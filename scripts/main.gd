@@ -5,28 +5,48 @@ const CELL_SIZE := 2.0
 const STARTING_WOOD := 30
 const WAREHOUSE_COST := 10
 const SAWMILL_COST := 10
+const HOUSE_COST := 12
+const FARM_COST := 12
 const POPULATION := 5
+const BED_CAPACITY := 4
+const FOOD_CONSUMPTION_INTERVAL := 10.0
 
 var wood := STARTING_WOOD
+var food := 20
+var wellbeing := 75
+var consumption_time := FOOD_CONSUMPTION_INTERVAL
 var selected_cell := Vector2i(0, 0)
 var build_mode := "warehouse"
 var placed_buildings: Dictionary = {}
 var warehouse_positions: Array[Vector3] = []
 var sawmill_positions: Array[Vector3] = []
+var farm_positions: Array[Vector3] = []
 var tree_positions: Array[Vector3] = []
 var citizens: Array[Citizen] = []
 var camera: Camera3D
+var camera_target := Vector3.ZERO
+var camera_distance := 30.0
+var camera_yaw := 42.0
+var camera_pitch := 52.0
 var selection_marker: MeshInstance3D
 var wood_label: Label
 var status_label: Label
 var controls_label: Label
+var camera_hint_label: Label
 
 func _ready() -> void:
 	_create_world()
 	_create_interface()
 	_create_forest()
 	_create_citizens()
-	_update_interface("Build a warehouse and a sawmill to begin production.")
+	_update_interface("Build a warehouse, sawmill, farm and homes to sustain the settlement.")
+
+func _process(delta: float) -> void:
+	_update_camera(delta)
+	consumption_time -= delta
+	if consumption_time <= 0.0:
+		consumption_time = FOOD_CONSUMPTION_INTERVAL
+		_apply_daily_needs()
 
 func _create_world() -> void:
 	var environment := WorldEnvironment.new()
@@ -47,9 +67,8 @@ func _create_world() -> void:
 	add_child(sun)
 
 	camera = Camera3D.new()
-	camera.position = Vector3(16.0, 19.0, 18.0)
 	add_child(camera)
-	camera.look_at(Vector3.ZERO)
+	_update_camera_position()
 	_create_ground()
 	_create_grid()
 	_create_selection_marker()
@@ -143,7 +162,7 @@ func _create_citizens() -> void:
 	for index in POPULATION:
 		var citizen := Citizen.new()
 		citizen.position = Vector3(-1.1 + (index % 3) * 1.1, 0.0, -0.8 + (index / 3) * 1.1)
-		citizen.wood_delivered.connect(_on_wood_delivered)
+		citizen.resource_delivered.connect(_on_resource_delivered)
 		add_child(citizen)
 		citizens.append(citizen)
 
@@ -153,7 +172,7 @@ func _create_interface() -> void:
 	var panel := ColorRect.new()
 	panel.color = Color(0.035, 0.07, 0.09, 0.88)
 	panel.position = Vector2(20, 20)
-	panel.size = Vector2(390, 132)
+	panel.size = Vector2(420, 132)
 	ui.add_child(panel)
 	wood_label = Label.new()
 	wood_label.position = Vector2(18, 14)
@@ -161,14 +180,18 @@ func _create_interface() -> void:
 	panel.add_child(wood_label)
 	status_label = Label.new()
 	status_label.position = Vector2(18, 50)
-	status_label.size = Vector2(354, 66)
+	status_label.size = Vector2(384, 66)
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	status_label.add_theme_font_size_override("font_size", 16)
 	panel.add_child(status_label)
 	controls_label = Label.new()
-	controls_label.position = Vector2(20, 674)
+	controls_label.position = Vector2(20, 646)
 	controls_label.add_theme_font_size_override("font_size", 16)
 	ui.add_child(controls_label)
+	camera_hint_label = Label.new()
+	camera_hint_label.position = Vector2(20, 678)
+	camera_hint_label.add_theme_font_size_override("font_size", 16)
+	ui.add_child(camera_hint_label)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -178,6 +201,18 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.keycode == KEY_2:
 			build_mode = "sawmill"
 			_update_interface("Sawmill selected.")
+		elif event.keycode == KEY_3:
+			build_mode = "farm"
+			_update_interface("Farm selected.")
+		elif event.keycode == KEY_4:
+			build_mode = "house"
+			_update_interface("House selected.")
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
+		camera_distance = maxf(14.0, camera_distance - 2.0)
+		_update_camera_position()
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_WHEEL_DOWN and event.pressed:
+		camera_distance = minf(46.0, camera_distance + 2.0)
+		_update_camera_position()
 	elif event is InputEventMouseMotion:
 		var cell: Variant = _cell_at_screen_position(event.position)
 		if cell != null:
@@ -210,7 +245,7 @@ func _place_building(cell: Vector2i) -> void:
 	if placed_buildings.has(cell):
 		_update_interface("This cell is already occupied.")
 		return
-	var cost := WAREHOUSE_COST if build_mode == "warehouse" else SAWMILL_COST
+	var cost := _building_cost()
 	if wood < cost:
 		_update_interface("Not enough wood.")
 		return
@@ -220,11 +255,16 @@ func _place_building(cell: Vector2i) -> void:
 	if build_mode == "warehouse":
 		warehouse_positions.append(position_on_board)
 		_create_warehouse(position_on_board)
-	else:
+	elif build_mode == "sawmill":
 		sawmill_positions.append(position_on_board)
 		_create_sawmill(position_on_board)
+	elif build_mode == "farm":
+		farm_positions.append(position_on_board)
+		_create_farm(position_on_board)
+	else:
+		_create_house(position_on_board)
 	_update_workers()
-	_update_interface("%s built." % ("Warehouse" if build_mode == "warehouse" else "Sawmill"))
+	_update_interface("%s built." % build_mode.capitalize())
 
 func _create_warehouse(position_on_board: Vector3) -> void:
 	var building := Node3D.new()
@@ -275,20 +315,127 @@ func _create_sawmill(position_on_board: Vector3) -> void:
 	blade.material_override = blade_material
 	building.add_child(blade)
 
+func _create_farm(position_on_board: Vector3) -> void:
+	var farm := Node3D.new()
+	farm.position = position_on_board
+	add_child(farm)
+	for offset in [Vector3(-0.45, 0.18, -0.35), Vector3(0.15, 0.18, -0.35), Vector3(-0.15, 0.18, 0.35), Vector3(0.48, 0.18, 0.32)]:
+		var crop := MeshInstance3D.new()
+		var crop_mesh := CylinderMesh.new()
+		crop_mesh.top_radius = 0.12
+		crop_mesh.bottom_radius = 0.18
+		crop_mesh.height = 0.36
+		crop.mesh = crop_mesh
+		crop.position = offset
+		var crop_material := StandardMaterial3D.new()
+		crop_material.albedo_color = Color("d2b744")
+		crop.material_override = crop_material
+		farm.add_child(crop)
+
+func _create_house(position_on_board: Vector3) -> void:
+	var house := Node3D.new()
+	house.position = position_on_board
+	add_child(house)
+	var base := MeshInstance3D.new()
+	var base_mesh := BoxMesh.new()
+	base_mesh.size = Vector3(1.5, 1.0, 1.45)
+	base.mesh = base_mesh
+	base.position.y = 0.5
+	var wall_material := StandardMaterial3D.new()
+	wall_material.albedo_color = Color("91a9bb")
+	base.material_override = wall_material
+	house.add_child(base)
+	var roof := MeshInstance3D.new()
+	var roof_mesh := PrismMesh.new()
+	roof_mesh.size = Vector3(1.78, 0.7, 1.72)
+	roof.mesh = roof_mesh
+	roof.position.y = 1.32
+	roof.rotation_degrees.y = 90.0
+	var roof_material := StandardMaterial3D.new()
+	roof_material.albedo_color = Color("476573")
+	roof.material_override = roof_material
+	house.add_child(roof)
+
 func _update_workers() -> void:
-	if warehouse_positions.is_empty() or sawmill_positions.is_empty():
+	if warehouse_positions.is_empty() or (sawmill_positions.is_empty() and farm_positions.is_empty()):
 		return
 	for index in citizens.size():
-		citizens[index].assign_work(tree_positions[index % tree_positions.size()], sawmill_positions[index % sawmill_positions.size()], warehouse_positions[index % warehouse_positions.size()])
+		var can_make_wood := not sawmill_positions.is_empty()
+		var can_make_food := not farm_positions.is_empty()
+		var make_food := can_make_food and (not can_make_wood or index >= 3)
+		if make_food:
+			var farm_position := farm_positions[index % farm_positions.size()]
+			citizens[index].assign_work("food", farm_position, farm_position, warehouse_positions[index % warehouse_positions.size()])
+		else:
+			citizens[index].assign_work("wood", tree_positions[index % tree_positions.size()], sawmill_positions[index % sawmill_positions.size()], warehouse_positions[index % warehouse_positions.size()])
 
-func _on_wood_delivered() -> void:
-	wood += 1
-	_update_interface("Workers delivered processed wood to the warehouse.")
+func _on_resource_delivered(resource_type: String) -> void:
+	if resource_type == "food":
+		food += 1
+	else:
+		wood += 1
+	_update_interface("Workers delivered %s to the warehouse." % resource_type)
+
+func _apply_daily_needs() -> void:
+	var beds := _house_count() * BED_CAPACITY
+	if food >= citizens.size():
+		food -= citizens.size()
+		wellbeing = mini(100, wellbeing + 2)
+	else:
+		food = 0
+		wellbeing = maxi(0, wellbeing - 14)
+		_update_interface("Food shortage lowered wellbeing.")
+	if beds < citizens.size():
+		wellbeing = maxi(0, wellbeing - 7)
+		_update_interface("Not enough housing lowered wellbeing.")
+	else:
+		wellbeing = mini(100, wellbeing + 1)
+	_update_interface("Citizens consumed food. Next needs check in 10 seconds.")
+
+func _house_count() -> int:
+	var houses := 0
+	for building_type in placed_buildings.values():
+		if building_type == "house":
+			houses += 1
+	return houses
+
+func _building_cost() -> int:
+	match build_mode:
+		"warehouse": return WAREHOUSE_COST
+		"sawmill": return SAWMILL_COST
+		"farm": return FARM_COST
+		_: return HOUSE_COST
+
+func _update_camera(delta: float) -> void:
+	var move_direction := Vector3.ZERO
+	var yaw_radians := deg_to_rad(camera_yaw)
+	var forward := Vector3(-sin(yaw_radians), 0.0, -cos(yaw_radians))
+	var right := Vector3(cos(yaw_radians), 0.0, -sin(yaw_radians))
+	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP): move_direction += forward
+	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN): move_direction -= forward
+	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT): move_direction += right
+	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT): move_direction -= right
+	if not move_direction.is_zero_approx():
+		camera_target += move_direction.normalized() * 9.0 * delta
+		camera_target.x = clampf(camera_target.x, -10.0, 10.0)
+		camera_target.z = clampf(camera_target.z, -10.0, 10.0)
+	if Input.is_key_pressed(KEY_Q): camera_yaw += 65.0 * delta
+	if Input.is_key_pressed(KEY_E): camera_yaw -= 65.0 * delta
+	_update_camera_position()
+
+func _update_camera_position() -> void:
+	if camera == null: return
+	var yaw_radians := deg_to_rad(camera_yaw)
+	var pitch_radians := deg_to_rad(camera_pitch)
+	var offset := Vector3(sin(yaw_radians) * cos(pitch_radians), sin(pitch_radians), cos(yaw_radians) * cos(pitch_radians)) * camera_distance
+	camera.position = camera_target + offset
+	camera.look_at(camera_target)
 
 func _cell_center(cell: Vector2i) -> Vector3:
 	return Vector3((cell.x + 0.5) * CELL_SIZE, 0.0, (cell.y + 0.5) * CELL_SIZE)
 
 func _update_interface(message: String) -> void:
-	wood_label.text = "Wood: %d   Citizens: %d   Buildings: %d" % [wood, citizens.size(), placed_buildings.size()]
+	wood_label.text = "Wood: %d   Food: %d   Wellbeing: %d%%" % [wood, food, wellbeing]
 	status_label.text = message
-	controls_label.text = "[1] Warehouse (10)   [2] Sawmill (10)   Selected: %s   Left click: build" % build_mode.capitalize()
+	controls_label.text = "[1] Warehouse (10)  [2] Sawmill (10)  [3] Farm (12)  [4] House (12 / 4 beds)  Selected: %s" % build_mode.capitalize()
+	camera_hint_label.text = "Left click: build   WASD or arrows: move camera   Q/E: rotate   Mouse wheel: zoom"
