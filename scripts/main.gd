@@ -54,8 +54,10 @@ var is_first_person := false
 var player_yaw := 0.0
 var player_pitch := -8.0
 var pocket_wood := 0
+var pocket_food := 0
 var interaction_time := 0.0
 var interaction_action := ""
+var interaction_resource := ""
 var interaction_hint_label: Label
 var interaction_progress: ProgressBar
 var dig_sites: Array[Dictionary] = []
@@ -426,7 +428,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event is InputEventMouseMotion:
 			player_yaw -= event.relative.x * 0.0035
 			player_pitch = clampf(player_pitch - event.relative.y * 0.003, -70.0, 65.0)
-		elif event is InputEventKey and event.keycode == KEY_F and event.pressed and not event.echo:
+		elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 			_start_interaction()
 		get_viewport().set_input_as_handled()
 		return
@@ -478,7 +480,12 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 		return
 	if not hit.collider.is_in_group("citizen_selector"):
 		return
-	selected_builder = hit.collider.get_parent() as Citizen
+	var clicked_citizen := hit.collider.get_parent() as Citizen
+	if selected_builder != null and selected_builder.specialization == "courier" and clicked_citizen != selected_builder:
+		selected_builder.courier_worker = clicked_citizen
+		_update_interface("Courier assigned to this worker. Click another worker to reassign.")
+		return
+	selected_builder = clicked_citizen
 	selected_house = null
 	house_menu.visible = false
 	build_mode = ""
@@ -546,44 +553,55 @@ func _update_player_control(delta: float) -> void:
 func _start_interaction() -> void:
 	if not interaction_action.is_empty():
 		return
-	if _nearby_warehouse() and pocket_wood > 0:
+	if _nearby_sawmill() and pocket_wood > 0:
 		wood += pocket_wood
 		var delivered := pocket_wood
 		pocket_wood = 0
-		_update_interface("Delivered %d wood to the warehouse." % delivered)
+		_update_interface("Delivered %d wood to the sawmill." % delivered)
 		_refresh_interaction_hint()
 		return
-	if _nearby_tree():
-		if pocket_wood >= POCKET_WOOD_CAPACITY:
-			_update_interface("Pocket is full. Take the wood to a warehouse.")
+	if _nearby_warehouse() and pocket_food > 0:
+		food += pocket_food
+		var delivered_food := pocket_food
+		pocket_food = 0
+		_update_interface("Delivered %d food to the warehouse." % delivered_food)
+		_refresh_interaction_hint()
+		return
+	if _nearby_tree() or _nearby_farm():
+		if pocket_wood + pocket_food >= POCKET_WOOD_CAPACITY:
+			_update_interface("Pocket is full. Take wood to the sawmill or food to the warehouse.")
 			_refresh_interaction_hint()
 			return
+		interaction_resource = "wood" if _nearby_tree() else "food"
 		interaction_action = "harvesting"
 		interaction_time = 0.0
 		interaction_progress.visible = true
-		interaction_hint_label.text = "Gathering wood..."
+		interaction_hint_label.text = "Gathering %s..." % interaction_resource
 		return
 	if _nearby_warehouse():
-		_update_interface("Your pocket is empty.")
+		_update_interface("Food pocket is empty. Wood must go to a sawmill first.")
 	else:
-		_update_interface("Move closer to a tree to gather wood or a warehouse to unload it.")
+		_update_interface("Move closer to a tree, farm, warehouse or sawmill.")
 
 func _update_interaction(delta: float) -> void:
 	if interaction_action.is_empty():
 		return
-	if not _nearby_tree():
+	if (interaction_resource == "wood" and not _nearby_tree()) or (interaction_resource == "food" and not _nearby_farm()):
 		interaction_action = ""
 		interaction_progress.visible = false
-		_update_interface("Gathering cancelled: you moved away from the tree.")
+		_update_interface("Gathering cancelled: you moved away from the resource.")
 		return
 	interaction_time += delta
 	interaction_progress.value = interaction_time / HARVEST_DURATION * 100.0
-	interaction_hint_label.text = "Gathering wood: %d%%" % roundi(interaction_progress.value)
+	interaction_hint_label.text = "Gathering %s: %d%%" % [interaction_resource, roundi(interaction_progress.value)]
 	if interaction_time >= HARVEST_DURATION:
 		interaction_action = ""
-		pocket_wood += 1
+		if interaction_resource == "wood":
+			pocket_wood += 1
+		else:
+			pocket_food += 1
 		interaction_progress.visible = false
-		_update_interface("Wood gathered. %d/%d in pocket." % [pocket_wood, POCKET_WOOD_CAPACITY])
+		_update_interface("Resource gathered. Wood: %d, food: %d, pocket: %d/%d." % [pocket_wood, pocket_food, pocket_wood + pocket_food, POCKET_WOOD_CAPACITY])
 		_refresh_interaction_hint()
 
 func _nearby_tree() -> bool:
@@ -602,16 +620,36 @@ func _nearby_warehouse() -> bool:
 			return true
 	return false
 
+func _nearby_sawmill() -> bool:
+	if player_citizen == null:
+		return false
+	for sawmill_position in sawmill_positions:
+		if player_citizen.global_position.distance_to(sawmill_position) <= INTERACTION_RANGE:
+			return true
+	return false
+
+func _nearby_farm() -> bool:
+	if player_citizen == null:
+		return false
+	for farm_position in farm_positions:
+		if player_citizen.global_position.distance_to(farm_position) <= INTERACTION_RANGE:
+			return true
+	return false
+
 func _refresh_interaction_hint() -> void:
 	if not is_first_person or not interaction_action.is_empty():
 		return
 	interaction_hint_label.visible = true
-	if _nearby_warehouse():
-		interaction_hint_label.text = "F: unload wood into warehouse (%d in pocket)" % pocket_wood
+	if _nearby_sawmill() and pocket_wood > 0:
+		interaction_hint_label.text = "LMB: unload wood at sawmill (%d wood)" % pocket_wood
+	elif _nearby_warehouse() and pocket_food > 0:
+		interaction_hint_label.text = "LMB: unload food at warehouse (%d food)" % pocket_food
 	elif _nearby_tree():
-		interaction_hint_label.text = "F: gather wood (%d/%d in pocket)" % [pocket_wood, POCKET_WOOD_CAPACITY]
+		interaction_hint_label.text = "LMB: gather wood (%d/%d in pocket)" % [pocket_wood + pocket_food, POCKET_WOOD_CAPACITY]
+	elif _nearby_farm():
+		interaction_hint_label.text = "LMB: gather food (%d/%d in pocket)" % [pocket_wood + pocket_food, POCKET_WOOD_CAPACITY]
 	else:
-		interaction_hint_label.text = "Find a tree to gather wood or a warehouse to unload it."
+		interaction_hint_label.text = "LMB gathers resources. Wood goes to a sawmill; food goes to a warehouse."
 
 func _cell_at_screen_position(screen_position: Vector2) -> Variant:
 	var from := camera.project_ray_origin(screen_position)
@@ -871,8 +909,13 @@ func _update_couriers() -> void:
 	for courier in citizens:
 		if courier.specialization != "courier" or courier.state != Citizen.State.IDLE:
 			continue
+		if is_instance_valid(courier.courier_worker):
+			if courier.courier_worker.has_pending_resource():
+				courier.assign_courier_pickup(courier.courier_worker, warehouse_positions[0])
+			continue
 		for worker in citizens:
 			if worker != courier and worker.has_pending_resource():
+				courier.courier_worker = worker
 				courier.assign_courier_pickup(worker, warehouse_positions[0])
 				break
 
@@ -1006,9 +1049,9 @@ func _cell_center(cell: Vector2i) -> Vector3:
 	return Vector3((cell.x + 0.5) * CELL_SIZE, 0.0, (cell.y + 0.5) * CELL_SIZE)
 
 func _update_interface(message: String) -> void:
-	wood_label.text = "Wood: %d   Food: %d   Soil: %d   Clay: %d\nWellbeing: %d%%   Pocket: %d/%d" % [wood, food, soil, clay, wellbeing, pocket_wood, POCKET_WOOD_CAPACITY]
+	wood_label.text = "Wood: %d   Food: %d   Soil: %d   Clay: %d\nWellbeing: %d%%   Pocket W:%d F:%d (%d/%d)" % [wood, food, soil, clay, wellbeing, pocket_wood, pocket_food, pocket_wood + pocket_food, POCKET_WOOD_CAPACITY]
 	status_label.text = message
 	if is_first_person:
-		camera_hint_label.text = "R: leave citizen  WASD/arrows: move  Mouse: look  F: interact"
+		camera_hint_label.text = "R: leave citizen  WASD/arrows: move  Mouse: look  LMB: gather/interact"
 	else:
 		camera_hint_label.text = "Click a citizen, then R: first-person.  WASD/arrows: move camera  Right drag: rotate/tilt  Middle drag: pan  Wheel: zoom"

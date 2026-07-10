@@ -7,8 +7,9 @@ signal resource_ready(worker: Citizen, resource_type: String, amount: int)
 
 const WALK_SPEED := 2.2
 const WORK_DURATION := 1.4
+const COURIER_WAIT_DURATION := 8.0
 
-enum State { IDLE, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE }
+enum State { IDLE, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER }
 
 var state := State.IDLE
 var resource_type := "wood"
@@ -32,6 +33,8 @@ var carried_amount := 0
 var pending_resources: Dictionary = {}
 var courier_target: Citizen
 var courier_resource_type := ""
+var courier_worker: Citizen
+var courier_wait_time := 0.0
 
 func _ready() -> void:
 	var selector := Area3D.new()
@@ -99,7 +102,8 @@ func _process(delta: float) -> void:
 				carried_amount = 2 if get_efficiency(active_role) >= 1.05 else 1
 				if uses_courier:
 					resource_ready.emit(self, resource_type, carried_amount)
-					state = State.TO_TREE
+					courier_wait_time = COURIER_WAIT_DURATION
+					state = State.WAITING_COURIER
 				else:
 					state = State.TO_WAREHOUSE
 		State.TO_WAREHOUSE:
@@ -107,6 +111,11 @@ func _process(delta: float) -> void:
 				resource_delivered.emit(resource_type, carried_amount)
 				state = State.EXCAVATING if returning_to_excavation else State.TO_TREE
 				returning_to_excavation = false
+		State.WAITING_COURIER:
+			courier_wait_time -= delta
+			if courier_wait_time <= 0.0:
+				pending_resources[resource_type] = maxi(0, int(pending_resources.get(resource_type, 0)) - carried_amount)
+				state = State.TO_WAREHOUSE
 		State.CONSTRUCTING:
 			if is_instance_valid(construction_site):
 				_move_to(construction_site.global_position, delta)
@@ -191,6 +200,8 @@ func take_pending_resource() -> Dictionary:
 		var amount: int = pending_resources[pending_type]
 		if amount > 0:
 			pending_resources[pending_type] = 0
+			if state == State.WAITING_COURIER:
+				state = State.TO_TREE
 			return {"type": pending_type, "amount": amount}
 	return {}
 
