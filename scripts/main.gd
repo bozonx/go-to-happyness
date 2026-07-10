@@ -15,7 +15,7 @@ const CONSTRUCTION_DURATION := 4.0
 const PLAYER_SPEED := 4.2
 const PLAYER_EYE_HEIGHT := 1.18
 const HARVEST_DURATION := 1.25
-const INTERACTION_RANGE := 2.15
+const INTERACTION_RANGE := CELL_SIZE
 const POCKET_WOOD_CAPACITY := 8
 
 var wood := STARTING_WOOD
@@ -32,6 +32,7 @@ var active_meal_hour := -1
 var selected_cell := Vector2i(0, 0)
 var build_mode := ""
 var placed_buildings: Dictionary = {}
+var house_cells: Dictionary = {}
 var tree_cells: Dictionary = {}
 var warehouse_positions: Array[Vector3] = []
 var sawmill_positions: Array[Vector3] = []
@@ -222,6 +223,7 @@ func _create_starting_tent() -> void:
 	tent.position = _cell_center(tent_cell)
 	tent.set_meta("is_tent", true)
 	placed_buildings[tent_cell] = "tent"
+	house_cells[tent_cell] = true
 	add_child(tent)
 	var base := MeshInstance3D.new()
 	var base_mesh := PrismMesh.new()
@@ -252,6 +254,7 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	citizen.position = spawn_position
 	add_child(citizen)
 	citizen.setup_specialization(primary_specialization if not primary_specialization.is_empty() else ["builder", "forestry", "farming"][citizens.size() % 3])
+	citizen.setup_navigation(_find_path_around_houses)
 	citizen.resource_delivered.connect(_on_resource_delivered)
 	citizen.excavation_cycle.connect(_on_excavation_cycle)
 	citizen.resource_ready.connect(_on_resource_ready)
@@ -802,7 +805,13 @@ func _place_building(cell: Vector2i) -> void:
 	_update_interface("Construction started. The progress bar shows completion.")
 
 func _can_place(cell: Vector2i) -> bool:
-	return not placed_buildings.has(cell) and not tree_cells.has(cell) and not dig_cells.has(cell)
+	if placed_buildings.has(cell) or tree_cells.has(cell) or dig_cells.has(cell):
+		return false
+	for x_offset in range(-1, 2):
+		for z_offset in range(-1, 2):
+			if placed_buildings.has(cell + Vector2i(x_offset, z_offset)):
+				return false
+	return true
 
 func _create_construction_site(cell: Vector2i, building_type: String, position_on_board: Vector3) -> void:
 	var site := Node3D.new()
@@ -867,6 +876,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			_create_farm(position_on_board)
 		"house":
 			completed_house_count += 1
+			house_cells[cell] = true
 			_create_house(position_on_board)
 		"canteen":
 			_create_canteen(position_on_board)
@@ -1025,7 +1035,7 @@ func _update_tent_dismantle(delta: float) -> void:
 		return
 	var dismantlers := 0
 	for citizen in citizens:
-		if citizen.specialization == "builder" and citizen.global_position.distance_to(tent.global_position) <= 0.3:
+		if citizen.specialization == "builder" and citizen.is_building_site(tent):
 			dismantlers += 1
 	if dismantlers <= 0:
 		return
@@ -1035,6 +1045,7 @@ func _update_tent_dismantle(delta: float) -> void:
 	tent.queue_free()
 	tent = null
 	placed_buildings.erase(tent_cell)
+	house_cells.erase(tent_cell)
 	wood += 2
 	tent_dismantle_progress = -1.0
 	_update_workers()
@@ -1296,6 +1307,60 @@ func _update_camera_position() -> void:
 
 func _cell_center(cell: Vector2i) -> Vector3:
 	return Vector3((cell.x + 0.5) * CELL_SIZE, 0.0, (cell.y + 0.5) * CELL_SIZE)
+
+func _cell_from_position(position_on_board: Vector3) -> Vector2i:
+	return Vector2i(floori(position_on_board.x / CELL_SIZE), floori(position_on_board.z / CELL_SIZE))
+
+func _is_board_cell(cell: Vector2i) -> bool:
+	var half_cells := BOARD_CELLS / 2
+	return cell.x >= -half_cells and cell.x < half_cells and cell.y >= -half_cells and cell.y < half_cells
+
+func _find_path_around_houses(from: Vector3, destination: Vector3, may_enter_destination_house: bool) -> Array[Vector3]:
+	var start := _cell_from_position(from)
+	var goal := _cell_from_position(destination)
+	if not _is_board_cell(start) or not _is_board_cell(goal):
+		return [destination]
+	var final_destination := destination
+	if house_cells.has(goal) and not may_enter_destination_house:
+		var closest_accessible_cell: Variant = null
+		for direction in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
+			var adjacent: Vector2i = goal + direction
+			if not _is_board_cell(adjacent) or house_cells.has(adjacent):
+				continue
+			if closest_accessible_cell == null or _cell_center(adjacent).distance_squared_to(from) < _cell_center(closest_accessible_cell).distance_squared_to(from):
+				closest_accessible_cell = adjacent
+		if closest_accessible_cell == null:
+			return []
+		goal = closest_accessible_cell
+		final_destination = _cell_center(goal)
+	var frontier: Array[Vector2i] = [start]
+	var came_from: Dictionary = {start: start}
+	var directions := [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]
+	var cursor := 0
+	while cursor < frontier.size():
+		var current := frontier[cursor]
+		cursor += 1
+		if current == goal:
+			break
+		for direction in directions:
+			var next: Vector2i = current + direction
+			if not _is_board_cell(next) or came_from.has(next):
+				continue
+			if house_cells.has(next) and next != start and (next != goal or not may_enter_destination_house):
+				continue
+			came_from[next] = current
+			frontier.append(next)
+	if not came_from.has(goal):
+		return [destination]
+	var cells: Array[Vector2i] = []
+	var step := goal
+	while step != start:
+		cells.push_front(step)
+		step = came_from[step]
+	var path: Array[Vector3] = []
+	for cell in cells:
+		path.append(final_destination if cell == goal else _cell_center(cell))
+	return path
 
 func _update_interface(message: String) -> void:
 	wood_label.text = "Wood: %d   Warehouse food: %d   Canteen: %d\nSoil: %d   Clay: %d   Wellbeing: %d%%\nTent: %d/%d   Population: %d" % [wood, food, canteen_food, soil, clay, wellbeing, _tent_resident_count(), TENT_CAPACITY, citizens.size()]

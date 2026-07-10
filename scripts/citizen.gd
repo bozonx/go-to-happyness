@@ -10,6 +10,7 @@ signal canteen_delivery_finished(worker: Citizen, amount: int)
 const WALK_SPEED := 2.2
 const WORK_DURATION := 1.4
 const COURIER_WAIT_DURATION := 8.0
+const BUILD_WORK_DISTANCE := 2.0
 
 enum State { IDLE, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY }
 
@@ -44,6 +45,11 @@ var debuffs: Dictionary = {}
 var meal_time := 0.0
 var delivery_amount := 0
 var canteen_position := Vector3.ZERO
+var construction_position := Vector3.ZERO
+var pathfinder: Callable
+var movement_path: Array[Vector3] = []
+var path_destination := Vector3.INF
+var path_allows_destination_house := false
 
 func _ready() -> void:
 	var selector := Area3D.new()
@@ -128,7 +134,7 @@ func _process(delta: float) -> void:
 				state = State.TO_WAREHOUSE
 		State.CONSTRUCTING:
 			if is_instance_valid(construction_site):
-				_move_to(construction_site.global_position, delta)
+				_move_to(construction_position, delta)
 			else:
 				state = State.IDLE
 				construction_site = null
@@ -153,7 +159,7 @@ func _process(delta: float) -> void:
 				resource_delivered.emit(courier_resource_type, carried_amount)
 				state = State.IDLE
 		State.TO_HOME:
-			if is_instance_valid(home) and _move_to(home.global_position, delta):
+			if is_instance_valid(home) and _move_to(home.global_position, delta, true):
 				state = State.RESTING
 		State.RESTING:
 			satisfaction = minf(get_satisfaction_cap(), satisfaction + delta * 2.2)
@@ -176,7 +182,21 @@ func _process(delta: float) -> void:
 				delivery_amount = 0
 				state = State.IDLE
 
-func _move_to(destination: Vector3, delta: float) -> bool:
+func _move_to(destination: Vector3, delta: float, may_enter_destination_house := false) -> bool:
+	if path_destination.distance_to(destination) > 0.08 or path_allows_destination_house != may_enter_destination_house:
+		path_destination = destination
+		path_allows_destination_house = may_enter_destination_house
+		movement_path = pathfinder.call(global_position, destination, may_enter_destination_house) if pathfinder.is_valid() else [destination]
+	while not movement_path.is_empty():
+		var waypoint: Vector3 = movement_path.front()
+		var waypoint_offset := waypoint - global_position
+		waypoint_offset.y = 0.0
+		if waypoint_offset.length() > 0.08:
+			return _move_directly_to(waypoint, delta)
+		movement_path.pop_front()
+	return true
+
+func _move_directly_to(destination: Vector3, delta: float) -> bool:
 	var offset := destination - global_position
 	offset.y = 0.0
 	if offset.length() <= 0.08:
@@ -197,11 +217,14 @@ func set_player_controlled(controlled: bool) -> void:
 		state = State.IDLE
 		construction_site = null
 		active_role = ""
+		movement_path.clear()
 
 func assign_construction(site: Node3D) -> void:
 	if is_player_controlled:
 		return
 	construction_site = site
+	construction_position = _work_position_for(site.global_position)
+	movement_path.clear()
 	active_role = "construction"
 	state = State.CONSTRUCTING
 
@@ -245,7 +268,17 @@ func assign_courier_pickup(worker: Citizen, warehouse: Vector3) -> void:
 	state = State.COURIER_TO_WORKER
 
 func is_building_site(site: Node3D) -> bool:
-	return not is_player_controlled and state == State.CONSTRUCTING and construction_site == site and global_position.distance_to(site.global_position) <= 0.25
+	return not is_player_controlled and state == State.CONSTRUCTING and construction_site == site and global_position.distance_to(construction_position) <= 0.25
+
+func setup_navigation(next_pathfinder: Callable) -> void:
+	pathfinder = next_pathfinder
+
+func _work_position_for(site_position: Vector3) -> Vector3:
+	var offset := global_position - site_position
+	offset.y = 0.0
+	if absf(offset.x) > absf(offset.z):
+		return site_position + Vector3(BUILD_WORK_DISTANCE if offset.x >= 0.0 else -BUILD_WORK_DISTANCE, 0.0, 0.0)
+	return site_position + Vector3(0.0, 0.0, BUILD_WORK_DISTANCE if offset.z >= 0.0 else -BUILD_WORK_DISTANCE)
 
 func setup_specialization(next_specialization: String) -> void:
 	specialization = next_specialization
