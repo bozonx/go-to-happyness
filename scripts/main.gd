@@ -75,6 +75,8 @@ func _process(delta: float) -> void:
 	if consumption_time <= 0.0:
 		consumption_time = FOOD_CONSUMPTION_INTERVAL
 		_apply_daily_needs()
+	if selected_builder != null and build_menu.visible:
+		_show_selected_citizen_menu()
 
 func _create_world() -> void:
 	var environment := WorldEnvironment.new()
@@ -190,11 +192,15 @@ func _create_tree(position_on_board: Vector3) -> void:
 
 func _create_citizens() -> void:
 	for index in POPULATION:
-		var citizen := Citizen.new()
-		citizen.position = Vector3(-1.1 + (index % 3) * 1.1, 0.0, -0.8 + (index / 3) * 1.1)
-		citizen.resource_delivered.connect(_on_resource_delivered)
-		add_child(citizen)
-		citizens.append(citizen)
+		_add_citizen(Vector3(-1.1 + (index % 3) * 1.1, 0.0, -0.8 + (index / 3) * 1.1))
+
+func _add_citizen(spawn_position: Vector3) -> void:
+	var citizen := Citizen.new()
+	citizen.position = spawn_position
+	add_child(citizen)
+	citizen.setup_specialization(["builder", "forestry", "farming"][citizens.size() % 3])
+	citizen.resource_delivered.connect(_on_resource_delivered)
+	citizens.append(citizen)
 
 func _create_interface() -> void:
 	var ui := CanvasLayer.new()
@@ -236,21 +242,25 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	build_menu = Panel.new()
 	build_menu.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	build_menu.offset_left = -324.0
-	build_menu.offset_top = -220.0
+	build_menu.offset_top = -410.0
 	build_menu.offset_right = -20.0
 	build_menu.offset_bottom = -20.0
 	build_menu.visible = false
 	ui.add_child(build_menu)
 	build_menu_title = Label.new()
 	build_menu_title.position = Vector2(16, 14)
-	build_menu_title.size = Vector2(272, 36)
+	build_menu_title.size = Vector2(272, 62)
 	build_menu_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	build_menu_title.add_theme_font_size_override("font_size", 18)
 	build_menu.add_child(build_menu_title)
-	_add_build_button("Warehouse - 10 wood", "warehouse", 56)
-	_add_build_button("Sawmill - 10 wood", "sawmill", 92)
-	_add_build_button("Farm - 12 wood", "farm", 128)
-	_add_build_button("House - 12 wood", "house", 164)
+	_add_role_button("Auto task", "", 84)
+	_add_role_button("Assign: construction", "construction", 118)
+	_add_role_button("Assign: forestry", "forestry", 152)
+	_add_role_button("Assign: farming", "farming", 186)
+	_add_build_button("Warehouse - 10 wood", "warehouse", 244)
+	_add_build_button("Sawmill - 10 wood", "sawmill", 280)
+	_add_build_button("Farm - 12 wood", "farm", 316)
+	_add_build_button("House - 12 wood", "house", 352)
 
 func _add_build_button(title: String, building_type: String, y_position: float) -> void:
 	var button := Button.new()
@@ -259,6 +269,22 @@ func _add_build_button(title: String, building_type: String, y_position: float) 
 	button.size = Vector2(272, 30)
 	button.pressed.connect(_select_build_mode.bind(building_type))
 	build_menu.add_child(button)
+
+func _add_role_button(title: String, role: String, y_position: float) -> void:
+	var button := Button.new()
+	button.text = title
+	button.position = Vector2(16, y_position)
+	button.size = Vector2(272, 28)
+	button.pressed.connect(_set_manual_role.bind(role))
+	build_menu.add_child(button)
+
+func _set_manual_role(role: String) -> void:
+	if selected_builder == null:
+		return
+	selected_builder.manual_role = role
+	_update_workers()
+	_show_selected_citizen_menu()
+	_update_interface("Citizen assigned to %s." % ("automatic work" if role.is_empty() else role))
 
 func _select_build_mode(next_mode: String) -> void:
 	if selected_builder == null:
@@ -320,8 +346,16 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 	build_mode = ""
 	selection_marker.visible = false
 	build_menu.visible = true
-	build_menu_title.text = "Citizen selected\nChoose construction:"
+	_show_selected_citizen_menu()
 	_update_interface("Citizen selected. Choose a building in the lower-right menu.")
+
+func _show_selected_citizen_menu() -> void:
+	if selected_builder == null:
+		return
+	var assignment := "Auto" if selected_builder.manual_role.is_empty() else selected_builder.manual_role.capitalize()
+	var role_for_efficiency := _work_role_for(selected_builder) if selected_builder.manual_role.is_empty() else selected_builder.manual_role
+	build_menu_title.text = "%s  Sat: %d%%\nEfficiency: %d%%  Task: %s" % [selected_builder.role_label(), roundi(selected_builder.satisfaction), roundi(selected_builder.get_efficiency(role_for_efficiency) * 100.0), assignment]
+	build_menu_title.add_theme_color_override("font_color", selected_builder.specialization_color())
 
 func _toggle_first_person() -> void:
 	if is_first_person:
@@ -520,10 +554,10 @@ func _create_construction_site(cell: Vector2i, building_type: String, position_o
 func _update_construction(delta: float) -> void:
 	for index in range(construction_sites.size() - 1, -1, -1):
 		var site: Dictionary = construction_sites[index]
-		var builder_count := _builder_count(site.node)
-		var progress: float = minf(1.0, site.progress + delta / CONSTRUCTION_DURATION * builder_count)
+		var builder_power := _building_power(site.node)
+		var progress: float = minf(1.0, site.progress + delta / CONSTRUCTION_DURATION * builder_power)
 		if index == 0:
-			status_label.text = "Building %s: %d builder(s) at the site." % [site.type, builder_count]
+			status_label.text = "Building %s: %d builder(s), %.1fx speed." % [site.type, _builder_count(site.node), builder_power]
 		site.progress = progress
 		var fill: MeshInstance3D = site.fill
 		fill.scale.x = maxf(0.01, progress)
@@ -548,6 +582,8 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 		"house":
 			completed_house_count += 1
 			_create_house(position_on_board)
+			_add_citizen(position_on_board + Vector3(-0.45, 0.0, -0.8))
+			_add_citizen(position_on_board + Vector3(0.45, 0.0, -0.8))
 	_update_workers()
 	_update_interface("%s construction completed." % building_type.capitalize())
 
@@ -642,24 +678,37 @@ func _create_house(position_on_board: Vector3) -> void:
 	house.add_child(roof)
 
 func _update_workers() -> void:
-	if not construction_sites.is_empty():
-		for index in citizens.size():
-			var citizen := citizens[index]
-			if not citizen.is_player_controlled:
-				var site: Dictionary = construction_sites[index % construction_sites.size()]
-				citizen.assign_construction(site.node)
-		return
-	if warehouse_positions.is_empty() or (sawmill_positions.is_empty() and farm_positions.is_empty()):
-		return
 	for index in citizens.size():
-		var can_make_wood := not sawmill_positions.is_empty()
-		var can_make_food := not farm_positions.is_empty()
-		var make_food := can_make_food and (not can_make_wood or index >= 3)
-		if make_food:
-			var farm_position := farm_positions[index % farm_positions.size()]
-			citizens[index].assign_work("food", farm_position, farm_position, warehouse_positions[index % warehouse_positions.size()])
+		var citizen := citizens[index]
+		if citizen.is_player_controlled:
+			continue
+		var role := _work_role_for(citizen)
+		if role == "construction" and not construction_sites.is_empty():
+			var site: Dictionary = construction_sites[index % construction_sites.size()]
+			citizen.assign_construction(site.node)
+		elif role == "forestry" and not warehouse_positions.is_empty() and not sawmill_positions.is_empty():
+			citizen.assign_work("wood", tree_positions[index % tree_positions.size()], sawmill_positions[index % sawmill_positions.size()], warehouse_positions[index % warehouse_positions.size()])
+		elif role == "farming" and not warehouse_positions.is_empty() and not farm_positions.is_empty():
+			citizen.assign_work("food", farm_positions[index % farm_positions.size()], farm_positions[index % farm_positions.size()], warehouse_positions[index % warehouse_positions.size()])
 		else:
-			citizens[index].assign_work("wood", tree_positions[index % tree_positions.size()], sawmill_positions[index % sawmill_positions.size()], warehouse_positions[index % warehouse_positions.size()])
+			citizen.idle()
+
+func _work_role_for(citizen: Citizen) -> String:
+	if not citizen.manual_role.is_empty():
+		return citizen.manual_role
+	if citizen.specialization == "builder" and not construction_sites.is_empty():
+		return "construction"
+	if citizen.specialization == "forestry" and not sawmill_positions.is_empty():
+		return "forestry"
+	if citizen.specialization == "farming" and not farm_positions.is_empty():
+		return "farming"
+	if not construction_sites.is_empty():
+		return "construction"
+	if not sawmill_positions.is_empty():
+		return "forestry"
+	if not farm_positions.is_empty():
+		return "farming"
+	return ""
 
 func _builder_count(site_node: Node3D) -> int:
 	var count := 0
@@ -668,12 +717,19 @@ func _builder_count(site_node: Node3D) -> int:
 			count += 1
 	return count
 
-func _on_resource_delivered(resource_type: String) -> void:
+func _building_power(site_node: Node3D) -> float:
+	var power := 0.0
+	for citizen in citizens:
+		if citizen.is_building_site(site_node):
+			power += citizen.get_efficiency("construction")
+	return power
+
+func _on_resource_delivered(resource_type: String, amount: int) -> void:
 	if resource_type == "food":
-		food += 1
+		food += amount
 	else:
-		wood += 1
-	_update_interface("Workers delivered %s to the warehouse." % resource_type)
+		wood += amount
+	_update_interface("Workers delivered %d %s to the warehouse." % [amount, resource_type])
 
 func _apply_daily_needs() -> void:
 	var beds := _house_count() * BED_CAPACITY
