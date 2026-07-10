@@ -7,9 +7,10 @@ const WAREHOUSE_COST := 10
 const SAWMILL_COST := 10
 const HOUSE_COST := 12
 const FARM_COST := 12
+const CANTEEN_COST := 16
 const POPULATION := 5
-const BED_CAPACITY := 4
-const FOOD_CONSUMPTION_INTERVAL := 10.0
+const HOUSE_CAPACITY := 2
+const TENT_CAPACITY := 5
 const CONSTRUCTION_DURATION := 4.0
 const PLAYER_SPEED := 4.2
 const PLAYER_EYE_HEIGHT := 1.18
@@ -22,7 +23,10 @@ var food := 20
 var soil := 0
 var clay := 0
 var wellbeing := 75
-var consumption_time := FOOD_CONSUMPTION_INTERVAL
+var game_minutes := 7 * 60
+var game_minutes_per_second := 8.0
+var previous_clock_minute := -1
+var active_meal_hour := -1
 var selected_cell := Vector2i(0, 0)
 var build_mode := ""
 var placed_buildings: Dictionary = {}
@@ -67,13 +71,22 @@ var dig_mode := false
 var house_menu: Panel
 var house_menu_title: Label
 var selected_house: Node3D
+var tent: Node3D
+var tent_cell := Vector2i(0, 0)
+var canteen: Node3D
+var canteen_position := Vector3.ZERO
+var canteen_food := 0
+var pending_canteen_delivery := false
+var clock_label: Label
+var tent_dismantle_progress := -1.0
 
 func _ready() -> void:
 	_create_world()
 	_create_interface()
 	_create_forest()
+	_create_starting_tent()
 	_create_citizens()
-	_update_interface("Build a warehouse, sawmill, farm and homes to sustain the settlement.")
+	_update_interface("All five starting workers live in the tent. Resettle them into houses to remove the housing debuff.")
 
 func _process(delta: float) -> void:
 	if is_first_person:
@@ -82,11 +95,11 @@ func _process(delta: float) -> void:
 	else:
 		_update_camera(delta)
 	_update_construction(delta)
-	_update_couriers()
-	consumption_time -= delta
-	if consumption_time <= 0.0:
-		consumption_time = FOOD_CONSUMPTION_INTERVAL
-		_apply_daily_needs()
+	_update_tent_dismantle(delta)
+	_update_clock(delta)
+	_update_canteen_delivery()
+	if not _is_night():
+		_update_couriers()
 	if selected_builder != null and build_menu.visible:
 		_show_selected_citizen_menu()
 
@@ -202,6 +215,32 @@ func _create_tree(position_on_board: Vector3) -> void:
 	crown.material_override = crown_material
 	tree.add_child(crown)
 
+func _create_starting_tent() -> void:
+	tent = Node3D.new()
+	tent.position = _cell_center(tent_cell)
+	tent.set_meta("is_tent", true)
+	placed_buildings[tent_cell] = "tent"
+	add_child(tent)
+	var base := MeshInstance3D.new()
+	var base_mesh := PrismMesh.new()
+	base_mesh.size = Vector3(1.7, 1.25, 1.55)
+	base.mesh = base_mesh
+	base.position.y = 0.63
+	base.rotation_degrees.y = 90.0
+	var tent_material := StandardMaterial3D.new()
+	tent_material.albedo_color = Color("c7a96a")
+	base.material_override = tent_material
+	tent.add_child(base)
+	var selector := Area3D.new()
+	selector.add_to_group("house_selector")
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(1.7, 1.5, 1.6)
+	shape.shape = box
+	shape.position.y = 0.75
+	selector.add_child(shape)
+	tent.add_child(selector)
+
 func _create_citizens() -> void:
 	for index in POPULATION:
 		_add_citizen(Vector3(-1.1 + (index % 3) * 1.1, 0.0, -0.8 + (index / 3) * 1.1))
@@ -214,7 +253,12 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	citizen.resource_delivered.connect(_on_resource_delivered)
 	citizen.excavation_cycle.connect(_on_excavation_cycle)
 	citizen.resource_ready.connect(_on_resource_ready)
+	citizen.meal_finished.connect(_on_meal_finished)
+	citizen.canteen_delivery_finished.connect(_on_canteen_delivery_finished)
 	citizens.append(citizen)
+	if is_instance_valid(tent):
+		citizen.assign_home(tent)
+		citizen.add_debuff("tent", 25.0)
 
 func _create_interface() -> void:
 	var ui := CanvasLayer.new()
@@ -222,16 +266,16 @@ func _create_interface() -> void:
 	var panel := ColorRect.new()
 	panel.color = Color(0.035, 0.07, 0.09, 0.88)
 	panel.position = Vector2(20, 20)
-	panel.size = Vector2(460, 150)
+	panel.size = Vector2(500, 176)
 	ui.add_child(panel)
 	wood_label = Label.new()
 	wood_label.position = Vector2(18, 14)
-	wood_label.size = Vector2(424, 42)
+	wood_label.size = Vector2(464, 64)
 	wood_label.add_theme_font_size_override("font_size", 18)
 	panel.add_child(wood_label)
 	status_label = Label.new()
-	status_label.position = Vector2(18, 62)
-	status_label.size = Vector2(424, 70)
+	status_label.position = Vector2(18, 84)
+	status_label.size = Vector2(464, 76)
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	status_label.add_theme_font_size_override("font_size", 16)
 	panel.add_child(status_label)
@@ -239,6 +283,15 @@ func _create_interface() -> void:
 	camera_hint_label.position = Vector2(20, 682)
 	camera_hint_label.add_theme_font_size_override("font_size", 16)
 	ui.add_child(camera_hint_label)
+	clock_label = Label.new()
+	clock_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	clock_label.offset_left = -220
+	clock_label.offset_top = 22
+	clock_label.offset_right = -22
+	clock_label.offset_bottom = 52
+	clock_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	clock_label.add_theme_font_size_override("font_size", 22)
+	ui.add_child(clock_label)
 	interaction_hint_label = Label.new()
 	interaction_hint_label.position = Vector2(20, 592)
 	interaction_hint_label.size = Vector2(500, 28)
@@ -258,7 +311,7 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	build_menu = Panel.new()
 	build_menu.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	build_menu.offset_left = -324.0
-	build_menu.offset_top = -464.0
+	build_menu.offset_top = -500.0
 	build_menu.offset_right = -20.0
 	build_menu.offset_bottom = -20.0
 	build_menu.visible = false
@@ -277,13 +330,14 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_build_button("Warehouse - 10 wood", "warehouse", 290)
 	_add_build_button("Sawmill - 10 wood", "sawmill", 326)
 	_add_build_button("Farm - 12 wood", "farm", 362)
-	_add_build_button("House - 12 wood", "house", 398)
+	_add_build_button("Canteen - 16 wood", "canteen", 398)
+	_add_build_button("House - 12 wood", "house", 434)
 
 func _create_house_menu(ui: CanvasLayer) -> void:
 	house_menu = Panel.new()
 	house_menu.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	house_menu.offset_left = -324.0
-	house_menu.offset_top = -302.0
+	house_menu.offset_top = -340.0
 	house_menu.offset_right = -20.0
 	house_menu.offset_bottom = -20.0
 	house_menu.visible = false
@@ -293,11 +347,35 @@ func _create_house_menu(ui: CanvasLayer) -> void:
 	house_menu_title.size = Vector2(272, 42)
 	house_menu_title.add_theme_font_size_override("font_size", 17)
 	house_menu.add_child(house_menu_title)
-	_add_house_spawn_button("Spawn Builder", "builder", 64)
-	_add_house_spawn_button("Spawn Forester", "forestry", 104)
-	_add_house_spawn_button("Spawn Farmer", "farming", 144)
-	_add_house_spawn_button("Spawn Digger", "excavation", 184)
-	_add_house_spawn_button("Spawn Courier", "courier", 224)
+	_add_house_resettle_button()
+	_add_house_spawn_button("Spawn Builder", "builder", 102)
+	_add_house_spawn_button("Spawn Forester", "forestry", 136)
+	_add_house_spawn_button("Spawn Farmer", "farming", 170)
+	_add_house_spawn_button("Spawn Digger", "excavation", 204)
+	_add_house_spawn_button("Spawn Courier", "courier", 238)
+	_add_house_spawn_button("Spawn Cook", "cook", 272)
+
+func _add_house_resettle_button() -> void:
+	var button := Button.new()
+	button.text = "Resettle tent resident"
+	button.position = Vector2(16, 64)
+	button.size = Vector2(272, 30)
+	button.pressed.connect(_resettle_tent_resident)
+	house_menu.add_child(button)
+
+func _resettle_tent_resident() -> void:
+	if selected_house == null or int(selected_house.get_meta("spawn_slots", 0)) <= 0:
+		return
+	for citizen in citizens:
+		if citizen.home == tent:
+			citizen.assign_home(selected_house)
+			citizen.remove_debuff("tent")
+			selected_house.set_meta("spawn_slots", int(selected_house.get_meta("spawn_slots", 0)) - 1)
+			_show_house_menu()
+			_update_interface("A resident moved out of the tent. Their maximum satisfaction increased.")
+			_check_tent_dismantle()
+			return
+	_update_interface("No residents remain in the tent.")
 
 func _add_house_spawn_button(title: String, specialization: String, y_position: float) -> void:
 	var button := Button.new()
@@ -315,6 +393,8 @@ func _spawn_house_citizen(specialization: String) -> void:
 		return
 	var offset := Vector3(-0.45 + (2 - slots) * 0.9, 0.0, -0.85)
 	_add_citizen(selected_house.global_position + offset, specialization)
+	citizens.back().assign_home(selected_house)
+	citizens.back().remove_debuff("tent")
 	selected_house.set_meta("spawn_slots", slots - 1)
 	_update_workers()
 	_show_house_menu()
@@ -327,7 +407,7 @@ func _show_house_menu() -> void:
 	house_menu.visible = slots > 0
 	if slots <= 0:
 		return
-	house_menu_title.text = "House recruitment\nChoose resident (%d/2 slots)" % slots
+	house_menu_title.text = "House residents\nFree beds: %d/%d" % [slots, HOUSE_CAPACITY]
 
 func _add_build_button(title: String, building_type: String, y_position: float) -> void:
 	var button := Button.new()
@@ -475,8 +555,12 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 		selected_house = hit.collider.get_parent() as Node3D
 		selected_builder = null
 		build_menu.visible = false
-		_show_house_menu()
-		_update_interface("House selected. Choose two residents to recruit.")
+		if selected_house == tent:
+			house_menu.visible = false
+			_update_interface("Starting tent: %d/%d residents. It cannot recruit new people." % [_tent_resident_count(), TENT_CAPACITY])
+		else:
+			_show_house_menu()
+			_update_interface("House selected. Resettle a tent resident or recruit a new worker.")
 		return
 	if not hit.collider.is_in_group("citizen_selector"):
 		return
@@ -498,7 +582,9 @@ func _show_selected_citizen_menu() -> void:
 	if selected_builder == null:
 		return
 	var assignment := "Auto" if selected_builder.manual_role.is_empty() else selected_builder.manual_role.capitalize()
-	build_menu_title.text = "%s  Sat: %d%%  Task: %s\nBuild %.1f  Wood %.1f\nFarm %.1f  Dig %.1f" % [selected_builder.role_label(), roundi(selected_builder.satisfaction), assignment, float(selected_builder.skills.construction), float(selected_builder.skills.forestry), float(selected_builder.skills.farming), float(selected_builder.skills.excavation)]
+	var home_label := "Tent" if selected_builder.home == tent else "House"
+	var effect_label := "Meal buff" if selected_builder.buffs.has("canteen_meal") else ("Tent debuff" if selected_builder.debuffs.has("tent") else "None")
+	build_menu_title.text = "%s  Sat: %d/%d%%  Food: %d%%\nHome: %s  Effect: %s  Task: %s\nBuild %.1f Wood %.1f Farm %.1f Dig %.1f" % [selected_builder.role_label(), roundi(selected_builder.satisfaction), roundi(selected_builder.get_satisfaction_cap()), roundi(selected_builder.hunger), home_label, effect_label, assignment, float(selected_builder.skills.construction), float(selected_builder.skills.forestry), float(selected_builder.skills.farming), float(selected_builder.skills.excavation)]
 	build_menu_title.add_theme_color_override("font_color", selected_builder.specialization_color())
 
 func _toggle_first_person() -> void:
@@ -757,6 +843,8 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 		"house":
 			completed_house_count += 1
 			_create_house(position_on_board)
+		"canteen":
+			_create_canteen(position_on_board)
 	_update_workers()
 	_update_interface("%s construction completed." % building_type.capitalize())
 
@@ -860,12 +948,83 @@ func _create_house(position_on_board: Vector3) -> void:
 	selector.add_child(selector_shape)
 	house.add_child(selector)
 
+func _create_canteen(position_on_board: Vector3) -> void:
+	canteen = Node3D.new()
+	canteen.position = position_on_board
+	canteen_position = position_on_board
+	add_child(canteen)
+	var base := MeshInstance3D.new()
+	var base_mesh := BoxMesh.new()
+	base_mesh.size = Vector3(1.7, 0.9, 1.65)
+	base.mesh = base_mesh
+	base.position.y = 0.45
+	var wall_material := StandardMaterial3D.new()
+	wall_material.albedo_color = Color("d4a64f")
+	base.material_override = wall_material
+	canteen.add_child(base)
+	var roof := MeshInstance3D.new()
+	var roof_mesh := PrismMesh.new()
+	roof_mesh.size = Vector3(1.95, 0.75, 1.9)
+	roof.mesh = roof_mesh
+	roof.position.y = 1.25
+	roof.rotation_degrees.y = 90.0
+	var roof_material := StandardMaterial3D.new()
+	roof_material.albedo_color = Color("a54e38")
+	roof.material_override = roof_material
+	canteen.add_child(roof)
+	var sign := Label3D.new()
+	sign.text = "CANTEEN"
+	sign.position = Vector3(0, 1.3, -0.88)
+	sign.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	sign.font_size = 42
+	canteen.add_child(sign)
+
+func _tent_resident_count() -> int:
+	var count := 0
+	for citizen in citizens:
+		if citizen.home == tent:
+			count += 1
+	return count
+
+func _check_tent_dismantle() -> void:
+	if not is_instance_valid(tent) or _tent_resident_count() > 0 or tent_dismantle_progress >= 0.0:
+		return
+	for citizen in citizens:
+		if citizen.specialization == "builder":
+			citizen.assign_construction(tent)
+	tent_dismantle_progress = 0.0
+	_update_interface("The tent is empty. Builders are walking over to dismantle it.")
+
+func _update_tent_dismantle(delta: float) -> void:
+	if tent_dismantle_progress < 0.0 or not is_instance_valid(tent):
+		return
+	var dismantlers := 0
+	for citizen in citizens:
+		if citizen.specialization == "builder" and citizen.global_position.distance_to(tent.global_position) <= 0.3:
+			dismantlers += 1
+	if dismantlers <= 0:
+		return
+	tent_dismantle_progress += delta * dismantlers
+	if tent_dismantle_progress < 2.0:
+		return
+	tent.queue_free()
+	tent = null
+	placed_buildings.erase(tent_cell)
+	wood += 2
+	tent_dismantle_progress = -1.0
+	_update_workers()
+	_update_interface("Builders dismantled the empty tent and recovered 2 wood.")
+
 func _update_workers() -> void:
+	if _is_night():
+		for citizen in citizens:
+			citizen.go_home()
+		return
 	for index in citizens.size():
 		var citizen := citizens[index]
 		if citizen.is_player_controlled:
 			continue
-		if citizen.specialization == "courier":
+		if citizen.specialization == "courier" or citizen.specialization == "cook":
 			continue
 		var role := _work_role_for(citizen)
 		if role == "construction" and not construction_sites.is_empty():
@@ -902,6 +1061,89 @@ func _has_courier() -> bool:
 		if citizen.specialization == "courier":
 			return true
 	return false
+
+func _has_cook() -> bool:
+	for citizen in citizens:
+		if citizen.specialization == "cook":
+			return true
+	return false
+
+func _update_clock(delta: float) -> void:
+	game_minutes = posmod(game_minutes + delta * game_minutes_per_second, 24.0 * 60.0)
+	var current_minute := int(game_minutes)
+	var hour := current_minute / 60
+	var minute := current_minute % 60
+	clock_label.text = "%s  %02d:%02d" % ["Night" if _is_night() else "Day", hour, minute]
+	if previous_clock_minute == current_minute:
+		return
+	previous_clock_minute = current_minute
+	if minute == 0 and (hour == 8 or hour == 13 or hour == 19) and active_meal_hour != hour:
+		active_meal_hour = hour
+		_start_meal(hour)
+	if minute == 0 and hour == 21:
+		_update_workers()
+		_update_interface("Nightfall: workers are returning to their assigned homes.")
+	if minute == 0 and hour == 6:
+		active_meal_hour = -1
+		_update_workers()
+		_update_interface("Morning: workers left their homes for their assignments.")
+
+func _is_night() -> bool:
+	var hour := int(game_minutes) / 60
+	return hour >= 21 or hour < 6
+
+func _start_meal(hour: int) -> void:
+	if not is_instance_valid(canteen):
+		for citizen in citizens:
+			if not citizen.is_player_controlled:
+				citizen.receive_meal(false)
+		_update_interface("%02d:00 meal missed: no canteen." % hour)
+		return
+	if not _has_cook():
+		for citizen in citizens:
+			if not citizen.is_player_controlled:
+				citizen.receive_meal(false)
+		_update_interface("%02d:00 meal missed: the canteen needs a cook." % hour)
+		return
+	for citizen in citizens:
+		if citizen.is_available_for_schedule():
+			citizen.go_to_canteen(canteen_position)
+	_update_interface("%02d:00 meal service started. Residents are heading to the canteen." % hour)
+
+func _on_meal_finished(citizen: Citizen) -> void:
+	var served := is_instance_valid(canteen) and _has_cook() and canteen_food > 0
+	if served:
+		canteen_food -= 1
+	citizen.receive_meal(served)
+	if not served:
+		_update_interface("Canteen ran out of food. A worker missed their meal.")
+	if not _is_night():
+		_update_workers()
+
+func _update_canteen_delivery() -> void:
+	if not is_instance_valid(canteen) or warehouse_positions.is_empty() or food <= 0 or canteen_food >= 12 or pending_canteen_delivery:
+		return
+	var carrier: Citizen
+	for citizen in citizens:
+		if citizen.specialization == "courier" and citizen.state == Citizen.State.IDLE:
+			carrier = citizen
+			break
+	if carrier == null:
+		for citizen in citizens:
+			if citizen.specialization == "cook" and citizen.state == Citizen.State.IDLE:
+				carrier = citizen
+				break
+	if carrier == null:
+		return
+	var amount := mini(4, food)
+	food -= amount
+	pending_canteen_delivery = true
+	carrier.deliver_food_to_canteen(warehouse_positions[0], canteen_position, amount)
+
+func _on_canteen_delivery_finished(_worker: Citizen, amount: int) -> void:
+	canteen_food += amount
+	pending_canteen_delivery = false
+	_update_interface("Canteen received %d food. Stock: %d." % [amount, canteen_food])
 
 func _update_couriers() -> void:
 	if warehouse_positions.is_empty():
@@ -978,30 +1220,12 @@ func _on_excavation_cycle(worker: Citizen, site_node: Node3D, efficiency: float)
 		dig_sites[index] = site
 		return
 
-func _apply_daily_needs() -> void:
-	var beds := _house_count() * BED_CAPACITY
-	if food >= citizens.size():
-		food -= citizens.size()
-		wellbeing = mini(100, wellbeing + 2)
-	else:
-		food = 0
-		wellbeing = maxi(0, wellbeing - 14)
-		_update_interface("Food shortage lowered wellbeing.")
-	if beds < citizens.size():
-		wellbeing = maxi(0, wellbeing - 7)
-		_update_interface("Not enough housing lowered wellbeing.")
-	else:
-		wellbeing = mini(100, wellbeing + 1)
-	_update_interface("Citizens consumed food. Next needs check in 10 seconds.")
-
-func _house_count() -> int:
-	return completed_house_count
-
 func _building_cost() -> int:
 	match build_mode:
 		"warehouse": return WAREHOUSE_COST
 		"sawmill": return SAWMILL_COST
 		"farm": return FARM_COST
+		"canteen": return CANTEEN_COST
 		_: return HOUSE_COST
 
 func _update_camera(delta: float) -> void:
@@ -1049,7 +1273,7 @@ func _cell_center(cell: Vector2i) -> Vector3:
 	return Vector3((cell.x + 0.5) * CELL_SIZE, 0.0, (cell.y + 0.5) * CELL_SIZE)
 
 func _update_interface(message: String) -> void:
-	wood_label.text = "Wood: %d   Food: %d   Soil: %d   Clay: %d\nWellbeing: %d%%   Pocket W:%d F:%d (%d/%d)" % [wood, food, soil, clay, wellbeing, pocket_wood, pocket_food, pocket_wood + pocket_food, POCKET_WOOD_CAPACITY]
+	wood_label.text = "Wood: %d   Warehouse food: %d   Canteen: %d\nSoil: %d   Clay: %d   Wellbeing: %d%%\nTent: %d/%d   Population: %d" % [wood, food, canteen_food, soil, clay, wellbeing, _tent_resident_count(), TENT_CAPACITY, citizens.size()]
 	status_label.text = message
 	if is_first_person:
 		camera_hint_label.text = "R: leave citizen  WASD/arrows: move  Mouse: look  LMB: gather/interact"

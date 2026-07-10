@@ -4,12 +4,14 @@ extends Node3D
 signal resource_delivered(resource_type: String, amount: int)
 signal excavation_cycle(worker: Citizen, site: Node3D, efficiency: float)
 signal resource_ready(worker: Citizen, resource_type: String, amount: int)
+signal meal_finished(worker: Citizen)
+signal canteen_delivery_finished(worker: Citizen, amount: int)
 
 const WALK_SPEED := 2.2
 const WORK_DURATION := 1.4
 const COURIER_WAIT_DURATION := 8.0
 
-enum State { IDLE, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER }
+enum State { IDLE, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY }
 
 var state := State.IDLE
 var resource_type := "wood"
@@ -35,6 +37,13 @@ var courier_target: Citizen
 var courier_resource_type := ""
 var courier_worker: Citizen
 var courier_wait_time := 0.0
+var home: Node3D
+var hunger := 78.0
+var buffs: Dictionary = {}
+var debuffs: Dictionary = {}
+var meal_time := 0.0
+var delivery_amount := 0
+var canteen_position := Vector3.ZERO
 
 func _ready() -> void:
 	var selector := Area3D.new()
@@ -84,6 +93,7 @@ func assign_work(next_resource_type: String, source: Vector3, workplace: Vector3
 func _process(delta: float) -> void:
 	if is_player_controlled:
 		return
+	_update_effects(delta)
 	_update_satisfaction(delta)
 	match state:
 		State.TO_TREE:
@@ -141,6 +151,29 @@ func _process(delta: float) -> void:
 		State.COURIER_TO_WAREHOUSE:
 			if _move_to(warehouse_position, delta):
 				resource_delivered.emit(courier_resource_type, carried_amount)
+				state = State.IDLE
+		State.TO_HOME:
+			if is_instance_valid(home) and _move_to(home.global_position, delta):
+				state = State.RESTING
+		State.RESTING:
+			satisfaction = minf(get_satisfaction_cap(), satisfaction + delta * 2.2)
+			hunger = maxf(0.0, hunger - delta * 0.25)
+		State.TO_CANTEEN:
+			if _move_to(canteen_position, delta):
+				state = State.EATING
+				meal_time = 1.1
+		State.EATING:
+			meal_time -= delta
+			if meal_time <= 0.0:
+				meal_finished.emit(self)
+				state = State.IDLE
+		State.TO_FOOD_PICKUP:
+			if _move_to(warehouse_position, delta):
+				state = State.TO_CANTEEN_DELIVERY
+		State.TO_CANTEEN_DELIVERY:
+			if _move_to(canteen_position, delta):
+				canteen_delivery_finished.emit(self, delivery_amount)
+				delivery_amount = 0
 				state = State.IDLE
 
 func _move_to(destination: Vector3, delta: float) -> bool:
@@ -223,12 +256,14 @@ func setup_specialization(next_specialization: String) -> void:
 		"farming": body_material.albedo_color = Color("5c8fc9")
 		"excavation": body_material.albedo_color = Color("a6744b")
 		"courier": body_material.albedo_color = Color("a85d91")
+		"cook": body_material.albedo_color = Color("d96f43")
 
 func get_efficiency(role: String) -> float:
 	var skill_value: float = skills.get(role, 1.0)
 	var skill_bonus := 0.55 + skill_value * 0.18
 	var satisfaction_factor := lerpf(0.45, 1.0, satisfaction / 100.0)
-	return skill_bonus * satisfaction_factor
+	var meal_bonus := 0.15 if buffs.has("canteen_meal") else 0.0
+	return skill_bonus * satisfaction_factor * (1.0 + meal_bonus)
 
 func role_label() -> String:
 	match specialization:
@@ -236,6 +271,7 @@ func role_label() -> String:
 		"forestry": return "Forester"
 		"farming": return "Farmer"
 		"excavation": return "Digger"
+		"cook": return "Cook"
 		_: return "Courier"
 
 func specialization_color() -> Color:
@@ -244,6 +280,7 @@ func specialization_color() -> Color:
 		"forestry": return Color("3f9b61")
 		"farming": return Color("5c8fc9")
 		"excavation": return Color("a6744b")
+		"cook": return Color("d96f43")
 		_: return Color("a85d91")
 
 func preferred_role() -> String:
@@ -257,15 +294,69 @@ func idle() -> void:
 	construction_site = null
 	assigned_dig_site = null
 
+func assign_home(next_home: Node3D) -> void:
+	home = next_home
+
+func go_home() -> void:
+	if not is_player_controlled and is_instance_valid(home):
+		active_role = ""
+		state = State.TO_HOME
+
+func go_to_canteen(next_canteen_position: Vector3) -> void:
+	if not is_player_controlled:
+		canteen_position = next_canteen_position
+		active_role = ""
+		state = State.TO_CANTEEN
+
+func deliver_food_to_canteen(warehouse: Vector3, next_canteen_position: Vector3, amount: int) -> void:
+	if not is_player_controlled:
+		warehouse_position = warehouse
+		canteen_position = next_canteen_position
+		delivery_amount = amount
+		active_role = ""
+		state = State.TO_FOOD_PICKUP
+
+func add_debuff(debuff_id: String, value: float) -> void:
+	debuffs[debuff_id] = value
+
+func remove_debuff(debuff_id: String) -> void:
+	debuffs.erase(debuff_id)
+
+func get_satisfaction_cap() -> float:
+	var cap := 100.0
+	for penalty in debuffs.values():
+		cap -= float(penalty)
+	return maxf(10.0, cap)
+
+func receive_meal(served: bool) -> void:
+	if served:
+		hunger = minf(100.0, hunger + 35.0)
+		satisfaction = minf(get_satisfaction_cap(), satisfaction + 8.0)
+		buffs["canteen_meal"] = 8.0
+	else:
+		hunger = maxf(0.0, hunger - 18.0)
+		satisfaction = maxf(0.0, satisfaction - 12.0)
+
+func _update_effects(delta: float) -> void:
+	for buff_id in buffs.keys():
+		var time_left := float(buffs[buff_id]) - delta
+		if time_left <= 0.0:
+			buffs.erase(buff_id)
+		else:
+			buffs[buff_id] = time_left
+
+func is_available_for_schedule() -> bool:
+	return not is_player_controlled and state != State.TO_CANTEEN and state != State.EATING and state != State.TO_HOME and state != State.RESTING
+
 func _update_satisfaction(delta: float) -> void:
 	satisfaction_tick += delta
 	if satisfaction_tick < 1.0:
 		return
 	if active_role.is_empty():
-		satisfaction = minf(100.0, satisfaction + 1.2 * satisfaction_tick)
+		satisfaction = minf(get_satisfaction_cap(), satisfaction + 1.2 * satisfaction_tick)
 		satisfaction_tick = 0.0
 		return
 	var change := 1.1 if active_role == preferred_role() else -2.3
-	satisfaction = clampf(satisfaction + change * satisfaction_tick, 0.0, 100.0)
+	satisfaction = clampf(satisfaction + change * satisfaction_tick, 0.0, get_satisfaction_cap())
 	skills[active_role] = minf(5.0, float(skills.get(active_role, 1.0)) + 0.025 * satisfaction_tick)
 	satisfaction_tick = 0.0
