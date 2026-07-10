@@ -39,6 +39,7 @@ var build_menu: Panel
 var build_menu_title: Label
 var camera_hint_label: Label
 var is_panning_camera := false
+var is_rotating_camera := false
 var construction_sites: Array[Dictionary] = []
 var completed_house_count := 0
 
@@ -246,8 +247,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		_update_camera_position()
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_MIDDLE:
 		is_panning_camera = event.pressed
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
+		is_rotating_camera = event.pressed
 	elif event is InputEventMouseMotion:
-		if is_panning_camera:
+		if is_rotating_camera:
+			_rotate_camera(event.relative)
+		elif is_panning_camera:
 			_pan_camera(event.relative)
 		elif selected_builder != null and not build_mode.is_empty():
 			var cell: Variant = _cell_at_screen_position(event.position)
@@ -265,6 +270,7 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 	var from := camera.project_ray_origin(screen_position)
 	var to := from + camera.project_ray_normal(screen_position) * 200.0
 	var query := PhysicsRayQueryParameters3D.create(from, to)
+	query.collide_with_areas = true
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	if hit.is_empty() or not hit.collider.is_in_group("citizen_selector"):
 		return
@@ -529,8 +535,6 @@ func _update_camera(delta: float) -> void:
 		camera_target += move_direction.normalized() * 9.0 * delta
 		camera_target.x = clampf(camera_target.x, -10.0, 10.0)
 		camera_target.z = clampf(camera_target.z, -10.0, 10.0)
-	if Input.is_key_pressed(KEY_Q): camera_yaw += 65.0 * delta
-	if Input.is_key_pressed(KEY_E): camera_yaw -= 65.0 * delta
 	_update_camera_position()
 
 func _pan_camera(mouse_delta: Vector2) -> void:
@@ -544,6 +548,11 @@ func _pan_camera(mouse_delta: Vector2) -> void:
 	camera_target += forward * mouse_delta.y * 0.035
 	camera_target.x = clampf(camera_target.x, -10.0, 10.0)
 	camera_target.z = clampf(camera_target.z, -10.0, 10.0)
+	_update_camera_position()
+
+func _rotate_camera(mouse_delta: Vector2) -> void:
+	camera_yaw -= mouse_delta.x * 0.35
+	camera_pitch = clampf(camera_pitch - mouse_delta.y * 0.25, 25.0, 78.0)
 	_update_camera_position()
 
 func _update_camera_position() -> void:
@@ -560,4 +569,4 @@ func _cell_center(cell: Vector2i) -> Vector3:
 func _update_interface(message: String) -> void:
 	wood_label.text = "Wood: %d   Food: %d   Wellbeing: %d%%" % [wood, food, wellbeing]
 	status_label.text = message
-	camera_hint_label.text = "Select a citizen to build.  WASD/arrows: move  Q/E: rotate  Middle mouse: pan  Wheel: zoom"
+	camera_hint_label.text = "Select a citizen to build.  WASD/arrows: move  Right drag: rotate/tilt  Middle drag: pan  Wheel: zoom"
