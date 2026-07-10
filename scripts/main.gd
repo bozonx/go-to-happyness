@@ -11,6 +11,11 @@ const POPULATION := 5
 const BED_CAPACITY := 4
 const FOOD_CONSUMPTION_INTERVAL := 10.0
 const CONSTRUCTION_DURATION := 4.0
+const PLAYER_SPEED := 4.2
+const PLAYER_EYE_HEIGHT := 1.18
+const HARVEST_DURATION := 1.25
+const INTERACTION_RANGE := 2.15
+const POCKET_WOOD_CAPACITY := 8
 
 var wood := STARTING_WOOD
 var food := 20
@@ -42,6 +47,15 @@ var is_panning_camera := false
 var is_rotating_camera := false
 var construction_sites: Array[Dictionary] = []
 var completed_house_count := 0
+var player_citizen: Citizen
+var is_first_person := false
+var player_yaw := 0.0
+var player_pitch := -8.0
+var pocket_wood := 0
+var interaction_time := 0.0
+var interaction_action := ""
+var interaction_hint_label: Label
+var interaction_progress: ProgressBar
 
 func _ready() -> void:
 	_create_world()
@@ -51,7 +65,11 @@ func _ready() -> void:
 	_update_interface("Build a warehouse, sawmill, farm and homes to sustain the settlement.")
 
 func _process(delta: float) -> void:
-	_update_camera(delta)
+	if is_first_person:
+		_update_player_control(delta)
+		_update_interaction(delta)
+	else:
+		_update_camera(delta)
 	_update_construction(delta)
 	consumption_time -= delta
 	if consumption_time <= 0.0:
@@ -200,6 +218,18 @@ func _create_interface() -> void:
 	camera_hint_label.position = Vector2(20, 682)
 	camera_hint_label.add_theme_font_size_override("font_size", 16)
 	ui.add_child(camera_hint_label)
+	interaction_hint_label = Label.new()
+	interaction_hint_label.position = Vector2(20, 592)
+	interaction_hint_label.size = Vector2(500, 28)
+	interaction_hint_label.add_theme_font_size_override("font_size", 18)
+	interaction_hint_label.visible = false
+	ui.add_child(interaction_hint_label)
+	interaction_progress = ProgressBar.new()
+	interaction_progress.position = Vector2(20, 625)
+	interaction_progress.size = Vector2(310, 22)
+	interaction_progress.show_percentage = false
+	interaction_progress.visible = false
+	ui.add_child(interaction_progress)
 	_create_build_menu(ui)
 
 func _create_build_menu(ui: CanvasLayer) -> void:
@@ -239,6 +269,18 @@ func _select_build_mode(next_mode: String) -> void:
 	_update_interface("%s selected. Choose a valid cell." % build_mode.capitalize())
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.keycode == KEY_R and event.pressed and not event.echo:
+		_toggle_first_person()
+		get_viewport().set_input_as_handled()
+		return
+	if is_first_person:
+		if event is InputEventMouseMotion:
+			player_yaw -= event.relative.x * 0.0035
+			player_pitch = clampf(player_pitch - event.relative.y * 0.003, -70.0, 65.0)
+		elif event is InputEventKey and event.keycode == KEY_F and event.pressed and not event.echo:
+			_start_interaction()
+		get_viewport().set_input_as_handled()
+		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
 		camera_distance = maxf(7.0, camera_distance - 2.0)
 		_update_camera_position()
@@ -280,6 +322,124 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 	build_menu.visible = true
 	build_menu_title.text = "Citizen selected\nChoose construction:"
 	_update_interface("Citizen selected. Choose a building in the lower-right menu.")
+
+func _toggle_first_person() -> void:
+	if is_first_person:
+		is_first_person = false
+		if player_citizen != null:
+			player_citizen.set_player_controlled(false)
+			camera_target = player_citizen.global_position
+		player_citizen = null
+		interaction_action = ""
+		interaction_hint_label.visible = false
+		interaction_progress.visible = false
+		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+		build_menu.visible = selected_builder != null
+		_update_interface("Left first-person control. Citizen remains selected.")
+		return
+	if selected_builder == null:
+		_update_interface("Select a citizen first, then press R to take control.")
+		return
+	player_citizen = selected_builder
+	player_citizen.set_player_controlled(true)
+	is_first_person = true
+	build_mode = ""
+	selection_marker.visible = false
+	build_menu.visible = false
+	player_yaw = player_citizen.rotation.y
+	player_pitch = -8.0
+	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+	_update_interface("First-person control enabled. Gather wood and bring it to a warehouse.")
+
+func _update_player_control(delta: float) -> void:
+	if player_citizen == null:
+		_toggle_first_person()
+		return
+	var move_direction := Vector3.ZERO
+	var forward := Vector3(-sin(player_yaw), 0.0, -cos(player_yaw))
+	var right := Vector3(cos(player_yaw), 0.0, -sin(player_yaw))
+	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP): move_direction += forward
+	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN): move_direction -= forward
+	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT): move_direction += right
+	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT): move_direction -= right
+	if not move_direction.is_zero_approx():
+		player_citizen.global_position += move_direction.normalized() * PLAYER_SPEED * delta
+		player_citizen.global_position.x = clampf(player_citizen.global_position.x, -11.3, 11.3)
+		player_citizen.global_position.z = clampf(player_citizen.global_position.z, -11.3, 11.3)
+		player_citizen.rotation.y = player_yaw
+	camera.global_position = player_citizen.global_position + Vector3(0.0, PLAYER_EYE_HEIGHT, 0.0)
+	camera.rotation = Vector3(player_pitch, player_yaw, 0.0)
+	_refresh_interaction_hint()
+
+func _start_interaction() -> void:
+	if not interaction_action.is_empty():
+		return
+	if _nearby_warehouse() and pocket_wood > 0:
+		wood += pocket_wood
+		var delivered := pocket_wood
+		pocket_wood = 0
+		_update_interface("Delivered %d wood to the warehouse." % delivered)
+		_refresh_interaction_hint()
+		return
+	if _nearby_tree():
+		if pocket_wood >= POCKET_WOOD_CAPACITY:
+			_update_interface("Pocket is full. Take the wood to a warehouse.")
+			_refresh_interaction_hint()
+			return
+		interaction_action = "harvesting"
+		interaction_time = 0.0
+		interaction_progress.visible = true
+		interaction_hint_label.text = "Gathering wood..."
+		return
+	if _nearby_warehouse():
+		_update_interface("Your pocket is empty.")
+	else:
+		_update_interface("Move closer to a tree to gather wood or a warehouse to unload it.")
+
+func _update_interaction(delta: float) -> void:
+	if interaction_action.is_empty():
+		return
+	if not _nearby_tree():
+		interaction_action = ""
+		interaction_progress.visible = false
+		_update_interface("Gathering cancelled: you moved away from the tree.")
+		return
+	interaction_time += delta
+	interaction_progress.value = interaction_time / HARVEST_DURATION * 100.0
+	interaction_hint_label.text = "Gathering wood: %d%%" % roundi(interaction_progress.value)
+	if interaction_time >= HARVEST_DURATION:
+		interaction_action = ""
+		pocket_wood += 1
+		interaction_progress.visible = false
+		_update_interface("Wood gathered. %d/%d in pocket." % [pocket_wood, POCKET_WOOD_CAPACITY])
+		_refresh_interaction_hint()
+
+func _nearby_tree() -> bool:
+	if player_citizen == null:
+		return false
+	for tree_position in tree_positions:
+		if player_citizen.global_position.distance_to(tree_position) <= INTERACTION_RANGE:
+			return true
+	return false
+
+func _nearby_warehouse() -> bool:
+	if player_citizen == null:
+		return false
+	for warehouse_position in warehouse_positions:
+		if player_citizen.global_position.distance_to(warehouse_position) <= INTERACTION_RANGE:
+			return true
+	return false
+
+func _refresh_interaction_hint() -> void:
+	if not is_first_person or not interaction_action.is_empty():
+		return
+	interaction_hint_label.visible = true
+	if _nearby_warehouse():
+		interaction_hint_label.text = "F: unload wood into warehouse (%d in pocket)" % pocket_wood
+	elif _nearby_tree():
+		interaction_hint_label.text = "F: gather wood (%d/%d in pocket)" % [pocket_wood, POCKET_WOOD_CAPACITY]
+	else:
+		interaction_hint_label.text = "Find a tree to gather wood or a warehouse to unload it."
 
 func _cell_at_screen_position(screen_position: Vector2) -> Variant:
 	var from := camera.project_ray_origin(screen_position)
@@ -567,6 +727,9 @@ func _cell_center(cell: Vector2i) -> Vector3:
 	return Vector3((cell.x + 0.5) * CELL_SIZE, 0.0, (cell.y + 0.5) * CELL_SIZE)
 
 func _update_interface(message: String) -> void:
-	wood_label.text = "Wood: %d   Food: %d   Wellbeing: %d%%" % [wood, food, wellbeing]
+	wood_label.text = "Wood: %d   Food: %d   Wellbeing: %d%%   Pocket: %d/%d" % [wood, food, wellbeing, pocket_wood, POCKET_WOOD_CAPACITY]
 	status_label.text = message
-	camera_hint_label.text = "Select a citizen to build.  WASD/arrows: move  Right drag: rotate/tilt  Middle drag: pan  Wheel: zoom"
+	if is_first_person:
+		camera_hint_label.text = "R: leave citizen  WASD/arrows: move  Mouse: look  F: interact"
+	else:
+		camera_hint_label.text = "Click a citizen, then R: first-person.  WASD/arrows: move camera  Right drag: rotate/tilt  Middle drag: pan  Wheel: zoom"

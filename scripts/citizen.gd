@@ -14,6 +14,7 @@ var source_position := Vector3.ZERO
 var workplace_position := Vector3.ZERO
 var warehouse_position := Vector3.ZERO
 var work_time := 0.0
+var is_player_controlled := false
 
 func _ready() -> void:
 	var selector := Area3D.new()
@@ -50,6 +51,8 @@ func _ready() -> void:
 	add_child(head)
 
 func assign_work(next_resource_type: String, source: Vector3, workplace: Vector3, warehouse: Vector3) -> void:
+	if is_player_controlled:
+		return
 	resource_type = next_resource_type
 	source_position = source
 	workplace_position = workplace
@@ -57,6 +60,8 @@ func assign_work(next_resource_type: String, source: Vector3, workplace: Vector3
 	state = State.TO_TREE
 
 func _process(delta: float) -> void:
+	if is_player_controlled:
+		return
 	match state:
 		State.TO_TREE:
 			if _move_to(source_position, delta):
@@ -91,3 +96,8 @@ func _move_to(destination: Vector3, delta: float) -> bool:
 func _work(delta: float) -> bool:
 	work_time -= delta
 	return work_time <= 0.0
+
+func set_player_controlled(controlled: bool) -> void:
+	is_player_controlled = controlled
+	if controlled:
+		state = State.IDLE
