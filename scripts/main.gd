@@ -4,19 +4,29 @@ const BOARD_CELLS := 12
 const CELL_SIZE := 2.0
 const STARTING_WOOD := 30
 const WAREHOUSE_COST := 10
+const SAWMILL_COST := 10
+const POPULATION := 5
 
 var wood := STARTING_WOOD
 var selected_cell := Vector2i(0, 0)
+var build_mode := "warehouse"
 var placed_buildings: Dictionary = {}
+var warehouse_positions: Array[Vector3] = []
+var sawmill_positions: Array[Vector3] = []
+var tree_positions: Array[Vector3] = []
+var citizens: Array[Citizen] = []
 var camera: Camera3D
 var selection_marker: MeshInstance3D
 var wood_label: Label
 var status_label: Label
+var controls_label: Label
 
 func _ready() -> void:
 	_create_world()
 	_create_interface()
-	_update_interface("Choose a cell to place a warehouse.")
+	_create_forest()
+	_create_citizens()
+	_update_interface("Build a warehouse and a sawmill to begin production.")
 
 func _create_world() -> void:
 	var environment := WorldEnvironment.new()
@@ -40,7 +50,6 @@ func _create_world() -> void:
 	camera.position = Vector3(16.0, 19.0, 18.0)
 	add_child(camera)
 	camera.look_at(Vector3.ZERO)
-
 	_create_ground()
 	_create_grid()
 	_create_selection_marker()
@@ -97,42 +106,86 @@ func _create_selection_marker() -> void:
 	add_child(selection_marker)
 	_move_selection(Vector2i(0, 0))
 
+func _create_forest() -> void:
+	var cells := [Vector2i(-5, -4), Vector2i(-4, -5), Vector2i(-5, 4), Vector2i(4, -5), Vector2i(5, 4), Vector2i(4, 5)]
+	for cell in cells:
+		var tree_position := _cell_center(cell)
+		tree_positions.append(tree_position)
+		_create_tree(tree_position)
+
+func _create_tree(position_on_board: Vector3) -> void:
+	var tree := Node3D.new()
+	tree.position = position_on_board
+	add_child(tree)
+	var trunk := MeshInstance3D.new()
+	var trunk_mesh := CylinderMesh.new()
+	trunk_mesh.top_radius = 0.12
+	trunk_mesh.bottom_radius = 0.17
+	trunk_mesh.height = 1.1
+	trunk.mesh = trunk_mesh
+	trunk.position.y = 0.55
+	var trunk_material := StandardMaterial3D.new()
+	trunk_material.albedo_color = Color("684630")
+	trunk.material_override = trunk_material
+	tree.add_child(trunk)
+	var crown := MeshInstance3D.new()
+	var crown_mesh := SphereMesh.new()
+	crown_mesh.radius = 0.62
+	crown_mesh.height = 1.25
+	crown.mesh = crown_mesh
+	crown.position.y = 1.35
+	var crown_material := StandardMaterial3D.new()
+	crown_material.albedo_color = Color("2d633b")
+	crown.material_override = crown_material
+	tree.add_child(crown)
+
+func _create_citizens() -> void:
+	for index in POPULATION:
+		var citizen := Citizen.new()
+		citizen.position = Vector3(-1.1 + (index % 3) * 1.1, 0.0, -0.8 + (index / 3) * 1.1)
+		citizen.wood_delivered.connect(_on_wood_delivered)
+		add_child(citizen)
+		citizens.append(citizen)
+
 func _create_interface() -> void:
 	var ui := CanvasLayer.new()
 	add_child(ui)
 	var panel := ColorRect.new()
 	panel.color = Color(0.035, 0.07, 0.09, 0.88)
 	panel.position = Vector2(20, 20)
-	panel.size = Vector2(360, 116)
+	panel.size = Vector2(390, 132)
 	ui.add_child(panel)
-
 	wood_label = Label.new()
 	wood_label.position = Vector2(18, 14)
-	wood_label.add_theme_font_size_override("font_size", 24)
+	wood_label.add_theme_font_size_override("font_size", 22)
 	panel.add_child(wood_label)
-
 	status_label = Label.new()
-	status_label.position = Vector2(18, 52)
-	status_label.size = Vector2(324, 48)
+	status_label.position = Vector2(18, 50)
+	status_label.size = Vector2(354, 66)
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	status_label.add_theme_font_size_override("font_size", 16)
 	panel.add_child(status_label)
-
-	var controls := Label.new()
-	controls.text = "Left click: place warehouse (10 wood)"
-	controls.position = Vector2(20, 680)
-	controls.add_theme_font_size_override("font_size", 16)
-	ui.add_child(controls)
+	controls_label = Label.new()
+	controls_label.position = Vector2(20, 674)
+	controls_label.add_theme_font_size_override("font_size", 16)
+	ui.add_child(controls_label)
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventMouseMotion:
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_1:
+			build_mode = "warehouse"
+			_update_interface("Warehouse selected.")
+		elif event.keycode == KEY_2:
+			build_mode = "sawmill"
+			_update_interface("Sawmill selected.")
+	elif event is InputEventMouseMotion:
 		var cell: Variant = _cell_at_screen_position(event.position)
 		if cell != null:
 			_move_selection(cell)
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		var cell: Variant = _cell_at_screen_position(event.position)
 		if cell != null:
-			_place_warehouse(cell)
+			_place_building(cell)
 
 func _cell_at_screen_position(screen_position: Vector2) -> Variant:
 	var from := camera.project_ray_origin(screen_position)
@@ -153,23 +206,30 @@ func _move_selection(cell: Vector2i) -> void:
 	selected_cell = cell
 	selection_marker.position = _cell_center(cell) + Vector3(0.0, 0.04, 0.0)
 
-func _place_warehouse(cell: Vector2i) -> void:
+func _place_building(cell: Vector2i) -> void:
 	if placed_buildings.has(cell):
 		_update_interface("This cell is already occupied.")
 		return
-	if wood < WAREHOUSE_COST:
-		_update_interface("Not enough wood to build a warehouse.")
+	var cost := WAREHOUSE_COST if build_mode == "warehouse" else SAWMILL_COST
+	if wood < cost:
+		_update_interface("Not enough wood.")
 		return
-	wood -= WAREHOUSE_COST
-	placed_buildings[cell] = "warehouse"
-	_create_warehouse(_cell_center(cell))
-	_update_interface("Warehouse built. It will store future production.")
+	wood -= cost
+	placed_buildings[cell] = build_mode
+	var position_on_board := _cell_center(cell)
+	if build_mode == "warehouse":
+		warehouse_positions.append(position_on_board)
+		_create_warehouse(position_on_board)
+	else:
+		sawmill_positions.append(position_on_board)
+		_create_sawmill(position_on_board)
+	_update_workers()
+	_update_interface("%s built." % ("Warehouse" if build_mode == "warehouse" else "Sawmill"))
 
 func _create_warehouse(position_on_board: Vector3) -> void:
 	var building := Node3D.new()
 	building.position = position_on_board
 	add_child(building)
-
 	var base := MeshInstance3D.new()
 	var base_mesh := BoxMesh.new()
 	base_mesh.size = Vector3(1.45, 0.9, 1.35)
@@ -177,13 +237,10 @@ func _create_warehouse(position_on_board: Vector3) -> void:
 	base.position.y = 0.45
 	var wall_material := StandardMaterial3D.new()
 	wall_material.albedo_color = Color("c78d52")
-	wall_material.roughness = 0.88
 	base.material_override = wall_material
 	building.add_child(base)
-
 	var roof := MeshInstance3D.new()
 	var roof_mesh := PrismMesh.new()
-	roof_mesh.left_to_right = 0.5
 	roof_mesh.size = Vector3(1.7, 0.62, 1.62)
 	roof.mesh = roof_mesh
 	roof.position.y = 1.2
@@ -193,9 +250,45 @@ func _create_warehouse(position_on_board: Vector3) -> void:
 	roof.material_override = roof_material
 	building.add_child(roof)
 
+func _create_sawmill(position_on_board: Vector3) -> void:
+	var building := Node3D.new()
+	building.position = position_on_board
+	add_child(building)
+	var platform := MeshInstance3D.new()
+	var platform_mesh := BoxMesh.new()
+	platform_mesh.size = Vector3(1.6, 0.25, 1.45)
+	platform.mesh = platform_mesh
+	platform.position.y = 0.13
+	var wood_material := StandardMaterial3D.new()
+	wood_material.albedo_color = Color("af6f3b")
+	platform.material_override = wood_material
+	building.add_child(platform)
+	var blade := MeshInstance3D.new()
+	var blade_mesh := CylinderMesh.new()
+	blade_mesh.top_radius = 0.42
+	blade_mesh.bottom_radius = 0.42
+	blade_mesh.height = 0.08
+	blade.mesh = blade_mesh
+	blade.position.y = 0.32
+	var blade_material := StandardMaterial3D.new()
+	blade_material.albedo_color = Color("b7c4c9")
+	blade.material_override = blade_material
+	building.add_child(blade)
+
+func _update_workers() -> void:
+	if warehouse_positions.is_empty() or sawmill_positions.is_empty():
+		return
+	for index in citizens.size():
+		citizens[index].assign_work(tree_positions[index % tree_positions.size()], sawmill_positions[index % sawmill_positions.size()], warehouse_positions[index % warehouse_positions.size()])
+
+func _on_wood_delivered() -> void:
+	wood += 1
+	_update_interface("Workers delivered processed wood to the warehouse.")
+
 func _cell_center(cell: Vector2i) -> Vector3:
 	return Vector3((cell.x + 0.5) * CELL_SIZE, 0.0, (cell.y + 0.5) * CELL_SIZE)
 
 func _update_interface(message: String) -> void:
-	wood_label.text = "Wood: %d    Warehouses: %d" % [wood, placed_buildings.size()]
+	wood_label.text = "Wood: %d   Citizens: %d   Buildings: %d" % [wood, citizens.size(), placed_buildings.size()]
 	status_label.text = message
+	controls_label.text = "[1] Warehouse (10)   [2] Sawmill (10)   Selected: %s   Left click: build" % build_mode.capitalize()
