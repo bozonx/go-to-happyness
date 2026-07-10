@@ -24,7 +24,9 @@ var soil := 0
 var clay := 0
 var wellbeing := 75
 var game_minutes := 7 * 60
-var game_minutes_per_second := 8.0
+const GAME_DAY_REAL_SECONDS := 600.0
+const GAME_MINUTES_PER_SECOND := 1440.0 / GAME_DAY_REAL_SECONDS
+var time_multiplier := 1.0
 var previous_clock_minute := -1
 var active_meal_hour := -1
 var selected_cell := Vector2i(0, 0)
@@ -292,6 +294,7 @@ func _create_interface() -> void:
 	clock_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	clock_label.add_theme_font_size_override("font_size", 22)
 	ui.add_child(clock_label)
+	_create_time_controls(ui)
 	interaction_hint_label = Label.new()
 	interaction_hint_label.position = Vector2(20, 592)
 	interaction_hint_label.size = Vector2(500, 28)
@@ -306,6 +309,28 @@ func _create_interface() -> void:
 	ui.add_child(interaction_progress)
 	_create_build_menu(ui)
 	_create_house_menu(ui)
+
+func _create_time_controls(ui: CanvasLayer) -> void:
+	var controls := HBoxContainer.new()
+	controls.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	controls.offset_left = -220
+	controls.offset_top = 58
+	controls.offset_right = -22
+	controls.offset_bottom = 90
+	controls.alignment = BoxContainer.ALIGNMENT_END
+	ui.add_child(controls)
+	for multiplier in [1.0, 2.0, 4.0]:
+		var button := Button.new()
+		button.text = "x%d" % int(multiplier)
+		button.tooltip_text = "Simulation speed x%d" % int(multiplier)
+		button.custom_minimum_size = Vector2(56, 30)
+		button.pressed.connect(_set_time_multiplier.bind(multiplier))
+		controls.add_child(button)
+
+func _set_time_multiplier(multiplier: float) -> void:
+	time_multiplier = multiplier
+	Engine.time_scale = multiplier
+	_update_interface("Simulation speed set to x%d." % int(multiplier))
 
 func _create_build_menu(ui: CanvasLayer) -> void:
 	build_menu = Panel.new()
@@ -1069,11 +1094,11 @@ func _has_cook() -> bool:
 	return false
 
 func _update_clock(delta: float) -> void:
-	game_minutes = posmod(game_minutes + delta * game_minutes_per_second, 24.0 * 60.0)
+	game_minutes = posmod(game_minutes + delta * GAME_MINUTES_PER_SECOND, 24.0 * 60.0)
 	var current_minute := int(game_minutes)
 	var hour := current_minute / 60
 	var minute := current_minute % 60
-	clock_label.text = "%s  %02d:%02d" % ["Night" if _is_night() else "Day", hour, minute]
+	clock_label.text = "%s  %02d:%02d  x%d" % ["Night" if _is_night() else "Day", hour, minute, int(time_multiplier)]
 	if previous_clock_minute == current_minute:
 		return
 	previous_clock_minute = current_minute
