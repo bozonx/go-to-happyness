@@ -6,7 +6,7 @@ signal resource_delivered(resource_type: String)
 const WALK_SPEED := 2.2
 const WORK_DURATION := 1.4
 
-enum State { IDLE, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE }
+enum State { IDLE, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING }
 
 var state := State.IDLE
 var resource_type := "wood"
@@ -15,6 +15,7 @@ var workplace_position := Vector3.ZERO
 var warehouse_position := Vector3.ZERO
 var work_time := 0.0
 var is_player_controlled := false
+var construction_site: Node3D
 
 func _ready() -> void:
 	var selector := Area3D.new()
@@ -81,6 +82,12 @@ func _process(delta: float) -> void:
 			if _move_to(warehouse_position, delta):
 				resource_delivered.emit(resource_type)
 				state = State.TO_TREE
+		State.CONSTRUCTING:
+			if is_instance_valid(construction_site):
+				_move_to(construction_site.global_position, delta)
+			else:
+				state = State.IDLE
+				construction_site = null
 
 func _move_to(destination: Vector3, delta: float) -> bool:
 	var offset := destination - global_position
@@ -101,3 +108,13 @@ func set_player_controlled(controlled: bool) -> void:
 	is_player_controlled = controlled
 	if controlled:
 		state = State.IDLE
+		construction_site = null
+
+func assign_construction(site: Node3D) -> void:
+	if is_player_controlled:
+		return
+	construction_site = site
+	state = State.CONSTRUCTING
+
+func is_building_site(site: Node3D) -> bool:
+	return not is_player_controlled and state == State.CONSTRUCTING and construction_site == site and global_position.distance_to(site.global_position) <= 0.25

@@ -335,6 +335,7 @@ func _toggle_first_person() -> void:
 		interaction_progress.visible = false
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 		build_menu.visible = selected_builder != null
+		_update_workers()
 		_update_interface("Left first-person control. Citizen remains selected.")
 		return
 	if selected_builder == null:
@@ -514,11 +515,15 @@ func _create_construction_site(cell: Vector2i, building_type: String, position_o
 	fill.scale.x = 0.01
 	site.add_child(fill)
 	construction_sites.append({"cell": cell, "type": building_type, "position": position_on_board, "node": site, "fill": fill, "progress": 0.0})
+	_update_workers()
 
 func _update_construction(delta: float) -> void:
 	for index in range(construction_sites.size() - 1, -1, -1):
 		var site: Dictionary = construction_sites[index]
-		var progress: float = minf(1.0, site.progress + delta / CONSTRUCTION_DURATION)
+		var builder_count := _builder_count(site.node)
+		var progress: float = minf(1.0, site.progress + delta / CONSTRUCTION_DURATION * builder_count)
+		if index == 0:
+			status_label.text = "Building %s: %d builder(s) at the site." % [site.type, builder_count]
 		site.progress = progress
 		var fill: MeshInstance3D = site.fill
 		fill.scale.x = maxf(0.01, progress)
@@ -526,8 +531,8 @@ func _update_construction(delta: float) -> void:
 		construction_sites[index] = site
 		if progress >= 1.0:
 			site.node.queue_free()
-			_complete_building(site.cell, site.type, site.position)
 			construction_sites.remove_at(index)
+			_complete_building(site.cell, site.type, site.position)
 
 func _complete_building(cell: Vector2i, building_type: String, position_on_board: Vector3) -> void:
 	match building_type:
@@ -637,6 +642,13 @@ func _create_house(position_on_board: Vector3) -> void:
 	house.add_child(roof)
 
 func _update_workers() -> void:
+	if not construction_sites.is_empty():
+		for index in citizens.size():
+			var citizen := citizens[index]
+			if not citizen.is_player_controlled:
+				var site: Dictionary = construction_sites[index % construction_sites.size()]
+				citizen.assign_construction(site.node)
+		return
 	if warehouse_positions.is_empty() or (sawmill_positions.is_empty() and farm_positions.is_empty()):
 		return
 	for index in citizens.size():
@@ -648,6 +660,13 @@ func _update_workers() -> void:
 			citizens[index].assign_work("food", farm_position, farm_position, warehouse_positions[index % warehouse_positions.size()])
 		else:
 			citizens[index].assign_work("wood", tree_positions[index % tree_positions.size()], sawmill_positions[index % sawmill_positions.size()], warehouse_positions[index % warehouse_positions.size()])
+
+func _builder_count(site_node: Node3D) -> int:
+	var count := 0
+	for citizen in citizens:
+		if citizen.is_building_site(site_node):
+			count += 1
+	return count
 
 func _on_resource_delivered(resource_type: String) -> void:
 	if resource_type == "food":
