@@ -16,6 +16,17 @@ var warehouse_position := Vector3.ZERO
 var work_time := 0.0
 
 func _ready() -> void:
+	var selector := Area3D.new()
+	selector.add_to_group("citizen_selector")
+	var selector_shape := CollisionShape3D.new()
+	var capsule_shape := CapsuleShape3D.new()
+	capsule_shape.radius = 0.38
+	capsule_shape.height = 1.3
+	selector_shape.shape = capsule_shape
+	selector_shape.position.y = 0.65
+	selector.add_child(selector_shape)
+	add_child(selector)
+
 	var body := MeshInstance3D.new()
 	var body_mesh := CapsuleMesh.new()
 	body_mesh.radius = 0.22
