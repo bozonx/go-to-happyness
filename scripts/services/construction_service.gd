@@ -8,13 +8,27 @@ func configure(next_simulation: Node) -> void:
 	simulation = next_simulation
 
 
-func start_site(cell: Vector2i, building_type: String, position: Vector3) -> void:
+func start_site(cell: Vector2i, building_type: String, position: Vector3, rotation_quarters := 0, supplied_blueprint: Dictionary = {}, occupied_footprint := Vector2i.ZERO) -> void:
 	var site := Node3D.new()
 	site.position = position
+	site.rotation.y = rotation_quarters * PI * 0.5
 	site.set_meta("building_type", building_type)
 	simulation.add_child(site)
-	var blueprint := BuildingBlueprints.get_blueprint(building_type)
+	var blueprint := supplied_blueprint if not supplied_blueprint.is_empty() else BuildingBlueprints.get_blueprint(building_type)
 	site.set_meta("footprint", blueprint.footprint)
+	site.set_meta("occupied_footprint", occupied_footprint if occupied_footprint != Vector2i.ZERO else blueprint.footprint)
+	var territory := MeshInstance3D.new()
+	var territory_mesh := BoxMesh.new()
+	var display_footprint: Vector2i = blueprint.footprint
+	territory_mesh.size = Vector3(display_footprint.x, 0.035, display_footprint.y)
+	territory.mesh = territory_mesh
+	territory.position.y = 0.025
+	var territory_material := StandardMaterial3D.new()
+	territory_material.albedo_color = Color(0.22, 0.72, 0.43, 0.35)
+	territory_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	territory_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	territory.material_override = territory_material
+	site.add_child(territory)
 	var bar_mesh := BoxMesh.new()
 	bar_mesh.size = Vector3(1.45, 0.11, 0.12)
 	var back := MeshInstance3D.new()

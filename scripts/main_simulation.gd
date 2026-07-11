@@ -80,6 +80,7 @@ var active_meal_hour := -1
 var selected_cell := Vector2i(0, 0)
 var selected_world_position := Vector3.ZERO
 var build_mode := ""
+var build_rotation_quarters := 0
 var placed_buildings: Dictionary = {}
 var house_cells: Dictionary = {}
 var tree_cells: Dictionary = {}
@@ -112,6 +113,8 @@ var camera_yaw := 42.0
 var camera_pitch := 52.0
 var selection_marker: MeshInstance3D
 var selection_material: StandardMaterial3D
+var preview_entrance_marker: MeshInstance3D
+var preview_back_entrance_marker: MeshInstance3D
 var wood_label: Label
 var status_label: Label
 var messages: Array[Dictionary] = []
@@ -143,6 +146,7 @@ var pocket_water := 0
 var interaction_time := 0.0
 var interaction_action := ""
 var interaction_resource := ""
+var player_work_target: Node3D
 var interaction_hint_label: Label
 var interaction_progress: ProgressBar
 var dig_sites: Array[Dictionary] = []
@@ -550,6 +554,8 @@ func _building_power(site_node: Node3D) -> float:
 	for citizen in citizens:
 		if citizen.is_building_site(site_node):
 			power += citizen.get_efficiency("construction")
+	if is_instance_valid(player_work_target) and player_work_target == site_node and player_citizen != null:
+		power += player_citizen.get_efficiency("construction")
 	return power
 
 func _on_resource_delivered(worker: Citizen, resource_type: String, amount: int) -> void:
@@ -815,6 +821,8 @@ func _update_interface(message: String) -> void:
 	_add_message(message)
 	if is_first_person:
 		var build_hint := "  B: construction" if player_citizen == hero_citizen else ""
+		if not build_mode.is_empty():
+			build_hint += "  Q/E: rotate"
 		camera_hint_label.text = "R: hero/overview  WASD/arrows: move  Space: jump  Shift: sprint  Mouse: look  LMB: interact  RMB: dig%s" % build_hint
 	else:
 		camera_hint_label.text = "R: view from hero. Select a citizen and choose Manage. Right drag: rotate  Middle drag: pan  Wheel: zoom"
@@ -1117,7 +1125,26 @@ func _create_selection_marker() -> void:
 	selection_marker.material_override = selection_material
 	selection_marker.visible = false
 	add_child(selection_marker)
+	preview_entrance_marker = _create_preview_entrance_marker(Color("4ecb71"))
+	preview_back_entrance_marker = _create_preview_entrance_marker(Color("30343a"))
+	add_child(preview_entrance_marker)
+	add_child(preview_back_entrance_marker)
 	_move_selection(Vector3.ZERO)
+
+func _create_preview_entrance_marker(color: Color) -> MeshInstance3D:
+	var marker := MeshInstance3D.new()
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = 0.32
+	mesh.bottom_radius = 0.32
+	mesh.height = 0.08
+	marker.mesh = mesh
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.emission_enabled = true
+	material.emission = color
+	marker.material_override = material
+	marker.visible = false
+	return marker
 
 func _create_forest() -> void:
 	var cells := [Vector2i(-16, -15), Vector2i(-15, -18), Vector2i(-18, -12), Vector2i(-12, -19), Vector2i(16, -15), Vector2i(15, -18), Vector2i(18, -12), Vector2i(12, -19), Vector2i(-16, 15), Vector2i(-15, 18), Vector2i(-18, 12), Vector2i(-12, 19), Vector2i(16, 15), Vector2i(15, 18), Vector2i(18, 12), Vector2i(12, 19), Vector2i(-20, -5), Vector2i(-20, 5), Vector2i(20, -5), Vector2i(20, 5), Vector2i(-5, -20), Vector2i(5, -20), Vector2i(-5, 20), Vector2i(5, 20)]
@@ -1504,7 +1531,7 @@ func _create_house_menu(ui: CanvasLayer) -> void:
 	house_menu.add_child(house_spawn_button)
 	var demolish_button := Button.new()
 	demolish_button.text = "Mark for demolition"
-	demolish_button.position = Vector2(16, 102)
+	demolish_button.position = Vector2(16, 140)
 	demolish_button.size = Vector2(272, 30)
 	demolish_button.pressed.connect(func(): _mark_building_for_demolition(selected_house))
 	house_menu.add_child(demolish_button)
@@ -1596,6 +1623,21 @@ func _spawn_house_citizen() -> void:
 	_show_house_menu()
 	_update_interface("A new %s resident joined the settlement and received an automatic task." % specialization.replace("_", " "))
 
+func _settle_unhoused_resident() -> void:
+	if selected_house == null or bool(selected_house.get_meta("pending_demolition", false)):
+		return
+	var slots: int = selected_house.get_meta("spawn_slots", 0)
+	if slots <= 0:
+		return
+	for citizen in citizens:
+		if is_instance_valid(citizen.home):
+			continue
+		citizen.assign_home(selected_house)
+		selected_house.set_meta("spawn_slots", slots - 1)
+		_update_interface("%s has been settled in this home." % citizen.role_label())
+		_show_house_menu()
+		return
+
 func _show_house_menu() -> void:
 	if selected_house == null:
 		return
@@ -1604,11 +1646,21 @@ func _show_house_menu() -> void:
 	var capacity: int = int(selected_house.get_meta("housing_capacity", HOUSE_CAPACITY))
 	var building_type: String = selected_house.get_meta("building_type", "house")
 	var home_name := "Жилая палатка" if building_type == "living_tent" else ("Палатка" if building_type == "tent" else "House")
-	house_menu_title.text = "%s\nFree beds: %d/%d" % [home_name, slots, capacity]
+	var unhoused := _unhoused_citizen_count()
+	house_menu_title.text = "%s\nFree beds: %d/%d  Unhoused: %d" % [home_name, slots, capacity, unhoused]
 	if house_spawn_button != null:
-		var unhoused := _unhoused_citizen_count()
 		house_spawn_button.disabled = slots <= 0 or unhoused > 0 or bool(selected_house.get_meta("pending_demolition", false))
 		house_spawn_button.text = "House the initial residents first" if unhoused > 0 else ("No free beds" if slots <= 0 else "Invite random resident")
+	var settle_button := house_menu.get_node_or_null("SettleUnhoused") as Button
+	if settle_button == null:
+		settle_button = Button.new()
+		settle_button.name = "SettleUnhoused"
+		settle_button.position = Vector2(16, 102)
+		settle_button.size = Vector2(272, 30)
+		settle_button.pressed.connect(_settle_unhoused_resident)
+		house_menu.add_child(settle_button)
+	settle_button.text = "Settle unhoused resident"
+	settle_button.disabled = slots <= 0 or unhoused <= 0 or bool(selected_house.get_meta("pending_demolition", false))
 
 func _unhoused_citizen_count() -> int:
 	var count := 0
@@ -1618,15 +1670,8 @@ func _unhoused_citizen_count() -> int:
 	return count
 
 func _house_initial_residents(house: Node3D) -> void:
-	var slots: int = house.get_meta("spawn_slots", 0)
-	for citizen in citizens:
-		if slots <= 0:
-			break
-		if is_instance_valid(citizen.home):
-			continue
-		citizen.assign_home(house)
-		slots -= 1
-	house.set_meta("spawn_slots", slots)
+	# The player explicitly assigns each resident through the house menu.
+	pass
 
 func _add_build_button(title: String, building_type: String, y_position: float, category: String) -> void:
 	var button := Button.new()
@@ -1855,16 +1900,20 @@ func _select_build_mode(next_mode: String) -> void:
 		_update_interface("This building belongs to a later era. Complete the current settlement requirements first.")
 		return
 	build_mode = next_mode
+	build_rotation_quarters = 0
 	selection_marker.visible = true
 	_move_selection(selected_world_position)
 	if is_first_person:
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-	_update_interface("%s selected. Choose a clear point on the voxel terrain." % build_mode.capitalize())
+	_update_interface("%s selected. Choose a clear point; Q/E rotates the building." % build_mode.capitalize())
 
 func _cancel_build_action() -> void:
 	build_mode = ""
+	build_rotation_quarters = 0
 	dig_mode = false
 	selection_marker.visible = false
+	preview_entrance_marker.visible = false
+	preview_back_entrance_marker.visible = false
 	build_menu.visible = false
 	selected_builder = null
 	_update_interface("Construction mode cancelled.")
@@ -1908,6 +1957,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 	if event is InputEventKey and event.keycode == KEY_R and event.pressed and not event.echo:
 		_toggle_hero_view()
+		get_viewport().set_input_as_handled()
+		return
+	if not build_mode.is_empty() and event is InputEventKey and event.pressed and not event.echo and event.keycode in [KEY_Q, KEY_E]:
+		build_rotation_quarters = posmod(build_rotation_quarters + (-1 if event.keycode == KEY_Q else 1), 4)
+		_move_selection(selected_world_position)
 		get_viewport().set_input_as_handled()
 		return
 	if is_first_person:
@@ -2073,9 +2127,24 @@ func _mark_building_for_demolition(building: Node3D) -> void:
 		_update_interface("This building cannot be demolished.")
 		return
 	building.set_meta("pending_demolition", true)
+	_add_demolition_marker(building)
 	demolition_sites.append({"building": building, "type": str(building.get_meta("building_type", "house")), "progress": 0.0})
 	_update_workers()
 	_update_interface("Building marked for demolition. Residents and stored goods must be relocated first.")
+
+func _add_demolition_marker(building: Node3D) -> void:
+	if building.has_meta("demolition_marker"):
+		return
+	var marker := Label3D.new()
+	marker.text = "DEMOLISH"
+	marker.position = Vector3(0.0, 5.2, 0.0)
+	marker.font_size = 32
+	marker.outline_size = 6
+	marker.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	marker.no_depth_test = true
+	marker.modulate = Color("ef4f45")
+	building.add_child(marker)
+	building.set_meta("demolition_marker", marker)
 
 func _demolition_ready(site: Dictionary) -> bool:
 	var building: Node3D = site.building
@@ -2085,10 +2154,11 @@ func _demolition_ready(site: Dictionary) -> bool:
 		if citizen.home != building:
 			continue
 		var replacement := _find_relocation_home(building)
-		if replacement == null:
-			return false
-		citizen.assign_home(replacement)
-		replacement.set_meta("spawn_slots", int(replacement.get_meta("spawn_slots", 0)) - 1)
+		if replacement != null:
+			citizen.assign_home(replacement)
+			replacement.set_meta("spawn_slots", int(replacement.get_meta("spawn_slots", 0)) - 1)
+		else:
+			citizen.home = null
 	if str(site.type) == "warehouse":
 		return settlement.storage_used_units() <= settlement.storage_capacity(warehouse_positions.size() - 1)
 	return true
@@ -2129,7 +2199,7 @@ func _finish_demolition(site: Dictionary) -> void:
 	for index in range(building_footprints.size() - 1, -1, -1):
 		if building_footprints[index].node == building:
 			building_footprints.remove_at(index)
-	_unregister_navigation_footprint(building.global_position, building.get_meta("footprint", Vector2i(3, 3)))
+	_unregister_navigation_footprint(building.global_position, building.get_meta("occupied_footprint", building.get_meta("footprint", Vector2i(3, 3))))
 	placed_buildings.erase(_placement_key(building.global_position))
 	settlement.buildings[building_type] = maxi(0, int(settlement.buildings.get(building_type, 1)) - 1)
 	for resource_type in BuildingCatalog.demolition_refund(building_type):
@@ -2288,6 +2358,14 @@ func _update_player_control(delta: float) -> void:
 func _start_interaction() -> void:
 	if not interaction_action.is_empty():
 		return
+	var work_target := _nearby_player_work_target()
+	if work_target != null:
+		player_work_target = work_target
+		interaction_action = "demolition" if bool(work_target.get_meta("pending_demolition", false)) else "construction"
+		interaction_time = 0.0
+		interaction_progress.visible = true
+		interaction_hint_label.text = "Working on %s..." % ("demolition" if interaction_action == "demolition" else "construction")
+		return
 	if _nearby_sawmill() and pocket_wood > 0:
 		var sawmill_position := _nearby_sawmill_position()
 		var stock := _sawmill_stock(sawmill_position)
@@ -2373,6 +2451,16 @@ func _dig_voxel_at_crosshair() -> void:
 func _update_interaction(delta: float) -> void:
 	if interaction_action.is_empty():
 		return
+	if interaction_action in ["construction", "demolition"]:
+		if not is_instance_valid(player_work_target) or player_citizen.global_position.distance_to(player_work_target.global_position) > INTERACTION_RANGE:
+			interaction_action = ""
+			player_work_target = null
+			interaction_progress.visible = false
+			_refresh_interaction_hint()
+			return
+		interaction_progress.value = 100.0
+		interaction_hint_label.text = "Working on %s..." % interaction_action
+		return
 	if (interaction_resource in ["wood", "branches"] and not _nearby_tree()) or (interaction_resource == "food" and not _nearby_farm()) or (interaction_resource == "water" and not _nearby_pond()):
 		interaction_action = ""
 		interaction_progress.visible = false
@@ -2452,6 +2540,10 @@ func _refresh_interaction_hint() -> void:
 	if not is_first_person or not interaction_action.is_empty():
 		return
 	interaction_hint_label.visible = true
+	var work_target := _nearby_player_work_target()
+	if work_target != null:
+		interaction_hint_label.text = "LMB: %s" % ("dismantle marked building" if bool(work_target.get_meta("pending_demolition", false)) else "build marked site")
+		return
 	if _nearby_sawmill() and pocket_wood > 0:
 		interaction_hint_label.text = "LMB: unload wood at sawmill (%d wood)" % pocket_wood
 	elif _nearby_sawmill() and int(_sawmill_stock(_nearby_sawmill_position()).boards) > 0:
@@ -2484,10 +2576,19 @@ func _move_selection(world_position: Vector3) -> void:
 	selected_cell = _placement_key(selected_world_position)
 	selection_marker.position = selected_world_position + Vector3(0.0, 0.04, 0.0)
 	if not build_mode.is_empty():
-		var footprint: Vector2i = BuildingBlueprints.get_blueprint(build_mode).footprint
+		var local_footprint: Vector2i = BuildingBlueprints.get_blueprint(build_mode).footprint
+		var footprint := _rotated_footprint(local_footprint)
 		(selection_marker.mesh as BoxMesh).size = Vector3(footprint.x, 0.04, footprint.y)
+		var forward := Vector3(0.0, 0.0, -1.0).rotated(Vector3.UP, build_rotation_quarters * PI * 0.5)
+		preview_entrance_marker.position = selected_world_position + forward * (local_footprint.y * 0.5 + 0.35) + Vector3.UP * 0.08
+		preview_back_entrance_marker.position = selected_world_position - forward * (local_footprint.y * 0.5 + 0.35) + Vector3.UP * 0.08
+		preview_entrance_marker.visible = true
+		preview_back_entrance_marker.visible = true
 	if selected_builder != null and not build_mode.is_empty():
 		selection_material.albedo_color = Color(0.25, 0.85, 0.37, 0.55) if _can_place(selected_world_position) else Color(0.9, 0.2, 0.18, 0.6)
+
+func _rotated_footprint(footprint: Vector2i) -> Vector2i:
+	return Vector2i(footprint.y, footprint.x) if build_rotation_quarters % 2 != 0 else footprint
 
 
 func _place_building(world_position: Vector3) -> void:
@@ -2506,11 +2607,15 @@ func _place_building(world_position: Vector3) -> void:
 	placed_buildings[cell] = build_mode
 	building_positions.append(world_position)
 	var blueprint := BuildingBlueprints.get_blueprint(build_mode)
-	building_footprints.append({"center": world_position, "footprint": blueprint.footprint, "node": null})
+	var occupied_footprint := _rotated_footprint(blueprint.footprint)
+	building_footprints.append({"center": world_position, "footprint": occupied_footprint, "node": null})
 	_rebuild_navigation_mesh()
-	_create_construction_site(cell, build_mode, world_position)
+	_create_construction_site(cell, build_mode, world_position, build_rotation_quarters, blueprint, occupied_footprint)
 	build_mode = ""
+	build_rotation_quarters = 0
 	selection_marker.visible = false
+	preview_entrance_marker.visible = false
+	preview_back_entrance_marker.visible = false
 	build_menu.visible = false
 	selected_builder = null
 	_update_interface("Construction started. The progress bar shows completion.")
@@ -2529,7 +2634,7 @@ func _can_hero_build() -> bool:
 func _can_place(world_position: Vector3) -> bool:
 	if build_mode.is_empty():
 		return false
-	var footprint: Vector2i = BuildingBlueprints.get_blueprint(build_mode).footprint
+	var footprint := _rotated_footprint(BuildingBlueprints.get_blueprint(build_mode).footprint)
 	return _is_footprint_level(world_position, footprint) and _is_footprint_clear(world_position, footprint)
 
 func _can_pay_building_cost(building_type: String) -> bool:
@@ -2587,8 +2692,8 @@ func _is_clear_of_objects(world_position: Vector3, minimum_distance: float) -> b
 func _placement_key(world_position: Vector3) -> Vector2i:
 	return Vector2i(roundi(world_position.x), roundi(world_position.z))
 
-func _create_construction_site(cell: Vector2i, building_type: String, position_on_board: Vector3) -> void:
-	construction.start_site(cell, building_type, position_on_board)
+func _create_construction_site(cell: Vector2i, building_type: String, position_on_board: Vector3, rotation_quarters := 0, blueprint: Dictionary = {}, occupied_footprint := Vector2i.ZERO) -> void:
+	construction.start_site(cell, building_type, position_on_board, rotation_quarters, blueprint, occupied_footprint)
 
 func _update_construction(delta: float) -> void:
 	construction.tick(delta)
@@ -2668,7 +2773,8 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 		if record.center == position_on_board and record.node == null:
 			record.node = building
 			break
-	_register_navigation_footprint(position_on_board, blueprint)
+	var occupied_footprint: Vector2i = building.get_meta("occupied_footprint", blueprint.footprint)
+	_register_navigation_footprint(position_on_board, {"footprint": occupied_footprint})
 	_add_building_status_indicator(building)
 	_rebuild_navigation_mesh()
 	_update_workers()
@@ -2783,7 +2889,7 @@ func _register_navigation_footprint(center: Vector3, blueprint: Dictionary) -> v
 			house_cells[Vector2i(min_x + x, min_z + z)] = true
 
 func _register_service_entrance(building: Node3D, footprint: Vector2i, home_entrance := false, show_marker := true) -> void:
-	var service_position := building.global_position + Vector3(0.0, 0.0, footprint.y * 0.5 + SERVICE_PAD_OFFSET)
+	var service_position := building.to_global(Vector3(0.0, 0.0, footprint.y * 0.5 + SERVICE_PAD_OFFSET))
 	service_position.y = building.global_position.y
 	building.set_meta("service_position", service_position)
 	if home_entrance:
@@ -2818,6 +2924,19 @@ func _add_service_entrance_marker(building: Node3D, footprint: Vector2i) -> void
 	light.visible = false
 	building.add_child(light)
 	entrance_lights.append(light)
+
+func _nearby_player_work_target() -> Node3D:
+	if player_citizen == null:
+		return null
+	for site in construction_sites:
+		var node := site.node as Node3D
+		if is_instance_valid(node) and player_citizen.global_position.distance_to(node.global_position) <= INTERACTION_RANGE:
+			return node
+	for site in demolition_sites:
+		var building := site.building as Node3D
+		if is_instance_valid(building) and player_citizen.global_position.distance_to(building.global_position) <= INTERACTION_RANGE:
+			return building
+	return null
 
 
 func _unregister_navigation_footprint(center: Vector3, footprint: Vector2i) -> void:
@@ -3081,6 +3200,9 @@ func _refresh_campfire_menu() -> void:
 			can_advance = false
 			
 	campfire_requirements_label.text = req_text
+	var unhoused := _unhoused_citizen_count()
+	if unhoused > 0:
+		campfire_requirements_label.text += "\nProblems:\n- Unhoused residents: %d. Settle them in a home before inviting anyone new.\n" % unhoused
 	campfire_advance_button.disabled = not can_advance
 	_refresh_campfire_jobs()
 
