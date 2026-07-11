@@ -872,7 +872,11 @@ func _create_starting_tent() -> void:
 
 func _create_citizens() -> void:
 	for index in range(POPULATION):
-		_add_citizen(Vector3(-1.1 + (index % 2) * 1.1, 0.0, -0.8 + (index / 2) * 1.1))
+		var spawn_position := Vector3(-1.1 + (index % 2) * 1.1, 0.0, -0.8 + (index / 2) * 1.1)
+		var terrain_height := _terrain_height_at(spawn_position.x, spawn_position.z, 0.0)
+		if not is_nan(terrain_height):
+			spawn_position.y = terrain_height + 0.08
+		_add_citizen(spawn_position)
 
 func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void:
 	var citizen := Citizen.new()
