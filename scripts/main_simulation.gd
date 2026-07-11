@@ -9,17 +9,6 @@ const NAVIGATION_CLEARANCE_MARGIN := 1.0
 const SERVICE_PAD_OFFSET := 1.0
 const MAX_BUILD_SLOPE := 0.35
 const STARTING_WOOD := 30
-const WAREHOUSE_COST := 10
-const SAWMILL_COST := 10
-const HOUSE_COST := 12
-const FARM_COST := 12
-const CANTEEN_COST := 16
-const SCHOOL_COST := 18
-const PARK_COST := 14
-const BRICK_FACTORY_COST := 24
-const MATERIALS_FACTORY_COST := 28
-const BRICK_RESEARCH_COST := 15
-const BOARD_RESEARCH_COST := 10
 const BRICK_RESEARCH_DURATION := 20.0
 const POPULATION := 4
 const WAREHOUSE_CAPACITY := 50
@@ -142,9 +131,13 @@ var entrance_lights: Array[OmniLight3D] = []
 var build_category := ""
 var build_buttons: Array[Button] = []
 var role_buttons: Array[Button] = []
+var workforce: WorkforceCoordinator
 
 
 func _ready() -> void:
+	workforce = WorkforceCoordinator.new()
+	workforce.configure(self)
+	add_child(workforce)
 	_create_world()
 	_create_interface()
 	_create_forest()
@@ -172,122 +165,19 @@ func _process(delta: float) -> void:
 		_show_selected_citizen_menu()
 
 func _update_workers() -> void:
-	if _is_night():
-		for citizen in citizens:
-			citizen.request_goap_decision()
-		return
-	for citizen in citizens:
-		if citizen.is_player_controlled:
-			continue
-		if citizen.state in [Citizen.State.TO_CANTEEN, Citizen.State.EATING, Citizen.State.TO_FOOD_PICKUP, Citizen.State.TO_CANTEEN_DELIVERY, Citizen.State.COURIER_TO_WORKER, Citizen.State.COURIER_TO_WAREHOUSE, Citizen.State.WAITING_COURIER]:
-			continue
-		if citizen.blocked_by_storage:
-			if _stored_resources() >= _warehouse_capacity():
-				continue
-			citizen.blocked_by_storage = false
-		citizen.request_goap_decision()
+	workforce.update_workers()
 
 func _can_assign_goap_work(citizen: Citizen) -> bool:
-	if citizen.is_player_controlled or citizen.blocked_by_storage:
-		return false
-	if citizen.specialization == "courier":
-		return false
-	if int(game_minutes) / 60 < 8:
-		return false
-	if citizen.specialization == "cook":
-		return is_instance_valid(canteen)
-	if citizen.specialization == "teacher":
-		return not school_positions.is_empty()
-	if citizen.specialization == "factory_worker":
-		return _factory_for_role("factory_worker") != null
-	if citizen.specialization == "engineer":
-		return _factory_for_role("engineer") != null
-	if not citizen.training_role.is_empty() and citizen.training_days_completed < 10 and int(game_minutes) / 60 < 12:
-		return not school_positions.is_empty()
-	if citizen.specialization == "builder" and construction_sites.is_empty() and _factory_for_role("engineer") != null:
-		return true
-	var role := _work_role_for(citizen)
-	match role:
-		"construction": return not construction_sites.is_empty()
-		"forestry": return not warehouse_positions.is_empty() and not sawmill_positions.is_empty() and not tree_positions.is_empty()
-		"farming": return not warehouse_positions.is_empty() and not farm_positions.is_empty()
-		"excavation": return not dig_sites.is_empty() and not warehouse_positions.is_empty()
-	return false
+	return workforce.can_assign_work(citizen)
 
 func _assign_goap_work(citizen: Citizen, index: int) -> void:
-	if not _can_assign_goap_work(citizen):
-		return
-	if citizen.specialization == "cook":
-		citizen.assign_canteen_work(canteen_position)
-		return
-	if citizen.specialization == "teacher":
-		citizen.assign_teacher_work(school_positions[0])
-		return
-	if citizen.specialization == "factory_worker":
-		citizen.assign_factory_work(_factory_for_role("factory_worker"), "factory_work")
-		return
-	if citizen.specialization == "engineer":
-		citizen.assign_factory_work(_factory_for_role("engineer"), "engineering")
-		return
-	if not citizen.training_role.is_empty() and citizen.training_days_completed < 10 and int(game_minutes) / 60 < 12:
-		citizen.attend_school()
-		return
-	if citizen.specialization == "builder" and construction_sites.is_empty():
-		var materials_plant := _factory_for_role("engineer")
-		if materials_plant != null:
-			citizen.assign_factory_work(materials_plant, "construction")
-			return
-	var role := _work_role_for(citizen)
-	if role == "construction":
-		var construction: Dictionary = construction_sites[index % construction_sites.size()]
-		citizen.assign_construction(construction.node)
-	elif role == "forestry":
-		var sawmill_position := sawmill_positions[index % sawmill_positions.size()]
-		var tree_position := _reserve_closest_tree_for_sawmill(citizen, sawmill_position)
-		if tree_position != Vector3.INF:
-			citizen.assign_work("wood", tree_position, sawmill_position, warehouse_positions[index % warehouse_positions.size()])
-	elif role == "farming":
-		citizen.assign_work("food", farm_positions[index % farm_positions.size()], farm_positions[index % farm_positions.size()], warehouse_positions[index % warehouse_positions.size()], _has_courier())
-	elif role == "excavation":
-		var dig_site := citizen.assigned_dig_site
-		if not is_instance_valid(dig_site):
-			var excavation: Dictionary = dig_sites[index % dig_sites.size()]
-			dig_site = excavation.node
-		citizen.assign_excavation(dig_site)
+	workforce.assign_work(citizen, index)
 
 func _work_role_for(citizen: Citizen) -> String:
-	if not citizen.manual_role.is_empty():
-		return citizen.manual_role
-	if citizen.specialization == "builder" and not construction_sites.is_empty():
-		return "construction"
-	if citizen.specialization == "forestry" and not sawmill_positions.is_empty():
-		return "forestry"
-	if citizen.specialization == "farming" and not farm_positions.is_empty():
-		return "farming"
-	if citizen.specialization == "excavation" and not dig_sites.is_empty():
-		return "excavation"
-	return ""
+	return workforce.work_role_for(citizen)
 
 func _factory_for_role(role: String) -> Node3D:
-	if role == "factory_worker":
-		for type in ["materials_factory", "brick_factory", "recycling_factory", "metal_factory"]:
-			for factory in factories:
-				if factory.get_meta("building_type", "") != type:
-					continue
-				var assigned_workers := 0
-				for citizen in citizens:
-					assigned_workers += 1 if _is_factory_worker_active(citizen, factory) else 0
-				if assigned_workers < int(factory.get_meta("required_factory_workers", 1)):
-					return factory
-	for factory in factories:
-		if not is_instance_valid(factory):
-			continue
-		var type: String = factory.get_meta("building_type", "")
-		if role == "factory_worker" and type in ["brick_factory", "materials_factory", "recycling_factory", "metal_factory"]:
-			return factory
-		if role == "engineer" and type == "materials_factory":
-			return factory
-	return null
+	return workforce.factory_for_role(role)
 
 
 func _is_factory_worker_active(citizen: Citizen, factory: Node3D) -> bool:
@@ -699,16 +589,7 @@ func _on_excavation_cycle(worker: Citizen, site_node: Node3D, efficiency: float)
 		return
 
 func _building_cost() -> int:
-	match build_mode:
-		"warehouse": return WAREHOUSE_COST
-		"sawmill": return SAWMILL_COST
-		"farm": return FARM_COST
-		"canteen": return CANTEEN_COST
-		"school": return SCHOOL_COST
-		"park": return PARK_COST
-		"brick_factory": return BRICK_FACTORY_COST
-		"materials_factory": return MATERIALS_FACTORY_COST
-		_: return HOUSE_COST
+	return BuildingCatalog.cost_for(build_mode)
 
 func _stored_resources() -> int:
 	return wood + food + soil + clay + boards + bricks
@@ -1240,7 +1121,7 @@ func _show_materials_factory_menu() -> void:
 	elif brick_research_progress >= 0.0:
 		materials_factory_menu_title.text = "Materials factory\nResearch: %d%%" % roundi(brick_research_progress * 100.0)
 	else:
-		materials_factory_menu_title.text = "Materials factory\nNeeds factory worker, builder and engineer.\nResearch cost: %d bricks, %d boards." % [BRICK_RESEARCH_COST, BOARD_RESEARCH_COST]
+		materials_factory_menu_title.text = "Materials factory\nNeeds factory worker, builder and engineer.\nResearch cost: %d bricks, %d boards." % [BuildingCatalog.research_cost("brick_construction", "bricks"), BuildingCatalog.research_cost("brick_construction", "boards")]
 
 func _start_brick_research() -> void:
 	if selected_materials_factory == null or brick_construction_unlocked or brick_research_progress >= 0.0:
@@ -1248,11 +1129,13 @@ func _start_brick_research() -> void:
 	if not _materials_factory_staffed(selected_materials_factory):
 		_update_interface("Research needs a factory worker, builder and engineer assigned to this factory.")
 		return
-	if bricks < BRICK_RESEARCH_COST or boards < BOARD_RESEARCH_COST:
-		_update_interface("Research needs %d bricks and %d boards." % [BRICK_RESEARCH_COST, BOARD_RESEARCH_COST])
+	var brick_cost := BuildingCatalog.research_cost("brick_construction", "bricks")
+	var board_cost := BuildingCatalog.research_cost("brick_construction", "boards")
+	if bricks < brick_cost or boards < board_cost:
+		_update_interface("Research needs %d bricks and %d boards." % [brick_cost, board_cost])
 		return
-	bricks -= BRICK_RESEARCH_COST
-	boards -= BOARD_RESEARCH_COST
+	bricks -= brick_cost
+	boards -= board_cost
 	brick_research_progress = 0.0
 	brick_research_factory = selected_materials_factory
 	_show_materials_factory_menu()
@@ -1903,23 +1786,15 @@ func _can_place(world_position: Vector3) -> bool:
 	return _is_footprint_level(world_position, footprint) and _is_footprint_clear(world_position, footprint)
 
 func _can_pay_building_cost(building_type: String) -> bool:
-	if building_type in ["recycling_factory", "metal_factory"]:
-		return bricks >= 25
-	if building_type == "city_hall":
-		return bricks >= 35
-	if building_type == "leisure_center":
-		return bricks >= 30
-	return wood >= _building_cost()
+	var cost := BuildingCatalog.cost_for(building_type)
+	return bricks >= cost if BuildingCatalog.currency_for(building_type) == BuildingCatalog.BRICKS else wood >= cost
 
 func _pay_building_cost(building_type: String) -> void:
-	if building_type in ["recycling_factory", "metal_factory"]:
-		bricks -= 25
-	elif building_type == "city_hall":
-		bricks -= 35
-	elif building_type == "leisure_center":
-		bricks -= 30
+	var cost := BuildingCatalog.cost_for(building_type)
+	if BuildingCatalog.currency_for(building_type) == BuildingCatalog.BRICKS:
+		bricks -= cost
 	else:
-		wood -= _building_cost()
+		wood -= cost
 
 func _is_footprint_clear(world_position: Vector3, footprint: Vector2i) -> bool:
 	var half := Vector2(footprint.x, footprint.y) * 0.5
@@ -2143,109 +2018,6 @@ func _unregister_navigation_footprint(center: Vector3, footprint: Vector2i) -> v
 		if is_instance_valid(pocket.node) and pocket.node.global_position == center:
 			service_pockets.remove_at(index)
 
-func _create_warehouse(position_on_board: Vector3) -> void:
-	var building := Node3D.new()
-	building.position = position_on_board
-	add_child(building)
-	var base := MeshInstance3D.new()
-	var base_mesh := BoxMesh.new()
-	base_mesh.size = Vector3(1.45, 0.9, 1.35)
-	base.mesh = base_mesh
-	base.position.y = 0.45
-	var wall_material := StandardMaterial3D.new()
-	wall_material.albedo_color = Color("c78d52")
-	base.material_override = wall_material
-	building.add_child(base)
-	var roof := MeshInstance3D.new()
-	var roof_mesh := PrismMesh.new()
-	roof_mesh.size = Vector3(1.7, 0.62, 1.62)
-	roof.mesh = roof_mesh
-	roof.position.y = 1.2
-	roof.rotation_degrees.y = 90.0
-	var roof_material := StandardMaterial3D.new()
-	roof_material.albedo_color = Color("91483e")
-	roof.material_override = roof_material
-	building.add_child(roof)
-
-func _create_sawmill(position_on_board: Vector3) -> void:
-	var building := Node3D.new()
-	building.position = position_on_board
-	add_child(building)
-	var platform := MeshInstance3D.new()
-	var platform_mesh := BoxMesh.new()
-	platform_mesh.size = Vector3(1.6, 0.25, 1.45)
-	platform.mesh = platform_mesh
-	platform.position.y = 0.13
-	var wood_material := StandardMaterial3D.new()
-	wood_material.albedo_color = Color("af6f3b")
-	platform.material_override = wood_material
-	building.add_child(platform)
-	var blade := MeshInstance3D.new()
-	var blade_mesh := CylinderMesh.new()
-	blade_mesh.top_radius = 0.42
-	blade_mesh.bottom_radius = 0.42
-	blade_mesh.height = 0.08
-	blade.mesh = blade_mesh
-	blade.position.y = 0.32
-	var blade_material := StandardMaterial3D.new()
-	blade_material.albedo_color = Color("b7c4c9")
-	blade.material_override = blade_material
-	building.add_child(blade)
-
-func _create_farm(position_on_board: Vector3) -> void:
-	var farm := Node3D.new()
-	farm.position = position_on_board
-	add_child(farm)
-	for offset in [Vector3(-0.45, 0.18, -0.35), Vector3(0.15, 0.18, -0.35), Vector3(-0.15, 0.18, 0.35), Vector3(0.48, 0.18, 0.32)]:
-		var crop := MeshInstance3D.new()
-		var crop_mesh := CylinderMesh.new()
-		crop_mesh.top_radius = 0.12
-		crop_mesh.bottom_radius = 0.18
-		crop_mesh.height = 0.36
-		crop.mesh = crop_mesh
-		crop.position = offset
-		var crop_material := StandardMaterial3D.new()
-		crop_material.albedo_color = Color("d2b744")
-		crop.material_override = crop_material
-		farm.add_child(crop)
-
-func _create_house(position_on_board: Vector3) -> void:
-	var house := Node3D.new()
-	house.position = position_on_board
-	house.set_meta("spawn_slots", HOUSE_CAPACITY)
-	add_child(house)
-	var base := MeshInstance3D.new()
-	var base_mesh := BoxMesh.new()
-	base_mesh.size = Vector3(1.5, 1.0, 1.45)
-	base.mesh = base_mesh
-	base.position.y = 0.5
-	var wall_material := StandardMaterial3D.new()
-	wall_material.albedo_color = Color("91a9bb")
-	base.material_override = wall_material
-	house.add_child(base)
-	var roof := MeshInstance3D.new()
-	var roof_mesh := PrismMesh.new()
-	roof_mesh.size = Vector3(1.78, 0.7, 1.72)
-	roof.mesh = roof_mesh
-	roof.position.y = 1.32
-	roof.rotation_degrees.y = 90.0
-	var roof_material := StandardMaterial3D.new()
-	roof_material.albedo_color = Color("476573")
-	roof.material_override = roof_material
-	house.add_child(roof)
-	var selector := Area3D.new()
-	selector.add_to_group("house_selector")
-	selector.collision_layer = 4
-	selector.collision_mask = 0
-	var selector_shape := CollisionShape3D.new()
-	var shape := BoxShape3D.new()
-	shape.size = Vector3(1.6, 1.5, 1.6)
-	selector_shape.shape = shape
-	selector_shape.position.y = 0.75
-	selector.add_child(selector_shape)
-	house.add_child(selector)
-	_add_house_light(house)
-
 func _add_house_light(house: Node3D) -> void:
 	var light := OmniLight3D.new()
 	light.light_color = Color("ffd58a")
@@ -2288,76 +2060,6 @@ func _consume_tree_at(position_on_board: Vector3) -> void:
 	get_tree().create_timer(4.0).timeout.connect(tree.queue_free)
 	_update_workers()
 	_update_interface("A tree has been felled and will disappear shortly.")
-
-func _create_canteen(position_on_board: Vector3) -> void:
-	canteen = Node3D.new()
-	canteen.position = position_on_board
-	canteen_position = position_on_board
-	add_child(canteen)
-	var base := MeshInstance3D.new()
-	var base_mesh := BoxMesh.new()
-	base_mesh.size = Vector3(1.7, 0.9, 1.65)
-	base.mesh = base_mesh
-	base.position.y = 0.45
-	var wall_material := StandardMaterial3D.new()
-	wall_material.albedo_color = Color("d4a64f")
-	base.material_override = wall_material
-	canteen.add_child(base)
-	var roof := MeshInstance3D.new()
-	var roof_mesh := PrismMesh.new()
-	roof_mesh.size = Vector3(1.95, 0.75, 1.9)
-	roof.mesh = roof_mesh
-	roof.position.y = 1.25
-	roof.rotation_degrees.y = 90.0
-	var roof_material := StandardMaterial3D.new()
-	roof_material.albedo_color = Color("a54e38")
-	roof.material_override = roof_material
-	canteen.add_child(roof)
-	var sign := Label3D.new()
-	sign.text = "CANTEEN"
-	sign.position = Vector3(0, 1.3, -0.88)
-	sign.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	sign.font_size = 42
-	canteen.add_child(sign)
-
-func _create_school(position_on_board: Vector3) -> void:
-	var school := Node3D.new()
-	school.position = position_on_board
-	add_child(school)
-	var base := MeshInstance3D.new()
-	var base_mesh := BoxMesh.new()
-	base_mesh.size = Vector3(1.8, 1.05, 1.7)
-	base.mesh = base_mesh
-	base.position.y = 0.52
-	var wall_material := StandardMaterial3D.new()
-	wall_material.albedo_color = Color("8d7fc0")
-	base.material_override = wall_material
-	school.add_child(base)
-	var roof := MeshInstance3D.new()
-	var roof_mesh := PrismMesh.new()
-	roof_mesh.size = Vector3(2.05, 0.76, 1.95)
-	roof.mesh = roof_mesh
-	roof.position.y = 1.4
-	roof.rotation_degrees.y = 90.0
-	var roof_material := StandardMaterial3D.new()
-	roof_material.albedo_color = Color("4f477b")
-	roof.material_override = roof_material
-	school.add_child(roof)
-	var selector := Area3D.new()
-	selector.add_to_group("school_selector")
-	var selector_shape := CollisionShape3D.new()
-	var shape := BoxShape3D.new()
-	shape.size = Vector3(1.9, 1.65, 1.8)
-	selector_shape.shape = shape
-	selector_shape.position.y = 0.82
-	selector.add_child(selector_shape)
-	school.add_child(selector)
-	var sign := Label3D.new()
-	sign.text = "SCHOOL"
-	sign.position = Vector3(0, 1.35, -0.98)
-	sign.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	sign.font_size = 40
-	school.add_child(sign)
 
 func _tent_resident_count() -> int:
 	var count := 0
