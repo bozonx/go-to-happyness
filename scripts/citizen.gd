@@ -6,6 +6,7 @@ signal excavation_cycle(worker: Citizen, site: Node3D, efficiency: float)
 signal resource_ready(worker: Citizen, resource_type: String, amount: int)
 signal meal_finished(worker: Citizen)
 signal canteen_delivery_finished(worker: Citizen, amount: int)
+signal factory_cycle(worker: Citizen, factory: Node3D)
 
 const WALK_SPEED := 2.2
 const WORK_DURATION := 1.4
@@ -19,7 +20,7 @@ const UNIT_SEPARATION_DISTANCE := 0.72
 const UNIT_SEPARATION_STRENGTH := 1.35
 const CONSTRUCTION_SLOT_SPACING := 0.42
 
-enum State { IDLE, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK }
+enum State { IDLE, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING }
 
 var state := State.IDLE
 var resource_type := "wood"
@@ -63,6 +64,9 @@ var blocked_by_storage := false
 var training_role := ""
 var training_days_completed := 0
 var school_position := Vector3.ZERO
+var factory: Node3D
+var factory_position := Vector3.ZERO
+var park_position := Vector3.ZERO
 
 func _ready() -> void:
 	add_to_group("citizens")
@@ -189,6 +193,14 @@ func _physics_process(delta: float) -> void:
 			pass
 		State.TO_SCHOOL_WORK:
 			_process_school_work(delta)
+		State.TO_FACTORY:
+			_process_to_factory(delta)
+		State.FACTORY_WORK:
+			_process_factory_work(delta)
+		State.TO_PARK:
+			_process_go_to_park(delta)
+		State.RELAXING:
+			_process_relaxing(delta)
 
 func _process_to_source(delta: float) -> void:
 	if _move_to(source_position, delta):
@@ -297,6 +309,33 @@ func _process_go_to_school(delta: float) -> void:
 
 func _process_school_work(delta: float) -> void:
 	if _move_to(school_position, delta):
+		state = State.IDLE
+
+func _process_to_factory(delta: float) -> void:
+	if not is_instance_valid(factory):
+		idle()
+		return
+	if _move_to(factory_position, delta):
+		state = State.FACTORY_WORK
+		work_time = WORK_DURATION / get_efficiency(active_role)
+
+func _process_factory_work(delta: float) -> void:
+	if not is_instance_valid(factory):
+		idle()
+		return
+	if _work(delta):
+		factory_cycle.emit(self, factory)
+		work_time = WORK_DURATION / get_efficiency(active_role)
+
+func _process_go_to_park(delta: float) -> void:
+	if _move_to(park_position, delta):
+		state = State.RELAXING
+		meal_time = 4.0
+
+func _process_relaxing(delta: float) -> void:
+	meal_time -= delta
+	satisfaction = minf(get_satisfaction_cap(), satisfaction + delta * 5.0)
+	if meal_time <= 0.0:
 		state = State.IDLE
 
 func _move_to(destination: Vector3, delta: float, may_enter_destination_house := false) -> bool:
@@ -472,6 +511,19 @@ func assign_teacher_work(next_school_position: Vector3) -> void:
 		active_role = "teaching"
 		state = State.TO_SCHOOL_WORK
 
+func assign_factory_work(next_factory: Node3D, role: String) -> void:
+	if not is_player_controlled:
+		factory = next_factory
+		factory_position = next_factory.global_position
+		active_role = role
+		state = State.TO_FACTORY
+
+func go_to_park(next_park_position: Vector3) -> void:
+	if not is_player_controlled:
+		park_position = next_park_position
+		active_role = "relaxing"
+		state = State.TO_PARK
+
 func start_training(next_role: String, next_school_position: Vector3) -> void:
 	training_role = next_role
 	training_days_completed = 0
@@ -524,6 +576,8 @@ func setup_specialization(next_specialization: String) -> void:
 		"courier": body_material.albedo_color = Color("a85d91")
 		"cook": body_material.albedo_color = Color("d96f43")
 		"teacher": body_material.albedo_color = Color("7656a8")
+		"factory_worker": body_material.albedo_color = Color("c45d42")
+		"engineer": body_material.albedo_color = Color("4d7a9b")
 
 func get_efficiency(role: String) -> float:
 	var skill_value: float = skills.get(role, 1.0)
@@ -540,6 +594,8 @@ func role_label() -> String:
 		"excavation": return "Digger"
 		"cook": return "Cook"
 		"teacher": return "Teacher"
+		"factory_worker": return "Factory worker"
+		"engineer": return "Engineer"
 		_: return "Courier"
 
 func specialization_color() -> Color:
@@ -550,6 +606,8 @@ func specialization_color() -> Color:
 		"excavation": return Color("a6744b")
 		"cook": return Color("d96f43")
 		"teacher": return Color("7656a8")
+		"factory_worker": return Color("c45d42")
+		"engineer": return Color("4d7a9b")
 		_: return Color("a85d91")
 
 func preferred_role() -> String:
@@ -615,7 +673,7 @@ func _update_effects(delta: float) -> void:
 			buffs[buff_id] = time_left
 
 func is_available_for_schedule() -> bool:
-	return not is_player_controlled and state != State.TO_CANTEEN and state != State.EATING and state != State.TO_HOME and state != State.RESTING and state != State.STUDYING
+	return not is_player_controlled and state != State.TO_CANTEEN and state != State.EATING and state != State.TO_HOME and state != State.RESTING and state != State.STUDYING and state != State.TO_PARK and state != State.RELAXING
 
 func _update_satisfaction(delta: float) -> void:
 	satisfaction_tick += delta

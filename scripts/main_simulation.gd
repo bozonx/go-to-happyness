@@ -12,6 +12,12 @@ const HOUSE_COST := 12
 const FARM_COST := 12
 const CANTEEN_COST := 16
 const SCHOOL_COST := 18
+const PARK_COST := 14
+const BRICK_FACTORY_COST := 24
+const MATERIALS_FACTORY_COST := 28
+const BRICK_RESEARCH_COST := 15
+const BOARD_RESEARCH_COST := 10
+const BRICK_RESEARCH_DURATION := 20.0
 const POPULATION := 5
 const WAREHOUSE_CAPACITY := 50
 const HOUSE_CAPACITY := 2
@@ -32,6 +38,8 @@ var wood := STARTING_WOOD
 var food := 20
 var soil := 0
 var clay := 0
+var boards := 0
+var bricks := 0
 var wellbeing := 75
 var game_minutes: float = 7.0 * 60.0
 const GAME_DAY_REAL_SECONDS := 300.0
@@ -49,6 +57,10 @@ var warehouse_positions: Array[Vector3] = []
 var sawmill_positions: Array[Vector3] = []
 var farm_positions: Array[Vector3] = []
 var school_positions: Array[Vector3] = []
+var park_positions: Array[Vector3] = []
+var factories: Array[Node3D] = []
+var brick_construction_unlocked := false
+var brick_research_progress := -1.0
 var tree_positions: Array[Vector3] = []
 var citizens: Array[Citizen] = []
 var camera: Camera3D
@@ -103,6 +115,9 @@ var building_footprints: Array[Dictionary] = []
 var selected_school: Node3D
 var school_menu: Panel
 var school_menu_title: Label
+var materials_factory_menu: Panel
+var materials_factory_menu_title: Label
+var selected_materials_factory: Node3D
 
 
 func _ready() -> void:
@@ -124,6 +139,7 @@ func _process(delta: float) -> void:
 	_update_clock(delta)
 	_update_daylight()
 	_update_canteen_delivery()
+	_update_brick_research(delta)
 	if not _is_night():
 		_update_couriers()
 	if selected_builder != null and build_menu.visible:
@@ -153,6 +169,21 @@ func _update_workers() -> void:
 				citizen.assign_teacher_work(school_positions[0])
 			continue
 		if citizen.specialization == "courier":
+			continue
+		if citizen.specialization == "factory_worker":
+			var factory := _factory_for_role("factory_worker")
+			if factory != null:
+				citizen.assign_factory_work(factory, "factory_work")
+			continue
+		if citizen.specialization == "builder" and construction_sites.is_empty():
+			var materials_plant := _factory_for_role("engineer")
+			if materials_plant != null:
+				citizen.assign_factory_work(materials_plant, "construction")
+				continue
+		if citizen.specialization == "engineer":
+			var materials_factory := _factory_for_role("engineer")
+			if materials_factory != null:
+				citizen.assign_factory_work(materials_factory, "engineering")
 			continue
 		if not citizen.training_role.is_empty() and citizen.training_days_completed < 10 and int(game_minutes) / 60 < 12:
 			citizen.attend_school()
@@ -186,6 +217,27 @@ func _work_role_for(citizen: Citizen) -> String:
 	if citizen.specialization == "excavation" and not dig_sites.is_empty():
 		return "excavation"
 	return ""
+
+func _factory_for_role(role: String) -> Node3D:
+	if role == "factory_worker":
+		for type in ["materials_factory", "brick_factory", "recycling_factory", "metal_factory"]:
+			for factory in factories:
+				if factory.get_meta("building_type", "") != type:
+					continue
+				var assigned_workers := 0
+				for citizen in citizens:
+					assigned_workers += 1 if citizen.factory == factory and citizen.specialization == "factory_worker" else 0
+				if assigned_workers < int(factory.get_meta("required_factory_workers", 1)):
+					return factory
+	for factory in factories:
+		if not is_instance_valid(factory):
+			continue
+		var type: String = factory.get_meta("building_type", "")
+		if role == "factory_worker" and type in ["brick_factory", "materials_factory", "recycling_factory", "metal_factory"]:
+			return factory
+		if role == "engineer" and type == "materials_factory":
+			return factory
+	return null
 
 func _has_courier() -> bool:
 	for citizen in citizens:
@@ -243,6 +295,12 @@ func _handle_clock_minute(clock_minute: int) -> void:
 	if minute == 0 and (hour == 8 or hour == 13 or hour == 19) and active_meal_hour != hour:
 		active_meal_hour = hour
 		_start_meal(hour)
+	if minute == 0 and hour == 14:
+		_start_park_rest(false)
+	if minute == 0 and hour == 16:
+		_start_park_rest(true)
+	if minute == 0 and hour == 18:
+		_start_park_rest(false)
 	if minute == 0 and hour == 21:
 		_update_workers()
 		_update_interface("Nightfall: workers are returning to their assigned homes.")
@@ -273,9 +331,27 @@ func _start_meal(hour: int) -> void:
 		_update_interface("%02d:00 meal missed: the canteen needs a cook." % hour)
 		return
 	for citizen in citizens:
+		# The cook keeps the canteen staffed during the lunch service and receives
+		# their park break after the rush.
+		if citizen.specialization == "cook" and hour == 13:
+			continue
 		if citizen.is_available_for_schedule():
 			citizen.go_to_canteen(canteen_position)
 	_update_interface("%02d:00 meal service started. Residents are heading to the canteen." % hour)
+
+func _start_park_rest(cooks_only: bool) -> void:
+	if park_positions.is_empty():
+		return
+	var sent := 0
+	for citizen in citizens:
+		if citizen.is_player_controlled or not citizen.is_available_for_schedule():
+			continue
+		if (citizen.specialization == "cook") != cooks_only:
+			continue
+		citizen.go_to_park(park_positions[sent % park_positions.size()])
+		sent += 1
+	if sent > 0:
+		_update_interface("%02d:00 park break: %d residents are resting." % [int(game_minutes) / 60, sent])
 
 func _on_meal_finished(citizen: Citizen) -> void:
 	var served := is_instance_valid(canteen) and _has_cook() and canteen_food > 0
@@ -345,7 +421,8 @@ func _building_power(site_node: Node3D) -> float:
 	return power
 
 func _on_resource_delivered(worker: Citizen, resource_type: String, amount: int) -> void:
-	if _stored_resources() + amount > _warehouse_capacity():
+	var storage_amount := amount * 2 if resource_type == "wood" else amount
+	if _stored_resources() + storage_amount > _warehouse_capacity():
 		worker.storage_delivery_result(false)
 		_update_interface("Warehouse is full. Build another warehouse; the worker went home.")
 		return
@@ -357,8 +434,32 @@ func _on_resource_delivered(worker: Citizen, resource_type: String, amount: int)
 		clay += amount
 	else:
 		wood += amount
+		boards += amount
 	worker.storage_delivery_result(true)
 	_update_interface("Workers delivered %d %s to the warehouse." % [amount, resource_type])
+
+func _on_factory_cycle(worker: Citizen, factory: Node3D) -> void:
+	if not is_instance_valid(factory):
+		return
+	var type: String = factory.get_meta("building_type", "")
+	if type == "brick_factory":
+		if clay < 1:
+			return
+		clay -= 1
+		bricks += 1
+		_update_interface("Brick factory produced 1 brick.")
+
+func _materials_factory_staffed(factory: Node3D) -> bool:
+	var has_worker := false
+	var has_builder := false
+	var has_engineer := false
+	for citizen in citizens:
+		if citizen.factory != factory:
+			continue
+		has_worker = has_worker or citizen.specialization == "factory_worker"
+		has_builder = has_builder or citizen.specialization == "builder"
+		has_engineer = has_engineer or citizen.specialization == "engineer"
+	return has_worker and has_builder and has_engineer
 
 func _on_resource_ready(worker: Citizen, resource_type: String, amount: int) -> void:
 	worker.register_pending_resource(resource_type, amount)
@@ -401,10 +502,13 @@ func _building_cost() -> int:
 		"farm": return FARM_COST
 		"canteen": return CANTEEN_COST
 		"school": return SCHOOL_COST
+		"park": return PARK_COST
+		"brick_factory": return BRICK_FACTORY_COST
+		"materials_factory": return MATERIALS_FACTORY_COST
 		_: return HOUSE_COST
 
 func _stored_resources() -> int:
-	return wood + food + soil + clay
+	return wood + food + soil + clay + boards + bricks
 
 func _warehouse_capacity() -> int:
 	# Starting supplies are kept at the tent until the first warehouse is built.
@@ -505,7 +609,7 @@ func _find_path_around_houses(from: Vector3, destination: Vector3, may_enter_des
 	return path
 
 func _update_interface(message: String) -> void:
-	wood_label.text = "Wood: %d   Warehouse food: %d   Canteen: %d\nSoil: %d   Clay: %d   Storage: %d/%d\nTent: %d/%d   Population: %d" % [wood, food, canteen_food, soil, clay, _stored_resources(), _warehouse_capacity(), _tent_resident_count(), TENT_CAPACITY, citizens.size()]
+	wood_label.text = "Wood: %d  Boards: %d  Bricks: %d\nFood: %d  Canteen: %d  Soil: %d  Clay: %d\nStorage: %d/%d  Tent: %d/%d  Population: %d" % [wood, boards, bricks, food, canteen_food, soil, clay, _stored_resources(), _warehouse_capacity(), _tent_resident_count(), TENT_CAPACITY, citizens.size()]
 	status_label.text = message
 	if is_first_person:
 		camera_hint_label.text = "R: leave citizen  WASD/arrows: move  Space: jump  Shift: sprint  Mouse: look  LMB: interact  RMB: dig"
@@ -708,6 +812,7 @@ func _create_interface() -> void:
 	_create_build_menu(ui)
 	_create_house_menu(ui)
 	_create_school_menu(ui)
+	_create_materials_factory_menu(ui)
 
 func _create_time_controls(ui: CanvasLayer) -> void:
 	var controls := HBoxContainer.new()
@@ -735,7 +840,7 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	build_menu = Panel.new()
 	build_menu.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	build_menu.offset_left = -324.0
-	build_menu.offset_top = -540.0
+	build_menu.offset_top = -780.0
 	build_menu.offset_right = -20.0
 	build_menu.offset_bottom = -20.0
 	build_menu.visible = false
@@ -757,6 +862,13 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_build_button("Canteen - 16 wood", "canteen", 398)
 	_add_build_button("House - 12 wood", "house", 434)
 	_add_build_button("School - 18 wood", "school", 470)
+	_add_build_button("Park - 14 wood", "park", 506)
+	_add_build_button("Brick factory - 24 wood", "brick_factory", 542)
+	_add_build_button("Materials factory - 28 wood", "materials_factory", 578)
+	_add_build_button("Recycling factory - bricks", "recycling_factory", 614)
+	_add_build_button("Metal factory - bricks", "metal_factory", 650)
+	_add_build_button("City hall - bricks", "city_hall", 686)
+	_add_build_button("Leisure center - bricks", "leisure_center", 722)
 
 func _create_school_menu(ui: CanvasLayer) -> void:
 	school_menu = Panel.new()
@@ -772,7 +884,8 @@ func _create_school_menu(ui: CanvasLayer) -> void:
 	school_menu_title.size = Vector2(272, 72)
 	school_menu_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	school_menu.add_child(school_menu_title)
-	var roles := [["Construction", "construction"], ["Forestry", "forestry"], ["Farming", "farming"], ["Excavation", "excavation"]]
+	var roles := [["Construction", "construction"], ["Forestry", "forestry"], ["Farming", "farming"], ["Excavation", "excavation"], ["Factory worker", "factory_worker"], ["Engineer", "engineer"]]
+	school_menu.offset_top = -430.0
 	for index in range(roles.size()):
 		var button := Button.new()
 		button.text = "Train: %s" % roles[index][0]
@@ -810,6 +923,67 @@ func _create_house_menu(ui: CanvasLayer) -> void:
 	_add_house_spawn_button("Spawn Courier", "courier", 238)
 	_add_house_spawn_button("Spawn Cook", "cook", 272)
 	_add_house_spawn_button("Spawn Teacher", "teacher", 306)
+	_add_house_spawn_button("Spawn Factory worker", "factory_worker", 340)
+	_add_house_spawn_button("Spawn Engineer", "engineer", 374)
+	house_menu.offset_top = -450.0
+
+func _create_materials_factory_menu(ui: CanvasLayer) -> void:
+	materials_factory_menu = Panel.new()
+	materials_factory_menu.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	materials_factory_menu.offset_left = -324.0
+	materials_factory_menu.offset_top = -260.0
+	materials_factory_menu.offset_right = -20.0
+	materials_factory_menu.offset_bottom = -20.0
+	materials_factory_menu.visible = false
+	ui.add_child(materials_factory_menu)
+	materials_factory_menu_title = Label.new()
+	materials_factory_menu_title.position = Vector2(16, 14)
+	materials_factory_menu_title.size = Vector2(272, 94)
+	materials_factory_menu_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	materials_factory_menu.add_child(materials_factory_menu_title)
+	var research_button := Button.new()
+	research_button.text = "Research brick construction"
+	research_button.position = Vector2(16, 120)
+	research_button.size = Vector2(272, 32)
+	research_button.pressed.connect(_start_brick_research)
+	materials_factory_menu.add_child(research_button)
+
+func _show_materials_factory_menu() -> void:
+	if selected_materials_factory == null:
+		return
+	materials_factory_menu.visible = true
+	if brick_construction_unlocked:
+		materials_factory_menu_title.text = "Materials factory\nBrick construction unlocked."
+	elif brick_research_progress >= 0.0:
+		materials_factory_menu_title.text = "Materials factory\nResearch: %d%%" % roundi(brick_research_progress * 100.0)
+	else:
+		materials_factory_menu_title.text = "Materials factory\nNeeds factory worker, builder and engineer.\nResearch cost: %d bricks, %d boards." % [BRICK_RESEARCH_COST, BOARD_RESEARCH_COST]
+
+func _start_brick_research() -> void:
+	if selected_materials_factory == null or brick_construction_unlocked or brick_research_progress >= 0.0:
+		return
+	if not _materials_factory_staffed(selected_materials_factory):
+		_update_interface("Research needs a factory worker, builder and engineer assigned to this factory.")
+		return
+	if bricks < BRICK_RESEARCH_COST or boards < BOARD_RESEARCH_COST:
+		_update_interface("Research needs %d bricks and %d boards." % [BRICK_RESEARCH_COST, BOARD_RESEARCH_COST])
+		return
+	bricks -= BRICK_RESEARCH_COST
+	boards -= BOARD_RESEARCH_COST
+	brick_research_progress = 0.0
+	_show_materials_factory_menu()
+	_update_interface("Brick construction research started.")
+
+func _update_brick_research(delta: float) -> void:
+	if brick_research_progress < 0.0 or brick_construction_unlocked:
+		return
+	brick_research_progress = minf(1.0, brick_research_progress + delta / BRICK_RESEARCH_DURATION)
+	if brick_research_progress >= 1.0:
+		brick_construction_unlocked = true
+		brick_research_progress = -1.0
+		_update_interface("Brick construction unlocked: recycling, metal, city hall and leisure center are available.")
+	if materials_factory_menu != null and materials_factory_menu.visible:
+		_show_materials_factory_menu()
 
 func _add_house_resettle_button() -> void:
 	var button := Button.new()
@@ -952,6 +1126,9 @@ func _create_dig_site(cell: Vector2i, world_position: Vector3) -> Dictionary:
 func _select_build_mode(next_mode: String) -> void:
 	if selected_builder == null:
 		return
+	if next_mode in ["recycling_factory", "metal_factory", "city_hall", "leisure_center"] and not brick_construction_unlocked:
+		_update_interface("This brick building is locked. Research brick construction at a materials factory.")
+		return
 	build_mode = next_mode
 	selection_marker.visible = true
 	_move_selection(selected_world_position)
@@ -1034,6 +1211,16 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 		school_menu_title.text = "Student: %s\nChoose a profession. Study takes 10 mornings." % selected_builder.role_label()
 		school_menu.visible = true
 		_update_interface("Choose the profession for this student.")
+		return
+	if hit.collider.is_in_group("materials_factory_selector"):
+		selected_materials_factory = hit.collider.get_parent() as Node3D
+		selected_house = null
+		selected_school = null
+		house_menu.visible = false
+		school_menu.visible = false
+		build_menu.visible = false
+		_show_materials_factory_menu()
+		_update_interface("Materials factory selected. Start brick construction research here.")
 		return
 	if not hit.collider.is_in_group("citizen_selector"):
 		return
@@ -1274,11 +1461,10 @@ func _place_building(world_position: Vector3) -> void:
 		_update_interface("Construction is not allowed at this point.")
 		return
 	var cell := _placement_key(world_position)
-	var cost := _building_cost()
-	if wood < cost:
-		_update_interface("Not enough wood.")
+	if not _can_pay_building_cost(build_mode):
+		_update_interface("Not enough resources for this building.")
 		return
-	wood -= cost
+	_pay_building_cost(build_mode)
 	placed_buildings[cell] = build_mode
 	building_positions.append(world_position)
 	var blueprint := BuildingBlueprints.get_blueprint(build_mode)
@@ -1295,6 +1481,25 @@ func _can_place(world_position: Vector3) -> bool:
 		return false
 	var footprint: Vector2i = BuildingBlueprints.get_blueprint(build_mode).footprint
 	return _is_footprint_level(world_position, footprint) and _is_footprint_clear(world_position, footprint)
+
+func _can_pay_building_cost(building_type: String) -> bool:
+	if building_type in ["recycling_factory", "metal_factory"]:
+		return bricks >= 25
+	if building_type == "city_hall":
+		return bricks >= 35
+	if building_type == "leisure_center":
+		return bricks >= 30
+	return wood >= _building_cost()
+
+func _pay_building_cost(building_type: String) -> void:
+	if building_type in ["recycling_factory", "metal_factory"]:
+		bricks -= 25
+	elif building_type == "city_hall":
+		bricks -= 35
+	elif building_type == "leisure_center":
+		bricks -= 30
+	else:
+		wood -= _building_cost()
 
 func _is_footprint_clear(world_position: Vector3, footprint: Vector2i) -> bool:
 	var half := Vector2(footprint.x, footprint.y) * 0.5
@@ -1420,13 +1625,23 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 		"school":
 			school_positions.append(position_on_board)
 			_add_building_selector(building, "school_selector", blueprint.footprint)
+		"park":
+			park_positions.append(position_on_board)
+		"brick_factory", "materials_factory", "recycling_factory", "metal_factory":
+			building.set_meta("required_factory_workers", 3 if building_type in ["recycling_factory", "metal_factory"] else 1)
+			factories.append(building)
+			if building_type == "materials_factory":
+				_add_building_selector(building, "materials_factory_selector", blueprint.footprint)
 	for record in building_footprints:
 		if record.center == position_on_board and record.node == null:
 			record.node = building
 			break
 	_register_navigation_footprint(position_on_board, blueprint)
 	_update_workers()
-	_update_interface("%s construction completed." % building_type.capitalize())
+	var completion_message := "%s construction completed." % building_type.capitalize()
+	if building_type in ["recycling_factory", "metal_factory"]:
+		completion_message += " It requires 3 factory workers."
+	_update_interface(completion_message)
 
 func _add_building_selector(building: Node3D, group_name: String, footprint: Vector2i) -> void:
 	var selector := Area3D.new()
