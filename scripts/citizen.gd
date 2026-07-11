@@ -59,6 +59,9 @@ var pathfinder: Callable
 var movement_path: Array[Vector3] = []
 var path_destination := Vector3.INF
 var path_allows_destination_house := false
+var navigation_agent: NavigationAgent3D
+var safe_navigation_velocity := Vector3.ZERO
+var has_safe_navigation_velocity := false
 var stuck_time := 0.0
 var jump_cooldown := 0.0
 var blocked_by_storage := false
@@ -72,8 +75,25 @@ var park_position := Vector3.ZERO
 func _ready() -> void:
 	add_to_group("citizens")
 	_setup_collision()
+	_setup_navigation_agent()
 	_setup_selector()
 	_setup_visuals()
+
+func _setup_navigation_agent() -> void:
+	navigation_agent = NavigationAgent3D.new()
+	navigation_agent.path_desired_distance = 0.28
+	navigation_agent.target_desired_distance = 0.7
+	navigation_agent.path_height_offset = 0.0
+	navigation_agent.avoidance_enabled = true
+	navigation_agent.use_3d_avoidance = false
+	navigation_agent.radius = 0.36
+	navigation_agent.neighbor_distance = 3.0
+	navigation_agent.velocity_computed.connect(_on_navigation_velocity_computed)
+	add_child(navigation_agent)
+
+func _on_navigation_velocity_computed(safe_velocity: Vector3) -> void:
+	safe_navigation_velocity = safe_velocity
+	has_safe_navigation_velocity = true
 
 func _setup_collision() -> void:
 	# Bodies collide with terrain, but not with each other. Local steering keeps
@@ -340,6 +360,19 @@ func _process_relaxing(delta: float) -> void:
 		state = State.IDLE
 
 func _move_to(destination: Vector3, delta: float, may_enter_destination_house := false) -> bool:
+	if navigation_agent != null and navigation_agent.get_navigation_map().is_valid():
+		if path_destination.distance_to(destination) > 0.08:
+			path_destination = destination
+			navigation_agent.target_position = destination
+		for ignored_start_position in range(2):
+			var next_path_position := navigation_agent.get_next_path_position()
+			if navigation_agent.is_navigation_finished():
+				return true
+			var path_offset := next_path_position - global_position
+			path_offset.y = 0.0
+			if path_offset.length() > 0.08:
+				return _move_directly_to(next_path_position, delta)
+		return false
 	if path_destination.distance_to(destination) > 0.08 or path_allows_destination_house != may_enter_destination_house:
 		path_destination = destination
 		path_allows_destination_house = may_enter_destination_house
@@ -364,8 +397,11 @@ func _move_directly_to(destination: Vector3, delta: float) -> bool:
 	var desired_velocity := direction * WALK_SPEED + separation * UNIT_SEPARATION_STRENGTH
 	if desired_velocity.length() > WALK_SPEED:
 		desired_velocity = desired_velocity.normalized() * WALK_SPEED
-	velocity.x = desired_velocity.x
-	velocity.z = desired_velocity.z
+	if navigation_agent != null:
+		navigation_agent.velocity = desired_velocity
+	var movement_velocity := safe_navigation_velocity if has_safe_navigation_velocity else desired_velocity
+	velocity.x = movement_velocity.x
+	velocity.z = movement_velocity.z
 	jump_cooldown = maxf(0.0, jump_cooldown - delta)
 	var position_before_move := global_position
 	move_and_slide()
@@ -442,6 +478,7 @@ func set_player_controlled(controlled: bool) -> void:
 		construction_site = null
 		active_role = ""
 		movement_path.clear()
+		path_destination = Vector3.INF
 
 func assign_construction(site: Node3D) -> void:
 	if is_player_controlled:

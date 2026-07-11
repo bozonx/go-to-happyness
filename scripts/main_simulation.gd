@@ -33,6 +33,7 @@ const INTERACTION_RANGE := 2.25
 const POCKET_WOOD_CAPACITY := 8
 const DIG_RADIUS := 2.2
 const DIG_REACH := 6.0
+const NAVIGATION_AGENT_RADIUS := 0.38
 
 var wood := STARTING_WOOD
 var food := 20
@@ -110,6 +111,7 @@ var clock_label: Label
 var tent_dismantle_progress := -1.0
 var voxel_terrain: VoxelLodTerrain
 var voxel_tool: VoxelTool
+var navigation_region: NavigationRegion3D
 var building_positions: Array[Vector3] = []
 var building_footprints: Array[Dictionary] = []
 var selected_school: Node3D
@@ -663,6 +665,7 @@ func _create_world() -> void:
 	add_child(camera)
 	_update_camera_position()
 	_create_voxel_terrain()
+	_create_navigation_region()
 	_create_selection_marker()
 
 func _create_voxel_terrain() -> void:
@@ -688,6 +691,51 @@ func _create_voxel_terrain() -> void:
 	camera.add_child(VoxelViewer.new())
 	voxel_tool = voxel_terrain.get_voxel_tool()
 	voxel_tool.channel = VoxelBuffer.CHANNEL_SDF
+
+func _create_navigation_region() -> void:
+	navigation_region = NavigationRegion3D.new()
+	navigation_region.use_edge_connections = true
+	add_child(navigation_region)
+	_rebuild_navigation_mesh()
+
+func _rebuild_navigation_mesh() -> void:
+	if navigation_region == null:
+		return
+	var navigation_mesh := NavigationMesh.new()
+	navigation_mesh.agent_radius = NAVIGATION_AGENT_RADIUS
+	navigation_mesh.agent_height = 1.75
+	navigation_mesh.agent_max_climb = 0.45
+	navigation_mesh.agent_max_slope = 52.0
+	var vertices := PackedVector3Array()
+	var polygons: Array[PackedInt32Array] = []
+	var half_cells := BOARD_CELLS / 2
+	for x in range(-half_cells, half_cells):
+		for z in range(-half_cells, half_cells):
+			if _is_navigation_cell_blocked(Vector2i(x, z)):
+				continue
+			var vertex_index := vertices.size()
+			vertices.append(Vector3(x, 0.0, z))
+			vertices.append(Vector3(x + 1.0, 0.0, z))
+			vertices.append(Vector3(x + 1.0, 0.0, z + 1.0))
+			vertices.append(Vector3(x, 0.0, z + 1.0))
+			polygons.append(PackedInt32Array([vertex_index, vertex_index + 2, vertex_index + 1]))
+			polygons.append(PackedInt32Array([vertex_index, vertex_index + 3, vertex_index + 2]))
+	navigation_mesh.vertices = vertices
+	for polygon in polygons:
+		navigation_mesh.add_polygon(polygon)
+	navigation_region.navigation_mesh = navigation_mesh
+	if is_inside_tree():
+		NavigationServer3D.map_force_update(get_world_3d().navigation_map)
+
+func _is_navigation_cell_blocked(cell: Vector2i) -> bool:
+	for record in building_footprints:
+		var center: Vector3 = record.center
+		var footprint: Vector2i = record.footprint
+		var min_x := roundi(center.x - (footprint.x - 1) * 0.5)
+		var min_z := roundi(center.z - (footprint.y - 1) * 0.5)
+		if cell.x >= min_x and cell.x < min_x + footprint.x and cell.y >= min_z and cell.y < min_z + footprint.y:
+			return true
+	return false
 
 func _create_selection_marker() -> void:
 	selection_marker = MeshInstance3D.new()
@@ -743,6 +791,7 @@ func _create_starting_tent() -> void:
 	tent.position = _cell_center(tent_cell)
 	building_positions.append(tent.position)
 	building_footprints.append({"center": tent.position, "footprint": Vector2i(3, 3), "node": tent})
+	_rebuild_navigation_mesh()
 	tent.set_meta("is_tent", true)
 	placed_buildings[tent_cell] = "tent"
 	house_cells[tent_cell] = true
@@ -1506,6 +1555,7 @@ func _place_building(world_position: Vector3) -> void:
 	building_positions.append(world_position)
 	var blueprint := BuildingBlueprints.get_blueprint(build_mode)
 	building_footprints.append({"center": world_position, "footprint": blueprint.footprint, "node": null})
+	_rebuild_navigation_mesh()
 	_create_construction_site(cell, build_mode, world_position)
 	build_mode = ""
 	selection_marker.visible = false
@@ -1674,7 +1724,8 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 		if record.center == position_on_board and record.node == null:
 			record.node = building
 			break
-	_register_navigation_footprint(position_on_board, blueprint)
+		_register_navigation_footprint(position_on_board, blueprint)
+	_rebuild_navigation_mesh()
 	_update_workers()
 	var completion_message := "%s construction completed." % building_type.capitalize()
 	if building_type in ["recycling_factory", "metal_factory"]:
@@ -1922,6 +1973,7 @@ func _update_tent_dismantle(delta: float) -> void:
 	tent = null
 	placed_buildings.erase(tent_cell)
 	house_cells.erase(tent_cell)
+	_rebuild_navigation_mesh()
 	wood += 2
 	tent_dismantle_progress = -1.0
 	_update_workers()
