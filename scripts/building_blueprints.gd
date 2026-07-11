@@ -31,11 +31,22 @@ const COLORS := {
 	"metal_factory_roof": Color("394651"),
 	"city_hall_roof": Color("6b6040"),
 	"leisure_center_roof": Color("704065"),
+	"campfire": Color("b85e42"),
+	"tent": Color("c7a96a"),
+	"forager_tent": Color("739350"),
+	"craft_tent": Color("a46b46"),
+	"water_store": Color("4d8fa8"),
+	"dugout": Color("8a6549"),
+	"earth_house": Color("9b7655"),
+	"smithy": Color("65686d"),
+	"hide_worker": Color("a98259"),
 }
 
 
 static func get_blueprint(building_type: String) -> Dictionary:
 	match building_type:
+		"campfire": return _park_blueprint()
+		"tent", "forager_tent", "craft_tent", "water_store", "dugout", "earth_house", "smithy", "hide_worker": return _enclosed_blueprint(building_type, Vector2i(4, 4), 2, "gable")
 		"warehouse": return _enclosed_blueprint("warehouse", Vector2i(5, 5), 3, "shed")
 		"sawmill": return _sawmill_blueprint()
 		"farm": return _farm_blueprint()

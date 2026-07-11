@@ -1,8 +1,12 @@
 extends SceneTree
 
+const SettlementRulesScript = preload("res://scripts/domain/settlement_rules.gd")
+
 
 func _init() -> void:
 	_test_settlement_economy()
+	_test_progression_and_volunteers()
+	_test_work_schedule_wellbeing()
 	_test_clock_wraps_and_reports_elapsed_minutes()
 	_test_sawmill_rules()
 	_test_workforce_policy()
@@ -14,18 +18,39 @@ func _init() -> void:
 
 func _test_settlement_economy() -> void:
 	var state := SettlementState.new()
+	assert(state.money == 20 and state.wood == 0 and state.food == 0)
+	state.branches = 12
+	state.grass = 4
 	assert(state.can_afford_building("warehouse"))
 	assert(state.pay_for_building("warehouse"))
-	assert(state.wood == 20)
-	assert(not state.can_afford_building("city_hall"))
-	state.bricks = 35
-	assert(state.pay_for_building("city_hall"))
-	assert(state.bricks == 0)
+	assert(state.branches == 0 and state.grass == 0)
 	state.bricks = 15
 	state.boards = 10
 	assert(state.can_afford_research("brick_construction"))
 	assert(state.pay_for_research("brick_construction"))
 	assert(state.bricks == 0 and state.boards == 0)
+
+
+func _test_progression_and_volunteers() -> void:
+	var state := SettlementState.new()
+	state.buildings = {"campfire": 1, "craft_tent": 1}
+	state.food = 4
+	state.water = 4
+	state.trade_sales = 1
+	for tool_id in state.tools:
+		state.tools[tool_id] = tool_id != "sawmill_kit"
+	assert(state.can_advance_to(SettlementState.Era.EARTH, 4, 4))
+	assert(state.advance_era(SettlementState.Era.EARTH, 4, 4))
+	assert(SettlementRulesScript.volunteer_can_arrive(1, 2, 60.0))
+	assert(not SettlementRulesScript.volunteer_can_arrive(0, 2, 60.0))
+	assert(SettlementRulesScript.should_volunteer_leave(3))
+
+
+func _test_work_schedule_wellbeing() -> void:
+	var short_day: int = SettlementRulesScript.daily_wellbeing_change(true, 1.0, 1.0, 6, false)
+	var long_night_day: int = SettlementRulesScript.daily_wellbeing_change(true, 1.0, 1.0, 10, true)
+	assert(short_day > long_night_day)
+	assert(SettlementRulesScript.production_multiplier(10, true) > SettlementRulesScript.production_multiplier(6, false))
 
 
 func _test_clock_wraps_and_reports_elapsed_minutes() -> void:

@@ -1,5 +1,7 @@
 extends Node3D
 
+const SETTLEMENT_RULES = preload("res://scripts/domain/settlement_rules.gd")
+
 
 const BOARD_CELLS := 48
 const CELL_SIZE := BuildingBlueprints.BLOCK_SIZE
@@ -8,7 +10,6 @@ const TREE_BUILD_CLEARANCE_BLOCKS := 1.0
 const NAVIGATION_CLEARANCE_MARGIN := 1.0
 const SERVICE_PAD_OFFSET := 1.0
 const MAX_BUILD_SLOPE := 0.35
-const STARTING_WOOD := 30
 const BRICK_RESEARCH_DURATION := 20.0
 const POPULATION := 4
 const WAREHOUSE_CAPACITY := 50
@@ -49,6 +50,18 @@ var boards: int:
 var bricks: int:
 	get: return settlement.bricks
 	set(value): settlement.bricks = value
+var branches: int:
+	get: return settlement.branches
+	set(value): settlement.branches = value
+var grass: int:
+	get: return settlement.grass
+	set(value): settlement.grass = value
+var water: int:
+	get: return settlement.water
+	set(value): settlement.water = value
+var money: int:
+	get: return settlement.money
+	set(value): settlement.money = value
 var wellbeing: int:
 	get: return settlement.wellbeing
 	set(value): settlement.wellbeing = value
@@ -125,6 +138,7 @@ var house_menu: Panel
 var house_menu_title: Label
 var selected_house: Node3D
 var tent: Node3D
+var entrance_stone: Node3D
 var tent_cell := Vector2i(0, 0)
 var canteen: Node3D
 var canteen_position := Vector3.ZERO
@@ -168,9 +182,9 @@ func _ready() -> void:
 	_create_world()
 	_create_interface()
 	_create_forest()
-	_create_starting_tent()
+	_create_entrance_stone()
 	_create_citizens()
-	_update_interface("All four starting workers live in the tent. Resettle them into houses to remove the housing debuff.")
+	_update_interface("Four volunteers wait by the entrance stone. Gather branches and grass to establish the first camp.")
 
 func _process(delta: float) -> void:
 	runtime_seconds += delta
@@ -273,6 +287,22 @@ func _handle_clock_minute(clock_minute: int) -> void:
 		for citizen in citizens:
 			citizen.finish_school_day()
 		_update_workers()
+	if minute == 0 and hour == 6:
+		_apply_daily_settlement_rules()
+
+func _apply_daily_settlement_rules() -> void:
+	var population := citizens.size()
+	if population == 0:
+		return
+	var housing := completed_house_count * HOUSE_CAPACITY
+	var change := SETTLEMENT_RULES.daily_wellbeing_change(housing >= population, float(food) / population, float(water) / population, settlement.workday_hours, settlement.night_shifts_allowed)
+	wellbeing = clampi(wellbeing + change, 0, 100)
+	settlement.low_wellbeing_days = settlement.low_wellbeing_days + 1 if wellbeing < SettlementRules.LOW_WELLBEING else 0
+	if SETTLEMENT_RULES.should_volunteer_leave(settlement.low_wellbeing_days) and not citizens.is_empty():
+		var departing: Citizen = citizens.pop_back()
+		departing.queue_free()
+		settlement.low_wellbeing_days = 0
+		_update_interface("A volunteer left after several days of poor living conditions.")
 
 func _update_house_lights() -> void:
 	var hour := int(game_minutes) / 60
@@ -449,6 +479,8 @@ func _on_resource_delivered(worker: Citizen, resource_type: String, amount: int)
 		clay += amount
 	elif resource_type == "boards":
 		boards += amount
+	elif resource_type == "branches":
+		branches += amount
 	else:
 		wood += amount
 	worker.storage_delivery_result(true)
@@ -669,12 +701,15 @@ func _find_path_around_houses(from: Vector3, destination: Vector3, may_enter_des
 	return path
 
 func _update_interface(message: String) -> void:
-	wood_label.text = "Wood: %d  Boards: %d  Bricks: %d\nFood: %d  Canteen: %d  Soil: %d  Clay: %d\nStorage: %d/%d  Tent: %d/%d  Population: %d" % [wood, boards, bricks, food, canteen_food, soil, clay, _stored_resources(), _warehouse_capacity(), _tent_resident_count(), TENT_CAPACITY, citizens.size()]
+	wood_label.text = "Era: %s  Money: %d  Branches: %d  Grass: %d  Water: %d\nFood: %d  Logs: %d  Timber: %d  Boards: %d  Bricks: %d\nStorage: %d/%d  Population: %d  Wellbeing: %d" % [_era_name(), money, branches, grass, water, food, settlement.logs, wood, boards, bricks, _stored_resources(), _warehouse_capacity(), citizens.size(), wellbeing]
 	status_label.text = message
 	if is_first_person:
 		camera_hint_label.text = "R: leave citizen  WASD/arrows: move  Space: jump  Shift: sprint  Mouse: look  LMB: interact  RMB: dig"
 	else:
 		camera_hint_label.text = "Click a citizen, then R: first-person. Build freely on voxel terrain. Right drag: rotate  Middle drag: pan  Wheel: zoom"
+
+func _era_name() -> String:
+	return ["Tent", "Earth", "Wood", "Brick"][settlement.era]
 
 
 func _create_world() -> void:
@@ -839,6 +874,22 @@ func _create_tree(position_on_board: Vector3) -> void:
 		crown.material_override = crown_material
 		tree.add_child(crown)
 
+func _create_entrance_stone() -> void:
+	entrance_stone = Node3D.new()
+	entrance_stone.position = _cell_center(Vector2i(-2, 1))
+	add_child(entrance_stone)
+	var stone := MeshInstance3D.new()
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = 0.55
+	mesh.bottom_radius = 0.75
+	mesh.height = 2.2
+	stone.mesh = mesh
+	stone.position.y = 1.1
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("6b7375")
+	stone.material_override = material
+	entrance_stone.add_child(stone)
+
 func _create_starting_tent() -> void:
 	tent = Node3D.new()
 	tent.position = _cell_center(tent_cell)
@@ -874,7 +925,7 @@ func _create_starting_tent() -> void:
 	tent.add_child(selector)
 
 func _create_citizens() -> void:
-	var spawn_anchor: Vector3 = tent.get_meta("service_position", tent.global_position + Vector3(0.0, 0.0, 2.5))
+	var spawn_anchor: Vector3 = entrance_stone.global_position + Vector3(0.0, 0.0, 2.0)
 	for index in range(POPULATION):
 		var spawn_position := spawn_anchor + Vector3(-0.55 + (index % 2) * 1.1, 0.0, (index / 2) * 0.85)
 		var terrain_height := _terrain_height_at(spawn_position.x, spawn_position.z, 0.0)
@@ -899,9 +950,6 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	citizen.canteen_delivery_finished.connect(_on_canteen_delivery_finished)
 	citizen.factory_cycle.connect(_on_factory_cycle)
 	citizens.append(citizen)
-	if is_instance_valid(tent):
-		citizen.assign_home(tent)
-		citizen.add_debuff("tent", 25.0)
 	citizen.setup_goap(self, citizens.size() - 1)
 
 
@@ -971,6 +1019,28 @@ func _create_time_controls(ui: CanvasLayer) -> void:
 		button.custom_minimum_size = Vector2(56, 30)
 		button.pressed.connect(_set_time_multiplier.bind(multiplier))
 		controls.add_child(button)
+	var labour_controls := HBoxContainer.new()
+	labour_controls.position = Vector2(20, 204)
+	ui.add_child(labour_controls)
+	for hours in [6, 8, 10]:
+		var day_button := Button.new()
+		day_button.text = "%dh" % hours
+		day_button.tooltip_text = "Set workday duration"
+		day_button.pressed.connect(_set_workday_hours.bind(hours))
+		labour_controls.add_child(day_button)
+	var night_button := CheckButton.new()
+	night_button.text = "Night shifts"
+	night_button.tooltip_text = "Night shifts increase output and reduce wellbeing"
+	night_button.toggled.connect(_set_night_shifts)
+	labour_controls.add_child(night_button)
+
+func _set_workday_hours(hours: int) -> void:
+	settlement.workday_hours = hours
+	_update_interface("Workday set to %d hours." % hours)
+
+func _set_night_shifts(enabled: bool) -> void:
+	settlement.night_shifts_allowed = enabled
+	_update_interface("Night shifts %s." % ("allowed" if enabled else "disabled"))
 
 func _set_time_multiplier(multiplier: float) -> void:
 	time_multiplier = multiplier
@@ -997,22 +1067,27 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_role_button("Assign: forestry", "forestry", 164)
 	_add_role_button("Assign: farming", "farming", 198)
 	_add_role_button("Assign: excavation", "excavation", 232)
-	_add_build_category_button("Wooden buildings", "wood", 290)
-	_add_build_category_button("Brick buildings", "brick", 326)
+	_add_build_category_button("Tent era", "tent", 290)
+	_add_build_category_button("Earth era", "earth", 326)
+	_add_build_category_button("Wooden era", "wood", 360)
+	_add_build_category_button("Brick era", "brick", 394)
 	_add_build_category_back_button()
-	_add_build_button("Warehouse - 10 wood", "warehouse", 370, "wood")
-	_add_build_button("Sawmill - 10 wood", "sawmill", 404, "wood")
-	_add_build_button("Farm - 12 wood", "farm", 438, "wood")
-	_add_build_button("Canteen - 16 wood", "canteen", 472, "wood")
-	_add_build_button("House - 12 wood", "house", 506, "wood")
-	_add_build_button("School - 18 wood", "school", 540, "wood")
-	_add_build_button("Park - 14 wood", "park", 574, "wood")
-	_add_build_button("Brick factory - 24 wood", "brick_factory", 370, "brick")
-	_add_build_button("Materials factory - 28 wood", "materials_factory", 404, "brick")
-	_add_build_button("Recycling factory - bricks", "recycling_factory", 438, "brick")
-	_add_build_button("Metal factory - bricks", "metal_factory", 472, "brick")
-	_add_build_button("City hall - bricks", "city_hall", 506, "brick")
-	_add_build_button("Leisure center - bricks", "leisure_center", 540, "brick")
+	_add_build_button("Campfire - branches", "campfire", 430, "tent")
+	_add_build_button("Tent - branches + grass", "tent", 464, "tent")
+	_add_build_button("Forager tent", "forager_tent", 498, "tent")
+	_add_build_button("Craft tent", "craft_tent", 532, "tent")
+	_add_build_button("Water store", "water_store", 566, "tent")
+	_add_build_button("Simple store", "warehouse", 600, "tent")
+	_add_build_button("Dugout", "dugout", 430, "earth")
+	_add_build_button("Earth house", "earth_house", 464, "earth")
+	_add_build_button("Smithy", "smithy", 498, "earth")
+	_add_build_button("Hide workshop", "hide_worker", 532, "earth")
+	_add_build_button("Sawmill - logs + kit", "sawmill", 430, "wood")
+	_add_build_button("Farm", "farm", 464, "wood")
+	_add_build_button("Canteen", "canteen", 498, "wood")
+	_add_build_button("Wood house", "house", 532, "wood")
+	_add_build_button("Brick kiln", "brick_factory", 430, "brick")
+	_add_build_button("Materials factory", "materials_factory", 464, "brick")
 	_refresh_build_menu()
 
 func _create_school_menu(ui: CanvasLayer) -> void:
@@ -1061,15 +1136,6 @@ func _create_house_menu(ui: CanvasLayer) -> void:
 	house_menu_title.add_theme_font_size_override("font_size", 17)
 	house_menu.add_child(house_menu_title)
 	_add_house_resettle_button()
-	_add_house_spawn_button("Spawn Builder", "builder", 102)
-	_add_house_spawn_button("Spawn Forester", "forestry", 136)
-	_add_house_spawn_button("Spawn Farmer", "farming", 170)
-	_add_house_spawn_button("Spawn Digger", "excavation", 204)
-	_add_house_spawn_button("Spawn Courier", "courier", 238)
-	_add_house_spawn_button("Spawn Cook", "cook", 272)
-	_add_house_spawn_button("Spawn Teacher", "teacher", 306)
-	_add_house_spawn_button("Spawn Factory worker", "factory_worker", 340)
-	_add_house_spawn_button("Spawn Engineer", "engineer", 374)
 	house_menu.offset_top = -450.0
 
 func _create_materials_factory_menu(ui: CanvasLayer) -> void:
@@ -1325,8 +1391,8 @@ func _create_dig_site(cell: Vector2i, world_position: Vector3) -> Dictionary:
 func _select_build_mode(next_mode: String) -> void:
 	if selected_builder == null:
 		return
-	if next_mode in ["recycling_factory", "metal_factory", "city_hall", "leisure_center"] and not brick_construction_unlocked:
-		_update_interface("This brick building is locked. Research brick construction at a materials factory.")
+	if BuildingCatalog.era_for(next_mode) > settlement.era:
+		_update_interface("This building belongs to a later era. Complete the current settlement requirements first.")
 		return
 	build_mode = next_mode
 	selection_marker.visible = true
@@ -1957,36 +2023,35 @@ func _add_house_light(house: Node3D) -> void:
 
 func _on_tree_harvested(worker: Citizen, position_on_board: Vector3) -> void:
 	tree_reservations.erase(_cell_from_position(position_on_board))
-	_consume_tree_at(position_on_board)
+	_fell_tree_at(position_on_board)
 
 func _consume_tree_near_player() -> void:
 	if player_citizen == null:
 		return
 	for position_on_board in tree_positions:
 		if player_citizen.global_position.distance_to(position_on_board) <= INTERACTION_RANGE:
-			_consume_tree_at(position_on_board)
-			return
+			var tree: Node3D = tree_nodes.get(_cell_from_position(position_on_board))
+			if is_instance_valid(tree) and not bool(tree.get_meta("felled", false)):
+				branches += 1
+				_update_interface("Collected branches. The tree remains standing.")
+				return
 
-func _consume_tree_at(position_on_board: Vector3) -> void:
+func _fell_tree_at(position_on_board: Vector3) -> void:
 	var cell := _cell_from_position(position_on_board)
 	var tree: Node3D = tree_nodes.get(cell)
 	if not is_instance_valid(tree):
 		return
-	var remaining: int = int(tree.get_meta("remaining_wood", 1)) - 1
-	tree.set_meta("remaining_wood", remaining)
-	if remaining > 0:
+	if bool(tree.get_meta("felled", false)):
 		return
-	tree_cells.erase(cell)
-	tree_nodes.erase(cell)
-	tree_positions.erase(position_on_board)
-	_rebuild_navigation_mesh()
-	# The tree remains visible briefly as it falls, then leaves the world.
+	tree.set_meta("felled", true)
 	tree.rotation_degrees.z = 82.0
-	get_tree().create_timer(4.0).timeout.connect(tree.queue_free)
-	_update_workers()
-	_update_interface("A tree has been felled and will disappear shortly.")
+	settlement.logs += 1
+	settlement.branches += 3
+	_update_interface("A tree was felled. Its fallen trunk awaits manual processing; the living tree is no longer removed by branch gathering.")
 
 func _tent_resident_count() -> int:
+	if not is_instance_valid(tent):
+		return 0
 	var count := 0
 	for citizen in citizens:
 		if citizen.home == tent:
