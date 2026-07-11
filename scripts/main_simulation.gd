@@ -1724,7 +1724,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 		if record.center == position_on_board and record.node == null:
 			record.node = building
 			break
-		_register_navigation_footprint(position_on_board, blueprint)
+	_register_navigation_footprint(position_on_board, blueprint)
 	_rebuild_navigation_mesh()
 	_update_workers()
 	var completion_message := "%s construction completed." % building_type.capitalize()

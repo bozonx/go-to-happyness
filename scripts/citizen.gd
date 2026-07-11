@@ -82,7 +82,7 @@ func _ready() -> void:
 func _setup_navigation_agent() -> void:
 	navigation_agent = NavigationAgent3D.new()
 	navigation_agent.path_desired_distance = 0.28
-	navigation_agent.target_desired_distance = 0.7
+	navigation_agent.target_desired_distance = 0.18
 	navigation_agent.path_height_offset = 0.0
 	navigation_agent.avoidance_enabled = true
 	navigation_agent.use_3d_avoidance = false
