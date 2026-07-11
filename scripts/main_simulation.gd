@@ -150,6 +150,7 @@ var exhausted_dig_cells: Dictionary = {}
 var dig_mode := false
 var house_menu: Panel
 var house_menu_title: Label
+var house_spawn_button: Button
 var selected_house: Node3D
 var tent: Node3D
 var entrance_stone: Node3D
@@ -1395,8 +1396,8 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	
 	_add_build_button("Campfire", "campfire", 176, "tent")
 	_add_build_button("Cooking campfire", "cook_campfire", 210, "tent")
-	_add_build_button("Tent", "tent", 244, "tent")
-	_add_build_button("Living tent", "living_tent", 278, "tent")
+	_add_build_button("Палатка на 4 жителя", "tent", 244, "tent")
+	_add_build_button("Жилая палатка на 1 жителя", "living_tent", 278, "tent")
 	_add_build_button("Forager tent", "forager_tent", 312, "tent")
 	_add_build_button("Craft tent", "craft_tent", 346, "tent")
 	_add_build_button("Dew collector", "dew_collector", 380, "tent")
@@ -1472,12 +1473,13 @@ func _create_house_menu(ui: CanvasLayer) -> void:
 	house_menu_title.size = Vector2(272, 42)
 	house_menu_title.add_theme_font_size_override("font_size", 17)
 	house_menu.add_child(house_menu_title)
-	var spawn_button := Button.new()
-	spawn_button.text = "Invite resident"
-	spawn_button.position = Vector2(16, 64)
-	spawn_button.size = Vector2(272, 30)
-	spawn_button.pressed.connect(_spawn_house_citizen)
-	house_menu.add_child(spawn_button)
+	house_spawn_button = Button.new()
+	house_spawn_button.text = "Invite random resident"
+	house_spawn_button.tooltip_text = "The resident's specialization is selected at random."
+	house_spawn_button.position = Vector2(16, 64)
+	house_spawn_button.size = Vector2(272, 30)
+	house_spawn_button.pressed.connect(_spawn_house_citizen)
+	house_menu.add_child(house_spawn_button)
 	var demolish_button := Button.new()
 	demolish_button.text = "Mark for demolition"
 	demolish_button.position = Vector2(16, 102)
@@ -1552,7 +1554,7 @@ func _update_brick_research(delta: float) -> void:
 		_show_materials_factory_menu()
 
 func _spawn_house_citizen() -> void:
-	if selected_house == null:
+	if selected_house == null or bool(selected_house.get_meta("pending_demolition", false)):
 		return
 	var slots: int = selected_house.get_meta("spawn_slots", 0)
 	if slots <= 0:
@@ -1570,7 +1572,7 @@ func _spawn_house_citizen() -> void:
 		if not recreation.is_empty():
 			citizens.back().go_to_park(recreation[spawned % recreation.size()])
 	_show_house_menu()
-	_update_interface("A new resident joined the settlement and received an automatic task.")
+	_update_interface("A new %s resident joined the settlement and received an automatic task." % specialization.replace("_", " "))
 
 func _show_house_menu() -> void:
 	if selected_house == null:
@@ -1578,7 +1580,12 @@ func _show_house_menu() -> void:
 	var slots: int = selected_house.get_meta("spawn_slots", 0)
 	house_menu.visible = true
 	var capacity: int = int(selected_house.get_meta("housing_capacity", HOUSE_CAPACITY))
-	house_menu_title.text = "House residents\nFree beds: %d/%d" % [slots, capacity]
+	var building_type: String = selected_house.get_meta("building_type", "house")
+	var home_name := "Жилая палатка" if building_type == "living_tent" else ("Палатка" if building_type == "tent" else "House")
+	house_menu_title.text = "%s\nFree beds: %d/%d" % [home_name, slots, capacity]
+	if house_spawn_button != null:
+		house_spawn_button.disabled = slots <= 0 or bool(selected_house.get_meta("pending_demolition", false))
+		house_spawn_button.text = "No free beds" if slots <= 0 else "Invite random resident"
 
 func _add_build_button(title: String, building_type: String, y_position: float, category: String) -> void:
 	var button := Button.new()

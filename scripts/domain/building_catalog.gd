@@ -4,8 +4,8 @@ extends RefCounted
 const DEFINITIONS := {
 	"campfire": {"name": "Campfire", "category": "tent", "costs": {"branches": 6}},
 	"cook_campfire": {"name": "Cooking campfire", "category": "tent", "costs": {"branches": 8, "grass": 6}},
-	"tent": {"name": "Tent", "category": "tent", "costs": {"branches": 8, "grass": 6}},
-	"living_tent": {"name": "Living tent", "category": "tent", "costs": {"branches": 10, "grass": 8}},
+	"tent": {"name": "Палатка на 4 жителя", "category": "tent", "costs": {"branches": 8, "grass": 6}},
+	"living_tent": {"name": "Жилая палатка на 1 жителя", "category": "tent", "costs": {"branches": 10, "grass": 8}},
 	"forager_tent": {"name": "Forager tent", "category": "tent", "costs": {"branches": 10, "grass": 4}},
 	"craft_tent": {"name": "Craft tent", "category": "tent", "costs": {"branches": 10, "grass": 5}},
 	"dew_collector": {"name": "Dew collector", "category": "tent", "costs": {"branches": 6, "grass": 4}},
