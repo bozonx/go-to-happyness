@@ -59,6 +59,8 @@ var game_minutes: float:
 const GAME_DAY_REAL_SECONDS := 300.0
 const GAME_MINUTES_PER_SECOND := 1440.0 / GAME_DAY_REAL_SECONDS
 var time_multiplier := 1.0
+var runtime_seconds := 0.0
+var random := RandomNumberGenerator.new()
 var active_meal_hour := -1
 var selected_cell := Vector2i(0, 0)
 var selected_world_position := Vector3.ZERO
@@ -171,6 +173,7 @@ func _ready() -> void:
 	_update_interface("All four starting workers live in the tent. Resettle them into houses to remove the housing debuff.")
 
 func _process(delta: float) -> void:
+	runtime_seconds += delta
 	if is_first_person:
 		_update_player_control(delta)
 		_update_interaction(delta)
@@ -481,25 +484,25 @@ func _sawmill_key(position_on_board: Vector3) -> Vector2i:
 	return _cell_from_position(position_on_board)
 
 func _sawmill_stock(position_on_board: Vector3) -> Dictionary:
-	return sawmills.stock_at(position_on_board)
+	return sawmills.stock_at(position_on_board, runtime_seconds)
 
 func _store_sawmill_stock(position_on_board: Vector3, stock: Dictionary) -> void:
 	sawmills.store(position_on_board, stock)
 
 func _on_logs_delivered(worker: Citizen, sawmill_position: Vector3, amount: int) -> void:
-	sawmills.accept_logs(worker, sawmill_position, amount)
+	sawmills.accept_logs(worker, sawmill_position, amount, runtime_seconds)
 
 func _update_sawmills(delta: float) -> void:
-	sawmills.tick(delta)
+	sawmills.tick(delta, runtime_seconds)
 
 func _decide_forestry_delivery(worker: Citizen, sawmill_position: Vector3) -> void:
-	sawmills.decide_delivery(worker, sawmill_position)
+	sawmills.decide_delivery(worker, sawmill_position, runtime_seconds)
 
 func _on_sawmill_boards_collected(courier: Citizen, sawmill_position: Vector3) -> void:
-	sawmills.collect_boards(courier, sawmill_position)
+	sawmills.collect_boards(courier, sawmill_position, runtime_seconds)
 
 func _sawmill_with_boards() -> Vector3:
-	return sawmills.position_with_boards()
+	return sawmills.position_with_boards(runtime_seconds)
 
 func _reserve_closest_tree_for_sawmill(worker: Citizen, sawmill_position: Vector3) -> Vector3:
 	for cell in tree_reservations.keys():
@@ -810,7 +813,7 @@ func _create_forest() -> void:
 func _create_tree(position_on_board: Vector3) -> void:
 	var tree := Node3D.new()
 	tree.position = position_on_board
-	tree.set_meta("remaining_wood", randi_range(4, 7))
+	tree.set_meta("remaining_wood", random.randi_range(4, 7))
 	tree_nodes[_cell_from_position(position_on_board)] = tree
 	add_child(tree)
 	var trunk := MeshInstance3D.new()
@@ -832,7 +835,7 @@ func _create_tree(position_on_board: Vector3) -> void:
 		crown.mesh = crown_mesh
 		crown.position = crown_data[0]
 		var crown_material := StandardMaterial3D.new()
-		crown_material.albedo_color = Color("2d633b").lightened(randf_range(-0.06, 0.08))
+		crown_material.albedo_color = Color("2d633b").lightened(random.randf_range(-0.06, 0.08))
 		crown.material_override = crown_material
 		tree.add_child(crown)
 
@@ -871,8 +874,9 @@ func _create_starting_tent() -> void:
 	tent.add_child(selector)
 
 func _create_citizens() -> void:
+	var spawn_anchor: Vector3 = tent.get_meta("service_position", tent.global_position + Vector3(0.0, 0.0, 2.5))
 	for index in range(POPULATION):
-		var spawn_position := Vector3(-1.1 + (index % 2) * 1.1, 0.0, -0.8 + (index / 2) * 1.1)
+		var spawn_position := spawn_anchor + Vector3(-0.55 + (index % 2) * 1.1, 0.0, (index / 2) * 0.85)
 		var terrain_height := _terrain_height_at(spawn_position.x, spawn_position.z, 0.0)
 		if not is_nan(terrain_height):
 			spawn_position.y = terrain_height + 0.08
@@ -1313,7 +1317,7 @@ func _create_dig_site(cell: Vector2i, world_position: Vector3) -> Dictionary:
 	pit_material.albedo_color = Color("78533b")
 	pit.material_override = pit_material
 	site_node.add_child(pit)
-	var site := {"cell": cell, "node": site_node, "pit": pit, "soil_limit": randi_range(3, 6), "clay_limit": randi_range(7, 12), "depth": 0}
+	var site := {"cell": cell, "node": site_node, "pit": pit, "soil_limit": random.randi_range(3, 6), "clay_limit": random.randi_range(7, 12), "depth": 0}
 	dig_sites.append(site)
 	dig_cells[cell] = true
 	return site
@@ -1949,7 +1953,7 @@ func _add_house_light(house: Node3D) -> void:
 	light.position = Vector3(0.0, 2.0, footprint.y * 0.5 + 0.35)
 	light.visible = false
 	house.add_child(light)
-	house_lights.append({"light": light, "house": house, "off_minute": randi_range(22 * 60, 26 * 60) % (24 * 60)})
+	house_lights.append({"light": light, "house": house, "off_minute": random.randi_range(22 * 60, 26 * 60) % (24 * 60)})
 
 func _on_tree_harvested(worker: Citizen, position_on_board: Vector3) -> void:
 	tree_reservations.erase(_cell_from_position(position_on_board))

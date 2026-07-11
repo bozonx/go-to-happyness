@@ -40,7 +40,7 @@ func tick(delta: float) -> void:
 	for index in range(simulation.construction_sites.size() - 1, -1, -1):
 		var site: Dictionary = simulation.construction_sites[index]
 		var builder_power: float = simulation._building_power(site.node)
-		var progress: float = minf(1.0, site.progress + delta / simulation.CONSTRUCTION_DURATION * builder_power)
+		var progress: float = ConstructionProgress.advance(site.progress, delta, simulation.CONSTRUCTION_DURATION, builder_power)
 		if index == 0:
 			simulation.status_label.text = "Building %s: %d builder(s), %.1fx speed." % [site.type, simulation._builder_count(site.node), builder_power]
 		site.progress = progress

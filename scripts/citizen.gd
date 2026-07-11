@@ -32,7 +32,7 @@ var resource_type := "wood"
 var source_position := Vector3.ZERO
 var workplace_position := Vector3.ZERO
 var warehouse_position := Vector3.ZERO
-var work_time := 0.0
+var task_timer := CitizenTaskState.new()
 var is_player_controlled := false
 var construction_site: Node3D
 var specialization := "builder"
@@ -50,12 +50,10 @@ var pending_resources: Dictionary = {}
 var courier_target: Citizen
 var courier_resource_type := ""
 var courier_worker: Citizen
-var courier_wait_time := 0.0
 var home: Node3D
 var hunger := 78.0
 var buffs: Dictionary = {}
 var debuffs: Dictionary = {}
-var meal_time := 0.0
 var delivery_amount := 0
 var canteen_position := Vector3.ZERO
 var construction_position := Vector3.ZERO
@@ -70,6 +68,7 @@ var recovery_repath_done := false
 var jump_cooldown := 0.0
 var sidestep_time := 0.0
 var sidestep_direction := Vector3.ZERO
+var ground_contact_confirmed := false
 var blocked_by_storage := false
 var training_role := ""
 var training_days_completed := 0
@@ -231,7 +230,7 @@ func _physics_process(delta: float) -> void:
 func _process_to_source(delta: float) -> void:
 	if _move_to(source_position, delta):
 		state = State.CHOPPING
-		work_time = WORK_DURATION / get_efficiency(active_role)
+		_start_task(WORK_DURATION / get_efficiency(active_role))
 
 func _process_source_work(delta: float) -> void:
 	if _work(delta):
@@ -245,7 +244,7 @@ func _process_to_workplace(delta: float) -> void:
 			logs_delivered.emit(self, workplace_position, 1)
 			return
 		state = State.SAWING
-		work_time = WORK_DURATION / get_efficiency(active_role)
+		_start_task(WORK_DURATION / get_efficiency(active_role))
 
 func _process_workplace_work(delta: float) -> void:
 	if not _work(delta):
@@ -253,7 +252,7 @@ func _process_workplace_work(delta: float) -> void:
 	carried_amount = 2 if get_efficiency(active_role) >= 1.05 else 1
 	if uses_courier:
 		resource_ready.emit(self, resource_type, carried_amount)
-		courier_wait_time = COURIER_WAIT_DURATION
+		_start_task(COURIER_WAIT_DURATION)
 		state = State.WAITING_COURIER
 	else:
 		state = State.TO_WAREHOUSE
@@ -264,8 +263,7 @@ func _process_resource_delivery(delta: float) -> void:
 		resource_delivered.emit(self, resource_type, carried_amount)
 
 func _process_courier_wait(delta: float) -> void:
-	courier_wait_time -= delta
-	if courier_wait_time <= 0.0:
+	if task_timer.advance(delta):
 		pending_resources[resource_type] = maxi(0, int(pending_resources.get(resource_type, 0)) - carried_amount)
 		state = State.TO_WAREHOUSE
 
@@ -282,11 +280,11 @@ func _process_excavation(delta: float) -> void:
 		return
 	if not _move_to(assigned_dig_site.global_position, delta):
 		return
-	if work_time <= 0.0:
-		work_time = WORK_DURATION / get_efficiency("excavation")
+	if task_timer.remaining <= 0.0:
+		_start_task(WORK_DURATION / get_efficiency("excavation"))
 	if _work(delta):
 		excavation_cycle.emit(self, assigned_dig_site, get_efficiency("excavation"))
-		work_time = 0.0
+		task_timer.remaining = 0.0
 
 func _process_courier_pickup(delta: float) -> void:
 	if is_instance_valid(courier_target) and _move_to(courier_target.global_position, delta):
@@ -318,11 +316,10 @@ func _process_resting(delta: float) -> void:
 func _process_go_to_canteen(delta: float) -> void:
 	if _move_to(canteen_position, delta):
 		state = State.EATING
-		meal_time = 1.1
+		_start_task(1.1)
 
 func _process_eating(delta: float) -> void:
-	meal_time -= delta
-	if meal_time <= 0.0:
+	if task_timer.advance(delta):
 		state = State.IDLE
 		meal_finished.emit(self)
 
@@ -355,7 +352,7 @@ func _process_to_factory(delta: float) -> void:
 		return
 	if _move_to(factory_position, delta):
 		state = State.FACTORY_WORK
-		work_time = WORK_DURATION / get_efficiency(active_role)
+		_start_task(WORK_DURATION / get_efficiency(active_role))
 
 func _process_factory_work(delta: float) -> void:
 	if not is_instance_valid(factory):
@@ -363,17 +360,17 @@ func _process_factory_work(delta: float) -> void:
 		return
 	if _work(delta):
 		factory_cycle.emit(self, factory)
-		work_time = WORK_DURATION / get_efficiency(active_role)
+		_start_task(WORK_DURATION / get_efficiency(active_role))
 
 func _process_go_to_park(delta: float) -> void:
 	if _move_to(park_position, delta):
 		state = State.RELAXING
-		meal_time = 4.0
+		_start_task(4.0)
 
 func _process_relaxing(delta: float) -> void:
-	meal_time -= delta
+	var finished := task_timer.advance(delta)
 	satisfaction = minf(get_satisfaction_cap(), satisfaction + delta * 5.0)
-	if meal_time <= 0.0:
+	if finished:
 		state = State.IDLE
 
 func _move_to(destination: Vector3, delta: float, may_enter_destination_house := false) -> bool:
@@ -485,6 +482,11 @@ func _start_sidestep(forward: Vector3) -> void:
 	recovery_repath_done = false
 
 func _apply_gravity(delta: float) -> void:
+	if not ground_contact_confirmed:
+		if not _has_ground_below():
+			velocity = Vector3.ZERO
+			return
+		ground_contact_confirmed = true
 	if not is_on_floor() or velocity.y > 0.0:
 		velocity.y -= GRAVITY * delta
 	else:
@@ -494,9 +496,20 @@ func _apply_gravity(delta: float) -> void:
 		velocity.z = 0.0
 		move_and_slide()
 
+
+func _has_ground_below() -> bool:
+	var space_state := get_world_3d().direct_space_state
+	var origin := global_position + Vector3.UP * 0.25
+	var query := PhysicsRayQueryParameters3D.create(origin, origin + Vector3.DOWN * 2.0, collision_mask)
+	query.exclude = [get_rid()]
+	return not space_state.intersect_ray(query).is_empty()
+
 func _work(delta: float) -> bool:
-	work_time -= delta
-	return work_time <= 0.0
+	return task_timer.advance(delta)
+
+
+func _start_task(duration: float) -> void:
+	task_timer.start(duration)
 
 func set_player_controlled(controlled: bool) -> void:
 	is_player_controlled = controlled

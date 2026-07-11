@@ -16,15 +16,21 @@ call `SettlementState` directly.
 `SimulationClock` owns minute advancement and day wrapping. The scene receives elapsed
 minutes and maps them to game events such as meals, training and shift changes.
 
+`SawmillRules`, `ConstructionProgress`, `WorkforcePolicy`, `CitizenTaskState` and
+`CitizenDecisionContext` own deterministic production, scheduling and timed-task
+rules. They must not reference nodes, rendering, physics or system time.
+
 `BuildingBlueprints` owns procedural visuals and collision modules only. It does not
 decide prices, production or unlock conditions.
 
-`WorkforceCoordinator` owns work eligibility and task assignment. `MainSimulation`
-keeps compatibility methods because GOAP currently uses them; new AI code should use
-the coordinator or a narrow scheduling interface rather than read scene state.
+`WorkforceCoordinator` translates scene state into policy input and applies the chosen
+assignment. `MainSimulation` keeps compatibility methods because GOAP currently uses
+them; new AI code should use the coordinator or a narrow scheduling interface rather
+than read scene state.
 
-`Citizen` is presently an actor with movement and task execution. New task selection
-belongs in a coordinator or GOAP action; new movement behavior belongs in the actor.
+`Citizen` is an actor with movement and task execution. Timed task progression belongs
+in `CitizenTaskState`; new task selection belongs in a coordinator or GOAP action;
+new movement behavior belongs in the actor.
 `CitizenRoleProfile` owns presentation and preferred-role data for specializations.
 
 ## Extension rules

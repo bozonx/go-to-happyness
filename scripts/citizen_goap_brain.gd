@@ -112,22 +112,21 @@ func request_decision() -> void:
 
 
 func is_goal_valid(intent: Intent) -> bool:
-	match intent:
-		Intent.SLEEP:
-			return simulation._is_night() and is_instance_valid(citizen.home)
-		Intent.EAT:
-			return meal_requested and not simulation._is_night() and is_instance_valid(simulation.canteen)
-		Intent.WORK:
-			return not simulation._is_night() and not meal_requested and simulation._can_assign_goap_work(citizen)
-	return false
+	return _decision_context().is_goal_valid(intent)
 
 
 func get_goal_priority(intent: Intent) -> int:
-	match intent:
-		Intent.SLEEP: return 100
-		Intent.EAT: return 80
-		Intent.WORK: return 10
-	return 0
+	return _decision_context().priority_for(intent)
+
+
+func _decision_context() -> CitizenDecisionContext:
+	var context := CitizenDecisionContext.new()
+	context.is_night = simulation._is_night()
+	context.has_home = is_instance_valid(citizen.home)
+	context.has_canteen = is_instance_valid(simulation.canteen)
+	context.meal_requested = meal_requested
+	context.can_assign_work = simulation._can_assign_goap_work(citizen)
+	return context
 
 
 func can_start(intent: Intent) -> bool:

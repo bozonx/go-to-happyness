@@ -29,30 +29,7 @@ func update_workers() -> void:
 
 
 func can_assign_work(citizen: Citizen) -> bool:
-	if citizen.is_player_controlled or citizen.blocked_by_storage:
-		return false
-	if citizen.specialization == "courier":
-		return false
-	if int(simulation.game_minutes) / 60 < 8:
-		return false
-	if citizen.specialization == "cook":
-		return is_instance_valid(simulation.canteen)
-	if citizen.specialization == "teacher":
-		return not simulation.school_positions.is_empty()
-	if citizen.specialization == "factory_worker":
-		return factory_for_role("factory_worker") != null
-	if citizen.specialization == "engineer":
-		return factory_for_role("engineer") != null
-	if not citizen.training_role.is_empty() and citizen.training_days_completed < 10 and int(simulation.game_minutes) / 60 < 12:
-		return not simulation.school_positions.is_empty()
-	if citizen.specialization == "builder" and simulation.construction_sites.is_empty() and factory_for_role("engineer") != null:
-		return true
-	match work_role_for(citizen):
-		"construction": return not simulation.construction_sites.is_empty()
-		"forestry": return not simulation.warehouse_positions.is_empty() and not simulation.sawmill_positions.is_empty() and not simulation.tree_positions.is_empty()
-		"farming": return not simulation.warehouse_positions.is_empty() and not simulation.farm_positions.is_empty()
-		"excavation": return not simulation.dig_sites.is_empty() and not simulation.warehouse_positions.is_empty()
-	return false
+	return WorkforcePolicy.can_assign(_worker_data(citizen), _world_data())
 
 
 func assign_work(citizen: Citizen, index: int) -> void:
@@ -99,17 +76,34 @@ func assign_work(citizen: Citizen, index: int) -> void:
 
 
 func work_role_for(citizen: Citizen) -> String:
-	if not citizen.manual_role.is_empty():
-		return citizen.manual_role
-	if citizen.specialization == "builder" and not simulation.construction_sites.is_empty():
-		return "construction"
-	if citizen.specialization == "forestry" and not simulation.sawmill_positions.is_empty():
-		return "forestry"
-	if citizen.specialization == "farming" and not simulation.farm_positions.is_empty():
-		return "farming"
-	if citizen.specialization == "excavation" and not simulation.dig_sites.is_empty():
-		return "excavation"
-	return ""
+	return WorkforcePolicy.role_for(_worker_data(citizen), _world_data())
+
+
+func _worker_data(citizen: Citizen) -> Dictionary:
+	return {
+		"player_controlled": citizen.is_player_controlled,
+		"blocked_by_storage": citizen.blocked_by_storage,
+		"specialization": citizen.specialization,
+		"manual_role": citizen.manual_role,
+		"training_role": citizen.training_role,
+		"training_days_completed": citizen.training_days_completed,
+	}
+
+
+func _world_data() -> Dictionary:
+	return {
+		"hour": int(simulation.game_minutes) / 60,
+		"has_canteen": is_instance_valid(simulation.canteen),
+		"schools": simulation.school_positions.size(),
+		"construction_sites": simulation.construction_sites.size(),
+		"warehouses": simulation.warehouse_positions.size(),
+		"sawmills": simulation.sawmill_positions.size(),
+		"trees": simulation.tree_positions.size(),
+		"farms": simulation.farm_positions.size(),
+		"dig_sites": simulation.dig_sites.size(),
+		"has_factory_job": factory_for_role("factory_worker") != null,
+		"has_engineer_job": factory_for_role("engineer") != null,
+	}
 
 
 func factory_for_role(role: String) -> Node3D:
