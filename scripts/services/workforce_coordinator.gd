@@ -19,7 +19,6 @@ func update_workers() -> void:
 	for citizen in simulation.citizens:
 		if citizen.is_player_controlled:
 			continue
-		_ensure_home(citizen)
 		if citizen.state in [Citizen.State.TO_CANTEEN, Citizen.State.EATING, Citizen.State.TO_FOOD_PICKUP, Citizen.State.TO_CANTEEN_DELIVERY, Citizen.State.COURIER_TO_WORKER, Citizen.State.COURIER_TO_WAREHOUSE, Citizen.State.WAITING_COURIER]:
 			continue
 		if citizen.blocked_by_storage:
@@ -140,18 +139,6 @@ func _world_data() -> Dictionary:
 		"wood": simulation.wood,
 		"population": simulation.citizens.size(),
 	}
-
-func _ensure_home(citizen: Citizen) -> void:
-	if is_instance_valid(citizen.home):
-		return
-	for record in simulation.building_footprints:
-		var home: Node3D = record.node
-		if not is_instance_valid(home) or int(home.get_meta("spawn_slots", 0)) <= 0:
-			continue
-		citizen.assign_home(home)
-		home.set_meta("spawn_slots", int(home.get_meta("spawn_slots", 0)) - 1)
-		return
-
 
 func factory_for_role(role: String) -> Node3D:
 	if role == "factory_worker":

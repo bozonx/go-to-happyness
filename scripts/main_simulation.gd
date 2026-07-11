@@ -219,10 +219,9 @@ func _ready() -> void:
 	_create_forest()
 	_create_ponds()
 	_create_entrance_stone()
-	_create_starting_tent()
 	_create_citizens()
 
-	# Starting resources to place first campfire and tents. The tent-era store is
+	# Starting resources to place the first campfire and housing. The tent-era store is
 	# small, so the starting stock is kept within its base capacity.
 	settlement.money = 100
 	settlement.branches = 16
@@ -242,7 +241,6 @@ func _process(delta: float) -> void:
 		_update_camera(delta)
 	_update_construction(delta)
 	_update_demolition(delta)
-	_update_tent_dismantle(delta)
 	_update_water_collectors(delta)
 	_update_clock(delta)
 	_update_daylight()
@@ -1187,45 +1185,6 @@ func _create_entrance_stone() -> void:
 	entrance_stone.position = _cell_center(Vector2i(-2, 1))
 	add_child(entrance_stone)
 
-func _create_starting_tent() -> void:
-	tent = Node3D.new()
-	tent.position = _cell_center(tent_cell)
-	building_positions.append(tent.position)
-	building_footprints.append({"center": tent.position, "footprint": Vector2i(3, 3), "node": tent})
-	_rebuild_navigation_mesh()
-	tent.set_meta("is_tent", true)
-	tent.set_meta("building_type", "tent")
-	tent.set_meta("footprint", Vector2i(3, 3))
-	tent.set_meta("spawn_slots", TENT_CAPACITY)
-	tent.set_meta("housing_capacity", TENT_CAPACITY)
-	placed_buildings[tent_cell] = "tent"
-	_register_navigation_footprint(tent.position, {"footprint": Vector2i(3, 3)})
-	add_child(tent)
-	_register_service_entrance(tent, Vector2i(3, 3), true)
-	_rebuild_navigation_mesh()
-	var base := MeshInstance3D.new()
-	var base_mesh := PrismMesh.new()
-	base_mesh.size = Vector3(3.0, 2.2, 3.0)
-	base.mesh = base_mesh
-	base.position.y = 1.1
-	base.rotation_degrees.y = 90.0
-	var tent_material := StandardMaterial3D.new()
-	tent_material.albedo_color = Color("c7a96a")
-	base.material_override = tent_material
-	tent.add_child(base)
-	var selector := Area3D.new()
-	selector.add_to_group("house_selector")
-	selector.collision_layer = 4
-	selector.collision_mask = 0
-	var shape := CollisionShape3D.new()
-	var box := BoxShape3D.new()
-	box.size = Vector3(3.0, 2.2, 3.0)
-	shape.shape = box
-	shape.position.y = 1.1
-	selector.add_child(shape)
-	tent.add_child(selector)
-	_add_building_status_indicator(tent)
-
 func _create_citizens() -> void:
 	var spawn_anchor: Vector3 = entrance_stone.global_position + Vector3(0.0, 0.0, 2.0)
 	for index in range(POPULATION):
@@ -1234,7 +1193,6 @@ func _create_citizens() -> void:
 		if not is_nan(terrain_height):
 			spawn_position.y = terrain_height + 0.08
 		_add_citizen(spawn_position)
-		citizens.back().assign_home(tent)
 
 func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void:
 	var citizen := Citizen.new()
@@ -1514,16 +1472,15 @@ func _create_house_menu(ui: CanvasLayer) -> void:
 	house_menu_title.size = Vector2(272, 42)
 	house_menu_title.add_theme_font_size_override("font_size", 17)
 	house_menu.add_child(house_menu_title)
-	_add_house_resettle_button()
 	var spawn_button := Button.new()
 	spawn_button.text = "Invite resident"
-	spawn_button.position = Vector2(16, 102)
+	spawn_button.position = Vector2(16, 64)
 	spawn_button.size = Vector2(272, 30)
 	spawn_button.pressed.connect(_spawn_house_citizen)
 	house_menu.add_child(spawn_button)
 	var demolish_button := Button.new()
 	demolish_button.text = "Mark for demolition"
-	demolish_button.position = Vector2(16, 140)
+	demolish_button.position = Vector2(16, 102)
 	demolish_button.size = Vector2(272, 30)
 	demolish_button.pressed.connect(func(): _mark_building_for_demolition(selected_house))
 	house_menu.add_child(demolish_button)
@@ -1594,28 +1551,6 @@ func _update_brick_research(delta: float) -> void:
 	if materials_factory_menu != null and materials_factory_menu.visible:
 		_show_materials_factory_menu()
 
-func _add_house_resettle_button() -> void:
-	var button := Button.new()
-	button.text = "Resettle tent resident"
-	button.position = Vector2(16, 64)
-	button.size = Vector2(272, 30)
-	button.pressed.connect(_resettle_tent_resident)
-	house_menu.add_child(button)
-
-func _resettle_tent_resident() -> void:
-	if selected_house == null or int(selected_house.get_meta("spawn_slots", 0)) <= 0:
-		return
-	for citizen in citizens:
-		if citizen.home == tent:
-			citizen.assign_home(selected_house)
-			citizen.remove_debuff("tent")
-			selected_house.set_meta("spawn_slots", int(selected_house.get_meta("spawn_slots", 0)) - 1)
-			_show_house_menu()
-			_update_interface("A resident moved out of the tent. Their maximum satisfaction increased.")
-			_check_tent_dismantle()
-			return
-	_update_interface("No residents remain in the tent.")
-
 func _spawn_house_citizen() -> void:
 	if selected_house == null:
 		return
@@ -1628,7 +1563,6 @@ func _spawn_house_citizen() -> void:
 	var specialization: String = ["builder", "forestry", "farming", "excavation", "courier", "cook"][random.randi_range(0, 5)]
 	_add_citizen(entrance + Vector3((spawned % 2) * 0.7 - 0.35, 0.0, 0.45 + (spawned / 2) * 0.45), specialization)
 	citizens.back().assign_home(selected_house)
-	citizens.back().remove_debuff("tent")
 	selected_house.set_meta("spawn_slots", slots - 1)
 	_update_workers()
 	if citizens.back().state == Citizen.State.IDLE:
@@ -2019,12 +1953,8 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 		selected_building = selected_house
 		selected_builder = null
 		build_menu.visible = false
-		if tent != null and selected_house == tent:
-			house_menu.visible = false
-			_update_interface("Starting tent: %d/%d residents. It cannot recruit new people." % [_tent_resident_count(), TENT_CAPACITY])
-		else:
-			_show_house_menu()
-			_update_interface("House selected. Resettle a tent resident or recruit a new worker.")
+		_show_house_menu()
+		_update_interface("House selected. Recruit a new resident when a bed is free.")
 		return
 	if hit.collider.is_in_group("school_selector"):
 		selected_school = hit.collider.get_parent() as Node3D
@@ -2205,7 +2135,7 @@ func _show_selected_citizen_menu() -> void:
 	var assignment := "Auto" if selected_builder.manual_role.is_empty() else selected_builder.manual_role.capitalize()
 	if not selected_builder.training_role.is_empty():
 		assignment = "Training %s %d/10" % [selected_builder.training_role.capitalize(), selected_builder.training_days_completed]
-	var home_label := "Tent" if selected_builder.home == tent else "House"
+	var home_label := "No home" if not is_instance_valid(selected_builder.home) else "House"
 	var effect_label := "Meal buff" if selected_builder.buffs.has("canteen_meal") else ("Tent debuff" if selected_builder.debuffs.has("tent") else "None")
 	if build_category.is_empty():
 		build_menu_title.text = "%s  Sat: %d/%d%%  Food: %d%%\nHome: %s  Effect: %s  Task: %s\nBuild %.1f Wood %.1f Farm %.1f Dig %.1f" % [selected_builder.role_label(), roundi(selected_builder.satisfaction), roundi(selected_builder.get_satisfaction_cap()), roundi(selected_builder.hunger), home_label, effect_label, assignment, float(selected_builder.skills.construction), float(selected_builder.skills.forestry), float(selected_builder.skills.farming), float(selected_builder.skills.excavation)]
@@ -2883,51 +2813,6 @@ func _fell_tree_at(position_on_board: Vector3) -> void:
 	tree.rotation_degrees.z = 82.0
 	settlement.branches += 3
 	_update_interface("A tree was felled. Its log is ready for delivery; the living tree is no longer available for gathering.")
-
-func _tent_resident_count() -> int:
-	if not is_instance_valid(tent):
-		return 0
-	var count := 0
-	for citizen in citizens:
-		if citizen.home == tent:
-			count += 1
-	return count
-
-func _check_tent_dismantle() -> void:
-	if not is_instance_valid(tent) or _tent_resident_count() > 0 or tent_dismantle_progress >= 0.0:
-		return
-	for citizen in citizens:
-		if citizen.specialization == "builder":
-			citizen.assign_construction(tent)
-	tent_dismantle_progress = 0.0
-	_update_interface("The tent is empty. Builders are walking over to dismantle it.")
-
-func _update_tent_dismantle(delta: float) -> void:
-	if tent_dismantle_progress < 0.0 or not is_instance_valid(tent):
-		return
-	var dismantlers := 0
-	for citizen in citizens:
-		if citizen.specialization == "builder" and citizen.is_building_site(tent):
-			dismantlers += 1
-	if dismantlers <= 0:
-		return
-	tent_dismantle_progress += delta * dismantlers
-	if tent_dismantle_progress < 2.0:
-		return
-	building_positions.erase(tent.global_position)
-	for index in range(building_footprints.size() - 1, -1, -1):
-		if building_footprints[index].node == tent:
-			building_footprints.remove_at(index)
-	_unregister_navigation_footprint(tent.global_position, Vector2i(3, 3))
-	tent.queue_free()
-	tent = null
-	placed_buildings.erase(tent_cell)
-	_rebuild_navigation_mesh()
-	branches += 2
-	tent_dismantle_progress = -1.0
-	_update_workers()
-	_update_interface("Builders dismantled the empty tent and recovered 2 branches.")
-
 
 func _update_water_collectors(delta: float) -> void:
 	# Dew collectors and ponds slowly gather water from dew and rain. Each one
