@@ -152,6 +152,7 @@ var build_buttons: Array[Button] = []
 var role_buttons: Array[Button] = []
 var workforce: WorkforceCoordinator
 var sawmills: SawmillService
+var construction: ConstructionService
 
 
 func _ready() -> void:
@@ -160,6 +161,8 @@ func _ready() -> void:
 	add_child(workforce)
 	sawmills = SawmillService.new()
 	sawmills.configure(self)
+	construction = ConstructionService.new()
+	construction.configure(self)
 	_create_world()
 	_create_interface()
 	_create_forest()
@@ -1813,60 +1816,10 @@ func _placement_key(world_position: Vector3) -> Vector2i:
 	return Vector2i(roundi(world_position.x), roundi(world_position.z))
 
 func _create_construction_site(cell: Vector2i, building_type: String, position_on_board: Vector3) -> void:
-	var site := Node3D.new()
-	site.position = position_on_board
-	site.set_meta("building_type", building_type)
-	add_child(site)
-	var blueprint := BuildingBlueprints.get_blueprint(building_type)
-	site.set_meta("footprint", blueprint.footprint)
-	var bar_back := MeshInstance3D.new()
-	var bar_mesh := BoxMesh.new()
-	bar_mesh.size = Vector3(1.45, 0.11, 0.12)
-	bar_back.mesh = bar_mesh
-	bar_back.position = Vector3(0.0, 2.15, 0.0)
-	var back_material := StandardMaterial3D.new()
-	back_material.albedo_color = Color("392d2e")
-	bar_back.material_override = back_material
-	site.add_child(bar_back)
-	var fill := MeshInstance3D.new()
-	fill.mesh = bar_mesh
-	fill.position = Vector3(-0.725, 2.17, -0.07)
-	var fill_material := StandardMaterial3D.new()
-	fill_material.albedo_color = Color("56bd58")
-	fill.material_override = fill_material
-	fill.scale.x = 0.01
-	site.add_child(fill)
-	construction_sites.append({"cell": cell, "type": building_type, "position": position_on_board, "node": site, "fill": fill, "progress": 0.0, "blueprint": blueprint, "modules_built": 0})
-	_update_workers()
+	construction.start_site(cell, building_type, position_on_board)
 
 func _update_construction(delta: float) -> void:
-	for index in range(construction_sites.size() - 1, -1, -1):
-		var site: Dictionary = construction_sites[index]
-		var builder_power := _building_power(site.node)
-		var progress: float = minf(1.0, site.progress + delta / CONSTRUCTION_DURATION * builder_power)
-		if index == 0:
-			status_label.text = "Building %s: %d builder(s), %.1fx speed." % [site.type, _builder_count(site.node), builder_power]
-		site.progress = progress
-		var modules: Array = site.blueprint.modules
-		var target_module_count := mini(modules.size(), floori(progress * modules.size()))
-		while site.modules_built < target_module_count:
-			site.node.add_child(BuildingBlueprints.create_module(modules[site.modules_built]))
-			site.modules_built += 1
-		var fill: MeshInstance3D = site.fill
-		fill.scale.x = maxf(0.01, progress)
-		fill.position.x = -0.725 + 0.725 * progress
-		construction_sites[index] = site
-		if progress >= 1.0:
-			if is_instance_valid(fill):
-				fill.get_parent().remove_child(fill)
-				fill.queue_free()
-			for child in site.node.get_children():
-				if child is MeshInstance3D and child != fill:
-					child.queue_free()
-			construction_sites.remove_at(index)
-			for citizen in citizens:
-				citizen.finish_construction(site.node)
-			_complete_building(site.cell, site.type, site.position, site.node, site.blueprint)
+	construction.tick(delta)
 
 func _complete_building(cell: Vector2i, building_type: String, position_on_board: Vector3, building: Node3D, blueprint: Dictionary) -> void:
 	_register_service_entrance(building, blueprint.footprint, false, building_type not in ["farm", "park"])
