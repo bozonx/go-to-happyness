@@ -8,7 +8,9 @@ const SAWMILL_COST := 10
 const HOUSE_COST := 12
 const FARM_COST := 12
 const CANTEEN_COST := 16
+const SCHOOL_COST := 18
 const POPULATION := 5
+const WAREHOUSE_CAPACITY := 50
 const HOUSE_CAPACITY := 2
 const TENT_CAPACITY := 5
 const CONSTRUCTION_DURATION := 4.0
@@ -29,7 +31,7 @@ var soil := 0
 var clay := 0
 var wellbeing := 75
 var game_minutes := 7 * 60
-const GAME_DAY_REAL_SECONDS := 600.0
+const GAME_DAY_REAL_SECONDS := 300.0
 const GAME_MINUTES_PER_SECOND := 1440.0 / GAME_DAY_REAL_SECONDS
 var time_multiplier := 1.0
 var previous_clock_minute := -1
@@ -43,6 +45,7 @@ var tree_cells: Dictionary = {}
 var warehouse_positions: Array[Vector3] = []
 var sawmill_positions: Array[Vector3] = []
 var farm_positions: Array[Vector3] = []
+var school_positions: Array[Vector3] = []
 var tree_positions: Array[Vector3] = []
 var citizens: Array[Citizen] = []
 var camera: Camera3D
@@ -91,6 +94,9 @@ var tent_dismantle_progress := -1.0
 var voxel_terrain: VoxelLodTerrain
 var voxel_tool: VoxelTool
 var building_positions: Array[Vector3] = []
+var selected_school: Node3D
+var school_menu: Panel
+var school_menu_title: Label
 
 func _ready() -> void:
 	_create_world()
@@ -240,7 +246,7 @@ func _create_starting_tent() -> void:
 	tent.add_child(selector)
 
 func _create_citizens() -> void:
-	for index in POPULATION:
+	for index in range(POPULATION):
 		_add_citizen(Vector3(-1.1 + (index % 3) * 1.1, 0.0, -0.8 + (index / 3) * 1.1))
 
 func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void:
@@ -306,6 +312,7 @@ func _create_interface() -> void:
 	ui.add_child(interaction_progress)
 	_create_build_menu(ui)
 	_create_house_menu(ui)
+	_create_school_menu(ui)
 
 func _create_time_controls(ui: CanvasLayer) -> void:
 	var controls := HBoxContainer.new()
@@ -354,12 +361,43 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_build_button("Farm - 12 wood", "farm", 362)
 	_add_build_button("Canteen - 16 wood", "canteen", 398)
 	_add_build_button("House - 12 wood", "house", 434)
+	_add_build_button("School - 18 wood", "school", 470)
+
+func _create_school_menu(ui: CanvasLayer) -> void:
+	school_menu = Panel.new()
+	school_menu.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	school_menu.offset_left = -324.0
+	school_menu.offset_top = -360.0
+	school_menu.offset_right = -20.0
+	school_menu.offset_bottom = -20.0
+	school_menu.visible = false
+	ui.add_child(school_menu)
+	school_menu_title = Label.new()
+	school_menu_title.position = Vector2(16, 14)
+	school_menu_title.size = Vector2(272, 72)
+	school_menu_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	school_menu.add_child(school_menu_title)
+	var roles := [["Construction", "construction"], ["Forestry", "forestry"], ["Farming", "farming"], ["Excavation", "excavation"]]
+	for index in range(roles.size()):
+		var button := Button.new()
+		button.text = "Train: %s" % roles[index][0]
+		button.position = Vector2(16, 94 + index * 32)
+		button.size = Vector2(272, 28)
+		button.pressed.connect(_start_school_training.bind(roles[index][1]))
+		school_menu.add_child(button)
+
+func _start_school_training(role: String) -> void:
+	if selected_builder == null or selected_school == null:
+		return
+	selected_builder.start_training(role, selected_school.global_position)
+	school_menu.visible = false
+	_update_interface("Training started: 10 mornings in school, then regular work.")
 
 func _create_house_menu(ui: CanvasLayer) -> void:
 	house_menu = Panel.new()
 	house_menu.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	house_menu.offset_left = -324.0
-	house_menu.offset_top = -340.0
+	house_menu.offset_top = -378.0
 	house_menu.offset_right = -20.0
 	house_menu.offset_bottom = -20.0
 	house_menu.visible = false
@@ -376,6 +414,7 @@ func _create_house_menu(ui: CanvasLayer) -> void:
 	_add_house_spawn_button("Spawn Digger", "excavation", 204)
 	_add_house_spawn_button("Spawn Courier", "courier", 238)
 	_add_house_spawn_button("Spawn Cook", "cook", 272)
+	_add_house_spawn_button("Spawn Teacher", "teacher", 306)
 
 func _add_house_resettle_button() -> void:
 	var button := Button.new()
@@ -588,6 +627,18 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 			_show_house_menu()
 			_update_interface("House selected. Resettle a tent resident or recruit a new worker.")
 		return
+	if hit.collider.is_in_group("school_selector"):
+		selected_school = hit.collider.get_parent() as Node3D
+		house_menu.visible = false
+		build_menu.visible = false
+		if selected_builder == null:
+			school_menu.visible = false
+			_update_interface("Select a citizen first, then click the school to choose training.")
+			return
+		school_menu_title.text = "Student: %s\nChoose a profession. Study takes 10 mornings." % selected_builder.role_label()
+		school_menu.visible = true
+		_update_interface("Choose the profession for this student.")
+		return
 	if not hit.collider.is_in_group("citizen_selector"):
 		return
 	var clicked_citizen := hit.collider.get_parent() as Citizen
@@ -597,7 +648,9 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 		return
 	selected_builder = clicked_citizen
 	selected_house = null
+	selected_school = null
 	house_menu.visible = false
+	school_menu.visible = false
 	build_mode = ""
 	selection_marker.visible = false
 	build_menu.visible = true
@@ -632,13 +685,12 @@ func _toggle_first_person() -> void:
 		_update_interface("Select a citizen first, then press R to take control.")
 		return
 	player_citizen = selected_builder
-	player_citizen.set_player_controlled(true)
 	is_first_person = true
 	build_mode = ""
 	selection_marker.visible = false
 	build_menu.visible = false
 	player_yaw = player_citizen.rotation.y
-	player_pitch = deg_to_rad(-8.0)
+	player_pitch = 0.0
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	_update_interface("First-person control enabled. Gather wood and bring it to a warehouse.")
 
@@ -653,6 +705,13 @@ func _update_player_control(delta: float) -> void:
 	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN): move_direction -= forward
 	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT): move_direction += right
 	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT): move_direction -= right
+	if not player_citizen.is_player_controlled:
+		if move_direction.is_zero_approx():
+			camera.global_position = player_citizen.global_position + Vector3(0.0, PLAYER_EYE_HEIGHT, 0.0)
+			camera.rotation = Vector3(player_pitch, player_yaw, 0.0)
+			_refresh_interaction_hint()
+			return
+		player_citizen.set_player_controlled(true)
 	var speed := PLAYER_SPEED * (PLAYER_SPRINT_MULTIPLIER if Input.is_key_pressed(KEY_SHIFT) else 1.0)
 	if not move_direction.is_zero_approx():
 		move_direction = move_direction.normalized()
@@ -677,6 +736,9 @@ func _start_interaction() -> void:
 	if not interaction_action.is_empty():
 		return
 	if _nearby_sawmill() and pocket_wood > 0:
+		if _stored_resources() + pocket_wood > _warehouse_capacity():
+			_update_interface("Warehouse is full. Build another warehouse before unloading wood.")
+			return
 		wood += pocket_wood
 		var delivered := pocket_wood
 		pocket_wood = 0
@@ -684,6 +746,9 @@ func _start_interaction() -> void:
 		_refresh_interaction_hint()
 		return
 	if _nearby_warehouse() and pocket_food > 0:
+		if _stored_resources() + pocket_food > _warehouse_capacity():
+			_update_interface("Warehouse is full. Build another warehouse before unloading food.")
+			return
 		food += pocket_food
 		var delivered_food := pocket_food
 		pocket_food = 0
@@ -902,6 +967,9 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			_create_house(position_on_board)
 		"canteen":
 			_create_canteen(position_on_board)
+		"school":
+			school_positions.append(position_on_board)
+			_create_school(position_on_board)
 	_update_workers()
 	_update_interface("%s construction completed." % building_type.capitalize())
 
@@ -1036,6 +1104,45 @@ func _create_canteen(position_on_board: Vector3) -> void:
 	sign.font_size = 42
 	canteen.add_child(sign)
 
+func _create_school(position_on_board: Vector3) -> void:
+	var school := Node3D.new()
+	school.position = position_on_board
+	add_child(school)
+	var base := MeshInstance3D.new()
+	var base_mesh := BoxMesh.new()
+	base_mesh.size = Vector3(1.8, 1.05, 1.7)
+	base.mesh = base_mesh
+	base.position.y = 0.52
+	var wall_material := StandardMaterial3D.new()
+	wall_material.albedo_color = Color("8d7fc0")
+	base.material_override = wall_material
+	school.add_child(base)
+	var roof := MeshInstance3D.new()
+	var roof_mesh := PrismMesh.new()
+	roof_mesh.size = Vector3(2.05, 0.76, 1.95)
+	roof.mesh = roof_mesh
+	roof.position.y = 1.4
+	roof.rotation_degrees.y = 90.0
+	var roof_material := StandardMaterial3D.new()
+	roof_material.albedo_color = Color("4f477b")
+	roof.material_override = roof_material
+	school.add_child(roof)
+	var selector := Area3D.new()
+	selector.add_to_group("school_selector")
+	var selector_shape := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(1.9, 1.65, 1.8)
+	selector_shape.shape = shape
+	selector_shape.position.y = 0.82
+	selector.add_child(selector_shape)
+	school.add_child(selector)
+	var sign := Label3D.new()
+	sign.text = "SCHOOL"
+	sign.position = Vector3(0, 1.35, -0.98)
+	sign.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	sign.font_size = 40
+	school.add_child(sign)
+
 func _tent_resident_count() -> int:
 	var count := 0
 	for citizen in citizens:
@@ -1083,7 +1190,18 @@ func _update_workers() -> void:
 		var citizen := citizens[index]
 		if citizen.is_player_controlled:
 			continue
-		if citizen.specialization == "courier" or citizen.specialization == "cook":
+		if citizen.specialization == "cook":
+			if is_instance_valid(canteen):
+				citizen.assign_canteen_work(canteen_position)
+			continue
+		if citizen.specialization == "teacher":
+			if not school_positions.is_empty():
+				citizen.assign_teacher_work(school_positions[0])
+			continue
+		if citizen.specialization == "courier":
+			continue
+		if not citizen.training_role.is_empty() and citizen.training_days_completed < 10 and int(game_minutes) / 60 < 12:
+			citizen.attend_school()
 			continue
 		var role := _work_role_for(citizen)
 		if role == "construction" and not construction_sites.is_empty():
@@ -1135,7 +1253,18 @@ func _update_clock(delta: float) -> void:
 	clock_label.text = "%s  %02d:%02d  x%d" % ["Night" if _is_night() else "Day", hour, minute, int(time_multiplier)]
 	if previous_clock_minute == current_minute:
 		return
+	if previous_clock_minute < 0:
+		previous_clock_minute = current_minute
+		return
+	var minute_to_process := posmod(previous_clock_minute + 1, 24 * 60)
+	while minute_to_process != posmod(current_minute + 1, 24 * 60):
+		_handle_clock_minute(minute_to_process)
+		minute_to_process = posmod(minute_to_process + 1, 24 * 60)
 	previous_clock_minute = current_minute
+
+func _handle_clock_minute(clock_minute: int) -> void:
+	var hour := clock_minute / 60
+	var minute := clock_minute % 60
 	if minute == 0 and (hour == 8 or hour == 13 or hour == 19) and active_meal_hour != hour:
 		active_meal_hour = hour
 		_start_meal(hour)
@@ -1146,6 +1275,10 @@ func _update_clock(delta: float) -> void:
 		active_meal_hour = -1
 		_update_workers()
 		_update_interface("Morning: workers left their homes for their assignments.")
+	if minute == 0 and hour == 12:
+		for citizen in citizens:
+			citizen.finish_school_day()
+		_update_workers()
 
 func _is_night() -> bool:
 	var hour := int(game_minutes) / 60
@@ -1234,7 +1367,11 @@ func _building_power(site_node: Node3D) -> float:
 			power += citizen.get_efficiency("construction")
 	return power
 
-func _on_resource_delivered(resource_type: String, amount: int) -> void:
+func _on_resource_delivered(worker: Citizen, resource_type: String, amount: int) -> void:
+	if _stored_resources() + amount > _warehouse_capacity():
+		worker.storage_delivery_result(false)
+		_update_interface("Warehouse is full. Build another warehouse; the worker went home.")
+		return
 	if resource_type == "food":
 		food += amount
 	elif resource_type == "soil":
@@ -1243,6 +1380,7 @@ func _on_resource_delivered(resource_type: String, amount: int) -> void:
 		clay += amount
 	else:
 		wood += amount
+	worker.storage_delivery_result(true)
 	_update_interface("Workers delivered %d %s to the warehouse." % [amount, resource_type])
 
 func _on_resource_ready(worker: Citizen, resource_type: String, amount: int) -> void:
@@ -1285,7 +1423,14 @@ func _building_cost() -> int:
 		"sawmill": return SAWMILL_COST
 		"farm": return FARM_COST
 		"canteen": return CANTEEN_COST
+		"school": return SCHOOL_COST
 		_: return HOUSE_COST
+
+func _stored_resources() -> int:
+	return wood + food + soil + clay
+
+func _warehouse_capacity() -> int:
+	return warehouse_positions.size() * WAREHOUSE_CAPACITY
 
 func _update_camera(delta: float) -> void:
 	var move_direction := Vector3.ZERO
@@ -1382,7 +1527,7 @@ func _find_path_around_houses(from: Vector3, destination: Vector3, may_enter_des
 	return path
 
 func _update_interface(message: String) -> void:
-	wood_label.text = "Wood: %d   Warehouse food: %d   Canteen: %d\nSoil: %d   Clay: %d   Wellbeing: %d%%\nTent: %d/%d   Population: %d" % [wood, food, canteen_food, soil, clay, wellbeing, _tent_resident_count(), TENT_CAPACITY, citizens.size()]
+	wood_label.text = "Wood: %d   Warehouse food: %d   Canteen: %d\nSoil: %d   Clay: %d   Storage: %d/%d\nTent: %d/%d   Population: %d" % [wood, food, canteen_food, soil, clay, _stored_resources(), _warehouse_capacity(), _tent_resident_count(), TENT_CAPACITY, citizens.size()]
 	status_label.text = message
 	if is_first_person:
 		camera_hint_label.text = "R: leave citizen  WASD/arrows: move  Space: jump  Shift: sprint  Mouse: look  LMB: interact  RMB: dig"

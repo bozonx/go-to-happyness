@@ -1,7 +1,7 @@
 class_name Citizen
 extends CharacterBody3D
 
-signal resource_delivered(resource_type: String, amount: int)
+signal resource_delivered(worker: Citizen, resource_type: String, amount: int)
 signal excavation_cycle(worker: Citizen, site: Node3D, efficiency: float)
 signal resource_ready(worker: Citizen, resource_type: String, amount: int)
 signal meal_finished(worker: Citizen)
@@ -20,7 +20,7 @@ const UNIT_SEPARATION_DISTANCE := 0.72
 const UNIT_SEPARATION_STRENGTH := 1.35
 const CONSTRUCTION_SLOT_SPACING := 0.42
 
-enum State { IDLE, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY }
+enum State { IDLE, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK }
 
 var state := State.IDLE
 var resource_type := "wood"
@@ -60,6 +60,9 @@ var path_destination := Vector3.INF
 var path_allows_destination_house := false
 var stuck_time := 0.0
 var jump_cooldown := 0.0
+var training_role := ""
+var training_days_completed := 0
+var school_position := Vector3.ZERO
 
 func _ready() -> void:
 	add_to_group("citizens")
@@ -155,9 +158,8 @@ func _physics_process(delta: float) -> void:
 					state = State.TO_WAREHOUSE
 		State.TO_WAREHOUSE:
 			if _move_to(warehouse_position, delta):
-				resource_delivered.emit(resource_type, carried_amount)
-				state = State.EXCAVATING if returning_to_excavation else State.TO_TREE
-				returning_to_excavation = false
+				state = State.IDLE
+				resource_delivered.emit(self, resource_type, carried_amount)
 		State.WAITING_COURIER:
 			courier_wait_time -= delta
 			if courier_wait_time <= 0.0:
@@ -187,8 +189,8 @@ func _physics_process(delta: float) -> void:
 				state = State.COURIER_TO_WAREHOUSE if carried_amount > 0 else State.IDLE
 		State.COURIER_TO_WAREHOUSE:
 			if _move_to(warehouse_position, delta):
-				resource_delivered.emit(courier_resource_type, carried_amount)
 				state = State.IDLE
+				resource_delivered.emit(self, courier_resource_type, carried_amount)
 		State.TO_HOME:
 			if is_instance_valid(home) and _move_to(home.global_position, delta, true):
 				state = State.RESTING
@@ -211,6 +213,18 @@ func _physics_process(delta: float) -> void:
 			if _move_to(canteen_position, delta):
 				canteen_delivery_finished.emit(self, delivery_amount)
 				delivery_amount = 0
+				state = State.IDLE
+		State.TO_CANTEEN_WORK:
+			if _move_to(canteen_position, delta):
+				state = State.IDLE
+		State.TO_SCHOOL:
+			if _move_to(school_position, delta):
+				state = State.STUDYING
+				active_role = "training"
+		State.STUDYING:
+			pass
+		State.TO_SCHOOL_WORK:
+			if _move_to(school_position, delta):
 				state = State.IDLE
 
 func _move_to(destination: Vector3, delta: float, may_enter_destination_house := false) -> bool:
@@ -337,6 +351,16 @@ func deliver_excavation(next_resource_type: String, warehouse: Vector3) -> void:
 	returning_to_excavation = true
 	state = State.TO_WAREHOUSE
 
+func storage_delivery_result(accepted: bool) -> void:
+	if accepted:
+		if specialization == "courier":
+			state = State.IDLE
+			return
+		state = State.EXCAVATING if returning_to_excavation else State.TO_TREE
+		returning_to_excavation = false
+	else:
+		go_home()
+
 func register_pending_resource(next_resource_type: String, amount: int) -> void:
 	pending_resources[next_resource_type] = int(pending_resources.get(next_resource_type, 0)) + amount
 
@@ -362,6 +386,41 @@ func assign_courier_pickup(worker: Citizen, warehouse: Vector3) -> void:
 	active_role = ""
 	state = State.COURIER_TO_WORKER
 
+func assign_canteen_work(next_canteen_position: Vector3) -> void:
+	if not is_player_controlled:
+		canteen_position = next_canteen_position
+		active_role = "cooking"
+		state = State.TO_CANTEEN_WORK
+
+func assign_teacher_work(next_school_position: Vector3) -> void:
+	if not is_player_controlled:
+		school_position = next_school_position
+		active_role = "teaching"
+		state = State.TO_SCHOOL_WORK
+
+func start_training(next_role: String, next_school_position: Vector3) -> void:
+	training_role = next_role
+	training_days_completed = 0
+	school_position = next_school_position
+
+func attend_school() -> void:
+	if not is_player_controlled and not training_role.is_empty() and training_days_completed < 10:
+		state = State.TO_SCHOOL
+
+func finish_school_day() -> void:
+	if state != State.STUDYING:
+		return
+	training_days_completed += 1
+	skills[training_role] = minf(5.0, float(skills.get(training_role, 1.0)) + 0.4)
+	if training_days_completed >= 10:
+		var final_skill := float(skills[training_role])
+		specialization = "builder" if training_role == "construction" else training_role
+		manual_role = ""
+		setup_specialization(specialization)
+		skills[training_role] = maxf(final_skill, float(skills[training_role]))
+		training_role = ""
+	state = State.IDLE
+
 func is_building_site(site: Node3D) -> bool:
 	return not is_player_controlled and state == State.CONSTRUCTING and construction_site == site and global_position.distance_to(construction_position) <= 0.25
 
@@ -386,6 +445,7 @@ func setup_specialization(next_specialization: String) -> void:
 		"excavation": body_material.albedo_color = Color("a6744b")
 		"courier": body_material.albedo_color = Color("a85d91")
 		"cook": body_material.albedo_color = Color("d96f43")
+		"teacher": body_material.albedo_color = Color("7656a8")
 
 func get_efficiency(role: String) -> float:
 	var skill_value: float = skills.get(role, 1.0)
@@ -401,6 +461,7 @@ func role_label() -> String:
 		"farming": return "Farmer"
 		"excavation": return "Digger"
 		"cook": return "Cook"
+		"teacher": return "Teacher"
 		_: return "Courier"
 
 func specialization_color() -> Color:
@@ -410,6 +471,7 @@ func specialization_color() -> Color:
 		"farming": return Color("5c8fc9")
 		"excavation": return Color("a6744b")
 		"cook": return Color("d96f43")
+		"teacher": return Color("7656a8")
 		_: return Color("a85d91")
 
 func preferred_role() -> String:
@@ -475,7 +537,7 @@ func _update_effects(delta: float) -> void:
 			buffs[buff_id] = time_left
 
 func is_available_for_schedule() -> bool:
-	return not is_player_controlled and state != State.TO_CANTEEN and state != State.EATING and state != State.TO_HOME and state != State.RESTING
+	return not is_player_controlled and state != State.TO_CANTEEN and state != State.EATING and state != State.TO_HOME and state != State.RESTING and state != State.STUDYING
 
 func _update_satisfaction(delta: float) -> void:
 	satisfaction_tick += delta
