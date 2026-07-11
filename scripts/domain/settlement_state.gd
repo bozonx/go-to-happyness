@@ -29,6 +29,109 @@ var trade_sales := 0
 var buildings: Dictionary = {}
 var brick_construction_unlocked := false
 
+## --- Weighted, reallocatable storage ------------------------------------------
+## Every stored good takes up "space units". The warehouse holds a fixed number of
+## units for the current era; the player splits that budget between resources in
+## the warehouse menu. Heavy goods (logs, bricks) cost more than a unit each;
+## water is light and packs several to a unit.
+const STORED_RESOURCES := ["branches", "grass", "water", "food", "hides", "goods", "logs", "wood", "soil", "clay", "boards", "bricks"]
+const STORAGE_WEIGHTS := {
+	"branches": 1.0, "grass": 1.0, "water": 0.5, "food": 1.0,
+	"hides": 1.0, "goods": 1.0, "logs": 2.0, "wood": 2.0,
+	"soil": 1.0, "clay": 1.0, "boards": 1.5, "bricks": 2.0,
+}
+const ERA_STORAGE_BASE := {Era.TENT: 48, Era.EARTH: 90, Era.CLAY: 140, Era.WOOD: 210, Era.BRICK: 320}
+const ERA_STORAGE_PER_WAREHOUSE := {Era.TENT: 32, Era.EARTH: 48, Era.CLAY: 70, Era.WOOD: 100, Era.BRICK: 140}
+const STORAGE_STEP := 4.0
+
+var storage_limits: Dictionary = {} # resource -> allocated space units (float)
+
+
+func storage_weight(resource_type: String) -> float:
+	return float(STORAGE_WEIGHTS.get(resource_type, 1.0))
+
+
+func storage_capacity(warehouses: int) -> int:
+	return int(ERA_STORAGE_BASE.get(era, 24)) + maxi(0, warehouses) * int(ERA_STORAGE_PER_WAREHOUSE.get(era, 24))
+
+
+func storage_used_units() -> float:
+	var total := 0.0
+	for resource_type in STORED_RESOURCES:
+		total += amount(resource_type) * storage_weight(resource_type)
+	return total
+
+
+func _storage_allocated_units() -> float:
+	var total := 0.0
+	for resource_type in STORED_RESOURCES:
+		total += float(storage_limits.get(resource_type, 0.0))
+	return total
+
+
+func storage_free_units(warehouses: int) -> float:
+	return maxf(0.0, storage_capacity(warehouses) - _storage_allocated_units())
+
+
+func storage_limit(resource_type: String) -> float:
+	return float(storage_limits.get(resource_type, 0.0))
+
+
+func ensure_storage_defaults(warehouses: int) -> void:
+	# First-time setup gives the era's staple goods a generous slice and leaves the
+	# rest of the budget free for the player to assign in the warehouse menu.
+	if storage_limits.is_empty():
+		for resource_type in STORED_RESOURCES:
+			storage_limits[resource_type] = 0.0
+		var primary := ["branches", "grass", "water", "food"]
+		var share := float(storage_capacity(warehouses)) * 0.8 / primary.size()
+		for resource_type in primary:
+			storage_limits[resource_type] = share
+	_clamp_storage_limits(warehouses)
+
+
+func _clamp_storage_limits(warehouses: int) -> void:
+	# Never let allocations exceed the capacity or drop below what is already stored.
+	var capacity := float(storage_capacity(warehouses))
+	for resource_type in STORED_RESOURCES:
+		var used := amount(resource_type) * storage_weight(resource_type)
+		storage_limits[resource_type] = maxf(float(storage_limits.get(resource_type, 0.0)), used)
+	if _storage_allocated_units() > capacity:
+		# Trim the fat proportionally from any headroom above what is stored.
+		var overflow := _storage_allocated_units() - capacity
+		for resource_type in STORED_RESOURCES:
+			if overflow <= 0.0:
+				break
+			var used := amount(resource_type) * storage_weight(resource_type)
+			var slack := float(storage_limits[resource_type]) - used
+			var cut := minf(slack, overflow)
+			storage_limits[resource_type] -= cut
+			overflow -= cut
+
+
+func adjust_storage_limit(resource_type: String, delta_units: float, warehouses: int) -> void:
+	if not STORED_RESOURCES.has(resource_type):
+		return
+	var current := float(storage_limits.get(resource_type, 0.0))
+	var used := amount(resource_type) * storage_weight(resource_type)
+	var target := current + delta_units
+	if delta_units > 0.0:
+		target = minf(target, current + storage_free_units(warehouses))
+	target = maxf(target, used) # cannot squeeze below what is already there
+	storage_limits[resource_type] = maxf(0.0, target)
+
+
+func storage_room_for(resource_type: String) -> int:
+	if not STORED_RESOURCES.has(resource_type):
+		return 1 << 30
+	var weight := storage_weight(resource_type)
+	var headroom := float(storage_limits.get(resource_type, 0.0)) - amount(resource_type) * weight
+	return maxi(0, int(floor((headroom + 0.001) / weight)))
+
+
+func storage_can_accept(resource_type: String, count: int) -> bool:
+	return storage_room_for(resource_type) >= count
+
 
 func amount(resource_type: String) -> int:
 	match resource_type:

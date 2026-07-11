@@ -86,6 +86,7 @@ var sawmill_positions: Array[Vector3] = []
 var sawmill_stocks: Dictionary = {}
 var tree_reservations: Dictionary = {}
 var farm_positions: Array[Vector3] = []
+var pond_positions: Array[Vector3] = []
 var school_positions: Array[Vector3] = []
 var park_positions: Array[Vector3] = []
 var leisure_positions: Array[Vector3] = []
@@ -125,6 +126,7 @@ var player_pitch := -8.0
 var pocket_wood := 0
 var pocket_food := 0
 var pocket_boards := 0
+var pocket_water := 0
 var interaction_time := 0.0
 var interaction_action := ""
 var interaction_resource := ""
@@ -169,6 +171,9 @@ var campfire_advance_button: Button
 var selected_market: Node3D = null
 var market_menu: Panel
 var market_menu_title: Label
+var selected_warehouse: Node3D = null
+var warehouse_menu: Panel
+var warehouse_menu_title: Label
 var job_submenu_btn: Button
 var job_back_btn: Button
 var house_lights: Array[Dictionary] = []
@@ -197,16 +202,19 @@ func _ready() -> void:
 	_create_world()
 	_create_interface()
 	_create_forest()
+	_create_ponds()
 	_create_entrance_stone()
 	_create_citizens()
-	
-	# Starting resources to place first campfire and tents
+
+	# Starting resources to place first campfire and tents. The tent-era store is
+	# small, so the starting stock is kept within its base capacity.
 	settlement.money = 100
-	settlement.branches = 30
-	settlement.grass = 20
-	settlement.water = 15
-	settlement.food = 15
-	
+	settlement.branches = 16
+	settlement.grass = 8
+	settlement.water = 6
+	settlement.food = 6
+	settlement.ensure_storage_defaults(warehouse_positions.size())
+
 	_update_interface("Four volunteers wait. Gather branches and grass, and build the Campfire to start management.")
 
 func _process(delta: float) -> void:
@@ -492,10 +500,9 @@ func _building_power(site_node: Node3D) -> float:
 	return power
 
 func _on_resource_delivered(worker: Citizen, resource_type: String, amount: int) -> void:
-	var storage_amount := amount
-	if _stored_resources() + storage_amount > _warehouse_capacity():
+	if not settlement.storage_can_accept(resource_type, amount):
 		worker.storage_delivery_result(false)
-		_update_interface("Warehouse is full. Build another warehouse; the worker went home.")
+		_update_interface("No storage room for %s. Rebalance the warehouse or build another; the worker went home." % resource_type)
 		return
 	if resource_type == "food":
 		food += amount
@@ -640,11 +647,10 @@ func _format_costs(building_type: String) -> String:
 	return "  ".join(parts) if not parts.is_empty() else "free"
 
 func _stored_resources() -> int:
-	return settlement.total_stored_resources()
+	return int(ceil(settlement.storage_used_units()))
 
 func _warehouse_capacity() -> int:
-	# Starting supplies are kept at the tent until the first warehouse is built.
-	return maxi(WAREHOUSE_CAPACITY, warehouse_positions.size() * WAREHOUSE_CAPACITY)
+	return settlement.storage_capacity(warehouse_positions.size())
 
 func _total_housing_slots() -> int:
 	var count := 0
@@ -892,6 +898,47 @@ func _create_forest() -> void:
 		_create_tree(tree_position)
 	_rebuild_navigation_mesh()
 
+func _create_ponds() -> void:
+	# Natural ponds are part of the terrain, not a building. Residents cannot fill
+	# a bucket automatically, but the player can draw water here once they own one.
+	for cell in [Vector2i(-9, 8), Vector2i(10, -7)]:
+		var center := _cell_center(cell)
+		pond_positions.append(center)
+		_create_pond_visual(center)
+	_rebuild_navigation_mesh()
+
+func _create_pond_visual(center: Vector3) -> void:
+	var pond := Node3D.new()
+	pond.position = center
+	add_child(pond)
+	var rim := MeshInstance3D.new()
+	var rim_mesh := CylinderMesh.new()
+	rim_mesh.top_radius = 2.6
+	rim_mesh.bottom_radius = 2.6
+	rim_mesh.height = 0.3
+	rim.mesh = rim_mesh
+	rim.position.y = 0.12
+	var rim_material := StandardMaterial3D.new()
+	rim_material.albedo_color = Color("6f747a")
+	rim.material_override = rim_material
+	pond.add_child(rim)
+	var surface := MeshInstance3D.new()
+	var surface_mesh := CylinderMesh.new()
+	surface_mesh.top_radius = 2.3
+	surface_mesh.bottom_radius = 2.3
+	surface_mesh.height = 0.24
+	surface.mesh = surface_mesh
+	surface.position.y = 0.2
+	var surface_material := StandardMaterial3D.new()
+	surface_material.albedo_color = Color("3f7fa0")
+	surface_material.roughness = 0.2
+	surface.material_override = surface_material
+	pond.add_child(surface)
+	# Block the pond footprint so the terrain reads as impassable water.
+	for x in range(-2, 3):
+		for z in range(-2, 3):
+			house_cells[_cell_from_position(center) + Vector2i(x, z)] = true
+
 func _create_tree(position_on_board: Vector3) -> void:
 	var tree := Node3D.new()
 	tree.position = position_on_board
@@ -1054,6 +1101,7 @@ func _create_interface() -> void:
 	_create_materials_factory_menu(ui)
 	_create_campfire_menu(ui)
 	_create_market_menu(ui)
+	_create_warehouse_menu(ui)
 
 func _create_time_controls(ui: CanvasLayer) -> void:
 	var controls := HBoxContainer.new()
@@ -1162,9 +1210,8 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_build_button("Forager tent", "forager_tent", 278, "tent")
 	_add_build_button("Craft tent", "craft_tent", 312, "tent")
 	_add_build_button("Dew collector", "dew_collector", 346, "tent")
-	_add_build_button("Pond", "pond", 380, "tent")
-	_add_build_button("Simple store", "warehouse", 414, "tent")
-	_add_build_button("Trade tent", "trade_tent", 448, "tent")
+	_add_build_button("Simple store", "warehouse", 380, "tent")
+	_add_build_button("Trade tent", "trade_tent", 414, "tent")
 	
 	_add_build_button("Dugout", "dugout", 176, "earth")
 	_add_build_button("Earth house", "earth_house", 210, "earth")
@@ -1572,11 +1619,13 @@ func _close_context_menus() -> void:
 	build_menu.visible = false
 	campfire_menu.visible = false
 	market_menu.visible = false
+	warehouse_menu.visible = false
 	selected_house = null
 	selected_school = null
 	selected_materials_factory = null
 	selected_campfire = null
 	selected_market = null
+	selected_warehouse = null
 	selected_builder = null
 	build_category = ""
 	build_menu_is_job_menu = false
@@ -1663,6 +1712,10 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 		selected_market = hit.collider.get_parent() as Node3D
 		_show_market_menu()
 		return
+	if hit.collider.is_in_group("warehouse_selector"):
+		selected_warehouse = hit.collider.get_parent() as Node3D
+		_show_warehouse_menu()
+		return
 	if hit.collider.is_in_group("house_selector"):
 		selected_house = hit.collider.get_parent() as Node3D
 		selected_builder = null
@@ -1708,11 +1761,13 @@ func _hide_all_selection_menus() -> void:
 	materials_factory_menu.visible = false
 	campfire_menu.visible = false
 	market_menu.visible = false
+	warehouse_menu.visible = false
 	selected_house = null
 	selected_school = null
 	selected_materials_factory = null
 	selected_campfire = null
 	selected_market = null
+	selected_warehouse = null
 
 
 func _citizen_at_screen_position(screen_position: Vector2) -> Citizen:
@@ -1854,22 +1909,38 @@ func _start_interaction() -> void:
 			_update_interface("The sawmill has no ready boards, or your pocket is full.")
 		_refresh_interaction_hint()
 		return
-	if _nearby_warehouse() and (pocket_food > 0 or pocket_boards > 0):
-		var delivery := pocket_food + pocket_boards
-		if _stored_resources() + delivery > _warehouse_capacity():
-			_update_interface("Warehouse is full. Build another warehouse before unloading food.")
+	if _nearby_warehouse() and (pocket_food > 0 or pocket_boards > 0 or pocket_water > 0):
+		var delivered_food := mini(pocket_food, settlement.storage_room_for("food"))
+		var delivered_boards := mini(pocket_boards, settlement.storage_room_for("boards"))
+		var delivered_water := mini(pocket_water, settlement.storage_room_for("water"))
+		if delivered_food + delivered_boards + delivered_water <= 0:
+			_update_interface("No storage room. Rebalance the warehouse or build another.")
 			return
-		food += pocket_food
-		boards += pocket_boards
-		var delivered_food := pocket_food
-		var delivered_boards := pocket_boards
-		pocket_food = 0
-		pocket_boards = 0
-		_update_interface("Delivered %d food and %d boards to the warehouse." % [delivered_food, delivered_boards])
+		food += delivered_food
+		boards += delivered_boards
+		water += delivered_water
+		pocket_food -= delivered_food
+		pocket_boards -= delivered_boards
+		pocket_water -= delivered_water
+		_update_interface("Delivered %d food, %d boards, %d water to the warehouse." % [delivered_food, delivered_boards, delivered_water])
 		_refresh_interaction_hint()
 		return
+	if _nearby_pond() and not (_nearby_tree() or _nearby_farm()):
+		if not bool(settlement.tools.get("bucket", false)):
+			_update_interface("You need a bucket to draw water. Buy one at a market.")
+			return
+		if _pocket_total() >= POCKET_WOOD_CAPACITY:
+			_update_interface("Pocket is full. Take water to the warehouse.")
+			_refresh_interaction_hint()
+			return
+		interaction_resource = "water"
+		interaction_action = "harvesting"
+		interaction_time = 0.0
+		interaction_progress.visible = true
+		interaction_hint_label.text = "Filling bucket..."
+		return
 	if _nearby_tree() or _nearby_farm():
-		if pocket_wood + pocket_food + pocket_boards >= POCKET_WOOD_CAPACITY:
+		if _pocket_total() >= POCKET_WOOD_CAPACITY:
 			_update_interface("Pocket is full. Take wood to the sawmill or food to the warehouse.")
 			_refresh_interaction_hint()
 			return
@@ -1882,7 +1953,7 @@ func _start_interaction() -> void:
 	if _nearby_warehouse():
 		_update_interface("Food pocket is empty. Wood must go to a sawmill first.")
 	else:
-		_update_interface("Move closer to a tree, farm, warehouse or sawmill.")
+		_update_interface("Move closer to a tree, farm, pond, warehouse or sawmill.")
 
 func _dig_voxel_at_crosshair() -> void:
 	if voxel_tool == null:
@@ -1898,7 +1969,7 @@ func _dig_voxel_at_crosshair() -> void:
 func _update_interaction(delta: float) -> void:
 	if interaction_action.is_empty():
 		return
-	if (interaction_resource == "wood" and not _nearby_tree()) or (interaction_resource == "food" and not _nearby_farm()):
+	if (interaction_resource == "wood" and not _nearby_tree()) or (interaction_resource == "food" and not _nearby_farm()) or (interaction_resource == "water" and not _nearby_pond()):
 		interaction_action = ""
 		interaction_progress.visible = false
 		_update_interface("Gathering cancelled: you moved away from the resource.")
@@ -1910,11 +1981,13 @@ func _update_interaction(delta: float) -> void:
 		interaction_action = ""
 		if interaction_resource == "wood":
 			pocket_wood += 1
+		elif interaction_resource == "water":
+			pocket_water += 1
 		else:
 			pocket_food += 1
 		interaction_progress.visible = false
 		_consume_tree_near_player() if interaction_resource == "wood" else null
-		_update_interface("Resource gathered. Wood: %d, food: %d, boards: %d, pocket: %d/%d." % [pocket_wood, pocket_food, pocket_boards, pocket_wood + pocket_food + pocket_boards, POCKET_WOOD_CAPACITY])
+		_update_interface("Gathered. Wood: %d, food: %d, water: %d, boards: %d, pocket: %d/%d." % [pocket_wood, pocket_food, pocket_water, pocket_boards, _pocket_total(), POCKET_WOOD_CAPACITY])
 		_refresh_interaction_hint()
 
 func _nearby_tree() -> bool:
@@ -1952,6 +2025,17 @@ func _nearby_farm() -> bool:
 			return true
 	return false
 
+func _nearby_pond() -> bool:
+	if player_citizen == null:
+		return false
+	for pond_position in pond_positions:
+		if player_citizen.global_position.distance_to(pond_position) <= INTERACTION_RANGE:
+			return true
+	return false
+
+func _pocket_total() -> int:
+	return pocket_wood + pocket_food + pocket_boards + pocket_water
+
 func _refresh_interaction_hint() -> void:
 	if not is_first_person or not interaction_action.is_empty():
 		return
@@ -1960,12 +2044,17 @@ func _refresh_interaction_hint() -> void:
 		interaction_hint_label.text = "LMB: unload wood at sawmill (%d wood)" % pocket_wood
 	elif _nearby_sawmill() and int(_sawmill_stock(_nearby_sawmill_position()).boards) > 0:
 		interaction_hint_label.text = "LMB: take ready boards from sawmill"
-	elif _nearby_warehouse() and (pocket_food > 0 or pocket_boards > 0):
-		interaction_hint_label.text = "LMB: unload food %d / boards %d at warehouse" % [pocket_food, pocket_boards]
+	elif _nearby_warehouse() and (pocket_food > 0 or pocket_boards > 0 or pocket_water > 0):
+		interaction_hint_label.text = "LMB: unload food %d / boards %d / water %d at warehouse" % [pocket_food, pocket_boards, pocket_water]
 	elif _nearby_tree():
-		interaction_hint_label.text = "LMB: gather wood (%d/%d in pocket)" % [pocket_wood + pocket_food + pocket_boards, POCKET_WOOD_CAPACITY]
+		interaction_hint_label.text = "LMB: gather wood (%d/%d in pocket)" % [_pocket_total(), POCKET_WOOD_CAPACITY]
 	elif _nearby_farm():
-		interaction_hint_label.text = "LMB: gather food (%d/%d in pocket)" % [pocket_wood + pocket_food + pocket_boards, POCKET_WOOD_CAPACITY]
+		interaction_hint_label.text = "LMB: gather food (%d/%d in pocket)" % [_pocket_total(), POCKET_WOOD_CAPACITY]
+	elif _nearby_pond():
+		if bool(settlement.tools.get("bucket", false)):
+			interaction_hint_label.text = "LMB: fill bucket with water (%d/%d in pocket)" % [_pocket_total(), POCKET_WOOD_CAPACITY]
+		else:
+			interaction_hint_label.text = "Buy a bucket at a market to draw water here."
 	else:
 		interaction_hint_label.text = "LMB: gather. Logs go to sawmill, boards and food go to warehouse."
 
@@ -2087,6 +2176,8 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 	match building_type:
 		"warehouse":
 			warehouse_positions.append(service_position)
+			settlement.ensure_storage_defaults(warehouse_positions.size())
+			_add_building_selector(building, "warehouse_selector", blueprint.footprint)
 		"sawmill":
 			sawmill_positions.append(service_position)
 			_sawmill_stock(service_position)
@@ -2111,9 +2202,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			if building_type == "tent":
 				building.set_meta("is_tent", true)
 		"dew_collector":
-			water_collectors.append({"node": building, "stored": 0, "cap": 10, "rate": 0.12, "accum": 0.0})
-		"pond":
-			water_collectors.append({"node": building, "stored": 0, "cap": 30, "rate": 0.25, "accum": 0.0})
+			water_collectors.append({"node": building, "rate": 0.12, "accum": 0.0})
 		"trade_tent", "earth_market", "clay_market", "wood_market", "brick_market":
 			_add_building_selector(building, "market_selector", blueprint.footprint)
 		"canteen":
@@ -2303,12 +2392,12 @@ func _update_water_collectors(delta: float) -> void:
 	# fills its own basin up to a cap; the gathered water flows into the shared
 	# settlement supply.
 	for collector in water_collectors:
-		if collector.stored >= collector.cap:
-			continue
 		collector.accum += delta * float(collector.rate)
-		while collector.accum >= 1.0 and collector.stored < collector.cap:
+		while collector.accum >= 1.0:
+			# Keep the water in the funnel until the warehouse has room for it.
+			if not settlement.storage_can_accept("water", 1):
+				break
 			collector.accum -= 1.0
-			collector.stored += 1
 			water += 1
 
 
@@ -2493,6 +2582,7 @@ func _on_campfire_advance_pressed() -> void:
 		SettlementState.Era.WOOD: next_era = SettlementState.Era.BRICK
 	
 	if settlement.advance_era(next_era, citizens.size(), housing_slots):
+		settlement.ensure_storage_defaults(warehouse_positions.size())
 		_update_interface("Advanced to the %s Era! New buildings unlocked." % _era_name())
 		_refresh_campfire_menu()
 		_refresh_build_menu()
@@ -2615,6 +2705,84 @@ func _buy_tool(tool_id: String, price: int) -> void:
 		_refresh_market_menu()
 	else:
 		_update_interface("Cannot buy %s. Check money or check if already owned." % tool_id.replace("_", " "))
+
+
+func _create_warehouse_menu(ui: CanvasLayer) -> void:
+	warehouse_menu = Panel.new()
+	warehouse_menu.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	warehouse_menu.offset_left = -344.0
+	warehouse_menu.offset_top = -660.0
+	warehouse_menu.offset_right = -20.0
+	warehouse_menu.offset_bottom = -20.0
+	warehouse_menu.visible = false
+	ui.add_child(warehouse_menu)
+
+	warehouse_menu_title = Label.new()
+	warehouse_menu_title.position = Vector2(16, 12)
+	warehouse_menu_title.size = Vector2(292, 60)
+	warehouse_menu_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	warehouse_menu_title.add_theme_font_size_override("font_size", 15)
+	warehouse_menu.add_child(warehouse_menu_title)
+
+
+func _show_warehouse_menu() -> void:
+	selected_builder = null
+	build_menu.visible = false
+	selection_marker.visible = false
+	build_mode = ""
+	warehouse_menu.visible = true
+	_refresh_warehouse_menu()
+
+
+func _refresh_warehouse_menu() -> void:
+	if selected_warehouse == null:
+		return
+	var warehouses := warehouse_positions.size()
+	var capacity := settlement.storage_capacity(warehouses)
+	var used := settlement.storage_used_units()
+	var free := settlement.storage_free_units(warehouses)
+	warehouse_menu_title.text = "Storage balance\nUsed %d / %d units   Free to assign: %d\nMove capacity between goods (%d units per click)." % [int(ceil(used)), capacity, int(floor(free)), int(SettlementState.STORAGE_STEP)]
+
+	for child in warehouse_menu.get_children():
+		if child != warehouse_menu_title:
+			child.queue_free()
+
+	var y_offset := 82.0
+	for resource_type in SettlementState.STORED_RESOURCES:
+		var limit := settlement.storage_limit(resource_type)
+		var weight := settlement.storage_weight(resource_type)
+		var stored_units := settlement.amount(resource_type) * weight
+		var row := Label.new()
+		row.position = Vector2(16, y_offset + 4)
+		row.size = Vector2(180, 24)
+		row.add_theme_font_size_override("font_size", 13)
+		row.text = "%s  %d (%d/%d u, x%.1f)" % [resource_type, settlement.amount(resource_type), int(ceil(stored_units)), int(round(limit)), weight]
+		warehouse_menu.add_child(row)
+		var minus := Button.new()
+		minus.text = "-"
+		minus.position = Vector2(238, y_offset)
+		minus.size = Vector2(32, 28)
+		minus.pressed.connect(_adjust_storage.bind(resource_type, -SettlementState.STORAGE_STEP))
+		warehouse_menu.add_child(minus)
+		var plus := Button.new()
+		plus.text = "+"
+		plus.position = Vector2(274, y_offset)
+		plus.size = Vector2(32, 28)
+		plus.pressed.connect(_adjust_storage.bind(resource_type, SettlementState.STORAGE_STEP))
+		warehouse_menu.add_child(plus)
+		y_offset += 32.0
+
+	var close_btn := Button.new()
+	close_btn.text = "Close Menu"
+	close_btn.position = Vector2(16, y_offset + 8)
+	close_btn.size = Vector2(290, 28)
+	close_btn.pressed.connect(_close_context_menus)
+	warehouse_menu.add_child(close_btn)
+
+
+func _adjust_storage(resource_type: String, delta_units: float) -> void:
+	settlement.adjust_storage_limit(resource_type, delta_units, warehouse_positions.size())
+	_refresh_warehouse_menu()
 
 
 func _find_closest_tree_for_citizen(citizen: Citizen) -> Vector3:
