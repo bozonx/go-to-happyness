@@ -5,6 +5,8 @@ extends RefCounted
 
 static func role_for(worker: Dictionary, world: Dictionary) -> String:
 	var manual_role := str(worker.get("manual_role", ""))
+	if manual_role == "unassigned":
+		return manual_role
 	if not manual_role.is_empty():
 		return manual_role
 	# Automatic work first covers essential shortages when the required workplace
@@ -48,6 +50,8 @@ static func role_for(worker: Dictionary, world: Dictionary) -> String:
 
 static func can_assign(worker: Dictionary, world: Dictionary) -> bool:
 	if bool(worker.get("player_controlled", false)) or bool(worker.get("blocked_by_storage", false)):
+		return false
+	if str(worker.get("manual_role", "")) == "unassigned":
 		return false
 	var specialization := str(worker.get("specialization", ""))
 	if specialization == "courier" or int(world.get("hour", 0)) < 8:

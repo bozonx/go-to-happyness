@@ -186,9 +186,10 @@ var campfire_menu: Panel
 var campfire_menu_title: Label
 var campfire_requirements_label: Label
 var campfire_advance_button: Button
-var campfire_jobs_label: Label
-var campfire_worker_picker: OptionButton
-var campfire_role_picker: OptionButton
+var campfire_occupancy_button: Button
+var workforce_menu: Panel
+var workforce_menu_title: Label
+var workforce_list: VBoxContainer
 var selected_market: Node3D = null
 var market_menu: Panel
 var market_menu_title: Label
@@ -319,7 +320,7 @@ func _update_clock(delta: float) -> void:
 	var elapsed_minutes := clock.advance(delta, GAME_MINUTES_PER_SECOND)
 	clock_label.text = "%s  %02d:%02d  x%d" % ["Night" if clock.is_night() else "Day", clock.hour(), clock.minute(), int(time_multiplier)]
 	if skip_night_button != null:
-		skip_night_button.visible = clock.is_night()
+		skip_night_button.visible = not settlement.night_shifts_allowed and not _is_work_time()
 	for clock_minute in elapsed_minutes:
 		_handle_clock_minute(clock_minute)
 
@@ -1329,6 +1330,7 @@ func _create_interface() -> void:
 	_create_market_menu(ui)
 	_create_warehouse_menu(ui)
 	_create_building_menu(ui)
+	_create_workforce_menu(ui)
 
 func _create_time_controls(ui: CanvasLayer) -> void:
 	var controls := HBoxContainer.new()
@@ -1346,8 +1348,8 @@ func _create_time_controls(ui: CanvasLayer) -> void:
 		button.custom_minimum_size = Vector2(56, 30)
 		button.pressed.connect(_set_time_multiplier.bind(multiplier))
 		controls.add_child(button)
-	# Appears once the working day is over, so the player can jump straight to
-	# the next morning without waiting through the night.
+	# Appears as soon as the selected workday is over, including the evening
+	# hours before the world is considered night.
 	skip_night_button = Button.new()
 	skip_night_button.text = "Skip night »"
 	skip_night_button.tooltip_text = "Jump to the next working morning (08:00)"
@@ -1371,10 +1373,14 @@ func _skip_night() -> void:
 
 func _set_workday_hours(hours: int) -> void:
 	settlement.workday_hours = hours
+	if skip_night_button != null:
+		skip_night_button.visible = not settlement.night_shifts_allowed and not _is_work_time()
 	_update_interface("Workday set to %d hours." % hours)
 
 func _set_night_shifts(enabled: bool) -> void:
 	settlement.night_shifts_allowed = enabled
+	if skip_night_button != null:
+		skip_night_button.visible = not settlement.night_shifts_allowed and not _is_work_time()
 	_update_interface("Night shifts %s." % ("allowed" if enabled else "disabled"))
 
 func _set_time_multiplier(multiplier: float) -> void:
@@ -1813,6 +1819,9 @@ func _set_manual_role(role: String) -> void:
 	_show_selected_citizen_menu()
 	_refresh_build_menu()
 	_update_interface("%s assigned to %s." % ["Hero" if selected_builder.is_hero else "Citizen", "automatic work" if role.is_empty() else role.replace("_", " ")])
+	_refresh_campfire_occupancy_button()
+	if workforce_menu != null and workforce_menu.visible:
+		_refresh_workforce_menu()
 
 func _is_role_available(role: String) -> bool:
 	match role:
@@ -1931,6 +1940,7 @@ func _close_context_menus() -> void:
 	market_menu.visible = false
 	warehouse_menu.visible = false
 	building_menu.visible = false
+	_hide_workforce_menu()
 	selected_house = null
 	selected_school = null
 	selected_materials_factory = null
@@ -3027,7 +3037,7 @@ func _create_campfire_menu(ui: CanvasLayer) -> void:
 	campfire_menu = Panel.new()
 	campfire_menu.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	campfire_menu.offset_left = -324.0
-	campfire_menu.offset_top = -780.0
+	campfire_menu.offset_top = -510.0
 	campfire_menu.offset_right = -20.0
 	campfire_menu.offset_bottom = -20.0
 	campfire_menu.visible = false
@@ -3073,36 +3083,17 @@ func _create_campfire_menu(ui: CanvasLayer) -> void:
 	night_button.toggled.connect(_set_night_shifts)
 	labour_controls.add_child(night_button)
 	
+	campfire_occupancy_button = Button.new()
+	campfire_occupancy_button.position = Vector2(16, 405)
+	campfire_occupancy_button.size = Vector2(272, 32)
+	campfire_occupancy_button.pressed.connect(_show_workforce_menu)
+	campfire_menu.add_child(campfire_occupancy_button)
 	var close_btn := Button.new()
 	close_btn.text = "Close Menu"
-	close_btn.position = Vector2(16, 405)
+	close_btn.position = Vector2(16, 447)
 	close_btn.size = Vector2(272, 28)
 	close_btn.pressed.connect(_close_context_menus)
 	campfire_menu.add_child(close_btn)
-
-	campfire_jobs_label = Label.new()
-	campfire_jobs_label.position = Vector2(16, 445)
-	campfire_jobs_label.size = Vector2(272, 120)
-	campfire_jobs_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	campfire_jobs_label.add_theme_font_size_override("font_size", 12)
-	campfire_menu.add_child(campfire_jobs_label)
-	campfire_worker_picker = OptionButton.new()
-	campfire_worker_picker.position = Vector2(16, 570)
-	campfire_worker_picker.size = Vector2(132, 28)
-	campfire_menu.add_child(campfire_worker_picker)
-	campfire_role_picker = OptionButton.new()
-	campfire_role_picker.position = Vector2(156, 570)
-	campfire_role_picker.size = Vector2(132, 28)
-	for role in ["", "construction", "forestry", "farming", "excavation", "gather_branches", "gather_grass", "gather_food", "gather_dew", "gather_water", "courier"]:
-		campfire_role_picker.add_item("Auto" if role.is_empty() else role.replace("_", " "))
-		campfire_role_picker.set_item_metadata(campfire_role_picker.item_count - 1, role)
-	campfire_menu.add_child(campfire_role_picker)
-	var apply_job := Button.new()
-	apply_job.text = "Set work"
-	apply_job.position = Vector2(16, 606)
-	apply_job.size = Vector2(272, 28)
-	apply_job.pressed.connect(_set_campfire_worker_role)
-	campfire_menu.add_child(apply_job)
 
 
 func _show_campfire_menu() -> void:
@@ -3112,6 +3103,167 @@ func _show_campfire_menu() -> void:
 	build_mode = ""
 	campfire_menu.visible = true
 	_refresh_campfire_menu()
+
+
+func _create_workforce_menu(ui: CanvasLayer) -> void:
+	workforce_menu = Panel.new()
+	workforce_menu.set_anchors_preset(Control.PRESET_CENTER)
+	workforce_menu.offset_left = -230.0
+	workforce_menu.offset_top = -255.0
+	workforce_menu.offset_right = 230.0
+	workforce_menu.offset_bottom = 255.0
+	workforce_menu.visible = false
+	ui.add_child(workforce_menu)
+	workforce_menu_title = Label.new()
+	workforce_menu_title.position = Vector2(18, 16)
+	workforce_menu_title.size = Vector2(424, 30)
+	workforce_menu_title.add_theme_font_size_override("font_size", 18)
+	workforce_menu.add_child(workforce_menu_title)
+	var scroll := ScrollContainer.new()
+	scroll.position = Vector2(18, 54)
+	scroll.size = Vector2(424, 390)
+	workforce_menu.add_child(scroll)
+	workforce_list = VBoxContainer.new()
+	workforce_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	workforce_list.add_theme_constant_override("separation", 6)
+	scroll.add_child(workforce_list)
+	var close_btn := Button.new()
+	close_btn.text = "Close"
+	close_btn.position = Vector2(18, 458)
+	close_btn.size = Vector2(424, 32)
+	close_btn.pressed.connect(_hide_workforce_menu)
+	workforce_menu.add_child(close_btn)
+
+
+func _show_workforce_menu() -> void:
+	if workforce_menu == null:
+		return
+	workforce_menu.visible = true
+	_refresh_workforce_menu()
+
+
+func _hide_workforce_menu() -> void:
+	if workforce_menu != null:
+		workforce_menu.visible = false
+
+
+func _refresh_campfire_occupancy_button() -> void:
+	if campfire_occupancy_button == null:
+		return
+	var total := 0
+	var occupied := 0
+	for citizen in citizens:
+		if citizen.is_player_controlled:
+			continue
+		total += 1
+		occupied += 1 if citizen.manual_role != "unassigned" else 0
+	campfire_occupancy_button.text = "Occupancy: %d/%d" % [occupied, total]
+
+
+func _workforce_roles() -> Array[String]:
+	return ["construction", "forestry", "farming", "excavation", "gather_branches", "gather_grass", "gather_food", "gather_dew", "gather_water", "courier"]
+
+
+func _workforce_role_label(role: String) -> String:
+	var labels := {
+		"construction": "Construction", "forestry": "Forestry", "farming": "Farming",
+		"excavation": "Excavation", "gather_branches": "Gather branches",
+		"gather_grass": "Gather grass", "gather_food": "Foraging",
+		"gather_dew": "Collect dew", "gather_water": "Collect water", "courier": "Courier"
+	}
+	return str(labels.get(role, role.replace("_", " ").capitalize()))
+
+
+func _workforce_role_limit(role: String) -> int:
+	match role:
+		"forestry": return sawmill_positions.size()
+		"farming": return farm_positions.size()
+		"gather_food": return forager_positions.size()
+		"courier": return warehouse_positions.size()
+	return -1
+
+
+func _workforce_role_count(role: String) -> int:
+	var count := 0
+	for citizen in citizens:
+		if not citizen.is_player_controlled and citizen.manual_role != "unassigned" and _work_role_for(citizen) == role:
+			count += 1
+	return count
+
+
+func _unassigned_worker_count() -> int:
+	var count := 0
+	for citizen in citizens:
+		count += 1 if not citizen.is_player_controlled and citizen.manual_role == "unassigned" else 0
+	return count
+
+
+func _refresh_workforce_menu() -> void:
+	if workforce_menu == null or workforce_list == null:
+		return
+	for child in workforce_list.get_children():
+		child.queue_free()
+	var total := 0
+	for citizen in citizens:
+		total += 1 if not citizen.is_player_controlled else 0
+	workforce_menu_title.text = "Workforce: %d residents" % total
+	for role in _workforce_roles():
+		var row := HBoxContainer.new()
+		row.custom_minimum_size = Vector2(424, 34)
+		var label := Label.new()
+		var assigned := _workforce_role_count(role)
+		var limit := _workforce_role_limit(role)
+		label.text = "%s  %d%s" % [_workforce_role_label(role), assigned, "/%d" % limit if limit >= 0 else ""]
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		label.tooltip_text = "No workplace is available" if limit == 0 else ""
+		row.add_child(label)
+		var remove_button := Button.new()
+		remove_button.text = "-"
+		remove_button.tooltip_text = "Make one resident unemployed"
+		remove_button.custom_minimum_size = Vector2(38, 30)
+		remove_button.disabled = assigned == 0
+		remove_button.pressed.connect(_remove_worker_from_role.bind(role))
+		row.add_child(remove_button)
+		var add_button := Button.new()
+		add_button.text = "+"
+		add_button.tooltip_text = "Assign an unemployed resident"
+		add_button.custom_minimum_size = Vector2(38, 30)
+		add_button.disabled = _unassigned_worker_count() == 0 or not _is_role_available(role) or (limit >= 0 and assigned >= limit)
+		add_button.pressed.connect(_assign_unemployed_worker.bind(role))
+		row.add_child(add_button)
+		workforce_list.add_child(row)
+	var separator := HSeparator.new()
+	workforce_list.add_child(separator)
+	var unassigned := Label.new()
+	unassigned.text = "Unemployed  %d" % _unassigned_worker_count()
+	unassigned.add_theme_font_size_override("font_size", 16)
+	workforce_list.add_child(unassigned)
+
+
+func _remove_worker_from_role(role: String) -> void:
+	for citizen in citizens:
+		if citizen.is_player_controlled or citizen.manual_role == "unassigned" or _work_role_for(citizen) != role:
+			continue
+		citizen.idle()
+		citizen.manual_role = "unassigned"
+		citizen.assigned_dig_site = null
+		_update_workers()
+		_refresh_workforce_menu()
+		_refresh_campfire_occupancy_button()
+		return
+
+
+func _assign_unemployed_worker(role: String) -> void:
+	if not _is_role_available(role) or (_workforce_role_limit(role) >= 0 and _workforce_role_count(role) >= _workforce_role_limit(role)):
+		return
+	for citizen in citizens:
+		if citizen.is_player_controlled or citizen.manual_role != "unassigned":
+			continue
+		selected_builder = citizen
+		_set_manual_role(role)
+		_refresh_workforce_menu()
+		_refresh_campfire_occupancy_button()
+		return
 
 
 func _refresh_campfire_menu() -> void:
@@ -3204,34 +3356,7 @@ func _refresh_campfire_menu() -> void:
 	if unhoused > 0:
 		campfire_requirements_label.text += "\nProblems:\n- Unhoused residents: %d. Settle them in a home before inviting anyone new.\n" % unhoused
 	campfire_advance_button.disabled = not can_advance
-	_refresh_campfire_jobs()
-
-func _refresh_campfire_jobs() -> void:
-	if campfire_jobs_label == null:
-		return
-	var lines := ["Workforce:"]
-	if campfire_worker_picker != null:
-		campfire_worker_picker.clear()
-	for citizen in citizens:
-		var role := citizen.manual_role if not citizen.manual_role.is_empty() else ("auto / " + _work_role_for(citizen))
-		lines.append("%s: %s" % [citizen.role_label(), role.replace("_", " ")])
-		if campfire_worker_picker != null and not citizen.is_player_controlled:
-			campfire_worker_picker.add_item(citizen.role_label())
-			campfire_worker_picker.set_item_metadata(campfire_worker_picker.item_count - 1, citizen.get_instance_id())
-	campfire_jobs_label.text = "\n".join(lines)
-
-func _set_campfire_worker_role() -> void:
-	if campfire_worker_picker == null or campfire_worker_picker.item_count == 0:
-		return
-	var id := int(campfire_worker_picker.get_item_metadata(campfire_worker_picker.selected))
-	for citizen in citizens:
-		if citizen.get_instance_id() != id:
-			continue
-		var role := str(campfire_role_picker.get_item_metadata(campfire_role_picker.selected))
-		selected_builder = citizen
-		_set_manual_role(role)
-		_refresh_campfire_jobs()
-		return
+	_refresh_campfire_occupancy_button()
 
 
 func _on_campfire_advance_pressed() -> void:
