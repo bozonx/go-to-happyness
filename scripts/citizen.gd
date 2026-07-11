@@ -14,7 +14,11 @@ const BUILD_WORK_DISTANCE := 2.0
 const GRAVITY := 18.0
 const AI_JUMP_VELOCITY := 7.6
 const AI_ESCAPE_JUMP_VELOCITY := 9.2
-const STUCK_TIME_BEFORE_JUMP := 0.3
+const STUCK_TIME_BEFORE_JUMP := 0.75
+const NAVIGATION_CELL_SIZE := 2.0
+const UNIT_SEPARATION_DISTANCE := 0.72
+const UNIT_SEPARATION_STRENGTH := 1.35
+const CONSTRUCTION_SLOT_SPACING := 0.42
 
 enum State { IDLE, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY }
 
@@ -58,6 +62,17 @@ var stuck_time := 0.0
 var jump_cooldown := 0.0
 
 func _ready() -> void:
+	add_to_group("citizens")
+	# Bodies collide with terrain, but not with each other. Local steering keeps
+	# citizens readable without allowing a crowded cell to block navigation.
+	collision_layer = 2
+	collision_mask = 1
+	motion_mode = CharacterBody3D.MOTION_MODE_GROUNDED
+	up_direction = Vector3.UP
+	floor_max_angle = deg_to_rad(52.0)
+	floor_snap_length = 0.38
+	floor_constant_speed = true
+	floor_stop_on_slope = true
 	var body_collision := CollisionShape3D.new()
 	var body_shape := CapsuleShape3D.new()
 	body_shape.radius = 0.28
@@ -67,6 +82,8 @@ func _ready() -> void:
 	add_child(body_collision)
 	var selector := Area3D.new()
 	selector.add_to_group("citizen_selector")
+	selector.collision_layer = 4
+	selector.collision_mask = 0
 	var selector_shape := CollisionShape3D.new()
 	var capsule_shape := CapsuleShape3D.new()
 	capsule_shape.radius = 0.38
@@ -217,22 +234,58 @@ func _move_directly_to(destination: Vector3, delta: float) -> bool:
 		global_position = Vector3(destination.x, global_position.y, destination.z)
 		return true
 	var direction := offset.normalized()
-	velocity.x = direction.x * WALK_SPEED
-	velocity.z = direction.z * WALK_SPEED
+	var separation := _same_cell_separation()
+	var desired_velocity := direction * WALK_SPEED + separation * UNIT_SEPARATION_STRENGTH
+	if desired_velocity.length() > WALK_SPEED:
+		desired_velocity = desired_velocity.normalized() * WALK_SPEED
+	velocity.x = desired_velocity.x
+	velocity.z = desired_velocity.z
 	jump_cooldown = maxf(0.0, jump_cooldown - delta)
-	if is_on_floor() and jump_cooldown <= 0.0 and (is_on_wall() or destination.y > global_position.y + 0.7):
-		_jump_out_of_obstacle(destination.y > global_position.y + 1.5)
 	var position_before_move := global_position
 	move_and_slide()
 	var horizontal_progress := Vector2(global_position.x - position_before_move.x, global_position.z - position_before_move.z).length()
 	if is_on_floor() and horizontal_progress < WALK_SPEED * delta * 0.15:
 		stuck_time += delta
-		if stuck_time >= STUCK_TIME_BEFORE_JUMP and jump_cooldown <= 0.0:
-			_jump_out_of_obstacle(destination.y > global_position.y + 0.5)
+		if stuck_time >= STUCK_TIME_BEFORE_JUMP and jump_cooldown <= 0.0 and _has_low_obstacle_ahead(direction):
+			_jump_out_of_obstacle(false)
 	else:
 		stuck_time = 0.0
 	look_at(global_position + direction, Vector3.UP)
 	return false
+
+func _same_cell_separation() -> Vector3:
+	var separation := Vector3.ZERO
+	var own_cell := _navigation_cell(global_position)
+	for node in get_tree().get_nodes_in_group("citizens"):
+		var other := node as Citizen
+		if other == null or other == self or _navigation_cell(other.global_position) != own_cell:
+			continue
+		var away := global_position - other.global_position
+		away.y = 0.0
+		var distance := away.length()
+		if distance >= UNIT_SEPARATION_DISTANCE:
+			continue
+		if distance < 0.01:
+			var angle := float(get_instance_id() % 16) * TAU / 16.0
+			away = Vector3(cos(angle), 0.0, sin(angle))
+		else:
+			away /= distance
+		separation += away * (1.0 - distance / UNIT_SEPARATION_DISTANCE)
+	return separation.limit_length(1.0)
+
+func _navigation_cell(world_position: Vector3) -> Vector2i:
+	return Vector2i(floori(world_position.x / NAVIGATION_CELL_SIZE), floori(world_position.z / NAVIGATION_CELL_SIZE))
+
+func _has_low_obstacle_ahead(direction: Vector3) -> bool:
+	var space_state := get_world_3d().direct_space_state
+	var forward := direction * 0.62
+	var low_query := PhysicsRayQueryParameters3D.create(global_position + Vector3.UP * 0.22, global_position + Vector3.UP * 0.22 + forward, collision_mask)
+	low_query.exclude = [get_rid()]
+	if space_state.intersect_ray(low_query).is_empty():
+		return false
+	var high_query := PhysicsRayQueryParameters3D.create(global_position + Vector3.UP * 0.9, global_position + Vector3.UP * 0.9 + forward, collision_mask)
+	high_query.exclude = [get_rid()]
+	return space_state.intersect_ray(high_query).is_empty()
 
 func _jump_out_of_obstacle(needs_escape_jump: bool) -> void:
 	velocity.y = AI_ESCAPE_JUMP_VELOCITY if needs_escape_jump else AI_JUMP_VELOCITY
@@ -318,9 +371,10 @@ func setup_navigation(next_pathfinder: Callable) -> void:
 func _work_position_for(site_position: Vector3) -> Vector3:
 	var offset := global_position - site_position
 	offset.y = 0.0
+	var slot := float(int(get_instance_id() % 3) - 1) * CONSTRUCTION_SLOT_SPACING
 	if absf(offset.x) > absf(offset.z):
-		return site_position + Vector3(BUILD_WORK_DISTANCE if offset.x >= 0.0 else -BUILD_WORK_DISTANCE, 0.0, 0.0)
-	return site_position + Vector3(0.0, 0.0, BUILD_WORK_DISTANCE if offset.z >= 0.0 else -BUILD_WORK_DISTANCE)
+		return site_position + Vector3(BUILD_WORK_DISTANCE if offset.x >= 0.0 else -BUILD_WORK_DISTANCE, 0.0, slot)
+	return site_position + Vector3(slot, 0.0, BUILD_WORK_DISTANCE if offset.z >= 0.0 else -BUILD_WORK_DISTANCE)
 
 func setup_specialization(next_specialization: String) -> void:
 	specialization = next_specialization
