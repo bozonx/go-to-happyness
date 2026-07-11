@@ -104,7 +104,7 @@ func assign_work(next_resource_type: String, source: Vector3, workplace: Vector3
 	active_role = "forestry" if next_resource_type == "wood" else "farming"
 	state = State.TO_TREE
 
-func _process(delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	if is_player_controlled:
 		return
 	_apply_gravity(delta)
