@@ -60,6 +60,7 @@ var path_destination := Vector3.INF
 var path_allows_destination_house := false
 var stuck_time := 0.0
 var jump_cooldown := 0.0
+var blocked_by_storage := false
 var training_role := ""
 var training_days_completed := 0
 var school_position := Vector3.ZERO
@@ -353,12 +354,14 @@ func deliver_excavation(next_resource_type: String, warehouse: Vector3) -> void:
 
 func storage_delivery_result(accepted: bool) -> void:
 	if accepted:
+		blocked_by_storage = false
 		if specialization == "courier":
 			state = State.IDLE
 			return
 		state = State.EXCAVATING if returning_to_excavation else State.TO_TREE
 		returning_to_excavation = false
 	else:
+		blocked_by_storage = true
 		go_home()
 
 func register_pending_resource(next_resource_type: String, amount: int) -> void:

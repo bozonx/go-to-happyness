@@ -30,7 +30,7 @@ var food := 20
 var soil := 0
 var clay := 0
 var wellbeing := 75
-var game_minutes := 7 * 60
+var game_minutes: float = 7.0 * 60.0
 const GAME_DAY_REAL_SECONDS := 300.0
 const GAME_MINUTES_PER_SECOND := 1440.0 / GAME_DAY_REAL_SECONDS
 var time_multiplier := 1.0
@@ -49,6 +49,8 @@ var school_positions: Array[Vector3] = []
 var tree_positions: Array[Vector3] = []
 var citizens: Array[Citizen] = []
 var camera: Camera3D
+var sun: DirectionalLight3D
+var world_environment: Environment
 var camera_target := Vector3.ZERO
 var camera_distance := 30.0
 var camera_yaw := 42.0
@@ -115,6 +117,7 @@ func _process(delta: float) -> void:
 	_update_construction(delta)
 	_update_tent_dismantle(delta)
 	_update_clock(delta)
+	_update_daylight()
 	_update_canteen_delivery()
 	if not _is_night():
 		_update_couriers()
@@ -123,7 +126,7 @@ func _process(delta: float) -> void:
 
 func _create_world() -> void:
 	var environment := WorldEnvironment.new()
-	var world_environment := Environment.new()
+	world_environment = Environment.new()
 	world_environment.background_mode = Environment.BG_COLOR
 	world_environment.background_color = Color("78a9c5")
 	world_environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
@@ -133,11 +136,12 @@ func _create_world() -> void:
 	environment.environment = world_environment
 	add_child(environment)
 
-	var sun := DirectionalLight3D.new()
+	sun = DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-52.0, -32.0, 0.0)
 	sun.light_energy = 1.2
 	sun.shadow_enabled = true
 	add_child(sun)
+	_update_daylight()
 
 	camera = Camera3D.new()
 	add_child(camera)
@@ -340,7 +344,7 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	build_menu = Panel.new()
 	build_menu.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	build_menu.offset_left = -324.0
-	build_menu.offset_top = -500.0
+	build_menu.offset_top = -540.0
 	build_menu.offset_right = -20.0
 	build_menu.offset_bottom = -20.0
 	build_menu.visible = false
@@ -661,6 +665,8 @@ func _show_selected_citizen_menu() -> void:
 	if selected_builder == null:
 		return
 	var assignment := "Auto" if selected_builder.manual_role.is_empty() else selected_builder.manual_role.capitalize()
+	if not selected_builder.training_role.is_empty():
+		assignment = "Training %s %d/10" % [selected_builder.training_role.capitalize(), selected_builder.training_days_completed]
 	var home_label := "Tent" if selected_builder.home == tent else "House"
 	var effect_label := "Meal buff" if selected_builder.buffs.has("canteen_meal") else ("Tent debuff" if selected_builder.debuffs.has("tent") else "None")
 	build_menu_title.text = "%s  Sat: %d/%d%%  Food: %d%%\nHome: %s  Effect: %s  Task: %s\nBuild %.1f Wood %.1f Farm %.1f Dig %.1f" % [selected_builder.role_label(), roundi(selected_builder.satisfaction), roundi(selected_builder.get_satisfaction_cap()), roundi(selected_builder.hunger), home_label, effect_label, assignment, float(selected_builder.skills.construction), float(selected_builder.skills.forestry), float(selected_builder.skills.farming), float(selected_builder.skills.excavation)]
@@ -1190,6 +1196,12 @@ func _update_workers() -> void:
 		var citizen := citizens[index]
 		if citizen.is_player_controlled:
 			continue
+		if citizen.state in [Citizen.State.TO_CANTEEN, Citizen.State.EATING, Citizen.State.TO_FOOD_PICKUP, Citizen.State.TO_CANTEEN_DELIVERY, Citizen.State.COURIER_TO_WORKER, Citizen.State.COURIER_TO_WAREHOUSE, Citizen.State.WAITING_COURIER]:
+			continue
+		if citizen.blocked_by_storage:
+			if _stored_resources() >= _warehouse_capacity():
+				continue
+			citizen.blocked_by_storage = false
 		if citizen.specialization == "cook":
 			if is_instance_valid(canteen):
 				citizen.assign_canteen_work(canteen_position)
@@ -1241,12 +1253,33 @@ func _has_courier() -> bool:
 
 func _has_cook() -> bool:
 	for citizen in citizens:
-		if citizen.specialization == "cook":
+		if citizen.specialization == "cook" and not citizen.is_player_controlled and is_instance_valid(canteen) and citizen.global_position.distance_to(canteen_position) <= 2.2:
 			return true
 	return false
 
+func _update_daylight() -> void:
+	if sun == null or world_environment == null:
+		return
+	var hour := game_minutes / 60.0
+	var solar_height := sin((hour - 6.0) / 12.0 * PI)
+	var direct_light := smoothstep(0.0, 0.28, solar_height)
+	var twilight := 1.0 - smoothstep(0.0, 0.28, absf(solar_height))
+	var night_color := Color("101a2b")
+	var twilight_color := Color("d87850")
+	var day_color := Color("78a9c5")
+	if solar_height <= 0.0:
+		world_environment.background_color = night_color.lerp(twilight_color, twilight)
+	else:
+		world_environment.background_color = twilight_color.lerp(day_color, direct_light)
+	world_environment.ambient_light_color = Color("4b5872").lerp(Color("d7ebef"), maxf(direct_light, twilight * 0.35))
+	world_environment.ambient_light_energy = lerpf(0.18, 0.65, maxf(direct_light, twilight * 0.3))
+	sun.rotation_degrees = Vector3(-90.0 + (hour - 12.0) * 15.0, -32.0, 0.0)
+	sun.light_color = Color("f08a5d").lerp(Color("fff2d1"), direct_light)
+	sun.light_energy = lerpf(0.0, 1.2, direct_light)
+	sun.shadow_enabled = direct_light > 0.05
+
 func _update_clock(delta: float) -> void:
-	game_minutes = posmod(game_minutes + delta * GAME_MINUTES_PER_SECOND, 24.0 * 60.0)
+	game_minutes = fposmod(game_minutes + delta * GAME_MINUTES_PER_SECOND, 24.0 * 60.0)
 	var current_minute := int(game_minutes)
 	var hour := current_minute / 60
 	var minute := current_minute % 60
@@ -1332,9 +1365,11 @@ func _update_canteen_delivery() -> void:
 	pending_canteen_delivery = true
 	carrier.deliver_food_to_canteen(warehouse_positions[0], canteen_position, amount)
 
-func _on_canteen_delivery_finished(_worker: Citizen, amount: int) -> void:
+func _on_canteen_delivery_finished(worker: Citizen, amount: int) -> void:
 	canteen_food += amount
 	pending_canteen_delivery = false
+	if worker.specialization == "cook":
+		worker.assign_canteen_work(canteen_position)
 	_update_interface("Canteen received %d food. Stock: %d." % [amount, canteen_food])
 
 func _update_couriers() -> void:
@@ -1430,7 +1465,8 @@ func _stored_resources() -> int:
 	return wood + food + soil + clay
 
 func _warehouse_capacity() -> int:
-	return warehouse_positions.size() * WAREHOUSE_CAPACITY
+	# Starting supplies are kept at the tent until the first warehouse is built.
+	return maxi(WAREHOUSE_CAPACITY, warehouse_positions.size() * WAREHOUSE_CAPACITY)
 
 func _update_camera(delta: float) -> void:
 	var move_direction := Vector3.ZERO
