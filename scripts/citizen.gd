@@ -24,6 +24,8 @@ const SIDESTEP_DURATION := 0.65
 const CONSTRUCTION_SLOT_SPACING := 0.42
 const CONSTRUCTION_APPROACH_DISTANCE := 1.75
 const NAVIGATION_TARGET_CLEARANCE := 0.48
+const ROUTE_PROGRESS_EPSILON := 0.06
+const ROUTE_RETRY_INTERVAL := 2.0
 
 enum State { IDLE, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, TO_GATHER, GATHERING }
 
@@ -61,6 +63,7 @@ var delivery_amount := 0
 var canteen_position := Vector3.ZERO
 var construction_position := Vector3.ZERO
 var pathfinder: Callable
+var delivery_position_resolver: Callable
 var movement_path: Array[Vector3] = []
 var path_destination := Vector3.INF
 var navigation_target_position := Vector3.INF
@@ -68,6 +71,9 @@ var path_allows_destination_house := false
 var navigation_agent: NavigationAgent3D
 var stuck_time := 0.0
 var recovery_repath_done := false
+var route_no_progress_time := 0.0
+var route_best_distance := INF
+var route_recovery_attempt := 0
 var jump_cooldown := 0.0
 var sidestep_time := 0.0
 var sidestep_direction := Vector3.ZERO
@@ -281,6 +287,7 @@ func _process_workplace_work(delta: float) -> void:
 		state = State.TO_WAREHOUSE
 
 func _process_resource_delivery(delta: float) -> void:
+	_refresh_warehouse_position()
 	if _move_to(warehouse_position, delta):
 		state = State.IDLE
 		resource_delivered.emit(self, resource_type, carried_amount)
@@ -321,6 +328,7 @@ func _process_sawmill_pickup(delta: float) -> void:
 		sawmill_boards_collected.emit(self, workplace_position)
 
 func _process_courier_delivery(delta: float) -> void:
+	_refresh_warehouse_position()
 	if _move_to(warehouse_position, delta):
 		state = State.IDLE
 		resource_delivered.emit(self, courier_resource_type, carried_amount)
@@ -347,6 +355,7 @@ func _process_eating(delta: float) -> void:
 		meal_finished.emit(self)
 
 func _process_food_pickup(delta: float) -> void:
+	_refresh_warehouse_position()
 	if _move_to(warehouse_position, delta):
 		state = State.TO_CANTEEN_DELIVERY
 
@@ -399,17 +408,21 @@ func _process_relaxing(delta: float) -> void:
 func _move_to(destination: Vector3, delta: float, may_enter_destination_house := false) -> bool:
 	if navigation_agent != null and navigation_agent.get_navigation_map().is_valid():
 		if path_destination.distance_to(destination) > 0.08:
-			path_destination = destination
-			navigation_target_position = _accessible_navigation_target(destination)
+			_reset_route(destination)
+			navigation_target_position = _accessible_navigation_target(destination, 0)
 			navigation_agent.target_position = navigation_target_position
 		for ignored_start_position in range(2):
 			var next_path_position := navigation_agent.get_next_path_position()
 			if navigation_agent.is_navigation_finished():
-				return true
+				if _has_arrived_at_navigation_target():
+					return true
+				_recover_idle_route(delta)
+				return false
 			var path_offset := next_path_position - global_position
 			path_offset.y = 0.0
 			if path_offset.length() > 0.08:
 				return _move_directly_to(next_path_position, delta)
+		_recover_idle_route(delta)
 		return false
 	if path_destination.distance_to(destination) > 0.08 or path_allows_destination_house != may_enter_destination_house:
 		path_destination = destination
@@ -439,8 +452,11 @@ func _move_directly_to(destination: Vector3, delta: float) -> bool:
 	velocity.z = desired_velocity.z
 	jump_cooldown = maxf(0.0, jump_cooldown - delta)
 	var position_before_move := global_position
+	var distance_before_move := offset.length()
 	move_and_slide()
 	var horizontal_progress := Vector2(global_position.x - position_before_move.x, global_position.z - position_before_move.z).length()
+	var distance_after_move := Vector2(destination.x - global_position.x, destination.z - global_position.z).length()
+	_update_route_progress(distance_before_move, distance_after_move, delta, direction)
 	if is_on_floor() and horizontal_progress < WALK_SPEED * delta * 0.15:
 		stuck_time += delta
 		if jump_cooldown <= 0.0:
@@ -480,21 +496,67 @@ func _jump_out_of_obstacle() -> void:
 
 func _force_repath() -> void:
 	if navigation_agent != null:
-		navigation_target_position = _accessible_navigation_target(path_destination)
+		route_recovery_attempt += 1
+		navigation_target_position = _accessible_navigation_target(path_destination, route_recovery_attempt)
 		navigation_agent.target_position = navigation_target_position
 	recovery_repath_done = true
 
-func _accessible_navigation_target(destination: Vector3) -> Vector3:
+func _accessible_navigation_target(destination: Vector3, attempt: int) -> Vector3:
 	var navigation_map := navigation_agent.get_navigation_map()
 	var closest_point := NavigationServer3D.map_get_closest_point(navigation_map, destination)
 	var blocked_offset := closest_point - destination
 	blocked_offset.y = 0.0
-	if blocked_offset.length() <= 0.05:
+	if blocked_offset.length() <= 0.05 and attempt == 0:
 		return closest_point
 	# Keep the capsule away from the exact navmesh boundary, which normally
 	# coincides with a building wall or a tree cell.
-	var cleared_target := closest_point + blocked_offset.normalized() * NAVIGATION_TARGET_CLEARANCE
-	return NavigationServer3D.map_get_closest_point(navigation_map, cleared_target)
+	var outward := blocked_offset.normalized() if blocked_offset.length() > 0.05 else (global_position - destination).normalized()
+	if outward.is_zero_approx():
+		outward = Vector3.FORWARD
+	var candidates: Array[Vector3] = []
+	for direction in [outward, Vector3(-outward.z, 0.0, outward.x), Vector3(outward.z, 0.0, -outward.x), -outward]:
+		var candidate := NavigationServer3D.map_get_closest_point(navigation_map, closest_point + direction * NAVIGATION_TARGET_CLEARANCE)
+		if not NavigationServer3D.map_get_path(navigation_map, global_position, candidate, true).is_empty():
+			candidates.append(candidate)
+	if candidates.is_empty():
+		return closest_point
+	return candidates[attempt % candidates.size()]
+
+func _has_arrived_at_navigation_target() -> bool:
+	var offset := navigation_target_position - global_position
+	offset.y = 0.0
+	return offset.length() <= maxf(0.45, navigation_agent.target_desired_distance + 0.2)
+
+func _reset_route(destination: Vector3) -> void:
+	path_destination = destination
+	route_no_progress_time = 0.0
+	route_best_distance = INF
+	route_recovery_attempt = 0
+	recovery_repath_done = false
+
+func _update_route_progress(distance_before: float, distance_after: float, delta: float, direction: Vector3) -> void:
+	if distance_after + ROUTE_PROGRESS_EPSILON < minf(distance_before, route_best_distance):
+		route_best_distance = distance_after
+		route_no_progress_time = 0.0
+		return
+	route_best_distance = minf(route_best_distance, distance_after)
+	route_no_progress_time += delta
+	if route_no_progress_time < ROUTE_RETRY_INTERVAL:
+		return
+	route_no_progress_time = 0.0
+	if route_recovery_attempt % 2 == 0:
+		_force_repath()
+	else:
+		route_recovery_attempt += 1
+		_start_sidestep(direction)
+
+func _recover_idle_route(delta: float) -> void:
+	var direction := navigation_target_position - global_position
+	direction.y = 0.0
+	if direction.is_zero_approx():
+		direction = Vector3.FORWARD
+	var distance := direction.length()
+	_update_route_progress(distance, distance, delta, direction.normalized())
 
 func _start_sidestep(forward: Vector3) -> void:
 	var side_sign := -1.0 if get_instance_id() % 2 == 0 else 1.0
@@ -718,8 +780,16 @@ func finish_school_day() -> void:
 func is_building_site(site: Node3D) -> bool:
 	return not is_player_controlled and state == State.CONSTRUCTING and construction_site == site and global_position.distance_to(construction_position) <= 0.7
 
-func setup_navigation(next_pathfinder: Callable) -> void:
+func setup_navigation(next_pathfinder: Callable, next_delivery_position_resolver := Callable()) -> void:
 	pathfinder = next_pathfinder
+	delivery_position_resolver = next_delivery_position_resolver
+
+func _refresh_warehouse_position() -> void:
+	if not delivery_position_resolver.is_valid():
+		return
+	var resolved: Vector3 = delivery_position_resolver.call(global_position)
+	if resolved != Vector3.INF and warehouse_position.distance_to(resolved) > 0.08:
+		warehouse_position = resolved
 
 func setup_goap(simulation: Node, worker_index: int) -> void:
 	goap_brain = CitizenGoapBrain.new()
