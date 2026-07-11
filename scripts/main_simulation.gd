@@ -151,12 +151,15 @@ var build_category := ""
 var build_buttons: Array[Button] = []
 var role_buttons: Array[Button] = []
 var workforce: WorkforceCoordinator
+var sawmills: SawmillService
 
 
 func _ready() -> void:
 	workforce = WorkforceCoordinator.new()
 	workforce.configure(self)
 	add_child(workforce)
+	sawmills = SawmillService.new()
+	sawmills.configure(self)
 	_create_world()
 	_create_interface()
 	_create_forest()
@@ -475,65 +478,25 @@ func _sawmill_key(position_on_board: Vector3) -> Vector2i:
 	return _cell_from_position(position_on_board)
 
 func _sawmill_stock(position_on_board: Vector3) -> Dictionary:
-	var key := _sawmill_key(position_on_board)
-	if not sawmill_stocks.has(key):
-		sawmill_stocks[key] = {"logs": 0, "boards": 0, "process_time": 0.0, "last_courier_pickup": Time.get_ticks_msec() / 1000.0}
-	return sawmill_stocks[key]
+	return sawmills.stock_at(position_on_board)
 
 func _store_sawmill_stock(position_on_board: Vector3, stock: Dictionary) -> void:
-	sawmill_stocks[_sawmill_key(position_on_board)] = stock
+	sawmills.store(position_on_board, stock)
 
 func _on_logs_delivered(worker: Citizen, sawmill_position: Vector3, amount: int) -> void:
-	var stock := _sawmill_stock(sawmill_position)
-	stock.logs = int(stock.logs) + amount
-	_store_sawmill_stock(sawmill_position, stock)
-	_decide_forestry_delivery(worker, sawmill_position)
+	sawmills.accept_logs(worker, sawmill_position, amount)
 
 func _update_sawmills(delta: float) -> void:
-	for sawmill_position in sawmill_positions:
-		var stock := _sawmill_stock(sawmill_position)
-		if int(stock.logs) <= 0:
-			stock.process_time = 0.0
-			_store_sawmill_stock(sawmill_position, stock)
-			continue
-		if float(stock.process_time) <= 0.0:
-			stock.process_time = SAWMILL_PROCESS_DURATION
-		stock.process_time = float(stock.process_time) - delta
-		if float(stock.process_time) <= 0.0:
-			stock.logs = int(stock.logs) - 1
-			stock.boards = int(stock.boards) + 1
-			stock.process_time = SAWMILL_PROCESS_DURATION if int(stock.logs) > 0 else 0.0
-		_store_sawmill_stock(sawmill_position, stock)
+	sawmills.tick(delta)
 
 func _decide_forestry_delivery(worker: Citizen, sawmill_position: Vector3) -> void:
-	var stock := _sawmill_stock(sawmill_position)
-	var board_count := int(stock.boards)
-	var courier_late := Time.get_ticks_msec() / 1000.0 - float(stock.last_courier_pickup) >= COURIER_LATE_SECONDS
-	if board_count > 0 and (not _has_courier() or (board_count >= SAWMILL_WORKER_DELIVERY_THRESHOLD and courier_late)):
-		var amount := mini(board_count, SAWMILL_WORKER_DELIVERY_THRESHOLD)
-		stock.boards = board_count - amount
-		_store_sawmill_stock(sawmill_position, stock)
-		worker.deliver_sawmill_boards(amount)
-		return
-	_assign_next_forestry_tree(worker)
+	sawmills.decide_delivery(worker, sawmill_position)
 
 func _on_sawmill_boards_collected(courier: Citizen, sawmill_position: Vector3) -> void:
-	var stock := _sawmill_stock(sawmill_position)
-	var amount := int(stock.boards)
-	stock.boards = 0
-	stock.last_courier_pickup = Time.get_ticks_msec() / 1000.0
-	_store_sawmill_stock(sawmill_position, stock)
-	courier.collect_sawmill_boards(amount)
+	sawmills.collect_boards(courier, sawmill_position)
 
 func _sawmill_with_boards() -> Vector3:
-	var best_position := Vector3.INF
-	var highest_board_count := 0
-	for sawmill_position in sawmill_positions:
-		var board_count := int(_sawmill_stock(sawmill_position).boards)
-		if board_count > highest_board_count:
-			highest_board_count = board_count
-			best_position = sawmill_position
-	return best_position
+	return sawmills.position_with_boards()
 
 func _reserve_closest_tree_for_sawmill(worker: Citizen, sawmill_position: Vector3) -> Vector3:
 	for cell in tree_reservations.keys():
