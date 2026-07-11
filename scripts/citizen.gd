@@ -1,5 +1,5 @@
 class_name Citizen
-extends Node3D
+extends CharacterBody3D
 
 signal resource_delivered(resource_type: String, amount: int)
 signal excavation_cycle(worker: Citizen, site: Node3D, efficiency: float)
@@ -11,6 +11,7 @@ const WALK_SPEED := 2.2
 const WORK_DURATION := 1.4
 const COURIER_WAIT_DURATION := 8.0
 const BUILD_WORK_DISTANCE := 2.0
+const GRAVITY := 18.0
 
 enum State { IDLE, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY }
 
@@ -52,6 +53,13 @@ var path_destination := Vector3.INF
 var path_allows_destination_house := false
 
 func _ready() -> void:
+	var body_collision := CollisionShape3D.new()
+	var body_shape := CapsuleShape3D.new()
+	body_shape.radius = 0.28
+	body_shape.height = 1.25
+	body_collision.shape = body_shape
+	body_collision.position.y = 0.63
+	add_child(body_collision)
 	var selector := Area3D.new()
 	selector.add_to_group("citizen_selector")
 	var selector_shape := CollisionShape3D.new()
@@ -99,6 +107,7 @@ func assign_work(next_resource_type: String, source: Vector3, workplace: Vector3
 func _process(delta: float) -> void:
 	if is_player_controlled:
 		return
+	_apply_gravity(delta)
 	_update_effects(delta)
 	_update_satisfaction(delta)
 	match state:
@@ -203,9 +212,21 @@ func _move_directly_to(destination: Vector3, delta: float) -> bool:
 		global_position = Vector3(destination.x, global_position.y, destination.z)
 		return true
 	var direction := offset.normalized()
-	global_position += direction * WALK_SPEED * delta
+	velocity.x = direction.x * WALK_SPEED
+	velocity.z = direction.z * WALK_SPEED
+	move_and_slide()
 	look_at(global_position + direction, Vector3.UP)
 	return false
+
+func _apply_gravity(delta: float) -> void:
+	if not is_on_floor():
+		velocity.y -= GRAVITY * delta
+	else:
+		velocity.y = -0.5
+	if state == State.IDLE or state == State.RESTING:
+		velocity.x = 0.0
+		velocity.z = 0.0
+		move_and_slide()
 
 func _work(delta: float) -> bool:
 	work_time -= delta

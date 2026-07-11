@@ -13,6 +13,9 @@ const HOUSE_CAPACITY := 2
 const TENT_CAPACITY := 5
 const CONSTRUCTION_DURATION := 4.0
 const PLAYER_SPEED := 4.2
+const PLAYER_SPRINT_MULTIPLIER := 1.8
+const PLAYER_JUMP_VELOCITY := 6.5
+const PLAYER_GRAVITY := 18.0
 const PLAYER_EYE_HEIGHT := 1.18
 const HARVEST_DURATION := 1.25
 const INTERACTION_RANGE := CELL_SIZE
@@ -32,6 +35,7 @@ var time_multiplier := 1.0
 var previous_clock_minute := -1
 var active_meal_hour := -1
 var selected_cell := Vector2i(0, 0)
+var selected_world_position := Vector3.ZERO
 var build_mode := ""
 var placed_buildings: Dictionary = {}
 var house_cells: Dictionary = {}
@@ -86,6 +90,7 @@ var clock_label: Label
 var tent_dismantle_progress := -1.0
 var voxel_terrain: VoxelLodTerrain
 var voxel_tool: VoxelTool
+var building_positions: Array[Vector3] = []
 
 func _ready() -> void:
 	_create_world()
@@ -131,51 +136,23 @@ func _create_world() -> void:
 	camera = Camera3D.new()
 	add_child(camera)
 	_update_camera_position()
-	_create_ground()
 	_create_voxel_terrain()
-	_create_grid()
 	_create_selection_marker()
 
-func _create_ground() -> void:
-	var ground := MeshInstance3D.new()
-	var ground_mesh := BoxMesh.new()
-	ground_mesh.size = Vector3(BOARD_CELLS * CELL_SIZE, 0.25, BOARD_CELLS * CELL_SIZE)
-	ground.mesh = ground_mesh
-	ground.position.y = -0.125
-	var material := StandardMaterial3D.new()
-	material.albedo_color = Color("5f8953")
-	material.roughness = 0.95
-	ground.material_override = material
-	ground.visible = false  # воксельный террейн заменяет видимую землю; коллайдер ниже остаётся плоскостью застройки
-	add_child(ground)
-
-	var ground_body := StaticBody3D.new()
-	var collision := CollisionShape3D.new()
-	var shape := BoxShape3D.new()
-	shape.size = Vector3(BOARD_CELLS * CELL_SIZE, 0.25, BOARD_CELLS * CELL_SIZE)
-	collision.shape = shape
-	collision.position.y = -0.125
-	ground_body.add_child(collision)
-	add_child(ground_body)
-
 func _create_voxel_terrain() -> void:
-	# Гладкий SDF-террейн поверх плоскости застройки: только визуал + копание.
-	# Коллизии выключены, поэтому рейкасты выбора клеток/юнитов бьют в плоский пол на y=0,
-	# и вся сеточная логика игры работает как раньше.
 	voxel_terrain = VoxelLodTerrain.new()
 	voxel_terrain.mesher = VoxelMesherTransvoxel.new()
 	var generator := VoxelGeneratorNoise2D.new()
 	var noise := FastNoiseLite.new()
 	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
-	noise.frequency = 0.05  # мягкие пологие волны на масштабе доски
+	noise.frequency = 0.025
 	generator.noise = noise
 	generator.channel = VoxelBuffer.CHANNEL_SDF
-	# Поверхность остаётся чуть ниже y=0: игровые объекты и сетка продолжают стоять на плоскости застройки.
-	generator.height_start = -0.34
-	generator.height_range = 0.16
+	generator.height_start = -0.15
+	generator.height_range = 0.3
 	voxel_terrain.generator = generator
-	voxel_terrain.generate_collisions = false
-	voxel_terrain.view_distance = 96
+	voxel_terrain.generate_collisions = true
+	voxel_terrain.view_distance = 192
 	var material := StandardMaterial3D.new()
 	material.albedo_color = Color("5f8953")
 	material.roughness = 0.95
@@ -186,28 +163,10 @@ func _create_voxel_terrain() -> void:
 	voxel_tool = voxel_terrain.get_voxel_tool()
 	voxel_tool.channel = VoxelBuffer.CHANNEL_SDF
 
-func _create_grid() -> void:
-	var grid := ImmediateMesh.new()
-	var half_size := BOARD_CELLS * CELL_SIZE * 0.5
-	var grid_material := StandardMaterial3D.new()
-	grid_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	grid_material.albedo_color = Color(0.16, 0.27, 0.16, 0.5)
-	grid.surface_begin(Mesh.PRIMITIVE_LINES, grid_material)
-	for line in range(BOARD_CELLS + 1):
-		var coordinate := -half_size + line * CELL_SIZE
-		grid.surface_add_vertex(Vector3(coordinate, 0.02, -half_size))
-		grid.surface_add_vertex(Vector3(coordinate, 0.02, half_size))
-		grid.surface_add_vertex(Vector3(-half_size, 0.02, coordinate))
-		grid.surface_add_vertex(Vector3(half_size, 0.02, coordinate))
-	grid.surface_end()
-	var grid_instance := MeshInstance3D.new()
-	grid_instance.mesh = grid
-	add_child(grid_instance)
-
 func _create_selection_marker() -> void:
 	selection_marker = MeshInstance3D.new()
 	var marker_mesh := BoxMesh.new()
-	marker_mesh.size = Vector3(CELL_SIZE - 0.08, 0.04, CELL_SIZE - 0.08)
+	marker_mesh.size = Vector3(1.7, 0.04, 1.7)
 	selection_marker.mesh = marker_mesh
 	selection_material = StandardMaterial3D.new()
 	selection_material.albedo_color = Color(0.95, 0.79, 0.24, 0.55)
@@ -216,7 +175,7 @@ func _create_selection_marker() -> void:
 	selection_marker.material_override = selection_material
 	selection_marker.visible = false
 	add_child(selection_marker)
-	_move_selection(Vector2i(0, 0))
+	_move_selection(Vector3.ZERO)
 
 func _create_forest() -> void:
 	var cells := [Vector2i(-5, -4), Vector2i(-4, -5), Vector2i(-5, 4), Vector2i(4, -5), Vector2i(5, 4), Vector2i(4, 5)]
@@ -255,6 +214,7 @@ func _create_tree(position_on_board: Vector3) -> void:
 func _create_starting_tent() -> void:
 	tent = Node3D.new()
 	tent.position = _cell_center(tent_cell)
+	building_positions.append(tent.position)
 	tent.set_meta("is_tent", true)
 	placed_buildings[tent_cell] = "tent"
 	house_cells[tent_cell] = true
@@ -506,16 +466,17 @@ func _start_dig_assignment() -> void:
 	build_mode = ""
 	selection_marker.visible = true
 	selection_material.albedo_color = Color(0.65, 0.42, 0.2, 0.55)
-	_move_selection(selected_cell)
-	_update_interface("Choose a clear cell for excavation.")
+	_move_selection(selected_world_position)
+	_update_interface("Choose a clear point on the voxel terrain for excavation.")
 
-func _place_dig_site(cell: Vector2i) -> void:
-	if not _can_excavate(cell):
-		_update_interface("Excavation is not allowed on this cell.")
+func _place_dig_site(world_position: Vector3) -> void:
+	var cell := _placement_key(world_position)
+	if not _can_excavate(world_position):
+		_update_interface("Excavation is not allowed at this point.")
 		return
 	var site := _dig_site_at(cell)
 	if site.is_empty():
-		site = _create_dig_site(cell)
+		site = _create_dig_site(cell, world_position)
 	selected_builder.assigned_dig_site = site.node
 	selected_builder.manual_role = "excavation"
 	dig_mode = false
@@ -524,8 +485,9 @@ func _place_dig_site(cell: Vector2i) -> void:
 	_show_selected_citizen_menu()
 	_update_interface("Excavation assigned. Soil and clay will be exposed before stone.")
 
-func _can_excavate(cell: Vector2i) -> bool:
-	return not placed_buildings.has(cell) and not tree_cells.has(cell) and not exhausted_dig_cells.has(cell)
+func _can_excavate(world_position: Vector3) -> bool:
+	var cell := _placement_key(world_position)
+	return not exhausted_dig_cells.has(cell) and _is_clear_of_objects(world_position, 1.0)
 
 func _dig_site_at(cell: Vector2i) -> Dictionary:
 	for site in dig_sites:
@@ -533,9 +495,9 @@ func _dig_site_at(cell: Vector2i) -> Dictionary:
 			return site
 	return {}
 
-func _create_dig_site(cell: Vector2i) -> Dictionary:
+func _create_dig_site(cell: Vector2i, world_position: Vector3) -> Dictionary:
 	var site_node := Node3D.new()
-	site_node.position = _cell_center(cell)
+	site_node.position = world_position
 	add_child(site_node)
 	var pit := MeshInstance3D.new()
 	var pit_mesh := CylinderMesh.new()
@@ -558,8 +520,8 @@ func _select_build_mode(next_mode: String) -> void:
 		return
 	build_mode = next_mode
 	selection_marker.visible = true
-	_move_selection(selected_cell)
-	_update_interface("%s selected. Choose a valid cell." % build_mode.capitalize())
+	_move_selection(selected_world_position)
+	_update_interface("%s selected. Choose a clear point on the voxel terrain." % build_mode.capitalize())
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.keycode == KEY_R and event.pressed and not event.echo:
@@ -569,7 +531,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if is_first_person:
 		if event is InputEventMouseMotion:
 			player_yaw -= event.relative.x * 0.0035
-			player_pitch = clampf(player_pitch - event.relative.y * 0.003, -70.0, 65.0)
+			player_pitch = clampf(player_pitch - event.relative.y * 0.003, deg_to_rad(-70.0), deg_to_rad(65.0))
 		elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 			_start_interaction()
 		elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
@@ -592,18 +554,18 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif is_panning_camera:
 			_pan_camera(event.relative)
 		elif selected_builder != null and (not build_mode.is_empty() or dig_mode):
-			var cell: Variant = _cell_at_screen_position(event.position)
-			if cell != null:
-				_move_selection(cell)
+			var terrain_point: Variant = _terrain_point_at_screen_position(event.position)
+			if terrain_point != null:
+				_move_selection(terrain_point)
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		if selected_builder != null and dig_mode:
-			var dig_cell: Variant = _cell_at_screen_position(event.position)
-			if dig_cell != null:
-				_place_dig_site(dig_cell)
+			var dig_point: Variant = _terrain_point_at_screen_position(event.position)
+			if dig_point != null:
+				_place_dig_site(dig_point)
 		elif selected_builder != null and not build_mode.is_empty():
-			var cell: Variant = _cell_at_screen_position(event.position)
-			if cell != null:
-				_place_building(cell)
+			var build_point: Variant = _terrain_point_at_screen_position(event.position)
+			if build_point != null:
+				_place_building(build_point)
 		else:
 			_select_citizen_at(event.position)
 
@@ -676,7 +638,7 @@ func _toggle_first_person() -> void:
 	selection_marker.visible = false
 	build_menu.visible = false
 	player_yaw = player_citizen.rotation.y
-	player_pitch = -8.0
+	player_pitch = deg_to_rad(-8.0)
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	_update_interface("First-person control enabled. Gather wood and bring it to a warehouse.")
 
@@ -691,11 +653,22 @@ func _update_player_control(delta: float) -> void:
 	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN): move_direction -= forward
 	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT): move_direction += right
 	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT): move_direction -= right
+	var speed := PLAYER_SPEED * (PLAYER_SPRINT_MULTIPLIER if Input.is_key_pressed(KEY_SHIFT) else 1.0)
 	if not move_direction.is_zero_approx():
-		player_citizen.global_position += move_direction.normalized() * PLAYER_SPEED * delta
-		player_citizen.global_position.x = clampf(player_citizen.global_position.x, -11.3, 11.3)
-		player_citizen.global_position.z = clampf(player_citizen.global_position.z, -11.3, 11.3)
+		move_direction = move_direction.normalized()
+		player_citizen.velocity.x = move_direction.x * speed
+		player_citizen.velocity.z = move_direction.z * speed
 		player_citizen.rotation.y = player_yaw
+	else:
+		player_citizen.velocity.x = move_toward(player_citizen.velocity.x, 0.0, speed * 8.0 * delta)
+		player_citizen.velocity.z = move_toward(player_citizen.velocity.z, 0.0, speed * 8.0 * delta)
+	if player_citizen.is_on_floor():
+		player_citizen.velocity.y = -0.5
+		if Input.is_key_pressed(KEY_SPACE):
+			player_citizen.velocity.y = PLAYER_JUMP_VELOCITY
+	else:
+		player_citizen.velocity.y -= PLAYER_GRAVITY * delta
+	player_citizen.move_and_slide()
 	camera.global_position = player_citizen.global_position + Vector3(0.0, PLAYER_EYE_HEIGHT, 0.0)
 	camera.rotation = Vector3(player_pitch, player_yaw, 0.0)
 	_refresh_interaction_hint()
@@ -812,53 +785,55 @@ func _refresh_interaction_hint() -> void:
 	else:
 		interaction_hint_label.text = "LMB gathers resources. Wood goes to a sawmill; food goes to a warehouse."
 
-func _cell_at_screen_position(screen_position: Vector2) -> Variant:
+func _terrain_point_at_screen_position(screen_position: Vector2) -> Variant:
 	var from := camera.project_ray_origin(screen_position)
 	var to := from + camera.project_ray_normal(screen_position) * 200.0
 	var query := PhysicsRayQueryParameters3D.create(from, to)
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	if hit.is_empty():
 		return null
-	var point: Vector3 = hit.position
-	var half_cells := BOARD_CELLS / 2
-	var x := floori(point.x / CELL_SIZE)
-	var z := floori(point.z / CELL_SIZE)
-	if x < -half_cells or x >= half_cells or z < -half_cells or z >= half_cells:
-		return null
-	return Vector2i(x, z)
+	return hit.position as Vector3
 
-func _move_selection(cell: Vector2i) -> void:
-	selected_cell = cell
-	selection_marker.position = _cell_center(cell) + Vector3(0.0, 0.04, 0.0)
+func _move_selection(world_position: Vector3) -> void:
+	selected_world_position = world_position
+	selected_cell = _placement_key(world_position)
+	selection_marker.position = world_position + Vector3(0.0, 0.04, 0.0)
 	if selected_builder != null and not build_mode.is_empty():
-		selection_material.albedo_color = Color(0.25, 0.85, 0.37, 0.55) if _can_place(cell) else Color(0.9, 0.2, 0.18, 0.6)
+		selection_material.albedo_color = Color(0.25, 0.85, 0.37, 0.55) if _can_place(world_position) else Color(0.9, 0.2, 0.18, 0.6)
 
-func _place_building(cell: Vector2i) -> void:
-	if not _can_place(cell):
-		_update_interface("Construction is not allowed on this cell.")
+func _place_building(world_position: Vector3) -> void:
+	if not _can_place(world_position):
+		_update_interface("Construction is not allowed at this point.")
 		return
+	var cell := _placement_key(world_position)
 	var cost := _building_cost()
 	if wood < cost:
 		_update_interface("Not enough wood.")
 		return
 	wood -= cost
 	placed_buildings[cell] = build_mode
-	var position_on_board := _cell_center(cell)
-	_create_construction_site(cell, build_mode, position_on_board)
+	building_positions.append(world_position)
+	_create_construction_site(cell, build_mode, world_position)
 	build_mode = ""
 	selection_marker.visible = false
 	build_menu.visible = false
 	selected_builder = null
 	_update_interface("Construction started. The progress bar shows completion.")
 
-func _can_place(cell: Vector2i) -> bool:
-	if placed_buildings.has(cell) or tree_cells.has(cell) or dig_cells.has(cell):
-		return false
-	for x_offset in range(-1, 2):
-		for z_offset in range(-1, 2):
-			if placed_buildings.has(cell + Vector2i(x_offset, z_offset)):
-				return false
+func _can_place(world_position: Vector3) -> bool:
+	return _is_clear_of_objects(world_position, 1.8)
+
+func _is_clear_of_objects(world_position: Vector3, minimum_distance: float) -> bool:
+	for occupied_position in building_positions + tree_positions:
+		if Vector2(occupied_position.x, occupied_position.z).distance_to(Vector2(world_position.x, world_position.z)) < minimum_distance:
+			return false
+	for site in dig_sites:
+		if Vector2(site.node.global_position.x, site.node.global_position.z).distance_to(Vector2(world_position.x, world_position.z)) < minimum_distance:
+			return false
 	return true
+
+func _placement_key(world_position: Vector3) -> Vector2i:
+	return Vector2i(roundi(world_position.x * 4.0), roundi(world_position.z * 4.0))
 
 func _create_construction_site(cell: Vector2i, building_type: String, position_on_board: Vector3) -> void:
 	var site := Node3D.new()
@@ -1089,6 +1064,7 @@ func _update_tent_dismantle(delta: float) -> void:
 	tent_dismantle_progress += delta * dismantlers
 	if tent_dismantle_progress < 2.0:
 		return
+	building_positions.erase(tent.global_position)
 	tent.queue_free()
 	tent = null
 	placed_buildings.erase(tent_cell)
@@ -1322,8 +1298,6 @@ func _update_camera(delta: float) -> void:
 	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT): move_direction -= right
 	if not move_direction.is_zero_approx():
 		camera_target += move_direction.normalized() * 9.0 * delta
-		camera_target.x = clampf(camera_target.x, -10.0, 10.0)
-		camera_target.z = clampf(camera_target.z, -10.0, 10.0)
 	_update_camera_position()
 
 func _pan_camera(mouse_delta: Vector2) -> void:
@@ -1335,8 +1309,6 @@ func _pan_camera(mouse_delta: Vector2) -> void:
 	forward = forward.normalized()
 	camera_target -= right * mouse_delta.x * 0.035
 	camera_target += forward * mouse_delta.y * 0.035
-	camera_target.x = clampf(camera_target.x, -10.0, 10.0)
-	camera_target.z = clampf(camera_target.z, -10.0, 10.0)
 	_update_camera_position()
 
 func _rotate_camera(mouse_delta: Vector2) -> void:
@@ -1413,6 +1385,6 @@ func _update_interface(message: String) -> void:
 	wood_label.text = "Wood: %d   Warehouse food: %d   Canteen: %d\nSoil: %d   Clay: %d   Wellbeing: %d%%\nTent: %d/%d   Population: %d" % [wood, food, canteen_food, soil, clay, wellbeing, _tent_resident_count(), TENT_CAPACITY, citizens.size()]
 	status_label.text = message
 	if is_first_person:
-		camera_hint_label.text = "R: leave citizen  WASD/arrows: move  Mouse: look  LMB: gather/interact  RMB: dig terrain"
+		camera_hint_label.text = "R: leave citizen  WASD/arrows: move  Space: jump  Shift: sprint  Mouse: look  LMB: interact  RMB: dig"
 	else:
-		camera_hint_label.text = "Click a citizen, then R: first-person.  WASD/arrows: move camera  Right drag: rotate/tilt  Middle drag: pan  Wheel: zoom"
+		camera_hint_label.text = "Click a citizen, then R: first-person. Build freely on voxel terrain. Right drag: rotate  Middle drag: pan  Wheel: zoom"
