@@ -3,6 +3,7 @@ extends RefCounted
 
 const DEFINITIONS := {
 	"campfire": {"name": "Campfire", "category": "tent", "costs": {"branches": 6}},
+	"cook_campfire": {"name": "Cooking campfire", "category": "tent", "costs": {"branches": 8, "grass": 6}},
 	"tent": {"name": "Tent", "category": "tent", "costs": {"branches": 8, "grass": 6}},
 	"living_tent": {"name": "Living tent", "category": "tent", "costs": {"branches": 10, "grass": 8}},
 	"forager_tent": {"name": "Forager tent", "category": "tent", "costs": {"branches": 10, "grass": 4}},

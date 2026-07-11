@@ -32,6 +32,7 @@ const COLORS := {
 	"city_hall_roof": Color("6b6040"),
 	"leisure_center_roof": Color("704065"),
 	"campfire": Color("b85e42"),
+	"cook_campfire": Color("c56a3a"),
 	"tent": Color("c7a96a"),
 	"forager_tent": Color("739350"),
 	"craft_tent": Color("a46b46"),
@@ -55,6 +56,7 @@ const COLORS := {
 static func get_blueprint(building_type: String) -> Dictionary:
 	match building_type:
 		"campfire": return _campfire_blueprint()
+		"cook_campfire": return _cook_campfire_blueprint()
 		"dew_collector": return _water_collector_blueprint("dew_collector", Vector2i(2, 2))
 		"pond": return _pond_blueprint()
 		"tent", "living_tent", "forager_tent", "craft_tent", "trade_tent": return _enclosed_blueprint(building_type, Vector2i(4, 4), 2, "gable")
@@ -244,6 +246,23 @@ static func _campfire_blueprint() -> Dictionary:
 	modules.append(_module(Vector3(0.0, 0.2, 0.0), Vector3(0.8, 0.25, 0.25), "wood", Color("5c4033"), Vector3(0.0, -45.0, 0.0)))
 	modules.append(_module(Vector3(0.0, 0.35, 0.0), Vector3(0.4, 0.3, 0.4), "fire", Color("ff5a00")))
 	return {"type": "campfire", "footprint": footprint, "entrance": Vector2i(0, -1), "modules": modules}
+
+
+static func _cook_campfire_blueprint() -> Dictionary:
+	var footprint := Vector2i(3, 3)
+	var modules: Array[Dictionary] = []
+	modules.append(_module(Vector3(0.0, 0.05, 0.0), Vector3(3.0, 0.1, 3.0), "floor", Color("4f4438")))
+	# Ring of stones around the fire.
+	for angle_index in range(6):
+		var angle := angle_index * PI / 3.0
+		modules.append(_module(Vector3(cos(angle) * 0.9, 0.18, sin(angle) * 0.9), Vector3(0.35, 0.35, 0.35), "stone", Color("6f747a")))
+	modules.append(_module(Vector3(0.0, 0.2, 0.0), Vector3(0.8, 0.25, 0.25), "wood", Color("5c4033"), Vector3(0.0, 45.0, 0.0)))
+	modules.append(_module(Vector3(0.0, 0.35, 0.0), Vector3(0.4, 0.3, 0.4), "fire", Color("ff5a00")))
+	# A cooking pot on a tripod above the flames.
+	for leg_angle in [0.0, 2.1, 4.2]:
+		modules.append(_module(Vector3(cos(leg_angle) * 0.5, 0.75, sin(leg_angle) * 0.5), Vector3(0.08, 1.5, 0.08), "tripod", Color("3a3a3a"), Vector3(0.0, 0.0, 18.0)))
+	modules.append(_module(Vector3(0.0, 0.85, 0.0), Vector3(0.7, 0.55, 0.7), "pot", Color("2c2c2c")))
+	return {"type": "cook_campfire", "footprint": footprint, "entrance": Vector2i(0, -1), "modules": modules}
 
 
 static func _module(position: Vector3, size: Vector3, kind: String, color: Color, rotation := Vector3.ZERO) -> Dictionary:

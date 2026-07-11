@@ -18,6 +18,8 @@ static func role_for(worker: Dictionary, world: Dictionary) -> String:
 	if specialization == "farming":
 		if int(world.get("farms", 0)) > 0:
 			return "farming"
+		elif int(world.get("forager_tents", 0)) > 0:
+			return "gather_food"
 		else:
 			return "gather_grass"
 	if specialization == "excavation" and int(world.get("dig_sites", 0)) > 0:
@@ -52,4 +54,5 @@ static func can_assign(worker: Dictionary, world: Dictionary) -> bool:
 		"excavation": return int(world.get("warehouses", 0)) > 0 and int(world.get("dig_sites", 0)) > 0
 		"gather_branches": return int(world.get("trees", 0)) > 0
 		"gather_grass": return true
+		"gather_food": return int(world.get("forager_tents", 0)) > 0
 	return false

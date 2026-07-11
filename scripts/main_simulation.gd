@@ -13,6 +13,7 @@ const MAX_BUILD_SLOPE := 0.35
 const BRICK_RESEARCH_DURATION := 20.0
 const POPULATION := 4
 const WAREHOUSE_CAPACITY := 50
+const FOOD_PURCHASE_PRICE := 2
 const HOUSE_CAPACITY := 4
 const TENT_CAPACITY := 4
 const CONSTRUCTION_DURATION := 4.0
@@ -87,6 +88,7 @@ var sawmill_stocks: Dictionary = {}
 var tree_reservations: Dictionary = {}
 var farm_positions: Array[Vector3] = []
 var pond_positions: Array[Vector3] = []
+var forager_positions: Array[Vector3] = []
 var school_positions: Array[Vector3] = []
 var park_positions: Array[Vector3] = []
 var leisure_positions: Array[Vector3] = []
@@ -301,7 +303,7 @@ func _update_clock(delta: float) -> void:
 func _handle_clock_minute(clock_minute: int) -> void:
 	var hour := clock_minute / 60
 	var minute := clock_minute % 60
-	if minute == 0 and (hour == 13 or hour == 19) and active_meal_hour != hour:
+	if minute == 0 and (hour == 9 or hour == 13 or hour == 19) and active_meal_hour != hour:
 		active_meal_hour = hour
 		_start_meal(hour)
 	if minute == 0 and hour == 14:
@@ -328,6 +330,12 @@ func _apply_daily_settlement_rules() -> void:
 	var population := citizens.size()
 	if population == 0:
 		return
+	# Everyone drinks each day. When there is no kitchen running meals, they also
+	# eat straight from the stores; a working cooking campfire/canteen already
+	# draws food through the meal pipeline, so we don't double-count there.
+	water = maxi(0, water - population)
+	if not is_instance_valid(canteen):
+		food = maxi(0, food - population)
 	var housing := _total_housing_slots()
 	var change := SETTLEMENT_RULES.daily_wellbeing_change(housing >= population, float(food) / population, float(water) / population, settlement.workday_hours, settlement.night_shifts_allowed)
 	wellbeing = clampi(wellbeing + change, 0, 100)
@@ -1195,6 +1203,7 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_role_button("Assign: excavation", "excavation", 272)
 	_add_role_button("Assign: gather branches", "gather_branches", 306)
 	_add_role_button("Assign: gather grass", "gather_grass", 340)
+	_add_role_button("Assign: forage food", "gather_food", 374)
 	
 	# Era category buttons (shown on main build menu)
 	_add_build_category_button("Tent era", "tent", 136)
@@ -1205,13 +1214,14 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_build_category_back_button()
 	
 	_add_build_button("Campfire", "campfire", 176, "tent")
-	_add_build_button("Tent", "tent", 210, "tent")
-	_add_build_button("Living tent", "living_tent", 244, "tent")
-	_add_build_button("Forager tent", "forager_tent", 278, "tent")
-	_add_build_button("Craft tent", "craft_tent", 312, "tent")
-	_add_build_button("Dew collector", "dew_collector", 346, "tent")
-	_add_build_button("Simple store", "warehouse", 380, "tent")
-	_add_build_button("Trade tent", "trade_tent", 414, "tent")
+	_add_build_button("Cooking campfire", "cook_campfire", 210, "tent")
+	_add_build_button("Tent", "tent", 244, "tent")
+	_add_build_button("Living tent", "living_tent", 278, "tent")
+	_add_build_button("Forager tent", "forager_tent", 312, "tent")
+	_add_build_button("Craft tent", "craft_tent", 346, "tent")
+	_add_build_button("Dew collector", "dew_collector", 380, "tent")
+	_add_build_button("Simple store", "warehouse", 414, "tent")
+	_add_build_button("Trade tent", "trade_tent", 448, "tent")
 	
 	_add_build_button("Dugout", "dugout", 176, "earth")
 	_add_build_button("Earth house", "earth_house", 210, "earth")
@@ -1716,6 +1726,9 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 		selected_warehouse = hit.collider.get_parent() as Node3D
 		_show_warehouse_menu()
 		return
+	if hit.collider.is_in_group("cook_campfire_selector"):
+		_assign_cook_at_campfire()
+		return
 	if hit.collider.is_in_group("house_selector"):
 		selected_house = hit.collider.get_parent() as Node3D
 		selected_builder = null
@@ -2192,6 +2205,21 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			fire_light.light_energy = 2.5
 			fire_light.omni_range = 8.0
 			building.add_child(fire_light)
+		"cook_campfire":
+			# The cooking campfire is the tent-era canteen: residents eat here and a
+			# cook keeps it staffed, reusing the existing canteen/meal pipeline.
+			canteen = building
+			canteen_position = service_position
+			_add_building_selector(building, "cook_campfire_selector", blueprint.footprint)
+			var cook_fire_light := OmniLight3D.new()
+			cook_fire_light.position = Vector3(0.0, 0.5, 0.0)
+			cook_fire_light.light_color = Color("ff9d3b")
+			cook_fire_light.light_energy = 2.5
+			cook_fire_light.omni_range = 8.0
+			building.add_child(cook_fire_light)
+		"forager_tent":
+			forager_positions.append(service_position)
+			_update_interface("Forager tent ready. Assign a resident to forage food, or a free hand will.")
 		"tent", "living_tent", "dugout", "earth_house", "clay_house", "house":
 			if building_type == "house":
 				completed_house_count += 1
@@ -2634,14 +2662,17 @@ func _refresh_market_menu() -> void:
 	
 	sell_items.append(["branches", 1])
 	sell_items.append(["grass", 1])
+	sell_items.append(["water", 1])
+	# Hand tools are available from the very first (tent-era) market so the
+	# settlement can meet the Earth-era tool requirement without a later market.
 	buy_items.append(["axe", 15])
 	buy_items.append(["hand_saw", 15])
-	
+	buy_items.append(["shovel", 15])
+	buy_items.append(["bucket", 15])
+
 	if market_type in ["earth_market", "clay_market", "wood_market", "brick_market"]:
 		sell_items.append(["soil", 1])
-		buy_items.append(["shovel", 15])
-		buy_items.append(["bucket", 15])
-		
+
 	if market_type in ["clay_market", "wood_market", "brick_market"]:
 		sell_items.append(["clay", 2])
 		
@@ -2678,13 +2709,39 @@ func _refresh_market_menu() -> void:
 		y_offset += 32.0
 
 	y_offset += 10.0
-	
+
+	# Emergency food supply: traders will sell rations for coins.
+	var food_btn := Button.new()
+	food_btn.text = "Buy 5 food (%d Coins)" % (5 * FOOD_PURCHASE_PRICE)
+	food_btn.position = Vector2(16, y_offset)
+	food_btn.size = Vector2(272, 28)
+	food_btn.pressed.connect(_buy_food.bind(5, FOOD_PURCHASE_PRICE))
+	market_menu.add_child(food_btn)
+	y_offset += 42.0
+
 	var close_btn := Button.new()
 	close_btn.text = "Close Menu"
 	close_btn.position = Vector2(16, y_offset)
 	close_btn.size = Vector2(272, 28)
 	close_btn.pressed.connect(_close_context_menus)
 	market_menu.add_child(close_btn)
+
+
+func _buy_food(quantity: int, unit_price: int) -> void:
+	if selected_market == null:
+		return
+	var room := settlement.storage_room_for("food")
+	var buyable := mini(quantity, room)
+	if buyable <= 0:
+		_update_interface("No storage room for food. Rebalance the warehouse first.")
+		return
+	if settlement.money < buyable * unit_price:
+		_update_interface("Not enough coins to buy food.")
+		return
+	settlement.money -= buyable * unit_price
+	settlement.food += buyable
+	_update_interface("Bought %d food for %d coins." % [buyable, buyable * unit_price])
+	_refresh_market_menu()
 
 
 func _sell_resource(resource_type: String, quantity: int, unit_price: int) -> void:
@@ -2785,6 +2842,20 @@ func _adjust_storage(resource_type: String, delta_units: float) -> void:
 	_refresh_warehouse_menu()
 
 
+func _assign_cook_at_campfire() -> void:
+	if selected_builder == null:
+		_update_interface("Select a resident first, then click the cooking campfire to make them the cook.")
+		return
+	if selected_builder.is_player_controlled:
+		_update_interface("Pick a settler, not the character you are controlling.")
+		return
+	selected_builder.manual_role = ""
+	selected_builder.setup_specialization("cook")
+	selected_builder.assign_canteen_work(canteen_position)
+	_update_interface("%s is now the cook and will keep the campfire kitchen running." % selected_builder.role_label())
+	_update_workers()
+
+
 func _find_closest_tree_for_citizen(citizen: Citizen) -> Vector3:
 	var closest_tree := Vector3.INF
 	var closest_dist := INF
@@ -2796,6 +2867,26 @@ func _find_closest_tree_for_citizen(citizen: Citizen) -> Vector3:
 				closest_dist = dist
 				closest_tree = pos
 	return closest_tree
+
+func _find_forage_position(citizen: Citizen) -> Vector3:
+	# Foragers wander a short way out from their tent to pick wild food, then carry
+	# it back to storage. Without a forager tent there is nowhere to forage.
+	if forager_positions.is_empty():
+		return Vector3.INF
+	var hut := forager_positions[0]
+	var closest_dist := INF
+	for pos in forager_positions:
+		var dist := citizen.global_position.distance_squared_to(pos)
+		if dist < closest_dist:
+			closest_dist = dist
+			hut = pos
+	var angle := randf_range(0.0, 2.0 * PI)
+	var radius := randf_range(2.5, 6.0)
+	var spot := hut + Vector3(cos(angle) * radius, 0.0, sin(angle) * radius)
+	var height := _terrain_height_at(spot.x, spot.z, 0.0)
+	if not is_nan(height):
+		spot.y = height
+	return spot
 
 func _find_grass_gathering_position(citizen: Citizen) -> Vector3:
 	var angle := randf_range(0.0, 2.0 * PI)

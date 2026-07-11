@@ -82,6 +82,12 @@ func assign_work(citizen: Citizen, index: int) -> void:
 		"gather_grass":
 			var grass_pos: Vector3 = simulation._find_grass_gathering_position(citizen)
 			citizen.assign_gathering("grass", grass_pos, simulation._get_delivery_position())
+		"gather_food":
+			var forage_pos: Vector3 = simulation._find_forage_position(citizen)
+			if forage_pos != Vector3.INF:
+				citizen.assign_gathering("food", forage_pos, simulation._get_delivery_position())
+			else:
+				citizen.idle()
 
 
 func work_role_for(citizen: Citizen) -> String:
@@ -109,6 +115,7 @@ func _world_data() -> Dictionary:
 		"sawmills": simulation.sawmill_positions.size(),
 		"trees": simulation.tree_positions.size(),
 		"farms": simulation.farm_positions.size(),
+		"forager_tents": simulation.forager_positions.size(),
 		"dig_sites": simulation.dig_sites.size(),
 		"has_factory_job": factory_for_role("factory_worker") != null,
 		"has_engineer_job": factory_for_role("engineer") != null,
