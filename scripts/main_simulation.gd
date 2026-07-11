@@ -62,6 +62,7 @@ var park_positions: Array[Vector3] = []
 var factories: Array[Node3D] = []
 var brick_construction_unlocked := false
 var brick_research_progress := -1.0
+var brick_research_factory: Node3D
 var tree_positions: Array[Vector3] = []
 var citizens: Array[Citizen] = []
 var camera: Camera3D
@@ -107,6 +108,8 @@ var canteen: Node3D
 var canteen_position := Vector3.ZERO
 var canteen_food := 0
 var pending_canteen_delivery := false
+var pending_canteen_carrier: Citizen
+var pending_canteen_delivery_amount := 0
 var clock_label: Label
 var tent_dismantle_progress := -1.0
 var voxel_terrain: VoxelLodTerrain
@@ -250,7 +253,7 @@ func _factory_for_role(role: String) -> Node3D:
 					continue
 				var assigned_workers := 0
 				for citizen in citizens:
-					assigned_workers += 1 if citizen.factory == factory and citizen.specialization == "factory_worker" else 0
+					assigned_workers += 1 if _is_factory_worker_active(citizen, factory) else 0
 				if assigned_workers < int(factory.get_meta("required_factory_workers", 1)):
 					return factory
 	for factory in factories:
@@ -262,6 +265,10 @@ func _factory_for_role(role: String) -> Node3D:
 		if role == "engineer" and type == "materials_factory":
 			return factory
 	return null
+
+
+func _is_factory_worker_active(citizen: Citizen, factory: Node3D) -> bool:
+	return citizen.factory == factory and citizen.specialization == "factory_worker" and citizen.state in [Citizen.State.TO_FACTORY, Citizen.State.FACTORY_WORK]
 
 func _has_courier() -> bool:
 	for citizen in citizens:
@@ -409,7 +416,12 @@ func _on_meal_finished(citizen: Citizen) -> void:
 		_update_workers()
 
 func _update_canteen_delivery() -> void:
-	if not is_instance_valid(canteen) or warehouse_positions.is_empty() or food <= 0 or canteen_food >= 12 or pending_canteen_delivery:
+	if pending_canteen_delivery:
+		if not is_instance_valid(pending_canteen_carrier) or pending_canteen_carrier.state not in [Citizen.State.TO_FOOD_PICKUP, Citizen.State.TO_CANTEEN_DELIVERY]:
+			_cancel_canteen_delivery()
+		else:
+			return
+	if not is_instance_valid(canteen) or warehouse_positions.is_empty() or food <= 0 or canteen_food >= 12:
 		return
 	var carrier: Citizen
 	for citizen in citizens:
@@ -426,11 +438,24 @@ func _update_canteen_delivery() -> void:
 	var amount := mini(4, food)
 	food -= amount
 	pending_canteen_delivery = true
+	pending_canteen_carrier = carrier
+	pending_canteen_delivery_amount = amount
 	carrier.deliver_food_to_canteen(warehouse_positions[0], canteen_position, amount)
 
+func _cancel_canteen_delivery() -> void:
+	food += pending_canteen_delivery_amount
+	pending_canteen_delivery = false
+	pending_canteen_carrier = null
+	pending_canteen_delivery_amount = 0
+	_update_interface("Canteen delivery was interrupted; food returned to the warehouse.")
+
 func _on_canteen_delivery_finished(worker: Citizen, amount: int) -> void:
+	if not pending_canteen_delivery or worker != pending_canteen_carrier or amount != pending_canteen_delivery_amount:
+		return
 	canteen_food += amount
 	pending_canteen_delivery = false
+	pending_canteen_carrier = null
+	pending_canteen_delivery_amount = 0
 	if worker.specialization == "cook":
 		worker.assign_canteen_work(canteen_position)
 	_update_interface("Canteen received %d food. Stock: %d." % [amount, canteen_food])
@@ -499,7 +524,7 @@ func _materials_factory_staffed(factory: Node3D) -> bool:
 	var has_builder := false
 	var has_engineer := false
 	for citizen in citizens:
-		if citizen.factory != factory:
+		if citizen.factory != factory or citizen.state not in [Citizen.State.TO_FACTORY, Citizen.State.FACTORY_WORK]:
 			continue
 		has_worker = has_worker or citizen.specialization == "factory_worker"
 		has_builder = has_builder or citizen.specialization == "builder"
@@ -819,7 +844,7 @@ func _create_starting_tent() -> void:
 	_rebuild_navigation_mesh()
 	tent.set_meta("is_tent", true)
 	placed_buildings[tent_cell] = "tent"
-	house_cells[tent_cell] = true
+	_register_navigation_footprint(tent.position, {"footprint": Vector2i(3, 3)})
 	add_child(tent)
 	var base := MeshInstance3D.new()
 	var base_mesh := PrismMesh.new()
@@ -858,6 +883,7 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	citizen.resource_ready.connect(_on_resource_ready)
 	citizen.meal_finished.connect(_on_meal_finished)
 	citizen.canteen_delivery_finished.connect(_on_canteen_delivery_finished)
+	citizen.factory_cycle.connect(_on_factory_cycle)
 	citizens.append(citizen)
 	if is_instance_valid(tent):
 		citizen.assign_home(tent)
@@ -1072,16 +1098,22 @@ func _start_brick_research() -> void:
 	bricks -= BRICK_RESEARCH_COST
 	boards -= BOARD_RESEARCH_COST
 	brick_research_progress = 0.0
+	brick_research_factory = selected_materials_factory
 	_show_materials_factory_menu()
 	_update_interface("Brick construction research started.")
 
 func _update_brick_research(delta: float) -> void:
 	if brick_research_progress < 0.0 or brick_construction_unlocked:
 		return
+	if not is_instance_valid(brick_research_factory) or not _materials_factory_staffed(brick_research_factory):
+		if materials_factory_menu != null and materials_factory_menu.visible:
+			_show_materials_factory_menu()
+		return
 	brick_research_progress = minf(1.0, brick_research_progress + delta / BRICK_RESEARCH_DURATION)
 	if brick_research_progress >= 1.0:
 		brick_construction_unlocked = true
 		brick_research_progress = -1.0
+		brick_research_factory = null
 		_update_interface("Brick construction unlocked: recycling, metal, city hall and leisure center are available.")
 	if materials_factory_menu != null and materials_factory_menu.visible:
 		_show_materials_factory_menu()
@@ -1159,6 +1191,7 @@ func _add_role_button(title: String, role: String, y_position: float) -> void:
 func _set_manual_role(role: String) -> void:
 	if selected_builder == null:
 		return
+	selected_builder.idle()
 	if role == "excavation":
 		_start_dig_assignment()
 		return
@@ -1781,6 +1814,14 @@ func _register_navigation_footprint(center: Vector3, blueprint: Dictionary) -> v
 		for z in range(footprint.y):
 			house_cells[Vector2i(min_x + x, min_z + z)] = true
 
+
+func _unregister_navigation_footprint(center: Vector3, footprint: Vector2i) -> void:
+	var min_x := roundi(center.x - (footprint.x - 1) * 0.5)
+	var min_z := roundi(center.z - (footprint.y - 1) * 0.5)
+	for x in range(footprint.x):
+		for z in range(footprint.y):
+			house_cells.erase(Vector2i(min_x + x, min_z + z))
+
 func _create_warehouse(position_on_board: Vector3) -> void:
 	var building := Node3D.new()
 	building.position = position_on_board
@@ -1997,10 +2038,10 @@ func _update_tent_dismantle(delta: float) -> void:
 	for index in range(building_footprints.size() - 1, -1, -1):
 		if building_footprints[index].node == tent:
 			building_footprints.remove_at(index)
+	_unregister_navigation_footprint(tent.global_position, Vector2i(3, 3))
 	tent.queue_free()
 	tent = null
 	placed_buildings.erase(tent_cell)
-	house_cells.erase(tent_cell)
 	_rebuild_navigation_mesh()
 	wood += 2
 	tent_dismantle_progress = -1.0

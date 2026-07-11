@@ -175,6 +175,7 @@ func assign_work(next_resource_type: String, source: Vector3, workplace: Vector3
 	workplace_position = workplace
 	warehouse_position = warehouse
 	uses_courier = next_uses_courier
+	factory = null
 	active_role = "forestry" if next_resource_type == "wood" else "farming"
 	state = State.TO_TREE
 
@@ -319,8 +320,8 @@ func _process_go_to_canteen(delta: float) -> void:
 func _process_eating(delta: float) -> void:
 	meal_time -= delta
 	if meal_time <= 0.0:
-		meal_finished.emit(self)
 		state = State.IDLE
+		meal_finished.emit(self)
 
 func _process_food_pickup(delta: float) -> void:
 	if _move_to(warehouse_position, delta):
@@ -328,9 +329,9 @@ func _process_food_pickup(delta: float) -> void:
 
 func _process_canteen_delivery(delta: float) -> void:
 	if _move_to(canteen_position, delta):
+		state = State.IDLE
 		canteen_delivery_finished.emit(self, delivery_amount)
 		delivery_amount = 0
-		state = State.IDLE
 
 func _process_canteen_work(delta: float) -> void:
 	if _move_to(canteen_position, delta):
@@ -524,6 +525,7 @@ func set_player_controlled(controlled: bool) -> void:
 	if controlled:
 		state = State.IDLE
 		construction_site = null
+		factory = null
 		active_role = ""
 		movement_path.clear()
 		path_destination = Vector3.INF
@@ -532,6 +534,7 @@ func assign_construction(site: Node3D) -> void:
 	if is_player_controlled:
 		return
 	construction_site = site
+	factory = null
 	construction_position = _work_position_for(site)
 	movement_path.clear()
 	active_role = "construction"
@@ -552,6 +555,7 @@ func assign_excavation(site: Node3D) -> void:
 	if is_player_controlled:
 		return
 	assigned_dig_site = site
+	factory = null
 	active_role = "excavation"
 	state = State.EXCAVATING
 
@@ -597,18 +601,21 @@ func assign_courier_pickup(worker: Citizen, warehouse: Vector3) -> void:
 	courier_target = worker
 	warehouse_position = warehouse
 	active_role = ""
+	factory = null
 	state = State.COURIER_TO_WORKER
 
 func assign_canteen_work(next_canteen_position: Vector3) -> void:
 	if not is_player_controlled:
 		canteen_position = next_canteen_position
 		active_role = "cooking"
+		factory = null
 		state = State.TO_CANTEEN_WORK
 
 func assign_teacher_work(next_school_position: Vector3) -> void:
 	if not is_player_controlled:
 		school_position = next_school_position
 		active_role = "teaching"
+		factory = null
 		state = State.TO_SCHOOL_WORK
 
 func assign_factory_work(next_factory: Node3D, role: String) -> void:
@@ -622,6 +629,7 @@ func go_to_park(next_park_position: Vector3) -> void:
 	if not is_player_controlled:
 		park_position = next_park_position
 		active_role = "relaxing"
+		factory = null
 		state = State.TO_PARK
 
 func start_training(next_role: String, next_school_position: Vector3) -> void:
@@ -631,6 +639,7 @@ func start_training(next_role: String, next_school_position: Vector3) -> void:
 
 func attend_school() -> void:
 	if not is_player_controlled and not training_role.is_empty() and training_days_completed < 10:
+		factory = null
 		state = State.TO_SCHOOL
 
 func finish_school_day() -> void:
@@ -737,6 +746,7 @@ func idle() -> void:
 	active_role = ""
 	construction_site = null
 	assigned_dig_site = null
+	factory = null
 
 func assign_home(next_home: Node3D) -> void:
 	home = next_home
@@ -744,12 +754,14 @@ func assign_home(next_home: Node3D) -> void:
 func go_home() -> void:
 	if not is_player_controlled and is_instance_valid(home):
 		active_role = ""
+		factory = null
 		state = State.TO_HOME
 
 func go_to_canteen(next_canteen_position: Vector3) -> void:
 	if not is_player_controlled:
 		canteen_position = next_canteen_position
 		active_role = ""
+		factory = null
 		state = State.TO_CANTEEN
 
 func deliver_food_to_canteen(warehouse: Vector3, next_canteen_position: Vector3, amount: int) -> void:
@@ -758,6 +770,7 @@ func deliver_food_to_canteen(warehouse: Vector3, next_canteen_position: Vector3,
 		canteen_position = next_canteen_position
 		delivery_amount = amount
 		active_role = ""
+		factory = null
 		state = State.TO_FOOD_PICKUP
 
 func add_debuff(debuff_id: String, value: float) -> void:
