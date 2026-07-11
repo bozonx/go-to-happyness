@@ -73,6 +73,15 @@ func assign_work(citizen: Citizen, index: int) -> void:
 				var excavation: Dictionary = simulation.dig_sites[index % simulation.dig_sites.size()]
 				dig_site = excavation.node
 			citizen.assign_excavation(dig_site)
+		"gather_branches":
+			var tree_pos: Vector3 = simulation._find_closest_tree_for_citizen(citizen)
+			if tree_pos != Vector3.INF:
+				citizen.assign_gathering("branches", tree_pos, simulation._get_delivery_position())
+			else:
+				citizen.idle()
+		"gather_grass":
+			var grass_pos: Vector3 = simulation._find_grass_gathering_position(citizen)
+			citizen.assign_gathering("grass", grass_pos, simulation._get_delivery_position())
 
 
 func work_role_for(citizen: Citizen) -> String:

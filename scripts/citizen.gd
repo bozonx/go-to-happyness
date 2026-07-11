@@ -25,10 +25,12 @@ const CONSTRUCTION_SLOT_SPACING := 0.42
 const CONSTRUCTION_APPROACH_DISTANCE := 1.75
 const NAVIGATION_TARGET_CLEARANCE := 0.48
 
-enum State { IDLE, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL }
+enum State { IDLE, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, TO_GATHER, GATHERING }
 
 var state := State.IDLE
 var resource_type := "wood"
+var gather_resource_type := ""
+var gather_source_position := Vector3.ZERO
 var source_position := Vector3.ZERO
 var workplace_position := Vector3.ZERO
 var warehouse_position := Vector3.ZERO
@@ -226,6 +228,10 @@ func _physics_process(delta: float) -> void:
 			_process_go_to_park(delta)
 		State.RELAXING:
 			_process_relaxing(delta)
+		State.TO_GATHER:
+			_process_to_gather(delta)
+		State.GATHERING:
+			_process_gathering(delta)
 
 func _process_to_source(delta: float) -> void:
 	if _move_to(source_position, delta):
@@ -811,3 +817,24 @@ func _update_satisfaction(delta: float) -> void:
 	satisfaction = clampf(satisfaction + change * satisfaction_tick, 0.0, get_satisfaction_cap())
 	skills[active_role] = minf(5.0, float(skills.get(active_role, 1.0)) + 0.025 * satisfaction_tick)
 	satisfaction_tick = 0.0
+
+
+func assign_gathering(res_type: String, source_pos: Vector3, delivery_pos: Vector3) -> void:
+	if is_player_controlled:
+		return
+	gather_resource_type = res_type
+	gather_source_position = source_pos
+	warehouse_position = delivery_pos
+	active_role = "gather_" + res_type
+	state = State.TO_GATHER
+
+func _process_to_gather(delta: float) -> void:
+	if _move_to(gather_source_position, delta):
+		state = State.GATHERING
+		_start_task(2.0 / get_efficiency("forestry" if gather_resource_type == "branches" else "farming"))
+
+func _process_gathering(delta: float) -> void:
+	if _work(delta):
+		carried_amount = 1
+		resource_type = gather_resource_type
+		state = State.TO_WAREHOUSE

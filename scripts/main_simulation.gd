@@ -169,10 +169,13 @@ var campfire_advance_button: Button
 var selected_market: Node3D = null
 var market_menu: Panel
 var market_menu_title: Label
+var job_submenu_btn: Button
+var job_back_btn: Button
 var house_lights: Array[Dictionary] = []
 var house_light_update_minute := -1
 var entrance_lights: Array[OmniLight3D] = []
 var build_category := ""
+var build_menu_is_job_menu := false
 var build_buttons: Array[Button] = []
 var role_buttons: Array[Button] = []
 var workforce: WorkforceCoordinator
@@ -1073,53 +1076,76 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	build_menu.offset_bottom = -20.0
 	build_menu.visible = false
 	ui.add_child(build_menu)
+	
 	build_menu_title = Label.new()
 	build_menu_title.position = Vector2(16, 14)
 	build_menu_title.size = Vector2(272, 74)
 	build_menu_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	build_menu_title.add_theme_font_size_override("font_size", 15)
 	build_menu.add_child(build_menu_title)
-	_add_role_button("Auto task", "", 96)
-	_add_role_button("Assign: construction", "construction", 130)
-	_add_role_button("Assign: forestry", "forestry", 164)
-	_add_role_button("Assign: farming", "farming", 198)
-	_add_role_button("Assign: excavation", "excavation", 232)
-	_add_build_category_button("Tent era", "tent", 290)
-	_add_build_category_button("Earth era", "earth", 324)
-	_add_build_category_button("Clay era", "clay", 358)
-	_add_build_category_button("Wooden era", "wood", 392)
-	_add_build_category_button("Brick era", "brick", 426)
+	
+	# Add the "Assign Job..." button that opens the job submenu
+	job_submenu_btn = Button.new()
+	job_submenu_btn.text = "Assign Job..."
+	job_submenu_btn.position = Vector2(16, 96)
+	job_submenu_btn.size = Vector2(272, 30)
+	job_submenu_btn.pressed.connect(_open_job_submenu)
+	build_menu.add_child(job_submenu_btn)
+	
+	# Job Back Button
+	job_back_btn = Button.new()
+	job_back_btn.text = "Back to categories"
+	job_back_btn.position = Vector2(16, 96)
+	job_back_btn.size = Vector2(272, 30)
+	job_back_btn.pressed.connect(_close_job_submenu)
+	build_menu.add_child(job_back_btn)
+	
+	# Role buttons in job submenu
+	_add_role_button("Auto task", "", 136)
+	_add_role_button("Assign: construction", "construction", 170)
+	_add_role_button("Assign: forestry", "forestry", 204)
+	_add_role_button("Assign: farming", "farming", 238)
+	_add_role_button("Assign: excavation", "excavation", 272)
+	_add_role_button("Assign: gather branches", "gather_branches", 306)
+	_add_role_button("Assign: gather grass", "gather_grass", 340)
+	
+	# Era category buttons (shown on main build menu)
+	_add_build_category_button("Tent era", "tent", 136)
+	_add_build_category_button("Earth era", "earth", 170)
+	_add_build_category_button("Clay era", "clay", 204)
+	_add_build_category_button("Wooden era", "wood", 238)
+	_add_build_category_button("Brick era", "brick", 272)
 	_add_build_category_back_button()
 	
-	_add_build_button("Campfire - branches", "campfire", 330, "tent")
-	_add_build_button("Tent - branches + grass", "tent", 364, "tent")
-	_add_build_button("Forager tent", "forager_tent", 398, "tent")
-	_add_build_button("Craft tent", "craft_tent", 432, "tent")
-	_add_build_button("Water store", "water_store", 466, "tent")
-	_add_build_button("Simple store", "warehouse", 500, "tent")
-	_add_build_button("Trade tent", "trade_tent", 534, "tent")
+	_add_build_button("Campfire - branches", "campfire", 176, "tent")
+	_add_build_button("Tent - branches + grass", "tent", 210, "tent")
+	_add_build_button("Forager tent", "forager_tent", 244, "tent")
+	_add_build_button("Craft tent", "craft_tent", 278, "tent")
+	_add_build_button("Water store", "water_store", 312, "tent")
+	_add_build_button("Simple store", "warehouse", 346, "tent")
+	_add_build_button("Trade tent", "trade_tent", 380, "tent")
 	
-	_add_build_button("Dugout", "dugout", 330, "earth")
-	_add_build_button("Earth house", "earth_house", 364, "earth")
-	_add_build_button("Smithy", "smithy", 398, "earth")
-	_add_build_button("Hide workshop", "hide_worker", 432, "earth")
-	_add_build_button("Earth market", "earth_market", 466, "earth")
+	_add_build_button("Dugout", "dugout", 176, "earth")
+	_add_build_button("Earth house", "earth_house", 210, "earth")
+	_add_build_button("Smithy", "smithy", 244, "earth")
+	_add_build_button("Hide workshop", "hide_worker", 278, "earth")
+	_add_build_button("Earth market", "earth_market", 312, "earth")
 	
-	_add_build_button("Clay house", "clay_house", 330, "clay")
-	_add_build_button("Clay workshop", "clay_workshop", 364, "clay")
-	_add_build_button("Clay market", "clay_market", 398, "clay")
+	_add_build_button("Clay house", "clay_house", 176, "clay")
+	_add_build_button("Clay workshop", "clay_workshop", 210, "clay")
+	_add_build_button("Clay market", "clay_market", 244, "clay")
 	
-	_add_build_button("Sawmill - logs + kit", "sawmill", 330, "wood")
-	_add_build_button("Farm", "farm", 364, "wood")
-	_add_build_button("Canteen", "canteen", 398, "wood")
-	_add_build_button("Wood house", "house", 432, "wood")
-	_add_build_button("School", "school", 466, "wood")
-	_add_build_button("Park", "park", 500, "wood")
-	_add_build_button("Wood market", "wood_market", 534, "wood")
+	_add_build_button("Sawmill - logs + kit", "sawmill", 176, "wood")
+	_add_build_button("Farm", "farm", 210, "wood")
+	_add_build_button("Canteen", "canteen", 244, "wood")
+	_add_build_button("Wood house", "house", 278, "wood")
+	_add_build_button("School", "school", 312, "wood")
+	_add_build_button("Park", "park", 346, "wood")
+	_add_build_button("Wood market", "wood_market", 380, "wood")
 	
-	_add_build_button("Brick kiln", "brick_factory", 330, "brick")
-	_add_build_button("Materials factory", "materials_factory", 364, "brick")
-	_add_build_button("Brick market", "brick_market", 398, "brick")
+	_add_build_button("Brick kiln", "brick_factory", 176, "brick")
+	_add_build_button("Materials factory", "materials_factory", 210, "brick")
+	_add_build_button("Brick market", "brick_market", 244, "brick")
 	
 	_refresh_build_menu()
 
@@ -1318,7 +1344,7 @@ func _add_build_category_button(title: String, category: String, y_position: flo
 func _add_build_category_back_button() -> void:
 	var button := Button.new()
 	button.text = "Back to categories"
-	button.position = Vector2(16, 290)
+	button.position = Vector2(16, 136)
 	button.size = Vector2(272, 30)
 	button.pressed.connect(_open_build_category.bind(""))
 	button.set_meta("category_back", true)
@@ -1332,16 +1358,40 @@ func _open_build_category(category: String) -> void:
 		_show_selected_citizen_menu()
 
 func _refresh_build_menu() -> void:
+	var selected_exists := selected_builder != null
+	
+	if job_submenu_btn != null:
+		job_submenu_btn.visible = selected_exists and not build_menu_is_job_menu and build_category.is_empty()
+	if job_back_btn != null:
+		job_back_btn.visible = selected_exists and build_menu_is_job_menu
+	
 	for button in build_buttons:
 		var category_button: String = button.get_meta("category_button", "")
 		if button.get_meta("category_back", false):
-			button.visible = not build_category.is_empty()
+			button.visible = not build_category.is_empty() and not build_menu_is_job_menu
+		elif not category_button.is_empty():
+			button.visible = build_category.is_empty() and not build_menu_is_job_menu
 		else:
-			button.visible = build_category.is_empty() and not category_button.is_empty() or not build_category.is_empty() and button.get_meta("category", "") == build_category
+			button.visible = not build_category.is_empty() and button.get_meta("category", "") == build_category and not build_menu_is_job_menu
+			
 	for button in role_buttons:
-		button.visible = build_category.is_empty()
-	if build_menu_title != null and not build_category.is_empty():
-		build_menu_title.text = "%s buildings\nChoose a building to place." % build_category.capitalize()
+		button.visible = build_menu_is_job_menu and selected_exists
+		
+	if build_menu_title != null:
+		if build_menu_is_job_menu:
+			build_menu_title.text = "Assign Job\nSelect a task for the citizen."
+		elif not build_category.is_empty():
+			build_menu_title.text = "%s buildings\nChoose a building to place." % build_category.capitalize()
+		else:
+			_show_selected_citizen_menu()
+
+func _open_job_submenu() -> void:
+	build_menu_is_job_menu = true
+	_refresh_build_menu()
+
+func _close_job_submenu() -> void:
+	build_menu_is_job_menu = false
+	_refresh_build_menu()
 
 func _add_role_button(title: String, role: String, y_position: float) -> void:
 	var button := Button.new()
@@ -1358,12 +1408,15 @@ func _set_manual_role(role: String) -> void:
 	selected_builder.idle()
 	if role == "excavation":
 		_start_dig_assignment()
+		build_menu_is_job_menu = false
 		return
 	selected_builder.manual_role = role
 	selected_builder.assigned_dig_site = null
 	_update_workers()
+	build_menu_is_job_menu = false
 	_show_selected_citizen_menu()
-	_update_interface("Citizen assigned to %s." % ("automatic work" if role.is_empty() else role))
+	_refresh_build_menu()
+	_update_interface("Citizen assigned to %s." % ("automatic work" if role.is_empty() else role.replace("_", " ")))
 
 func _start_dig_assignment() -> void:
 	if selected_builder == null:
@@ -1456,6 +1509,7 @@ func _close_context_menus() -> void:
 	selected_market = null
 	selected_builder = null
 	build_category = ""
+	build_menu_is_job_menu = false
 	_refresh_build_menu()
 
 
@@ -2452,3 +2506,33 @@ func _buy_tool(tool_id: String, price: int) -> void:
 		_refresh_market_menu()
 	else:
 		_update_interface("Cannot buy %s. Check money or check if already owned." % tool_id.replace("_", " "))
+
+
+func _find_closest_tree_for_citizen(citizen: Citizen) -> Vector3:
+	var closest_tree := Vector3.INF
+	var closest_dist := INF
+	for pos in tree_positions:
+		var tree = tree_nodes.get(_cell_from_position(pos))
+		if is_instance_valid(tree) and not bool(tree.get_meta("felled", false)):
+			var dist = citizen.global_position.distance_squared_to(pos)
+			if dist < closest_dist:
+				closest_dist = dist
+				closest_tree = pos
+	return closest_tree
+
+func _find_grass_gathering_position(citizen: Citizen) -> Vector3:
+	var angle := randf_range(0.0, 2.0 * PI)
+	var dist := randf_range(2.0, 12.0)
+	var pos := Vector3(cos(angle) * dist, 0.0, sin(angle) * dist)
+	var height := _terrain_height_at(pos.x, pos.z, 0.0)
+	if not is_nan(height):
+		pos.y = height
+	return pos
+
+func _get_delivery_position() -> Vector3:
+	if not warehouse_positions.is_empty():
+		return warehouse_positions[0]
+	elif is_instance_valid(campfire_node):
+		return campfire_node.global_position
+	else:
+		return entrance_stone.global_position
