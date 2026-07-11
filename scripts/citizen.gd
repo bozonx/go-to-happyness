@@ -15,6 +15,7 @@ const GRAVITY := 18.0
 const AI_JUMP_VELOCITY := 7.6
 const AI_ESCAPE_JUMP_VELOCITY := 9.2
 const STUCK_TIME_BEFORE_JUMP := 0.75
+const STUCK_TIME_BEFORE_ESCAPE_JUMP := 1.5
 const NAVIGATION_CELL_SIZE := 1.0
 const UNIT_SEPARATION_DISTANCE := 0.72
 const UNIT_SEPARATION_STRENGTH := 1.35
@@ -371,8 +372,11 @@ func _move_directly_to(destination: Vector3, delta: float) -> bool:
 	var horizontal_progress := Vector2(global_position.x - position_before_move.x, global_position.z - position_before_move.z).length()
 	if is_on_floor() and horizontal_progress < WALK_SPEED * delta * 0.15:
 		stuck_time += delta
-		if stuck_time >= STUCK_TIME_BEFORE_JUMP and jump_cooldown <= 0.0 and _has_low_obstacle_ahead(direction):
-			_jump_out_of_obstacle(false)
+		if jump_cooldown <= 0.0:
+			if stuck_time >= STUCK_TIME_BEFORE_ESCAPE_JUMP:
+				_jump_out_of_obstacle(true)
+			elif stuck_time >= STUCK_TIME_BEFORE_JUMP and _has_low_obstacle_ahead(direction):
+				_jump_out_of_obstacle(false)
 	else:
 		stuck_time = 0.0
 	look_at(global_position + direction, Vector3.UP)
@@ -418,7 +422,7 @@ func _jump_out_of_obstacle(needs_escape_jump: bool) -> void:
 	stuck_time = 0.0
 
 func _apply_gravity(delta: float) -> void:
-	if not is_on_floor():
+	if not is_on_floor() or velocity.y > 0.0:
 		velocity.y -= GRAVITY * delta
 	else:
 		velocity.y = -0.5
