@@ -4,6 +4,9 @@ extends Node3D
 const BOARD_CELLS := 48
 const CELL_SIZE := BuildingBlueprints.BLOCK_SIZE
 const BUILDING_CLEARANCE_BLOCKS := 3.0
+const TREE_BUILD_CLEARANCE_BLOCKS := 1.0
+const NAVIGATION_CLEARANCE_MARGIN := 1.0
+const SERVICE_PAD_OFFSET := 1.0
 const MAX_BUILD_SLOPE := 0.35
 const STARTING_WOOD := 30
 const WAREHOUSE_COST := 10
@@ -117,6 +120,7 @@ var voxel_tool: VoxelTool
 var navigation_region: NavigationRegion3D
 var building_positions: Array[Vector3] = []
 var building_footprints: Array[Dictionary] = []
+var service_pockets: Array[Dictionary] = []
 var selected_school: Node3D
 var school_menu: Panel
 var school_menu_title: Label
@@ -782,7 +786,16 @@ func _is_navigation_cell_blocked(cell: Vector2i) -> bool:
 		var footprint: Vector2i = record.footprint
 		var min_x := roundi(center.x - (footprint.x - 1) * 0.5)
 		var min_z := roundi(center.z - (footprint.y - 1) * 0.5)
-		if cell.x >= min_x and cell.x < min_x + footprint.x and cell.y >= min_z and cell.y < min_z + footprint.y:
+		var margin := ceili(NAVIGATION_CLEARANCE_MARGIN)
+		if cell.x >= min_x - margin and cell.x < min_x + footprint.x + margin and cell.y >= min_z - margin and cell.y < min_z + footprint.y + margin:
+			if _is_service_pocket(cell, record.get("node")):
+				continue
+			return true
+	return false
+
+func _is_service_pocket(cell: Vector2i, building: Variant) -> bool:
+	for pocket in service_pockets:
+		if pocket.cell == cell and (building == null or pocket.node == building):
 			return true
 	return false
 
@@ -846,6 +859,8 @@ func _create_starting_tent() -> void:
 	placed_buildings[tent_cell] = "tent"
 	_register_navigation_footprint(tent.position, {"footprint": Vector2i(3, 3)})
 	add_child(tent)
+	_register_service_entrance(tent, Vector2i(3, 3), true)
+	_rebuild_navigation_mesh()
 	var base := MeshInstance3D.new()
 	var base_mesh := PrismMesh.new()
 	base_mesh.size = Vector3(3.0, 2.2, 3.0)
@@ -1656,7 +1671,7 @@ func _is_footprint_clear(world_position: Vector3, footprint: Vector2i) -> bool:
 		if absf(world_position.x - other_center.x) < half.x + other_half.x + BUILDING_CLEARANCE_BLOCKS and absf(world_position.z - other_center.z) < half.y + other_half.y + BUILDING_CLEARANCE_BLOCKS:
 			return false
 	for tree_position in tree_positions:
-		if absf(world_position.x - tree_position.x) < half.x + 0.5 and absf(world_position.z - tree_position.z) < half.y + 0.5:
+		if absf(world_position.x - tree_position.x) < half.x + 0.5 + TREE_BUILD_CLEARANCE_BLOCKS and absf(world_position.z - tree_position.z) < half.y + 0.5 + TREE_BUILD_CLEARANCE_BLOCKS:
 			return false
 	for site in dig_sites:
 		if absf(world_position.x - site.node.global_position.x) < half.x + 1.0 and absf(world_position.z - site.node.global_position.z) < half.y + 1.0:
@@ -1756,26 +1771,29 @@ func _update_construction(delta: float) -> void:
 			_complete_building(site.cell, site.type, site.position, site.node, site.blueprint)
 
 func _complete_building(cell: Vector2i, building_type: String, position_on_board: Vector3, building: Node3D, blueprint: Dictionary) -> void:
+	_register_service_entrance(building, blueprint.footprint, false, building_type not in ["farm", "park"])
+	var service_position: Vector3 = building.get_meta("service_position")
 	match building_type:
 		"warehouse":
-			warehouse_positions.append(position_on_board)
+			warehouse_positions.append(service_position)
 		"sawmill":
-			sawmill_positions.append(position_on_board)
+			sawmill_positions.append(service_position)
 		"farm":
-			farm_positions.append(position_on_board)
+			farm_positions.append(service_position)
 		"house":
 			completed_house_count += 1
 			building.set_meta("spawn_slots", 2)
+			building.set_meta("entrance_position", service_position)
 			_add_building_selector(building, "house_selector", blueprint.footprint)
 			_add_house_light(building)
 		"canteen":
 			canteen = building
-			canteen_position = position_on_board
+			canteen_position = service_position
 		"school":
-			school_positions.append(position_on_board)
+			school_positions.append(service_position)
 			_add_building_selector(building, "school_selector", blueprint.footprint)
 		"park":
-			park_positions.append(position_on_board)
+			park_positions.append(service_position)
 		"brick_factory", "materials_factory", "recycling_factory", "metal_factory":
 			building.set_meta("required_factory_workers", 3 if building_type in ["recycling_factory", "metal_factory"] else 1)
 			factories.append(building)
@@ -1814,6 +1832,34 @@ func _register_navigation_footprint(center: Vector3, blueprint: Dictionary) -> v
 		for z in range(footprint.y):
 			house_cells[Vector2i(min_x + x, min_z + z)] = true
 
+func _register_service_entrance(building: Node3D, footprint: Vector2i, home_entrance := false, show_marker := true) -> void:
+	var service_position := building.global_position + Vector3(0.0, 0.0, footprint.y * 0.5 + SERVICE_PAD_OFFSET)
+	service_position.y = building.global_position.y
+	building.set_meta("service_position", service_position)
+	if home_entrance:
+		building.set_meta("entrance_position", service_position)
+	service_pockets.append({"cell": _cell_from_position(service_position), "node": building})
+	if show_marker:
+		_add_service_entrance_marker(building, footprint)
+
+func _add_service_entrance_marker(building: Node3D, footprint: Vector2i) -> void:
+	var marker := MeshInstance3D.new()
+	var marker_mesh := BoxMesh.new()
+	marker_mesh.size = Vector3(0.72, 1.45, 0.12)
+	marker.mesh = marker_mesh
+	marker.position = Vector3(0.0, 0.73, footprint.y * 0.5 + 0.08)
+	var marker_material := StandardMaterial3D.new()
+	marker_material.albedo_color = Color("17191c")
+	marker_material.roughness = 0.95
+	marker.material_override = marker_material
+	building.add_child(marker)
+	var sign := Label3D.new()
+	sign.text = "STAFF"
+	sign.position = Vector3(0.0, 1.72, footprint.y * 0.5 + 0.16)
+	sign.font_size = 24
+	sign.modulate = Color("e5c86b")
+	building.add_child(sign)
+
 
 func _unregister_navigation_footprint(center: Vector3, footprint: Vector2i) -> void:
 	var min_x := roundi(center.x - (footprint.x - 1) * 0.5)
@@ -1821,6 +1867,10 @@ func _unregister_navigation_footprint(center: Vector3, footprint: Vector2i) -> v
 	for x in range(footprint.x):
 		for z in range(footprint.y):
 			house_cells.erase(Vector2i(min_x + x, min_z + z))
+	for index in range(service_pockets.size() - 1, -1, -1):
+		var pocket: Dictionary = service_pockets[index]
+		if is_instance_valid(pocket.node) and pocket.node.global_position == center:
+			service_pockets.remove_at(index)
 
 func _create_warehouse(position_on_board: Vector3) -> void:
 	var building := Node3D.new()

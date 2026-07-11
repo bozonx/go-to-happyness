@@ -17,10 +17,8 @@ const STUCK_TIME_BEFORE_JUMP := 0.75
 const STUCK_TIME_BEFORE_REPATH := 1.5
 const STUCK_TIME_BEFORE_SIDESTEP := 2.25
 const SIDESTEP_DURATION := 0.65
-const NAVIGATION_CELL_SIZE := 1.0
-const UNIT_SEPARATION_DISTANCE := 0.72
-const UNIT_SEPARATION_STRENGTH := 1.35
 const CONSTRUCTION_SLOT_SPACING := 0.42
+const CONSTRUCTION_APPROACH_DISTANCE := 1.75
 const NAVIGATION_TARGET_CLEARANCE := 0.48
 
 enum State { IDLE, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING }
@@ -63,8 +61,6 @@ var path_destination := Vector3.INF
 var navigation_target_position := Vector3.INF
 var path_allows_destination_house := false
 var navigation_agent: NavigationAgent3D
-var safe_navigation_velocity := Vector3.ZERO
-var has_safe_navigation_velocity := false
 var stuck_time := 0.0
 var recovery_repath_done := false
 var jump_cooldown := 0.0
@@ -91,24 +87,13 @@ func _setup_navigation_agent() -> void:
 	navigation_agent.path_desired_distance = 0.28
 	navigation_agent.target_desired_distance = 0.18
 	navigation_agent.path_height_offset = 0.0
-	navigation_agent.avoidance_enabled = true
-	navigation_agent.use_3d_avoidance = false
-	navigation_agent.radius = 0.36
-	navigation_agent.neighbor_distance = 3.0
-	navigation_agent.max_neighbors = 12
-	navigation_agent.time_horizon_agents = 1.2
-	navigation_agent.time_horizon_obstacles = 0.8
-	navigation_agent.avoidance_priority = 0.45 + float(get_instance_id() % 11) * 0.01
-	navigation_agent.velocity_computed.connect(_on_navigation_velocity_computed)
+	# NPC-vs-NPC avoidance is disabled for now: citizens only collide with the
+	# terrain and buildings, so a crowded cell can never deadlock movement.
+	navigation_agent.avoidance_enabled = false
 	add_child(navigation_agent)
 
-func _on_navigation_velocity_computed(safe_velocity: Vector3) -> void:
-	safe_navigation_velocity = safe_velocity
-	has_safe_navigation_velocity = true
-
 func _setup_collision() -> void:
-	# Bodies collide with terrain, but not with each other. Local steering keeps
-	# citizens readable without allowing a crowded cell to block navigation.
+	# Bodies collide with terrain and buildings, but not with each other.
 	collision_layer = 2
 	collision_mask = 1
 	motion_mode = CharacterBody3D.MOTION_MODE_GROUNDED
@@ -305,7 +290,10 @@ func _process_courier_delivery(delta: float) -> void:
 		resource_delivered.emit(self, courier_resource_type, carried_amount)
 
 func _process_go_home(delta: float) -> void:
-	if is_instance_valid(home) and _move_to(home.global_position, delta, true):
+	if not is_instance_valid(home):
+		return
+	var home_entrance: Vector3 = home.get_meta("entrance_position", home.global_position)
+	if _move_to(home_entrance, delta, true):
 		state = State.RESTING
 
 func _process_resting(delta: float) -> void:
@@ -408,18 +396,12 @@ func _move_directly_to(destination: Vector3, delta: float) -> bool:
 		global_position = Vector3(destination.x, global_position.y, destination.z)
 		return true
 	var direction := offset.normalized()
-	var separation := _same_cell_separation()
 	if sidestep_time > 0.0:
 		sidestep_time = maxf(0.0, sidestep_time - delta)
 		direction = (direction * 0.35 + sidestep_direction).normalized()
-	var desired_velocity := direction * WALK_SPEED + separation * UNIT_SEPARATION_STRENGTH
-	if desired_velocity.length() > WALK_SPEED:
-		desired_velocity = desired_velocity.normalized() * WALK_SPEED
-	if navigation_agent != null:
-		navigation_agent.velocity = desired_velocity
-	var movement_velocity := safe_navigation_velocity if has_safe_navigation_velocity else desired_velocity
-	velocity.x = movement_velocity.x
-	velocity.z = movement_velocity.z
+	var desired_velocity := direction * WALK_SPEED
+	velocity.x = desired_velocity.x
+	velocity.z = desired_velocity.z
 	jump_cooldown = maxf(0.0, jump_cooldown - delta)
 	var position_before_move := global_position
 	move_and_slide()
@@ -439,35 +421,18 @@ func _move_directly_to(destination: Vector3, delta: float) -> bool:
 	look_at(global_position + direction, Vector3.UP)
 	return false
 
-func _same_cell_separation() -> Vector3:
-	var separation := Vector3.ZERO
-	var own_cell := _navigation_cell(global_position)
-	for node in get_tree().get_nodes_in_group("citizens"):
-		var other := node as Citizen
-		if other == null or other == self or _navigation_cell(other.global_position) != own_cell:
-			continue
-		var away := global_position - other.global_position
-		away.y = 0.0
-		var distance := away.length()
-		if distance >= UNIT_SEPARATION_DISTANCE:
-			continue
-		if distance < 0.01:
-			var angle := float(get_instance_id() % 16) * TAU / 16.0
-			away = Vector3(cos(angle), 0.0, sin(angle))
-		else:
-			away /= distance
-		separation += away * (1.0 - distance / UNIT_SEPARATION_DISTANCE)
-	return separation.limit_length(1.0)
-
-func _navigation_cell(world_position: Vector3) -> Vector2i:
-	return Vector2i(floori(world_position.x / NAVIGATION_CELL_SIZE), floori(world_position.z / NAVIGATION_CELL_SIZE))
-
 func _has_low_obstacle_ahead(direction: Vector3) -> bool:
 	var space_state := get_world_3d().direct_space_state
 	var forward := direction * 0.62
 	var low_query := PhysicsRayQueryParameters3D.create(global_position + Vector3.UP * 0.22, global_position + Vector3.UP * 0.22 + forward, collision_mask)
 	low_query.exclude = [get_rid()]
-	if space_state.intersect_ray(low_query).is_empty():
+	var low_hit := space_state.intersect_ray(low_query)
+	if low_hit.is_empty():
+		return false
+	# Never hop onto buildings: a wall or platform ahead means the path must go
+	# around it, not over it.
+	var collider: Object = low_hit.get("collider")
+	if collider is Node and (collider as Node).has_meta("building_module"):
 		return false
 	var high_query := PhysicsRayQueryParameters3D.create(global_position + Vector3.UP * 0.9, global_position + Vector3.UP * 0.9 + forward, collision_mask)
 	high_query.exclude = [get_rid()]
@@ -482,8 +447,6 @@ func _force_repath() -> void:
 	if navigation_agent != null:
 		navigation_target_position = _accessible_navigation_target(path_destination)
 		navigation_agent.target_position = navigation_target_position
-		navigation_agent.velocity = Vector3.ZERO
-	has_safe_navigation_velocity = false
 	recovery_repath_done = true
 
 func _accessible_navigation_target(destination: Vector3) -> Vector3:
@@ -621,7 +584,7 @@ func assign_teacher_work(next_school_position: Vector3) -> void:
 func assign_factory_work(next_factory: Node3D, role: String) -> void:
 	if not is_player_controlled:
 		factory = next_factory
-		factory_position = next_factory.global_position
+		factory_position = next_factory.get_meta("service_position", next_factory.global_position)
 		active_role = role
 		state = State.TO_FACTORY
 
@@ -657,7 +620,7 @@ func finish_school_day() -> void:
 	state = State.IDLE
 
 func is_building_site(site: Node3D) -> bool:
-	return not is_player_controlled and state == State.CONSTRUCTING and construction_site == site and global_position.distance_to(construction_position) <= 0.25
+	return not is_player_controlled and state == State.CONSTRUCTING and construction_site == site and global_position.distance_to(construction_position) <= 0.7
 
 func setup_navigation(next_pathfinder: Callable) -> void:
 	pathfinder = next_pathfinder
@@ -686,9 +649,9 @@ func _work_position_for(site: Node3D) -> Vector3:
 	offset.y = 0.0
 	var slot := float(int(get_instance_id() % 3) - 1) * CONSTRUCTION_SLOT_SPACING
 	if absf(offset.x) > absf(offset.z):
-		var x_distance := footprint.x * 0.5 + 0.65
+		var x_distance := footprint.x * 0.5 + CONSTRUCTION_APPROACH_DISTANCE
 		return site_position + Vector3(x_distance if offset.x >= 0.0 else -x_distance, 0.0, slot)
-	var z_distance := footprint.y * 0.5 + 0.65
+	var z_distance := footprint.y * 0.5 + CONSTRUCTION_APPROACH_DISTANCE
 	return site_position + Vector3(slot, 0.0, z_distance if offset.z >= 0.0 else -z_distance)
 
 func setup_specialization(next_specialization: String) -> void:
