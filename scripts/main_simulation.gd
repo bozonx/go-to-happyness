@@ -177,6 +177,9 @@ var entrance_lights: Array[OmniLight3D] = []
 var build_category := ""
 var build_menu_is_job_menu := false
 var build_buttons: Array[Button] = []
+var build_item_buttons: Array[Button] = []
+var skip_night_button: Button
+var water_collectors: Array[Dictionary] = []
 var role_buttons: Array[Button] = []
 var workforce: WorkforceCoordinator
 var sawmills: SawmillService
@@ -215,6 +218,7 @@ func _process(delta: float) -> void:
 		_update_camera(delta)
 	_update_construction(delta)
 	_update_tent_dismantle(delta)
+	_update_water_collectors(delta)
 	_update_clock(delta)
 	_update_daylight()
 	_update_house_lights()
@@ -281,6 +285,8 @@ func _update_daylight() -> void:
 func _update_clock(delta: float) -> void:
 	var elapsed_minutes := clock.advance(delta, GAME_MINUTES_PER_SECOND)
 	clock_label.text = "%s  %02d:%02d  x%d" % ["Night" if clock.is_night() else "Day", clock.hour(), clock.minute(), int(time_multiplier)]
+	if skip_night_button != null:
+		skip_night_button.visible = clock.is_night()
 	for clock_minute in elapsed_minutes:
 		_handle_clock_minute(clock_minute)
 
@@ -627,6 +633,12 @@ func _on_excavation_cycle(worker: Citizen, site_node: Node3D, efficiency: float)
 func _building_cost() -> int:
 	return BuildingCatalog.cost_for(build_mode)
 
+func _format_costs(building_type: String) -> String:
+	var parts: Array[String] = []
+	for resource_type in BuildingCatalog.cost_resources(building_type):
+		parts.append("%d %s" % [BuildingCatalog.cost_for_resource(building_type, resource_type), resource_type])
+	return "  ".join(parts) if not parts.is_empty() else "free"
+
 func _stored_resources() -> int:
 	return settlement.total_stored_resources()
 
@@ -637,7 +649,7 @@ func _warehouse_capacity() -> int:
 func _total_housing_slots() -> int:
 	var count := 0
 	for type in placed_buildings.values():
-		if type in ["tent", "dugout", "earth_house", "clay_house", "house"]:
+		if type in ["tent", "living_tent", "dugout", "earth_house", "clay_house", "house"]:
 			count += HOUSE_CAPACITY
 	return count
 
@@ -667,7 +679,7 @@ func _pan_camera(mouse_delta: Vector2) -> void:
 
 func _rotate_camera(mouse_delta: Vector2) -> void:
 	camera_yaw -= mouse_delta.x * 0.35
-	camera_pitch = clampf(camera_pitch - mouse_delta.y * 0.25, 25.0, 78.0)
+	camera_pitch = clampf(camera_pitch - mouse_delta.y * 0.25, 8.0, 85.0)
 	_update_camera_position()
 
 func _update_camera_position() -> void:
@@ -736,7 +748,7 @@ func _find_path_around_houses(from: Vector3, destination: Vector3, may_enter_des
 	return path
 
 func _update_interface(message: String) -> void:
-	wood_label.text = "Era: %s  Money: %d  Branches: %d  Grass: %d  Water: %d\nFood: %d  Logs: %d  Timber: %d  Boards: %d  Bricks: %d\nStorage: %d/%d  Population: %d  Wellbeing: %d" % [_era_name(), money, branches, grass, water, food, settlement.logs, wood, boards, bricks, _stored_resources(), _warehouse_capacity(), citizens.size(), wellbeing]
+	wood_label.text = "Era: %s\nMoney: %d\nBranches: %d\nGrass: %d\nWater: %d\nFood: %d\nLogs: %d\nTimber: %d\nBoards: %d\nBricks: %d\nStorage: %d/%d\nPopulation: %d\nWellbeing: %d" % [_era_name(), money, branches, grass, water, food, settlement.logs, wood, boards, bricks, _stored_resources(), _warehouse_capacity(), citizens.size(), wellbeing]
 	status_label.text = message
 	if is_first_person:
 		camera_hint_label.text = "R: leave citizen  WASD/arrows: move  Space: jump  Shift: sprint  Mouse: look  LMB: interact  RMB: dig"
@@ -980,22 +992,29 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 func _create_interface() -> void:
 	var ui := CanvasLayer.new()
 	add_child(ui)
+	# Resources: a compact vertical list in its own small panel.
 	var panel := ColorRect.new()
 	panel.color = Color(0.035, 0.07, 0.09, 0.88)
 	panel.position = Vector2(20, 20)
-	panel.size = Vector2(500, 176)
+	panel.size = Vector2(172, 256)
 	ui.add_child(panel)
 	wood_label = Label.new()
-	wood_label.position = Vector2(18, 14)
-	wood_label.size = Vector2(464, 64)
-	wood_label.add_theme_font_size_override("font_size", 18)
+	wood_label.position = Vector2(14, 10)
+	wood_label.size = Vector2(150, 240)
+	wood_label.add_theme_font_size_override("font_size", 12)
 	panel.add_child(wood_label)
+	# Messages live in a separate block below the resources.
+	var status_panel := ColorRect.new()
+	status_panel.color = Color(0.035, 0.07, 0.09, 0.82)
+	status_panel.position = Vector2(20, 288)
+	status_panel.size = Vector2(380, 86)
+	ui.add_child(status_panel)
 	status_label = Label.new()
-	status_label.position = Vector2(18, 84)
-	status_label.size = Vector2(464, 76)
+	status_label.position = Vector2(14, 8)
+	status_label.size = Vector2(352, 72)
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	status_label.add_theme_font_size_override("font_size", 16)
-	panel.add_child(status_label)
+	status_label.add_theme_font_size_override("font_size", 14)
+	status_panel.add_child(status_label)
 	camera_hint_label = Label.new()
 	camera_hint_label.position = Vector2(20, 682)
 	camera_hint_label.add_theme_font_size_override("font_size", 16)
@@ -1024,7 +1043,7 @@ func _create_interface() -> void:
 	ui.add_child(interaction_progress)
 	var build_toggle_btn := Button.new()
 	build_toggle_btn.text = "Construction Panel"
-	build_toggle_btn.position = Vector2(20, 210)
+	build_toggle_btn.position = Vector2(20, 388)
 	build_toggle_btn.size = Vector2(180, 36)
 	build_toggle_btn.pressed.connect(_toggle_global_build_menu)
 	ui.add_child(build_toggle_btn)
@@ -1052,6 +1071,26 @@ func _create_time_controls(ui: CanvasLayer) -> void:
 		button.custom_minimum_size = Vector2(56, 30)
 		button.pressed.connect(_set_time_multiplier.bind(multiplier))
 		controls.add_child(button)
+	# Appears once the working day is over, so the player can jump straight to
+	# the next morning without waiting through the night.
+	skip_night_button = Button.new()
+	skip_night_button.text = "Skip night »"
+	skip_night_button.tooltip_text = "Jump to the next working morning (08:00)"
+	skip_night_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	skip_night_button.offset_left = -220
+	skip_night_button.offset_top = 96
+	skip_night_button.offset_right = -22
+	skip_night_button.offset_bottom = 128
+	skip_night_button.visible = false
+	skip_night_button.pressed.connect(_skip_night)
+	ui.add_child(skip_night_button)
+
+
+func _skip_night() -> void:
+	clock.set_time(8 * 60)
+	active_meal_hour = -1
+	_update_workers()
+	_update_interface("Skipped the night. A fresh working day begins at 08:00.")
 
 
 func _set_workday_hours(hours: int) -> void:
@@ -1117,13 +1156,15 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_build_category_button("Brick era", "brick", 272)
 	_add_build_category_back_button()
 	
-	_add_build_button("Campfire - branches", "campfire", 176, "tent")
-	_add_build_button("Tent - branches + grass", "tent", 210, "tent")
-	_add_build_button("Forager tent", "forager_tent", 244, "tent")
-	_add_build_button("Craft tent", "craft_tent", 278, "tent")
-	_add_build_button("Water store", "water_store", 312, "tent")
-	_add_build_button("Simple store", "warehouse", 346, "tent")
-	_add_build_button("Trade tent", "trade_tent", 380, "tent")
+	_add_build_button("Campfire", "campfire", 176, "tent")
+	_add_build_button("Tent", "tent", 210, "tent")
+	_add_build_button("Living tent", "living_tent", 244, "tent")
+	_add_build_button("Forager tent", "forager_tent", 278, "tent")
+	_add_build_button("Craft tent", "craft_tent", 312, "tent")
+	_add_build_button("Dew collector", "dew_collector", 346, "tent")
+	_add_build_button("Pond", "pond", 380, "tent")
+	_add_build_button("Simple store", "warehouse", 414, "tent")
+	_add_build_button("Trade tent", "trade_tent", 448, "tent")
 	
 	_add_build_button("Dugout", "dugout", 176, "earth")
 	_add_build_button("Earth house", "earth_house", 210, "earth")
@@ -1325,11 +1366,23 @@ func _add_build_button(title: String, building_type: String, y_position: float, 
 	var button := Button.new()
 	button.text = title
 	button.position = Vector2(16, y_position)
-	button.size = Vector2(272, 30)
+	button.size = Vector2(272, 44)
 	button.pressed.connect(_select_build_mode.bind(building_type))
 	button.set_meta("category", category)
+	button.set_meta("build_type", building_type)
+	button.add_theme_font_size_override("font_size", 15)
+	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	# Small cost line under the building name, dimmed when unaffordable.
+	var cost_label := Label.new()
+	cost_label.position = Vector2(10, 24)
+	cost_label.size = Vector2(252, 16)
+	cost_label.add_theme_font_size_override("font_size", 11)
+	cost_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	button.add_child(cost_label)
+	button.set_meta("cost_label", cost_label)
 	build_menu.add_child(button)
 	build_buttons.append(button)
+	build_item_buttons.append(button)
 
 func _add_build_category_button(title: String, category: String, y_position: float) -> void:
 	var button := Button.new()
@@ -1376,7 +1429,24 @@ func _refresh_build_menu() -> void:
 			
 	for button in role_buttons:
 		button.visible = build_menu_is_job_menu and selected_exists
-		
+
+	# Lay the visible building buttons out in a single column and annotate each
+	# with its resource cost. Unaffordable buildings are disabled and dimmed.
+	var row_y := 176.0
+	for button in build_item_buttons:
+		if not button.visible:
+			continue
+		button.position = Vector2(16, row_y)
+		row_y += 50.0
+		var building_type: String = button.get_meta("build_type", "")
+		var affordable := settlement.can_afford_building(building_type)
+		button.disabled = not affordable
+		button.modulate = Color(1, 1, 1, 1) if affordable else Color(0.55, 0.55, 0.6, 1)
+		var cost_label: Label = button.get_meta("cost_label")
+		if cost_label != null:
+			cost_label.text = _format_costs(building_type)
+			cost_label.add_theme_color_override("font_color", Color("cdd6df") if affordable else Color("d98a86"))
+
 	if build_menu_title != null:
 		if build_menu_is_job_menu:
 			build_menu_title.text = "Assign Job\nSelect a task for the citizen."
@@ -1529,10 +1599,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
-		camera_distance = maxf(7.0, camera_distance - 2.0)
+		camera_distance = maxf(3.0, camera_distance - 2.0)
 		_update_camera_position()
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_WHEEL_DOWN and event.pressed:
-		camera_distance = minf(46.0, camera_distance + 2.0)
+		camera_distance = minf(80.0, camera_distance + 2.0)
 		_update_camera_position()
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_MIDDLE:
 		is_panning_camera = event.pressed
@@ -1579,7 +1649,12 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 	query.collision_mask = 4
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	if hit.is_empty():
+		# Clicking empty ground clears the current selection and its menu.
+		_close_context_menus()
 		return
+	# Switching to a different building always dismisses the previously open
+	# menu first, so only one context menu is ever visible at a time.
+	_hide_all_selection_menus()
 	if hit.collider.is_in_group("campfire_selector"):
 		selected_campfire = hit.collider.get_parent() as Node3D
 		_show_campfire_menu()
@@ -1625,6 +1700,21 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 		return
 	_select_citizen(hit.collider.get_parent() as Citizen)
 
+func _hide_all_selection_menus() -> void:
+	# Hides every building context menu and clears their selections, but leaves
+	# the currently selected citizen untouched (the school menu needs it).
+	house_menu.visible = false
+	school_menu.visible = false
+	materials_factory_menu.visible = false
+	campfire_menu.visible = false
+	market_menu.visible = false
+	selected_house = null
+	selected_school = null
+	selected_materials_factory = null
+	selected_campfire = null
+	selected_market = null
+
+
 func _citizen_at_screen_position(screen_position: Vector2) -> Citizen:
 	var closest: Citizen
 	var closest_distance := 22.0
@@ -1645,10 +1735,7 @@ func _select_citizen(clicked_citizen: Citizen) -> void:
 		_update_interface("Courier assigned to this worker. Click another worker to reassign.")
 		return
 	selected_builder = clicked_citizen
-	selected_house = null
-	selected_school = null
-	house_menu.visible = false
-	school_menu.visible = false
+	_hide_all_selection_menus()
 	build_mode = ""
 	build_category = ""
 	selection_marker.visible = false
@@ -2014,7 +2101,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			fire_light.light_energy = 2.5
 			fire_light.omni_range = 8.0
 			building.add_child(fire_light)
-		"tent", "dugout", "earth_house", "clay_house", "house":
+		"tent", "living_tent", "dugout", "earth_house", "clay_house", "house":
 			if building_type == "house":
 				completed_house_count += 1
 			building.set_meta("spawn_slots", HOUSE_CAPACITY)
@@ -2023,6 +2110,10 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			_add_house_light(building)
 			if building_type == "tent":
 				building.set_meta("is_tent", true)
+		"dew_collector":
+			water_collectors.append({"node": building, "stored": 0, "cap": 10, "rate": 0.12, "accum": 0.0})
+		"pond":
+			water_collectors.append({"node": building, "stored": 0, "cap": 30, "rate": 0.25, "accum": 0.0})
 		"trade_tent", "earth_market", "clay_market", "wood_market", "brick_market":
 			_add_building_selector(building, "market_selector", blueprint.footprint)
 		"canteen":
@@ -2207,6 +2298,20 @@ func _update_tent_dismantle(delta: float) -> void:
 	_update_interface("Builders dismantled the empty tent and recovered 2 wood.")
 
 
+func _update_water_collectors(delta: float) -> void:
+	# Dew collectors and ponds slowly gather water from dew and rain. Each one
+	# fills its own basin up to a cap; the gathered water flows into the shared
+	# settlement supply.
+	for collector in water_collectors:
+		if collector.stored >= collector.cap:
+			continue
+		collector.accum += delta * float(collector.rate)
+		while collector.accum >= 1.0 and collector.stored < collector.cap:
+			collector.accum -= 1.0
+			collector.stored += 1
+			water += 1
+
+
 func _toggle_global_build_menu() -> void:
 	_close_context_menus()
 	build_menu.visible = not build_menu.visible
@@ -2275,8 +2380,10 @@ func _create_campfire_menu(ui: CanvasLayer) -> void:
 
 
 func _show_campfire_menu() -> void:
-	_close_context_menus()
 	selected_builder = null
+	build_menu.visible = false
+	selection_marker.visible = false
+	build_mode = ""
 	campfire_menu.visible = true
 	_refresh_campfire_menu()
 
@@ -2411,8 +2518,10 @@ func _create_market_menu(ui: CanvasLayer) -> void:
 
 
 func _show_market_menu() -> void:
-	_close_context_menus()
 	selected_builder = null
+	build_menu.visible = false
+	selection_marker.visible = false
+	build_mode = ""
 	market_menu.visible = true
 	_refresh_market_menu()
 

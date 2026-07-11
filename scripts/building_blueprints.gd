@@ -35,7 +35,9 @@ const COLORS := {
 	"tent": Color("c7a96a"),
 	"forager_tent": Color("739350"),
 	"craft_tent": Color("a46b46"),
-	"water_store": Color("4d8fa8"),
+	"living_tent": Color("bfa070"),
+	"dew_collector": Color("5f95ab"),
+	"pond": Color("3f7fa0"),
 	"dugout": Color("8a6549"),
 	"earth_house": Color("9b7655"),
 	"smithy": Color("65686d"),
@@ -53,7 +55,9 @@ const COLORS := {
 static func get_blueprint(building_type: String) -> Dictionary:
 	match building_type:
 		"campfire": return _campfire_blueprint()
-		"tent", "forager_tent", "craft_tent", "water_store", "trade_tent": return _enclosed_blueprint(building_type, Vector2i(4, 4), 2, "gable")
+		"dew_collector": return _water_collector_blueprint("dew_collector", Vector2i(2, 2))
+		"pond": return _pond_blueprint()
+		"tent", "living_tent", "forager_tent", "craft_tent", "trade_tent": return _enclosed_blueprint(building_type, Vector2i(4, 4), 2, "gable")
 		"dugout", "earth_house", "smithy", "hide_worker", "earth_market": return _enclosed_blueprint(building_type, Vector2i(4, 4), 2, "gable")
 		"clay_house", "clay_workshop", "clay_market": return _enclosed_blueprint(building_type, Vector2i(4, 4), 2, "gable")
 		"warehouse": return _enclosed_blueprint("warehouse", Vector2i(5, 5), 3, "shed")
@@ -128,6 +132,13 @@ static func _add_enclosing_walls(modules: Array[Dictionary], footprint: Vector2i
 			if not (level == 1 and z_index % 2 == 0):
 				modules.append(_module(Vector3(-half_x, y, z), Vector3(PANEL_THICKNESS, 1.0, 1.0), "wall", COLORS[building_type]))
 				modules.append(_module(Vector3(half_x, y, z), Vector3(PANEL_THICKNESS, 1.0, 1.0), "wall", COLORS[building_type]))
+	# Solid corner columns hide the seam where the front/back and side panels
+	# meet, so the building reads as a proper box instead of four loose walls.
+	var corner_color: Color = COLORS[building_type].darkened(0.18)
+	var column_center_y := 0.5 + (height - 1) * 0.5
+	for corner_x: float in [-half_x, half_x]:
+		for corner_z: float in [-half_z, half_z]:
+			modules.append(_module(Vector3(corner_x, column_center_y, corner_z), Vector3(0.62, height, 0.62), "corner", corner_color))
 
 
 static func _add_roof(modules: Array[Dictionary], footprint: Vector2i, height: int, roof_style: String, building_type: String) -> void:
@@ -191,6 +202,38 @@ static func _park_blueprint() -> Dictionary:
 		modules.append(_module(offset + Vector3.UP * 1.0, Vector3(1.25, 1.25, 1.25), "tree", Color("2d733d")))
 	modules.append(_module(Vector3.ZERO, Vector3(3.0, 0.25, 0.5), "bench", Color("8a603c")))
 	return {"type": "park", "footprint": footprint, "entrance": Vector2i(0, -3), "modules": modules}
+
+
+static func _water_collector_blueprint(building_type: String, footprint: Vector2i) -> Dictionary:
+	# A raised basin on four legs. Dew and rain trickle into the tray, so the
+	# collector slowly fills the settlement's water up to its own limit.
+	var modules: Array[Dictionary] = []
+	var half_x := (footprint.x - 1) * 0.5
+	var half_z := (footprint.y - 1) * 0.5
+	var frame_color: Color = COLORS[building_type].darkened(0.25)
+	for x: float in [-half_x, half_x]:
+		for z: float in [-half_z, half_z]:
+			modules.append(_module(Vector3(x, 0.5, z), Vector3(0.28, 1.0, 0.28), "post", frame_color))
+	modules.append(_module(Vector3(0.0, 1.05, 0.0), Vector3(footprint.x + 0.2, 0.22, footprint.y + 0.2), "basin", frame_color))
+	modules.append(_module(Vector3(0.0, 1.22, 0.0), Vector3(footprint.x - 0.2, 0.16, footprint.y - 0.2), "water", COLORS[building_type]))
+	# A little collecting funnel above the tray.
+	modules.append(_module(Vector3(0.0, 1.7, 0.0), Vector3(0.9, 0.7, 0.9), "funnel", frame_color, Vector3(0.0, 45.0, 0.0)))
+	return {"type": building_type, "footprint": footprint, "entrance": Vector2i(0, -1), "modules": modules}
+
+
+static func _pond_blueprint() -> Dictionary:
+	var footprint := Vector2i(5, 5)
+	var modules: Array[Dictionary] = []
+	# A stone rim around a recessed water surface.
+	var half_x := (footprint.x - 1) * 0.5
+	var half_z := (footprint.y - 1) * 0.5
+	for x in range(footprint.x):
+		for z in range(footprint.y):
+			var on_edge := x == 0 or z == 0 or x == footprint.x - 1 or z == footprint.y - 1
+			if on_edge:
+				modules.append(_module(Vector3(_axis_coordinate(x, footprint.x), 0.18, _axis_coordinate(z, footprint.y)), Vector3(1.0, 0.36, 1.0), "rim", Color("6f747a")))
+	modules.append(_module(Vector3(0.0, 0.1, 0.0), Vector3(footprint.x - 1.4, 0.2, footprint.y - 1.4), "water", COLORS.pond))
+	return {"type": "pond", "footprint": footprint, "entrance": Vector2i(0, -2), "modules": modules}
 
 
 static func _campfire_blueprint() -> Dictionary:

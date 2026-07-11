@@ -20,6 +20,12 @@ func advance(delta: float, game_minutes_per_second: float) -> PackedInt32Array:
 	return elapsed_minutes
 
 
+func set_time(minute_of_day: int) -> void:
+	# Jump straight to a time of day without replaying the skipped minutes.
+	minutes = fposmod(float(minute_of_day), MINUTES_PER_DAY)
+	_previous_minute = int(minutes)
+
+
 func hour() -> int:
 	return int(minutes) / 60
 

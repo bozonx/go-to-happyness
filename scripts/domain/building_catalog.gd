@@ -4,9 +4,11 @@ extends RefCounted
 const DEFINITIONS := {
 	"campfire": {"name": "Campfire", "category": "tent", "costs": {"branches": 6}},
 	"tent": {"name": "Tent", "category": "tent", "costs": {"branches": 8, "grass": 6}},
+	"living_tent": {"name": "Living tent", "category": "tent", "costs": {"branches": 10, "grass": 8}},
 	"forager_tent": {"name": "Forager tent", "category": "tent", "costs": {"branches": 10, "grass": 4}},
 	"craft_tent": {"name": "Craft tent", "category": "tent", "costs": {"branches": 10, "grass": 5}},
-	"water_store": {"name": "Water store", "category": "tent", "costs": {"branches": 6, "grass": 4}},
+	"dew_collector": {"name": "Dew collector", "category": "tent", "costs": {"branches": 6, "grass": 4}},
+	"pond": {"name": "Pond", "category": "tent", "costs": {"branches": 8, "grass": 6}},
 	"warehouse": {"name": "Simple store", "category": "tent", "costs": {"branches": 12, "grass": 4}},
 	"trade_tent": {"name": "Trade tent", "category": "tent", "costs": {"branches": 10, "grass": 5}},
 	"dugout": {"name": "Dugout", "category": "earth", "costs": {"soil": 12, "branches": 8}},
