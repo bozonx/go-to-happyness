@@ -153,10 +153,9 @@ func _process(delta: float) -> void:
 func _update_workers() -> void:
 	if _is_night():
 		for citizen in citizens:
-			citizen.go_home()
+			citizen.request_goap_decision()
 		return
-	for index in citizens.size():
-		var citizen := citizens[index]
+	for citizen in citizens:
 		if citizen.is_player_controlled:
 			continue
 		if citizen.state in [Citizen.State.TO_CANTEEN, Citizen.State.EATING, Citizen.State.TO_FOOD_PICKUP, Citizen.State.TO_CANTEEN_DELIVERY, Citizen.State.COURIER_TO_WORKER, Citizen.State.COURIER_TO_WAREHOUSE, Citizen.State.WAITING_COURIER]:
@@ -165,50 +164,70 @@ func _update_workers() -> void:
 			if _stored_resources() >= _warehouse_capacity():
 				continue
 			citizen.blocked_by_storage = false
-		if citizen.specialization == "cook":
-			if is_instance_valid(canteen):
-				citizen.assign_canteen_work(canteen_position)
-			continue
-		if citizen.specialization == "teacher":
-			if not school_positions.is_empty():
-				citizen.assign_teacher_work(school_positions[0])
-			continue
-		if citizen.specialization == "courier":
-			continue
-		if citizen.specialization == "factory_worker":
-			var factory := _factory_for_role("factory_worker")
-			if factory != null:
-				citizen.assign_factory_work(factory, "factory_work")
-			continue
-		if citizen.specialization == "builder" and construction_sites.is_empty():
-			var materials_plant := _factory_for_role("engineer")
-			if materials_plant != null:
-				citizen.assign_factory_work(materials_plant, "construction")
-				continue
-		if citizen.specialization == "engineer":
-			var materials_factory := _factory_for_role("engineer")
-			if materials_factory != null:
-				citizen.assign_factory_work(materials_factory, "engineering")
-			continue
-		if not citizen.training_role.is_empty() and citizen.training_days_completed < 10 and int(game_minutes) / 60 < 12:
-			citizen.attend_school()
-			continue
-		var role := _work_role_for(citizen)
-		if role == "construction" and not construction_sites.is_empty():
-			var site: Dictionary = construction_sites[index % construction_sites.size()]
-			citizen.assign_construction(site.node)
-		elif role == "forestry" and not warehouse_positions.is_empty() and not sawmill_positions.is_empty():
-			citizen.assign_work("wood", tree_positions[index % tree_positions.size()], sawmill_positions[index % sawmill_positions.size()], warehouse_positions[index % warehouse_positions.size()], _has_courier())
-		elif role == "farming" and not warehouse_positions.is_empty() and not farm_positions.is_empty():
-			citizen.assign_work("food", farm_positions[index % farm_positions.size()], farm_positions[index % farm_positions.size()], warehouse_positions[index % warehouse_positions.size()], _has_courier())
-		elif role == "excavation" and not dig_sites.is_empty() and not warehouse_positions.is_empty():
-			var dig_site := citizen.assigned_dig_site
-			if not is_instance_valid(dig_site):
-				var site: Dictionary = dig_sites[index % dig_sites.size()]
-				dig_site = site.node
-			citizen.assign_excavation(dig_site)
-		else:
-			citizen.idle()
+		citizen.request_goap_decision()
+
+func _can_assign_goap_work(citizen: Citizen) -> bool:
+	if citizen.is_player_controlled or citizen.blocked_by_storage:
+		return false
+	if citizen.specialization == "courier":
+		return false
+	if citizen.specialization == "cook":
+		return is_instance_valid(canteen)
+	if citizen.specialization == "teacher":
+		return not school_positions.is_empty()
+	if citizen.specialization == "factory_worker":
+		return _factory_for_role("factory_worker") != null
+	if citizen.specialization == "engineer":
+		return _factory_for_role("engineer") != null
+	if not citizen.training_role.is_empty() and citizen.training_days_completed < 10 and int(game_minutes) / 60 < 12:
+		return not school_positions.is_empty()
+	if citizen.specialization == "builder" and construction_sites.is_empty() and _factory_for_role("engineer") != null:
+		return true
+	var role := _work_role_for(citizen)
+	match role:
+		"construction": return not construction_sites.is_empty()
+		"forestry": return not warehouse_positions.is_empty() and not sawmill_positions.is_empty() and not tree_positions.is_empty()
+		"farming": return not warehouse_positions.is_empty() and not farm_positions.is_empty()
+		"excavation": return not dig_sites.is_empty() and not warehouse_positions.is_empty()
+	return false
+
+func _assign_goap_work(citizen: Citizen, index: int) -> void:
+	if not _can_assign_goap_work(citizen):
+		return
+	if citizen.specialization == "cook":
+		citizen.assign_canteen_work(canteen_position)
+		return
+	if citizen.specialization == "teacher":
+		citizen.assign_teacher_work(school_positions[0])
+		return
+	if citizen.specialization == "factory_worker":
+		citizen.assign_factory_work(_factory_for_role("factory_worker"), "factory_work")
+		return
+	if citizen.specialization == "engineer":
+		citizen.assign_factory_work(_factory_for_role("engineer"), "engineering")
+		return
+	if not citizen.training_role.is_empty() and citizen.training_days_completed < 10 and int(game_minutes) / 60 < 12:
+		citizen.attend_school()
+		return
+	if citizen.specialization == "builder" and construction_sites.is_empty():
+		var materials_plant := _factory_for_role("engineer")
+		if materials_plant != null:
+			citizen.assign_factory_work(materials_plant, "construction")
+			return
+	var role := _work_role_for(citizen)
+	if role == "construction":
+		var construction: Dictionary = construction_sites[index % construction_sites.size()]
+		citizen.assign_construction(construction.node)
+	elif role == "forestry":
+		citizen.assign_work("wood", tree_positions[index % tree_positions.size()], sawmill_positions[index % sawmill_positions.size()], warehouse_positions[index % warehouse_positions.size()], _has_courier())
+	elif role == "farming":
+		citizen.assign_work("food", farm_positions[index % farm_positions.size()], farm_positions[index % farm_positions.size()], warehouse_positions[index % warehouse_positions.size()], _has_courier())
+	elif role == "excavation":
+		var dig_site := citizen.assigned_dig_site
+		if not is_instance_valid(dig_site):
+			var excavation: Dictionary = dig_sites[index % dig_sites.size()]
+			dig_site = excavation.node
+		citizen.assign_excavation(dig_site)
 
 func _work_role_for(citizen: Citizen) -> String:
 	if not citizen.manual_role.is_empty():
@@ -361,7 +380,7 @@ func _start_meal(hour: int) -> void:
 		if citizen.specialization == "cook" and hour == 13:
 			continue
 		if citizen.is_available_for_schedule():
-			citizen.go_to_canteen(canteen_position)
+			citizen.request_goap_meal()
 	_update_interface("%02d:00 meal service started. Residents are heading to the canteen." % hour)
 
 func _start_park_rest(cooks_only: bool) -> void:
@@ -383,6 +402,7 @@ func _on_meal_finished(citizen: Citizen) -> void:
 	if served:
 		canteen_food -= 1
 	citizen.receive_meal(served)
+	citizen.finish_goap_meal()
 	if not served:
 		_update_interface("Canteen ran out of food. A worker missed their meal.")
 	if not _is_night():
@@ -837,6 +857,7 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	if is_instance_valid(tent):
 		citizen.assign_home(tent)
 		citizen.add_debuff("tent", 25.0)
+	citizen.setup_goap(self, citizens.size() - 1)
 
 
 func _create_interface() -> void:

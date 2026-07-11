@@ -71,6 +71,7 @@ var school_position := Vector3.ZERO
 var factory: Node3D
 var factory_position := Vector3.ZERO
 var park_position := Vector3.ZERO
+var goap_brain: CitizenGoapBrain
 
 func _ready() -> void:
 	add_to_group("citizens")
@@ -170,6 +171,8 @@ func assign_work(next_resource_type: String, source: Vector3, workplace: Vector3
 func _physics_process(delta: float) -> void:
 	if is_player_controlled:
 		return
+	if goap_brain != null:
+		goap_brain.tick(delta)
 	_apply_gravity(delta)
 	_update_effects(delta)
 	_update_satisfaction(delta)
@@ -593,6 +596,23 @@ func is_building_site(site: Node3D) -> bool:
 
 func setup_navigation(next_pathfinder: Callable) -> void:
 	pathfinder = next_pathfinder
+
+func setup_goap(simulation: Node, worker_index: int) -> void:
+	goap_brain = CitizenGoapBrain.new()
+	add_child(goap_brain)
+	goap_brain.setup(self, simulation, worker_index)
+
+func request_goap_decision() -> void:
+	if goap_brain != null:
+		goap_brain.request_decision()
+
+func request_goap_meal() -> void:
+	if goap_brain != null:
+		goap_brain.request_meal()
+
+func finish_goap_meal() -> void:
+	if goap_brain != null:
+		goap_brain.finish_meal_request()
 
 func _work_position_for(site: Node3D) -> Vector3:
 	var site_position := site.global_position

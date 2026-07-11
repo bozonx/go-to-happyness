@@ -38,7 +38,7 @@ func _find_best_plan(goal, desired_state, blackboard):
 		"children": []
 	}
 
-	if _build_plans(root, blackboard.duplicate()):
+	if _build_plans(root, blackboard.duplicate(), {}):
 		var plans = _transform_tree_into_array(root, blackboard)
 		return _get_cheapest_plan(plans)
 
@@ -58,10 +58,15 @@ func _get_cheapest_plan(plans):
 
 ## Recursively expands the search tree, returning [code]true[/code] if at
 ## least one complete path to a satisfied state was found.
-func _build_plans(step, blackboard):
+func _build_plans(step, blackboard, visited: Dictionary):
 	var has_followup = false
 
 	var state = step.state.duplicate()
+	var state_key := _state_key(state)
+	if visited.has(state_key):
+		return false
+	var branch_visited := visited.duplicate()
+	branch_visited[state_key] = true
 
 	for s in step.state:
 		var blackboard_value = blackboard.get(s)
@@ -99,11 +104,20 @@ func _build_plans(step, blackboard):
 				"children": []
 				}
 
-			if desired_state.is_empty() or _build_plans(s, blackboard.duplicate()):
+			if desired_state.is_empty() or _build_plans(s, blackboard.duplicate(), branch_visited):
 				step.children.push_back(s)
 				has_followup = true
 
 	return has_followup
+
+
+func _state_key(state: Dictionary) -> String:
+	var keys := state.keys()
+	keys.sort_custom(func(a, b): return str(a) < str(b))
+	var parts: PackedStringArray = []
+	for key in keys:
+		parts.append("%s=%s" % [str(key), var_to_str(state[key])])
+	return "|".join(parts)
 
 
 ## Converts the recursive tree into a flat array of plans with total costs.

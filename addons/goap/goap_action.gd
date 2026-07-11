@@ -61,7 +61,7 @@ func is_valid() -> bool:
 ## Returns the cost of this action for plan evaluation.
 ## Override to make cost context-dependent.
 func get_cost(_blackboard) -> int:
-	return 1000
+	return cost
 
 
 ## Returns the [member preconditions] dictionary.

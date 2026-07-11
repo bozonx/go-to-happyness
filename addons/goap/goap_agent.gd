@@ -211,7 +211,7 @@ func _follow_plan(plan, delta):
 				var desired_state = _current_goal.get_desired_state()
 				var is_goal_satisfied = true
 				for state_key in desired_state:
-					if _world_state.get_state(state_key) != desired_state[state_key]:
+					if not GoapWorldState.is_satisfied(_world_state.get_state(state_key), desired_state[state_key]):
 						is_goal_satisfied = false
 						break
 
@@ -226,7 +226,7 @@ func _follow_plan(plan, delta):
 			var desired_state = _current_goal.get_desired_state()
 			var is_goal_satisfied = true
 			for state_key in desired_state:
-				if _world_state.get_state(state_key) != desired_state[state_key]:
+				if not GoapWorldState.is_satisfied(_world_state.get_state(state_key), desired_state[state_key]):
 					is_goal_satisfied = false
 					break
 			
