@@ -32,8 +32,11 @@ const PLAYER_JUMP_VELOCITY := 6.5
 const PLAYER_GRAVITY := 18.0
 const PLAYER_EYE_HEIGHT := 1.65
 const HARVEST_DURATION := 1.25
-const INTERACTION_RANGE := 2.25
+const INTERACTION_RANGE := 4.5
 const POCKET_WOOD_CAPACITY := 8
+const SAWMILL_PROCESS_DURATION := 4.0
+const SAWMILL_WORKER_DELIVERY_THRESHOLD := 4
+const COURIER_LATE_SECONDS := 12.0
 const DIG_RADIUS := 2.2
 const DIG_REACH := 6.0
 const NAVIGATION_AGENT_RADIUS := 0.38
@@ -59,6 +62,8 @@ var house_cells: Dictionary = {}
 var tree_cells: Dictionary = {}
 var warehouse_positions: Array[Vector3] = []
 var sawmill_positions: Array[Vector3] = []
+var sawmill_stocks: Dictionary = {}
+var tree_reservations: Dictionary = {}
 var farm_positions: Array[Vector3] = []
 var school_positions: Array[Vector3] = []
 var park_positions: Array[Vector3] = []
@@ -159,6 +164,7 @@ func _process(delta: float) -> void:
 	_update_daylight()
 	_update_house_lights()
 	_update_canteen_delivery()
+	_update_sawmills(delta)
 	_update_brick_research(delta)
 	if not _is_night():
 		_update_couriers()
@@ -185,6 +191,8 @@ func _can_assign_goap_work(citizen: Citizen) -> bool:
 	if citizen.is_player_controlled or citizen.blocked_by_storage:
 		return false
 	if citizen.specialization == "courier":
+		return false
+	if int(game_minutes) / 60 < 8:
 		return false
 	if citizen.specialization == "cook":
 		return is_instance_valid(canteen)
@@ -234,7 +242,10 @@ func _assign_goap_work(citizen: Citizen, index: int) -> void:
 		var construction: Dictionary = construction_sites[index % construction_sites.size()]
 		citizen.assign_construction(construction.node)
 	elif role == "forestry":
-		citizen.assign_work("wood", tree_positions[index % tree_positions.size()], sawmill_positions[index % sawmill_positions.size()], warehouse_positions[index % warehouse_positions.size()], _has_courier())
+		var sawmill_position := sawmill_positions[index % sawmill_positions.size()]
+		var tree_position := _reserve_closest_tree_for_sawmill(citizen, sawmill_position)
+		if tree_position != Vector3.INF:
+			citizen.assign_work("wood", tree_position, sawmill_position, warehouse_positions[index % warehouse_positions.size()])
 	elif role == "farming":
 		citizen.assign_work("food", farm_positions[index % farm_positions.size()], farm_positions[index % farm_positions.size()], warehouse_positions[index % warehouse_positions.size()], _has_courier())
 	elif role == "excavation":
@@ -335,7 +346,7 @@ func _update_clock(delta: float) -> void:
 func _handle_clock_minute(clock_minute: int) -> void:
 	var hour := clock_minute / 60
 	var minute := clock_minute % 60
-	if minute == 0 and (hour == 8 or hour == 13 or hour == 19) and active_meal_hour != hour:
+	if minute == 0 and (hour == 13 or hour == 19) and active_meal_hour != hour:
 		active_meal_hour = hour
 		_start_meal(hour)
 	if minute == 0 and hour == 14:
@@ -347,7 +358,7 @@ func _handle_clock_minute(clock_minute: int) -> void:
 	if minute == 0 and hour == 21:
 		_update_workers()
 		_update_interface("Nightfall: workers are returning to their assigned homes.")
-	if minute == 0 and hour == 6:
+	if minute == 0 and hour == 8:
 		active_meal_hour = -1
 		_update_workers()
 		_update_interface("Morning: workers left their homes for their assignments.")
@@ -492,6 +503,11 @@ func _update_couriers() -> void:
 		if is_instance_valid(courier.courier_worker):
 			if courier.courier_worker.has_pending_resource():
 				courier.assign_courier_pickup(courier.courier_worker, warehouse_positions[0])
+				continue
+			courier.courier_worker = null
+		var sawmill_position := _sawmill_with_boards()
+		if sawmill_position != Vector3.INF:
+			courier.assign_sawmill_pickup(sawmill_position, warehouse_positions[0])
 			continue
 		for worker in citizens:
 			if worker != courier and worker.has_pending_resource():
@@ -514,7 +530,7 @@ func _building_power(site_node: Node3D) -> float:
 	return power
 
 func _on_resource_delivered(worker: Citizen, resource_type: String, amount: int) -> void:
-	var storage_amount := amount * 2 if resource_type == "wood" else amount
+	var storage_amount := amount
 	if _stored_resources() + storage_amount > _warehouse_capacity():
 		worker.storage_delivery_result(false)
 		_update_interface("Warehouse is full. Build another warehouse; the worker went home.")
@@ -525,9 +541,10 @@ func _on_resource_delivered(worker: Citizen, resource_type: String, amount: int)
 		soil += amount
 	elif resource_type == "clay":
 		clay += amount
+	elif resource_type == "boards":
+		boards += amount
 	else:
 		wood += amount
-		boards += amount
 	worker.storage_delivery_result(true)
 	_update_interface("Workers delivered %d %s to the warehouse." % [amount, resource_type])
 
@@ -556,6 +573,99 @@ func _materials_factory_staffed(factory: Node3D) -> bool:
 
 func _on_resource_ready(worker: Citizen, resource_type: String, amount: int) -> void:
 	worker.register_pending_resource(resource_type, amount)
+
+func _sawmill_key(position_on_board: Vector3) -> Vector2i:
+	return _cell_from_position(position_on_board)
+
+func _sawmill_stock(position_on_board: Vector3) -> Dictionary:
+	var key := _sawmill_key(position_on_board)
+	if not sawmill_stocks.has(key):
+		sawmill_stocks[key] = {"logs": 0, "boards": 0, "process_time": 0.0, "last_courier_pickup": Time.get_ticks_msec() / 1000.0}
+	return sawmill_stocks[key]
+
+func _store_sawmill_stock(position_on_board: Vector3, stock: Dictionary) -> void:
+	sawmill_stocks[_sawmill_key(position_on_board)] = stock
+
+func _on_logs_delivered(worker: Citizen, sawmill_position: Vector3, amount: int) -> void:
+	var stock := _sawmill_stock(sawmill_position)
+	stock.logs = int(stock.logs) + amount
+	_store_sawmill_stock(sawmill_position, stock)
+	_decide_forestry_delivery(worker, sawmill_position)
+
+func _update_sawmills(delta: float) -> void:
+	for sawmill_position in sawmill_positions:
+		var stock := _sawmill_stock(sawmill_position)
+		if int(stock.logs) <= 0:
+			stock.process_time = 0.0
+			_store_sawmill_stock(sawmill_position, stock)
+			continue
+		if float(stock.process_time) <= 0.0:
+			stock.process_time = SAWMILL_PROCESS_DURATION
+		stock.process_time = float(stock.process_time) - delta
+		if float(stock.process_time) <= 0.0:
+			stock.logs = int(stock.logs) - 1
+			stock.boards = int(stock.boards) + 1
+			stock.process_time = SAWMILL_PROCESS_DURATION if int(stock.logs) > 0 else 0.0
+		_store_sawmill_stock(sawmill_position, stock)
+
+func _decide_forestry_delivery(worker: Citizen, sawmill_position: Vector3) -> void:
+	var stock := _sawmill_stock(sawmill_position)
+	var board_count := int(stock.boards)
+	var courier_late := Time.get_ticks_msec() / 1000.0 - float(stock.last_courier_pickup) >= COURIER_LATE_SECONDS
+	if board_count > 0 and (not _has_courier() or (board_count >= SAWMILL_WORKER_DELIVERY_THRESHOLD and courier_late)):
+		var amount := mini(board_count, SAWMILL_WORKER_DELIVERY_THRESHOLD)
+		stock.boards = board_count - amount
+		_store_sawmill_stock(sawmill_position, stock)
+		worker.deliver_sawmill_boards(amount)
+		return
+	_assign_next_forestry_tree(worker)
+
+func _on_sawmill_boards_collected(courier: Citizen, sawmill_position: Vector3) -> void:
+	var stock := _sawmill_stock(sawmill_position)
+	var amount := int(stock.boards)
+	stock.boards = 0
+	stock.last_courier_pickup = Time.get_ticks_msec() / 1000.0
+	_store_sawmill_stock(sawmill_position, stock)
+	courier.collect_sawmill_boards(amount)
+
+func _sawmill_with_boards() -> Vector3:
+	var best_position := Vector3.INF
+	var highest_board_count := 0
+	for sawmill_position in sawmill_positions:
+		var board_count := int(_sawmill_stock(sawmill_position).boards)
+		if board_count > highest_board_count:
+			highest_board_count = board_count
+			best_position = sawmill_position
+	return best_position
+
+func _reserve_closest_tree_for_sawmill(worker: Citizen, sawmill_position: Vector3) -> Vector3:
+	for cell in tree_reservations.keys():
+		var reserved_worker: Citizen = tree_reservations[cell]
+		if not is_instance_valid(reserved_worker) or reserved_worker.state not in [Citizen.State.TO_TREE, Citizen.State.CHOPPING]:
+			tree_reservations.erase(cell)
+	var closest_tree := Vector3.INF
+	var closest_distance := INF
+	for tree_position in tree_positions:
+		var cell := _cell_from_position(tree_position)
+		if tree_reservations.has(cell):
+			continue
+		var distance := sawmill_position.distance_squared_to(tree_position)
+		if distance < closest_distance:
+			closest_distance = distance
+			closest_tree = tree_position
+	if closest_tree != Vector3.INF:
+		tree_reservations[_cell_from_position(closest_tree)] = worker
+	return closest_tree
+
+func _assign_next_forestry_tree(worker: Citizen) -> void:
+	var tree_position := _reserve_closest_tree_for_sawmill(worker, worker.workplace_position)
+	if tree_position == Vector3.INF:
+		worker.idle()
+		return
+	worker.assign_next_forestry_tree(tree_position)
+
+func _on_forestry_tree_requested(worker: Citizen) -> void:
+	_assign_next_forestry_tree(worker)
 
 func _on_excavation_cycle(worker: Citizen, site_node: Node3D, efficiency: float) -> void:
 	for index in range(dig_sites.size()):
@@ -920,6 +1030,9 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	citizen.excavation_cycle.connect(_on_excavation_cycle)
 	citizen.resource_ready.connect(_on_resource_ready)
 	citizen.tree_harvested.connect(_on_tree_harvested)
+	citizen.logs_delivered.connect(_on_logs_delivered)
+	citizen.forestry_tree_requested.connect(_on_forestry_tree_requested)
+	citizen.sawmill_boards_collected.connect(_on_sawmill_boards_collected)
 	citizen.meal_finished.connect(_on_meal_finished)
 	citizen.canteen_delivery_finished.connect(_on_canteen_delivery_finished)
 	citizen.factory_cycle.connect(_on_factory_cycle)
@@ -1549,6 +1662,9 @@ func _toggle_first_person() -> void:
 		_update_interface("Select a citizen first, then press R to take control.")
 		return
 	player_citizen = selected_builder
+	# Watching a citizen must not cancel their current AI task. Manual control
+	# starts only after the player presses a movement key.
+	player_citizen.set_player_controlled(false)
 	is_first_person = true
 	build_mode = ""
 	selection_marker.visible = false
@@ -1556,7 +1672,7 @@ func _toggle_first_person() -> void:
 	player_yaw = player_citizen.rotation.y
 	player_pitch = 0.0
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-	_update_interface("First-person control enabled. Gather resources, mill logs into boards, and deliver them to storage.")
+	_update_interface("First-person control enabled. Gather resources, unload logs for processing, and deliver boards to storage.")
 
 func _update_player_control(delta: float) -> void:
 	if player_citizen == null:
@@ -1600,10 +1716,27 @@ func _start_interaction() -> void:
 	if not interaction_action.is_empty():
 		return
 	if _nearby_sawmill() and pocket_wood > 0:
-		var milled := pocket_wood
-		pocket_boards += milled
+		var sawmill_position := _nearby_sawmill_position()
+		var stock := _sawmill_stock(sawmill_position)
+		stock.logs = int(stock.logs) + pocket_wood
+		_store_sawmill_stock(sawmill_position, stock)
+		var unloaded := pocket_wood
 		pocket_wood = 0
-		_update_interface("Milled %d logs into boards. Take the boards to a warehouse." % milled)
+		_update_interface("Unloaded %d logs at the sawmill. Boards will be ready after processing." % unloaded)
+		_refresh_interaction_hint()
+		return
+	if _nearby_sawmill():
+		var pickup_sawmill_position := _nearby_sawmill_position()
+		var pickup_stock := _sawmill_stock(pickup_sawmill_position)
+		var free_capacity := POCKET_WOOD_CAPACITY - pocket_wood - pocket_food - pocket_boards
+		var amount := mini(int(pickup_stock.boards), free_capacity)
+		if amount > 0:
+			pickup_stock.boards = int(pickup_stock.boards) - amount
+			_store_sawmill_stock(pickup_sawmill_position, pickup_stock)
+			pocket_boards += amount
+			_update_interface("Picked up %d boards from the sawmill." % amount)
+		else:
+			_update_interface("The sawmill has no ready boards, or your pocket is full.")
 		_refresh_interaction_hint()
 		return
 	if _nearby_warehouse() and (pocket_food > 0 or pocket_boards > 0):
@@ -1686,12 +1819,15 @@ func _nearby_warehouse() -> bool:
 	return false
 
 func _nearby_sawmill() -> bool:
+	return _nearby_sawmill_position() != Vector3.INF
+
+func _nearby_sawmill_position() -> Vector3:
 	if player_citizen == null:
-		return false
+		return Vector3.INF
 	for sawmill_position in sawmill_positions:
 		if player_citizen.global_position.distance_to(sawmill_position) <= INTERACTION_RANGE:
-			return true
-	return false
+			return sawmill_position
+	return Vector3.INF
 
 func _nearby_farm() -> bool:
 	if player_citizen == null:
@@ -1707,6 +1843,8 @@ func _refresh_interaction_hint() -> void:
 	interaction_hint_label.visible = true
 	if _nearby_sawmill() and pocket_wood > 0:
 		interaction_hint_label.text = "LMB: unload wood at sawmill (%d wood)" % pocket_wood
+	elif _nearby_sawmill() and int(_sawmill_stock(_nearby_sawmill_position()).boards) > 0:
+		interaction_hint_label.text = "LMB: take ready boards from sawmill"
 	elif _nearby_warehouse() and (pocket_food > 0 or pocket_boards > 0):
 		interaction_hint_label.text = "LMB: unload food %d / boards %d at warehouse" % [pocket_food, pocket_boards]
 	elif _nearby_tree():
@@ -1899,6 +2037,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			warehouse_positions.append(service_position)
 		"sawmill":
 			sawmill_positions.append(service_position)
+			_sawmill_stock(service_position)
 		"farm":
 			farm_positions.append(service_position)
 		"house":
@@ -2120,6 +2259,7 @@ func _add_house_light(house: Node3D) -> void:
 	house_lights.append({"light": light, "house": house, "off_minute": randi_range(22 * 60, 26 * 60) % (24 * 60)})
 
 func _on_tree_harvested(worker: Citizen, position_on_board: Vector3) -> void:
+	tree_reservations.erase(_cell_from_position(position_on_board))
 	_consume_tree_at(position_on_board)
 
 func _consume_tree_near_player() -> void:

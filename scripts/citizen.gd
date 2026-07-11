@@ -5,6 +5,9 @@ signal resource_delivered(worker: Citizen, resource_type: String, amount: int)
 signal excavation_cycle(worker: Citizen, site: Node3D, efficiency: float)
 signal resource_ready(worker: Citizen, resource_type: String, amount: int)
 signal tree_harvested(worker: Citizen, position_on_board: Vector3)
+signal logs_delivered(worker: Citizen, sawmill_position: Vector3, amount: int)
+signal forestry_tree_requested(worker: Citizen)
+signal sawmill_boards_collected(courier: Citizen, sawmill_position: Vector3)
 signal meal_finished(worker: Citizen)
 signal canteen_delivery_finished(worker: Citizen, amount: int)
 signal factory_cycle(worker: Citizen, factory: Node3D)
@@ -22,7 +25,7 @@ const CONSTRUCTION_SLOT_SPACING := 0.42
 const CONSTRUCTION_APPROACH_DISTANCE := 1.75
 const NAVIGATION_TARGET_CLEARANCE := 0.48
 
-enum State { IDLE, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING }
+enum State { IDLE, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL }
 
 var state := State.IDLE
 var resource_type := "wood"
@@ -192,6 +195,8 @@ func _physics_process(delta: float) -> void:
 			_process_excavation(delta)
 		State.COURIER_TO_WORKER:
 			_process_courier_pickup(delta)
+		State.COURIER_TO_SAWMILL:
+			_process_sawmill_pickup(delta)
 		State.COURIER_TO_WAREHOUSE:
 			_process_courier_delivery(delta)
 		State.TO_HOME:
@@ -236,6 +241,9 @@ func _process_source_work(delta: float) -> void:
 
 func _process_to_workplace(delta: float) -> void:
 	if _move_to(workplace_position, delta):
+		if resource_type == "wood":
+			logs_delivered.emit(self, workplace_position, 1)
+			return
 		state = State.SAWING
 		work_time = WORK_DURATION / get_efficiency(active_role)
 
@@ -286,6 +294,10 @@ func _process_courier_pickup(delta: float) -> void:
 		courier_resource_type = cargo.get("type", "")
 		carried_amount = int(cargo.get("amount", 0))
 		state = State.COURIER_TO_WAREHOUSE if carried_amount > 0 else State.IDLE
+
+func _process_sawmill_pickup(delta: float) -> void:
+	if _move_to(workplace_position, delta):
+		sawmill_boards_collected.emit(self, workplace_position)
 
 func _process_courier_delivery(delta: float) -> void:
 	if _move_to(warehouse_position, delta):
@@ -538,7 +550,12 @@ func storage_delivery_result(accepted: bool) -> void:
 		if specialization == "courier":
 			state = State.IDLE
 			return
-		state = State.EXCAVATING if returning_to_excavation else State.TO_TREE
+		if returning_to_excavation:
+			state = State.EXCAVATING
+		elif active_role == "forestry":
+			forestry_tree_requested.emit(self)
+		else:
+			state = State.TO_TREE
 		returning_to_excavation = false
 	else:
 		blocked_by_storage = true
@@ -569,6 +586,27 @@ func assign_courier_pickup(worker: Citizen, warehouse: Vector3) -> void:
 	active_role = ""
 	factory = null
 	state = State.COURIER_TO_WORKER
+
+func assign_sawmill_pickup(sawmill: Vector3, warehouse: Vector3) -> void:
+	workplace_position = sawmill
+	warehouse_position = warehouse
+	active_role = ""
+	factory = null
+	state = State.COURIER_TO_SAWMILL
+
+func collect_sawmill_boards(amount: int) -> void:
+	carried_amount = amount
+	courier_resource_type = "boards"
+	state = State.COURIER_TO_WAREHOUSE if amount > 0 else State.IDLE
+
+func deliver_sawmill_boards(amount: int) -> void:
+	resource_type = "boards"
+	carried_amount = amount
+	state = State.TO_WAREHOUSE
+
+func assign_next_forestry_tree(tree_position: Vector3) -> void:
+	source_position = tree_position
+	state = State.TO_TREE
 
 func assign_canteen_work(next_canteen_position: Vector3) -> void:
 	if not is_player_controlled:
