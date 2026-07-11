@@ -170,8 +170,9 @@ func _create_voxel_terrain() -> void:
 	noise.frequency = 0.05  # мягкие пологие волны на масштабе доски
 	generator.noise = noise
 	generator.channel = VoxelBuffer.CHANNEL_SDF
-	generator.height_start = -1.4  # диапазон высот поверхности ≈ [-1.4, +0.4]:
-	generator.height_range = 1.8   # маленькие перепады, смещённые ниже нуля, чтобы постройки не утопали
+	# Поверхность остаётся чуть ниже y=0: игровые объекты и сетка продолжают стоять на плоскости застройки.
+	generator.height_start = -0.34
+	generator.height_range = 0.16
 	voxel_terrain.generator = generator
 	voxel_terrain.generate_collisions = false
 	voxel_terrain.view_distance = 96
@@ -571,6 +572,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			player_pitch = clampf(player_pitch - event.relative.y * 0.003, -70.0, 65.0)
 		elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 			_start_interaction()
+		elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+			_dig_voxel_at_crosshair()
 		get_viewport().set_input_as_handled()
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
@@ -729,6 +732,17 @@ func _start_interaction() -> void:
 		_update_interface("Food pocket is empty. Wood must go to a sawmill first.")
 	else:
 		_update_interface("Move closer to a tree, farm, warehouse or sawmill.")
+
+func _dig_voxel_at_crosshair() -> void:
+	if voxel_tool == null:
+		return
+	var origin := camera.global_position
+	var direction := -camera.global_transform.basis.z
+	var hit := voxel_tool.raycast(origin, direction, DIG_REACH)
+	if hit == null:
+		return
+	voxel_tool.mode = VoxelTool.MODE_REMOVE
+	voxel_tool.do_sphere(hit.position, DIG_RADIUS)
 
 func _update_interaction(delta: float) -> void:
 	if interaction_action.is_empty():
@@ -1399,6 +1413,6 @@ func _update_interface(message: String) -> void:
 	wood_label.text = "Wood: %d   Warehouse food: %d   Canteen: %d\nSoil: %d   Clay: %d   Wellbeing: %d%%\nTent: %d/%d   Population: %d" % [wood, food, canteen_food, soil, clay, wellbeing, _tent_resident_count(), TENT_CAPACITY, citizens.size()]
 	status_label.text = message
 	if is_first_person:
-		camera_hint_label.text = "R: leave citizen  WASD/arrows: move  Mouse: look  LMB: gather/interact"
+		camera_hint_label.text = "R: leave citizen  WASD/arrows: move  Mouse: look  LMB: gather/interact  RMB: dig terrain"
 	else:
 		camera_hint_label.text = "Click a citizen, then R: first-person.  WASD/arrows: move camera  Right drag: rotate/tilt  Middle drag: pan  Wheel: zoom"
