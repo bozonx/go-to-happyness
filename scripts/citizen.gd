@@ -80,6 +80,7 @@ var factory: Node3D
 var factory_position := Vector3.ZERO
 var park_position := Vector3.ZERO
 var goap_brain: CitizenGoapBrain
+var idle_indicator: Label3D
 
 func _ready() -> void:
 	add_to_group("citizens")
@@ -133,6 +134,19 @@ func _setup_selector() -> void:
 func _setup_visuals() -> void:
 	_setup_body_mesh()
 	_setup_head_mesh()
+	_setup_idle_indicator()
+
+func _setup_idle_indicator() -> void:
+	idle_indicator = Label3D.new()
+	idle_indicator.position = Vector3(0.0, 2.05, 0.0)
+	idle_indicator.text = "IDLE"
+	idle_indicator.font_size = 32
+	idle_indicator.outline_size = 6
+	idle_indicator.modulate = Color("f0c45d")
+	idle_indicator.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	idle_indicator.no_depth_test = true
+	idle_indicator.visible = false
+	add_child(idle_indicator)
 
 func _setup_body_mesh() -> void:
 	var body := MeshInstance3D.new()
@@ -172,16 +186,6 @@ func assign_work(next_resource_type: String, source: Vector3, workplace: Vector3
 
 func _physics_process(delta: float) -> void:
 	if is_player_controlled:
-		return
-	# The hero is the settlement's leader, not another autonomous worker. They
-	# stay where the player leaves them until the player takes control again.
-	if is_hero:
-		_apply_gravity(delta)
-		_update_effects(delta)
-		_update_satisfaction(delta)
-		velocity.x = 0.0
-		velocity.z = 0.0
-		move_and_slide()
 		return
 	if goap_brain != null:
 		goap_brain.tick(delta)
@@ -243,6 +247,8 @@ func _physics_process(delta: float) -> void:
 			_process_to_gather(delta)
 		State.GATHERING:
 			_process_gathering(delta)
+	if idle_indicator != null:
+		idle_indicator.visible = state == State.IDLE and not is_player_controlled
 
 func _process_to_source(delta: float) -> void:
 	if _move_to(source_position, delta):
@@ -530,6 +536,8 @@ func _start_task(duration: float) -> void:
 
 func set_player_controlled(controlled: bool) -> void:
 	is_player_controlled = controlled
+	if idle_indicator != null:
+		idle_indicator.visible = false
 	if controlled:
 		state = State.IDLE
 		construction_site = null
@@ -782,7 +790,6 @@ func assign_home(next_home: Node3D) -> void:
 
 func go_home() -> void:
 	if not is_player_controlled and is_instance_valid(home):
-		active_role = ""
 		factory = null
 		state = State.TO_HOME
 

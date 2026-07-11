@@ -7,6 +7,16 @@ static func role_for(worker: Dictionary, world: Dictionary) -> String:
 	var manual_role := str(worker.get("manual_role", ""))
 	if not manual_role.is_empty():
 		return manual_role
+	# Automatic work first covers essential shortages when the required workplace
+	# exists, then falls back to the resident's specialization.
+	var population := maxi(1, int(world.get("population", 1)))
+	if int(world.get("food", 0)) < population * 2:
+		if int(world.get("farms", 0)) > 0:
+			return "farming"
+		if int(world.get("forager_tents", 0)) > 0:
+			return "gather_food"
+	if int(world.get("wood", 0)) < population and int(world.get("sawmills", 0)) > 0 and int(world.get("trees", 0)) > 0:
+		return "forestry"
 	var specialization := str(worker.get("specialization", ""))
 	if specialization == "builder" and int(world.get("construction_sites", 0)) > 0:
 		return "construction"

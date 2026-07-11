@@ -198,6 +198,8 @@ var build_item_buttons: Array[Button] = []
 var skip_night_button: Button
 var water_collectors: Array[Dictionary] = []
 var role_buttons: Array[Button] = []
+var building_status_indicators: Array[Label3D] = []
+var building_status_update_time := 0.0
 var manage_citizen_button: Button
 var workforce: WorkforceCoordinator
 var sawmills: SawmillService
@@ -248,6 +250,7 @@ func _process(delta: float) -> void:
 	_update_canteen_delivery()
 	_update_sawmills(delta)
 	_update_brick_research(delta)
+	_update_building_status_indicators(delta)
 	if not _is_night():
 		_update_couriers()
 	if selected_builder != null and build_menu.visible:
@@ -694,9 +697,10 @@ func _warehouse_capacity() -> int:
 
 func _total_housing_slots() -> int:
 	var count := 0
-	for type in placed_buildings.values():
-		if type in ["tent", "living_tent", "dugout", "earth_house", "clay_house", "house"]:
-			count += HOUSE_CAPACITY
+	for record in building_footprints:
+		var building: Node3D = record.node
+		if is_instance_valid(building):
+			count += int(building.get_meta("housing_capacity", 0))
 	return count
 
 func _update_camera(delta: float) -> void:
@@ -1192,6 +1196,8 @@ func _create_starting_tent() -> void:
 	tent.set_meta("is_tent", true)
 	tent.set_meta("building_type", "tent")
 	tent.set_meta("footprint", Vector2i(3, 3))
+	tent.set_meta("spawn_slots", TENT_CAPACITY)
+	tent.set_meta("housing_capacity", TENT_CAPACITY)
 	placed_buildings[tent_cell] = "tent"
 	_register_navigation_footprint(tent.position, {"footprint": Vector2i(3, 3)})
 	add_child(tent)
@@ -1218,6 +1224,7 @@ func _create_starting_tent() -> void:
 	shape.position.y = 1.1
 	selector.add_child(shape)
 	tent.add_child(selector)
+	_add_building_status_indicator(tent)
 
 func _create_citizens() -> void:
 	var spawn_anchor: Vector3 = entrance_stone.global_position + Vector3(0.0, 0.0, 2.0)
@@ -1508,13 +1515,19 @@ func _create_house_menu(ui: CanvasLayer) -> void:
 	house_menu_title.add_theme_font_size_override("font_size", 17)
 	house_menu.add_child(house_menu_title)
 	_add_house_resettle_button()
+	var spawn_button := Button.new()
+	spawn_button.text = "Invite resident"
+	spawn_button.position = Vector2(16, 102)
+	spawn_button.size = Vector2(272, 30)
+	spawn_button.pressed.connect(_spawn_house_citizen)
+	house_menu.add_child(spawn_button)
 	var demolish_button := Button.new()
 	demolish_button.text = "Mark for demolition"
-	demolish_button.position = Vector2(16, 102)
+	demolish_button.position = Vector2(16, 140)
 	demolish_button.size = Vector2(272, 30)
 	demolish_button.pressed.connect(func(): _mark_building_for_demolition(selected_house))
 	house_menu.add_child(demolish_button)
-	house_menu.offset_top = -450.0
+	house_menu.offset_top = -490.0
 
 func _create_materials_factory_menu(ui: CanvasLayer) -> void:
 	materials_factory_menu = Panel.new()
@@ -1603,22 +1616,16 @@ func _resettle_tent_resident() -> void:
 			return
 	_update_interface("No residents remain in the tent.")
 
-func _add_house_spawn_button(title: String, specialization: String, y_position: float) -> void:
-	var button := Button.new()
-	button.text = title
-	button.position = Vector2(16, y_position)
-	button.size = Vector2(272, 30)
-	button.pressed.connect(_spawn_house_citizen.bind(specialization))
-	house_menu.add_child(button)
-
-func _spawn_house_citizen(specialization: String) -> void:
+func _spawn_house_citizen() -> void:
 	if selected_house == null:
 		return
 	var slots: int = selected_house.get_meta("spawn_slots", 0)
 	if slots <= 0:
 		return
 	var entrance: Vector3 = selected_house.get_meta("entrance_position", selected_house.global_position + Vector3(0.0, 0.0, 3.5))
-	var spawned := HOUSE_CAPACITY - slots
+	var capacity: int = int(selected_house.get_meta("housing_capacity", HOUSE_CAPACITY))
+	var spawned := capacity - slots
+	var specialization: String = ["builder", "forestry", "farming", "excavation", "courier", "cook"][random.randi_range(0, 5)]
 	_add_citizen(entrance + Vector3((spawned % 2) * 0.7 - 0.35, 0.0, 0.45 + (spawned / 2) * 0.45), specialization)
 	citizens.back().assign_home(selected_house)
 	citizens.back().remove_debuff("tent")
@@ -1629,14 +1636,15 @@ func _spawn_house_citizen(specialization: String) -> void:
 		if not recreation.is_empty():
 			citizens.back().go_to_park(recreation[spawned % recreation.size()])
 	_show_house_menu()
-	_update_interface("New %s joined the settlement and received an automatic task." % specialization)
+	_update_interface("A new resident joined the settlement and received an automatic task.")
 
 func _show_house_menu() -> void:
 	if selected_house == null:
 		return
 	var slots: int = selected_house.get_meta("spawn_slots", 0)
 	house_menu.visible = true
-	house_menu_title.text = "House residents\nFree beds: %d/%d" % [slots, HOUSE_CAPACITY]
+	var capacity: int = int(selected_house.get_meta("housing_capacity", HOUSE_CAPACITY))
+	house_menu_title.text = "House residents\nFree beds: %d/%d" % [slots, capacity]
 
 func _add_build_button(title: String, building_type: String, y_position: float, category: String) -> void:
 	var button := Button.new()
@@ -1694,7 +1702,7 @@ func _refresh_build_menu() -> void:
 		manage_citizen_button.text = "Управлять" if selected_builder != hero_citizen else "Управлять героем"
 	
 	if job_submenu_btn != null:
-		job_submenu_btn.visible = citizen_actions_visible and selected_builder != hero_citizen
+		job_submenu_btn.visible = citizen_actions_visible
 	if job_back_btn != null:
 		job_back_btn.visible = selected_exists and build_menu_is_job_menu
 	
@@ -1708,7 +1716,11 @@ func _refresh_build_menu() -> void:
 			button.visible = not build_category.is_empty() and button.get_meta("category", "") == build_category and not build_menu_is_job_menu
 			
 	for button in role_buttons:
-		button.visible = build_menu_is_job_menu and selected_exists
+		var role: String = button.get_meta("role", "")
+		button.visible = build_menu_is_job_menu and selected_exists and _is_role_available(role)
+		if button.visible:
+			var base_title: String = button.get_meta("base_title", button.text)
+			button.text = "%s  [%d]" % [base_title, _assigned_count_for_role(role)] if not role.is_empty() else base_title
 
 	# Lay the visible building buttons out in a single column and annotate each
 	# with its resource cost. Unaffordable buildings are disabled and dimmed.
@@ -1729,7 +1741,7 @@ func _refresh_build_menu() -> void:
 
 	if build_menu_title != null:
 		if build_menu_is_job_menu:
-			build_menu_title.text = "Assign Job\nSelect a task for the citizen."
+			build_menu_title.text = "Assign Job\nOnly available workplaces are shown. [n] = assigned residents."
 		elif not build_category.is_empty():
 			build_menu_title.text = "%s buildings\nChoose a building to place." % build_category.capitalize()
 		else:
@@ -1749,14 +1761,13 @@ func _add_role_button(title: String, role: String, y_position: float) -> void:
 	button.position = Vector2(16, y_position)
 	button.size = Vector2(272, 28)
 	button.pressed.connect(_set_manual_role.bind(role))
+	button.set_meta("role", role)
+	button.set_meta("base_title", title)
 	build_menu.add_child(button)
 	role_buttons.append(button)
 
 func _set_manual_role(role: String) -> void:
 	if selected_builder == null:
-		return
-	if selected_builder == hero_citizen:
-		_update_interface("The hero performs work directly while under your control.")
 		return
 	selected_builder.idle()
 	if role == "excavation":
@@ -1769,7 +1780,26 @@ func _set_manual_role(role: String) -> void:
 	build_menu_is_job_menu = false
 	_show_selected_citizen_menu()
 	_refresh_build_menu()
-	_update_interface("Citizen assigned to %s." % ("automatic work" if role.is_empty() else role.replace("_", " ")))
+	_update_interface("%s assigned to %s." % ["Hero" if selected_builder.is_hero else "Citizen", "automatic work" if role.is_empty() else role.replace("_", " ")])
+
+func _is_role_available(role: String) -> bool:
+	match role:
+		"": return true
+		"construction": return not construction_sites.is_empty() or not demolition_sites.is_empty()
+		"forestry": return not sawmill_positions.is_empty() and not warehouse_positions.is_empty()
+		"farming": return not farm_positions.is_empty() and not warehouse_positions.is_empty()
+		"excavation": return not dig_sites.is_empty() and not warehouse_positions.is_empty()
+		"gather_branches": return not tree_positions.is_empty()
+		"gather_grass": return settlement.era == SettlementState.Era.TENT
+		"gather_food": return not forager_positions.is_empty()
+	return false
+
+func _assigned_count_for_role(role: String) -> int:
+	var count := 0
+	for citizen in citizens:
+		if citizen.manual_role == role or (role.is_empty() and citizen.manual_role.is_empty()):
+			count += 1
+	return count
 
 func _start_dig_assignment() -> void:
 	if selected_builder == null:
@@ -2621,7 +2651,9 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 		"tent", "living_tent", "dugout", "earth_house", "clay_house", "house":
 			if building_type == "house":
 				completed_house_count += 1
-			building.set_meta("spawn_slots", HOUSE_CAPACITY)
+			var housing_capacity := 1 if building_type == "living_tent" else HOUSE_CAPACITY
+			building.set_meta("housing_capacity", housing_capacity)
+			building.set_meta("spawn_slots", housing_capacity)
 			building.set_meta("entrance_position", service_position)
 			_add_building_selector(building, "house_selector", blueprint.footprint)
 			_add_house_light(building)
@@ -2651,6 +2683,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			record.node = building
 			break
 	_register_navigation_footprint(position_on_board, blueprint)
+	_add_building_status_indicator(building)
 	_rebuild_navigation_mesh()
 	_update_workers()
 	var completion_message := "%s construction completed." % building_type.capitalize()
@@ -2670,6 +2703,68 @@ func _add_building_selector(building: Node3D, group_name: String, footprint: Vec
 	collision.position.y = 2.0
 	selector.add_child(collision)
 	building.add_child(selector)
+
+func _add_building_status_indicator(building: Node3D) -> void:
+	if not is_instance_valid(building) or building.has_meta("status_indicator"):
+		return
+	var indicator := Label3D.new()
+	indicator.position = Vector3(0.0, 4.2, 0.0)
+	indicator.font_size = 28
+	indicator.outline_size = 5
+	indicator.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	indicator.no_depth_test = true
+	indicator.visible = false
+	building.add_child(indicator)
+	building.set_meta("status_indicator", indicator)
+	building_status_indicators.append(indicator)
+
+func _update_building_status_indicators(delta: float) -> void:
+	building_status_update_time -= delta
+	if building_status_update_time > 0.0:
+		return
+	building_status_update_time = 0.5
+	for indicator in building_status_indicators:
+		if not is_instance_valid(indicator):
+			continue
+		var building := indicator.get_parent() as Node3D
+		if not is_instance_valid(building):
+			continue
+		var required := _required_staff_for_building(building)
+		if required.is_empty():
+			indicator.visible = false
+			continue
+		var assigned := _assigned_staff_for_building(building, required)
+		indicator.visible = assigned < int(required.count)
+		indicator.text = "NO WORKER" if assigned == 0 else "STAFF %d/%d" % [assigned, int(required.count)]
+		indicator.modulate = Color("ef6b5b") if assigned == 0 else Color("f0c45d")
+
+func _required_staff_for_building(building: Node3D) -> Dictionary:
+	match str(building.get_meta("building_type", "")):
+		"sawmill": return {"role": "forestry", "count": 1}
+		"farm": return {"role": "farming", "count": 1}
+		"forager_tent": return {"role": "gather_food", "count": 1}
+		"cook_campfire", "canteen": return {"role": "cooking", "count": 1}
+		"school": return {"role": "teaching", "count": 1}
+		"brick_factory", "materials_factory", "recycling_factory", "metal_factory": return {"role": "factory_worker", "count": int(building.get_meta("required_factory_workers", 1))}
+	return {}
+
+func _assigned_staff_for_building(building: Node3D, required: Dictionary) -> int:
+	var count := 0
+	var role: String = required.role
+	for citizen in citizens:
+		if role == "cooking" and citizen.active_role == "cooking":
+			count += 1
+		elif role == "teaching" and citizen.active_role == "teaching":
+			count += 1
+		elif role == "factory_worker" and citizen.factory == building and citizen.state in [Citizen.State.TO_FACTORY, Citizen.State.FACTORY_WORK]:
+			count += 1
+		elif role == "forestry" and citizen.active_role == "forestry":
+			count += 1
+		elif role == "farming" and citizen.active_role == "farming":
+			count += 1
+		elif role == "gather_food" and citizen.active_role == "gather_food":
+			count += 1
+	return count
 
 func _has_storage_room_for_role(role: String) -> bool:
 	var resource_for_role := {"forestry": "logs", "farming": "food", "excavation": "soil", "gather_branches": "branches", "gather_grass": "grass", "gather_food": "food"}

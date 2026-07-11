@@ -17,8 +17,9 @@ func update_workers() -> void:
 			citizen.request_goap_decision()
 		return
 	for citizen in simulation.citizens:
-		if citizen.is_player_controlled or citizen.is_hero:
+		if citizen.is_player_controlled:
 			continue
+		_ensure_home(citizen)
 		if citizen.state in [Citizen.State.TO_CANTEEN, Citizen.State.EATING, Citizen.State.TO_FOOD_PICKUP, Citizen.State.TO_CANTEEN_DELIVERY, Citizen.State.COURIER_TO_WORKER, Citizen.State.COURIER_TO_WAREHOUSE, Citizen.State.WAITING_COURIER]:
 			continue
 		if citizen.blocked_by_storage:
@@ -111,7 +112,7 @@ func work_role_for(citizen: Citizen) -> String:
 
 func _worker_data(citizen: Citizen) -> Dictionary:
 	return {
-		"player_controlled": citizen.is_player_controlled or citizen.is_hero,
+		"player_controlled": citizen.is_player_controlled,
 		"blocked_by_storage": citizen.blocked_by_storage,
 		"specialization": citizen.specialization,
 		"manual_role": citizen.manual_role,
@@ -135,7 +136,21 @@ func _world_data() -> Dictionary:
 		"dig_sites": simulation.dig_sites.size(),
 		"has_factory_job": factory_for_role("factory_worker") != null,
 		"has_engineer_job": factory_for_role("engineer") != null,
+		"food": simulation.food,
+		"wood": simulation.wood,
+		"population": simulation.citizens.size(),
 	}
+
+func _ensure_home(citizen: Citizen) -> void:
+	if is_instance_valid(citizen.home):
+		return
+	for record in simulation.building_footprints:
+		var home: Node3D = record.node
+		if not is_instance_valid(home) or int(home.get_meta("spawn_slots", 0)) <= 0:
+			continue
+		citizen.assign_home(home)
+		home.set_meta("spawn_slots", int(home.get_meta("spawn_slots", 0)) - 1)
+		return
 
 
 func factory_for_role(role: String) -> Node3D:
