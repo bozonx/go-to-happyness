@@ -87,6 +87,7 @@ var build_menu_title: Label
 var camera_hint_label: Label
 var is_panning_camera := false
 var is_rotating_camera := false
+var right_mouse_dragged := false
 var construction_sites: Array[Dictionary] = []
 var completed_house_count := 0
 var player_citizen: Citizen
@@ -368,12 +369,23 @@ func _update_house_lights() -> void:
 		if not is_instance_valid(light):
 			continue
 		var off_minute: int = record.off_minute
-		# Every home lights up at 20:00. Each household chooses one stable
+		# A home is lit only after someone moves in. It turns on with evening
+		# twilight and each household chooses one stable
 		# switch-off time between 22:00 and 02:00, including after midnight.
-		light.visible = minute_of_day >= 20 * 60 and minute_of_day < off_minute if off_minute >= 20 * 60 else minute_of_day >= 20 * 60 or minute_of_day < off_minute
+		var house: Node3D = record.house
+		var occupied := _house_has_residents(house)
+		light.visible = occupied and (minute_of_day >= 17 * 60 and minute_of_day < off_minute if off_minute >= 17 * 60 else minute_of_day >= 17 * 60 or minute_of_day < off_minute)
 	for light in entrance_lights:
 		if is_instance_valid(light):
-			light.visible = _is_night()
+			light.visible = minute_of_day >= 17 * 60 or minute_of_day < 7 * 60
+
+func _house_has_residents(house: Node3D) -> bool:
+	if not is_instance_valid(house):
+		return false
+	for citizen in citizens:
+		if citizen.home == house:
+			return true
+	return false
 
 func _is_night() -> bool:
 	var hour := int(game_minutes) / 60
@@ -1393,12 +1405,18 @@ func _unhandled_input(event: InputEvent) -> void:
 		_update_camera_position()
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_MIDDLE:
 		is_panning_camera = event.pressed
-	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
-		_close_context_menus()
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
-		is_rotating_camera = event.pressed
+		if event.pressed:
+			is_rotating_camera = true
+			right_mouse_dragged = false
+		else:
+			is_rotating_camera = false
+			if not right_mouse_dragged:
+				_close_context_menus()
 	elif event is InputEventMouseMotion:
 		if is_rotating_camera:
+			if event.relative.length_squared() > 0.0:
+				right_mouse_dragged = true
 			_rotate_camera(event.relative)
 		elif is_panning_camera:
 			_pan_camera(event.relative)
@@ -2099,7 +2117,7 @@ func _add_house_light(house: Node3D) -> void:
 	light.position = Vector3(0.0, 2.0, footprint.y * 0.5 + 0.35)
 	light.visible = false
 	house.add_child(light)
-	house_lights.append({"light": light, "off_minute": randi_range(22 * 60, 26 * 60) % (24 * 60)})
+	house_lights.append({"light": light, "house": house, "off_minute": randi_range(22 * 60, 26 * 60) % (24 * 60)})
 
 func _on_tree_harvested(worker: Citizen, position_on_board: Vector3) -> void:
 	_consume_tree_at(position_on_board)
