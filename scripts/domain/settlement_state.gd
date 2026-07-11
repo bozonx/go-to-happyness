@@ -24,7 +24,7 @@ var wellbeing := 75
 var workday_hours := 8
 var night_shifts_allowed := false
 var low_wellbeing_days := 0
-var tools := {"axe": false, "hand_saw": false, "shovel": false, "bucket": false, "sawmill_kit": false}
+var tools := {"axe": false, "hand_saw": false, "shovel": false, "bucket": false}
 var trade_sales := 0
 var buildings: Dictionary = {}
 var brick_construction_unlocked := false
@@ -78,15 +78,16 @@ func storage_limit(resource_type: String) -> float:
 
 
 func ensure_storage_defaults(warehouses: int) -> void:
-	# First-time setup gives the era's staple goods a generous slice and leaves the
-	# rest of the budget free for the player to assign in the warehouse menu.
+	# Preserve the starting stock, then divide unused space between early staples.
 	if storage_limits.is_empty():
 		for resource_type in STORED_RESOURCES:
 			storage_limits[resource_type] = 0.0
 		var primary := ["branches", "grass", "water", "food"]
-		var share := float(storage_capacity(warehouses)) * 0.8 / primary.size()
 		for resource_type in primary:
-			storage_limits[resource_type] = share
+			storage_limits[resource_type] = amount(resource_type) * storage_weight(resource_type)
+		var share := storage_free_units(warehouses) / primary.size()
+		for resource_type in primary:
+			storage_limits[resource_type] += share
 	_clamp_storage_limits(warehouses)
 
 
@@ -131,6 +132,18 @@ func storage_room_for(resource_type: String) -> int:
 
 func storage_can_accept(resource_type: String, count: int) -> bool:
 	return storage_room_for(resource_type) >= count
+
+
+func reserve_storage_room_for(resource_type: String, count: int, warehouses: int) -> bool:
+	if count <= 0 or not STORED_RESOURCES.has(resource_type):
+		return count <= 0
+	var required_units := count * storage_weight(resource_type)
+	var available_units := maxf(0.0, float(storage_limits.get(resource_type, 0.0)) - amount(resource_type) * storage_weight(resource_type))
+	var missing_units := maxf(0.0, required_units - available_units)
+	if missing_units > 0.0:
+		var expansion := minf(missing_units, storage_free_units(warehouses))
+		storage_limits[resource_type] = float(storage_limits.get(resource_type, 0.0)) + expansion
+	return storage_can_accept(resource_type, count)
 
 
 func amount(resource_type: String) -> int:
@@ -216,7 +229,7 @@ func can_advance_to(next_era: Era, population: int, housing_slots: int) -> bool:
 		Era.CLAY:
 			return era == Era.EARTH and has_building("smithy") and has_building("earth_market") and housing_slots >= population and clay >= 5 and money >= 5 and trade_sales >= 3 and _has_tools(["shovel"])
 		Era.WOOD:
-			return era == Era.CLAY and has_building("clay_market") and water >= population and logs >= 10 and money >= 10 and bool(tools.sawmill_kit) and has_building("sawmill")
+			return era == Era.CLAY and has_building("clay_market") and water >= population and logs >= 10 and money >= 10
 		Era.BRICK:
 			return era == Era.WOOD and has_building("brick_factory") and clay >= 20 and has_building("wood_market")
 	return false

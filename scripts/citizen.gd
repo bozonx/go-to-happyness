@@ -850,10 +850,12 @@ func assign_gathering(res_type: String, source_pos: Vector3, delivery_pos: Vecto
 func _process_to_gather(delta: float) -> void:
 	if _move_to(gather_source_position, delta):
 		state = State.GATHERING
-		_start_task(2.0 / get_efficiency("forestry" if gather_resource_type == "branches" else "farming"))
+		_start_task(2.0 / get_efficiency("forestry" if gather_resource_type in ["branches", "logs"] else "farming"))
 
 func _process_gathering(delta: float) -> void:
 	if _work(delta):
 		carried_amount = 1
 		resource_type = gather_resource_type
+		if resource_type == "logs":
+			tree_harvested.emit(self, gather_source_position)
 		state = State.TO_WAREHOUSE

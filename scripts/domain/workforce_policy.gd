@@ -13,6 +13,8 @@ static func role_for(worker: Dictionary, world: Dictionary) -> String:
 	if specialization == "forestry":
 		if int(world.get("sawmills", 0)) > 0:
 			return "forestry"
+		elif int(world.get("era", SettlementState.Era.TENT)) >= SettlementState.Era.EARTH and int(world.get("warehouses", 0)) > 0:
+			return "forestry"
 		else:
 			return "gather_branches"
 	if specialization == "farming":
@@ -49,7 +51,7 @@ static func can_assign(worker: Dictionary, world: Dictionary) -> bool:
 		
 	match role_for(worker, world):
 		"construction": return int(world.get("construction_sites", 0)) > 0
-		"forestry": return int(world.get("warehouses", 0)) > 0 and int(world.get("sawmills", 0)) > 0 and int(world.get("trees", 0)) > 0
+		"forestry": return int(world.get("warehouses", 0)) > 0 and int(world.get("trees", 0)) > 0
 		"farming": return int(world.get("warehouses", 0)) > 0 and int(world.get("farms", 0)) > 0
 		"excavation": return int(world.get("warehouses", 0)) > 0 and int(world.get("dig_sites", 0)) > 0
 		"gather_branches": return int(world.get("trees", 0)) > 0

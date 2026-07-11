@@ -112,6 +112,12 @@ var selection_marker: MeshInstance3D
 var selection_material: StandardMaterial3D
 var wood_label: Label
 var status_label: Label
+var messages: Array[Dictionary] = []
+var current_day := 1
+var message_scroll: ScrollContainer
+var message_list: VBoxContainer
+var messages_modal: Panel
+var modal_message_list: VBoxContainer
 var selected_builder: Citizen
 var build_menu: Panel
 var build_menu_title: Label
@@ -208,6 +214,7 @@ func _ready() -> void:
 	_create_forest()
 	_create_ponds()
 	_create_entrance_stone()
+	_create_starting_tent()
 	_create_citizens()
 
 	# Starting resources to place first campfire and tents. The tent-era store is
@@ -510,22 +517,11 @@ func _building_power(site_node: Node3D) -> float:
 	return power
 
 func _on_resource_delivered(worker: Citizen, resource_type: String, amount: int) -> void:
-	if not settlement.storage_can_accept(resource_type, amount):
+	if not settlement.reserve_storage_room_for(resource_type, amount, warehouse_positions.size()):
 		worker.storage_delivery_result(false)
 		_update_interface("No storage room for %s. Rebalance the warehouse or build another; the worker went home." % resource_type)
 		return
-	if resource_type == "food":
-		food += amount
-	elif resource_type == "soil":
-		soil += amount
-	elif resource_type == "clay":
-		clay += amount
-	elif resource_type == "boards":
-		boards += amount
-	elif resource_type == "branches":
-		branches += amount
-	else:
-		wood += amount
+	settlement.add(resource_type, amount)
 	worker.storage_delivery_result(true)
 	_update_interface("Workers delivered %d %s to the warehouse." % [amount, resource_type])
 
@@ -764,7 +760,7 @@ func _find_path_around_houses(from: Vector3, destination: Vector3, may_enter_des
 	return path
 
 func _update_interface(message: String) -> void:
-	wood_label.text = "Era: %s\nMoney: %d\nBranches: %d\nGrass: %d\nWater: %d\nFood: %d\nLogs: %d\nTimber: %d\nBoards: %d\nBricks: %d\nStorage: %d/%d\nPopulation: %d\nWellbeing: %d" % [_era_name(), money, branches, grass, water, food, settlement.logs, wood, boards, bricks, _stored_resources(), _warehouse_capacity(), citizens.size(), wellbeing]
+	wood_label.text = "Era: %s\nMoney: %d\nBranches: %d\nGrass: %d\nWater: %d\nFood: %d\nLogs: %d\nBoards: %d\nBricks: %d\nStorage: %d/%d\nPopulation: %d\nWellbeing: %d" % [_era_name(), money, branches, grass, water, food, settlement.logs, boards, bricks, _stored_resources(), _warehouse_capacity(), citizens.size(), wellbeing]
 	status_label.text = message
 	if is_first_person:
 		var build_hint := "  B: construction" if player_citizen == hero_citizen else ""
@@ -1026,6 +1022,7 @@ func _create_citizens() -> void:
 		if not is_nan(terrain_height):
 			spawn_position.y = terrain_height + 0.08
 		_add_citizen(spawn_position)
+		citizens.back().assign_home(tent)
 
 func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void:
 	var citizen := Citizen.new()
@@ -2004,11 +2001,12 @@ func _start_interaction() -> void:
 		interaction_hint_label.text = "Filling bucket..."
 		return
 	if _nearby_tree() or _nearby_farm():
-		if _pocket_total() >= POCKET_WOOD_CAPACITY:
+		var gathering_branches := _nearby_tree() and settlement.era < SettlementState.Era.WOOD
+		if not gathering_branches and _pocket_total() >= POCKET_WOOD_CAPACITY:
 			_update_interface("Pocket is full. Take wood to the sawmill or food to the warehouse.")
 			_refresh_interaction_hint()
 			return
-		interaction_resource = "wood" if _nearby_tree() else "food"
+		interaction_resource = "branches" if gathering_branches else ("wood" if _nearby_tree() else "food")
 		interaction_action = "harvesting"
 		interaction_time = 0.0
 		interaction_progress.visible = true
@@ -2033,7 +2031,7 @@ func _dig_voxel_at_crosshair() -> void:
 func _update_interaction(delta: float) -> void:
 	if interaction_action.is_empty():
 		return
-	if (interaction_resource == "wood" and not _nearby_tree()) or (interaction_resource == "food" and not _nearby_farm()) or (interaction_resource == "water" and not _nearby_pond()):
+	if (interaction_resource in ["wood", "branches"] and not _nearby_tree()) or (interaction_resource == "food" and not _nearby_farm()) or (interaction_resource == "water" and not _nearby_pond()):
 		interaction_action = ""
 		interaction_progress.visible = false
 		_update_interface("Gathering cancelled: you moved away from the resource.")
@@ -2045,13 +2043,21 @@ func _update_interaction(delta: float) -> void:
 		interaction_action = ""
 		if interaction_resource == "wood":
 			pocket_wood += 1
+		elif interaction_resource == "branches":
+			if settlement.reserve_storage_room_for("branches", 1, warehouse_positions.size()):
+				branches += 1
+			else:
+				_update_interface("No storage room for branches. Rebalance the warehouse or build another.")
 		elif interaction_resource == "water":
 			pocket_water += 1
 		else:
 			pocket_food += 1
 		interaction_progress.visible = false
 		_consume_tree_near_player() if interaction_resource == "wood" else null
-		_update_interface("Gathered. Wood: %d, food: %d, water: %d, boards: %d, pocket: %d/%d." % [pocket_wood, pocket_food, pocket_water, pocket_boards, _pocket_total(), POCKET_WOOD_CAPACITY])
+		if interaction_resource == "branches":
+			_update_interface("Gathered branches. Branches: %d." % branches)
+		else:
+			_update_interface("Gathered. Wood: %d, food: %d, water: %d, boards: %d, pocket: %d/%d." % [pocket_wood, pocket_food, pocket_water, pocket_boards, _pocket_total(), POCKET_WOOD_CAPACITY])
 		_refresh_interaction_hint()
 
 func _nearby_tree() -> bool:
@@ -2111,7 +2117,7 @@ func _refresh_interaction_hint() -> void:
 	elif _nearby_warehouse() and (pocket_food > 0 or pocket_boards > 0 or pocket_water > 0):
 		interaction_hint_label.text = "LMB: unload food %d / boards %d / water %d at warehouse" % [pocket_food, pocket_boards, pocket_water]
 	elif _nearby_tree():
-		interaction_hint_label.text = "LMB: gather wood (%d/%d in pocket)" % [_pocket_total(), POCKET_WOOD_CAPACITY]
+		interaction_hint_label.text = "LMB: gather branches" if settlement.era < SettlementState.Era.WOOD else "LMB: gather wood (%d/%d in pocket)" % [_pocket_total(), POCKET_WOOD_CAPACITY]
 	elif _nearby_farm():
 		interaction_hint_label.text = "LMB: gather food (%d/%d in pocket)" % [_pocket_total(), POCKET_WOOD_CAPACITY]
 	elif _nearby_pond():
@@ -2431,9 +2437,8 @@ func _fell_tree_at(position_on_board: Vector3) -> void:
 		return
 	tree.set_meta("felled", true)
 	tree.rotation_degrees.z = 82.0
-	settlement.logs += 1
 	settlement.branches += 3
-	_update_interface("A tree was felled. Its fallen trunk awaits manual processing; the living tree is no longer removed by branch gathering.")
+	_update_interface("A tree was felled. Its log is ready for delivery; the living tree is no longer available for gathering.")
 
 func _tent_resident_count() -> int:
 	if not is_instance_valid(tent):
@@ -2474,10 +2479,10 @@ func _update_tent_dismantle(delta: float) -> void:
 	tent = null
 	placed_buildings.erase(tent_cell)
 	_rebuild_navigation_mesh()
-	wood += 2
+	branches += 2
 	tent_dismantle_progress = -1.0
 	_update_workers()
-	_update_interface("Builders dismantled the empty tent and recovered 2 wood.")
+	_update_interface("Builders dismantled the empty tent and recovered 2 branches.")
 
 
 func _update_water_collectors(delta: float) -> void:
@@ -2632,16 +2637,12 @@ func _refresh_campfire_menu() -> void:
 			var water_ok := water >= citizens.size()
 			var logs_ok := settlement.logs >= 10
 			var money_ok := settlement.money >= 10
-			var kit_ok := bool(settlement.tools.sawmill_kit)
-			var has_sawmill := settlement.has_building("sawmill")
 			
 			req_text = "Requirements for Wood Era:\n"
 			req_text += "- Clay market built: %s\n" % ("Yes" if has_mkt else "No")
-			req_text += "- Sawmill built: %s\n" % ("Yes" if has_sawmill else "No")
 			req_text += "- Water (needs %d): %d (%s)\n" % [citizens.size(), water, "OK" if water_ok else "Need more"]
 			req_text += "- Logs (needs 10): %d (%s)\n" % [settlement.logs, "OK" if logs_ok else "Need more"]
 			req_text += "- Money (needs 10): %d (%s)\n" % [settlement.money, "OK" if money_ok else "Need more"]
-			req_text += "- Sawmill kit owned: %s\n" % ("Yes" if kit_ok else "No")
 			can_advance = settlement.can_advance_to(next_era, citizens.size(), housing_slots)
 			
 		SettlementState.Era.WOOD:
@@ -2745,7 +2746,6 @@ func _refresh_market_menu() -> void:
 	if market_type in ["wood_market", "brick_market"]:
 		sell_items.append(["wood", 2])
 		sell_items.append(["boards", 3])
-		buy_items.append(["sawmill_kit", 30])
 		
 	if market_type == "brick_market":
 		sell_items.append(["bricks", 4])

@@ -20,10 +20,13 @@ func _init() -> void:
 		assert(is_instance_valid(citizen))
 		assert(citizen.is_inside_tree())
 		assert(citizen.is_in_group("citizens"))
+		assert(citizen.home == simulation.tent)
 		assert(is_finite(citizen.global_position.x) and is_finite(citizen.global_position.y) and is_finite(citizen.global_position.z))
 		assert(citizen.global_position.z >= simulation.entrance_stone.global_position.z + 1.5)
 		assert(citizen.global_position.y > -1.0)
 		assert(citizen.get_children().any(func(child): return child is MeshInstance3D))
+	assert(is_instance_valid(simulation.tent))
+	assert(simulation._total_housing_slots() >= simulation.POPULATION)
 	# R always enters the hero view; direct management of another citizen is explicit.
 	simulation._toggle_hero_view()
 	assert(simulation.is_first_person)

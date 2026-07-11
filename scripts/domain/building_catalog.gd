@@ -10,7 +10,7 @@ const DEFINITIONS := {
 	"craft_tent": {"name": "Craft tent", "category": "tent", "costs": {"branches": 10, "grass": 5}},
 	"dew_collector": {"name": "Dew collector", "category": "tent", "costs": {"branches": 6, "grass": 4}},
 	"pond": {"name": "Pond", "category": "tent", "costs": {"branches": 8, "grass": 6}},
-	"warehouse": {"name": "Simple store", "category": "tent", "costs": {"branches": 12, "grass": 4}},
+	"warehouse": {"name": "Simple store", "category": "tent", "costs": {}},
 	"trade_tent": {"name": "Trade tent", "category": "tent", "costs": {"branches": 10, "grass": 5}},
 	"dugout": {"name": "Dugout", "category": "earth", "costs": {"soil": 12, "branches": 8}},
 	"earth_house": {"name": "Earth house", "category": "earth", "costs": {"soil": 20, "branches": 12}},
@@ -27,7 +27,7 @@ const DEFINITIONS := {
 	"school": {"name": "School", "category": "wood", "costs": {"boards": 18}},
 	"park": {"name": "Park", "category": "wood", "costs": {"boards": 14}},
 	"wood_market": {"name": "Wood market", "category": "wood", "costs": {"boards": 15}},
-	"brick_factory": {"name": "Brick kiln", "category": "brick", "costs": {"wood": 12, "soil": 12}},
+	"brick_factory": {"name": "Brick kiln", "category": "brick", "costs": {"boards": 12, "soil": 12}},
 	"materials_factory": {"name": "Materials factory", "category": "brick", "costs": {"bricks": 18, "boards": 8}},
 	"brick_market": {"name": "Brick market", "category": "brick", "costs": {"bricks": 20}},
 }

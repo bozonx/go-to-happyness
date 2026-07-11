@@ -22,7 +22,7 @@ func update_workers() -> void:
 		if citizen.state in [Citizen.State.TO_CANTEEN, Citizen.State.EATING, Citizen.State.TO_FOOD_PICKUP, Citizen.State.TO_CANTEEN_DELIVERY, Citizen.State.COURIER_TO_WORKER, Citizen.State.COURIER_TO_WAREHOUSE, Citizen.State.WAITING_COURIER]:
 			continue
 		if citizen.blocked_by_storage:
-			if simulation._stored_resources() >= simulation._warehouse_capacity():
+			if not simulation.settlement.reserve_storage_room_for(citizen.resource_type, maxi(1, citizen.carried_amount), simulation.warehouse_positions.size()):
 				continue
 			citizen.blocked_by_storage = false
 		citizen.request_goap_decision()
@@ -60,10 +60,13 @@ func assign_work(citizen: Citizen, index: int) -> void:
 			var construction: Dictionary = simulation.construction_sites[index % simulation.construction_sites.size()]
 			citizen.assign_construction(construction.node)
 		"forestry":
-			var sawmill_position: Vector3 = simulation.sawmill_positions[index % simulation.sawmill_positions.size()]
-			var tree_position: Vector3 = simulation._reserve_closest_tree_for_sawmill(citizen, sawmill_position)
+			var tree_position: Vector3 = simulation._reserve_closest_tree_for_sawmill(citizen, Vector3.ZERO)
 			if tree_position != Vector3.INF:
-				citizen.assign_work("wood", tree_position, sawmill_position, simulation.warehouse_positions[index % simulation.warehouse_positions.size()])
+				if simulation.sawmill_positions.is_empty():
+					citizen.assign_gathering("logs", tree_position, simulation._get_delivery_position())
+				else:
+					var sawmill_position: Vector3 = simulation.sawmill_positions[index % simulation.sawmill_positions.size()]
+					citizen.assign_work("wood", tree_position, sawmill_position, simulation.warehouse_positions[index % simulation.warehouse_positions.size()])
 		"farming":
 			var farm_position: Vector3 = simulation.farm_positions[index % simulation.farm_positions.size()]
 			citizen.assign_work("food", farm_position, farm_position, simulation.warehouse_positions[index % simulation.warehouse_positions.size()], simulation._has_courier())
@@ -107,6 +110,7 @@ func _worker_data(citizen: Citizen) -> Dictionary:
 
 func _world_data() -> Dictionary:
 	return {
+		"era": simulation.settlement.era,
 		"hour": int(simulation.game_minutes) / 60,
 		"has_canteen": is_instance_valid(simulation.canteen),
 		"schools": simulation.school_positions.size(),

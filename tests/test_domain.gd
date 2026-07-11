@@ -23,7 +23,11 @@ func _test_settlement_economy() -> void:
 	state.grass = 4
 	assert(state.can_afford_building("warehouse"))
 	assert(state.pay_for_building("warehouse"))
-	assert(state.branches == 0 and state.grass == 0)
+	assert(state.branches == 12 and state.grass == 4)
+	state.ensure_storage_defaults(0)
+	assert(state.reserve_storage_room_for("grass", 1, 0))
+	state.add("grass", 1)
+	assert(state.grass == 5 and state.wood == 0)
 	state.bricks = 15
 	state.boards = 10
 	assert(state.can_afford_research("brick_construction"))
@@ -38,7 +42,7 @@ func _test_progression_and_volunteers() -> void:
 	state.water = 4
 	state.trade_sales = 1
 	for tool_id in state.tools:
-		state.tools[tool_id] = tool_id != "sawmill_kit"
+		state.tools[tool_id] = true
 	assert(state.can_advance_to(SettlementState.Era.EARTH, 4, 4))
 	assert(state.advance_era(SettlementState.Era.EARTH, 4, 4))
 
@@ -49,6 +53,11 @@ func _test_progression_and_volunteers() -> void:
 	state.tools["shovel"] = true
 	assert(state.can_advance_to(SettlementState.Era.CLAY, 4, 4))
 	assert(state.advance_era(SettlementState.Era.CLAY, 4, 4))
+	state.buildings = {"clay_market": 1}
+	state.water = 4
+	state.logs = 10
+	state.money = 10
+	assert(state.can_advance_to(SettlementState.Era.WOOD, 4, 4))
 
 	assert(SettlementRulesScript.volunteer_can_arrive(1, 2, 60.0))
 	assert(not SettlementRulesScript.volunteer_can_arrive(0, 2, 60.0))
@@ -88,6 +97,11 @@ func _test_workforce_policy() -> void:
 	var forester := {"specialization": "forestry", "manual_role": "", "player_controlled": false, "blocked_by_storage": false, "training_role": "", "training_days_completed": 0}
 	assert(WorkforcePolicy.role_for(forester, world) == "forestry")
 	assert(WorkforcePolicy.can_assign(forester, world))
+	world.sawmills = 0
+	world.era = SettlementState.Era.TENT
+	assert(WorkforcePolicy.role_for(forester, world) == "gather_branches")
+	world.era = SettlementState.Era.EARTH
+	assert(WorkforcePolicy.role_for(forester, world) == "forestry")
 	world.hour = 7
 	assert(not WorkforcePolicy.can_assign(forester, world))
 
