@@ -118,6 +118,8 @@ var school_menu_title: Label
 var materials_factory_menu: Panel
 var materials_factory_menu_title: Label
 var selected_materials_factory: Node3D
+var house_lights: Array[Dictionary] = []
+var house_light_update_minute := -1
 
 
 func _ready() -> void:
@@ -138,6 +140,7 @@ func _process(delta: float) -> void:
 	_update_tent_dismantle(delta)
 	_update_clock(delta)
 	_update_daylight()
+	_update_house_lights()
 	_update_canteen_delivery()
 	_update_brick_research(delta)
 	if not _is_night():
@@ -312,6 +315,26 @@ func _handle_clock_minute(clock_minute: int) -> void:
 		for citizen in citizens:
 			citizen.finish_school_day()
 		_update_workers()
+
+func _update_house_lights() -> void:
+	var hour := int(game_minutes) / 60
+	var minute := int(game_minutes) % 60
+	var clock_minute := int(game_minutes)
+	if house_light_update_minute == clock_minute:
+		return
+	house_light_update_minute = clock_minute
+	var evening := hour >= 20 or hour < 2
+	var late_night := hour >= 22 or hour < 2
+	for record in house_lights:
+		var light: OmniLight3D = record.light
+		if not is_instance_valid(light):
+			continue
+		if not evening:
+			light.visible = false
+		elif not late_night:
+			light.visible = true
+		elif minute % 15 == 0:
+			light.visible = randf() > 0.35
 
 func _is_night() -> bool:
 	var hour := int(game_minutes) / 60
@@ -681,7 +704,7 @@ func _create_selection_marker() -> void:
 	_move_selection(Vector3.ZERO)
 
 func _create_forest() -> void:
-	var cells := [Vector2i(-5, -4), Vector2i(-4, -5), Vector2i(-5, 4), Vector2i(4, -5), Vector2i(5, 4), Vector2i(4, 5)]
+	var cells := [Vector2i(-11, -10), Vector2i(-8, -12), Vector2i(-5, -9), Vector2i(-2, -12), Vector2i(3, -11), Vector2i(7, -9), Vector2i(11, -12), Vector2i(13, -7), Vector2i(-13, -5), Vector2i(-9, -4), Vector2i(-6, -2), Vector2i(7, -3), Vector2i(11, -1), Vector2i(14, 3), Vector2i(-14, 4), Vector2i(-10, 7), Vector2i(-6, 10), Vector2i(-2, 13), Vector2i(3, 10), Vector2i(7, 13), Vector2i(11, 8), Vector2i(14, 12), Vector2i(-12, 13), Vector2i(5, 5)]
 	for cell in cells:
 		var tree_position := _cell_center(cell)
 		tree_cells[cell] = true
@@ -694,25 +717,26 @@ func _create_tree(position_on_board: Vector3) -> void:
 	add_child(tree)
 	var trunk := MeshInstance3D.new()
 	var trunk_mesh := CylinderMesh.new()
-	trunk_mesh.top_radius = 0.12
-	trunk_mesh.bottom_radius = 0.17
-	trunk_mesh.height = 1.1
+	trunk_mesh.top_radius = 0.16
+	trunk_mesh.bottom_radius = 0.27
+	trunk_mesh.height = 3.6
 	trunk.mesh = trunk_mesh
-	trunk.position.y = 0.55
+	trunk.position.y = 1.8
 	var trunk_material := StandardMaterial3D.new()
 	trunk_material.albedo_color = Color("684630")
 	trunk.material_override = trunk_material
 	tree.add_child(trunk)
-	var crown := MeshInstance3D.new()
-	var crown_mesh := SphereMesh.new()
-	crown_mesh.radius = 0.62
-	crown_mesh.height = 1.25
-	crown.mesh = crown_mesh
-	crown.position.y = 1.35
-	var crown_material := StandardMaterial3D.new()
-	crown_material.albedo_color = Color("2d633b")
-	crown.material_override = crown_material
-	tree.add_child(crown)
+	for crown_data in [[Vector3(-0.35, 3.75, 0.0), 1.05], [Vector3(0.38, 4.05, 0.1), 1.16], [Vector3(0.0, 4.72, 0.0), 0.96]]:
+		var crown := MeshInstance3D.new()
+		var crown_mesh := SphereMesh.new()
+		crown_mesh.radius = crown_data[1]
+		crown_mesh.height = crown_data[1] * 1.35
+		crown.mesh = crown_mesh
+		crown.position = crown_data[0]
+		var crown_material := StandardMaterial3D.new()
+		crown_material.albedo_color = Color("2d633b").lightened(randf_range(-0.06, 0.08))
+		crown.material_override = crown_material
+		tree.add_child(crown)
 
 func _create_starting_tent() -> void:
 	tent = Node3D.new()
@@ -735,6 +759,8 @@ func _create_starting_tent() -> void:
 	tent.add_child(base)
 	var selector := Area3D.new()
 	selector.add_to_group("house_selector")
+	selector.collision_layer = 4
+	selector.collision_mask = 0
 	var shape := CollisionShape3D.new()
 	var box := BoxShape3D.new()
 	box.size = Vector3(3.0, 2.2, 3.0)
@@ -1134,6 +1160,14 @@ func _select_build_mode(next_mode: String) -> void:
 	_move_selection(selected_world_position)
 	_update_interface("%s selected. Choose a clear point on the voxel terrain." % build_mode.capitalize())
 
+func _cancel_build_action() -> void:
+	build_mode = ""
+	dig_mode = false
+	selection_marker.visible = false
+	build_menu.visible = false
+	selected_builder = null
+	_update_interface("Construction mode cancelled.")
+
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.keycode == KEY_R and event.pressed and not event.echo:
@@ -1158,6 +1192,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		_update_camera_position()
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_MIDDLE:
 		is_panning_camera = event.pressed
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed and (not build_mode.is_empty() or dig_mode):
+		_cancel_build_action()
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
 		is_rotating_camera = event.pressed
 	elif event is InputEventMouseMotion:
@@ -1186,6 +1222,7 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 	var to := from + camera.project_ray_normal(screen_position) * 200.0
 	var query := PhysicsRayQueryParameters3D.create(from, to)
 	query.collide_with_areas = true
+	query.collision_mask = 4
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	if hit.is_empty():
 		return
@@ -1619,6 +1656,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			completed_house_count += 1
 			building.set_meta("spawn_slots", 2)
 			_add_building_selector(building, "house_selector", blueprint.footprint)
+			_add_house_light(building)
 		"canteen":
 			canteen = building
 			canteen_position = position_on_board
@@ -1646,11 +1684,13 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 func _add_building_selector(building: Node3D, group_name: String, footprint: Vector2i) -> void:
 	var selector := Area3D.new()
 	selector.add_to_group(group_name)
+	selector.collision_layer = 4
+	selector.collision_mask = 0
 	var collision := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
-	shape.size = Vector3(footprint.x - 1.0, 2.5, footprint.y - 1.0)
+	shape.size = Vector3(footprint.x + 0.25, 4.5, footprint.y + 0.25)
 	collision.shape = shape
-	collision.position.y = 1.5
+	collision.position.y = 2.0
 	selector.add_child(collision)
 	building.add_child(selector)
 
@@ -1754,6 +1794,8 @@ func _create_house(position_on_board: Vector3) -> void:
 	house.add_child(roof)
 	var selector := Area3D.new()
 	selector.add_to_group("house_selector")
+	selector.collision_layer = 4
+	selector.collision_mask = 0
 	var selector_shape := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
 	shape.size = Vector3(1.6, 1.5, 1.6)
@@ -1761,6 +1803,18 @@ func _create_house(position_on_board: Vector3) -> void:
 	selector_shape.position.y = 0.75
 	selector.add_child(selector_shape)
 	house.add_child(selector)
+	_add_house_light(house)
+
+func _add_house_light(house: Node3D) -> void:
+	var light := OmniLight3D.new()
+	light.light_color = Color("ffd58a")
+	light.light_energy = 2.2
+	light.omni_range = 5.5
+	light.shadow_enabled = true
+	light.position = Vector3(0.0, 2.0, 0.0)
+	light.visible = false
+	house.add_child(light)
+	house_lights.append({"light": light})
 
 func _create_canteen(position_on_board: Vector3) -> void:
 	canteen = Node3D.new()
