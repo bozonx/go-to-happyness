@@ -4,7 +4,7 @@ extends RefCounted
 ## Persistent, scene-free settlement economy. All progression gates live here so
 ## UI and simulation code cannot accidentally create a second rule set.
 
-enum Era { TENT, EARTH, CLAY, WOOD, BRICK }
+enum Era { TENT, EARTH, CLAY, WOOD, STONE, BRICK }
 
 var era := Era.TENT
 var money := 20
@@ -19,12 +19,13 @@ var wood := 0 # Legacy name for hand-cut timber used by existing buildings.
 var soil := 0
 var clay := 0
 var boards := 0
+var stone := 0
 var bricks := 0
 var wellbeing := 75
 var workday_hours := 8
 var night_shifts_allowed := false
 var low_wellbeing_days := 0
-var tools := {"axe": false, "hand_saw": false, "shovel": false, "bucket": false, "filter_1": false}
+var tools := {"axe": false, "hand_saw": false, "shovel": false, "bucket": false, "hoe": false, "pickaxe": false, "filter_1": false}
 var tool_uses := {"filter_1": 0}
 var trade_sales := 0
 var buildings: Dictionary = {}
@@ -35,13 +36,13 @@ var brick_construction_unlocked := false
 ## units for the current era; the player splits that budget between resources in
 ## the warehouse menu. Heavy goods (logs, bricks) cost more than a unit each;
 ## water is light and packs several to a unit.
-const STORED_RESOURCES := ["branches", "grass", "water", "food", "hides", "goods", "logs", "wood", "soil", "clay", "boards", "bricks"]
+const STORED_RESOURCES := ["branches", "grass", "water", "food", "hides", "goods", "logs", "wood", "soil", "clay", "boards", "stone", "bricks"]
 const STORAGE_WEIGHTS := {
 	"branches": 1.0, "grass": 1.0, "water": 0.5, "food": 1.0,
 	"hides": 1.0, "goods": 1.0, "logs": 2.0, "wood": 2.0,
-	"soil": 1.0, "clay": 1.0, "boards": 1.5, "bricks": 2.0,
+	"soil": 1.0, "clay": 1.0, "boards": 1.5, "stone": 2.0, "bricks": 2.0,
 }
-const ERA_STORAGE_PER_WAREHOUSE := {Era.TENT: 32, Era.EARTH: 48, Era.CLAY: 70, Era.WOOD: 100, Era.BRICK: 140}
+const ERA_STORAGE_PER_WAREHOUSE := {Era.TENT: 32, Era.EARTH: 48, Era.CLAY: 70, Era.WOOD: 100, Era.STONE: 120, Era.BRICK: 150}
 const STORAGE_STEP := 4.0
 
 var storage_limits: Dictionary = {} # resource -> allocated space units (float)
@@ -168,6 +169,7 @@ func amount(resource_type: String) -> int:
 		"soil": return soil
 		"clay": return clay
 		"boards": return boards
+		"stone": return stone
 		"bricks": return bricks
 	return 0
 
@@ -186,11 +188,12 @@ func add(resource_type: String, value: int) -> void:
 		"soil": soil += value
 		"clay": clay += value
 		"boards": boards += value
+		"stone": stone += value
 		"bricks": bricks += value
 
 
 func total_stored_resources() -> int:
-	return branches + grass + water + food + hides + goods + logs + wood + soil + clay + boards + bricks
+	return branches + grass + water + food + hides + goods + logs + wood + soil + clay + boards + stone + bricks
 
 
 func can_afford_building(building_type: String) -> bool:
@@ -247,11 +250,13 @@ func can_advance_to(next_era: Era, population: int, housing_slots: int) -> bool:
 		Era.EARTH:
 			return era == Era.TENT and has_building("campfire") and has_building("trade_tent") and housing_slots >= population and food >= population and water >= population and has_building("craft_tent") and trade_sales >= 1 and _has_tools(["axe", "hand_saw", "shovel", "bucket"])
 		Era.CLAY:
-			return era == Era.EARTH and has_building("smithy") and has_building("earth_market") and housing_slots >= population and clay >= 5 and money >= 5 and trade_sales >= 3 and _has_tools(["shovel"])
+			return era == Era.EARTH and has_building("smithy") and has_building("earth_market") and housing_slots >= population and clay >= 5 and money >= 5 and trade_sales >= 3 and _has_tools(["hoe"])
 		Era.WOOD:
 			return era == Era.CLAY and has_building("clay_market") and water >= population and logs >= 10 and money >= 10
+		Era.STONE:
+			return era == Era.WOOD and has_building("wood_market") and money >= 15 and _has_tools(["pickaxe"])
 		Era.BRICK:
-			return era == Era.WOOD and has_building("brick_factory") and clay >= 20 and has_building("wood_market")
+			return era == Era.STONE and has_building("stone_market") and has_building("masonry_workshop") and stone >= 20 and money >= 20
 	return false
 
 

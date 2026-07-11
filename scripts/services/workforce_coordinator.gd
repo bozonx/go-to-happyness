@@ -88,10 +88,20 @@ func assign_work(citizen: Citizen, index: int) -> void:
 			citizen.assign_work("food", farm_position, farm_position, simulation.warehouse_positions[index % simulation.warehouse_positions.size()], simulation._has_courier())
 		"excavation":
 			var dig_site := citizen.assigned_dig_site
-			if not is_instance_valid(dig_site):
-				var excavation: Dictionary = simulation.dig_sites[index % simulation.dig_sites.size()]
-				dig_site = excavation.node
-			citizen.assign_excavation(dig_site)
+			if not is_instance_valid(dig_site) or not simulation._can_work_at_dig_site(simulation._dig_site_for_node(dig_site)):
+				# Find the first valid dig site
+				var valid_sites := []
+				for site in simulation.dig_sites:
+					if simulation._can_work_at_dig_site(site):
+						valid_sites.append(site.node)
+				if not valid_sites.is_empty():
+					dig_site = valid_sites[index % valid_sites.size()]
+				else:
+					dig_site = null
+			if is_instance_valid(dig_site):
+				citizen.assign_excavation(dig_site)
+			else:
+				citizen.idle()
 		"gather_branches":
 			var tree_pos: Vector3 = simulation._find_closest_tree_for_citizen(citizen)
 			if tree_pos != Vector3.INF:
@@ -140,7 +150,7 @@ func _world_data() -> Dictionary:
 		"trees": simulation.tree_positions.size(),
 		"farms": simulation.farm_positions.size(),
 		"forager_tents": simulation.forager_positions.size(),
-		"dig_sites": simulation.dig_sites.size(),
+		"dig_sites": simulation._count_valid_dig_sites(),
 		"has_factory_job": factory_for_role("factory_worker") != null,
 		"has_engineer_job": factory_for_role("engineer") != null,
 		"food": simulation.food,
@@ -151,7 +161,20 @@ func _world_data() -> Dictionary:
 		"has_bucket": bool(simulation.settlement.tools.get("bucket", false)),
 		"has_filter": bool(simulation.settlement.tools.get("filter_1", false)),
 		"population": simulation.citizens.size(),
+		"assigned_roles": _assigned_role_counts(),
 	}
+
+
+func _assigned_role_counts() -> Dictionary:
+	var counts: Dictionary = {}
+	for citizen in simulation.citizens:
+		if citizen.is_player_controlled or citizen.active_role.is_empty() or citizen.active_role in ["trade", "relaxing", "training"]:
+			continue
+		var role: String = citizen.active_role
+		if role == "gather_wood":
+			role = "forestry"
+		counts[role] = int(counts.get(role, 0)) + 1
+	return counts
 
 func factory_for_role(role: String) -> Node3D:
 	if role == "factory_worker":

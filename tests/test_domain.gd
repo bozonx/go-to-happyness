@@ -31,6 +31,24 @@ func _test_settlement_economy() -> void:
 	assert(state.reserve_storage_room_for("grass", 1, 1))
 	state.add("grass", 1)
 	assert(state.grass == 5 and state.wood == 0)
+	
+	# Verify Clay house costs grass instead of soil
+	state.era = SettlementState.Era.CLAY
+	state.clay = 12
+	state.grass = 10
+	state.branches = 8
+	assert(state.can_afford_building("clay_house"))
+	assert(state.pay_for_building("clay_house"))
+	assert(state.grass == 0 and state.clay == 0)
+	
+	# Verify Stone house costs stone and clay
+	state.stone = 15
+	state.clay = 8
+	state.era = SettlementState.Era.STONE
+	assert(state.can_afford_building("stone_house"))
+	assert(state.pay_for_building("stone_house"))
+	assert(state.stone == 0 and state.clay == 0)
+
 	state.bricks = 15
 	state.boards = 10
 	assert(state.can_afford_research("brick_construction"))
@@ -54,13 +72,27 @@ func _test_progression_and_volunteers() -> void:
 	state.money = 10
 	state.trade_sales = 3
 	state.tools["shovel"] = true
+	state.tools["hoe"] = true
 	assert(state.can_advance_to(SettlementState.Era.CLAY, 4, 4))
 	assert(state.advance_era(SettlementState.Era.CLAY, 4, 4))
+	
 	state.buildings = {"clay_market": 1}
 	state.water = 4
 	state.logs = 10
 	state.money = 10
 	assert(state.can_advance_to(SettlementState.Era.WOOD, 4, 4))
+	assert(state.advance_era(SettlementState.Era.WOOD, 4, 4))
+
+	state.buildings = {"wood_market": 1, "sawmill": 1}
+	state.money = 15
+	state.tools["pickaxe"] = true
+	assert(state.can_advance_to(SettlementState.Era.STONE, 4, 4))
+	assert(state.advance_era(SettlementState.Era.STONE, 4, 4))
+
+	state.buildings = {"stone_market": 1, "masonry_workshop": 1, "stone_house": 1}
+	state.stone = 20
+	state.money = 20
+	assert(state.can_advance_to(SettlementState.Era.BRICK, 4, 4))
 
 	assert(SettlementRulesScript.volunteer_can_arrive(1, 2, 60.0))
 	assert(not SettlementRulesScript.volunteer_can_arrive(0, 2, 60.0))
@@ -112,6 +144,18 @@ func _test_workforce_policy() -> void:
 	world.has_filter = true
 	assert(WorkforcePolicy.role_for(forester, world) == "gather_water")
 	assert(WorkforcePolicy.can_assign(forester, world))
+	world.assigned_roles = {"gather_water": 1}
+	world.farms = 1
+	world.food = 0
+	assert(WorkforcePolicy.role_for(forester, world) == "farming")
+	world.water = 20
+	world.food = 20
+	world.assigned_roles = {"farming": 1}
+	world.dig_sites = 1
+	assert(WorkforcePolicy.role_for(forester, world) == "excavation")
+	assert(WorkforcePolicy.can_take_queued_job({"idle": true, "manual_role": "", "player_controlled": false}))
+	assert(not WorkforcePolicy.can_take_queued_job({"idle": true, "manual_role": "farming", "player_controlled": false}))
+	assert(not WorkforcePolicy.can_take_queued_job({"idle": true, "manual_role": "unassigned", "player_controlled": false}))
 
 
 func _test_citizen_task_state() -> void:

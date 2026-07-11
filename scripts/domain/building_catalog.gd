@@ -17,9 +17,12 @@ const DEFINITIONS := {
 	"smithy": {"name": "Smithy", "category": "earth", "costs": {"soil": 18, "branches": 16}},
 	"hide_worker": {"name": "Hide workshop", "category": "earth", "costs": {"soil": 12, "branches": 10}},
 	"earth_market": {"name": "Earth market", "category": "earth", "costs": {"soil": 15, "branches": 10}},
-	"clay_house": {"name": "Clay house", "category": "clay", "costs": {"clay": 12, "soil": 10, "branches": 8}},
-	"clay_workshop": {"name": "Clay workshop", "category": "clay", "costs": {"clay": 15, "soil": 10, "branches": 10}},
-	"clay_market": {"name": "Clay market", "category": "clay", "costs": {"clay": 12, "soil": 10, "branches": 5}},
+	"clay_house": {"name": "Clay house", "category": "clay", "costs": {"clay": 12, "grass": 10, "branches": 8}},
+	"clay_workshop": {"name": "Clay workshop", "category": "clay", "costs": {"clay": 15, "grass": 10, "branches": 10}},
+	"clay_market": {"name": "Clay market", "category": "clay", "costs": {"clay": 12, "grass": 8, "branches": 6}},
+	"stone_house": {"name": "Stone house", "category": "stone", "costs": {"stone": 15, "clay": 8}},
+	"masonry_workshop": {"name": "Masonry workshop", "category": "stone", "costs": {"stone": 12, "boards": 12}},
+	"stone_market": {"name": "Stone market", "category": "stone", "costs": {"stone": 18, "boards": 8}},
 	"sawmill": {"name": "Sawmill", "category": "wood", "costs": {"logs": 4, "money": 1}},
 	"farm": {"name": "Farm", "category": "wood", "costs": {"boards": 12}},
 	"canteen": {"name": "Canteen", "category": "wood", "costs": {"boards": 16}},
@@ -57,6 +60,7 @@ static func era_for(building_type: String) -> SettlementState.Era:
 		"earth": return SettlementState.Era.EARTH
 		"clay": return SettlementState.Era.CLAY
 		"wood": return SettlementState.Era.WOOD
+		"stone": return SettlementState.Era.STONE
 		"brick": return SettlementState.Era.BRICK
 	return SettlementState.Era.TENT
 static func research_cost(research_id: String, resource_type: String) -> int: return int(RESEARCH_COSTS.get(research_id, {}).get(resource_type, 0))

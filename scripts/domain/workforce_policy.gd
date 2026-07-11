@@ -9,43 +9,79 @@ static func role_for(worker: Dictionary, world: Dictionary) -> String:
 		return manual_role
 	if not manual_role.is_empty():
 		return manual_role
-	# Automatic work first covers essential shortages when the required workplace
-	# exists, then falls back to the resident's specialization.
+	return _automatic_role_for(worker, world)
+
+
+static func _automatic_role_for(worker: Dictionary, world: Dictionary) -> String:
+	# Scores are intentionally spaced apart: essentials win first, but every worker
+	# already assigned to that shortage lowers its score and prevents herd switching.
 	var population := maxi(1, int(world.get("population", 1)))
-	if bool(world.get("has_collected_dew", false)) and int(world.get("water", 0)) < population * 2:
-		return "gather_dew"
-	if bool(world.get("has_bucket", false)) and bool(world.get("has_filter", false)) and int(world.get("ponds", 0)) > 0 and int(world.get("water", 0)) < population * 2:
-		return "gather_water"
+	var specialization := str(worker.get("specialization", ""))
+	var scores: Dictionary = {}
+	if int(world.get("water", 0)) < population * 2:
+		if bool(world.get("has_collected_dew", false)):
+			_add_score(scores, "gather_dew", 120 - _assigned(world, "gather_dew") * 45)
+		if bool(world.get("has_bucket", false)) and bool(world.get("has_filter", false)) and int(world.get("ponds", 0)) > 0:
+			_add_score(scores, "gather_water", 118 - _assigned(world, "gather_water") * 45)
 	if int(world.get("food", 0)) < population * 2:
 		if int(world.get("farms", 0)) > 0:
-			return "farming"
+			_add_score(scores, "farming", 110 - _assigned(world, "farming") * 40)
 		if int(world.get("forager_tents", 0)) > 0:
-			return "gather_food"
+			_add_score(scores, "gather_food", 106 - _assigned(world, "gather_food") * 40)
 	if int(world.get("wood", 0)) < population and int(world.get("sawmills", 0)) > 0 and int(world.get("trees", 0)) > 0:
-		return "forestry"
-	var specialization := str(worker.get("specialization", ""))
-	if specialization == "builder" and int(world.get("construction_sites", 0)) > 0:
-		return "construction"
-	if specialization == "forestry":
-		if int(world.get("sawmills", 0)) > 0:
-			return "forestry"
-		elif int(world.get("era", SettlementState.Era.TENT)) >= SettlementState.Era.EARTH and int(world.get("warehouses", 0)) > 0:
-			return "forestry"
-		else:
-			return "gather_branches"
-	if specialization == "farming":
-		if int(world.get("farms", 0)) > 0:
-			return "farming"
-		elif int(world.get("forager_tents", 0)) > 0:
-			return "gather_food"
-		else:
-			return "gather_grass"
-	if specialization == "excavation" and int(world.get("dig_sites", 0)) > 0:
-		return "excavation"
-	
-	if int(world.get("construction_sites", 0)) > 0:
-		return "construction"
-	return "gather_branches"
+		_add_score(scores, "forestry", 96 - _assigned(world, "forestry") * 36)
+
+	# An empty productive building is useful immediately. Once occupied, normal
+	# shortage and specialization scores decide whether it needs extra workers.
+	_add_empty_workplace_score(scores, world, "construction", int(world.get("construction_sites", 0)))
+	_add_empty_workplace_score(scores, world, "forestry", int(world.get("sawmills", 0)))
+	_add_empty_workplace_score(scores, world, "farming", int(world.get("farms", 0)))
+	_add_empty_workplace_score(scores, world, "gather_food", int(world.get("forager_tents", 0)))
+	_add_empty_workplace_score(scores, world, "excavation", int(world.get("dig_sites", 0)))
+
+	var preferred := "construction" if specialization == "builder" else specialization
+	if preferred == "forestry" and int(world.get("sawmills", 0)) == 0:
+		preferred = "forestry" if int(world.get("era", SettlementState.Era.TENT)) >= SettlementState.Era.EARTH and int(world.get("warehouses", 0)) > 0 else "gather_branches"
+	elif preferred == "farming" and int(world.get("farms", 0)) == 0:
+		preferred = "gather_food" if int(world.get("forager_tents", 0)) > 0 else "gather_grass"
+	if _role_available(preferred, world):
+		_add_score(scores, preferred, 50 - _assigned(world, preferred) * 5)
+	if scores.is_empty():
+		return "construction" if int(world.get("construction_sites", 0)) > 0 else "gather_branches"
+	var best_role := ""
+	var best_score := -100000
+	for role in scores:
+		if int(scores[role]) > best_score:
+			best_role = role
+			best_score = int(scores[role])
+	return best_role
+
+
+static func _assigned(world: Dictionary, role: String) -> int:
+	return int(world.get("assigned_roles", {}).get(role, 0))
+
+
+static func _add_score(scores: Dictionary, role: String, score: int) -> void:
+	scores[role] = maxi(int(scores.get(role, -100000)), score)
+
+
+static func _add_empty_workplace_score(scores: Dictionary, world: Dictionary, role: String, capacity: int) -> void:
+	if capacity > 0 and _assigned(world, role) < capacity and _role_available(role, world):
+		_add_score(scores, role, 82 - _assigned(world, role) * 4)
+
+
+static func _role_available(role: String, world: Dictionary) -> bool:
+	match role:
+		"construction": return int(world.get("construction_sites", 0)) > 0
+		"forestry": return int(world.get("warehouses", 0)) > 0 and int(world.get("trees", 0)) > 0
+		"farming": return int(world.get("warehouses", 0)) > 0 and int(world.get("farms", 0)) > 0
+		"excavation": return int(world.get("warehouses", 0)) > 0 and int(world.get("dig_sites", 0)) > 0
+		"gather_food": return int(world.get("forager_tents", 0)) > 0
+		"gather_dew": return bool(world.get("has_collected_dew", false))
+		"gather_water": return bool(world.get("has_bucket", false)) and bool(world.get("has_filter", false)) and int(world.get("ponds", 0)) > 0
+		"gather_branches": return int(world.get("trees", 0)) > 0
+		"gather_grass": return true
+	return false
 
 
 static func can_assign(worker: Dictionary, world: Dictionary) -> bool:
@@ -78,3 +114,10 @@ static func can_assign(worker: Dictionary, world: Dictionary) -> bool:
 		"gather_dew": return bool(world.get("has_collected_dew", false))
 		"gather_water": return bool(world.get("has_bucket", false)) and bool(world.get("has_filter", false)) and int(world.get("ponds", 0)) > 0
 	return false
+
+
+static func can_take_queued_job(worker: Dictionary) -> bool:
+	return not bool(worker.get("player_controlled", false)) \
+		and bool(worker.get("idle", false)) \
+		and str(worker.get("manual_role", "")).is_empty() \
+		and not bool(worker.get("has_queued_job", false))

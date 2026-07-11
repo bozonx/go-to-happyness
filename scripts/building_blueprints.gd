@@ -48,6 +48,12 @@ const COLORS := {
 	"clay_house": Color("b87a50"),
 	"clay_workshop": Color("c28558"),
 	"clay_market": Color("a6683c"),
+	"stone_house": Color("8a8d8f"),
+	"masonry_workshop": Color("76797b"),
+	"stone_market": Color("6e7173"),
+	"stone_house_roof": Color("505355"),
+	"masonry_workshop_roof": Color("46484a"),
+	"stone_market_roof": Color("3c3d3e"),
 	"wood_market": Color("af6f3b"),
 	"brick_market": Color("b85e42"),
 }
@@ -62,6 +68,7 @@ static func get_blueprint(building_type: String) -> Dictionary:
 		"tent", "living_tent", "forager_tent", "craft_tent", "trade_tent": return _enclosed_blueprint(building_type, Vector2i(4, 4), 2, "gable")
 		"dugout", "earth_house", "smithy", "hide_worker", "earth_market": return _enclosed_blueprint(building_type, Vector2i(4, 4), 2, "gable")
 		"clay_house", "clay_workshop", "clay_market": return _enclosed_blueprint(building_type, Vector2i(4, 4), 2, "gable")
+		"stone_house", "masonry_workshop", "stone_market": return _enclosed_blueprint(building_type, Vector2i(5, 5), 3, "hip")
 		"warehouse": return _enclosed_blueprint("warehouse", Vector2i(5, 5), 3, "shed")
 		"sawmill": return _sawmill_blueprint()
 		"farm": return _farm_blueprint()

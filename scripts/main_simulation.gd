@@ -52,6 +52,9 @@ var boards: int:
 var bricks: int:
 	get: return settlement.bricks
 	set(value): settlement.bricks = value
+var stone: int:
+	get: return settlement.stone
+	set(value): settlement.stone = value
 var branches: int:
 	get: return settlement.branches
 	set(value): settlement.branches = value
@@ -666,6 +669,18 @@ func _on_excavation_cycle(worker: Citizen, site_node: Node3D, efficiency: float)
 		var site: Dictionary = dig_sites[index]
 		if site.node != site_node:
 			continue
+		
+		# Check if the next layer is blocked by tool requirement BEFORE incrementing depth
+		var next_depth = site.depth + 1
+		var tool_id = _tool_for_depth(site, next_depth)
+		if tool_id != "" and not bool(settlement.tools.get(tool_id, false)):
+			# Settlement doesn't have the tool for this layer! Stop the worker.
+			worker.assigned_dig_site = null
+			worker.idle()
+			_update_interface("Excavation paused: missing tool '%s' for the next layer." % tool_id)
+			_update_workers()
+			return
+			
 		site.depth += 1
 		var delivery_pos: Vector3 = Vector3.ZERO
 		if not warehouse_positions.is_empty():
@@ -675,19 +690,32 @@ func _on_excavation_cycle(worker: Citizen, site_node: Node3D, efficiency: float)
 		else:
 			delivery_pos = entrance_stone.global_position
 			
-		if site.depth <= site.soil_limit:
+		if site.depth <= site.grass_limit:
+			worker.deliver_excavation("grass", delivery_pos)
+			var pit_material := StandardMaterial3D.new()
+			pit_material.albedo_color = Color("3e612c") # Grass green
+			site.pit.material_override = pit_material
+			_update_interface("Digger is carrying grass to the warehouse.")
+		elif site.depth <= site.soil_limit:
 			worker.deliver_excavation("soil", delivery_pos)
+			var pit_material := StandardMaterial3D.new()
+			pit_material.albedo_color = Color("78533b") # Soil brown
+			site.pit.material_override = pit_material
 			_update_interface("Digger is carrying soil to the warehouse.")
 		elif site.depth <= site.clay_limit:
 			worker.deliver_excavation("clay", delivery_pos)
 			var pit_material := StandardMaterial3D.new()
-			pit_material.albedo_color = Color("a96445")
+			pit_material.albedo_color = Color("a96445") # Clay reddish-brown
 			site.pit.material_override = pit_material
 			_update_interface("Digger is carrying clay to the warehouse.")
+		elif site.depth <= site.stone_limit:
+			worker.deliver_excavation("stone", delivery_pos)
+			var pit_material := StandardMaterial3D.new()
+			pit_material.albedo_color = Color("62676a") # Stone grey
+			site.pit.material_override = pit_material
+			_update_interface("Digger is carrying stone to the warehouse.")
 		else:
-			var rock_material := StandardMaterial3D.new()
-			rock_material.albedo_color = Color("62676a")
-			site.pit.material_override = rock_material
+			site_node.queue_free()
 			dig_sites.remove_at(index)
 			dig_cells.erase(site.cell)
 			exhausted_dig_cells[site.cell] = true
@@ -695,10 +723,54 @@ func _on_excavation_cycle(worker: Citizen, site_node: Node3D, efficiency: float)
 				if citizen.assigned_dig_site == site_node:
 					citizen.assigned_dig_site = null
 			_update_workers()
-			_update_interface("Stone reached. This excavation is exhausted; choose another cell.")
+			_update_interface("Stone excavation is exhausted; choose another cell.")
 			return
 		dig_sites[index] = site
 		return
+
+func _can_work_at_dig_site(site: Dictionary) -> bool:
+	var next_depth = site.depth + 1
+	if next_depth > site.stone_limit:
+		return false
+	var tool_id = _tool_for_depth(site, next_depth)
+	if tool_id != "" and not bool(settlement.tools.get(tool_id, false)):
+		return false
+	return true
+
+func _tool_for_depth(site: Dictionary, depth: int) -> String:
+	if depth <= site.grass_limit:
+		return ""
+	elif depth <= site.soil_limit:
+		return "shovel"
+	elif depth <= site.clay_limit:
+		return "hoe"
+	elif depth <= site.stone_limit:
+		return "pickaxe"
+	return ""
+
+func _resource_for_depth(site: Dictionary, depth: int) -> String:
+	if depth <= site.grass_limit:
+		return "grass"
+	elif depth <= site.soil_limit:
+		return "soil"
+	elif depth <= site.clay_limit:
+		return "clay"
+	elif depth <= site.stone_limit:
+		return "stone"
+	return "soil"
+
+func _count_valid_dig_sites() -> int:
+	var count := 0
+	for site in dig_sites:
+		if _can_work_at_dig_site(site):
+			count += 1
+	return count
+
+func _dig_site_for_node(site_node: Node3D) -> Dictionary:
+	for site in dig_sites:
+		if site.node == site_node:
+			return site
+	return {}
 
 func _building_cost() -> int:
 	return BuildingCatalog.cost_for(build_mode)
@@ -818,7 +890,7 @@ func _find_path_around_houses(from: Vector3, destination: Vector3, may_enter_des
 	return path
 
 func _update_interface(message: String) -> void:
-	wood_label.text = "Era: %s\nMoney: %d\nBranches: %d\nGrass: %d\nWater: %d\nFood: %d\nLogs: %d\nTimber: %d\nBoards: %d\nBricks: %d\nStorage: %d/%d\nPopulation: %d\nWellbeing: %d" % [_era_name(), money, branches, grass, water, food, settlement.logs, wood, boards, bricks, _stored_resources(), _warehouse_capacity(), citizens.size(), wellbeing]
+	wood_label.text = "Era: %s\nMoney: %d\nBranches: %d\nGrass: %d\nWater: %d\nFood: %d\nSoil: %d\nClay: %d\nLogs: %d\nTimber: %d\nBoards: %d\nStone: %d\nBricks: %d\nStorage: %d/%d\nPopulation: %d\nWellbeing: %d" % [_era_name(), money, branches, grass, water, food, soil, clay, settlement.logs, wood, boards, stone, bricks, _stored_resources(), _warehouse_capacity(), citizens.size(), wellbeing]
 	_add_message(message)
 	if is_first_person:
 		var build_hint := "  B: construction" if player_citizen == hero_citizen else ""
@@ -1446,7 +1518,8 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_build_category_button("Earth era", "earth", 170)
 	_add_build_category_button("Clay era", "clay", 204)
 	_add_build_category_button("Wooden era", "wood", 238)
-	_add_build_category_button("Brick era", "brick", 272)
+	_add_build_category_button("Stone era", "stone", 272)
+	_add_build_category_button("Brick era", "brick", 306)
 	_add_build_category_back_button()
 	
 	_add_build_button("Campfire", "campfire", 176, "tent")
@@ -1476,6 +1549,10 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_build_button("School", "school", 312, "wood")
 	_add_build_button("Park", "park", 346, "wood")
 	_add_build_button("Wood market", "wood_market", 380, "wood")
+	
+	_add_build_button("Stone house", "stone_house", 176, "stone")
+	_add_build_button("Masonry workshop", "masonry_workshop", 210, "stone")
+	_add_build_button("Stone market", "stone_market", 244, "stone")
 	
 	_add_build_button("Brick kiln", "brick_factory", 176, "brick")
 	_add_build_button("Materials factory", "materials_factory", 210, "brick")
@@ -1744,7 +1821,7 @@ func _refresh_build_menu() -> void:
 		if button.get_meta("category_back", false):
 			button.visible = not build_category.is_empty() and not build_menu_is_job_menu
 		elif not category_button.is_empty():
-			var category_era: int = int({"tent": SettlementState.Era.TENT, "earth": SettlementState.Era.EARTH, "clay": SettlementState.Era.CLAY, "wood": SettlementState.Era.WOOD, "brick": SettlementState.Era.BRICK}.get(category_button, SettlementState.Era.TENT))
+			var category_era: int = int({"tent": SettlementState.Era.TENT, "earth": SettlementState.Era.EARTH, "clay": SettlementState.Era.CLAY, "wood": SettlementState.Era.WOOD, "stone": SettlementState.Era.STONE, "brick": SettlementState.Era.BRICK}.get(category_button, SettlementState.Era.TENT))
 			button.visible = build_category.is_empty() and not build_menu_is_job_menu and category_era <= settlement.era
 		else:
 			button.visible = not build_category.is_empty() and button.get_meta("category", "") == build_category and not build_menu_is_job_menu
@@ -1829,7 +1906,13 @@ func _is_role_available(role: String) -> bool:
 		"construction": return not construction_sites.is_empty() or not demolition_sites.is_empty()
 		"forestry": return bool(settlement.tools.get("axe", false)) and bool(settlement.tools.get("hand_saw", false)) and not tree_positions.is_empty() and not warehouse_positions.is_empty()
 		"farming": return not farm_positions.is_empty() and not warehouse_positions.is_empty()
-		"excavation": return not dig_sites.is_empty() and not warehouse_positions.is_empty()
+		"excavation":
+			if dig_sites.is_empty() or warehouse_positions.is_empty():
+				return false
+			for site in dig_sites:
+				if _can_work_at_dig_site(site):
+					return true
+			return false
 		"gather_branches": return not tree_positions.is_empty()
 		"gather_grass": return settlement.era == SettlementState.Era.TENT
 		"gather_food": return not forager_positions.is_empty()
@@ -1869,7 +1952,7 @@ func _place_dig_site(world_position: Vector3) -> void:
 	selection_marker.visible = false
 	_update_workers()
 	_show_selected_citizen_menu()
-	_update_interface("Excavation assigned. Soil and clay will be exposed before stone.")
+	_update_interface("Excavation assigned. Grass, soil and clay will be exposed before stone.")
 
 func _can_excavate(world_position: Vector3) -> bool:
 	var cell := _placement_key(world_position)
@@ -1893,10 +1976,30 @@ func _create_dig_site(cell: Vector2i, world_position: Vector3) -> Dictionary:
 	pit.mesh = pit_mesh
 	pit.position.y = 0.03
 	var pit_material := StandardMaterial3D.new()
-	pit_material.albedo_color = Color("78533b")
+	pit_material.albedo_color = Color("3e612c") # Start with grass green
 	pit.material_override = pit_material
 	site_node.add_child(pit)
-	var site := {"cell": cell, "node": site_node, "pit": pit, "soil_limit": random.randi_range(3, 6), "clay_limit": random.randi_range(7, 12), "depth": 0}
+	
+	var grass_depth := random.randi_range(2, 4)
+	var soil_depth := random.randi_range(3, 6)
+	var clay_depth := random.randi_range(4, 8)
+	var stone_depth := random.randi_range(5, 10)
+	
+	var grass_limit := grass_depth
+	var soil_limit := grass_limit + soil_depth
+	var clay_limit := soil_limit + clay_depth
+	var stone_limit := clay_limit + stone_depth
+	
+	var site := {
+		"cell": cell,
+		"node": site_node,
+		"pit": pit,
+		"grass_limit": grass_limit,
+		"soil_limit": soil_limit,
+		"clay_limit": clay_limit,
+		"stone_limit": stone_limit,
+		"depth": 0
+	}
 	dig_sites.append(site)
 	dig_cells[cell] = true
 	return site
@@ -2710,7 +2813,7 @@ func _update_construction(delta: float) -> void:
 
 func _complete_building(cell: Vector2i, building_type: String, position_on_board: Vector3, building: Node3D, blueprint: Dictionary) -> void:
 	building.set_meta("building_type", building_type)
-	if building_type not in ["warehouse", "campfire", "cook_campfire", "trade_tent", "earth_market", "clay_market", "wood_market", "brick_market", "school", "materials_factory", "tent", "living_tent", "dugout", "earth_house", "clay_house", "house"]:
+	if building_type not in ["warehouse", "campfire", "cook_campfire", "trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market", "school", "materials_factory", "tent", "living_tent", "dugout", "earth_house", "clay_house", "stone_house", "house"]:
 		_add_building_selector(building, "building_selector", blueprint.footprint)
 	_register_service_entrance(building, blueprint.footprint, false, building_type not in ["farm", "park"])
 	var service_position: Vector3 = building.get_meta("service_position")
@@ -2748,7 +2851,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 		"forager_tent":
 			forager_positions.append(service_position)
 			_update_interface("Forager tent ready. Assign a resident to forage food, or a free hand will.")
-		"tent", "living_tent", "dugout", "earth_house", "clay_house", "house":
+		"tent", "living_tent", "dugout", "earth_house", "clay_house", "stone_house", "house":
 			if building_type == "house":
 				completed_house_count += 1
 			var housing_capacity := 1 if building_type == "living_tent" else HOUSE_CAPACITY
@@ -2762,7 +2865,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			_house_initial_residents(building)
 		"dew_collector":
 			water_collectors.append({"node": building, "rate": 0.12, "accum": 0.0, "stored": 0, "capacity": 10})
-		"trade_tent", "earth_market", "clay_market", "wood_market", "brick_market":
+		"trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market":
 			_add_building_selector(building, "market_selector", blueprint.footprint)
 		"canteen":
 			canteen = building
@@ -2869,7 +2972,15 @@ func _assigned_staff_for_building(building: Node3D, required: Dictionary) -> int
 	return count
 
 func _has_storage_room_for_role(role: String) -> bool:
-	var resource_for_role := {"forestry": "logs", "farming": "food", "excavation": "soil", "gather_branches": "branches", "gather_grass": "grass", "gather_food": "food", "gather_water": "water", "gather_dew": "water"}
+	if role == "excavation":
+		for site in dig_sites:
+			if _can_work_at_dig_site(site):
+				var next_depth = site.depth + 1
+				var resource = _resource_for_depth(site, next_depth)
+				return settlement.can_make_room_for(resource, 1, warehouse_positions.size())
+		return settlement.can_make_room_for("soil", 1, warehouse_positions.size())
+		
+	var resource_for_role := {"forestry": "logs", "farming": "food", "gather_branches": "branches", "gather_grass": "grass", "gather_food": "food", "gather_water": "water", "gather_dew": "water"}
 	if not resource_for_role.has(role):
 		return true
 	return settlement.can_make_room_for(resource_for_role[role], 1, warehouse_positions.size())
@@ -2884,7 +2995,7 @@ func _send_citizen_to_leisure(citizen: Citizen) -> void:
 
 func _grant_debug_resources() -> void:
 	# Approximate early-to-late material demand, rather than equal stacks.
-	var grants := {"money": 30, "branches": 36, "grass": 20, "water": 24, "food": 18, "hides": 8, "goods": 8, "logs": 16, "wood": 10, "soil": 28, "clay": 22, "boards": 18, "bricks": 14}
+	var grants := {"money": 30, "branches": 36, "grass": 20, "water": 24, "food": 18, "hides": 8, "goods": 8, "logs": 16, "wood": 10, "soil": 28, "clay": 22, "boards": 18, "stone": 15, "bricks": 14}
 	for resource_type in grants:
 		settlement.add(resource_type, grants[resource_type])
 	_update_workers()
@@ -3336,15 +3447,31 @@ func _refresh_campfire_menu() -> void:
 			can_advance = settlement.can_advance_to(next_era, citizens.size(), housing_slots)
 			
 		SettlementState.Era.WOOD:
-			next_era = SettlementState.Era.BRICK
-			var has_bf := settlement.has_building("brick_factory")
-			var clay_ok := settlement.clay >= 20
+			next_era = SettlementState.Era.STONE
 			var has_mkt := settlement.has_building("wood_market")
+			var has_sm := settlement.has_building("sawmill")
+			var pickaxe_ok := settlement._has_tools(["pickaxe"])
+			var money_ok := settlement.money >= 15
+			
+			req_text = "Requirements for Stone Era:\n"
+			req_text += "- Sawmill built: %s\n" % ("Yes" if has_sm else "No")
+			req_text += "- Wood market built: %s\n" % ("Yes" if has_mkt else "No")
+			req_text += "- Tool Pickaxe owned: %s\n" % ("Yes" if pickaxe_ok else "No")
+			req_text += "- Money (needs 15): %d (%s)\n" % [settlement.money, "OK" if money_ok else "Need more"]
+			can_advance = settlement.can_advance_to(next_era, citizens.size(), housing_slots)
+
+		SettlementState.Era.STONE:
+			next_era = SettlementState.Era.BRICK
+			var has_mkt := settlement.has_building("stone_market")
+			var has_mw := settlement.has_building("masonry_workshop")
+			var stone_ok := settlement.stone >= 20
+			var money_ok := settlement.money >= 20
 			
 			req_text = "Requirements for Brick Era:\n"
-			req_text += "- Brick kiln built: %s\n" % ("Yes" if has_bf else "No")
-			req_text += "- Wood market built: %s\n" % ("Yes" if has_mkt else "No")
-			req_text += "- Clay (needs 20): %d (%s)\n" % [settlement.clay, "OK" if clay_ok else "Need more"]
+			req_text += "- Masonry workshop built: %s\n" % ("Yes" if has_mw else "No")
+			req_text += "- Stone market built: %s\n" % ("Yes" if has_mkt else "No")
+			req_text += "- Stone (needs 20): %d (%s)\n" % [settlement.stone, "OK" if stone_ok else "Need more"]
+			req_text += "- Money (needs 20): %d (%s)\n" % [settlement.money, "OK" if money_ok else "Need more"]
 			can_advance = settlement.can_advance_to(next_era, citizens.size(), housing_slots)
 			
 		SettlementState.Era.BRICK:
@@ -3368,7 +3495,8 @@ func _on_campfire_advance_pressed() -> void:
 		SettlementState.Era.TENT: next_era = SettlementState.Era.EARTH
 		SettlementState.Era.EARTH: next_era = SettlementState.Era.CLAY
 		SettlementState.Era.CLAY: next_era = SettlementState.Era.WOOD
-		SettlementState.Era.WOOD: next_era = SettlementState.Era.BRICK
+		SettlementState.Era.WOOD: next_era = SettlementState.Era.STONE
+		SettlementState.Era.STONE: next_era = SettlementState.Era.BRICK
 	
 	if settlement.advance_era(next_era, citizens.size(), housing_slots):
 		settlement.ensure_storage_defaults(warehouse_positions.size())
@@ -3425,23 +3553,32 @@ func _refresh_market_menu() -> void:
 	sell_items.append(["branches", 1])
 	sell_items.append(["grass", 1])
 	sell_items.append(["water", 1])
-	# Hand tools are available from the very first (tent-era) market so the
-	# settlement can meet the Earth-era tool requirement without a later market.
-	buy_items.append(["axe", 15])
-	buy_items.append(["hand_saw", 15])
-	buy_items.append(["shovel", 15])
-	buy_items.append(["bucket", 15])
-	buy_items.append(["filter_1", 8])
+	
+	if market_type == "trade_tent":
+		buy_items.append(["axe", 15])
+		buy_items.append(["hand_saw", 15])
+		buy_items.append(["shovel", 15])
+		buy_items.append(["bucket", 15])
+		buy_items.append(["filter_1", 8])
+	elif market_type in ["earth_market", "clay_market"]:
+		buy_items.append(["hoe", 18])
+		buy_items.append(["filter_1", 8])
+	elif market_type in ["wood_market", "stone_market", "brick_market"]:
+		buy_items.append(["pickaxe", 25])
+		buy_items.append(["filter_1", 8])
 
-	if market_type in ["earth_market", "clay_market", "wood_market", "brick_market"]:
+	if market_type in ["earth_market", "clay_market", "wood_market", "stone_market", "brick_market"]:
 		sell_items.append(["soil", 1])
 
-	if market_type in ["clay_market", "wood_market", "brick_market"]:
+	if market_type in ["clay_market", "wood_market", "stone_market", "brick_market"]:
 		sell_items.append(["clay", 2])
 		
-	if market_type in ["wood_market", "brick_market"]:
+	if market_type in ["wood_market", "stone_market", "brick_market"]:
 		sell_items.append(["wood", 2])
 		sell_items.append(["boards", 3])
+		
+	if market_type in ["stone_market", "brick_market"]:
+		sell_items.append(["stone", 3])
 		
 	if market_type == "brick_market":
 		sell_items.append(["bricks", 4])
@@ -3577,11 +3714,21 @@ func _trade_has_tool_order(tool_id: String) -> bool:
 func _dispatch_queued_trades() -> void:
 	if queued_trades.is_empty():
 		return
+	var candidates: Array[Citizen] = []
 	for worker in citizens:
+		if WorkforcePolicy.can_take_queued_job({
+			"player_controlled": worker.is_player_controlled,
+			"idle": worker.state == Citizen.State.IDLE,
+			"manual_role": worker.manual_role,
+			"has_queued_job": pending_trades.has(worker.get_instance_id()),
+		}):
+			candidates.append(worker)
+	# Dedicated couriers take new market work first; other automatic workers are
+	# valid fallbacks so an order cannot stall when no courier exists.
+	candidates.sort_custom(func(a: Citizen, b: Citizen): return (a.specialization == "courier") and b.specialization != "courier")
+	for worker in candidates:
 		if queued_trades.is_empty():
 			return
-		if worker.is_player_controlled or worker.state != Citizen.State.IDLE or pending_trades.has(worker.get_instance_id()):
-			continue
 		var order: Dictionary = queued_trades.pop_front()
 		pending_trades[worker.get_instance_id()] = order.trade
 		worker.deliver_trade(order.source, order.destination)
