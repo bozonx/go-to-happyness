@@ -312,6 +312,8 @@ func _update_clock(delta: float) -> void:
 func _handle_clock_minute(clock_minute: int) -> void:
 	var hour := clock_minute / 60
 	var minute := clock_minute % 60
+	if minute == 0 and hour == 0:
+		current_day += 1
 	if minute == 0 and (hour == 9 or hour == 13 or hour == 19) and active_meal_hour != hour:
 		active_meal_hour = hour
 		_start_meal(hour)
@@ -354,6 +356,24 @@ func _apply_daily_settlement_rules() -> void:
 		departing.queue_free()
 		settlement.low_wellbeing_days = 0
 		_update_interface("A volunteer left after several days of poor living conditions.")
+	# --- Daily settlement warnings ---
+	if food == 0:
+		_add_message("CRITICAL: Food supplies exhausted! Workers are starving.")
+	elif float(food) / population < 1.0:
+		_add_message("Warning: Food is running low (%d for %d people)." % [food, population])
+	if water == 0:
+		_add_message("CRITICAL: Water supplies exhausted! Settlement is dehydrated.")
+	elif float(water) / population < 1.0:
+		_add_message("Warning: Water is running low (%d for %d people)." % [water, population])
+	var storage_ratio := float(_stored_resources()) / float(maxi(1, _warehouse_capacity()))
+	if storage_ratio >= 0.95:
+		_add_message("CRITICAL: Storage nearly full (%d%%). Build another warehouse or rebalance." % [int(storage_ratio * 100)])
+	elif storage_ratio >= 0.80:
+		_add_message("Warning: Storage filling up (%d%% used)." % [int(storage_ratio * 100)])
+	if wellbeing < SettlementRules.LOW_WELLBEING:
+		_add_message("Warning: Low wellbeing (%d). Unhappiness is accumulating — volunteers may leave!" % wellbeing)
+	elif change < 0:
+		_add_message("Wellbeing is declining (change: %d). Consider improving living conditions." % change)
 
 func _update_house_lights() -> void:
 	var hour := int(game_minutes) / 60
@@ -760,8 +780,8 @@ func _find_path_around_houses(from: Vector3, destination: Vector3, may_enter_des
 	return path
 
 func _update_interface(message: String) -> void:
-	wood_label.text = "Era: %s\nMoney: %d\nBranches: %d\nGrass: %d\nWater: %d\nFood: %d\nLogs: %d\nBoards: %d\nBricks: %d\nStorage: %d/%d\nPopulation: %d\nWellbeing: %d" % [_era_name(), money, branches, grass, water, food, settlement.logs, boards, bricks, _stored_resources(), _warehouse_capacity(), citizens.size(), wellbeing]
-	status_label.text = message
+	wood_label.text = "Era: %s\nMoney: %d\nBranches: %d\nGrass: %d\nWater: %d\nFood: %d\nLogs: %d\nTimber: %d\nBoards: %d\nBricks: %d\nStorage: %d/%d\nPopulation: %d\nWellbeing: %d" % [_era_name(), money, branches, grass, water, food, settlement.logs, wood, boards, bricks, _stored_resources(), _warehouse_capacity(), citizens.size(), wellbeing]
+	_add_message(message)
 	if is_first_person:
 		var build_hint := "  B: construction" if player_citizen == hero_citizen else ""
 		camera_hint_label.text = "R: hero/overview  WASD/arrows: move  Space: jump  Shift: sprint  Mouse: look  LMB: interact  RMB: dig%s" % build_hint
@@ -771,6 +791,175 @@ func _update_interface(message: String) -> void:
 func _era_name() -> String:
 	return ["Tent", "Earth", "Clay", "Wood", "Brick"][settlement.era]
 
+
+# ---------- Message log system ------------------------------------------------
+
+func _add_message(text: String) -> void:
+	if message_list == null:
+		return
+	var msg_type := _classify_message(text)
+	var timestamp := "[Day %d, %02d:%02d]" % [current_day, clock.hour(), clock.minute()]
+	var entry := {"text": text, "type": msg_type, "timestamp": timestamp}
+	messages.append(entry)
+	var color := _message_color(msg_type)
+	var formatted := "[color=%s]%s[/color] %s" % [color, timestamp, text]
+	_append_message_label(message_list, formatted, 12, 356)
+	_scroll_to_bottom.call_deferred()
+	# Keep only last 60 visible in the compact panel.
+	while message_list.get_child_count() > 60:
+		var old_node := message_list.get_child(0)
+		message_list.remove_child(old_node)
+		old_node.queue_free()
+
+
+func _classify_message(text: String) -> String:
+	var lower := text.to_lower()
+	# Error-level
+	if lower.contains("critical") or lower.contains("missed") or lower.contains("ran out") or lower.contains("left after") or lower.contains("no canteen") or lower.contains("needs a cook") or lower.contains("no storage room") or lower.contains("interrupted") or lower.contains("not allowed") or lower.contains("exhausted") or lower.contains("starving") or lower.contains("dehydrated"):
+		return "error"
+	# Warning-level
+	if lower.contains("warning") or lower.contains("rebalance") or lower.contains("low wellbeing") or lower.contains("declining") or lower.contains("filling up") or lower.contains("running low") or lower.contains("needs") or lower.contains("requires"):
+		return "warning"
+	# Success-level
+	if lower.contains("unlocked") or lower.contains("completed") or lower.contains("delivered") or lower.contains("produced") or lower.contains("joined") or lower.contains("built") or lower.contains("advanced") or lower.contains("received") or lower.contains("research started"):
+		return "success"
+	return "info"
+
+
+func _message_color(msg_type: String) -> String:
+	match msg_type:
+		"error": return "#e85555"
+		"warning": return "#f0a030"
+		"success": return "#7dce82"
+		_: return "#8ab4cc"
+
+
+func _append_message_label(container: VBoxContainer, formatted_text: String, font_size: int, min_width: float) -> void:
+	var label := RichTextLabel.new()
+	label.bbcode_enabled = true
+	label.fit_content = true
+	label.scroll_active = false
+	label.text = formatted_text
+	label.add_theme_font_size_override("normal_font_size", font_size)
+	label.custom_minimum_size = Vector2(min_width, 0)
+	container.add_child(label)
+
+
+func _scroll_to_bottom() -> void:
+	if message_scroll != null:
+		message_scroll.scroll_vertical = int(message_scroll.get_v_scroll_bar().max_value)
+
+
+func _create_message_panel(ui: CanvasLayer) -> void:
+	var msg_panel := Panel.new()
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.03, 0.06, 0.08, 0.92)
+	style.border_color = Color(0.15, 0.25, 0.32, 0.7)
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(4)
+	msg_panel.add_theme_stylebox_override("panel", style)
+	msg_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	msg_panel.offset_left = 20
+	msg_panel.offset_top = -268
+	msg_panel.offset_right = 400
+	msg_panel.offset_bottom = -38
+	ui.add_child(msg_panel)
+
+	# Header row
+	var header := HBoxContainer.new()
+	header.position = Vector2(10, 6)
+	header.size = Vector2(368, 26)
+	msg_panel.add_child(header)
+
+	var title := Label.new()
+	title.text = "Messages"
+	title.add_theme_font_size_override("font_size", 13)
+	title.add_theme_color_override("font_color", Color(0.7, 0.85, 0.95))
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(title)
+
+	var history_btn := Button.new()
+	history_btn.text = "History"
+	history_btn.add_theme_font_size_override("font_size", 12)
+	history_btn.custom_minimum_size = Vector2(70, 24)
+	history_btn.pressed.connect(_open_messages_modal)
+	header.add_child(history_btn)
+
+	# Scrollable message list
+	message_scroll = ScrollContainer.new()
+	message_scroll.position = Vector2(6, 34)
+	message_scroll.size = Vector2(376, 190)
+	message_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	msg_panel.add_child(message_scroll)
+
+	message_list = VBoxContainer.new()
+	message_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	message_scroll.add_child(message_list)
+
+
+func _create_messages_modal(ui: CanvasLayer) -> void:
+	messages_modal = Panel.new()
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.025, 0.05, 0.07, 0.96)
+	style.border_color = Color(0.2, 0.35, 0.45, 0.8)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(6)
+	messages_modal.add_theme_stylebox_override("panel", style)
+	messages_modal.set_anchors_preset(Control.PRESET_CENTER)
+	messages_modal.offset_left = -300
+	messages_modal.offset_top = -240
+	messages_modal.offset_right = 300
+	messages_modal.offset_bottom = 240
+	messages_modal.visible = false
+	ui.add_child(messages_modal)
+
+	# Title
+	var title := Label.new()
+	title.text = "Message History"
+	title.position = Vector2(20, 12)
+	title.size = Vector2(460, 30)
+	title.add_theme_font_size_override("font_size", 18)
+	title.add_theme_color_override("font_color", Color(0.8, 0.9, 1.0))
+	messages_modal.add_child(title)
+
+	# Close button
+	var close_btn := Button.new()
+	close_btn.text = "Close"
+	close_btn.position = Vector2(510, 10)
+	close_btn.size = Vector2(78, 30)
+	close_btn.pressed.connect(_close_messages_modal)
+	messages_modal.add_child(close_btn)
+
+	# Scroll container
+	var scroll := ScrollContainer.new()
+	scroll.position = Vector2(12, 48)
+	scroll.size = Vector2(576, 420)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	messages_modal.add_child(scroll)
+
+	modal_message_list = VBoxContainer.new()
+	modal_message_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(modal_message_list)
+
+
+func _open_messages_modal() -> void:
+	if messages_modal == null:
+		return
+	# Rebuild modal content from full history.
+	for child in modal_message_list.get_children():
+		child.queue_free()
+	for entry in messages:
+		var color := _message_color(entry.type)
+		var formatted := "[color=%s]%s[/color] %s" % [color, entry.timestamp, entry.text]
+		_append_message_label(modal_message_list, formatted, 13, 564)
+	messages_modal.visible = true
+
+
+func _close_messages_modal() -> void:
+	if messages_modal != null:
+		messages_modal.visible = false
+
+# ---------- End message log system --------------------------------------------
 
 func _create_world() -> void:
 	var environment := WorldEnvironment.new()
@@ -1061,21 +1250,20 @@ func _create_interface() -> void:
 	wood_label.size = Vector2(150, 240)
 	wood_label.add_theme_font_size_override("font_size", 12)
 	panel.add_child(wood_label)
-	# Messages live in a separate block below the resources.
-	var status_panel := ColorRect.new()
-	status_panel.color = Color(0.035, 0.07, 0.09, 0.82)
-	status_panel.position = Vector2(20, 288)
-	status_panel.size = Vector2(380, 86)
-	ui.add_child(status_panel)
+	# Hidden status label — kept for backward compatibility.
 	status_label = Label.new()
-	status_label.position = Vector2(14, 8)
-	status_label.size = Vector2(352, 72)
-	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	status_label.add_theme_font_size_override("font_size", 14)
-	status_panel.add_child(status_label)
+	status_label.visible = false
+	ui.add_child(status_label)
+	# Message log panel — bottom-left.
+	_create_message_panel(ui)
+	_create_messages_modal(ui)
 	camera_hint_label = Label.new()
-	camera_hint_label.position = Vector2(20, 682)
-	camera_hint_label.add_theme_font_size_override("font_size", 16)
+	camera_hint_label.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	camera_hint_label.offset_left = 20
+	camera_hint_label.offset_top = -30
+	camera_hint_label.offset_right = 800
+	camera_hint_label.offset_bottom = -6
+	camera_hint_label.add_theme_font_size_override("font_size", 14)
 	ui.add_child(camera_hint_label)
 	clock_label = Label.new()
 	clock_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
@@ -1146,6 +1334,7 @@ func _create_time_controls(ui: CanvasLayer) -> void:
 
 
 func _skip_night() -> void:
+	current_day += 1
 	clock.set_time(8 * 60)
 	active_meal_hour = -1
 	_update_workers()
