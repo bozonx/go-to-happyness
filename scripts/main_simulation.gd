@@ -743,7 +743,7 @@ func _create_voxel_terrain() -> void:
 
 func _create_navigation_region() -> void:
 	navigation_region = NavigationRegion3D.new()
-	navigation_region.use_edge_connections = true
+	navigation_region.use_edge_connections = false
 	add_child(navigation_region)
 	_rebuild_navigation_mesh()
 
@@ -757,18 +757,20 @@ func _rebuild_navigation_mesh() -> void:
 	navigation_mesh.agent_max_slope = 52.0
 	var vertices := PackedVector3Array()
 	var polygons: Array[PackedInt32Array] = []
+	var vertex_indices: Dictionary = {}
 	var half_cells := BOARD_CELLS / 2
 	for x in range(-half_cells, half_cells):
 		for z in range(-half_cells, half_cells):
 			if _is_navigation_cell_blocked(Vector2i(x, z)):
 				continue
-			var vertex_index := vertices.size()
-			vertices.append(Vector3(x, 0.0, z))
-			vertices.append(Vector3(x + 1.0, 0.0, z))
-			vertices.append(Vector3(x + 1.0, 0.0, z + 1.0))
-			vertices.append(Vector3(x, 0.0, z + 1.0))
-			polygons.append(PackedInt32Array([vertex_index, vertex_index + 2, vertex_index + 1]))
-			polygons.append(PackedInt32Array([vertex_index, vertex_index + 3, vertex_index + 2]))
+			var corners := [Vector2i(x, z), Vector2i(x, z + 1), Vector2i(x + 1, z + 1), Vector2i(x + 1, z)]
+			var polygon := PackedInt32Array()
+			for corner in corners:
+				if not vertex_indices.has(corner):
+					vertex_indices[corner] = vertices.size()
+					vertices.append(Vector3(corner.x, 0.0, corner.y))
+				polygon.append(int(vertex_indices[corner]))
+			polygons.append(polygon)
 	navigation_mesh.vertices = vertices
 	for polygon in polygons:
 		navigation_mesh.add_polygon(polygon)
