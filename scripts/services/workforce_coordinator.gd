@@ -23,13 +23,19 @@ func update_workers() -> void:
 			continue
 		if citizen.blocked_by_storage:
 			if not simulation.settlement.reserve_storage_room_for(citizen.resource_type, maxi(1, citizen.carried_amount), simulation.warehouse_positions.size()):
+				simulation._send_citizen_to_leisure(citizen)
 				continue
 			citizen.blocked_by_storage = false
-		citizen.request_goap_decision()
+		if can_assign_work(citizen):
+			citizen.request_goap_decision()
+		else:
+			simulation._send_citizen_to_leisure(citizen)
 
 
 func can_assign_work(citizen: Citizen) -> bool:
-	return WorkforcePolicy.can_assign(_worker_data(citizen), _world_data())
+	if not WorkforcePolicy.can_assign(_worker_data(citizen), _world_data()):
+		return false
+	return simulation._has_storage_room_for_role(work_role_for(citizen))
 
 
 func assign_work(citizen: Citizen, index: int) -> void:
@@ -51,14 +57,20 @@ func assign_work(citizen: Citizen, index: int) -> void:
 		citizen.attend_school()
 		return
 	if citizen.specialization == "builder" and simulation.construction_sites.is_empty():
+		if not simulation.demolition_sites.is_empty():
+			citizen.assign_demolition(simulation.demolition_sites[index % simulation.demolition_sites.size()].building)
+			return
 		var materials_plant := factory_for_role("engineer")
 		if materials_plant != null:
 			citizen.assign_factory_work(materials_plant, "construction")
 			return
 	match work_role_for(citizen):
 		"construction":
-			var construction: Dictionary = simulation.construction_sites[index % simulation.construction_sites.size()]
-			citizen.assign_construction(construction.node)
+			if not simulation.demolition_sites.is_empty():
+				citizen.assign_demolition(simulation.demolition_sites[index % simulation.demolition_sites.size()].building)
+			elif not simulation.construction_sites.is_empty():
+				var construction: Dictionary = simulation.construction_sites[index % simulation.construction_sites.size()]
+				citizen.assign_construction(construction.node)
 		"forestry":
 			var tree_position: Vector3 = simulation._reserve_closest_tree_for_sawmill(citizen, Vector3.ZERO)
 			if tree_position != Vector3.INF:
@@ -114,7 +126,7 @@ func _world_data() -> Dictionary:
 		"hour": int(simulation.game_minutes) / 60,
 		"has_canteen": is_instance_valid(simulation.canteen),
 		"schools": simulation.school_positions.size(),
-		"construction_sites": simulation.construction_sites.size(),
+		"construction_sites": simulation.construction_sites.size() + simulation.demolition_sites.size(),
 		"warehouses": simulation.warehouse_positions.size(),
 		"sawmills": simulation.sawmill_positions.size(),
 		"trees": simulation.tree_positions.size(),

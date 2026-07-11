@@ -43,6 +43,12 @@ static func cost_for_resource(building_type: String, resource_type: String) -> i
 static func cost_for(building_type: String) -> int:
 	var costs: Dictionary = definition_for(building_type).get("costs", {})
 	return int(costs.values()[0]) if costs.size() == 1 else 0
+static func demolition_refund(building_type: String) -> Dictionary:
+	var recovered := {}
+	var costs: Dictionary = definition_for(building_type).get("costs", {})
+	for resource_type in costs:
+		recovered[resource_type] = maxi(1, floori(int(costs[resource_type]) * 0.35))
+	return recovered
 static func currency_for(building_type: String) -> String:
 	var resources := cost_resources(building_type)
 	return resources[0] if resources.size() == 1 else ""

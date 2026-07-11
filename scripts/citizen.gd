@@ -555,6 +555,16 @@ func assign_construction(site: Node3D) -> void:
 	active_role = "construction"
 	state = State.CONSTRUCTING
 
+func assign_demolition(building: Node3D) -> void:
+	if is_player_controlled:
+		return
+	construction_site = building
+	factory = null
+	construction_position = _work_position_for(building)
+	movement_path.clear()
+	active_role = "demolition"
+	state = State.CONSTRUCTING
+
 func finish_construction(site: Node3D) -> void:
 	if construction_site != site:
 		return

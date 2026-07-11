@@ -133,6 +133,13 @@ func storage_room_for(resource_type: String) -> int:
 func storage_can_accept(resource_type: String, count: int) -> bool:
 	return storage_room_for(resource_type) >= count
 
+func can_make_room_for(resource_type: String, count: int, warehouses: int) -> bool:
+	if not STORED_RESOURCES.has(resource_type):
+		return true
+	var required := count * storage_weight(resource_type)
+	var available := maxf(0.0, float(storage_limits.get(resource_type, 0.0)) - amount(resource_type) * storage_weight(resource_type))
+	return available + storage_free_units(warehouses) + 0.001 >= required
+
 
 func reserve_storage_room_for(resource_type: String, count: int, warehouses: int) -> bool:
 	if count <= 0 or not STORED_RESOURCES.has(resource_type):

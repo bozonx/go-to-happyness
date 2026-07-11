@@ -17,6 +17,7 @@ const FOOD_PURCHASE_PRICE := 2
 const HOUSE_CAPACITY := 4
 const TENT_CAPACITY := 4
 const CONSTRUCTION_DURATION := 4.0
+const DEMOLITION_DURATION := 3.0
 const PLAYER_SPEED := 4.2
 const PLAYER_SPRINT_MULTIPLIER := 1.8
 const PLAYER_JUMP_VELOCITY := 6.5
@@ -119,6 +120,7 @@ var message_list: VBoxContainer
 var messages_modal: Panel
 var modal_message_list: VBoxContainer
 var selected_builder: Citizen
+var selected_building: Node3D
 var build_menu: Panel
 var build_menu_title: Label
 var camera_hint_label: Label
@@ -126,6 +128,7 @@ var is_panning_camera := false
 var is_rotating_camera := false
 var right_mouse_dragged := false
 var construction_sites: Array[Dictionary] = []
+var demolition_sites: Array[Dictionary] = []
 var completed_house_count := 0
 var player_citizen: Citizen
 var hero_citizen: Citizen
@@ -236,6 +239,7 @@ func _process(delta: float) -> void:
 	else:
 		_update_camera(delta)
 	_update_construction(delta)
+	_update_demolition(delta)
 	_update_tent_dismantle(delta)
 	_update_water_collectors(delta)
 	_update_clock(delta)
@@ -538,12 +542,22 @@ func _building_power(site_node: Node3D) -> float:
 
 func _on_resource_delivered(worker: Citizen, resource_type: String, amount: int) -> void:
 	if not settlement.reserve_storage_room_for(resource_type, amount, warehouse_positions.size()):
-		worker.storage_delivery_result(false)
-		_update_interface("No storage room for %s. Rebalance the warehouse or build another; the worker went home." % resource_type)
+		# Cargo already in transit must never disappear. It may temporarily exceed
+		# the allocation; scheduling prevents new production until room is freed.
+		settlement.add(resource_type, amount)
+		_finish_storage_delivery(worker, resource_type)
+		_update_interface("Workers delivered %d %s over the storage limit. New collection is paused." % [amount, resource_type])
 		return
 	settlement.add(resource_type, amount)
-	worker.storage_delivery_result(true)
+	_finish_storage_delivery(worker, resource_type)
 	_update_interface("Workers delivered %d %s to the warehouse." % [amount, resource_type])
+
+func _finish_storage_delivery(worker: Citizen, resource_type: String) -> void:
+	if settlement.can_make_room_for(resource_type, 1, warehouse_positions.size()):
+		worker.storage_delivery_result(true)
+		return
+	worker.idle()
+	_send_citizen_to_leisure(worker)
 
 func _on_factory_cycle(worker: Citizen, factory: Node3D) -> void:
 	if not is_instance_valid(factory):
@@ -1176,6 +1190,8 @@ func _create_starting_tent() -> void:
 	building_footprints.append({"center": tent.position, "footprint": Vector2i(3, 3), "node": tent})
 	_rebuild_navigation_mesh()
 	tent.set_meta("is_tent", true)
+	tent.set_meta("building_type", "tent")
+	tent.set_meta("footprint", Vector2i(3, 3))
 	placed_buildings[tent_cell] = "tent"
 	_register_navigation_footprint(tent.position, {"footprint": Vector2i(3, 3)})
 	add_child(tent)
@@ -1492,6 +1508,12 @@ func _create_house_menu(ui: CanvasLayer) -> void:
 	house_menu_title.add_theme_font_size_override("font_size", 17)
 	house_menu.add_child(house_menu_title)
 	_add_house_resettle_button()
+	var demolish_button := Button.new()
+	demolish_button.text = "Mark for demolition"
+	demolish_button.position = Vector2(16, 102)
+	demolish_button.size = Vector2(272, 30)
+	demolish_button.pressed.connect(func(): _mark_building_for_demolition(selected_house))
+	house_menu.add_child(demolish_button)
 	house_menu.offset_top = -450.0
 
 func _create_materials_factory_menu(ui: CanvasLayer) -> void:
@@ -1613,9 +1635,7 @@ func _show_house_menu() -> void:
 	if selected_house == null:
 		return
 	var slots: int = selected_house.get_meta("spawn_slots", 0)
-	house_menu.visible = slots > 0
-	if slots <= 0:
-		return
+	house_menu.visible = true
 	house_menu_title.text = "House residents\nFree beds: %d/%d" % [slots, HOUSE_CAPACITY]
 
 func _add_build_button(title: String, building_type: String, y_position: float, category: String) -> void:
@@ -1847,6 +1867,7 @@ func _close_context_menus() -> void:
 	selected_campfire = null
 	selected_market = null
 	selected_warehouse = null
+	selected_building = null
 	selected_builder = null
 	build_category = ""
 	build_menu_is_job_menu = false
@@ -1854,6 +1875,16 @@ func _close_context_menus() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.keycode == KEY_F and event.ctrl_pressed and event.pressed and not event.echo:
+		if OS.is_debug_build():
+			_grant_debug_resources()
+			get_viewport().set_input_as_handled()
+			return
+	if event is InputEventKey and event.keycode == KEY_DELETE and event.pressed and not event.echo:
+		if is_instance_valid(selected_building):
+			_mark_building_for_demolition(selected_building)
+			get_viewport().set_input_as_handled()
+			return
 	if event is InputEventKey and event.keycode == KEY_R and event.pressed and not event.echo:
 		_toggle_hero_view()
 		get_viewport().set_input_as_handled()
@@ -1936,21 +1967,26 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 	_hide_all_selection_menus()
 	if hit.collider.is_in_group("campfire_selector"):
 		selected_campfire = hit.collider.get_parent() as Node3D
+		selected_building = selected_campfire
 		_show_campfire_menu()
 		return
 	if hit.collider.is_in_group("market_selector"):
 		selected_market = hit.collider.get_parent() as Node3D
+		selected_building = selected_market
 		_show_market_menu()
 		return
 	if hit.collider.is_in_group("warehouse_selector"):
 		selected_warehouse = hit.collider.get_parent() as Node3D
+		selected_building = selected_warehouse
 		_show_warehouse_menu()
 		return
 	if hit.collider.is_in_group("cook_campfire_selector"):
+		selected_building = hit.collider.get_parent() as Node3D
 		_assign_cook_at_campfire()
 		return
 	if hit.collider.is_in_group("house_selector"):
 		selected_house = hit.collider.get_parent() as Node3D
+		selected_building = selected_house
 		selected_builder = null
 		build_menu.visible = false
 		if tent != null and selected_house == tent:
@@ -1962,6 +1998,7 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 		return
 	if hit.collider.is_in_group("school_selector"):
 		selected_school = hit.collider.get_parent() as Node3D
+		selected_building = selected_school
 		house_menu.visible = false
 		build_menu.visible = false
 		if selected_builder == null:
@@ -1974,6 +2011,7 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 		return
 	if hit.collider.is_in_group("materials_factory_selector"):
 		selected_materials_factory = hit.collider.get_parent() as Node3D
+		selected_building = selected_materials_factory
 		selected_house = null
 		selected_school = null
 		house_menu.visible = false
@@ -1981,6 +2019,10 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 		build_menu.visible = false
 		_show_materials_factory_menu()
 		_update_interface("Materials factory selected. Start brick construction research here.")
+		return
+	if hit.collider.is_in_group("building_selector"):
+		selected_building = hit.collider.get_parent() as Node3D
+		_update_interface("Building selected. Press Delete to mark it for demolition.")
 		return
 	if not hit.collider.is_in_group("citizen_selector"):
 		return
@@ -2001,6 +2043,99 @@ func _hide_all_selection_menus() -> void:
 	selected_campfire = null
 	selected_market = null
 	selected_warehouse = null
+	selected_building = null
+
+func _mark_building_for_demolition(building: Node3D) -> void:
+	if not _can_hero_build() or not is_instance_valid(building):
+		return
+	for site in demolition_sites:
+		if site.building == building:
+			return
+	if building == entrance_stone:
+		_update_interface("This building cannot be demolished.")
+		return
+	building.set_meta("pending_demolition", true)
+	demolition_sites.append({"building": building, "type": str(building.get_meta("building_type", "house")), "progress": 0.0})
+	_update_workers()
+	_update_interface("Building marked for demolition. Residents and stored goods must be relocated first.")
+
+func _demolition_ready(site: Dictionary) -> bool:
+	var building: Node3D = site.building
+	if not is_instance_valid(building):
+		return false
+	for citizen in citizens:
+		if citizen.home != building:
+			continue
+		var replacement := _find_relocation_home(building)
+		if replacement == null:
+			return false
+		citizen.assign_home(replacement)
+		replacement.set_meta("spawn_slots", int(replacement.get_meta("spawn_slots", 0)) - 1)
+	if str(site.type) == "warehouse":
+		return settlement.storage_used_units() <= settlement.storage_capacity(warehouse_positions.size() - 1)
+	return true
+
+func _find_relocation_home(excluded: Node3D) -> Node3D:
+	for record in building_footprints:
+		var candidate: Node3D = record.node
+		if not is_instance_valid(candidate) or candidate == excluded or bool(candidate.get_meta("pending_demolition", false)):
+			continue
+		if int(candidate.get_meta("spawn_slots", 0)) > 0:
+			return candidate
+	return null
+
+func _update_demolition(delta: float) -> void:
+	for index in range(demolition_sites.size() - 1, -1, -1):
+		var site: Dictionary = demolition_sites[index]
+		if not is_instance_valid(site.building):
+			demolition_sites.remove_at(index)
+			continue
+		if not _demolition_ready(site):
+			continue
+		var power := _building_power(site.building)
+		if power <= 0.0:
+			continue
+		site.progress = minf(1.0, float(site.progress) + delta * power / DEMOLITION_DURATION)
+		demolition_sites[index] = site
+		if site.progress >= 1.0:
+			_finish_demolition(site)
+			demolition_sites.remove_at(index)
+
+func _finish_demolition(site: Dictionary) -> void:
+	var building: Node3D = site.building
+	var building_type := str(site.type)
+	for citizen in citizens:
+		citizen.finish_construction(building)
+	_remove_building_services(building, building_type)
+	building_positions.erase(building.global_position)
+	for index in range(building_footprints.size() - 1, -1, -1):
+		if building_footprints[index].node == building:
+			building_footprints.remove_at(index)
+	_unregister_navigation_footprint(building.global_position, building.get_meta("footprint", Vector2i(3, 3)))
+	placed_buildings.erase(_placement_key(building.global_position))
+	settlement.buildings[building_type] = maxi(0, int(settlement.buildings.get(building_type, 1)) - 1)
+	for resource_type in BuildingCatalog.demolition_refund(building_type):
+		settlement.add(resource_type, BuildingCatalog.demolition_refund(building_type)[resource_type])
+	building.queue_free()
+	_rebuild_navigation_mesh()
+	_update_workers()
+	_update_interface("%s dismantled; usable materials were recovered." % building_type.capitalize())
+
+func _remove_building_services(building: Node3D, building_type: String) -> void:
+	var service_position: Vector3 = building.get_meta("service_position", building.global_position)
+	match building_type:
+		"warehouse": warehouse_positions.erase(service_position)
+		"sawmill": sawmill_positions.erase(service_position)
+		"farm": farm_positions.erase(service_position)
+		"forager_tent": forager_positions.erase(service_position)
+		"school": school_positions.erase(service_position)
+		"park": park_positions.erase(service_position)
+		"leisure_center": leisure_positions.erase(service_position)
+		"campfire":
+			if campfire_node == building: campfire_node = null
+		"cook_campfire", "canteen":
+			if canteen == building: canteen = null
+		"brick_factory", "materials_factory", "recycling_factory", "metal_factory": factories.erase(building)
 
 
 func _citizen_at_screen_position(screen_position: Vector2) -> Citizen:
@@ -2444,6 +2579,9 @@ func _update_construction(delta: float) -> void:
 	construction.tick(delta)
 
 func _complete_building(cell: Vector2i, building_type: String, position_on_board: Vector3, building: Node3D, blueprint: Dictionary) -> void:
+	building.set_meta("building_type", building_type)
+	if building_type not in ["warehouse", "campfire", "cook_campfire", "trade_tent", "earth_market", "clay_market", "wood_market", "brick_market", "school", "materials_factory", "tent", "living_tent", "dugout", "earth_house", "clay_house", "house"]:
+		_add_building_selector(building, "building_selector", blueprint.footprint)
 	_register_service_entrance(building, blueprint.footprint, false, building_type not in ["farm", "park"])
 	var service_position: Vector3 = building.get_meta("service_position")
 	match building_type:
@@ -2532,6 +2670,28 @@ func _add_building_selector(building: Node3D, group_name: String, footprint: Vec
 	collision.position.y = 2.0
 	selector.add_child(collision)
 	building.add_child(selector)
+
+func _has_storage_room_for_role(role: String) -> bool:
+	var resource_for_role := {"forestry": "logs", "farming": "food", "excavation": "soil", "gather_branches": "branches", "gather_grass": "grass", "gather_food": "food"}
+	if not resource_for_role.has(role):
+		return true
+	return settlement.can_make_room_for(resource_for_role[role], 1, warehouse_positions.size())
+
+func _send_citizen_to_leisure(citizen: Citizen) -> void:
+	if citizen.is_player_controlled or citizen.state not in [Citizen.State.IDLE, Citizen.State.RESTING]:
+		return
+	var recreation := pond_positions + park_positions + leisure_positions
+	if recreation.is_empty():
+		return
+	citizen.go_to_park(recreation[int(citizen.get_instance_id()) % recreation.size()])
+
+func _grant_debug_resources() -> void:
+	# Approximate early-to-late material demand, rather than equal stacks.
+	var grants := {"money": 30, "branches": 36, "grass": 20, "water": 24, "food": 18, "hides": 8, "goods": 8, "logs": 16, "wood": 10, "soil": 28, "clay": 22, "boards": 18, "bricks": 14}
+	for resource_type in grants:
+		settlement.add(resource_type, grants[resource_type])
+	_update_workers()
+	_update_interface("Debug resources added in normal spending proportions.")
 
 func _register_navigation_footprint(center: Vector3, blueprint: Dictionary) -> void:
 	var footprint: Vector2i = blueprint.footprint
@@ -3084,9 +3244,16 @@ func _refresh_warehouse_menu() -> void:
 		warehouse_menu.add_child(plus)
 		y_offset += 32.0
 
+	var demolish_btn := Button.new()
+	demolish_btn.text = "Mark for demolition"
+	demolish_btn.position = Vector2(16, y_offset + 8)
+	demolish_btn.size = Vector2(290, 28)
+	demolish_btn.pressed.connect(func(): _mark_building_for_demolition(selected_warehouse))
+	warehouse_menu.add_child(demolish_btn)
+
 	var close_btn := Button.new()
 	close_btn.text = "Close Menu"
-	close_btn.position = Vector2(16, y_offset + 8)
+	close_btn.position = Vector2(16, y_offset + 42)
 	close_btn.size = Vector2(290, 28)
 	close_btn.pressed.connect(_close_context_menus)
 	warehouse_menu.add_child(close_btn)
