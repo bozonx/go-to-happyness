@@ -12,6 +12,9 @@ const WORK_DURATION := 1.4
 const COURIER_WAIT_DURATION := 8.0
 const BUILD_WORK_DISTANCE := 2.0
 const GRAVITY := 18.0
+const AI_JUMP_VELOCITY := 7.6
+const AI_ESCAPE_JUMP_VELOCITY := 9.2
+const STUCK_TIME_BEFORE_JUMP := 0.3
 
 enum State { IDLE, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY }
 
@@ -51,6 +54,8 @@ var pathfinder: Callable
 var movement_path: Array[Vector3] = []
 var path_destination := Vector3.INF
 var path_allows_destination_house := false
+var stuck_time := 0.0
+var jump_cooldown := 0.0
 
 func _ready() -> void:
 	var body_collision := CollisionShape3D.new()
@@ -214,9 +219,25 @@ func _move_directly_to(destination: Vector3, delta: float) -> bool:
 	var direction := offset.normalized()
 	velocity.x = direction.x * WALK_SPEED
 	velocity.z = direction.z * WALK_SPEED
+	jump_cooldown = maxf(0.0, jump_cooldown - delta)
+	if is_on_floor() and jump_cooldown <= 0.0 and (is_on_wall() or destination.y > global_position.y + 0.7):
+		_jump_out_of_obstacle(destination.y > global_position.y + 1.5)
+	var position_before_move := global_position
 	move_and_slide()
+	var horizontal_progress := Vector2(global_position.x - position_before_move.x, global_position.z - position_before_move.z).length()
+	if is_on_floor() and horizontal_progress < WALK_SPEED * delta * 0.15:
+		stuck_time += delta
+		if stuck_time >= STUCK_TIME_BEFORE_JUMP and jump_cooldown <= 0.0:
+			_jump_out_of_obstacle(destination.y > global_position.y + 0.5)
+	else:
+		stuck_time = 0.0
 	look_at(global_position + direction, Vector3.UP)
 	return false
+
+func _jump_out_of_obstacle(needs_escape_jump: bool) -> void:
+	velocity.y = AI_ESCAPE_JUMP_VELOCITY if needs_escape_jump else AI_JUMP_VELOCITY
+	jump_cooldown = 0.45
+	stuck_time = 0.0
 
 func _apply_gravity(delta: float) -> void:
 	if not is_on_floor():
