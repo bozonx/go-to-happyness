@@ -3409,7 +3409,8 @@ func _refresh_market_menu() -> void:
 	if selected_market == null:
 		return
 	var market_type: String = selected_market.get_meta("building_type", "trade_tent")
-	market_menu_title.text = "%s Menu\nMoney: %d coins\nTrade Sales: %d" % [market_type.capitalize().replace("_", " "), settlement.money, settlement.trade_sales]
+	var available_money := _available_trade_money()
+	market_menu_title.text = "%s Menu\nCoins: %d  Available: %d\nCompleted sales: %d" % [market_type.capitalize().replace("_", " "), settlement.money, available_money, settlement.trade_sales]
 	
 	# Clear previous buttons except title
 	for child in market_menu.get_children():
@@ -3448,11 +3449,14 @@ func _refresh_market_menu() -> void:
 	for item in sell_items:
 		var res: String = item[0]
 		var price: int = item[1]
+		var sellable := mini(5, settlement.amount(res))
 		var btn := Button.new()
-		btn.text = "Sell 5 %s (+%d Coins)" % [res, price * 5]
+		btn.text = "Sell %d %s (+%d)  Stock: %d" % [sellable, res, price * sellable, settlement.amount(res)]
 		btn.position = Vector2(16, y_offset)
 		btn.size = Vector2(272, 28)
-		btn.pressed.connect(_sell_resource.bind(res, 5, price))
+		btn.disabled = sellable <= 0
+		btn.tooltip_text = "Nothing left to sell" if btn.disabled else "Sell up to five units from available stock"
+		btn.pressed.connect(_sell_resource.bind(res, sellable, price))
 		market_menu.add_child(btn)
 		y_offset += 32.0
 		
@@ -3465,18 +3469,27 @@ func _refresh_market_menu() -> void:
 		btn.text = "Buy %s (%d Coins)" % [tool_name.replace("_", " "), price]
 		btn.position = Vector2(16, y_offset)
 		btn.size = Vector2(272, 28)
+		var already_ordered := _trade_has_tool_order(tool_name)
+		var owned := bool(settlement.tools.get(tool_name, false))
+		btn.disabled = owned or already_ordered or available_money < price
+		btn.tooltip_text = "Already owned" if owned else ("Already ordered" if already_ordered else "Not enough available coins" if available_money < price else "")
 		btn.pressed.connect(_buy_tool.bind(tool_name, price))
 		market_menu.add_child(btn)
 		y_offset += 32.0
 
 	y_offset += 10.0
 
-	# Emergency food supply: traders will sell rations for coins.
+	# Emergency food supply: the offer is reduced to what can be paid for and
+	# stored after accounting for food orders already on the way.
+	var room := maxi(0, settlement.storage_room_for("food") - _trade_incoming_resource("food"))
+	var buyable := mini(5, mini(room, available_money / FOOD_PURCHASE_PRICE))
 	var food_btn := Button.new()
-	food_btn.text = "Buy 5 food (%d Coins)" % (5 * FOOD_PURCHASE_PRICE)
+	food_btn.text = "Buy %d food (%d Coins)  Room: %d" % [buyable, buyable * FOOD_PURCHASE_PRICE, room]
 	food_btn.position = Vector2(16, y_offset)
 	food_btn.size = Vector2(272, 28)
-	food_btn.pressed.connect(_buy_food.bind(5, FOOD_PURCHASE_PRICE))
+	food_btn.disabled = buyable <= 0
+	food_btn.tooltip_text = "No storage room or available coins" if food_btn.disabled else "Buy food for the settlement"
+	food_btn.pressed.connect(_buy_food.bind(buyable, FOOD_PURCHASE_PRICE))
 	market_menu.add_child(food_btn)
 	y_offset += 42.0
 
@@ -3491,13 +3504,10 @@ func _refresh_market_menu() -> void:
 func _buy_food(quantity: int, unit_price: int) -> void:
 	if selected_market == null:
 		return
-	var room := settlement.storage_room_for("food")
-	var buyable := mini(quantity, room)
+	var room := maxi(0, settlement.storage_room_for("food") - _trade_incoming_resource("food"))
+	var buyable := mini(quantity, mini(room, _available_trade_money() / unit_price))
 	if buyable <= 0:
-		_update_interface("No storage room for food. Rebalance the warehouse first.")
-		return
-	if settlement.money < buyable * unit_price:
-		_update_interface("Not enough coins to buy food.")
+		_update_interface("Cannot buy food: check storage space and available coins.")
 		return
 	_start_trade({"kind": "buy_resource", "resource": "food", "quantity": buyable, "price": unit_price}, selected_market.global_position, _get_delivery_position())
 	_refresh_market_menu()
@@ -3517,7 +3527,7 @@ func _sell_resource(resource_type: String, quantity: int, unit_price: int) -> vo
 func _buy_tool(tool_id: String, price: int) -> void:
 	if selected_market == null:
 		return
-	if not settlement.tools.has(tool_id) or bool(settlement.tools[tool_id]) or settlement.money < price:
+	if not settlement.tools.has(tool_id) or bool(settlement.tools[tool_id]) or _trade_has_tool_order(tool_id) or _available_trade_money() < price:
 		_update_interface("Cannot buy %s. Check money or check if already owned." % tool_id.replace("_", " "))
 		return
 	_start_trade({"kind": "buy_tool", "tool": tool_id, "price": price}, selected_market.global_position, _get_delivery_position())
@@ -3526,6 +3536,43 @@ func _buy_tool(tool_id: String, price: int) -> void:
 func _start_trade(trade: Dictionary, source: Vector3, destination: Vector3) -> void:
 	queued_trades.append({"trade": trade, "source": source, "destination": destination})
 	_dispatch_queued_trades()
+
+
+func _trade_orders() -> Array[Dictionary]:
+	var orders: Array[Dictionary] = []
+	for order in queued_trades:
+		orders.append(order.trade)
+	for trade in pending_trades.values():
+		orders.append(trade)
+	return orders
+
+
+func _trade_reserved_money() -> int:
+	var reserved := 0
+	for trade in _trade_orders():
+		match str(trade.kind):
+			"buy_resource": reserved += int(trade.quantity) * int(trade.price)
+			"buy_tool": reserved += int(trade.price)
+	return reserved
+
+
+func _available_trade_money() -> int:
+	return maxi(0, settlement.money - _trade_reserved_money())
+
+
+func _trade_incoming_resource(resource_type: String) -> int:
+	var incoming := 0
+	for trade in _trade_orders():
+		if str(trade.kind) == "buy_resource" and str(trade.resource) == resource_type:
+			incoming += int(trade.quantity)
+	return incoming
+
+
+func _trade_has_tool_order(tool_id: String) -> bool:
+	for trade in _trade_orders():
+		if str(trade.kind) == "buy_tool" and str(trade.tool) == tool_id:
+			return true
+	return false
 
 func _dispatch_queued_trades() -> void:
 	if queued_trades.is_empty():
