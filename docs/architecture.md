@@ -9,6 +9,13 @@ of truth for feature rules.
 `BuildingCatalog` owns build and research economy definitions. Add a building there
 before adding its geometry to `BuildingBlueprints` and runtime completion handling.
 
+`SettlementState` owns resources, unlocks and all payment rules. Scene code may use
+the temporary compatibility properties on `MainSimulation`, but new economy code must
+call `SettlementState` directly.
+
+`SimulationClock` owns minute advancement and day wrapping. The scene receives elapsed
+minutes and maps them to game events such as meals, training and shift changes.
+
 `BuildingBlueprints` owns procedural visuals and collision modules only. It does not
 decide prices, production or unlock conditions.
 
@@ -18,6 +25,7 @@ the coordinator or a narrow scheduling interface rather than read scene state.
 
 `Citizen` is presently an actor with movement and task execution. New task selection
 belongs in a coordinator or GOAP action; new movement behavior belongs in the actor.
+`CitizenRoleProfile` owns presentation and preferred-role data for specializations.
 
 ## Extension rules
 
@@ -34,3 +42,5 @@ belongs in a coordinator or GOAP action; new movement behavior belongs in the ac
 Add headless tests before changing economy or scheduling rules. Cover building payment,
 research payment, work eligibility and task assignment first; they are deterministic
 and do not require rendering or voxel terrain.
+
+`tests/test_domain.gd` is the current dependency-free headless test entry point.

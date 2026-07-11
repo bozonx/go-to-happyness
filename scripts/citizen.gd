@@ -698,16 +698,7 @@ func _work_position_for(site: Node3D) -> Vector3:
 func setup_specialization(next_specialization: String) -> void:
 	specialization = next_specialization
 	skills[preferred_role()] = 4.0
-	match specialization:
-		"builder": body_material.albedo_color = Color("d8a647")
-		"forestry": body_material.albedo_color = Color("3f9b61")
-		"farming": body_material.albedo_color = Color("5c8fc9")
-		"excavation": body_material.albedo_color = Color("a6744b")
-		"courier": body_material.albedo_color = Color("a85d91")
-		"cook": body_material.albedo_color = Color("d96f43")
-		"teacher": body_material.albedo_color = Color("7656a8")
-		"factory_worker": body_material.albedo_color = Color("c45d42")
-		"engineer": body_material.albedo_color = Color("4d7a9b")
+	body_material.albedo_color = CitizenRoleProfile.color_for(specialization)
 
 func get_efficiency(role: String) -> float:
 	var skill_value: float = skills.get(role, 1.0)
@@ -717,31 +708,13 @@ func get_efficiency(role: String) -> float:
 	return skill_bonus * satisfaction_factor * (1.0 + meal_bonus)
 
 func role_label() -> String:
-	match specialization:
-		"builder": return "Builder"
-		"forestry": return "Forester"
-		"farming": return "Farmer"
-		"excavation": return "Digger"
-		"cook": return "Cook"
-		"teacher": return "Teacher"
-		"factory_worker": return "Factory worker"
-		"engineer": return "Engineer"
-		_: return "Courier"
+	return CitizenRoleProfile.label_for(specialization)
 
 func specialization_color() -> Color:
-	match specialization:
-		"builder": return Color("d8a647")
-		"forestry": return Color("3f9b61")
-		"farming": return Color("5c8fc9")
-		"excavation": return Color("a6744b")
-		"cook": return Color("d96f43")
-		"teacher": return Color("7656a8")
-		"factory_worker": return Color("c45d42")
-		"engineer": return Color("4d7a9b")
-		_: return Color("a85d91")
+	return CitizenRoleProfile.color_for(specialization)
 
 func preferred_role() -> String:
-	return "construction" if specialization == "builder" else specialization
+	return CitizenRoleProfile.preferred_role_for(specialization)
 
 func idle() -> void:
 	if is_player_controlled:

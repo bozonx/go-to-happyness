@@ -30,18 +30,35 @@ const DIG_RADIUS := 2.2
 const DIG_REACH := 6.0
 const NAVIGATION_AGENT_RADIUS := 0.38
 
-var wood := STARTING_WOOD
-var food := 20
-var soil := 0
-var clay := 0
-var boards := 0
-var bricks := 0
-var wellbeing := 75
-var game_minutes: float = 7.0 * 60.0
+var settlement := SettlementState.new()
+var wood: int:
+	get: return settlement.wood
+	set(value): settlement.wood = value
+var food: int:
+	get: return settlement.food
+	set(value): settlement.food = value
+var soil: int:
+	get: return settlement.soil
+	set(value): settlement.soil = value
+var clay: int:
+	get: return settlement.clay
+	set(value): settlement.clay = value
+var boards: int:
+	get: return settlement.boards
+	set(value): settlement.boards = value
+var bricks: int:
+	get: return settlement.bricks
+	set(value): settlement.bricks = value
+var wellbeing: int:
+	get: return settlement.wellbeing
+	set(value): settlement.wellbeing = value
+var clock := SimulationClock.new()
+var game_minutes: float:
+	get: return clock.minutes
+	set(value): clock.minutes = value
 const GAME_DAY_REAL_SECONDS := 300.0
 const GAME_MINUTES_PER_SECOND := 1440.0 / GAME_DAY_REAL_SECONDS
 var time_multiplier := 1.0
-var previous_clock_minute := -1
 var active_meal_hour := -1
 var selected_cell := Vector2i(0, 0)
 var selected_world_position := Vector3.ZERO
@@ -58,7 +75,9 @@ var school_positions: Array[Vector3] = []
 var park_positions: Array[Vector3] = []
 var leisure_positions: Array[Vector3] = []
 var factories: Array[Node3D] = []
-var brick_construction_unlocked := false
+var brick_construction_unlocked: bool:
+	get: return settlement.brick_construction_unlocked
+	set(value): settlement.brick_construction_unlocked = value
 var brick_research_progress := -1.0
 var brick_research_factory: Node3D
 var tree_positions: Array[Vector3] = []
@@ -217,21 +236,10 @@ func _update_daylight() -> void:
 	sun.shadow_enabled = direct_light > 0.05
 
 func _update_clock(delta: float) -> void:
-	game_minutes = fposmod(game_minutes + delta * GAME_MINUTES_PER_SECOND, 24.0 * 60.0)
-	var current_minute := int(game_minutes)
-	var hour := current_minute / 60
-	var minute := current_minute % 60
-	clock_label.text = "%s  %02d:%02d  x%d" % ["Night" if _is_night() else "Day", hour, minute, int(time_multiplier)]
-	if previous_clock_minute == current_minute:
-		return
-	if previous_clock_minute < 0:
-		previous_clock_minute = current_minute
-		return
-	var minute_to_process := posmod(previous_clock_minute + 1, 24 * 60)
-	while minute_to_process != posmod(current_minute + 1, 24 * 60):
-		_handle_clock_minute(minute_to_process)
-		minute_to_process = posmod(minute_to_process + 1, 24 * 60)
-	previous_clock_minute = current_minute
+	var elapsed_minutes := clock.advance(delta, GAME_MINUTES_PER_SECOND)
+	clock_label.text = "%s  %02d:%02d  x%d" % ["Night" if clock.is_night() else "Day", clock.hour(), clock.minute(), int(time_multiplier)]
+	for clock_minute in elapsed_minutes:
+		_handle_clock_minute(clock_minute)
 
 func _handle_clock_minute(clock_minute: int) -> void:
 	var hour := clock_minute / 60
@@ -289,8 +297,7 @@ func _house_has_residents(house: Node3D) -> bool:
 	return false
 
 func _is_night() -> bool:
-	var hour := int(game_minutes) / 60
-	return hour >= 21 or hour < 6
+	return clock.is_night()
 
 func _start_meal(hour: int) -> void:
 	if not is_instance_valid(canteen):
@@ -592,7 +599,7 @@ func _building_cost() -> int:
 	return BuildingCatalog.cost_for(build_mode)
 
 func _stored_resources() -> int:
-	return wood + food + soil + clay + boards + bricks
+	return settlement.total_stored_resources()
 
 func _warehouse_capacity() -> int:
 	# Starting supplies are kept at the tent until the first warehouse is built.
@@ -1131,11 +1138,10 @@ func _start_brick_research() -> void:
 		return
 	var brick_cost := BuildingCatalog.research_cost("brick_construction", "bricks")
 	var board_cost := BuildingCatalog.research_cost("brick_construction", "boards")
-	if bricks < brick_cost or boards < board_cost:
+	if not settlement.can_afford_research("brick_construction"):
 		_update_interface("Research needs %d bricks and %d boards." % [brick_cost, board_cost])
 		return
-	bricks -= brick_cost
-	boards -= board_cost
+	settlement.pay_for_research("brick_construction")
 	brick_research_progress = 0.0
 	brick_research_factory = selected_materials_factory
 	_show_materials_factory_menu()
@@ -1786,15 +1792,10 @@ func _can_place(world_position: Vector3) -> bool:
 	return _is_footprint_level(world_position, footprint) and _is_footprint_clear(world_position, footprint)
 
 func _can_pay_building_cost(building_type: String) -> bool:
-	var cost := BuildingCatalog.cost_for(building_type)
-	return bricks >= cost if BuildingCatalog.currency_for(building_type) == BuildingCatalog.BRICKS else wood >= cost
+	return settlement.can_afford_building(building_type)
 
 func _pay_building_cost(building_type: String) -> void:
-	var cost := BuildingCatalog.cost_for(building_type)
-	if BuildingCatalog.currency_for(building_type) == BuildingCatalog.BRICKS:
-		bricks -= cost
-	else:
-		wood -= cost
+	settlement.pay_for_building(building_type)
 
 func _is_footprint_clear(world_position: Vector3, footprint: Vector2i) -> bool:
 	var half := Vector2(footprint.x, footprint.y) * 0.5

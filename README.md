@@ -19,3 +19,11 @@ The voxel extension is intentionally ignored by Git because it contains large pl
 - `addons/goap/` is a vendored editor/runtime dependency; keep game-specific behavior outside it.
 
 See [docs/architecture.md](docs/architecture.md) before adding a gameplay system.
+
+## Checks
+
+Run the deterministic domain checks with:
+
+```sh
+godot --headless --path . --script res://tests/test_domain.gd
+```

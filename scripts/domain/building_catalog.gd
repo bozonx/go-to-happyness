@@ -42,3 +42,10 @@ static func currency_for(building_type: String) -> String:
 
 static func research_cost(research_id: String, resource_type: String) -> int:
 	return int(RESEARCH_COSTS.get(research_id, {}).get(resource_type, 0))
+
+
+static func research_resources(research_id: String) -> Array[String]:
+	var resources: Array[String] = []
+	for resource_type in RESEARCH_COSTS.get(research_id, {}):
+		resources.append(resource_type)
+	return resources
