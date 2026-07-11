@@ -25,7 +25,10 @@ func _test_settlement_economy() -> void:
 	assert(state.pay_for_building("warehouse"))
 	assert(state.branches == 12 and state.grass == 4)
 	state.ensure_storage_defaults(0)
-	assert(state.reserve_storage_room_for("grass", 1, 0))
+	assert(state.storage_capacity(0) == 0)
+	assert(not state.reserve_storage_room_for("grass", 1, 0))
+	state.ensure_storage_defaults(1)
+	assert(state.reserve_storage_room_for("grass", 1, 1))
 	state.add("grass", 1)
 	assert(state.grass == 5 and state.wood == 0)
 	state.bricks = 15
@@ -93,7 +96,7 @@ func _test_sawmill_rules() -> void:
 
 
 func _test_workforce_policy() -> void:
-	var world := {"hour": 9, "warehouses": 1, "sawmills": 1, "trees": 1, "farms": 0, "dig_sites": 0, "schools": 0, "construction_sites": 0, "has_canteen": false, "has_factory_job": false, "has_engineer_job": false}
+	var world := {"hour": 9, "warehouses": 1, "sawmills": 1, "trees": 1, "farms": 0, "dig_sites": 0, "schools": 0, "construction_sites": 0, "has_canteen": false, "has_factory_job": false, "has_engineer_job": false, "has_bucket": false, "ponds": 2, "water": 0, "population": 3}
 	var forester := {"specialization": "forestry", "manual_role": "", "player_controlled": false, "blocked_by_storage": false, "training_role": "", "training_days_completed": 0}
 	assert(WorkforcePolicy.role_for(forester, world) == "forestry")
 	assert(WorkforcePolicy.can_assign(forester, world))
@@ -104,6 +107,10 @@ func _test_workforce_policy() -> void:
 	assert(WorkforcePolicy.role_for(forester, world) == "forestry")
 	world.hour = 7
 	assert(not WorkforcePolicy.can_assign(forester, world))
+	world.hour = 9
+	world.has_bucket = true
+	assert(WorkforcePolicy.role_for(forester, world) == "gather_water")
+	assert(WorkforcePolicy.can_assign(forester, world))
 
 
 func _test_citizen_task_state() -> void:

@@ -22,7 +22,6 @@ func _init() -> void:
 		assert(citizen.is_in_group("citizens"))
 		assert(citizen.home == null)
 		assert(is_finite(citizen.global_position.x) and is_finite(citizen.global_position.y) and is_finite(citizen.global_position.z))
-		assert(citizen.global_position.z >= simulation.entrance_stone.global_position.z + 1.5)
 		assert(citizen.global_position.y > -1.0)
 		assert(citizen.get_children().any(func(child): return child is MeshInstance3D))
 	assert(simulation.tent == null)

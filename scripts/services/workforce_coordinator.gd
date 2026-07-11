@@ -103,6 +103,10 @@ func assign_work(citizen: Citizen, index: int) -> void:
 				citizen.assign_gathering("food", forage_pos, simulation._get_delivery_position())
 			else:
 				citizen.idle()
+		"gather_water":
+			if not simulation.pond_positions.is_empty():
+				var pond: Vector3 = simulation.pond_positions[index % simulation.pond_positions.size()]
+				citizen.assign_gathering("water", pond, simulation._get_delivery_position())
 
 
 func work_role_for(citizen: Citizen) -> String:
@@ -136,7 +140,10 @@ func _world_data() -> Dictionary:
 		"has_factory_job": factory_for_role("factory_worker") != null,
 		"has_engineer_job": factory_for_role("engineer") != null,
 		"food": simulation.food,
+		"water": simulation.water,
 		"wood": simulation.wood,
+		"ponds": simulation.pond_positions.size(),
+		"has_bucket": bool(simulation.settlement.tools.get("bucket", false)),
 		"population": simulation.citizens.size(),
 	}
 

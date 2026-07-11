@@ -40,7 +40,6 @@ const STORAGE_WEIGHTS := {
 	"hides": 1.0, "goods": 1.0, "logs": 2.0, "wood": 2.0,
 	"soil": 1.0, "clay": 1.0, "boards": 1.5, "bricks": 2.0,
 }
-const ERA_STORAGE_BASE := {Era.TENT: 48, Era.EARTH: 90, Era.CLAY: 140, Era.WOOD: 210, Era.BRICK: 320}
 const ERA_STORAGE_PER_WAREHOUSE := {Era.TENT: 32, Era.EARTH: 48, Era.CLAY: 70, Era.WOOD: 100, Era.BRICK: 140}
 const STORAGE_STEP := 4.0
 
@@ -52,7 +51,7 @@ func storage_weight(resource_type: String) -> float:
 
 
 func storage_capacity(warehouses: int) -> int:
-	return int(ERA_STORAGE_BASE.get(era, 24)) + maxi(0, warehouses) * int(ERA_STORAGE_PER_WAREHOUSE.get(era, 24))
+	return maxi(0, warehouses) * int(ERA_STORAGE_PER_WAREHOUSE.get(era, 24))
 
 
 func storage_used_units() -> float:
@@ -78,7 +77,8 @@ func storage_limit(resource_type: String) -> float:
 
 
 func ensure_storage_defaults(warehouses: int) -> void:
-	# Preserve the starting stock, then divide unused space between early staples.
+	# Capacity exists only in placed warehouses. Existing overflow (for example a
+	# debug grant) is preserved, but does not create additional free capacity.
 	if storage_limits.is_empty():
 		for resource_type in STORED_RESOURCES:
 			storage_limits[resource_type] = 0.0
