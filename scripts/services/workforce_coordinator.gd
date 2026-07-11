@@ -12,7 +12,7 @@ func configure(next_simulation: Node) -> void:
 
 
 func update_workers() -> void:
-	if simulation._is_night():
+	if not simulation._is_work_time():
 		for citizen in simulation.citizens:
 			citizen.request_goap_decision()
 		return
@@ -65,6 +65,10 @@ func assign_work(citizen: Citizen, index: int) -> void:
 			citizen.assign_factory_work(materials_plant, "construction")
 			return
 	match work_role_for(citizen):
+		"gather_dew":
+			var collector_position: Vector3 = simulation._reserve_dew_collector()
+			if collector_position != Vector3.INF:
+				citizen.assign_gathering("water", collector_position, simulation._get_delivery_position())
 		"construction":
 			if not simulation.demolition_sites.is_empty():
 				citizen.assign_demolition(simulation.demolition_sites[index % simulation.demolition_sites.size()].building)
@@ -143,7 +147,9 @@ func _world_data() -> Dictionary:
 		"water": simulation.water,
 		"wood": simulation.wood,
 		"ponds": simulation.pond_positions.size(),
+		"has_collected_dew": simulation._has_collected_dew(),
 		"has_bucket": bool(simulation.settlement.tools.get("bucket", false)),
+		"has_filter": bool(simulation.settlement.tools.get("filter_1", false)),
 		"population": simulation.citizens.size(),
 	}
 

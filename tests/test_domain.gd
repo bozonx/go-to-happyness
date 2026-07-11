@@ -109,6 +109,7 @@ func _test_workforce_policy() -> void:
 	assert(not WorkforcePolicy.can_assign(forester, world))
 	world.hour = 9
 	world.has_bucket = true
+	world.has_filter = true
 	assert(WorkforcePolicy.role_for(forester, world) == "gather_water")
 	assert(WorkforcePolicy.can_assign(forester, world))
 

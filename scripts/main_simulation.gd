@@ -87,6 +87,7 @@ var warehouse_positions: Array[Vector3] = []
 var sawmill_positions: Array[Vector3] = []
 var sawmill_stocks: Dictionary = {}
 var tree_reservations: Dictionary = {}
+var grass_reservations: Dictionary = {}
 var farm_positions: Array[Vector3] = []
 var pond_positions: Array[Vector3] = []
 var forager_positions: Array[Vector3] = []
@@ -181,6 +182,9 @@ var campfire_menu: Panel
 var campfire_menu_title: Label
 var campfire_requirements_label: Label
 var campfire_advance_button: Button
+var campfire_jobs_label: Label
+var campfire_worker_picker: OptionButton
+var campfire_role_picker: OptionButton
 var selected_market: Node3D = null
 var market_menu: Panel
 var market_menu_title: Label
@@ -201,6 +205,8 @@ var build_buttons: Array[Button] = []
 var build_item_buttons: Array[Button] = []
 var skip_night_button: Button
 var water_collectors: Array[Dictionary] = []
+var pending_trades: Dictionary = {} # worker instance id -> queued trade
+var queued_trades: Array[Dictionary] = []
 var role_buttons: Array[Button] = []
 var building_status_indicators: Array[Label3D] = []
 var building_status_update_time := 0.0
@@ -244,10 +250,11 @@ func _process(delta: float) -> void:
 	_update_daylight()
 	_update_house_lights()
 	_update_canteen_delivery()
+	_dispatch_queued_trades()
 	_update_sawmills(delta)
 	_update_brick_research(delta)
 	_update_building_status_indicators(delta)
-	if not _is_night():
+	if _is_work_time():
 		_update_couriers()
 	if selected_builder != null and build_menu.visible:
 		_show_selected_citizen_menu()
@@ -412,6 +419,12 @@ func _house_has_residents(house: Node3D) -> bool:
 func _is_night() -> bool:
 	return clock.is_night()
 
+func _is_work_time() -> bool:
+	if settlement.night_shifts_allowed:
+		return true
+	var hour := clock.hour()
+	return hour >= 8 and hour < 8 + settlement.workday_hours
+
 func _start_meal(hour: int) -> void:
 	if not is_instance_valid(canteen):
 		for citizen in citizens:
@@ -456,7 +469,7 @@ func _on_meal_finished(citizen: Citizen) -> void:
 	citizen.finish_goap_meal()
 	if not served:
 		_update_interface("Canteen ran out of food. A worker missed their meal.")
-	if not _is_night():
+	if _is_work_time():
 		_update_workers()
 
 func _update_canteen_delivery() -> void:
@@ -540,6 +553,10 @@ func _building_power(site_node: Node3D) -> float:
 	return power
 
 func _on_resource_delivered(worker: Citizen, resource_type: String, amount: int) -> void:
+	if resource_type == "water" and worker.active_role == "gather_water" and not settlement.use_filter():
+		worker.idle()
+		_update_interface("The water filter is spent. Buy a replacement at the market.")
+		return
 	if not settlement.reserve_storage_room_for(resource_type, amount, warehouse_positions.size()):
 		# Cargo already in transit must never disappear. It may temporarily exceed
 		# the allocation; scheduling prevents new production until room is freed.
@@ -615,6 +632,9 @@ func _reserve_closest_tree_for_sawmill(worker: Citizen, sawmill_position: Vector
 	for tree_position in tree_positions:
 		var cell := _cell_from_position(tree_position)
 		if tree_reservations.has(cell):
+			continue
+		var tree: Node3D = tree_nodes.get(cell)
+		if not is_instance_valid(tree) or bool(tree.get_meta("felled", false)):
 			continue
 		var distance := sawmill_position.distance_squared_to(tree_position)
 		if distance < closest_distance:
@@ -1067,10 +1087,6 @@ func _rebuild_navigation_mesh() -> void:
 		NavigationServer3D.map_force_update(get_world_3d().navigation_map)
 
 func _is_navigation_cell_blocked(cell: Vector2i) -> bool:
-	# Trees occupy a navigation cell even though their visual meshes do not need
-	# physics bodies. Workers targeting a tree stop at the nearest navmesh edge.
-	if tree_cells.has(cell):
-		return true
 	for record in building_footprints:
 		var center: Vector3 = record.center
 		var footprint: Vector2i = record.footprint
@@ -1212,6 +1228,7 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	citizen.meal_finished.connect(_on_meal_finished)
 	citizen.canteen_delivery_finished.connect(_on_canteen_delivery_finished)
 	citizen.factory_cycle.connect(_on_factory_cycle)
+	citizen.trade_delivery_finished.connect(_on_trade_delivery_finished)
 	citizens.append(citizen)
 	if hero_citizen == null:
 		hero_citizen = citizen
@@ -1388,7 +1405,8 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_role_button("Assign: gather grass", "gather_grass", 340)
 	_add_role_button("Assign: forage food", "gather_food", 374)
 	_add_role_button("Assign: collect water", "gather_water", 408)
-	_add_role_button("Assign: courier", "courier", 442)
+	_add_role_button("Assign: collect dew", "gather_dew", 442)
+	_add_role_button("Assign: courier", "courier", 476)
 	
 	# Era category buttons (shown on main build menu)
 	_add_build_category_button("Tent era", "tent", 136)
@@ -1761,7 +1779,8 @@ func _is_role_available(role: String) -> bool:
 		"gather_branches": return not tree_positions.is_empty()
 		"gather_grass": return settlement.era == SettlementState.Era.TENT
 		"gather_food": return not forager_positions.is_empty()
-		"gather_water": return bool(settlement.tools.get("bucket", false)) and not pond_positions.is_empty() and not warehouse_positions.is_empty()
+		"gather_dew": return _has_collected_dew() and not warehouse_positions.is_empty()
+		"gather_water": return bool(settlement.tools.get("bucket", false)) and bool(settlement.tools.get("filter_1", false)) and not pond_positions.is_empty() and not warehouse_positions.is_empty()
 		"courier": return not warehouse_positions.is_empty()
 	return false
 
@@ -2527,9 +2546,6 @@ func _is_footprint_clear(world_position: Vector3, footprint: Vector2i) -> bool:
 		var other_half := Vector2(other_footprint.x, other_footprint.y) * 0.5
 		if absf(world_position.x - other_center.x) < half.x + other_half.x + BUILDING_CLEARANCE_BLOCKS and absf(world_position.z - other_center.z) < half.y + other_half.y + BUILDING_CLEARANCE_BLOCKS:
 			return false
-	for tree_position in tree_positions:
-		if absf(world_position.x - tree_position.x) < half.x + 0.5 + TREE_BUILD_CLEARANCE_BLOCKS and absf(world_position.z - tree_position.z) < half.y + 0.5 + TREE_BUILD_CLEARANCE_BLOCKS:
-			return false
 	for site in dig_sites:
 		if absf(world_position.x - site.node.global_position.x) < half.x + 1.0 and absf(world_position.z - site.node.global_position.z) < half.y + 1.0:
 			return false
@@ -2630,7 +2646,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 				building.set_meta("is_tent", true)
 			_house_initial_residents(building)
 		"dew_collector":
-			water_collectors.append({"node": building, "rate": 0.12, "accum": 0.0})
+			water_collectors.append({"node": building, "rate": 0.12, "accum": 0.0, "stored": 0, "capacity": 10})
 		"trade_tent", "earth_market", "clay_market", "wood_market", "brick_market":
 			_add_building_selector(building, "market_selector", blueprint.footprint)
 		"canteen":
@@ -2737,7 +2753,7 @@ func _assigned_staff_for_building(building: Node3D, required: Dictionary) -> int
 	return count
 
 func _has_storage_room_for_role(role: String) -> bool:
-	var resource_for_role := {"forestry": "logs", "farming": "food", "excavation": "soil", "gather_branches": "branches", "gather_grass": "grass", "gather_food": "food", "gather_water": "water"}
+	var resource_for_role := {"forestry": "logs", "farming": "food", "excavation": "soil", "gather_branches": "branches", "gather_grass": "grass", "gather_food": "food", "gather_water": "water", "gather_dew": "water"}
 	if not resource_for_role.has(role):
 		return true
 	return settlement.can_make_room_for(resource_for_role[role], 1, warehouse_positions.size())
@@ -2855,17 +2871,27 @@ func _fell_tree_at(position_on_board: Vector3) -> void:
 	_update_interface("A tree was felled. Its log is ready for delivery; the living tree is no longer available for gathering.")
 
 func _update_water_collectors(delta: float) -> void:
-	# Dew collectors and ponds slowly gather water from dew and rain. Each one
-	# fills its own basin up to a cap; the gathered water flows into the shared
-	# settlement supply.
+	# Water stays in each basin until a resident carries it to storage.
 	for collector in water_collectors:
 		collector.accum += delta * float(collector.rate)
-		while collector.accum >= 1.0:
-			# Keep the water in the funnel until the warehouse has room for it.
-			if not settlement.storage_can_accept("water", 1):
-				break
+		while collector.accum >= 1.0 and int(collector.stored) < int(collector.capacity):
 			collector.accum -= 1.0
-			water += 1
+			collector.stored = int(collector.stored) + 1
+
+func _reserve_dew_collector() -> Vector3:
+	for collector in water_collectors:
+		if int(collector.stored) <= 0:
+			continue
+		collector.stored = int(collector.stored) - 1
+		var node: Node3D = collector.node
+		return node.get_meta("service_position", node.global_position)
+	return Vector3.INF
+
+func _has_collected_dew() -> bool:
+	for collector in water_collectors:
+		if int(collector.stored) > 0:
+			return true
+	return false
 
 
 func _toggle_global_build_menu() -> void:
@@ -2882,7 +2908,7 @@ func _create_campfire_menu(ui: CanvasLayer) -> void:
 	campfire_menu = Panel.new()
 	campfire_menu.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	campfire_menu.offset_left = -324.0
-	campfire_menu.offset_top = -600.0
+	campfire_menu.offset_top = -780.0
 	campfire_menu.offset_right = -20.0
 	campfire_menu.offset_bottom = -20.0
 	campfire_menu.visible = false
@@ -2916,7 +2942,7 @@ func _create_campfire_menu(ui: CanvasLayer) -> void:
 	var labour_controls := HBoxContainer.new()
 	labour_controls.position = Vector2(16, 360)
 	campfire_menu.add_child(labour_controls)
-	for hours in [6, 8, 10]:
+	for hours in [6, 8, 10, 12]:
 		var day_button := Button.new()
 		day_button.text = "%dh" % hours
 		day_button.tooltip_text = "Set workday duration"
@@ -2934,6 +2960,30 @@ func _create_campfire_menu(ui: CanvasLayer) -> void:
 	close_btn.size = Vector2(272, 28)
 	close_btn.pressed.connect(_close_context_menus)
 	campfire_menu.add_child(close_btn)
+
+	campfire_jobs_label = Label.new()
+	campfire_jobs_label.position = Vector2(16, 445)
+	campfire_jobs_label.size = Vector2(272, 120)
+	campfire_jobs_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	campfire_jobs_label.add_theme_font_size_override("font_size", 12)
+	campfire_menu.add_child(campfire_jobs_label)
+	campfire_worker_picker = OptionButton.new()
+	campfire_worker_picker.position = Vector2(16, 570)
+	campfire_worker_picker.size = Vector2(132, 28)
+	campfire_menu.add_child(campfire_worker_picker)
+	campfire_role_picker = OptionButton.new()
+	campfire_role_picker.position = Vector2(156, 570)
+	campfire_role_picker.size = Vector2(132, 28)
+	for role in ["", "construction", "forestry", "farming", "excavation", "gather_branches", "gather_grass", "gather_food", "gather_dew", "gather_water", "courier"]:
+		campfire_role_picker.add_item("Auto" if role.is_empty() else role.replace("_", " "))
+		campfire_role_picker.set_item_metadata(campfire_role_picker.item_count - 1, role)
+	campfire_menu.add_child(campfire_role_picker)
+	var apply_job := Button.new()
+	apply_job.text = "Set work"
+	apply_job.position = Vector2(16, 606)
+	apply_job.size = Vector2(272, 28)
+	apply_job.pressed.connect(_set_campfire_worker_role)
+	campfire_menu.add_child(apply_job)
 
 
 func _show_campfire_menu() -> void:
@@ -3032,6 +3082,34 @@ func _refresh_campfire_menu() -> void:
 			
 	campfire_requirements_label.text = req_text
 	campfire_advance_button.disabled = not can_advance
+	_refresh_campfire_jobs()
+
+func _refresh_campfire_jobs() -> void:
+	if campfire_jobs_label == null:
+		return
+	var lines := ["Workforce:"]
+	if campfire_worker_picker != null:
+		campfire_worker_picker.clear()
+	for citizen in citizens:
+		var role := citizen.manual_role if not citizen.manual_role.is_empty() else ("auto / " + _work_role_for(citizen))
+		lines.append("%s: %s" % [citizen.role_label(), role.replace("_", " ")])
+		if campfire_worker_picker != null and not citizen.is_player_controlled:
+			campfire_worker_picker.add_item(citizen.role_label())
+			campfire_worker_picker.set_item_metadata(campfire_worker_picker.item_count - 1, citizen.get_instance_id())
+	campfire_jobs_label.text = "\n".join(lines)
+
+func _set_campfire_worker_role() -> void:
+	if campfire_worker_picker == null or campfire_worker_picker.item_count == 0:
+		return
+	var id := int(campfire_worker_picker.get_item_metadata(campfire_worker_picker.selected))
+	for citizen in citizens:
+		if citizen.get_instance_id() != id:
+			continue
+		var role := str(campfire_role_picker.get_item_metadata(campfire_role_picker.selected))
+		selected_builder = citizen
+		_set_manual_role(role)
+		_refresh_campfire_jobs()
+		return
 
 
 func _on_campfire_advance_pressed() -> void:
@@ -3105,6 +3183,7 @@ func _refresh_market_menu() -> void:
 	buy_items.append(["hand_saw", 15])
 	buy_items.append(["shovel", 15])
 	buy_items.append(["bucket", 15])
+	buy_items.append(["filter_1", 8])
 
 	if market_type in ["earth_market", "clay_market", "wood_market", "brick_market"]:
 		sell_items.append(["soil", 1])
@@ -3173,31 +3252,71 @@ func _buy_food(quantity: int, unit_price: int) -> void:
 	if settlement.money < buyable * unit_price:
 		_update_interface("Not enough coins to buy food.")
 		return
-	settlement.money -= buyable * unit_price
-	settlement.food += buyable
-	_update_interface("Bought %d food for %d coins." % [buyable, buyable * unit_price])
+	_start_trade({"kind": "buy_resource", "resource": "food", "quantity": buyable, "price": unit_price}, selected_market.global_position, _get_delivery_position())
 	_refresh_market_menu()
 
 
 func _sell_resource(resource_type: String, quantity: int, unit_price: int) -> void:
 	if selected_market == null:
 		return
-	if settlement.sell(resource_type, quantity, unit_price):
-		_update_interface("Sold %d %s for %d coins." % [quantity, resource_type, quantity * unit_price])
-		_refresh_market_menu()
-	else:
+	if settlement.amount(resource_type) < quantity:
 		_update_interface("Not enough %s to sell." % resource_type)
+		return
+	settlement.add(resource_type, -quantity)
+	_start_trade({"kind": "sell", "resource": resource_type, "quantity": quantity, "price": unit_price}, _get_delivery_position(), selected_market.global_position)
+	_refresh_market_menu()
 
 
 func _buy_tool(tool_id: String, price: int) -> void:
 	if selected_market == null:
 		return
-	if settlement.buy_tool(tool_id, price):
-		_update_workers()
-		_update_interface("Bought %s for %d coins." % [tool_id.replace("_", " "), price])
-		_refresh_market_menu()
-	else:
+	if not settlement.tools.has(tool_id) or bool(settlement.tools[tool_id]) or settlement.money < price:
 		_update_interface("Cannot buy %s. Check money or check if already owned." % tool_id.replace("_", " "))
+		return
+	_start_trade({"kind": "buy_tool", "tool": tool_id, "price": price}, selected_market.global_position, _get_delivery_position())
+	_refresh_market_menu()
+
+func _start_trade(trade: Dictionary, source: Vector3, destination: Vector3) -> void:
+	queued_trades.append({"trade": trade, "source": source, "destination": destination})
+	_dispatch_queued_trades()
+
+func _dispatch_queued_trades() -> void:
+	if queued_trades.is_empty():
+		return
+	for worker in citizens:
+		if queued_trades.is_empty():
+			return
+		if worker.is_player_controlled or worker.state != Citizen.State.IDLE or pending_trades.has(worker.get_instance_id()):
+			continue
+		var order: Dictionary = queued_trades.pop_front()
+		pending_trades[worker.get_instance_id()] = order.trade
+		worker.deliver_trade(order.source, order.destination)
+		_update_interface("A resident is carrying the trade order.")
+	if not queued_trades.is_empty():
+		_update_interface("Trade queued: no resident is currently free to carry it.")
+
+func _on_trade_delivery_finished(worker: Citizen) -> void:
+	var trade: Dictionary = pending_trades.get(worker.get_instance_id(), {})
+	if trade.is_empty():
+		return
+	pending_trades.erase(worker.get_instance_id())
+	match str(trade.kind):
+		"sell":
+			settlement.money += int(trade.quantity) * int(trade.price)
+			settlement.trade_sales += 1
+			_update_interface("Sold %d %s after delivery to the market." % [int(trade.quantity), str(trade.resource)])
+		"buy_resource":
+			var total := int(trade.quantity) * int(trade.price)
+			if settlement.money >= total:
+				settlement.money -= total
+				settlement.add(str(trade.resource), int(trade.quantity))
+				_update_interface("Purchased %d %s after delivery to storage." % [int(trade.quantity), str(trade.resource)])
+		"buy_tool":
+			if settlement.buy_tool(str(trade.tool), int(trade.price)):
+				_update_workers()
+				_update_interface("Purchased %s after delivery to storage." % str(trade.tool).replace("_", " "))
+	if market_menu.visible:
+		_refresh_market_menu()
 
 func _create_building_menu(ui: CanvasLayer) -> void:
 	building_menu = Panel.new()
@@ -3382,13 +3501,29 @@ func _find_forage_position(citizen: Citizen) -> Vector3:
 	return spot
 
 func _find_grass_gathering_position(citizen: Citizen) -> Vector3:
-	var angle := randf_range(0.0, 2.0 * PI)
-	var dist := randf_range(2.0, 12.0)
-	var pos := Vector3(cos(angle) * dist, 0.0, sin(angle) * dist)
-	var height := _terrain_height_at(pos.x, pos.z, 0.0)
-	if not is_nan(height):
+	_cleanup_grass_reservations()
+	# Grass is an area resource. Reserve a grid cell so simultaneous gatherers
+	# spread across the meadow instead of walking to the same random point.
+	for attempt in range(32):
+		var angle := randf_range(0.0, 2.0 * PI)
+		var dist := randf_range(2.0, 12.0)
+		var pos := Vector3(cos(angle) * dist, 0.0, sin(angle) * dist)
+		var cell := _cell_from_position(pos)
+		if grass_reservations.has(cell):
+			continue
+		var height := _terrain_height_at(pos.x, pos.z, 0.0)
+		if is_nan(height):
+			continue
 		pos.y = height
-	return pos
+		grass_reservations[cell] = citizen
+		return pos
+	return _get_delivery_position()
+
+func _cleanup_grass_reservations() -> void:
+	for cell in grass_reservations.keys():
+		var worker: Citizen = grass_reservations[cell]
+		if not is_instance_valid(worker) or worker.state not in [Citizen.State.TO_GATHER, Citizen.State.GATHERING]:
+			grass_reservations.erase(cell)
 
 func _get_delivery_position() -> Vector3:
 	return _get_nearest_delivery_position(Vector3.ZERO)

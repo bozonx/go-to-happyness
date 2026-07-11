@@ -11,6 +11,7 @@ signal sawmill_boards_collected(courier: Citizen, sawmill_position: Vector3)
 signal meal_finished(worker: Citizen)
 signal canteen_delivery_finished(worker: Citizen, amount: int)
 signal factory_cycle(worker: Citizen, factory: Node3D)
+signal trade_delivery_finished(worker: Citizen)
 
 const WALK_SPEED := 2.2
 const WORK_DURATION := 1.4
@@ -27,7 +28,7 @@ const NAVIGATION_TARGET_CLEARANCE := 0.48
 const ROUTE_PROGRESS_EPSILON := 0.06
 const ROUTE_RETRY_INTERVAL := 2.0
 
-enum State { IDLE, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, TO_GATHER, GATHERING }
+enum State { IDLE, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, TO_GATHER, GATHERING, TO_TRADE_PICKUP, TO_TRADE_DESTINATION }
 
 var state := State.IDLE
 var resource_type := "wood"
@@ -85,6 +86,8 @@ var school_position := Vector3.ZERO
 var factory: Node3D
 var factory_position := Vector3.ZERO
 var park_position := Vector3.ZERO
+var trade_source_position := Vector3.ZERO
+var trade_destination_position := Vector3.ZERO
 var goap_brain: CitizenGoapBrain
 var idle_indicator: Label3D
 
@@ -253,6 +256,10 @@ func _physics_process(delta: float) -> void:
 			_process_to_gather(delta)
 		State.GATHERING:
 			_process_gathering(delta)
+		State.TO_TRADE_PICKUP:
+			_process_trade_pickup(delta)
+		State.TO_TRADE_DESTINATION:
+			_process_trade_destination(delta)
 	if idle_indicator != null:
 		idle_indicator.visible = state == State.IDLE and not is_player_controlled
 
@@ -671,6 +678,9 @@ func storage_delivery_result(accepted: bool) -> void:
 			state = State.EXCAVATING
 		elif active_role == "forestry":
 			forestry_tree_requested.emit(self)
+		elif active_role.begins_with("gather_"):
+			state = State.IDLE
+			request_goap_decision()
 		else:
 			state = State.TO_TREE
 		returning_to_excavation = false
@@ -752,6 +762,15 @@ func go_to_park(next_park_position: Vector3) -> void:
 		active_role = "relaxing"
 		factory = null
 		state = State.TO_PARK
+
+func deliver_trade(source: Vector3, destination: Vector3) -> void:
+	if is_player_controlled:
+		return
+	trade_source_position = source
+	trade_destination_position = destination
+	active_role = "trade"
+	factory = null
+	state = State.TO_TRADE_PICKUP
 
 func start_training(next_role: String, next_school_position: Vector3) -> void:
 	training_role = next_role
@@ -941,8 +960,17 @@ func _process_to_gather(delta: float) -> void:
 
 func _process_gathering(delta: float) -> void:
 	if _work(delta):
-		carried_amount = 1
+		carried_amount = 3 if gather_resource_type == "water" and active_role == "gather_water" else 1
 		resource_type = gather_resource_type
 		if resource_type == "logs":
 			tree_harvested.emit(self, gather_source_position)
 		state = State.TO_WAREHOUSE
+
+func _process_trade_pickup(delta: float) -> void:
+	if _move_to(trade_source_position, delta):
+		state = State.TO_TRADE_DESTINATION
+
+func _process_trade_destination(delta: float) -> void:
+	if _move_to(trade_destination_position, delta):
+		state = State.IDLE
+		trade_delivery_finished.emit(self)

@@ -24,7 +24,8 @@ var wellbeing := 75
 var workday_hours := 8
 var night_shifts_allowed := false
 var low_wellbeing_days := 0
-var tools := {"axe": false, "hand_saw": false, "shovel": false, "bucket": false}
+var tools := {"axe": false, "hand_saw": false, "shovel": false, "bucket": false, "filter_1": false}
+var tool_uses := {"filter_1": 0}
 var trade_sales := 0
 var buildings: Dictionary = {}
 var brick_construction_unlocked := false
@@ -217,6 +218,18 @@ func buy_tool(tool_id: String, price: int) -> bool:
 		return false
 	money -= price
 	tools[tool_id] = true
+	if tool_id == "filter_1":
+		tool_uses[tool_id] = 12
+	return true
+
+func use_filter() -> bool:
+	var uses := int(tool_uses.get("filter_1", 0))
+	if not bool(tools.get("filter_1", false)) or uses <= 0:
+		tools["filter_1"] = false
+		return false
+	tool_uses["filter_1"] = uses - 1
+	if uses == 1:
+		tools["filter_1"] = false
 	return true
 
 

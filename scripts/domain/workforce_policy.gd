@@ -10,7 +10,9 @@ static func role_for(worker: Dictionary, world: Dictionary) -> String:
 	# Automatic work first covers essential shortages when the required workplace
 	# exists, then falls back to the resident's specialization.
 	var population := maxi(1, int(world.get("population", 1)))
-	if bool(world.get("has_bucket", false)) and int(world.get("ponds", 0)) > 0 and int(world.get("water", 0)) < population * 2:
+	if bool(world.get("has_collected_dew", false)) and int(world.get("water", 0)) < population * 2:
+		return "gather_dew"
+	if bool(world.get("has_bucket", false)) and bool(world.get("has_filter", false)) and int(world.get("ponds", 0)) > 0 and int(world.get("water", 0)) < population * 2:
 		return "gather_water"
 	if int(world.get("food", 0)) < population * 2:
 		if int(world.get("farms", 0)) > 0:
@@ -69,5 +71,6 @@ static func can_assign(worker: Dictionary, world: Dictionary) -> bool:
 		"gather_branches": return int(world.get("trees", 0)) > 0
 		"gather_grass": return true
 		"gather_food": return int(world.get("forager_tents", 0)) > 0
-		"gather_water": return bool(world.get("has_bucket", false)) and int(world.get("ponds", 0)) > 0
+		"gather_dew": return bool(world.get("has_collected_dew", false))
+		"gather_water": return bool(world.get("has_bucket", false)) and bool(world.get("has_filter", false)) and int(world.get("ponds", 0)) > 0
 	return false
