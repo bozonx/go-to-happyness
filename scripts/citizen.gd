@@ -13,13 +13,15 @@ const WORK_DURATION := 1.4
 const COURIER_WAIT_DURATION := 8.0
 const GRAVITY := 18.0
 const AI_JUMP_VELOCITY := 7.6
-const AI_ESCAPE_JUMP_VELOCITY := 9.2
 const STUCK_TIME_BEFORE_JUMP := 0.75
-const STUCK_TIME_BEFORE_ESCAPE_JUMP := 1.5
+const STUCK_TIME_BEFORE_REPATH := 1.5
+const STUCK_TIME_BEFORE_SIDESTEP := 2.25
+const SIDESTEP_DURATION := 0.65
 const NAVIGATION_CELL_SIZE := 1.0
 const UNIT_SEPARATION_DISTANCE := 0.72
 const UNIT_SEPARATION_STRENGTH := 1.35
 const CONSTRUCTION_SLOT_SPACING := 0.42
+const NAVIGATION_TARGET_CLEARANCE := 0.48
 
 enum State { IDLE, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING }
 
@@ -58,12 +60,16 @@ var construction_position := Vector3.ZERO
 var pathfinder: Callable
 var movement_path: Array[Vector3] = []
 var path_destination := Vector3.INF
+var navigation_target_position := Vector3.INF
 var path_allows_destination_house := false
 var navigation_agent: NavigationAgent3D
 var safe_navigation_velocity := Vector3.ZERO
 var has_safe_navigation_velocity := false
 var stuck_time := 0.0
+var recovery_repath_done := false
 var jump_cooldown := 0.0
+var sidestep_time := 0.0
+var sidestep_direction := Vector3.ZERO
 var blocked_by_storage := false
 var training_role := ""
 var training_days_completed := 0
@@ -89,6 +95,10 @@ func _setup_navigation_agent() -> void:
 	navigation_agent.use_3d_avoidance = false
 	navigation_agent.radius = 0.36
 	navigation_agent.neighbor_distance = 3.0
+	navigation_agent.max_neighbors = 12
+	navigation_agent.time_horizon_agents = 1.2
+	navigation_agent.time_horizon_obstacles = 0.8
+	navigation_agent.avoidance_priority = 0.45 + float(get_instance_id() % 11) * 0.01
 	navigation_agent.velocity_computed.connect(_on_navigation_velocity_computed)
 	add_child(navigation_agent)
 
@@ -366,7 +376,8 @@ func _move_to(destination: Vector3, delta: float, may_enter_destination_house :=
 	if navigation_agent != null and navigation_agent.get_navigation_map().is_valid():
 		if path_destination.distance_to(destination) > 0.08:
 			path_destination = destination
-			navigation_agent.target_position = destination
+			navigation_target_position = _accessible_navigation_target(destination)
+			navigation_agent.target_position = navigation_target_position
 		for ignored_start_position in range(2):
 			var next_path_position := navigation_agent.get_next_path_position()
 			if navigation_agent.is_navigation_finished():
@@ -397,6 +408,9 @@ func _move_directly_to(destination: Vector3, delta: float) -> bool:
 		return true
 	var direction := offset.normalized()
 	var separation := _same_cell_separation()
+	if sidestep_time > 0.0:
+		sidestep_time = maxf(0.0, sidestep_time - delta)
+		direction = (direction * 0.35 + sidestep_direction).normalized()
 	var desired_velocity := direction * WALK_SPEED + separation * UNIT_SEPARATION_STRENGTH
 	if desired_velocity.length() > WALK_SPEED:
 		desired_velocity = desired_velocity.normalized() * WALK_SPEED
@@ -412,12 +426,15 @@ func _move_directly_to(destination: Vector3, delta: float) -> bool:
 	if is_on_floor() and horizontal_progress < WALK_SPEED * delta * 0.15:
 		stuck_time += delta
 		if jump_cooldown <= 0.0:
-			if stuck_time >= STUCK_TIME_BEFORE_ESCAPE_JUMP:
-				_jump_out_of_obstacle(true)
+			if stuck_time >= STUCK_TIME_BEFORE_SIDESTEP:
+				_start_sidestep(direction)
+			elif stuck_time >= STUCK_TIME_BEFORE_REPATH and not recovery_repath_done:
+				_force_repath()
 			elif stuck_time >= STUCK_TIME_BEFORE_JUMP and _has_low_obstacle_ahead(direction):
-				_jump_out_of_obstacle(false)
+				_jump_out_of_obstacle()
 	else:
 		stuck_time = 0.0
+		recovery_repath_done = false
 	look_at(global_position + direction, Vector3.UP)
 	return false
 
@@ -455,10 +472,38 @@ func _has_low_obstacle_ahead(direction: Vector3) -> bool:
 	high_query.exclude = [get_rid()]
 	return space_state.intersect_ray(high_query).is_empty()
 
-func _jump_out_of_obstacle(needs_escape_jump: bool) -> void:
-	velocity.y = AI_ESCAPE_JUMP_VELOCITY if needs_escape_jump else AI_JUMP_VELOCITY
+func _jump_out_of_obstacle() -> void:
+	velocity.y = AI_JUMP_VELOCITY
 	jump_cooldown = 0.45
 	stuck_time = 0.0
+
+func _force_repath() -> void:
+	if navigation_agent != null:
+		navigation_target_position = _accessible_navigation_target(path_destination)
+		navigation_agent.target_position = navigation_target_position
+		navigation_agent.velocity = Vector3.ZERO
+	has_safe_navigation_velocity = false
+	recovery_repath_done = true
+
+func _accessible_navigation_target(destination: Vector3) -> Vector3:
+	var navigation_map := navigation_agent.get_navigation_map()
+	var closest_point := NavigationServer3D.map_get_closest_point(navigation_map, destination)
+	var blocked_offset := closest_point - destination
+	blocked_offset.y = 0.0
+	if blocked_offset.length() <= 0.05:
+		return closest_point
+	# Keep the capsule away from the exact navmesh boundary, which normally
+	# coincides with a building wall or a tree cell.
+	var cleared_target := closest_point + blocked_offset.normalized() * NAVIGATION_TARGET_CLEARANCE
+	return NavigationServer3D.map_get_closest_point(navigation_map, cleared_target)
+
+func _start_sidestep(forward: Vector3) -> void:
+	var side_sign := -1.0 if get_instance_id() % 2 == 0 else 1.0
+	sidestep_direction = Vector3(-forward.z, 0.0, forward.x) * side_sign
+	sidestep_time = SIDESTEP_DURATION
+	_force_repath()
+	stuck_time = 0.0
+	recovery_repath_done = false
 
 func _apply_gravity(delta: float) -> void:
 	if not is_on_floor() or velocity.y > 0.0:
@@ -491,6 +536,17 @@ func assign_construction(site: Node3D) -> void:
 	movement_path.clear()
 	active_role = "construction"
 	state = State.CONSTRUCTING
+
+func finish_construction(site: Node3D) -> void:
+	if construction_site != site:
+		return
+	construction_site = null
+	active_role = ""
+	movement_path.clear()
+	path_destination = Vector3.INF
+	navigation_target_position = Vector3.INF
+	state = State.IDLE
+	request_goap_decision()
 
 func assign_excavation(site: Node3D) -> void:
 	if is_player_controlled:

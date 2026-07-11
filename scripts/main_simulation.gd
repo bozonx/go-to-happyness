@@ -748,6 +748,10 @@ func _rebuild_navigation_mesh() -> void:
 		NavigationServer3D.map_force_update(get_world_3d().navigation_map)
 
 func _is_navigation_cell_blocked(cell: Vector2i) -> bool:
+	# Trees occupy a navigation cell even though their visual meshes do not need
+	# physics bodies. Workers targeting a tree stop at the nearest navmesh edge.
+	if tree_cells.has(cell):
+		return true
 	for record in building_footprints:
 		var center: Vector3 = record.center
 		var footprint: Vector2i = record.footprint
@@ -778,6 +782,7 @@ func _create_forest() -> void:
 		tree_cells[cell] = true
 		tree_positions.append(tree_position)
 		_create_tree(tree_position)
+	_rebuild_navigation_mesh()
 
 func _create_tree(position_on_board: Vector3) -> void:
 	var tree := Node3D.new()
@@ -1713,6 +1718,8 @@ func _update_construction(delta: float) -> void:
 				if child is MeshInstance3D and child != fill:
 					child.queue_free()
 			construction_sites.remove_at(index)
+			for citizen in citizens:
+				citizen.finish_construction(site.node)
 			_complete_building(site.cell, site.type, site.position, site.node, site.blueprint)
 
 func _complete_building(cell: Vector2i, building_type: String, position_on_board: Vector3, building: Node3D, blueprint: Dictionary) -> void:
