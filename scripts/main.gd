@@ -17,6 +17,8 @@ const PLAYER_EYE_HEIGHT := 1.18
 const HARVEST_DURATION := 1.25
 const INTERACTION_RANGE := CELL_SIZE
 const POCKET_WOOD_CAPACITY := 8
+const DIG_RADIUS := 2.2
+const DIG_REACH := 6.0
 
 var wood := STARTING_WOOD
 var food := 20
@@ -82,6 +84,8 @@ var canteen_food := 0
 var pending_canteen_delivery := false
 var clock_label: Label
 var tent_dismantle_progress := -1.0
+var voxel_terrain: VoxelLodTerrain
+var voxel_tool: VoxelTool
 
 func _ready() -> void:
 	_create_world()
@@ -128,6 +132,7 @@ func _create_world() -> void:
 	add_child(camera)
 	_update_camera_position()
 	_create_ground()
+	_create_voxel_terrain()
 	_create_grid()
 	_create_selection_marker()
 
@@ -141,6 +146,7 @@ func _create_ground() -> void:
 	material.albedo_color = Color("5f8953")
 	material.roughness = 0.95
 	ground.material_override = material
+	ground.visible = false  # воксельный террейн заменяет видимую землю; коллайдер ниже остаётся плоскостью застройки
 	add_child(ground)
 
 	var ground_body := StaticBody3D.new()
@@ -151,6 +157,33 @@ func _create_ground() -> void:
 	collision.position.y = -0.125
 	ground_body.add_child(collision)
 	add_child(ground_body)
+
+func _create_voxel_terrain() -> void:
+	# Гладкий SDF-террейн поверх плоскости застройки: только визуал + копание.
+	# Коллизии выключены, поэтому рейкасты выбора клеток/юнитов бьют в плоский пол на y=0,
+	# и вся сеточная логика игры работает как раньше.
+	voxel_terrain = VoxelLodTerrain.new()
+	voxel_terrain.mesher = VoxelMesherTransvoxel.new()
+	var generator := VoxelGeneratorNoise2D.new()
+	var noise := FastNoiseLite.new()
+	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	noise.frequency = 0.05  # мягкие пологие волны на масштабе доски
+	generator.noise = noise
+	generator.channel = VoxelBuffer.CHANNEL_SDF
+	generator.height_start = -1.4  # диапазон высот поверхности ≈ [-1.4, +0.4]:
+	generator.height_range = 1.8   # маленькие перепады, смещённые ниже нуля, чтобы постройки не утопали
+	voxel_terrain.generator = generator
+	voxel_terrain.generate_collisions = false
+	voxel_terrain.view_distance = 96
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("5f8953")
+	material.roughness = 0.95
+	voxel_terrain.material = material
+	add_child(voxel_terrain)
+	# Стример подгружает воксели вокруг камеры (нужно и для отрисовки, и для копания).
+	camera.add_child(VoxelViewer.new())
+	voxel_tool = voxel_terrain.get_voxel_tool()
+	voxel_tool.channel = VoxelBuffer.CHANNEL_SDF
 
 func _create_grid() -> void:
 	var grid := ImmediateMesh.new()
