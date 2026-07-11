@@ -122,6 +122,7 @@ var right_mouse_dragged := false
 var construction_sites: Array[Dictionary] = []
 var completed_house_count := 0
 var player_citizen: Citizen
+var hero_citizen: Citizen
 var is_first_person := false
 var player_yaw := 0.0
 var player_pitch := -8.0
@@ -188,6 +189,7 @@ var build_item_buttons: Array[Button] = []
 var skip_night_button: Button
 var water_collectors: Array[Dictionary] = []
 var role_buttons: Array[Button] = []
+var manage_citizen_button: Button
 var workforce: WorkforceCoordinator
 var sawmills: SawmillService
 var construction: ConstructionService
@@ -217,7 +219,7 @@ func _ready() -> void:
 	settlement.food = 6
 	settlement.ensure_storage_defaults(warehouse_positions.size())
 
-	_update_interface("Four volunteers wait. Gather branches and grass, and build the Campfire to start management.")
+	_update_interface("The hero and three volunteers wait. Gather branches and grass, and build the Campfire to start management.")
 
 func _process(delta: float) -> void:
 	runtime_seconds += delta
@@ -765,9 +767,10 @@ func _update_interface(message: String) -> void:
 	wood_label.text = "Era: %s\nMoney: %d\nBranches: %d\nGrass: %d\nWater: %d\nFood: %d\nLogs: %d\nTimber: %d\nBoards: %d\nBricks: %d\nStorage: %d/%d\nPopulation: %d\nWellbeing: %d" % [_era_name(), money, branches, grass, water, food, settlement.logs, wood, boards, bricks, _stored_resources(), _warehouse_capacity(), citizens.size(), wellbeing]
 	status_label.text = message
 	if is_first_person:
-		camera_hint_label.text = "R: leave citizen  WASD/arrows: move  Space: jump  Shift: sprint  Mouse: look  LMB: interact  RMB: dig"
+		var build_hint := "  B: construction" if player_citizen == hero_citizen else ""
+		camera_hint_label.text = "R: hero/overview  WASD/arrows: move  Space: jump  Shift: sprint  Mouse: look  LMB: interact  RMB: dig%s" % build_hint
 	else:
-		camera_hint_label.text = "Click a citizen, then R: first-person. Build freely on voxel terrain. Right drag: rotate  Middle drag: pan  Wheel: zoom"
+		camera_hint_label.text = "R: view from hero. Select a citizen and choose Manage. Right drag: rotate  Middle drag: pan  Wheel: zoom"
 
 func _era_name() -> String:
 	return ["Tent", "Earth", "Clay", "Wood", "Brick"][settlement.era]
@@ -1041,6 +1044,9 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	citizen.canteen_delivery_finished.connect(_on_canteen_delivery_finished)
 	citizen.factory_cycle.connect(_on_factory_cycle)
 	citizens.append(citizen)
+	if hero_citizen == null:
+		hero_citizen = citizen
+		citizen.set_hero(true)
 	citizen.setup_goap(self, citizens.size() - 1)
 
 
@@ -1178,11 +1184,18 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	build_menu_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	build_menu_title.add_theme_font_size_override("font_size", 15)
 	build_menu.add_child(build_menu_title)
+
+	manage_citizen_button = Button.new()
+	manage_citizen_button.text = "Управлять"
+	manage_citizen_button.position = Vector2(16, 96)
+	manage_citizen_button.size = Vector2(272, 30)
+	manage_citizen_button.pressed.connect(_take_control_of_selected_citizen)
+	build_menu.add_child(manage_citizen_button)
 	
 	# Add the "Assign Job..." button that opens the job submenu
 	job_submenu_btn = Button.new()
 	job_submenu_btn.text = "Assign Job..."
-	job_submenu_btn.position = Vector2(16, 96)
+	job_submenu_btn.position = Vector2(16, 310)
 	job_submenu_btn.size = Vector2(272, 30)
 	job_submenu_btn.pressed.connect(_open_job_submenu)
 	build_menu.add_child(job_submenu_btn)
@@ -1469,9 +1482,13 @@ func _open_build_category(category: String) -> void:
 
 func _refresh_build_menu() -> void:
 	var selected_exists := selected_builder != null
+	var citizen_actions_visible := selected_exists and not build_menu_is_job_menu and build_category.is_empty()
+	if manage_citizen_button != null:
+		manage_citizen_button.visible = citizen_actions_visible
+		manage_citizen_button.text = "Управлять" if selected_builder != hero_citizen else "Управлять героем"
 	
 	if job_submenu_btn != null:
-		job_submenu_btn.visible = selected_exists and not build_menu_is_job_menu and build_category.is_empty()
+		job_submenu_btn.visible = citizen_actions_visible and selected_builder != hero_citizen
 	if job_back_btn != null:
 		job_back_btn.visible = selected_exists and build_menu_is_job_menu
 	
@@ -1531,6 +1548,9 @@ func _add_role_button(title: String, role: String, y_position: float) -> void:
 
 func _set_manual_role(role: String) -> void:
 	if selected_builder == null:
+		return
+	if selected_builder == hero_citizen:
+		_update_interface("The hero performs work directly while under your control.")
 		return
 	selected_builder.idle()
 	if role == "excavation":
@@ -1602,12 +1622,17 @@ func _create_dig_site(cell: Vector2i, world_position: Vector3) -> Dictionary:
 	return site
 
 func _select_build_mode(next_mode: String) -> void:
+	if not _can_hero_build():
+		_update_interface("Only the hero can approve construction decisions.")
+		return
 	if BuildingCatalog.era_for(next_mode) > settlement.era:
 		_update_interface("This building belongs to a later era. Complete the current settlement requirements first.")
 		return
 	build_mode = next_mode
 	selection_marker.visible = true
 	_move_selection(selected_world_position)
+	if is_first_person:
+		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	_update_interface("%s selected. Choose a clear point on the voxel terrain." % build_mode.capitalize())
 
 func _cancel_build_action() -> void:
@@ -1644,15 +1669,24 @@ func _close_context_menus() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.keycode == KEY_R and event.pressed and not event.echo:
-		_toggle_first_person()
+		_toggle_hero_view()
 		get_viewport().set_input_as_handled()
 		return
 	if is_first_person:
-		if event is InputEventMouseMotion:
+		if event is InputEventKey and event.keycode == KEY_B and event.pressed and not event.echo:
+			if _can_hero_build():
+				_toggle_global_build_menu()
+				Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE if build_menu.visible else Input.MOUSE_MODE_CAPTURED)
+			else:
+				_update_interface("Only the hero can approve construction decisions.")
+		elif event is InputEventMouseMotion:
 			player_yaw -= event.relative.x * 0.0035
 			player_pitch = clampf(player_pitch - event.relative.y * 0.003, deg_to_rad(-70.0), deg_to_rad(65.0))
 		elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-			_start_interaction()
+			if not build_mode.is_empty() and _can_hero_build():
+				_place_building_at_crosshair()
+			else:
+				_start_interaction()
 		elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
 			_dig_voxel_at_crosshair()
 		get_viewport().set_input_as_handled()
@@ -1826,25 +1860,26 @@ func _show_selected_citizen_menu() -> void:
 		build_menu_title.text = "%s  Sat: %d/%d%%  Food: %d%%\nHome: %s  Effect: %s  Task: %s\nBuild %.1f Wood %.1f Farm %.1f Dig %.1f" % [selected_builder.role_label(), roundi(selected_builder.satisfaction), roundi(selected_builder.get_satisfaction_cap()), roundi(selected_builder.hunger), home_label, effect_label, assignment, float(selected_builder.skills.construction), float(selected_builder.skills.forestry), float(selected_builder.skills.farming), float(selected_builder.skills.excavation)]
 	build_menu_title.add_theme_color_override("font_color", selected_builder.specialization_color())
 
-func _toggle_first_person() -> void:
+func _toggle_hero_view() -> void:
 	if is_first_person:
-		is_first_person = false
-		if player_citizen != null:
-			player_citizen.set_player_controlled(false)
-			camera_target = player_citizen.global_position
-		player_citizen = null
-		interaction_action = ""
-		interaction_hint_label.visible = false
-		interaction_progress.visible = false
-		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
-		build_menu.visible = selected_builder != null
-		_update_workers()
-		_update_interface("Left first-person control. Citizen remains selected.")
+		if player_citizen == hero_citizen:
+			_leave_first_person_to_hero_overview()
+		else:
+			_enter_first_person(hero_citizen, "Returned to the hero.")
 		return
+	_enter_first_person(hero_citizen, "Hero view enabled.")
+
+func _take_control_of_selected_citizen() -> void:
 	if selected_builder == null:
-		_update_interface("Select a citizen first, then press R to take control.")
 		return
-	player_citizen = selected_builder
+	_enter_first_person(selected_builder, "%s is now under direct control." % selected_builder.role_label())
+
+func _enter_first_person(citizen: Citizen, message: String) -> void:
+	if citizen == null:
+		return
+	if is_first_person and player_citizen != null and player_citizen != citizen:
+		player_citizen.set_player_controlled(false)
+	player_citizen = citizen
 	# Watching a citizen must not cancel their current AI task. Manual control
 	# starts only after the player presses a movement key.
 	player_citizen.set_player_controlled(false)
@@ -1855,11 +1890,27 @@ func _toggle_first_person() -> void:
 	player_yaw = player_citizen.rotation.y
 	player_pitch = 0.0
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-	_update_interface("First-person control enabled. Gather resources, unload logs for processing, and deliver boards to storage.")
+	_update_interface(message)
+
+func _leave_first_person_to_hero_overview() -> void:
+	is_first_person = false
+	if player_citizen != null:
+		player_citizen.set_player_controlled(false)
+	player_citizen = null
+	interaction_action = ""
+	interaction_hint_label.visible = false
+	interaction_progress.visible = false
+	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+	if hero_citizen != null:
+		camera_target = hero_citizen.global_position
+	_update_camera_position()
+	build_menu.visible = selected_builder != null
+	_update_workers()
+	_update_interface("Overview centered on the hero.")
 
 func _update_player_control(delta: float) -> void:
 	if player_citizen == null:
-		_toggle_first_person()
+		_leave_first_person_to_hero_overview()
 		return
 	var move_direction := Vector3.ZERO
 	var forward := Vector3(-sin(player_yaw), 0.0, -cos(player_yaw))
@@ -2092,6 +2143,9 @@ func _move_selection(world_position: Vector3) -> void:
 
 
 func _place_building(world_position: Vector3) -> void:
+	if not _can_hero_build():
+		_update_interface("Only the hero can approve construction decisions.")
+		return
 	world_position = _snapped_build_position(world_position)
 	if not _can_place(world_position):
 		_update_interface("Construction is not allowed at this point.")
@@ -2112,6 +2166,17 @@ func _place_building(world_position: Vector3) -> void:
 	build_menu.visible = false
 	selected_builder = null
 	_update_interface("Construction started. The progress bar shows completion.")
+
+func _place_building_at_crosshair() -> void:
+	var viewport_center := get_viewport().get_visible_rect().size * 0.5
+	var terrain_point: Variant = _terrain_point_at_screen_position(viewport_center)
+	if terrain_point == null:
+		_update_interface("Aim at clear terrain to place the building.")
+		return
+	_place_building(terrain_point)
+
+func _can_hero_build() -> bool:
+	return not is_first_person or player_citizen == hero_citizen
 
 func _can_place(world_position: Vector3) -> bool:
 	if build_mode.is_empty():
@@ -2430,8 +2495,9 @@ func _update_water_collectors(delta: float) -> void:
 
 
 func _toggle_global_build_menu() -> void:
+	var was_visible := build_menu.visible
 	_close_context_menus()
-	build_menu.visible = not build_menu.visible
+	build_menu.visible = not was_visible
 	if build_menu.visible:
 		build_category = ""
 		_refresh_build_menu()

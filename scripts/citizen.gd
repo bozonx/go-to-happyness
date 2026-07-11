@@ -36,6 +36,7 @@ var workplace_position := Vector3.ZERO
 var warehouse_position := Vector3.ZERO
 var task_timer := CitizenTaskState.new()
 var is_player_controlled := false
+var is_hero := false
 var construction_site: Node3D
 var specialization := "builder"
 var manual_role := ""
@@ -171,6 +172,16 @@ func assign_work(next_resource_type: String, source: Vector3, workplace: Vector3
 
 func _physics_process(delta: float) -> void:
 	if is_player_controlled:
+		return
+	# The hero is the settlement's leader, not another autonomous worker. They
+	# stay where the player leaves them until the player takes control again.
+	if is_hero:
+		_apply_gravity(delta)
+		_update_effects(delta)
+		_update_satisfaction(delta)
+		velocity.x = 0.0
+		velocity.z = 0.0
+		move_and_slide()
 		return
 	if goap_brain != null:
 		goap_brain.tick(delta)
@@ -527,6 +538,13 @@ func set_player_controlled(controlled: bool) -> void:
 		movement_path.clear()
 		path_destination = Vector3.INF
 
+func set_hero(hero: bool) -> void:
+	is_hero = hero
+	if hero:
+		add_to_group("hero")
+		if body_material != null:
+			body_material.albedo_color = Color("e6c857")
+
 func assign_construction(site: Node3D) -> void:
 	if is_player_controlled:
 		return
@@ -717,7 +735,7 @@ func _work_position_for(site: Node3D) -> Vector3:
 func setup_specialization(next_specialization: String) -> void:
 	specialization = next_specialization
 	skills[preferred_role()] = 4.0
-	body_material.albedo_color = CitizenRoleProfile.color_for(specialization)
+	body_material.albedo_color = Color("e6c857") if is_hero else CitizenRoleProfile.color_for(specialization)
 
 func get_efficiency(role: String) -> float:
 	var skill_value: float = skills.get(role, 1.0)
@@ -727,10 +745,11 @@ func get_efficiency(role: String) -> float:
 	return skill_bonus * satisfaction_factor * (1.0 + meal_bonus)
 
 func role_label() -> String:
-	return CitizenRoleProfile.label_for(specialization)
+	var role := CitizenRoleProfile.label_for(specialization)
+	return "Hero (%s)" % role if is_hero else role
 
 func specialization_color() -> Color:
-	return CitizenRoleProfile.color_for(specialization)
+	return Color("e6c857") if is_hero else CitizenRoleProfile.color_for(specialization)
 
 func preferred_role() -> String:
 	return CitizenRoleProfile.preferred_role_for(specialization)

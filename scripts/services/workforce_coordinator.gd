@@ -17,7 +17,7 @@ func update_workers() -> void:
 			citizen.request_goap_decision()
 		return
 	for citizen in simulation.citizens:
-		if citizen.is_player_controlled:
+		if citizen.is_player_controlled or citizen.is_hero:
 			continue
 		if citizen.state in [Citizen.State.TO_CANTEEN, Citizen.State.EATING, Citizen.State.TO_FOOD_PICKUP, Citizen.State.TO_CANTEEN_DELIVERY, Citizen.State.COURIER_TO_WORKER, Citizen.State.COURIER_TO_WAREHOUSE, Citizen.State.WAITING_COURIER]:
 			continue
@@ -96,7 +96,7 @@ func work_role_for(citizen: Citizen) -> String:
 
 func _worker_data(citizen: Citizen) -> Dictionary:
 	return {
-		"player_controlled": citizen.is_player_controlled,
+		"player_controlled": citizen.is_player_controlled or citizen.is_hero,
 		"blocked_by_storage": citizen.blocked_by_storage,
 		"specialization": citizen.specialization,
 		"manual_role": citizen.manual_role,
