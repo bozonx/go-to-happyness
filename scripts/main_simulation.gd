@@ -160,6 +160,15 @@ var school_menu_title: Label
 var materials_factory_menu: Panel
 var materials_factory_menu_title: Label
 var selected_materials_factory: Node3D
+var campfire_node: Node3D = null
+var selected_campfire: Node3D = null
+var campfire_menu: Panel
+var campfire_menu_title: Label
+var campfire_requirements_label: Label
+var campfire_advance_button: Button
+var selected_market: Node3D = null
+var market_menu: Panel
+var market_menu_title: Label
 var house_lights: Array[Dictionary] = []
 var house_light_update_minute := -1
 var entrance_lights: Array[OmniLight3D] = []
@@ -184,7 +193,15 @@ func _ready() -> void:
 	_create_forest()
 	_create_entrance_stone()
 	_create_citizens()
-	_update_interface("Four volunteers wait by the entrance stone. Gather branches and grass to establish the first camp.")
+	
+	# Starting resources to place first campfire and tents
+	settlement.money = 100
+	settlement.branches = 30
+	settlement.grass = 20
+	settlement.water = 15
+	settlement.food = 15
+	
+	_update_interface("Four volunteers wait. Gather branches and grass, and build the Campfire to start management.")
 
 func _process(delta: float) -> void:
 	runtime_seconds += delta
@@ -294,7 +311,7 @@ func _apply_daily_settlement_rules() -> void:
 	var population := citizens.size()
 	if population == 0:
 		return
-	var housing := completed_house_count * HOUSE_CAPACITY
+	var housing := _total_housing_slots()
 	var change := SETTLEMENT_RULES.daily_wellbeing_change(housing >= population, float(food) / population, float(water) / population, settlement.workday_hours, settlement.night_shifts_allowed)
 	wellbeing = clampi(wellbeing + change, 0, 100)
 	settlement.low_wellbeing_days = settlement.low_wellbeing_days + 1 if wellbeing < SettlementRules.LOW_WELLBEING else 0
@@ -571,11 +588,19 @@ func _on_excavation_cycle(worker: Citizen, site_node: Node3D, efficiency: float)
 		if site.node != site_node:
 			continue
 		site.depth += 1
+		var delivery_pos: Vector3 = Vector3.ZERO
+		if not warehouse_positions.is_empty():
+			delivery_pos = warehouse_positions[0]
+		elif is_instance_valid(campfire_node):
+			delivery_pos = campfire_node.global_position
+		else:
+			delivery_pos = entrance_stone.global_position
+			
 		if site.depth <= site.soil_limit:
-			worker.deliver_excavation("soil", warehouse_positions[0])
+			worker.deliver_excavation("soil", delivery_pos)
 			_update_interface("Digger is carrying soil to the warehouse.")
 		elif site.depth <= site.clay_limit:
-			worker.deliver_excavation("clay", warehouse_positions[0])
+			worker.deliver_excavation("clay", delivery_pos)
 			var pit_material := StandardMaterial3D.new()
 			pit_material.albedo_color = Color("a96445")
 			site.pit.material_override = pit_material
@@ -605,6 +630,13 @@ func _stored_resources() -> int:
 func _warehouse_capacity() -> int:
 	# Starting supplies are kept at the tent until the first warehouse is built.
 	return maxi(WAREHOUSE_CAPACITY, warehouse_positions.size() * WAREHOUSE_CAPACITY)
+
+func _total_housing_slots() -> int:
+	var count := 0
+	for type in placed_buildings.values():
+		if type in ["tent", "dugout", "earth_house", "clay_house", "house"]:
+			count += HOUSE_CAPACITY
+	return count
 
 func _update_camera(delta: float) -> void:
 	var move_direction := Vector3.ZERO
@@ -709,7 +741,7 @@ func _update_interface(message: String) -> void:
 		camera_hint_label.text = "Click a citizen, then R: first-person. Build freely on voxel terrain. Right drag: rotate  Middle drag: pan  Wheel: zoom"
 
 func _era_name() -> String:
-	return ["Tent", "Earth", "Wood", "Brick"][settlement.era]
+	return ["Tent", "Earth", "Clay", "Wood", "Brick"][settlement.era]
 
 
 func _create_world() -> void:
@@ -837,7 +869,7 @@ func _create_selection_marker() -> void:
 	_move_selection(Vector3.ZERO)
 
 func _create_forest() -> void:
-	var cells := [Vector2i(-11, -10), Vector2i(-8, -12), Vector2i(-5, -9), Vector2i(-2, -12), Vector2i(3, -11), Vector2i(7, -9), Vector2i(11, -12), Vector2i(13, -7), Vector2i(-13, -5), Vector2i(-9, -4), Vector2i(-6, -2), Vector2i(7, -3), Vector2i(11, -1), Vector2i(14, 3), Vector2i(-14, 4), Vector2i(-10, 7), Vector2i(-6, 10), Vector2i(-2, 13), Vector2i(3, 10), Vector2i(7, 13), Vector2i(11, 8), Vector2i(14, 12), Vector2i(-12, 13), Vector2i(5, 5)]
+	var cells := [Vector2i(-16, -15), Vector2i(-15, -18), Vector2i(-18, -12), Vector2i(-12, -19), Vector2i(16, -15), Vector2i(15, -18), Vector2i(18, -12), Vector2i(12, -19), Vector2i(-16, 15), Vector2i(-15, 18), Vector2i(-18, 12), Vector2i(-12, 19), Vector2i(16, 15), Vector2i(15, 18), Vector2i(18, 12), Vector2i(12, 19), Vector2i(-20, -5), Vector2i(-20, 5), Vector2i(20, -5), Vector2i(20, 5), Vector2i(-5, -20), Vector2i(5, -20), Vector2i(-5, 20), Vector2i(5, 20)]
 	for cell in cells:
 		var tree_position := _cell_center(cell)
 		tree_cells[cell] = true
@@ -878,17 +910,6 @@ func _create_entrance_stone() -> void:
 	entrance_stone = Node3D.new()
 	entrance_stone.position = _cell_center(Vector2i(-2, 1))
 	add_child(entrance_stone)
-	var stone := MeshInstance3D.new()
-	var mesh := CylinderMesh.new()
-	mesh.top_radius = 0.55
-	mesh.bottom_radius = 0.75
-	mesh.height = 2.2
-	stone.mesh = mesh
-	stone.position.y = 1.1
-	var material := StandardMaterial3D.new()
-	material.albedo_color = Color("6b7375")
-	stone.material_override = material
-	entrance_stone.add_child(stone)
 
 func _create_starting_tent() -> void:
 	tent = Node3D.new()
@@ -998,10 +1019,19 @@ func _create_interface() -> void:
 	interaction_progress.show_percentage = false
 	interaction_progress.visible = false
 	ui.add_child(interaction_progress)
+	var build_toggle_btn := Button.new()
+	build_toggle_btn.text = "Construction Panel"
+	build_toggle_btn.position = Vector2(20, 210)
+	build_toggle_btn.size = Vector2(180, 36)
+	build_toggle_btn.pressed.connect(_toggle_global_build_menu)
+	ui.add_child(build_toggle_btn)
+	
 	_create_build_menu(ui)
 	_create_house_menu(ui)
 	_create_school_menu(ui)
 	_create_materials_factory_menu(ui)
+	_create_campfire_menu(ui)
+	_create_market_menu(ui)
 
 func _create_time_controls(ui: CanvasLayer) -> void:
 	var controls := HBoxContainer.new()
@@ -1019,20 +1049,7 @@ func _create_time_controls(ui: CanvasLayer) -> void:
 		button.custom_minimum_size = Vector2(56, 30)
 		button.pressed.connect(_set_time_multiplier.bind(multiplier))
 		controls.add_child(button)
-	var labour_controls := HBoxContainer.new()
-	labour_controls.position = Vector2(20, 204)
-	ui.add_child(labour_controls)
-	for hours in [6, 8, 10]:
-		var day_button := Button.new()
-		day_button.text = "%dh" % hours
-		day_button.tooltip_text = "Set workday duration"
-		day_button.pressed.connect(_set_workday_hours.bind(hours))
-		labour_controls.add_child(day_button)
-	var night_button := CheckButton.new()
-	night_button.text = "Night shifts"
-	night_button.tooltip_text = "Night shifts increase output and reduce wellbeing"
-	night_button.toggled.connect(_set_night_shifts)
-	labour_controls.add_child(night_button)
+
 
 func _set_workday_hours(hours: int) -> void:
 	settlement.workday_hours = hours
@@ -1068,26 +1085,42 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_role_button("Assign: farming", "farming", 198)
 	_add_role_button("Assign: excavation", "excavation", 232)
 	_add_build_category_button("Tent era", "tent", 290)
-	_add_build_category_button("Earth era", "earth", 326)
-	_add_build_category_button("Wooden era", "wood", 360)
-	_add_build_category_button("Brick era", "brick", 394)
+	_add_build_category_button("Earth era", "earth", 324)
+	_add_build_category_button("Clay era", "clay", 358)
+	_add_build_category_button("Wooden era", "wood", 392)
+	_add_build_category_button("Brick era", "brick", 426)
 	_add_build_category_back_button()
-	_add_build_button("Campfire - branches", "campfire", 430, "tent")
-	_add_build_button("Tent - branches + grass", "tent", 464, "tent")
-	_add_build_button("Forager tent", "forager_tent", 498, "tent")
-	_add_build_button("Craft tent", "craft_tent", 532, "tent")
-	_add_build_button("Water store", "water_store", 566, "tent")
-	_add_build_button("Simple store", "warehouse", 600, "tent")
-	_add_build_button("Dugout", "dugout", 430, "earth")
-	_add_build_button("Earth house", "earth_house", 464, "earth")
-	_add_build_button("Smithy", "smithy", 498, "earth")
-	_add_build_button("Hide workshop", "hide_worker", 532, "earth")
-	_add_build_button("Sawmill - logs + kit", "sawmill", 430, "wood")
-	_add_build_button("Farm", "farm", 464, "wood")
-	_add_build_button("Canteen", "canteen", 498, "wood")
-	_add_build_button("Wood house", "house", 532, "wood")
-	_add_build_button("Brick kiln", "brick_factory", 430, "brick")
-	_add_build_button("Materials factory", "materials_factory", 464, "brick")
+	
+	_add_build_button("Campfire - branches", "campfire", 330, "tent")
+	_add_build_button("Tent - branches + grass", "tent", 364, "tent")
+	_add_build_button("Forager tent", "forager_tent", 398, "tent")
+	_add_build_button("Craft tent", "craft_tent", 432, "tent")
+	_add_build_button("Water store", "water_store", 466, "tent")
+	_add_build_button("Simple store", "warehouse", 500, "tent")
+	_add_build_button("Trade tent", "trade_tent", 534, "tent")
+	
+	_add_build_button("Dugout", "dugout", 330, "earth")
+	_add_build_button("Earth house", "earth_house", 364, "earth")
+	_add_build_button("Smithy", "smithy", 398, "earth")
+	_add_build_button("Hide workshop", "hide_worker", 432, "earth")
+	_add_build_button("Earth market", "earth_market", 466, "earth")
+	
+	_add_build_button("Clay house", "clay_house", 330, "clay")
+	_add_build_button("Clay workshop", "clay_workshop", 364, "clay")
+	_add_build_button("Clay market", "clay_market", 398, "clay")
+	
+	_add_build_button("Sawmill - logs + kit", "sawmill", 330, "wood")
+	_add_build_button("Farm", "farm", 364, "wood")
+	_add_build_button("Canteen", "canteen", 398, "wood")
+	_add_build_button("Wood house", "house", 432, "wood")
+	_add_build_button("School", "school", 466, "wood")
+	_add_build_button("Park", "park", 500, "wood")
+	_add_build_button("Wood market", "wood_market", 534, "wood")
+	
+	_add_build_button("Brick kiln", "brick_factory", 330, "brick")
+	_add_build_button("Materials factory", "materials_factory", 364, "brick")
+	_add_build_button("Brick market", "brick_market", 398, "brick")
+	
 	_refresh_build_menu()
 
 func _create_school_menu(ui: CanvasLayer) -> void:
@@ -1389,8 +1422,6 @@ func _create_dig_site(cell: Vector2i, world_position: Vector3) -> Dictionary:
 	return site
 
 func _select_build_mode(next_mode: String) -> void:
-	if selected_builder == null:
-		return
 	if BuildingCatalog.era_for(next_mode) > settlement.era:
 		_update_interface("This building belongs to a later era. Complete the current settlement requirements first.")
 		return
@@ -1416,9 +1447,13 @@ func _close_context_menus() -> void:
 	school_menu.visible = false
 	materials_factory_menu.visible = false
 	build_menu.visible = false
+	campfire_menu.visible = false
+	market_menu.visible = false
 	selected_house = null
 	selected_school = null
 	selected_materials_factory = null
+	selected_campfire = null
+	selected_market = null
 	selected_builder = null
 	build_category = ""
 	_refresh_build_menu()
@@ -1462,7 +1497,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			_rotate_camera(event.relative)
 		elif is_panning_camera:
 			_pan_camera(event.relative)
-		elif selected_builder != null and (not build_mode.is_empty() or dig_mode):
+		elif not build_mode.is_empty() or (selected_builder != null and dig_mode):
 			var terrain_point: Variant = _terrain_point_at_screen_position(event.position)
 			if terrain_point != null:
 				_move_selection(terrain_point)
@@ -1471,7 +1506,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			var dig_point: Variant = _terrain_point_at_screen_position(event.position)
 			if dig_point != null:
 				_place_dig_site(dig_point)
-		elif selected_builder != null and not build_mode.is_empty():
+		elif not build_mode.is_empty():
 			var build_point: Variant = _terrain_point_at_screen_position(event.position)
 			if build_point != null:
 				_place_building(build_point)
@@ -1491,11 +1526,19 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	if hit.is_empty():
 		return
+	if hit.collider.is_in_group("campfire_selector"):
+		selected_campfire = hit.collider.get_parent() as Node3D
+		_show_campfire_menu()
+		return
+	if hit.collider.is_in_group("market_selector"):
+		selected_market = hit.collider.get_parent() as Node3D
+		_show_market_menu()
+		return
 	if hit.collider.is_in_group("house_selector"):
 		selected_house = hit.collider.get_parent() as Node3D
 		selected_builder = null
 		build_menu.visible = false
-		if selected_house == tent:
+		if tent != null and selected_house == tent:
 			house_menu.visible = false
 			_update_interface("Starting tent: %d/%d residents. It cannot recruit new people." % [_tent_resident_count(), TENT_CAPACITY])
 		else:
@@ -1562,6 +1605,8 @@ func _select_citizen(clicked_citizen: Citizen) -> void:
 
 func _show_selected_citizen_menu() -> void:
 	if selected_builder == null:
+		build_menu_title.text = "Construction Panel\nChoose an era category below."
+		build_menu_title.add_theme_color_override("font_color", Color("ffffff"))
 		return
 	var assignment := "Auto" if selected_builder.manual_role.is_empty() else selected_builder.manual_role.capitalize()
 	if not selected_builder.training_role.is_empty():
@@ -1906,12 +1951,26 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			_sawmill_stock(service_position)
 		"farm":
 			farm_positions.append(service_position)
-		"house":
-			completed_house_count += 1
+		"campfire":
+			campfire_node = building
+			_add_building_selector(building, "campfire_selector", blueprint.footprint)
+			var fire_light := OmniLight3D.new()
+			fire_light.position = Vector3(0.0, 0.5, 0.0)
+			fire_light.light_color = Color("ff9d3b")
+			fire_light.light_energy = 2.5
+			fire_light.omni_range = 8.0
+			building.add_child(fire_light)
+		"tent", "dugout", "earth_house", "clay_house", "house":
+			if building_type == "house":
+				completed_house_count += 1
 			building.set_meta("spawn_slots", HOUSE_CAPACITY)
 			building.set_meta("entrance_position", service_position)
 			_add_building_selector(building, "house_selector", blueprint.footprint)
 			_add_house_light(building)
+			if building_type == "tent":
+				building.set_meta("is_tent", true)
+		"trade_tent", "earth_market", "clay_market", "wood_market", "brick_market":
+			_add_building_selector(building, "market_selector", blueprint.footprint)
 		"canteen":
 			canteen = building
 			canteen_position = service_position
@@ -2092,3 +2151,304 @@ func _update_tent_dismantle(delta: float) -> void:
 	tent_dismantle_progress = -1.0
 	_update_workers()
 	_update_interface("Builders dismantled the empty tent and recovered 2 wood.")
+
+
+func _toggle_global_build_menu() -> void:
+	_close_context_menus()
+	build_menu.visible = not build_menu.visible
+	if build_menu.visible:
+		build_category = ""
+		_refresh_build_menu()
+		_show_selected_citizen_menu()
+
+
+func _create_campfire_menu(ui: CanvasLayer) -> void:
+	campfire_menu = Panel.new()
+	campfire_menu.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	campfire_menu.offset_left = -324.0
+	campfire_menu.offset_top = -600.0
+	campfire_menu.offset_right = -20.0
+	campfire_menu.offset_bottom = -20.0
+	campfire_menu.visible = false
+	ui.add_child(campfire_menu)
+	
+	campfire_menu_title = Label.new()
+	campfire_menu_title.position = Vector2(16, 14)
+	campfire_menu_title.size = Vector2(272, 40)
+	campfire_menu_title.add_theme_font_size_override("font_size", 17)
+	campfire_menu.add_child(campfire_menu_title)
+	
+	campfire_requirements_label = Label.new()
+	campfire_requirements_label.position = Vector2(16, 60)
+	campfire_requirements_label.size = Vector2(272, 220)
+	campfire_requirements_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	campfire_requirements_label.add_theme_font_size_override("font_size", 13)
+	campfire_menu.add_child(campfire_requirements_label)
+	
+	campfire_advance_button = Button.new()
+	campfire_advance_button.text = "Advance Era"
+	campfire_advance_button.position = Vector2(16, 290)
+	campfire_advance_button.size = Vector2(272, 36)
+	campfire_advance_button.pressed.connect(_on_campfire_advance_pressed)
+	campfire_menu.add_child(campfire_advance_button)
+
+	var labour_label := Label.new()
+	labour_label.text = "Labor Policy:"
+	labour_label.position = Vector2(16, 335)
+	campfire_menu.add_child(labour_label)
+	
+	var labour_controls := HBoxContainer.new()
+	labour_controls.position = Vector2(16, 360)
+	campfire_menu.add_child(labour_controls)
+	for hours in [6, 8, 10]:
+		var day_button := Button.new()
+		day_button.text = "%dh" % hours
+		day_button.tooltip_text = "Set workday duration"
+		day_button.pressed.connect(_set_workday_hours.bind(hours))
+		labour_controls.add_child(day_button)
+	var night_button := CheckButton.new()
+	night_button.text = "Night shifts"
+	night_button.tooltip_text = "Night shifts increase output and reduce wellbeing"
+	night_button.toggled.connect(_set_night_shifts)
+	labour_controls.add_child(night_button)
+	
+	var close_btn := Button.new()
+	close_btn.text = "Close Menu"
+	close_btn.position = Vector2(16, 405)
+	close_btn.size = Vector2(272, 28)
+	close_btn.pressed.connect(_close_context_menus)
+	campfire_menu.add_child(close_btn)
+
+
+func _show_campfire_menu() -> void:
+	_close_context_menus()
+	selected_builder = null
+	campfire_menu.visible = true
+	_refresh_campfire_menu()
+
+
+func _refresh_campfire_menu() -> void:
+	if selected_campfire == null:
+		return
+	var era_str := _era_name()
+	campfire_menu_title.text = "Campfire (Era: %s)" % era_str
+	
+	var req_text := ""
+	var next_era := SettlementState.Era.TENT
+	var can_advance := false
+	
+	var housing_slots := _total_housing_slots()
+	
+	match settlement.era:
+		SettlementState.Era.TENT:
+			next_era = SettlementState.Era.EARTH
+			var has_cf := settlement.has_building("campfire")
+			var has_mkt := settlement.has_building("trade_tent")
+			var has_ct := settlement.has_building("craft_tent")
+			var pop_ok := housing_slots >= citizens.size()
+			var food_ok := food >= citizens.size()
+			var water_ok := water >= citizens.size()
+			var trade_ok := settlement.trade_sales >= 1
+			var tools_ok := settlement._has_tools(["axe", "hand_saw", "shovel", "bucket"])
+			
+			req_text = "Requirements for Earth Era:\n"
+			req_text += "- Campfire built: %s\n" % ("Yes" if has_cf else "No")
+			req_text += "- Trade tent built: %s\n" % ("Yes" if has_mkt else "No")
+			req_text += "- Craft tent built: %s\n" % ("Yes" if has_ct else "No")
+			req_text += "- Housing slots (needs %d): %d (%s)\n" % [citizens.size(), housing_slots, "OK" if pop_ok else "Need more"]
+			req_text += "- Food (needs %d): %d (%s)\n" % [citizens.size(), food, "OK" if food_ok else "Need more"]
+			req_text += "- Water (needs %d): %d (%s)\n" % [citizens.size(), water, "OK" if water_ok else "Need more"]
+			req_text += "- Trade sales (needs 1): %d (%s)\n" % [settlement.trade_sales, "OK" if trade_ok else "No sales"]
+			req_text += "- Tools (axe, saw, shovel, bucket): %s\n" % ("OK" if tools_ok else "Missing")
+			can_advance = settlement.can_advance_to(next_era, citizens.size(), housing_slots)
+		
+		SettlementState.Era.EARTH:
+			next_era = SettlementState.Era.CLAY
+			var has_smithy := settlement.has_building("smithy")
+			var has_mkt := settlement.has_building("earth_market")
+			var pop_ok := housing_slots >= citizens.size()
+			var clay_ok := settlement.clay >= 5
+			var money_ok := settlement.money >= 5
+			var trade_ok := settlement.trade_sales >= 3
+			var shovel_ok := settlement._has_tools(["shovel"])
+			
+			req_text = "Requirements for Clay Era:\n"
+			req_text += "- Smithy built: %s\n" % ("Yes" if has_smithy else "No")
+			req_text += "- Earth market built: %s\n" % ("Yes" if has_mkt else "No")
+			req_text += "- Housing slots (needs %d): %d (%s)\n" % [citizens.size(), housing_slots, "OK" if pop_ok else "Need more"]
+			req_text += "- Clay (needs 5): %d (%s)\n" % [settlement.clay, "OK" if clay_ok else "Need more"]
+			req_text += "- Money (needs 5): %d (%s)\n" % [settlement.money, "OK" if money_ok else "Need more"]
+			req_text += "- Trade sales (needs 3): %d (%s)\n" % [settlement.trade_sales, "OK" if trade_ok else "Need more"]
+			req_text += "- Tool Shovel owned: %s\n" % ("Yes" if shovel_ok else "No")
+			can_advance = settlement.can_advance_to(next_era, citizens.size(), housing_slots)
+			
+		SettlementState.Era.CLAY:
+			next_era = SettlementState.Era.WOOD
+			var has_mkt := settlement.has_building("clay_market")
+			var water_ok := water >= citizens.size()
+			var logs_ok := settlement.logs >= 10
+			var money_ok := settlement.money >= 10
+			var kit_ok := bool(settlement.tools.sawmill_kit)
+			var has_sawmill := settlement.has_building("sawmill")
+			
+			req_text = "Requirements for Wood Era:\n"
+			req_text += "- Clay market built: %s\n" % ("Yes" if has_mkt else "No")
+			req_text += "- Sawmill built: %s\n" % ("Yes" if has_sawmill else "No")
+			req_text += "- Water (needs %d): %d (%s)\n" % [citizens.size(), water, "OK" if water_ok else "Need more"]
+			req_text += "- Logs (needs 10): %d (%s)\n" % [settlement.logs, "OK" if logs_ok else "Need more"]
+			req_text += "- Money (needs 10): %d (%s)\n" % [settlement.money, "OK" if money_ok else "Need more"]
+			req_text += "- Sawmill kit owned: %s\n" % ("Yes" if kit_ok else "No")
+			can_advance = settlement.can_advance_to(next_era, citizens.size(), housing_slots)
+			
+		SettlementState.Era.WOOD:
+			next_era = SettlementState.Era.BRICK
+			var has_bf := settlement.has_building("brick_factory")
+			var clay_ok := settlement.clay >= 20
+			var has_mkt := settlement.has_building("wood_market")
+			
+			req_text = "Requirements for Brick Era:\n"
+			req_text += "- Brick kiln built: %s\n" % ("Yes" if has_bf else "No")
+			req_text += "- Wood market built: %s\n" % ("Yes" if has_mkt else "No")
+			req_text += "- Clay (needs 20): %d (%s)\n" % [settlement.clay, "OK" if clay_ok else "Need more"]
+			can_advance = settlement.can_advance_to(next_era, citizens.size(), housing_slots)
+			
+		SettlementState.Era.BRICK:
+			req_text = "Maximum era reached! Your settlement is fully advanced."
+			can_advance = false
+			
+	campfire_requirements_label.text = req_text
+	campfire_advance_button.disabled = not can_advance
+
+
+func _on_campfire_advance_pressed() -> void:
+	if selected_campfire == null:
+		return
+	var housing_slots := _total_housing_slots()
+	var next_era := SettlementState.Era.TENT
+	match settlement.era:
+		SettlementState.Era.TENT: next_era = SettlementState.Era.EARTH
+		SettlementState.Era.EARTH: next_era = SettlementState.Era.CLAY
+		SettlementState.Era.CLAY: next_era = SettlementState.Era.WOOD
+		SettlementState.Era.WOOD: next_era = SettlementState.Era.BRICK
+	
+	if settlement.advance_era(next_era, citizens.size(), housing_slots):
+		_update_interface("Advanced to the %s Era! New buildings unlocked." % _era_name())
+		_refresh_campfire_menu()
+		_refresh_build_menu()
+	else:
+		_update_interface("Failed to advance era. Double-check requirements.")
+
+
+func _create_market_menu(ui: CanvasLayer) -> void:
+	market_menu = Panel.new()
+	market_menu.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	market_menu.offset_left = -324.0
+	market_menu.offset_top = -650.0
+	market_menu.offset_right = -20.0
+	market_menu.offset_bottom = -20.0
+	market_menu.visible = false
+	ui.add_child(market_menu)
+	
+	market_menu_title = Label.new()
+	market_menu_title.position = Vector2(16, 14)
+	market_menu_title.size = Vector2(272, 70)
+	market_menu_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	market_menu.add_child(market_menu_title)
+
+
+func _show_market_menu() -> void:
+	_close_context_menus()
+	selected_builder = null
+	market_menu.visible = true
+	_refresh_market_menu()
+
+
+func _refresh_market_menu() -> void:
+	if selected_market == null:
+		return
+	var market_type: String = selected_market.get_meta("building_type", "trade_tent")
+	market_menu_title.text = "%s Menu\nMoney: %d coins\nTrade Sales: %d" % [market_type.capitalize().replace("_", " "), settlement.money, settlement.trade_sales]
+	
+	# Clear previous buttons except title
+	for child in market_menu.get_children():
+		if child != market_menu_title:
+			child.queue_free()
+			
+	var y_offset := 80.0
+	
+	var sell_items := []
+	var buy_items := []
+	
+	sell_items.append(["branches", 1])
+	sell_items.append(["grass", 1])
+	buy_items.append(["axe", 15])
+	buy_items.append(["hand_saw", 15])
+	
+	if market_type in ["earth_market", "clay_market", "wood_market", "brick_market"]:
+		sell_items.append(["soil", 1])
+		buy_items.append(["shovel", 15])
+		buy_items.append(["bucket", 15])
+		
+	if market_type in ["clay_market", "wood_market", "brick_market"]:
+		sell_items.append(["clay", 2])
+		
+	if market_type in ["wood_market", "brick_market"]:
+		sell_items.append(["wood", 2])
+		sell_items.append(["boards", 3])
+		buy_items.append(["sawmill_kit", 30])
+		
+	if market_type == "brick_market":
+		sell_items.append(["bricks", 4])
+		
+	for item in sell_items:
+		var res: String = item[0]
+		var price: int = item[1]
+		var btn := Button.new()
+		btn.text = "Sell 5 %s (+%d Coins)" % [res, price * 5]
+		btn.position = Vector2(16, y_offset)
+		btn.size = Vector2(272, 28)
+		btn.pressed.connect(_sell_resource.bind(res, 5, price))
+		market_menu.add_child(btn)
+		y_offset += 32.0
+		
+	y_offset += 10.0
+	
+	for item in buy_items:
+		var tool_name: String = item[0]
+		var price: int = item[1]
+		var btn := Button.new()
+		btn.text = "Buy %s (%d Coins)" % [tool_name.replace("_", " "), price]
+		btn.position = Vector2(16, y_offset)
+		btn.size = Vector2(272, 28)
+		btn.pressed.connect(_buy_tool.bind(tool_name, price))
+		market_menu.add_child(btn)
+		y_offset += 32.0
+
+	y_offset += 10.0
+	
+	var close_btn := Button.new()
+	close_btn.text = "Close Menu"
+	close_btn.position = Vector2(16, y_offset)
+	close_btn.size = Vector2(272, 28)
+	close_btn.pressed.connect(_close_context_menus)
+	market_menu.add_child(close_btn)
+
+
+func _sell_resource(resource_type: String, quantity: int, unit_price: int) -> void:
+	if selected_market == null:
+		return
+	if settlement.sell(resource_type, quantity, unit_price):
+		_update_interface("Sold %d %s for %d coins." % [quantity, resource_type, quantity * unit_price])
+		_refresh_market_menu()
+	else:
+		_update_interface("Not enough %s to sell." % resource_type)
+
+
+func _buy_tool(tool_id: String, price: int) -> void:
+	if selected_market == null:
+		return
+	if settlement.buy_tool(tool_id, price):
+		_update_interface("Bought %s for %d coins." % [tool_id.replace("_", " "), price])
+		_refresh_market_menu()
+	else:
+		_update_interface("Cannot buy %s. Check money or check if already owned." % tool_id.replace("_", " "))

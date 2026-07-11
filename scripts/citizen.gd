@@ -740,6 +740,10 @@ func idle() -> void:
 
 func assign_home(next_home: Node3D) -> void:
 	home = next_home
+	if is_instance_valid(home) and home.has_meta("is_tent"):
+		add_debuff("tent", 15.0)
+	else:
+		remove_debuff("tent")
 
 func go_home() -> void:
 	if not is_player_controlled and is_instance_valid(home):

@@ -33,7 +33,7 @@ func _test_settlement_economy() -> void:
 
 func _test_progression_and_volunteers() -> void:
 	var state := SettlementState.new()
-	state.buildings = {"campfire": 1, "craft_tent": 1}
+	state.buildings = {"campfire": 1, "trade_tent": 1, "craft_tent": 1}
 	state.food = 4
 	state.water = 4
 	state.trade_sales = 1
@@ -41,6 +41,15 @@ func _test_progression_and_volunteers() -> void:
 		state.tools[tool_id] = tool_id != "sawmill_kit"
 	assert(state.can_advance_to(SettlementState.Era.EARTH, 4, 4))
 	assert(state.advance_era(SettlementState.Era.EARTH, 4, 4))
+
+	state.buildings = {"smithy": 1, "earth_market": 1}
+	state.clay = 5
+	state.money = 10
+	state.trade_sales = 3
+	state.tools["shovel"] = true
+	assert(state.can_advance_to(SettlementState.Era.CLAY, 4, 4))
+	assert(state.advance_era(SettlementState.Era.CLAY, 4, 4))
+
 	assert(SettlementRulesScript.volunteer_can_arrive(1, 2, 60.0))
 	assert(not SettlementRulesScript.volunteer_can_arrive(0, 2, 60.0))
 	assert(SettlementRulesScript.should_volunteer_leave(3))

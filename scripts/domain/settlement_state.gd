@@ -4,7 +4,7 @@ extends RefCounted
 ## Persistent, scene-free settlement economy. All progression gates live here so
 ## UI and simulation code cannot accidentally create a second rule set.
 
-enum Era { TENT, EARTH, WOOD, BRICK }
+enum Era { TENT, EARTH, CLAY, WOOD, BRICK }
 
 var era := Era.TENT
 var money := 20
@@ -109,11 +109,13 @@ func sell(resource_type: String, quantity: int, unit_price: int) -> bool:
 func can_advance_to(next_era: Era, population: int, housing_slots: int) -> bool:
 	match next_era:
 		Era.EARTH:
-			return era == Era.TENT and has_building("campfire") and housing_slots >= population and food >= population and water >= population and has_building("craft_tent") and trade_sales >= 1 and _has_tools(["axe", "hand_saw", "shovel", "bucket"])
+			return era == Era.TENT and has_building("campfire") and has_building("trade_tent") and housing_slots >= population and food >= population and water >= population and has_building("craft_tent") and trade_sales >= 1 and _has_tools(["axe", "hand_saw", "shovel", "bucket"])
+		Era.CLAY:
+			return era == Era.EARTH and has_building("smithy") and has_building("earth_market") and housing_slots >= population and clay >= 5 and money >= 5 and trade_sales >= 3 and _has_tools(["shovel"])
 		Era.WOOD:
-			return era == Era.EARTH and has_building("smithy") and water >= population and logs >= 4 and money >= 1 and bool(tools.sawmill_kit) and has_building("sawmill")
+			return era == Era.CLAY and has_building("clay_market") and water >= population and logs >= 10 and money >= 10 and bool(tools.sawmill_kit) and has_building("sawmill")
 		Era.BRICK:
-			return era == Era.WOOD and has_building("brick_factory") and clay >= 1
+			return era == Era.WOOD and has_building("brick_factory") and clay >= 20 and has_building("wood_market")
 	return false
 
 
