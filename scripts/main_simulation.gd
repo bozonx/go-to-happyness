@@ -1,8 +1,10 @@
 extends Node3D
 
 
-const BOARD_CELLS := 12
-const CELL_SIZE := 2.0
+const BOARD_CELLS := 48
+const CELL_SIZE := BuildingBlueprints.BLOCK_SIZE
+const BUILDING_CLEARANCE_BLOCKS := 3.0
+const MAX_BUILD_SLOPE := 0.35
 const STARTING_WOOD := 30
 const WAREHOUSE_COST := 10
 const SAWMILL_COST := 10
@@ -19,9 +21,9 @@ const PLAYER_SPEED := 4.2
 const PLAYER_SPRINT_MULTIPLIER := 1.8
 const PLAYER_JUMP_VELOCITY := 6.5
 const PLAYER_GRAVITY := 18.0
-const PLAYER_EYE_HEIGHT := 1.18
+const PLAYER_EYE_HEIGHT := 1.65
 const HARVEST_DURATION := 1.25
-const INTERACTION_RANGE := CELL_SIZE
+const INTERACTION_RANGE := 2.25
 const POCKET_WOOD_CAPACITY := 8
 const DIG_RADIUS := 2.2
 const DIG_REACH := 6.0
@@ -97,6 +99,7 @@ var tent_dismantle_progress := -1.0
 var voxel_terrain: VoxelLodTerrain
 var voxel_tool: VoxelTool
 var building_positions: Array[Vector3] = []
+var building_footprints: Array[Dictionary] = []
 var selected_school: Node3D
 var school_menu: Panel
 var school_menu_title: Label
@@ -562,7 +565,7 @@ func _create_voxel_terrain() -> void:
 func _create_selection_marker() -> void:
 	selection_marker = MeshInstance3D.new()
 	var marker_mesh := BoxMesh.new()
-	marker_mesh.size = Vector3(1.7, 0.04, 1.7)
+	marker_mesh.size = Vector3(1.0, 0.04, 1.0)
 	selection_marker.mesh = marker_mesh
 	selection_material = StandardMaterial3D.new()
 	selection_material.albedo_color = Color(0.95, 0.79, 0.24, 0.55)
@@ -611,15 +614,16 @@ func _create_starting_tent() -> void:
 	tent = Node3D.new()
 	tent.position = _cell_center(tent_cell)
 	building_positions.append(tent.position)
+	building_footprints.append({"center": tent.position, "footprint": Vector2i(3, 3), "node": tent})
 	tent.set_meta("is_tent", true)
 	placed_buildings[tent_cell] = "tent"
 	house_cells[tent_cell] = true
 	add_child(tent)
 	var base := MeshInstance3D.new()
 	var base_mesh := PrismMesh.new()
-	base_mesh.size = Vector3(1.7, 1.25, 1.55)
+	base_mesh.size = Vector3(3.0, 2.2, 3.0)
 	base.mesh = base_mesh
-	base.position.y = 0.63
+	base.position.y = 1.1
 	base.rotation_degrees.y = 90.0
 	var tent_material := StandardMaterial3D.new()
 	tent_material.albedo_color = Color("c7a96a")
@@ -629,9 +633,9 @@ func _create_starting_tent() -> void:
 	selector.add_to_group("house_selector")
 	var shape := CollisionShape3D.new()
 	var box := BoxShape3D.new()
-	box.size = Vector3(1.7, 1.5, 1.6)
+	box.size = Vector3(3.0, 2.2, 3.0)
 	shape.shape = box
-	shape.position.y = 0.75
+	shape.position.y = 1.1
 	selector.add_child(shape)
 	tent.add_child(selector)
 
@@ -1254,14 +1258,18 @@ func _terrain_point_at_screen_position(screen_position: Vector2) -> Variant:
 	return hit.position as Vector3
 
 func _move_selection(world_position: Vector3) -> void:
-	selected_world_position = world_position
-	selected_cell = _placement_key(world_position)
-	selection_marker.position = world_position + Vector3(0.0, 0.04, 0.0)
+	selected_world_position = _snapped_build_position(world_position) if not build_mode.is_empty() else world_position
+	selected_cell = _placement_key(selected_world_position)
+	selection_marker.position = selected_world_position + Vector3(0.0, 0.04, 0.0)
+	if not build_mode.is_empty():
+		var footprint: Vector2i = BuildingBlueprints.get_blueprint(build_mode).footprint
+		(selection_marker.mesh as BoxMesh).size = Vector3(footprint.x, 0.04, footprint.y)
 	if selected_builder != null and not build_mode.is_empty():
-		selection_material.albedo_color = Color(0.25, 0.85, 0.37, 0.55) if _can_place(world_position) else Color(0.9, 0.2, 0.18, 0.6)
+		selection_material.albedo_color = Color(0.25, 0.85, 0.37, 0.55) if _can_place(selected_world_position) else Color(0.9, 0.2, 0.18, 0.6)
 
 
 func _place_building(world_position: Vector3) -> void:
+	world_position = _snapped_build_position(world_position)
 	if not _can_place(world_position):
 		_update_interface("Construction is not allowed at this point.")
 		return
@@ -1273,6 +1281,8 @@ func _place_building(world_position: Vector3) -> void:
 	wood -= cost
 	placed_buildings[cell] = build_mode
 	building_positions.append(world_position)
+	var blueprint := BuildingBlueprints.get_blueprint(build_mode)
+	building_footprints.append({"center": world_position, "footprint": blueprint.footprint, "node": null})
 	_create_construction_site(cell, build_mode, world_position)
 	build_mode = ""
 	selection_marker.visible = false
@@ -1281,7 +1291,50 @@ func _place_building(world_position: Vector3) -> void:
 	_update_interface("Construction started. The progress bar shows completion.")
 
 func _can_place(world_position: Vector3) -> bool:
-	return _is_clear_of_objects(world_position, 1.8)
+	if build_mode.is_empty():
+		return false
+	var footprint: Vector2i = BuildingBlueprints.get_blueprint(build_mode).footprint
+	return _is_footprint_level(world_position, footprint) and _is_footprint_clear(world_position, footprint)
+
+func _is_footprint_clear(world_position: Vector3, footprint: Vector2i) -> bool:
+	var half := Vector2(footprint.x, footprint.y) * 0.5
+	for record in building_footprints:
+		var other_center: Vector3 = record.center
+		var other_footprint: Vector2i = record.footprint
+		var other_half := Vector2(other_footprint.x, other_footprint.y) * 0.5
+		if absf(world_position.x - other_center.x) < half.x + other_half.x + BUILDING_CLEARANCE_BLOCKS and absf(world_position.z - other_center.z) < half.y + other_half.y + BUILDING_CLEARANCE_BLOCKS:
+			return false
+	for tree_position in tree_positions:
+		if absf(world_position.x - tree_position.x) < half.x + 0.5 and absf(world_position.z - tree_position.z) < half.y + 0.5:
+			return false
+	for site in dig_sites:
+		if absf(world_position.x - site.node.global_position.x) < half.x + 1.0 and absf(world_position.z - site.node.global_position.z) < half.y + 1.0:
+			return false
+	return true
+
+func _is_footprint_level(world_position: Vector3, footprint: Vector2i) -> bool:
+	var heights: Array[float] = []
+	var half_x := footprint.x * 0.5 - 0.25
+	var half_z := footprint.y * 0.5 - 0.25
+	for offset in [Vector2(-half_x, -half_z), Vector2(half_x, -half_z), Vector2(-half_x, half_z), Vector2(half_x, half_z), Vector2.ZERO]:
+		var height := _terrain_height_at(world_position.x + offset.x, world_position.z + offset.y, world_position.y)
+		if is_nan(height):
+			return false
+		heights.append(height)
+	return heights.max() - heights.min() <= MAX_BUILD_SLOPE
+
+func _terrain_height_at(x: float, z: float, near_y: float) -> float:
+	var from := Vector3(x, near_y + 12.0, z)
+	var query := PhysicsRayQueryParameters3D.create(from, Vector3(x, near_y - 12.0, z))
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	return NAN if hit.is_empty() else float(hit.position.y)
+
+func _snapped_build_position(world_position: Vector3) -> Vector3:
+	var snapped := Vector3(roundf(world_position.x), world_position.y, roundf(world_position.z))
+	var ground_height := _terrain_height_at(snapped.x, snapped.z, world_position.y)
+	if not is_nan(ground_height):
+		snapped.y = ground_height
+	return snapped
 
 func _is_clear_of_objects(world_position: Vector3, minimum_distance: float) -> bool:
 	for occupied_position in building_positions + tree_positions:
@@ -1293,21 +1346,15 @@ func _is_clear_of_objects(world_position: Vector3, minimum_distance: float) -> b
 	return true
 
 func _placement_key(world_position: Vector3) -> Vector2i:
-	return Vector2i(roundi(world_position.x * 4.0), roundi(world_position.z * 4.0))
+	return Vector2i(roundi(world_position.x), roundi(world_position.z))
 
 func _create_construction_site(cell: Vector2i, building_type: String, position_on_board: Vector3) -> void:
 	var site := Node3D.new()
 	site.position = position_on_board
+	site.set_meta("building_type", building_type)
 	add_child(site)
-	var foundation := MeshInstance3D.new()
-	var foundation_mesh := BoxMesh.new()
-	foundation_mesh.size = Vector3(1.7, 0.12, 1.7)
-	foundation.mesh = foundation_mesh
-	foundation.position.y = 0.06
-	var foundation_material := StandardMaterial3D.new()
-	foundation_material.albedo_color = Color("736d63")
-	foundation.material_override = foundation_material
-	site.add_child(foundation)
+	var blueprint := BuildingBlueprints.get_blueprint(building_type)
+	site.set_meta("footprint", blueprint.footprint)
 	var bar_back := MeshInstance3D.new()
 	var bar_mesh := BoxMesh.new()
 	bar_mesh.size = Vector3(1.45, 0.11, 0.12)
@@ -1325,7 +1372,7 @@ func _create_construction_site(cell: Vector2i, building_type: String, position_o
 	fill.material_override = fill_material
 	fill.scale.x = 0.01
 	site.add_child(fill)
-	construction_sites.append({"cell": cell, "type": building_type, "position": position_on_board, "node": site, "fill": fill, "progress": 0.0})
+	construction_sites.append({"cell": cell, "type": building_type, "position": position_on_board, "node": site, "fill": fill, "progress": 0.0, "blueprint": blueprint, "modules_built": 0})
 	_update_workers()
 
 func _update_construction(delta: float) -> void:
@@ -1336,37 +1383,69 @@ func _update_construction(delta: float) -> void:
 		if index == 0:
 			status_label.text = "Building %s: %d builder(s), %.1fx speed." % [site.type, _builder_count(site.node), builder_power]
 		site.progress = progress
+		var modules: Array = site.blueprint.modules
+		var target_module_count := mini(modules.size(), floori(progress * modules.size()))
+		while site.modules_built < target_module_count:
+			site.node.add_child(BuildingBlueprints.create_module(modules[site.modules_built]))
+			site.modules_built += 1
 		var fill: MeshInstance3D = site.fill
 		fill.scale.x = maxf(0.01, progress)
 		fill.position.x = -0.725 + 0.725 * progress
 		construction_sites[index] = site
 		if progress >= 1.0:
-			site.node.queue_free()
+			if is_instance_valid(fill):
+				fill.get_parent().remove_child(fill)
+				fill.queue_free()
+			for child in site.node.get_children():
+				if child is MeshInstance3D and child != fill:
+					child.queue_free()
 			construction_sites.remove_at(index)
-			_complete_building(site.cell, site.type, site.position)
+			_complete_building(site.cell, site.type, site.position, site.node, site.blueprint)
 
-func _complete_building(cell: Vector2i, building_type: String, position_on_board: Vector3) -> void:
+func _complete_building(cell: Vector2i, building_type: String, position_on_board: Vector3, building: Node3D, blueprint: Dictionary) -> void:
 	match building_type:
 		"warehouse":
 			warehouse_positions.append(position_on_board)
-			_create_warehouse(position_on_board)
 		"sawmill":
 			sawmill_positions.append(position_on_board)
-			_create_sawmill(position_on_board)
 		"farm":
 			farm_positions.append(position_on_board)
-			_create_farm(position_on_board)
 		"house":
 			completed_house_count += 1
-			house_cells[cell] = true
-			_create_house(position_on_board)
+			building.set_meta("spawn_slots", 2)
+			_add_building_selector(building, "house_selector", blueprint.footprint)
 		"canteen":
-			_create_canteen(position_on_board)
+			canteen = building
+			canteen_position = position_on_board
 		"school":
 			school_positions.append(position_on_board)
-			_create_school(position_on_board)
+			_add_building_selector(building, "school_selector", blueprint.footprint)
+	for record in building_footprints:
+		if record.center == position_on_board and record.node == null:
+			record.node = building
+			break
+	_register_navigation_footprint(position_on_board, blueprint)
 	_update_workers()
 	_update_interface("%s construction completed." % building_type.capitalize())
+
+func _add_building_selector(building: Node3D, group_name: String, footprint: Vector2i) -> void:
+	var selector := Area3D.new()
+	selector.add_to_group(group_name)
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(footprint.x - 1.0, 2.5, footprint.y - 1.0)
+	collision.shape = shape
+	collision.position.y = 1.5
+	selector.add_child(collision)
+	building.add_child(selector)
+
+func _register_navigation_footprint(center: Vector3, blueprint: Dictionary) -> void:
+	var footprint: Vector2i = blueprint.footprint
+	var min_x := roundi(center.x - (footprint.x - 1) * 0.5)
+	var min_z := roundi(center.z - (footprint.y - 1) * 0.5)
+	for x in range(footprint.x):
+		for z in range(footprint.y):
+			house_cells[Vector2i(min_x + x, min_z + z)] = true
 
 func _create_warehouse(position_on_board: Vector3) -> void:
 	var building := Node3D.new()
@@ -1567,6 +1646,9 @@ func _update_tent_dismantle(delta: float) -> void:
 	if tent_dismantle_progress < 2.0:
 		return
 	building_positions.erase(tent.global_position)
+	for index in range(building_footprints.size() - 1, -1, -1):
+		if building_footprints[index].node == tent:
+			building_footprints.remove_at(index)
 	tent.queue_free()
 	tent = null
 	placed_buildings.erase(tent_cell)

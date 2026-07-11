@@ -10,12 +10,11 @@ signal canteen_delivery_finished(worker: Citizen, amount: int)
 const WALK_SPEED := 2.2
 const WORK_DURATION := 1.4
 const COURIER_WAIT_DURATION := 8.0
-const BUILD_WORK_DISTANCE := 2.0
 const GRAVITY := 18.0
 const AI_JUMP_VELOCITY := 7.6
 const AI_ESCAPE_JUMP_VELOCITY := 9.2
 const STUCK_TIME_BEFORE_JUMP := 0.75
-const NAVIGATION_CELL_SIZE := 2.0
+const NAVIGATION_CELL_SIZE := 1.0
 const UNIT_SEPARATION_DISTANCE := 0.72
 const UNIT_SEPARATION_STRENGTH := 1.35
 const CONSTRUCTION_SLOT_SPACING := 0.42
@@ -84,10 +83,10 @@ func _setup_collision() -> void:
 	floor_stop_on_slope = true
 	var body_collision := CollisionShape3D.new()
 	var body_shape := CapsuleShape3D.new()
-	body_shape.radius = 0.28
-	body_shape.height = 1.25
+	body_shape.radius = 0.32
+	body_shape.height = 1.75
 	body_collision.shape = body_shape
-	body_collision.position.y = 0.63
+	body_collision.position.y = 0.875
 	add_child(body_collision)
 
 func _setup_selector() -> void:
@@ -97,10 +96,10 @@ func _setup_selector() -> void:
 	selector.collision_mask = 0
 	var selector_shape := CollisionShape3D.new()
 	var capsule_shape := CapsuleShape3D.new()
-	capsule_shape.radius = 0.38
-	capsule_shape.height = 1.3
+	capsule_shape.radius = 0.4
+	capsule_shape.height = 1.8
 	selector_shape.shape = capsule_shape
-	selector_shape.position.y = 0.65
+	selector_shape.position.y = 0.9
 	selector.add_child(selector_shape)
 	add_child(selector)
 
@@ -111,10 +110,10 @@ func _setup_visuals() -> void:
 func _setup_body_mesh() -> void:
 	var body := MeshInstance3D.new()
 	var body_mesh := CapsuleMesh.new()
-	body_mesh.radius = 0.22
-	body_mesh.height = 0.78
+	body_mesh.radius = 0.25
+	body_mesh.height = 1.15
 	body.mesh = body_mesh
-	body.position.y = 0.39
+	body.position.y = 0.65
 	body_material = StandardMaterial3D.new()
 	body_material.albedo_color = Color("5d92b2")
 	body.material_override = body_material
@@ -123,10 +122,10 @@ func _setup_body_mesh() -> void:
 func _setup_head_mesh() -> void:
 	var head := MeshInstance3D.new()
 	var head_mesh := SphereMesh.new()
-	head_mesh.radius = 0.24
-	head_mesh.height = 0.48
+	head_mesh.radius = 0.25
+	head_mesh.height = 0.5
 	head.mesh = head_mesh
-	head.position.y = 0.92
+	head.position.y = 1.5
 	var head_material := StandardMaterial3D.new()
 	head_material.albedo_color = Color("b8d8c1")
 	head.material_override = head_material
@@ -405,7 +404,7 @@ func assign_construction(site: Node3D) -> void:
 	if is_player_controlled:
 		return
 	construction_site = site
-	construction_position = _work_position_for(site.global_position)
+	construction_position = _work_position_for(site)
 	movement_path.clear()
 	active_role = "construction"
 	state = State.CONSTRUCTING
@@ -502,13 +501,17 @@ func is_building_site(site: Node3D) -> bool:
 func setup_navigation(next_pathfinder: Callable) -> void:
 	pathfinder = next_pathfinder
 
-func _work_position_for(site_position: Vector3) -> Vector3:
+func _work_position_for(site: Node3D) -> Vector3:
+	var site_position := site.global_position
+	var footprint: Vector2i = site.get_meta("footprint", Vector2i(3, 3))
 	var offset := global_position - site_position
 	offset.y = 0.0
 	var slot := float(int(get_instance_id() % 3) - 1) * CONSTRUCTION_SLOT_SPACING
 	if absf(offset.x) > absf(offset.z):
-		return site_position + Vector3(BUILD_WORK_DISTANCE if offset.x >= 0.0 else -BUILD_WORK_DISTANCE, 0.0, slot)
-	return site_position + Vector3(slot, 0.0, BUILD_WORK_DISTANCE if offset.z >= 0.0 else -BUILD_WORK_DISTANCE)
+		var x_distance := footprint.x * 0.5 + 0.65
+		return site_position + Vector3(x_distance if offset.x >= 0.0 else -x_distance, 0.0, slot)
+	var z_distance := footprint.y * 0.5 + 0.65
+	return site_position + Vector3(slot, 0.0, z_distance if offset.z >= 0.0 else -z_distance)
 
 func setup_specialization(next_specialization: String) -> void:
 	specialization = next_specialization
