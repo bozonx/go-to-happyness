@@ -67,6 +67,11 @@ var school_position := Vector3.ZERO
 
 func _ready() -> void:
 	add_to_group("citizens")
+	_setup_collision()
+	_setup_selector()
+	_setup_visuals()
+
+func _setup_collision() -> void:
 	# Bodies collide with terrain, but not with each other. Local steering keeps
 	# citizens readable without allowing a crowded cell to block navigation.
 	collision_layer = 2
@@ -84,6 +89,8 @@ func _ready() -> void:
 	body_collision.shape = body_shape
 	body_collision.position.y = 0.63
 	add_child(body_collision)
+
+func _setup_selector() -> void:
 	var selector := Area3D.new()
 	selector.add_to_group("citizen_selector")
 	selector.collision_layer = 4
@@ -97,6 +104,11 @@ func _ready() -> void:
 	selector.add_child(selector_shape)
 	add_child(selector)
 
+func _setup_visuals() -> void:
+	_setup_body_mesh()
+	_setup_head_mesh()
+
+func _setup_body_mesh() -> void:
 	var body := MeshInstance3D.new()
 	var body_mesh := CapsuleMesh.new()
 	body_mesh.radius = 0.22
@@ -108,6 +120,7 @@ func _ready() -> void:
 	body.material_override = body_material
 	add_child(body)
 
+func _setup_head_mesh() -> void:
 	var head := MeshInstance3D.new()
 	var head_mesh := SphereMesh.new()
 	head_mesh.radius = 0.24
@@ -138,95 +151,154 @@ func _physics_process(delta: float) -> void:
 	_update_satisfaction(delta)
 	match state:
 		State.TO_TREE:
-			if _move_to(source_position, delta):
-				state = State.CHOPPING
-				work_time = WORK_DURATION / get_efficiency(active_role)
+			_process_to_source(delta)
 		State.CHOPPING:
-			if _work(delta):
-				state = State.TO_SAWMILL
+			_process_source_work(delta)
 		State.TO_SAWMILL:
-			if _move_to(workplace_position, delta):
-				state = State.SAWING
-				work_time = WORK_DURATION / get_efficiency(active_role)
+			_process_to_workplace(delta)
 		State.SAWING:
-			if _work(delta):
-				carried_amount = 2 if get_efficiency(active_role) >= 1.05 else 1
-				if uses_courier:
-					resource_ready.emit(self, resource_type, carried_amount)
-					courier_wait_time = COURIER_WAIT_DURATION
-					state = State.WAITING_COURIER
-				else:
-					state = State.TO_WAREHOUSE
+			_process_workplace_work(delta)
 		State.TO_WAREHOUSE:
-			if _move_to(warehouse_position, delta):
-				state = State.IDLE
-				resource_delivered.emit(self, resource_type, carried_amount)
+			_process_resource_delivery(delta)
 		State.WAITING_COURIER:
-			courier_wait_time -= delta
-			if courier_wait_time <= 0.0:
-				pending_resources[resource_type] = maxi(0, int(pending_resources.get(resource_type, 0)) - carried_amount)
-				state = State.TO_WAREHOUSE
+			_process_courier_wait(delta)
 		State.CONSTRUCTING:
-			if is_instance_valid(construction_site):
-				_move_to(construction_position, delta)
-			else:
-				state = State.IDLE
-				construction_site = null
+			_process_construction(delta)
 		State.EXCAVATING:
-			if is_instance_valid(assigned_dig_site):
-				if _move_to(assigned_dig_site.global_position, delta):
-					if work_time <= 0.0:
-						work_time = WORK_DURATION / get_efficiency("excavation")
-					if _work(delta):
-						excavation_cycle.emit(self, assigned_dig_site, get_efficiency("excavation"))
-						work_time = 0.0
-			else:
-				idle()
+			_process_excavation(delta)
 		State.COURIER_TO_WORKER:
-			if is_instance_valid(courier_target) and _move_to(courier_target.global_position, delta):
-				var cargo := courier_target.take_pending_resource()
-				courier_resource_type = cargo.get("type", "")
-				carried_amount = int(cargo.get("amount", 0))
-				state = State.COURIER_TO_WAREHOUSE if carried_amount > 0 else State.IDLE
+			_process_courier_pickup(delta)
 		State.COURIER_TO_WAREHOUSE:
-			if _move_to(warehouse_position, delta):
-				state = State.IDLE
-				resource_delivered.emit(self, courier_resource_type, carried_amount)
+			_process_courier_delivery(delta)
 		State.TO_HOME:
-			if is_instance_valid(home) and _move_to(home.global_position, delta, true):
-				state = State.RESTING
+			_process_go_home(delta)
 		State.RESTING:
-			satisfaction = minf(get_satisfaction_cap(), satisfaction + delta * 2.2)
-			hunger = maxf(0.0, hunger - delta * 0.25)
+			_process_resting(delta)
 		State.TO_CANTEEN:
-			if _move_to(canteen_position, delta):
-				state = State.EATING
-				meal_time = 1.1
+			_process_go_to_canteen(delta)
 		State.EATING:
-			meal_time -= delta
-			if meal_time <= 0.0:
-				meal_finished.emit(self)
-				state = State.IDLE
+			_process_eating(delta)
 		State.TO_FOOD_PICKUP:
-			if _move_to(warehouse_position, delta):
-				state = State.TO_CANTEEN_DELIVERY
+			_process_food_pickup(delta)
 		State.TO_CANTEEN_DELIVERY:
-			if _move_to(canteen_position, delta):
-				canteen_delivery_finished.emit(self, delivery_amount)
-				delivery_amount = 0
-				state = State.IDLE
+			_process_canteen_delivery(delta)
 		State.TO_CANTEEN_WORK:
-			if _move_to(canteen_position, delta):
-				state = State.IDLE
+			_process_canteen_work(delta)
 		State.TO_SCHOOL:
-			if _move_to(school_position, delta):
-				state = State.STUDYING
-				active_role = "training"
+			_process_go_to_school(delta)
 		State.STUDYING:
 			pass
 		State.TO_SCHOOL_WORK:
-			if _move_to(school_position, delta):
-				state = State.IDLE
+			_process_school_work(delta)
+
+func _process_to_source(delta: float) -> void:
+	if _move_to(source_position, delta):
+		state = State.CHOPPING
+		work_time = WORK_DURATION / get_efficiency(active_role)
+
+func _process_source_work(delta: float) -> void:
+	if _work(delta):
+		state = State.TO_SAWMILL
+
+func _process_to_workplace(delta: float) -> void:
+	if _move_to(workplace_position, delta):
+		state = State.SAWING
+		work_time = WORK_DURATION / get_efficiency(active_role)
+
+func _process_workplace_work(delta: float) -> void:
+	if not _work(delta):
+		return
+	carried_amount = 2 if get_efficiency(active_role) >= 1.05 else 1
+	if uses_courier:
+		resource_ready.emit(self, resource_type, carried_amount)
+		courier_wait_time = COURIER_WAIT_DURATION
+		state = State.WAITING_COURIER
+	else:
+		state = State.TO_WAREHOUSE
+
+func _process_resource_delivery(delta: float) -> void:
+	if _move_to(warehouse_position, delta):
+		state = State.IDLE
+		resource_delivered.emit(self, resource_type, carried_amount)
+
+func _process_courier_wait(delta: float) -> void:
+	courier_wait_time -= delta
+	if courier_wait_time <= 0.0:
+		pending_resources[resource_type] = maxi(0, int(pending_resources.get(resource_type, 0)) - carried_amount)
+		state = State.TO_WAREHOUSE
+
+func _process_construction(delta: float) -> void:
+	if is_instance_valid(construction_site):
+		_move_to(construction_position, delta)
+	else:
+		state = State.IDLE
+		construction_site = null
+
+func _process_excavation(delta: float) -> void:
+	if not is_instance_valid(assigned_dig_site):
+		idle()
+		return
+	if not _move_to(assigned_dig_site.global_position, delta):
+		return
+	if work_time <= 0.0:
+		work_time = WORK_DURATION / get_efficiency("excavation")
+	if _work(delta):
+		excavation_cycle.emit(self, assigned_dig_site, get_efficiency("excavation"))
+		work_time = 0.0
+
+func _process_courier_pickup(delta: float) -> void:
+	if is_instance_valid(courier_target) and _move_to(courier_target.global_position, delta):
+		var cargo := courier_target.take_pending_resource()
+		courier_resource_type = cargo.get("type", "")
+		carried_amount = int(cargo.get("amount", 0))
+		state = State.COURIER_TO_WAREHOUSE if carried_amount > 0 else State.IDLE
+
+func _process_courier_delivery(delta: float) -> void:
+	if _move_to(warehouse_position, delta):
+		state = State.IDLE
+		resource_delivered.emit(self, courier_resource_type, carried_amount)
+
+func _process_go_home(delta: float) -> void:
+	if is_instance_valid(home) and _move_to(home.global_position, delta, true):
+		state = State.RESTING
+
+func _process_resting(delta: float) -> void:
+	satisfaction = minf(get_satisfaction_cap(), satisfaction + delta * 2.2)
+	hunger = maxf(0.0, hunger - delta * 0.25)
+
+func _process_go_to_canteen(delta: float) -> void:
+	if _move_to(canteen_position, delta):
+		state = State.EATING
+		meal_time = 1.1
+
+func _process_eating(delta: float) -> void:
+	meal_time -= delta
+	if meal_time <= 0.0:
+		meal_finished.emit(self)
+		state = State.IDLE
+
+func _process_food_pickup(delta: float) -> void:
+	if _move_to(warehouse_position, delta):
+		state = State.TO_CANTEEN_DELIVERY
+
+func _process_canteen_delivery(delta: float) -> void:
+	if _move_to(canteen_position, delta):
+		canteen_delivery_finished.emit(self, delivery_amount)
+		delivery_amount = 0
+		state = State.IDLE
+
+func _process_canteen_work(delta: float) -> void:
+	if _move_to(canteen_position, delta):
+		state = State.IDLE
+
+func _process_go_to_school(delta: float) -> void:
+	if _move_to(school_position, delta):
+		state = State.STUDYING
+		active_role = "training"
+
+func _process_school_work(delta: float) -> void:
+	if _move_to(school_position, delta):
+		state = State.IDLE
 
 func _move_to(destination: Vector3, delta: float, may_enter_destination_house := false) -> bool:
 	if path_destination.distance_to(destination) > 0.08 or path_allows_destination_house != may_enter_destination_house:
