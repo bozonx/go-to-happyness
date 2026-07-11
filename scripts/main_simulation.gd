@@ -21,10 +21,10 @@ const MATERIALS_FACTORY_COST := 28
 const BRICK_RESEARCH_COST := 15
 const BOARD_RESEARCH_COST := 10
 const BRICK_RESEARCH_DURATION := 20.0
-const POPULATION := 5
+const POPULATION := 4
 const WAREHOUSE_CAPACITY := 50
-const HOUSE_CAPACITY := 2
-const TENT_CAPACITY := 5
+const HOUSE_CAPACITY := 4
+const TENT_CAPACITY := 4
 const CONSTRUCTION_DURATION := 4.0
 const PLAYER_SPEED := 4.2
 const PLAYER_SPRINT_MULTIPLIER := 1.8
@@ -62,11 +62,13 @@ var sawmill_positions: Array[Vector3] = []
 var farm_positions: Array[Vector3] = []
 var school_positions: Array[Vector3] = []
 var park_positions: Array[Vector3] = []
+var leisure_positions: Array[Vector3] = []
 var factories: Array[Node3D] = []
 var brick_construction_unlocked := false
 var brick_research_progress := -1.0
 var brick_research_factory: Node3D
 var tree_positions: Array[Vector3] = []
+var tree_nodes: Dictionary = {}
 var citizens: Array[Citizen] = []
 var camera: Camera3D
 var sun: DirectionalLight3D
@@ -93,6 +95,7 @@ var player_yaw := 0.0
 var player_pitch := -8.0
 var pocket_wood := 0
 var pocket_food := 0
+var pocket_boards := 0
 var interaction_time := 0.0
 var interaction_action := ""
 var interaction_resource := ""
@@ -129,6 +132,10 @@ var materials_factory_menu_title: Label
 var selected_materials_factory: Node3D
 var house_lights: Array[Dictionary] = []
 var house_light_update_minute := -1
+var entrance_lights: Array[OmniLight3D] = []
+var build_category := ""
+var build_buttons: Array[Button] = []
+var role_buttons: Array[Button] = []
 
 
 func _ready() -> void:
@@ -137,7 +144,7 @@ func _ready() -> void:
 	_create_forest()
 	_create_starting_tent()
 	_create_citizens()
-	_update_interface("All five starting workers live in the tent. Resettle them into houses to remove the housing debuff.")
+	_update_interface("All four starting workers live in the tent. Resettle them into houses to remove the housing debuff.")
 
 func _process(delta: float) -> void:
 	if is_first_person:
@@ -355,18 +362,18 @@ func _update_house_lights() -> void:
 	if house_light_update_minute == clock_minute:
 		return
 	house_light_update_minute = clock_minute
-	var evening := hour >= 20 or hour < 2
-	var late_night := hour >= 22 or hour < 2
+	var minute_of_day := hour * 60 + minute
 	for record in house_lights:
 		var light: OmniLight3D = record.light
 		if not is_instance_valid(light):
 			continue
-		if not evening:
-			light.visible = false
-		elif not late_night:
-			light.visible = true
-		elif minute % 15 == 0:
-			light.visible = randf() > 0.35
+		var off_minute: int = record.off_minute
+		# Every home lights up at 20:00. Each household chooses one stable
+		# switch-off time between 22:00 and 02:00, including after midnight.
+		light.visible = minute_of_day >= 20 * 60 and minute_of_day < off_minute if off_minute >= 20 * 60 else minute_of_day >= 20 * 60 or minute_of_day < off_minute
+	for light in entrance_lights:
+		if is_instance_valid(light):
+			light.visible = _is_night()
 
 func _is_night() -> bool:
 	var hour := int(game_minutes) / 60
@@ -827,6 +834,8 @@ func _create_forest() -> void:
 func _create_tree(position_on_board: Vector3) -> void:
 	var tree := Node3D.new()
 	tree.position = position_on_board
+	tree.set_meta("remaining_wood", randi_range(4, 7))
+	tree_nodes[_cell_from_position(position_on_board)] = tree
 	add_child(tree)
 	var trunk := MeshInstance3D.new()
 	var trunk_mesh := CylinderMesh.new()
@@ -887,7 +896,7 @@ func _create_starting_tent() -> void:
 
 func _create_citizens() -> void:
 	for index in range(POPULATION):
-		_add_citizen(Vector3(-1.1 + (index % 3) * 1.1, 0.0, -0.8 + (index / 3) * 1.1))
+		_add_citizen(Vector3(-1.1 + (index % 2) * 1.1, 0.0, -0.8 + (index / 2) * 1.1))
 
 func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void:
 	var citizen := Citizen.new()
@@ -898,6 +907,7 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	citizen.resource_delivered.connect(_on_resource_delivered)
 	citizen.excavation_cycle.connect(_on_excavation_cycle)
 	citizen.resource_ready.connect(_on_resource_ready)
+	citizen.tree_harvested.connect(_on_tree_harvested)
 	citizen.meal_finished.connect(_on_meal_finished)
 	citizen.canteen_delivery_finished.connect(_on_canteen_delivery_finished)
 	citizen.factory_cycle.connect(_on_factory_cycle)
@@ -1000,19 +1010,23 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_role_button("Assign: forestry", "forestry", 164)
 	_add_role_button("Assign: farming", "farming", 198)
 	_add_role_button("Assign: excavation", "excavation", 232)
-	_add_build_button("Warehouse - 10 wood", "warehouse", 290)
-	_add_build_button("Sawmill - 10 wood", "sawmill", 326)
-	_add_build_button("Farm - 12 wood", "farm", 362)
-	_add_build_button("Canteen - 16 wood", "canteen", 398)
-	_add_build_button("House - 12 wood", "house", 434)
-	_add_build_button("School - 18 wood", "school", 470)
-	_add_build_button("Park - 14 wood", "park", 506)
-	_add_build_button("Brick factory - 24 wood", "brick_factory", 542)
-	_add_build_button("Materials factory - 28 wood", "materials_factory", 578)
-	_add_build_button("Recycling factory - bricks", "recycling_factory", 614)
-	_add_build_button("Metal factory - bricks", "metal_factory", 650)
-	_add_build_button("City hall - bricks", "city_hall", 686)
-	_add_build_button("Leisure center - bricks", "leisure_center", 722)
+	_add_build_category_button("Wooden buildings", "wood", 290)
+	_add_build_category_button("Brick buildings", "brick", 326)
+	_add_build_category_back_button()
+	_add_build_button("Warehouse - 10 wood", "warehouse", 370, "wood")
+	_add_build_button("Sawmill - 10 wood", "sawmill", 404, "wood")
+	_add_build_button("Farm - 12 wood", "farm", 438, "wood")
+	_add_build_button("Canteen - 16 wood", "canteen", 472, "wood")
+	_add_build_button("House - 12 wood", "house", 506, "wood")
+	_add_build_button("School - 18 wood", "school", 540, "wood")
+	_add_build_button("Park - 14 wood", "park", 574, "wood")
+	_add_build_button("Brick factory - 24 wood", "brick_factory", 370, "brick")
+	_add_build_button("Materials factory - 28 wood", "materials_factory", 404, "brick")
+	_add_build_button("Recycling factory - bricks", "recycling_factory", 438, "brick")
+	_add_build_button("Metal factory - bricks", "metal_factory", 472, "brick")
+	_add_build_button("City hall - bricks", "city_hall", 506, "brick")
+	_add_build_button("Leisure center - bricks", "leisure_center", 540, "brick")
+	_refresh_build_menu()
 
 func _create_school_menu(ui: CanvasLayer) -> void:
 	school_menu = Panel.new()
@@ -1171,12 +1185,17 @@ func _spawn_house_citizen(specialization: String) -> void:
 	var slots: int = selected_house.get_meta("spawn_slots", 0)
 	if slots <= 0:
 		return
-	var offset := Vector3(-0.45 + (2 - slots) * 0.9, 0.0, -0.85)
-	_add_citizen(selected_house.global_position + offset, specialization)
+	var entrance: Vector3 = selected_house.get_meta("entrance_position", selected_house.global_position + Vector3(0.0, 0.0, 3.5))
+	var spawned := HOUSE_CAPACITY - slots
+	_add_citizen(entrance + Vector3((spawned % 2) * 0.7 - 0.35, 0.0, 0.45 + (spawned / 2) * 0.45), specialization)
 	citizens.back().assign_home(selected_house)
 	citizens.back().remove_debuff("tent")
 	selected_house.set_meta("spawn_slots", slots - 1)
 	_update_workers()
+	if citizens.back().state == Citizen.State.IDLE:
+		var recreation := park_positions + leisure_positions
+		if not recreation.is_empty():
+			citizens.back().go_to_park(recreation[spawned % recreation.size()])
 	_show_house_menu()
 	_update_interface("New %s joined the settlement and received an automatic task." % specialization)
 
@@ -1189,13 +1208,53 @@ func _show_house_menu() -> void:
 		return
 	house_menu_title.text = "House residents\nFree beds: %d/%d" % [slots, HOUSE_CAPACITY]
 
-func _add_build_button(title: String, building_type: String, y_position: float) -> void:
+func _add_build_button(title: String, building_type: String, y_position: float, category: String) -> void:
 	var button := Button.new()
 	button.text = title
 	button.position = Vector2(16, y_position)
 	button.size = Vector2(272, 30)
 	button.pressed.connect(_select_build_mode.bind(building_type))
+	button.set_meta("category", category)
 	build_menu.add_child(button)
+	build_buttons.append(button)
+
+func _add_build_category_button(title: String, category: String, y_position: float) -> void:
+	var button := Button.new()
+	button.text = title
+	button.position = Vector2(16, y_position)
+	button.size = Vector2(272, 30)
+	button.pressed.connect(_open_build_category.bind(category))
+	build_menu.add_child(button)
+	build_buttons.append(button)
+	button.set_meta("category_button", category)
+
+func _add_build_category_back_button() -> void:
+	var button := Button.new()
+	button.text = "Back to categories"
+	button.position = Vector2(16, 290)
+	button.size = Vector2(272, 30)
+	button.pressed.connect(_open_build_category.bind(""))
+	button.set_meta("category_back", true)
+	build_menu.add_child(button)
+	build_buttons.append(button)
+
+func _open_build_category(category: String) -> void:
+	build_category = category
+	_refresh_build_menu()
+	if build_category.is_empty():
+		_show_selected_citizen_menu()
+
+func _refresh_build_menu() -> void:
+	for button in build_buttons:
+		var category_button: String = button.get_meta("category_button", "")
+		if button.get_meta("category_back", false):
+			button.visible = not build_category.is_empty()
+		else:
+			button.visible = build_category.is_empty() and not category_button.is_empty() or not build_category.is_empty() and button.get_meta("category", "") == build_category
+	for button in role_buttons:
+		button.visible = build_category.is_empty()
+	if build_menu_title != null and not build_category.is_empty():
+		build_menu_title.text = "%s buildings\nChoose a building to place." % build_category.capitalize()
 
 func _add_role_button(title: String, role: String, y_position: float) -> void:
 	var button := Button.new()
@@ -1204,6 +1263,7 @@ func _add_role_button(title: String, role: String, y_position: float) -> void:
 	button.size = Vector2(272, 28)
 	button.pressed.connect(_set_manual_role.bind(role))
 	build_menu.add_child(button)
+	role_buttons.append(button)
 
 func _set_manual_role(role: String) -> void:
 	if selected_builder == null:
@@ -1293,6 +1353,22 @@ func _cancel_build_action() -> void:
 	selected_builder = null
 	_update_interface("Construction mode cancelled.")
 
+func _close_context_menus() -> void:
+	build_mode = ""
+	dig_mode = false
+	selection_marker.visible = false
+	is_rotating_camera = false
+	house_menu.visible = false
+	school_menu.visible = false
+	materials_factory_menu.visible = false
+	build_menu.visible = false
+	selected_house = null
+	selected_school = null
+	selected_materials_factory = null
+	selected_builder = null
+	build_category = ""
+	_refresh_build_menu()
+
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.keycode == KEY_R and event.pressed and not event.echo:
@@ -1317,8 +1393,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		_update_camera_position()
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_MIDDLE:
 		is_panning_camera = event.pressed
-	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed and (not build_mode.is_empty() or dig_mode):
-		_cancel_build_action()
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+		_close_context_menus()
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
 		is_rotating_camera = event.pressed
 	elif event is InputEventMouseMotion:
@@ -1343,6 +1419,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			_select_citizen_at(event.position)
 
 func _select_citizen_at(screen_position: Vector2) -> void:
+	var visible_citizen := _citizen_at_screen_position(screen_position)
+	if visible_citizen != null:
+		_select_citizen(visible_citizen)
+		return
 	var from := camera.project_ray_origin(screen_position)
 	var to := from + camera.project_ray_normal(screen_position) * 200.0
 	var query := PhysicsRayQueryParameters3D.create(from, to)
@@ -1386,7 +1466,23 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 		return
 	if not hit.collider.is_in_group("citizen_selector"):
 		return
-	var clicked_citizen := hit.collider.get_parent() as Citizen
+	_select_citizen(hit.collider.get_parent() as Citizen)
+
+func _citizen_at_screen_position(screen_position: Vector2) -> Citizen:
+	var closest: Citizen
+	var closest_distance := 22.0
+	for citizen in citizens:
+		if not is_instance_valid(citizen) or camera.is_position_behind(citizen.global_position):
+			continue
+		var distance := camera.unproject_position(citizen.global_position + Vector3.UP * 0.9).distance_to(screen_position)
+		if distance < closest_distance:
+			closest = citizen
+			closest_distance = distance
+	return closest
+
+func _select_citizen(clicked_citizen: Citizen) -> void:
+	if clicked_citizen == null:
+		return
 	if selected_builder != null and selected_builder.specialization == "courier" and clicked_citizen != selected_builder:
 		selected_builder.courier_worker = clicked_citizen
 		_update_interface("Courier assigned to this worker. Click another worker to reassign.")
@@ -1397,8 +1493,10 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 	house_menu.visible = false
 	school_menu.visible = false
 	build_mode = ""
+	build_category = ""
 	selection_marker.visible = false
 	build_menu.visible = true
+	_refresh_build_menu()
 	_show_selected_citizen_menu()
 	_update_interface("Citizen selected. Choose a building in the lower-right menu.")
 
@@ -1410,7 +1508,8 @@ func _show_selected_citizen_menu() -> void:
 		assignment = "Training %s %d/10" % [selected_builder.training_role.capitalize(), selected_builder.training_days_completed]
 	var home_label := "Tent" if selected_builder.home == tent else "House"
 	var effect_label := "Meal buff" if selected_builder.buffs.has("canteen_meal") else ("Tent debuff" if selected_builder.debuffs.has("tent") else "None")
-	build_menu_title.text = "%s  Sat: %d/%d%%  Food: %d%%\nHome: %s  Effect: %s  Task: %s\nBuild %.1f Wood %.1f Farm %.1f Dig %.1f" % [selected_builder.role_label(), roundi(selected_builder.satisfaction), roundi(selected_builder.get_satisfaction_cap()), roundi(selected_builder.hunger), home_label, effect_label, assignment, float(selected_builder.skills.construction), float(selected_builder.skills.forestry), float(selected_builder.skills.farming), float(selected_builder.skills.excavation)]
+	if build_category.is_empty():
+		build_menu_title.text = "%s  Sat: %d/%d%%  Food: %d%%\nHome: %s  Effect: %s  Task: %s\nBuild %.1f Wood %.1f Farm %.1f Dig %.1f" % [selected_builder.role_label(), roundi(selected_builder.satisfaction), roundi(selected_builder.get_satisfaction_cap()), roundi(selected_builder.hunger), home_label, effect_label, assignment, float(selected_builder.skills.construction), float(selected_builder.skills.forestry), float(selected_builder.skills.farming), float(selected_builder.skills.excavation)]
 	build_menu_title.add_theme_color_override("font_color", selected_builder.specialization_color())
 
 func _toggle_first_person() -> void:
@@ -1439,7 +1538,7 @@ func _toggle_first_person() -> void:
 	player_yaw = player_citizen.rotation.y
 	player_pitch = 0.0
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-	_update_interface("First-person control enabled. Gather wood and bring it to a warehouse.")
+	_update_interface("First-person control enabled. Gather resources, mill logs into boards, and deliver them to storage.")
 
 func _update_player_control(delta: float) -> void:
 	if player_citizen == null:
@@ -1483,27 +1582,28 @@ func _start_interaction() -> void:
 	if not interaction_action.is_empty():
 		return
 	if _nearby_sawmill() and pocket_wood > 0:
-		if _stored_resources() + pocket_wood > _warehouse_capacity():
-			_update_interface("Warehouse is full. Build another warehouse before unloading wood.")
-			return
-		wood += pocket_wood
-		var delivered := pocket_wood
+		var milled := pocket_wood
+		pocket_boards += milled
 		pocket_wood = 0
-		_update_interface("Delivered %d wood to the sawmill." % delivered)
+		_update_interface("Milled %d logs into boards. Take the boards to a warehouse." % milled)
 		_refresh_interaction_hint()
 		return
-	if _nearby_warehouse() and pocket_food > 0:
-		if _stored_resources() + pocket_food > _warehouse_capacity():
+	if _nearby_warehouse() and (pocket_food > 0 or pocket_boards > 0):
+		var delivery := pocket_food + pocket_boards
+		if _stored_resources() + delivery > _warehouse_capacity():
 			_update_interface("Warehouse is full. Build another warehouse before unloading food.")
 			return
 		food += pocket_food
+		boards += pocket_boards
 		var delivered_food := pocket_food
+		var delivered_boards := pocket_boards
 		pocket_food = 0
-		_update_interface("Delivered %d food to the warehouse." % delivered_food)
+		pocket_boards = 0
+		_update_interface("Delivered %d food and %d boards to the warehouse." % [delivered_food, delivered_boards])
 		_refresh_interaction_hint()
 		return
 	if _nearby_tree() or _nearby_farm():
-		if pocket_wood + pocket_food >= POCKET_WOOD_CAPACITY:
+		if pocket_wood + pocket_food + pocket_boards >= POCKET_WOOD_CAPACITY:
 			_update_interface("Pocket is full. Take wood to the sawmill or food to the warehouse.")
 			_refresh_interaction_hint()
 			return
@@ -1547,7 +1647,8 @@ func _update_interaction(delta: float) -> void:
 		else:
 			pocket_food += 1
 		interaction_progress.visible = false
-		_update_interface("Resource gathered. Wood: %d, food: %d, pocket: %d/%d." % [pocket_wood, pocket_food, pocket_wood + pocket_food, POCKET_WOOD_CAPACITY])
+		_consume_tree_near_player() if interaction_resource == "wood" else null
+		_update_interface("Resource gathered. Wood: %d, food: %d, boards: %d, pocket: %d/%d." % [pocket_wood, pocket_food, pocket_boards, pocket_wood + pocket_food + pocket_boards, POCKET_WOOD_CAPACITY])
 		_refresh_interaction_hint()
 
 func _nearby_tree() -> bool:
@@ -1588,14 +1689,14 @@ func _refresh_interaction_hint() -> void:
 	interaction_hint_label.visible = true
 	if _nearby_sawmill() and pocket_wood > 0:
 		interaction_hint_label.text = "LMB: unload wood at sawmill (%d wood)" % pocket_wood
-	elif _nearby_warehouse() and pocket_food > 0:
-		interaction_hint_label.text = "LMB: unload food at warehouse (%d food)" % pocket_food
+	elif _nearby_warehouse() and (pocket_food > 0 or pocket_boards > 0):
+		interaction_hint_label.text = "LMB: unload food %d / boards %d at warehouse" % [pocket_food, pocket_boards]
 	elif _nearby_tree():
-		interaction_hint_label.text = "LMB: gather wood (%d/%d in pocket)" % [pocket_wood + pocket_food, POCKET_WOOD_CAPACITY]
+		interaction_hint_label.text = "LMB: gather wood (%d/%d in pocket)" % [pocket_wood + pocket_food + pocket_boards, POCKET_WOOD_CAPACITY]
 	elif _nearby_farm():
-		interaction_hint_label.text = "LMB: gather food (%d/%d in pocket)" % [pocket_wood + pocket_food, POCKET_WOOD_CAPACITY]
+		interaction_hint_label.text = "LMB: gather food (%d/%d in pocket)" % [pocket_wood + pocket_food + pocket_boards, POCKET_WOOD_CAPACITY]
 	else:
-		interaction_hint_label.text = "LMB gathers resources. Wood goes to a sawmill; food goes to a warehouse."
+		interaction_hint_label.text = "LMB: gather. Logs go to sawmill, boards and food go to warehouse."
 
 func _terrain_point_at_screen_position(screen_position: Vector2) -> Variant:
 	var from := camera.project_ray_origin(screen_position)
@@ -1784,7 +1885,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			farm_positions.append(service_position)
 		"house":
 			completed_house_count += 1
-			building.set_meta("spawn_slots", 2)
+			building.set_meta("spawn_slots", HOUSE_CAPACITY)
 			building.set_meta("entrance_position", service_position)
 			_add_building_selector(building, "house_selector", blueprint.footprint)
 			_add_house_light(building)
@@ -1796,6 +1897,8 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			_add_building_selector(building, "school_selector", blueprint.footprint)
 		"park":
 			park_positions.append(service_position)
+		"leisure_center":
+			leisure_positions.append(service_position)
 		"brick_factory", "materials_factory", "recycling_factory", "metal_factory":
 			building.set_meta("required_factory_workers", 3 if building_type in ["recycling_factory", "metal_factory"] else 1)
 			factories.append(building)
@@ -1861,6 +1964,15 @@ func _add_service_entrance_marker(building: Node3D, footprint: Vector2i) -> void
 	sign.font_size = 24
 	sign.modulate = Color("e5c86b")
 	building.add_child(sign)
+	var light := OmniLight3D.new()
+	light.light_color = Color("ffd58a")
+	light.light_energy = 2.0
+	light.omni_range = 5.0
+	light.shadow_enabled = true
+	light.position = Vector3(0.0, 2.2, footprint.y * 0.5 + 0.45)
+	light.visible = false
+	building.add_child(light)
+	entrance_lights.append(light)
 
 
 func _unregister_navigation_footprint(center: Vector3, footprint: Vector2i) -> void:
@@ -1943,7 +2055,7 @@ func _create_farm(position_on_board: Vector3) -> void:
 func _create_house(position_on_board: Vector3) -> void:
 	var house := Node3D.new()
 	house.position = position_on_board
-	house.set_meta("spawn_slots", 2)
+	house.set_meta("spawn_slots", HOUSE_CAPACITY)
 	add_child(house)
 	var base := MeshInstance3D.new()
 	var base_mesh := BoxMesh.new()
@@ -1983,10 +2095,41 @@ func _add_house_light(house: Node3D) -> void:
 	light.light_energy = 2.2
 	light.omni_range = 5.5
 	light.shadow_enabled = true
-	light.position = Vector3(0.0, 2.0, 0.0)
+	var footprint: Vector2i = house.get_meta("footprint", Vector2i(5, 5))
+	light.position = Vector3(0.0, 2.0, footprint.y * 0.5 + 0.35)
 	light.visible = false
 	house.add_child(light)
-	house_lights.append({"light": light})
+	house_lights.append({"light": light, "off_minute": randi_range(22 * 60, 26 * 60) % (24 * 60)})
+
+func _on_tree_harvested(worker: Citizen, position_on_board: Vector3) -> void:
+	_consume_tree_at(position_on_board)
+
+func _consume_tree_near_player() -> void:
+	if player_citizen == null:
+		return
+	for position_on_board in tree_positions:
+		if player_citizen.global_position.distance_to(position_on_board) <= INTERACTION_RANGE:
+			_consume_tree_at(position_on_board)
+			return
+
+func _consume_tree_at(position_on_board: Vector3) -> void:
+	var cell := _cell_from_position(position_on_board)
+	var tree: Node3D = tree_nodes.get(cell)
+	if not is_instance_valid(tree):
+		return
+	var remaining: int = int(tree.get_meta("remaining_wood", 1)) - 1
+	tree.set_meta("remaining_wood", remaining)
+	if remaining > 0:
+		return
+	tree_cells.erase(cell)
+	tree_nodes.erase(cell)
+	tree_positions.erase(position_on_board)
+	_rebuild_navigation_mesh()
+	# The tree remains visible briefly as it falls, then leaves the world.
+	tree.rotation_degrees.z = 82.0
+	get_tree().create_timer(4.0).timeout.connect(tree.queue_free)
+	_update_workers()
+	_update_interface("A tree has been felled and will disappear shortly.")
 
 func _create_canteen(position_on_board: Vector3) -> void:
 	canteen = Node3D.new()

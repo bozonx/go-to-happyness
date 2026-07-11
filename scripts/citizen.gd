@@ -4,6 +4,7 @@ extends CharacterBody3D
 signal resource_delivered(worker: Citizen, resource_type: String, amount: int)
 signal excavation_cycle(worker: Citizen, site: Node3D, efficiency: float)
 signal resource_ready(worker: Citizen, resource_type: String, amount: int)
+signal tree_harvested(worker: Citizen, position_on_board: Vector3)
 signal meal_finished(worker: Citizen)
 signal canteen_delivery_finished(worker: Citizen, amount: int)
 signal factory_cycle(worker: Citizen, factory: Node3D)
@@ -229,6 +230,8 @@ func _process_to_source(delta: float) -> void:
 
 func _process_source_work(delta: float) -> void:
 	if _work(delta):
+		if resource_type == "wood":
+			tree_harvested.emit(self, source_position)
 		state = State.TO_SAWMILL
 
 func _process_to_workplace(delta: float) -> void:
