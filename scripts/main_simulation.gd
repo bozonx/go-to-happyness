@@ -3525,18 +3525,14 @@ func _hide_workforce_menu() -> void:
 func _refresh_campfire_occupancy_button() -> void:
 	if campfire_occupancy_button == null:
 		return
-	var total := 0
-	var occupied := 0
-	for citizen in citizens:
-		if citizen.is_player_controlled:
-			continue
-		total += 1
-		occupied += 1 if citizen.manual_role != "unassigned" else 0
-	campfire_occupancy_button.text = "Occupancy: %d/%d" % [occupied, total]
+	var total := _employment_resident_count()
+	var employed := _employment_state_count(Citizen.EmploymentState.EMPLOYED) + _employment_state_count(Citizen.EmploymentState.PENDING_JOB)
+	var reserve := _employment_state_count(Citizen.EmploymentState.AUTO_RESERVE) + _employment_state_count(Citizen.EmploymentState.MANUAL_COURIER)
+	campfire_occupancy_button.text = "Employment: %d/%d  Reserve: %d" % [employed, total, reserve]
 
 
 func _workforce_roles() -> Array[String]:
-	return ["construction", "forestry", "farming", "excavation", "gather_branches", "gather_grass", "gather_food", "courier"]
+	return ["construction", "forestry", "farming", "excavation", "gather_branches", "gather_grass", "gather_food", "gather_dew", "gather_water", "courier"]
 
 
 func _workforce_role_label(role: String) -> String:
@@ -3544,6 +3540,7 @@ func _workforce_role_label(role: String) -> String:
 		"construction": "Construction", "forestry": "Forestry", "farming": "Farming",
 		"excavation": "Excavation", "gather_branches": "Gather branches",
 		"gather_grass": "Gather grass", "gather_food": "Foraging",
+		"gather_dew": "Collect dew", "gather_water": "Collect water",
 		"courier": "Courier"
 	}
 	return str(labels.get(role, role.replace("_", " ").capitalize()))
@@ -3591,51 +3588,134 @@ func _refresh_workforce_menu() -> void:
 		return
 	for child in workforce_list.get_children():
 		child.queue_free()
-	var total := 0
-	for citizen in citizens:
-		total += 1 if not citizen.is_player_controlled else 0
-	workforce_menu_title.text = "Workforce: %d residents" % total
+	var total := _employment_resident_count()
+	var employed := _employment_state_count(Citizen.EmploymentState.EMPLOYED)
+	var hiring := _employment_state_count(Citizen.EmploymentState.PENDING_JOB)
+	var reserve := _employment_state_count(Citizen.EmploymentState.AUTO_RESERVE) + _employment_state_count(Citizen.EmploymentState.MANUAL_COURIER)
+	var unemployed := _employment_state_count(Citizen.EmploymentState.UNEMPLOYED) + _employment_state_count(Citizen.EmploymentState.PENDING_UNEMPLOYMENT)
+	workforce_menu_title.text = "Employment: %d residents" % total
+	_add_workforce_summary("Employed %d   Hiring %d   Reserve %d   Unemployed %d" % [employed, hiring, reserve, unemployed])
+
+	var jobs_title := Label.new()
+	jobs_title.text = "Available jobs"
+	jobs_title.add_theme_font_size_override("font_size", 16)
+	workforce_list.add_child(jobs_title)
+	var shown_jobs := 0
 	for role in _workforce_roles():
-		var row := HBoxContainer.new()
-		row.custom_minimum_size = Vector2(424, 34)
-		var label := Label.new()
-		var assigned := _workforce_role_count(role)
-		var manually := _manually_assigned_count(role)
-		var limit := _workforce_role_limit(role)
-		
-		var text := "%s  %d locked" % [_workforce_role_label(role), manually]
-		if assigned != manually:
-			text += " (%d active)" % assigned
-		if limit >= 0:
-			text += " / %d limit" % limit
-		label.text = text
-		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		label.tooltip_text = "No workplace is available" if limit == 0 else ""
-		row.add_child(label)
-		
-		var remove_button := Button.new()
-		remove_button.text = "-"
-		remove_button.tooltip_text = "Make one resident automatic"
-		remove_button.custom_minimum_size = Vector2(38, 30)
-		remove_button.disabled = manually == 0
-		remove_button.pressed.connect(_remove_worker_from_role.bind(role))
-		row.add_child(remove_button)
-		
-		var add_button := Button.new()
-		add_button.text = "+"
-		add_button.tooltip_text = "Assign a free resident"
-		add_button.custom_minimum_size = Vector2(38, 30)
-		add_button.disabled = _auto_or_unassigned_worker_count() == 0 or not _is_role_available(role) or (limit >= 0 and assigned >= limit)
-		add_button.pressed.connect(_assign_unemployed_worker.bind(role))
-		row.add_child(add_button)
-		
-		workforce_list.add_child(row)
-	var separator := HSeparator.new()
-	workforce_list.add_child(separator)
-	var unassigned := Label.new()
-	unassigned.text = "Auto / Unassigned  %d" % _auto_or_unassigned_worker_count()
-	unassigned.add_theme_font_size_override("font_size", 16)
-	workforce_list.add_child(unassigned)
+		var employed_for_role := _employment_role_count(role, Citizen.EmploymentState.EMPLOYED)
+		var pending_for_role := _employment_role_count(role, Citizen.EmploymentState.PENDING_JOB)
+		if not _is_role_available(role) and employed_for_role == 0 and pending_for_role == 0:
+			continue
+		_add_workforce_job_row(role, employed_for_role, pending_for_role)
+		shown_jobs += 1
+	if shown_jobs == 0:
+		_add_workforce_summary("No workplaces are available. Residents remain in reserve or register as unemployed.")
+
+	var reserve_title := Label.new()
+	reserve_title.text = "Reserve"
+	reserve_title.add_theme_font_size_override("font_size", 16)
+	workforce_list.add_child(reserve_title)
+	_add_workforce_summary("Couriers %d   Free residents %d" % [_employment_state_count(Citizen.EmploymentState.MANUAL_COURIER), _employment_state_count(Citizen.EmploymentState.AUTO_RESERVE)])
+
+	var unemployed_residents := _citizens_with_employment_states([Citizen.EmploymentState.UNEMPLOYED, Citizen.EmploymentState.PENDING_UNEMPLOYMENT])
+	if not unemployed_residents.is_empty():
+		var unemployed_title := Label.new()
+		unemployed_title.text = "Unemployed"
+		unemployed_title.add_theme_font_size_override("font_size", 16)
+		workforce_list.add_child(unemployed_title)
+		for citizen in unemployed_residents:
+			_add_unemployed_resident_row(citizen)
+
+
+func _add_workforce_summary(text: String) -> void:
+	var label := Label.new()
+	label.text = text
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.add_theme_color_override("font_color", Color("c7d6df"))
+	workforce_list.add_child(label)
+
+
+func _add_workforce_job_row(role: String, employed: int, pending: int) -> void:
+	var row := HBoxContainer.new()
+	row.custom_minimum_size = Vector2(424, 38)
+	var label := Label.new()
+	var limit := _workforce_role_limit(role)
+	var capacity := " / %d" % limit if limit >= 0 else ""
+	label.text = "%s\nEmployed %d%s  Hiring %d" % [_workforce_role_label(role), employed, capacity, pending]
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(label)
+	var dismiss := Button.new()
+	dismiss.text = "Dismiss"
+	dismiss.tooltip_text = "Dismiss one resident from this job"
+	dismiss.custom_minimum_size = Vector2(78, 34)
+	dismiss.disabled = employed + pending == 0
+	dismiss.pressed.connect(_remove_worker_from_role.bind(role))
+	row.add_child(dismiss)
+	var assign := Button.new()
+	assign.text = "Assign"
+	assign.tooltip_text = "Assign a reserve or unemployed resident"
+	assign.custom_minimum_size = Vector2(72, 34)
+	assign.disabled = not _is_role_available(role) or (limit >= 0 and employed + pending >= limit) or not _has_assignable_resident()
+	assign.pressed.connect(_assign_unemployed_worker.bind(role))
+	row.add_child(assign)
+	workforce_list.add_child(row)
+
+
+func _add_unemployed_resident_row(citizen: Citizen) -> void:
+	var row := HBoxContainer.new()
+	row.custom_minimum_size = Vector2(424, 34)
+	var label := Label.new()
+	label.text = "%s%s" % [citizen.role_label(), " (registering)" if citizen.employment_state == Citizen.EmploymentState.PENDING_UNEMPLOYMENT else ""]
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(label)
+	var auto_button := Button.new()
+	auto_button.text = "Auto"
+	auto_button.tooltip_text = "Return this resident to the automatic reserve"
+	auto_button.custom_minimum_size = Vector2(72, 30)
+	auto_button.pressed.connect(_enable_auto_for_citizen.bind(citizen))
+	row.add_child(auto_button)
+	workforce_list.add_child(row)
+
+
+func _employment_resident_count() -> int:
+	var count := 0
+	for citizen in citizens:
+		count += 1 if not citizen.is_player_controlled else 0
+	return count
+
+
+func _employment_state_count(state: int) -> int:
+	var count := 0
+	for citizen in citizens:
+		if not citizen.is_player_controlled and citizen.employment_state == state:
+			count += 1
+	return count
+
+
+func _employment_role_count(role: String, state: int) -> int:
+	var count := 0
+	for citizen in citizens:
+		if citizen.is_player_controlled or citizen.employment_state != state:
+			continue
+		var citizen_role := citizen.permanent_role if state == Citizen.EmploymentState.EMPLOYED else citizen.pending_employment_role
+		if citizen_role == role:
+			count += 1
+	return count
+
+
+func _citizens_with_employment_states(states: Array) -> Array[Citizen]:
+	var result: Array[Citizen] = []
+	for citizen in citizens:
+		if not citizen.is_player_controlled and citizen.employment_state in states:
+			result.append(citizen)
+	return result
+
+
+func _has_assignable_resident() -> bool:
+	for citizen in citizens:
+		if not citizen.is_player_controlled and citizen.employment_state in [Citizen.EmploymentState.AUTO_RESERVE, Citizen.EmploymentState.UNEMPLOYED]:
+			return true
+	return false
 
 
 func _remove_worker_from_role(role: String) -> void:
@@ -3643,7 +3723,7 @@ func _remove_worker_from_role(role: String) -> void:
 		if citizen.is_player_controlled:
 			continue
 		if role == "courier":
-			if citizen.specialization == "courier":
+			if citizen.employment_state == Citizen.EmploymentState.MANUAL_COURIER:
 				citizen.idle()
 				var prev := citizen.previous_specialization
 				if prev.is_empty():
@@ -3651,18 +3731,20 @@ func _remove_worker_from_role(role: String) -> void:
 				citizen.setup_specialization(prev)
 				citizen.manual_role = ""
 				citizen.permanent_role = ""
-				citizen.auto_mode_enabled = true
-				citizen.employment_state = Citizen.EmploymentState.AUTO_RESERVE
+				citizen.pending_employment_role = ""
+				citizen.auto_mode_enabled = false
+				citizen.employment_state = Citizen.EmploymentState.UNEMPLOYED
 				_update_workers()
 				_refresh_workforce_menu()
 				_refresh_campfire_occupancy_button()
 				return
-		elif citizen.manual_role == role:
+		elif citizen.permanent_role == role or citizen.pending_employment_role == role or citizen.manual_role == role:
 			citizen.idle()
 			citizen.manual_role = ""
 			citizen.permanent_role = ""
-			citizen.auto_mode_enabled = true
-			citizen.employment_state = Citizen.EmploymentState.AUTO_RESERVE
+			citizen.pending_employment_role = ""
+			citizen.auto_mode_enabled = false
+			citizen.employment_state = Citizen.EmploymentState.UNEMPLOYED
 			citizen.assigned_dig_site = null
 			_update_workers()
 			_refresh_workforce_menu()
@@ -3671,17 +3753,31 @@ func _remove_worker_from_role(role: String) -> void:
 
 
 func _assign_unemployed_worker(role: String) -> void:
-	if not _is_role_available(role) or (_workforce_role_limit(role) >= 0 and _workforce_role_count(role) >= _workforce_role_limit(role)):
+	if not _is_role_available(role):
 		return
 	for citizen in citizens:
 		if citizen.is_player_controlled:
 			continue
-		if (citizen.manual_role.is_empty() or citizen.manual_role == "unassigned") and citizen.specialization not in ["courier", "cook", "teacher", "factory_worker", "engineer"]:
+		if citizen.employment_state in [Citizen.EmploymentState.AUTO_RESERVE, Citizen.EmploymentState.UNEMPLOYED]:
 			selected_builder = citizen
 			_set_manual_role(role)
 			_refresh_workforce_menu()
 			_refresh_campfire_occupancy_button()
 			return
+
+
+func _enable_auto_for_citizen(citizen: Citizen) -> void:
+	if not is_instance_valid(citizen) or citizen.is_player_controlled:
+		return
+	citizen.idle()
+	citizen.manual_role = ""
+	citizen.permanent_role = ""
+	citizen.pending_employment_role = ""
+	citizen.auto_mode_enabled = true
+	citizen.employment_state = Citizen.EmploymentState.AUTO_RESERVE
+	_update_workers()
+	_refresh_workforce_menu()
+	_refresh_campfire_occupancy_button()
 
 
 func _refresh_campfire_menu() -> void:
