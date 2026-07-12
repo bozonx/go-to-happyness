@@ -16,6 +16,11 @@ signal trade_delivery_finished(worker: Citizen)
 const WALK_SPEED := 2.2
 const WORK_DURATION := 1.4
 const COURIER_WAIT_DURATION := 8.0
+# One in-game hour at base speed (1440 game-min / 300 real-sec = 4.8 game-min/s).
+# Both this timer and the clock advance with the same scaled delta, so the wait
+# always spans exactly one in-game hour regardless of the simulation speed.
+const WAIT_DURATION := 12.5
+const WAIT_RECHECK_INTERVAL := 1.0
 const GRAVITY := 18.0
 const AI_JUMP_VELOCITY := 7.6
 const STUCK_TIME_BEFORE_JUMP := 0.75
@@ -28,7 +33,7 @@ const NAVIGATION_TARGET_CLEARANCE := 0.48
 const ROUTE_PROGRESS_EPSILON := 0.06
 const ROUTE_RETRY_INTERVAL := 2.0
 
-enum State { IDLE, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, TO_GATHER, GATHERING, TO_TRADE_PICKUP, TO_TRADE_DESTINATION }
+enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, TO_GATHER, GATHERING, TO_TRADE_PICKUP, TO_TRADE_DESTINATION }
 
 var state := State.IDLE
 var resource_type := "wood"
@@ -38,6 +43,12 @@ var source_position := Vector3.ZERO
 var workplace_position := Vector3.ZERO
 var warehouse_position := Vector3.ZERO
 var task_timer := CitizenTaskState.new()
+var wait_recheck := 0.0
+# Injected by the simulation: work_scheduler(Citizen) -> bool tries to place the
+# citizen on a job and reports success; leisure_scheduler(Citizen) -> bool routes
+# them to a rest spot (park/pond/home) and reports whether somewhere was found.
+var work_scheduler := Callable()
+var leisure_scheduler := Callable()
 var is_player_controlled := false
 var is_hero := false
 var construction_site: Node3D
@@ -203,6 +214,8 @@ func _physics_process(delta: float) -> void:
 	_update_effects(delta)
 	_update_satisfaction(delta)
 	match state:
+		State.WAITING:
+			_process_waiting(delta)
 		State.TO_TREE:
 			_process_to_source(delta)
 		State.CHOPPING:
@@ -262,7 +275,7 @@ func _physics_process(delta: float) -> void:
 		State.TO_TRADE_DESTINATION:
 			_process_trade_destination(delta)
 	if idle_indicator != null:
-		idle_indicator.visible = state == State.IDLE and not is_player_controlled
+		_update_idle_indicator()
 
 func _process_to_source(delta: float) -> void:
 	if _move_to(source_position, delta):
@@ -412,6 +425,24 @@ func _process_relaxing(delta: float) -> void:
 	satisfaction = minf(get_satisfaction_cap(), satisfaction + delta * 5.0)
 	if finished:
 		state = State.IDLE
+
+func _process_waiting(delta: float) -> void:
+	# While waiting, keep probing for work so the citizen jumps back the moment a
+	# job frees up. The recheck is throttled so a genuinely idle settlement does
+	# not thrash the scheduler every frame.
+	wait_recheck -= delta
+	if wait_recheck <= 0.0:
+		wait_recheck = WAIT_RECHECK_INTERVAL
+		if work_scheduler.is_valid() and bool(work_scheduler.call(self)):
+			return
+	if task_timer.advance(delta):
+		# The full waiting window elapsed with no work. Head to a rest spot.
+		var rested := leisure_scheduler.is_valid() and bool(leisure_scheduler.call(self))
+		if not rested:
+			# Nowhere to rest yet (no parks/home): restart the window so the
+			# citizen keeps re-checking for work instead of freezing forever.
+			task_timer.start(WAIT_DURATION)
+			wait_recheck = WAIT_RECHECK_INTERVAL
 
 func _move_to(destination: Vector3, delta: float, may_enter_destination_house := false) -> bool:
 	if navigation_agent != null and navigation_agent.get_navigation_map().is_valid():
@@ -584,7 +615,7 @@ func _apply_gravity(delta: float) -> void:
 		velocity.y -= GRAVITY * delta
 	else:
 		velocity.y = -0.5
-	if state == State.IDLE or state == State.RESTING:
+	if state == State.IDLE or state == State.RESTING or state == State.WAITING:
 		velocity.x = 0.0
 		velocity.z = 0.0
 		move_and_slide()
@@ -804,6 +835,10 @@ func setup_navigation(next_pathfinder: Callable, next_delivery_position_resolver
 	pathfinder = next_pathfinder
 	delivery_position_resolver = next_delivery_position_resolver
 
+func setup_scheduler(next_work_scheduler: Callable, next_leisure_scheduler: Callable) -> void:
+	work_scheduler = next_work_scheduler
+	leisure_scheduler = next_leisure_scheduler
+
 func _refresh_warehouse_position() -> void:
 	if not delivery_position_resolver.is_valid():
 		return
@@ -870,6 +905,32 @@ func idle() -> void:
 	construction_site = null
 	assigned_dig_site = null
 	factory = null
+
+func begin_waiting() -> void:
+	# Enter the pre-rest waiting window. Idempotent: repeated calls (e.g. a retry
+	# that still fails to find a free work node) preserve the running countdown so
+	# the citizen reliably progresses toward rest instead of waiting forever.
+	if is_player_controlled or state == State.WAITING:
+		return
+	state = State.WAITING
+	active_role = ""
+	construction_site = null
+	assigned_dig_site = null
+	factory = null
+	task_timer.start(WAIT_DURATION)
+	wait_recheck = WAIT_RECHECK_INTERVAL
+
+func _update_idle_indicator() -> void:
+	if is_player_controlled or state not in [State.IDLE, State.WAITING]:
+		idle_indicator.visible = false
+		return
+	idle_indicator.visible = true
+	if state == State.WAITING:
+		idle_indicator.text = "WAITING"
+		idle_indicator.modulate = Color("f0873d")
+	else:
+		idle_indicator.text = "IDLE"
+		idle_indicator.modulate = Color("f0c45d")
 
 func assign_home(next_home: Node3D) -> void:
 	home = next_home

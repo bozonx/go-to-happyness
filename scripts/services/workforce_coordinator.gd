@@ -11,6 +11,14 @@ func configure(next_simulation: Node) -> void:
 	simulation = next_simulation
 
 
+const BUSY_STATES := [
+	Citizen.State.TO_CANTEEN, Citizen.State.EATING, Citizen.State.TO_FOOD_PICKUP,
+	Citizen.State.TO_CANTEEN_DELIVERY, Citizen.State.COURIER_TO_WORKER,
+	Citizen.State.COURIER_TO_WAREHOUSE, Citizen.State.COURIER_TO_SAWMILL,
+	Citizen.State.WAITING_COURIER,
+]
+
+
 func update_workers() -> void:
 	if not simulation._is_work_time():
 		for citizen in simulation.citizens:
@@ -19,17 +27,29 @@ func update_workers() -> void:
 	for citizen in simulation.citizens:
 		if citizen.is_player_controlled:
 			continue
-		if citizen.state in [Citizen.State.TO_CANTEEN, Citizen.State.EATING, Citizen.State.TO_FOOD_PICKUP, Citizen.State.TO_CANTEEN_DELIVERY, Citizen.State.COURIER_TO_WORKER, Citizen.State.COURIER_TO_WAREHOUSE, Citizen.State.WAITING_COURIER]:
+		# Couriers/canteen runs and the self-managed WAITING window run their own
+		# course; the scheduler must not yank them out mid-task.
+		if citizen.state in BUSY_STATES or citizen.state == Citizen.State.WAITING:
 			continue
 		if citizen.blocked_by_storage:
 			if not simulation.settlement.reserve_storage_room_for(citizen.resource_type, maxi(1, citizen.carried_amount), simulation.warehouse_positions.size()):
-				simulation._send_citizen_to_leisure(citizen)
+				_send_to_waiting(citizen)
 				continue
 			citizen.blocked_by_storage = false
 		if can_assign_work(citizen):
-			citizen.request_goap_decision()
+			# Only pull genuinely free (idle) citizens onto work. Those on a
+			# scheduled break (park/home) or actively working are left alone.
+			if citizen.state == Citizen.State.IDLE:
+				citizen.request_goap_decision()
 		else:
-			simulation._send_citizen_to_leisure(citizen)
+			_send_to_waiting(citizen)
+
+
+func _send_to_waiting(citizen: Citizen) -> void:
+	# Standing idle with no work is the trigger for the pre-rest waiting window.
+	# Citizens mid-task or already resting keep doing what they were doing.
+	if citizen.state == Citizen.State.IDLE:
+		citizen.begin_waiting()
 
 
 func can_assign_work(citizen: Citizen) -> bool:
@@ -100,14 +120,10 @@ func assign_work(citizen: Citizen, index: int) -> void:
 					dig_site = null
 			if is_instance_valid(dig_site):
 				citizen.assign_excavation(dig_site)
-			else:
-				citizen.idle()
 		"gather_branches":
 			var tree_pos: Vector3 = simulation._find_closest_tree_for_citizen(citizen)
 			if tree_pos != Vector3.INF:
 				citizen.assign_gathering("branches", tree_pos, simulation._get_delivery_position())
-			else:
-				citizen.idle()
 		"gather_grass":
 			var grass_pos: Vector3 = simulation._find_grass_gathering_position(citizen)
 			citizen.assign_gathering("grass", grass_pos, simulation._get_delivery_position())
@@ -115,12 +131,15 @@ func assign_work(citizen: Citizen, index: int) -> void:
 			var forage_pos: Vector3 = simulation._find_forage_position(citizen)
 			if forage_pos != Vector3.INF:
 				citizen.assign_gathering("food", forage_pos, simulation._get_delivery_position())
-			else:
-				citizen.idle()
 		"gather_water":
 			if not simulation.pond_positions.is_empty():
 				var pond: Vector3 = simulation.pond_positions[index % simulation.pond_positions.size()]
 				citizen.assign_gathering("water", pond, simulation._get_delivery_position())
+	# A shortage/empty-workplace score can outrun the number of free work nodes
+	# (trees, forage spots, dew collectors). When no concrete slot was reserved the
+	# citizen is still IDLE here — send them to wait rather than churn or freeze.
+	if citizen.state == Citizen.State.IDLE:
+		citizen.begin_waiting()
 
 
 func work_role_for(citizen: Citizen) -> String:

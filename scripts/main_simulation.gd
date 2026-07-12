@@ -77,6 +77,11 @@ var game_minutes: float:
 const GAME_DAY_REAL_SECONDS := 300.0
 const GAME_MINUTES_PER_SECOND := 1440.0 / GAME_DAY_REAL_SECONDS
 var time_multiplier := 1.0
+# The scheduler used to run only on discrete events, so a citizen who fell idle
+# between events could stand doing nothing indefinitely. Poll it steadily during
+# work hours so idle workers are promptly re-assigned or sent to wait/rest.
+const WORKER_POLL_INTERVAL := 0.5
+var _worker_poll_timer := 0.0
 var runtime_seconds := 0.0
 var random := RandomNumberGenerator.new()
 var active_meal_hour := -1
@@ -274,6 +279,10 @@ func _process(delta: float) -> void:
 	_update_building_status_indicators(delta)
 	if _is_work_time():
 		_update_couriers()
+		_worker_poll_timer -= delta
+		if _worker_poll_timer <= 0.0:
+			_worker_poll_timer = WORKER_POLL_INTERVAL
+			_update_workers()
 	if selected_builder != null and build_menu.visible:
 		_show_selected_citizen_menu()
 
@@ -1328,6 +1337,7 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	add_child(citizen)
 	citizen.setup_specialization(primary_specialization if not primary_specialization.is_empty() else ["builder", "forestry", "farming"][citizens.size() % 3])
 	citizen.setup_navigation(_find_path_around_houses, _get_nearest_delivery_position)
+	citizen.setup_scheduler(_try_resume_work, _send_citizen_to_leisure)
 	citizen.resource_delivered.connect(_on_resource_delivered)
 	citizen.excavation_cycle.connect(_on_excavation_cycle)
 	citizen.resource_ready.connect(_on_resource_ready)
@@ -3022,13 +3032,31 @@ func _has_storage_room_for_role(role: String) -> bool:
 		return true
 	return settlement.can_make_room_for(resource_for_role[role], 1, warehouse_positions.size())
 
-func _send_citizen_to_leisure(citizen: Citizen) -> void:
-	if citizen.is_player_controlled or citizen.state not in [Citizen.State.IDLE, Citizen.State.RESTING]:
-		return
+func _send_citizen_to_leisure(citizen: Citizen) -> bool:
+	# Returns whether the citizen was actually placed somewhere to rest so the
+	# waiting window knows if it needs to keep looking for work.
+	if citizen.is_player_controlled or citizen.state not in [Citizen.State.IDLE, Citizen.State.RESTING, Citizen.State.WAITING]:
+		return false
 	var recreation := pond_positions + park_positions + leisure_positions
-	if recreation.is_empty():
-		return
-	citizen.go_to_park(recreation[int(citizen.get_instance_id()) % recreation.size()])
+	if not recreation.is_empty():
+		citizen.go_to_park(recreation[int(citizen.get_instance_id()) % recreation.size()])
+		return true
+	# No recreation built yet (early tent era): fall back to resting at home so
+	# workers with nothing to do stop loitering instead of standing forever.
+	if is_instance_valid(citizen.home):
+		citizen.go_home()
+		return true
+	return false
+
+func _try_resume_work(citizen: Citizen) -> bool:
+	# Called from a waiting citizen to grab a job the instant one frees up. Assign
+	# directly (not via a deferred GOAP request) so we can report real success:
+	# assign_work leaves the citizen WAITING when no concrete slot was available.
+	if not _is_work_time() or not workforce.can_assign_work(citizen):
+		return false
+	var index := citizen.goap_brain.worker_index if is_instance_valid(citizen.goap_brain) else 0
+	workforce.assign_work(citizen, index)
+	return citizen.state not in [Citizen.State.IDLE, Citizen.State.WAITING]
 
 func _grant_debug_resources() -> void:
 	# Approximate early-to-late material demand, rather than equal stacks.
