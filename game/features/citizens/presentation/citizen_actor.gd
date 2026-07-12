@@ -88,6 +88,14 @@ var temp_training_role := ""
 const DEVELOPED_SKILL_THRESHOLD := 0.15
 const SKILL_GROWTH_PER_SECOND_WORK := 0.0001
 const FREELANCE_CONSTRUCTION_SKILL_CAP := 0.20
+const COURIER_EQUIPMENT := {
+	"hands": {"capacity": 1, "speed": 1.0},
+	"basket": {"capacity": 2, "speed": 1.05},
+	"backpack": {"capacity": 4, "speed": 1.0},
+	"cart": {"capacity": 6, "speed": 0.82},
+	"bicycle": {"capacity": 4, "speed": 1.40},
+	"bicycle_trailer": {"capacity": 6, "speed": 1.30}
+}
 const SKILL_GROWTH_PER_SCHOOL_DAY := 0.01
 const SKILL_DECAY_RATE := 0.005
 const SKILL_MIN_FLOOR := 0.10
@@ -99,6 +107,7 @@ var pending_resources: Dictionary = {}
 var courier_target: Citizen
 var courier_resource_type := ""
 var courier_worker: Citizen
+var courier_equipment := "hands"
 var home: Node3D
 var hunger := 78.0
 var buffs: Dictionary = {}
@@ -473,7 +482,7 @@ func _process_courier_pickup(delta: float) -> void:
 		state = State.IDLE
 		return
 	if _move_to(courier_target.global_position, delta):
-		var cargo := courier_target.take_pending_resource()
+		var cargo := courier_target.take_pending_resource(courier_capacity())
 		courier_target.set_meta("last_courier_pickup", simulation.runtime_seconds if simulation != null else 0.0)
 		courier_resource_type = cargo.get("type", "")
 		carried_amount = int(cargo.get("amount", 0))
@@ -1034,14 +1043,15 @@ func has_pending_resource() -> bool:
 			return true
 	return false
 
-func take_pending_resource() -> Dictionary:
+func take_pending_resource(max_amount := 0) -> Dictionary:
 	for pending_type in pending_resources.keys():
 		var amount: int = pending_resources[pending_type]
 		if amount > 0:
-			pending_resources[pending_type] = 0
+			var taken := amount if max_amount <= 0 else mini(amount, max_amount)
+			pending_resources[pending_type] = amount - taken
 			if state == State.WAITING_COURIER:
 				state = State.TO_TREE
-			return {"type": pending_type, "amount": amount}
+			return {"type": pending_type, "amount": taken}
 	return {}
 
 func assign_courier_pickup(worker: Citizen, warehouse: Vector3) -> void:
@@ -1059,7 +1069,7 @@ func assign_sawmill_pickup(sawmill: Vector3, warehouse: Vector3) -> void:
 	state = State.COURIER_TO_SAWMILL
 
 func collect_sawmill_boards(amount: int) -> void:
-	carried_amount = amount
+	carried_amount = mini(amount, courier_capacity())
 	courier_resource_type = "boards"
 	state = State.COURIER_TO_WAREHOUSE if amount > 0 else State.IDLE
 
@@ -1284,9 +1294,19 @@ func has_perk(skill_name: String) -> bool:
 	return skills.get(skill_name, 0.0) >= 1.0
 
 func get_walk_speed() -> float:
+	var speed := WALK_SPEED * float(COURIER_EQUIPMENT.get(courier_equipment, COURIER_EQUIPMENT.hands).speed)
 	if has_perk("construction"):
-		return WALK_SPEED * 1.15
-	return WALK_SPEED
+		speed *= 1.15
+	return speed
+
+
+func courier_capacity() -> int:
+	return int(COURIER_EQUIPMENT.get(courier_equipment, COURIER_EQUIPMENT.hands).capacity)
+
+
+func set_courier_equipment(next_equipment: String) -> void:
+	if COURIER_EQUIPMENT.has(next_equipment):
+		courier_equipment = next_equipment
 
 func setup_specialization(next_specialization: String) -> void:
 	specialization = next_specialization

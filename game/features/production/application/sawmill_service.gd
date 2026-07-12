@@ -46,8 +46,8 @@ func decide_delivery(worker: Citizen, position: Vector3, now_seconds: float) -> 
 
 func collect_boards(courier: Citizen, position: Vector3, now_seconds: float) -> void:
 	var stock := stock_at(position, now_seconds)
-	var amount := int(stock.boards)
-	stock.boards = 0
+	var amount := mini(int(stock.boards), courier.courier_capacity())
+	stock.boards = int(stock.boards) - amount
 	stock.last_courier_pickup = now_seconds
 	store(position, stock)
 	courier.collect_sawmill_boards(amount)

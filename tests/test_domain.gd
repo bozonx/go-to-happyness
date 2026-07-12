@@ -24,6 +24,7 @@ func _init() -> void:
 	_test_courier_metadata()
 	_test_construction_delivery_stays_scheduled()
 	_test_freelance_construction_skill_cap()
+	_test_courier_equipment_capacity()
 	_test_research_mechanics()
 	quit(0)
 
@@ -416,6 +417,17 @@ func _test_freelance_construction_skill_cap() -> void:
 	worker._update_satisfaction(0.0)
 	assert(float(worker.skills.construction) > Citizen.FREELANCE_CONSTRUCTION_SKILL_CAP)
 	worker.free()
+
+
+func _test_courier_equipment_capacity() -> void:
+	var courier := Citizen.new()
+	courier.set_courier_equipment("backpack")
+	assert(courier.courier_capacity() == 4)
+	courier.register_pending_resource("boards", 6)
+	var cargo := courier.take_pending_resource(courier.courier_capacity())
+	assert(int(cargo.amount) == 4)
+	assert(int(courier.pending_resources.boards) == 2)
+	courier.free()
 
 
 func _test_research_mechanics() -> void:

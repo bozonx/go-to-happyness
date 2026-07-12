@@ -54,7 +54,7 @@ func update_canteen_delivery() -> void:
 				break
 	if carrier == null:
 		return
-	var amount: int = mini(4, mini(simulation.food, capacity - simulation.canteen_food))
+	var amount: int = mini(carrier.courier_capacity(), mini(simulation.food, capacity - simulation.canteen_food))
 	simulation.food -= amount
 	simulation.pending_canteen_delivery = true
 	simulation.pending_canteen_carrier = carrier

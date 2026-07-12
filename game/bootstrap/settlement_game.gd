@@ -1,6 +1,7 @@
 extends Node3D
 
 const SETTLEMENT_RULES = preload("res://game/features/settlement/domain/settlement_rules.gd")
+const CourierDispatcherScript = preload("res://game/features/logistics/application/courier_dispatcher.gd")
 
 
 const BOARD_CELLS := 48
@@ -286,6 +287,7 @@ var demolition: DemolitionService
 var water_collector_service: WaterCollectorService
 var canteen_service: CanteenService
 var trade_service: TradeService
+var courier_dispatcher: RefCounted
 
 
 func _ready() -> void:
@@ -323,6 +325,8 @@ func _ready() -> void:
 	canteen_service.configure(self)
 	trade_service = TradeService.new()
 	trade_service.configure(self)
+	courier_dispatcher = CourierDispatcherScript.new()
+	courier_dispatcher.configure(self)
 	_create_world()
 	_create_interface()
 	_create_forest()
@@ -746,6 +750,11 @@ func _on_canteen_delivery_finished(worker: Citizen, amount: int) -> void:
 	canteen_service.on_canteen_delivery_finished(worker, amount)
 
 func _update_couriers() -> void:
+	if courier_dispatcher != null:
+		courier_dispatcher.dispatch()
+
+
+func _dispatch_courier_tasks() -> void:
 	if warehouse_positions.is_empty():
 		return
 	for courier in citizens:
@@ -755,9 +764,21 @@ func _update_couriers() -> void:
 	_update_resource_pile_supplies()
 	_update_construction_supplies()
 
+	var has_idle_pinned_courier := false
+	for citizen in citizens:
+		if citizen.employment_state == Citizen.EmploymentState.FREELANCE and citizen.freelance_assignment == "courier" and citizen.state == Citizen.State.IDLE:
+			has_idle_pinned_courier = true
+			break
+
 	var available_couriers := []
 	for courier in citizens:
-		if courier.freelance_assignment != "courier" or courier.employment_state != Citizen.EmploymentState.FREELANCE or courier.state != Citizen.State.IDLE:
+		if courier.employment_state != Citizen.EmploymentState.FREELANCE or courier.state != Citizen.State.IDLE:
+			continue
+		if not courier.freelance_assignment.is_empty() and courier.freelance_assignment != "courier":
+			continue
+		# A flexible worker is a fallback only when no dedicated courier can take
+		# the job now. This preserves the value of pinning a courier.
+		if courier.freelance_assignment != "courier" and has_idle_pinned_courier:
 			continue
 		
 		# 1. Manual assignment check
@@ -884,6 +905,12 @@ func _update_couriers() -> void:
 			# Case 3: Couriers > productions with goods.
 			# Distribute even if 0 goods (to queue up), preferring fewest assigned.
 			var candidates := active_productions.duplicate()
+			if not has_idle_pinned_courier:
+				# Flexible workers only pick up resources that already exist. They do
+				# not idle at a producer and block their normal work assignment.
+				candidates = candidates.filter(func(production): return bool(production.has_goods))
+			if candidates.is_empty():
+				continue
 			candidates.sort_custom(func(a, b):
 				var count_a: int = assigned_couriers[a.key]
 				var count_b: int = assigned_couriers[b.key]
@@ -5241,7 +5268,7 @@ func _trade_has_tool_order(tool_id: String) -> bool:
 
 
 func _dispatch_queued_trades() -> void:
-	trade_service.dispatch_queued_trades()
+	_request_courier_dispatch()
 
 
 func _on_trade_delivery_finished(worker: Citizen) -> void:

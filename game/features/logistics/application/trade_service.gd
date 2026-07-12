@@ -43,7 +43,7 @@ func buy_tool(tool_id: String, price: int) -> void:
 
 func start_trade(trade: Dictionary, source: Vector3, destination: Vector3) -> void:
 	simulation.queued_trades.append({"trade": trade, "source": source, "destination": destination})
-	dispatch_queued_trades()
+	simulation._request_courier_dispatch()
 
 
 func trade_orders() -> Array[Dictionary]:
