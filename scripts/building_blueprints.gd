@@ -32,6 +32,7 @@ const COLORS := {
 	"city_hall_roof": Color("6b6040"),
 	"leisure_center_roof": Color("704065"),
 	"campfire": Color("b85e42"),
+	"gathering_place": Color("6e4a2b"),
 	"cook_campfire": Color("c56a3a"),
 	"tent": Color("c7a96a"),
 	"forager_tent": Color("739350"),
@@ -74,6 +75,7 @@ const COLORS := {
 static func get_blueprint(building_type: String) -> Dictionary:
 	match building_type:
 		"campfire": return _campfire_blueprint()
+		"gathering_place": return _gathering_place_blueprint()
 		"cook_campfire": return _cook_campfire_blueprint()
 		"dew_collector": return _water_collector_blueprint("dew_collector", Vector2i(2, 2))
 		"pond": return _pond_blueprint()
@@ -270,6 +272,12 @@ static func _campfire_blueprint() -> Dictionary:
 	modules.append(_module(Vector3(0.0, 0.2, 0.0), Vector3(0.8, 0.25, 0.25), "wood", Color("5c4033"), Vector3(0.0, -45.0, 0.0)))
 	modules.append(_module(Vector3(0.0, 0.35, 0.0), Vector3(0.4, 0.3, 0.4), "fire", Color("ff5a00")))
 	return {"type": "campfire", "footprint": footprint, "entrance": Vector2i(0, -1), "modules": modules}
+
+static func _gathering_place_blueprint() -> Dictionary:
+	var modules: Array[Dictionary] = []
+	modules.append(_module(Vector3.ZERO, Vector3(3.6, 0.12, 3.6), "ground", Color("6d604d")))
+	modules.append(_module(Vector3(0.0, 0.28, 0.0), Vector3(0.75, 0.42, 0.75), "fire", Color("ff5a00")))
+	return {"type": "gathering_place", "footprint": Vector2i(4, 4), "entrance": Vector2i(0, -3), "modules": modules}
 
 
 static func _cook_campfire_blueprint() -> Dictionary:

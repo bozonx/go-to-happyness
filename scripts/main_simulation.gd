@@ -299,6 +299,7 @@ func _process(delta: float) -> void:
 	_update_daylight()
 	_update_house_lights()
 	_update_canteen_delivery()
+	_update_fire_status()
 	_dispatch_queued_trades()
 	_update_sawmills(delta)
 	_update_brick_research(delta)
@@ -455,6 +456,7 @@ func _apply_daily_settlement_rules() -> void:
 		return
 	for citizen in citizens:
 		citizen.apply_daily_decay()
+	_apply_building_wear_and_repairs()
 	# Everyone drinks each day. When there is no kitchen running meals, they also
 	# eat straight from the stores; a working cooking campfire/canteen already
 	# draws food through the meal pipeline, so we don't double-count there.
@@ -536,7 +538,7 @@ func _is_work_time() -> bool:
 	return hour >= 8 and hour < 8 + settlement.workday_hours
 
 func _start_meal(hour: int) -> void:
-	if not is_instance_valid(canteen):
+	if not is_instance_valid(canteen) or not _is_fire_lit(canteen):
 		for citizen in citizens:
 			if not citizen.is_player_controlled:
 				citizen.receive_meal(false)
@@ -2865,6 +2867,7 @@ func _remove_building_services(building: Node3D, building_type: String) -> void:
 		"forager_tent": forager_positions.erase(service_position)
 		"school": school_positions.erase(service_position)
 		"park": park_positions.erase(service_position)
+		"gathering_place": gathering_place_positions.erase(service_position)
 		"leisure_center": leisure_positions.erase(service_position)
 		"craft_tent": craft_tent_positions.erase(service_position)
 		"trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market":
@@ -3373,6 +3376,10 @@ func _update_construction(delta: float) -> void:
 func _complete_building(cell: Vector2i, building_type: String, position_on_board: Vector3, building: Node3D, blueprint: Dictionary) -> void:
 	settlement.buildings[building_type] = int(settlement.buildings.get(building_type, 0)) + 1
 	building.set_meta("building_type", building_type)
+	building.set_meta("condition", 100.0)
+	if building_type in ["campfire", "cook_campfire", "gathering_place"]:
+		building.set_meta("fire_fuel", 4)
+		building.set_meta("fire_lit", true)
 	if _is_staffed_workplace(building):
 		workplace_priority_counter += 1
 		building.set_meta("accepting_workers", true)
@@ -3408,6 +3415,12 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			gathering_place_positions.append(service_position)
 			_create_gathering_place_visual(building)
 			_add_building_selector(building, "building_selector", blueprint.footprint)
+			var gathering_light := OmniLight3D.new()
+			gathering_light.position = Vector3(0.0, 0.5, 0.0)
+			gathering_light.light_color = Color("ff9d3b")
+			gathering_light.light_energy = 2.0
+			gathering_light.omni_range = 7.0
+			building.add_child(gathering_light)
 		"cook_campfire", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant":
 			canteen = building
 			canteen_position = service_position
@@ -3571,13 +3584,17 @@ func _send_citizen_to_leisure(citizen: Citizen, minimum_hours := 0) -> bool:
 	if citizen.is_player_controlled or citizen.state not in [Citizen.State.IDLE, Citizen.State.RESTING, Citizen.State.WAITING]:
 		return false
 	# Dedicated recreation first (parks, leisure centers), picked at random.
-	var recreation := gathering_place_positions + park_positions + leisure_positions
+	var recreation: Array[Vector3] = park_positions + leisure_positions
+	for position in gathering_place_positions:
+		var place := _building_at_service_position(position)
+		if is_instance_valid(place) and _is_fire_lit(place):
+			recreation.append(position)
 	if not recreation.is_empty():
 		citizen.go_to_park(recreation[randi() % recreation.size()], minimum_hours)
 		return true
 	# No parks yet (early eras): gather at the main campfire or a natural pond.
 	var gathering_spots: Array[Vector3] = []
-	if is_instance_valid(campfire_node):
+	if is_instance_valid(campfire_node) and _is_fire_lit(campfire_node):
 		gathering_spots.append(campfire_node.global_position)
 	for pond in pond_positions:
 		# Do not stand in water: choose a stable point at its rim.
@@ -4972,6 +4989,84 @@ func _create_gathering_place_visual(building: Node3D) -> void:
 		log.rotation.z = PI * 0.5
 		log.position = Vector3(cos(angle) * 1.25, 0.28, sin(angle) * 1.25)
 		building.add_child(log)
+
+func _building_at_service_position(position: Vector3) -> Node3D:
+	for record in building_footprints:
+		var building := record.get("node") as Node3D
+		if is_instance_valid(building) and building.get_meta("service_position", building.global_position).distance_squared_to(position) < 0.01:
+			return building
+	return null
+
+func _is_fire_lit(building: Node3D) -> bool:
+	return is_instance_valid(building) and bool(building.get_meta("fire_lit", true))
+
+func _update_fire_status() -> void:
+	# Fires consume one large branch each four simulated hours. Couriers' first
+	# reserve duty is keeping them supplied from storage; without branches the
+	# service is deliberately unavailable.
+	var minute := int(game_minutes)
+	if minute % (4 * 60) != 0 or get_meta("last_fire_tick", -1) == minute:
+		return
+	set_meta("last_fire_tick", minute)
+	for record in building_footprints:
+		var building := record.get("node") as Node3D
+		if not is_instance_valid(building) or str(building.get_meta("building_type", "")) not in ["campfire", "cook_campfire", "gathering_place"]:
+			continue
+		var fuel := int(building.get_meta("fire_fuel", 0))
+		if fuel <= 0 and branches > 0:
+			# A stockroom branch is allocated as a courier supply reservation.
+			branches -= 1
+			fuel = 3
+		building.set_meta("fire_fuel", fuel)
+		if fuel > 0:
+			fuel -= 1
+		building.set_meta("fire_fuel", fuel)
+		building.set_meta("fire_lit", fuel > 0)
+		for child in building.get_children():
+			if child is OmniLight3D:
+				child.visible = fuel > 0
+	if is_instance_valid(campfire_node) and not _is_fire_lit(campfire_node):
+		wellbeing = maxi(0, wellbeing - 1)
+
+func _apply_building_wear_and_repairs() -> void:
+	for record in building_footprints:
+		var building := record.get("node") as Node3D
+		if not is_instance_valid(building):
+			continue
+		var building_type := str(building.get_meta("building_type", ""))
+		if bool(building.get_meta("ruined", false)):
+			continue
+		var era := BuildingCatalog.era_for(building_type)
+		if era > SettlementState.Era.EARTH:
+			continue
+		var wear := 8.0 if era == SettlementState.Era.TENT else 3.0
+		var condition := maxf(0.0, float(building.get_meta("condition", 100.0)) - wear)
+		# An assigned builder repairs one damaged early structure per day, consuming
+		# a branch from storage. This retains the daily maintenance loop.
+		if condition < 100.0 and branches > 0 and _has_active_builder():
+			branches -= 1
+			condition = minf(100.0, condition + 18.0)
+		building.set_meta("condition", condition)
+		if condition <= 0.0:
+			_mark_building_ruined(building, building_type)
+
+func _has_active_builder() -> bool:
+	for citizen in citizens:
+		if citizen.permanent_role == "construction" or citizen.specialization == "builder":
+			return true
+	return false
+
+func _mark_building_ruined(building: Node3D, building_type: String) -> void:
+	# Destruction uses the existing service cleanup and leaves a visible resource
+	# pile placeholder rather than silently deleting stored contents.
+	_remove_building_services(building, building_type)
+	building.set_meta("condition", 1.0)
+	building.set_meta("ruined", true)
+	var indicator := building.get_meta("status_indicator") as Label3D
+	if is_instance_valid(indicator):
+		indicator.visible = true
+		indicator.text = "RUINED"
+		indicator.modulate = Color("ef6b5b")
 
 func _cleanup_grass_reservations() -> void:
 	for cell in grass_reservations.keys():
