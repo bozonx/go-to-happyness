@@ -256,8 +256,10 @@ func assign_work(citizen: Citizen, index: int) -> void:
 		"construction":
 			if not simulation.demolition_sites.is_empty():
 				citizen.assign_demolition(simulation.demolition_sites[index % simulation.demolition_sites.size()].building)
-			elif not simulation.construction_sites.is_empty():
-				var construction: Dictionary = simulation.construction_sites[index % simulation.construction_sites.size()]
+			else:
+				var construction: Dictionary = simulation._preferred_construction_site()
+				if construction.is_empty():
+					return
 				citizen.assign_construction(construction.node)
 		"forestry":
 			var tree_position: Vector3 = simulation._reserve_closest_tree_for_sawmill(citizen, Vector3.ZERO)

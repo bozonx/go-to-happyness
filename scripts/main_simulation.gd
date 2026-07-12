@@ -805,23 +805,57 @@ func _update_couriers() -> void:
 
 func _update_construction_supplies() -> void:
 	# Reserve one unit at a time. The courier physically carries it from storage
-	# to the site; construction remains blocked until the arrival signal fires.
+	# to the site. Unlike production logistics, construction deliberately focuses
+	# on one development-critical project until it is supplied.
+	var site := _preferred_construction_site()
+	if site.is_empty():
+		return
 	for courier in citizens:
 		if courier.specialization != "courier" or courier.state != Citizen.State.IDLE:
 			continue
-		for site in construction_sites:
-			for resource_type in site.required_materials:
-				var required := int(site.required_materials[resource_type])
-				var delivered := int(site.delivered_materials.get(resource_type, 0))
-				var reserved := int(site.get("reserved_materials", {}).get(resource_type, 0))
-				if delivered + reserved >= required or settlement.amount(resource_type) <= 0:
-					continue
-				settlement.add(resource_type, -1)
-				var reservations: Dictionary = site.get("reserved_materials", {})
-				reservations[resource_type] = reserved + 1
-				site.reserved_materials = reservations
-				courier.assign_construction_delivery(site.node, warehouse_positions[0], resource_type)
-				return
+		for resource_type in site.required_materials:
+			var required := int(site.required_materials[resource_type])
+			var delivered := int(site.delivered_materials.get(resource_type, 0))
+			var reserved := int(site.get("reserved_materials", {}).get(resource_type, 0))
+			if delivered + reserved >= required or settlement.amount(resource_type) <= 0:
+				continue
+			settlement.add(resource_type, -1)
+			var reservations: Dictionary = site.get("reserved_materials", {})
+			reservations[resource_type] = reserved + 1
+			site.reserved_materials = reservations
+			courier.assign_construction_delivery(site.node, warehouse_positions[0], resource_type)
+			return
+
+func _preferred_construction_site() -> Dictionary:
+	var chosen: Dictionary = {}
+	var best_score := -INF
+	for site in construction_sites:
+		var score := _construction_development_priority(site)
+		if score > best_score:
+			chosen = site
+			best_score = score
+	return chosen
+
+func _construction_development_priority(site: Dictionary) -> float:
+	var building_type := str(site.type)
+	var score := float(BuildingCatalog.era_for(building_type)) * 100.0
+	var population := citizens.size()
+	match building_type:
+		"warehouse": score += 1000.0 if warehouse_positions.is_empty() else 180.0
+		"campfire": score += 950.0 if not is_instance_valid(campfire_node) else 120.0
+		"tent", "living_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "brick_house":
+			score += 850.0 if _total_housing_slots() < population else 140.0
+		"forager_tent", "farm": score += 700.0 if food < population * 2 else 160.0
+		"cook_campfire", "dugout_kitchen", "clay_bakery", "canteen": score += 580.0 if not is_instance_valid(canteen) else 120.0
+		"sawmill": score += 420.0 if sawmill_positions.is_empty() else 100.0
+		"gathering_place", "park", "leisure_center": score += 80.0
+		_: score += 250.0
+	# Once a project has started receiving stock, preserve the focus and avoid
+	# oscillating between equally valuable plans.
+	var supplied := 0
+	for resource_type in site.delivered_materials:
+		supplied += int(site.delivered_materials[resource_type])
+	return score + supplied * 2.0
 
 func _on_construction_material_delivered(_courier: Citizen, site_node: Node3D, resource_type: String, amount: int) -> void:
 	for index in construction_sites.size():
