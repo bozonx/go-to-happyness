@@ -130,10 +130,18 @@ func cancel_site(site_node: Node3D) -> void:
 		var site: Dictionary = simulation.construction_sites[index]
 		if site.node != site_node:
 			continue
-		# Only delivered goods were withdrawn from storage, so return half of those.
+		# Delivered stock is returned at the normal cancellation rate. In-transit
+		# reservations are returned in full so cargo can never vanish.
 		for resource_type in site.delivered_materials:
 			var refund := maxi(1, floori(int(site.delivered_materials[resource_type]) * 0.5))
 			simulation.settlement.add(resource_type, refund)
+		for resource_type in site.get("reserved_materials", {}):
+			simulation.settlement.add(resource_type, int(site.reserved_materials[resource_type]))
+		for citizen in simulation.citizens:
+			if citizen.construction_site == site_node and citizen.state in [Citizen.State.TO_CONSTRUCTION_PICKUP, Citizen.State.TO_CONSTRUCTION_SITE]:
+				citizen.carried_amount = 0
+				citizen.construction_site = null
+				citizen.idle()
 		# Release builders working on this site
 		for citizen in simulation.citizens:
 			citizen.finish_construction(site_node)

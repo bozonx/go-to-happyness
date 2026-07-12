@@ -172,6 +172,9 @@ func _test_workforce_policy() -> void:
 	var early_builder := {"specialization": "builder", "manual_role": "", "player_controlled": false, "blocked_by_storage": false}
 	var early_world := {"era": SettlementState.Era.WOOD, "construction_sites": 1, "assigned_roles": {}, "population": 2}
 	assert(WorkforcePolicy.role_for(early_builder, early_world) == "construction")
+	assert(WorkforcePolicy.permanent_vacancy_for(early_builder, early_world) == "construction")
+	early_world.builder_jobs = 0
+	assert(WorkforcePolicy.permanent_vacancy_for(early_builder, early_world) == "construction")
 	early_world.assigned_roles = {"construction": 1}
 	assert(WorkforcePolicy.role_for(early_builder, early_world) != "construction")
 	var guild_world := {"era": SettlementState.Era.STONE, "construction_sites": 1, "builder_jobs": 1, "assigned_roles": {}, "population": 2}

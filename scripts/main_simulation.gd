@@ -98,6 +98,7 @@ var sawmill_stocks: Dictionary = {}
 var tree_reservations: Dictionary = {}
 var grass_reservations: Dictionary = {}
 var grass_sources: Dictionary = {} # cell -> {node, remaining}; finite patches around trees
+var resource_piles: Array[Dictionary] = []
 var farm_positions: Array[Vector3] = []
 var builders_guild_positions: Array[Vector3] = []
 var construction_company_positions: Array[Vector3] = []
@@ -300,6 +301,7 @@ func _process(delta: float) -> void:
 	_update_house_lights()
 	_update_canteen_delivery()
 	_update_fire_status()
+	_update_repairs()
 	_dispatch_queued_trades()
 	_update_sawmills(delta)
 	_update_brick_research(delta)
@@ -339,6 +341,8 @@ func _has_courier() -> bool:
 	return false
 
 func _has_cook() -> bool:
+	if not _is_fire_lit(canteen):
+		return false
 	for citizen in citizens:
 		if citizen.specialization == "cook" and not citizen.is_player_controlled and is_instance_valid(canteen) and citizen.global_position.distance_to(canteen_position) <= 2.2:
 			return true
@@ -457,6 +461,7 @@ func _apply_daily_settlement_rules() -> void:
 	for citizen in citizens:
 		citizen.apply_daily_decay()
 	_apply_building_wear_and_repairs()
+	_decay_resource_piles()
 	# Everyone drinks each day. When there is no kitchen running meals, they also
 	# eat straight from the stores; a working cooking campfire/canteen already
 	# draws food through the meal pipeline, so we don't double-count there.
@@ -577,6 +582,10 @@ func _start_after_work_rest() -> void:
 	for citizen in citizens:
 		if citizen.is_player_controlled:
 			continue
+		# Do not discard a courier's cargo or interrupt a production delivery at
+		# shift end. They will return home at the nightly cutoff instead.
+		if not citizen.is_available_for_schedule():
+			continue
 		if settlement.workday_hours >= 12:
 			citizen.go_home()
 		elif not _send_citizen_to_leisure(citizen, random.randi_range(1, maxi(1, 25 - (8 + settlement.workday_hours)))):
@@ -642,6 +651,8 @@ func _on_canteen_delivery_finished(worker: Citizen, amount: int) -> void:
 func _update_couriers() -> void:
 	if warehouse_positions.is_empty():
 		return
+	_update_firewood_supplies()
+	_update_resource_pile_supplies()
 	_update_construction_supplies()
 
 	var available_couriers := []
@@ -825,6 +836,75 @@ func _on_construction_material_delivered(_courier: Citizen, site_node: Node3D, r
 		site.reserved_materials = reservations
 		construction_sites[index] = site
 		return
+
+func _on_building_supply_delivered(_courier: Citizen, target: Node3D, supply_kind: String, resource_type: String, amount: int) -> void:
+	if not is_instance_valid(target):
+		settlement.add(resource_type, amount)
+		return
+	match supply_kind:
+		"firewood":
+			target.set_meta("fire_fuel", int(target.get_meta("fire_fuel", 0)) + amount)
+			target.set_meta("fire_reserved", maxi(0, int(target.get_meta("fire_reserved", 0)) - amount))
+			target.set_meta("fire_lit", true)
+		"repair":
+			target.set_meta("repair_reserved", false)
+			var repaired_condition := minf(100.0, float(target.get_meta("condition", 0.0)) + 18.0)
+			target.set_meta("condition", repaired_condition)
+			target.set_meta("repair_needed", repaired_condition < 82.0)
+		"pile":
+			settlement.add(resource_type, amount)
+			for index in resource_piles.size():
+				if resource_piles[index].node == target:
+					var reserved: Dictionary = resource_piles[index].reserved
+					reserved[resource_type] = maxi(0, int(reserved.get(resource_type, 0)) - amount)
+					resource_piles[index].reserved = reserved
+					break
+
+func _update_firewood_supplies() -> void:
+	for courier in citizens:
+		if courier.specialization != "courier" or courier.state != Citizen.State.IDLE:
+			continue
+		for record in building_footprints:
+			var building := record.get("node") as Node3D
+			if not is_instance_valid(building) or str(building.get_meta("building_type", "")) not in ["campfire", "cook_campfire", "gathering_place"]:
+				continue
+			if int(building.get_meta("fire_fuel", 0)) + int(building.get_meta("fire_reserved", 0)) >= 4 or branches <= 0:
+				continue
+			branches -= 1
+			building.set_meta("fire_reserved", int(building.get_meta("fire_reserved", 0)) + 1)
+			courier.assign_building_supply(building, warehouse_positions[0], "branches", "firewood")
+			return
+
+func _update_repairs() -> void:
+	if warehouse_positions.is_empty() or branches <= 0 or not _is_work_time():
+		return
+	for builder in citizens:
+		if builder.state != Citizen.State.IDLE or (builder.permanent_role != "construction" and builder.specialization != "builder"):
+			continue
+		for record in building_footprints:
+			var building := record.get("node") as Node3D
+			if not is_instance_valid(building) or not bool(building.get_meta("repair_needed", false)) or bool(building.get_meta("repair_reserved", false)):
+				continue
+			branches -= 1
+			building.set_meta("repair_reserved", true)
+			builder.assign_building_supply(building, warehouse_positions[0], "branches", "repair")
+			return
+
+func _update_resource_pile_supplies() -> void:
+	for courier in citizens:
+		if courier.specialization != "courier" or courier.state != Citizen.State.IDLE:
+			continue
+		for index in resource_piles.size():
+			var pile: Dictionary = resource_piles[index]
+			for resource_type in pile.resources:
+				var available := int(pile.resources[resource_type]) - int(pile.reserved.get(resource_type, 0))
+				if available <= 0:
+					continue
+				pile.resources[resource_type] = int(pile.resources[resource_type]) - 1
+				pile.reserved[resource_type] = int(pile.reserved.get(resource_type, 0)) + 1
+				resource_piles[index] = pile
+				courier.assign_building_supply(pile.node, warehouse_positions[0], resource_type, "pile")
+				return
 
 func _builder_count(site_node: Node3D) -> int:
 	var count := 0
@@ -1617,6 +1697,7 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	citizen.setup_scheduler(_try_resume_work, _send_citizen_to_leisure)
 	citizen.resource_delivered.connect(_on_resource_delivered)
 	citizen.construction_material_delivered.connect(_on_construction_material_delivered)
+	citizen.building_supply_delivered.connect(_on_building_supply_delivered)
 	citizen.excavation_cycle.connect(_on_excavation_cycle)
 	citizen.resource_ready.connect(_on_resource_ready)
 	citizen.tree_harvested.connect(_on_tree_harvested)
@@ -2838,6 +2919,7 @@ func _update_demolition(delta: float) -> void:
 func _finish_demolition(site: Dictionary) -> void:
 	var building: Node3D = site.building
 	var building_type := str(site.type)
+	_return_in_transit_building_supplies(building)
 	for citizen in citizens:
 		citizen.finish_construction(building)
 	_remove_building_services(building, building_type)
@@ -5013,11 +5095,6 @@ func _update_fire_status() -> void:
 		if not is_instance_valid(building) or str(building.get_meta("building_type", "")) not in ["campfire", "cook_campfire", "gathering_place"]:
 			continue
 		var fuel := int(building.get_meta("fire_fuel", 0))
-		if fuel <= 0 and branches > 0:
-			# A stockroom branch is allocated as a courier supply reservation.
-			branches -= 1
-			fuel = 3
-		building.set_meta("fire_fuel", fuel)
 		if fuel > 0:
 			fuel -= 1
 		building.set_meta("fire_fuel", fuel)
@@ -5041,14 +5118,10 @@ func _apply_building_wear_and_repairs() -> void:
 			continue
 		var wear := 8.0 if era == SettlementState.Era.TENT else 3.0
 		var condition := maxf(0.0, float(building.get_meta("condition", 100.0)) - wear)
-		# An assigned builder repairs one damaged early structure per day, consuming
-		# a branch from storage. This retains the daily maintenance loop.
-		if condition < 100.0 and branches > 0 and _has_active_builder():
-			branches -= 1
-			condition = minf(100.0, condition + 18.0)
 		building.set_meta("condition", condition)
+		building.set_meta("repair_needed", condition < 82.0)
 		if condition <= 0.0:
-			_mark_building_ruined(building, building_type)
+			_destroy_building_to_pile(building, building_type)
 
 func _has_active_builder() -> bool:
 	for citizen in citizens:
@@ -5056,17 +5129,83 @@ func _has_active_builder() -> bool:
 			return true
 	return false
 
-func _mark_building_ruined(building: Node3D, building_type: String) -> void:
-	# Destruction uses the existing service cleanup and leaves a visible resource
-	# pile placeholder rather than silently deleting stored contents.
+func _destroy_building_to_pile(building: Node3D, building_type: String) -> void:
+	var resources: Dictionary = BuildingCatalog.demolition_refund(building_type).duplicate(true)
+	if building_type == "warehouse":
+		resources.clear()
+		for resource_type in SettlementState.STORED_RESOURCES:
+			var amount := settlement.amount(resource_type)
+			if amount > 0:
+				resources[resource_type] = amount
+				settlement.add(resource_type, -amount)
+	for citizen in citizens:
+		if citizen.home == building:
+			citizen.home = null
+	_return_in_transit_building_supplies(building)
 	_remove_building_services(building, building_type)
-	building.set_meta("condition", 1.0)
-	building.set_meta("ruined", true)
-	var indicator := building.get_meta("status_indicator") as Label3D
-	if is_instance_valid(indicator):
-		indicator.visible = true
-		indicator.text = "RUINED"
-		indicator.modulate = Color("ef6b5b")
+	building_positions.erase(building.global_position)
+	for index in range(building_footprints.size() - 1, -1, -1):
+		if building_footprints[index].node == building:
+			building_footprints.remove_at(index)
+	_unregister_navigation_footprint(building.global_position, building.get_meta("occupied_footprint", building.get_meta("footprint", Vector2i(3, 3))))
+	placed_buildings.erase(_placement_key(building.global_position))
+	settlement.buildings[building_type] = maxi(0, int(settlement.buildings.get(building_type, 1)) - 1)
+	_create_resource_pile(building.global_position, resources)
+	building.queue_free()
+	_rebuild_navigation_mesh()
+	_update_workers()
+
+func _create_resource_pile(position: Vector3, resources: Dictionary) -> void:
+	if resources.is_empty():
+		return
+	var pile := Node3D.new()
+	pile.position = position
+	var mesh_node := MeshInstance3D.new()
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = 0.1
+	mesh.bottom_radius = 1.0
+	mesh.height = 1.4
+	mesh_node.mesh = mesh
+	mesh_node.position.y = 0.7
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("8b6540")
+	mesh_node.material_override = material
+	pile.add_child(mesh_node)
+	var label := Label3D.new()
+	label.text = "RESOURCES"
+	label.position.y = 1.7
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	pile.add_child(label)
+	add_child(pile)
+	resource_piles.append({"node": pile, "resources": resources, "reserved": {}})
+
+func _decay_resource_piles() -> void:
+	for index in range(resource_piles.size() - 1, -1, -1):
+		var pile: Dictionary = resource_piles[index]
+		for resource_type in pile.resources.keys():
+			var remaining := int(pile.resources[resource_type])
+			if remaining > 0:
+				pile.resources[resource_type] = maxi(0, remaining - maxi(1, ceili(remaining * 0.1)))
+		var empty := true
+		for amount in pile.resources.values():
+			if int(amount) > 0:
+				empty = false
+		if empty:
+			if is_instance_valid(pile.node):
+				pile.node.queue_free()
+			resource_piles.remove_at(index)
+		else:
+			resource_piles[index] = pile
+
+func _return_in_transit_building_supplies(building: Node3D) -> void:
+	for citizen in citizens:
+		if citizen.construction_site != building or citizen.state not in [Citizen.State.TO_CONSTRUCTION_PICKUP, Citizen.State.TO_CONSTRUCTION_SITE]:
+			continue
+		if citizen.carried_amount > 0 and not citizen.construction_delivery_resource.is_empty():
+			settlement.add(citizen.construction_delivery_resource, citizen.carried_amount)
+		citizen.carried_amount = 0
+		citizen.construction_site = null
+		citizen.idle()
 
 func _cleanup_grass_reservations() -> void:
 	for cell in grass_reservations.keys():

@@ -3,6 +3,7 @@ extends CharacterBody3D
 
 signal resource_delivered(worker: Citizen, resource_type: String, amount: int)
 signal construction_material_delivered(worker: Citizen, site: Node3D, resource_type: String, amount: int)
+signal building_supply_delivered(worker: Citizen, target: Node3D, supply_kind: String, resource_type: String, amount: int)
 signal excavation_cycle(worker: Citizen, site: Node3D, efficiency: float)
 signal resource_ready(worker: Citizen, resource_type: String, amount: int)
 signal tree_harvested(worker: Citizen, position_on_board: Vector3)
@@ -98,6 +99,7 @@ var craft_position := Vector3.ZERO
 var craft_timer := 0.0
 var construction_position := Vector3.ZERO
 var construction_delivery_resource := ""
+var building_supply_kind := "construction"
 var park_rest_duration := 4.0
 var pathfinder: Callable
 var delivery_position_resolver: Callable
@@ -417,11 +419,15 @@ func _process_courier_delivery(delta: float) -> void:
 		resource_delivered.emit(self, courier_resource_type, carried_amount)
 
 func assign_construction_delivery(site: Node3D, warehouse: Vector3, resource_type: String) -> void:
-	if is_player_controlled or not is_instance_valid(site):
+	assign_building_supply(site, warehouse, resource_type, "construction")
+
+func assign_building_supply(target: Node3D, warehouse: Vector3, resource_type: String, supply_kind: String) -> void:
+	if is_player_controlled or not is_instance_valid(target):
 		return
-	construction_site = site
+	construction_site = target
 	warehouse_position = warehouse
 	construction_delivery_resource = resource_type
+	building_supply_kind = supply_kind
 	carried_amount = 1
 	state = State.TO_CONSTRUCTION_PICKUP
 
@@ -435,9 +441,13 @@ func _process_construction_delivery(delta: float) -> void:
 		idle()
 		return
 	if _move_to(construction_position, delta):
-		construction_material_delivered.emit(self, construction_site, construction_delivery_resource, carried_amount)
+		if building_supply_kind == "construction":
+			construction_material_delivered.emit(self, construction_site, construction_delivery_resource, carried_amount)
+		else:
+			building_supply_delivered.emit(self, construction_site, building_supply_kind, construction_delivery_resource, carried_amount)
 		carried_amount = 0
 		construction_delivery_resource = ""
+		building_supply_kind = "construction"
 		construction_site = null
 		state = State.IDLE
 
