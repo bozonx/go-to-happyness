@@ -591,6 +591,7 @@ func _apply_daily_settlement_rules() -> void:
 		return
 	for citizen in citizens:
 		citizen.apply_daily_decay()
+		citizen.generate_toilet_schedule()
 	_apply_building_wear_and_repairs()
 	_decay_resource_piles()
 	# Everyone drinks each day. When there is no kitchen running meals, they also
@@ -1872,6 +1873,7 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 		citizen.auto_mode_enabled = false
 		citizen.employment_state = Citizen.EmploymentState.UNEMPLOYED
 	citizen.setup_goap(self, citizens.size() - 1)
+	citizen.generate_toilet_schedule()
 
 
 func _create_interface() -> void:
@@ -2078,6 +2080,9 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_build_button("Dew collector", "dew_collector", 380, "tent")
 	_add_build_button("Simple store", "warehouse", 414, "tent")
 	_add_build_button("Trade tent", "trade_tent", 448, "tent")
+	_add_build_button("Общественный туалет ур. 1", "toilet_tent", 482, "tent")
+	_add_build_button("Общественный туалет ур. 2", "toilet_tent_lvl2", 516, "tent")
+	_add_build_button("Общественный туалет ур. 3", "toilet_tent_lvl3", 550, "tent")
 	
 	_add_build_button("Dugout", "dugout", 176, "earth")
 	_add_build_button("Earth house", "earth_house", 210, "earth")
@@ -2086,6 +2091,9 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_build_button("Earth market", "earth_market", 312, "earth")
 	_add_build_button("Earth Assembly", "earth_assembly", 346, "earth")
 	_add_build_button("Dugout kitchen", "dugout_kitchen", 380, "earth")
+	_add_build_button("Земляной туалет ур. 1", "toilet_earth", 414, "earth")
+	_add_build_button("Земляной туалет ур. 2", "toilet_earth_lvl2", 448, "earth")
+	_add_build_button("Земляной туалет ур. 3", "toilet_earth_lvl3", 482, "earth")
 	
 	_add_build_button("Clay house", "clay_house", 176, "clay")
 	_add_build_button("Clay workshop", "clay_workshop", 210, "clay")
@@ -2093,6 +2101,9 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_build_button("Clay lodge", "clay_lodge", 278, "clay")
 	_add_build_button("Clay bakery", "clay_bakery", 312, "clay")
 	_add_build_button("School", "school", 346, "clay")
+	_add_build_button("Глиняный туалет ур. 1", "toilet_clay", 380, "clay")
+	_add_build_button("Глиняный туалет ур. 2", "toilet_clay_lvl2", 414, "clay")
+	_add_build_button("Глиняный туалет ур. 3", "toilet_clay_lvl3", 448, "clay")
 	
 	_add_build_button("Sawmill - logs + kit", "sawmill", 176, "wood")
 	_add_build_button("Farm", "farm", 210, "wood")
@@ -2103,6 +2114,9 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_build_button("Park", "park", 312, "wood")
 	_add_build_button("Wood market", "wood_market", 346, "wood")
 	_add_build_button("Wooden town hall", "wood_town_hall", 380, "wood")
+	_add_build_button("Деревянный туалет ур. 1", "toilet_wood", 414, "wood")
+	_add_build_button("Деревянный туалет ур. 2", "toilet_wood_lvl2", 448, "wood")
+	_add_build_button("Деревянный туалет ур. 3", "toilet_wood_lvl3", 482, "wood")
 	
 	_add_build_button("Stone house", "stone_house", 176, "stone")
 	_add_build_button("Masonry workshop", "masonry_workshop", 210, "stone")
@@ -2110,6 +2124,9 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_build_button("Stone prefecture", "stone_prefecture", 278, "stone")
 	_add_build_button("Stone tavern", "stone_tavern", 312, "stone")
 	_add_build_button("Гильдия строителей", "builders_guild", 346, "stone")
+	_add_build_button("Каменный туалет ур. 1", "toilet_stone", 380, "stone")
+	_add_build_button("Каменный туалет ур. 2", "toilet_stone_lvl2", 414, "stone")
+	_add_build_button("Каменный туалет ур. 3", "toilet_stone_lvl3", 448, "stone")
 	
 	_add_build_button("Brick kiln", "brick_factory", 176, "brick")
 	_add_build_button("Materials factory", "materials_factory", 210, "brick")
@@ -2119,6 +2136,9 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_build_button("Brick house", "brick_house", 346, "brick")
 	_add_build_button("Строительная фирма", "construction_company", 380, "brick")
 	_add_build_button("Служба занятости", "employment_office", 414, "brick")
+	_add_build_button("Кирпичный туалет ур. 1", "toilet_brick", 448, "brick")
+	_add_build_button("Кирпичный туалет ур. 2", "toilet_brick_lvl2", 482, "brick")
+	_add_build_button("Кирпичный туалет ур. 3", "toilet_brick_lvl3", 516, "brick")
 
 	_refresh_build_menu()
 
@@ -2442,17 +2462,17 @@ func _hide_research_menu() -> void:
 	if research_menu != null:
 		research_menu.visible = false
 
-func _get_available_courier_for_research(required_skill: String) -> Citizen:
-	var best_courier: Citizen = null
+func _get_available_researcher(required_skill: String) -> Citizen:
+	var best_researcher: Citizen = null
 	var best_skill_val := -1.0
 	for citizen in citizens:
-		if citizen.specialization == "courier" and citizen.employment_state in [Citizen.EmploymentState.AUTO_RESERVE, Citizen.EmploymentState.MANUAL_COURIER] and citizen.state == Citizen.State.IDLE:
-			var skill_key = required_skill
-			var skill_val := float(citizen.skills.get(skill_key, 0.0))
-			if skill_val > best_skill_val:
-				best_courier = citizen
-				best_skill_val = skill_val
-	return best_courier
+		if citizen.is_player_controlled or citizen.state != Citizen.State.IDLE:
+			continue
+		var skill_val := float(citizen.skills.get(required_skill, 0.0))
+		if skill_val > best_skill_val:
+			best_researcher = citizen
+			best_skill_val = skill_val
+	return best_researcher
 
 func _refresh_research_menu() -> void:
 	if research_menu == null or research_list == null:
@@ -2526,15 +2546,15 @@ func _refresh_research_menu() -> void:
 					prerequisites_met = false
 					break
 			
-			var courier := _get_available_courier_for_research(tech.required_skill)
-			var has_worker := courier != null
+			var researcher := _get_available_researcher(tech.required_skill)
+			var has_worker := researcher != null
 			var can_start := settlement.can_start_building_research(tech_id) and has_worker and settlement.active_research_tech_id == ""
 			
 			start_btn.disabled = not can_start
 			if not prerequisites_met:
 				start_btn.tooltip_text = "Research the previous level first."
 			elif not has_worker:
-				start_btn.tooltip_text = "Requires an idle resident in the reserve (Courier)."
+				start_btn.tooltip_text = "Requires an idle resident."
 			elif not affordable:
 				start_btn.tooltip_text = "Not enough resources."
 			elif settlement.active_research_tech_id != "":
@@ -2554,9 +2574,9 @@ func _start_research(tech_id: String) -> void:
 		_update_interface("Research requires an active Campfire.")
 		return
 		
-	var courier := _get_available_courier_for_research(tech.required_skill)
-	if courier == null:
-		_update_interface("Requires an idle resident in the reserve (Courier).")
+	var researcher := _get_available_researcher(tech.required_skill)
+	if researcher == null:
+		_update_interface("Requires an idle resident.")
 		return
 		
 	if not settlement.can_start_building_research(tech_id):
@@ -2566,7 +2586,7 @@ func _start_research(tech_id: String) -> void:
 	settlement.pay_for_research(tech_id)
 	
 	settlement.active_research_tech_id = tech_id
-	settlement.active_research_worker_id = courier.get_instance_id()
+	settlement.active_research_worker_id = researcher.get_instance_id()
 	
 	var base_duration: float = tech.base_duration
 	settlement.active_research_duration = base_duration
@@ -2575,9 +2595,9 @@ func _start_research(tech_id: String) -> void:
 	var research_pos := global_position
 	if is_instance_valid(campfire_node):
 		research_pos = campfire_node.get_meta("service_position", campfire_node.global_position)
-	courier.assign_research_work(research_pos)
+	researcher.assign_research_work(research_pos)
 	
-	_update_interface("Research started: %s. %s is studying at the Campfire." % [tech.name, courier.role_label()])
+	_update_interface("Research started: %s. %s is studying at the Campfire." % [tech.name, researcher.role_label()])
 	_refresh_research_menu()
 	_refresh_campfire_menu()
 
@@ -5796,3 +5816,13 @@ func _cancel_selected_construction() -> void:
 	construction.cancel_site(selected_building)
 	_close_context_menus()
 	_update_interface("Construction cancelled. Refunded 50% of costs.")
+
+
+func get_toilets() -> Array[Node3D]:
+	var toilets: Array[Node3D] = []
+	for record in building_registry.records():
+		if is_instance_valid(record.node):
+			var b_type: String = record.node.get_meta("building_type", "")
+			if b_type.begins_with("toilet_"):
+				toilets.append(record.node)
+	return toilets

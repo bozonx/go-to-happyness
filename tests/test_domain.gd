@@ -75,7 +75,7 @@ func _test_settlement_economy() -> void:
 
 func _test_progression_and_volunteers() -> void:
 	var state := SettlementState.new()
-	state.buildings = {"campfire": 1, "trade_tent": 1, "craft_tent_lvl3": 1, "living_tent_lvl3": 1}
+	state.buildings = {"campfire": 1, "trade_tent": 1, "craft_tent_lvl3": 1, "living_tent_lvl3": 1, "toilet_tent_lvl3": 1}
 	state.food = 4
 	state.water = 4
 	state.trade_sales = 1
@@ -84,7 +84,7 @@ func _test_progression_and_volunteers() -> void:
 	assert(state.can_advance_to(SettlementState.Era.EARTH, 4, 4))
 	assert(state.advance_era(SettlementState.Era.EARTH, 4, 4))
 
-	state.buildings = {"earth_assembly": 1, "smithy": 1, "earth_market": 1}
+	state.buildings = {"earth_assembly": 1, "smithy": 1, "earth_market": 1, "toilet_earth_lvl3": 1}
 	state.clay = 5
 	state.money = 10
 	state.trade_sales = 3
@@ -93,20 +93,20 @@ func _test_progression_and_volunteers() -> void:
 	assert(state.can_advance_to(SettlementState.Era.CLAY, 4, 4))
 	assert(state.advance_era(SettlementState.Era.CLAY, 4, 4))
 	
-	state.buildings = {"clay_lodge": 1, "clay_market": 1}
+	state.buildings = {"clay_lodge": 1, "clay_market": 1, "toilet_clay_lvl3": 1}
 	state.water = 4
 	state.logs = 10
 	state.money = 10
 	assert(state.can_advance_to(SettlementState.Era.WOOD, 4, 4))
 	assert(state.advance_era(SettlementState.Era.WOOD, 4, 4))
 
-	state.buildings = {"wood_town_hall": 1, "wood_market": 1, "sawmill": 1, "house_lvl3": 1}
+	state.buildings = {"wood_town_hall": 1, "wood_market": 1, "sawmill": 1, "house_lvl3": 1, "toilet_wood_lvl3": 1}
 	state.money = 15
 	state.tools["pickaxe"] = true
 	assert(state.can_advance_to(SettlementState.Era.STONE, 4, 4))
 	assert(state.advance_era(SettlementState.Era.STONE, 4, 4))
 
-	state.buildings = {"stone_prefecture": 1, "stone_market": 1, "masonry_workshop": 1, "stone_house": 1}
+	state.buildings = {"stone_prefecture": 1, "stone_market": 1, "masonry_workshop": 1, "stone_house": 1, "toilet_stone_lvl3": 1}
 	state.stone = 20
 	state.money = 20
 	assert(state.can_advance_to(SettlementState.Era.BRICK, 4, 4))

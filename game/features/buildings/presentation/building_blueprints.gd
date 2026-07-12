@@ -76,6 +76,24 @@ const COLORS := {
 	"brick_house": Color("b4533a"),
 	"construction_company": Color("a94b3c"),
 	"employment_office": Color("8a8f99"),
+	"toilet_tent": Color("ab8e5b"),
+	"toilet_tent_lvl2": Color("a08350"),
+	"toilet_tent_lvl3": Color("957845"),
+	"toilet_earth": Color("8a6549"),
+	"toilet_earth_lvl2": Color("7f5a3e"),
+	"toilet_earth_lvl3": Color("744f33"),
+	"toilet_clay": Color("b87a50"),
+	"toilet_clay_lvl2": Color("ad6f45"),
+	"toilet_clay_lvl3": Color("a2643a"),
+	"toilet_wood": Color("af6f3b"),
+	"toilet_wood_lvl2": Color("a46430"),
+	"toilet_wood_lvl3": Color("995925"),
+	"toilet_stone": Color("8a8d8f"),
+	"toilet_stone_lvl2": Color("7f8284"),
+	"toilet_stone_lvl3": Color("747779"),
+	"toilet_brick": Color("b85e42"),
+	"toilet_brick_lvl2": Color("ad5337"),
+	"toilet_brick_lvl3": Color("a2482c"),
 }
 
 
@@ -114,6 +132,12 @@ static func get_blueprint(building_type: String) -> Dictionary:
 		"city_hall": return _enclosed_blueprint("city_hall", Vector2i(8, 6), 4, "hip")
 		"leisure_center": return _enclosed_blueprint("leisure_center", Vector2i(8, 6), 3, "hip")
 		"wood_market", "brick_market": return _enclosed_blueprint(building_type, Vector2i(5, 5), 3, "shed")
+		"toilet_tent", "toilet_tent_lvl2", "toilet_tent_lvl3": return _enclosed_blueprint(building_type, Vector2i(3, 3), 2, "gable")
+		"toilet_earth", "toilet_earth_lvl2", "toilet_earth_lvl3": return _enclosed_blueprint(building_type, Vector2i(3, 3), 2, "gable")
+		"toilet_clay", "toilet_clay_lvl2", "toilet_clay_lvl3": return _enclosed_blueprint(building_type, Vector2i(3, 3), 2, "gable")
+		"toilet_wood", "toilet_wood_lvl2", "toilet_wood_lvl3": return _enclosed_blueprint(building_type, Vector2i(3, 3), 2, "gable")
+		"toilet_stone", "toilet_stone_lvl2", "toilet_stone_lvl3": return _enclosed_blueprint(building_type, Vector2i(3, 3), 2, "hip")
+		"toilet_brick", "toilet_brick_lvl2", "toilet_brick_lvl3": return _enclosed_blueprint(building_type, Vector2i(3, 3), 2, "shed")
 		_: return _enclosed_blueprint(building_type, Vector2i(5, 5), 3, "gable")
 
 

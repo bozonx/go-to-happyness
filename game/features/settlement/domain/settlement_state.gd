@@ -45,6 +45,18 @@ var unlocked_building_levels := {
 	"canteen": false,
 	"stone_tavern": false,
 	"brick_restaurant": false,
+	"toilet_tent_lvl2": false,
+	"toilet_tent_lvl3": false,
+	"toilet_earth_lvl2": false,
+	"toilet_earth_lvl3": false,
+	"toilet_clay_lvl2": false,
+	"toilet_clay_lvl3": false,
+	"toilet_wood_lvl2": false,
+	"toilet_wood_lvl3": false,
+	"toilet_stone_lvl2": false,
+	"toilet_stone_lvl3": false,
+	"toilet_brick_lvl2": false,
+	"toilet_brick_lvl3": false,
 }
 var active_research_tech_id := ""
 var active_research_worker_id := -1

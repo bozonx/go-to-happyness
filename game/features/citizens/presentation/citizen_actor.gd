@@ -38,7 +38,7 @@ const NAVIGATION_TARGET_CLEARANCE := 0.48
 const ROUTE_PROGRESS_EPSILON := 0.06
 const ROUTE_RETRY_INTERVAL := 2.0
 
-enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, TO_GATHER, GATHERING, TO_TRADE_PICKUP, TO_TRADE_DESTINATION, TO_EMPLOYMENT_CENTER, EMPLOYMENT_PROCESSING, CANTEEN_WORK, SCHOOL_WORK, TO_MARKET_WORK, MARKET_WORK, TO_CRAFT_WORK, CRAFT_WORK, TO_CONSTRUCTION_PICKUP, TO_CONSTRUCTION_SITE, TO_OFFICIAL_WORK, OFFICIAL_WORK, TO_ARRIVAL_ENTRANCE, ARRIVAL_MEETING, ARRIVAL_WAITING, TO_ARRIVAL_CENTER, RESEARCHING }
+enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, TO_GATHER, GATHERING, TO_TRADE_PICKUP, TO_TRADE_DESTINATION, TO_EMPLOYMENT_CENTER, EMPLOYMENT_PROCESSING, CANTEEN_WORK, SCHOOL_WORK, TO_MARKET_WORK, MARKET_WORK, TO_CRAFT_WORK, CRAFT_WORK, TO_CONSTRUCTION_PICKUP, TO_CONSTRUCTION_SITE, TO_OFFICIAL_WORK, OFFICIAL_WORK, TO_ARRIVAL_ENTRANCE, ARRIVAL_MEETING, ARRIVAL_WAITING, TO_ARRIVAL_CENTER, RESEARCHING, TO_TOILET, USING_TOILET, WAITING_FOR_TOILET, TO_BUSH, USING_BUSH }
 
 enum EmploymentState { AUTO_RESERVE, EMPLOYED, UNEMPLOYED, PENDING_JOB, PENDING_UNEMPLOYMENT, MANUAL_COURIER }
 
@@ -105,6 +105,10 @@ var buffs: Dictionary = {}
 var debuffs: Dictionary = {}
 var delivery_amount := 0
 var canteen_position := Vector3.ZERO
+var toilet_times: Array[float] = []
+var current_toilet_target: Node3D = null
+var needs_toilet := false
+const TOILET_USE_DURATION := 5.0
 var market_position := Vector3.ZERO
 var craft_position := Vector3.ZERO
 var craft_timer := 0.0
@@ -162,6 +166,7 @@ func _ready() -> void:
 	_setup_navigation_agent()
 	_setup_selector()
 	_setup_visuals()
+	generate_toilet_schedule()
 
 func _setup_navigation_agent() -> void:
 	navigation_agent = NavigationAgent3D.new()
@@ -266,6 +271,21 @@ func _physics_process(delta: float) -> void:
 	_apply_gravity(delta)
 	_update_effects(delta)
 	_update_satisfaction(delta)
+	
+	if not is_player_controlled:
+		if simulation != null and not toilet_times.is_empty():
+			var current_time := float(simulation.game_minutes)
+			if current_time >= toilet_times[0]:
+				toilet_times.pop_front()
+				needs_toilet = true
+		
+		if needs_toilet and state not in [State.TO_TOILET, State.USING_TOILET, State.WAITING_FOR_TOILET, State.TO_BUSH, State.USING_BUSH]:
+			if is_available_for_schedule():
+				_find_and_go_to_toilet_or_bush()
+			if state not in [State.TO_TOILET, State.USING_TOILET, State.WAITING_FOR_TOILET, State.TO_BUSH, State.USING_BUSH]:
+				if not _is_toilet_or_bush_nearby():
+					satisfaction = maxf(0.0, satisfaction - delta * 6.0)
+
 	match state:
 		State.WAITING:
 			_process_waiting(delta)
@@ -359,6 +379,16 @@ func _physics_process(delta: float) -> void:
 			_process_arrival_meeting(delta)
 		State.TO_ARRIVAL_CENTER:
 			_process_arrival_center(delta)
+		State.TO_TOILET:
+			_process_to_toilet(delta)
+		State.USING_TOILET:
+			_process_using_toilet(delta)
+		State.WAITING_FOR_TOILET:
+			_process_waiting_for_toilet(delta)
+		State.TO_BUSH:
+			_process_to_bush(delta)
+		State.USING_BUSH:
+			_process_using_bush(delta)
 	if idle_indicator != null:
 		_update_idle_indicator()
 
@@ -1295,6 +1325,33 @@ func _update_idle_indicator() -> void:
 	if is_player_controlled:
 		idle_indicator.visible = false
 		return
+	if state == State.TO_TOILET:
+		idle_indicator.visible = true
+		idle_indicator.text = "Going to Toilet"
+		idle_indicator.modulate = Color("a5d6a7")
+		return
+	if state == State.WAITING_FOR_TOILET:
+		idle_indicator.visible = true
+		idle_indicator.text = "Waiting in Queue"
+		idle_indicator.modulate = Color("ffb74d")
+		return
+	if state == State.USING_TOILET:
+		idle_indicator.visible = true
+		var pct := int((1.0 - task_timer.remaining / TOILET_USE_DURATION) * 100.0)
+		idle_indicator.text = "Using Toilet (%d%%)" % clamp(pct, 0, 100)
+		idle_indicator.modulate = Color("81c784")
+		return
+	if state == State.TO_BUSH:
+		idle_indicator.visible = true
+		idle_indicator.text = "Going to Bush"
+		idle_indicator.modulate = Color("a5d6a7")
+		return
+	if state == State.USING_BUSH:
+		idle_indicator.visible = true
+		var pct := int((1.0 - task_timer.remaining / TOILET_USE_DURATION) * 100.0)
+		idle_indicator.text = "Relieving in Bush (%d%%)" % clamp(pct, 0, 100)
+		idle_indicator.modulate = Color("81c784")
+		return
 	if state == State.RESEARCHING:
 		idle_indicator.visible = true
 		idle_indicator.text = "Researching"
@@ -1390,7 +1447,7 @@ func _update_effects(delta: float) -> void:
 			buffs[buff_id] = time_left
 
 func is_available_for_schedule() -> bool:
-	return not is_player_controlled and not has_active_delivery() and state != State.TO_CANTEEN and state != State.EATING and state != State.TO_HOME and state != State.RESTING and state != State.STUDYING and state != State.TO_PARK and state != State.RELAXING and state != State.RESEARCHING
+	return not is_player_controlled and not has_active_delivery() and state != State.TO_CANTEEN and state != State.EATING and state != State.TO_HOME and state != State.RESTING and state != State.STUDYING and state != State.TO_PARK and state != State.RELAXING and state != State.RESEARCHING and state != State.TO_TOILET and state != State.USING_TOILET and state != State.WAITING_FOR_TOILET and state != State.TO_BUSH and state != State.USING_BUSH
 
 func _update_satisfaction(delta: float) -> void:
 	satisfaction_tick += delta
@@ -1475,3 +1532,196 @@ func _process_trade_destination(delta: float) -> void:
 	if _move_to(trade_destination_position, delta):
 		state = State.IDLE
 		trade_delivery_finished.emit(self)
+
+
+func is_toilet_user(citizen: Citizen) -> bool:
+	if citizen.is_player_controlled or citizen.is_hero:
+		return false
+	return citizen.specialization in ["courier", "unassigned", "builder"] or citizen.employment_workplace == null
+
+
+func generate_toilet_schedule() -> void:
+	toilet_times.clear()
+	if is_toilet_user(self):
+		var time1 := randf_range(480.0, 800.0)
+		var time2 := randf_range(840.0, 1200.0)
+		toilet_times.append(time1)
+		toilet_times.append(time2)
+		toilet_times.sort()
+
+
+func _get_simulation_toilets() -> Array[Node3D]:
+	var toilets: Array[Node3D] = []
+	if simulation != null and "building_registry" in simulation:
+		var registry = simulation.building_registry
+		if registry != null:
+			for record in registry.records():
+				if is_instance_valid(record.node):
+					var b_type: String = record.node.get_meta("building_type", "")
+					if b_type.begins_with("toilet_"):
+						toilets.append(record.node)
+	return toilets
+
+
+func _is_toilet_or_bush_nearby() -> bool:
+	if simulation == null:
+		return false
+	var toilets := _get_simulation_toilets()
+	for toilet in toilets:
+		var serv_pos: Vector3 = toilet.get_meta("service_position") if toilet.has_meta("service_position") else toilet.global_position
+		if global_position.distance_to(serv_pos) <= 50.0:
+			return true
+	var nearest_tree_pos := Vector3.INF
+	var min_tree_dist := 999999.0
+	if "tree_positions" in simulation:
+		for tree_pos in simulation.tree_positions:
+			var d := global_position.distance_to(tree_pos)
+			if d < min_tree_dist:
+				min_tree_dist = d
+	if min_tree_dist <= 30.0:
+		return true
+	return false
+
+
+func _find_and_go_to_toilet_or_bush() -> void:
+	if simulation == null:
+		return
+		
+	# 1. Look for toilets within 50.0 units
+	var toilets := _get_simulation_toilets()
+	var nearby_toilets: Array[Node3D] = []
+	for toilet in toilets:
+		var serv_pos: Vector3 = toilet.get_meta("service_position") if toilet.has_meta("service_position") else toilet.global_position
+		if global_position.distance_to(serv_pos) <= 50.0:
+			nearby_toilets.append(toilet)
+			
+	if not nearby_toilets.is_empty():
+		# Distribute evenly: pick the toilet with the lowest load
+		var best_toilet: Node3D = null
+		var min_load := 999999
+		for toilet in nearby_toilets:
+			var load := 0
+			for other in simulation.citizens:
+				if other.current_toilet_target == toilet:
+					load += 1
+			if load < min_load:
+				min_load = load
+				best_toilet = toilet
+			elif load == min_load:
+				if best_toilet == null:
+					best_toilet = toilet
+				else:
+					var serv_pos_best: Vector3 = best_toilet.get_meta("service_position") if best_toilet.has_meta("service_position") else best_toilet.global_position
+					var serv_pos_curr: Vector3 = toilet.get_meta("service_position") if toilet.has_meta("service_position") else toilet.global_position
+					if global_position.distance_to(serv_pos_curr) < global_position.distance_to(serv_pos_best):
+						best_toilet = toilet
+						
+		if best_toilet != null:
+			current_toilet_target = best_toilet
+			state = State.TO_TOILET
+			return
+			
+	# 2. Look for tree/grass within 30.0 units
+	var nearest_tree_pos := Vector3.INF
+	var min_tree_dist := 999999.0
+	if "tree_positions" in simulation:
+		for tree_pos in simulation.tree_positions:
+			var d := global_position.distance_to(tree_pos)
+			if d < min_tree_dist:
+				min_tree_dist = d
+				nearest_tree_pos = tree_pos
+				
+	if min_tree_dist <= 30.0:
+		source_position = nearest_tree_pos
+		state = State.TO_BUSH
+		return
+
+
+func _process_to_toilet(delta: float) -> void:
+	if not is_instance_valid(current_toilet_target):
+		current_toilet_target = null
+		state = State.IDLE
+		return
+	var serv_pos: Vector3 = current_toilet_target.get_meta("service_position") if current_toilet_target.has_meta("service_position") else current_toilet_target.global_position
+	if _move_to(serv_pos, delta):
+		# Arrived! Check capacity
+		var users_count := 0
+		for other in simulation.citizens:
+			if other != self and other.state == State.USING_TOILET and other.current_toilet_target == current_toilet_target:
+				users_count += 1
+		
+		var b_type: String = current_toilet_target.get_meta("building_type", "")
+		var base_cap := 1
+		if "tent" in b_type: base_cap = 1
+		elif "earth" in b_type: base_cap = 2
+		elif "clay" in b_type: base_cap = 3
+		elif "wood" in b_type: base_cap = 4
+		elif "stone" in b_type: base_cap = 5
+		elif "brick" in b_type: base_cap = 6
+		
+		var lvl := 1
+		if "lvl2" in b_type: lvl = 2
+		elif "lvl3" in b_type: lvl = 3
+		var capacity := base_cap + lvl - 1
+		
+		if users_count < capacity:
+			state = State.USING_TOILET
+			_start_task(TOILET_USE_DURATION)
+		else:
+			state = State.WAITING_FOR_TOILET
+
+
+func _process_using_toilet(delta: float) -> void:
+	if not is_instance_valid(current_toilet_target):
+		current_toilet_target = null
+		state = State.IDLE
+		return
+	if _work(delta):
+		needs_toilet = false
+		current_toilet_target = null
+		satisfaction = minf(get_satisfaction_cap(), satisfaction + 10.0)
+		state = State.IDLE
+		request_goap_decision()
+
+
+func _process_waiting_for_toilet(delta: float) -> void:
+	if not is_instance_valid(current_toilet_target):
+		current_toilet_target = null
+		state = State.IDLE
+		return
+	var users_count := 0
+	for other in simulation.citizens:
+		if other != self and other.state == State.USING_TOILET and other.current_toilet_target == current_toilet_target:
+			users_count += 1
+			
+	var b_type: String = current_toilet_target.get_meta("building_type", "")
+	var base_cap := 1
+	if "tent" in b_type: base_cap = 1
+	elif "earth" in b_type: base_cap = 2
+	elif "clay" in b_type: base_cap = 3
+	elif "wood" in b_type: base_cap = 4
+	elif "stone" in b_type: base_cap = 5
+	elif "brick" in b_type: base_cap = 6
+	
+	var lvl := 1
+	if "lvl2" in b_type: lvl = 2
+	elif "lvl3" in b_type: lvl = 3
+	var capacity := base_cap + lvl - 1
+	
+	if users_count < capacity:
+		state = State.USING_TOILET
+		_start_task(TOILET_USE_DURATION)
+
+
+func _process_to_bush(delta: float) -> void:
+	if _move_to(source_position, delta):
+		state = State.USING_BUSH
+		_start_task(TOILET_USE_DURATION)
+
+
+func _process_using_bush(delta: float) -> void:
+	if _work(delta):
+		needs_toilet = false
+		satisfaction = minf(get_satisfaction_cap(), satisfaction + 10.0)
+		state = State.IDLE
+		request_goap_decision()
