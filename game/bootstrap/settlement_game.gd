@@ -236,6 +236,9 @@ var campfire_dismiss_button: Button
 var workforce_menu: Panel
 var workforce_menu_title: Label
 var workforce_list: VBoxContainer
+var research_menu: Panel
+var research_menu_title: Label
+var research_list: VBoxContainer
 var selected_market: Node3D = null
 var market_menu: Panel
 var market_menu_title: Label
@@ -354,6 +357,7 @@ func _process(delta: float) -> void:
 	_dispatch_queued_trades()
 	_update_sawmills(delta)
 	_update_brick_research(delta)
+	_update_building_research(delta)
 	_update_building_status_indicators(delta)
 	if _is_work_time():
 		_update_couriers()
@@ -1924,6 +1928,7 @@ func _create_interface() -> void:
 	_create_warehouse_menu(ui)
 	_create_building_menu(ui)
 	_create_workforce_menu(ui)
+	_create_research_menu(ui)
 
 func _create_time_controls(ui: CanvasLayer) -> void:
 	var controls := HBoxContainer.new()
@@ -2051,8 +2056,12 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_build_button("Cooking campfire", "cook_campfire", 227, "tent")
 	_add_build_button("Палатка на 4 жителя", "tent", 244, "tent")
 	_add_build_button("Жилая палатка на 1 жителя", "living_tent", 278, "tent")
+	_add_build_button("Жилая палатка ур. 2", "living_tent_lvl2", 278, "tent")
+	_add_build_button("Жилая палатка ур. 3", "living_tent_lvl3", 278, "tent")
 	_add_build_button("Forager tent", "forager_tent", 312, "tent")
 	_add_build_button("Craft tent", "craft_tent", 346, "tent")
+	_add_build_button("Craft tent Level 2", "craft_tent_lvl2", 346, "tent")
+	_add_build_button("Craft tent Level 3", "craft_tent_lvl3", 346, "tent")
 	_add_build_button("Dew collector", "dew_collector", 380, "tent")
 	_add_build_button("Simple store", "warehouse", 414, "tent")
 	_add_build_button("Trade tent", "trade_tent", 448, "tent")
@@ -2076,6 +2085,8 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_build_button("Farm", "farm", 210, "wood")
 	_add_build_button("Canteen", "canteen", 244, "wood")
 	_add_build_button("Wood house", "house", 278, "wood")
+	_add_build_button("Wood house Level 2", "house_lvl2", 278, "wood")
+	_add_build_button("Wood house Level 3", "house_lvl3", 278, "wood")
 	_add_build_button("Park", "park", 312, "wood")
 	_add_build_button("Wood market", "wood_market", 346, "wood")
 	_add_build_button("Wooden town hall", "wood_town_hall", 380, "wood")
@@ -2316,6 +2327,253 @@ func _update_brick_research(delta: float) -> void:
 	if materials_factory_menu != null and materials_factory_menu.visible:
 		_show_materials_factory_menu()
 
+func _update_building_research(delta: float) -> void:
+	if settlement.active_research_tech_id == "":
+		return
+	
+	var tech_id := settlement.active_research_tech_id
+	var tech: Dictionary = BuildingCatalog.RESEARCH_TECHS[tech_id]
+	var worker: Citizen = null
+	
+	for citizen in citizens:
+		if citizen.get_instance_id() == settlement.active_research_worker_id:
+			worker = citizen
+			break
+			
+	if worker == null:
+		settlement.active_research_tech_id = ""
+		settlement.active_research_worker_id = -1
+		_update_interface("Research cancelled: researcher citizen is no longer available.")
+		_refresh_campfire_menu()
+		return
+		
+	var skill_name: String = tech.required_skill
+	var skill_val := float(worker.skills.get(skill_name, 0.0))
+	var speed_mult := 1.0 + skill_val
+	
+	settlement.active_research_remaining_time -= delta * speed_mult
+	
+	if research_menu != null and research_menu.visible:
+		_refresh_research_menu()
+		
+	if settlement.active_research_remaining_time <= 0.0:
+		var unlocked_building: String = tech.target_building
+		settlement.unlocked_building_levels[unlocked_building] = true
+		
+		var skill_to_upgrade := "craftsman" if skill_name == "craftsman" else "construction"
+		worker.skills[skill_to_upgrade] = minf(1.0, float(worker.skills.get(skill_to_upgrade, 0.0)) + 0.20)
+		
+		worker.idle()
+		
+		settlement.active_research_tech_id = ""
+		settlement.active_research_worker_id = -1
+		
+		var b_name: String = BuildingCatalog.definition_for(unlocked_building).get("name", unlocked_building)
+		_update_interface("Research completed: %s unlocked! %s skill improved by 20%%." % [b_name, skill_to_upgrade.capitalize()])
+		
+		_refresh_campfire_menu()
+		_refresh_build_menu()
+		if research_menu != null and research_menu.visible:
+			_refresh_research_menu()
+
+func _create_research_menu(ui: CanvasLayer) -> void:
+	research_menu = Panel.new()
+	research_menu.set_anchors_preset(Control.PRESET_CENTER)
+	research_menu.offset_left = -250.0
+	research_menu.offset_top = -250.0
+	research_menu.offset_right = 250.0
+	research_menu.offset_bottom = 250.0
+	research_menu.visible = false
+	ui.add_child(research_menu)
+	
+	research_menu_title = Label.new()
+	research_menu_title.position = Vector2(18, 16)
+	research_menu_title.size = Vector2(464, 30)
+	research_menu_title.add_theme_font_size_override("font_size", 18)
+	research_menu.add_child(research_menu_title)
+	
+	var scroll := ScrollContainer.new()
+	scroll.position = Vector2(18, 54)
+	scroll.size = Vector2(464, 330)
+	research_menu.add_child(scroll)
+	
+	research_list = VBoxContainer.new()
+	research_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	research_list.add_theme_constant_override("separation", 8)
+	scroll.add_child(research_list)
+	
+	var close_btn := Button.new()
+	close_btn.text = "Close"
+	close_btn.position = Vector2(18, 398)
+	close_btn.size = Vector2(464, 32)
+	close_btn.pressed.connect(_hide_research_menu)
+	research_menu.add_child(close_btn)
+
+func _show_research_menu() -> void:
+	if research_menu == null:
+		return
+	research_menu.visible = true
+	_refresh_research_menu()
+
+func _hide_research_menu() -> void:
+	if research_menu != null:
+		research_menu.visible = false
+
+func _get_available_courier_for_research(required_skill: String) -> Citizen:
+	var best_courier: Citizen = null
+	var best_skill_val := -1.0
+	for citizen in citizens:
+		if citizen.specialization == "courier" and citizen.employment_state in [Citizen.EmploymentState.AUTO_RESERVE, Citizen.EmploymentState.MANUAL_COURIER] and citizen.state == Citizen.State.IDLE:
+			var skill_key = required_skill
+			var skill_val := float(citizen.skills.get(skill_key, 0.0))
+			if skill_val > best_skill_val:
+				best_courier = citizen
+				best_skill_val = skill_val
+	return best_courier
+
+func _refresh_research_menu() -> void:
+	if research_menu == null or research_list == null:
+		return
+	for child in research_list.get_children():
+		child.queue_free()
+		
+	research_menu_title.text = "Research (Campfire)"
+	
+	for tech_id in BuildingCatalog.RESEARCH_TECHS:
+		var tech: Dictionary = BuildingCatalog.RESEARCH_TECHS[tech_id]
+		var required_era := BuildingCatalog.era_for(tech.target_building)
+		
+		if required_era > settlement.era:
+			continue
+			
+		var row := HBoxContainer.new()
+		row.custom_minimum_size = Vector2(464, 40)
+		research_list.add_child(row)
+		
+		var details_vbox := VBoxContainer.new()
+		details_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(details_vbox)
+		
+		var title_lbl := Label.new()
+		title_lbl.text = tech.name
+		title_lbl.add_theme_font_size_override("font_size", 14)
+		details_vbox.add_child(title_lbl)
+		
+		var desc_lbl := Label.new()
+		var costs_array: Array[String] = []
+		var cost_dict: Dictionary = BuildingCatalog.RESEARCH_COSTS.get(tech_id, {})
+		for res in cost_dict:
+			costs_array.append("%d %s" % [cost_dict[res], res])
+		var cost_str := ", ".join(costs_array)
+		
+		desc_lbl.text = "Duration: %ds | Cost: %s | Skill: %s" % [int(tech.base_duration), cost_str, tech.required_skill.capitalize()]
+		desc_lbl.add_theme_font_size_override("font_size", 10)
+		desc_lbl.add_theme_color_override("font_color", Color("a5b5c5"))
+		details_vbox.add_child(desc_lbl)
+		
+		if settlement.unlocked_building_levels.get(tech.target_building, false):
+			var status_lbl := Label.new()
+			status_lbl.text = "Researched"
+			status_lbl.add_theme_color_override("font_color", Color("76c893"))
+			row.add_child(status_lbl)
+		elif settlement.active_research_tech_id == tech_id:
+			var progress_vbox := VBoxContainer.new()
+			progress_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			row.add_child(progress_vbox)
+			
+			var progress_pct := (1.0 - (settlement.active_research_remaining_time / settlement.active_research_duration)) * 100.0
+			var progress_lbl := Label.new()
+			progress_lbl.text = "Researching: %d%%" % int(clampf(progress_pct, 0.0, 100.0))
+			progress_lbl.add_theme_font_size_override("font_size", 11)
+			progress_vbox.add_child(progress_lbl)
+			
+			var cancel_btn := Button.new()
+			cancel_btn.text = "Cancel"
+			cancel_btn.pressed.connect(_cancel_research)
+			row.add_child(cancel_btn)
+		else:
+			var start_btn := Button.new()
+			start_btn.text = "Start"
+			
+			var affordable := true
+			for res in cost_dict:
+				if settlement.amount(res) < cost_dict[res]:
+					affordable = false
+					break
+			
+			var courier := _get_available_courier_for_research(tech.required_skill)
+			var has_worker := courier != null
+			var can_start := affordable and has_worker and settlement.active_research_tech_id == ""
+			
+			start_btn.disabled = not can_start
+			if not has_worker:
+				start_btn.tooltip_text = "Requires an idle resident in the reserve (Courier)."
+			elif not affordable:
+				start_btn.tooltip_text = "Not enough resources."
+			elif settlement.active_research_tech_id != "":
+				start_btn.tooltip_text = "Another research is already active."
+			
+			start_btn.pressed.connect(_start_research.bind(tech_id))
+			row.add_child(start_btn)
+
+func _start_research(tech_id: String) -> void:
+	var tech: Dictionary = BuildingCatalog.RESEARCH_TECHS[tech_id]
+	if settlement.active_research_tech_id != "":
+		_update_interface("Already researching another technology.")
+		return
+		
+	var courier := _get_available_courier_for_research(tech.required_skill)
+	if courier == null:
+		_update_interface("Requires an idle resident in the reserve (Courier).")
+		return
+		
+	if not settlement.can_afford_research(tech_id):
+		_update_interface("Not enough resources for research.")
+		return
+		
+	settlement.pay_for_research(tech_id)
+	
+	settlement.active_research_tech_id = tech_id
+	settlement.active_research_worker_id = courier.get_instance_id()
+	
+	var base_duration: float = tech.base_duration
+	var skill_val := float(courier.skills.get(tech.required_skill, 0.0))
+	var speed_mult := 1.0 + skill_val
+	settlement.active_research_duration = base_duration / speed_mult
+	settlement.active_research_remaining_time = settlement.active_research_duration
+	
+	var research_pos := global_position
+	if is_instance_valid(campfire_node):
+		research_pos = campfire_node.get_meta("service_position", campfire_node.global_position)
+	courier.assign_research_work(research_pos)
+	
+	_update_interface("Research started: %s. %s is studying at the Campfire." % [tech.name, courier.role_label()])
+	_refresh_research_menu()
+	_refresh_campfire_menu()
+
+func _cancel_research() -> void:
+	if settlement.active_research_tech_id == "":
+		return
+		
+	var tech_id := settlement.active_research_tech_id
+	var worker_id := settlement.active_research_worker_id
+	
+	for citizen in citizens:
+		if citizen.get_instance_id() == worker_id:
+			citizen.idle()
+			break
+			
+	var cost_dict: Dictionary = BuildingCatalog.RESEARCH_COSTS.get(tech_id, {})
+	for res in cost_dict:
+		settlement.add(res, cost_dict[res])
+		
+	settlement.active_research_tech_id = ""
+	settlement.active_research_worker_id = -1
+	
+	_update_interface("Research cancelled. Resources refunded.")
+	_refresh_research_menu()
+	_refresh_campfire_menu()
+
 func _spawn_house_citizen() -> void:
 	if selected_house == null or bool(selected_house.get_meta("pending_demolition", false)):
 		return
@@ -2522,7 +2780,11 @@ func _refresh_build_menu() -> void:
 			var category_era: int = int({"tent": SettlementState.Era.TENT, "earth": SettlementState.Era.EARTH, "clay": SettlementState.Era.CLAY, "wood": SettlementState.Era.WOOD, "stone": SettlementState.Era.STONE, "brick": SettlementState.Era.BRICK}.get(category_button, SettlementState.Era.TENT))
 			button.visible = build_category.is_empty() and not build_menu_is_job_menu and category_era <= settlement.era
 		else:
-			button.visible = not build_category.is_empty() and button.get_meta("category", "") == build_category and not build_menu_is_job_menu
+			var build_type: String = button.get_meta("build_type", "")
+			var is_unlocked := true
+			if build_type in ["living_tent_lvl2", "living_tent_lvl3", "craft_tent", "craft_tent_lvl2", "craft_tent_lvl3", "house", "house_lvl2", "house_lvl3"]:
+				is_unlocked = settlement.unlocked_building_levels.get(build_type, false)
+			button.visible = not build_category.is_empty() and button.get_meta("category", "") == build_category and not build_menu_is_job_menu and is_unlocked
 			
 	for button in role_buttons:
 		var role: String = button.get_meta("role", "")
@@ -2713,7 +2975,7 @@ func _employer_types_for_role(role: String) -> Array[String]:
 		"seller": return ["trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market"]
 		"factory_worker": return ["brick_factory", "materials_factory", "recycling_factory", "metal_factory"]
 		"engineer": return ["materials_factory"]
-		"craftsman": return ["craft_tent"]
+		"craftsman": return ["craft_tent", "craft_tent_lvl2", "craft_tent_lvl3"]
 		"official": return OFFICIAL_WORKPLACE_TYPES
 	return []
 
@@ -3149,7 +3411,7 @@ func _remove_building_services(building: Node3D, building_type: String) -> void:
 		"park": park_positions.erase(service_position)
 		"gathering_place": gathering_place_positions.erase(service_position)
 		"leisure_center": leisure_positions.erase(service_position)
-		"craft_tent": craft_tent_positions.erase(service_position)
+		"craft_tent", "craft_tent_lvl2", "craft_tent_lvl3": craft_tent_positions.erase(service_position)
 		"trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market":
 			market_positions.erase(service_position)
 		"campfire", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall":
@@ -3665,7 +3927,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 		workplace_priority_counter += 1
 		building.set_meta("accepting_workers", true)
 		building.set_meta("workplace_priority", workplace_priority_counter)
-	if building_type not in ["warehouse", "campfire", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall", "cook_campfire", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant", "trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market", "school", "materials_factory", "tent", "living_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "brick_house"]:
+	if building_type not in ["warehouse", "campfire", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall", "cook_campfire", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant", "trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market", "school", "materials_factory", "tent", "living_tent", "living_tent_lvl2", "living_tent_lvl3", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house", "craft_tent", "craft_tent_lvl2", "craft_tent_lvl3"]:
 		_add_building_selector(building, "building_selector", blueprint.footprint)
 	_register_service_entrance(building, blueprint.footprint, false, building_type not in ["farm", "park"])
 	var service_position: Vector3 = building.get_meta("service_position")
@@ -3715,15 +3977,19 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 		"forager_tent":
 			forager_positions.append(service_position)
 			_update_interface("Forager tent ready. Assign a resident to forage food, or a free hand will.")
-		"tent", "living_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "brick_house":
-			if building_type in ["house", "brick_house"]:
+		"tent", "living_tent", "living_tent_lvl2", "living_tent_lvl3", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house":
+			if building_type in ["house", "house_lvl2", "house_lvl3", "brick_house"]:
 				completed_house_count += 1
 			var housing_capacity := HOUSE_CAPACITY
 			match building_type:
 				"living_tent": housing_capacity = 1
+				"living_tent_lvl2": housing_capacity = 2
+				"living_tent_lvl3": housing_capacity = 3
 				"tent", "dugout": housing_capacity = 4
 				"earth_house", "clay_house": housing_capacity = 6
 				"house": housing_capacity = 8
+				"house_lvl2": housing_capacity = 10
+				"house_lvl3": housing_capacity = 12
 				"stone_house": housing_capacity = 10
 				"brick_house": housing_capacity = 12
 			building.set_meta("housing_capacity", housing_capacity)
@@ -3731,12 +3997,12 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			building.set_meta("entrance_position", service_position)
 			_add_building_selector(building, "house_selector", blueprint.footprint)
 			_add_house_light(building)
-			if building_type == "tent":
+			if building_type in ["tent", "living_tent", "living_tent_lvl2", "living_tent_lvl3"]:
 				building.set_meta("is_tent", true)
 			_house_initial_residents(building)
 		"dew_collector":
 			water_collectors.append({"node": building, "rate": 0.12, "accum": 0.0, "stored": 0, "capacity": 10})
-		"craft_tent":
+		"craft_tent", "craft_tent_lvl2", "craft_tent_lvl3":
 			craft_tent_positions.append(service_position)
 		"trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market":
 			_add_building_selector(building, "market_selector", blueprint.footprint)
@@ -4044,7 +4310,7 @@ func _create_campfire_menu(ui: CanvasLayer) -> void:
 	campfire_menu = Panel.new()
 	campfire_menu.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	campfire_menu.offset_left = -324.0
-	campfire_menu.offset_top = -636.0
+	campfire_menu.offset_top = -676.0
 	campfire_menu.offset_right = -20.0
 	campfire_menu.offset_bottom = -20.0
 	campfire_menu.visible = false
@@ -4096,32 +4362,39 @@ func _create_campfire_menu(ui: CanvasLayer) -> void:
 	campfire_occupancy_button.pressed.connect(_show_workforce_menu)
 	campfire_menu.add_child(campfire_occupancy_button)
 
+	var campfire_research_button := Button.new()
+	campfire_research_button.text = "Research Building Levels"
+	campfire_research_button.position = Vector2(16, 445)
+	campfire_research_button.size = Vector2(272, 32)
+	campfire_research_button.pressed.connect(_show_research_menu)
+	campfire_menu.add_child(campfire_research_button)
+
 	# The town hall is the employment centre: manage its officer here, exactly
 	# like assigning a cook/teacher/seller at their own workplace.
 	campfire_official_button = Button.new()
 	campfire_official_button.text = "Assign selected resident as employment officer"
-	campfire_official_button.position = Vector2(16, 445)
+	campfire_official_button.position = Vector2(16, 485)
 	campfire_official_button.size = Vector2(272, 32)
 	campfire_official_button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	campfire_official_button.pressed.connect(_assign_official_at_campfire)
 	campfire_menu.add_child(campfire_official_button)
 
 	campfire_accept_button = Button.new()
-	campfire_accept_button.position = Vector2(16, 483)
+	campfire_accept_button.position = Vector2(16, 523)
 	campfire_accept_button.size = Vector2(272, 32)
 	campfire_accept_button.pressed.connect(_toggle_campfire_acceptance)
 	campfire_menu.add_child(campfire_accept_button)
 
 	campfire_dismiss_button = Button.new()
 	campfire_dismiss_button.text = "Dismiss employment officer"
-	campfire_dismiss_button.position = Vector2(16, 521)
+	campfire_dismiss_button.position = Vector2(16, 561)
 	campfire_dismiss_button.size = Vector2(272, 32)
 	campfire_dismiss_button.pressed.connect(_dismiss_campfire_worker)
 	campfire_menu.add_child(campfire_dismiss_button)
 
 	var close_btn := Button.new()
 	close_btn.text = "Close Menu"
-	close_btn.position = Vector2(16, 561)
+	close_btn.position = Vector2(16, 601)
 	close_btn.size = Vector2(272, 28)
 	close_btn.pressed.connect(_close_context_menus)
 	campfire_menu.add_child(close_btn)
@@ -4482,7 +4755,8 @@ func _refresh_campfire_menu() -> void:
 			next_era = SettlementState.Era.EARTH
 			var has_cf := settlement.has_building("campfire")
 			var has_mkt := settlement.has_building("trade_tent")
-			var has_ct := settlement.has_building("craft_tent")
+			var has_ct := settlement.has_building("craft_tent_lvl3")
+			var has_lt3 := settlement.has_building("living_tent_lvl3")
 			var pop_ok := housing_slots >= citizens.size()
 			var food_ok := food >= citizens.size()
 			var water_ok := water >= citizens.size()
@@ -4492,7 +4766,8 @@ func _refresh_campfire_menu() -> void:
 			req_text = "Requirements for Earth Era:\n"
 			req_text += "- Campfire built: %s\n" % ("Yes" if has_cf else "No")
 			req_text += "- Trade tent built: %s\n" % ("Yes" if has_mkt else "No")
-			req_text += "- Craft tent built: %s\n" % ("Yes" if has_ct else "No")
+			req_text += "- Craft tent Level 3 built: %s\n" % ("Yes" if has_ct else "No")
+			req_text += "- Living tent Level 3 built: %s\n" % ("Yes" if has_lt3 else "No")
 			req_text += "- Housing slots (needs %d): %d (%s)\n" % [citizens.size(), housing_slots, "OK" if pop_ok else "Need more"]
 			req_text += "- Food (needs %d): %d (%s)\n" % [citizens.size(), food, "OK" if food_ok else "Need more"]
 			req_text += "- Water (needs %d): %d (%s)\n" % [citizens.size(), water, "OK" if water_ok else "Need more"]
@@ -4543,6 +4818,7 @@ func _refresh_campfire_menu() -> void:
 			var has_th := settlement.has_building("wood_town_hall")
 			var has_mkt := settlement.has_building("wood_market")
 			var has_sm := settlement.has_building("sawmill")
+			var has_house3 := settlement.has_building("house_lvl3")
 			var pickaxe_ok := settlement._has_tools(["pickaxe"])
 			var money_ok := settlement.money >= 15
 			
@@ -4550,6 +4826,7 @@ func _refresh_campfire_menu() -> void:
 			req_text += "- Wooden town hall built: %s\n" % ("Yes" if has_th else "No")
 			req_text += "- Sawmill built: %s\n" % ("Yes" if has_sm else "No")
 			req_text += "- Wood market built: %s\n" % ("Yes" if has_mkt else "No")
+			req_text += "- Wood house Level 3 built: %s\n" % ("Yes" if has_house3 else "No")
 			req_text += "- Tool Pickaxe owned: %s\n" % ("Yes" if pickaxe_ok else "No")
 			req_text += "- Money (needs 15): %d (%s)\n" % [settlement.money, "OK" if money_ok else "Need more"]
 			can_advance = settlement.can_advance_to(next_era, citizens.size(), housing_slots)

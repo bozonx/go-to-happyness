@@ -20,6 +20,7 @@ func _init() -> void:
 	_test_school_and_seller_rules()
 	_test_courier_metadata()
 	_test_construction_delivery_stays_scheduled()
+	_test_research_mechanics()
 	quit(0)
 
 
@@ -73,7 +74,7 @@ func _test_settlement_economy() -> void:
 
 func _test_progression_and_volunteers() -> void:
 	var state := SettlementState.new()
-	state.buildings = {"campfire": 1, "trade_tent": 1, "craft_tent": 1}
+	state.buildings = {"campfire": 1, "trade_tent": 1, "craft_tent_lvl3": 1, "living_tent_lvl3": 1}
 	state.food = 4
 	state.water = 4
 	state.trade_sales = 1
@@ -98,7 +99,7 @@ func _test_progression_and_volunteers() -> void:
 	assert(state.can_advance_to(SettlementState.Era.WOOD, 4, 4))
 	assert(state.advance_era(SettlementState.Era.WOOD, 4, 4))
 
-	state.buildings = {"wood_town_hall": 1, "wood_market": 1, "sawmill": 1}
+	state.buildings = {"wood_town_hall": 1, "wood_market": 1, "sawmill": 1, "house_lvl3": 1}
 	state.money = 15
 	state.tools["pickaxe"] = true
 	assert(state.can_advance_to(SettlementState.Era.STONE, 4, 4))
@@ -350,3 +351,22 @@ func _test_construction_delivery_stays_scheduled() -> void:
 	assert(courier.has_active_delivery())
 	assert(not courier.is_available_for_schedule())
 	courier.free()
+
+
+func _test_research_mechanics() -> void:
+	var state := SettlementState.new()
+	assert(state.unlocked_building_levels.get("living_tent", false))
+	assert(not state.unlocked_building_levels.get("living_tent_lvl2", false))
+	assert(not state.unlocked_building_levels.get("craft_tent", false))
+	
+	state.branches = 5
+	state.grass = 5
+	assert(state.can_afford_research("craft_tent"))
+	assert(state.pay_for_research("craft_tent"))
+	assert(state.branches == 0 and state.grass == 0)
+	
+	var citizen := Citizen.new()
+	citizen._ready()
+	citizen.state = Citizen.State.RESEARCHING
+	assert(not citizen.is_available_for_schedule())
+	citizen.free()

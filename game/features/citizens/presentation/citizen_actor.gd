@@ -38,7 +38,7 @@ const NAVIGATION_TARGET_CLEARANCE := 0.48
 const ROUTE_PROGRESS_EPSILON := 0.06
 const ROUTE_RETRY_INTERVAL := 2.0
 
-enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, TO_GATHER, GATHERING, TO_TRADE_PICKUP, TO_TRADE_DESTINATION, TO_EMPLOYMENT_CENTER, EMPLOYMENT_PROCESSING, CANTEEN_WORK, SCHOOL_WORK, TO_MARKET_WORK, MARKET_WORK, TO_CRAFT_WORK, CRAFT_WORK, TO_CONSTRUCTION_PICKUP, TO_CONSTRUCTION_SITE, TO_OFFICIAL_WORK, OFFICIAL_WORK, TO_ARRIVAL_ENTRANCE, ARRIVAL_MEETING, ARRIVAL_WAITING, TO_ARRIVAL_CENTER }
+enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, TO_GATHER, GATHERING, TO_TRADE_PICKUP, TO_TRADE_DESTINATION, TO_EMPLOYMENT_CENTER, EMPLOYMENT_PROCESSING, CANTEEN_WORK, SCHOOL_WORK, TO_MARKET_WORK, MARKET_WORK, TO_CRAFT_WORK, CRAFT_WORK, TO_CONSTRUCTION_PICKUP, TO_CONSTRUCTION_SITE, TO_OFFICIAL_WORK, OFFICIAL_WORK, TO_ARRIVAL_ENTRANCE, ARRIVAL_MEETING, ARRIVAL_WAITING, TO_ARRIVAL_CENTER, RESEARCHING }
 
 enum EmploymentState { AUTO_RESERVE, EMPLOYED, UNEMPLOYED, PENDING_JOB, PENDING_UNEMPLOYMENT, MANUAL_COURIER }
 
@@ -130,6 +130,7 @@ var training_role := ""
 var training_days_completed := 0
 var school_position := Vector3.ZERO
 var official_position := Vector3.ZERO
+var research_position := Vector3.ZERO
 var arrival_position := Vector3.INF
 var factory: Node3D
 var factory_position := Vector3.ZERO
@@ -305,6 +306,8 @@ func _physics_process(delta: float) -> void:
 			_process_go_to_school(delta)
 		State.STUDYING:
 			pass
+		State.RESEARCHING:
+			_process_research(delta)
 		State.TO_SCHOOL_WORK:
 			_process_school_work(delta)
 		State.TO_OFFICIAL_WORK:
@@ -1038,6 +1041,17 @@ func assign_craft_work(next_craft_position: Vector3) -> void:
 		factory = null
 		state = State.TO_CRAFT_WORK
 
+func assign_research_work(next_research_position: Vector3) -> void:
+	if not is_player_controlled:
+		research_position = next_research_position
+		active_role = "research"
+		factory = null
+		state = State.RESEARCHING
+
+func _process_research(delta: float) -> void:
+	if _move_to(research_position, delta):
+		pass
+
 func _process_craft_work_arrival(delta: float) -> void:
 	if _move_to(craft_position, delta):
 		craft_timer = 10.0 / get_efficiency("craftsman")
@@ -1271,6 +1285,11 @@ func _update_idle_indicator() -> void:
 	if is_player_controlled:
 		idle_indicator.visible = false
 		return
+	if state == State.RESEARCHING:
+		idle_indicator.visible = true
+		idle_indicator.text = "Researching"
+		idle_indicator.modulate = Color("6ab0df")
+		return
 	idle_indicator.visible = true
 	match employment_state:
 		EmploymentState.EMPLOYED:
@@ -1356,7 +1375,7 @@ func _update_effects(delta: float) -> void:
 			buffs[buff_id] = time_left
 
 func is_available_for_schedule() -> bool:
-	return not is_player_controlled and not has_active_delivery() and state != State.TO_CANTEEN and state != State.EATING and state != State.TO_HOME and state != State.RESTING and state != State.STUDYING and state != State.TO_PARK and state != State.RELAXING
+	return not is_player_controlled and not has_active_delivery() and state != State.TO_CANTEEN and state != State.EATING and state != State.TO_HOME and state != State.RESTING and state != State.STUDYING and state != State.TO_PARK and state != State.RELAXING and state != State.RESEARCHING
 
 func _update_satisfaction(delta: float) -> void:
 	satisfaction_tick += delta

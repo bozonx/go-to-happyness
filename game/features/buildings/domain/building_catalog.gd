@@ -7,8 +7,12 @@ const DEFINITIONS := {
 	"cook_campfire": {"name": "Cooking campfire", "category": "tent", "costs": {"branches": 8, "grass": 6}},
 	"tent": {"name": "Палатка на 4 жителя", "category": "tent", "costs": {"branches": 8, "grass": 6}},
 	"living_tent": {"name": "Жилая палатка на 1 жителя", "category": "tent", "costs": {"branches": 10, "grass": 8}},
+	"living_tent_lvl2": {"name": "Жилая палатка ур. 2 на 2 жителя", "category": "tent", "costs": {"branches": 15, "grass": 12}},
+	"living_tent_lvl3": {"name": "Жилая палатка ур. 3 на 3 жителя", "category": "tent", "costs": {"branches": 22, "grass": 18}},
 	"forager_tent": {"name": "Forager tent", "category": "tent", "costs": {"branches": 10, "grass": 4}},
 	"craft_tent": {"name": "Craft tent", "category": "tent", "costs": {"branches": 10, "grass": 5}},
+	"craft_tent_lvl2": {"name": "Craft tent Level 2", "category": "tent", "costs": {"branches": 18, "grass": 10}},
+	"craft_tent_lvl3": {"name": "Craft tent Level 3", "category": "tent", "costs": {"branches": 25, "grass": 18}},
 	"dew_collector": {"name": "Dew collector", "category": "tent", "costs": {"branches": 6, "grass": 4}},
 	"pond": {"name": "Pond", "category": "tent", "costs": {"branches": 8, "grass": 6}},
 	"warehouse": {"name": "Simple store", "category": "tent", "costs": {}},
@@ -36,6 +40,8 @@ const DEFINITIONS := {
 	"canteen": {"name": "Canteen", "category": "wood", "costs": {"boards": 16}},
 	"wood_town_hall": {"name": "Wooden town hall", "category": "wood", "costs": {"boards": 20}},
 	"house": {"name": "Wood house", "category": "wood", "costs": {"boards": 12}},
+	"house_lvl2": {"name": "Wood house Level 2", "category": "wood", "costs": {"boards": 18, "logs": 5}},
+	"house_lvl3": {"name": "Wood house Level 3", "category": "wood", "costs": {"boards": 24, "logs": 10}},
 	"school": {"name": "School", "category": "clay", "costs": {"clay": 15, "branches": 10, "grass": 8}},
 	"park": {"name": "Park", "category": "wood", "costs": {"boards": 14}},
 	"wood_market": {"name": "Wood market", "category": "wood", "costs": {"boards": 15}},
@@ -49,7 +55,68 @@ const DEFINITIONS := {
 	"employment_office": {"name": "Служба занятости", "category": "brick", "costs": {"bricks": 22, "boards": 12}},
 }
 
-const RESEARCH_COSTS := {"brick_construction": {"bricks": 15, "boards": 10}}
+const RESEARCH_COSTS := {
+	"brick_construction": {"bricks": 15, "boards": 10},
+	"craft_tent": {"branches": 5, "grass": 5},
+	"craft_tent_lvl2": {"branches": 10, "grass": 8},
+	"craft_tent_lvl3": {"branches": 15, "grass": 12},
+	"living_tent_lvl2": {"branches": 8, "grass": 8},
+	"living_tent_lvl3": {"branches": 12, "grass": 12},
+	"house": {"boards": 10, "logs": 5},
+	"house_lvl2": {"boards": 15, "logs": 10},
+	"house_lvl3": {"boards": 20, "logs": 15},
+}
+
+const RESEARCH_TECHS := {
+	"craft_tent": {
+		"name": "Ремесленник ур. 1",
+		"base_duration": 20.0,
+		"required_skill": "craftsman",
+		"target_building": "craft_tent",
+	},
+	"craft_tent_lvl2": {
+		"name": "Ремесленник ур. 2",
+		"base_duration": 40.0,
+		"required_skill": "craftsman",
+		"target_building": "craft_tent_lvl2",
+	},
+	"craft_tent_lvl3": {
+		"name": "Ремесленник ур. 3",
+		"base_duration": 60.0,
+		"required_skill": "craftsman",
+		"target_building": "craft_tent_lvl3",
+	},
+	"living_tent_lvl2": {
+		"name": "Палатка ур. 2",
+		"base_duration": 30.0,
+		"required_skill": "construction",
+		"target_building": "living_tent_lvl2",
+	},
+	"living_tent_lvl3": {
+		"name": "Палатка ур. 3",
+		"base_duration": 50.0,
+		"required_skill": "construction",
+		"target_building": "living_tent_lvl3",
+	},
+	"house": {
+		"name": "Дом ур. 1",
+		"base_duration": 40.0,
+		"required_skill": "construction",
+		"target_building": "house",
+	},
+	"house_lvl2": {
+		"name": "Дом ур. 2",
+		"base_duration": 60.0,
+		"required_skill": "construction",
+		"target_building": "house_lvl2",
+	},
+	"house_lvl3": {
+		"name": "Дом ур. 3",
+		"base_duration": 80.0,
+		"required_skill": "construction",
+		"target_building": "house_lvl3",
+	}
+}
 
 static func definition_for(building_type: String) -> Dictionary: return DEFINITIONS.get(building_type, DEFINITIONS.house).duplicate(true)
 static func cost_resources(building_type: String) -> Array[String]:
