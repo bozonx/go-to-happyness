@@ -1,6 +1,6 @@
 extends Node3D
 
-const SETTLEMENT_RULES = preload("res://scripts/domain/settlement_rules.gd")
+const SETTLEMENT_RULES = preload("res://game/features/settlement/domain/settlement_rules.gd")
 
 
 const BOARD_CELLS := 48

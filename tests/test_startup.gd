@@ -2,7 +2,7 @@ extends SceneTree
 
 
 func _init() -> void:
-	var scene := load("res://scenes/main.tscn") as PackedScene
+	var scene := load("res://game/bootstrap/settlement_game.tscn") as PackedScene
 	var simulation := scene.instantiate()
 	root.add_child(simulation)
 	await process_frame

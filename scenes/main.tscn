@@ -1,6 +1,6 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://b1xh2otueqssm"]
 
 [ext_resource type="Script" path="res://scripts/main_simulation.gd" id="1_main"]
 
-[node name="SettlementPrototype" type="Node3D"]
+[node name="SettlementPrototype" type="Node3D" unique_id=507501428]
 script = ExtResource("1_main")

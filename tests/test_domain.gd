@@ -1,6 +1,6 @@
 extends SceneTree
 
-const SettlementRulesScript = preload("res://scripts/domain/settlement_rules.gd")
+const SettlementRulesScript = preload("res://game/features/settlement/domain/settlement_rules.gd")
 
 
 func _init() -> void:
