@@ -42,6 +42,7 @@ var is_player_controlled := false
 var is_hero := false
 var construction_site: Node3D
 var specialization := "builder"
+var previous_specialization := ""
 var manual_role := ""
 var active_role := ""
 var satisfaction := 72.0

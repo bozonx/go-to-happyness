@@ -249,6 +249,16 @@ func _process(delta: float) -> void:
 	if is_first_person:
 		_update_player_control(delta)
 		_update_interaction(delta)
+		if not build_mode.is_empty():
+			var viewport_center := get_viewport().get_visible_rect().size * 0.5
+			var terrain_point: Variant = _terrain_point_at_screen_position(viewport_center)
+			if terrain_point != null:
+				_move_selection(terrain_point)
+				selection_marker.visible = true
+			else:
+				selection_marker.visible = false
+				preview_entrance_marker.visible = false
+				preview_back_entrance_marker.visible = false
 	else:
 		_update_camera(delta)
 	_update_construction(delta)
@@ -1886,9 +1896,16 @@ func _set_manual_role(role: String) -> void:
 		build_menu_is_job_menu = false
 		return
 	if role == "courier":
+		if selected_builder.specialization != "courier":
+			selected_builder.previous_specialization = selected_builder.specialization
 		selected_builder.setup_specialization("courier")
 		selected_builder.manual_role = ""
 	else:
+		if selected_builder.specialization == "courier":
+			var prev := selected_builder.previous_specialization
+			if prev.is_empty():
+				prev = "builder"
+			selected_builder.setup_specialization(prev)
 		selected_builder.manual_role = role
 	selected_builder.assigned_dig_site = null
 	_update_workers()
@@ -2017,6 +2034,7 @@ func _select_build_mode(next_mode: String) -> void:
 	_move_selection(selected_world_position)
 	if is_first_person:
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+		build_menu.visible = false
 	_update_interface("%s selected. Choose a clear point; Q/E rotates the building." % build_mode.capitalize())
 
 func _cancel_build_action() -> void:
@@ -2096,6 +2114,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			_dig_voxel_at_crosshair()
 		get_viewport().set_input_as_handled()
 		return
+	if event is InputEventMouseButton and event.pressed:
+		if get_viewport().gui_get_hovered_control() != null:
+			return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
 		camera_distance = maxf(3.0, camera_distance - 2.0)
 		_update_camera_position()
@@ -2120,9 +2141,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif is_panning_camera:
 			_pan_camera(event.relative)
 		elif not build_mode.is_empty() or (selected_builder != null and dig_mode):
-			var terrain_point: Variant = _terrain_point_at_screen_position(event.position)
-			if terrain_point != null:
-				_move_selection(terrain_point)
+			if get_viewport().gui_get_hovered_control() == null:
+				var terrain_point: Variant = _terrain_point_at_screen_position(event.position)
+				if terrain_point != null:
+					_move_selection(terrain_point)
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		if selected_builder != null and dig_mode:
 			var dig_point: Variant = _terrain_point_at_screen_position(event.position)
@@ -2697,7 +2719,7 @@ func _move_selection(world_position: Vector3) -> void:
 		preview_back_entrance_marker.position = selected_world_position - forward * (local_footprint.y * 0.5 + 0.35) + Vector3.UP * 0.08
 		preview_entrance_marker.visible = true
 		preview_back_entrance_marker.visible = true
-	if selected_builder != null and not build_mode.is_empty():
+	if not build_mode.is_empty():
 		selection_material.albedo_color = Color(0.25, 0.85, 0.37, 0.55) if _can_place(selected_world_position) else Color(0.9, 0.2, 0.18, 0.6)
 
 func _rotated_footprint(footprint: Vector2i) -> Vector2i:
@@ -3302,10 +3324,23 @@ func _workforce_role_count(role: String) -> int:
 	return count
 
 
-func _unassigned_worker_count() -> int:
+func _manually_assigned_count(role: String) -> int:
 	var count := 0
 	for citizen in citizens:
-		count += 1 if not citizen.is_player_controlled and citizen.manual_role == "unassigned" else 0
+		if not citizen.is_player_controlled:
+			if role == "courier" and citizen.specialization == "courier":
+				count += 1
+			elif citizen.manual_role == role:
+				count += 1
+	return count
+
+
+func _auto_or_unassigned_worker_count() -> int:
+	var count := 0
+	for citizen in citizens:
+		if not citizen.is_player_controlled:
+			if (citizen.manual_role.is_empty() or citizen.manual_role == "unassigned") and citizen.specialization not in ["courier", "cook", "teacher", "factory_worker", "engineer"]:
+				count += 1
 	return count
 
 
@@ -3323,58 +3358,82 @@ func _refresh_workforce_menu() -> void:
 		row.custom_minimum_size = Vector2(424, 34)
 		var label := Label.new()
 		var assigned := _workforce_role_count(role)
+		var manually := _manually_assigned_count(role)
 		var limit := _workforce_role_limit(role)
-		label.text = "%s  %d%s" % [_workforce_role_label(role), assigned, "/%d" % limit if limit >= 0 else ""]
+		
+		var text := "%s  %d locked" % [_workforce_role_label(role), manually]
+		if assigned != manually:
+			text += " (%d active)" % assigned
+		if limit >= 0:
+			text += " / %d limit" % limit
+		label.text = text
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		label.tooltip_text = "No workplace is available" if limit == 0 else ""
 		row.add_child(label)
+		
 		var remove_button := Button.new()
 		remove_button.text = "-"
-		remove_button.tooltip_text = "Make one resident unemployed"
+		remove_button.tooltip_text = "Make one resident automatic"
 		remove_button.custom_minimum_size = Vector2(38, 30)
-		remove_button.disabled = assigned == 0
+		remove_button.disabled = manually == 0
 		remove_button.pressed.connect(_remove_worker_from_role.bind(role))
 		row.add_child(remove_button)
+		
 		var add_button := Button.new()
 		add_button.text = "+"
-		add_button.tooltip_text = "Assign an unemployed resident"
+		add_button.tooltip_text = "Assign a free resident"
 		add_button.custom_minimum_size = Vector2(38, 30)
-		add_button.disabled = _unassigned_worker_count() == 0 or not _is_role_available(role) or (limit >= 0 and assigned >= limit)
+		add_button.disabled = _auto_or_unassigned_worker_count() == 0 or not _is_role_available(role) or (limit >= 0 and assigned >= limit)
 		add_button.pressed.connect(_assign_unemployed_worker.bind(role))
 		row.add_child(add_button)
+		
 		workforce_list.add_child(row)
 	var separator := HSeparator.new()
 	workforce_list.add_child(separator)
 	var unassigned := Label.new()
-	unassigned.text = "Unemployed  %d" % _unassigned_worker_count()
+	unassigned.text = "Auto / Unassigned  %d" % _auto_or_unassigned_worker_count()
 	unassigned.add_theme_font_size_override("font_size", 16)
 	workforce_list.add_child(unassigned)
 
 
 func _remove_worker_from_role(role: String) -> void:
 	for citizen in citizens:
-		if citizen.is_player_controlled or citizen.manual_role == "unassigned" or _work_role_for(citizen) != role:
+		if citizen.is_player_controlled:
 			continue
-		citizen.idle()
-		citizen.manual_role = "unassigned"
-		citizen.assigned_dig_site = null
-		_update_workers()
-		_refresh_workforce_menu()
-		_refresh_campfire_occupancy_button()
-		return
+		if role == "courier":
+			if citizen.specialization == "courier":
+				citizen.idle()
+				var prev := citizen.previous_specialization
+				if prev.is_empty():
+					prev = "builder"
+				citizen.setup_specialization(prev)
+				citizen.manual_role = ""
+				_update_workers()
+				_refresh_workforce_menu()
+				_refresh_campfire_occupancy_button()
+				return
+		elif citizen.manual_role == role:
+			citizen.idle()
+			citizen.manual_role = ""
+			citizen.assigned_dig_site = null
+			_update_workers()
+			_refresh_workforce_menu()
+			_refresh_campfire_occupancy_button()
+			return
 
 
 func _assign_unemployed_worker(role: String) -> void:
 	if not _is_role_available(role) or (_workforce_role_limit(role) >= 0 and _workforce_role_count(role) >= _workforce_role_limit(role)):
 		return
 	for citizen in citizens:
-		if citizen.is_player_controlled or citizen.manual_role != "unassigned":
+		if citizen.is_player_controlled:
 			continue
-		selected_builder = citizen
-		_set_manual_role(role)
-		_refresh_workforce_menu()
-		_refresh_campfire_occupancy_button()
-		return
+		if (citizen.manual_role.is_empty() or citizen.manual_role == "unassigned") and citizen.specialization not in ["courier", "cook", "teacher", "factory_worker", "engineer"]:
+			selected_builder = citizen
+			_set_manual_role(role)
+			_refresh_workforce_menu()
+			_refresh_campfire_occupancy_button()
+			return
 
 
 func _refresh_campfire_menu() -> void:
