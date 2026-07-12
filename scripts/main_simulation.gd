@@ -327,6 +327,22 @@ func _has_cook() -> bool:
 			return true
 	return false
 
+
+func _employment_center_position() -> Vector3:
+	if is_instance_valid(campfire_node):
+		return campfire_node.get_meta("service_position", campfire_node.global_position)
+	return Vector3.INF
+
+
+func _on_employment_processing_finished(citizen: Citizen) -> void:
+	# Do not grant a profession outside the shift. Keep the reservation/status and
+	# restart the one-hour registration at the next working morning.
+	if not _is_work_time():
+		citizen.state = Citizen.State.IDLE
+		return
+	citizen.finish_employment_processing()
+	_update_workers()
+
 func _update_daylight() -> void:
 	if sun == null or world_environment == null:
 		return
@@ -1370,6 +1386,7 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	citizen.canteen_delivery_finished.connect(_on_canteen_delivery_finished)
 	citizen.factory_cycle.connect(_on_factory_cycle)
 	citizen.trade_delivery_finished.connect(_on_trade_delivery_finished)
+	citizen.employment_processing_finished.connect(_on_employment_processing_finished)
 	citizens.append(citizen)
 	if hero_citizen == null:
 		hero_citizen = citizen
@@ -2035,6 +2052,9 @@ func _set_manual_role(role: String) -> void:
 			selected_builder.previous_specialization = selected_builder.specialization
 		selected_builder.setup_specialization("courier")
 		selected_builder.manual_role = ""
+		selected_builder.permanent_role = ""
+		selected_builder.auto_mode_enabled = false
+		selected_builder.employment_state = Citizen.EmploymentState.MANUAL_COURIER
 	else:
 		if selected_builder.specialization == "courier":
 			var prev := selected_builder.previous_specialization
@@ -2042,6 +2062,12 @@ func _set_manual_role(role: String) -> void:
 				prev = "builder"
 			selected_builder.setup_specialization(prev)
 		selected_builder.manual_role = role
+		selected_builder.auto_mode_enabled = false
+		if not role.is_empty() and _employment_center_position() != Vector3.INF:
+			selected_builder.begin_employment_processing(_employment_center_position(), role)
+		else:
+			selected_builder.permanent_role = role
+			selected_builder.employment_state = Citizen.EmploymentState.EMPLOYED if not role.is_empty() else Citizen.EmploymentState.AUTO_RESERVE
 	selected_builder.assigned_dig_site = null
 	_update_workers()
 	build_menu_is_job_menu = false
@@ -2100,6 +2126,12 @@ func _place_dig_site(world_position: Vector3) -> void:
 		site = _create_dig_site(cell, world_position)
 	selected_builder.assigned_dig_site = site.node
 	selected_builder.manual_role = "excavation"
+	selected_builder.auto_mode_enabled = false
+	if _employment_center_position() != Vector3.INF:
+		selected_builder.begin_employment_processing(_employment_center_position(), "excavation")
+	else:
+		selected_builder.permanent_role = "excavation"
+		selected_builder.employment_state = Citizen.EmploymentState.EMPLOYED
 	dig_mode = false
 	selection_marker.visible = false
 	_update_workers()
@@ -3569,6 +3601,9 @@ func _remove_worker_from_role(role: String) -> void:
 					prev = "builder"
 				citizen.setup_specialization(prev)
 				citizen.manual_role = ""
+				citizen.permanent_role = ""
+				citizen.auto_mode_enabled = true
+				citizen.employment_state = Citizen.EmploymentState.AUTO_RESERVE
 				_update_workers()
 				_refresh_workforce_menu()
 				_refresh_campfire_occupancy_button()
@@ -3576,6 +3611,9 @@ func _remove_worker_from_role(role: String) -> void:
 		elif citizen.manual_role == role:
 			citizen.idle()
 			citizen.manual_role = ""
+			citizen.permanent_role = ""
+			citizen.auto_mode_enabled = true
+			citizen.employment_state = Citizen.EmploymentState.AUTO_RESERVE
 			citizen.assigned_dig_site = null
 			_update_workers()
 			_refresh_workforce_menu()

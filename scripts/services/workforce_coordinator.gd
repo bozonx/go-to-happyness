@@ -28,8 +28,19 @@ func update_workers() -> void:
 	for citizen in sorted_citizens:
 		if citizen.is_player_controlled:
 			continue
-		# Couriers/canteen runs and the self-managed WAITING window run their own
-		# course; the scheduler must not yank them out mid-task.
+		if citizen.employment_state in [Citizen.EmploymentState.PENDING_JOB, Citizen.EmploymentState.PENDING_UNEMPLOYMENT] and citizen.state in [Citizen.State.IDLE, Citizen.State.RESTING, Citizen.State.TO_HOME]:
+			if citizen.employment_state == Citizen.EmploymentState.PENDING_UNEMPLOYMENT:
+				var queued_vacancy := WorkforcePolicy.permanent_vacancy_for(_worker_data(citizen), _world_data())
+				if not queued_vacancy.is_empty():
+					citizen.queue_employment_processing(queued_vacancy)
+			if _can_finish_registration_today(citizen):
+				citizen.begin_employment_processing(simulation._employment_center_position(), citizen.pending_employment_role)
+			continue
+		if citizen.state in [Citizen.State.TO_EMPLOYMENT_CENTER, Citizen.State.EMPLOYMENT_PROCESSING]:
+			_update_employment_processing(citizen)
+			continue
+		# Couriers and service runs keep their current task; an automatic courier is
+		# considered for a vacancy only after its delivery has completed.
 		if citizen.state in BUSY_STATES or citizen.state == Citizen.State.WAITING:
 			continue
 		if citizen.blocked_by_storage:
@@ -37,6 +48,24 @@ func update_workers() -> void:
 				_send_to_waiting(citizen)
 				continue
 			citizen.blocked_by_storage = false
+		if citizen.employment_state == Citizen.EmploymentState.EMPLOYED:
+			if can_assign_work(citizen) and citizen.state in [Citizen.State.IDLE, Citizen.State.RESTING]:
+				citizen.request_goap_decision()
+			continue
+		if citizen.employment_state == Citizen.EmploymentState.MANUAL_COURIER:
+			continue
+		if citizen.employment_state == Citizen.EmploymentState.UNEMPLOYED or not citizen.auto_mode_enabled:
+			continue
+		# A free productive workplace turns an automatic reserve worker into a
+		# permanent employee only after registration at the employment centre.
+		if citizen.state in [Citizen.State.IDLE, Citizen.State.RESTING]:
+			var vacancy := WorkforcePolicy.permanent_vacancy_for(_worker_data(citizen), _world_data())
+			if not vacancy.is_empty():
+				if _can_finish_registration_today(citizen):
+					citizen.begin_employment_processing(simulation._employment_center_position(), vacancy)
+				else:
+					citizen.queue_employment_processing(vacancy)
+				continue
 		if can_assign_work(citizen):
 			# Pull free citizens onto work: the genuinely idle and the ones resting
 			# at home (morning wake-up / rest-fallback from an earlier work drought).
@@ -45,6 +74,29 @@ func update_workers() -> void:
 				citizen.request_goap_decision()
 		else:
 			_send_to_waiting(citizen)
+
+
+func _update_employment_processing(citizen: Citizen) -> void:
+	# A newly opened productive workplace interrupts unemployment registration.
+	# The citizen is already unburdened here; active deliveries are never routed
+	# into this state and therefore always finish before any transfer.
+	if citizen.employment_state == Citizen.EmploymentState.PENDING_UNEMPLOYMENT:
+		var vacancy := WorkforcePolicy.permanent_vacancy_for(_worker_data(citizen), _world_data())
+		if not vacancy.is_empty():
+			if _can_finish_registration_today(citizen):
+				citizen.begin_employment_processing(simulation._employment_center_position(), vacancy)
+			else:
+				citizen.queue_employment_processing(vacancy)
+
+
+func _can_finish_registration_today(citizen: Citizen) -> bool:
+	var center: Vector3 = simulation._employment_center_position()
+	if center == Vector3.INF:
+		return false
+	var minutes_to_walk: float = citizen.global_position.distance_to(center) / Citizen.WALK_SPEED * float(simulation.GAME_MINUTES_PER_SECOND)
+	var shift_end := 8.0 + float(simulation.settlement.workday_hours)
+	var finish_hour: float = float(simulation.game_minutes) / 60.0 + minutes_to_walk / 60.0 + 1.0
+	return finish_hour <= shift_end
 
 func _get_sorted_citizens() -> Array[Citizen]:
 	var list: Array[Citizen] = []
@@ -61,12 +113,14 @@ func _get_sorted_citizens() -> Array[Citizen]:
 
 
 func _send_to_waiting(citizen: Citizen) -> void:
-	# During work hours a citizen with no assignable work belongs in the WAITING
-	# window (visible indicator + keeps re-probing), never asleep. RESTING here means
-	# they were left sleeping at home — e.g. after "skip night" with no free work —
-	# so wake them too; otherwise they sleep through the whole day.
+	# Lack of reserve work is registered at the employment centre rather than an
+	# indefinite waiting state. The coordinator can still replace this process with
+	# a newly opened productive vacancy before the paperwork completes.
 	if citizen.state == Citizen.State.IDLE or citizen.state == Citizen.State.RESTING:
-		citizen.begin_waiting()
+		if _can_finish_registration_today(citizen):
+			citizen.begin_employment_processing(simulation._employment_center_position())
+		else:
+			citizen.queue_employment_processing()
 
 
 func can_assign_work(citizen: Citizen) -> bool:
@@ -161,12 +215,10 @@ func assign_work(citizen: Citizen, index: int) -> void:
 			if not simulation.pond_positions.is_empty():
 				var pond: Vector3 = simulation.pond_positions[index % simulation.pond_positions.size()]
 				citizen.assign_gathering("water", pond, simulation._get_delivery_position())
-	# A shortage/empty-workplace score can outrun the number of free work nodes
-	# (trees, forage spots, dew collectors). When no concrete slot was reserved the
-	# citizen is still IDLE (or was woken from RESTING) here — send them to wait
-	# rather than churn or freeze.
+	# A role can be available in policy while its concrete source is exhausted.
+	# Register unemployment instead of returning to the obsolete waiting loop.
 	if citizen.state == Citizen.State.IDLE or citizen.state == Citizen.State.RESTING:
-		citizen.begin_waiting()
+		_send_to_waiting(citizen)
 
 
 func work_role_for(citizen: Citizen) -> String:
@@ -187,6 +239,8 @@ func _worker_data(citizen: Citizen) -> Dictionary:
 		"manual_role": citizen.manual_role,
 		"training_role": citizen.training_role,
 		"training_days_completed": citizen.training_days_completed,
+		"permanent_role": citizen.permanent_role,
+		"skills": citizen.skills,
 		"should_study": should_study,
 	}
 
@@ -221,9 +275,15 @@ func _world_data() -> Dictionary:
 func _assigned_role_counts() -> Dictionary:
 	var counts: Dictionary = {}
 	for citizen in simulation.citizens:
-		if citizen.is_player_controlled or citizen.active_role.is_empty() or citizen.active_role in ["trade", "relaxing", "training"]:
+		if citizen.is_player_controlled:
 			continue
-		var role: String = citizen.active_role
+		var role: String = citizen.permanent_role
+		if role.is_empty() and citizen.employment_state == Citizen.EmploymentState.PENDING_JOB:
+			role = citizen.pending_employment_role
+		if role.is_empty():
+			role = citizen.active_role
+		if role.is_empty() or role in ["trade", "relaxing", "training"]:
+			continue
 		if role == "gather_wood":
 			role = "forestry"
 		counts[role] = int(counts.get(role, 0)) + 1

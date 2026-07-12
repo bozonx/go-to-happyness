@@ -161,6 +161,12 @@ func _test_workforce_policy() -> void:
 	world.assigned_roles = {"farming": 1}
 	world.dig_sites = 1
 	assert(WorkforcePolicy.role_for(forester, world) == "excavation")
+	world.assigned_roles = {"excavation": 1}
+	world.sawmills = 1
+	world.trees = 1
+	assert(WorkforcePolicy.permanent_vacancy_for(forester, world) == "forestry")
+	forester.permanent_role = "farming"
+	assert(WorkforcePolicy.role_for(forester, world) == "farming")
 	assert(WorkforcePolicy.can_take_queued_job({"idle": true, "manual_role": "", "player_controlled": false}))
 	assert(not WorkforcePolicy.can_take_queued_job({"idle": true, "manual_role": "farming", "player_controlled": false}))
 	assert(not WorkforcePolicy.can_take_queued_job({"idle": true, "manual_role": "unassigned", "player_controlled": false}))

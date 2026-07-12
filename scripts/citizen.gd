@@ -20,6 +20,7 @@ const COURIER_WAIT_DURATION := 8.0
 # Both this timer and the clock advance with the same scaled delta, so the wait
 # always spans exactly one in-game hour regardless of the simulation speed.
 const WAIT_DURATION := 12.5
+const EMPLOYMENT_PROCESS_DURATION := 12.5
 const WAIT_RECHECK_INTERVAL := 1.0
 const GRAVITY := 18.0
 const AI_JUMP_VELOCITY := 7.6
@@ -33,7 +34,9 @@ const NAVIGATION_TARGET_CLEARANCE := 0.48
 const ROUTE_PROGRESS_EPSILON := 0.06
 const ROUTE_RETRY_INTERVAL := 2.0
 
-enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, TO_GATHER, GATHERING, TO_TRADE_PICKUP, TO_TRADE_DESTINATION }
+enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, TO_GATHER, GATHERING, TO_TRADE_PICKUP, TO_TRADE_DESTINATION, TO_EMPLOYMENT_CENTER, EMPLOYMENT_PROCESSING }
+
+enum EmploymentState { AUTO_RESERVE, EMPLOYED, UNEMPLOYED, PENDING_JOB, PENDING_UNEMPLOYMENT, MANUAL_COURIER }
 
 var state := State.IDLE
 var resource_type := "wood"
@@ -56,6 +59,11 @@ var specialization := "builder"
 var previous_specialization := ""
 var manual_role := ""
 var active_role := ""
+var employment_state := EmploymentState.AUTO_RESERVE
+var auto_mode_enabled := true
+var permanent_role := ""
+var pending_employment_role := ""
+var employment_center_position := Vector3.INF
 var satisfaction := 72.0
 var satisfaction_tick := 0.0
 var body_material: StandardMaterial3D
@@ -111,6 +119,8 @@ var trade_destination_position := Vector3.ZERO
 var simulation: Node
 var goap_brain: CitizenGoapBrain
 var idle_indicator: Label3D
+
+signal employment_processing_finished(citizen: Citizen)
 
 func _ready() -> void:
 	skills = {
@@ -177,7 +187,7 @@ func _setup_visuals() -> void:
 func _setup_idle_indicator() -> void:
 	idle_indicator = Label3D.new()
 	idle_indicator.position = Vector3(0.0, 2.05, 0.0)
-	idle_indicator.text = "IDLE"
+	idle_indicator.text = "Reserve"
 	idle_indicator.font_size = 32
 	idle_indicator.outline_size = 6
 	idle_indicator.modulate = Color("f0c45d")
@@ -291,6 +301,10 @@ func _physics_process(delta: float) -> void:
 			_process_trade_pickup(delta)
 		State.TO_TRADE_DESTINATION:
 			_process_trade_destination(delta)
+		State.TO_EMPLOYMENT_CENTER:
+			_process_to_employment_center(delta)
+		State.EMPLOYMENT_PROCESSING:
+			_process_employment_processing(delta)
 	if idle_indicator != null:
 		_update_idle_indicator()
 
@@ -468,6 +482,61 @@ func _process_waiting(delta: float) -> void:
 			# the visible IDLE indicator; the worker poll re-enters the waiting
 			# window or assigns work as soon as either becomes possible.
 			idle()
+
+
+func begin_employment_processing(center_position: Vector3, next_pending_role := "") -> void:
+	if is_player_controlled or center_position == Vector3.INF:
+		return
+	employment_center_position = center_position
+	pending_employment_role = next_pending_role
+	employment_state = EmploymentState.PENDING_JOB if not next_pending_role.is_empty() else EmploymentState.PENDING_UNEMPLOYMENT
+	active_role = ""
+	state = State.TO_EMPLOYMENT_CENTER
+
+
+func queue_employment_processing(next_pending_role := "") -> void:
+	pending_employment_role = next_pending_role
+	employment_state = EmploymentState.PENDING_JOB if not next_pending_role.is_empty() else EmploymentState.PENDING_UNEMPLOYMENT
+	active_role = ""
+	state = State.IDLE
+
+
+func cancel_employment_processing() -> void:
+	if state not in [State.TO_EMPLOYMENT_CENTER, State.EMPLOYMENT_PROCESSING]:
+		return
+	pending_employment_role = ""
+	employment_state = EmploymentState.AUTO_RESERVE
+	state = State.IDLE
+
+
+func _process_to_employment_center(delta: float) -> void:
+	if employment_center_position == Vector3.INF:
+		state = State.IDLE
+		return
+	if _move_to(employment_center_position, delta):
+		state = State.EMPLOYMENT_PROCESSING
+		_start_task(EMPLOYMENT_PROCESS_DURATION)
+
+
+func _process_employment_processing(delta: float) -> void:
+	if _work(delta):
+		employment_processing_finished.emit(self)
+
+
+func finish_employment_processing() -> void:
+	if employment_state == EmploymentState.PENDING_JOB:
+		permanent_role = pending_employment_role
+		employment_state = EmploymentState.EMPLOYED
+	else:
+		permanent_role = ""
+		auto_mode_enabled = false
+		employment_state = EmploymentState.UNEMPLOYED
+	pending_employment_role = ""
+	state = State.IDLE
+
+
+func has_active_delivery() -> bool:
+	return state in [State.COURIER_TO_WORKER, State.COURIER_TO_WAREHOUSE, State.COURIER_TO_SAWMILL, State.TO_FOOD_PICKUP, State.TO_CANTEEN_DELIVERY] or carried_amount > 0
 
 func _move_to(destination: Vector3, delta: float, may_enter_destination_house := false) -> bool:
 	if navigation_agent != null and navigation_agent.get_navigation_map().is_valid():
@@ -1010,16 +1079,29 @@ func begin_waiting() -> void:
 	wait_recheck = WAIT_RECHECK_INTERVAL
 
 func _update_idle_indicator() -> void:
-	if is_player_controlled or state not in [State.IDLE, State.WAITING]:
+	if is_player_controlled:
 		idle_indicator.visible = false
 		return
 	idle_indicator.visible = true
-	if state == State.WAITING:
-		idle_indicator.text = "WAITING"
-		idle_indicator.modulate = Color("f0873d")
-	else:
-		idle_indicator.text = "IDLE"
-		idle_indicator.modulate = Color("f0c45d")
+	match employment_state:
+		EmploymentState.EMPLOYED:
+			idle_indicator.text = "Employed: %s" % permanent_role.replace("_", " ")
+			idle_indicator.modulate = Color("76c893")
+		EmploymentState.PENDING_JOB:
+			idle_indicator.text = "Hiring: %s" % pending_employment_role.replace("_", " ")
+			idle_indicator.modulate = Color("7bb7e8")
+		EmploymentState.PENDING_UNEMPLOYMENT:
+			idle_indicator.text = "Registering unemployed"
+			idle_indicator.modulate = Color("f0873d")
+		EmploymentState.UNEMPLOYED:
+			idle_indicator.text = "Unemployed"
+			idle_indicator.modulate = Color("c8a96b")
+		EmploymentState.MANUAL_COURIER:
+			idle_indicator.text = "Courier (manual)"
+			idle_indicator.modulate = Color("d18fc1")
+		_:
+			idle_indicator.text = "Reserve: courier" if specialization == "courier" else "Reserve"
+			idle_indicator.modulate = Color("f0c45d")
 
 func assign_home(next_home: Node3D) -> void:
 	home = next_home

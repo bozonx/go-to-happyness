@@ -4,12 +4,36 @@ extends RefCounted
 ## Scheduling rules expressed over plain data so they can run headlessly.
 
 static func role_for(worker: Dictionary, world: Dictionary) -> String:
+	var permanent_role := str(worker.get("permanent_role", ""))
+	if not permanent_role.is_empty():
+		return permanent_role
 	var manual_role := str(worker.get("manual_role", ""))
 	if manual_role == "unassigned":
 		return manual_role
 	if not manual_role.is_empty():
 		return manual_role
 	return _automatic_role_for(worker, world)
+
+
+static func permanent_vacancy_for(worker: Dictionary, world: Dictionary) -> String:
+	# Only fixed productive workplaces create a long-term employment contract.
+	# Couriers and free gatherers stay in the reserve pool.
+	var scores: Dictionary = {}
+	_add_empty_workplace_score(scores, world, "construction", int(world.get("construction_sites", 0)))
+	_add_empty_workplace_score(scores, world, "forestry", int(world.get("sawmills", 0)))
+	_add_empty_workplace_score(scores, world, "farming", int(world.get("farms", 0)))
+	_add_empty_workplace_score(scores, world, "gather_food", int(world.get("forager_tents", 0)))
+	_add_empty_workplace_score(scores, world, "excavation", int(world.get("dig_sites", 0)))
+	if scores.is_empty():
+		return ""
+	var best_role := ""
+	var best_score := -100000
+	for role in scores:
+		var score := int(scores[role]) + roundi(float(worker.get("skills", {}).get(role, 0.0)) * 10.0)
+		if score > best_score:
+			best_role = role
+			best_score = score
+	return best_role
 
 
 static func _automatic_role_for(worker: Dictionary, world: Dictionary) -> String:
