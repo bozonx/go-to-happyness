@@ -61,9 +61,11 @@ func _get_sorted_citizens() -> Array[Citizen]:
 
 
 func _send_to_waiting(citizen: Citizen) -> void:
-	# Standing idle with no work is the trigger for the pre-rest waiting window.
-	# Citizens mid-task or already resting keep doing what they were doing.
-	if citizen.state == Citizen.State.IDLE:
+	# During work hours a citizen with no assignable work belongs in the WAITING
+	# window (visible indicator + keeps re-probing), never asleep. RESTING here means
+	# they were left sleeping at home — e.g. after "skip night" with no free work —
+	# so wake them too; otherwise they sleep through the whole day.
+	if citizen.state == Citizen.State.IDLE or citizen.state == Citizen.State.RESTING:
 		citizen.begin_waiting()
 
 

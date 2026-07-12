@@ -1478,6 +1478,10 @@ func _create_time_controls(ui: CanvasLayer) -> void:
 
 func _skip_night() -> void:
 	current_day += 1
+	# Living through the night crosses 06:00, when the daily water/food sink runs and
+	# frees storage. Skipping must apply the same rules, otherwise stores stay full,
+	# no production is assignable, and workers have nothing to wake up for.
+	_apply_daily_settlement_rules()
 	clock.set_time(8 * 60)
 	active_meal_hour = -1
 	_update_workers()
@@ -3155,10 +3159,11 @@ func _send_citizen_to_leisure(citizen: Citizen) -> bool:
 	if not gathering_spots.is_empty():
 		citizen.go_to_park(gathering_spots[randi() % gathering_spots.size()])
 		return true
-	# Nothing communal exists at all: at least rest at home instead of loitering.
-	if is_instance_valid(citizen.home):
-		citizen.go_home()
-		return true
+	# Nothing communal exists at all. During the working day we must NOT send them
+	# home to sleep — a RESTING citizen stops re-probing for work and would sleep
+	# through the day (the "skip night with full storage" freeze). Return false so
+	# the waiting window drops them to IDLE (with its indicator) and the poll keeps
+	# checking. Night-time sleep is handled separately by the GOAP sleep goal.
 	return false
 
 func _try_resume_work(citizen: Citizen) -> bool:
