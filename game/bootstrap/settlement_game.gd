@@ -100,8 +100,9 @@ var selected_world_position := Vector3.ZERO
 var build_mode := ""
 var build_rotation_quarters := 0
 var building_registry := BuildingRegistry.new()
-var house_cells: Dictionary = {}
 var tree_cells: Dictionary = {}
+var terrain_blocked_cells: Dictionary = {}
+var navigation_blocked_cells: Dictionary = {}
 var warehouse_positions: Array[Vector3] = []
 var sawmill_positions: Array[Vector3] = []
 var sawmill_stocks: Dictionary = {}
@@ -278,6 +279,7 @@ var building_status_update_time := 0.0
 var workplace_priority_counter := 0
 var manage_citizen_button: Button
 var workforce: WorkforceCoordinator
+var route_service: GridRouteService
 var sawmills: SawmillService
 var construction: ConstructionService
 var demolition: DemolitionService
@@ -290,6 +292,8 @@ func _ready() -> void:
 	workforce = WorkforceCoordinator.new()
 	workforce.configure(self)
 	add_child(workforce)
+	route_service = GridRouteService.new()
+	route_service.configure(_cell_from_position, _cell_center, _is_board_cell, _is_navigation_cell_blocked)
 	sawmills = SawmillService.new()
 	sawmills.configure(self)
 	var construction_runtime := ConstructionRuntime.new()
@@ -783,7 +787,7 @@ func _update_couriers() -> void:
 			var has_filter := bool(settlement.tools.get("filter_1", false))
 			if has_bucket and has_filter and not pond_positions.is_empty():
 				var pond_pos := pond_positions[0]
-				courier.assign_gathering("water", pond_pos, warehouse_positions[0])
+				courier.assign_gathering("water", _pond_access_position(courier.global_position, pond_pos), warehouse_positions[0])
 				continue
 		
 		# Courier is available for dynamic production assignment
@@ -1376,52 +1380,8 @@ func _is_board_cell(cell: Vector2i) -> bool:
 	var half_cells := BOARD_CELLS / 2
 	return cell.x >= -half_cells and cell.x < half_cells and cell.y >= -half_cells and cell.y < half_cells
 
-func _find_path_around_houses(from: Vector3, destination: Vector3, may_enter_destination_house: bool) -> Array[Vector3]:
-	var start := _cell_from_position(from)
-	var goal := _cell_from_position(destination)
-	if not _is_board_cell(start) or not _is_board_cell(goal):
-		return [destination]
-	var final_destination := destination
-	if house_cells.has(goal) and not may_enter_destination_house:
-		var closest_accessible_cell: Variant = null
-		for direction in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
-			var adjacent: Vector2i = goal + direction
-			if not _is_board_cell(adjacent) or house_cells.has(adjacent):
-				continue
-			if closest_accessible_cell == null or _cell_center(adjacent).distance_squared_to(from) < _cell_center(closest_accessible_cell).distance_squared_to(from):
-				closest_accessible_cell = adjacent
-		if closest_accessible_cell == null:
-			return []
-		goal = closest_accessible_cell
-		final_destination = _cell_center(goal)
-	var frontier: Array[Vector2i] = [start]
-	var came_from: Dictionary = {start: start}
-	var directions := [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]
-	var cursor := 0
-	while cursor < frontier.size():
-		var current := frontier[cursor]
-		cursor += 1
-		if current == goal:
-			break
-		for direction in directions:
-			var next: Vector2i = current + direction
-			if not _is_board_cell(next) or came_from.has(next):
-				continue
-			if house_cells.has(next) and next != start and (next != goal or not may_enter_destination_house):
-				continue
-			came_from[next] = current
-			frontier.append(next)
-	if not came_from.has(goal):
-		return [destination]
-	var cells: Array[Vector2i] = []
-	var step := goal
-	while step != start:
-		cells.push_front(step)
-		step = came_from[step]
-	var path: Array[Vector3] = []
-	for cell in cells:
-		path.append(final_destination if cell == goal else _cell_center(cell))
-	return path
+func _find_path_around_houses(from: Vector3, destination: Vector3, _may_enter_destination_house: bool) -> RouteResult:
+	return route_service.find_route(from, destination)
 
 func _update_interface(message: String) -> void:
 	wood_label.text = "Era: %s\nMoney: %d\nBranches: %d\nGrass: %d\nWater: %d\nFood: %d\nSoil: %d\nClay: %d\nLogs: %d\nTimber: %d\nBoards: %d\nStone: %d\nBricks: %d\nStorage: %d/%d\nPopulation: %d\nWellbeing: %d" % [_era_name(), money, branches, grass, water, food, soil, clay, settlement.logs, wood, boards, stone, bricks, _stored_resources(), _warehouse_capacity(), citizens.size(), wellbeing]
@@ -1673,6 +1633,7 @@ func _create_navigation_region() -> void:
 func _rebuild_navigation_mesh() -> void:
 	if navigation_region == null:
 		return
+	_rebuild_navigation_obstacles()
 	var navigation_mesh := NavigationMesh.new()
 	navigation_mesh.agent_radius = NAVIGATION_AGENT_RADIUS
 	navigation_mesh.agent_height = 1.75
@@ -1702,23 +1663,25 @@ func _rebuild_navigation_mesh() -> void:
 		NavigationServer3D.map_force_update(get_world_3d().navigation_map)
 
 func _is_navigation_cell_blocked(cell: Vector2i) -> bool:
+	return navigation_blocked_cells.has(cell)
+
+func _rebuild_navigation_obstacles() -> void:
+	var building_blocked: Dictionary = {}
+	var margin := ceili(NAVIGATION_CLEARANCE_MARGIN)
 	for record in building_registry.records():
 		var center: Vector3 = record.center
 		var footprint: Vector2i = record.footprint
 		var min_x := roundi(center.x - (footprint.x - 1) * 0.5)
 		var min_z := roundi(center.z - (footprint.y - 1) * 0.5)
-		var margin := ceili(NAVIGATION_CLEARANCE_MARGIN)
-		if cell.x >= min_x - margin and cell.x < min_x + footprint.x + margin and cell.y >= min_z - margin and cell.y < min_z + footprint.y + margin:
-			if _is_service_pocket(cell, record.node):
-				continue
-			return true
-	return false
-
-func _is_service_pocket(cell: Vector2i, building: Variant) -> bool:
+		for x in range(min_x - margin, min_x + footprint.x + margin):
+			for z in range(min_z - margin, min_z + footprint.y + margin):
+				building_blocked[Vector2i(x, z)] = true
 	for pocket in service_pockets:
-		if pocket.cell == cell and (building == null or pocket.node == building):
-			return true
-	return false
+		if is_instance_valid(pocket.node):
+			building_blocked.erase(pocket.cell)
+	navigation_blocked_cells = terrain_blocked_cells.duplicate()
+	for cell in building_blocked:
+		navigation_blocked_cells[cell] = true
 
 func _create_selection_marker() -> void:
 	selection_marker = MeshInstance3D.new()
@@ -1799,10 +1762,33 @@ func _create_pond_visual(center: Vector3) -> void:
 	surface_material.roughness = 0.2
 	surface.material_override = surface_material
 	pond.add_child(surface)
-	# Block the pond footprint so the terrain reads as impassable water.
+	# Ponds and excavated terrain are part of the same routing obstacle map.
 	for x in range(-2, 3):
 		for z in range(-2, 3):
-			house_cells[_cell_from_position(center) + Vector2i(x, z)] = true
+			terrain_blocked_cells[_cell_from_position(center) + Vector2i(x, z)] = true
+
+func _pond_access_position(from: Vector3, pond_center: Vector3) -> Vector3:
+	var candidates := [
+		pond_center + Vector3(3.0, 0.0, 0.0),
+		pond_center + Vector3(-3.0, 0.0, 0.0),
+		pond_center + Vector3(0.0, 0.0, 3.0),
+		pond_center + Vector3(0.0, 0.0, -3.0)
+	]
+	var best := Vector3.INF
+	var best_distance := INF
+	for candidate in candidates:
+		if _is_navigation_cell_blocked(_cell_from_position(candidate)):
+			continue
+		var distance := from.distance_squared_to(candidate)
+		if distance < best_distance:
+			best = candidate
+			best_distance = distance
+	if best == Vector3.INF:
+		return Vector3.INF
+	var terrain_height := _terrain_height_at(best.x, best.z, pond_center.y)
+	if not is_nan(terrain_height):
+		best.y = terrain_height
+	return best
 
 func _create_tree(position_on_board: Vector3) -> void:
 	var tree := Node3D.new()
@@ -3767,6 +3753,19 @@ func _dig_voxel_at_crosshair() -> void:
 		return
 	voxel_tool.mode = VoxelTool.MODE_REMOVE
 	voxel_tool.do_sphere(hit.position, DIG_RADIUS)
+	_mark_excavation_as_navigation_blocked(hit.position, DIG_RADIUS)
+	_rebuild_navigation_mesh()
+
+func _mark_excavation_as_navigation_blocked(center: Vector3, radius: float) -> void:
+	var center_cell := _cell_from_position(center)
+	var cell_radius := ceili(radius + 0.75)
+	for x in range(center_cell.x - cell_radius, center_cell.x + cell_radius + 1):
+		for z in range(center_cell.y - cell_radius, center_cell.y + cell_radius + 1):
+			var cell := Vector2i(x, z)
+			if not _is_board_cell(cell):
+				continue
+			if _cell_center(cell).distance_to(Vector3(center.x, 0.0, center.z)) <= radius + 0.75:
+				terrain_blocked_cells[cell] = true
 
 func _update_interaction(delta: float) -> void:
 	if interaction_action.is_empty():
@@ -3969,11 +3968,22 @@ func _pay_building_cost(building_type: String) -> void:
 func _is_footprint_clear(world_position: Vector3, footprint: Vector2i) -> bool:
 	if not building_registry.is_footprint_clear(world_position, footprint, BUILDING_CLEARANCE_BLOCKS):
 		return false
+	if _footprint_overlaps_terrain_obstacle(world_position, footprint):
+		return false
 	var half := Vector2(footprint.x, footprint.y) * 0.5
 	for site in dig_sites:
 		if absf(world_position.x - site.node.global_position.x) < half.x + 1.0 and absf(world_position.z - site.node.global_position.z) < half.y + 1.0:
 			return false
 	return true
+
+func _footprint_overlaps_terrain_obstacle(center: Vector3, footprint: Vector2i) -> bool:
+	var min_x := roundi(center.x - (footprint.x - 1) * 0.5)
+	var min_z := roundi(center.z - (footprint.y - 1) * 0.5)
+	for x in range(footprint.x):
+		for z in range(footprint.y):
+			if terrain_blocked_cells.has(Vector2i(min_x + x, min_z + z)):
+				return true
+	return false
 
 func _is_footprint_level(world_position: Vector3, footprint: Vector2i) -> bool:
 	var heights: Array[float] = []
@@ -4129,7 +4139,6 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 				_add_building_selector(building, "materials_factory_selector", blueprint.footprint)
 	building_registry.attach_node(cell, building)
 	var occupied_footprint: Vector2i = building.get_meta("occupied_footprint", blueprint.footprint)
-	_register_navigation_footprint(position_on_board, {"footprint": occupied_footprint})
 	_add_building_status_indicator(building)
 	_rebuild_navigation_mesh()
 	_update_workers()
@@ -4301,14 +4310,6 @@ func _grant_debug_resources() -> void:
 	_update_workers()
 	_update_interface("Debug resources added in normal spending proportions.")
 
-func _register_navigation_footprint(center: Vector3, blueprint: Dictionary) -> void:
-	var footprint: Vector2i = blueprint.footprint
-	var min_x := roundi(center.x - (footprint.x - 1) * 0.5)
-	var min_z := roundi(center.z - (footprint.y - 1) * 0.5)
-	for x in range(footprint.x):
-		for z in range(footprint.y):
-			house_cells[Vector2i(min_x + x, min_z + z)] = true
-
 func _register_service_entrance(building: Node3D, footprint: Vector2i, home_entrance := false, show_marker := true) -> void:
 	var service_position := building.to_global(Vector3(0.0, 0.0, footprint.y * 0.5 + SERVICE_PAD_OFFSET))
 	service_position.y = building.global_position.y
@@ -4361,11 +4362,6 @@ func _nearby_player_work_target() -> Node3D:
 
 
 func _unregister_navigation_footprint(center: Vector3, footprint: Vector2i) -> void:
-	var min_x := roundi(center.x - (footprint.x - 1) * 0.5)
-	var min_z := roundi(center.z - (footprint.y - 1) * 0.5)
-	for x in range(footprint.x):
-		for z in range(footprint.y):
-			house_cells.erase(Vector2i(min_x + x, min_z + z))
 	for index in range(service_pockets.size() - 1, -1, -1):
 		var pocket: Dictionary = service_pockets[index]
 		if is_instance_valid(pocket.node) and pocket.node.global_position == center:

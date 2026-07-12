@@ -1,6 +1,7 @@
 extends SceneTree
 
 const SettlementRulesScript = preload("res://game/features/settlement/domain/settlement_rules.gd")
+const GridRouteServiceScript = preload("res://game/features/world/application/grid_route_service.gd")
 
 
 func _init() -> void:
@@ -12,6 +13,7 @@ func _init() -> void:
 	_test_sawmill_rules()
 	_test_workforce_policy()
 	_test_citizen_task_state()
+	_test_grid_routing()
 	_test_citizen_decision_context()
 	_test_construction_progress()
 	_test_construction_service_cancellation()
@@ -233,6 +235,29 @@ func _test_citizen_decision_context() -> void:
 	context.meal_requested = true
 	context.has_canteen = true
 	assert(context.is_goal_valid(CitizenDecisionContext.Intent.EAT))
+
+
+func _test_grid_routing() -> void:
+	var blocked: Dictionary = {
+		Vector2i(1, 0): true,
+		Vector2i(1, 1): true,
+		Vector2i(1, 2): true
+	}
+	var router = GridRouteServiceScript.new()
+	router.configure(
+		func(position: Vector3) -> Vector2i: return Vector2i(floori(position.x), floori(position.z)),
+		func(cell: Vector2i) -> Vector3: return Vector3(cell.x + 0.5, 0.0, cell.y + 0.5),
+		func(cell: Vector2i) -> bool: return cell.x >= 0 and cell.x < 3 and cell.y >= 0 and cell.y < 3,
+		func(cell: Vector2i) -> bool: return blocked.has(cell)
+	)
+	var unreachable: RouteResult = router.find_route(Vector3(0.5, 0.0, 0.5), Vector3(2.5, 0.0, 0.5))
+	assert(not unreachable.reachable and unreachable.waypoints.is_empty())
+
+	blocked.erase(Vector2i(1, 2))
+	var route: RouteResult = router.find_route(Vector3(0.5, 0.0, 0.5), Vector3(2.5, 0.0, 0.5))
+	assert(route.reachable and route.arrival_position == Vector3(2.5, 0.0, 0.5))
+	for waypoint in route.waypoints:
+		assert(not blocked.has(Vector2i(floori(waypoint.x), floori(waypoint.z))))
 
 
 func _test_construction_progress() -> void:

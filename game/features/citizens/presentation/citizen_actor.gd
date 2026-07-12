@@ -31,10 +31,8 @@ const AI_JUMP_VELOCITY := 7.6
 const STUCK_TIME_BEFORE_JUMP := 0.75
 const STUCK_TIME_BEFORE_REPATH := 1.5
 const STUCK_TIME_BEFORE_SIDESTEP := 2.25
-const SIDESTEP_DURATION := 0.65
 const CONSTRUCTION_SLOT_SPACING := 0.42
 const CONSTRUCTION_APPROACH_DISTANCE := 1.75
-const NAVIGATION_TARGET_CLEARANCE := 0.48
 const ROUTE_PROGRESS_EPSILON := 0.06
 const ROUTE_RETRY_INTERVAL := 2.0
 
@@ -123,6 +121,8 @@ var movement_path: Array[Vector3] = []
 var path_destination := Vector3.INF
 var navigation_target_position := Vector3.INF
 var path_allows_destination_house := false
+var active_route: RouteResult
+var route_retry_timer := 0.0
 var navigation_agent: NavigationAgent3D
 var stuck_time := 0.0
 var recovery_repath_done := false
@@ -130,8 +130,6 @@ var route_no_progress_time := 0.0
 var route_best_distance := INF
 var route_recovery_attempt := 0
 var jump_cooldown := 0.0
-var sidestep_time := 0.0
-var sidestep_direction := Vector3.ZERO
 var ground_contact_confirmed := false
 var blocked_by_storage := false
 var training_role := ""
@@ -724,10 +722,19 @@ func has_active_delivery() -> bool:
 	return state in [State.COURIER_TO_WORKER, State.COURIER_TO_WAREHOUSE, State.COURIER_TO_SAWMILL, State.TO_FOOD_PICKUP, State.TO_CANTEEN_DELIVERY, State.TO_CONSTRUCTION_PICKUP, State.TO_CONSTRUCTION_SITE] or carried_amount > 0
 
 func _move_to(destination: Vector3, delta: float, may_enter_destination_house := false) -> bool:
+	if path_destination.distance_to(destination) > 0.08 or path_allows_destination_house != may_enter_destination_house:
+		_reset_route(destination)
+		path_allows_destination_house = may_enter_destination_house
+		_plan_route(destination)
+	if active_route == null or not active_route.reachable:
+		route_retry_timer = maxf(0.0, route_retry_timer - delta)
+		if route_retry_timer <= 0.0:
+			_plan_route(destination)
+		if active_route == null or not active_route.reachable:
+			return false
 	if navigation_agent != null and navigation_agent.get_navigation_map().is_valid():
-		if path_destination.distance_to(destination) > 0.08:
-			_reset_route(destination)
-			navigation_target_position = _accessible_navigation_target(destination, 0)
+		if navigation_target_position.distance_to(active_route.arrival_position) > 0.01:
+			navigation_target_position = active_route.arrival_position
 			navigation_agent.target_position = navigation_target_position
 		for ignored_start_position in range(2):
 			var next_path_position := navigation_agent.get_next_path_position()
@@ -742,10 +749,6 @@ func _move_to(destination: Vector3, delta: float, may_enter_destination_house :=
 				return _move_directly_to(next_path_position, delta)
 		_recover_idle_route(delta)
 		return false
-	if path_destination.distance_to(destination) > 0.08 or path_allows_destination_house != may_enter_destination_house:
-		path_destination = destination
-		path_allows_destination_house = may_enter_destination_house
-		movement_path = pathfinder.call(global_position, destination, may_enter_destination_house) if pathfinder.is_valid() else [destination]
 	while not movement_path.is_empty():
 		var waypoint: Vector3 = movement_path.front()
 		var waypoint_offset := waypoint - global_position
@@ -755,6 +758,23 @@ func _move_to(destination: Vector3, delta: float, may_enter_destination_house :=
 		movement_path.pop_front()
 	return true
 
+func _plan_route(destination: Vector3) -> void:
+	var result: Variant = RouteResult.success([destination], destination)
+	if pathfinder.is_valid():
+		result = pathfinder.call(global_position, destination, path_allows_destination_house)
+	if not result is RouteResult or not (result as RouteResult).reachable:
+		active_route = RouteResult.unreachable()
+		movement_path.clear()
+		navigation_target_position = Vector3.INF
+		route_retry_timer = ROUTE_RETRY_INTERVAL
+		velocity.x = 0.0
+		velocity.z = 0.0
+		return
+	active_route = result as RouteResult
+	movement_path = active_route.waypoints.duplicate()
+	navigation_target_position = Vector3.INF
+	route_retry_timer = 0.0
+
 func _move_directly_to(destination: Vector3, delta: float) -> bool:
 	var offset := destination - global_position
 	offset.y = 0.0
@@ -762,9 +782,6 @@ func _move_directly_to(destination: Vector3, delta: float) -> bool:
 		global_position = Vector3(destination.x, global_position.y, destination.z)
 		return true
 	var direction := offset.normalized()
-	if sidestep_time > 0.0:
-		sidestep_time = maxf(0.0, sidestep_time - delta)
-		direction = (direction * 0.35 + sidestep_direction).normalized()
 	var desired_velocity := direction * get_walk_speed()
 	velocity.x = desired_velocity.x
 	velocity.z = desired_velocity.z
@@ -779,7 +796,7 @@ func _move_directly_to(destination: Vector3, delta: float) -> bool:
 		stuck_time += delta
 		if jump_cooldown <= 0.0:
 			if stuck_time >= STUCK_TIME_BEFORE_SIDESTEP:
-				_start_sidestep(direction)
+				_force_repath()
 			elif stuck_time >= STUCK_TIME_BEFORE_REPATH and not recovery_repath_done:
 				_force_repath()
 			elif stuck_time >= STUCK_TIME_BEFORE_JUMP and _has_low_obstacle_ahead(direction):
@@ -813,35 +830,15 @@ func _jump_out_of_obstacle() -> void:
 	stuck_time = 0.0
 
 func _force_repath() -> void:
-	if navigation_agent != null:
-		route_recovery_attempt += 1
-		navigation_target_position = _accessible_navigation_target(path_destination, route_recovery_attempt)
-		navigation_agent.target_position = navigation_target_position
+	route_recovery_attempt += 1
+	active_route = null
+	movement_path.clear()
+	navigation_target_position = Vector3.INF
+	route_retry_timer = 0.0
 	recovery_repath_done = true
 
-func _accessible_navigation_target(destination: Vector3, attempt: int) -> Vector3:
-	var navigation_map := navigation_agent.get_navigation_map()
-	var closest_point := NavigationServer3D.map_get_closest_point(navigation_map, destination)
-	var blocked_offset := closest_point - destination
-	blocked_offset.y = 0.0
-	if blocked_offset.length() <= 0.05 and attempt == 0:
-		return closest_point
-	# Keep the capsule away from the exact navmesh boundary, which normally
-	# coincides with a building wall or a tree cell.
-	var outward := blocked_offset.normalized() if blocked_offset.length() > 0.05 else (global_position - destination).normalized()
-	if outward.is_zero_approx():
-		outward = Vector3.FORWARD
-	var candidates: Array[Vector3] = []
-	for direction in [outward, Vector3(-outward.z, 0.0, outward.x), Vector3(outward.z, 0.0, -outward.x), -outward]:
-		var candidate := NavigationServer3D.map_get_closest_point(navigation_map, closest_point + direction * NAVIGATION_TARGET_CLEARANCE)
-		if not NavigationServer3D.map_get_path(navigation_map, global_position, candidate, true).is_empty():
-			candidates.append(candidate)
-	if candidates.is_empty():
-		return closest_point
-	return candidates[attempt % candidates.size()]
-
 func _has_arrived_at_navigation_target() -> bool:
-	var offset := navigation_target_position - global_position
+	var offset := path_destination - global_position
 	offset.y = 0.0
 	return offset.length() <= maxf(0.45, navigation_agent.target_desired_distance + 0.2)
 
@@ -862,11 +859,7 @@ func _update_route_progress(distance_before: float, distance_after: float, delta
 	if route_no_progress_time < ROUTE_RETRY_INTERVAL:
 		return
 	route_no_progress_time = 0.0
-	if route_recovery_attempt % 2 == 0:
-		_force_repath()
-	else:
-		route_recovery_attempt += 1
-		_start_sidestep(direction)
+	_force_repath()
 
 func _recover_idle_route(delta: float) -> void:
 	var direction := navigation_target_position - global_position
@@ -875,14 +868,6 @@ func _recover_idle_route(delta: float) -> void:
 		direction = Vector3.FORWARD
 	var distance := direction.length()
 	_update_route_progress(distance, distance, delta, direction.normalized())
-
-func _start_sidestep(forward: Vector3) -> void:
-	var side_sign := -1.0 if get_instance_id() % 2 == 0 else 1.0
-	sidestep_direction = Vector3(-forward.z, 0.0, forward.x) * side_sign
-	sidestep_time = SIDESTEP_DURATION
-	_force_repath()
-	stuck_time = 0.0
-	recovery_repath_done = false
 
 func _apply_gravity(delta: float) -> void:
 	if not ground_contact_confirmed:

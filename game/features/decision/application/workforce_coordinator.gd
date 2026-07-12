@@ -331,7 +331,10 @@ func assign_work(citizen: Citizen, index: int) -> void:
 				citizen.assign_gathering("water", collector_position, simulation._get_delivery_position())
 		"gather_water":
 			if not simulation.pond_positions.is_empty():
-				citizen.assign_gathering("water", simulation.pond_positions[index % simulation.pond_positions.size()], simulation._get_delivery_position())
+				var pond_center: Vector3 = simulation.pond_positions[index % simulation.pond_positions.size()]
+				var pond_access: Vector3 = simulation._pond_access_position(citizen.global_position, pond_center)
+				if pond_access != Vector3.INF:
+					citizen.assign_gathering("water", pond_access, simulation._get_delivery_position())
 		"craftsman":
 			if not simulation.craft_tent_positions.is_empty():
 				var craft_pos: Vector3 = _workplace_position(citizen, simulation.craft_tent_positions[index % simulation.craft_tent_positions.size()])
