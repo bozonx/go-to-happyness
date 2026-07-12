@@ -70,7 +70,19 @@ func update_workers() -> void:
 		# the idle reserve pool instead of entering the generic no-work waiting loop.
 		if citizen.specialization == "courier":
 			continue
-		if citizen.employment_state == Citizen.EmploymentState.UNEMPLOYED or not citizen.auto_mode_enabled:
+		if citizen.employment_state == Citizen.EmploymentState.UNEMPLOYED:
+			# A registered-unemployed resident rests instead of churning, but must
+			# rejoin the reserve the moment real work is possible again (storage
+			# freed up, a new gather source or a fresh vacancy) — otherwise
+			# "unemployed" becomes a permanent trap nobody is ever hired out of.
+			if citizen.state in [Citizen.State.IDLE, Citizen.State.RESTING]:
+				var reopened_vacancy := WorkforcePolicy.permanent_vacancy_for(_worker_data(citizen), _world_data())
+				if not reopened_vacancy.is_empty() or can_assign_work(citizen):
+					citizen.auto_mode_enabled = true
+					citizen.employment_state = Citizen.EmploymentState.AUTO_RESERVE
+			if citizen.employment_state == Citizen.EmploymentState.UNEMPLOYED:
+				continue
+		if not citizen.auto_mode_enabled:
 			continue
 		# A free productive workplace turns an automatic reserve worker into a
 		# permanent employee only after registration at the employment centre.
@@ -198,14 +210,17 @@ func _employer_exists(role: String) -> bool:
 
 
 func _release_employment(citizen: Citizen) -> void:
+	# The workplace disappeared out from under the worker — a change the player
+	# did not choose. Return them to the reserve pool so they immediately look for
+	# other work instead of becoming a permanently idle "unemployed" body.
 	citizen.idle()
 	citizen.manual_role = ""
 	citizen.permanent_role = ""
 	citizen.pending_employment_role = ""
 	citizen.employment_workplace = null
 	citizen.pending_employment_workplace = null
-	citizen.auto_mode_enabled = false
-	citizen.employment_state = Citizen.EmploymentState.UNEMPLOYED
+	citizen.auto_mode_enabled = true
+	citizen.employment_state = Citizen.EmploymentState.AUTO_RESERVE
 
 
 func can_assign_work(citizen: Citizen) -> bool:
@@ -230,7 +245,7 @@ func assign_work(citizen: Citizen, index: int) -> void:
 			citizen.assign_seller_work(market_pos)
 		return
 	if role == "official":
-		citizen.assign_official_work(_workplace_position(citizen, simulation.employment_office_position))
+		citizen.assign_official_work(_workplace_position(citizen, simulation._employment_center_position()))
 		return
 	if role == "factory_worker":
 		var factory_worker_node: Node3D = citizen.employment_workplace if is_instance_valid(citizen.employment_workplace) else factory_for_role("factory_worker")

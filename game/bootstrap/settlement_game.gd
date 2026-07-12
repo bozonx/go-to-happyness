@@ -82,6 +82,15 @@ var time_multiplier := 1.0
 # between events could stand doing nothing indefinitely. Poll it steadily during
 # work hours so idle workers are promptly re-assigned or sent to wait/rest.
 const WORKER_POLL_INTERVAL := 0.5
+# The main campfire progression (town hall) doubles as the employment centre:
+# the employment officer must man it to register residents fast. A dedicated
+# employment office (brick era) serves the same purpose.
+const OFFICIAL_WORKPLACE_TYPES: Array[String] = ["campfire", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall", "employment_office"]
+# How close the officer must stand to their post to count as manning it.
+const OFFICER_POST_RADIUS := 3.5
+# Registration handled by the roaming hero in the field (no manned centre) is
+# deliberately slower than a proper office run by a settled officer.
+const FIELD_REGISTRATION_PENALTY := 2.0
 var _worker_poll_timer := 0.0
 var runtime_seconds := 0.0
 var random := RandomNumberGenerator.new()
@@ -218,6 +227,9 @@ var campfire_menu_title: Label
 var campfire_requirements_label: Label
 var campfire_advance_button: Button
 var campfire_occupancy_button: Button
+var campfire_official_button: Button
+var campfire_accept_button: Button
+var campfire_dismiss_button: Button
 var workforce_menu: Panel
 var workforce_menu_title: Label
 var workforce_list: VBoxContainer
@@ -387,21 +399,42 @@ func _employment_center_position() -> Vector3:
 		return employment_office.get_meta("service_position", employment_office.global_position)
 	if is_instance_valid(campfire_node):
 		return campfire_node.get_meta("service_position", campfire_node.global_position)
+	# No employment building yet: residents register wherever the roaming
+	# hero-officer stands, so the paperwork still gets done (just slower).
+	if is_instance_valid(hero_citizen) and _hero_is_officer():
+		return hero_citizen.global_position
 	return Vector3.INF
 
 
+func _hero_is_officer() -> bool:
+	return is_instance_valid(hero_citizen) and (hero_citizen.manual_role == "official" or hero_citizen.permanent_role == "official")
+
+
+func _hero_at_employment_center() -> bool:
+	# True only when a proper employment building exists and the hero is manning it.
+	if not is_instance_valid(hero_citizen):
+		return false
+	if not is_instance_valid(employment_office) and not is_instance_valid(campfire_node):
+		return false
+	var center := _employment_center_position()
+	return center != Vector3.INF and hero_citizen.global_position.distance_to(center) <= OFFICER_POST_RADIUS
+
+
 func _registration_official() -> Citizen:
-	# Once a dedicated employment office is built, whoever is assigned there and
-	# actually standing at their post services registrations.
-	if is_instance_valid(employment_office):
+	# A dedicated officer actually manning the employment centre (town hall or
+	# employment office) services registrations fastest.
+	var center := _employment_center_position()
+	if center != Vector3.INF:
 		for citizen in citizens:
-			if is_instance_valid(citizen) and citizen.state == Citizen.State.OFFICIAL_WORK and citizen.global_position.distance_to(employment_office_position) <= 3.5:
+			if not is_instance_valid(citizen) or citizen.is_player_controlled or citizen == hero_citizen:
+				continue
+			if citizen.permanent_role != "official":
+				continue
+			if citizen.state == Citizen.State.OFFICIAL_WORK and citizen.global_position.distance_to(center) <= OFFICER_POST_RADIUS:
 				return citizen
-		return null
-	# Before that, only the hero can personally act as employment officer, and
-	# only while standing at the registration point (the campfire/town hall).
-	var post := _employment_center_position()
-	if is_instance_valid(hero_citizen) and hero_citizen.manual_role == "official" and post != Vector3.INF and hero_citizen.global_position.distance_to(post) <= 2.5:
+	# The hero holds the officer role by default and can register residents in
+	# the field, wherever they reach him — even before any centre is built.
+	if is_instance_valid(hero_citizen) and _hero_is_officer():
 		return hero_citizen
 	return null
 
@@ -414,7 +447,11 @@ func _registration_duration() -> float:
 	var official := _registration_official()
 	if official == null:
 		return Citizen.EMPLOYMENT_PROCESS_DURATION
-	return Citizen.EMPLOYMENT_PROCESS_DURATION / official.get_efficiency("official")
+	var duration := Citizen.EMPLOYMENT_PROCESS_DURATION / official.get_efficiency("official")
+	# Field registration (roaming hero, no manned centre) takes noticeably longer.
+	if official == hero_citizen and not _hero_at_employment_center():
+		duration *= FIELD_REGISTRATION_PENALTY
+	return duration
 
 
 func _is_teacher_present_at_school() -> bool:
@@ -1739,6 +1776,10 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	if hero_citizen == null:
 		hero_citizen = citizen
 		citizen.set_hero(true)
+		# The hero holds the employment-officer role by default so residents can
+		# always be hired from the very first day; the player may reassign it to
+		# any settler (or to the hero) later, like any other profession.
+		_appoint_official(citizen)
 	citizen.setup_goap(self, citizens.size() - 1)
 
 
@@ -1920,7 +1961,7 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_role_button("Assign: forage food", "gather_food", 374)
 	_add_role_button("Assign: courier", "courier", 408)
 	_add_role_button("Assign: craftsman", "craftsman", 442)
-	_add_role_button("Take role: employment officer", "official", 476, true)
+	_add_role_button("Assign: employment officer", "official", 476)
 	
 	# Era category buttons (shown on main build menu)
 	_add_build_category_button("Tent era", "tent", 136)
@@ -2420,6 +2461,11 @@ func _set_manual_role(role: String) -> void:
 		selected_builder.permanent_role = ""
 		selected_builder.auto_mode_enabled = false
 		selected_builder.employment_state = Citizen.EmploymentState.MANUAL_COURIER
+	elif role == "official":
+		# The employment officer is appointed directly by the mayor. They run job
+		# registration, so they cannot themselves queue for it — this also breaks
+		# the bootstrap deadlock of "you need an officer to appoint an officer".
+		_appoint_official(selected_builder)
 	else:
 		if selected_builder.specialization == "courier":
 			var prev := selected_builder.previous_specialization
@@ -2527,7 +2573,7 @@ func _employer_types_for_role(role: String) -> Array[String]:
 		"factory_worker": return ["brick_factory", "materials_factory", "recycling_factory", "metal_factory"]
 		"engineer": return ["materials_factory"]
 		"craftsman": return ["craft_tent"]
-		"official": return ["employment_office"]
+		"official": return OFFICIAL_WORKPLACE_TYPES
 	return []
 
 
@@ -3857,7 +3903,7 @@ func _create_campfire_menu(ui: CanvasLayer) -> void:
 	campfire_menu = Panel.new()
 	campfire_menu.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	campfire_menu.offset_left = -324.0
-	campfire_menu.offset_top = -510.0
+	campfire_menu.offset_top = -636.0
 	campfire_menu.offset_right = -20.0
 	campfire_menu.offset_bottom = -20.0
 	campfire_menu.visible = false
@@ -3908,16 +3954,41 @@ func _create_campfire_menu(ui: CanvasLayer) -> void:
 	campfire_occupancy_button.size = Vector2(272, 32)
 	campfire_occupancy_button.pressed.connect(_show_workforce_menu)
 	campfire_menu.add_child(campfire_occupancy_button)
+
+	# The town hall is the employment centre: manage its officer here, exactly
+	# like assigning a cook/teacher/seller at their own workplace.
+	campfire_official_button = Button.new()
+	campfire_official_button.text = "Assign selected resident as employment officer"
+	campfire_official_button.position = Vector2(16, 445)
+	campfire_official_button.size = Vector2(272, 32)
+	campfire_official_button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	campfire_official_button.pressed.connect(_assign_official_at_campfire)
+	campfire_menu.add_child(campfire_official_button)
+
+	campfire_accept_button = Button.new()
+	campfire_accept_button.position = Vector2(16, 483)
+	campfire_accept_button.size = Vector2(272, 32)
+	campfire_accept_button.pressed.connect(_toggle_campfire_acceptance)
+	campfire_menu.add_child(campfire_accept_button)
+
+	campfire_dismiss_button = Button.new()
+	campfire_dismiss_button.text = "Dismiss employment officer"
+	campfire_dismiss_button.position = Vector2(16, 521)
+	campfire_dismiss_button.size = Vector2(272, 32)
+	campfire_dismiss_button.pressed.connect(_dismiss_campfire_worker)
+	campfire_menu.add_child(campfire_dismiss_button)
+
 	var close_btn := Button.new()
 	close_btn.text = "Close Menu"
-	close_btn.position = Vector2(16, 447)
+	close_btn.position = Vector2(16, 561)
 	close_btn.size = Vector2(272, 28)
 	close_btn.pressed.connect(_close_context_menus)
 	campfire_menu.add_child(close_btn)
 
 
 func _show_campfire_menu() -> void:
-	selected_builder = null
+	# Keep any resident the player picked selected so they can be appointed as the
+	# employment officer here, just like at a canteen/school/market.
 	build_menu.visible = false
 	selection_marker.visible = false
 	build_mode = ""
@@ -4001,7 +4072,7 @@ func _workforce_role_limit(role: String) -> int:
 		"gather_food": return forager_positions.size()
 		"courier": return warehouse_positions.size()
 		"cook": return 1 if is_instance_valid(canteen) else 0
-		"official": return 1 if is_instance_valid(employment_office) else 0
+		"official": return _available_employer_capacity("official")
 		"teacher": return school_positions.size()
 		"seller": return market_positions.size()
 		"factory_worker": return workforce._factory_job_capacity()
@@ -4367,7 +4438,44 @@ func _refresh_campfire_menu() -> void:
 	if unhoused > 0:
 		campfire_requirements_label.text += "\nProblems:\n- Unhoused residents: %d. Settle them in a home before inviting anyone new.\n" % unhoused
 	campfire_advance_button.disabled = not can_advance
+	_refresh_campfire_worker_controls()
 	_refresh_campfire_occupancy_button()
+
+
+func _refresh_campfire_worker_controls() -> void:
+	if campfire_official_button == null:
+		return
+	var is_center := is_instance_valid(selected_campfire) and str(selected_campfire.get_meta("building_type", "")) in OFFICIAL_WORKPLACE_TYPES
+	var accepting := is_center and bool(selected_campfire.get_meta("accepting_workers", true))
+	campfire_official_button.visible = is_center
+	campfire_official_button.disabled = selected_builder == null or selected_builder.is_player_controlled or not accepting
+	campfire_accept_button.visible = is_center
+	campfire_accept_button.text = "Stop accepting officer" if accepting else "Start accepting officer"
+	var officer := _workplace_worker(selected_campfire) if is_center else null
+	campfire_dismiss_button.visible = is_center
+	campfire_dismiss_button.disabled = officer == null
+
+
+func _assign_official_at_campfire() -> void:
+	if not is_instance_valid(selected_campfire):
+		return
+	selected_building = selected_campfire
+	_assign_official()
+	_refresh_campfire_menu()
+
+
+func _toggle_campfire_acceptance() -> void:
+	if not is_instance_valid(selected_campfire):
+		return
+	selected_building = selected_campfire
+	_toggle_selected_workplace_acceptance()
+
+
+func _dismiss_campfire_worker() -> void:
+	if not is_instance_valid(selected_campfire):
+		return
+	selected_building = selected_campfire
+	_dismiss_selected_workplace_worker()
 
 
 func _on_campfire_advance_pressed() -> void:
@@ -4611,7 +4719,7 @@ func _create_building_menu(ui: CanvasLayer) -> void:
 	building_official_button.text = "Assign selected resident as employment officer"
 	building_official_button.position = Vector2(16, 104)
 	building_official_button.size = Vector2(272, 30)
-	building_official_button.pressed.connect(_assign_official_at_employment_office)
+	building_official_button.pressed.connect(_assign_official)
 	building_menu.add_child(building_official_button)
 	building_accept_workers_button = Button.new()
 	building_accept_workers_button.position = Vector2(16, 104)
@@ -4678,7 +4786,7 @@ func _show_building_menu() -> void:
 		building_seller_button.visible = building_type in ["trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market"]
 		building_seller_button.disabled = selected_builder == null or selected_builder.is_player_controlled or not bool(selected_building.get_meta("accepting_workers", true))
 
-		building_official_button.visible = building_type == "employment_office"
+		building_official_button.visible = building_type in OFFICIAL_WORKPLACE_TYPES
 		building_official_button.disabled = selected_builder == null or selected_builder.is_player_controlled or not bool(selected_building.get_meta("accepting_workers", true))
 
 		var is_workplace := _is_staffed_workplace(selected_building)
@@ -4709,7 +4817,7 @@ func _toggle_selected_workplace_acceptance() -> void:
 		selected_building.set_meta("workplace_priority", workplace_priority_counter)
 		_update_interface("This workplace is accepting workers at the front of its queue.")
 	_update_workers()
-	_show_building_menu()
+	_reopen_workplace_menu()
 
 
 func _dismiss_selected_workplace_worker() -> void:
@@ -4719,7 +4827,16 @@ func _dismiss_selected_workplace_worker() -> void:
 	selected_building.set_meta("accepting_workers", false)
 	_send_to_unemployment_registration(worker)
 	_update_workers()
-	_show_building_menu()
+	_reopen_workplace_menu()
+
+
+func _reopen_workplace_menu() -> void:
+	# The town hall keeps its own dedicated menu; every other workplace uses the
+	# generic building menu.
+	if is_instance_valid(selected_campfire) and selected_building == selected_campfire and campfire_menu.visible:
+		_refresh_campfire_menu()
+	else:
+		_show_building_menu()
 
 
 func _workplace_worker(building: Node3D) -> Citizen:
@@ -4733,7 +4850,7 @@ func _workplace_worker(building: Node3D) -> Citizen:
 
 func _workplace_priority_position(building: Node3D) -> int:
 	var role := ""
-	for candidate_role in ["construction", "forestry", "farming", "gather_food", "cook", "teacher", "seller", "factory_worker", "engineer"]:
+	for candidate_role in ["construction", "forestry", "farming", "gather_food", "cook", "teacher", "seller", "official", "factory_worker", "engineer"]:
 		if str(building.get_meta("building_type", "")) in _employer_types_for_role(candidate_role):
 			role = candidate_role
 			break
@@ -4874,17 +4991,36 @@ func _assign_seller_at_market() -> void:
 	_update_workers()
 
 
-func _assign_official_at_employment_office() -> void:
+func _assign_official() -> void:
 	if selected_builder == null:
-		_update_interface("Select a resident first, then click the employment office to make them the officer.")
+		_update_interface("Select a resident first, then click the town hall or employment office to make them the officer.")
 		return
 	if selected_builder.is_player_controlled:
 		_update_interface("Pick a settler, not the character you are controlling.")
 		return
-	_set_manual_specialist_employment(selected_builder, "official")
-	selected_builder.setup_specialization("official")
-	_update_interface("%s is registering as an employment officer." % selected_builder.role_label())
+	_appoint_official(selected_builder)
+	_update_interface("%s is now the employment officer." % selected_builder.role_label())
 	_update_workers()
+
+
+func _appoint_official(citizen: Citizen) -> void:
+	# Direct mayoral appointment: the officer runs job registration and therefore
+	# never queues for it themselves, which also prevents a bootstrap deadlock.
+	if citizen == null:
+		return
+	if citizen.specialization == "courier":
+		var prev := citizen.previous_specialization
+		citizen.setup_specialization(prev if not prev.is_empty() else "builder")
+	citizen.idle()
+	citizen.setup_specialization("official")
+	citizen.manual_role = ""
+	citizen.auto_mode_enabled = false
+	citizen.assigned_dig_site = null
+	citizen.pending_employment_role = ""
+	citizen.pending_employment_workplace = null
+	citizen.permanent_role = "official"
+	citizen.employment_workplace = _employer_for_role("official")
+	citizen.employment_state = Citizen.EmploymentState.EMPLOYED
 
 
 func _set_manual_specialist_employment(citizen: Citizen, role: String) -> void:
