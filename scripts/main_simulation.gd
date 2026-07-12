@@ -98,6 +98,8 @@ var sawmill_stocks: Dictionary = {}
 var tree_reservations: Dictionary = {}
 var grass_reservations: Dictionary = {}
 var farm_positions: Array[Vector3] = []
+var builders_guild_positions: Array[Vector3] = []
+var construction_company_positions: Array[Vector3] = []
 var pond_positions: Array[Vector3] = []
 var forager_positions: Array[Vector3] = []
 var school_positions: Array[Vector3] = []
@@ -1665,6 +1667,7 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_build_button("Stone market", "stone_market", 244, "stone")
 	_add_build_button("Stone prefecture", "stone_prefecture", 278, "stone")
 	_add_build_button("Stone tavern", "stone_tavern", 312, "stone")
+	_add_build_button("Гильдия строителей", "builders_guild", 346, "stone")
 	
 	_add_build_button("Brick kiln", "brick_factory", 176, "brick")
 	_add_build_button("Materials factory", "materials_factory", 210, "brick")
@@ -1672,6 +1675,7 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_build_button("Brick City Hall", "brick_city_hall", 278, "brick")
 	_add_build_button("Brick restaurant", "brick_restaurant", 312, "brick")
 	_add_build_button("Brick house", "brick_house", 346, "brick")
+	_add_build_button("Строительная фирма", "construction_company", 380, "brick")
 	
 	_refresh_build_menu()
 
@@ -2557,6 +2561,8 @@ func _remove_building_services(building: Node3D, building_type: String) -> void:
 		"warehouse": warehouse_positions.erase(service_position)
 		"sawmill": sawmill_positions.erase(service_position)
 		"farm": farm_positions.erase(service_position)
+		"builders_guild": builders_guild_positions.erase(service_position)
+		"construction_company": construction_company_positions.erase(service_position)
 		"forager_tent": forager_positions.erase(service_position)
 		"school": school_positions.erase(service_position)
 		"park": park_positions.erase(service_position)
@@ -3058,6 +3064,10 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			_sawmill_stock(service_position)
 		"farm":
 			farm_positions.append(service_position)
+		"builders_guild":
+			builders_guild_positions.append(service_position)
+		"construction_company":
+			construction_company_positions.append(service_position)
 		"campfire", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall":
 			campfire_node = building
 			_add_building_selector(building, "campfire_selector", blueprint.footprint)

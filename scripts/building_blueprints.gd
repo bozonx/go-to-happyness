@@ -63,9 +63,11 @@ const COLORS := {
 	"wood_town_hall": Color("8b6540"),
 	"stone_prefecture": Color("707275"),
 	"stone_tavern": Color("7d8082"),
+	"builders_guild": Color("747b80"),
 	"brick_city_hall": Color("b7a552"),
 	"brick_restaurant": Color("a2583d"),
 	"brick_house": Color("b4533a"),
+	"construction_company": Color("a94b3c"),
 }
 
 
@@ -78,11 +80,12 @@ static func get_blueprint(building_type: String) -> Dictionary:
 		"tent", "living_tent", "forager_tent", "craft_tent", "trade_tent": return _enclosed_blueprint(building_type, Vector2i(4, 4), 2, "gable")
 		"dugout", "earth_house", "smithy", "hide_worker", "earth_market", "earth_assembly", "dugout_kitchen": return _enclosed_blueprint(building_type, Vector2i(4, 4), 2, "gable")
 		"clay_house", "clay_workshop", "clay_market", "clay_lodge", "clay_bakery": return _enclosed_blueprint(building_type, Vector2i(4, 4), 2, "gable")
-		"stone_house", "masonry_workshop", "stone_market", "stone_prefecture", "stone_tavern": return _enclosed_blueprint(building_type, Vector2i(5, 5), 3, "hip")
+		"stone_house", "masonry_workshop", "stone_market", "stone_prefecture", "stone_tavern", "builders_guild": return _enclosed_blueprint(building_type, Vector2i(5, 5), 3, "hip")
 		"wood_town_hall": return _enclosed_blueprint("wood_town_hall", Vector2i(6, 6), 3, "hip")
 		"brick_city_hall": return _enclosed_blueprint("brick_city_hall", Vector2i(7, 6), 4, "hip")
 		"brick_restaurant": return _enclosed_blueprint("brick_restaurant", Vector2i(7, 5), 3, "hip")
 		"brick_house": return _enclosed_blueprint("brick_house", Vector2i(5, 5), 3, "gable")
+		"construction_company": return _enclosed_blueprint("construction_company", Vector2i(7, 6), 3, "shed")
 		"warehouse": return _enclosed_blueprint("warehouse", Vector2i(5, 5), 3, "shed")
 		"sawmill": return _sawmill_blueprint()
 		"farm": return _farm_blueprint()

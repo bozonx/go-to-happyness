@@ -27,6 +27,7 @@ const DEFINITIONS := {
 	"stone_house": {"name": "Stone house", "category": "stone", "costs": {"stone": 15, "clay": 8}},
 	"stone_prefecture": {"name": "Stone prefecture", "category": "stone", "costs": {"stone": 25, "boards": 12}},
 	"stone_tavern": {"name": "Stone tavern", "category": "stone", "costs": {"stone": 20, "boards": 10}},
+	"builders_guild": {"name": "Гильдия строителей", "category": "stone", "costs": {"stone": 18, "boards": 8}},
 	"masonry_workshop": {"name": "Masonry workshop", "category": "stone", "costs": {"stone": 12, "boards": 12}},
 	"stone_market": {"name": "Stone market", "category": "stone", "costs": {"stone": 18, "boards": 8}},
 	"sawmill": {"name": "Sawmill", "category": "wood", "costs": {"logs": 4, "money": 1}},
@@ -43,6 +44,7 @@ const DEFINITIONS := {
 	"brick_city_hall": {"name": "Brick City Hall", "category": "brick", "costs": {"bricks": 30, "boards": 15}},
 	"brick_restaurant": {"name": "Brick restaurant", "category": "brick", "costs": {"bricks": 24, "boards": 12}},
 	"brick_house": {"name": "Brick house", "category": "brick", "costs": {"bricks": 22, "boards": 10}},
+	"construction_company": {"name": "Строительная фирма", "category": "brick", "costs": {"bricks": 26, "boards": 14}},
 }
 
 const RESEARCH_COSTS := {"brick_construction": {"bricks": 15, "boards": 10}}
