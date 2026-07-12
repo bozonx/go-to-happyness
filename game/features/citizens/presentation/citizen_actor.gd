@@ -51,6 +51,9 @@ var workplace_position := Vector3.ZERO
 var warehouse_position := Vector3.ZERO
 var task_timer := CitizenTaskState.new()
 var wait_recheck := 0.0
+# Set only after the visible no-work window has elapsed. The workforce
+# coordinator consumes this marker by starting unemployment registration.
+var no_work_wait_complete := false
 # Injected by the simulation: work_scheduler(Citizen) -> bool tries to place the
 # citizen on a job and reports success; leisure_scheduler(Citizen) -> bool routes
 # them to a rest spot (park/pond/home) and reports whether somewhere was found.
@@ -425,7 +428,15 @@ func _process_excavation(delta: float) -> void:
 		task_timer.remaining = 0.0
 
 func _process_courier_pickup(delta: float) -> void:
-	if is_instance_valid(courier_target) and _move_to(courier_target.global_position, delta):
+	if not is_instance_valid(courier_target):
+		# The producer may be removed while a courier is en route. Drop the stale
+		# job so the dispatcher can give this courier another task immediately.
+		courier_target = null
+		courier_resource_type = ""
+		carried_amount = 0
+		state = State.IDLE
+		return
+	if _move_to(courier_target.global_position, delta):
 		var cargo := courier_target.take_pending_resource()
 		courier_target.set_meta("last_courier_pickup", simulation.runtime_seconds if simulation != null else 0.0)
 		courier_resource_type = cargo.get("type", "")
@@ -572,13 +583,11 @@ func _process_waiting(delta: float) -> void:
 		if work_scheduler.is_valid() and bool(work_scheduler.call(self)):
 			return
 	if task_timer.advance(delta):
-		# The full waiting window elapsed with no work. Head to a rest spot.
-		var rested := leisure_scheduler.is_valid() and bool(leisure_scheduler.call(self))
-		if not rested:
-			# Nowhere to rest at all (no park/campfire/pond/home): stand down with
-			# the visible IDLE indicator; the worker poll re-enters the waiting
-			# window or assigns work as soon as either becomes possible.
-			idle()
+		# The full window elapsed without a concrete task. The coordinator now
+		# routes the citizen to the employment centre instead of leaving them in an
+		# endless leisure/idle loop.
+		idle()
+		no_work_wait_complete = true
 
 
 func begin_employment_processing(center_position: Vector3, next_pending_role := "", next_workplace: Node3D = null) -> void:
@@ -1274,6 +1283,7 @@ func begin_waiting() -> void:
 	if is_player_controlled or state == State.WAITING:
 		return
 	state = State.WAITING
+	no_work_wait_complete = false
 	active_role = ""
 	construction_site = null
 	assigned_dig_site = null
@@ -1289,6 +1299,11 @@ func _update_idle_indicator() -> void:
 		idle_indicator.visible = true
 		idle_indicator.text = "Researching"
 		idle_indicator.modulate = Color("6ab0df")
+		return
+	if state == State.WAITING:
+		idle_indicator.visible = true
+		idle_indicator.text = "No work"
+		idle_indicator.modulate = Color("f0873d")
 		return
 	idle_indicator.visible = true
 	match employment_state:

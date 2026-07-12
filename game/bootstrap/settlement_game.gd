@@ -372,6 +372,10 @@ func _update_workers() -> void:
 	workforce.update_workers()
 
 func _can_assign_goap_work(citizen: Citizen) -> bool:
+	# The coordinator owns the transition from the completed no-work window into
+	# unemployment registration. GOAP must not restart the same failed task first.
+	if citizen.no_work_wait_complete:
+		return false
 	return workforce.can_assign_work(citizen)
 
 func _assign_goap_work(citizen: Citizen, index: int) -> void:
@@ -518,6 +522,12 @@ func _on_employment_processing_finished(citizen: Citizen) -> void:
 		citizen.state = Citizen.State.IDLE
 		return
 	citizen.finish_employment_processing()
+	# Registration is the hand-off, not the end of the workflow. Assign the job
+	# in the same frame so a newly hired gatherer/builder never remains idle until
+	# a later scheduler or GOAP tick happens to wake them up.
+	if citizen.employment_state == Citizen.EmploymentState.EMPLOYED and workforce.can_assign_work(citizen):
+		var worker_index := citizen.goap_brain.worker_index if citizen.goap_brain != null else 0
+		workforce.assign_work(citizen, worker_index)
 	_update_workers()
 
 func _update_daylight() -> void:
@@ -890,7 +900,9 @@ func _update_construction_supplies() -> void:
 			reservations[resource_type] = reserved + 1
 			site.reserved_materials = reservations
 			courier.assign_construction_delivery(site.node, warehouse_positions[0], resource_type)
-			return
+			# Keep assigning the remaining idle couriers. Every reservation is tracked
+			# per material, so multiple couriers can safely supply one building at once.
+			break
 
 
 func _reconcile_construction_reservations(site: ConstructionSite) -> void:
@@ -949,6 +961,7 @@ func _construction_development_priority(site: ConstructionSite) -> float:
 
 func _on_construction_material_delivered(_courier: Citizen, site_node: Node3D, resource_type: String, amount: int) -> void:
 	construction.accept_delivery(site_node, resource_type, amount)
+	_request_courier_dispatch()
 
 func _on_building_supply_delivered(_courier: Citizen, target: Node3D, supply_kind: String, resource_type: String, amount: int) -> void:
 	if not is_instance_valid(target):

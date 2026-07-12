@@ -20,6 +20,7 @@ func start_site(cell: Vector2i, building_type: String, position: Vector3, rotati
 	site_node.set_meta("occupied_footprint", occupied_footprint if occupied_footprint != Vector2i.ZERO else blueprint.footprint)
 
 	var territory := MeshInstance3D.new()
+	territory.name = "ConstructionTerritory"
 	var territory_mesh := BoxMesh.new()
 	var display_footprint: Vector2i = blueprint.footprint
 	territory_mesh.size = Vector3(display_footprint.x, 0.035, display_footprint.y)
@@ -35,6 +36,7 @@ func start_site(cell: Vector2i, building_type: String, position: Vector3, rotati
 	var bar_mesh := BoxMesh.new()
 	bar_mesh.size = Vector3(1.45, 0.11, 0.12)
 	var back := MeshInstance3D.new()
+	back.name = "ConstructionProgressBack"
 	back.mesh = bar_mesh
 	back.position = Vector3(0.0, 2.15, 0.0)
 	var back_material := StandardMaterial3D.new()
@@ -42,6 +44,7 @@ func start_site(cell: Vector2i, building_type: String, position: Vector3, rotati
 	back.material_override = back_material
 	site_node.add_child(back)
 	var fill := MeshInstance3D.new()
+	fill.name = "ConstructionProgressFill"
 	fill.mesh = bar_mesh
 	fill.position = Vector3(-0.725, 2.17, -0.07)
 	var fill_material := StandardMaterial3D.new()
@@ -158,6 +161,7 @@ func _update_supply_label(site: ConstructionSite) -> void:
 
 func _add_selector(site_node: Node3D, footprint: Vector2i) -> void:
 	var selector := Area3D.new()
+	selector.name = "ConstructionSelector"
 	selector.add_to_group("construction_selector")
 	selector.collision_layer = 4
 	selector.collision_mask = 0
@@ -171,9 +175,9 @@ func _add_selector(site_node: Node3D, footprint: Vector2i) -> void:
 
 
 func _cleanup_completed_site(site: ConstructionSite) -> void:
-	if is_instance_valid(site.fill):
-		site.fill.get_parent().remove_child(site.fill)
-		site.fill.queue_free()
-	for child in site.node.get_children():
-		if child is MeshInstance3D and child != site.fill:
+	# Construction-only visuals and hit area must not survive as UI on the
+	# completed building. Blueprint modules are StaticBody3D children and remain.
+	for child_name in ["ConstructionTerritory", "ConstructionProgressBack", "ConstructionProgressFill", "SupplyLabel", "ConstructionSelector"]:
+		var child := site.node.get_node_or_null(child_name)
+		if child != null:
 			child.queue_free()

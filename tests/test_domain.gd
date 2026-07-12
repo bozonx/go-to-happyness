@@ -15,6 +15,7 @@ func _init() -> void:
 	_test_citizen_decision_context()
 	_test_construction_progress()
 	_test_construction_service_cancellation()
+	_test_completed_construction_cleans_temporary_ui()
 	_test_demolition_service_completion()
 	_test_building_registry()
 	_test_school_and_seller_rules()
@@ -259,6 +260,29 @@ func _test_construction_service_cancellation() -> void:
 	assert(site.delivered_materials.boards == 1)
 	assert(service.cancel_site(site.node))
 	assert(service.sites.is_empty() and runtime.building_registry.record_at_cell(cell) == null)
+	scene_root.free()
+
+
+func _test_completed_construction_cleans_temporary_ui() -> void:
+	var scene_root := Node3D.new()
+	var runtime := ConstructionRuntime.new()
+	runtime.scene_root = scene_root
+	runtime.settlement = SettlementState.new()
+	runtime.building_registry = BuildingRegistry.new()
+	runtime.citizens = []
+	runtime.duration = 1.0
+	runtime.builder_power = func(_site: Node3D) -> float: return 1.0
+	runtime.builder_count = func(_site: Node3D) -> int: return 1
+	runtime.set_status = func(_text: String) -> void: pass
+	runtime.workers_changed = func() -> void: pass
+	runtime.building_completed = func(_cell: Vector2i, _type: String, _position: Vector3, _building: Node3D, _blueprint: Dictionary) -> void: pass
+	var service := ConstructionService.new()
+	service.configure(runtime)
+	var site := service.start_site(Vector2i.ZERO, "warehouse", Vector3.ZERO)
+	site.delivered_materials = site.required_materials.duplicate(true)
+	service.tick(1.0)
+	assert(site.node.get_node("SupplyLabel").is_queued_for_deletion())
+	assert(site.node.get_node("ConstructionSelector").is_queued_for_deletion())
 	scene_root.free()
 
 

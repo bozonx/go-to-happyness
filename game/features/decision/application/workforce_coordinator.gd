@@ -52,6 +52,12 @@ func update_workers() -> void:
 		# considered for a vacancy only after its delivery has completed.
 		if citizen.state in BUSY_STATES or citizen.state == Citizen.State.WAITING:
 			continue
+		# A concrete source can disappear after the policy selected a role (for
+		# example, the last grass patch was collected). Keep the no-work status for
+		# one in-game hour, then register unemployment unless a vacancy appeared.
+		if citizen.no_work_wait_complete:
+			_send_to_waiting(citizen)
+			continue
 		if citizen.blocked_by_storage:
 			if not simulation.settlement.reserve_storage_room_for(citizen.resource_type, maxi(1, citizen.carried_amount), simulation.warehouse_positions.size()):
 				_send_to_waiting(citizen)
@@ -174,10 +180,14 @@ func _schedule_permanent_vacancies() -> void:
 
 
 func _send_to_waiting(citizen: Citizen) -> void:
-	# Lack of reserve work is registered at the employment centre rather than an
-	# indefinite waiting state. The coordinator can still replace this process with
-	# a newly opened productive vacancy before the paperwork completes.
+	# Show a no-work state first. This gives the dispatcher a chance to recover
+	# from transient shortages and makes the later unemployment registration clear
+	# to the player rather than looking like a worker silently froze.
 	if citizen.state == Citizen.State.IDLE or citizen.state == Citizen.State.RESTING:
+		if not citizen.no_work_wait_complete:
+			citizen.begin_waiting()
+			return
+		citizen.no_work_wait_complete = false
 		if _can_finish_registration_today(citizen):
 			citizen.begin_employment_processing(simulation._employment_center_position())
 		else:
