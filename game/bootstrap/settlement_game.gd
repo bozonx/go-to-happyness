@@ -401,7 +401,7 @@ func _has_cook() -> bool:
 	if not _is_fire_lit(canteen):
 		return false
 	for citizen in citizens:
-		if citizen.specialization == "cook" and not citizen.is_player_controlled and is_instance_valid(canteen) and citizen.global_position.distance_to(canteen_position) <= 2.2:
+		if citizen.specialization == "cook" and is_instance_valid(canteen) and citizen.global_position.distance_to(canteen_position) <= 2.2:
 			return true
 	return false
 
@@ -441,12 +441,16 @@ func _registration_official() -> Citizen:
 	var center := _employment_center_position()
 	if center != Vector3.INF:
 		for citizen in citizens:
-			if not is_instance_valid(citizen) or citizen.is_player_controlled or citizen == hero_citizen:
+			if not is_instance_valid(citizen) or citizen == hero_citizen:
 				continue
 			if citizen.permanent_role != "official":
 				continue
-			if citizen.state == Citizen.State.OFFICIAL_WORK and citizen.global_position.distance_to(center) <= OFFICER_POST_RADIUS:
-				return citizen
+			if citizen.is_player_controlled:
+				if citizen.global_position.distance_to(center) <= OFFICER_POST_RADIUS:
+					return citizen
+			else:
+				if citizen.state == Citizen.State.OFFICIAL_WORK and citizen.global_position.distance_to(center) <= OFFICER_POST_RADIUS:
+					return citizen
 	if has_employment_building:
 		# The hero can process registrations while controlled directly, without
 		# entering the autonomous OFFICIAL_WORK state.
@@ -494,9 +498,13 @@ func _is_teacher_present_at_school() -> bool:
 		return false
 	var school_pos := school_positions[0]
 	for citizen in citizens:
-		if citizen.specialization == "teacher" and citizen.state == Citizen.State.SCHOOL_WORK:
-			if citizen.global_position.distance_to(school_pos) <= 3.5:
-				return true
+		if citizen.specialization == "teacher":
+			if citizen.is_player_controlled:
+				if citizen.global_position.distance_to(school_pos) <= 3.5:
+					return true
+			elif citizen.state == Citizen.State.SCHOOL_WORK:
+				if citizen.global_position.distance_to(school_pos) <= 3.5:
+					return true
 	return false
 
 
@@ -506,12 +514,16 @@ func _is_seller_present_at(market_node: Node3D) -> bool:
 	var service_position: Vector3 = market_node.get_meta("service_position", market_node.global_position)
 	for citizen in citizens:
 		var is_seller := citizen.permanent_role == "seller" or citizen.specialization == "seller"
-		if not is_seller or citizen.state not in [Citizen.State.TO_MARKET_WORK, Citizen.State.MARKET_WORK]:
+		if not is_seller:
 			continue
 		if is_instance_valid(citizen.employment_workplace) and citizen.employment_workplace != market_node:
 			continue
-		if citizen.global_position.distance_to(service_position) <= 3.5:
-			return true
+		if citizen.is_player_controlled:
+			if citizen.global_position.distance_to(service_position) <= 3.5:
+				return true
+		elif citizen.state in [Citizen.State.TO_MARKET_WORK, Citizen.State.MARKET_WORK]:
+			if citizen.global_position.distance_to(service_position) <= 3.5:
+				return true
 	return false
 
 
@@ -888,7 +900,11 @@ func _update_construction_supplies() -> void:
 	if site == null:
 		return
 	for courier in citizens:
-		if courier.specialization != "courier" or courier.state != Citizen.State.IDLE:
+		if courier.is_player_controlled or courier.state != Citizen.State.IDLE:
+			continue
+		var is_courier := courier.specialization == "courier"
+		var is_builder := courier.specialization == "builder" or courier.permanent_role == "construction" or courier.manual_role == "construction"
+		if not is_courier and not is_builder:
 			continue
 		for resource_type in site.required_materials:
 			var required := int(site.required_materials[resource_type])
@@ -1099,7 +1115,12 @@ func _materials_factory_staffed(factory: Node3D) -> bool:
 	var has_builder := false
 	var has_engineer := false
 	for citizen in citizens:
-		if citizen.factory != factory or citizen.state not in [Citizen.State.TO_FACTORY, Citizen.State.FACTORY_WORK]:
+		if citizen.factory != factory:
+			continue
+		if citizen.is_player_controlled:
+			if citizen.global_position.distance_to(factory.global_position) > 6.0:
+				continue
+		elif citizen.state not in [Citizen.State.TO_FACTORY, Citizen.State.FACTORY_WORK]:
 			continue
 		has_worker = has_worker or citizen.specialization == "factory_worker"
 		has_builder = has_builder or citizen.specialization == "builder"
@@ -1954,7 +1975,7 @@ func _create_time_controls(ui: CanvasLayer) -> void:
 	controls.offset_bottom = 90
 	controls.alignment = BoxContainer.ALIGNMENT_END
 	ui.add_child(controls)
-	for multiplier in [1.0, 2.0, 4.0]:
+	for multiplier in [1.0, 2.0, 5.0]:
 		var button := Button.new()
 		button.text = "x%d" % int(multiplier)
 		button.tooltip_text = "Simulation speed x%d" % int(multiplier)
@@ -2001,7 +2022,10 @@ func _set_night_shifts(enabled: bool) -> void:
 
 func _set_time_multiplier(multiplier: float) -> void:
 	time_multiplier = multiplier
-	Engine.time_scale = multiplier
+	if is_first_person:
+		Engine.time_scale = 1.0
+	else:
+		Engine.time_scale = multiplier
 	_update_interface("Simulation speed set to x%d." % int(multiplier))
 
 func _create_build_menu(ui: CanvasLayer) -> void:
@@ -3224,15 +3248,19 @@ func _unhandled_input(event: InputEvent) -> void:
 			else:
 				_update_interface("Only the hero can approve construction decisions.")
 		elif event is InputEventMouseMotion:
-			player_yaw -= event.relative.x * 0.0035
-			player_pitch = clampf(player_pitch - event.relative.y * 0.003, deg_to_rad(-70.0), deg_to_rad(65.0))
+			if not build_menu.visible:
+				player_yaw -= event.relative.x * 0.0035
+				player_pitch = clampf(player_pitch - event.relative.y * 0.003, deg_to_rad(-70.0), deg_to_rad(65.0))
 		elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 			if not build_mode.is_empty() and _can_hero_build():
 				_place_building_at_crosshair()
 			else:
 				_start_interaction()
 		elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
-			_dig_voxel_at_crosshair()
+			if player_citizen == hero_citizen:
+				_dig_voxel_at_crosshair()
+			else:
+				_leave_first_person_to_hero_overview()
 		get_viewport().set_input_as_handled()
 		return
 	if event is InputEventMouseButton and event.pressed:
@@ -3296,6 +3324,9 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 	# Switching to a different building always dismisses the previously open
 	# menu first, so only one context menu is ever visible at a time.
 	_hide_all_selection_menus()
+	if not hit.collider.is_in_group("school_selector"):
+		selected_builder = null
+	build_menu.visible = false
 	if hit.collider.is_in_group("campfire_selector"):
 		selected_campfire = hit.collider.get_parent() as Node3D
 		selected_building = selected_campfire
@@ -3577,6 +3608,7 @@ func _enter_first_person(citizen: Citizen, message: String) -> void:
 	player_yaw = player_citizen.rotation.y
 	player_pitch = 0.0
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+	Engine.time_scale = 1.0
 	_update_interface(message)
 
 func _leave_first_person_to_hero_overview() -> void:
@@ -3593,6 +3625,7 @@ func _leave_first_person_to_hero_overview() -> void:
 	_update_camera_position()
 	build_menu.visible = selected_builder != null
 	_update_workers()
+	Engine.time_scale = time_multiplier
 	_update_interface("Overview centered on the hero.")
 
 func _update_player_control(delta: float) -> void:
@@ -3839,6 +3872,12 @@ func _refresh_interaction_hint() -> void:
 			interaction_hint_label.text = "Buy a bucket at a market to draw water here."
 	else:
 		interaction_hint_label.text = "LMB: gather. Logs go to sawmill, boards and food go to warehouse."
+	if player_citizen != null and is_instance_valid(player_citizen.employment_workplace):
+		var workplace := player_citizen.employment_workplace
+		var service_pos: Vector3 = workplace.get_meta("service_position", workplace.global_position)
+		if player_citizen.global_position.distance_to(service_pos) <= 3.5:
+			var type: String = workplace.get_meta("building_type", "Workplace")
+			interaction_hint_label.text = "You are occupying your workplace: %s" % type.capitalize().replace("_", " ")
 
 func _terrain_point_at_screen_position(screen_position: Vector2) -> Variant:
 	var from := camera.project_ray_origin(screen_position)

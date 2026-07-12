@@ -12,7 +12,13 @@ static func role_for(worker: Dictionary, world: Dictionary) -> String:
 		return manual_role
 	if not manual_role.is_empty():
 		return manual_role
-	return _automatic_role_for(worker, world)
+	var auto_role := _automatic_role_for(worker, world)
+	if auto_role == "construction":
+		var is_auto := bool(worker.get("auto_mode_enabled", false))
+		var is_builder := str(worker.get("specialization", "")) == "builder"
+		if not is_auto and not is_builder:
+			return ""
+	return auto_role
 
 
 static func permanent_vacancy_for(worker: Dictionary, world: Dictionary) -> String:
@@ -149,6 +155,15 @@ static func can_assign(worker: Dictionary, world: Dictionary) -> bool:
 	if str(worker.get("manual_role", "")) == "unassigned":
 		return false
 	var assigned_role := role_for(worker, world)
+	if assigned_role == "construction":
+		var is_auto := bool(worker.get("auto_mode_enabled", false))
+		var is_builder := str(worker.get("specialization", "")) == "builder"
+		var is_manual_builder := str(worker.get("manual_role", "")) == "construction"
+		var is_permanent_builder := str(worker.get("permanent_role", "")) == "construction"
+		if not is_auto and not is_builder and not is_manual_builder and not is_permanent_builder:
+			return false
+	if assigned_role == "official" and bool(worker.get("is_hero", false)):
+		return false
 	if not str(worker.get("permanent_role", "")).is_empty():
 		if assigned_role == "construction" and _construction_capacity(world) <= 0:
 			return false

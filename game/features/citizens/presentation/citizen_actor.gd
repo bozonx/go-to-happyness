@@ -1569,7 +1569,7 @@ func _is_toilet_or_bush_nearby() -> bool:
 	var toilets := _get_simulation_toilets()
 	for toilet in toilets:
 		var serv_pos: Vector3 = toilet.get_meta("service_position") if toilet.has_meta("service_position") else toilet.global_position
-		if global_position.distance_to(serv_pos) <= 50.0:
+		if global_position.distance_to(serv_pos) <= 100.0:
 			return true
 	var nearest_tree_pos := Vector3.INF
 	var min_tree_dist := 999999.0
@@ -1578,7 +1578,7 @@ func _is_toilet_or_bush_nearby() -> bool:
 			var d := global_position.distance_to(tree_pos)
 			if d < min_tree_dist:
 				min_tree_dist = d
-	if min_tree_dist <= 30.0:
+	if min_tree_dist <= 100.0:
 		return true
 	return false
 
@@ -1587,12 +1587,12 @@ func _find_and_go_to_toilet_or_bush() -> void:
 	if simulation == null:
 		return
 		
-	# 1. Look for toilets within 50.0 units
+	# 1. Look for toilets within 100.0 units
 	var toilets := _get_simulation_toilets()
 	var nearby_toilets: Array[Node3D] = []
 	for toilet in toilets:
 		var serv_pos: Vector3 = toilet.get_meta("service_position") if toilet.has_meta("service_position") else toilet.global_position
-		if global_position.distance_to(serv_pos) <= 50.0:
+		if global_position.distance_to(serv_pos) <= 100.0:
 			nearby_toilets.append(toilet)
 			
 	if not nearby_toilets.is_empty():
@@ -1602,7 +1602,7 @@ func _find_and_go_to_toilet_or_bush() -> void:
 		for toilet in nearby_toilets:
 			var load := 0
 			for other in simulation.citizens:
-				if other.current_toilet_target == toilet:
+				if other != self and other.current_toilet_target == toilet:
 					load += 1
 			if load < min_load:
 				min_load = load
@@ -1621,7 +1621,7 @@ func _find_and_go_to_toilet_or_bush() -> void:
 			state = State.TO_TOILET
 			return
 			
-	# 2. Look for tree/grass within 30.0 units
+	# 2. Look for tree/grass within 100.0 units
 	var nearest_tree_pos := Vector3.INF
 	var min_tree_dist := 999999.0
 	if "tree_positions" in simulation:
@@ -1631,7 +1631,7 @@ func _find_and_go_to_toilet_or_bush() -> void:
 				min_tree_dist = d
 				nearest_tree_pos = tree_pos
 				
-	if min_tree_dist <= 30.0:
+	if min_tree_dist <= 100.0:
 		source_position = nearest_tree_pos
 		state = State.TO_BUSH
 		return

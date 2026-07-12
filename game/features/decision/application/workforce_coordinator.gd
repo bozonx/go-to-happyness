@@ -369,6 +369,8 @@ func _worker_data(citizen: Citizen) -> Dictionary:
 		"permanent_role": citizen.permanent_role,
 		"skills": citizen.skills,
 		"should_study": should_study,
+		"auto_mode_enabled": citizen.auto_mode_enabled,
+		"is_hero": citizen.is_hero,
 	}
 
 
