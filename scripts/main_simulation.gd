@@ -358,9 +358,13 @@ func _is_seller_present_at(market_node: Node3D) -> bool:
 		return false
 	var service_position: Vector3 = market_node.get_meta("service_position", market_node.global_position)
 	for citizen in citizens:
-		if citizen.specialization == "seller" and citizen.state == Citizen.State.MARKET_WORK:
-			if citizen.global_position.distance_to(service_position) <= 3.0:
-				return true
+		var is_seller := citizen.permanent_role == "seller" or citizen.specialization == "seller"
+		if not is_seller or citizen.state not in [Citizen.State.TO_MARKET_WORK, Citizen.State.MARKET_WORK]:
+			continue
+		if is_instance_valid(citizen.employment_workplace) and citizen.employment_workplace != market_node:
+			continue
+		if citizen.global_position.distance_to(service_position) <= 3.5:
+			return true
 	return false
 
 
@@ -4050,6 +4054,7 @@ func _refresh_market_menu() -> void:
 	# Clear previous buttons except title
 	for child in market_menu.get_children():
 		if child != market_menu_title:
+			market_menu.remove_child(child)
 			child.queue_free()
 			
 	var y_offset := 104.0 if not seller_ok else 80.0
@@ -4143,6 +4148,7 @@ func _refresh_market_menu() -> void:
 	close_btn.size = Vector2(272, 28)
 	close_btn.pressed.connect(_close_context_menus)
 	market_menu.add_child(close_btn)
+	market_menu.offset_top = -maxf(420.0, y_offset + 66.0)
 
 
 func _buy_food(quantity: int, unit_price: int) -> void:
