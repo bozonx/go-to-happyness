@@ -23,6 +23,7 @@ func _init() -> void:
 	_test_school_and_seller_rules()
 	_test_courier_metadata()
 	_test_construction_delivery_stays_scheduled()
+	_test_freelance_construction_skill_cap()
 	_test_research_mechanics()
 	quit(0)
 
@@ -400,6 +401,21 @@ func _test_construction_delivery_stays_scheduled() -> void:
 	assert(courier.has_active_delivery())
 	assert(not courier.is_available_for_schedule())
 	courier.free()
+
+
+func _test_freelance_construction_skill_cap() -> void:
+	var worker := Citizen.new()
+	worker.skills = {"construction": Citizen.FREELANCE_CONSTRUCTION_SKILL_CAP - 0.00001}
+	worker.active_role = "construction"
+	worker.employment_state = Citizen.EmploymentState.FREELANCE
+	worker.satisfaction_tick = 10.0
+	worker._update_satisfaction(0.0)
+	assert(float(worker.skills.construction) <= Citizen.FREELANCE_CONSTRUCTION_SKILL_CAP)
+	worker.employment_state = Citizen.EmploymentState.EMPLOYED
+	worker.satisfaction_tick = 10.0
+	worker._update_satisfaction(0.0)
+	assert(float(worker.skills.construction) > Citizen.FREELANCE_CONSTRUCTION_SKILL_CAP)
+	worker.free()
 
 
 func _test_research_mechanics() -> void:

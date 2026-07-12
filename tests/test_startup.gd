@@ -13,7 +13,6 @@ func _init() -> void:
 	assert(is_instance_valid(simulation.hero_citizen))
 	assert(simulation.hero_citizen.is_hero)
 	assert(simulation.hero_citizen.specialization == "official")
-	assert(not simulation.hero_citizen.auto_mode_enabled)
 	assert(is_instance_valid(simulation.entrance_stone))
 	var hero_count := 0
 	for citizen in simulation.citizens:
@@ -30,8 +29,7 @@ func _init() -> void:
 		assert(citizen.global_position.distance_to(simulation.entrance_stone.global_position) < 5.0)
 		if not citizen.is_hero:
 			assert(citizen.specialization == "unassigned")
-			assert(not citizen.auto_mode_enabled)
-			assert(citizen.employment_state == Citizen.EmploymentState.UNEMPLOYED)
+			assert(citizen.employment_state == Citizen.EmploymentState.UNREGISTERED)
 	var resident: Citizen = simulation.citizens[1]
 	simulation.settlement.era = SettlementState.Era.TENT
 	assert(resident.is_toilet_user(resident))
@@ -41,10 +39,10 @@ func _init() -> void:
 	resident.setup_specialization("cook")
 	resident.employment_state = Citizen.EmploymentState.EMPLOYED
 	assert(not resident.is_toilet_user(resident))
-	resident.employment_state = Citizen.EmploymentState.AUTO_RESERVE
+	resident.employment_state = Citizen.EmploymentState.FREELANCE
 	assert(resident.is_toilet_user(resident))
-	resident.setup_specialization("courier")
-	resident.employment_state = Citizen.EmploymentState.MANUAL_COURIER
+	resident.freelance_assignment = "courier"
+	resident.employment_state = Citizen.EmploymentState.FREELANCE
 	assert(resident.is_toilet_user(resident))
 	resident.go_to_arrival_entrance(simulation.entrance_stone.global_position)
 	assert(resident.has_active_arrival_task())

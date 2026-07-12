@@ -90,14 +90,14 @@ func dispatch_queued_trades() -> void:
 	for worker in simulation.citizens:
 		if WorkforcePolicy.can_take_queued_job({
 			"player_controlled": worker.is_player_controlled,
-			"idle": worker.state == Citizen.State.IDLE and worker.employment_state in [Citizen.EmploymentState.AUTO_RESERVE, Citizen.EmploymentState.MANUAL_COURIER],
-			"manual_role": worker.manual_role,
+			"idle": worker.state == Citizen.State.IDLE and worker.employment_state == Citizen.EmploymentState.FREELANCE,
+			"freelance_assignment": worker.freelance_assignment,
 			"has_queued_job": simulation.pending_trades.has(worker.get_instance_id()),
 		}):
 			candidates.append(worker)
 	# Dedicated couriers take new market work first; other automatic workers are
 	# valid fallbacks so an order cannot stall when no courier exists.
-	candidates.sort_custom(func(a: Citizen, b: Citizen): return (a.specialization == "courier") and b.specialization != "courier")
+	candidates.sort_custom(func(a: Citizen, b: Citizen): return (a.freelance_assignment == "courier") and b.freelance_assignment != "courier")
 	for worker in candidates:
 		if simulation.queued_trades.is_empty():
 			return

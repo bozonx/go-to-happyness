@@ -7,17 +7,10 @@ static func role_for(worker: Dictionary, world: Dictionary) -> String:
 	var permanent_role := str(worker.get("permanent_role", ""))
 	if not permanent_role.is_empty():
 		return permanent_role
-	var manual_role := str(worker.get("manual_role", ""))
-	if manual_role == "unassigned":
-		return manual_role
-	if not manual_role.is_empty():
-		return manual_role
+	var freelance_assignment := str(worker.get("freelance_assignment", worker.get("manual_role", "")))
+	if not freelance_assignment.is_empty():
+		return freelance_assignment
 	var auto_role := _automatic_role_for(worker, world)
-	if auto_role == "construction":
-		var is_auto := bool(worker.get("auto_mode_enabled", false))
-		var is_builder := str(worker.get("specialization", "")) == "builder"
-		if not is_auto and not is_builder:
-			return ""
 	return auto_role
 
 
@@ -152,16 +145,9 @@ static func _role_available(role: String, world: Dictionary) -> bool:
 static func can_assign(worker: Dictionary, world: Dictionary) -> bool:
 	if bool(worker.get("player_controlled", false)) or bool(worker.get("blocked_by_storage", false)):
 		return false
-	if str(worker.get("manual_role", "")) == "unassigned":
+	if str(worker.get("workforce_status", "")) == "unregistered":
 		return false
 	var assigned_role := role_for(worker, world)
-	if assigned_role == "construction":
-		var is_auto := bool(worker.get("auto_mode_enabled", false))
-		var is_builder := str(worker.get("specialization", "")) == "builder"
-		var is_manual_builder := str(worker.get("manual_role", "")) == "construction"
-		var is_permanent_builder := str(worker.get("permanent_role", "")) == "construction"
-		if not is_auto and not is_builder and not is_manual_builder and not is_permanent_builder:
-			return false
 	if assigned_role == "official" and bool(worker.get("is_hero", false)):
 		return false
 	if not str(worker.get("permanent_role", "")).is_empty():
@@ -169,7 +155,7 @@ static func can_assign(worker: Dictionary, world: Dictionary) -> bool:
 			return false
 		return _role_available(assigned_role, world)
 	var specialization := str(worker.get("specialization", ""))
-	if specialization == "courier" or int(world.get("hour", 0)) < 8:
+	if str(worker.get("freelance_assignment", "")) == "courier" or int(world.get("hour", 0)) < 8:
 		return false
 	if specialization == "craftsman":
 		return int(world.get("craftsman_jobs", 0)) > 0
@@ -202,5 +188,5 @@ static func can_assign(worker: Dictionary, world: Dictionary) -> bool:
 static func can_take_queued_job(worker: Dictionary) -> bool:
 	return not bool(worker.get("player_controlled", false)) \
 		and bool(worker.get("idle", false)) \
-		and str(worker.get("manual_role", "")).is_empty() \
+		and str(worker.get("freelance_assignment", worker.get("manual_role", ""))).is_empty() \
 		and not bool(worker.get("has_queued_job", false))

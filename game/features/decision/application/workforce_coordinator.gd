@@ -29,19 +29,14 @@ func update_workers() -> void:
 		for citizen in simulation.citizens:
 			citizen.request_goap_decision()
 		return
-	_schedule_permanent_vacancies()
 	var sorted_citizens := _get_sorted_citizens()
 	for citizen in sorted_citizens:
 		if citizen.is_player_controlled:
 			continue
-		if citizen.employment_state == Citizen.EmploymentState.PENDING_JOB and not _employer_exists(citizen.pending_employment_role):
+		if citizen.employment_state == Citizen.EmploymentState.REGISTERING and not citizen.pending_employment_role.is_empty() and not _employer_exists(citizen.pending_employment_role):
 			citizen.queue_employment_processing()
 			continue
-		if citizen.employment_state in [Citizen.EmploymentState.PENDING_JOB, Citizen.EmploymentState.PENDING_UNEMPLOYMENT] and citizen.state in [Citizen.State.IDLE, Citizen.State.RESTING, Citizen.State.TO_HOME]:
-			if citizen.employment_state == Citizen.EmploymentState.PENDING_UNEMPLOYMENT and citizen.auto_mode_enabled:
-				var queued_vacancy := WorkforcePolicy.permanent_vacancy_for(_worker_data(citizen), _world_data())
-				if not queued_vacancy.is_empty():
-					citizen.queue_employment_processing(queued_vacancy, simulation._employer_for_role(queued_vacancy))
+		if citizen.employment_state == Citizen.EmploymentState.REGISTERING and citizen.state in [Citizen.State.IDLE, Citizen.State.RESTING, Citizen.State.TO_HOME]:
 			if _can_finish_registration_today(citizen):
 				citizen.begin_employment_processing(simulation._employment_center_position(), citizen.pending_employment_role, citizen.pending_employment_workplace)
 			continue
@@ -52,15 +47,11 @@ func update_workers() -> void:
 		# considered for a vacancy only after its delivery has completed.
 		if citizen.state in BUSY_STATES or citizen.state == Citizen.State.WAITING:
 			continue
-		# A concrete source can disappear after the policy selected a role (for
-		# example, the last grass patch was collected). Keep the no-work status for
-		# one in-game hour, then register unemployment unless a vacancy appeared.
 		if citizen.no_work_wait_complete:
-			_send_to_waiting(citizen)
-			continue
+			citizen.no_work_wait_complete = false
 		if citizen.blocked_by_storage:
 			if not simulation.settlement.reserve_storage_room_for(citizen.resource_type, maxi(1, citizen.carried_amount), simulation.warehouse_positions.size()):
-				_send_to_waiting(citizen)
+				citizen.begin_waiting()
 				continue
 			citizen.blocked_by_storage = false
 		if citizen.employment_state == Citizen.EmploymentState.EMPLOYED:
@@ -70,28 +61,14 @@ func update_workers() -> void:
 			if can_assign_work(citizen) and citizen.state in [Citizen.State.IDLE, Citizen.State.RESTING]:
 				citizen.request_goap_decision()
 			continue
-		if citizen.employment_state == Citizen.EmploymentState.MANUAL_COURIER:
+		if citizen.employment_state == Citizen.EmploymentState.UNREGISTERED:
 			continue
-		# Couriers are dispatched directly by MainSimulation. They must remain in
-		# the idle reserve pool instead of entering the generic no-work waiting loop.
-		if citizen.specialization == "courier":
+		if citizen.employment_state != Citizen.EmploymentState.FREELANCE:
 			continue
-		if citizen.employment_state == Citizen.EmploymentState.UNEMPLOYED:
-			# Residents remain inactive until the player assigns a profession or
-			# explicitly returns them to auto mode.
+		# Pinned couriers are dispatched by logistics and must not enter the
+		# generic work scorer while they are waiting for an order.
+		if citizen.freelance_assignment == "courier":
 			continue
-		if not citizen.auto_mode_enabled:
-			continue
-		# A free productive workplace turns an automatic reserve worker into a
-		# permanent employee only after registration at the employment centre.
-		if citizen.state in [Citizen.State.IDLE, Citizen.State.RESTING]:
-			var vacancy := WorkforcePolicy.permanent_vacancy_for(_worker_data(citizen), _world_data())
-			if not vacancy.is_empty():
-				if _can_finish_registration_today(citizen):
-					citizen.begin_employment_processing(simulation._employment_center_position(), vacancy, simulation._employer_for_role(vacancy))
-				else:
-					citizen.queue_employment_processing(vacancy, simulation._employer_for_role(vacancy))
-				continue
 		if can_assign_work(citizen):
 			# Pull free citizens onto work: the genuinely idle and the ones resting
 			# at home (morning wake-up / rest-fallback from an earlier work drought).
@@ -99,20 +76,11 @@ func update_workers() -> void:
 			if citizen.state == Citizen.State.IDLE or citizen.state == Citizen.State.RESTING:
 				citizen.request_goap_decision()
 		else:
-			_send_to_waiting(citizen)
+			citizen.begin_waiting()
 
 
-func _update_employment_processing(citizen: Citizen) -> void:
-	# A newly opened productive workplace interrupts unemployment registration.
-	# The citizen is already unburdened here; active deliveries are never routed
-	# into this state and therefore always finish before any transfer.
-	if citizen.employment_state == Citizen.EmploymentState.PENDING_UNEMPLOYMENT and citizen.auto_mode_enabled:
-		var vacancy := WorkforcePolicy.permanent_vacancy_for(_worker_data(citizen), _world_data())
-		if not vacancy.is_empty():
-			if _can_finish_registration_today(citizen):
-				citizen.begin_employment_processing(simulation._employment_center_position(), vacancy, simulation._employer_for_role(vacancy))
-			else:
-				citizen.queue_employment_processing(vacancy, simulation._employer_for_role(vacancy))
+func _update_employment_processing(_citizen: Citizen) -> void:
+	pass
 
 
 func _can_finish_registration_today(citizen: Citizen) -> bool:
@@ -146,11 +114,10 @@ func _schedule_permanent_vacancies() -> void:
 	while true:
 		var candidates_by_role: Dictionary = {}
 		for citizen in simulation.citizens:
-			if citizen.is_player_controlled or not citizen.auto_mode_enabled:
+			if citizen.is_player_controlled:
 				continue
-			var is_reserve: bool = citizen.employment_state == Citizen.EmploymentState.AUTO_RESERVE and citizen.state in [Citizen.State.IDLE, Citizen.State.RESTING]
-			var is_registering_unemployed: bool = citizen.employment_state == Citizen.EmploymentState.PENDING_UNEMPLOYMENT
-			if (not is_reserve and not is_registering_unemployed) or reserved_ids.has(citizen.get_instance_id()):
+			var is_freelance: bool = citizen.employment_state == Citizen.EmploymentState.FREELANCE and citizen.state in [Citizen.State.IDLE, Citizen.State.RESTING] and citizen.freelance_assignment.is_empty()
+			if not is_freelance or reserved_ids.has(citizen.get_instance_id()):
 				continue
 			var role := WorkforcePolicy.permanent_vacancy_for(_worker_data(citizen), _world_data())
 			if role.is_empty():
@@ -216,13 +183,7 @@ func _release_employment(citizen: Citizen) -> void:
 	# did not choose. Return them to the reserve pool so they immediately look for
 	# other work instead of becoming a permanently idle "unemployed" body.
 	citizen.idle()
-	citizen.manual_role = ""
-	citizen.permanent_role = ""
-	citizen.pending_employment_role = ""
-	citizen.employment_workplace = null
-	citizen.pending_employment_workplace = null
-	citizen.auto_mode_enabled = true
-	citizen.employment_state = Citizen.EmploymentState.AUTO_RESERVE
+	citizen.release_to_freelance()
 
 
 func can_assign_work(citizen: Citizen) -> bool:
@@ -367,12 +328,13 @@ func _worker_data(citizen: Citizen) -> Dictionary:
 		"blocked_by_storage": citizen.blocked_by_storage,
 		"specialization": citizen.specialization,
 		"manual_role": citizen.manual_role,
+		"freelance_assignment": citizen.freelance_assignment,
 		"training_role": citizen.training_role,
 		"training_days_completed": citizen.training_days_completed,
 		"permanent_role": citizen.permanent_role,
 		"skills": citizen.skills,
 		"should_study": should_study,
-		"auto_mode_enabled": citizen.auto_mode_enabled,
+		"workforce_status": "unregistered" if citizen.employment_state == Citizen.EmploymentState.UNREGISTERED else "active",
 		"is_hero": citizen.is_hero,
 	}
 
@@ -443,7 +405,7 @@ func _assigned_role_counts() -> Dictionary:
 			# at another employer that is still accepting staff.
 			continue
 		var role: String = citizen.permanent_role
-		if role.is_empty() and citizen.employment_state == Citizen.EmploymentState.PENDING_JOB:
+		if role.is_empty() and citizen.employment_state == Citizen.EmploymentState.REGISTERING:
 			role = citizen.pending_employment_role
 		if role.is_empty():
 			role = citizen.active_role

@@ -44,7 +44,7 @@ func update_canteen_delivery() -> void:
 		return
 	var carrier: Citizen = null
 	for citizen in simulation.citizens:
-		if citizen.specialization == "courier" and citizen.state == Citizen.State.IDLE:
+		if citizen.employment_state == Citizen.EmploymentState.FREELANCE and citizen.freelance_assignment == "courier" and citizen.state == Citizen.State.IDLE:
 			carrier = citizen
 			break
 	if carrier == null:

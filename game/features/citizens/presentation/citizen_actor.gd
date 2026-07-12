@@ -38,7 +38,7 @@ const ROUTE_RETRY_INTERVAL := 2.0
 
 enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, TO_GATHER, GATHERING, TO_TRADE_PICKUP, TO_TRADE_DESTINATION, TO_EMPLOYMENT_CENTER, EMPLOYMENT_PROCESSING, CANTEEN_WORK, SCHOOL_WORK, TO_MARKET_WORK, MARKET_WORK, TO_CRAFT_WORK, CRAFT_WORK, TO_CONSTRUCTION_PICKUP, TO_CONSTRUCTION_SITE, TO_OFFICIAL_WORK, OFFICIAL_WORK, TO_ARRIVAL_ENTRANCE, ARRIVAL_MEETING, ARRIVAL_WAITING, TO_ARRIVAL_CENTER, RESEARCHING, TO_TOILET, USING_TOILET, WAITING_FOR_TOILET, TO_BUSH, USING_BUSH }
 
-enum EmploymentState { AUTO_RESERVE, EMPLOYED, UNEMPLOYED, PENDING_JOB, PENDING_UNEMPLOYMENT, MANUAL_COURIER }
+enum EmploymentState { UNREGISTERED, FREELANCE, EMPLOYED, REGISTERING }
 
 var state := State.IDLE
 var resource_type := "wood"
@@ -67,11 +67,11 @@ var is_player_controlled := false
 var is_hero := false
 var construction_site: Node3D
 var specialization := "unassigned"
-var previous_specialization := ""
-var manual_role := ""
+var manual_role := "" # Compatibility with existing work policy; mirrors freelance_assignment when pinned.
 var active_role := ""
-var employment_state := EmploymentState.AUTO_RESERVE
-var auto_mode_enabled := true
+var employment_state := EmploymentState.UNREGISTERED
+var freelance_assignment := ""
+var pending_freelance_assignment := ""
 var permanent_role := ""
 var pending_employment_role := ""
 var employment_workplace: Node3D
@@ -87,6 +87,7 @@ var temp_training_role := ""
 
 const DEVELOPED_SKILL_THRESHOLD := 0.15
 const SKILL_GROWTH_PER_SECOND_WORK := 0.0001
+const FREELANCE_CONSTRUCTION_SKILL_CAP := 0.20
 const SKILL_GROWTH_PER_SCHOOL_DAY := 0.01
 const SKILL_DECAY_RATE := 0.005
 const SKILL_MIN_FLOOR := 0.10
@@ -631,7 +632,7 @@ func begin_employment_processing(center_position: Vector3, next_pending_role := 
 	employment_center_position = center_position
 	pending_employment_role = next_pending_role
 	pending_employment_workplace = next_workplace
-	employment_state = EmploymentState.PENDING_JOB if not next_pending_role.is_empty() else EmploymentState.PENDING_UNEMPLOYMENT
+	employment_state = EmploymentState.REGISTERING
 	active_role = ""
 	state = State.TO_EMPLOYMENT_CENTER
 
@@ -678,7 +679,7 @@ func _process_arrival_center(delta: float) -> void:
 func queue_employment_processing(next_pending_role := "", next_workplace: Node3D = null) -> void:
 	pending_employment_role = next_pending_role
 	pending_employment_workplace = next_workplace
-	employment_state = EmploymentState.PENDING_JOB if not next_pending_role.is_empty() else EmploymentState.PENDING_UNEMPLOYMENT
+	employment_state = EmploymentState.REGISTERING
 	active_role = ""
 	state = State.IDLE
 
@@ -688,7 +689,7 @@ func cancel_employment_processing() -> void:
 		return
 	pending_employment_role = ""
 	pending_employment_workplace = null
-	employment_state = EmploymentState.AUTO_RESERVE
+	employment_state = EmploymentState.FREELANCE
 	state = State.IDLE
 
 
@@ -715,17 +716,47 @@ func _process_employment_processing(delta: float) -> void:
 
 
 func finish_employment_processing() -> void:
-	if employment_state == EmploymentState.PENDING_JOB:
+	if not pending_employment_role.is_empty():
 		permanent_role = pending_employment_role
 		employment_workplace = pending_employment_workplace
 		employment_state = EmploymentState.EMPLOYED
 	else:
 		permanent_role = ""
-		auto_mode_enabled = false
-		employment_state = EmploymentState.UNEMPLOYED
+		freelance_assignment = pending_freelance_assignment
+		manual_role = freelance_assignment
+		pending_freelance_assignment = ""
+		employment_state = EmploymentState.FREELANCE
 	pending_employment_role = ""
 	pending_employment_workplace = null
 	state = State.IDLE
+
+
+func pin_freelance_role(role: String) -> void:
+	if is_player_controlled or employment_state != EmploymentState.FREELANCE:
+		return
+	freelance_assignment = role
+	manual_role = role
+	permanent_role = ""
+	employment_workplace = null
+
+
+func request_freelance_registration(role := "") -> void:
+	if is_player_controlled or employment_state != EmploymentState.UNREGISTERED:
+		return
+	pending_freelance_assignment = role
+	queue_employment_processing()
+
+
+func release_to_freelance() -> void:
+	idle()
+	freelance_assignment = ""
+	manual_role = ""
+	permanent_role = ""
+	pending_employment_role = ""
+	pending_freelance_assignment = ""
+	employment_workplace = null
+	pending_employment_workplace = null
+	employment_state = EmploymentState.FREELANCE
 
 
 func has_active_delivery() -> bool:
@@ -977,7 +1008,7 @@ func deliver_excavation(next_resource_type: String, warehouse: Vector3) -> void:
 func storage_delivery_result(accepted: bool) -> void:
 	if accepted:
 		blocked_by_storage = false
-		if specialization == "courier":
+		if freelance_assignment == "courier":
 			state = State.IDLE
 			return
 		if returning_to_excavation:
@@ -1154,8 +1185,7 @@ func finish_school_day(teacher_present := true) -> void:
 				manual_role = ""
 				permanent_role = ""
 				pending_employment_role = ""
-				auto_mode_enabled = true
-				employment_state = EmploymentState.AUTO_RESERVE
+				employment_state = EmploymentState.FREELANCE
 				setup_specialization(specialization)
 				training_role = ""
 				training_days_completed = 0
@@ -1364,20 +1394,15 @@ func _update_idle_indicator() -> void:
 		EmploymentState.EMPLOYED:
 			idle_indicator.text = "Employed: %s%s" % [permanent_role.replace("_", " "), _employment_workplace_suffix(employment_workplace)]
 			idle_indicator.modulate = Color("76c893")
-		EmploymentState.PENDING_JOB:
-			idle_indicator.text = "Hiring: %s%s" % [pending_employment_role.replace("_", " "), _employment_workplace_suffix(pending_employment_workplace)]
+		EmploymentState.REGISTERING:
+			var registration_label := "freelance worker" if pending_employment_role.is_empty() else pending_employment_role.replace("_", " ")
+			idle_indicator.text = "Registering: %s%s" % [registration_label, _employment_workplace_suffix(pending_employment_workplace)]
 			idle_indicator.modulate = Color("7bb7e8")
-		EmploymentState.PENDING_UNEMPLOYMENT:
-			idle_indicator.text = "Registering unemployed"
+		EmploymentState.UNREGISTERED:
+			idle_indicator.text = "Unregistered"
 			idle_indicator.modulate = Color("f0873d")
-		EmploymentState.UNEMPLOYED:
-			idle_indicator.text = "Unemployed"
-			idle_indicator.modulate = Color("c8a96b")
-		EmploymentState.MANUAL_COURIER:
-			idle_indicator.text = "Courier (manual)"
-			idle_indicator.modulate = Color("d18fc1")
 		_:
-			idle_indicator.text = "Reserve: courier" if specialization == "courier" else "Reserve"
+			idle_indicator.text = "Freelance: %s" % (freelance_assignment.replace("_", " ") if not freelance_assignment.is_empty() else "available")
 			idle_indicator.modulate = Color("f0c45d")
 
 
@@ -1493,8 +1518,11 @@ func _update_satisfaction(delta: float) -> void:
 							growth_multiplier = 1.5
 							break
 							
-		var current_val = float(skills.get(core_skill, 0.0))
-		skills[core_skill] = minf(1.0, current_val + SKILL_GROWTH_PER_SECOND_WORK * growth_multiplier * satisfaction_tick)
+		var current_val := float(skills.get(core_skill, 0.0))
+		var skill_cap := 1.0
+		if employment_state == EmploymentState.FREELANCE and core_skill == "construction":
+			skill_cap = FREELANCE_CONSTRUCTION_SKILL_CAP
+		skills[core_skill] = minf(skill_cap, current_val + SKILL_GROWTH_PER_SECOND_WORK * growth_multiplier * satisfaction_tick)
 		practiced_today[core_skill] = true
 		
 	satisfaction_tick = 0.0
@@ -1541,7 +1569,7 @@ func is_toilet_user(citizen: Citizen) -> bool:
 		return false
 	if citizen.simulation != null and citizen.simulation.settlement.era <= SettlementState.Era.EARTH:
 		return true
-	return citizen.specialization == "courier" or citizen.employment_state in [EmploymentState.AUTO_RESERVE, EmploymentState.UNEMPLOYED]
+	return citizen.employment_state in [EmploymentState.UNREGISTERED, EmploymentState.FREELANCE]
 
 
 func generate_toilet_schedule() -> void:
