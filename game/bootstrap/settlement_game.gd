@@ -1024,6 +1024,36 @@ func _update_construction_supplies() -> void:
 			break
 
 
+func _assign_construction_support(worker: Citizen, site: ConstructionSite) -> bool:
+	if worker == null or site == null or not is_instance_valid(site.node):
+		return false
+	for resource_type in site.required_materials:
+		var required := int(site.required_materials[resource_type])
+		var delivered := int(site.delivered_materials.get(resource_type, 0))
+		var reserved := int(site.reserved_materials.get(resource_type, 0))
+		if delivered + reserved >= required:
+			continue
+		# A flexible construction worker doubles as the bootstrap courier. This
+		# prevents every freelancer from waiting at an unsupplied foundation.
+		if not warehouse_positions.is_empty() and settlement.amount(resource_type) > 0:
+			settlement.add(resource_type, -1)
+			site.reserved_materials[resource_type] = reserved + 1
+			worker.active_role = "construction"
+			worker.assign_construction_delivery(site.node, warehouse_positions[0], resource_type)
+			return true
+		if resource_type == "branches" and not warehouse_positions.is_empty():
+			var tree_position := _find_closest_tree_for_citizen(worker)
+			if tree_position != Vector3.INF:
+				worker.assign_gathering("branches", tree_position, warehouse_positions[0])
+				return true
+		if resource_type == "grass" and not warehouse_positions.is_empty():
+			var grass_position := _find_grass_gathering_position(worker)
+			if grass_position != Vector3.INF:
+				worker.assign_gathering("grass", grass_position, warehouse_positions[0])
+				return true
+	return false
+
+
 func _reconcile_construction_reservations(site: ConstructionSite) -> void:
 	# A delivery can be interrupted by the end-of-day scheduler or a route reset.
 	# Return its reservation when no courier still owns it, otherwise the final
@@ -2447,7 +2477,7 @@ func _update_brick_research(delta: float) -> void:
 			if citizen.skills.get("engineer", 0.0) >= 1.0:
 				speed_mult = 1.30
 				break
-				
+
 	brick_research_progress = minf(1.0, brick_research_progress + (delta * speed_mult) / BRICK_RESEARCH_DURATION)
 	if brick_research_progress >= 1.0:
 		brick_construction_unlocked = true

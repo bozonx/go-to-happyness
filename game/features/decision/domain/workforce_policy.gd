@@ -61,7 +61,9 @@ static func _automatic_role_for(worker: Dictionary, world: Dictionary) -> String
 
 	# An empty productive building is useful immediately. Once occupied, normal
 	# shortage and specialization scores decide whether it needs extra workers.
-	_add_empty_workplace_score(scores, world, "construction", _construction_capacity(world))
+	# Automatic freelancers provide one builder for early construction. Extra
+	# sites must not absorb the rest of the reserve while materials are missing;
+	# additional builders can still be pinned manually by the player.
 	_add_empty_workplace_score(scores, world, "forestry", int(world.get("forestry_jobs", world.get("sawmills", 0))))
 	_add_empty_workplace_score(scores, world, "farming", int(world.get("farming_jobs", world.get("farms", 0))))
 	_add_empty_workplace_score(scores, world, "gather_food", int(world.get("forager_jobs", world.get("forager_tents", 0))))

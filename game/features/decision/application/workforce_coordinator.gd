@@ -203,6 +203,8 @@ func assign_work(citizen: Citizen, index: int) -> void:
 				var construction: ConstructionSite = simulation._preferred_construction_site()
 				if construction == null:
 					return
+				if not construction.is_supplied() and simulation._assign_construction_support(citizen, construction):
+					return
 				citizen.assign_construction(construction.node)
 		"forestry":
 			var tree_position: Vector3 = simulation._reserve_closest_tree_for_sawmill(citizen, Vector3.ZERO)

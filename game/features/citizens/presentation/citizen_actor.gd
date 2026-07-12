@@ -1525,7 +1525,12 @@ func _update_idle_indicator() -> void:
 			idle_indicator.text = "Unregistered"
 			idle_indicator.modulate = Color("f0873d")
 		_:
-			idle_indicator.text = "Freelance: %s" % (freelance_assignment.replace("_", " ") if not freelance_assignment.is_empty() else "available")
+			var visible_role := freelance_assignment
+			var automatic := false
+			if visible_role.is_empty() and not active_role.is_empty():
+				visible_role = active_role
+				automatic = true
+			idle_indicator.text = "Freelance: %s%s" % [visible_role.replace("_", " ") if not visible_role.is_empty() else "available", " (automatic)" if automatic else ""]
 			idle_indicator.modulate = Color("f0c45d")
 
 

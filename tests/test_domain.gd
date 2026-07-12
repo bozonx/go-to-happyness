@@ -211,6 +211,8 @@ func _test_workforce_policy() -> void:
 	assert(WorkforcePolicy.permanent_vacancy_for(early_builder, early_world) == "construction")
 	early_world.assigned_roles = {"construction": 1}
 	assert(WorkforcePolicy.role_for(early_builder, early_world) != "construction")
+	early_world.construction_sites = 2
+	assert(WorkforcePolicy.role_for(early_builder, early_world) != "construction")
 	var guild_world := {"era": SettlementState.Era.STONE, "construction_sites": 1, "builder_jobs": 1, "assigned_roles": {}, "population": 2}
 	assert(WorkforcePolicy.permanent_vacancy_for(early_builder, guild_world) == "construction")
 	var employed_cook := {"specialization": "cook", "permanent_role": "farming", "manual_role": "", "player_controlled": false, "blocked_by_storage": false}
