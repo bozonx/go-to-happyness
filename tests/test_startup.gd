@@ -29,7 +29,7 @@ func _init() -> void:
 		assert(citizen.global_position.distance_to(simulation.entrance_stone.global_position) < 5.0)
 		if not citizen.is_hero:
 			assert(citizen.specialization == "unassigned")
-			assert(citizen.employment_state == Citizen.EmploymentState.UNREGISTERED)
+			assert(citizen.employment_state == Citizen.EmploymentState.FREELANCE)
 	var resident: Citizen = simulation.citizens[1]
 	simulation.settlement.era = SettlementState.Era.TENT
 	assert(resident.is_toilet_user(resident))
@@ -88,11 +88,30 @@ func _init() -> void:
 	assert(simulation.building_registry.record_at_cell(cell) == null)
 	var field_officer: Citizen = simulation.citizens[1]
 	simulation._appoint_official(field_officer)
-	simulation.hero_citizen.permanent_role = ""
-	simulation.hero_citizen.manual_role = ""
-	assert(simulation._employment_center_position() == field_officer.global_position)
+	assert(simulation._employment_center_position() == Vector3.INF)
+	assert(simulation._registration_official() == null)
+	var civic_centre := Node3D.new()
+	civic_centre.position = field_officer.global_position
+	civic_centre.set_meta("service_position", field_officer.global_position)
+	civic_centre.set_meta("accepting_workers", true)
+	simulation.add_child(civic_centre)
+	simulation.campfire_node = civic_centre
+	simulation._activate_employment_centre(civic_centre)
+	simulation.game_minutes = 9.0 * 60.0
 	field_officer.state = Citizen.State.OFFICIAL_WORK
 	assert(simulation._registration_official() == field_officer)
+	var first_in_queue: Citizen = simulation.citizens[2]
+	var second_in_queue: Citizen = simulation.citizens[3]
+	first_in_queue.global_position = civic_centre.global_position
+	second_in_queue.global_position = civic_centre.global_position
+	first_in_queue.begin_employment_processing(simulation._employment_center_position())
+	second_in_queue.begin_employment_processing(simulation._employment_center_position())
+	assert(simulation._can_start_registration(first_in_queue))
+	assert(not simulation._can_start_registration(second_in_queue))
+	first_in_queue.state = Citizen.State.EMPLOYMENT_PROCESSING
+	assert(not simulation._can_start_registration(second_in_queue))
+	field_officer.global_position += Vector3(10.0, 0.0, 0.0)
+	assert(not simulation._can_start_registration(first_in_queue))
 	# R always enters the hero view; direct management of another citizen is explicit.
 	simulation._toggle_hero_view()
 	assert(simulation.is_first_person)

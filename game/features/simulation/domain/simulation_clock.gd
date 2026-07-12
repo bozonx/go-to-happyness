@@ -3,7 +3,9 @@ extends RefCounted
 
 const MINUTES_PER_DAY := 24 * 60
 
-var minutes := 7.0 * 60.0
+# Start at the beginning of the workday: the initial freelance reserve can
+# immediately gather the materials required for the first warehouse and fire.
+var minutes := 8.0 * 60.0
 var _previous_minute := -1
 
 

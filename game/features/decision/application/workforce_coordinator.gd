@@ -89,7 +89,8 @@ func _can_finish_registration_today(citizen: Citizen) -> bool:
 		return false
 	var minutes_to_walk: float = citizen.global_position.distance_to(center) / Citizen.WALK_SPEED * float(simulation.GAME_MINUTES_PER_SECOND)
 	var shift_end := 8.0 + float(simulation.settlement.workday_hours)
-	var finish_hour: float = float(simulation.game_minutes) / 60.0 + minutes_to_walk / 60.0 + 1.0
+	var process_minutes: float = simulation._registration_duration() * float(simulation.GAME_MINUTES_PER_SECOND)
+	var finish_hour: float = float(simulation.game_minutes) / 60.0 + (minutes_to_walk + process_minutes) / 60.0
 	return finish_hour <= shift_end
 
 func _get_sorted_citizens() -> Array[Citizen]:
@@ -121,6 +122,7 @@ func _employer_exists(role: String) -> bool:
 		"seller": return not simulation.market_positions.is_empty()
 		"factory_worker": return _factory_job_capacity() > 0
 		"engineer": return _engineer_job_capacity() > 0
+		"official": return is_instance_valid(simulation._employment_centre_building())
 	return true
 
 
@@ -128,6 +130,12 @@ func _release_employment(citizen: Citizen) -> void:
 	# The workplace disappeared out from under the worker — a change the player
 	# did not choose. Return them to the reserve pool so they immediately look for
 	# other work instead of becoming a permanently idle "unemployed" body.
+	if citizen.permanent_role == "official":
+		# The appointment belongs to the settlement, not to a demolished civic
+		# building. Keep it ready for the next campfire/town-hall upgrade.
+		citizen.idle()
+		citizen.employment_workplace = null
+		return
 	citizen.idle()
 	citizen.release_to_freelance()
 
@@ -154,7 +162,8 @@ func assign_work(citizen: Citizen, index: int) -> void:
 			citizen.assign_seller_work(market_pos)
 		return
 	if role == "official":
-		citizen.assign_official_work(_workplace_position(citizen, simulation._employment_center_position()))
+		if is_instance_valid(citizen.employment_workplace):
+			citizen.assign_official_work(_workplace_position(citizen, simulation._employment_center_position()))
 		return
 	if role == "factory_worker":
 		var factory_worker_node: Node3D = citizen.employment_workplace if is_instance_valid(citizen.employment_workplace) else factory_for_role("factory_worker")

@@ -131,6 +131,7 @@ func _test_work_schedule_wellbeing() -> void:
 
 func _test_clock_wraps_and_reports_elapsed_minutes() -> void:
 	var clock := SimulationClock.new()
+	assert(clock.hour() == 8)
 	clock.minutes = 1439.0
 	assert(clock.advance(0.0, 1.0).is_empty())
 	var elapsed := clock.advance(2.0, 1.0)

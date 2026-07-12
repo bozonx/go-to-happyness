@@ -86,15 +86,13 @@ var time_multiplier := 1.0
 # work hours so idle workers are promptly re-assigned or sent to wait/rest.
 const WORKER_POLL_INTERVAL := 0.5
 # The main campfire progression (town hall) doubles as the employment centre:
-# the employment officer must man it to register residents fast. A dedicated
-# employment office (brick era) serves the same purpose.
-const OFFICIAL_WORKPLACE_TYPES: Array[String] = ["campfire", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall", "employment_office"]
+# the employment officer must man it to register residents. The civic centre
+# is always the main campfire or its town-hall upgrade.
+const OFFICIAL_WORKPLACE_TYPES: Array[String] = ["campfire", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall"]
 # How close the officer must stand to their post to count as manning it.
 const OFFICER_POST_RADIUS := 3.5
-# Registration handled by the roaming hero in the field (no manned centre) is
-# deliberately slower than a proper office run by a settled officer.
-const FIELD_REGISTRATION_PENALTY := 2.0
 var _worker_poll_timer := 0.0
+var _registration_queue_counter := 0
 var _last_unstaffed_warning_time := -1000.0
 var runtime_seconds := 0.0
 var random := RandomNumberGenerator.new()
@@ -430,73 +428,30 @@ func _has_cook() -> bool:
 
 
 func _employment_center_position() -> Vector3:
-	if is_instance_valid(employment_office):
-		return employment_office.get_meta("service_position", employment_office.global_position)
 	if is_instance_valid(campfire_node):
 		return campfire_node.get_meta("service_position", campfire_node.global_position)
-	# No employment building yet: the appointed officer is the field employment
-	# centre. This must not be limited to the hero because the player can appoint
-	# another resident before placing the first campfire.
-	var official := _field_registration_official()
-	if official != null:
-		return official.global_position
 	return Vector3.INF
 
 
-func _hero_is_officer() -> bool:
-	return is_instance_valid(hero_citizen) and (hero_citizen.manual_role == "official" or hero_citizen.permanent_role == "official")
-
-
-func _hero_at_employment_center() -> bool:
-	# True only when a proper employment building exists and the hero is manning it.
-	if not is_instance_valid(hero_citizen):
-		return false
-	if not is_instance_valid(employment_office) and not is_instance_valid(campfire_node):
-		return false
-	var center := _employment_center_position()
-	return center != Vector3.INF and hero_citizen.global_position.distance_to(center) <= OFFICER_POST_RADIUS
+func _employment_centre_building() -> Node3D:
+	return campfire_node if is_instance_valid(campfire_node) else null
 
 
 func _registration_official() -> Citizen:
-	# A dedicated officer actually manning the employment centre (town hall or
-	# employment office) services registrations fastest.
-	var has_employment_building := is_instance_valid(employment_office) or is_instance_valid(campfire_node)
-	var center := _employment_center_position()
-	if center != Vector3.INF:
-		for citizen in citizens:
-			if not is_instance_valid(citizen) or citizen == hero_citizen:
-				continue
-			if citizen.permanent_role != "official":
-				continue
-			if citizen.is_player_controlled:
-				if citizen.global_position.distance_to(center) <= OFFICER_POST_RADIUS:
-					return citizen
-			else:
-				if citizen.state == Citizen.State.OFFICIAL_WORK and citizen.global_position.distance_to(center) <= OFFICER_POST_RADIUS:
-					return citizen
-	if has_employment_building:
-		# The hero can process registrations while controlled directly, without
-		# entering the autonomous OFFICIAL_WORK state.
-		if is_instance_valid(hero_citizen) and _hero_is_officer():
-			return hero_citizen
+	# Any citizen can be the officer, but they must physically staff the active
+	# civic centre. Player control does not grant remote registration privileges.
+	var centre := _employment_centre_building()
+	if not is_instance_valid(centre):
 		return null
-	var official := _field_registration_official()
-	if official != null and (official.state == Citizen.State.OFFICIAL_WORK or official == hero_citizen):
-		return official
-	return null
-
-
-func _field_registration_official() -> Citizen:
-	# Prefer an officer already at their post so a new registration always heads
-	# to a stable target. A newly appointed officer is still a valid field centre
-	# and will enter OFFICIAL_WORK on the next worker update.
+	var center := _employment_center_position()
 	for citizen in citizens:
 		if not is_instance_valid(citizen) or citizen.permanent_role != "official":
 			continue
-		if citizen.state == Citizen.State.OFFICIAL_WORK:
-			return citizen
-	for citizen in citizens:
-		if is_instance_valid(citizen) and citizen.permanent_role == "official":
+		if citizen.employment_workplace != centre:
+			continue
+		if citizen.global_position.distance_to(center) > OFFICER_POST_RADIUS:
+			continue
+		if citizen.is_player_controlled or citizen.state == Citizen.State.OFFICIAL_WORK:
 			return citizen
 	return null
 
@@ -505,15 +460,29 @@ func _is_registration_staffed() -> bool:
 	return _is_work_time() and _registration_official() != null
 
 
+func _next_registration_ticket() -> int:
+	_registration_queue_counter += 1
+	return _registration_queue_counter
+
+
+func _can_start_registration(citizen: Citizen) -> bool:
+	if not _is_registration_staffed() or citizen.employment_state != Citizen.EmploymentState.REGISTERING:
+		return false
+	for other in citizens:
+		if not is_instance_valid(other) or other == citizen:
+			continue
+		if other.state == Citizen.State.EMPLOYMENT_PROCESSING:
+			return false
+		if other.employment_state == Citizen.EmploymentState.REGISTERING and other.registration_queue_order >= 0 and other.registration_queue_order < citizen.registration_queue_order:
+			return false
+	return true
+
+
 func _registration_duration() -> float:
 	var official := _registration_official()
 	if official == null:
 		return Citizen.EMPLOYMENT_PROCESS_DURATION
-	var duration := Citizen.EMPLOYMENT_PROCESS_DURATION / official.get_efficiency("official")
-	# Field registration (roaming hero, no manned centre) takes noticeably longer.
-	if official == hero_citizen and not _hero_at_employment_center():
-		duration *= FIELD_REGISTRATION_PENALTY
-	return duration
+	return Citizen.EMPLOYMENT_PROCESS_DURATION / official.get_efficiency("official")
 
 
 func _is_teacher_present_at_school() -> bool:
@@ -1969,7 +1938,7 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	citizen.setup_specialization(primary_specialization if not primary_specialization.is_empty() else "unassigned")
 	citizen.setup_navigation(_find_path_around_houses, _get_nearest_delivery_position, _resolve_building_queue_position)
 	citizen.setup_scheduler(_try_resume_work, _send_citizen_to_leisure)
-	citizen.setup_registration_service(_is_registration_staffed, _registration_duration)
+	citizen.setup_registration_service(_can_start_registration, _registration_duration)
 	citizen.resource_delivered.connect(_on_resource_delivered)
 	citizen.construction_material_delivered.connect(_on_construction_material_delivered)
 	citizen.building_supply_delivered.connect(_on_building_supply_delivered)
@@ -1991,13 +1960,13 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	if hero_citizen == null:
 		hero_citizen = citizen
 		citizen.set_hero(true)
-		# The hero holds the employment-officer role by default so residents can
-		# always be hired from the very first day; the player may reassign it to
-		# any settler (or to the hero) later, like any other profession.
+		# The first resident starts with the officer role, but without a civic
+		# centre that role has no special powers and no field registration.
 		_appoint_official(citizen)
 	else:
-		# Residents join the workforce only through the registration service.
-		citizen.employment_state = Citizen.EmploymentState.UNREGISTERED
+		# Before the first campfire the settlement has no administration. Initial
+		# residents therefore form a usable freelance reserve to bootstrap it.
+		citizen.employment_state = Citizen.EmploymentState.FREELANCE if not is_instance_valid(campfire_node) else Citizen.EmploymentState.UNREGISTERED
 	citizen.setup_goap(self, citizens.size() - 1)
 	citizen.generate_toilet_schedule()
 
@@ -2264,10 +2233,9 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_build_button("Brick restaurant", "brick_restaurant", 312, "brick")
 	_add_build_button("Brick house", "brick_house", 346, "brick")
 	_add_build_button("Строительная фирма", "construction_company", 380, "brick")
-	_add_build_button("Служба занятости", "employment_office", 414, "brick")
-	_add_build_button("Кирпичный туалет ур. 1", "toilet_brick", 448, "brick")
-	_add_build_button("Кирпичный туалет ур. 2", "toilet_brick_lvl2", 482, "brick")
-	_add_build_button("Кирпичный туалет ур. 3", "toilet_brick_lvl3", 516, "brick")
+	_add_build_button("Кирпичный туалет ур. 1", "toilet_brick", 414, "brick")
+	_add_build_button("Кирпичный туалет ур. 2", "toilet_brick_lvl2", 448, "brick")
+	_add_build_button("Кирпичный туалет ур. 3", "toilet_brick_lvl3", 482, "brick")
 
 	_refresh_build_menu()
 
@@ -2805,7 +2773,11 @@ func _update_arrivals() -> void:
 				citizen.escort_arrivals_to(_employment_center_position())
 				arrival_escort_ids.erase(citizen.get_instance_id())
 			else:
-				citizen.begin_employment_processing(_employment_center_position())
+				if _employment_center_position() != Vector3.INF:
+					citizen.begin_employment_processing(_employment_center_position())
+				else:
+					citizen.employment_state = Citizen.EmploymentState.FREELANCE
+					citizen.idle()
 	for greeter_id in arrival_waiting_greeters.keys():
 		var waiting_greeter := instance_from_id(greeter_id) as Citizen
 		var waiting_order: Dictionary = arrival_waiting_greeters[greeter_id]
@@ -2865,9 +2837,16 @@ func _on_arrival_greeter_ready(greeter: Citizen) -> void:
 	var newcomer: Citizen = citizens.back()
 	newcomer.assign_home(house)
 	if _is_work_time():
-		greeter.escort_arrivals_to(_employment_center_position())
-		newcomer.begin_employment_processing(_employment_center_position())
-		_update_interface("The newcomer was met at the entrance and is heading to employment registration.")
+		var centre := _employment_center_position()
+		if centre != Vector3.INF:
+			greeter.escort_arrivals_to(centre)
+			newcomer.begin_employment_processing(centre)
+			_update_interface("The newcomer was met at the entrance and is heading to employment registration.")
+		else:
+			greeter.idle()
+			newcomer.employment_state = Citizen.EmploymentState.FREELANCE
+			newcomer.idle()
+			_update_interface("The newcomer joined the pre-campfire freelance reserve.")
 	else:
 		arrival_escort_ids[greeter.get_instance_id()] = true
 		greeter.wait_for_arrival_morning()
@@ -3121,6 +3100,9 @@ func _set_manual_role(role: String) -> void:
 	var freelance_roles := ["", "courier", "construction", "gather_branches", "gather_grass", "gather_dew", "gather_water"]
 	if role in freelance_roles:
 		if selected_builder.employment_state == Citizen.EmploymentState.UNREGISTERED:
+			if _employment_center_position() == Vector3.INF:
+				_update_interface("Build the main campfire before registering new residents.")
+				return
 			selected_builder.request_freelance_registration(role)
 		elif selected_builder.employment_state == Citizen.EmploymentState.FREELANCE:
 			selected_builder.pin_freelance_role(role)
@@ -3133,6 +3115,9 @@ func _set_manual_role(role: String) -> void:
 		_appoint_official(selected_builder)
 	else:
 		if selected_builder.employment_state == Citizen.EmploymentState.FREELANCE:
+			if _employment_center_position() == Vector3.INF:
+				_update_interface("Build the main campfire before assigning permanent jobs.")
+				return
 			selected_builder.begin_employment_processing(_employment_center_position(), role, _employer_for_role(role))
 	selected_builder.assigned_dig_site = null
 	_update_workers()
@@ -3170,7 +3155,7 @@ func _is_role_available(role: String) -> bool:
 		"engineer": return _available_employer_capacity("engineer") > 0
 		"courier": return not warehouse_positions.is_empty()
 		"craftsman": return not craft_tent_positions.is_empty()
-		"official": return true
+		"official": return is_instance_valid(_employment_centre_building())
 	return false
 
 func _assigned_count_for_role(role: String) -> int:
@@ -3186,6 +3171,8 @@ func _builder_job_capacity() -> int:
 
 
 func _employer_for_role(role: String) -> Node3D:
+	if role == "official":
+		return _employment_centre_building()
 	if role == "excavation":
 			for site in dig_sites:
 				if _can_work_at_dig_site(site):
@@ -3233,6 +3220,9 @@ func _employer_types_for_role(role: String) -> Array[String]:
 
 
 func _available_employer_capacity(role: String) -> int:
+	if role == "official":
+		var centre := _employment_centre_building()
+		return 1 if is_instance_valid(centre) and bool(centre.get_meta("accepting_workers", true)) else 0
 	var capacity := 0
 	for record in building_registry.records():
 		var building := record.node
@@ -3689,6 +3679,13 @@ func _remove_building_services(building: Node3D, building_type: String) -> void:
 func _release_employment_at_building(building: Node3D) -> void:
 	for citizen in citizens:
 		if citizen.employment_workplace != building and citizen.pending_employment_workplace != building:
+			continue
+		if citizen.permanent_role == "official":
+			# Civic upgrades temporarily remove the post. Keep the appointment so it
+			# transfers to the next main campfire instead of silently disappearing.
+			citizen.idle()
+			citizen.employment_workplace = null
+			citizen.pending_employment_workplace = null
 			continue
 		_send_to_unemployment_registration(citizen)
 
@@ -4244,6 +4241,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			construction_company_positions.append(service_position)
 		"campfire", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall":
 			campfire_node = building
+			_activate_employment_centre(building)
 			_add_building_selector(building, "campfire_selector", blueprint.footprint)
 			var fire_light := OmniLight3D.new()
 			fire_light.position = Vector3(0.0, 0.5, 0.0)
@@ -4931,9 +4929,10 @@ func _add_unemployed_resident_row(citizen: Citizen) -> void:
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(label)
 	var auto_button := Button.new()
-	auto_button.text = "Register"
+	auto_button.text = "Registering" if citizen.employment_state == Citizen.EmploymentState.REGISTERING else "Register"
 	auto_button.tooltip_text = "Register this resident as a freelance worker"
 	auto_button.custom_minimum_size = Vector2(72, 30)
+	auto_button.disabled = citizen.employment_state != Citizen.EmploymentState.UNREGISTERED or _employment_center_position() == Vector3.INF
 	auto_button.pressed.connect(_enable_auto_for_citizen.bind(citizen))
 	row.add_child(auto_button)
 	workforce_list.add_child(row)
@@ -5014,15 +5013,23 @@ func _remove_worker_from_role(role: String) -> void:
 func _assign_unemployed_worker(role: String) -> void:
 	if not _is_role_available(role):
 		return
+	var best: Citizen = null
+	var best_score := -INF
 	for citizen in citizens:
 		if citizen.is_player_controlled:
 			continue
 		if citizen.employment_state == Citizen.EmploymentState.FREELANCE:
-			selected_builder = citizen
-			_set_manual_role(role)
-			_refresh_workforce_menu()
-			_refresh_campfire_occupancy_button()
-			return
+			var score := float(citizen.skills.get(role, 0.0))
+			if citizen.preferred_role() == role:
+				score += 1.0
+			if score > best_score:
+				best = citizen
+				best_score = score
+	if best != null:
+		selected_builder = best
+		_set_manual_role(role)
+		_refresh_workforce_menu()
+		_refresh_campfire_occupancy_button()
 
 
 func _enable_auto_for_citizen(citizen: Citizen) -> void:
@@ -5779,7 +5786,7 @@ func _assign_seller_at_market() -> void:
 
 func _assign_official() -> void:
 	if selected_builder == null:
-		_update_interface("Select a resident first, then click the town hall or employment office to make them the officer.")
+		_update_interface("Select a resident first, then assign them as the officer at the main campfire or town hall.")
 		return
 	if selected_builder.is_player_controlled:
 		_update_interface("Pick a settler, not the character you are controlling.")
@@ -5790,10 +5797,16 @@ func _assign_official() -> void:
 
 
 func _appoint_official(citizen: Citizen) -> void:
-	# Direct mayoral appointment: the officer runs job registration and therefore
-	# never queues for it themselves, which also prevents a bootstrap deadlock.
+	# A mayoral appointment selects the settlement's single registration officer.
+	# It is independent of who the player currently controls.
 	if citizen == null:
 		return
+	for other in citizens:
+		if not is_instance_valid(other) or other == citizen or other.permanent_role != "official":
+			continue
+		other.idle()
+		other.setup_specialization("unassigned")
+		other.release_to_freelance()
 	citizen.idle()
 	citizen.setup_specialization("official")
 	citizen.manual_role = ""
@@ -5804,6 +5817,21 @@ func _appoint_official(citizen: Citizen) -> void:
 	citizen.permanent_role = "official"
 	citizen.employment_workplace = _employer_for_role("official")
 	citizen.employment_state = Citizen.EmploymentState.EMPLOYED
+	if not is_instance_valid(citizen.employment_workplace):
+		citizen.active_role = ""
+
+
+func _activate_employment_centre(centre: Node3D) -> void:
+	if not is_instance_valid(centre):
+		return
+	for citizen in citizens:
+		if not is_instance_valid(citizen) or citizen.permanent_role != "official":
+			continue
+		citizen.employment_workplace = centre
+		citizen.pending_employment_workplace = null
+		citizen.employment_state = Citizen.EmploymentState.EMPLOYED
+		citizen.idle()
+	_update_workers()
 
 
 func _set_manual_specialist_employment(citizen: Citizen, role: String) -> void:
@@ -6118,7 +6146,7 @@ func _check_unstaffed_employment_center() -> void:
 	var center := _employment_center_position()
 	if center != Vector3.INF:
 		for citizen in citizens:
-			if is_instance_valid(citizen) and citizen.state == Citizen.State.TO_EMPLOYMENT_CENTER:
+			if is_instance_valid(citizen) and citizen.state in [Citizen.State.TO_EMPLOYMENT_CENTER, Citizen.State.EMPLOYMENT_PROCESSING]:
 				if citizen.global_position.distance_to(center) <= 3.5:
 					has_waiting_citizen = true
 					break

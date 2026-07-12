@@ -148,8 +148,6 @@ static func can_assign(worker: Dictionary, world: Dictionary) -> bool:
 	if str(worker.get("workforce_status", "")) == "unregistered":
 		return false
 	var assigned_role := role_for(worker, world)
-	if assigned_role == "official" and bool(worker.get("is_hero", false)):
-		return false
 	if not str(worker.get("permanent_role", "")).is_empty():
 		if assigned_role == "construction" and _construction_capacity(world) <= 0:
 			return false

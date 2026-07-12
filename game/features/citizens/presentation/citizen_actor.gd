@@ -62,9 +62,9 @@ var no_work_wait_complete := false
 # them to a rest spot (park/pond/home) and reports whether somewhere was found.
 var work_scheduler := Callable()
 var leisure_scheduler := Callable()
-# Injected: registration_staff_checker() -> bool reports whether the
-# employment centre (hero manning his post, or an assigned official) is
-# currently able to process registrations; registration_duration_resolver()
+	# Injected: registration_staff_checker(Citizen) -> bool reports whether this
+	# citizen is currently first in a staffed employment-centre queue;
+	# registration_duration_resolver()
 # -> float returns how long that processing should take.
 var registration_staff_checker := Callable()
 var registration_duration_resolver := Callable()
@@ -82,6 +82,7 @@ var pending_employment_role := ""
 var employment_workplace: Node3D
 var pending_employment_workplace: Node3D
 var employment_center_position := Vector3.INF
+var registration_queue_order := -1
 var overtime_mode := false
 var satisfaction := 72.0
 var satisfaction_tick := 0.0
@@ -702,6 +703,7 @@ func begin_employment_processing(center_position: Vector3, next_pending_role := 
 	pending_employment_role = next_pending_role
 	pending_employment_workplace = next_workplace
 	employment_state = EmploymentState.REGISTERING
+	_take_registration_ticket()
 	active_role = ""
 	state = State.TO_EMPLOYMENT_CENTER
 
@@ -764,6 +766,7 @@ func queue_employment_processing(next_pending_role := "", next_workplace: Node3D
 	pending_employment_role = next_pending_role
 	pending_employment_workplace = next_workplace
 	employment_state = EmploymentState.REGISTERING
+	_take_registration_ticket()
 	active_role = ""
 	state = State.IDLE
 
@@ -785,16 +788,22 @@ func _process_to_employment_center(delta: float) -> void:
 		return
 	# Arrived and queuing: stay put (a visible line at the campfire) until
 	# someone is actually manning the employment centre.
-	if registration_staff_checker.is_valid() and not bool(registration_staff_checker.call()):
+	if registration_staff_checker.is_valid() and not bool(registration_staff_checker.call(self)):
 		return
-	var duration := EMPLOYMENT_PROCESS_DURATION
-	if registration_duration_resolver.is_valid():
-		duration = float(registration_duration_resolver.call())
+	if task_timer.remaining <= 0.0:
+		var duration := EMPLOYMENT_PROCESS_DURATION
+		if registration_duration_resolver.is_valid():
+			duration = float(registration_duration_resolver.call())
+		_start_task(duration)
 	state = State.EMPLOYMENT_PROCESSING
-	_start_task(duration)
 
 
 func _process_employment_processing(delta: float) -> void:
+	# Registration is suspended, rather than completed remotely, when the
+	# official leaves their post or the workplace is no longer staffed.
+	if registration_staff_checker.is_valid() and not bool(registration_staff_checker.call(self)):
+		state = State.TO_EMPLOYMENT_CENTER
+		return
 	if _work(delta):
 		employment_processing_finished.emit(self)
 
@@ -812,6 +821,7 @@ func finish_employment_processing() -> void:
 		employment_state = EmploymentState.FREELANCE
 	pending_employment_role = ""
 	pending_employment_workplace = null
+	registration_queue_order = -1
 	state = State.IDLE
 
 
@@ -841,6 +851,14 @@ func release_to_freelance() -> void:
 	employment_workplace = null
 	pending_employment_workplace = null
 	employment_state = EmploymentState.FREELANCE
+	registration_queue_order = -1
+
+
+func _take_registration_ticket() -> void:
+	if registration_queue_order >= 0:
+		return
+	if simulation != null and simulation.has_method("_next_registration_ticket"):
+		registration_queue_order = int(simulation.call("_next_registration_ticket"))
 
 
 func has_active_delivery() -> bool:
