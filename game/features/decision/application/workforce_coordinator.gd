@@ -209,11 +209,14 @@ func assign_work(citizen: Citizen, index: int) -> void:
 		"forestry":
 			var tree_position: Vector3 = simulation._reserve_closest_tree_for_sawmill(citizen, Vector3.ZERO)
 			if tree_position != Vector3.INF:
+				var tree_access: Vector3 = simulation._resource_access_position(citizen.global_position, tree_position)
 				if simulation.sawmill_positions.is_empty():
-					citizen.assign_gathering("logs", tree_position, simulation._get_delivery_position())
+					if tree_access != Vector3.INF:
+						citizen.assign_gathering("logs", tree_position, simulation._get_delivery_position(), tree_access)
 				else:
 					var sawmill_position: Vector3 = _workplace_position(citizen, simulation.sawmill_positions[index % simulation.sawmill_positions.size()])
-					citizen.assign_work("wood", tree_position, sawmill_position, simulation.warehouse_positions[index % simulation.warehouse_positions.size()])
+					if tree_access != Vector3.INF:
+						citizen.assign_work("wood", tree_position, sawmill_position, simulation.warehouse_positions[index % simulation.warehouse_positions.size()], false, tree_access)
 		"farming":
 			var farm_position: Vector3 = _workplace_position(citizen, simulation.farm_positions[index % simulation.farm_positions.size()])
 			# Farm output is always collected by couriers; production staff never
@@ -236,7 +239,9 @@ func assign_work(citizen: Citizen, index: int) -> void:
 		"gather_branches":
 			var tree_pos: Vector3 = simulation._find_closest_tree_for_citizen(citizen)
 			if tree_pos != Vector3.INF:
-				citizen.assign_gathering("branches", tree_pos, simulation._get_delivery_position())
+				var tree_access: Vector3 = simulation._resource_access_position(citizen.global_position, tree_pos)
+				if tree_access != Vector3.INF:
+					citizen.assign_gathering("branches", tree_pos, simulation._get_delivery_position(), tree_access)
 		"gather_grass":
 			var grass_pos: Vector3 = simulation._find_grass_gathering_position(citizen)
 			if grass_pos != Vector3.INF:

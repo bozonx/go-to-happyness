@@ -49,7 +49,9 @@ var state := State.IDLE
 var resource_type := "wood"
 var gather_resource_type := ""
 var gather_source_position := Vector3.ZERO
+var gather_access_position := Vector3.ZERO
 var source_position := Vector3.ZERO
+var source_access_position := Vector3.ZERO
 var workplace_position := Vector3.ZERO
 var warehouse_position := Vector3.ZERO
 var task_timer := CitizenTaskState.new()
@@ -124,6 +126,7 @@ var toilet_times: Array[float] = []
 var current_toilet_target: Node3D = null
 var needs_toilet := false
 const TOILET_USE_DURATION := 5.0
+var toilet_timer := CitizenTaskState.new()
 var market_position := Vector3.ZERO
 var craft_position := Vector3.ZERO
 var craft_timer := 0.0
@@ -271,11 +274,13 @@ func _setup_head_mesh() -> void:
 	head.material_override = head_material
 	add_child(head)
 
-func assign_work(next_resource_type: String, source: Vector3, workplace: Vector3, warehouse: Vector3, next_uses_courier := false) -> void:
+func assign_work(next_resource_type: String, source: Vector3, workplace: Vector3, warehouse: Vector3, next_uses_courier := false, access_pos := Vector3.INF) -> void:
 	if is_player_controlled:
 		return
+	_reset_assignment_navigation()
 	resource_type = next_resource_type
 	source_position = source
+	source_access_position = source if access_pos == Vector3.INF else access_pos
 	workplace_position = workplace
 	warehouse_position = warehouse
 	uses_courier = next_uses_courier
@@ -309,7 +314,8 @@ func _physics_process(delta: float) -> void:
 				needs_toilet = true
 		
 		if needs_toilet and state not in [State.TO_TOILET, State.USING_TOILET, State.WAITING_FOR_TOILET, State.TO_BUSH, State.USING_BUSH]:
-			if is_available_for_schedule():
+			# Defer the trip until the current work/delivery action has completed.
+			if state in [State.IDLE, State.WAITING, State.RESTING]:
 				_find_and_go_to_toilet_or_bush()
 			if state not in [State.TO_TOILET, State.USING_TOILET, State.WAITING_FOR_TOILET, State.TO_BUSH, State.USING_BUSH]:
 				if not _is_toilet_or_bush_nearby():
@@ -424,7 +430,7 @@ func _physics_process(delta: float) -> void:
 		_update_idle_indicator()
 
 func _process_to_source(delta: float) -> void:
-	if _move_to(source_position, delta):
+	if _move_to(source_access_position, delta, false, false):
 		state = State.CHOPPING
 		_start_task(WORK_DURATION / get_efficiency(active_role))
 
@@ -521,6 +527,7 @@ func assign_construction_delivery(site: Node3D, warehouse: Vector3, resource_typ
 func assign_building_supply(target: Node3D, warehouse: Vector3, resource_type: String, supply_kind: String) -> void:
 	if is_player_controlled or not is_instance_valid(target):
 		return
+	_reset_assignment_navigation()
 	construction_site = target
 	warehouse_position = warehouse
 	construction_delivery_resource = resource_type
@@ -1070,6 +1077,7 @@ func set_hero(hero: bool) -> void:
 func assign_construction(site: Node3D) -> void:
 	if is_player_controlled:
 		return
+	_reset_assignment_navigation()
 	construction_site = site
 	factory = null
 	construction_position = _work_position_for(site)
@@ -1115,6 +1123,7 @@ func deliver_excavation(next_resource_type: String, warehouse: Vector3) -> void:
 
 func storage_delivery_result(accepted: bool) -> void:
 	if accepted:
+		carried_amount = 0
 		blocked_by_storage = false
 		if freelance_assignment == "courier":
 			state = State.IDLE
@@ -1486,7 +1495,7 @@ func _update_idle_indicator() -> void:
 		return
 	if state == State.USING_TOILET:
 		idle_indicator.visible = true
-		var pct := int((1.0 - task_timer.remaining / TOILET_USE_DURATION) * 100.0)
+		var pct := int((1.0 - toilet_timer.remaining / TOILET_USE_DURATION) * 100.0)
 		idle_indicator.text = "Using Toilet (%d%%)" % clamp(pct, 0, 100)
 		idle_indicator.modulate = Color("81c784")
 		return
@@ -1497,7 +1506,7 @@ func _update_idle_indicator() -> void:
 		return
 	if state == State.USING_BUSH:
 		idle_indicator.visible = true
-		var pct := int((1.0 - task_timer.remaining / TOILET_USE_DURATION) * 100.0)
+		var pct := int((1.0 - toilet_timer.remaining / TOILET_USE_DURATION) * 100.0)
 		idle_indicator.text = "Relieving in Bush (%d%%)" % clamp(pct, 0, 100)
 		idle_indicator.modulate = Color("81c784")
 		return
@@ -1656,17 +1665,19 @@ func _update_satisfaction(delta: float) -> void:
 	satisfaction_tick = 0.0
 
 
-func assign_gathering(res_type: String, source_pos: Vector3, delivery_pos: Vector3) -> void:
+func assign_gathering(res_type: String, source_pos: Vector3, delivery_pos: Vector3, access_pos := Vector3.INF) -> void:
 	if is_player_controlled:
 		return
+	_reset_assignment_navigation()
 	gather_resource_type = res_type
 	gather_source_position = source_pos
+	gather_access_position = source_pos if access_pos == Vector3.INF else access_pos
 	warehouse_position = delivery_pos
 	active_role = "gather_" + res_type
 	state = State.TO_GATHER
 
 func _process_to_gather(delta: float) -> void:
-	if _move_to(gather_source_position, delta):
+	if _move_to(gather_access_position, delta, false, false):
 		state = State.GATHERING
 		_start_task(2.0 / get_efficiency("forestry" if gather_resource_type in ["branches", "logs"] else "farming"))
 
@@ -1689,10 +1700,10 @@ func _process_gathering(delta: float) -> void:
 				idle()
 				simulation._update_interface("The water filter is spent. Buy a replacement at the market.")
 				return
-		resource_ready.emit(self, resource_type, carried_amount)
-		carried_amount = 0
-		state = State.IDLE
-		request_goap_decision()
+		# Free gathering is self-contained: the gatherer carries the result to
+		# storage. Requiring a second freelancer to become a courier deadlocks the
+		# bootstrap when the whole reserve is collecting construction materials.
+		state = State.TO_WAREHOUSE
 
 func _process_trade_pickup(delta: float) -> void:
 	if _move_to(trade_source_position, delta):
@@ -1788,8 +1799,9 @@ func _find_and_go_to_toilet_or_bush() -> void:
 					if global_position.distance_to(serv_pos_curr) < global_position.distance_to(serv_pos_best):
 						best_toilet = toilet
 						
-		if best_toilet != null:
-			current_toilet_target = best_toilet
+			if best_toilet != null:
+				_reset_assignment_navigation()
+				current_toilet_target = best_toilet
 			state = State.TO_TOILET
 			return
 			
@@ -1804,9 +1816,22 @@ func _find_and_go_to_toilet_or_bush() -> void:
 				nearest_tree_pos = tree_pos
 				
 	if min_tree_dist <= 100.0:
-		source_position = nearest_tree_pos
-		state = State.TO_BUSH
+		var access_position: Vector3 = simulation._resource_access_position(global_position, nearest_tree_pos)
+		if access_position != Vector3.INF:
+			_reset_assignment_navigation()
+			source_position = access_position
+			state = State.TO_BUSH
 		return
+
+
+func _reset_assignment_navigation() -> void:
+	idle_wander_anchor = Vector3.INF
+	idle_wander_target = Vector3.INF
+	movement_path.clear()
+	active_route = null
+	path_destination = Vector3.INF
+	navigation_target_position = Vector3.INF
+	route_retry_timer = 0.0
 
 
 func _process_to_toilet(delta: float) -> void:
@@ -1838,7 +1863,7 @@ func _process_to_toilet(delta: float) -> void:
 		
 		if users_count < capacity:
 			state = State.USING_TOILET
-			_start_task(TOILET_USE_DURATION)
+			toilet_timer.start(TOILET_USE_DURATION)
 		else:
 			state = State.WAITING_FOR_TOILET
 
@@ -1848,7 +1873,7 @@ func _process_using_toilet(delta: float) -> void:
 		current_toilet_target = null
 		state = State.IDLE
 		return
-	if _work(delta):
+	if toilet_timer.advance(delta):
 		needs_toilet = false
 		current_toilet_target = null
 		satisfaction = minf(get_satisfaction_cap(), satisfaction + 10.0)
@@ -1882,17 +1907,17 @@ func _process_waiting_for_toilet(delta: float) -> void:
 	
 	if users_count < capacity:
 		state = State.USING_TOILET
-		_start_task(TOILET_USE_DURATION)
+		toilet_timer.start(TOILET_USE_DURATION)
 
 
 func _process_to_bush(delta: float) -> void:
 	if _move_to(source_position, delta):
 		state = State.USING_BUSH
-		_start_task(TOILET_USE_DURATION)
+		toilet_timer.start(TOILET_USE_DURATION)
 
 
 func _process_using_bush(delta: float) -> void:
-	if _work(delta):
+	if toilet_timer.advance(delta):
 		needs_toilet = false
 		satisfaction = minf(get_satisfaction_cap(), satisfaction + 10.0)
 		state = State.IDLE

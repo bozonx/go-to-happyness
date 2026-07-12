@@ -1044,8 +1044,10 @@ func _assign_construction_support(worker: Citizen, site: ConstructionSite) -> bo
 		if resource_type == "branches" and not warehouse_positions.is_empty():
 			var tree_position := _find_closest_tree_for_citizen(worker)
 			if tree_position != Vector3.INF:
-				worker.assign_gathering("branches", tree_position, warehouse_positions[0])
-				return true
+				var access_position := _resource_access_position(worker.global_position, tree_position)
+				if access_position != Vector3.INF:
+					worker.assign_gathering("branches", tree_position, warehouse_positions[0], access_position)
+					return true
 		if resource_type == "grass" and not warehouse_positions.is_empty():
 			var grass_position := _find_grass_gathering_position(worker)
 			if grass_position != Vector3.INF:
@@ -1898,6 +1900,25 @@ func _pond_access_position(from: Vector3, pond_center: Vector3) -> Vector3:
 	var terrain_height := _terrain_height_at(best.x, best.z, pond_center.y)
 	if not is_nan(terrain_height):
 		best.y = terrain_height
+	return best
+
+
+func _resource_access_position(from: Vector3, resource_position: Vector3) -> Vector3:
+	var resource_cell := _cell_from_position(resource_position)
+	var best := Vector3.INF
+	var best_distance := INF
+	for offset in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1)]:
+		var cell: Vector2i = resource_cell + offset
+		if not _is_board_cell(cell) or _is_navigation_cell_blocked(cell):
+			continue
+		var candidate: Vector3 = _cell_center(cell)
+		var route: RouteResult = _find_path_around_houses(from, candidate, false)
+		if not route.reachable:
+			continue
+		var distance := from.distance_squared_to(candidate)
+		if distance < best_distance:
+			best = candidate
+			best_distance = distance
 	return best
 
 func _create_tree(position_on_board: Vector3) -> void:
