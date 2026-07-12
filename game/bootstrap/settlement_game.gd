@@ -749,6 +749,7 @@ func _cancel_canteen_delivery() -> void:
 
 
 func _on_canteen_delivery_finished(worker: Citizen, amount: int) -> void:
+	courier_dispatcher.complete_for(worker)
 	canteen_service.on_canteen_delivery_finished(worker, amount)
 
 func _update_couriers() -> void:
@@ -796,7 +797,10 @@ func _is_courier_task_valid(task: RefCounted) -> bool:
 			return is_instance_valid(task.payload.worker) and task.payload.worker.has_pending_resource()
 		CourierTask.Kind.CONSTRUCTION:
 			var site: ConstructionSite = task.payload.site
-			return site != null and is_instance_valid(site.node) and settlement.amount(str(task.payload.resource)) > 0
+			if site == null or not is_instance_valid(site.node):
+				return false
+			var resource_type := str(task.payload.resource)
+			return int(site.delivered_materials.get(resource_type, 0)) + int(site.reserved_materials.get(resource_type, 0)) < int(site.required_materials.get(resource_type, 0)) and settlement.amount(resource_type) > 0
 	return false
 
 
@@ -1103,9 +1107,11 @@ func _construction_development_priority(site: ConstructionSite) -> float:
 
 func _on_construction_material_delivered(_courier: Citizen, site_node: Node3D, resource_type: String, amount: int) -> void:
 	construction.accept_delivery(site_node, resource_type, amount)
+	courier_dispatcher.complete_for(_courier)
 	_request_courier_dispatch()
 
 func _on_building_supply_delivered(_courier: Citizen, target: Node3D, supply_kind: String, resource_type: String, amount: int) -> void:
+	courier_dispatcher.complete_for(_courier)
 	if not is_instance_valid(target):
 		settlement.add(resource_type, amount)
 		return
@@ -1191,6 +1197,7 @@ func _building_power(site_node: Node3D) -> float:
 	return power
 
 func _on_resource_delivered(worker: Citizen, resource_type: String, amount: int) -> void:
+	courier_dispatcher.complete_for(worker)
 	if not settlement.reserve_storage_room_for(resource_type, amount, warehouse_positions.size()):
 		# Cargo already in transit must never disappear. It may temporarily exceed
 		# the allocation; scheduling prevents new production until room is freed.
@@ -5422,6 +5429,7 @@ func _dispatch_queued_trades() -> void:
 
 func _on_trade_delivery_finished(worker: Citizen) -> void:
 	trade_service.on_trade_delivery_finished(worker)
+	courier_dispatcher.complete_for(worker)
 
 func _create_building_menu(ui: CanvasLayer) -> void:
 	building_menu = Panel.new()
