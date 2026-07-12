@@ -70,7 +70,8 @@ var money: int:
 var wellbeing: int:
 	get: return settlement.wellbeing
 	set(value): settlement.wellbeing = value
-var clock := SimulationClock.new()
+var day_cycle := SimulationDayCycle.new()
+var clock: SimulationClock = day_cycle.clock
 var game_minutes: float:
 	get: return clock.minutes
 	set(value): clock.minutes = value
@@ -84,7 +85,6 @@ const WORKER_POLL_INTERVAL := 0.5
 var _worker_poll_timer := 0.0
 var runtime_seconds := 0.0
 var random := RandomNumberGenerator.new()
-var active_meal_hour := -1
 var selected_cell := Vector2i(0, 0)
 var selected_world_position := Vector3.ZERO
 var build_mode := ""
@@ -133,7 +133,8 @@ var preview_back_entrance_marker: MeshInstance3D
 var wood_label: Label
 var status_label: Label
 var messages: Array[Dictionary] = []
-var current_day := 1
+var current_day: int:
+	get: return day_cycle.current_day
 var message_scroll: ScrollContainer
 var message_list: VBoxContainer
 var messages_modal: Panel
@@ -421,47 +422,38 @@ func _update_daylight() -> void:
 	sun.shadow_enabled = direct_light > 0.05
 
 func _update_clock(delta: float) -> void:
-	var elapsed_minutes := clock.advance(delta, GAME_MINUTES_PER_SECOND)
+	var events := day_cycle.advance(delta, GAME_MINUTES_PER_SECOND, settlement.workday_hours)
 	clock_label.text = "%s  %02d:%02d  x%d" % ["Night" if clock.is_night() else "Day", clock.hour(), clock.minute(), int(time_multiplier)]
 	if skip_night_button != null:
 		skip_night_button.visible = not settlement.night_shifts_allowed and not _is_work_time()
-	for clock_minute in elapsed_minutes:
-		_handle_clock_minute(clock_minute)
+	for event in events:
+		_handle_day_cycle_event(event)
 
-func _handle_clock_minute(clock_minute: int) -> void:
-	var hour := clock_minute / 60
-	var minute := clock_minute % 60
-	if minute == 0 and hour == 0:
-		current_day += 1
-	if minute == 0 and (hour == 9 or hour == 13 or hour == 19) and active_meal_hour != hour:
-		active_meal_hour = hour
-		_start_meal(hour)
-	if minute == 0 and hour == 14:
-		_start_park_rest(false)
-	if minute == 0 and hour == 16:
-		_start_park_rest(true)
-	if minute == 0 and hour == 18:
-		_start_park_rest(false)
-	if minute == 0 and hour == 8 + settlement.workday_hours:
-		_start_after_work_rest()
-	if minute == 0 and hour == 1:
-		for citizen in citizens:
-			if not citizen.is_player_controlled:
-				citizen.go_home()
-	if minute == 0 and hour == 21:
-		_update_workers()
-		_update_interface("Nightfall: workers are returning to their assigned homes.")
-	if minute == 0 and hour == 8:
-		active_meal_hour = -1
-		_update_workers()
-		_update_interface("Morning: workers left their homes for their assignments.")
-	if minute == 0 and hour == 12:
-		var teacher_ok := _is_teacher_present_at_school()
-		for citizen in citizens:
-			citizen.finish_school_day(teacher_ok)
-		_update_workers()
-	if minute == 0 and hour == 6:
-		_apply_daily_settlement_rules()
+func _handle_day_cycle_event(event: SimulationDayEvent) -> void:
+	match event.kind:
+		SimulationDayEvent.Kind.MEAL:
+			_start_meal(event.hour)
+		SimulationDayEvent.Kind.PARK_REST:
+			_start_park_rest(event.cooks_only)
+		SimulationDayEvent.Kind.WORKDAY_ENDED:
+			_start_after_work_rest()
+		SimulationDayEvent.Kind.RETURN_HOME:
+			for citizen in citizens:
+				if not citizen.is_player_controlled:
+					citizen.go_home()
+		SimulationDayEvent.Kind.NIGHTFALL:
+			_update_workers()
+			_update_interface("Nightfall: workers are returning to their assigned homes.")
+		SimulationDayEvent.Kind.WORKDAY_STARTED:
+			_update_workers()
+			_update_interface("Morning: workers left their homes for their assignments.")
+		SimulationDayEvent.Kind.SCHOOL_DAY_ENDED:
+			var teacher_ok := _is_teacher_present_at_school()
+			for citizen in citizens:
+				citizen.finish_school_day(teacher_ok)
+			_update_workers()
+		SimulationDayEvent.Kind.DAILY_SETTLEMENT_UPDATE:
+			_apply_daily_settlement_rules()
 
 func _apply_daily_settlement_rules() -> void:
 	var population := citizens.size()
@@ -546,10 +538,7 @@ func _is_night() -> bool:
 	return clock.is_night()
 
 func _is_work_time() -> bool:
-	if settlement.night_shifts_allowed:
-		return true
-	var hour := clock.hour()
-	return hour >= 8 and hour < 8 + settlement.workday_hours
+	return day_cycle.is_work_time(settlement.workday_hours, settlement.night_shifts_allowed)
 
 func _start_meal(hour: int) -> void:
 	canteen_service.start_meal(hour)
@@ -1816,13 +1805,12 @@ func _create_time_controls(ui: CanvasLayer) -> void:
 
 
 func _skip_night() -> void:
-	current_day += 1
+	day_cycle.start_next_day()
 	# Living through the night crosses 06:00, when the daily water/food sink runs and
 	# frees storage. Skipping must apply the same rules, otherwise stores stay full,
 	# no production is assignable, and workers have nothing to wake up for.
 	_apply_daily_settlement_rules()
-	clock.set_time(8 * 60)
-	active_meal_hour = -1
+	day_cycle.set_to_workday_start()
 	_update_workers()
 	_update_interface("Skipped the night. A fresh working day begins at 08:00.")
 

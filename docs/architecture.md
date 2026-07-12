@@ -18,7 +18,7 @@ game/
     decision/{domain,application}/
     logistics/application/
     production/{domain,application}/
-    simulation/application/
+    simulation/{domain,application}/
     world/presentation/
 ```
 
@@ -57,7 +57,8 @@ create generic `utils`, `helpers`, `managers` or catch-all `services` directorie
 - `decision`: workforce policy, GOAP adapter and work assignment coordination.
 - `logistics`: couriers, canteen deliveries, trade and water collection.
 - `production`: production-specific rules and systems, currently the sawmill.
-- `simulation`: the deterministic clock and simulation-wide scheduling.
+- `simulation`: the deterministic clock, day-cycle events and simulation-wide
+  scheduling.
 - `world`: terrain and world-only presentation. Future routing code belongs in a
   `routing` feature; UI belongs in a `ui/presentation` feature.
 

@@ -8,6 +8,7 @@ func _init() -> void:
 	_test_progression_and_volunteers()
 	_test_work_schedule_wellbeing()
 	_test_clock_wraps_and_reports_elapsed_minutes()
+	_test_day_cycle_schedule()
 	_test_sawmill_rules()
 	_test_workforce_policy()
 	_test_citizen_task_state()
@@ -124,6 +125,26 @@ func _test_clock_wraps_and_reports_elapsed_minutes() -> void:
 	assert(elapsed.size() == 2)
 	assert(elapsed[0] == 0 and elapsed[1] == 1)
 	assert(clock.hour() == 0 and clock.minute() == 1)
+
+
+func _test_day_cycle_schedule() -> void:
+	var cycle := SimulationDayCycle.new()
+	cycle.clock.set_time(8 * 60 + 59)
+	var meal_events := cycle.advance(1.0, 1.0, 8)
+	assert(meal_events.size() == 1)
+	assert(meal_events[0].kind == SimulationDayEvent.Kind.MEAL and meal_events[0].hour == 9)
+	assert(cycle.events_for_minute(9 * 60, 8).is_empty())
+
+	var afternoon_events := cycle.events_for_minute(16 * 60, 8)
+	assert(afternoon_events.size() == 2)
+	assert(afternoon_events[0].kind == SimulationDayEvent.Kind.PARK_REST and afternoon_events[0].cooks_only)
+	assert(afternoon_events[1].kind == SimulationDayEvent.Kind.WORKDAY_ENDED)
+
+	var midnight_events := cycle.events_for_minute(0, 8)
+	assert(midnight_events.size() == 1 and midnight_events[0].kind == SimulationDayEvent.Kind.DAY_STARTED)
+	assert(cycle.current_day == 2)
+	cycle.clock.set_time(0)
+	assert(not cycle.is_work_time(8, false) and cycle.is_work_time(8, true))
 
 
 func _test_sawmill_rules() -> void:
