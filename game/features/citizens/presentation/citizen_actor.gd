@@ -90,9 +90,9 @@ const SKILL_GROWTH_PER_SECOND_WORK := 0.0001
 const FREELANCE_CONSTRUCTION_SKILL_CAP := 0.20
 const COURIER_EQUIPMENT := {
 	"hands": {"capacity": 1, "speed": 1.0},
-	"basket": {"capacity": 2, "speed": 1.05},
-	"backpack": {"capacity": 4, "speed": 1.0},
-	"cart": {"capacity": 6, "speed": 0.82},
+	"simple_backpack": {"capacity": 2, "speed": 1.0},
+	"reinforced_backpack": {"capacity": 4, "speed": 1.0},
+	"cargo_backpack": {"capacity": 6, "speed": 0.95},
 	"bicycle": {"capacity": 4, "speed": 1.40},
 	"bicycle_trailer": {"capacity": 6, "speed": 1.30}
 }
@@ -1594,7 +1594,19 @@ func _process_gathering(delta: float) -> void:
 				carried_amount *= 2
 				if simulation != null:
 					simulation._update_interface("Lumberjack Master: Forester gathered 2 logs!")
-		state = State.TO_WAREHOUSE
+		if simulation != null:
+			if resource_type == "grass":
+				simulation._consume_grass_source(gather_source_position)
+			elif resource_type == "branches":
+				simulation._consume_tree_branches(gather_source_position)
+			if resource_type == "water" and active_role == "gather_water" and not simulation.settlement.use_filter():
+				idle()
+				simulation._update_interface("The water filter is spent. Buy a replacement at the market.")
+				return
+		resource_ready.emit(self, resource_type, carried_amount)
+		carried_amount = 0
+		state = State.IDLE
+		request_goap_decision()
 
 func _process_trade_pickup(delta: float) -> void:
 	if _move_to(trade_source_position, delta):

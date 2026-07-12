@@ -107,60 +107,6 @@ func _get_sorted_citizens() -> Array[Citizen]:
 	return list
 
 
-func _schedule_permanent_vacancies() -> void:
-	# Choose a candidate after the role is known: the strongest forester wins a
-	# forestry vacancy even when another resident has a higher farming skill.
-	var reserved_ids: Dictionary = {}
-	while true:
-		var candidates_by_role: Dictionary = {}
-		for citizen in simulation.citizens:
-			if citizen.is_player_controlled:
-				continue
-			var is_freelance: bool = citizen.employment_state == Citizen.EmploymentState.FREELANCE and citizen.state in [Citizen.State.IDLE, Citizen.State.RESTING] and citizen.freelance_assignment.is_empty()
-			if not is_freelance or reserved_ids.has(citizen.get_instance_id()):
-				continue
-			var role := WorkforcePolicy.permanent_vacancy_for(_worker_data(citizen), _world_data())
-			if role.is_empty():
-				continue
-			if not candidates_by_role.has(role):
-				candidates_by_role[role] = []
-			candidates_by_role[role].append(citizen)
-		if candidates_by_role.is_empty():
-			return
-		var selected_role := ""
-		var selected_citizen: Citizen = null
-		for role in candidates_by_role:
-			var candidates: Array = candidates_by_role[role]
-			candidates.sort_custom(func(a: Citizen, b: Citizen): return float(a.skills.get(role, 0.0)) > float(b.skills.get(role, 0.0)))
-			var candidate: Citizen = candidates[0]
-			if selected_citizen == null or float(candidate.skills.get(role, 0.0)) > float(selected_citizen.skills.get(selected_role, 0.0)):
-				selected_role = role
-				selected_citizen = candidate
-		if selected_citizen == null:
-			return
-		reserved_ids[selected_citizen.get_instance_id()] = true
-		var workplace: Node3D = simulation._employer_for_role(selected_role)
-		if _can_finish_registration_today(selected_citizen):
-			selected_citizen.begin_employment_processing(simulation._employment_center_position(), selected_role, workplace)
-		else:
-			selected_citizen.queue_employment_processing(selected_role, workplace)
-
-
-func _send_to_waiting(citizen: Citizen) -> void:
-	# Show a no-work state first. This gives the dispatcher a chance to recover
-	# from transient shortages and makes the later unemployment registration clear
-	# to the player rather than looking like a worker silently froze.
-	if citizen.state == Citizen.State.IDLE or citizen.state == Citizen.State.RESTING:
-		if not citizen.no_work_wait_complete:
-			citizen.begin_waiting()
-			return
-		citizen.no_work_wait_complete = false
-		if _can_finish_registration_today(citizen):
-			citizen.begin_employment_processing(simulation._employment_center_position())
-		else:
-			citizen.queue_employment_processing()
-
-
 func _employer_exists(role: String) -> bool:
 	match role:
 		"construction":
@@ -303,9 +249,10 @@ func assign_work(citizen: Citizen, index: int) -> void:
 				var craft_pos: Vector3 = _workplace_position(citizen, simulation.craft_tent_positions[index % simulation.craft_tent_positions.size()])
 				citizen.assign_craft_work(craft_pos)
 	# A role can be available in policy while its concrete source is exhausted.
-	# Register unemployment instead of returning to the obsolete waiting loop.
+	# Keep the freelance worker available for a later task instead of changing
+	# their employment status.
 	if citizen.state == Citizen.State.IDLE or citizen.state == Citizen.State.RESTING:
-		_send_to_waiting(citizen)
+		citizen.begin_waiting()
 
 
 func _workplace_position(citizen: Citizen, fallback: Vector3) -> Vector3:

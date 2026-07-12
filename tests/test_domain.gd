@@ -421,7 +421,7 @@ func _test_freelance_construction_skill_cap() -> void:
 
 func _test_courier_equipment_capacity() -> void:
 	var courier := Citizen.new()
-	courier.set_courier_equipment("backpack")
+	courier.set_courier_equipment("reinforced_backpack")
 	assert(courier.courier_capacity() == 4)
 	courier.register_pending_resource("boards", 6)
 	var cargo := courier.take_pending_resource(courier.courier_capacity())

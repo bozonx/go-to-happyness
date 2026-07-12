@@ -41,6 +41,15 @@ func buy_tool(tool_id: String, price: int) -> void:
 	simulation._refresh_market_menu()
 
 
+func buy_courier_equipment(courier: Citizen, equipment_id: String, price: int) -> void:
+	if simulation.selected_market == null or not is_instance_valid(courier):
+		return
+	if courier.employment_state != Citizen.EmploymentState.FREELANCE or courier.freelance_assignment != "courier" or courier.courier_equipment == equipment_id or available_trade_money() < price:
+		return
+	start_trade({"kind": "buy_courier_equipment", "courier_id": courier.get_instance_id(), "equipment": equipment_id, "price": price}, simulation.selected_market.global_position, simulation._get_delivery_position())
+	simulation._refresh_market_menu()
+
+
 func start_trade(trade: Dictionary, source: Vector3, destination: Vector3) -> void:
 	simulation.queued_trades.append({"trade": trade, "source": source, "destination": destination})
 	simulation._request_courier_dispatch()
@@ -61,6 +70,7 @@ func trade_reserved_money() -> int:
 		match str(trade.kind):
 			"buy_resource": reserved += int(trade.quantity) * int(trade.price)
 			"buy_tool": reserved += int(trade.price)
+			"buy_courier_equipment": reserved += int(trade.price)
 	return reserved
 
 
@@ -129,5 +139,12 @@ func on_trade_delivery_finished(worker: Citizen) -> void:
 			if simulation.settlement.buy_tool(str(trade.tool), int(trade.price)):
 				simulation._update_workers()
 				simulation._update_interface("Purchased %s after delivery to storage." % str(trade.tool).replace("_", " "))
+		"buy_courier_equipment":
+			var price := int(trade.price)
+			var courier := instance_from_id(int(trade.courier_id)) as Citizen
+			if is_instance_valid(courier) and simulation.settlement.money >= price:
+				simulation.settlement.money -= price
+				courier.set_courier_equipment(str(trade.equipment))
+				simulation._update_interface("%s received %s." % [courier.role_label(), str(trade.equipment).replace("_", " ")])
 	if simulation.market_menu.visible:
 		simulation._refresh_market_menu()

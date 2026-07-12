@@ -1061,7 +1061,7 @@ func _update_repairs() -> void:
 	if warehouse_positions.is_empty() or branches <= 0 or not _is_work_time():
 		return
 	for builder in citizens:
-		if builder.state != Citizen.State.IDLE or (builder.permanent_role != "construction" and builder.specialization != "builder"):
+		if builder.state != Citizen.State.IDLE or builder.employment_state != Citizen.EmploymentState.FREELANCE or builder.freelance_assignment != "courier":
 			continue
 		for record in building_registry.records():
 			var building := record.node
@@ -1105,14 +1105,6 @@ func _building_power(site_node: Node3D) -> float:
 	return power
 
 func _on_resource_delivered(worker: Citizen, resource_type: String, amount: int) -> void:
-	if resource_type == "grass":
-		_consume_grass_source(worker.gather_source_position)
-	elif resource_type == "branches":
-		_consume_tree_branches(worker.gather_source_position)
-	if resource_type == "water" and worker.active_role == "gather_water" and not settlement.use_filter():
-		worker.idle()
-		_update_interface("The water filter is spent. Buy a replacement at the market.")
-		return
 	if not settlement.reserve_storage_room_for(resource_type, amount, warehouse_positions.size()):
 		# Cargo already in transit must never disappear. It may temporarily exceed
 		# the allocation; scheduling prevents new production until room is freed.
@@ -1247,16 +1239,8 @@ func _on_excavation_cycle(worker: Citizen, site_node: Node3D, efficiency: float)
 			return
 			
 		site.depth += 1
-		var delivery_pos: Vector3 = Vector3.ZERO
-		if not warehouse_positions.is_empty():
-			delivery_pos = warehouse_positions[0]
-		elif is_instance_valid(campfire_node):
-			delivery_pos = campfire_node.global_position
-		else:
-			delivery_pos = entrance_stone.global_position
-			
 		if site.depth <= site.grass_limit:
-			worker.deliver_excavation("grass", delivery_pos)
+			worker.register_pending_resource("grass", 1)
 			var pit_material := StandardMaterial3D.new()
 			pit_material.albedo_color = Color("3e612c") # Grass green
 			site.pit.material_override = pit_material
@@ -1266,19 +1250,19 @@ func _on_excavation_cycle(worker: Citizen, site_node: Node3D, efficiency: float)
 			if worker.skills.get("excavation", 0.0) >= 1.0 and randf() < 0.10:
 				res = "clay" if randf() < 0.5 else "stone"
 				_update_interface("Deep Digger: Digger found rare %s in soil!" % res.capitalize())
-			worker.deliver_excavation(res, delivery_pos)
+			worker.register_pending_resource(res, 1)
 			var pit_material := StandardMaterial3D.new()
 			pit_material.albedo_color = Color("78533b") # Soil brown
 			site.pit.material_override = pit_material
 			_update_interface("Digger is carrying %s to the warehouse." % res)
 		elif site.depth <= site.clay_limit:
-			worker.deliver_excavation("clay", delivery_pos)
+			worker.register_pending_resource("clay", 1)
 			var pit_material := StandardMaterial3D.new()
 			pit_material.albedo_color = Color("a96445") # Clay reddish-brown
 			site.pit.material_override = pit_material
 			_update_interface("Digger is carrying clay to the warehouse.")
 		elif site.depth <= site.stone_limit:
-			worker.deliver_excavation("stone", delivery_pos)
+			worker.register_pending_resource("stone", 1)
 			var pit_material := StandardMaterial3D.new()
 			pit_material.albedo_color = Color("62676a") # Stone grey
 			site.pit.material_override = pit_material
@@ -1295,6 +1279,7 @@ func _on_excavation_cycle(worker: Citizen, site_node: Node3D, efficiency: float)
 			_update_interface("Stone excavation is exhausted; choose another cell.")
 			return
 		dig_sites[index] = site
+		_request_courier_dispatch()
 		return
 
 func _can_work_at_dig_site(site: Dictionary) -> bool:
@@ -3196,12 +3181,8 @@ func _place_dig_site(world_position: Vector3) -> void:
 	if site.is_empty():
 		site = _create_dig_site(cell, world_position)
 	selected_builder.assigned_dig_site = site.node
-	selected_builder.manual_role = "excavation"
-	selected_builder.permanent_role = "excavation"
-	selected_builder.employment_workplace = site.node
-	selected_builder.pending_employment_role = ""
-	selected_builder.pending_employment_workplace = null
-	selected_builder.employment_state = Citizen.EmploymentState.EMPLOYED
+	if selected_builder.employment_state == Citizen.EmploymentState.FREELANCE:
+		selected_builder.begin_employment_processing(_employment_center_position(), "excavation", site.node)
 	dig_mode = false
 	selection_marker.visible = false
 	_update_workers()
@@ -5253,6 +5234,37 @@ func _refresh_market_menu() -> void:
 		market_menu.add_child(btn)
 		y_offset += 32.0
 
+	var equipment_target: Citizen = selected_builder if is_instance_valid(selected_builder) and selected_builder.employment_state == Citizen.EmploymentState.FREELANCE and selected_builder.freelance_assignment == "courier" else null
+	var equipment_offers: Array[Array] = []
+	if settlement.era == SettlementState.Era.TENT:
+		equipment_offers.append(["simple_backpack", 12])
+	elif settlement.era >= SettlementState.Era.CLAY:
+		equipment_offers.append(["reinforced_backpack", 22])
+		equipment_offers.append(["bicycle", 30])
+		if settlement.era >= SettlementState.Era.WOOD:
+			equipment_offers.append(["cargo_backpack", 36])
+			equipment_offers.append(["bicycle_trailer", 48])
+	if not equipment_offers.is_empty():
+		y_offset += 10.0
+		var equipment_label := Label.new()
+		equipment_label.text = "Courier equipment: %s" % (equipment_target.role_label() if equipment_target != null else "select a pinned courier")
+		equipment_label.position = Vector2(16, y_offset)
+		equipment_label.size = Vector2(272, 22)
+		market_menu.add_child(equipment_label)
+		y_offset += 24.0
+		for offer in equipment_offers:
+			var equipment_id: String = offer[0]
+			var equipment_price: int = offer[1]
+			var equipment_button := Button.new()
+			equipment_button.text = "Buy %s (%d Coins)" % [equipment_id.replace("_", " "), equipment_price]
+			equipment_button.position = Vector2(16, y_offset)
+			equipment_button.size = Vector2(272, 28)
+			equipment_button.disabled = not seller_ok or equipment_target == null or equipment_target.courier_equipment == equipment_id or available_money < equipment_price
+			equipment_button.tooltip_text = "Select a pinned courier first" if equipment_target == null else ""
+			equipment_button.pressed.connect(_buy_courier_equipment.bind(equipment_target, equipment_id, equipment_price))
+			market_menu.add_child(equipment_button)
+			y_offset += 32.0
+
 	y_offset += 10.0
 
 	# Emergency food supply: the offer is reduced to what can be paid for and
@@ -5288,6 +5300,10 @@ func _sell_resource(resource_type: String, quantity: int, unit_price: int) -> vo
 
 func _buy_tool(tool_id: String, price: int) -> void:
 	trade_service.buy_tool(tool_id, price)
+
+
+func _buy_courier_equipment(courier: Citizen, equipment_id: String, price: int) -> void:
+	trade_service.buy_courier_equipment(courier, equipment_id, price)
 
 
 func _start_trade(trade: Dictionary, source: Vector3, destination: Vector3) -> void:
@@ -5690,14 +5706,10 @@ func _appoint_official(citizen: Citizen) -> void:
 
 
 func _set_manual_specialist_employment(citizen: Citizen, role: String) -> void:
+	if citizen.employment_state != Citizen.EmploymentState.FREELANCE:
+		return
 	citizen.idle()
-	citizen.manual_role = ""
-	citizen.freelance_assignment = ""
-	citizen.permanent_role = role
-	citizen.employment_workplace = _employer_for_role(role)
-	citizen.pending_employment_role = ""
-	citizen.pending_employment_workplace = null
-	citizen.employment_state = Citizen.EmploymentState.EMPLOYED
+	citizen.begin_employment_processing(_employment_center_position(), role, _employer_for_role(role))
 
 
 func _find_closest_tree_for_citizen(citizen: Citizen) -> Vector3:

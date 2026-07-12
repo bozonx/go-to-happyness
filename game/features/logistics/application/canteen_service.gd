@@ -48,11 +48,6 @@ func update_canteen_delivery() -> void:
 			carrier = citizen
 			break
 	if carrier == null:
-		for citizen in simulation.citizens:
-			if citizen.specialization == "cook" and citizen.state == Citizen.State.IDLE:
-				carrier = citizen
-				break
-	if carrier == null:
 		return
 	var amount: int = mini(carrier.courier_capacity(), mini(simulation.food, capacity - simulation.canteen_food))
 	simulation.food -= amount
