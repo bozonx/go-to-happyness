@@ -37,7 +37,10 @@ func update_canteen_delivery() -> void:
 			cancel_canteen_delivery()
 		else:
 			return
-	if not is_instance_valid(simulation.canteen) or simulation.warehouse_positions.is_empty() or simulation.food <= 0 or simulation.canteen_food >= 12:
+	if not is_instance_valid(simulation.canteen) or simulation.warehouse_positions.is_empty() or simulation.food <= 0:
+		return
+	var capacity := BuildingCatalog.kitchen_food_capacity(str(simulation.canteen.get_meta("building_type", "")))
+	if capacity <= 0 or simulation.canteen_food >= capacity:
 		return
 	var carrier: Citizen = null
 	for citizen in simulation.citizens:
@@ -51,7 +54,7 @@ func update_canteen_delivery() -> void:
 				break
 	if carrier == null:
 		return
-	var amount: int = mini(4, simulation.food)
+	var amount: int = mini(4, mini(simulation.food, capacity - simulation.canteen_food))
 	simulation.food -= amount
 	simulation.pending_canteen_delivery = true
 	simulation.pending_canteen_carrier = carrier

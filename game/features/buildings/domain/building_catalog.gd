@@ -65,6 +65,20 @@ const RESEARCH_COSTS := {
 	"house": {"boards": 10, "logs": 5},
 	"house_lvl2": {"boards": 15, "logs": 10},
 	"house_lvl3": {"boards": 20, "logs": 15},
+	"dugout_kitchen": {"soil": 8, "branches": 4},
+	"clay_bakery": {"clay": 8, "branches": 4},
+	"canteen": {"boards": 8, "logs": 4},
+	"stone_tavern": {"stone": 10, "boards": 6},
+	"brick_restaurant": {"bricks": 14, "boards": 8},
+}
+
+const KITCHEN_FOOD_CAPACITIES := {
+	"cook_campfire": 4,
+	"dugout_kitchen": 6,
+	"clay_bakery": 8,
+	"canteen": 12,
+	"stone_tavern": 16,
+	"brick_restaurant": 20,
 }
 
 const RESEARCH_TECHS := {
@@ -73,48 +87,101 @@ const RESEARCH_TECHS := {
 		"base_duration": 20.0,
 		"required_skill": "craftsman",
 		"target_building": "craft_tent",
+		"prerequisites": [],
 	},
 	"craft_tent_lvl2": {
 		"name": "Ремесленник ур. 2",
 		"base_duration": 40.0,
 		"required_skill": "craftsman",
 		"target_building": "craft_tent_lvl2",
+		"prerequisites": ["craft_tent"],
 	},
 	"craft_tent_lvl3": {
 		"name": "Ремесленник ур. 3",
 		"base_duration": 60.0,
 		"required_skill": "craftsman",
 		"target_building": "craft_tent_lvl3",
+		"prerequisites": ["craft_tent_lvl2"],
 	},
 	"living_tent_lvl2": {
 		"name": "Палатка ур. 2",
 		"base_duration": 30.0,
 		"required_skill": "construction",
 		"target_building": "living_tent_lvl2",
+		"prerequisites": ["living_tent"],
 	},
 	"living_tent_lvl3": {
 		"name": "Палатка ур. 3",
 		"base_duration": 50.0,
 		"required_skill": "construction",
 		"target_building": "living_tent_lvl3",
+		"prerequisites": ["living_tent_lvl2"],
 	},
 	"house": {
 		"name": "Дом ур. 1",
 		"base_duration": 40.0,
 		"required_skill": "construction",
 		"target_building": "house",
+		"prerequisites": [],
 	},
 	"house_lvl2": {
 		"name": "Дом ур. 2",
 		"base_duration": 60.0,
 		"required_skill": "construction",
 		"target_building": "house_lvl2",
+		"prerequisites": ["house"],
 	},
 	"house_lvl3": {
 		"name": "Дом ур. 3",
 		"base_duration": 80.0,
 		"required_skill": "construction",
 		"target_building": "house_lvl3",
+		"prerequisites": ["house_lvl2"],
+	},
+	"dugout_kitchen": {
+		"name": "Кухня ур. 2",
+		"base_duration": 25.0,
+		"required_skill": "construction",
+		"target_building": "dugout_kitchen",
+		"prerequisites": ["cook_campfire"],
+		"effect": "Запас еды: 6",
+		"reward_skill": "cook",
+	},
+	"clay_bakery": {
+		"name": "Кухня ур. 3",
+		"base_duration": 40.0,
+		"required_skill": "construction",
+		"target_building": "clay_bakery",
+		"prerequisites": ["dugout_kitchen"],
+		"effect": "Запас еды: 8",
+		"reward_skill": "cook",
+	},
+	"canteen": {
+		"name": "Кухня ур. 4",
+		"base_duration": 55.0,
+		"required_skill": "construction",
+		"target_building": "canteen",
+		"prerequisites": ["clay_bakery"],
+		"effect": "Запас еды: 12",
+		"reward_skill": "cook",
+	},
+	"stone_tavern": {
+		"name": "Кухня ур. 5",
+		"base_duration": 70.0,
+		"required_skill": "construction",
+		"target_building": "stone_tavern",
+		"prerequisites": ["canteen"],
+		"effect": "Запас еды: 16",
+		"reward_skill": "cook",
+	},
+	"brick_restaurant": {
+		"name": "Кухня ур. 6",
+		"base_duration": 90.0,
+		"required_skill": "construction",
+		"target_building": "brick_restaurant",
+		"prerequisites": ["stone_tavern"],
+		"effect": "Запас еды: 20",
+		"reward_skill": "cook",
 	}
 }
 
@@ -149,3 +216,6 @@ static func research_resources(research_id: String) -> Array[String]:
 	var resources: Array[String] = []
 	for resource_type in RESEARCH_COSTS.get(research_id, {}): resources.append(resource_type)
 	return resources
+
+static func kitchen_food_capacity(building_type: String) -> int:
+	return int(KITCHEN_FOOD_CAPACITIES.get(building_type, 0))

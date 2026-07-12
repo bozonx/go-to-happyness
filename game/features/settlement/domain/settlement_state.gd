@@ -40,6 +40,11 @@ var unlocked_building_levels := {
 	"craft_tent_lvl3": false,
 	"house_lvl2": false,
 	"house_lvl3": false,
+	"dugout_kitchen": false,
+	"clay_bakery": false,
+	"canteen": false,
+	"stone_tavern": false,
+	"brick_restaurant": false,
 }
 var active_research_tech_id := ""
 var active_research_worker_id := -1
@@ -212,9 +217,8 @@ func total_stored_resources() -> int:
 
 
 func can_afford_building(building_type: String) -> bool:
-	if building_type in ["living_tent_lvl2", "living_tent_lvl3", "craft_tent", "craft_tent_lvl2", "craft_tent_lvl3", "house", "house_lvl2", "house_lvl3"]:
-		if not unlocked_building_levels.get(building_type, false):
-			return false
+	if BuildingCatalog.RESEARCH_TECHS.has(building_type) and not unlocked_building_levels.get(building_type, false):
+		return false
 	for resource_type in BuildingCatalog.cost_resources(building_type):
 		if amount(resource_type) < BuildingCatalog.cost_for_resource(building_type, resource_type):
 			return false
@@ -266,15 +270,15 @@ func sell(resource_type: String, quantity: int, unit_price: int) -> bool:
 func can_advance_to(next_era: Era, population: int, housing_slots: int) -> bool:
 	match next_era:
 		Era.EARTH:
-			return era == Era.TENT and has_building("campfire") and has_building("trade_tent") and housing_slots >= population and food >= population and water >= population and has_building("craft_tent_lvl3") and has_building("living_tent_lvl3") and trade_sales >= 1 and _has_tools(["axe", "hand_saw", "shovel", "bucket"])
+			return era == Era.TENT and has_building("campfire") and has_building("trade_tent") and housing_slots >= population and food >= population and water >= population and has_building("craft_tent_lvl3") and has_building("living_tent_lvl3") and trade_sales >= 1 and _has_tools(["axe", "hand_saw", "shovel", "bucket"]) and has_building("toilet_tent_lvl3")
 		Era.CLAY:
-			return era == Era.EARTH and has_building("earth_assembly") and has_building("smithy") and has_building("earth_market") and housing_slots >= population and clay >= 5 and money >= 5 and trade_sales >= 3 and _has_tools(["hoe"])
+			return era == Era.EARTH and has_building("earth_assembly") and has_building("smithy") and has_building("earth_market") and housing_slots >= population and clay >= 5 and money >= 5 and trade_sales >= 3 and _has_tools(["hoe"]) and has_building("toilet_earth_lvl3")
 		Era.WOOD:
-			return era == Era.CLAY and has_building("clay_lodge") and has_building("clay_market") and water >= population and logs >= 10 and money >= 10
+			return era == Era.CLAY and has_building("clay_lodge") and has_building("clay_market") and water >= population and logs >= 10 and money >= 10 and has_building("toilet_clay_lvl3")
 		Era.STONE:
-			return era == Era.WOOD and has_building("wood_town_hall") and has_building("wood_market") and money >= 15 and _has_tools(["pickaxe"]) and has_building("house_lvl3")
+			return era == Era.WOOD and has_building("wood_town_hall") and has_building("wood_market") and money >= 15 and _has_tools(["pickaxe"]) and has_building("house_lvl3") and has_building("toilet_wood_lvl3")
 		Era.BRICK:
-			return era == Era.STONE and has_building("stone_prefecture") and has_building("stone_market") and has_building("masonry_workshop") and stone >= 20 and money >= 20
+			return era == Era.STONE and has_building("stone_prefecture") and has_building("stone_market") and has_building("masonry_workshop") and stone >= 20 and money >= 20 and has_building("toilet_stone_lvl3")
 	return false
 
 
@@ -295,9 +299,23 @@ func _has_tools(required: Array) -> bool:
 
 
 func can_afford_research(research_id: String) -> bool:
+	if not BuildingCatalog.RESEARCH_COSTS.has(research_id):
+		return false
 	for resource_type in BuildingCatalog.research_resources(research_id):
 		if amount(resource_type) < BuildingCatalog.research_cost(research_id, resource_type): return false
 	return true
+
+
+func can_start_building_research(research_id: String) -> bool:
+	if not BuildingCatalog.RESEARCH_TECHS.has(research_id):
+		return false
+	var tech: Dictionary = BuildingCatalog.RESEARCH_TECHS[research_id]
+	if era < BuildingCatalog.era_for(str(tech.target_building)) or unlocked_building_levels.get(tech.target_building, false):
+		return false
+	for prerequisite in tech.get("prerequisites", []):
+		if BuildingCatalog.RESEARCH_TECHS.has(prerequisite) and not unlocked_building_levels.get(prerequisite, false):
+			return false
+	return can_afford_research(research_id)
 
 
 func pay_for_research(research_id: String) -> bool:

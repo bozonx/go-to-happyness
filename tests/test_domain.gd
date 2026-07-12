@@ -386,8 +386,21 @@ func _test_research_mechanics() -> void:
 	state.branches = 5
 	state.grass = 5
 	assert(state.can_afford_research("craft_tent"))
+	assert(state.can_start_building_research("craft_tent"))
+	assert(not state.can_start_building_research("craft_tent_lvl2"))
 	assert(state.pay_for_research("craft_tent"))
 	assert(state.branches == 0 and state.grass == 0)
+	state.unlocked_building_levels["craft_tent"] = true
+	state.branches = 10
+	state.grass = 8
+	assert(state.can_start_building_research("craft_tent_lvl2"))
+	assert(not state.can_afford_building("dugout_kitchen"))
+	state.era = SettlementState.Era.EARTH
+	state.soil = 8
+	state.branches = 4
+	assert(state.can_start_building_research("dugout_kitchen"))
+	assert(BuildingCatalog.kitchen_food_capacity("cook_campfire") == 4)
+	assert(BuildingCatalog.kitchen_food_capacity("brick_restaurant") == 20)
 	
 	var citizen := Citizen.new()
 	citizen._ready()

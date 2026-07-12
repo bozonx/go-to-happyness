@@ -2345,7 +2345,13 @@ func _update_building_research(delta: float) -> void:
 		return
 	
 	var tech_id := settlement.active_research_tech_id
+	if not BuildingCatalog.RESEARCH_TECHS.has(tech_id):
+		_cancel_active_building_research(true, "Research cancelled: invalid technology.")
+		return
 	var tech: Dictionary = BuildingCatalog.RESEARCH_TECHS[tech_id]
+	if not is_instance_valid(campfire_node) or not _is_fire_lit(campfire_node):
+		_cancel_active_building_research(true, "Research cancelled: the Campfire is unavailable. Resources refunded.")
+		return
 	var worker: Citizen = null
 	
 	for citizen in citizens:
@@ -2354,16 +2360,18 @@ func _update_building_research(delta: float) -> void:
 			break
 			
 	if worker == null:
-		settlement.active_research_tech_id = ""
-		settlement.active_research_worker_id = -1
-		_update_interface("Research cancelled: researcher citizen is no longer available.")
-		_refresh_campfire_menu()
+		_cancel_active_building_research(true, "Research cancelled: researcher citizen is no longer available. Resources refunded.")
+		return
+	if worker.state != Citizen.State.RESEARCHING:
+		_cancel_active_building_research(true, "Research cancelled: researcher stopped working. Resources refunded.")
 		return
 		
 	var skill_name: String = tech.required_skill
 	var skill_val := float(worker.skills.get(skill_name, 0.0))
 	var speed_mult := 1.0 + skill_val
 	
+	if worker.global_position.distance_to(campfire_node.get_meta("service_position", campfire_node.global_position)) > 0.15:
+		return
 	settlement.active_research_remaining_time -= delta * speed_mult
 	
 	if research_menu != null and research_menu.visible:
@@ -2373,13 +2381,15 @@ func _update_building_research(delta: float) -> void:
 		var unlocked_building: String = tech.target_building
 		settlement.unlocked_building_levels[unlocked_building] = true
 		
-		var skill_to_upgrade := "craftsman" if skill_name == "craftsman" else "construction"
+		var skill_to_upgrade: String = str(tech.get("reward_skill", "craftsman" if skill_name == "craftsman" else "construction"))
 		worker.skills[skill_to_upgrade] = minf(1.0, float(worker.skills.get(skill_to_upgrade, 0.0)) + 0.20)
 		
 		worker.idle()
 		
 		settlement.active_research_tech_id = ""
 		settlement.active_research_worker_id = -1
+		settlement.active_research_remaining_time = 0.0
+		settlement.active_research_duration = 0.0
 		
 		var b_name: String = BuildingCatalog.definition_for(unlocked_building).get("name", unlocked_building)
 		_update_interface("Research completed: %s unlocked! %s skill improved by 20%%." % [b_name, skill_to_upgrade.capitalize()])
@@ -2478,8 +2488,9 @@ func _refresh_research_menu() -> void:
 		for res in cost_dict:
 			costs_array.append("%d %s" % [cost_dict[res], res])
 		var cost_str := ", ".join(costs_array)
-		
-		desc_lbl.text = "Duration: %ds | Cost: %s | Skill: %s" % [int(tech.base_duration), cost_str, tech.required_skill.capitalize()]
+		var effect_str: String = str(tech.get("effect", ""))
+
+		desc_lbl.text = "Duration: %ds | Cost: %s | Skill: %s%s" % [int(tech.base_duration), cost_str, tech.required_skill.capitalize(), " | %s" % effect_str if not effect_str.is_empty() else ""]
 		desc_lbl.add_theme_font_size_override("font_size", 10)
 		desc_lbl.add_theme_color_override("font_color", Color("a5b5c5"))
 		details_vbox.add_child(desc_lbl)
@@ -2508,18 +2519,21 @@ func _refresh_research_menu() -> void:
 			var start_btn := Button.new()
 			start_btn.text = "Start"
 			
-			var affordable := true
-			for res in cost_dict:
-				if settlement.amount(res) < cost_dict[res]:
-					affordable = false
+			var affordable := settlement.can_afford_research(tech_id)
+			var prerequisites_met := true
+			for prerequisite in tech.get("prerequisites", []):
+				if BuildingCatalog.RESEARCH_TECHS.has(prerequisite) and not settlement.unlocked_building_levels.get(prerequisite, false):
+					prerequisites_met = false
 					break
 			
 			var courier := _get_available_courier_for_research(tech.required_skill)
 			var has_worker := courier != null
-			var can_start := affordable and has_worker and settlement.active_research_tech_id == ""
+			var can_start := settlement.can_start_building_research(tech_id) and has_worker and settlement.active_research_tech_id == ""
 			
 			start_btn.disabled = not can_start
-			if not has_worker:
+			if not prerequisites_met:
+				start_btn.tooltip_text = "Research the previous level first."
+			elif not has_worker:
 				start_btn.tooltip_text = "Requires an idle resident in the reserve (Courier)."
 			elif not affordable:
 				start_btn.tooltip_text = "Not enough resources."
@@ -2530,9 +2544,14 @@ func _refresh_research_menu() -> void:
 			row.add_child(start_btn)
 
 func _start_research(tech_id: String) -> void:
+	if not BuildingCatalog.RESEARCH_TECHS.has(tech_id):
+		return
 	var tech: Dictionary = BuildingCatalog.RESEARCH_TECHS[tech_id]
 	if settlement.active_research_tech_id != "":
 		_update_interface("Already researching another technology.")
+		return
+	if not is_instance_valid(campfire_node) or not _is_fire_lit(campfire_node):
+		_update_interface("Research requires an active Campfire.")
 		return
 		
 	var courier := _get_available_courier_for_research(tech.required_skill)
@@ -2540,8 +2559,8 @@ func _start_research(tech_id: String) -> void:
 		_update_interface("Requires an idle resident in the reserve (Courier).")
 		return
 		
-	if not settlement.can_afford_research(tech_id):
-		_update_interface("Not enough resources for research.")
+	if not settlement.can_start_building_research(tech_id):
+		_update_interface("Research prerequisites or resources are missing.")
 		return
 		
 	settlement.pay_for_research(tech_id)
@@ -2550,9 +2569,7 @@ func _start_research(tech_id: String) -> void:
 	settlement.active_research_worker_id = courier.get_instance_id()
 	
 	var base_duration: float = tech.base_duration
-	var skill_val := float(courier.skills.get(tech.required_skill, 0.0))
-	var speed_mult := 1.0 + skill_val
-	settlement.active_research_duration = base_duration / speed_mult
+	settlement.active_research_duration = base_duration
 	settlement.active_research_remaining_time = settlement.active_research_duration
 	
 	var research_pos := global_position
@@ -2567,24 +2584,26 @@ func _start_research(tech_id: String) -> void:
 func _cancel_research() -> void:
 	if settlement.active_research_tech_id == "":
 		return
-		
+	_cancel_active_building_research(true, "Research cancelled. Resources refunded.")
+	_refresh_research_menu()
+	_refresh_campfire_menu()
+
+
+func _cancel_active_building_research(refund: bool, message: String) -> void:
 	var tech_id := settlement.active_research_tech_id
 	var worker_id := settlement.active_research_worker_id
-	
 	for citizen in citizens:
 		if citizen.get_instance_id() == worker_id:
 			citizen.idle()
 			break
-			
-	var cost_dict: Dictionary = BuildingCatalog.RESEARCH_COSTS.get(tech_id, {})
-	for res in cost_dict:
-		settlement.add(res, cost_dict[res])
-		
+	if refund:
+		for resource_type in BuildingCatalog.research_resources(tech_id):
+			settlement.add(resource_type, BuildingCatalog.research_cost(tech_id, resource_type))
 	settlement.active_research_tech_id = ""
 	settlement.active_research_worker_id = -1
-	
-	_update_interface("Research cancelled. Resources refunded.")
-	_refresh_research_menu()
+	settlement.active_research_remaining_time = 0.0
+	settlement.active_research_duration = 0.0
+	_update_interface(message)
 	_refresh_campfire_menu()
 
 func _spawn_house_citizen() -> void:
@@ -2794,9 +2813,7 @@ func _refresh_build_menu() -> void:
 			button.visible = build_category.is_empty() and not build_menu_is_job_menu and category_era <= settlement.era
 		else:
 			var build_type: String = button.get_meta("build_type", "")
-			var is_unlocked := true
-			if build_type in ["living_tent_lvl2", "living_tent_lvl3", "craft_tent", "craft_tent_lvl2", "craft_tent_lvl3", "house", "house_lvl2", "house_lvl3"]:
-				is_unlocked = settlement.unlocked_building_levels.get(build_type, false)
+			var is_unlocked: bool = not BuildingCatalog.RESEARCH_TECHS.has(build_type) or bool(settlement.unlocked_building_levels.get(build_type, false))
 			button.visible = not build_category.is_empty() and button.get_meta("category", "") == build_category and not build_menu_is_job_menu and is_unlocked
 			
 	for button in role_buttons:
@@ -3395,13 +3412,21 @@ func _update_demolition(delta: float) -> void:
 func _finish_demolition(site: DemolitionSite) -> void:
 	var building: Node3D = site.building
 	var building_type := site.building_type
+	var active_kitchen_removed := canteen == building
 	_return_in_transit_building_supplies(building)
+	if active_kitchen_removed:
+		if pending_canteen_delivery:
+			_cancel_canteen_delivery()
+		food += canteen_food
+		canteen_food = 0
 	for citizen in citizens:
 		citizen.finish_construction(building)
 	_remove_building_services(building, building_type)
 	var removed_record := building_registry.remove_node(building)
 	if removed_record != null:
 		_unregister_navigation_footprint(removed_record.center, removed_record.footprint)
+	if active_kitchen_removed:
+		_select_best_canteen()
 	settlement.buildings[building_type] = maxi(0, int(settlement.buildings.get(building_type, 1)) - 1)
 	for resource_type in BuildingCatalog.demolition_refund(building_type):
 		settlement.add(resource_type, BuildingCatalog.demolition_refund(building_type)[resource_type])
@@ -3978,8 +4003,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			gathering_light.omni_range = 7.0
 			building.add_child(gathering_light)
 		"cook_campfire", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant":
-			canteen = building
-			canteen_position = service_position
+			_activate_kitchen_if_better(building, service_position)
 			_add_building_selector(building, "cook_campfire_selector", blueprint.footprint)
 			var cook_fire_light := OmniLight3D.new()
 			cook_fire_light.position = Vector3(0.0, 0.5, 0.0)
@@ -4020,9 +4044,6 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 		"trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market":
 			_add_building_selector(building, "market_selector", blueprint.footprint)
 			market_positions.append(service_position)
-		"canteen":
-			canteen = building
-			canteen_position = service_position
 		"employment_office":
 			employment_office = building
 			employment_office_position = service_position
@@ -4049,6 +4070,30 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 		completion_message += " It requires 3 factory workers."
 	_update_interface(completion_message)
 	_request_courier_dispatch()
+
+
+func _activate_kitchen_if_better(building: Node3D, service_position: Vector3) -> void:
+	var capacity := BuildingCatalog.kitchen_food_capacity(str(building.get_meta("building_type", "")))
+	var active_capacity := BuildingCatalog.kitchen_food_capacity(str(canteen.get_meta("building_type", ""))) if is_instance_valid(canteen) else 0
+	if capacity >= active_capacity:
+		canteen = building
+		canteen_position = service_position
+
+
+func _select_best_canteen() -> void:
+	var best_kitchen: Node3D = null
+	var best_capacity := 0
+	for record in building_registry.records():
+		var candidate: Node3D = record.node
+		if not is_instance_valid(candidate):
+			continue
+		var capacity := BuildingCatalog.kitchen_food_capacity(str(candidate.get_meta("building_type", "")))
+		if capacity > best_capacity:
+			best_kitchen = candidate
+			best_capacity = capacity
+	canteen = best_kitchen
+	if best_kitchen != null:
+		canteen_position = best_kitchen.get_meta("service_position", best_kitchen.global_position)
 
 func _add_building_selector(building: Node3D, group_name: String, footprint: Vector2i) -> void:
 	var selector := Area3D.new()
