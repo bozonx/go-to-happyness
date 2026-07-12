@@ -191,6 +191,7 @@ var tent: Node3D
 var entrance_stone: Node3D
 var pending_arrivals: Array[Dictionary] = []
 var arrival_greeters: Dictionary = {}
+var arrival_waiting_greeters: Dictionary = {}
 var arrival_escort_ids: Dictionary = {}
 var tent_cell := Vector2i(0, 0)
 var canteen: Node3D
@@ -942,9 +943,7 @@ func _update_construction_supplies() -> void:
 	for courier in citizens:
 		if courier.is_player_controlled or courier.state != Citizen.State.IDLE:
 			continue
-		var is_courier := courier.freelance_assignment == "courier"
-		var is_builder := courier.freelance_assignment == "construction" or courier.permanent_role == "construction"
-		if not is_courier and not is_builder:
+		if courier.freelance_assignment != "courier" or courier.employment_state != Citizen.EmploymentState.FREELANCE:
 			continue
 		for resource_type in site.required_materials:
 			var required := int(site.required_materials[resource_type])
@@ -2681,23 +2680,30 @@ func _spawn_house_citizen() -> void:
 	_show_house_menu()
 	pending_arrivals.append({"house": selected_house})
 	_update_arrivals()
-	_update_interface("A resident is expected at the entrance stone. A courier or free resident is going to meet them.")
+	_update_interface("A resident is expected at the entrance stone. A free freelance worker will meet them.")
 
 
-func _find_arrival_greeter() -> Citizen:
-	# Dedicated couriers take arrivals first. With no courier, only a genuinely
-	# free resident is diverted; employed workers keep their current profession.
+func _find_arrival_greeter(allow_busy := false) -> Citizen:
+	var best: Citizen = null
+	var best_score := INF
 	for citizen in citizens:
-		if citizen.is_player_controlled or citizen.state != Citizen.State.IDLE:
+		if citizen.is_player_controlled or citizen.employment_state != Citizen.EmploymentState.FREELANCE:
 			continue
-		if citizen.freelance_assignment == "courier":
-			return citizen
-	for citizen in citizens:
-		if citizen.is_player_controlled or citizen.state != Citizen.State.IDLE:
+		if citizen.has_active_arrival_task() or citizen.pending_arrival_entrance != Vector3.INF:
 			continue
-		if citizen.employment_state == Citizen.EmploymentState.FREELANCE:
-			return citizen
-	return null
+		var is_free := citizen.state in [Citizen.State.IDLE, Citizen.State.RESTING]
+		if not is_free and not allow_busy:
+			continue
+		if not is_free and citizen.has_active_delivery():
+			# Never abandon cargo. The next candidate will be considered instead.
+			continue
+		var score := citizen.global_position.distance_to(entrance_stone.global_position)
+		if not is_free:
+			score += citizen.task_timer.remaining * Citizen.WALK_SPEED
+		if score < best_score:
+			best = citizen
+			best_score = score
+	return best
 
 
 func _update_arrivals() -> void:
@@ -2715,16 +2721,39 @@ func _update_arrivals() -> void:
 				arrival_escort_ids.erase(citizen.get_instance_id())
 			else:
 				citizen.begin_employment_processing(_employment_center_position())
+	for greeter_id in arrival_waiting_greeters.keys():
+		var waiting_greeter := instance_from_id(greeter_id) as Citizen
+		var waiting_order: Dictionary = arrival_waiting_greeters[greeter_id]
+		if not is_instance_valid(waiting_greeter) or waiting_greeter.employment_state != Citizen.EmploymentState.FREELANCE:
+			arrival_waiting_greeters.erase(greeter_id)
+			_requeue_arrival_order(waiting_order)
+			continue
+		if waiting_greeter.has_active_arrival_task():
+			arrival_waiting_greeters.erase(greeter_id)
+			arrival_greeters[greeter_id] = waiting_order
+			continue
+		if waiting_greeter.state in [Citizen.State.IDLE, Citizen.State.RESTING]:
+			waiting_greeter.go_to_arrival_entrance(entrance_stone.global_position)
+			arrival_waiting_greeters.erase(greeter_id)
+			arrival_greeters[greeter_id] = waiting_order
 	for index in pending_arrivals.size():
 		var order: Dictionary = pending_arrivals[index]
 		if bool(order.get("dispatched", false)):
 			continue
 		var greeter := _find_arrival_greeter()
+		var deferred := false
+		if greeter == null:
+			greeter = _find_arrival_greeter(true)
+			deferred = greeter != null
 		if greeter == null:
 			continue
 		order.dispatched = true
 		order.greeter_id = greeter.get_instance_id()
 		pending_arrivals[index] = order
+		if deferred:
+			arrival_waiting_greeters[greeter.get_instance_id()] = order
+			greeter.request_arrival_greeting(entrance_stone.global_position)
+			continue
 		arrival_greeters[greeter.get_instance_id()] = order
 		if not _is_work_time():
 			greeter.satisfaction = maxf(0.0, greeter.satisfaction - 6.0)
@@ -2763,18 +2792,33 @@ func _on_arrival_greeter_ready(greeter: Citizen) -> void:
 
 
 func _requeue_interrupted_arrivals() -> void:
+	for greeter_id in arrival_waiting_greeters.keys():
+		var waiting_greeter := instance_from_id(greeter_id) as Citizen
+		if is_instance_valid(waiting_greeter) and waiting_greeter.has_active_arrival_task():
+			arrival_greeters[greeter_id] = arrival_waiting_greeters[greeter_id]
+			arrival_waiting_greeters.erase(greeter_id)
+			continue
+		if is_instance_valid(waiting_greeter) and waiting_greeter.pending_arrival_entrance != Vector3.INF:
+			continue
+		var waiting_order: Dictionary = arrival_waiting_greeters[greeter_id]
+		arrival_waiting_greeters.erase(greeter_id)
+		_requeue_arrival_order(waiting_order)
 	for greeter_id in arrival_greeters.keys():
 		var greeter: Citizen = instance_from_id(greeter_id) as Citizen
 		if is_instance_valid(greeter) and greeter.has_active_arrival_task():
 			continue
 		var order: Dictionary = arrival_greeters[greeter_id]
 		arrival_greeters.erase(greeter_id)
-		for index in pending_arrivals.size():
-			if pending_arrivals[index] == order:
-				order.dispatched = false
-				order.erase("greeter_id")
-				pending_arrivals[index] = order
-				break
+		_requeue_arrival_order(order)
+
+
+func _requeue_arrival_order(order: Dictionary) -> void:
+	for index in pending_arrivals.size():
+		if pending_arrivals[index] == order:
+			order.dispatched = false
+			order.erase("greeter_id")
+			pending_arrivals[index] = order
+			return
 
 
 func _cancel_arrivals_for_house(house: Node3D) -> void:
@@ -2786,9 +2830,12 @@ func _cancel_arrivals_for_house(house: Node3D) -> void:
 		var greeter_id := int(order.get("greeter_id", -1))
 		if greeter_id >= 0:
 			arrival_greeters.erase(greeter_id)
+			arrival_waiting_greeters.erase(greeter_id)
 			var greeter: Citizen = instance_from_id(greeter_id) as Citizen
-			if is_instance_valid(greeter) and greeter.has_active_arrival_task():
-				greeter.idle()
+			if is_instance_valid(greeter):
+				greeter.pending_arrival_entrance = Vector3.INF
+				if greeter.has_active_arrival_task():
+					greeter.idle()
 		pending_arrivals.remove_at(index)
 		cancelled = true
 	if cancelled:

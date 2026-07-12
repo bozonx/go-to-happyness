@@ -148,6 +148,7 @@ var school_position := Vector3.ZERO
 var official_position := Vector3.ZERO
 var research_position := Vector3.ZERO
 var arrival_position := Vector3.INF
+var pending_arrival_entrance := Vector3.INF
 var factory: Node3D
 var factory_position := Vector3.ZERO
 var park_position := Vector3.ZERO
@@ -450,8 +451,9 @@ func _process_resource_delivery(delta: float) -> void:
 
 func _process_courier_wait(delta: float) -> void:
 	if task_timer.advance(delta):
-		pending_resources[resource_type] = maxi(0, int(pending_resources.get(resource_type, 0)) - carried_amount)
-		state = State.TO_WAREHOUSE
+		if _start_pending_arrival_if_any():
+			return
+		state = State.TO_TREE
 
 func _process_construction(delta: float) -> void:
 	if is_instance_valid(construction_site):
@@ -605,6 +607,8 @@ func _process_factory_work(delta: float) -> void:
 		return
 	if _work(delta):
 		factory_cycle.emit(self, factory)
+		if _start_pending_arrival_if_any():
+			return
 		_start_task(WORK_DURATION / get_efficiency(active_role))
 
 func _process_go_to_park(delta: float) -> void:
@@ -651,6 +655,21 @@ func go_to_arrival_entrance(entrance_position: Vector3) -> void:
 		return
 	arrival_position = entrance_position
 	state = State.TO_ARRIVAL_ENTRANCE
+
+
+func request_arrival_greeting(entrance_position: Vector3) -> void:
+	if is_player_controlled or employment_state != EmploymentState.FREELANCE:
+		return
+	pending_arrival_entrance = entrance_position
+
+
+func _start_pending_arrival_if_any() -> bool:
+	if pending_arrival_entrance == Vector3.INF:
+		return false
+	var entrance := pending_arrival_entrance
+	pending_arrival_entrance = Vector3.INF
+	go_to_arrival_entrance(entrance)
+	return true
 
 
 func has_active_arrival_task() -> bool:
@@ -1079,6 +1098,8 @@ func deliver_sawmill_boards(amount: int) -> void:
 	state = State.TO_WAREHOUSE
 
 func assign_next_forestry_tree(tree_position: Vector3) -> void:
+	if _start_pending_arrival_if_any():
+		return
 	source_position = tree_position
 	state = State.TO_TREE
 
@@ -1351,6 +1372,7 @@ func idle() -> void:
 	construction_site = null
 	assigned_dig_site = null
 	factory = null
+	_start_pending_arrival_if_any()
 
 func begin_waiting() -> void:
 	# Enter the pre-rest waiting window. Idempotent: repeated calls (e.g. a retry

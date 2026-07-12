@@ -33,14 +33,7 @@ func tick(delta: float, now_seconds: float) -> void:
 
 
 func decide_delivery(worker: Citizen, position: Vector3, now_seconds: float) -> void:
-	var stock := stock_at(position, now_seconds)
-	var boards := int(stock.boards)
-	if SawmillRules.should_worker_deliver(stock, simulation._has_courier(), now_seconds, simulation.SAWMILL_WORKER_DELIVERY_THRESHOLD, simulation.COURIER_LATE_SECONDS):
-		var amount := mini(boards, simulation.SAWMILL_WORKER_DELIVERY_THRESHOLD)
-		stock.boards = boards - amount
-		store(position, stock)
-		worker.deliver_sawmill_boards(amount)
-		return
+	# Boards remain at the sawmill until a courier collects them.
 	simulation._assign_next_forestry_tree(worker)
 
 

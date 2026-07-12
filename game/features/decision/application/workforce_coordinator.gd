@@ -259,7 +259,9 @@ func assign_work(citizen: Citizen, index: int) -> void:
 					citizen.assign_work("wood", tree_position, sawmill_position, simulation.warehouse_positions[index % simulation.warehouse_positions.size()])
 		"farming":
 			var farm_position: Vector3 = _workplace_position(citizen, simulation.farm_positions[index % simulation.farm_positions.size()])
-			citizen.assign_work("food", farm_position, farm_position, simulation.warehouse_positions[index % simulation.warehouse_positions.size()], simulation._has_courier())
+			# Farm output is always collected by couriers; production staff never
+			# switch to transport when the courier pool is empty.
+			citizen.assign_work("food", farm_position, farm_position, simulation.warehouse_positions[index % simulation.warehouse_positions.size()], true)
 		"excavation":
 			var dig_site := citizen.employment_workplace if is_instance_valid(citizen.employment_workplace) else citizen.assigned_dig_site
 			if not is_instance_valid(dig_site) or not simulation._can_work_at_dig_site(simulation._dig_site_for_node(dig_site)):
