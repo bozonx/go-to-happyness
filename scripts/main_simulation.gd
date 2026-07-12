@@ -651,6 +651,9 @@ func _on_canteen_delivery_finished(worker: Citizen, amount: int) -> void:
 func _update_couriers() -> void:
 	if warehouse_positions.is_empty():
 		return
+	for courier in citizens:
+		if courier.specialization == "courier" and courier.state == Citizen.State.WAITING:
+			courier.idle()
 	_update_firewood_supplies()
 	_update_resource_pile_supplies()
 	_update_construction_supplies()
@@ -971,10 +974,12 @@ func _on_resource_delivered(worker: Citizen, resource_type: String, amount: int)
 		settlement.add(resource_type, amount)
 		_finish_storage_delivery(worker, resource_type)
 		_update_interface("Workers delivered %d %s over the storage limit. New collection is paused." % [amount, resource_type])
+		_request_courier_dispatch()
 		return
 	settlement.add(resource_type, amount)
 	_finish_storage_delivery(worker, resource_type)
 	_update_interface("Workers delivered %d %s to the warehouse." % [amount, resource_type])
+	_request_courier_dispatch()
 
 func _finish_storage_delivery(worker: Citizen, resource_type: String) -> void:
 	if settlement.can_make_room_for(resource_type, 1, warehouse_positions.size()):
@@ -1013,6 +1018,7 @@ func _materials_factory_staffed(factory: Node3D) -> bool:
 
 func _on_resource_ready(worker: Citizen, resource_type: String, amount: int) -> void:
 	worker.register_pending_resource(resource_type, amount)
+	_request_courier_dispatch()
 
 func _sawmill_key(position_on_board: Vector3) -> Vector2i:
 	return _cell_from_position(position_on_board)
@@ -1025,6 +1031,7 @@ func _store_sawmill_stock(position_on_board: Vector3, stock: Dictionary) -> void
 
 func _on_logs_delivered(worker: Citizen, sawmill_position: Vector3, amount: int) -> void:
 	sawmills.accept_logs(worker, sawmill_position, amount, runtime_seconds)
+	_request_courier_dispatch()
 
 func _update_sawmills(delta: float) -> void:
 	sawmills.tick(delta, runtime_seconds)
@@ -1034,6 +1041,11 @@ func _decide_forestry_delivery(worker: Citizen, sawmill_position: Vector3) -> vo
 
 func _on_sawmill_boards_collected(courier: Citizen, sawmill_position: Vector3) -> void:
 	sawmills.collect_boards(courier, sawmill_position, runtime_seconds)
+	_request_courier_dispatch()
+
+func _request_courier_dispatch() -> void:
+	if _is_work_time():
+		_update_couriers()
 
 func _sawmill_with_boards() -> Vector3:
 	return sawmills.position_with_boards(runtime_seconds)
@@ -3604,6 +3616,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 	if building_type in ["recycling_factory", "metal_factory"]:
 		completion_message += " It requires 3 factory workers."
 	_update_interface(completion_message)
+	_request_courier_dispatch()
 
 func _add_building_selector(building: Node3D, group_name: String, footprint: Vector2i) -> void:
 	var selector := Area3D.new()

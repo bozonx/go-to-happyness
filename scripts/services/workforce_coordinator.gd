@@ -65,6 +65,10 @@ func update_workers() -> void:
 			continue
 		if citizen.employment_state == Citizen.EmploymentState.MANUAL_COURIER:
 			continue
+		# Couriers are dispatched directly by MainSimulation. They must remain in
+		# the idle reserve pool instead of entering the generic no-work waiting loop.
+		if citizen.specialization == "courier":
+			continue
 		if citizen.employment_state == Citizen.EmploymentState.UNEMPLOYED or not citizen.auto_mode_enabled:
 			continue
 		# A free productive workplace turns an automatic reserve worker into a
