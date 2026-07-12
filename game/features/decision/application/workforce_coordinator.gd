@@ -69,6 +69,8 @@ func update_workers() -> void:
 		# generic work scorer while they are waiting for an order.
 		if citizen.freelance_assignment == "courier":
 			continue
+		if not citizen.can_recheck_automatic_role():
+			continue
 		if can_assign_work(citizen):
 			# Pull free citizens onto work: the genuinely idle and the ones resting
 			# at home (morning wake-up / rest-fallback from an earlier work drought).
@@ -150,6 +152,8 @@ func assign_work(citizen: Citizen, index: int) -> void:
 	if not can_assign_work(citizen):
 		return
 	var role := work_role_for(citizen)
+	if citizen.employment_state == Citizen.EmploymentState.FREELANCE and citizen.freelance_assignment.is_empty():
+		citizen.last_automatic_role = role
 	if role == "cook":
 		citizen.assign_canteen_work(_workplace_position(citizen, simulation.canteen_position))
 		return
@@ -294,6 +298,7 @@ func _worker_data(citizen: Citizen) -> Dictionary:
 		"specialization": citizen.specialization,
 		"manual_role": citizen.manual_role,
 		"freelance_assignment": citizen.freelance_assignment,
+		"last_automatic_role": citizen.last_automatic_role,
 		"training_role": citizen.training_role,
 		"training_days_completed": citizen.training_days_completed,
 		"permanent_role": citizen.permanent_role,

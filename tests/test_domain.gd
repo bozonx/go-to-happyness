@@ -26,6 +26,7 @@ func _init() -> void:
 	_test_courier_metadata()
 	_test_construction_delivery_stays_scheduled()
 	_test_freelance_construction_skill_cap()
+	_test_freelance_role_recheck_cooldown()
 	_test_courier_equipment_capacity()
 	_test_research_mechanics()
 	quit(0)
@@ -223,6 +224,8 @@ func _test_workforce_policy() -> void:
 	assert(WorkforcePolicy.can_take_queued_job({"idle": true, "manual_role": "", "player_controlled": false}))
 	assert(not WorkforcePolicy.can_take_queued_job({"idle": true, "manual_role": "farming", "player_controlled": false}))
 	assert(not WorkforcePolicy.can_take_queued_job({"idle": true, "manual_role": "unassigned", "player_controlled": false}))
+	var stable_freelancer := {"specialization": "unassigned", "last_automatic_role": "gather_grass"}
+	assert(WorkforcePolicy.role_for(stable_freelancer, {"hour": 9, "trees": 1, "population": 1}) == "gather_grass")
 
 
 func _test_citizen_task_state() -> void:
@@ -454,6 +457,16 @@ func _test_freelance_construction_skill_cap() -> void:
 	worker.satisfaction_tick = 10.0
 	worker._update_satisfaction(0.0)
 	assert(float(worker.skills.construction) > Citizen.FREELANCE_CONSTRUCTION_SKILL_CAP)
+	worker.free()
+
+
+func _test_freelance_role_recheck_cooldown() -> void:
+	var worker := Citizen.new()
+	worker.employment_state = Citizen.EmploymentState.FREELANCE
+	worker.begin_role_recheck_cooldown()
+	assert(worker.role_recheck_remaining >= Citizen.ROLE_RECHECK_MIN_DELAY)
+	assert(worker.role_recheck_remaining <= Citizen.ROLE_RECHECK_MAX_DELAY)
+	assert(not worker.can_recheck_automatic_role())
 	worker.free()
 
 

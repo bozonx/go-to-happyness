@@ -79,6 +79,11 @@ static func _automatic_role_for(worker: Dictionary, world: Dictionary) -> String
 		can_use_preferred = true
 	if _role_available(preferred, world) and preferred != "construction" and can_use_preferred:
 		_add_score(scores, preferred, 50 - _assigned(world, preferred) * 5)
+	var last_role := str(worker.get("last_automatic_role", ""))
+	if not last_role.is_empty() and last_role != "construction" and _role_available(last_role, world) and _automatic_role_has_open_slot(last_role, world):
+		# A modest hysteresis bonus keeps a freelancer on a still-useful profession,
+		# but essential shortages and empty workplaces can still override it.
+		_add_score(scores, last_role, int(scores.get(last_role, 35)) + 15)
 	if scores.is_empty():
 		return "gather_branches"
 	var best_role := ""

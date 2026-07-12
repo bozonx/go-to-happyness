@@ -107,6 +107,10 @@ const COURIER_EQUIPMENT := {
 const SKILL_GROWTH_PER_SCHOOL_DAY := 0.01
 const SKILL_DECAY_RATE := 0.005
 const SKILL_MIN_FLOOR := 0.10
+const ROLE_RECHECK_MIN_DELAY := 0.75
+const ROLE_RECHECK_MAX_DELAY := 1.5
+var role_recheck_remaining := 0.0
+var last_automatic_role := ""
 var assigned_dig_site: Node3D
 var uses_courier := false
 var returning_to_excavation := false
@@ -291,6 +295,7 @@ func assign_work(next_resource_type: String, source: Vector3, workplace: Vector3
 func _physics_process(delta: float) -> void:
 	if is_player_controlled:
 		return
+	role_recheck_remaining = maxf(0.0, role_recheck_remaining - delta)
 	if goap_brain != null:
 		goap_brain.tick(delta)
 	if state not in [State.IDLE, State.WAITING]:
@@ -554,6 +559,7 @@ func _process_construction_delivery(delta: float) -> void:
 		building_supply_kind = "construction"
 		construction_site = null
 		state = State.IDLE
+		begin_role_recheck_cooldown()
 
 func _process_go_home(delta: float) -> void:
 	if not is_instance_valid(home):
@@ -1104,7 +1110,7 @@ func finish_construction(site: Node3D) -> void:
 	path_destination = Vector3.INF
 	navigation_target_position = Vector3.INF
 	state = State.IDLE
-	request_goap_decision()
+	begin_role_recheck_cooldown()
 
 func assign_excavation(site: Node3D) -> void:
 	if is_player_controlled:
@@ -1134,7 +1140,7 @@ func storage_delivery_result(accepted: bool) -> void:
 			forestry_tree_requested.emit(self)
 		elif active_role.begins_with("gather_"):
 			state = State.IDLE
-			request_goap_decision()
+			begin_role_recheck_cooldown()
 		else:
 			state = State.TO_TREE
 		returning_to_excavation = false
@@ -1351,6 +1357,15 @@ func setup_goap(next_simulation: Node, worker_index: int) -> void:
 func request_goap_decision() -> void:
 	if goap_brain != null:
 		goap_brain.request_decision()
+
+
+func begin_role_recheck_cooldown() -> void:
+	if employment_state == EmploymentState.FREELANCE and freelance_assignment.is_empty():
+		role_recheck_remaining = randf_range(ROLE_RECHECK_MIN_DELAY, ROLE_RECHECK_MAX_DELAY)
+
+
+func can_recheck_automatic_role() -> bool:
+	return role_recheck_remaining <= 0.0
 
 func request_goap_meal() -> void:
 	if goap_brain != null:

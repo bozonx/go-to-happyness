@@ -397,6 +397,8 @@ func _can_assign_goap_work(citizen: Citizen) -> bool:
 	# unemployment registration. GOAP must not restart the same failed task first.
 	if citizen.no_work_wait_complete:
 		return false
+	if citizen.employment_state == Citizen.EmploymentState.FREELANCE and citizen.freelance_assignment.is_empty() and not citizen.can_recheck_automatic_role():
+		return false
 	return workforce.can_assign_work(citizen)
 
 func _assign_goap_work(citizen: Citizen, index: int) -> void:
@@ -4526,7 +4528,7 @@ func _try_resume_work(citizen: Citizen) -> bool:
 	# Called from a waiting citizen to grab a job the instant one frees up. Assign
 	# directly (not via a deferred GOAP request) so we can report real success:
 	# assign_work leaves the citizen WAITING when no concrete slot was available.
-	if not _is_work_time() or not workforce.can_assign_work(citizen):
+	if not _is_work_time() or not citizen.can_recheck_automatic_role() or not workforce.can_assign_work(citizen):
 		return false
 	var index := citizen.goap_brain.worker_index if is_instance_valid(citizen.goap_brain) else 0
 	workforce.assign_work(citizen, index)

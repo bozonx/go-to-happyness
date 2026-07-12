@@ -67,7 +67,7 @@ func _available_couriers() -> Array[Citizen]:
 			continue
 		if citizen.freelance_assignment == "courier":
 			pinned.append(citizen)
-		elif citizen.freelance_assignment.is_empty():
+		elif citizen.freelance_assignment.is_empty() and citizen.can_recheck_automatic_role():
 			flexible.append(citizen)
 	return pinned if not pinned.is_empty() else flexible
 
