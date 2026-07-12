@@ -104,6 +104,7 @@ var pond_positions: Array[Vector3] = []
 var forager_positions: Array[Vector3] = []
 var school_positions: Array[Vector3] = []
 var market_positions: Array[Vector3] = []
+var craft_tent_positions: Array[Vector3] = []
 var park_positions: Array[Vector3] = []
 var leisure_positions: Array[Vector3] = []
 var factories: Array[Node3D] = []
@@ -228,6 +229,7 @@ var building_seller_button: Button
 var building_accept_workers_button: Button
 var building_dismiss_worker_button: Button
 var building_close_button: Button
+var building_cancel_construction_button: Button
 var job_submenu_btn: Button
 var job_back_btn: Button
 var house_lights: Array[Dictionary] = []
@@ -622,6 +624,14 @@ func _update_couriers() -> void:
 				courier.assign_courier_pickup(courier.courier_worker, warehouse_positions[0])
 				continue
 			courier.courier_worker = null
+		
+		# Trade orders have highest priority — couriers deliver market orders first
+		if not queued_trades.is_empty():
+			var order: Dictionary = queued_trades.pop_front()
+			pending_trades[courier.get_instance_id()] = order.trade
+			courier.deliver_trade(order.source, order.destination)
+			_update_interface("Courier is delivering a trade order.")
+			continue
 		
 		# Courier water logistics
 		var water_needed := water < citizens.size() * 2
@@ -1618,7 +1628,7 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	build_menu.add_child(job_back_btn)
 	
 	# Role buttons in job submenu
-	_add_role_button("Auto task", "", 136)
+	_add_role_button("Auto task (Unassign)", "", 136)
 	_add_role_button("Assign: construction", "construction", 170)
 	_add_role_button("Assign: forestry (logs/timber)", "forestry", 204)
 	_add_role_button("Assign: farming", "farming", 238)
@@ -1627,6 +1637,7 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_role_button("Assign: gather grass", "gather_grass", 340)
 	_add_role_button("Assign: forage food", "gather_food", 374)
 	_add_role_button("Assign: courier", "courier", 408)
+	_add_role_button("Assign: craftsman", "craftsman", 442)
 	
 	# Era category buttons (shown on main build menu)
 	_add_build_category_button("Tent era", "tent", 136)
@@ -2051,7 +2062,16 @@ func _refresh_build_menu() -> void:
 		button.visible = build_menu_is_job_menu and selected_exists and _is_role_available(role)
 		if button.visible:
 			var base_title: String = button.get_meta("base_title", button.text)
-			button.text = "%s  [%d]" % [base_title, _assigned_count_for_role(role)] if not role.is_empty() else base_title
+			if role.is_empty():
+				button.text = base_title
+			else:
+				var skill_val := float(selected_builder.skills.get(role, 0.0))
+				var active_cnt := _workforce_role_count(role)
+				var limit := _workforce_role_limit(role)
+				var limit_str := ""
+				if limit >= 0:
+					limit_str = "/%d" % limit
+				button.text = "%s (Skill: %d%%) [%d%s]" % [base_title, roundi(skill_val * 100.0), active_cnt, limit_str]
 
 	# Lay the visible building buttons out in a single column and annotate each
 	# with its resource cost. Unaffordable buildings are disabled and dimmed.
@@ -2161,6 +2181,7 @@ func _is_role_available(role: String) -> bool:
 		"factory_worker": return _available_employer_capacity("factory_worker") > 0
 		"engineer": return _available_employer_capacity("engineer") > 0
 		"courier": return not warehouse_positions.is_empty()
+		"craftsman": return not craft_tent_positions.is_empty()
 	return false
 
 func _assigned_count_for_role(role: String) -> int:
@@ -2217,6 +2238,7 @@ func _employer_types_for_role(role: String) -> Array[String]:
 		"seller": return ["trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market"]
 		"factory_worker": return ["brick_factory", "materials_factory", "recycling_factory", "metal_factory"]
 		"engineer": return ["materials_factory"]
+		"craftsman": return ["craft_tent"]
 	return []
 
 
@@ -2235,7 +2257,7 @@ func _is_staffed_workplace(building: Node3D) -> bool:
 	if not is_instance_valid(building):
 		return false
 	var building_type := str(building.get_meta("building_type", ""))
-	for role in ["construction", "forestry", "farming", "gather_food", "cook", "teacher", "seller", "factory_worker", "engineer"]:
+	for role in ["construction", "forestry", "farming", "gather_food", "cook", "teacher", "seller", "factory_worker", "engineer", "craftsman"]:
 		if building_type in _employer_types_for_role(role):
 			return true
 	return false
@@ -2246,6 +2268,8 @@ func _employer_capacity(role: String, building: Node3D) -> int:
 		return 3 if building.get_meta("building_type", "") == "construction_company" else 1
 	if role == "factory_worker":
 		return int(building.get_meta("required_factory_workers", 1))
+	if role == "craftsman":
+		return 1
 	return 1
 
 func _start_dig_assignment() -> void:
@@ -2529,6 +2553,10 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 		_show_materials_factory_menu()
 		_update_interface("Materials factory selected. Start brick construction research here.")
 		return
+	if hit.collider.is_in_group("construction_selector"):
+		selected_building = hit.collider.get_parent() as Node3D
+		_show_building_menu()
+		return
 	if hit.collider.is_in_group("building_selector"):
 		selected_building = hit.collider.get_parent() as Node3D
 		_show_building_menu()
@@ -2661,6 +2689,7 @@ func _remove_building_services(building: Node3D, building_type: String) -> void:
 		"school": school_positions.erase(service_position)
 		"park": park_positions.erase(service_position)
 		"leisure_center": leisure_positions.erase(service_position)
+		"craft_tent": craft_tent_positions.erase(service_position)
 		"trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market":
 			market_positions.erase(service_position)
 		"campfire", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall":
@@ -3232,6 +3261,8 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			_house_initial_residents(building)
 		"dew_collector":
 			water_collectors.append({"node": building, "rate": 0.12, "accum": 0.0, "stored": 0, "capacity": 10})
+		"craft_tent":
+			craft_tent_positions.append(service_position)
 		"trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market":
 			_add_building_selector(building, "market_selector", blueprint.footprint)
 			market_positions.append(service_position)
@@ -3663,7 +3694,7 @@ func _refresh_campfire_occupancy_button() -> void:
 
 
 func _workforce_roles() -> Array[String]:
-	return ["construction", "forestry", "farming", "excavation", "gather_food", "cook", "teacher", "seller", "factory_worker", "engineer", "gather_branches", "gather_grass", "gather_dew", "gather_water", "courier"]
+	return ["construction", "forestry", "farming", "excavation", "gather_food", "cook", "teacher", "seller", "factory_worker", "engineer", "gather_branches", "gather_grass", "gather_dew", "gather_water", "courier", "craftsman"]
 
 
 func _workforce_role_label(role: String) -> String:
@@ -3674,7 +3705,7 @@ func _workforce_role_label(role: String) -> String:
 		"gather_dew": "Collect dew", "gather_water": "Collect water",
 		"cook": "Cook", "teacher": "Teacher", "seller": "Seller",
 		"factory_worker": "Factory worker", "engineer": "Engineer",
-		"courier": "Courier"
+		"courier": "Courier", "craftsman": "Craftsman"
 	}
 	return str(labels.get(role, role.replace("_", " ").capitalize()))
 
@@ -3691,14 +3722,21 @@ func _workforce_role_limit(role: String) -> int:
 		"seller": return market_positions.size()
 		"factory_worker": return workforce._factory_job_capacity()
 		"engineer": return workforce._engineer_job_capacity()
+		"craftsman": return craft_tent_positions.size()
 	return -1
 
 
 func _workforce_role_count(role: String) -> int:
 	var count := 0
 	for citizen in citizens:
-		if not citizen.is_player_controlled and citizen.manual_role != "unassigned" and _work_role_for(citizen) == role:
-			count += 1
+		if citizen.is_player_controlled or citizen.manual_role == "unassigned":
+			continue
+		if role == "courier":
+			if citizen.specialization == "courier":
+				count += 1
+		else:
+			if _work_role_for(citizen) == role:
+				count += 1
 	return count
 
 
@@ -3834,11 +3872,17 @@ func _employment_state_count(state: int) -> int:
 func _employment_role_count(role: String, state: int) -> int:
 	var count := 0
 	for citizen in citizens:
-		if citizen.is_player_controlled or citizen.employment_state != state:
+		if citizen.is_player_controlled:
 			continue
-		var citizen_role := citizen.permanent_role if state == Citizen.EmploymentState.EMPLOYED else citizen.pending_employment_role
-		if citizen_role == role:
-			count += 1
+		if role == "courier":
+			if state == Citizen.EmploymentState.EMPLOYED and citizen.employment_state == Citizen.EmploymentState.MANUAL_COURIER:
+				count += 1
+		else:
+			if citizen.employment_state != state:
+				continue
+			var citizen_role := citizen.permanent_role if state == Citizen.EmploymentState.EMPLOYED else citizen.pending_employment_role
+			if citizen_role == role:
+				count += 1
 	return count
 
 
@@ -4114,6 +4158,7 @@ func _refresh_market_menu() -> void:
 	sell_items.append(["branches", 1])
 	sell_items.append(["grass", 1])
 	sell_items.append(["water", 1])
+	sell_items.append(["goods", 5])
 	
 	if market_type == "trade_tent":
 		buy_items.append(["axe", 15])
@@ -4372,35 +4417,63 @@ func _create_building_menu(ui: CanvasLayer) -> void:
 	building_close_button.size = Vector2(272, 30)
 	building_close_button.pressed.connect(_close_context_menus)
 	building_menu.add_child(building_close_button)
+	
+	building_cancel_construction_button = Button.new()
+	building_cancel_construction_button.text = "Cancel construction"
+	building_cancel_construction_button.position = Vector2(16, 140)
+	building_cancel_construction_button.size = Vector2(272, 30)
+	building_cancel_construction_button.pressed.connect(_cancel_selected_construction)
+	building_menu.add_child(building_cancel_construction_button)
 
 func _show_building_menu() -> void:
 	if not is_instance_valid(selected_building):
 		return
 	build_menu.visible = false
 	building_menu.visible = true
-	var building_type := str(selected_building.get_meta("building_type", "building"))
-	var definition := BuildingCatalog.definition_for(building_type)
-	building_menu_title.text = "%s\n%s" % [str(definition.get("name", building_type.capitalize())), "Press Delete to mark this building for demolition."]
-	building_cook_button.visible = building_type in ["cook_campfire", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant"]
-	building_cook_button.disabled = selected_builder == null or selected_builder.is_player_controlled or not bool(selected_building.get_meta("accepting_workers", true))
 	
-	building_teacher_button.visible = building_type == "school"
-	building_teacher_button.disabled = selected_builder == null or selected_builder.is_player_controlled or not bool(selected_building.get_meta("accepting_workers", true))
+	var is_construction := _is_construction_site(selected_building)
 	
-	building_seller_button.visible = building_type in ["trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market"]
-	building_seller_button.disabled = selected_builder == null or selected_builder.is_player_controlled or not bool(selected_building.get_meta("accepting_workers", true))
-	var is_workplace := _is_staffed_workplace(selected_building)
-	building_accept_workers_button.visible = is_workplace
-	building_dismiss_worker_button.visible = is_workplace
-	if is_workplace:
-		var accepting := bool(selected_building.get_meta("accepting_workers", true))
-		building_accept_workers_button.text = "Stop accepting workers" if accepting else "Start accepting workers"
-		building_accept_workers_button.tooltip_text = "This workplace is priority #%d among open workplaces of the same profession." % _workplace_priority_position(selected_building) if accepting else "Reopen this workplace and move it to the front of the hiring queue."
-		building_dismiss_worker_button.disabled = _workplace_worker(selected_building) == null
-	var special_button_visible := building_cook_button.visible or building_teacher_button.visible or building_seller_button.visible
-	for button in [building_cook_button, building_teacher_button, building_seller_button]:
-		button.position.y = 176.0
-	building_close_button.position.y = 220.0 if special_button_visible else 184.0
+	if is_construction:
+		var site_data := _get_construction_site_data(selected_building)
+		var type: String = site_data.get("type", "building")
+		var progress: float = site_data.get("progress", 0.0)
+		var builders := _builder_count(selected_building)
+		building_menu_title.text = "Under Construction: %s\nProgress: %d%%\nBuilders: %d" % [type.capitalize().replace("_", " "), roundi(progress * 100.0), builders]
+		
+		building_cook_button.visible = false
+		building_teacher_button.visible = false
+		building_seller_button.visible = false
+		building_accept_workers_button.visible = false
+		building_dismiss_worker_button.visible = false
+		building_cancel_construction_button.visible = true
+		building_cancel_construction_button.position.y = 104.0
+		building_close_button.position.y = 140.0
+	else:
+		var building_type := str(selected_building.get_meta("building_type", "building"))
+		var definition := BuildingCatalog.definition_for(building_type)
+		building_menu_title.text = "%s\n%s" % [str(definition.get("name", building_type.capitalize())), "Press Delete to mark this building for demolition."]
+		building_cook_button.visible = building_type in ["cook_campfire", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant"]
+		building_cook_button.disabled = selected_builder == null or selected_builder.is_player_controlled or not bool(selected_building.get_meta("accepting_workers", true))
+		
+		building_teacher_button.visible = building_type == "school"
+		building_teacher_button.disabled = selected_builder == null or selected_builder.is_player_controlled or not bool(selected_building.get_meta("accepting_workers", true))
+		
+		building_seller_button.visible = building_type in ["trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market"]
+		building_seller_button.disabled = selected_builder == null or selected_builder.is_player_controlled or not bool(selected_building.get_meta("accepting_workers", true))
+		
+		var is_workplace := _is_staffed_workplace(selected_building)
+		building_accept_workers_button.visible = is_workplace
+		building_dismiss_worker_button.visible = is_workplace
+		building_cancel_construction_button.visible = false
+		if is_workplace:
+			var accepting := bool(selected_building.get_meta("accepting_workers", true))
+			building_accept_workers_button.text = "Stop accepting workers" if accepting else "Start accepting workers"
+			building_accept_workers_button.tooltip_text = "This workplace is priority #%d among open workplaces of the same profession." % _workplace_priority_position(selected_building) if accepting else "Reopen this workplace and move it to the front of the hiring queue."
+			building_dismiss_worker_button.disabled = _workplace_worker(selected_building) == null
+		var special_button_visible := building_cook_button.visible or building_teacher_button.visible or building_seller_button.visible
+		for button in [building_cook_button, building_teacher_button, building_seller_button]:
+			button.position.y = 176.0
+		building_close_button.position.y = 220.0 if special_button_visible else 184.0
 
 
 func _toggle_selected_workplace_acceptance() -> void:
@@ -4679,3 +4752,24 @@ func _get_nearest_delivery_position(from: Vector3) -> Vector3:
 		return campfire_node.global_position
 	else:
 		return entrance_stone.global_position
+
+func _is_construction_site(node: Node3D) -> bool:
+	if not is_instance_valid(node):
+		return false
+	for site in construction_sites:
+		if site.node == node:
+			return true
+	return false
+
+func _get_construction_site_data(node: Node3D) -> Dictionary:
+	for site in construction_sites:
+		if site.node == node:
+			return site
+	return {}
+
+func _cancel_selected_construction() -> void:
+	if not is_instance_valid(selected_building) or not _is_construction_site(selected_building):
+		return
+	construction.cancel_site(selected_building)
+	_close_context_menus()
+	_update_interface("Construction cancelled. Refunded 50% of costs.")

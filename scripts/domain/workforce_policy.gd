@@ -29,6 +29,7 @@ static func permanent_vacancy_for(worker: Dictionary, world: Dictionary) -> Stri
 	_add_empty_workplace_score(scores, world, "teacher", int(world.get("teacher_jobs", 0)))
 	_add_empty_workplace_score(scores, world, "seller", int(world.get("seller_jobs", 0)))
 	_add_empty_workplace_score(scores, world, "factory_worker", int(world.get("factory_jobs", 0)))
+	_add_empty_workplace_score(scores, world, "craftsman", int(world.get("craftsman_jobs", 0)))
 	_add_empty_workplace_score(scores, world, "engineer", int(world.get("engineer_jobs", 0)))
 	if scores.is_empty():
 		return ""
@@ -97,7 +98,8 @@ static func _automatic_role_has_open_slot(role: String, world: Dictionary) -> bo
 	var capacities := {
 		"forestry": "forestry_jobs", "farming": "farming_jobs", "gather_food": "forager_jobs",
 		"cook": "cooking_jobs", "teacher": "teacher_jobs", "seller": "seller_jobs",
-		"factory_worker": "factory_jobs", "engineer": "engineer_jobs"
+		"factory_worker": "factory_jobs", "engineer": "engineer_jobs",
+		"craftsman": "craftsman_jobs"
 	}
 	if not capacities.has(role):
 		return true
@@ -128,6 +130,7 @@ static func _role_available(role: String, world: Dictionary) -> bool:
 		"seller": return int(world.get("markets", 0)) > 0
 		"factory_worker": return int(world.get("factory_jobs", 0)) > 0
 		"engineer": return int(world.get("engineer_jobs", 0)) > 0
+		"craftsman": return int(world.get("craftsman_jobs", 0)) > 0
 		"gather_branches": return int(world.get("trees", 0)) > 0
 		"gather_grass": return true
 	return false
@@ -146,6 +149,8 @@ static func can_assign(worker: Dictionary, world: Dictionary) -> bool:
 	var specialization := str(worker.get("specialization", ""))
 	if specialization == "courier" or int(world.get("hour", 0)) < 8:
 		return false
+	if specialization == "craftsman":
+		return int(world.get("craftsman_jobs", 0)) > 0
 	if specialization == "cook":
 		return bool(world.get("has_canteen", false))
 	if specialization == "teacher":

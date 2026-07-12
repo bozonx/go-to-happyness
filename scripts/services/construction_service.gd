@@ -47,6 +47,18 @@ func start_site(cell: Vector2i, building_type: String, position: Vector3, rotati
 	fill.scale.x = 0.01
 	site.add_child(fill)
 	simulation.construction_sites.append({"cell": cell, "type": building_type, "position": position, "node": site, "fill": fill, "progress": 0.0, "blueprint": blueprint, "modules_built": 0})
+	# Clickable selector so players can open the construction menu
+	var selector := Area3D.new()
+	selector.add_to_group("construction_selector")
+	selector.collision_layer = 4
+	selector.collision_mask = 0
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(display_footprint.x, 2.5, display_footprint.y)
+	shape.shape = box
+	shape.position = Vector3(0.0, 1.25, 0.0)
+	selector.add_child(shape)
+	site.add_child(selector)
 	simulation._update_workers()
 
 
@@ -79,3 +91,36 @@ func tick(delta: float) -> void:
 		for citizen in simulation.citizens:
 			citizen.finish_construction(site.node)
 		simulation._complete_building(site.cell, site.type, site.position, site.node, site.blueprint)
+
+
+func cancel_site(site_node: Node3D) -> void:
+	for index in range(simulation.construction_sites.size() - 1, -1, -1):
+		var site: Dictionary = simulation.construction_sites[index]
+		if site.node != site_node:
+			continue
+		# Refund ~50% of building costs
+		var costs: Dictionary = BuildingCatalog.definition_for(site.type).get("costs", {})
+		for resource_type in costs:
+			var refund := maxi(1, floori(int(costs[resource_type]) * 0.5))
+			simulation.settlement.add(resource_type, refund)
+		# Release builders working on this site
+		for citizen in simulation.citizens:
+			citizen.finish_construction(site_node)
+		# Remove the footprint reservation
+		for fp_idx in range(simulation.building_footprints.size() - 1, -1, -1):
+			var record: Dictionary = simulation.building_footprints[fp_idx]
+			if record.center == site.position and record.node == null:
+				simulation.building_footprints.remove_at(fp_idx)
+				break
+		# Remove position from building_positions
+		var pos_idx: int = simulation.building_positions.find(site.position)
+		if pos_idx >= 0:
+			simulation.building_positions.remove_at(pos_idx)
+		# Remove placed_buildings entry
+		simulation.placed_buildings.erase(site.cell)
+		# Clean up scene node
+		site_node.queue_free()
+		simulation.construction_sites.remove_at(index)
+		simulation._rebuild_navigation_mesh()
+		simulation._update_workers()
+		return

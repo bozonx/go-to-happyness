@@ -302,6 +302,10 @@ func assign_work(citizen: Citizen, index: int) -> void:
 		"gather_water":
 			if not simulation.pond_positions.is_empty():
 				citizen.assign_gathering("water", simulation.pond_positions[index % simulation.pond_positions.size()], simulation._get_delivery_position())
+		"craftsman":
+			if not simulation.craft_tent_positions.is_empty():
+				var craft_pos: Vector3 = _workplace_position(citizen, simulation.craft_tent_positions[index % simulation.craft_tent_positions.size()])
+				citizen.assign_craft_work(craft_pos)
 	# A role can be available in policy while its concrete source is exhausted.
 	# Register unemployment instead of returning to the obsolete waiting loop.
 	if citizen.state == Citizen.State.IDLE or citizen.state == Citizen.State.RESTING:

@@ -34,7 +34,7 @@ const NAVIGATION_TARGET_CLEARANCE := 0.48
 const ROUTE_PROGRESS_EPSILON := 0.06
 const ROUTE_RETRY_INTERVAL := 2.0
 
-enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, TO_GATHER, GATHERING, TO_TRADE_PICKUP, TO_TRADE_DESTINATION, TO_EMPLOYMENT_CENTER, EMPLOYMENT_PROCESSING, CANTEEN_WORK, SCHOOL_WORK, TO_MARKET_WORK, MARKET_WORK }
+enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, TO_GATHER, GATHERING, TO_TRADE_PICKUP, TO_TRADE_DESTINATION, TO_EMPLOYMENT_CENTER, EMPLOYMENT_PROCESSING, CANTEEN_WORK, SCHOOL_WORK, TO_MARKET_WORK, MARKET_WORK, TO_CRAFT_WORK, CRAFT_WORK }
 
 enum EmploymentState { AUTO_RESERVE, EMPLOYED, UNEMPLOYED, PENDING_JOB, PENDING_UNEMPLOYMENT, MANUAL_COURIER }
 
@@ -93,6 +93,8 @@ var debuffs: Dictionary = {}
 var delivery_amount := 0
 var canteen_position := Vector3.ZERO
 var market_position := Vector3.ZERO
+var craft_position := Vector3.ZERO
+var craft_timer := 0.0
 var construction_position := Vector3.ZERO
 var pathfinder: Callable
 var delivery_position_resolver: Callable
@@ -132,7 +134,8 @@ func _ready() -> void:
 		"farming": randf_range(0.0, 0.1),
 		"excavation": randf_range(0.0, 0.1),
 		"factory_worker": randf_range(0.0, 0.1),
-		"engineer": randf_range(0.0, 0.1)
+		"engineer": randf_range(0.0, 0.1),
+		"craftsman": randf_range(0.0, 0.1)
 	}
 	add_to_group("citizens")
 	_setup_collision()
@@ -316,6 +319,10 @@ func _physics_process(delta: float) -> void:
 			_process_market_work_arrival(delta)
 		State.MARKET_WORK:
 			pass
+		State.TO_CRAFT_WORK:
+			_process_craft_work_arrival(delta)
+		State.CRAFT_WORK:
+			_process_craft_work(delta)
 	if idle_indicator != null:
 		_update_idle_indicator()
 
@@ -902,6 +909,24 @@ func assign_seller_work(next_market_position: Vector3) -> void:
 		factory = null
 		state = State.TO_MARKET_WORK
 
+func assign_craft_work(next_craft_position: Vector3) -> void:
+	if not is_player_controlled:
+		craft_position = next_craft_position
+		active_role = "crafting"
+		factory = null
+		state = State.TO_CRAFT_WORK
+
+func _process_craft_work_arrival(delta: float) -> void:
+	if _move_to(craft_position, delta):
+		craft_timer = 10.0 / get_efficiency("craftsman")
+		state = State.CRAFT_WORK
+
+func _process_craft_work(delta: float) -> void:
+	craft_timer -= delta
+	if craft_timer <= 0.0:
+		resource_ready.emit(self, "goods", 1)
+		craft_timer = 10.0 / get_efficiency("craftsman")
+
 func assign_factory_work(next_factory: Node3D, role: String) -> void:
 	if not is_player_controlled:
 		factory = next_factory
@@ -1036,6 +1061,8 @@ func get_core_skill_for_role(role: String) -> String:
 			return "engineer"
 		"courier":
 			return "courier"
+		"craftsman", "crafting":
+			return "craftsman"
 		"cooking", "cook":
 			return "cook"
 		"teaching", "teacher":
