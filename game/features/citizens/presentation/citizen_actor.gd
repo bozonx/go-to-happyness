@@ -35,6 +35,11 @@ const CONSTRUCTION_SLOT_SPACING := 0.42
 const CONSTRUCTION_APPROACH_DISTANCE := 1.75
 const ROUTE_PROGRESS_EPSILON := 0.06
 const ROUTE_RETRY_INTERVAL := 2.0
+const IDLE_WANDER_RADIUS := 3.0
+const IDLE_WANDER_MIN_PAUSE := 2.5
+const IDLE_WANDER_MAX_PAUSE := 6.0
+const IDLE_WANDER_CANDIDATES := 8
+const IDLE_PERSONAL_SPACE := 1.15
 
 enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, TO_GATHER, GATHERING, TO_TRADE_PICKUP, TO_TRADE_DESTINATION, TO_EMPLOYMENT_CENTER, EMPLOYMENT_PROCESSING, CANTEEN_WORK, SCHOOL_WORK, TO_MARKET_WORK, MARKET_WORK, TO_CRAFT_WORK, CRAFT_WORK, TO_CONSTRUCTION_PICKUP, TO_CONSTRUCTION_SITE, TO_OFFICIAL_WORK, OFFICIAL_WORK, TO_ARRIVAL_ENTRANCE, ARRIVAL_MEETING, ARRIVAL_WAITING, TO_ARRIVAL_CENTER, RESEARCHING, TO_TOILET, USING_TOILET, WAITING_FOR_TOILET, TO_BUSH, USING_BUSH }
 
@@ -127,6 +132,10 @@ var building_supply_kind := "construction"
 var park_rest_duration := 4.0
 var pathfinder: Callable
 var delivery_position_resolver: Callable
+var queue_position_resolver: Callable
+var idle_wander_anchor := Vector3.INF
+var idle_wander_target := Vector3.INF
+var idle_wander_pause := 0.0
 var movement_path: Array[Vector3] = []
 var path_destination := Vector3.INF
 var navigation_target_position := Vector3.INF
@@ -278,6 +287,9 @@ func _physics_process(delta: float) -> void:
 		return
 	if goap_brain != null:
 		goap_brain.tick(delta)
+	if state not in [State.IDLE, State.WAITING]:
+		idle_wander_anchor = Vector3.INF
+		idle_wander_target = Vector3.INF
 	_apply_gravity(delta)
 	_update_effects(delta)
 	_update_satisfaction(delta)
@@ -303,6 +315,8 @@ func _physics_process(delta: float) -> void:
 					satisfaction = maxf(0.0, satisfaction - delta * 6.0)
 
 	match state:
+		State.IDLE:
+			_process_idle_wander(delta)
 		State.WAITING:
 			_process_waiting(delta)
 		State.TO_TREE:
@@ -631,12 +645,54 @@ func _process_waiting(delta: float) -> void:
 		wait_recheck = WAIT_RECHECK_INTERVAL
 		if work_scheduler.is_valid() and bool(work_scheduler.call(self)):
 			return
+	_process_idle_wander(delta)
 	if task_timer.advance(delta):
 		# The full window elapsed without a concrete task. The coordinator now
 		# routes the citizen to the employment centre instead of leaving them in an
 		# endless leisure/idle loop.
 		idle()
 		no_work_wait_complete = true
+
+
+func _process_idle_wander(delta: float) -> void:
+	if idle_wander_anchor == Vector3.INF:
+		idle_wander_anchor = global_position
+		idle_wander_pause = randf_range(IDLE_WANDER_MIN_PAUSE, IDLE_WANDER_MAX_PAUSE)
+	if idle_wander_target != Vector3.INF:
+		if _move_to(idle_wander_target, delta, false, false):
+			idle_wander_target = Vector3.INF
+			idle_wander_pause = randf_range(IDLE_WANDER_MIN_PAUSE, IDLE_WANDER_MAX_PAUSE)
+		return
+	idle_wander_pause -= delta
+	velocity.x = 0.0
+	velocity.z = 0.0
+	if idle_wander_pause > 0.0:
+		return
+	idle_wander_target = _choose_idle_wander_target()
+	if idle_wander_target == Vector3.INF:
+		idle_wander_pause = IDLE_WANDER_MIN_PAUSE
+
+
+func _choose_idle_wander_target() -> Vector3:
+	var best := Vector3.INF
+	var best_score := -INF
+	for ignored in range(IDLE_WANDER_CANDIDATES):
+		var angle := randf() * TAU
+		var radius := randf_range(IDLE_PERSONAL_SPACE, IDLE_WANDER_RADIUS)
+		var candidate := idle_wander_anchor + Vector3(cos(angle) * radius, 0.0, sin(angle) * radius)
+		var route: Variant = pathfinder.call(global_position, candidate, false) if pathfinder.is_valid() else RouteResult.success([candidate], candidate)
+		if not route is RouteResult or not (route as RouteResult).reachable:
+			continue
+		var nearest_neighbor := IDLE_WANDER_RADIUS * 2.0
+		if simulation != null:
+			for other in simulation.citizens:
+				if other != self and is_instance_valid(other):
+					nearest_neighbor = minf(nearest_neighbor, candidate.distance_to(other.global_position))
+		var score := nearest_neighbor - candidate.distance_to(idle_wander_anchor) * 0.08
+		if score > best_score:
+			best_score = score
+			best = candidate
+	return best
 
 
 func begin_employment_processing(center_position: Vector3, next_pending_role := "", next_workplace: Node3D = null) -> void:
@@ -790,15 +846,21 @@ func release_to_freelance() -> void:
 func has_active_delivery() -> bool:
 	return state in [State.COURIER_TO_WORKER, State.COURIER_TO_WAREHOUSE, State.COURIER_TO_SAWMILL, State.TO_FOOD_PICKUP, State.TO_CANTEEN_DELIVERY, State.TO_CONSTRUCTION_PICKUP, State.TO_CONSTRUCTION_SITE] or carried_amount > 0
 
-func _move_to(destination: Vector3, delta: float, may_enter_destination_house := false) -> bool:
-	if path_destination.distance_to(destination) > 0.08 or path_allows_destination_house != may_enter_destination_house:
-		_reset_route(destination)
+func _move_to(destination: Vector3, delta: float, may_enter_destination_house := false, use_building_queue := true) -> bool:
+	var movement_destination := destination
+	var is_queue_head := true
+	if use_building_queue and queue_position_resolver.is_valid():
+		var queue_result: Dictionary = queue_position_resolver.call(self, destination)
+		movement_destination = queue_result.get("position", destination)
+		is_queue_head = bool(queue_result.get("is_head", true))
+	if path_destination.distance_to(movement_destination) > 0.08 or path_allows_destination_house != may_enter_destination_house:
+		_reset_route(movement_destination)
 		path_allows_destination_house = may_enter_destination_house
-		_plan_route(destination)
+		_plan_route(movement_destination)
 	if active_route == null or not active_route.reachable:
 		route_retry_timer = maxf(0.0, route_retry_timer - delta)
 		if route_retry_timer <= 0.0:
-			_plan_route(destination)
+			_plan_route(movement_destination)
 		if active_route == null or not active_route.reachable:
 			return false
 	if navigation_agent != null and navigation_agent.get_navigation_map().is_valid():
@@ -809,7 +871,7 @@ func _move_to(destination: Vector3, delta: float, may_enter_destination_house :=
 			var next_path_position := navigation_agent.get_next_path_position()
 			if navigation_agent.is_navigation_finished():
 				if _has_arrived_at_navigation_target():
-					return true
+					return is_queue_head
 				_recover_idle_route(delta)
 				return false
 			var path_offset := next_path_position - global_position
@@ -825,7 +887,7 @@ func _move_to(destination: Vector3, delta: float, may_enter_destination_house :=
 		if waypoint_offset.length() > 0.08:
 			return _move_directly_to(waypoint, delta)
 		movement_path.pop_front()
-	return true
+	return is_queue_head
 
 func _plan_route(destination: Vector3) -> void:
 	var result: Variant = RouteResult.success([destination], destination)
@@ -1233,9 +1295,10 @@ func apply_daily_decay() -> void:
 func is_building_site(site: Node3D) -> bool:
 	return not is_player_controlled and state == State.CONSTRUCTING and construction_site == site and global_position.distance_to(construction_position) <= 0.7
 
-func setup_navigation(next_pathfinder: Callable, next_delivery_position_resolver := Callable()) -> void:
+func setup_navigation(next_pathfinder: Callable, next_delivery_position_resolver := Callable(), next_queue_position_resolver := Callable()) -> void:
 	pathfinder = next_pathfinder
 	delivery_position_resolver = next_delivery_position_resolver
+	queue_position_resolver = next_queue_position_resolver
 
 func setup_scheduler(next_work_scheduler: Callable, next_leisure_scheduler: Callable) -> void:
 	work_scheduler = next_work_scheduler

@@ -3,6 +3,7 @@ extends Node3D
 const SETTLEMENT_RULES = preload("res://game/features/settlement/domain/settlement_rules.gd")
 const CourierDispatcherScript = preload("res://game/features/logistics/application/courier_dispatcher.gd")
 const CourierTaskScript = preload("res://game/features/logistics/domain/courier_task.gd")
+const BuildingQueueServiceScript = preload("res://game/features/citizens/application/building_queue_service.gd")
 
 
 const BOARD_CELLS := 48
@@ -283,6 +284,7 @@ var workplace_priority_counter := 0
 var manage_citizen_button: Button
 var workforce: WorkforceCoordinator
 var route_service: GridRouteService
+var building_queue_service: RefCounted
 var sawmills: SawmillService
 var construction: ConstructionService
 var demolition: DemolitionService
@@ -298,6 +300,8 @@ func _ready() -> void:
 	add_child(workforce)
 	route_service = GridRouteService.new()
 	route_service.configure(_cell_from_position, _cell_center, _is_board_cell, _is_navigation_cell_blocked)
+	building_queue_service = BuildingQueueServiceScript.new()
+	building_queue_service.configure(building_registry, _cell_from_position, _cell_center, _is_board_cell, _is_navigation_cell_blocked)
 	sawmills = SawmillService.new()
 	sawmills.configure(self)
 	var construction_runtime := ConstructionRuntime.new()
@@ -1487,6 +1491,9 @@ func _is_board_cell(cell: Vector2i) -> bool:
 func _find_path_around_houses(from: Vector3, destination: Vector3, _may_enter_destination_house: bool) -> RouteResult:
 	return route_service.find_route(from, destination)
 
+func _resolve_building_queue_position(citizen: Citizen, destination: Vector3) -> Dictionary:
+	return building_queue_service.resolve(citizen, destination)
+
 func _update_interface(message: String) -> void:
 	wood_label.text = "Era: %s\nMoney: %d\nBranches: %d\nGrass: %d\nWater: %d\nFood: %d\nSoil: %d\nClay: %d\nLogs: %d\nTimber: %d\nBoards: %d\nStone: %d\nBricks: %d\nStorage: %d/%d\nPopulation: %d\nWellbeing: %d" % [_era_name(), money, branches, grass, water, food, soil, clay, settlement.logs, wood, boards, stone, bricks, _stored_resources(), _warehouse_capacity(), citizens.size(), wellbeing]
 	_add_message(message)
@@ -1960,7 +1967,7 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	citizen.position = spawn_position
 	add_child(citizen)
 	citizen.setup_specialization(primary_specialization if not primary_specialization.is_empty() else "unassigned")
-	citizen.setup_navigation(_find_path_around_houses, _get_nearest_delivery_position)
+	citizen.setup_navigation(_find_path_around_houses, _get_nearest_delivery_position, _resolve_building_queue_position)
 	citizen.setup_scheduler(_try_resume_work, _send_citizen_to_leisure)
 	citizen.setup_registration_service(_is_registration_staffed, _registration_duration)
 	citizen.resource_delivered.connect(_on_resource_delivered)

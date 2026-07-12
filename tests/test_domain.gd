@@ -2,6 +2,7 @@ extends SceneTree
 
 const SettlementRulesScript = preload("res://game/features/settlement/domain/settlement_rules.gd")
 const GridRouteServiceScript = preload("res://game/features/world/application/grid_route_service.gd")
+const BuildingQueueServiceScript = preload("res://game/features/citizens/application/building_queue_service.gd")
 
 
 func _init() -> void:
@@ -14,6 +15,7 @@ func _init() -> void:
 	_test_workforce_policy()
 	_test_citizen_task_state()
 	_test_grid_routing()
+	_test_building_queue_routing()
 	_test_citizen_decision_context()
 	_test_construction_progress()
 	_test_construction_service_cancellation()
@@ -260,6 +262,39 @@ func _test_grid_routing() -> void:
 	assert(route.reachable and route.arrival_position == Vector3(2.5, 0.0, 0.5))
 	for waypoint in route.waypoints:
 		assert(not blocked.has(Vector2i(floori(waypoint.x), floori(waypoint.z))))
+
+
+func _test_building_queue_routing() -> void:
+	var registry := BuildingRegistry.new()
+	var building := Node3D.new()
+	building.position = Vector3(1.5, 0.0, 1.5)
+	root.add_child(building)
+	building.set_meta("service_position", Vector3(2.5, 0.0, 1.5))
+	registry.reserve(Vector2i(1, 1), building.position, Vector2i.ONE)
+	registry.attach_node(Vector2i(1, 1), building)
+	var blocked := {Vector2i(3, 1): true}
+	var queues = BuildingQueueServiceScript.new()
+	queues.configure(
+		registry,
+		func(position: Vector3) -> Vector2i: return Vector2i(floori(position.x), floori(position.z)),
+		func(cell: Vector2i) -> Vector3: return Vector3(cell.x + 0.5, 0.0, cell.y + 0.5),
+		func(cell: Vector2i) -> bool: return cell.x >= 0 and cell.x < 6 and cell.y >= 0 and cell.y < 6,
+		func(cell: Vector2i) -> bool: return blocked.has(cell)
+	)
+	var first := Node.new()
+	var second := Node.new()
+	var third := Node.new()
+	var head: Dictionary = queues.resolve(first, building.position)
+	var middle: Dictionary = queues.resolve(second, building.get_meta("service_position"))
+	var tail: Dictionary = queues.resolve(third, building.position)
+	assert(head.is_head and head.position == building.get_meta("service_position"))
+	assert(not middle.is_head and not blocked.has(Vector2i(floori(middle.position.x), floori(middle.position.z))))
+	assert(not tail.is_head and tail.position != middle.position)
+	first.free()
+	second.free()
+	third.free()
+	root.remove_child(building)
+	building.free()
 
 
 func _test_construction_progress() -> void:
