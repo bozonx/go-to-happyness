@@ -59,7 +59,15 @@ var active_role := ""
 var satisfaction := 72.0
 var satisfaction_tick := 0.0
 var body_material: StandardMaterial3D
-var skills := {"construction": 1.2, "forestry": 1.2, "farming": 1.2, "excavation": 1.2}
+var skills := {}
+var practiced_today: Dictionary = {}
+var temp_training_role := ""
+
+const DEVELOPED_SKILL_THRESHOLD := 0.15
+const SKILL_GROWTH_PER_SECOND_WORK := 0.0001
+const SKILL_GROWTH_PER_SCHOOL_DAY := 0.01
+const SKILL_DECAY_RATE := 0.005
+const SKILL_MIN_FLOOR := 0.10
 var assigned_dig_site: Node3D
 var uses_courier := false
 var returning_to_excavation := false
@@ -100,10 +108,19 @@ var factory_position := Vector3.ZERO
 var park_position := Vector3.ZERO
 var trade_source_position := Vector3.ZERO
 var trade_destination_position := Vector3.ZERO
+var simulation: Node
 var goap_brain: CitizenGoapBrain
 var idle_indicator: Label3D
 
 func _ready() -> void:
+	skills = {
+		"construction": randf_range(0.0, 0.1),
+		"forestry": randf_range(0.0, 0.1),
+		"farming": randf_range(0.0, 0.1),
+		"excavation": randf_range(0.0, 0.1),
+		"factory_worker": randf_range(0.0, 0.1),
+		"engineer": randf_range(0.0, 0.1)
+	}
 	add_to_group("citizens")
 	_setup_collision()
 	_setup_navigation_agent()
@@ -291,7 +308,12 @@ func _process_source_work(delta: float) -> void:
 func _process_to_workplace(delta: float) -> void:
 	if _move_to(workplace_position, delta):
 		if resource_type == "wood":
-			logs_delivered.emit(self, workplace_position, 1)
+			var count := 1
+			if has_perk("forestry") and randf() < 0.10:
+				count = 2
+				if simulation != null:
+					simulation._update_interface("Lumberjack Master: Forester delivered 2 logs!")
+			logs_delivered.emit(self, workplace_position, count)
 			return
 		state = State.SAWING
 		_start_task(WORK_DURATION / get_efficiency(active_role))
@@ -356,6 +378,9 @@ func _process_courier_delivery(delta: float) -> void:
 
 func _process_go_home(delta: float) -> void:
 	if not is_instance_valid(home):
+		# The home was demolished mid-walk: drop back to IDLE (with its indicator)
+		# instead of silently standing in TO_HOME forever.
+		idle()
 		return
 	var home_entrance: Vector3 = home.get_meta("entrance_position", home.global_position)
 	if _move_to(home_entrance, delta, true):
@@ -439,10 +464,10 @@ func _process_waiting(delta: float) -> void:
 		# The full waiting window elapsed with no work. Head to a rest spot.
 		var rested := leisure_scheduler.is_valid() and bool(leisure_scheduler.call(self))
 		if not rested:
-			# Nowhere to rest yet (no parks/home): restart the window so the
-			# citizen keeps re-checking for work instead of freezing forever.
-			task_timer.start(WAIT_DURATION)
-			wait_recheck = WAIT_RECHECK_INTERVAL
+			# Nowhere to rest at all (no park/campfire/pond/home): stand down with
+			# the visible IDLE indicator; the worker poll re-enters the waiting
+			# window or assigns work as soon as either becomes possible.
+			idle()
 
 func _move_to(destination: Vector3, delta: float, may_enter_destination_house := false) -> bool:
 	if navigation_agent != null and navigation_agent.get_navigation_map().is_valid():
@@ -486,7 +511,7 @@ func _move_directly_to(destination: Vector3, delta: float) -> bool:
 	if sidestep_time > 0.0:
 		sidestep_time = maxf(0.0, sidestep_time - delta)
 		direction = (direction * 0.35 + sidestep_direction).normalized()
-	var desired_velocity := direction * WALK_SPEED
+	var desired_velocity := direction * get_walk_speed()
 	velocity.x = desired_velocity.x
 	velocity.z = desired_velocity.z
 	jump_cooldown = maxf(0.0, jump_cooldown - delta)
@@ -496,7 +521,7 @@ func _move_directly_to(destination: Vector3, delta: float) -> bool:
 	var horizontal_progress := Vector2(global_position.x - position_before_move.x, global_position.z - position_before_move.z).length()
 	var distance_after_move := Vector2(destination.x - global_position.x, destination.z - global_position.z).length()
 	_update_route_progress(distance_before_move, distance_after_move, delta, direction)
-	if is_on_floor() and horizontal_progress < WALK_SPEED * delta * 0.15:
+	if is_on_floor() and horizontal_progress < get_walk_speed() * delta * 0.15:
 		stuck_time += delta
 		if jump_cooldown <= 0.0:
 			if stuck_time >= STUCK_TIME_BEFORE_SIDESTEP:
@@ -809,24 +834,43 @@ func start_training(next_role: String, next_school_position: Vector3) -> void:
 	training_days_completed = 0
 	school_position = next_school_position
 
-func attend_school() -> void:
-	if not is_player_controlled and not training_role.is_empty() and training_days_completed < 10:
+func attend_school(school_pos: Vector3, role_to_train: String) -> void:
+	if not is_player_controlled:
+		school_position = school_pos
+		temp_training_role = role_to_train
 		factory = null
 		state = State.TO_SCHOOL
 
 func finish_school_day() -> void:
 	if state != State.STUDYING:
 		return
-	training_days_completed += 1
-	skills[training_role] = minf(5.0, float(skills.get(training_role, 1.0)) + 0.4)
-	if training_days_completed >= 10:
-		var final_skill := float(skills[training_role])
-		specialization = "builder" if training_role == "construction" else training_role
-		manual_role = ""
-		setup_specialization(specialization)
-		skills[training_role] = maxf(final_skill, float(skills[training_role]))
-		training_role = ""
+	
+	var trained_role := training_role
+	if trained_role.is_empty():
+		trained_role = temp_training_role
+		
+	if not trained_role.is_empty():
+		var current_val := float(skills.get(trained_role, 0.0))
+		skills[trained_role] = minf(1.0, current_val + SKILL_GROWTH_PER_SCHOOL_DAY)
+		practiced_today[trained_role] = true
+		
+		if not training_role.is_empty():
+			training_days_completed += 1
+			if training_days_completed >= 10:
+				specialization = "builder" if training_role == "construction" else training_role
+				manual_role = ""
+				setup_specialization(specialization)
+				training_role = ""
+				training_days_completed = 0
+				
+	temp_training_role = ""
 	state = State.IDLE
+
+func apply_daily_decay() -> void:
+	for skill_name in skills.keys():
+		if not practiced_today.get(skill_name, false):
+			skills[skill_name] = maxf(SKILL_MIN_FLOOR, float(skills.get(skill_name, 0.0)) - SKILL_DECAY_RATE)
+	practiced_today.clear()
 
 func is_building_site(site: Node3D) -> bool:
 	return not is_player_controlled and state == State.CONSTRUCTING and construction_site == site and global_position.distance_to(construction_position) <= 0.7
@@ -846,7 +890,8 @@ func _refresh_warehouse_position() -> void:
 	if resolved != Vector3.INF and warehouse_position.distance_to(resolved) > 0.08:
 		warehouse_position = resolved
 
-func setup_goap(simulation: Node, worker_index: int) -> void:
+func setup_goap(next_simulation: Node, worker_index: int) -> void:
+	simulation = next_simulation
 	goap_brain = CitizenGoapBrain.new()
 	add_child(goap_brain)
 	goap_brain.setup(self, simulation, worker_index)
@@ -875,17 +920,61 @@ func _work_position_for(site: Node3D) -> Vector3:
 	var z_distance := footprint.y * 0.5 + CONSTRUCTION_APPROACH_DISTANCE
 	return site_position + Vector3(slot, 0.0, z_distance if offset.z >= 0.0 else -z_distance)
 
+func get_core_skill_for_role(role: String) -> String:
+	match role:
+		"construction", "demolition":
+			return "construction"
+		"forestry", "gather_branches", "gather_logs":
+			return "forestry"
+		"farming", "gather_water", "gather_dew", "gather_food":
+			return "farming"
+		"excavation":
+			return "excavation"
+		"factory_work", "factory_worker":
+			return "factory_worker"
+		"engineering", "engineer":
+			return "engineer"
+		"courier":
+			return "courier"
+		"cooking", "cook":
+			return "cook"
+		"teaching", "teacher":
+			return "teacher"
+		_:
+			return ""
+
+func has_perk(skill_name: String) -> bool:
+	return skills.get(skill_name, 0.0) >= 1.0
+
+func get_walk_speed() -> float:
+	if has_perk("construction"):
+		return WALK_SPEED * 1.15
+	return WALK_SPEED
+
 func setup_specialization(next_specialization: String) -> void:
 	specialization = next_specialization
-	skills[preferred_role()] = 4.0
 	body_material.albedo_color = Color("e6c857") if is_hero else CitizenRoleProfile.color_for(specialization)
 
 func get_efficiency(role: String) -> float:
-	var skill_value: float = skills.get(role, 1.0)
-	var skill_bonus := 0.55 + skill_value * 0.18
+	var core_skill := get_core_skill_for_role(role)
+	var S := float(skills.get(core_skill, 0.0)) if not core_skill.is_empty() else 0.5
+	
+	# Determine era index (0 to 5)
+	var era_index := 0
+	if simulation != null and simulation.settlement != null:
+		era_index = int(simulation.settlement.era)
+	
+	# Max penalty is era-dependent
+	var max_penalty := 0.15 + 0.11 * float(era_index)
+	var skill_efficiency_factor := lerpf(1.0 - max_penalty, 1.30, S)
+	
+	# Farmer perk bonus
+	if role == "farming" and has_perk("farming"):
+		skill_efficiency_factor += 0.15
+		
 	var satisfaction_factor := lerpf(0.45, 1.0, satisfaction / 100.0)
 	var meal_bonus := 0.15 if buffs.has("canteen_meal") else 0.0
-	return skill_bonus * satisfaction_factor * (1.0 + meal_bonus)
+	return skill_efficiency_factor * satisfaction_factor * (1.0 + meal_bonus)
 
 func role_label() -> String:
 	var role := CitizenRoleProfile.label_for(specialization)
@@ -1000,9 +1089,44 @@ func _update_satisfaction(delta: float) -> void:
 		satisfaction = minf(get_satisfaction_cap(), satisfaction + 1.2 * satisfaction_tick)
 		satisfaction_tick = 0.0
 		return
-	var change := 1.1 if active_role == preferred_role() else -2.3
+		
+	# Satisfaction rules based on job matching and developed skills
+	var core_pref_role := get_core_skill_for_role(preferred_role())
+	var core_active_role := get_core_skill_for_role(active_role)
+	var change := 0.0
+	
+	if not core_active_role.is_empty() and core_active_role == core_pref_role:
+		change = 1.2
+	else:
+		var has_developed := false
+		for val in skills.values():
+			if float(val) > DEVELOPED_SKILL_THRESHOLD:
+				has_developed = true
+				break
+		if has_developed:
+			change = -2.0
+		else:
+			change = 0.0
+			
 	satisfaction = clampf(satisfaction + change * satisfaction_tick, 0.0, get_satisfaction_cap())
-	skills[active_role] = minf(5.0, float(skills.get(active_role, 1.0)) + 0.025 * satisfaction_tick)
+	
+	# Skill growth with mentor synergy
+	var core_skill := get_core_skill_for_role(active_role)
+	if not core_skill.is_empty():
+		var growth_multiplier := 1.0
+		if simulation != null:
+			for other in simulation.citizens:
+				if other != self and not other.is_player_controlled:
+					var other_core: String = other.get_core_skill_for_role(other.active_role)
+					if other_core == core_skill and float(other.skills.get(core_skill, 0.0)) >= 0.80:
+						if global_position.distance_to(other.global_position) <= 5.0:
+							growth_multiplier = 1.5
+							break
+							
+		var current_val = float(skills.get(core_skill, 0.0))
+		skills[core_skill] = minf(1.0, current_val + SKILL_GROWTH_PER_SECOND_WORK * growth_multiplier * satisfaction_tick)
+		practiced_today[core_skill] = true
+		
 	satisfaction_tick = 0.0
 
 
@@ -1026,6 +1150,10 @@ func _process_gathering(delta: float) -> void:
 		resource_type = gather_resource_type
 		if resource_type == "logs":
 			tree_harvested.emit(self, gather_source_position)
+			if has_perk("forestry") and randf() < 0.10:
+				carried_amount *= 2
+				if simulation != null:
+					simulation._update_interface("Lumberjack Master: Forester gathered 2 logs!")
 		state = State.TO_WAREHOUSE
 
 func _process_trade_pickup(delta: float) -> void:

@@ -34,7 +34,7 @@ const DEFINITIONS := {
 	"canteen": {"name": "Canteen", "category": "wood", "costs": {"boards": 16}},
 	"wood_town_hall": {"name": "Wooden town hall", "category": "wood", "costs": {"boards": 20}},
 	"house": {"name": "Wood house", "category": "wood", "costs": {"boards": 12}},
-	"school": {"name": "School", "category": "wood", "costs": {"boards": 18}},
+	"school": {"name": "School", "category": "clay", "costs": {"clay": 15, "branches": 10, "grass": 8}},
 	"park": {"name": "Park", "category": "wood", "costs": {"boards": 14}},
 	"wood_market": {"name": "Wood market", "category": "wood", "costs": {"boards": 15}},
 	"brick_factory": {"name": "Brick kiln", "category": "brick", "costs": {"boards": 12, "soil": 12}},

@@ -24,7 +24,8 @@ func update_workers() -> void:
 		for citizen in simulation.citizens:
 			citizen.request_goap_decision()
 		return
-	for citizen in simulation.citizens:
+	var sorted_citizens := _get_sorted_citizens()
+	for citizen in sorted_citizens:
 		if citizen.is_player_controlled:
 			continue
 		# Couriers/canteen runs and the self-managed WAITING window run their own
@@ -37,12 +38,26 @@ func update_workers() -> void:
 				continue
 			citizen.blocked_by_storage = false
 		if can_assign_work(citizen):
-			# Only pull genuinely free (idle) citizens onto work. Those on a
-			# scheduled break (park/home) or actively working are left alone.
-			if citizen.state == Citizen.State.IDLE:
+			# Pull free citizens onto work: the genuinely idle and the ones resting
+			# at home (morning wake-up / rest-fallback from an earlier work drought).
+			# Park breaks (RELAXING) and active work states are left alone.
+			if citizen.state == Citizen.State.IDLE or citizen.state == Citizen.State.RESTING:
 				citizen.request_goap_decision()
 		else:
 			_send_to_waiting(citizen)
+
+func _get_sorted_citizens() -> Array[Citizen]:
+	var list: Array[Citizen] = []
+	for citizen in simulation.citizens:
+		list.append(citizen)
+	list.sort_custom(func(a: Citizen, b: Citizen):
+		var a_pref := a.preferred_role()
+		var b_pref := b.preferred_role()
+		var a_skill := float(a.skills.get(a_pref, 0.0))
+		var b_skill := float(b.skills.get(b_pref, 0.0))
+		return a_skill > b_skill
+	)
+	return list
 
 
 func _send_to_waiting(citizen: Citizen) -> void:
@@ -73,8 +88,17 @@ func assign_work(citizen: Citizen, index: int) -> void:
 	if citizen.specialization == "engineer":
 		citizen.assign_factory_work(factory_for_role("engineer"), "engineering")
 		return
-	if not citizen.training_role.is_empty() and citizen.training_days_completed < 10 and int(simulation.game_minutes) / 60 < 12:
-		citizen.attend_school()
+	var should_study := false
+	var target_role := ""
+	if not citizen.training_role.is_empty() and citizen.training_days_completed < 10:
+		should_study = true
+		target_role = citizen.training_role
+	elif simulation.school_developed_professions.get(citizen.preferred_role(), false) and float(citizen.skills.get(citizen.preferred_role(), 0.0)) < 1.0:
+		should_study = true
+		target_role = citizen.preferred_role()
+		
+	if should_study and not simulation.school_positions.is_empty() and int(simulation.game_minutes) / 60 < 12:
+		citizen.attend_school(simulation.school_positions[0], target_role)
 		return
 	if citizen.specialization == "builder" and simulation.construction_sites.is_empty():
 		if not simulation.demolition_sites.is_empty():
@@ -137,8 +161,9 @@ func assign_work(citizen: Citizen, index: int) -> void:
 				citizen.assign_gathering("water", pond, simulation._get_delivery_position())
 	# A shortage/empty-workplace score can outrun the number of free work nodes
 	# (trees, forage spots, dew collectors). When no concrete slot was reserved the
-	# citizen is still IDLE here — send them to wait rather than churn or freeze.
-	if citizen.state == Citizen.State.IDLE:
+	# citizen is still IDLE (or was woken from RESTING) here — send them to wait
+	# rather than churn or freeze.
+	if citizen.state == Citizen.State.IDLE or citizen.state == Citizen.State.RESTING:
 		citizen.begin_waiting()
 
 
@@ -147,6 +172,12 @@ func work_role_for(citizen: Citizen) -> String:
 
 
 func _worker_data(citizen: Citizen) -> Dictionary:
+	var should_study := false
+	if not citizen.training_role.is_empty() and citizen.training_days_completed < 10:
+		should_study = true
+	elif simulation.school_developed_professions.get(citizen.preferred_role(), false) and float(citizen.skills.get(citizen.preferred_role(), 0.0)) < 1.0:
+		should_study = true
+		
 	return {
 		"player_controlled": citizen.is_player_controlled,
 		"blocked_by_storage": citizen.blocked_by_storage,
@@ -154,6 +185,7 @@ func _worker_data(citizen: Citizen) -> Dictionary:
 		"manual_role": citizen.manual_role,
 		"training_role": citizen.training_role,
 		"training_days_completed": citizen.training_days_completed,
+		"should_study": should_study,
 	}
 
 

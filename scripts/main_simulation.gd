@@ -185,6 +185,16 @@ var service_pockets: Array[Dictionary] = []
 var selected_school: Node3D
 var school_menu: Panel
 var school_menu_title: Label
+var school_developed_professions: Dictionary = {
+	"construction": false,
+	"forestry": false,
+	"farming": false,
+	"excavation": false,
+	"factory_worker": false,
+	"engineer": false
+}
+var school_retrain_buttons: Array[Button] = []
+var school_dev_checkboxes: Dictionary = {}
 var materials_factory_menu: Panel
 var materials_factory_menu_title: Label
 var selected_materials_factory: Node3D
@@ -378,6 +388,8 @@ func _apply_daily_settlement_rules() -> void:
 	var population := citizens.size()
 	if population == 0:
 		return
+	for citizen in citizens:
+		citizen.apply_daily_decay()
 	# Everyone drinks each day. When there is no kitchen running meals, they also
 	# eat straight from the stores; a working cooking campfire/canteen already
 	# draws food through the meal pipeline, so we don't double-count there.
@@ -612,8 +624,13 @@ func _on_factory_cycle(worker: Citizen, factory: Node3D) -> void:
 		if clay < 1:
 			return
 		clay -= 1
-		bricks += 1
-		_update_interface("Brick factory produced 1 brick.")
+		var produced := 1
+		if worker.skills.get("factory_worker", 0.0) >= 1.0 and randf() < 0.10:
+			produced = 2
+			_update_interface("Industrialist: Brick factory produced 2 bricks from 1 clay!")
+		else:
+			_update_interface("Brick factory produced 1 brick.")
+		bricks += produced
 
 func _materials_factory_staffed(factory: Node3D) -> bool:
 	var has_worker := false
@@ -716,11 +733,15 @@ func _on_excavation_cycle(worker: Citizen, site_node: Node3D, efficiency: float)
 			site.pit.material_override = pit_material
 			_update_interface("Digger is carrying grass to the warehouse.")
 		elif site.depth <= site.soil_limit:
-			worker.deliver_excavation("soil", delivery_pos)
+			var res := "soil"
+			if worker.skills.get("excavation", 0.0) >= 1.0 and randf() < 0.10:
+				res = "clay" if randf() < 0.5 else "stone"
+				_update_interface("Deep Digger: Digger found rare %s in soil!" % res.capitalize())
+			worker.deliver_excavation(res, delivery_pos)
 			var pit_material := StandardMaterial3D.new()
 			pit_material.albedo_color = Color("78533b") # Soil brown
 			site.pit.material_override = pit_material
-			_update_interface("Digger is carrying soil to the warehouse.")
+			_update_interface("Digger is carrying %s to the warehouse." % res)
 		elif site.depth <= site.clay_limit:
 			worker.deliver_excavation("clay", delivery_pos)
 			var pit_material := StandardMaterial3D.new()
@@ -1565,15 +1586,15 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_build_button("Clay market", "clay_market", 244, "clay")
 	_add_build_button("Clay lodge", "clay_lodge", 278, "clay")
 	_add_build_button("Clay bakery", "clay_bakery", 312, "clay")
+	_add_build_button("School", "school", 346, "clay")
 	
 	_add_build_button("Sawmill - logs + kit", "sawmill", 176, "wood")
 	_add_build_button("Farm", "farm", 210, "wood")
 	_add_build_button("Canteen", "canteen", 244, "wood")
 	_add_build_button("Wood house", "house", 278, "wood")
-	_add_build_button("School", "school", 312, "wood")
-	_add_build_button("Park", "park", 346, "wood")
-	_add_build_button("Wood market", "wood_market", 380, "wood")
-	_add_build_button("Wooden town hall", "wood_town_hall", 414, "wood")
+	_add_build_button("Park", "park", 312, "wood")
+	_add_build_button("Wood market", "wood_market", 346, "wood")
+	_add_build_button("Wooden town hall", "wood_town_hall", 380, "wood")
 	
 	_add_build_button("Stone house", "stone_house", 176, "stone")
 	_add_build_button("Masonry workshop", "masonry_workshop", 210, "stone")
@@ -1593,26 +1614,82 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 func _create_school_menu(ui: CanvasLayer) -> void:
 	school_menu = Panel.new()
 	school_menu.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	school_menu.offset_left = -324.0
-	school_menu.offset_top = -360.0
+	school_menu.offset_left = -520.0
+	school_menu.offset_top = -460.0
 	school_menu.offset_right = -20.0
 	school_menu.offset_bottom = -20.0
 	school_menu.visible = false
 	ui.add_child(school_menu)
+	
 	school_menu_title = Label.new()
 	school_menu_title.position = Vector2(16, 14)
-	school_menu_title.size = Vector2(272, 72)
+	school_menu_title.size = Vector2(220, 72)
 	school_menu_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	school_menu_title.add_theme_font_size_override("font_size", 13)
 	school_menu.add_child(school_menu_title)
-	var roles := [["Construction", "construction"], ["Forestry", "forestry"], ["Farming", "farming"], ["Excavation", "excavation"], ["Factory worker", "factory_worker"], ["Engineer", "engineer"]]
-	school_menu.offset_top = -430.0
+	
+	var dev_title := Label.new()
+	dev_title.text = "Global Skill Development\n(Check to train all in morning):"
+	dev_title.position = Vector2(250, 14)
+	dev_title.size = Vector2(250, 72)
+	dev_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	dev_title.add_theme_font_size_override("font_size", 13)
+	school_menu.add_child(dev_title)
+	
+	var roles := [
+		["Construction", "construction"],
+		["Forestry", "forestry"],
+		["Farming", "farming"],
+		["Excavation", "excavation"],
+		["Factory worker", "factory_worker"],
+		["Engineer", "engineer"]
+	]
+	
+	school_retrain_buttons.clear()
 	for index in range(roles.size()):
 		var button := Button.new()
 		button.text = "Train: %s" % roles[index][0]
-		button.position = Vector2(16, 94 + index * 32)
-		button.size = Vector2(272, 28)
+		button.position = Vector2(16, 94 + index * 42)
+		button.size = Vector2(220, 32)
 		button.pressed.connect(_start_school_training.bind(roles[index][1]))
 		school_menu.add_child(button)
+		school_retrain_buttons.append(button)
+		
+	school_dev_checkboxes.clear()
+	for index in range(roles.size()):
+		var role_id: String = roles[index][1]
+		var cb := CheckBox.new()
+		cb.text = "Develop %s" % roles[index][0]
+		cb.position = Vector2(250, 94 + index * 42)
+		cb.size = Vector2(250, 32)
+		cb.toggled.connect(func(pressed: bool): _toggle_school_development(role_id, pressed))
+		school_menu.add_child(cb)
+		school_dev_checkboxes[role_id] = cb
+		
+	var demolish_btn := Button.new()
+	demolish_btn.text = "Demolish School"
+	demolish_btn.position = Vector2(16, 390)
+	demolish_btn.size = Vector2(220, 32)
+	demolish_btn.pressed.connect(func():
+		if selected_school != null:
+			_mark_building_for_demolition(selected_school)
+			school_menu.visible = false
+	)
+	school_menu.add_child(demolish_btn)
+	
+	var close_btn := Button.new()
+	close_btn.text = "Close"
+	close_btn.position = Vector2(250, 390)
+	close_btn.size = Vector2(250, 32)
+	close_btn.pressed.connect(func(): school_menu.visible = false)
+	school_menu.add_child(close_btn)
+
+func _toggle_school_development(role: String, pressed: bool) -> void:
+	school_developed_professions[role] = pressed
+	if pressed:
+		_update_interface("School developed: all %ss will train in mornings." % role.capitalize())
+	else:
+		_update_interface("Stopped school training for %ss." % role.capitalize())
 
 func _start_school_training(role: String) -> void:
 	if selected_builder == null or selected_school == null:
@@ -1620,6 +1697,32 @@ func _start_school_training(role: String) -> void:
 	selected_builder.start_training(role, selected_school.global_position)
 	school_menu.visible = false
 	_update_interface("Training started: 10 mornings in school, then regular work.")
+
+func _show_school_menu() -> void:
+	if selected_school == null:
+		return
+	build_menu.visible = false
+	house_menu.visible = false
+	building_menu.visible = false
+	
+	if selected_builder != null:
+		school_menu_title.text = "Student: %s\nSelect individual retraining (takes 10 mornings):" % selected_builder.role_label()
+		for btn in school_retrain_buttons:
+			btn.disabled = false
+	else:
+		school_menu_title.text = "Student: None\n(Select a resident first to enable retraining)"
+		for btn in school_retrain_buttons:
+			btn.disabled = true
+			
+	for role in school_developed_professions:
+		if school_dev_checkboxes.has(role):
+			var cb: CheckBox = school_dev_checkboxes[role]
+			cb.set_block_signals(true)
+			cb.button_pressed = school_developed_professions[role]
+			cb.set_block_signals(false)
+			
+	school_menu.visible = true
+	_update_interface("School selected: configure morning study and retraining here.")
 
 func _create_house_menu(ui: CanvasLayer) -> void:
 	house_menu = Panel.new()
@@ -1706,7 +1809,15 @@ func _update_brick_research(delta: float) -> void:
 		if materials_factory_menu != null and materials_factory_menu.visible:
 			_show_materials_factory_menu()
 		return
-	brick_research_progress = minf(1.0, brick_research_progress + delta / BRICK_RESEARCH_DURATION)
+	
+	var speed_mult := 1.0
+	for citizen in citizens:
+		if citizen.factory == brick_research_factory and citizen.specialization == "engineer" and citizen.state in [Citizen.State.TO_FACTORY, Citizen.State.FACTORY_WORK]:
+			if citizen.skills.get("engineer", 0.0) >= 1.0:
+				speed_mult = 1.30
+				break
+				
+	brick_research_progress = minf(1.0, brick_research_progress + (delta * speed_mult) / BRICK_RESEARCH_DURATION)
 	if brick_research_progress >= 1.0:
 		brick_construction_unlocked = true
 		brick_research_progress = -1.0
@@ -2227,13 +2338,7 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 		selected_building = selected_school
 		house_menu.visible = false
 		build_menu.visible = false
-		if selected_builder == null:
-			selected_building = selected_school
-			_show_building_menu()
-			return
-		school_menu_title.text = "Student: %s\nChoose a profession. Study takes 10 mornings." % selected_builder.role_label()
-		school_menu.visible = true
-		_update_interface("Choose the profession for this student.")
+		_show_school_menu()
 		return
 	if hit.collider.is_in_group("materials_factory_selector"):
 		selected_materials_factory = hit.collider.get_parent() as Node3D
@@ -2421,7 +2526,7 @@ func _show_selected_citizen_menu() -> void:
 	var home_label := "No home" if not is_instance_valid(selected_builder.home) else "House"
 	var effect_label := "Meal buff" if selected_builder.buffs.has("canteen_meal") else ("Tent debuff" if selected_builder.debuffs.has("tent") else "None")
 	if build_category.is_empty():
-		build_menu_title.text = "%s  Sat: %d/%d%%  Food: %d%%\nHome: %s  Effect: %s  Task: %s\nBuild %.1f Wood %.1f Farm %.1f Dig %.1f" % [selected_builder.role_label(), roundi(selected_builder.satisfaction), roundi(selected_builder.get_satisfaction_cap()), roundi(selected_builder.hunger), home_label, effect_label, assignment, float(selected_builder.skills.construction), float(selected_builder.skills.forestry), float(selected_builder.skills.farming), float(selected_builder.skills.excavation)]
+		build_menu_title.text = "%s  Sat: %d/%d%%  Food: %d%%\nHome: %s  Effect: %s  Task: %s\nBuild %.0f%% Wood %.0f%% Farm %.0f%% Dig %.0f%%" % [selected_builder.role_label(), roundi(selected_builder.satisfaction), roundi(selected_builder.get_satisfaction_cap()), roundi(selected_builder.hunger), home_label, effect_label, assignment, float(selected_builder.skills.get("construction", 0.0)) * 100.0, float(selected_builder.skills.get("forestry", 0.0)) * 100.0, float(selected_builder.skills.get("farming", 0.0)) * 100.0, float(selected_builder.skills.get("excavation", 0.0)) * 100.0]
 	build_menu_title.add_theme_color_override("font_color", selected_builder.specialization_color())
 
 func _toggle_hero_view() -> void:
@@ -3037,12 +3142,20 @@ func _send_citizen_to_leisure(citizen: Citizen) -> bool:
 	# waiting window knows if it needs to keep looking for work.
 	if citizen.is_player_controlled or citizen.state not in [Citizen.State.IDLE, Citizen.State.RESTING, Citizen.State.WAITING]:
 		return false
-	var recreation := pond_positions + park_positions + leisure_positions
+	# Dedicated recreation first (parks, leisure centers), picked at random.
+	var recreation := park_positions + leisure_positions
 	if not recreation.is_empty():
-		citizen.go_to_park(recreation[int(citizen.get_instance_id()) % recreation.size()])
+		citizen.go_to_park(recreation[randi() % recreation.size()])
 		return true
-	# No recreation built yet (early tent era): fall back to resting at home so
-	# workers with nothing to do stop loitering instead of standing forever.
+	# No parks yet (early eras): gather at the main campfire or a natural pond.
+	var gathering_spots: Array[Vector3] = []
+	if is_instance_valid(campfire_node):
+		gathering_spots.append(campfire_node.global_position)
+	gathering_spots.append_array(pond_positions)
+	if not gathering_spots.is_empty():
+		citizen.go_to_park(gathering_spots[randi() % gathering_spots.size()])
+		return true
+	# Nothing communal exists at all: at least rest at home instead of loitering.
 	if is_instance_valid(citizen.home):
 		citizen.go_home()
 		return true

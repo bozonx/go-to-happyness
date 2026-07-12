@@ -108,7 +108,8 @@ func finish_meal_request() -> void:
 func request_decision() -> void:
 	if _agent != null:
 		_agent.get_world_state().set_state("assigned", false)
-	_think_time = 0.0
+		_agent.process(0.0)
+	_think_time = THINK_INTERVAL
 
 
 func is_goal_valid(intent: Intent) -> bool:
@@ -152,7 +153,7 @@ func is_intent_complete(intent: Intent) -> bool:
 		Intent.EAT:
 			return citizen.state == Citizen.State.IDLE and not meal_requested
 		Intent.WORK:
-			return citizen.state != Citizen.State.IDLE
+			return citizen.state != Citizen.State.IDLE and citizen.state != Citizen.State.RESTING
 	return false
 
 
@@ -165,7 +166,9 @@ func _sync_world_state() -> void:
 	var world := _agent.get_world_state()
 	world.set_state("resting", citizen.state == Citizen.State.RESTING)
 	world.set_state("fed", not meal_requested)
-	world.set_state("assigned", citizen.state != Citizen.State.IDLE)
+	# RESTING must not count as "assigned": a citizen sleeping at home would
+	# otherwise satisfy the Work goal forever and never wake up for the next shift.
+	world.set_state("assigned", citizen.state != Citizen.State.IDLE and citizen.state != Citizen.State.RESTING)
 
 
 func _add_goal(goal_name: String, intent: Intent, state_key: String) -> void:

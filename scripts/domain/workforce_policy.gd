@@ -98,7 +98,7 @@ static func can_assign(worker: Dictionary, world: Dictionary) -> bool:
 		return int(world.get("schools", 0)) > 0
 	if specialization in ["factory_worker", "engineer"]:
 		return bool(world.get("has_factory_job", false))
-	if not str(worker.get("training_role", "")).is_empty() and int(worker.get("training_days_completed", 0)) < 10 and int(world.get("hour", 0)) < 12:
+	if bool(worker.get("should_study", false)) and int(world.get("hour", 0)) < 12:
 		return int(world.get("schools", 0)) > 0
 	if specialization == "builder" and int(world.get("construction_sites", 0)) == 0 and bool(world.get("has_engineer_job", false)):
 		return true
