@@ -79,6 +79,7 @@ var pending_employment_role := ""
 var employment_workplace: Node3D
 var pending_employment_workplace: Node3D
 var employment_center_position := Vector3.INF
+var overtime_mode := false
 var satisfaction := 72.0
 var satisfaction_tick := 0.0
 var body_material: StandardMaterial3D
@@ -1318,7 +1319,7 @@ func begin_waiting() -> void:
 	construction_site = null
 	assigned_dig_site = null
 	factory = null
-	task_timer.start(WAIT_DURATION)
+	task_timer.start(WAIT_DURATION * 24.0)
 	wait_recheck = WAIT_RECHECK_INTERVAL
 
 func _update_idle_indicator() -> void:
@@ -1359,7 +1360,8 @@ func _update_idle_indicator() -> void:
 		return
 	if state == State.WAITING:
 		idle_indicator.visible = true
-		idle_indicator.text = "No work"
+		var remaining_hours := int(task_timer.remaining / WAIT_DURATION) + 1
+		idle_indicator.text = "No work (waiting %dh)" % clamp(remaining_hours, 1, 24)
 		idle_indicator.modulate = Color("f0873d")
 		return
 	idle_indicator.visible = true
@@ -1462,6 +1464,9 @@ func _update_satisfaction(delta: float) -> void:
 	var core_pref_role := get_core_skill_for_role(preferred_role())
 	var core_active_role := get_core_skill_for_role(active_role)
 	var change := 0.0
+	
+	if overtime_mode:
+		change -= 3.0
 	
 	if not core_active_role.is_empty() and core_active_role == core_pref_role:
 		change = 1.2

@@ -92,6 +92,7 @@ const OFFICER_POST_RADIUS := 3.5
 # deliberately slower than a proper office run by a settled officer.
 const FIELD_REGISTRATION_PENALTY := 2.0
 var _worker_poll_timer := 0.0
+var _last_unstaffed_warning_time := -1000.0
 var runtime_seconds := 0.0
 var random := RandomNumberGenerator.new()
 var selected_cell := Vector2i(0, 0)
@@ -254,6 +255,9 @@ var building_official_button: Button
 var building_accept_workers_button: Button
 var building_dismiss_worker_button: Button
 var building_close_button: Button
+var building_overtime_button: Button
+var campfire_overtime_button: Button
+var campfire_close_btn: Button
 var building_cancel_construction_button: Button
 var job_submenu_btn: Button
 var job_back_btn: Button
@@ -369,7 +373,12 @@ func _process(delta: float) -> void:
 		_show_selected_citizen_menu()
 
 func _update_workers() -> void:
+	if _is_work_time():
+		for citizen in citizens:
+			if is_instance_valid(citizen):
+				citizen.overtime_mode = false
 	workforce.update_workers()
+	_check_unstaffed_employment_center()
 
 func _can_assign_goap_work(citizen: Citizen) -> bool:
 	# The coordinator owns the transition from the completed no-work window into
@@ -581,7 +590,7 @@ func _handle_day_cycle_event(event: SimulationDayEvent) -> void:
 			_start_after_work_rest()
 		SimulationDayEvent.Kind.RETURN_HOME:
 			for citizen in citizens:
-				if not citizen.is_player_controlled:
+				if not citizen.is_player_controlled and not citizen.overtime_mode:
 					citizen.go_home()
 		SimulationDayEvent.Kind.NIGHTFALL:
 			_update_workers()
@@ -708,7 +717,7 @@ func _start_after_work_rest() -> void:
 			continue
 		# Do not discard a courier's cargo or interrupt a production delivery at
 		# shift end. They will return home at the nightly cutoff instead.
-		if not citizen.is_available_for_schedule():
+		if not citizen.is_available_for_schedule() or citizen.overtime_mode:
 			continue
 		if settlement.workday_hours >= 12:
 			citizen.go_home()
@@ -2951,11 +2960,11 @@ func _set_manual_role(role: String) -> void:
 			selected_builder.setup_specialization(prev)
 		selected_builder.manual_role = role
 		selected_builder.auto_mode_enabled = role.is_empty()
-		if not role.is_empty() and _employment_center_position() != Vector3.INF:
-			selected_builder.begin_employment_processing(_employment_center_position(), role, _employer_for_role(role))
-		else:
-			selected_builder.permanent_role = role
-			selected_builder.employment_state = Citizen.EmploymentState.EMPLOYED if not role.is_empty() else Citizen.EmploymentState.AUTO_RESERVE
+		selected_builder.permanent_role = role
+		selected_builder.employment_workplace = _employer_for_role(role) if not role.is_empty() else null
+		selected_builder.pending_employment_role = ""
+		selected_builder.pending_employment_workplace = null
+		selected_builder.employment_state = Citizen.EmploymentState.EMPLOYED if not role.is_empty() else Citizen.EmploymentState.AUTO_RESERVE
 	selected_builder.assigned_dig_site = null
 	_update_workers()
 	build_menu_is_job_menu = false
@@ -3105,11 +3114,11 @@ func _place_dig_site(world_position: Vector3) -> void:
 	selected_builder.assigned_dig_site = site.node
 	selected_builder.manual_role = "excavation"
 	selected_builder.auto_mode_enabled = false
-	if _employment_center_position() != Vector3.INF:
-		selected_builder.begin_employment_processing(_employment_center_position(), "excavation", site.node)
-	else:
-		selected_builder.permanent_role = "excavation"
-		selected_builder.employment_state = Citizen.EmploymentState.EMPLOYED
+	selected_builder.permanent_role = "excavation"
+	selected_builder.employment_workplace = site.node
+	selected_builder.pending_employment_role = ""
+	selected_builder.pending_employment_workplace = null
+	selected_builder.employment_state = Citizen.EmploymentState.EMPLOYED
 	dig_mode = false
 	selection_marker.visible = false
 	_update_workers()
@@ -4509,12 +4518,19 @@ func _create_campfire_menu(ui: CanvasLayer) -> void:
 	campfire_dismiss_button.pressed.connect(_dismiss_campfire_worker)
 	campfire_menu.add_child(campfire_dismiss_button)
 
-	var close_btn := Button.new()
-	close_btn.text = "Close Menu"
-	close_btn.position = Vector2(16, 601)
-	close_btn.size = Vector2(272, 28)
-	close_btn.pressed.connect(_close_context_menus)
-	campfire_menu.add_child(close_btn)
+	campfire_overtime_button = Button.new()
+	campfire_overtime_button.text = "Вызвать работника сверхурочно"
+	campfire_overtime_button.position = Vector2(16, 599)
+	campfire_overtime_button.size = Vector2(272, 32)
+	campfire_overtime_button.pressed.connect(_call_campfire_worker_overtime)
+	campfire_menu.add_child(campfire_overtime_button)
+
+	campfire_close_btn = Button.new()
+	campfire_close_btn.text = "Close Menu"
+	campfire_close_btn.position = Vector2(16, 601)
+	campfire_close_btn.size = Vector2(272, 28)
+	campfire_close_btn.pressed.connect(_close_context_menus)
+	campfire_menu.add_child(campfire_close_btn)
 
 
 func _show_campfire_menu() -> void:
@@ -4989,6 +5005,14 @@ func _refresh_campfire_worker_controls() -> void:
 	var officer := _workplace_worker(selected_campfire) if is_center else null
 	campfire_dismiss_button.visible = is_center
 	campfire_dismiss_button.disabled = officer == null
+	
+	if campfire_overtime_button != null:
+		campfire_overtime_button.visible = is_center and not _is_work_time() and officer != null
+		if campfire_overtime_button.visible:
+			campfire_overtime_button.position.y = 599.0
+			campfire_close_btn.position.y = 637.0
+		else:
+			campfire_close_btn.position.y = 601.0
 
 
 func _assign_official_at_campfire() -> void:
@@ -5267,6 +5291,13 @@ func _create_building_menu(ui: CanvasLayer) -> void:
 	building_dismiss_worker_button.size = Vector2(272, 30)
 	building_dismiss_worker_button.pressed.connect(_dismiss_selected_workplace_worker)
 	building_menu.add_child(building_dismiss_worker_button)
+	building_overtime_button = Button.new()
+	building_overtime_button.text = "Вызвать работника сверхурочно"
+	building_overtime_button.position = Vector2(16, 176)
+	building_overtime_button.size = Vector2(272, 30)
+	building_overtime_button.pressed.connect(_call_worker_overtime)
+	building_menu.add_child(building_overtime_button)
+
 	building_close_button = Button.new()
 	building_close_button.text = "Close"
 	building_close_button.position = Vector2(16, 184)
@@ -5328,15 +5359,36 @@ func _show_building_menu() -> void:
 		building_accept_workers_button.visible = is_workplace
 		building_dismiss_worker_button.visible = is_workplace
 		building_cancel_construction_button.visible = false
+		
+		var officer := _workplace_worker(selected_building)
+		building_overtime_button.visible = is_workplace and not _is_work_time() and officer != null
+		
 		if is_workplace:
 			var accepting := bool(selected_building.get_meta("accepting_workers", true))
 			building_accept_workers_button.text = "Stop accepting workers" if accepting else "Start accepting workers"
 			building_accept_workers_button.tooltip_text = "This workplace is priority #%d among open workplaces of the same profession." % _workplace_priority_position(selected_building) if accepting else "Reopen this workplace and move it to the front of the hiring queue."
-			building_dismiss_worker_button.disabled = _workplace_worker(selected_building) == null
+			building_dismiss_worker_button.disabled = officer == null
+		
+		var next_y := 104.0
+		if building_accept_workers_button.visible:
+			building_accept_workers_button.position.y = next_y
+			next_y += 36.0
+		if building_dismiss_worker_button.visible:
+			building_dismiss_worker_button.position.y = next_y
+			next_y += 36.0
+		if building_overtime_button.visible:
+			building_overtime_button.position.y = next_y
+			next_y += 36.0
+			
 		var special_button_visible := building_cook_button.visible or building_teacher_button.visible or building_seller_button.visible or building_official_button.visible
 		for button in [building_cook_button, building_teacher_button, building_seller_button, building_official_button]:
-			button.position.y = 176.0
-		building_close_button.position.y = 220.0 if special_button_visible else 184.0
+			if button.visible:
+				button.position.y = next_y
+		if special_button_visible:
+			next_y += 44.0
+		else:
+			next_y += 8.0
+		building_close_button.position.y = next_y
 
 
 func _toggle_selected_workplace_acceptance() -> void:
@@ -5562,12 +5614,11 @@ func _set_manual_specialist_employment(citizen: Citizen, role: String) -> void:
 	citizen.idle()
 	citizen.manual_role = ""
 	citizen.auto_mode_enabled = false
-	if _employment_center_position() != Vector3.INF:
-		citizen.begin_employment_processing(_employment_center_position(), role, _employer_for_role(role))
-	else:
-		citizen.permanent_role = role
-		citizen.pending_employment_role = ""
-		citizen.employment_state = Citizen.EmploymentState.EMPLOYED
+	citizen.permanent_role = role
+	citizen.employment_workplace = _employer_for_role(role)
+	citizen.pending_employment_role = ""
+	citizen.pending_employment_workplace = null
+	citizen.employment_state = Citizen.EmploymentState.EMPLOYED
 
 
 func _find_closest_tree_for_citizen(citizen: Citizen) -> Vector3:
@@ -5865,3 +5916,46 @@ func get_toilets() -> Array[Node3D]:
 			if b_type.begins_with("toilet_"):
 				toilets.append(record.node)
 	return toilets
+
+
+func _check_unstaffed_employment_center() -> void:
+	if not _is_work_time():
+		return
+	
+	var has_waiting_citizen := false
+	var center := _employment_center_position()
+	if center != Vector3.INF:
+		for citizen in citizens:
+			if is_instance_valid(citizen) and citizen.state == Citizen.State.TO_EMPLOYMENT_CENTER:
+				if citizen.global_position.distance_to(center) <= 3.5:
+					has_waiting_citizen = true
+					break
+	
+	if has_waiting_citizen and not _is_registration_staffed():
+		var current_time := runtime_seconds
+		if current_time - _last_unstaffed_warning_time > 60.0:
+			_last_unstaffed_warning_time = current_time
+			_add_message("Предупреждение: В службе занятости нет чиновника! Оформление жителей приостановлено.")
+
+
+func _call_worker_overtime() -> void:
+	if not is_instance_valid(selected_building):
+		return
+	var workers_found := false
+	for citizen in citizens:
+		if is_instance_valid(citizen) and (citizen.employment_workplace == selected_building or citizen.pending_employment_workplace == selected_building):
+			citizen.overtime_mode = true
+			citizen.satisfaction = maxf(0.0, citizen.satisfaction - 25.0)
+			workers_found = true
+			_add_message("Работник %s вызван сверхурочно. Уровень удовольствия снизился." % [citizen.role_label()])
+	if workers_found:
+		_update_workers()
+		_reopen_workplace_menu()
+
+
+func _call_campfire_worker_overtime() -> void:
+	if not is_instance_valid(selected_campfire):
+		return
+	selected_building = selected_campfire
+	_call_worker_overtime()
+	_refresh_campfire_menu()

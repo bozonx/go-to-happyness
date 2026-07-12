@@ -126,7 +126,7 @@ func _decision_context() -> CitizenDecisionContext:
 	var context := CitizenDecisionContext.new()
 	# The existing sleep goal uses this field; rest begins when the configured
 	# shift ends, not merely when the sky becomes dark.
-	context.is_night = not simulation._is_work_time()
+	context.is_night = not (simulation._is_work_time() or citizen.overtime_mode)
 	context.has_home = is_instance_valid(citizen.home)
 	context.has_canteen = is_instance_valid(simulation.canteen)
 	context.meal_requested = meal_requested
