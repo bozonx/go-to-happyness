@@ -325,7 +325,7 @@ func _is_factory_worker_active(citizen: Citizen, factory: Node3D) -> bool:
 
 func _has_courier() -> bool:
 	for citizen in citizens:
-		if citizen.specialization == "courier":
+		if citizen.specialization == "courier" and citizen.employment_state in [Citizen.EmploymentState.AUTO_RESERVE, Citizen.EmploymentState.MANUAL_COURIER]:
 			return true
 	return false
 
@@ -607,7 +607,7 @@ func _update_couriers() -> void:
 	if warehouse_positions.is_empty():
 		return
 	for courier in citizens:
-		if courier.specialization != "courier" or courier.state != Citizen.State.IDLE:
+		if courier.specialization != "courier" or courier.employment_state not in [Citizen.EmploymentState.AUTO_RESERVE, Citizen.EmploymentState.MANUAL_COURIER] or courier.state != Citizen.State.IDLE:
 			continue
 		if is_instance_valid(courier.courier_worker):
 			if courier.courier_worker.has_pending_resource():
@@ -2114,7 +2114,7 @@ func _set_manual_role(role: String) -> void:
 		selected_builder.manual_role = role
 		selected_builder.auto_mode_enabled = false
 		if not role.is_empty() and _employment_center_position() != Vector3.INF:
-			selected_builder.begin_employment_processing(_employment_center_position(), role)
+			selected_builder.begin_employment_processing(_employment_center_position(), role, _employer_for_role(role))
 		else:
 			selected_builder.permanent_role = role
 			selected_builder.employment_state = Citizen.EmploymentState.EMPLOYED if not role.is_empty() else Citizen.EmploymentState.AUTO_RESERVE
@@ -2131,7 +2131,8 @@ func _set_manual_role(role: String) -> void:
 func _is_role_available(role: String) -> bool:
 	match role:
 		"": return true
-		"construction": return not construction_sites.is_empty() or not demolition_sites.is_empty()
+		"construction":
+			return (not construction_sites.is_empty() or not demolition_sites.is_empty()) and (settlement.era < SettlementState.Era.STONE or _builder_job_capacity() > 0)
 		"forestry": return bool(settlement.tools.get("axe", false)) and bool(settlement.tools.get("hand_saw", false)) and not tree_positions.is_empty() and not warehouse_positions.is_empty()
 		"farming": return not farm_positions.is_empty() and not warehouse_positions.is_empty()
 		"excavation":
@@ -2146,6 +2147,11 @@ func _is_role_available(role: String) -> bool:
 		"gather_food": return not forager_positions.is_empty()
 		"gather_dew": return _has_collected_dew() and not warehouse_positions.is_empty()
 		"gather_water": return bool(settlement.tools.get("bucket", false)) and bool(settlement.tools.get("filter_1", false)) and not pond_positions.is_empty() and not warehouse_positions.is_empty()
+		"cook": return is_instance_valid(canteen)
+		"teacher": return not school_positions.is_empty()
+		"seller": return not market_positions.is_empty()
+		"factory_worker": return workforce._factory_job_capacity() > 0
+		"engineer": return workforce._engineer_job_capacity() > 0
 		"courier": return not warehouse_positions.is_empty()
 	return false
 
@@ -2155,6 +2161,53 @@ func _assigned_count_for_role(role: String) -> int:
 		if citizen.manual_role == role or (role.is_empty() and citizen.manual_role.is_empty()):
 			count += 1
 	return count
+
+
+func _builder_job_capacity() -> int:
+	return builders_guild_positions.size() + construction_company_positions.size() * 3
+
+
+func _employer_for_role(role: String) -> Node3D:
+	var types: Array[String] = []
+	match role:
+		"construction": types = ["builders_guild", "construction_company"]
+		"forestry": types = ["sawmill"]
+		"farming": types = ["farm"]
+		"gather_food": types = ["forager_tent"]
+		"cook": types = ["cook_campfire", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant"]
+		"teacher": types = ["school"]
+		"seller": types = ["trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market"]
+		"factory_worker": types = ["brick_factory", "materials_factory", "recycling_factory", "metal_factory"]
+		"engineer": types = ["materials_factory"]
+		"excavation":
+			for site in dig_sites:
+				if _can_work_at_dig_site(site):
+					return site.node
+			return null
+		_: return null
+	var best: Node3D
+	var best_load := 100000
+	for record in building_footprints:
+		var building := record.get("node") as Node3D
+		if not is_instance_valid(building) or str(building.get_meta("building_type", "")) not in types:
+			continue
+		var capacity := _employer_capacity(role, building)
+		var load := 0
+		for citizen in citizens:
+			if citizen.employment_workplace == building or citizen.pending_employment_workplace == building:
+				load += 1
+		if load < capacity and load < best_load:
+			best = building
+			best_load = load
+	return best
+
+
+func _employer_capacity(role: String, building: Node3D) -> int:
+	if role == "construction":
+		return 3 if building.get_meta("building_type", "") == "construction_company" else 1
+	if role == "factory_worker":
+		return int(building.get_meta("required_factory_workers", 1))
+	return 1
 
 func _start_dig_assignment() -> void:
 	if selected_builder == null:
@@ -2178,7 +2231,7 @@ func _place_dig_site(world_position: Vector3) -> void:
 	selected_builder.manual_role = "excavation"
 	selected_builder.auto_mode_enabled = false
 	if _employment_center_position() != Vector3.INF:
-		selected_builder.begin_employment_processing(_employment_center_position(), "excavation")
+		selected_builder.begin_employment_processing(_employment_center_position(), "excavation", site.node)
 	else:
 		selected_builder.permanent_role = "excavation"
 		selected_builder.employment_state = Citizen.EmploymentState.EMPLOYED
@@ -2556,6 +2609,7 @@ func _finish_demolition(site: Dictionary) -> void:
 	_update_interface("%s dismantled; usable materials were recovered." % building_type.capitalize())
 
 func _remove_building_services(building: Node3D, building_type: String) -> void:
+	_release_employment_at_building(building)
 	var service_position: Vector3 = building.get_meta("service_position", building.global_position)
 	match building_type:
 		"warehouse": warehouse_positions.erase(service_position)
@@ -2574,6 +2628,20 @@ func _remove_building_services(building: Node3D, building_type: String) -> void:
 		"cook_campfire", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant":
 			if canteen == building: canteen = null
 		"brick_factory", "materials_factory", "recycling_factory", "metal_factory": factories.erase(building)
+
+
+func _release_employment_at_building(building: Node3D) -> void:
+	for citizen in citizens:
+		if citizen.employment_workplace != building and citizen.pending_employment_workplace != building:
+			continue
+		citizen.idle()
+		citizen.manual_role = ""
+		citizen.permanent_role = ""
+		citizen.pending_employment_role = ""
+		citizen.employment_workplace = null
+		citizen.pending_employment_workplace = null
+		citizen.auto_mode_enabled = false
+		citizen.employment_state = Citizen.EmploymentState.UNEMPLOYED
 
 
 func _citizen_at_screen_position(screen_position: Vector2) -> Citizen:
@@ -3542,7 +3610,7 @@ func _refresh_campfire_occupancy_button() -> void:
 
 
 func _workforce_roles() -> Array[String]:
-	return ["construction", "forestry", "farming", "excavation", "gather_branches", "gather_grass", "gather_food", "gather_dew", "gather_water", "courier"]
+	return ["construction", "forestry", "farming", "excavation", "gather_food", "cook", "teacher", "seller", "factory_worker", "engineer", "gather_branches", "gather_grass", "gather_dew", "gather_water", "courier"]
 
 
 func _workforce_role_label(role: String) -> String:
@@ -3551,6 +3619,8 @@ func _workforce_role_label(role: String) -> String:
 		"excavation": "Excavation", "gather_branches": "Gather branches",
 		"gather_grass": "Gather grass", "gather_food": "Foraging",
 		"gather_dew": "Collect dew", "gather_water": "Collect water",
+		"cook": "Cook", "teacher": "Teacher", "seller": "Seller",
+		"factory_worker": "Factory worker", "engineer": "Engineer",
 		"courier": "Courier"
 	}
 	return str(labels.get(role, role.replace("_", " ").capitalize()))
@@ -3558,10 +3628,16 @@ func _workforce_role_label(role: String) -> String:
 
 func _workforce_role_limit(role: String) -> int:
 	match role:
+		"construction": return _builder_job_capacity() if settlement.era >= SettlementState.Era.STONE else -1
 		"forestry": return sawmill_positions.size()
 		"farming": return farm_positions.size()
 		"gather_food": return forager_positions.size()
 		"courier": return warehouse_positions.size()
+		"cook": return 1 if is_instance_valid(canteen) else 0
+		"teacher": return school_positions.size()
+		"seller": return market_positions.size()
+		"factory_worker": return workforce._factory_job_capacity()
+		"engineer": return workforce._engineer_job_capacity()
 	return -1
 
 
@@ -3742,6 +3818,8 @@ func _remove_worker_from_role(role: String) -> void:
 				citizen.manual_role = ""
 				citizen.permanent_role = ""
 				citizen.pending_employment_role = ""
+				citizen.employment_workplace = null
+				citizen.pending_employment_workplace = null
 				citizen.auto_mode_enabled = false
 				citizen.employment_state = Citizen.EmploymentState.UNEMPLOYED
 				_update_workers()
@@ -3753,6 +3831,8 @@ func _remove_worker_from_role(role: String) -> void:
 			citizen.manual_role = ""
 			citizen.permanent_role = ""
 			citizen.pending_employment_role = ""
+			citizen.employment_workplace = null
+			citizen.pending_employment_workplace = null
 			citizen.auto_mode_enabled = false
 			citizen.employment_state = Citizen.EmploymentState.UNEMPLOYED
 			citizen.assigned_dig_site = null
@@ -3783,6 +3863,8 @@ func _enable_auto_for_citizen(citizen: Citizen) -> void:
 	citizen.manual_role = ""
 	citizen.permanent_role = ""
 	citizen.pending_employment_role = ""
+	citizen.employment_workplace = null
+	citizen.pending_employment_workplace = null
 	citizen.auto_mode_enabled = true
 	citizen.employment_state = Citizen.EmploymentState.AUTO_RESERVE
 	_update_workers()
@@ -4143,7 +4225,7 @@ func _dispatch_queued_trades() -> void:
 	for worker in citizens:
 		if WorkforcePolicy.can_take_queued_job({
 			"player_controlled": worker.is_player_controlled,
-			"idle": worker.state == Citizen.State.IDLE,
+			"idle": worker.state == Citizen.State.IDLE and worker.employment_state in [Citizen.EmploymentState.AUTO_RESERVE, Citizen.EmploymentState.MANUAL_COURIER],
 			"manual_role": worker.manual_role,
 			"has_queued_job": pending_trades.has(worker.get_instance_id()),
 		}):
@@ -4335,11 +4417,9 @@ func _assign_cook_at_campfire() -> void:
 	if selected_builder.is_player_controlled:
 		_update_interface("Pick a settler, not the character you are controlling.")
 		return
-	selected_builder.manual_role = ""
-	selected_builder.permanent_role = ""
+	_set_manual_specialist_employment(selected_builder, "cook")
 	selected_builder.setup_specialization("cook")
-	selected_builder.assign_canteen_work(canteen_position)
-	_update_interface("%s is now the cook and will keep the campfire kitchen running." % selected_builder.role_label())
+	_update_interface("%s is registering as a cook." % selected_builder.role_label())
 	_update_workers()
 
 
@@ -4350,12 +4430,9 @@ func _assign_teacher_at_school() -> void:
 	if selected_builder.is_player_controlled:
 		_update_interface("Pick a settler, not the character you are controlling.")
 		return
-	selected_builder.manual_role = ""
-	selected_builder.permanent_role = ""
+	_set_manual_specialist_employment(selected_builder, "teacher")
 	selected_builder.setup_specialization("teacher")
-	if not school_positions.is_empty():
-		selected_builder.assign_teacher_work(school_positions[0])
-	_update_interface("%s is now the teacher and will keep the school running." % selected_builder.role_label())
+	_update_interface("%s is registering as a teacher." % selected_builder.role_label())
 	_update_workers()
 
 
@@ -4366,14 +4443,22 @@ func _assign_seller_at_market() -> void:
 	if selected_builder.is_player_controlled:
 		_update_interface("Pick a settler, not the character you are controlling.")
 		return
-	selected_builder.manual_role = ""
-	selected_builder.permanent_role = ""
+	_set_manual_specialist_employment(selected_builder, "seller")
 	selected_builder.setup_specialization("seller")
-	if selected_building != null:
-		var service_position: Vector3 = selected_building.get_meta("service_position", selected_building.global_position)
-		selected_builder.assign_seller_work(service_position)
-	_update_interface("%s is now the seller and will keep the market running." % selected_builder.role_label())
+	_update_interface("%s is registering as a seller." % selected_builder.role_label())
 	_update_workers()
+
+
+func _set_manual_specialist_employment(citizen: Citizen, role: String) -> void:
+	citizen.idle()
+	citizen.manual_role = ""
+	citizen.auto_mode_enabled = false
+	if _employment_center_position() != Vector3.INF:
+		citizen.begin_employment_processing(_employment_center_position(), role, _employer_for_role(role))
+	else:
+		citizen.permanent_role = role
+		citizen.pending_employment_role = ""
+		citizen.employment_state = Citizen.EmploymentState.EMPLOYED
 
 
 func _find_closest_tree_for_citizen(citizen: Citizen) -> Vector3:

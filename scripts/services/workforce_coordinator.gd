@@ -28,17 +28,21 @@ func update_workers() -> void:
 		for citizen in simulation.citizens:
 			citizen.request_goap_decision()
 		return
+	_schedule_permanent_vacancies()
 	var sorted_citizens := _get_sorted_citizens()
 	for citizen in sorted_citizens:
 		if citizen.is_player_controlled:
+			continue
+		if citizen.employment_state == Citizen.EmploymentState.PENDING_JOB and not _employer_exists(citizen.pending_employment_role):
+			citizen.queue_employment_processing()
 			continue
 		if citizen.employment_state in [Citizen.EmploymentState.PENDING_JOB, Citizen.EmploymentState.PENDING_UNEMPLOYMENT] and citizen.state in [Citizen.State.IDLE, Citizen.State.RESTING, Citizen.State.TO_HOME]:
 			if citizen.employment_state == Citizen.EmploymentState.PENDING_UNEMPLOYMENT:
 				var queued_vacancy := WorkforcePolicy.permanent_vacancy_for(_worker_data(citizen), _world_data())
 				if not queued_vacancy.is_empty():
-					citizen.queue_employment_processing(queued_vacancy)
+					citizen.queue_employment_processing(queued_vacancy, simulation._employer_for_role(queued_vacancy))
 			if _can_finish_registration_today(citizen):
-				citizen.begin_employment_processing(simulation._employment_center_position(), citizen.pending_employment_role)
+				citizen.begin_employment_processing(simulation._employment_center_position(), citizen.pending_employment_role, citizen.pending_employment_workplace)
 			continue
 		if citizen.state in [Citizen.State.TO_EMPLOYMENT_CENTER, Citizen.State.EMPLOYMENT_PROCESSING]:
 			_update_employment_processing(citizen)
@@ -53,6 +57,9 @@ func update_workers() -> void:
 				continue
 			citizen.blocked_by_storage = false
 		if citizen.employment_state == Citizen.EmploymentState.EMPLOYED:
+			if not _employer_exists(citizen.permanent_role):
+				_release_employment(citizen)
+				continue
 			if can_assign_work(citizen) and citizen.state in [Citizen.State.IDLE, Citizen.State.RESTING]:
 				citizen.request_goap_decision()
 			continue
@@ -66,9 +73,9 @@ func update_workers() -> void:
 			var vacancy := WorkforcePolicy.permanent_vacancy_for(_worker_data(citizen), _world_data())
 			if not vacancy.is_empty():
 				if _can_finish_registration_today(citizen):
-					citizen.begin_employment_processing(simulation._employment_center_position(), vacancy)
+					citizen.begin_employment_processing(simulation._employment_center_position(), vacancy, simulation._employer_for_role(vacancy))
 				else:
-					citizen.queue_employment_processing(vacancy)
+					citizen.queue_employment_processing(vacancy, simulation._employer_for_role(vacancy))
 				continue
 		if can_assign_work(citizen):
 			# Pull free citizens onto work: the genuinely idle and the ones resting
@@ -88,9 +95,9 @@ func _update_employment_processing(citizen: Citizen) -> void:
 		var vacancy := WorkforcePolicy.permanent_vacancy_for(_worker_data(citizen), _world_data())
 		if not vacancy.is_empty():
 			if _can_finish_registration_today(citizen):
-				citizen.begin_employment_processing(simulation._employment_center_position(), vacancy)
+				citizen.begin_employment_processing(simulation._employment_center_position(), vacancy, simulation._employer_for_role(vacancy))
 			else:
-				citizen.queue_employment_processing(vacancy)
+				citizen.queue_employment_processing(vacancy, simulation._employer_for_role(vacancy))
 
 
 func _can_finish_registration_today(citizen: Citizen) -> bool:
@@ -106,14 +113,55 @@ func _get_sorted_citizens() -> Array[Citizen]:
 	var list: Array[Citizen] = []
 	for citizen in simulation.citizens:
 		list.append(citizen)
+	var early_construction: bool = simulation.settlement.era < SettlementState.Era.STONE and not simulation.construction_sites.is_empty()
 	list.sort_custom(func(a: Citizen, b: Citizen):
-		var a_pref := a.preferred_role()
-		var b_pref := b.preferred_role()
+		var a_pref := "construction" if early_construction else a.preferred_role()
+		var b_pref := "construction" if early_construction else b.preferred_role()
 		var a_skill := float(a.skills.get(a_pref, 0.0))
 		var b_skill := float(b.skills.get(b_pref, 0.0))
 		return a_skill > b_skill
 	)
 	return list
+
+
+func _schedule_permanent_vacancies() -> void:
+	# Choose a candidate after the role is known: the strongest forester wins a
+	# forestry vacancy even when another resident has a higher farming skill.
+	var reserved_ids: Dictionary = {}
+	while true:
+		var candidates_by_role: Dictionary = {}
+		for citizen in simulation.citizens:
+			if citizen.is_player_controlled or not citizen.auto_mode_enabled:
+				continue
+			var is_reserve: bool = citizen.employment_state == Citizen.EmploymentState.AUTO_RESERVE and citizen.state in [Citizen.State.IDLE, Citizen.State.RESTING]
+			var is_registering_unemployed: bool = citizen.employment_state == Citizen.EmploymentState.PENDING_UNEMPLOYMENT
+			if (not is_reserve and not is_registering_unemployed) or reserved_ids.has(citizen.get_instance_id()):
+				continue
+			var role := WorkforcePolicy.permanent_vacancy_for(_worker_data(citizen), _world_data())
+			if role.is_empty():
+				continue
+			if not candidates_by_role.has(role):
+				candidates_by_role[role] = []
+			candidates_by_role[role].append(citizen)
+		if candidates_by_role.is_empty():
+			return
+		var selected_role := ""
+		var selected_citizen: Citizen
+		for role in candidates_by_role:
+			var candidates: Array = candidates_by_role[role]
+			candidates.sort_custom(func(a: Citizen, b: Citizen): return float(a.skills.get(role, 0.0)) > float(b.skills.get(role, 0.0)))
+			var candidate: Citizen = candidates[0]
+			if selected_citizen == null or float(candidate.skills.get(role, 0.0)) > float(selected_citizen.skills.get(selected_role, 0.0)):
+				selected_role = role
+				selected_citizen = candidate
+		if selected_citizen == null:
+			return
+		reserved_ids[selected_citizen.get_instance_id()] = true
+		var workplace: Node3D = simulation._employer_for_role(selected_role)
+		if _can_finish_registration_today(selected_citizen):
+			selected_citizen.begin_employment_processing(simulation._employment_center_position(), selected_role, workplace)
+		else:
+			selected_citizen.queue_employment_processing(selected_role, workplace)
 
 
 func _send_to_waiting(citizen: Citizen) -> void:
@@ -127,6 +175,34 @@ func _send_to_waiting(citizen: Citizen) -> void:
 			citizen.queue_employment_processing()
 
 
+func _employer_exists(role: String) -> bool:
+	match role:
+		"construction":
+			if simulation.settlement.era < SettlementState.Era.STONE:
+				return not simulation.construction_sites.is_empty() or not simulation.demolition_sites.is_empty()
+			return int(_world_data().get("builder_jobs", 0)) > 0
+		"forestry": return not simulation.sawmill_positions.is_empty()
+		"farming": return not simulation.farm_positions.is_empty()
+		"gather_food": return not simulation.forager_positions.is_empty()
+		"cook": return is_instance_valid(simulation.canteen)
+		"teacher": return not simulation.school_positions.is_empty()
+		"seller": return not simulation.market_positions.is_empty()
+		"factory_worker": return _factory_job_capacity() > 0
+		"engineer": return _engineer_job_capacity() > 0
+	return true
+
+
+func _release_employment(citizen: Citizen) -> void:
+	citizen.idle()
+	citizen.manual_role = ""
+	citizen.permanent_role = ""
+	citizen.pending_employment_role = ""
+	citizen.employment_workplace = null
+	citizen.pending_employment_workplace = null
+	citizen.auto_mode_enabled = false
+	citizen.employment_state = Citizen.EmploymentState.UNEMPLOYED
+
+
 func can_assign_work(citizen: Citizen) -> bool:
 	if not WorkforcePolicy.can_assign(_worker_data(citizen), _world_data()):
 		return false
@@ -136,22 +212,25 @@ func can_assign_work(citizen: Citizen) -> bool:
 func assign_work(citizen: Citizen, index: int) -> void:
 	if not can_assign_work(citizen):
 		return
-	if citizen.specialization == "cook":
-		citizen.assign_canteen_work(simulation.canteen_position)
+	var role := work_role_for(citizen)
+	if role == "cook":
+		citizen.assign_canteen_work(_workplace_position(citizen, simulation.canteen_position))
 		return
-	if citizen.specialization == "teacher":
-		citizen.assign_teacher_work(simulation.school_positions[0])
+	if role == "teacher":
+		citizen.assign_teacher_work(_workplace_position(citizen, simulation.school_positions[0]))
 		return
-	if citizen.specialization == "seller":
+	if role == "seller":
 		if not simulation.market_positions.is_empty():
-			var market_pos: Vector3 = simulation.market_positions[index % simulation.market_positions.size()]
+			var market_pos: Vector3 = _workplace_position(citizen, simulation.market_positions[index % simulation.market_positions.size()])
 			citizen.assign_seller_work(market_pos)
 		return
-	if citizen.specialization == "factory_worker":
-		citizen.assign_factory_work(factory_for_role("factory_worker"), "factory_work")
+	if role == "factory_worker":
+		var factory_worker_node: Node3D = citizen.employment_workplace if is_instance_valid(citizen.employment_workplace) else factory_for_role("factory_worker")
+		citizen.assign_factory_work(factory_worker_node, "factory_work")
 		return
-	if citizen.specialization == "engineer":
-		citizen.assign_factory_work(factory_for_role("engineer"), "engineering")
+	if role == "engineer":
+		var engineer_node: Node3D = citizen.employment_workplace if is_instance_valid(citizen.employment_workplace) else factory_for_role("engineer")
+		citizen.assign_factory_work(engineer_node, "engineering")
 		return
 	var should_study := false
 	var target_role := ""
@@ -173,7 +252,7 @@ func assign_work(citizen: Citizen, index: int) -> void:
 		if materials_plant != null:
 			citizen.assign_factory_work(materials_plant, "construction")
 			return
-	match work_role_for(citizen):
+	match role:
 		"construction":
 			if not simulation.demolition_sites.is_empty():
 				citizen.assign_demolition(simulation.demolition_sites[index % simulation.demolition_sites.size()].building)
@@ -186,13 +265,13 @@ func assign_work(citizen: Citizen, index: int) -> void:
 				if simulation.sawmill_positions.is_empty():
 					citizen.assign_gathering("logs", tree_position, simulation._get_delivery_position())
 				else:
-					var sawmill_position: Vector3 = simulation.sawmill_positions[index % simulation.sawmill_positions.size()]
+					var sawmill_position: Vector3 = _workplace_position(citizen, simulation.sawmill_positions[index % simulation.sawmill_positions.size()])
 					citizen.assign_work("wood", tree_position, sawmill_position, simulation.warehouse_positions[index % simulation.warehouse_positions.size()])
 		"farming":
-			var farm_position: Vector3 = simulation.farm_positions[index % simulation.farm_positions.size()]
+			var farm_position: Vector3 = _workplace_position(citizen, simulation.farm_positions[index % simulation.farm_positions.size()])
 			citizen.assign_work("food", farm_position, farm_position, simulation.warehouse_positions[index % simulation.warehouse_positions.size()], simulation._has_courier())
 		"excavation":
-			var dig_site := citizen.assigned_dig_site
+			var dig_site := citizen.employment_workplace if is_instance_valid(citizen.employment_workplace) else citizen.assigned_dig_site
 			if not is_instance_valid(dig_site) or not simulation._can_work_at_dig_site(simulation._dig_site_for_node(dig_site)):
 				# Find the first valid dig site
 				var valid_sites := []
@@ -213,13 +292,26 @@ func assign_work(citizen: Citizen, index: int) -> void:
 			var grass_pos: Vector3 = simulation._find_grass_gathering_position(citizen)
 			citizen.assign_gathering("grass", grass_pos, simulation._get_delivery_position())
 		"gather_food":
-			var forage_pos: Vector3 = simulation._find_forage_position(citizen)
+			var forage_pos: Vector3 = _workplace_position(citizen, simulation._find_forage_position(citizen))
 			if forage_pos != Vector3.INF:
 				citizen.assign_gathering("food", forage_pos, simulation._get_delivery_position())
+		"gather_dew":
+			var collector_position: Vector3 = simulation._reserve_dew_collector()
+			if collector_position != Vector3.INF:
+				citizen.assign_gathering("water", collector_position, simulation._get_delivery_position())
+		"gather_water":
+			if not simulation.pond_positions.is_empty():
+				citizen.assign_gathering("water", simulation.pond_positions[index % simulation.pond_positions.size()], simulation._get_delivery_position())
 	# A role can be available in policy while its concrete source is exhausted.
 	# Register unemployment instead of returning to the obsolete waiting loop.
 	if citizen.state == Citizen.State.IDLE or citizen.state == Citizen.State.RESTING:
 		_send_to_waiting(citizen)
+
+
+func _workplace_position(citizen: Citizen, fallback: Vector3) -> Vector3:
+	if is_instance_valid(citizen.employment_workplace):
+		return citizen.employment_workplace.get_meta("service_position", citizen.employment_workplace.global_position)
+	return fallback
 
 
 func work_role_for(citizen: Citizen) -> String:
@@ -251,8 +343,12 @@ func _world_data() -> Dictionary:
 		"era": simulation.settlement.era,
 		"hour": int(simulation.game_minutes) / 60,
 		"has_canteen": is_instance_valid(simulation.canteen),
+		"cooking_jobs": 1 if is_instance_valid(simulation.canteen) else 0,
 		"schools": simulation.school_positions.size(),
 		"markets": simulation.market_positions.size(),
+		"builder_jobs": simulation.builders_guild_positions.size() + simulation.construction_company_positions.size() * 3,
+		"factory_jobs": _factory_job_capacity(),
+		"engineer_jobs": _engineer_job_capacity(),
 		"construction_sites": simulation.construction_sites.size() + simulation.demolition_sites.size(),
 		"warehouses": simulation.warehouse_positions.size(),
 		"sawmills": simulation.sawmill_positions.size(),
@@ -272,6 +368,22 @@ func _world_data() -> Dictionary:
 		"population": simulation.citizens.size(),
 		"assigned_roles": _assigned_role_counts(),
 	}
+
+
+func _factory_job_capacity() -> int:
+	var capacity := 0
+	for factory in simulation.factories:
+		if is_instance_valid(factory):
+			capacity += int(factory.get_meta("required_factory_workers", 1))
+	return capacity
+
+
+func _engineer_job_capacity() -> int:
+	var capacity := 0
+	for factory in simulation.factories:
+		if is_instance_valid(factory) and factory.get_meta("building_type", "") == "materials_factory":
+			capacity += 1
+	return capacity
 
 
 func _assigned_role_counts() -> Dictionary:

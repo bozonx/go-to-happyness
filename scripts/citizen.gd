@@ -63,6 +63,8 @@ var employment_state := EmploymentState.AUTO_RESERVE
 var auto_mode_enabled := true
 var permanent_role := ""
 var pending_employment_role := ""
+var employment_workplace: Node3D
+var pending_employment_workplace: Node3D
 var employment_center_position := Vector3.INF
 var satisfaction := 72.0
 var satisfaction_tick := 0.0
@@ -497,18 +499,20 @@ func _process_waiting(delta: float) -> void:
 			idle()
 
 
-func begin_employment_processing(center_position: Vector3, next_pending_role := "") -> void:
+func begin_employment_processing(center_position: Vector3, next_pending_role := "", next_workplace: Node3D = null) -> void:
 	if is_player_controlled or center_position == Vector3.INF:
 		return
 	employment_center_position = center_position
 	pending_employment_role = next_pending_role
+	pending_employment_workplace = next_workplace
 	employment_state = EmploymentState.PENDING_JOB if not next_pending_role.is_empty() else EmploymentState.PENDING_UNEMPLOYMENT
 	active_role = ""
 	state = State.TO_EMPLOYMENT_CENTER
 
 
-func queue_employment_processing(next_pending_role := "") -> void:
+func queue_employment_processing(next_pending_role := "", next_workplace: Node3D = null) -> void:
 	pending_employment_role = next_pending_role
+	pending_employment_workplace = next_workplace
 	employment_state = EmploymentState.PENDING_JOB if not next_pending_role.is_empty() else EmploymentState.PENDING_UNEMPLOYMENT
 	active_role = ""
 	state = State.IDLE
@@ -518,6 +522,7 @@ func cancel_employment_processing() -> void:
 	if state not in [State.TO_EMPLOYMENT_CENTER, State.EMPLOYMENT_PROCESSING]:
 		return
 	pending_employment_role = ""
+	pending_employment_workplace = null
 	employment_state = EmploymentState.AUTO_RESERVE
 	state = State.IDLE
 
@@ -539,12 +544,14 @@ func _process_employment_processing(delta: float) -> void:
 func finish_employment_processing() -> void:
 	if employment_state == EmploymentState.PENDING_JOB:
 		permanent_role = pending_employment_role
+		employment_workplace = pending_employment_workplace
 		employment_state = EmploymentState.EMPLOYED
 	else:
 		permanent_role = ""
 		auto_mode_enabled = false
 		employment_state = EmploymentState.UNEMPLOYED
 	pending_employment_role = ""
+	pending_employment_workplace = null
 	state = State.IDLE
 
 
@@ -948,6 +955,10 @@ func finish_school_day(teacher_present := true) -> void:
 			if training_days_completed >= 10:
 				specialization = "builder" if training_role == "construction" else training_role
 				manual_role = ""
+				permanent_role = ""
+				pending_employment_role = ""
+				auto_mode_enabled = true
+				employment_state = EmploymentState.AUTO_RESERVE
 				setup_specialization(specialization)
 				training_role = ""
 				training_days_completed = 0
@@ -1107,10 +1118,10 @@ func _update_idle_indicator() -> void:
 	idle_indicator.visible = true
 	match employment_state:
 		EmploymentState.EMPLOYED:
-			idle_indicator.text = "Employed: %s" % permanent_role.replace("_", " ")
+			idle_indicator.text = "Employed: %s%s" % [permanent_role.replace("_", " "), _employment_workplace_suffix(employment_workplace)]
 			idle_indicator.modulate = Color("76c893")
 		EmploymentState.PENDING_JOB:
-			idle_indicator.text = "Hiring: %s" % pending_employment_role.replace("_", " ")
+			idle_indicator.text = "Hiring: %s%s" % [pending_employment_role.replace("_", " "), _employment_workplace_suffix(pending_employment_workplace)]
 			idle_indicator.modulate = Color("7bb7e8")
 		EmploymentState.PENDING_UNEMPLOYMENT:
 			idle_indicator.text = "Registering unemployed"
@@ -1124,6 +1135,12 @@ func _update_idle_indicator() -> void:
 		_:
 			idle_indicator.text = "Reserve: courier" if specialization == "courier" else "Reserve"
 			idle_indicator.modulate = Color("f0c45d")
+
+
+func _employment_workplace_suffix(workplace: Node3D) -> String:
+	if not is_instance_valid(workplace):
+		return ""
+	return " (%s)" % str(workplace.get_meta("building_type", "site")).replace("_", " ")
 
 func assign_home(next_home: Node3D) -> void:
 	home = next_home
