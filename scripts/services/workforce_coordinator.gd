@@ -16,6 +16,10 @@ const BUSY_STATES := [
 	Citizen.State.TO_CANTEEN_DELIVERY, Citizen.State.COURIER_TO_WORKER,
 	Citizen.State.COURIER_TO_WAREHOUSE, Citizen.State.COURIER_TO_SAWMILL,
 	Citizen.State.WAITING_COURIER,
+	Citizen.State.TO_CANTEEN_WORK, Citizen.State.CANTEEN_WORK,
+	Citizen.State.TO_SCHOOL_WORK, Citizen.State.SCHOOL_WORK,
+	Citizen.State.TO_MARKET_WORK, Citizen.State.MARKET_WORK,
+	Citizen.State.TO_TRADE_PICKUP, Citizen.State.TO_TRADE_DESTINATION
 ]
 
 
@@ -138,6 +142,11 @@ func assign_work(citizen: Citizen, index: int) -> void:
 	if citizen.specialization == "teacher":
 		citizen.assign_teacher_work(simulation.school_positions[0])
 		return
+	if citizen.specialization == "seller":
+		if not simulation.market_positions.is_empty():
+			var market_pos: Vector3 = simulation.market_positions[index % simulation.market_positions.size()]
+			citizen.assign_seller_work(market_pos)
+		return
 	if citizen.specialization == "factory_worker":
 		citizen.assign_factory_work(factory_for_role("factory_worker"), "factory_work")
 		return
@@ -165,10 +174,6 @@ func assign_work(citizen: Citizen, index: int) -> void:
 			citizen.assign_factory_work(materials_plant, "construction")
 			return
 	match work_role_for(citizen):
-		"gather_dew":
-			var collector_position: Vector3 = simulation._reserve_dew_collector()
-			if collector_position != Vector3.INF:
-				citizen.assign_gathering("water", collector_position, simulation._get_delivery_position())
 		"construction":
 			if not simulation.demolition_sites.is_empty():
 				citizen.assign_demolition(simulation.demolition_sites[index % simulation.demolition_sites.size()].building)
@@ -211,10 +216,6 @@ func assign_work(citizen: Citizen, index: int) -> void:
 			var forage_pos: Vector3 = simulation._find_forage_position(citizen)
 			if forage_pos != Vector3.INF:
 				citizen.assign_gathering("food", forage_pos, simulation._get_delivery_position())
-		"gather_water":
-			if not simulation.pond_positions.is_empty():
-				var pond: Vector3 = simulation.pond_positions[index % simulation.pond_positions.size()]
-				citizen.assign_gathering("water", pond, simulation._get_delivery_position())
 	# A role can be available in policy while its concrete source is exhausted.
 	# Register unemployment instead of returning to the obsolete waiting loop.
 	if citizen.state == Citizen.State.IDLE or citizen.state == Citizen.State.RESTING:
@@ -251,6 +252,7 @@ func _world_data() -> Dictionary:
 		"hour": int(simulation.game_minutes) / 60,
 		"has_canteen": is_instance_valid(simulation.canteen),
 		"schools": simulation.school_positions.size(),
+		"markets": simulation.market_positions.size(),
 		"construction_sites": simulation.construction_sites.size() + simulation.demolition_sites.size(),
 		"warehouses": simulation.warehouse_positions.size(),
 		"sawmills": simulation.sawmill_positions.size(),

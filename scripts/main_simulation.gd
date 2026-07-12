@@ -101,6 +101,7 @@ var farm_positions: Array[Vector3] = []
 var pond_positions: Array[Vector3] = []
 var forager_positions: Array[Vector3] = []
 var school_positions: Array[Vector3] = []
+var market_positions: Array[Vector3] = []
 var park_positions: Array[Vector3] = []
 var leisure_positions: Array[Vector3] = []
 var factories: Array[Node3D] = []
@@ -191,7 +192,10 @@ var school_developed_professions: Dictionary = {
 	"farming": false,
 	"excavation": false,
 	"factory_worker": false,
-	"engineer": false
+	"engineer": false,
+	"cook": false,
+	"teacher": false,
+	"seller": false
 }
 var school_retrain_buttons: Array[Button] = []
 var school_dev_checkboxes: Dictionary = {}
@@ -217,6 +221,8 @@ var warehouse_menu_title: Label
 var building_menu: Panel
 var building_menu_title: Label
 var building_cook_button: Button
+var building_teacher_button: Button
+var building_seller_button: Button
 var job_submenu_btn: Button
 var job_back_btn: Button
 var house_lights: Array[Dictionary] = []
@@ -334,6 +340,28 @@ func _employment_center_position() -> Vector3:
 	return Vector3.INF
 
 
+func _is_teacher_present_at_school() -> bool:
+	if school_positions.is_empty():
+		return false
+	var school_pos := school_positions[0]
+	for citizen in citizens:
+		if citizen.specialization == "teacher" and citizen.state == Citizen.State.SCHOOL_WORK:
+			if citizen.global_position.distance_to(school_pos) <= 3.5:
+				return true
+	return false
+
+
+func _is_seller_present_at(market_node: Node3D) -> bool:
+	if not is_instance_valid(market_node):
+		return false
+	var service_position: Vector3 = market_node.get_meta("service_position", market_node.global_position)
+	for citizen in citizens:
+		if citizen.specialization == "seller" and citizen.state == Citizen.State.MARKET_WORK:
+			if citizen.global_position.distance_to(service_position) <= 3.0:
+				return true
+	return false
+
+
 func _on_employment_processing_finished(citizen: Citizen) -> void:
 	# Do not grant a profession outside the shift. Keep the reservation/status and
 	# restart the one-hour registration at the next working morning.
@@ -394,8 +422,9 @@ func _handle_clock_minute(clock_minute: int) -> void:
 		_update_workers()
 		_update_interface("Morning: workers left their homes for their assignments.")
 	if minute == 0 and hour == 12:
+		var teacher_ok := _is_teacher_present_at_school()
 		for citizen in citizens:
-			citizen.finish_school_day()
+			citizen.finish_school_day(teacher_ok)
 		_update_workers()
 	if minute == 0 and hour == 6:
 		_apply_daily_settlement_rules()
@@ -583,6 +612,22 @@ func _update_couriers() -> void:
 				courier.assign_courier_pickup(courier.courier_worker, warehouse_positions[0])
 				continue
 			courier.courier_worker = null
+		
+		# Courier water logistics
+		var water_needed := water < citizens.size() * 2
+		if water_needed:
+			var collector_position := _reserve_dew_collector()
+			if collector_position != Vector3.INF:
+				courier.assign_gathering("water", collector_position, warehouse_positions[0])
+				continue
+			
+			var has_bucket := bool(settlement.tools.get("bucket", false))
+			var has_filter := bool(settlement.tools.get("filter_1", false))
+			if has_bucket and has_filter and not pond_positions.is_empty():
+				var pond_pos := pond_positions[0]
+				courier.assign_gathering("water", pond_pos, warehouse_positions[0])
+				continue
+
 		var sawmill_position := _sawmill_with_boards()
 		if sawmill_position != Vector3.INF:
 			courier.assign_sawmill_pickup(sawmill_position, warehouse_positions[0])
@@ -1571,9 +1616,7 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_role_button("Assign: gather branches", "gather_branches", 306)
 	_add_role_button("Assign: gather grass", "gather_grass", 340)
 	_add_role_button("Assign: forage food", "gather_food", 374)
-	_add_role_button("Assign: collect water", "gather_water", 408)
-	_add_role_button("Assign: collect dew", "gather_dew", 442)
-	_add_role_button("Assign: courier", "courier", 476)
+	_add_role_button("Assign: courier", "courier", 408)
 	
 	# Era category buttons (shown on main build menu)
 	_add_build_category_button("Tent era", "tent", 136)
@@ -1636,7 +1679,7 @@ func _create_school_menu(ui: CanvasLayer) -> void:
 	school_menu = Panel.new()
 	school_menu.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	school_menu.offset_left = -520.0
-	school_menu.offset_top = -460.0
+	school_menu.offset_top = -550.0
 	school_menu.offset_right = -20.0
 	school_menu.offset_bottom = -20.0
 	school_menu.visible = false
@@ -1663,7 +1706,10 @@ func _create_school_menu(ui: CanvasLayer) -> void:
 		["Farming", "farming"],
 		["Excavation", "excavation"],
 		["Factory worker", "factory_worker"],
-		["Engineer", "engineer"]
+		["Engineer", "engineer"],
+		["Cook", "cook"],
+		["Teacher", "teacher"],
+		["Seller", "seller"]
 	]
 	
 	school_retrain_buttons.clear()
@@ -1689,7 +1735,7 @@ func _create_school_menu(ui: CanvasLayer) -> void:
 		
 	var demolish_btn := Button.new()
 	demolish_btn.text = "Demolish School"
-	demolish_btn.position = Vector2(16, 390)
+	demolish_btn.position = Vector2(16, 480)
 	demolish_btn.size = Vector2(220, 32)
 	demolish_btn.pressed.connect(func():
 		if selected_school != null:
@@ -1700,7 +1746,7 @@ func _create_school_menu(ui: CanvasLayer) -> void:
 	
 	var close_btn := Button.new()
 	close_btn.text = "Close"
-	close_btn.position = Vector2(250, 390)
+	close_btn.position = Vector2(250, 480)
 	close_btn.size = Vector2(250, 32)
 	close_btn.pressed.connect(func(): school_menu.visible = false)
 	school_menu.add_child(close_btn)
@@ -2515,6 +2561,8 @@ func _remove_building_services(building: Node3D, building_type: String) -> void:
 		"school": school_positions.erase(service_position)
 		"park": park_positions.erase(service_position)
 		"leisure_center": leisure_positions.erase(service_position)
+		"trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market":
+			market_positions.erase(service_position)
 		"campfire", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall":
 			if campfire_node == building: campfire_node = null
 		"cook_campfire", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant":
@@ -3055,6 +3103,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			water_collectors.append({"node": building, "rate": 0.12, "accum": 0.0, "stored": 0, "capacity": 10})
 		"trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market":
 			_add_building_selector(building, "market_selector", blueprint.footprint)
+			market_positions.append(service_position)
 		"canteen":
 			canteen = building
 			canteen_position = service_position
@@ -3487,7 +3536,7 @@ func _refresh_campfire_occupancy_button() -> void:
 
 
 func _workforce_roles() -> Array[String]:
-	return ["construction", "forestry", "farming", "excavation", "gather_branches", "gather_grass", "gather_food", "gather_dew", "gather_water", "courier"]
+	return ["construction", "forestry", "farming", "excavation", "gather_branches", "gather_grass", "gather_food", "courier"]
 
 
 func _workforce_role_label(role: String) -> String:
@@ -3495,7 +3544,7 @@ func _workforce_role_label(role: String) -> String:
 		"construction": "Construction", "forestry": "Forestry", "farming": "Farming",
 		"excavation": "Excavation", "gather_branches": "Gather branches",
 		"gather_grass": "Gather grass", "gather_food": "Foraging",
-		"gather_dew": "Collect dew", "gather_water": "Collect water", "courier": "Courier"
+		"courier": "Courier"
 	}
 	return str(labels.get(role, role.replace("_", " ").capitalize()))
 
@@ -3804,14 +3853,18 @@ func _refresh_market_menu() -> void:
 		return
 	var market_type: String = selected_market.get_meta("building_type", "trade_tent")
 	var available_money := _available_trade_money()
+	var seller_ok := _is_seller_present_at(selected_market)
+	
 	market_menu_title.text = "%s Menu\nCoins: %d  Available: %d\nCompleted sales: %d" % [market_type.capitalize().replace("_", " "), settlement.money, available_money, settlement.trade_sales]
+	if not seller_ok:
+		market_menu_title.text += "\nINACTIVE: Seller is missing!\n(Seller must be working at the market to trade)"
 	
 	# Clear previous buttons except title
 	for child in market_menu.get_children():
 		if child != market_menu_title:
 			child.queue_free()
 			
-	var y_offset := 80.0
+	var y_offset := 104.0 if not seller_ok else 80.0
 	
 	var sell_items := []
 	var buy_items := []
@@ -3857,8 +3910,8 @@ func _refresh_market_menu() -> void:
 		btn.text = "Sell %d %s (+%d)  Stock: %d" % [sellable, res, price * sellable, settlement.amount(res)]
 		btn.position = Vector2(16, y_offset)
 		btn.size = Vector2(272, 28)
-		btn.disabled = sellable <= 0
-		btn.tooltip_text = "Nothing left to sell" if btn.disabled else "Sell up to five units from available stock"
+		btn.disabled = sellable <= 0 or not seller_ok
+		btn.tooltip_text = "Seller is missing" if not seller_ok else ("Nothing left to sell" if sellable <= 0 else "Sell up to five units from available stock")
 		btn.pressed.connect(_sell_resource.bind(res, sellable, price))
 		market_menu.add_child(btn)
 		y_offset += 32.0
@@ -3874,8 +3927,8 @@ func _refresh_market_menu() -> void:
 		btn.size = Vector2(272, 28)
 		var already_ordered := _trade_has_tool_order(tool_name)
 		var owned := bool(settlement.tools.get(tool_name, false))
-		btn.disabled = owned or already_ordered or available_money < price
-		btn.tooltip_text = "Already owned" if owned else ("Already ordered" if already_ordered else "Not enough available coins" if available_money < price else "")
+		btn.disabled = owned or already_ordered or available_money < price or not seller_ok
+		btn.tooltip_text = "Seller is missing" if not seller_ok else ("Already owned" if owned else ("Already ordered" if already_ordered else "Not enough available coins" if available_money < price else ""))
 		btn.pressed.connect(_buy_tool.bind(tool_name, price))
 		market_menu.add_child(btn)
 		y_offset += 32.0
@@ -3890,8 +3943,8 @@ func _refresh_market_menu() -> void:
 	food_btn.text = "Buy %d food (%d Coins)  Room: %d" % [buyable, buyable * FOOD_PURCHASE_PRICE, room]
 	food_btn.position = Vector2(16, y_offset)
 	food_btn.size = Vector2(272, 28)
-	food_btn.disabled = buyable <= 0
-	food_btn.tooltip_text = "No storage room or available coins" if food_btn.disabled else "Buy food for the settlement"
+	food_btn.disabled = buyable <= 0 or not seller_ok
+	food_btn.tooltip_text = "Seller is missing" if not seller_ok else ("No storage room or available coins" if buyable <= 0 else "Buy food for the settlement")
 	food_btn.pressed.connect(_buy_food.bind(buyable, FOOD_PURCHASE_PRICE))
 	market_menu.add_child(food_btn)
 	y_offset += 42.0
@@ -4045,6 +4098,20 @@ func _create_building_menu(ui: CanvasLayer) -> void:
 	building_cook_button.size = Vector2(272, 30)
 	building_cook_button.pressed.connect(_assign_cook_at_campfire)
 	building_menu.add_child(building_cook_button)
+	
+	building_teacher_button = Button.new()
+	building_teacher_button.text = "Assign selected resident as teacher"
+	building_teacher_button.position = Vector2(16, 104)
+	building_teacher_button.size = Vector2(272, 30)
+	building_teacher_button.pressed.connect(_assign_teacher_at_school)
+	building_menu.add_child(building_teacher_button)
+	
+	building_seller_button = Button.new()
+	building_seller_button.text = "Assign selected resident as seller"
+	building_seller_button.position = Vector2(16, 104)
+	building_seller_button.size = Vector2(272, 30)
+	building_seller_button.pressed.connect(_assign_seller_at_market)
+	building_menu.add_child(building_seller_button)
 	var close_button := Button.new()
 	close_button.text = "Close"
 	close_button.position = Vector2(16, 146)
@@ -4062,6 +4129,12 @@ func _show_building_menu() -> void:
 	building_menu_title.text = "%s\n%s" % [str(definition.get("name", building_type.capitalize())), "Press Delete to mark this building for demolition."]
 	building_cook_button.visible = building_type in ["cook_campfire", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant"]
 	building_cook_button.disabled = selected_builder == null or selected_builder.is_player_controlled
+	
+	building_teacher_button.visible = building_type == "school"
+	building_teacher_button.disabled = selected_builder == null or selected_builder.is_player_controlled
+	
+	building_seller_button.visible = building_type in ["trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market"]
+	building_seller_button.disabled = selected_builder == null or selected_builder.is_player_controlled
 
 
 func _create_warehouse_menu(ui: CanvasLayer) -> void:
@@ -4157,9 +4230,43 @@ func _assign_cook_at_campfire() -> void:
 		_update_interface("Pick a settler, not the character you are controlling.")
 		return
 	selected_builder.manual_role = ""
+	selected_builder.permanent_role = ""
 	selected_builder.setup_specialization("cook")
 	selected_builder.assign_canteen_work(canteen_position)
 	_update_interface("%s is now the cook and will keep the campfire kitchen running." % selected_builder.role_label())
+	_update_workers()
+
+
+func _assign_teacher_at_school() -> void:
+	if selected_builder == null:
+		_update_interface("Select a resident first, then click the school to make them the teacher.")
+		return
+	if selected_builder.is_player_controlled:
+		_update_interface("Pick a settler, not the character you are controlling.")
+		return
+	selected_builder.manual_role = ""
+	selected_builder.permanent_role = ""
+	selected_builder.setup_specialization("teacher")
+	if not school_positions.is_empty():
+		selected_builder.assign_teacher_work(school_positions[0])
+	_update_interface("%s is now the teacher and will keep the school running." % selected_builder.role_label())
+	_update_workers()
+
+
+func _assign_seller_at_market() -> void:
+	if selected_builder == null:
+		_update_interface("Select a resident first, then click the market to make them the seller.")
+		return
+	if selected_builder.is_player_controlled:
+		_update_interface("Pick a settler, not the character you are controlling.")
+		return
+	selected_builder.manual_role = ""
+	selected_builder.permanent_role = ""
+	selected_builder.setup_specialization("seller")
+	if selected_building != null:
+		var service_position: Vector3 = selected_building.get_meta("service_position", selected_building.global_position)
+		selected_builder.assign_seller_work(service_position)
+	_update_interface("%s is now the seller and will keep the market running." % selected_builder.role_label())
 	_update_workers()
 
 

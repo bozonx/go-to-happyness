@@ -34,7 +34,7 @@ const NAVIGATION_TARGET_CLEARANCE := 0.48
 const ROUTE_PROGRESS_EPSILON := 0.06
 const ROUTE_RETRY_INTERVAL := 2.0
 
-enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, TO_GATHER, GATHERING, TO_TRADE_PICKUP, TO_TRADE_DESTINATION, TO_EMPLOYMENT_CENTER, EMPLOYMENT_PROCESSING }
+enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, TO_GATHER, GATHERING, TO_TRADE_PICKUP, TO_TRADE_DESTINATION, TO_EMPLOYMENT_CENTER, EMPLOYMENT_PROCESSING, CANTEEN_WORK, SCHOOL_WORK, TO_MARKET_WORK, MARKET_WORK }
 
 enum EmploymentState { AUTO_RESERVE, EMPLOYED, UNEMPLOYED, PENDING_JOB, PENDING_UNEMPLOYMENT, MANUAL_COURIER }
 
@@ -90,6 +90,7 @@ var buffs: Dictionary = {}
 var debuffs: Dictionary = {}
 var delivery_amount := 0
 var canteen_position := Vector3.ZERO
+var market_position := Vector3.ZERO
 var construction_position := Vector3.ZERO
 var pathfinder: Callable
 var delivery_position_resolver: Callable
@@ -305,6 +306,14 @@ func _physics_process(delta: float) -> void:
 			_process_to_employment_center(delta)
 		State.EMPLOYMENT_PROCESSING:
 			_process_employment_processing(delta)
+		State.CANTEEN_WORK:
+			pass
+		State.SCHOOL_WORK:
+			pass
+		State.TO_MARKET_WORK:
+			_process_market_work_arrival(delta)
+		State.MARKET_WORK:
+			pass
 	if idle_indicator != null:
 		_update_idle_indicator()
 
@@ -427,7 +436,7 @@ func _process_canteen_delivery(delta: float) -> void:
 
 func _process_canteen_work(delta: float) -> void:
 	if _move_to(canteen_position, delta):
-		state = State.IDLE
+		state = State.CANTEEN_WORK
 
 func _process_go_to_school(delta: float) -> void:
 	if _move_to(school_position, delta):
@@ -436,7 +445,11 @@ func _process_go_to_school(delta: float) -> void:
 
 func _process_school_work(delta: float) -> void:
 	if _move_to(school_position, delta):
-		state = State.IDLE
+		state = State.SCHOOL_WORK
+
+func _process_market_work_arrival(delta: float) -> void:
+	if _move_to(market_position, delta):
+		state = State.MARKET_WORK
 
 func _process_to_factory(delta: float) -> void:
 	if not is_instance_valid(factory):
@@ -875,6 +888,13 @@ func assign_teacher_work(next_school_position: Vector3) -> void:
 		factory = null
 		state = State.TO_SCHOOL_WORK
 
+func assign_seller_work(next_market_position: Vector3) -> void:
+	if not is_player_controlled:
+		market_position = next_market_position
+		active_role = "selling"
+		factory = null
+		state = State.TO_MARKET_WORK
+
 func assign_factory_work(next_factory: Node3D, role: String) -> void:
 	if not is_player_controlled:
 		factory = next_factory
@@ -910,7 +930,7 @@ func attend_school(school_pos: Vector3, role_to_train: String) -> void:
 		factory = null
 		state = State.TO_SCHOOL
 
-func finish_school_day() -> void:
+func finish_school_day(teacher_present := true) -> void:
 	if state != State.STUDYING:
 		return
 	
@@ -918,7 +938,7 @@ func finish_school_day() -> void:
 	if trained_role.is_empty():
 		trained_role = temp_training_role
 		
-	if not trained_role.is_empty():
+	if not trained_role.is_empty() and teacher_present:
 		var current_val := float(skills.get(trained_role, 0.0))
 		skills[trained_role] = minf(1.0, current_val + SKILL_GROWTH_PER_SCHOOL_DAY)
 		practiced_today[trained_role] = true
@@ -1009,6 +1029,8 @@ func get_core_skill_for_role(role: String) -> String:
 			return "cook"
 		"teaching", "teacher":
 			return "teacher"
+		"selling", "seller":
+			return "seller"
 		_:
 			return ""
 

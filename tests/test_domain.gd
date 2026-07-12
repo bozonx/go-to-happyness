@@ -13,6 +13,7 @@ func _init() -> void:
 	_test_citizen_task_state()
 	_test_citizen_decision_context()
 	_test_construction_progress()
+	_test_school_and_seller_rules()
 	quit(0)
 
 
@@ -150,9 +151,9 @@ func _test_workforce_policy() -> void:
 	world.hour = 9
 	world.has_bucket = true
 	world.has_filter = true
-	assert(WorkforcePolicy.role_for(forester, world) == "gather_water")
+	assert(WorkforcePolicy.role_for(forester, world) == "forestry")
 	assert(WorkforcePolicy.can_assign(forester, world))
-	world.assigned_roles = {"gather_water": 1}
+	world.assigned_roles = {"forestry": 1}
 	world.farms = 1
 	world.food = 0
 	assert(WorkforcePolicy.role_for(forester, world) == "farming")
@@ -194,3 +195,29 @@ func _test_citizen_decision_context() -> void:
 func _test_construction_progress() -> void:
 	assert(is_equal_approx(ConstructionProgress.advance(0.25, 2.0, 4.0, 1.0), 0.75))
 	assert(ConstructionProgress.advance(0.9, 4.0, 4.0, 1.0) == 1.0)
+
+
+func _test_school_and_seller_rules() -> void:
+	var seller := {"specialization": "seller", "manual_role": "", "player_controlled": false, "blocked_by_storage": false}
+	var world := {"hour": 9, "markets": 0}
+	assert(not WorkforcePolicy.can_assign(seller, world))
+	world.markets = 1
+	assert(WorkforcePolicy.can_assign(seller, world))
+
+	var citizen := Citizen.new()
+	citizen.skills["farming"] = 0.5
+	citizen.training_role = "farming"
+	# State.STUDYING is index 20
+	citizen.state = 20
+	
+	# Test studying without teacher
+	citizen.finish_school_day(false)
+	assert(citizen.skills["farming"] == 0.5) # no increase
+	assert(citizen.state == 0) # State.IDLE
+	
+	# Test studying with teacher
+	citizen.training_role = "farming"
+	citizen.state = 20
+	citizen.finish_school_day(true)
+	assert(citizen.skills["farming"] > 0.5) # increase!
+	citizen.free()

@@ -11,6 +11,7 @@ const PROFILES := {
 	"teacher": {"label": "Teacher", "role": "teacher", "color": Color("7656a8")},
 	"factory_worker": {"label": "Factory worker", "role": "factory_worker", "color": Color("c45d42")},
 	"engineer": {"label": "Engineer", "role": "engineer", "color": Color("4d7a9b")},
+	"seller": {"label": "Seller", "role": "seller", "color": Color("5ca0cf")},
 }
 
 
