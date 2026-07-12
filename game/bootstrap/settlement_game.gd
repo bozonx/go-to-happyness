@@ -147,8 +147,10 @@ var camera_hint_label: Label
 var is_panning_camera := false
 var is_rotating_camera := false
 var right_mouse_dragged := false
-var construction_sites: Array[Dictionary] = []
-var demolition_sites: Array[Dictionary] = []
+var construction_sites: Array[ConstructionSite]:
+	get: return construction.sites if construction != null else []
+var demolition_sites: Array[DemolitionSite]:
+	get: return demolition.sites if demolition != null else []
 var completed_house_count := 0
 var player_citizen: Citizen
 var hero_citizen: Citizen
@@ -253,6 +255,7 @@ var manage_citizen_button: Button
 var workforce: WorkforceCoordinator
 var sawmills: SawmillService
 var construction: ConstructionService
+var demolition: DemolitionService
 var water_collector_service: WaterCollectorService
 var canteen_service: CanteenService
 var trade_service: TradeService
@@ -264,8 +267,27 @@ func _ready() -> void:
 	add_child(workforce)
 	sawmills = SawmillService.new()
 	sawmills.configure(self)
+	var construction_runtime := ConstructionRuntime.new()
+	construction_runtime.scene_root = self
+	construction_runtime.settlement = settlement
+	construction_runtime.building_registry = building_registry
+	construction_runtime.citizens = citizens
+	construction_runtime.duration = CONSTRUCTION_DURATION
+	construction_runtime.builder_power = _building_power
+	construction_runtime.builder_count = _builder_count
+	construction_runtime.set_status = _set_construction_status
+	construction_runtime.building_completed = _complete_building
+	construction_runtime.workers_changed = _update_workers
+	construction_runtime.navigation_changed = _rebuild_navigation_mesh
 	construction = ConstructionService.new()
-	construction.configure(self)
+	construction.configure(construction_runtime)
+	var demolition_runtime := DemolitionRuntime.new()
+	demolition_runtime.duration = DEMOLITION_DURATION
+	demolition_runtime.building_power = _building_power
+	demolition_runtime.is_ready = _demolition_ready
+	demolition_runtime.completed = _finish_demolition
+	demolition = DemolitionService.new()
+	demolition.configure(demolition_runtime)
 	water_collector_service = WaterCollectorService.new()
 	water_collector_service.configure(self)
 	canteen_service = CanteenService.new()
@@ -750,7 +772,7 @@ func _update_construction_supplies() -> void:
 	# to the site. Unlike production logistics, construction deliberately focuses
 	# on one development-critical project until it is supplied.
 	var site := _preferred_construction_site()
-	if site.is_empty():
+	if site == null:
 		return
 	for courier in citizens:
 		if courier.specialization != "courier" or courier.state != Citizen.State.IDLE:
@@ -758,18 +780,18 @@ func _update_construction_supplies() -> void:
 		for resource_type in site.required_materials:
 			var required := int(site.required_materials[resource_type])
 			var delivered := int(site.delivered_materials.get(resource_type, 0))
-			var reserved := int(site.get("reserved_materials", {}).get(resource_type, 0))
+			var reserved := int(site.reserved_materials.get(resource_type, 0))
 			if delivered + reserved >= required or settlement.amount(resource_type) <= 0:
 				continue
 			settlement.add(resource_type, -1)
-			var reservations: Dictionary = site.get("reserved_materials", {})
+			var reservations := site.reserved_materials
 			reservations[resource_type] = reserved + 1
 			site.reserved_materials = reservations
 			courier.assign_construction_delivery(site.node, warehouse_positions[0], resource_type)
 			return
 
-func _preferred_construction_site() -> Dictionary:
-	var chosen: Dictionary = {}
+func _preferred_construction_site() -> ConstructionSite:
+	var chosen: ConstructionSite
 	var best_score := -INF
 	for site in construction_sites:
 		var score := _construction_development_priority(site)
@@ -778,8 +800,8 @@ func _preferred_construction_site() -> Dictionary:
 			best_score = score
 	return chosen
 
-func _construction_development_priority(site: Dictionary) -> float:
-	var building_type := str(site.type)
+func _construction_development_priority(site: ConstructionSite) -> float:
+	var building_type := site.building_type
 	var score := float(BuildingCatalog.era_for(building_type)) * 100.0
 	var population := citizens.size()
 	match building_type:
@@ -800,18 +822,7 @@ func _construction_development_priority(site: Dictionary) -> float:
 	return score + supplied * 2.0
 
 func _on_construction_material_delivered(_courier: Citizen, site_node: Node3D, resource_type: String, amount: int) -> void:
-	for index in construction_sites.size():
-		var site: Dictionary = construction_sites[index]
-		if site.node != site_node:
-			continue
-		var delivered: Dictionary = site.delivered_materials
-		delivered[resource_type] = int(delivered.get(resource_type, 0)) + amount
-		site.delivered_materials = delivered
-		var reservations: Dictionary = site.get("reserved_materials", {})
-		reservations[resource_type] = maxi(0, int(reservations.get(resource_type, 0)) - amount)
-		site.reserved_materials = reservations
-		construction_sites[index] = site
-		return
+	construction.accept_delivery(site_node, resource_type, amount)
 
 func _on_building_supply_delivered(_courier: Citizen, target: Node3D, supply_kind: String, resource_type: String, amount: int) -> void:
 	if not is_instance_valid(target):
@@ -2825,16 +2836,15 @@ func _hide_all_selection_menus() -> void:
 func _mark_building_for_demolition(building: Node3D) -> void:
 	if not _can_hero_build() or not is_instance_valid(building):
 		return
-	for site in demolition_sites:
-		if site.building == building:
-			return
+	if demolition.has_site(building):
+		return
 	if building == entrance_stone:
 		_update_interface("This building cannot be demolished.")
 		return
 	_release_employment_at_building(building)
 	building.set_meta("pending_demolition", true)
 	_add_demolition_marker(building)
-	demolition_sites.append({"building": building, "type": str(building.get_meta("building_type", "house")), "progress": 0.0})
+	demolition.mark(building, str(building.get_meta("building_type", "house")))
 	_update_workers()
 	_update_interface("Building marked for demolition. Residents and stored goods must be relocated first.")
 
@@ -2852,7 +2862,7 @@ func _add_demolition_marker(building: Node3D) -> void:
 	building.add_child(marker)
 	building.set_meta("demolition_marker", marker)
 
-func _demolition_ready(site: Dictionary) -> bool:
+func _demolition_ready(site: DemolitionSite) -> bool:
 	var building: Node3D = site.building
 	if not is_instance_valid(building):
 		return false
@@ -2865,7 +2875,7 @@ func _demolition_ready(site: Dictionary) -> bool:
 			replacement.set_meta("spawn_slots", int(replacement.get_meta("spawn_slots", 0)) - 1)
 		else:
 			citizen.home = null
-	if str(site.type) == "warehouse":
+	if site.building_type == "warehouse":
 		return settlement.storage_used_units() <= settlement.storage_capacity(warehouse_positions.size() - 1)
 	return true
 
@@ -2879,25 +2889,11 @@ func _find_relocation_home(excluded: Node3D) -> Node3D:
 	return null
 
 func _update_demolition(delta: float) -> void:
-	for index in range(demolition_sites.size() - 1, -1, -1):
-		var site: Dictionary = demolition_sites[index]
-		if not is_instance_valid(site.building):
-			demolition_sites.remove_at(index)
-			continue
-		if not _demolition_ready(site):
-			continue
-		var power := _building_power(site.building)
-		if power <= 0.0:
-			continue
-		site.progress = minf(1.0, float(site.progress) + delta * power / DEMOLITION_DURATION)
-		demolition_sites[index] = site
-		if site.progress >= 1.0:
-			_finish_demolition(site)
-			demolition_sites.remove_at(index)
+	demolition.tick(delta)
 
-func _finish_demolition(site: Dictionary) -> void:
+func _finish_demolition(site: DemolitionSite) -> void:
 	var building: Node3D = site.building
-	var building_type := str(site.type)
+	var building_type := site.building_type
 	_return_in_transit_building_supplies(building)
 	for citizen in citizens:
 		citizen.finish_construction(building)
@@ -3424,6 +3420,11 @@ func _create_construction_site(cell: Vector2i, building_type: String, position_o
 
 func _update_construction(delta: float) -> void:
 	construction.tick(delta)
+
+
+func _set_construction_status(text: String) -> void:
+	if status_label != null:
+		status_label.text = text
 
 func _complete_building(cell: Vector2i, building_type: String, position_on_board: Vector3, building: Node3D, blueprint: Dictionary) -> void:
 	settlement.buildings[building_type] = int(settlement.buildings.get(building_type, 0)) + 1
@@ -4595,8 +4596,8 @@ func _show_building_menu() -> void:
 	
 	if is_construction:
 		var site_data := _get_construction_site_data(selected_building)
-		var type: String = site_data.get("type", "building")
-		var progress: float = site_data.get("progress", 0.0)
+		var type := site_data.building_type
+		var progress := site_data.progress
 		var builders := _builder_count(selected_building)
 		var supplied_parts: Array[String] = []
 		for resource_type in site_data.required_materials:
@@ -5103,18 +5104,10 @@ func _get_nearest_delivery_position(from: Vector3) -> Vector3:
 		return entrance_stone.global_position
 
 func _is_construction_site(node: Node3D) -> bool:
-	if not is_instance_valid(node):
-		return false
-	for site in construction_sites:
-		if site.node == node:
-			return true
-	return false
+	return is_instance_valid(node) and construction.has_site(node)
 
-func _get_construction_site_data(node: Node3D) -> Dictionary:
-	for site in construction_sites:
-		if site.node == node:
-			return site
-	return {}
+func _get_construction_site_data(node: Node3D) -> ConstructionSite:
+	return construction.site_for_node(node)
 
 func _cancel_selected_construction() -> void:
 	if not is_instance_valid(selected_building) or not _is_construction_site(selected_building):

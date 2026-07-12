@@ -150,7 +150,7 @@ func _schedule_permanent_vacancies() -> void:
 		if candidates_by_role.is_empty():
 			return
 		var selected_role := ""
-		var selected_citizen: Citizen
+		var selected_citizen: Citizen = null
 		for role in candidates_by_role:
 			var candidates: Array = candidates_by_role[role]
 			candidates.sort_custom(func(a: Citizen, b: Citizen): return float(a.skills.get(role, 0.0)) > float(b.skills.get(role, 0.0)))
@@ -244,8 +244,10 @@ func assign_work(citizen: Citizen, index: int) -> void:
 	elif simulation.school_developed_professions.get(citizen.preferred_role(), false) and float(citizen.skills.get(citizen.preferred_role(), 0.0)) < 1.0:
 		should_study = true
 		target_role = citizen.preferred_role()
-		
-	if should_study and not simulation.school_positions.is_empty() and int(simulation.game_minutes) / 60 < 12:
+
+	@warning_ignore("integer_division")
+	var current_hour: int = int(simulation.game_minutes) / 60
+	if should_study and not simulation.school_positions.is_empty() and current_hour < 12:
 		citizen.attend_school(simulation.school_positions[0], target_role)
 		return
 	if citizen.specialization == "builder" and simulation.construction_sites.is_empty():
@@ -261,8 +263,8 @@ func assign_work(citizen: Citizen, index: int) -> void:
 			if not simulation.demolition_sites.is_empty():
 				citizen.assign_demolition(simulation.demolition_sites[index % simulation.demolition_sites.size()].building)
 			else:
-				var construction: Dictionary = simulation._preferred_construction_site()
-				if construction.is_empty():
+				var construction: ConstructionSite = simulation._preferred_construction_site()
+				if construction == null:
 					return
 				citizen.assign_construction(construction.node)
 		"forestry":
@@ -350,9 +352,11 @@ func _worker_data(citizen: Citizen) -> Dictionary:
 
 
 func _world_data() -> Dictionary:
+	@warning_ignore("integer_division")
+	var current_hour: int = int(simulation.game_minutes) / 60
 	return {
 		"era": simulation.settlement.era,
-		"hour": int(simulation.game_minutes) / 60,
+		"hour": current_hour,
 		"has_canteen": is_instance_valid(simulation.canteen),
 		"cooking_jobs": simulation._available_employer_capacity("cook"),
 		"schools": simulation.school_positions.size(),

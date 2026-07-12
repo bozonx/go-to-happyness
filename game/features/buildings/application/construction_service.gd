@@ -1,22 +1,24 @@
 class_name ConstructionService
 extends RefCounted
 
-var simulation: Node
+var runtime: ConstructionRuntime
+var sites: Array[ConstructionSite] = []
 
 
-func configure(next_simulation: Node) -> void:
-	simulation = next_simulation
+func configure(next_runtime: ConstructionRuntime) -> void:
+	runtime = next_runtime
 
 
-func start_site(cell: Vector2i, building_type: String, position: Vector3, rotation_quarters := 0, supplied_blueprint: Dictionary = {}, occupied_footprint := Vector2i.ZERO) -> void:
-	var site := Node3D.new()
-	site.position = position
-	site.rotation.y = rotation_quarters * PI * 0.5
-	site.set_meta("building_type", building_type)
-	simulation.add_child(site)
+func start_site(cell: Vector2i, building_type: String, position: Vector3, rotation_quarters := 0, supplied_blueprint: Dictionary = {}, occupied_footprint := Vector2i.ZERO) -> ConstructionSite:
+	var site_node := Node3D.new()
+	site_node.position = position
+	site_node.rotation.y = rotation_quarters * PI * 0.5
+	site_node.set_meta("building_type", building_type)
+	runtime.scene_root.add_child(site_node)
 	var blueprint := supplied_blueprint if not supplied_blueprint.is_empty() else BuildingBlueprints.get_blueprint(building_type)
-	site.set_meta("footprint", blueprint.footprint)
-	site.set_meta("occupied_footprint", occupied_footprint if occupied_footprint != Vector2i.ZERO else blueprint.footprint)
+	site_node.set_meta("footprint", blueprint.footprint)
+	site_node.set_meta("occupied_footprint", occupied_footprint if occupied_footprint != Vector2i.ZERO else blueprint.footprint)
+
 	var territory := MeshInstance3D.new()
 	var territory_mesh := BoxMesh.new()
 	var display_footprint: Vector2i = blueprint.footprint
@@ -28,7 +30,8 @@ func start_site(cell: Vector2i, building_type: String, position: Vector3, rotati
 	territory_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	territory_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	territory.material_override = territory_material
-	site.add_child(territory)
+	site_node.add_child(territory)
+
 	var bar_mesh := BoxMesh.new()
 	bar_mesh.size = Vector3(1.45, 0.11, 0.12)
 	var back := MeshInstance3D.new()
@@ -37,7 +40,7 @@ func start_site(cell: Vector2i, building_type: String, position: Vector3, rotati
 	var back_material := StandardMaterial3D.new()
 	back_material.albedo_color = Color("392d2e")
 	back.material_override = back_material
-	site.add_child(back)
+	site_node.add_child(back)
 	var fill := MeshInstance3D.new()
 	fill.mesh = bar_mesh
 	fill.position = Vector3(-0.725, 2.17, -0.07)
@@ -45,7 +48,7 @@ func start_site(cell: Vector2i, building_type: String, position: Vector3, rotati
 	fill_material.albedo_color = Color("56bd58")
 	fill.material_override = fill_material
 	fill.scale.x = 0.01
-	site.add_child(fill)
+	site_node.add_child(fill)
 	var material_label := Label3D.new()
 	material_label.name = "SupplyLabel"
 	material_label.position = Vector3(0.0, 2.45, 0.0)
@@ -53,66 +56,94 @@ func start_site(cell: Vector2i, building_type: String, position: Vector3, rotati
 	material_label.outline_size = 5
 	material_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	material_label.no_depth_test = true
-	site.add_child(material_label)
+	site_node.add_child(material_label)
+
 	var required: Dictionary = BuildingCatalog.definition_for(building_type).get("costs", {}).duplicate(true)
-	simulation.construction_sites.append({"cell": cell, "type": building_type, "position": position, "node": site, "fill": fill, "progress": 0.0, "blueprint": blueprint, "modules_built": 0, "required_materials": required, "delivered_materials": {}})
-	# Clickable selector so players can open the construction menu
-	var selector := Area3D.new()
-	selector.add_to_group("construction_selector")
-	selector.collision_layer = 4
-	selector.collision_mask = 0
-	var shape := CollisionShape3D.new()
-	var box := BoxShape3D.new()
-	box.size = Vector3(display_footprint.x, 2.5, display_footprint.y)
-	shape.shape = box
-	shape.position = Vector3(0.0, 1.25, 0.0)
-	selector.add_child(shape)
-	site.add_child(selector)
-	simulation._update_workers()
+	var site := ConstructionSite.new(cell, building_type, position, site_node, fill, blueprint, required)
+	sites.append(site)
+	_add_selector(site_node, display_footprint)
+	runtime.workers_changed.call()
+	return site
 
 
 func tick(delta: float) -> void:
-	for index in range(simulation.construction_sites.size() - 1, -1, -1):
-		var site: Dictionary = simulation.construction_sites[index]
-		if not _is_supplied(site):
+	for index in range(sites.size() - 1, -1, -1):
+		var site := sites[index]
+		if not site.is_supplied():
 			_update_supply_label(site)
-			simulation.construction_sites[index] = site
 			continue
 		_update_supply_label(site)
-		var builder_power: float = simulation._building_power(site.node)
-		var progress: float = ConstructionProgress.advance(site.progress, delta, simulation.CONSTRUCTION_DURATION, builder_power)
+		var builder_power: float = runtime.builder_power.call(site.node)
+		var progress := ConstructionProgress.advance(site.progress, delta, runtime.duration, builder_power)
 		if index == 0:
-			simulation.status_label.text = "Building %s: %d builder(s), %.1fx speed." % [site.type, simulation._builder_count(site.node), builder_power]
+			runtime.set_status.call("Building %s: %d builder(s), %.1fx speed." % [site.building_type, runtime.builder_count.call(site.node), builder_power])
 		site.progress = progress
 		var modules: Array = site.blueprint.modules
 		var target_module_count := mini(modules.size(), floori(progress * modules.size()))
 		while site.modules_built < target_module_count:
 			site.node.add_child(BuildingBlueprints.create_module(modules[site.modules_built]))
 			site.modules_built += 1
-		var fill: MeshInstance3D = site.fill
-		fill.scale.x = maxf(0.01, progress)
-		fill.position.x = -0.725 + 0.725 * progress
-		simulation.construction_sites[index] = site
+		if is_instance_valid(site.fill):
+			site.fill.scale.x = maxf(0.01, progress)
+			site.fill.position.x = -0.725 + 0.725 * progress
 		if progress < 1.0:
 			continue
-		if is_instance_valid(fill):
-			fill.get_parent().remove_child(fill)
-			fill.queue_free()
-		for child in site.node.get_children():
-			if child is MeshInstance3D and child != fill:
-				child.queue_free()
-		simulation.construction_sites.remove_at(index)
-		for citizen in simulation.citizens:
+		_cleanup_completed_site(site)
+		sites.remove_at(index)
+		for citizen in runtime.citizens:
 			citizen.finish_construction(site.node)
-		simulation._complete_building(site.cell, site.type, site.position, site.node, site.blueprint)
+		runtime.building_completed.call(site.cell, site.building_type, site.position, site.node, site.blueprint)
 
-func _is_supplied(site: Dictionary) -> bool:
-	for resource_type in site.required_materials:
-		if int(site.delivered_materials.get(resource_type, 0)) < int(site.required_materials[resource_type]):
-			return false
+
+func accept_delivery(site_node: Node3D, resource_type: String, amount: int) -> bool:
+	var site := site_for_node(site_node)
+	if site == null:
+		return false
+	site.delivered_materials[resource_type] = int(site.delivered_materials.get(resource_type, 0)) + amount
+	site.reserved_materials[resource_type] = maxi(0, int(site.reserved_materials.get(resource_type, 0)) - amount)
 	return true
 
-func _update_supply_label(site: Dictionary) -> void:
+
+func has_site(node: Node3D) -> bool:
+	return site_for_node(node) != null
+
+
+func site_for_node(node: Node3D) -> ConstructionSite:
+	for site in sites:
+		if site.node == node:
+			return site
+	return null
+
+
+func cancel_site(site_node: Node3D) -> bool:
+	for index in range(sites.size() - 1, -1, -1):
+		var site := sites[index]
+		if site.node != site_node:
+			continue
+		# Delivered stock is returned at the normal cancellation rate. In-transit
+		# reservations are returned in full so cargo can never vanish.
+		for resource_type in site.delivered_materials:
+			var refund := maxi(1, floori(int(site.delivered_materials[resource_type]) * 0.5))
+			runtime.settlement.add(resource_type, refund)
+		for resource_type in site.reserved_materials:
+			runtime.settlement.add(resource_type, int(site.reserved_materials[resource_type]))
+		for citizen in runtime.citizens:
+			if citizen.construction_site == site_node and citizen.state in [Citizen.State.TO_CONSTRUCTION_PICKUP, Citizen.State.TO_CONSTRUCTION_SITE]:
+				citizen.carried_amount = 0
+				citizen.construction_site = null
+				citizen.idle()
+		for citizen in runtime.citizens:
+			citizen.finish_construction(site_node)
+		runtime.building_registry.cancel_reservation(site.cell)
+		site_node.queue_free()
+		sites.remove_at(index)
+		runtime.navigation_changed.call()
+		runtime.workers_changed.call()
+		return true
+	return false
+
+
+func _update_supply_label(site: ConstructionSite) -> void:
 	var label := site.node.get_node_or_null("SupplyLabel") as Label3D
 	if label == null:
 		return
@@ -125,30 +156,24 @@ func _update_supply_label(site: Dictionary) -> void:
 	label.modulate = Color("f0c45d") if delivered < required else Color("56bd58")
 
 
-func cancel_site(site_node: Node3D) -> void:
-	for index in range(simulation.construction_sites.size() - 1, -1, -1):
-		var site: Dictionary = simulation.construction_sites[index]
-		if site.node != site_node:
-			continue
-		# Delivered stock is returned at the normal cancellation rate. In-transit
-		# reservations are returned in full so cargo can never vanish.
-		for resource_type in site.delivered_materials:
-			var refund := maxi(1, floori(int(site.delivered_materials[resource_type]) * 0.5))
-			simulation.settlement.add(resource_type, refund)
-		for resource_type in site.get("reserved_materials", {}):
-			simulation.settlement.add(resource_type, int(site.reserved_materials[resource_type]))
-		for citizen in simulation.citizens:
-			if citizen.construction_site == site_node and citizen.state in [Citizen.State.TO_CONSTRUCTION_PICKUP, Citizen.State.TO_CONSTRUCTION_SITE]:
-				citizen.carried_amount = 0
-				citizen.construction_site = null
-				citizen.idle()
-		# Release builders working on this site
-		for citizen in simulation.citizens:
-			citizen.finish_construction(site_node)
-			simulation.building_registry.cancel_reservation(site.cell)
-		# Clean up scene node
-		site_node.queue_free()
-		simulation.construction_sites.remove_at(index)
-		simulation._rebuild_navigation_mesh()
-		simulation._update_workers()
-		return
+func _add_selector(site_node: Node3D, footprint: Vector2i) -> void:
+	var selector := Area3D.new()
+	selector.add_to_group("construction_selector")
+	selector.collision_layer = 4
+	selector.collision_mask = 0
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(footprint.x, 2.5, footprint.y)
+	shape.shape = box
+	shape.position = Vector3(0.0, 1.25, 0.0)
+	selector.add_child(shape)
+	site_node.add_child(selector)
+
+
+func _cleanup_completed_site(site: ConstructionSite) -> void:
+	if is_instance_valid(site.fill):
+		site.fill.get_parent().remove_child(site.fill)
+		site.fill.queue_free()
+	for child in site.node.get_children():
+		if child is MeshInstance3D and child != site.fill:
+			child.queue_free()

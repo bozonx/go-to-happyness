@@ -14,6 +14,8 @@ func _init() -> void:
 	_test_citizen_task_state()
 	_test_citizen_decision_context()
 	_test_construction_progress()
+	_test_construction_service_cancellation()
+	_test_demolition_service_completion()
 	_test_building_registry()
 	_test_school_and_seller_rules()
 	_test_courier_metadata()
@@ -231,6 +233,45 @@ func _test_citizen_decision_context() -> void:
 func _test_construction_progress() -> void:
 	assert(is_equal_approx(ConstructionProgress.advance(0.25, 2.0, 4.0, 1.0), 0.75))
 	assert(ConstructionProgress.advance(0.9, 4.0, 4.0, 1.0) == 1.0)
+
+
+func _test_construction_service_cancellation() -> void:
+	var scene_root := Node3D.new()
+	var runtime := ConstructionRuntime.new()
+	runtime.scene_root = scene_root
+	runtime.settlement = SettlementState.new()
+	runtime.building_registry = BuildingRegistry.new()
+	runtime.citizens = []
+	runtime.workers_changed = func() -> void: pass
+	runtime.navigation_changed = func() -> void: pass
+	var service := ConstructionService.new()
+	service.configure(runtime)
+
+	var cell := Vector2i(2, 3)
+	runtime.building_registry.reserve(cell, Vector3(2.0, 0.0, 3.0), Vector2i(5, 5))
+	var site := service.start_site(cell, "warehouse", Vector3(2.0, 0.0, 3.0))
+	assert(service.has_site(site.node))
+	assert(service.accept_delivery(site.node, "boards", 1))
+	assert(site.delivered_materials.boards == 1)
+	assert(service.cancel_site(site.node))
+	assert(service.sites.is_empty() and runtime.building_registry.record_at_cell(cell) == null)
+	scene_root.free()
+
+
+func _test_demolition_service_completion() -> void:
+	var completed: Array[DemolitionSite] = []
+	var runtime := DemolitionRuntime.new()
+	runtime.duration = 3.0
+	runtime.building_power = func(_building: Node3D) -> float: return 1.0
+	runtime.is_ready = func(_site: DemolitionSite) -> bool: return true
+	runtime.completed = func(site: DemolitionSite) -> void: completed.append(site)
+	var service := DemolitionService.new()
+	service.configure(runtime)
+	var building := Node3D.new()
+	assert(service.mark(building, "warehouse"))
+	service.tick(3.0)
+	assert(service.sites.is_empty() and completed.size() == 1 and completed[0].building_type == "warehouse")
+	building.free()
 
 
 func _test_building_registry() -> void:

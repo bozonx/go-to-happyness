@@ -76,6 +76,11 @@ completed footprints. Its `BuildingRecord` connects a placement cell and footpri
 the completed runtime node. Construction, navigation and demolition must use this
 registry rather than maintain parallel position or footprint arrays.
 
+`ConstructionService` and `DemolitionService` own typed construction and demolition
+queues. Their scene, economy, worker and completion dependencies are explicit runtime
+callbacks, not a bootstrap-controller reference. Building placement and completion
+effects remain the next building subsystems to move behind the same narrow boundary.
+
 `building_blueprints.gd` is presentation code. It may build geometry and collision,
 but it must not decide costs, unlocks, production or staffing. Do not use `Node3D`
 metadata or arbitrary dictionaries as a new source of building state; introduce a
@@ -120,7 +125,9 @@ implementation for several features. Extract it incrementally without a behavior
 rewrite:
 
 1. Move clock/day-cycle scheduling into `simulation/application`.
-2. Introduce a building registry, then extract placement, construction and demolition.
+2. Extract building placement and completion effects. Construction and demolition
+   queues already belong to buildings/application; preserve those boundaries instead
+   of adding feature logic back to the bootstrap controller.
 3. Extract courier dispatch and resource delivery into `logistics/application`.
 4. Extract navigation and routing behind a route service.
 5. Move each UI panel into `ui/presentation` and make it consume commands and query
