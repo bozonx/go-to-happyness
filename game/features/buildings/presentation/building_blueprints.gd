@@ -69,6 +69,7 @@ const COLORS := {
 	"brick_restaurant": Color("a2583d"),
 	"brick_house": Color("b4533a"),
 	"construction_company": Color("a94b3c"),
+	"employment_office": Color("8a8f99"),
 }
 
 
@@ -88,6 +89,7 @@ static func get_blueprint(building_type: String) -> Dictionary:
 		"brick_restaurant": return _enclosed_blueprint("brick_restaurant", Vector2i(7, 5), 3, "hip")
 		"brick_house": return _enclosed_blueprint("brick_house", Vector2i(5, 5), 3, "gable")
 		"construction_company": return _enclosed_blueprint("construction_company", Vector2i(7, 6), 3, "shed")
+		"employment_office": return _enclosed_blueprint("employment_office", Vector2i(5, 5), 3, "hip")
 		"warehouse": return _enclosed_blueprint("warehouse", Vector2i(5, 5), 3, "shed")
 		"sawmill": return _sawmill_blueprint()
 		"farm": return _farm_blueprint()

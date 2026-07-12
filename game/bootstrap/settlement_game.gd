@@ -180,6 +180,8 @@ var entrance_stone: Node3D
 var tent_cell := Vector2i(0, 0)
 var canteen: Node3D
 var canteen_position := Vector3.ZERO
+var employment_office: Node3D
+var employment_office_position := Vector3.ZERO
 var canteen_food := 0
 var pending_canteen_delivery := false
 var pending_canteen_carrier: Citizen
@@ -230,6 +232,7 @@ var building_menu_title: Label
 var building_cook_button: Button
 var building_teacher_button: Button
 var building_seller_button: Button
+var building_official_button: Button
 var building_accept_workers_button: Button
 var building_dismiss_worker_button: Button
 var building_close_button: Button
@@ -380,9 +383,38 @@ func _has_cook() -> bool:
 
 
 func _employment_center_position() -> Vector3:
+	if is_instance_valid(employment_office):
+		return employment_office.get_meta("service_position", employment_office.global_position)
 	if is_instance_valid(campfire_node):
 		return campfire_node.get_meta("service_position", campfire_node.global_position)
 	return Vector3.INF
+
+
+func _registration_official() -> Citizen:
+	# Once a dedicated employment office is built, whoever is assigned there and
+	# actually standing at their post services registrations.
+	if is_instance_valid(employment_office):
+		for citizen in citizens:
+			if is_instance_valid(citizen) and citizen.state == Citizen.State.OFFICIAL_WORK and citizen.global_position.distance_to(employment_office_position) <= 3.5:
+				return citizen
+		return null
+	# Before that, only the hero can personally act as employment officer, and
+	# only while standing at the registration point (the campfire/town hall).
+	var post := _employment_center_position()
+	if is_instance_valid(hero_citizen) and hero_citizen.manual_role == "official" and post != Vector3.INF and hero_citizen.global_position.distance_to(post) <= 2.5:
+		return hero_citizen
+	return null
+
+
+func _is_registration_staffed() -> bool:
+	return _is_work_time() and _registration_official() != null
+
+
+func _registration_duration() -> float:
+	var official := _registration_official()
+	if official == null:
+		return Citizen.EMPLOYMENT_PROCESS_DURATION
+	return Citizen.EMPLOYMENT_PROCESS_DURATION / official.get_efficiency("official")
 
 
 func _is_teacher_present_at_school() -> bool:
@@ -1686,6 +1718,7 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	citizen.setup_specialization(primary_specialization if not primary_specialization.is_empty() else ["builder", "forestry", "farming"][citizens.size() % 3])
 	citizen.setup_navigation(_find_path_around_houses, _get_nearest_delivery_position)
 	citizen.setup_scheduler(_try_resume_work, _send_citizen_to_leisure)
+	citizen.setup_registration_service(_is_registration_staffed, _registration_duration)
 	citizen.resource_delivered.connect(_on_resource_delivered)
 	citizen.construction_material_delivered.connect(_on_construction_material_delivered)
 	citizen.building_supply_delivered.connect(_on_building_supply_delivered)
@@ -1887,6 +1920,7 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_role_button("Assign: forage food", "gather_food", 374)
 	_add_role_button("Assign: courier", "courier", 408)
 	_add_role_button("Assign: craftsman", "craftsman", 442)
+	_add_role_button("Take role: employment officer", "official", 476, true)
 	
 	# Era category buttons (shown on main build menu)
 	_add_build_category_button("Tent era", "tent", 136)
@@ -1945,7 +1979,8 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_build_button("Brick restaurant", "brick_restaurant", 312, "brick")
 	_add_build_button("Brick house", "brick_house", 346, "brick")
 	_add_build_button("Строительная фирма", "construction_company", 380, "brick")
-	
+	_add_build_button("Служба занятости", "employment_office", 414, "brick")
+
 	_refresh_build_menu()
 
 func _create_school_menu(ui: CanvasLayer) -> void:
@@ -2309,7 +2344,8 @@ func _refresh_build_menu() -> void:
 			
 	for button in role_buttons:
 		var role: String = button.get_meta("role", "")
-		button.visible = build_menu_is_job_menu and selected_exists and _is_role_available(role)
+		var hero_only: bool = button.get_meta("hero_only", false)
+		button.visible = build_menu_is_job_menu and selected_exists and _is_role_available(role) and (not hero_only or selected_builder.is_hero)
 		if button.visible:
 			var base_title: String = button.get_meta("base_title", button.text)
 			if role.is_empty():
@@ -2356,7 +2392,7 @@ func _close_job_submenu() -> void:
 	build_menu_is_job_menu = false
 	_refresh_build_menu()
 
-func _add_role_button(title: String, role: String, y_position: float) -> void:
+func _add_role_button(title: String, role: String, y_position: float, hero_only := false) -> void:
 	var button := Button.new()
 	button.text = title
 	button.position = Vector2(16, y_position)
@@ -2364,6 +2400,7 @@ func _add_role_button(title: String, role: String, y_position: float) -> void:
 	button.pressed.connect(_set_manual_role.bind(role))
 	button.set_meta("role", role)
 	button.set_meta("base_title", title)
+	button.set_meta("hero_only", hero_only)
 	build_menu.add_child(button)
 	role_buttons.append(button)
 
@@ -2432,6 +2469,7 @@ func _is_role_available(role: String) -> bool:
 		"engineer": return _available_employer_capacity("engineer") > 0
 		"courier": return not warehouse_positions.is_empty()
 		"craftsman": return not craft_tent_positions.is_empty()
+		"official": return true
 	return false
 
 func _assigned_count_for_role(role: String) -> int:
@@ -2489,6 +2527,7 @@ func _employer_types_for_role(role: String) -> Array[String]:
 		"factory_worker": return ["brick_factory", "materials_factory", "recycling_factory", "metal_factory"]
 		"engineer": return ["materials_factory"]
 		"craftsman": return ["craft_tent"]
+		"official": return ["employment_office"]
 	return []
 
 
@@ -2507,7 +2546,7 @@ func _is_staffed_workplace(building: Node3D) -> bool:
 	if not is_instance_valid(building):
 		return false
 	var building_type := str(building.get_meta("building_type", ""))
-	for role in ["construction", "forestry", "farming", "gather_food", "cook", "teacher", "seller", "factory_worker", "engineer", "craftsman"]:
+	for role in ["construction", "forestry", "farming", "gather_food", "cook", "teacher", "seller", "factory_worker", "engineer", "craftsman", "official"]:
 		if building_type in _employer_types_for_role(role):
 			return true
 	return false
@@ -2930,6 +2969,8 @@ func _remove_building_services(building: Node3D, building_type: String) -> void:
 			if campfire_node == building: campfire_node = null
 		"cook_campfire", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant":
 			if canteen == building: canteen = null
+		"employment_office":
+			if employment_office == building: employment_office = null
 		"brick_factory", "materials_factory", "recycling_factory", "metal_factory": factories.erase(building)
 
 
@@ -3516,6 +3557,9 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 		"canteen":
 			canteen = building
 			canteen_position = service_position
+		"employment_office":
+			employment_office = building
+			employment_office_position = service_position
 		"school":
 			school_positions.append(service_position)
 			_add_building_selector(building, "school_selector", blueprint.footprint)
@@ -3933,7 +3977,7 @@ func _refresh_campfire_occupancy_button() -> void:
 
 
 func _workforce_roles() -> Array[String]:
-	return ["construction", "forestry", "farming", "excavation", "gather_food", "cook", "teacher", "seller", "factory_worker", "engineer", "gather_branches", "gather_grass", "gather_dew", "gather_water", "courier", "craftsman"]
+	return ["construction", "forestry", "farming", "excavation", "gather_food", "cook", "teacher", "seller", "official", "factory_worker", "engineer", "gather_branches", "gather_grass", "gather_dew", "gather_water", "courier", "craftsman"]
 
 
 func _workforce_role_label(role: String) -> String:
@@ -3942,7 +3986,7 @@ func _workforce_role_label(role: String) -> String:
 		"excavation": "Excavation", "gather_branches": "Gather branches",
 		"gather_grass": "Gather grass", "gather_food": "Foraging",
 		"gather_dew": "Collect dew", "gather_water": "Collect water",
-		"cook": "Cook", "teacher": "Teacher", "seller": "Seller",
+		"cook": "Cook", "teacher": "Teacher", "seller": "Seller", "official": "Employment officer",
 		"factory_worker": "Factory worker", "engineer": "Engineer",
 		"courier": "Courier", "craftsman": "Craftsman"
 	}
@@ -3957,6 +4001,7 @@ func _workforce_role_limit(role: String) -> int:
 		"gather_food": return forager_positions.size()
 		"courier": return warehouse_positions.size()
 		"cook": return 1 if is_instance_valid(canteen) else 0
+		"official": return 1 if is_instance_valid(employment_office) else 0
 		"teacher": return school_positions.size()
 		"seller": return market_positions.size()
 		"factory_worker": return workforce._factory_job_capacity()
@@ -4561,6 +4606,13 @@ func _create_building_menu(ui: CanvasLayer) -> void:
 	building_seller_button.size = Vector2(272, 30)
 	building_seller_button.pressed.connect(_assign_seller_at_market)
 	building_menu.add_child(building_seller_button)
+
+	building_official_button = Button.new()
+	building_official_button.text = "Assign selected resident as employment officer"
+	building_official_button.position = Vector2(16, 104)
+	building_official_button.size = Vector2(272, 30)
+	building_official_button.pressed.connect(_assign_official_at_employment_office)
+	building_menu.add_child(building_official_button)
 	building_accept_workers_button = Button.new()
 	building_accept_workers_button.position = Vector2(16, 104)
 	building_accept_workers_button.size = Vector2(272, 30)
@@ -4607,6 +4659,7 @@ func _show_building_menu() -> void:
 		building_cook_button.visible = false
 		building_teacher_button.visible = false
 		building_seller_button.visible = false
+		building_official_button.visible = false
 		building_accept_workers_button.visible = false
 		building_dismiss_worker_button.visible = false
 		building_cancel_construction_button.visible = true
@@ -4624,7 +4677,10 @@ func _show_building_menu() -> void:
 		
 		building_seller_button.visible = building_type in ["trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market"]
 		building_seller_button.disabled = selected_builder == null or selected_builder.is_player_controlled or not bool(selected_building.get_meta("accepting_workers", true))
-		
+
+		building_official_button.visible = building_type == "employment_office"
+		building_official_button.disabled = selected_builder == null or selected_builder.is_player_controlled or not bool(selected_building.get_meta("accepting_workers", true))
+
 		var is_workplace := _is_staffed_workplace(selected_building)
 		building_accept_workers_button.visible = is_workplace
 		building_dismiss_worker_button.visible = is_workplace
@@ -4634,8 +4690,8 @@ func _show_building_menu() -> void:
 			building_accept_workers_button.text = "Stop accepting workers" if accepting else "Start accepting workers"
 			building_accept_workers_button.tooltip_text = "This workplace is priority #%d among open workplaces of the same profession." % _workplace_priority_position(selected_building) if accepting else "Reopen this workplace and move it to the front of the hiring queue."
 			building_dismiss_worker_button.disabled = _workplace_worker(selected_building) == null
-		var special_button_visible := building_cook_button.visible or building_teacher_button.visible or building_seller_button.visible
-		for button in [building_cook_button, building_teacher_button, building_seller_button]:
+		var special_button_visible := building_cook_button.visible or building_teacher_button.visible or building_seller_button.visible or building_official_button.visible
+		for button in [building_cook_button, building_teacher_button, building_seller_button, building_official_button]:
 			button.position.y = 176.0
 		building_close_button.position.y = 220.0 if special_button_visible else 184.0
 
@@ -4815,6 +4871,19 @@ func _assign_seller_at_market() -> void:
 	_set_manual_specialist_employment(selected_builder, "seller")
 	selected_builder.setup_specialization("seller")
 	_update_interface("%s is registering as a seller." % selected_builder.role_label())
+	_update_workers()
+
+
+func _assign_official_at_employment_office() -> void:
+	if selected_builder == null:
+		_update_interface("Select a resident first, then click the employment office to make them the officer.")
+		return
+	if selected_builder.is_player_controlled:
+		_update_interface("Pick a settler, not the character you are controlling.")
+		return
+	_set_manual_specialist_employment(selected_builder, "official")
+	selected_builder.setup_specialization("official")
+	_update_interface("%s is registering as an employment officer." % selected_builder.role_label())
 	_update_workers()
 
 

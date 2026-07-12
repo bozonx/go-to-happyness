@@ -36,7 +36,7 @@ const NAVIGATION_TARGET_CLEARANCE := 0.48
 const ROUTE_PROGRESS_EPSILON := 0.06
 const ROUTE_RETRY_INTERVAL := 2.0
 
-enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, TO_GATHER, GATHERING, TO_TRADE_PICKUP, TO_TRADE_DESTINATION, TO_EMPLOYMENT_CENTER, EMPLOYMENT_PROCESSING, CANTEEN_WORK, SCHOOL_WORK, TO_MARKET_WORK, MARKET_WORK, TO_CRAFT_WORK, CRAFT_WORK, TO_CONSTRUCTION_PICKUP, TO_CONSTRUCTION_SITE }
+enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, TO_GATHER, GATHERING, TO_TRADE_PICKUP, TO_TRADE_DESTINATION, TO_EMPLOYMENT_CENTER, EMPLOYMENT_PROCESSING, CANTEEN_WORK, SCHOOL_WORK, TO_MARKET_WORK, MARKET_WORK, TO_CRAFT_WORK, CRAFT_WORK, TO_CONSTRUCTION_PICKUP, TO_CONSTRUCTION_SITE, TO_OFFICIAL_WORK, OFFICIAL_WORK }
 
 enum EmploymentState { AUTO_RESERVE, EMPLOYED, UNEMPLOYED, PENDING_JOB, PENDING_UNEMPLOYMENT, MANUAL_COURIER }
 
@@ -54,6 +54,12 @@ var wait_recheck := 0.0
 # them to a rest spot (park/pond/home) and reports whether somewhere was found.
 var work_scheduler := Callable()
 var leisure_scheduler := Callable()
+# Injected: registration_staff_checker() -> bool reports whether the
+# employment centre (hero manning his post, or an assigned official) is
+# currently able to process registrations; registration_duration_resolver()
+# -> float returns how long that processing should take.
+var registration_staff_checker := Callable()
+var registration_duration_resolver := Callable()
 var is_player_controlled := false
 var is_hero := false
 var construction_site: Node3D
@@ -121,6 +127,7 @@ var blocked_by_storage := false
 var training_role := ""
 var training_days_completed := 0
 var school_position := Vector3.ZERO
+var official_position := Vector3.ZERO
 var factory: Node3D
 var factory_position := Vector3.ZERO
 var park_position := Vector3.ZERO
@@ -140,7 +147,8 @@ func _ready() -> void:
 		"excavation": randf_range(0.0, 0.1),
 		"factory_worker": randf_range(0.0, 0.1),
 		"engineer": randf_range(0.0, 0.1),
-		"craftsman": randf_range(0.0, 0.1)
+		"craftsman": randf_range(0.0, 0.1),
+		"official": randf_range(0.0, 0.1)
 	}
 	add_to_group("citizens")
 	_setup_collision()
@@ -296,6 +304,10 @@ func _physics_process(delta: float) -> void:
 			pass
 		State.TO_SCHOOL_WORK:
 			_process_school_work(delta)
+		State.TO_OFFICIAL_WORK:
+			_process_official_work(delta)
+		State.OFFICIAL_WORK:
+			pass
 		State.TO_FACTORY:
 			_process_to_factory(delta)
 		State.FACTORY_WORK:
@@ -503,6 +515,10 @@ func _process_school_work(delta: float) -> void:
 	if _move_to(school_position, delta):
 		state = State.SCHOOL_WORK
 
+func _process_official_work(delta: float) -> void:
+	if _move_to(official_position, delta):
+		state = State.OFFICIAL_WORK
+
 func _process_market_work_arrival(delta: float) -> void:
 	if _move_to(market_position, delta):
 		state = State.MARKET_WORK
@@ -585,9 +601,17 @@ func _process_to_employment_center(delta: float) -> void:
 	if employment_center_position == Vector3.INF:
 		state = State.IDLE
 		return
-	if _move_to(employment_center_position, delta):
-		state = State.EMPLOYMENT_PROCESSING
-		_start_task(EMPLOYMENT_PROCESS_DURATION)
+	if not _move_to(employment_center_position, delta):
+		return
+	# Arrived and queuing: stay put (a visible line at the campfire) until
+	# someone is actually manning the employment centre.
+	if registration_staff_checker.is_valid() and not bool(registration_staff_checker.call()):
+		return
+	var duration := EMPLOYMENT_PROCESS_DURATION
+	if registration_duration_resolver.is_valid():
+		duration = float(registration_duration_resolver.call())
+	state = State.EMPLOYMENT_PROCESSING
+	_start_task(duration)
 
 
 func _process_employment_processing(delta: float) -> void:
@@ -956,6 +980,13 @@ func assign_seller_work(next_market_position: Vector3) -> void:
 		factory = null
 		state = State.TO_MARKET_WORK
 
+func assign_official_work(next_office_position: Vector3) -> void:
+	if not is_player_controlled:
+		official_position = next_office_position
+		active_role = "registration"
+		factory = null
+		state = State.TO_OFFICIAL_WORK
+
 func assign_craft_work(next_craft_position: Vector3) -> void:
 	if not is_player_controlled:
 		craft_position = next_craft_position
@@ -1056,6 +1087,10 @@ func setup_scheduler(next_work_scheduler: Callable, next_leisure_scheduler: Call
 	work_scheduler = next_work_scheduler
 	leisure_scheduler = next_leisure_scheduler
 
+func setup_registration_service(staff_checker: Callable, duration_resolver: Callable) -> void:
+	registration_staff_checker = staff_checker
+	registration_duration_resolver = duration_resolver
+
 func _refresh_warehouse_position() -> void:
 	if not delivery_position_resolver.is_valid():
 		return
@@ -1117,6 +1152,8 @@ func get_core_skill_for_role(role: String) -> String:
 			return "teacher"
 		"selling", "seller":
 			return "seller"
+		"registration", "official":
+			return "official"
 		_:
 			return ""
 

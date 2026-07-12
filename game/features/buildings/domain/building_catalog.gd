@@ -46,6 +46,7 @@ const DEFINITIONS := {
 	"brick_restaurant": {"name": "Brick restaurant", "category": "brick", "costs": {"bricks": 24, "boards": 12}},
 	"brick_house": {"name": "Brick house", "category": "brick", "costs": {"bricks": 22, "boards": 10}},
 	"construction_company": {"name": "Строительная фирма", "category": "brick", "costs": {"bricks": 26, "boards": 14}},
+	"employment_office": {"name": "Служба занятости", "category": "brick", "costs": {"bricks": 22, "boards": 12}},
 }
 
 const RESEARCH_COSTS := {"brick_construction": {"bricks": 15, "boards": 10}}

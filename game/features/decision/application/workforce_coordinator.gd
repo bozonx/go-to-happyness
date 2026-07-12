@@ -19,7 +19,8 @@ const BUSY_STATES := [
 	Citizen.State.TO_CANTEEN_WORK, Citizen.State.CANTEEN_WORK,
 	Citizen.State.TO_SCHOOL_WORK, Citizen.State.SCHOOL_WORK,
 	Citizen.State.TO_MARKET_WORK, Citizen.State.MARKET_WORK,
-	Citizen.State.TO_TRADE_PICKUP, Citizen.State.TO_TRADE_DESTINATION
+	Citizen.State.TO_TRADE_PICKUP, Citizen.State.TO_TRADE_DESTINATION,
+	Citizen.State.TO_OFFICIAL_WORK, Citizen.State.OFFICIAL_WORK
 ]
 
 
@@ -228,6 +229,9 @@ func assign_work(citizen: Citizen, index: int) -> void:
 			var market_pos: Vector3 = _workplace_position(citizen, simulation.market_positions[index % simulation.market_positions.size()])
 			citizen.assign_seller_work(market_pos)
 		return
+	if role == "official":
+		citizen.assign_official_work(_workplace_position(citizen, simulation.employment_office_position))
+		return
 	if role == "factory_worker":
 		var factory_worker_node: Node3D = citizen.employment_workplace if is_instance_valid(citizen.employment_workplace) else factory_for_role("factory_worker")
 		citizen.assign_factory_work(factory_worker_node, "factory_work")
@@ -367,6 +371,7 @@ func _world_data() -> Dictionary:
 		"forager_jobs": simulation._available_employer_capacity("gather_food"),
 		"teacher_jobs": simulation._available_employer_capacity("teacher"),
 		"seller_jobs": simulation._available_employer_capacity("seller"),
+		"official_jobs": simulation._available_employer_capacity("official"),
 		"factory_jobs": simulation._available_employer_capacity("factory_worker"),
 		"engineer_jobs": simulation._available_employer_capacity("engineer"),
 		"construction_sites": simulation.construction_sites.size() + simulation.demolition_sites.size(),

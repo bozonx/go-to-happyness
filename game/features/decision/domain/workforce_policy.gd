@@ -134,6 +134,7 @@ static func _role_available(role: String, world: Dictionary) -> bool:
 		"factory_worker": return int(world.get("factory_jobs", 0)) > 0
 		"engineer": return int(world.get("engineer_jobs", 0)) > 0
 		"craftsman": return int(world.get("craftsman_jobs", 0)) > 0
+		"official": return int(world.get("official_jobs", 0)) > 0
 		"gather_branches": return int(world.get("trees", 0)) > 0
 		"gather_grass": return true
 	return false
