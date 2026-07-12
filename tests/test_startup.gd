@@ -32,6 +32,36 @@ func _init() -> void:
 			assert(citizen.specialization == "unassigned")
 			assert(not citizen.auto_mode_enabled)
 			assert(citizen.employment_state == Citizen.EmploymentState.UNEMPLOYED)
+	var resident: Citizen = simulation.citizens[1]
+	simulation.settlement.era = SettlementState.Era.TENT
+	assert(resident.is_toilet_user(resident))
+	simulation.settlement.era = SettlementState.Era.EARTH
+	assert(resident.is_toilet_user(resident))
+	simulation.settlement.era = SettlementState.Era.WOOD
+	resident.setup_specialization("cook")
+	resident.employment_state = Citizen.EmploymentState.EMPLOYED
+	assert(not resident.is_toilet_user(resident))
+	resident.employment_state = Citizen.EmploymentState.AUTO_RESERVE
+	assert(resident.is_toilet_user(resident))
+	resident.setup_specialization("courier")
+	resident.employment_state = Citizen.EmploymentState.MANUAL_COURIER
+	assert(resident.is_toilet_user(resident))
+	resident.go_to_arrival_entrance(simulation.entrance_stone.global_position)
+	assert(resident.has_active_arrival_task())
+	assert(not resident.is_available_for_schedule())
+	var arrival_home := Node3D.new()
+	simulation.add_child(arrival_home)
+	resident.assign_home(arrival_home)
+	resident.go_home()
+	assert(resident.state == Citizen.State.TO_ARRIVAL_ENTRANCE)
+	var interrupted_order := {"house": arrival_home, "dispatched": true, "greeter_id": resident.get_instance_id()}
+	simulation.pending_arrivals.append(interrupted_order)
+	simulation.arrival_greeters[resident.get_instance_id()] = interrupted_order
+	resident.idle()
+	simulation._requeue_interrupted_arrivals()
+	assert(not bool(simulation.pending_arrivals[0].get("dispatched", false)))
+	simulation._cancel_arrivals_for_house(arrival_home)
+	assert(simulation.pending_arrivals.is_empty())
 	assert(simulation.tent == null)
 	assert(simulation._total_housing_slots() == 0)
 	var pond_cell: Vector2i = simulation._cell_from_position(simulation.pond_positions[0])

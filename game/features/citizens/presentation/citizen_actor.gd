@@ -272,7 +272,13 @@ func _physics_process(delta: float) -> void:
 	_update_satisfaction(delta)
 	
 	if not is_player_controlled:
-		if simulation != null and not toilet_times.is_empty():
+		if not is_toilet_user(self):
+			toilet_times.clear()
+			needs_toilet = false
+			current_toilet_target = null
+			if state in [State.TO_TOILET, State.USING_TOILET, State.WAITING_FOR_TOILET, State.TO_BUSH, State.USING_BUSH]:
+				state = State.IDLE
+		elif simulation != null and not toilet_times.is_empty():
 			var current_time := float(simulation.game_minutes)
 			if current_time >= toilet_times[0]:
 				toilet_times.pop_front()
@@ -635,6 +641,10 @@ func go_to_arrival_entrance(entrance_position: Vector3) -> void:
 		return
 	arrival_position = entrance_position
 	state = State.TO_ARRIVAL_ENTRANCE
+
+
+func has_active_arrival_task() -> bool:
+	return state in [State.TO_ARRIVAL_ENTRANCE, State.ARRIVAL_MEETING, State.ARRIVAL_WAITING, State.TO_ARRIVAL_CENTER]
 
 
 func wait_for_arrival_morning() -> void:
@@ -1384,7 +1394,7 @@ func assign_home(next_home: Node3D) -> void:
 		remove_debuff("tent")
 
 func go_home() -> void:
-	if not is_player_controlled and is_instance_valid(home):
+	if not is_player_controlled and not has_active_arrival_task() and is_instance_valid(home):
 		factory = null
 		state = State.TO_HOME
 
@@ -1434,6 +1444,8 @@ func _update_effects(delta: float) -> void:
 			buffs[buff_id] = time_left
 
 func is_available_for_schedule() -> bool:
+	if has_active_arrival_task():
+		return false
 	return not is_player_controlled and not has_active_delivery() and state != State.TO_CANTEEN and state != State.EATING and state != State.TO_HOME and state != State.RESTING and state != State.STUDYING and state != State.TO_PARK and state != State.RELAXING and state != State.RESEARCHING and state != State.TO_TOILET and state != State.USING_TOILET and state != State.WAITING_FOR_TOILET and state != State.TO_BUSH and state != State.USING_BUSH
 
 func _update_satisfaction(delta: float) -> void:
@@ -1525,9 +1537,11 @@ func _process_trade_destination(delta: float) -> void:
 
 
 func is_toilet_user(citizen: Citizen) -> bool:
-	if citizen.is_player_controlled or citizen.is_hero:
+	if citizen.is_player_controlled:
 		return false
-	return citizen.specialization in ["courier", "unassigned", "builder"] or citizen.employment_workplace == null
+	if citizen.simulation != null and citizen.simulation.settlement.era <= SettlementState.Era.EARTH:
+		return true
+	return citizen.specialization == "courier" or citizen.employment_state in [EmploymentState.AUTO_RESERVE, EmploymentState.UNEMPLOYED]
 
 
 func generate_toilet_schedule() -> void:

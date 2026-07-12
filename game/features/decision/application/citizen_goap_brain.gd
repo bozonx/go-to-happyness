@@ -85,7 +85,7 @@ func setup(next_citizen: Citizen, next_simulation: Node, next_worker_index: int)
 func tick(delta: float) -> void:
 	if _agent == null or citizen.is_player_controlled:
 		return
-	if citizen.state in [Citizen.State.TO_TOILET, Citizen.State.USING_TOILET, Citizen.State.WAITING_FOR_TOILET, Citizen.State.TO_BUSH, Citizen.State.USING_BUSH]:
+	if citizen.has_active_arrival_task() or citizen.state in [Citizen.State.TO_TOILET, Citizen.State.USING_TOILET, Citizen.State.WAITING_FOR_TOILET, Citizen.State.TO_BUSH, Citizen.State.USING_BUSH]:
 		return
 	_think_time -= delta
 	if _think_time > 0.0:

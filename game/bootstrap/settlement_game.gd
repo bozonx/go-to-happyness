@@ -2677,6 +2677,7 @@ func _find_arrival_greeter() -> Citizen:
 func _update_arrivals() -> void:
 	if not is_instance_valid(entrance_stone):
 		return
+	_requeue_interrupted_arrivals()
 	# At the start of a workday, visitors and their greeter leave the stone for
 	# the employment centre, or the hero when no office has been built.
 	if _is_work_time():
@@ -2712,8 +2713,9 @@ func _on_arrival_greeter_ready(greeter: Citizen) -> void:
 		return
 	pending_arrivals.erase(order)
 	var house := order.get("house") as Node3D
-	if not is_instance_valid(house):
+	if not is_instance_valid(house) or bool(house.get_meta("pending_demolition", false)):
 		greeter.idle()
+		_update_interface("Arrival cancelled because its assigned home is being demolished.")
 		return
 	var spawn_position := entrance_stone.global_position + Vector3(0.55, 0.08, 0.55)
 	var terrain_height := _terrain_height_at(spawn_position.x, spawn_position.z, spawn_position.y)
@@ -2732,6 +2734,39 @@ func _on_arrival_greeter_ready(greeter: Citizen) -> void:
 		newcomer.wait_for_arrival_morning()
 		_update_interface("The newcomer and greeter are waiting at the entrance for the workday.")
 	_show_house_menu()
+
+
+func _requeue_interrupted_arrivals() -> void:
+	for greeter_id in arrival_greeters.keys():
+		var greeter: Citizen = instance_from_id(greeter_id) as Citizen
+		if is_instance_valid(greeter) and greeter.has_active_arrival_task():
+			continue
+		var order: Dictionary = arrival_greeters[greeter_id]
+		arrival_greeters.erase(greeter_id)
+		for index in pending_arrivals.size():
+			if pending_arrivals[index] == order:
+				order.dispatched = false
+				order.erase("greeter_id")
+				pending_arrivals[index] = order
+				break
+
+
+func _cancel_arrivals_for_house(house: Node3D) -> void:
+	var cancelled := false
+	for index in range(pending_arrivals.size() - 1, -1, -1):
+		var order: Dictionary = pending_arrivals[index]
+		if order.get("house") != house:
+			continue
+		var greeter_id := int(order.get("greeter_id", -1))
+		if greeter_id >= 0:
+			arrival_greeters.erase(greeter_id)
+			var greeter: Citizen = instance_from_id(greeter_id) as Citizen
+			if is_instance_valid(greeter) and greeter.has_active_arrival_task():
+				greeter.idle()
+		pending_arrivals.remove_at(index)
+		cancelled = true
+	if cancelled:
+		_update_interface("Pending arrival cancelled because its assigned home is being demolished.")
 
 func _settle_unhoused_resident() -> void:
 	if selected_house == null or bool(selected_house.get_meta("pending_demolition", false)):
@@ -3407,6 +3442,7 @@ func _mark_building_for_demolition(building: Node3D) -> void:
 		return
 	_release_employment_at_building(building)
 	building.set_meta("pending_demolition", true)
+	_cancel_arrivals_for_house(building)
 	_add_demolition_marker(building)
 	demolition.mark(building, str(building.get_meta("building_type", "house")))
 	_update_workers()
