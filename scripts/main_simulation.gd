@@ -1547,10 +1547,14 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_build_button("Smithy", "smithy", 244, "earth")
 	_add_build_button("Hide workshop", "hide_worker", 278, "earth")
 	_add_build_button("Earth market", "earth_market", 312, "earth")
+	_add_build_button("Earth Assembly", "earth_assembly", 346, "earth")
+	_add_build_button("Dugout kitchen", "dugout_kitchen", 380, "earth")
 	
 	_add_build_button("Clay house", "clay_house", 176, "clay")
 	_add_build_button("Clay workshop", "clay_workshop", 210, "clay")
 	_add_build_button("Clay market", "clay_market", 244, "clay")
+	_add_build_button("Clay lodge", "clay_lodge", 278, "clay")
+	_add_build_button("Clay bakery", "clay_bakery", 312, "clay")
 	
 	_add_build_button("Sawmill - logs + kit", "sawmill", 176, "wood")
 	_add_build_button("Farm", "farm", 210, "wood")
@@ -1559,14 +1563,20 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_build_button("School", "school", 312, "wood")
 	_add_build_button("Park", "park", 346, "wood")
 	_add_build_button("Wood market", "wood_market", 380, "wood")
+	_add_build_button("Wooden town hall", "wood_town_hall", 414, "wood")
 	
 	_add_build_button("Stone house", "stone_house", 176, "stone")
 	_add_build_button("Masonry workshop", "masonry_workshop", 210, "stone")
 	_add_build_button("Stone market", "stone_market", 244, "stone")
+	_add_build_button("Stone prefecture", "stone_prefecture", 278, "stone")
+	_add_build_button("Stone tavern", "stone_tavern", 312, "stone")
 	
 	_add_build_button("Brick kiln", "brick_factory", 176, "brick")
 	_add_build_button("Materials factory", "materials_factory", 210, "brick")
 	_add_build_button("Brick market", "brick_market", 244, "brick")
+	_add_build_button("Brick City Hall", "brick_city_hall", 278, "brick")
+	_add_build_button("Brick restaurant", "brick_restaurant", 312, "brick")
+	_add_build_button("Brick house", "brick_house", 346, "brick")
 	
 	_refresh_build_menu()
 
@@ -2354,9 +2364,9 @@ func _remove_building_services(building: Node3D, building_type: String) -> void:
 		"school": school_positions.erase(service_position)
 		"park": park_positions.erase(service_position)
 		"leisure_center": leisure_positions.erase(service_position)
-		"campfire":
+		"campfire", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall":
 			if campfire_node == building: campfire_node = null
-		"cook_campfire", "canteen":
+		"cook_campfire", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant":
 			if canteen == building: canteen = null
 		"brick_factory", "materials_factory", "recycling_factory", "metal_factory": factories.erase(building)
 
@@ -2835,7 +2845,7 @@ func _update_construction(delta: float) -> void:
 
 func _complete_building(cell: Vector2i, building_type: String, position_on_board: Vector3, building: Node3D, blueprint: Dictionary) -> void:
 	building.set_meta("building_type", building_type)
-	if building_type not in ["warehouse", "campfire", "cook_campfire", "trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market", "school", "materials_factory", "tent", "living_tent", "dugout", "earth_house", "clay_house", "stone_house", "house"]:
+	if building_type not in ["warehouse", "campfire", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall", "cook_campfire", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant", "trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market", "school", "materials_factory", "tent", "living_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "brick_house"]:
 		_add_building_selector(building, "building_selector", blueprint.footprint)
 	_register_service_entrance(building, blueprint.footprint, false, building_type not in ["farm", "park"])
 	var service_position: Vector3 = building.get_meta("service_position")
@@ -2849,7 +2859,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			_sawmill_stock(service_position)
 		"farm":
 			farm_positions.append(service_position)
-		"campfire":
+		"campfire", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall":
 			campfire_node = building
 			_add_building_selector(building, "campfire_selector", blueprint.footprint)
 			var fire_light := OmniLight3D.new()
@@ -2858,9 +2868,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			fire_light.light_energy = 2.5
 			fire_light.omni_range = 8.0
 			building.add_child(fire_light)
-		"cook_campfire":
-			# The cooking campfire is the tent-era canteen: residents eat here and a
-			# cook keeps it staffed, reusing the existing canteen/meal pipeline.
+		"cook_campfire", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant":
 			canteen = building
 			canteen_position = service_position
 			_add_building_selector(building, "cook_campfire_selector", blueprint.footprint)
@@ -2873,10 +2881,17 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 		"forager_tent":
 			forager_positions.append(service_position)
 			_update_interface("Forager tent ready. Assign a resident to forage food, or a free hand will.")
-		"tent", "living_tent", "dugout", "earth_house", "clay_house", "stone_house", "house":
-			if building_type == "house":
+		"tent", "living_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "brick_house":
+			if building_type in ["house", "brick_house"]:
 				completed_house_count += 1
-			var housing_capacity := 1 if building_type == "living_tent" else HOUSE_CAPACITY
+			var housing_capacity := HOUSE_CAPACITY
+			match building_type:
+				"living_tent": housing_capacity = 1
+				"tent", "dugout": housing_capacity = 4
+				"earth_house", "clay_house": housing_capacity = 6
+				"house": housing_capacity = 8
+				"stone_house": housing_capacity = 10
+				"brick_house": housing_capacity = 12
 			building.set_meta("housing_capacity", housing_capacity)
 			building.set_meta("spawn_slots", housing_capacity)
 			building.set_meta("entrance_position", service_position)
@@ -2970,7 +2985,7 @@ func _required_staff_for_building(building: Node3D) -> Dictionary:
 		"sawmill": return {"role": "forestry", "count": 1}
 		"farm": return {"role": "farming", "count": 1}
 		"forager_tent": return {"role": "gather_food", "count": 1}
-		"cook_campfire", "canteen": return {"role": "cooking", "count": 1}
+		"cook_campfire", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant": return {"role": "cooking", "count": 1}
 		"school": return {"role": "teaching", "count": 1}
 		"brick_factory", "materials_factory", "recycling_factory", "metal_factory": return {"role": "factory_worker", "count": int(building.get_meta("required_factory_workers", 1))}
 	return {}
@@ -3473,6 +3488,7 @@ func _refresh_campfire_menu() -> void:
 		
 		SettlementState.Era.EARTH:
 			next_era = SettlementState.Era.CLAY
+			var has_assembly := settlement.has_building("earth_assembly")
 			var has_smithy := settlement.has_building("smithy")
 			var has_mkt := settlement.has_building("earth_market")
 			var pop_ok := housing_slots >= citizens.size()
@@ -3482,6 +3498,7 @@ func _refresh_campfire_menu() -> void:
 			var shovel_ok := settlement._has_tools(["shovel"])
 			
 			req_text = "Requirements for Clay Era:\n"
+			req_text += "- Earth Assembly built: %s\n" % ("Yes" if has_assembly else "No")
 			req_text += "- Smithy built: %s\n" % ("Yes" if has_smithy else "No")
 			req_text += "- Earth market built: %s\n" % ("Yes" if has_mkt else "No")
 			req_text += "- Housing slots (needs %d): %d (%s)\n" % [citizens.size(), housing_slots, "OK" if pop_ok else "Need more"]
@@ -3493,12 +3510,14 @@ func _refresh_campfire_menu() -> void:
 			
 		SettlementState.Era.CLAY:
 			next_era = SettlementState.Era.WOOD
+			var has_lodge := settlement.has_building("clay_lodge")
 			var has_mkt := settlement.has_building("clay_market")
 			var water_ok := water >= citizens.size()
 			var logs_ok := settlement.logs >= 10
 			var money_ok := settlement.money >= 10
 			
 			req_text = "Requirements for Wood Era:\n"
+			req_text += "- Clay lodge built: %s\n" % ("Yes" if has_lodge else "No")
 			req_text += "- Clay market built: %s\n" % ("Yes" if has_mkt else "No")
 			req_text += "- Water (needs %d): %d (%s)\n" % [citizens.size(), water, "OK" if water_ok else "Need more"]
 			req_text += "- Logs (needs 10): %d (%s)\n" % [settlement.logs, "OK" if logs_ok else "Need more"]
@@ -3507,12 +3526,14 @@ func _refresh_campfire_menu() -> void:
 			
 		SettlementState.Era.WOOD:
 			next_era = SettlementState.Era.STONE
+			var has_th := settlement.has_building("wood_town_hall")
 			var has_mkt := settlement.has_building("wood_market")
 			var has_sm := settlement.has_building("sawmill")
 			var pickaxe_ok := settlement._has_tools(["pickaxe"])
 			var money_ok := settlement.money >= 15
 			
 			req_text = "Requirements for Stone Era:\n"
+			req_text += "- Wooden town hall built: %s\n" % ("Yes" if has_th else "No")
 			req_text += "- Sawmill built: %s\n" % ("Yes" if has_sm else "No")
 			req_text += "- Wood market built: %s\n" % ("Yes" if has_mkt else "No")
 			req_text += "- Tool Pickaxe owned: %s\n" % ("Yes" if pickaxe_ok else "No")
@@ -3521,12 +3542,14 @@ func _refresh_campfire_menu() -> void:
 
 		SettlementState.Era.STONE:
 			next_era = SettlementState.Era.BRICK
+			var has_pref := settlement.has_building("stone_prefecture")
 			var has_mkt := settlement.has_building("stone_market")
 			var has_mw := settlement.has_building("masonry_workshop")
 			var stone_ok := settlement.stone >= 20
 			var money_ok := settlement.money >= 20
 			
 			req_text = "Requirements for Brick Era:\n"
+			req_text += "- Stone prefecture built: %s\n" % ("Yes" if has_pref else "No")
 			req_text += "- Masonry workshop built: %s\n" % ("Yes" if has_mw else "No")
 			req_text += "- Stone market built: %s\n" % ("Yes" if has_mkt else "No")
 			req_text += "- Stone (needs 20): %d (%s)\n" % [settlement.stone, "OK" if stone_ok else "Need more"]
@@ -3853,7 +3876,7 @@ func _show_building_menu() -> void:
 	var building_type := str(selected_building.get_meta("building_type", "building"))
 	var definition := BuildingCatalog.definition_for(building_type)
 	building_menu_title.text = "%s\n%s" % [str(definition.get("name", building_type.capitalize())), "Press Delete to mark this building for demolition."]
-	building_cook_button.visible = building_type == "cook_campfire"
+	building_cook_button.visible = building_type in ["cook_campfire", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant"]
 	building_cook_button.disabled = selected_builder == null or selected_builder.is_player_controlled
 
 

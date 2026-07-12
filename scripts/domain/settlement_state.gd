@@ -250,13 +250,13 @@ func can_advance_to(next_era: Era, population: int, housing_slots: int) -> bool:
 		Era.EARTH:
 			return era == Era.TENT and has_building("campfire") and has_building("trade_tent") and housing_slots >= population and food >= population and water >= population and has_building("craft_tent") and trade_sales >= 1 and _has_tools(["axe", "hand_saw", "shovel", "bucket"])
 		Era.CLAY:
-			return era == Era.EARTH and has_building("smithy") and has_building("earth_market") and housing_slots >= population and clay >= 5 and money >= 5 and trade_sales >= 3 and _has_tools(["hoe"])
+			return era == Era.EARTH and has_building("earth_assembly") and has_building("smithy") and has_building("earth_market") and housing_slots >= population and clay >= 5 and money >= 5 and trade_sales >= 3 and _has_tools(["hoe"])
 		Era.WOOD:
-			return era == Era.CLAY and has_building("clay_market") and water >= population and logs >= 10 and money >= 10
+			return era == Era.CLAY and has_building("clay_lodge") and has_building("clay_market") and water >= population and logs >= 10 and money >= 10
 		Era.STONE:
-			return era == Era.WOOD and has_building("wood_market") and money >= 15 and _has_tools(["pickaxe"])
+			return era == Era.WOOD and has_building("wood_town_hall") and has_building("wood_market") and money >= 15 and _has_tools(["pickaxe"])
 		Era.BRICK:
-			return era == Era.STONE and has_building("stone_market") and has_building("masonry_workshop") and stone >= 20 and money >= 20
+			return era == Era.STONE and has_building("stone_prefecture") and has_building("stone_market") and has_building("masonry_workshop") and stone >= 20 and money >= 20
 	return false
 
 

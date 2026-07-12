@@ -56,6 +56,16 @@ const COLORS := {
 	"stone_market_roof": Color("3c3d3e"),
 	"wood_market": Color("af6f3b"),
 	"brick_market": Color("b85e42"),
+	"earth_assembly": Color("7a5840"),
+	"dugout_kitchen": Color("825d43"),
+	"clay_lodge": Color("c0855c"),
+	"clay_bakery": Color("c57b4c"),
+	"wood_town_hall": Color("8b6540"),
+	"stone_prefecture": Color("707275"),
+	"stone_tavern": Color("7d8082"),
+	"brick_city_hall": Color("b7a552"),
+	"brick_restaurant": Color("a2583d"),
+	"brick_house": Color("b4533a"),
 }
 
 
@@ -66,9 +76,13 @@ static func get_blueprint(building_type: String) -> Dictionary:
 		"dew_collector": return _water_collector_blueprint("dew_collector", Vector2i(2, 2))
 		"pond": return _pond_blueprint()
 		"tent", "living_tent", "forager_tent", "craft_tent", "trade_tent": return _enclosed_blueprint(building_type, Vector2i(4, 4), 2, "gable")
-		"dugout", "earth_house", "smithy", "hide_worker", "earth_market": return _enclosed_blueprint(building_type, Vector2i(4, 4), 2, "gable")
-		"clay_house", "clay_workshop", "clay_market": return _enclosed_blueprint(building_type, Vector2i(4, 4), 2, "gable")
-		"stone_house", "masonry_workshop", "stone_market": return _enclosed_blueprint(building_type, Vector2i(5, 5), 3, "hip")
+		"dugout", "earth_house", "smithy", "hide_worker", "earth_market", "earth_assembly", "dugout_kitchen": return _enclosed_blueprint(building_type, Vector2i(4, 4), 2, "gable")
+		"clay_house", "clay_workshop", "clay_market", "clay_lodge", "clay_bakery": return _enclosed_blueprint(building_type, Vector2i(4, 4), 2, "gable")
+		"stone_house", "masonry_workshop", "stone_market", "stone_prefecture", "stone_tavern": return _enclosed_blueprint(building_type, Vector2i(5, 5), 3, "hip")
+		"wood_town_hall": return _enclosed_blueprint("wood_town_hall", Vector2i(6, 6), 3, "hip")
+		"brick_city_hall": return _enclosed_blueprint("brick_city_hall", Vector2i(7, 6), 4, "hip")
+		"brick_restaurant": return _enclosed_blueprint("brick_restaurant", Vector2i(7, 5), 3, "hip")
+		"brick_house": return _enclosed_blueprint("brick_house", Vector2i(5, 5), 3, "gable")
 		"warehouse": return _enclosed_blueprint("warehouse", Vector2i(5, 5), 3, "shed")
 		"sawmill": return _sawmill_blueprint()
 		"farm": return _farm_blueprint()
@@ -82,7 +96,7 @@ static func get_blueprint(building_type: String) -> Dictionary:
 		"city_hall": return _enclosed_blueprint("city_hall", Vector2i(8, 6), 4, "hip")
 		"leisure_center": return _enclosed_blueprint("leisure_center", Vector2i(8, 6), 3, "hip")
 		"wood_market", "brick_market": return _enclosed_blueprint(building_type, Vector2i(5, 5), 3, "shed")
-		_: return _enclosed_blueprint("house", Vector2i(5, 5), 3, "gable")
+		_: return _enclosed_blueprint(building_type, Vector2i(5, 5), 3, "gable")
 
 
 static func create_module(module: Dictionary) -> StaticBody3D:
