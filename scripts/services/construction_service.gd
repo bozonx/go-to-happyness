@@ -46,7 +46,16 @@ func start_site(cell: Vector2i, building_type: String, position: Vector3, rotati
 	fill.material_override = fill_material
 	fill.scale.x = 0.01
 	site.add_child(fill)
-	simulation.construction_sites.append({"cell": cell, "type": building_type, "position": position, "node": site, "fill": fill, "progress": 0.0, "blueprint": blueprint, "modules_built": 0})
+	var material_label := Label3D.new()
+	material_label.name = "SupplyLabel"
+	material_label.position = Vector3(0.0, 2.45, 0.0)
+	material_label.font_size = 26
+	material_label.outline_size = 5
+	material_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	material_label.no_depth_test = true
+	site.add_child(material_label)
+	var required: Dictionary = BuildingCatalog.definition_for(building_type).get("costs", {}).duplicate(true)
+	simulation.construction_sites.append({"cell": cell, "type": building_type, "position": position, "node": site, "fill": fill, "progress": 0.0, "blueprint": blueprint, "modules_built": 0, "required_materials": required, "delivered_materials": {}})
 	# Clickable selector so players can open the construction menu
 	var selector := Area3D.new()
 	selector.add_to_group("construction_selector")
@@ -65,6 +74,11 @@ func start_site(cell: Vector2i, building_type: String, position: Vector3, rotati
 func tick(delta: float) -> void:
 	for index in range(simulation.construction_sites.size() - 1, -1, -1):
 		var site: Dictionary = simulation.construction_sites[index]
+		if not _is_supplied(site):
+			_update_supply_label(site)
+			simulation.construction_sites[index] = site
+			continue
+		_update_supply_label(site)
 		var builder_power: float = simulation._building_power(site.node)
 		var progress: float = ConstructionProgress.advance(site.progress, delta, simulation.CONSTRUCTION_DURATION, builder_power)
 		if index == 0:
@@ -92,16 +106,33 @@ func tick(delta: float) -> void:
 			citizen.finish_construction(site.node)
 		simulation._complete_building(site.cell, site.type, site.position, site.node, site.blueprint)
 
+func _is_supplied(site: Dictionary) -> bool:
+	for resource_type in site.required_materials:
+		if int(site.delivered_materials.get(resource_type, 0)) < int(site.required_materials[resource_type]):
+			return false
+	return true
+
+func _update_supply_label(site: Dictionary) -> void:
+	var label := site.node.get_node_or_null("SupplyLabel") as Label3D
+	if label == null:
+		return
+	var delivered := 0
+	var required := 0
+	for resource_type in site.required_materials:
+		delivered += int(site.delivered_materials.get(resource_type, 0))
+		required += int(site.required_materials[resource_type])
+	label.text = "MATERIALS %d/%d" % [delivered, required]
+	label.modulate = Color("f0c45d") if delivered < required else Color("56bd58")
+
 
 func cancel_site(site_node: Node3D) -> void:
 	for index in range(simulation.construction_sites.size() - 1, -1, -1):
 		var site: Dictionary = simulation.construction_sites[index]
 		if site.node != site_node:
 			continue
-		# Refund ~50% of building costs
-		var costs: Dictionary = BuildingCatalog.definition_for(site.type).get("costs", {})
-		for resource_type in costs:
-			var refund := maxi(1, floori(int(costs[resource_type]) * 0.5))
+		# Only delivered goods were withdrawn from storage, so return half of those.
+		for resource_type in site.delivered_materials:
+			var refund := maxi(1, floori(int(site.delivered_materials[resource_type]) * 0.5))
 			simulation.settlement.add(resource_type, refund)
 		# Release builders working on this site
 		for citizen in simulation.citizens:

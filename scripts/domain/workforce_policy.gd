@@ -19,8 +19,8 @@ static func permanent_vacancy_for(worker: Dictionary, world: Dictionary) -> Stri
 	# Only fixed productive workplaces create a long-term employment contract.
 	# Couriers and free gatherers stay in the reserve pool.
 	var scores: Dictionary = {}
-	if int(world.get("era", SettlementState.Era.TENT)) >= SettlementState.Era.STONE:
-		_add_empty_workplace_score(scores, world, "construction", int(world.get("builder_jobs", 0)))
+	# Construction is permanent in every era; early construction sites are jobs.
+	_add_empty_workplace_score(scores, world, "construction", int(world.get("builder_jobs", world.get("construction_sites", 0))))
 	_add_empty_workplace_score(scores, world, "forestry", int(world.get("forestry_jobs", world.get("sawmills", 0))))
 	_add_empty_workplace_score(scores, world, "farming", int(world.get("farming_jobs", world.get("farms", 0))))
 	_add_empty_workplace_score(scores, world, "gather_food", int(world.get("forager_jobs", world.get("forager_tents", 0))))
@@ -62,8 +62,7 @@ static func _automatic_role_for(worker: Dictionary, world: Dictionary) -> String
 
 	# An empty productive building is useful immediately. Once occupied, normal
 	# shortage and specialization scores decide whether it needs extra workers.
-	if int(world.get("era", SettlementState.Era.TENT)) >= SettlementState.Era.STONE:
-		_add_empty_workplace_score(scores, world, "construction", int(world.get("builder_jobs", 0)))
+	_add_empty_workplace_score(scores, world, "construction", int(world.get("builder_jobs", world.get("construction_sites", 0))))
 	_add_empty_workplace_score(scores, world, "forestry", int(world.get("forestry_jobs", world.get("sawmills", 0))))
 	_add_empty_workplace_score(scores, world, "farming", int(world.get("farming_jobs", world.get("farms", 0))))
 	_add_empty_workplace_score(scores, world, "gather_food", int(world.get("forager_jobs", world.get("forager_tents", 0))))
@@ -143,7 +142,7 @@ static func can_assign(worker: Dictionary, world: Dictionary) -> bool:
 		return false
 	var assigned_role := role_for(worker, world)
 	if not str(worker.get("permanent_role", "")).is_empty():
-		if assigned_role == "construction" and int(world.get("era", SettlementState.Era.TENT)) >= SettlementState.Era.STONE and int(world.get("builder_jobs", 0)) <= 0:
+		if assigned_role == "construction" and int(world.get("builder_jobs", world.get("construction_sites", 0))) <= 0:
 			return false
 		return _role_available(assigned_role, world)
 	var specialization := str(worker.get("specialization", ""))

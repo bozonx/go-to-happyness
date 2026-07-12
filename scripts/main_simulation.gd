@@ -97,6 +97,7 @@ var sawmill_positions: Array[Vector3] = []
 var sawmill_stocks: Dictionary = {}
 var tree_reservations: Dictionary = {}
 var grass_reservations: Dictionary = {}
+var grass_sources: Dictionary = {} # cell -> {node, remaining}; finite patches around trees
 var farm_positions: Array[Vector3] = []
 var builders_guild_positions: Array[Vector3] = []
 var construction_company_positions: Array[Vector3] = []
@@ -107,6 +108,7 @@ var market_positions: Array[Vector3] = []
 var craft_tent_positions: Array[Vector3] = []
 var park_positions: Array[Vector3] = []
 var leisure_positions: Array[Vector3] = []
+var gathering_place_positions: Array[Vector3] = []
 var factories: Array[Node3D] = []
 var brick_construction_unlocked: bool:
 	get: return settlement.brick_construction_unlocked
@@ -426,6 +428,12 @@ func _handle_clock_minute(clock_minute: int) -> void:
 		_start_park_rest(true)
 	if minute == 0 and hour == 18:
 		_start_park_rest(false)
+	if minute == 0 and hour == 8 + settlement.workday_hours:
+		_start_after_work_rest()
+	if minute == 0 and hour == 1:
+		for citizen in citizens:
+			if not citizen.is_player_controlled:
+				citizen.go_home()
 	if minute == 0 and hour == 21:
 		_update_workers()
 		_update_interface("Nightfall: workers are returning to their assigned homes.")
@@ -493,13 +501,13 @@ func _update_house_lights() -> void:
 		var light: OmniLight3D = record.light
 		if not is_instance_valid(light):
 			continue
-		var off_minute: int = record.off_minute
+		var house: Node3D = record.house
+		var off_minute: int = int(house.get_meta("light_off_minute", record.off_minute))
 		# A home is lit only after someone moves in. It turns on with evening
 		# twilight and each household chooses one stable
 		# switch-off time between 22:00 and 02:00, including after midnight.
-		var house: Node3D = record.house
 		var occupied := _house_has_residents(house)
-		light.visible = occupied and (minute_of_day >= 17 * 60 and minute_of_day < off_minute if off_minute >= 17 * 60 else minute_of_day >= 17 * 60 or minute_of_day < off_minute)
+		light.visible = occupied and _house_has_people_at_home(house) and (minute_of_day >= 17 * 60 and minute_of_day < off_minute if off_minute >= 17 * 60 else minute_of_day >= 17 * 60 or minute_of_day < off_minute)
 	for light in entrance_lights:
 		if is_instance_valid(light):
 			light.visible = minute_of_day >= 17 * 60 or minute_of_day < 7 * 60
@@ -509,6 +517,12 @@ func _house_has_residents(house: Node3D) -> bool:
 		return false
 	for citizen in citizens:
 		if citizen.home == house:
+			return true
+	return false
+
+func _house_has_people_at_home(house: Node3D) -> bool:
+	for citizen in citizens:
+		if citizen.home == house and citizen.state == Citizen.State.RESTING:
 			return true
 	return false
 
@@ -556,6 +570,16 @@ func _start_park_rest(cooks_only: bool) -> void:
 		sent += 1
 	if sent > 0:
 		_update_interface("%02d:00 park break: %d residents are resting." % [int(game_minutes) / 60, sent])
+
+func _start_after_work_rest() -> void:
+	for citizen in citizens:
+		if citizen.is_player_controlled:
+			continue
+		if settlement.workday_hours >= 12:
+			citizen.go_home()
+		elif not _send_citizen_to_leisure(citizen, random.randi_range(1, maxi(1, 25 - (8 + settlement.workday_hours)))):
+			citizen.go_home()
+	_update_interface("Workday ended: residents are going to rest before returning home.")
 
 func _on_meal_finished(citizen: Citizen) -> void:
 	var served := is_instance_valid(canteen) and _has_cook() and canteen_food > 0
@@ -616,6 +640,7 @@ func _on_canteen_delivery_finished(worker: Citizen, amount: int) -> void:
 func _update_couriers() -> void:
 	if warehouse_positions.is_empty():
 		return
+	_update_construction_supplies()
 
 	var available_couriers := []
 	for courier in citizens:
@@ -765,6 +790,40 @@ func _update_couriers() -> void:
 				courier.courier_worker = best_prod.target
 				courier.assign_courier_pickup(best_prod.target, warehouse_positions[0])
 
+func _update_construction_supplies() -> void:
+	# Reserve one unit at a time. The courier physically carries it from storage
+	# to the site; construction remains blocked until the arrival signal fires.
+	for courier in citizens:
+		if courier.specialization != "courier" or courier.state != Citizen.State.IDLE:
+			continue
+		for site in construction_sites:
+			for resource_type in site.required_materials:
+				var required := int(site.required_materials[resource_type])
+				var delivered := int(site.delivered_materials.get(resource_type, 0))
+				var reserved := int(site.get("reserved_materials", {}).get(resource_type, 0))
+				if delivered + reserved >= required or settlement.amount(resource_type) <= 0:
+					continue
+				settlement.add(resource_type, -1)
+				var reservations: Dictionary = site.get("reserved_materials", {})
+				reservations[resource_type] = reserved + 1
+				site.reserved_materials = reservations
+				courier.assign_construction_delivery(site.node, warehouse_positions[0], resource_type)
+				return
+
+func _on_construction_material_delivered(_courier: Citizen, site_node: Node3D, resource_type: String, amount: int) -> void:
+	for index in construction_sites.size():
+		var site: Dictionary = construction_sites[index]
+		if site.node != site_node:
+			continue
+		var delivered: Dictionary = site.delivered_materials
+		delivered[resource_type] = int(delivered.get(resource_type, 0)) + amount
+		site.delivered_materials = delivered
+		var reservations: Dictionary = site.get("reserved_materials", {})
+		reservations[resource_type] = maxi(0, int(reservations.get(resource_type, 0)) - amount)
+		site.reserved_materials = reservations
+		construction_sites[index] = site
+		return
+
 func _builder_count(site_node: Node3D) -> int:
 	var count := 0
 	for citizen in citizens:
@@ -782,6 +841,10 @@ func _building_power(site_node: Node3D) -> float:
 	return power
 
 func _on_resource_delivered(worker: Citizen, resource_type: String, amount: int) -> void:
+	if resource_type == "grass":
+		_consume_grass_source(worker.gather_source_position)
+	elif resource_type == "branches":
+		_consume_tree_branches(worker.gather_source_position)
 	if resource_type == "water" and worker.active_role == "gather_water" and not settlement.use_filter():
 		worker.idle()
 		_update_interface("The water filter is spent. Buy a replacement at the market.")
@@ -1454,6 +1517,7 @@ func _create_forest() -> void:
 		tree_cells[cell] = true
 		tree_positions.append(tree_position)
 		_create_tree(tree_position)
+		_create_grass_sources_near_tree(cell)
 	_rebuild_navigation_mesh()
 
 func _create_ponds() -> void:
@@ -1501,6 +1565,8 @@ func _create_tree(position_on_board: Vector3) -> void:
 	var tree := Node3D.new()
 	tree.position = position_on_board
 	tree.set_meta("remaining_wood", random.randi_range(4, 7))
+	tree.set_meta("remaining_branches", random.randi_range(5, 9))
+	tree.set_meta("hand_branches", 0)
 	tree_nodes[_cell_from_position(position_on_board)] = tree
 	add_child(tree)
 	var trunk := MeshInstance3D.new()
@@ -1548,6 +1614,7 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	citizen.setup_navigation(_find_path_around_houses, _get_nearest_delivery_position)
 	citizen.setup_scheduler(_try_resume_work, _send_citizen_to_leisure)
 	citizen.resource_delivered.connect(_on_resource_delivered)
+	citizen.construction_material_delivered.connect(_on_construction_material_delivered)
 	citizen.excavation_cycle.connect(_on_excavation_cycle)
 	citizen.resource_ready.connect(_on_resource_ready)
 	citizen.tree_harvested.connect(_on_tree_harvested)
@@ -1560,6 +1627,8 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	citizen.trade_delivery_finished.connect(_on_trade_delivery_finished)
 	citizen.employment_processing_finished.connect(_on_employment_processing_finished)
 	citizens.append(citizen)
+	if citizens.size() > POPULATION:
+		food += random.randi_range(2, 5)
 	if hero_citizen == null:
 		hero_citizen = citizen
 		citizen.set_hero(true)
@@ -1756,7 +1825,8 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_build_category_back_button()
 	
 	_add_build_button("Campfire", "campfire", 176, "tent")
-	_add_build_button("Cooking campfire", "cook_campfire", 210, "tent")
+	_add_build_button("Лобное место", "gathering_place", 193, "tent")
+	_add_build_button("Cooking campfire", "cook_campfire", 227, "tent")
 	_add_build_button("Палатка на 4 жителя", "tent", 244, "tent")
 	_add_build_button("Жилая палатка на 1 жителя", "living_tent", 278, "tent")
 	_add_build_button("Forager tent", "forager_tent", 312, "tent")
@@ -3206,7 +3276,6 @@ func _place_building(world_position: Vector3) -> void:
 	if not _can_pay_building_cost(build_mode):
 		_update_interface("Not enough resources for this building.")
 		return
-	_pay_building_cost(build_mode)
 	placed_buildings[cell] = build_mode
 	building_positions.append(world_position)
 	var blueprint := BuildingBlueprints.get_blueprint(build_mode)
@@ -3221,7 +3290,7 @@ func _place_building(world_position: Vector3) -> void:
 	preview_back_entrance_marker.visible = false
 	build_menu.visible = false
 	selected_builder = null
-	_update_interface("Construction started. The progress bar shows completion.")
+	_update_interface("Construction marked. Couriers must deliver the required materials before builders can start.")
 
 func _place_building_at_crosshair() -> void:
 	var viewport_center := get_viewport().get_visible_rect().size * 0.5
@@ -3302,6 +3371,7 @@ func _update_construction(delta: float) -> void:
 	construction.tick(delta)
 
 func _complete_building(cell: Vector2i, building_type: String, position_on_board: Vector3, building: Node3D, blueprint: Dictionary) -> void:
+	settlement.buildings[building_type] = int(settlement.buildings.get(building_type, 0)) + 1
 	building.set_meta("building_type", building_type)
 	if _is_staffed_workplace(building):
 		workplace_priority_counter += 1
@@ -3334,6 +3404,10 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			fire_light.light_energy = 2.5
 			fire_light.omni_range = 8.0
 			building.add_child(fire_light)
+		"gathering_place":
+			gathering_place_positions.append(service_position)
+			_create_gathering_place_visual(building)
+			_add_building_selector(building, "building_selector", blueprint.footprint)
 		"cook_campfire", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant":
 			canteen = building
 			canteen_position = service_position
@@ -3491,23 +3565,25 @@ func _has_storage_room_for_role(role: String) -> bool:
 		return true
 	return settlement.can_make_room_for(resource_for_role[role], 1, warehouse_positions.size())
 
-func _send_citizen_to_leisure(citizen: Citizen) -> bool:
+func _send_citizen_to_leisure(citizen: Citizen, minimum_hours := 0) -> bool:
 	# Returns whether the citizen was actually placed somewhere to rest so the
 	# waiting window knows if it needs to keep looking for work.
 	if citizen.is_player_controlled or citizen.state not in [Citizen.State.IDLE, Citizen.State.RESTING, Citizen.State.WAITING]:
 		return false
 	# Dedicated recreation first (parks, leisure centers), picked at random.
-	var recreation := park_positions + leisure_positions
+	var recreation := gathering_place_positions + park_positions + leisure_positions
 	if not recreation.is_empty():
-		citizen.go_to_park(recreation[randi() % recreation.size()])
+		citizen.go_to_park(recreation[randi() % recreation.size()], minimum_hours)
 		return true
 	# No parks yet (early eras): gather at the main campfire or a natural pond.
 	var gathering_spots: Array[Vector3] = []
 	if is_instance_valid(campfire_node):
 		gathering_spots.append(campfire_node.global_position)
-	gathering_spots.append_array(pond_positions)
+	for pond in pond_positions:
+		# Do not stand in water: choose a stable point at its rim.
+		gathering_spots.append(pond + Vector3(2.8, 0.0, 0.0))
 	if not gathering_spots.is_empty():
-		citizen.go_to_park(gathering_spots[randi() % gathering_spots.size()])
+		citizen.go_to_park(gathering_spots[randi() % gathering_spots.size()], minimum_hours)
 		return true
 	# Nothing communal exists at all. During the working day we must NOT send them
 	# home to sleep — a RESTING citizen stops re-probing for work and would sleep
@@ -4545,7 +4621,10 @@ func _show_building_menu() -> void:
 		var type: String = site_data.get("type", "building")
 		var progress: float = site_data.get("progress", 0.0)
 		var builders := _builder_count(selected_building)
-		building_menu_title.text = "Under Construction: %s\nProgress: %d%%\nBuilders: %d" % [type.capitalize().replace("_", " "), roundi(progress * 100.0), builders]
+		var supplied_parts: Array[String] = []
+		for resource_type in site_data.required_materials:
+			supplied_parts.append("%s %d/%d" % [resource_type, int(site_data.delivered_materials.get(resource_type, 0)), int(site_data.required_materials[resource_type])])
+		building_menu_title.text = "Under Construction: %s\nMaterials: %s\nProgress: %d%%  Builders: %d" % [type.capitalize().replace("_", " "), ", ".join(supplied_parts), roundi(progress * 100.0), builders]
 		
 		building_cook_button.visible = false
 		building_teacher_button.visible = false
@@ -4782,7 +4861,8 @@ func _find_closest_tree_for_citizen(citizen: Citizen) -> Vector3:
 		if tree_reservations.has(cell) and tree_reservations[cell] != citizen:
 			continue
 		var tree = tree_nodes.get(_cell_from_position(pos))
-		if is_instance_valid(tree) and not bool(tree.get_meta("felled", false)):
+		var hand_limit := ceili(float(int(tree.get_meta("initial_branches", tree.get_meta("remaining_branches", 0)))) * 0.3) if is_instance_valid(tree) else 0
+		if is_instance_valid(tree) and not bool(tree.get_meta("felled", false)) and int(tree.get_meta("remaining_branches", 0)) > 0 and (bool(settlement.tools.get("axe", false)) or int(tree.get_meta("hand_branches", 0)) < hand_limit):
 			var dist = citizen.global_position.distance_squared_to(pos)
 			if dist < closest_dist:
 				closest_dist = dist
@@ -4819,22 +4899,79 @@ func _find_forage_position(citizen: Citizen) -> Vector3:
 
 func _find_grass_gathering_position(citizen: Citizen) -> Vector3:
 	_cleanup_grass_reservations()
-	# Grass is an area resource. Reserve a grid cell so simultaneous gatherers
-	# spread across the meadow instead of walking to the same random point.
-	for attempt in range(32):
-		var angle := randf_range(0.0, 2.0 * PI)
-		var dist := randf_range(2.0, 12.0)
-		var pos := Vector3(cos(angle) * dist, 0.0, sin(angle) * dist)
-		var cell := _cell_from_position(pos)
-		if grass_reservations.has(cell):
+	var candidates: Array[Vector2i] = []
+	for cell in grass_sources:
+		var source: Dictionary = grass_sources[cell]
+		if int(source.remaining) > 0 and not grass_reservations.has(cell):
+			candidates.append(cell)
+	if candidates.is_empty():
+		return Vector3.INF
+	candidates.sort_custom(func(a, b): return _cell_center(a).distance_squared_to(citizen.global_position) < _cell_center(b).distance_squared_to(citizen.global_position))
+	var cell := candidates[0]
+	grass_reservations[cell] = citizen
+	return (grass_sources[cell].node as Node3D).global_position
+
+func _create_grass_sources_near_tree(tree_cell: Vector2i) -> void:
+	for offset in [Vector2i(2, 0), Vector2i(-2, 1), Vector2i(1, -2)]:
+		var cell: Vector2i = tree_cell + offset
+		if grass_sources.has(cell) or tree_cells.has(cell):
 			continue
-		var height := _terrain_height_at(pos.x, pos.z, 0.0)
-		if is_nan(height):
-			continue
-		pos.y = height
-		grass_reservations[cell] = citizen
-		return pos
-	return _get_delivery_position()
+		var position := _cell_center(cell)
+		var node := MeshInstance3D.new()
+		var mesh := CylinderMesh.new()
+		mesh.top_radius = 0.3
+		mesh.bottom_radius = 0.3
+		mesh.height = 0.06
+		node.mesh = mesh
+		node.position = position + Vector3.UP * 0.05
+		var material := StandardMaterial3D.new()
+		material.albedo_color = Color("4fbc55")
+		material.emission_enabled = true
+		material.emission = Color("245b2a")
+		node.material_override = material
+		add_child(node)
+		grass_sources[cell] = {"node": node, "remaining": random.randi_range(2, 5)}
+
+func _consume_grass_source(position: Vector3) -> void:
+	var cell := _cell_from_position(position)
+	if not grass_sources.has(cell):
+		return
+	var source: Dictionary = grass_sources[cell]
+	source.remaining = maxi(0, int(source.remaining) - 1)
+	if int(source.remaining) == 0:
+		if is_instance_valid(source.node):
+			source.node.queue_free()
+		grass_sources.erase(cell)
+	else:
+		grass_sources[cell] = source
+
+func _consume_tree_branches(position: Vector3) -> void:
+	var tree: Node3D = tree_nodes.get(_cell_from_position(position))
+	if not is_instance_valid(tree):
+		return
+	var remaining := int(tree.get_meta("remaining_branches", 0))
+	var hand_taken := int(tree.get_meta("hand_branches", 0))
+	var hand_limit := ceili(float(int(tree.get_meta("initial_branches", remaining))) * 0.3)
+	if not tree.has_meta("initial_branches"):
+		tree.set_meta("initial_branches", remaining)
+		hand_limit = ceili(float(remaining) * 0.3)
+	if not bool(settlement.tools.get("axe", false)) and hand_taken >= hand_limit:
+		return
+	tree.set_meta("remaining_branches", maxi(0, remaining - 1))
+	if not bool(settlement.tools.get("axe", false)):
+		tree.set_meta("hand_branches", hand_taken + 1)
+
+func _create_gathering_place_visual(building: Node3D) -> void:
+	for angle in [0.0, PI * 0.5, PI, PI * 1.5]:
+		var log := MeshInstance3D.new()
+		var mesh := CylinderMesh.new()
+		mesh.top_radius = 0.16
+		mesh.bottom_radius = 0.16
+		mesh.height = 1.5
+		log.mesh = mesh
+		log.rotation.z = PI * 0.5
+		log.position = Vector3(cos(angle) * 1.25, 0.28, sin(angle) * 1.25)
+		building.add_child(log)
 
 func _cleanup_grass_reservations() -> void:
 	for cell in grass_reservations.keys():

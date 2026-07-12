@@ -2,6 +2,7 @@ class_name Citizen
 extends CharacterBody3D
 
 signal resource_delivered(worker: Citizen, resource_type: String, amount: int)
+signal construction_material_delivered(worker: Citizen, site: Node3D, resource_type: String, amount: int)
 signal excavation_cycle(worker: Citizen, site: Node3D, efficiency: float)
 signal resource_ready(worker: Citizen, resource_type: String, amount: int)
 signal tree_harvested(worker: Citizen, position_on_board: Vector3)
@@ -34,7 +35,7 @@ const NAVIGATION_TARGET_CLEARANCE := 0.48
 const ROUTE_PROGRESS_EPSILON := 0.06
 const ROUTE_RETRY_INTERVAL := 2.0
 
-enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, TO_GATHER, GATHERING, TO_TRADE_PICKUP, TO_TRADE_DESTINATION, TO_EMPLOYMENT_CENTER, EMPLOYMENT_PROCESSING, CANTEEN_WORK, SCHOOL_WORK, TO_MARKET_WORK, MARKET_WORK, TO_CRAFT_WORK, CRAFT_WORK }
+enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, TO_GATHER, GATHERING, TO_TRADE_PICKUP, TO_TRADE_DESTINATION, TO_EMPLOYMENT_CENTER, EMPLOYMENT_PROCESSING, CANTEEN_WORK, SCHOOL_WORK, TO_MARKET_WORK, MARKET_WORK, TO_CRAFT_WORK, CRAFT_WORK, TO_CONSTRUCTION_PICKUP, TO_CONSTRUCTION_SITE }
 
 enum EmploymentState { AUTO_RESERVE, EMPLOYED, UNEMPLOYED, PENDING_JOB, PENDING_UNEMPLOYMENT, MANUAL_COURIER }
 
@@ -96,6 +97,8 @@ var market_position := Vector3.ZERO
 var craft_position := Vector3.ZERO
 var craft_timer := 0.0
 var construction_position := Vector3.ZERO
+var construction_delivery_resource := ""
+var park_rest_duration := 4.0
 var pathfinder: Callable
 var delivery_position_resolver: Callable
 var movement_path: Array[Vector3] = []
@@ -323,6 +326,10 @@ func _physics_process(delta: float) -> void:
 			_process_craft_work_arrival(delta)
 		State.CRAFT_WORK:
 			_process_craft_work(delta)
+		State.TO_CONSTRUCTION_PICKUP:
+			_process_construction_pickup(delta)
+		State.TO_CONSTRUCTION_SITE:
+			_process_construction_delivery(delta)
 	if idle_indicator != null:
 		_update_idle_indicator()
 
@@ -409,6 +416,31 @@ func _process_courier_delivery(delta: float) -> void:
 		state = State.IDLE
 		resource_delivered.emit(self, courier_resource_type, carried_amount)
 
+func assign_construction_delivery(site: Node3D, warehouse: Vector3, resource_type: String) -> void:
+	if is_player_controlled or not is_instance_valid(site):
+		return
+	construction_site = site
+	warehouse_position = warehouse
+	construction_delivery_resource = resource_type
+	carried_amount = 1
+	state = State.TO_CONSTRUCTION_PICKUP
+
+func _process_construction_pickup(delta: float) -> void:
+	if _move_to(warehouse_position, delta):
+		construction_position = _work_position_for(construction_site)
+		state = State.TO_CONSTRUCTION_SITE
+
+func _process_construction_delivery(delta: float) -> void:
+	if not is_instance_valid(construction_site):
+		idle()
+		return
+	if _move_to(construction_position, delta):
+		construction_material_delivered.emit(self, construction_site, construction_delivery_resource, carried_amount)
+		carried_amount = 0
+		construction_delivery_resource = ""
+		construction_site = null
+		state = State.IDLE
+
 func _process_go_home(delta: float) -> void:
 	if not is_instance_valid(home):
 		# The home was demolished mid-walk: drop back to IDLE (with its indicator)
@@ -418,6 +450,10 @@ func _process_go_home(delta: float) -> void:
 	var home_entrance: Vector3 = home.get_meta("entrance_position", home.global_position)
 	if _move_to(home_entrance, delta, true):
 		state = State.RESTING
+		if simulation != null:
+			var now := int(simulation.game_minutes)
+			var hour := now / 60
+			home.set_meta("light_off_minute", (now + 60) % (24 * 60) if hour >= 23 else simulation.random.randi_range(22 * 60, 26 * 60) % (24 * 60))
 
 func _process_resting(delta: float) -> void:
 	satisfaction = minf(get_satisfaction_cap(), satisfaction + delta * 2.2)
@@ -480,7 +516,7 @@ func _process_factory_work(delta: float) -> void:
 func _process_go_to_park(delta: float) -> void:
 	if _move_to(park_position, delta):
 		state = State.RELAXING
-		_start_task(4.0)
+		_start_task(park_rest_duration)
 
 func _process_relaxing(delta: float) -> void:
 	var finished := task_timer.advance(delta)
@@ -935,9 +971,10 @@ func assign_factory_work(next_factory: Node3D, role: String) -> void:
 		active_role = role
 		state = State.TO_FACTORY
 
-func go_to_park(next_park_position: Vector3) -> void:
+func go_to_park(next_park_position: Vector3, minimum_hours := 0) -> void:
 	if not is_player_controlled:
 		park_position = next_park_position
+		park_rest_duration = maxf(4.0, float(minimum_hours) * 12.5) if minimum_hours > 0 else 4.0
 		active_role = "relaxing"
 		factory = null
 		state = State.TO_PARK

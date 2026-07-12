@@ -290,7 +290,8 @@ func assign_work(citizen: Citizen, index: int) -> void:
 				citizen.assign_gathering("branches", tree_pos, simulation._get_delivery_position())
 		"gather_grass":
 			var grass_pos: Vector3 = simulation._find_grass_gathering_position(citizen)
-			citizen.assign_gathering("grass", grass_pos, simulation._get_delivery_position())
+			if grass_pos != Vector3.INF:
+				citizen.assign_gathering("grass", grass_pos, simulation._get_delivery_position())
 		"gather_food":
 			var forage_pos: Vector3 = _workplace_position(citizen, simulation._find_forage_position(citizen))
 			if forage_pos != Vector3.INF:
