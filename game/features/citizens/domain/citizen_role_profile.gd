@@ -2,6 +2,7 @@ class_name CitizenRoleProfile
 extends RefCounted
 
 const PROFILES := {
+	"unassigned": {"label": "Unassigned", "role": "", "color": Color("b9b5aa")},
 	"builder": {"label": "Builder", "role": "construction", "color": Color("d8a647")},
 	"forestry": {"label": "Forester", "role": "forestry", "color": Color("3f9b61")},
 	"farming": {"label": "Farmer", "role": "farming", "color": Color("5c8fc9")},

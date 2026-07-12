@@ -186,6 +186,9 @@ var house_spawn_button: Button
 var selected_house: Node3D
 var tent: Node3D
 var entrance_stone: Node3D
+var pending_arrivals: Array[Dictionary] = []
+var arrival_greeters: Dictionary = {}
+var arrival_escort_ids: Dictionary = {}
 var tent_cell := Vector2i(0, 0)
 var canteen: Node3D
 var canteen_position := Vector3.ZERO
@@ -345,6 +348,7 @@ func _process(delta: float) -> void:
 	_update_daylight()
 	_update_house_lights()
 	_update_canteen_delivery()
+	_update_arrivals()
 	_update_fire_status()
 	_update_repairs()
 	_dispatch_queued_trades()
@@ -1736,7 +1740,23 @@ func _create_tree(position_on_board: Vector3) -> void:
 
 func _create_entrance_stone() -> void:
 	entrance_stone = Node3D.new()
-	entrance_stone.position = _cell_center(Vector2i(-2, 1))
+	# The entrance is deliberately on the meadow boundary, not in the initial
+	# build area: every resident visibly arrives from outside the settlement.
+	entrance_stone.position = _cell_center(Vector2i(-22, 1))
+	entrance_stone.name = "EntranceStone"
+	var stone := MeshInstance3D.new()
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = 0.48
+	mesh.bottom_radius = 0.7
+	mesh.height = 1.15
+	mesh.radial_segments = 7
+	stone.mesh = mesh
+	stone.position.y = 0.58
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("777b72")
+	material.roughness = 0.95
+	stone.material_override = material
+	entrance_stone.add_child(stone)
 	add_child(entrance_stone)
 
 func _create_citizens() -> void:
@@ -1746,13 +1766,13 @@ func _create_citizens() -> void:
 		var terrain_height := _terrain_height_at(spawn_position.x, spawn_position.z, 0.0)
 		if not is_nan(terrain_height):
 			spawn_position.y = terrain_height + 0.08
-		_add_citizen(spawn_position)
+		_add_citizen(spawn_position, "unassigned")
 
 func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void:
 	var citizen := Citizen.new()
 	citizen.position = spawn_position
 	add_child(citizen)
-	citizen.setup_specialization(primary_specialization if not primary_specialization.is_empty() else ["builder", "forestry", "farming"][citizens.size() % 3])
+	citizen.setup_specialization(primary_specialization if not primary_specialization.is_empty() else "unassigned")
 	citizen.setup_navigation(_find_path_around_houses, _get_nearest_delivery_position)
 	citizen.setup_scheduler(_try_resume_work, _send_citizen_to_leisure)
 	citizen.setup_registration_service(_is_registration_staffed, _registration_duration)
@@ -1770,6 +1790,7 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	citizen.factory_cycle.connect(_on_factory_cycle)
 	citizen.trade_delivery_finished.connect(_on_trade_delivery_finished)
 	citizen.employment_processing_finished.connect(_on_employment_processing_finished)
+	citizen.arrival_greeter_ready.connect(_on_arrival_greeter_ready)
 	citizens.append(citizen)
 	if citizens.size() > POPULATION:
 		food += random.randi_range(2, 5)
@@ -1780,6 +1801,10 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 		# always be hired from the very first day; the player may reassign it to
 		# any settler (or to the hero) later, like any other profession.
 		_appoint_official(citizen)
+	else:
+		# New and starting residents wait for an explicit profession or auto mode.
+		citizen.auto_mode_enabled = false
+		citizen.employment_state = Citizen.EmploymentState.UNEMPLOYED
 	citizen.setup_goap(self, citizens.size() - 1)
 
 
@@ -2155,8 +2180,8 @@ func _create_house_menu(ui: CanvasLayer) -> void:
 	house_menu_title.add_theme_font_size_override("font_size", 17)
 	house_menu.add_child(house_menu_title)
 	house_spawn_button = Button.new()
-	house_spawn_button.text = "Invite random resident"
-	house_spawn_button.tooltip_text = "The resident's specialization is selected at random."
+	house_spawn_button.text = "Order a resident"
+	house_spawn_button.tooltip_text = "A courier, or a free resident, will meet the newcomer at the entrance stone."
 	house_spawn_button.position = Vector2(16, 64)
 	house_spawn_button.size = Vector2(272, 30)
 	house_spawn_button.pressed.connect(_spawn_house_citizen)
@@ -2248,20 +2273,87 @@ func _spawn_house_citizen() -> void:
 	var slots: int = selected_house.get_meta("spawn_slots", 0)
 	if slots <= 0 or _unhoused_citizen_count() > 0:
 		return
-	var entrance: Vector3 = selected_house.get_meta("entrance_position", selected_house.global_position + Vector3(0.0, 0.0, 3.5))
-	var capacity: int = int(selected_house.get_meta("housing_capacity", HOUSE_CAPACITY))
-	var spawned := capacity - slots
-	var specialization: String = ["builder", "forestry", "farming", "excavation", "courier", "cook"][random.randi_range(0, 5)]
-	_add_citizen(entrance + Vector3((spawned % 2) * 0.7 - 0.35, 0.0, 0.45 + (spawned / 2) * 0.45), specialization)
-	citizens.back().assign_home(selected_house)
 	selected_house.set_meta("spawn_slots", slots - 1)
-	_update_workers()
-	if citizens.back().state == Citizen.State.IDLE:
-		var recreation := park_positions + leisure_positions
-		if not recreation.is_empty():
-			citizens.back().go_to_park(recreation[spawned % recreation.size()])
 	_show_house_menu()
-	_update_interface("A new %s resident joined the settlement and received an automatic task." % specialization.replace("_", " "))
+	pending_arrivals.append({"house": selected_house})
+	_update_arrivals()
+	_update_interface("A resident is expected at the entrance stone. A courier or free resident is going to meet them.")
+
+
+func _find_arrival_greeter() -> Citizen:
+	# Dedicated couriers take arrivals first. With no courier, only a genuinely
+	# free resident is diverted; employed workers keep their current profession.
+	for citizen in citizens:
+		if citizen.is_player_controlled or citizen.state != Citizen.State.IDLE:
+			continue
+		if citizen.specialization == "courier":
+			return citizen
+	for citizen in citizens:
+		if citizen.is_player_controlled or citizen.state != Citizen.State.IDLE:
+			continue
+		if citizen.employment_state in [Citizen.EmploymentState.AUTO_RESERVE, Citizen.EmploymentState.UNEMPLOYED]:
+			return citizen
+	return null
+
+
+func _update_arrivals() -> void:
+	if not is_instance_valid(entrance_stone):
+		return
+	# At the start of a workday, visitors and their greeter leave the stone for
+	# the employment centre, or the hero when no office has been built.
+	if _is_work_time():
+		for citizen in citizens:
+			if citizen.state != Citizen.State.ARRIVAL_WAITING:
+				continue
+			if arrival_escort_ids.has(citizen.get_instance_id()):
+				citizen.escort_arrivals_to(_employment_center_position())
+				arrival_escort_ids.erase(citizen.get_instance_id())
+			else:
+				citizen.begin_employment_processing(_employment_center_position())
+	for index in pending_arrivals.size():
+		var order: Dictionary = pending_arrivals[index]
+		if bool(order.get("dispatched", false)):
+			continue
+		var greeter := _find_arrival_greeter()
+		if greeter == null:
+			continue
+		order.dispatched = true
+		order.greeter_id = greeter.get_instance_id()
+		pending_arrivals[index] = order
+		arrival_greeters[greeter.get_instance_id()] = order
+		if not _is_work_time():
+			greeter.satisfaction = maxf(0.0, greeter.satisfaction - 6.0)
+		greeter.go_to_arrival_entrance(entrance_stone.global_position)
+
+
+func _on_arrival_greeter_ready(greeter: Citizen) -> void:
+	var order: Dictionary = arrival_greeters.get(greeter.get_instance_id(), {})
+	arrival_greeters.erase(greeter.get_instance_id())
+	if order.is_empty():
+		greeter.idle()
+		return
+	pending_arrivals.erase(order)
+	var house := order.get("house") as Node3D
+	if not is_instance_valid(house):
+		greeter.idle()
+		return
+	var spawn_position := entrance_stone.global_position + Vector3(0.55, 0.08, 0.55)
+	var terrain_height := _terrain_height_at(spawn_position.x, spawn_position.z, spawn_position.y)
+	if not is_nan(terrain_height):
+		spawn_position.y = terrain_height + 0.08
+	_add_citizen(spawn_position, "unassigned")
+	var newcomer: Citizen = citizens.back()
+	newcomer.assign_home(house)
+	if _is_work_time():
+		greeter.escort_arrivals_to(_employment_center_position())
+		newcomer.begin_employment_processing(_employment_center_position())
+		_update_interface("The newcomer was met at the entrance and is heading to employment registration.")
+	else:
+		arrival_escort_ids[greeter.get_instance_id()] = true
+		greeter.wait_for_arrival_morning()
+		newcomer.wait_for_arrival_morning()
+		_update_interface("The newcomer and greeter are waiting at the entrance for the workday.")
+	_show_house_menu()
 
 func _settle_unhoused_resident() -> void:
 	if selected_house == null or bool(selected_house.get_meta("pending_demolition", false)):
@@ -2290,7 +2382,7 @@ func _show_house_menu() -> void:
 	house_menu_title.text = "%s\nFree beds: %d/%d  Unhoused: %d" % [home_name, slots, capacity, unhoused]
 	if house_spawn_button != null:
 		house_spawn_button.disabled = slots <= 0 or unhoused > 0 or bool(selected_house.get_meta("pending_demolition", false))
-		house_spawn_button.text = "House the initial residents first" if unhoused > 0 else ("No free beds" if slots <= 0 else "Invite random resident")
+		house_spawn_button.text = "House the initial residents first" if unhoused > 0 else ("No free beds" if slots <= 0 else "Order a resident")
 	var settle_button := house_menu.get_node_or_null("SettleUnhoused") as Button
 	if settle_button == null:
 		settle_button = Button.new()
@@ -2473,7 +2565,7 @@ func _set_manual_role(role: String) -> void:
 				prev = "builder"
 			selected_builder.setup_specialization(prev)
 		selected_builder.manual_role = role
-		selected_builder.auto_mode_enabled = false
+		selected_builder.auto_mode_enabled = role.is_empty()
 		if not role.is_empty() and _employment_center_position() != Vector3.INF:
 			selected_builder.begin_employment_processing(_employment_center_position(), role, _employer_for_role(role))
 		else:

@@ -71,17 +71,9 @@ func update_workers() -> void:
 		if citizen.specialization == "courier":
 			continue
 		if citizen.employment_state == Citizen.EmploymentState.UNEMPLOYED:
-			# A registered-unemployed resident rests instead of churning, but must
-			# rejoin the reserve the moment real work is possible again (storage
-			# freed up, a new gather source or a fresh vacancy) — otherwise
-			# "unemployed" becomes a permanent trap nobody is ever hired out of.
-			if citizen.state in [Citizen.State.IDLE, Citizen.State.RESTING]:
-				var reopened_vacancy := WorkforcePolicy.permanent_vacancy_for(_worker_data(citizen), _world_data())
-				if not reopened_vacancy.is_empty() or can_assign_work(citizen):
-					citizen.auto_mode_enabled = true
-					citizen.employment_state = Citizen.EmploymentState.AUTO_RESERVE
-			if citizen.employment_state == Citizen.EmploymentState.UNEMPLOYED:
-				continue
+			# Residents remain inactive until the player assigns a profession or
+			# explicitly returns them to auto mode.
+			continue
 		if not citizen.auto_mode_enabled:
 			continue
 		# A free productive workplace turns an automatic reserve worker into a

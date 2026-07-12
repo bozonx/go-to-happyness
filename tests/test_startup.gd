@@ -12,6 +12,9 @@ func _init() -> void:
 	assert(simulation.citizens.size() == simulation.POPULATION)
 	assert(is_instance_valid(simulation.hero_citizen))
 	assert(simulation.hero_citizen.is_hero)
+	assert(simulation.hero_citizen.specialization == "official")
+	assert(not simulation.hero_citizen.auto_mode_enabled)
+	assert(is_instance_valid(simulation.entrance_stone))
 	var hero_count := 0
 	for citizen in simulation.citizens:
 		hero_count += 1 if citizen.is_hero else 0
@@ -24,6 +27,11 @@ func _init() -> void:
 		assert(is_finite(citizen.global_position.x) and is_finite(citizen.global_position.y) and is_finite(citizen.global_position.z))
 		assert(citizen.global_position.y > -1.0)
 		assert(citizen.get_children().any(func(child): return child is MeshInstance3D))
+		assert(citizen.global_position.distance_to(simulation.entrance_stone.global_position) < 5.0)
+		if not citizen.is_hero:
+			assert(citizen.specialization == "unassigned")
+			assert(not citizen.auto_mode_enabled)
+			assert(citizen.employment_state == Citizen.EmploymentState.UNEMPLOYED)
 	assert(simulation.tent == null)
 	assert(simulation._total_housing_slots() == 0)
 	var cell := Vector2i(12, 12)

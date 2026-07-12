@@ -14,6 +14,7 @@ signal meal_finished(worker: Citizen)
 signal canteen_delivery_finished(worker: Citizen, amount: int)
 signal factory_cycle(worker: Citizen, factory: Node3D)
 signal trade_delivery_finished(worker: Citizen)
+signal arrival_greeter_ready(worker: Citizen)
 
 const WALK_SPEED := 2.2
 const WORK_DURATION := 1.4
@@ -23,6 +24,7 @@ const COURIER_WAIT_DURATION := 8.0
 # always spans exactly one in-game hour regardless of the simulation speed.
 const WAIT_DURATION := 12.5
 const EMPLOYMENT_PROCESS_DURATION := 12.5
+const ARRIVAL_MEETING_DURATION := 3.0
 const WAIT_RECHECK_INTERVAL := 1.0
 const GRAVITY := 18.0
 const AI_JUMP_VELOCITY := 7.6
@@ -36,7 +38,7 @@ const NAVIGATION_TARGET_CLEARANCE := 0.48
 const ROUTE_PROGRESS_EPSILON := 0.06
 const ROUTE_RETRY_INTERVAL := 2.0
 
-enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, TO_GATHER, GATHERING, TO_TRADE_PICKUP, TO_TRADE_DESTINATION, TO_EMPLOYMENT_CENTER, EMPLOYMENT_PROCESSING, CANTEEN_WORK, SCHOOL_WORK, TO_MARKET_WORK, MARKET_WORK, TO_CRAFT_WORK, CRAFT_WORK, TO_CONSTRUCTION_PICKUP, TO_CONSTRUCTION_SITE, TO_OFFICIAL_WORK, OFFICIAL_WORK }
+enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, TO_GATHER, GATHERING, TO_TRADE_PICKUP, TO_TRADE_DESTINATION, TO_EMPLOYMENT_CENTER, EMPLOYMENT_PROCESSING, CANTEEN_WORK, SCHOOL_WORK, TO_MARKET_WORK, MARKET_WORK, TO_CRAFT_WORK, CRAFT_WORK, TO_CONSTRUCTION_PICKUP, TO_CONSTRUCTION_SITE, TO_OFFICIAL_WORK, OFFICIAL_WORK, TO_ARRIVAL_ENTRANCE, ARRIVAL_MEETING, ARRIVAL_WAITING, TO_ARRIVAL_CENTER }
 
 enum EmploymentState { AUTO_RESERVE, EMPLOYED, UNEMPLOYED, PENDING_JOB, PENDING_UNEMPLOYMENT, MANUAL_COURIER }
 
@@ -63,7 +65,7 @@ var registration_duration_resolver := Callable()
 var is_player_controlled := false
 var is_hero := false
 var construction_site: Node3D
-var specialization := "builder"
+var specialization := "unassigned"
 var previous_specialization := ""
 var manual_role := ""
 var active_role := ""
@@ -128,6 +130,7 @@ var training_role := ""
 var training_days_completed := 0
 var school_position := Vector3.ZERO
 var official_position := Vector3.ZERO
+var arrival_position := Vector3.INF
 var factory: Node3D
 var factory_position := Vector3.ZERO
 var park_position := Vector3.ZERO
@@ -344,6 +347,12 @@ func _physics_process(delta: float) -> void:
 			_process_construction_pickup(delta)
 		State.TO_CONSTRUCTION_SITE:
 			_process_construction_delivery(delta)
+		State.TO_ARRIVAL_ENTRANCE:
+			_process_arrival_entrance(delta)
+		State.ARRIVAL_MEETING:
+			_process_arrival_meeting(delta)
+		State.TO_ARRIVAL_CENTER:
+			_process_arrival_center(delta)
 	if idle_indicator != null:
 		_update_idle_indicator()
 
@@ -578,6 +587,41 @@ func begin_employment_processing(center_position: Vector3, next_pending_role := 
 	employment_state = EmploymentState.PENDING_JOB if not next_pending_role.is_empty() else EmploymentState.PENDING_UNEMPLOYMENT
 	active_role = ""
 	state = State.TO_EMPLOYMENT_CENTER
+
+
+func go_to_arrival_entrance(entrance_position: Vector3) -> void:
+	if is_player_controlled:
+		return
+	arrival_position = entrance_position
+	state = State.TO_ARRIVAL_ENTRANCE
+
+
+func wait_for_arrival_morning() -> void:
+	state = State.ARRIVAL_WAITING
+
+
+func escort_arrivals_to(center_position: Vector3) -> void:
+	if center_position == Vector3.INF:
+		wait_for_arrival_morning()
+		return
+	arrival_position = center_position
+	state = State.TO_ARRIVAL_CENTER
+
+
+func _process_arrival_entrance(delta: float) -> void:
+	if _move_to(arrival_position, delta):
+		state = State.ARRIVAL_MEETING
+		_start_task(ARRIVAL_MEETING_DURATION)
+
+
+func _process_arrival_meeting(delta: float) -> void:
+	if task_timer.advance(delta):
+		arrival_greeter_ready.emit(self)
+
+
+func _process_arrival_center(delta: float) -> void:
+	if _move_to(arrival_position, delta):
+		idle()
 
 
 func queue_employment_processing(next_pending_role := "", next_workplace: Node3D = null) -> void:
