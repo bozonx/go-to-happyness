@@ -145,18 +145,7 @@ func cancel_site(site_node: Node3D) -> void:
 		# Release builders working on this site
 		for citizen in simulation.citizens:
 			citizen.finish_construction(site_node)
-		# Remove the footprint reservation
-		for fp_idx in range(simulation.building_footprints.size() - 1, -1, -1):
-			var record: Dictionary = simulation.building_footprints[fp_idx]
-			if record.center == site.position and record.node == null:
-				simulation.building_footprints.remove_at(fp_idx)
-				break
-		# Remove position from building_positions
-		var pos_idx: int = simulation.building_positions.find(site.position)
-		if pos_idx >= 0:
-			simulation.building_positions.remove_at(pos_idx)
-		# Remove placed_buildings entry
-		simulation.placed_buildings.erase(site.cell)
+			simulation.building_registry.cancel_reservation(site.cell)
 		# Clean up scene node
 		site_node.queue_free()
 		simulation.construction_sites.remove_at(index)

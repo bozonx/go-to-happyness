@@ -89,7 +89,7 @@ var selected_cell := Vector2i(0, 0)
 var selected_world_position := Vector3.ZERO
 var build_mode := ""
 var build_rotation_quarters := 0
-var placed_buildings: Dictionary = {}
+var building_registry := BuildingRegistry.new()
 var house_cells: Dictionary = {}
 var tree_cells: Dictionary = {}
 var warehouse_positions: Array[Vector3] = []
@@ -187,8 +187,6 @@ var tent_dismantle_progress := -1.0
 var voxel_terrain: VoxelLodTerrain
 var voxel_tool: VoxelTool
 var navigation_region: NavigationRegion3D
-var building_positions: Array[Vector3] = []
-var building_footprints: Array[Dictionary] = []
 var service_pockets: Array[Dictionary] = []
 var selected_school: Node3D
 var school_menu: Panel
@@ -842,8 +840,8 @@ func _update_firewood_supplies() -> void:
 	for courier in citizens:
 		if courier.specialization != "courier" or courier.state != Citizen.State.IDLE:
 			continue
-		for record in building_footprints:
-			var building := record.get("node") as Node3D
+		for record in building_registry.records():
+			var building := record.node
 			if not is_instance_valid(building) or str(building.get_meta("building_type", "")) not in ["campfire", "cook_campfire", "gathering_place"]:
 				continue
 			if int(building.get_meta("fire_fuel", 0)) + int(building.get_meta("fire_reserved", 0)) >= 4 or branches <= 0:
@@ -859,8 +857,8 @@ func _update_repairs() -> void:
 	for builder in citizens:
 		if builder.state != Citizen.State.IDLE or (builder.permanent_role != "construction" and builder.specialization != "builder"):
 			continue
-		for record in building_footprints:
-			var building := record.get("node") as Node3D
+		for record in building_registry.records():
+			var building := record.node
 			if not is_instance_valid(building) or not bool(building.get_meta("repair_needed", false)) or bool(building.get_meta("repair_reserved", false)):
 				continue
 			branches -= 1
@@ -1148,12 +1146,7 @@ func _warehouse_capacity() -> int:
 	return settlement.storage_capacity(warehouse_positions.size())
 
 func _total_housing_slots() -> int:
-	var count := 0
-	for record in building_footprints:
-		var building: Node3D = record.node
-		if is_instance_valid(building):
-			count += int(building.get_meta("housing_capacity", 0))
-	return count
+	return building_registry.housing_capacity()
 
 func _update_camera(delta: float) -> void:
 	var move_direction := Vector3.ZERO
@@ -1528,14 +1521,14 @@ func _rebuild_navigation_mesh() -> void:
 		NavigationServer3D.map_force_update(get_world_3d().navigation_map)
 
 func _is_navigation_cell_blocked(cell: Vector2i) -> bool:
-	for record in building_footprints:
+	for record in building_registry.records():
 		var center: Vector3 = record.center
 		var footprint: Vector2i = record.footprint
 		var min_x := roundi(center.x - (footprint.x - 1) * 0.5)
 		var min_z := roundi(center.z - (footprint.y - 1) * 0.5)
 		var margin := ceili(NAVIGATION_CLEARANCE_MARGIN)
 		if cell.x >= min_x - margin and cell.x < min_x + footprint.x + margin and cell.y >= min_z - margin and cell.y < min_z + footprint.y + margin:
-			if _is_service_pocket(cell, record.get("node")):
+			if _is_service_pocket(cell, record.node):
 				continue
 			return true
 	return false
@@ -2454,8 +2447,8 @@ func _employer_for_role(role: String) -> Node3D:
 	var best: Node3D
 	var best_load := 100000
 	var best_priority := -1
-	for record in building_footprints:
-		var building := record.get("node") as Node3D
+	for record in building_registry.records():
+		var building := record.node
 		if not is_instance_valid(building) or str(building.get_meta("building_type", "")) not in types:
 			continue
 		if not bool(building.get_meta("accepting_workers", true)):
@@ -2490,8 +2483,8 @@ func _employer_types_for_role(role: String) -> Array[String]:
 
 func _available_employer_capacity(role: String) -> int:
 	var capacity := 0
-	for record in building_footprints:
-		var building := record.get("node") as Node3D
+	for record in building_registry.records():
+		var building := record.node
 		if not is_instance_valid(building) or str(building.get_meta("building_type", "")) not in _employer_types_for_role(role):
 			continue
 		if bool(building.get_meta("accepting_workers", true)):
@@ -2877,7 +2870,7 @@ func _demolition_ready(site: Dictionary) -> bool:
 	return true
 
 func _find_relocation_home(excluded: Node3D) -> Node3D:
-	for record in building_footprints:
+	for record in building_registry.records():
 		var candidate: Node3D = record.node
 		if not is_instance_valid(candidate) or candidate == excluded or bool(candidate.get_meta("pending_demolition", false)):
 			continue
@@ -2909,12 +2902,9 @@ func _finish_demolition(site: Dictionary) -> void:
 	for citizen in citizens:
 		citizen.finish_construction(building)
 	_remove_building_services(building, building_type)
-	building_positions.erase(building.global_position)
-	for index in range(building_footprints.size() - 1, -1, -1):
-		if building_footprints[index].node == building:
-			building_footprints.remove_at(index)
-	_unregister_navigation_footprint(building.global_position, building.get_meta("occupied_footprint", building.get_meta("footprint", Vector2i(3, 3))))
-	placed_buildings.erase(_placement_key(building.global_position))
+	var removed_record := building_registry.remove_node(building)
+	if removed_record != null:
+		_unregister_navigation_footprint(removed_record.center, removed_record.footprint)
 	settlement.buildings[building_type] = maxi(0, int(settlement.buildings.get(building_type, 1)) - 1)
 	for resource_type in BuildingCatalog.demolition_refund(building_type):
 		settlement.add(resource_type, BuildingCatalog.demolition_refund(building_type)[resource_type])
@@ -3347,11 +3337,9 @@ func _place_building(world_position: Vector3) -> void:
 	if not _can_pay_building_cost(build_mode):
 		_update_interface("Not enough resources for this building.")
 		return
-	placed_buildings[cell] = build_mode
-	building_positions.append(world_position)
 	var blueprint := BuildingBlueprints.get_blueprint(build_mode)
 	var occupied_footprint := _rotated_footprint(blueprint.footprint)
-	building_footprints.append({"center": world_position, "footprint": occupied_footprint, "node": null})
+	building_registry.reserve(cell, world_position, occupied_footprint)
 	_rebuild_navigation_mesh()
 	_create_construction_site(cell, build_mode, world_position, build_rotation_quarters, blueprint, occupied_footprint)
 	build_mode = ""
@@ -3387,13 +3375,9 @@ func _pay_building_cost(building_type: String) -> void:
 	settlement.pay_for_building(building_type)
 
 func _is_footprint_clear(world_position: Vector3, footprint: Vector2i) -> bool:
+	if not building_registry.is_footprint_clear(world_position, footprint, BUILDING_CLEARANCE_BLOCKS):
+		return false
 	var half := Vector2(footprint.x, footprint.y) * 0.5
-	for record in building_footprints:
-		var other_center: Vector3 = record.center
-		var other_footprint: Vector2i = record.footprint
-		var other_half := Vector2(other_footprint.x, other_footprint.y) * 0.5
-		if absf(world_position.x - other_center.x) < half.x + other_half.x + BUILDING_CLEARANCE_BLOCKS and absf(world_position.z - other_center.z) < half.y + other_half.y + BUILDING_CLEARANCE_BLOCKS:
-			return false
 	for site in dig_sites:
 		if absf(world_position.x - site.node.global_position.x) < half.x + 1.0 and absf(world_position.z - site.node.global_position.z) < half.y + 1.0:
 			return false
@@ -3424,7 +3408,7 @@ func _snapped_build_position(world_position: Vector3) -> Vector3:
 	return snapped
 
 func _is_clear_of_objects(world_position: Vector3, minimum_distance: float) -> bool:
-	for occupied_position in building_positions + tree_positions:
+	for occupied_position in building_registry.positions() + tree_positions:
 		if Vector2(occupied_position.x, occupied_position.z).distance_to(Vector2(world_position.x, world_position.z)) < minimum_distance:
 			return false
 	for site in dig_sites:
@@ -3543,10 +3527,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			factories.append(building)
 			if building_type == "materials_factory":
 				_add_building_selector(building, "materials_factory_selector", blueprint.footprint)
-	for record in building_footprints:
-		if record.center == position_on_board and record.node == null:
-			record.node = building
-			break
+	building_registry.attach_node(cell, building)
 	var occupied_footprint: Vector2i = building.get_meta("occupied_footprint", blueprint.footprint)
 	_register_navigation_footprint(position_on_board, {"footprint": occupied_footprint})
 	_add_building_status_indicator(building)
@@ -4703,8 +4684,8 @@ func _workplace_priority_position(building: Node3D) -> int:
 		return 0
 	var position := 1
 	var priority := int(building.get_meta("workplace_priority", 0))
-	for record in building_footprints:
-		var candidate := record.get("node") as Node3D
+	for record in building_registry.records():
+		var candidate := record.node
 		if not is_instance_valid(candidate) or candidate == building or not bool(candidate.get_meta("accepting_workers", true)):
 			continue
 		if str(candidate.get_meta("building_type", "")) in _employer_types_for_role(role) and int(candidate.get_meta("workplace_priority", 0)) > priority:
@@ -4970,11 +4951,7 @@ func _create_gathering_place_visual(building: Node3D) -> void:
 		building.add_child(log)
 
 func _building_at_service_position(position: Vector3) -> Node3D:
-	for record in building_footprints:
-		var building := record.get("node") as Node3D
-		if is_instance_valid(building) and building.get_meta("service_position", building.global_position).distance_squared_to(position) < 0.01:
-			return building
-	return null
+	return building_registry.building_at_service_position(position)
 
 func _is_fire_lit(building: Node3D) -> bool:
 	return is_instance_valid(building) and bool(building.get_meta("fire_lit", true))
@@ -4987,8 +4964,8 @@ func _update_fire_status() -> void:
 	if minute % (4 * 60) != 0 or get_meta("last_fire_tick", -1) == minute:
 		return
 	set_meta("last_fire_tick", minute)
-	for record in building_footprints:
-		var building := record.get("node") as Node3D
+	for record in building_registry.records():
+		var building := record.node
 		if not is_instance_valid(building) or str(building.get_meta("building_type", "")) not in ["campfire", "cook_campfire", "gathering_place"]:
 			continue
 		var fuel := int(building.get_meta("fire_fuel", 0))
@@ -5003,8 +4980,8 @@ func _update_fire_status() -> void:
 		wellbeing = maxi(0, wellbeing - 1)
 
 func _apply_building_wear_and_repairs() -> void:
-	for record in building_footprints:
-		var building := record.get("node") as Node3D
+	for record in building_registry.records():
+		var building := record.node
 		if not is_instance_valid(building):
 			continue
 		var building_type := str(building.get_meta("building_type", ""))
@@ -5040,12 +5017,9 @@ func _destroy_building_to_pile(building: Node3D, building_type: String) -> void:
 			citizen.home = null
 	_return_in_transit_building_supplies(building)
 	_remove_building_services(building, building_type)
-	building_positions.erase(building.global_position)
-	for index in range(building_footprints.size() - 1, -1, -1):
-		if building_footprints[index].node == building:
-			building_footprints.remove_at(index)
-	_unregister_navigation_footprint(building.global_position, building.get_meta("occupied_footprint", building.get_meta("footprint", Vector2i(3, 3))))
-	placed_buildings.erase(_placement_key(building.global_position))
+	var removed_record := building_registry.remove_node(building)
+	if removed_record != null:
+		_unregister_navigation_footprint(removed_record.center, removed_record.footprint)
 	settlement.buildings[building_type] = maxi(0, int(settlement.buildings.get(building_type, 1)) - 1)
 	_create_resource_pile(building.global_position, resources)
 	building.queue_free()

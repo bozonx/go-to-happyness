@@ -71,6 +71,11 @@ Keep the three building concepts separate:
 - `BuildingInstance`: typed runtime gameplay state, addressed by an ID.
 - `BuildingView`: the `Node3D` and its collision/mesh representation.
 
+`BuildingRegistry` is the current application-level source of truth for reserved and
+completed footprints. Its `BuildingRecord` connects a placement cell and footprint to
+the completed runtime node. Construction, navigation and demolition must use this
+registry rather than maintain parallel position or footprint arrays.
+
 `building_blueprints.gd` is presentation code. It may build geometry and collision,
 but it must not decide costs, unlocks, production or staffing. Do not use `Node3D`
 metadata or arbitrary dictionaries as a new source of building state; introduce a

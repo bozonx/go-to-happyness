@@ -14,6 +14,7 @@ func _init() -> void:
 	_test_citizen_task_state()
 	_test_citizen_decision_context()
 	_test_construction_progress()
+	_test_building_registry()
 	_test_school_and_seller_rules()
 	_test_courier_metadata()
 	quit(0)
@@ -230,6 +231,26 @@ func _test_citizen_decision_context() -> void:
 func _test_construction_progress() -> void:
 	assert(is_equal_approx(ConstructionProgress.advance(0.25, 2.0, 4.0, 1.0), 0.75))
 	assert(ConstructionProgress.advance(0.9, 4.0, 4.0, 1.0) == 1.0)
+
+
+func _test_building_registry() -> void:
+	var registry := BuildingRegistry.new()
+	var first := registry.reserve(Vector2i(0, 0), Vector3.ZERO, Vector2i(2, 2))
+	assert(first.cell == Vector2i(0, 0) and first.node == null)
+	assert(not registry.is_footprint_clear(Vector3(1.0, 0.0, 0.0), Vector2i(2, 2), 0.0))
+	assert(registry.is_footprint_clear(Vector3(4.0, 0.0, 0.0), Vector2i(2, 2), 0.0))
+
+	var building := Node3D.new()
+	building.set_meta("housing_capacity", 4)
+	building.set_meta("service_position", Vector3(0.5, 0.0, 0.5))
+	assert(registry.attach_node(Vector2i(0, 0), building) == first)
+	assert(registry.housing_capacity() == 4)
+	assert(registry.building_at_service_position(Vector3(0.5, 0.0, 0.5)) == building)
+
+	registry.reserve(Vector2i(4, 0), Vector3(4.0, 0.0, 0.0), Vector2i(2, 2))
+	assert(registry.cancel_reservation(Vector2i(4, 0)) != null)
+	assert(registry.remove_node(building) == first and registry.records().is_empty())
+	building.free()
 
 
 func _test_school_and_seller_rules() -> void:
