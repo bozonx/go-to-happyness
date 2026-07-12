@@ -14,6 +14,7 @@ func _init() -> void:
 	_test_citizen_decision_context()
 	_test_construction_progress()
 	_test_school_and_seller_rules()
+	_test_courier_metadata()
 	quit(0)
 
 
@@ -231,3 +232,20 @@ func _test_school_and_seller_rules() -> void:
 	citizen.finish_school_day(true)
 	assert(citizen.skills["farming"] > 0.5) # increase!
 	citizen.free()
+
+func _test_courier_metadata() -> void:
+	var citizen := Citizen.new()
+	var courier_target := Citizen.new()
+	citizen.courier_target = courier_target
+	
+	# Initially metadata is not set
+	assert(not courier_target.has_meta("last_courier_pickup"))
+	
+	# Simulate pickup
+	var cargo := courier_target.take_pending_resource()
+	courier_target.set_meta("last_courier_pickup", 100.0)
+	
+	assert(courier_target.get_meta("last_courier_pickup") == 100.0)
+	
+	citizen.free()
+	courier_target.free()

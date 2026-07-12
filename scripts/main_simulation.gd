@@ -616,16 +616,20 @@ func _on_canteen_delivery_finished(worker: Citizen, amount: int) -> void:
 func _update_couriers() -> void:
 	if warehouse_positions.is_empty():
 		return
+
+	var available_couriers := []
 	for courier in citizens:
 		if courier.specialization != "courier" or courier.employment_state not in [Citizen.EmploymentState.AUTO_RESERVE, Citizen.EmploymentState.MANUAL_COURIER] or courier.state != Citizen.State.IDLE:
 			continue
+		
+		# 1. Manual assignment check
 		if is_instance_valid(courier.courier_worker):
 			if courier.courier_worker.has_pending_resource():
 				courier.assign_courier_pickup(courier.courier_worker, warehouse_positions[0])
 				continue
 			courier.courier_worker = null
 		
-		# Trade orders have highest priority — couriers deliver market orders first
+		# 2. Trade orders (highest priority)
 		if not queued_trades.is_empty():
 			var order: Dictionary = queued_trades.pop_front()
 			pending_trades[courier.get_instance_id()] = order.trade
@@ -633,7 +637,7 @@ func _update_couriers() -> void:
 			_update_interface("Courier is delivering a trade order.")
 			continue
 		
-		# Courier water logistics
+		# 3. Water logistics (high priority)
 		var water_needed := water < citizens.size() * 2
 		if water_needed:
 			var collector_position := _reserve_dew_collector()
@@ -647,16 +651,119 @@ func _update_couriers() -> void:
 				var pond_pos := pond_positions[0]
 				courier.assign_gathering("water", pond_pos, warehouse_positions[0])
 				continue
+		
+		# Courier is available for dynamic production assignment
+		available_couriers.append(courier)
 
-		var sawmill_position := _sawmill_with_boards()
-		if sawmill_position != Vector3.INF:
-			courier.assign_sawmill_pickup(sawmill_position, warehouse_positions[0])
-			continue
-		for worker in citizens:
-			if worker != courier and worker.has_pending_resource():
-				courier.courier_worker = worker
-				courier.assign_courier_pickup(worker, warehouse_positions[0])
-				break
+	if available_couriers.is_empty():
+		return
+
+	# Determine total couriers serving productions
+	var production_couriers := available_couriers.size()
+	for citizen in citizens:
+		if citizen.specialization == "courier" and citizen.employment_state in [Citizen.EmploymentState.AUTO_RESERVE, Citizen.EmploymentState.MANUAL_COURIER]:
+			if citizen.state in [Citizen.State.COURIER_TO_SAWMILL, Citizen.State.COURIER_TO_WORKER, Citizen.State.COURIER_TO_WAREHOUSE]:
+				production_couriers += 1
+
+	# Gather all active productions
+	var active_productions := []
+	var num_productions_with_goods := 0
+
+	# 1. Sawmills
+	for pos in sawmill_positions:
+		var stock = sawmills.stock_at(pos, runtime_seconds)
+		var has_goods = int(stock.boards) > 0
+		if has_goods:
+			num_productions_with_goods += 1
+		active_productions.append({
+			"type": "sawmill",
+			"target": pos,
+			"key": _cell_from_position(pos),
+			"has_goods": has_goods,
+			"last_pickup_time": float(stock.get("last_courier_pickup", 0.0))
+		})
+
+	# 2. Staffed workers or workers with pending resources
+	for worker in citizens:
+		if worker.specialization != "courier" and (worker.active_role in ["farming", "crafting"] or worker.has_pending_resource()):
+			var has_goods = worker.has_pending_resource()
+			if has_goods:
+				num_productions_with_goods += 1
+			active_productions.append({
+				"type": "worker",
+				"target": worker,
+				"key": worker.get_instance_id(),
+				"has_goods": has_goods,
+				"last_pickup_time": float(worker.get_meta("last_courier_pickup", 0.0))
+			})
+
+	if active_productions.is_empty():
+		return
+
+	# Count currently assigned couriers to each production
+	var assigned_couriers := {}
+	for prod in active_productions:
+		assigned_couriers[prod.key] = 0
+
+	for citizen in citizens:
+		if citizen.specialization == "courier" and citizen.employment_state in [Citizen.EmploymentState.AUTO_RESERVE, Citizen.EmploymentState.MANUAL_COURIER]:
+			if citizen.state == Citizen.State.COURIER_TO_SAWMILL:
+				var key = _cell_from_position(citizen.workplace_position)
+				if assigned_couriers.has(key):
+					assigned_couriers[key] += 1
+			elif citizen.state == Citizen.State.COURIER_TO_WORKER:
+				if is_instance_valid(citizen.courier_target):
+					var key = citizen.courier_target.get_instance_id()
+					if assigned_couriers.has(key):
+						assigned_couriers[key] += 1
+
+	# Assign available couriers
+	for courier in available_couriers:
+		var best_prod = null
+
+		if production_couriers <= num_productions_with_goods:
+			# Cases 1 and 2: Couriers <= productions with goods.
+			# Assign to unique productions with goods that have no couriers assigned.
+			var candidates := []
+			for prod in active_productions:
+				if prod.has_goods and assigned_couriers[prod.key] == 0:
+					candidates.append(prod)
+			
+			if not candidates.is_empty():
+				# Sort by oldest pickup time first
+				candidates.sort_custom(func(a, b): return a.last_pickup_time < b.last_pickup_time)
+				best_prod = candidates[0]
+			else:
+				# Fallback: if all have assignments, pick oldest pickup time among goods-ready productions
+				var all_goods := []
+				for prod in active_productions:
+					if prod.has_goods:
+						all_goods.append(prod)
+				if not all_goods.is_empty():
+					all_goods.sort_custom(func(a, b): return a.last_pickup_time < b.last_pickup_time)
+					best_prod = all_goods[0]
+		else:
+			# Case 3: Couriers > productions with goods.
+			# Distribute even if 0 goods (to queue up), preferring fewest assigned.
+			var candidates := active_productions.duplicate()
+			candidates.sort_custom(func(a, b):
+				var count_a: int = assigned_couriers[a.key]
+				var count_b: int = assigned_couriers[b.key]
+				if count_a != count_b:
+					return count_a < count_b
+				if a.has_goods != b.has_goods:
+					return a.has_goods # Prefer true (has goods) first
+				return a.last_pickup_time < b.last_pickup_time
+			)
+			best_prod = candidates[0]
+
+		if best_prod != null:
+			assigned_couriers[best_prod.key] += 1
+			if best_prod.type == "sawmill":
+				courier.assign_sawmill_pickup(best_prod.target, warehouse_positions[0])
+			elif best_prod.type == "worker":
+				courier.courier_worker = best_prod.target
+				courier.assign_courier_pickup(best_prod.target, warehouse_positions[0])
 
 func _builder_count(site_node: Node3D) -> int:
 	var count := 0

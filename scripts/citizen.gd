@@ -394,6 +394,7 @@ func _process_excavation(delta: float) -> void:
 func _process_courier_pickup(delta: float) -> void:
 	if is_instance_valid(courier_target) and _move_to(courier_target.global_position, delta):
 		var cargo := courier_target.take_pending_resource()
+		courier_target.set_meta("last_courier_pickup", simulation.runtime_seconds if simulation != null else 0.0)
 		courier_resource_type = cargo.get("type", "")
 		carried_amount = int(cargo.get("amount", 0))
 		state = State.COURIER_TO_WAREHOUSE if carried_amount > 0 else State.IDLE
