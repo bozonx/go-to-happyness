@@ -2,6 +2,7 @@ extends Node3D
 
 const SETTLEMENT_RULES = preload("res://game/features/settlement/domain/settlement_rules.gd")
 const CourierDispatcherScript = preload("res://game/features/logistics/application/courier_dispatcher.gd")
+const CourierTaskScript = preload("res://game/features/logistics/domain/courier_task.gd")
 
 
 const BOARD_CELLS := 48
@@ -753,6 +754,91 @@ func _on_canteen_delivery_finished(worker: Citizen, amount: int) -> void:
 func _update_couriers() -> void:
 	if courier_dispatcher != null:
 		courier_dispatcher.dispatch()
+
+
+func _publish_courier_tasks(dispatcher: RefCounted) -> void:
+	if warehouse_positions.is_empty():
+		return
+	# Emergency food is published before every other task.
+	if is_instance_valid(canteen) and food > 0 and not pending_canteen_delivery:
+		var food_capacity := BuildingCatalog.kitchen_food_capacity(str(canteen.get_meta("building_type", "")))
+		if food_capacity > canteen_food:
+			dispatcher.publish(&"canteen_food", CourierTask.Kind.CANTEEN, 100, warehouse_positions[0], canteen_position)
+	for order in queued_trades:
+		var trade: Dictionary = order.trade
+		dispatcher.publish(StringName("trade_%s" % str(trade)), CourierTask.Kind.TRADE, 80, order.source, order.destination, {"order": order})
+	for position in sawmill_positions:
+		if int(sawmills.stock_at(position, runtime_seconds).boards) > 0:
+			dispatcher.publish(StringName("sawmill_%s" % _cell_from_position(position)), CourierTask.Kind.SAWMILL_PICKUP, 50, position, warehouse_positions[0], {"position": position})
+	for worker in citizens:
+		if worker != null and worker.has_pending_resource():
+			dispatcher.publish(StringName("worker_%d" % worker.get_instance_id()), CourierTask.Kind.WORKER_PICKUP, 45, worker.global_position, warehouse_positions[0], {"worker": worker})
+	var site := _preferred_construction_site()
+	if site != null:
+		for resource_type in site.required_materials:
+			var required := int(site.required_materials[resource_type])
+			var delivered := int(site.delivered_materials.get(resource_type, 0))
+			var reserved := int(site.reserved_materials.get(resource_type, 0))
+			if delivered + reserved < required and settlement.amount(resource_type) > 0:
+				dispatcher.publish(StringName("construction_%s_%s" % [site.node.get_instance_id(), resource_type]), CourierTask.Kind.CONSTRUCTION, 70, warehouse_positions[0], site.node.global_position, {"site": site, "resource": resource_type})
+				break
+
+
+func _is_courier_task_valid(task: RefCounted) -> bool:
+	match task.kind:
+		CourierTask.Kind.CANTEEN:
+			return is_instance_valid(canteen) and food > 0 and not pending_canteen_delivery and canteen_food < BuildingCatalog.kitchen_food_capacity(str(canteen.get_meta("building_type", "")))
+		CourierTask.Kind.TRADE:
+			return queued_trades.has(task.payload.order)
+		CourierTask.Kind.SAWMILL_PICKUP:
+			return int(sawmills.stock_at(task.payload.position, runtime_seconds).boards) > 0
+		CourierTask.Kind.WORKER_PICKUP:
+			return is_instance_valid(task.payload.worker) and task.payload.worker.has_pending_resource()
+		CourierTask.Kind.CONSTRUCTION:
+			var site: ConstructionSite = task.payload.site
+			return site != null and is_instance_valid(site.node) and settlement.amount(str(task.payload.resource)) > 0
+	return false
+
+
+func _start_courier_task(courier: Citizen, task: RefCounted) -> bool:
+	match task.kind:
+		CourierTask.Kind.CANTEEN:
+			var capacity := BuildingCatalog.kitchen_food_capacity(str(canteen.get_meta("building_type", "")))
+			var amount := mini(courier.courier_capacity(), mini(food, capacity - canteen_food))
+			if amount <= 0:
+				return false
+			food -= amount
+			pending_canteen_delivery = true
+			pending_canteen_carrier = courier
+			pending_canteen_delivery_amount = amount
+			courier.deliver_food_to_canteen(warehouse_positions[0], canteen_position, amount)
+			return true
+		CourierTask.Kind.TRADE:
+			var order: Dictionary = task.payload.order
+			if not queued_trades.has(order):
+				return false
+			queued_trades.erase(order)
+			pending_trades[courier.get_instance_id()] = order.trade
+			courier.deliver_trade(order.source, order.destination)
+			return true
+		CourierTask.Kind.SAWMILL_PICKUP:
+			courier.assign_sawmill_pickup(task.payload.position, warehouse_positions[0])
+			return true
+		CourierTask.Kind.WORKER_PICKUP:
+			courier.assign_courier_pickup(task.payload.worker, warehouse_positions[0])
+			return true
+		CourierTask.Kind.CONSTRUCTION:
+			var site: ConstructionSite = task.payload.site
+			var resource_type := str(task.payload.resource)
+			if site == null or not is_instance_valid(site.node) or settlement.amount(resource_type) <= 0:
+				return false
+			settlement.add(resource_type, -1)
+			var reservations := site.reserved_materials
+			reservations[resource_type] = int(reservations.get(resource_type, 0)) + 1
+			site.reserved_materials = reservations
+			courier.assign_construction_delivery(site.node, warehouse_positions[0], resource_type)
+			return true
+	return false
 
 
 func _dispatch_courier_tasks() -> void:

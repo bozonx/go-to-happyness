@@ -37,24 +37,9 @@ func update_canteen_delivery() -> void:
 			cancel_canteen_delivery()
 		else:
 			return
-	if not is_instance_valid(simulation.canteen) or simulation.warehouse_positions.is_empty() or simulation.food <= 0:
-		return
-	var capacity := BuildingCatalog.kitchen_food_capacity(str(simulation.canteen.get_meta("building_type", "")))
-	if capacity <= 0 or simulation.canteen_food >= capacity:
-		return
-	var carrier: Citizen = null
-	for citizen in simulation.citizens:
-		if citizen.employment_state == Citizen.EmploymentState.FREELANCE and citizen.freelance_assignment == "courier" and citizen.state == Citizen.State.IDLE:
-			carrier = citizen
-			break
-	if carrier == null:
-		return
-	var amount: int = mini(carrier.courier_capacity(), mini(simulation.food, capacity - simulation.canteen_food))
-	simulation.food -= amount
-	simulation.pending_canteen_delivery = true
-	simulation.pending_canteen_carrier = carrier
-	simulation.pending_canteen_delivery_amount = amount
-	carrier.deliver_food_to_canteen(simulation.warehouse_positions[0], simulation.canteen_position, amount)
+	# Publishing and assignment are owned by CourierDispatcher. This service only
+	# validates an in-flight delivery and applies its result.
+	simulation._request_courier_dispatch()
 
 
 func cancel_canteen_delivery() -> void:
