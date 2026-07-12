@@ -37,7 +37,7 @@ func update_workers() -> void:
 			citizen.queue_employment_processing()
 			continue
 		if citizen.employment_state in [Citizen.EmploymentState.PENDING_JOB, Citizen.EmploymentState.PENDING_UNEMPLOYMENT] and citizen.state in [Citizen.State.IDLE, Citizen.State.RESTING, Citizen.State.TO_HOME]:
-			if citizen.employment_state == Citizen.EmploymentState.PENDING_UNEMPLOYMENT:
+			if citizen.employment_state == Citizen.EmploymentState.PENDING_UNEMPLOYMENT and citizen.auto_mode_enabled:
 				var queued_vacancy := WorkforcePolicy.permanent_vacancy_for(_worker_data(citizen), _world_data())
 				if not queued_vacancy.is_empty():
 					citizen.queue_employment_processing(queued_vacancy, simulation._employer_for_role(queued_vacancy))
@@ -91,7 +91,7 @@ func _update_employment_processing(citizen: Citizen) -> void:
 	# A newly opened productive workplace interrupts unemployment registration.
 	# The citizen is already unburdened here; active deliveries are never routed
 	# into this state and therefore always finish before any transfer.
-	if citizen.employment_state == Citizen.EmploymentState.PENDING_UNEMPLOYMENT:
+	if citizen.employment_state == Citizen.EmploymentState.PENDING_UNEMPLOYMENT and citizen.auto_mode_enabled:
 		var vacancy := WorkforcePolicy.permanent_vacancy_for(_worker_data(citizen), _world_data())
 		if not vacancy.is_empty():
 			if _can_finish_registration_today(citizen):
@@ -343,12 +343,17 @@ func _world_data() -> Dictionary:
 		"era": simulation.settlement.era,
 		"hour": int(simulation.game_minutes) / 60,
 		"has_canteen": is_instance_valid(simulation.canteen),
-		"cooking_jobs": 1 if is_instance_valid(simulation.canteen) else 0,
+		"cooking_jobs": simulation._available_employer_capacity("cook"),
 		"schools": simulation.school_positions.size(),
 		"markets": simulation.market_positions.size(),
-		"builder_jobs": simulation.builders_guild_positions.size() + simulation.construction_company_positions.size() * 3,
-		"factory_jobs": _factory_job_capacity(),
-		"engineer_jobs": _engineer_job_capacity(),
+		"builder_jobs": simulation._available_employer_capacity("construction"),
+		"forestry_jobs": simulation._available_employer_capacity("forestry"),
+		"farming_jobs": simulation._available_employer_capacity("farming"),
+		"forager_jobs": simulation._available_employer_capacity("gather_food"),
+		"teacher_jobs": simulation._available_employer_capacity("teacher"),
+		"seller_jobs": simulation._available_employer_capacity("seller"),
+		"factory_jobs": simulation._available_employer_capacity("factory_worker"),
+		"engineer_jobs": simulation._available_employer_capacity("engineer"),
 		"construction_sites": simulation.construction_sites.size() + simulation.demolition_sites.size(),
 		"warehouses": simulation.warehouse_positions.size(),
 		"sawmills": simulation.sawmill_positions.size(),
@@ -390,6 +395,10 @@ func _assigned_role_counts() -> Dictionary:
 	var counts: Dictionary = {}
 	for citizen in simulation.citizens:
 		if citizen.is_player_controlled:
+			continue
+		if not citizen.permanent_role.is_empty() and is_instance_valid(citizen.employment_workplace) and not bool(citizen.employment_workplace.get_meta("accepting_workers", true)):
+			# A retained worker at a closed workplace must not consume a vacancy
+			# at another employer that is still accepting staff.
 			continue
 		var role: String = citizen.permanent_role
 		if role.is_empty() and citizen.employment_state == Citizen.EmploymentState.PENDING_JOB:

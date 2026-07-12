@@ -21,13 +21,13 @@ static func permanent_vacancy_for(worker: Dictionary, world: Dictionary) -> Stri
 	var scores: Dictionary = {}
 	if int(world.get("era", SettlementState.Era.TENT)) >= SettlementState.Era.STONE:
 		_add_empty_workplace_score(scores, world, "construction", int(world.get("builder_jobs", 0)))
-	_add_empty_workplace_score(scores, world, "forestry", int(world.get("sawmills", 0)))
-	_add_empty_workplace_score(scores, world, "farming", int(world.get("farms", 0)))
-	_add_empty_workplace_score(scores, world, "gather_food", int(world.get("forager_tents", 0)))
+	_add_empty_workplace_score(scores, world, "forestry", int(world.get("forestry_jobs", world.get("sawmills", 0))))
+	_add_empty_workplace_score(scores, world, "farming", int(world.get("farming_jobs", world.get("farms", 0))))
+	_add_empty_workplace_score(scores, world, "gather_food", int(world.get("forager_jobs", world.get("forager_tents", 0))))
 	_add_empty_workplace_score(scores, world, "excavation", int(world.get("dig_sites", 0)))
 	_add_empty_workplace_score(scores, world, "cook", int(world.get("cooking_jobs", 0)))
-	_add_empty_workplace_score(scores, world, "teacher", int(world.get("schools", 0)))
-	_add_empty_workplace_score(scores, world, "seller", int(world.get("markets", 0)))
+	_add_empty_workplace_score(scores, world, "teacher", int(world.get("teacher_jobs", 0)))
+	_add_empty_workplace_score(scores, world, "seller", int(world.get("seller_jobs", 0)))
 	_add_empty_workplace_score(scores, world, "factory_worker", int(world.get("factory_jobs", 0)))
 	_add_empty_workplace_score(scores, world, "engineer", int(world.get("engineer_jobs", 0)))
 	if scores.is_empty():
@@ -52,20 +52,20 @@ static func _automatic_role_for(worker: Dictionary, world: Dictionary) -> String
 		return "construction"
 	var scores: Dictionary = {}
 	if int(world.get("food", 0)) < population * 2:
-		if int(world.get("farms", 0)) > 0:
+		if int(world.get("farming_jobs", world.get("farms", 0))) > _assigned(world, "farming"):
 			_add_score(scores, "farming", 110 - _assigned(world, "farming") * 40)
-		if int(world.get("forager_tents", 0)) > 0:
+		if int(world.get("forager_jobs", world.get("forager_tents", 0))) > _assigned(world, "gather_food"):
 			_add_score(scores, "gather_food", 106 - _assigned(world, "gather_food") * 40)
-	if int(world.get("wood", 0)) < population and int(world.get("sawmills", 0)) > 0 and int(world.get("trees", 0)) > 0:
+	if int(world.get("wood", 0)) < population and int(world.get("forestry_jobs", world.get("sawmills", 0))) > _assigned(world, "forestry") and int(world.get("trees", 0)) > 0:
 		_add_score(scores, "forestry", 96 - _assigned(world, "forestry") * 36)
 
 	# An empty productive building is useful immediately. Once occupied, normal
 	# shortage and specialization scores decide whether it needs extra workers.
 	if int(world.get("era", SettlementState.Era.TENT)) >= SettlementState.Era.STONE:
 		_add_empty_workplace_score(scores, world, "construction", int(world.get("builder_jobs", 0)))
-	_add_empty_workplace_score(scores, world, "forestry", int(world.get("sawmills", 0)))
-	_add_empty_workplace_score(scores, world, "farming", int(world.get("farms", 0)))
-	_add_empty_workplace_score(scores, world, "gather_food", int(world.get("forager_tents", 0)))
+	_add_empty_workplace_score(scores, world, "forestry", int(world.get("forestry_jobs", world.get("sawmills", 0))))
+	_add_empty_workplace_score(scores, world, "farming", int(world.get("farming_jobs", world.get("farms", 0))))
+	_add_empty_workplace_score(scores, world, "gather_food", int(world.get("forager_jobs", world.get("forager_tents", 0))))
 	_add_empty_workplace_score(scores, world, "excavation", int(world.get("dig_sites", 0)))
 
 	var preferred := "construction" if specialization == "builder" else specialization
@@ -73,7 +73,10 @@ static func _automatic_role_for(worker: Dictionary, world: Dictionary) -> String
 		preferred = "forestry" if int(world.get("era", SettlementState.Era.TENT)) >= SettlementState.Era.EARTH and int(world.get("warehouses", 0)) > 0 else "gather_branches"
 	elif preferred == "farming" and int(world.get("farms", 0)) == 0:
 		preferred = "gather_food" if int(world.get("forager_tents", 0)) > 0 else "gather_grass"
-	if _role_available(preferred, world) and preferred != "construction":
+	var can_use_preferred := _automatic_role_has_open_slot(preferred, world)
+	if preferred == "forestry" and int(world.get("sawmills", 0)) == 0 and int(world.get("era", SettlementState.Era.TENT)) >= SettlementState.Era.EARTH:
+		can_use_preferred = true
+	if _role_available(preferred, world) and preferred != "construction" and can_use_preferred:
 		_add_score(scores, preferred, 50 - _assigned(world, preferred) * 5)
 	if scores.is_empty():
 		return "gather_branches"
@@ -88,6 +91,18 @@ static func _automatic_role_for(worker: Dictionary, world: Dictionary) -> String
 
 static func _assigned(world: Dictionary, role: String) -> int:
 	return int(world.get("assigned_roles", {}).get(role, 0))
+
+
+static func _automatic_role_has_open_slot(role: String, world: Dictionary) -> bool:
+	var capacities := {
+		"forestry": "forestry_jobs", "farming": "farming_jobs", "gather_food": "forager_jobs",
+		"cook": "cooking_jobs", "teacher": "teacher_jobs", "seller": "seller_jobs",
+		"factory_worker": "factory_jobs", "engineer": "engineer_jobs"
+	}
+	if not capacities.has(role):
+		return true
+	var fallback := {"forestry_jobs": "sawmills", "farming_jobs": "farms", "forager_jobs": "forager_tents"}
+	return int(world.get(capacities[role], world.get(fallback.get(capacities[role], ""), 0))) > _assigned(world, role)
 
 
 static func _add_score(scores: Dictionary, role: String, score: int) -> void:
