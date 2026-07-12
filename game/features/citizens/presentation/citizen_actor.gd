@@ -678,7 +678,7 @@ func finish_employment_processing() -> void:
 
 
 func has_active_delivery() -> bool:
-	return state in [State.COURIER_TO_WORKER, State.COURIER_TO_WAREHOUSE, State.COURIER_TO_SAWMILL, State.TO_FOOD_PICKUP, State.TO_CANTEEN_DELIVERY] or carried_amount > 0
+	return state in [State.COURIER_TO_WORKER, State.COURIER_TO_WAREHOUSE, State.COURIER_TO_SAWMILL, State.TO_FOOD_PICKUP, State.TO_CANTEEN_DELIVERY, State.TO_CONSTRUCTION_PICKUP, State.TO_CONSTRUCTION_SITE] or carried_amount > 0
 
 func _move_to(destination: Vector3, delta: float, may_enter_destination_house := false) -> bool:
 	if navigation_agent != null and navigation_agent.get_navigation_map().is_valid():
@@ -1356,7 +1356,7 @@ func _update_effects(delta: float) -> void:
 			buffs[buff_id] = time_left
 
 func is_available_for_schedule() -> bool:
-	return not is_player_controlled and state != State.TO_CANTEEN and state != State.EATING and state != State.TO_HOME and state != State.RESTING and state != State.STUDYING and state != State.TO_PARK and state != State.RELAXING
+	return not is_player_controlled and not has_active_delivery() and state != State.TO_CANTEEN and state != State.EATING and state != State.TO_HOME and state != State.RESTING and state != State.STUDYING and state != State.TO_PARK and state != State.RELAXING
 
 func _update_satisfaction(delta: float) -> void:
 	satisfaction_tick += delta

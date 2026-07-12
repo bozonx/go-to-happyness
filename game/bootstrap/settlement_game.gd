@@ -403,10 +403,12 @@ func _employment_center_position() -> Vector3:
 		return employment_office.get_meta("service_position", employment_office.global_position)
 	if is_instance_valid(campfire_node):
 		return campfire_node.get_meta("service_position", campfire_node.global_position)
-	# No employment building yet: residents register wherever the roaming
-	# hero-officer stands, so the paperwork still gets done (just slower).
-	if is_instance_valid(hero_citizen) and _hero_is_officer():
-		return hero_citizen.global_position
+	# No employment building yet: the appointed officer is the field employment
+	# centre. This must not be limited to the hero because the player can appoint
+	# another resident before placing the first campfire.
+	var official := _field_registration_official()
+	if official != null:
+		return official.global_position
 	return Vector3.INF
 
 
@@ -427,6 +429,7 @@ func _hero_at_employment_center() -> bool:
 func _registration_official() -> Citizen:
 	# A dedicated officer actually manning the employment centre (town hall or
 	# employment office) services registrations fastest.
+	var has_employment_building := is_instance_valid(employment_office) or is_instance_valid(campfire_node)
 	var center := _employment_center_position()
 	if center != Vector3.INF:
 		for citizen in citizens:
@@ -436,10 +439,30 @@ func _registration_official() -> Citizen:
 				continue
 			if citizen.state == Citizen.State.OFFICIAL_WORK and citizen.global_position.distance_to(center) <= OFFICER_POST_RADIUS:
 				return citizen
-	# The hero holds the officer role by default and can register residents in
-	# the field, wherever they reach him — even before any centre is built.
-	if is_instance_valid(hero_citizen) and _hero_is_officer():
-		return hero_citizen
+	if has_employment_building:
+		# The hero can process registrations while controlled directly, without
+		# entering the autonomous OFFICIAL_WORK state.
+		if is_instance_valid(hero_citizen) and _hero_is_officer():
+			return hero_citizen
+		return null
+	var official := _field_registration_official()
+	if official != null and (official.state == Citizen.State.OFFICIAL_WORK or official == hero_citizen):
+		return official
+	return null
+
+
+func _field_registration_official() -> Citizen:
+	# Prefer an officer already at their post so a new registration always heads
+	# to a stable target. A newly appointed officer is still a valid field centre
+	# and will enter OFFICIAL_WORK on the next worker update.
+	for citizen in citizens:
+		if not is_instance_valid(citizen) or citizen.permanent_role != "official":
+			continue
+		if citizen.state == Citizen.State.OFFICIAL_WORK:
+			return citizen
+	for citizen in citizens:
+		if is_instance_valid(citizen) and citizen.permanent_role == "official":
+			return citizen
 	return null
 
 
@@ -844,6 +867,8 @@ func _update_construction_supplies() -> void:
 	# Reserve one unit at a time. The courier physically carries it from storage
 	# to the site. Unlike production logistics, construction deliberately focuses
 	# on one development-critical project until it is supplied.
+	for construction_site in construction_sites:
+		_reconcile_construction_reservations(construction_site)
 	var site := _preferred_construction_site()
 	if site == null:
 		return
@@ -862,6 +887,30 @@ func _update_construction_supplies() -> void:
 			site.reserved_materials = reservations
 			courier.assign_construction_delivery(site.node, warehouse_positions[0], resource_type)
 			return
+
+
+func _reconcile_construction_reservations(site: ConstructionSite) -> void:
+	# A delivery can be interrupted by the end-of-day scheduler or a route reset.
+	# Return its reservation when no courier still owns it, otherwise the final
+	# material can remain permanently reserved without ever reaching the site.
+	var in_transit: Dictionary = {}
+	for citizen in citizens:
+		if citizen.construction_site != site.node:
+			continue
+		if citizen.state not in [Citizen.State.TO_CONSTRUCTION_PICKUP, Citizen.State.TO_CONSTRUCTION_SITE]:
+			continue
+		if citizen.building_supply_kind != "construction" or citizen.construction_delivery_resource.is_empty():
+			continue
+		in_transit[citizen.construction_delivery_resource] = int(in_transit.get(citizen.construction_delivery_resource, 0)) + citizen.carried_amount
+	var reservations := site.reserved_materials
+	for resource_type in reservations:
+		var reserved := int(reservations[resource_type])
+		var active := int(in_transit.get(resource_type, 0))
+		if reserved <= active:
+			continue
+		settlement.add(resource_type, reserved - active)
+		reservations[resource_type] = active
+	site.reserved_materials = reservations
 
 func _preferred_construction_site() -> ConstructionSite:
 	var chosen: ConstructionSite

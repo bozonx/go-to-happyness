@@ -41,9 +41,21 @@ func _init() -> void:
 	simulation._create_construction_site(cell, "warehouse", position, 0, blueprint, blueprint.footprint)
 	assert(simulation.construction_sites.size() == 1)
 	assert(simulation._is_construction_site(simulation.construction_sites[0].node))
+	var construction_site: ConstructionSite = simulation.construction_sites[0]
+	construction_site.reserved_materials = {"branches": 1}
+	simulation._reconcile_construction_reservations(construction_site)
+	assert(simulation.settlement.branches == 1)
+	assert(construction_site.reserved_materials.branches == 0)
 	assert(simulation.construction.cancel_site(simulation.construction_sites[0].node))
 	assert(simulation.construction_sites.is_empty())
 	assert(simulation.building_registry.record_at_cell(cell) == null)
+	var field_officer: Citizen = simulation.citizens[1]
+	simulation._appoint_official(field_officer)
+	simulation.hero_citizen.permanent_role = ""
+	simulation.hero_citizen.manual_role = ""
+	assert(simulation._employment_center_position() == field_officer.global_position)
+	field_officer.state = Citizen.State.OFFICIAL_WORK
+	assert(simulation._registration_official() == field_officer)
 	# R always enters the hero view; direct management of another citizen is explicit.
 	simulation._toggle_hero_view()
 	assert(simulation.is_first_person)

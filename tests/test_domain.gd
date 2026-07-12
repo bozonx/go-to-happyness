@@ -19,6 +19,7 @@ func _init() -> void:
 	_test_building_registry()
 	_test_school_and_seller_rules()
 	_test_courier_metadata()
+	_test_construction_delivery_stays_scheduled()
 	quit(0)
 
 
@@ -206,6 +207,8 @@ func _test_workforce_policy() -> void:
 	var employed_cook := {"specialization": "cook", "permanent_role": "farming", "manual_role": "", "player_controlled": false, "blocked_by_storage": false}
 	var cook_world := {"hour": 9, "farms": 1, "warehouses": 1, "trees": 0, "construction_sites": 0, "cooking_jobs": 1}
 	assert(WorkforcePolicy.can_assign(employed_cook, cook_world))
+	var field_officer := {"specialization": "official", "permanent_role": "official", "manual_role": "", "player_controlled": false, "blocked_by_storage": false}
+	assert(WorkforcePolicy.can_assign(field_officer, {"official_jobs": 0}))
 	assert(WorkforcePolicy.can_take_queued_job({"idle": true, "manual_role": "", "player_controlled": false}))
 	assert(not WorkforcePolicy.can_take_queued_job({"idle": true, "manual_role": "farming", "player_controlled": false}))
 	assert(not WorkforcePolicy.can_take_queued_job({"idle": true, "manual_role": "unassigned", "player_controlled": false}))
@@ -335,3 +338,15 @@ func _test_courier_metadata() -> void:
 	
 	citizen.free()
 	courier_target.free()
+
+
+func _test_construction_delivery_stays_scheduled() -> void:
+	var courier := Citizen.new()
+	courier.state = Citizen.State.TO_CONSTRUCTION_PICKUP
+	courier.carried_amount = 1
+	assert(courier.has_active_delivery())
+	assert(not courier.is_available_for_schedule())
+	courier.state = Citizen.State.TO_CONSTRUCTION_SITE
+	assert(courier.has_active_delivery())
+	assert(not courier.is_available_for_schedule())
+	courier.free()
