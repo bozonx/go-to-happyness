@@ -254,6 +254,9 @@ var manage_citizen_button: Button
 var workforce: WorkforceCoordinator
 var sawmills: SawmillService
 var construction: ConstructionService
+var water_collector_service: WaterCollectorService
+var canteen_service: CanteenService
+var trade_service: TradeService
 
 
 func _ready() -> void:
@@ -264,6 +267,12 @@ func _ready() -> void:
 	sawmills.configure(self)
 	construction = ConstructionService.new()
 	construction.configure(self)
+	water_collector_service = WaterCollectorService.new()
+	water_collector_service.configure(self)
+	canteen_service = CanteenService.new()
+	canteen_service.configure(self)
+	trade_service = TradeService.new()
+	trade_service.configure(self)
 	_create_world()
 	_create_interface()
 	_create_forest()
@@ -543,26 +552,8 @@ func _is_work_time() -> bool:
 	return hour >= 8 and hour < 8 + settlement.workday_hours
 
 func _start_meal(hour: int) -> void:
-	if not is_instance_valid(canteen) or not _is_fire_lit(canteen):
-		for citizen in citizens:
-			if not citizen.is_player_controlled:
-				citizen.receive_meal(false)
-		_update_interface("%02d:00 meal missed: no canteen." % hour)
-		return
-	if not _has_cook():
-		for citizen in citizens:
-			if not citizen.is_player_controlled:
-				citizen.receive_meal(false)
-		_update_interface("%02d:00 meal missed: the canteen needs a cook." % hour)
-		return
-	for citizen in citizens:
-		# The cook keeps the canteen staffed during the lunch service and receives
-		# their park break after the rush.
-		if citizen.specialization == "cook" and hour == 13:
-			continue
-		if citizen.is_available_for_schedule():
-			citizen.request_goap_meal()
-	_update_interface("%02d:00 meal service started. Residents are heading to the canteen." % hour)
+	canteen_service.start_meal(hour)
+
 
 func _start_park_rest(cooks_only: bool) -> void:
 	if park_positions.is_empty():
@@ -578,6 +569,7 @@ func _start_park_rest(cooks_only: bool) -> void:
 	if sent > 0:
 		_update_interface("%02d:00 park break: %d residents are resting." % [int(game_minutes) / 60, sent])
 
+
 func _start_after_work_rest() -> void:
 	for citizen in citizens:
 		if citizen.is_player_controlled:
@@ -592,61 +584,21 @@ func _start_after_work_rest() -> void:
 			citizen.go_home()
 	_update_interface("Workday ended: residents are going to rest before returning home.")
 
+
 func _on_meal_finished(citizen: Citizen) -> void:
-	var served := is_instance_valid(canteen) and _has_cook() and canteen_food > 0
-	if served:
-		canteen_food -= 1
-	citizen.receive_meal(served)
-	citizen.finish_goap_meal()
-	if not served:
-		_update_interface("Canteen ran out of food. A worker missed their meal.")
-	if _is_work_time():
-		_update_workers()
+	canteen_service.on_meal_finished(citizen)
+
 
 func _update_canteen_delivery() -> void:
-	if pending_canteen_delivery:
-		if not is_instance_valid(pending_canteen_carrier) or pending_canteen_carrier.state not in [Citizen.State.TO_FOOD_PICKUP, Citizen.State.TO_CANTEEN_DELIVERY]:
-			_cancel_canteen_delivery()
-		else:
-			return
-	if not is_instance_valid(canteen) or warehouse_positions.is_empty() or food <= 0 or canteen_food >= 12:
-		return
-	var carrier: Citizen
-	for citizen in citizens:
-		if citizen.specialization == "courier" and citizen.state == Citizen.State.IDLE:
-			carrier = citizen
-			break
-	if carrier == null:
-		for citizen in citizens:
-			if citizen.specialization == "cook" and citizen.state == Citizen.State.IDLE:
-				carrier = citizen
-				break
-	if carrier == null:
-		return
-	var amount := mini(4, food)
-	food -= amount
-	pending_canteen_delivery = true
-	pending_canteen_carrier = carrier
-	pending_canteen_delivery_amount = amount
-	carrier.deliver_food_to_canteen(warehouse_positions[0], canteen_position, amount)
+	canteen_service.update_canteen_delivery()
+
 
 func _cancel_canteen_delivery() -> void:
-	food += pending_canteen_delivery_amount
-	pending_canteen_delivery = false
-	pending_canteen_carrier = null
-	pending_canteen_delivery_amount = 0
-	_update_interface("Canteen delivery was interrupted; food returned to the warehouse.")
+	canteen_service.cancel_canteen_delivery()
+
 
 func _on_canteen_delivery_finished(worker: Citizen, amount: int) -> void:
-	if not pending_canteen_delivery or worker != pending_canteen_carrier or amount != pending_canteen_delivery_amount:
-		return
-	canteen_food += amount
-	pending_canteen_delivery = false
-	pending_canteen_carrier = null
-	pending_canteen_delivery_amount = 0
-	if worker.specialization == "cook":
-		worker.assign_canteen_work(canteen_position)
-	_update_interface("Canteen received %d food. Stock: %d." % [amount, canteen_food])
+	canteen_service.on_canteen_delivery_finished(worker, amount)
 
 func _update_couriers() -> void:
 	if warehouse_positions.is_empty():
@@ -3866,27 +3818,15 @@ func _fell_tree_at(position_on_board: Vector3) -> void:
 	_update_interface("A tree was felled. Its log is ready for delivery; the living tree is no longer available for gathering.")
 
 func _update_water_collectors(delta: float) -> void:
-	# Water stays in each basin until a resident carries it to storage.
-	for collector in water_collectors:
-		collector.accum += delta * float(collector.rate)
-		while collector.accum >= 1.0 and int(collector.stored) < int(collector.capacity):
-			collector.accum -= 1.0
-			collector.stored = int(collector.stored) + 1
+	water_collector_service.tick(delta)
+
 
 func _reserve_dew_collector() -> Vector3:
-	for collector in water_collectors:
-		if int(collector.stored) <= 0:
-			continue
-		collector.stored = int(collector.stored) - 1
-		var node: Node3D = collector.node
-		return node.get_meta("service_position", node.global_position)
-	return Vector3.INF
+	return water_collector_service.reserve_dew_collector()
+
 
 func _has_collected_dew() -> bool:
-	for collector in water_collectors:
-		if int(collector.stored) > 0:
-			return true
-	return false
+	return water_collector_service.has_collected_dew()
 
 
 func _toggle_global_build_menu() -> void:
@@ -4575,125 +4515,47 @@ func _refresh_market_menu() -> void:
 
 
 func _buy_food(quantity: int, unit_price: int) -> void:
-	if selected_market == null:
-		return
-	var room := maxi(0, settlement.storage_room_for("food") - _trade_incoming_resource("food"))
-	var buyable := mini(quantity, mini(room, _available_trade_money() / unit_price))
-	if buyable <= 0:
-		_update_interface("Cannot buy food: check storage space and available coins.")
-		return
-	_start_trade({"kind": "buy_resource", "resource": "food", "quantity": buyable, "price": unit_price}, selected_market.global_position, _get_delivery_position())
-	_refresh_market_menu()
+	trade_service.buy_food(quantity, unit_price)
 
 
 func _sell_resource(resource_type: String, quantity: int, unit_price: int) -> void:
-	if selected_market == null:
-		return
-	if settlement.amount(resource_type) < quantity:
-		_update_interface("Not enough %s to sell." % resource_type)
-		return
-	settlement.add(resource_type, -quantity)
-	_start_trade({"kind": "sell", "resource": resource_type, "quantity": quantity, "price": unit_price}, _get_delivery_position(), selected_market.global_position)
-	_refresh_market_menu()
+	trade_service.sell_resource(resource_type, quantity, unit_price)
 
 
 func _buy_tool(tool_id: String, price: int) -> void:
-	if selected_market == null:
-		return
-	if not settlement.tools.has(tool_id) or bool(settlement.tools[tool_id]) or _trade_has_tool_order(tool_id) or _available_trade_money() < price:
-		_update_interface("Cannot buy %s. Check money or check if already owned." % tool_id.replace("_", " "))
-		return
-	_start_trade({"kind": "buy_tool", "tool": tool_id, "price": price}, selected_market.global_position, _get_delivery_position())
-	_refresh_market_menu()
+	trade_service.buy_tool(tool_id, price)
+
 
 func _start_trade(trade: Dictionary, source: Vector3, destination: Vector3) -> void:
-	queued_trades.append({"trade": trade, "source": source, "destination": destination})
-	_dispatch_queued_trades()
+	trade_service.start_trade(trade, source, destination)
 
 
 func _trade_orders() -> Array[Dictionary]:
-	var orders: Array[Dictionary] = []
-	for order in queued_trades:
-		orders.append(order.trade)
-	for trade in pending_trades.values():
-		orders.append(trade)
-	return orders
+	return trade_service.trade_orders()
 
 
 func _trade_reserved_money() -> int:
-	var reserved := 0
-	for trade in _trade_orders():
-		match str(trade.kind):
-			"buy_resource": reserved += int(trade.quantity) * int(trade.price)
-			"buy_tool": reserved += int(trade.price)
-	return reserved
+	return trade_service.trade_reserved_money()
 
 
 func _available_trade_money() -> int:
-	return maxi(0, settlement.money - _trade_reserved_money())
+	return trade_service.available_trade_money()
 
 
 func _trade_incoming_resource(resource_type: String) -> int:
-	var incoming := 0
-	for trade in _trade_orders():
-		if str(trade.kind) == "buy_resource" and str(trade.resource) == resource_type:
-			incoming += int(trade.quantity)
-	return incoming
+	return trade_service.trade_incoming_resource(resource_type)
 
 
 func _trade_has_tool_order(tool_id: String) -> bool:
-	for trade in _trade_orders():
-		if str(trade.kind) == "buy_tool" and str(trade.tool) == tool_id:
-			return true
-	return false
+	return trade_service.trade_has_tool_order(tool_id)
+
 
 func _dispatch_queued_trades() -> void:
-	if queued_trades.is_empty():
-		return
-	var candidates: Array[Citizen] = []
-	for worker in citizens:
-		if WorkforcePolicy.can_take_queued_job({
-			"player_controlled": worker.is_player_controlled,
-			"idle": worker.state == Citizen.State.IDLE and worker.employment_state in [Citizen.EmploymentState.AUTO_RESERVE, Citizen.EmploymentState.MANUAL_COURIER],
-			"manual_role": worker.manual_role,
-			"has_queued_job": pending_trades.has(worker.get_instance_id()),
-		}):
-			candidates.append(worker)
-	# Dedicated couriers take new market work first; other automatic workers are
-	# valid fallbacks so an order cannot stall when no courier exists.
-	candidates.sort_custom(func(a: Citizen, b: Citizen): return (a.specialization == "courier") and b.specialization != "courier")
-	for worker in candidates:
-		if queued_trades.is_empty():
-			return
-		var order: Dictionary = queued_trades.pop_front()
-		pending_trades[worker.get_instance_id()] = order.trade
-		worker.deliver_trade(order.source, order.destination)
-		_update_interface("A resident is carrying the trade order.")
-	if not queued_trades.is_empty():
-		_update_interface("Trade queued: no resident is currently free to carry it.")
+	trade_service.dispatch_queued_trades()
+
 
 func _on_trade_delivery_finished(worker: Citizen) -> void:
-	var trade: Dictionary = pending_trades.get(worker.get_instance_id(), {})
-	if trade.is_empty():
-		return
-	pending_trades.erase(worker.get_instance_id())
-	match str(trade.kind):
-		"sell":
-			settlement.money += int(trade.quantity) * int(trade.price)
-			settlement.trade_sales += 1
-			_update_interface("Sold %d %s after delivery to the market." % [int(trade.quantity), str(trade.resource)])
-		"buy_resource":
-			var total := int(trade.quantity) * int(trade.price)
-			if settlement.money >= total:
-				settlement.money -= total
-				settlement.add(str(trade.resource), int(trade.quantity))
-				_update_interface("Purchased %d %s after delivery to storage." % [int(trade.quantity), str(trade.resource)])
-		"buy_tool":
-			if settlement.buy_tool(str(trade.tool), int(trade.price)):
-				_update_workers()
-				_update_interface("Purchased %s after delivery to storage." % str(trade.tool).replace("_", " "))
-	if market_menu.visible:
-		_refresh_market_menu()
+	trade_service.on_trade_delivery_finished(worker)
 
 func _create_building_menu(ui: CanvasLayer) -> void:
 	building_menu = Panel.new()
