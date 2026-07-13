@@ -351,6 +351,7 @@ func _update_character_model() -> void:
 		var inst := scene.instantiate() as Node3D
 		# Rotate 180 degrees to align face with movement direction (-Z forward)
 		inst.rotation.y = PI
+		inst.scale = Vector3(2.65, 2.65, 2.65)
 		add_child(inst)
 		current_character_mesh = inst
 		current_model_path = path
