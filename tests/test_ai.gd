@@ -1,5 +1,8 @@
 extends SceneTree
 
+const SleepGoalScript = preload("res://game/features/decision/domain/goals/sleep_goal.gd")
+const SettlementCitizenActuatorScript = preload("res://game/features/decision/application/settlement_citizen_actuator.gd")
+
 
 class ScriptedStep extends BehaviorStep:
 	var statuses: Array[BehaviorStep.Status]
@@ -85,12 +88,25 @@ class NullTaskGoal extends FixedGoal:
 class FakeActuator extends CitizenActuator:
 	var stop_count := 0
 	var cancel_action_count := 0
+	var action_start_count := 0
+	var next_action_status := ActionStatus.RUNNING
 
 	func stop() -> void:
 		stop_count += 1
 
 	func cancel_action() -> void:
 		cancel_action_count += 1
+
+	func begin_action(
+		action: StringName,
+		_target_entity_id: int = -1,
+		_payload: AIFactSet = null
+	) -> bool:
+		action_start_count += 1
+		return action == &"sleep"
+
+	func action_status() -> ActionStatus:
+		return next_action_status
 
 
 class FakeFacade extends AIWorldFacade:
@@ -111,6 +127,11 @@ class FakeFacade extends AIWorldFacade:
 		)
 
 
+class NullFacade extends AIWorldFacade:
+	func capture(_sequence: int) -> WorldSnapshot:
+		return null
+
+
 func _init() -> void:
 	_test_fact_sets_and_snapshots()
 	_test_blackboard_clear()
@@ -124,6 +145,8 @@ func _init() -> void:
 	_test_citizen_brain_cancels_for_player_control()
 	_test_citizen_brain_failure_cooldown()
 	_test_citizen_brain_cancels_when_winning_goal_has_no_task()
+	_test_native_sleep_goal()
+	_test_production_sleep_actuator()
 	_test_order_reconciliation()
 	_test_order_board_deduplicates_provider_output()
 	_test_director_reconfiguration_clears_orders()
@@ -152,7 +175,7 @@ func _test_blackboard_clear() -> void:
 	memory.set_cooldown(&"work", 10.0)
 	memory.clear()
 	assert(not memory.has(&"target"))
-	assert(is_zero_approx(memory.cooldown_penalty(&"work", 0.0, 10.0)))
+	assert(not memory.is_on_cooldown(&"work", 0.0))
 
 
 func _test_utility_hysteresis() -> void:
@@ -335,7 +358,44 @@ func _test_citizen_brain_cancels_when_winning_goal_has_no_task() -> void:
 	work.utility = 0.5
 	brain.think(snapshot, null)
 	assert(work.last_step.cancels == 1 and brain.runner.active_task == null)
-	assert(brain.blackboard.cooldown_penalty(&"blocked", 0.0, 6.0) > 0.0)
+	assert(brain.blackboard.is_on_cooldown(&"blocked", 0.0))
+
+
+func _test_native_sleep_goal() -> void:
+	var goal := SleepGoalScript.new()
+	var actuator := FakeActuator.new(1)
+	var brain := CitizenBrain.new(1, actuator, [goal])
+	var sleep_snapshot := _sleep_snapshot(true)
+	brain.think(sleep_snapshot, null)
+	brain.tick(sleep_snapshot, null, 0.1)
+	assert(actuator.action_start_count == 1)
+	assert(brain.runner.active_goal_id() == &"sleep")
+	var morning_snapshot := _sleep_snapshot(false)
+	brain.tick(morning_snapshot, null, 0.1)
+	assert(actuator.cancel_action_count == 1)
+	assert(brain.runner.active_task == null)
+	var no_home := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
+		&"needs.should_sleep": true,
+		&"needs.has_home": false,
+		&"needs.can_start_sleep": true,
+	}))
+	assert(is_zero_approx(goal.score(_snapshot(0.0, no_home), no_home, null, AIBlackboard.new())))
+
+
+func _test_production_sleep_actuator() -> void:
+	var citizen := Citizen.new()
+	citizen.ai_id = 17
+	var home := Node3D.new()
+	citizen.assign_home(home)
+	var actuator := SettlementCitizenActuatorScript.new(citizen)
+	assert(actuator.is_valid())
+	assert(actuator.begin_action(&"sleep"))
+	assert(citizen.state == Citizen.State.TO_HOME)
+	assert(actuator.action_status() == CitizenActuator.ActionStatus.RUNNING)
+	actuator.cancel_action()
+	assert(citizen.state == Citizen.State.IDLE)
+	home.free()
+	citizen.free()
 
 
 func _test_order_reconciliation() -> void:
@@ -391,6 +451,14 @@ func _test_reservations() -> void:
 
 
 func _test_runtime_configuration_and_identity() -> void:
+	var no_facade := CitizenAISystem.new()
+	assert(not no_facade.configure(null))
+	assert(no_facade.facade == null and no_facade.latest_snapshot == null)
+	no_facade.free()
+	var null_snapshot := CitizenAISystem.new()
+	assert(not null_snapshot.configure(NullFacade.new()))
+	assert(null_snapshot.facade == null and null_snapshot.latest_snapshot == null)
+	null_snapshot.free()
 	var system := CitizenAISystem.new()
 	system.snapshot_interval = 0.0
 	system.director_interval = -1.0
@@ -416,6 +484,9 @@ func _test_runtime_reconfiguration_updates_registered_brains() -> void:
 	var facade := FakeFacade.new(citizens)
 	var system := CitizenAISystem.new()
 	system.configure(facade)
+	var original_snapshot := system.latest_snapshot
+	assert(not system.configure(NullFacade.new()))
+	assert(system.facade == facade and system.latest_snapshot == original_snapshot)
 	system.register_citizen(1, FakeActuator.new(1))
 	var goal := ScriptedGoal.new(&"idle", 0.5, [BehaviorStep.Status.RUNNING])
 	system.configure(facade, [goal])
@@ -458,3 +529,12 @@ func _snapshot(simulation_seconds: float, citizen: CitizenSnapshot) -> WorldSnap
 	return WorldSnapshot.new(simulation_seconds as int, simulation_seconds, 0.0, AIFactSet.new(), {
 		citizen.id: citizen,
 	})
+
+
+func _sleep_snapshot(should_sleep: bool) -> WorldSnapshot:
+	var citizen := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
+		&"needs.should_sleep": should_sleep,
+		&"needs.has_home": true,
+		&"needs.can_start_sleep": true,
+	}))
+	return _snapshot(0.0, citizen)

@@ -6,9 +6,6 @@ extends RefCounted
 var minimum_utility := 0.001
 var stickiness_bonus := 0.08
 var switch_margin := 0.03
-## How long a failed goal remains unavailable before only a critical need may
-## select it again (simulation seconds).
-var cooldown_window := 6.0
 ## A goal may bypass its cooldown only when it reaches an explicitly critical
 ## utility. Scores are normalized to [0, 1] by concrete goals.
 var cooldown_emergency_utility := 0.95
@@ -37,10 +34,10 @@ func choose(
 			continue
 		var utility := clampf(raw_utility, 0.0, 1.0)
 		if blackboard != null:
-			var penalty := blackboard.cooldown_penalty(goal.id, simulation_seconds, cooldown_window)
-			if penalty > 0.0 and utility < cooldown_emergency_utility:
+			var cooling_down := blackboard.is_on_cooldown(goal.id, simulation_seconds)
+			if cooling_down and utility < cooldown_emergency_utility:
 				continue
-			if penalty > 0.0:
+			if cooling_down:
 				# A critical need must win on its actual severity, not on a damped value.
 				utility = maxf(utility, cooldown_emergency_utility)
 		if goal.id == current_goal_id and utility >= minimum_utility:

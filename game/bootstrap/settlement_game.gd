@@ -4,6 +4,8 @@ const SETTLEMENT_RULES = preload("res://game/features/settlement/domain/settleme
 const CourierDispatcherScript = preload("res://game/features/logistics/application/courier_dispatcher.gd")
 const CourierTaskScript = preload("res://game/features/logistics/domain/courier_task.gd")
 const BuildingQueueServiceScript = preload("res://game/features/citizens/application/building_queue_service.gd")
+const SleepGoalScript = preload("res://game/features/decision/domain/goals/sleep_goal.gd")
+const SettlementCitizenActuatorScript = preload("res://game/features/decision/application/settlement_citizen_actuator.gd")
 
 
 const BOARD_CELLS := 48
@@ -308,9 +310,8 @@ func _ready() -> void:
 	citizen_ai = CitizenAISystem.new()
 	citizen_ai.name = "CitizenAI"
 	add_child(citizen_ai)
-	# Phase one runs the complete native runtime with no goals or order providers.
-	# Its shadow actuator makes this connection observational until tasks migrate.
-	citizen_ai.configure(SettlementAIWorldFacade.new(self))
+	if not citizen_ai.configure(SettlementAIWorldFacade.new(self), [SleepGoalScript.new()]):
+		push_error("Native citizen AI failed to capture its initial world snapshot")
 	nav_grid = NavGrid.new()
 	nav_grid.configure(CELL_SIZE, BOARD_CELLS)
 	route_service = GridRouteService.new()
@@ -637,11 +638,7 @@ func _handle_day_cycle_event(event: SimulationDayEvent) -> void:
 		SimulationDayEvent.Kind.PARK_REST:
 			_start_park_rest(event.cooks_only)
 		SimulationDayEvent.Kind.WORKDAY_ENDED:
-			_start_after_work_rest()
-		SimulationDayEvent.Kind.RETURN_HOME:
-			for citizen in citizens:
-				if not citizen.is_player_controlled and not citizen.overtime_mode:
-					citizen.go_home()
+			_update_interface("Workday ended: residents are returning to their assigned homes.")
 		SimulationDayEvent.Kind.NIGHTFALL:
 			_update_workers()
 			_update_interface("Nightfall: workers are returning to their assigned homes.")
@@ -793,21 +790,6 @@ func _start_park_rest(cooks_only: bool) -> void:
 		sent += 1
 	if sent > 0:
 		_update_interface("%02d:00 park break: %d residents are resting." % [int(game_minutes) / 60, sent])
-
-
-func _start_after_work_rest() -> void:
-	for citizen in citizens:
-		if citizen.is_player_controlled:
-			continue
-		# Do not discard a courier's cargo or interrupt a production delivery at
-		# shift end. They will return home at the nightly cutoff instead.
-		if not citizen.is_available_for_schedule() or citizen.overtime_mode:
-			continue
-		if settlement.workday_hours >= 12:
-			citizen.go_home()
-		elif not _send_citizen_to_leisure(citizen, random.randi_range(1, maxi(1, 25 - (8 + settlement.workday_hours)))):
-			citizen.go_home()
-	_update_interface("Workday ended: residents are going to rest before returning home.")
 
 
 func _on_meal_finished(citizen: Citizen) -> void:
@@ -2091,7 +2073,7 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	citizens.append(citizen)
 	citizen.ai_id = _next_ai_citizen_id
 	_next_ai_citizen_id += 1
-	citizen_ai.register_citizen(citizen.ai_id, ShadowCitizenActuator.new(citizen.ai_id))
+	citizen_ai.register_citizen(citizen.ai_id, SettlementCitizenActuatorScript.new(citizen))
 	citizen.tree_exiting.connect(_on_ai_citizen_exiting.bind(citizen.ai_id), CONNECT_ONE_SHOT)
 	if citizens.size() > POPULATION:
 		food += random.randi_range(2, 5)

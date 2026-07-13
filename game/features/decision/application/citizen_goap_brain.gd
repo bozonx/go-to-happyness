@@ -3,7 +3,7 @@ extends Node
 
 const THINK_INTERVAL := 0.25
 
-enum Intent { SLEEP, EAT, WORK }
+enum Intent { EAT, WORK }
 
 var citizen: Citizen
 var simulation: Node
@@ -66,10 +66,8 @@ func setup(next_citizen: Citizen, next_simulation: Node, next_worker_index: int)
 	add_child(_goals)
 	add_child(_actions)
 
-	_add_goal("Sleep", Intent.SLEEP, "resting")
 	_add_goal("Eat", Intent.EAT, "fed")
 	_add_goal("Work", Intent.WORK, "assigned")
-	_add_action("GoHome", Intent.SLEEP, "resting", 1)
 	_add_action("EatAtCanteen", Intent.EAT, "fed", 1)
 	_add_action("PerformAssignedWork", Intent.WORK, "assigned", 2)
 
@@ -124,10 +122,7 @@ func get_goal_priority(intent: Intent) -> int:
 
 func _decision_context() -> CitizenDecisionContext:
 	var context := CitizenDecisionContext.new()
-	# The existing sleep goal uses this field; rest begins when the configured
-	# shift ends, not merely when the sky becomes dark.
 	context.is_night = not (simulation._is_work_time() or citizen.overtime_mode)
-	context.has_home = is_instance_valid(citizen.home)
 	context.has_canteen = is_instance_valid(simulation.canteen)
 	context.meal_requested = meal_requested
 	context.can_assign_work = simulation._can_assign_goap_work(citizen)
@@ -140,8 +135,6 @@ func can_start(intent: Intent) -> bool:
 
 func start_intent(intent: Intent) -> void:
 	match intent:
-		Intent.SLEEP:
-			citizen.go_home()
 		Intent.EAT:
 			citizen.go_to_canteen(simulation.canteen_position)
 		Intent.WORK:
@@ -150,8 +143,6 @@ func start_intent(intent: Intent) -> void:
 
 func is_intent_complete(intent: Intent) -> bool:
 	match intent:
-		Intent.SLEEP:
-			return citizen.state == Citizen.State.RESTING
 		Intent.EAT:
 			return citizen.state == Citizen.State.IDLE and not meal_requested
 		Intent.WORK:
@@ -166,10 +157,9 @@ func cancel_intent(intent: Intent) -> void:
 
 func _sync_world_state() -> void:
 	var world := _agent.get_world_state()
-	world.set_state("resting", citizen.state == Citizen.State.RESTING)
 	world.set_state("fed", not meal_requested)
-	# RESTING must not count as "assigned": a citizen sleeping at home would
-	# otherwise satisfy the Work goal forever and never wake up for the next shift.
+	# A resting resident must not count as assigned, otherwise the work goal would
+	# remain satisfied across the start of the next shift.
 	world.set_state("assigned", citizen.state != Citizen.State.IDLE and citizen.state != Citizen.State.RESTING)
 
 

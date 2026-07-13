@@ -43,8 +43,6 @@ func events_for_minute(clock_minute: int, workday_hours: int) -> Array[Simulatio
 		events.append(SimulationDayEvent.new(SimulationDayEvent.Kind.PARK_REST, hour, false))
 	if hour == 8 + workday_hours:
 		events.append(SimulationDayEvent.new(SimulationDayEvent.Kind.WORKDAY_ENDED, hour))
-	if hour == 1:
-		events.append(SimulationDayEvent.new(SimulationDayEvent.Kind.RETURN_HOME, hour))
 	if hour == 21:
 		events.append(SimulationDayEvent.new(SimulationDayEvent.Kind.NIGHTFALL, hour))
 	if hour == 8:

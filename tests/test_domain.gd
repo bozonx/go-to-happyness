@@ -286,12 +286,11 @@ func _test_citizen_state_display_queue() -> void:
 func _test_citizen_decision_context() -> void:
 	var context := CitizenDecisionContext.new()
 	context.is_night = true
-	context.has_home = true
-	assert(context.is_goal_valid(CitizenDecisionContext.Intent.SLEEP))
-	assert(context.priority_for(CitizenDecisionContext.Intent.SLEEP) > context.priority_for(CitizenDecisionContext.Intent.WORK))
-	context.is_night = false
 	context.meal_requested = true
 	context.has_canteen = true
+	assert(not context.is_goal_valid(CitizenDecisionContext.Intent.EAT))
+	assert(not context.is_goal_valid(CitizenDecisionContext.Intent.WORK))
+	context.is_night = false
 	assert(context.is_goal_valid(CitizenDecisionContext.Intent.EAT))
 
 

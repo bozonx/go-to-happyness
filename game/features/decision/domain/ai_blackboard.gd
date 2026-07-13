@@ -15,14 +15,12 @@ func set_cooldown(goal_id: StringName, expires_at: float) -> void:
 	_cooldowns[goal_id] = expires_at
 
 
-## Remaining cooldown fraction in [0, 1] for `goal_id`: 1.0 right after a failure,
-## decaying linearly to 0.0 at expiry. Goals whose need keeps rising still win
-## eventually, so a genuinely critical need is never permanently suppressed.
-func cooldown_penalty(goal_id: StringName, simulation_seconds: float, window: float) -> float:
+## True while a failed goal must not be selected again. The arbiter may explicitly
+## override this only for a critical utility, so ordinary failures cannot rebuild a
+## task every think cycle.
+func is_on_cooldown(goal_id: StringName, simulation_seconds: float) -> bool:
 	var expires_at := float(_cooldowns.get(goal_id, -1.0))
-	if expires_at < 0.0 or simulation_seconds >= expires_at or window <= 0.0:
-		return 0.0
-	return clampf((expires_at - simulation_seconds) / window, 0.0, 1.0)
+	return expires_at >= 0.0 and simulation_seconds < expires_at
 
 
 func has(key: StringName) -> bool:

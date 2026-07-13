@@ -1,8 +1,8 @@
 class_name CitizenAISystem
 extends Node
 
-## Runtime composition root for the native AI. It is live from phase one, while
-## its goal catalog and order providers intentionally remain empty.
+## Runtime composition root for the native AI. The catalog grows through complete
+## vertical slices; each migrated slice owns its writes instead of shadowing legacy.
 
 @export var snapshot_interval := 0.20
 @export var director_interval := 1.0
@@ -29,14 +29,21 @@ func configure(
 	next_facade: AIWorldFacade,
 	goals: Array[AICitizenGoal] = [],
 	providers: Array[OrderProvider] = []
-) -> void:
+) -> bool:
+	if next_facade == null:
+		return false
+	var initial_snapshot := next_facade.capture(_snapshot_sequence + 1)
+	if initial_snapshot == null:
+		return false
 	_validate_runtime_configuration()
 	facade = next_facade
 	_goals = _unique_goals(goals)
 	director.configure(_unique_providers(providers))
 	for brain: CitizenBrain in _brains.values():
 		brain.configure_goals(_goals)
-	_capture_snapshot()
+	_snapshot_sequence += 1
+	_accept_snapshot(initial_snapshot)
+	return true
 
 
 func register_citizen(citizen_id: int, actuator: CitizenActuator) -> void:
@@ -81,7 +88,9 @@ func _physics_process(delta: float) -> void:
 	_snapshot_elapsed += delta
 	_director_elapsed += delta
 	if latest_snapshot == null or _snapshot_elapsed >= snapshot_interval:
-		_capture_snapshot()
+		if not _capture_snapshot():
+			facade = null
+			return
 	if latest_snapshot == null:
 		return
 	reservations.expire(latest_snapshot.simulation_seconds)
@@ -93,14 +102,19 @@ func _physics_process(delta: float) -> void:
 	_think_due_brains()
 
 
-func _capture_snapshot() -> void:
+func _capture_snapshot() -> bool:
 	if facade == null:
-		return
-	_snapshot_sequence += 1
-	var captured := facade.capture(_snapshot_sequence)
+		return false
+	var next_sequence := _snapshot_sequence + 1
+	var captured := facade.capture(next_sequence)
 	if captured == null:
-		push_error("AIWorldFacade.capture() returned null")
-		return
+		return false
+	_snapshot_sequence = next_sequence
+	_accept_snapshot(captured)
+	return true
+
+
+func _accept_snapshot(captured: WorldSnapshot) -> void:
 	latest_snapshot = captured
 	# The ledger is persistent, live state; the facade builds a fresh snapshot each
 	# cycle, so re-attach the single shared instance instead of a throwaway one.
