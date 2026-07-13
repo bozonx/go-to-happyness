@@ -1,8 +1,8 @@
 class_name SettlementCitizenActuator
 extends CitizenActuator
 
-## First production actuator slice. It owns only the sleep command; later
-## mechanics add their own verbs without exposing Citizen's FSM to goals.
+## Production actuator for migrated personal-need actions. It exposes abilities,
+## never the Citizen FSM itself.
 
 var citizen: Citizen
 var _active_action: StringName
@@ -40,6 +40,22 @@ func begin_action(
 			citizen.go_to_canteen(destination)
 			_active_action = action if citizen.state in [Citizen.State.TO_CANTEEN, Citizen.State.EATING] else &""
 			return _active_action == action
+		&"relieve":
+			var relief_position: Variant = _payload.value(&"target.position", Vector3.INF) if _payload != null else Vector3.INF
+			var relief_kind: Variant = _payload.value(&"target.kind", &"") if _payload != null else &""
+			if not (relief_position is Vector3) or relief_position == Vector3.INF or not (relief_kind is StringName):
+				return false
+			citizen.go_to_relief(relief_position, relief_kind)
+			_active_action = action if citizen.state in [Citizen.State.TO_TOILET, Citizen.State.USING_TOILET, Citizen.State.WAITING_FOR_TOILET, Citizen.State.TO_BUSH, Citizen.State.USING_BUSH] else &""
+			return _active_action == action
+		&"rest":
+			var rest_position: Variant = _payload.value(&"target.position", Vector3.INF) if _payload != null else Vector3.INF
+			var rest_duration := float(_payload.value(&"action.duration", 4.0)) if _payload != null else 4.0
+			if not (rest_position is Vector3) or rest_position == Vector3.INF:
+				return false
+			citizen.go_to_park(rest_position, 0, rest_duration)
+			_active_action = action if citizen.state in [Citizen.State.TO_PARK, Citizen.State.RELAXING] else &""
+			return _active_action == action
 	return false
 
 
@@ -55,12 +71,26 @@ func action_status() -> ActionStatus:
 				return ActionStatus.RUNNING
 			if citizen.state == Citizen.State.IDLE:
 				return ActionStatus.SUCCEEDED
+		&"relieve":
+			if citizen.state in [Citizen.State.TO_TOILET, Citizen.State.USING_TOILET, Citizen.State.WAITING_FOR_TOILET, Citizen.State.TO_BUSH, Citizen.State.USING_BUSH]:
+				return ActionStatus.RUNNING
+			if citizen.simulation != null and citizen.simulation.citizen_needs_service != null and not citizen.simulation.citizen_needs_service.has_toilet_request(citizen_id):
+				return ActionStatus.SUCCEEDED
+			if citizen.state == Citizen.State.IDLE:
+				return ActionStatus.SUCCEEDED
+		&"rest":
+			if citizen.state in [Citizen.State.TO_PARK, Citizen.State.RELAXING]:
+				return ActionStatus.RUNNING
+			if citizen.simulation != null and citizen.simulation.citizen_needs_service != null and not citizen.simulation.citizen_needs_service.has_rest_request(citizen_id):
+				return ActionStatus.SUCCEEDED
+			if citizen.state == Citizen.State.IDLE:
+				return ActionStatus.SUCCEEDED
 	return ActionStatus.FAILED
 
 
 func cancel_action() -> void:
 	if not is_valid():
 		return
-	if citizen.state in [Citizen.State.TO_HOME, Citizen.State.RESTING, Citizen.State.TO_CANTEEN, Citizen.State.EATING]:
+	if citizen.state in [Citizen.State.TO_HOME, Citizen.State.RESTING, Citizen.State.TO_CANTEEN, Citizen.State.EATING, Citizen.State.TO_TOILET, Citizen.State.USING_TOILET, Citizen.State.WAITING_FOR_TOILET, Citizen.State.TO_BUSH, Citizen.State.USING_BUSH, Citizen.State.TO_PARK, Citizen.State.RELAXING]:
 		citizen.idle()
 	_active_action = &""

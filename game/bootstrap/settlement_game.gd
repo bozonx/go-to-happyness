@@ -6,6 +6,8 @@ const CourierTaskScript = preload("res://game/features/logistics/domain/courier_
 const BuildingQueueServiceScript = preload("res://game/features/citizens/application/building_queue_service.gd")
 const SleepGoalScript = preload("res://game/features/decision/domain/goals/sleep_goal.gd")
 const MealGoalScript = preload("res://game/features/decision/domain/goals/meal_goal.gd")
+const ToiletGoalScript = preload("res://game/features/decision/domain/goals/toilet_goal.gd")
+const RestGoalScript = preload("res://game/features/decision/domain/goals/rest_goal.gd")
 const SettlementCitizenActuatorScript = preload("res://game/features/decision/application/settlement_citizen_actuator.gd")
 
 
@@ -290,6 +292,7 @@ var workplace_priority_counter := 0
 var manage_citizen_button: Button
 var workforce: WorkforceCoordinator
 var citizen_ai: CitizenAISystem
+var citizen_needs_service: CitizenNeedsService
 ## Monotonic source of stable citizen AI identity. Persist it alongside the roster
 ## once save/load is introduced so reloaded games issue non-colliding ids.
 var _next_ai_citizen_id := 1
@@ -311,7 +314,7 @@ func _ready() -> void:
 	citizen_ai = CitizenAISystem.new()
 	citizen_ai.name = "CitizenAI"
 	add_child(citizen_ai)
-	if not citizen_ai.configure(SettlementAIWorldFacade.new(self), [SleepGoalScript.new(), MealGoalScript.new()]):
+	if not citizen_ai.configure(SettlementAIWorldFacade.new(self), [SleepGoalScript.new(), MealGoalScript.new(), ToiletGoalScript.new(), RestGoalScript.new()]):
 		push_error("Native citizen AI failed to capture its initial world snapshot")
 	nav_grid = NavGrid.new()
 	nav_grid.configure(CELL_SIZE, BOARD_CELLS)
@@ -346,6 +349,8 @@ func _ready() -> void:
 	water_collector_service.configure(self)
 	canteen_service = CanteenService.new()
 	canteen_service.configure(self)
+	citizen_needs_service = CitizenNeedsService.new()
+	citizen_needs_service.configure(self)
 	trade_service = TradeService.new()
 	trade_service.configure(self)
 	courier_dispatcher = CourierDispatcherScript.new()
@@ -367,6 +372,8 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	runtime_seconds += delta
+	if citizen_needs_service != null:
+		citizen_needs_service.tick(game_minutes)
 	if is_first_person:
 		_update_player_control(delta)
 		_update_interaction(delta)
@@ -660,7 +667,8 @@ func _apply_daily_settlement_rules() -> void:
 		return
 	for citizen in citizens:
 		citizen.apply_daily_decay()
-		citizen.generate_toilet_schedule()
+	if citizen_needs_service != null:
+		citizen_needs_service.schedule_daily_toilets(citizens)
 	_apply_building_wear_and_repairs()
 	
 	# Heap (Open-Air) Storage decay:
@@ -777,18 +785,9 @@ func _start_meal(hour: int) -> void:
 
 
 func _start_park_rest(cooks_only: bool) -> void:
-	if park_positions.is_empty():
+	if citizen_needs_service == null:
 		return
-	var sent := 0
-	for citizen in citizens:
-		# A scheduled break may consume idle time, but must never replace work or
-		# an already selected need/task.
-		if citizen.is_player_controlled or citizen.state not in [Citizen.State.IDLE, Citizen.State.WAITING]:
-			continue
-		if (citizen.specialization == "cook") != cooks_only:
-			continue
-		citizen.go_to_park(park_positions[sent % park_positions.size()])
-		sent += 1
+	var sent := citizen_needs_service.request_scheduled_rest(cooks_only, citizens, park_positions)
 	if sent > 0:
 		_update_interface("%02d:00 park break: %d residents are resting." % [int(game_minutes) / 60, sent])
 
@@ -2066,6 +2065,8 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	citizen.forestry_tree_requested.connect(_on_forestry_tree_requested)
 	citizen.sawmill_boards_collected.connect(_on_sawmill_boards_collected)
 	citizen.meal_finished.connect(_on_meal_finished)
+	citizen.relief_finished.connect(_on_relief_finished)
+	citizen.leisure_finished.connect(_on_leisure_finished)
 	citizen.canteen_delivery_finished.connect(_on_canteen_delivery_finished)
 	citizen.factory_cycle.connect(_on_factory_cycle)
 	citizen.trade_delivery_finished.connect(_on_trade_delivery_finished)
@@ -2089,7 +2090,8 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 		# residents therefore form a usable freelance reserve to bootstrap it.
 		citizen.employment_state = Citizen.EmploymentState.FREELANCE if not is_instance_valid(campfire_node) else Citizen.EmploymentState.UNREGISTERED
 	citizen.setup_goap(self, citizens.size() - 1)
-	citizen.generate_toilet_schedule()
+	if citizen_needs_service != null:
+		citizen_needs_service.schedule_toilet(citizen.ai_id)
 
 
 func _on_ai_citizen_exiting(citizen_id: int) -> void:
@@ -2097,6 +2099,18 @@ func _on_ai_citizen_exiting(citizen_id: int) -> void:
 		citizen_ai.unregister_citizen(citizen_id)
 	if canteen_service != null:
 		canteen_service.remove_citizen(citizen_id)
+	if citizen_needs_service != null:
+		citizen_needs_service.remove_citizen(citizen_id)
+
+
+func _on_relief_finished(citizen: Citizen) -> void:
+	if citizen_needs_service != null:
+		citizen_needs_service.fulfill_toilet(citizen.ai_id)
+
+
+func _on_leisure_finished(citizen: Citizen) -> void:
+	if citizen_needs_service != null:
+		citizen_needs_service.fulfill_rest(citizen.ai_id)
 
 
 func _create_interface() -> void:
@@ -4711,8 +4725,7 @@ func _send_citizen_to_leisure(citizen: Citizen, minimum_hours := 0) -> bool:
 		if is_instance_valid(place) and _is_fire_lit(place):
 			recreation.append(position)
 	if not recreation.is_empty():
-		citizen.go_to_park(recreation[randi() % recreation.size()], minimum_hours)
-		return true
+		return citizen_needs_service != null and citizen_needs_service.request_leisure(citizen.ai_id, recreation, minimum_hours)
 	# No parks yet (early eras): gather at the main campfire or a natural pond.
 	var gathering_spots: Array[Vector3] = []
 	if is_instance_valid(campfire_node) and _is_fire_lit(campfire_node):
@@ -4721,8 +4734,7 @@ func _send_citizen_to_leisure(citizen: Citizen, minimum_hours := 0) -> bool:
 		# Do not stand in water: choose a stable point at its rim.
 		gathering_spots.append(pond + Vector3(2.8, 0.0, 0.0))
 	if not gathering_spots.is_empty():
-		citizen.go_to_park(gathering_spots[randi() % gathering_spots.size()], minimum_hours)
-		return true
+		return citizen_needs_service != null and citizen_needs_service.request_leisure(citizen.ai_id, gathering_spots, minimum_hours)
 	# Nothing communal exists at all. During the working day we must NOT send them
 	# home to sleep — a RESTING citizen stops re-probing for work and would sleep
 	# through the day (the "skip night with full storage" freeze). Return false so

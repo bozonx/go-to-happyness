@@ -21,6 +21,11 @@ func capture(sequence: int) -> WorldSnapshot:
 			continue
 		var citizen_id := actor.ai_id
 		var can_start_personal_need := not actor.has_active_arrival_task() and not actor.has_active_delivery()
+		var needs_service: CitizenNeedsService = simulation.citizen_needs_service
+		var rest_request := needs_service.rest_request(citizen_id) if needs_service != null else {}
+		var relief_candidates: Array[Dictionary] = []
+		if needs_service != null and needs_service.has_toilet_request(citizen_id):
+			relief_candidates = needs_service.relief_candidates_for(actor)
 		citizens_by_id[citizen_id] = CitizenSnapshot.new(
 			citizen_id,
 			actor.global_position,
@@ -34,6 +39,12 @@ func capture(sequence: int) -> WorldSnapshot:
 				&"needs.meal_requested": canteen_service != null and canteen_service.is_meal_requested(citizen_id),
 				&"needs.can_start_meal": canteen_service != null and can_start_personal_need and is_instance_valid(simulation.canteen),
 				&"needs.canteen_position": simulation.canteen_position,
+				&"needs.toilet_requested": needs_service != null and needs_service.has_toilet_request(citizen_id),
+				&"needs.relief_candidates": relief_candidates,
+				&"needs.rest_requested": needs_service != null and needs_service.has_rest_request(citizen_id),
+				&"needs.can_start_rest": can_start_personal_need and actor.state in [Citizen.State.IDLE, Citizen.State.WAITING],
+				&"needs.rest_position": rest_request.get(&"position", Vector3.INF),
+				&"needs.rest_duration": rest_request.get(&"duration", 4.0),
 			})
 		)
 	var settlement_facts := AIFactSet.new({

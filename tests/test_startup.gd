@@ -12,7 +12,8 @@ func _init() -> void:
 	assert(simulation.citizens.size() == simulation.POPULATION)
 	assert(is_instance_valid(simulation.citizen_ai))
 	assert(simulation.citizen_ai.brain_count() == simulation.citizens.size())
-	assert(simulation.citizen_ai.goal_count() == 2)
+	assert(simulation.citizen_ai.goal_count() == 4)
+	assert(simulation.citizen_needs_service != null)
 	assert(simulation.citizen_ai.director.provider_count() == 0)
 	assert(is_instance_valid(simulation.hero_citizen))
 	assert(simulation.hero_citizen.is_hero)
@@ -44,31 +45,20 @@ func _init() -> void:
 			assert(citizen.specialization == "unassigned")
 			assert(citizen.employment_state == Citizen.EmploymentState.FREELANCE)
 	var resident: Citizen = simulation.citizens[1]
-	simulation.settlement.era = SettlementState.Era.TENT
-	assert(resident.is_toilet_user(resident))
-	simulation.settlement.era = SettlementState.Era.EARTH
-	assert(resident.is_toilet_user(resident))
-	simulation.settlement.era = SettlementState.Era.WOOD
-	resident.setup_specialization("cook")
-	resident.employment_state = Citizen.EmploymentState.EMPLOYED
-	assert(resident.is_toilet_user(resident))
-	resident.employment_state = Citizen.EmploymentState.FREELANCE
-	assert(resident.is_toilet_user(resident))
-	resident.freelance_assignment = "courier"
-	resident.employment_state = Citizen.EmploymentState.FREELANCE
-	assert(resident.is_toilet_user(resident))
-	resident.generate_toilet_schedule()
-	assert(resident.toilet_times.size() == 1)
-	assert(resident.toilet_times[0] >= 480.0 and resident.toilet_times[0] <= 1200.0)
-	assert(resident._get_simulation_toilets().is_empty())
-
-	# A relief break must not overwrite the target of an interrupted work task.
+	# The needs service schedules relief; the actor receives only a selected target
+	# through the native actuator and preserves its interrupted work state.
 	var work_target: Vector3 = simulation._resource_access_position(resident.global_position, simulation.tree_positions[0])
 	assert(work_target != Vector3.INF)
 	resident.gender = "male"
 	resident.state = Citizen.State.TO_TREE
 	resident.source_access_position = work_target
-	resident._find_and_go_to_toilet_or_bush()
+	simulation.citizen_needs_service.schedule_toilet(resident.ai_id)
+	simulation.citizen_needs_service.tick(20.0 * 60.0 + 1.0)
+	assert(simulation.citizen_needs_service.has_toilet_request(resident.ai_id))
+	var relief_candidates: Array[Dictionary] = simulation.citizen_needs_service.relief_candidates_for(resident)
+	assert(not relief_candidates.is_empty())
+	var relief_target := relief_candidates[0] as Dictionary
+	resident.go_to_relief(relief_target[&"position"] as Vector3, relief_target[&"kind"] as StringName)
 	assert(resident.state == Citizen.State.TO_BUSH)
 	assert(resident.toilet_relief_type == "tree")
 	assert(resident.source_access_position == work_target)
@@ -77,25 +67,7 @@ func _init() -> void:
 	resident._process_using_bush(0.1)
 	assert(resident.state == Citizen.State.TO_TREE)
 	assert(resident.source_access_position == work_target)
-
-	# Women prefer a grass patch, and an idle wander retains its exact destination.
-	resident.gender = "female"
-	var wander_anchor := resident.global_position + Vector3(2.0, 0.0, 0.0)
-	var wander_target := resident.global_position + Vector3(3.0, 0.0, 0.0)
-	resident.state = Citizen.State.IDLE
-	resident.idle_wander_anchor = wander_anchor
-	resident.idle_wander_target = wander_target
-	resident.idle_wander_pause = 1.25
-	resident._find_and_go_to_toilet_or_bush()
-	assert(resident.state == Citizen.State.TO_BUSH)
-	assert(resident.toilet_relief_type == "grass")
-	resident.state = Citizen.State.USING_BUSH
-	resident.toilet_timer.start(0.0)
-	resident._process_using_bush(0.1)
-	assert(resident.state == Citizen.State.IDLE)
-	assert(resident.idle_wander_anchor == wander_anchor)
-	assert(resident.idle_wander_target == wander_target)
-	assert(is_equal_approx(resident.idle_wander_pause, 1.25))
+	assert(not simulation.citizen_needs_service.has_toilet_request(resident.ai_id))
 
 	# A scheduled leisure break must only claim an idle citizen. In particular it
 	# must not overwrite a route to an already assigned work target.

@@ -2,6 +2,8 @@ extends SceneTree
 
 const SleepGoalScript = preload("res://game/features/decision/domain/goals/sleep_goal.gd")
 const MealGoalScript = preload("res://game/features/decision/domain/goals/meal_goal.gd")
+const ToiletGoalScript = preload("res://game/features/decision/domain/goals/toilet_goal.gd")
+const RestGoalScript = preload("res://game/features/decision/domain/goals/rest_goal.gd")
 const SettlementCitizenActuatorScript = preload("res://game/features/decision/application/settlement_citizen_actuator.gd")
 
 
@@ -104,7 +106,7 @@ class FakeActuator extends CitizenActuator:
 		_payload: AIFactSet = null
 	) -> bool:
 		action_start_count += 1
-		return action in [&"sleep", &"eat"]
+		return action in [&"sleep", &"eat", &"relieve", &"rest"]
 
 	func action_status() -> ActionStatus:
 		return next_action_status
@@ -148,6 +150,8 @@ func _init() -> void:
 	_test_citizen_brain_cancels_when_winning_goal_has_no_task()
 	_test_native_sleep_goal()
 	_test_native_meal_goal()
+	_test_native_toilet_goal()
+	_test_native_rest_goal()
 	_test_production_sleep_actuator()
 	_test_order_reconciliation()
 	_test_order_board_deduplicates_provider_output()
@@ -405,6 +409,39 @@ func _test_native_meal_goal() -> void:
 	assert(is_zero_approx(goal.score(_snapshot(0.0, blocked), blocked, null, AIBlackboard.new())))
 
 
+func _test_native_toilet_goal() -> void:
+	var goal := ToiletGoalScript.new()
+	var actuator := FakeActuator.new(1)
+	var brain := CitizenBrain.new(1, actuator, [goal])
+	var requested := _toilet_snapshot(true)
+	brain.think(requested, null)
+	brain.tick(requested, null, 0.1)
+	assert(actuator.action_start_count == 1)
+	assert(brain.runner.active_goal_id() == &"toilet")
+	assert(requested.reservations.owner_of([&"needs.relief", &"tree:0:0:0"], 0.0) == 1)
+	var completed := _toilet_snapshot(false)
+	completed.reservations = requested.reservations
+	brain.tick(completed, null, 0.1)
+	assert(actuator.cancel_action_count == 1)
+	assert(brain.runner.active_task == null)
+	assert(completed.reservations.owner_of([&"needs.relief", &"tree:0:0:0"], 0.0) == 0)
+
+
+func _test_native_rest_goal() -> void:
+	var goal := RestGoalScript.new()
+	var actuator := FakeActuator.new(1)
+	var brain := CitizenBrain.new(1, actuator, [goal])
+	var requested := _rest_snapshot(true)
+	brain.think(requested, null)
+	brain.tick(requested, null, 0.1)
+	assert(actuator.action_start_count == 1)
+	assert(brain.runner.active_goal_id() == &"rest")
+	var completed := _rest_snapshot(false)
+	brain.tick(completed, null, 0.1)
+	assert(actuator.cancel_action_count == 1)
+	assert(brain.runner.active_task == null)
+
+
 func _test_production_sleep_actuator() -> void:
 	var citizen := Citizen.new()
 	citizen.ai_id = 17
@@ -422,6 +459,20 @@ func _test_production_sleep_actuator() -> void:
 	citizen.state = Citizen.State.IDLE
 	assert(actuator.action_status() == CitizenActuator.ActionStatus.SUCCEEDED)
 	actuator.cancel_action()
+	assert(actuator.begin_action(&"relieve", -1, AIFactSet.new({
+		&"target.position": Vector3.ZERO,
+		&"target.kind": &"tree",
+	})))
+	assert(citizen.state == Citizen.State.TO_BUSH)
+	actuator.cancel_action()
+	assert(citizen.state == Citizen.State.IDLE)
+	assert(actuator.begin_action(&"rest", -1, AIFactSet.new({
+		&"target.position": Vector3.ZERO,
+		&"action.duration": 2.0,
+	})))
+	assert(citizen.state == Citizen.State.TO_PARK)
+	actuator.cancel_action()
+	assert(citizen.state == Citizen.State.IDLE)
 	home.free()
 	citizen.free()
 
@@ -573,5 +624,27 @@ func _meal_snapshot(meal_requested: bool) -> WorldSnapshot:
 		&"needs.meal_requested": meal_requested,
 		&"needs.can_start_meal": true,
 		&"needs.canteen_position": Vector3.ZERO,
+	}))
+	return _snapshot(0.0, citizen)
+
+
+func _toilet_snapshot(toilet_requested: bool) -> WorldSnapshot:
+	var citizen := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
+		&"needs.toilet_requested": toilet_requested,
+		&"needs.relief_candidates": [{
+			&"id": &"tree:0:0:0",
+			&"position": Vector3.ZERO,
+			&"kind": &"tree",
+		}],
+	}))
+	return _snapshot(0.0, citizen)
+
+
+func _rest_snapshot(rest_requested: bool) -> WorldSnapshot:
+	var citizen := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
+		&"needs.rest_requested": rest_requested,
+		&"needs.can_start_rest": true,
+		&"needs.rest_position": Vector3.ZERO,
+		&"needs.rest_duration": 4.0,
 	}))
 	return _snapshot(0.0, citizen)
