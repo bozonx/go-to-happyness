@@ -56,6 +56,16 @@ func begin_action(
 			citizen.go_to_park(rest_position, 0, rest_duration)
 			_active_action = action if citizen.state in [Citizen.State.TO_PARK, Citizen.State.RELAXING] else &""
 			return _active_action == action
+		&"forestry":
+			var tree_position: Variant = _payload.value(&"target.position", Vector3.INF) if _payload != null else Vector3.INF
+			var access_position: Variant = _payload.value(&"target.access_position", Vector3.INF) if _payload != null else Vector3.INF
+			var sawmill_position: Variant = _payload.value(&"workplace.position", Vector3.INF) if _payload != null else Vector3.INF
+			var warehouse_position: Variant = _payload.value(&"warehouse.position", Vector3.INF) if _payload != null else Vector3.INF
+			if not (tree_position is Vector3) or tree_position == Vector3.INF or not (access_position is Vector3) or access_position == Vector3.INF or not (sawmill_position is Vector3) or sawmill_position == Vector3.INF or not (warehouse_position is Vector3) or warehouse_position == Vector3.INF:
+				return false
+			citizen.assign_work("wood", tree_position, sawmill_position, warehouse_position, false, access_position)
+			_active_action = action if citizen.state in [Citizen.State.TO_TREE, Citizen.State.CHOPPING, Citizen.State.TO_SAWMILL] else &""
+			return _active_action == action
 	return false
 
 
@@ -85,12 +95,17 @@ func action_status() -> ActionStatus:
 				return ActionStatus.SUCCEEDED
 			if citizen.state == Citizen.State.IDLE:
 				return ActionStatus.SUCCEEDED
+		&"forestry":
+			if citizen.state in [Citizen.State.TO_TREE, Citizen.State.CHOPPING, Citizen.State.TO_SAWMILL]:
+				return ActionStatus.RUNNING
+			if citizen.state == Citizen.State.IDLE:
+				return ActionStatus.SUCCEEDED
 	return ActionStatus.FAILED
 
 
 func cancel_action() -> void:
 	if not is_valid():
 		return
-	if citizen.state in [Citizen.State.TO_HOME, Citizen.State.RESTING, Citizen.State.TO_CANTEEN, Citizen.State.EATING, Citizen.State.TO_TOILET, Citizen.State.USING_TOILET, Citizen.State.WAITING_FOR_TOILET, Citizen.State.TO_BUSH, Citizen.State.USING_BUSH, Citizen.State.TO_PARK, Citizen.State.RELAXING]:
+	if citizen.state in [Citizen.State.TO_HOME, Citizen.State.RESTING, Citizen.State.TO_CANTEEN, Citizen.State.EATING, Citizen.State.TO_TOILET, Citizen.State.USING_TOILET, Citizen.State.WAITING_FOR_TOILET, Citizen.State.TO_BUSH, Citizen.State.USING_BUSH, Citizen.State.TO_PARK, Citizen.State.RELAXING, Citizen.State.TO_TREE, Citizen.State.CHOPPING, Citizen.State.TO_SAWMILL]:
 		citizen.idle()
 	_active_action = &""

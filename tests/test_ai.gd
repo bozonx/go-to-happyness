@@ -4,6 +4,8 @@ const SleepGoalScript = preload("res://game/features/decision/domain/goals/sleep
 const MealGoalScript = preload("res://game/features/decision/domain/goals/meal_goal.gd")
 const ToiletGoalScript = preload("res://game/features/decision/domain/goals/toilet_goal.gd")
 const RestGoalScript = preload("res://game/features/decision/domain/goals/rest_goal.gd")
+const ForestryGoalScript = preload("res://game/features/decision/domain/goals/forestry_goal.gd")
+const ForestryOrderProviderScript = preload("res://game/features/decision/application/forestry_order_provider.gd")
 const SettlementCitizenActuatorScript = preload("res://game/features/decision/application/settlement_citizen_actuator.gd")
 
 
@@ -106,7 +108,7 @@ class FakeActuator extends CitizenActuator:
 		_payload: AIFactSet = null
 	) -> bool:
 		action_start_count += 1
-		return action in [&"sleep", &"eat", &"relieve", &"rest"]
+		return action in [&"sleep", &"eat", &"relieve", &"rest", &"forestry"]
 
 	func action_status() -> ActionStatus:
 		return next_action_status
@@ -152,6 +154,8 @@ func _init() -> void:
 	_test_native_meal_goal()
 	_test_native_toilet_goal()
 	_test_native_rest_goal()
+	_test_forestry_provider_assigns_unique_stable_targets()
+	_test_native_forestry_goal()
 	_test_production_sleep_actuator()
 	_test_order_reconciliation()
 	_test_order_board_deduplicates_provider_output()
@@ -442,6 +446,52 @@ func _test_native_rest_goal() -> void:
 	assert(brain.runner.active_task == null)
 
 
+func _test_forestry_provider_assigns_unique_stable_targets() -> void:
+	var provider := ForestryOrderProviderScript.new()
+	var first := _forestry_citizen(1, false)
+	var second := _forestry_citizen(2, false)
+	var snapshot := WorldSnapshot.new(1, 0.0, 0.0, AIFactSet.new(), {1: first, 2: second})
+	var orders := provider.collect_orders(snapshot)
+	assert(orders.size() == 2)
+	assert(orders[0].target_position != orders[1].target_position)
+	var first_target := orders[0].target_position
+	var second_target := orders[1].target_position
+	var active_snapshot := WorldSnapshot.new(2, 1.0, 0.0, AIFactSet.new(), {
+		1: _forestry_citizen(1, true),
+		2: _forestry_citizen(2, true),
+	})
+	var active_orders := provider.collect_orders(active_snapshot)
+	assert(active_orders.size() == 2)
+	assert(active_orders[0].target_position == first_target)
+	assert(active_orders[1].target_position == second_target)
+	var mixed_snapshot := WorldSnapshot.new(3, 2.0, 0.0, AIFactSet.new(), {
+		1: _forestry_citizen(1, false),
+		2: _forestry_citizen(2, true),
+	})
+	var mixed_orders := provider.collect_orders(mixed_snapshot)
+	assert(mixed_orders.size() == 2)
+	assert(mixed_orders[0].target_position != mixed_orders[1].target_position)
+
+
+func _test_native_forestry_goal() -> void:
+	var goal := ForestryGoalScript.new()
+	var actuator := FakeActuator.new(1)
+	var brain := CitizenBrain.new(1, actuator, [goal])
+	var citizen := _forestry_citizen(1, false)
+	var snapshot := _snapshot(0.0, citizen)
+	var order := _forestry_order(1, Vector3(3.0, 0.0, 0.0), &"tree:3:0")
+	order.id = 17
+	brain.think(snapshot, order)
+	brain.tick(snapshot, order, 0.1)
+	assert(actuator.action_start_count == 1)
+	assert(brain.runner.active_goal_id() == &"forestry")
+	assert(snapshot.reservations.owner_of([&"forestry.tree", &"tree:3:0"], 0.0) == 1)
+	actuator.next_action_status = CitizenActuator.ActionStatus.SUCCEEDED
+	brain.tick(snapshot, order, 0.1)
+	assert(brain.runner.active_task == null)
+	assert(snapshot.reservations.owner_of([&"forestry.tree", &"tree:3:0"], 0.0) == 0)
+
+
 func _test_production_sleep_actuator() -> void:
 	var citizen := Citizen.new()
 	citizen.ai_id = 17
@@ -648,3 +698,37 @@ func _rest_snapshot(rest_requested: bool) -> WorldSnapshot:
 		&"needs.rest_duration": 4.0,
 	}))
 	return _snapshot(0.0, citizen)
+
+
+func _forestry_citizen(citizen_id: int, in_progress: bool) -> CitizenSnapshot:
+	return CitizenSnapshot.new(citizen_id, Vector3(float(citizen_id), 0.0, 0.0), false, true, AIFactSet.new({
+		&"work.forestry.worker": true,
+		&"work.forestry.in_progress": in_progress,
+		&"work.forestry.candidates": [
+			{
+				&"id": &"tree:3:0",
+				&"position": Vector3(3.0, 0.0, 0.0),
+				&"access": Vector3(2.5, 0.0, 0.0),
+				&"sawmill_position": Vector3(6.0, 0.0, 0.0),
+				&"warehouse_position": Vector3(8.0, 0.0, 0.0),
+			},
+			{
+				&"id": &"tree:9:0",
+				&"position": Vector3(9.0, 0.0, 0.0),
+				&"access": Vector3(8.5, 0.0, 0.0),
+				&"sawmill_position": Vector3(6.0, 0.0, 0.0),
+				&"warehouse_position": Vector3(8.0, 0.0, 0.0),
+			},
+		],
+	}))
+
+
+func _forestry_order(citizen_id: int, tree_position: Vector3, tree_id: StringName) -> CitizenOrder:
+	var order := CitizenOrder.new(citizen_id, &"forestry", &"workforce.forestry", 0.55, AIFactSet.new({
+		&"work.tree_id": tree_id,
+		&"work.tree_access": tree_position + Vector3(-0.5, 0.0, 0.0),
+		&"work.sawmill_position": Vector3(6.0, 0.0, 0.0),
+		&"work.warehouse_position": Vector3(8.0, 0.0, 0.0),
+	}))
+	order.target_position = tree_position
+	return order

@@ -8,6 +8,8 @@ const SleepGoalScript = preload("res://game/features/decision/domain/goals/sleep
 const MealGoalScript = preload("res://game/features/decision/domain/goals/meal_goal.gd")
 const ToiletGoalScript = preload("res://game/features/decision/domain/goals/toilet_goal.gd")
 const RestGoalScript = preload("res://game/features/decision/domain/goals/rest_goal.gd")
+const ForestryGoalScript = preload("res://game/features/decision/domain/goals/forestry_goal.gd")
+const ForestryOrderProviderScript = preload("res://game/features/decision/application/forestry_order_provider.gd")
 const SettlementCitizenActuatorScript = preload("res://game/features/decision/application/settlement_citizen_actuator.gd")
 
 
@@ -314,7 +316,11 @@ func _ready() -> void:
 	citizen_ai = CitizenAISystem.new()
 	citizen_ai.name = "CitizenAI"
 	add_child(citizen_ai)
-	if not citizen_ai.configure(SettlementAIWorldFacade.new(self), [SleepGoalScript.new(), MealGoalScript.new(), ToiletGoalScript.new(), RestGoalScript.new()]):
+	if not citizen_ai.configure(
+		SettlementAIWorldFacade.new(self),
+		[SleepGoalScript.new(), MealGoalScript.new(), ToiletGoalScript.new(), RestGoalScript.new(), ForestryGoalScript.new()],
+		[ForestryOrderProviderScript.new()]
+	):
 		push_error("Native citizen AI failed to capture its initial world snapshot")
 	nav_grid = NavGrid.new()
 	nav_grid.configure(CELL_SIZE, BOARD_CELLS)

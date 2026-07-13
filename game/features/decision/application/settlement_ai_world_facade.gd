@@ -26,6 +26,29 @@ func capture(sequence: int) -> WorldSnapshot:
 		var relief_candidates: Array[Dictionary] = []
 		if needs_service != null and needs_service.has_toilet_request(citizen_id):
 			relief_candidates = needs_service.relief_candidates_for(actor)
+		var forestry_worker := actor.permanent_role == "forestry" and actor.is_employed() and not actor.is_player_controlled
+		var forestry_candidates: Array[Dictionary] = []
+		var sawmill_position := Vector3.INF
+		var warehouse_position := Vector3.INF
+		if forestry_worker and simulation._is_work_time() and not simulation.sawmill_positions.is_empty() and not simulation.warehouse_positions.is_empty() and simulation._has_storage_room_for_role("forestry"):
+			sawmill_position = actor.employment_workplace.get_meta("service_position", actor.employment_workplace.global_position) if is_instance_valid(actor.employment_workplace) else simulation.sawmill_positions[0]
+			warehouse_position = simulation._get_nearest_delivery_position(actor.global_position)
+			for tree_position in simulation.tree_positions:
+				var cell: Vector2i = simulation._cell_from_position(tree_position)
+				var tree: Node3D = simulation.tree_nodes.get(cell) as Node3D
+				if not is_instance_valid(tree) or bool(tree.get_meta("felled", false)):
+					continue
+				var access_position: Vector3 = simulation._resource_access_position(actor.global_position, tree_position)
+				if access_position == Vector3.INF:
+					continue
+				forestry_candidates.append({
+					&"id": StringName("tree:%d:%d" % [cell.x, cell.y]),
+					&"position": tree_position,
+					&"access": access_position,
+					&"sawmill_position": sawmill_position,
+					&"warehouse_position": warehouse_position,
+				})
+		var forestry_in_progress := actor.state in [Citizen.State.TO_TREE, Citizen.State.CHOPPING, Citizen.State.TO_SAWMILL]
 		citizens_by_id[citizen_id] = CitizenSnapshot.new(
 			citizen_id,
 			actor.global_position,
@@ -45,6 +68,9 @@ func capture(sequence: int) -> WorldSnapshot:
 				&"needs.can_start_rest": can_start_personal_need and actor.state in [Citizen.State.IDLE, Citizen.State.WAITING],
 				&"needs.rest_position": rest_request.get(&"position", Vector3.INF),
 				&"needs.rest_duration": rest_request.get(&"duration", 4.0),
+				&"work.forestry.worker": forestry_worker,
+				&"work.forestry.in_progress": forestry_in_progress,
+				&"work.forestry.candidates": forestry_candidates,
 			})
 		)
 	var settlement_facts := AIFactSet.new({

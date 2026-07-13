@@ -34,6 +34,9 @@ func tick(delta: float, now_seconds: float) -> void:
 
 func decide_delivery(worker: Citizen, position: Vector3, now_seconds: float) -> void:
 	# Boards remain at the sawmill until a courier collects them.
+	if worker.permanent_role == "forestry":
+		worker.idle()
+		return
 	simulation._assign_next_forestry_tree(worker)
 
 
