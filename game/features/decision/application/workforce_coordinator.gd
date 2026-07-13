@@ -27,8 +27,6 @@ const BUSY_STATES := [
 
 func update_workers() -> void:
 	if not simulation._is_work_time():
-		for citizen in simulation.citizens:
-			citizen.request_goap_decision()
 		return
 	var sorted_citizens := _get_sorted_citizens()
 	for citizen in sorted_citizens:
@@ -59,8 +57,6 @@ func update_workers() -> void:
 			if not _employer_exists(citizen.permanent_role):
 				_release_employment(citizen)
 				continue
-			if can_assign_work(citizen) and citizen.state in [Citizen.State.IDLE, Citizen.State.RESTING]:
-				citizen.request_goap_decision()
 			continue
 		if citizen.is_unregistered():
 			continue
@@ -81,13 +77,7 @@ func update_workers() -> void:
 				continue
 		if not citizen.can_recheck_automatic_role():
 			continue
-		if can_assign_work(citizen):
-			# Pull free citizens onto work: the genuinely idle and the ones resting
-			# at home (morning wake-up / rest-fallback from an earlier work drought).
-			# Park breaks (RELAXING) and active work states are left alone.
-			if citizen.state == Citizen.State.IDLE or citizen.state == Citizen.State.RESTING:
-				citizen.request_goap_decision()
-		else:
+		if not can_assign_work(citizen):
 			citizen.begin_waiting()
 
 
@@ -162,7 +152,7 @@ func can_assign_work(citizen: Citizen) -> bool:
 func assign_work(citizen: Citizen, index: int) -> void:
 	# Native providers own complete work cycles for these permanent roles. This
 	# method is also called by registration and waiting fallbacks, so the boundary
-	# must live here rather than only in the legacy GOAP brain.
+	# must remain here because registration and waiting fallbacks also call it.
 	if citizen.permanent_role in ["forestry", "farming", "construction", "gather_branches", "gather_food", "excavation", "cook", "teacher", "seller", "official", "craftsman", "factory_worker", "engineer"]:
 		return
 	if not can_assign_work(citizen):

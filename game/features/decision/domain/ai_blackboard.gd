@@ -10,7 +10,7 @@ var _cooldowns: Dictionary = {}
 
 ## Records that `goal_id` just failed and should be dampened until `expires_at`
 ## (simulation seconds). Keeps a failing task from being re-selected and re-built
-## every think tick — the degenerate idle-loop the old GOAP brain suffered.
+## every think tick, preventing a degenerate idle-loop after a failed task.
 func set_cooldown(goal_id: StringName, expires_at: float) -> void:
 	_cooldowns[goal_id] = expires_at
 

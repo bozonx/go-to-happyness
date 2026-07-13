@@ -16,7 +16,7 @@ The voxel extension is intentionally ignored by Git because it contains large pl
 - `game/features/<feature>/domain/` contains rules and state without scene or UI concerns.
 - `game/features/<feature>/application/` coordinates gameplay use cases and services.
 - `game/features/<feature>/presentation/` contains Godot nodes, procedural visuals and scene-facing actors.
-- `addons/goap/` is a vendored editor/runtime dependency; keep game-specific behavior outside it.
+- Citizen decisions use the native `decision` feature; there is no GOAP runtime or editor dependency.
 
 See [docs/architecture.md](docs/architecture.md) and
 [design_docs/citizen_ai.md](design_docs/citizen_ai.md) before adding AI behavior.

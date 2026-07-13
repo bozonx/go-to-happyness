@@ -134,8 +134,7 @@ func _init() -> void:
 	simulation.add_child(civic_centre)
 	simulation.campfire_node = civic_centre
 	simulation.game_minutes = 9.0 * 60.0
-	# Building completion must hand the officer directly to the new centre. A
-	# deferred GOAP decision here previously left an observable IDLE race.
+	# Building completion must hand the officer directly to the new centre.
 	simulation._activate_employment_centre(civic_centre)
 	assert(field_officer.state == Citizen.State.TO_OFFICIAL_WORK)
 	field_officer.state = Citizen.State.OFFICIAL_WORK

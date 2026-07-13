@@ -54,7 +54,7 @@ create generic `utils`, `helpers`, `managers` or catch-all `services` directorie
 - `settlement`: economy, stored resources, eras, wellbeing and global progression.
 - `buildings`: definitions, placement, construction, demolition and building visuals.
 - `citizens`: citizen profiles, task state, actor movement and task execution.
-- `decision`: workforce policy, GOAP adapter and work assignment coordination.
+- `decision`: workforce policy, native order publication and citizen work coordination.
 - `logistics`: couriers, canteen deliveries, trade and water collection.
 - `production`: production-specific rules and systems, currently the sawmill.
 - `simulation`: the deterministic clock, day-cycle events and simulation-wide
@@ -93,9 +93,9 @@ execution and some role state. New movement and physics code belongs with the
 citizen presentation actor. New task selection belongs in `decision/application`;
 new deterministic eligibility rules belong in `decision/domain`.
 
-The GOAP integration is an adapter, not the source of game rules. It may request a
-decision and execute an assigned command, but it must use a narrow decision/query
-interface rather than read the composition root directly.
+The native AI runtime is the decision boundary. It reads through `AIWorldFacade`
+and issues commands only through `CitizenActuator`; it must not read the
+composition root directly.
 
 Routing must be introduced as its own feature with a route request/result API. The
 navigation mesh and obstacle registry remain Godot-facing; route selection rules do

@@ -442,18 +442,6 @@ func _update_workers() -> void:
 	_check_unstaffed_employment_center()
 	_refresh_labor_authority_indicator()
 
-func _can_assign_goap_work(citizen: Citizen) -> bool:
-	# The coordinator owns the transition from the completed no-work window into
-	# unemployment registration. GOAP must not restart the same failed task first.
-	if citizen.no_work_wait_complete:
-		return false
-	if citizen.employment_state == Citizen.EmploymentState.FREELANCE and citizen.freelance_assignment.is_empty() and not citizen.can_recheck_automatic_role():
-		return false
-	return workforce.can_assign_work(citizen)
-
-func _assign_goap_work(citizen: Citizen, index: int) -> void:
-	workforce.assign_work(citizen, index)
-
 func _work_role_for(citizen: Citizen) -> String:
 	return workforce.work_role_for(citizen)
 
@@ -622,12 +610,8 @@ func _on_employment_processing_finished(citizen: Citizen) -> void:
 		citizen.state = Citizen.State.IDLE
 		return
 	citizen.finish_employment_processing()
-	# Registration is the hand-off, not the end of the workflow. Assign the job
-	# in the same frame so a newly hired gatherer/builder never remains idle until
-	# a later scheduler or GOAP tick happens to wake them up.
-	if citizen.employment_state == Citizen.EmploymentState.EMPLOYED and workforce.can_assign_work(citizen):
-		var worker_index := citizen.goap_brain.worker_index if citizen.goap_brain != null else 0
-		workforce.assign_work(citizen, worker_index)
+	# The native runtime observes the employment state in its next snapshot and
+	# owns the first work command. Do not invoke a second scheduler here.
 	_update_workers()
 
 func _update_daylight() -> void:
@@ -2109,7 +2093,6 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 		# Before the first campfire the settlement has no administration. Initial
 		# residents therefore form a usable freelance reserve to bootstrap it.
 		citizen.employment_state = Citizen.EmploymentState.FREELANCE if not is_instance_valid(campfire_node) else Citizen.EmploymentState.UNREGISTERED
-	citizen.setup_goap(self, citizens.size() - 1)
 	if citizen_needs_service != null:
 		citizen_needs_service.schedule_toilet(citizen.ai_id)
 
@@ -4759,18 +4742,13 @@ func _send_citizen_to_leisure(citizen: Citizen, minimum_hours := 0) -> bool:
 	# home to sleep — a RESTING citizen stops re-probing for work and would sleep
 	# through the day (the "skip night with full storage" freeze). Return false so
 	# the waiting window drops them to IDLE (with its indicator) and the poll keeps
-	# checking. Night-time sleep is handled separately by the GOAP sleep goal.
+	# checking. Night-time sleep is handled separately by the native sleep goal.
 	return false
 
 func _try_resume_work(citizen: Citizen) -> bool:
-	# Called from a waiting citizen to grab a job the instant one frees up. Assign
-	# directly (not via a deferred GOAP request) so we can report real success:
-	# assign_work leaves the citizen WAITING when no concrete slot was available.
-	if not _is_work_time() or not citizen.can_recheck_automatic_role() or not workforce.can_assign_work(citizen):
-		return false
-	var index := citizen.goap_brain.worker_index if is_instance_valid(citizen.goap_brain) else 0
-	workforce.assign_work(citizen, index)
-	return citizen.state not in [Citizen.State.IDLE, Citizen.State.WAITING]
+	# Work acquisition belongs to CitizenAISystem. This compatibility callback
+	# must not schedule a second FSM command from the presentation actor.
+	return false
 
 func _grant_debug_resources() -> void:
 	# Approximate early-to-late material demand, rather than equal stacks.
@@ -6186,9 +6164,8 @@ func _activate_employment_centre(centre: Node3D) -> void:
 		citizen.employment_workplace = centre
 		citizen.pending_employment_workplace = null
 		citizen.employment_state = Citizen.EmploymentState.EMPLOYED
-		# Completion used to leave the officer IDLE and relied on a later GOAP
-		# pass to notice the new campfire. Assign the post in this same hand-off so
-		# another scheduler tick cannot replace the job before the route starts.
+		# Start the post in the same hand-off so another scheduler tick cannot
+		# replace the job before the route starts.
 		if not citizen.is_player_controlled and _is_work_time():
 			citizen.assign_official_work(service_position)
 		else:

@@ -124,7 +124,7 @@ const STATE_ANIMATIONS := {
 signal state_changed(citizen: Citizen, previous_state: int, next_state: int)
 
 # State changes drive simulation immediately. The label intentionally follows a
-# short queue so quick scheduler/GOAP hand-offs remain observable instead of
+# short queue so quick scheduler hand-offs remain observable instead of
 # being overwritten in the same frame.
 var _state := State.IDLE
 var state: int:
@@ -297,7 +297,6 @@ var park_position := Vector3.ZERO
 var trade_source_position := Vector3.ZERO
 var trade_destination_position := Vector3.ZERO
 var simulation: Node
-var goap_brain: CitizenGoapBrain
 var idle_indicator: Label3D
 
 signal employment_processing_finished(citizen: Citizen)
@@ -615,8 +614,6 @@ func _physics_process(delta: float) -> void:
 	# surface, so keep their minimum lifetime in real seconds at every speed.
 	_advance_state_display(delta / maxf(Engine.time_scale, 0.001))
 	role_recheck_remaining = maxf(0.0, role_recheck_remaining - delta)
-	if goap_brain != null:
-		goap_brain.tick(delta)
 	if state not in [State.IDLE, State.WAITING]:
 		idle_wander_anchor = Vector3.INF
 		idle_wander_target = Vector3.INF
@@ -1697,17 +1694,6 @@ func _refresh_warehouse_position() -> void:
 	var resolved: Vector3 = delivery_position_resolver.call(global_position)
 	if resolved != Vector3.INF and warehouse_position.distance_to(resolved) > 0.08:
 		warehouse_position = resolved
-
-func setup_goap(next_simulation: Node, worker_index: int) -> void:
-	simulation = next_simulation
-	goap_brain = CitizenGoapBrain.new()
-	add_child(goap_brain)
-	goap_brain.setup(self, simulation, worker_index)
-
-func request_goap_decision() -> void:
-	if goap_brain != null:
-		goap_brain.request_decision()
-
 
 func begin_role_recheck_cooldown() -> void:
 	if is_reserve() and freelance_assignment.is_empty():
