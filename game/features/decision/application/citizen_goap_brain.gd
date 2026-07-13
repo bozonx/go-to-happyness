@@ -98,7 +98,7 @@ func request_decision() -> void:
 
 
 func _uses_native_work_cycle() -> bool:
-	return citizen.permanent_role in ["forestry", "farming"]
+	return citizen.permanent_role in ["forestry", "farming", "construction"]
 
 
 func is_goal_valid(intent: Intent) -> bool:

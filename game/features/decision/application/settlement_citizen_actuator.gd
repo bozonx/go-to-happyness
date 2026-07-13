@@ -74,6 +74,16 @@ func begin_action(
 			citizen.assign_work("food", farm_position, farm_position, farm_warehouse_position, true)
 			_active_action = action if citizen.state in [Citizen.State.TO_TREE, Citizen.State.TO_SAWMILL, Citizen.State.SAWING, Citizen.State.WAITING_COURIER] else &""
 			return _active_action == action
+		&"construction", &"demolition":
+			var target := instance_from_id(_target_entity_id) as Node3D
+			if not is_instance_valid(target):
+				return false
+			if action == &"construction":
+				citizen.assign_construction(target)
+			else:
+				citizen.assign_demolition(target)
+			_active_action = action if citizen.state == Citizen.State.CONSTRUCTING else &""
+			return _active_action == action
 	return false
 
 
@@ -113,12 +123,17 @@ func action_status() -> ActionStatus:
 				return ActionStatus.RUNNING
 			if citizen.state == Citizen.State.IDLE:
 				return ActionStatus.SUCCEEDED
+		&"construction", &"demolition":
+			if citizen.state == Citizen.State.CONSTRUCTING and citizen.active_role == str(_active_action):
+				return ActionStatus.RUNNING
+			if citizen.state == Citizen.State.IDLE:
+				return ActionStatus.SUCCEEDED
 	return ActionStatus.FAILED
 
 
 func cancel_action() -> void:
 	if not is_valid():
 		return
-	if citizen.state in [Citizen.State.TO_HOME, Citizen.State.RESTING, Citizen.State.TO_CANTEEN, Citizen.State.EATING, Citizen.State.TO_TOILET, Citizen.State.USING_TOILET, Citizen.State.WAITING_FOR_TOILET, Citizen.State.TO_BUSH, Citizen.State.USING_BUSH, Citizen.State.TO_PARK, Citizen.State.RELAXING, Citizen.State.TO_TREE, Citizen.State.CHOPPING, Citizen.State.TO_SAWMILL, Citizen.State.SAWING, Citizen.State.WAITING_COURIER]:
+	if citizen.state in [Citizen.State.TO_HOME, Citizen.State.RESTING, Citizen.State.TO_CANTEEN, Citizen.State.EATING, Citizen.State.TO_TOILET, Citizen.State.USING_TOILET, Citizen.State.WAITING_FOR_TOILET, Citizen.State.TO_BUSH, Citizen.State.USING_BUSH, Citizen.State.TO_PARK, Citizen.State.RELAXING, Citizen.State.TO_TREE, Citizen.State.CHOPPING, Citizen.State.TO_SAWMILL, Citizen.State.SAWING, Citizen.State.WAITING_COURIER, Citizen.State.CONSTRUCTING]:
 		citizen.idle()
 	_active_action = &""

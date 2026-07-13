@@ -8,6 +8,8 @@ const ForestryGoalScript = preload("res://game/features/decision/domain/goals/fo
 const ForestryOrderProviderScript = preload("res://game/features/decision/application/forestry_order_provider.gd")
 const FarmingGoalScript = preload("res://game/features/decision/domain/goals/farming_goal.gd")
 const FarmingOrderProviderScript = preload("res://game/features/decision/application/farming_order_provider.gd")
+const ConstructionGoalScript = preload("res://game/features/decision/domain/goals/construction_goal.gd")
+const ConstructionOrderProviderScript = preload("res://game/features/decision/application/construction_order_provider.gd")
 const SettlementCitizenActuatorScript = preload("res://game/features/decision/application/settlement_citizen_actuator.gd")
 
 
@@ -110,7 +112,7 @@ class FakeActuator extends CitizenActuator:
 		_payload: AIFactSet = null
 	) -> bool:
 		action_start_count += 1
-		return action in [&"sleep", &"eat", &"relieve", &"rest", &"forestry", &"farming"]
+		return action in [&"sleep", &"eat", &"relieve", &"rest", &"forestry", &"farming", &"construction", &"demolition"]
 
 	func action_status() -> ActionStatus:
 		return next_action_status
@@ -161,6 +163,9 @@ func _init() -> void:
 	_test_farming_provider_keeps_active_cycle()
 	_test_native_farming_goal()
 	_test_farming_actuator_completes_after_courier_pickup()
+	_test_construction_provider_keeps_active_cycle()
+	_test_native_construction_goal()
+	_test_construction_actuator()
 	_test_production_sleep_actuator()
 	_test_order_reconciliation()
 	_test_order_board_deduplicates_provider_output()
@@ -550,6 +555,55 @@ func _test_farming_actuator_completes_after_courier_pickup() -> void:
 	citizen.free()
 
 
+func _test_construction_provider_keeps_active_cycle() -> void:
+	var provider := ConstructionOrderProviderScript.new()
+	var ready := _construction_citizen(1, false, true, &"construction", 41)
+	var inactive := _construction_citizen(2, false, false, &"construction", 42)
+	var orders := provider.collect_orders(WorldSnapshot.new(1, 0.0, 0.0, AIFactSet.new(), {1: ready, 2: inactive}))
+	assert(orders.size() == 1)
+	assert(orders[0].kind == &"construction" and orders[0].target_entity_id == 41)
+	var active := _construction_citizen(1, true, false, &"demolition", 43)
+	var active_orders := provider.collect_orders(WorldSnapshot.new(2, 1.0, 0.0, AIFactSet.new(), {1: active}))
+	assert(active_orders.size() == 1)
+	assert(active_orders[0].kind == &"demolition" and active_orders[0].target_entity_id == 43)
+
+
+func _test_native_construction_goal() -> void:
+	var goal := ConstructionGoalScript.new()
+	var actuator := FakeActuator.new(1)
+	var brain := CitizenBrain.new(1, actuator, [goal])
+	var citizen := _construction_citizen(1, false, true, &"construction", 41)
+	var snapshot := _snapshot(0.0, citizen)
+	var order := _construction_order(1, &"construction", 41)
+	order.id = 19
+	brain.think(snapshot, order)
+	brain.tick(snapshot, order, 0.1)
+	assert(actuator.action_start_count == 1)
+	assert(brain.runner.active_goal_id() == &"construction")
+	actuator.next_action_status = CitizenActuator.ActionStatus.SUCCEEDED
+	brain.tick(snapshot, order, 0.1)
+	assert(brain.runner.active_task == null)
+
+
+func _test_construction_actuator() -> void:
+	var citizen := Citizen.new()
+	citizen.ai_id = 19
+	var target := Node3D.new()
+	root.add_child(citizen)
+	root.add_child(target)
+	var actuator := SettlementCitizenActuatorScript.new(citizen)
+	assert(actuator.begin_action(&"construction", target.get_instance_id()))
+	assert(citizen.state == Citizen.State.CONSTRUCTING and citizen.active_role == "construction")
+	actuator.cancel_action()
+	assert(citizen.state == Citizen.State.IDLE)
+	assert(actuator.begin_action(&"demolition", target.get_instance_id()))
+	assert(citizen.state == Citizen.State.CONSTRUCTING and citizen.active_role == "demolition")
+	root.remove_child(target)
+	root.remove_child(citizen)
+	target.free()
+	citizen.free()
+
+
 func _test_production_sleep_actuator() -> void:
 	var citizen := Citizen.new()
 	citizen.ai_id = 17
@@ -808,4 +862,24 @@ func _farming_order(citizen_id: int, farm_position: Vector3) -> CitizenOrder:
 		&"work.warehouse_position": Vector3(8.0, 0.0, 0.0),
 	}))
 	order.target_position = farm_position
+	return order
+
+
+func _construction_citizen(citizen_id: int, in_progress: bool, can_start: bool, mode: StringName, target_id: int) -> CitizenSnapshot:
+	return CitizenSnapshot.new(citizen_id, Vector3(float(citizen_id), 0.0, 0.0), false, true, AIFactSet.new({
+		&"work.construction.worker": true,
+		&"work.construction.in_progress": in_progress,
+		&"work.construction.can_start": can_start,
+		&"work.construction.mode": mode,
+		&"work.construction.target_id": target_id,
+		&"work.construction.position": Vector3(5.0, 0.0, 0.0),
+	}))
+
+
+func _construction_order(citizen_id: int, mode: StringName, target_id: int) -> CitizenOrder:
+	var order := CitizenOrder.new(citizen_id, mode, &"workforce.construction", 0.60, AIFactSet.new({
+		&"work.construction.mode": mode,
+	}))
+	order.target_entity_id = target_id
+	order.target_position = Vector3(5.0, 0.0, 0.0)
 	return order

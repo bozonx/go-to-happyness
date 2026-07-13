@@ -60,6 +60,30 @@ func capture(sequence: int) -> WorldSnapshot:
 			farming_position = actor.employment_workplace.get_meta("service_position", actor.employment_workplace.global_position) if is_instance_valid(actor.employment_workplace) else simulation.farm_positions[0]
 			farming_warehouse_position = simulation._get_nearest_delivery_position(actor.global_position)
 		var farming_can_start: bool = farming_worker and simulation._is_work_time() and simulation._has_storage_room_for_role("farming") and farming_position != Vector3.INF and farming_warehouse_position != Vector3.INF
+		var construction_worker := actor.permanent_role == "construction" and actor.is_employed() and not actor.is_player_controlled
+		var construction_in_progress := construction_worker and actor.active_role in ["construction", "demolition"] and actor.state == Citizen.State.CONSTRUCTING and is_instance_valid(actor.construction_site)
+		var construction_can_start := false
+		var construction_mode: StringName = &""
+		var construction_target_id := -1
+		var construction_position := Vector3.INF
+		if construction_in_progress:
+			construction_mode = StringName(actor.active_role)
+			construction_target_id = actor.construction_site.get_instance_id()
+			construction_position = actor.construction_site.global_position
+		elif construction_worker and simulation._is_work_time():
+			if not simulation.demolition_sites.is_empty():
+				var demolition_site: DemolitionSite = simulation.demolition_sites[(citizen_id - 1) % simulation.demolition_sites.size()]
+				if is_instance_valid(demolition_site.building):
+					construction_mode = &"demolition"
+					construction_target_id = demolition_site.building.get_instance_id()
+					construction_position = demolition_site.building.global_position
+			elif simulation._preferred_construction_site() != null:
+				var construction_site: ConstructionSite = simulation._preferred_construction_site()
+				if construction_site.is_supplied() and is_instance_valid(construction_site.node):
+					construction_mode = &"construction"
+					construction_target_id = construction_site.node.get_instance_id()
+					construction_position = construction_site.node.global_position
+			construction_can_start = construction_target_id >= 0
 		citizens_by_id[citizen_id] = CitizenSnapshot.new(
 			citizen_id,
 			actor.global_position,
@@ -87,6 +111,12 @@ func capture(sequence: int) -> WorldSnapshot:
 				&"work.farming.can_start": farming_can_start,
 				&"work.farming.position": farming_position,
 				&"work.farming.warehouse_position": farming_warehouse_position,
+				&"work.construction.worker": construction_worker,
+				&"work.construction.in_progress": construction_in_progress,
+				&"work.construction.can_start": construction_can_start,
+				&"work.construction.mode": construction_mode,
+				&"work.construction.target_id": construction_target_id,
+				&"work.construction.position": construction_position,
 			})
 		)
 	var settlement_facts := AIFactSet.new({

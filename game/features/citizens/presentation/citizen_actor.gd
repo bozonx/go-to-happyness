@@ -1713,9 +1713,10 @@ func can_recheck_automatic_role() -> bool:
 	return role_recheck_remaining <= 0.0
 
 func _work_position_for(site: Node3D) -> Vector3:
-	var site_position := site.global_position
+	var site_position := site.global_position if site.is_inside_tree() else site.position
 	var footprint: Vector2i = site.get_meta("footprint", Vector2i(3, 3))
-	var offset := global_position - site_position
+	var actor_position := global_position if is_inside_tree() else position
+	var offset := actor_position - site_position
 	offset.y = 0.0
 	var slot := float(int(get_instance_id() % 3) - 1) * CONSTRUCTION_SLOT_SPACING
 	if absf(offset.x) > absf(offset.z):

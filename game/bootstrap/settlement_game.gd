@@ -12,6 +12,8 @@ const ForestryGoalScript = preload("res://game/features/decision/domain/goals/fo
 const ForestryOrderProviderScript = preload("res://game/features/decision/application/forestry_order_provider.gd")
 const FarmingGoalScript = preload("res://game/features/decision/domain/goals/farming_goal.gd")
 const FarmingOrderProviderScript = preload("res://game/features/decision/application/farming_order_provider.gd")
+const ConstructionGoalScript = preload("res://game/features/decision/domain/goals/construction_goal.gd")
+const ConstructionOrderProviderScript = preload("res://game/features/decision/application/construction_order_provider.gd")
 const SettlementCitizenActuatorScript = preload("res://game/features/decision/application/settlement_citizen_actuator.gd")
 
 
@@ -320,8 +322,8 @@ func _ready() -> void:
 	add_child(citizen_ai)
 	if not citizen_ai.configure(
 		SettlementAIWorldFacade.new(self),
-		[SleepGoalScript.new(), MealGoalScript.new(), ToiletGoalScript.new(), RestGoalScript.new(), ForestryGoalScript.new(), FarmingGoalScript.new()],
-		[ForestryOrderProviderScript.new(), FarmingOrderProviderScript.new()]
+		[SleepGoalScript.new(), MealGoalScript.new(), ToiletGoalScript.new(), RestGoalScript.new(), ForestryGoalScript.new(), FarmingGoalScript.new(), ConstructionGoalScript.new()],
+		[ForestryOrderProviderScript.new(), FarmingOrderProviderScript.new(), ConstructionOrderProviderScript.new()]
 	):
 		push_error("Native citizen AI failed to capture its initial world snapshot")
 	nav_grid = NavGrid.new()
