@@ -2326,6 +2326,12 @@ func execute_action(action: StringName, target: Node3D, payload: AIFactSet) -> b
 			if not simulation.courier_dispatcher.start_task(self, task_id):
 				return false
 			return has_active_delivery()
+		&"construction_supply":
+			var supply_resource: Variant = payload.value(&"resource.type", "") if payload != null else ""
+			var supply_warehouse: Variant = payload.value(&"warehouse.position", Vector3.INF) if payload != null else Vector3.INF
+			if not is_instance_valid(target) or not (supply_resource is String) or supply_resource.is_empty() or not (supply_warehouse is Vector3) or supply_warehouse == Vector3.INF or simulation == null:
+				return false
+			return simulation.begin_native_construction_supply(self, target, supply_resource, supply_warehouse)
 		&"register":
 			var center_position: Variant = payload.value(&"center.position", Vector3.INF) if payload != null else Vector3.INF
 			var pending_role: Variant = payload.value(&"workplace.role", "") if payload != null else ""
@@ -2338,6 +2344,9 @@ func execute_action(action: StringName, target: Node3D, payload: AIFactSet) -> b
 			if not (delegated_action is StringName) or delegated_action == &"" or delegated_action == &"reserve_work":
 				return false
 			reserve_action = delegated_action
+			var reserve_role: Variant = payload.value(&"reserve.role", "") if payload != null else ""
+			if reserve_role is String and not reserve_role.is_empty() and freelance_assignment.is_empty():
+				last_automatic_role = reserve_role
 			var started := execute_action(reserve_action, target, payload)
 			if not started:
 				reserve_action = &""
@@ -2406,6 +2415,11 @@ func get_action_status(action: StringName) -> int:
 				return 2 # SUCCEEDED
 		&"courier_delivery":
 			if has_active_delivery():
+				return 1 # RUNNING
+			if state == State.IDLE:
+				return 2 # SUCCEEDED
+		&"construction_supply":
+			if state in [State.TO_CONSTRUCTION_PICKUP, State.TO_CONSTRUCTION_SITE]:
 				return 1 # RUNNING
 			if state == State.IDLE:
 				return 2 # SUCCEEDED

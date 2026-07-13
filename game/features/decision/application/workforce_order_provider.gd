@@ -81,10 +81,11 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 			_reserve_assignments.erase(citizen_id)
 			continue
 		var commands: Dictionary = citizen.facts.value(&"workforce.reserve.commands", {})
-		var command: Dictionary = commands.get(StringName(role), {})
+		var command: Dictionary = commands.get(StringName(role), {}).duplicate(true)
 		if command.is_empty():
 			_reserve_assignments.erase(citizen_id)
 			continue
+		command[&"reserve.role"] = role
 		_reserve_assignments[citizen_id] = command.duplicate(true)
 		orders.append(_reserve_order(citizen_id, command))
 		_increment_assigned_role(allocation_world, role)
@@ -96,8 +97,6 @@ func _reserve_order(citizen_id: int, command: Dictionary) -> CitizenOrder:
 	var target_position: Variant = command.get(&"target.position", Vector3.INF)
 	var target_key: Variant = command.get(&"target.key", &"")
 	var payload := command.duplicate(true)
-	payload.erase(&"target.position")
-	payload.erase(&"target.key")
 	var order := CitizenOrder.new(citizen_id, &"reserve_work", id, 0.40, AIFactSet.new(payload))
 	order.target_position = target_position as Vector3 if target_position is Vector3 else Vector3.INF
 	order.target_key = target_key as StringName if target_key is StringName else &""

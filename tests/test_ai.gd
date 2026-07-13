@@ -171,6 +171,8 @@ func _init() -> void:
 	_test_native_toilet_goal()
 	_test_native_rest_goal()
 	_test_reserve_work_provider_keeps_assignment()
+	_test_reserve_work_rejects_contested_target()
+	_test_reserve_work_actuator_delegates_payload()
 	_test_forestry_provider_assigns_unique_stable_targets()
 	_test_native_forestry_goal()
 	_test_farming_provider_keeps_active_cycle()
@@ -997,27 +999,32 @@ func _test_reserve_work_provider_keeps_assignment() -> void:
 	var command := {
 		&"reserve.action": &"gathering",
 		&"target.position": Vector3(4.0, 0.0, 0.0),
+		&"target.key": &"tree:4:0",
+		&"reserve.claim_kind": &"gathering.source",
+		&"reserve.claim_id": &"branch:4:0",
 		&"resource.type": "branches",
 		&"target.access_position": Vector3(3.5, 0.0, 0.0),
 		&"warehouse.position": Vector3(8.0, 0.0, 0.0),
 	}
 	var citizen := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
-		&"workforce.worker_data": {"workforce_status": "active", "permanent_role": "gather_branches"},
+		&"workforce.worker_data": {"workforce_status": "active"},
 		&"workforce.reserve.eligible": true,
 		&"workforce.reserve.in_progress": false,
 		&"workforce.reserve.commands": {&"gather_branches": command},
 	}))
-	var settlement := AIFactSet.new({&"workforce.world_data": {"trees": 1, "population": 1, "assigned_roles": {}}})
+	var settlement := AIFactSet.new({&"workforce.world_data": {"trees": 1, "population": 1, "hour": 9, "officer_available": true, "assigned_roles": {}}})
 	var snapshot := WorldSnapshot.new(1, 0.0, 0.0, settlement, {1: citizen})
 	var orders := provider.collect_orders(snapshot)
 	assert(orders.size() == 1)
 	var order: CitizenOrder = orders[0]
 	assert(order.kind == &"reserve_work")
 	assert(order.payload.value(&"reserve.action") == &"gathering")
+	assert(order.payload.value(&"target.position") == Vector3(4.0, 0.0, 0.0))
+	assert(order.payload.value(&"target.key") == &"tree:4:0")
 	assert(order.target_position == Vector3(4.0, 0.0, 0.0))
 
 	var running := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
-		&"workforce.worker_data": {"workforce_status": "active", "permanent_role": "gather_branches"},
+		&"workforce.worker_data": {"workforce_status": "active"},
 		&"workforce.reserve.eligible": true,
 		&"workforce.reserve.in_progress": true,
 		&"workforce.reserve.commands": {},
@@ -1033,6 +1040,59 @@ func _test_reserve_work_provider_keeps_assignment() -> void:
 	context.refresh(snapshot, order)
 	assert(task.root.run(context, 0.1) == BehaviorStep.Status.RUNNING)
 	assert(actuator.action_start_count == 1)
+	actuator.next_action_status = CitizenActuator.ActionStatus.SUCCEEDED
+	assert(task.root.run(context, 0.1) == BehaviorStep.Status.SUCCESS)
+	assert(snapshot.reservations.owner_of([&"gathering.source", &"branch:4:0"], 0.0) == 0)
+
+
+func _test_reserve_work_rejects_contested_target() -> void:
+	var goal := ReserveWorkGoalScript.new()
+	var command := AIFactSet.new({
+		&"reserve.action": &"gathering",
+		&"reserve.claim_kind": &"gathering.source",
+		&"reserve.claim_id": &"branch:3:0",
+		&"target.position": Vector3(3.0, 0.0, 0.0),
+		&"target.access_position": Vector3(2.5, 0.0, 0.0),
+		&"warehouse.position": Vector3(8.0, 0.0, 0.0),
+	})
+	var first := CitizenSnapshot.new(1)
+	var second := CitizenSnapshot.new(2)
+	var snapshot := WorldSnapshot.new(1, 0.0, 0.0, AIFactSet.new(), {1: first, 2: second})
+	var first_order := CitizenOrder.new(1, &"reserve_work", &"workforce.coordination", 0.4, command)
+	var second_order := CitizenOrder.new(2, &"reserve_work", &"workforce.coordination", 0.4, command)
+	var first_actuator := FakeActuator.new(1)
+	var second_actuator := FakeActuator.new(2)
+	var first_context := BehaviorContext.new(first_actuator, AIBlackboard.new())
+	var second_context := BehaviorContext.new(second_actuator, AIBlackboard.new())
+	first_context.refresh(snapshot, first_order)
+	second_context.refresh(snapshot, second_order)
+	assert(goal.build_task(snapshot, first, first_order, AIBlackboard.new()).root.run(first_context, 0.1) == BehaviorStep.Status.RUNNING)
+	assert(goal.build_task(snapshot, second, second_order, AIBlackboard.new()).root.run(second_context, 0.1) == BehaviorStep.Status.FAILURE)
+	assert(first_actuator.action_start_count == 1)
+	assert(second_actuator.action_start_count == 0)
+	assert(snapshot.reservations.owner_of([&"gathering.source", &"branch:3:0"], 0.0) == 1)
+
+
+func _test_reserve_work_actuator_delegates_payload() -> void:
+	var citizen := Citizen.new()
+	citizen.ai_id = 27
+	root.add_child(citizen)
+	var actuator := SettlementCitizenActuatorScript.new(citizen)
+	assert(actuator.begin_action(&"reserve_work", &"", AIFactSet.new({
+		&"reserve.action": &"gathering",
+		&"reserve.role": "gather_branches",
+		&"target.position": Vector3(4.0, 0.0, 0.0),
+		&"target.access_position": Vector3(3.5, 0.0, 0.0),
+		&"warehouse.position": Vector3(8.0, 0.0, 0.0),
+		&"resource.type": "branches",
+	})))
+	assert(citizen.state == Citizen.State.TO_GATHER)
+	assert(citizen.last_automatic_role == "gather_branches")
+	assert(actuator.action_status() == CitizenActuator.ActionStatus.RUNNING)
+	actuator.cancel_action()
+	assert(citizen.state == Citizen.State.IDLE)
+	root.remove_child(citizen)
+	citizen.free()
 
 
 func _context(order: CitizenOrder = null) -> BehaviorContext:

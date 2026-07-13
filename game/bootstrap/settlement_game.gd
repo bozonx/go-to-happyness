@@ -1113,35 +1113,22 @@ func _update_construction_supplies() -> void:
 			break
 
 
-func _assign_construction_support(worker: Citizen, site: ConstructionSite) -> bool:
-	if worker == null or site == null or not is_instance_valid(site.node):
+func begin_native_construction_supply(worker: Citizen, site_node: Node3D, resource_type: String, warehouse: Vector3) -> bool:
+	if worker == null or not is_instance_valid(site_node) or warehouse == Vector3.INF:
 		return false
-	for resource_type in site.required_materials:
-		var required := int(site.required_materials[resource_type])
+	for site: ConstructionSite in construction_sites:
+		if site.node != site_node:
+			continue
+		var required := int(site.required_materials.get(resource_type, 0))
 		var delivered := int(site.delivered_materials.get(resource_type, 0))
 		var reserved := int(site.reserved_materials.get(resource_type, 0))
-		if delivered + reserved >= required:
-			continue
-		# A flexible construction worker doubles as the bootstrap courier. This
-		# prevents every freelancer from waiting at an unsupplied foundation.
-		if not warehouse_positions.is_empty() and settlement.amount(resource_type) > 0:
-			settlement.add(resource_type, -1)
-			site.reserved_materials[resource_type] = reserved + 1
-			worker.active_role = "construction"
-			worker.assign_construction_delivery(site.node, warehouse_positions[0], resource_type)
-			return true
-		if resource_type == "branches" and not warehouse_positions.is_empty():
-			var tree_position := _find_closest_tree_for_citizen(worker)
-			if tree_position != Vector3.INF:
-				var access_position := _resource_access_position(worker.global_position, tree_position)
-				if access_position != Vector3.INF:
-					worker.assign_gathering("branches", tree_position, warehouse_positions[0], access_position)
-					return true
-		if resource_type == "grass" and not warehouse_positions.is_empty():
-			var grass_position := _find_grass_gathering_position(worker)
-			if grass_position != Vector3.INF:
-				worker.assign_gathering("grass", grass_position, warehouse_positions[0])
-				return true
+		if required <= delivered + reserved or settlement.amount(resource_type) <= 0:
+			return false
+		settlement.add(resource_type, -1)
+		site.reserved_materials[resource_type] = reserved + 1
+		worker.active_role = "construction"
+		worker.assign_construction_delivery(site.node, warehouse, resource_type)
+		return worker.state in [Citizen.State.TO_CONSTRUCTION_PICKUP, Citizen.State.TO_CONSTRUCTION_SITE]
 	return false
 
 

@@ -31,7 +31,7 @@ func capture(sequence: int) -> WorldSnapshot:
 		var reserve_eligible := actor.is_reserve() and not actor.is_courier() and not actor.is_player_controlled
 		var reserve_commands: Dictionary = {}
 		if reserve_eligible and not reserve_in_progress and actor.state in [Citizen.State.IDLE, Citizen.State.RESTING, Citizen.State.WAITING]:
-			for reserve_role in [&"forestry", &"farming", &"construction", &"gather_branches", &"gather_grass", &"gather_food", &"gather_dew", &"gather_water", &"cook", &"teacher", &"seller", &"craftsman", &"factory_worker", &"engineer"]:
+			for reserve_role in [&"forestry", &"farming", &"construction", &"excavation", &"gather_branches", &"gather_grass", &"gather_food", &"gather_dew", &"gather_water", &"cook", &"teacher", &"seller", &"craftsman", &"factory_worker", &"engineer"]:
 				var command := _reserve_command_for(actor, String(reserve_role))
 				if not command.is_empty():
 					reserve_commands[reserve_role] = command
@@ -325,6 +325,7 @@ func _reserve_command_for(actor: Citizen, role: String) -> Dictionary:
 				return {}
 			return {
 				&"reserve.action": &"forestry", &"target.position": tree,
+				&"reserve.claim_kind": &"forestry.tree", &"reserve.claim_id": _target_key(&"tree", tree),
 				&"target.access_position": access,
 				&"workplace.position": simulation.sawmill_positions[0],
 				&"warehouse.position": warehouse,
@@ -345,6 +346,15 @@ func _reserve_command_for(actor: Citizen, role: String) -> Dictionary:
 			var site: ConstructionSite = simulation._preferred_construction_site()
 			if site != null and site.is_supplied() and is_instance_valid(site.node):
 				return {&"reserve.action": &"construction", &"target.position": site.node.global_position, &"target.key": _target_key(&"construction", site.node.global_position)}
+			if site != null and is_instance_valid(site.node):
+				return _construction_support_command(actor, site, warehouse)
+		"excavation":
+			for dig_site_value in simulation.dig_sites:
+				var dig_site := dig_site_value as Dictionary
+				var dig_node := dig_site.get(&"node") as Node3D
+				if is_instance_valid(dig_node) and simulation._can_work_at_dig_site(dig_site):
+					var dig_id := _target_key(&"dig", dig_node.global_position)
+					return {&"reserve.action": &"excavation", &"target.position": dig_node.global_position, &"target.key": dig_id, &"reserve.claim_kind": &"excavation.site", &"reserve.claim_id": dig_id}
 		"gather_branches", "gather_grass", "gather_food", "gather_dew", "gather_water":
 			return _reserve_gathering_command(actor, role, warehouse)
 		"cook", "teacher", "seller", "craftsman":
@@ -355,6 +365,22 @@ func _reserve_command_for(actor: Citizen, role: String) -> Dictionary:
 			var factory: Node3D = _factory_for_role_internal(role)
 			if is_instance_valid(factory):
 				return {&"reserve.action": &"factory_work", &"target.position": factory.global_position, &"target.key": _target_key(&"factory", factory.global_position), &"factory.role": &"factory_work" if role == "factory_worker" else &"engineering"}
+	return {}
+
+
+func _construction_support_command(actor: Citizen, site: ConstructionSite, warehouse: Vector3) -> Dictionary:
+	for resource_type in site.required_materials:
+		var required := int(site.required_materials[resource_type])
+		var delivered := int(site.delivered_materials.get(resource_type, 0))
+		var reserved := int(site.reserved_materials.get(resource_type, 0))
+		if delivered + reserved >= required:
+			continue
+		if simulation.settlement.amount(resource_type) > 0:
+			return {&"reserve.action": &"construction_supply", &"target.position": site.node.global_position, &"target.key": _target_key(&"construction", site.node.global_position), &"resource.type": resource_type, &"warehouse.position": warehouse}
+		if resource_type == "branches":
+			return _reserve_gathering_command(actor, "gather_branches", warehouse)
+		if resource_type == "grass":
+			return _reserve_gathering_command(actor, "gather_grass", warehouse)
 	return {}
 
 
@@ -388,10 +414,22 @@ func _reserve_gathering_command(actor: Citizen, role: String, warehouse: Vector3
 		return {}
 	return {
 		&"reserve.action": &"gathering", &"target.position": source,
+		&"reserve.claim_kind": &"gathering.source", &"reserve.claim_id": _gathering_source_id(role, source),
 		&"resource.type": resource_type,
 		&"target.access_position": access,
 		&"warehouse.position": warehouse,
 	}
+
+
+func _gathering_source_id(role: String, source: Vector3) -> StringName:
+	var cell: Vector2i = simulation._cell_from_position(source)
+	match role:
+		"gather_branches": return StringName("branch:%d:%d" % [cell.x, cell.y])
+		"gather_grass": return StringName("grass:%d:%d" % [cell.x, cell.y])
+		"gather_food": return StringName("forage:%d" % cell.x)
+		"gather_dew": return StringName("dew:%d:%d" % [cell.x, cell.y])
+		"gather_water": return StringName("water:%d:%d" % [cell.x, cell.y])
+	return &""
 
 
 func _nearest_tree(actor: Citizen, branches_only: bool) -> Vector3:
