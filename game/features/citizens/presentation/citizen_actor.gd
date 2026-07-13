@@ -61,6 +61,40 @@ const MODEL_PREFIXES := {
 	"official": "official",
 }
 
+const RANDOM_HEADS_MALE := [
+	"common-male", "courier-male", "official-male", "teacher-male", "worker-male"
+]
+const RANDOM_HEADS_FEMALE := [
+	"common-female", "courier-female", "official-female", "teacher-female", "worker-female"
+]
+
+const SKIN_COLORS := [
+	Color("f1976e"),
+	Color("f1c09a"),
+	Color("af6142"),
+	Color("d8a27d"),
+	Color("753a22"),
+]
+
+const HAIR_COLORS := [
+	Color("1c1d1f"),
+	Color("3b2219"),
+	Color("7a431d"),
+	Color("b58135"),
+	Color("5a5c5e"),
+]
+
+const CLOTHING_COLORS := [
+	Color("1e3d59"),
+	Color("ff6e40"),
+	Color("17b890"),
+	Color("868ba2"),
+	Color("4a4552"),
+	Color("a83232"),
+	Color("d4af37"),
+	Color("228b22"),
+]
+
 const STATE_ANIMATIONS := {
 	State.IDLE: "idle",
 	State.WAITING: "idle",
@@ -132,6 +166,10 @@ var gender: String = ""
 var current_model_path: String = ""
 var current_character_mesh: Node3D
 var animation_player: AnimationPlayer
+var skin_color: Color = Color.WHITE
+var shirt_color: Color = Color.WHITE
+var pants_color: Color = Color.WHITE
+var hair_color: Color = Color.WHITE
 var skills := {}
 var practiced_today: Dictionary = {}
 var temp_training_role := ""
@@ -223,6 +261,16 @@ signal employment_processing_finished(citizen: Citizen)
 func _ready() -> void:
 	if gender.is_empty():
 		gender = "male" if randf() > 0.5 else "female"
+	if skin_color == Color.WHITE:
+		skin_color = SKIN_COLORS.pick_random()
+	if shirt_color == Color.WHITE:
+		shirt_color = CLOTHING_COLORS.pick_random()
+	if pants_color == Color.WHITE:
+		pants_color = CLOTHING_COLORS.pick_random()
+		while pants_color == shirt_color:
+			pants_color = CLOTHING_COLORS.pick_random()
+	if hair_color == Color.WHITE:
+		hair_color = HAIR_COLORS.pick_random()
 	skills = {
 		"construction": randf_range(0.0, 0.1),
 		"forestry": randf_range(0.0, 0.1),
@@ -324,6 +372,8 @@ func _setup_head_mesh() -> void:
 	head.material_override = head_material
 	add_child(head)
 
+static var _shared_shader_material: ShaderMaterial
+
 func _update_character_model() -> void:
 	var prefix: String = MODEL_PREFIXES.get(specialization, "common")
 	var path := "res://assets/characters/%s-%s.glb" % [prefix, gender]
@@ -336,6 +386,7 @@ func _update_character_model() -> void:
 		return
 		
 	if current_model_path == path:
+		_update_mesh_colors()
 		return
 		
 	# Clean up fallback mesh or previous model if it exists
@@ -359,9 +410,28 @@ func _update_character_model() -> void:
 		# Rotate 180 degrees to align face with movement direction (-Z forward)
 		inst.rotation.y = PI
 		inst.scale = Vector3(2.65, 2.65, 2.65)
+		
+		# Randomize head for regular characters
+		if specialization != "policeman":
+			_randomize_head_on_instance(inst)
+			
 		add_child(inst)
 		current_character_mesh = inst
 		current_model_path = path
+		
+		# Apply shader material and colors
+		if _shared_shader_material == null:
+			_shared_shader_material = ShaderMaterial.new()
+			_shared_shader_material.shader = load("res://game/features/citizens/presentation/citizen_color_swap.gdshader")
+			
+		var body_mesh = _find_node_by_name(inst, "body-mesh") as MeshInstance3D
+		var head_mesh = _find_node_by_name(inst, "head-mesh") as MeshInstance3D
+		if body_mesh:
+			body_mesh.material_override = _shared_shader_material
+		if head_mesh:
+			head_mesh.material_override = _shared_shader_material
+			
+		_update_mesh_colors()
 		
 		# To satisfy existing startup tests that assert an immediate MeshInstance3D child exists:
 		var anchor := MeshInstance3D.new()
@@ -376,6 +446,45 @@ func _update_character_model() -> void:
 				var anim = animation_player.get_animation(anim_name)
 				if anim != null:
 					anim.loop_mode = Animation.LOOP_LINEAR
+
+func _update_mesh_colors() -> void:
+	if current_character_mesh == null:
+		return
+	var body_mesh = _find_node_by_name(current_character_mesh, "body-mesh") as MeshInstance3D
+	var head_mesh = _find_node_by_name(current_character_mesh, "head-mesh") as MeshInstance3D
+	if body_mesh:
+		body_mesh.set_instance_shader_parameter("skin_color", skin_color)
+		body_mesh.set_instance_shader_parameter("shirt_color", shirt_color)
+		body_mesh.set_instance_shader_parameter("pants_color", pants_color)
+		body_mesh.set_instance_shader_parameter("hair_color", hair_color)
+	if head_mesh:
+		head_mesh.set_instance_shader_parameter("skin_color", skin_color)
+		head_mesh.set_instance_shader_parameter("shirt_color", shirt_color)
+		head_mesh.set_instance_shader_parameter("pants_color", pants_color)
+		head_mesh.set_instance_shader_parameter("hair_color", hair_color)
+
+func _randomize_head_on_instance(inst: Node3D) -> void:
+	var pool := RANDOM_HEADS_MALE if gender == "male" else RANDOM_HEADS_FEMALE
+	var random_model_name = pool.pick_random()
+	var path := "res://assets/characters/%s.glb" % random_model_name
+	if FileAccess.file_exists(path):
+		var donor_scene := load(path) as PackedScene
+		if donor_scene != null:
+			var donor_inst = donor_scene.instantiate()
+			var donor_head = _find_node_by_name(donor_inst, "head-mesh") as MeshInstance3D
+			var target_head = _find_node_by_name(inst, "head-mesh") as MeshInstance3D
+			if donor_head != null and target_head != null:
+				target_head.mesh = donor_head.mesh
+			donor_inst.queue_free()
+
+func _find_node_by_name(node: Node, node_name: String) -> Node:
+	if node.name == node_name:
+		return node
+	for child in node.get_children():
+		var res = _find_node_by_name(child, node_name)
+		if res:
+			return res
+	return null
 
 func _setup_fallback_mesh() -> void:
 	if not has_node("FallbackBody"):

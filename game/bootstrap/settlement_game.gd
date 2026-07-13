@@ -1997,6 +1997,10 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	citizen.position = spawn_position
 	if hero_citizen == null:
 		citizen.gender = "male"
+		citizen.skin_color = Color("f1c09a")
+		citizen.hair_color = Color("3b2219")
+		citizen.shirt_color = Color("1e3d59")
+		citizen.pants_color = Color("ff6e40")
 	add_child(citizen)
 	citizen.setup_specialization(primary_specialization if not primary_specialization.is_empty() else "unassigned")
 	citizen.setup_navigation(_find_path_around_houses, _get_nearest_delivery_position, _resolve_building_queue_position)
