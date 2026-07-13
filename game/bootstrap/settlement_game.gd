@@ -38,7 +38,6 @@ const SAWMILL_WORKER_DELIVERY_THRESHOLD := 4
 const COURIER_LATE_SECONDS := 12.0
 const DIG_RADIUS := 2.2
 const DIG_REACH := 6.0
-const NAVIGATION_AGENT_RADIUS := 0.38
 
 var settlement := SettlementState.new()
 var wood: int:
@@ -212,7 +211,7 @@ var clock_label: Label
 var tent_dismantle_progress := -1.0
 var voxel_terrain: VoxelLodTerrain
 var voxel_tool: VoxelTool
-var navigation_region: NavigationRegion3D
+var nav_grid: NavGrid
 var service_pockets: Array[Dictionary] = []
 var selected_school: Node3D
 var school_menu: Panel
@@ -302,10 +301,12 @@ func _ready() -> void:
 	workforce = WorkforceCoordinator.new()
 	workforce.configure(self)
 	add_child(workforce)
+	nav_grid = NavGrid.new()
+	nav_grid.configure(CELL_SIZE, BOARD_CELLS)
 	route_service = GridRouteService.new()
-	route_service.configure(_cell_from_position, _cell_center, _is_board_cell, _is_navigation_cell_blocked)
+	route_service.configure(nav_grid)
 	building_queue_service = BuildingQueueServiceScript.new()
-	building_queue_service.configure(building_registry, _cell_from_position, _cell_center, _is_board_cell, _is_navigation_cell_blocked)
+	building_queue_service.configure(building_registry, nav_grid)
 	sawmills = SawmillService.new()
 	sawmills.configure(self)
 	var construction_runtime := ConstructionRuntime.new()
@@ -319,7 +320,7 @@ func _ready() -> void:
 	construction_runtime.set_status = _set_construction_status
 	construction_runtime.building_completed = _complete_building
 	construction_runtime.workers_changed = _update_workers
-	construction_runtime.navigation_changed = _rebuild_navigation_mesh
+	construction_runtime.navigation_changed = _refresh_navigation_grid
 	construction = ConstructionService.new()
 	construction.configure(construction_runtime)
 	var demolition_runtime := DemolitionRuntime.new()
@@ -1805,7 +1806,7 @@ func _create_world() -> void:
 	add_child(camera)
 	_update_camera_position()
 	_create_voxel_terrain()
-	_create_navigation_region()
+	_refresh_navigation_grid()
 	_create_selection_marker()
 
 func _create_voxel_terrain() -> void:
@@ -1832,43 +1833,13 @@ func _create_voxel_terrain() -> void:
 	voxel_tool = voxel_terrain.get_voxel_tool()
 	voxel_tool.channel = VoxelBuffer.CHANNEL_SDF
 
-func _create_navigation_region() -> void:
-	navigation_region = NavigationRegion3D.new()
-	navigation_region.use_edge_connections = false
-	add_child(navigation_region)
-	_rebuild_navigation_mesh()
-
-func _rebuild_navigation_mesh() -> void:
-	if navigation_region == null:
-		return
+## Recomputes walkable cells (terrain + building footprints with clearance) and
+## publishes them to the shared NavGrid. Citizens route entirely through the grid,
+## so this is the only navigation structure the settlement maintains.
+func _refresh_navigation_grid() -> void:
 	_rebuild_navigation_obstacles()
-	var navigation_mesh := NavigationMesh.new()
-	navigation_mesh.agent_radius = NAVIGATION_AGENT_RADIUS
-	navigation_mesh.agent_height = 1.75
-	navigation_mesh.agent_max_climb = 0.45
-	navigation_mesh.agent_max_slope = 52.0
-	var vertices := PackedVector3Array()
-	var polygons: Array[PackedInt32Array] = []
-	var vertex_indices: Dictionary = {}
-	var half_cells := BOARD_CELLS / 2
-	for x in range(-half_cells, half_cells):
-		for z in range(-half_cells, half_cells):
-			if _is_navigation_cell_blocked(Vector2i(x, z)):
-				continue
-			var corners := [Vector2i(x, z), Vector2i(x, z + 1), Vector2i(x + 1, z + 1), Vector2i(x + 1, z)]
-			var polygon := PackedInt32Array()
-			for corner in corners:
-				if not vertex_indices.has(corner):
-					vertex_indices[corner] = vertices.size()
-					vertices.append(Vector3(corner.x, 0.0, corner.y))
-				polygon.append(int(vertex_indices[corner]))
-			polygons.append(polygon)
-	navigation_mesh.vertices = vertices
-	for polygon in polygons:
-		navigation_mesh.add_polygon(polygon)
-	navigation_region.navigation_mesh = navigation_mesh
-	if is_inside_tree():
-		NavigationServer3D.map_force_update(get_world_3d().navigation_map)
+	if nav_grid != null:
+		nav_grid.set_blocked_cells(navigation_blocked_cells)
 
 func _is_navigation_cell_blocked(cell: Vector2i) -> bool:
 	return navigation_blocked_cells.has(cell)
@@ -1932,7 +1903,7 @@ func _create_forest() -> void:
 		tree_positions.append(tree_position)
 		_create_tree(tree_position)
 		_create_grass_sources_near_tree(cell)
-	_rebuild_navigation_mesh()
+	_refresh_navigation_grid()
 
 func _create_ponds() -> void:
 	# Natural ponds are part of the terrain, not a building. Residents cannot fill
@@ -1941,7 +1912,7 @@ func _create_ponds() -> void:
 		var center := _cell_center(cell)
 		pond_positions.append(center)
 		_create_pond_visual(center)
-	_rebuild_navigation_mesh()
+	_refresh_navigation_grid()
 
 func _create_pond_visual(center: Vector3) -> void:
 	var pond := Node3D.new()
@@ -3852,7 +3823,7 @@ func _finish_demolition(site: DemolitionSite) -> void:
 		_select_best_campfire()
 	_create_resource_pile(building.global_position, pile_resources)
 	building.queue_free()
-	_rebuild_navigation_mesh()
+	_refresh_navigation_grid()
 	_update_workers()
 	_update_interface("%s dismantled; recovered materials are waiting in a resource pile." % building_type.capitalize())
 
@@ -4159,7 +4130,7 @@ func _dig_voxel_at_crosshair() -> void:
 	voxel_tool.mode = VoxelTool.MODE_REMOVE
 	voxel_tool.do_sphere(hit.position, DIG_RADIUS)
 	_mark_excavation_as_navigation_blocked(hit.position, DIG_RADIUS)
-	_rebuild_navigation_mesh()
+	_refresh_navigation_grid()
 
 func _mark_excavation_as_navigation_blocked(center: Vector3, radius: float) -> void:
 	var center_cell := _cell_from_position(center)
@@ -4378,7 +4349,7 @@ func _place_building(world_position: Vector3) -> void:
 	var blueprint := BuildingBlueprints.get_blueprint(build_mode)
 	var occupied_footprint := _rotated_footprint(blueprint.footprint)
 	building_registry.reserve(cell, world_position, occupied_footprint)
-	_rebuild_navigation_mesh()
+	_refresh_navigation_grid()
 	_create_construction_site(cell, build_mode, world_position, build_rotation_quarters, blueprint, occupied_footprint)
 	build_mode = ""
 	build_rotation_quarters = 0
@@ -4599,7 +4570,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 	building_registry.attach_node(cell, building)
 	var occupied_footprint: Vector2i = building.get_meta("occupied_footprint", blueprint.footprint)
 	_add_building_status_indicator(building)
-	_rebuild_navigation_mesh()
+	_refresh_navigation_grid()
 	_update_workers()
 	var completion_message := "%s construction completed." % building_type.capitalize()
 	if building_type in ["recycling_factory", "metal_factory"]:
@@ -6391,7 +6362,7 @@ func _destroy_building_to_pile(building: Node3D, building_type: String) -> void:
 		_select_best_campfire()
 	_create_resource_pile(building.global_position, resources)
 	building.queue_free()
-	_rebuild_navigation_mesh()
+	_refresh_navigation_grid()
 	_update_workers()
 
 

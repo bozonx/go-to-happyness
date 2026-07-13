@@ -4,20 +4,14 @@ extends RefCounted
 ## Keeps one FIFO line per building and lays that line over walkable grid cells.
 
 var building_registry: BuildingRegistry
-var cell_from_position: Callable
-var cell_center: Callable
-var is_board_cell: Callable
-var is_cell_blocked: Callable
+var grid: NavGrid
 var _queues: Dictionary = {}
 var _last_seen_frame: Dictionary = {}
 
 
-func configure(registry: BuildingRegistry, next_cell_from_position: Callable, next_cell_center: Callable, next_is_board_cell: Callable, next_is_cell_blocked: Callable) -> void:
+func configure(registry: BuildingRegistry, next_grid: NavGrid) -> void:
 	building_registry = registry
-	cell_from_position = next_cell_from_position
-	cell_center = next_cell_center
-	is_board_cell = next_is_board_cell
-	is_cell_blocked = next_is_cell_blocked
+	grid = next_grid
 
 
 func resolve(citizen: Node, destination: Vector3) -> Dictionary:
@@ -76,7 +70,7 @@ func _build_slots(building: Node3D, destination: Vector3, count: int) -> Array[V
 	var slots: Array[Vector3] = [destination]
 	if count <= 1:
 		return slots
-	var current: Vector2i = cell_from_position.call(destination)
+	var current: Vector2i = grid.cell_from_position(destination)
 	var outward := _cardinal_direction(destination - building.position)
 	var direction := outward
 	var visited := {current: true}
@@ -87,7 +81,7 @@ func _build_slots(building: Node3D, destination: Vector3, count: int) -> Array[V
 		direction = next_direction
 		current += direction
 		visited[current] = true
-		slots.append(cell_center.call(current))
+		slots.append(grid.cell_center(current))
 	# A fully enclosed pocket is not expected, but duplicate the final safe slot
 	# rather than ever placing a queued citizen inside an obstacle.
 	while slots.size() < count:
@@ -100,7 +94,7 @@ func _choose_next_direction(cell: Vector2i, direction: Vector2i, visited: Dictio
 	var candidates: Array[Vector2i] = [direction, right, -right, -direction]
 	for candidate in candidates:
 		var next := cell + candidate
-		if bool(is_board_cell.call(next)) and not bool(is_cell_blocked.call(next)) and not visited.has(next):
+		if grid.is_walkable(next) and not visited.has(next):
 			return candidate
 	return Vector2i.ZERO
 

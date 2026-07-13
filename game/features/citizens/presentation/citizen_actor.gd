@@ -259,11 +259,9 @@ var idle_wander_target := Vector3.INF
 var idle_wander_pause := 0.0
 var movement_path: Array[Vector3] = []
 var path_destination := Vector3.INF
-var navigation_target_position := Vector3.INF
 var path_allows_destination_house := false
 var active_route: RouteResult
 var route_retry_timer := 0.0
-var navigation_agent: NavigationAgent3D
 var stuck_time := 0.0
 var recovery_repath_done := false
 var route_no_progress_time := 0.0
@@ -315,20 +313,9 @@ func _ready() -> void:
 	}
 	add_to_group("citizens")
 	_setup_collision()
-	_setup_navigation_agent()
 	_setup_selector()
 	_setup_visuals()
 	generate_toilet_schedule()
-
-func _setup_navigation_agent() -> void:
-	navigation_agent = NavigationAgent3D.new()
-	navigation_agent.path_desired_distance = 0.28
-	navigation_agent.target_desired_distance = 0.18
-	navigation_agent.path_height_offset = 0.0
-	# NPC-vs-NPC avoidance is disabled for now: citizens only collide with the
-	# terrain and buildings, so a crowded cell can never deadlock movement.
-	navigation_agent.avoidance_enabled = false
-	add_child(navigation_agent)
 
 func _setup_collision() -> void:
 	# Bodies collide with terrain and buildings, but not with each other.
@@ -1203,14 +1190,12 @@ func _plan_route(destination: Vector3) -> void:
 	if not result is RouteResult or not (result as RouteResult).reachable:
 		active_route = RouteResult.unreachable()
 		movement_path.clear()
-		navigation_target_position = Vector3.INF
 		route_retry_timer = ROUTE_RETRY_INTERVAL
 		velocity.x = 0.0
 		velocity.z = 0.0
 		return
 	active_route = result as RouteResult
 	movement_path = active_route.waypoints.duplicate()
-	navigation_target_position = Vector3.INF
 	route_retry_timer = 0.0
 
 func _move_directly_to(destination: Vector3, delta: float) -> bool:
@@ -1271,7 +1256,6 @@ func _force_repath() -> void:
 	route_recovery_attempt += 1
 	active_route = null
 	movement_path.clear()
-	navigation_target_position = Vector3.INF
 	route_retry_timer = 0.0
 	recovery_repath_done = true
 
@@ -1284,11 +1268,6 @@ func _reset_waypoint_progress() -> void:
 func _stop_horizontal_movement() -> void:
 	velocity.x = 0.0
 	velocity.z = 0.0
-
-func _has_arrived_at_navigation_target() -> bool:
-	var offset := path_destination - global_position
-	offset.y = 0.0
-	return offset.length() <= maxf(0.45, navigation_agent.target_desired_distance + 0.2)
 
 func _reset_route(destination: Vector3) -> void:
 	path_destination = destination
@@ -1308,14 +1287,6 @@ func _update_route_progress(distance_before: float, distance_after: float, delta
 		return
 	route_no_progress_time = 0.0
 	_force_repath()
-
-func _recover_idle_route(delta: float) -> void:
-	var direction := navigation_target_position - global_position
-	direction.y = 0.0
-	if direction.is_zero_approx():
-		direction = Vector3.FORWARD
-	var distance := direction.length()
-	_update_route_progress(distance, distance, delta, direction.normalized())
 
 func _apply_gravity(delta: float) -> void:
 	if not ground_contact_confirmed:
@@ -1405,7 +1376,6 @@ func finish_construction(site: Node3D) -> void:
 	active_role = ""
 	movement_path.clear()
 	path_destination = Vector3.INF
-	navigation_target_position = Vector3.INF
 	state = State.IDLE
 	begin_role_recheck_cooldown()
 
@@ -2231,7 +2201,6 @@ func _reset_toilet_navigation() -> void:
 	movement_path.clear()
 	active_route = null
 	path_destination = Vector3.INF
-	navigation_target_position = Vector3.INF
 	route_retry_timer = 0.0
 
 
@@ -2256,7 +2225,6 @@ func _reset_assignment_navigation() -> void:
 	movement_path.clear()
 	active_route = null
 	path_destination = Vector3.INF
-	navigation_target_position = Vector3.INF
 	route_retry_timer = 0.0
 
 
