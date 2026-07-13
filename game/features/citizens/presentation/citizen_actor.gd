@@ -2256,3 +2256,186 @@ func _process_using_bush(delta: float) -> void:
 		satisfaction = minf(get_satisfaction_cap(), satisfaction + 10.0)
 		_resume_after_toilet()
 		relief_finished.emit(self)
+
+
+func execute_action(action: StringName, target: Node3D, payload: AIFactSet) -> bool:
+	if is_player_controlled:
+		return false
+	match action:
+		&"sleep":
+			go_home()
+			return state in [State.TO_HOME, State.RESTING]
+		&"eat":
+			var destination: Variant = payload.value(&"target.position", Vector3.INF) if payload != null else Vector3.INF
+			if not (destination is Vector3) or destination == Vector3.INF:
+				return false
+			go_to_canteen(destination)
+			return state in [State.TO_CANTEEN, State.EATING]
+		&"relieve":
+			var relief_position: Variant = payload.value(&"target.position", Vector3.INF) if payload != null else Vector3.INF
+			var relief_kind: Variant = payload.value(&"target.kind", &"") if payload != null else &""
+			if not (relief_position is Vector3) or relief_position == Vector3.INF or not (relief_kind is StringName):
+				return false
+			go_to_relief(relief_position, relief_kind)
+			return state in [State.TO_TOILET, State.USING_TOILET, State.WAITING_FOR_TOILET, State.TO_BUSH, State.USING_BUSH]
+		&"rest":
+			var rest_position: Variant = payload.value(&"target.position", Vector3.INF) if payload != null else Vector3.INF
+			var rest_duration := float(payload.value(&"action.duration", 4.0)) if payload != null else 4.0
+			if not (rest_position is Vector3) or rest_position == Vector3.INF:
+				return false
+			go_to_park(rest_position, 0, rest_duration)
+			return state in [State.TO_PARK, State.RELAXING]
+		&"forestry":
+			var tree_position: Variant = payload.value(&"target.position", Vector3.INF) if payload != null else Vector3.INF
+			var access_position: Variant = payload.value(&"target.access_position", Vector3.INF) if payload != null else Vector3.INF
+			var sawmill_position: Variant = payload.value(&"workplace.position", Vector3.INF) if payload != null else Vector3.INF
+			var warehouse_position: Variant = payload.value(&"warehouse.position", Vector3.INF) if payload != null else Vector3.INF
+			if not (tree_position is Vector3) or tree_position == Vector3.INF or not (access_position is Vector3) or access_position == Vector3.INF or not (sawmill_position is Vector3) or sawmill_position == Vector3.INF or not (warehouse_position is Vector3) or warehouse_position == Vector3.INF:
+				return false
+			assign_work("wood", tree_position, sawmill_position, warehouse_position, false, access_position)
+			return state in [State.TO_TREE, State.CHOPPING, State.TO_SAWMILL]
+		&"farming":
+			var farm_position: Variant = payload.value(&"workplace.position", Vector3.INF) if payload != null else Vector3.INF
+			var farm_warehouse_position: Variant = payload.value(&"warehouse.position", Vector3.INF) if payload != null else Vector3.INF
+			if not (farm_position is Vector3) or farm_position == Vector3.INF or not (farm_warehouse_position is Vector3) or farm_warehouse_position == Vector3.INF:
+				return false
+			assign_work("food", farm_position, farm_position, farm_warehouse_position, true)
+			return state in [State.TO_TREE, State.TO_SAWMILL, State.SAWING, State.WAITING_COURIER]
+		&"construction", &"demolition":
+			if not is_instance_valid(target):
+				return false
+			if action == &"construction":
+				assign_construction(target)
+			else:
+				assign_demolition(target)
+			return state == State.CONSTRUCTING
+		&"gathering":
+			var resource_type: Variant = payload.value(&"resource.type", "") if payload != null else ""
+			var source_position: Variant = payload.value(&"target.position", Vector3.INF) if payload != null else Vector3.INF
+			var access_position: Variant = payload.value(&"target.access_position", Vector3.INF) if payload != null else Vector3.INF
+			var gathering_warehouse_position: Variant = payload.value(&"warehouse.position", Vector3.INF) if payload != null else Vector3.INF
+			if not (resource_type is String) or resource_type.is_empty() or not (source_position is Vector3) or source_position == Vector3.INF or not (access_position is Vector3) or access_position == Vector3.INF or not (gathering_warehouse_position is Vector3) or gathering_warehouse_position == Vector3.INF:
+				return false
+			assign_gathering(resource_type, source_position, gathering_warehouse_position, access_position)
+			return state in [State.TO_GATHER, State.GATHERING, State.TO_WAREHOUSE]
+		&"excavation":
+			if not is_instance_valid(target):
+				return false
+			assign_excavation(target)
+			return state == State.EXCAVATING
+		&"cook", &"teacher", &"seller", &"official", &"craftsman":
+			var service_position: Variant = payload.value(&"workplace.position", Vector3.INF) if payload != null else Vector3.INF
+			if not (service_position is Vector3) or service_position == Vector3.INF:
+				return false
+			match action:
+				&"cook": assign_canteen_work(service_position)
+				&"teacher": assign_teacher_work(service_position)
+				&"seller": assign_seller_work(service_position)
+				&"official": assign_official_work(service_position)
+				&"craftsman": assign_craft_work(service_position, _craft_speed_multiplier_internal())
+			return state in _service_states_for_internal(action)
+		&"factory_work":
+			var factory_role: Variant = payload.value(&"factory.role", &"") if payload != null else &""
+			if not is_instance_valid(target) or not (factory_role is StringName) or factory_role == &"":
+				return false
+			assign_factory_work(target, String(factory_role))
+			return state in [State.TO_FACTORY, State.FACTORY_WORK]
+		&"courier_delivery":
+			var task_id: Variant = payload.value(&"courier.task_id", &"") if payload != null else &""
+			if not (task_id is StringName) or task_id == &"" or simulation == null or simulation.courier_dispatcher == null:
+				return false
+			if not simulation.courier_dispatcher.start_task(self, task_id):
+				return false
+			return has_active_delivery()
+	return false
+
+
+func get_action_status(action: StringName) -> int:
+	match action:
+		&"sleep":
+			if state in [State.TO_HOME, State.RESTING]:
+				return 1 # RUNNING
+		&"eat":
+			if state in [State.TO_CANTEEN, State.EATING]:
+				return 1 # RUNNING
+			if state == State.IDLE:
+				return 2 # SUCCEEDED
+		&"relieve":
+			if state in [State.TO_TOILET, State.USING_TOILET, State.WAITING_FOR_TOILET, State.TO_BUSH, State.USING_BUSH]:
+				return 1 # RUNNING
+			if simulation != null and simulation.citizen_needs_service != null and not simulation.citizen_needs_service.has_toilet_request(ai_id):
+				return 2 # SUCCEEDED
+			if state == State.IDLE:
+				return 2 # SUCCEEDED
+		&"rest":
+			if state in [State.TO_PARK, State.RELAXING]:
+				return 1 # RUNNING
+			if simulation != null and simulation.citizen_needs_service != null and not simulation.citizen_needs_service.has_rest_request(ai_id):
+				return 2 # SUCCEEDED
+			if state == State.IDLE:
+				return 2 # SUCCEEDED
+		&"forestry":
+			if state in [State.TO_TREE, State.CHOPPING, State.TO_SAWMILL]:
+				return 1 # RUNNING
+			if state == State.IDLE:
+				return 2 # SUCCEEDED
+		&"farming":
+			if state in [State.TO_TREE, State.TO_SAWMILL, State.SAWING, State.WAITING_COURIER]:
+				return 1 # RUNNING
+			if state == State.IDLE:
+				return 2 # SUCCEEDED
+		&"construction", &"demolition":
+			if state == State.CONSTRUCTING and active_role == str(action):
+				return 1 # RUNNING
+			if state == State.IDLE:
+				return 2 # SUCCEEDED
+		&"gathering":
+			if state in [State.TO_GATHER, State.GATHERING, State.TO_WAREHOUSE]:
+				return 1 # RUNNING
+			if state == State.IDLE:
+				return 2 # SUCCEEDED
+		&"excavation":
+			if state in [State.EXCAVATING, State.WAITING_COURIER]:
+				return 1 # RUNNING
+			if state == State.IDLE:
+				return 2 # SUCCEEDED
+		&"cook", &"teacher", &"seller", &"official", &"craftsman":
+			if state in _service_states_for_internal(action):
+				return 1 # RUNNING
+			if state == State.IDLE:
+				return 2 # SUCCEEDED
+		&"factory_work":
+			if state in [State.TO_FACTORY, State.FACTORY_WORK]:
+				return 1 # RUNNING
+			if state == State.IDLE:
+				return 2 # SUCCEEDED
+		&"courier_delivery":
+			if has_active_delivery():
+				return 1 # RUNNING
+			if state == State.IDLE:
+				return 2 # SUCCEEDED
+	return 3 # FAILED
+
+
+func cancel_current_action() -> void:
+	if state in [State.TO_HOME, State.RESTING, State.TO_CANTEEN, State.EATING, State.TO_TOILET, State.USING_TOILET, State.WAITING_FOR_TOILET, State.TO_BUSH, State.USING_BUSH, State.TO_PARK, State.RELAXING, State.TO_TREE, State.CHOPPING, State.TO_SAWMILL, State.SAWING, State.WAITING_COURIER, State.CONSTRUCTING, State.TO_GATHER, State.GATHERING, State.TO_WAREHOUSE, State.EXCAVATING, State.TO_CANTEEN_WORK, State.CANTEEN_WORK, State.TO_SCHOOL_WORK, State.SCHOOL_WORK, State.TO_MARKET_WORK, State.MARKET_WORK, State.TO_OFFICIAL_WORK, State.OFFICIAL_WORK, State.TO_CRAFT_WORK, State.CRAFT_WORK, State.TO_FACTORY, State.FACTORY_WORK, State.COURIER_TO_WORKER, State.COURIER_TO_WAREHOUSE, State.COURIER_TO_SAWMILL, State.TO_FOOD_PICKUP, State.TO_CANTEEN_DELIVERY, State.TO_CONSTRUCTION_PICKUP, State.TO_CONSTRUCTION_SITE, State.TO_TRADE_PICKUP, State.TO_TRADE_DESTINATION]:
+		idle()
+
+
+func _craft_speed_multiplier_internal() -> float:
+	if not is_instance_valid(employment_workplace):
+		return 1.0
+	match str(employment_workplace.get_meta("building_type", "")):
+		"craft_tent_lvl2": return 1.3
+		"craft_tent_lvl3": return 1.7
+	return 1.0
+
+
+func _service_states_for_internal(action: StringName) -> Array:
+	match action:
+		&"cook": return [State.TO_CANTEEN_WORK, State.CANTEEN_WORK]
+		&"teacher": return [State.TO_SCHOOL_WORK, State.SCHOOL_WORK]
+		&"seller": return [State.TO_MARKET_WORK, State.MARKET_WORK]
+		&"official": return [State.TO_OFFICIAL_WORK, State.OFFICIAL_WORK]
+		&"craftsman": return [State.TO_CRAFT_WORK, State.CRAFT_WORK]
+	return []

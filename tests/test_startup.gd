@@ -148,6 +148,7 @@ func _init() -> void:
 	var second_in_queue: Citizen = simulation.citizens[3]
 	first_in_queue.global_position = civic_centre.global_position
 	second_in_queue.global_position = civic_centre.global_position
+	simulation.citizen_ai.process_mode = Node.PROCESS_MODE_DISABLED
 	first_in_queue.begin_employment_processing(simulation._employment_center_position())
 	second_in_queue.begin_employment_processing(simulation._employment_center_position())
 	assert(simulation._can_start_registration(first_in_queue))
@@ -156,6 +157,7 @@ func _init() -> void:
 	assert(not simulation._can_start_registration(second_in_queue))
 	field_officer.global_position += Vector3(10.0, 0.0, 0.0)
 	assert(not simulation._can_start_registration(first_in_queue))
+	simulation.citizen_ai.process_mode = Node.PROCESS_MODE_INHERIT
 	# R always enters the hero view; direct management of another citizen is explicit.
 	simulation._toggle_hero_view()
 	assert(simulation.is_first_person)
