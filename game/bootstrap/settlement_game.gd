@@ -25,8 +25,8 @@ const FactoryWorkOrderProviderScript = preload("res://game/features/decision/app
 const CourierDeliveryGoalScript = preload("res://game/features/decision/domain/goals/courier_delivery_goal.gd")
 const CourierDeliveryOrderProviderScript = preload("res://game/features/decision/application/courier_delivery_order_provider.gd")
 const SettlementCitizenActuatorScript = preload("res://game/features/decision/application/settlement_citizen_actuator.gd")
-const ShadowCitizenActuatorScript = preload("res://game/features/decision/application/shadow_citizen_actuator.gd")
 const RegisterGoalScript = preload("res://game/features/decision/domain/goals/register_goal.gd")
+const ReserveWorkGoalScript = preload("res://game/features/decision/domain/goals/reserve_work_goal.gd")
 const WorkforceOrderProviderScript = preload("res://game/features/decision/application/workforce_order_provider.gd")
 
 
@@ -309,9 +309,7 @@ var building_status_indicators: Array[Label3D] = []
 var building_status_update_time := 0.0
 var workplace_priority_counter := 0
 var manage_citizen_button: Button
-var workforce: WorkforceCoordinator
 var citizen_ai: CitizenAISystem
-@export var use_native_ai := true
 var citizen_needs_service: CitizenNeedsService
 ## Monotonic source of stable citizen AI identity. Persist it alongside the roster
 ## once save/load is introduced so reloaded games issue non-colliding ids.
@@ -328,10 +326,6 @@ var courier_dispatcher: RefCounted
 
 
 func _ready() -> void:
-	if not use_native_ai:
-		workforce = WorkforceCoordinator.new()
-		workforce.configure(self)
-		add_child(workforce)
 	citizen_ai = CitizenAISystem.new()
 	citizen_ai.name = "CitizenAI"
 	add_child(citizen_ai)
@@ -382,7 +376,7 @@ func _ready() -> void:
 	_create_citizens()
 	if not citizen_ai.configure(
 		SettlementAIWorldFacade.new(self),
-		[SleepGoalScript.new(), MealGoalScript.new(), ToiletGoalScript.new(), RestGoalScript.new(), RegisterGoalScript.new(), ForestryGoalScript.new(), FarmingGoalScript.new(), ConstructionGoalScript.new(), GatheringGoalScript.new(), ExcavationGoalScript.new(), ServiceWorkGoalScript.new(), FactoryWorkGoalScript.new(), CourierDeliveryGoalScript.new()],
+		[SleepGoalScript.new(), MealGoalScript.new(), ToiletGoalScript.new(), RestGoalScript.new(), RegisterGoalScript.new(), ReserveWorkGoalScript.new(), ForestryGoalScript.new(), FarmingGoalScript.new(), ConstructionGoalScript.new(), GatheringGoalScript.new(), ExcavationGoalScript.new(), ServiceWorkGoalScript.new(), FactoryWorkGoalScript.new(), CourierDeliveryGoalScript.new()],
 		[WorkforceOrderProviderScript.new(), ForestryOrderProviderScript.new(), FarmingOrderProviderScript.new(), ConstructionOrderProviderScript.new(), GatheringOrderProviderScript.new(), ExcavationOrderProviderScript.new(), ServiceWorkOrderProviderScript.new(), FactoryWorkOrderProviderScript.new(), CourierDeliveryOrderProviderScript.new()]
 	):
 		push_error("Native citizen AI failed to capture its initial world snapshot")
@@ -443,19 +437,13 @@ func _update_workers() -> void:
 		for citizen in citizens:
 			if is_instance_valid(citizen):
 				citizen.overtime_mode = false
-	if not use_native_ai:
-		workforce.update_workers()
 	_check_unstaffed_employment_center()
 	_refresh_labor_authority_indicator()
 
 func _work_role_for(citizen: Citizen) -> String:
-	if workforce != null:
-		return workforce.work_role_for(citizen)
 	return citizen.permanent_role if not citizen.permanent_role.is_empty() else citizen.freelance_assignment
 
 func _factory_for_role(role: String) -> Node3D:
-	if workforce != null:
-		return workforce.factory_for_role(role)
 	return _employer_for_role(role)
 
 
@@ -2068,7 +2056,6 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	citizen.simulation = self
 	citizen.setup_specialization(primary_specialization if not primary_specialization.is_empty() else "unassigned")
 	citizen.setup_navigation(_find_path_around_houses, _get_nearest_delivery_position, _resolve_building_queue_position)
-	citizen.setup_scheduler(_try_resume_work, _send_citizen_to_leisure)
 	citizen.setup_registration_service(_can_start_registration, _registration_duration)
 	citizen.resource_delivered.connect(_on_resource_delivered)
 	citizen.construction_material_delivered.connect(_on_construction_material_delivered)
@@ -2090,10 +2077,7 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	citizens.append(citizen)
 	citizen.ai_id = _next_ai_citizen_id
 	_next_ai_citizen_id += 1
-	if use_native_ai:
-		citizen_ai.register_citizen(citizen.ai_id, SettlementCitizenActuatorScript.new(citizen, _ai_target_for_key))
-	else:
-		citizen_ai.register_citizen(citizen.ai_id, ShadowCitizenActuatorScript.new(citizen.ai_id))
+	citizen_ai.register_citizen(citizen.ai_id, SettlementCitizenActuatorScript.new(citizen, _ai_target_for_key))
 	citizen.tree_exiting.connect(_on_ai_citizen_exiting.bind(citizen.ai_id), CONNECT_ONE_SHOT)
 	if citizens.size() > POPULATION:
 		food += random.randi_range(2, 5)
@@ -4787,11 +4771,6 @@ func _send_citizen_to_leisure(citizen: Citizen, minimum_hours := 0) -> bool:
 	# through the day (the "skip night with full storage" freeze). Return false so
 	# the waiting window drops them to IDLE (with its indicator) and the poll keeps
 	# checking. Night-time sleep is handled separately by the native sleep goal.
-	return false
-
-func _try_resume_work(citizen: Citizen) -> bool:
-	# Work acquisition belongs to CitizenAISystem. This compatibility callback
-	# must not schedule a second FSM command from the presentation actor.
 	return false
 
 func _grant_debug_resources() -> void:

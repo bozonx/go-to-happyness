@@ -152,14 +152,6 @@ var workplace_position := Vector3.ZERO
 var warehouse_position := Vector3.ZERO
 var task_timer := CitizenTaskState.new()
 var wait_recheck := 0.0
-# Set only after the visible no-work window has elapsed. The workforce
-# coordinator consumes this marker by starting unemployment registration.
-var no_work_wait_complete := false
-# Injected by the simulation: work_scheduler(Citizen) -> bool tries to place the
-# citizen on a job and reports success; leisure_scheduler(Citizen) -> bool routes
-# them to a rest spot (park/pond/home) and reports whether somewhere was found.
-var work_scheduler := Callable()
-var leisure_scheduler := Callable()
 	# Injected: registration_staff_checker(Citizen) -> bool reports whether this
 	# citizen is currently first in a staffed employment-centre queue;
 	# registration_duration_resolver()
@@ -180,6 +172,7 @@ var specialization := "unassigned"
 var manual_role: String:
 	get: return freelance_assignment
 var active_role := ""
+var reserve_action: StringName = &""
 var employment_state := EmploymentState.UNREGISTERED
 var freelance_assignment := ""
 var pending_freelance_assignment := ""
@@ -960,21 +953,12 @@ func _process_relaxing(delta: float) -> void:
 		leisure_finished.emit(self)
 
 func _process_waiting(delta: float) -> void:
-	# While waiting, keep probing for work so the citizen jumps back the moment a
-	# job frees up. The recheck is throttled so a genuinely idle settlement does
-	# not thrash the scheduler every frame.
+	# Native AI owns work acquisition. Waiting is only a presentation state while
+	# the next snapshot/director cycle publishes a new order.
 	wait_recheck -= delta
-	if wait_recheck <= 0.0:
-		wait_recheck = WAIT_RECHECK_INTERVAL
-		if work_scheduler.is_valid() and bool(work_scheduler.call(self)):
-			return
 	_process_idle_wander(delta)
 	if task_timer.advance(delta):
-		# The full window elapsed without a concrete task. The coordinator now
-		# routes the citizen to the employment centre instead of leaving them in an
-		# endless leisure/idle loop.
 		idle()
-		no_work_wait_complete = true
 
 
 func _process_idle_wander(delta: float) -> void:
@@ -1680,10 +1664,6 @@ func setup_navigation(next_pathfinder: Callable, next_delivery_position_resolver
 	delivery_position_resolver = next_delivery_position_resolver
 	queue_position_resolver = next_queue_position_resolver
 
-func setup_scheduler(next_work_scheduler: Callable, next_leisure_scheduler: Callable) -> void:
-	work_scheduler = next_work_scheduler
-	leisure_scheduler = next_leisure_scheduler
-
 func setup_registration_service(staff_checker: Callable, duration_resolver: Callable) -> void:
 	registration_staff_checker = staff_checker
 	registration_duration_resolver = duration_resolver
@@ -1819,7 +1799,6 @@ func begin_waiting() -> void:
 		return
 	_reset_assignment_navigation()
 	state = State.WAITING
-	no_work_wait_complete = false
 	active_role = ""
 	construction_site = null
 	assigned_dig_site = null
@@ -2354,6 +2333,15 @@ func execute_action(action: StringName, target: Node3D, payload: AIFactSet) -> b
 				return false
 			begin_employment_processing(center_position, pending_role, target)
 			return state in [State.TO_EMPLOYMENT_CENTER, State.EMPLOYMENT_PROCESSING]
+		&"reserve_work":
+			var delegated_action: Variant = payload.value(&"reserve.action", &"") if payload != null else &""
+			if not (delegated_action is StringName) or delegated_action == &"" or delegated_action == &"reserve_work":
+				return false
+			reserve_action = delegated_action
+			var started := execute_action(reserve_action, target, payload)
+			if not started:
+				reserve_action = &""
+			return started
 	return false
 
 
@@ -2426,10 +2414,18 @@ func get_action_status(action: StringName) -> int:
 				return 1 # RUNNING
 			if employment_state == EmploymentState.EMPLOYED or state == State.IDLE:
 				return 2 # SUCCEEDED
+		&"reserve_work":
+			if reserve_action == &"":
+				return 3 # FAILED
+			var reserve_status := get_action_status(reserve_action)
+			if reserve_status != 1:
+				reserve_action = &""
+			return reserve_status
 	return 3 # FAILED
 
 
 func cancel_current_action() -> void:
+	reserve_action = &""
 	if is_registering():
 		pending_employment_role = ""
 		pending_employment_workplace = null

@@ -19,12 +19,22 @@ func capture(sequence: int) -> WorldSnapshot:
 	if simulation.courier_dispatcher != null and simulation._is_work_time():
 		for task: CourierTask in simulation.courier_dispatcher.available_tasks():
 			courier_tasks.append({&"id": task.id, &"priority": task.priority, &"pickup": task.pickup})
+	var workforce_world := _world_data()
 	var citizens_by_id: Dictionary = {}
 	for actor: Citizen in simulation.citizens:
 		if not is_instance_valid(actor) or actor.ai_id == 0:
 			continue
 		var citizen_id := actor.ai_id
 		var can_start_personal_need := not actor.has_active_arrival_task() and not actor.has_active_delivery()
+		var worker_data := _worker_data(actor)
+		var reserve_in_progress := actor.is_reserve() and actor.reserve_action != &""
+		var reserve_eligible := actor.is_reserve() and not actor.is_courier() and not actor.is_player_controlled
+		var reserve_commands: Dictionary = {}
+		if reserve_eligible and not reserve_in_progress and actor.state in [Citizen.State.IDLE, Citizen.State.RESTING, Citizen.State.WAITING]:
+			for reserve_role in [&"forestry", &"farming", &"construction", &"gather_branches", &"gather_grass", &"gather_food", &"gather_dew", &"gather_water", &"cook", &"teacher", &"seller", &"craftsman", &"factory_worker", &"engineer"]:
+				var command := _reserve_command_for(actor, String(reserve_role))
+				if not command.is_empty():
+					reserve_commands[reserve_role] = command
 		var needs_service: CitizenNeedsService = simulation.citizen_needs_service
 		var rest_request := needs_service.rest_request(citizen_id) if needs_service != null else {}
 		var relief_candidates: Array[Dictionary] = []
@@ -211,14 +221,17 @@ func capture(sequence: int) -> WorldSnapshot:
 				&"work.courier.worker": courier_worker,
 				&"work.courier.can_start": courier_can_start,
 				&"work.courier.tasks": courier_tasks,
-				&"workforce.worker_data": _worker_data(actor),
+				&"workforce.worker_data": worker_data,
 				&"workforce.pending_workplace_key": _workplace_target_key(actor.pending_employment_workplace),
+				&"workforce.reserve.eligible": reserve_eligible,
+				&"workforce.reserve.in_progress": reserve_in_progress,
+				&"workforce.reserve.commands": reserve_commands,
 			})
 		)
 	var settlement_facts := AIFactSet.new({
 		&"population": citizens_by_id.size(),
 		&"era": simulation.settlement.era,
-		&"workforce.world_data": _world_data(),
+		&"workforce.world_data": workforce_world,
 		&"workforce.employment_center_position": simulation._employment_center_position(),
 		&"workforce.role_employers": _role_employers(),
 	})
@@ -296,6 +309,150 @@ func _gathering_candidates_for(actor: Citizen) -> Array[Dictionary]:
 			&"warehouse_position": simulation._get_nearest_delivery_position(actor.global_position),
 		})
 	return candidates
+
+
+func _reserve_command_for(actor: Citizen, role: String) -> Dictionary:
+	var warehouse: Vector3 = simulation._get_nearest_delivery_position(actor.global_position)
+	if warehouse == Vector3.INF:
+		return {}
+	match role:
+		"forestry":
+			if simulation.sawmill_positions.is_empty():
+				return {}
+			var tree: Vector3 = _nearest_tree(actor, false)
+			var access: Vector3 = simulation._resource_access_position(actor.global_position, tree)
+			if tree == Vector3.INF or access == Vector3.INF:
+				return {}
+			return {
+				&"reserve.action": &"forestry", &"target.position": tree,
+				&"target.access_position": access,
+				&"workplace.position": simulation.sawmill_positions[0],
+				&"warehouse.position": warehouse,
+			}
+		"farming":
+			if simulation.farm_positions.is_empty():
+				return {}
+			return {
+				&"reserve.action": &"farming", &"target.position": simulation.farm_positions[0],
+				&"workplace.position": simulation.farm_positions[0],
+				&"warehouse.position": warehouse,
+			}
+		"construction":
+			if not simulation.demolition_sites.is_empty():
+				var demolition: DemolitionSite = simulation.demolition_sites[(actor.ai_id - 1) % simulation.demolition_sites.size()]
+				if is_instance_valid(demolition.building):
+					return {&"reserve.action": &"demolition", &"target.position": demolition.building.global_position, &"target.key": _target_key(&"demolition", demolition.building.global_position)}
+			var site: ConstructionSite = simulation._preferred_construction_site()
+			if site != null and site.is_supplied() and is_instance_valid(site.node):
+				return {&"reserve.action": &"construction", &"target.position": site.node.global_position, &"target.key": _target_key(&"construction", site.node.global_position)}
+		"gather_branches", "gather_grass", "gather_food", "gather_dew", "gather_water":
+			return _reserve_gathering_command(actor, role, warehouse)
+		"cook", "teacher", "seller", "craftsman":
+			var workplace: Node3D = simulation._employer_for_role(role)
+			if is_instance_valid(workplace):
+				return {&"reserve.action": StringName(role), &"target.position": workplace.get_meta("service_position", workplace.global_position), &"workplace.position": workplace.get_meta("service_position", workplace.global_position)}
+		"factory_worker", "engineer":
+			var factory: Node3D = _factory_for_role_internal(role)
+			if is_instance_valid(factory):
+				return {&"reserve.action": &"factory_work", &"target.position": factory.global_position, &"target.key": _target_key(&"factory", factory.global_position), &"factory.role": &"factory_work" if role == "factory_worker" else &"engineering"}
+	return {}
+
+
+func _reserve_gathering_command(actor: Citizen, role: String, warehouse: Vector3) -> Dictionary:
+	var resource_type := ""
+	var source := Vector3.INF
+	var access := Vector3.INF
+	match role:
+		"gather_branches":
+			resource_type = "branches"
+			source = _nearest_tree(actor, true)
+			access = simulation._resource_access_position(actor.global_position, source)
+		"gather_grass":
+			resource_type = "grass"
+			source = _nearest_grass(actor)
+			access = source
+		"gather_food":
+			resource_type = "food"
+			source = _forage_position(actor)
+			access = source
+		"gather_dew":
+			resource_type = "water"
+			source = _dew_collector_position()
+			access = source
+		"gather_water":
+			resource_type = "water"
+			if not simulation.pond_positions.is_empty():
+				source = simulation._pond_access_position(actor.global_position, simulation.pond_positions[0])
+				access = source
+	if resource_type.is_empty() or source == Vector3.INF or access == Vector3.INF:
+		return {}
+	return {
+		&"reserve.action": &"gathering", &"target.position": source,
+		&"resource.type": resource_type,
+		&"target.access_position": access,
+		&"warehouse.position": warehouse,
+	}
+
+
+func _nearest_tree(actor: Citizen, branches_only: bool) -> Vector3:
+	var best := Vector3.INF
+	var best_distance := INF
+	for position: Vector3 in simulation.tree_positions:
+		var cell: Vector2i = simulation._cell_from_position(position)
+		if simulation.tree_reservations.has(cell) and simulation.tree_reservations[cell] != actor:
+			continue
+		var tree := simulation.tree_nodes.get(cell) as Node3D
+		if not is_instance_valid(tree) or bool(tree.get_meta("felled", false)):
+			continue
+		if branches_only and int(tree.get_meta("remaining_branches", 0)) <= 0:
+			continue
+		var distance := actor.global_position.distance_squared_to(position)
+		if distance < best_distance:
+			best = position
+			best_distance = distance
+	return best
+
+
+func _nearest_grass(actor: Citizen) -> Vector3:
+	var best := Vector3.INF
+	var best_distance := INF
+	for cell: Vector2i in simulation.grass_sources:
+		if simulation.grass_reservations.has(cell):
+			continue
+		var source: Dictionary = simulation.grass_sources[cell]
+		var node := source.get("node") as Node3D
+		if int(source.get("remaining", 0)) <= 0 or not is_instance_valid(node):
+			continue
+		var distance := actor.global_position.distance_squared_to(node.global_position)
+		if distance < best_distance:
+			best = node.global_position
+			best_distance = distance
+	return best
+
+
+func _forage_position(actor: Citizen) -> Vector3:
+	if simulation.forager_positions.is_empty():
+		return Vector3.INF
+	var hut: Vector3 = simulation.forager_positions[0]
+	for position: Vector3 in simulation.forager_positions:
+		if actor.global_position.distance_squared_to(position) < actor.global_position.distance_squared_to(hut):
+			hut = position
+	var angle := float(actor.ai_id % 8) * TAU / 8.0
+	var spot := hut + Vector3(cos(angle) * 4.0, 0.0, sin(angle) * 4.0)
+	var height: float = simulation._terrain_height_at(spot.x, spot.z, 0.0)
+	if not is_nan(height):
+		spot.y = height
+	return spot
+
+
+func _dew_collector_position() -> Vector3:
+	for collector: Dictionary in simulation.water_collectors:
+		if int(collector.get("stored", 0)) <= 0:
+			continue
+		var node := collector.get("node") as Node3D
+		if is_instance_valid(node):
+			return node.get_meta("service_position", node.global_position)
+	return Vector3.INF
 
 
 func _worker_data(actor: Citizen) -> Dictionary:

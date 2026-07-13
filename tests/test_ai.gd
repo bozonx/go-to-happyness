@@ -21,6 +21,8 @@ const FactoryWorkOrderProviderScript = preload("res://game/features/decision/app
 const CourierDeliveryGoalScript = preload("res://game/features/decision/domain/goals/courier_delivery_goal.gd")
 const CourierDeliveryOrderProviderScript = preload("res://game/features/decision/application/courier_delivery_order_provider.gd")
 const SettlementCitizenActuatorScript = preload("res://game/features/decision/application/settlement_citizen_actuator.gd")
+const ReserveWorkGoalScript = preload("res://game/features/decision/domain/goals/reserve_work_goal.gd")
+const WorkforceOrderProviderScript = preload("res://game/features/decision/application/workforce_order_provider.gd")
 
 
 class ScriptedStep extends BehaviorStep:
@@ -122,7 +124,7 @@ class FakeActuator extends CitizenActuator:
 		_payload: AIFactSet = null
 	) -> bool:
 		action_start_count += 1
-		return action in [&"sleep", &"eat", &"relieve", &"rest", &"forestry", &"farming", &"construction", &"demolition", &"gathering", &"excavation", &"cook", &"teacher", &"seller", &"official", &"craftsman", &"factory_work", &"courier_delivery"]
+		return action in [&"sleep", &"eat", &"relieve", &"rest", &"register", &"reserve_work", &"forestry", &"farming", &"construction", &"demolition", &"gathering", &"excavation", &"cook", &"teacher", &"seller", &"official", &"craftsman", &"factory_work", &"courier_delivery"]
 
 	func action_status() -> ActionStatus:
 		return next_action_status
@@ -168,6 +170,7 @@ func _init() -> void:
 	_test_native_meal_goal()
 	_test_native_toilet_goal()
 	_test_native_rest_goal()
+	_test_reserve_work_provider_keeps_assignment()
 	_test_forestry_provider_assigns_unique_stable_targets()
 	_test_native_forestry_goal()
 	_test_farming_provider_keeps_active_cycle()
@@ -989,8 +992,51 @@ func _test_runtime_think_budget_is_fair() -> void:
 	system.free()
 
 
+func _test_reserve_work_provider_keeps_assignment() -> void:
+	var provider := WorkforceOrderProviderScript.new()
+	var command := {
+		&"reserve.action": &"gathering",
+		&"target.position": Vector3(4.0, 0.0, 0.0),
+		&"resource.type": "branches",
+		&"target.access_position": Vector3(3.5, 0.0, 0.0),
+		&"warehouse.position": Vector3(8.0, 0.0, 0.0),
+	}
+	var citizen := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
+		&"workforce.worker_data": {"workforce_status": "active", "permanent_role": "gather_branches"},
+		&"workforce.reserve.eligible": true,
+		&"workforce.reserve.in_progress": false,
+		&"workforce.reserve.commands": {&"gather_branches": command},
+	}))
+	var settlement := AIFactSet.new({&"workforce.world_data": {"trees": 1, "population": 1, "assigned_roles": {}}})
+	var snapshot := WorldSnapshot.new(1, 0.0, 0.0, settlement, {1: citizen})
+	var orders := provider.collect_orders(snapshot)
+	assert(orders.size() == 1)
+	var order: CitizenOrder = orders[0]
+	assert(order.kind == &"reserve_work")
+	assert(order.payload.value(&"reserve.action") == &"gathering")
+	assert(order.target_position == Vector3(4.0, 0.0, 0.0))
+
+	var running := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
+		&"workforce.worker_data": {"workforce_status": "active", "permanent_role": "gather_branches"},
+		&"workforce.reserve.eligible": true,
+		&"workforce.reserve.in_progress": true,
+		&"workforce.reserve.commands": {},
+	}))
+	var continued := provider.collect_orders(WorldSnapshot.new(2, 1.0, 0.0, settlement, {1: running}))
+	assert(continued.size() == 1)
+	assert(continued[0].payload.to_dictionary() == order.payload.to_dictionary())
+
+	var goal := ReserveWorkGoalScript.new()
+	var actuator := FakeActuator.new(1)
+	var task := goal.build_task(snapshot, citizen, order, AIBlackboard.new())
+	var context := BehaviorContext.new(actuator, AIBlackboard.new())
+	context.refresh(snapshot, order)
+	assert(task.root.run(context, 0.1) == BehaviorStep.Status.RUNNING)
+	assert(actuator.action_start_count == 1)
+
+
 func _context(order: CitizenOrder = null) -> BehaviorContext:
-	var actuator := ShadowCitizenActuator.new(1)
+	var actuator := FakeActuator.new(1)
 	var context := BehaviorContext.new(actuator, AIBlackboard.new())
 	context.refresh(_snapshot(0.0, CitizenSnapshot.new(1)), order)
 	return context
