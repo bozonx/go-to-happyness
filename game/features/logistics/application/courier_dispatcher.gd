@@ -19,6 +19,7 @@ func dispatch() -> void:
 	if simulation == null or not simulation._is_work_time():
 		return
 	simulation._publish_courier_tasks(self)
+	_publish_manual_worker_tasks()
 	_cleanup_invalid_tasks()
 	var available := _available_couriers()
 	var ordered := tasks.values()
@@ -30,12 +31,53 @@ func dispatch() -> void:
 	for task: CourierTask in ordered:
 		if task.is_assigned() or available.is_empty():
 			continue
-		var courier := _nearest_courier(available, task.pickup)
+		var courier := _requested_courier(task, available)
 		if courier == null:
 			continue
 		if simulation._start_courier_task(courier, task):
 			task.assigned_courier_id = courier.get_instance_id()
 			available.erase(courier)
+
+
+func is_manually_targeted(worker: Citizen) -> bool:
+	if simulation == null or not is_instance_valid(worker):
+		return false
+	for courier in simulation.citizens:
+		if is_instance_valid(courier) and courier.is_reserve() and courier.is_courier() and courier.courier_worker == worker:
+			return true
+	return false
+
+
+func _publish_manual_worker_tasks() -> void:
+	if simulation.warehouse_positions.is_empty():
+		return
+	for courier in simulation.citizens:
+		if not is_instance_valid(courier) or not courier.is_reserve() or not courier.is_courier():
+			continue
+		var worker: Citizen = courier.courier_worker
+		if not is_instance_valid(worker):
+			continue
+		if not worker.has_pending_resource():
+			courier.courier_worker = null
+			continue
+		publish(
+			StringName("manual_worker_%d" % courier.get_instance_id()),
+			CourierTask.Kind.WORKER_PICKUP,
+			110,
+			worker.global_position,
+			simulation.warehouse_positions[0],
+			{"worker": worker, "courier_id": courier.get_instance_id()}
+		)
+
+
+func _requested_courier(task: CourierTask, available: Array[Citizen]) -> Citizen:
+	var requested_id := int(task.payload.get("courier_id", -1))
+	if requested_id >= 0:
+		for courier in available:
+			if courier.get_instance_id() == requested_id:
+				return courier
+		return null
+	return _nearest_courier(available, task.pickup)
 
 
 func publish(id: StringName, kind: CourierTask.Kind, priority: int, pickup: Vector3, dropoff: Vector3, payload := {}) -> void:

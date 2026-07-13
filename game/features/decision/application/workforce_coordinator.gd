@@ -69,6 +69,15 @@ func update_workers() -> void:
 		# generic work scorer while they are waiting for an order.
 		if citizen.is_courier():
 			continue
+		# An officer fills open, fixed workplaces separately from the flexible
+		# reserve scorer. The resulting worker remains attached to that building.
+		if citizen.freelance_assignment.is_empty() and _officer_available() and citizen.state in [Citizen.State.IDLE, Citizen.State.RESTING]:
+			var vacancy := WorkforcePolicy.permanent_vacancy_for(_worker_data(citizen), _world_data())
+			var workplace: Node3D = simulation._employer_for_role(vacancy)
+			var centre: Vector3 = simulation._employment_center_position()
+			if not vacancy.is_empty() and is_instance_valid(workplace) and centre != Vector3.INF:
+				citizen.begin_employment_processing(centre, vacancy, workplace)
+				continue
 		if not citizen.can_recheck_automatic_role():
 			continue
 		if can_assign_work(citizen):

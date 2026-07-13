@@ -40,17 +40,16 @@ func _init() -> void:
 	simulation.add_child(civic_centre)
 	simulation.campfire_node = civic_centre
 
-	# A free resident can be assigned as a permanent branch gatherer at the yard.
-	var hand: Citizen = null
+	# The workforce menu's Assign action must create a permanent yard contract;
+	# this is the same handler connected to the visible UI button.
+	simulation._assign_unemployed_worker("gather_branches")
+	var pending_yard_worker: Citizen = null
 	for citizen in simulation.citizens:
-		if not citizen.is_hero and not citizen.is_player_controlled:
-			hand = citizen
+		if citizen.pending_employment_role == "gather_branches":
+			pending_yard_worker = citizen
 			break
-	assert(hand != null)
-	hand.employment_state = Citizen.EmploymentState.FREELANCE
-	simulation._set_manual_specialist_employment(hand, "gather_branches")
-	assert(hand.pending_employment_role == "gather_branches")
-	assert(hand.pending_employment_workplace == yard)
+	assert(pending_yard_worker != null)
+	assert(pending_yard_worker.pending_employment_workplace == yard)
 
 	root.remove_child(simulation)
 	simulation.free()

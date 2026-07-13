@@ -149,6 +149,11 @@ func _init() -> void:
 	simulation.game_minutes = 9.0 * 60.0
 	field_officer.state = Citizen.State.OFFICIAL_WORK
 	assert(simulation._registration_official() == field_officer)
+	# Delegating the officer role blocks every labor command, including overtime.
+	simulation.selected_building = civic_centre
+	field_officer.overtime_mode = false
+	simulation._call_worker_overtime()
+	assert(not field_officer.overtime_mode)
 	var first_in_queue: Citizen = simulation.citizens[2]
 	var second_in_queue: Citizen = simulation.citizens[3]
 	first_in_queue.global_position = civic_centre.global_position

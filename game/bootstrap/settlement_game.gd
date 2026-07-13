@@ -833,7 +833,7 @@ func _publish_courier_tasks(dispatcher: RefCounted) -> void:
 		if int(sawmills.stock_at(position, runtime_seconds).boards) > 0:
 			dispatcher.publish(StringName("sawmill_%s" % _cell_from_position(position)), CourierTask.Kind.SAWMILL_PICKUP, 50, position, warehouse_positions[0], {"position": position})
 	for worker in citizens:
-		if worker != null and worker.has_pending_resource():
+		if worker != null and worker.has_pending_resource() and not courier_dispatcher.is_manually_targeted(worker):
 			dispatcher.publish(StringName("worker_%d" % worker.get_instance_id()), CourierTask.Kind.WORKER_PICKUP, 45, worker.global_position, warehouse_positions[0], {"worker": worker})
 	var site := _preferred_construction_site()
 	if site != null:
@@ -3917,7 +3917,11 @@ func _select_citizen(clicked_citizen: Citizen) -> void:
 	if clicked_citizen == null:
 		return
 	if selected_builder != null and selected_builder.is_courier() and clicked_citizen != selected_builder:
+		if not _player_can_command_labor():
+			_show_labor_command_blocked()
+			return
 		selected_builder.courier_worker = clicked_citizen
+		_request_courier_dispatch()
 		_update_interface("Courier assigned to this worker. Click another worker to reassign.")
 		return
 	selected_builder = clicked_citizen
@@ -5038,11 +5042,11 @@ func _refresh_campfire_occupancy_button() -> void:
 
 
 func _workforce_roles() -> Array[String]:
-	return ["construction", "forestry", "farming", "excavation", "gather_food", "cook", "teacher", "seller", "official", "factory_worker", "engineer", "craftsman"]
+	return ["construction", "forestry", "farming", "excavation", "gather_branches", "gather_food", "cook", "teacher", "seller", "official", "factory_worker", "engineer", "craftsman"]
 
 
 func _freelance_roles() -> Array[String]:
-	return ["courier", "construction", "gather_branches", "gather_grass", "gather_dew", "gather_water"]
+	return ["courier", "construction", "gather_grass", "gather_dew", "gather_water"]
 
 
 func _workforce_role_label(role: String) -> String:
@@ -5063,6 +5067,7 @@ func _workforce_role_limit(role: String) -> int:
 		"construction": return _builder_job_capacity() if settlement.era >= SettlementState.Era.STONE else -1
 		"forestry": return sawmill_positions.size()
 		"farming": return farm_positions.size()
+		"gather_branches": return _available_employer_capacity("gather_branches")
 		"gather_food": return forager_positions.size()
 		"courier": return warehouse_positions.size()
 		"cook": return 1 if is_instance_valid(canteen) else 0
@@ -5309,7 +5314,10 @@ func _assign_unemployed_worker(role: String) -> void:
 				best_score = score
 	if best != null:
 		selected_builder = best
-		_set_manual_role(role)
+		if role == "gather_branches":
+			_set_manual_specialist_employment(best, role)
+		else:
+			_set_manual_role(role)
 		_refresh_workforce_menu()
 		_refresh_campfire_occupancy_button()
 
@@ -5470,6 +5478,8 @@ func _refresh_campfire_worker_controls() -> void:
 	
 	if campfire_overtime_button != null:
 		campfire_overtime_button.visible = is_center and not _is_work_time() and officer != null
+		campfire_overtime_button.disabled = not can_command_labor
+		campfire_overtime_button.tooltip_text = blocked_tooltip if not can_command_labor else ""
 		if campfire_overtime_button.visible:
 			campfire_overtime_button.position.y = 599.0
 			campfire_close_btn.position.y = 637.0
@@ -5873,6 +5883,8 @@ func _show_building_menu() -> void:
 		
 		var officer := _workplace_worker(selected_building)
 		building_overtime_button.visible = is_workplace and not _is_work_time() and officer != null
+		building_overtime_button.disabled = not can_command_labor
+		building_overtime_button.tooltip_text = blocked_tooltip if not can_command_labor else ""
 		
 		if is_workplace:
 			var accepting := bool(selected_building.get_meta("accepting_workers", true))
@@ -6534,6 +6546,9 @@ func _check_unstaffed_employment_center() -> void:
 
 
 func _call_worker_overtime() -> void:
+	if not _player_can_command_labor():
+		_show_labor_command_blocked()
+		return
 	if not is_instance_valid(selected_building):
 		return
 	var workers_found := false
