@@ -49,6 +49,17 @@ func capture(sequence: int) -> WorldSnapshot:
 					&"warehouse_position": warehouse_position,
 				})
 		var forestry_in_progress := actor.state in [Citizen.State.TO_TREE, Citizen.State.CHOPPING, Citizen.State.TO_SAWMILL]
+		var farming_worker := actor.permanent_role == "farming" and actor.is_employed() and not actor.is_player_controlled
+		var farming_in_progress := farming_worker and actor.active_role == "farming" and actor.state in [Citizen.State.TO_TREE, Citizen.State.TO_SAWMILL, Citizen.State.SAWING, Citizen.State.WAITING_COURIER]
+		var farming_position := Vector3.INF
+		var farming_warehouse_position := Vector3.INF
+		if farming_in_progress:
+			farming_position = actor.workplace_position
+			farming_warehouse_position = actor.warehouse_position
+		elif farming_worker and not simulation.farm_positions.is_empty() and not simulation.warehouse_positions.is_empty():
+			farming_position = actor.employment_workplace.get_meta("service_position", actor.employment_workplace.global_position) if is_instance_valid(actor.employment_workplace) else simulation.farm_positions[0]
+			farming_warehouse_position = simulation._get_nearest_delivery_position(actor.global_position)
+		var farming_can_start: bool = farming_worker and simulation._is_work_time() and simulation._has_storage_room_for_role("farming") and farming_position != Vector3.INF and farming_warehouse_position != Vector3.INF
 		citizens_by_id[citizen_id] = CitizenSnapshot.new(
 			citizen_id,
 			actor.global_position,
@@ -71,6 +82,11 @@ func capture(sequence: int) -> WorldSnapshot:
 				&"work.forestry.worker": forestry_worker,
 				&"work.forestry.in_progress": forestry_in_progress,
 				&"work.forestry.candidates": forestry_candidates,
+				&"work.farming.worker": farming_worker,
+				&"work.farming.in_progress": farming_in_progress,
+				&"work.farming.can_start": farming_can_start,
+				&"work.farming.position": farming_position,
+				&"work.farming.warehouse_position": farming_warehouse_position,
 			})
 		)
 	var settlement_facts := AIFactSet.new({

@@ -6,6 +6,8 @@ const ToiletGoalScript = preload("res://game/features/decision/domain/goals/toil
 const RestGoalScript = preload("res://game/features/decision/domain/goals/rest_goal.gd")
 const ForestryGoalScript = preload("res://game/features/decision/domain/goals/forestry_goal.gd")
 const ForestryOrderProviderScript = preload("res://game/features/decision/application/forestry_order_provider.gd")
+const FarmingGoalScript = preload("res://game/features/decision/domain/goals/farming_goal.gd")
+const FarmingOrderProviderScript = preload("res://game/features/decision/application/farming_order_provider.gd")
 const SettlementCitizenActuatorScript = preload("res://game/features/decision/application/settlement_citizen_actuator.gd")
 
 
@@ -108,7 +110,7 @@ class FakeActuator extends CitizenActuator:
 		_payload: AIFactSet = null
 	) -> bool:
 		action_start_count += 1
-		return action in [&"sleep", &"eat", &"relieve", &"rest", &"forestry"]
+		return action in [&"sleep", &"eat", &"relieve", &"rest", &"forestry", &"farming"]
 
 	func action_status() -> ActionStatus:
 		return next_action_status
@@ -156,6 +158,9 @@ func _init() -> void:
 	_test_native_rest_goal()
 	_test_forestry_provider_assigns_unique_stable_targets()
 	_test_native_forestry_goal()
+	_test_farming_provider_keeps_active_cycle()
+	_test_native_farming_goal()
+	_test_farming_actuator_completes_after_courier_pickup()
 	_test_production_sleep_actuator()
 	_test_order_reconciliation()
 	_test_order_board_deduplicates_provider_output()
@@ -492,6 +497,59 @@ func _test_native_forestry_goal() -> void:
 	assert(snapshot.reservations.owner_of([&"forestry.tree", &"tree:3:0"], 0.0) == 0)
 
 
+func _test_farming_provider_keeps_active_cycle() -> void:
+	var provider := FarmingOrderProviderScript.new()
+	var ready := _farming_citizen(1, false, true)
+	var inactive := _farming_citizen(2, false, false)
+	var snapshot := WorldSnapshot.new(1, 0.0, 0.0, AIFactSet.new(), {1: ready, 2: inactive})
+	var orders := provider.collect_orders(snapshot)
+	assert(orders.size() == 1)
+	assert(orders[0].citizen_id == 1 and orders[0].kind == &"farming")
+	var active := _farming_citizen(1, true, false)
+	var active_orders := provider.collect_orders(WorldSnapshot.new(2, 1.0, 0.0, AIFactSet.new(), {1: active}))
+	assert(active_orders.size() == 1)
+	assert(active_orders[0].target_position == orders[0].target_position)
+
+
+func _test_native_farming_goal() -> void:
+	var goal := FarmingGoalScript.new()
+	var actuator := FakeActuator.new(1)
+	var brain := CitizenBrain.new(1, actuator, [goal])
+	var citizen := _farming_citizen(1, false, true)
+	var snapshot := _snapshot(0.0, citizen)
+	var order := _farming_order(1, Vector3(4.0, 0.0, 0.0))
+	order.id = 18
+	brain.think(snapshot, order)
+	brain.tick(snapshot, order, 0.1)
+	assert(actuator.action_start_count == 1)
+	assert(brain.runner.active_goal_id() == &"farming")
+	actuator.next_action_status = CitizenActuator.ActionStatus.SUCCEEDED
+	brain.tick(snapshot, order, 0.1)
+	assert(brain.runner.active_task == null)
+
+
+func _test_farming_actuator_completes_after_courier_pickup() -> void:
+	var citizen := Citizen.new()
+	citizen.ai_id = 18
+	citizen.permanent_role = "farming"
+	var actuator := SettlementCitizenActuatorScript.new(citizen)
+	assert(actuator.begin_action(&"farming", -1, AIFactSet.new({
+		&"workplace.position": Vector3.ZERO,
+		&"warehouse.position": Vector3(2.0, 0.0, 0.0),
+	})))
+	assert(citizen.state == Citizen.State.TO_TREE)
+	citizen.state = Citizen.State.WAITING_COURIER
+	citizen.register_pending_resource("food", 1)
+	citizen.task_timer.start(0.0)
+	citizen._process_courier_wait(0.1)
+	assert(citizen.state == Citizen.State.WAITING_COURIER)
+	assert(citizen.take_pending_resource()["amount"] == 1)
+	assert(citizen.state == Citizen.State.IDLE)
+	assert(citizen.active_role.is_empty())
+	assert(actuator.action_status() == CitizenActuator.ActionStatus.SUCCEEDED)
+	citizen.free()
+
+
 func _test_production_sleep_actuator() -> void:
 	var citizen := Citizen.new()
 	citizen.ai_id = 17
@@ -731,4 +789,23 @@ func _forestry_order(citizen_id: int, tree_position: Vector3, tree_id: StringNam
 		&"work.warehouse_position": Vector3(8.0, 0.0, 0.0),
 	}))
 	order.target_position = tree_position
+	return order
+
+
+func _farming_citizen(citizen_id: int, in_progress: bool, can_start: bool) -> CitizenSnapshot:
+	return CitizenSnapshot.new(citizen_id, Vector3(float(citizen_id), 0.0, 0.0), false, true, AIFactSet.new({
+		&"work.farming.worker": true,
+		&"work.farming.in_progress": in_progress,
+		&"work.farming.can_start": can_start,
+		&"work.farming.position": Vector3(4.0, 0.0, 0.0),
+		&"work.farming.warehouse_position": Vector3(8.0, 0.0, 0.0),
+	}))
+
+
+func _farming_order(citizen_id: int, farm_position: Vector3) -> CitizenOrder:
+	var order := CitizenOrder.new(citizen_id, &"farming", &"workforce.farming", 0.50, AIFactSet.new({
+		&"work.farm_position": farm_position,
+		&"work.warehouse_position": Vector3(8.0, 0.0, 0.0),
+	}))
+	order.target_position = farm_position
 	return order

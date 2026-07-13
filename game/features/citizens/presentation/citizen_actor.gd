@@ -779,6 +779,12 @@ func _process_courier_wait(delta: float) -> void:
 	if task_timer.advance(delta):
 		if _start_pending_arrival_if_any():
 			return
+		if permanent_role == "farming" and active_role == "farming":
+			# Native farming completes only when a courier takes the produced food.
+			# Keep the worker available to the dispatcher without starting another
+			# production cycle while the previous output is still pending.
+			_start_task(COURIER_WAIT_DURATION)
+			return
 		state = State.TO_TREE
 
 func _process_construction(delta: float) -> void:
@@ -1483,8 +1489,14 @@ func take_pending_resource(max_amount := 0) -> Dictionary:
 		if amount > 0:
 			var taken := amount if max_amount <= 0 else mini(amount, max_amount)
 			pending_resources[pending_type] = amount - taken
-			if state == State.WAITING_COURIER:
-				state = State.TO_TREE
+			if state == State.WAITING_COURIER and int(pending_resources[pending_type]) == 0:
+				# A native farm task owns one production-and-handoff cycle. Legacy
+				# farmers retain their looping FSM until that role is migrated.
+				if permanent_role == "farming" and active_role == "farming":
+					state = State.IDLE
+					active_role = ""
+				else:
+					state = State.TO_TREE
 			return {"type": pending_type, "amount": taken}
 	return {}
 

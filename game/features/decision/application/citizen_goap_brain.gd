@@ -78,7 +78,7 @@ func setup(next_citizen: Citizen, next_simulation: Node, next_worker_index: int)
 
 
 func tick(delta: float) -> void:
-	if _agent == null or citizen.is_player_controlled or citizen.permanent_role == "forestry":
+	if _agent == null or citizen.is_player_controlled or _uses_native_work_cycle():
 		return
 	if citizen.has_active_arrival_task() or citizen.has_active_delivery() or citizen.state in [Citizen.State.TO_TOILET, Citizen.State.USING_TOILET, Citizen.State.WAITING_FOR_TOILET, Citizen.State.TO_BUSH, Citizen.State.USING_BUSH]:
 		return
@@ -91,10 +91,14 @@ func tick(delta: float) -> void:
 
 
 func request_decision() -> void:
-	if _agent != null and citizen.permanent_role != "forestry":
+	if _agent != null and not _uses_native_work_cycle():
 		_agent.get_world_state().set_state("assigned", false)
 		_agent.process(0.0)
-	_think_time = THINK_INTERVAL
+		_think_time = THINK_INTERVAL
+
+
+func _uses_native_work_cycle() -> bool:
+	return citizen.permanent_role in ["forestry", "farming"]
 
 
 func is_goal_valid(intent: Intent) -> bool:

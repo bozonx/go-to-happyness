@@ -66,6 +66,14 @@ func begin_action(
 			citizen.assign_work("wood", tree_position, sawmill_position, warehouse_position, false, access_position)
 			_active_action = action if citizen.state in [Citizen.State.TO_TREE, Citizen.State.CHOPPING, Citizen.State.TO_SAWMILL] else &""
 			return _active_action == action
+		&"farming":
+			var farm_position: Variant = _payload.value(&"workplace.position", Vector3.INF) if _payload != null else Vector3.INF
+			var farm_warehouse_position: Variant = _payload.value(&"warehouse.position", Vector3.INF) if _payload != null else Vector3.INF
+			if not (farm_position is Vector3) or farm_position == Vector3.INF or not (farm_warehouse_position is Vector3) or farm_warehouse_position == Vector3.INF:
+				return false
+			citizen.assign_work("food", farm_position, farm_position, farm_warehouse_position, true)
+			_active_action = action if citizen.state in [Citizen.State.TO_TREE, Citizen.State.TO_SAWMILL, Citizen.State.SAWING, Citizen.State.WAITING_COURIER] else &""
+			return _active_action == action
 	return false
 
 
@@ -100,12 +108,17 @@ func action_status() -> ActionStatus:
 				return ActionStatus.RUNNING
 			if citizen.state == Citizen.State.IDLE:
 				return ActionStatus.SUCCEEDED
+		&"farming":
+			if citizen.state in [Citizen.State.TO_TREE, Citizen.State.TO_SAWMILL, Citizen.State.SAWING, Citizen.State.WAITING_COURIER]:
+				return ActionStatus.RUNNING
+			if citizen.state == Citizen.State.IDLE:
+				return ActionStatus.SUCCEEDED
 	return ActionStatus.FAILED
 
 
 func cancel_action() -> void:
 	if not is_valid():
 		return
-	if citizen.state in [Citizen.State.TO_HOME, Citizen.State.RESTING, Citizen.State.TO_CANTEEN, Citizen.State.EATING, Citizen.State.TO_TOILET, Citizen.State.USING_TOILET, Citizen.State.WAITING_FOR_TOILET, Citizen.State.TO_BUSH, Citizen.State.USING_BUSH, Citizen.State.TO_PARK, Citizen.State.RELAXING, Citizen.State.TO_TREE, Citizen.State.CHOPPING, Citizen.State.TO_SAWMILL]:
+	if citizen.state in [Citizen.State.TO_HOME, Citizen.State.RESTING, Citizen.State.TO_CANTEEN, Citizen.State.EATING, Citizen.State.TO_TOILET, Citizen.State.USING_TOILET, Citizen.State.WAITING_FOR_TOILET, Citizen.State.TO_BUSH, Citizen.State.USING_BUSH, Citizen.State.TO_PARK, Citizen.State.RELAXING, Citizen.State.TO_TREE, Citizen.State.CHOPPING, Citizen.State.TO_SAWMILL, Citizen.State.SAWING, Citizen.State.WAITING_COURIER]:
 		citizen.idle()
 	_active_action = &""
