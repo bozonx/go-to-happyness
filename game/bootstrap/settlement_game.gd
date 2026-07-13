@@ -6171,13 +6171,20 @@ func _appoint_official(citizen: Citizen) -> void:
 func _activate_employment_centre(centre: Node3D) -> void:
 	if not is_instance_valid(centre):
 		return
+	var service_position: Vector3 = centre.get_meta("service_position", centre.global_position)
 	for citizen in citizens:
 		if not is_instance_valid(citizen) or citizen.permanent_role != "official":
 			continue
 		citizen.employment_workplace = centre
 		citizen.pending_employment_workplace = null
 		citizen.employment_state = Citizen.EmploymentState.EMPLOYED
-		citizen.idle()
+		# Completion used to leave the officer IDLE and relied on a later GOAP
+		# pass to notice the new campfire. Assign the post in this same hand-off so
+		# another scheduler tick cannot replace the job before the route starts.
+		if not citizen.is_player_controlled and _is_work_time():
+			citizen.assign_official_work(service_position)
+		else:
+			citizen.idle()
 	_update_workers()
 
 

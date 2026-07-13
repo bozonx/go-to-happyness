@@ -14,6 +14,7 @@ func _init() -> void:
 	_test_sawmill_rules()
 	_test_workforce_policy()
 	_test_citizen_task_state()
+	_test_citizen_state_display_queue()
 	_test_grid_routing()
 	_test_building_queue_routing()
 	_test_citizen_decision_context()
@@ -266,6 +267,20 @@ func _test_citizen_task_state() -> void:
 	task.start(1.0)
 	assert(not task.advance(0.4))
 	assert(task.advance(0.6))
+
+
+func _test_citizen_state_display_queue() -> void:
+	var citizen := Citizen.new()
+	citizen.state = Citizen.State.TO_TREE
+	citizen.state = Citizen.State.CHOPPING
+	assert(citizen._displayed_state == Citizen.State.IDLE)
+	citizen._advance_state_display(1.0)
+	assert(citizen._displayed_state == Citizen.State.TO_TREE)
+	citizen._advance_state_display(0.99)
+	assert(citizen._displayed_state == Citizen.State.TO_TREE)
+	citizen._advance_state_display(0.01)
+	assert(citizen._displayed_state == Citizen.State.CHOPPING)
+	citizen.free()
 
 
 func _test_citizen_decision_context() -> void:

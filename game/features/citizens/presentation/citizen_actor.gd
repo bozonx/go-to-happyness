@@ -40,6 +40,8 @@ const IDLE_WANDER_MIN_PAUSE := 2.5
 const IDLE_WANDER_MAX_PAUSE := 6.0
 const IDLE_WANDER_CANDIDATES := 8
 const IDLE_PERSONAL_SPACE := 1.15
+const MIN_STATE_DISPLAY_DURATION := 1.0
+const MAX_PENDING_STATE_DISPLAY_TRANSITIONS := 60
 
 enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, TO_GATHER, GATHERING, TO_TRADE_PICKUP, TO_TRADE_DESTINATION, TO_EMPLOYMENT_CENTER, EMPLOYMENT_PROCESSING, CANTEEN_WORK, SCHOOL_WORK, TO_MARKET_WORK, MARKET_WORK, TO_CRAFT_WORK, CRAFT_WORK, TO_CONSTRUCTION_PICKUP, TO_CONSTRUCTION_SITE, TO_OFFICIAL_WORK, OFFICIAL_WORK, TO_ARRIVAL_ENTRANCE, ARRIVAL_MEETING, ARRIVAL_WAITING, TO_ARRIVAL_CENTER, RESEARCHING, TO_TOILET, USING_TOILET, WAITING_FOR_TOILET, TO_BUSH, USING_BUSH }
 
@@ -114,7 +116,27 @@ const STATE_ANIMATIONS := {
 	State.RESEARCHING: "interact-right",
 }
 
-var state := State.IDLE
+signal state_changed(citizen: Citizen, previous_state: int, next_state: int)
+
+# State changes drive simulation immediately. The label intentionally follows a
+# short queue so quick scheduler/GOAP hand-offs remain observable instead of
+# being overwritten in the same frame.
+var _state := State.IDLE
+var state: int:
+	get:
+		return _state
+	set(next_state):
+		if _state == next_state:
+			return
+		var previous_state: int = _state
+		_state = next_state
+		if _pending_state_display.size() >= MAX_PENDING_STATE_DISPLAY_TRANSITIONS:
+			_pending_state_display.pop_front()
+		_pending_state_display.append(next_state)
+		state_changed.emit(self, previous_state, next_state)
+var _displayed_state := State.IDLE
+var _displayed_state_elapsed := 0.0
+var _pending_state_display: Array[int] = []
 var resource_type := "wood"
 var gather_resource_type := ""
 var gather_source_position := Vector3.ZERO
@@ -537,6 +559,9 @@ func assign_work(next_resource_type: String, source: Vector3, workplace: Vector3
 func _physics_process(delta: float) -> void:
 	if is_player_controlled:
 		return
+	# Engine.time_scale accelerates simulation delta. Statuses are a diagnostic
+	# surface, so keep their minimum lifetime in real seconds at every speed.
+	_advance_state_display(delta / maxf(Engine.time_scale, 0.001))
 	role_recheck_remaining = maxf(0.0, role_recheck_remaining - delta)
 	if goap_brain != null:
 		goap_brain.tick(delta)
@@ -1788,43 +1813,49 @@ func _update_idle_indicator() -> void:
 	if is_player_controlled:
 		idle_indicator.visible = false
 		return
-	if state == State.TO_TOILET:
+	var visible_state := _displayed_state
+	if visible_state == State.TO_TOILET:
 		idle_indicator.visible = true
 		idle_indicator.text = "Going to Toilet"
 		idle_indicator.modulate = Color("a5d6a7")
 		return
-	if state == State.WAITING_FOR_TOILET:
+	if visible_state == State.WAITING_FOR_TOILET:
 		idle_indicator.visible = true
 		idle_indicator.text = "Waiting in Queue"
 		idle_indicator.modulate = Color("ffb74d")
 		return
-	if state == State.USING_TOILET:
+	if visible_state == State.USING_TOILET:
 		idle_indicator.visible = true
 		var pct := int((1.0 - toilet_timer.remaining / TOILET_USE_DURATION) * 100.0)
 		idle_indicator.text = "Using Toilet (%d%%)" % clamp(pct, 0, 100)
 		idle_indicator.modulate = Color("81c784")
 		return
-	if state == State.TO_BUSH:
+	if visible_state == State.TO_BUSH:
 		idle_indicator.visible = true
 		idle_indicator.text = "Going to %s" % ("Tree" if toilet_relief_type == "tree" else "Grass")
 		idle_indicator.modulate = Color("a5d6a7")
 		return
-	if state == State.USING_BUSH:
+	if visible_state == State.USING_BUSH:
 		idle_indicator.visible = true
 		var pct := int((1.0 - toilet_timer.remaining / TOILET_USE_DURATION) * 100.0)
 		idle_indicator.text = "Relieving by %s (%d%%)" % ["Tree" if toilet_relief_type == "tree" else "Grass", clamp(pct, 0, 100)]
 		idle_indicator.modulate = Color("81c784")
 		return
-	if state == State.RESEARCHING:
+	if visible_state == State.RESEARCHING:
 		idle_indicator.visible = true
 		idle_indicator.text = "Researching"
 		idle_indicator.modulate = Color("6ab0df")
 		return
-	if state == State.WAITING:
+	if visible_state == State.WAITING:
 		idle_indicator.visible = true
 		var remaining_hours := int(task_timer.remaining / WAIT_DURATION) + 1
 		idle_indicator.text = "No work (waiting %dh)" % clamp(remaining_hours, 1, 24)
 		idle_indicator.modulate = Color("f0873d")
+		return
+	if visible_state != State.IDLE:
+		idle_indicator.visible = true
+		idle_indicator.text = _state_display_name(visible_state)
+		idle_indicator.modulate = Color("7bb7e8")
 		return
 	idle_indicator.visible = true
 	match employment_state:
@@ -1846,6 +1877,21 @@ func _update_idle_indicator() -> void:
 				automatic = true
 			idle_indicator.text = "Reserve: %s%s" % [visible_role.replace("_", " ") if not visible_role.is_empty() else "available", " (planned)" if automatic else ""]
 			idle_indicator.modulate = Color("f0c45d")
+
+
+func _advance_state_display(delta: float) -> void:
+	_displayed_state_elapsed += delta
+	if _pending_state_display.is_empty() or _displayed_state_elapsed < MIN_STATE_DISPLAY_DURATION:
+		return
+	_displayed_state = _pending_state_display.pop_front()
+	_displayed_state_elapsed = 0.0
+
+
+func _state_display_name(displayed_state: int) -> String:
+	var state_names := State.keys()
+	if displayed_state < 0 or displayed_state >= state_names.size():
+		return "Unknown state"
+	return str(state_names[displayed_state]).capitalize().replace("_", " ")
 
 
 func _employment_workplace_suffix(workplace: Node3D) -> String:
