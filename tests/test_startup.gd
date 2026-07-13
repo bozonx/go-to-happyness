@@ -10,6 +10,9 @@ func _init() -> void:
 	for _frame in range(10):
 		await physics_frame
 	assert(simulation.citizens.size() == simulation.POPULATION)
+	assert(simulation.settlement.money == SettlementState.TENT_STARTING_MONEY)
+	assert(simulation.settlement.food == SettlementState.TENT_STARTING_FOOD)
+	assert(simulation.settlement.branches == 0)
 	assert(is_instance_valid(simulation.citizen_ai))
 	assert(simulation.citizen_ai.brain_count() == simulation.citizens.size())
 	assert(simulation.citizen_ai.goal_count() == 14)
@@ -118,6 +121,7 @@ func _init() -> void:
 	var construction_resource := str(construction_site.required_materials.keys()[0])
 	var supply_worker: Citizen = simulation.citizens[2]
 	supply_worker.idle()
+	simulation.settlement.add(construction_resource, 1)
 	var material_before: int = simulation.settlement.amount(construction_resource)
 	assert(simulation.begin_native_construction_supply(supply_worker, construction_site.node, construction_resource, supply_worker.global_position))
 	assert(simulation.settlement.amount(construction_resource) == material_before - 1)

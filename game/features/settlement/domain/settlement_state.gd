@@ -5,6 +5,16 @@ extends RefCounted
 ## UI and simulation code cannot accidentally create a second rule set.
 
 enum Era { TENT, EARTH, CLAY, WOOD, STONE, BRICK }
+enum StorageAvailability { OK, UNKNOWN_RESOURCE, NO_WAREHOUSE, NO_ROOM }
+
+const TENT_STARTING_MONEY := 500
+const TENT_STARTING_FOOD := 16
+const TENT_STARTING_POPULATION := 4
+const TENT_STARTING_WELLBEING := 75
+const TENT_STARTING_EQUIPMENT := {
+	"flint_steel": {"owned": true},
+	"construction_gloves": {"sets": 1, "active_durability": 100.0},
+}
 
 var era := Era.TENT
 var money := 20
@@ -27,6 +37,7 @@ var night_shifts_allowed := false
 var low_wellbeing_days := 0
 var tools := {"axe": false, "hand_saw": false, "shovel": false, "bucket": false, "hoe": false, "pickaxe": false, "filter_1": false}
 var tool_uses := {"filter_1": 0}
+var equipment: Dictionary = TENT_STARTING_EQUIPMENT.duplicate(true)
 var trade_sales := 0
 var buildings: Dictionary = {}
 var brick_construction_unlocked := false
@@ -72,6 +83,46 @@ var active_research_tech_id := ""
 var active_research_worker_id := -1
 var active_research_remaining_time := 0.0
 var active_research_duration := 0.0
+
+
+func apply_tent_start(reset_progress := true) -> void:
+	era = Era.TENT
+	money = TENT_STARTING_MONEY
+	branches = 0
+	grass = 0
+	water = 0
+	food = TENT_STARTING_FOOD
+	hides = 0
+	goods = 0
+	logs = 0
+	wood = 0
+	soil = 0
+	clay = 0
+	boards = 0
+	stone = 0
+	bricks = 0
+	wellbeing = TENT_STARTING_WELLBEING
+	workday_hours = 8
+	night_shifts_allowed = false
+	low_wellbeing_days = 0
+	tools = {"axe": false, "hand_saw": false, "shovel": false, "bucket": false, "hoe": false, "pickaxe": false, "filter_1": false}
+	tool_uses = {"filter_1": 0}
+	equipment = TENT_STARTING_EQUIPMENT.duplicate(true)
+	trade_sales = 0
+	brick_construction_unlocked = false
+	active_research_tech_id = ""
+	active_research_worker_id = -1
+	active_research_remaining_time = 0.0
+	active_research_duration = 0.0
+	storage_limits.clear()
+	if reset_progress:
+		buildings.clear()
+		for building_type in unlocked_building_levels.keys():
+			unlocked_building_levels[building_type] = _tent_start_unlock_for(building_type)
+
+
+func _tent_start_unlock_for(building_type: String) -> bool:
+	return false
 
 ## --- Weighted, reallocatable storage ------------------------------------------
 ## Every stored good takes up "space units". The warehouse holds a fixed number of
@@ -184,6 +235,16 @@ func storage_room_for(resource_type: String) -> int:
 func storage_can_accept(resource_type: String, count: int) -> bool:
 	return storage_room_for(resource_type) >= count
 
+
+func storage_availability_for(resource_type: String, count: int, warehouses: int) -> StorageAvailability:
+	if count <= 0:
+		return StorageAvailability.OK
+	if not STORED_RESOURCES.has(resource_type):
+		return StorageAvailability.UNKNOWN_RESOURCE
+	if warehouses <= 0:
+		return StorageAvailability.NO_WAREHOUSE
+	return StorageAvailability.OK if storage_room_for(resource_type) >= count else StorageAvailability.NO_ROOM
+
 func can_make_room_for(resource_type: String, count: int, warehouses: int) -> bool:
 	if not STORED_RESOURCES.has(resource_type):
 		return true
@@ -195,13 +256,15 @@ func can_make_room_for(resource_type: String, count: int, warehouses: int) -> bo
 func reserve_storage_room_for(resource_type: String, count: int, warehouses: int) -> bool:
 	if count <= 0 or not STORED_RESOURCES.has(resource_type):
 		return count <= 0
+	if storage_availability_for(resource_type, count, warehouses) == StorageAvailability.NO_WAREHOUSE:
+		return false
 	var required_units := count * storage_weight(resource_type)
 	var available_units := maxf(0.0, float(storage_limits.get(resource_type, 0.0)) - amount(resource_type) * storage_weight(resource_type))
 	var missing_units := maxf(0.0, required_units - available_units)
 	if missing_units > 0.0:
 		var expansion := minf(missing_units, storage_free_units(warehouses))
 		storage_limits[resource_type] = float(storage_limits.get(resource_type, 0.0)) + expansion
-	return storage_can_accept(resource_type, count)
+	return storage_availability_for(resource_type, count, warehouses) == StorageAvailability.OK
 
 
 func amount(resource_type: String) -> int:
@@ -246,7 +309,7 @@ func total_stored_resources() -> int:
 
 
 func can_afford_building(building_type: String) -> bool:
-	if BuildingCatalog.RESEARCH_TECHS.has(building_type) and not unlocked_building_levels.get(building_type, false):
+	if not is_building_unlocked(building_type):
 		return false
 	for resource_type in BuildingCatalog.cost_resources(building_type):
 		if amount(resource_type) < BuildingCatalog.cost_for_resource(building_type, resource_type):
@@ -265,6 +328,16 @@ func pay_for_building(building_type: String) -> bool:
 
 func has_building(building_type: String) -> bool:
 	return int(buildings.get(building_type, 0)) > 0
+
+
+func is_building_unlocked(building_type: String) -> bool:
+	if building_type == "warehouse":
+		return true
+	if building_type == "campfire":
+		return era > Era.TENT or has_building("warehouse") or has_building("campfire")
+	if unlocked_building_levels.has(building_type):
+		return bool(unlocked_building_levels.get(building_type, false))
+	return true
 
 
 func buy_tool(tool_id: String, price: int) -> bool:

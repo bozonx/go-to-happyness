@@ -2,9 +2,9 @@ class_name BuildingCatalog
 extends RefCounted
 
 const DEFINITIONS := {
-	"campfire": {"name": "Campfire", "category": "tent", "costs": {"branches": 6}},
-	"campfire_lvl2": {"name": "Главный костер ур. 2", "category": "tent", "costs": {"branches": 15, "grass": 10}},
-	"campfire_lvl3": {"name": "Главный костер ур. 3", "category": "tent", "costs": {"branches": 25, "grass": 18}},
+	"campfire": {"name": "Campfire", "category": "tent", "costs": {"branches": 6}, "landmark": true, "demolishable": false},
+	"campfire_lvl2": {"name": "Главный костер ур. 2", "category": "tent", "costs": {"branches": 15, "grass": 10}, "landmark": true, "demolishable": false, "upgrade_only": true, "upgrades_from": "campfire"},
+	"campfire_lvl3": {"name": "Главный костер ур. 3", "category": "tent", "costs": {"branches": 25, "grass": 18}, "landmark": true, "demolishable": false, "upgrade_only": true, "upgrades_from": "campfire_lvl2"},
 	"gathering_place": {"name": "Лобное место", "category": "tent", "costs": {"branches": 8}},
 	"cook_campfire": {"name": "Cooking campfire", "category": "tent", "costs": {"branches": 8, "grass": 6}},
 	"tent": {"name": "Палатка на 4 жителя", "category": "tent", "costs": {"branches": 8, "grass": 6}},
@@ -389,6 +389,14 @@ static func demolition_refund(building_type: String) -> Dictionary:
 static func currency_for(building_type: String) -> String:
 	var resources := cost_resources(building_type)
 	return resources[0] if resources.size() == 1 else ""
+static func is_landmark(building_type: String) -> bool:
+	return bool(definition_for(building_type).get("landmark", false))
+static func is_demolishable(building_type: String) -> bool:
+	return bool(definition_for(building_type).get("demolishable", true))
+static func is_upgrade_only(building_type: String) -> bool:
+	return bool(definition_for(building_type).get("upgrade_only", false))
+static func upgrades_from(building_type: String) -> String:
+	return str(definition_for(building_type).get("upgrades_from", ""))
 static func era_for(building_type: String) -> SettlementState.Era:
 	match str(definition_for(building_type).get("category", "tent")):
 		"earth": return SettlementState.Era.EARTH

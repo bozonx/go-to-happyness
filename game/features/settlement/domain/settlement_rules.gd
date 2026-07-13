@@ -3,6 +3,13 @@ extends RefCounted
 
 const LOW_WELLBEING := 30
 const LEAVE_AFTER_DAYS := 3
+const OPEN_AIR_ORGANIC_DECAY_RATES := {
+	"food": 0.10,
+	"grass": 0.05,
+	"branches": 0.05,
+	"wood": 0.05,
+	"logs": 0.05,
+}
 
 static func production_multiplier(workday_hours: int, night_shifts: bool) -> float:
 	return clampf(float(workday_hours) / 8.0 + (0.2 if night_shifts else 0.0), 0.5, 1.5)
@@ -21,3 +28,20 @@ static func volunteer_can_arrive(free_beds: int, water: int, average_wellbeing: 
 
 static func should_volunteer_leave(consecutive_low_days: int) -> bool:
 	return consecutive_low_days >= LEAVE_AFTER_DAYS
+
+
+static func open_air_storage_decay_losses(amounts: Dictionary, total_stored_units: float, safe_capacity_units: float) -> Dictionary:
+	var losses := {}
+	if total_stored_units <= safe_capacity_units or total_stored_units <= 0.0:
+		return losses
+	var exposed_ratio := (total_stored_units - safe_capacity_units) / total_stored_units
+	for resource_type in OPEN_AIR_ORGANIC_DECAY_RATES:
+		var amount := int(amounts.get(resource_type, 0))
+		if amount <= 0:
+			continue
+		var exposed_amount := float(amount) * exposed_ratio
+		var rate := float(OPEN_AIR_ORGANIC_DECAY_RATES[resource_type])
+		var lost := ceili(exposed_amount * rate)
+		if lost > 0:
+			losses[resource_type] = mini(amount, lost)
+	return losses

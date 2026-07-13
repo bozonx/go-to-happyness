@@ -31,6 +31,7 @@ class FakeCanteenSimulation extends Node:
 
 func _init() -> void:
 	_test_settlement_economy()
+	_test_tent_start_config()
 	_test_progression_and_volunteers()
 	_test_work_schedule_wellbeing()
 	_test_clock_wraps_and_reports_elapsed_minutes()
@@ -104,6 +105,36 @@ func _test_settlement_economy() -> void:
 	assert(state.can_afford_building("brick_house"))
 	assert(state.pay_for_building("brick_house"))
 	assert(state.bricks == 0 and state.boards == 0)
+
+
+func _test_tent_start_config() -> void:
+	var state := SettlementState.new()
+	state.apply_tent_start()
+	assert(state.era == SettlementState.Era.TENT)
+	assert(state.money == SettlementState.TENT_STARTING_MONEY)
+	assert(state.food == SettlementState.TENT_STARTING_FOOD)
+	assert(state.branches == 0 and state.grass == 0)
+	assert(bool(state.equipment.flint_steel.owned))
+	assert(int(state.equipment.construction_gloves.sets) == 1)
+	assert(state.is_building_unlocked("warehouse"))
+	assert(not state.is_building_unlocked("campfire"))
+	assert(not state.can_afford_building("campfire"))
+	state.buildings["warehouse"] = 1
+	state.branches = 6
+	assert(state.is_building_unlocked("campfire"))
+	assert(state.can_afford_building("campfire"))
+	assert(BuildingCatalog.is_landmark("campfire"))
+	assert(not BuildingCatalog.is_demolishable("campfire"))
+	assert(BuildingCatalog.is_upgrade_only("campfire_lvl2"))
+	assert(BuildingCatalog.upgrades_from("campfire_lvl2") == "campfire")
+	assert(state.storage_availability_for("grass", 1, 0) == SettlementState.StorageAvailability.NO_WAREHOUSE)
+	state.ensure_storage_defaults(1)
+	assert(state.storage_availability_for("grass", 1, 1) == SettlementState.StorageAvailability.NO_ROOM)
+	state.buildings["warehouse"] = 2
+	state.adjust_storage_limit("grass", 1.0, 2)
+	assert(state.storage_availability_for("grass", 1, 1) == SettlementState.StorageAvailability.OK)
+	var decay := SettlementRulesScript.open_air_storage_decay_losses({"food": 16, "grass": 10}, 26.0, 0.0)
+	assert(int(decay.food) == 2 and int(decay.grass) == 1)
 
 
 func _test_progression_and_volunteers() -> void:

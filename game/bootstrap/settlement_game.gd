@@ -368,6 +368,7 @@ func _ready() -> void:
 	trade_service.configure(self)
 	courier_dispatcher = CourierDispatcherScript.new()
 	courier_dispatcher.configure(self)
+	settlement.apply_tent_start()
 	_create_world()
 	_create_interface()
 	_create_forest()
@@ -381,10 +382,6 @@ func _ready() -> void:
 	):
 		push_error("Native citizen AI failed to capture its initial world snapshot")
 
-	settlement.money = 100
-	# Seed enough branches for the very first campfire so the player sees the build
-	# loop immediately instead of grinding 1.5 days for the opening structure.
-	settlement.branches = 6
 	settlement.ensure_storage_defaults(warehouse_positions.size())
 	_update_workers()
 	_update_interface("Build a simple store, then gather materials for the first campfire and tents.")
@@ -677,28 +674,23 @@ func _apply_daily_settlement_rules() -> void:
 	var warehouse_lvl2_count := int(settlement.buildings.get("warehouse_lvl2", 0))
 	var safe_capacity := warehouse_lvl2_count * 48.0
 	var total_stored := settlement.storage_used_units()
-	if total_stored > safe_capacity:
-		var exposed_ratio := (total_stored - safe_capacity) / total_stored
+	var decay_losses := SETTLEMENT_RULES.open_air_storage_decay_losses({
+		"food": food,
+		"grass": grass,
+		"branches": branches,
+		"wood": wood,
+		"logs": settlement.logs,
+	}, total_stored, safe_capacity)
+	if not decay_losses.is_empty():
 		var decay_msg := ""
-		var organic_resources := {
-			"food": 0.10,
-			"grass": 0.05,
-			"branches": 0.05,
-			"wood": 0.05,
-			"logs": 0.05
-		}
-		for res in organic_resources:
-			var current_amt := settlement.amount(res)
-			if current_amt > 0:
-				var exposed_amt := float(current_amt) * exposed_ratio
-				var lost := ceili(exposed_amt * organic_resources[res])
-				if lost > 0:
-					settlement.add(res, -lost)
-					if decay_msg.is_empty():
-						decay_msg = "Daily decay: lost "
-					else:
-						decay_msg += ", "
-					decay_msg += "%d %s" % [lost, res]
+		for res in decay_losses:
+			var lost := int(decay_losses[res])
+			settlement.add(res, -lost)
+			if decay_msg.is_empty():
+				decay_msg = "Daily decay: lost "
+			else:
+				decay_msg += ", "
+			decay_msg += "%d %s" % [lost, res]
 		if not decay_msg.is_empty():
 			decay_msg += " due to open-air Heap storage."
 			_add_message(decay_msg)
@@ -3016,7 +3008,7 @@ func _refresh_build_menu() -> void:
 			button.visible = build_category.is_empty() and not build_menu_is_job_menu and category_era <= settlement.era
 		else:
 			var build_type: String = button.get_meta("build_type", "")
-			var is_unlocked: bool = not BuildingCatalog.RESEARCH_TECHS.has(build_type) or bool(settlement.unlocked_building_levels.get(build_type, false))
+			var is_unlocked := settlement.is_building_unlocked(build_type) and not BuildingCatalog.is_upgrade_only(build_type)
 			button.visible = not build_category.is_empty() and button.get_meta("category", "") == build_category and not build_menu_is_job_menu and is_unlocked
 			
 	for button in role_buttons:
@@ -3590,11 +3582,15 @@ func _mark_building_for_demolition(building: Node3D) -> void:
 	if building == entrance_stone:
 		_update_interface("This building cannot be demolished.")
 		return
+	var building_type := str(building.get_meta("building_type", "house"))
+	if not BuildingCatalog.is_demolishable(building_type):
+		_update_interface("This landmark cannot be demolished.")
+		return
 	_release_employment_at_building(building)
 	building.set_meta("pending_demolition", true)
 	_cancel_arrivals_for_house(building)
 	_add_demolition_marker(building)
-	demolition.mark(building, str(building.get_meta("building_type", "house")))
+	demolition.mark(building, building_type)
 	_update_workers()
 	_update_interface("Building marked for demolition. Residents and stored goods must be relocated first.")
 
@@ -4189,6 +4185,9 @@ func _place_building(world_position: Vector3) -> void:
 	var cell := _placement_key(world_position)
 	if not _can_pay_building_cost(build_mode):
 		_update_interface("Not enough resources for this building.")
+		return
+	if BuildingCatalog.is_upgrade_only(build_mode):
+		_update_interface("This landmark level is upgraded from the campfire menu.")
 		return
 	var blueprint := BuildingBlueprints.get_blueprint(build_mode)
 	var occupied_footprint := _rotated_footprint(blueprint.footprint)
