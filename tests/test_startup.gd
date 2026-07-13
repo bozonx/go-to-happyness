@@ -92,6 +92,18 @@ func _init() -> void:
 	assert(resident.idle_wander_anchor == wander_anchor)
 	assert(resident.idle_wander_target == wander_target)
 	assert(is_equal_approx(resident.idle_wander_pause, 1.25))
+
+	# A scheduled leisure break must only claim an idle citizen. In particular it
+	# must not overwrite a route to an already assigned work target.
+	resident.setup_specialization("cook")
+	resident.state = Citizen.State.TO_TREE
+	resident.source_access_position = work_target
+	simulation.park_positions.clear()
+	simulation.park_positions.append(resident.global_position + Vector3(1.0, 0.0, 0.0))
+	simulation._start_park_rest(true)
+	assert(resident.state == Citizen.State.TO_TREE)
+	assert(resident.source_access_position == work_target)
+
 	resident.go_to_arrival_entrance(simulation.entrance_stone.global_position)
 	assert(resident.has_active_arrival_task())
 	assert(not resident.is_available_for_schedule())

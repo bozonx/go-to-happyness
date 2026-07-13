@@ -772,7 +772,9 @@ func _start_park_rest(cooks_only: bool) -> void:
 		return
 	var sent := 0
 	for citizen in citizens:
-		if citizen.is_player_controlled or not citizen.is_available_for_schedule():
+		# A scheduled break may consume idle time, but must never replace work or
+		# an already selected need/task.
+		if citizen.is_player_controlled or citizen.state not in [Citizen.State.IDLE, Citizen.State.WAITING]:
 			continue
 		if (citizen.specialization == "cook") != cooks_only:
 			continue

@@ -1160,23 +1160,6 @@ func _move_to(destination: Vector3, delta: float, may_enter_destination_house :=
 			_plan_route(movement_destination)
 		if active_route == null or not active_route.reachable:
 			return false
-	if navigation_agent != null and navigation_agent.get_navigation_map().is_valid():
-		if navigation_target_position.distance_to(active_route.arrival_position) > 0.01:
-			navigation_target_position = active_route.arrival_position
-			navigation_agent.target_position = navigation_target_position
-		for ignored_start_position in range(2):
-			var next_path_position := navigation_agent.get_next_path_position()
-			if navigation_agent.is_navigation_finished():
-				if _has_arrived_at_navigation_target():
-					return is_queue_head
-				_recover_idle_route(delta)
-				return false
-			var path_offset := next_path_position - global_position
-			path_offset.y = 0.0
-			if path_offset.length() > 0.08:
-				return _move_directly_to(next_path_position, delta)
-		_recover_idle_route(delta)
-		return false
 	while not movement_path.is_empty():
 		var waypoint: Vector3 = movement_path.front()
 		var waypoint_offset := waypoint - global_position
@@ -1184,6 +1167,8 @@ func _move_to(destination: Vector3, delta: float, may_enter_destination_house :=
 		if waypoint_offset.length() > 0.08:
 			return _move_directly_to(waypoint, delta)
 		movement_path.pop_front()
+		_reset_waypoint_progress()
+	_stop_horizontal_movement()
 	return is_queue_head
 
 func _plan_route(destination: Vector3) -> void:
@@ -1264,6 +1249,16 @@ func _force_repath() -> void:
 	navigation_target_position = Vector3.INF
 	route_retry_timer = 0.0
 	recovery_repath_done = true
+
+func _reset_waypoint_progress() -> void:
+	route_no_progress_time = 0.0
+	route_best_distance = INF
+	stuck_time = 0.0
+	recovery_repath_done = false
+
+func _stop_horizontal_movement() -> void:
+	velocity.x = 0.0
+	velocity.z = 0.0
 
 func _has_arrived_at_navigation_target() -> bool:
 	var offset := path_destination - global_position
@@ -1370,6 +1365,7 @@ func assign_construction(site: Node3D) -> void:
 func assign_demolition(building: Node3D) -> void:
 	if is_player_controlled:
 		return
+	_reset_assignment_navigation()
 	construction_site = building
 	factory = null
 	construction_position = _work_position_for(building)
@@ -1391,6 +1387,7 @@ func finish_construction(site: Node3D) -> void:
 func assign_excavation(site: Node3D) -> void:
 	if is_player_controlled:
 		return
+	_reset_assignment_navigation()
 	assigned_dig_site = site
 	factory = null
 	active_role = "excavation"
@@ -1445,6 +1442,7 @@ func take_pending_resource(max_amount := 0) -> Dictionary:
 	return {}
 
 func assign_courier_pickup(worker: Citizen, warehouse: Vector3) -> void:
+	_reset_assignment_navigation()
 	courier_target = worker
 	warehouse_position = warehouse
 	active_role = ""
@@ -1452,6 +1450,7 @@ func assign_courier_pickup(worker: Citizen, warehouse: Vector3) -> void:
 	state = State.COURIER_TO_WORKER
 
 func assign_sawmill_pickup(sawmill: Vector3, warehouse: Vector3) -> void:
+	_reset_assignment_navigation()
 	workplace_position = sawmill
 	warehouse_position = warehouse
 	active_role = ""
@@ -1476,6 +1475,7 @@ func assign_next_forestry_tree(tree_position: Vector3) -> void:
 
 func assign_canteen_work(next_canteen_position: Vector3) -> void:
 	if not is_player_controlled:
+		_reset_assignment_navigation()
 		canteen_position = next_canteen_position
 		active_role = "cooking"
 		factory = null
@@ -1483,6 +1483,7 @@ func assign_canteen_work(next_canteen_position: Vector3) -> void:
 
 func assign_teacher_work(next_school_position: Vector3) -> void:
 	if not is_player_controlled:
+		_reset_assignment_navigation()
 		school_position = next_school_position
 		active_role = "teaching"
 		factory = null
@@ -1490,6 +1491,7 @@ func assign_teacher_work(next_school_position: Vector3) -> void:
 
 func assign_seller_work(next_market_position: Vector3) -> void:
 	if not is_player_controlled:
+		_reset_assignment_navigation()
 		market_position = next_market_position
 		active_role = "selling"
 		factory = null
@@ -1497,6 +1499,7 @@ func assign_seller_work(next_market_position: Vector3) -> void:
 
 func assign_official_work(next_office_position: Vector3) -> void:
 	if not is_player_controlled:
+		_reset_assignment_navigation()
 		official_position = next_office_position
 		active_role = "registration"
 		factory = null
@@ -1504,6 +1507,7 @@ func assign_official_work(next_office_position: Vector3) -> void:
 
 func assign_craft_work(next_craft_position: Vector3, next_speed_multiplier := 1.0) -> void:
 	if not is_player_controlled:
+		_reset_assignment_navigation()
 		craft_position = next_craft_position
 		craft_speed_multiplier = next_speed_multiplier
 		active_role = "crafting"
@@ -1512,6 +1516,7 @@ func assign_craft_work(next_craft_position: Vector3, next_speed_multiplier := 1.
 
 func assign_research_work(next_research_position: Vector3) -> void:
 	if not is_player_controlled:
+		_reset_assignment_navigation()
 		research_position = next_research_position
 		active_role = "research"
 		factory = null
@@ -1534,6 +1539,7 @@ func _process_craft_work(delta: float) -> void:
 
 func assign_factory_work(next_factory: Node3D, role: String) -> void:
 	if not is_player_controlled:
+		_reset_assignment_navigation()
 		factory = next_factory
 		factory_position = next_factory.get_meta("service_position", next_factory.global_position)
 		active_role = role
@@ -1541,6 +1547,7 @@ func assign_factory_work(next_factory: Node3D, role: String) -> void:
 
 func go_to_park(next_park_position: Vector3, minimum_hours := 0) -> void:
 	if not is_player_controlled:
+		_reset_assignment_navigation()
 		park_position = next_park_position
 		park_rest_duration = maxf(4.0, float(minimum_hours) * 12.5) if minimum_hours > 0 else 4.0
 		active_role = "relaxing"
@@ -1550,6 +1557,7 @@ func go_to_park(next_park_position: Vector3, minimum_hours := 0) -> void:
 func deliver_trade(source: Vector3, destination: Vector3) -> void:
 	if is_player_controlled:
 		return
+	_reset_assignment_navigation()
 	trade_source_position = source
 	trade_destination_position = destination
 	active_role = "trade"
@@ -1563,6 +1571,7 @@ func start_training(next_role: String, next_school_position: Vector3) -> void:
 
 func attend_school(school_pos: Vector3, role_to_train: String) -> void:
 	if not is_player_controlled:
+		_reset_assignment_navigation()
 		school_position = school_pos
 		temp_training_role = role_to_train
 		factory = null
@@ -1751,6 +1760,7 @@ func preferred_role() -> String:
 func idle() -> void:
 	if is_player_controlled:
 		return
+	_reset_assignment_navigation()
 	state = State.IDLE
 	active_role = ""
 	construction_site = null
@@ -1764,6 +1774,7 @@ func begin_waiting() -> void:
 	# the citizen reliably progresses toward rest instead of waiting forever.
 	if is_player_controlled or state == State.WAITING:
 		return
+	_reset_assignment_navigation()
 	state = State.WAITING
 	no_work_wait_complete = false
 	active_role = ""
@@ -1851,11 +1862,13 @@ func assign_home(next_home: Node3D) -> void:
 
 func go_home() -> void:
 	if not is_player_controlled and not has_active_arrival_task() and not has_active_delivery() and is_instance_valid(home):
+		_reset_assignment_navigation()
 		factory = null
 		state = State.TO_HOME
 
 func go_to_canteen(next_canteen_position: Vector3) -> void:
 	if not is_player_controlled and not has_active_delivery():
+		_reset_assignment_navigation()
 		canteen_position = next_canteen_position
 		active_role = ""
 		factory = null
@@ -1863,6 +1876,7 @@ func go_to_canteen(next_canteen_position: Vector3) -> void:
 
 func deliver_food_to_canteen(warehouse: Vector3, next_canteen_position: Vector3, amount: int) -> void:
 	if not is_player_controlled:
+		_reset_assignment_navigation()
 		warehouse_position = warehouse
 		canteen_position = next_canteen_position
 		delivery_amount = amount
