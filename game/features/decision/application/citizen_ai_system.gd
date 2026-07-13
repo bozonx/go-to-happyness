@@ -11,11 +11,13 @@ extends Node
 
 var facade: AIWorldFacade
 var director := SettlementDirector.new()
+var reservations := ReservationLedger.new()
 var latest_snapshot: WorldSnapshot
 var _goals: Array[AICitizenGoal] = []
 var _brains: Dictionary = {}
 var _citizen_ids: Array[int] = []
 var _next_think_at: Dictionary = {}
+var _order_cache: Dictionary = {}
 var _elapsed := 0.0
 var _snapshot_elapsed := 0.0
 var _director_elapsed := 0.0
@@ -49,7 +51,9 @@ func unregister_citizen(citizen_id: int) -> void:
 	_brains.erase(citizen_id)
 	_citizen_ids.erase(citizen_id)
 	_next_think_at.erase(citizen_id)
+	_order_cache.erase(citizen_id)
 	director.order_board.remove_citizen(citizen_id)
+	reservations.release_all(citizen_id)
 	_think_cursor = 0 if _citizen_ids.is_empty() else _think_cursor % _citizen_ids.size()
 
 
@@ -69,9 +73,11 @@ func _physics_process(delta: float) -> void:
 	_director_elapsed += delta
 	if latest_snapshot == null or _snapshot_elapsed >= snapshot_interval:
 		_capture_snapshot()
+	reservations.expire(latest_snapshot.simulation_seconds)
 	if _director_elapsed >= director_interval:
 		_director_elapsed = fmod(_director_elapsed, director_interval)
 		director.tick(latest_snapshot)
+	_rebuild_order_cache()
 	_tick_brains(delta)
 	_think_due_brains()
 
@@ -81,7 +87,22 @@ func _capture_snapshot() -> void:
 		return
 	_snapshot_sequence += 1
 	latest_snapshot = facade.capture(_snapshot_sequence)
+	# The ledger is persistent, live state; the facade builds a fresh snapshot each
+	# cycle, so re-attach the single shared instance instead of a throwaway one.
+	latest_snapshot.reservations = reservations
 	_snapshot_elapsed = 0.0
+
+
+func _rebuild_order_cache() -> void:
+	# The winning order per citizen is scanned once per frame and shared by both the
+	# per-frame behavior tick and the budgeted think pass, instead of twice each.
+	_order_cache.clear()
+	if latest_snapshot == null:
+		return
+	for citizen_id in _citizen_ids:
+		var order := director.order_board.order_for(citizen_id, latest_snapshot.simulation_seconds)
+		if order != null:
+			_order_cache[citizen_id] = order
 
 
 func _tick_brains(delta: float) -> void:
@@ -91,11 +112,7 @@ func _tick_brains(delta: float) -> void:
 		var brain := _brains.get(citizen_id) as CitizenBrain
 		if brain == null:
 			continue
-		brain.tick(
-			latest_snapshot,
-			director.order_board.order_for(citizen_id, latest_snapshot.simulation_seconds),
-			delta
-		)
+		brain.tick(latest_snapshot, _order_cache.get(citizen_id), delta)
 
 
 func _think_due_brains() -> void:
@@ -114,8 +131,5 @@ func _think_due_brains() -> void:
 		_next_think_at[citizen_id] = _elapsed + think_interval
 		var brain := _brains.get(citizen_id) as CitizenBrain
 		if brain != null:
-			brain.think(
-				latest_snapshot,
-				director.order_board.order_for(citizen_id, latest_snapshot.simulation_seconds)
-			)
+			brain.think(latest_snapshot, _order_cache.get(citizen_id))
 			processed += 1

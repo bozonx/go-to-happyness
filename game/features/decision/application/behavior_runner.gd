@@ -61,11 +61,15 @@ func suspended_count() -> int:
 
 
 func _resume_previous(context: BehaviorContext) -> void:
-	if _suspended.is_empty():
+	while not _suspended.is_empty():
+		var candidate: BehaviorTask = _suspended.pop_back()
+		if not candidate.is_still_valid(context):
+			candidate.root.cancel(context)
+			continue
+		active_task = candidate
+		active_task.root.resume(context)
+		task_resumed.emit(active_task)
 		return
-	active_task = _suspended.pop_back()
-	active_task.root.resume(context)
-	task_resumed.emit(active_task)
 
 
 func _cancel_suspended_goal(goal_id: StringName, context: BehaviorContext) -> void:

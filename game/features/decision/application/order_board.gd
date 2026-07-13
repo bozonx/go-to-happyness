@@ -85,6 +85,10 @@ func _remove_issuer(issuer: StringName) -> void:
 			_orders_by_citizen[citizen_id] = retained
 
 
+## Identity of an order for id/issued-at carry-over relies on value equality of its
+## fields. Order payloads must therefore hold only value types (numbers, strings,
+## StringNames, vectors) — never scene nodes — or two identical proposals will look
+## distinct and pointlessly churn their ids each director tick.
 func _matching_order(previous: Array[CitizenOrder], proposal: CitizenOrder) -> CitizenOrder:
 	for existing in previous:
 		if (

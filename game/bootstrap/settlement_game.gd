@@ -287,6 +287,9 @@ var workplace_priority_counter := 0
 var manage_citizen_button: Button
 var workforce: WorkforceCoordinator
 var citizen_ai: CitizenAISystem
+## Monotonic source of stable citizen AI identity. Persist alongside the roster so
+## reloaded games keep issuing fresh, non-colliding ids.
+var _next_ai_citizen_id := 1
 var route_service: GridRouteService
 var building_queue_service: RefCounted
 var sawmills: SawmillService
@@ -2086,9 +2089,10 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	citizen.employment_processing_finished.connect(_on_employment_processing_finished)
 	citizen.arrival_greeter_ready.connect(_on_arrival_greeter_ready)
 	citizens.append(citizen)
-	var citizen_id := citizen.get_instance_id()
-	citizen_ai.register_citizen(citizen_id, ShadowCitizenActuator.new(citizen_id))
-	citizen.tree_exiting.connect(_on_ai_citizen_exiting.bind(citizen_id), CONNECT_ONE_SHOT)
+	citizen.ai_id = _next_ai_citizen_id
+	_next_ai_citizen_id += 1
+	citizen_ai.register_citizen(citizen.ai_id, ShadowCitizenActuator.new(citizen.ai_id))
+	citizen.tree_exiting.connect(_on_ai_citizen_exiting.bind(citizen.ai_id), CONNECT_ONE_SHOT)
 	if citizens.size() > POPULATION:
 		food += random.randi_range(2, 5)
 	if hero_citizen == null:

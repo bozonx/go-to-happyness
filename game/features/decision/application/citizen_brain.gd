@@ -1,6 +1,9 @@
 class_name CitizenBrain
 extends RefCounted
 
+## How long (simulation seconds) a goal is dampened after its task fails.
+const FAILURE_COOLDOWN := 6.0
+
 var citizen_id: int
 var blackboard := AIBlackboard.new()
 var arbiter := UtilityArbiter.new()
@@ -16,6 +19,7 @@ func _init(
 	citizen_id = next_citizen_id
 	context = BehaviorContext.new(actuator, blackboard)
 	arbiter.configure(goals)
+	runner.task_finished.connect(_on_task_finished)
 
 
 func think(snapshot: WorldSnapshot, order: CitizenOrder) -> void:
@@ -56,3 +60,10 @@ func tick(snapshot: WorldSnapshot, order: CitizenOrder, delta: float) -> void:
 
 func shutdown() -> void:
 	runner.cancel_all(context)
+
+
+func _on_task_finished(task: BehaviorTask, status: BehaviorStep.Status) -> void:
+	if status != BehaviorStep.Status.FAILURE or task.goal_id == &"":
+		return
+	var now := context.snapshot.simulation_seconds if context.snapshot != null else 0.0
+	blackboard.set_cooldown(task.goal_id, now + FAILURE_COOLDOWN)

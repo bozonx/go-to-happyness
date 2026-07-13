@@ -93,13 +93,24 @@ func tick(ctx: BehaviorContext, delta: float) -> Status:  # override
 func reset() -> void: pass          # called when re-entered after interruption
 ```
 
-Composites (each ~10–15 lines, written once, reused forever):
+Composites (each ~10–15 lines, written once, reused forever) — **implemented**:
 
-- `Sequence(steps)` — run in order; fail fast; SUCCESS when all succeed.
-- `Selector(steps)` — first child that doesn't FAIL wins (fallbacks).
-- `Parallel(main, guards)` — run `main`; if a guard fires, pre-empt + resume.
-- Leaves: `WalkTo(target)`, `WorkAt(workplace, duration)`, `PickUp(resource)`,
-  `Deposit(warehouse)`, `Wait(seconds)`, `PlayState(fsm_state)` (migration bridge).
+- `SequenceStep(children)` — run in order; fail fast; SUCCESS when all succeed.
+- `SelectorStep(children)` — first child that doesn't FAIL wins (fallbacks).
+- `ParallelStep(children, ALL|ANY)` — run children together; SUCCESS on all (ALL)
+  or the first (ANY), cancelling the rest.
+
+Leaf steps (`WalkTo`, `WorkAt`, `PickUp`, `Deposit`, `Wait`, …) are **not written
+yet**: they arrive with their owning mechanic in phase two, because each one pins
+down a verb on the actuator and we only add verbs we actually use.
+
+**Interruption is runner-level, not a Parallel guard.** When a higher-utility goal
+wins mid-task, `BehaviorRunner` *suspends* the current resumable task onto a stack,
+runs the interrupt, and *resumes* the prior task when it finishes — the whole
+suspend/resume/cancel lifecycle lives on `BehaviorStep`. This is cleaner than a
+magic guard child: any goal can pre-empt any other, and a resumed task first
+re-checks its optional `guard(context)` — if the world moved on (target claimed,
+order expired, tree felled) the stale task is dropped and the arbiter rebuilds.
 
 A whole scenario becomes declarative data-ish composition:
 
@@ -163,6 +174,19 @@ Hysteresis (avoid flip-flopping between two near-equal goals) lives in the Arbit
 as a small "stickiness" bonus for the currently-running goal — one place, not
 scattered.
 
+**Failure cooldown.** When a task ends in FAILURE the brain marks its goal on a
+short, decaying cooldown in the blackboard; the arbiter dampens that goal's utility
+until the window elapses. This kills the tight fail-rebuild-fail loop the old GOAP
+idle behavior suffered, while a genuinely rising need (starvation) still overtakes
+the penalty and wins — nothing is permanently suppressed.
+
+**Reservations.** Directors allocate work globally, but two citizens can still race
+for the same physical target (one tree, one workbench slot, one unit of cargo). A
+shared `ReservationLedger` — the single mutable reference on the otherwise-immutable
+snapshot — lets a goal score "is this free for me?" and a Step `claim`/`release` it.
+Claims carry a TTL so an abandoned task never wedges a target, and are dropped
+automatically when a citizen unregisters.
+
 `WorldSnapshot` is the grown-up `CitizenDecisionContext`: a pure data struct built
 once per think-tick by the Sensor from the facade. All goal scoring and the whole
 `WorkforcePolicy` run on it → **headless testable, deterministic**.
@@ -178,7 +202,10 @@ safety). We introduce two narrow, typed seams:
 - **`AIWorldFacade`** (read side): captures a coherent `WorldSnapshot`. The
   connected adapter currently exposes identity, position, time and settlement
   identity only. Each migrated mechanic adds its owned facts to this boundary;
-  goals never reach through to `simulation._private()` methods.
+  goals never reach through to `simulation._private()` methods. Citizen identity in
+  the snapshot is a stable, settlement-issued `ai_id` (a monotonic counter), **not**
+  `get_instance_id()` — so orders, reservations and blackboard memory keep referring
+  to the same citizen across save/load and stay deterministic for headless tests.
 - **`CitizenActuator`** (write side): the verbs a Step may perform on a citizen —
   movement plus mechanic-level actions. Phase one uses a
   `ShadowCitizenActuator` that cannot issue commands. We will implement new verbs
@@ -196,10 +223,11 @@ when it moves.
 game/features/decision/
   domain/                         # pure, RefCounted, headless
     ai_fact_set.gd                # immutable namespaced extension facts
+    reservation_ledger.gd         # shared claims on contested targets (TTL'd)
     citizen_snapshot.gd
     world_snapshot.gd             # coherent facts for one think cycle
     citizen_order.gd              # Director → Brain assignment payload
-    ai_blackboard.gd              # per-citizen decision memory
+    ai_blackboard.gd              # per-citizen decision memory + goal cooldowns
     citizen_goal.gd               # AICitizenGoal: score() / build_task()
     workforce_policy.gd           # UNCHANGED — role scoring stays
     behavior/
@@ -275,10 +303,12 @@ zero private-method reach-through.
 
 ## 10. Testing strategy
 
-- **Domain stays pure** → new `tests/test_ai.gd`: goal scoring (utility ordering,
-  hysteresis), `WorldSnapshot` construction from a fake facade, and Step composites
-  (Sequence fail-fast, Selector fallback, Parallel pre-empt/resume) with a fake
-  actuator. All headless, deterministic, no scene.
+- **Domain stays pure** → `tests/test_ai.gd`: goal scoring (utility ordering,
+  hysteresis, failure cooldown), `WorldSnapshot`/fact construction, Step composites
+  (Sequence fail-fast, Selector fallback, Parallel ANY), runner interrupt/resume,
+  stale-task drop on resume, order reconciliation, and the `ReservationLedger`
+  (claim/deny/re-affirm/wrong-owner-release/expiry) with a fake actuator. All
+  headless, deterministic, no scene.
 - `WorkforcePolicy` tests unchanged (it doesn't move).
 - Each migration phase must keep `godot --headless --script res://tests/test_domain.gd`
   green before merge.

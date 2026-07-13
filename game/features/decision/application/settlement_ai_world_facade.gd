@@ -17,9 +17,9 @@ func capture(sequence: int) -> WorldSnapshot:
 		return WorldSnapshot.new(sequence)
 	var citizens_by_id: Dictionary = {}
 	for actor: Citizen in simulation.citizens:
-		if not is_instance_valid(actor):
+		if not is_instance_valid(actor) or actor.ai_id == 0:
 			continue
-		var citizen_id := actor.get_instance_id()
+		var citizen_id := actor.ai_id
 		citizens_by_id[citizen_id] = CitizenSnapshot.new(
 			citizen_id,
 			actor.global_position,

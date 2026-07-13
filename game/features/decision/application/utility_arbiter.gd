@@ -6,6 +6,10 @@ extends RefCounted
 var minimum_utility := 0.001
 var stickiness_bonus := 0.08
 var switch_margin := 0.03
+## How hard a just-failed goal is suppressed at the peak of its cooldown, and over
+## how long (simulation seconds) that suppression decays back to normal.
+var cooldown_damping := 0.85
+var cooldown_window := 6.0
 var _goals: Array[AICitizenGoal] = []
 
 
@@ -24,8 +28,12 @@ func choose(
 	var best_utility := minimum_utility
 	var current_goal: AICitizenGoal
 	var current_utility := 0.0
+	var simulation_seconds := snapshot.simulation_seconds if snapshot != null else 0.0
 	for goal in _goals:
 		var utility := maxf(0.0, goal.score(snapshot, citizen, order, blackboard))
+		if blackboard != null:
+			var penalty := blackboard.cooldown_penalty(goal.id, simulation_seconds, cooldown_window)
+			utility *= 1.0 - cooldown_damping * penalty
 		if goal.id == current_goal_id and utility >= minimum_utility:
 			current_goal = goal
 			current_utility = utility

@@ -8,6 +8,10 @@ var sequence: int
 var simulation_seconds: float
 var game_minutes: float
 var settlement: AIFactSet
+## Live, shared claim store injected by the runtime after capture. It is the one
+## mutable reference on the snapshot: reservations are cross-citizen state that
+## cannot be frozen per think cycle without letting two citizens claim one target.
+var reservations: ReservationLedger
 var _citizens: Dictionary
 
 
@@ -22,6 +26,7 @@ func _init(
 	simulation_seconds = next_simulation_seconds
 	game_minutes = next_game_minutes
 	settlement = next_settlement if next_settlement != null else AIFactSet.new()
+	reservations = ReservationLedger.new()
 	_citizens = next_citizens.duplicate()
 
 

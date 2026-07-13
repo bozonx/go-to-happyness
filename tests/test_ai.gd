@@ -41,9 +41,12 @@ class FixedGoal extends AICitizenGoal:
 func _init() -> void:
 	_test_fact_sets_and_snapshots()
 	_test_utility_hysteresis()
+	_test_failure_cooldown()
 	_test_behavior_composites()
 	_test_runner_interrupt_and_resume()
+	_test_resume_drops_stale_task()
 	_test_order_reconciliation()
+	_test_reservations()
 	quit(0)
 
 
@@ -74,6 +77,55 @@ func _test_utility_hysteresis() -> void:
 	work.utility = 0.0
 	eat.utility = 0.02
 	assert(arbiter.choose(snapshot, citizen, null, memory, &"work").goal == eat)
+
+
+func _test_failure_cooldown() -> void:
+	var work := FixedGoal.new(&"work", 0.60)
+	var eat := FixedGoal.new(&"eat", 0.40)
+	var arbiter := UtilityArbiter.new()
+	arbiter.configure([work, eat])
+	var citizen := CitizenSnapshot.new(1)
+	var memory := AIBlackboard.new()
+	# Work loses right after failing, even though its raw utility is higher.
+	memory.set_cooldown(&"work", 6.0)
+	var fresh := WorldSnapshot.new(0, 0.0, 0.0)
+	assert(arbiter.choose(fresh, citizen, null, memory).goal == eat)
+	# Once the cooldown window elapses, work is preferred again.
+	var later := WorldSnapshot.new(0, 6.0, 0.0)
+	assert(arbiter.choose(later, citizen, null, memory).goal == work)
+
+
+func _test_resume_drops_stale_task() -> void:
+	var context := _context()
+	var work_step := ScriptedStep.new([BehaviorStep.Status.RUNNING])
+	var urgent_step := ScriptedStep.new([BehaviorStep.Status.SUCCESS])
+	var runner := BehaviorRunner.new()
+	var work_task := BehaviorTask.new(&"work", work_step)
+	work_task.guard = func(_ctx: BehaviorContext) -> bool: return false
+	assert(runner.start(work_task, context))
+	assert(runner.tick(context, 0.1) == BehaviorStep.Status.RUNNING)
+	assert(runner.start(BehaviorTask.new(&"urgent", urgent_step), context))
+	# The interrupt completes; the stale work task fails its guard and is dropped.
+	assert(runner.tick(context, 0.1) == BehaviorStep.Status.SUCCESS)
+	assert(runner.active_task == null and runner.suspended_count() == 0)
+
+
+func _test_reservations() -> void:
+	var ledger := ReservationLedger.new()
+	assert(ledger.claim(&"tree_7", 1, 0.0, 5.0))
+	assert(not ledger.claim(&"tree_7", 2, 0.0, 5.0))
+	assert(ledger.claim(&"tree_7", 1, 1.0, 5.0)) # owner re-affirms
+	assert(ledger.owner_of(&"tree_7", 1.0) == 1)
+	assert(ledger.is_available_for(&"tree_7", 1, 1.0))
+	assert(not ledger.is_available_for(&"tree_7", 2, 1.0))
+	# A release from the wrong citizen is ignored; the rightful owner can release.
+	ledger.release(&"tree_7", 2)
+	assert(ledger.owner_of(&"tree_7", 1.0) == 1)
+	ledger.release(&"tree_7", 1)
+	assert(ledger.claim(&"tree_7", 2, 2.0, 5.0))
+	# Expiry frees an abandoned claim.
+	ledger.expire(100.0)
+	assert(ledger.active_count() == 0)
 
 
 func _test_behavior_composites() -> void:
