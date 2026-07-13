@@ -1364,6 +1364,10 @@ func _is_board_cell(cell: Vector2i) -> bool:
 func _find_path_around_houses(from: Vector3, destination: Vector3, _may_enter_destination_house: bool) -> RouteResult:
 	return route_service.find_route(from, destination)
 
+
+func _movement_speed_modifier_at(position_on_board: Vector3) -> float:
+	return nav_grid.movement_speed_modifier_at(position_on_board) if nav_grid != null else 1.0
+
 func _resolve_building_queue_position(citizen: Citizen, destination: Vector3) -> Dictionary:
 	return building_queue_service.resolve(citizen, destination)
 
@@ -1615,6 +1619,13 @@ func _refresh_navigation_grid() -> void:
 	_rebuild_navigation_obstacles()
 	if nav_grid != null:
 		nav_grid.set_blocked_cells(navigation_blocked_cells)
+		var terrain_weights: Dictionary = {}
+		for x in range(-BOARD_CELLS / 2, BOARD_CELLS / 2):
+			for z in range(-BOARD_CELLS / 2, BOARD_CELLS / 2):
+				var cell := Vector2i(x, z)
+				if not navigation_blocked_cells.has(cell):
+					terrain_weights[cell] = NavGrid.DEFAULT_CELL_WEIGHT
+		nav_grid.set_cell_weights(terrain_weights)
 
 func _is_navigation_cell_blocked(cell: Vector2i) -> bool:
 	return navigation_blocked_cells.has(cell)
@@ -1836,7 +1847,7 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	add_child(citizen)
 	citizen.simulation = self
 	citizen.setup_specialization(primary_specialization if not primary_specialization.is_empty() else "unassigned")
-	citizen.setup_navigation(_find_path_around_houses, _get_nearest_delivery_position, _resolve_building_queue_position)
+	citizen.setup_navigation(_find_path_around_houses, _get_nearest_delivery_position, _resolve_building_queue_position, _movement_speed_modifier_at)
 	citizen.setup_registration_service(_can_start_registration, _registration_duration)
 	citizen.resource_delivered.connect(_on_resource_delivered)
 	citizen.construction_material_delivered.connect(_on_construction_material_delivered)

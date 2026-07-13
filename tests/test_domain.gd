@@ -40,6 +40,7 @@ func _init() -> void:
 	_test_citizen_task_state()
 	_test_citizen_state_display_queue()
 	_test_grid_routing()
+	_test_weighted_grid_routing()
 	_test_building_queue_routing()
 	_test_canteen_meal_requests()
 	_test_construction_progress()
@@ -352,6 +353,55 @@ func _test_grid_routing() -> void:
 	assert(route.reachable and route.arrival_position == Vector3(2.5, 0.0, 0.5))
 	for waypoint in route.waypoints:
 		assert(not blocked.has(Vector2i(floori(waypoint.x), floori(waypoint.z))))
+
+
+func _test_weighted_grid_routing() -> void:
+	var grid := NavGrid.new()
+	grid.configure(1.0, 10)
+	var router := GridRouteServiceScript.new()
+	router.configure(grid)
+
+	# Eight-way A* collapses an unobstructed diagonal to the requested endpoint.
+	var diagonal_destination := Vector3(3.5, 0.0, 3.5)
+	var diagonal_route := router.find_route(Vector3(0.5, 0.0, 0.5), diagonal_destination)
+	assert(diagonal_route.reachable and diagonal_route.waypoints == [diagonal_destination])
+
+	# A diagonal cannot pass between two orthogonally adjacent blocked cells.
+	grid.set_blocked_cells({Vector2i(1, 0): true, Vector2i(0, 1): true, Vector2i(-1, 0): true, Vector2i(0, -1): true})
+	var corner_route := router.find_route(Vector3(0.5, 0.0, 0.5), Vector3(1.5, 0.0, 1.5))
+	assert(not corner_route.reachable)
+	grid.set_blocked_cells({})
+
+	# A cheaper corridor wins over the shorter strip of expensive terrain. The
+	# weighted smoother must keep the detour instead of cutting through that strip.
+	var weights: Dictionary = {}
+	for x in range(-2, 3):
+		weights[Vector2i(x, 0)] = 10.0
+	for x in range(-2, 3):
+		weights[Vector2i(x, 1)] = 0.5
+	grid.set_cell_weights(weights)
+	var start := Vector3(-2.5, 0.0, 0.5)
+	var destination := Vector3(3.5, 0.0, 0.5)
+	var weighted_route := router.find_route(start, destination)
+	assert(weighted_route.reachable)
+	var uses_cheap_corridor := false
+	for waypoint in weighted_route.waypoints:
+		uses_cheap_corridor = uses_cheap_corridor or waypoint.z > 1.0
+	assert(uses_cheap_corridor)
+	assert(grid.segment_cost(start, destination) > 1.08 * _route_polyline_cost(grid, start, weighted_route.waypoints))
+
+	grid.set_blocked_cells({Vector2i(3, 0): true})
+	var blocked_destination := router.find_route(start, destination)
+	assert(not blocked_destination.reachable)
+
+
+func _route_polyline_cost(grid: NavGrid, start: Vector3, waypoints: Array[Vector3]) -> float:
+	var total := 0.0
+	var previous := start
+	for waypoint in waypoints:
+		total += grid.segment_cost(previous, waypoint)
+		previous = waypoint
+	return total
 
 
 func _test_building_queue_routing() -> void:

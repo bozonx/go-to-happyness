@@ -259,6 +259,7 @@ var construction_delivery_resource := ""
 var building_supply_kind := "construction"
 var park_rest_duration := 4.0
 var pathfinder: Callable
+var movement_speed_modifier_query: Callable
 var delivery_position_resolver: Callable
 var queue_position_resolver: Callable
 var idle_wander_anchor := Vector3.INF
@@ -1243,7 +1244,9 @@ func _move_directly_to(destination: Vector3, delta: float) -> bool:
 		global_position = Vector3(destination.x, global_position.y, destination.z)
 		return true
 	var direction := offset.normalized()
-	var desired_velocity := direction * get_walk_speed()
+	var speed_modifier := float(movement_speed_modifier_query.call(global_position)) if movement_speed_modifier_query.is_valid() else 1.0
+	var current_walk_speed := get_walk_speed() * speed_modifier
+	var desired_velocity := direction * current_walk_speed
 	velocity.x = desired_velocity.x
 	velocity.z = desired_velocity.z
 	jump_cooldown = maxf(0.0, jump_cooldown - delta)
@@ -1253,7 +1256,7 @@ func _move_directly_to(destination: Vector3, delta: float) -> bool:
 	var horizontal_progress := Vector2(global_position.x - position_before_move.x, global_position.z - position_before_move.z).length()
 	var distance_after_move := Vector2(destination.x - global_position.x, destination.z - global_position.z).length()
 	_update_route_progress(distance_before_move, distance_after_move, delta, direction)
-	if is_on_floor() and horizontal_progress < get_walk_speed() * delta * 0.15:
+	if is_on_floor() and horizontal_progress < current_walk_speed * delta * 0.15:
 		stuck_time += delta
 		if jump_cooldown <= 0.0:
 			if stuck_time >= STUCK_TIME_BEFORE_SIDESTEP:
@@ -1658,10 +1661,11 @@ func apply_daily_decay() -> void:
 func is_building_site(site: Node3D) -> bool:
 	return not is_player_controlled and state == State.CONSTRUCTING and construction_site == site and global_position.distance_to(construction_position) <= 0.7
 
-func setup_navigation(next_pathfinder: Callable, next_delivery_position_resolver := Callable(), next_queue_position_resolver := Callable()) -> void:
+func setup_navigation(next_pathfinder: Callable, next_delivery_position_resolver := Callable(), next_queue_position_resolver := Callable(), next_movement_speed_modifier_query := Callable()) -> void:
 	pathfinder = next_pathfinder
 	delivery_position_resolver = next_delivery_position_resolver
 	queue_position_resolver = next_queue_position_resolver
+	movement_speed_modifier_query = next_movement_speed_modifier_query
 
 func setup_registration_service(staff_checker: Callable, duration_resolver: Callable) -> void:
 	registration_staff_checker = staff_checker

@@ -11,6 +11,9 @@ extends RefCounted
 var cell_size := 1.0
 var board_half_cells := 0
 var _blocked: Dictionary = {}
+var _cell_weights: Dictionary = {}
+
+const DEFAULT_CELL_WEIGHT := 2.0
 
 
 func configure(next_cell_size: float, next_board_cells: int) -> void:
@@ -22,6 +25,27 @@ func configure(next_cell_size: float, next_board_cells: int) -> void:
 ## building footprints) and hand it over; the grid never mutates it in place.
 func set_blocked_cells(next_blocked: Dictionary) -> void:
 	_blocked = next_blocked
+
+
+## Replaces terrain traversal weights wholesale. Cells not listed here use the
+## default grass cost. Blocked cells remain impassable regardless of a weight.
+func set_cell_weights(next_weights: Dictionary) -> void:
+	_cell_weights = next_weights
+
+
+func get_cell_weight(cell: Vector2i) -> float:
+	return maxf(0.001, float(_cell_weights.get(cell, DEFAULT_CELL_WEIGHT)))
+
+
+func movement_speed_modifier_at(position_on_board: Vector3) -> float:
+	return 1.0 / get_cell_weight(cell_from_position(position_on_board))
+
+
+func minimum_cell_weight() -> float:
+	var minimum := DEFAULT_CELL_WEIGHT
+	for weight in _cell_weights.values():
+		minimum = minf(minimum, maxf(0.001, float(weight)))
+	return minimum
 
 
 func cell_from_position(position_on_board: Vector3) -> Vector2i:
@@ -49,12 +73,25 @@ func is_walkable(cell: Vector2i) -> bool:
 ## tested — no corner is cut past an obstacle. This is what lets routes collapse
 ## to straight lines while still hugging around blocked footprints.
 func is_segment_clear(from: Vector3, to: Vector3) -> bool:
+	return is_finite(segment_cost(from, to))
+
+
+## Traverses every cell crossed by a world-space segment and returns its
+## weighted length. INF means the segment crosses a blocked cell or cuts an
+## obstacle corner. This is deliberately shared by visibility and smoothing so
+## both use the same conservative geometry rules.
+func segment_cost(from: Vector3, to: Vector3) -> float:
 	var start_cell := cell_from_position(from)
 	var end_cell := cell_from_position(to)
+	if not is_walkable(start_cell) or not is_walkable(end_cell):
+		return INF
 	var ax := from.x / cell_size
 	var az := from.z / cell_size
 	var dx := (to.x / cell_size) - ax
 	var dz := (to.z / cell_size) - az
+	var segment_length := Vector2(to.x - from.x, to.z - from.z).length()
+	if segment_length <= 0.0001:
+		return 0.0
 
 	var cell := start_cell
 	var step_x := 0
@@ -82,19 +119,34 @@ func is_segment_clear(from: Vector3, to: Vector3) -> bool:
 		t_delta_z = 1.0 / -dz
 		t_max_z = (float(cell.y) - az) / dz
 
+	var traversed_cost := 0.0
+	var previous_t := 0.0
 	# A board is at most board_half_cells * 2 wide in each axis; the diagonal span
 	# bounds the number of cells any segment can enter, so the loop always ends.
 	var guard := board_half_cells * 4 + 4
 	while guard > 0:
 		guard -= 1
-		if not is_walkable(cell):
-			return false
 		if cell == end_cell:
-			return true
-		if t_max_x < t_max_z:
+			return traversed_cost + (1.0 - previous_t) * segment_length * get_cell_weight(cell)
+		var next_t := minf(t_max_x, t_max_z)
+		traversed_cost += (next_t - previous_t) * segment_length * get_cell_weight(cell)
+		previous_t = next_t
+		if is_equal_approx(t_max_x, t_max_z):
+			# Crossing exactly through a grid corner touches both side cells. Requiring
+			# both prevents a line from slipping through a building corner.
+			var horizontal_side := cell + Vector2i(step_x, 0)
+			var vertical_side := cell + Vector2i(0, step_z)
+			if not is_walkable(horizontal_side) or not is_walkable(vertical_side):
+				return INF
+			cell += Vector2i(step_x, step_z)
+			t_max_x += t_delta_x
+			t_max_z += t_delta_z
+		elif t_max_x < t_max_z:
 			cell.x += step_x
 			t_max_x += t_delta_x
 		else:
 			cell.y += step_z
 			t_max_z += t_delta_z
-	return false
+		if not is_walkable(cell):
+			return INF
+	return INF
