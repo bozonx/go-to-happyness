@@ -18,6 +18,8 @@ const ServiceWorkGoalScript = preload("res://game/features/decision/domain/goals
 const ServiceWorkOrderProviderScript = preload("res://game/features/decision/application/service_work_order_provider.gd")
 const FactoryWorkGoalScript = preload("res://game/features/decision/domain/goals/factory_work_goal.gd")
 const FactoryWorkOrderProviderScript = preload("res://game/features/decision/application/factory_work_order_provider.gd")
+const CourierDeliveryGoalScript = preload("res://game/features/decision/domain/goals/courier_delivery_goal.gd")
+const CourierDeliveryOrderProviderScript = preload("res://game/features/decision/application/courier_delivery_order_provider.gd")
 const SettlementCitizenActuatorScript = preload("res://game/features/decision/application/settlement_citizen_actuator.gd")
 
 
@@ -120,7 +122,7 @@ class FakeActuator extends CitizenActuator:
 		_payload: AIFactSet = null
 	) -> bool:
 		action_start_count += 1
-		return action in [&"sleep", &"eat", &"relieve", &"rest", &"forestry", &"farming", &"construction", &"demolition", &"gathering", &"excavation", &"cook", &"teacher", &"seller", &"official", &"craftsman", &"factory_work"]
+		return action in [&"sleep", &"eat", &"relieve", &"rest", &"forestry", &"farming", &"construction", &"demolition", &"gathering", &"excavation", &"cook", &"teacher", &"seller", &"official", &"craftsman", &"factory_work", &"courier_delivery"]
 
 	func action_status() -> ActionStatus:
 		return next_action_status
@@ -185,6 +187,8 @@ func _init() -> void:
 	_test_factory_provider_keeps_active_station()
 	_test_native_factory_goal()
 	_test_factory_actuator()
+	_test_courier_provider_assigns_unique_tasks()
+	_test_native_courier_goal()
 	_test_production_sleep_actuator()
 	_test_order_reconciliation()
 	_test_order_board_deduplicates_provider_output()
@@ -805,6 +809,31 @@ func _test_factory_actuator() -> void:
 	citizen.free()
 
 
+func _test_courier_provider_assigns_unique_tasks() -> void:
+	var provider := CourierDeliveryOrderProviderScript.new()
+	var first := _courier_citizen(1)
+	var second := _courier_citizen(2)
+	var orders := provider.collect_orders(WorldSnapshot.new(1, 0.0, 0.0, AIFactSet.new(), {1: first, 2: second}))
+	assert(orders.size() == 2)
+	assert(orders[0].payload.value(&"courier.task_id") != orders[1].payload.value(&"courier.task_id"))
+
+
+func _test_native_courier_goal() -> void:
+	var goal := CourierDeliveryGoalScript.new()
+	var actuator := FakeActuator.new(1)
+	var brain := CitizenBrain.new(1, actuator, [goal])
+	var citizen := _courier_citizen(1)
+	var snapshot := _snapshot(0.0, citizen)
+	var order := CitizenOrder.new(1, &"courier_delivery", &"logistics.courier", 0.8, AIFactSet.new({&"courier.task_id": &"canteen_food"}))
+	order.id = 24
+	brain.think(snapshot, order)
+	brain.tick(snapshot, order, 0.1)
+	assert(actuator.action_start_count == 1)
+	actuator.next_action_status = CitizenActuator.ActionStatus.SUCCEEDED
+	brain.tick(snapshot, order, 0.1)
+	assert(brain.runner.active_task == null)
+
+
 func _test_production_sleep_actuator() -> void:
 	var citizen := Citizen.new()
 	citizen.ai_id = 17
@@ -1161,3 +1190,14 @@ func _factory_order(citizen_id: int, role: StringName) -> CitizenOrder:
 	order.target_entity_id = 71
 	order.target_position = Vector3(7.0, 0.0, 0.0)
 	return order
+
+
+func _courier_citizen(citizen_id: int) -> CitizenSnapshot:
+	return CitizenSnapshot.new(citizen_id, Vector3(float(citizen_id), 0.0, 0.0), false, true, AIFactSet.new({
+		&"work.courier.worker": true,
+		&"work.courier.can_start": true,
+		&"work.courier.tasks": [
+			{&"id": &"canteen_food", &"priority": 100, &"pickup": Vector3.ZERO},
+			{&"id": &"worker:2", &"priority": 45, &"pickup": Vector3(4.0, 0.0, 0.0)},
+		],
+	}))
