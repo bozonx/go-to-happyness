@@ -65,7 +65,7 @@ func _available_couriers() -> Array[Citizen]:
 	for citizen in simulation.citizens:
 		if not citizen.is_reserve() or citizen.state != Citizen.State.IDLE:
 			continue
-		if citizen.freelance_assignment == "courier":
+		if citizen.is_courier():
 			pinned.append(citizen)
 		elif citizen.freelance_assignment.is_empty() and citizen.can_recheck_automatic_role():
 			flexible.append(citizen)

@@ -107,7 +107,7 @@ func dispatch_queued_trades() -> void:
 			candidates.append(worker)
 	# Dedicated couriers take new market work first; other automatic workers are
 	# valid fallbacks so an order cannot stall when no courier exists.
-	candidates.sort_custom(func(a: Citizen, b: Citizen): return (a.freelance_assignment == "courier") and b.freelance_assignment != "courier")
+	candidates.sort_custom(func(a: Citizen, b: Citizen): return a.is_courier() and not b.is_courier())
 	for worker in candidates:
 		if simulation.queued_trades.is_empty():
 			return

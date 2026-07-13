@@ -424,7 +424,7 @@ func _is_factory_worker_active(citizen: Citizen, factory: Node3D) -> bool:
 
 func _has_courier() -> bool:
 	for citizen in citizens:
-		if citizen.employment_state == Citizen.EmploymentState.FREELANCE and citizen.freelance_assignment == "courier":
+		if citizen.is_reserve() and citizen.is_courier():
 			return true
 	return false
 
@@ -832,7 +832,7 @@ func _dispatch_courier_tasks() -> void:
 	if warehouse_positions.is_empty():
 		return
 	for courier in citizens:
-		if courier.freelance_assignment == "courier" and courier.state == Citizen.State.WAITING:
+		if courier.is_courier() and courier.state == Citizen.State.WAITING:
 			courier.idle()
 	_update_firewood_supplies()
 	_update_resource_pile_supplies()
@@ -840,7 +840,7 @@ func _dispatch_courier_tasks() -> void:
 
 	var has_idle_pinned_courier := false
 	for citizen in citizens:
-		if citizen.employment_state == Citizen.EmploymentState.FREELANCE and citizen.freelance_assignment == "courier" and citizen.state == Citizen.State.IDLE:
+		if citizen.is_reserve() and citizen.is_courier() and citizen.state == Citizen.State.IDLE:
 			has_idle_pinned_courier = true
 			break
 
@@ -848,11 +848,11 @@ func _dispatch_courier_tasks() -> void:
 	for courier in citizens:
 		if courier.employment_state != Citizen.EmploymentState.FREELANCE or courier.state != Citizen.State.IDLE:
 			continue
-		if not courier.freelance_assignment.is_empty() and courier.freelance_assignment != "courier":
+		if courier.has_work_order() and not courier.is_courier():
 			continue
 		# A flexible worker is a fallback only when no dedicated courier can take
 		# the job now. This preserves the value of pinning a courier.
-		if courier.freelance_assignment != "courier" and has_idle_pinned_courier:
+		if not courier.is_courier() and has_idle_pinned_courier:
 			continue
 		
 		# 1. Manual assignment check
@@ -894,7 +894,7 @@ func _dispatch_courier_tasks() -> void:
 	# Determine total couriers serving productions
 	var production_couriers := available_couriers.size()
 	for citizen in citizens:
-		if citizen.employment_state == Citizen.EmploymentState.FREELANCE and citizen.freelance_assignment == "courier":
+		if citizen.is_reserve() and citizen.is_courier():
 			if citizen.state in [Citizen.State.COURIER_TO_SAWMILL, Citizen.State.COURIER_TO_WORKER, Citizen.State.COURIER_TO_WAREHOUSE]:
 				production_couriers += 1
 
@@ -918,7 +918,7 @@ func _dispatch_courier_tasks() -> void:
 
 	# 2. Staffed workers or workers with pending resources
 	for worker in citizens:
-		if worker.freelance_assignment != "courier" and (worker.active_role in ["farming", "crafting"] or worker.has_pending_resource()):
+		if not worker.is_courier() and (worker.active_role in ["farming", "crafting"] or worker.has_pending_resource()):
 			var has_goods = worker.has_pending_resource()
 			if has_goods:
 				num_productions_with_goods += 1
@@ -939,7 +939,7 @@ func _dispatch_courier_tasks() -> void:
 		assigned_couriers[prod.key] = 0
 
 	for citizen in citizens:
-		if citizen.employment_state == Citizen.EmploymentState.FREELANCE and citizen.freelance_assignment == "courier":
+		if citizen.is_reserve() and citizen.is_courier():
 			if citizen.state == Citizen.State.COURIER_TO_SAWMILL:
 				var key = _cell_from_position(citizen.workplace_position)
 				if assigned_couriers.has(key):
@@ -1016,7 +1016,7 @@ func _update_construction_supplies() -> void:
 	for courier in citizens:
 		if courier.is_player_controlled or courier.state != Citizen.State.IDLE:
 			continue
-		if courier.freelance_assignment != "courier" or courier.employment_state != Citizen.EmploymentState.FREELANCE:
+		if not courier.is_courier() or not courier.is_reserve():
 			continue
 		for resource_type in site.required_materials:
 			var required := int(site.required_materials[resource_type])
@@ -1151,7 +1151,7 @@ func _on_building_supply_delivered(_courier: Citizen, target: Node3D, supply_kin
 
 func _update_firewood_supplies() -> void:
 	for courier in citizens:
-		if courier.freelance_assignment != "courier" or courier.state != Citizen.State.IDLE:
+		if not courier.is_courier() or courier.state != Citizen.State.IDLE:
 			continue
 		for record in building_registry.records():
 			var building := record.node
@@ -1168,7 +1168,7 @@ func _update_repairs() -> void:
 	if warehouse_positions.is_empty() or branches <= 0 or not _is_work_time():
 		return
 	for builder in citizens:
-		if builder.state != Citizen.State.IDLE or builder.employment_state != Citizen.EmploymentState.FREELANCE or builder.freelance_assignment != "courier":
+		if builder.state != Citizen.State.IDLE or not builder.is_reserve() or not builder.is_courier():
 			continue
 		for record in building_registry.records():
 			var building := record.node
@@ -1181,7 +1181,7 @@ func _update_repairs() -> void:
 
 func _update_resource_pile_supplies() -> void:
 	for courier in citizens:
-		if courier.freelance_assignment != "courier" or courier.state != Citizen.State.IDLE:
+		if not courier.is_courier() or courier.state != Citizen.State.IDLE:
 			continue
 		for index in resource_piles.size():
 			var pile: Dictionary = resource_piles[index]
@@ -3785,7 +3785,7 @@ func _citizen_at_screen_position(screen_position: Vector2) -> Citizen:
 func _select_citizen(clicked_citizen: Citizen) -> void:
 	if clicked_citizen == null:
 		return
-	if selected_builder != null and selected_builder.freelance_assignment == "courier" and clicked_citizen != selected_builder:
+	if selected_builder != null and selected_builder.is_courier() and clicked_citizen != selected_builder:
 		selected_builder.courier_worker = clicked_citizen
 		_update_interface("Courier assigned to this worker. Click another worker to reassign.")
 		return
@@ -4937,7 +4937,7 @@ func _workforce_role_count(role: String) -> int:
 		if citizen.is_player_controlled:
 			continue
 		if role == "courier":
-			if citizen.freelance_assignment == "courier":
+			if citizen.is_courier():
 				count += 1
 		else:
 			if _work_role_for(citizen) == role:
@@ -4949,7 +4949,7 @@ func _manually_assigned_count(role: String) -> int:
 	var count := 0
 	for citizen in citizens:
 		if not citizen.is_player_controlled:
-			if role == "courier" and citizen.freelance_assignment == "courier":
+			if role == "courier" and citizen.is_courier():
 				count += 1
 			elif citizen.manual_role == role:
 				count += 1
@@ -5091,7 +5091,7 @@ func _employment_role_count(role: String, state: int) -> int:
 		if citizen.is_player_controlled:
 			continue
 		if role == "courier":
-			if state == Citizen.EmploymentState.FREELANCE and citizen.employment_state == Citizen.EmploymentState.FREELANCE and citizen.freelance_assignment == "courier":
+			if state == Citizen.EmploymentState.FREELANCE and citizen.is_reserve() and citizen.is_courier():
 				count += 1
 		else:
 			if citizen.employment_state != state:
@@ -5465,7 +5465,7 @@ func _refresh_market_menu() -> void:
 		market_menu.add_child(btn)
 		y_offset += 32.0
 
-	var equipment_target: Citizen = selected_builder if is_instance_valid(selected_builder) and selected_builder.employment_state == Citizen.EmploymentState.FREELANCE and selected_builder.freelance_assignment == "courier" else null
+	var equipment_target: Citizen = selected_builder if is_instance_valid(selected_builder) and selected_builder.is_reserve() and selected_builder.is_courier() else null
 	var equipment_offers: Array[Array] = []
 	if settlement.era == SettlementState.Era.TENT:
 		equipment_offers.append(["simple_backpack", 12])

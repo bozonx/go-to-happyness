@@ -1276,7 +1276,7 @@ func storage_delivery_result(accepted: bool) -> void:
 	if accepted:
 		carried_amount = 0
 		blocked_by_storage = false
-		if freelance_assignment == "courier":
+		if is_courier():
 			state = State.IDLE
 			return
 		if returning_to_excavation:
