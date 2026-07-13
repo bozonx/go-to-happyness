@@ -10,6 +10,10 @@ const FarmingGoalScript = preload("res://game/features/decision/domain/goals/far
 const FarmingOrderProviderScript = preload("res://game/features/decision/application/farming_order_provider.gd")
 const ConstructionGoalScript = preload("res://game/features/decision/domain/goals/construction_goal.gd")
 const ConstructionOrderProviderScript = preload("res://game/features/decision/application/construction_order_provider.gd")
+const GatheringGoalScript = preload("res://game/features/decision/domain/goals/gathering_goal.gd")
+const GatheringOrderProviderScript = preload("res://game/features/decision/application/gathering_order_provider.gd")
+const ExcavationGoalScript = preload("res://game/features/decision/domain/goals/excavation_goal.gd")
+const ExcavationOrderProviderScript = preload("res://game/features/decision/application/excavation_order_provider.gd")
 const SettlementCitizenActuatorScript = preload("res://game/features/decision/application/settlement_citizen_actuator.gd")
 
 
@@ -112,7 +116,7 @@ class FakeActuator extends CitizenActuator:
 		_payload: AIFactSet = null
 	) -> bool:
 		action_start_count += 1
-		return action in [&"sleep", &"eat", &"relieve", &"rest", &"forestry", &"farming", &"construction", &"demolition"]
+		return action in [&"sleep", &"eat", &"relieve", &"rest", &"forestry", &"farming", &"construction", &"demolition", &"gathering", &"excavation"]
 
 	func action_status() -> ActionStatus:
 		return next_action_status
@@ -166,6 +170,11 @@ func _init() -> void:
 	_test_construction_provider_keeps_active_cycle()
 	_test_native_construction_goal()
 	_test_construction_actuator()
+	_test_gathering_provider_assigns_unique_stable_sources()
+	_test_native_gathering_goal()
+	_test_excavation_provider_assigns_unique_stable_sites()
+	_test_native_excavation_goal()
+	_test_excavation_actuator_completes_after_courier_pickup()
 	_test_production_sleep_actuator()
 	_test_order_reconciliation()
 	_test_order_board_deduplicates_provider_output()
@@ -604,6 +613,96 @@ func _test_construction_actuator() -> void:
 	citizen.free()
 
 
+func _test_gathering_provider_assigns_unique_stable_sources() -> void:
+	var provider := GatheringOrderProviderScript.new()
+	var first := _gathering_citizen(1, false)
+	var second := _gathering_citizen(2, false)
+	var orders := provider.collect_orders(WorldSnapshot.new(1, 0.0, 0.0, AIFactSet.new(), {1: first, 2: second}))
+	assert(orders.size() == 2)
+	assert(orders[0].target_position != orders[1].target_position)
+	var active_orders := provider.collect_orders(WorldSnapshot.new(2, 1.0, 0.0, AIFactSet.new(), {
+		1: _gathering_citizen(1, true),
+		2: _gathering_citizen(2, true),
+	}))
+	assert(active_orders.size() == 2)
+	assert(active_orders[0].target_position == orders[0].target_position)
+	assert(active_orders[1].target_position == orders[1].target_position)
+
+
+func _test_native_gathering_goal() -> void:
+	var goal := GatheringGoalScript.new()
+	var actuator := FakeActuator.new(1)
+	var brain := CitizenBrain.new(1, actuator, [goal])
+	var citizen := _gathering_citizen(1, false)
+	var snapshot := _snapshot(0.0, citizen)
+	var order := _gathering_order(1, Vector3(3.0, 0.0, 0.0), &"branch:3:0")
+	order.id = 20
+	brain.think(snapshot, order)
+	brain.tick(snapshot, order, 0.1)
+	assert(actuator.action_start_count == 1)
+	assert(snapshot.reservations.owner_of([&"gathering.source", &"branch:3:0"], 0.0) == 1)
+	actuator.next_action_status = CitizenActuator.ActionStatus.SUCCEEDED
+	brain.tick(snapshot, order, 0.1)
+	assert(snapshot.reservations.owner_of([&"gathering.source", &"branch:3:0"], 0.0) == 0)
+
+
+func _test_excavation_provider_assigns_unique_stable_sites() -> void:
+	var provider := ExcavationOrderProviderScript.new()
+	var first := _excavation_citizen(1, false)
+	var second := _excavation_citizen(2, false)
+	var orders := provider.collect_orders(WorldSnapshot.new(1, 0.0, 0.0, AIFactSet.new(), {1: first, 2: second}))
+	assert(orders.size() == 2)
+	assert(orders[0].target_entity_id != orders[1].target_entity_id)
+	var active_orders := provider.collect_orders(WorldSnapshot.new(2, 1.0, 0.0, AIFactSet.new(), {
+		1: _excavation_citizen(1, true),
+		2: _excavation_citizen(2, true),
+	}))
+	assert(active_orders.size() == 2)
+	assert(active_orders[0].target_entity_id == orders[0].target_entity_id)
+	assert(active_orders[1].target_entity_id == orders[1].target_entity_id)
+
+
+func _test_native_excavation_goal() -> void:
+	var goal := ExcavationGoalScript.new()
+	var actuator := FakeActuator.new(1)
+	var brain := CitizenBrain.new(1, actuator, [goal])
+	var citizen := _excavation_citizen(1, false)
+	var snapshot := _snapshot(0.0, citizen)
+	var order := _excavation_order(1, 61, &"dig:61")
+	order.id = 21
+	brain.think(snapshot, order)
+	brain.tick(snapshot, order, 0.1)
+	assert(actuator.action_start_count == 1)
+	assert(snapshot.reservations.owner_of([&"excavation.site", &"dig:61"], 0.0) == 1)
+	actuator.next_action_status = CitizenActuator.ActionStatus.SUCCEEDED
+	brain.tick(snapshot, order, 0.1)
+	assert(snapshot.reservations.owner_of([&"excavation.site", &"dig:61"], 0.0) == 0)
+
+
+func _test_excavation_actuator_completes_after_courier_pickup() -> void:
+	var citizen := Citizen.new()
+	citizen.ai_id = 21
+	citizen.permanent_role = "excavation"
+	var target := Node3D.new()
+	root.add_child(citizen)
+	root.add_child(target)
+	var actuator := SettlementCitizenActuatorScript.new(citizen)
+	assert(actuator.begin_action(&"excavation", target.get_instance_id()))
+	citizen.state = Citizen.State.WAITING_COURIER
+	citizen.register_pending_resource("soil", 1)
+	citizen.task_timer.start(0.0)
+	citizen._process_courier_wait(0.1)
+	assert(citizen.state == Citizen.State.WAITING_COURIER)
+	assert(citizen.take_pending_resource()["amount"] == 1)
+	assert(citizen.state == Citizen.State.IDLE and citizen.active_role.is_empty())
+	assert(citizen.assigned_dig_site == null)
+	assert(actuator.action_status() == CitizenActuator.ActionStatus.SUCCEEDED)
+	root.remove_child(target)
+	root.remove_child(citizen)
+	target.free()
+	citizen.free()
+
+
 func _test_production_sleep_actuator() -> void:
 	var citizen := Citizen.new()
 	citizen.ai_id = 17
@@ -882,4 +981,44 @@ func _construction_order(citizen_id: int, mode: StringName, target_id: int) -> C
 	}))
 	order.target_entity_id = target_id
 	order.target_position = Vector3(5.0, 0.0, 0.0)
+	return order
+
+
+func _gathering_citizen(citizen_id: int, in_progress: bool) -> CitizenSnapshot:
+	return CitizenSnapshot.new(citizen_id, Vector3(float(citizen_id), 0.0, 0.0), false, true, AIFactSet.new({
+		&"work.gathering.worker": true,
+		&"work.gathering.in_progress": in_progress,
+		&"work.gathering.candidates": [
+			{&"id": &"branch:3:0", &"resource_type": "branches", &"position": Vector3(3.0, 0.0, 0.0), &"access": Vector3(2.5, 0.0, 0.0), &"warehouse_position": Vector3(8.0, 0.0, 0.0)},
+			{&"id": &"branch:9:0", &"resource_type": "branches", &"position": Vector3(9.0, 0.0, 0.0), &"access": Vector3(8.5, 0.0, 0.0), &"warehouse_position": Vector3(8.0, 0.0, 0.0)},
+		],
+	}))
+
+
+func _gathering_order(citizen_id: int, source_position: Vector3, source_id: StringName) -> CitizenOrder:
+	var order := CitizenOrder.new(citizen_id, &"gathering", &"workforce.gathering", 0.50, AIFactSet.new({
+		&"work.source_id": source_id,
+		&"resource.type": "branches",
+		&"target.access_position": source_position + Vector3(-0.5, 0.0, 0.0),
+		&"warehouse.position": Vector3(8.0, 0.0, 0.0),
+	}))
+	order.target_position = source_position
+	return order
+
+
+func _excavation_citizen(citizen_id: int, in_progress: bool) -> CitizenSnapshot:
+	return CitizenSnapshot.new(citizen_id, Vector3(float(citizen_id), 0.0, 0.0), false, true, AIFactSet.new({
+		&"work.excavation.worker": true,
+		&"work.excavation.in_progress": in_progress,
+		&"work.excavation.candidates": [
+			{&"id": &"dig:61", &"target_id": 61, &"position": Vector3(3.0, 0.0, 0.0)},
+			{&"id": &"dig:62", &"target_id": 62, &"position": Vector3(9.0, 0.0, 0.0)},
+		],
+	}))
+
+
+func _excavation_order(citizen_id: int, target_id: int, site_id: StringName) -> CitizenOrder:
+	var order := CitizenOrder.new(citizen_id, &"excavation", &"workforce.excavation", 0.50, AIFactSet.new({&"work.site_id": site_id}))
+	order.target_entity_id = target_id
+	order.target_position = Vector3(3.0, 0.0, 0.0)
 	return order

@@ -84,6 +84,23 @@ func begin_action(
 				citizen.assign_demolition(target)
 			_active_action = action if citizen.state == Citizen.State.CONSTRUCTING else &""
 			return _active_action == action
+		&"gathering":
+			var resource_type: Variant = _payload.value(&"resource.type", "") if _payload != null else ""
+			var source_position: Variant = _payload.value(&"target.position", Vector3.INF) if _payload != null else Vector3.INF
+			var access_position: Variant = _payload.value(&"target.access_position", Vector3.INF) if _payload != null else Vector3.INF
+			var gathering_warehouse_position: Variant = _payload.value(&"warehouse.position", Vector3.INF) if _payload != null else Vector3.INF
+			if not (resource_type is String) or resource_type.is_empty() or not (source_position is Vector3) or source_position == Vector3.INF or not (access_position is Vector3) or access_position == Vector3.INF or not (gathering_warehouse_position is Vector3) or gathering_warehouse_position == Vector3.INF:
+				return false
+			citizen.assign_gathering(resource_type, source_position, gathering_warehouse_position, access_position)
+			_active_action = action if citizen.state in [Citizen.State.TO_GATHER, Citizen.State.GATHERING, Citizen.State.TO_WAREHOUSE] else &""
+			return _active_action == action
+		&"excavation":
+			var dig_site := instance_from_id(_target_entity_id) as Node3D
+			if not is_instance_valid(dig_site):
+				return false
+			citizen.assign_excavation(dig_site)
+			_active_action = action if citizen.state == Citizen.State.EXCAVATING else &""
+			return _active_action == action
 	return false
 
 
@@ -128,12 +145,22 @@ func action_status() -> ActionStatus:
 				return ActionStatus.RUNNING
 			if citizen.state == Citizen.State.IDLE:
 				return ActionStatus.SUCCEEDED
+		&"gathering":
+			if citizen.state in [Citizen.State.TO_GATHER, Citizen.State.GATHERING, Citizen.State.TO_WAREHOUSE]:
+				return ActionStatus.RUNNING
+			if citizen.state == Citizen.State.IDLE:
+				return ActionStatus.SUCCEEDED
+		&"excavation":
+			if citizen.state in [Citizen.State.EXCAVATING, Citizen.State.WAITING_COURIER]:
+				return ActionStatus.RUNNING
+			if citizen.state == Citizen.State.IDLE:
+				return ActionStatus.SUCCEEDED
 	return ActionStatus.FAILED
 
 
 func cancel_action() -> void:
 	if not is_valid():
 		return
-	if citizen.state in [Citizen.State.TO_HOME, Citizen.State.RESTING, Citizen.State.TO_CANTEEN, Citizen.State.EATING, Citizen.State.TO_TOILET, Citizen.State.USING_TOILET, Citizen.State.WAITING_FOR_TOILET, Citizen.State.TO_BUSH, Citizen.State.USING_BUSH, Citizen.State.TO_PARK, Citizen.State.RELAXING, Citizen.State.TO_TREE, Citizen.State.CHOPPING, Citizen.State.TO_SAWMILL, Citizen.State.SAWING, Citizen.State.WAITING_COURIER, Citizen.State.CONSTRUCTING]:
+	if citizen.state in [Citizen.State.TO_HOME, Citizen.State.RESTING, Citizen.State.TO_CANTEEN, Citizen.State.EATING, Citizen.State.TO_TOILET, Citizen.State.USING_TOILET, Citizen.State.WAITING_FOR_TOILET, Citizen.State.TO_BUSH, Citizen.State.USING_BUSH, Citizen.State.TO_PARK, Citizen.State.RELAXING, Citizen.State.TO_TREE, Citizen.State.CHOPPING, Citizen.State.TO_SAWMILL, Citizen.State.SAWING, Citizen.State.WAITING_COURIER, Citizen.State.CONSTRUCTING, Citizen.State.TO_GATHER, Citizen.State.GATHERING, Citizen.State.TO_WAREHOUSE, Citizen.State.EXCAVATING]:
 		citizen.idle()
 	_active_action = &""

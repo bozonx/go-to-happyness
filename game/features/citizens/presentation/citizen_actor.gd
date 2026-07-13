@@ -779,10 +779,10 @@ func _process_courier_wait(delta: float) -> void:
 	if task_timer.advance(delta):
 		if _start_pending_arrival_if_any():
 			return
-		if permanent_role == "farming" and active_role == "farming":
-			# Native farming completes only when a courier takes the produced food.
+		if permanent_role in ["farming", "excavation"] and active_role in ["farming", "excavation"]:
+			# Native cycles complete only when a courier takes their pending output.
 			# Keep the worker available to the dispatcher without starting another
-			# production cycle while the previous output is still pending.
+			# cycle while the previous output is still pending.
 			_start_task(COURIER_WAIT_DURATION)
 			return
 		state = State.TO_TREE
@@ -803,8 +803,11 @@ func _process_excavation(delta: float) -> void:
 	if task_timer.remaining <= 0.0:
 		_start_task(WORK_DURATION / get_efficiency("excavation"))
 	if _work(delta):
-		excavation_cycle.emit(self, assigned_dig_site, get_efficiency("excavation"))
 		task_timer.remaining = 0.0
+		excavation_cycle.emit(self, assigned_dig_site, get_efficiency("excavation"))
+		if permanent_role == "excavation" and active_role == "excavation" and state == State.EXCAVATING and is_instance_valid(assigned_dig_site):
+			_start_task(COURIER_WAIT_DURATION)
+			state = State.WAITING_COURIER
 
 func _process_courier_pickup(delta: float) -> void:
 	if not is_instance_valid(courier_target):
@@ -1492,9 +1495,11 @@ func take_pending_resource(max_amount := 0) -> Dictionary:
 			if state == State.WAITING_COURIER and int(pending_resources[pending_type]) == 0:
 				# A native farm task owns one production-and-handoff cycle. Legacy
 				# farmers retain their looping FSM until that role is migrated.
-				if permanent_role == "farming" and active_role == "farming":
+				if permanent_role in ["farming", "excavation"] and active_role == permanent_role:
 					state = State.IDLE
 					active_role = ""
+					if permanent_role == "excavation":
+						assigned_dig_site = null
 				else:
 					state = State.TO_TREE
 			return {"type": pending_type, "amount": taken}

@@ -14,6 +14,10 @@ const FarmingGoalScript = preload("res://game/features/decision/domain/goals/far
 const FarmingOrderProviderScript = preload("res://game/features/decision/application/farming_order_provider.gd")
 const ConstructionGoalScript = preload("res://game/features/decision/domain/goals/construction_goal.gd")
 const ConstructionOrderProviderScript = preload("res://game/features/decision/application/construction_order_provider.gd")
+const GatheringGoalScript = preload("res://game/features/decision/domain/goals/gathering_goal.gd")
+const GatheringOrderProviderScript = preload("res://game/features/decision/application/gathering_order_provider.gd")
+const ExcavationGoalScript = preload("res://game/features/decision/domain/goals/excavation_goal.gd")
+const ExcavationOrderProviderScript = preload("res://game/features/decision/application/excavation_order_provider.gd")
 const SettlementCitizenActuatorScript = preload("res://game/features/decision/application/settlement_citizen_actuator.gd")
 
 
@@ -322,8 +326,8 @@ func _ready() -> void:
 	add_child(citizen_ai)
 	if not citizen_ai.configure(
 		SettlementAIWorldFacade.new(self),
-		[SleepGoalScript.new(), MealGoalScript.new(), ToiletGoalScript.new(), RestGoalScript.new(), ForestryGoalScript.new(), FarmingGoalScript.new(), ConstructionGoalScript.new()],
-		[ForestryOrderProviderScript.new(), FarmingOrderProviderScript.new(), ConstructionOrderProviderScript.new()]
+		[SleepGoalScript.new(), MealGoalScript.new(), ToiletGoalScript.new(), RestGoalScript.new(), ForestryGoalScript.new(), FarmingGoalScript.new(), ConstructionGoalScript.new(), GatheringGoalScript.new(), ExcavationGoalScript.new()],
+		[ForestryOrderProviderScript.new(), FarmingOrderProviderScript.new(), ConstructionOrderProviderScript.new(), GatheringOrderProviderScript.new(), ExcavationOrderProviderScript.new()]
 	):
 		push_error("Native citizen AI failed to capture its initial world snapshot")
 	nav_grid = NavGrid.new()
