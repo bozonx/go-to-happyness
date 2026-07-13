@@ -288,7 +288,7 @@ func assign_work(citizen: Citizen, index: int) -> void:
 		"craftsman":
 			if not simulation.craft_tent_positions.is_empty():
 				var craft_pos: Vector3 = _workplace_position(citizen, simulation.craft_tent_positions[index % simulation.craft_tent_positions.size()])
-				citizen.assign_craft_work(craft_pos)
+				citizen.assign_craft_work(craft_pos, _craft_speed_multiplier(citizen))
 	# A role can be available in policy while its concrete source is exhausted.
 	# Keep the freelance worker available for a later task instead of changing
 	# their employment status.
@@ -350,6 +350,7 @@ func _world_data() -> Dictionary:
 		"official_jobs": simulation._available_employer_capacity("official"),
 		"factory_jobs": simulation._available_employer_capacity("factory_worker"),
 		"engineer_jobs": simulation._available_employer_capacity("engineer"),
+		"craftsman_jobs": simulation._available_employer_capacity("craftsman"),
 		"construction_sites": simulation.construction_sites.size() + simulation.demolition_sites.size(),
 		"warehouses": simulation.warehouse_positions.size(),
 		"sawmills": simulation.sawmill_positions.size(),
@@ -370,6 +371,15 @@ func _world_data() -> Dictionary:
 		"assigned_roles": _assigned_role_counts(),
 		"officer_available": _officer_available(),
 	}
+
+
+func _craft_speed_multiplier(citizen: Citizen) -> float:
+	if not is_instance_valid(citizen.employment_workplace):
+		return 1.0
+	match str(citizen.employment_workplace.get_meta("building_type", "")):
+		"craft_tent_lvl2": return 1.3
+		"craft_tent_lvl3": return 1.7
+	return 1.0
 
 
 func _officer_available() -> bool:

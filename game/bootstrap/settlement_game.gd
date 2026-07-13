@@ -92,7 +92,7 @@ const WORKER_POLL_INTERVAL := 0.5
 # The main campfire progression (town hall) doubles as the employment centre:
 # the employment officer must man it to register residents. The civic centre
 # is always the main campfire or its town-hall upgrade.
-const OFFICIAL_WORKPLACE_TYPES: Array[String] = ["campfire", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall"]
+const OFFICIAL_WORKPLACE_TYPES: Array[String] = ["campfire", "campfire_lvl2", "campfire_lvl3", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall"]
 # How close the officer must stand to their post to count as manning it.
 const OFFICER_POST_RADIUS := 3.5
 var _worker_poll_timer := 0.0
@@ -1233,7 +1233,7 @@ func _update_firewood_supplies() -> void:
 			continue
 		for record in building_registry.records():
 			var building := record.node
-			if not is_instance_valid(building) or str(building.get_meta("building_type", "")) not in ["campfire", "cook_campfire", "gathering_place"]:
+			if not is_instance_valid(building) or str(building.get_meta("building_type", "")) not in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "gathering_place"]:
 				continue
 			if int(building.get_meta("fire_fuel", 0)) + int(building.get_meta("fire_reserved", 0)) >= 4 or branches <= 0:
 				continue
@@ -1266,6 +1266,8 @@ func _update_resource_pile_supplies() -> void:
 			for resource_type in pile.resources:
 				var available := int(pile.resources[resource_type]) - int(pile.reserved.get(resource_type, 0))
 				if available <= 0:
+					continue
+				if not settlement.reserve_storage_room_for(resource_type, 1, warehouse_positions.size()):
 					continue
 				pile.resources[resource_type] = int(pile.resources[resource_type]) - 1
 				pile.reserved[resource_type] = int(pile.reserved.get(resource_type, 0)) + 1
@@ -3803,8 +3805,6 @@ func _demolition_ready(site: DemolitionSite) -> bool:
 			replacement.set_meta("spawn_slots", int(replacement.get_meta("spawn_slots", 0)) - 1)
 		else:
 			citizen.home = null
-	if site.building_type in ["warehouse", "warehouse_lvl2"]:
-		return settlement.storage_used_units() <= settlement.storage_capacity(warehouse_positions.size() - 1)
 	return true
 
 func _find_relocation_home(excluded: Node3D) -> Node3D:
@@ -3823,6 +3823,9 @@ func _finish_demolition(site: DemolitionSite) -> void:
 	var building: Node3D = site.building
 	var building_type := site.building_type
 	var active_kitchen_removed := canteen == building
+	var pile_resources: Dictionary = BuildingCatalog.demolition_refund(building_type).duplicate(true)
+	if building_type in ["warehouse", "warehouse_lvl2"]:
+		_move_stored_resources_to_pile(pile_resources)
 	_return_in_transit_building_supplies(building)
 	if active_kitchen_removed:
 		if pending_canteen_delivery:
@@ -3838,12 +3841,14 @@ func _finish_demolition(site: DemolitionSite) -> void:
 	if active_kitchen_removed:
 		_select_best_canteen()
 	settlement.buildings[building_type] = maxi(0, int(settlement.buildings.get(building_type, 1)) - 1)
-	for resource_type in BuildingCatalog.demolition_refund(building_type):
-		settlement.add(resource_type, BuildingCatalog.demolition_refund(building_type)[resource_type])
+	settlement.ensure_storage_defaults(warehouse_positions.size())
+	if campfire_node == null:
+		_select_best_campfire()
+	_create_resource_pile(building.global_position, pile_resources)
 	building.queue_free()
 	_rebuild_navigation_mesh()
 	_update_workers()
-	_update_interface("%s dismantled; usable materials were recovered." % building_type.capitalize())
+	_update_interface("%s dismantled; recovered materials are waiting in a resource pile." % building_type.capitalize())
 
 func _remove_building_services(building: Node3D, building_type: String) -> void:
 	_release_employment_at_building(building)
@@ -5068,7 +5073,7 @@ func _workforce_role_limit(role: String) -> int:
 		"forestry": return sawmill_positions.size()
 		"farming": return farm_positions.size()
 		"gather_branches": return _available_employer_capacity("gather_branches")
-		"gather_food": return forager_positions.size()
+		"gather_food": return _available_employer_capacity("gather_food")
 		"courier": return warehouse_positions.size()
 		"cook": return 1 if is_instance_valid(canteen) else 0
 		"official": return _available_employer_capacity("official")
@@ -5076,7 +5081,7 @@ func _workforce_role_limit(role: String) -> int:
 		"seller": return market_positions.size()
 		"factory_worker": return workforce._factory_job_capacity()
 		"engineer": return workforce._engineer_job_capacity()
-		"craftsman": return craft_tent_positions.size()
+		"craftsman": return _available_employer_capacity("craftsman")
 	return -1
 
 
@@ -6318,7 +6323,7 @@ func _update_fire_status() -> void:
 	set_meta("last_fire_tick", minute)
 	for record in building_registry.records():
 		var building := record.node
-		if not is_instance_valid(building) or str(building.get_meta("building_type", "")) not in ["campfire", "cook_campfire", "gathering_place"]:
+		if not is_instance_valid(building) or str(building.get_meta("building_type", "")) not in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "gathering_place"]:
 			continue
 		var fuel := int(building.get_meta("fire_fuel", 0))
 		if fuel > 0:
@@ -6358,12 +6363,7 @@ func _has_active_builder() -> bool:
 func _destroy_building_to_pile(building: Node3D, building_type: String) -> void:
 	var resources: Dictionary = BuildingCatalog.demolition_refund(building_type).duplicate(true)
 	if building_type in ["warehouse", "warehouse_lvl2"]:
-		resources.clear()
-		for resource_type in SettlementState.STORED_RESOURCES:
-			var amount := settlement.amount(resource_type)
-			if amount > 0:
-				resources[resource_type] = amount
-				settlement.add(resource_type, -amount)
+		_move_stored_resources_to_pile(resources)
 	for citizen in citizens:
 		if citizen.home == building:
 			citizen.home = null
@@ -6373,10 +6373,43 @@ func _destroy_building_to_pile(building: Node3D, building_type: String) -> void:
 	if removed_record != null:
 		_unregister_navigation_footprint(removed_record.center, removed_record.footprint)
 	settlement.buildings[building_type] = maxi(0, int(settlement.buildings.get(building_type, 1)) - 1)
+	settlement.ensure_storage_defaults(warehouse_positions.size())
+	if campfire_node == null:
+		_select_best_campfire()
 	_create_resource_pile(building.global_position, resources)
 	building.queue_free()
 	_rebuild_navigation_mesh()
 	_update_workers()
+
+
+func _move_stored_resources_to_pile(resources: Dictionary) -> void:
+	for resource_type in SettlementState.STORED_RESOURCES:
+		var amount := settlement.amount(resource_type)
+		if amount <= 0:
+			continue
+		resources[resource_type] = int(resources.get(resource_type, 0)) + amount
+		settlement.add(resource_type, -amount)
+
+
+func _select_best_campfire() -> void:
+	var best_campfire: Node3D = null
+	var best_rank := -1
+	var ranks := {
+		"campfire": 1, "campfire_lvl2": 2, "campfire_lvl3": 3,
+		"earth_assembly": 4, "clay_lodge": 5, "wood_town_hall": 6,
+		"stone_prefecture": 7, "brick_city_hall": 8,
+	}
+	for record in building_registry.records():
+		var candidate: Node3D = record.node
+		if not is_instance_valid(candidate):
+			continue
+		var rank := int(ranks.get(str(candidate.get_meta("building_type", "")), -1))
+		if rank > best_rank:
+			best_campfire = candidate
+			best_rank = rank
+	campfire_node = best_campfire
+	if is_instance_valid(campfire_node):
+		_activate_employment_centre(campfire_node)
 
 func _create_resource_pile(position: Vector3, resources: Dictionary) -> void:
 	if resources.is_empty():

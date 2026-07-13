@@ -342,13 +342,20 @@ func can_start_building_research(research_id: String) -> bool:
 	if era < BuildingCatalog.era_for(str(tech.target_building)) or unlocked_building_levels.get(tech.target_building, false):
 		return false
 	for prerequisite in tech.get("prerequisites", []):
-		if BuildingCatalog.RESEARCH_TECHS.has(prerequisite) and not unlocked_building_levels.get(prerequisite, false):
+		if BuildingCatalog.RESEARCH_TECHS.has(prerequisite):
+			if not unlocked_building_levels.get(prerequisite, false):
+				return false
+		elif not has_building(str(prerequisite)):
 			return false
 	if era == Era.TENT:
 		var target: String = str(tech.target_building)
-		if target.ends_with("_lvl2") and not has_building("campfire_lvl2") and not has_building("campfire_lvl3"):
+		# The central campfire is itself the gate which unlocks each technology
+		# tier, so it must not require the level it is trying to unlock.
+		if target == "campfire_lvl3" and not has_building("campfire_lvl2"):
 			return false
-		if target.ends_with("_lvl3") and not has_building("campfire_lvl3"):
+		if target != "campfire_lvl2" and target != "campfire_lvl3" and target.ends_with("_lvl2") and not has_building("campfire_lvl2") and not has_building("campfire_lvl3"):
+			return false
+		if target != "campfire_lvl3" and target.ends_with("_lvl3") and not has_building("campfire_lvl3"):
 			return false
 	return can_afford_research(research_id)
 

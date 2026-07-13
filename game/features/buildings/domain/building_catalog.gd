@@ -175,7 +175,7 @@ const RESEARCH_TECHS := {
 		"base_duration": 30.0,
 		"required_skill": "construction",
 		"target_building": "campfire_lvl2",
-		"prerequisites": [],
+		"prerequisites": ["campfire"],
 	},
 	"campfire_lvl3": {
 		"name": "Главный костер ур. 3",
@@ -210,7 +210,7 @@ const RESEARCH_TECHS := {
 		"base_duration": 35.0,
 		"required_skill": "construction",
 		"target_building": "forager_tent_lvl2",
-		"prerequisites": [],
+		"prerequisites": ["forager_tent"],
 	},
 	"forager_tent_lvl3": {
 		"name": "Для охотников-собирателей ур. 3",

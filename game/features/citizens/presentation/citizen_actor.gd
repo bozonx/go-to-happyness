@@ -224,6 +224,7 @@ var toilet_resume_idle_wander_pause := 0.0
 var market_position := Vector3.ZERO
 var craft_position := Vector3.ZERO
 var craft_timer := 0.0
+var craft_speed_multiplier := 1.0
 var construction_position := Vector3.ZERO
 var construction_delivery_resource := ""
 var building_supply_kind := "construction"
@@ -1501,9 +1502,10 @@ func assign_official_work(next_office_position: Vector3) -> void:
 		factory = null
 		state = State.TO_OFFICIAL_WORK
 
-func assign_craft_work(next_craft_position: Vector3) -> void:
+func assign_craft_work(next_craft_position: Vector3, next_speed_multiplier := 1.0) -> void:
 	if not is_player_controlled:
 		craft_position = next_craft_position
+		craft_speed_multiplier = next_speed_multiplier
 		active_role = "crafting"
 		factory = null
 		state = State.TO_CRAFT_WORK
@@ -1521,14 +1523,14 @@ func _process_research(delta: float) -> void:
 
 func _process_craft_work_arrival(delta: float) -> void:
 	if _move_to(craft_position, delta):
-		craft_timer = 10.0 / get_efficiency("craftsman")
+		craft_timer = 10.0 / (get_efficiency("craftsman") * craft_speed_multiplier)
 		state = State.CRAFT_WORK
 
 func _process_craft_work(delta: float) -> void:
 	craft_timer -= delta
 	if craft_timer <= 0.0:
 		resource_ready.emit(self, "goods", 1)
-		craft_timer = 10.0 / get_efficiency("craftsman")
+		craft_timer = 10.0 / (get_efficiency("craftsman") * craft_speed_multiplier)
 
 func assign_factory_work(next_factory: Node3D, role: String) -> void:
 	if not is_player_controlled:

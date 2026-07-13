@@ -251,6 +251,15 @@ func _test_workforce_policy() -> void:
 	yard_world.trees = 0
 	assert(not WorkforcePolicy.can_assign(branch_worker, yard_world))
 
+	var craft_world := {"hour": 9, "craftsman_jobs": 3, "assigned_roles": {}, "officer_available": true}
+	var craft_worker := {"specialization": "craftsman", "manual_role": "", "player_controlled": false, "blocked_by_storage": false}
+	assert(WorkforcePolicy.permanent_vacancy_for(craft_worker, craft_world) == "craftsman")
+	assert(WorkforcePolicy.can_assign(craft_worker, craft_world))
+	var artisan := Citizen.new()
+	artisan.assign_craft_work(Vector3.ZERO, 1.7)
+	assert(is_equal_approx(artisan.craft_speed_multiplier, 1.7))
+	artisan.free()
+
 
 func _test_citizen_task_state() -> void:
 	var task := CitizenTaskState.new()
@@ -527,6 +536,7 @@ func _test_research_mechanics() -> void:
 	state.era = SettlementState.Era.EARTH
 	state.soil = 8
 	state.branches = 4
+	state.buildings["cook_campfire"] = 1
 	assert(state.can_start_building_research("dugout_kitchen"))
 	assert(BuildingCatalog.kitchen_food_capacity("cook_campfire") == 4)
 	assert(BuildingCatalog.kitchen_food_capacity("brick_restaurant") == 20)
@@ -536,14 +546,28 @@ func _test_research_mechanics() -> void:
 	test_state.era = SettlementState.Era.TENT
 	test_state.branches = 100
 	test_state.grass = 100
-	test_state.unlocked_building_levels["dew_collector"] = true
-	assert(not test_state.can_start_building_research("dew_collector_lvl2"))
+	assert(not test_state.can_start_building_research("campfire_lvl2"))
+	test_state.buildings["campfire"] = 1
+	assert(test_state.can_start_building_research("campfire_lvl2"))
+	test_state.unlocked_building_levels["campfire_lvl2"] = true
+	assert(not test_state.can_start_building_research("campfire_lvl3"))
 	test_state.buildings["campfire_lvl2"] = 1
+	assert(test_state.can_start_building_research("campfire_lvl3"))
+	test_state.unlocked_building_levels["dew_collector"] = true
+	test_state.buildings["dew_collector"] = 1
 	assert(test_state.can_start_building_research("dew_collector_lvl2"))
 	test_state.unlocked_building_levels["dew_collector_lvl2"] = true
 	assert(not test_state.can_start_building_research("dew_collector_lvl3"))
 	test_state.buildings["campfire_lvl3"] = 1
 	assert(test_state.can_start_building_research("dew_collector_lvl3"))
+
+	var forager_state := SettlementState.new()
+	forager_state.branches = 100
+	forager_state.grass = 100
+	forager_state.buildings["campfire_lvl2"] = 1
+	assert(not forager_state.can_start_building_research("forager_tent_lvl2"))
+	forager_state.buildings["forager_tent"] = 1
+	assert(forager_state.can_start_building_research("forager_tent_lvl2"))
 
 	# Heap and warehouse capacity tests:
 	test_state.buildings.clear()
