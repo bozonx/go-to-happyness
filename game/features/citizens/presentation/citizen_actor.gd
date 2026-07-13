@@ -1162,7 +1162,7 @@ func release_to_freelance() -> void:
 # Single point of truth for reading a citizen's employment situation. Callers
 # should prefer these over touching `employment_state`/`freelance_assignment`
 # directly, so that collapsing the stored EmploymentState later (see
-# docs/employment_redesign.md, Stage 2) only has to change these bodies.
+# design_docs/workforce_system.md) only has to change these bodies.
 func is_employed() -> bool:
 	return employment_state == EmploymentState.EMPLOYED
 

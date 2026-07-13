@@ -14,12 +14,13 @@ game/
   features/
     settlement/domain/
     buildings/{domain,application,presentation}/
-    citizens/{domain,presentation}/
+    citizens/{domain,application,presentation}/
     decision/{domain,application}/
-    logistics/application/
+    logistics/{domain,application}/
+    needs/application/
     production/{domain,application}/
     simulation/{domain,application}/
-    world/presentation/
+    world/{application,presentation}/
 ```
 
 `game/bootstrap/settlement_game.tscn` is the configured main scene. Its
@@ -54,13 +55,18 @@ create generic `utils`, `helpers`, `managers` or catch-all `services` directorie
 - `settlement`: economy, stored resources, eras, wellbeing and global progression.
 - `buildings`: definitions, placement, construction, demolition and building visuals.
 - `citizens`: citizen profiles, task state, actor movement and task execution.
-- `decision`: workforce policy, native order publication and citizen work coordination.
-- `logistics`: couriers, canteen deliveries, trade and water collection.
+- `decision`: native AI runtime, order publication, utility arbitration,
+  reservations, behavior steps and deterministic workforce eligibility.
+- `logistics`: courier tasks, delivery dispatch, canteen supply, trade and water
+  collection. Domain task state such as `CourierTask` and `TradeOrder` belongs here.
+- `needs`: simulation of personal needs that feed AI facts. The AI decides when to
+  satisfy them; the needs service owns the values and effects.
 - `production`: production-specific rules and systems, currently the sawmill.
 - `simulation`: the deterministic clock, day-cycle events and simulation-wide
   scheduling.
-- `world`: terrain and world-only presentation. Future routing code belongs in a
-  `routing` feature; UI belongs in a `ui/presentation` feature.
+- `world`: terrain, navigation grid and route services, plus world-only
+  presentation. Split out `routing` only if route rules become an independent
+  subsystem. UI belongs in a future `ui/presentation` feature.
 
 ## Building model
 
@@ -86,7 +92,7 @@ but it must not decide costs, unlocks, production or staffing. Do not use `Node3
 metadata or arbitrary dictionaries as a new source of building state; introduce a
 typed runtime record and registry as the building feature grows.
 
-## Citizen, decision and routing boundaries
+## Citizen, decision, needs and routing boundaries
 
 `Citizen` is currently a transitional actor that still contains movement, task
 execution and some role state. New movement and physics code belongs with the
@@ -97,9 +103,24 @@ The native AI runtime is the decision boundary. It reads through `AIWorldFacade`
 and issues commands only through `CitizenActuator`; it must not read the
 composition root directly.
 
-Routing must be introduced as its own feature with a route request/result API. The
-navigation mesh and obstacle registry remain Godot-facing; route selection rules do
-not depend on `Citizen` or UI nodes.
+`SettlementDirector` publishes settlement-scale work through `OrderProvider`
+implementations. `CitizenBrain` decides whether the current citizen should execute
+that order now or satisfy a personal need first. Do not let a feature bypass this
+split by directly steering citizens from a global service.
+
+Personal needs are state, not task selection. `needs/application` owns hunger,
+rest, toilet and future need parameters; decision goals read immutable facts and
+apply effects only through actuator commands and feature services.
+
+Routing currently lives in `world/application` as `NavGrid`, `GridRouteService` and
+`RouteResult`. Route selection rules must not depend on `Citizen` nodes or UI
+nodes. If roads and weighted navigation grow into a larger subsystem, extract a
+dedicated `routing` feature with a route request/result API instead of pushing that
+logic into the bootstrap controller.
+
+Logistics owns delivery tasks. Producers publish or request deliveries; they do
+not directly pick walkers or mutate courier state except through the logistics
+dispatcher and AI order path.
 
 ## Rules for new code
 
@@ -117,18 +138,29 @@ not depend on `Citizen` or UI nodes.
    colours belong in the UI feature, not in domain rules.
 6. Prefer a scene per reusable UI panel or actor over constructing a growing UI tree
    inside the bootstrap controller.
+7. Add new AI mechanics as vertical slices: facts in the facade, an order provider
+   when there is global competition, a goal, behavior steps, actuator commands,
+   reservation rules and tests. Delete the old write owner in the same change.
+8. Keep citizen identity stable. AI ids, order ids, reservation keys and target
+   keys must be stable value identifiers; do not use runtime `ObjectID` as saved or
+   cross-system identity.
 
 ## Migration boundary
 
-The AI migration is complete. Continue extracting bootstrap implementation into
-feature modules incrementally without a behavior rewrite:
+The native AI migration is the primary execution path. Continue extracting
+bootstrap implementation into feature modules incrementally without a behavior
+rewrite:
 
-1. Move clock/day-cycle scheduling into `simulation/application`.
-2. Extract building placement and completion effects. Construction and demolition
+1. Extract building placement and completion effects. Construction and demolition
    queues already belong to buildings/application; preserve those boundaries instead
    of adding feature logic back to the bootstrap controller.
-3. Extract courier dispatch and resource delivery into `logistics/application`.
-4. Extract navigation and routing behind a route service.
+2. Keep moving delivery and trade state into `logistics/{domain,application}`.
+   `CourierDispatcher` remains the owner of courier task assignment while task
+   producers migrate to typed requests.
+3. Move remaining need state and effects behind `needs/application` and expose them
+   to AI only as facts.
+4. Expand `world/application` routing behind request/result APIs before adding
+   weighted roads or desire-line traffic.
 5. Move each UI panel into `ui/presentation` and make it consume commands and query
    results instead of bootstrap fields.
 6. Split the citizen actor only after its movement and task-execution contracts are
@@ -142,11 +174,20 @@ API.
 
 Put pure rule tests in `tests/unit/domain`, application/system tests in
 `tests/unit/application`, and scene startup checks in `tests/smoke`. The existing
-headless entries remain `tests/test_domain.gd` and `tests/test_startup.gd` until they
-are moved alongside their new test categories.
+headless entries remain `tests/test_domain.gd`, `tests/test_ai.gd`,
+`tests/test_materials_yard.gd` and `tests/test_startup.gd` until they are moved
+alongside their new test categories.
 
 Run the domain checks with:
 
 ```sh
 godot --headless --path . --script res://tests/test_domain.gd
+```
+
+Run AI and materials-yard checks when changing citizens, orders, workforce,
+logistics or early gathering:
+
+```sh
+godot --headless --path . --script res://tests/test_ai.gd
+godot --headless --path . --script res://tests/test_materials_yard.gd
 ```
