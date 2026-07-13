@@ -13,6 +13,13 @@ var guard: Callable
 
 
 func is_still_valid(context: BehaviorContext) -> bool:
+	if context == null or context.snapshot == null:
+		return false
+	if order_id != 0:
+		if context.order == null or context.order.id != order_id:
+			return false
+		if context.order.is_expired(context.snapshot.simulation_seconds):
+			return false
 	return not guard.is_valid() or bool(guard.call(context))
 
 

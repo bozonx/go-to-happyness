@@ -43,3 +43,4 @@ func erase(key: StringName) -> void:
 
 func clear() -> void:
 	_values.clear()
+	_cooldowns.clear()

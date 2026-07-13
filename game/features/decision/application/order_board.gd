@@ -34,6 +34,8 @@ func replace_issuer_orders(
 				_next_order_id += 1
 		var citizen_orders: Array[CitizenOrder] = []
 		citizen_orders.assign(_orders_by_citizen.get(order.citizen_id, []))
+		if _contains_equivalent_order(citizen_orders, order, issuer):
+			continue
 		citizen_orders.append(order)
 		_orders_by_citizen[order.citizen_id] = citizen_orders
 
@@ -66,6 +68,10 @@ func clear_expired(simulation_seconds: float) -> void:
 			_orders_by_citizen[citizen_id] = live
 
 
+func clear() -> void:
+	_orders_by_citizen.clear()
+
+
 func candidate_count() -> int:
 	var total := 0
 	for orders: Array in _orders_by_citizen.values():
@@ -91,12 +97,27 @@ func _remove_issuer(issuer: StringName) -> void:
 ## distinct and pointlessly churn their ids each director tick.
 func _matching_order(previous: Array[CitizenOrder], proposal: CitizenOrder) -> CitizenOrder:
 	for existing in previous:
-		if (
-			existing.citizen_id == proposal.citizen_id
-			and existing.kind == proposal.kind
-			and existing.target_entity_id == proposal.target_entity_id
-			and existing.target_position == proposal.target_position
-			and existing.payload.to_dictionary() == proposal.payload.to_dictionary()
-		):
+		if _orders_are_equivalent(existing, proposal):
 			return existing
 	return null
+
+
+func _contains_equivalent_order(
+	orders: Array[CitizenOrder],
+	proposal: CitizenOrder,
+	issuer: StringName
+) -> bool:
+	for existing in orders:
+		if existing.issuer == issuer and _orders_are_equivalent(existing, proposal):
+			return true
+	return false
+
+
+func _orders_are_equivalent(left: CitizenOrder, right: CitizenOrder) -> bool:
+	return (
+		left.citizen_id == right.citizen_id
+		and left.kind == right.kind
+		and left.target_entity_id == right.target_entity_id
+		and left.target_position == right.target_position
+		and left.payload.to_dictionary() == right.payload.to_dictionary()
+	)

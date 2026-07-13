@@ -30,14 +30,23 @@ func configure(
 	goals: Array[AICitizenGoal] = [],
 	providers: Array[OrderProvider] = []
 ) -> void:
+	_validate_runtime_configuration()
 	facade = next_facade
-	_goals = goals.duplicate()
-	director.configure(providers)
+	_goals = _unique_goals(goals)
+	director.configure(_unique_providers(providers))
+	for brain: CitizenBrain in _brains.values():
+		brain.configure_goals(_goals)
 	_capture_snapshot()
 
 
 func register_citizen(citizen_id: int, actuator: CitizenActuator) -> void:
-	if citizen_id == 0 or actuator == null or _brains.has(citizen_id):
+	if (
+		citizen_id <= 0
+		or actuator == null
+		or not actuator.is_valid()
+		or actuator.citizen_id != citizen_id
+		or _brains.has(citizen_id)
+	):
 		return
 	_brains[citizen_id] = CitizenBrain.new(citizen_id, actuator, _goals)
 	_citizen_ids.append(citizen_id)
@@ -73,6 +82,8 @@ func _physics_process(delta: float) -> void:
 	_director_elapsed += delta
 	if latest_snapshot == null or _snapshot_elapsed >= snapshot_interval:
 		_capture_snapshot()
+	if latest_snapshot == null:
+		return
 	reservations.expire(latest_snapshot.simulation_seconds)
 	if _director_elapsed >= director_interval:
 		_director_elapsed = fmod(_director_elapsed, director_interval)
@@ -86,7 +97,11 @@ func _capture_snapshot() -> void:
 	if facade == null:
 		return
 	_snapshot_sequence += 1
-	latest_snapshot = facade.capture(_snapshot_sequence)
+	var captured := facade.capture(_snapshot_sequence)
+	if captured == null:
+		push_error("AIWorldFacade.capture() returned null")
+		return
+	latest_snapshot = captured
 	# The ledger is persistent, live state; the facade builds a fresh snapshot each
 	# cycle, so re-attach the single shared instance instead of a throwaway one.
 	latest_snapshot.reservations = reservations
@@ -133,3 +148,34 @@ func _think_due_brains() -> void:
 		if brain != null:
 			brain.think(latest_snapshot, _order_cache.get(citizen_id))
 			processed += 1
+
+
+func _validate_runtime_configuration() -> void:
+	snapshot_interval = maxf(snapshot_interval, 0.001)
+	director_interval = maxf(director_interval, 0.001)
+	think_interval = maxf(think_interval, 0.001)
+	max_thinks_per_frame = maxi(max_thinks_per_frame, 0)
+
+
+func _unique_goals(goals: Array[AICitizenGoal]) -> Array[AICitizenGoal]:
+	var result: Array[AICitizenGoal] = []
+	var ids: Dictionary = {}
+	for goal in goals:
+		if goal == null or goal.id.is_empty() or ids.has(goal.id):
+			push_error("AI goal ids must be non-empty and unique")
+			continue
+		ids[goal.id] = true
+		result.append(goal)
+	return result
+
+
+func _unique_providers(providers: Array[OrderProvider]) -> Array[OrderProvider]:
+	var result: Array[OrderProvider] = []
+	var ids: Dictionary = {}
+	for provider in providers:
+		if provider == null or provider.id.is_empty() or ids.has(provider.id):
+			push_error("Order provider ids must be non-empty and unique")
+			continue
+		ids[provider.id] = true
+		result.append(provider)
+	return result

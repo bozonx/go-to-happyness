@@ -6,10 +6,12 @@ extends RefCounted
 var minimum_utility := 0.001
 var stickiness_bonus := 0.08
 var switch_margin := 0.03
-## How hard a just-failed goal is suppressed at the peak of its cooldown, and over
-## how long (simulation seconds) that suppression decays back to normal.
-var cooldown_damping := 0.85
+## How long a failed goal remains unavailable before only a critical need may
+## select it again (simulation seconds).
 var cooldown_window := 6.0
+## A goal may bypass its cooldown only when it reaches an explicitly critical
+## utility. Scores are normalized to [0, 1] by concrete goals.
+var cooldown_emergency_utility := 0.95
 var _goals: Array[AICitizenGoal] = []
 
 
@@ -30,10 +32,17 @@ func choose(
 	var current_utility := 0.0
 	var simulation_seconds := snapshot.simulation_seconds if snapshot != null else 0.0
 	for goal in _goals:
-		var utility := maxf(0.0, goal.score(snapshot, citizen, order, blackboard))
+		var raw_utility := goal.score(snapshot, citizen, order, blackboard)
+		if not is_finite(raw_utility):
+			continue
+		var utility := clampf(raw_utility, 0.0, 1.0)
 		if blackboard != null:
 			var penalty := blackboard.cooldown_penalty(goal.id, simulation_seconds, cooldown_window)
-			utility *= 1.0 - cooldown_damping * penalty
+			if penalty > 0.0 and utility < cooldown_emergency_utility:
+				continue
+			if penalty > 0.0:
+				# A critical need must win on its actual severity, not on a damped value.
+				utility = maxf(utility, cooldown_emergency_utility)
 		if goal.id == current_goal_id and utility >= minimum_utility:
 			current_goal = goal
 			current_utility = utility

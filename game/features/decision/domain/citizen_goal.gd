@@ -2,7 +2,8 @@ class_name AICitizenGoal
 extends RefCounted
 
 ## Stateless goal definition. Concrete goals are added to a catalog; neither the
-## arbiter nor CitizenBrain needs to change when a new goal is introduced.
+## arbiter nor CitizenBrain needs to change when a new goal is introduced. Scores
+## must be finite and normalized to [0, 1].
 
 var id: StringName
 var resumable := true

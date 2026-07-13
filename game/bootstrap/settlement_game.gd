@@ -287,8 +287,8 @@ var workplace_priority_counter := 0
 var manage_citizen_button: Button
 var workforce: WorkforceCoordinator
 var citizen_ai: CitizenAISystem
-## Monotonic source of stable citizen AI identity. Persist alongside the roster so
-## reloaded games keep issuing fresh, non-colliding ids.
+## Monotonic source of stable citizen AI identity. Persist it alongside the roster
+## once save/load is introduced so reloaded games issue non-colliding ids.
 var _next_ai_citizen_id := 1
 var route_service: GridRouteService
 var building_queue_service: RefCounted

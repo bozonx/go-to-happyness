@@ -44,6 +44,9 @@ func think(snapshot: WorldSnapshot, order: CitizenOrder) -> void:
 			return
 	var task := result.goal.build_task(snapshot, context.citizen, order, blackboard)
 	if task == null:
+		var now := snapshot.simulation_seconds if snapshot != null else 0.0
+		blackboard.set_cooldown(result.goal.id, now + FAILURE_COOLDOWN)
+		runner.cancel_all(context)
 		return
 	task.goal_id = result.goal.id
 	task.resumable = result.goal.resumable
@@ -53,13 +56,19 @@ func think(snapshot: WorldSnapshot, order: CitizenOrder) -> void:
 
 func tick(snapshot: WorldSnapshot, order: CitizenOrder, delta: float) -> void:
 	context.refresh(snapshot, order)
-	if context.citizen == null:
+	if context.citizen == null or context.citizen.is_player_controlled or not context.citizen.is_available:
+		runner.cancel_all(context)
 		return
 	runner.tick(context, delta)
 
 
 func shutdown() -> void:
 	runner.cancel_all(context)
+
+
+func configure_goals(goals: Array[AICitizenGoal]) -> void:
+	runner.cancel_all(context)
+	arbiter.configure(goals)
 
 
 func _on_task_finished(task: BehaviorTask, status: BehaviorStep.Status) -> void:

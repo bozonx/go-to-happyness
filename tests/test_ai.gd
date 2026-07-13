@@ -6,6 +6,9 @@ class ScriptedStep extends BehaviorStep:
 	var ticks := 0
 	var suspends := 0
 	var resumes := 0
+	var cancels := 0
+	var finishes := 0
+	var final_status := Status.RUNNING
 
 	func _init(next_statuses: Array[BehaviorStep.Status]) -> void:
 		statuses = next_statuses.duplicate()
@@ -20,6 +23,13 @@ class ScriptedStep extends BehaviorStep:
 
 	func _resume(_context: BehaviorContext) -> void:
 		resumes += 1
+
+	func _cancel(_context: BehaviorContext) -> void:
+		cancels += 1
+
+	func _finish(_context: BehaviorContext, status: Status) -> void:
+		finishes += 1
+		final_status = status
 
 
 class FixedGoal extends AICitizenGoal:
@@ -38,15 +48,89 @@ class FixedGoal extends AICitizenGoal:
 		return utility
 
 
+class ScriptedGoal extends FixedGoal:
+	var statuses: Array[BehaviorStep.Status]
+	var build_count := 0
+	var last_step: ScriptedStep
+
+	func _init(
+		next_id: StringName,
+		next_utility: float,
+		next_statuses: Array[BehaviorStep.Status]
+	) -> void:
+		super(next_id, next_utility)
+		statuses = next_statuses.duplicate()
+
+	func build_task(
+		_snapshot: WorldSnapshot,
+		_citizen: CitizenSnapshot,
+		_order: CitizenOrder,
+		_blackboard: AIBlackboard
+	) -> BehaviorTask:
+		build_count += 1
+		last_step = ScriptedStep.new(statuses)
+		return BehaviorTask.new(id, last_step)
+
+
+class NullTaskGoal extends FixedGoal:
+	func build_task(
+		_snapshot: WorldSnapshot,
+		_citizen: CitizenSnapshot,
+		_order: CitizenOrder,
+		_blackboard: AIBlackboard
+	) -> BehaviorTask:
+		return null
+
+
+class FakeActuator extends CitizenActuator:
+	var stop_count := 0
+	var cancel_action_count := 0
+
+	func stop() -> void:
+		stop_count += 1
+
+	func cancel_action() -> void:
+		cancel_action_count += 1
+
+
+class FakeFacade extends AIWorldFacade:
+	var citizens: Dictionary
+	var simulation_seconds := 0.0
+	var game_minutes := 0.0
+
+	func _init(next_citizens: Dictionary) -> void:
+		citizens = next_citizens
+
+	func capture(sequence: int) -> WorldSnapshot:
+		return WorldSnapshot.new(
+			sequence,
+			simulation_seconds,
+			game_minutes,
+			AIFactSet.new(),
+			citizens
+		)
+
+
 func _init() -> void:
 	_test_fact_sets_and_snapshots()
+	_test_blackboard_clear()
 	_test_utility_hysteresis()
 	_test_failure_cooldown()
-	_test_behavior_composites()
+	_test_emergency_goal_bypasses_cooldown()
+	_test_behavior_composites_and_lifecycle()
 	_test_runner_interrupt_and_resume()
 	_test_resume_drops_stale_task()
+	_test_resume_drops_changed_order()
+	_test_citizen_brain_cancels_for_player_control()
+	_test_citizen_brain_failure_cooldown()
+	_test_citizen_brain_cancels_when_winning_goal_has_no_task()
 	_test_order_reconciliation()
+	_test_order_board_deduplicates_provider_output()
+	_test_director_reconfiguration_clears_orders()
 	_test_reservations()
+	_test_runtime_configuration_and_identity()
+	_test_runtime_reconfiguration_updates_registered_brains()
+	_test_runtime_think_budget_is_fair()
 	quit(0)
 
 
@@ -60,6 +144,15 @@ func _test_fact_sets_and_snapshots() -> void:
 	assert(snapshot.sequence == 3)
 	assert(snapshot.citizen_count() == 1)
 	assert(snapshot.citizen(7) == citizen)
+
+
+func _test_blackboard_clear() -> void:
+	var memory := AIBlackboard.new()
+	memory.set_value(&"target", 7)
+	memory.set_cooldown(&"work", 10.0)
+	memory.clear()
+	assert(not memory.has(&"target"))
+	assert(is_zero_approx(memory.cooldown_penalty(&"work", 0.0, 10.0)))
 
 
 func _test_utility_hysteresis() -> void:
@@ -86,49 +179,28 @@ func _test_failure_cooldown() -> void:
 	arbiter.configure([work, eat])
 	var citizen := CitizenSnapshot.new(1)
 	var memory := AIBlackboard.new()
-	# Work loses right after failing, even though its raw utility is higher.
 	memory.set_cooldown(&"work", 6.0)
 	var fresh := WorldSnapshot.new(0, 0.0, 0.0)
 	assert(arbiter.choose(fresh, citizen, null, memory).goal == eat)
-	# Once the cooldown window elapses, work is preferred again.
+	var only_work := UtilityArbiter.new()
+	only_work.configure([work])
+	assert(only_work.choose(fresh, citizen, null, memory).goal == null)
 	var later := WorldSnapshot.new(0, 6.0, 0.0)
 	assert(arbiter.choose(later, citizen, null, memory).goal == work)
 
 
-func _test_resume_drops_stale_task() -> void:
-	var context := _context()
-	var work_step := ScriptedStep.new([BehaviorStep.Status.RUNNING])
-	var urgent_step := ScriptedStep.new([BehaviorStep.Status.SUCCESS])
-	var runner := BehaviorRunner.new()
-	var work_task := BehaviorTask.new(&"work", work_step)
-	work_task.guard = func(_ctx: BehaviorContext) -> bool: return false
-	assert(runner.start(work_task, context))
-	assert(runner.tick(context, 0.1) == BehaviorStep.Status.RUNNING)
-	assert(runner.start(BehaviorTask.new(&"urgent", urgent_step), context))
-	# The interrupt completes; the stale work task fails its guard and is dropped.
-	assert(runner.tick(context, 0.1) == BehaviorStep.Status.SUCCESS)
-	assert(runner.active_task == null and runner.suspended_count() == 0)
+func _test_emergency_goal_bypasses_cooldown() -> void:
+	var emergency := FixedGoal.new(&"flee", 0.96)
+	var arbiter := UtilityArbiter.new()
+	arbiter.configure([emergency])
+	var memory := AIBlackboard.new()
+	memory.set_cooldown(&"flee", 6.0)
+	var result := arbiter.choose(WorldSnapshot.new(0, 0.0), CitizenSnapshot.new(1), null, memory)
+	assert(result.goal == emergency)
+	assert(is_equal_approx(result.utility, emergency.utility))
 
 
-func _test_reservations() -> void:
-	var ledger := ReservationLedger.new()
-	assert(ledger.claim(&"tree_7", 1, 0.0, 5.0))
-	assert(not ledger.claim(&"tree_7", 2, 0.0, 5.0))
-	assert(ledger.claim(&"tree_7", 1, 1.0, 5.0)) # owner re-affirms
-	assert(ledger.owner_of(&"tree_7", 1.0) == 1)
-	assert(ledger.is_available_for(&"tree_7", 1, 1.0))
-	assert(not ledger.is_available_for(&"tree_7", 2, 1.0))
-	# A release from the wrong citizen is ignored; the rightful owner can release.
-	ledger.release(&"tree_7", 2)
-	assert(ledger.owner_of(&"tree_7", 1.0) == 1)
-	ledger.release(&"tree_7", 1)
-	assert(ledger.claim(&"tree_7", 2, 2.0, 5.0))
-	# Expiry frees an abandoned claim.
-	ledger.expire(100.0)
-	assert(ledger.active_count() == 0)
-
-
-func _test_behavior_composites() -> void:
+func _test_behavior_composites_and_lifecycle() -> void:
 	var context := _context()
 	var first := ScriptedStep.new([BehaviorStep.Status.SUCCESS])
 	var second := ScriptedStep.new([BehaviorStep.Status.RUNNING, BehaviorStep.Status.SUCCESS])
@@ -137,6 +209,14 @@ func _test_behavior_composites() -> void:
 	assert(first.ticks == 1 and second.ticks == 1)
 	assert(sequence.run(context, 0.1) == BehaviorStep.Status.SUCCESS)
 	assert(first.ticks == 1 and second.ticks == 2)
+	assert(first.finishes == 1 and second.finishes == 1 and sequence._finished)
+
+	var terminal := ScriptedStep.new([BehaviorStep.Status.SUCCESS])
+	assert(terminal.run(context, 0.1) == BehaviorStep.Status.SUCCESS)
+	assert(terminal.run(context, 0.1) == BehaviorStep.Status.SUCCESS)
+	assert(terminal.ticks == 1 and terminal.finishes == 1)
+	terminal.cancel(context)
+	assert(terminal.cancels == 0)
 
 	var failure := ScriptedStep.new([BehaviorStep.Status.FAILURE])
 	var fallback := ScriptedStep.new([BehaviorStep.Status.SUCCESS])
@@ -148,7 +228,13 @@ func _test_behavior_composites() -> void:
 	var fast := ScriptedStep.new([BehaviorStep.Status.SUCCESS])
 	var parallel := ParallelStep.new([slow, fast], ParallelStep.SuccessPolicy.ANY)
 	assert(parallel.run(context, 0.1) == BehaviorStep.Status.SUCCESS)
-	assert(not slow._entered)
+	assert(not slow._entered and fast.finishes == 1)
+
+	var failed_any := ParallelStep.new([
+		ScriptedStep.new([BehaviorStep.Status.FAILURE]),
+		ScriptedStep.new([BehaviorStep.Status.RUNNING]),
+	], ParallelStep.SuccessPolicy.ANY)
+	assert(failed_any.run(context, 0.1) == BehaviorStep.Status.FAILURE)
 
 
 func _test_runner_interrupt_and_resume() -> void:
@@ -170,6 +256,88 @@ func _test_runner_interrupt_and_resume() -> void:
 	assert(runner.active_task == null)
 
 
+func _test_resume_drops_stale_task() -> void:
+	var context := _context()
+	var work_step := ScriptedStep.new([BehaviorStep.Status.RUNNING])
+	var urgent_step := ScriptedStep.new([BehaviorStep.Status.SUCCESS])
+	var runner := BehaviorRunner.new()
+	var work_task := BehaviorTask.new(&"work", work_step)
+	work_task.guard = func(_ctx: BehaviorContext) -> bool: return false
+	assert(runner.start(work_task, context))
+	assert(runner.tick(context, 0.1) == BehaviorStep.Status.RUNNING)
+	assert(runner.start(BehaviorTask.new(&"urgent", urgent_step), context))
+	assert(runner.tick(context, 0.1) == BehaviorStep.Status.SUCCESS)
+	assert(runner.active_task == null and runner.suspended_count() == 0)
+	assert(work_step.cancels == 1)
+
+
+func _test_resume_drops_changed_order() -> void:
+	var original := CitizenOrder.new(1, &"work", &"jobs", 1.0)
+	original.id = 11
+	var context := _context(original)
+	var work_step := ScriptedStep.new([BehaviorStep.Status.RUNNING])
+	var work_task := BehaviorTask.new(&"work", work_step)
+	work_task.order_id = original.id
+	var runner := BehaviorRunner.new()
+	assert(runner.start(work_task, context))
+	assert(runner.tick(context, 0.1) == BehaviorStep.Status.RUNNING)
+	assert(runner.start(BehaviorTask.new(&"urgent", ScriptedStep.new([BehaviorStep.Status.SUCCESS])), context))
+	var replacement := CitizenOrder.new(1, &"work", &"jobs", 1.0)
+	replacement.id = 12
+	context.refresh(context.snapshot, replacement)
+	assert(runner.tick(context, 0.1) == BehaviorStep.Status.SUCCESS)
+	assert(runner.active_task == null and work_step.cancels == 1)
+
+
+func _test_citizen_brain_cancels_for_player_control() -> void:
+	var goal := ScriptedGoal.new(&"work", 0.5, [BehaviorStep.Status.RUNNING])
+	var brain := CitizenBrain.new(1, FakeActuator.new(1), [goal])
+	var active := _snapshot(0.0, CitizenSnapshot.new(1, Vector3.ZERO, false, true))
+	brain.think(active, null)
+	brain.tick(active, null, 0.1)
+	assert(goal.last_step.ticks == 1)
+	var player_controlled := _snapshot(0.1, CitizenSnapshot.new(1, Vector3.ZERO, true, true))
+	brain.tick(player_controlled, null, 0.1)
+	assert(goal.last_step.cancels == 1)
+	assert(brain.runner.active_task == null)
+	var unavailable_goal := ScriptedGoal.new(&"work", 0.5, [BehaviorStep.Status.RUNNING])
+	var unavailable_brain := CitizenBrain.new(1, FakeActuator.new(1), [unavailable_goal])
+	unavailable_brain.think(active, null)
+	unavailable_brain.tick(active, null, 0.1)
+	var unavailable := _snapshot(0.1, CitizenSnapshot.new(1, Vector3.ZERO, false, false))
+	unavailable_brain.tick(unavailable, null, 0.1)
+	assert(unavailable_goal.last_step.cancels == 1)
+
+
+func _test_citizen_brain_failure_cooldown() -> void:
+	var goal := ScriptedGoal.new(&"work", 0.60, [BehaviorStep.Status.FAILURE])
+	var brain := CitizenBrain.new(1, FakeActuator.new(1), [goal])
+	var fresh := _snapshot(0.0, CitizenSnapshot.new(1))
+	brain.think(fresh, null)
+	brain.tick(fresh, null, 0.1)
+	assert(goal.build_count == 1 and goal.last_step.finishes == 1)
+	brain.think(fresh, null)
+	assert(goal.build_count == 1 and brain.runner.active_task == null)
+	var later := _snapshot(6.0, CitizenSnapshot.new(1))
+	brain.think(later, null)
+	assert(goal.build_count == 2)
+
+
+func _test_citizen_brain_cancels_when_winning_goal_has_no_task() -> void:
+	var work := ScriptedGoal.new(&"work", 0.5, [BehaviorStep.Status.RUNNING])
+	var blocked := NullTaskGoal.new(&"blocked", 0.8)
+	var brain := CitizenBrain.new(1, FakeActuator.new(1), [work, blocked])
+	var snapshot := _snapshot(0.0, CitizenSnapshot.new(1))
+	work.utility = 0.9
+	brain.think(snapshot, null)
+	brain.tick(snapshot, null, 0.1)
+	assert(work.last_step.ticks == 1)
+	work.utility = 0.5
+	brain.think(snapshot, null)
+	assert(work.last_step.cancels == 1 and brain.runner.active_task == null)
+	assert(brain.blackboard.cooldown_penalty(&"blocked", 0.0, 6.0) > 0.0)
+
+
 func _test_order_reconciliation() -> void:
 	var board := OrderBoard.new()
 	var low := CitizenOrder.new(5, &"haul", &"logistics", 0.4)
@@ -185,10 +353,108 @@ func _test_order_reconciliation() -> void:
 	assert(replacement.id == low.id)
 
 
-func _context() -> BehaviorContext:
+func _test_order_board_deduplicates_provider_output() -> void:
+	var board := OrderBoard.new()
+	var first := CitizenOrder.new(5, &"haul", &"logistics", 0.4)
+	var duplicate := CitizenOrder.new(5, &"haul", &"logistics", 0.4)
+	board.replace_issuer_orders(&"logistics", [first, duplicate], 0.0)
+	assert(board.candidate_count() == 1)
+	assert(board.order_for(5, 0.0).id == first.id)
+	var competing := CitizenOrder.new(5, &"haul", &"construction", 0.8)
+	board.replace_issuer_orders(&"construction", [competing], 0.0)
+	assert(board.candidate_count() == 2)
+	assert(board.order_for(5, 0.0) == competing)
+
+
+func _test_director_reconfiguration_clears_orders() -> void:
+	var director := SettlementDirector.new()
+	director.order_board.replace_issuer_orders(&"jobs", [CitizenOrder.new(1, &"work", &"jobs", 1.0)], 0.0)
+	assert(director.order_board.candidate_count() == 1)
+	director.configure([])
+	assert(director.order_board.candidate_count() == 0)
+
+
+func _test_reservations() -> void:
+	var ledger := ReservationLedger.new()
+	assert(ledger.claim(&"tree_7", 1, 0.0, 5.0))
+	assert(not ledger.claim(&"tree_7", 2, 0.0, 5.0))
+	assert(ledger.claim(&"tree_7", 1, 1.0, 5.0))
+	assert(ledger.owner_of(&"tree_7", 1.0) == 1)
+	assert(ledger.is_available_for(&"tree_7", 1, 1.0))
+	assert(not ledger.is_available_for(&"tree_7", 2, 1.0))
+	ledger.release(&"tree_7", 2)
+	assert(ledger.owner_of(&"tree_7", 1.0) == 1)
+	ledger.release(&"tree_7", 1)
+	assert(ledger.claim(&"tree_7", 2, 2.0, 5.0))
+	assert(ledger.owner_of(&"tree_7", 7.0) == 0)
+	assert(ledger.active_count() == 0)
+
+
+func _test_runtime_configuration_and_identity() -> void:
+	var system := CitizenAISystem.new()
+	system.snapshot_interval = 0.0
+	system.director_interval = -1.0
+	system.think_interval = 0.0
+	system.max_thinks_per_frame = -5
+	system.configure(FakeFacade.new({}))
+	assert(system.snapshot_interval > 0.0)
+	assert(system.director_interval > 0.0)
+	assert(system.think_interval > 0.0)
+	assert(system.max_thinks_per_frame == 0)
+	system.register_citizen(1, FakeActuator.new(2))
+	assert(system.brain_count() == 0)
+	system.register_citizen(1, FakeActuator.new(1))
+	assert(system.brain_count() == 1)
+	assert(system.reservations.claim(&"tree", 1, 0.0))
+	system.unregister_citizen(1)
+	assert(system.reservations.active_count() == 0)
+	system.free()
+
+
+func _test_runtime_reconfiguration_updates_registered_brains() -> void:
+	var citizens := {1: CitizenSnapshot.new(1)}
+	var facade := FakeFacade.new(citizens)
+	var system := CitizenAISystem.new()
+	system.configure(facade)
+	system.register_citizen(1, FakeActuator.new(1))
+	var goal := ScriptedGoal.new(&"idle", 0.5, [BehaviorStep.Status.RUNNING])
+	system.configure(facade, [goal])
+	system._physics_process(0.1)
+	assert(goal.build_count == 1)
+	system.unregister_citizen(1)
+	system.free()
+
+
+func _test_runtime_think_budget_is_fair() -> void:
+	var citizens := {
+		1: CitizenSnapshot.new(1),
+		2: CitizenSnapshot.new(2),
+		3: CitizenSnapshot.new(3),
+	}
+	var goal := ScriptedGoal.new(&"idle", 0.5, [BehaviorStep.Status.RUNNING])
+	var system := CitizenAISystem.new()
+	system.max_thinks_per_frame = 1
+	system.think_interval = 100.0
+	system.configure(FakeFacade.new(citizens), [goal])
+	for citizen_id in citizens:
+		system.register_citizen(citizen_id, FakeActuator.new(citizen_id))
+	system._physics_process(0.1)
+	system._physics_process(0.1)
+	system._physics_process(0.1)
+	assert(goal.build_count == 3)
+	for citizen_id in citizens:
+		system.unregister_citizen(citizen_id)
+	system.free()
+
+
+func _context(order: CitizenOrder = null) -> BehaviorContext:
 	var actuator := ShadowCitizenActuator.new(1)
 	var context := BehaviorContext.new(actuator, AIBlackboard.new())
-	context.refresh(WorldSnapshot.new(0, 0.0, 0.0, AIFactSet.new(), {
-		1: CitizenSnapshot.new(1),
-	}), null)
+	context.refresh(_snapshot(0.0, CitizenSnapshot.new(1)), order)
 	return context
+
+
+func _snapshot(simulation_seconds: float, citizen: CitizenSnapshot) -> WorldSnapshot:
+	return WorldSnapshot.new(simulation_seconds as int, simulation_seconds, 0.0, AIFactSet.new(), {
+		citizen.id: citizen,
+	})

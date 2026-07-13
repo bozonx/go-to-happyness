@@ -167,8 +167,8 @@ var registration_duration_resolver := Callable()
 var is_player_controlled := false
 var is_hero := false
 ## Stable, settlement-issued identity for the native AI. Unlike get_instance_id()
-## it is deterministic and survives save/load, so AI orders, reservations and
-## blackboard memory keep referring to the same citizen across sessions.
+## it is deterministic within a loaded settlement and is designed to be persisted
+## with the roster once save/load is introduced.
 var ai_id := 0
 var construction_site: Node3D
 var specialization := "unassigned"

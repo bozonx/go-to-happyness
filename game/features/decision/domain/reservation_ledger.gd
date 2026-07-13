@@ -77,6 +77,9 @@ func active_count() -> int:
 
 func _live_claim(key: Variant, simulation_seconds: float) -> _Claim:
 	var claim_data := _claims.get(key) as _Claim
-	if claim_data == null or claim_data.expires_at <= simulation_seconds:
+	if claim_data == null:
+		return null
+	if claim_data.expires_at <= simulation_seconds:
+		_claims.erase(key)
 		return null
 	return claim_data

@@ -7,6 +7,7 @@ var _providers: Array[OrderProvider] = []
 
 func configure(providers: Array[OrderProvider]) -> void:
 	_providers = providers.duplicate()
+	order_board.clear()
 
 
 func tick(snapshot: WorldSnapshot) -> void:

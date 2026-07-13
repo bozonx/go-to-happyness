@@ -18,7 +18,8 @@ The voxel extension is intentionally ignored by Git because it contains large pl
 - `game/features/<feature>/presentation/` contains Godot nodes, procedural visuals and scene-facing actors.
 - `addons/goap/` is a vendored editor/runtime dependency; keep game-specific behavior outside it.
 
-See [docs/architecture.md](docs/architecture.md) before adding a gameplay system.
+See [docs/architecture.md](docs/architecture.md) and
+[design_docs/citizen_ai.md](design_docs/citizen_ai.md) before adding AI behavior.
 
 ## Checks
 
@@ -26,4 +27,10 @@ Run the deterministic domain checks with:
 
 ```sh
 godot --headless --path . --script res://tests/test_domain.gd
+godot --headless --path . --script res://tests/test_ai.gd
+godot --headless --path . --script res://tests/test_startup.gd
 ```
+
+`test_ai.gd` covers the native AI runtime without a gameplay scene. `test_startup.gd`
+is an integration smoke test and may print known dummy-renderer diagnostics in
+headless mode; its exit status remains authoritative.
