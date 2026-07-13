@@ -101,6 +101,26 @@ func begin_action(
 			citizen.assign_excavation(dig_site)
 			_active_action = action if citizen.state == Citizen.State.EXCAVATING else &""
 			return _active_action == action
+		&"cook", &"teacher", &"seller", &"official", &"craftsman":
+			var service_position: Variant = _payload.value(&"workplace.position", Vector3.INF) if _payload != null else Vector3.INF
+			if not (service_position is Vector3) or service_position == Vector3.INF:
+				return false
+			match action:
+				&"cook": citizen.assign_canteen_work(service_position)
+				&"teacher": citizen.assign_teacher_work(service_position)
+				&"seller": citizen.assign_seller_work(service_position)
+				&"official": citizen.assign_official_work(service_position)
+				&"craftsman": citizen.assign_craft_work(service_position, _craft_speed_multiplier())
+			_active_action = action if citizen.state in _service_states_for(action) else &""
+			return _active_action == action
+		&"factory_work":
+			var factory := instance_from_id(_target_entity_id) as Node3D
+			var factory_role: Variant = _payload.value(&"factory.role", &"") if _payload != null else &""
+			if not is_instance_valid(factory) or not (factory_role is StringName) or factory_role == &"":
+				return false
+			citizen.assign_factory_work(factory, String(factory_role))
+			_active_action = action if citizen.state in [Citizen.State.TO_FACTORY, Citizen.State.FACTORY_WORK] else &""
+			return _active_action == action
 	return false
 
 
@@ -155,12 +175,41 @@ func action_status() -> ActionStatus:
 				return ActionStatus.RUNNING
 			if citizen.state == Citizen.State.IDLE:
 				return ActionStatus.SUCCEEDED
+		&"cook", &"teacher", &"seller", &"official", &"craftsman":
+			if citizen.state in _service_states_for(_active_action):
+				return ActionStatus.RUNNING
+			if citizen.state == Citizen.State.IDLE:
+				return ActionStatus.SUCCEEDED
+		&"factory_work":
+			if citizen.state in [Citizen.State.TO_FACTORY, Citizen.State.FACTORY_WORK]:
+				return ActionStatus.RUNNING
+			if citizen.state == Citizen.State.IDLE:
+				return ActionStatus.SUCCEEDED
 	return ActionStatus.FAILED
 
 
 func cancel_action() -> void:
 	if not is_valid():
 		return
-	if citizen.state in [Citizen.State.TO_HOME, Citizen.State.RESTING, Citizen.State.TO_CANTEEN, Citizen.State.EATING, Citizen.State.TO_TOILET, Citizen.State.USING_TOILET, Citizen.State.WAITING_FOR_TOILET, Citizen.State.TO_BUSH, Citizen.State.USING_BUSH, Citizen.State.TO_PARK, Citizen.State.RELAXING, Citizen.State.TO_TREE, Citizen.State.CHOPPING, Citizen.State.TO_SAWMILL, Citizen.State.SAWING, Citizen.State.WAITING_COURIER, Citizen.State.CONSTRUCTING, Citizen.State.TO_GATHER, Citizen.State.GATHERING, Citizen.State.TO_WAREHOUSE, Citizen.State.EXCAVATING]:
+	if citizen.state in [Citizen.State.TO_HOME, Citizen.State.RESTING, Citizen.State.TO_CANTEEN, Citizen.State.EATING, Citizen.State.TO_TOILET, Citizen.State.USING_TOILET, Citizen.State.WAITING_FOR_TOILET, Citizen.State.TO_BUSH, Citizen.State.USING_BUSH, Citizen.State.TO_PARK, Citizen.State.RELAXING, Citizen.State.TO_TREE, Citizen.State.CHOPPING, Citizen.State.TO_SAWMILL, Citizen.State.SAWING, Citizen.State.WAITING_COURIER, Citizen.State.CONSTRUCTING, Citizen.State.TO_GATHER, Citizen.State.GATHERING, Citizen.State.TO_WAREHOUSE, Citizen.State.EXCAVATING, Citizen.State.TO_CANTEEN_WORK, Citizen.State.CANTEEN_WORK, Citizen.State.TO_SCHOOL_WORK, Citizen.State.SCHOOL_WORK, Citizen.State.TO_MARKET_WORK, Citizen.State.MARKET_WORK, Citizen.State.TO_OFFICIAL_WORK, Citizen.State.OFFICIAL_WORK, Citizen.State.TO_CRAFT_WORK, Citizen.State.CRAFT_WORK, Citizen.State.TO_FACTORY, Citizen.State.FACTORY_WORK]:
 		citizen.idle()
 	_active_action = &""
+
+
+func _service_states_for(action: StringName) -> Array:
+	match action:
+		&"cook": return [Citizen.State.TO_CANTEEN_WORK, Citizen.State.CANTEEN_WORK]
+		&"teacher": return [Citizen.State.TO_SCHOOL_WORK, Citizen.State.SCHOOL_WORK]
+		&"seller": return [Citizen.State.TO_MARKET_WORK, Citizen.State.MARKET_WORK]
+		&"official": return [Citizen.State.TO_OFFICIAL_WORK, Citizen.State.OFFICIAL_WORK]
+		&"craftsman": return [Citizen.State.TO_CRAFT_WORK, Citizen.State.CRAFT_WORK]
+	return []
+
+
+func _craft_speed_multiplier() -> float:
+	if not is_instance_valid(citizen.employment_workplace):
+		return 1.0
+	match str(citizen.employment_workplace.get_meta("building_type", "")):
+		"craft_tent_lvl2": return 1.3
+		"craft_tent_lvl3": return 1.7
+	return 1.0

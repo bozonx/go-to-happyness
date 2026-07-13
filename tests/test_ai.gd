@@ -14,6 +14,10 @@ const GatheringGoalScript = preload("res://game/features/decision/domain/goals/g
 const GatheringOrderProviderScript = preload("res://game/features/decision/application/gathering_order_provider.gd")
 const ExcavationGoalScript = preload("res://game/features/decision/domain/goals/excavation_goal.gd")
 const ExcavationOrderProviderScript = preload("res://game/features/decision/application/excavation_order_provider.gd")
+const ServiceWorkGoalScript = preload("res://game/features/decision/domain/goals/service_work_goal.gd")
+const ServiceWorkOrderProviderScript = preload("res://game/features/decision/application/service_work_order_provider.gd")
+const FactoryWorkGoalScript = preload("res://game/features/decision/domain/goals/factory_work_goal.gd")
+const FactoryWorkOrderProviderScript = preload("res://game/features/decision/application/factory_work_order_provider.gd")
 const SettlementCitizenActuatorScript = preload("res://game/features/decision/application/settlement_citizen_actuator.gd")
 
 
@@ -116,7 +120,7 @@ class FakeActuator extends CitizenActuator:
 		_payload: AIFactSet = null
 	) -> bool:
 		action_start_count += 1
-		return action in [&"sleep", &"eat", &"relieve", &"rest", &"forestry", &"farming", &"construction", &"demolition", &"gathering", &"excavation"]
+		return action in [&"sleep", &"eat", &"relieve", &"rest", &"forestry", &"farming", &"construction", &"demolition", &"gathering", &"excavation", &"cook", &"teacher", &"seller", &"official", &"craftsman", &"factory_work"]
 
 	func action_status() -> ActionStatus:
 		return next_action_status
@@ -175,6 +179,12 @@ func _init() -> void:
 	_test_excavation_provider_assigns_unique_stable_sites()
 	_test_native_excavation_goal()
 	_test_excavation_actuator_completes_after_courier_pickup()
+	_test_service_provider_keeps_active_workplace()
+	_test_native_service_goal()
+	_test_service_actuator()
+	_test_factory_provider_keeps_active_station()
+	_test_native_factory_goal()
+	_test_factory_actuator()
 	_test_production_sleep_actuator()
 	_test_order_reconciliation()
 	_test_order_board_deduplicates_provider_output()
@@ -703,6 +713,98 @@ func _test_excavation_actuator_completes_after_courier_pickup() -> void:
 	citizen.free()
 
 
+func _test_service_provider_keeps_active_workplace() -> void:
+	var provider := ServiceWorkOrderProviderScript.new()
+	var ready := _service_citizen(1, false, true, &"cook")
+	var inactive := _service_citizen(2, false, false, &"teacher")
+	var orders := provider.collect_orders(WorldSnapshot.new(1, 0.0, 0.0, AIFactSet.new(), {1: ready, 2: inactive}))
+	assert(orders.size() == 1)
+	assert(orders[0].kind == &"service_work")
+	assert(orders[0].payload.value(&"work.service.role") == &"cook")
+	var active := _service_citizen(1, true, false, &"cook")
+	var active_orders := provider.collect_orders(WorldSnapshot.new(2, 1.0, 0.0, AIFactSet.new(), {1: active}))
+	assert(active_orders.size() == 1)
+	assert(active_orders[0].target_position == Vector3(5.0, 0.0, 0.0))
+
+
+func _test_native_service_goal() -> void:
+	var goal := ServiceWorkGoalScript.new()
+	var actuator := FakeActuator.new(1)
+	var brain := CitizenBrain.new(1, actuator, [goal])
+	var citizen := _service_citizen(1, false, true, &"cook")
+	var snapshot := _snapshot(0.0, citizen)
+	var order := _service_order(1, &"cook")
+	order.id = 22
+	brain.think(snapshot, order)
+	brain.tick(snapshot, order, 0.1)
+	assert(actuator.action_start_count == 1)
+	assert(brain.runner.active_goal_id() == &"service_work")
+	actuator.next_action_status = CitizenActuator.ActionStatus.SUCCEEDED
+	brain.tick(snapshot, order, 0.1)
+	assert(brain.runner.active_task == null)
+
+
+func _test_service_actuator() -> void:
+	var citizen := Citizen.new()
+	citizen.ai_id = 22
+	root.add_child(citizen)
+	var actuator := SettlementCitizenActuatorScript.new(citizen)
+	assert(actuator.begin_action(&"cook", -1, AIFactSet.new({&"workplace.position": Vector3.ZERO})))
+	assert(citizen.state == Citizen.State.TO_CANTEEN_WORK)
+	actuator.cancel_action()
+	assert(citizen.state == Citizen.State.IDLE)
+	root.remove_child(citizen)
+	citizen.free()
+
+
+func _test_factory_provider_keeps_active_station() -> void:
+	var provider := FactoryWorkOrderProviderScript.new()
+	var ready := _factory_citizen(1, false, true, &"factory_work")
+	var inactive := _factory_citizen(2, false, false, &"engineering")
+	var orders := provider.collect_orders(WorldSnapshot.new(1, 0.0, 0.0, AIFactSet.new(), {1: ready, 2: inactive}))
+	assert(orders.size() == 1)
+	assert(orders[0].kind == &"factory_work" and orders[0].target_entity_id == 71)
+	var active := _factory_citizen(1, true, false, &"factory_work")
+	var active_orders := provider.collect_orders(WorldSnapshot.new(2, 1.0, 0.0, AIFactSet.new(), {1: active}))
+	assert(active_orders.size() == 1)
+	assert(active_orders[0].payload.value(&"factory.role") == &"factory_work")
+
+
+func _test_native_factory_goal() -> void:
+	var goal := FactoryWorkGoalScript.new()
+	var actuator := FakeActuator.new(1)
+	var brain := CitizenBrain.new(1, actuator, [goal])
+	var citizen := _factory_citizen(1, false, true, &"engineering")
+	var snapshot := _snapshot(0.0, citizen)
+	var order := _factory_order(1, &"engineering")
+	order.id = 23
+	brain.think(snapshot, order)
+	brain.tick(snapshot, order, 0.1)
+	assert(actuator.action_start_count == 1)
+	assert(brain.runner.active_goal_id() == &"factory_work")
+	actuator.next_action_status = CitizenActuator.ActionStatus.SUCCEEDED
+	brain.tick(snapshot, order, 0.1)
+	assert(brain.runner.active_task == null)
+
+
+func _test_factory_actuator() -> void:
+	var citizen := Citizen.new()
+	citizen.ai_id = 23
+	var factory := Node3D.new()
+	factory.set_meta("service_position", Vector3.ZERO)
+	root.add_child(citizen)
+	root.add_child(factory)
+	var actuator := SettlementCitizenActuatorScript.new(citizen)
+	assert(actuator.begin_action(&"factory_work", factory.get_instance_id(), AIFactSet.new({&"factory.role": &"engineering"})))
+	assert(citizen.state == Citizen.State.TO_FACTORY and citizen.active_role == "engineering")
+	actuator.cancel_action()
+	assert(citizen.state == Citizen.State.IDLE)
+	root.remove_child(factory)
+	root.remove_child(citizen)
+	factory.free()
+	citizen.free()
+
+
 func _test_production_sleep_actuator() -> void:
 	var citizen := Citizen.new()
 	citizen.ai_id = 17
@@ -1021,4 +1123,41 @@ func _excavation_order(citizen_id: int, target_id: int, site_id: StringName) -> 
 	var order := CitizenOrder.new(citizen_id, &"excavation", &"workforce.excavation", 0.50, AIFactSet.new({&"work.site_id": site_id}))
 	order.target_entity_id = target_id
 	order.target_position = Vector3(3.0, 0.0, 0.0)
+	return order
+
+
+func _service_citizen(citizen_id: int, in_progress: bool, can_start: bool, role: StringName) -> CitizenSnapshot:
+	return CitizenSnapshot.new(citizen_id, Vector3(float(citizen_id), 0.0, 0.0), false, true, AIFactSet.new({
+		&"work.service.worker": true,
+		&"work.service.in_progress": in_progress,
+		&"work.service.can_start": can_start,
+		&"work.service.role": role,
+		&"work.service.position": Vector3(5.0, 0.0, 0.0),
+	}))
+
+
+func _service_order(citizen_id: int, role: StringName) -> CitizenOrder:
+	var order := CitizenOrder.new(citizen_id, &"service_work", &"workforce.service", 0.45, AIFactSet.new({
+		&"work.service.role": role,
+		&"workplace.position": Vector3(5.0, 0.0, 0.0),
+	}))
+	order.target_position = Vector3(5.0, 0.0, 0.0)
+	return order
+
+
+func _factory_citizen(citizen_id: int, in_progress: bool, can_start: bool, role: StringName) -> CitizenSnapshot:
+	return CitizenSnapshot.new(citizen_id, Vector3(float(citizen_id), 0.0, 0.0), false, true, AIFactSet.new({
+		&"work.factory.worker": true,
+		&"work.factory.in_progress": in_progress,
+		&"work.factory.can_start": can_start,
+		&"work.factory.role": role,
+		&"work.factory.target_id": 71,
+		&"work.factory.position": Vector3(7.0, 0.0, 0.0),
+	}))
+
+
+func _factory_order(citizen_id: int, role: StringName) -> CitizenOrder:
+	var order := CitizenOrder.new(citizen_id, &"factory_work", &"workforce.factory", 0.46, AIFactSet.new({&"factory.role": role}))
+	order.target_entity_id = 71
+	order.target_position = Vector3(7.0, 0.0, 0.0)
 	return order

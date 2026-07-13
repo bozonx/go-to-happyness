@@ -163,7 +163,7 @@ func assign_work(citizen: Citizen, index: int) -> void:
 	# Native providers own complete work cycles for these permanent roles. This
 	# method is also called by registration and waiting fallbacks, so the boundary
 	# must live here rather than only in the legacy GOAP brain.
-	if citizen.permanent_role in ["forestry", "farming", "construction", "gather_branches", "gather_food", "excavation"]:
+	if citizen.permanent_role in ["forestry", "farming", "construction", "gather_branches", "gather_food", "excavation", "cook", "teacher", "seller", "official", "craftsman", "factory_worker", "engineer"]:
 		return
 	if not can_assign_work(citizen):
 		return

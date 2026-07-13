@@ -1605,7 +1605,7 @@ func assign_factory_work(next_factory: Node3D, role: String) -> void:
 	if not is_player_controlled:
 		_reset_assignment_navigation()
 		factory = next_factory
-		factory_position = next_factory.get_meta("service_position", next_factory.global_position)
+		factory_position = next_factory.get_meta("service_position", next_factory.global_position if next_factory.is_inside_tree() else next_factory.position)
 		active_role = role
 		state = State.TO_FACTORY
 
