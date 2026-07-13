@@ -121,6 +121,14 @@ func begin_action(
 			citizen.assign_factory_work(factory, String(factory_role))
 			_active_action = action if citizen.state in [Citizen.State.TO_FACTORY, Citizen.State.FACTORY_WORK] else &""
 			return _active_action == action
+		&"courier_delivery":
+			var task_id: Variant = _payload.value(&"courier.task_id", &"") if _payload != null else &""
+			if not (task_id is StringName) or task_id == &"" or citizen.simulation == null or citizen.simulation.courier_dispatcher == null:
+				return false
+			if not citizen.simulation.courier_dispatcher.start_task(citizen, task_id):
+				return false
+			_active_action = action if citizen.has_active_delivery() else &""
+			return _active_action == action
 	return false
 
 
@@ -185,13 +193,18 @@ func action_status() -> ActionStatus:
 				return ActionStatus.RUNNING
 			if citizen.state == Citizen.State.IDLE:
 				return ActionStatus.SUCCEEDED
+		&"courier_delivery":
+			if citizen.has_active_delivery():
+				return ActionStatus.RUNNING
+			if citizen.state == Citizen.State.IDLE:
+				return ActionStatus.SUCCEEDED
 	return ActionStatus.FAILED
 
 
 func cancel_action() -> void:
 	if not is_valid():
 		return
-	if citizen.state in [Citizen.State.TO_HOME, Citizen.State.RESTING, Citizen.State.TO_CANTEEN, Citizen.State.EATING, Citizen.State.TO_TOILET, Citizen.State.USING_TOILET, Citizen.State.WAITING_FOR_TOILET, Citizen.State.TO_BUSH, Citizen.State.USING_BUSH, Citizen.State.TO_PARK, Citizen.State.RELAXING, Citizen.State.TO_TREE, Citizen.State.CHOPPING, Citizen.State.TO_SAWMILL, Citizen.State.SAWING, Citizen.State.WAITING_COURIER, Citizen.State.CONSTRUCTING, Citizen.State.TO_GATHER, Citizen.State.GATHERING, Citizen.State.TO_WAREHOUSE, Citizen.State.EXCAVATING, Citizen.State.TO_CANTEEN_WORK, Citizen.State.CANTEEN_WORK, Citizen.State.TO_SCHOOL_WORK, Citizen.State.SCHOOL_WORK, Citizen.State.TO_MARKET_WORK, Citizen.State.MARKET_WORK, Citizen.State.TO_OFFICIAL_WORK, Citizen.State.OFFICIAL_WORK, Citizen.State.TO_CRAFT_WORK, Citizen.State.CRAFT_WORK, Citizen.State.TO_FACTORY, Citizen.State.FACTORY_WORK]:
+	if citizen.state in [Citizen.State.TO_HOME, Citizen.State.RESTING, Citizen.State.TO_CANTEEN, Citizen.State.EATING, Citizen.State.TO_TOILET, Citizen.State.USING_TOILET, Citizen.State.WAITING_FOR_TOILET, Citizen.State.TO_BUSH, Citizen.State.USING_BUSH, Citizen.State.TO_PARK, Citizen.State.RELAXING, Citizen.State.TO_TREE, Citizen.State.CHOPPING, Citizen.State.TO_SAWMILL, Citizen.State.SAWING, Citizen.State.WAITING_COURIER, Citizen.State.CONSTRUCTING, Citizen.State.TO_GATHER, Citizen.State.GATHERING, Citizen.State.TO_WAREHOUSE, Citizen.State.EXCAVATING, Citizen.State.TO_CANTEEN_WORK, Citizen.State.CANTEEN_WORK, Citizen.State.TO_SCHOOL_WORK, Citizen.State.SCHOOL_WORK, Citizen.State.TO_MARKET_WORK, Citizen.State.MARKET_WORK, Citizen.State.TO_OFFICIAL_WORK, Citizen.State.OFFICIAL_WORK, Citizen.State.TO_CRAFT_WORK, Citizen.State.CRAFT_WORK, Citizen.State.TO_FACTORY, Citizen.State.FACTORY_WORK, Citizen.State.COURIER_TO_WORKER, Citizen.State.COURIER_TO_WAREHOUSE, Citizen.State.COURIER_TO_SAWMILL, Citizen.State.TO_FOOD_PICKUP, Citizen.State.TO_CANTEEN_DELIVERY, Citizen.State.TO_CONSTRUCTION_PICKUP, Citizen.State.TO_CONSTRUCTION_SITE, Citizen.State.TO_TRADE_PICKUP, Citizen.State.TO_TRADE_DESTINATION]:
 		citizen.idle()
 	_active_action = &""
 

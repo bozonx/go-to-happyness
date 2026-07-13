@@ -15,6 +15,10 @@ func capture(sequence: int) -> WorldSnapshot:
 	if not is_instance_valid(simulation):
 		return WorldSnapshot.new(sequence)
 	var canteen_service: CanteenService = simulation.canteen_service
+	var courier_tasks: Array[Dictionary] = []
+	if simulation.courier_dispatcher != null and simulation._is_work_time():
+		for task: CourierTask in simulation.courier_dispatcher.available_tasks():
+			courier_tasks.append({&"id": task.id, &"priority": task.priority, &"pickup": task.pickup})
 	var citizens_by_id: Dictionary = {}
 	for actor: Citizen in simulation.citizens:
 		if not is_instance_valid(actor) or actor.ai_id == 0:
@@ -152,6 +156,8 @@ func capture(sequence: int) -> WorldSnapshot:
 			var factory_position_value: Variant = factory_node.get_meta("service_position", factory_node.global_position)
 			if factory_position_value is Vector3:
 				factory_position = factory_position_value
+		var courier_worker: bool = actor.is_reserve() and actor.is_courier() and not actor.is_player_controlled
+		var courier_can_start: bool = courier_worker and actor.state == Citizen.State.IDLE and simulation._is_work_time()
 		citizens_by_id[citizen_id] = CitizenSnapshot.new(
 			citizen_id,
 			actor.global_position,
@@ -202,6 +208,9 @@ func capture(sequence: int) -> WorldSnapshot:
 				&"work.factory.role": factory_role,
 				&"work.factory.target_id": factory_node.get_instance_id() if is_instance_valid(factory_node) else -1,
 				&"work.factory.position": factory_position,
+				&"work.courier.worker": courier_worker,
+				&"work.courier.can_start": courier_can_start,
+				&"work.courier.tasks": courier_tasks,
 			})
 		)
 	var settlement_facts := AIFactSet.new({

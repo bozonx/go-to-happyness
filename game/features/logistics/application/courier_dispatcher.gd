@@ -21,22 +21,25 @@ func dispatch() -> void:
 	simulation._publish_courier_tasks(self)
 	_publish_manual_worker_tasks()
 	_cleanup_invalid_tasks()
-	var available := _available_couriers()
-	var ordered := tasks.values()
-	ordered.sort_custom(func(a: CourierTask, b: CourierTask):
-		if a.priority != b.priority:
-			return a.priority > b.priority
-		return a.created_at < b.created_at
-	)
-	for task: CourierTask in ordered:
-		if task.is_assigned() or available.is_empty():
-			continue
-		var courier := _requested_courier(task, available)
-		if courier == null:
-			continue
-		if simulation._start_courier_task(courier, task):
-			task.assigned_courier_id = courier.get_instance_id()
-			available.erase(courier)
+
+
+func available_tasks() -> Array[CourierTask]:
+	var result: Array[CourierTask] = []
+	for task: CourierTask in tasks.values():
+		if not task.is_assigned() and simulation._is_courier_task_valid(task):
+			result.append(task)
+	result.sort_custom(func(a: CourierTask, b: CourierTask): return a.priority > b.priority)
+	return result
+
+
+func start_task(courier: Citizen, task_id: StringName) -> bool:
+	if not is_instance_valid(courier) or not tasks.has(task_id):
+		return false
+	var task: CourierTask = tasks[task_id]
+	if task.is_assigned() or not simulation._is_courier_task_valid(task) or not simulation._start_courier_task(courier, task):
+		return false
+	task.assigned_courier_id = courier.get_instance_id()
+	return true
 
 
 func is_manually_targeted(worker: Citizen) -> bool:
