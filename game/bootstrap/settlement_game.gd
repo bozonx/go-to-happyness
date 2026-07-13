@@ -821,6 +821,10 @@ func _update_couriers() -> void:
 func _publish_courier_tasks(dispatcher: RefCounted) -> void:
 	if warehouse_positions.is_empty():
 		return
+	# Repair reservations left by an interrupted or removed carrier before task
+	# validity is evaluated. This is the active dispatcher path.
+	for construction_site in construction_sites:
+		_reconcile_construction_reservations(construction_site)
 	# Emergency food is published before every other task.
 	if is_instance_valid(canteen) and food > 0 and not pending_canteen_delivery:
 		var food_capacity := BuildingCatalog.kitchen_food_capacity(str(canteen.get_meta("building_type", "")))
@@ -2297,15 +2301,15 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	build_menu.add_child(job_back_btn)
 	
 	# Role buttons in job submenu
-	_add_role_button("Freelance: flexible", "", 136)
-	_add_role_button("Freelance: construction helper", "construction", 170)
+	_add_role_button("Reserve: available", "", 136)
+	_add_role_button("Work order: construction helper", "construction", 170)
 	_add_role_button("Assign: forestry (logs/timber)", "forestry", 204)
 	_add_role_button("Assign: farming", "farming", 238)
 	_add_role_button("Assign: excavation", "excavation", 272)
-	_add_role_button("Freelance: gather branches", "gather_branches", 306)
-	_add_role_button("Freelance: gather grass", "gather_grass", 340)
+	_add_role_button("Work order: gather branches", "gather_branches", 306)
+	_add_role_button("Work order: gather grass", "gather_grass", 340)
 	_add_role_button("Assign: forage food", "gather_food", 374)
-	_add_role_button("Freelance: courier", "courier", 408)
+	_add_role_button("Work order: courier", "courier", 408)
 	_add_role_button("Assign: craftsman", "craftsman", 442)
 	_add_role_button("Assign: employment officer", "official", 476)
 	
@@ -2907,7 +2911,7 @@ func _spawn_house_citizen() -> void:
 	_show_house_menu()
 	pending_arrivals.append({"house": selected_house})
 	_update_arrivals()
-	_update_interface("A resident is expected at the entrance stone. A free freelance worker will meet them.")
+	_update_interface("A resident is expected at the entrance stone. An available reserve worker will meet them.")
 
 
 func _find_arrival_greeter(allow_busy := false) -> Citizen:
@@ -3020,7 +3024,7 @@ func _on_arrival_greeter_ready(greeter: Citizen) -> void:
 			greeter.idle()
 			newcomer.employment_state = Citizen.EmploymentState.FREELANCE
 			newcomer.idle()
-			_update_interface("The newcomer joined the pre-campfire freelance reserve.")
+			_update_interface("The newcomer joined the pre-campfire workforce reserve.")
 	else:
 		arrival_escort_ids[greeter.get_instance_id()] = true
 		greeter.wait_for_arrival_morning()
@@ -3946,7 +3950,7 @@ func _show_selected_citizen_menu() -> void:
 		return
 	var assignment := "Unregistered"
 	if selected_builder.employment_state == Citizen.EmploymentState.FREELANCE:
-		assignment = "Freelance: %s" % (selected_builder.freelance_assignment.replace("_", " ") if not selected_builder.freelance_assignment.is_empty() else "flexible")
+		assignment = "Reserve: %s" % (selected_builder.freelance_assignment.replace("_", " ") if not selected_builder.freelance_assignment.is_empty() else "available")
 	elif selected_builder.employment_state == Citizen.EmploymentState.EMPLOYED:
 		assignment = "Employed: %s" % selected_builder.permanent_role.replace("_", " ")
 	elif selected_builder.employment_state == Citizen.EmploymentState.REGISTERING:
@@ -5043,7 +5047,7 @@ func _refresh_campfire_occupancy_button() -> void:
 	var total := _employment_resident_count()
 	var employed := _employment_state_count(Citizen.EmploymentState.EMPLOYED) + _employment_state_count(Citizen.EmploymentState.REGISTERING)
 	var freelance := _employment_state_count(Citizen.EmploymentState.FREELANCE)
-	campfire_occupancy_button.text = "Employment: %d/%d  Freelance: %d" % [employed, total, freelance]
+	campfire_occupancy_button.text = "Employment: %d/%d  Reserve: %d" % [employed, total, freelance]
 
 
 func _workforce_roles() -> Array[String]:
@@ -5130,7 +5134,7 @@ func _refresh_workforce_menu() -> void:
 	var reserve := _employment_state_count(Citizen.EmploymentState.FREELANCE)
 	var unregistered := _employment_state_count(Citizen.EmploymentState.UNREGISTERED)
 	workforce_menu_title.text = "Employment: %d residents" % total
-	_add_workforce_summary("Employed %d   Registering %d   Freelance %d   Unregistered %d" % [employed, hiring, reserve, unregistered])
+	_add_workforce_summary("Employed %d   Registering %d   Reserve %d   Unregistered %d" % [employed, hiring, reserve, unregistered])
 
 	var jobs_title := Label.new()
 	jobs_title.text = "Employed positions"
@@ -5145,15 +5149,15 @@ func _refresh_workforce_menu() -> void:
 		_add_workforce_job_row(role, employed_for_role, pending_for_role)
 		shown_jobs += 1
 	if shown_jobs == 0:
-		_add_workforce_summary("No workplaces are available. Registered residents remain freelance.")
+		_add_workforce_summary("No workplaces are available. Registered residents remain in reserve.")
 
 	var reserve_title := Label.new()
-	reserve_title.text = "Freelance workers"
+	reserve_title.text = "Reserve workers"
 	reserve_title.add_theme_font_size_override("font_size", 16)
 	workforce_list.add_child(reserve_title)
 	_add_workforce_summary("Available %d" % _freelance_role_count(""))
 	for role in _freelance_roles():
-		_add_workforce_summary("Freelance: %s  %d" % [_workforce_role_label(role), _freelance_role_count(role)])
+		_add_workforce_summary("Work order: %s  %d" % [_workforce_role_label(role), _freelance_role_count(role)])
 
 	var unregistered_residents := _citizens_with_employment_states([Citizen.EmploymentState.UNREGISTERED, Citizen.EmploymentState.REGISTERING])
 	if not unregistered_residents.is_empty():
@@ -5214,7 +5218,7 @@ func _add_unemployed_resident_row(citizen: Citizen) -> void:
 	row.add_child(label)
 	var auto_button := Button.new()
 	auto_button.text = "Registering" if citizen.employment_state == Citizen.EmploymentState.REGISTERING else "Register"
-	auto_button.tooltip_text = "Register this resident as a freelance worker"
+	auto_button.tooltip_text = "Register this resident in the workforce reserve"
 	auto_button.custom_minimum_size = Vector2(72, 30)
 	auto_button.disabled = not _player_can_command_labor() or citizen.employment_state != Citizen.EmploymentState.UNREGISTERED or _employment_center_position() == Vector3.INF
 	if not _player_can_command_labor():

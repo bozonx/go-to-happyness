@@ -20,6 +20,7 @@ const BUSY_STATES := [
 	Citizen.State.TO_SCHOOL_WORK, Citizen.State.SCHOOL_WORK,
 	Citizen.State.TO_MARKET_WORK, Citizen.State.MARKET_WORK,
 	Citizen.State.TO_TRADE_PICKUP, Citizen.State.TO_TRADE_DESTINATION,
+	Citizen.State.TO_CONSTRUCTION_PICKUP, Citizen.State.TO_CONSTRUCTION_SITE,
 	Citizen.State.TO_OFFICIAL_WORK, Citizen.State.OFFICIAL_WORK
 ]
 

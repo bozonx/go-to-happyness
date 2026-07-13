@@ -1821,7 +1821,7 @@ func _update_idle_indicator() -> void:
 			idle_indicator.text = "Employed: %s%s" % [permanent_role.replace("_", " "), _employment_workplace_suffix(employment_workplace)]
 			idle_indicator.modulate = Color("76c893")
 		EmploymentState.REGISTERING:
-			var registration_label := "freelance worker" if pending_employment_role.is_empty() else pending_employment_role.replace("_", " ")
+			var registration_label := "reserve worker" if pending_employment_role.is_empty() else pending_employment_role.replace("_", " ")
 			idle_indicator.text = "Registering: %s%s" % [registration_label, _employment_workplace_suffix(pending_employment_workplace)]
 			idle_indicator.modulate = Color("7bb7e8")
 		EmploymentState.UNREGISTERED:
@@ -1833,7 +1833,7 @@ func _update_idle_indicator() -> void:
 			if visible_role.is_empty() and not active_role.is_empty():
 				visible_role = active_role
 				automatic = true
-			idle_indicator.text = "Freelance: %s%s" % [visible_role.replace("_", " ") if not visible_role.is_empty() else "available", " (automatic)" if automatic else ""]
+			idle_indicator.text = "Reserve: %s%s" % [visible_role.replace("_", " ") if not visible_role.is_empty() else "available", " (planned)" if automatic else ""]
 			idle_indicator.modulate = Color("f0c45d")
 
 
@@ -1850,12 +1850,12 @@ func assign_home(next_home: Node3D) -> void:
 		remove_debuff("tent")
 
 func go_home() -> void:
-	if not is_player_controlled and not has_active_arrival_task() and is_instance_valid(home):
+	if not is_player_controlled and not has_active_arrival_task() and not has_active_delivery() and is_instance_valid(home):
 		factory = null
 		state = State.TO_HOME
 
 func go_to_canteen(next_canteen_position: Vector3) -> void:
-	if not is_player_controlled:
+	if not is_player_controlled and not has_active_delivery():
 		canteen_position = next_canteen_position
 		active_role = ""
 		factory = null

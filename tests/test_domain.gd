@@ -475,6 +475,13 @@ func _test_construction_delivery_stays_scheduled() -> void:
 	courier.state = Citizen.State.TO_CONSTRUCTION_SITE
 	assert(courier.has_active_delivery())
 	assert(not courier.is_available_for_schedule())
+	var home := Node3D.new()
+	courier.home = home
+	courier.go_home()
+	assert(courier.state == Citizen.State.TO_CONSTRUCTION_SITE)
+	courier.go_to_canteen(Vector3.ZERO)
+	assert(courier.state == Citizen.State.TO_CONSTRUCTION_SITE)
+	home.free()
 	courier.free()
 
 
