@@ -104,8 +104,10 @@ const STATE_ANIMATIONS := {
 	State.SAWING: "interact-right",
 	State.CONSTRUCTING: "interact-right",
 	State.EXCAVATING: "interact-right",
-	State.EATING: "idle",
-	State.RESTING: "idle",
+	State.EATING: "sit",
+	State.RESTING: "sit",
+	State.STUDYING: "sit",
+	State.RELAXING: "sit",
 	State.USING_TOILET: "crouch",
 	State.USING_BUSH: "crouch",
 	State.FACTORY_WORK: "interact-right",
@@ -114,6 +116,7 @@ const STATE_ANIMATIONS := {
 	State.MARKET_WORK: "interact-right",
 	State.OFFICIAL_WORK: "interact-right",
 	State.RESEARCHING: "interact-right",
+	State.EMPLOYMENT_PROCESSING: "interact-right",
 }
 
 signal state_changed(citizen: Citizen, previous_state: int, next_state: int)
@@ -188,10 +191,18 @@ var gender: String = ""
 var current_model_path: String = ""
 var current_character_mesh: Node3D
 var animation_player: AnimationPlayer
+# A transient full-body gesture (e.g. "pick-up") that plays once and then hands
+# control back to the state/locomotion animation. Cleared as soon as it elapses
+# or the citizen starts moving.
+var _one_shot_anim: String = ""
+var _one_shot_remaining: float = 0.0
 var skin_color: Color = Color.WHITE
 var shirt_color: Color = Color.WHITE
 var pants_color: Color = Color.WHITE
 var hair_color: Color = Color.WHITE
+# Chosen once and reused across every model rebuild so a citizen keeps the same
+# face for life, even when a promotion swaps their body model.
+var head_model_name: String = ""
 var head_visible: bool = true
 var skills := {}
 var practiced_today: Dictionary = {}
@@ -393,8 +404,14 @@ func _setup_head_mesh() -> void:
 
 static var _shared_shader_material: ShaderMaterial
 
+func _resolve_model_prefix() -> String:
+	# The hero always wears the constable model, regardless of their civic role.
+	if is_hero:
+		return "policeman"
+	return MODEL_PREFIXES.get(specialization, "common")
+
 func _update_character_model() -> void:
-	var prefix: String = MODEL_PREFIXES.get(specialization, "common")
+	var prefix := _resolve_model_prefix()
 	var path := "res://assets/characters/%s-%s.glb" % [prefix, gender]
 	
 	if not FileAccess.file_exists(path):
@@ -430,8 +447,9 @@ func _update_character_model() -> void:
 		inst.rotation.y = PI
 		inst.scale = Vector3(2.65, 2.65, 2.65)
 		
-		# Randomize head for regular characters
-		if specialization != "policeman":
+		# Regular citizens get a stable, randomly assigned head; the hero keeps the
+		# constable model's own head so their appearance never shuffles.
+		if not is_hero:
 			_randomize_head_on_instance(inst)
 			
 		add_child(inst)
@@ -463,7 +481,7 @@ func _update_character_model() -> void:
 		# Set up animations
 		animation_player = inst.get_node_or_null("AnimationPlayer") as AnimationPlayer
 		if animation_player != null:
-			for anim_name in ["idle", "walk", "sprint", "crouch"]:
+			for anim_name in ["idle", "walk", "sprint", "crouch", "sit"]:
 				var anim = animation_player.get_animation(anim_name)
 				if anim != null:
 					anim.loop_mode = Animation.LOOP_LINEAR
@@ -471,23 +489,34 @@ func _update_character_model() -> void:
 func _update_mesh_colors() -> void:
 	if current_character_mesh == null:
 		return
-	var body_mesh = _find_node_by_name(current_character_mesh, "body-mesh") as MeshInstance3D
-	var head_mesh = _find_node_by_name(current_character_mesh, "head-mesh") as MeshInstance3D
-	if body_mesh:
-		body_mesh.set_instance_shader_parameter("skin_color", skin_color)
-		body_mesh.set_instance_shader_parameter("shirt_color", shirt_color)
-		body_mesh.set_instance_shader_parameter("pants_color", pants_color)
-		body_mesh.set_instance_shader_parameter("hair_color", hair_color)
-	if head_mesh:
-		head_mesh.set_instance_shader_parameter("skin_color", skin_color)
-		head_mesh.set_instance_shader_parameter("shirt_color", shirt_color)
-		head_mesh.set_instance_shader_parameter("pants_color", pants_color)
-		head_mesh.set_instance_shader_parameter("hair_color", hair_color)
+	# Clothing is only recoloured on the generic "common" citizen, so the tailored
+	# professional models (worker/teacher/courier/official) keep their uniform. The
+	# hero keeps everything the constable texture provides and only takes a skin tone.
+	var uses_common_model := _resolve_model_prefix() == "common"
+	var swap_clothing := 1.0 if uses_common_model and not is_hero else 0.0
+	var swap_hair := 0.0 if is_hero else 1.0
+	for mesh in [
+		_find_node_by_name(current_character_mesh, "body-mesh") as MeshInstance3D,
+		_find_node_by_name(current_character_mesh, "head-mesh") as MeshInstance3D,
+	]:
+		if mesh == null:
+			continue
+		mesh.set_instance_shader_parameter("skin_color", skin_color)
+		mesh.set_instance_shader_parameter("shirt_color", shirt_color)
+		mesh.set_instance_shader_parameter("pants_color", pants_color)
+		mesh.set_instance_shader_parameter("hair_color", hair_color)
+		mesh.set_instance_shader_parameter("swap_skin", 1.0)
+		mesh.set_instance_shader_parameter("swap_shirt", swap_clothing)
+		mesh.set_instance_shader_parameter("swap_pants", swap_clothing)
+		mesh.set_instance_shader_parameter("swap_hair", swap_hair)
 
 func _randomize_head_on_instance(inst: Node3D) -> void:
-	var pool := RANDOM_HEADS_MALE if gender == "male" else RANDOM_HEADS_FEMALE
-	var random_model_name = pool.pick_random()
-	var path := "res://assets/characters/%s.glb" % random_model_name
+	# Pick the donor head exactly once; every later rebuild reuses it so the face
+	# stays constant for the citizen's whole life.
+	if head_model_name.is_empty():
+		var pool := RANDOM_HEADS_MALE if gender == "male" else RANDOM_HEADS_FEMALE
+		head_model_name = pool.pick_random()
+	var path := "res://assets/characters/%s.glb" % head_model_name
 	if FileAccess.file_exists(path):
 		var donor_scene := load(path) as PackedScene
 		if donor_scene != null:
@@ -513,21 +542,55 @@ func _setup_fallback_mesh() -> void:
 	if not has_node("FallbackHead"):
 		_setup_head_mesh()
 
-func _update_animations(_delta: float) -> void:
+# Queue a one-shot gesture (e.g. picking an item up). It plays to completion and
+# then locomotion/state animation resumes; movement cancels it immediately.
+func play_one_shot(anim_name: String) -> void:
 	if animation_player == null:
 		return
-		
-	var anim_to_play := "idle"
-	
-	# Ignore vertical movement (falling/jumping) when deciding to play walk
-	var horizontal_velocity := Vector3(velocity.x, 0.0, velocity.z)
-	if horizontal_velocity.length() > 0.15:
-		anim_to_play = "walk"
-	else:
-		anim_to_play = STATE_ANIMATIONS.get(state, "idle")
-		
+	var anim := animation_player.get_animation(anim_name)
+	if anim == null:
+		return
+	_one_shot_anim = anim_name
+	_one_shot_remaining = anim.length
+	animation_player.play(anim_name, 0.15)
+
+# Locomotion picker shared by AI and the player-controlled hero. Walking speeds
+# past the sprint threshold (bicycle couriers, hero holding shift) break into a run.
+func _locomotion_animation(horizontal_speed: float) -> String:
+	if horizontal_speed <= 0.15:
+		return ""
+	return "sprint" if horizontal_speed > WALK_SPEED * 1.3 else "walk"
+
+func _play_animation(anim_to_play: String) -> void:
 	if animation_player.current_animation != anim_to_play:
-		animation_player.play(anim_to_play, 0.25)
+		animation_player.play(anim_to_play, 0.2)
+
+func _update_animations(delta: float) -> void:
+	if animation_player == null:
+		return
+	var horizontal_speed := Vector3(velocity.x, 0.0, velocity.z).length()
+	# A running one-shot owns the rig until it ends or the citizen starts moving.
+	if not _one_shot_anim.is_empty():
+		_one_shot_remaining -= delta
+		if _one_shot_remaining > 0.0 and horizontal_speed <= 0.15:
+			return
+		_one_shot_anim = ""
+	var locomotion := _locomotion_animation(horizontal_speed)
+	var anim_to_play := locomotion if not locomotion.is_empty() else STATE_ANIMATIONS.get(state, "idle") as String
+	_play_animation(anim_to_play)
+
+# Driven every frame by the settlement while the hero is under direct control, so
+# the player character animates (walk/run/jump/fall) just like an AI citizen.
+func drive_player_animation(is_sprinting: bool) -> void:
+	if animation_player == null:
+		return
+	var horizontal_speed := Vector3(velocity.x, 0.0, velocity.z).length()
+	var anim_to_play := "idle"
+	if not is_on_floor():
+		anim_to_play = "jump" if velocity.y > 0.5 else "fall"
+	elif horizontal_speed > 0.15:
+		anim_to_play = "sprint" if is_sprinting else "walk"
+	_play_animation(anim_to_play)
 
 func assign_work(next_resource_type: String, source: Vector3, workplace: Vector3, warehouse: Vector3, next_uses_courier := false, access_pos := Vector3.INF) -> void:
 	if is_player_controlled:
@@ -728,6 +791,7 @@ func _process_resource_delivery(delta: float) -> void:
 	_refresh_warehouse_position()
 	if _move_to(warehouse_position, delta):
 		state = State.IDLE
+		play_one_shot("pick-up")
 		resource_delivered.emit(self, resource_type, carried_amount)
 
 func _process_courier_wait(delta: float) -> void:
@@ -779,6 +843,7 @@ func _process_courier_delivery(delta: float) -> void:
 	_refresh_warehouse_position()
 	if _move_to(warehouse_position, delta):
 		state = State.IDLE
+		play_one_shot("pick-up")
 		resource_delivered.emit(self, courier_resource_type, carried_amount)
 
 func assign_construction_delivery(site: Node3D, warehouse: Vector3, resource_type: String) -> void:
@@ -842,6 +907,7 @@ func _process_go_to_canteen(delta: float) -> void:
 func _process_eating(delta: float) -> void:
 	if task_timer.advance(delta):
 		state = State.IDLE
+		play_one_shot("emote-yes")
 		meal_finished.emit(self)
 
 func _process_food_pickup(delta: float) -> void:
@@ -1336,6 +1402,10 @@ func set_hero(hero: bool) -> void:
 		add_to_group("hero")
 		if body_material != null:
 			body_material.albedo_color = Color("e6c857")
+		# _ready() already built a regular citizen model; rebuild it as the constable
+		# so the hero is instantly recognisable (skin-only recolour, fixed head).
+		if current_model_path != "":
+			_update_character_model()
 
 func set_head_visible(value: bool) -> void:
 	head_visible = value

@@ -4023,6 +4023,7 @@ func _update_player_control(delta: float) -> void:
 	else:
 		player_citizen.velocity.y -= PLAYER_GRAVITY * delta
 	player_citizen.move_and_slide()
+	player_citizen.drive_player_animation(Input.is_key_pressed(KEY_SHIFT))
 	camera.global_position = player_citizen.global_position + Vector3(0.0, PLAYER_EYE_HEIGHT, 0.0)
 	camera.rotation = Vector3(player_pitch, player_yaw, 0.0)
 	_refresh_interaction_hint()
