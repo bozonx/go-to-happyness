@@ -8,7 +8,7 @@ func _enter(context: BehaviorContext) -> void:
 		return
 	var task_id := context.order.payload.value(&"courier.task_id", &"") as StringName
 	if task_id != &"":
-		started = context.actuator.begin_action(&"courier_delivery", -1, AIFactSet.new({&"courier.task_id": task_id}))
+		started = context.actuator.begin_action(&"courier_delivery", &"", AIFactSet.new({&"courier.task_id": task_id}))
 
 func _tick(context: BehaviorContext, _delta: float) -> Status:
 	if not started:

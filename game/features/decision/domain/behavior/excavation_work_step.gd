@@ -11,13 +11,13 @@ func _enter(context: BehaviorContext) -> void:
 	if context.citizen == null or context.snapshot == null or context.order == null:
 		return
 	var site_id := context.order.payload.value(&"work.site_id", &"") as StringName
-	if site_id == &"" or context.order.target_entity_id < 0:
+	if site_id == &"" or context.order.target_key == &"":
 		return
 	_reservation_key = [&"excavation.site", site_id]
 	if not context.snapshot.reservations.claim(_reservation_key, context.citizen.id, context.snapshot.simulation_seconds, RESERVATION_TTL):
 		_reservation_key.clear()
 		return
-	_started = context.actuator.begin_action(&"excavation", context.order.target_entity_id)
+	_started = context.actuator.begin_action(&"excavation", context.order.target_key)
 	if not _started:
 		_release(context)
 

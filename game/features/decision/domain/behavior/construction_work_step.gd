@@ -8,9 +8,9 @@ func _enter(context: BehaviorContext) -> void:
 	if context.citizen == null or context.order == null:
 		return
 	var mode := context.order.payload.value(&"work.construction.mode", &"") as StringName
-	if mode not in [&"construction", &"demolition"] or context.order.target_entity_id < 0:
+	if mode not in [&"construction", &"demolition"] or context.order.target_key == &"":
 		return
-	_started = context.actuator.begin_action(mode, context.order.target_entity_id)
+	_started = context.actuator.begin_action(mode, context.order.target_key)
 
 
 func _tick(context: BehaviorContext, _delta: float) -> Status:

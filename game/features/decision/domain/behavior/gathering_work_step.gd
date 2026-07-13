@@ -21,7 +21,7 @@ func _enter(context: BehaviorContext) -> void:
 	if not context.snapshot.reservations.claim(_reservation_key, context.citizen.id, context.snapshot.simulation_seconds, RESERVATION_TTL):
 		_reservation_key.clear()
 		return
-	_started = context.actuator.begin_action(&"gathering", -1, AIFactSet.new({
+	_started = context.actuator.begin_action(&"gathering", &"", AIFactSet.new({
 		&"resource.type": resource_type,
 		&"target.position": source_position,
 		&"target.access_position": access_position,

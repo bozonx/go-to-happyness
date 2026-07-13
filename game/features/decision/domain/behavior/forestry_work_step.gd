@@ -21,7 +21,7 @@ func _enter(context: BehaviorContext) -> void:
 	if not context.snapshot.reservations.claim(_reservation_key, context.citizen.id, context.snapshot.simulation_seconds, RESERVATION_TTL):
 		_reservation_key.clear()
 		return
-	_started = context.actuator.begin_action(&"forestry", -1, AIFactSet.new({
+	_started = context.actuator.begin_action(&"forestry", &"", AIFactSet.new({
 		&"target.position": tree_position,
 		&"target.access_position": tree_access,
 		&"workplace.position": sawmill_position,

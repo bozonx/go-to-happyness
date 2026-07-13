@@ -11,7 +11,7 @@ func _enter(context: BehaviorContext) -> void:
 	var warehouse_position: Variant = context.order.payload.value(&"work.warehouse_position", Vector3.INF)
 	if not (farm_position is Vector3) or farm_position == Vector3.INF or not (warehouse_position is Vector3) or warehouse_position == Vector3.INF:
 		return
-	_started = context.actuator.begin_action(&"farming", -1, AIFactSet.new({
+	_started = context.actuator.begin_action(&"farming", &"", AIFactSet.new({
 		&"workplace.position": farm_position,
 		&"warehouse.position": warehouse_position,
 	}))

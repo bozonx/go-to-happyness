@@ -23,9 +23,9 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 		if not in_progress and not bool(citizen.facts.value(&"work.construction.can_start", false)):
 			continue
 		var mode := citizen.facts.value(&"work.construction.mode", &"") as StringName
-		var target_id := int(citizen.facts.value(&"work.construction.target_id", -1))
+		var target_key := citizen.facts.value(&"work.construction.target_key", &"") as StringName
 		var target_position: Variant = citizen.facts.value(&"work.construction.position", Vector3.INF)
-		if mode not in [&"construction", &"demolition"] or target_id < 0 or not (target_position is Vector3) or target_position == Vector3.INF:
+		if mode not in [&"construction", &"demolition"] or target_key == &"" or not (target_position is Vector3) or target_position == Vector3.INF:
 			continue
 		var order := CitizenOrder.new(
 			citizen_id,
@@ -34,7 +34,7 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 			0.60,
 			AIFactSet.new({&"work.construction.mode": mode})
 		)
-		order.target_entity_id = target_id
+		order.target_key = target_key
 		order.target_position = target_position
 		orders.append(order)
 	return orders

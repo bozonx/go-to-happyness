@@ -118,7 +118,7 @@ class FakeActuator extends CitizenActuator:
 
 	func begin_action(
 		action: StringName,
-		_target_entity_id: int = -1,
+		_target_key: StringName = &"",
 		_payload: AIFactSet = null
 	) -> bool:
 		action_start_count += 1
@@ -561,7 +561,7 @@ func _test_farming_actuator_completes_after_courier_pickup() -> void:
 	citizen.ai_id = 18
 	citizen.permanent_role = "farming"
 	var actuator := SettlementCitizenActuatorScript.new(citizen)
-	assert(actuator.begin_action(&"farming", -1, AIFactSet.new({
+	assert(actuator.begin_action(&"farming", &"", AIFactSet.new({
 		&"workplace.position": Vector3.ZERO,
 		&"warehouse.position": Vector3(2.0, 0.0, 0.0),
 	})))
@@ -584,11 +584,11 @@ func _test_construction_provider_keeps_active_cycle() -> void:
 	var inactive := _construction_citizen(2, false, false, &"construction", 42)
 	var orders := provider.collect_orders(WorldSnapshot.new(1, 0.0, 0.0, AIFactSet.new(), {1: ready, 2: inactive}))
 	assert(orders.size() == 1)
-	assert(orders[0].kind == &"construction" and orders[0].target_entity_id == 41)
+	assert(orders[0].kind == &"construction" and orders[0].target_key == &"construction:41")
 	var active := _construction_citizen(1, true, false, &"demolition", 43)
 	var active_orders := provider.collect_orders(WorldSnapshot.new(2, 1.0, 0.0, AIFactSet.new(), {1: active}))
 	assert(active_orders.size() == 1)
-	assert(active_orders[0].kind == &"demolition" and active_orders[0].target_entity_id == 43)
+	assert(active_orders[0].kind == &"demolition" and active_orders[0].target_key == &"demolition:43")
 
 
 func _test_native_construction_goal() -> void:
@@ -614,12 +614,12 @@ func _test_construction_actuator() -> void:
 	var target := Node3D.new()
 	root.add_child(citizen)
 	root.add_child(target)
-	var actuator := SettlementCitizenActuatorScript.new(citizen)
-	assert(actuator.begin_action(&"construction", target.get_instance_id()))
+	var actuator := SettlementCitizenActuatorScript.new(citizen, func(_key: StringName) -> Node3D: return target)
+	assert(actuator.begin_action(&"construction", &"construction:5"))
 	assert(citizen.state == Citizen.State.CONSTRUCTING and citizen.active_role == "construction")
 	actuator.cancel_action()
 	assert(citizen.state == Citizen.State.IDLE)
-	assert(actuator.begin_action(&"demolition", target.get_instance_id()))
+	assert(actuator.begin_action(&"demolition", &"demolition:5"))
 	assert(citizen.state == Citizen.State.CONSTRUCTING and citizen.active_role == "demolition")
 	root.remove_child(target)
 	root.remove_child(citizen)
@@ -666,14 +666,14 @@ func _test_excavation_provider_assigns_unique_stable_sites() -> void:
 	var second := _excavation_citizen(2, false)
 	var orders := provider.collect_orders(WorldSnapshot.new(1, 0.0, 0.0, AIFactSet.new(), {1: first, 2: second}))
 	assert(orders.size() == 2)
-	assert(orders[0].target_entity_id != orders[1].target_entity_id)
+	assert(orders[0].target_key != orders[1].target_key)
 	var active_orders := provider.collect_orders(WorldSnapshot.new(2, 1.0, 0.0, AIFactSet.new(), {
 		1: _excavation_citizen(1, true),
 		2: _excavation_citizen(2, true),
 	}))
 	assert(active_orders.size() == 2)
-	assert(active_orders[0].target_entity_id == orders[0].target_entity_id)
-	assert(active_orders[1].target_entity_id == orders[1].target_entity_id)
+	assert(active_orders[0].target_key == orders[0].target_key)
+	assert(active_orders[1].target_key == orders[1].target_key)
 
 
 func _test_native_excavation_goal() -> void:
@@ -700,8 +700,8 @@ func _test_excavation_actuator_completes_after_courier_pickup() -> void:
 	var target := Node3D.new()
 	root.add_child(citizen)
 	root.add_child(target)
-	var actuator := SettlementCitizenActuatorScript.new(citizen)
-	assert(actuator.begin_action(&"excavation", target.get_instance_id()))
+	var actuator := SettlementCitizenActuatorScript.new(citizen, func(_key: StringName) -> Node3D: return target)
+	assert(actuator.begin_action(&"excavation", &"dig:3:0"))
 	citizen.state = Citizen.State.WAITING_COURIER
 	citizen.register_pending_resource("soil", 1)
 	citizen.task_timer.start(0.0)
@@ -753,7 +753,7 @@ func _test_service_actuator() -> void:
 	citizen.ai_id = 22
 	root.add_child(citizen)
 	var actuator := SettlementCitizenActuatorScript.new(citizen)
-	assert(actuator.begin_action(&"cook", -1, AIFactSet.new({&"workplace.position": Vector3.ZERO})))
+	assert(actuator.begin_action(&"cook", &"", AIFactSet.new({&"workplace.position": Vector3.ZERO})))
 	assert(citizen.state == Citizen.State.TO_CANTEEN_WORK)
 	actuator.cancel_action()
 	assert(citizen.state == Citizen.State.IDLE)
@@ -767,7 +767,7 @@ func _test_factory_provider_keeps_active_station() -> void:
 	var inactive := _factory_citizen(2, false, false, &"engineering")
 	var orders := provider.collect_orders(WorldSnapshot.new(1, 0.0, 0.0, AIFactSet.new(), {1: ready, 2: inactive}))
 	assert(orders.size() == 1)
-	assert(orders[0].kind == &"factory_work" and orders[0].target_entity_id == 71)
+	assert(orders[0].kind == &"factory_work" and orders[0].target_key == &"factory:7")
 	var active := _factory_citizen(1, true, false, &"factory_work")
 	var active_orders := provider.collect_orders(WorldSnapshot.new(2, 1.0, 0.0, AIFactSet.new(), {1: active}))
 	assert(active_orders.size() == 1)
@@ -798,8 +798,8 @@ func _test_factory_actuator() -> void:
 	factory.set_meta("service_position", Vector3.ZERO)
 	root.add_child(citizen)
 	root.add_child(factory)
-	var actuator := SettlementCitizenActuatorScript.new(citizen)
-	assert(actuator.begin_action(&"factory_work", factory.get_instance_id(), AIFactSet.new({&"factory.role": &"engineering"})))
+	var actuator := SettlementCitizenActuatorScript.new(citizen, func(_key: StringName) -> Node3D: return factory)
+	assert(actuator.begin_action(&"factory_work", &"factory:7", AIFactSet.new({&"factory.role": &"engineering"})))
 	assert(citizen.state == Citizen.State.TO_FACTORY and citizen.active_role == "engineering")
 	actuator.cancel_action()
 	assert(citizen.state == Citizen.State.IDLE)
@@ -846,19 +846,19 @@ func _test_production_sleep_actuator() -> void:
 	assert(actuator.action_status() == CitizenActuator.ActionStatus.RUNNING)
 	actuator.cancel_action()
 	assert(citizen.state == Citizen.State.IDLE)
-	assert(actuator.begin_action(&"eat", -1, AIFactSet.new({&"target.position": Vector3.ZERO})))
+	assert(actuator.begin_action(&"eat", &"", AIFactSet.new({&"target.position": Vector3.ZERO})))
 	assert(citizen.state == Citizen.State.TO_CANTEEN)
 	citizen.state = Citizen.State.IDLE
 	assert(actuator.action_status() == CitizenActuator.ActionStatus.SUCCEEDED)
 	actuator.cancel_action()
-	assert(actuator.begin_action(&"relieve", -1, AIFactSet.new({
+	assert(actuator.begin_action(&"relieve", &"", AIFactSet.new({
 		&"target.position": Vector3.ZERO,
 		&"target.kind": &"tree",
 	})))
 	assert(citizen.state == Citizen.State.TO_BUSH)
 	actuator.cancel_action()
 	assert(citizen.state == Citizen.State.IDLE)
-	assert(actuator.begin_action(&"rest", -1, AIFactSet.new({
+	assert(actuator.begin_action(&"rest", &"", AIFactSet.new({
 		&"target.position": Vector3.ZERO,
 		&"action.duration": 2.0,
 	})))
@@ -1101,7 +1101,7 @@ func _construction_citizen(citizen_id: int, in_progress: bool, can_start: bool, 
 		&"work.construction.in_progress": in_progress,
 		&"work.construction.can_start": can_start,
 		&"work.construction.mode": mode,
-		&"work.construction.target_id": target_id,
+		&"work.construction.target_key": StringName("%s:%d" % [mode, target_id]),
 		&"work.construction.position": Vector3(5.0, 0.0, 0.0),
 	}))
 
@@ -1110,7 +1110,7 @@ func _construction_order(citizen_id: int, mode: StringName, target_id: int) -> C
 	var order := CitizenOrder.new(citizen_id, mode, &"workforce.construction", 0.60, AIFactSet.new({
 		&"work.construction.mode": mode,
 	}))
-	order.target_entity_id = target_id
+	order.target_key = StringName("%s:%d" % [mode, target_id])
 	order.target_position = Vector3(5.0, 0.0, 0.0)
 	return order
 
@@ -1142,15 +1142,15 @@ func _excavation_citizen(citizen_id: int, in_progress: bool) -> CitizenSnapshot:
 		&"work.excavation.worker": true,
 		&"work.excavation.in_progress": in_progress,
 		&"work.excavation.candidates": [
-			{&"id": &"dig:61", &"target_id": 61, &"position": Vector3(3.0, 0.0, 0.0)},
-			{&"id": &"dig:62", &"target_id": 62, &"position": Vector3(9.0, 0.0, 0.0)},
+			{&"id": &"dig:61", &"target_key": &"dig:61", &"position": Vector3(3.0, 0.0, 0.0)},
+			{&"id": &"dig:62", &"target_key": &"dig:62", &"position": Vector3(9.0, 0.0, 0.0)},
 		],
 	}))
 
 
 func _excavation_order(citizen_id: int, target_id: int, site_id: StringName) -> CitizenOrder:
 	var order := CitizenOrder.new(citizen_id, &"excavation", &"workforce.excavation", 0.50, AIFactSet.new({&"work.site_id": site_id}))
-	order.target_entity_id = target_id
+	order.target_key = site_id
 	order.target_position = Vector3(3.0, 0.0, 0.0)
 	return order
 
@@ -1180,14 +1180,14 @@ func _factory_citizen(citizen_id: int, in_progress: bool, can_start: bool, role:
 		&"work.factory.in_progress": in_progress,
 		&"work.factory.can_start": can_start,
 		&"work.factory.role": role,
-		&"work.factory.target_id": 71,
+		&"work.factory.target_key": &"factory:7",
 		&"work.factory.position": Vector3(7.0, 0.0, 0.0),
 	}))
 
 
 func _factory_order(citizen_id: int, role: StringName) -> CitizenOrder:
 	var order := CitizenOrder.new(citizen_id, &"factory_work", &"workforce.factory", 0.46, AIFactSet.new({&"factory.role": role}))
-	order.target_entity_id = 71
+	order.target_key = &"factory:7"
 	order.target_position = Vector3(7.0, 0.0, 0.0)
 	return order
 

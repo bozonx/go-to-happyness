@@ -2079,7 +2079,7 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	citizens.append(citizen)
 	citizen.ai_id = _next_ai_citizen_id
 	_next_ai_citizen_id += 1
-	citizen_ai.register_citizen(citizen.ai_id, SettlementCitizenActuatorScript.new(citizen))
+	citizen_ai.register_citizen(citizen.ai_id, SettlementCitizenActuatorScript.new(citizen, _ai_target_for_key))
 	citizen.tree_exiting.connect(_on_ai_citizen_exiting.bind(citizen.ai_id), CONNECT_ONE_SHOT)
 	if citizens.size() > POPULATION:
 		food += random.randi_range(2, 5)
@@ -2104,6 +2104,31 @@ func _on_ai_citizen_exiting(citizen_id: int) -> void:
 		canteen_service.remove_citizen(citizen_id)
 	if citizen_needs_service != null:
 		citizen_needs_service.remove_citizen(citizen_id)
+
+
+func _ai_target_for_key(target_key: StringName) -> Node3D:
+	var parts := String(target_key).split(":")
+	if parts.size() != 3:
+		return null
+	var cell := Vector2i(int(parts[1]), int(parts[2]))
+	match parts[0]:
+		"construction":
+			for site: ConstructionSite in construction_sites:
+				if site.cell == cell and is_instance_valid(site.node):
+					return site.node
+		"demolition":
+			for site: DemolitionSite in demolition_sites:
+				if is_instance_valid(site.building) and _cell_from_position(site.building.global_position) == cell:
+					return site.building
+		"dig":
+			var site := _dig_site_at(cell)
+			var node := site.get(&"node") as Node3D
+			return node if is_instance_valid(node) else null
+		"factory":
+			for factory: Node3D in factories:
+				if is_instance_valid(factory) and _cell_from_position(factory.global_position) == cell:
+					return factory
+	return null
 
 
 func _on_relief_finished(citizen: Citizen) -> void:

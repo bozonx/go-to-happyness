@@ -11,7 +11,7 @@ func _enter(context: BehaviorContext) -> void:
 	if destination is Vector3 and destination != Vector3.INF:
 		_started = context.actuator.begin_action(
 			&"eat",
-			-1,
+			&"",
 			AIFactSet.new({&"target.position": destination})
 		)
 

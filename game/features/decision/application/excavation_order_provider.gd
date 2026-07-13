@@ -67,6 +67,6 @@ func _order_for(citizen_id: int, assignment: Dictionary) -> CitizenOrder:
 	var order := CitizenOrder.new(citizen_id, &"excavation", id, 0.50, AIFactSet.new({
 		&"work.site_id": assignment.get(&"id", &""),
 	}))
-	order.target_entity_id = int(assignment.get(&"target_id", -1))
+	order.target_key = assignment.get(&"target_key", &"") as StringName
 	order.target_position = assignment.get(&"position", Vector3.INF)
 	return order

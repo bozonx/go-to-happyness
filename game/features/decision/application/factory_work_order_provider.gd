@@ -22,14 +22,14 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 		var in_progress := bool(citizen.facts.value(&"work.factory.in_progress", false))
 		var can_start := bool(citizen.facts.value(&"work.factory.can_start", false))
 		var role := citizen.facts.value(&"work.factory.role", &"") as StringName
-		var target_id := int(citizen.facts.value(&"work.factory.target_id", -1))
+		var target_key := citizen.facts.value(&"work.factory.target_key", &"") as StringName
 		var position: Variant = citizen.facts.value(&"work.factory.position", Vector3.INF)
-		if role not in [&"factory_work", &"engineering", &"construction"] or target_id < 0 or not (position is Vector3) or position == Vector3.INF:
+		if role not in [&"factory_work", &"engineering", &"construction"] or target_key == &"" or not (position is Vector3) or position == Vector3.INF:
 			continue
 		if not in_progress and not can_start:
 			continue
 		var order := CitizenOrder.new(citizen_id, &"factory_work", id, 0.46, AIFactSet.new({&"factory.role": role}))
-		order.target_entity_id = target_id
+		order.target_key = target_key
 		order.target_position = position
 		orders.append(order)
 	return orders

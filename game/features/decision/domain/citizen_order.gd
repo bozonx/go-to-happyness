@@ -9,7 +9,8 @@ var citizen_id: int
 var kind: StringName
 var issuer: StringName
 var priority: float
-var target_entity_id: int
+## Stable, scene-independent key resolved by the production actuator.
+var target_key: StringName
 var target_position: Vector3
 var payload: AIFactSet
 var issued_at: float
@@ -27,7 +28,7 @@ func _init(
 	kind = next_kind
 	issuer = next_issuer
 	priority = next_priority
-	target_entity_id = -1
+	target_key = &""
 	target_position = Vector3.INF
 	payload = next_payload if next_payload != null else AIFactSet.new()
 	issued_at = 0.0

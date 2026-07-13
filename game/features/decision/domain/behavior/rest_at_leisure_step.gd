@@ -10,7 +10,7 @@ func _enter(context: BehaviorContext) -> void:
 	var position: Variant = context.citizen.facts.value(&"needs.rest_position", Vector3.INF)
 	var duration := float(context.citizen.facts.value(&"needs.rest_duration", 4.0))
 	if position is Vector3 and position != Vector3.INF:
-		_started = context.actuator.begin_action(&"rest", -1, AIFactSet.new({
+		_started = context.actuator.begin_action(&"rest", &"", AIFactSet.new({
 			&"target.position": position,
 			&"action.duration": maxf(duration, 0.1),
 		}))

@@ -5,12 +5,14 @@ extends CitizenActuator
 ## never the Citizen FSM itself.
 
 var citizen: Citizen
+var target_resolver := Callable()
 var _active_action: StringName
 
 
-func _init(next_citizen: Citizen = null) -> void:
+func _init(next_citizen: Citizen = null, next_target_resolver := Callable()) -> void:
 	super(next_citizen.ai_id if is_instance_valid(next_citizen) else 0)
 	citizen = next_citizen
+	target_resolver = next_target_resolver
 
 
 func is_valid() -> bool:
@@ -23,7 +25,7 @@ func is_valid() -> bool:
 
 func begin_action(
 	action: StringName,
-	_target_entity_id: int = -1,
+	_target_key: StringName = &"",
 	_payload: AIFactSet = null
 ) -> bool:
 	if not is_valid():
@@ -75,7 +77,7 @@ func begin_action(
 			_active_action = action if citizen.state in [Citizen.State.TO_TREE, Citizen.State.TO_SAWMILL, Citizen.State.SAWING, Citizen.State.WAITING_COURIER] else &""
 			return _active_action == action
 		&"construction", &"demolition":
-			var target := instance_from_id(_target_entity_id) as Node3D
+			var target := _resolve_target(_target_key)
 			if not is_instance_valid(target):
 				return false
 			if action == &"construction":
@@ -95,7 +97,7 @@ func begin_action(
 			_active_action = action if citizen.state in [Citizen.State.TO_GATHER, Citizen.State.GATHERING, Citizen.State.TO_WAREHOUSE] else &""
 			return _active_action == action
 		&"excavation":
-			var dig_site := instance_from_id(_target_entity_id) as Node3D
+			var dig_site := _resolve_target(_target_key)
 			if not is_instance_valid(dig_site):
 				return false
 			citizen.assign_excavation(dig_site)
@@ -114,7 +116,7 @@ func begin_action(
 			_active_action = action if citizen.state in _service_states_for(action) else &""
 			return _active_action == action
 		&"factory_work":
-			var factory := instance_from_id(_target_entity_id) as Node3D
+			var factory := _resolve_target(_target_key)
 			var factory_role: Variant = _payload.value(&"factory.role", &"") if _payload != null else &""
 			if not is_instance_valid(factory) or not (factory_role is StringName) or factory_role == &"":
 				return false
@@ -226,3 +228,9 @@ func _craft_speed_multiplier() -> float:
 		"craft_tent_lvl2": return 1.3
 		"craft_tent_lvl3": return 1.7
 	return 1.0
+
+
+func _resolve_target(target_key: StringName) -> Node3D:
+	if target_key == &"" or not target_resolver.is_valid():
+		return null
+	return target_resolver.call(target_key) as Node3D

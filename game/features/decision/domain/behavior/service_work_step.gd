@@ -11,7 +11,7 @@ func _enter(context: BehaviorContext) -> void:
 	var position: Variant = context.order.payload.value(&"workplace.position", context.order.target_position)
 	if role not in [&"cook", &"teacher", &"seller", &"official", &"craftsman"] or not (position is Vector3) or position == Vector3.INF:
 		return
-	_started = context.actuator.begin_action(role, -1, AIFactSet.new({&"workplace.position": position}))
+	_started = context.actuator.begin_action(role, &"", AIFactSet.new({&"workplace.position": position}))
 
 
 func _tick(context: BehaviorContext, _delta: float) -> Status:

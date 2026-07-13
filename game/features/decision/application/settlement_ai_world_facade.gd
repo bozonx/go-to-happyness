@@ -68,26 +68,26 @@ func capture(sequence: int) -> WorldSnapshot:
 		var construction_in_progress := construction_worker and actor.active_role in ["construction", "demolition"] and actor.state == Citizen.State.CONSTRUCTING and is_instance_valid(actor.construction_site)
 		var construction_can_start := false
 		var construction_mode: StringName = &""
-		var construction_target_id := -1
+		var construction_target_key: StringName = &""
 		var construction_position := Vector3.INF
 		if construction_in_progress:
 			construction_mode = StringName(actor.active_role)
-			construction_target_id = actor.construction_site.get_instance_id()
+			construction_target_key = _target_key(&"construction", actor.construction_site.global_position)
 			construction_position = actor.construction_site.global_position
 		elif construction_worker and simulation._is_work_time():
 			if not simulation.demolition_sites.is_empty():
 				var demolition_site: DemolitionSite = simulation.demolition_sites[(citizen_id - 1) % simulation.demolition_sites.size()]
 				if is_instance_valid(demolition_site.building):
 					construction_mode = &"demolition"
-					construction_target_id = demolition_site.building.get_instance_id()
+					construction_target_key = _target_key(&"demolition", demolition_site.building.global_position)
 					construction_position = demolition_site.building.global_position
 			elif simulation._preferred_construction_site() != null:
 				var construction_site: ConstructionSite = simulation._preferred_construction_site()
 				if construction_site.is_supplied() and is_instance_valid(construction_site.node):
 					construction_mode = &"construction"
-					construction_target_id = construction_site.node.get_instance_id()
+					construction_target_key = _target_key(&"construction", construction_site.node.global_position)
 					construction_position = construction_site.node.global_position
-			construction_can_start = construction_target_id >= 0
+			construction_can_start = construction_target_key != &""
 		var gathering_worker := actor.permanent_role in ["gather_branches", "gather_food"] and actor.is_employed() and not actor.is_player_controlled
 		var gathering_in_progress := gathering_worker and actor.active_role.begins_with("gather_") and actor.state in [Citizen.State.TO_GATHER, Citizen.State.GATHERING, Citizen.State.TO_WAREHOUSE]
 		var gathering_candidates: Array[Dictionary] = []
@@ -103,8 +103,8 @@ func capture(sequence: int) -> WorldSnapshot:
 				if not is_instance_valid(dig_node) or not simulation._can_work_at_dig_site(dig_site):
 					continue
 				excavation_candidates.append({
-					&"id": StringName("dig:%d" % dig_node.get_instance_id()),
-					&"target_id": dig_node.get_instance_id(),
+					&"id": _target_key(&"dig", dig_node.global_position),
+					&"target_key": _target_key(&"dig", dig_node.global_position),
 					&"position": dig_node.global_position,
 				})
 		var service_worker := actor.permanent_role in ["cook", "teacher", "seller", "official", "craftsman"] and actor.is_employed() and not actor.is_player_controlled
@@ -189,7 +189,7 @@ func capture(sequence: int) -> WorldSnapshot:
 				&"work.construction.in_progress": construction_in_progress,
 				&"work.construction.can_start": construction_can_start,
 				&"work.construction.mode": construction_mode,
-				&"work.construction.target_id": construction_target_id,
+				&"work.construction.target_key": construction_target_key,
 				&"work.construction.position": construction_position,
 				&"work.gathering.worker": gathering_worker,
 				&"work.gathering.in_progress": gathering_in_progress,
@@ -206,7 +206,7 @@ func capture(sequence: int) -> WorldSnapshot:
 				&"work.factory.in_progress": factory_in_progress,
 				&"work.factory.can_start": factory_can_start,
 				&"work.factory.role": factory_role,
-				&"work.factory.target_id": factory_node.get_instance_id() if is_instance_valid(factory_node) else -1,
+				&"work.factory.target_key": _target_key(&"factory", factory_node.global_position) if is_instance_valid(factory_node) else &"",
 				&"work.factory.position": factory_position,
 				&"work.courier.worker": courier_worker,
 				&"work.courier.can_start": courier_can_start,
@@ -224,6 +224,11 @@ func capture(sequence: int) -> WorldSnapshot:
 		settlement_facts,
 		citizens_by_id
 	)
+
+
+func _target_key(kind: StringName, position: Vector3) -> StringName:
+	var cell: Vector2i = simulation._cell_from_position(position)
+	return StringName("%s:%d:%d" % [kind, cell.x, cell.y])
 
 
 func _gathering_candidates_for(actor: Citizen) -> Array[Dictionary]:

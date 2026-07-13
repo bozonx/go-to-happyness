@@ -5,12 +5,12 @@ var _started := false
 
 
 func _enter(context: BehaviorContext) -> void:
-	if context.citizen == null or context.order == null or context.order.target_entity_id < 0:
+	if context.citizen == null or context.order == null or context.order.target_key == &"":
 		return
 	var role := context.order.payload.value(&"factory.role", &"") as StringName
 	if role not in [&"factory_work", &"engineering", &"construction"]:
 		return
-	_started = context.actuator.begin_action(&"factory_work", context.order.target_entity_id, AIFactSet.new({&"factory.role": role}))
+	_started = context.actuator.begin_action(&"factory_work", context.order.target_key, AIFactSet.new({&"factory.role": role}))
 
 
 func _tick(context: BehaviorContext, _delta: float) -> Status:

@@ -31,7 +31,7 @@ func stop() -> void:
 
 func begin_action(
 	_action: StringName,
-	_target_entity_id: int = -1,
+	_target_key: StringName = &"",
 	_payload: AIFactSet = null
 ) -> bool:
 	return false

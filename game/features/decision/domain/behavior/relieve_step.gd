@@ -21,7 +21,7 @@ func _enter(context: BehaviorContext) -> void:
 		var key: Array = [&"needs.relief", target_id]
 		if not context.snapshot.reservations.claim(key, context.citizen.id, context.snapshot.simulation_seconds, RESERVATION_TTL):
 			continue
-		if context.actuator.begin_action(&"relieve", -1, AIFactSet.new({
+		if context.actuator.begin_action(&"relieve", &"", AIFactSet.new({
 			&"target.position": position,
 			&"target.kind": kind,
 		})):
