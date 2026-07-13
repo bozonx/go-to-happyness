@@ -47,12 +47,51 @@ func _init() -> void:
 	simulation.settlement.era = SettlementState.Era.WOOD
 	resident.setup_specialization("cook")
 	resident.employment_state = Citizen.EmploymentState.EMPLOYED
-	assert(not resident.is_toilet_user(resident))
+	assert(resident.is_toilet_user(resident))
 	resident.employment_state = Citizen.EmploymentState.FREELANCE
 	assert(resident.is_toilet_user(resident))
 	resident.freelance_assignment = "courier"
 	resident.employment_state = Citizen.EmploymentState.FREELANCE
 	assert(resident.is_toilet_user(resident))
+	resident.generate_toilet_schedule()
+	assert(resident.toilet_times.size() == 1)
+	assert(resident.toilet_times[0] >= 480.0 and resident.toilet_times[0] <= 1200.0)
+	assert(resident._get_simulation_toilets().is_empty())
+
+	# A relief break must not overwrite the target of an interrupted work task.
+	var work_target: Vector3 = simulation._resource_access_position(resident.global_position, simulation.tree_positions[0])
+	assert(work_target != Vector3.INF)
+	resident.gender = "male"
+	resident.state = Citizen.State.TO_TREE
+	resident.source_access_position = work_target
+	resident._find_and_go_to_toilet_or_bush()
+	assert(resident.state == Citizen.State.TO_BUSH)
+	assert(resident.toilet_relief_type == "tree")
+	assert(resident.source_access_position == work_target)
+	resident.state = Citizen.State.USING_BUSH
+	resident.toilet_timer.start(0.0)
+	resident._process_using_bush(0.1)
+	assert(resident.state == Citizen.State.TO_TREE)
+	assert(resident.source_access_position == work_target)
+
+	# Women prefer a grass patch, and an idle wander retains its exact destination.
+	resident.gender = "female"
+	var wander_anchor := resident.global_position + Vector3(2.0, 0.0, 0.0)
+	var wander_target := resident.global_position + Vector3(3.0, 0.0, 0.0)
+	resident.state = Citizen.State.IDLE
+	resident.idle_wander_anchor = wander_anchor
+	resident.idle_wander_target = wander_target
+	resident.idle_wander_pause = 1.25
+	resident._find_and_go_to_toilet_or_bush()
+	assert(resident.state == Citizen.State.TO_BUSH)
+	assert(resident.toilet_relief_type == "grass")
+	resident.state = Citizen.State.USING_BUSH
+	resident.toilet_timer.start(0.0)
+	resident._process_using_bush(0.1)
+	assert(resident.state == Citizen.State.IDLE)
+	assert(resident.idle_wander_anchor == wander_anchor)
+	assert(resident.idle_wander_target == wander_target)
+	assert(is_equal_approx(resident.idle_wander_pause, 1.25))
 	resident.go_to_arrival_entrance(simulation.entrance_stone.global_position)
 	assert(resident.has_active_arrival_task())
 	assert(not resident.is_available_for_schedule())

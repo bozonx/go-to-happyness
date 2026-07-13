@@ -212,7 +212,15 @@ var toilet_times: Array[float] = []
 var current_toilet_target: Node3D = null
 var needs_toilet := false
 const TOILET_USE_DURATION := 5.0
+const RELIEF_SEARCH_RADIUS := 100.0
 var toilet_timer := CitizenTaskState.new()
+var toilet_relief_position := Vector3.INF
+var toilet_relief_type := ""
+var toilet_resume_state := State.IDLE
+var has_toilet_resume_state := false
+var toilet_resume_idle_wander_anchor := Vector3.INF
+var toilet_resume_idle_wander_target := Vector3.INF
+var toilet_resume_idle_wander_pause := 0.0
 var market_position := Vector3.ZERO
 var craft_position := Vector3.ZERO
 var craft_timer := 0.0
@@ -551,10 +559,10 @@ func _physics_process(delta: float) -> void:
 				toilet_times.pop_front()
 				needs_toilet = true
 		
-		if needs_toilet and state not in [State.TO_TOILET, State.USING_TOILET, State.WAITING_FOR_TOILET, State.TO_BUSH, State.USING_BUSH]:
-			# Defer the trip until the current work/delivery action has completed.
-			if state in [State.IDLE, State.WAITING, State.RESTING]:
-				_find_and_go_to_toilet_or_bush()
+		if needs_toilet and not _is_toilet_state():
+			# A toilet break interrupts the current task. Its state and navigation are
+			# restored after the break, so work and wandering continue where they left off.
+			_find_and_go_to_toilet_or_bush()
 			if state not in [State.TO_TOILET, State.USING_TOILET, State.WAITING_FOR_TOILET, State.TO_BUSH, State.USING_BUSH]:
 				if not _is_toilet_or_bush_nearby():
 					satisfaction = maxf(0.0, satisfaction - delta * 6.0)
@@ -1785,13 +1793,13 @@ func _update_idle_indicator() -> void:
 		return
 	if state == State.TO_BUSH:
 		idle_indicator.visible = true
-		idle_indicator.text = "Going to Bush"
+		idle_indicator.text = "Going to %s" % ("Tree" if toilet_relief_type == "tree" else "Grass")
 		idle_indicator.modulate = Color("a5d6a7")
 		return
 	if state == State.USING_BUSH:
 		idle_indicator.visible = true
 		var pct := int((1.0 - toilet_timer.remaining / TOILET_USE_DURATION) * 100.0)
-		idle_indicator.text = "Relieving in Bush (%d%%)" % clamp(pct, 0, 100)
+		idle_indicator.text = "Relieving by %s (%d%%)" % ["Tree" if toilet_relief_type == "tree" else "Grass", clamp(pct, 0, 100)]
 		idle_indicator.modulate = Color("81c784")
 		return
 	if state == State.RESEARCHING:
@@ -2008,21 +2016,14 @@ func _process_trade_destination(delta: float) -> void:
 
 
 func is_toilet_user(citizen: Citizen) -> bool:
-	if citizen.is_player_controlled:
-		return false
-	if citizen.simulation != null and citizen.simulation.settlement.era <= SettlementState.Era.EARTH:
-		return true
-	return citizen.is_unregistered() or citizen.is_reserve()
+	return not citizen.is_player_controlled
 
 
 func generate_toilet_schedule() -> void:
 	toilet_times.clear()
 	if is_toilet_user(self):
-		var time1 := randf_range(480.0, 800.0)
-		var time2 := randf_range(840.0, 1200.0)
-		toilet_times.append(time1)
-		toilet_times.append(time2)
-		toilet_times.sort()
+		# One randomly timed break during the active part of the day.
+		toilet_times.append(randf_range(480.0, 1200.0))
 
 
 func _get_simulation_toilets() -> Array[Node3D]:
@@ -2044,30 +2045,21 @@ func _is_toilet_or_bush_nearby() -> bool:
 	var toilets := _get_simulation_toilets()
 	for toilet in toilets:
 		var serv_pos: Vector3 = toilet.get_meta("service_position") if toilet.has_meta("service_position") else toilet.global_position
-		if global_position.distance_to(serv_pos) <= 100.0:
+		if global_position.distance_to(serv_pos) <= RELIEF_SEARCH_RADIUS:
 			return true
-	var nearest_tree_pos := Vector3.INF
-	var min_tree_dist := 999999.0
-	if "tree_positions" in simulation:
-		for tree_pos in simulation.tree_positions:
-			var d := global_position.distance_to(tree_pos)
-			if d < min_tree_dist:
-				min_tree_dist = d
-	if min_tree_dist <= 100.0:
-		return true
-	return false
+	return _find_relief_position("tree") != Vector3.INF or _find_relief_position("grass") != Vector3.INF
 
 
 func _find_and_go_to_toilet_or_bush() -> void:
 	if simulation == null:
 		return
 		
-	# 1. Look for toilets within 100.0 units
+	# 1. Look for toilets within the normal service radius.
 	var toilets := _get_simulation_toilets()
 	var nearby_toilets: Array[Node3D] = []
 	for toilet in toilets:
 		var serv_pos: Vector3 = toilet.get_meta("service_position") if toilet.has_meta("service_position") else toilet.global_position
-		if global_position.distance_to(serv_pos) <= 100.0:
+		if global_position.distance_to(serv_pos) <= RELIEF_SEARCH_RADIUS:
 			nearby_toilets.append(toilet)
 			
 	if not nearby_toilets.is_empty():
@@ -2091,29 +2083,94 @@ func _find_and_go_to_toilet_or_bush() -> void:
 					if global_position.distance_to(serv_pos_curr) < global_position.distance_to(serv_pos_best):
 						best_toilet = toilet
 						
-			if best_toilet != null:
-				_reset_assignment_navigation()
-				current_toilet_target = best_toilet
-			state = State.TO_TOILET
+		if best_toilet != null:
+			current_toilet_target = best_toilet
+			_begin_toilet_trip(State.TO_TOILET)
 			return
-			
-	# 2. Look for tree/grass within 100.0 units
-	var nearest_tree_pos := Vector3.INF
-	var min_tree_dist := 999999.0
-	if "tree_positions" in simulation:
-		for tree_pos in simulation.tree_positions:
-			var d := global_position.distance_to(tree_pos)
-			if d < min_tree_dist:
-				min_tree_dist = d
-				nearest_tree_pos = tree_pos
-				
-	if min_tree_dist <= 100.0:
-		var access_position: Vector3 = simulation._resource_access_position(global_position, nearest_tree_pos)
-		if access_position != Vector3.INF:
-			_reset_assignment_navigation()
-			source_position = access_position
-			state = State.TO_BUSH
+
+	# Without a toilet, men prefer a tree and women prefer a grass patch.
+	var relief_preferences: Array[String] = []
+	if gender == "male":
+		relief_preferences.append_array(["tree", "grass"])
+	else:
+		relief_preferences.append_array(["grass", "tree"])
+	for relief_type in relief_preferences:
+		var relief_position := _find_relief_position(relief_type)
+		if relief_position == Vector3.INF:
+			continue
+		toilet_relief_position = relief_position
+		toilet_relief_type = relief_type
+		_begin_toilet_trip(State.TO_BUSH)
 		return
+
+
+func _is_toilet_state(next_state := state) -> bool:
+	return next_state in [State.TO_TOILET, State.USING_TOILET, State.WAITING_FOR_TOILET, State.TO_BUSH, State.USING_BUSH]
+
+
+func _find_relief_position(relief_type: String) -> Vector3:
+	if simulation == null:
+		return Vector3.INF
+	var closest := Vector3.INF
+	var closest_distance := INF
+	if relief_type == "tree" and "tree_positions" in simulation:
+		for tree_position in simulation.tree_positions:
+			if global_position.distance_to(tree_position) > RELIEF_SEARCH_RADIUS:
+				continue
+			var access_position: Vector3 = simulation._resource_access_position(global_position, tree_position)
+			if access_position == Vector3.INF:
+				continue
+			var distance := global_position.distance_squared_to(access_position)
+			if distance < closest_distance:
+				closest = access_position
+				closest_distance = distance
+	elif relief_type == "grass" and "grass_sources" in simulation:
+		for source in simulation.grass_sources.values():
+			var grass_node := source.get("node") as Node3D
+			if not is_instance_valid(grass_node) or global_position.distance_to(grass_node.global_position) > RELIEF_SEARCH_RADIUS:
+				continue
+			var route: RouteResult = simulation._find_path_around_houses(global_position, grass_node.global_position, false)
+			if not route.reachable:
+				continue
+			var distance := global_position.distance_squared_to(grass_node.global_position)
+			if distance < closest_distance:
+				closest = grass_node.global_position
+				closest_distance = distance
+	return closest
+
+
+func _begin_toilet_trip(next_state: int) -> void:
+	if not has_toilet_resume_state:
+		toilet_resume_state = state
+		has_toilet_resume_state = true
+		toilet_resume_idle_wander_anchor = idle_wander_anchor
+		toilet_resume_idle_wander_target = idle_wander_target
+		toilet_resume_idle_wander_pause = idle_wander_pause
+	_reset_toilet_navigation()
+	state = next_state
+
+
+func _reset_toilet_navigation() -> void:
+	movement_path.clear()
+	active_route = null
+	path_destination = Vector3.INF
+	navigation_target_position = Vector3.INF
+	route_retry_timer = 0.0
+
+
+func _resume_after_toilet() -> void:
+	current_toilet_target = null
+	toilet_relief_position = Vector3.INF
+	toilet_relief_type = ""
+	_reset_toilet_navigation()
+	if has_toilet_resume_state:
+		state = toilet_resume_state
+		idle_wander_anchor = toilet_resume_idle_wander_anchor
+		idle_wander_target = toilet_resume_idle_wander_target
+		idle_wander_pause = toilet_resume_idle_wander_pause
+	else:
+		state = State.IDLE
+	has_toilet_resume_state = false
 
 
 func _reset_assignment_navigation() -> void:
@@ -2128,8 +2185,7 @@ func _reset_assignment_navigation() -> void:
 
 func _process_to_toilet(delta: float) -> void:
 	if not is_instance_valid(current_toilet_target):
-		current_toilet_target = null
-		state = State.IDLE
+		_resume_after_toilet()
 		return
 	var serv_pos: Vector3 = current_toilet_target.get_meta("service_position") if current_toilet_target.has_meta("service_position") else current_toilet_target.global_position
 	if _move_to(serv_pos, delta):
@@ -2162,21 +2218,17 @@ func _process_to_toilet(delta: float) -> void:
 
 func _process_using_toilet(delta: float) -> void:
 	if not is_instance_valid(current_toilet_target):
-		current_toilet_target = null
-		state = State.IDLE
+		_resume_after_toilet()
 		return
 	if toilet_timer.advance(delta):
 		needs_toilet = false
-		current_toilet_target = null
 		satisfaction = minf(get_satisfaction_cap(), satisfaction + 10.0)
-		state = State.IDLE
-		request_goap_decision()
+		_resume_after_toilet()
 
 
 func _process_waiting_for_toilet(delta: float) -> void:
 	if not is_instance_valid(current_toilet_target):
-		current_toilet_target = null
-		state = State.IDLE
+		_resume_after_toilet()
 		return
 	var users_count := 0
 	for other in simulation.citizens:
@@ -2203,7 +2255,10 @@ func _process_waiting_for_toilet(delta: float) -> void:
 
 
 func _process_to_bush(delta: float) -> void:
-	if _move_to(source_position, delta):
+	if toilet_relief_position == Vector3.INF:
+		_resume_after_toilet()
+		return
+	if _move_to(toilet_relief_position, delta):
 		state = State.USING_BUSH
 		toilet_timer.start(TOILET_USE_DURATION)
 
@@ -2212,5 +2267,4 @@ func _process_using_bush(delta: float) -> void:
 	if toilet_timer.advance(delta):
 		needs_toilet = false
 		satisfaction = minf(get_satisfaction_cap(), satisfaction + 10.0)
-		state = State.IDLE
-		request_goap_decision()
+		_resume_after_toilet()
