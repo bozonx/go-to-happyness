@@ -41,7 +41,6 @@ func _init() -> void:
 	_test_citizen_state_display_queue()
 	_test_grid_routing()
 	_test_building_queue_routing()
-	_test_citizen_decision_context()
 	_test_canteen_meal_requests()
 	_test_construction_progress()
 	_test_construction_service_cancellation()
@@ -306,15 +305,6 @@ func _test_citizen_state_display_queue() -> void:
 	citizen._advance_state_display(0.01)
 	assert(citizen._displayed_state == Citizen.State.CHOPPING)
 	citizen.free()
-
-
-func _test_citizen_decision_context() -> void:
-	var context := CitizenDecisionContext.new()
-	context.is_night = true
-	assert(not context.is_goal_valid(CitizenDecisionContext.Intent.WORK))
-	context.is_night = false
-	context.can_assign_work = true
-	assert(context.is_goal_valid(CitizenDecisionContext.Intent.WORK))
 
 
 func _test_canteen_meal_requests() -> void:

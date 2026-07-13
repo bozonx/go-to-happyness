@@ -120,9 +120,8 @@ not depend on `Citizen` or UI nodes.
 
 ## Migration boundary
 
-The physical migration is complete, but `settlement_game.gd` still contains legacy
-implementation for several features. Extract it incrementally without a behavior
-rewrite:
+The AI migration is complete. Continue extracting bootstrap implementation into
+feature modules incrementally without a behavior rewrite:
 
 1. Move clock/day-cycle scheduling into `simulation/application`.
 2. Extract building placement and completion effects. Construction and demolition

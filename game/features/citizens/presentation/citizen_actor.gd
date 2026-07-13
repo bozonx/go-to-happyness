@@ -586,7 +586,7 @@ func drive_player_animation(is_sprinting: bool) -> void:
 		anim_to_play = "sprint" if is_sprinting else "walk"
 	_play_animation(anim_to_play)
 
-func assign_work(next_resource_type: String, source: Vector3, workplace: Vector3, warehouse: Vector3, next_uses_courier := false, access_pos := Vector3.INF) -> void:
+func start_production_cycle(next_resource_type: String, source: Vector3, workplace: Vector3, warehouse: Vector3, next_uses_courier := false, access_pos := Vector3.INF) -> void:
 	if is_player_controlled:
 		return
 	_reset_assignment_navigation()
@@ -1474,8 +1474,7 @@ func take_pending_resource(max_amount := 0) -> Dictionary:
 			var taken := amount if max_amount <= 0 else mini(amount, max_amount)
 			pending_resources[pending_type] = amount - taken
 			if state == State.WAITING_COURIER and int(pending_resources[pending_type]) == 0:
-				# A native farm task owns one production-and-handoff cycle. Legacy
-				# farmers retain their looping FSM until that role is migrated.
+				# A production task owns one production-and-handoff cycle.
 				if permanent_role in ["farming", "excavation"] and active_role == permanent_role:
 					state = State.IDLE
 					active_role = ""
@@ -2271,14 +2270,14 @@ func execute_action(action: StringName, target: Node3D, payload: AIFactSet) -> b
 			var warehouse_position: Variant = payload.value(&"warehouse.position", Vector3.INF) if payload != null else Vector3.INF
 			if not (tree_position is Vector3) or tree_position == Vector3.INF or not (access_position is Vector3) or access_position == Vector3.INF or not (sawmill_position is Vector3) or sawmill_position == Vector3.INF or not (warehouse_position is Vector3) or warehouse_position == Vector3.INF:
 				return false
-			assign_work("wood", tree_position, sawmill_position, warehouse_position, false, access_position)
+			start_production_cycle("wood", tree_position, sawmill_position, warehouse_position, false, access_position)
 			return state in [State.TO_TREE, State.CHOPPING, State.TO_SAWMILL]
 		&"farming":
 			var farm_position: Variant = payload.value(&"workplace.position", Vector3.INF) if payload != null else Vector3.INF
 			var farm_warehouse_position: Variant = payload.value(&"warehouse.position", Vector3.INF) if payload != null else Vector3.INF
 			if not (farm_position is Vector3) or farm_position == Vector3.INF or not (farm_warehouse_position is Vector3) or farm_warehouse_position == Vector3.INF:
 				return false
-			assign_work("food", farm_position, farm_position, farm_warehouse_position, true)
+			start_production_cycle("food", farm_position, farm_position, farm_warehouse_position, true)
 			return state in [State.TO_TREE, State.TO_SAWMILL, State.SAWING, State.WAITING_COURIER]
 		&"construction", &"demolition":
 			if not is_instance_valid(target):

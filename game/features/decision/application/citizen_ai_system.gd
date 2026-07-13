@@ -2,7 +2,7 @@ class_name CitizenAISystem
 extends Node
 
 ## Runtime composition root for the native AI. The catalog grows through complete
-## vertical slices; each migrated slice owns its writes instead of shadowing legacy.
+## vertical slices; each slice owns its writes.
 
 @export var snapshot_interval := 0.20
 @export var director_interval := 1.0
