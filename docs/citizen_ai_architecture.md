@@ -1,8 +1,9 @@
 # Citizen AI Architecture (GOAP removal + native planner)
 
-Status: **design / target architecture**. Supersedes the vendored `addons/goap`
-brain. Bold end-state is described first; a safe migration path follows so we can
-land it in phases without freezing the game.
+Status: **native foundation implemented and connected in shadow mode**. The new
+runtime is live, but its goal catalog and order-provider catalog are intentionally
+empty. The vendored `addons/goap` brain remains the behavior owner only until
+gameplay tasks are migrated in the next phase.
 
 ---
 
@@ -174,13 +175,14 @@ Today `CitizenGoapBrain` and `WorkforceCoordinator` call dozens of
 `simulation._private()` methods on a 6589-line `Node` typed as `Node` (no type
 safety). We introduce two narrow, typed seams:
 
-- **`WorldFacade`** (read side): everything the Sensor needs to build a
-  `WorldSnapshot` — canteen position, work-time, storage room, vacancies. One
-  typed interface; `SettlementGame` implements it. Snapshot-building no longer
-  reaches into privates.
+- **`AIWorldFacade`** (read side): captures a coherent `WorldSnapshot`. The
+  connected adapter currently exposes identity, position, time and settlement
+  identity only. Each migrated mechanic adds its owned facts to this boundary;
+  goals never reach through to `simulation._private()` methods.
 - **`CitizenActuator`** (write side): the verbs a Step may perform on a citizen —
-  `walk_to`, `work_at`, `pick_up`, `deposit`, `go_home`, `is_arrived`. Wraps the
-  existing FSM setters during migration, then absorbs them.
+  movement plus mechanic-level actions. Phase one uses a
+  `ShadowCitizenActuator` that cannot issue commands. We will implement new verbs
+  as tasks migrate rather than wrap old FSM setters.
 
 Result: the AI layer depends on **two small interfaces**, not the god-object. This
 also makes the eventual `settlement_game.gd` breakup safe — the AI won't shatter
@@ -193,67 +195,67 @@ when it moves.
 ```
 game/features/decision/
   domain/                         # pure, RefCounted, headless
-    world_snapshot.gd             # facts (grown CitizenDecisionContext)
-    order.gd                      # Director → Brain assignment payload
+    ai_fact_set.gd                # immutable namespaced extension facts
+    citizen_snapshot.gd
+    world_snapshot.gd             # coherent facts for one think cycle
+    citizen_order.gd              # Director → Brain assignment payload
+    ai_blackboard.gd              # per-citizen decision memory
+    citizen_goal.gd               # AICitizenGoal: score() / build_task()
     workforce_policy.gd           # UNCHANGED — role scoring stays
-    goals/
-      goal.gd                     # base: score() / build_task()
-      sleep_goal.gd
-      eat_goal.gd
-      toilet_goal.gd
-      work_goal.gd
-      (relax_goal.gd, flee_goal.gd … future)
     behavior/
-      step.gd                     # Status enum + contract
-      sequence.gd  selector.gd  parallel.gd
-      leaves/ walk_to.gd work_at.gd pick_up.gd deposit.gd wait.gd
-      legacy_fsm_step.gd          # migration bridge (see §8)
+      behavior_context.gd
+      behavior_step.gd            # lifecycle + Status contract
+      behavior_task.gd
+      sequence_step.gd
+      selector_step.gd
+      parallel_step.gd
+    goals/                        # intentionally empty until phase two
   application/
-    citizen_brain.gd              # replaces citizen_goap_brain.gd
-    behavior_runner.gd            # ticks the active Task tree
-    arbiter.gd                    # utility selection over goals
-    settlement_director.gd        # replaces/renames workforce_coordinator.gd
-    world_facade.gd               # typed read seam over SettlementGame
-    citizen_actuator.gd           # typed write seam over Citizen
+    citizen_ai_system.gd          # lifecycle, snapshots and bounded think budget
+    citizen_brain.gd
+    behavior_runner.gd            # task pre-emption and resume stack
+    utility_arbiter.gd            # scoring, hysteresis, deterministic ties
+    order_board.gd                # competing director proposals
+    order_provider.gd
+    settlement_director.gd
+    world_facade.gd
+    settlement_ai_world_facade.gd
+    citizen_actuator.gd
+    shadow_citizen_actuator.gd
 
-addons/goap/                      # DELETED
+addons/goap/                      # deleted after migrated tasks own behavior
 ```
 
 ---
 
-## 8. Migration — bold end-state, safe path
+## 8. Migration — connected foundation, then vertical slices
 
-We do **not** rewrite 55 FSM states before the game runs again. Four phases; the
-game is playable after each.
+**Phase 1 — Complete native foundation in shadow mode — DONE.**
+- All domain primitives, composites, utility arbitration, interruption/resume,
+  order reconciliation, director, per-citizen brains and scalable runtime
+  scheduling exist now.
+- `SettlementGame` owns a live `CitizenAISystem`. Citizens are registered and
+  unregistered with scene lifetime, snapshots are captured, and brains tick.
+- Goal and provider catalogs are empty. The shadow actuator rejects writes, so
+  this phase has no gameplay behavior and cannot compete with GOAP.
+- `tests/test_ai.gd` covers the pure runtime; the startup smoke test verifies the
+  live system and one brain per resident.
 
-**Phase 0 — Scaffolding (no behavior change).**
-Add `WorldFacade` + `CitizenActuator` interfaces implemented by pass-through to
-today's `simulation._x()` / `citizen.setter()`. Add `WorldSnapshot`, `Order`, the
-`Step`/composites, `Arbiter`, `BehaviorRunner`. Nothing wired yet. Tests still green.
+**Phase 2 — Migrate gameplay as owned vertical slices.**
+- Add task-specific snapshot facts and actuator verbs from the mechanic that owns
+  them. Do not add generic access to `SettlementGame` and do not wrap FSM states.
+- Add the concrete Goal, Steps and (where global allocation is needed)
+  `OrderProvider` for one complete scenario.
+- Switch that scenario to the native owner, test it, then delete its old scheduler
+  and `_process_*` arms immediately. There is never dual write ownership.
+- Start with personal needs and the basic gather/deposit loop, then move
+  forestry, farming, construction, services and logistics.
 
-**Phase 1 — Swap the brain, keep the FSM (the GOAP removal).**
-- `CitizenBrain` replaces `CitizenGoapBrain`. Goals: Sleep/Eat/Work as today, but
-  as `Goal.score()` utility classes reading `WorldSnapshot`.
-- Each goal's `build_task()` returns a **`LegacyFsmStep`**: it calls the existing
-  actuator verb (`go_home`, `go_to_canteen`, assign work) and reports SUCCESS when
-  the citizen reaches the matching FSM state — i.e. *exactly what GOAP's
-  `is_intent_complete` does now*, minus the addon.
-- Delete `addons/goap`, `citizen_goap_brain.gd`, GOAP debugger wiring.
-- **Net:** identical behavior, native code, one brain, typed seams. This is the
-  commit that removes GOAP.
-
-**Phase 2 — Real Steps for the common loops.**
-Peel the highest-traffic FSM chains (gather / forestry / farming / deliver) out of
-`citizen_actor`'s `match state` into composed `Sequence` Tasks driven through the
-actuator. `WorkGoal.build_task` now returns real trees. FSM handlers for migrated
-states are deleted as they are replaced. Toilet/meal become `Parallel` guards, so
-the 7-state interrupt special-casing disappears.
-
-**Phase 3 — Director cleanup + god-object seam.**
-Rename/refactor `WorkforceCoordinator` → `SettlementDirector`; it now emits typed
-`Order`s instead of poking flags + calling `_agent.process(0.0)`. Remove the
-double-scheduler dance (`request_decision`/`request_goap_decision`). Route all its
-`simulation._x()` calls through `WorldFacade`.
+**Phase 3 — Native ownership and legacy deletion.**
+- Once all top-level needs and work assignment run natively, remove
+  `CitizenGoapBrain`, `WorkforceCoordinator`, the GOAP plugin and addon.
+- Delete the remaining citizen behavior FSM arms. Keep `Citizen` focused on
+  movement, animation and actuator-level execution.
 
 End-state: `citizen_actor.gd` shrinks to movement + animation + actuator verbs;
 all "what/why" lives in goals+tasks; all "who works where" in Director+Policy;
@@ -285,14 +287,12 @@ zero private-method reach-through.
 
 ## 11. Risks & mitigations
 
-- **Behavior drift during Phase 1.** Mitigation: `LegacyFsmStep` reproduces
-  `is_intent_complete` verbatim; behavior is byte-for-byte the old brain minus the
-  planner. Diff is mechanical.
-- **Utility tuning regressions.** Mitigation: seed goal scores to reproduce the old
-  100/80/10 ordering exactly on day one; only introduce continuous ramps once
-  covered by `test_ai.gd`.
+- **Dual ownership during migration.** Mitigation: shadow mode cannot write. In
+  phase two, switch and delete each vertical slice together; never let two
+  schedulers command the same scenario.
+- **Utility tuning regressions.** Mitigation: define continuous curves from the
+  simulation's intended needs and cover their crossing points in `test_ai.gd`.
 - **Actuator surface creep.** Keep it to verbs actually used; grow per phase, don't
   pre-model all 55 states.
 - **Scope temptation.** God-object breakup is *enabled* by the facade but is out of
   scope for this plan — do not couple the two efforts.
-```

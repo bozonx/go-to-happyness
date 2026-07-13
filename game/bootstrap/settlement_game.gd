@@ -286,6 +286,7 @@ var building_status_update_time := 0.0
 var workplace_priority_counter := 0
 var manage_citizen_button: Button
 var workforce: WorkforceCoordinator
+var citizen_ai: CitizenAISystem
 var route_service: GridRouteService
 var building_queue_service: RefCounted
 var sawmills: SawmillService
@@ -301,6 +302,12 @@ func _ready() -> void:
 	workforce = WorkforceCoordinator.new()
 	workforce.configure(self)
 	add_child(workforce)
+	citizen_ai = CitizenAISystem.new()
+	citizen_ai.name = "CitizenAI"
+	add_child(citizen_ai)
+	# Phase one runs the complete native runtime with no goals or order providers.
+	# Its shadow actuator makes this connection observational until tasks migrate.
+	citizen_ai.configure(SettlementAIWorldFacade.new(self))
 	nav_grid = NavGrid.new()
 	nav_grid.configure(CELL_SIZE, BOARD_CELLS)
 	route_service = GridRouteService.new()
@@ -2079,6 +2086,9 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	citizen.employment_processing_finished.connect(_on_employment_processing_finished)
 	citizen.arrival_greeter_ready.connect(_on_arrival_greeter_ready)
 	citizens.append(citizen)
+	var citizen_id := citizen.get_instance_id()
+	citizen_ai.register_citizen(citizen_id, ShadowCitizenActuator.new(citizen_id))
+	citizen.tree_exiting.connect(_on_ai_citizen_exiting.bind(citizen_id), CONNECT_ONE_SHOT)
 	if citizens.size() > POPULATION:
 		food += random.randi_range(2, 5)
 	if hero_citizen == null:
@@ -2093,6 +2103,11 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 		citizen.employment_state = Citizen.EmploymentState.FREELANCE if not is_instance_valid(campfire_node) else Citizen.EmploymentState.UNREGISTERED
 	citizen.setup_goap(self, citizens.size() - 1)
 	citizen.generate_toilet_schedule()
+
+
+func _on_ai_citizen_exiting(citizen_id: int) -> void:
+	if is_instance_valid(citizen_ai):
+		citizen_ai.unregister_citizen(citizen_id)
 
 
 func _create_interface() -> void:

@@ -296,22 +296,19 @@ func _test_citizen_decision_context() -> void:
 
 
 func _test_grid_routing() -> void:
-	var blocked: Dictionary = {
-		Vector2i(1, 0): true,
-		Vector2i(1, 1): true,
-		Vector2i(1, 2): true
-	}
+	var blocked: Dictionary = {}
+	for y in range(-3, 3):
+		blocked[Vector2i(1, y)] = true
+	var grid := NavGrid.new()
+	grid.configure(1.0, 6)
+	grid.set_blocked_cells(blocked)
 	var router = GridRouteServiceScript.new()
-	router.configure(
-		func(position: Vector3) -> Vector2i: return Vector2i(floori(position.x), floori(position.z)),
-		func(cell: Vector2i) -> Vector3: return Vector3(cell.x + 0.5, 0.0, cell.y + 0.5),
-		func(cell: Vector2i) -> bool: return cell.x >= 0 and cell.x < 3 and cell.y >= 0 and cell.y < 3,
-		func(cell: Vector2i) -> bool: return blocked.has(cell)
-	)
+	router.configure(grid)
 	var unreachable: RouteResult = router.find_route(Vector3(0.5, 0.0, 0.5), Vector3(2.5, 0.0, 0.5))
 	assert(not unreachable.reachable and unreachable.waypoints.is_empty())
 
 	blocked.erase(Vector2i(1, 2))
+	grid.set_blocked_cells(blocked)
 	var route: RouteResult = router.find_route(Vector3(0.5, 0.0, 0.5), Vector3(2.5, 0.0, 0.5))
 	assert(route.reachable and route.arrival_position == Vector3(2.5, 0.0, 0.5))
 	for waypoint in route.waypoints:
@@ -327,14 +324,11 @@ func _test_building_queue_routing() -> void:
 	registry.reserve(Vector2i(1, 1), building.position, Vector2i.ONE)
 	registry.attach_node(Vector2i(1, 1), building)
 	var blocked := {Vector2i(3, 1): true}
+	var grid := NavGrid.new()
+	grid.configure(1.0, 12)
+	grid.set_blocked_cells(blocked)
 	var queues = BuildingQueueServiceScript.new()
-	queues.configure(
-		registry,
-		func(position: Vector3) -> Vector2i: return Vector2i(floori(position.x), floori(position.z)),
-		func(cell: Vector2i) -> Vector3: return Vector3(cell.x + 0.5, 0.0, cell.y + 0.5),
-		func(cell: Vector2i) -> bool: return cell.x >= 0 and cell.x < 6 and cell.y >= 0 and cell.y < 6,
-		func(cell: Vector2i) -> bool: return blocked.has(cell)
-	)
+	queues.configure(registry, grid)
 	var first := Node.new()
 	var second := Node.new()
 	var third := Node.new()
