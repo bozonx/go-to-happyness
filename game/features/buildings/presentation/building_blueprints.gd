@@ -8,7 +8,9 @@ const PANEL_THICKNESS := 0.5
 const COLORS := {
 	"foundation": Color("776d60"),
 	"house": Color("91a9bb"),
-	"warehouse": Color("c78d52"),
+	"warehouse": Color("8a6549"), # Dirt heap color
+	"warehouse_lvl2": Color("c7a96a"),
+	"warehouse_lvl2_roof": Color("78513f"),
 	"sawmill": Color("af6f3b"),
 	"farm": Color("788f45"),
 	"canteen": Color("d4a64f"),
@@ -32,10 +34,14 @@ const COLORS := {
 	"city_hall_roof": Color("6b6040"),
 	"leisure_center_roof": Color("704065"),
 	"campfire": Color("b85e42"),
+	"campfire_lvl2": Color("b85e42"),
+	"campfire_lvl3": Color("c56a3a"),
 	"gathering_place": Color("6e4a2b"),
 	"cook_campfire": Color("c56a3a"),
 	"tent": Color("c7a96a"),
 	"forager_tent": Color("739350"),
+	"forager_tent_lvl2": Color("5f7a3f"),
+	"forager_tent_lvl3": Color("4c6230"),
 	"materials_yard": Color("8a7b4f"),
 	"craft_tent": Color("a46b46"),
 	"craft_tent_lvl2": Color("9a603c"),
@@ -43,9 +49,11 @@ const COLORS := {
 	"living_tent": Color("bfa070"),
 	"living_tent_lvl2": Color("b89660"),
 	"living_tent_lvl3": Color("b08850"),
+	"dew_collector": Color("5f95ab"),
+	"dew_collector_lvl2": Color("4fa2c0"),
+	"dew_collector_lvl3": Color("3eafd3"),
 	"house_lvl2": Color("859eaf"),
 	"house_lvl3": Color("7992a3"),
-	"dew_collector": Color("5f95ab"),
 	"pond": Color("3f7fa0"),
 	"dugout": Color("8a6549"),
 	"earth_house": Color("9b7655"),
@@ -100,12 +108,16 @@ const COLORS := {
 
 static func get_blueprint(building_type: String) -> Dictionary:
 	match building_type:
-		"campfire": return _campfire_blueprint()
+		"campfire", "campfire_lvl2", "campfire_lvl3": return _campfire_blueprint_for(building_type)
 		"gathering_place": return _gathering_place_blueprint()
 		"cook_campfire": return _cook_campfire_blueprint()
 		"dew_collector": return _water_collector_blueprint("dew_collector", Vector2i(2, 2))
+		"dew_collector_lvl2": return _water_collector_blueprint("dew_collector_lvl2", Vector2i(2, 2))
+		"dew_collector_lvl3": return _water_collector_blueprint("dew_collector_lvl3", Vector2i(3, 3))
 		"pond": return _pond_blueprint()
 		"tent", "living_tent", "forager_tent", "materials_yard", "craft_tent", "trade_tent": return _enclosed_blueprint(building_type, Vector2i(4, 4), 2, "gable")
+		"forager_tent_lvl2": return _enclosed_blueprint("forager_tent_lvl2", Vector2i(5, 5), 2, "gable")
+		"forager_tent_lvl3": return _enclosed_blueprint("forager_tent_lvl3", Vector2i(6, 6), 2, "gable")
 		"living_tent_lvl2", "craft_tent_lvl2": return _enclosed_blueprint(building_type, Vector2i(5, 5), 2, "gable")
 		"living_tent_lvl3", "craft_tent_lvl3": return _enclosed_blueprint(building_type, Vector2i(6, 6), 2, "gable")
 		"house": return _enclosed_blueprint("house", Vector2i(4, 4), 3, "gable")
@@ -120,7 +132,8 @@ static func get_blueprint(building_type: String) -> Dictionary:
 		"brick_house": return _enclosed_blueprint("brick_house", Vector2i(5, 5), 3, "gable")
 		"construction_company": return _enclosed_blueprint("construction_company", Vector2i(7, 6), 3, "shed")
 		"employment_office": return _enclosed_blueprint("employment_office", Vector2i(5, 5), 3, "hip")
-		"warehouse": return _enclosed_blueprint("warehouse", Vector2i(5, 5), 3, "shed")
+		"warehouse": return _heap_blueprint("warehouse", Vector2i(5, 5))
+		"warehouse_lvl2": return _enclosed_blueprint("warehouse_lvl2", Vector2i(5, 5), 3, "shed")
 		"sawmill": return _sawmill_blueprint()
 		"farm": return _farm_blueprint()
 		"canteen": return _enclosed_blueprint("canteen", Vector2i(7, 5), 3, "hip")
@@ -302,14 +315,33 @@ static func _pond_blueprint() -> Dictionary:
 	return {"type": "pond", "footprint": footprint, "entrance": Vector2i(0, -2), "modules": modules}
 
 
-static func _campfire_blueprint() -> Dictionary:
+static func _campfire_blueprint_for(building_type: String) -> Dictionary:
 	var footprint := Vector2i(2, 2)
 	var modules: Array[Dictionary] = []
 	modules.append(_module(Vector3(0.0, 0.05, 0.0), Vector3(2.0, 0.1, 2.0), "floor", Color("4f4438")))
 	modules.append(_module(Vector3(0.0, 0.2, 0.0), Vector3(0.8, 0.25, 0.25), "wood", Color("5c4033"), Vector3(0.0, 45.0, 0.0)))
 	modules.append(_module(Vector3(0.0, 0.2, 0.0), Vector3(0.8, 0.25, 0.25), "wood", Color("5c4033"), Vector3(0.0, -45.0, 0.0)))
+	if building_type == "campfire_lvl2":
+		modules.append(_module(Vector3(-0.4, 0.2, 0.4), Vector3(0.8, 0.25, 0.25), "wood", Color("5c4033"), Vector3(0.0, 0.0, 0.0)))
+		modules.append(_module(Vector3(0.4, 0.2, -0.4), Vector3(0.8, 0.25, 0.25), "wood", Color("5c4033"), Vector3(0.0, 90.0, 0.0)))
+	elif building_type == "campfire_lvl3":
+		modules.append(_module(Vector3(-0.4, 0.2, 0.4), Vector3(0.8, 0.25, 0.25), "wood", Color("5c4033"), Vector3(0.0, 0.0, 0.0)))
+		modules.append(_module(Vector3(0.4, 0.2, -0.4), Vector3(0.8, 0.25, 0.25), "wood", Color("5c4033"), Vector3(0.0, 90.0, 0.0)))
+		for i in range(4):
+			var angle := i * PI / 2.0
+			modules.append(_module(Vector3(cos(angle) * 0.9, 0.18, sin(angle) * 0.9), Vector3(0.3, 0.3, 0.3), "stone", Color("6f747a")))
 	modules.append(_module(Vector3(0.0, 0.35, 0.0), Vector3(0.4, 0.3, 0.4), "fire", Color("ff5a00")))
-	return {"type": "campfire", "footprint": footprint, "entrance": Vector2i(0, -1), "modules": modules}
+	return {"type": building_type, "footprint": footprint, "entrance": Vector2i(0, -1), "modules": modules}
+
+static func _heap_blueprint(building_type: String, footprint: Vector2i) -> Dictionary:
+	var modules: Array[Dictionary] = []
+	_add_floor(modules, footprint, building_type)
+	modules.append(_module(Vector3(0.0, 0.4, 0.0), Vector3(2.5, 0.7, 2.5), "soil_heap", Color("8a6549")))
+	modules.append(_module(Vector3(-0.6, 0.4, 0.6), Vector3(1.6, 0.3, 0.3), "wood_log", Color("5c4033"), Vector3(0.0, 30.0, 0.0)))
+	modules.append(_module(Vector3(-0.4, 0.6, 0.5), Vector3(1.6, 0.3, 0.3), "wood_log", Color("5c4033"), Vector3(0.0, 15.0, 0.0)))
+	modules.append(_module(Vector3(0.6, 0.4, -0.6), Vector3(1.2, 0.4, 1.2), "grass_pile", Color("739350"), Vector3(0.0, -25.0, 0.0)))
+	modules.append(_module(Vector3(0.8, 0.3, 0.8), Vector3(0.5, 0.4, 0.5), "stone", Color("6f747a"), Vector3(15.0, 45.0, 0.0)))
+	return {"type": building_type, "footprint": footprint, "entrance": Vector2i(0, -footprint.y / 2), "modules": modules}
 
 static func _gathering_place_blueprint() -> Dictionary:
 	var modules: Array[Dictionary] = []

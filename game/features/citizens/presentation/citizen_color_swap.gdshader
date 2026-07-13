@@ -8,31 +8,52 @@ instance uniform vec4 shirt_color : source_color = vec4(0.52, 0.55, 0.63, 1.0);
 instance uniform vec4 pants_color : source_color = vec4(0.31, 0.32, 0.37, 1.0);
 instance uniform vec4 hair_color : source_color = vec4(0.21, 0.22, 0.23, 1.0);
 
+vec3 rgb2hsv(vec3 c) {
+	vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+	vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+	vec4 q = mix(mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r)), p, step(p.x, c.r));
+
+	float d = q.x - min(q.w, q.y);
+	float e = 1.0e-10;
+	return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+}
+
+vec3 hsv2rgb(vec3 c) {
+	vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+	vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+	return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
 void fragment() {
 	vec4 tex_color = texture(albedo_texture, UV);
 	
-	// Color matching thresholds (distance in RGB space)
-	// 1. Skin tones (Peach #f1976e, Beige #f1c09a, Dark brown #af6142)
-	if (distance(tex_color.rgb, vec3(0.945, 0.592, 0.431)) < 0.05 ||
-		distance(tex_color.rgb, vec3(0.945, 0.753, 0.604)) < 0.05 ||
-		distance(tex_color.rgb, vec3(0.686, 0.380, 0.259)) < 0.05) {
-		tex_color.rgb = skin_color.rgb;
+	// Determine column index (0 to 15)
+	int col = int(UV.x * 16.0);
+	
+	vec3 target_color;
+	bool replace = false;
+	
+	if (col >= 10 && col <= 15) {
+		target_color = skin_color.rgb;
+		replace = true;
+	} else if (col == 2 || col == 3 || col == 6 || col == 7) {
+		target_color = shirt_color.rgb;
+		replace = true;
+	} else if (col == 4 || col == 5) {
+		target_color = pants_color.rgb;
+		replace = true;
+	} else if (col == 0 || col == 1) {
+		target_color = hair_color.rgb;
+		replace = true;
 	}
-	// 2. Shirt colors (Blue/Grey shades #868ba2, #81869f)
-	else if (distance(tex_color.rgb, vec3(0.525, 0.545, 0.635)) < 0.05 ||
-			 distance(tex_color.rgb, vec3(0.505, 0.525, 0.623)) < 0.05) {
-		tex_color.rgb = shirt_color.rgb;
+	
+	if (replace) {
+		vec3 original_hsv = rgb2hsv(tex_color.rgb);
+		vec3 target_hsv = rgb2hsv(target_color);
+		// Keep the original Value (brightness) for shading
+		vec3 final_hsv = vec3(target_hsv.x, target_hsv.y, original_hsv.z);
+		tex_color.rgb = hsv2rgb(final_hsv);
 	}
-	// 3. Pants/Shoes (Dark grey #505260, #525563)
-	else if (distance(tex_color.rgb, vec3(0.313, 0.321, 0.376)) < 0.05 ||
-			 distance(tex_color.rgb, vec3(0.321, 0.333, 0.388)) < 0.05) {
-		tex_color.rgb = pants_color.rgb;
-	}
-	// 4. Hair/Accent colors (Grey/Dark slate #37393c, #4a4552)
-	else if (distance(tex_color.rgb, vec3(0.215, 0.223, 0.235)) < 0.05 ||
-			 distance(tex_color.rgb, vec3(0.290, 0.270, 0.321)) < 0.05) {
-		tex_color.rgb = hair_color.rgb;
-	}
-
+	
 	ALBEDO = tex_color.rgb;
 }

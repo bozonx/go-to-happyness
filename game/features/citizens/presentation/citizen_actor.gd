@@ -1971,7 +1971,14 @@ func assign_gathering(res_type: String, source_pos: Vector3, delivery_pos: Vecto
 func _process_to_gather(delta: float) -> void:
 	if _move_to(gather_access_position, delta, false, false):
 		state = State.GATHERING
-		_start_task(2.0 / get_efficiency("forestry" if gather_resource_type in ["branches", "logs"] else "farming"))
+		var base_duration := 2.0 / get_efficiency("forestry" if gather_resource_type in ["branches", "logs"] else "farming")
+		if is_instance_valid(employment_workplace):
+			var b_type := str(employment_workplace.get_meta("building_type", ""))
+			if b_type.ends_with("_lvl2"):
+				base_duration /= 1.3
+			elif b_type.ends_with("_lvl3"):
+				base_duration /= 1.7
+		_start_task(base_duration)
 
 func _process_gathering(delta: float) -> void:
 	if _work(delta):
@@ -1985,6 +1992,14 @@ func _process_gathering(delta: float) -> void:
 		else:
 			carried_amount = 1
 		resource_type = gather_resource_type
+		if resource_type == "food" and is_instance_valid(employment_workplace):
+			var b_type := str(employment_workplace.get_meta("building_type", ""))
+			if b_type == "forager_tent_lvl2":
+				if randf() < 0.4:
+					resource_type = "hides"
+			elif b_type == "forager_tent_lvl3":
+				if randf() < 0.5:
+					resource_type = "hides"
 		if resource_type == "logs":
 			tree_harvested.emit(self, gather_source_position)
 			if has_perk("forestry") and randf() < 0.10:

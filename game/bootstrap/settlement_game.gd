@@ -653,6 +653,38 @@ func _apply_daily_settlement_rules() -> void:
 		citizen.apply_daily_decay()
 		citizen.generate_toilet_schedule()
 	_apply_building_wear_and_repairs()
+	
+	# Heap (Open-Air) Storage decay:
+	var warehouse_lvl2_count := int(settlement.buildings.get("warehouse_lvl2", 0))
+	var safe_capacity := warehouse_lvl2_count * 48.0
+	var total_stored := settlement.storage_used_units()
+	if total_stored > safe_capacity:
+		var exposed_ratio := (total_stored - safe_capacity) / total_stored
+		var decay_msg := ""
+		var organic_resources := {
+			"food": 0.10,
+			"grass": 0.05,
+			"branches": 0.05,
+			"wood": 0.05,
+			"logs": 0.05
+		}
+		for res in organic_resources:
+			var current_amt := settlement.amount(res)
+			if current_amt > 0:
+				var exposed_amt := float(current_amt) * exposed_ratio
+				var lost := ceili(exposed_amt * organic_resources[res])
+				if lost > 0:
+					settlement.add(res, -lost)
+					if decay_msg.is_empty():
+						decay_msg = "Daily decay: lost "
+					else:
+						decay_msg += ", "
+					decay_msg += "%d %s" % [lost, res]
+		if not decay_msg.is_empty():
+			decay_msg += " due to open-air Heap storage."
+			_add_message(decay_msg)
+			_update_interface(decay_msg)
+
 	_decay_resource_piles()
 	# Everyone drinks each day. When there is no kitchen running meals, they also
 	# eat straight from the stores; a working cooking campfire/canteen already
@@ -1150,11 +1182,11 @@ func _construction_development_priority(site: ConstructionSite) -> float:
 	var score := float(BuildingCatalog.era_for(building_type)) * 100.0
 	var population := citizens.size()
 	match building_type:
-		"warehouse": score += 1000.0 if warehouse_positions.is_empty() else 180.0
-		"campfire": score += 950.0 if not is_instance_valid(campfire_node) else 120.0
+		"warehouse", "warehouse_lvl2": score += 1000.0 if warehouse_positions.is_empty() else 180.0
+		"campfire", "campfire_lvl2", "campfire_lvl3": score += 950.0 if not is_instance_valid(campfire_node) else 120.0
 		"tent", "living_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "brick_house":
 			score += 850.0 if _total_housing_slots() < population else 140.0
-		"forager_tent", "farm": score += 700.0 if food < population * 2 else 160.0
+		"forager_tent", "forager_tent_lvl2", "forager_tent_lvl3", "farm": score += 700.0 if food < population * 2 else 160.0
 		"cook_campfire", "dugout_kitchen", "clay_bakery", "canteen": score += 580.0 if not is_instance_valid(canteen) else 120.0
 		"sawmill": score += 420.0 if sawmill_positions.is_empty() else 100.0
 		"gathering_place", "park", "leisure_center": score += 80.0
@@ -2285,6 +2317,8 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_build_category_back_button()
 	
 	_add_build_button("Campfire", "campfire", 176, "tent")
+	_add_build_button("Campfire Level 2", "campfire_lvl2", 200, "tent")
+	_add_build_button("Campfire Level 3", "campfire_lvl3", 200, "tent")
 	_add_build_button("Лобное место", "gathering_place", 193, "tent")
 	_add_build_button("Cooking campfire", "cook_campfire", 227, "tent")
 	_add_build_button("Палатка на 4 жителя", "tent", 244, "tent")
@@ -2292,12 +2326,17 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_build_button("Жилая палатка ур. 2", "living_tent_lvl2", 278, "tent")
 	_add_build_button("Жилая палатка ур. 3", "living_tent_lvl3", 278, "tent")
 	_add_build_button("Forager tent", "forager_tent", 312, "tent")
+	_add_build_button("Forager-Hunter tent", "forager_tent_lvl2", 200, "tent")
+	_add_build_button("Hunting lodge", "forager_tent_lvl3", 200, "tent")
 	_add_build_button("Двор стройматериалов", "materials_yard", 312, "tent")
 	_add_build_button("Craft tent", "craft_tent", 346, "tent")
 	_add_build_button("Craft tent Level 2", "craft_tent_lvl2", 346, "tent")
 	_add_build_button("Craft tent Level 3", "craft_tent_lvl3", 346, "tent")
 	_add_build_button("Dew collector", "dew_collector", 380, "tent")
-	_add_build_button("Simple store", "warehouse", 414, "tent")
+	_add_build_button("Dew collector Level 2", "dew_collector_lvl2", 200, "tent")
+	_add_build_button("Dew collector Level 3", "dew_collector_lvl3", 200, "tent")
+	_add_build_button("Куча материалов (Склад ур. 1)", "warehouse", 414, "tent")
+	_add_build_button("Склад ур. 2 (Палатка)", "warehouse_lvl2", 200, "tent")
 	_add_build_button("Trade tent", "trade_tent", 448, "tent")
 	_add_build_button("Общественный туалет ур. 1", "toilet_tent", 482, "tent")
 	_add_build_button("Общественный туалет ур. 2", "toilet_tent_lvl2", 516, "tent")
@@ -3346,7 +3385,7 @@ func _employer_types_for_role(role: String) -> Array[String]:
 		"construction": return ["builders_guild", "construction_company"]
 		"forestry": return ["sawmill"]
 		"farming": return ["farm"]
-		"gather_food": return ["forager_tent"]
+		"gather_food": return ["forager_tent", "forager_tent_lvl2", "forager_tent_lvl3"]
 		"gather_branches": return ["materials_yard"]
 		"cook": return ["cook_campfire", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant"]
 		"teacher": return ["school"]
@@ -3388,9 +3427,20 @@ func _employer_capacity(role: String, building: Node3D) -> int:
 	if role == "factory_worker":
 		return int(building.get_meta("required_factory_workers", 1))
 	if role == "craftsman":
+		var type := str(building.get_meta("building_type", ""))
+		if type == "craft_tent_lvl2":
+			return 2
+		elif type == "craft_tent_lvl3":
+			return 3
+		return 1
+	if role == "gather_food":
+		var type := str(building.get_meta("building_type", ""))
+		if type == "forager_tent_lvl2":
+			return 2
+		elif type == "forager_tent_lvl3":
+			return 3
 		return 1
 	if role == "gather_branches":
-		# The materials yard fields a small crew of hand-gatherers.
 		return 2
 	return 1
 
@@ -3753,7 +3803,7 @@ func _demolition_ready(site: DemolitionSite) -> bool:
 			replacement.set_meta("spawn_slots", int(replacement.get_meta("spawn_slots", 0)) - 1)
 		else:
 			citizen.home = null
-	if site.building_type == "warehouse":
+	if site.building_type in ["warehouse", "warehouse_lvl2"]:
 		return settlement.storage_used_units() <= settlement.storage_capacity(warehouse_positions.size() - 1)
 	return true
 
@@ -3799,12 +3849,12 @@ func _remove_building_services(building: Node3D, building_type: String) -> void:
 	_release_employment_at_building(building)
 	var service_position: Vector3 = building.get_meta("service_position", building.global_position)
 	match building_type:
-		"warehouse": warehouse_positions.erase(service_position)
+		"warehouse", "warehouse_lvl2": warehouse_positions.erase(service_position)
 		"sawmill": sawmill_positions.erase(service_position)
 		"farm": farm_positions.erase(service_position)
 		"builders_guild": builders_guild_positions.erase(service_position)
 		"construction_company": construction_company_positions.erase(service_position)
-		"forager_tent": forager_positions.erase(service_position)
+		"forager_tent", "forager_tent_lvl2", "forager_tent_lvl3": forager_positions.erase(service_position)
 		"materials_yard": materials_yard_positions.erase(service_position)
 		"school": school_positions.erase(service_position)
 		"park": park_positions.erase(service_position)
@@ -3813,10 +3863,14 @@ func _remove_building_services(building: Node3D, building_type: String) -> void:
 		"craft_tent", "craft_tent_lvl2", "craft_tent_lvl3": craft_tent_positions.erase(service_position)
 		"trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market":
 			market_positions.erase(service_position)
-		"campfire", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall":
+		"campfire", "campfire_lvl2", "campfire_lvl3", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall":
 			if campfire_node == building: campfire_node = null
 		"cook_campfire", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant":
 			if canteen == building: canteen = null
+		"dew_collector", "dew_collector_lvl2", "dew_collector_lvl3":
+			for i in range(water_collectors.size() - 1, -1, -1):
+				if water_collectors[i].node == building:
+					water_collectors.remove_at(i)
 		"employment_office":
 			if employment_office == building: employment_office = null
 		"brick_factory", "materials_factory", "recycling_factory", "metal_factory": factories.erase(building)
@@ -4414,19 +4468,19 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 	settlement.buildings[building_type] = int(settlement.buildings.get(building_type, 0)) + 1
 	building.set_meta("building_type", building_type)
 	building.set_meta("condition", 100.0)
-	if building_type in ["campfire", "cook_campfire", "gathering_place"]:
+	if building_type in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "gathering_place"]:
 		building.set_meta("fire_fuel", 4)
 		building.set_meta("fire_lit", true)
 	if _is_staffed_workplace(building):
 		workplace_priority_counter += 1
 		building.set_meta("accepting_workers", true)
 		building.set_meta("workplace_priority", workplace_priority_counter)
-	if building_type not in ["warehouse", "campfire", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall", "cook_campfire", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant", "trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market", "school", "materials_factory", "tent", "living_tent", "living_tent_lvl2", "living_tent_lvl3", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house", "craft_tent", "craft_tent_lvl2", "craft_tent_lvl3"]:
+	if building_type not in ["warehouse", "warehouse_lvl2", "campfire", "campfire_lvl2", "campfire_lvl3", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall", "cook_campfire", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant", "trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market", "school", "materials_factory", "tent", "living_tent", "living_tent_lvl2", "living_tent_lvl3", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house", "craft_tent", "craft_tent_lvl2", "craft_tent_lvl3", "forager_tent_lvl2", "forager_tent_lvl3"]:
 		_add_building_selector(building, "building_selector", blueprint.footprint)
 	_register_service_entrance(building, blueprint.footprint, false, building_type not in ["farm", "park"])
 	var service_position: Vector3 = building.get_meta("service_position")
 	match building_type:
-		"warehouse":
+		"warehouse", "warehouse_lvl2":
 			warehouse_positions.append(service_position)
 			settlement.ensure_storage_defaults(warehouse_positions.size())
 			_add_building_selector(building, "warehouse_selector", blueprint.footprint)
@@ -4439,7 +4493,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			builders_guild_positions.append(service_position)
 		"construction_company":
 			construction_company_positions.append(service_position)
-		"campfire", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall":
+		"campfire", "campfire_lvl2", "campfire_lvl3", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall":
 			campfire_node = building
 			_activate_employment_centre(building)
 			_add_building_selector(building, "campfire_selector", blueprint.footprint)
@@ -4468,7 +4522,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			cook_fire_light.light_energy = 2.5
 			cook_fire_light.omni_range = 8.0
 			building.add_child(cook_fire_light)
-		"forager_tent":
+		"forager_tent", "forager_tent_lvl2", "forager_tent_lvl3":
 			forager_positions.append(service_position)
 			_update_interface("Forager tent ready. Assign a resident to forage food, or a free hand will.")
 		"materials_yard":
@@ -4497,8 +4551,16 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			if building_type in ["tent", "living_tent", "living_tent_lvl2", "living_tent_lvl3"]:
 				building.set_meta("is_tent", true)
 			_house_initial_residents(building)
-		"dew_collector":
-			water_collectors.append({"node": building, "rate": 0.12, "accum": 0.0, "stored": 0, "capacity": 10})
+		"dew_collector", "dew_collector_lvl2", "dew_collector_lvl3":
+			var rate := 0.12
+			var capacity := 10
+			if building_type == "dew_collector_lvl2":
+				rate = 0.24
+				capacity = 20
+			elif building_type == "dew_collector_lvl3":
+				rate = 0.4
+				capacity = 35
+			water_collectors.append({"node": building, "rate": rate, "accum": 0.0, "stored": 0, "capacity": capacity})
 		"craft_tent", "craft_tent_lvl2", "craft_tent_lvl3":
 			craft_tent_positions.append(service_position)
 		"trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market":
@@ -4606,6 +4668,8 @@ func _required_staff_for_building(building: Node3D) -> Dictionary:
 		"sawmill": return {"role": "forestry", "count": 1}
 		"farm": return {"role": "farming", "count": 1}
 		"forager_tent": return {"role": "gather_food", "count": 1}
+		"forager_tent_lvl2": return {"role": "gather_food", "count": 2}
+		"forager_tent_lvl3": return {"role": "gather_food", "count": 3}
 		"materials_yard": return {"role": "gather_branches", "count": 2}
 		"cook_campfire", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant": return {"role": "cooking", "count": 1}
 		"school": return {"role": "teaching", "count": 1}
@@ -6281,7 +6345,7 @@ func _has_active_builder() -> bool:
 
 func _destroy_building_to_pile(building: Node3D, building_type: String) -> void:
 	var resources: Dictionary = BuildingCatalog.demolition_refund(building_type).duplicate(true)
-	if building_type == "warehouse":
+	if building_type in ["warehouse", "warehouse_lvl2"]:
 		resources.clear()
 		for resource_type in SettlementState.STORED_RESOURCES:
 			var amount := settlement.amount(resource_type)
@@ -6307,17 +6371,64 @@ func _create_resource_pile(position: Vector3, resources: Dictionary) -> void:
 		return
 	var pile := Node3D.new()
 	pile.position = position
-	var mesh_node := MeshInstance3D.new()
-	var mesh := CylinderMesh.new()
-	mesh.top_radius = 0.1
-	mesh.bottom_radius = 1.0
-	mesh.height = 1.4
-	mesh_node.mesh = mesh
-	mesh_node.position.y = 0.7
-	var material := StandardMaterial3D.new()
-	material.albedo_color = Color("8b6540")
-	mesh_node.material_override = material
-	pile.add_child(mesh_node)
+
+	# Base dirt mound
+	var base_mesh_node := MeshInstance3D.new()
+	var base_mesh := CylinderMesh.new()
+	base_mesh.top_radius = 0.8
+	base_mesh.bottom_radius = 1.1
+	base_mesh.height = 0.4
+	base_mesh_node.mesh = base_mesh
+	base_mesh_node.position.y = 0.2
+	var base_mat := StandardMaterial3D.new()
+	base_mat.albedo_color = Color("5c4033")
+	base_mesh_node.material_override = base_mat
+	pile.add_child(base_mesh_node)
+
+	# Logs
+	var log_mesh := BoxMesh.new()
+	log_mesh.size = Vector3(1.2, 0.25, 0.25)
+	var log_mat := StandardMaterial3D.new()
+	log_mat.albedo_color = Color("4a3225")
+
+	var log1 := MeshInstance3D.new()
+	log1.mesh = log_mesh
+	log1.position = Vector3(-0.3, 0.35, 0.2)
+	log1.rotation_degrees = Vector3(10, 25, 5)
+	log1.material_override = log_mat
+	pile.add_child(log1)
+
+	var log2 := MeshInstance3D.new()
+	log2.mesh = log_mesh
+	log2.position = Vector3(0.2, 0.4, -0.2)
+	log2.rotation_degrees = Vector3(-15, -35, -8)
+	log2.material_override = log_mat
+	pile.add_child(log2)
+
+	# Grass clump
+	var grass_pile := MeshInstance3D.new()
+	var grass_mesh := BoxMesh.new()
+	grass_mesh.size = Vector3(0.8, 0.3, 0.8)
+	grass_pile.mesh = grass_mesh
+	grass_pile.position = Vector3(0.3, 0.3, 0.3)
+	grass_pile.rotation_degrees = Vector3(5, 12, -5)
+	var grass_mat := StandardMaterial3D.new()
+	grass_mat.albedo_color = Color("739350")
+	grass_pile.material_override = grass_mat
+	pile.add_child(grass_pile)
+
+	# A stone
+	var stone_pile := MeshInstance3D.new()
+	var stone_mesh := BoxMesh.new()
+	stone_mesh.size = Vector3(0.4, 0.3, 0.4)
+	stone_pile.mesh = stone_mesh
+	stone_pile.position = Vector3(-0.2, 0.3, -0.4)
+	stone_pile.rotation_degrees = Vector3(20, 45, 10)
+	var stone_mat := StandardMaterial3D.new()
+	stone_mat.albedo_color = Color("6f747a")
+	stone_pile.material_override = stone_mat
+	pile.add_child(stone_pile)
+
 	var label := Label3D.new()
 	label.text = "RESOURCES"
 	label.position.y = 1.7

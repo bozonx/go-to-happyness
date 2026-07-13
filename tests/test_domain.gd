@@ -521,6 +521,7 @@ func _test_research_mechanics() -> void:
 	state.unlocked_building_levels["craft_tent"] = true
 	state.branches = 10
 	state.grass = 8
+	state.buildings["campfire_lvl2"] = 1
 	assert(state.can_start_building_research("craft_tent_lvl2"))
 	assert(not state.can_afford_building("dugout_kitchen"))
 	state.era = SettlementState.Era.EARTH
@@ -529,6 +530,27 @@ func _test_research_mechanics() -> void:
 	assert(state.can_start_building_research("dugout_kitchen"))
 	assert(BuildingCatalog.kitchen_food_capacity("cook_campfire") == 4)
 	assert(BuildingCatalog.kitchen_food_capacity("brick_restaurant") == 20)
+	
+	# Campfire level tech gating tests:
+	var test_state := SettlementState.new()
+	test_state.era = SettlementState.Era.TENT
+	test_state.branches = 100
+	test_state.grass = 100
+	test_state.unlocked_building_levels["dew_collector"] = true
+	assert(not test_state.can_start_building_research("dew_collector_lvl2"))
+	test_state.buildings["campfire_lvl2"] = 1
+	assert(test_state.can_start_building_research("dew_collector_lvl2"))
+	test_state.unlocked_building_levels["dew_collector_lvl2"] = true
+	assert(not test_state.can_start_building_research("dew_collector_lvl3"))
+	test_state.buildings["campfire_lvl3"] = 1
+	assert(test_state.can_start_building_research("dew_collector_lvl3"))
+
+	# Heap and warehouse capacity tests:
+	test_state.buildings.clear()
+	test_state.buildings["warehouse"] = 1
+	assert(test_state.storage_capacity(1) == 24)
+	test_state.buildings["warehouse_lvl2"] = 1
+	assert(test_state.storage_capacity(2) == 72)
 	
 	var citizen := Citizen.new()
 	citizen._ready()

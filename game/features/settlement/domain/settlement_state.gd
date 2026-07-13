@@ -57,6 +57,16 @@ var unlocked_building_levels := {
 	"toilet_stone_lvl3": false,
 	"toilet_brick_lvl2": false,
 	"toilet_brick_lvl3": false,
+	"tent": false,
+	"campfire_lvl2": false,
+	"campfire_lvl3": false,
+	"warehouse_lvl2": false,
+	"dew_collector": true,
+	"dew_collector_lvl2": false,
+	"dew_collector_lvl3": false,
+	"forager_tent": true,
+	"forager_tent_lvl2": false,
+	"forager_tent_lvl3": false,
 }
 var active_research_tech_id := ""
 var active_research_worker_id := -1
@@ -85,7 +95,14 @@ func storage_weight(resource_type: String) -> float:
 
 
 func storage_capacity(warehouses: int) -> int:
-	return maxi(0, warehouses) * int(ERA_STORAGE_PER_WAREHOUSE.get(era, 24))
+	if warehouses <= 0:
+		return 0
+	var heap_count := int(buildings.get("warehouse", 0))
+	var tent_count := int(buildings.get("warehouse_lvl2", 0))
+	var capacity := heap_count * 24 + tent_count * 48
+	if capacity == 0 and warehouses > 0:
+		capacity = warehouses * int(ERA_STORAGE_PER_WAREHOUSE.get(era, 24))
+	return capacity
 
 
 func storage_used_units() -> float:
@@ -326,6 +343,12 @@ func can_start_building_research(research_id: String) -> bool:
 		return false
 	for prerequisite in tech.get("prerequisites", []):
 		if BuildingCatalog.RESEARCH_TECHS.has(prerequisite) and not unlocked_building_levels.get(prerequisite, false):
+			return false
+	if era == Era.TENT:
+		var target: String = str(tech.target_building)
+		if target.ends_with("_lvl2") and not has_building("campfire_lvl2") and not has_building("campfire_lvl3"):
+			return false
+		if target.ends_with("_lvl3") and not has_building("campfire_lvl3"):
 			return false
 	return can_afford_research(research_id)
 
