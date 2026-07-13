@@ -2347,6 +2347,13 @@ func execute_action(action: StringName, target: Node3D, payload: AIFactSet) -> b
 			if not simulation.courier_dispatcher.start_task(self, task_id):
 				return false
 			return has_active_delivery()
+		&"register":
+			var center_position: Variant = payload.value(&"center.position", Vector3.INF) if payload != null else Vector3.INF
+			var pending_role: Variant = payload.value(&"workplace.role", "") if payload != null else ""
+			if not (center_position is Vector3) or center_position == Vector3.INF or not (pending_role is String) or pending_role.is_empty():
+				return false
+			begin_employment_processing(center_position, pending_role, target)
+			return state in [State.TO_EMPLOYMENT_CENTER, State.EMPLOYMENT_PROCESSING]
 	return false
 
 
@@ -2414,11 +2421,22 @@ func get_action_status(action: StringName) -> int:
 				return 1 # RUNNING
 			if state == State.IDLE:
 				return 2 # SUCCEEDED
+		&"register":
+			if state in [State.TO_EMPLOYMENT_CENTER, State.EMPLOYMENT_PROCESSING]:
+				return 1 # RUNNING
+			if employment_state == EmploymentState.EMPLOYED or state == State.IDLE:
+				return 2 # SUCCEEDED
 	return 3 # FAILED
 
 
 func cancel_current_action() -> void:
-	if state in [State.TO_HOME, State.RESTING, State.TO_CANTEEN, State.EATING, State.TO_TOILET, State.USING_TOILET, State.WAITING_FOR_TOILET, State.TO_BUSH, State.USING_BUSH, State.TO_PARK, State.RELAXING, State.TO_TREE, State.CHOPPING, State.TO_SAWMILL, State.SAWING, State.WAITING_COURIER, State.CONSTRUCTING, State.TO_GATHER, State.GATHERING, State.TO_WAREHOUSE, State.EXCAVATING, State.TO_CANTEEN_WORK, State.CANTEEN_WORK, State.TO_SCHOOL_WORK, State.SCHOOL_WORK, State.TO_MARKET_WORK, State.MARKET_WORK, State.TO_OFFICIAL_WORK, State.OFFICIAL_WORK, State.TO_CRAFT_WORK, State.CRAFT_WORK, State.TO_FACTORY, State.FACTORY_WORK, State.COURIER_TO_WORKER, State.COURIER_TO_WAREHOUSE, State.COURIER_TO_SAWMILL, State.TO_FOOD_PICKUP, State.TO_CANTEEN_DELIVERY, State.TO_CONSTRUCTION_PICKUP, State.TO_CONSTRUCTION_SITE, State.TO_TRADE_PICKUP, State.TO_TRADE_DESTINATION]:
+	if is_registering():
+		pending_employment_role = ""
+		pending_employment_workplace = null
+		pending_freelance_assignment = ""
+		registration_queue_order = -1
+		employment_state = EmploymentState.FREELANCE
+	if state in [State.TO_HOME, State.RESTING, State.TO_CANTEEN, State.EATING, State.TO_TOILET, State.USING_TOILET, State.WAITING_FOR_TOILET, State.TO_BUSH, State.USING_BUSH, State.TO_PARK, State.RELAXING, State.TO_TREE, State.CHOPPING, State.TO_SAWMILL, State.SAWING, State.WAITING_COURIER, State.CONSTRUCTING, State.TO_GATHER, State.GATHERING, State.TO_WAREHOUSE, State.EXCAVATING, State.TO_CANTEEN_WORK, State.CANTEEN_WORK, State.TO_SCHOOL_WORK, State.SCHOOL_WORK, State.TO_MARKET_WORK, State.MARKET_WORK, State.TO_OFFICIAL_WORK, State.OFFICIAL_WORK, State.TO_CRAFT_WORK, State.CRAFT_WORK, State.TO_FACTORY, State.FACTORY_WORK, State.COURIER_TO_WORKER, State.COURIER_TO_WAREHOUSE, State.COURIER_TO_SAWMILL, State.TO_FOOD_PICKUP, State.TO_CANTEEN_DELIVERY, State.TO_CONSTRUCTION_PICKUP, State.TO_CONSTRUCTION_SITE, State.TO_TRADE_PICKUP, State.TO_TRADE_DESTINATION, State.TO_EMPLOYMENT_CENTER, State.EMPLOYMENT_PROCESSING]:
 		idle()
 
 

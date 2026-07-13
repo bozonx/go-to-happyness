@@ -26,6 +26,8 @@ const CourierDeliveryGoalScript = preload("res://game/features/decision/domain/g
 const CourierDeliveryOrderProviderScript = preload("res://game/features/decision/application/courier_delivery_order_provider.gd")
 const SettlementCitizenActuatorScript = preload("res://game/features/decision/application/settlement_citizen_actuator.gd")
 const ShadowCitizenActuatorScript = preload("res://game/features/decision/application/shadow_citizen_actuator.gd")
+const RegisterGoalScript = preload("res://game/features/decision/domain/goals/register_goal.gd")
+const WorkforceOrderProviderScript = preload("res://game/features/decision/application/workforce_order_provider.gd")
 
 
 const BOARD_CELLS := 48
@@ -326,18 +328,13 @@ var courier_dispatcher: RefCounted
 
 
 func _ready() -> void:
-	workforce = WorkforceCoordinator.new()
-	workforce.configure(self)
-	add_child(workforce)
+	if not use_native_ai:
+		workforce = WorkforceCoordinator.new()
+		workforce.configure(self)
+		add_child(workforce)
 	citizen_ai = CitizenAISystem.new()
 	citizen_ai.name = "CitizenAI"
 	add_child(citizen_ai)
-	if not citizen_ai.configure(
-		SettlementAIWorldFacade.new(self),
-		[SleepGoalScript.new(), MealGoalScript.new(), ToiletGoalScript.new(), RestGoalScript.new(), ForestryGoalScript.new(), FarmingGoalScript.new(), ConstructionGoalScript.new(), GatheringGoalScript.new(), ExcavationGoalScript.new(), ServiceWorkGoalScript.new(), FactoryWorkGoalScript.new(), CourierDeliveryGoalScript.new()],
-		[ForestryOrderProviderScript.new(), FarmingOrderProviderScript.new(), ConstructionOrderProviderScript.new(), GatheringOrderProviderScript.new(), ExcavationOrderProviderScript.new(), ServiceWorkOrderProviderScript.new(), FactoryWorkOrderProviderScript.new(), CourierDeliveryOrderProviderScript.new()]
-	):
-		push_error("Native citizen AI failed to capture its initial world snapshot")
 	nav_grid = NavGrid.new()
 	nav_grid.configure(CELL_SIZE, BOARD_CELLS)
 	route_service = GridRouteService.new()
@@ -383,6 +380,12 @@ func _ready() -> void:
 	_create_ponds()
 	_create_entrance_stone()
 	_create_citizens()
+	if not citizen_ai.configure(
+		SettlementAIWorldFacade.new(self),
+		[SleepGoalScript.new(), MealGoalScript.new(), ToiletGoalScript.new(), RestGoalScript.new(), RegisterGoalScript.new(), ForestryGoalScript.new(), FarmingGoalScript.new(), ConstructionGoalScript.new(), GatheringGoalScript.new(), ExcavationGoalScript.new(), ServiceWorkGoalScript.new(), FactoryWorkGoalScript.new(), CourierDeliveryGoalScript.new()],
+		[WorkforceOrderProviderScript.new(), ForestryOrderProviderScript.new(), FarmingOrderProviderScript.new(), ConstructionOrderProviderScript.new(), GatheringOrderProviderScript.new(), ExcavationOrderProviderScript.new(), ServiceWorkOrderProviderScript.new(), FactoryWorkOrderProviderScript.new(), CourierDeliveryOrderProviderScript.new()]
+	):
+		push_error("Native citizen AI failed to capture its initial world snapshot")
 
 	settlement.money = 100
 	# Seed enough branches for the very first campfire so the player sees the build
@@ -446,10 +449,14 @@ func _update_workers() -> void:
 	_refresh_labor_authority_indicator()
 
 func _work_role_for(citizen: Citizen) -> String:
-	return workforce.work_role_for(citizen)
+	if workforce != null:
+		return workforce.work_role_for(citizen)
+	return citizen.permanent_role if not citizen.permanent_role.is_empty() else citizen.freelance_assignment
 
 func _factory_for_role(role: String) -> Node3D:
-	return workforce.factory_for_role(role)
+	if workforce != null:
+		return workforce.factory_for_role(role)
+	return _employer_for_role(role)
 
 
 func _is_factory_worker_active(citizen: Citizen, factory: Node3D) -> bool:
@@ -2119,6 +2126,11 @@ func _ai_target_for_key(target_key: StringName) -> Node3D:
 		return null
 	var cell := Vector2i(int(parts[1]), int(parts[2]))
 	match parts[0]:
+		"building":
+			for record in building_registry.records():
+				var building := record.node as Node3D
+				if is_instance_valid(building) and _cell_from_position(building.global_position) == cell:
+					return building
 		"construction":
 			for site: ConstructionSite in construction_sites:
 				if site.cell == cell and is_instance_valid(site.node):
@@ -5103,8 +5115,8 @@ func _workforce_role_limit(role: String) -> int:
 		"official": return _available_employer_capacity("official")
 		"teacher": return school_positions.size()
 		"seller": return market_positions.size()
-		"factory_worker": return workforce._factory_job_capacity()
-		"engineer": return workforce._engineer_job_capacity()
+		"factory_worker": return _available_employer_capacity("factory_worker")
+		"engineer": return _available_employer_capacity("engineer")
 		"craftsman": return _available_employer_capacity("craftsman")
 	return -1
 

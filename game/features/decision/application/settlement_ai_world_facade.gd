@@ -211,11 +211,16 @@ func capture(sequence: int) -> WorldSnapshot:
 				&"work.courier.worker": courier_worker,
 				&"work.courier.can_start": courier_can_start,
 				&"work.courier.tasks": courier_tasks,
+				&"workforce.worker_data": _worker_data(actor),
+				&"workforce.pending_workplace_key": _workplace_target_key(actor.pending_employment_workplace),
 			})
 		)
 	var settlement_facts := AIFactSet.new({
 		&"population": citizens_by_id.size(),
 		&"era": simulation.settlement.era,
+		&"workforce.world_data": _world_data(),
+		&"workforce.employment_center_position": simulation._employment_center_position(),
+		&"workforce.role_employers": _role_employers(),
 	})
 	return WorldSnapshot.new(
 		sequence,
@@ -229,6 +234,14 @@ func capture(sequence: int) -> WorldSnapshot:
 func _target_key(kind: StringName, position: Vector3) -> StringName:
 	var cell: Vector2i = simulation._cell_from_position(position)
 	return StringName("%s:%d:%d" % [kind, cell.x, cell.y])
+
+
+func _workplace_target_key(workplace: Node3D) -> StringName:
+	if not is_instance_valid(workplace):
+		return &""
+	if workplace == simulation._dig_site_for_node(workplace).get(&"node"):
+		return _target_key(&"dig", workplace.global_position)
+	return _target_key(&"building", workplace.global_position)
 
 
 func _gathering_candidates_for(actor: Citizen) -> Array[Dictionary]:
@@ -283,3 +296,152 @@ func _gathering_candidates_for(actor: Citizen) -> Array[Dictionary]:
 			&"warehouse_position": simulation._get_nearest_delivery_position(actor.global_position),
 		})
 	return candidates
+
+
+func _worker_data(actor: Citizen) -> Dictionary:
+	var should_study := false
+	if not actor.training_role.is_empty() and actor.training_days_completed < 10:
+		should_study = true
+	elif simulation.school_developed_professions.get(actor.preferred_role(), false) and float(actor.skills.get(actor.preferred_role(), 0.0)) < 1.0:
+		should_study = true
+
+	return {
+		"player_controlled": actor.is_player_controlled,
+		"blocked_by_storage": actor.blocked_by_storage,
+		"specialization": actor.specialization,
+		"manual_role": actor.manual_role,
+		"freelance_assignment": actor.freelance_assignment,
+		"last_automatic_role": actor.last_automatic_role,
+		"training_role": actor.training_role,
+		"training_days_completed": actor.training_days_completed,
+		"permanent_role": actor.permanent_role,
+		"skills": actor.skills,
+		"should_study": should_study,
+		"workforce_status": "unregistered" if actor.is_unregistered() else "active",
+		"is_hero": actor.is_hero,
+	}
+
+
+func _world_data() -> Dictionary:
+	@warning_ignore("integer_division")
+	var current_hour: int = int(simulation.game_minutes) / 60
+	return {
+		"era": simulation.settlement.era,
+		"hour": current_hour,
+		"has_canteen": is_instance_valid(simulation.canteen),
+		"cooking_jobs": simulation._available_employer_capacity("cook"),
+		"schools": simulation.school_positions.size(),
+		"markets": simulation.market_positions.size(),
+		"builder_jobs": simulation._available_employer_capacity("construction"),
+		"forestry_jobs": simulation._available_employer_capacity("forestry"),
+		"farming_jobs": simulation._available_employer_capacity("farming"),
+		"forager_jobs": simulation._available_employer_capacity("gather_food"),
+		"materials_yard_jobs": simulation._available_employer_capacity("gather_branches"),
+		"teacher_jobs": simulation._available_employer_capacity("teacher"),
+		"seller_jobs": simulation._available_employer_capacity("seller"),
+		"official_jobs": simulation._available_employer_capacity("official"),
+		"factory_jobs": simulation._available_employer_capacity("factory_worker"),
+		"engineer_jobs": simulation._available_employer_capacity("engineer"),
+		"craftsman_jobs": simulation._available_employer_capacity("craftsman"),
+		"construction_sites": simulation.construction_sites.size() + simulation.demolition_sites.size(),
+		"warehouses": simulation.warehouse_positions.size(),
+		"sawmills": simulation.sawmill_positions.size(),
+		"trees": simulation.tree_positions.size(),
+		"farms": simulation.farm_positions.size(),
+		"forager_tents": simulation.forager_positions.size(),
+		"dig_sites": simulation._count_valid_dig_sites(),
+		"has_factory_job": _factory_for_role_internal("factory_worker") != null,
+		"has_engineer_job": _factory_for_role_internal("engineer") != null,
+		"food": simulation.food,
+		"water": simulation.water,
+		"wood": simulation.wood,
+		"ponds": simulation.pond_positions.size(),
+		"has_collected_dew": simulation._has_collected_dew(),
+		"has_bucket": bool(simulation.settlement.tools.get("bucket", false)),
+		"has_filter": bool(simulation.settlement.tools.get("filter_1", false)),
+		"population": simulation.citizens.size(),
+		"assigned_roles": _assigned_role_counts_internal(),
+		"officer_available": _officer_available_internal(),
+	}
+
+
+func _officer_available_internal() -> bool:
+	for citizen in simulation.citizens:
+		if is_instance_valid(citizen) and citizen.permanent_role == "official":
+			return true
+	return false
+
+
+func _factory_job_capacity() -> int:
+	var capacity := 0
+	for factory in simulation.factories:
+		if is_instance_valid(factory):
+			capacity += int(factory.get_meta("required_factory_workers", 1))
+	return capacity
+
+
+func _engineer_job_capacity() -> int:
+	var capacity := 0
+	for factory in simulation.factories:
+		if is_instance_valid(factory) and factory.get_meta("building_type", "") == "materials_factory":
+			capacity += 1
+	return capacity
+
+
+func _assigned_role_counts_internal() -> Dictionary:
+	var counts: Dictionary = {}
+	for citizen in simulation.citizens:
+		if citizen.is_player_controlled:
+			continue
+		if not citizen.permanent_role.is_empty() and is_instance_valid(citizen.employment_workplace) and not bool(citizen.employment_workplace.get_meta("accepting_workers", true)):
+			continue
+		var role: String = citizen.permanent_role
+		if role.is_empty() and citizen.is_registering():
+			role = citizen.pending_employment_role
+		if role.is_empty():
+			role = citizen.active_role
+		if role.is_empty() or role in ["trade", "relaxing", "training"]:
+			continue
+		if role == "gather_wood":
+			role = "forestry"
+		counts[role] = int(counts.get(role, 0)) + 1
+	return counts
+
+
+func _factory_for_role_internal(role: String) -> Node3D:
+	if role == "factory_worker":
+		for building_type in ["materials_factory", "brick_factory", "recycling_factory", "metal_factory"]:
+			for factory in simulation.factories:
+				if factory.get_meta("building_type", "") != building_type:
+					continue
+				var assigned_workers := 0
+				for citizen in simulation.citizens:
+					assigned_workers += 1 if simulation._is_factory_worker_active(citizen, factory) else 0
+				if assigned_workers < int(factory.get_meta("required_factory_workers", 1)):
+					return factory
+	for factory in simulation.factories:
+		if not is_instance_valid(factory):
+			continue
+		var building_type: String = factory.get_meta("building_type", "")
+		if role == "factory_worker" and building_type in ["brick_factory", "materials_factory", "recycling_factory", "metal_factory"]:
+			return factory
+		if role == "engineer" and building_type == "materials_factory":
+			return factory
+	return null
+
+
+func _role_employers() -> Dictionary:
+	var employers := {}
+	var roles := [
+		"forestry", "farming", "construction", "gather_branches", "gather_food",
+		"excavation", "cook", "teacher", "seller", "official", "craftsman",
+		"factory_worker", "engineer"
+	]
+	for role in roles:
+		var workplace: Node3D = simulation._employer_for_role(role)
+		if is_instance_valid(workplace):
+			employers[role] = {
+				"position": workplace.global_position,
+				"target_key": _workplace_target_key(workplace)
+			}
+	return employers
