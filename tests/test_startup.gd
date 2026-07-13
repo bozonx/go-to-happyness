@@ -13,6 +13,15 @@ func _init() -> void:
 	assert(is_instance_valid(simulation.hero_citizen))
 	assert(simulation.hero_citizen.is_hero)
 	assert(simulation.hero_citizen.specialization == "official")
+	assert(simulation._player_can_command_labor())
+	simulation.hero_citizen.permanent_role = ""
+	assert(simulation._player_can_command_labor())
+	simulation._appoint_official(simulation.hero_citizen)
+	var delegated_officer: Citizen = simulation.citizens[1]
+	simulation._appoint_official(delegated_officer)
+	assert(not simulation._player_can_command_labor())
+	simulation._appoint_official(simulation.hero_citizen)
+	assert(simulation._player_can_command_labor())
 	assert(is_instance_valid(simulation.entrance_stone))
 	var hero_count := 0
 	for citizen in simulation.citizens:

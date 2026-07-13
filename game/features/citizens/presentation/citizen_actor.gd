@@ -170,6 +170,7 @@ var skin_color: Color = Color.WHITE
 var shirt_color: Color = Color.WHITE
 var pants_color: Color = Color.WHITE
 var hair_color: Color = Color.WHITE
+var head_visible: bool = true
 var skills := {}
 var practiced_today: Dictionary = {}
 var temp_training_role := ""
@@ -423,6 +424,7 @@ func _update_character_model() -> void:
 		if _shared_shader_material == null:
 			_shared_shader_material = ShaderMaterial.new()
 			_shared_shader_material.shader = load("res://game/features/citizens/presentation/citizen_color_swap.gdshader")
+			_shared_shader_material.set_shader_parameter("albedo_texture", load("res://assets/characters/Textures/colormap.png"))
 			
 		var body_mesh = _find_node_by_name(inst, "body-mesh") as MeshInstance3D
 		var head_mesh = _find_node_by_name(inst, "head-mesh") as MeshInstance3D
@@ -430,6 +432,7 @@ func _update_character_model() -> void:
 			body_mesh.material_override = _shared_shader_material
 		if head_mesh:
 			head_mesh.material_override = _shared_shader_material
+			head_mesh.visible = head_visible
 			
 		_update_mesh_colors()
 		
@@ -1333,6 +1336,16 @@ func set_hero(hero: bool) -> void:
 		add_to_group("hero")
 		if body_material != null:
 			body_material.albedo_color = Color("e6c857")
+
+func set_head_visible(value: bool) -> void:
+	head_visible = value
+	if current_character_mesh != null:
+		var head_mesh = _find_node_by_name(current_character_mesh, "head-mesh") as MeshInstance3D
+		if head_mesh:
+			head_mesh.visible = value
+	var fallback_head = get_node_or_null("FallbackHead")
+	if fallback_head:
+		fallback_head.visible = value
 
 func assign_construction(site: Node3D) -> void:
 	if is_player_controlled:
