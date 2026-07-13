@@ -170,6 +170,7 @@ func _init() -> void:
 	_test_native_meal_goal()
 	_test_native_toilet_goal()
 	_test_native_rest_goal()
+	_test_register_provider_keeps_order_while_registering()
 	_test_reserve_work_provider_keeps_assignment()
 	_test_reserve_work_rejects_contested_target()
 	_test_reserve_work_actuator_delegates_payload()
@@ -1043,6 +1044,34 @@ func _test_reserve_work_provider_keeps_assignment() -> void:
 	actuator.next_action_status = CitizenActuator.ActionStatus.SUCCEEDED
 	assert(task.root.run(context, 0.1) == BehaviorStep.Status.SUCCESS)
 	assert(snapshot.reservations.owner_of([&"gathering.source", &"branch:4:0"], 0.0) == 0)
+
+
+func _test_register_provider_keeps_order_while_registering() -> void:
+	var provider := WorkforceOrderProviderScript.new()
+	var settlement := AIFactSet.new({
+		&"workforce.world_data": {"officer_available": true, "assigned_roles": {}, "forestry_jobs": 1, "warehouses": 1, "trees": 1},
+		&"workforce.employment_center_position": Vector3(2.0, 0.0, 0.0),
+		&"workforce.role_employers": {
+			"forestry": {"position": Vector3(6.0, 0.0, 0.0), "target_key": &"building:6:0"},
+		},
+	})
+	var unregistered := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
+		&"workforce.worker_data": {"workforce_status": "unregistered", "skills": {"forestry": 1.0}},
+	}))
+	var initial_orders := provider.collect_orders(WorldSnapshot.new(1, 0.0, 0.0, settlement, {1: unregistered}))
+	assert(initial_orders.size() == 1)
+	assert(initial_orders[0].kind == &"register")
+
+	var registering := CitizenSnapshot.new(1, Vector3(1.0, 0.0, 0.0), false, true, AIFactSet.new({
+		&"workforce.worker_data": {"workforce_status": "registering", "pending_employment_role": "forestry"},
+		&"workforce.pending_workplace_key": &"building:6:0",
+		&"workforce.pending_workplace_position": Vector3(6.0, 0.0, 0.0),
+	}))
+	var continued_orders := provider.collect_orders(WorldSnapshot.new(2, 1.0, 0.0, settlement, {1: registering}))
+	assert(continued_orders.size() == 1)
+	assert(continued_orders[0].kind == &"register")
+	assert(continued_orders[0].payload.value(&"workplace.role") == "forestry")
+	assert(continued_orders[0].target_position == initial_orders[0].target_position)
 
 
 func _test_reserve_work_rejects_contested_target() -> void:

@@ -223,6 +223,7 @@ func capture(sequence: int) -> WorldSnapshot:
 				&"work.courier.tasks": courier_tasks,
 				&"workforce.worker_data": worker_data,
 				&"workforce.pending_workplace_key": _workplace_target_key(actor.pending_employment_workplace),
+				&"workforce.pending_workplace_position": actor.pending_employment_workplace.global_position if is_instance_valid(actor.pending_employment_workplace) else Vector3.INF,
 				&"workforce.reserve.eligible": reserve_eligible,
 				&"workforce.reserve.in_progress": reserve_in_progress,
 				&"workforce.reserve.commands": reserve_commands,
@@ -510,9 +511,10 @@ func _worker_data(actor: Citizen) -> Dictionary:
 		"training_role": actor.training_role,
 		"training_days_completed": actor.training_days_completed,
 		"permanent_role": actor.permanent_role,
+		"pending_employment_role": actor.pending_employment_role,
 		"skills": actor.skills,
 		"should_study": should_study,
-		"workforce_status": "unregistered" if actor.is_unregistered() else "active",
+		"workforce_status": "unregistered" if actor.is_unregistered() else "registering" if actor.is_registering() else "active",
 		"is_hero": actor.is_hero,
 	}
 

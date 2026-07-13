@@ -3312,6 +3312,8 @@ func _set_manual_role(role: String) -> void:
 				return
 			selected_builder.begin_employment_processing(_employment_center_position(), role, _employer_for_role(role))
 	selected_builder.assigned_dig_site = null
+	if citizen_ai != null:
+		citizen_ai.request_decision_refresh()
 	_update_workers()
 	build_menu_is_job_menu = false
 	_show_selected_citizen_menu()

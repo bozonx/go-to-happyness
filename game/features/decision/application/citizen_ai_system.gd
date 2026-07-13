@@ -81,6 +81,15 @@ func goal_count() -> int:
 	return _goals.size()
 
 
+## Manual role changes must be visible on the next physics tick instead of
+## waiting for the periodic director pass.
+func request_decision_refresh() -> void:
+	if facade == null:
+		return
+	_snapshot_elapsed = snapshot_interval
+	_director_elapsed = director_interval
+
+
 func _physics_process(delta: float) -> void:
 	if facade == null:
 		return

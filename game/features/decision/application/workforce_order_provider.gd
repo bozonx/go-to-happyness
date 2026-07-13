@@ -28,19 +28,24 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 				continue
 
 			var worker_data: Dictionary = citizen.facts.value(&"workforce.worker_data", {})
-			if worker_data.is_empty() or worker_data.get("workforce_status") != "unregistered":
+			if worker_data.is_empty():
+				continue
+			var status := str(worker_data.get("workforce_status", ""))
+			if status not in ["unregistered", "registering"]:
 				continue
 
-			if not bool(world_data.get("officer_available", true)):
-				continue
-			var pending_role := WorkforcePolicy.permanent_vacancy_for(worker_data, allocation_world)
+			var pending_role := str(worker_data.get("pending_employment_role", "")) if status == "registering" else ""
+			if pending_role.is_empty():
+				if not bool(world_data.get("officer_available", true)):
+					continue
+				pending_role = WorkforcePolicy.permanent_vacancy_for(worker_data, allocation_world)
 
 			if pending_role.is_empty():
 				continue
 
 			var employer_data: Dictionary = employers.get(pending_role, {})
-			var workplace_pos: Variant = employer_data.get("position", Vector3.INF)
-			var workplace_key: Variant = employer_data.get("target_key", &"")
+			var workplace_pos: Variant = citizen.facts.value(&"workforce.pending_workplace_position", Vector3.INF) if status == "registering" else employer_data.get("position", Vector3.INF)
+			var workplace_key: Variant = citizen.facts.value(&"workforce.pending_workplace_key", &"") if status == "registering" else employer_data.get("target_key", &"")
 
 			var target_pos := workplace_pos as Vector3 if workplace_pos is Vector3 else Vector3.INF
 			var target_key := workplace_key as StringName if workplace_key is StringName else &""
