@@ -1995,6 +1995,8 @@ func _create_citizens() -> void:
 func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void:
 	var citizen := Citizen.new()
 	citizen.position = spawn_position
+	if hero_citizen == null:
+		citizen.gender = "male"
 	add_child(citizen)
 	citizen.setup_specialization(primary_specialization if not primary_specialization.is_empty() else "unassigned")
 	citizen.setup_navigation(_find_path_around_houses, _get_nearest_delivery_position, _resolve_building_queue_position)

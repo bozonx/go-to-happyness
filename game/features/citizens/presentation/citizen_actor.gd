@@ -45,6 +45,41 @@ enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE,
 
 enum EmploymentState { UNREGISTERED, FREELANCE, EMPLOYED, REGISTERING }
 
+const MODEL_PREFIXES := {
+	"unassigned": "common",
+	"builder": "worker",
+	"forestry": "worker",
+	"farming": "worker",
+	"excavation": "worker",
+	"courier": "courier",
+	"cook": "common",
+	"teacher": "teacher",
+	"factory_worker": "worker",
+	"engineer": "worker",
+	"seller": "common",
+	"craftsman": "worker",
+	"official": "official",
+}
+
+const STATE_ANIMATIONS := {
+	State.IDLE: "idle",
+	State.WAITING: "idle",
+	State.CHOPPING: "interact-right",
+	State.SAWING: "interact-right",
+	State.CONSTRUCTING: "interact-right",
+	State.EXCAVATING: "interact-right",
+	State.EATING: "idle",
+	State.RESTING: "idle",
+	State.USING_TOILET: "crouch",
+	State.USING_BUSH: "crouch",
+	State.FACTORY_WORK: "interact-right",
+	State.CRAFT_WORK: "interact-right",
+	State.SCHOOL_WORK: "interact-right",
+	State.MARKET_WORK: "interact-right",
+	State.OFFICIAL_WORK: "interact-right",
+	State.RESEARCHING: "interact-right",
+}
+
 var state := State.IDLE
 var resource_type := "wood"
 var gather_resource_type := ""
@@ -89,6 +124,10 @@ var overtime_mode := false
 var satisfaction := 72.0
 var satisfaction_tick := 0.0
 var body_material: StandardMaterial3D
+var gender: String = ""
+var current_model_path: String = ""
+var current_character_mesh: Node3D
+var animation_player: AnimationPlayer
 var skills := {}
 var practiced_today: Dictionary = {}
 var temp_training_role := ""
@@ -178,6 +217,8 @@ var idle_indicator: Label3D
 signal employment_processing_finished(citizen: Citizen)
 
 func _ready() -> void:
+	if gender.is_empty():
+		gender = "male" if randf() > 0.5 else "female"
 	skills = {
 		"construction": randf_range(0.0, 0.1),
 		"forestry": randf_range(0.0, 0.1),
@@ -238,8 +279,7 @@ func _setup_selector() -> void:
 	add_child(selector)
 
 func _setup_visuals() -> void:
-	_setup_body_mesh()
-	_setup_head_mesh()
+	_update_character_model()
 	_setup_idle_indicator()
 
 func _setup_idle_indicator() -> void:
@@ -256,6 +296,7 @@ func _setup_idle_indicator() -> void:
 
 func _setup_body_mesh() -> void:
 	var body := MeshInstance3D.new()
+	body.name = "FallbackBody"
 	var body_mesh := CapsuleMesh.new()
 	body_mesh.radius = 0.25
 	body_mesh.height = 1.15
@@ -268,6 +309,7 @@ func _setup_body_mesh() -> void:
 
 func _setup_head_mesh() -> void:
 	var head := MeshInstance3D.new()
+	head.name = "FallbackHead"
 	var head_mesh := SphereMesh.new()
 	head_mesh.radius = 0.25
 	head_mesh.height = 0.5
@@ -277,6 +319,71 @@ func _setup_head_mesh() -> void:
 	head_material.albedo_color = Color("b8d8c1")
 	head.material_override = head_material
 	add_child(head)
+
+func _update_character_model() -> void:
+	var prefix: String = MODEL_PREFIXES.get(specialization, "common")
+	var path := "res://assets/characters/%s-%s.glb" % [prefix, gender]
+	
+	if not FileAccess.file_exists(path):
+		path = "res://assets/characters/common-%s.glb" % [gender]
+		
+	if not FileAccess.file_exists(path):
+		_setup_fallback_mesh()
+		return
+		
+	if current_model_path == path:
+		return
+		
+	# Clean up fallback mesh or previous model if it exists
+	if is_instance_valid(current_character_mesh):
+		current_character_mesh.queue_free()
+		current_character_mesh = null
+	
+	var fallback_body = get_node_or_null("FallbackBody")
+	if fallback_body:
+		fallback_body.queue_free()
+	var fallback_head = get_node_or_null("FallbackHead")
+	if fallback_head:
+		fallback_head.queue_free()
+		
+	var scene := load(path) as PackedScene
+	if scene != null:
+		var inst := scene.instantiate() as Node3D
+		# Rotate 180 degrees to align face with movement direction (-Z forward)
+		inst.rotation.y = PI
+		add_child(inst)
+		current_character_mesh = inst
+		current_model_path = path
+		
+		# Set up animations
+		animation_player = inst.get_node_or_null("AnimationPlayer") as AnimationPlayer
+		if animation_player != null:
+			for anim_name in ["idle", "walk", "sprint", "crouch"]:
+				var anim = animation_player.get_animation(anim_name)
+				if anim != null:
+					anim.loop_mode = Animation.LOOP_LINEAR
+
+func _setup_fallback_mesh() -> void:
+	if not has_node("FallbackBody"):
+		_setup_body_mesh()
+	if not has_node("FallbackHead"):
+		_setup_head_mesh()
+
+func _update_animations(_delta: float) -> void:
+	if animation_player == null:
+		return
+		
+	var anim_to_play := "idle"
+	
+	# Ignore vertical movement (falling/jumping) when deciding to play walk
+	var horizontal_velocity := Vector3(velocity.x, 0.0, velocity.z)
+	if horizontal_velocity.length() > 0.15:
+		anim_to_play = "walk"
+	else:
+		anim_to_play = STATE_ANIMATIONS.get(state, "idle")
+		
+	if animation_player.current_animation != anim_to_play:
+		animation_player.play(anim_to_play, 0.25)
 
 func assign_work(next_resource_type: String, source: Vector3, workplace: Vector3, warehouse: Vector3, next_uses_courier := false, access_pos := Vector3.INF) -> void:
 	if is_player_controlled:
@@ -433,6 +540,7 @@ func _physics_process(delta: float) -> void:
 			_process_using_bush(delta)
 	if idle_indicator != null:
 		_update_idle_indicator()
+	_update_animations(delta)
 
 func _process_to_source(delta: float) -> void:
 	if _move_to(source_access_position, delta, false, false):
@@ -1436,7 +1544,9 @@ func set_courier_equipment(next_equipment: String) -> void:
 
 func setup_specialization(next_specialization: String) -> void:
 	specialization = next_specialization
-	body_material.albedo_color = Color("e6c857") if is_hero else CitizenRoleProfile.color_for(specialization)
+	if body_material != null:
+		body_material.albedo_color = Color("e6c857") if is_hero else CitizenRoleProfile.color_for(specialization)
+	_update_character_model()
 
 func get_efficiency(role: String) -> float:
 	var core_skill := get_core_skill_for_role(role)
