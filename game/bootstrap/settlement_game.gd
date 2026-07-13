@@ -4393,7 +4393,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			_update_interface("Forager tent ready. Assign a resident to forage food, or a free hand will.")
 		"materials_yard":
 			materials_yard_positions.append(service_position)
-			_update_interface("Двор стройматериалов готов. Назначьте жителя собирать ветки, или это сделает свободный работник.")
+			_update_interface("Двор стройматериалов готов. Работники собирают ветки и траву (что в дефиците), или это сделает свободный житель.")
 		"tent", "living_tent", "living_tent_lvl2", "living_tent_lvl3", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house":
 			if building_type in ["house", "house_lvl2", "house_lvl3", "brick_house"]:
 				completed_house_count += 1

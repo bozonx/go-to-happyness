@@ -242,11 +242,22 @@ func assign_work(citizen: Citizen, index: int) -> void:
 			if is_instance_valid(dig_site):
 				citizen.assign_excavation(dig_site)
 		"gather_branches":
-			var tree_pos: Vector3 = simulation._find_closest_tree_for_citizen(citizen)
-			if tree_pos != Vector3.INF:
-				var tree_access: Vector3 = simulation._resource_access_position(citizen.global_position, tree_pos)
-				if tree_access != Vector3.INF:
-					citizen.assign_gathering("branches", tree_pos, simulation._get_delivery_position(), tree_access)
+			# Materials-yard staff (the only permanent gather_branches employment)
+			# balance the two raw tent goods: when grass is the scarcer stock and a
+			# patch is free they cut grass, otherwise they cut branches. Reserve
+			# hands left on gather_branches by the officer's plan only cut branches.
+			var cut_grass := false
+			if citizen.is_employed() and simulation.settlement.grass < simulation.settlement.branches:
+				var grass_pos: Vector3 = simulation._find_grass_gathering_position(citizen)
+				if grass_pos != Vector3.INF:
+					citizen.assign_gathering("grass", grass_pos, simulation._get_delivery_position())
+					cut_grass = true
+			if not cut_grass:
+				var tree_pos: Vector3 = simulation._find_closest_tree_for_citizen(citizen)
+				if tree_pos != Vector3.INF:
+					var tree_access: Vector3 = simulation._resource_access_position(citizen.global_position, tree_pos)
+					if tree_access != Vector3.INF:
+						citizen.assign_gathering("branches", tree_pos, simulation._get_delivery_position(), tree_access)
 		"gather_grass":
 			var grass_pos: Vector3 = simulation._find_grass_gathering_position(citizen)
 			if grass_pos != Vector3.INF:
