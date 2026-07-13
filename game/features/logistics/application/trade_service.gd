@@ -1,6 +1,8 @@
 class_name TradeService
 extends RefCounted
 
+const TradeOrderScript = preload("res://game/features/logistics/domain/trade_order.gd")
+
 var simulation: Node
 
 
@@ -50,27 +52,46 @@ func buy_courier_equipment(courier: Citizen, equipment_id: String, price: int) -
 	simulation._refresh_market_menu()
 
 
-func start_trade(trade: Dictionary, source: Vector3, destination: Vector3) -> void:
-	simulation.queued_trades.append({"trade": trade, "source": source, "destination": destination})
+func start_trade(
+	trade: Dictionary,
+	source: Vector3,
+	destination: Vector3,
+	source_endpoint := TradeOrderScript.ENDPOINT_MARKET,
+	destination_endpoint := TradeOrderScript.ENDPOINT_STORAGE
+) -> void:
+	start_trade_order(TradeOrderScript.create(trade, source, destination, source_endpoint, destination_endpoint))
+
+
+func start_trade_order(order: RefCounted) -> void:
+	if order == null:
+		return
+	simulation.queued_trades.append(order)
 	simulation._request_courier_dispatch()
+
+
+func start_entrance_purchase(trade: Dictionary) -> void:
+	if not is_instance_valid(simulation.entrance_stone):
+		return
+	start_trade_order(TradeOrderScript.entrance_purchase(
+		trade,
+		simulation.entrance_stone.global_position,
+		simulation._get_delivery_position()
+	))
 
 
 func trade_orders() -> Array[Dictionary]:
 	var orders: Array[Dictionary] = []
 	for order in simulation.queued_trades:
 		orders.append(order.trade)
-	for trade in simulation.pending_trades.values():
-		orders.append(trade)
+	for order in simulation.pending_trades.values():
+		orders.append(_payload_for_order(order))
 	return orders
 
 
 func trade_reserved_money() -> int:
 	var reserved := 0
-	for trade in trade_orders():
-		match str(trade.kind):
-			"buy_resource": reserved += int(trade.quantity) * int(trade.price)
-			"buy_tool": reserved += int(trade.price)
-			"buy_courier_equipment": reserved += int(trade.price)
+	for order in _all_orders():
+		reserved += order.reserved_money()
 	return reserved
 
 
@@ -80,15 +101,14 @@ func available_trade_money() -> int:
 
 func trade_incoming_resource(resource_type: String) -> int:
 	var incoming := 0
-	for trade in trade_orders():
-		if str(trade.kind) == "buy_resource" and str(trade.resource) == resource_type:
-			incoming += int(trade.quantity)
+	for order in _all_orders():
+		incoming += order.incoming_resource(resource_type)
 	return incoming
 
 
 func trade_has_tool_order(tool_id: String) -> bool:
-	for trade in trade_orders():
-		if str(trade.kind) == "buy_tool" and str(trade.tool) == tool_id:
+	for order in _all_orders():
+		if order.has_tool_order(tool_id):
 			return true
 	return false
 
@@ -111,8 +131,8 @@ func dispatch_queued_trades() -> void:
 	for worker in candidates:
 		if simulation.queued_trades.is_empty():
 			return
-		var order: Dictionary = simulation.queued_trades.pop_front()
-		simulation.pending_trades[worker.get_instance_id()] = order.trade
+		var order: RefCounted = simulation.queued_trades.pop_front()
+		simulation.pending_trades[worker.get_instance_id()] = order
 		worker.deliver_trade(order.source, order.destination)
 		simulation._update_interface("A resident is carrying the trade order.")
 	if not simulation.queued_trades.is_empty():
@@ -120,9 +140,10 @@ func dispatch_queued_trades() -> void:
 
 
 func on_trade_delivery_finished(worker: Citizen) -> void:
-	var trade: Dictionary = simulation.pending_trades.get(worker.get_instance_id(), {})
-	if trade.is_empty():
+	var order: RefCounted = simulation.pending_trades.get(worker.get_instance_id(), null)
+	if order == null:
 		return
+	var trade: Dictionary = order.trade
 	simulation.pending_trades.erase(worker.get_instance_id())
 	match str(trade.kind):
 		"sell":
@@ -148,3 +169,20 @@ func on_trade_delivery_finished(worker: Citizen) -> void:
 				simulation._update_interface("%s received %s." % [courier.role_label(), str(trade.equipment).replace("_", " ")])
 	if simulation.market_menu.visible:
 		simulation._refresh_market_menu()
+
+
+func _all_orders() -> Array:
+	var orders: Array = []
+	for order in simulation.queued_trades:
+		if order != null and order.has_method("reserved_money"):
+			orders.append(order)
+	for order in simulation.pending_trades.values():
+		if order != null and order.has_method("reserved_money"):
+			orders.append(order)
+	return orders
+
+
+func _payload_for_order(order: Variant) -> Dictionary:
+	if order != null and order is RefCounted and order.has_method("reserved_money"):
+		return order.trade
+	return order if order is Dictionary else {}

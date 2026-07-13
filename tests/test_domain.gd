@@ -4,6 +4,8 @@ const SettlementRulesScript = preload("res://game/features/settlement/domain/set
 const GridRouteServiceScript = preload("res://game/features/world/application/grid_route_service.gd")
 const BuildingQueueServiceScript = preload("res://game/features/citizens/application/building_queue_service.gd")
 const CanteenServiceScript = preload("res://game/features/logistics/application/canteen_service.gd")
+const TradeOrderScript = preload("res://game/features/logistics/domain/trade_order.gd")
+const FireSourceStateScript = preload("res://game/features/settlement/domain/fire_source_state.gd")
 
 
 class FakeCanteenSimulation extends Node:
@@ -56,6 +58,8 @@ func _init() -> void:
 	_test_freelance_role_recheck_cooldown()
 	_test_courier_equipment_capacity()
 	_test_research_mechanics()
+	_test_trade_order_model()
+	_test_fire_source_state()
 	quit(0)
 
 
@@ -135,6 +139,32 @@ func _test_tent_start_config() -> void:
 	assert(state.storage_availability_for("grass", 1, 1) == SettlementState.StorageAvailability.OK)
 	var decay := SettlementRulesScript.open_air_storage_decay_losses({"food": 16, "grass": 10}, 26.0, 0.0)
 	assert(int(decay.food) == 2 and int(decay.grass) == 1)
+
+
+func _test_trade_order_model() -> void:
+	var order := TradeOrderScript.entrance_purchase(
+		{"kind": "buy_resource", "resource": "food", "quantity": 4, "price": 2},
+		Vector3(1.0, 0.0, 0.0),
+		Vector3(5.0, 0.0, 0.0)
+	)
+	assert(order.source_endpoint == TradeOrderScript.ENDPOINT_ENTRANCE_STONE)
+	assert(order.destination_endpoint == TradeOrderScript.ENDPOINT_STORAGE)
+	assert(order.outside_duration_minutes == 120.0)
+	assert(order.reserved_money() == 8)
+	assert(order.incoming_resource("food") == 4)
+	assert(order.incoming_resource("grass") == 0)
+
+
+func _test_fire_source_state() -> void:
+	var fire := FireSourceStateScript.from_values(1, 0, true)
+	assert(fire.total_committed_fuel() == 1)
+	assert(fire.needs_supply(4))
+	fire.reserve(2)
+	assert(fire.total_committed_fuel() == 3)
+	fire.add_delivered(2)
+	assert(fire.fuel == 3 and fire.reserved_fuel == 0 and fire.lit)
+	fire.consume(3)
+	assert(fire.fuel == 0 and not fire.lit)
 
 
 func _test_progression_and_volunteers() -> void:
@@ -685,6 +715,10 @@ func _test_research_mechanics() -> void:
 	assert(not test_state.can_start_building_research("campfire_lvl2"))
 	test_state.buildings["campfire"] = 1
 	assert(test_state.can_start_building_research("campfire_lvl2"))
+	assert(test_state.can_start_building_research("official"))
+	assert(test_state.pay_for_research("official"))
+	assert(test_state.complete_research("official") == "official")
+	assert(test_state.is_research_completed("official"))
 	test_state.unlocked_building_levels["campfire_lvl2"] = true
 	assert(not test_state.can_start_building_research("campfire_lvl3"))
 	test_state.buildings["campfire_lvl2"] = 1

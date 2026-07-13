@@ -1,8 +1,10 @@
 extends Node3D
 
 const SETTLEMENT_RULES = preload("res://game/features/settlement/domain/settlement_rules.gd")
+const FireSourceStateScript = preload("res://game/features/settlement/domain/fire_source_state.gd")
 const CourierDispatcherScript = preload("res://game/features/logistics/application/courier_dispatcher.gd")
 const CourierTaskScript = preload("res://game/features/logistics/domain/courier_task.gd")
+const TradeServiceScript = preload("res://game/features/logistics/application/trade_service.gd")
 const BuildingQueueServiceScript = preload("res://game/features/citizens/application/building_queue_service.gd")
 const SleepGoalScript = preload("res://game/features/decision/domain/goals/sleep_goal.gd")
 const MealGoalScript = preload("res://game/features/decision/domain/goals/meal_goal.gd")
@@ -302,8 +304,8 @@ var build_buttons: Array[Button] = []
 var build_item_buttons: Array[Button] = []
 var skip_night_button: Button
 var water_collectors: Array[Dictionary] = []
-var pending_trades: Dictionary = {} # worker instance id -> queued trade
-var queued_trades: Array[Dictionary] = []
+var pending_trades: Dictionary = {} # worker instance id -> TradeOrder
+var queued_trades: Array = []
 var role_buttons: Array[Button] = []
 var building_status_indicators: Array[Label3D] = []
 var building_status_update_time := 0.0
@@ -364,7 +366,7 @@ func _ready() -> void:
 	canteen_service.configure(self)
 	citizen_needs_service = CitizenNeedsService.new()
 	citizen_needs_service.configure(self)
-	trade_service = TradeService.new()
+	trade_service = TradeServiceScript.new()
 	trade_service.configure(self)
 	courier_dispatcher = CourierDispatcherScript.new()
 	courier_dispatcher.configure(self)
@@ -872,11 +874,11 @@ func _start_courier_task(courier: Citizen, task: RefCounted) -> bool:
 			courier.deliver_food_to_canteen(warehouse_positions[0], canteen_position, amount)
 			return true
 		CourierTask.Kind.TRADE:
-			var order: Dictionary = task.payload.order
+			var order: RefCounted = task.payload.order
 			if not queued_trades.has(order):
 				return false
 			queued_trades.erase(order)
-			pending_trades[courier.get_instance_id()] = order.trade
+			pending_trades[courier.get_instance_id()] = order
 			courier.deliver_trade(order.source, order.destination)
 			return true
 		CourierTask.Kind.SAWMILL_PICKUP:
@@ -984,9 +986,9 @@ func _on_building_supply_delivered(_courier: Citizen, target: Node3D, supply_kin
 		return
 	match supply_kind:
 		"firewood":
-			target.set_meta("fire_fuel", int(target.get_meta("fire_fuel", 0)) + amount)
-			target.set_meta("fire_reserved", maxi(0, int(target.get_meta("fire_reserved", 0)) - amount))
-			target.set_meta("fire_lit", true)
+			var fire_state := _fire_state_for(target)
+			fire_state.add_delivered(amount)
+			_apply_fire_state(target, fire_state)
 		"repair":
 			target.set_meta("repair_reserved", false)
 			var repaired_condition := minf(100.0, float(target.get_meta("condition", 0.0)) + 18.0)
@@ -1009,10 +1011,12 @@ func _update_firewood_supplies() -> void:
 			var building := record.node
 			if not is_instance_valid(building) or str(building.get_meta("building_type", "")) not in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "gathering_place"]:
 				continue
-			if int(building.get_meta("fire_fuel", 0)) + int(building.get_meta("fire_reserved", 0)) >= 4 or branches <= 0:
+			var fire_state := _fire_state_for(building)
+			if not fire_state.needs_supply(4) or branches <= 0:
 				continue
 			branches -= 1
-			building.set_meta("fire_reserved", int(building.get_meta("fire_reserved", 0)) + 1)
+			fire_state.reserve(1)
+			_apply_fire_state(building, fire_state)
 			courier.assign_building_supply(building, warehouse_positions[0], "branches", "firewood")
 			return
 
@@ -2477,14 +2481,13 @@ func _update_building_research(delta: float) -> void:
 	
 	if research_menu != null and research_menu.visible:
 		_refresh_research_menu()
-		
+
 	if settlement.active_research_remaining_time <= 0.0:
-		var unlocked_building: String = tech.target_building
-		settlement.unlocked_building_levels[unlocked_building] = true
+		var unlocked_target := settlement.complete_research(tech_id)
 		
 		var skill_to_upgrade: String = str(tech.get("reward_skill", "craftsman" if skill_name == "craftsman" else "construction"))
 		worker.skills[skill_to_upgrade] = minf(1.0, float(worker.skills.get(skill_to_upgrade, 0.0)) + 0.20)
-		
+
 		worker.idle()
 		
 		settlement.active_research_tech_id = ""
@@ -2492,7 +2495,9 @@ func _update_building_research(delta: float) -> void:
 		settlement.active_research_remaining_time = 0.0
 		settlement.active_research_duration = 0.0
 		
-		var b_name: String = BuildingCatalog.definition_for(unlocked_building).get("name", unlocked_building)
+		var b_name: String = str(tech.get("name", unlocked_target))
+		if tech.has("target_building"):
+			b_name = BuildingCatalog.definition_for(str(tech.target_building)).get("name", str(tech.target_building))
 		_update_interface("Research completed: %s unlocked! %s skill improved by 20%%." % [b_name, skill_to_upgrade.capitalize()])
 		
 		_refresh_campfire_menu()
@@ -2560,29 +2565,30 @@ func _refresh_research_menu() -> void:
 		return
 	for child in research_list.get_children():
 		child.queue_free()
-		
+
 	research_menu_title.text = "Research (Campfire)"
-	
+
 	for tech_id in BuildingCatalog.RESEARCH_TECHS:
 		var tech: Dictionary = BuildingCatalog.RESEARCH_TECHS[tech_id]
-		var required_era := BuildingCatalog.era_for(tech.target_building)
-		
+		var target_building := str(tech.get("target_building", ""))
+		var required_era := BuildingCatalog.era_for(target_building) if not target_building.is_empty() else SettlementState.Era.TENT
+
 		if required_era > settlement.era:
 			continue
-			
+
 		var row := HBoxContainer.new()
 		row.custom_minimum_size = Vector2(464, 40)
 		research_list.add_child(row)
-		
+
 		var details_vbox := VBoxContainer.new()
 		details_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(details_vbox)
-		
+
 		var title_lbl := Label.new()
 		title_lbl.text = tech.name
 		title_lbl.add_theme_font_size_override("font_size", 14)
 		details_vbox.add_child(title_lbl)
-		
+
 		var desc_lbl := Label.new()
 		var costs_array: Array[String] = []
 		var cost_dict: Dictionary = BuildingCatalog.RESEARCH_COSTS.get(tech_id, {})
@@ -2590,13 +2596,12 @@ func _refresh_research_menu() -> void:
 			costs_array.append("%d %s" % [cost_dict[res], res])
 		var cost_str := ", ".join(costs_array)
 		var effect_str: String = str(tech.get("effect", ""))
-
 		desc_lbl.text = "Duration: %ds | Cost: %s | Skill: %s%s" % [int(tech.base_duration), cost_str, tech.required_skill.capitalize(), " | %s" % effect_str if not effect_str.is_empty() else ""]
 		desc_lbl.add_theme_font_size_override("font_size", 10)
 		desc_lbl.add_theme_color_override("font_color", Color("a5b5c5"))
 		details_vbox.add_child(desc_lbl)
-		
-		if settlement.unlocked_building_levels.get(tech.target_building, false):
+
+		if settlement.is_research_completed(tech_id):
 			var status_lbl := Label.new()
 			status_lbl.text = "Researched"
 			status_lbl.add_theme_color_override("font_color", Color("76c893"))
@@ -2605,13 +2610,13 @@ func _refresh_research_menu() -> void:
 			var progress_vbox := VBoxContainer.new()
 			progress_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			row.add_child(progress_vbox)
-			
+
 			var progress_pct := (1.0 - (settlement.active_research_remaining_time / settlement.active_research_duration)) * 100.0
 			var progress_lbl := Label.new()
 			progress_lbl.text = "Researching: %d%%" % int(clampf(progress_pct, 0.0, 100.0))
 			progress_lbl.add_theme_font_size_override("font_size", 11)
 			progress_vbox.add_child(progress_lbl)
-			
+
 			var cancel_btn := Button.new()
 			cancel_btn.text = "Cancel"
 			cancel_btn.pressed.connect(_cancel_research)
@@ -2619,18 +2624,18 @@ func _refresh_research_menu() -> void:
 		else:
 			var start_btn := Button.new()
 			start_btn.text = "Start"
-			
+
 			var affordable := settlement.can_afford_research(tech_id)
 			var prerequisites_met := true
 			for prerequisite in tech.get("prerequisites", []):
-				if BuildingCatalog.RESEARCH_TECHS.has(prerequisite) and not settlement.unlocked_building_levels.get(prerequisite, false):
+				if BuildingCatalog.RESEARCH_TECHS.has(prerequisite) and not settlement.is_research_completed(str(prerequisite)):
 					prerequisites_met = false
 					break
-			
+
 			var researcher := _get_available_researcher(tech.required_skill)
 			var has_worker := researcher != null
 			var can_start := settlement.can_start_building_research(tech_id) and has_worker and settlement.active_research_tech_id == ""
-			
+
 			start_btn.disabled = not can_start
 			if not prerequisites_met:
 				start_btn.tooltip_text = "Research the previous level first."
@@ -2640,7 +2645,7 @@ func _refresh_research_menu() -> void:
 				start_btn.tooltip_text = "Not enough resources."
 			elif settlement.active_research_tech_id != "":
 				start_btn.tooltip_text = "Another research is already active."
-			
+
 			start_btn.pressed.connect(_start_research.bind(tech_id))
 			row.add_child(start_btn)
 
@@ -6124,8 +6129,27 @@ func _create_gathering_place_visual(building: Node3D) -> void:
 func _building_at_service_position(position: Vector3) -> Node3D:
 	return building_registry.building_at_service_position(position)
 
+
+func _fire_state_for(building: Node3D) -> RefCounted:
+	if not is_instance_valid(building):
+		return FireSourceStateScript.new()
+	return FireSourceStateScript.from_values(
+		int(building.get_meta("fire_fuel", 0)),
+		int(building.get_meta("fire_reserved", 0)),
+		bool(building.get_meta("fire_lit", true))
+	)
+
+
+func _apply_fire_state(building: Node3D, fire_state: RefCounted) -> void:
+	if not is_instance_valid(building) or fire_state == null:
+		return
+	building.set_meta("fire_fuel", fire_state.fuel)
+	building.set_meta("fire_reserved", fire_state.reserved_fuel)
+	building.set_meta("fire_lit", fire_state.lit)
+
+
 func _is_fire_lit(building: Node3D) -> bool:
-	return is_instance_valid(building) and bool(building.get_meta("fire_lit", true))
+	return is_instance_valid(building) and _fire_state_for(building).lit
 
 func _update_fire_status() -> void:
 	# Fires consume one large branch each four simulated hours. Couriers' first
@@ -6139,14 +6163,12 @@ func _update_fire_status() -> void:
 		var building := record.node
 		if not is_instance_valid(building) or str(building.get_meta("building_type", "")) not in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "gathering_place"]:
 			continue
-		var fuel := int(building.get_meta("fire_fuel", 0))
-		if fuel > 0:
-			fuel -= 1
-		building.set_meta("fire_fuel", fuel)
-		building.set_meta("fire_lit", fuel > 0)
+		var fire_state := _fire_state_for(building)
+		fire_state.consume(1)
+		_apply_fire_state(building, fire_state)
 		for child in building.get_children():
 			if child is OmniLight3D:
-				child.visible = fuel > 0
+				child.visible = fire_state.lit
 	if is_instance_valid(campfire_node) and not _is_fire_lit(campfire_node):
 		wellbeing = maxi(0, wellbeing - 1)
 

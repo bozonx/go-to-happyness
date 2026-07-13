@@ -41,6 +41,9 @@ var equipment: Dictionary = TENT_STARTING_EQUIPMENT.duplicate(true)
 var trade_sales := 0
 var buildings: Dictionary = {}
 var brick_construction_unlocked := false
+var unlocked_systems := {
+	"official": false,
+}
 var unlocked_building_levels := {
 	"living_tent": true,
 	"craft_tent": false,
@@ -117,6 +120,8 @@ func apply_tent_start(reset_progress := true) -> void:
 	storage_limits.clear()
 	if reset_progress:
 		buildings.clear()
+		for system_id in unlocked_systems.keys():
+			unlocked_systems[system_id] = false
 		for building_type in unlocked_building_levels.keys():
 			unlocked_building_levels[building_type] = _tent_start_unlock_for(building_type)
 
@@ -412,16 +417,19 @@ func can_start_building_research(research_id: String) -> bool:
 	if not BuildingCatalog.RESEARCH_TECHS.has(research_id):
 		return false
 	var tech: Dictionary = BuildingCatalog.RESEARCH_TECHS[research_id]
-	if era < BuildingCatalog.era_for(str(tech.target_building)) or unlocked_building_levels.get(tech.target_building, false):
+	if is_research_completed(research_id):
+		return false
+	var target_building := str(tech.get("target_building", ""))
+	if not target_building.is_empty() and era < BuildingCatalog.era_for(target_building):
 		return false
 	for prerequisite in tech.get("prerequisites", []):
 		if BuildingCatalog.RESEARCH_TECHS.has(prerequisite):
-			if not unlocked_building_levels.get(prerequisite, false):
+			if not is_research_completed(str(prerequisite)):
 				return false
 		elif not has_building(str(prerequisite)):
 			return false
-	if era == Era.TENT:
-		var target: String = str(tech.target_building)
+	if era == Era.TENT and not target_building.is_empty():
+		var target: String = target_building
 		# The central campfire is itself the gate which unlocks each technology
 		# tier, so it must not require the level it is trying to unlock.
 		if target == "campfire_lvl3" and not has_building("campfire_lvl2"):
@@ -431,6 +439,31 @@ func can_start_building_research(research_id: String) -> bool:
 		if target != "campfire_lvl3" and target.ends_with("_lvl3") and not has_building("campfire_lvl3"):
 			return false
 	return can_afford_research(research_id)
+
+
+func is_research_completed(research_id: String) -> bool:
+	if not BuildingCatalog.RESEARCH_TECHS.has(research_id):
+		return false
+	var tech: Dictionary = BuildingCatalog.RESEARCH_TECHS[research_id]
+	var target_system := str(tech.get("target_system", ""))
+	if not target_system.is_empty():
+		return bool(unlocked_systems.get(target_system, false))
+	var target_building := str(tech.get("target_building", ""))
+	return not target_building.is_empty() and bool(unlocked_building_levels.get(target_building, false))
+
+
+func complete_research(research_id: String) -> String:
+	if not BuildingCatalog.RESEARCH_TECHS.has(research_id):
+		return ""
+	var tech: Dictionary = BuildingCatalog.RESEARCH_TECHS[research_id]
+	var target_system := str(tech.get("target_system", ""))
+	if not target_system.is_empty():
+		unlocked_systems[target_system] = true
+		return target_system
+	var target_building := str(tech.get("target_building", ""))
+	if not target_building.is_empty():
+		unlocked_building_levels[target_building] = true
+	return target_building
 
 
 func pay_for_research(research_id: String) -> bool:

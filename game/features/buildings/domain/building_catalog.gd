@@ -89,6 +89,7 @@ const RESEARCH_COSTS := {
 	"living_tent_lvl2": {"branches": 8, "grass": 8},
 	"living_tent_lvl3": {"branches": 12, "grass": 12},
 	"tent": {"branches": 6, "grass": 4},
+	"official": {"branches": 4, "grass": 4},
 	"campfire_lvl2": {"branches": 8, "grass": 6},
 	"campfire_lvl3": {"branches": 15, "grass": 12},
 	"warehouse_lvl2": {"branches": 8, "grass": 6},
@@ -169,6 +170,15 @@ const RESEARCH_TECHS := {
 		"required_skill": "construction",
 		"target_building": "tent",
 		"prerequisites": [],
+	},
+	"official": {
+		"name": "Чиновник",
+		"base_duration": 30.0,
+		"required_skill": "construction",
+		"target_system": "official",
+		"prerequisites": ["campfire"],
+		"effect": "Enables formal workforce automation.",
+		"reward_skill": "official",
 	},
 	"campfire_lvl2": {
 		"name": "Главный костер ур. 2",
