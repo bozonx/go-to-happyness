@@ -23,6 +23,7 @@ static func permanent_vacancy_for(worker: Dictionary, world: Dictionary) -> Stri
 	_add_empty_workplace_score(scores, world, "forestry", int(world.get("forestry_jobs", world.get("sawmills", 0))))
 	_add_empty_workplace_score(scores, world, "farming", int(world.get("farming_jobs", world.get("farms", 0))))
 	_add_empty_workplace_score(scores, world, "gather_food", int(world.get("forager_jobs", world.get("forager_tents", 0))))
+	_add_empty_workplace_score(scores, world, "gather_branches", int(world.get("materials_yard_jobs", 0)))
 	_add_empty_workplace_score(scores, world, "excavation", int(world.get("dig_sites", 0)))
 	_add_empty_workplace_score(scores, world, "cook", int(world.get("cooking_jobs", 0)))
 	_add_empty_workplace_score(scores, world, "teacher", int(world.get("teacher_jobs", 0)))
@@ -159,6 +160,14 @@ static func can_assign(worker: Dictionary, world: Dictionary) -> bool:
 		if assigned_role == "construction" and _construction_capacity(world) <= 0:
 			return false
 		return _role_available(assigned_role, world)
+	# Reserve workers act on the employment officer's plan. With no active officer
+	# the plan is silent, so only explicitly ordered citizens (a pinned role) keep
+	# working; the rest idle. This turns the old invisible "freelancer" into work
+	# the officer is visibly responsible for. Default true keeps headless policy
+	# checks that omit the flag behaving as before.
+	var has_order := not str(worker.get("freelance_assignment", worker.get("manual_role", ""))).is_empty()
+	if not has_order and not bool(world.get("officer_available", true)):
+		return false
 	var specialization := str(worker.get("specialization", ""))
 	if str(worker.get("freelance_assignment", "")) == "courier" or int(world.get("hour", 0)) < 8:
 		return false

@@ -29,6 +29,10 @@ const PLAYER_EYE_HEIGHT := 1.65
 const HARVEST_DURATION := 1.25
 const INTERACTION_RANGE := 4.5
 const POCKET_WOOD_CAPACITY := 8
+# The hero gathers raw bootstrap materials in a batch per action, unlike NPCs who
+# fetch one-to-two at a time. This is the player's lever to force a direction:
+# playing the hero rushes what the officer's plan would otherwise trickle in.
+const HERO_GATHER_YIELD := 3
 const SAWMILL_PROCESS_DURATION := 4.0
 const SAWMILL_WORKER_DELIVERY_THRESHOLD := 4
 const COURIER_LATE_SECONDS := 12.0
@@ -116,6 +120,7 @@ var builders_guild_positions: Array[Vector3] = []
 var construction_company_positions: Array[Vector3] = []
 var pond_positions: Array[Vector3] = []
 var forager_positions: Array[Vector3] = []
+var materials_yard_positions: Array[Vector3] = []
 var school_positions: Array[Vector3] = []
 var market_positions: Array[Vector3] = []
 var craft_tent_positions: Array[Vector3] = []
@@ -339,6 +344,9 @@ func _ready() -> void:
 	_create_citizens()
 
 	settlement.money = 100
+	# Seed enough branches for the very first campfire so the player sees the build
+	# loop immediately instead of grinding 1.5 days for the opening structure.
+	settlement.branches = 6
 	settlement.ensure_storage_defaults(warehouse_positions.size())
 	_update_workers()
 	_update_interface("Build a simple store, then gather materials for the first campfire and tents.")
@@ -2225,6 +2233,7 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_build_button("Жилая палатка ур. 2", "living_tent_lvl2", 278, "tent")
 	_add_build_button("Жилая палатка ур. 3", "living_tent_lvl3", 278, "tent")
 	_add_build_button("Forager tent", "forager_tent", 312, "tent")
+	_add_build_button("Двор стройматериалов", "materials_yard", 312, "tent")
 	_add_build_button("Craft tent", "craft_tent", 346, "tent")
 	_add_build_button("Craft tent Level 2", "craft_tent_lvl2", 346, "tent")
 	_add_build_button("Craft tent Level 3", "craft_tent_lvl3", 346, "tent")
@@ -3262,6 +3271,7 @@ func _employer_types_for_role(role: String) -> Array[String]:
 		"forestry": return ["sawmill"]
 		"farming": return ["farm"]
 		"gather_food": return ["forager_tent"]
+		"gather_branches": return ["materials_yard"]
 		"cook": return ["cook_campfire", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant"]
 		"teacher": return ["school"]
 		"seller": return ["trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market"]
@@ -3290,7 +3300,7 @@ func _is_staffed_workplace(building: Node3D) -> bool:
 	if not is_instance_valid(building):
 		return false
 	var building_type := str(building.get_meta("building_type", ""))
-	for role in ["construction", "forestry", "farming", "gather_food", "cook", "teacher", "seller", "factory_worker", "engineer", "craftsman", "official"]:
+	for role in ["construction", "forestry", "farming", "gather_food", "gather_branches", "cook", "teacher", "seller", "factory_worker", "engineer", "craftsman", "official"]:
 		if building_type in _employer_types_for_role(role):
 			return true
 	return false
@@ -3303,6 +3313,9 @@ func _employer_capacity(role: String, building: Node3D) -> int:
 		return int(building.get_meta("required_factory_workers", 1))
 	if role == "craftsman":
 		return 1
+	if role == "gather_branches":
+		# The materials yard fields a small crew of hand-gatherers.
+		return 2
 	return 1
 
 func _start_dig_assignment() -> void:
@@ -3713,6 +3726,7 @@ func _remove_building_services(building: Node3D, building_type: String) -> void:
 		"builders_guild": builders_guild_positions.erase(service_position)
 		"construction_company": construction_company_positions.erase(service_position)
 		"forager_tent": forager_positions.erase(service_position)
+		"materials_yard": materials_yard_positions.erase(service_position)
 		"school": school_positions.erase(service_position)
 		"park": park_positions.erase(service_position)
 		"gathering_place": gathering_place_positions.erase(service_position)
@@ -3969,6 +3983,16 @@ func _start_interaction() -> void:
 		interaction_progress.visible = true
 		interaction_hint_label.text = "Gathering %s..." % interaction_resource
 		return
+	if _nearby_grass_source():
+		if settlement.storage_room_for("grass") <= 0:
+			_update_interface("No storage room for grass. Rebalance the warehouse or build another.")
+			return
+		interaction_resource = "grass"
+		interaction_action = "harvesting"
+		interaction_time = 0.0
+		interaction_progress.visible = true
+		interaction_hint_label.text = "Gathering grass..."
+		return
 	if _nearby_warehouse():
 		_update_interface("Food pocket is empty. Wood must go to a sawmill first.")
 	else:
@@ -4011,7 +4035,7 @@ func _update_interaction(delta: float) -> void:
 		interaction_progress.value = 100.0
 		interaction_hint_label.text = "Working on %s..." % interaction_action
 		return
-	if (interaction_resource in ["wood", "branches"] and not _nearby_tree()) or (interaction_resource == "food" and not _nearby_farm()) or (interaction_resource == "water" and not _nearby_pond()):
+	if (interaction_resource in ["wood", "branches"] and not _nearby_tree()) or (interaction_resource == "food" and not _nearby_farm()) or (interaction_resource == "water" and not _nearby_pond()) or (interaction_resource == "grass" and not _nearby_grass_source()):
 		interaction_action = ""
 		interaction_progress.visible = false
 		_update_interface("Gathering cancelled: you moved away from the resource.")
@@ -4024,18 +4048,28 @@ func _update_interaction(delta: float) -> void:
 		if interaction_resource == "wood":
 			pocket_wood += 1
 		elif interaction_resource == "branches":
-			if settlement.reserve_storage_room_for("branches", 1, warehouse_positions.size()):
-				branches += 1
+			var branch_batch := mini(HERO_GATHER_YIELD, settlement.storage_room_for("branches"))
+			if branch_batch > 0:
+				branches += branch_batch
+				_update_interface("Gathered %d branches. Branches: %d." % [branch_batch, branches])
 			else:
 				_update_interface("No storage room for branches. Rebalance the warehouse or build another.")
+		elif interaction_resource == "grass":
+			var grass_batch := mini(HERO_GATHER_YIELD, settlement.storage_room_for("grass"))
+			if grass_batch > 0:
+				grass += grass_batch
+				_consume_grass_near_player(grass_batch)
+				_update_interface("Gathered %d grass. Grass: %d." % [grass_batch, grass])
+			else:
+				_update_interface("No storage room for grass. Rebalance the warehouse or build another.")
 		elif interaction_resource == "water":
 			pocket_water += 1
 		else:
 			pocket_food += 1
 		interaction_progress.visible = false
 		_consume_tree_near_player() if interaction_resource == "wood" else null
-		if interaction_resource == "branches":
-			_update_interface("Gathered branches. Branches: %d." % branches)
+		if interaction_resource in ["branches", "grass"]:
+			pass
 		else:
 			_update_interface("Gathered. Wood: %d, food: %d, water: %d, boards: %d, pocket: %d/%d." % [pocket_wood, pocket_food, pocket_water, pocket_boards, _pocket_total(), POCKET_WOOD_CAPACITY])
 		_refresh_interaction_hint()
@@ -4083,6 +4117,36 @@ func _nearby_pond() -> bool:
 			return true
 	return false
 
+func _nearby_grass_source() -> bool:
+	return _nearby_grass_source_position() != Vector3.INF
+
+func _nearby_grass_source_position() -> Vector3:
+	if player_citizen == null:
+		return Vector3.INF
+	var best := Vector3.INF
+	var best_dist := INTERACTION_RANGE
+	for cell in grass_sources:
+		var source: Dictionary = grass_sources[cell]
+		if int(source.remaining) <= 0 or not is_instance_valid(source.node):
+			continue
+		var node_pos: Vector3 = (source.node as Node3D).global_position
+		var dist := player_citizen.global_position.distance_to(node_pos)
+		if dist <= best_dist:
+			best_dist = dist
+			best = node_pos
+	return best
+
+func _consume_grass_near_player(amount: int) -> void:
+	# The hero's batch harvest draws from the nearest patch and rolls onto adjacent
+	# patches if the closest one is exhausted, so one action can clear a small tuft.
+	var remaining_to_take := amount
+	while remaining_to_take > 0:
+		var pos := _nearby_grass_source_position()
+		if pos == Vector3.INF:
+			return
+		_consume_grass_source(pos)
+		remaining_to_take -= 1
+
 func _pocket_total() -> int:
 	return pocket_wood + pocket_food + pocket_boards + pocket_water
 
@@ -4104,6 +4168,8 @@ func _refresh_interaction_hint() -> void:
 		interaction_hint_label.text = "LMB: gather branches" if settlement.era < SettlementState.Era.WOOD else "LMB: gather wood (%d/%d in pocket)" % [_pocket_total(), POCKET_WOOD_CAPACITY]
 	elif _nearby_farm():
 		interaction_hint_label.text = "LMB: gather food (%d/%d in pocket)" % [_pocket_total(), POCKET_WOOD_CAPACITY]
+	elif _nearby_grass_source():
+		interaction_hint_label.text = "LMB: gather grass (x%d)" % HERO_GATHER_YIELD
 	elif _nearby_pond():
 		if bool(settlement.tools.get("bucket", false)):
 			interaction_hint_label.text = "LMB: fill bucket with water (%d/%d in pocket)" % [_pocket_total(), POCKET_WOOD_CAPACITY]
@@ -4324,6 +4390,9 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 		"forager_tent":
 			forager_positions.append(service_position)
 			_update_interface("Forager tent ready. Assign a resident to forage food, or a free hand will.")
+		"materials_yard":
+			materials_yard_positions.append(service_position)
+			_update_interface("Двор стройматериалов готов. Назначьте жителя собирать ветки, или это сделает свободный работник.")
 		"tent", "living_tent", "living_tent_lvl2", "living_tent_lvl3", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house":
 			if building_type in ["house", "house_lvl2", "house_lvl3", "brick_house"]:
 				completed_house_count += 1
@@ -4456,6 +4525,7 @@ func _required_staff_for_building(building: Node3D) -> Dictionary:
 		"sawmill": return {"role": "forestry", "count": 1}
 		"farm": return {"role": "farming", "count": 1}
 		"forager_tent": return {"role": "gather_food", "count": 1}
+		"materials_yard": return {"role": "gather_branches", "count": 2}
 		"cook_campfire", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant": return {"role": "cooking", "count": 1}
 		"school": return {"role": "teaching", "count": 1}
 		"brick_factory", "materials_factory", "recycling_factory", "metal_factory": return {"role": "factory_worker", "count": int(building.get_meta("required_factory_workers", 1))}

@@ -227,6 +227,30 @@ func _test_workforce_policy() -> void:
 	var stable_freelancer := {"specialization": "unassigned", "last_automatic_role": "gather_grass"}
 	assert(WorkforcePolicy.role_for(stable_freelancer, {"hour": 9, "trees": 1, "population": 1}) == "gather_grass")
 
+	# Officer-plans gate: an un-ordered reserve worker is only assignable while an
+	# officer is available; an explicit order (manual_role) bypasses the gate; an
+	# already-employed worker is unaffected.
+	var reserve := {"specialization": "unassigned", "manual_role": "", "player_controlled": false, "blocked_by_storage": false}
+	var reserve_world := {"hour": 9, "trees": 1, "population": 1, "officer_available": true}
+	assert(WorkforcePolicy.can_assign(reserve, reserve_world))
+	reserve_world.officer_available = false
+	assert(not WorkforcePolicy.can_assign(reserve, reserve_world))
+	var ordered := {"specialization": "unassigned", "manual_role": "gather_branches", "freelance_assignment": "gather_branches", "player_controlled": false, "blocked_by_storage": false}
+	assert(WorkforcePolicy.can_assign(ordered, reserve_world))
+	var employed := {"specialization": "cook", "permanent_role": "cook", "manual_role": "", "player_controlled": false, "blocked_by_storage": false}
+	assert(WorkforcePolicy.can_assign(employed, {"cooking_jobs": 1, "has_canteen": true, "officer_available": false}))
+
+	# Materials yard: an empty gather_branches vacancy is offered as a permanent job
+	# when a yard exists and there are trees; a permanently-employed branch gatherer
+	# stays assignable while trees remain.
+	var yard_hand := {"specialization": "unassigned", "manual_role": "", "player_controlled": false, "blocked_by_storage": false}
+	var yard_world := {"hour": 9, "trees": 2, "warehouses": 1, "population": 2, "materials_yard_jobs": 2, "assigned_roles": {}, "officer_available": true}
+	assert(WorkforcePolicy.permanent_vacancy_for(yard_hand, yard_world) == "gather_branches")
+	var branch_worker := {"specialization": "unassigned", "permanent_role": "gather_branches", "manual_role": "", "player_controlled": false, "blocked_by_storage": false}
+	assert(WorkforcePolicy.can_assign(branch_worker, yard_world))
+	yard_world.trees = 0
+	assert(not WorkforcePolicy.can_assign(branch_worker, yard_world))
+
 
 func _test_citizen_task_state() -> void:
 	var task := CitizenTaskState.new()

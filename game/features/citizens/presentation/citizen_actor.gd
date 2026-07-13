@@ -1698,7 +1698,15 @@ func _process_to_gather(delta: float) -> void:
 
 func _process_gathering(delta: float) -> void:
 	if _work(delta):
-		carried_amount = 3 if gather_resource_type == "water" and active_role == "gather_water" else 1
+		# Raw bootstrap materials (branches/grass) are gathered two-at-a-time so the
+		# early tent era is not a one-unit-per-trip slog; skill still governs cycle
+		# speed and matters more in later eras. Water hauling keeps its bucket bonus.
+		if gather_resource_type == "water" and active_role == "gather_water":
+			carried_amount = 3
+		elif gather_resource_type in ["branches", "grass"]:
+			carried_amount = 2
+		else:
+			carried_amount = 1
 		resource_type = gather_resource_type
 		if resource_type == "logs":
 			tree_harvested.emit(self, gather_source_position)

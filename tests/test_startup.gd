@@ -80,8 +80,9 @@ func _init() -> void:
 	assert(simulation._is_construction_site(simulation.construction_sites[0].node))
 	var construction_site: ConstructionSite = simulation.construction_sites[0]
 	construction_site.reserved_materials = {"branches": 1}
+	var branches_before: int = simulation.settlement.branches
 	simulation._reconcile_construction_reservations(construction_site)
-	assert(simulation.settlement.branches == 1)
+	assert(simulation.settlement.branches == branches_before + 1)
 	assert(construction_site.reserved_materials.branches == 0)
 	assert(simulation.construction.cancel_site(simulation.construction_sites[0].node))
 	assert(simulation.construction_sites.is_empty())

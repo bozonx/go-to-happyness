@@ -10,6 +10,7 @@ const DEFINITIONS := {
 	"living_tent_lvl2": {"name": "Жилая палатка ур. 2 на 2 жителя", "category": "tent", "costs": {"branches": 15, "grass": 12}},
 	"living_tent_lvl3": {"name": "Жилая палатка ур. 3 на 3 жителя", "category": "tent", "costs": {"branches": 22, "grass": 18}},
 	"forager_tent": {"name": "Forager tent", "category": "tent", "costs": {"branches": 10, "grass": 4}},
+	"materials_yard": {"name": "Двор стройматериалов", "category": "tent", "costs": {"branches": 10, "grass": 6}},
 	"craft_tent": {"name": "Craft tent", "category": "tent", "costs": {"branches": 10, "grass": 5}},
 	"craft_tent_lvl2": {"name": "Craft tent Level 2", "category": "tent", "costs": {"branches": 18, "grass": 10}},
 	"craft_tent_lvl3": {"name": "Craft tent Level 3", "category": "tent", "costs": {"branches": 25, "grass": 18}},

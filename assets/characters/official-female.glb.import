@@ -4,12 +4,12 @@ importer="scene"
 importer_version=1
 type="PackedScene"
 uid="uid://d3s221nncy2hs"
-path="res://.godot/imported/oficial-femail.glb-564852d25df56f23d86ee121131d65d7.scn"
+path="res://.godot/imported/official-female.glb-6d20669db205327489fd6d81371c6393.scn"
 
 [deps]
 
-source_file="res://assets/characters/oficial-femail.glb"
-dest_files=["res://.godot/imported/oficial-femail.glb-564852d25df56f23d86ee121131d65d7.scn"]
+source_file="res://assets/characters/official-female.glb"
+dest_files=["res://.godot/imported/official-female.glb-6d20669db205327489fd6d81371c6393.scn"]
 
 [params]
 

@@ -119,6 +119,7 @@ func _employer_exists(role: String) -> bool:
 		"forestry": return not simulation.sawmill_positions.is_empty()
 		"farming": return not simulation.farm_positions.is_empty()
 		"gather_food": return not simulation.forager_positions.is_empty()
+		"gather_branches": return not simulation.materials_yard_positions.is_empty()
 		"cook": return is_instance_valid(simulation.canteen)
 		"teacher": return not simulation.school_positions.is_empty()
 		"seller": return not simulation.market_positions.is_empty()
@@ -323,6 +324,7 @@ func _world_data() -> Dictionary:
 		"forestry_jobs": simulation._available_employer_capacity("forestry"),
 		"farming_jobs": simulation._available_employer_capacity("farming"),
 		"forager_jobs": simulation._available_employer_capacity("gather_food"),
+		"materials_yard_jobs": simulation._available_employer_capacity("gather_branches"),
 		"teacher_jobs": simulation._available_employer_capacity("teacher"),
 		"seller_jobs": simulation._available_employer_capacity("seller"),
 		"official_jobs": simulation._available_employer_capacity("official"),
@@ -346,7 +348,18 @@ func _world_data() -> Dictionary:
 		"has_filter": bool(simulation.settlement.tools.get("filter_1", false)),
 		"population": simulation.citizens.size(),
 		"assigned_roles": _assigned_role_counts(),
+		"officer_available": _officer_available(),
 	}
+
+
+func _officer_available() -> bool:
+	# The officer's plan drives un-ordered reserve workers. The hero holds the
+	# officer role by default, so this is true from turn 0; it only goes false if
+	# the role is left vacant, at which point reserve citizens idle until ordered.
+	for citizen in simulation.citizens:
+		if is_instance_valid(citizen) and citizen.permanent_role == "official":
+			return true
+	return false
 
 
 func _factory_job_capacity() -> int:
