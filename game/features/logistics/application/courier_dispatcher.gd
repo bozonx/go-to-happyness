@@ -63,7 +63,7 @@ func _available_couriers() -> Array[Citizen]:
 	var pinned: Array[Citizen] = []
 	var flexible: Array[Citizen] = []
 	for citizen in simulation.citizens:
-		if citizen.employment_state != Citizen.EmploymentState.FREELANCE or citizen.state != Citizen.State.IDLE:
+		if not citizen.is_reserve() or citizen.state != Citizen.State.IDLE:
 			continue
 		if citizen.freelance_assignment == "courier":
 			pinned.append(citizen)

@@ -9,29 +9,43 @@
 (0 assertion-fail), `test_materials_yard`, + плейтест игроком перед следующим
 шагом. Коммит после каждого зелёного шага — чтобы всегда был откат.
 
-### Этап 1. Подготовка модели (низкий риск, без смены поведения)
-Strangler-подход: сначала аксессоры, потом удаление дублей — по одному.
+### Этап 1. Подготовка модели — **[СДЕЛАНО]** (низкий риск, без смены поведения)
+Strangler-подход: сначала аксессоры, потом удаление дублей.
 
-1.1. **Аксессоры на `Citizen`** поверх текущих полей, без удаления:
-`is_employed()`, `is_reserve()`, `work_order()` (=`freelance_assignment`),
-`profession()` (=`specialization`), `workplace()` (=`employment_workplace`).
-Мигрировать чтения на аксессоры точечно. Поведение не меняется.
-1.2. **`manual_role` → производное от `freelance_assignment`.** Они всегда
-зеркалят друг друга (`pin`/`release`/`finish_employment_processing`). Сделать
-`manual_role` геттером, убрать все записи. **-1 поле.** Проверить.
-1.3. **Слить `training_role` + `temp_training_role` + pending → `training`
-{role, days}.** **-2 поля.** Проверить.
+1.1. **[СДЕЛАНО] Аксессоры на `Citizen`**: `is_employed()`, `is_reserve()`,
+`is_registering()`, `is_unregistered()`, `has_work_order()`, `is_courier()`.
+Единая точка чтения статуса — при коллапсе `EmploymentState` (Этап 2) меняются
+только их тела. Первую партию чтений уже мигрировал (`pin_freelance_role`,
+`request_freelance_registration`, гварды в `workforce_coordinator.update_workers`
+включая `is_courier()`). Полная миграция 50+ мест — это Этап 2.
+1.2. **[СДЕЛАНО] `manual_role` → геттер `freelance_assignment`.** Они всегда
+зеркалили друг друга; убраны все записи. Побочно **исправлен латентный баг**: в
+`finish_school_day` при завершении обучения чистился только `manual_role`, а
+`freelance_assignment` оставался — теперь чистится источник истины. **-1 поле.**
+1.3. **[ПРОПУЩЕНО — слияние небезопасно].** `training_role` и `temp_training_role`
+семантически РАЗНЫЕ: первый — обязательство переучиться (10 дней, меняет
+специализацию), второй — разовый заход в школу за скиллом на день (ставится в
+`attend_school`, чистится каждый `finish_school_day`). Слить их = смешать
+«переобучение» и «разовую практику», это смена поведения без выгоды. Оставлено
+как есть.
 
-### Этап 2. Коллапс `EmploymentState` (высокий риск — делать отдельным заходом)
-2.1. Ввести производный статус: `employed = workplace != null`,
-`ordered = order != ""`, иначе `reserve`. `UNREGISTERED` = «reserve до первого
-костра» — выражается как reserve + отсутствие центра занятости.
-2.2. `REGISTERING` — это транзиентное движение, уже есть в movement-`State`
-(`TO_EMPLOYMENT_CENTER`/`EMPLOYMENT_PROCESSING`). Убрать `EmploymentState`
-как хранимый enum, заменив чтения на предикаты. **Самый большой diff — 50+
-мест.** Обязателен плейтест: наём, увольнение, регистрация новичков, ночь/skip.
-2.3. Обновить `_worker_data`/`workforce_policy` на новые предикаты (флаг
-`officer_available` уже готов).
+### Этап 2. Инкапсуляция `EmploymentState` — **[СДЕЛАНО для brain-слоя]**
+**Важно (пересмотр после анализа):** enum **НЕ удаляем**. `UNREGISTERED` и
+`REGISTERING` несут состояние, не выводимое из других полей (не «до костра» и не
+всегда движение — `queue_employment_processing` ставит REGISTERING при
+`state = IDLE`). Плюс в UI есть легитимные хелперы, работающие с enum как со
+значением (`_employment_state_count`, `_citizens_with_employment_states`). Поэтому
+цель Этапа 2 — не «удалить enum», а **централизовать чтения статуса через
+аксессоры**, оставив enum приватным backing-store за `Citizen`.
+2.1. **[СДЕЛАНО]** Все чтения статуса в **decision+logistics слое** (мозг:
+`workforce_coordinator`, `courier_dispatcher`, `trade_service`) и внутренние
+чтения `citizen_actor` переведены на `is_employed/is_reserve/is_registering/
+is_unregistered/is_courier`. Логика поведения больше не трогает enum напрямую.
+2.2. **[ОСТАВЛЕНО]** ~48 чтений в `settlement_game` (UI/меню/счётчики) — это
+display-код и enum-as-value хелперы; миграция = churn без выигрыша в поведении
+и лишний риск в хрупком 6000-строчном файле. Enum там используется штатно.
+2.3. `_worker_data`/`workforce_policy` уже на данных-словарях (флаг
+`officer_available` готов ещё с Этапа officer-gate).
 
 ### Этап 3. Курьер → профессия (после Этапа 2)
 3.1. Аксессор `is_courier()` вместо 30+ `freelance_assignment == "courier"`

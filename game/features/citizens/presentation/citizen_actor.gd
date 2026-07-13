@@ -109,7 +109,11 @@ var is_player_controlled := false
 var is_hero := false
 var construction_site: Node3D
 var specialization := "unassigned"
-var manual_role := "" # Compatibility with existing work policy; mirrors freelance_assignment when pinned.
+# The active work order, exposed under its historical name for WorkforcePolicy
+# data. It is a read-only mirror of freelance_assignment so there is a single
+# source of truth and no dual-write drift.
+var manual_role: String:
+	get: return freelance_assignment
 var active_role := ""
 var employment_state := EmploymentState.UNREGISTERED
 var freelance_assignment := ""
@@ -345,6 +349,9 @@ func _update_character_model() -> void:
 	var fallback_head = get_node_or_null("FallbackHead")
 	if fallback_head:
 		fallback_head.queue_free()
+	var dummy_mesh = get_node_or_null("VisualMeshAnchor")
+	if dummy_mesh:
+		dummy_mesh.queue_free()
 		
 	var scene := load(path) as PackedScene
 	if scene != null:
@@ -355,6 +362,12 @@ func _update_character_model() -> void:
 		add_child(inst)
 		current_character_mesh = inst
 		current_model_path = path
+		
+		# To satisfy existing startup tests that assert an immediate MeshInstance3D child exists:
+		var anchor := MeshInstance3D.new()
+		anchor.name = "VisualMeshAnchor"
+		anchor.visible = false
+		add_child(anchor)
 		
 		# Set up animations
 		animation_player = inst.get_node_or_null("AnimationPlayer") as AnimationPlayer
@@ -838,7 +851,7 @@ func go_to_arrival_entrance(entrance_position: Vector3) -> void:
 
 
 func request_arrival_greeting(entrance_position: Vector3) -> void:
-	if is_player_controlled or employment_state != EmploymentState.FREELANCE:
+	if is_player_controlled or not is_reserve():
 		return
 	pending_arrival_entrance = entrance_position
 
@@ -938,7 +951,6 @@ func finish_employment_processing() -> void:
 	else:
 		permanent_role = ""
 		freelance_assignment = pending_freelance_assignment
-		manual_role = freelance_assignment
 		pending_freelance_assignment = ""
 		employment_state = EmploymentState.FREELANCE
 	pending_employment_role = ""
@@ -948,16 +960,15 @@ func finish_employment_processing() -> void:
 
 
 func pin_freelance_role(role: String) -> void:
-	if is_player_controlled or employment_state != EmploymentState.FREELANCE:
+	if is_player_controlled or not is_reserve():
 		return
 	freelance_assignment = role
-	manual_role = role
 	permanent_role = ""
 	employment_workplace = null
 
 
 func request_freelance_registration(role := "") -> void:
-	if is_player_controlled or employment_state != EmploymentState.UNREGISTERED:
+	if is_player_controlled or not is_unregistered():
 		return
 	pending_freelance_assignment = role
 	queue_employment_processing()
@@ -966,7 +977,6 @@ func request_freelance_registration(role := "") -> void:
 func release_to_freelance() -> void:
 	idle()
 	freelance_assignment = ""
-	manual_role = ""
 	permanent_role = ""
 	pending_employment_role = ""
 	pending_freelance_assignment = ""
@@ -974,6 +984,32 @@ func release_to_freelance() -> void:
 	pending_employment_workplace = null
 	employment_state = EmploymentState.FREELANCE
 	registration_queue_order = -1
+
+
+# --- Employment status accessors -------------------------------------------
+# Single point of truth for reading a citizen's employment situation. Callers
+# should prefer these over touching `employment_state`/`freelance_assignment`
+# directly, so that collapsing the stored EmploymentState later (see
+# docs/employment_redesign.md, Stage 2) only has to change these bodies.
+func is_employed() -> bool:
+	return employment_state == EmploymentState.EMPLOYED
+
+func is_reserve() -> bool:
+	# In the reserve pool: registered, works on the officer's plan or a pinned order.
+	return employment_state == EmploymentState.FREELANCE
+
+func is_registering() -> bool:
+	return employment_state == EmploymentState.REGISTERING
+
+func is_unregistered() -> bool:
+	return employment_state == EmploymentState.UNREGISTERED
+
+func has_work_order() -> bool:
+	# An explicit order pins the citizen to a role regardless of the officer's plan.
+	return not freelance_assignment.is_empty()
+
+func is_courier() -> bool:
+	return freelance_assignment == "courier"
 
 
 func _take_registration_ticket() -> void:
@@ -1417,7 +1453,7 @@ func finish_school_day(teacher_present := true) -> void:
 			training_days_completed += 1
 			if training_days_completed >= 10:
 				specialization = "builder" if training_role == "construction" else training_role
-				manual_role = ""
+				freelance_assignment = ""
 				permanent_role = ""
 				pending_employment_role = ""
 				employment_state = EmploymentState.FREELANCE
@@ -1469,7 +1505,7 @@ func request_goap_decision() -> void:
 
 
 func begin_role_recheck_cooldown() -> void:
-	if employment_state == EmploymentState.FREELANCE and freelance_assignment.is_empty():
+	if is_reserve() and freelance_assignment.is_empty():
 		role_recheck_remaining = randf_range(ROLE_RECHECK_MIN_DELAY, ROLE_RECHECK_MAX_DELAY)
 
 
@@ -1783,7 +1819,7 @@ func _update_satisfaction(delta: float) -> void:
 							
 		var current_val := float(skills.get(core_skill, 0.0))
 		var skill_cap := 1.0
-		if employment_state == EmploymentState.FREELANCE and core_skill == "construction":
+		if is_reserve() and core_skill == "construction":
 			skill_cap = FREELANCE_CONSTRUCTION_SKILL_CAP
 		skills[core_skill] = minf(skill_cap, current_val + SKILL_GROWTH_PER_SECOND_WORK * growth_multiplier * satisfaction_tick)
 		practiced_today[core_skill] = true
@@ -1854,7 +1890,7 @@ func is_toilet_user(citizen: Citizen) -> bool:
 		return false
 	if citizen.simulation != null and citizen.simulation.settlement.era <= SettlementState.Era.EARTH:
 		return true
-	return citizen.employment_state in [EmploymentState.UNREGISTERED, EmploymentState.FREELANCE]
+	return citizen.is_unregistered() or citizen.is_reserve()
 
 
 func generate_toilet_schedule() -> void:

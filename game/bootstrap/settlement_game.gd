@@ -3763,7 +3763,6 @@ func _send_to_unemployment_registration(citizen: Citizen) -> void:
 	if citizen.is_player_controlled:
 		return
 	citizen.idle()
-	citizen.manual_role = ""
 	citizen.permanent_role = ""
 	citizen.pending_employment_role = ""
 	citizen.employment_workplace = null
@@ -5934,7 +5933,6 @@ func _appoint_official(citizen: Citizen) -> void:
 		other.release_to_freelance()
 	citizen.idle()
 	citizen.setup_specialization("official")
-	citizen.manual_role = ""
 	citizen.freelance_assignment = ""
 	citizen.assigned_dig_site = null
 	citizen.pending_employment_role = ""

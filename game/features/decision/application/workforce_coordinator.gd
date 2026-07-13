@@ -33,10 +33,10 @@ func update_workers() -> void:
 	for citizen in sorted_citizens:
 		if citizen.is_player_controlled:
 			continue
-		if citizen.employment_state == Citizen.EmploymentState.REGISTERING and not citizen.pending_employment_role.is_empty() and not _employer_exists(citizen.pending_employment_role):
+		if citizen.is_registering() and not citizen.pending_employment_role.is_empty() and not _employer_exists(citizen.pending_employment_role):
 			citizen.queue_employment_processing()
 			continue
-		if citizen.employment_state == Citizen.EmploymentState.REGISTERING and citizen.state in [Citizen.State.IDLE, Citizen.State.RESTING, Citizen.State.TO_HOME]:
+		if citizen.is_registering() and citizen.state in [Citizen.State.IDLE, Citizen.State.RESTING, Citizen.State.TO_HOME]:
 			if _can_finish_registration_today(citizen):
 				citizen.begin_employment_processing(simulation._employment_center_position(), citizen.pending_employment_role, citizen.pending_employment_workplace)
 			continue
@@ -54,20 +54,20 @@ func update_workers() -> void:
 				citizen.begin_waiting()
 				continue
 			citizen.blocked_by_storage = false
-		if citizen.employment_state == Citizen.EmploymentState.EMPLOYED:
+		if citizen.is_employed():
 			if not _employer_exists(citizen.permanent_role):
 				_release_employment(citizen)
 				continue
 			if can_assign_work(citizen) and citizen.state in [Citizen.State.IDLE, Citizen.State.RESTING]:
 				citizen.request_goap_decision()
 			continue
-		if citizen.employment_state == Citizen.EmploymentState.UNREGISTERED:
+		if citizen.is_unregistered():
 			continue
-		if citizen.employment_state != Citizen.EmploymentState.FREELANCE:
+		if not citizen.is_reserve():
 			continue
 		# Pinned couriers are dispatched by logistics and must not enter the
 		# generic work scorer while they are waiting for an order.
-		if citizen.freelance_assignment == "courier":
+		if citizen.is_courier():
 			continue
 		if not citizen.can_recheck_automatic_role():
 			continue
@@ -153,7 +153,7 @@ func assign_work(citizen: Citizen, index: int) -> void:
 	if not can_assign_work(citizen):
 		return
 	var role := work_role_for(citizen)
-	if citizen.employment_state == Citizen.EmploymentState.FREELANCE and citizen.freelance_assignment.is_empty():
+	if citizen.is_reserve() and citizen.freelance_assignment.is_empty():
 		citizen.last_automatic_role = role
 	if role == "cook":
 		citizen.assign_canteen_work(_workplace_position(citizen, simulation.canteen_position))
@@ -305,7 +305,7 @@ func _worker_data(citizen: Citizen) -> Dictionary:
 		"permanent_role": citizen.permanent_role,
 		"skills": citizen.skills,
 		"should_study": should_study,
-		"workforce_status": "unregistered" if citizen.employment_state == Citizen.EmploymentState.UNREGISTERED else "active",
+		"workforce_status": "unregistered" if citizen.is_unregistered() else "active",
 		"is_hero": citizen.is_hero,
 	}
 
@@ -388,7 +388,7 @@ func _assigned_role_counts() -> Dictionary:
 			# at another employer that is still accepting staff.
 			continue
 		var role: String = citizen.permanent_role
-		if role.is_empty() and citizen.employment_state == Citizen.EmploymentState.REGISTERING:
+		if role.is_empty() and citizen.is_registering():
 			role = citizen.pending_employment_role
 		if role.is_empty():
 			role = citizen.active_role

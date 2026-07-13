@@ -44,7 +44,7 @@ func buy_tool(tool_id: String, price: int) -> void:
 func buy_courier_equipment(courier: Citizen, equipment_id: String, price: int) -> void:
 	if simulation.selected_market == null or not is_instance_valid(courier):
 		return
-	if courier.employment_state != Citizen.EmploymentState.FREELANCE or courier.freelance_assignment != "courier" or courier.courier_equipment == equipment_id or available_trade_money() < price:
+	if not courier.is_reserve() or not courier.is_courier() or courier.courier_equipment == equipment_id or available_trade_money() < price:
 		return
 	start_trade({"kind": "buy_courier_equipment", "courier_id": courier.get_instance_id(), "equipment": equipment_id, "price": price}, simulation.selected_market.global_position, simulation._get_delivery_position())
 	simulation._refresh_market_menu()
@@ -100,7 +100,7 @@ func dispatch_queued_trades() -> void:
 	for worker in simulation.citizens:
 		if WorkforcePolicy.can_take_queued_job({
 			"player_controlled": worker.is_player_controlled,
-			"idle": worker.state == Citizen.State.IDLE and worker.employment_state == Citizen.EmploymentState.FREELANCE,
+			"idle": worker.state == Citizen.State.IDLE and worker.is_reserve(),
 			"freelance_assignment": worker.freelance_assignment,
 			"has_queued_job": simulation.pending_trades.has(worker.get_instance_id()),
 		}):
