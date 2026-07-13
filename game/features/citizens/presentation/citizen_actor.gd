@@ -1722,14 +1722,6 @@ func begin_role_recheck_cooldown() -> void:
 func can_recheck_automatic_role() -> bool:
 	return role_recheck_remaining <= 0.0
 
-func request_goap_meal() -> void:
-	if goap_brain != null:
-		goap_brain.request_meal()
-
-func finish_goap_meal() -> void:
-	if goap_brain != null:
-		goap_brain.finish_meal_request()
-
 func _work_position_for(site: Node3D) -> Vector3:
 	var site_position := site.global_position
 	var footprint: Vector2i = site.get_meta("footprint", Vector2i(3, 3))

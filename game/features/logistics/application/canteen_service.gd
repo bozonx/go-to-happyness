@@ -2,6 +2,7 @@ class_name CanteenService
 extends RefCounted
 
 var simulation: Node
+var _meal_requests: Dictionary = {}
 
 
 func configure(next_simulation: Node) -> void:
@@ -26,8 +27,8 @@ func start_meal(hour: int) -> void:
 		# their park break after the rush.
 		if citizen.specialization == "cook" and hour == 13:
 			continue
-		if citizen.is_available_for_schedule():
-			citizen.request_goap_meal()
+		if citizen.ai_id > 0 and citizen.is_available_for_schedule():
+			_meal_requests[citizen.ai_id] = true
 	simulation._update_interface("%02d:00 meal service started. Residents are heading to the canteen." % hour)
 
 
@@ -67,8 +68,16 @@ func on_meal_finished(citizen: Citizen) -> void:
 	if served:
 		simulation.canteen_food -= 1
 	citizen.receive_meal(served)
-	citizen.finish_goap_meal()
+	_meal_requests.erase(citizen.ai_id)
 	if not served:
 		simulation._update_interface("Canteen ran out of food. A worker missed their meal.")
 	if simulation._is_work_time():
 		simulation._update_workers()
+
+
+func is_meal_requested(citizen_id: int) -> bool:
+	return _meal_requests.has(citizen_id)
+
+
+func remove_citizen(citizen_id: int) -> void:
+	_meal_requests.erase(citizen_id)

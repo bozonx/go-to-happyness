@@ -5,6 +5,7 @@ const CourierDispatcherScript = preload("res://game/features/logistics/applicati
 const CourierTaskScript = preload("res://game/features/logistics/domain/courier_task.gd")
 const BuildingQueueServiceScript = preload("res://game/features/citizens/application/building_queue_service.gd")
 const SleepGoalScript = preload("res://game/features/decision/domain/goals/sleep_goal.gd")
+const MealGoalScript = preload("res://game/features/decision/domain/goals/meal_goal.gd")
 const SettlementCitizenActuatorScript = preload("res://game/features/decision/application/settlement_citizen_actuator.gd")
 
 
@@ -310,7 +311,7 @@ func _ready() -> void:
 	citizen_ai = CitizenAISystem.new()
 	citizen_ai.name = "CitizenAI"
 	add_child(citizen_ai)
-	if not citizen_ai.configure(SettlementAIWorldFacade.new(self), [SleepGoalScript.new()]):
+	if not citizen_ai.configure(SettlementAIWorldFacade.new(self), [SleepGoalScript.new(), MealGoalScript.new()]):
 		push_error("Native citizen AI failed to capture its initial world snapshot")
 	nav_grid = NavGrid.new()
 	nav_grid.configure(CELL_SIZE, BOARD_CELLS)
@@ -2094,6 +2095,8 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 func _on_ai_citizen_exiting(citizen_id: int) -> void:
 	if is_instance_valid(citizen_ai):
 		citizen_ai.unregister_citizen(citizen_id)
+	if canteen_service != null:
+		canteen_service.remove_citizen(citizen_id)
 
 
 func _create_interface() -> void:

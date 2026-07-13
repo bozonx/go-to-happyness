@@ -3,6 +3,30 @@ extends SceneTree
 const SettlementRulesScript = preload("res://game/features/settlement/domain/settlement_rules.gd")
 const GridRouteServiceScript = preload("res://game/features/world/application/grid_route_service.gd")
 const BuildingQueueServiceScript = preload("res://game/features/citizens/application/building_queue_service.gd")
+const CanteenServiceScript = preload("res://game/features/logistics/application/canteen_service.gd")
+
+
+class FakeCanteenSimulation extends Node:
+	var canteen: Node3D
+	var citizens: Array[Citizen] = []
+	var canteen_food := 2
+	var last_interface_message := ""
+	var workers_updated := false
+
+	func _is_fire_lit(_canteen: Node3D) -> bool:
+		return true
+
+	func _has_cook() -> bool:
+		return true
+
+	func _update_interface(message: String) -> void:
+		last_interface_message = message
+
+	func _is_work_time() -> bool:
+		return true
+
+	func _update_workers() -> void:
+		workers_updated = true
 
 
 func _init() -> void:
@@ -18,6 +42,7 @@ func _init() -> void:
 	_test_grid_routing()
 	_test_building_queue_routing()
 	_test_citizen_decision_context()
+	_test_canteen_meal_requests()
 	_test_construction_progress()
 	_test_construction_service_cancellation()
 	_test_completed_construction_cleans_temporary_ui()
@@ -286,12 +311,37 @@ func _test_citizen_state_display_queue() -> void:
 func _test_citizen_decision_context() -> void:
 	var context := CitizenDecisionContext.new()
 	context.is_night = true
-	context.meal_requested = true
-	context.has_canteen = true
-	assert(not context.is_goal_valid(CitizenDecisionContext.Intent.EAT))
 	assert(not context.is_goal_valid(CitizenDecisionContext.Intent.WORK))
 	context.is_night = false
-	assert(context.is_goal_valid(CitizenDecisionContext.Intent.EAT))
+	context.can_assign_work = true
+	assert(context.is_goal_valid(CitizenDecisionContext.Intent.WORK))
+
+
+func _test_canteen_meal_requests() -> void:
+	var simulation := FakeCanteenSimulation.new()
+	simulation.canteen = Node3D.new()
+	var citizen := Citizen.new()
+	citizen.ai_id = 42
+	simulation.citizens.append(citizen)
+	var service := CanteenServiceScript.new()
+	service.configure(simulation)
+
+	service.start_meal(13)
+	assert(service.is_meal_requested(citizen.ai_id))
+	assert(simulation.last_interface_message.contains("meal service started"))
+
+	service.on_meal_finished(citizen)
+	assert(not service.is_meal_requested(citizen.ai_id))
+	assert(simulation.canteen_food == 1)
+	assert(simulation.workers_updated)
+
+	service.start_meal(13)
+	assert(service.is_meal_requested(citizen.ai_id))
+	service.remove_citizen(citizen.ai_id)
+	assert(not service.is_meal_requested(citizen.ai_id))
+	citizen.free()
+	simulation.canteen.free()
+	simulation.free()
 
 
 func _test_grid_routing() -> void:

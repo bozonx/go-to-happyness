@@ -12,7 +12,7 @@ func _init() -> void:
 	assert(simulation.citizens.size() == simulation.POPULATION)
 	assert(is_instance_valid(simulation.citizen_ai))
 	assert(simulation.citizen_ai.brain_count() == simulation.citizens.size())
-	assert(simulation.citizen_ai.goal_count() == 1)
+	assert(simulation.citizen_ai.goal_count() == 2)
 	assert(simulation.citizen_ai.director.provider_count() == 0)
 	assert(is_instance_valid(simulation.hero_citizen))
 	assert(simulation.hero_citizen.is_hero)
