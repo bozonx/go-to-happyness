@@ -25,6 +25,7 @@ const FactoryWorkOrderProviderScript = preload("res://game/features/decision/app
 const CourierDeliveryGoalScript = preload("res://game/features/decision/domain/goals/courier_delivery_goal.gd")
 const CourierDeliveryOrderProviderScript = preload("res://game/features/decision/application/courier_delivery_order_provider.gd")
 const SettlementCitizenActuatorScript = preload("res://game/features/decision/application/settlement_citizen_actuator.gd")
+const ShadowCitizenActuatorScript = preload("res://game/features/decision/application/shadow_citizen_actuator.gd")
 
 
 const BOARD_CELLS := 48
@@ -308,6 +309,7 @@ var workplace_priority_counter := 0
 var manage_citizen_button: Button
 var workforce: WorkforceCoordinator
 var citizen_ai: CitizenAISystem
+@export var use_native_ai := true
 var citizen_needs_service: CitizenNeedsService
 ## Monotonic source of stable citizen AI identity. Persist it alongside the roster
 ## once save/load is introduced so reloaded games issue non-colliding ids.
@@ -438,7 +440,8 @@ func _update_workers() -> void:
 		for citizen in citizens:
 			if is_instance_valid(citizen):
 				citizen.overtime_mode = false
-	workforce.update_workers()
+	if not use_native_ai:
+		workforce.update_workers()
 	_check_unstaffed_employment_center()
 	_refresh_labor_authority_indicator()
 
@@ -2055,6 +2058,7 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 		citizen.shirt_color = Color("1e3d59")
 		citizen.pants_color = Color("ff6e40")
 	add_child(citizen)
+	citizen.simulation = self
 	citizen.setup_specialization(primary_specialization if not primary_specialization.is_empty() else "unassigned")
 	citizen.setup_navigation(_find_path_around_houses, _get_nearest_delivery_position, _resolve_building_queue_position)
 	citizen.setup_scheduler(_try_resume_work, _send_citizen_to_leisure)
@@ -2079,7 +2083,10 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	citizens.append(citizen)
 	citizen.ai_id = _next_ai_citizen_id
 	_next_ai_citizen_id += 1
-	citizen_ai.register_citizen(citizen.ai_id, SettlementCitizenActuatorScript.new(citizen, _ai_target_for_key))
+	if use_native_ai:
+		citizen_ai.register_citizen(citizen.ai_id, SettlementCitizenActuatorScript.new(citizen, _ai_target_for_key))
+	else:
+		citizen_ai.register_citizen(citizen.ai_id, ShadowCitizenActuatorScript.new(citizen.ai_id))
 	citizen.tree_exiting.connect(_on_ai_citizen_exiting.bind(citizen.ai_id), CONNECT_ONE_SHOT)
 	if citizens.size() > POPULATION:
 		food += random.randi_range(2, 5)
