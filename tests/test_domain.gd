@@ -4,6 +4,7 @@ const SettlementRulesScript = preload("res://game/features/settlement/domain/set
 const GridRouteServiceScript = preload("res://game/features/routing/application/grid_route_service.gd")
 const BuildingQueueServiceScript = preload("res://game/features/citizens/application/building_queue_service.gd")
 const BuildingAvailabilityServiceScript = preload("res://game/features/buildings/application/building_availability_service.gd")
+const BuildingResearchServiceScript = preload("res://game/features/buildings/application/building_research_service.gd")
 const CitizenLivingStatusServiceScript = preload("res://game/features/citizens/application/citizen_living_status_service.gd")
 const CanteenServiceScript = preload("res://game/features/logistics/application/canteen_service.gd")
 const StorageDeliveryServiceScript = preload("res://game/features/logistics/application/storage_delivery_service.gd")
@@ -95,6 +96,7 @@ func _init() -> void:
 	_test_storage_delivery_service()
 	_test_building_availability_service()
 	_test_citizen_living_status_service()
+	_test_building_research_service()
 	quit(0)
 
 
@@ -297,6 +299,36 @@ func _test_citizen_living_status_service() -> void:
 	assert(not citizen.has_status_effect(CitizenStatusEffectScript.NO_LIT_COMMUNAL_FIRE))
 	citizen.free()
 	tent_home.free()
+
+
+func _test_building_research_service() -> void:
+	var state := SettlementState.new()
+	state.apply_tent_start()
+	state.buildings["campfire"] = 1
+	state.branches = 8
+	state.grass = 8
+	var service := BuildingResearchServiceScript.new()
+	service.configure(state)
+	assert(service.visible_tech_ids().has("official"))
+	var menu_state: Dictionary = service.menu_state("official", false)
+	assert(bool(menu_state.visible))
+	assert(not bool(menu_state.can_start))
+	assert(menu_state.reason == BuildingResearchServiceScript.REASON_NO_WORKER)
+	assert(service.start_research("official", 77))
+	assert(state.active_research_tech_id == "official")
+	assert(state.active_research_worker_id == 77)
+	assert(state.branches == 4 and state.grass == 4)
+	service.cancel_active(true)
+	assert(state.active_research_tech_id.is_empty())
+	assert(state.branches == 8 and state.grass == 8)
+	assert(service.start_research("official", 77))
+	service.advance_active(30.0, 1.0)
+	assert(service.is_active_complete())
+	var completion: Dictionary = service.complete_active()
+	assert(completion.unlocked_target == "official")
+	assert(completion.reward_skill == "official")
+	assert(state.unlocked_systems.official)
+	assert(state.active_research_tech_id.is_empty())
 
 
 func _test_progression_and_volunteers() -> void:

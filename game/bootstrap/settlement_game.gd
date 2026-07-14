@@ -7,6 +7,7 @@ const CourierTaskScript = preload("res://game/features/logistics/domain/courier_
 const TradeServiceScript = preload("res://game/features/logistics/application/trade_service.gd")
 const StorageDeliveryServiceScript = preload("res://game/features/logistics/application/storage_delivery_service.gd")
 const BuildingAvailabilityServiceScript = preload("res://game/features/buildings/application/building_availability_service.gd")
+const BuildingResearchServiceScript = preload("res://game/features/buildings/application/building_research_service.gd")
 const BuildingQueueServiceScript = preload("res://game/features/citizens/application/building_queue_service.gd")
 const CitizenLivingStatusServiceScript = preload("res://game/features/citizens/application/citizen_living_status_service.gd")
 const SleepGoalScript = preload("res://game/features/decision/domain/goals/sleep_goal.gd")
@@ -323,6 +324,7 @@ var _next_ai_citizen_id := 1
 var route_service: GridRouteService
 var building_queue_service: RefCounted
 var building_availability_service: RefCounted
+var building_research_service: RefCounted
 var sawmills: SawmillService
 var construction: ConstructionService
 var demolition: DemolitionService
@@ -345,6 +347,8 @@ func _ready() -> void:
 	building_queue_service.configure(building_registry, nav_grid)
 	building_availability_service = BuildingAvailabilityServiceScript.new()
 	building_availability_service.configure(settlement)
+	building_research_service = BuildingResearchServiceScript.new()
+	building_research_service.configure(settlement)
 	sawmills = SawmillService.new()
 	sawmills.configure(self)
 	var construction_runtime := ConstructionRuntime.new()
@@ -2481,27 +2485,18 @@ func _update_building_research(delta: float) -> void:
 	
 	if worker.global_position.distance_to(campfire_node.get_meta("service_position", campfire_node.global_position)) > 0.15:
 		return
-	settlement.active_research_remaining_time -= delta * speed_mult
+	building_research_service.advance_active(delta, speed_mult)
 	
 	if research_menu != null and research_menu.visible:
 		_refresh_research_menu()
 
-	if settlement.active_research_remaining_time <= 0.0:
-		var unlocked_target := settlement.complete_research(tech_id)
-		
-		var skill_to_upgrade: String = str(tech.get("reward_skill", "craftsman" if skill_name == "craftsman" else "construction"))
+	if building_research_service.is_active_complete():
+		var completion: Dictionary = building_research_service.complete_active()
+		var skill_to_upgrade: String = str(completion.get("reward_skill", "construction"))
 		worker.skills[skill_to_upgrade] = minf(1.0, float(worker.skills.get(skill_to_upgrade, 0.0)) + 0.20)
 
 		worker.idle()
-		
-		settlement.active_research_tech_id = ""
-		settlement.active_research_worker_id = -1
-		settlement.active_research_remaining_time = 0.0
-		settlement.active_research_duration = 0.0
-		
-		var b_name: String = str(tech.get("name", unlocked_target))
-		if tech.has("target_building"):
-			b_name = BuildingCatalog.definition_for(str(tech.target_building)).get("name", str(tech.target_building))
+		var b_name := str(completion.get("display_name", tech_id))
 		_update_interface("Research completed: %s unlocked! %s skill improved by 20%%." % [b_name, skill_to_upgrade.capitalize()])
 		
 		_refresh_campfire_menu()
@@ -2572,13 +2567,10 @@ func _refresh_research_menu() -> void:
 
 	research_menu_title.text = "Research (Campfire)"
 
-	for tech_id in BuildingCatalog.RESEARCH_TECHS:
+	for tech_id in building_research_service.visible_tech_ids():
 		var tech: Dictionary = BuildingCatalog.RESEARCH_TECHS[tech_id]
-		var target_building := str(tech.get("target_building", ""))
-		var required_era := BuildingCatalog.era_for(target_building) if not target_building.is_empty() else SettlementState.Era.TENT
-
-		if required_era > settlement.era:
-			continue
+		var researcher := _get_available_researcher(str(tech.get("required_skill", "construction")))
+		var research_state: Dictionary = building_research_service.menu_state(tech_id, researcher != null)
 
 		var row := HBoxContainer.new()
 		row.custom_minimum_size = Vector2(464, 40)
@@ -2594,30 +2586,24 @@ func _refresh_research_menu() -> void:
 		details_vbox.add_child(title_lbl)
 
 		var desc_lbl := Label.new()
-		var costs_array: Array[String] = []
-		var cost_dict: Dictionary = BuildingCatalog.RESEARCH_COSTS.get(tech_id, {})
-		for res in cost_dict:
-			costs_array.append("%d %s" % [cost_dict[res], res])
-		var cost_str := ", ".join(costs_array)
 		var effect_str: String = str(tech.get("effect", ""))
-		desc_lbl.text = "Duration: %ds | Cost: %s | Skill: %s%s" % [int(tech.base_duration), cost_str, tech.required_skill.capitalize(), " | %s" % effect_str if not effect_str.is_empty() else ""]
+		desc_lbl.text = "Duration: %ds | Cost: %s | Skill: %s%s" % [int(research_state.duration), str(research_state.cost_text), str(research_state.required_skill).capitalize(), " | %s" % effect_str if not effect_str.is_empty() else ""]
 		desc_lbl.add_theme_font_size_override("font_size", 10)
 		desc_lbl.add_theme_color_override("font_color", Color("a5b5c5"))
 		details_vbox.add_child(desc_lbl)
 
-		if settlement.is_research_completed(tech_id):
+		if bool(research_state.completed):
 			var status_lbl := Label.new()
 			status_lbl.text = "Researched"
 			status_lbl.add_theme_color_override("font_color", Color("76c893"))
 			row.add_child(status_lbl)
-		elif settlement.active_research_tech_id == tech_id:
+		elif bool(research_state.active):
 			var progress_vbox := VBoxContainer.new()
 			progress_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			row.add_child(progress_vbox)
 
-			var progress_pct := (1.0 - (settlement.active_research_remaining_time / settlement.active_research_duration)) * 100.0
 			var progress_lbl := Label.new()
-			progress_lbl.text = "Researching: %d%%" % int(clampf(progress_pct, 0.0, 100.0))
+			progress_lbl.text = "Researching: %d%%" % int(research_state.progress_pct)
 			progress_lbl.add_theme_font_size_override("font_size", 11)
 			progress_vbox.add_child(progress_lbl)
 
@@ -2628,27 +2614,8 @@ func _refresh_research_menu() -> void:
 		else:
 			var start_btn := Button.new()
 			start_btn.text = "Start"
-
-			var affordable := settlement.can_afford_research(tech_id)
-			var prerequisites_met := true
-			for prerequisite in tech.get("prerequisites", []):
-				if BuildingCatalog.RESEARCH_TECHS.has(prerequisite) and not settlement.is_research_completed(str(prerequisite)):
-					prerequisites_met = false
-					break
-
-			var researcher := _get_available_researcher(tech.required_skill)
-			var has_worker := researcher != null
-			var can_start := settlement.can_start_building_research(tech_id) and has_worker and settlement.active_research_tech_id == ""
-
-			start_btn.disabled = not can_start
-			if not prerequisites_met:
-				start_btn.tooltip_text = "Research the previous level first."
-			elif not has_worker:
-				start_btn.tooltip_text = "Requires an idle resident."
-			elif not affordable:
-				start_btn.tooltip_text = "Not enough resources."
-			elif settlement.active_research_tech_id != "":
-				start_btn.tooltip_text = "Another research is already active."
+			start_btn.disabled = not bool(research_state.can_start)
+			start_btn.tooltip_text = building_research_service.message_for_reason(research_state.reason) if start_btn.disabled else ""
 
 			start_btn.pressed.connect(_start_research.bind(tech_id))
 			row.add_child(start_btn)
@@ -2669,18 +2636,12 @@ func _start_research(tech_id: String) -> void:
 		_update_interface("Requires an idle resident.")
 		return
 		
-	if not settlement.can_start_building_research(tech_id):
+	if building_research_service.start_block_reason(tech_id, true) != BuildingResearchServiceScript.REASON_OK:
 		_update_interface("Research prerequisites or resources are missing.")
 		return
-		
-	settlement.pay_for_research(tech_id)
-	
-	settlement.active_research_tech_id = tech_id
-	settlement.active_research_worker_id = researcher.get_instance_id()
-	
-	var base_duration: float = tech.base_duration
-	settlement.active_research_duration = base_duration
-	settlement.active_research_remaining_time = settlement.active_research_duration
+	if not building_research_service.start_research(tech_id, researcher.get_instance_id()):
+		_update_interface("Research prerequisites or resources are missing.")
+		return
 	
 	var research_pos := global_position
 	if is_instance_valid(campfire_node):
@@ -2700,19 +2661,12 @@ func _cancel_research() -> void:
 
 
 func _cancel_active_building_research(refund: bool, message: String) -> void:
-	var tech_id := settlement.active_research_tech_id
 	var worker_id := settlement.active_research_worker_id
 	for citizen in citizens:
 		if citizen.get_instance_id() == worker_id:
 			citizen.idle()
 			break
-	if refund:
-		for resource_type in BuildingCatalog.research_resources(tech_id):
-			settlement.add(resource_type, BuildingCatalog.research_cost(tech_id, resource_type))
-	settlement.active_research_tech_id = ""
-	settlement.active_research_worker_id = -1
-	settlement.active_research_remaining_time = 0.0
-	settlement.active_research_duration = 0.0
+	building_research_service.cancel_active(refund)
 	_update_interface(message)
 	_refresh_campfire_menu()
 
@@ -3094,6 +3048,10 @@ func _set_manual_role(role: String) -> void:
 	if role != "official" and not _player_can_command_labor():
 		_show_labor_command_blocked()
 		return
+	# A work assignment is an explicit hand-off to the settlement AI. Without
+	# this, a citizen previously moved in first-person mode keeps the direct
+	# control flag and is excluded from every work and courier order.
+	selected_builder.set_player_controlled(false)
 	selected_builder.idle()
 	if role == "excavation":
 		_start_dig_assignment()
@@ -3108,8 +3066,12 @@ func _set_manual_role(role: String) -> void:
 			selected_builder.request_freelance_registration(role)
 		elif selected_builder.employment_state == Citizen.EmploymentState.FREELANCE:
 			selected_builder.pin_freelance_role(role)
-		elif role.is_empty() and selected_builder.employment_state == Citizen.EmploymentState.EMPLOYED:
+		else:
+			# An employed specialist, including the starting hero-official, must
+			# leave the workplace before receiving a reserve work order. Previously
+			# this path reported success but left the old role unchanged.
 			selected_builder.release_to_freelance()
+			selected_builder.pin_freelance_role(role)
 	elif role == "official":
 		# The employment officer is appointed directly by the mayor. They run job
 		# registration, so they cannot themselves queue for it — this also breaks

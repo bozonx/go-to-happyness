@@ -30,6 +30,15 @@ func _init() -> void:
 	assert(not simulation._player_can_command_labor())
 	simulation._appoint_official(simulation.hero_citizen)
 	assert(simulation._player_can_command_labor())
+	# A role assignment must release the hero from the starting official post and
+	# from any previous first-person control so the AI can actually execute it.
+	simulation.selected_builder = simulation.hero_citizen
+	simulation.hero_citizen.set_player_controlled(true)
+	simulation._set_manual_role("gather_grass")
+	assert(not simulation.hero_citizen.is_player_controlled)
+	assert(simulation.hero_citizen.employment_state == Citizen.EmploymentState.FREELANCE)
+	assert(simulation.hero_citizen.freelance_assignment == "gather_grass")
+	simulation._appoint_official(simulation.hero_citizen)
 	assert(is_instance_valid(simulation.entrance_stone))
 	var hero_count := 0
 	for citizen in simulation.citizens:
