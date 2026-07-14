@@ -199,6 +199,7 @@ func _init() -> void:
 	simulation._skip_night()
 	assert(simulation.outside_workers.has(outside_worker.get_instance_id()))
 	assert(not outside_worker.visible)
+	assert(outside_worker.freelance_assignment == "")
 	assert(simulation.settlement.money == money_before_outside_work)
 	simulation.clock.set_time(9 * 60)
 	simulation._return_outside_workers()

@@ -511,13 +511,13 @@ func _update_workers() -> void:
 	_refresh_labor_authority_indicator()
 
 
-func _clear_daily_helper_orders() -> void:
+func _clear_daily_orders() -> void:
 	var changed := false
 	for citizen in citizens:
 		if not is_instance_valid(citizen):
 			continue
-		if citizen.is_helper():
-			citizen.clear_daily_helper_order()
+		if citizen.has_daily_order():
+			citizen.clear_daily_order()
 			changed = true
 	if changed and citizen_ai != null:
 		citizen_ai.request_decision_refresh()
@@ -742,14 +742,14 @@ func _handle_day_cycle_event(event: SimulationDayEvent) -> void:
 		SimulationDayEvent.Kind.PARK_REST:
 			_start_park_rest(event.cooks_only)
 		SimulationDayEvent.Kind.WORKDAY_ENDED:
-			_clear_daily_helper_orders()
+			_clear_daily_orders()
 			_update_interface("Workday ended: residents are returning to their assigned homes.")
 		SimulationDayEvent.Kind.NIGHTFALL:
 			_refresh_living_statuses()
 			_update_workers()
 			_update_interface("Nightfall: workers are returning to their assigned homes.")
 		SimulationDayEvent.Kind.WORKDAY_STARTED:
-			_clear_daily_helper_orders()
+			_clear_daily_orders()
 			_refresh_living_statuses()
 			_update_workers()
 			_update_interface("Morning: workers left their homes for their assignments.")
@@ -2449,7 +2449,7 @@ func _skip_night() -> void:
 	_apply_daily_settlement_rules()
 	clock.set_time(6 * 60)
 	_return_outside_workers()
-	_clear_daily_helper_orders()
+	_clear_daily_orders()
 	_apply_skip_night_incident()
 	_update_workers()
 	for citizen in citizens:
@@ -4286,8 +4286,8 @@ func _show_selected_citizen_menu() -> void:
 		return
 	var assignment := "Unregistered"
 	if selected_builder.employment_state == Citizen.EmploymentState.FREELANCE:
-		if selected_builder.is_helper():
-			assignment = "Daily order: helper"
+		if selected_builder.has_daily_order():
+			assignment = "Daily order: %s" % selected_builder.freelance_assignment.replace("_", " ")
 		else:
 			assignment = "No permanent work%s" % (": " + selected_builder.freelance_assignment.replace("_", " ") if not selected_builder.freelance_assignment.is_empty() else "")
 	elif selected_builder.employment_state == Citizen.EmploymentState.EMPLOYED:
@@ -5474,7 +5474,7 @@ func _workforce_roles() -> Array[String]:
 
 
 func _freelance_roles() -> Array[String]:
-	return ["helper", "courier", "construction", "gather_grass", "gather_dew", "gather_water"]
+	return ["helper", "courier", "construction", "gather_branches", "gather_grass", "gather_dew", "gather_water"]
 
 
 func _workforce_role_label(role: String) -> String:

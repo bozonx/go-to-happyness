@@ -78,6 +78,15 @@ const RANDOM_HEADS_FEMALE := [
 	"common-female", "courier-female", "official-female", "teacher-female", "worker-female"
 ]
 
+const DAILY_ORDER_ROLES := {
+	"helper": true,
+	"construction": true,
+	"gather_branches": true,
+	"gather_grass": true,
+	"gather_dew": true,
+	"gather_water": true,
+}
+
 const SKIN_COLORS := [
 	Color("f1976e"),
 	Color("f1c09a"),
@@ -1242,18 +1251,27 @@ func has_work_order() -> bool:
 func is_helper() -> bool:
 	return freelance_assignment == "helper"
 
+func is_daily_order_role(role: String) -> bool:
+	return DAILY_ORDER_ROLES.has(role)
+
+func has_daily_order() -> bool:
+	return is_daily_order_role(freelance_assignment)
+
 func is_courier() -> bool:
 	return freelance_assignment == "courier"
 
 func can_handle_entry_logistics() -> bool:
 	return is_reserve() and (is_helper() or is_courier())
 
-func clear_daily_helper_order() -> void:
-	if not is_helper():
+func clear_daily_order() -> void:
+	if not has_daily_order():
 		return
+	var cleared_role := freelance_assignment
 	freelance_assignment = ""
-	if active_role == "helper":
+	if active_role == cleared_role:
 		active_role = ""
+	if reserve_action != &"" and String(reserve_action) == cleared_role:
+		reserve_action = &""
 	if state in [State.IDLE, State.RESTING, State.WAITING]:
 		begin_role_recheck_cooldown()
 
@@ -2018,8 +2036,8 @@ func _update_idle_indicator() -> void:
 			if visible_role.is_empty() and not active_role.is_empty():
 				visible_role = active_role
 				automatic = true
-			if visible_role == "helper":
-				idle_indicator.text = "Daily order: helper"
+			if is_daily_order_role(visible_role):
+				idle_indicator.text = "Daily order: %s" % visible_role.replace("_", " ")
 			elif visible_role.is_empty():
 				idle_indicator.text = "No permanent work"
 			else:
