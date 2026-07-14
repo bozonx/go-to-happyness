@@ -128,6 +128,7 @@ func apply_tent_start(reset_progress := true) -> void:
 	active_research_remaining_time = 0.0
 	active_research_duration = 0.0
 	storage_limits.clear()
+	debug_storage_capacity_bonus = 0
 	if reset_progress:
 		buildings.clear()
 		for system_id in unlocked_systems.keys():
@@ -182,6 +183,9 @@ const ERA_STORAGE_PER_WAREHOUSE := {Era.TENT: 32, Era.EARTH: 48, Era.CLAY: 70, E
 const STORAGE_STEP := 4.0
 
 var storage_limits: Dictionary = {} # resource -> allocated space units (float)
+## Debug grants are intended to unlock test scenarios, not to consume every
+## physical warehouse slot. The bonus is active only while a warehouse exists.
+var debug_storage_capacity_bonus := 0
 
 
 func storage_weight(resource_type: String) -> float:
@@ -196,7 +200,7 @@ func storage_capacity(warehouses: int) -> int:
 	var capacity := heap_count * 24 + tent_count * 48
 	if capacity == 0 and warehouses > 0:
 		capacity = warehouses * int(ERA_STORAGE_PER_WAREHOUSE.get(era, 24))
-	return capacity
+	return capacity + debug_storage_capacity_bonus
 
 
 func storage_used_units() -> float:
@@ -213,8 +217,16 @@ func _storage_allocated_units() -> float:
 	return total
 
 
+func _storage_committed_units() -> float:
+	var total := 0.0
+	for resource_type in STORED_RESOURCES:
+		var used := amount(resource_type) * storage_weight(resource_type)
+		total += maxf(float(storage_limits.get(resource_type, 0.0)), used)
+	return total
+
+
 func storage_free_units(warehouses: int) -> float:
-	return maxf(0.0, storage_capacity(warehouses) - _storage_allocated_units())
+	return maxf(0.0, storage_capacity(warehouses) - _storage_committed_units())
 
 
 func storage_limit(resource_type: String) -> float:
@@ -302,11 +314,13 @@ func reserve_storage_room_for(resource_type: String, count: int, warehouses: int
 	if storage_availability_for(resource_type, count, warehouses) == StorageAvailability.NO_WAREHOUSE:
 		return false
 	var required_units := count * storage_weight(resource_type)
-	var available_units := maxf(0.0, float(storage_limits.get(resource_type, 0.0)) - amount(resource_type) * storage_weight(resource_type))
-	var missing_units := maxf(0.0, required_units - available_units)
-	if missing_units > 0.0:
-		var expansion := minf(missing_units, storage_free_units(warehouses))
-		storage_limits[resource_type] = float(storage_limits.get(resource_type, 0.0)) + expansion
+	var current_limit := float(storage_limits.get(resource_type, 0.0))
+	var used_units := amount(resource_type) * storage_weight(resource_type)
+	var current_headroom := maxf(0.0, current_limit - used_units)
+	var additional_committed_units := maxf(0.0, required_units - current_headroom)
+	if additional_committed_units > storage_free_units(warehouses) + 0.001:
+		return false
+	storage_limits[resource_type] = maxf(current_limit, used_units + required_units)
 	return storage_availability_for(resource_type, count, warehouses) == StorageAvailability.OK
 
 

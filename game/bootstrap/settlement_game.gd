@@ -4660,7 +4660,7 @@ func _start_interaction() -> void:
 		interaction_hint_label.text = "Filling bucket..."
 		return
 	if _nearby_grass_source():
-		if settlement.storage_room_for("grass") <= 0:
+		if not settlement.can_make_room_for("grass", 1, warehouse_positions.size()):
 			_update_interface("No storage room for grass. Rebalance the warehouse or build another.")
 			return
 		interaction_resource = "grass"
@@ -4736,14 +4736,14 @@ func _update_interaction(delta: float) -> void:
 		if interaction_resource == "wood":
 			pocket_wood += 1
 		elif interaction_resource == "branches":
-			var branch_batch := mini(HERO_GATHER_YIELD, settlement.storage_room_for("branches"))
+			var branch_batch := _reserve_player_gather_storage("branches", HERO_GATHER_YIELD)
 			if branch_batch > 0:
 				branches += branch_batch
 				_update_interface("Gathered %d branches. Branches: %d." % [branch_batch, branches])
 			else:
 				_update_interface("No storage room for branches. Rebalance the warehouse or build another.")
 		elif interaction_resource == "grass":
-			var grass_batch := mini(HERO_GATHER_YIELD, settlement.storage_room_for("grass"))
+			var grass_batch := _reserve_player_gather_storage("grass", HERO_GATHER_YIELD)
 			if grass_batch > 0:
 				grass += grass_batch
 				_consume_grass_near_player(grass_batch)
@@ -4761,6 +4761,14 @@ func _update_interaction(delta: float) -> void:
 		else:
 			_update_interface("Gathered. Wood: %d, food: %d, water: %d, boards: %d, pocket: %d/%d." % [pocket_wood, pocket_food, pocket_water, pocket_boards, _pocket_total(), POCKET_WOOD_CAPACITY])
 		_refresh_interaction_hint()
+
+
+func _reserve_player_gather_storage(resource_type: String, requested: int) -> int:
+	for amount in range(requested, 0, -1):
+		if settlement.reserve_storage_room_for(resource_type, amount, warehouse_positions.size()):
+			return amount
+	return 0
+
 
 func _nearby_tree() -> bool:
 	if player_citizen == null:
@@ -5308,6 +5316,10 @@ func _grant_debug_resources() -> void:
 	var grants := {"money": 30, "branches": 36, "grass": 20, "water": 24, "food": 18, "hides": 8, "goods": 8, "logs": 16, "wood": 10, "soil": 28, "clay": 22, "boards": 18, "stone": 15, "bricks": 14}
 	for resource_type in grants:
 		settlement.add(resource_type, grants[resource_type])
+	# Cover all current stock so hot-reloading this fix also repairs a session in
+	# which Ctrl+F had already overflowed storage before the bonus existed.
+	settlement.debug_storage_capacity_bonus = maxi(settlement.debug_storage_capacity_bonus, ceili(settlement.storage_used_units()))
+	settlement.ensure_storage_defaults(warehouse_positions.size())
 	_update_workers()
 	_request_courier_dispatch()
 	_update_interface("Debug resources added in normal spending proportions.")

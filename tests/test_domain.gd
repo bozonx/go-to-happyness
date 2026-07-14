@@ -219,6 +219,14 @@ func _test_tent_start_config() -> void:
 	storage_state.buildings["warehouse"] = 2
 	storage_state.adjust_storage_limit("grass", 1.0, 2)
 	assert(storage_state.storage_availability_for("grass", 1, 1) == SettlementState.StorageAvailability.OK)
+	var debug_storage_state := SettlementState.new()
+	debug_storage_state.apply_tent_start()
+	debug_storage_state.ensure_storage_defaults(0)
+	debug_storage_state.debug_storage_capacity_bonus = 100
+	debug_storage_state.buildings["warehouse"] = 1
+	debug_storage_state.ensure_storage_defaults(1)
+	assert(debug_storage_state.storage_capacity(1) == 124)
+	assert(debug_storage_state.reserve_storage_room_for("branches", 3, 1))
 	var decay := SettlementRulesScript.open_air_storage_decay_losses({"food": 16, "grass": 10}, 26.0, 0.0)
 	assert(int(decay.food) == 2 and int(decay.grass) == 1)
 
