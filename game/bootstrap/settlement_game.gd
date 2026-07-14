@@ -2,10 +2,10 @@ extends Node3D
 
 const SETTLEMENT_RULES = preload("res://game/features/settlement/domain/settlement_rules.gd")
 const FireSourceStateScript = preload("res://game/features/settlement/domain/fire_source_state.gd")
-const CitizenStatusEffectScript = preload("res://game/features/citizens/domain/citizen_status_effect.gd")
 const CourierDispatcherScript = preload("res://game/features/logistics/application/courier_dispatcher.gd")
 const CourierTaskScript = preload("res://game/features/logistics/domain/courier_task.gd")
 const TradeServiceScript = preload("res://game/features/logistics/application/trade_service.gd")
+const StorageDeliveryServiceScript = preload("res://game/features/logistics/application/storage_delivery_service.gd")
 const BuildingQueueServiceScript = preload("res://game/features/citizens/application/building_queue_service.gd")
 const SleepGoalScript = preload("res://game/features/decision/domain/goals/sleep_goal.gd")
 const MealGoalScript = preload("res://game/features/decision/domain/goals/meal_goal.gd")
@@ -325,6 +325,7 @@ var demolition: DemolitionService
 var water_collector_service: WaterCollectorService
 var canteen_service: CanteenService
 var trade_service: TradeService
+var storage_delivery_service: RefCounted
 var courier_dispatcher: RefCounted
 
 
@@ -369,6 +370,8 @@ func _ready() -> void:
 	citizen_needs_service.configure(self)
 	trade_service = TradeServiceScript.new()
 	trade_service.configure(self)
+	storage_delivery_service = StorageDeliveryServiceScript.new()
+	storage_delivery_service.configure(self)
 	courier_dispatcher = CourierDispatcherScript.new()
 	courier_dispatcher.configure(self)
 	settlement.apply_tent_start()
@@ -1071,36 +1074,7 @@ func _building_power(site_node: Node3D) -> float:
 	return power
 
 func _on_resource_delivered(worker: Citizen, resource_type: String, amount: int) -> void:
-	courier_dispatcher.complete_for(worker)
-	var storage_status: int = settlement.storage_availability_for(resource_type, amount, warehouse_positions.size())
-	if storage_status != SettlementState.StorageAvailability.OK:
-		# Cargo already in transit must never disappear. It may temporarily exceed
-		# the allocation; scheduling prevents new production until room is freed.
-		settlement.add(resource_type, amount)
-		_finish_storage_delivery(worker, resource_type, storage_status)
-		_update_interface(_storage_delivery_pause_message(storage_status, amount, resource_type))
-		_request_courier_dispatch()
-		return
-	settlement.reserve_storage_room_for(resource_type, amount, warehouse_positions.size())
-	settlement.add(resource_type, amount)
-	_finish_storage_delivery(worker, resource_type, storage_status)
-	_update_interface("Workers delivered %d %s to the warehouse." % [amount, resource_type])
-	_request_courier_dispatch()
-
-func _finish_storage_delivery(worker: Citizen, resource_type: String, storage_status := SettlementState.StorageAvailability.OK) -> void:
-	if storage_status == SettlementState.StorageAvailability.NO_WAREHOUSE:
-		worker.storage_delivery_result(false, CitizenStatusEffectScript.STORAGE_NO_WAREHOUSE)
-		return
-	if settlement.can_make_room_for(resource_type, 1, warehouse_positions.size()):
-		worker.storage_delivery_result(true)
-		return
-	worker.idle()
-	_send_citizen_to_leisure(worker)
-
-func _storage_delivery_pause_message(storage_status: int, amount: int, resource_type: String) -> String:
-	if storage_status == SettlementState.StorageAvailability.NO_WAREHOUSE:
-		return "Workers delivered %d %s without warehouse storage. New collection is paused." % [amount, resource_type]
-	return "Workers delivered %d %s over the storage limit. New collection is paused." % [amount, resource_type]
+	storage_delivery_service.on_resource_delivered(worker, resource_type, amount)
 
 func _on_factory_cycle(worker: Citizen, factory: Node3D) -> void:
 	if not is_instance_valid(factory):

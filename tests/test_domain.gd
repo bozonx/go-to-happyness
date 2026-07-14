@@ -4,6 +4,7 @@ const SettlementRulesScript = preload("res://game/features/settlement/domain/set
 const GridRouteServiceScript = preload("res://game/features/routing/application/grid_route_service.gd")
 const BuildingQueueServiceScript = preload("res://game/features/citizens/application/building_queue_service.gd")
 const CanteenServiceScript = preload("res://game/features/logistics/application/canteen_service.gd")
+const StorageDeliveryServiceScript = preload("res://game/features/logistics/application/storage_delivery_service.gd")
 const TradeOrderScript = preload("res://game/features/logistics/domain/trade_order.gd")
 const FireSourceStateScript = preload("res://game/features/settlement/domain/fire_source_state.gd")
 const CitizenStatusEffectScript = preload("res://game/features/citizens/domain/citizen_status_effect.gd")
@@ -30,6 +31,31 @@ class FakeCanteenSimulation extends Node:
 
 	func _update_workers() -> void:
 		workers_updated = true
+
+
+class FakeCourierDispatcher extends RefCounted:
+	var completed := 0
+
+	func complete_for(_worker: Citizen) -> void:
+		completed += 1
+
+
+class FakeStorageSimulation extends Node:
+	var settlement := SettlementState.new()
+	var warehouse_positions: Array[Vector3] = []
+	var courier_dispatcher := FakeCourierDispatcher.new()
+	var last_interface_message := ""
+	var dispatch_requested := false
+	var leisure_worker: Citizen
+
+	func _update_interface(message: String) -> void:
+		last_interface_message = message
+
+	func _request_courier_dispatch() -> void:
+		dispatch_requested = true
+
+	func _send_citizen_to_leisure(worker: Citizen) -> void:
+		leisure_worker = worker
 
 
 func _init() -> void:
@@ -64,6 +90,7 @@ func _init() -> void:
 	_test_trade_order_model()
 	_test_fire_source_state()
 	_test_citizen_status_effects()
+	_test_storage_delivery_service()
 	quit(0)
 
 
@@ -195,6 +222,33 @@ func _test_citizen_status_effects() -> void:
 	citizen.storage_delivery_result(true)
 	assert(not citizen.blocked_by_storage)
 	assert(not citizen.has_status_effect(CitizenStatusEffectScript.STORAGE_NO_WAREHOUSE))
+
+
+func _test_storage_delivery_service() -> void:
+	var simulation := FakeStorageSimulation.new()
+	var service := StorageDeliveryServiceScript.new()
+	service.configure(simulation)
+	var worker := Citizen.new()
+	simulation.settlement.buildings["warehouse"] = 1
+	simulation.warehouse_positions = [Vector3.ZERO]
+	simulation.settlement.ensure_storage_defaults(1)
+	service.on_resource_delivered(worker, "grass", 1)
+	assert(simulation.settlement.grass == 1)
+	assert(not worker.blocked_by_storage)
+	assert(simulation.dispatch_requested)
+	assert(simulation.courier_dispatcher.completed == 1)
+	assert(simulation.last_interface_message == "Workers delivered 1 grass to the warehouse.")
+
+	var no_storage_simulation := FakeStorageSimulation.new()
+	var no_storage_service := StorageDeliveryServiceScript.new()
+	no_storage_service.configure(no_storage_simulation)
+	var blocked_worker := Citizen.new()
+	blocked_worker.carried_amount = 1
+	no_storage_service.on_resource_delivered(blocked_worker, "grass", 1)
+	assert(no_storage_simulation.settlement.grass == 1)
+	assert(blocked_worker.blocked_by_storage)
+	assert(blocked_worker.has_status_effect(CitizenStatusEffectScript.STORAGE_NO_WAREHOUSE))
+	assert(no_storage_simulation.last_interface_message == "Workers delivered 1 grass without warehouse storage. New collection is paused.")
 
 
 func _test_progression_and_volunteers() -> void:
