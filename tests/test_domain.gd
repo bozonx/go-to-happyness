@@ -1045,6 +1045,12 @@ func _test_construction_delivery_stays_scheduled() -> void:
 	assert(courier.state == Citizen.State.TO_CONSTRUCTION_SITE)
 	courier.go_to_canteen(Vector3.ZERO)
 	assert(courier.state == Citizen.State.TO_CONSTRUCTION_SITE)
+	courier.construction_delivery_resource = "branches"
+	courier.cancel_current_action()
+	assert(courier.state == Citizen.State.IDLE)
+	assert(courier.carried_amount == 0)
+	assert(courier.construction_delivery_resource.is_empty())
+	assert(not courier.has_active_delivery())
 	home.free()
 	courier.free()
 

@@ -631,7 +631,7 @@ func _refresh_labor_authority_indicator() -> void:
 	if _officer_exists():
 		labor_authority_label.visible = false
 	else:
-		labor_authority_label.text = "Автоматизация недоступна\nНазначьте officer'а"
+		labor_authority_label.text = "Постоянные должности недоступны без officer'а\nДневные приказы доступны"
 		labor_authority_label.add_theme_color_override("font_color", Color("e28c8c"))
 		labor_authority_label.visible = true
 

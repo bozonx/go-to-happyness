@@ -2638,6 +2638,7 @@ func get_action_status(action: StringName) -> int:
 
 func cancel_current_action() -> void:
 	var was_relief_action := state in [State.TO_TOILET, State.USING_TOILET, State.WAITING_FOR_TOILET, State.TO_BUSH, State.USING_BUSH]
+	var was_construction_delivery := state in [State.TO_CONSTRUCTION_PICKUP, State.TO_CONSTRUCTION_SITE]
 	# A gathering action can be interrupted after the resource has been picked
 	# up. Put that cargo on the ground rather than leaving it attached to an idle worker.
 	if active_role.begins_with("gather_") and carried_amount > 0 and not resource_type.is_empty():
@@ -2650,6 +2651,12 @@ func cancel_current_action() -> void:
 		employment_state = EmploymentState.NO_PERMANENT_WORK
 	if state in [State.TO_HOME, State.RESTING, State.TO_CANTEEN, State.EATING, State.TO_TOILET, State.USING_TOILET, State.WAITING_FOR_TOILET, State.TO_BUSH, State.USING_BUSH, State.TO_PARK, State.RELAXING, State.TO_TREE, State.CHOPPING, State.TO_SAWMILL, State.SAWING, State.WAITING_COURIER, State.CONSTRUCTING, State.TO_GATHER, State.GATHERING, State.TO_WAREHOUSE, State.EXCAVATING, State.TO_CANTEEN_WORK, State.CANTEEN_WORK, State.TO_SCHOOL_WORK, State.SCHOOL_WORK, State.TO_MARKET_WORK, State.MARKET_WORK, State.TO_OFFICIAL_WORK, State.OFFICIAL_WORK, State.TO_CRAFT_WORK, State.CRAFT_WORK, State.TO_FACTORY, State.FACTORY_WORK, State.COURIER_TO_WORKER, State.COURIER_TO_WAREHOUSE, State.COURIER_TO_SAWMILL, State.TO_FOOD_PICKUP, State.TO_CANTEEN_DELIVERY, State.TO_CONSTRUCTION_PICKUP, State.TO_CONSTRUCTION_SITE, State.TO_TRADE_PICKUP, State.TO_TRADE_DESTINATION, State.TO_EMPLOYMENT_CENTER, State.EMPLOYMENT_PROCESSING]:
 		idle()
+	if was_construction_delivery:
+		# The site reservation is reconciled by SettlementGame. Clear the actor-side
+		# cargo so a cancelled route cannot remain an assigned delivery forever.
+		carried_amount = 0
+		construction_delivery_resource = ""
+		building_supply_kind = "construction"
 	if was_relief_action:
 		current_toilet_target = null
 		toilet_relief_position = Vector3.INF

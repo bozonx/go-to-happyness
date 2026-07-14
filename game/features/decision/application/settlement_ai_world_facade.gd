@@ -209,6 +209,7 @@ func capture(sequence: int) -> WorldSnapshot:
 				&"needs.can_start_meal": canteen_service != null and can_start_personal_need and is_instance_valid(simulation.canteen),
 				&"needs.canteen_position": simulation.canteen_position,
 				&"needs.toilet_requested": needs_service != null and needs_service.has_toilet_request(citizen_id),
+				&"needs.can_start_toilet": can_start_personal_need,
 				&"needs.relief_candidates": relief_candidates,
 				&"needs.rest_requested": needs_service != null and needs_service.has_rest_request(citizen_id),
 				&"needs.can_start_rest": can_start_personal_need and actor.state in [Citizen.State.IDLE, Citizen.State.WAITING],

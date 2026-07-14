@@ -17,6 +17,8 @@ func score(
 ) -> float:
 	if citizen == null or not bool(citizen.facts.value(&"needs.toilet_requested", false)):
 		return 0.0
+	if not bool(citizen.facts.value(&"needs.can_start_toilet", false)):
+		return 0.0
 	var candidates: Array = citizen.facts.value(&"needs.relief_candidates", []) as Array
 	return 0.82 if not candidates.is_empty() else 0.0
 

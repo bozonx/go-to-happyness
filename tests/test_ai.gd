@@ -495,6 +495,12 @@ func _test_native_toilet_goal() -> void:
 	assert(actuator.cancel_action_count == 1)
 	assert(brain.runner.active_task == null)
 	assert(completed.reservations.owner_of([&"needs.relief", &"tree:0:0:0"], 0.0) == 0)
+	var blocked := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
+		&"needs.toilet_requested": true,
+		&"needs.can_start_toilet": false,
+		&"needs.relief_candidates": [{&"id": &"tree:0:0:0", &"position": Vector3.ZERO, &"kind": &"tree"}],
+	}))
+	assert(is_zero_approx(goal.score(_snapshot(0.0, blocked), blocked, null, AIBlackboard.new())))
 
 
 func _test_native_rest_goal() -> void:
@@ -1277,6 +1283,7 @@ func _meal_snapshot(meal_requested: bool) -> WorldSnapshot:
 func _toilet_snapshot(toilet_requested: bool) -> WorldSnapshot:
 	var citizen := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
 		&"needs.toilet_requested": toilet_requested,
+		&"needs.can_start_toilet": true,
 		&"needs.relief_candidates": [{
 			&"id": &"tree:0:0:0",
 			&"position": Vector3.ZERO,
