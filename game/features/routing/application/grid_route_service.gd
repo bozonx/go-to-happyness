@@ -14,6 +14,7 @@ const DIRECTIONS: Array[Vector2i] = [
 	Vector2i(-1, -1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(1, 1),
 ]
 const DIAGONAL_DISTANCE := 1.41421356237
+const MAX_SMOOTH_LOOKAHEAD := 12
 
 
 func configure(next_grid: NavGrid) -> void:
@@ -33,34 +34,35 @@ func find_route_for_profile(from: Vector3, destination: Vector3, traveler_profil
 func find_route_request(request: RefCounted) -> RouteResult:
 	if grid == null:
 		return RouteResult.unreachable()
-	var grid_revision := grid.revision()
+	var grid_revision := grid.topology_revision()
 	var start: Vector2i = grid.cell_from_position(request.from)
 	var goal: Vector2i = grid.cell_from_position(request.destination)
 	if not grid.is_board_cell(start) or not grid.is_board_cell(goal):
 		return RouteResult.unreachable(grid_revision)
 	# A task must name an actual reachable interaction point. Snapping an
 	# inaccessible target to a nearby cell causes false task completion.
-	if grid.is_blocked(goal):
+	if grid.is_blocked(goal) and not request.allow_destination_cell:
 		return RouteResult.unreachable(grid_revision)
 
-	var came_from := _search(start, goal, request.traveler_profile)
+	var came_from := _search(start, goal, request.traveler_profile, request.allow_destination_cell)
 	if not came_from.has(goal):
 		return RouteResult.unreachable(grid_revision)
 
 	# Reconstruct the coarse path as world points: the start, each cell centre,
 	# and finally the exact service/work interaction point requested by the task.
 	var points: Array[Vector3] = [request.from]
-	var chain: Array[Vector2i] = []
+	var reverse_chain: Array[Vector2i] = []
 	var step := goal
 	while step != start:
-		chain.push_front(step)
+		reverse_chain.append(step)
 		step = came_from[step]
-	for cell in chain:
+	for index in range(reverse_chain.size() - 1, -1, -1):
+		var cell := reverse_chain[index]
 		points.append(grid.cell_center(cell))
 	if points.back().distance_squared_to(request.destination) > 0.0001:
 		points.append(request.destination)
 
-	var waypoints := _smooth(points, request.traveler_profile)
+	var waypoints := _smooth(points, request.traveler_profile, request.allow_destination_cell)
 	if waypoints.is_empty():
 		waypoints = [request.destination]
 	return RouteResult.success(waypoints, request.destination, grid_revision)
@@ -74,7 +76,7 @@ func _make_request(from: Vector3, destination: Vector3, allow_destination := fal
 	return request
 
 
-func _search(start: Vector2i, goal: Vector2i, traveler_profile: StringName) -> Dictionary:
+func _search(start: Vector2i, goal: Vector2i, traveler_profile: StringName, allow_blocked_goal: bool) -> Dictionary:
 	var frontier_cells: Array[Vector2i] = []
 	var frontier_priorities := PackedFloat32Array()
 	var came_from: Dictionary = {start: start}
@@ -93,7 +95,7 @@ func _search(start: Vector2i, goal: Vector2i, traveler_profile: StringName) -> D
 			var next := current + direction
 			if closed.has(next):
 				continue
-			if not grid.is_walkable(next):
+			if not grid.is_walkable(next) and not (allow_blocked_goal and next == goal):
 				continue
 			if direction.x != 0 and direction.y != 0:
 				if not grid.is_walkable(current + Vector2i(direction.x, 0)) or not grid.is_walkable(current + Vector2i(0, direction.y)):
@@ -159,7 +161,7 @@ func _octile_distance(from: Vector2i, to: Vector2i) -> float:
 ## more than the original path portion. The leading point is not emitted as a
 ## waypoint; it may be inside a transient clearance cell, so its first successor
 ## is retained if no valid weighted segment starts there.
-func _smooth(points: Array[Vector3], traveler_profile: StringName) -> Array[Vector3]:
+func _smooth(points: Array[Vector3], traveler_profile: StringName, allow_blocked_destination := false) -> Array[Vector3]:
 	if points.size() <= 1:
 		return []
 	var waypoints: Array[Vector3] = []
@@ -167,7 +169,10 @@ func _smooth(points: Array[Vector3], traveler_profile: StringName) -> Array[Vect
 	while anchor_index < points.size() - 1:
 		var best_index := anchor_index + 1
 		var original_cost := 0.0
-		for candidate_index in range(anchor_index + 1, points.size()):
+		var last_candidate := mini(points.size() - 1, anchor_index + MAX_SMOOTH_LOOKAHEAD)
+		for candidate_index in range(anchor_index + 1, last_candidate + 1):
+			if allow_blocked_destination and candidate_index == points.size() - 1:
+				break
 			var leg_cost := grid.segment_cost(points[candidate_index - 1], points[candidate_index], traveler_profile)
 			if not is_finite(leg_cost):
 				break

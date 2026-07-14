@@ -146,8 +146,7 @@ func _nearest_relief_position(citizen: Citizen, relief_type: StringName) -> Vect
 			var grass_node := source.get("node") as Node3D
 			if not is_instance_valid(grass_node) or citizen.global_position.distance_to(grass_node.global_position) > RELIEF_SEARCH_RADIUS:
 				continue
-			var route: RouteResult = simulation._find_path_around_houses(citizen.global_position, grass_node.global_position, false)
-			if not route.reachable:
+			if not simulation._is_route_reachable(citizen.global_position, grass_node.global_position):
 				continue
 			var distance := citizen.global_position.distance_squared_to(grass_node.global_position)
 			if distance < closest_distance:

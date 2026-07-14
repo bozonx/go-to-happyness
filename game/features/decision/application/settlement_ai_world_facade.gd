@@ -336,8 +336,7 @@ func _gathering_candidates_for(actor: Citizen) -> Array[Dictionary]:
 			var grass_node := grass_source.get(&"node") as Node3D
 			if int(grass_source.get(&"remaining", 0)) <= 0 or not is_instance_valid(grass_node) or simulation.grass_reservations.has(grass_cell):
 				continue
-			var route: RouteResult = simulation._find_path_around_houses(actor.global_position, grass_node.global_position, false)
-			if not route.reachable:
+			if not simulation._is_route_reachable(actor.global_position, grass_node.global_position):
 				continue
 			candidates.append({
 				&"id": StringName("grass:%d:%d" % [grass_cell.x, grass_cell.y]),

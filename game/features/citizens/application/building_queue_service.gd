@@ -7,6 +7,8 @@ var building_registry: BuildingRegistry
 var grid: NavGrid
 var _queues: Dictionary = {}
 var _last_seen_frame: Dictionary = {}
+var _building_lookup_cache: Dictionary = {}
+const BUILDING_LOOKUP_CACHE_LIMIT := 512
 
 
 func configure(registry: BuildingRegistry, next_grid: NavGrid) -> void:
@@ -40,17 +42,35 @@ func resolve(citizen: Node, destination: Vector3) -> Dictionary:
 
 
 func _building_for_destination(destination: Vector3) -> Node3D:
-	var exact := building_registry.building_at_service_position(destination)
-	if is_instance_valid(exact):
-		return exact
+	var key := _destination_key(destination)
+	var cached := _building_lookup_cache.get(key) as Node3D
+	if is_instance_valid(cached) and _matches_destination(cached, destination):
+		return cached
+	_building_lookup_cache.erase(key)
 	for record in building_registry.records():
 		if not is_instance_valid(record.node):
 			continue
 		var building: Node3D = record.node
-		var entrance: Vector3 = building.get_meta("entrance_position", Vector3.INF)
-		if building.position.distance_squared_to(destination) < 0.01 or entrance.distance_squared_to(destination) < 0.01:
+		if _matches_destination(building, destination):
+			if _building_lookup_cache.size() >= BUILDING_LOOKUP_CACHE_LIMIT:
+				_building_lookup_cache.clear()
+			_building_lookup_cache[key] = building
 			return building
 	return null
+
+
+func _matches_destination(building: Node3D, destination: Vector3) -> bool:
+	var service_position: Vector3 = building.get_meta("service_position", building.position)
+	var entrance: Vector3 = building.get_meta("entrance_position", Vector3.INF)
+	return (
+		building.position.distance_squared_to(destination) < 0.01
+		or service_position.distance_squared_to(destination) < 0.01
+		or entrance.distance_squared_to(destination) < 0.01
+	)
+
+
+func _destination_key(destination: Vector3) -> String:
+	return "%d:%d:%d" % [roundi(destination.x * 100.0), roundi(destination.y * 100.0), roundi(destination.z * 100.0)]
 
 
 func _prune_queue(queue: Array, building_id: int, frame: int) -> void:

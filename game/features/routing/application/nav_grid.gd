@@ -15,6 +15,7 @@ var _cell_weights: Dictionary = {}
 var _profile_cell_weights: Dictionary = {}
 var _minimum_cell_weight := DEFAULT_CELL_WEIGHT
 var _revision := 0
+var _topology_revision := 0
 
 const DEFAULT_CELL_WEIGHT := 2.0
 const PEDESTRIAN_PROFILE := &"pedestrian"
@@ -27,6 +28,7 @@ func configure(next_cell_size: float, next_board_cells: int) -> void:
 	cell_size = next_cell_size
 	board_half_cells = next_half_cells
 	_revision += 1
+	_topology_revision += 1
 
 
 ## Replaces the blocked set wholesale. Callers rebuild the dictionary (terrain +
@@ -36,6 +38,7 @@ func set_blocked_cells(next_blocked: Dictionary) -> void:
 		return
 	_blocked = next_blocked.duplicate()
 	_revision += 1
+	_topology_revision += 1
 
 
 ## Replaces terrain traversal weights wholesale. Cells not listed here use the
@@ -77,6 +80,12 @@ func minimum_cell_weight() -> float:
 
 func revision() -> int:
 	return _revision
+
+
+## Changes to traversal cost alter the best future route but never make an
+## existing route unsafe. Consumers that need collision safety use this value.
+func topology_revision() -> int:
+	return _topology_revision
 
 
 func cell_from_position(position_on_board: Vector3) -> Vector2i:

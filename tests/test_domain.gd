@@ -3,6 +3,7 @@ extends SceneTree
 const SettlementRulesScript = preload("res://game/features/settlement/domain/settlement_rules.gd")
 const TentEraSurvivalRulesScript = preload("res://game/features/settlement/domain/tent_era_survival_rules.gd")
 const GridRouteServiceScript = preload("res://game/features/routing/application/grid_route_service.gd")
+const RouteRequestScript = preload("res://game/features/routing/application/route_request.gd")
 const BuildingQueueServiceScript = preload("res://game/features/citizens/application/building_queue_service.gd")
 const BuildingAvailabilityServiceScript = preload("res://game/features/buildings/application/building_availability_service.gd")
 const BuildingResearchServiceScript = preload("res://game/features/buildings/application/building_research_service.gd")
@@ -92,6 +93,7 @@ func _init() -> void:
 	_test_grid_routing()
 	_test_weighted_grid_routing()
 	_test_navigation_grid_revision()
+	_test_navigation_recovery_guards()
 	_test_trail_field()
 	_test_citizen_replans_on_navigation_revision()
 	_test_citizen_route_failure_marks_action_failed()
@@ -688,6 +690,11 @@ func _test_weighted_grid_routing() -> void:
 	grid.set_blocked_cells({Vector2i(3, 0): true})
 	var blocked_destination := router.find_route(start, destination)
 	assert(not blocked_destination.reachable)
+	var allowed_request := RouteRequestScript.new()
+	allowed_request.from = start
+	allowed_request.destination = destination
+	allowed_request.allow_destination_cell = true
+	assert(router.find_route_request(allowed_request).reachable)
 
 
 func _test_navigation_grid_revision() -> void:
@@ -711,6 +718,23 @@ func _test_navigation_grid_revision() -> void:
 	assert(grid.revision() == initial_revision + 1)
 	grid.set_blocked_cells({Vector2i(0, 0): true})
 	assert(grid.revision() == initial_revision + 2)
+	assert(grid.topology_revision() == route.grid_revision + 1)
+
+
+func _test_navigation_recovery_guards() -> void:
+	var citizen := Citizen.new()
+	var revisions := [5]
+	citizen.navigation_revision_query = func() -> int: return revisions[0]
+	citizen.active_route = RouteResult.unreachable(4)
+	citizen.navigation_failed = true
+	citizen._invalidate_route_for_navigation_change()
+	assert(not citizen.navigation_failed)
+	assert(citizen.active_route == null)
+	citizen._force_repath()
+	var attempts := citizen.route_recovery_attempt
+	citizen._force_repath()
+	assert(citizen.route_recovery_attempt == attempts)
+	citizen.free()
 
 
 func _test_trail_field() -> void:

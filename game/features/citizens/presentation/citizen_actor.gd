@@ -1260,10 +1260,10 @@ func _move_to(destination: Vector3, delta: float, may_enter_destination_house :=
 		var queue_result: Dictionary = queue_position_resolver.call(self, destination)
 		movement_destination = queue_result.get("position", destination)
 		is_queue_head = bool(queue_result.get("is_head", true))
-	if navigation_failed:
-		return false
 	if _route_uses_stale_navigation():
 		_invalidate_route_for_navigation_change()
+	if navigation_failed:
+		return false
 	if path_destination.distance_to(movement_destination) > 0.08 or path_allows_destination_house != may_enter_destination_house:
 		_reset_route(movement_destination)
 		path_allows_destination_house = may_enter_destination_house
@@ -1306,6 +1306,7 @@ func _plan_route(destination: Vector3) -> void:
 	route_retry_timer = 0.0
 	route_retry_delay = ROUTE_RETRY_INTERVAL
 	route_unreachable_time = 0.0
+	recovery_repath_done = false
 
 
 func _route_uses_stale_navigation() -> bool:
@@ -1321,6 +1322,9 @@ func _invalidate_route_for_navigation_change() -> void:
 	route_retry_timer = randf_range(0.0, STALE_NAVIGATION_REPLAN_JITTER)
 	route_retry_delay = ROUTE_RETRY_INTERVAL
 	route_unreachable_time = 0.0
+	navigation_failed = false
+	stuck_time = 0.0
+	recovery_repath_done = false
 
 func _move_directly_to(destination: Vector3, delta: float) -> bool:
 	var offset := destination - global_position
@@ -1346,9 +1350,7 @@ func _move_directly_to(destination: Vector3, delta: float) -> bool:
 	if is_on_floor() and horizontal_progress < current_walk_speed * delta * 0.15:
 		stuck_time += delta
 		if jump_cooldown <= 0.0:
-			if stuck_time >= STUCK_TIME_BEFORE_SIDESTEP:
-				_force_repath()
-			elif stuck_time >= STUCK_TIME_BEFORE_REPATH and not recovery_repath_done:
+			if stuck_time >= STUCK_TIME_BEFORE_REPATH and not recovery_repath_done:
 				_force_repath()
 			elif stuck_time >= STUCK_TIME_BEFORE_JUMP and _has_low_obstacle_ahead(direction):
 				_jump_out_of_obstacle()
@@ -1381,6 +1383,8 @@ func _jump_out_of_obstacle() -> void:
 	stuck_time = 0.0
 
 func _force_repath() -> void:
+	if recovery_repath_done:
+		return
 	route_recovery_attempt += 1
 	if route_recovery_attempt >= ROUTE_RECOVERY_FAILURE_ATTEMPTS:
 		navigation_failed = true
@@ -1388,6 +1392,8 @@ func _force_repath() -> void:
 	movement_path.clear()
 	route_retry_timer = 0.0
 	route_retry_delay = ROUTE_RETRY_INTERVAL
+	route_no_progress_time = 0.0
+	stuck_time = 0.0
 	recovery_repath_done = true
 
 func _reset_waypoint_progress() -> void:

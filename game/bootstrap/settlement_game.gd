@@ -264,6 +264,9 @@ var tent_dismantle_progress := -1.0
 var voxel_terrain: VoxelLodTerrain
 var voxel_tool: VoxelTool
 var nav_grid: NavGrid
+var _route_reachability_cache: Dictionary = {}
+var _route_reachability_cache_revision := -1
+const ROUTE_REACHABILITY_CACHE_LIMIT := 1024
 var service_pockets: Array[Dictionary] = []
 var selected_school: Node3D
 var school_menu: Panel
@@ -1543,7 +1546,33 @@ func _movement_speed_modifier_at(position_on_board: Vector3) -> float:
 
 
 func _navigation_revision() -> int:
-	return nav_grid.revision() if nav_grid != null else -1
+	return nav_grid.topology_revision() if nav_grid != null else -1
+
+
+## Candidate discovery asks only whether a destination can be reached. Cache the
+## result per topology revision so snapshot construction does not repeatedly run
+## the same synchronous A* searches before an actor starts moving.
+func _is_route_reachable(from: Vector3, destination: Vector3, may_enter_destination_house := false) -> bool:
+	if nav_grid == null:
+		return false
+	var topology_revision := nav_grid.topology_revision()
+	if _route_reachability_cache_revision != topology_revision:
+		_route_reachability_cache.clear()
+		_route_reachability_cache_revision = topology_revision
+	var key := "%d:%d>%d:%d:%d" % [
+		nav_grid.cell_from_position(from).x,
+		nav_grid.cell_from_position(from).y,
+		nav_grid.cell_from_position(destination).x,
+		nav_grid.cell_from_position(destination).y,
+		1 if may_enter_destination_house else 0,
+	]
+	if _route_reachability_cache.has(key):
+		return bool(_route_reachability_cache[key])
+	if _route_reachability_cache.size() >= ROUTE_REACHABILITY_CACHE_LIMIT:
+		_route_reachability_cache.clear()
+	var reachable := _find_path_around_houses(from, destination, may_enter_destination_house).reachable
+	_route_reachability_cache[key] = reachable
+	return reachable
 
 func _resolve_building_queue_position(citizen: Citizen, destination: Vector3) -> Dictionary:
 	return building_queue_service.resolve(citizen, destination)
@@ -1978,8 +2007,7 @@ func _resource_access_position(from: Vector3, resource_position: Vector3) -> Vec
 		if not _is_board_cell(cell) or _is_navigation_cell_blocked(cell):
 			continue
 		var candidate: Vector3 = _cell_center(cell)
-		var route: RouteResult = _find_path_around_houses(from, candidate, false)
-		if not route.reachable:
+		if not _is_route_reachable(from, candidate):
 			continue
 		var distance := from.distance_squared_to(candidate)
 		if distance < best_distance:
@@ -6814,11 +6842,11 @@ func food_gathering_candidates(citizen: Citizen) -> Array[Dictionary]:
 		return candidates
 	for cell in forage_sources:
 		var node := (forage_sources[cell] as Dictionary).get("node") as Node3D
-		if is_instance_valid(node) and _find_path_around_houses(citizen.global_position, node.global_position, false).reachable:
+		if is_instance_valid(node) and _is_route_reachable(citizen.global_position, node.global_position):
 			candidates.append({&"id": StringName("plant:%d:%d" % [cell.x, cell.y]), &"resource_type": "food", &"position": node.global_position, &"access": node.global_position, &"warehouse_position": _get_nearest_delivery_position(citizen.global_position)})
 	for cell in rabbit_sources:
 		var node := (rabbit_sources[cell] as Dictionary).get("node") as Node3D
-		if is_instance_valid(node) and _find_path_around_houses(citizen.global_position, node.global_position, false).reachable:
+		if is_instance_valid(node) and _is_route_reachable(citizen.global_position, node.global_position):
 			candidates.append({&"id": StringName("rabbit:%d:%d" % [cell.x, cell.y]), &"resource_type": "food", &"position": node.global_position, &"access": node.global_position, &"warehouse_position": _get_nearest_delivery_position(citizen.global_position)})
 	candidates.sort_custom(func(a, b): return (a[&"position"] as Vector3).distance_squared_to(citizen.global_position) < (b[&"position"] as Vector3).distance_squared_to(citizen.global_position))
 	return candidates
