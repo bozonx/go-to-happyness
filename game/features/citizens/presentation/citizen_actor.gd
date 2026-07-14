@@ -150,6 +150,8 @@ var state: int:
 			return
 		var previous_state: int = _state
 		_state = next_state
+		if next_state == State.IDLE and queue_release_notifier.is_valid():
+			queue_release_notifier.call(self)
 		if _pending_state_display.size() >= MAX_PENDING_STATE_DISPLAY_TRANSITIONS:
 			_pending_state_display[-1] = next_state
 		else:
@@ -969,7 +971,7 @@ func _process_canteen_delivery(delta: float) -> void:
 		delivery_amount = 0
 
 func _process_canteen_work(delta: float) -> void:
-	if _move_to(canteen_position, delta):
+	if _move_to(canteen_position, delta, false, false):
 		state = State.CANTEEN_WORK
 
 func _process_go_to_school(delta: float) -> void:
@@ -978,22 +980,22 @@ func _process_go_to_school(delta: float) -> void:
 		active_role = "training"
 
 func _process_school_work(delta: float) -> void:
-	if _move_to(school_position, delta):
+	if _move_to(school_position, delta, false, false):
 		state = State.SCHOOL_WORK
 
 func _process_official_work(delta: float) -> void:
-	if _move_to(official_position, delta):
+	if _move_to(official_position, delta, false, false):
 		state = State.OFFICIAL_WORK
 
 func _process_market_work_arrival(delta: float) -> void:
-	if _move_to(market_position, delta):
+	if _move_to(market_position, delta, false, false):
 		state = State.MARKET_WORK
 
 func _process_to_factory(delta: float) -> void:
 	if not is_instance_valid(factory):
 		idle()
 		return
-	if _move_to(factory_position, delta):
+	if _move_to(factory_position, delta, false, false):
 		state = State.FACTORY_WORK
 		_start_task(WORK_DURATION / get_efficiency(active_role))
 
@@ -1730,11 +1732,11 @@ func assign_research_work(next_research_position: Vector3) -> void:
 		state = State.RESEARCHING
 
 func _process_research(delta: float) -> void:
-	if _move_to(research_position, delta):
+	if _move_to(research_position, delta, false, false):
 		pass
 
 func _process_craft_work_arrival(delta: float) -> void:
-	if _move_to(craft_position, delta):
+	if _move_to(craft_position, delta, false, false):
 		craft_timer = 10.0 / (get_efficiency("craftsman") * craft_speed_multiplier)
 		state = State.CRAFT_WORK
 
@@ -2333,6 +2335,8 @@ func _resume_after_toilet() -> void:
 	toilet_relief_position = Vector3.INF
 	toilet_relief_type = ""
 	_reset_toilet_navigation()
+	if queue_release_notifier.is_valid():
+		queue_release_notifier.call(self)
 	if has_toilet_resume_state:
 		state = toilet_resume_state
 		idle_wander_anchor = toilet_resume_idle_wander_anchor

@@ -6,6 +6,7 @@ extends RefCounted
 var building_registry: BuildingRegistry
 var grid: NavGrid
 var _queues: Dictionary = {}
+var _occupants: Dictionary = {}
 var _last_admitted_frame: Dictionary = {}
 var _building_lookup_cache: Dictionary = {}
 const BUILDING_LOOKUP_CACHE_LIMIT := 512
@@ -27,16 +28,20 @@ func resolve(citizen: Node, destination: Vector3) -> Dictionary:
 	var frame := Engine.get_physics_frames()
 	var building_id := building.get_instance_id()
 	var citizen_id := citizen.get_instance_id()
+	_release_from_other_buildings(citizen_id, building_id)
 	var queue: Array = _queues.get(building_id, [])
 	_prune_queue(queue)
+	var occupants: Array = _occupants.get(building_id, [])
+	_prune_queue(occupants)
+	_occupants[building_id] = occupants
 	if not queue.has(citizen_id):
 		queue.append(citizen_id)
 	_queues[building_id] = queue
 
 	var index := queue.find(citizen_id)
-	if index <= 0 and int(_last_admitted_frame.get(building_id, -1)) != frame:
+	if index <= 0 and occupants.size() < _capacity_for(building) and int(_last_admitted_frame.get(building_id, -1)) != frame:
 		return {"position": service_position, "is_head": true}
-	var slots := _build_slots(building, service_position, queue.size())
+	var slots := _build_slots(building, service_position, queue.size() + 1)
 	var waiting_index := maxi(1, index)
 	if waiting_index < slots.size():
 		return {"position": slots[waiting_index], "is_head": false}
@@ -60,6 +65,10 @@ func complete_arrival(citizen: Node, destination: Vector3) -> void:
 	if index != 0:
 		return
 	queue.pop_front()
+	var occupants: Array = _occupants.get(building_id, [])
+	if not occupants.has(citizen.get_instance_id()):
+		occupants.append(citizen.get_instance_id())
+	_occupants[building_id] = occupants
 	_last_admitted_frame[building_id] = Engine.get_physics_frames()
 	if queue.is_empty():
 		_queues.erase(building_id)
@@ -79,6 +88,44 @@ func release(citizen: Node) -> void:
 			_queues.erase(building_id)
 		else:
 			_queues[building_id] = queue
+	for building_id in _occupants.keys().duplicate():
+		var occupants: Array = _occupants[building_id]
+		occupants.erase(citizen_id)
+		_prune_queue(occupants)
+		if occupants.is_empty():
+			_occupants.erase(building_id)
+		else:
+			_occupants[building_id] = occupants
+
+
+func _release_from_other_buildings(citizen_id: int, retained_building_id: int) -> void:
+	for building_id in _occupants.keys().duplicate():
+		if int(building_id) == retained_building_id:
+			continue
+		var occupants: Array = _occupants[building_id]
+		occupants.erase(citizen_id)
+		if occupants.is_empty():
+			_occupants.erase(building_id)
+		else:
+			_occupants[building_id] = occupants
+
+
+func _capacity_for(building: Node3D) -> int:
+	var building_type := str(building.get_meta("building_type", ""))
+	if building_type.begins_with("toilet_"):
+		var base_capacity := 1
+		if "earth" in building_type: base_capacity = 2
+		elif "clay" in building_type: base_capacity = 3
+		elif "wood" in building_type: base_capacity = 4
+		elif "stone" in building_type: base_capacity = 5
+		elif "brick" in building_type: base_capacity = 6
+		var level := 3 if "lvl3" in building_type else 2 if "lvl2" in building_type else 1
+		return base_capacity + level - 1
+	if building.has_meta("housing_capacity"):
+		return maxi(1, int(building.get_meta("housing_capacity")))
+	if building.has_meta("required_factory_workers"):
+		return maxi(1, int(building.get_meta("required_factory_workers")))
+	return maxi(1, int(building.get_meta("queue_capacity", 1)))
 
 
 func _building_for_destination(destination: Vector3) -> Node3D:

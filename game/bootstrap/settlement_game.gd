@@ -757,8 +757,7 @@ func _update_clock(delta: float) -> void:
 	if clock.hour() != previous_hour:
 		_apply_hourly_tent_survival(clock.hour())
 	clock_label.text = "%s  %02d:%02d  x%d" % ["Night" if clock.is_night() else "Day", clock.hour(), clock.minute(), int(time_multiplier)]
-	if skip_night_button != null:
-		skip_night_button.visible = not settlement.night_shifts_allowed and not _is_work_time()
+	_update_skip_night_button()
 	for event in events:
 		_handle_day_cycle_event(event)
 
@@ -794,8 +793,9 @@ func _handle_day_cycle_event(event: SimulationDayEvent) -> void:
 			_return_outside_workers()
 
 
-func _apply_hourly_tent_survival(hour: int) -> void:
-	var survival_hour := day_cycle.current_day * 24 + hour
+func _apply_hourly_tent_survival(hour: int, survival_day := 0) -> void:
+	var day := day_cycle.current_day if survival_day <= 0 else survival_day
+	var survival_hour := day * 24 + hour
 	if settlement.era != SettlementState.Era.TENT or last_survival_hour == survival_hour:
 		return
 	last_survival_hour = survival_hour
@@ -2424,7 +2424,7 @@ func _create_time_controls(ui: CanvasLayer) -> void:
 	# hours before the world is considered night.
 	skip_night_button = Button.new()
 	skip_night_button.text = "Skip night »"
-	skip_night_button.tooltip_text = "Jump to the next working morning (08:00)"
+	skip_night_button.tooltip_text = "Jump to the next morning (06:00)"
 	skip_night_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	skip_night_button.offset_left = -220
 	skip_night_button.offset_top = 96
@@ -2435,28 +2435,72 @@ func _create_time_controls(ui: CanvasLayer) -> void:
 	ui.add_child(skip_night_button)
 
 
+func _can_skip_night() -> bool:
+	if settlement.night_shifts_allowed:
+		return false
+	var hour := clock.hour()
+	return hour >= 8 + settlement.workday_hours or hour < 6
+
+
+func _update_skip_night_button() -> void:
+	if skip_night_button != null:
+		skip_night_button.visible = _can_skip_night()
+
+
+func _skip_night_survival_hours() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	var current_hour := clock.hour()
+	var first_hour := current_hour if clock.minute() == 0 else posmod(current_hour + 1, 24)
+	if current_hour >= 6 and current_hour < 22:
+		first_hour = 22
+	var offset := 0
+	while offset < 24:
+		var hour := posmod(first_hour + offset, 24)
+		if hour == 6:
+			break
+		var survival_day := day_cycle.current_day
+		if current_hour >= 6 and hour < current_hour:
+			survival_day += 1
+		result.append({"day": survival_day, "hour": hour})
+		offset += 1
+	return result
+
+
 func _skip_night() -> void:
+	if not _can_skip_night():
+		_update_skip_night_button()
+		return
 	# Skipping time must not teleport workers to the entrance. Their current
 	# locations are valid even when the morning scheduler assigns fresh work.
 	var positions: Dictionary = {}
 	for citizen in citizens:
 		if is_instance_valid(citizen) and not outside_workers.has(citizen.get_instance_id()):
 			positions[citizen.get_instance_id()] = citizen.global_position
-	for hour in [22, 23, 0, 1, 2, 3, 4, 5]:
-		_apply_hourly_tent_survival(hour)
-	day_cycle.start_next_day()
+	var target_day := day_cycle.current_day + (1 if clock.hour() >= 6 else 0)
+	for survival_hour in _skip_night_survival_hours():
+		_apply_hourly_tent_survival(int(survival_hour.hour), int(survival_hour.day))
+	day_cycle.current_day = target_day
 	tent_weather = TentEraSurvivalRulesScript.weather_for_day(day_cycle.current_day)
+	clock.set_time(6 * 60)
 	# Living through the night crosses 06:00, when the daily water/food sink runs and
 	# frees storage. Skipping must apply the same rules, otherwise stores stay full,
 	# no production is assignable, and workers have nothing to wake up for.
+	_expire_temporary_tents()
+	_refresh_living_statuses()
 	_apply_daily_settlement_rules()
-	clock.set_time(6 * 60)
 	_return_outside_workers()
 	_apply_skip_night_incident()
 	_update_workers()
 	for citizen in citizens:
 		if is_instance_valid(citizen) and positions.has(citizen.get_instance_id()):
 			citizen.global_position = positions[citizen.get_instance_id()]
+			citizen.velocity = Vector3.ZERO
+			last_citizen_positions[citizen.get_instance_id()] = citizen.global_position
+	if citizen_ai != null:
+		citizen_ai.request_decision_refresh()
+	_update_skip_night_button()
+	_update_daylight()
+	_update_house_lights()
 	_update_interface("Skipped the night. Morning begins at 06:00.")
 
 
@@ -2483,14 +2527,12 @@ func _apply_skip_night_incident() -> void:
 
 func _set_workday_hours(hours: int) -> void:
 	settlement.workday_hours = hours
-	if skip_night_button != null:
-		skip_night_button.visible = not settlement.night_shifts_allowed and not _is_work_time()
+	_update_skip_night_button()
 	_update_interface("Workday set to %d hours." % hours)
 
 func _set_night_shifts(enabled: bool) -> void:
 	settlement.night_shifts_allowed = enabled
-	if skip_night_button != null:
-		skip_night_button.visible = not settlement.night_shifts_allowed and not _is_work_time()
+	_update_skip_night_button()
 	_update_interface("Night shifts %s." % ("allowed" if enabled else "disabled"))
 
 func _set_time_multiplier(multiplier: float) -> void:

@@ -239,9 +239,32 @@ func _init() -> void:
 	field_officer.global_position += Vector3(10.0, 0.0, 0.0)
 	assert(not simulation._can_start_registration(first_in_queue))
 	simulation.citizen_ai.process_mode = Node.PROCESS_MODE_INHERIT
+	var staying_worker: Citizen = simulation.citizens[1]
+	var staying_position: Vector3 = simulation.entrance_stone.global_position + Vector3(8.0, 0.0, 3.0)
+	simulation.day_cycle.current_day = 2
+	simulation.clock.set_time(2 * 60 + 30)
+	simulation.wellbeing = 100
+	staying_worker.global_position = staying_position
+	simulation.last_citizen_positions[staying_worker.get_instance_id()] = staying_position
+	simulation._update_skip_night_button()
+	assert(simulation.skip_night_button.visible)
+	var citizen_count_before_midnight_skip: int = simulation.citizens.size()
+	simulation._skip_night()
+	assert(simulation.day_cycle.current_day == 2)
+	assert(simulation.clock.hour() == 6 and simulation.clock.minute() == 0)
+	assert(not simulation.skip_night_button.visible)
+	assert(simulation.citizens.size() == citizen_count_before_midnight_skip)
+	assert(staying_worker.visible)
+	assert(staying_worker.global_position == staying_position)
 	var outside_worker: Citizen = simulation.citizens[3]
 	simulation.day_cycle.current_day = 1
+	simulation.last_survival_hour = -1
 	simulation.clock.set_time(21 * 60)
+	staying_position = simulation.entrance_stone.global_position + Vector3(12.0, 0.0, 2.0)
+	staying_worker.global_position = staying_position
+	simulation.last_citizen_positions[staying_worker.get_instance_id()] = staying_position
+	simulation._update_skip_night_button()
+	assert(simulation.skip_night_button.visible)
 	outside_worker.global_position = simulation.entrance_stone.global_position + Vector3(10.0, 0.0, 0.0)
 	simulation.last_citizen_positions[outside_worker.get_instance_id()] = outside_worker.global_position
 	simulation.selected_builder = outside_worker
@@ -251,6 +274,9 @@ func _init() -> void:
 	assert(simulation.outside_workers.has(outside_worker.get_instance_id()))
 	assert(not outside_worker.visible)
 	simulation._skip_night()
+	assert(simulation.clock.hour() == 6 and simulation.clock.minute() == 0)
+	assert(not simulation.skip_night_button.visible)
+	assert(staying_worker.global_position == staying_position)
 	assert(simulation.outside_workers.has(outside_worker.get_instance_id()))
 	assert(not outside_worker.visible)
 	assert(outside_worker.daily_order_role == "helper")

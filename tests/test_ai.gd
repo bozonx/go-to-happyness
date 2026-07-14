@@ -906,9 +906,13 @@ func _test_production_sleep_actuator() -> void:
 	actuator.cancel_action()
 	assert(citizen.state == Citizen.State.IDLE)
 	assert(not citizen.has_toilet_resume_state)
+	var queue_release_calls := [0]
+	citizen.queue_release_notifier = func(_actor: Citizen) -> void: queue_release_calls[0] += 1
+	citizen.state = Citizen.State.TO_TREE
 	citizen.go_to_relief(Vector3.ONE, &"tree")
 	citizen._resume_after_toilet()
-	assert(citizen.state == Citizen.State.IDLE)
+	assert(citizen.state == Citizen.State.TO_TREE)
+	assert(queue_release_calls[0] == 1)
 	citizen.state = Citizen.State.TO_TREE
 	citizen.go_to_relief(Vector3.ONE, &"tree")
 	citizen.set_player_controlled(true)

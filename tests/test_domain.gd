@@ -838,6 +838,8 @@ func _test_building_queue_routing() -> void:
 	queues.complete_arrival(first, building.position)
 	assert(not queues.resolve(second, building.position).is_head)
 	queues._last_admitted_frame[building.get_instance_id()] = Engine.get_physics_frames() - 1
+	assert(not queues.resolve(second, building.position).is_head)
+	queues.release(first)
 	assert(queues.resolve(second, building.position).is_head)
 	queues.release(second)
 	assert(queues.resolve(third, building.position).is_head)
