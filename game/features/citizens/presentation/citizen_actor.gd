@@ -803,6 +803,13 @@ func _process_workplace_work(delta: float) -> void:
 func _process_resource_delivery(delta: float) -> void:
 	_refresh_warehouse_position()
 	if _move_to(warehouse_position, delta):
+		if active_role == "gather_food":
+			# Hunters and gatherers first leave their catch at their own lodge.
+			# A courier then collects it from the waiting worker for the warehouse.
+			resource_ready.emit(self, resource_type, carried_amount)
+			_start_task(COURIER_WAIT_DURATION)
+			state = State.WAITING_COURIER
+			return
 		state = State.IDLE
 		play_one_shot("pick-up")
 		resource_delivered.emit(self, resource_type, carried_amount)
@@ -1740,6 +1747,10 @@ func setup_registration_service(staff_checker: Callable, duration_resolver: Call
 	registration_duration_resolver = duration_resolver
 
 func _refresh_warehouse_position() -> void:
+	# A lodge worker temporarily uses this destination to return food to their
+	# workplace before a courier takes over the warehouse leg.
+	if active_role == "gather_food":
+		return
 	if not delivery_position_resolver.is_valid():
 		return
 	var resolved: Vector3 = delivery_position_resolver.call(global_position)
@@ -2138,14 +2149,11 @@ func _process_gathering(delta: float) -> void:
 		else:
 			carried_amount = 1
 		resource_type = gather_resource_type
-		if resource_type == "food" and is_instance_valid(employment_workplace):
-			var b_type := str(employment_workplace.get_meta("building_type", ""))
-			if b_type == "forager_tent_lvl2":
-				if randf() < 0.4:
-					resource_type = "hides"
-			elif b_type == "forager_tent_lvl3":
-				if randf() < 0.5:
-					resource_type = "hides"
+		if resource_type == "food" and simulation != null:
+			resource_type = simulation.harvest_wild_food(gather_source_position, self)
+			if resource_type.is_empty():
+				idle()
+				return
 		if resource_type == "logs":
 			tree_harvested.emit(self, gather_source_position)
 			if has_perk("forestry") and randf() < 0.10:
@@ -2161,9 +2169,10 @@ func _process_gathering(delta: float) -> void:
 				idle()
 				simulation._update_interface("The water filter is spent. Buy a replacement at the market.")
 				return
-		# Free gathering is self-contained: the gatherer carries the result to
-		# storage. Requiring a second freelancer to become a courier deadlocks the
-		# bootstrap when the whole reserve is collecting construction materials.
+		if active_role == "gather_food" and is_instance_valid(employment_workplace):
+			warehouse_position = employment_workplace.get_meta("service_position", employment_workplace.global_position)
+		# Bootstrap gathering remains self-contained, while food collected by a
+		# dedicated lodge is handed to a courier at the lodge.
 		state = State.TO_WAREHOUSE
 
 func _process_trade_pickup(delta: float) -> void:

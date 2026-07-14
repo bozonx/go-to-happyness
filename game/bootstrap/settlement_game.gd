@@ -147,6 +147,15 @@ var sawmill_stocks: Dictionary = {}
 var tree_reservations: Dictionary = {}
 var grass_reservations: Dictionary = {}
 var grass_sources: Dictionary = {} # cell -> {node, remaining}; finite patches around trees
+var forage_sources: Dictionary = {} # cell -> {node}; wild edible plants, one harvest each
+var rabbit_sources: Dictionary = {} # cell -> {node, direction}; simple moving meadow animals
+var forage_respawn_at: Dictionary = {}
+var rabbit_respawn_at: Dictionary = {}
+const WILD_FOOD_RESPAWN_SECONDS := 45.0
+const RABBIT_RESPAWN_SECONDS := 60.0
+const RABBIT_MAX_COUNT := 8
+var outside_workers: Dictionary = {} # citizen instance id -> {citizen, return_day}
+var last_citizen_positions: Dictionary = {}
 var resource_piles: Array[Dictionary] = []
 var farm_positions: Array[Vector3] = []
 var builders_guild_positions: Array[Vector3] = []
@@ -409,6 +418,7 @@ func _ready() -> void:
 	_create_world()
 	_create_interface()
 	_create_forest()
+	_spawn_initial_rabbits()
 	_create_ponds()
 	_create_entrance_stone()
 	_create_citizens()
@@ -448,6 +458,8 @@ func _process(delta: float) -> void:
 	_update_demolition(delta)
 	_update_water_collectors(delta)
 	_update_clock(delta)
+	_update_wild_food(delta)
+	_guard_citizen_positions()
 	_update_trail_overlay()
 	_update_daylight()
 	_update_house_lights()
@@ -476,6 +488,23 @@ func _update_workers() -> void:
 				citizen.overtime_mode = false
 	_check_unstaffed_employment_center()
 	_refresh_labor_authority_indicator()
+
+func _guard_citizen_positions() -> void:
+	if not is_instance_valid(entrance_stone):
+		return
+	for citizen in citizens:
+		if not is_instance_valid(citizen) or outside_workers.has(citizen.get_instance_id()):
+			continue
+		var citizen_id := citizen.get_instance_id()
+		var previous: Vector3 = last_citizen_positions.get(citizen_id, citizen.global_position)
+		var intentionally_at_entrance := citizen.state in [Citizen.State.TO_ARRIVAL_ENTRANCE, Citizen.State.ARRIVAL_MEETING, Citizen.State.ARRIVAL_WAITING, Citizen.State.TO_ARRIVAL_CENTER, Citizen.State.TO_TRADE_PICKUP, Citizen.State.TO_TRADE_DESTINATION]
+		# No normal work transition moves an established resident from across the
+		# map to the entrance. Keep the last known world location if that reset is
+		# observed, while preserving genuine arrival and trade routes.
+		if not intentionally_at_entrance and previous.distance_to(entrance_stone.global_position) > 5.0 and citizen.global_position.distance_to(entrance_stone.global_position) < 2.5:
+			citizen.global_position = previous
+			citizen.velocity = Vector3.ZERO
+		last_citizen_positions[citizen_id] = citizen.global_position
 
 func _work_role_for(citizen: Citizen) -> String:
 	return citizen.permanent_role if not citizen.permanent_role.is_empty() else citizen.freelance_assignment
@@ -700,6 +729,7 @@ func _handle_day_cycle_event(event: SimulationDayEvent) -> void:
 			_expire_temporary_tents()
 			_refresh_living_statuses()
 			_apply_daily_settlement_rules()
+			_return_outside_workers()
 
 
 func _apply_hourly_tent_survival(hour: int) -> void:
@@ -1089,7 +1119,14 @@ func _construction_development_priority(site: ConstructionSite) -> float:
 	return score + supplied * 2.0
 
 func _on_construction_material_delivered(_courier: Citizen, site_node: Node3D, resource_type: String, amount: int) -> void:
-	construction.accept_delivery(site_node, resource_type, amount)
+	if not construction.accept_delivery(site_node, resource_type, amount):
+		# The cargo was reserved at pickup, but another courier may have completed
+		# the requirement first. Return it instead of silently overfilling the site.
+		settlement.add(resource_type, amount)
+		var site := construction.site_for_node(site_node)
+		if site != null:
+			site.reserved_materials[resource_type] = maxi(0, int(site.reserved_materials.get(resource_type, 0)) - amount)
+		_update_interface("Construction site is full; courier returned %d %s to storage." % [amount, resource_type])
 	courier_dispatcher.complete_for(_courier)
 	_request_courier_dispatch()
 
@@ -1817,6 +1854,7 @@ func _create_forest() -> void:
 		tree_positions.append(tree_position)
 		_create_tree(tree_position)
 		_create_grass_sources_near_tree(cell)
+		_create_forage_sources_near_tree(cell)
 	_refresh_navigation_grid()
 
 func _create_ponds() -> void:
@@ -2202,6 +2240,12 @@ func _create_time_controls(ui: CanvasLayer) -> void:
 
 
 func _skip_night() -> void:
+	# Skipping time must not teleport workers to the entrance. Their current
+	# locations are valid even when the morning scheduler assigns fresh work.
+	var positions: Dictionary = {}
+	for citizen in citizens:
+		if is_instance_valid(citizen) and not outside_workers.has(citizen.get_instance_id()):
+			positions[citizen.get_instance_id()] = citizen.global_position
 	for hour in [22, 23, 0, 1, 2, 3, 4, 5]:
 		_apply_hourly_tent_survival(hour)
 	day_cycle.start_next_day()
@@ -2210,8 +2254,12 @@ func _skip_night() -> void:
 	# frees storage. Skipping must apply the same rules, otherwise stores stay full,
 	# no production is assignable, and workers have nothing to wake up for.
 	_apply_daily_settlement_rules()
+	_return_outside_workers()
 	day_cycle.set_to_workday_start()
 	_update_workers()
+	for citizen in citizens:
+		if is_instance_valid(citizen) and positions.has(citizen.get_instance_id()):
+			citizen.global_position = positions[citizen.get_instance_id()]
 	_update_interface("Skipped the night. A fresh working day begins at 08:00.")
 
 
@@ -2512,7 +2560,7 @@ func _create_entrance_menu(ui: CanvasLayer) -> void:
 	entrance_menu = Panel.new()
 	entrance_menu.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	entrance_menu.offset_left = -324.0
-	entrance_menu.offset_top = -250.0
+	entrance_menu.offset_top = -292.0
 	entrance_menu.offset_right = -20.0
 	entrance_menu.offset_bottom = -20.0
 	entrance_menu.visible = false
@@ -2537,9 +2585,16 @@ func _create_entrance_menu(ui: CanvasLayer) -> void:
 	gloves_button.size = Vector2(272, 32)
 	gloves_button.pressed.connect(func(): trade_service.buy_entrance_gloves(ENTRANCE_GLOVE_PRICE))
 	entrance_menu.add_child(gloves_button)
+	var work_button := Button.new()
+	work_button.text = "Send selected resident to outside work"
+	work_button.tooltip_text = "The selected resident leaves for one full day and returns with 8 coins."
+	work_button.position = Vector2(16, 162)
+	work_button.size = Vector2(272, 32)
+	work_button.pressed.connect(_send_selected_resident_to_outside_work)
+	entrance_menu.add_child(work_button)
 	var close_btn := Button.new()
 	close_btn.text = "Close"
-	close_btn.position = Vector2(16, 170)
+	close_btn.position = Vector2(16, 210)
 	close_btn.size = Vector2(272, 30)
 	close_btn.pressed.connect(_close_context_menus)
 	entrance_menu.add_child(close_btn)
@@ -2548,8 +2603,42 @@ func _create_entrance_menu(ui: CanvasLayer) -> void:
 func _show_entrance_menu() -> void:
 	if not is_instance_valid(selected_entrance):
 		return
-	entrance_menu_title.text = "Entrance sign\nEmergency outside orders"
+	var resident_name := selected_builder.role_label() if is_instance_valid(selected_builder) else "no resident selected"
+	entrance_menu_title.text = "Entrance sign\nEmergency orders. Outside work: %s" % resident_name
 	entrance_menu.visible = true
+
+func _send_selected_resident_to_outside_work() -> void:
+	if not is_instance_valid(selected_builder) or selected_builder.is_player_controlled:
+		_update_interface("Select an AI-controlled resident before sending them to outside work.")
+		return
+	var worker_id := selected_builder.get_instance_id()
+	if outside_workers.has(worker_id):
+		_update_interface("This resident is already working in a neighboring settlement.")
+		return
+	selected_builder.cancel_current_action()
+	selected_builder.visible = false
+	selected_builder.process_mode = Node.PROCESS_MODE_DISABLED
+	outside_workers[worker_id] = {"citizen": selected_builder, "return_day": day_cycle.current_day + 1}
+	if citizen_ai != null:
+		citizen_ai.request_decision_refresh()
+	_update_interface("Resident left for outside work and will return tomorrow with 8 coins.")
+
+func _return_outside_workers() -> void:
+	for worker_id in outside_workers.keys():
+		var assignment := outside_workers[worker_id] as Dictionary
+		if day_cycle.current_day < int(assignment.get("return_day", 0)):
+			continue
+		var worker := assignment.get("citizen") as Citizen
+		if is_instance_valid(worker):
+			worker.process_mode = Node.PROCESS_MODE_INHERIT
+			worker.visible = true
+			worker.global_position = entrance_stone.global_position + Vector3(0.8, 0.08, 1.2)
+			worker.idle()
+			settlement.money += 8
+		outside_workers.erase(worker_id)
+		_update_interface("A resident returned from outside work with 8 coins.")
+	if citizen_ai != null:
+		citizen_ai.request_decision_refresh()
 
 
 func _create_house_menu(ui: CanvasLayer) -> void:
@@ -6422,6 +6511,105 @@ func _create_grass_sources_near_tree(tree_cell: Vector2i) -> void:
 		node.material_override = material
 		add_child(node)
 		grass_sources[cell] = {"node": node, "remaining": random.randi_range(2, 5)}
+
+func _create_forage_sources_near_tree(tree_cell: Vector2i) -> void:
+	for offset in [Vector2i(3, 1), Vector2i(-3, -1)]:
+		var cell: Vector2i = tree_cell + offset
+		if forage_sources.has(cell) or tree_cells.has(cell) or _is_navigation_cell_blocked(cell):
+			continue
+		var node := MeshInstance3D.new()
+		var mesh := BoxMesh.new()
+		mesh.size = Vector3(0.42, 0.22, 0.42)
+		node.mesh = mesh
+		node.position = _cell_center(cell) + Vector3.UP * 0.12
+		var material := StandardMaterial3D.new()
+		material.albedo_color = Color("75a84c")
+		material.emission_enabled = true
+		material.emission = Color("27451c")
+		node.material_override = material
+		add_child(node)
+		forage_sources[cell] = {"node": node}
+
+func _spawn_initial_rabbits() -> void:
+	for tree_cell in tree_cells.keys():
+		if rabbit_sources.size() >= RABBIT_MAX_COUNT:
+			break
+		_spawn_rabbit_near_tree(tree_cell as Vector2i)
+
+func _spawn_rabbit_near_tree(tree_cell: Vector2i) -> void:
+	for offset in [Vector2i(4, 0), Vector2i(-4, 2), Vector2i(2, -4)]:
+		var cell: Vector2i = tree_cell + offset
+		if rabbit_sources.has(cell) or tree_cells.has(cell) or _is_navigation_cell_blocked(cell):
+			continue
+		var node := MeshInstance3D.new()
+		var mesh := BoxMesh.new()
+		mesh.size = Vector3(0.48, 0.32, 0.32)
+		node.mesh = mesh
+		node.position = _cell_center(cell) + Vector3.UP * 0.16
+		var material := StandardMaterial3D.new()
+		material.albedo_color = Color("d5d1c3")
+		node.material_override = material
+		add_child(node)
+		rabbit_sources[cell] = {"node": node, "direction": Vector3(randf_range(-1.0, 1.0), 0.0, randf_range(-1.0, 1.0)).normalized()}
+		return
+
+func _update_wild_food(delta: float) -> void:
+	for source in rabbit_sources.values():
+		var rabbit := source.get("node") as Node3D
+		if not is_instance_valid(rabbit):
+			continue
+		var direction: Vector3 = source.get("direction", Vector3.FORWARD)
+		if randf() < delta * 0.7:
+			direction = Vector3(randf_range(-1.0, 1.0), 0.0, randf_range(-1.0, 1.0)).normalized()
+			source.direction = direction
+		var next := rabbit.global_position + direction * delta * 0.7
+		if _is_navigation_cell_blocked(_cell_from_position(next)):
+			source.direction = -direction
+		else:
+			rabbit.global_position = next
+	for cell in forage_respawn_at.keys().duplicate():
+		if runtime_seconds >= float(forage_respawn_at[cell]):
+			_create_forage_sources_near_tree((cell as Vector2i) - Vector2i(3, 1))
+			forage_respawn_at.erase(cell)
+	for cell in rabbit_respawn_at.keys().duplicate():
+		if runtime_seconds >= float(rabbit_respawn_at[cell]) and rabbit_sources.size() < RABBIT_MAX_COUNT:
+			_spawn_rabbit_near_tree(cell as Vector2i)
+			rabbit_respawn_at.erase(cell)
+
+func food_gathering_candidates(citizen: Citizen) -> Array[Dictionary]:
+	var candidates: Array[Dictionary] = []
+	if forager_positions.is_empty() or warehouse_positions.is_empty():
+		return candidates
+	for cell in forage_sources:
+		var node := (forage_sources[cell] as Dictionary).get("node") as Node3D
+		if is_instance_valid(node):
+			candidates.append({&"id": StringName("plant:%d:%d" % [cell.x, cell.y]), &"resource_type": "food", &"position": node.global_position, &"access": node.global_position, &"warehouse_position": _get_nearest_delivery_position(citizen.global_position)})
+	for cell in rabbit_sources:
+		var node := (rabbit_sources[cell] as Dictionary).get("node") as Node3D
+		if is_instance_valid(node):
+			candidates.append({&"id": StringName("rabbit:%d:%d" % [cell.x, cell.y]), &"resource_type": "food", &"position": node.global_position, &"access": node.global_position, &"warehouse_position": _get_nearest_delivery_position(citizen.global_position)})
+	candidates.sort_custom(func(a, b): return (a[&"position"] as Vector3).distance_squared_to(citizen.global_position) < (b[&"position"] as Vector3).distance_squared_to(citizen.global_position))
+	return candidates
+
+func harvest_wild_food(position: Vector3, worker: Citizen) -> String:
+	var plant_cell := _cell_from_position(position)
+	if forage_sources.has(plant_cell):
+		var plant := (forage_sources[plant_cell] as Dictionary).get("node") as Node3D
+		if is_instance_valid(plant):
+			plant.queue_free()
+		forage_sources.erase(plant_cell)
+		forage_respawn_at[plant_cell] = runtime_seconds + WILD_FOOD_RESPAWN_SECONDS
+		return "food"
+	for cell in rabbit_sources:
+		var source := rabbit_sources[cell] as Dictionary
+		var rabbit := source.get("node") as Node3D
+		if is_instance_valid(rabbit) and rabbit.global_position.distance_to(position) <= 1.6:
+			worker.play_one_shot("interact-right")
+			rabbit.queue_free()
+			rabbit_sources.erase(cell)
+			rabbit_respawn_at[cell] = runtime_seconds + RABBIT_RESPAWN_SECONDS
+			return "hides" if randf() < 0.35 else "food"
+	return ""
 
 func _consume_grass_source(position: Vector3) -> void:
 	var cell := _cell_from_position(position)

@@ -100,7 +100,13 @@ func tick(delta: float) -> void:
 
 func accept_delivery(site_node: Node3D, resource_type: String, amount: int) -> bool:
 	var site := site_for_node(site_node)
-	if site == null:
+	if site == null or amount <= 0:
+		return false
+	var required := int(site.required_materials.get(resource_type, 0))
+	var delivered := int(site.delivered_materials.get(resource_type, 0))
+	# Reservations are made before a courier leaves the warehouse. A final guard
+	# here keeps late or duplicated deliveries from overfilling a completed site.
+	if required <= delivered or amount > required - delivered:
 		return false
 	site.delivered_materials[resource_type] = int(site.delivered_materials.get(resource_type, 0)) + amount
 	site.reserved_materials[resource_type] = maxi(0, int(site.reserved_materials.get(resource_type, 0)) - amount)

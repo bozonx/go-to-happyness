@@ -24,7 +24,7 @@ func capture(sequence: int) -> WorldSnapshot:
 	var gathering_targets := _gathering_targets()
 	var citizens_by_id: Dictionary = {}
 	for actor: Citizen in simulation.citizens:
-		if not is_instance_valid(actor) or actor.ai_id == 0:
+		if not is_instance_valid(actor) or actor.ai_id == 0 or simulation.outside_workers.has(actor.get_instance_id()):
 			continue
 		var citizen_id := actor.ai_id
 		var can_start_personal_need := not actor.has_active_arrival_task() and not actor.has_active_delivery()
@@ -308,16 +308,7 @@ func _workplace_target_key(workplace: Node3D) -> StringName:
 func _gathering_candidates_for(actor: Citizen) -> Array[Dictionary]:
 	var candidates: Array[Dictionary] = []
 	if actor.permanent_role == "gather_food":
-		var forage_position: Vector3 = actor.employment_workplace.get_meta("service_position", actor.employment_workplace.global_position) if is_instance_valid(actor.employment_workplace) else Vector3.INF
-		if forage_position != Vector3.INF and not simulation.warehouse_positions.is_empty():
-			candidates.append({
-				&"id": StringName("forage:%d" % actor.ai_id),
-				&"resource_type": "food",
-				&"position": forage_position,
-				&"access": forage_position,
-				&"warehouse_position": simulation._get_nearest_delivery_position(actor.global_position),
-			})
-		return candidates
+		return simulation.food_gathering_candidates(actor)
 	if actor.permanent_role != "gather_branches" or simulation.warehouse_positions.is_empty():
 		return candidates
 	if simulation.settlement.grass < simulation.settlement.branches:
