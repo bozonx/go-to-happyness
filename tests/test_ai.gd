@@ -164,6 +164,7 @@ func _init() -> void:
 	_test_resume_drops_stale_task()
 	_test_resume_drops_changed_order()
 	_test_citizen_brain_cancels_for_player_control()
+	_test_citizen_brain_defers_interrupt_until_active_finishes()
 	_test_citizen_brain_failure_cooldown()
 	_test_citizen_brain_cancels_when_winning_goal_has_no_task()
 	_test_native_sleep_goal()
@@ -381,6 +382,31 @@ func _test_citizen_brain_cancels_for_player_control() -> void:
 	assert(unavailable_goal.last_step.cancels == 1)
 
 
+func _test_citizen_brain_defers_interrupt_until_active_finishes() -> void:
+	var work := ScriptedGoal.new(&"work", 0.90, [
+		BehaviorStep.Status.RUNNING,
+		BehaviorStep.Status.SUCCESS,
+	])
+	var urgent := ScriptedGoal.new(&"urgent", 0.40, [BehaviorStep.Status.RUNNING])
+	var brain := CitizenBrain.new(1, FakeActuator.new(1), [work, urgent])
+	var snapshot := _snapshot(0.0, CitizenSnapshot.new(1))
+	brain.think(snapshot, null)
+	brain.tick(snapshot, null, 0.1)
+	assert(brain.runner.active_goal_id() == &"work")
+	assert(work.last_step.ticks == 1)
+	work.utility = 0.50
+	urgent.utility = 0.95
+	brain.think(snapshot, null)
+	assert(brain.runner.active_goal_id() == &"work")
+	assert(urgent.build_count == 1 and urgent.last_step.ticks == 0)
+	brain.tick(snapshot, null, 0.1)
+	assert(work.last_step.finishes == 1)
+	assert(brain.runner.active_goal_id() == &"urgent")
+	assert(urgent.last_step.ticks == 0)
+	brain.tick(snapshot, null, 0.1)
+	assert(urgent.last_step.ticks == 1)
+
+
 func _test_citizen_brain_failure_cooldown() -> void:
 	var goal := ScriptedGoal.new(&"work", 0.60, [BehaviorStep.Status.FAILURE])
 	var brain := CitizenBrain.new(1, FakeActuator.new(1), [goal])
@@ -406,7 +432,7 @@ func _test_citizen_brain_cancels_when_winning_goal_has_no_task() -> void:
 	assert(work.last_step.ticks == 1)
 	work.utility = 0.5
 	brain.think(snapshot, null)
-	assert(work.last_step.cancels == 1 and brain.runner.active_task == null)
+	assert(work.last_step.cancels == 0 and brain.runner.active_goal_id() == &"work")
 	assert(brain.blackboard.is_on_cooldown(&"blocked", 0.0))
 
 
@@ -1061,6 +1087,7 @@ func _test_register_provider_keeps_order_while_registering() -> void:
 	var initial_orders := provider.collect_orders(WorldSnapshot.new(1, 0.0, 0.0, settlement, {1: unregistered}))
 	assert(initial_orders.size() == 1)
 	assert(initial_orders[0].kind == &"register")
+	assert(is_equal_approx(initial_orders[0].priority, 0.74))
 
 	var registering := CitizenSnapshot.new(1, Vector3(1.0, 0.0, 0.0), false, true, AIFactSet.new({
 		&"workforce.worker_data": {"workforce_status": "registering", "pending_employment_role": "forestry"},

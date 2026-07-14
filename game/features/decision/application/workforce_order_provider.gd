@@ -52,7 +52,7 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 			if target_pos == Vector3.INF or target_key == &"":
 				continue
 
-			var order := CitizenOrder.new(citizen_id, &"register", id, 0.95, AIFactSet.new({
+			var order := CitizenOrder.new(citizen_id, &"register", id, 0.74, AIFactSet.new({
 				&"workplace.role": pending_role,
 				&"workplace.position": target_pos,
 				&"workplace.node_key": target_key,

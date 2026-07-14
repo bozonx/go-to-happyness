@@ -9,12 +9,14 @@ signal task_finished(task: BehaviorTask, status: BehaviorStep.Status)
 signal task_resumed(task: BehaviorTask)
 
 var active_task: BehaviorTask
+var pending_task: BehaviorTask
 var _suspended: Array[BehaviorTask] = []
 
 
 func start(task: BehaviorTask, context: BehaviorContext) -> bool:
 	if task == null or task.root == null:
 		return false
+	_cancel_pending(context)
 	_cancel_suspended_goal(task.goal_id, context)
 	if active_task != null:
 		if active_task.goal_id == task.goal_id:
@@ -30,8 +32,22 @@ func start(task: BehaviorTask, context: BehaviorContext) -> bool:
 	return true
 
 
+func start_after_active(task: BehaviorTask, context: BehaviorContext) -> bool:
+	if task == null or task.root == null:
+		return false
+	if active_task == null:
+		return start(task, context)
+	if has_pending(task.goal_id, task.order_id):
+		return true
+	_cancel_suspended_goal(task.goal_id, context)
+	_cancel_pending(context)
+	pending_task = task
+	return true
+
+
 func tick(context: BehaviorContext, delta: float) -> BehaviorStep.Status:
 	if active_task == null:
+		_start_pending_or_resume(context)
 		return BehaviorStep.Status.SUCCESS
 	var completed_task := active_task
 	var status := active_task.root.run(context, delta)
@@ -39,7 +55,7 @@ func tick(context: BehaviorContext, delta: float) -> BehaviorStep.Status:
 		return status
 	active_task = null
 	task_finished.emit(completed_task, status)
-	_resume_previous(context)
+	_start_pending_or_resume(context)
 	return status
 
 
@@ -47,6 +63,7 @@ func cancel_all(context: BehaviorContext) -> void:
 	if active_task != null:
 		active_task.root.cancel(context)
 	active_task = null
+	_cancel_pending(context)
 	for task in _suspended:
 		task.root.cancel(context)
 	_suspended.clear()
@@ -58,6 +75,14 @@ func active_goal_id() -> StringName:
 
 func suspended_count() -> int:
 	return _suspended.size()
+
+
+func has_pending(goal_id: StringName, order_id: int) -> bool:
+	return pending_task != null and pending_task.goal_id == goal_id and pending_task.order_id == order_id
+
+
+func clear_pending(context: BehaviorContext) -> void:
+	_cancel_pending(context)
 
 
 func _resume_previous(context: BehaviorContext) -> void:
@@ -77,3 +102,20 @@ func _cancel_suspended_goal(goal_id: StringName, context: BehaviorContext) -> vo
 		if _suspended[index].goal_id == goal_id:
 			_suspended[index].root.cancel(context)
 			_suspended.remove_at(index)
+
+
+func _cancel_pending(context: BehaviorContext) -> void:
+	if pending_task != null:
+		pending_task.root.cancel(context)
+	pending_task = null
+
+
+func _start_pending_or_resume(context: BehaviorContext) -> void:
+	if pending_task != null:
+		var next_task := pending_task
+		pending_task = null
+		if next_task.is_still_valid(context):
+			start(next_task, context)
+			return
+		next_task.root.cancel(context)
+	_resume_previous(context)

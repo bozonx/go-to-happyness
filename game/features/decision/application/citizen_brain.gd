@@ -37,21 +37,29 @@ func think(snapshot: WorldSnapshot, order: CitizenOrder) -> void:
 	if result.goal == null:
 		runner.cancel_all(context)
 		return
+	var next_order_id := order.id if order != null else 0
 	if result.goal.id == runner.active_goal_id():
 		var active_order_id := runner.active_task.order_id if runner.active_task != null else 0
-		var next_order_id := order.id if order != null else 0
 		if active_order_id == next_order_id:
+			runner.clear_pending(context)
 			return
+	elif runner.active_task != null and runner.has_pending(result.goal.id, next_order_id):
+		return
 	var task := result.goal.build_task(snapshot, context.citizen, order, blackboard)
 	if task == null:
 		var now := snapshot.simulation_seconds if snapshot != null else 0.0
 		blackboard.set_cooldown(result.goal.id, now + FAILURE_COOLDOWN)
-		runner.cancel_all(context)
+		runner.clear_pending(context)
+		if runner.active_task == null:
+			runner.cancel_all(context)
 		return
 	task.goal_id = result.goal.id
 	task.resumable = result.goal.resumable
-	task.order_id = order.id if order != null else 0
-	runner.start(task, context)
+	task.order_id = next_order_id
+	if runner.active_task != null and result.goal.id != runner.active_goal_id():
+		runner.start_after_active(task, context)
+	else:
+		runner.start(task, context)
 
 
 func tick(snapshot: WorldSnapshot, order: CitizenOrder, delta: float) -> void:
