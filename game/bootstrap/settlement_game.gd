@@ -1076,8 +1076,13 @@ func _publish_courier_tasks(dispatcher: RefCounted) -> void:
 
 
 func _construction_material_source(resource_type: String) -> Dictionary:
-	if not warehouse_positions.is_empty() and settlement.amount(resource_type) > 0:
-		return {"kind": "storage", "id": "storage", "position": warehouse_positions[0]}
+	if settlement.amount(resource_type) > 0:
+		if not warehouse_positions.is_empty():
+			return {"kind": "storage", "id": "storage", "position": warehouse_positions[0]}
+		# Debug grants and cancellation refunds can create settlement stock before
+		# the first warehouse exists. Treat it as open storage at the camp entrance
+		# so a helper can still supply the bootstrap warehouse or main campfire.
+		return {"kind": "open_storage", "id": "open_storage", "position": _get_nearest_delivery_position(Vector3.ZERO)}
 	for pile: Dictionary in resource_piles:
 		var pile_node := pile.get("node") as Node3D
 		if is_instance_valid(pile_node) and int(pile.get("resources", {}).get(resource_type, 0)) > 0:
@@ -1434,6 +1439,8 @@ func _on_sawmill_boards_collected(courier: Citizen, sawmill_position: Vector3) -
 func _request_courier_dispatch() -> void:
 	if _is_work_time():
 		_update_couriers()
+		if citizen_ai != null:
+			citizen_ai.request_decision_refresh()
 
 func _sawmill_with_boards() -> Vector3:
 	return sawmills.position_with_boards(runtime_seconds)
@@ -5007,6 +5014,7 @@ func _placement_key(world_position: Vector3) -> Vector2i:
 
 func _create_construction_site(cell: Vector2i, building_type: String, position_on_board: Vector3, rotation_quarters := 0, blueprint: Dictionary = {}, occupied_footprint := Vector2i.ZERO) -> void:
 	construction.start_site(cell, building_type, position_on_board, rotation_quarters, blueprint, occupied_footprint)
+	_request_courier_dispatch()
 
 func _update_construction(delta: float) -> void:
 	construction.tick(delta)
@@ -5301,6 +5309,7 @@ func _grant_debug_resources() -> void:
 	for resource_type in grants:
 		settlement.add(resource_type, grants[resource_type])
 	_update_workers()
+	_request_courier_dispatch()
 	_update_interface("Debug resources added in normal spending proportions.")
 
 func _register_service_entrance(building: Node3D, footprint: Vector2i, home_entrance := false, show_marker := true) -> void:

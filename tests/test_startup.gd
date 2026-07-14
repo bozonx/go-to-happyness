@@ -202,6 +202,25 @@ func _init() -> void:
 	assert(int(construction_site.reserved_materials.get(construction_resource, 0)) == 0)
 	logistics_worker.clear_daily_order()
 
+	# Ctrl+F grants settlement stock without creating a warehouse or a pile. That
+	# stock is collected from the camp entrance until a warehouse is completed.
+	simulation.settlement.add(construction_resource, 1)
+	simulation._assign_daily_order(logistics_worker, "helper")
+	simulation._update_couriers()
+	var debug_stock_snapshot := SettlementAIWorldFacade.new(simulation).capture(1000)
+	var debug_stock_orders := CourierDeliveryOrderProvider.new().collect_orders(debug_stock_snapshot)
+	var matching_debug_orders := debug_stock_orders.filter(func(order: CitizenOrder): return order.citizen_id == logistics_worker.ai_id and order.kind == &"courier_delivery")
+	assert(not matching_debug_orders.is_empty())
+	var debug_stock_order: CitizenOrder = matching_debug_orders.front()
+	assert(simulation.courier_dispatcher.start_task(logistics_worker, debug_stock_order.payload.value(&"courier.task_id")))
+	assert(simulation.settlement.amount(construction_resource) == 0)
+	logistics_worker.global_position = simulation.entrance_stone.global_position
+	logistics_worker._process_construction_pickup(0.1)
+	logistics_worker.global_position = logistics_worker.construction_position
+	logistics_worker._process_construction_delivery(0.1)
+	assert(int(construction_site.delivered_materials.get(construction_resource, 0)) == 2)
+	logistics_worker.clear_daily_order()
+
 	simulation.settlement.add(construction_resource, 1)
 	var material_before: int = simulation.settlement.amount(construction_resource)
 	var added_test_warehouse := false
