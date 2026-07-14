@@ -1066,8 +1066,7 @@ func _start_courier_task(courier: Citizen, task: RefCounted) -> bool:
 			if not queued_trades.has(order):
 				return false
 			queued_trades.erase(order)
-			pending_trades[courier.get_instance_id()] = order
-			courier.deliver_trade(order.source, order.destination)
+			trade_service.assign_order_to_worker(courier, order)
 			return true
 		CourierTask.Kind.SAWMILL_PICKUP:
 			courier.assign_sawmill_pickup(task.payload.position, warehouse_positions[0])
@@ -2340,6 +2339,8 @@ func _assign_survival_busy_worker(hours: float, status_label: String) -> void:
 	if candidates.is_empty():
 		return
 	var worker: Citizen = candidates[random.randi_range(0, candidates.size() - 1)]
+	if citizen_ai != null:
+		citizen_ai.cancel_citizen_work(worker.ai_id)
 	worker.cancel_current_action()
 	worker.set_player_controlled(true)
 	worker.set_status_effect(&"survival_assignment", status_label, 1.0, hours)
@@ -4175,6 +4176,8 @@ func _release_employment_at_building(building: Node3D) -> void:
 		if citizen.permanent_role == "official":
 			# Civic upgrades temporarily remove the post. Keep the appointment so it
 			# transfers to the next main campfire instead of silently disappearing.
+			if citizen_ai != null:
+				citizen_ai.cancel_citizen_work(citizen.ai_id)
 			citizen.idle()
 			citizen.employment_workplace = null
 			citizen.pending_employment_workplace = null
@@ -4185,6 +4188,8 @@ func _release_employment_at_building(building: Node3D) -> void:
 func _send_to_unemployment_registration(citizen: Citizen) -> void:
 	if citizen.is_player_controlled:
 		return
+	if citizen_ai != null:
+		citizen_ai.cancel_citizen_work(citizen.ai_id)
 	citizen.idle()
 	citizen.permanent_role = ""
 	citizen.pending_employment_role = ""
@@ -4316,6 +4321,8 @@ func _update_player_control(delta: float) -> void:
 			camera.rotation = Vector3(player_pitch, player_yaw, 0.0)
 			_refresh_interaction_hint()
 			return
+		if citizen_ai != null:
+			citizen_ai.cancel_citizen_work(player_citizen.ai_id)
 		player_citizen.set_player_controlled(true)
 	var speed := PLAYER_SPEED * (PLAYER_SPRINT_MULTIPLIER if Input.is_key_pressed(KEY_SHIFT) else 1.0)
 	if not move_direction.is_zero_approx():

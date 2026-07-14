@@ -9,6 +9,7 @@ const BuildingResearchServiceScript = preload("res://game/features/buildings/app
 const CitizenLivingStatusServiceScript = preload("res://game/features/citizens/application/citizen_living_status_service.gd")
 const CanteenServiceScript = preload("res://game/features/logistics/application/canteen_service.gd")
 const StorageDeliveryServiceScript = preload("res://game/features/logistics/application/storage_delivery_service.gd")
+const TradeServiceScript = preload("res://game/features/logistics/application/trade_service.gd")
 const TradeOrderScript = preload("res://game/features/logistics/domain/trade_order.gd")
 const FireSourceStateScript = preload("res://game/features/settlement/domain/fire_source_state.gd")
 const CitizenStatusEffectScript = preload("res://game/features/citizens/domain/citizen_status_effect.gd")
@@ -63,6 +64,19 @@ class FakeStorageSimulation extends Node:
 		leisure_worker = worker
 
 
+class FakeTradeSimulation extends Node:
+	var queued_trades: Array = []
+	var pending_trades: Dictionary = {}
+	var total_minutes := 0.0
+	var last_interface_message := ""
+
+	func _total_game_minutes() -> float:
+		return total_minutes
+
+	func _update_interface(message: String) -> void:
+		last_interface_message = message
+
+
 func _init() -> void:
 	_test_settlement_economy()
 	_test_tent_start_config()
@@ -96,6 +110,7 @@ func _init() -> void:
 	_test_courier_equipment_capacity()
 	_test_research_mechanics()
 	_test_trade_order_model()
+	_test_trade_service_entrance_expedition_walks_to_sign_before_departure()
 	_test_fire_source_state()
 	_test_citizen_status_effects()
 	_test_storage_delivery_service()
@@ -212,6 +227,37 @@ func _test_trade_order_model() -> void:
 	assert(order.reserved_money() == 8)
 	assert(order.incoming_resource("food") == 4)
 	assert(order.incoming_resource("grass") == 0)
+
+
+func _test_trade_service_entrance_expedition_walks_to_sign_before_departure() -> void:
+	var simulation := FakeTradeSimulation.new()
+	var service := TradeServiceScript.new()
+	service.configure(simulation)
+	var worker := Citizen.new()
+	worker.position = Vector3(12.0, 0.0, 0.0)
+	var entrance := Vector3(-22.5, 0.0, 1.5)
+	var storage := Vector3(2.5, 0.0, 0.5)
+	var order := TradeOrderScript.entrance_purchase(
+		{"kind": "buy_resource", "resource": "food", "quantity": 4, "price": 2},
+		entrance,
+		storage
+	)
+
+	service.assign_order_to_worker(worker, order)
+	assert(simulation.pending_trades.has(worker.get_instance_id()))
+	assert(worker.position == Vector3(12.0, 0.0, 0.0))
+	assert(worker.state == Citizen.State.TO_TRADE_PICKUP)
+	assert(worker.trade_source_position == entrance)
+	assert(worker.trade_destination_position == entrance)
+
+	service.on_trade_delivery_finished(worker)
+	assert(simulation.pending_trades.has(worker.get_instance_id()))
+	assert(service.entrance_expeditions.has(worker.get_instance_id()))
+	assert(not worker.visible)
+	assert(worker.process_mode == Node.PROCESS_MODE_DISABLED)
+	assert(order.return_at_minutes == order.outside_duration_minutes)
+	worker.free()
+	simulation.free()
 
 
 func _test_fire_source_state() -> void:

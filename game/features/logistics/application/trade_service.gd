@@ -145,14 +145,21 @@ func dispatch_queued_trades() -> void:
 		if simulation.queued_trades.is_empty():
 			return
 		var order: RefCounted = simulation.queued_trades.pop_front()
-		simulation.pending_trades[worker.get_instance_id()] = order
-		if order.source_endpoint == TradeOrderScript.ENDPOINT_ENTRANCE_STONE and order.outside_duration_minutes > 0.0:
-			_begin_entrance_expedition(worker, order)
-		else:
-			worker.deliver_trade(order.source, order.destination)
-			simulation._update_interface("A resident is carrying the trade order.")
+		assign_order_to_worker(worker, order)
 	if not simulation.queued_trades.is_empty():
 		simulation._update_interface("Trade queued: no resident is currently free to carry it.")
+
+
+func assign_order_to_worker(worker: Citizen, order: RefCounted) -> void:
+	if not is_instance_valid(worker) or order == null:
+		return
+	simulation.pending_trades[worker.get_instance_id()] = order
+	if _is_pending_entrance_expedition(order):
+		worker.deliver_trade(order.source, order.source)
+		simulation._update_interface("A resident is heading to the entrance sign for the outside trade trip.")
+	else:
+		worker.deliver_trade(order.source, order.destination)
+		simulation._update_interface("A resident is carrying the trade order.")
 
 
 func update() -> void:
@@ -183,6 +190,9 @@ func _begin_entrance_expedition(worker: Citizen, order: RefCounted) -> void:
 func on_trade_delivery_finished(worker: Citizen) -> void:
 	var order: RefCounted = simulation.pending_trades.get(worker.get_instance_id(), null)
 	if order == null:
+		return
+	if _is_pending_entrance_expedition(order):
+		_begin_entrance_expedition(worker, order)
 		return
 	var trade: Dictionary = order.trade
 	simulation.pending_trades.erase(worker.get_instance_id())
@@ -220,6 +230,15 @@ func on_trade_delivery_finished(worker: Citizen) -> void:
 				simulation._update_interface("%s received %s." % [courier.role_label(), str(trade.equipment).replace("_", " ")])
 	if simulation.market_menu.visible:
 		simulation._refresh_market_menu()
+
+
+func _is_pending_entrance_expedition(order: RefCounted) -> bool:
+	return (
+		order != null
+		and order.source_endpoint == TradeOrderScript.ENDPOINT_ENTRANCE_STONE
+		and order.outside_duration_minutes > 0.0
+		and order.return_at_minutes < 0.0
+	)
 
 
 func _all_orders() -> Array:

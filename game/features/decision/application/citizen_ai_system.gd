@@ -82,6 +82,18 @@ func unregister_citizen(citizen_id: int) -> void:
 	_think_cursor = 0 if _citizen_ids.is_empty() else _think_cursor % _citizen_ids.size()
 
 
+## Stops a single citizen's current AI task when an external invariant invalidates it.
+func cancel_citizen_work(citizen_id: int) -> void:
+	var brain := _brains.get(citizen_id) as CitizenBrain
+	if brain != null:
+		brain.cancel_current_task()
+	reservations.release_all(citizen_id)
+	director.order_board.remove_citizen(citizen_id)
+	_order_cache.erase(citizen_id)
+	_order_cache_dirty = true
+	request_decision_refresh()
+
+
 func brain_count() -> int:
 	return _brains.size()
 

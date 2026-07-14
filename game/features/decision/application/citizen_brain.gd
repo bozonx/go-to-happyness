@@ -74,6 +74,10 @@ func shutdown() -> void:
 	runner.cancel_all(context)
 
 
+func cancel_current_task() -> void:
+	runner.cancel_all(context)
+
+
 func configure_goals(goals: Array[AICitizenGoal]) -> void:
 	runner.cancel_all(context)
 	arbiter.configure(goals)

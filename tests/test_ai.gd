@@ -23,6 +23,7 @@ const CourierDeliveryGoalScript = preload("res://game/features/decision/domain/g
 const CourierDeliveryOrderProviderScript = preload("res://game/features/decision/application/courier_delivery_order_provider.gd")
 const SettlementCitizenActuatorScript = preload("res://game/features/decision/application/settlement_citizen_actuator.gd")
 const ReserveWorkGoalScript = preload("res://game/features/decision/domain/goals/reserve_work_goal.gd")
+const ReserveWorkStepScript = preload("res://game/features/decision/domain/behavior/reserve_work_step.gd")
 const WorkforceOrderProviderScript = preload("res://game/features/decision/application/workforce_order_provider.gd")
 
 
@@ -173,7 +174,9 @@ func _init() -> void:
 	_test_native_toilet_goal()
 	_test_native_rest_goal()
 	_test_register_provider_keeps_order_while_registering()
+	_test_register_provider_distributes_workplaces_by_capacity()
 	_test_reserve_work_provider_keeps_assignment()
+	_test_runner_cancels_stale_active_order_and_releases_reservation()
 	_test_reserve_work_rejects_contested_target()
 	_test_reserved_step_renews_lease()
 	_test_reserve_work_actuator_delegates_payload()
@@ -335,16 +338,13 @@ func _test_runner_interrupt_and_resume() -> void:
 func _test_resume_drops_stale_task() -> void:
 	var context := _context()
 	var work_step := ScriptedStep.new([BehaviorStep.Status.RUNNING])
-	var urgent_step := ScriptedStep.new([BehaviorStep.Status.SUCCESS])
 	var runner := BehaviorRunner.new()
 	var work_task := BehaviorTask.new(&"work", work_step)
 	work_task.guard = func(_ctx: BehaviorContext) -> bool: return false
 	assert(runner.start(work_task, context))
-	assert(runner.tick(context, 0.1) == BehaviorStep.Status.RUNNING)
-	assert(runner.start(BehaviorTask.new(&"urgent", urgent_step), context))
-	assert(runner.tick(context, 0.1) == BehaviorStep.Status.SUCCESS)
+	assert(runner.tick(context, 0.1) == BehaviorStep.Status.FAILURE)
 	assert(runner.active_task == null and runner.suspended_count() == 0)
-	assert(work_step.cancels == 1)
+	assert(work_step.ticks == 0)
 
 
 func _test_resume_drops_changed_order() -> void:
@@ -1117,6 +1117,58 @@ func _test_register_provider_keeps_order_while_registering() -> void:
 	assert(continued_orders[0].kind == &"register")
 	assert(continued_orders[0].payload.value(&"workplace.role") == "forestry")
 	assert(continued_orders[0].target_position == initial_orders[0].target_position)
+
+
+func _test_register_provider_distributes_workplaces_by_capacity() -> void:
+	var provider := WorkforceOrderProviderScript.new()
+	var settlement := AIFactSet.new({
+		&"workforce.world_data": {
+			"officer_available": true, "assigned_roles": {}, "forestry_jobs": 2,
+			"warehouses": 1, "trees": 2,
+		},
+		&"workforce.employment_center_position": Vector3(2.0, 0.0, 0.0),
+		&"workforce.role_employers": {
+			"forestry": [
+				{"position": Vector3(6.0, 0.0, 0.0), "target_key": &"building:6:0", "available_slots": 1},
+				{"position": Vector3(10.0, 0.0, 0.0), "target_key": &"building:10:0", "available_slots": 1},
+			],
+		},
+	})
+	var first := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
+		&"workforce.worker_data": {"workforce_status": "unregistered", "skills": {"forestry": 1.0}},
+	}))
+	var second := CitizenSnapshot.new(2, Vector3.ZERO, false, true, AIFactSet.new({
+		&"workforce.worker_data": {"workforce_status": "unregistered", "skills": {"forestry": 1.0}},
+	}))
+	var orders := provider.collect_orders(WorldSnapshot.new(1, 0.0, 0.0, settlement, {1: first, 2: second}))
+	assert(orders.size() == 2)
+	assert(orders[0].payload.value(&"workplace.node_key") != orders[1].payload.value(&"workplace.node_key"))
+
+
+func _test_runner_cancels_stale_active_order_and_releases_reservation() -> void:
+	var command := AIFactSet.new({
+		&"reserve.action": &"gathering",
+		&"reserve.claim_kind": &"gathering.source",
+		&"reserve.claim_id": &"branch:3:0",
+		&"target.position": Vector3(3.0, 0.0, 0.0),
+	})
+	var citizen := CitizenSnapshot.new(1)
+	var snapshot := WorldSnapshot.new(1, 0.0, 0.0, AIFactSet.new(), {1: citizen})
+	var order := CitizenOrder.new(1, &"reserve_work", &"workforce.coordination", 0.4, command)
+	order.id = 7
+	var actuator := FakeActuator.new(1)
+	var context := BehaviorContext.new(actuator, AIBlackboard.new())
+	context.refresh(snapshot, order)
+	var task := BehaviorTask.new(&"reserve_work", ReserveWorkStepScript.new(), false)
+	task.order_id = order.id
+	var runner := BehaviorRunner.new()
+	runner.start(task, context)
+	assert(runner.tick(context, 0.1) == BehaviorStep.Status.RUNNING)
+	assert(snapshot.reservations.owner_of([&"gathering.source", &"branch:3:0"], 0.0) == 1)
+	context.refresh(snapshot, null)
+	assert(runner.tick(context, 0.1) == BehaviorStep.Status.FAILURE)
+	assert(actuator.cancel_action_count == 1)
+	assert(snapshot.reservations.owner_of([&"gathering.source", &"branch:3:0"], 0.0) == 0)
 
 
 func _test_reserve_work_rejects_contested_target() -> void:

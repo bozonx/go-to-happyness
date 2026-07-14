@@ -16,7 +16,7 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 	var allocation_world := world_data.duplicate(true)
 	allocation_world["assigned_roles"] = (world_data.get("assigned_roles", {}) as Dictionary).duplicate()
 	var center_position: Variant = snapshot.settlement.value(&"workforce.employment_center_position", Vector3.INF)
-	var employers: Dictionary = snapshot.settlement.value(&"workforce.role_employers", {})
+	var employers: Dictionary = _available_employers(snapshot.settlement.value(&"workforce.role_employers", {}))
 
 	if not world_data.is_empty() and center_position is Vector3 and center_position != Vector3.INF:
 		var citizen_ids := snapshot.citizen_ids()
@@ -43,7 +43,7 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 			if pending_role.is_empty():
 				continue
 
-			var employer_data: Dictionary = employers.get(pending_role, {})
+			var employer_data: Dictionary = _claim_employer_slot(employers, pending_role) if status != "registering" else {}
 			var workplace_pos: Variant = citizen.facts.value(&"workforce.pending_workplace_position", Vector3.INF) if status == "registering" else employer_data.get("position", Vector3.INF)
 			var workplace_key: Variant = citizen.facts.value(&"workforce.pending_workplace_key", &"") if status == "registering" else employer_data.get("target_key", &"")
 
@@ -96,6 +96,42 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 		_increment_assigned_role(allocation_world, role)
 
 	return orders
+
+
+func _available_employers(raw_employers: Dictionary) -> Dictionary:
+	var employers: Dictionary = {}
+	for role_value in raw_employers:
+		var role := str(role_value)
+		var raw_candidates: Variant = raw_employers[role_value]
+		var candidates: Array = raw_candidates if raw_candidates is Array else [raw_candidates]
+		var available: Array[Dictionary] = []
+		for candidate_value in candidates:
+			var candidate := candidate_value as Dictionary
+			var position: Variant = candidate.get("position", Vector3.INF)
+			var target_key: Variant = candidate.get("target_key", &"")
+			if not (position is Vector3) or position == Vector3.INF or not (target_key is StringName) or target_key == &"":
+				continue
+			var slots := int(candidate.get("available_slots", 1))
+			if slots <= 0:
+				continue
+			var normalized := candidate.duplicate(true)
+			normalized["available_slots"] = slots
+			available.append(normalized)
+		if not available.is_empty():
+			employers[role] = available
+	return employers
+
+
+func _claim_employer_slot(employers: Dictionary, role: String) -> Dictionary:
+	var candidates: Array = employers.get(role, []) as Array
+	for candidate_value in candidates:
+		var candidate := candidate_value as Dictionary
+		var slots := int(candidate.get("available_slots", 0))
+		if slots <= 0:
+			continue
+		candidate["available_slots"] = slots - 1
+		return candidate.duplicate(true)
+	return {}
 
 
 func _reserve_order(citizen_id: int, command: Dictionary) -> CitizenOrder:

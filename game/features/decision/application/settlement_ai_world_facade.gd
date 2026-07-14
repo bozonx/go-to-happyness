@@ -719,10 +719,35 @@ func _role_employers() -> Dictionary:
 		"factory_worker", "engineer"
 	]
 	for role in roles:
-		var workplace: Node3D = simulation._employer_for_role(role)
-		if is_instance_valid(workplace):
-			employers[role] = {
-				"position": workplace.global_position,
-				"target_key": _workplace_target_key(workplace)
-			}
+		var candidates: Array[Dictionary] = []
+		for record in simulation.building_registry.records():
+			var workplace: Node3D = record.node
+			if not is_instance_valid(workplace) or str(workplace.get_meta("building_type", "")) not in simulation._employer_types_for_role(role):
+				continue
+			if not bool(workplace.get_meta("accepting_workers", true)):
+				continue
+			var occupied := 0
+			for citizen in simulation.citizens:
+				if not is_instance_valid(citizen):
+					continue
+				var assigned_role: String = citizen.permanent_role if citizen.is_employed() else citizen.pending_employment_role
+				if assigned_role == role and (citizen.employment_workplace == workplace or citizen.pending_employment_workplace == workplace):
+					occupied += 1
+			var available_slots: int = simulation._employer_capacity(role, workplace) - occupied
+			if available_slots > 0:
+				candidates.append({
+					"position": workplace.global_position,
+					"target_key": _workplace_target_key(workplace),
+					"available_slots": available_slots,
+				})
+		if candidates.is_empty():
+			var fallback: Node3D = simulation._employer_for_role(role)
+			if is_instance_valid(fallback):
+				candidates.append({
+					"position": fallback.global_position,
+					"target_key": _workplace_target_key(fallback),
+					"available_slots": 1,
+				})
+		if not candidates.is_empty():
+			employers[role] = candidates
 	return employers

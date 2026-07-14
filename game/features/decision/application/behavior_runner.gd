@@ -49,6 +49,11 @@ func tick(context: BehaviorContext, delta: float) -> BehaviorStep.Status:
 	if active_task == null:
 		_start_pending_or_resume(context)
 		return BehaviorStep.Status.SUCCESS
+	if not active_task.is_still_valid(context):
+		active_task.root.cancel(context)
+		active_task = null
+		_start_pending_or_resume(context)
+		return BehaviorStep.Status.FAILURE
 	var completed_task := active_task
 	var status := active_task.root.run(context, delta)
 	if status == BehaviorStep.Status.RUNNING:
