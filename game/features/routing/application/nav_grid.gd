@@ -16,9 +16,15 @@ var _profile_cell_weights: Dictionary = {}
 var _minimum_cell_weight := DEFAULT_CELL_WEIGHT
 var _revision := 0
 var _topology_revision := 0
+var _component_topology_revision := -1
+var _walkable_components: Dictionary = {}
 
 const DEFAULT_CELL_WEIGHT := 2.0
 const PEDESTRIAN_PROFILE := &"pedestrian"
+const CONNECTED_DIRECTIONS: Array[Vector2i] = [
+	Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN,
+	Vector2i(-1, -1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(1, 1),
+]
 
 
 func configure(next_cell_size: float, next_board_cells: int) -> void:
@@ -106,6 +112,20 @@ func is_blocked(cell: Vector2i) -> bool:
 
 func is_walkable(cell: Vector2i) -> bool:
 	return is_board_cell(cell) and not _blocked.has(cell)
+
+
+## Reachability queries used during AI candidate discovery do not need a route.
+## Connected components reduce those queries to O(1) after one topology-sized
+## flood fill, leaving weighted A* for the actor that actually accepts the task.
+func are_positions_connected(from: Vector3, to: Vector3) -> bool:
+	return are_cells_connected(cell_from_position(from), cell_from_position(to))
+
+
+func are_cells_connected(from: Vector2i, to: Vector2i) -> bool:
+	if not is_walkable(from) or not is_walkable(to):
+		return false
+	_ensure_walkable_components()
+	return _walkable_components.get(from, -1) == _walkable_components.get(to, -2)
 
 
 ## True when a straight line between two world points crosses only walkable cells.
@@ -199,3 +219,32 @@ func _recompute_minimum_cell_weight() -> void:
 	for profile_weights in _profile_cell_weights.values():
 		for weight in (profile_weights as Dictionary).values():
 			_minimum_cell_weight = minf(_minimum_cell_weight, maxf(0.001, float(weight)))
+
+
+func _ensure_walkable_components() -> void:
+	if _component_topology_revision == _topology_revision:
+		return
+	_walkable_components.clear()
+	var next_component := 0
+	for y in range(-board_half_cells, board_half_cells):
+		for x in range(-board_half_cells, board_half_cells):
+			var start := Vector2i(x, y)
+			if not is_walkable(start) or _walkable_components.has(start):
+				continue
+			var frontier: Array[Vector2i] = [start]
+			var cursor := 0
+			_walkable_components[start] = next_component
+			while cursor < frontier.size():
+				var current := frontier[cursor]
+				cursor += 1
+				for direction in CONNECTED_DIRECTIONS:
+					var neighbor := current + direction
+					if not is_walkable(neighbor) or _walkable_components.has(neighbor):
+						continue
+					if direction.x != 0 and direction.y != 0:
+						if not is_walkable(current + Vector2i(direction.x, 0)) or not is_walkable(current + Vector2i(0, direction.y)):
+							continue
+					_walkable_components[neighbor] = next_component
+					frontier.append(neighbor)
+			next_component += 1
+	_component_topology_revision = _topology_revision

@@ -52,7 +52,7 @@ const MAX_PENDING_STATE_DISPLAY_TRANSITIONS := 60
 
 enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, TO_GATHER, GATHERING, TO_TRADE_PICKUP, TO_TRADE_DESTINATION, TO_EMPLOYMENT_CENTER, EMPLOYMENT_PROCESSING, CANTEEN_WORK, SCHOOL_WORK, TO_MARKET_WORK, MARKET_WORK, TO_CRAFT_WORK, CRAFT_WORK, TO_CONSTRUCTION_PICKUP, TO_CONSTRUCTION_SITE, TO_OFFICIAL_WORK, OFFICIAL_WORK, TO_ARRIVAL_ENTRANCE, ARRIVAL_MEETING, ARRIVAL_WAITING, TO_ARRIVAL_CENTER, RESEARCHING, TO_TOILET, USING_TOILET, WAITING_FOR_TOILET, TO_BUSH, USING_BUSH }
 
-enum EmploymentState { UNREGISTERED, FREELANCE, EMPLOYED, REGISTERING }
+enum EmploymentState { UNREGISTERED, NO_PERMANENT_WORK, EMPLOYED, REGISTERING }
 
 const MODEL_PREFIXES := {
 	"unassigned": "common",
@@ -82,6 +82,7 @@ const DAILY_ORDER_ROLES := {
 	"construction": true,
 	"gather_branches": true,
 	"gather_grass": true,
+	"gather_food": true,
 	"gather_dew": true,
 	"gather_water": true,
 }
@@ -180,16 +181,11 @@ var is_hero := false
 var ai_id := 0
 var construction_site: Node3D
 var specialization := "unassigned"
-# The active work order, exposed under its historical name for WorkforcePolicy
-# data. It is a read-only mirror of freelance_assignment so there is a single
-# source of truth and no dual-write drift.
-var manual_role: String:
-	get: return freelance_assignment
 var active_role := ""
-var reserve_action: StringName = &""
 var employment_state := EmploymentState.UNREGISTERED
-var freelance_assignment := ""
-var pending_freelance_assignment := ""
+var daily_order_role := ""
+var daily_order_workday_id := 0
+var daily_order_expires_at := -1.0
 var permanent_role := ""
 var pending_employment_role := ""
 var employment_workplace: Node3D
@@ -226,7 +222,7 @@ var temp_training_role := ""
 
 const DEVELOPED_SKILL_THRESHOLD := 0.15
 const SKILL_GROWTH_PER_SECOND_WORK := 0.0001
-const FREELANCE_CONSTRUCTION_SKILL_CAP := 0.20
+const DAILY_CONSTRUCTION_SKILL_CAP := 0.20
 const COURIER_EQUIPMENT := {
 	"hands": {"capacity": 1, "speed": 1.0},
 	"simple_backpack": {"capacity": 2, "speed": 1.0},
@@ -241,7 +237,6 @@ const SKILL_MIN_FLOOR := 0.10
 const ROLE_RECHECK_MIN_DELAY := 0.75
 const ROLE_RECHECK_MAX_DELAY := 1.5
 var role_recheck_remaining := 0.0
-var last_automatic_role := ""
 var assigned_dig_site: Node3D
 var uses_courier := false
 var returning_to_excavation := false
@@ -385,7 +380,7 @@ func _setup_visuals() -> void:
 func _setup_idle_indicator() -> void:
 	idle_indicator = Label3D.new()
 	idle_indicator.position = Vector3(0.0, 2.05, 0.0)
-	idle_indicator.text = "Reserve"
+	idle_indicator.text = "No permanent work"
 	idle_indicator.font_size = 32
 	idle_indicator.outline_size = 6
 	idle_indicator.modulate = Color("f0c45d")
@@ -1090,7 +1085,7 @@ func go_to_arrival_entrance(entrance_position: Vector3) -> void:
 
 
 func request_arrival_greeting(entrance_position: Vector3) -> void:
-	if is_player_controlled or not is_reserve():
+	if is_player_controlled or not can_handle_entry_logistics():
 		return
 	pending_arrival_entrance = entrance_position
 
@@ -1150,7 +1145,7 @@ func cancel_employment_processing() -> void:
 		return
 	pending_employment_role = ""
 	pending_employment_workplace = null
-	employment_state = EmploymentState.FREELANCE
+	employment_state = EmploymentState.NO_PERMANENT_WORK
 	state = State.IDLE
 
 
@@ -1189,53 +1184,47 @@ func finish_employment_processing() -> void:
 		employment_state = EmploymentState.EMPLOYED
 	else:
 		permanent_role = ""
-		freelance_assignment = pending_freelance_assignment
-		pending_freelance_assignment = ""
-		employment_state = EmploymentState.FREELANCE
+		employment_state = EmploymentState.NO_PERMANENT_WORK
 	pending_employment_role = ""
 	pending_employment_workplace = null
 	registration_queue_order = -1
 	state = State.IDLE
 
 
-func pin_freelance_role(role: String) -> void:
-	if is_player_controlled or not is_reserve():
+func assign_daily_order(role: String, workday_id: int, expires_at: float) -> void:
+	if is_player_controlled:
 		return
-	freelance_assignment = role
-	permanent_role = ""
-	employment_workplace = null
+	daily_order_role = role
+	daily_order_workday_id = workday_id
+	daily_order_expires_at = expires_at
 
 
-func request_freelance_registration(role := "") -> void:
+func request_no_permanent_work_registration() -> void:
 	if is_player_controlled or not is_unregistered():
 		return
-	pending_freelance_assignment = role
 	queue_employment_processing()
 
 
-func release_to_freelance() -> void:
+func release_to_no_permanent_work() -> void:
 	idle()
-	freelance_assignment = ""
 	permanent_role = ""
 	pending_employment_role = ""
-	pending_freelance_assignment = ""
 	employment_workplace = null
 	pending_employment_workplace = null
-	employment_state = EmploymentState.FREELANCE
+	employment_state = EmploymentState.NO_PERMANENT_WORK
 	registration_queue_order = -1
 
 
 # --- Employment status accessors -------------------------------------------
 # Single point of truth for reading a citizen's employment situation. Callers
-# should prefer these over touching `employment_state`/`freelance_assignment`
+# should prefer these over touching `employment_state`
 # directly, so that collapsing the stored EmploymentState later (see
 # design_docs/workforce_system.md) only has to change these bodies.
 func is_employed() -> bool:
 	return employment_state == EmploymentState.EMPLOYED
 
-func is_reserve() -> bool:
-	# In the reserve pool: registered, works on the officer's plan or a pinned order.
-	return employment_state == EmploymentState.FREELANCE
+func has_no_permanent_work() -> bool:
+	return employment_state == EmploymentState.NO_PERMANENT_WORK
 
 func is_registering() -> bool:
 	return employment_state == EmploymentState.REGISTERING
@@ -1243,34 +1232,39 @@ func is_registering() -> bool:
 func is_unregistered() -> bool:
 	return employment_state == EmploymentState.UNREGISTERED
 
-func has_work_order() -> bool:
-	# An explicit order pins the citizen to a role regardless of the officer's plan.
-	return not freelance_assignment.is_empty()
-
 func is_helper() -> bool:
-	return freelance_assignment == "helper"
+	return has_active_daily_order() and daily_order_role == "helper"
 
 func is_daily_order_role(role: String) -> bool:
 	return DAILY_ORDER_ROLES.has(role)
 
 func has_daily_order() -> bool:
-	return is_daily_order_role(freelance_assignment)
+	return is_daily_order_role(daily_order_role)
 
 func is_courier() -> bool:
-	return freelance_assignment == "courier"
+	return permanent_role == "courier" and is_employed()
 
 func can_handle_entry_logistics() -> bool:
-	return is_reserve() and (is_helper() or is_courier())
+	return is_helper() or is_courier()
 
-func clear_daily_order() -> void:
+func has_active_daily_order() -> bool:
+	if not has_daily_order():
+		return false
+	if simulation == null or not simulation.has_method("is_daily_order_active"):
+		return true
+	return bool(simulation.is_daily_order_active(self))
+
+func clear_daily_order(workday_id := 0) -> void:
 	if not has_daily_order():
 		return
-	var cleared_role := freelance_assignment
-	freelance_assignment = ""
+	if workday_id > 0 and daily_order_workday_id != workday_id:
+		return
+	var cleared_role := daily_order_role
+	daily_order_role = ""
+	daily_order_workday_id = 0
+	daily_order_expires_at = -1.0
 	if active_role == cleared_role:
 		active_role = ""
-	if reserve_action != &"" and String(reserve_action) == cleared_role:
-		reserve_action = &""
 	if state in [State.IDLE, State.RESTING, State.WAITING]:
 		begin_role_recheck_cooldown()
 
@@ -1792,10 +1786,10 @@ func finish_school_day(teacher_present := true) -> void:
 			training_days_completed += 1
 			if training_days_completed >= 10:
 				specialization = "builder" if training_role == "construction" else training_role
-				freelance_assignment = ""
+				clear_daily_order()
 				permanent_role = ""
 				pending_employment_role = ""
-				employment_state = EmploymentState.FREELANCE
+				employment_state = EmploymentState.NO_PERMANENT_WORK
 				setup_specialization(specialization)
 				training_role = ""
 				training_days_completed = 0
@@ -1836,11 +1830,11 @@ func _refresh_warehouse_position() -> void:
 		warehouse_position = resolved
 
 func begin_role_recheck_cooldown() -> void:
-	if is_reserve() and freelance_assignment.is_empty():
+	if has_no_permanent_work() and daily_order_role.is_empty():
 		role_recheck_remaining = randf_range(ROLE_RECHECK_MIN_DELAY, ROLE_RECHECK_MAX_DELAY)
 
 
-func can_recheck_automatic_role() -> bool:
+func can_recheck_idle_work() -> bool:
 	return role_recheck_remaining <= 0.0
 
 func _work_position_for(site: Node3D) -> Vector3:
@@ -2030,7 +2024,7 @@ func _update_idle_indicator() -> void:
 			idle_indicator.text = "Unregistered"
 			idle_indicator.modulate = Color("f0873d")
 		_:
-			var visible_role := freelance_assignment
+			var visible_role := daily_order_role
 			var automatic := false
 			if visible_role.is_empty() and not active_role.is_empty():
 				visible_role = active_role
@@ -2192,8 +2186,8 @@ func _update_satisfaction(delta: float) -> void:
 							
 		var current_val := float(skills.get(core_skill, 0.0))
 		var skill_cap := 1.0
-		if is_reserve() and core_skill == "construction":
-			skill_cap = FREELANCE_CONSTRUCTION_SKILL_CAP
+		if has_active_daily_order() and core_skill == "construction":
+			skill_cap = DAILY_CONSTRUCTION_SKILL_CAP
 		skills[core_skill] = minf(skill_cap, current_val + SKILL_GROWTH_PER_SECOND_WORK * growth_multiplier * satisfaction_tick)
 		practiced_today[core_skill] = true
 		
@@ -2525,18 +2519,6 @@ func execute_action(action: StringName, target: Node3D, payload: AIFactSet) -> b
 				return false
 			begin_employment_processing(center_position, pending_role, target)
 			return state in [State.TO_EMPLOYMENT_CENTER, State.EMPLOYMENT_PROCESSING]
-		&"reserve_work":
-			var delegated_action: Variant = payload.value(&"reserve.action", &"") if payload != null else &""
-			if not (delegated_action is StringName) or delegated_action == &"" or delegated_action == &"reserve_work":
-				return false
-			reserve_action = delegated_action
-			var reserve_role: Variant = payload.value(&"reserve.role", "") if payload != null else ""
-			if reserve_role is String and not reserve_role.is_empty() and freelance_assignment.is_empty():
-				last_automatic_role = reserve_role
-			var started := execute_action(reserve_action, target, payload)
-			if not started:
-				reserve_action = &""
-			return started
 	return false
 
 
@@ -2616,24 +2598,15 @@ func get_action_status(action: StringName) -> int:
 				return 1 # RUNNING
 			if employment_state == EmploymentState.EMPLOYED or state == State.IDLE:
 				return 2 # SUCCEEDED
-		&"reserve_work":
-			if reserve_action == &"":
-				return 3 # FAILED
-			var reserve_status := get_action_status(reserve_action)
-			if reserve_status != 1:
-				reserve_action = &""
-			return reserve_status
 	return 3 # FAILED
 
 
 func cancel_current_action() -> void:
-	reserve_action = &""
 	if is_registering():
 		pending_employment_role = ""
 		pending_employment_workplace = null
-		pending_freelance_assignment = ""
 		registration_queue_order = -1
-		employment_state = EmploymentState.FREELANCE
+		employment_state = EmploymentState.NO_PERMANENT_WORK
 	if state in [State.TO_HOME, State.RESTING, State.TO_CANTEEN, State.EATING, State.TO_TOILET, State.USING_TOILET, State.WAITING_FOR_TOILET, State.TO_BUSH, State.USING_BUSH, State.TO_PARK, State.RELAXING, State.TO_TREE, State.CHOPPING, State.TO_SAWMILL, State.SAWING, State.WAITING_COURIER, State.CONSTRUCTING, State.TO_GATHER, State.GATHERING, State.TO_WAREHOUSE, State.EXCAVATING, State.TO_CANTEEN_WORK, State.CANTEEN_WORK, State.TO_SCHOOL_WORK, State.SCHOOL_WORK, State.TO_MARKET_WORK, State.MARKET_WORK, State.TO_OFFICIAL_WORK, State.OFFICIAL_WORK, State.TO_CRAFT_WORK, State.CRAFT_WORK, State.TO_FACTORY, State.FACTORY_WORK, State.COURIER_TO_WORKER, State.COURIER_TO_WAREHOUSE, State.COURIER_TO_SAWMILL, State.TO_FOOD_PICKUP, State.TO_CANTEEN_DELIVERY, State.TO_CONSTRUCTION_PICKUP, State.TO_CONSTRUCTION_SITE, State.TO_TRADE_PICKUP, State.TO_TRADE_DESTINATION, State.TO_EMPLOYMENT_CENTER, State.EMPLOYMENT_PROCESSING]:
 		idle()
 

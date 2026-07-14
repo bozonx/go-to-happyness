@@ -30,14 +30,8 @@ func capture(sequence: int) -> WorldSnapshot:
 		var citizen_id := actor.ai_id
 		var can_start_personal_need := not actor.has_active_arrival_task() and not actor.has_active_delivery()
 		var worker_data := _worker_data(actor)
-		var reserve_in_progress := actor.is_reserve() and actor.reserve_action != &""
-		var reserve_eligible := actor.is_reserve() and not actor.can_handle_entry_logistics() and not actor.is_player_controlled
-		var reserve_commands: Dictionary = {}
-		if reserve_eligible and not reserve_in_progress and actor.state in [Citizen.State.IDLE, Citizen.State.RESTING, Citizen.State.WAITING]:
-			for reserve_role in [&"forestry", &"farming", &"construction", &"excavation", &"gather_branches", &"gather_grass", &"gather_food", &"gather_dew", &"gather_water", &"cook", &"teacher", &"seller", &"craftsman", &"factory_worker", &"engineer"]:
-				var command := _reserve_command_for(actor, String(reserve_role))
-				if not command.is_empty():
-					reserve_commands[reserve_role] = command
+		var daily_order_active := actor.has_active_daily_order() and not actor.is_player_controlled
+		var daily_order_role := actor.daily_order_role if daily_order_active else ""
 		var needs_service: CitizenNeedsService = simulation.citizen_needs_service
 		var rest_request := needs_service.rest_request(citizen_id) if needs_service != null else {}
 		var relief_candidates: Array[Dictionary] = []
@@ -85,12 +79,40 @@ func capture(sequence: int) -> WorldSnapshot:
 					construction_target_key = _target_key(&"construction", construction_site.node.global_position)
 					construction_position = construction_site.node.global_position
 			construction_can_start = construction_target_key != &""
+		var daily_construction_in_progress := daily_order_active and daily_order_role == "construction" and actor.active_role in ["construction", "demolition"] and actor.state == Citizen.State.CONSTRUCTING and is_instance_valid(actor.construction_site)
+		var daily_construction_can_start := false
+		var daily_construction_mode: StringName = &""
+		var daily_construction_target_key: StringName = &""
+		var daily_construction_position := Vector3.INF
+		if daily_construction_in_progress:
+			daily_construction_mode = StringName(actor.active_role)
+			daily_construction_target_key = _target_key(&"construction", actor.construction_site.global_position)
+			daily_construction_position = actor.construction_site.global_position
+		elif daily_order_role == "construction":
+			if not simulation.demolition_sites.is_empty():
+				var daily_demolition_site: DemolitionSite = simulation.demolition_sites[(citizen_id - 1) % simulation.demolition_sites.size()]
+				if is_instance_valid(daily_demolition_site.building):
+					daily_construction_mode = &"demolition"
+					daily_construction_target_key = _target_key(&"demolition", daily_demolition_site.building.global_position)
+					daily_construction_position = daily_demolition_site.building.global_position
+			elif simulation._preferred_construction_site() != null:
+				var daily_construction_site: ConstructionSite = simulation._preferred_construction_site()
+				if daily_construction_site.is_supplied() and is_instance_valid(daily_construction_site.node):
+					daily_construction_mode = &"construction"
+					daily_construction_target_key = _target_key(&"construction", daily_construction_site.node.global_position)
+					daily_construction_position = daily_construction_site.node.global_position
+			daily_construction_can_start = daily_construction_target_key != &""
 		var gathering_worker := actor.permanent_role in ["gather_branches", "gather_food"] and actor.is_employed() and not actor.is_player_controlled
 		var gathering_in_progress := gathering_worker and actor.active_role.begins_with("gather_") and actor.state in [Citizen.State.TO_GATHER, Citizen.State.GATHERING, Citizen.State.TO_WAREHOUSE]
 		var gathering_candidates: Array[Dictionary] = []
 		if gathering_worker and simulation._is_work_time() and simulation._has_storage_room_for_role(actor.permanent_role):
 			if actor.permanent_role == "gather_food":
 				gathering_candidates = food_gathering_targets
+		var daily_gathering_in_progress := daily_order_active and daily_order_role.begins_with("gather_") and actor.active_role.begins_with("gather_") and actor.state in [Citizen.State.TO_GATHER, Citizen.State.GATHERING, Citizen.State.TO_WAREHOUSE]
+		var daily_gathering_candidates: Array[Dictionary] = []
+		if daily_order_role.begins_with("gather_") and simulation._has_storage_room_for_role(daily_order_role):
+			daily_gathering_candidates = _daily_gathering_targets_for(actor, daily_order_role, food_gathering_targets)
+		var daily_gathering_can_start := daily_order_active and daily_order_role.begins_with("gather_") and not daily_gathering_candidates.is_empty()
 		var excavation_worker := actor.permanent_role == "excavation" and actor.is_employed() and not actor.is_player_controlled
 		var excavation_in_progress := excavation_worker and actor.active_role == "excavation" and actor.state in [Citizen.State.EXCAVATING, Citizen.State.WAITING_COURIER]
 		var excavation_candidates: Array[Dictionary] = []
@@ -213,12 +235,23 @@ func capture(sequence: int) -> WorldSnapshot:
 				&"work.factory.position": factory_position,
 				&"work.courier.worker": courier_worker,
 				&"work.courier.can_start": courier_can_start,
+				&"daily.order.active": daily_order_active,
+				&"daily.order.role": daily_order_role,
+				&"daily.order.workday_id": actor.daily_order_workday_id,
+				&"daily.order.expires_at": actor.daily_order_expires_at,
+				&"daily.construction.in_progress": daily_construction_in_progress,
+				&"daily.construction.can_start": daily_construction_can_start,
+				&"daily.construction.mode": daily_construction_mode,
+				&"daily.construction.target_key": daily_construction_target_key,
+				&"daily.construction.position": daily_construction_position,
+				&"daily.gathering.in_progress": daily_gathering_in_progress,
+				&"daily.gathering.can_start": daily_gathering_can_start,
+				&"daily.gathering.role": StringName(daily_order_role) if daily_order_role.begins_with("gather_") else &"",
+				&"daily.gathering.candidates": daily_gathering_candidates,
+				&"daily.gathering.warehouse_position": simulation._get_nearest_delivery_position(actor.global_position) if daily_order_role.begins_with("gather_") else Vector3.INF,
 				&"workforce.worker_data": worker_data,
 				&"workforce.pending_workplace_key": _workplace_target_key(actor.pending_employment_workplace),
 				&"workforce.pending_workplace_position": actor.pending_employment_workplace.global_position if is_instance_valid(actor.pending_employment_workplace) else Vector3.INF,
-				&"workforce.reserve.eligible": reserve_eligible,
-				&"workforce.reserve.in_progress": reserve_in_progress,
-				&"workforce.reserve.commands": reserve_commands,
 			})
 		)
 	var settlement_facts := AIFactSet.new({
@@ -321,201 +354,41 @@ func _food_gathering_targets() -> Array[Dictionary]:
 	return targets
 
 
-func _reserve_command_for(actor: Citizen, role: String) -> Dictionary:
-	var warehouse: Vector3 = simulation._get_nearest_delivery_position(actor.global_position)
-	if warehouse == Vector3.INF:
-		return {}
-	match role:
-		"forestry":
-			if simulation.sawmill_positions.is_empty():
-				return {}
-			var tree_assignment := _nearest_tree_assignment(actor, false)
-			var tree: Vector3 = tree_assignment.get(&"position", Vector3.INF)
-			var access: Vector3 = tree_assignment.get(&"access", Vector3.INF)
-			if tree == Vector3.INF:
-				return {}
-			return {
-				&"reserve.action": &"forestry", &"target.position": tree,
-				&"reserve.claim_kind": &"forestry.tree", &"reserve.claim_id": _target_key(&"tree", tree),
-				&"target.access_position": access,
-				&"workplace.position": simulation.sawmill_positions[0],
-				&"warehouse.position": warehouse,
-			}
-		"farming":
-			if simulation.farm_positions.is_empty():
-				return {}
-			return {
-				&"reserve.action": &"farming", &"target.position": simulation.farm_positions[0],
-				&"workplace.position": simulation.farm_positions[0],
-				&"warehouse.position": warehouse,
-			}
-		"construction":
-			if not simulation.demolition_sites.is_empty():
-				var demolition: DemolitionSite = simulation.demolition_sites[(actor.ai_id - 1) % simulation.demolition_sites.size()]
-				if is_instance_valid(demolition.building):
-					return {&"reserve.action": &"demolition", &"target.position": demolition.building.global_position, &"target.key": _target_key(&"demolition", demolition.building.global_position)}
-			var site: ConstructionSite = simulation._preferred_construction_site()
-			if site != null and site.is_supplied() and is_instance_valid(site.node):
-				return {&"reserve.action": &"construction", &"target.position": site.node.global_position, &"target.key": _target_key(&"construction", site.node.global_position)}
-			if site != null and is_instance_valid(site.node):
-				return _construction_support_command(actor, site, warehouse)
-		"excavation":
-			for dig_site_value in simulation.dig_sites:
-				var dig_site := dig_site_value as Dictionary
-				var dig_node := dig_site.get(&"node") as Node3D
-				if is_instance_valid(dig_node) and simulation._can_work_at_dig_site(dig_site):
-					var dig_id := _target_key(&"dig", dig_node.global_position)
-					return {&"reserve.action": &"excavation", &"target.position": dig_node.global_position, &"target.key": dig_id, &"reserve.claim_kind": &"excavation.site", &"reserve.claim_id": dig_id}
-		"gather_branches", "gather_grass", "gather_food", "gather_dew", "gather_water":
-			return _reserve_gathering_command(actor, role, warehouse)
-		"cook", "teacher", "seller", "craftsman":
-			var workplace: Node3D = simulation._employer_for_role(role)
-			if is_instance_valid(workplace):
-				return {&"reserve.action": StringName(role), &"target.position": workplace.get_meta("service_position", workplace.global_position), &"workplace.position": workplace.get_meta("service_position", workplace.global_position)}
-		"factory_worker", "engineer":
-			var factory: Node3D = _factory_for_role_internal(role)
-			if is_instance_valid(factory):
-				return {&"reserve.action": &"factory_work", &"target.position": factory.global_position, &"target.key": _target_key(&"factory", factory.global_position), &"factory.role": &"factory_work" if role == "factory_worker" else &"engineering"}
-	return {}
-
-
-func _construction_support_command(actor: Citizen, site: ConstructionSite, warehouse: Vector3) -> Dictionary:
-	for resource_type in site.required_materials:
-		var required := int(site.required_materials[resource_type])
-		var delivered := int(site.delivered_materials.get(resource_type, 0))
-		var reserved := int(site.reserved_materials.get(resource_type, 0))
-		if delivered + reserved >= required:
-			continue
-		if simulation.settlement.amount(resource_type) > 0:
-			if _has_idle_logistics_worker():
-				return {}
-			return {&"reserve.action": &"construction_supply", &"target.position": site.node.global_position, &"target.key": _target_key(&"construction", site.node.global_position), &"resource.type": resource_type, &"warehouse.position": warehouse}
-		if resource_type == "branches":
-			return _reserve_gathering_command(actor, "gather_branches", warehouse)
-		if resource_type == "grass":
-			return _reserve_gathering_command(actor, "gather_grass", warehouse)
-	return {}
-
-
-func _has_idle_logistics_worker() -> bool:
-	for candidate: Citizen in simulation.citizens:
-		if (
-			is_instance_valid(candidate)
-			and not candidate.is_player_controlled
-			and candidate.can_handle_entry_logistics()
-			and candidate.state == Citizen.State.IDLE
-		):
-			return true
-	return false
-
-
-func _reserve_gathering_command(actor: Citizen, role: String, warehouse: Vector3) -> Dictionary:
-	var resource_type := ""
-	var source := Vector3.INF
-	var access := Vector3.INF
+func _daily_gathering_targets_for(actor: Citizen, role: String, food_targets: Array[Dictionary]) -> Array[Dictionary]:
+	var targets: Array[Dictionary] = []
 	match role:
 		"gather_branches":
-			resource_type = "branches"
-			var tree_assignment := _nearest_tree_assignment(actor, true)
-			source = tree_assignment.get(&"position", Vector3.INF)
-			access = tree_assignment.get(&"access", Vector3.INF)
+			for tree_position: Vector3 in simulation.tree_positions:
+				var tree_cell: Vector2i = simulation._cell_from_position(tree_position)
+				var tree := simulation.tree_nodes.get(tree_cell) as Node3D
+				if not is_instance_valid(tree) or bool(tree.get_meta("felled", false)) or int(tree.get_meta("remaining_branches", 0)) <= 0:
+					continue
+				var access := _resource_access_position(tree_position)
+				if access != Vector3.INF:
+					targets.append({&"id": StringName("branch:%d:%d" % [tree_cell.x, tree_cell.y]), &"resource_type": "branches", &"position": tree_position, &"access": access})
 		"gather_grass":
-			resource_type = "grass"
-			source = _nearest_grass(actor)
-			access = source
+			for grass_cell_value in simulation.grass_sources.keys():
+				var grass_cell := grass_cell_value as Vector2i
+				var grass_source := simulation.grass_sources.get(grass_cell, {}) as Dictionary
+				var grass_node := grass_source.get(&"node") as Node3D
+				if int(grass_source.get(&"remaining", 0)) > 0 and is_instance_valid(grass_node):
+					targets.append({&"id": StringName("grass:%d:%d" % [grass_cell.x, grass_cell.y]), &"resource_type": "grass", &"position": grass_node.global_position, &"access": grass_node.global_position})
 		"gather_food":
-			resource_type = "food"
-			source = _forage_position(actor)
-			access = source
+			targets = food_targets.duplicate(true)
 		"gather_dew":
-			resource_type = "water"
-			source = _dew_collector_position()
-			access = source
+			for collector: Dictionary in simulation.water_collectors:
+				if int(collector.get("stored", 0)) <= 0:
+					continue
+				var collector_node := collector.get("node") as Node3D
+				if is_instance_valid(collector_node):
+					var position: Vector3 = collector_node.get_meta("service_position", collector_node.global_position)
+					targets.append({&"id": _target_key(&"dew", position), &"resource_type": "water", &"position": position, &"access": position})
 		"gather_water":
-			resource_type = "water"
-			if not simulation.pond_positions.is_empty():
-				source = simulation._pond_access_position(actor.global_position, simulation.pond_positions[0])
-				access = source
-	if resource_type.is_empty() or source == Vector3.INF or access == Vector3.INF:
-		return {}
-	return {
-		&"reserve.action": &"gathering", &"target.position": source,
-		&"reserve.claim_kind": &"gathering.source", &"reserve.claim_id": _gathering_source_id(role, source),
-		&"resource.type": resource_type,
-		&"target.access_position": access,
-		&"warehouse.position": warehouse,
-	}
-
-
-func _gathering_source_id(role: String, source: Vector3) -> StringName:
-	var cell: Vector2i = simulation._cell_from_position(source)
-	match role:
-		"gather_branches": return StringName("branch:%d:%d" % [cell.x, cell.y])
-		"gather_grass": return StringName("grass:%d:%d" % [cell.x, cell.y])
-		"gather_food": return StringName("forage:%d" % cell.x)
-		"gather_dew": return StringName("dew:%d:%d" % [cell.x, cell.y])
-		"gather_water": return StringName("water:%d:%d" % [cell.x, cell.y])
-	return &""
-
-
-func _nearest_tree_assignment(actor: Citizen, branches_only: bool) -> Dictionary:
-	var best: Dictionary = {}
-	var best_distance := INF
-	for position: Vector3 in simulation.tree_positions:
-		var cell: Vector2i = simulation._cell_from_position(position)
-		var tree := simulation.tree_nodes.get(cell) as Node3D
-		if not is_instance_valid(tree) or bool(tree.get_meta("felled", false)):
-			continue
-		if branches_only and int(tree.get_meta("remaining_branches", 0)) <= 0:
-			continue
-		var access := _resource_access_position(position)
-		if access == Vector3.INF:
-			continue
-		var distance := actor.global_position.distance_squared_to(access)
-		if distance < best_distance:
-			best = {&"position": position, &"access": access}
-			best_distance = distance
-	return best
-
-
-func _nearest_grass(actor: Citizen) -> Vector3:
-	var best := Vector3.INF
-	var best_distance := INF
-	for cell: Vector2i in simulation.grass_sources:
-		var source: Dictionary = simulation.grass_sources[cell]
-		var node := source.get("node") as Node3D
-		if int(source.get("remaining", 0)) <= 0 or not is_instance_valid(node):
-			continue
-		var distance := actor.global_position.distance_squared_to(node.global_position)
-		if distance < best_distance:
-			best = node.global_position
-			best_distance = distance
-	return best
-
-
-func _forage_position(actor: Citizen) -> Vector3:
-	if simulation.forager_positions.is_empty():
-		return Vector3.INF
-	var hut: Vector3 = simulation.forager_positions[0]
-	for position: Vector3 in simulation.forager_positions:
-		if actor.global_position.distance_squared_to(position) < actor.global_position.distance_squared_to(hut):
-			hut = position
-	var angle := float(actor.ai_id % 8) * TAU / 8.0
-	var spot := hut + Vector3(cos(angle) * 4.0, 0.0, sin(angle) * 4.0)
-	var height: float = simulation._terrain_height_at(spot.x, spot.z, 0.0)
-	if not is_nan(height):
-		spot.y = height
-	return spot
-
-
-func _dew_collector_position() -> Vector3:
-	for collector: Dictionary in simulation.water_collectors:
-		if int(collector.get("stored", 0)) <= 0:
-			continue
-		var node := collector.get("node") as Node3D
-		if is_instance_valid(node):
-			return node.get_meta("service_position", node.global_position)
-	return Vector3.INF
+			for pond_position: Vector3 in simulation.pond_positions:
+				var access: Vector3 = simulation._pond_access_position(actor.global_position, pond_position)
+				if access != Vector3.INF:
+					targets.append({&"id": _target_key(&"water", access), &"resource_type": "water", &"position": access, &"access": access})
+	return targets
 
 
 func _worker_data(actor: Citizen) -> Dictionary:
@@ -530,9 +403,8 @@ func _worker_data(actor: Citizen) -> Dictionary:
 		"blocked_by_storage": actor.blocked_by_storage,
 		"status_effects": actor.status_effect_labels(),
 		"specialization": actor.specialization,
-		"manual_role": actor.manual_role,
-		"freelance_assignment": actor.freelance_assignment,
-		"last_automatic_role": actor.last_automatic_role,
+		"daily_order_role": actor.daily_order_role if actor.has_active_daily_order() else "",
+		"daily_order_workday_id": actor.daily_order_workday_id,
 		"training_role": actor.training_role,
 		"training_days_completed": actor.training_days_completed,
 		"permanent_role": actor.permanent_role,

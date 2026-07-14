@@ -3,7 +3,7 @@ extends RefCounted
 
 const MINUTES_PER_DAY := 24 * 60
 
-# Start at the beginning of the workday: the initial freelance reserve can
+# Start at the beginning of the workday so the player's first daily orders can
 # immediately gather the materials required for the first warehouse and fire.
 var minutes := 8.0 * 60.0
 var _previous_minute := -1

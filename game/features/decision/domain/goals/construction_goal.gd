@@ -19,6 +19,8 @@ func score(
 ) -> float:
 	if citizen == null or order == null or order.kind not in [&"construction", &"demolition"]:
 		return 0.0
+	if order.issuer == &"player":
+		return clampf(order.priority, 0.0, 1.0)
 	if not bool(citizen.facts.value(&"work.construction.worker", false)):
 		return 0.0
 	return clampf(order.priority, 0.0, 1.0)

@@ -15,31 +15,30 @@ func _init() -> void:
 	assert(simulation.settlement.branches == 0)
 	assert(is_instance_valid(simulation.citizen_ai))
 	assert(simulation.citizen_ai.brain_count() == simulation.citizens.size())
-	assert(simulation.citizen_ai.goal_count() == 14)
+	assert(simulation.citizen_ai.goal_count() == 13)
 	assert(simulation.citizen_needs_service != null)
-	assert(simulation.citizen_ai.director.provider_count() == 9)
+	assert(simulation.citizen_ai.director.provider_count() == 10)
 	assert(is_instance_valid(simulation.hero_citizen))
 	assert(simulation.hero_citizen.is_hero)
 	assert(simulation.hero_citizen.specialization == "unassigned")
-	assert(simulation.hero_citizen.employment_state == Citizen.EmploymentState.FREELANCE)
+	assert(simulation.hero_citizen.employment_state == Citizen.EmploymentState.NO_PERMANENT_WORK)
 	assert(simulation.is_first_person)
 	assert(simulation.player_citizen == simulation.hero_citizen)
-	assert(simulation._player_can_command_labor())
-	assert(simulation._player_can_command_labor())
+	assert(not simulation._player_can_command_labor())
 	simulation._appoint_official(simulation.hero_citizen)
 	var delegated_officer: Citizen = simulation.citizens[1]
 	simulation._appoint_official(delegated_officer)
 	assert(simulation._player_can_command_labor())
 	simulation._appoint_official(simulation.hero_citizen)
 	assert(simulation._player_can_command_labor())
-	# A role assignment must release the hero from the starting official post and
-	# from any previous first-person control so the AI can actually execute it.
+	# A daily order releases first-person control but does not break the permanent job.
 	simulation.selected_builder = simulation.hero_citizen
 	simulation.hero_citizen.set_player_controlled(true)
-	simulation._set_manual_role("gather_grass")
+	simulation._set_selected_work_role("gather_grass")
 	assert(not simulation.hero_citizen.is_player_controlled)
-	assert(simulation.hero_citizen.employment_state == Citizen.EmploymentState.FREELANCE)
-	assert(simulation.hero_citizen.freelance_assignment == "gather_grass")
+	assert(simulation.hero_citizen.employment_state == Citizen.EmploymentState.EMPLOYED)
+	assert(simulation.hero_citizen.permanent_role == "official")
+	assert(simulation.hero_citizen.daily_order_role == "gather_grass")
 	simulation._appoint_official(simulation.hero_citizen)
 	assert(is_instance_valid(simulation.entrance_stone))
 	var hero_count := 0
@@ -57,7 +56,7 @@ func _init() -> void:
 		assert(citizen.global_position.distance_to(simulation.entrance_stone.global_position) < 5.0)
 		if not citizen.is_hero:
 			assert(citizen.specialization == "unassigned")
-			assert(citizen.employment_state == Citizen.EmploymentState.FREELANCE)
+			assert(citizen.employment_state == Citizen.EmploymentState.NO_PERMANENT_WORK)
 	var resident: Citizen = simulation.citizens[1]
 	# The needs service schedules relief; the actor receives only a selected target
 	# through the native actuator and preserves its interrupted work state.
@@ -139,19 +138,16 @@ func _init() -> void:
 	if simulation.warehouse_positions.is_empty():
 		simulation.warehouse_positions.append(supply_worker.global_position)
 		added_test_warehouse = true
-	supply_worker.release_to_freelance()
-	supply_worker.pin_freelance_role("construction")
-	logistics_worker.release_to_freelance()
-	logistics_worker.pin_freelance_role("helper")
+	simulation._assign_daily_order(supply_worker, "construction")
+	simulation._assign_daily_order(logistics_worker, "helper")
 	simulation._update_couriers()
 	var construction_snapshot := SettlementAIWorldFacade.new(simulation).capture(1000)
 	var workforce_orders := WorkforceOrderProvider.new().collect_orders(construction_snapshot)
-	for order: CitizenOrder in workforce_orders:
-		assert(order.citizen_id != supply_worker.ai_id or order.payload.value(&"reserve.action", &"") != &"construction_supply")
+	assert(workforce_orders.all(func(order: CitizenOrder): return order.citizen_id != supply_worker.ai_id))
 	var courier_orders := CourierDeliveryOrderProvider.new().collect_orders(construction_snapshot)
 	assert(courier_orders.any(func(order: CitizenOrder): return order.citizen_id == logistics_worker.ai_id and order.kind == &"courier_delivery"))
-	logistics_worker.release_to_freelance()
-	supply_worker.release_to_freelance()
+	logistics_worker.clear_daily_order()
+	supply_worker.clear_daily_order()
 	if added_test_warehouse:
 		simulation.warehouse_positions.clear()
 	assert(simulation.begin_native_construction_supply(supply_worker, construction_site.node, construction_resource, supply_worker.global_position))
@@ -205,23 +201,25 @@ func _init() -> void:
 	simulation.citizen_ai.process_mode = Node.PROCESS_MODE_INHERIT
 	var outside_worker: Citizen = simulation.citizens[3]
 	simulation.day_cycle.current_day = 1
-	simulation.clock.set_time(9 * 60)
+	simulation.clock.set_time(21 * 60)
 	outside_worker.global_position = simulation.entrance_stone.global_position + Vector3(10.0, 0.0, 0.0)
 	simulation.last_citizen_positions[outside_worker.get_instance_id()] = outside_worker.global_position
 	simulation.selected_builder = outside_worker
-	outside_worker.release_to_freelance()
-	outside_worker.pin_freelance_role("helper")
+	simulation._assign_daily_order(outside_worker, "helper")
 	var money_before_outside_work: int = simulation.settlement.money
 	simulation._send_selected_resident_to_outside_work()
 	assert(simulation.outside_workers.has(outside_worker.get_instance_id()))
 	assert(not outside_worker.visible)
-	simulation.clock.set_time(21 * 60)
 	simulation._skip_night()
 	assert(simulation.outside_workers.has(outside_worker.get_instance_id()))
 	assert(not outside_worker.visible)
-	assert(outside_worker.freelance_assignment == "")
+	assert(outside_worker.daily_order_role == "helper")
+	assert(outside_worker.daily_order_workday_id == 2)
 	assert(simulation.settlement.money == money_before_outside_work)
 	simulation.clock.set_time(9 * 60)
+	simulation._return_outside_workers()
+	assert(simulation.outside_workers.has(outside_worker.get_instance_id()))
+	simulation.clock.set_time(21 * 60)
 	simulation._return_outside_workers()
 	assert(not simulation.outside_workers.has(outside_worker.get_instance_id()))
 	assert(outside_worker.visible)

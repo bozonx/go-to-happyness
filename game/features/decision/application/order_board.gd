@@ -127,6 +127,7 @@ func _orders_are_equivalent(left: CitizenOrder, right: CitizenOrder) -> bool:
 	return (
 		left.citizen_id == right.citizen_id
 		and left.kind == right.kind
+		and left.workday_id == right.workday_id
 		and left.target_key == right.target_key
 		and left.target_position == right.target_position
 		and left.payload.is_equal_to(right.payload)

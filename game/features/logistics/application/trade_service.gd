@@ -47,7 +47,7 @@ func buy_tool(tool_id: String, price: int) -> void:
 func buy_courier_equipment(courier: Citizen, equipment_id: String, price: int) -> void:
 	if simulation.selected_market == null or not is_instance_valid(courier):
 		return
-	if not courier.is_reserve() or not courier.is_courier() or courier.courier_equipment == equipment_id or available_trade_money() < price:
+	if not courier.is_courier() or courier.courier_equipment == equipment_id or available_trade_money() < price:
 		return
 	start_trade({"kind": "buy_courier_equipment", "courier_id": courier.get_instance_id(), "equipment": equipment_id, "price": price}, simulation.selected_market.global_position, simulation._get_delivery_position())
 	simulation._refresh_market_menu()

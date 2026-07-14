@@ -22,9 +22,8 @@ const FactoryWorkOrderProviderScript = preload("res://game/features/decision/app
 const CourierDeliveryGoalScript = preload("res://game/features/decision/domain/goals/courier_delivery_goal.gd")
 const CourierDeliveryOrderProviderScript = preload("res://game/features/decision/application/courier_delivery_order_provider.gd")
 const SettlementCitizenActuatorScript = preload("res://game/features/decision/application/settlement_citizen_actuator.gd")
-const ReserveWorkGoalScript = preload("res://game/features/decision/domain/goals/reserve_work_goal.gd")
-const ReserveWorkStepScript = preload("res://game/features/decision/domain/behavior/reserve_work_step.gd")
 const WorkforceOrderProviderScript = preload("res://game/features/decision/application/workforce_order_provider.gd")
+const DailyPlayerOrderProviderScript = preload("res://game/features/decision/application/daily_player_order_provider.gd")
 
 
 class ScriptedStep extends BehaviorStep:
@@ -126,7 +125,7 @@ class FakeActuator extends CitizenActuator:
 		_payload: AIFactSet = null
 	) -> bool:
 		action_start_count += 1
-		return action in [&"sleep", &"eat", &"relieve", &"rest", &"register", &"reserve_work", &"forestry", &"farming", &"construction", &"demolition", &"gathering", &"excavation", &"cook", &"teacher", &"seller", &"official", &"craftsman", &"factory_work", &"courier_delivery"]
+		return action in [&"sleep", &"eat", &"relieve", &"rest", &"register", &"forestry", &"farming", &"construction", &"demolition", &"gathering", &"excavation", &"cook", &"teacher", &"seller", &"official", &"craftsman", &"factory_work", &"courier_delivery"]
 
 	func action_status() -> ActionStatus:
 		return next_action_status
@@ -175,11 +174,10 @@ func _init() -> void:
 	_test_native_rest_goal()
 	_test_register_provider_keeps_order_while_registering()
 	_test_register_provider_distributes_workplaces_by_capacity()
-	_test_reserve_work_provider_keeps_assignment()
+	_test_daily_player_order_provider_keeps_gathering_assignment()
+	_test_daily_player_order_provider_publishes_construction_order()
 	_test_runner_cancels_stale_active_order_and_releases_reservation()
-	_test_reserve_work_rejects_contested_target()
 	_test_reserved_step_renews_lease()
-	_test_reserve_work_actuator_delegates_payload()
 	_test_forestry_provider_assigns_unique_stable_targets()
 	_test_native_forestry_goal()
 	_test_farming_provider_keeps_active_cycle()
@@ -1039,55 +1037,74 @@ func _test_runtime_think_budget_is_fair() -> void:
 	system.free()
 
 
-func _test_reserve_work_provider_keeps_assignment() -> void:
-	var provider := WorkforceOrderProviderScript.new()
-	var command := {
-		&"reserve.action": &"gathering",
-		&"target.position": Vector3(4.0, 0.0, 0.0),
-		&"target.key": &"tree:4:0",
-		&"reserve.claim_kind": &"gathering.source",
-		&"reserve.claim_id": &"branch:4:0",
-		&"resource.type": "branches",
-		&"target.access_position": Vector3(3.5, 0.0, 0.0),
-		&"warehouse.position": Vector3(8.0, 0.0, 0.0),
+func _test_daily_player_order_provider_keeps_gathering_assignment() -> void:
+	var provider := DailyPlayerOrderProviderScript.new()
+	var source := {
+		&"id": &"branch:4:0",
+		&"resource_type": "branches",
+		&"position": Vector3(4.0, 0.0, 0.0),
+		&"access": Vector3(3.5, 0.0, 0.0),
 	}
 	var citizen := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
-		&"workforce.worker_data": {"workforce_status": "active"},
-		&"workforce.reserve.eligible": true,
-		&"workforce.reserve.in_progress": false,
-		&"workforce.reserve.commands": {&"gather_branches": command},
+		&"daily.order.active": true,
+		&"daily.order.role": "gather_branches",
+		&"daily.order.workday_id": 3,
+		&"daily.order.expires_at": 42.0,
+		&"daily.gathering.can_start": true,
+		&"daily.gathering.in_progress": false,
+		&"daily.gathering.candidates": [source],
+		&"daily.gathering.warehouse_position": Vector3(8.0, 0.0, 0.0),
 	}))
-	var settlement := AIFactSet.new({&"workforce.world_data": {"trees": 1, "population": 1, "hour": 9, "officer_available": true, "assigned_roles": {}}})
-	var snapshot := WorldSnapshot.new(1, 0.0, 0.0, settlement, {1: citizen})
+	var snapshot := WorldSnapshot.new(1, 0.0, 0.0, AIFactSet.new(), {1: citizen})
 	var orders := provider.collect_orders(snapshot)
 	assert(orders.size() == 1)
 	var order: CitizenOrder = orders[0]
-	assert(order.kind == &"reserve_work")
-	assert(order.payload.value(&"reserve.action") == &"gathering")
-	assert(order.payload.value(&"target.position") == Vector3(4.0, 0.0, 0.0))
-	assert(order.payload.value(&"target.key") == &"tree:4:0")
+	assert(order.kind == &"gathering")
+	assert(order.issuer == &"player")
+	assert(order.workday_id == 3)
+	assert(is_equal_approx(order.expires_at, 42.0))
+	assert(order.payload.value(&"work.source_id") == &"branch:4:0")
+	assert(order.payload.value(&"resource.type") == "branches")
 	assert(order.target_position == Vector3(4.0, 0.0, 0.0))
 
 	var running := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
-		&"workforce.worker_data": {"workforce_status": "active"},
-		&"workforce.reserve.eligible": true,
-		&"workforce.reserve.in_progress": true,
-		&"workforce.reserve.commands": {},
+		&"daily.order.active": true,
+		&"daily.order.role": "gather_branches",
+		&"daily.order.workday_id": 3,
+		&"daily.order.expires_at": 42.0,
+		&"daily.gathering.in_progress": true,
+		&"daily.gathering.can_start": false,
 	}))
-	var continued := provider.collect_orders(WorldSnapshot.new(2, 1.0, 0.0, settlement, {1: running}))
+	var continued := provider.collect_orders(WorldSnapshot.new(2, 1.0, 0.0, AIFactSet.new(), {1: running}))
 	assert(continued.size() == 1)
 	assert(continued[0].payload.to_dictionary() == order.payload.to_dictionary())
 
-	var goal := ReserveWorkGoalScript.new()
-	var actuator := FakeActuator.new(1)
-	var task := goal.build_task(snapshot, citizen, order, AIBlackboard.new())
-	var context := BehaviorContext.new(actuator, AIBlackboard.new())
-	context.refresh(snapshot, order)
-	assert(task.root.run(context, 0.1) == BehaviorStep.Status.RUNNING)
-	assert(actuator.action_start_count == 1)
-	actuator.next_action_status = CitizenActuator.ActionStatus.SUCCEEDED
-	assert(task.root.run(context, 0.1) == BehaviorStep.Status.SUCCESS)
-	assert(snapshot.reservations.owner_of([&"gathering.source", &"branch:4:0"], 0.0) == 0)
+	var inactive := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
+		&"daily.order.active": false,
+		&"daily.order.role": "gather_branches",
+	}))
+	assert(provider.collect_orders(WorldSnapshot.new(3, 2.0, 0.0, AIFactSet.new(), {1: inactive})).is_empty())
+
+
+func _test_daily_player_order_provider_publishes_construction_order() -> void:
+	var provider := DailyPlayerOrderProviderScript.new()
+	var citizen := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
+		&"daily.order.active": true,
+		&"daily.order.role": "construction",
+		&"daily.order.workday_id": 5,
+		&"daily.order.expires_at": 99.0,
+		&"daily.construction.can_start": true,
+		&"daily.construction.mode": &"construction",
+		&"daily.construction.target_key": &"construction:1:2",
+		&"daily.construction.position": Vector3(1.0, 0.0, 2.0),
+	}))
+	var orders := provider.collect_orders(WorldSnapshot.new(1, 0.0, 0.0, AIFactSet.new(), {1: citizen}))
+	assert(orders.size() == 1)
+	assert(orders[0].kind == &"construction")
+	assert(orders[0].issuer == &"player")
+	assert(orders[0].workday_id == 5)
+	assert(orders[0].target_key == &"construction:1:2")
+	assert(orders[0].target_position == Vector3(1.0, 0.0, 2.0))
 
 
 func _test_register_provider_keeps_order_while_registering() -> void:
@@ -1147,56 +1164,29 @@ func _test_register_provider_distributes_workplaces_by_capacity() -> void:
 
 func _test_runner_cancels_stale_active_order_and_releases_reservation() -> void:
 	var command := AIFactSet.new({
-		&"reserve.action": &"gathering",
-		&"reserve.claim_kind": &"gathering.source",
-		&"reserve.claim_id": &"branch:3:0",
-		&"target.position": Vector3(3.0, 0.0, 0.0),
+		&"work.tree_id": &"tree:3:0",
+		&"work.tree_access": Vector3(3.0, 0.0, 0.0),
+		&"work.sawmill_position": Vector3(4.0, 0.0, 0.0),
+		&"work.warehouse_position": Vector3(5.0, 0.0, 0.0),
 	})
 	var citizen := CitizenSnapshot.new(1)
 	var snapshot := WorldSnapshot.new(1, 0.0, 0.0, AIFactSet.new(), {1: citizen})
-	var order := CitizenOrder.new(1, &"reserve_work", &"workforce.coordination", 0.4, command)
+	var order := CitizenOrder.new(1, &"forestry", &"forestry", 0.4, command)
+	order.target_position = Vector3(3.0, 0.0, 0.0)
 	order.id = 7
 	var actuator := FakeActuator.new(1)
 	var context := BehaviorContext.new(actuator, AIBlackboard.new())
 	context.refresh(snapshot, order)
-	var task := BehaviorTask.new(&"reserve_work", ReserveWorkStepScript.new(), false)
+	var task := BehaviorTask.new(&"forestry", ForestryWorkStepScript.new(), false)
 	task.order_id = order.id
 	var runner := BehaviorRunner.new()
 	runner.start(task, context)
 	assert(runner.tick(context, 0.1) == BehaviorStep.Status.RUNNING)
-	assert(snapshot.reservations.owner_of([&"gathering.source", &"branch:3:0"], 0.0) == 1)
+	assert(snapshot.reservations.owner_of([&"forestry.tree", &"tree:3:0"], 0.0) == 1)
 	context.refresh(snapshot, null)
 	assert(runner.tick(context, 0.1) == BehaviorStep.Status.FAILURE)
 	assert(actuator.cancel_action_count == 1)
-	assert(snapshot.reservations.owner_of([&"gathering.source", &"branch:3:0"], 0.0) == 0)
-
-
-func _test_reserve_work_rejects_contested_target() -> void:
-	var goal := ReserveWorkGoalScript.new()
-	var command := AIFactSet.new({
-		&"reserve.action": &"gathering",
-		&"reserve.claim_kind": &"gathering.source",
-		&"reserve.claim_id": &"branch:3:0",
-		&"target.position": Vector3(3.0, 0.0, 0.0),
-		&"target.access_position": Vector3(2.5, 0.0, 0.0),
-		&"warehouse.position": Vector3(8.0, 0.0, 0.0),
-	})
-	var first := CitizenSnapshot.new(1)
-	var second := CitizenSnapshot.new(2)
-	var snapshot := WorldSnapshot.new(1, 0.0, 0.0, AIFactSet.new(), {1: first, 2: second})
-	var first_order := CitizenOrder.new(1, &"reserve_work", &"workforce.coordination", 0.4, command)
-	var second_order := CitizenOrder.new(2, &"reserve_work", &"workforce.coordination", 0.4, command)
-	var first_actuator := FakeActuator.new(1)
-	var second_actuator := FakeActuator.new(2)
-	var first_context := BehaviorContext.new(first_actuator, AIBlackboard.new())
-	var second_context := BehaviorContext.new(second_actuator, AIBlackboard.new())
-	first_context.refresh(snapshot, first_order)
-	second_context.refresh(snapshot, second_order)
-	assert(goal.build_task(snapshot, first, first_order, AIBlackboard.new()).root.run(first_context, 0.1) == BehaviorStep.Status.RUNNING)
-	assert(goal.build_task(snapshot, second, second_order, AIBlackboard.new()).root.run(second_context, 0.1) == BehaviorStep.Status.FAILURE)
-	assert(first_actuator.action_start_count == 1)
-	assert(second_actuator.action_start_count == 0)
-	assert(snapshot.reservations.owner_of([&"gathering.source", &"branch:3:0"], 0.0) == 1)
+	assert(snapshot.reservations.owner_of([&"forestry.tree", &"tree:3:0"], 0.0) == 0)
 
 
 func _test_reserved_step_renews_lease() -> void:
@@ -1220,28 +1210,6 @@ func _test_reserved_step_renews_lease() -> void:
 	context.refresh(snapshot, order)
 	assert(step.run(context, 0.1) == BehaviorStep.Status.RUNNING)
 	assert(not ledger.claim([&"forestry.tree", &"tree:1"], 2, 120.0, 5.0))
-
-
-func _test_reserve_work_actuator_delegates_payload() -> void:
-	var citizen := Citizen.new()
-	citizen.ai_id = 27
-	root.add_child(citizen)
-	var actuator := SettlementCitizenActuatorScript.new(citizen)
-	assert(actuator.begin_action(&"reserve_work", &"", AIFactSet.new({
-		&"reserve.action": &"gathering",
-		&"reserve.role": "gather_branches",
-		&"target.position": Vector3(4.0, 0.0, 0.0),
-		&"target.access_position": Vector3(3.5, 0.0, 0.0),
-		&"warehouse.position": Vector3(8.0, 0.0, 0.0),
-		&"resource.type": "branches",
-	})))
-	assert(citizen.state == Citizen.State.TO_GATHER)
-	assert(citizen.last_automatic_role == "gather_branches")
-	assert(actuator.action_status() == CitizenActuator.ActionStatus.RUNNING)
-	actuator.cancel_action()
-	assert(citizen.state == Citizen.State.IDLE)
-	root.remove_child(citizen)
-	citizen.free()
 
 
 func _context(order: CitizenOrder = null) -> BehaviorContext:

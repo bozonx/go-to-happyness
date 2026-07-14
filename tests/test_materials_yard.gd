@@ -39,6 +39,7 @@ func _init() -> void:
 	civic_centre.set_meta("accepting_workers", true)
 	simulation.add_child(civic_centre)
 	simulation.campfire_node = civic_centre
+	simulation._appoint_official(simulation.citizens[1])
 
 	# The workforce menu's Assign action must create a permanent yard contract;
 	# this is the same handler connected to the visible UI button.

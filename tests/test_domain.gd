@@ -107,8 +107,8 @@ func _init() -> void:
 	_test_school_and_seller_rules()
 	_test_courier_metadata()
 	_test_construction_delivery_stays_scheduled()
-	_test_freelance_construction_skill_cap()
-	_test_freelance_role_recheck_cooldown()
+	_test_daily_order_construction_skill_cap()
+	_test_daily_order_role_recheck_cooldown()
 	_test_courier_equipment_capacity()
 	_test_research_mechanics()
 	_test_trade_order_model()
@@ -497,85 +497,58 @@ func _test_sawmill_rules() -> void:
 
 func _test_workforce_policy() -> void:
 	var world := {"hour": 9, "warehouses": 1, "sawmills": 1, "trees": 1, "farms": 0, "dig_sites": 0, "schools": 0, "construction_sites": 0, "has_canteen": false, "has_factory_job": false, "has_engineer_job": false, "has_bucket": false, "ponds": 2, "water": 0, "population": 3}
-	var forester := {"specialization": "forestry", "manual_role": "", "player_controlled": false, "blocked_by_storage": false, "training_role": "", "training_days_completed": 0}
+	var forester := {"specialization": "forestry", "permanent_role": "forestry", "player_controlled": false, "blocked_by_storage": false, "training_role": "", "training_days_completed": 0}
 	assert(WorkforcePolicy.role_for(forester, world) == "forestry")
 	assert(WorkforcePolicy.can_assign(forester, world))
-	world.sawmills = 0
-	world.era = SettlementState.Era.TENT
-	assert(WorkforcePolicy.role_for(forester, world) == "gather_branches")
-	world.era = SettlementState.Era.EARTH
-	assert(WorkforcePolicy.role_for(forester, world) == "forestry")
+	var no_job := {"specialization": "forestry", "player_controlled": false, "blocked_by_storage": false}
+	assert(WorkforcePolicy.role_for(no_job, world) == "")
+	assert(not WorkforcePolicy.can_assign(no_job, world))
+	var daily_ordered := {"specialization": "unassigned", "daily_order_role": "gather_branches", "player_controlled": false, "blocked_by_storage": false}
+	assert(WorkforcePolicy.role_for(daily_ordered, world) == "gather_branches")
+	assert(WorkforcePolicy.can_assign(daily_ordered, world))
 	world.hour = 7
-	assert(not WorkforcePolicy.can_assign(forester, world))
+	assert(not WorkforcePolicy.can_assign(daily_ordered, world))
 	world.hour = 9
-	world.has_bucket = true
-	world.has_filter = true
-	assert(WorkforcePolicy.role_for(forester, world) == "forestry")
-	assert(WorkforcePolicy.can_assign(forester, world))
-	world.assigned_roles = {"forestry": 1}
-	world.farms = 1
-	world.food = 0
-	assert(WorkforcePolicy.role_for(forester, world) == "farming")
-	world.water = 20
-	world.food = 20
-	world.assigned_roles = {"farming": 1}
-	world.dig_sites = 1
-	assert(WorkforcePolicy.role_for(forester, world) == "excavation")
-	world.assigned_roles = {"excavation": 1}
 	world.sawmills = 1
 	world.trees = 1
 	assert(WorkforcePolicy.permanent_vacancy_for(forester, world) == "forestry")
 	forester.permanent_role = "farming"
 	assert(WorkforcePolicy.role_for(forester, world) == "farming")
-	var early_builder := {"specialization": "builder", "manual_role": "", "player_controlled": false, "blocked_by_storage": false}
+	var early_builder := {"specialization": "builder", "player_controlled": false, "blocked_by_storage": false}
 	var early_world := {"era": SettlementState.Era.WOOD, "construction_sites": 1, "assigned_roles": {}, "population": 2}
-	assert(WorkforcePolicy.role_for(early_builder, early_world) == "construction")
+	assert(WorkforcePolicy.role_for(early_builder, early_world) == "")
 	assert(WorkforcePolicy.permanent_vacancy_for(early_builder, early_world) == "construction")
 	early_world.builder_jobs = 0
 	assert(WorkforcePolicy.permanent_vacancy_for(early_builder, early_world) == "construction")
 	early_world.assigned_roles = {"construction": 1}
-	assert(WorkforcePolicy.role_for(early_builder, early_world) != "construction")
+	assert(WorkforcePolicy.role_for(early_builder, early_world) == "")
 	early_world.construction_sites = 2
-	assert(WorkforcePolicy.role_for(early_builder, early_world) != "construction")
+	assert(WorkforcePolicy.role_for(early_builder, early_world) == "")
 	var guild_world := {"era": SettlementState.Era.STONE, "construction_sites": 1, "builder_jobs": 1, "assigned_roles": {}, "population": 2}
 	assert(WorkforcePolicy.permanent_vacancy_for(early_builder, guild_world) == "construction")
-	var employed_cook := {"specialization": "cook", "permanent_role": "farming", "manual_role": "", "player_controlled": false, "blocked_by_storage": false}
+	var employed_cook := {"specialization": "cook", "permanent_role": "farming", "player_controlled": false, "blocked_by_storage": false}
 	var cook_world := {"hour": 9, "farms": 1, "warehouses": 1, "trees": 0, "construction_sites": 0, "cooking_jobs": 1}
 	assert(WorkforcePolicy.can_assign(employed_cook, cook_world))
-	var field_officer := {"specialization": "official", "permanent_role": "official", "manual_role": "", "player_controlled": false, "blocked_by_storage": false}
+	var field_officer := {"specialization": "official", "permanent_role": "official", "player_controlled": false, "blocked_by_storage": false}
 	assert(WorkforcePolicy.can_assign(field_officer, {"official_jobs": 0}))
-	assert(WorkforcePolicy.can_take_queued_job({"idle": true, "manual_role": "", "player_controlled": false}))
-	assert(not WorkforcePolicy.can_take_queued_job({"idle": true, "manual_role": "farming", "player_controlled": false}))
-	assert(not WorkforcePolicy.can_take_queued_job({"idle": true, "manual_role": "unassigned", "player_controlled": false}))
-	var stable_freelancer := {"specialization": "unassigned", "last_automatic_role": "gather_grass"}
-	assert(WorkforcePolicy.role_for(stable_freelancer, {"hour": 9, "trees": 1, "population": 1}) == "gather_grass")
-
-	# Officer-plans gate: an un-ordered reserve worker is only assignable while an
-	# officer is available; an explicit order (manual_role) bypasses the gate; an
-	# already-employed worker is unaffected.
-	var reserve := {"specialization": "unassigned", "manual_role": "", "player_controlled": false, "blocked_by_storage": false}
-	var reserve_world := {"hour": 9, "trees": 1, "population": 1, "officer_available": true}
-	assert(WorkforcePolicy.can_assign(reserve, reserve_world))
-	reserve_world.officer_available = false
-	assert(not WorkforcePolicy.can_assign(reserve, reserve_world))
-	var ordered := {"specialization": "unassigned", "manual_role": "gather_branches", "freelance_assignment": "gather_branches", "player_controlled": false, "blocked_by_storage": false}
-	assert(WorkforcePolicy.can_assign(ordered, reserve_world))
-	var employed := {"specialization": "cook", "permanent_role": "cook", "manual_role": "", "player_controlled": false, "blocked_by_storage": false}
+	assert(WorkforcePolicy.can_take_queued_job({"idle": true, "daily_order_role": "", "player_controlled": false}))
+	assert(not WorkforcePolicy.can_take_queued_job({"idle": true, "daily_order_role": "gather_branches", "player_controlled": false}))
+	var employed := {"specialization": "cook", "permanent_role": "cook", "player_controlled": false, "blocked_by_storage": false}
 	assert(WorkforcePolicy.can_assign(employed, {"cooking_jobs": 1, "has_canteen": true, "officer_available": false}))
 
 	# Materials yard: an empty gather_branches vacancy is offered as a permanent job
 	# when a yard exists and there are trees; a permanently-employed branch gatherer
 	# stays assignable while trees remain.
-	var yard_hand := {"specialization": "unassigned", "manual_role": "", "player_controlled": false, "blocked_by_storage": false}
+	var yard_hand := {"specialization": "unassigned", "player_controlled": false, "blocked_by_storage": false}
 	var yard_world := {"hour": 9, "trees": 2, "warehouses": 1, "population": 2, "materials_yard_jobs": 2, "assigned_roles": {}, "officer_available": true}
 	assert(WorkforcePolicy.permanent_vacancy_for(yard_hand, yard_world) == "gather_branches")
-	var branch_worker := {"specialization": "unassigned", "permanent_role": "gather_branches", "manual_role": "", "player_controlled": false, "blocked_by_storage": false}
+	var branch_worker := {"specialization": "unassigned", "permanent_role": "gather_branches", "player_controlled": false, "blocked_by_storage": false}
 	assert(WorkforcePolicy.can_assign(branch_worker, yard_world))
 	yard_world.trees = 0
 	assert(not WorkforcePolicy.can_assign(branch_worker, yard_world))
 
 	var craft_world := {"hour": 9, "craftsman_jobs": 3, "assigned_roles": {}, "officer_available": true}
-	var craft_worker := {"specialization": "craftsman", "manual_role": "", "player_controlled": false, "blocked_by_storage": false}
+	var craft_worker := {"specialization": "craftsman", "permanent_role": "craftsman", "player_controlled": false, "blocked_by_storage": false}
 	assert(WorkforcePolicy.permanent_vacancy_for(craft_worker, craft_world) == "craftsman")
 	assert(WorkforcePolicy.can_assign(craft_worker, craft_world))
 	var artisan := Citizen.new()
@@ -954,7 +927,7 @@ func _test_building_registry() -> void:
 
 
 func _test_school_and_seller_rules() -> void:
-	var seller := {"specialization": "seller", "manual_role": "", "player_controlled": false, "blocked_by_storage": false}
+	var seller := {"specialization": "seller", "permanent_role": "seller", "player_controlled": false, "blocked_by_storage": false}
 	var world := {"hour": 9, "markets": 0}
 	assert(not WorkforcePolicy.can_assign(seller, world))
 	world.markets = 1
@@ -1015,28 +988,31 @@ func _test_construction_delivery_stays_scheduled() -> void:
 	courier.free()
 
 
-func _test_freelance_construction_skill_cap() -> void:
+func _test_daily_order_construction_skill_cap() -> void:
 	var worker := Citizen.new()
-	worker.skills = {"construction": Citizen.FREELANCE_CONSTRUCTION_SKILL_CAP - 0.00001}
+	worker.assign_daily_order("construction", 1, 100.0)
+	worker.skills = {"construction": Citizen.DAILY_CONSTRUCTION_SKILL_CAP - 0.00001}
 	worker.active_role = "construction"
-	worker.employment_state = Citizen.EmploymentState.FREELANCE
+	worker.employment_state = Citizen.EmploymentState.NO_PERMANENT_WORK
 	worker.satisfaction_tick = 10.0
 	worker._update_satisfaction(0.0)
-	assert(float(worker.skills.construction) <= Citizen.FREELANCE_CONSTRUCTION_SKILL_CAP)
+	assert(float(worker.skills.construction) <= Citizen.DAILY_CONSTRUCTION_SKILL_CAP)
+	worker.clear_daily_order()
 	worker.employment_state = Citizen.EmploymentState.EMPLOYED
+	worker.active_role = "construction"
 	worker.satisfaction_tick = 10.0
 	worker._update_satisfaction(0.0)
-	assert(float(worker.skills.construction) > Citizen.FREELANCE_CONSTRUCTION_SKILL_CAP)
+	assert(float(worker.skills.construction) > Citizen.DAILY_CONSTRUCTION_SKILL_CAP)
 	worker.free()
 
 
-func _test_freelance_role_recheck_cooldown() -> void:
+func _test_daily_order_role_recheck_cooldown() -> void:
 	var worker := Citizen.new()
-	worker.employment_state = Citizen.EmploymentState.FREELANCE
+	worker.employment_state = Citizen.EmploymentState.NO_PERMANENT_WORK
 	worker.begin_role_recheck_cooldown()
 	assert(worker.role_recheck_remaining >= Citizen.ROLE_RECHECK_MIN_DELAY)
 	assert(worker.role_recheck_remaining <= Citizen.ROLE_RECHECK_MAX_DELAY)
-	assert(not worker.can_recheck_automatic_role())
+	assert(not worker.can_recheck_idle_work())
 	worker.free()
 
 

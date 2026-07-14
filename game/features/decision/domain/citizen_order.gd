@@ -15,6 +15,7 @@ var target_position: Vector3
 var payload: AIFactSet
 var issued_at: float
 var expires_at: float
+var workday_id: int
 
 
 func _init(
@@ -33,6 +34,7 @@ func _init(
 	payload = next_payload if next_payload != null else AIFactSet.new()
 	issued_at = 0.0
 	expires_at = -1.0
+	workday_id = 0
 
 
 func is_expired(simulation_seconds: float) -> bool:
