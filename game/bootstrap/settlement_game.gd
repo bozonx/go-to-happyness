@@ -1,6 +1,7 @@
 extends Node3D
 
 const SETTLEMENT_RULES = preload("res://game/features/settlement/domain/settlement_rules.gd")
+const TentEraSurvivalRulesScript = preload("res://game/features/settlement/domain/tent_era_survival_rules.gd")
 const FireSourceStateScript = preload("res://game/features/settlement/domain/fire_source_state.gd")
 const CourierDispatcherScript = preload("res://game/features/logistics/application/courier_dispatcher.gd")
 const CourierTaskScript = preload("res://game/features/logistics/domain/courier_task.gd")
@@ -47,6 +48,7 @@ const BRICK_RESEARCH_DURATION := 20.0
 const POPULATION := 4
 const WAREHOUSE_CAPACITY := 50
 const FOOD_PURCHASE_PRICE := 2
+const ENTRANCE_GLOVE_PRICE := 20
 const HOUSE_CAPACITY := 4
 const TENT_CAPACITY := 4
 const CONSTRUCTION_DURATION := 4.0
@@ -182,6 +184,8 @@ var labor_authority_label: Label
 var messages: Array[Dictionary] = []
 var current_day: int:
 	get: return day_cycle.current_day
+var tent_weather: int = TentEraSurvivalRulesScript.Weather.WARMING
+var last_survival_hour := -1
 var message_scroll: ScrollContainer
 var message_list: VBoxContainer
 var messages_modal: Panel
@@ -386,6 +390,7 @@ func _ready() -> void:
 	courier_dispatcher = CourierDispatcherScript.new()
 	courier_dispatcher.configure(self)
 	settlement.apply_tent_start()
+	tent_weather = TentEraSurvivalRulesScript.weather_for_day(day_cycle.current_day)
 	_create_world()
 	_create_interface()
 	_create_forest()
@@ -649,7 +654,10 @@ func _update_daylight() -> void:
 	sun.shadow_enabled = direct_light > 0.05
 
 func _update_clock(delta: float) -> void:
+	var previous_hour := clock.hour()
 	var events := day_cycle.advance(delta, GAME_MINUTES_PER_SECOND, settlement.workday_hours)
+	if clock.hour() != previous_hour:
+		_apply_hourly_tent_survival(clock.hour())
 	clock_label.text = "%s  %02d:%02d  x%d" % ["Night" if clock.is_night() else "Day", clock.hour(), clock.minute(), int(time_multiplier)]
 	if skip_night_button != null:
 		skip_night_button.visible = not settlement.night_shifts_allowed and not _is_work_time()
@@ -678,8 +686,71 @@ func _handle_day_cycle_event(event: SimulationDayEvent) -> void:
 				citizen.finish_school_day(teacher_ok)
 			_update_workers()
 		SimulationDayEvent.Kind.DAILY_SETTLEMENT_UPDATE:
+			tent_weather = TentEraSurvivalRulesScript.weather_for_day(day_cycle.current_day)
+			_update_interface("Forecast: %s." % TentEraSurvivalRulesScript.WEATHER_NAMES[tent_weather])
+			_expire_temporary_tents()
 			_refresh_living_statuses()
 			_apply_daily_settlement_rules()
+
+
+func _apply_hourly_tent_survival(hour: int) -> void:
+	var survival_hour := day_cycle.current_day * 24 + hour
+	if settlement.era != SettlementState.Era.TENT or last_survival_hour == survival_hour:
+		return
+	last_survival_hour = survival_hour
+	var night := hour >= 22 or hour < 6
+	var has_fire := _has_lit_communal_fire()
+	var total_loss := 0
+	for citizen in citizens:
+		if not is_instance_valid(citizen):
+			continue
+		var has_home := is_instance_valid(citizen.home)
+		total_loss += TentEraSurvivalRulesScript.hourly_wellbeing_loss(has_home, has_fire, tent_weather, night)
+	if total_loss > 0:
+		wellbeing = maxi(0, wellbeing - ceili(float(total_loss) / maxi(1, citizens.size())))
+	if tent_weather == TentEraSurvivalRulesScript.Weather.RAIN and hour > 0:
+		_apply_rain_damage()
+	if wellbeing <= 0 and not citizens.is_empty():
+		var departing: Citizen = citizens.pop_back()
+		departing.queue_free()
+		_add_message("A resident left the camp after wellbeing reached zero.")
+		_schedule_recovery_arrival()
+
+
+func _apply_rain_damage() -> void:
+	var sheltered_capacity := int(settlement.buildings.get("warehouse_lvl2", 0)) * 48
+	if settlement.storage_used_units() <= sheltered_capacity:
+		return
+	var losses := TentEraSurvivalRulesScript.rain_hourly_decay_losses({"food": food, "grass": grass, "branches": branches, "wood": wood, "logs": settlement.logs})
+	for resource_type in losses:
+		settlement.add(resource_type, -int(losses[resource_type]))
+	for record in building_registry.records():
+		var building: Node3D = record.node
+		if is_instance_valid(building) and str(building.get_meta("building_type", "")) in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "gathering_place"]:
+			var fire_state := _fire_state_for(building)
+			fire_state.lit = false
+			_apply_fire_state(building, fire_state)
+
+
+func _expire_temporary_tents() -> void:
+	for record in building_registry.records().duplicate():
+		var building: Node3D = record.node
+		if not is_instance_valid(building) or str(building.get_meta("building_type", "")) != "tent":
+			continue
+		_destroy_building_to_pile(building, "tent")
+		_add_message("The temporary tent was dismantled at dawn.")
+
+
+func _schedule_recovery_arrival() -> void:
+	if citizens.size() >= POPULATION:
+		return
+	await get_tree().create_timer(0.1).timeout
+	if citizens.size() < POPULATION and is_instance_valid(entrance_stone):
+		_add_citizen(entrance_stone.global_position + Vector3(0.8, 0.1, 1.2), "unassigned")
+		money += 100
+		food += 4
+		settlement.add_construction_glove_set()
+		_add_message("A survivor arrived with emergency supplies.")
 
 func _apply_daily_settlement_rules() -> void:
 	var population := citizens.size()
@@ -723,7 +794,7 @@ func _apply_daily_settlement_rules() -> void:
 	# draws food through the meal pipeline, so we don't double-count there.
 	water = maxi(0, water - population)
 	if not is_instance_valid(canteen):
-		food = maxi(0, food - population)
+		food = maxi(0, food - TentEraSurvivalRulesScript.daily_food_consumption(population, tent_weather))
 	var housing := _total_housing_slots()
 	var change := SETTLEMENT_RULES.daily_wellbeing_change(housing >= population, float(food) / population, float(water) / population, settlement.workday_hours, settlement.night_shifts_allowed)
 	wellbeing = clampi(wellbeing + change, 0, 100)
@@ -1842,6 +1913,8 @@ func _create_citizens() -> void:
 func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void:
 	var citizen := Citizen.new()
 	citizen.position = spawn_position
+	if citizens.size() < POPULATION:
+		citizen.gender = "male" if citizens.size() % 2 == 0 else "female"
 	if hero_citizen == null:
 		citizen.gender = "male"
 		citizen.skin_color = Color("f1c09a")
@@ -2045,10 +2118,33 @@ func _create_time_controls(ui: CanvasLayer) -> void:
 	skip_night_button.visible = false
 	skip_night_button.pressed.connect(_skip_night)
 	ui.add_child(skip_night_button)
+	var emergency_food_button := Button.new()
+	emergency_food_button.text = "Entrance: food"
+	emergency_food_button.tooltip_text = "Order 4 food at the entrance stone; an idle resident makes the trip."
+	emergency_food_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	emergency_food_button.offset_left = -220
+	emergency_food_button.offset_top = 136
+	emergency_food_button.offset_right = -122
+	emergency_food_button.offset_bottom = 166
+	emergency_food_button.pressed.connect(func(): trade_service.buy_entrance_food(4, FOOD_PURCHASE_PRICE))
+	ui.add_child(emergency_food_button)
+	var emergency_gloves_button := Button.new()
+	emergency_gloves_button.text = "Entrance: gloves"
+	emergency_gloves_button.tooltip_text = "Order one construction glove set at the entrance stone."
+	emergency_gloves_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	emergency_gloves_button.offset_left = -118
+	emergency_gloves_button.offset_top = 136
+	emergency_gloves_button.offset_right = -22
+	emergency_gloves_button.offset_bottom = 166
+	emergency_gloves_button.pressed.connect(func(): trade_service.buy_entrance_gloves(ENTRANCE_GLOVE_PRICE))
+	ui.add_child(emergency_gloves_button)
 
 
 func _skip_night() -> void:
+	for hour in [22, 23, 0, 1, 2, 3, 4, 5]:
+		_apply_hourly_tent_survival(hour)
 	day_cycle.start_next_day()
+	tent_weather = TentEraSurvivalRulesScript.weather_for_day(day_cycle.current_day)
 	# Living through the night crosses 06:00, when the daily water/food sink runs and
 	# frees storage. Skipping must apply the same rules, otherwise stores stay full,
 	# no production is assignable, and workers have nothing to wake up for.

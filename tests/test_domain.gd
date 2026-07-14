@@ -1,6 +1,7 @@
 extends SceneTree
 
 const SettlementRulesScript = preload("res://game/features/settlement/domain/settlement_rules.gd")
+const TentEraSurvivalRulesScript = preload("res://game/features/settlement/domain/tent_era_survival_rules.gd")
 const GridRouteServiceScript = preload("res://game/features/routing/application/grid_route_service.gd")
 const BuildingQueueServiceScript = preload("res://game/features/citizens/application/building_queue_service.gd")
 const BuildingAvailabilityServiceScript = preload("res://game/features/buildings/application/building_availability_service.gd")
@@ -66,6 +67,7 @@ func _init() -> void:
 	_test_tent_start_config()
 	_test_progression_and_volunteers()
 	_test_work_schedule_wellbeing()
+	_test_tent_survival_rules()
 	_test_clock_wraps_and_reports_elapsed_minutes()
 	_test_day_cycle_schedule()
 	_test_sawmill_rules()
@@ -157,6 +159,10 @@ func _test_tent_start_config() -> void:
 	assert(state.branches == 0 and state.grass == 0)
 	assert(bool(state.equipment.flint_steel.owned))
 	assert(int(state.equipment.construction_gloves.sets) == 1)
+	assert(state.construction_gloves_available())
+	assert(state.wear_construction_gloves(100.0) == false)
+	state.add_construction_glove_set()
+	assert(state.construction_gloves_available())
 	assert(state.is_building_unlocked("warehouse"))
 	assert(not state.is_building_unlocked("campfire"))
 	assert(not state.can_afford_building("campfire"))
@@ -379,6 +385,16 @@ func _test_work_schedule_wellbeing() -> void:
 	var long_night_day: int = SettlementRulesScript.daily_wellbeing_change(true, 1.0, 1.0, 10, true)
 	assert(short_day > long_night_day)
 	assert(SettlementRulesScript.production_multiplier(10, true) > SettlementRulesScript.production_multiplier(6, false))
+
+
+func _test_tent_survival_rules() -> void:
+	assert(TentEraSurvivalRulesScript.weather_for_day(1) == TentEraSurvivalRulesScript.Weather.WARMING)
+	assert(TentEraSurvivalRulesScript.weather_for_day(2) == TentEraSurvivalRulesScript.Weather.COOLING)
+	assert(TentEraSurvivalRulesScript.hourly_wellbeing_loss(false, true, TentEraSurvivalRulesScript.Weather.COOLING, true) == 6)
+	assert(TentEraSurvivalRulesScript.hourly_wellbeing_loss(true, false, TentEraSurvivalRulesScript.Weather.WARMING, false) == 2)
+	assert(TentEraSurvivalRulesScript.daily_food_consumption(4, TentEraSurvivalRulesScript.Weather.COOLING) == 5)
+	var rain_loss := TentEraSurvivalRulesScript.rain_hourly_decay_losses({"food": 16, "branches": 1})
+	assert(int(rain_loss.food) == 1 and int(rain_loss.branches) == 1)
 
 
 func _test_clock_wraps_and_reports_elapsed_minutes() -> void:

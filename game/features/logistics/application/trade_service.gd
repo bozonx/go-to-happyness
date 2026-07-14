@@ -79,6 +79,18 @@ func start_entrance_purchase(trade: Dictionary) -> void:
 	))
 
 
+func buy_entrance_food(quantity: int, unit_price: int) -> void:
+	if quantity <= 0 or available_trade_money() < quantity * unit_price:
+		return
+	start_entrance_purchase({"kind": "buy_resource", "resource": "food", "quantity": quantity, "price": unit_price})
+
+
+func buy_entrance_gloves(price: int) -> void:
+	if available_trade_money() < price:
+		return
+	start_entrance_purchase({"kind": "buy_gloves", "price": price})
+
+
 func trade_orders() -> Array[Dictionary]:
 	var orders: Array[Dictionary] = []
 	for order in simulation.queued_trades:
@@ -160,6 +172,12 @@ func on_trade_delivery_finished(worker: Citizen) -> void:
 			if simulation.settlement.buy_tool(str(trade.tool), int(trade.price)):
 				simulation._update_workers()
 				simulation._update_interface("Purchased %s after delivery to storage." % str(trade.tool).replace("_", " "))
+		"buy_gloves":
+			var gloves_price := int(trade.price)
+			if simulation.settlement.money >= gloves_price:
+				simulation.settlement.money -= gloves_price
+				simulation.settlement.add_construction_glove_set()
+				simulation._update_interface("Purchased a construction glove set at the entrance stone.")
 		"buy_courier_equipment":
 			var price := int(trade.price)
 			var courier := instance_from_id(int(trade.courier_id)) as Citizen

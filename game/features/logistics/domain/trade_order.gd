@@ -40,6 +40,7 @@ func reserved_money() -> int:
 		"buy_resource": return int(trade.get("quantity", 0)) * int(trade.get("price", 0))
 		"buy_tool": return int(trade.get("price", 0))
 		"buy_courier_equipment": return int(trade.get("price", 0))
+		"buy_gloves": return int(trade.get("price", 0))
 	return 0
 
 

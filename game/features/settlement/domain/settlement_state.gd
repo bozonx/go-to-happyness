@@ -129,6 +129,32 @@ func apply_tent_start(reset_progress := true) -> void:
 func _tent_start_unlock_for(building_type: String) -> bool:
 	return false
 
+
+func construction_gloves_available() -> bool:
+	return int(equipment.get("construction_gloves", {}).get("sets", 0)) > 0
+
+
+func wear_construction_gloves(amount: float) -> bool:
+	var gloves: Dictionary = equipment.get("construction_gloves", {})
+	if int(gloves.get("sets", 0)) <= 0:
+		return false
+	gloves["active_durability"] = float(gloves.get("active_durability", 100.0)) - amount
+	while float(gloves["active_durability"]) <= 0.0 and int(gloves.get("sets", 0)) > 0:
+		gloves["sets"] = int(gloves["sets"]) - 1
+		gloves["active_durability"] = float(gloves["active_durability"]) + 100.0
+	if int(gloves["sets"]) <= 0:
+		gloves["active_durability"] = 0.0
+	equipment["construction_gloves"] = gloves
+	return int(gloves.get("sets", 0)) > 0
+
+
+func add_construction_glove_set() -> void:
+	var gloves: Dictionary = equipment.get("construction_gloves", {})
+	gloves["sets"] = int(gloves.get("sets", 0)) + 1
+	if float(gloves.get("active_durability", 0.0)) <= 0.0:
+		gloves["active_durability"] = 100.0
+	equipment["construction_gloves"] = gloves
+
 ## --- Weighted, reallocatable storage ------------------------------------------
 ## Every stored good takes up "space units". The warehouse holds a fixed number of
 ## units for the current era; the player splits that budget between resources in
@@ -366,6 +392,8 @@ func is_building_unlocked(building_type: String) -> bool:
 		return true
 	if building_type == "campfire":
 		return era > Era.TENT or has_building("warehouse") or has_building("campfire")
+	if building_type == "tent":
+		return era > Era.TENT or has_building("campfire")
 	if unlocked_building_levels.has(building_type):
 		return bool(unlocked_building_levels.get(building_type, false))
 	return true
