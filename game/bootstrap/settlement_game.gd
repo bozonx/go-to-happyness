@@ -6,6 +6,7 @@ const CourierDispatcherScript = preload("res://game/features/logistics/applicati
 const CourierTaskScript = preload("res://game/features/logistics/domain/courier_task.gd")
 const TradeServiceScript = preload("res://game/features/logistics/application/trade_service.gd")
 const StorageDeliveryServiceScript = preload("res://game/features/logistics/application/storage_delivery_service.gd")
+const BuildingAvailabilityServiceScript = preload("res://game/features/buildings/application/building_availability_service.gd")
 const BuildingQueueServiceScript = preload("res://game/features/citizens/application/building_queue_service.gd")
 const SleepGoalScript = preload("res://game/features/decision/domain/goals/sleep_goal.gd")
 const MealGoalScript = preload("res://game/features/decision/domain/goals/meal_goal.gd")
@@ -319,6 +320,7 @@ var citizen_needs_service: CitizenNeedsService
 var _next_ai_citizen_id := 1
 var route_service: GridRouteService
 var building_queue_service: RefCounted
+var building_availability_service: RefCounted
 var sawmills: SawmillService
 var construction: ConstructionService
 var demolition: DemolitionService
@@ -339,6 +341,8 @@ func _ready() -> void:
 	route_service.configure(nav_grid)
 	building_queue_service = BuildingQueueServiceScript.new()
 	building_queue_service.configure(building_registry, nav_grid)
+	building_availability_service = BuildingAvailabilityServiceScript.new()
+	building_availability_service.configure(settlement)
 	sawmills = SawmillService.new()
 	sawmills.configure(self)
 	var construction_runtime := ConstructionRuntime.new()
@@ -1281,10 +1285,7 @@ func _building_cost() -> int:
 	return BuildingCatalog.cost_for(build_mode)
 
 func _format_costs(building_type: String) -> String:
-	var parts: Array[String] = []
-	for resource_type in BuildingCatalog.cost_resources(building_type):
-		parts.append("%d %s" % [BuildingCatalog.cost_for_resource(building_type, resource_type), resource_type])
-	return "  ".join(parts) if not parts.is_empty() else "free"
+	return building_availability_service.cost_text(building_type)
 
 func _stored_resources() -> int:
 	return int(ceil(settlement.storage_used_units()))
@@ -2991,12 +2992,12 @@ func _refresh_build_menu() -> void:
 		if button.get_meta("category_back", false):
 			button.visible = not build_category.is_empty() and not build_menu_is_job_menu
 		elif not category_button.is_empty():
-			var category_era: int = int({"tent": SettlementState.Era.TENT, "earth": SettlementState.Era.EARTH, "clay": SettlementState.Era.CLAY, "wood": SettlementState.Era.WOOD, "stone": SettlementState.Era.STONE, "brick": SettlementState.Era.BRICK}.get(category_button, SettlementState.Era.TENT))
-			button.visible = build_category.is_empty() and not build_menu_is_job_menu and category_era <= settlement.era
+			button.visible = build_category.is_empty() and not build_menu_is_job_menu and building_availability_service.is_category_available(category_button)
 		else:
 			var build_type: String = button.get_meta("build_type", "")
-			var is_unlocked := settlement.is_building_unlocked(build_type) and not BuildingCatalog.is_upgrade_only(build_type)
-			button.visible = not build_category.is_empty() and button.get_meta("category", "") == build_category and not build_menu_is_job_menu and is_unlocked
+			var menu_state: Dictionary = building_availability_service.menu_state(build_type)
+			button.set_meta("build_menu_state", menu_state)
+			button.visible = not build_category.is_empty() and button.get_meta("category", "") == build_category and not build_menu_is_job_menu and bool(menu_state.visible)
 			
 	for button in role_buttons:
 		var role: String = button.get_meta("role", "")
@@ -3026,13 +3027,15 @@ func _refresh_build_menu() -> void:
 		button.position = Vector2(16, row_y)
 		row_y += 50.0
 		var building_type: String = button.get_meta("build_type", "")
-		var affordable := settlement.can_afford_building(building_type)
-		button.disabled = not affordable
-		button.modulate = Color(1, 1, 1, 1) if affordable else Color(0.55, 0.55, 0.6, 1)
+		var menu_state: Dictionary = button.get_meta("build_menu_state", building_availability_service.menu_state(building_type))
+		var enabled := bool(menu_state.enabled)
+		button.disabled = not enabled
+		button.tooltip_text = "" if enabled else building_availability_service.message_for_reason(menu_state.reason)
+		button.modulate = Color(1, 1, 1, 1) if enabled else Color(0.55, 0.55, 0.6, 1)
 		var cost_label: Label = button.get_meta("cost_label")
 		if cost_label != null:
-			cost_label.text = _format_costs(building_type)
-			cost_label.add_theme_color_override("font_color", Color("cdd6df") if affordable else Color("d98a86"))
+			cost_label.text = str(menu_state.cost_text)
+			cost_label.add_theme_color_override("font_color", Color("cdd6df") if enabled else Color("d98a86"))
 
 	if build_menu_title != null:
 		if build_menu_is_job_menu:
@@ -3329,8 +3332,9 @@ func _select_build_mode(next_mode: String) -> void:
 	if not _can_hero_build():
 		_update_interface("Only the hero can approve construction decisions.")
 		return
-	if BuildingCatalog.era_for(next_mode) > settlement.era:
-		_update_interface("This building belongs to a later era. Complete the current settlement requirements first.")
+	var placement_state: Dictionary = building_availability_service.placement_state(next_mode)
+	if not bool(placement_state.allowed):
+		_update_interface(str(placement_state.message))
 		return
 	build_mode = next_mode
 	build_rotation_quarters = 0
@@ -4171,10 +4175,8 @@ func _place_building(world_position: Vector3) -> void:
 		return
 	var cell := _placement_key(world_position)
 	if not _can_pay_building_cost(build_mode):
-		_update_interface("Not enough resources for this building.")
-		return
-	if BuildingCatalog.is_upgrade_only(build_mode):
-		_update_interface("This landmark level is upgraded from the campfire menu.")
+		var placement_state: Dictionary = building_availability_service.placement_state(build_mode)
+		_update_interface(str(placement_state.message))
 		return
 	var blueprint := BuildingBlueprints.get_blueprint(build_mode)
 	var occupied_footprint := _rotated_footprint(blueprint.footprint)
@@ -4208,7 +4210,7 @@ func _can_place(world_position: Vector3) -> bool:
 	return _is_footprint_level(world_position, footprint) and _is_footprint_clear(world_position, footprint)
 
 func _can_pay_building_cost(building_type: String) -> bool:
-	return settlement.can_afford_building(building_type)
+	return bool(building_availability_service.placement_state(building_type).allowed)
 
 func _pay_building_cost(building_type: String) -> void:
 	settlement.pay_for_building(building_type)

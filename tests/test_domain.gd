@@ -3,6 +3,7 @@ extends SceneTree
 const SettlementRulesScript = preload("res://game/features/settlement/domain/settlement_rules.gd")
 const GridRouteServiceScript = preload("res://game/features/routing/application/grid_route_service.gd")
 const BuildingQueueServiceScript = preload("res://game/features/citizens/application/building_queue_service.gd")
+const BuildingAvailabilityServiceScript = preload("res://game/features/buildings/application/building_availability_service.gd")
 const CanteenServiceScript = preload("res://game/features/logistics/application/canteen_service.gd")
 const StorageDeliveryServiceScript = preload("res://game/features/logistics/application/storage_delivery_service.gd")
 const TradeOrderScript = preload("res://game/features/logistics/domain/trade_order.gd")
@@ -91,6 +92,7 @@ func _init() -> void:
 	_test_fire_source_state()
 	_test_citizen_status_effects()
 	_test_storage_delivery_service()
+	_test_building_availability_service()
 	quit(0)
 
 
@@ -249,6 +251,30 @@ func _test_storage_delivery_service() -> void:
 	assert(blocked_worker.blocked_by_storage)
 	assert(blocked_worker.has_status_effect(CitizenStatusEffectScript.STORAGE_NO_WAREHOUSE))
 	assert(no_storage_simulation.last_interface_message == "Workers delivered 1 grass without warehouse storage. New collection is paused.")
+
+
+func _test_building_availability_service() -> void:
+	var state := SettlementState.new()
+	state.apply_tent_start()
+	var service := BuildingAvailabilityServiceScript.new()
+	service.configure(state)
+	assert(service.is_category_available("tent"))
+	assert(not service.is_category_available("earth"))
+	var warehouse_menu: Dictionary = service.menu_state("warehouse")
+	assert(bool(warehouse_menu.visible))
+	assert(bool(warehouse_menu.enabled))
+	assert(str(warehouse_menu.cost_text) == "free")
+	var campfire_menu: Dictionary = service.menu_state("campfire")
+	assert(not bool(campfire_menu.visible))
+	assert(campfire_menu.reason == BuildingAvailabilityServiceScript.REASON_LOCKED)
+	var upgrade_menu: Dictionary = service.menu_state("campfire_lvl2")
+	assert(not bool(upgrade_menu.visible))
+	assert(upgrade_menu.reason == BuildingAvailabilityServiceScript.REASON_UPGRADE_ONLY)
+	state.buildings["warehouse"] = 1
+	state.branches = 6
+	var campfire_placement: Dictionary = service.placement_state("campfire")
+	assert(bool(campfire_placement.allowed))
+	assert(service.cost_text("campfire") == "6 branches")
 
 
 func _test_progression_and_volunteers() -> void:
