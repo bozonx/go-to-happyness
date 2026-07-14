@@ -183,6 +183,29 @@ func _init() -> void:
 	field_officer.global_position += Vector3(10.0, 0.0, 0.0)
 	assert(not simulation._can_start_registration(first_in_queue))
 	simulation.citizen_ai.process_mode = Node.PROCESS_MODE_INHERIT
+	var outside_worker: Citizen = simulation.citizens[3]
+	simulation.day_cycle.current_day = 1
+	simulation.clock.set_time(9 * 60)
+	outside_worker.global_position = simulation.entrance_stone.global_position + Vector3(10.0, 0.0, 0.0)
+	simulation.last_citizen_positions[outside_worker.get_instance_id()] = outside_worker.global_position
+	simulation.selected_builder = outside_worker
+	var money_before_outside_work: int = simulation.settlement.money
+	simulation._send_selected_resident_to_outside_work()
+	assert(simulation.outside_workers.has(outside_worker.get_instance_id()))
+	assert(not outside_worker.visible)
+	simulation.clock.set_time(21 * 60)
+	simulation._skip_night()
+	assert(simulation.outside_workers.has(outside_worker.get_instance_id()))
+	assert(not outside_worker.visible)
+	assert(simulation.settlement.money == money_before_outside_work)
+	simulation.clock.set_time(9 * 60)
+	simulation._return_outside_workers()
+	assert(not simulation.outside_workers.has(outside_worker.get_instance_id()))
+	assert(outside_worker.visible)
+	assert(simulation.settlement.money == money_before_outside_work + simulation.OUTSIDE_WORK_REWARD)
+	var outside_return_position := outside_worker.global_position
+	simulation._guard_citizen_positions()
+	assert(outside_worker.global_position == outside_return_position)
 	# The game starts in hero view; R toggles between hero FPP and overview.
 	assert(simulation.is_first_person)
 	simulation._toggle_hero_view()

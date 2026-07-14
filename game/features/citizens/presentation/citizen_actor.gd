@@ -591,6 +591,12 @@ func play_one_shot(anim_name: String) -> void:
 	_one_shot_remaining = anim.length
 	animation_player.play(anim_name, 0.15)
 
+func play_hunting_shot() -> void:
+	for anim_name in ["shoot", "shot", "rifle-shot", "interact-right"]:
+		if animation_player != null and animation_player.get_animation(anim_name) != null:
+			play_one_shot(anim_name)
+			return
+
 # Locomotion picker shared by AI and the player-controlled hero. Walking speeds
 # past the sprint threshold (bicycle couriers, hero holding shift) break into a run.
 func _locomotion_animation(horizontal_speed: float) -> String:

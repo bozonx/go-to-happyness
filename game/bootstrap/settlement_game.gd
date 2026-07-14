@@ -51,6 +51,8 @@ const POPULATION := 4
 const WAREHOUSE_CAPACITY := 50
 const FOOD_PURCHASE_PRICE := 2
 const ENTRANCE_GLOVE_PRICE := 20
+const OUTSIDE_WORK_DURATION_MINUTES := SimulationClock.MINUTES_PER_DAY
+const OUTSIDE_WORK_REWARD := 8
 const HOUSE_CAPACITY := 4
 const TENT_CAPACITY := 4
 const CONSTRUCTION_DURATION := 4.0
@@ -154,7 +156,7 @@ var rabbit_respawn_at: Dictionary = {}
 const WILD_FOOD_RESPAWN_SECONDS := 45.0
 const RABBIT_RESPAWN_SECONDS := 60.0
 const RABBIT_MAX_COUNT := 8
-var outside_workers: Dictionary = {} # citizen instance id -> {citizen, return_day}
+var outside_workers: Dictionary = {} # citizen instance id -> {citizen, return_at_minute}
 var last_citizen_positions: Dictionary = {}
 var resource_piles: Array[Dictionary] = []
 var farm_positions: Array[Vector3] = []
@@ -459,6 +461,7 @@ func _process(delta: float) -> void:
 	_update_demolition(delta)
 	_update_water_collectors(delta)
 	_update_clock(delta)
+	_return_outside_workers()
 	_update_wild_food(delta)
 	_guard_citizen_positions()
 	_update_trail_overlay()
@@ -2281,8 +2284,8 @@ func _skip_night() -> void:
 	# frees storage. Skipping must apply the same rules, otherwise stores stay full,
 	# no production is assignable, and workers have nothing to wake up for.
 	_apply_daily_settlement_rules()
-	_return_outside_workers()
 	clock.set_time(6 * 60)
+	_return_outside_workers()
 	_apply_skip_night_incident()
 	_update_workers()
 	for citizen in citizens:
@@ -2661,15 +2664,25 @@ func _send_selected_resident_to_outside_work() -> void:
 	selected_builder.cancel_current_action()
 	selected_builder.visible = false
 	selected_builder.process_mode = Node.PROCESS_MODE_DISABLED
-	outside_workers[worker_id] = {"citizen": selected_builder, "return_day": day_cycle.current_day + 1}
+	outside_workers[worker_id] = {
+		"citizen": selected_builder,
+		"return_at_minute": _absolute_game_minutes() + OUTSIDE_WORK_DURATION_MINUTES,
+	}
 	if citizen_ai != null:
 		citizen_ai.request_decision_refresh()
-	_update_interface("Resident left for outside work and will return tomorrow with 8 coins.")
+	_update_interface("Resident left for outside work and will return in 24 hours with %d coins." % OUTSIDE_WORK_REWARD)
+
+func _absolute_game_minutes() -> int:
+	return (day_cycle.current_day - 1) * SimulationClock.MINUTES_PER_DAY + floori(clock.minutes)
 
 func _return_outside_workers() -> void:
+	var returned_any := false
 	for worker_id in outside_workers.keys():
 		var assignment := outside_workers[worker_id] as Dictionary
-		if day_cycle.current_day < int(assignment.get("return_day", 0)):
+		if assignment.has("return_at_minute"):
+			if _absolute_game_minutes() < int(assignment.return_at_minute):
+				continue
+		elif day_cycle.current_day < int(assignment.get("return_day", 0)):
 			continue
 		var worker := assignment.get("citizen") as Citizen
 		if is_instance_valid(worker):
@@ -2677,10 +2690,12 @@ func _return_outside_workers() -> void:
 			worker.visible = true
 			worker.global_position = entrance_stone.global_position + Vector3(0.8, 0.08, 1.2)
 			worker.idle()
-			settlement.money += 8
+			settlement.money += OUTSIDE_WORK_REWARD
+			last_citizen_positions[worker_id] = worker.global_position
 		outside_workers.erase(worker_id)
-		_update_interface("A resident returned from outside work with 8 coins.")
-	if citizen_ai != null:
+		returned_any = true
+		_update_interface("A resident returned from outside work with %d coins." % OUTSIDE_WORK_REWARD)
+	if returned_any and citizen_ai != null:
 		citizen_ai.request_decision_refresh()
 
 
@@ -6642,7 +6657,7 @@ func harvest_wild_food(position: Vector3, worker: Citizen) -> String:
 		var source := rabbit_sources[cell] as Dictionary
 		var rabbit := source.get("node") as Node3D
 		if is_instance_valid(rabbit) and rabbit.global_position.distance_to(position) <= 1.6:
-			worker.play_one_shot("interact-right")
+			worker.play_hunting_shot()
 			rabbit.queue_free()
 			rabbit_sources.erase(cell)
 			rabbit_respawn_at[cell] = runtime_seconds + RABBIT_RESPAWN_SECONDS
