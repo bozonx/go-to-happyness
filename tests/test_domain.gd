@@ -4,6 +4,7 @@ const SettlementRulesScript = preload("res://game/features/settlement/domain/set
 const GridRouteServiceScript = preload("res://game/features/routing/application/grid_route_service.gd")
 const BuildingQueueServiceScript = preload("res://game/features/citizens/application/building_queue_service.gd")
 const BuildingAvailabilityServiceScript = preload("res://game/features/buildings/application/building_availability_service.gd")
+const CitizenLivingStatusServiceScript = preload("res://game/features/citizens/application/citizen_living_status_service.gd")
 const CanteenServiceScript = preload("res://game/features/logistics/application/canteen_service.gd")
 const StorageDeliveryServiceScript = preload("res://game/features/logistics/application/storage_delivery_service.gd")
 const TradeOrderScript = preload("res://game/features/logistics/domain/trade_order.gd")
@@ -93,6 +94,7 @@ func _init() -> void:
 	_test_citizen_status_effects()
 	_test_storage_delivery_service()
 	_test_building_availability_service()
+	_test_citizen_living_status_service()
 	quit(0)
 
 
@@ -275,6 +277,26 @@ func _test_building_availability_service() -> void:
 	var campfire_placement: Dictionary = service.placement_state("campfire")
 	assert(bool(campfire_placement.allowed))
 	assert(service.cost_text("campfire") == "6 branches")
+
+
+func _test_citizen_living_status_service() -> void:
+	var service := CitizenLivingStatusServiceScript.new()
+	var citizen := Citizen.new()
+	service.refresh_citizen(citizen, true, false)
+	assert(citizen.has_status_effect(CitizenStatusEffectScript.NO_HOME))
+	assert(not citizen.has_status_effect(CitizenStatusEffectScript.NO_LIT_COMMUNAL_FIRE))
+	var tent_home := Node3D.new()
+	tent_home.set_meta("is_tent", true)
+	citizen.assign_home(tent_home)
+	service.refresh_citizen(citizen, true, false)
+	assert(not citizen.has_status_effect(CitizenStatusEffectScript.NO_HOME))
+	assert(citizen.has_status_effect(CitizenStatusEffectScript.TENT_SHELTER))
+	service.refresh_citizen(citizen, false, true)
+	assert(citizen.has_status_effect(CitizenStatusEffectScript.NO_LIT_COMMUNAL_FIRE))
+	service.refresh_citizen(citizen, true, false)
+	assert(not citizen.has_status_effect(CitizenStatusEffectScript.NO_LIT_COMMUNAL_FIRE))
+	citizen.free()
+	tent_home.free()
 
 
 func _test_progression_and_volunteers() -> void:

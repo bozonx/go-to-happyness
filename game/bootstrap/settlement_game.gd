@@ -8,6 +8,7 @@ const TradeServiceScript = preload("res://game/features/logistics/application/tr
 const StorageDeliveryServiceScript = preload("res://game/features/logistics/application/storage_delivery_service.gd")
 const BuildingAvailabilityServiceScript = preload("res://game/features/buildings/application/building_availability_service.gd")
 const BuildingQueueServiceScript = preload("res://game/features/citizens/application/building_queue_service.gd")
+const CitizenLivingStatusServiceScript = preload("res://game/features/citizens/application/citizen_living_status_service.gd")
 const SleepGoalScript = preload("res://game/features/decision/domain/goals/sleep_goal.gd")
 const MealGoalScript = preload("res://game/features/decision/domain/goals/meal_goal.gd")
 const ToiletGoalScript = preload("res://game/features/decision/domain/goals/toilet_goal.gd")
@@ -315,6 +316,7 @@ var workplace_priority_counter := 0
 var manage_citizen_button: Button
 var citizen_ai: CitizenAISystem
 var citizen_needs_service: CitizenNeedsService
+var citizen_living_status_service: RefCounted
 ## Monotonic source of stable citizen AI identity. Persist it alongside the roster
 ## once save/load is introduced so reloaded games issue non-colliding ids.
 var _next_ai_citizen_id := 1
@@ -372,6 +374,7 @@ func _ready() -> void:
 	canteen_service.configure(self)
 	citizen_needs_service = CitizenNeedsService.new()
 	citizen_needs_service.configure(self)
+	citizen_living_status_service = CitizenLivingStatusServiceScript.new()
 	trade_service = TradeServiceScript.new()
 	trade_service.configure(self)
 	storage_delivery_service = StorageDeliveryServiceScript.new()
@@ -385,6 +388,7 @@ func _ready() -> void:
 	_create_ponds()
 	_create_entrance_stone()
 	_create_citizens()
+	_refresh_living_statuses()
 	if not citizen_ai.configure(
 		SettlementAIWorldFacade.new(self),
 		[SleepGoalScript.new(), MealGoalScript.new(), ToiletGoalScript.new(), RestGoalScript.new(), RegisterGoalScript.new(), ReserveWorkGoalScript.new(), ForestryGoalScript.new(), FarmingGoalScript.new(), ConstructionGoalScript.new(), GatheringGoalScript.new(), ExcavationGoalScript.new(), ServiceWorkGoalScript.new(), FactoryWorkGoalScript.new(), CourierDeliveryGoalScript.new()],
@@ -657,9 +661,11 @@ func _handle_day_cycle_event(event: SimulationDayEvent) -> void:
 		SimulationDayEvent.Kind.WORKDAY_ENDED:
 			_update_interface("Workday ended: residents are returning to their assigned homes.")
 		SimulationDayEvent.Kind.NIGHTFALL:
+			_refresh_living_statuses()
 			_update_workers()
 			_update_interface("Nightfall: workers are returning to their assigned homes.")
 		SimulationDayEvent.Kind.WORKDAY_STARTED:
+			_refresh_living_statuses()
 			_update_workers()
 			_update_interface("Morning: workers left their homes for their assignments.")
 		SimulationDayEvent.Kind.SCHOOL_DAY_ENDED:
@@ -668,6 +674,7 @@ func _handle_day_cycle_event(event: SimulationDayEvent) -> void:
 				citizen.finish_school_day(teacher_ok)
 			_update_workers()
 		SimulationDayEvent.Kind.DAILY_SETTLEMENT_UPDATE:
+			_refresh_living_statuses()
 			_apply_daily_settlement_rules()
 
 func _apply_daily_settlement_rules() -> void:
@@ -780,6 +787,19 @@ func _house_has_people_at_home(house: Node3D) -> bool:
 
 func _is_night() -> bool:
 	return clock.is_night()
+
+func _has_lit_communal_fire() -> bool:
+	return is_instance_valid(campfire_node) and _is_fire_lit(campfire_node)
+
+func _refresh_living_statuses() -> void:
+	if citizen_living_status_service == null:
+		return
+	citizen_living_status_service.refresh_all(citizens, _has_lit_communal_fire(), _is_night())
+
+func _refresh_living_status(citizen: Citizen) -> void:
+	if citizen_living_status_service == null:
+		return
+	citizen_living_status_service.refresh_citizen(citizen, _has_lit_communal_fire(), _is_night())
 
 func _is_work_time() -> bool:
 	return day_cycle.is_work_time(settlement.workday_hours, settlement.night_shifts_allowed)
@@ -997,6 +1017,7 @@ func _on_building_supply_delivered(_courier: Citizen, target: Node3D, supply_kin
 			var fire_state := _fire_state_for(target)
 			fire_state.add_delivered(amount)
 			_apply_fire_state(target, fire_state)
+			_refresh_living_statuses()
 		"repair":
 			target.set_meta("repair_reserved", false)
 			var repaired_condition := minf(100.0, float(target.get_meta("condition", 0.0)) + 18.0)
@@ -2808,6 +2829,7 @@ func _on_arrival_greeter_ready(greeter: Citizen) -> void:
 	_add_citizen(spawn_position, "unassigned")
 	var newcomer: Citizen = citizens.back()
 	newcomer.assign_home(house)
+	_refresh_living_status(newcomer)
 	if _is_work_time():
 		var centre := _employment_center_position()
 		if centre != Vector3.INF:
@@ -2887,6 +2909,7 @@ func _settle_unhoused_resident() -> void:
 		if is_instance_valid(citizen.home):
 			continue
 		citizen.assign_home(selected_house)
+		_refresh_living_status(citizen)
 		selected_house.set_meta("spawn_slots", slots - 1)
 		_update_interface("%s has been settled in this home." % citizen.role_label())
 		_show_house_menu()
@@ -3609,9 +3632,11 @@ func _demolition_ready(site: DemolitionSite) -> bool:
 		var replacement := _find_relocation_home(building)
 		if replacement != null:
 			citizen.assign_home(replacement)
+			_refresh_living_status(citizen)
 			replacement.set_meta("spawn_slots", int(replacement.get_meta("spawn_slots", 0)) - 1)
 		else:
 			citizen.home = null
+			_refresh_living_status(citizen)
 	return true
 
 func _find_relocation_home(excluded: Node3D) -> Node3D:
@@ -6155,6 +6180,7 @@ func _update_fire_status() -> void:
 				child.visible = fire_state.lit
 	if is_instance_valid(campfire_node) and not _is_fire_lit(campfire_node):
 		wellbeing = maxi(0, wellbeing - 1)
+	_refresh_living_statuses()
 
 func _apply_building_wear_and_repairs() -> void:
 	for record in building_registry.records():
@@ -6187,6 +6213,7 @@ func _destroy_building_to_pile(building: Node3D, building_type: String) -> void:
 	for citizen in citizens:
 		if citizen.home == building:
 			citizen.home = null
+			_refresh_living_status(citizen)
 	_return_in_transit_building_supplies(building)
 	_remove_building_services(building, building_type)
 	var removed_record := building_registry.remove_node(building)
