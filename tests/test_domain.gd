@@ -673,7 +673,8 @@ func _test_citizen_replans_on_navigation_revision() -> void:
 	navigation_revisions[0] += 1
 	assert(citizen._route_uses_stale_navigation())
 	citizen._invalidate_route_for_navigation_change()
-	assert(citizen.active_route == null and citizen.route_retry_timer == 0.0)
+	assert(citizen.active_route == null)
+	assert(citizen.route_retry_timer >= 0.0 and citizen.route_retry_timer <= Citizen.STALE_NAVIGATION_REPLAN_JITTER)
 	citizen.free()
 
 
@@ -924,8 +925,12 @@ func _test_research_mechanics() -> void:
 	state.soil = 8
 	state.branches = 4
 	state.buildings["cook_campfire"] = 1
+	state.unlocked_building_levels["cook_campfire_lvl2"] = true
+	state.unlocked_building_levels["cook_campfire_lvl3"] = true
 	assert(state.can_start_building_research("dugout_kitchen"))
 	assert(BuildingCatalog.kitchen_food_capacity("cook_campfire") == 4)
+	assert(BuildingCatalog.kitchen_food_capacity("cook_campfire_lvl2") == 6)
+	assert(BuildingCatalog.kitchen_food_capacity("cook_campfire_lvl3") == 8)
 	assert(BuildingCatalog.kitchen_food_capacity("brick_restaurant") == 20)
 	
 	# Campfire level tech gating tests:
@@ -944,6 +949,9 @@ func _test_research_mechanics() -> void:
 	assert(not test_state.can_start_building_research("campfire_lvl3"))
 	test_state.buildings["campfire_lvl2"] = 1
 	assert(test_state.can_start_building_research("campfire_lvl3"))
+	assert(test_state.can_start_building_research("gathering_place"))
+	assert(test_state.complete_research("gathering_place") == "gathering_place")
+	assert(test_state.is_building_unlocked("gathering_place"))
 	test_state.unlocked_building_levels["dew_collector"] = true
 	test_state.buildings["dew_collector"] = 1
 	assert(test_state.can_start_building_research("dew_collector_lvl2"))

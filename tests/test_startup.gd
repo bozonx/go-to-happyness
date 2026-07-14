@@ -20,14 +20,16 @@ func _init() -> void:
 	assert(simulation.citizen_ai.director.provider_count() == 9)
 	assert(is_instance_valid(simulation.hero_citizen))
 	assert(simulation.hero_citizen.is_hero)
-	assert(simulation.hero_citizen.specialization == "official")
+	assert(simulation.hero_citizen.specialization == "unassigned")
+	assert(simulation.hero_citizen.employment_state == Citizen.EmploymentState.FREELANCE)
+	assert(simulation.is_first_person)
+	assert(simulation.player_citizen == simulation.hero_citizen)
 	assert(simulation._player_can_command_labor())
-	simulation.hero_citizen.permanent_role = ""
 	assert(simulation._player_can_command_labor())
 	simulation._appoint_official(simulation.hero_citizen)
 	var delegated_officer: Citizen = simulation.citizens[1]
 	simulation._appoint_official(delegated_officer)
-	assert(not simulation._player_can_command_labor())
+	assert(simulation._player_can_command_labor())
 	simulation._appoint_official(simulation.hero_citizen)
 	assert(simulation._player_can_command_labor())
 	# A role assignment must release the hero from the starting official post and
@@ -159,11 +161,12 @@ func _init() -> void:
 	assert(field_officer.state == Citizen.State.TO_OFFICIAL_WORK)
 	field_officer.state = Citizen.State.OFFICIAL_WORK
 	assert(simulation._registration_official() == field_officer)
-	# Delegating the officer role blocks every labor command, including overtime.
+	# A delegated officer enables automation, but the player can still issue
+	# manual labor commands.
 	simulation.selected_building = civic_centre
 	field_officer.overtime_mode = false
 	simulation._call_worker_overtime()
-	assert(not field_officer.overtime_mode)
+	assert(field_officer.overtime_mode)
 	var first_in_queue: Citizen = simulation.citizens[2]
 	var second_in_queue: Citizen = simulation.citizens[3]
 	first_in_queue.global_position = civic_centre.global_position

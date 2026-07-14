@@ -177,7 +177,7 @@ func on_trade_delivery_finished(worker: Citizen) -> void:
 			if simulation.settlement.money >= gloves_price:
 				simulation.settlement.money -= gloves_price
 				simulation.settlement.add_construction_glove_set()
-				simulation._update_interface("Purchased a construction glove set at the entrance stone.")
+				simulation._update_interface("Purchased a construction glove set at the entrance sign.")
 		"buy_courier_equipment":
 			var price := int(trade.price)
 			var courier := instance_from_id(int(trade.courier_id)) as Citizen

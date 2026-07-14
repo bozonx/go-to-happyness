@@ -228,6 +228,9 @@ var house_spawn_button: Button
 var selected_house: Node3D
 var tent: Node3D
 var entrance_stone: Node3D
+var selected_entrance: Node3D
+var entrance_menu: Panel
+var entrance_menu_title: Label
 var pending_arrivals: Array[Dictionary] = []
 var arrival_greeters: Dictionary = {}
 var arrival_waiting_greeters: Dictionary = {}
@@ -271,6 +274,7 @@ var selected_campfire: Node3D = null
 var campfire_menu: Panel
 var campfire_menu_title: Label
 var campfire_requirements_label: Label
+var campfire_upgrade_button: Button
 var campfire_advance_button: Button
 var campfire_occupancy_button: Button
 var campfire_official_button: Button
@@ -296,6 +300,7 @@ var building_seller_button: Button
 var building_official_button: Button
 var building_accept_workers_button: Button
 var building_dismiss_worker_button: Button
+var building_upgrade_button: Button
 var building_close_button: Button
 var building_overtime_button: Button
 var campfire_overtime_button: Button
@@ -408,6 +413,7 @@ func _ready() -> void:
 	settlement.ensure_storage_defaults(warehouse_positions.size())
 	_update_workers()
 	_update_interface("Build a simple store, then gather materials for the first campfire and tents.")
+	_enter_first_person(hero_citizen, "Hero view enabled.")
 
 func _process(delta: float) -> void:
 	runtime_seconds += delta
@@ -507,17 +513,11 @@ func _officer_exists() -> bool:
 
 
 func _player_can_command_labor() -> bool:
-	if is_instance_valid(hero_citizen) and hero_citizen.permanent_role == "official":
-		return true
-	# Before a civic centre exists, the player remains the founder even if the
-	# officer role has not yet been assigned.
-	return not _officer_exists() and _employment_center_position() == Vector3.INF
+	return true
 
 
 func _labor_command_block_message() -> String:
-	if _officer_exists():
-		return "Труд делегирован: NPC-чиновник управляет автоматически. Назначьте мэром героя, чтобы командовать вручную."
-	return "Посёлок без управления трудом: назначьте officer'а. Стройка остаётся доступной."
+	return "Автоматизация труда требует назначенного чиновника. До этого раздавайте указания жителям вручную."
 
 
 func _show_labor_command_blocked() -> void:
@@ -527,14 +527,10 @@ func _show_labor_command_blocked() -> void:
 func _refresh_labor_authority_indicator() -> void:
 	if labor_authority_label == null:
 		return
-	if _player_can_command_labor():
+	if _officer_exists():
 		labor_authority_label.visible = false
-	elif _officer_exists():
-		labor_authority_label.text = "Труд: делегирован NPC-мэру"
-		labor_authority_label.add_theme_color_override("font_color", Color("e6c857"))
-		labor_authority_label.visible = true
 	else:
-		labor_authority_label.text = "Нет управления трудом\nНазначьте officer'а"
+		labor_authority_label.text = "Автоматизация недоступна\nНазначьте officer'а"
 		labor_authority_label.add_theme_color_override("font_color", Color("e28c8c"))
 		labor_authority_label.visible = true
 
@@ -728,7 +724,7 @@ func _apply_rain_damage() -> void:
 		settlement.add(resource_type, -int(losses[resource_type]))
 	for record in building_registry.records():
 		var building: Node3D = record.node
-		if is_instance_valid(building) and str(building.get_meta("building_type", "")) in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "gathering_place"]:
+		if is_instance_valid(building) and str(building.get_meta("building_type", "")) in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"]:
 			var fire_state := _fire_state_for(building)
 			fire_state.lit = false
 			_apply_fire_state(building, fire_state)
@@ -1068,7 +1064,7 @@ func _construction_development_priority(site: ConstructionSite) -> float:
 		"tent", "living_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "brick_house":
 			score += 850.0 if _total_housing_slots() < population else 140.0
 		"forager_tent", "forager_tent_lvl2", "forager_tent_lvl3", "farm": score += 700.0 if food < population * 2 else 160.0
-		"cook_campfire", "dugout_kitchen", "clay_bakery", "canteen": score += 580.0 if not is_instance_valid(canteen) else 120.0
+		"cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen": score += 580.0 if not is_instance_valid(canteen) else 120.0
 		"sawmill": score += 420.0 if sawmill_positions.is_empty() else 100.0
 		"gathering_place", "park", "leisure_center": score += 80.0
 		_: score += 250.0
@@ -1115,7 +1111,7 @@ func _update_firewood_supplies() -> void:
 			continue
 		for record in building_registry.records():
 			var building := record.node
-			if not is_instance_valid(building) or str(building.get_meta("building_type", "")) not in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "gathering_place"]:
+			if not is_instance_valid(building) or str(building.get_meta("building_type", "")) not in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"]:
 				continue
 			var fire_state := _fire_state_for(building)
 			if not fire_state.needs_supply(4) or branches <= 0:
@@ -1901,20 +1897,46 @@ func _create_entrance_stone() -> void:
 	# The entrance is deliberately on the meadow boundary, not in the initial
 	# build area: every resident visibly arrives from outside the settlement.
 	entrance_stone.position = _cell_center(Vector2i(-22, 1))
-	entrance_stone.name = "EntranceStone"
-	var stone := MeshInstance3D.new()
-	var mesh := CylinderMesh.new()
-	mesh.top_radius = 0.48
-	mesh.bottom_radius = 0.7
-	mesh.height = 1.15
-	mesh.radial_segments = 7
-	stone.mesh = mesh
-	stone.position.y = 0.58
-	var material := StandardMaterial3D.new()
-	material.albedo_color = Color("777b72")
-	material.roughness = 0.95
-	stone.material_override = material
-	entrance_stone.add_child(stone)
+	entrance_stone.name = "EntranceSign"
+	for x: float in [-0.62, 0.62]:
+		var post := MeshInstance3D.new()
+		var post_mesh := BoxMesh.new()
+		post_mesh.size = Vector3(0.16, 1.55, 0.16)
+		post.mesh = post_mesh
+		post.position = Vector3(x, 0.78, 0.0)
+		var post_material := StandardMaterial3D.new()
+		post_material.albedo_color = Color("5c4033")
+		post_material.roughness = 0.95
+		post.material_override = post_material
+		entrance_stone.add_child(post)
+	var board := MeshInstance3D.new()
+	var board_mesh := BoxMesh.new()
+	board_mesh.size = Vector3(1.8, 0.65, 0.14)
+	board.mesh = board_mesh
+	board.position = Vector3(0.0, 1.25, 0.0)
+	var board_material := StandardMaterial3D.new()
+	board_material.albedo_color = Color("8a6549")
+	board_material.roughness = 0.9
+	board.material_override = board_material
+	entrance_stone.add_child(board)
+	var label := Label3D.new()
+	label.text = "Settlement"
+	label.position = Vector3(0.0, 1.26, -0.09)
+	label.font_size = 28
+	label.modulate = Color("f0dfb2")
+	label.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+	entrance_stone.add_child(label)
+	var selector := Area3D.new()
+	selector.add_to_group("entrance_selector")
+	selector.collision_layer = 4
+	selector.collision_mask = 0
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(2.2, 2.4, 1.0)
+	collision.shape = shape
+	collision.position.y = 1.1
+	selector.add_child(collision)
+	entrance_stone.add_child(selector)
 	add_child(entrance_stone)
 
 func _create_citizens() -> void:
@@ -1969,9 +1991,7 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	if hero_citizen == null:
 		hero_citizen = citizen
 		citizen.set_hero(true)
-		# The first resident starts with the officer role, but without a civic
-		# centre that role has no special powers and no field registration.
-		_appoint_official(citizen)
+		citizen.employment_state = Citizen.EmploymentState.FREELANCE
 	else:
 		# Before the first campfire the settlement has no administration. Initial
 		# residents therefore form a usable freelance reserve to bootstrap it.
@@ -2095,6 +2115,7 @@ func _create_interface() -> void:
 	ui.add_child(build_toggle_btn)
 	
 	_create_build_menu(ui)
+	_create_entrance_menu(ui)
 	_create_house_menu(ui)
 	_create_school_menu(ui)
 	_create_materials_factory_menu(ui)
@@ -2134,26 +2155,6 @@ func _create_time_controls(ui: CanvasLayer) -> void:
 	skip_night_button.visible = false
 	skip_night_button.pressed.connect(_skip_night)
 	ui.add_child(skip_night_button)
-	var emergency_food_button := Button.new()
-	emergency_food_button.text = "Entrance: food"
-	emergency_food_button.tooltip_text = "Order 4 food at the entrance stone; an idle resident makes the trip."
-	emergency_food_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	emergency_food_button.offset_left = -220
-	emergency_food_button.offset_top = 136
-	emergency_food_button.offset_right = -122
-	emergency_food_button.offset_bottom = 166
-	emergency_food_button.pressed.connect(func(): trade_service.buy_entrance_food(4, FOOD_PURCHASE_PRICE))
-	ui.add_child(emergency_food_button)
-	var emergency_gloves_button := Button.new()
-	emergency_gloves_button.text = "Entrance: gloves"
-	emergency_gloves_button.tooltip_text = "Order one construction glove set at the entrance stone."
-	emergency_gloves_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	emergency_gloves_button.offset_left = -118
-	emergency_gloves_button.offset_top = 136
-	emergency_gloves_button.offset_right = -22
-	emergency_gloves_button.offset_bottom = 166
-	emergency_gloves_button.pressed.connect(func(): trade_service.buy_entrance_gloves(ENTRANCE_GLOVE_PRICE))
-	ui.add_child(emergency_gloves_button)
 
 
 func _skip_night() -> void:
@@ -2255,8 +2256,8 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_build_button("Campfire", "campfire", 176, "tent")
 	_add_build_button("Campfire Level 2", "campfire_lvl2", 200, "tent")
 	_add_build_button("Campfire Level 3", "campfire_lvl3", 200, "tent")
-	_add_build_button("Лобное место", "gathering_place", 193, "tent")
-	_add_build_button("Cooking campfire", "cook_campfire", 227, "tent")
+	_add_build_button("Бадминтонная площадка", "gathering_place", 193, "tent")
+	_add_build_button("Костер для готовки ур. 1", "cook_campfire", 227, "tent")
 	_add_build_button("Палатка на 4 жителя", "tent", 244, "tent")
 	_add_build_button("Жилая палатка на 1 жителя", "living_tent", 278, "tent")
 	_add_build_button("Жилая палатка ур. 2", "living_tent_lvl2", 278, "tent")
@@ -2463,6 +2464,50 @@ func _show_school_menu() -> void:
 	school_menu.visible = true
 	_update_interface("School selected: configure morning study and retraining here.")
 
+func _create_entrance_menu(ui: CanvasLayer) -> void:
+	entrance_menu = Panel.new()
+	entrance_menu.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	entrance_menu.offset_left = -324.0
+	entrance_menu.offset_top = -250.0
+	entrance_menu.offset_right = -20.0
+	entrance_menu.offset_bottom = -20.0
+	entrance_menu.visible = false
+	ui.add_child(entrance_menu)
+	entrance_menu_title = Label.new()
+	entrance_menu_title.position = Vector2(16, 14)
+	entrance_menu_title.size = Vector2(272, 56)
+	entrance_menu_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	entrance_menu_title.add_theme_font_size_override("font_size", 16)
+	entrance_menu.add_child(entrance_menu_title)
+	var food_button := Button.new()
+	food_button.text = "Order food"
+	food_button.tooltip_text = "Order 4 food; an idle resident makes the trip."
+	food_button.position = Vector2(16, 82)
+	food_button.size = Vector2(272, 32)
+	food_button.pressed.connect(func(): trade_service.buy_entrance_food(4, FOOD_PURCHASE_PRICE))
+	entrance_menu.add_child(food_button)
+	var gloves_button := Button.new()
+	gloves_button.text = "Order construction gloves"
+	gloves_button.tooltip_text = "Order one construction glove set."
+	gloves_button.position = Vector2(16, 122)
+	gloves_button.size = Vector2(272, 32)
+	gloves_button.pressed.connect(func(): trade_service.buy_entrance_gloves(ENTRANCE_GLOVE_PRICE))
+	entrance_menu.add_child(gloves_button)
+	var close_btn := Button.new()
+	close_btn.text = "Close"
+	close_btn.position = Vector2(16, 170)
+	close_btn.size = Vector2(272, 30)
+	close_btn.pressed.connect(_close_context_menus)
+	entrance_menu.add_child(close_btn)
+
+
+func _show_entrance_menu() -> void:
+	if not is_instance_valid(selected_entrance):
+		return
+	entrance_menu_title.text = "Entrance sign\nEmergency outside orders"
+	entrance_menu.visible = true
+
+
 func _create_house_menu(ui: CanvasLayer) -> void:
 	house_menu = Panel.new()
 	house_menu.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
@@ -2479,7 +2524,7 @@ func _create_house_menu(ui: CanvasLayer) -> void:
 	house_menu.add_child(house_menu_title)
 	house_spawn_button = Button.new()
 	house_spawn_button.text = "Order a resident"
-	house_spawn_button.tooltip_text = "A courier, or a free resident, will meet the newcomer at the entrance stone."
+	house_spawn_button.tooltip_text = "A courier, or a free resident, will meet the newcomer at the entrance sign."
 	house_spawn_button.position = Vector2(16, 64)
 	house_spawn_button.size = Vector2(272, 30)
 	house_spawn_button.pressed.connect(_spawn_house_citizen)
@@ -2792,7 +2837,7 @@ func _spawn_house_citizen() -> void:
 	_show_house_menu()
 	pending_arrivals.append({"house": selected_house})
 	_update_arrivals()
-	_update_interface("A resident is expected at the entrance stone. An available reserve worker will meet them.")
+	_update_interface("A resident is expected at the entrance sign. An available reserve worker will meet them.")
 
 
 func _find_arrival_greeter(allow_busy := false) -> Citizen:
@@ -2822,7 +2867,7 @@ func _update_arrivals() -> void:
 	if not is_instance_valid(entrance_stone):
 		return
 	_requeue_interrupted_arrivals()
-	# At the start of a workday, visitors and their greeter leave the stone for
+	# At the start of a workday, visitors and their greeter leave the entrance for
 	# the employment centre, or the hero when no office has been built.
 	if _is_work_time():
 		for citizen in citizens:
@@ -3288,7 +3333,7 @@ func _employer_types_for_role(role: String) -> Array[String]:
 		"farming": return ["farm"]
 		"gather_food": return ["forager_tent", "forager_tent_lvl2", "forager_tent_lvl3"]
 		"gather_branches": return ["materials_yard"]
-		"cook": return ["cook_campfire", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant"]
+		"cook": return ["cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant"]
 		"teacher": return ["school"]
 		"seller": return ["trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market"]
 		"factory_worker": return ["brick_factory", "materials_factory", "recycling_factory", "metal_factory"]
@@ -3458,6 +3503,7 @@ func _close_context_menus() -> void:
 	dig_mode = false
 	selection_marker.visible = false
 	is_rotating_camera = false
+	entrance_menu.visible = false
 	house_menu.visible = false
 	school_menu.visible = false
 	materials_factory_menu.visible = false
@@ -3468,6 +3514,7 @@ func _close_context_menus() -> void:
 	building_menu.visible = false
 	_hide_workforce_menu()
 	selected_house = null
+	selected_entrance = null
 	selected_school = null
 	selected_materials_factory = null
 	selected_campfire = null
@@ -3587,6 +3634,11 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 	if not hit.collider.is_in_group("school_selector"):
 		selected_builder = null
 	build_menu.visible = false
+	if hit.collider.is_in_group("entrance_selector"):
+		selected_entrance = hit.collider.get_parent() as Node3D
+		selected_building = selected_entrance
+		_show_entrance_menu()
+		return
 	if hit.collider.is_in_group("campfire_selector"):
 		selected_campfire = hit.collider.get_parent() as Node3D
 		selected_building = selected_campfire
@@ -3648,6 +3700,7 @@ func _hide_all_selection_menus() -> void:
 	# Hides every building context menu and clears their selections, but leaves
 	# the currently selected citizen untouched (the school menu needs it).
 	house_menu.visible = false
+	entrance_menu.visible = false
 	school_menu.visible = false
 	materials_factory_menu.visible = false
 	campfire_menu.visible = false
@@ -3655,6 +3708,7 @@ func _hide_all_selection_menus() -> void:
 	warehouse_menu.visible = false
 	building_menu.visible = false
 	selected_house = null
+	selected_entrance = null
 	selected_school = null
 	selected_materials_factory = null
 	selected_campfire = null
@@ -3776,7 +3830,7 @@ func _remove_building_services(building: Node3D, building_type: String) -> void:
 			market_positions.erase(service_position)
 		"campfire", "campfire_lvl2", "campfire_lvl3", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall":
 			if campfire_node == building: campfire_node = null
-		"cook_campfire", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant":
+		"cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant":
 			if canteen == building: canteen = null
 		"dew_collector", "dew_collector_lvl2", "dew_collector_lvl3":
 			for i in range(water_collectors.size() - 1, -1, -1):
@@ -4022,6 +4076,16 @@ func _start_interaction() -> void:
 		interaction_progress.visible = true
 		interaction_hint_label.text = "Filling bucket..."
 		return
+	if _nearby_grass_source():
+		if settlement.storage_room_for("grass") <= 0:
+			_update_interface("No storage room for grass. Rebalance the warehouse or build another.")
+			return
+		interaction_resource = "grass"
+		interaction_action = "harvesting"
+		interaction_time = 0.0
+		interaction_progress.visible = true
+		interaction_hint_label.text = "Gathering grass..."
+		return
 	if _nearby_tree() or _nearby_farm():
 		var gathering_branches := _nearby_tree() and settlement.era < SettlementState.Era.WOOD
 		if not gathering_branches and _pocket_total() >= POCKET_WOOD_CAPACITY:
@@ -4033,16 +4097,6 @@ func _start_interaction() -> void:
 		interaction_time = 0.0
 		interaction_progress.visible = true
 		interaction_hint_label.text = "Gathering %s..." % interaction_resource
-		return
-	if _nearby_grass_source():
-		if settlement.storage_room_for("grass") <= 0:
-			_update_interface("No storage room for grass. Rebalance the warehouse or build another.")
-			return
-		interaction_resource = "grass"
-		interaction_action = "harvesting"
-		interaction_time = 0.0
-		interaction_progress.visible = true
-		interaction_hint_label.text = "Gathering grass..."
 		return
 	if _nearby_warehouse():
 		_update_interface("Food pocket is empty. Wood must go to a sawmill first.")
@@ -4215,12 +4269,12 @@ func _refresh_interaction_hint() -> void:
 		interaction_hint_label.text = "LMB: take ready boards from sawmill"
 	elif _nearby_warehouse() and (pocket_food > 0 or pocket_boards > 0 or pocket_water > 0):
 		interaction_hint_label.text = "LMB: unload food %d / boards %d / water %d at warehouse" % [pocket_food, pocket_boards, pocket_water]
+	elif _nearby_grass_source():
+		interaction_hint_label.text = "LMB: gather grass (x%d)" % HERO_GATHER_YIELD
 	elif _nearby_tree():
 		interaction_hint_label.text = "LMB: gather branches" if settlement.era < SettlementState.Era.WOOD else "LMB: gather wood (%d/%d in pocket)" % [_pocket_total(), POCKET_WOOD_CAPACITY]
 	elif _nearby_farm():
 		interaction_hint_label.text = "LMB: gather food (%d/%d in pocket)" % [_pocket_total(), POCKET_WOOD_CAPACITY]
-	elif _nearby_grass_source():
-		interaction_hint_label.text = "LMB: gather grass (x%d)" % HERO_GATHER_YIELD
 	elif _nearby_pond():
 		if bool(settlement.tools.get("bucket", false)):
 			interaction_hint_label.text = "LMB: fill bucket with water (%d/%d in pocket)" % [_pocket_total(), POCKET_WOOD_CAPACITY]
@@ -4387,14 +4441,14 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 	settlement.buildings[building_type] = int(settlement.buildings.get(building_type, 0)) + 1
 	building.set_meta("building_type", building_type)
 	building.set_meta("condition", 100.0)
-	if building_type in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "gathering_place"]:
+	if building_type in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"]:
 		building.set_meta("fire_fuel", 4)
 		building.set_meta("fire_lit", true)
 	if _is_staffed_workplace(building):
 		workplace_priority_counter += 1
 		building.set_meta("accepting_workers", true)
 		building.set_meta("workplace_priority", workplace_priority_counter)
-	if building_type not in ["warehouse", "warehouse_lvl2", "campfire", "campfire_lvl2", "campfire_lvl3", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall", "cook_campfire", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant", "trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market", "school", "materials_factory", "tent", "living_tent", "living_tent_lvl2", "living_tent_lvl3", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house", "craft_tent", "craft_tent_lvl2", "craft_tent_lvl3", "forager_tent_lvl2", "forager_tent_lvl3"]:
+	if building_type not in ["warehouse", "warehouse_lvl2", "campfire", "campfire_lvl2", "campfire_lvl3", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant", "trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market", "school", "materials_factory", "tent", "living_tent", "living_tent_lvl2", "living_tent_lvl3", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house", "craft_tent", "craft_tent_lvl2", "craft_tent_lvl3", "forager_tent_lvl2", "forager_tent_lvl3"]:
 		_add_building_selector(building, "building_selector", blueprint.footprint)
 	_register_service_entrance(building, blueprint.footprint, false, building_type not in ["farm", "park"])
 	var service_position: Vector3 = building.get_meta("service_position")
@@ -4426,13 +4480,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			gathering_place_positions.append(service_position)
 			_create_gathering_place_visual(building)
 			_add_building_selector(building, "building_selector", blueprint.footprint)
-			var gathering_light := OmniLight3D.new()
-			gathering_light.position = Vector3(0.0, 0.5, 0.0)
-			gathering_light.light_color = Color("ff9d3b")
-			gathering_light.light_energy = 2.0
-			gathering_light.omni_range = 7.0
-			building.add_child(gathering_light)
-		"cook_campfire", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant":
+		"cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant":
 			_activate_kitchen_if_better(building, service_position)
 			_add_building_selector(building, "cook_campfire_selector", blueprint.footprint)
 			var cook_fire_light := OmniLight3D.new()
@@ -4548,6 +4596,16 @@ func _add_building_selector(building: Node3D, group_name: String, footprint: Vec
 	selector.add_child(collision)
 	building.add_child(selector)
 
+
+func _add_fire_light(building: Node3D, energy := 2.5, light_range := 8.0) -> void:
+	var fire_light := OmniLight3D.new()
+	fire_light.position = Vector3(0.0, 0.5, 0.0)
+	fire_light.light_color = Color("ff9d3b")
+	fire_light.light_energy = energy
+	fire_light.omni_range = light_range
+	building.add_child(fire_light)
+
+
 func _add_building_status_indicator(building: Node3D) -> void:
 	if not is_instance_valid(building) or building.has_meta("status_indicator"):
 		return
@@ -4590,7 +4648,7 @@ func _required_staff_for_building(building: Node3D) -> Dictionary:
 		"forager_tent_lvl2": return {"role": "gather_food", "count": 2}
 		"forager_tent_lvl3": return {"role": "gather_food", "count": 3}
 		"materials_yard": return {"role": "gather_branches", "count": 2}
-		"cook_campfire", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant": return {"role": "cooking", "count": 1}
+		"cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant": return {"role": "cooking", "count": 1}
 		"school": return {"role": "teaching", "count": 1}
 		"brick_factory", "materials_factory", "recycling_factory", "metal_factory": return {"role": "factory_worker", "count": int(building.get_meta("required_factory_workers", 1))}
 	return {}
@@ -4636,7 +4694,7 @@ func _send_citizen_to_leisure(citizen: Citizen, minimum_hours := 0) -> bool:
 	var recreation: Array[Vector3] = park_positions + leisure_positions
 	for position in gathering_place_positions:
 		var place := _building_at_service_position(position)
-		if is_instance_valid(place) and _is_fire_lit(place):
+		if is_instance_valid(place):
 			recreation.append(position)
 	if not recreation.is_empty():
 		return citizen_needs_service != null and citizen_needs_service.request_leisure(citizen.ai_id, recreation, minimum_hours)
@@ -4786,7 +4844,7 @@ func _create_campfire_menu(ui: CanvasLayer) -> void:
 	campfire_menu = Panel.new()
 	campfire_menu.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	campfire_menu.offset_left = -324.0
-	campfire_menu.offset_top = -676.0
+	campfire_menu.offset_top = -720.0
 	campfire_menu.offset_right = -20.0
 	campfire_menu.offset_bottom = -20.0
 	campfire_menu.visible = false
@@ -4812,13 +4870,20 @@ func _create_campfire_menu(ui: CanvasLayer) -> void:
 	campfire_advance_button.pressed.connect(_on_campfire_advance_pressed)
 	campfire_menu.add_child(campfire_advance_button)
 
+	campfire_upgrade_button = Button.new()
+	campfire_upgrade_button.text = "Upgrade campfire"
+	campfire_upgrade_button.position = Vector2(16, 330)
+	campfire_upgrade_button.size = Vector2(272, 32)
+	campfire_upgrade_button.pressed.connect(_upgrade_selected_building)
+	campfire_menu.add_child(campfire_upgrade_button)
+
 	var labour_label := Label.new()
 	labour_label.text = "Labor Policy:"
-	labour_label.position = Vector2(16, 335)
+	labour_label.position = Vector2(16, 368)
 	campfire_menu.add_child(labour_label)
 	
 	var labour_controls := HBoxContainer.new()
-	labour_controls.position = Vector2(16, 360)
+	labour_controls.position = Vector2(16, 393)
 	campfire_menu.add_child(labour_controls)
 	for hours in [6, 8, 10, 12]:
 		var day_button := Button.new()
@@ -4833,14 +4898,14 @@ func _create_campfire_menu(ui: CanvasLayer) -> void:
 	labour_controls.add_child(night_button)
 	
 	campfire_occupancy_button = Button.new()
-	campfire_occupancy_button.position = Vector2(16, 405)
+	campfire_occupancy_button.position = Vector2(16, 438)
 	campfire_occupancy_button.size = Vector2(272, 32)
 	campfire_occupancy_button.pressed.connect(_show_workforce_menu)
 	campfire_menu.add_child(campfire_occupancy_button)
 
 	var campfire_research_button := Button.new()
 	campfire_research_button.text = "Research Building Levels"
-	campfire_research_button.position = Vector2(16, 445)
+	campfire_research_button.position = Vector2(16, 478)
 	campfire_research_button.size = Vector2(272, 32)
 	campfire_research_button.pressed.connect(_show_research_menu)
 	campfire_menu.add_child(campfire_research_button)
@@ -4849,35 +4914,35 @@ func _create_campfire_menu(ui: CanvasLayer) -> void:
 	# like assigning a cook/teacher/seller at their own workplace.
 	campfire_official_button = Button.new()
 	campfire_official_button.text = "Assign selected resident as employment officer"
-	campfire_official_button.position = Vector2(16, 485)
+	campfire_official_button.position = Vector2(16, 518)
 	campfire_official_button.size = Vector2(272, 32)
 	campfire_official_button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	campfire_official_button.pressed.connect(_assign_official_at_campfire)
 	campfire_menu.add_child(campfire_official_button)
 
 	campfire_accept_button = Button.new()
-	campfire_accept_button.position = Vector2(16, 523)
+	campfire_accept_button.position = Vector2(16, 556)
 	campfire_accept_button.size = Vector2(272, 32)
 	campfire_accept_button.pressed.connect(_toggle_campfire_acceptance)
 	campfire_menu.add_child(campfire_accept_button)
 
 	campfire_dismiss_button = Button.new()
 	campfire_dismiss_button.text = "Dismiss employment officer"
-	campfire_dismiss_button.position = Vector2(16, 561)
+	campfire_dismiss_button.position = Vector2(16, 594)
 	campfire_dismiss_button.size = Vector2(272, 32)
 	campfire_dismiss_button.pressed.connect(_dismiss_campfire_worker)
 	campfire_menu.add_child(campfire_dismiss_button)
 
 	campfire_overtime_button = Button.new()
 	campfire_overtime_button.text = "Вызвать работника сверхурочно"
-	campfire_overtime_button.position = Vector2(16, 599)
+	campfire_overtime_button.position = Vector2(16, 632)
 	campfire_overtime_button.size = Vector2(272, 32)
 	campfire_overtime_button.pressed.connect(_call_campfire_worker_overtime)
 	campfire_menu.add_child(campfire_overtime_button)
 
 	campfire_close_btn = Button.new()
 	campfire_close_btn.text = "Close Menu"
-	campfire_close_btn.position = Vector2(16, 601)
+	campfire_close_btn.position = Vector2(16, 634)
 	campfire_close_btn.size = Vector2(272, 28)
 	campfire_close_btn.pressed.connect(_close_context_menus)
 	campfire_menu.add_child(campfire_close_btn)
@@ -4926,6 +4991,9 @@ func _create_workforce_menu(ui: CanvasLayer) -> void:
 func _show_workforce_menu() -> void:
 	if workforce_menu == null:
 		return
+	if not _officer_exists():
+		_update_interface(_labor_command_block_message())
+		return
 	workforce_menu.visible = true
 	_refresh_workforce_menu()
 
@@ -4941,7 +5009,14 @@ func _refresh_campfire_occupancy_button() -> void:
 	var total := _employment_resident_count()
 	var employed := _employment_state_count(Citizen.EmploymentState.EMPLOYED) + _employment_state_count(Citizen.EmploymentState.REGISTERING)
 	var freelance := _employment_state_count(Citizen.EmploymentState.FREELANCE)
-	campfire_occupancy_button.text = "Employment: %d/%d  Reserve: %d" % [employed, total, freelance]
+	if not _officer_exists():
+		campfire_occupancy_button.text = "Workers automation: assign officer"
+		campfire_occupancy_button.disabled = true
+		campfire_occupancy_button.tooltip_text = _labor_command_block_message()
+	else:
+		campfire_occupancy_button.text = "Employment: %d/%d  Reserve: %d" % [employed, total, freelance]
+		campfire_occupancy_button.disabled = false
+		campfire_occupancy_button.tooltip_text = ""
 
 
 func _workforce_roles() -> Array[String]:
@@ -5357,6 +5432,13 @@ func _refresh_campfire_menu() -> void:
 	if not _officer_exists():
 		campfire_requirements_label.text += "\nУправление трудом: officer не назначен. Резерв простаивает, но стройка доступна.\n"
 	campfire_advance_button.disabled = not can_advance
+	if campfire_upgrade_button != null:
+		var selected_type := str(selected_campfire.get_meta("building_type", "campfire")) if is_instance_valid(selected_campfire) else ""
+		var next_upgrade := settlement.next_building_upgrade(selected_type)
+		campfire_upgrade_button.visible = not next_upgrade.is_empty()
+		campfire_upgrade_button.text = "Upgrade to %s" % str(BuildingCatalog.definition_for(next_upgrade).get("name", next_upgrade))
+		campfire_upgrade_button.disabled = not settlement.can_upgrade_building(selected_type)
+		campfire_upgrade_button.tooltip_text = "" if not campfire_upgrade_button.disabled else "Research the next level and gather its resources."
 	_refresh_campfire_worker_controls()
 	_refresh_campfire_occupancy_button()
 
@@ -5384,10 +5466,10 @@ func _refresh_campfire_worker_controls() -> void:
 		campfire_overtime_button.disabled = not can_command_labor
 		campfire_overtime_button.tooltip_text = blocked_tooltip if not can_command_labor else ""
 		if campfire_overtime_button.visible:
-			campfire_overtime_button.position.y = 599.0
-			campfire_close_btn.position.y = 637.0
+			campfire_overtime_button.position.y = 632.0
+			campfire_close_btn.position.y = 670.0
 		else:
-			campfire_close_btn.position.y = 601.0
+			campfire_close_btn.position.y = 634.0
 
 
 func _assign_official_at_campfire() -> void:
@@ -5715,6 +5797,13 @@ func _create_building_menu(ui: CanvasLayer) -> void:
 	building_overtime_button.pressed.connect(_call_worker_overtime)
 	building_menu.add_child(building_overtime_button)
 
+	building_upgrade_button = Button.new()
+	building_upgrade_button.text = "Upgrade"
+	building_upgrade_button.position = Vector2(16, 212)
+	building_upgrade_button.size = Vector2(272, 30)
+	building_upgrade_button.pressed.connect(_upgrade_selected_building)
+	building_menu.add_child(building_upgrade_button)
+
 	building_close_button = Button.new()
 	building_close_button.text = "Close"
 	building_close_button.position = Vector2(16, 184)
@@ -5753,6 +5842,7 @@ func _show_building_menu() -> void:
 		building_official_button.visible = false
 		building_accept_workers_button.visible = false
 		building_dismiss_worker_button.visible = false
+		building_upgrade_button.visible = false
 		building_cancel_construction_button.visible = true
 		building_cancel_construction_button.position.y = 104.0
 		building_close_button.position.y = 140.0
@@ -5760,7 +5850,7 @@ func _show_building_menu() -> void:
 		var building_type := str(selected_building.get_meta("building_type", "building"))
 		var definition := BuildingCatalog.definition_for(building_type)
 		building_menu_title.text = "%s\n%s" % [str(definition.get("name", building_type.capitalize())), "Press Delete to mark this building for demolition."]
-		building_cook_button.visible = building_type in ["cook_campfire", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant"]
+		building_cook_button.visible = building_type in ["cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant"]
 		var can_command_labor := _player_can_command_labor()
 		var blocked_tooltip := _labor_command_block_message()
 		building_cook_button.disabled = not can_command_labor or selected_builder == null or selected_builder.is_player_controlled or not bool(selected_building.get_meta("accepting_workers", true))
@@ -5780,6 +5870,11 @@ func _show_building_menu() -> void:
 		var is_workplace := _is_staffed_workplace(selected_building)
 		building_accept_workers_button.visible = is_workplace
 		building_dismiss_worker_button.visible = is_workplace
+		var next_upgrade := settlement.next_building_upgrade(building_type)
+		building_upgrade_button.visible = not next_upgrade.is_empty()
+		building_upgrade_button.text = "Upgrade to %s" % str(BuildingCatalog.definition_for(next_upgrade).get("name", next_upgrade))
+		building_upgrade_button.disabled = not settlement.can_upgrade_building(building_type)
+		building_upgrade_button.tooltip_text = "" if not building_upgrade_button.disabled else "Research the next level and gather its resources."
 		building_accept_workers_button.disabled = not can_command_labor
 		building_accept_workers_button.tooltip_text = blocked_tooltip if not can_command_labor else ""
 		building_cancel_construction_button.visible = false
@@ -5805,6 +5900,9 @@ func _show_building_menu() -> void:
 			next_y += 36.0
 		if building_overtime_button.visible:
 			building_overtime_button.position.y = next_y
+			next_y += 36.0
+		if building_upgrade_button.visible:
+			building_upgrade_button.position.y = next_y
 			next_y += 36.0
 			
 		var special_button_visible := building_cook_button.visible or building_teacher_button.visible or building_seller_button.visible or building_official_button.visible
@@ -5854,6 +5952,55 @@ func _reopen_workplace_menu() -> void:
 	# The town hall keeps its own dedicated menu; every other workplace uses the
 	# generic building menu.
 	if is_instance_valid(selected_campfire) and selected_building == selected_campfire and campfire_menu.visible:
+		_refresh_campfire_menu()
+	else:
+		_show_building_menu()
+
+
+func _upgrade_selected_building() -> void:
+	if not is_instance_valid(selected_building):
+		return
+	var old_type := str(selected_building.get_meta("building_type", ""))
+	var target_type := settlement.next_building_upgrade(old_type)
+	if target_type.is_empty():
+		return
+	var old_footprint: Vector2i = selected_building.get_meta("footprint", BuildingBlueprints.get_blueprint(old_type).footprint)
+	var blueprint := BuildingBlueprints.get_blueprint(target_type)
+	if blueprint.footprint != old_footprint:
+		_update_interface("This upgrade needs rebuilding because its footprint changes.")
+		return
+	if not settlement.can_upgrade_building(old_type):
+		_update_interface("Upgrade needs research and resources.")
+		return
+	if settlement.pay_for_building_upgrade(old_type).is_empty():
+		return
+	for child in selected_building.get_children():
+		selected_building.remove_child(child)
+		child.queue_free()
+	if selected_building.has_meta("status_indicator"):
+		selected_building.remove_meta("status_indicator")
+	selected_building.set_meta("building_type", target_type)
+	selected_building.set_meta("footprint", blueprint.footprint)
+	selected_building.set_meta("occupied_footprint", blueprint.footprint)
+	for module in blueprint.modules:
+		selected_building.add_child(BuildingBlueprints.create_module(module))
+	_unregister_navigation_footprint(selected_building.global_position, old_footprint)
+	_register_service_entrance(selected_building, blueprint.footprint, false, target_type not in ["farm", "park"])
+	var service_position: Vector3 = selected_building.get_meta("service_position", selected_building.global_position)
+	if target_type in ["campfire", "campfire_lvl2", "campfire_lvl3", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall"]:
+		campfire_node = selected_building
+		_activate_employment_centre(selected_building)
+		_add_building_selector(selected_building, "campfire_selector", blueprint.footprint)
+		_add_fire_light(selected_building)
+	elif target_type in ["cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant"]:
+		_activate_kitchen_if_better(selected_building, service_position)
+		_add_building_selector(selected_building, "cook_campfire_selector", blueprint.footprint)
+		_add_fire_light(selected_building)
+	_add_building_status_indicator(selected_building)
+	_refresh_navigation_grid()
+	_update_workers()
+	_update_interface("%s upgraded to %s." % [str(BuildingCatalog.definition_for(old_type).get("name", old_type)), str(BuildingCatalog.definition_for(target_type).get("name", target_type))])
+	if campfire_menu.visible and selected_building == selected_campfire:
 		_refresh_campfire_menu()
 	else:
 		_show_building_menu()
@@ -6200,16 +6347,16 @@ func _consume_tree_branches(position: Vector3) -> void:
 		tree.set_meta("hand_branches", hand_taken + 1)
 
 func _create_gathering_place_visual(building: Node3D) -> void:
-	for angle in [0.0, PI * 0.5, PI, PI * 1.5]:
-		var log := MeshInstance3D.new()
-		var mesh := CylinderMesh.new()
-		mesh.top_radius = 0.16
-		mesh.bottom_radius = 0.16
-		mesh.height = 1.5
-		log.mesh = mesh
-		log.rotation.z = PI * 0.5
-		log.position = Vector3(cos(angle) * 1.25, 0.28, sin(angle) * 1.25)
-		building.add_child(log)
+	var racket := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3(0.18, 0.06, 1.0)
+	racket.mesh = mesh
+	racket.position = Vector3(-1.7, 0.22, -2.6)
+	racket.rotation_degrees = Vector3(0.0, 28.0, 0.0)
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("3a3a3a")
+	racket.material_override = material
+	building.add_child(racket)
 
 func _building_at_service_position(position: Vector3) -> Node3D:
 	return building_registry.building_at_service_position(position)
@@ -6246,7 +6393,7 @@ func _update_fire_status() -> void:
 	set_meta("last_fire_tick", minute)
 	for record in building_registry.records():
 		var building := record.node
-		if not is_instance_valid(building) or str(building.get_meta("building_type", "")) not in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "gathering_place"]:
+		if not is_instance_valid(building) or str(building.get_meta("building_type", "")) not in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"]:
 			continue
 		var fire_state := _fire_state_for(building)
 		fire_state.consume(1)
