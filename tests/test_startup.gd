@@ -134,6 +134,26 @@ func _init() -> void:
 	supply_worker.idle()
 	simulation.settlement.add(construction_resource, 1)
 	var material_before: int = simulation.settlement.amount(construction_resource)
+	var logistics_worker: Citizen = simulation.citizens[3]
+	var added_test_warehouse := false
+	if simulation.warehouse_positions.is_empty():
+		simulation.warehouse_positions.append(supply_worker.global_position)
+		added_test_warehouse = true
+	supply_worker.release_to_freelance()
+	supply_worker.pin_freelance_role("construction")
+	logistics_worker.release_to_freelance()
+	logistics_worker.pin_freelance_role("helper")
+	simulation._update_couriers()
+	var construction_snapshot := SettlementAIWorldFacade.new(simulation).capture(1000)
+	var workforce_orders := WorkforceOrderProvider.new().collect_orders(construction_snapshot)
+	for order: CitizenOrder in workforce_orders:
+		assert(order.citizen_id != supply_worker.ai_id or order.payload.value(&"reserve.action", &"") != &"construction_supply")
+	var courier_orders := CourierDeliveryOrderProvider.new().collect_orders(construction_snapshot)
+	assert(courier_orders.any(func(order: CitizenOrder): return order.citizen_id == logistics_worker.ai_id and order.kind == &"courier_delivery"))
+	logistics_worker.release_to_freelance()
+	supply_worker.release_to_freelance()
+	if added_test_warehouse:
+		simulation.warehouse_positions.clear()
 	assert(simulation.begin_native_construction_supply(supply_worker, construction_site.node, construction_resource, supply_worker.global_position))
 	assert(simulation.settlement.amount(construction_resource) == material_before - 1)
 	assert(int(construction_site.reserved_materials.get(construction_resource, 0)) == 1)

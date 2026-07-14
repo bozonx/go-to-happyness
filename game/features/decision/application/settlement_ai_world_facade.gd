@@ -387,12 +387,26 @@ func _construction_support_command(actor: Citizen, site: ConstructionSite, wareh
 		if delivered + reserved >= required:
 			continue
 		if simulation.settlement.amount(resource_type) > 0:
+			if _has_idle_logistics_worker():
+				return {}
 			return {&"reserve.action": &"construction_supply", &"target.position": site.node.global_position, &"target.key": _target_key(&"construction", site.node.global_position), &"resource.type": resource_type, &"warehouse.position": warehouse}
 		if resource_type == "branches":
 			return _reserve_gathering_command(actor, "gather_branches", warehouse)
 		if resource_type == "grass":
 			return _reserve_gathering_command(actor, "gather_grass", warehouse)
 	return {}
+
+
+func _has_idle_logistics_worker() -> bool:
+	for candidate: Citizen in simulation.citizens:
+		if (
+			is_instance_valid(candidate)
+			and not candidate.is_player_controlled
+			and candidate.can_handle_entry_logistics()
+			and candidate.state == Citizen.State.IDLE
+		):
+			return true
+	return false
 
 
 func _reserve_gathering_command(actor: Citizen, role: String, warehouse: Vector3) -> Dictionary:
