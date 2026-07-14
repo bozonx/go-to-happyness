@@ -35,6 +35,7 @@ const SettlementCitizenActuatorScript = preload("res://game/features/decision/ap
 const RegisterGoalScript = preload("res://game/features/decision/domain/goals/register_goal.gd")
 const ReserveWorkGoalScript = preload("res://game/features/decision/domain/goals/reserve_work_goal.gd")
 const WorkforceOrderProviderScript = preload("res://game/features/decision/application/workforce_order_provider.gd")
+const RouteRequestScript = preload("res://game/features/routing/application/route_request.gd")
 const TrailFieldServiceScript = preload("res://game/features/roads/application/trail_field_service.gd")
 const TrailOverlayShader = preload("res://game/features/roads/presentation/trail_overlay.gdshader")
 
@@ -381,7 +382,7 @@ func _ready() -> void:
 	nav_grid = NavGrid.new()
 	nav_grid.configure(CELL_SIZE, BOARD_CELLS)
 	trail_field = TrailFieldServiceScript.new()
-	trail_field.configure(BOARD_CELLS * CELL_SIZE)
+	trail_field.configure(BOARD_CELLS * CELL_SIZE, CELL_SIZE, nav_grid)
 	route_service = GridRouteService.new()
 	route_service.configure(nav_grid)
 	building_queue_service = BuildingQueueServiceScript.new()
@@ -1530,8 +1531,12 @@ func _is_board_cell(cell: Vector2i) -> bool:
 	var half_cells := BOARD_CELLS / 2
 	return cell.x >= -half_cells and cell.x < half_cells and cell.y >= -half_cells and cell.y < half_cells
 
-func _find_path_around_houses(from: Vector3, destination: Vector3, _may_enter_destination_house: bool) -> RouteResult:
-	return route_service.find_route(from, destination)
+func _find_path_around_houses(from: Vector3, destination: Vector3, may_enter_destination_house: bool) -> RouteResult:
+	var request := RouteRequestScript.new()
+	request.from = from
+	request.destination = destination
+	request.allow_destination_cell = may_enter_destination_house
+	return route_service.find_route_request(request)
 
 
 func _movement_speed_modifier_at(position_on_board: Vector3) -> float:

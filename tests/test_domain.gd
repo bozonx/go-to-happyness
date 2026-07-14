@@ -685,6 +685,47 @@ func _test_trail_field() -> void:
 		normal.apply_daily_decay()
 	assert(normal.total_strength() == 0)
 
+	var grid := NavGrid.new()
+	grid.configure(1.0, 12)
+	var trails := TrailFieldServiceScript.new()
+	trails.configure(12.0, 1.0, grid)
+	var initial_revision := grid.revision()
+	var path_cell := Vector2i(1, 0)
+	trails.record_walker_position(2, Vector3(0.1, 0.0, 0.1), false)
+	for _entry in range(3):
+		trails.record_walker_position(2, Vector3(1.1, 0.0, 0.1), false)
+		trails.record_walker_position(2, Vector3(0.1, 0.0, 0.1), false)
+	assert(trails.cell_state(path_cell) == TrailFieldService.TrailState.NONE)
+	assert(is_equal_approx(grid.get_cell_weight(path_cell), NavGrid.DEFAULT_CELL_WEIGHT))
+	trails.record_walker_position(2, Vector3(1.1, 0.0, 0.1), false)
+	assert(trails.cell_state(path_cell) == TrailFieldService.TrailState.YOUNG)
+	assert(is_equal_approx(grid.get_cell_weight(path_cell), TrailFieldService.YOUNG_PATH_WEIGHT))
+	assert(is_equal_approx(grid.get_cell_weight(path_cell, &"cart"), NavGrid.DEFAULT_CELL_WEIGHT))
+	assert(grid.revision() > initial_revision)
+	var young_revision := grid.revision()
+	for _entry in range(5):
+		trails.record_walker_position(2, Vector3(0.1, 0.0, 0.1), false)
+		trails.record_walker_position(2, Vector3(1.1, 0.0, 0.1), false)
+	assert(trails.cell_state(path_cell) == TrailFieldService.TrailState.MATURE)
+	assert(is_equal_approx(grid.get_cell_weight(path_cell), TrailFieldService.MATURE_PATH_WEIGHT))
+	assert(grid.revision() > young_revision)
+
+	var ordered_grid := NavGrid.new()
+	ordered_grid.configure(1.0, 12)
+	var ordered_trails := TrailFieldServiceScript.new()
+	ordered_trails.configure(12.0, 1.0, ordered_grid)
+	ordered_trails.record_walker_position(3, Vector3(0.1, 0.0, 0.1), true)
+	ordered_trails.record_walker_position(3, Vector3(1.1, 0.0, 0.1), true)
+	ordered_trails.record_walker_position(3, Vector3(0.1, 0.0, 0.1), true)
+	ordered_trails.record_walker_position(3, Vector3(1.1, 0.0, 0.1), true)
+	assert(ordered_trails.cell_state(path_cell) == TrailFieldService.TrailState.YOUNG)
+
+	for _day in range(20):
+		trails.apply_daily_decay()
+	assert(trails.cell_state(path_cell) == TrailFieldService.TrailState.NONE)
+	assert(not trails.active_weight_overrides().has(path_cell))
+	assert(is_equal_approx(grid.get_cell_weight(path_cell), NavGrid.DEFAULT_CELL_WEIGHT))
+
 
 func _test_citizen_replans_on_navigation_revision() -> void:
 	var citizen := Citizen.new()

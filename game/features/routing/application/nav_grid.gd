@@ -12,10 +12,12 @@ var cell_size := 1.0
 var board_half_cells := 0
 var _blocked: Dictionary = {}
 var _cell_weights: Dictionary = {}
+var _profile_cell_weights: Dictionary = {}
 var _minimum_cell_weight := DEFAULT_CELL_WEIGHT
 var _revision := 0
 
 const DEFAULT_CELL_WEIGHT := 2.0
+const PEDESTRIAN_PROFILE := &"pedestrian"
 
 
 func configure(next_cell_size: float, next_board_cells: int) -> void:
@@ -42,18 +44,31 @@ func set_cell_weights(next_weights: Dictionary) -> void:
 	if _cell_weights == next_weights:
 		return
 	_cell_weights = next_weights.duplicate()
-	_minimum_cell_weight = DEFAULT_CELL_WEIGHT
-	for weight in _cell_weights.values():
-		_minimum_cell_weight = minf(_minimum_cell_weight, maxf(0.001, float(weight)))
+	_recompute_minimum_cell_weight()
 	_revision += 1
 
 
-func get_cell_weight(cell: Vector2i) -> float:
+func set_profile_cell_weights(profile: StringName, next_weights: Dictionary) -> void:
+	var current: Dictionary = _profile_cell_weights.get(profile, {})
+	if current == next_weights:
+		return
+	if next_weights.is_empty():
+		_profile_cell_weights.erase(profile)
+	else:
+		_profile_cell_weights[profile] = next_weights.duplicate()
+	_recompute_minimum_cell_weight()
+	_revision += 1
+
+
+func get_cell_weight(cell: Vector2i, profile: StringName = PEDESTRIAN_PROFILE) -> float:
+	var profile_weights: Dictionary = _profile_cell_weights.get(profile, {})
+	if profile_weights.has(cell):
+		return maxf(0.001, float(profile_weights[cell]))
 	return maxf(0.001, float(_cell_weights.get(cell, DEFAULT_CELL_WEIGHT)))
 
 
-func movement_speed_modifier_at(position_on_board: Vector3) -> float:
-	return 1.0 / get_cell_weight(cell_from_position(position_on_board))
+func movement_speed_modifier_at(position_on_board: Vector3, profile: StringName = PEDESTRIAN_PROFILE) -> float:
+	return 1.0 / get_cell_weight(cell_from_position(position_on_board), profile)
 
 
 func minimum_cell_weight() -> float:
@@ -96,7 +111,7 @@ func is_segment_clear(from: Vector3, to: Vector3) -> bool:
 ## weighted length. INF means the segment crosses a blocked cell or cuts an
 ## obstacle corner. This is deliberately shared by visibility and smoothing so
 ## both use the same conservative geometry rules.
-func segment_cost(from: Vector3, to: Vector3) -> float:
+func segment_cost(from: Vector3, to: Vector3, profile: StringName = PEDESTRIAN_PROFILE) -> float:
 	var start_cell := cell_from_position(from)
 	var end_cell := cell_from_position(to)
 	if not is_walkable(start_cell) or not is_walkable(end_cell):
@@ -143,9 +158,9 @@ func segment_cost(from: Vector3, to: Vector3) -> float:
 	while guard > 0:
 		guard -= 1
 		if cell == end_cell:
-			return traversed_cost + (1.0 - previous_t) * segment_length * get_cell_weight(cell)
+			return traversed_cost + (1.0 - previous_t) * segment_length * get_cell_weight(cell, profile)
 		var next_t := minf(t_max_x, t_max_z)
-		traversed_cost += (next_t - previous_t) * segment_length * get_cell_weight(cell)
+		traversed_cost += (next_t - previous_t) * segment_length * get_cell_weight(cell, profile)
 		previous_t = next_t
 		if is_equal_approx(t_max_x, t_max_z):
 			# Crossing exactly through a grid corner touches both side cells. Requiring
@@ -166,3 +181,12 @@ func segment_cost(from: Vector3, to: Vector3) -> float:
 		if not is_walkable(cell):
 			return INF
 	return INF
+
+
+func _recompute_minimum_cell_weight() -> void:
+	_minimum_cell_weight = DEFAULT_CELL_WEIGHT
+	for weight in _cell_weights.values():
+		_minimum_cell_weight = minf(_minimum_cell_weight, maxf(0.001, float(weight)))
+	for profile_weights in _profile_cell_weights.values():
+		for weight in (profile_weights as Dictionary).values():
+			_minimum_cell_weight = minf(_minimum_cell_weight, maxf(0.001, float(weight)))
