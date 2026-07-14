@@ -5,6 +5,7 @@ const STORAGE_NO_WAREHOUSE := &"storage_no_warehouse"
 const NO_HOME := &"no_home"
 const TENT_SHELTER := &"tent_shelter"
 const NO_LIT_COMMUNAL_FIRE := &"no_lit_communal_fire"
+const BARE_HANDS := &"bare_hands"
 
 var id := StringName()
 var label := ""

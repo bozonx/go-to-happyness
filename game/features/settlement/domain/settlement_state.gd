@@ -46,7 +46,7 @@ var unlocked_systems := {
 	"official": false,
 }
 var unlocked_building_levels := {
-	"living_tent": true,
+	"living_tent": false,
 	"craft_tent": false,
 	"house": false,
 	"living_tent_lvl2": false,
@@ -79,12 +79,16 @@ var unlocked_building_levels := {
 	"cook_campfire_lvl2": false,
 	"cook_campfire_lvl3": false,
 	"warehouse_lvl2": false,
-	"dew_collector": true,
+	"dew_collector": false,
 	"dew_collector_lvl2": false,
 	"dew_collector_lvl3": false,
-	"forager_tent": true,
+	"forager_tent": false,
 	"forager_tent_lvl2": false,
 	"forager_tent_lvl3": false,
+	"materials_yard": false,
+	"materials_yard_lvl2": false,
+	"materials_yard_lvl3": false,
+	"trade_tent": false,
 }
 var active_research_tech_id := ""
 var active_research_worker_id := -1
@@ -347,6 +351,8 @@ func total_stored_resources() -> int:
 func can_afford_building(building_type: String) -> bool:
 	if not is_building_unlocked(building_type):
 		return false
+	if building_type == "campfire" and era == Era.TENT and not has_building("warehouse"):
+		return false
 	for resource_type in BuildingCatalog.cost_resources(building_type):
 		if amount(resource_type) < BuildingCatalog.cost_for_resource(building_type, resource_type):
 			return false
@@ -396,12 +402,14 @@ func is_building_unlocked(building_type: String) -> bool:
 	if building_type == "warehouse":
 		return true
 	if building_type == "campfire":
-		return era > Era.TENT or has_building("warehouse") or has_building("campfire")
+		# The landmark must be visible in the initial build menu. Placement still
+		# requires the first warehouse so the bootstrap order remains explicit.
+		return true
 	if building_type == "tent":
 		return era > Era.TENT or has_building("campfire")
 	if unlocked_building_levels.has(building_type):
 		return bool(unlocked_building_levels.get(building_type, false))
-	return true
+	return era > Era.TENT
 
 
 func buy_tool(tool_id: String, price: int) -> bool:
@@ -436,7 +444,7 @@ func sell(resource_type: String, quantity: int, unit_price: int) -> bool:
 func can_advance_to(next_era: Era, population: int, housing_slots: int) -> bool:
 	match next_era:
 		Era.EARTH:
-			return era == Era.TENT and has_building("campfire") and has_building("trade_tent") and housing_slots >= population and food >= population and water >= population and has_building("craft_tent_lvl3") and has_building("living_tent_lvl3") and trade_sales >= 1 and _has_tools(["axe", "hand_saw", "shovel", "bucket"]) and has_building("toilet_tent_lvl3")
+			return era == Era.TENT and _has_tools(["axe", "hand_saw", "shovel", "bucket"])
 		Era.CLAY:
 			return era == Era.EARTH and has_building("earth_assembly") and has_building("smithy") and has_building("earth_market") and housing_slots >= population and clay >= 5 and money >= 5 and trade_sales >= 3 and _has_tools(["hoe"]) and has_building("toilet_earth_lvl3")
 		Era.WOOD:

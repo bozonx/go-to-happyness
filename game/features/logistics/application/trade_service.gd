@@ -4,6 +4,7 @@ extends RefCounted
 const TradeOrderScript = preload("res://game/features/logistics/domain/trade_order.gd")
 
 var simulation: Node
+var entrance_expeditions: Dictionary = {} # citizen id -> TradeOrder
 
 
 func configure(next_simulation: Node) -> void:
@@ -145,10 +146,38 @@ func dispatch_queued_trades() -> void:
 			return
 		var order: RefCounted = simulation.queued_trades.pop_front()
 		simulation.pending_trades[worker.get_instance_id()] = order
-		worker.deliver_trade(order.source, order.destination)
-		simulation._update_interface("A resident is carrying the trade order.")
+		if order.source_endpoint == TradeOrderScript.ENDPOINT_ENTRANCE_STONE and order.outside_duration_minutes > 0.0:
+			_begin_entrance_expedition(worker, order)
+		else:
+			worker.deliver_trade(order.source, order.destination)
+			simulation._update_interface("A resident is carrying the trade order.")
 	if not simulation.queued_trades.is_empty():
 		simulation._update_interface("Trade queued: no resident is currently free to carry it.")
+
+
+func update() -> void:
+	for worker_id in entrance_expeditions.keys().duplicate():
+		var order: RefCounted = entrance_expeditions[worker_id]
+		if simulation._total_game_minutes() < order.return_at_minutes:
+			continue
+		var worker := instance_from_id(int(worker_id)) as Citizen
+		entrance_expeditions.erase(worker_id)
+		if not is_instance_valid(worker):
+			continue
+		worker.process_mode = Node.PROCESS_MODE_INHERIT
+		worker.visible = true
+		worker.global_position = order.source
+		worker.deliver_trade(order.source, order.destination)
+		simulation._update_interface("A resident returned from the outside trade trip.")
+
+
+func _begin_entrance_expedition(worker: Citizen, order: RefCounted) -> void:
+	worker.cancel_current_action()
+	worker.visible = false
+	worker.process_mode = Node.PROCESS_MODE_DISABLED
+	order.return_at_minutes = simulation._total_game_minutes() + order.outside_duration_minutes
+	entrance_expeditions[worker.get_instance_id()] = order
+	simulation._update_interface("A resident left through the entrance sign and will return in 2 hours.")
 
 
 func on_trade_delivery_finished(worker: Citizen) -> void:
@@ -166,8 +195,12 @@ func on_trade_delivery_finished(worker: Citizen) -> void:
 			var total := int(trade.quantity) * int(trade.price)
 			if simulation.settlement.money >= total:
 				simulation.settlement.money -= total
-				simulation.settlement.add(str(trade.resource), int(trade.quantity))
-				simulation._update_interface("Purchased %d %s after delivery to storage." % [int(trade.quantity), str(trade.resource)])
+				if simulation.warehouse_positions.is_empty():
+					simulation._create_resource_pile(simulation.entrance_stone.global_position, {str(trade.resource): int(trade.quantity)})
+					simulation._update_interface("Purchased %d %s; the order is waiting in an open pile at the entrance." % [int(trade.quantity), str(trade.resource)])
+				else:
+					simulation.settlement.add(str(trade.resource), int(trade.quantity))
+					simulation._update_interface("Purchased %d %s after delivery to storage." % [int(trade.quantity), str(trade.resource)])
 		"buy_tool":
 			if simulation.settlement.buy_tool(str(trade.tool), int(trade.price)):
 				simulation._update_workers()

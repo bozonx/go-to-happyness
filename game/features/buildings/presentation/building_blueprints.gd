@@ -45,6 +45,8 @@ const COLORS := {
 	"forager_tent_lvl2": Color("5f7a3f"),
 	"forager_tent_lvl3": Color("4c6230"),
 	"materials_yard": Color("8a7b4f"),
+	"materials_yard_lvl2": Color("758254"),
+	"materials_yard_lvl3": Color("607044"),
 	"craft_tent": Color("a46b46"),
 	"craft_tent_lvl2": Color("9a603c"),
 	"craft_tent_lvl3": Color("905532"),
@@ -117,7 +119,7 @@ static func get_blueprint(building_type: String) -> Dictionary:
 		"dew_collector_lvl2": return _water_collector_blueprint("dew_collector_lvl2", Vector2i(2, 2))
 		"dew_collector_lvl3": return _water_collector_blueprint("dew_collector_lvl3", Vector2i(3, 3))
 		"pond": return _pond_blueprint()
-		"tent", "living_tent", "forager_tent", "materials_yard", "craft_tent", "trade_tent": return _enclosed_blueprint(building_type, Vector2i(4, 4), 2, "gable")
+		"tent", "living_tent", "forager_tent", "materials_yard", "materials_yard_lvl2", "materials_yard_lvl3", "craft_tent", "trade_tent": return _enclosed_blueprint(building_type, Vector2i(4, 4), 2, "gable")
 		"forager_tent_lvl2": return _enclosed_blueprint("forager_tent_lvl2", Vector2i(5, 5), 2, "gable")
 		"forager_tent_lvl3": return _enclosed_blueprint("forager_tent_lvl3", Vector2i(6, 6), 2, "gable")
 		"living_tent_lvl2", "craft_tent_lvl2": return _enclosed_blueprint(building_type, Vector2i(5, 5), 2, "gable")

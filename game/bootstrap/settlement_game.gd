@@ -197,6 +197,7 @@ var current_day: int:
 	get: return day_cycle.current_day
 var tent_weather: int = TentEraSurvivalRulesScript.Weather.WARMING
 var last_survival_hour := -1
+var recovery_arrival_at_minutes := -1.0
 var message_scroll: ScrollContainer
 var message_list: VBoxContainer
 var messages_modal: Panel
@@ -466,7 +467,9 @@ func _process(delta: float) -> void:
 	_update_canteen_delivery()
 	_update_arrivals()
 	_update_fire_status()
+	_update_recovery_arrival()
 	_update_repairs()
+	trade_service.update()
 	_dispatch_queued_trades()
 	_update_sawmills(delta)
 	_update_brick_research(delta)
@@ -747,6 +750,13 @@ func _apply_hourly_tent_survival(hour: int) -> void:
 		total_loss += TentEraSurvivalRulesScript.hourly_wellbeing_loss(has_home, has_fire, tent_weather, night)
 	if total_loss > 0:
 		wellbeing = maxi(0, wellbeing - ceili(float(total_loss) / maxi(1, citizens.size())))
+	if not settlement.construction_gloves_available():
+		var bare_handed_workers := 0
+		for citizen in citizens:
+			if is_instance_valid(citizen) and citizen._is_physical_work():
+				bare_handed_workers += 1
+		if bare_handed_workers > 0:
+			wellbeing = maxi(0, wellbeing - ceili(float(bare_handed_workers) / maxi(1, citizens.size())))
 	if tent_weather == TentEraSurvivalRulesScript.Weather.RAIN and hour > 0:
 		_apply_rain_damage()
 	if wellbeing <= 0 and not citizens.is_empty():
@@ -783,13 +793,24 @@ func _expire_temporary_tents() -> void:
 func _schedule_recovery_arrival() -> void:
 	if citizens.size() >= POPULATION:
 		return
-	await get_tree().create_timer(0.1).timeout
+	if recovery_arrival_at_minutes < 0.0:
+		recovery_arrival_at_minutes = _total_game_minutes() + 24.0 * 60.0
+
+
+func _total_game_minutes() -> float:
+	return float(day_cycle.current_day - 1) * 24.0 * 60.0 + game_minutes
+
+
+func _update_recovery_arrival() -> void:
+	if recovery_arrival_at_minutes < 0.0 or _total_game_minutes() < recovery_arrival_at_minutes:
+		return
 	if citizens.size() < POPULATION and is_instance_valid(entrance_stone):
 		_add_citizen(entrance_stone.global_position + Vector3(0.8, 0.1, 1.2), "unassigned")
 		money += 100
 		food += 4
 		settlement.add_construction_glove_set()
 		_add_message("A survivor arrived with emergency supplies.")
+	recovery_arrival_at_minutes = _total_game_minutes() + random.randi_range(24, 48) * 60.0 if citizens.size() < POPULATION else -1.0
 
 func _apply_daily_settlement_rules() -> void:
 	if trail_field != null:
@@ -905,7 +926,11 @@ func _is_night() -> bool:
 	return clock.is_night()
 
 func _has_lit_communal_fire() -> bool:
-	return is_instance_valid(campfire_node) and _is_fire_lit(campfire_node)
+	for record in building_registry.records():
+		var building: Node3D = record.node
+		if is_instance_valid(building) and str(building.get_meta("building_type", "")) in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"] and _is_fire_lit(building):
+			return true
+	return false
 
 func _refresh_living_statuses() -> void:
 	if citizen_living_status_service == null:
@@ -2026,6 +2051,8 @@ func _create_citizens() -> void:
 		if not is_nan(terrain_height):
 			spawn_position.y = terrain_height + 0.08
 		_add_citizen(spawn_position, "unassigned")
+	if not citizens.is_empty():
+		citizens[random.randi_range(0, citizens.size() - 1)].is_jack_of_all_trades = true
 
 func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void:
 	var citizen := Citizen.new()
@@ -2255,12 +2282,26 @@ func _skip_night() -> void:
 	# no production is assignable, and workers have nothing to wake up for.
 	_apply_daily_settlement_rules()
 	_return_outside_workers()
-	day_cycle.set_to_workday_start()
+	clock.set_time(6 * 60)
+	_apply_skip_night_incident()
 	_update_workers()
 	for citizen in citizens:
 		if is_instance_valid(citizen) and positions.has(citizen.get_instance_id()):
 			citizen.global_position = positions[citizen.get_instance_id()]
-	_update_interface("Skipped the night. A fresh working day begins at 08:00.")
+	_update_interface("Skipped the night. Morning begins at 06:00.")
+
+
+func _apply_skip_night_incident() -> void:
+	var incidents := [
+		{"resource": "food", "min": 3, "max": 5, "message": "Night scavengers took %d food."},
+		{"resource": "grass", "min": 10, "max": 15, "message": "A stray animal ate %d grass."},
+		{"resource": "branches", "min": 5, "max": 8, "message": "Wind scattered %d branches."},
+	]
+	var incident: Dictionary = incidents[random.randi_range(0, incidents.size() - 1)]
+	var amount := mini(settlement.amount(str(incident.resource)), random.randi_range(int(incident.min), int(incident.max)))
+	if amount > 0:
+		settlement.add(str(incident.resource), -amount)
+		_add_message(str(incident.message) % amount)
 
 
 func _set_workday_hours(hours: int) -> void:
@@ -2358,6 +2399,8 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_build_button("Forager-Hunter tent", "forager_tent_lvl2", 200, "tent")
 	_add_build_button("Hunting lodge", "forager_tent_lvl3", 200, "tent")
 	_add_build_button("Двор стройматериалов", "materials_yard", 312, "tent")
+	_add_build_button("Двор стройматериалов ур. 2", "materials_yard_lvl2", 200, "tent")
+	_add_build_button("Двор стройматериалов ур. 3", "materials_yard_lvl3", 200, "tent")
 	_add_build_button("Craft tent", "craft_tent", 346, "tent")
 	_add_build_button("Craft tent Level 2", "craft_tent_lvl2", 346, "tent")
 	_add_build_button("Craft tent Level 3", "craft_tent_lvl3", 346, "tent")
@@ -3386,6 +3429,8 @@ func _set_manual_role(role: String) -> void:
 		_refresh_workforce_menu()
 
 func _is_role_available(role: String) -> bool:
+	if not settlement.construction_gloves_available() and wellbeing < 30 and role in ["construction", "gather_branches", "gather_grass", "gather_food", "forestry", "farming", "excavation", "factory_worker", "craftsman"]:
+		return false
 	match role:
 		"": return true
 		"construction":
@@ -3465,7 +3510,7 @@ func _employer_types_for_role(role: String) -> Array[String]:
 		"forestry": return ["sawmill"]
 		"farming": return ["farm"]
 		"gather_food": return ["forager_tent", "forager_tent_lvl2", "forager_tent_lvl3"]
-		"gather_branches": return ["materials_yard"]
+		"gather_branches", "gather_grass": return ["materials_yard", "materials_yard_lvl2", "materials_yard_lvl3"]
 		"cook": return ["cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant"]
 		"teacher": return ["school"]
 		"seller": return ["trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market"]
@@ -3494,7 +3539,7 @@ func _is_staffed_workplace(building: Node3D) -> bool:
 	if not is_instance_valid(building):
 		return false
 	var building_type := str(building.get_meta("building_type", ""))
-	for role in ["construction", "forestry", "farming", "gather_food", "gather_branches", "cook", "teacher", "seller", "factory_worker", "engineer", "craftsman", "official"]:
+	for role in ["construction", "forestry", "farming", "gather_food", "gather_branches", "gather_grass", "cook", "teacher", "seller", "factory_worker", "engineer", "craftsman", "official"]:
 		if building_type in _employer_types_for_role(role):
 			return true
 	return false
@@ -3519,8 +3564,9 @@ func _employer_capacity(role: String, building: Node3D) -> int:
 		elif type == "forager_tent_lvl3":
 			return 3
 		return 1
-	if role == "gather_branches":
-		return 2
+	if role in ["gather_branches", "gather_grass"]:
+		var type := str(building.get_meta("building_type", ""))
+		return 4 if type == "materials_yard_lvl3" else 3 if type == "materials_yard_lvl2" else 2
 	return 1
 
 func _start_dig_assignment() -> void:
@@ -3606,6 +3652,9 @@ func _create_dig_site(cell: Vector2i, world_position: Vector3) -> Dictionary:
 func _select_build_mode(next_mode: String) -> void:
 	if not _can_hero_build():
 		_update_interface("Only the hero can approve construction decisions.")
+		return
+	if next_mode == "tent" and clock.hour() >= 22:
+		_update_interface("The temporary tent must be marked before 22:00.")
 		return
 	var placement_state: Dictionary = building_availability_service.placement_state(next_mode)
 	if not bool(placement_state.allowed):
@@ -3955,7 +4004,7 @@ func _remove_building_services(building: Node3D, building_type: String) -> void:
 		"builders_guild": builders_guild_positions.erase(service_position)
 		"construction_company": construction_company_positions.erase(service_position)
 		"forager_tent", "forager_tent_lvl2", "forager_tent_lvl3": forager_positions.erase(service_position)
-		"materials_yard": materials_yard_positions.erase(service_position)
+		"materials_yard", "materials_yard_lvl2", "materials_yard_lvl3": materials_yard_positions.erase(service_position)
 		"school": school_positions.erase(service_position)
 		"park": park_positions.erase(service_position)
 		"gathering_place": gathering_place_positions.erase(service_position)
@@ -4458,6 +4507,9 @@ func _place_building(world_position: Vector3) -> void:
 		_update_interface("Only the hero can approve construction decisions.")
 		return
 	world_position = _snapped_build_position(world_position)
+	if build_mode == "trade_tent" and is_instance_valid(entrance_stone) and world_position.distance_to(entrance_stone.global_position) > 8.0:
+		_update_interface("The tent market must be built beside the entrance sign.")
+		return
 	if not _can_place(world_position):
 		_update_interface("Construction is not allowed at this point.")
 		return
@@ -4783,6 +4835,8 @@ func _required_staff_for_building(building: Node3D) -> Dictionary:
 		"forager_tent_lvl2": return {"role": "gather_food", "count": 2}
 		"forager_tent_lvl3": return {"role": "gather_food", "count": 3}
 		"materials_yard": return {"role": "gather_branches", "count": 2}
+		"materials_yard_lvl2": return {"role": "gather_branches", "count": 3}
+		"materials_yard_lvl3": return {"role": "gather_branches", "count": 4}
 		"cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant": return {"role": "cooking", "count": 1}
 		"school": return {"role": "teaching", "count": 1}
 		"brick_factory", "materials_factory", "recycling_factory", "metal_factory": return {"role": "factory_worker", "count": int(building.get_meta("required_factory_workers", 1))}
@@ -5522,25 +5576,9 @@ func _refresh_campfire_menu() -> void:
 	match settlement.era:
 		SettlementState.Era.TENT:
 			next_era = SettlementState.Era.EARTH
-			var has_cf := settlement.has_building("campfire")
-			var has_mkt := settlement.has_building("trade_tent")
-			var has_ct := settlement.has_building("craft_tent_lvl3")
-			var has_lt3 := settlement.has_building("living_tent_lvl3")
-			var pop_ok := housing_slots >= citizens.size()
-			var food_ok := food >= citizens.size()
-			var water_ok := water >= citizens.size()
-			var trade_ok := settlement.trade_sales >= 1
 			var tools_ok := settlement._has_tools(["axe", "hand_saw", "shovel", "bucket"])
 			
 			req_text = "Requirements for Earth Era:\n"
-			req_text += "- Campfire built: %s\n" % ("Yes" if has_cf else "No")
-			req_text += "- Trade tent built: %s\n" % ("Yes" if has_mkt else "No")
-			req_text += "- Craft tent Level 3 built: %s\n" % ("Yes" if has_ct else "No")
-			req_text += "- Living tent Level 3 built: %s\n" % ("Yes" if has_lt3 else "No")
-			req_text += "- Housing slots (needs %d): %d (%s)\n" % [citizens.size(), housing_slots, "OK" if pop_ok else "Need more"]
-			req_text += "- Food (needs %d): %d (%s)\n" % [citizens.size(), food, "OK" if food_ok else "Need more"]
-			req_text += "- Water (needs %d): %d (%s)\n" % [citizens.size(), water, "OK" if water_ok else "Need more"]
-			req_text += "- Trade sales (needs 1): %d (%s)\n" % [settlement.trade_sales, "OK" if trade_ok else "No sales"]
 			req_text += "- Tools (axe, saw, shovel, bucket): %s\n" % ("OK" if tools_ok else "Missing")
 			can_advance = settlement.can_advance_to(next_era, citizens.size(), housing_slots)
 		

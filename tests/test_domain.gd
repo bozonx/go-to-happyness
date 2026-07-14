@@ -166,7 +166,7 @@ func _test_tent_start_config() -> void:
 	state.add_construction_glove_set()
 	assert(state.construction_gloves_available())
 	assert(state.is_building_unlocked("warehouse"))
-	assert(not state.is_building_unlocked("campfire"))
+	assert(state.is_building_unlocked("campfire"))
 	assert(not state.can_afford_building("campfire"))
 	state.buildings["warehouse"] = 1
 	state.branches = 6
@@ -282,8 +282,8 @@ func _test_building_availability_service() -> void:
 	assert(bool(warehouse_menu.enabled))
 	assert(str(warehouse_menu.cost_text) == "free")
 	var campfire_menu: Dictionary = service.menu_state("campfire")
-	assert(not bool(campfire_menu.visible))
-	assert(campfire_menu.reason == BuildingAvailabilityServiceScript.REASON_LOCKED)
+	assert(bool(campfire_menu.visible))
+	assert(not bool(campfire_menu.enabled))
 	var upgrade_menu: Dictionary = service.menu_state("campfire_lvl2")
 	assert(not bool(upgrade_menu.visible))
 	assert(upgrade_menu.reason == BuildingAvailabilityServiceScript.REASON_UPGRADE_ONLY)
@@ -926,7 +926,7 @@ func _test_courier_equipment_capacity() -> void:
 
 func _test_research_mechanics() -> void:
 	var state := SettlementState.new()
-	assert(state.unlocked_building_levels.get("living_tent", false))
+	assert(not state.unlocked_building_levels.get("living_tent", false))
 	assert(not state.unlocked_building_levels.get("living_tent_lvl2", false))
 	assert(not state.unlocked_building_levels.get("craft_tent", false))
 	

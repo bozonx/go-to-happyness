@@ -210,6 +210,7 @@ var hair_color: Color = Color.WHITE
 var head_model_name: String = ""
 var head_visible: bool = true
 var skills := {}
+var is_jack_of_all_trades := false
 var practiced_today: Dictionary = {}
 var temp_training_role := ""
 
@@ -1424,7 +1425,20 @@ func _has_ground_below() -> bool:
 	return not space_state.intersect_ray(query).is_empty()
 
 func _work(delta: float) -> bool:
-	return task_timer.advance(delta)
+	var speed_multiplier := 1.0
+	if _is_physical_work():
+		if simulation != null and simulation.settlement.construction_gloves_available():
+			# Durability is measured in collective in-game work hours, not frames.
+			simulation.settlement.wear_construction_gloves(delta * simulation.GAME_MINUTES_PER_SECOND / 60.0)
+			clear_status_effect(CitizenStatusEffect.BARE_HANDS)
+		else:
+			set_status_effect(CitizenStatusEffect.BARE_HANDS, "Bare hands", 1.0)
+			speed_multiplier = 0.60
+	return task_timer.advance(delta * speed_multiplier)
+
+
+func _is_physical_work() -> bool:
+	return active_role in ["construction", "gather_branches", "gather_grass", "gather_food", "forestry", "farming", "excavation", "factory_worker", "craftsman"]
 
 
 func _start_task(duration: float) -> void:
@@ -1850,7 +1864,10 @@ func get_efficiency(role: String) -> float:
 		
 	var satisfaction_factor := lerpf(0.45, 1.0, satisfaction / 100.0)
 	var meal_bonus := 0.15 if buffs.has("canteen_meal") else 0.0
-	return skill_efficiency_factor * satisfaction_factor * (1.0 + meal_bonus)
+	var efficiency := skill_efficiency_factor * satisfaction_factor * (1.0 + meal_bonus)
+	if is_jack_of_all_trades and role in ["construction", "gather_branches", "gather_grass", "gather_food", "forestry", "farming", "excavation"]:
+		efficiency *= 1.30
+	return efficiency
 
 func role_label() -> String:
 	var role := CitizenRoleProfile.label_for(specialization)

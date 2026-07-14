@@ -11,6 +11,7 @@ var destination := Vector3.ZERO
 var source_endpoint := ENDPOINT_MARKET
 var destination_endpoint := ENDPOINT_STORAGE
 var outside_duration_minutes := 0.0
+var return_at_minutes := -1.0
 
 
 static func create(
