@@ -20,6 +20,8 @@ func capture(sequence: int) -> WorldSnapshot:
 		for task: CourierTask in simulation.courier_dispatcher.available_tasks():
 			courier_tasks.append({&"id": task.id, &"priority": task.priority, &"pickup": task.pickup})
 	var workforce_world := _world_data()
+	var forestry_targets := _forestry_targets()
+	var gathering_targets := _gathering_targets()
 	var citizens_by_id: Dictionary = {}
 	for actor: Citizen in simulation.citizens:
 		if not is_instance_valid(actor) or actor.ai_id == 0:
@@ -41,27 +43,11 @@ func capture(sequence: int) -> WorldSnapshot:
 		if needs_service != null and needs_service.has_toilet_request(citizen_id):
 			relief_candidates = needs_service.relief_candidates_for(actor)
 		var forestry_worker := actor.permanent_role == "forestry" and actor.is_employed() and not actor.is_player_controlled
-		var forestry_candidates: Array[Dictionary] = []
 		var sawmill_position := Vector3.INF
 		var warehouse_position := Vector3.INF
 		if forestry_worker and simulation._is_work_time() and not simulation.sawmill_positions.is_empty() and not simulation.warehouse_positions.is_empty() and simulation._has_storage_room_for_role("forestry"):
 			sawmill_position = actor.employment_workplace.get_meta("service_position", actor.employment_workplace.global_position) if is_instance_valid(actor.employment_workplace) else simulation.sawmill_positions[0]
 			warehouse_position = simulation._get_nearest_delivery_position(actor.global_position)
-			for tree_position in simulation.tree_positions:
-				var cell: Vector2i = simulation._cell_from_position(tree_position)
-				var tree: Node3D = simulation.tree_nodes.get(cell) as Node3D
-				if not is_instance_valid(tree) or bool(tree.get_meta("felled", false)):
-					continue
-				var access_position: Vector3 = simulation._resource_access_position(actor.global_position, tree_position)
-				if access_position == Vector3.INF:
-					continue
-				forestry_candidates.append({
-					&"id": StringName("tree:%d:%d" % [cell.x, cell.y]),
-					&"position": tree_position,
-					&"access": access_position,
-					&"sawmill_position": sawmill_position,
-					&"warehouse_position": warehouse_position,
-				})
 		var forestry_in_progress := actor.state in [Citizen.State.TO_TREE, Citizen.State.CHOPPING, Citizen.State.TO_SAWMILL]
 		var farming_worker := actor.permanent_role == "farming" and actor.is_employed() and not actor.is_player_controlled
 		var farming_in_progress := farming_worker and actor.active_role == "farming" and actor.state in [Citizen.State.TO_TREE, Citizen.State.TO_SAWMILL, Citizen.State.SAWING, Citizen.State.WAITING_COURIER]
@@ -102,7 +88,8 @@ func capture(sequence: int) -> WorldSnapshot:
 		var gathering_in_progress := gathering_worker and actor.active_role.begins_with("gather_") and actor.state in [Citizen.State.TO_GATHER, Citizen.State.GATHERING, Citizen.State.TO_WAREHOUSE]
 		var gathering_candidates: Array[Dictionary] = []
 		if gathering_worker and simulation._is_work_time() and simulation._has_storage_room_for_role(actor.permanent_role):
-			gathering_candidates = _gathering_candidates_for(actor)
+			if actor.permanent_role == "gather_food":
+				gathering_candidates = _gathering_candidates_for(actor)
 		var excavation_worker := actor.permanent_role == "excavation" and actor.is_employed() and not actor.is_player_controlled
 		var excavation_in_progress := excavation_worker and actor.active_role == "excavation" and actor.state in [Citizen.State.EXCAVATING, Citizen.State.WAITING_COURIER]
 		var excavation_candidates: Array[Dictionary] = []
@@ -189,7 +176,9 @@ func capture(sequence: int) -> WorldSnapshot:
 				&"needs.rest_duration": rest_request.get(&"duration", 4.0),
 				&"work.forestry.worker": forestry_worker,
 				&"work.forestry.in_progress": forestry_in_progress,
-				&"work.forestry.candidates": forestry_candidates,
+				&"work.forestry.can_start": sawmill_position != Vector3.INF and warehouse_position != Vector3.INF,
+				&"work.forestry.sawmill_position": sawmill_position,
+				&"work.forestry.warehouse_position": warehouse_position,
 				&"work.farming.worker": farming_worker,
 				&"work.farming.in_progress": farming_in_progress,
 				&"work.farming.can_start": farming_can_start,
@@ -203,7 +192,10 @@ func capture(sequence: int) -> WorldSnapshot:
 				&"work.construction.position": construction_position,
 				&"work.gathering.worker": gathering_worker,
 				&"work.gathering.in_progress": gathering_in_progress,
+				&"work.gathering.can_start": gathering_worker and simulation._is_work_time() and simulation._has_storage_room_for_role(actor.permanent_role),
+				&"work.gathering.role": StringName(actor.permanent_role) if gathering_worker else &"",
 				&"work.gathering.candidates": gathering_candidates,
+				&"work.gathering.warehouse_position": simulation._get_nearest_delivery_position(actor.global_position) if gathering_worker else Vector3.INF,
 				&"work.excavation.worker": excavation_worker,
 				&"work.excavation.in_progress": excavation_in_progress,
 				&"work.excavation.candidates": excavation_candidates,
@@ -220,7 +212,6 @@ func capture(sequence: int) -> WorldSnapshot:
 				&"work.factory.position": factory_position,
 				&"work.courier.worker": courier_worker,
 				&"work.courier.can_start": courier_can_start,
-				&"work.courier.tasks": courier_tasks,
 				&"workforce.worker_data": worker_data,
 				&"workforce.pending_workplace_key": _workplace_target_key(actor.pending_employment_workplace),
 				&"workforce.pending_workplace_position": actor.pending_employment_workplace.global_position if is_instance_valid(actor.pending_employment_workplace) else Vector3.INF,
@@ -235,6 +226,9 @@ func capture(sequence: int) -> WorldSnapshot:
 		&"workforce.world_data": workforce_world,
 		&"workforce.employment_center_position": simulation._employment_center_position(),
 		&"workforce.role_employers": _role_employers(),
+		&"work.forestry.targets": forestry_targets,
+		&"work.gathering.targets": gathering_targets,
+		&"work.courier.tasks": courier_tasks,
 	})
 	return WorldSnapshot.new(
 		sequence,
@@ -248,6 +242,59 @@ func capture(sequence: int) -> WorldSnapshot:
 func _target_key(kind: StringName, position: Vector3) -> StringName:
 	var cell: Vector2i = simulation._cell_from_position(position)
 	return StringName("%s:%d:%d" % [kind, cell.x, cell.y])
+
+
+func _forestry_targets() -> Array[Dictionary]:
+	var targets: Array[Dictionary] = []
+	if not simulation._is_work_time():
+		return targets
+	for tree_position: Vector3 in simulation.tree_positions:
+		var cell: Vector2i = simulation._cell_from_position(tree_position)
+		var tree: Node3D = simulation.tree_nodes.get(cell) as Node3D
+		if not is_instance_valid(tree) or bool(tree.get_meta("felled", false)):
+			continue
+		var access := _resource_access_position(tree_position)
+		if access != Vector3.INF:
+			targets.append({&"id": StringName("tree:%d:%d" % [cell.x, cell.y]), &"position": tree_position, &"access": access})
+	return targets
+
+
+func _gathering_targets() -> Array[Dictionary]:
+	var targets: Array[Dictionary] = []
+	if not simulation._is_work_time():
+		return targets
+	if simulation.settlement.grass < simulation.settlement.branches:
+		for grass_cell_value in simulation.grass_sources.keys():
+			var grass_cell := grass_cell_value as Vector2i
+			var grass_source := simulation.grass_sources.get(grass_cell, {}) as Dictionary
+			var grass_node := grass_source.get(&"node") as Node3D
+			if int(grass_source.get(&"remaining", 0)) > 0 and is_instance_valid(grass_node) and not simulation.grass_reservations.has(grass_cell):
+				targets.append({&"id": StringName("grass:%d:%d" % [grass_cell.x, grass_cell.y]), &"resource_type": "grass", &"position": grass_node.global_position, &"access": grass_node.global_position})
+		if not targets.is_empty():
+			return targets
+	for tree_position: Vector3 in simulation.tree_positions:
+		var tree_cell: Vector2i = simulation._cell_from_position(tree_position)
+		if simulation.tree_reservations.has(tree_cell):
+			continue
+		var tree := simulation.tree_nodes.get(tree_cell) as Node3D
+		if not is_instance_valid(tree) or bool(tree.get_meta("felled", false)) or int(tree.get_meta("remaining_branches", 0)) <= 0:
+			continue
+		var hand_limit := ceili(float(int(tree.get_meta("initial_branches", tree.get_meta("remaining_branches", 0)))) * 0.3)
+		if not bool(simulation.settlement.tools.get("axe", false)) and int(tree.get_meta("hand_branches", 0)) >= hand_limit:
+			continue
+		var access := _resource_access_position(tree_position)
+		if access != Vector3.INF:
+			targets.append({&"id": StringName("branch:%d:%d" % [tree_cell.x, tree_cell.y]), &"resource_type": "branches", &"position": tree_position, &"access": access})
+	return targets
+
+
+func _resource_access_position(resource_position: Vector3) -> Vector3:
+	var resource_cell: Vector2i = simulation._cell_from_position(resource_position)
+	for offset in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1)]:
+		var cell: Vector2i = resource_cell + offset
+		if simulation._is_board_cell(cell) and not simulation._is_navigation_cell_blocked(cell):
+			return simulation._cell_center(cell)
+	return Vector3.INF
 
 
 func _workplace_target_key(workplace: Node3D) -> StringName:
@@ -299,7 +346,7 @@ func _gathering_candidates_for(actor: Citizen) -> Array[Dictionary]:
 		var hand_limit := ceili(float(int(tree.get_meta("initial_branches", tree.get_meta("remaining_branches", 0)))) * 0.3)
 		if not bool(simulation.settlement.tools.get("axe", false)) and int(tree.get_meta("hand_branches", 0)) >= hand_limit:
 			continue
-		var access_position: Vector3 = simulation._resource_access_position(actor.global_position, tree_position)
+		var access_position := _resource_access_position(tree_position)
 		if access_position == Vector3.INF:
 			continue
 		candidates.append({
@@ -321,7 +368,7 @@ func _reserve_command_for(actor: Citizen, role: String) -> Dictionary:
 			if simulation.sawmill_positions.is_empty():
 				return {}
 			var tree: Vector3 = _nearest_tree(actor, false)
-			var access: Vector3 = simulation._resource_access_position(actor.global_position, tree)
+			var access := _resource_access_position(tree)
 			if tree == Vector3.INF or access == Vector3.INF:
 				return {}
 			return {
@@ -393,7 +440,7 @@ func _reserve_gathering_command(actor: Citizen, role: String, warehouse: Vector3
 		"gather_branches":
 			resource_type = "branches"
 			source = _nearest_tree(actor, true)
-			access = simulation._resource_access_position(actor.global_position, source)
+			access = _resource_access_position(source)
 		"gather_grass":
 			resource_type = "grass"
 			source = _nearest_grass(actor)

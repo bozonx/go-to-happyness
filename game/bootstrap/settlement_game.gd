@@ -633,6 +633,8 @@ func _on_employment_processing_finished(citizen: Citizen) -> void:
 	_update_workers()
 
 func _update_daylight() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
 	if sun == null or world_environment == null:
 		return
 	var hour := game_minutes / 60.0
@@ -1671,6 +1673,9 @@ func _create_world() -> void:
 	_create_selection_marker()
 
 func _create_voxel_terrain() -> void:
+	if DisplayServer.get_name() == "headless":
+		_create_headless_ground()
+		return
 	voxel_terrain = VoxelLodTerrain.new()
 	voxel_terrain.mesher = VoxelMesherTransvoxel.new()
 	var generator := VoxelGeneratorNoise2D.new()
@@ -1693,6 +1698,17 @@ func _create_voxel_terrain() -> void:
 	camera.add_child(VoxelViewer.new())
 	voxel_tool = voxel_terrain.get_voxel_tool()
 	voxel_tool.channel = VoxelBuffer.CHANNEL_SDF
+
+func _create_headless_ground() -> void:
+	var ground := StaticBody3D.new()
+	ground.name = "HeadlessGround"
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(BOARD_CELLS * CELL_SIZE * 2.0, 0.2, BOARD_CELLS * CELL_SIZE * 2.0)
+	collision.shape = shape
+	collision.position.y = -0.1
+	ground.add_child(collision)
+	add_child(ground)
 
 ## Recomputes walkable cells (terrain + building footprints with clearance) and
 ## publishes them to the shared NavGrid. Citizens route entirely through the grid,
@@ -4330,6 +4346,8 @@ func _is_footprint_level(world_position: Vector3, footprint: Vector2i) -> bool:
 	return heights.max() - heights.min() <= MAX_BUILD_SLOPE
 
 func _terrain_height_at(x: float, z: float, near_y: float) -> float:
+	if DisplayServer.get_name() == "headless":
+		return 0.0
 	var from := Vector3(x, near_y + 12.0, z)
 	var query := PhysicsRayQueryParameters3D.create(from, Vector3(x, near_y - 12.0, z))
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)

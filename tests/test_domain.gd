@@ -234,6 +234,7 @@ func _test_citizen_status_effects() -> void:
 	citizen.storage_delivery_result(true)
 	assert(not citizen.blocked_by_storage)
 	assert(not citizen.has_status_effect(CitizenStatusEffectScript.STORAGE_NO_WAREHOUSE))
+	citizen.free()
 
 
 func _test_storage_delivery_service() -> void:
@@ -261,6 +262,10 @@ func _test_storage_delivery_service() -> void:
 	assert(blocked_worker.blocked_by_storage)
 	assert(blocked_worker.has_status_effect(CitizenStatusEffectScript.STORAGE_NO_WAREHOUSE))
 	assert(no_storage_simulation.last_interface_message == "Workers delivered 1 grass without warehouse storage. New collection is paused.")
+	worker.free()
+	blocked_worker.free()
+	simulation.free()
+	no_storage_simulation.free()
 
 
 func _test_building_availability_service() -> void:

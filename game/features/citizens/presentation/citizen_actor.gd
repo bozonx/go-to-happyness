@@ -192,6 +192,8 @@ var body_material: StandardMaterial3D
 var gender: String = ""
 var current_model_path: String = ""
 var current_character_mesh: Node3D
+var current_body_mesh: MeshInstance3D
+var current_head_mesh: MeshInstance3D
 var animation_player: AnimationPlayer
 # A transient full-body gesture (e.g. "pick-up") that plays once and then hands
 # control back to the state/locomotion animation. Cleared as soon as it elapses
@@ -404,6 +406,8 @@ func _setup_head_mesh() -> void:
 	add_child(head)
 
 static var _shared_shader_material: ShaderMaterial
+static var _model_scene_cache: Dictionary = {}
+static var _head_mesh_cache: Dictionary = {}
 
 func _resolve_model_prefix() -> String:
 	# The hero always wears the constable model, regardless of their civic role.
@@ -414,11 +418,25 @@ func _resolve_model_prefix() -> String:
 func _update_character_model() -> void:
 	var prefix := _resolve_model_prefix()
 	var path := "res://assets/characters/%s-%s.glb" % [prefix, gender]
-	
+	if DisplayServer.get_name() == "headless":
+		if is_instance_valid(current_character_mesh):
+			current_character_mesh.queue_free()
+			current_character_mesh = null
+		current_body_mesh = null
+		current_head_mesh = null
+		animation_player = null
+		current_model_path = ""
+		_setup_fallback_mesh()
+		return
+		
 	if not FileAccess.file_exists(path):
 		path = "res://assets/characters/common-%s.glb" % [gender]
 		
 	if not FileAccess.file_exists(path):
+		current_body_mesh = null
+		current_head_mesh = null
+		animation_player = null
+		current_model_path = ""
 		_setup_fallback_mesh()
 		return
 		
@@ -430,6 +448,9 @@ func _update_character_model() -> void:
 	if is_instance_valid(current_character_mesh):
 		current_character_mesh.queue_free()
 		current_character_mesh = null
+	current_body_mesh = null
+	current_head_mesh = null
+	animation_player = null
 	
 	var fallback_body = get_node_or_null("FallbackBody")
 	if fallback_body:
@@ -441,7 +462,7 @@ func _update_character_model() -> void:
 	if dummy_mesh:
 		dummy_mesh.queue_free()
 		
-	var scene := load(path) as PackedScene
+	var scene := _character_scene(path)
 	if scene != null:
 		var inst := scene.instantiate() as Node3D
 		# Rotate 180 degrees to align face with movement direction (-Z forward)
@@ -463,13 +484,13 @@ func _update_character_model() -> void:
 			_shared_shader_material.shader = load("res://game/features/citizens/presentation/citizen_color_swap.gdshader")
 			_shared_shader_material.set_shader_parameter("albedo_texture", load("res://assets/characters/Textures/colormap.png"))
 			
-		var body_mesh = _find_node_by_name(inst, "body-mesh") as MeshInstance3D
-		var head_mesh = _find_node_by_name(inst, "head-mesh") as MeshInstance3D
-		if body_mesh:
-			body_mesh.material_override = _shared_shader_material
-		if head_mesh:
-			head_mesh.material_override = _shared_shader_material
-			head_mesh.visible = head_visible
+		current_body_mesh = _find_node_by_name(inst, "body-mesh") as MeshInstance3D
+		current_head_mesh = _find_node_by_name(inst, "head-mesh") as MeshInstance3D
+		if current_body_mesh:
+			current_body_mesh.material_override = _shared_shader_material
+		if current_head_mesh:
+			current_head_mesh.material_override = _shared_shader_material
+			current_head_mesh.visible = head_visible
 			
 		_update_mesh_colors()
 		
@@ -496,10 +517,7 @@ func _update_mesh_colors() -> void:
 	var uses_common_model := _resolve_model_prefix() == "common"
 	var swap_clothing := 1.0 if uses_common_model and not is_hero else 0.0
 	var swap_hair := 0.0 if is_hero else 1.0
-	for mesh in [
-		_find_node_by_name(current_character_mesh, "body-mesh") as MeshInstance3D,
-		_find_node_by_name(current_character_mesh, "head-mesh") as MeshInstance3D,
-	]:
+	for mesh in [current_body_mesh, current_head_mesh]:
 		if mesh == null:
 			continue
 		mesh.set_instance_shader_parameter("skin_color", skin_color)
@@ -517,18 +535,33 @@ func _randomize_head_on_instance(inst: Node3D) -> void:
 	if head_model_name.is_empty():
 		var pool := RANDOM_HEADS_MALE if gender == "male" else RANDOM_HEADS_FEMALE
 		head_model_name = pool.pick_random()
-	var path := "res://assets/characters/%s.glb" % head_model_name
-	if FileAccess.file_exists(path):
-		var donor_scene := load(path) as PackedScene
-		if donor_scene != null:
-			var donor_inst = donor_scene.instantiate()
-			var donor_head = _find_node_by_name(donor_inst, "head-mesh") as MeshInstance3D
-			var target_head = _find_node_by_name(inst, "head-mesh") as MeshInstance3D
-			if donor_head != null and target_head != null:
-				target_head.mesh = donor_head.mesh
-			donor_inst.queue_free()
+	var donor_mesh := _donor_head_mesh(head_model_name)
+	var target_head = _find_node_by_name(inst, "head-mesh") as MeshInstance3D
+	if donor_mesh != null and target_head != null:
+		target_head.mesh = donor_mesh
 
-func _find_node_by_name(node: Node, node_name: String) -> Node:
+static func _character_scene(path: String) -> PackedScene:
+	if not _model_scene_cache.has(path):
+		_model_scene_cache[path] = load(path) as PackedScene
+	return _model_scene_cache[path] as PackedScene
+
+static func _donor_head_mesh(model_name: String) -> Mesh:
+	if _head_mesh_cache.has(model_name):
+		return _head_mesh_cache[model_name] as Mesh
+	var path := "res://assets/characters/%s.glb" % model_name
+	var mesh: Mesh = null
+	if FileAccess.file_exists(path):
+		var donor_scene := _character_scene(path)
+		if donor_scene != null:
+			var donor_inst := donor_scene.instantiate()
+			var donor_head = _find_node_by_name(donor_inst, "head-mesh") as MeshInstance3D
+			if donor_head != null:
+				mesh = donor_head.mesh
+			donor_inst.free()
+	_head_mesh_cache[model_name] = mesh
+	return mesh
+
+static func _find_node_by_name(node: Node, node_name: String) -> Node:
 	if node.name == node_name:
 		return node
 	for child in node.get_children():
@@ -1411,10 +1444,8 @@ func set_hero(hero: bool) -> void:
 
 func set_head_visible(value: bool) -> void:
 	head_visible = value
-	if current_character_mesh != null:
-		var head_mesh = _find_node_by_name(current_character_mesh, "head-mesh") as MeshInstance3D
-		if head_mesh:
-			head_mesh.visible = value
+	if current_head_mesh != null:
+		current_head_mesh.visible = value
 	var fallback_head = get_node_or_null("FallbackHead")
 	if fallback_head:
 		fallback_head.visible = value

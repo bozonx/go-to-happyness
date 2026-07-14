@@ -7,11 +7,13 @@ func _init() -> void:
 func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 	var orders: Array[CitizenOrder] = []
 	var claimed: Dictionary = {}
+	var shared_tasks: Array = snapshot.settlement.value(&"work.courier.tasks", []) as Array
 	for citizen_id in snapshot.citizen_ids():
 		var citizen := snapshot.citizen(citizen_id)
 		if citizen == null or not bool(citizen.facts.value(&"work.courier.worker", false)) or not bool(citizen.facts.value(&"work.courier.can_start", false)):
 			continue
-		for task_value in citizen.facts.value(&"work.courier.tasks", []) as Array:
+		var tasks: Array = shared_tasks if not shared_tasks.is_empty() else citizen.facts.value(&"work.courier.tasks", []) as Array
+		for task_value in tasks:
 			var task := task_value as Dictionary
 			var task_id := task.get(&"id", &"") as StringName
 			var pickup: Variant = task.get(&"pickup", Vector3.INF)

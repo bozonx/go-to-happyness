@@ -34,3 +34,7 @@ func merged(other: AIFactSet) -> AIFactSet:
 
 func to_dictionary() -> Dictionary:
 	return _values.duplicate(true)
+
+
+func is_equal_to(other: AIFactSet) -> bool:
+	return other != null and _values == other._values

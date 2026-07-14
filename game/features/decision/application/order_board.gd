@@ -5,6 +5,7 @@ extends RefCounted
 ## live order for each citizen.
 
 var _orders_by_citizen: Dictionary = {}
+var _orders_by_issuer: Dictionary = {}
 var _next_order_id := 1
 
 
@@ -13,16 +14,13 @@ func replace_issuer_orders(
 	orders: Array[CitizenOrder],
 	simulation_seconds: float
 ) -> void:
-	var previous: Array[CitizenOrder] = []
-	for citizen_orders: Array in _orders_by_citizen.values():
-		for existing: CitizenOrder in citizen_orders:
-			if existing.issuer == issuer:
-				previous.append(existing)
-	_remove_issuer(issuer)
+	var previous_by_citizen: Dictionary = _orders_by_issuer.get(issuer, {})
+	var next_by_citizen: Dictionary = {}
 	for order in orders:
 		if order == null or order.citizen_id == 0 or order.is_expired(simulation_seconds):
 			continue
 		order.issuer = issuer
+		var previous: Array = previous_by_citizen.get(order.citizen_id, [])
 		if order.id == 0:
 			var matching := _matching_order(previous, order)
 			if matching != null:
@@ -32,83 +30,91 @@ func replace_issuer_orders(
 				order.id = _next_order_id
 				order.issued_at = simulation_seconds
 				_next_order_id += 1
-		var citizen_orders: Array[CitizenOrder] = []
-		citizen_orders.assign(_orders_by_citizen.get(order.citizen_id, []))
-		if _contains_equivalent_order(citizen_orders, order, issuer):
+		var next_orders: Array = next_by_citizen.get(order.citizen_id, [])
+		if _contains_equivalent_order(next_orders, order):
 			continue
-		citizen_orders.append(order)
-		_orders_by_citizen[order.citizen_id] = citizen_orders
+		next_orders.append(order)
+		next_by_citizen[order.citizen_id] = next_orders
+	_remove_issuer(issuer)
+	_orders_by_issuer[issuer] = next_by_citizen
+	for citizen_id: int in next_by_citizen:
+		var citizen_orders: Dictionary = _orders_by_citizen.get(citizen_id, {})
+		citizen_orders[issuer] = next_by_citizen[citizen_id]
+		_orders_by_citizen[citizen_id] = citizen_orders
 
 
 func order_for(citizen_id: int, simulation_seconds: float) -> CitizenOrder:
 	var best: CitizenOrder
-	for order: CitizenOrder in _orders_by_citizen.get(citizen_id, []):
-		if order.is_expired(simulation_seconds):
-			continue
-		if best == null or order.priority > best.priority or (
-			is_equal_approx(order.priority, best.priority) and order.id < best.id
-		):
-			best = order
+	for issuer_orders: Array in (_orders_by_citizen.get(citizen_id, {}) as Dictionary).values():
+		for order: CitizenOrder in issuer_orders:
+			if order.is_expired(simulation_seconds):
+				continue
+			if best == null or order.priority > best.priority or (
+				is_equal_approx(order.priority, best.priority) and order.id < best.id
+			):
+				best = order
 	return best
 
 
 func remove_citizen(citizen_id: int) -> void:
 	_orders_by_citizen.erase(citizen_id)
+	for issuer: StringName in _orders_by_issuer.keys():
+		var issuer_orders: Dictionary = _orders_by_issuer[issuer]
+		issuer_orders.erase(citizen_id)
 
 
 func clear_expired(simulation_seconds: float) -> void:
-	for citizen_id: int in _orders_by_citizen.keys():
-		var live: Array[CitizenOrder] = []
-		for order: CitizenOrder in _orders_by_citizen[citizen_id]:
-			if not order.is_expired(simulation_seconds):
-				live.append(order)
-		if live.is_empty():
-			_orders_by_citizen.erase(citizen_id)
-		else:
-			_orders_by_citizen[citizen_id] = live
+	var issuers := _orders_by_issuer.keys()
+	for issuer: StringName in issuers:
+		var retained: Array[CitizenOrder] = []
+		for orders: Array in (_orders_by_issuer[issuer] as Dictionary).values():
+			for order: CitizenOrder in orders:
+				if not order.is_expired(simulation_seconds):
+					retained.append(order)
+		replace_issuer_orders(issuer, retained, simulation_seconds)
 
 
 func clear() -> void:
 	_orders_by_citizen.clear()
+	_orders_by_issuer.clear()
 
 
 func candidate_count() -> int:
 	var total := 0
-	for orders: Array in _orders_by_citizen.values():
-		total += orders.size()
+	for issuer_orders: Dictionary in _orders_by_issuer.values():
+		for orders: Array in issuer_orders.values():
+			total += orders.size()
 	return total
 
 
 func _remove_issuer(issuer: StringName) -> void:
-	for citizen_id: int in _orders_by_citizen.keys():
-		var retained: Array[CitizenOrder] = []
-		for order: CitizenOrder in _orders_by_citizen[citizen_id]:
-			if order.issuer != issuer:
-				retained.append(order)
-		if retained.is_empty():
+	var previous: Dictionary = _orders_by_issuer.get(issuer, {})
+	for citizen_id: int in previous:
+		var citizen_orders: Dictionary = _orders_by_citizen.get(citizen_id, {})
+		citizen_orders.erase(issuer)
+		if citizen_orders.is_empty():
 			_orders_by_citizen.erase(citizen_id)
 		else:
-			_orders_by_citizen[citizen_id] = retained
+			_orders_by_citizen[citizen_id] = citizen_orders
+	_orders_by_issuer.erase(issuer)
 
 
 ## Identity of an order for id/issued-at carry-over relies on value equality of its
 ## fields. Order payloads must therefore hold only value types (numbers, strings,
 ## StringNames, vectors) — never scene nodes — or two identical proposals will look
 ## distinct and pointlessly churn their ids each director tick.
-func _matching_order(previous: Array[CitizenOrder], proposal: CitizenOrder) -> CitizenOrder:
+func _matching_order(previous: Array, proposal: CitizenOrder) -> CitizenOrder:
 	for existing in previous:
-		if _orders_are_equivalent(existing, proposal):
-			return existing
+		var typed_existing := existing as CitizenOrder
+		if typed_existing != null and _orders_are_equivalent(typed_existing, proposal):
+			return typed_existing
 	return null
 
 
-func _contains_equivalent_order(
-	orders: Array[CitizenOrder],
-	proposal: CitizenOrder,
-	issuer: StringName
-) -> bool:
+func _contains_equivalent_order(orders: Array, proposal: CitizenOrder) -> bool:
 	for existing in orders:
-		if existing.issuer == issuer and _orders_are_equivalent(existing, proposal):
+		var typed_existing := existing as CitizenOrder
+		if typed_existing != null and _orders_are_equivalent(typed_existing, proposal):
 			return true
 	return false
 
@@ -119,5 +125,15 @@ func _orders_are_equivalent(left: CitizenOrder, right: CitizenOrder) -> bool:
 		and left.kind == right.kind
 		and left.target_key == right.target_key
 		and left.target_position == right.target_position
-		and left.payload.to_dictionary() == right.payload.to_dictionary()
+		and left.payload.is_equal_to(right.payload)
 	)
+
+
+func next_expiration_after(simulation_seconds: float) -> float:
+	var next_expiration := INF
+	for issuer_orders: Dictionary in _orders_by_issuer.values():
+		for orders: Array in issuer_orders.values():
+			for order: CitizenOrder in orders:
+				if order.expires_at > simulation_seconds:
+					next_expiration = minf(next_expiration, order.expires_at)
+	return next_expiration

@@ -34,13 +34,16 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 		if citizen == null or not bool(citizen.facts.value(&"work.gathering.worker", false)):
 			continue
 		var in_progress := bool(citizen.facts.value(&"work.gathering.in_progress", false))
+		if not in_progress and not bool(citizen.facts.value(&"work.gathering.can_start", true)):
+			_assignments.erase(citizen_id)
+			continue
 		var assignment := _assignments.get(citizen_id, {}) as Dictionary
 		if in_progress:
 			if not assignment.is_empty():
 				orders.append(_order_for(citizen_id, assignment))
 			continue
 		_assignments.erase(citizen_id)
-		var next_assignment := _closest_free_candidate(citizen, assigned_sources)
+		var next_assignment := _closest_free_candidate(snapshot, citizen, assigned_sources)
 		if next_assignment.is_empty():
 			continue
 		_assignments[citizen_id] = next_assignment
@@ -49,8 +52,10 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 	return orders
 
 
-func _closest_free_candidate(citizen: CitizenSnapshot, assigned_sources: Dictionary) -> Dictionary:
-	var candidates: Array = citizen.facts.value(&"work.gathering.candidates", []) as Array
+func _closest_free_candidate(snapshot: WorldSnapshot, citizen: CitizenSnapshot, assigned_sources: Dictionary) -> Dictionary:
+	var global_candidates: Array = snapshot.settlement.value(&"work.gathering.targets", []) as Array
+	var role := citizen.facts.value(&"work.gathering.role", &"") as StringName
+	var candidates: Array = global_candidates if not global_candidates.is_empty() and role != &"gather_food" else citizen.facts.value(&"work.gathering.candidates", []) as Array
 	var best: Dictionary = {}
 	var best_distance := INF
 	for candidate_value in candidates:
@@ -63,6 +68,8 @@ func _closest_free_candidate(citizen: CitizenSnapshot, assigned_sources: Diction
 		if distance < best_distance or (is_equal_approx(distance, best_distance) and str(source_id) < str(best.get(&"id", &""))):
 			best = candidate.duplicate(true)
 			best_distance = distance
+	if not best.is_empty():
+		best[&"warehouse_position"] = citizen.facts.value(&"work.gathering.warehouse_position", best.get(&"warehouse_position", Vector3.INF))
 	return best
 
 

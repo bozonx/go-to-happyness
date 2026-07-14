@@ -18,6 +18,8 @@ var _brains: Dictionary = {}
 var _citizen_ids: Array[int] = []
 var _next_think_at: Dictionary = {}
 var _order_cache: Dictionary = {}
+var _order_cache_dirty := true
+var _order_cache_expires_at := INF
 var _elapsed := 0.0
 var _snapshot_elapsed := 0.0
 var _director_elapsed := 0.0
@@ -39,6 +41,9 @@ func configure(
 	facade = next_facade
 	_goals = _unique_goals(goals)
 	director.configure(_unique_providers(providers))
+	_order_cache.clear()
+	_order_cache_dirty = true
+	_order_cache_expires_at = INF
 	for brain: CitizenBrain in _brains.values():
 		brain.configure_goals(_goals)
 	_snapshot_sequence += 1
@@ -58,6 +63,7 @@ func register_citizen(citizen_id: int, actuator: CitizenActuator) -> void:
 	_brains[citizen_id] = CitizenBrain.new(citizen_id, actuator, _goals)
 	_citizen_ids.append(citizen_id)
 	_next_think_at[citizen_id] = _elapsed
+	_order_cache_dirty = true
 
 
 func unregister_citizen(citizen_id: int) -> void:
@@ -68,6 +74,7 @@ func unregister_citizen(citizen_id: int) -> void:
 	_citizen_ids.erase(citizen_id)
 	_next_think_at.erase(citizen_id)
 	_order_cache.erase(citizen_id)
+	_order_cache_dirty = true
 	director.order_board.remove_citizen(citizen_id)
 	reservations.release_all(citizen_id)
 	_think_cursor = 0 if _citizen_ids.is_empty() else _think_cursor % _citizen_ids.size()
@@ -106,7 +113,9 @@ func _physics_process(delta: float) -> void:
 	if _director_elapsed >= director_interval:
 		_director_elapsed = fmod(_director_elapsed, director_interval)
 		director.tick(latest_snapshot)
-	_rebuild_order_cache()
+		_order_cache_dirty = true
+	if _order_cache_dirty or latest_snapshot.simulation_seconds >= _order_cache_expires_at:
+		_rebuild_order_cache()
 	_tick_brains(delta)
 	_think_due_brains()
 
@@ -141,6 +150,8 @@ func _rebuild_order_cache() -> void:
 		var order := director.order_board.order_for(citizen_id, latest_snapshot.simulation_seconds)
 		if order != null:
 			_order_cache[citizen_id] = order
+	_order_cache_expires_at = director.order_board.next_expiration_after(latest_snapshot.simulation_seconds)
+	_order_cache_dirty = false
 
 
 func _tick_brains(delta: float) -> void:

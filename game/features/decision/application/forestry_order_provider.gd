@@ -35,6 +35,9 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 		if citizen == null or not bool(citizen.facts.value(&"work.forestry.worker", false)):
 			continue
 		var in_progress := bool(citizen.facts.value(&"work.forestry.in_progress", false))
+		if not in_progress and not bool(citizen.facts.value(&"work.forestry.can_start", true)):
+			_assignments.erase(citizen_id)
+			continue
 		var assignment := _assignments.get(citizen_id, {}) as Dictionary
 		if in_progress:
 			if assignment.is_empty():
@@ -42,7 +45,7 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 			orders.append(_order_for(citizen_id, assignment))
 			continue
 		_assignments.erase(citizen_id)
-		var next_assignment := _closest_free_candidate(citizen, assigned_targets)
+		var next_assignment := _closest_free_candidate(snapshot, citizen, assigned_targets)
 		if next_assignment.is_empty():
 			continue
 		_assignments[citizen_id] = next_assignment
@@ -51,8 +54,8 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 	return orders
 
 
-func _closest_free_candidate(citizen: CitizenSnapshot, assigned_targets: Dictionary) -> Dictionary:
-	var candidates: Array = citizen.facts.value(&"work.forestry.candidates", []) as Array
+func _closest_free_candidate(snapshot: WorldSnapshot, citizen: CitizenSnapshot, assigned_targets: Dictionary) -> Dictionary:
+	var candidates: Array = snapshot.settlement.value(&"work.forestry.targets", citizen.facts.value(&"work.forestry.candidates", [])) as Array
 	var best: Dictionary = {}
 	var best_distance := INF
 	for candidate_value in candidates:
@@ -65,6 +68,9 @@ func _closest_free_candidate(citizen: CitizenSnapshot, assigned_targets: Diction
 		if distance < best_distance or (is_equal_approx(distance, best_distance) and str(target_id) < str(best.get(&"id", &""))):
 			best = candidate.duplicate(true)
 			best_distance = distance
+	if not best.is_empty():
+		best[&"sawmill_position"] = citizen.facts.value(&"work.forestry.sawmill_position", best.get(&"sawmill_position", Vector3.INF))
+		best[&"warehouse_position"] = citizen.facts.value(&"work.forestry.warehouse_position", best.get(&"warehouse_position", Vector3.INF))
 	return best
 
 
