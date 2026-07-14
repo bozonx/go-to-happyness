@@ -570,11 +570,12 @@ func _test_citizen_state_display_queue() -> void:
 	citizen.state = Citizen.State.CHOPPING
 	assert(citizen._displayed_state == Citizen.State.IDLE)
 	citizen._advance_state_display(1.0)
-	assert(citizen._displayed_state == Citizen.State.TO_TREE)
-	citizen._advance_state_display(0.99)
-	assert(citizen._displayed_state == Citizen.State.TO_TREE)
-	citizen._advance_state_display(0.01)
 	assert(citizen._displayed_state == Citizen.State.CHOPPING)
+	citizen._advance_state_display(0.99)
+	assert(citizen._displayed_state == Citizen.State.CHOPPING)
+	citizen.state = Citizen.State.TO_SAWMILL
+	citizen._advance_state_display(0.01)
+	assert(citizen._displayed_state == Citizen.State.TO_SAWMILL)
 	citizen.free()
 
 
@@ -822,15 +823,42 @@ func _test_building_queue_routing() -> void:
 	grid.set_blocked_cells(blocked)
 	var queues = BuildingQueueServiceScript.new()
 	queues.configure(registry, grid)
-	var first := Node.new()
-	var second := Node.new()
-	var third := Node.new()
+	var first := Node3D.new()
+	var second := Node3D.new()
+	var third := Node3D.new()
+	root.add_child(first)
+	root.add_child(second)
+	root.add_child(third)
 	var head: Dictionary = queues.resolve(first, building.position)
 	var middle: Dictionary = queues.resolve(second, building.get_meta("service_position"))
 	var tail: Dictionary = queues.resolve(third, building.position)
 	assert(head.is_head and head.position == building.get_meta("service_position"))
 	assert(not middle.is_head and not blocked.has(Vector2i(floori(middle.position.x), floori(middle.position.z))))
 	assert(not tail.is_head and tail.position != middle.position)
+	queues.complete_arrival(first, building.position)
+	assert(not queues.resolve(second, building.position).is_head)
+	queues._last_admitted_frame[building.get_instance_id()] = Engine.get_physics_frames() - 1
+	assert(queues.resolve(second, building.position).is_head)
+	queues.release(second)
+	assert(queues.resolve(third, building.position).is_head)
+	var overflow_positions: Dictionary = {}
+	var overflow_nodes: Array[Node3D] = []
+	for index in range(24):
+		var queued := Node3D.new()
+		queued.position = Vector3(-5.0 + index * 0.1, 0.0, -5.0)
+		root.add_child(queued)
+		overflow_nodes.append(queued)
+		var result: Dictionary = queues.resolve(queued, building.position)
+		var key := "%0.3f:%0.3f" % [result.position.x, result.position.z]
+		assert(not overflow_positions.has(key))
+		overflow_positions[key] = true
+	for queued in overflow_nodes:
+		queues.release(queued)
+		root.remove_child(queued)
+		queued.free()
+	root.remove_child(first)
+	root.remove_child(second)
+	root.remove_child(third)
 	first.free()
 	second.free()
 	third.free()

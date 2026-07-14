@@ -23,6 +23,7 @@ func capture(sequence: int) -> WorldSnapshot:
 	var forestry_targets := _forestry_targets()
 	var gathering_targets := _gathering_targets()
 	var food_gathering_targets := _food_gathering_targets()
+	var daily_gathering_cache: Dictionary = {"gather_food": food_gathering_targets}
 	var citizens_by_id: Dictionary = {}
 	for actor: Citizen in simulation.citizens:
 		if not is_instance_valid(actor) or actor.ai_id == 0 or simulation.outside_workers.has(actor.get_instance_id()):
@@ -101,9 +102,9 @@ func capture(sequence: int) -> WorldSnapshot:
 					daily_construction_mode = &"construction"
 					daily_construction_target_key = _target_key(&"construction", daily_construction_site.node.global_position)
 					daily_construction_position = daily_construction_site.node.global_position
-			daily_construction_can_start = daily_construction_target_key != &""
-		var gathering_worker := actor.permanent_role in ["gather_branches", "gather_food"] and actor.is_employed() and not actor.is_player_controlled
-		var gathering_in_progress := gathering_worker and actor.active_role.begins_with("gather_") and actor.state in [Citizen.State.TO_GATHER, Citizen.State.GATHERING, Citizen.State.TO_WAREHOUSE]
+				daily_construction_can_start = daily_construction_target_key != &""
+		var gathering_worker: bool = actor.permanent_role in ["gather_branches", "gather_food"] and actor.is_employed() and not actor.is_player_controlled
+		var gathering_in_progress: bool = gathering_worker and actor.active_role.begins_with("gather_") and actor.state in [Citizen.State.TO_GATHER, Citizen.State.GATHERING, Citizen.State.TO_WAREHOUSE]
 		var gathering_candidates: Array[Dictionary] = []
 		if gathering_worker and simulation._is_work_time() and simulation._has_storage_room_for_role(actor.permanent_role):
 			if actor.permanent_role == "gather_food":
@@ -111,7 +112,13 @@ func capture(sequence: int) -> WorldSnapshot:
 		var daily_gathering_in_progress := daily_order_active and daily_order_role.begins_with("gather_") and actor.active_role.begins_with("gather_") and actor.state in [Citizen.State.TO_GATHER, Citizen.State.GATHERING, Citizen.State.TO_WAREHOUSE]
 		var daily_gathering_candidates: Array[Dictionary] = []
 		if daily_order_role.begins_with("gather_") and simulation._has_storage_room_for_role(daily_order_role):
-			daily_gathering_candidates = _daily_gathering_targets_for(actor, daily_order_role, food_gathering_targets)
+			if daily_order_role == "gather_water":
+				daily_gathering_candidates = _daily_gathering_targets_for(actor, daily_order_role, food_gathering_targets)
+			elif daily_gathering_cache.has(daily_order_role):
+				daily_gathering_candidates = (daily_gathering_cache[daily_order_role] as Array[Dictionary]).duplicate(false)
+			else:
+				daily_gathering_candidates = _daily_gathering_targets_for(actor, daily_order_role, food_gathering_targets)
+				daily_gathering_cache[daily_order_role] = daily_gathering_candidates
 		var daily_gathering_can_start := daily_order_active and daily_order_role.begins_with("gather_") and not daily_gathering_candidates.is_empty()
 		var excavation_worker := actor.permanent_role == "excavation" and actor.is_employed() and not actor.is_player_controlled
 		var excavation_in_progress := excavation_worker and actor.active_role == "excavation" and actor.state in [Citizen.State.EXCAVATING, Citizen.State.WAITING_COURIER]
@@ -526,6 +533,16 @@ func _factory_for_role_internal(role: String) -> Node3D:
 
 func _role_employers() -> Dictionary:
 	var employers := {}
+	var occupancy: Dictionary = {}
+	for citizen in simulation.citizens:
+		if not is_instance_valid(citizen):
+			continue
+		var assigned_role: String = citizen.permanent_role if citizen.is_employed() else citizen.pending_employment_role
+		var workplace: Node3D = citizen.employment_workplace if citizen.is_employed() else citizen.pending_employment_workplace
+		if assigned_role.is_empty() or not is_instance_valid(workplace):
+			continue
+		var occupancy_key := "%s:%d" % [assigned_role, workplace.get_instance_id()]
+		occupancy[occupancy_key] = int(occupancy.get(occupancy_key, 0)) + 1
 	var roles := [
 		"forestry", "farming", "construction", "gather_branches", "gather_food",
 		"excavation", "cook", "teacher", "seller", "official", "craftsman",
@@ -539,13 +556,7 @@ func _role_employers() -> Dictionary:
 				continue
 			if not bool(workplace.get_meta("accepting_workers", true)):
 				continue
-			var occupied := 0
-			for citizen in simulation.citizens:
-				if not is_instance_valid(citizen):
-					continue
-				var assigned_role: String = citizen.permanent_role if citizen.is_employed() else citizen.pending_employment_role
-				if assigned_role == role and (citizen.employment_workplace == workplace or citizen.pending_employment_workplace == workplace):
-					occupied += 1
+			var occupied := int(occupancy.get("%s:%d" % [role, workplace.get_instance_id()], 0))
 			var available_slots: int = simulation._employer_capacity(role, workplace) - occupied
 			if available_slots > 0:
 				candidates.append({

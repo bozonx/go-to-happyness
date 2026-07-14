@@ -334,12 +334,14 @@ var survival_busy_until: Dictionary = {}
 var protected_firewood_day := -1
 var smoky_firewood_day := -1
 var job_submenu_btn: Button
+var daily_order_submenu_btn: Button
 var job_back_btn: Button
 var house_lights: Array[Dictionary] = []
 var house_light_update_minute := -1
 var entrance_lights: Array[OmniLight3D] = []
 var build_category := ""
 var build_menu_is_job_menu := false
+var build_menu_is_daily_order_menu := false
 var build_buttons: Array[Button] = []
 var build_item_buttons: Array[Button] = []
 var skip_night_button: Button
@@ -559,7 +561,7 @@ func _guard_citizen_positions() -> void:
 		# No normal work transition moves an established resident from across the
 		# map to the entrance. Keep the last known world location if that reset is
 		# observed, while preserving genuine arrival and trade routes.
-		if not intentionally_at_entrance and previous.distance_to(entrance_stone.global_position) > 5.0 and citizen.global_position.distance_to(entrance_stone.global_position) < 2.5:
+		if not intentionally_at_entrance and previous.distance_to(citizen.global_position) > 5.0 and previous.distance_to(entrance_stone.global_position) > 5.0 and citizen.global_position.distance_to(entrance_stone.global_position) < 2.5:
 			citizen.global_position = previous
 			citizen.velocity = Vector3.ZERO
 		last_citizen_positions[citizen_id] = citizen.global_position
@@ -1585,6 +1587,14 @@ func _is_route_reachable(from: Vector3, destination: Vector3, may_enter_destinat
 func _resolve_building_queue_position(citizen: Citizen, destination: Vector3) -> Dictionary:
 	return building_queue_service.resolve(citizen, destination)
 
+
+func _complete_building_queue_arrival(citizen: Citizen, destination: Vector3) -> void:
+	building_queue_service.complete_arrival(citizen, destination)
+
+
+func _release_building_queue_entry(citizen: Citizen) -> void:
+	building_queue_service.release(citizen)
+
 func _update_interface(message: String) -> void:
 	wood_label.text = "Era: %s\nMoney: %d\nBranches: %d\nGrass: %d\nWater: %d\nFood: %d\nSoil: %d\nClay: %d\nLogs: %d\nTimber: %d\nBoards: %d\nStone: %d\nBricks: %d\nStorage: %d/%d\nPopulation: %d\nWellbeing: %d" % [_era_name(), money, branches, grass, water, food, soil, clay, settlement.logs, wood, boards, stone, bricks, _stored_resources(), _warehouse_capacity(), citizens.size(), wellbeing]
 	_add_message(message)
@@ -2126,7 +2136,7 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	add_child(citizen)
 	citizen.simulation = self
 	citizen.setup_specialization(primary_specialization if not primary_specialization.is_empty() else "unassigned")
-	citizen.setup_navigation(_find_path_around_houses, _get_nearest_delivery_position, _resolve_building_queue_position, _movement_speed_modifier_at, _navigation_revision, _record_trail_movement)
+	citizen.setup_navigation(_find_path_around_houses, _get_nearest_delivery_position, _resolve_building_queue_position, _movement_speed_modifier_at, _navigation_revision, _record_trail_movement, _is_route_reachable, _complete_building_queue_arrival, _release_building_queue_entry)
 	citizen.setup_registration_service(_can_start_registration, _registration_duration)
 	citizen.resource_delivered.connect(_on_resource_delivered)
 	citizen.construction_material_delivered.connect(_on_construction_material_delivered)
@@ -2515,9 +2525,16 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	manage_citizen_button.pressed.connect(_take_control_of_selected_citizen)
 	build_menu.add_child(manage_citizen_button)
 	
-	# Add the "Assign Job..." button that opens the job submenu
+	# Add the citizen assignment submenus.
+	daily_order_submenu_btn = Button.new()
+	daily_order_submenu_btn.text = "Daily Orders..."
+	daily_order_submenu_btn.position = Vector2(16, 276)
+	daily_order_submenu_btn.size = Vector2(272, 30)
+	daily_order_submenu_btn.pressed.connect(_open_daily_order_submenu)
+	build_menu.add_child(daily_order_submenu_btn)
+
 	job_submenu_btn = Button.new()
-	job_submenu_btn.text = "Assign Job..."
+	job_submenu_btn.text = "Permanent Jobs..."
 	job_submenu_btn.position = Vector2(16, 310)
 	job_submenu_btn.size = Vector2(272, 30)
 	job_submenu_btn.pressed.connect(_open_job_submenu)
@@ -2528,22 +2545,29 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	job_back_btn.text = "Back to categories"
 	job_back_btn.position = Vector2(16, 96)
 	job_back_btn.size = Vector2(272, 30)
-	job_back_btn.pressed.connect(_close_job_submenu)
+	job_back_btn.pressed.connect(_close_assignment_submenu)
 	build_menu.add_child(job_back_btn)
 	
-	# Role buttons in job submenu
-	_add_role_button("No daily_order", "", 136)
-	_add_role_button("Daily order: helper", "helper", 170)
-	_add_role_button("Daily order: construction", "construction", 204)
-	_add_role_button("Assign: forestry (logs/timber)", "forestry", 238)
-	_add_role_button("Assign: farming", "farming", 272)
-	_add_role_button("Assign: excavation", "excavation", 306)
-	_add_role_button("Daily order: gather branches", "gather_branches", 340)
-	_add_role_button("Daily order: gather grass", "gather_grass", 374)
-	_add_role_button("Assign: forage food", "gather_food", 408)
-	_add_role_button("Assign: courier", "courier", 442)
-	_add_role_button("Assign: craftsman", "craftsman", 476)
-	_add_role_button("Assign: employment officer", "official", 510)
+	# Daily orders do not require an employment officer.
+	_add_role_button("Clear daily order", "", 136, false, "daily")
+	_add_role_button("Helper", "helper", 170, false, "daily")
+	_add_role_button("Construction", "construction", 204, false, "daily")
+	_add_role_button("Gather branches", "gather_branches", 238, false, "daily")
+	_add_role_button("Gather grass", "gather_grass", 272, false, "daily")
+	_add_role_button("Forage food", "gather_food", 306, false, "daily")
+	_add_role_button("Collect dew", "gather_dew", 340, false, "daily")
+	_add_role_button("Collect water", "gather_water", 374, false, "daily")
+
+	# Permanent jobs require an employment officer, except appointing the officer.
+	_add_role_button("Assign: construction", "construction", 136, false, "job")
+	_add_role_button("Assign: forestry (logs/timber)", "forestry", 170, false, "job")
+	_add_role_button("Assign: farming", "farming", 204, false, "job")
+	_add_role_button("Assign: excavation", "excavation", 238, false, "job")
+	_add_role_button("Assign: gather branches", "gather_branches", 272, false, "job")
+	_add_role_button("Assign: forage food", "gather_food", 306, false, "job")
+	_add_role_button("Assign: courier", "courier", 340, false, "job")
+	_add_role_button("Assign: craftsman", "craftsman", 374, false, "job")
+	_add_role_button("Assign: employment officer", "official", 408, false, "job")
 	
 	# Era category buttons (shown on main build menu)
 	_add_build_category_button("Tent era", "tent", 136)
@@ -3464,39 +3488,50 @@ func _add_build_category_back_button() -> void:
 
 func _open_build_category(category: String) -> void:
 	build_category = category
+	build_menu_is_job_menu = false
+	build_menu_is_daily_order_menu = false
 	_refresh_build_menu()
 	if build_category.is_empty():
 		_show_selected_citizen_menu()
 
 func _refresh_build_menu() -> void:
 	var selected_exists := selected_builder != null
-	var citizen_actions_visible := selected_exists and not build_menu_is_job_menu and build_category.is_empty()
+	var assignment_submenu_open := build_menu_is_job_menu or build_menu_is_daily_order_menu
+	var citizen_actions_visible := selected_exists and not assignment_submenu_open and build_category.is_empty()
 	if manage_citizen_button != null:
 		manage_citizen_button.visible = citizen_actions_visible
 		manage_citizen_button.text = "Управлять" if selected_builder != hero_citizen else "Управлять героем"
 	
+	if daily_order_submenu_btn != null:
+		daily_order_submenu_btn.visible = citizen_actions_visible
+		daily_order_submenu_btn.disabled = false
+		daily_order_submenu_btn.tooltip_text = ""
 	if job_submenu_btn != null:
 		job_submenu_btn.visible = citizen_actions_visible
+		job_submenu_btn.disabled = citizen_actions_visible and not _player_can_command_labor()
+		job_submenu_btn.tooltip_text = _labor_command_block_message() if job_submenu_btn.disabled else ""
 	if job_back_btn != null:
-		job_back_btn.visible = selected_exists and build_menu_is_job_menu
+		job_back_btn.visible = selected_exists and assignment_submenu_open
 	
 	for button in build_buttons:
 		var category_button: String = button.get_meta("category_button", "")
 		if button.get_meta("category_back", false):
-			button.visible = not build_category.is_empty() and not build_menu_is_job_menu
+			button.visible = not build_category.is_empty() and not assignment_submenu_open
 		elif not category_button.is_empty():
-			button.visible = build_category.is_empty() and not build_menu_is_job_menu and building_availability_service.is_category_available(category_button)
+			button.visible = build_category.is_empty() and not assignment_submenu_open and building_availability_service.is_category_available(category_button)
 		else:
 			var build_type: String = button.get_meta("build_type", "")
 			var menu_state: Dictionary = building_availability_service.menu_state(build_type)
 			button.set_meta("build_menu_state", menu_state)
-			button.visible = not build_category.is_empty() and button.get_meta("category", "") == build_category and not build_menu_is_job_menu and bool(menu_state.visible)
+			button.visible = not build_category.is_empty() and button.get_meta("category", "") == build_category and not assignment_submenu_open and bool(menu_state.visible)
 			
 	for button in role_buttons:
 		var role: String = button.get_meta("role", "")
 		var hero_only: bool = button.get_meta("hero_only", false)
-		button.visible = build_menu_is_job_menu and selected_exists and _is_role_available(role) and (not hero_only or selected_builder.is_hero)
-		button.disabled = button.visible and role != "official" and not _player_can_command_labor()
+		var submenu: String = button.get_meta("submenu", "job")
+		var is_daily_submenu := submenu == "daily"
+		button.visible = selected_exists and ((is_daily_submenu and build_menu_is_daily_order_menu) or (not is_daily_submenu and build_menu_is_job_menu)) and _is_role_available(role) and (not hero_only or selected_builder.is_hero)
+		button.disabled = button.visible and not is_daily_submenu and role != "official" and not _player_can_command_labor()
 		button.tooltip_text = _labor_command_block_message() if button.disabled else ""
 		if button.visible:
 			var base_title: String = button.get_meta("base_title", button.text)
@@ -3504,8 +3539,8 @@ func _refresh_build_menu() -> void:
 				button.text = base_title
 			else:
 				var skill_val := float(selected_builder.skills.get(role, 0.0))
-				var active_cnt := _workforce_role_count(role)
-				var limit := _workforce_role_limit(role)
+				var active_cnt := _daily_order_role_count(role) if is_daily_submenu else _workforce_role_count(role)
+				var limit := -1 if is_daily_submenu else _workforce_role_limit(role)
 				var limit_str := ""
 				if limit >= 0:
 					limit_str = "/%d" % limit
@@ -3532,33 +3567,48 @@ func _refresh_build_menu() -> void:
 
 	if build_menu_title != null:
 		if build_menu_is_job_menu:
-			build_menu_title.text = "Assign Job\nOnly available workplaces are shown. [n] = assigned residents."
+			build_menu_title.text = "Permanent Jobs\nRequires an employment officer. [n] = assigned residents."
+		elif build_menu_is_daily_order_menu:
+			build_menu_title.text = "Daily Orders\nNo officer required. Evening orders start next workday."
 		elif not build_category.is_empty():
 			build_menu_title.text = "%s buildings\nChoose a building to place." % build_category.capitalize()
 		else:
 			_show_selected_citizen_menu()
 
 func _open_job_submenu() -> void:
+	if not _player_can_command_labor():
+		_show_labor_command_blocked()
+		return
 	build_menu_is_job_menu = true
+	build_menu_is_daily_order_menu = false
+	build_category = ""
 	_refresh_build_menu()
 
-func _close_job_submenu() -> void:
+func _open_daily_order_submenu() -> void:
+	build_menu_is_daily_order_menu = true
 	build_menu_is_job_menu = false
+	build_category = ""
 	_refresh_build_menu()
 
-func _add_role_button(title: String, role: String, y_position: float, hero_only := false) -> void:
+func _close_assignment_submenu() -> void:
+	build_menu_is_job_menu = false
+	build_menu_is_daily_order_menu = false
+	_refresh_build_menu()
+
+func _add_role_button(title: String, role: String, y_position: float, hero_only := false, submenu := "job") -> void:
 	var button := Button.new()
 	button.text = title
 	button.position = Vector2(16, y_position)
 	button.size = Vector2(272, 28)
-	button.pressed.connect(_set_selected_work_role.bind(role))
+	button.pressed.connect(_set_selected_work_role.bind(role, submenu == "daily"))
 	button.set_meta("role", role)
 	button.set_meta("base_title", title)
 	button.set_meta("hero_only", hero_only)
+	button.set_meta("submenu", submenu)
 	build_menu.add_child(button)
 	role_buttons.append(button)
 
-func _set_selected_work_role(role: String) -> void:
+func _set_selected_work_role(role: String, daily_order := false) -> void:
 	if selected_builder == null:
 		return
 	# A work assignment is an explicit hand-off to the settlement AI. Without
@@ -3566,21 +3616,21 @@ func _set_selected_work_role(role: String) -> void:
 	# control flag and is excluded from every work and courier order.
 	selected_builder.set_player_controlled(false)
 	selected_builder.idle()
-	if role == "excavation":
-		if not _player_can_command_labor():
-			_show_labor_command_blocked()
-			return
-		_start_dig_assignment()
-		build_menu_is_job_menu = false
-		return
-	var daily_order_roles := ["", "helper", "construction", "gather_branches", "gather_grass", "gather_food", "gather_dew", "gather_water"]
-	if role in daily_order_roles:
+	if daily_order:
 		if role.is_empty():
 			selected_builder.clear_daily_order()
 		else:
 			_assign_daily_order(selected_builder, role)
 		if selected_builder.employment_state == Citizen.EmploymentState.UNREGISTERED and _employment_center_position() != Vector3.INF:
 			selected_builder.request_no_permanent_work_registration()
+	elif role == "excavation":
+		if not _player_can_command_labor():
+			_show_labor_command_blocked()
+			return
+		_start_dig_assignment()
+		build_menu_is_job_menu = false
+		build_menu_is_daily_order_menu = false
+		return
 	elif role == "official":
 		# The employment officer is appointed directly by the mayor. They run job
 		# registration, so they cannot themselves queue for it — this also breaks
@@ -3601,6 +3651,7 @@ func _set_selected_work_role(role: String) -> void:
 		citizen_ai.request_decision_refresh()
 	_update_workers()
 	build_menu_is_job_menu = false
+	build_menu_is_daily_order_menu = false
 	_show_selected_citizen_menu()
 	_refresh_build_menu()
 	_update_interface("%s assigned to %s." % ["Hero" if selected_builder.is_hero else "Citizen", "automatic work" if role.is_empty() else role.replace("_", " ")])
@@ -3889,6 +3940,7 @@ func _close_context_menus() -> void:
 	selected_builder = null
 	build_category = ""
 	build_menu_is_job_menu = false
+	build_menu_is_daily_order_menu = false
 	_refresh_build_menu()
 
 

@@ -25,6 +25,17 @@ func _init() -> void:
 	assert(simulation.is_first_person)
 	assert(simulation.player_citizen == simulation.hero_citizen)
 	assert(not simulation._player_can_command_labor())
+	simulation.selected_builder = simulation.hero_citizen
+	simulation._refresh_build_menu()
+	assert(simulation.daily_order_submenu_btn.visible)
+	assert(not simulation.daily_order_submenu_btn.disabled)
+	assert(simulation.job_submenu_btn.visible)
+	assert(simulation.job_submenu_btn.disabled)
+	simulation._open_job_submenu()
+	assert(not simulation.build_menu_is_job_menu)
+	simulation._open_daily_order_submenu()
+	assert(simulation.build_menu_is_daily_order_menu)
+	simulation._close_assignment_submenu()
 	simulation._appoint_official(simulation.hero_citizen)
 	var delegated_officer: Citizen = simulation.citizens[1]
 	simulation._appoint_official(delegated_officer)
@@ -34,7 +45,7 @@ func _init() -> void:
 	# A daily order releases first-person control but does not break the permanent job.
 	simulation.selected_builder = simulation.hero_citizen
 	simulation.hero_citizen.set_player_controlled(true)
-	simulation._set_selected_work_role("gather_grass")
+	simulation._set_selected_work_role("gather_grass", true)
 	assert(not simulation.hero_citizen.is_player_controlled)
 	assert(simulation.hero_citizen.employment_state == Citizen.EmploymentState.EMPLOYED)
 	assert(simulation.hero_citizen.permanent_role == "official")
@@ -58,6 +69,33 @@ func _init() -> void:
 			assert(citizen.specialization == "unassigned")
 			assert(citizen.employment_state == Citizen.EmploymentState.NO_PERMANENT_WORK)
 	var resident: Citizen = simulation.citizens[1]
+	var original_pathfinder := resident.pathfinder
+	var original_reachability_query := resident.route_reachability_query
+	var path_calls := [0]
+	var reachability_calls := [0]
+	resident.pathfinder = func(_from: Vector3, target: Vector3, _allow: bool) -> RouteResult:
+		path_calls[0] += 1
+		return RouteResult.success([target], target)
+	resident.route_reachability_query = func(_from: Vector3, _target: Vector3, _allow: bool) -> bool:
+		reachability_calls[0] += 1
+		return true
+	resident.idle_wander_anchor = resident.global_position
+	assert(resident._choose_idle_wander_target() != Vector3.INF)
+	assert(reachability_calls[0] == Citizen.IDLE_WANDER_CANDIDATES and path_calls[0] == 0)
+	resident.pathfinder = original_pathfinder
+	resident.route_reachability_query = original_reachability_query
+	var original_resident_position := resident.global_position
+	var entrance: Vector3 = simulation.entrance_stone.global_position
+	resident.global_position = entrance + Vector3(2.4, 0.0, 0.0)
+	simulation.last_citizen_positions[resident.get_instance_id()] = entrance + Vector3(2.6, 0.0, 0.0)
+	simulation._guard_citizen_positions()
+	assert(resident.global_position.distance_to(entrance) < 2.5)
+	resident.global_position = entrance
+	simulation.last_citizen_positions[resident.get_instance_id()] = entrance + Vector3(10.0, 0.0, 0.0)
+	simulation._guard_citizen_positions()
+	assert(resident.global_position.distance_to(entrance) > 5.0)
+	resident.global_position = original_resident_position
+	simulation.last_citizen_positions[resident.get_instance_id()] = original_resident_position
 	# The needs service schedules relief; the actor receives only a selected target
 	# through the native actuator and preserves its interrupted work state.
 	var work_target: Vector3 = simulation._resource_access_position(resident.global_position, simulation.tree_positions[0])
@@ -75,7 +113,9 @@ func _init() -> void:
 	assert(resident.state == Citizen.State.TO_BUSH)
 	assert(resident.toilet_relief_type == "tree")
 	assert(resident.source_access_position == work_target)
-	resident.state = Citizen.State.USING_BUSH
+	resident.global_position = relief_target[&"position"] as Vector3
+	resident._process_to_bush(0.1)
+	assert(resident.state == Citizen.State.USING_BUSH)
 	resident.toilet_timer.start(0.0)
 	resident._process_using_bush(0.1)
 	assert(resident.state == Citizen.State.TO_TREE)

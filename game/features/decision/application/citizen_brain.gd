@@ -56,10 +56,9 @@ func think(snapshot: WorldSnapshot, order: CitizenOrder) -> void:
 	task.goal_id = result.goal.id
 	task.resumable = result.goal.resumable
 	task.order_id = next_order_id
-	if runner.active_task != null and result.goal.id != runner.active_goal_id():
-		runner.start_after_active(task, context)
-	else:
-		runner.start(task, context)
+	# Once a challenger wins arbitration it must take control immediately. Deferring
+	# it behind an indefinite workplace action starves personal needs for a shift.
+	runner.start(task, context)
 
 
 func tick(snapshot: WorldSnapshot, order: CitizenOrder, delta: float) -> void:

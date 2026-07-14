@@ -165,7 +165,7 @@ func _init() -> void:
 	_test_resume_drops_stale_task()
 	_test_resume_drops_changed_order()
 	_test_citizen_brain_cancels_for_player_control()
-	_test_citizen_brain_defers_interrupt_until_active_finishes()
+	_test_citizen_brain_interrupts_active_work_immediately()
 	_test_citizen_brain_failure_cooldown()
 	_test_citizen_brain_cancels_when_winning_goal_has_no_task()
 	_test_native_sleep_goal()
@@ -383,12 +383,13 @@ func _test_citizen_brain_cancels_for_player_control() -> void:
 	assert(unavailable_goal.last_step.cancels == 1)
 
 
-func _test_citizen_brain_defers_interrupt_until_active_finishes() -> void:
+func _test_citizen_brain_interrupts_active_work_immediately() -> void:
 	var work := ScriptedGoal.new(&"work", 0.90, [
 		BehaviorStep.Status.RUNNING,
 		BehaviorStep.Status.SUCCESS,
 	])
 	var urgent := ScriptedGoal.new(&"urgent", 0.40, [BehaviorStep.Status.RUNNING])
+	work.resumable = false
 	var brain := CitizenBrain.new(1, FakeActuator.new(1), [work, urgent])
 	var snapshot := _snapshot(0.0, CitizenSnapshot.new(1))
 	brain.think(snapshot, null)
@@ -398,11 +399,9 @@ func _test_citizen_brain_defers_interrupt_until_active_finishes() -> void:
 	work.utility = 0.50
 	urgent.utility = 0.95
 	brain.think(snapshot, null)
-	assert(brain.runner.active_goal_id() == &"work")
-	assert(urgent.build_count == 1 and urgent.last_step.ticks == 0)
-	brain.tick(snapshot, null, 0.1)
-	assert(work.last_step.finishes == 1)
 	assert(brain.runner.active_goal_id() == &"urgent")
+	assert(work.last_step.cancels == 1)
+	assert(urgent.build_count == 1 and urgent.last_step.ticks == 0)
 	assert(urgent.last_step.ticks == 0)
 	brain.tick(snapshot, null, 0.1)
 	assert(urgent.last_step.ticks == 1)
@@ -906,6 +905,15 @@ func _test_production_sleep_actuator() -> void:
 	assert(citizen.state == Citizen.State.TO_BUSH)
 	actuator.cancel_action()
 	assert(citizen.state == Citizen.State.IDLE)
+	assert(not citizen.has_toilet_resume_state)
+	citizen.go_to_relief(Vector3.ONE, &"tree")
+	citizen._resume_after_toilet()
+	assert(citizen.state == Citizen.State.IDLE)
+	citizen.state = Citizen.State.TO_TREE
+	citizen.go_to_relief(Vector3.ONE, &"tree")
+	citizen.set_player_controlled(true)
+	assert(citizen.state == Citizen.State.IDLE and not citizen.has_toilet_resume_state)
+	citizen.set_player_controlled(false)
 	assert(actuator.begin_action(&"rest", &"", AIFactSet.new({
 		&"target.position": Vector3.ZERO,
 		&"action.duration": 2.0,

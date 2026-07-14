@@ -48,7 +48,7 @@ const IDLE_WANDER_MAX_PAUSE := 6.0
 const IDLE_WANDER_CANDIDATES := 8
 const IDLE_PERSONAL_SPACE := 1.15
 const MIN_STATE_DISPLAY_DURATION := 1.0
-const MAX_PENDING_STATE_DISPLAY_TRANSITIONS := 60
+const MAX_PENDING_STATE_DISPLAY_TRANSITIONS := 6
 
 enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, TO_GATHER, GATHERING, TO_TRADE_PICKUP, TO_TRADE_DESTINATION, TO_EMPLOYMENT_CENTER, EMPLOYMENT_PROCESSING, CANTEEN_WORK, SCHOOL_WORK, TO_MARKET_WORK, MARKET_WORK, TO_CRAFT_WORK, CRAFT_WORK, TO_CONSTRUCTION_PICKUP, TO_CONSTRUCTION_SITE, TO_OFFICIAL_WORK, OFFICIAL_WORK, TO_ARRIVAL_ENTRANCE, ARRIVAL_MEETING, ARRIVAL_WAITING, TO_ARRIVAL_CENTER, RESEARCHING, TO_TOILET, USING_TOILET, WAITING_FOR_TOILET, TO_BUSH, USING_BUSH }
 
@@ -151,8 +151,9 @@ var state: int:
 		var previous_state: int = _state
 		_state = next_state
 		if _pending_state_display.size() >= MAX_PENDING_STATE_DISPLAY_TRANSITIONS:
-			_pending_state_display.pop_front()
-		_pending_state_display.append(next_state)
+			_pending_state_display[-1] = next_state
+		else:
+			_pending_state_display.append(next_state)
 		state_changed.emit(self, previous_state, next_state)
 var _displayed_state := State.IDLE
 var _displayed_state_elapsed := 0.0
@@ -276,6 +277,9 @@ var trail_movement_recorder: Callable
 var navigation_revision_query: Callable
 var delivery_position_resolver: Callable
 var queue_position_resolver: Callable
+var queue_arrival_notifier: Callable
+var queue_release_notifier: Callable
+var route_reachability_query: Callable
 var idle_wander_anchor := Vector3.INF
 var idle_wander_target := Vector3.INF
 var idle_wander_pause := 0.0
@@ -1029,7 +1033,7 @@ func _process_idle_wander(delta: float) -> void:
 		idle_wander_anchor = global_position
 		idle_wander_pause = randf_range(IDLE_WANDER_MIN_PAUSE, IDLE_WANDER_MAX_PAUSE)
 	if idle_wander_target != Vector3.INF:
-		if _move_to(idle_wander_target, delta, false, false):
+		if _move_to(idle_wander_target, delta, false, false, false):
 			idle_wander_target = Vector3.INF
 			idle_wander_pause = randf_range(IDLE_WANDER_MIN_PAUSE, IDLE_WANDER_MAX_PAUSE)
 		return
@@ -1050,8 +1054,8 @@ func _choose_idle_wander_target() -> Vector3:
 		var angle := randf() * TAU
 		var radius := randf_range(IDLE_PERSONAL_SPACE, IDLE_WANDER_RADIUS)
 		var candidate := idle_wander_anchor + Vector3(cos(angle) * radius, 0.0, sin(angle) * radius)
-		var route: Variant = pathfinder.call(global_position, candidate, false) if pathfinder.is_valid() else RouteResult.success([candidate], candidate)
-		if not route is RouteResult or not (route as RouteResult).reachable:
+		var reachable := bool(route_reachability_query.call(global_position, candidate, false)) if route_reachability_query.is_valid() else true
+		if not reachable:
 			continue
 		var nearest_neighbor := IDLE_WANDER_RADIUS * 2.0
 		if simulation != null:
@@ -1279,7 +1283,7 @@ func _take_registration_ticket() -> void:
 func has_active_delivery() -> bool:
 	return state in [State.COURIER_TO_WORKER, State.COURIER_TO_WAREHOUSE, State.COURIER_TO_SAWMILL, State.TO_FOOD_PICKUP, State.TO_CANTEEN_DELIVERY, State.TO_CONSTRUCTION_PICKUP, State.TO_CONSTRUCTION_SITE] or carried_amount > 0
 
-func _move_to(destination: Vector3, delta: float, may_enter_destination_house := false, use_building_queue := true) -> bool:
+func _move_to(destination: Vector3, delta: float, may_enter_destination_house := false, use_building_queue := true, record_trail := true) -> bool:
 	var movement_destination := destination
 	var is_queue_head := true
 	if use_building_queue and queue_position_resolver.is_valid():
@@ -1308,10 +1312,12 @@ func _move_to(destination: Vector3, delta: float, may_enter_destination_house :=
 		var waypoint_offset := waypoint - global_position
 		waypoint_offset.y = 0.0
 		if waypoint_offset.length() > 0.08:
-			return _move_directly_to(waypoint, delta)
+			return _move_directly_to(waypoint, delta, record_trail)
 		movement_path.pop_front()
 		_reset_waypoint_progress()
 	_stop_horizontal_movement()
+	if is_queue_head and use_building_queue and queue_arrival_notifier.is_valid():
+		queue_arrival_notifier.call(self, destination)
 	return is_queue_head
 
 func _plan_route(destination: Vector3) -> void:
@@ -1352,7 +1358,7 @@ func _invalidate_route_for_navigation_change() -> void:
 	stuck_time = 0.0
 	recovery_repath_done = false
 
-func _move_directly_to(destination: Vector3, delta: float) -> bool:
+func _move_directly_to(destination: Vector3, delta: float, record_trail := true) -> bool:
 	var offset := destination - global_position
 	offset.y = 0.0
 	if offset.length() <= 0.08:
@@ -1369,7 +1375,7 @@ func _move_directly_to(destination: Vector3, delta: float) -> bool:
 	var distance_before_move := offset.length()
 	move_and_slide()
 	var horizontal_progress := Vector2(global_position.x - position_before_move.x, global_position.z - position_before_move.z).length()
-	if horizontal_progress > 0.01 and trail_movement_recorder.is_valid():
+	if record_trail and horizontal_progress > 0.01 and trail_movement_recorder.is_valid():
 		trail_movement_recorder.call(ai_id, global_position)
 	var distance_after_move := Vector2(destination.x - global_position.x, destination.z - global_position.z).length()
 	_update_route_progress(distance_before_move, distance_after_move, delta, direction)
@@ -1504,6 +1510,16 @@ func set_player_controlled(controlled: bool) -> void:
 	if idle_indicator != null:
 		idle_indicator.visible = false
 	if controlled:
+		current_toilet_target = null
+		toilet_relief_position = Vector3.INF
+		toilet_relief_type = ""
+		has_toilet_resume_state = false
+		toilet_resume_state = State.IDLE
+		toilet_resume_idle_wander_anchor = Vector3.INF
+		toilet_resume_idle_wander_target = Vector3.INF
+		toilet_resume_idle_wander_pause = 0.0
+		if queue_release_notifier.is_valid():
+			queue_release_notifier.call(self)
 		state = State.IDLE
 		construction_site = null
 		factory = null
@@ -1806,10 +1822,13 @@ func apply_daily_decay() -> void:
 func is_building_site(site: Node3D) -> bool:
 	return not is_player_controlled and state == State.CONSTRUCTING and construction_site == site and global_position.distance_to(construction_position) <= 0.7
 
-func setup_navigation(next_pathfinder: Callable, next_delivery_position_resolver := Callable(), next_queue_position_resolver := Callable(), next_movement_speed_modifier_query := Callable(), next_navigation_revision_query := Callable(), next_trail_movement_recorder := Callable()) -> void:
+func setup_navigation(next_pathfinder: Callable, next_delivery_position_resolver := Callable(), next_queue_position_resolver := Callable(), next_movement_speed_modifier_query := Callable(), next_navigation_revision_query := Callable(), next_trail_movement_recorder := Callable(), next_route_reachability_query := Callable(), next_queue_arrival_notifier := Callable(), next_queue_release_notifier := Callable()) -> void:
 	pathfinder = next_pathfinder
 	delivery_position_resolver = next_delivery_position_resolver
 	queue_position_resolver = next_queue_position_resolver
+	queue_arrival_notifier = next_queue_arrival_notifier
+	queue_release_notifier = next_queue_release_notifier
+	route_reachability_query = next_route_reachability_query
 	movement_speed_modifier_query = next_movement_speed_modifier_query
 	navigation_revision_query = next_navigation_revision_query
 	trail_movement_recorder = next_trail_movement_recorder
@@ -1941,6 +1960,8 @@ func idle() -> void:
 	if is_player_controlled:
 		return
 	_reset_assignment_navigation()
+	if queue_release_notifier.is_valid():
+		queue_release_notifier.call(self)
 	state = State.IDLE
 	active_role = ""
 	construction_site = null
@@ -2042,7 +2063,10 @@ func _advance_state_display(delta: float) -> void:
 	_displayed_state_elapsed += delta
 	if _pending_state_display.is_empty() or _displayed_state_elapsed < MIN_STATE_DISPLAY_DURATION:
 		return
-	_displayed_state = _pending_state_display.pop_front()
+	# Keep the visible state for one real second, then catch up to the newest
+	# transition instead of replaying a long stale backlog.
+	_displayed_state = _pending_state_display.back()
+	_pending_state_display.clear()
 	_displayed_state_elapsed = 0.0
 
 
@@ -2317,9 +2341,15 @@ func _resume_after_toilet() -> void:
 	else:
 		state = State.IDLE
 	has_toilet_resume_state = false
+	toilet_resume_state = State.IDLE
+	toilet_resume_idle_wander_anchor = Vector3.INF
+	toilet_resume_idle_wander_target = Vector3.INF
+	toilet_resume_idle_wander_pause = 0.0
 
 
 func _reset_assignment_navigation() -> void:
+	if queue_release_notifier.is_valid():
+		queue_release_notifier.call(self)
 	idle_wander_anchor = Vector3.INF
 	idle_wander_target = Vector3.INF
 	movement_path.clear()
@@ -2602,6 +2632,7 @@ func get_action_status(action: StringName) -> int:
 
 
 func cancel_current_action() -> void:
+	var was_relief_action := state in [State.TO_TOILET, State.USING_TOILET, State.WAITING_FOR_TOILET, State.TO_BUSH, State.USING_BUSH]
 	if is_registering():
 		pending_employment_role = ""
 		pending_employment_workplace = null
@@ -2609,6 +2640,15 @@ func cancel_current_action() -> void:
 		employment_state = EmploymentState.NO_PERMANENT_WORK
 	if state in [State.TO_HOME, State.RESTING, State.TO_CANTEEN, State.EATING, State.TO_TOILET, State.USING_TOILET, State.WAITING_FOR_TOILET, State.TO_BUSH, State.USING_BUSH, State.TO_PARK, State.RELAXING, State.TO_TREE, State.CHOPPING, State.TO_SAWMILL, State.SAWING, State.WAITING_COURIER, State.CONSTRUCTING, State.TO_GATHER, State.GATHERING, State.TO_WAREHOUSE, State.EXCAVATING, State.TO_CANTEEN_WORK, State.CANTEEN_WORK, State.TO_SCHOOL_WORK, State.SCHOOL_WORK, State.TO_MARKET_WORK, State.MARKET_WORK, State.TO_OFFICIAL_WORK, State.OFFICIAL_WORK, State.TO_CRAFT_WORK, State.CRAFT_WORK, State.TO_FACTORY, State.FACTORY_WORK, State.COURIER_TO_WORKER, State.COURIER_TO_WAREHOUSE, State.COURIER_TO_SAWMILL, State.TO_FOOD_PICKUP, State.TO_CANTEEN_DELIVERY, State.TO_CONSTRUCTION_PICKUP, State.TO_CONSTRUCTION_SITE, State.TO_TRADE_PICKUP, State.TO_TRADE_DESTINATION, State.TO_EMPLOYMENT_CENTER, State.EMPLOYMENT_PROCESSING]:
 		idle()
+	if was_relief_action:
+		current_toilet_target = null
+		toilet_relief_position = Vector3.INF
+		toilet_relief_type = ""
+		has_toilet_resume_state = false
+		toilet_resume_state = State.IDLE
+		toilet_resume_idle_wander_anchor = Vector3.INF
+		toilet_resume_idle_wander_target = Vector3.INF
+		toilet_resume_idle_wander_pause = 0.0
 
 
 func _craft_speed_multiplier_internal() -> float:

@@ -6,7 +6,7 @@ extends RefCounted
 var building_registry: BuildingRegistry
 var grid: NavGrid
 var _queues: Dictionary = {}
-var _last_seen_frame: Dictionary = {}
+var _last_admitted_frame: Dictionary = {}
 var _building_lookup_cache: Dictionary = {}
 const BUILDING_LOOKUP_CACHE_LIMIT := 512
 
@@ -28,17 +28,57 @@ func resolve(citizen: Node, destination: Vector3) -> Dictionary:
 	var building_id := building.get_instance_id()
 	var citizen_id := citizen.get_instance_id()
 	var queue: Array = _queues.get(building_id, [])
-	_prune_queue(queue, building_id, frame)
+	_prune_queue(queue)
 	if not queue.has(citizen_id):
 		queue.append(citizen_id)
 	_queues[building_id] = queue
-	_last_seen_frame[_presence_key(building_id, citizen_id)] = frame
 
 	var index := queue.find(citizen_id)
-	if index <= 0:
+	if index <= 0 and int(_last_admitted_frame.get(building_id, -1)) != frame:
 		return {"position": service_position, "is_head": true}
 	var slots := _build_slots(building, service_position, queue.size())
-	return {"position": slots[min(index, slots.size() - 1)], "is_head": false}
+	var waiting_index := maxi(1, index)
+	if waiting_index < slots.size():
+		return {"position": slots[waiting_index], "is_head": false}
+	# Do not stack overflow members onto the same final cell. They remain where
+	# they are until a unique slot becomes available.
+	var current_position := destination
+	if citizen is Node3D:
+		current_position = (citizen as Node3D).global_position
+	return {"position": current_position, "is_head": false}
+
+
+func complete_arrival(citizen: Node, destination: Vector3) -> void:
+	if not is_instance_valid(citizen):
+		return
+	var building := _building_for_destination(destination)
+	if not is_instance_valid(building):
+		return
+	var building_id := building.get_instance_id()
+	var queue: Array = _queues.get(building_id, [])
+	var index := queue.find(citizen.get_instance_id())
+	if index != 0:
+		return
+	queue.pop_front()
+	_last_admitted_frame[building_id] = Engine.get_physics_frames()
+	if queue.is_empty():
+		_queues.erase(building_id)
+	else:
+		_queues[building_id] = queue
+
+
+func release(citizen: Node) -> void:
+	if not is_instance_valid(citizen):
+		return
+	var citizen_id := citizen.get_instance_id()
+	for building_id in _queues.keys().duplicate():
+		var queue: Array = _queues[building_id]
+		queue.erase(citizen_id)
+		_prune_queue(queue)
+		if queue.is_empty():
+			_queues.erase(building_id)
+		else:
+			_queues[building_id] = queue
 
 
 func _building_for_destination(destination: Vector3) -> Node3D:
@@ -73,17 +113,11 @@ func _destination_key(destination: Vector3) -> String:
 	return "%d:%d:%d" % [roundi(destination.x * 100.0), roundi(destination.y * 100.0), roundi(destination.z * 100.0)]
 
 
-func _prune_queue(queue: Array, building_id: int, frame: int) -> void:
+func _prune_queue(queue: Array) -> void:
 	for index in range(queue.size() - 1, -1, -1):
 		var citizen_id: int = queue[index]
-		var presence_key := _presence_key(building_id, citizen_id)
-		if not is_instance_id_valid(citizen_id) or frame - int(_last_seen_frame.get(presence_key, frame)) > 1:
+		if not is_instance_id_valid(citizen_id):
 			queue.remove_at(index)
-			_last_seen_frame.erase(presence_key)
-
-
-func _presence_key(building_id: int, citizen_id: int) -> String:
-	return "%d:%d" % [building_id, citizen_id]
 
 
 func _build_slots(building: Node3D, destination: Vector3, count: int) -> Array[Vector3]:
@@ -102,10 +136,6 @@ func _build_slots(building: Node3D, destination: Vector3, count: int) -> Array[V
 		current += direction
 		visited[current] = true
 		slots.append(grid.cell_center(current))
-	# A fully enclosed pocket is not expected, but duplicate the final safe slot
-	# rather than ever placing a queued citizen inside an obstacle.
-	while slots.size() < count:
-		slots.append(slots.back())
 	return slots
 
 
