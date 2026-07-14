@@ -29,10 +29,11 @@ static func daily_food_consumption(population: int, weather: int) -> int:
 	var multiplier := 1.25 if weather == Weather.COOLING else 1.0
 	return ceili(population * multiplier)
 
-static func rain_hourly_decay_losses(amounts: Dictionary) -> Dictionary:
+static func rain_hourly_decay_losses(amounts: Dictionary, exposed_ratio := 1.0) -> Dictionary:
 	var losses := {}
 	for resource_type in ["food", "grass", "branches", "wood", "logs"]:
 		var amount := int(amounts.get(resource_type, 0))
 		if amount > 0:
-			losses[resource_type] = mini(amount, ceili(amount * 0.05))
+			var exposed_amount := amount * clampf(exposed_ratio, 0.0, 1.0)
+			losses[resource_type] = mini(amount, ceili(exposed_amount * 0.05))
 	return losses

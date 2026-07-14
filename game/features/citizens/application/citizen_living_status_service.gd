@@ -29,7 +29,7 @@ func _apply_home_status(citizen: Citizen) -> void:
 
 
 func _apply_communal_fire_status(citizen: Citizen, has_lit_communal_fire: bool, is_night: bool) -> void:
-	if is_night and not has_lit_communal_fire:
+	if not has_lit_communal_fire:
 		citizen.set_status_effect(CitizenStatusEffectScript.NO_LIT_COMMUNAL_FIRE, "No lit communal fire", 1.0)
 	else:
 		citizen.clear_status_effect(CitizenStatusEffectScript.NO_LIT_COMMUNAL_FIRE)

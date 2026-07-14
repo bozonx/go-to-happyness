@@ -318,9 +318,19 @@ var building_dismiss_worker_button: Button
 var building_upgrade_button: Button
 var building_close_button: Button
 var building_overtime_button: Button
+var building_relight_button: Button
 var campfire_overtime_button: Button
 var campfire_close_btn: Button
 var building_cancel_construction_button: Button
+var decision_menu: Panel
+var decision_title: Label
+var decision_description: Label
+var decision_primary_button: Button
+var decision_secondary_button: Button
+var pending_survival_decision := ""
+var survival_busy_until: Dictionary = {}
+var protected_firewood_day := -1
+var smoky_firewood_day := -1
 var job_submenu_btn: Button
 var job_back_btn: Button
 var house_lights: Array[Dictionary] = []
@@ -461,6 +471,7 @@ func _process(delta: float) -> void:
 	_update_demolition(delta)
 	_update_water_collectors(delta)
 	_update_clock(delta)
+	_update_survival_busy_workers()
 	_return_outside_workers()
 	_update_wild_food(delta)
 	_guard_citizen_positions()
@@ -732,6 +743,7 @@ func _handle_day_cycle_event(event: SimulationDayEvent) -> void:
 		SimulationDayEvent.Kind.DAILY_SETTLEMENT_UPDATE:
 			tent_weather = TentEraSurvivalRulesScript.weather_for_day(day_cycle.current_day)
 			_update_interface("Forecast: %s." % TentEraSurvivalRulesScript.WEATHER_NAMES[tent_weather])
+			_maybe_present_survival_decision()
 			_expire_temporary_tents()
 			_refresh_living_statuses()
 			_apply_daily_settlement_rules()
@@ -771,9 +783,12 @@ func _apply_hourly_tent_survival(hour: int) -> void:
 
 func _apply_rain_damage() -> void:
 	var sheltered_capacity := int(settlement.buildings.get("warehouse_lvl2", 0)) * 48
-	if settlement.storage_used_units() <= sheltered_capacity:
+	var stored_units := settlement.storage_used_units()
+	if stored_units <= sheltered_capacity:
 		return
-	var losses := TentEraSurvivalRulesScript.rain_hourly_decay_losses({"food": food, "grass": grass, "branches": branches, "wood": wood, "logs": settlement.logs})
+	var exposed_ratio := (stored_units - sheltered_capacity) / stored_units
+	var rain_amounts := {"food": food, "grass": grass, "branches": 0 if protected_firewood_day == day_cycle.current_day else branches, "wood": wood, "logs": settlement.logs}
+	var losses := TentEraSurvivalRulesScript.rain_hourly_decay_losses(rain_amounts, exposed_ratio)
 	for resource_type in losses:
 		settlement.add(resource_type, -int(losses[resource_type]))
 	for record in building_registry.records():
@@ -2237,6 +2252,106 @@ func _create_interface() -> void:
 	_create_workforce_menu(ui)
 	_create_research_menu(ui)
 	_create_campfire_orders_menu(ui)
+	_create_survival_decision_menu(ui)
+
+
+func _create_survival_decision_menu(ui: CanvasLayer) -> void:
+	decision_menu = Panel.new()
+	decision_menu.set_anchors_preset(Control.PRESET_CENTER)
+	decision_menu.offset_left = -240.0
+	decision_menu.offset_top = -150.0
+	decision_menu.offset_right = 240.0
+	decision_menu.offset_bottom = 150.0
+	decision_menu.visible = false
+	ui.add_child(decision_menu)
+	decision_title = Label.new()
+	decision_title.position = Vector2(20, 18)
+	decision_title.size = Vector2(440, 28)
+	decision_title.add_theme_font_size_override("font_size", 19)
+	decision_menu.add_child(decision_title)
+	decision_description = Label.new()
+	decision_description.position = Vector2(20, 58)
+	decision_description.size = Vector2(440, 116)
+	decision_description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	decision_menu.add_child(decision_description)
+	decision_primary_button = Button.new()
+	decision_primary_button.position = Vector2(20, 194)
+	decision_primary_button.size = Vector2(440, 32)
+	decision_primary_button.pressed.connect(_resolve_survival_decision.bind(true))
+	decision_menu.add_child(decision_primary_button)
+	decision_secondary_button = Button.new()
+	decision_secondary_button.position = Vector2(20, 236)
+	decision_secondary_button.size = Vector2(440, 32)
+	decision_secondary_button.pressed.connect(_resolve_survival_decision.bind(false))
+	decision_menu.add_child(decision_secondary_button)
+
+
+func _maybe_present_survival_decision() -> void:
+	if settlement.era != SettlementState.Era.TENT or decision_menu == null or decision_menu.visible:
+		return
+	if tent_weather == TentEraSurvivalRulesScript.Weather.RAIN and branches > 0:
+		pending_survival_decision = "protect_firewood"
+		decision_title.text = "Threat of wet firewood"
+		decision_description.text = "The open storage will be soaked by rain. Protect the branch supply for three hours, or keep everyone working and risk smoky fires tomorrow."
+		decision_primary_button.text = "Assign a resident to protect the firewood"
+		decision_secondary_button.text = "Ignore the risk"
+		decision_menu.visible = true
+	elif random.randf() < 0.35:
+		pending_survival_decision = "forest_gifts"
+		decision_title.text = "Unknown forest gifts"
+		decision_description.text = "Foragers found unfamiliar berries. They may lift the camp's spirits or poison one resident for a day."
+		decision_primary_button.text = "Try the berries"
+		decision_secondary_button.text = "Discard them"
+		decision_menu.visible = true
+
+
+func _resolve_survival_decision(accept: bool) -> void:
+	if pending_survival_decision == "protect_firewood":
+		if accept:
+			protected_firewood_day = day_cycle.current_day
+			_assign_survival_busy_worker(3.0, "Protecting firewood")
+			_add_message("A resident is protecting the firewood from rain.")
+		else:
+			smoky_firewood_day = day_cycle.current_day + 1
+			_add_message("The firewood was left exposed and will smoke tomorrow.")
+	elif pending_survival_decision == "forest_gifts" and accept:
+		if random.randf() < 0.5:
+			wellbeing = mini(100, wellbeing + 20)
+			_add_message("The berries were safe. Wellbeing rose by 20.")
+		else:
+			_assign_survival_busy_worker(24.0, "Poisoned")
+			_add_message("The berries were poisonous. One resident cannot work for 24 hours.")
+	elif pending_survival_decision == "forest_gifts":
+		_add_message("The unknown berries were discarded.")
+	pending_survival_decision = ""
+	decision_menu.visible = false
+
+
+func _assign_survival_busy_worker(hours: float, status_label: String) -> void:
+	var candidates: Array[Citizen] = []
+	for citizen in citizens:
+		if is_instance_valid(citizen) and not citizen.is_hero and not citizen.is_player_controlled:
+			candidates.append(citizen)
+	if candidates.is_empty():
+		return
+	var worker: Citizen = candidates[random.randi_range(0, candidates.size() - 1)]
+	worker.cancel_current_action()
+	worker.set_player_controlled(true)
+	worker.set_status_effect(&"survival_assignment", status_label, 1.0, hours)
+	survival_busy_until[worker.get_instance_id()] = _total_game_minutes() + hours * 60.0
+
+
+func _update_survival_busy_workers() -> void:
+	for worker_id in survival_busy_until.keys().duplicate():
+		if _total_game_minutes() < float(survival_busy_until[worker_id]):
+			continue
+		var worker := instance_from_id(int(worker_id)) as Citizen
+		if is_instance_valid(worker):
+			worker.set_player_controlled(false)
+			worker.clear_status_effect(&"survival_assignment")
+			worker.idle()
+		survival_busy_until.erase(worker_id)
+		_update_workers()
 
 func _create_time_controls(ui: CanvasLayer) -> void:
 	var controls := HBoxContainer.new()
@@ -2299,8 +2414,16 @@ func _apply_skip_night_incident() -> void:
 		{"resource": "food", "min": 3, "max": 5, "message": "Night scavengers took %d food."},
 		{"resource": "grass", "min": 10, "max": 15, "message": "A stray animal ate %d grass."},
 		{"resource": "branches", "min": 5, "max": 8, "message": "Wind scattered %d branches."},
+		{"resource": "gloves", "min": 20, "max": 20, "message": "Night scavengers damaged a glove set by %d%%."},
 	]
 	var incident: Dictionary = incidents[random.randi_range(0, incidents.size() - 1)]
+	if str(incident.resource) == "gloves":
+		var gloves: Dictionary = settlement.equipment.get("construction_gloves", {})
+		if int(gloves.get("sets", 0)) > 0:
+			gloves["active_durability"] = maxf(0.0, float(gloves.get("active_durability", 100.0)) - float(incident.max))
+			settlement.equipment["construction_gloves"] = gloves
+			_add_message(str(incident.message) % int(incident.max))
+		return
 	var amount := mini(settlement.amount(str(incident.resource)), random.randi_range(int(incident.min), int(incident.max)))
 	if amount > 0:
 		settlement.add(str(incident.resource), -amount)
@@ -5085,7 +5208,7 @@ func _create_campfire_menu(ui: CanvasLayer) -> void:
 	campfire_upgrade_button.text = "Upgrade campfire"
 	campfire_upgrade_button.position = Vector2(16, 330)
 	campfire_upgrade_button.size = Vector2(272, 32)
-	campfire_upgrade_button.pressed.connect(_upgrade_selected_building)
+	campfire_upgrade_button.pressed.connect(_handle_campfire_primary_action)
 	campfire_menu.add_child(campfire_upgrade_button)
 
 	var labour_label := Label.new()
@@ -5683,10 +5806,17 @@ func _refresh_campfire_menu() -> void:
 	if campfire_upgrade_button != null:
 		var selected_type := str(selected_campfire.get_meta("building_type", "campfire")) if is_instance_valid(selected_campfire) else ""
 		var next_upgrade := settlement.next_building_upgrade(selected_type)
-		campfire_upgrade_button.visible = not next_upgrade.is_empty()
-		campfire_upgrade_button.text = "Upgrade to %s" % str(BuildingCatalog.definition_for(next_upgrade).get("name", next_upgrade))
-		campfire_upgrade_button.disabled = not settlement.can_upgrade_building(selected_type)
-		campfire_upgrade_button.tooltip_text = "" if not campfire_upgrade_button.disabled else "Research the next level and gather its resources."
+		if is_instance_valid(selected_campfire) and not _is_fire_lit(selected_campfire):
+			var fire_state := _fire_state_for(selected_campfire)
+			campfire_upgrade_button.visible = true
+			campfire_upgrade_button.text = "Relight with flint and steel"
+			campfire_upgrade_button.disabled = fire_state.fuel <= 0
+			campfire_upgrade_button.tooltip_text = "Deliver branches before relighting." if campfire_upgrade_button.disabled else "Use the permanent flint and steel."
+		else:
+			campfire_upgrade_button.visible = not next_upgrade.is_empty()
+			campfire_upgrade_button.text = "Upgrade to %s" % str(BuildingCatalog.definition_for(next_upgrade).get("name", next_upgrade))
+			campfire_upgrade_button.disabled = not settlement.can_upgrade_building(selected_type)
+			campfire_upgrade_button.tooltip_text = "" if not campfire_upgrade_button.disabled else "Research the next level and gather its resources."
 	_refresh_campfire_worker_controls()
 	_refresh_campfire_occupancy_button()
 
@@ -5718,6 +5848,17 @@ func _refresh_campfire_worker_controls() -> void:
 			campfire_close_btn.position.y = 670.0
 		else:
 			campfire_close_btn.position.y = 634.0
+
+
+func _handle_campfire_primary_action() -> void:
+	if not is_instance_valid(selected_campfire):
+		return
+	selected_building = selected_campfire
+	if not _is_fire_lit(selected_campfire):
+		_relight_selected_fire()
+		_refresh_campfire_menu()
+		return
+	_upgrade_selected_building()
 
 
 func _assign_official_at_campfire() -> void:
@@ -6044,6 +6185,11 @@ func _create_building_menu(ui: CanvasLayer) -> void:
 	building_overtime_button.size = Vector2(272, 30)
 	building_overtime_button.pressed.connect(_call_worker_overtime)
 	building_menu.add_child(building_overtime_button)
+	building_relight_button = Button.new()
+	building_relight_button.text = "Relight with flint and steel"
+	building_relight_button.size = Vector2(272, 30)
+	building_relight_button.pressed.connect(_relight_selected_fire)
+	building_menu.add_child(building_relight_button)
 
 	building_upgrade_button = Button.new()
 	building_upgrade_button.text = "Upgrade"
@@ -6091,6 +6237,7 @@ func _show_building_menu() -> void:
 		building_accept_workers_button.visible = false
 		building_dismiss_worker_button.visible = false
 		building_upgrade_button.visible = false
+		building_relight_button.visible = false
 		building_cancel_construction_button.visible = true
 		building_cancel_construction_button.position.y = 104.0
 		building_close_button.position.y = 140.0
@@ -6126,6 +6273,7 @@ func _show_building_menu() -> void:
 		building_accept_workers_button.disabled = not can_command_labor
 		building_accept_workers_button.tooltip_text = blocked_tooltip if not can_command_labor else ""
 		building_cancel_construction_button.visible = false
+		building_relight_button.visible = building_type in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"] and not _is_fire_lit(selected_building)
 		
 		var officer := _workplace_worker(selected_building)
 		building_overtime_button.visible = is_workplace and not _is_work_time() and officer != null
@@ -6149,6 +6297,9 @@ func _show_building_menu() -> void:
 		if building_overtime_button.visible:
 			building_overtime_button.position.y = next_y
 			next_y += 36.0
+		if building_relight_button.visible:
+			building_relight_button.position.y = next_y
+			next_y += 36.0
 		if building_upgrade_button.visible:
 			building_upgrade_button.position.y = next_y
 			next_y += 36.0
@@ -6162,6 +6313,22 @@ func _show_building_menu() -> void:
 		else:
 			next_y += 8.0
 		building_close_button.position.y = next_y
+
+
+func _relight_selected_fire() -> void:
+	if not is_instance_valid(selected_building):
+		return
+	var fire_state := _fire_state_for(selected_building)
+	if fire_state.lit:
+		return
+	if fire_state.fuel <= 0:
+		_update_interface("A fire needs branches before it can be relit.")
+		return
+	fire_state.lit = true
+	_apply_fire_state(selected_building, fire_state)
+	_refresh_living_statuses()
+	_reopen_workplace_menu()
+	_update_interface("The fire was relit with flint and steel.")
 
 
 func _toggle_selected_workplace_acceptance() -> void:
@@ -6730,6 +6897,16 @@ func _apply_fire_state(building: Node3D, fire_state: RefCounted) -> void:
 func _is_fire_lit(building: Node3D) -> bool:
 	return is_instance_valid(building) and _fire_state_for(building).lit
 
+
+func fire_smoke_work_multiplier(position_on_board: Vector3) -> float:
+	if smoky_firewood_day != day_cycle.current_day:
+		return 1.0
+	for record in building_registry.records():
+		var building: Node3D = record.node
+		if is_instance_valid(building) and _is_fire_lit(building) and building.global_position.distance_to(position_on_board) <= 15.0:
+			return 0.70
+	return 1.0
+
 func _update_fire_status() -> void:
 	# Fires consume one large branch each four simulated hours. Couriers' first
 	# reserve duty is keeping them supplied from storage; without branches the
@@ -6904,8 +7081,9 @@ func _decay_resource_piles() -> void:
 		var pile: Dictionary = resource_piles[index]
 		for resource_type in pile.resources.keys():
 			var remaining := int(pile.resources[resource_type])
-			if remaining > 0:
-				pile.resources[resource_type] = maxi(0, remaining - maxi(1, ceili(remaining * 0.1)))
+			var daily_rate := 0.10 if resource_type == "food" else 0.05 if resource_type in ["grass", "branches", "wood", "logs"] else 0.0
+			if remaining > 0 and daily_rate > 0.0:
+				pile.resources[resource_type] = maxi(0, remaining - maxi(1, ceili(remaining * daily_rate)))
 		var empty := true
 		for amount in pile.resources.values():
 			if int(amount) > 0:

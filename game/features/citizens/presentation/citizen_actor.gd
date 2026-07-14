@@ -1440,6 +1440,8 @@ func _work(delta: float) -> bool:
 		else:
 			set_status_effect(CitizenStatusEffect.BARE_HANDS, "Bare hands", 1.0)
 			speed_multiplier = 0.60
+	if simulation != null:
+		speed_multiplier *= simulation.fire_smoke_work_multiplier(global_position)
 	return task_timer.advance(delta * speed_multiplier)
 
 
@@ -1727,7 +1729,8 @@ func finish_school_day(teacher_present := true) -> void:
 		
 	if not trained_role.is_empty() and teacher_present:
 		var current_val := float(skills.get(trained_role, 0.0))
-		skills[trained_role] = minf(1.0, current_val + SKILL_GROWTH_PER_SCHOOL_DAY)
+		var learning_multiplier := 1.20 if is_jack_of_all_trades and trained_role in ["construction", "forestry", "farming", "excavation", "factory_worker", "craftsman"] else 1.0
+		skills[trained_role] = minf(1.0, current_val + SKILL_GROWTH_PER_SCHOOL_DAY * learning_multiplier)
 		practiced_today[trained_role] = true
 		
 		if not training_role.is_empty():

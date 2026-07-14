@@ -461,7 +461,8 @@ static func demolition_refund(building_type: String) -> Dictionary:
 	var recovered := {}
 	var costs: Dictionary = definition_for(building_type).get("costs", {})
 	for resource_type in costs:
-		recovered[resource_type] = maxi(1, floori(int(costs[resource_type]) * 0.35))
+		var refund_ratio := 0.30 if building_type == "tent" else 0.35
+		recovered[resource_type] = maxi(1, floori(int(costs[resource_type]) * refund_ratio))
 	return recovered
 static func currency_for(building_type: String) -> String:
 	var resources := cost_resources(building_type)
