@@ -67,11 +67,15 @@ func clear_expired(simulation_seconds: float) -> void:
 	var issuers := _orders_by_issuer.keys()
 	for issuer: StringName in issuers:
 		var retained: Array[CitizenOrder] = []
+		var removed_any := false
 		for orders: Array in (_orders_by_issuer[issuer] as Dictionary).values():
 			for order: CitizenOrder in orders:
 				if not order.is_expired(simulation_seconds):
 					retained.append(order)
-		replace_issuer_orders(issuer, retained, simulation_seconds)
+				else:
+					removed_any = true
+		if removed_any:
+			replace_issuer_orders(issuer, retained, simulation_seconds)
 
 
 func clear() -> void:

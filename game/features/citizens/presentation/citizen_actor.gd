@@ -10,7 +10,6 @@ signal excavation_cycle(worker: Citizen, site: Node3D, efficiency: float)
 signal resource_ready(worker: Citizen, resource_type: String, amount: int)
 signal tree_harvested(worker: Citizen, position_on_board: Vector3)
 signal logs_delivered(worker: Citizen, sawmill_position: Vector3, amount: int)
-signal forestry_tree_requested(worker: Citizen)
 signal sawmill_boards_collected(courier: Citizen, sawmill_position: Vector3)
 signal meal_finished(worker: Citizen)
 signal relief_finished(worker: Citizen)
@@ -1598,7 +1597,7 @@ func storage_delivery_result(accepted: bool, reason := StringName()) -> void:
 		if returning_to_excavation:
 			state = State.EXCAVATING
 		elif active_role == "forestry":
-			forestry_tree_requested.emit(self)
+			idle()
 		elif active_role.begins_with("gather_"):
 			state = State.IDLE
 			begin_role_recheck_cooldown()

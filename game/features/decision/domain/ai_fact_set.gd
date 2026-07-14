@@ -22,14 +22,14 @@ func value(key: StringName, default_value: Variant = null) -> Variant:
 func with_value(key: StringName, next_value: Variant) -> AIFactSet:
 	var next := _values.duplicate(true)
 	next[key] = next_value
-	return AIFactSet.new(next)
+	return _from_owned_values(next)
 
 
 func merged(other: AIFactSet) -> AIFactSet:
 	var next := _values.duplicate(true)
 	if other != null:
 		next.merge(other._values, true)
-	return AIFactSet.new(next)
+	return _from_owned_values(next)
 
 
 func to_dictionary() -> Dictionary:
@@ -38,3 +38,9 @@ func to_dictionary() -> Dictionary:
 
 func is_equal_to(other: AIFactSet) -> bool:
 	return other != null and _values == other._values
+
+
+static func _from_owned_values(values: Dictionary) -> AIFactSet:
+	var facts := AIFactSet.new()
+	facts._values = values
+	return facts

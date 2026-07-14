@@ -147,8 +147,6 @@ var navigation_blocked_cells: Dictionary = {}
 var warehouse_positions: Array[Vector3] = []
 var sawmill_positions: Array[Vector3] = []
 var sawmill_stocks: Dictionary = {}
-var tree_reservations: Dictionary = {}
-var grass_reservations: Dictionary = {}
 var grass_sources: Dictionary = {} # cell -> {node, remaining}; finite patches around trees
 var forage_sources: Dictionary = {} # cell -> {node}; wild edible plants, one harvest each
 var rabbit_sources: Dictionary = {} # cell -> {node, direction}; simple moving meadow animals
@@ -1351,35 +1349,6 @@ func _request_courier_dispatch() -> void:
 func _sawmill_with_boards() -> Vector3:
 	return sawmills.position_with_boards(runtime_seconds)
 
-func _reserve_closest_tree_for_sawmill(worker: Citizen, sawmill_position: Vector3) -> Vector3:
-	_cleanup_tree_reservations()
-	var closest_tree := Vector3.INF
-	var closest_distance := INF
-	for tree_position in tree_positions:
-		var cell := _cell_from_position(tree_position)
-		if tree_reservations.has(cell):
-			continue
-		var tree: Node3D = tree_nodes.get(cell)
-		if not is_instance_valid(tree) or bool(tree.get_meta("felled", false)):
-			continue
-		var distance := sawmill_position.distance_squared_to(tree_position)
-		if distance < closest_distance:
-			closest_distance = distance
-			closest_tree = tree_position
-	if closest_tree != Vector3.INF:
-		tree_reservations[_cell_from_position(closest_tree)] = worker
-	return closest_tree
-
-func _assign_next_forestry_tree(worker: Citizen) -> void:
-	var tree_position := _reserve_closest_tree_for_sawmill(worker, worker.workplace_position)
-	if tree_position == Vector3.INF:
-		worker.idle()
-		return
-	worker.assign_next_forestry_tree(tree_position)
-
-func _on_forestry_tree_requested(worker: Citizen) -> void:
-	_assign_next_forestry_tree(worker)
-
 func _on_excavation_cycle(worker: Citizen, site_node: Node3D, efficiency: float) -> void:
 	for index in range(dig_sites.size()):
 		var site: Dictionary = dig_sites[index]
@@ -1582,10 +1551,9 @@ func _is_route_reachable(from: Vector3, destination: Vector3, may_enter_destinat
 	]
 	if _route_reachability_cache.has(key):
 		return bool(_route_reachability_cache[key])
-	if _route_reachability_cache.size() >= ROUTE_REACHABILITY_CACHE_LIMIT:
-		_route_reachability_cache.clear()
 	var reachable := _find_path_around_houses(from, destination, may_enter_destination_house).reachable
-	_route_reachability_cache[key] = reachable
+	if _route_reachability_cache.size() < ROUTE_REACHABILITY_CACHE_LIMIT:
+		_route_reachability_cache[key] = reachable
 	return reachable
 
 func _resolve_building_queue_position(citizen: Citizen, destination: Vector3) -> Dictionary:
@@ -2141,7 +2109,6 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	citizen.resource_ready.connect(_on_resource_ready)
 	citizen.tree_harvested.connect(_on_tree_harvested)
 	citizen.logs_delivered.connect(_on_logs_delivered)
-	citizen.forestry_tree_requested.connect(_on_forestry_tree_requested)
 	citizen.sawmill_boards_collected.connect(_on_sawmill_boards_collected)
 	citizen.meal_finished.connect(_on_meal_finished)
 	citizen.relief_finished.connect(_on_relief_finished)
@@ -5182,7 +5149,6 @@ func _add_house_light(house: Node3D) -> void:
 	house_lights.append({"light": light, "house": house, "off_minute": random.randi_range(22 * 60, 26 * 60) % (24 * 60)})
 
 func _on_tree_harvested(worker: Citizen, position_on_board: Vector3) -> void:
-	tree_reservations.erase(_cell_from_position(position_on_board))
 	_fell_tree_at(position_on_board)
 
 func _consume_tree_near_player() -> void:
@@ -6715,31 +6681,6 @@ func _set_manual_specialist_employment(citizen: Citizen, role: String) -> bool:
 	return true
 
 
-func _find_closest_tree_for_citizen(citizen: Citizen) -> Vector3:
-	_cleanup_tree_reservations()
-	var closest_tree := Vector3.INF
-	var closest_dist := INF
-	for pos in tree_positions:
-		var cell := _cell_from_position(pos)
-		if tree_reservations.has(cell) and tree_reservations[cell] != citizen:
-			continue
-		var tree = tree_nodes.get(_cell_from_position(pos))
-		var hand_limit := ceili(float(int(tree.get_meta("initial_branches", tree.get_meta("remaining_branches", 0)))) * 0.3) if is_instance_valid(tree) else 0
-		if is_instance_valid(tree) and not bool(tree.get_meta("felled", false)) and int(tree.get_meta("remaining_branches", 0)) > 0 and (bool(settlement.tools.get("axe", false)) or int(tree.get_meta("hand_branches", 0)) < hand_limit):
-			var dist = citizen.global_position.distance_squared_to(pos)
-			if dist < closest_dist:
-				closest_dist = dist
-				closest_tree = pos
-	if closest_tree != Vector3.INF:
-		tree_reservations[_cell_from_position(closest_tree)] = citizen
-	return closest_tree
-
-func _cleanup_tree_reservations() -> void:
-	for cell in tree_reservations.keys():
-		var reserved_worker: Citizen = tree_reservations[cell]
-		if not is_instance_valid(reserved_worker) or reserved_worker.state not in [Citizen.State.TO_TREE, Citizen.State.CHOPPING, Citizen.State.TO_GATHER, Citizen.State.GATHERING]:
-			tree_reservations.erase(cell)
-
 func _find_forage_position(citizen: Citizen) -> Vector3:
 	# Foragers wander a short way out from their tent to pick wild food, then carry
 	# it back to storage. Without a forager tent there is nowhere to forage.
@@ -6759,20 +6700,6 @@ func _find_forage_position(citizen: Citizen) -> Vector3:
 	if not is_nan(height):
 		spot.y = height
 	return spot
-
-func _find_grass_gathering_position(citizen: Citizen) -> Vector3:
-	_cleanup_grass_reservations()
-	var candidates: Array[Vector2i] = []
-	for cell in grass_sources:
-		var source: Dictionary = grass_sources[cell]
-		if int(source.remaining) > 0 and not grass_reservations.has(cell):
-			candidates.append(cell)
-	if candidates.is_empty():
-		return Vector3.INF
-	candidates.sort_custom(func(a, b): return _cell_center(a).distance_squared_to(citizen.global_position) < _cell_center(b).distance_squared_to(citizen.global_position))
-	var cell := candidates[0]
-	grass_reservations[cell] = citizen
-	return (grass_sources[cell].node as Node3D).global_position
 
 func _create_grass_sources_near_tree(tree_cell: Vector2i) -> void:
 	for offset in [Vector2i(2, 0), Vector2i(-2, 1), Vector2i(1, -2)]:
@@ -6858,21 +6785,6 @@ func _update_wild_food(delta: float) -> void:
 		if runtime_seconds >= float(rabbit_respawn_at[cell]) and rabbit_sources.size() < RABBIT_MAX_COUNT:
 			_spawn_rabbit_near_tree(cell as Vector2i)
 			rabbit_respawn_at.erase(cell)
-
-func food_gathering_candidates(citizen: Citizen) -> Array[Dictionary]:
-	var candidates: Array[Dictionary] = []
-	if forager_positions.is_empty() or warehouse_positions.is_empty():
-		return candidates
-	for cell in forage_sources:
-		var node := (forage_sources[cell] as Dictionary).get("node") as Node3D
-		if is_instance_valid(node) and _is_route_reachable(citizen.global_position, node.global_position):
-			candidates.append({&"id": StringName("plant:%d:%d" % [cell.x, cell.y]), &"resource_type": "food", &"position": node.global_position, &"access": node.global_position, &"warehouse_position": _get_nearest_delivery_position(citizen.global_position)})
-	for cell in rabbit_sources:
-		var node := (rabbit_sources[cell] as Dictionary).get("node") as Node3D
-		if is_instance_valid(node) and _is_route_reachable(citizen.global_position, node.global_position):
-			candidates.append({&"id": StringName("rabbit:%d:%d" % [cell.x, cell.y]), &"resource_type": "food", &"position": node.global_position, &"access": node.global_position, &"warehouse_position": _get_nearest_delivery_position(citizen.global_position)})
-	candidates.sort_custom(func(a, b): return (a[&"position"] as Vector3).distance_squared_to(citizen.global_position) < (b[&"position"] as Vector3).distance_squared_to(citizen.global_position))
-	return candidates
 
 func harvest_wild_food(position: Vector3, worker: Citizen) -> String:
 	var plant_cell := _cell_from_position(position)
@@ -7167,12 +7079,6 @@ func _return_in_transit_building_supplies(building: Node3D) -> void:
 		citizen.carried_amount = 0
 		citizen.construction_site = null
 		citizen.idle()
-
-func _cleanup_grass_reservations() -> void:
-	for cell in grass_reservations.keys():
-		var worker: Citizen = grass_reservations[cell]
-		if not is_instance_valid(worker) or worker.state not in [Citizen.State.TO_GATHER, Citizen.State.GATHERING]:
-			grass_reservations.erase(cell)
 
 func _get_delivery_position() -> Vector3:
 	return _get_nearest_delivery_position(Vector3.ZERO)
