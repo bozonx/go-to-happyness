@@ -305,6 +305,18 @@ func _init() -> void:
 	assert(simulation.player_citizen == simulation.citizens[1])
 	simulation._toggle_hero_view()
 	assert(simulation.player_citizen == simulation.hero_citizen)
+	# A skipped night evaluates survival hour by hour. Reaching zero wellbeing may
+	# make one resident leave, but the remaining night must not remove another
+	# resident for every hour spent at zero.
+	simulation.wellbeing = 1
+	simulation.last_survival_hour = -1
+	simulation.clock.set_time(21 * 60)
+	var citizen_count_before_zero_wellbeing_skip: int = simulation.citizens.size()
+	simulation._skip_night()
+	assert(simulation.citizens.size() == citizen_count_before_zero_wellbeing_skip - 1)
+	for citizen in simulation.citizens:
+		assert(is_instance_valid(citizen))
+		assert(citizen.visible)
 	root.remove_child(simulation)
 	simulation.free()
 	scene = null

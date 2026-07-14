@@ -799,6 +799,7 @@ func _apply_hourly_tent_survival(hour: int, survival_day := 0) -> void:
 	if settlement.era != SettlementState.Era.TENT or last_survival_hour == survival_hour:
 		return
 	last_survival_hour = survival_hour
+	var wellbeing_before_hour := wellbeing
 	var night := hour >= 22 or hour < 6
 	var has_fire := _has_lit_communal_fire()
 	var total_loss := 0
@@ -818,7 +819,7 @@ func _apply_hourly_tent_survival(hour: int, survival_day := 0) -> void:
 			wellbeing = maxi(0, wellbeing - ceili(float(bare_handed_workers) / maxi(1, citizens.size())))
 	if tent_weather == TentEraSurvivalRulesScript.Weather.RAIN and hour > 0:
 		_apply_rain_damage()
-	if wellbeing <= 0 and not citizens.is_empty():
+	if wellbeing_before_hour > 0 and wellbeing <= 0 and not citizens.is_empty():
 		var departing: Citizen = citizens.pop_back()
 		departing.queue_free()
 		_add_message("A resident left the camp after wellbeing reached zero.")
