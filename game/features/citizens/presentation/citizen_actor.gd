@@ -1,6 +1,8 @@
 class_name Citizen
 extends CharacterBody3D
 
+const CitizenStatusEffectScript = preload("res://game/features/citizens/domain/citizen_status_effect.gd")
+
 signal resource_delivered(worker: Citizen, resource_type: String, amount: int)
 signal construction_material_delivered(worker: Citizen, site: Node3D, resource_type: String, amount: int)
 signal building_supply_delivered(worker: Citizen, target: Node3D, supply_kind: String, resource_type: String, amount: int)
@@ -290,6 +292,7 @@ var factory_position := Vector3.ZERO
 var park_position := Vector3.ZERO
 var trade_source_position := Vector3.ZERO
 var trade_destination_position := Vector3.ZERO
+var status_effects: Dictionary = {}
 var simulation: Node
 var idle_indicator: Label3D
 
@@ -1440,10 +1443,11 @@ func deliver_excavation(next_resource_type: String, warehouse: Vector3) -> void:
 	returning_to_excavation = true
 	state = State.TO_WAREHOUSE
 
-func storage_delivery_result(accepted: bool) -> void:
+func storage_delivery_result(accepted: bool, reason := StringName()) -> void:
 	if accepted:
 		carried_amount = 0
 		blocked_by_storage = false
+		clear_status_effect(CitizenStatusEffectScript.STORAGE_NO_WAREHOUSE)
 		if is_courier():
 			state = State.IDLE
 			return
@@ -1458,7 +1462,10 @@ func storage_delivery_result(accepted: bool) -> void:
 			state = State.TO_TREE
 		returning_to_excavation = false
 	else:
+		carried_amount = 0
 		blocked_by_storage = true
+		if reason == CitizenStatusEffectScript.STORAGE_NO_WAREHOUSE:
+			set_status_effect(CitizenStatusEffectScript.STORAGE_NO_WAREHOUSE, "No warehouse", 1.0)
 		go_home()
 
 func register_pending_resource(next_resource_type: String, amount: int) -> void:
@@ -1935,6 +1942,22 @@ func add_debuff(debuff_id: String, value: float) -> void:
 
 func remove_debuff(debuff_id: String) -> void:
 	debuffs.erase(debuff_id)
+
+func set_status_effect(status_id: StringName, label: String, severity := 0.0, duration_hours := -1.0) -> void:
+	status_effects[status_id] = CitizenStatusEffectScript.create(status_id, label, severity, duration_hours)
+
+func clear_status_effect(status_id: StringName) -> void:
+	status_effects.erase(status_id)
+
+func has_status_effect(status_id: StringName) -> bool:
+	return status_effects.has(status_id)
+
+func status_effect_labels() -> Array[String]:
+	var labels: Array[String] = []
+	for status in status_effects.values():
+		if status != null and not str(status.label).is_empty():
+			labels.append(str(status.label))
+	return labels
 
 func get_satisfaction_cap() -> float:
 	var cap := 100.0

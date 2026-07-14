@@ -504,6 +504,7 @@ func _worker_data(actor: Citizen) -> Dictionary:
 	return {
 		"player_controlled": actor.is_player_controlled,
 		"blocked_by_storage": actor.blocked_by_storage,
+		"status_effects": actor.status_effect_labels(),
 		"specialization": actor.specialization,
 		"manual_role": actor.manual_role,
 		"freelance_assignment": actor.freelance_assignment,

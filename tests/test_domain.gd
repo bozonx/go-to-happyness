@@ -6,6 +6,7 @@ const BuildingQueueServiceScript = preload("res://game/features/citizens/applica
 const CanteenServiceScript = preload("res://game/features/logistics/application/canteen_service.gd")
 const TradeOrderScript = preload("res://game/features/logistics/domain/trade_order.gd")
 const FireSourceStateScript = preload("res://game/features/settlement/domain/fire_source_state.gd")
+const CitizenStatusEffectScript = preload("res://game/features/citizens/domain/citizen_status_effect.gd")
 
 
 class FakeCanteenSimulation extends Node:
@@ -60,6 +61,7 @@ func _init() -> void:
 	_test_research_mechanics()
 	_test_trade_order_model()
 	_test_fire_source_state()
+	_test_citizen_status_effects()
 	quit(0)
 
 
@@ -131,12 +133,25 @@ func _test_tent_start_config() -> void:
 	assert(not BuildingCatalog.is_demolishable("campfire"))
 	assert(BuildingCatalog.is_upgrade_only("campfire_lvl2"))
 	assert(BuildingCatalog.upgrades_from("campfire_lvl2") == "campfire")
-	assert(state.storage_availability_for("grass", 1, 0) == SettlementState.StorageAvailability.NO_WAREHOUSE)
-	state.ensure_storage_defaults(1)
-	assert(state.storage_availability_for("grass", 1, 1) == SettlementState.StorageAvailability.NO_ROOM)
-	state.buildings["warehouse"] = 2
-	state.adjust_storage_limit("grass", 1.0, 2)
-	assert(state.storage_availability_for("grass", 1, 1) == SettlementState.StorageAvailability.OK)
+	assert(BuildingCatalog.next_upgrade_for("campfire") == "campfire_lvl2")
+	state.buildings["campfire"] = 1
+	assert(not state.can_upgrade_building("campfire"))
+	state.unlocked_building_levels["campfire_lvl2"] = true
+	state.branches = 15
+	state.grass = 10
+	assert(state.can_upgrade_building("campfire"))
+	assert(state.pay_for_building_upgrade("campfire") == "campfire_lvl2")
+	assert(int(state.buildings.get("campfire", 0)) == 0)
+	assert(int(state.buildings.get("campfire_lvl2", 0)) == 1)
+	var storage_state := SettlementState.new()
+	assert(storage_state.storage_availability_for("grass", 1, 0) == SettlementState.StorageAvailability.NO_WAREHOUSE)
+	storage_state.branches = 24
+	storage_state.buildings["warehouse"] = 1
+	storage_state.ensure_storage_defaults(1)
+	assert(storage_state.storage_availability_for("grass", 1, 1) == SettlementState.StorageAvailability.NO_ROOM)
+	storage_state.buildings["warehouse"] = 2
+	storage_state.adjust_storage_limit("grass", 1.0, 2)
+	assert(storage_state.storage_availability_for("grass", 1, 1) == SettlementState.StorageAvailability.OK)
 	var decay := SettlementRulesScript.open_air_storage_decay_losses({"food": 16, "grass": 10}, 26.0, 0.0)
 	assert(int(decay.food) == 2 and int(decay.grass) == 1)
 
@@ -165,6 +180,19 @@ func _test_fire_source_state() -> void:
 	assert(fire.fuel == 3 and fire.reserved_fuel == 0 and fire.lit)
 	fire.consume(3)
 	assert(fire.fuel == 0 and not fire.lit)
+
+
+func _test_citizen_status_effects() -> void:
+	var citizen := Citizen.new()
+	citizen.carried_amount = 1
+	citizen.storage_delivery_result(false, CitizenStatusEffectScript.STORAGE_NO_WAREHOUSE)
+	assert(citizen.carried_amount == 0)
+	assert(citizen.blocked_by_storage)
+	assert(citizen.has_status_effect(CitizenStatusEffectScript.STORAGE_NO_WAREHOUSE))
+	assert(citizen.status_effect_labels().has("No warehouse"))
+	citizen.storage_delivery_result(true)
+	assert(not citizen.blocked_by_storage)
+	assert(not citizen.has_status_effect(CitizenStatusEffectScript.STORAGE_NO_WAREHOUSE))
 
 
 func _test_progression_and_volunteers() -> void:

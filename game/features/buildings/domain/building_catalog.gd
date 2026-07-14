@@ -407,6 +407,11 @@ static func is_upgrade_only(building_type: String) -> bool:
 	return bool(definition_for(building_type).get("upgrade_only", false))
 static func upgrades_from(building_type: String) -> String:
 	return str(definition_for(building_type).get("upgrades_from", ""))
+static func next_upgrade_for(building_type: String) -> String:
+	for candidate in DEFINITIONS.keys():
+		if upgrades_from(str(candidate)) == building_type:
+			return str(candidate)
+	return ""
 static func era_for(building_type: String) -> SettlementState.Era:
 	match str(definition_for(building_type).get("category", "tent")):
 		"earth": return SettlementState.Era.EARTH
