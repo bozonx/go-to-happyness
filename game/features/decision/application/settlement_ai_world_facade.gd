@@ -184,6 +184,16 @@ func capture(sequence: int) -> WorldSnapshot:
 			if factory_position_value is Vector3:
 				factory_position = factory_position_value
 		var courier_worker: bool = actor.can_handle_entry_logistics() and not actor.is_player_controlled
+		var courier_active_task_id: StringName = &""
+		var courier_active_pickup := Vector3.INF
+		var courier_active_priority := 0
+		if courier_worker and simulation.courier_dispatcher != null:
+			var active_courier_task: CourierTask = simulation.courier_dispatcher.task_for(actor)
+			if active_courier_task != null and actor.has_active_delivery():
+				courier_active_task_id = active_courier_task.id
+				courier_active_pickup = active_courier_task.pickup
+				courier_active_priority = active_courier_task.priority
+		var courier_in_progress := courier_active_task_id != &""
 		var courier_can_start: bool = courier_worker and actor.state == Citizen.State.IDLE and simulation._is_work_time()
 		citizens_by_id[citizen_id] = CitizenSnapshot.new(
 			citizen_id,
@@ -241,7 +251,11 @@ func capture(sequence: int) -> WorldSnapshot:
 				&"work.factory.target_key": _target_key(&"factory", factory_node.global_position) if is_instance_valid(factory_node) else &"",
 				&"work.factory.position": factory_position,
 				&"work.courier.worker": courier_worker,
+				&"work.courier.in_progress": courier_in_progress,
 				&"work.courier.can_start": courier_can_start,
+				&"work.courier.active_task_id": courier_active_task_id,
+				&"work.courier.active_pickup": courier_active_pickup,
+				&"work.courier.active_priority": courier_active_priority,
 				&"daily.order.active": daily_order_active,
 				&"daily.order.role": daily_order_role,
 				&"daily.order.workday_id": actor.daily_order_workday_id,

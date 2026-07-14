@@ -32,6 +32,16 @@ func available_tasks() -> Array[CourierTask]:
 	return result
 
 
+func task_for(courier: Citizen) -> CourierTask:
+	if not is_instance_valid(courier):
+		return null
+	var courier_id := courier.get_instance_id()
+	for task: CourierTask in tasks.values():
+		if task.assigned_courier_id == courier_id:
+			return task
+	return null
+
+
 func start_task(courier: Citizen, task_id: StringName) -> bool:
 	if not is_instance_valid(courier) or not tasks.has(task_id):
 		return false

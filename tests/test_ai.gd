@@ -199,6 +199,7 @@ func _init() -> void:
 	_test_factory_actuator()
 	_test_courier_provider_assigns_unique_tasks()
 	_test_courier_provider_uses_shared_snapshot_tasks()
+	_test_courier_provider_keeps_active_task_order()
 	_test_native_courier_goal()
 	_test_production_sleep_actuator()
 	_test_order_reconciliation()
@@ -863,6 +864,24 @@ func _test_courier_provider_uses_shared_snapshot_tasks() -> void:
 	assert(orders.size() == 2)
 	assert(orders[0].payload.value(&"courier.task_id") == &"shared_first")
 	assert(orders[1].payload.value(&"courier.task_id") == &"shared_second")
+
+
+func _test_courier_provider_keeps_active_task_order() -> void:
+	var provider := CourierDeliveryOrderProviderScript.new()
+	var citizen := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
+		&"work.courier.worker": true,
+		&"work.courier.in_progress": true,
+		&"work.courier.can_start": false,
+		&"work.courier.active_task_id": &"construction_42_branches",
+		&"work.courier.active_pickup": Vector3(3.0, 0.0, 4.0),
+		&"work.courier.active_priority": 70,
+	}))
+	var snapshot := WorldSnapshot.new(1, 0.0, 0.0, AIFactSet.new({&"work.courier.tasks": []}), {1: citizen})
+	var orders := provider.collect_orders(snapshot)
+	assert(orders.size() == 1)
+	assert(orders[0].citizen_id == 1)
+	assert(orders[0].payload.value(&"courier.task_id") == &"construction_42_branches")
+	assert(orders[0].target_position == Vector3(3.0, 0.0, 4.0))
 
 
 func _test_native_courier_goal() -> void:
