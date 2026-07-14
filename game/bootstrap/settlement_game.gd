@@ -1043,35 +1043,77 @@ func _update_couriers() -> void:
 
 
 func _publish_courier_tasks(dispatcher: RefCounted) -> void:
-	if warehouse_positions.is_empty():
-		return
 	# Repair reservations left by an interrupted or removed carrier before task
 	# validity is evaluated. This is the active dispatcher path.
 	for construction_site in construction_sites:
 		_reconcile_construction_reservations(construction_site)
-	# Emergency food is published before every other task.
-	if is_instance_valid(canteen) and food > 0 and not pending_canteen_delivery:
-		var food_capacity := BuildingCatalog.kitchen_food_capacity(str(canteen.get_meta("building_type", "")))
-		if food_capacity > canteen_food:
-			dispatcher.publish(&"canteen_food", CourierTask.Kind.CANTEEN, 100, warehouse_positions[0], canteen_position)
-	for order in queued_trades:
-		var trade: Dictionary = order.trade
-		dispatcher.publish(StringName("trade_%s" % str(trade)), CourierTask.Kind.TRADE, 80, order.source, order.destination, {"order": order})
-	for position in sawmill_positions:
-		if int(sawmills.stock_at(position, runtime_seconds).boards) > 0:
-			dispatcher.publish(StringName("sawmill_%s" % _cell_from_position(position)), CourierTask.Kind.SAWMILL_PICKUP, 50, position, warehouse_positions[0], {"position": position})
-	for worker in citizens:
-		if worker != null and worker.has_pending_resource() and not courier_dispatcher.is_manually_targeted(worker):
-			dispatcher.publish(StringName("worker_%d" % worker.get_instance_id()), CourierTask.Kind.WORKER_PICKUP, 45, worker.global_position, warehouse_positions[0], {"worker": worker})
+	if not warehouse_positions.is_empty():
+		# Emergency food is published before every other task.
+		if is_instance_valid(canteen) and food > 0 and not pending_canteen_delivery:
+			var food_capacity := BuildingCatalog.kitchen_food_capacity(str(canteen.get_meta("building_type", "")))
+			if food_capacity > canteen_food:
+				dispatcher.publish(&"canteen_food", CourierTask.Kind.CANTEEN, 100, warehouse_positions[0], canteen_position)
+		for order in queued_trades:
+			var trade: Dictionary = order.trade
+			dispatcher.publish(StringName("trade_%s" % str(trade)), CourierTask.Kind.TRADE, 80, order.source, order.destination, {"order": order})
+		for position in sawmill_positions:
+			if int(sawmills.stock_at(position, runtime_seconds).boards) > 0:
+				dispatcher.publish(StringName("sawmill_%s" % _cell_from_position(position)), CourierTask.Kind.SAWMILL_PICKUP, 50, position, warehouse_positions[0], {"position": position})
+		for worker in citizens:
+			if worker != null and worker.has_pending_resource() and not courier_dispatcher.is_manually_targeted(worker):
+				dispatcher.publish(StringName("worker_%d" % worker.get_instance_id()), CourierTask.Kind.WORKER_PICKUP, 45, worker.global_position, warehouse_positions[0], {"worker": worker})
 	var site := _preferred_construction_site()
 	if site != null:
 		for resource_type in site.required_materials:
 			var required := int(site.required_materials[resource_type])
 			var delivered := int(site.delivered_materials.get(resource_type, 0))
 			var reserved := int(site.reserved_materials.get(resource_type, 0))
-			if delivered + reserved < required and settlement.amount(resource_type) > 0:
-				dispatcher.publish(StringName("construction_%s_%s" % [site.node.get_instance_id(), resource_type]), CourierTask.Kind.CONSTRUCTION, 70, warehouse_positions[0], site.node.global_position, {"site": site, "resource": resource_type})
+			var source := _construction_material_source(str(resource_type))
+			if delivered + reserved < required and not source.is_empty():
+				var source_id := str(source.get("id", "storage"))
+				dispatcher.publish(StringName("construction_%s_%s_%s" % [site.node.get_instance_id(), resource_type, source_id]), CourierTask.Kind.CONSTRUCTION, 70, source.position, site.node.global_position, {"site": site, "resource": resource_type, "source": source})
 				break
+
+
+func _construction_material_source(resource_type: String) -> Dictionary:
+	if not warehouse_positions.is_empty() and settlement.amount(resource_type) > 0:
+		return {"kind": "storage", "id": "storage", "position": warehouse_positions[0]}
+	for pile: Dictionary in resource_piles:
+		var pile_node := pile.get("node") as Node3D
+		if is_instance_valid(pile_node) and int(pile.get("resources", {}).get(resource_type, 0)) > 0:
+			return {"kind": "pile", "id": pile_node.get_instance_id(), "position": pile_node.global_position, "node": pile_node}
+	return {}
+
+
+func _resource_pile_for_node(pile_node: Node3D) -> Dictionary:
+	for pile: Dictionary in resource_piles:
+		if pile.get("node") == pile_node:
+			return pile
+	return {}
+
+
+func _take_resource_from_pile(pile_node: Node3D, resource_type: String) -> bool:
+	for index in resource_piles.size():
+		var pile: Dictionary = resource_piles[index]
+		if pile.get("node") != pile_node or int(pile.get("resources", {}).get(resource_type, 0)) <= 0:
+			continue
+		pile.resources[resource_type] = int(pile.resources[resource_type]) - 1
+		var labels: Array[String] = []
+		for piled_resource in pile.resources:
+			var amount := int(pile.resources[piled_resource])
+			if amount > 0:
+				labels.append("%s x%d" % [str(piled_resource).to_upper(), amount])
+		labels.sort()
+		var label := pile_node.get_node_or_null("Label3D") as Label3D
+		if label != null:
+			label.text = "\n".join(labels)
+		if labels.is_empty():
+			resource_piles.remove_at(index)
+			pile_node.queue_free()
+		else:
+			resource_piles[index] = pile
+		return true
+	return false
 
 
 func _is_courier_task_valid(task: RefCounted) -> bool:
@@ -1089,7 +1131,12 @@ func _is_courier_task_valid(task: RefCounted) -> bool:
 			if site == null or not is_instance_valid(site.node):
 				return false
 			var resource_type := str(task.payload.resource)
-			return int(site.delivered_materials.get(resource_type, 0)) + int(site.reserved_materials.get(resource_type, 0)) < int(site.required_materials.get(resource_type, 0)) and settlement.amount(resource_type) > 0
+			var source: Dictionary = task.payload.get("source", {})
+			var source_available := settlement.amount(resource_type) > 0
+			if str(source.get("kind", "storage")) == "pile":
+				var pile := _resource_pile_for_node(source.get("node") as Node3D)
+				source_available = not pile.is_empty() and int(pile.get("resources", {}).get(resource_type, 0)) > 0
+			return int(site.delivered_materials.get(resource_type, 0)) + int(site.reserved_materials.get(resource_type, 0)) < int(site.required_materials.get(resource_type, 0)) and source_available
 	return false
 
 
@@ -1122,13 +1169,20 @@ func _start_courier_task(courier: Citizen, task: RefCounted) -> bool:
 		CourierTask.Kind.CONSTRUCTION:
 			var site: ConstructionSite = task.payload.site
 			var resource_type := str(task.payload.resource)
-			if site == null or not is_instance_valid(site.node) or settlement.amount(resource_type) <= 0:
+			var source: Dictionary = task.payload.get("source", {})
+			if site == null or not is_instance_valid(site.node):
 				return false
-			settlement.add(resource_type, -1)
+			if str(source.get("kind", "storage")) == "pile":
+				if not _take_resource_from_pile(source.get("node") as Node3D, resource_type):
+					return false
+			else:
+				if settlement.amount(resource_type) <= 0:
+					return false
+				settlement.add(resource_type, -1)
 			var reservations := site.reserved_materials
 			reservations[resource_type] = int(reservations.get(resource_type, 0)) + 1
 			site.reserved_materials = reservations
-			courier.assign_construction_delivery(site.node, warehouse_positions[0], resource_type)
+			courier.assign_construction_delivery(site.node, source.get("position", Vector3.INF), resource_type)
 			return true
 	return false
 

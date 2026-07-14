@@ -179,9 +179,31 @@ func _init() -> void:
 	var construction_resource := str(construction_site.required_materials.keys()[0])
 	var supply_worker: Citizen = simulation.citizens[2]
 	supply_worker.idle()
+	var logistics_worker: Citizen = simulation.citizens[3]
+	# The first warehouse must be supplyable from ground piles. This is the
+	# bootstrap path where no warehouse position exists yet.
+	assert(simulation.warehouse_positions.is_empty())
+	simulation._create_resource_pile(logistics_worker.global_position, {construction_resource: 1})
+	var source_pile: Dictionary = simulation.resource_piles.back()
+	simulation._assign_daily_order(logistics_worker, "helper")
+	simulation._update_couriers()
+	var pile_snapshot := SettlementAIWorldFacade.new(simulation).capture(999)
+	var pile_orders := CourierDeliveryOrderProvider.new().collect_orders(pile_snapshot)
+	var matching_pile_orders := pile_orders.filter(func(order: CitizenOrder): return order.citizen_id == logistics_worker.ai_id and order.kind == &"courier_delivery")
+	assert(not matching_pile_orders.is_empty())
+	var pile_order: CitizenOrder = matching_pile_orders.front()
+	assert(simulation.courier_dispatcher.start_task(logistics_worker, pile_order.payload.value(&"courier.task_id")))
+	assert(int(source_pile.resources.get(construction_resource, 0)) == 0)
+	logistics_worker.global_position = source_pile.node.global_position
+	logistics_worker._process_construction_pickup(0.1)
+	logistics_worker.global_position = logistics_worker.construction_position
+	logistics_worker._process_construction_delivery(0.1)
+	assert(int(construction_site.delivered_materials.get(construction_resource, 0)) == 1)
+	assert(int(construction_site.reserved_materials.get(construction_resource, 0)) == 0)
+	logistics_worker.clear_daily_order()
+
 	simulation.settlement.add(construction_resource, 1)
 	var material_before: int = simulation.settlement.amount(construction_resource)
-	var logistics_worker: Citizen = simulation.citizens[3]
 	var added_test_warehouse := false
 	if simulation.warehouse_positions.is_empty():
 		simulation.warehouse_positions.append(supply_worker.global_position)
