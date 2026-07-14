@@ -1024,13 +1024,13 @@ func _test_runtime_think_budget_is_fair() -> void:
 	var goal := ScriptedGoal.new(&"idle", 0.5, [BehaviorStep.Status.RUNNING])
 	var system := CitizenAISystem.new()
 	system.max_thinks_per_frame = 1
-	system.think_interval = 100.0
+	system.think_interval = 0.1
 	system.configure(FakeFacade.new(citizens), [goal])
 	for citizen_id in citizens:
 		system.register_citizen(citizen_id, FakeActuator.new(citizen_id))
-	system._physics_process(0.1)
-	system._physics_process(0.1)
-	system._physics_process(0.1)
+	system._physics_process(0.02)
+	system._physics_process(0.02)
+	system._physics_process(0.02)
 	assert(goal.build_count == 3)
 	for citizen_id in citizens:
 		system.unregister_citizen(citizen_id)

@@ -40,6 +40,7 @@ const CONSTRUCTION_APPROACH_DISTANCE := 1.75
 const ROUTE_PROGRESS_EPSILON := 0.06
 const ROUTE_RETRY_INTERVAL := 2.0
 const ROUTE_MAX_RETRY_INTERVAL := 16.0
+const STALE_NAVIGATION_REPLAN_JITTER := 0.35
 const IDLE_WANDER_RADIUS := 3.0
 const IDLE_WANDER_MIN_PAUSE := 2.5
 const IDLE_WANDER_MAX_PAUSE := 6.0
@@ -1292,7 +1293,7 @@ func _route_uses_stale_navigation() -> bool:
 func _invalidate_route_for_navigation_change() -> void:
 	active_route = null
 	movement_path.clear()
-	route_retry_timer = 0.0
+	route_retry_timer = randf_range(0.0, STALE_NAVIGATION_REPLAN_JITTER)
 	route_retry_delay = ROUTE_RETRY_INTERVAL
 
 func _move_directly_to(destination: Vector3, delta: float) -> bool:

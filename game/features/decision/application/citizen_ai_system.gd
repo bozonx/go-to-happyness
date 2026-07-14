@@ -9,6 +9,8 @@ extends Node
 @export var think_interval := 0.25
 @export var max_thinks_per_frame := 32
 
+const THINK_PHASE_BUCKETS := 16
+
 var facade: AIWorldFacade
 var director := SettlementDirector.new()
 var reservations := ReservationLedger.new()
@@ -62,7 +64,7 @@ func register_citizen(citizen_id: int, actuator: CitizenActuator) -> void:
 		return
 	_brains[citizen_id] = CitizenBrain.new(citizen_id, actuator, _goals)
 	_citizen_ids.append(citizen_id)
-	_next_think_at[citizen_id] = _elapsed
+	_next_think_at[citizen_id] = _elapsed + _think_phase_offset(citizen_id)
 	_order_cache_dirty = true
 
 
@@ -189,6 +191,11 @@ func _validate_runtime_configuration() -> void:
 	director_interval = maxf(director_interval, 0.001)
 	think_interval = maxf(think_interval, 0.001)
 	max_thinks_per_frame = maxi(max_thinks_per_frame, 0)
+
+
+func _think_phase_offset(citizen_id: int) -> float:
+	var bucket := posmod(citizen_id, THINK_PHASE_BUCKETS)
+	return think_interval * float(bucket) / float(THINK_PHASE_BUCKETS)
 
 
 func _unique_goals(goals: Array[AICitizenGoal]) -> Array[AICitizenGoal]:
