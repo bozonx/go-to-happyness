@@ -1312,6 +1312,11 @@ func _building_power(site_node: Node3D) -> float:
 func _on_resource_delivered(worker: Citizen, resource_type: String, amount: int) -> void:
 	storage_delivery_service.on_resource_delivered(worker, resource_type, amount)
 
+
+func _on_resource_dropped(worker: Citizen, resource_type: String, amount: int) -> void:
+	_drop_resource_pile(worker.global_position, resource_type, amount)
+	_update_interface("Worker dropped %d %s in a ground pile after the order was interrupted." % [amount, resource_type])
+
 func _on_factory_cycle(worker: Citizen, factory: Node3D) -> void:
 	if not is_instance_valid(factory):
 		return
@@ -2141,6 +2146,7 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	citizen.setup_navigation(_find_path_around_houses, _get_nearest_delivery_position, _resolve_building_queue_position, _movement_speed_modifier_at, _navigation_revision, _record_trail_movement, _is_route_reachable, _complete_building_queue_arrival, _release_building_queue_entry)
 	citizen.setup_registration_service(_can_start_registration, _registration_duration)
 	citizen.resource_delivered.connect(_on_resource_delivered)
+	citizen.resource_dropped.connect(_on_resource_dropped)
 	citizen.construction_material_delivered.connect(_on_construction_material_delivered)
 	citizen.building_supply_delivered.connect(_on_building_supply_delivered)
 	citizen.excavation_cycle.connect(_on_excavation_cycle)
@@ -7143,15 +7149,22 @@ func _select_best_campfire() -> void:
 func _create_resource_pile(position: Vector3, resources: Dictionary) -> void:
 	if resources.is_empty():
 		return
+	var normalized: Dictionary = {}
+	for resource_type in resources:
+		var amount := int(resources[resource_type])
+		if amount > 0:
+			normalized[str(resource_type)] = amount
+	if normalized.is_empty():
+		return
 	var pile := Node3D.new()
 	pile.position = position
 
 	# Base dirt mound
 	var base_mesh_node := MeshInstance3D.new()
 	var base_mesh := CylinderMesh.new()
-	base_mesh.top_radius = 0.8
-	base_mesh.bottom_radius = 1.1
-	base_mesh.height = 0.4
+	base_mesh.top_radius = 0.03
+	base_mesh.bottom_radius = 0.62
+	base_mesh.height = 0.62
 	base_mesh_node.mesh = base_mesh
 	base_mesh_node.position.y = 0.2
 	var base_mat := StandardMaterial3D.new()
@@ -7170,6 +7183,7 @@ func _create_resource_pile(position: Vector3, resources: Dictionary) -> void:
 	log1.position = Vector3(-0.3, 0.35, 0.2)
 	log1.rotation_degrees = Vector3(10, 25, 5)
 	log1.material_override = log_mat
+	log1.visible = normalized.has("branches") or normalized.has("wood") or normalized.has("logs")
 	pile.add_child(log1)
 
 	var log2 := MeshInstance3D.new()
@@ -7177,15 +7191,18 @@ func _create_resource_pile(position: Vector3, resources: Dictionary) -> void:
 	log2.position = Vector3(0.2, 0.4, -0.2)
 	log2.rotation_degrees = Vector3(-15, -35, -8)
 	log2.material_override = log_mat
+	log2.visible = log1.visible
 	pile.add_child(log2)
 
-	# Grass clump
+	# A compact grass cone makes dropped harvesting cargo recognizable at a glance.
 	var grass_pile := MeshInstance3D.new()
-	var grass_mesh := BoxMesh.new()
-	grass_mesh.size = Vector3(0.8, 0.3, 0.8)
+	var grass_mesh := CylinderMesh.new()
+	grass_mesh.top_radius = 0.02
+	grass_mesh.bottom_radius = 0.40
+	grass_mesh.height = 0.45
 	grass_pile.mesh = grass_mesh
-	grass_pile.position = Vector3(0.3, 0.3, 0.3)
-	grass_pile.rotation_degrees = Vector3(5, 12, -5)
+	grass_pile.position = Vector3(0.22, 0.42, 0.22)
+	grass_pile.visible = normalized.has("grass")
 	var grass_mat := StandardMaterial3D.new()
 	grass_mat.albedo_color = Color("739350")
 	grass_pile.material_override = grass_mat
@@ -7201,15 +7218,42 @@ func _create_resource_pile(position: Vector3, resources: Dictionary) -> void:
 	var stone_mat := StandardMaterial3D.new()
 	stone_mat.albedo_color = Color("6f747a")
 	stone_pile.material_override = stone_mat
+	stone_pile.visible = normalized.has("stone") or normalized.has("soil") or normalized.has("clay") or normalized.has("bricks")
 	pile.add_child(stone_pile)
 
 	var label := Label3D.new()
-	label.text = "RESOURCES"
+	var labels: Array[String] = []
+	for resource_type in normalized:
+		labels.append("%s x%d" % [str(resource_type).to_upper(), int(normalized[resource_type])])
+	labels.sort()
+	label.text = "\n".join(labels)
 	label.position.y = 1.7
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	pile.add_child(label)
 	add_child(pile)
-	resource_piles.append({"node": pile, "resources": resources, "reserved": {}})
+	resource_piles.append({"node": pile, "resources": normalized, "reserved": {}})
+
+
+func _drop_resource_pile(position: Vector3, resource_type: String, amount: int) -> void:
+	if resource_type.is_empty() or amount <= 0:
+		return
+	# Repeated deliveries to one entrance form a single readable pile.
+	for index in resource_piles.size():
+		var pile: Dictionary = resource_piles[index]
+		var pile_node := pile.get("node") as Node3D
+		if not is_instance_valid(pile_node) or pile.resources.size() != 1 or not pile.resources.has(resource_type) or pile_node.global_position.distance_squared_to(position) > 2.25:
+			continue
+		pile.resources[resource_type] = int(pile.resources.get(resource_type, 0)) + amount
+		resource_piles[index] = pile
+		var label := pile_node.get_node_or_null("Label3D") as Label3D
+		if label != null:
+			var labels: Array[String] = []
+			for piled_resource in pile.resources:
+				labels.append("%s x%d" % [str(piled_resource).to_upper(), int(pile.resources[piled_resource])])
+			labels.sort()
+			label.text = "\n".join(labels)
+		return
+	_create_resource_pile(position, {resource_type: amount})
 
 func _decay_resource_piles() -> void:
 	for index in range(resource_piles.size() - 1, -1, -1):

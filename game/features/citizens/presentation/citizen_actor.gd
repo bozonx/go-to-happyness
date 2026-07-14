@@ -4,6 +4,7 @@ extends CharacterBody3D
 const CitizenStatusEffectScript = preload("res://game/features/citizens/domain/citizen_status_effect.gd")
 
 signal resource_delivered(worker: Citizen, resource_type: String, amount: int)
+signal resource_dropped(worker: Citizen, resource_type: String, amount: int)
 signal construction_material_delivered(worker: Citizen, site: Node3D, resource_type: String, amount: int)
 signal building_supply_delivered(worker: Citizen, target: Node3D, supply_kind: String, resource_type: String, amount: int)
 signal excavation_cycle(worker: Citizen, site: Node3D, efficiency: float)
@@ -2637,6 +2638,11 @@ func get_action_status(action: StringName) -> int:
 
 func cancel_current_action() -> void:
 	var was_relief_action := state in [State.TO_TOILET, State.USING_TOILET, State.WAITING_FOR_TOILET, State.TO_BUSH, State.USING_BUSH]
+	# A gathering action can be interrupted after the resource has been picked
+	# up. Put that cargo on the ground rather than leaving it attached to an idle worker.
+	if active_role.begins_with("gather_") and carried_amount > 0 and not resource_type.is_empty():
+		resource_dropped.emit(self, resource_type, carried_amount)
+		carried_amount = 0
 	if is_registering():
 		pending_employment_role = ""
 		pending_employment_workplace = null

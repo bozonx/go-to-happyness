@@ -54,6 +54,7 @@ class FakeStorageSimulation extends Node:
 	var last_interface_message := ""
 	var dispatch_requested := false
 	var leisure_worker: Citizen
+	var dropped_piles: Array[Dictionary] = []
 
 	func _update_interface(message: String) -> void:
 		last_interface_message = message
@@ -63,6 +64,9 @@ class FakeStorageSimulation extends Node:
 
 	func _send_citizen_to_leisure(worker: Citizen) -> void:
 		leisure_worker = worker
+
+	func _drop_resource_pile(position: Vector3, resource_type: String, amount: int) -> void:
+		dropped_piles.append({"position": position, "resource_type": resource_type, "amount": amount})
 
 
 class FakeTradeSimulation extends Node:
@@ -305,19 +309,38 @@ func _test_storage_delivery_service() -> void:
 	assert(simulation.courier_dispatcher.completed == 1)
 	assert(simulation.last_interface_message == "Workers delivered 1 grass to the warehouse.")
 
+	var full_storage_simulation := FakeStorageSimulation.new()
+	var full_storage_service := StorageDeliveryServiceScript.new()
+	full_storage_service.configure(full_storage_simulation)
+	full_storage_simulation.settlement.buildings["warehouse"] = 1
+	full_storage_simulation.warehouse_positions = [Vector3.ZERO]
+	full_storage_simulation.settlement.ensure_storage_defaults(1)
+	full_storage_simulation.settlement.grass = int(full_storage_simulation.settlement.storage_limit("grass"))
+	var full_storage_worker := Citizen.new()
+	full_storage_worker.carried_amount = 1
+	full_storage_service.on_resource_delivered(full_storage_worker, "grass", 1)
+	assert(full_storage_simulation.settlement.grass == int(full_storage_simulation.settlement.storage_limit("grass")))
+	assert(full_storage_simulation.dropped_piles.size() == 1)
+	assert(full_storage_simulation.dropped_piles[0].resource_type == "grass")
+	assert(not full_storage_worker.blocked_by_storage)
+
 	var no_storage_simulation := FakeStorageSimulation.new()
 	var no_storage_service := StorageDeliveryServiceScript.new()
 	no_storage_service.configure(no_storage_simulation)
 	var blocked_worker := Citizen.new()
 	blocked_worker.carried_amount = 1
 	no_storage_service.on_resource_delivered(blocked_worker, "grass", 1)
-	assert(no_storage_simulation.settlement.grass == 1)
-	assert(blocked_worker.blocked_by_storage)
-	assert(blocked_worker.has_status_effect(CitizenStatusEffectScript.STORAGE_NO_WAREHOUSE))
-	assert(no_storage_simulation.last_interface_message == "Workers delivered 1 grass without warehouse storage. New collection is paused.")
+	assert(no_storage_simulation.settlement.grass == 0)
+	assert(no_storage_simulation.dropped_piles.size() == 1)
+	assert(no_storage_simulation.dropped_piles[0].resource_type == "grass")
+	assert(no_storage_simulation.dropped_piles[0].amount == 1)
+	assert(not blocked_worker.blocked_by_storage)
+	assert(no_storage_simulation.last_interface_message == "No warehouse for 1 grass; the worker left it in a ground pile.")
 	worker.free()
+	full_storage_worker.free()
 	blocked_worker.free()
 	simulation.free()
+	full_storage_simulation.free()
 	no_storage_simulation.free()
 
 
