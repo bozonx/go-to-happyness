@@ -46,7 +46,7 @@ func is_manually_targeted(worker: Citizen) -> bool:
 	if simulation == null or not is_instance_valid(worker):
 		return false
 	for courier in simulation.citizens:
-		if is_instance_valid(courier) and courier.is_reserve() and courier.is_courier() and courier.courier_worker == worker:
+		if is_instance_valid(courier) and courier.can_handle_entry_logistics() and courier.courier_worker == worker:
 			return true
 	return false
 
@@ -55,7 +55,7 @@ func _publish_manual_worker_tasks() -> void:
 	if simulation.warehouse_positions.is_empty():
 		return
 	for courier in simulation.citizens:
-		if not is_instance_valid(courier) or not courier.is_reserve() or not courier.is_courier():
+		if not is_instance_valid(courier) or not courier.can_handle_entry_logistics():
 			continue
 		var worker: Citizen = courier.courier_worker
 		if not is_instance_valid(worker):
@@ -105,16 +105,16 @@ func complete_for(courier: Citizen) -> void:
 
 
 func _available_couriers() -> Array[Citizen]:
-	var pinned: Array[Citizen] = []
-	var flexible: Array[Citizen] = []
+	var couriers: Array[Citizen] = []
+	var helpers: Array[Citizen] = []
 	for citizen in simulation.citizens:
-		if not citizen.is_reserve() or citizen.state != Citizen.State.IDLE:
+		if not citizen.can_handle_entry_logistics() or citizen.state != Citizen.State.IDLE:
 			continue
 		if citizen.is_courier():
-			pinned.append(citizen)
-		elif citizen.freelance_assignment.is_empty() and citizen.can_recheck_automatic_role():
-			flexible.append(citizen)
-	return pinned if not pinned.is_empty() else flexible
+			couriers.append(citizen)
+		elif citizen.is_helper():
+			helpers.append(citizen)
+	return couriers if not couriers.is_empty() else helpers
 
 
 func _nearest_courier(couriers: Array[Citizen], pickup: Vector3) -> Citizen:

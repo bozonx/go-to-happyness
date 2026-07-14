@@ -30,7 +30,7 @@ func capture(sequence: int) -> WorldSnapshot:
 		var can_start_personal_need := not actor.has_active_arrival_task() and not actor.has_active_delivery()
 		var worker_data := _worker_data(actor)
 		var reserve_in_progress := actor.is_reserve() and actor.reserve_action != &""
-		var reserve_eligible := actor.is_reserve() and not actor.is_courier() and not actor.is_player_controlled
+		var reserve_eligible := actor.is_reserve() and not actor.can_handle_entry_logistics() and not actor.is_player_controlled
 		var reserve_commands: Dictionary = {}
 		if reserve_eligible and not reserve_in_progress and actor.state in [Citizen.State.IDLE, Citizen.State.RESTING, Citizen.State.WAITING]:
 			for reserve_role in [&"forestry", &"farming", &"construction", &"excavation", &"gather_branches", &"gather_grass", &"gather_food", &"gather_dew", &"gather_water", &"cook", &"teacher", &"seller", &"craftsman", &"factory_worker", &"engineer"]:
@@ -155,7 +155,7 @@ func capture(sequence: int) -> WorldSnapshot:
 			var factory_position_value: Variant = factory_node.get_meta("service_position", factory_node.global_position)
 			if factory_position_value is Vector3:
 				factory_position = factory_position_value
-		var courier_worker: bool = actor.is_reserve() and actor.is_courier() and not actor.is_player_controlled
+		var courier_worker: bool = actor.can_handle_entry_logistics() and not actor.is_player_controlled
 		var courier_can_start: bool = courier_worker and actor.state == Citizen.State.IDLE and simulation._is_work_time()
 		citizens_by_id[citizen_id] = CitizenSnapshot.new(
 			citizen_id,

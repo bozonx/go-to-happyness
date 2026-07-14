@@ -510,6 +510,18 @@ func _update_workers() -> void:
 	_check_unstaffed_employment_center()
 	_refresh_labor_authority_indicator()
 
+
+func _clear_daily_helper_orders() -> void:
+	var changed := false
+	for citizen in citizens:
+		if not is_instance_valid(citizen):
+			continue
+		if citizen.is_helper():
+			citizen.clear_daily_helper_order()
+			changed = true
+	if changed and citizen_ai != null:
+		citizen_ai.request_decision_refresh()
+
 func _guard_citizen_positions() -> void:
 	if not is_instance_valid(entrance_stone):
 		return
@@ -539,7 +551,7 @@ func _is_factory_worker_active(citizen: Citizen, factory: Node3D) -> bool:
 
 func _has_courier() -> bool:
 	for citizen in citizens:
-		if citizen.is_reserve() and citizen.is_courier():
+		if citizen.can_handle_entry_logistics():
 			return true
 	return false
 
@@ -730,12 +742,14 @@ func _handle_day_cycle_event(event: SimulationDayEvent) -> void:
 		SimulationDayEvent.Kind.PARK_REST:
 			_start_park_rest(event.cooks_only)
 		SimulationDayEvent.Kind.WORKDAY_ENDED:
+			_clear_daily_helper_orders()
 			_update_interface("Workday ended: residents are returning to their assigned homes.")
 		SimulationDayEvent.Kind.NIGHTFALL:
 			_refresh_living_statuses()
 			_update_workers()
 			_update_interface("Nightfall: workers are returning to their assigned homes.")
 		SimulationDayEvent.Kind.WORKDAY_STARTED:
+			_clear_daily_helper_orders()
 			_refresh_living_statuses()
 			_update_workers()
 			_update_interface("Morning: workers left their homes for their assignments.")
@@ -1203,7 +1217,7 @@ func _on_building_supply_delivered(_courier: Citizen, target: Node3D, supply_kin
 
 func _update_firewood_supplies() -> void:
 	for courier in citizens:
-		if not courier.is_courier() or courier.state != Citizen.State.IDLE:
+		if not courier.can_handle_entry_logistics() or courier.state != Citizen.State.IDLE:
 			continue
 		for record in building_registry.records():
 			var building := record.node
@@ -1222,7 +1236,7 @@ func _update_repairs() -> void:
 	if warehouse_positions.is_empty() or branches <= 0 or not _is_work_time():
 		return
 	for builder in citizens:
-		if builder.state != Citizen.State.IDLE or not builder.is_reserve() or not builder.is_courier():
+		if builder.state != Citizen.State.IDLE or not builder.can_handle_entry_logistics():
 			continue
 		for record in building_registry.records():
 			var building := record.node
@@ -1235,7 +1249,7 @@ func _update_repairs() -> void:
 
 func _update_resource_pile_supplies() -> void:
 	for courier in citizens:
-		if not courier.is_courier() or courier.state != Citizen.State.IDLE:
+		if not courier.can_handle_entry_logistics() or courier.state != Citizen.State.IDLE:
 			continue
 		for index in resource_piles.size():
 			var pile: Dictionary = resource_piles[index]
@@ -2435,6 +2449,7 @@ func _skip_night() -> void:
 	_apply_daily_settlement_rules()
 	clock.set_time(6 * 60)
 	_return_outside_workers()
+	_clear_daily_helper_orders()
 	_apply_skip_night_incident()
 	_update_workers()
 	for citizen in citizens:
@@ -2525,17 +2540,18 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	build_menu.add_child(job_back_btn)
 	
 	# Role buttons in job submenu
-	_add_role_button("Reserve: available", "", 136)
-	_add_role_button("Work order: construction helper", "construction", 170)
-	_add_role_button("Assign: forestry (logs/timber)", "forestry", 204)
-	_add_role_button("Assign: farming", "farming", 238)
-	_add_role_button("Assign: excavation", "excavation", 272)
-	_add_role_button("Work order: gather branches", "gather_branches", 306)
-	_add_role_button("Work order: gather grass", "gather_grass", 340)
-	_add_role_button("Assign: forage food", "gather_food", 374)
-	_add_role_button("Work order: courier", "courier", 408)
-	_add_role_button("Assign: craftsman", "craftsman", 442)
-	_add_role_button("Assign: employment officer", "official", 476)
+	_add_role_button("No daily order", "", 136)
+	_add_role_button("Daily order: helper", "helper", 170)
+	_add_role_button("Daily order: construction", "construction", 204)
+	_add_role_button("Assign: forestry (logs/timber)", "forestry", 238)
+	_add_role_button("Assign: farming", "farming", 272)
+	_add_role_button("Assign: excavation", "excavation", 306)
+	_add_role_button("Daily order: gather branches", "gather_branches", 340)
+	_add_role_button("Daily order: gather grass", "gather_grass", 374)
+	_add_role_button("Assign: forage food", "gather_food", 408)
+	_add_role_button("Assign: courier", "courier", 442)
+	_add_role_button("Assign: craftsman", "craftsman", 476)
+	_add_role_button("Assign: employment officer", "official", 510)
 	
 	# Era category buttons (shown on main build menu)
 	_add_build_category_button("Tent era", "tent", 136)
@@ -2776,7 +2792,7 @@ func _create_entrance_menu(ui: CanvasLayer) -> void:
 	entrance_menu.add_child(entrance_menu_title)
 	var food_button := Button.new()
 	food_button.text = "Order food"
-	food_button.tooltip_text = "Order 4 food; an idle resident makes the trip."
+	food_button.tooltip_text = "Order 4 food; a Helper or Courier makes the trip."
 	food_button.position = Vector2(16, 82)
 	food_button.size = Vector2(272, 32)
 	food_button.pressed.connect(func(): trade_service.buy_entrance_food(4, FOOD_PURCHASE_PRICE))
@@ -2790,7 +2806,7 @@ func _create_entrance_menu(ui: CanvasLayer) -> void:
 	entrance_menu.add_child(gloves_button)
 	var work_button := Button.new()
 	work_button.text = "Send selected resident to outside work"
-	work_button.tooltip_text = "The selected resident leaves for one full day and returns with 8 coins."
+	work_button.tooltip_text = "Requires a Helper or Courier. The resident leaves for one full day and returns with 8 coins."
 	work_button.position = Vector2(16, 162)
 	work_button.size = Vector2(272, 32)
 	work_button.pressed.connect(_send_selected_resident_to_outside_work)
@@ -2812,7 +2828,10 @@ func _show_entrance_menu() -> void:
 
 func _send_selected_resident_to_outside_work() -> void:
 	if not is_instance_valid(selected_builder) or selected_builder.is_player_controlled:
-		_update_interface("Select an AI-controlled resident before sending them to outside work.")
+		_update_interface("Select an AI-controlled Helper or Courier before sending them to outside work.")
+		return
+	if not selected_builder.can_handle_entry_logistics():
+		_update_interface("Outside work requires a daily Helper or a Courier.")
 		return
 	var worker_id := selected_builder.get_instance_id()
 	if outside_workers.has(worker_id):
@@ -2872,7 +2891,7 @@ func _create_house_menu(ui: CanvasLayer) -> void:
 	house_menu.add_child(house_menu_title)
 	house_spawn_button = Button.new()
 	house_spawn_button.text = "Order a resident"
-	house_spawn_button.tooltip_text = "A courier, or a free resident, will meet the newcomer at the entrance sign."
+	house_spawn_button.tooltip_text = "A Helper or Courier will meet the newcomer at the entrance sign."
 	house_spawn_button.position = Vector2(16, 64)
 	house_spawn_button.size = Vector2(272, 30)
 	house_spawn_button.pressed.connect(_spawn_house_citizen)
@@ -3185,14 +3204,14 @@ func _spawn_house_citizen() -> void:
 	_show_house_menu()
 	pending_arrivals.append({"house": selected_house})
 	_update_arrivals()
-	_update_interface("A resident is expected at the entrance sign. An available reserve worker will meet them.")
+	_update_interface("A resident is expected at the entrance sign. Assign a Helper or use a Courier to meet them.")
 
 
 func _find_arrival_greeter(allow_busy := false) -> Citizen:
 	var best: Citizen = null
 	var best_score := INF
 	for citizen in citizens:
-		if citizen.is_player_controlled or citizen.employment_state != Citizen.EmploymentState.FREELANCE:
+		if citizen.is_player_controlled or not citizen.can_handle_entry_logistics():
 			continue
 		if citizen.has_active_arrival_task() or citizen.pending_arrival_entrance != Vector3.INF:
 			continue
@@ -3233,7 +3252,7 @@ func _update_arrivals() -> void:
 	for greeter_id in arrival_waiting_greeters.keys():
 		var waiting_greeter := instance_from_id(greeter_id) as Citizen
 		var waiting_order: Dictionary = arrival_waiting_greeters[greeter_id]
-		if not is_instance_valid(waiting_greeter) or waiting_greeter.employment_state != Citizen.EmploymentState.FREELANCE:
+		if not is_instance_valid(waiting_greeter) or not waiting_greeter.can_handle_entry_logistics():
 			arrival_waiting_greeters.erase(greeter_id)
 			_requeue_arrival_order(waiting_order)
 			continue
@@ -3299,7 +3318,7 @@ func _on_arrival_greeter_ready(greeter: Citizen) -> void:
 			greeter.idle()
 			newcomer.employment_state = Citizen.EmploymentState.FREELANCE
 			newcomer.idle()
-			_update_interface("The newcomer joined the pre-campfire workforce reserve.")
+			_update_interface("The newcomer joined the settlement without a permanent job.")
 	else:
 		arrival_escort_ids[greeter.get_instance_id()] = true
 		greeter.wait_for_arrival_morning()
@@ -3562,7 +3581,7 @@ func _set_manual_role(role: String) -> void:
 		_start_dig_assignment()
 		build_menu_is_job_menu = false
 		return
-	var freelance_roles := ["", "courier", "construction", "gather_branches", "gather_grass", "gather_dew", "gather_water"]
+	var freelance_roles := ["", "helper", "courier", "construction", "gather_branches", "gather_grass", "gather_dew", "gather_water"]
 	if role in freelance_roles:
 		if selected_builder.employment_state == Citizen.EmploymentState.UNREGISTERED:
 			if _employment_center_position() == Vector3.INF:
@@ -3605,6 +3624,7 @@ func _is_role_available(role: String) -> bool:
 		return false
 	match role:
 		"": return true
+		"helper": return true
 		"construction":
 			return (not construction_sites.is_empty() or not demolition_sites.is_empty()) and (settlement.era < SettlementState.Era.STONE or _builder_job_capacity() > 0)
 		"forestry": return _available_employer_capacity("forestry") > 0 and bool(settlement.tools.get("axe", false)) and bool(settlement.tools.get("hand_saw", false)) and not tree_positions.is_empty() and not warehouse_positions.is_empty()
@@ -4241,13 +4261,13 @@ func _citizen_at_screen_position(screen_position: Vector2) -> Citizen:
 func _select_citizen(clicked_citizen: Citizen) -> void:
 	if clicked_citizen == null:
 		return
-	if selected_builder != null and selected_builder.is_courier() and clicked_citizen != selected_builder:
+	if selected_builder != null and selected_builder.can_handle_entry_logistics() and clicked_citizen != selected_builder:
 		if not _player_can_command_labor():
 			_show_labor_command_blocked()
 			return
 		selected_builder.courier_worker = clicked_citizen
 		_request_courier_dispatch()
-		_update_interface("Courier assigned to this worker. Click another worker to reassign.")
+		_update_interface("%s assigned to this worker. Click another worker to reassign." % ("Courier" if selected_builder.is_courier() else "Helper"))
 		return
 	selected_builder = clicked_citizen
 	_hide_all_selection_menus()
@@ -4266,7 +4286,10 @@ func _show_selected_citizen_menu() -> void:
 		return
 	var assignment := "Unregistered"
 	if selected_builder.employment_state == Citizen.EmploymentState.FREELANCE:
-		assignment = "Reserve: %s" % (selected_builder.freelance_assignment.replace("_", " ") if not selected_builder.freelance_assignment.is_empty() else "available")
+		if selected_builder.is_helper():
+			assignment = "Daily order: helper"
+		else:
+			assignment = "No permanent work%s" % (": " + selected_builder.freelance_assignment.replace("_", " ") if not selected_builder.freelance_assignment.is_empty() else "")
 	elif selected_builder.employment_state == Citizen.EmploymentState.EMPLOYED:
 		assignment = "Employed: %s" % selected_builder.permanent_role.replace("_", " ")
 	elif selected_builder.employment_state == Citizen.EmploymentState.REGISTERING:
@@ -5451,7 +5474,7 @@ func _workforce_roles() -> Array[String]:
 
 
 func _freelance_roles() -> Array[String]:
-	return ["courier", "construction", "gather_grass", "gather_dew", "gather_water"]
+	return ["helper", "courier", "construction", "gather_grass", "gather_dew", "gather_water"]
 
 
 func _workforce_role_label(role: String) -> String:
@@ -5462,7 +5485,7 @@ func _workforce_role_label(role: String) -> String:
 		"gather_dew": "Collect dew", "gather_water": "Collect water",
 		"cook": "Cook", "teacher": "Teacher", "seller": "Seller", "official": "Employment officer",
 		"factory_worker": "Factory worker", "engineer": "Engineer",
-		"courier": "Courier", "craftsman": "Craftsman"
+		"helper": "Helper", "courier": "Courier", "craftsman": "Craftsman"
 	}
 	return str(labels.get(role, role.replace("_", " ").capitalize()))
 
@@ -5530,7 +5553,7 @@ func _refresh_workforce_menu() -> void:
 	var reserve := _employment_state_count(Citizen.EmploymentState.FREELANCE)
 	var unregistered := _employment_state_count(Citizen.EmploymentState.UNREGISTERED)
 	workforce_menu_title.text = "Employment: %d residents" % total
-	_add_workforce_summary("Employed %d   Registering %d   Reserve %d   Unregistered %d" % [employed, hiring, reserve, unregistered])
+	_add_workforce_summary("Employed %d   Registering %d   No permanent work %d   Unregistered %d" % [employed, hiring, reserve, unregistered])
 
 	var jobs_title := Label.new()
 	jobs_title.text = "Employed positions"
@@ -5545,15 +5568,15 @@ func _refresh_workforce_menu() -> void:
 		_add_workforce_job_row(role, employed_for_role, pending_for_role)
 		shown_jobs += 1
 	if shown_jobs == 0:
-		_add_workforce_summary("No workplaces are available. Registered residents remain in reserve.")
+		_add_workforce_summary("No workplaces are available. Registered residents remain without permanent work.")
 
 	var reserve_title := Label.new()
-	reserve_title.text = "Reserve workers"
+	reserve_title.text = "Daily orders"
 	reserve_title.add_theme_font_size_override("font_size", 16)
 	workforce_list.add_child(reserve_title)
 	_add_workforce_summary("Available %d" % _freelance_role_count(""))
 	for role in _freelance_roles():
-		_add_workforce_summary("Work order: %s  %d" % [_workforce_role_label(role), _freelance_role_count(role)])
+		_add_workforce_summary("Daily order: %s  %d" % [_workforce_role_label(role), _freelance_role_count(role)])
 
 	var unregistered_residents := _citizens_with_employment_states([Citizen.EmploymentState.UNREGISTERED, Citizen.EmploymentState.REGISTERING])
 	if not unregistered_residents.is_empty():
@@ -5595,7 +5618,7 @@ func _add_workforce_job_row(role: String, employed: int, pending: int) -> void:
 	row.add_child(dismiss)
 	var assign := Button.new()
 	assign.text = "Assign"
-	assign.tooltip_text = "Assign a reserve or unemployed resident"
+	assign.tooltip_text = "Assign a resident without permanent work"
 	assign.custom_minimum_size = Vector2(72, 34)
 	assign.disabled = (role != "official" and not can_command_labor) or not _is_role_available(role) or (limit >= 0 and employed + pending >= limit) or not _has_assignable_resident()
 	if assign.disabled and role != "official" and not can_command_labor:
@@ -5614,7 +5637,7 @@ func _add_unemployed_resident_row(citizen: Citizen) -> void:
 	row.add_child(label)
 	var auto_button := Button.new()
 	auto_button.text = "Registering" if citizen.employment_state == Citizen.EmploymentState.REGISTERING else "Register"
-	auto_button.tooltip_text = "Register this resident in the workforce reserve"
+	auto_button.tooltip_text = "Register this resident for workforce assignment"
 	auto_button.custom_minimum_size = Vector2(72, 30)
 	auto_button.disabled = not _player_can_command_labor() or citizen.employment_state != Citizen.EmploymentState.UNREGISTERED or _employment_center_position() == Vector3.INF
 	if not _player_can_command_labor():

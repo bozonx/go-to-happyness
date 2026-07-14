@@ -1239,8 +1239,23 @@ func has_work_order() -> bool:
 	# An explicit order pins the citizen to a role regardless of the officer's plan.
 	return not freelance_assignment.is_empty()
 
+func is_helper() -> bool:
+	return freelance_assignment == "helper"
+
 func is_courier() -> bool:
 	return freelance_assignment == "courier"
+
+func can_handle_entry_logistics() -> bool:
+	return is_reserve() and (is_helper() or is_courier())
+
+func clear_daily_helper_order() -> void:
+	if not is_helper():
+		return
+	freelance_assignment = ""
+	if active_role == "helper":
+		active_role = ""
+	if state in [State.IDLE, State.RESTING, State.WAITING]:
+		begin_role_recheck_cooldown()
 
 
 func _take_registration_ticket() -> void:
@@ -1838,7 +1853,7 @@ func get_core_skill_for_role(role: String) -> String:
 			return "factory_worker"
 		"engineering", "engineer":
 			return "engineer"
-		"courier":
+		"helper", "courier":
 			return "courier"
 		"craftsman", "crafting":
 			return "craftsman"
@@ -1991,7 +2006,7 @@ func _update_idle_indicator() -> void:
 			idle_indicator.text = "Employed: %s%s" % [permanent_role.replace("_", " "), _employment_workplace_suffix(employment_workplace)]
 			idle_indicator.modulate = Color("76c893")
 		EmploymentState.REGISTERING:
-			var registration_label := "reserve worker" if pending_employment_role.is_empty() else pending_employment_role.replace("_", " ")
+			var registration_label := "no permanent work" if pending_employment_role.is_empty() else pending_employment_role.replace("_", " ")
 			idle_indicator.text = "Registering: %s%s" % [registration_label, _employment_workplace_suffix(pending_employment_workplace)]
 			idle_indicator.modulate = Color("7bb7e8")
 		EmploymentState.UNREGISTERED:
@@ -2003,7 +2018,12 @@ func _update_idle_indicator() -> void:
 			if visible_role.is_empty() and not active_role.is_empty():
 				visible_role = active_role
 				automatic = true
-			idle_indicator.text = "Reserve: %s%s" % [visible_role.replace("_", " ") if not visible_role.is_empty() else "available", " (planned)" if automatic else ""]
+			if visible_role == "helper":
+				idle_indicator.text = "Daily order: helper"
+			elif visible_role.is_empty():
+				idle_indicator.text = "No permanent work"
+			else:
+				idle_indicator.text = "Work order: %s%s" % [visible_role.replace("_", " "), " (planned)" if automatic else ""]
 			idle_indicator.modulate = Color("f0c45d")
 
 

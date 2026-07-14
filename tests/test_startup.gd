@@ -189,6 +189,8 @@ func _init() -> void:
 	outside_worker.global_position = simulation.entrance_stone.global_position + Vector3(10.0, 0.0, 0.0)
 	simulation.last_citizen_positions[outside_worker.get_instance_id()] = outside_worker.global_position
 	simulation.selected_builder = outside_worker
+	outside_worker.release_to_freelance()
+	outside_worker.pin_freelance_role("helper")
 	var money_before_outside_work: int = simulation.settlement.money
 	simulation._send_selected_resident_to_outside_work()
 	assert(simulation.outside_workers.has(outside_worker.get_instance_id()))
