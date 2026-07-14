@@ -266,6 +266,7 @@ var building_supply_kind := "construction"
 var park_rest_duration := 4.0
 var pathfinder: Callable
 var movement_speed_modifier_query: Callable
+var trail_movement_recorder: Callable
 var navigation_revision_query: Callable
 var delivery_position_resolver: Callable
 var queue_position_resolver: Callable
@@ -1313,6 +1314,8 @@ func _move_directly_to(destination: Vector3, delta: float) -> bool:
 	var distance_before_move := offset.length()
 	move_and_slide()
 	var horizontal_progress := Vector2(global_position.x - position_before_move.x, global_position.z - position_before_move.z).length()
+	if horizontal_progress > 0.01 and trail_movement_recorder.is_valid():
+		trail_movement_recorder.call(ai_id, global_position)
 	var distance_after_move := Vector2(destination.x - global_position.x, destination.z - global_position.z).length()
 	_update_route_progress(distance_before_move, distance_after_move, delta, direction)
 	if is_on_floor() and horizontal_progress < current_walk_speed * delta * 0.15:
@@ -1724,12 +1727,13 @@ func apply_daily_decay() -> void:
 func is_building_site(site: Node3D) -> bool:
 	return not is_player_controlled and state == State.CONSTRUCTING and construction_site == site and global_position.distance_to(construction_position) <= 0.7
 
-func setup_navigation(next_pathfinder: Callable, next_delivery_position_resolver := Callable(), next_queue_position_resolver := Callable(), next_movement_speed_modifier_query := Callable(), next_navigation_revision_query := Callable()) -> void:
+func setup_navigation(next_pathfinder: Callable, next_delivery_position_resolver := Callable(), next_queue_position_resolver := Callable(), next_movement_speed_modifier_query := Callable(), next_navigation_revision_query := Callable(), next_trail_movement_recorder := Callable()) -> void:
 	pathfinder = next_pathfinder
 	delivery_position_resolver = next_delivery_position_resolver
 	queue_position_resolver = next_queue_position_resolver
 	movement_speed_modifier_query = next_movement_speed_modifier_query
 	navigation_revision_query = next_navigation_revision_query
+	trail_movement_recorder = next_trail_movement_recorder
 
 func setup_registration_service(staff_checker: Callable, duration_resolver: Callable) -> void:
 	registration_staff_checker = staff_checker

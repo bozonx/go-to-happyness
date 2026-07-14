@@ -164,9 +164,11 @@ func _init() -> void:
 	# A delegated officer enables automation, but the player can still issue
 	# manual labor commands.
 	simulation.selected_building = civic_centre
+	simulation.game_minutes = 20.0 * 60.0
 	field_officer.overtime_mode = false
 	simulation._call_worker_overtime()
 	assert(field_officer.overtime_mode)
+	simulation.game_minutes = 9.0 * 60.0
 	var first_in_queue: Citizen = simulation.citizens[2]
 	var second_in_queue: Citizen = simulation.citizens[3]
 	first_in_queue.global_position = civic_centre.global_position
@@ -181,12 +183,13 @@ func _init() -> void:
 	field_officer.global_position += Vector3(10.0, 0.0, 0.0)
 	assert(not simulation._can_start_registration(first_in_queue))
 	simulation.citizen_ai.process_mode = Node.PROCESS_MODE_INHERIT
-	# R always enters the hero view; direct management of another citizen is explicit.
+	# The game starts in hero view; R toggles between hero FPP and overview.
+	assert(simulation.is_first_person)
+	simulation._toggle_hero_view()
+	assert(not simulation.is_first_person)
 	simulation._toggle_hero_view()
 	assert(simulation.is_first_person)
 	assert(simulation.player_citizen == simulation.hero_citizen)
-	simulation._toggle_hero_view()
-	assert(not simulation.is_first_person)
 	simulation._select_citizen(simulation.citizens[1])
 	simulation._take_control_of_selected_citizen()
 	assert(simulation.player_citizen == simulation.citizens[1])

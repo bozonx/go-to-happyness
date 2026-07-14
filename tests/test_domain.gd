@@ -12,6 +12,7 @@ const StorageDeliveryServiceScript = preload("res://game/features/logistics/appl
 const TradeOrderScript = preload("res://game/features/logistics/domain/trade_order.gd")
 const FireSourceStateScript = preload("res://game/features/settlement/domain/fire_source_state.gd")
 const CitizenStatusEffectScript = preload("res://game/features/citizens/domain/citizen_status_effect.gd")
+const TrailFieldServiceScript = preload("res://game/features/roads/application/trail_field_service.gd")
 
 
 class FakeCanteenSimulation extends Node:
@@ -77,6 +78,7 @@ func _init() -> void:
 	_test_grid_routing()
 	_test_weighted_grid_routing()
 	_test_navigation_grid_revision()
+	_test_trail_field()
 	_test_citizen_replans_on_navigation_revision()
 	_test_building_queue_routing()
 	_test_canteen_meal_requests()
@@ -662,6 +664,25 @@ func _test_navigation_grid_revision() -> void:
 	assert(grid.revision() == initial_revision + 1)
 	grid.set_blocked_cells({Vector2i(0, 0): true})
 	assert(grid.revision() == initial_revision + 2)
+
+
+func _test_trail_field() -> void:
+	var normal := TrailFieldServiceScript.new()
+	normal.configure(12.0)
+	normal.record_walker_position(1, Vector3.ZERO, false)
+	normal.record_walker_position(1, Vector3(0.2, 0.0, 0.0), false)
+	assert(normal.total_strength() == 0)
+	normal.record_walker_position(1, Vector3(0.6, 0.0, 0.0), false)
+	var normal_strength := normal.total_strength()
+	assert(normal_strength > 0)
+	var ordered := TrailFieldServiceScript.new()
+	ordered.configure(12.0)
+	ordered.record_walker_position(1, Vector3.ZERO, true)
+	ordered.record_walker_position(1, Vector3(0.6, 0.0, 0.0), true)
+	assert(ordered.total_strength() > normal_strength)
+	for _day in range(40):
+		normal.apply_daily_decay()
+	assert(normal.total_strength() == 0)
 
 
 func _test_citizen_replans_on_navigation_revision() -> void:

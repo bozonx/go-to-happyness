@@ -35,6 +35,8 @@ const SettlementCitizenActuatorScript = preload("res://game/features/decision/ap
 const RegisterGoalScript = preload("res://game/features/decision/domain/goals/register_goal.gd")
 const ReserveWorkGoalScript = preload("res://game/features/decision/domain/goals/reserve_work_goal.gd")
 const WorkforceOrderProviderScript = preload("res://game/features/decision/application/workforce_order_provider.gd")
+const TrailFieldServiceScript = preload("res://game/features/roads/application/trail_field_service.gd")
+const TrailOverlayShader = preload("res://game/features/roads/presentation/trail_overlay.gdshader")
 
 
 const BOARD_CELLS := 48
@@ -276,6 +278,7 @@ var campfire_menu_title: Label
 var campfire_requirements_label: Label
 var campfire_upgrade_button: Button
 var campfire_advance_button: Button
+var campfire_orders_button: Button
 var campfire_occupancy_button: Button
 var campfire_official_button: Button
 var campfire_accept_button: Button
@@ -342,6 +345,11 @@ var canteen_service: CanteenService
 var trade_service: TradeService
 var storage_delivery_service: RefCounted
 var courier_dispatcher: RefCounted
+var trail_field: TrailFieldService
+var trail_overlay: MeshInstance3D
+var trail_overlay_material: ShaderMaterial
+var campfire_orders_menu: Panel
+var campfire_orders_toggle: CheckButton
 
 
 func _ready() -> void:
@@ -350,6 +358,8 @@ func _ready() -> void:
 	add_child(citizen_ai)
 	nav_grid = NavGrid.new()
 	nav_grid.configure(CELL_SIZE, BOARD_CELLS)
+	trail_field = TrailFieldServiceScript.new()
+	trail_field.configure(BOARD_CELLS * CELL_SIZE)
 	route_service = GridRouteService.new()
 	route_service.configure(nav_grid)
 	building_queue_service = BuildingQueueServiceScript.new()
@@ -438,6 +448,7 @@ func _process(delta: float) -> void:
 	_update_demolition(delta)
 	_update_water_collectors(delta)
 	_update_clock(delta)
+	_update_trail_overlay()
 	_update_daylight()
 	_update_house_lights()
 	_update_canteen_delivery()
@@ -751,6 +762,8 @@ func _schedule_recovery_arrival() -> void:
 		_add_message("A survivor arrived with emergency supplies.")
 
 func _apply_daily_settlement_rules() -> void:
+	if trail_field != null:
+		trail_field.apply_daily_decay()
 	var population := citizens.size()
 	if population == 0:
 		return
@@ -1665,6 +1678,7 @@ func _create_world() -> void:
 	add_child(camera)
 	_update_camera_position()
 	_create_voxel_terrain()
+	_create_trail_overlay()
 	_refresh_navigation_grid()
 	_create_selection_marker()
 
@@ -1705,6 +1719,33 @@ func _create_headless_ground() -> void:
 	collision.position.y = -0.1
 	ground.add_child(collision)
 	add_child(ground)
+
+
+func _create_trail_overlay() -> void:
+	if DisplayServer.get_name() == "headless" or trail_field == null:
+		return
+	trail_overlay = MeshInstance3D.new()
+	trail_overlay.name = "TrailOverlay"
+	var mesh := PlaneMesh.new()
+	mesh.size = Vector2(BOARD_CELLS * CELL_SIZE, BOARD_CELLS * CELL_SIZE)
+	trail_overlay.mesh = mesh
+	trail_overlay.position.y = 0.12
+	trail_overlay_material = ShaderMaterial.new()
+	trail_overlay_material.shader = TrailOverlayShader
+	trail_overlay.material_override = trail_overlay_material
+	add_child(trail_overlay)
+
+
+func _update_trail_overlay() -> void:
+	if trail_overlay_material == null or trail_field == null:
+		return
+	trail_overlay_material.set_shader_parameter("trail_map", trail_field.flush_texture(runtime_seconds))
+
+
+func _record_trail_movement(citizen_id: int, position_on_board: Vector3) -> void:
+	if settlement.era != SettlementState.Era.TENT or trail_field == null:
+		return
+	trail_field.record_walker_position(citizen_id, position_on_board, settlement.road_walking_order_enabled)
 
 ## Recomputes walkable cells (terrain + building footprints with clearance) and
 ## publishes them to the shared NavGrid. Citizens route entirely through the grid,
@@ -1962,7 +2003,7 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	add_child(citizen)
 	citizen.simulation = self
 	citizen.setup_specialization(primary_specialization if not primary_specialization.is_empty() else "unassigned")
-	citizen.setup_navigation(_find_path_around_houses, _get_nearest_delivery_position, _resolve_building_queue_position, _movement_speed_modifier_at, _navigation_revision)
+	citizen.setup_navigation(_find_path_around_houses, _get_nearest_delivery_position, _resolve_building_queue_position, _movement_speed_modifier_at, _navigation_revision, _record_trail_movement)
 	citizen.setup_registration_service(_can_start_registration, _registration_duration)
 	citizen.resource_delivered.connect(_on_resource_delivered)
 	citizen.construction_material_delivered.connect(_on_construction_material_delivered)
@@ -2001,6 +2042,8 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 
 
 func _on_ai_citizen_exiting(citizen_id: int) -> void:
+	if trail_field != null:
+		trail_field.forget_walker(citizen_id)
 	if is_instance_valid(citizen_ai):
 		citizen_ai.unregister_citizen(citizen_id)
 	if canteen_service != null:
@@ -2125,6 +2168,7 @@ func _create_interface() -> void:
 	_create_building_menu(ui)
 	_create_workforce_menu(ui)
 	_create_research_menu(ui)
+	_create_campfire_orders_menu(ui)
 
 func _create_time_controls(ui: CanvasLayer) -> void:
 	var controls := HBoxContainer.new()
@@ -3224,7 +3268,7 @@ func _set_manual_role(role: String) -> void:
 		elif selected_builder.employment_state == Citizen.EmploymentState.FREELANCE:
 			selected_builder.pin_freelance_role(role)
 		else:
-			# An employed specialist, including the starting hero-official, must
+			# An employed specialist must
 			# leave the workplace before receiving a reserve work order. Previously
 			# this path reported success but left the old role unchanged.
 			selected_builder.release_to_freelance()
@@ -3509,6 +3553,8 @@ func _close_context_menus() -> void:
 	materials_factory_menu.visible = false
 	build_menu.visible = false
 	campfire_menu.visible = false
+	if campfire_orders_menu != null:
+		campfire_orders_menu.visible = false
 	market_menu.visible = false
 	warehouse_menu.visible = false
 	building_menu.visible = false
@@ -4866,9 +4912,16 @@ func _create_campfire_menu(ui: CanvasLayer) -> void:
 	campfire_advance_button = Button.new()
 	campfire_advance_button.text = "Advance Era"
 	campfire_advance_button.position = Vector2(16, 290)
-	campfire_advance_button.size = Vector2(272, 36)
+	campfire_advance_button.size = Vector2(130, 36)
 	campfire_advance_button.pressed.connect(_on_campfire_advance_pressed)
 	campfire_menu.add_child(campfire_advance_button)
+
+	campfire_orders_button = Button.new()
+	campfire_orders_button.text = "Orders"
+	campfire_orders_button.position = Vector2(158, 290)
+	campfire_orders_button.size = Vector2(130, 36)
+	campfire_orders_button.pressed.connect(_show_campfire_orders_menu)
+	campfire_menu.add_child(campfire_orders_button)
 
 	campfire_upgrade_button = Button.new()
 	campfire_upgrade_button.text = "Upgrade campfire"
@@ -4956,6 +5009,59 @@ func _show_campfire_menu() -> void:
 	build_mode = ""
 	campfire_menu.visible = true
 	_refresh_campfire_menu()
+
+
+func _create_campfire_orders_menu(ui: CanvasLayer) -> void:
+	campfire_orders_menu = Panel.new()
+	campfire_orders_menu.set_anchors_preset(Control.PRESET_CENTER)
+	campfire_orders_menu.offset_left = -210.0
+	campfire_orders_menu.offset_top = -125.0
+	campfire_orders_menu.offset_right = 210.0
+	campfire_orders_menu.offset_bottom = 125.0
+	campfire_orders_menu.visible = false
+	ui.add_child(campfire_orders_menu)
+	var title := Label.new()
+	title.text = "Campfire Orders"
+	title.position = Vector2(18, 16)
+	title.size = Vector2(384, 28)
+	title.add_theme_font_size_override("font_size", 18)
+	campfire_orders_menu.add_child(title)
+	campfire_orders_toggle = CheckButton.new()
+	campfire_orders_toggle.text = "Walk as if on roads"
+	campfire_orders_toggle.position = Vector2(18, 58)
+	campfire_orders_toggle.size = Vector2(384, 32)
+	campfire_orders_toggle.tooltip_text = "Residents trample trails faster. Route selection is unchanged."
+	campfire_orders_toggle.toggled.connect(_set_road_walking_order)
+	campfire_orders_menu.add_child(campfire_orders_toggle)
+	var description := Label.new()
+	description.text = "This order only strengthens new trail marks. Roads are not used for route selection yet."
+	description.position = Vector2(18, 98)
+	description.size = Vector2(384, 62)
+	description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	description.add_theme_font_size_override("font_size", 13)
+	campfire_orders_menu.add_child(description)
+	var close_button := Button.new()
+	close_button.text = "Close"
+	close_button.position = Vector2(286, 196)
+	close_button.size = Vector2(116, 32)
+	close_button.pressed.connect(func() -> void: campfire_orders_menu.visible = false)
+	campfire_orders_menu.add_child(close_button)
+
+
+func _show_campfire_orders_menu() -> void:
+	if campfire_orders_menu == null or campfire_orders_toggle == null:
+		return
+	campfire_orders_toggle.set_pressed_no_signal(settlement.road_walking_order_enabled)
+	campfire_orders_toggle.disabled = settlement.era != SettlementState.Era.TENT
+	campfire_orders_toggle.tooltip_text = "Available in the Tent Era." if campfire_orders_toggle.disabled else "Residents trample trails faster. Route selection is unchanged."
+	campfire_orders_menu.visible = true
+
+
+func _set_road_walking_order(enabled: bool) -> void:
+	if settlement.era != SettlementState.Era.TENT:
+		return
+	settlement.road_walking_order_enabled = enabled
+	_update_interface("Trail-walking order %s. It does not change routes yet." % ("enabled" if enabled else "disabled"))
 
 
 func _create_workforce_menu(ui: CanvasLayer) -> void:

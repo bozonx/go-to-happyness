@@ -17,7 +17,9 @@
 ```mermaid
 graph TD
     subgraph Пищевая цепочка
-        K1[Костер для готовки - cook_campfire] --> K2[Земляная кухня - dugout_kitchen]
+        K1[Костер для готовки ур. 1 - cook_campfire] --> K1B[Костер для готовки ур. 2 - cook_campfire_lvl2]
+        K1B --> K1C[Костер для готовки ур. 3 - cook_campfire_lvl3]
+        K1C --> K2[Земляная кухня - dugout_kitchen]
         K2 --> K3[Глиняная пекарня - clay_bakery]
         K3 --> K4[Столовая - canteen]
         K4 --> K5[Каменная таверна - stone_tavern]
