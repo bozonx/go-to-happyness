@@ -39,6 +39,7 @@ const CONSTRUCTION_SLOT_SPACING := 0.42
 const CONSTRUCTION_APPROACH_DISTANCE := 1.75
 const ROUTE_PROGRESS_EPSILON := 0.06
 const ROUTE_RETRY_INTERVAL := 2.0
+const ROUTE_MAX_RETRY_INTERVAL := 16.0
 const IDLE_WANDER_RADIUS := 3.0
 const IDLE_WANDER_MIN_PAUSE := 2.5
 const IDLE_WANDER_MAX_PAUSE := 6.0
@@ -262,6 +263,7 @@ var building_supply_kind := "construction"
 var park_rest_duration := 4.0
 var pathfinder: Callable
 var movement_speed_modifier_query: Callable
+var navigation_revision_query: Callable
 var delivery_position_resolver: Callable
 var queue_position_resolver: Callable
 var idle_wander_anchor := Vector3.INF
@@ -272,6 +274,7 @@ var path_destination := Vector3.INF
 var path_allows_destination_house := false
 var active_route: RouteResult
 var route_retry_timer := 0.0
+var route_retry_delay := ROUTE_RETRY_INTERVAL
 var stuck_time := 0.0
 var recovery_repath_done := false
 var route_no_progress_time := 0.0
@@ -1204,6 +1207,8 @@ func _move_to(destination: Vector3, delta: float, may_enter_destination_house :=
 		var queue_result: Dictionary = queue_position_resolver.call(self, destination)
 		movement_destination = queue_result.get("position", destination)
 		is_queue_head = bool(queue_result.get("is_head", true))
+	if _route_uses_stale_navigation():
+		_invalidate_route_for_navigation_change()
 	if path_destination.distance_to(movement_destination) > 0.08 or path_allows_destination_house != may_enter_destination_house:
 		_reset_route(movement_destination)
 		path_allows_destination_house = may_enter_destination_house
@@ -1230,15 +1235,32 @@ func _plan_route(destination: Vector3) -> void:
 	if pathfinder.is_valid():
 		result = pathfinder.call(global_position, destination, path_allows_destination_house)
 	if not result is RouteResult or not (result as RouteResult).reachable:
-		active_route = RouteResult.unreachable()
+		var failed_revision := int(navigation_revision_query.call()) if navigation_revision_query.is_valid() else -1
+		active_route = RouteResult.unreachable(failed_revision)
 		movement_path.clear()
-		route_retry_timer = ROUTE_RETRY_INTERVAL
+		route_retry_timer = route_retry_delay
+		route_retry_delay = minf(ROUTE_MAX_RETRY_INTERVAL, route_retry_delay * 2.0)
 		velocity.x = 0.0
 		velocity.z = 0.0
 		return
 	active_route = result as RouteResult
 	movement_path = active_route.waypoints.duplicate()
 	route_retry_timer = 0.0
+	route_retry_delay = ROUTE_RETRY_INTERVAL
+
+
+func _route_uses_stale_navigation() -> bool:
+	if active_route == null or not navigation_revision_query.is_valid():
+		return false
+	var current_revision := int(navigation_revision_query.call())
+	return current_revision >= 0 and active_route.grid_revision != current_revision
+
+
+func _invalidate_route_for_navigation_change() -> void:
+	active_route = null
+	movement_path.clear()
+	route_retry_timer = 0.0
+	route_retry_delay = ROUTE_RETRY_INTERVAL
 
 func _move_directly_to(destination: Vector3, delta: float) -> bool:
 	var offset := destination - global_position
@@ -1301,6 +1323,7 @@ func _force_repath() -> void:
 	active_route = null
 	movement_path.clear()
 	route_retry_timer = 0.0
+	route_retry_delay = ROUTE_RETRY_INTERVAL
 	recovery_repath_done = true
 
 func _reset_waypoint_progress() -> void:
@@ -1319,6 +1342,7 @@ func _reset_route(destination: Vector3) -> void:
 	route_best_distance = INF
 	route_recovery_attempt = 0
 	recovery_repath_done = false
+	route_retry_delay = ROUTE_RETRY_INTERVAL
 
 func _update_route_progress(distance_before: float, distance_after: float, delta: float, direction: Vector3) -> void:
 	if distance_after + ROUTE_PROGRESS_EPSILON < minf(distance_before, route_best_distance):
@@ -1668,11 +1692,12 @@ func apply_daily_decay() -> void:
 func is_building_site(site: Node3D) -> bool:
 	return not is_player_controlled and state == State.CONSTRUCTING and construction_site == site and global_position.distance_to(construction_position) <= 0.7
 
-func setup_navigation(next_pathfinder: Callable, next_delivery_position_resolver := Callable(), next_queue_position_resolver := Callable(), next_movement_speed_modifier_query := Callable()) -> void:
+func setup_navigation(next_pathfinder: Callable, next_delivery_position_resolver := Callable(), next_queue_position_resolver := Callable(), next_movement_speed_modifier_query := Callable(), next_navigation_revision_query := Callable()) -> void:
 	pathfinder = next_pathfinder
 	delivery_position_resolver = next_delivery_position_resolver
 	queue_position_resolver = next_queue_position_resolver
 	movement_speed_modifier_query = next_movement_speed_modifier_query
+	navigation_revision_query = next_navigation_revision_query
 
 func setup_registration_service(staff_checker: Callable, duration_resolver: Callable) -> void:
 	registration_staff_checker = staff_checker

@@ -1,7 +1,7 @@
 extends SceneTree
 
 const SettlementRulesScript = preload("res://game/features/settlement/domain/settlement_rules.gd")
-const GridRouteServiceScript = preload("res://game/features/world/application/grid_route_service.gd")
+const GridRouteServiceScript = preload("res://game/features/routing/application/grid_route_service.gd")
 const BuildingQueueServiceScript = preload("res://game/features/citizens/application/building_queue_service.gd")
 const CanteenServiceScript = preload("res://game/features/logistics/application/canteen_service.gd")
 const TradeOrderScript = preload("res://game/features/logistics/domain/trade_order.gd")
@@ -45,6 +45,8 @@ func _init() -> void:
 	_test_citizen_state_display_queue()
 	_test_grid_routing()
 	_test_weighted_grid_routing()
+	_test_navigation_grid_revision()
+	_test_citizen_replans_on_navigation_revision()
 	_test_building_queue_routing()
 	_test_canteen_meal_requests()
 	_test_construction_progress()
@@ -482,6 +484,42 @@ func _test_weighted_grid_routing() -> void:
 	grid.set_blocked_cells({Vector2i(3, 0): true})
 	var blocked_destination := router.find_route(start, destination)
 	assert(not blocked_destination.reachable)
+
+
+func _test_navigation_grid_revision() -> void:
+	var grid := NavGrid.new()
+	grid.configure(1.0, 10)
+	var router := GridRouteServiceScript.new()
+	router.configure(grid)
+	var initial_revision := grid.revision()
+	grid.set_blocked_cells({})
+	grid.set_cell_weights({})
+	assert(grid.revision() == initial_revision)
+
+	var route: RouteResult = router.find_route(Vector3(-2.5, 0.0, 0.5), Vector3(2.5, 0.0, 0.5))
+	assert(route.reachable and route.grid_revision == initial_revision)
+	grid.set_cell_weights({Vector2i(0, 1): 0.5})
+	assert(grid.revision() == initial_revision + 1)
+	assert(grid.minimum_cell_weight() == 0.5)
+	assert(route.grid_revision != grid.revision())
+	assert(is_equal_approx(grid.get_cell_weight(Vector2i(4, 4)), NavGrid.DEFAULT_CELL_WEIGHT))
+	grid.set_cell_weights({Vector2i(0, 1): 0.5})
+	assert(grid.revision() == initial_revision + 1)
+	grid.set_blocked_cells({Vector2i(0, 0): true})
+	assert(grid.revision() == initial_revision + 2)
+
+
+func _test_citizen_replans_on_navigation_revision() -> void:
+	var citizen := Citizen.new()
+	var navigation_revisions := [3]
+	citizen.navigation_revision_query = func() -> int: return navigation_revisions[0]
+	citizen.active_route = RouteResult.success([Vector3(1.0, 0.0, 0.0)], Vector3(1.0, 0.0, 0.0), navigation_revisions[0])
+	assert(not citizen._route_uses_stale_navigation())
+	navigation_revisions[0] += 1
+	assert(citizen._route_uses_stale_navigation())
+	citizen._invalidate_route_for_navigation_change()
+	assert(citizen.active_route == null and citizen.route_retry_timer == 0.0)
+	citizen.free()
 
 
 func _route_polyline_cost(grid: NavGrid, start: Vector3, waypoints: Array[Vector3]) -> float:

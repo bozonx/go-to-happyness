@@ -12,25 +12,40 @@ var cell_size := 1.0
 var board_half_cells := 0
 var _blocked: Dictionary = {}
 var _cell_weights: Dictionary = {}
+var _minimum_cell_weight := DEFAULT_CELL_WEIGHT
+var _revision := 0
 
 const DEFAULT_CELL_WEIGHT := 2.0
 
 
 func configure(next_cell_size: float, next_board_cells: int) -> void:
+	var next_half_cells := next_board_cells / 2
+	if is_equal_approx(cell_size, next_cell_size) and board_half_cells == next_half_cells:
+		return
 	cell_size = next_cell_size
-	board_half_cells = next_board_cells / 2
+	board_half_cells = next_half_cells
+	_revision += 1
 
 
 ## Replaces the blocked set wholesale. Callers rebuild the dictionary (terrain +
 ## building footprints) and hand it over; the grid never mutates it in place.
 func set_blocked_cells(next_blocked: Dictionary) -> void:
-	_blocked = next_blocked
+	if _blocked == next_blocked:
+		return
+	_blocked = next_blocked.duplicate()
+	_revision += 1
 
 
 ## Replaces terrain traversal weights wholesale. Cells not listed here use the
 ## default grass cost. Blocked cells remain impassable regardless of a weight.
 func set_cell_weights(next_weights: Dictionary) -> void:
-	_cell_weights = next_weights
+	if _cell_weights == next_weights:
+		return
+	_cell_weights = next_weights.duplicate()
+	_minimum_cell_weight = DEFAULT_CELL_WEIGHT
+	for weight in _cell_weights.values():
+		_minimum_cell_weight = minf(_minimum_cell_weight, maxf(0.001, float(weight)))
+	_revision += 1
 
 
 func get_cell_weight(cell: Vector2i) -> float:
@@ -42,10 +57,11 @@ func movement_speed_modifier_at(position_on_board: Vector3) -> float:
 
 
 func minimum_cell_weight() -> float:
-	var minimum := DEFAULT_CELL_WEIGHT
-	for weight in _cell_weights.values():
-		minimum = minf(minimum, maxf(0.001, float(weight)))
-	return minimum
+	return _minimum_cell_weight
+
+
+func revision() -> int:
+	return _revision
 
 
 func cell_from_position(position_on_board: Vector3) -> Vector2i:

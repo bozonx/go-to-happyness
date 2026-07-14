@@ -64,9 +64,9 @@ create generic `utils`, `helpers`, `managers` or catch-all `services` directorie
 - `production`: production-specific rules and systems, currently the sawmill.
 - `simulation`: the deterministic clock, day-cycle events and simulation-wide
   scheduling.
-- `world`: terrain, navigation grid and route services, plus world-only
-  presentation. Split out `routing` only if route rules become an independent
-  subsystem. UI belongs in a future `ui/presentation` feature.
+- `world`: terrain, obstacle publication and world-only presentation.
+- `routing`: navigation grid, route selection and route results. UI belongs in a
+  future `ui/presentation` feature.
 
 ## Building model
 
@@ -112,11 +112,9 @@ Personal needs are state, not task selection. `needs/application` owns hunger,
 rest, toilet and future need parameters; decision goals read immutable facts and
 apply effects only through actuator commands and feature services.
 
-Routing currently lives in `world/application` as `NavGrid`, `GridRouteService` and
+Routing lives in `routing/application` as `NavGrid`, `GridRouteService` and
 `RouteResult`. Route selection rules must not depend on `Citizen` nodes or UI
-nodes. If roads and weighted navigation grow into a larger subsystem, extract a
-dedicated `routing` feature with a route request/result API instead of pushing that
-logic into the bootstrap controller.
+nodes; world code only publishes obstacles and coverage data to the grid.
 
 Logistics owns delivery tasks. Producers publish or request deliveries; they do
 not directly pick walkers or mutate courier state except through the logistics
@@ -159,8 +157,8 @@ rewrite:
    producers migrate to typed requests.
 3. Move remaining need state and effects behind `needs/application` and expose them
    to AI only as facts.
-4. Expand `world/application` routing behind request/result APIs before adding
-   weighted roads or desire-line traffic.
+4. Add road coverage and desire-line traffic through the `routing` request/result
+   API without pushing routing rules back into the bootstrap controller.
 5. Move each UI panel into `ui/presentation` and make it consume commands and query
    results instead of bootstrap fields.
 6. Split the citizen actor only after its movement and task-execution contracts are
