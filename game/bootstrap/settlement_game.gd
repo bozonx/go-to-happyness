@@ -345,6 +345,7 @@ var build_menu_is_daily_order_menu := false
 var build_buttons: Array[Button] = []
 var build_item_buttons: Array[Button] = []
 var skip_night_button: Button
+var start_workday_button: Button
 var water_collectors: Array[Dictionary] = []
 var pending_trades: Dictionary = {} # worker instance id -> TradeOrder
 var queued_trades: Array = []
@@ -2434,6 +2435,17 @@ func _create_time_controls(ui: CanvasLayer) -> void:
 	skip_night_button.visible = false
 	skip_night_button.pressed.connect(_skip_night)
 	ui.add_child(skip_night_button)
+	start_workday_button = Button.new()
+	start_workday_button.text = "К началу рабочего дня"
+	start_workday_button.tooltip_text = "Jump to 08:00"
+	start_workday_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	start_workday_button.offset_left = -220
+	start_workday_button.offset_top = 96
+	start_workday_button.offset_right = -22
+	start_workday_button.offset_bottom = 128
+	start_workday_button.visible = false
+	start_workday_button.pressed.connect(_skip_to_workday_start)
+	ui.add_child(start_workday_button)
 
 
 func _can_skip_night() -> bool:
@@ -2443,9 +2455,18 @@ func _can_skip_night() -> bool:
 	return hour >= 8 + settlement.workday_hours or hour < 6
 
 
+func _can_skip_to_workday_start() -> bool:
+	if settlement.night_shifts_allowed:
+		return false
+	var hour := clock.hour()
+	return hour >= 6 and hour < 8
+
+
 func _update_skip_night_button() -> void:
 	if skip_night_button != null:
 		skip_night_button.visible = _can_skip_night()
+	if start_workday_button != null:
+		start_workday_button.visible = _can_skip_to_workday_start()
 
 
 func _skip_night_survival_hours() -> Array[Dictionary]:
@@ -2503,6 +2524,20 @@ func _skip_night() -> void:
 	_update_daylight()
 	_update_house_lights()
 	_update_interface("Skipped the night. Morning begins at 06:00.")
+
+
+func _skip_to_workday_start() -> void:
+	if not _can_skip_to_workday_start():
+		_update_skip_night_button()
+		return
+	day_cycle.set_to_workday_start()
+	_handle_day_cycle_event(SimulationDayEvent.new(SimulationDayEvent.Kind.WORKDAY_STARTED, 8))
+	if citizen_ai != null:
+		citizen_ai.request_decision_refresh()
+	_update_skip_night_button()
+	_update_daylight()
+	_update_house_lights()
+	_update_interface("Workday starts at 08:00.")
 
 
 func _apply_skip_night_incident() -> void:
@@ -2626,7 +2661,7 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_build_button("Campfire Level 3", "campfire_lvl3", 200, "tent")
 	_add_build_button("Бадминтонная площадка", "gathering_place", 193, "tent")
 	_add_build_button("Костер для готовки ур. 1", "cook_campfire", 227, "tent")
-	_add_build_button("Палатка на 4 жителя", "tent", 244, "tent")
+	_add_build_button("Временная палатка на 4 жителя", "tent", 244, "tent")
 	_add_build_button("Жилая палатка на 1 жителя", "living_tent", 278, "tent")
 	_add_build_button("Жилая палатка ур. 2", "living_tent_lvl2", 278, "tent")
 	_add_build_button("Жилая палатка ур. 3", "living_tent_lvl3", 278, "tent")
@@ -3573,7 +3608,8 @@ func _refresh_build_menu() -> void:
 		var hero_only: bool = button.get_meta("hero_only", false)
 		var submenu: String = button.get_meta("submenu", "job")
 		var is_daily_submenu := submenu == "daily"
-		button.visible = selected_exists and ((is_daily_submenu and build_menu_is_daily_order_menu) or (not is_daily_submenu and build_menu_is_job_menu)) and _is_role_available(role) and (not hero_only or selected_builder.is_hero)
+		var role_available := _is_daily_order_role_available(role) if is_daily_submenu else _is_role_available(role)
+		button.visible = selected_exists and ((is_daily_submenu and build_menu_is_daily_order_menu) or (not is_daily_submenu and build_menu_is_job_menu)) and role_available and (not hero_only or selected_builder.is_hero)
 		button.disabled = button.visible and not is_daily_submenu and role != "official" and not _player_can_command_labor()
 		button.tooltip_text = _labor_command_block_message() if button.disabled else ""
 		if button.visible:
@@ -3733,6 +3769,11 @@ func _is_role_available(role: String) -> bool:
 		"craftsman": return not craft_tent_positions.is_empty()
 		"official": return is_instance_valid(_employment_centre_building())
 	return false
+
+
+func _is_daily_order_role_available(_role: String) -> bool:
+	return true
+
 
 func _assigned_count_for_role(role: String) -> int:
 	var count := 0
@@ -4024,7 +4065,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			else:
 				_start_interaction()
 		elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
-			if player_citizen == hero_citizen:
+			if not build_mode.is_empty():
+				_cancel_build_action()
+			elif player_citizen == hero_citizen:
 				_dig_voxel_at_crosshair()
 			else:
 				_leave_first_person_to_hero_overview()
@@ -4042,6 +4085,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_MIDDLE:
 		is_panning_camera = event.pressed
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
+		if event.pressed and (not build_mode.is_empty() or (selected_builder != null and dig_mode)):
+			_cancel_build_action()
+			get_viewport().set_input_as_handled()
+			return
 		if event.pressed:
 			is_rotating_camera = true
 			right_mouse_dragged = false

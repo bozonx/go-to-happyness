@@ -73,6 +73,7 @@ var unlocked_building_levels := {
 	"toilet_brick_lvl2": false,
 	"toilet_brick_lvl3": false,
 	"tent": false,
+	"cook_campfire": false,
 	"campfire_lvl2": false,
 	"campfire_lvl3": false,
 	"gathering_place": false,
@@ -136,6 +137,8 @@ func apply_tent_start(reset_progress := true) -> void:
 
 
 func _tent_start_unlock_for(building_type: String) -> bool:
+	if building_type in ["tent", "cook_campfire"]:
+		return true
 	return false
 
 
@@ -405,8 +408,6 @@ func is_building_unlocked(building_type: String) -> bool:
 		# The landmark must be visible in the initial build menu. Placement still
 		# requires the first warehouse so the bootstrap order remains explicit.
 		return true
-	if building_type == "tent":
-		return era > Era.TENT or has_building("campfire")
 	if unlocked_building_levels.has(building_type):
 		return bool(unlocked_building_levels.get(building_type, false))
 	return era > Era.TENT

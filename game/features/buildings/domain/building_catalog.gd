@@ -9,7 +9,7 @@ const DEFINITIONS := {
 	"cook_campfire": {"name": "Костер для готовки ур. 1", "category": "tent", "costs": {"branches": 8, "grass": 6}},
 	"cook_campfire_lvl2": {"name": "Костер для готовки ур. 2", "category": "tent", "costs": {"branches": 14, "grass": 10}, "upgrade_only": true, "upgrades_from": "cook_campfire"},
 	"cook_campfire_lvl3": {"name": "Костер для готовки ур. 3", "category": "tent", "costs": {"branches": 22, "grass": 16}, "upgrade_only": true, "upgrades_from": "cook_campfire_lvl2"},
-	"tent": {"name": "Палатка на 4 жителя", "category": "tent", "costs": {"branches": 8, "grass": 6}},
+	"tent": {"name": "Временная палатка на 4 жителя", "category": "tent", "costs": {"branches": 8, "grass": 6}},
 	"living_tent": {"name": "Жилая палатка на 1 жителя", "category": "tent", "costs": {"branches": 10, "grass": 8}},
 	"living_tent_lvl2": {"name": "Жилая палатка ур. 2 на 2 жителя", "category": "tent", "costs": {"branches": 15, "grass": 12}},
 	"living_tent_lvl3": {"name": "Жилая палатка ур. 3 на 3 жителя", "category": "tent", "costs": {"branches": 22, "grass": 18}},
@@ -178,7 +178,7 @@ const RESEARCH_TECHS := {
 		"prerequisites": ["living_tent_lvl2"],
 	},
 	"tent": {
-		"name": "Палатка на 4 жителя",
+		"name": "Временная палатка на 4 жителя",
 		"base_duration": 25.0,
 		"required_skill": "construction",
 		"target_building": "tent",

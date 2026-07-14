@@ -35,6 +35,14 @@ func _init() -> void:
 	assert(not simulation.build_menu_is_job_menu)
 	simulation._open_daily_order_submenu()
 	assert(simulation.build_menu_is_daily_order_menu)
+	var construction_daily_button: Button = null
+	for button in simulation.role_buttons:
+		if str(button.get_meta("submenu", "")) == "daily" and str(button.get_meta("role", "")) == "construction":
+			construction_daily_button = button
+			break
+	assert(construction_daily_button != null)
+	assert(construction_daily_button.visible)
+	assert(not construction_daily_button.disabled)
 	simulation._close_assignment_submenu()
 	simulation._appoint_official(simulation.hero_citizen)
 	var delegated_officer: Citizen = simulation.citizens[1]
@@ -253,6 +261,10 @@ func _init() -> void:
 	assert(simulation.day_cycle.current_day == 2)
 	assert(simulation.clock.hour() == 6 and simulation.clock.minute() == 0)
 	assert(not simulation.skip_night_button.visible)
+	assert(simulation.start_workday_button.visible)
+	simulation._skip_to_workday_start()
+	assert(simulation.clock.hour() == 8 and simulation.clock.minute() == 0)
+	assert(not simulation.start_workday_button.visible)
 	assert(simulation.citizens.size() == citizen_count_before_midnight_skip)
 	assert(staying_worker.visible)
 	assert(staying_worker.global_position == staying_position)

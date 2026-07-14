@@ -185,6 +185,8 @@ func _test_tent_start_config() -> void:
 	assert(state.construction_gloves_available())
 	assert(state.is_building_unlocked("warehouse"))
 	assert(state.is_building_unlocked("campfire"))
+	assert(state.is_building_unlocked("tent"))
+	assert(state.is_building_unlocked("cook_campfire"))
 	assert(not state.can_afford_building("campfire"))
 	state.buildings["warehouse"] = 1
 	state.branches = 6
@@ -341,6 +343,12 @@ func _test_building_availability_service() -> void:
 	var campfire_placement: Dictionary = service.placement_state("campfire")
 	assert(bool(campfire_placement.allowed))
 	assert(service.cost_text("campfire") == "6 branches")
+	state.branches = 8
+	state.grass = 6
+	var temporary_tent_placement: Dictionary = service.placement_state("tent")
+	assert(bool(temporary_tent_placement.allowed))
+	var cooking_campfire_placement: Dictionary = service.placement_state("cook_campfire")
+	assert(bool(cooking_campfire_placement.allowed))
 
 
 func _test_citizen_living_status_service() -> void:
