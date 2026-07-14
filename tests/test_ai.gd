@@ -6,6 +6,7 @@ const ToiletGoalScript = preload("res://game/features/decision/domain/goals/toil
 const RestGoalScript = preload("res://game/features/decision/domain/goals/rest_goal.gd")
 const ForestryGoalScript = preload("res://game/features/decision/domain/goals/forestry_goal.gd")
 const ForestryOrderProviderScript = preload("res://game/features/decision/application/forestry_order_provider.gd")
+const ForestryWorkStepScript = preload("res://game/features/decision/domain/behavior/forestry_work_step.gd")
 const FarmingGoalScript = preload("res://game/features/decision/domain/goals/farming_goal.gd")
 const FarmingOrderProviderScript = preload("res://game/features/decision/application/farming_order_provider.gd")
 const ConstructionGoalScript = preload("res://game/features/decision/domain/goals/construction_goal.gd")
@@ -174,6 +175,7 @@ func _init() -> void:
 	_test_register_provider_keeps_order_while_registering()
 	_test_reserve_work_provider_keeps_assignment()
 	_test_reserve_work_rejects_contested_target()
+	_test_reserved_step_renews_lease()
 	_test_reserve_work_actuator_delegates_payload()
 	_test_forestry_provider_assigns_unique_stable_targets()
 	_test_native_forestry_goal()
@@ -1143,6 +1145,29 @@ func _test_reserve_work_rejects_contested_target() -> void:
 	assert(first_actuator.action_start_count == 1)
 	assert(second_actuator.action_start_count == 0)
 	assert(snapshot.reservations.owner_of([&"gathering.source", &"branch:3:0"], 0.0) == 1)
+
+
+func _test_reserved_step_renews_lease() -> void:
+	var ledger := ReservationLedger.new()
+	var citizen := CitizenSnapshot.new(1)
+	var snapshot := WorldSnapshot.new(1, 0.0, 0.0, AIFactSet.new(), {1: citizen})
+	snapshot.reservations = ledger
+	var order := CitizenOrder.new(1, &"forestry", &"test", 1.0, AIFactSet.new({
+		&"work.tree_id": &"tree:1",
+		&"work.tree_access": Vector3(1.0, 0.0, 0.0),
+		&"work.sawmill_position": Vector3(2.0, 0.0, 0.0),
+		&"work.warehouse_position": Vector3(3.0, 0.0, 0.0),
+	}))
+	order.target_position = Vector3(4.0, 0.0, 0.0)
+	var actuator := FakeActuator.new(1)
+	var context := BehaviorContext.new(actuator, AIBlackboard.new())
+	context.refresh(snapshot, order)
+	var step := ForestryWorkStepScript.new()
+	assert(step.run(context, 0.1) == BehaviorStep.Status.RUNNING)
+	snapshot.simulation_seconds = 89.0
+	context.refresh(snapshot, order)
+	assert(step.run(context, 0.1) == BehaviorStep.Status.RUNNING)
+	assert(not ledger.claim([&"forestry.tree", &"tree:1"], 2, 120.0, 5.0))
 
 
 func _test_reserve_work_actuator_delegates_payload() -> void:

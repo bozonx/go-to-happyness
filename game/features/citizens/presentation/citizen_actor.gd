@@ -40,6 +40,8 @@ const CONSTRUCTION_APPROACH_DISTANCE := 1.75
 const ROUTE_PROGRESS_EPSILON := 0.06
 const ROUTE_RETRY_INTERVAL := 2.0
 const ROUTE_MAX_RETRY_INTERVAL := 16.0
+const ROUTE_UNREACHABLE_FAILURE_TIME := 8.0
+const ROUTE_RECOVERY_FAILURE_ATTEMPTS := 4
 const STALE_NAVIGATION_REPLAN_JITTER := 0.35
 const IDLE_WANDER_RADIUS := 3.0
 const IDLE_WANDER_MIN_PAUSE := 2.5
@@ -280,6 +282,8 @@ var path_allows_destination_house := false
 var active_route: RouteResult
 var route_retry_timer := 0.0
 var route_retry_delay := ROUTE_RETRY_INTERVAL
+var route_unreachable_time := 0.0
+var navigation_failed := false
 var stuck_time := 0.0
 var recovery_repath_done := false
 var route_no_progress_time := 0.0
@@ -1256,6 +1260,8 @@ func _move_to(destination: Vector3, delta: float, may_enter_destination_house :=
 		var queue_result: Dictionary = queue_position_resolver.call(self, destination)
 		movement_destination = queue_result.get("position", destination)
 		is_queue_head = bool(queue_result.get("is_head", true))
+	if navigation_failed:
+		return false
 	if _route_uses_stale_navigation():
 		_invalidate_route_for_navigation_change()
 	if path_destination.distance_to(movement_destination) > 0.08 or path_allows_destination_house != may_enter_destination_house:
@@ -1267,6 +1273,9 @@ func _move_to(destination: Vector3, delta: float, may_enter_destination_house :=
 		if route_retry_timer <= 0.0:
 			_plan_route(movement_destination)
 		if active_route == null or not active_route.reachable:
+			route_unreachable_time += delta
+			if route_unreachable_time >= ROUTE_UNREACHABLE_FAILURE_TIME:
+				navigation_failed = true
 			return false
 	while not movement_path.is_empty():
 		var waypoint: Vector3 = movement_path.front()
@@ -1296,6 +1305,7 @@ func _plan_route(destination: Vector3) -> void:
 	movement_path = active_route.waypoints.duplicate()
 	route_retry_timer = 0.0
 	route_retry_delay = ROUTE_RETRY_INTERVAL
+	route_unreachable_time = 0.0
 
 
 func _route_uses_stale_navigation() -> bool:
@@ -1310,6 +1320,7 @@ func _invalidate_route_for_navigation_change() -> void:
 	movement_path.clear()
 	route_retry_timer = randf_range(0.0, STALE_NAVIGATION_REPLAN_JITTER)
 	route_retry_delay = ROUTE_RETRY_INTERVAL
+	route_unreachable_time = 0.0
 
 func _move_directly_to(destination: Vector3, delta: float) -> bool:
 	var offset := destination - global_position
@@ -1371,6 +1382,8 @@ func _jump_out_of_obstacle() -> void:
 
 func _force_repath() -> void:
 	route_recovery_attempt += 1
+	if route_recovery_attempt >= ROUTE_RECOVERY_FAILURE_ATTEMPTS:
+		navigation_failed = true
 	active_route = null
 	movement_path.clear()
 	route_retry_timer = 0.0
@@ -1394,6 +1407,8 @@ func _reset_route(destination: Vector3) -> void:
 	route_recovery_attempt = 0
 	recovery_repath_done = false
 	route_retry_delay = ROUTE_RETRY_INTERVAL
+	route_unreachable_time = 0.0
+	navigation_failed = false
 
 func _update_route_progress(distance_before: float, distance_after: float, delta: float, direction: Vector3) -> void:
 	if distance_after + ROUTE_PROGRESS_EPSILON < minf(distance_before, route_best_distance):
@@ -1463,6 +1478,8 @@ func set_player_controlled(controlled: bool) -> void:
 		active_role = ""
 		movement_path.clear()
 		path_destination = Vector3.INF
+		route_unreachable_time = 0.0
+		navigation_failed = false
 
 func set_hero(hero: bool) -> void:
 	is_hero = hero
@@ -2246,6 +2263,8 @@ func _reset_toilet_navigation() -> void:
 	active_route = null
 	path_destination = Vector3.INF
 	route_retry_timer = 0.0
+	route_unreachable_time = 0.0
+	navigation_failed = false
 
 
 func _resume_after_toilet() -> void:
@@ -2270,6 +2289,8 @@ func _reset_assignment_navigation() -> void:
 	active_route = null
 	path_destination = Vector3.INF
 	route_retry_timer = 0.0
+	route_unreachable_time = 0.0
+	navigation_failed = false
 
 
 func _process_to_toilet(delta: float) -> void:
@@ -2477,6 +2498,8 @@ func execute_action(action: StringName, target: Node3D, payload: AIFactSet) -> b
 
 
 func get_action_status(action: StringName) -> int:
+	if navigation_failed:
+		return 3 # FAILED
 	match action:
 		&"sleep":
 			if state in [State.TO_HOME, State.RESTING]:

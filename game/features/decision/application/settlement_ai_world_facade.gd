@@ -43,9 +43,11 @@ func capture(sequence: int) -> WorldSnapshot:
 		if needs_service != null and needs_service.has_toilet_request(citizen_id):
 			relief_candidates = needs_service.relief_candidates_for(actor)
 		var forestry_worker := actor.permanent_role == "forestry" and actor.is_employed() and not actor.is_player_controlled
+		var forestry_candidates: Array[Dictionary] = []
 		var sawmill_position := Vector3.INF
 		var warehouse_position := Vector3.INF
 		if forestry_worker and simulation._is_work_time() and not simulation.sawmill_positions.is_empty() and not simulation.warehouse_positions.is_empty() and simulation._has_storage_room_for_role("forestry"):
+			forestry_candidates = _forestry_candidates_for(actor)
 			sawmill_position = actor.employment_workplace.get_meta("service_position", actor.employment_workplace.global_position) if is_instance_valid(actor.employment_workplace) else simulation.sawmill_positions[0]
 			warehouse_position = simulation._get_nearest_delivery_position(actor.global_position)
 		var forestry_in_progress := actor.state in [Citizen.State.TO_TREE, Citizen.State.CHOPPING, Citizen.State.TO_SAWMILL]
@@ -177,6 +179,7 @@ func capture(sequence: int) -> WorldSnapshot:
 				&"work.forestry.worker": forestry_worker,
 				&"work.forestry.in_progress": forestry_in_progress,
 				&"work.forestry.can_start": sawmill_position != Vector3.INF and warehouse_position != Vector3.INF,
+				&"work.forestry.candidates": forestry_candidates,
 				&"work.forestry.sawmill_position": sawmill_position,
 				&"work.forestry.warehouse_position": warehouse_position,
 				&"work.farming.worker": farming_worker,
@@ -259,6 +262,21 @@ func _forestry_targets() -> Array[Dictionary]:
 	return targets
 
 
+func _forestry_candidates_for(actor: Citizen) -> Array[Dictionary]:
+	var targets: Array[Dictionary] = []
+	for tree_position: Vector3 in simulation.tree_positions:
+		var cell: Vector2i = simulation._cell_from_position(tree_position)
+		var tree: Node3D = simulation.tree_nodes.get(cell) as Node3D
+		if not is_instance_valid(tree) or bool(tree.get_meta("felled", false)):
+			continue
+		if simulation.tree_reservations.has(cell) and simulation.tree_reservations[cell] != actor:
+			continue
+		var access: Vector3 = simulation._resource_access_position(actor.global_position, tree_position)
+		if access != Vector3.INF:
+			targets.append({&"id": StringName("tree:%d:%d" % [cell.x, cell.y]), &"position": tree_position, &"access": access})
+	return targets
+
+
 func _gathering_targets() -> Array[Dictionary]:
 	var targets: Array[Dictionary] = []
 	if not simulation._is_work_time():
@@ -318,6 +336,9 @@ func _gathering_candidates_for(actor: Citizen) -> Array[Dictionary]:
 			var grass_node := grass_source.get(&"node") as Node3D
 			if int(grass_source.get(&"remaining", 0)) <= 0 or not is_instance_valid(grass_node) or simulation.grass_reservations.has(grass_cell):
 				continue
+			var route: RouteResult = simulation._find_path_around_houses(actor.global_position, grass_node.global_position, false)
+			if not route.reachable:
+				continue
 			candidates.append({
 				&"id": StringName("grass:%d:%d" % [grass_cell.x, grass_cell.y]),
 				&"resource_type": "grass",
@@ -337,7 +358,7 @@ func _gathering_candidates_for(actor: Citizen) -> Array[Dictionary]:
 		var hand_limit := ceili(float(int(tree.get_meta("initial_branches", tree.get_meta("remaining_branches", 0)))) * 0.3)
 		if not bool(simulation.settlement.tools.get("axe", false)) and int(tree.get_meta("hand_branches", 0)) >= hand_limit:
 			continue
-		var access_position := _resource_access_position(tree_position)
+		var access_position: Vector3 = simulation._resource_access_position(actor.global_position, tree_position)
 		if access_position == Vector3.INF:
 			continue
 		candidates.append({
@@ -358,9 +379,10 @@ func _reserve_command_for(actor: Citizen, role: String) -> Dictionary:
 		"forestry":
 			if simulation.sawmill_positions.is_empty():
 				return {}
-			var tree: Vector3 = _nearest_tree(actor, false)
-			var access := _resource_access_position(tree)
-			if tree == Vector3.INF or access == Vector3.INF:
+			var tree_assignment := _nearest_tree_assignment(actor, false)
+			var tree: Vector3 = tree_assignment.get(&"position", Vector3.INF)
+			var access: Vector3 = tree_assignment.get(&"access", Vector3.INF)
+			if tree == Vector3.INF:
 				return {}
 			return {
 				&"reserve.action": &"forestry", &"target.position": tree,
@@ -430,8 +452,9 @@ func _reserve_gathering_command(actor: Citizen, role: String, warehouse: Vector3
 	match role:
 		"gather_branches":
 			resource_type = "branches"
-			source = _nearest_tree(actor, true)
-			access = _resource_access_position(source)
+			var tree_assignment := _nearest_tree_assignment(actor, true)
+			source = tree_assignment.get(&"position", Vector3.INF)
+			access = tree_assignment.get(&"access", Vector3.INF)
 		"gather_grass":
 			resource_type = "grass"
 			source = _nearest_grass(actor)
@@ -486,6 +509,28 @@ func _nearest_tree(actor: Citizen, branches_only: bool) -> Vector3:
 		var distance := actor.global_position.distance_squared_to(position)
 		if distance < best_distance:
 			best = position
+			best_distance = distance
+	return best
+
+
+func _nearest_tree_assignment(actor: Citizen, branches_only: bool) -> Dictionary:
+	var best: Dictionary = {}
+	var best_distance := INF
+	for position: Vector3 in simulation.tree_positions:
+		var cell: Vector2i = simulation._cell_from_position(position)
+		if simulation.tree_reservations.has(cell) and simulation.tree_reservations[cell] != actor:
+			continue
+		var tree := simulation.tree_nodes.get(cell) as Node3D
+		if not is_instance_valid(tree) or bool(tree.get_meta("felled", false)):
+			continue
+		if branches_only and int(tree.get_meta("remaining_branches", 0)) <= 0:
+			continue
+		var access: Vector3 = simulation._resource_access_position(actor.global_position, position)
+		if access == Vector3.INF:
+			continue
+		var distance := actor.global_position.distance_squared_to(access)
+		if distance < best_distance:
+			best = {&"position": position, &"access": access}
 			best_distance = distance
 	return best
 

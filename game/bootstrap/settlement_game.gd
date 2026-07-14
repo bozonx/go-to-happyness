@@ -6802,11 +6802,11 @@ func food_gathering_candidates(citizen: Citizen) -> Array[Dictionary]:
 		return candidates
 	for cell in forage_sources:
 		var node := (forage_sources[cell] as Dictionary).get("node") as Node3D
-		if is_instance_valid(node):
+		if is_instance_valid(node) and _find_path_around_houses(citizen.global_position, node.global_position, false).reachable:
 			candidates.append({&"id": StringName("plant:%d:%d" % [cell.x, cell.y]), &"resource_type": "food", &"position": node.global_position, &"access": node.global_position, &"warehouse_position": _get_nearest_delivery_position(citizen.global_position)})
 	for cell in rabbit_sources:
 		var node := (rabbit_sources[cell] as Dictionary).get("node") as Node3D
-		if is_instance_valid(node):
+		if is_instance_valid(node) and _find_path_around_houses(citizen.global_position, node.global_position, false).reachable:
 			candidates.append({&"id": StringName("rabbit:%d:%d" % [cell.x, cell.y]), &"resource_type": "food", &"position": node.global_position, &"access": node.global_position, &"warehouse_position": _get_nearest_delivery_position(citizen.global_position)})
 	candidates.sort_custom(func(a, b): return (a[&"position"] as Vector3).distance_squared_to(citizen.global_position) < (b[&"position"] as Vector3).distance_squared_to(citizen.global_position))
 	return candidates

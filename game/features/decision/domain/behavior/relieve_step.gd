@@ -36,6 +36,8 @@ func _tick(context: BehaviorContext, _delta: float) -> Status:
 		return Status.FAILURE
 	if not bool(context.citizen.facts.value(&"needs.toilet_requested", false)):
 		return Status.SUCCESS
+	if not _renew(context):
+		return Status.FAILURE
 	var status := context.actuator.action_status()
 	if status == CitizenActuator.ActionStatus.SUCCEEDED:
 		return Status.SUCCESS
@@ -58,3 +60,12 @@ func _release(context: BehaviorContext) -> void:
 	if not _reservation_key.is_empty() and context.snapshot != null and context.citizen != null:
 		context.snapshot.reservations.release(_reservation_key, context.citizen.id)
 	_reservation_key.clear()
+
+
+func _renew(context: BehaviorContext) -> bool:
+	return (
+		not _reservation_key.is_empty()
+		and context.snapshot != null
+		and context.citizen != null
+		and context.snapshot.reservations.claim(_reservation_key, context.citizen.id, context.snapshot.simulation_seconds, RESERVATION_TTL)
+	)

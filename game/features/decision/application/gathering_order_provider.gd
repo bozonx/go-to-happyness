@@ -55,7 +55,9 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 func _closest_free_candidate(snapshot: WorldSnapshot, citizen: CitizenSnapshot, assigned_sources: Dictionary) -> Dictionary:
 	var global_candidates: Array = snapshot.settlement.value(&"work.gathering.targets", []) as Array
 	var role := citizen.facts.value(&"work.gathering.role", &"") as StringName
-	var candidates: Array = global_candidates if not global_candidates.is_empty() and role != &"gather_food" else citizen.facts.value(&"work.gathering.candidates", []) as Array
+	var candidates: Array = citizen.facts.value(&"work.gathering.candidates", []) as Array
+	if not citizen.facts.has(&"work.gathering.candidates"):
+		candidates = global_candidates if role != &"gather_food" else []
 	var best: Dictionary = {}
 	var best_distance := INF
 	for candidate_value in candidates:

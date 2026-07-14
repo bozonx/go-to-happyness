@@ -80,6 +80,7 @@ func _init() -> void:
 	_test_navigation_grid_revision()
 	_test_trail_field()
 	_test_citizen_replans_on_navigation_revision()
+	_test_citizen_route_failure_marks_action_failed()
 	_test_building_queue_routing()
 	_test_canteen_meal_requests()
 	_test_construction_progress()
@@ -696,6 +697,21 @@ func _test_citizen_replans_on_navigation_revision() -> void:
 	citizen._invalidate_route_for_navigation_change()
 	assert(citizen.active_route == null)
 	assert(citizen.route_retry_timer >= 0.0 and citizen.route_retry_timer <= Citizen.STALE_NAVIGATION_REPLAN_JITTER)
+	citizen.free()
+
+
+func _test_citizen_route_failure_marks_action_failed() -> void:
+	var citizen := Citizen.new()
+	citizen.ai_id = 11
+	citizen.navigation_revision_query = func() -> int:
+		return 4
+	citizen.start_production_cycle("wood", Vector3(3.0, 0.0, 0.0), Vector3(4.0, 0.0, 0.0), Vector3(5.0, 0.0, 0.0), false, Vector3(1.0, 0.0, 0.0))
+	citizen.path_destination = Vector3(1.0, 0.0, 0.0)
+	citizen.active_route = RouteResult.unreachable(4)
+	citizen.route_retry_timer = Citizen.ROUTE_UNREACHABLE_FAILURE_TIME * 2.0
+	for _i in range(ceili(Citizen.ROUTE_UNREACHABLE_FAILURE_TIME / 0.5) + 1):
+		citizen._process_to_source(0.5)
+	assert(citizen.get_action_status(&"forestry") == CitizenActuator.ActionStatus.FAILED)
 	citizen.free()
 
 
