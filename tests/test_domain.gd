@@ -47,6 +47,9 @@ class FakeCourierDispatcher extends RefCounted:
 	func complete_for(_worker: Citizen) -> void:
 		completed += 1
 
+	func task_for(_worker: Citizen) -> RefCounted:
+		return null
+
 
 class FakeStorageSimulation extends Node:
 	var settlement := SettlementState.new()
@@ -134,6 +137,10 @@ func _init() -> void:
 	_test_building_research_service()
 	_test_cheer_up_mechanic()
 	_test_water_collector_service()
+	_test_resource_pile_decay_rates()
+	_test_warehouse_reservation_at_assignment()
+	_test_balanced_warehouse_mode()
+	_test_backpack_invariants()
 	quit(0)
 
 
@@ -1449,3 +1456,73 @@ func _test_water_collector_service() -> void:
 
 	collector.free()
 	simulation.free()
+
+
+func _test_resource_pile_decay_rates() -> void:
+	assert(TentEraSurvivalRulesScript.pile_decay_rate("food", false) == 0.05)
+	assert(TentEraSurvivalRulesScript.pile_decay_rate("food", true) == 0.10)
+	assert(TentEraSurvivalRulesScript.pile_decay_rate("branches", false) == 0.05)
+	assert(TentEraSurvivalRulesScript.pile_decay_rate("branches", true) == 0.10)
+	assert(TentEraSurvivalRulesScript.pile_decay_rate("boards", false) == 0.0)
+	assert(TentEraSurvivalRulesScript.pile_decay_rate("boards", true) == 0.03)
+	assert(TentEraSurvivalRulesScript.pile_decay_rate("stone", false) == 0.0)
+	assert(TentEraSurvivalRulesScript.pile_decay_rate("stone", true) == 0.0)
+	assert(TentEraSurvivalRulesScript.pile_decay_rate("water", false) == 0.05)
+	assert(TentEraSurvivalRulesScript.pile_decay_rate("water", true) == 0.0)
+
+
+func _test_warehouse_reservation_at_assignment() -> void:
+	var state := SettlementState.new()
+	state.apply_tent_start()
+	state.add_warehouse("warehouse")
+	state.warehouse_ever_built = true
+	state.ensure_storage_defaults(1)
+	state.branches = 10
+
+	var warehouse := state.warehouses[0]
+	var room_before := warehouse.room_for("branches", SettlementState.STORAGE_WEIGHTS)
+	assert(state.reserve_warehouse_room(0, "branches", 5))
+	assert(warehouse.room_for("branches", SettlementState.STORAGE_WEIGHTS) < room_before)
+	# Releasing should restore the room.
+	state.release_warehouse_reservation(0, "branches", 5)
+	assert(warehouse.room_for("branches", SettlementState.STORAGE_WEIGHTS) == room_before)
+
+
+func _test_balanced_warehouse_mode() -> void:
+	var state := SettlementState.new()
+	state.apply_tent_start()
+	state.add_warehouse("warehouse")
+	state.add_warehouse("warehouse")
+	state.warehouse_ever_built = true
+	state.ensure_storage_defaults(2)
+	state.balanced_warehouse_mode = true
+	state.warehouses[0].add("branches", 10, SettlementState.STORAGE_WEIGHTS)
+	state.warehouses[1].add("branches", 2, SettlementState.STORAGE_WEIGHTS)
+	# Balanced mode should pick the less-filled warehouse for new goods.
+	var index := state.find_warehouse_index(Vector3.ZERO, "branches", 1, [Vector3.ZERO, Vector3(10.0, 0.0, 0.0)])
+	assert(index == 1)
+	# With balanced mode off, the nearest warehouse wins.
+	state.balanced_warehouse_mode = false
+	index = state.find_warehouse_index(Vector3.ZERO, "branches", 1, [Vector3.ZERO, Vector3(10.0, 0.0, 0.0)])
+	assert(index == 0)
+
+
+func _test_backpack_invariants() -> void:
+	var state := SettlementState.new()
+	state.apply_tent_start()
+	assert(not state.warehouse_ever_built)
+	# Resources added before the first warehouse land in the backpack.
+	state.add("branches", 10)
+	assert(state.backpack_amount("branches") == 10)
+	assert(state.amount("branches") == 10)
+	# Money always remains virtual and goes directly into settlement money.
+	var old_money := state.money
+	state.add("money", 50)
+	assert(state.money == old_money + 50)
+	# After building a warehouse, backpack migrates and future additions go to warehouses.
+	state.add_warehouse("warehouse")
+	state.warehouse_ever_built = true
+	state.ensure_storage_defaults(1)
+	state.migrate_virtual_to_warehouse(1)
+	assert(state.backpack_amount("branches") == 0)
+	assert(state.amount("branches") == 10)

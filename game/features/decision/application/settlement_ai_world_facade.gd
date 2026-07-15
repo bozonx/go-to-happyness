@@ -115,11 +115,12 @@ func capture(sequence: int) -> WorldSnapshot:
 		if daily_order_role.begins_with("gather_") and simulation._has_storage_room_for_role(daily_order_role):
 			daily_gathering_candidates = _daily_gathering_targets_for(actor, daily_order_role)
 		var daily_gathering_can_start := daily_order_active and daily_order_role.begins_with("gather_") and not daily_gathering_candidates.is_empty()
-		var daily_cleaning_in_progress := daily_order_active and daily_order_role == "cleaning" and actor.active_role == "cleaning" and actor.state in [Citizen.State.TO_CLEANING_PILE, Citizen.State.CLEANING_PILE, Citizen.State.TO_WAREHOUSE]
+		var is_daily_courier := daily_order_active and daily_order_role == "courier"
+		var daily_cleaning_in_progress := (daily_order_active and daily_order_role == "cleaning" and actor.active_role == "cleaning" and actor.state in [Citizen.State.TO_CLEANING_PILE, Citizen.State.CLEANING_PILE, Citizen.State.TO_WAREHOUSE]) or (is_daily_courier and actor.active_role == "cleaning" and actor.state in [Citizen.State.TO_CLEANING_PILE, Citizen.State.CLEANING_PILE, Citizen.State.TO_WAREHOUSE])
 		var daily_cleaning_candidates: Array[Dictionary] = []
-		if daily_order_role == "cleaning" and daily_order_active and simulation._is_work_time():
+		if (daily_order_role == "cleaning" or is_daily_courier) and daily_order_active and simulation._is_work_time():
 			daily_cleaning_candidates = _cleaning_targets()
-		var daily_cleaning_can_start: bool = daily_order_active and daily_order_role == "cleaning" and simulation._is_work_time() and not daily_cleaning_candidates.is_empty()
+		var daily_cleaning_can_start: bool = (daily_order_active and daily_order_role == "cleaning" and simulation._is_work_time() and not daily_cleaning_candidates.is_empty()) or (is_daily_courier and simulation._is_work_time() and not daily_cleaning_candidates.is_empty())
 		var excavation_worker := actor.permanent_role == "excavation" and actor.is_employed() and not actor.is_player_controlled
 		var excavation_in_progress := excavation_worker and actor.active_role == "excavation" and actor.state in [Citizen.State.EXCAVATING, Citizen.State.WAITING_COURIER]
 		var excavation_candidates: Array[Dictionary] = []
@@ -274,7 +275,7 @@ func capture(sequence: int) -> WorldSnapshot:
 				&"daily.cleaning.in_progress": daily_cleaning_in_progress,
 				&"daily.cleaning.can_start": daily_cleaning_can_start,
 				&"daily.cleaning.candidates": daily_cleaning_candidates,
-				&"daily.cleaning.warehouse_position": simulation._get_nearest_delivery_position(actor.global_position) if daily_order_role == "cleaning" else Vector3.INF,
+				&"daily.cleaning.warehouse_position": simulation._get_nearest_delivery_position(actor.global_position) if daily_order_role in ["cleaning", "courier"] else Vector3.INF,
 				&"workforce.worker_data": worker_data,
 				&"workforce.pending_workplace_key": _workplace_target_key(actor.pending_employment_workplace),
 				&"workforce.pending_workplace_position": actor.pending_employment_workplace.global_position if is_instance_valid(actor.pending_employment_workplace) else Vector3.INF,
@@ -378,6 +379,20 @@ func _cleaning_targets() -> Array[Dictionary]:
 				&"resource_type": str(resource_type),
 				&"position": pile_node.global_position,
 				&"access": pile_node.global_position,
+			})
+	# The starter backpack is a non-decaying pile that couriers can empty into warehouses.
+	if simulation.backpack_position != Vector3.ZERO:
+		var backpack_cell: Vector2i = simulation._cell_from_position(simulation.backpack_position)
+		for resource_type in simulation.settlement.backpack:
+			var available := int(simulation.settlement.backpack.get(resource_type, 0))
+			if available <= 0 or not simulation.settlement.can_make_room_for(str(resource_type), 1, simulation.warehouse_positions.size()):
+				continue
+			targets.append({
+				&"id": StringName("backpack:%d:%d:%s" % [backpack_cell.x, backpack_cell.y, str(resource_type)]),
+				&"pile_id": StringName("backpack:%d:%d" % [backpack_cell.x, backpack_cell.y]),
+				&"resource_type": str(resource_type),
+				&"position": simulation.backpack_position,
+				&"access": simulation.backpack_position,
 			})
 	return targets
 

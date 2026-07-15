@@ -61,6 +61,25 @@ pocket is empty at a warehouse, `F` opens a menu to take goods back into the poc
 Only the hero can gather, deliver, or occupy workplace jobs from first-person mode.
 Other citizens can be controlled only for movement (observation / rescue).
 
+## Storage & Logistics
+
+- **Backpack**: Before the first warehouse is built, resources live in a virtual starter backpack shown separately in the HUD. The backpack never decays, cannot receive new resources after the start, and its consumables (food, water, construction gloves) are used directly by the settlement.
+- **Migration**: Building the first warehouse automatically moves backpack contents into the new warehouse.
+- **Ground piles**: Dropped resources form piles on the ground. They decay daily based on type and weather:
+  - Biological (food, grass, branches, logs, wood, hides): 5% per day, 10% while raining.
+  - Crafted (goods, boards, tarp): 3% per day only while raining.
+  - Inert (stone, clay, bricks, soil): no decay.
+  - Water: evaporates 5% per day on non-rain days.
+- **Balanced warehouse mode**: In the campfire orders menu you can enable balanced storage, which spreads each resource evenly across warehouses by fill percentage instead of always filling the nearest one.
+- **Daily Courier order**: In the daily orders menu, assign a citizen as a Courier for the day. They will move ground piles (and backpack leftovers if any) into the warehouse.
+- **Warehouse reservation**: When a courier is assigned to move resources to a warehouse, the destination room is reserved immediately so another delivery cannot steal the space before arrival.
+- **FPP storage interaction**: In first-person mode, stand next to a warehouse and press `F` to deposit one pocket item or `Shift+F` to deposit everything. With an empty pocket, `F` opens a menu to take goods from the warehouse.
+
+## Cheats
+
+- `Ctrl+F` grants extra resources, but only after the first warehouse has been built.
+- Money cheat adds virtual currency directly and is not restricted.
+
 ## Tent Era Survival
 
 The Tent Era implements the following systems:

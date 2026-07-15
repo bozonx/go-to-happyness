@@ -37,3 +37,20 @@ static func rain_hourly_decay_losses(amounts: Dictionary, exposed_ratio := 1.0) 
 			var exposed_amount := amount * clampf(exposed_ratio, 0.0, 1.0)
 			losses[resource_type] = mini(amount, ceili(exposed_amount * 0.05))
 	return losses
+
+
+## Daily decay for ground piles. Biological goods rot (5% per day, 10% in rain),
+## crafted goods rot slowly only while it is raining, stone/clay/bricks are
+## inert, and water evaporates under the sun (non-rain days).
+const PILE_BIOLOGICAL := ["food", "grass", "branches", "logs", "wood", "hides"]
+const PILE_CRAFTED := ["goods", "boards", "tarp"]
+const PILE_INERT := ["stone", "clay", "bricks", "soil"]
+
+static func pile_decay_rate(resource_type: String, is_raining: bool) -> float:
+	if resource_type in PILE_BIOLOGICAL:
+		return 0.10 if is_raining else 0.05
+	if resource_type in PILE_CRAFTED:
+		return 0.03 if is_raining else 0.0
+	if resource_type == "water":
+		return 0.0 if is_raining else 0.05
+	return 0.0

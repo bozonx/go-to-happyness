@@ -430,6 +430,7 @@ var trail_overlay: MeshInstance3D
 var trail_overlay_material: ShaderMaterial
 var campfire_orders_menu: Panel
 var campfire_orders_toggle: CheckButton
+var campfire_balanced_warehouse_toggle: CheckButton
 var campfire_cheer_button: Button
 
 
@@ -1131,7 +1132,7 @@ func _publish_courier_tasks(dispatcher: RefCounted) -> void:
 		for worker in citizens:
 			if worker != null and worker.has_pending_resource() and not courier_dispatcher.is_manually_targeted(worker):
 				var worker_position: Vector3 = worker.global_position
-				var worker_dropoff := _warehouse_delivery_position(worker_position, worker.carried_resource_type, worker.carried_amount)
+				var worker_dropoff := _warehouse_delivery_position(worker_position, worker.resource_type, worker.carried_amount)
 				dispatcher.publish(StringName("worker_%d" % worker.get_instance_id()), CourierTask.Kind.WORKER_PICKUP, 45, worker_position, worker_dropoff, {"worker": worker})
 	var sorted_sites := construction_sites.duplicate()
 	sorted_sites.sort_custom(func(a: ConstructionSite, b: ConstructionSite) -> bool:
@@ -1307,12 +1308,28 @@ func _start_courier_task(courier: Citizen, task: RefCounted) -> bool:
 			trade_service.assign_order_to_worker(courier, order)
 			return true
 		CourierTask.Kind.SAWMILL_PICKUP:
+			var sawmill_stock := sawmills.stock_at(task.payload.position, runtime_seconds)
+			var sawmill_amount := mini(courier.courier_capacity(), int(sawmill_stock.boards))
+			if sawmill_amount <= 0 or not _reserve_task_warehouse_space(task, "boards", sawmill_amount):
+				return false
 			courier.assign_sawmill_pickup(task.payload.position, task.dropoff)
 			return true
 		CourierTask.Kind.DEW_PICKUP:
+			var dew_stored := water_collector_service.stored_at(task.payload.position)
+			var dew_amount := mini(courier.courier_capacity(), dew_stored)
+			if dew_amount <= 0 or not _reserve_task_warehouse_space(task, "water", dew_amount):
+				return false
 			courier.assign_dew_collector_pickup(task.payload.position, task.dropoff)
 			return true
 		CourierTask.Kind.WORKER_PICKUP:
+			var worker: Citizen = task.payload.worker
+			var worker_resource: String = worker.resource_type
+			var worker_amount := worker.carried_amount
+			if worker_amount <= 0:
+				worker_amount = int(worker.pending_resources.get(worker_resource, 0))
+			worker_amount = mini(courier.courier_capacity(), worker_amount)
+			if worker_amount <= 0 or worker_resource.is_empty() or not _reserve_task_warehouse_space(task, worker_resource, worker_amount):
+				return false
 			courier.assign_courier_pickup(task.payload.worker, task.dropoff)
 			return true
 		CourierTask.Kind.CONSTRUCTION:
@@ -1348,6 +1365,31 @@ func _start_courier_task(courier: Citizen, task: RefCounted) -> bool:
 					return true
 			return false
 	return false
+
+
+func _reserve_task_warehouse_space(task: RefCounted, resource_type: String, amount: int) -> bool:
+	if task == null or amount <= 0 or resource_type.is_empty() or warehouse_positions.is_empty():
+		return false
+	var index := warehouse_positions.find(task.dropoff)
+	if index < 0:
+		index = settlement.find_warehouse_index(task.dropoff, resource_type, amount, warehouse_positions)
+	if index < 0:
+		return false
+	if not settlement.reserve_warehouse_room(index, resource_type, amount):
+		return false
+	task.reserved_warehouse_index = index
+	task.reserved_resource_type = resource_type
+	task.reserved_amount = amount
+	return true
+
+
+func _release_task_warehouse_reservation(task: RefCounted) -> void:
+	if task == null or task.reserved_warehouse_index < 0 or task.reserved_amount <= 0 or task.reserved_resource_type.is_empty():
+		return
+	settlement.release_warehouse_reservation(task.reserved_warehouse_index, task.reserved_resource_type, task.reserved_amount)
+	task.reserved_warehouse_index = -1
+	task.reserved_resource_type = ""
+	task.reserved_amount = 0
 
 
 func _reconcile_construction_reservations(site: ConstructionSite) -> void:
@@ -2371,7 +2413,7 @@ func _create_starter_backpack() -> void:
 	var terrain_height := _terrain_height_at(backpack_position.x, backpack_position.z, 0.0)
 	if not is_nan(terrain_height):
 		backpack_position.y = terrain_height + 0.08
-	_create_resource_pile(backpack_position, settlement.backpack)
+	_create_resource_pile(backpack_position, settlement.backpack, true)
 	if not resource_piles.is_empty():
 		backpack_node = resource_piles[resource_piles.size() - 1].node
 
@@ -6090,6 +6132,9 @@ func _send_citizen_to_leisure(citizen: Citizen, minimum_hours := 0) -> bool:
 	return false
 
 func _grant_debug_resources() -> void:
+	if not settlement.warehouse_ever_built:
+		_update_interface("Resources can only be added after the first warehouse is built.")
+		return
 	# Approximate early-to-late material demand, rather than equal stacks.
 	var grants := {"money": 30, "branches": 36, "grass": 20, "water": 24, "food": 18, "hides": 8, "goods": 8, "logs": 16, "wood": 10, "soil": 28, "clay": 22, "boards": 18, "stone": 15, "bricks": 14}
 	for resource_type in grants:
@@ -6438,16 +6483,23 @@ func _create_campfire_orders_menu(ui: CanvasLayer) -> void:
 	campfire_orders_toggle.tooltip_text = "Residents trample trails faster. Route selection is unchanged."
 	campfire_orders_toggle.toggled.connect(_set_road_walking_order)
 	campfire_orders_menu.add_child(campfire_orders_toggle)
+	campfire_balanced_warehouse_toggle = CheckButton.new()
+	campfire_balanced_warehouse_toggle.text = "Balanced warehouse storage"
+	campfire_balanced_warehouse_toggle.position = Vector2(18, 96)
+	campfire_balanced_warehouse_toggle.size = Vector2(384, 32)
+	campfire_balanced_warehouse_toggle.tooltip_text = "Spread each good evenly between warehouses instead of filling the nearest one."
+	campfire_balanced_warehouse_toggle.toggled.connect(_set_balanced_warehouse_mode)
+	campfire_orders_menu.add_child(campfire_balanced_warehouse_toggle)
 	var description := Label.new()
 	description.text = "This order only strengthens new trail marks. Roads are not used for route selection yet."
-	description.position = Vector2(18, 98)
-	description.size = Vector2(384, 52)
+	description.position = Vector2(18, 136)
+	description.size = Vector2(384, 44)
 	description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	description.add_theme_font_size_override("font_size", 13)
 	campfire_orders_menu.add_child(description)
 	campfire_cheer_button = Button.new()
 	campfire_cheer_button.text = "Cheer up"
-	campfire_cheer_button.position = Vector2(18, 156)
+	campfire_cheer_button.position = Vector2(18, 188)
 	campfire_cheer_button.size = Vector2(384, 32)
 	campfire_cheer_button.tooltip_text = "Once per day. Raises wellbeing by 5%%."
 	campfire_cheer_button.pressed.connect(_cheer_up_settlement)
@@ -6461,12 +6513,15 @@ func _create_campfire_orders_menu(ui: CanvasLayer) -> void:
 
 
 func _show_campfire_orders_menu() -> void:
-	if campfire_orders_menu == null or campfire_orders_toggle == null or campfire_cheer_button == null:
+	if campfire_orders_menu == null or campfire_orders_toggle == null or campfire_cheer_button == null or campfire_balanced_warehouse_toggle == null:
 		return
 	campfire_menu.visible = false
 	campfire_orders_toggle.set_pressed_no_signal(settlement.road_walking_order_enabled)
 	campfire_orders_toggle.disabled = settlement.era != SettlementState.Era.TENT
 	campfire_orders_toggle.tooltip_text = "Available in the Tent Era." if campfire_orders_toggle.disabled else "Residents trample trails faster. Route selection is unchanged."
+	campfire_balanced_warehouse_toggle.set_pressed_no_signal(settlement.balanced_warehouse_mode)
+	campfire_balanced_warehouse_toggle.disabled = warehouse_positions.is_empty()
+	campfire_balanced_warehouse_toggle.tooltip_text = "Build a warehouse first." if campfire_balanced_warehouse_toggle.disabled else "Spread each good evenly between warehouses instead of filling the nearest one."
 	var hour := clock.hour()
 	var can_cheer := hour >= 6 and not settlement.cheer_up_used_today
 	campfire_cheer_button.disabled = not can_cheer
@@ -6485,6 +6540,11 @@ func _set_road_walking_order(enabled: bool) -> void:
 		return
 	settlement.road_walking_order_enabled = enabled
 	_update_interface("Trail-walking order %s. It does not change routes yet." % ("enabled" if enabled else "disabled"))
+
+
+func _set_balanced_warehouse_mode(enabled: bool) -> void:
+	settlement.balanced_warehouse_mode = enabled
+	_update_interface("Balanced warehouse storage %s." % ("enabled" if enabled else "disabled"))
 
 
 func _cheer_up_settlement() -> void:
@@ -8410,7 +8470,7 @@ func _select_best_campfire() -> void:
 	if is_instance_valid(campfire_node):
 		_activate_employment_centre(campfire_node)
 
-func _create_resource_pile(position: Vector3, resources: Dictionary) -> void:
+func _create_resource_pile(position: Vector3, resources: Dictionary, is_backpack_pile := false) -> void:
 	if resources.is_empty():
 		return
 	var normalized: Dictionary = {}
@@ -8495,7 +8555,7 @@ func _create_resource_pile(position: Vector3, resources: Dictionary) -> void:
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	pile.add_child(label)
 	add_child(pile)
-	resource_piles.append({"node": pile, "resources": normalized, "reserved": {}})
+	resource_piles.append({"node": pile, "resources": normalized, "reserved": {}, "is_backpack": is_backpack_pile})
 
 
 func _remove_backpack_pile() -> void:
@@ -8530,6 +8590,22 @@ func _drop_overflow_as_piles(overflow: Dictionary, base_position: Vector3) -> vo
 		_create_resource_pile(base_position + offset, pile_resources)
 
 
+func _refresh_resource_pile_label(pile: Dictionary) -> void:
+	var pile_node := pile.get("node") as Node3D
+	if not is_instance_valid(pile_node):
+		return
+	var label := pile_node.get_node_or_null("Label3D") as Label3D
+	if label == null:
+		return
+	var labels: Array[String] = []
+	for piled_resource in pile.resources:
+		var amount := int(pile.resources[piled_resource])
+		if amount > 0:
+			labels.append("%s x%d" % [str(piled_resource).to_upper(), amount])
+	labels.sort()
+	label.text = "\n".join(labels)
+
+
 func _drop_resource_pile(position: Vector3, resource_type: String, amount: int) -> void:
 	if resource_type.is_empty() or amount <= 0:
 		return
@@ -8552,11 +8628,14 @@ func _drop_resource_pile(position: Vector3, resource_type: String, amount: int) 
 	_create_resource_pile(position, {resource_type: amount})
 
 func _decay_resource_piles() -> void:
+	var is_raining := tent_weather == TentEraSurvivalRulesScript.Weather.RAIN
 	for index in range(resource_piles.size() - 1, -1, -1):
 		var pile: Dictionary = resource_piles[index]
+		if pile.get("is_backpack", false):
+			continue
 		for resource_type in pile.resources.keys():
 			var remaining := int(pile.resources[resource_type])
-			var daily_rate := 0.10 if resource_type == "food" else 0.05 if resource_type in ["grass", "branches", "wood", "logs"] else 0.0
+			var daily_rate := TentEraSurvivalRulesScript.pile_decay_rate(str(resource_type), is_raining)
 			if remaining > 0 and daily_rate > 0.0:
 				pile.resources[resource_type] = maxi(0, remaining - maxi(1, ceili(remaining * daily_rate)))
 		var empty := true
@@ -8569,6 +8648,7 @@ func _decay_resource_piles() -> void:
 			resource_piles.remove_at(index)
 		else:
 			resource_piles[index] = pile
+			_refresh_resource_pile_label(pile)
 
 func _return_in_transit_building_supplies(building: Node3D) -> void:
 	for citizen in citizens:

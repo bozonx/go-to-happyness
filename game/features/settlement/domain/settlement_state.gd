@@ -73,6 +73,7 @@ var wellbeing := 75
 var workday_hours := 8
 var night_shifts_allowed := false
 var road_walking_order_enabled := false
+var balanced_warehouse_mode := false
 var cheer_up_used_today := false
 var low_wellbeing_days := 0
 var tools := {"axe": false, "hand_saw": false, "shovel": false, "bucket": false, "hoe": false, "pickaxe": false}
@@ -160,6 +161,7 @@ func apply_tent_start(reset_progress := true) -> void:
 	workday_hours = 8
 	night_shifts_allowed = false
 	road_walking_order_enabled = false
+	balanced_warehouse_mode = false
 	cheer_up_used_today = false
 	low_wellbeing_days = 0
 	tools = {"axe": false, "hand_saw": false, "shovel": false, "bucket": false, "hoe": false, "pickaxe": false}
@@ -365,17 +367,34 @@ func storage_can_accept(resource_type: String, count: int) -> bool:
 	return storage_room_for(resource_type) >= count
 
 
-## Pick the nearest warehouse that can hold `count` units of the resource.
+## Pick the best warehouse that can hold `count` units of the resource.
+## In balanced mode the warehouse with the lowest fill percentage for this
+## resource is chosen; otherwise the nearest eligible warehouse wins.
 func find_warehouse_index(from_position: Vector3, resource_type: String, count: int, positions: Array[Vector3]) -> int:
 	if warehouses.is_empty() or positions.is_empty() or count <= 0:
 		return -1
-	var best_index := -1
-	var best_distance := INF
+	var candidates: Array[int] = []
 	for i in range(warehouses.size()):
 		if i >= positions.size():
 			continue
 		if warehouses[i].room_for(resource_type, STORAGE_WEIGHTS) < count:
 			continue
+		candidates.append(i)
+	if candidates.is_empty():
+		return -1
+	if balanced_warehouse_mode:
+		var best_index := candidates[0]
+		var best_ratio := INF
+		for i in candidates:
+			var capacity := maxi(1, warehouses[i].capacity)
+			var ratio := float(warehouses[i].amount(resource_type)) / float(capacity)
+			if ratio < best_ratio:
+				best_ratio = ratio
+				best_index = i
+		return best_index
+	var best_index := -1
+	var best_distance := INF
+	for i in candidates:
 		var distance := from_position.distance_squared_to(positions[i])
 		if distance < best_distance:
 			best_distance = distance

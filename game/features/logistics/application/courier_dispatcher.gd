@@ -73,7 +73,7 @@ func _publish_manual_worker_tasks() -> void:
 		if not worker.has_pending_resource():
 			courier.courier_worker = null
 			continue
-		var resource_type: String = worker.carried_resource_type
+		var resource_type: String = worker.resource_type
 		var amount := worker.carried_amount
 		var worker_position: Vector3 = worker.global_position if worker.is_inside_tree() else worker.position
 		var warehouse_index: int = simulation.settlement.find_warehouse_index(worker_position, resource_type, amount, simulation.warehouse_positions)
@@ -147,10 +147,15 @@ func _nearest_courier(couriers: Array[Citizen], pickup: Vector3) -> Citizen:
 func _cleanup_invalid_tasks() -> void:
 	for id: StringName in tasks.keys():
 		var task: CourierTask = tasks[id]
+		var became_unassigned := false
 		if task.is_assigned():
 			var courier := instance_from_id(task.assigned_courier_id) as Citizen
 			if is_instance_valid(courier) and courier.has_active_delivery():
 				continue
 			task.assigned_courier_id = -1
+			became_unassigned = true
+		if not simulation._is_courier_task_valid(task) or became_unassigned:
+			if task.has_reservation() and simulation.has_method("_release_task_warehouse_reservation"):
+				simulation._release_task_warehouse_reservation(task)
 		if not simulation._is_courier_task_valid(task):
 			tasks.erase(id)
