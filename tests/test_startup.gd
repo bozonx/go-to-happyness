@@ -12,6 +12,7 @@ func _init() -> void:
 	assert(simulation.citizens.size() == simulation.POPULATION)
 	assert(simulation.settlement.money == SettlementState.TENT_STARTING_MONEY)
 	assert(simulation.settlement.amount("food") == SettlementState.TENT_STARTING_FOOD)
+	assert(simulation.settlement.amount("water") == SettlementState.TENT_STARTING_WATER)
 	assert(simulation.settlement.branches == 0)
 	assert(is_instance_valid(simulation.citizen_ai))
 	assert(simulation.citizen_ai.brain_count() == simulation.citizens.size())

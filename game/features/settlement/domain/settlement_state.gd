@@ -9,6 +9,7 @@ enum StorageAvailability { OK, UNKNOWN_RESOURCE, NO_WAREHOUSE, NO_ROOM }
 
 const TENT_STARTING_MONEY := 500
 const TENT_STARTING_FOOD := 16
+const TENT_STARTING_WATER := 8
 const TENT_STARTING_POPULATION := 4
 const TENT_STARTING_WELLBEING := 75
 const TENT_STARTING_EQUIPMENT := {
@@ -119,7 +120,6 @@ func apply_tent_start(reset_progress := true) -> void:
 	stone = 0
 	bricks = 0
 	tarp = 1
-	water = 8
 	wellbeing = TENT_STARTING_WELLBEING
 	workday_hours = 8
 	night_shifts_allowed = false
@@ -143,6 +143,7 @@ func apply_tent_start(reset_progress := true) -> void:
 	warehouse_ever_built = false
 	debug_storage_capacity_bonus = 0
 	virtual_stock["food"] = TENT_STARTING_FOOD
+	virtual_stock["water"] = TENT_STARTING_WATER
 	if reset_progress:
 		buildings.clear()
 		for system_id in unlocked_systems.keys():

@@ -182,6 +182,7 @@ func _test_tent_start_config() -> void:
 	assert(state.era == SettlementState.Era.TENT)
 	assert(state.money == SettlementState.TENT_STARTING_MONEY)
 	assert(state.amount("food") == SettlementState.TENT_STARTING_FOOD)
+	assert(state.amount("water") == SettlementState.TENT_STARTING_WATER)
 	assert(state.branches == 0 and state.grass == 0)
 	assert(bool(state.equipment.flint_steel.owned))
 	assert(int(state.equipment.construction_gloves.sets) == 1)
@@ -250,14 +251,14 @@ func _test_virtual_stockpile_migration() -> void:
 	state.apply_tent_start()
 	assert(state.uses_virtual_storage())
 	# A small amount that fits into the first open-air warehouse (24 units).
-	# Starting food is 16 and has weight 1.0, so 8 more units of branches fit exactly.
-	state.add("branches", 8)
-	assert(state.amount("branches") == 8)
+	# Starting food is 16 and water is 4 units, leaving room for 4 branches.
+	state.add("branches", 4)
+	assert(state.amount("branches") == 4)
 	assert(state.branches == 0) # not yet in warehouse
 	state.buildings["warehouse"] = 1
 	var overflow := state.migrate_virtual_to_warehouse(1)
 	assert(not state.uses_virtual_storage())
-	assert(state.branches == 8)
+	assert(state.branches == 4)
 	assert(overflow.is_empty())
 	assert(state.virtual_stock.is_empty())
 

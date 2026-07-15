@@ -1111,8 +1111,13 @@ func _publish_courier_tasks(dispatcher: RefCounted) -> void:
 		for worker in citizens:
 			if worker != null and worker.has_pending_resource() and not courier_dispatcher.is_manually_targeted(worker):
 				dispatcher.publish(StringName("worker_%d" % worker.get_instance_id()), CourierTask.Kind.WORKER_PICKUP, 45, worker.global_position, warehouse_positions[0], {"worker": worker})
-	var site := _preferred_construction_site()
-	if site != null:
+	var sorted_sites := construction_sites.duplicate()
+	sorted_sites.sort_custom(func(a: ConstructionSite, b: ConstructionSite) -> bool:
+		return _construction_development_priority(a) > _construction_development_priority(b)
+	)
+	for site: ConstructionSite in sorted_sites:
+		if site == null or not is_instance_valid(site.node):
+			continue
 		for resource_type in site.required_materials:
 			var required := int(site.required_materials[resource_type])
 			var delivered := int(site.delivered_materials.get(resource_type, 0))
@@ -1121,7 +1126,6 @@ func _publish_courier_tasks(dispatcher: RefCounted) -> void:
 			if delivered + reserved < required and not source.is_empty():
 				var source_id := str(source.get("id", "storage"))
 				dispatcher.publish(StringName("construction_%s_%s_%s" % [site.node.get_instance_id(), resource_type, source_id]), CourierTask.Kind.CONSTRUCTION, 70, source.position, site.node.global_position, {"site": site, "resource": resource_type, "source": source})
-				break
 
 
 func _construction_material_source(resource_type: String) -> Dictionary:
