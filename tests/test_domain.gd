@@ -271,6 +271,29 @@ func _test_virtual_stockpile_migration() -> void:
 	assert(big_overflow.get("branches", 0) > 0)
 	assert(overflow_state.branches <= overflow_state.storage_capacity(1))
 
+	# Debug-grant scenario: a large pre-warehouse grant must not become ground piles
+	# once the first warehouse is built. A matching capacity bonus lets the migration
+	# absorb the whole virtual stock.
+	var debug_state := SettlementState.new()
+	debug_state.apply_tent_start()
+	var debug_grants := {"branches": 36, "grass": 20, "water": 24, "food": 18, "hides": 8, "goods": 8, "logs": 16, "wood": 10, "soil": 28, "clay": 22, "boards": 18, "stone": 15, "bricks": 14}
+	var starting_food := debug_state.amount("food")
+	var grant_units := 0.0
+	for resource_type in debug_grants:
+		debug_state.add(resource_type, debug_grants[resource_type])
+		grant_units += debug_grants[resource_type] * debug_state.storage_weight(resource_type)
+	grant_units += debug_state.amount("food") * debug_state.storage_weight("food")
+	debug_state.debug_storage_capacity_bonus = ceili(grant_units)
+	debug_state.buildings["warehouse"] = 1
+	var debug_overflow := debug_state.migrate_virtual_to_warehouse(1)
+	assert(debug_overflow.is_empty())
+	for resource_type in debug_grants:
+		var expected: int = debug_grants[resource_type]
+		if resource_type == "food":
+			expected += starting_food
+		assert(debug_state.amount(resource_type) >= expected)
+	assert(debug_state.virtual_stock.is_empty())
+
 
 func _test_trade_order_model() -> void:
 	var order := TradeOrderScript.entrance_purchase(

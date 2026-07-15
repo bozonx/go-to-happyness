@@ -5446,6 +5446,13 @@ func _grant_debug_resources() -> void:
 	if had_warehouse:
 		settlement.debug_storage_capacity_bonus = maxi(settlement.debug_storage_capacity_bonus, ceili(settlement.storage_used_units()))
 		settlement.ensure_storage_defaults(warehouse_positions.size())
+	else:
+		# Reserve enough bonus capacity so the first completed warehouse can hold the
+		# whole debug grant instead of dumping it as ground piles.
+		var grant_units := 0.0
+		for resource_type in grants:
+			grant_units += grants[resource_type] * settlement.storage_weight(resource_type)
+		settlement.debug_storage_capacity_bonus = maxi(settlement.debug_storage_capacity_bonus, ceili(grant_units))
 	_update_workers()
 	_request_courier_dispatch()
 	_update_interface("Debug resources added in normal spending proportions.")
