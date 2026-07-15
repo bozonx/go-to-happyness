@@ -44,7 +44,7 @@ func update_canteen_delivery() -> void:
 
 
 func cancel_canteen_delivery() -> void:
-	simulation.food += simulation.pending_canteen_delivery_amount
+	simulation.settlement.add("food", simulation.pending_canteen_delivery_amount)
 	simulation.pending_canteen_delivery = false
 	simulation.pending_canteen_carrier = null
 	simulation.pending_canteen_delivery_amount = 0

@@ -28,6 +28,7 @@ func _init() -> void:
 	simulation.settlement.add("branches", 20)
 	simulation.settlement.add("grass", 20)
 	simulation.warehouse_positions.append(Vector3.ZERO)
+	simulation.settlement.add_warehouse("warehouse")
 
 	simulation._update_couriers()
 	var construction_tasks: Array[CourierTask] = simulation.courier_dispatcher.available_tasks().filter(

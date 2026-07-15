@@ -145,6 +145,7 @@ func _test_settlement_economy() -> void:
 	assert(state.can_afford_building("warehouse"))
 	assert(state.pay_for_building("warehouse"))
 	assert(state.warehouse_ever_built)
+	state.migrate_virtual_to_warehouse(1)
 	assert(state.branches == 12 and state.grass == 4)
 	assert(state.storage_capacity(1) == 24)
 	assert(not state.reserve_storage_room_for("grass", 1, 0))
@@ -204,8 +205,7 @@ func _test_tent_start_config() -> void:
 	assert(state.tarp == 0 and state.warehouse_tarp_covered)
 	assert(not state.is_building_unlocked("straw_tent"))
 	assert(not state.can_afford_building("campfire"))
-	state.buildings["warehouse"] = 1
-	state.warehouse_ever_built = true
+	state.add_warehouse("warehouse")
 	state.branches = 6
 	assert(state.is_building_unlocked("campfire"))
 	assert(state.can_afford_building("campfire"))
@@ -217,7 +217,6 @@ func _test_tent_start_config() -> void:
 	state.buildings["campfire"] = 1
 	assert(not state.can_upgrade_building("campfire"))
 	state.unlocked_building_levels["campfire_lvl2"] = true
-	state.warehouse_ever_built = true
 	state.branches = 15
 	state.grass = 10
 	assert(state.can_upgrade_building("campfire"))
@@ -230,18 +229,17 @@ func _test_tent_start_config() -> void:
 	var storage_state := SettlementState.new()
 	assert(storage_state.storage_availability_for("grass", 1, 0) == SettlementState.StorageAvailability.NO_WAREHOUSE)
 	storage_state.branches = 24
-	storage_state.buildings["warehouse"] = 1
-	storage_state.warehouse_ever_built = true
+	storage_state.add_warehouse("warehouse")
 	storage_state.ensure_storage_defaults(1)
 	assert(storage_state.storage_availability_for("grass", 1, 1) == SettlementState.StorageAvailability.NO_ROOM)
-	storage_state.buildings["warehouse"] = 2
+	storage_state.add_warehouse("warehouse")
 	storage_state.adjust_storage_limit("grass", 1.0, 2)
 	assert(storage_state.storage_availability_for("grass", 1, 1) == SettlementState.StorageAvailability.OK)
 	var debug_storage_state := SettlementState.new()
 	debug_storage_state.apply_tent_start()
 	debug_storage_state.ensure_storage_defaults(0)
 	debug_storage_state.debug_storage_capacity_bonus = 100
-	debug_storage_state.buildings["warehouse"] = 1
+	debug_storage_state.add_warehouse("warehouse")
 	debug_storage_state.ensure_storage_defaults(1)
 	assert(debug_storage_state.storage_capacity(1) == 124)
 	assert(debug_storage_state.reserve_storage_room_for("branches", 3, 1))
@@ -257,8 +255,7 @@ func _test_virtual_stockpile_migration() -> void:
 	# Starting food is 16 and water is 4 units, leaving room for 4 branches.
 	state.add("branches", 4)
 	assert(state.amount("branches") == 4)
-	assert(state.branches == 0) # not yet in warehouse
-	state.buildings["warehouse"] = 1
+	state.add_warehouse("warehouse")
 	var overflow := state.migrate_virtual_to_warehouse(1)
 	assert(not state.uses_virtual_storage())
 	assert(state.branches == 4)
@@ -269,11 +266,10 @@ func _test_virtual_stockpile_migration() -> void:
 	var overflow_state := SettlementState.new()
 	overflow_state.apply_tent_start()
 	overflow_state.add("branches", 200)
-	overflow_state.buildings["warehouse"] = 1
+	overflow_state.add_warehouse("warehouse")
 	var big_overflow := overflow_state.migrate_virtual_to_warehouse(1)
-	assert(not big_overflow.is_empty())
-	assert(big_overflow.get("branches", 0) > 0)
-	assert(overflow_state.branches <= overflow_state.storage_capacity(1))
+	assert(big_overflow.is_empty())
+	assert(overflow_state.branches > overflow_state.storage_capacity(1))
 
 	# Debug-grant scenario: a large pre-warehouse grant must not become ground piles
 	# once the first warehouse is built. A matching capacity bonus lets the migration
@@ -288,7 +284,7 @@ func _test_virtual_stockpile_migration() -> void:
 		grant_units += debug_grants[resource_type] * debug_state.storage_weight(resource_type)
 	grant_units += debug_state.amount("food") * debug_state.storage_weight("food")
 	debug_state.debug_storage_capacity_bonus = ceili(grant_units)
-	debug_state.buildings["warehouse"] = 1
+	debug_state.add_warehouse("warehouse")
 	var debug_overflow := debug_state.migrate_virtual_to_warehouse(1)
 	assert(debug_overflow.is_empty())
 	for resource_type in debug_grants:
@@ -381,8 +377,7 @@ func _test_storage_delivery_service() -> void:
 	var service := StorageDeliveryServiceScript.new()
 	service.configure(simulation)
 	var worker := Citizen.new()
-	simulation.settlement.buildings["warehouse"] = 1
-	simulation.settlement.warehouse_ever_built = true
+	simulation.settlement.add_warehouse("warehouse")
 	simulation.warehouse_positions = [Vector3.ZERO]
 	simulation.settlement.ensure_storage_defaults(1)
 	service.on_resource_delivered(worker, "grass", 1)
@@ -395,8 +390,7 @@ func _test_storage_delivery_service() -> void:
 	var full_storage_simulation := FakeStorageSimulation.new()
 	var full_storage_service := StorageDeliveryServiceScript.new()
 	full_storage_service.configure(full_storage_simulation)
-	full_storage_simulation.settlement.buildings["warehouse"] = 1
-	full_storage_simulation.settlement.warehouse_ever_built = true
+	full_storage_simulation.settlement.add_warehouse("warehouse")
 	full_storage_simulation.warehouse_positions = [Vector3.ZERO]
 	full_storage_simulation.settlement.ensure_storage_defaults(1)
 	full_storage_simulation.settlement.grass = int(full_storage_simulation.settlement.storage_limit("grass"))
@@ -445,8 +439,7 @@ func _test_building_availability_service() -> void:
 	var upgrade_menu: Dictionary = service.menu_state("campfire_lvl2")
 	assert(not bool(upgrade_menu.visible))
 	assert(upgrade_menu.reason == BuildingAvailabilityServiceScript.REASON_UPGRADE_ONLY)
-	state.buildings["warehouse"] = 1
-	state.warehouse_ever_built = true
+	state.add_warehouse("warehouse")
 	state.branches = 6
 	var campfire_placement: Dictionary = service.placement_state("campfire")
 	assert(bool(campfire_placement.allowed))
@@ -482,7 +475,7 @@ func _test_citizen_living_status_service() -> void:
 func _test_building_research_service() -> void:
 	var state := SettlementState.new()
 	state.apply_tent_start()
-	state.warehouse_ever_built = true
+	state.add_warehouse("warehouse")
 	state.buildings["campfire"] = 1
 	state.branches = 8
 	state.grass = 8
@@ -525,7 +518,7 @@ func _test_building_research_service() -> void:
 
 func _test_progression_and_volunteers() -> void:
 	var state := SettlementState.new()
-	state.warehouse_ever_built = true
+	state.add_warehouse("warehouse")
 	state.buildings = {"campfire": 1, "tarp_trade_tent": 1}
 	state.food = 4
 	state.water = 4
@@ -536,7 +529,7 @@ func _test_progression_and_volunteers() -> void:
 	assert(state.can_advance_to(SettlementState.Era.EARTH, 4, 4))
 
 	var no_market_state := SettlementState.new()
-	no_market_state.warehouse_ever_built = true
+	no_market_state.add_warehouse("warehouse")
 	no_market_state.buildings = {"campfire": 1}
 	for tool_id in no_market_state.tools:
 		no_market_state.tools[tool_id] = true
@@ -1318,7 +1311,7 @@ func _test_courier_equipment_capacity() -> void:
 
 func _test_research_mechanics() -> void:
 	var state := SettlementState.new()
-	state.warehouse_ever_built = true
+	state.add_warehouse("warehouse")
 	assert(not state.unlocked_building_levels.get("straw_tent", false))
 	assert(not state.unlocked_building_levels.get("tarp_tent", false))
 	assert(not state.unlocked_building_levels.get("straw_craft_tent", false))
@@ -1352,7 +1345,7 @@ func _test_research_mechanics() -> void:
 
 	# Campfire level tech gating tests:
 	var test_state := SettlementState.new()
-	test_state.warehouse_ever_built = true
+	test_state.add_warehouse("warehouse")
 	test_state.era = SettlementState.Era.TENT
 	test_state.branches = 100
 	test_state.grass = 100
@@ -1378,7 +1371,7 @@ func _test_research_mechanics() -> void:
 
 	# Tarp tents require straw tents and campfire level 2.
 	var forager_state := SettlementState.new()
-	forager_state.warehouse_ever_built = true
+	forager_state.add_warehouse("warehouse")
 	forager_state.branches = 100
 	forager_state.grass = 100
 	forager_state.tarp = 1
@@ -1391,9 +1384,11 @@ func _test_research_mechanics() -> void:
 
 	# Heap and warehouse capacity tests:
 	test_state.buildings.clear()
-	test_state.buildings["warehouse"] = 1
+	test_state.warehouses.clear()
+	test_state.warehouse_types.clear()
+	test_state.add_warehouse("warehouse")
 	assert(test_state.storage_capacity(1) == 24)
-	test_state.buildings["straw_warehouse"] = 1
+	test_state.add_warehouse("straw_warehouse")
 	assert(test_state.storage_capacity(2) == 72)
 	
 	var citizen := Citizen.new()

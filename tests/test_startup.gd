@@ -235,6 +235,7 @@ func _init() -> void:
 	var added_test_warehouse := false
 	if simulation.warehouse_positions.is_empty():
 		simulation.warehouse_positions.append(supply_worker.global_position)
+		simulation.settlement.add_warehouse("warehouse")
 		added_test_warehouse = true
 	assert(simulation._reserve_player_gather_storage("branches", simulation.HERO_GATHER_YIELD) == simulation.HERO_GATHER_YIELD)
 	simulation._assign_daily_order(supply_worker, "construction")
@@ -249,6 +250,9 @@ func _init() -> void:
 	supply_worker.clear_daily_order()
 	if added_test_warehouse:
 		simulation.warehouse_positions.clear()
+		simulation.settlement.warehouses.clear()
+		simulation.settlement.warehouse_types.clear()
+		simulation.settlement.warehouse_ever_built = false
 
 	# Verify the dispatcher reservation/reconciliation path for construction supply.
 	simulation._assign_daily_order(logistics_worker, "courier")

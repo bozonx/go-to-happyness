@@ -904,7 +904,7 @@ func _update_recovery_arrival() -> void:
 	if citizens.size() < POPULATION and is_instance_valid(entrance_stone):
 		_add_citizen(entrance_stone.global_position + Vector3(0.8, 0.1, 1.2), "unassigned")
 		money += 100
-		food += 4
+		settlement.add("food", 4)
 		settlement.add_construction_glove_set()
 		_add_message("A survivor arrived with emergency supplies.")
 	recovery_arrival_at_minutes = _total_game_minutes() + random.randi_range(24, 48) * 60.0 if citizens.size() < POPULATION else -1.0
@@ -956,9 +956,9 @@ func _apply_daily_settlement_rules() -> void:
 	# Everyone drinks each day. When there is no kitchen running meals, they also
 	# eat straight from the stores; a working cooking campfire/canteen already
 	# draws food through the meal pipeline, so we don't double-count there.
-	water = maxi(0, water - population)
+	settlement.add("water", -population)
 	if not is_instance_valid(canteen):
-		food = maxi(0, food - TentEraSurvivalRulesScript.daily_food_consumption(population, tent_weather))
+		settlement.add("food", -TentEraSurvivalRulesScript.daily_food_consumption(population, tent_weather))
 	var housing := _total_housing_slots()
 	var change := SETTLEMENT_RULES.daily_wellbeing_change(housing >= population, float(food) / population, float(water) / population, settlement.workday_hours, settlement.night_shifts_allowed)
 	wellbeing = clampi(wellbeing + change, 0, 100)
@@ -1285,9 +1285,8 @@ func _start_courier_task(courier: Citizen, task: RefCounted) -> bool:
 			var amount := mini(courier.courier_capacity(), mini(food, capacity - canteen_food))
 			if amount <= 0:
 				return false
-			food -= amount
+			settlement.add("food", -amount)
 			pending_canteen_delivery = true
-			pending_canteen_carrier = courier
 			pending_canteen_delivery_amount = amount
 			courier.deliver_food_to_canteen(warehouse_positions[0], canteen_position, amount)
 			return true
@@ -1334,7 +1333,7 @@ func _start_courier_task(courier: Citizen, task: RefCounted) -> bool:
 				"repair":
 					if branches <= 0:
 						return false
-					branches -= 1
+					settlement.add("branches", -1)
 					building.set_meta("repair_reserved", true)
 					courier.assign_building_supply(building, warehouse_positions[0], "branches", "repair")
 					return true
@@ -1466,14 +1465,14 @@ func _on_factory_cycle(worker: Citizen, factory: Node3D) -> void:
 	if type == "brick_factory":
 		if clay < 1:
 			return
-		clay -= 1
+		settlement.add("clay", -1)
 		var produced := 1
 		if worker.skills.get("factory_worker", 0.0) >= 1.0 and randf() < 0.10:
 			produced = 2
 			_update_interface("Industrialist: Brick factory produced 2 bricks from 1 clay!")
 		else:
 			_update_interface("Brick factory produced 1 brick.")
-		bricks += produced
+		settlement.add("bricks", produced)
 
 func _on_resource_ready(worker: Citizen, resource_type: String, amount: int) -> void:
 	worker.register_pending_resource(resource_type, amount)
@@ -2334,7 +2333,7 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	citizen_ai.register_citizen(citizen.ai_id, SettlementCitizenActuatorScript.new(citizen, _ai_target_for_key))
 	citizen.tree_exiting.connect(_on_ai_citizen_exiting.bind(citizen.ai_id), CONNECT_ONE_SHOT)
 	if citizens.size() > POPULATION:
-		food += random.randi_range(2, 5)
+		settlement.add("food", random.randi_range(2, 5))
 	if hero_citizen == null:
 		hero_citizen = citizen
 		citizen.set_hero(true)
@@ -2625,8 +2624,8 @@ func _resolve_survival_decision(accept: bool) -> void:
 	elif pending_survival_decision == "traveler":
 		if accept:
 			if food >= 3 and water >= 2:
-				food -= 3
-				water -= 2
+				settlement.add("food", -3)
+				settlement.add("water", -2)
 				settlement.add("tarp", 1)
 				_add_message("Traded 3 food and 2 water for a tarp roll.")
 			else:
@@ -4757,12 +4756,14 @@ func _finish_demolition(site: DemolitionSite) -> void:
 	var active_kitchen_removed := canteen == building
 	var pile_resources: Dictionary = BuildingCatalog.demolition_refund(building_type).duplicate(true)
 	if building_type in ["warehouse", "straw_warehouse", "tarp_warehouse"]:
-		_move_stored_resources_to_pile(pile_resources)
+		var service_position: Vector3 = building.get_meta("service_position", building.global_position)
+		var warehouse_index := warehouse_positions.find(service_position)
+		_move_stored_resources_to_pile(pile_resources, warehouse_index)
 	_return_in_transit_building_supplies(building)
 	if active_kitchen_removed:
 		if pending_canteen_delivery:
 			_cancel_canteen_delivery()
-		food += canteen_food
+		settlement.add("food", canteen_food)
 		canteen_food = 0
 	for citizen in citizens:
 		citizen.finish_construction(building)
@@ -6217,7 +6218,7 @@ func _fell_tree_at(position_on_board: Vector3) -> void:
 		return
 	tree.set_meta("felled", true)
 	tree.rotation_degrees.z = 82.0
-	branches += 3
+	settlement.add("branches", 3)
 	_update_interface("A tree was felled. Its log is ready for delivery; the living tree is no longer available for gathering.")
 
 func _update_water_collectors(delta: float) -> void:
@@ -7494,7 +7495,9 @@ func _upgrade_selected_building() -> void:
 	if not settlement.can_upgrade_building(old_type):
 		_update_interface("Upgrade needs research and resources.")
 		return
-	if settlement.pay_for_building_upgrade(old_type).is_empty():
+	var service_position: Vector3 = selected_building.get_meta("service_position", selected_building.global_position)
+	var warehouse_index := warehouse_positions.find(service_position)
+	if settlement.pay_for_building_upgrade(old_type, warehouse_index).is_empty():
 		return
 	for child in selected_building.get_children():
 		selected_building.remove_child(child)
@@ -7509,7 +7512,6 @@ func _upgrade_selected_building() -> void:
 	_unregister_navigation_footprint(selected_building.global_position, old_footprint)
 	var is_home := target_type in ["tent", "straw_tent", "tarp_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house"]
 	_register_service_entrance(selected_building, blueprint, is_home, target_type not in ["farm", "park"])
-	var service_position: Vector3 = selected_building.get_meta("service_position", selected_building.global_position)
 	if target_type in ["campfire", "campfire_lvl2", "campfire_lvl3", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall"]:
 		campfire_node = selected_building
 		_activate_employment_centre(selected_building)
@@ -8324,7 +8326,9 @@ func _has_active_builder() -> bool:
 func _destroy_building_to_pile(building: Node3D, building_type: String) -> void:
 	var resources: Dictionary = BuildingCatalog.demolition_refund(building_type).duplicate(true)
 	if building_type in ["warehouse", "straw_warehouse", "tarp_warehouse"]:
-		_move_stored_resources_to_pile(resources)
+		var service_position: Vector3 = building.get_meta("service_position", building.global_position)
+		var warehouse_index := warehouse_positions.find(service_position)
+		_move_stored_resources_to_pile(resources, warehouse_index)
 	for citizen in citizens:
 		if citizen.home == building:
 			citizen.home = null
@@ -8344,7 +8348,15 @@ func _destroy_building_to_pile(building: Node3D, building_type: String) -> void:
 	_update_workers()
 
 
-func _move_stored_resources_to_pile(resources: Dictionary) -> void:
+func _move_stored_resources_to_pile(resources: Dictionary, warehouse_index := -1) -> void:
+	if warehouse_index >= 0 and warehouse_index < settlement.warehouses.size():
+		for resource_type in SettlementState.STORED_RESOURCES:
+			var amount := settlement.warehouses[warehouse_index].amount(resource_type)
+			if amount <= 0:
+				continue
+			resources[resource_type] = int(resources.get(resource_type, 0)) + amount
+			settlement.warehouses[warehouse_index].set_amount(resource_type, 0)
+		return
 	for resource_type in SettlementState.STORED_RESOURCES:
 		var amount := settlement.amount(resource_type)
 		if amount <= 0:

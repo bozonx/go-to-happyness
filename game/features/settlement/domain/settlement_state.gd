@@ -156,7 +156,6 @@ func apply_tent_start(reset_progress := true) -> void:
 	boards = 0
 	stone = 0
 	bricks = 0
-	tarp = 1
 	wellbeing = TENT_STARTING_WELLBEING
 	workday_hours = 8
 	night_shifts_allowed = false
@@ -183,6 +182,7 @@ func apply_tent_start(reset_progress := true) -> void:
 	debug_storage_capacity_bonus = 0
 	virtual_stock["food"] = TENT_STARTING_FOOD
 	virtual_stock["water"] = TENT_STARTING_WATER
+	virtual_stock["tarp"] = 1
 	if reset_progress:
 		buildings.clear()
 		for system_id in unlocked_systems.keys():
@@ -572,7 +572,7 @@ func can_upgrade_building(building_type: String) -> bool:
 			return false
 	return true
 
-func pay_for_building_upgrade(building_type: String) -> String:
+func pay_for_building_upgrade(building_type: String, warehouse_index := -1) -> String:
 	if not can_upgrade_building(building_type):
 		return ""
 	var target := next_building_upgrade(building_type)
@@ -581,11 +581,15 @@ func pay_for_building_upgrade(building_type: String) -> String:
 	buildings[building_type] = maxi(0, int(buildings.get(building_type, 0)) - 1)
 	buildings[target] = int(buildings.get(target, 0)) + 1
 	if building_type in ["warehouse", "straw_warehouse", "tarp_warehouse"] and target in ["warehouse", "straw_warehouse", "tarp_warehouse"]:
-		for i in range(warehouse_types.size()):
-			if warehouse_types[i] == building_type:
-				warehouse_types[i] = target
-				warehouses[i].capacity = WarehouseState.capacity_for_building_type(target, era)
-				break
+		var index := warehouse_index
+		if index < 0 or index >= warehouse_types.size():
+			for i in range(warehouse_types.size()):
+				if warehouse_types[i] == building_type:
+					index = i
+					break
+		if index >= 0 and index < warehouse_types.size():
+			warehouse_types[index] = target
+			warehouses[index].capacity = WarehouseState.capacity_for_building_type(target, era)
 	return target
 
 

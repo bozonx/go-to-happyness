@@ -12,6 +12,7 @@ func _init() -> void:
 
 	var warehouse_position := Vector3.ZERO
 	simulation.warehouse_positions.append(warehouse_position)
+	simulation.settlement.add_warehouse("warehouse")
 
 	var site_cell := Vector2i(8, 0)
 	var site_position := Vector3(8.0, 0.0, 0.0)
