@@ -16,6 +16,8 @@ const TYPE_CAPACITIES := {
 
 ## Total space units this warehouse can hold.
 var capacity: int = 0
+## resource_type -> max units this warehouse can hold of that resource.
+var resource_limits: Dictionary = {}
 ## resource_type -> count stored in this warehouse only.
 var resources: Dictionary = {}
 ## resource_type -> count reserved by in-flight deliveries to this warehouse.
@@ -27,6 +29,7 @@ func _init(p_capacity: int = 0) -> void:
 	for resource_type in STORED_RESOURCES:
 		resources[resource_type] = 0
 		reserved[resource_type] = 0
+		resource_limits[resource_type] = float(p_capacity)
 
 
 static func capacity_for_building_type(building_type: String, era: int) -> int:
@@ -87,6 +90,14 @@ func room_for(resource_type: String, weights: Dictionary) -> int:
 	var reserved_count := int(reserved.get(resource_type, 0))
 	var free := maxf(0.0, free_units(weights) - float(reserved_count) * weight)
 	return maxi(0, int(floor(free / weight)))
+
+
+func set_resource_limit(resource_type: String, limit_units: float) -> void:
+	resource_limits[resource_type] = maxf(0.0, limit_units)
+
+
+func resource_limit(resource_type: String) -> float:
+	return float(resource_limits.get(resource_type, float(capacity)))
 
 
 func reserve(resource_type: String, count: int, weights: Dictionary) -> bool:

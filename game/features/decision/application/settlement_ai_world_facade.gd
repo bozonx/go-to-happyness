@@ -205,6 +205,7 @@ func capture(sequence: int) -> WorldSnapshot:
 				&"hero": actor.is_hero,
 				&"needs.should_sleep": not simulation._is_work_time() and not actor.overtime_mode,
 				&"needs.has_home": is_instance_valid(actor.home),
+				&"needs.home_position": actor.home.global_position if is_instance_valid(actor.home) else Vector3.INF,
 				&"needs.can_start_sleep": can_start_personal_need,
 				&"needs.meal_requested": canteen_service != null and canteen_service.is_meal_requested(citizen_id),
 				&"needs.can_start_meal": canteen_service != null and can_start_personal_need and is_instance_valid(simulation.canteen),

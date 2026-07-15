@@ -2,6 +2,8 @@ class_name ExcavationGoal
 extends AICitizenGoal
 
 const ExcavationWorkStepScript = preload("res://game/features/decision/domain/behavior/excavation_work_step.gd")
+const MoveToStepScript = preload("res://game/features/decision/domain/behavior/move_to_step.gd")
+const SequenceStepScript = preload("res://game/features/decision/domain/behavior/sequence_step.gd")
 
 
 func _init() -> void:
@@ -15,5 +17,11 @@ func score(_snapshot: WorldSnapshot, citizen: CitizenSnapshot, order: CitizenOrd
 	return clampf(order.priority, 0.0, 1.0) if bool(citizen.facts.value(&"work.excavation.worker", false)) else 0.0
 
 
-func build_task(_snapshot: WorldSnapshot, _citizen: CitizenSnapshot, _order: CitizenOrder, _blackboard: AIBlackboard) -> BehaviorTask:
-	return BehaviorTask.new(id, ExcavationWorkStepScript.new(), false, "Excavate resource layer")
+func build_task(_snapshot: WorldSnapshot, _citizen: CitizenSnapshot, order: CitizenOrder, _blackboard: AIBlackboard) -> BehaviorTask:
+	var move_target: Variant = order.target_position if order != null else Vector3.INF
+	if not (move_target is Vector3) or move_target == Vector3.INF:
+		return null
+	return BehaviorTask.new(id, SequenceStepScript.new([
+		MoveToStepScript.new(move_target),
+		ExcavationWorkStepScript.new(),
+	]), false, "Excavate resource layer")

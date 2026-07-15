@@ -2,6 +2,8 @@ class_name MealGoal
 extends AICitizenGoal
 
 const EatAtCanteenStepScript = preload("res://game/features/decision/domain/behavior/eat_at_canteen_step.gd")
+const MoveToStepScript = preload("res://game/features/decision/domain/behavior/move_to_step.gd")
+const SequenceStepScript = preload("res://game/features/decision/domain/behavior/sequence_step.gd")
 
 
 func _init() -> void:
@@ -33,8 +35,13 @@ func score(
 
 func build_task(
 	_snapshot: WorldSnapshot,
-	_citizen: CitizenSnapshot,
+	citizen: CitizenSnapshot,
 	_order: CitizenOrder,
 	_blackboard: AIBlackboard
 ) -> BehaviorTask:
-	return BehaviorTask.new(id, EatAtCanteenStepScript.new(), true, "Eat at canteen")
+	var canteen_position: Variant = citizen.facts.value(&"needs.canteen_position", Vector3.INF)
+	if not (canteen_position is Vector3) or canteen_position == Vector3.INF:
+		return null
+	var approach := MoveToStepScript.new(canteen_position)
+	var eat := EatAtCanteenStepScript.new()
+	return BehaviorTask.new(id, SequenceStepScript.new([approach, eat]), true, "Eat at canteen")

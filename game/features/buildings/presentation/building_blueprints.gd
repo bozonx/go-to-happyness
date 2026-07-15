@@ -110,10 +110,8 @@ const COLORS := {
 }
 
 
-const MULTI_ENTRANCE_BUILDINGS := {
-	"warehouse": true,
-	"straw_warehouse": true,
-	"tarp_warehouse": true,
+# Buildings with two worker entrances (front and back), used by staff and couriers.
+const DUAL_WORKER_ENTRANCE_BUILDINGS := {
 	"sawmill": true,
 	"school": true,
 	"canteen": true,
@@ -126,17 +124,46 @@ const MULTI_ENTRANCE_BUILDINGS := {
 	"recycling_factory": true,
 	"metal_factory": true,
 	"brick_factory": true,
-	"leisure_center": true,
 	"builders_guild": true,
 	"stone_prefecture": true,
 	"stone_tavern": true,
-	"stone_market": true,
-	"clay_market": true,
-	"earth_market": true,
-	"wood_market": true,
-	"brick_market": true,
+}
+
+# Buildings that have a visitor entrance (for guests/clients), separate from worker entrances.
+const VISITOR_ENTRANCE_BUILDINGS := {
+	"campfire": true,
+	"campfire_lvl2": true,
+	"campfire_lvl3": true,
+	"cook_campfire": true,
+	"cook_campfire_lvl2": true,
+	"cook_campfire_lvl3": true,
+	"canteen": true,
+	"school": true,
+	"city_hall": true,
+	"wood_town_hall": true,
+	"brick_city_hall": true,
+	"earth_assembly": true,
+	"clay_lodge": true,
+	"stone_prefecture": true,
+	"stone_tavern": true,
+	"brick_restaurant": true,
+	"dugout_kitchen": true,
+	"clay_bakery": true,
+	"employment_office": true,
 	"straw_trade_tent": true,
 	"tarp_trade_tent": true,
+	"earth_market": true,
+	"clay_market": true,
+	"wood_market": true,
+	"stone_market": true,
+	"brick_market": true,
+	"gathering_place": true,
+}
+
+# Buildings with only a visitor entrance and no worker entrance (e.g. recreation).
+const VISITOR_ONLY_BUILDINGS := {
+	"park": true,
+	"leisure_center": true,
 	"gathering_place": true,
 }
 
@@ -215,7 +242,7 @@ static func _enclosed_blueprint(building_type: String, footprint: Vector2i, heig
 	var modules: Array[Dictionary] = []
 	_add_floor(modules, footprint, building_type)
 	var worker_entrances: Array[Vector2i] = []
-	if building_type in MULTI_ENTRANCE_BUILDINGS:
+	if building_type in DUAL_WORKER_ENTRANCE_BUILDINGS:
 		worker_entrances = [Vector2i(0, -footprint.y / 2), Vector2i(0, footprint.y / 2)]
 	_add_enclosing_walls(modules, footprint, height, building_type, worker_entrances)
 	_add_roof(modules, footprint, height, roof_style, building_type)
@@ -417,8 +444,7 @@ static func _heap_blueprint(building_type: String, footprint: Vector2i) -> Dicti
 	modules.append(_module(Vector3(-0.4, 0.6, 0.5), Vector3(1.6, 0.3, 0.3), "wood_log", Color("5c4033"), Vector3(0.0, 15.0, 0.0)))
 	modules.append(_module(Vector3(0.6, 0.4, -0.6), Vector3(1.2, 0.4, 1.2), "grass_pile", Color("739350"), Vector3(0.0, -25.0, 0.0)))
 	modules.append(_module(Vector3(0.8, 0.3, 0.8), Vector3(0.5, 0.4, 0.5), "stone", Color("6f747a"), Vector3(15.0, 45.0, 0.0)))
-	var worker_entrances := [Vector2i(0, -footprint.y / 2), Vector2i(0, footprint.y / 2)]
-	return {"type": building_type, "footprint": footprint, "entrance": Vector2i(0, -footprint.y / 2), "worker_entrances": worker_entrances, "modules": modules}
+	return {"type": building_type, "footprint": footprint, "entrance": Vector2i(0, -footprint.y / 2), "modules": modules}
 
 static func _gathering_place_blueprint() -> Dictionary:
 	var modules: Array[Dictionary] = []
@@ -462,6 +488,8 @@ static func _cook_campfire_blueprint(building_type: String) -> Dictionary:
 
 
 static func worker_entrance_offsets(building_type: String) -> Array[Vector2i]:
+	if building_type in VISITOR_ONLY_BUILDINGS:
+		return []
 	var blueprint := get_blueprint(building_type)
 	var offsets: Array[Vector2i] = []
 	if blueprint.has("worker_entrances"):
@@ -471,6 +499,23 @@ static func worker_entrance_offsets(building_type: String) -> Array[Vector2i]:
 	elif blueprint.has("entrance"):
 		offsets.append(blueprint.entrance)
 	return offsets
+
+
+static func visitor_entrance_offsets(building_type: String) -> Array[Vector2i]:
+	if building_type not in VISITOR_ENTRANCE_BUILDINGS and building_type not in VISITOR_ONLY_BUILDINGS:
+		return []
+	var blueprint := get_blueprint(building_type)
+	if blueprint.has("entrance"):
+		return [blueprint.entrance]
+	return []
+
+
+static func has_worker_entrance(building_type: String) -> bool:
+	return not worker_entrance_offsets(building_type).is_empty()
+
+
+static func has_visitor_entrance(building_type: String) -> bool:
+	return building_type in VISITOR_ENTRANCE_BUILDINGS or building_type in VISITOR_ONLY_BUILDINGS
 
 
 static func _module(position: Vector3, size: Vector3, kind: String, color: Color, rotation := Vector3.ZERO) -> Dictionary:

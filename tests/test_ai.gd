@@ -23,6 +23,8 @@ const FactoryWorkOrderProviderScript = preload("res://game/features/decision/app
 const CourierDeliveryGoalScript = preload("res://game/features/decision/domain/goals/courier_delivery_goal.gd")
 const CourierDeliveryOrderProviderScript = preload("res://game/features/decision/application/courier_delivery_order_provider.gd")
 const SettlementCitizenActuatorScript = preload("res://game/features/decision/application/settlement_citizen_actuator.gd")
+const MoveToStepScript = preload("res://game/features/decision/domain/behavior/move_to_step.gd")
+const RelaxAtPositionStepScript = preload("res://game/features/decision/domain/behavior/relax_at_position_step.gd")
 const WorkforceOrderProviderScript = preload("res://game/features/decision/application/workforce_order_provider.gd")
 const DailyPlayerOrderProviderScript = preload("res://game/features/decision/application/daily_player_order_provider.gd")
 
@@ -229,8 +231,11 @@ func _init() -> void:
 	_test_toilet_goal_blocked_for_player_controlled()
 	_test_trip_bound_work_blocks_personal_need()
 	_test_active_personal_need_blocks_work()
+	_test_personal_need_blocks_other_personal_need()
 	_test_order_board_equivalence_ignores_payload_position()
 	_test_native_rest_goal()
+	_test_move_to_step()
+	_test_relax_at_position_step()
 	_test_register_provider_keeps_order_while_registering()
 	_test_register_provider_distributes_workplaces_by_capacity()
 	_test_daily_player_order_provider_keeps_gathering_assignment()
@@ -517,8 +522,14 @@ func _test_native_sleep_goal() -> void:
 	var sleep_snapshot := _sleep_snapshot(true)
 	brain.think(sleep_snapshot, null)
 	brain.tick(sleep_snapshot, null, 0.1)
-	assert(actuator.action_start_count == 1)
+	assert(actuator.move_to_count == 1)
+	assert(actuator.move_to_destination == Vector3.ZERO)
+	assert(actuator.action_start_count == 0)
 	assert(brain.runner.active_goal_id() == &"sleep")
+	actuator.arrived_flag = true
+	brain.tick(sleep_snapshot, null, 0.1)
+	assert(actuator.stop_count == 1)
+	assert(actuator.action_start_count == 1)
 	var morning_snapshot := _sleep_snapshot(false)
 	brain.tick(morning_snapshot, null, 0.1)
 	assert(actuator.cancel_action_count == 1)
@@ -538,8 +549,14 @@ func _test_native_meal_goal() -> void:
 	var meal_snapshot := _meal_snapshot(true)
 	brain.think(meal_snapshot, null)
 	brain.tick(meal_snapshot, null, 0.1)
-	assert(actuator.action_start_count == 1)
+	assert(actuator.move_to_count == 1)
+	assert(actuator.move_to_destination == Vector3.ZERO)
+	assert(actuator.action_start_count == 0)
 	assert(brain.runner.active_goal_id() == &"meal")
+	actuator.arrived_flag = true
+	brain.tick(meal_snapshot, null, 0.1)
+	assert(actuator.stop_count == 1)
+	assert(actuator.action_start_count == 1)
 	var completed_snapshot := _meal_snapshot(false)
 	brain.tick(completed_snapshot, null, 0.1)
 	assert(actuator.cancel_action_count == 1)
@@ -588,7 +605,8 @@ func _test_trip_bound_work_blocks_personal_need() -> void:
 	brain.think(snapshot, order)
 	brain.tick(snapshot, order, 0.1)
 	assert(brain.runner.active_goal_id() == &"forestry")
-	assert(actuator.action_start_count == 1)
+	assert(actuator.move_to_count == 1)
+	assert(actuator.action_start_count == 0)
 	var hungry_facts := citizen.facts.to_dictionary()
 	hungry_facts[&"needs.meal_requested"] = true
 	hungry_facts[&"needs.can_start_meal"] = true
@@ -597,7 +615,7 @@ func _test_trip_bound_work_blocks_personal_need() -> void:
 	var hungry_snapshot := _snapshot(1.0, hungry_citizen)
 	brain.think(hungry_snapshot, order)
 	assert(brain.runner.active_goal_id() == &"forestry")
-	assert(actuator.action_start_count == 1)
+	assert(actuator.action_start_count == 0)
 
 
 func _test_active_personal_need_blocks_work() -> void:
@@ -609,6 +627,10 @@ func _test_active_personal_need_blocks_work() -> void:
 	brain.think(snapshot, null)
 	brain.tick(snapshot, null, 0.1)
 	assert(brain.runner.active_goal_id() == &"meal")
+	assert(actuator.move_to_count == 1)
+	assert(actuator.action_start_count == 0)
+	actuator.arrived_flag = true
+	brain.tick(snapshot, null, 0.1)
 	assert(actuator.action_start_count == 1)
 	# A highly desirable work goal must not steal control while the citizen is eating.
 	var still_eating := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
@@ -618,6 +640,33 @@ func _test_active_personal_need_blocks_work() -> void:
 	}))
 	var work_snapshot := _snapshot(1.0, still_eating)
 	brain.think(work_snapshot, null)
+	assert(brain.runner.active_goal_id() == &"meal")
+	assert(actuator.cancel_action_count == 0)
+
+
+func _test_personal_need_blocks_other_personal_need() -> void:
+	var meal := MealGoalScript.new()
+	var sleep := SleepGoalScript.new()
+	var actuator := FakeActuator.new(1)
+	var brain := CitizenBrain.new(1, actuator, [meal, sleep])
+	var meal_snapshot := _meal_snapshot(true)
+	brain.think(meal_snapshot, null)
+	brain.tick(meal_snapshot, null, 0.1)
+	assert(brain.runner.active_goal_id() == &"meal")
+	assert(actuator.move_to_count == 1)
+	assert(actuator.action_start_count == 0)
+	actuator.arrived_flag = true
+	brain.tick(meal_snapshot, null, 0.1)
+	assert(actuator.action_start_count == 1)
+	# A pressing sleep need must not interrupt an already active meal trip.
+	var sleepy_facts := meal_snapshot.citizen(1).facts.to_dictionary()
+	sleepy_facts[&"needs.should_sleep"] = true
+	sleepy_facts[&"needs.has_home"] = true
+	sleepy_facts[&"needs.can_start_sleep"] = true
+	sleepy_facts[&"needs.home_position"] = Vector3.ZERO
+	var sleepy_citizen := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new(sleepy_facts))
+	var sleep_snapshot := _snapshot(1.0, sleepy_citizen)
+	brain.think(sleep_snapshot, null)
 	assert(brain.runner.active_goal_id() == &"meal")
 	assert(actuator.cancel_action_count == 0)
 
@@ -648,8 +697,14 @@ func _test_native_rest_goal() -> void:
 	var requested := _rest_snapshot(true)
 	brain.think(requested, null)
 	brain.tick(requested, null, 0.1)
-	assert(actuator.action_start_count == 1)
+	assert(actuator.move_to_count == 1)
+	assert(actuator.move_to_destination == Vector3.ZERO)
+	assert(actuator.action_start_count == 0)
 	assert(brain.runner.active_goal_id() == &"rest")
+	actuator.arrived_flag = true
+	brain.tick(requested, null, 0.1)
+	assert(actuator.stop_count == 1)
+	assert(actuator.action_start_count == 1)
 	var completed := _rest_snapshot(false)
 	brain.tick(completed, null, 0.1)
 	assert(actuator.cancel_action_count == 1)
@@ -693,8 +748,14 @@ func _test_native_forestry_goal() -> void:
 	order.id = 17
 	brain.think(snapshot, order)
 	brain.tick(snapshot, order, 0.1)
-	assert(actuator.action_start_count == 1)
+	assert(actuator.move_to_count == 1)
+	assert(actuator.move_to_destination == Vector3(3.0, 0.0, 0.0))
+	assert(actuator.action_start_count == 0)
 	assert(brain.runner.active_goal_id() == &"forestry")
+	actuator.arrived_flag = true
+	brain.tick(snapshot, order, 0.1)
+	assert(actuator.stop_count == 1)
+	assert(actuator.action_start_count == 1)
 	assert(snapshot.reservations.owner_of([&"forestry.tree", &"tree:3:0"], 0.0) == 1)
 	actuator.next_action_status = CitizenActuator.ActionStatus.SUCCEEDED
 	brain.tick(snapshot, order, 0.1)
@@ -726,8 +787,14 @@ func _test_native_farming_goal() -> void:
 	order.id = 18
 	brain.think(snapshot, order)
 	brain.tick(snapshot, order, 0.1)
-	assert(actuator.action_start_count == 1)
+	assert(actuator.move_to_count == 1)
+	assert(actuator.move_to_destination == Vector3(4.0, 0.0, 0.0))
+	assert(actuator.action_start_count == 0)
 	assert(brain.runner.active_goal_id() == &"farming")
+	actuator.arrived_flag = true
+	brain.tick(snapshot, order, 0.1)
+	assert(actuator.stop_count == 1)
+	assert(actuator.action_start_count == 1)
 	actuator.next_action_status = CitizenActuator.ActionStatus.SUCCEEDED
 	brain.tick(snapshot, order, 0.1)
 	assert(brain.runner.active_task == null)
@@ -778,8 +845,14 @@ func _test_native_construction_goal() -> void:
 	order.id = 19
 	brain.think(snapshot, order)
 	brain.tick(snapshot, order, 0.1)
-	assert(actuator.action_start_count == 1)
+	assert(actuator.move_to_count == 1)
+	assert(actuator.move_to_destination == Vector3(5.0, 0.0, 0.0))
+	assert(actuator.action_start_count == 0)
 	assert(brain.runner.active_goal_id() == &"construction")
+	actuator.arrived_flag = true
+	brain.tick(snapshot, order, 0.1)
+	assert(actuator.stop_count == 1)
+	assert(actuator.action_start_count == 1)
 	actuator.next_action_status = CitizenActuator.ActionStatus.SUCCEEDED
 	brain.tick(snapshot, order, 0.1)
 	assert(brain.runner.active_task == null)
@@ -830,6 +903,12 @@ func _test_native_gathering_goal() -> void:
 	order.id = 20
 	brain.think(snapshot, order)
 	brain.tick(snapshot, order, 0.1)
+	assert(actuator.move_to_count == 1)
+	assert(actuator.move_to_destination == Vector3(3.0, 0.0, 0.0))
+	assert(actuator.action_start_count == 0)
+	actuator.arrived_flag = true
+	brain.tick(snapshot, order, 0.1)
+	assert(actuator.stop_count == 1)
 	assert(actuator.action_start_count == 1)
 	assert(snapshot.reservations.owner_of([&"gathering.source", &"branch:3:0"], 0.0) == 1)
 	actuator.next_action_status = CitizenActuator.ActionStatus.SUCCEEDED
@@ -881,6 +960,11 @@ func _test_native_excavation_goal() -> void:
 	order.id = 21
 	brain.think(snapshot, order)
 	brain.tick(snapshot, order, 0.1)
+	assert(actuator.move_to_count == 1)
+	assert(actuator.action_start_count == 0)
+	actuator.arrived_flag = true
+	brain.tick(snapshot, order, 0.1)
+	assert(actuator.stop_count == 1)
 	assert(actuator.action_start_count == 1)
 	assert(snapshot.reservations.owner_of([&"excavation.site", &"dig:61"], 0.0) == 1)
 	actuator.next_action_status = CitizenActuator.ActionStatus.SUCCEEDED
@@ -936,8 +1020,13 @@ func _test_native_service_goal() -> void:
 	order.id = 22
 	brain.think(snapshot, order)
 	brain.tick(snapshot, order, 0.1)
-	assert(actuator.action_start_count == 1)
+	assert(actuator.move_to_count == 1)
+	assert(actuator.action_start_count == 0)
 	assert(brain.runner.active_goal_id() == &"service_work")
+	actuator.arrived_flag = true
+	brain.tick(snapshot, order, 0.1)
+	assert(actuator.stop_count == 1)
+	assert(actuator.action_start_count == 1)
 	actuator.next_action_status = CitizenActuator.ActionStatus.SUCCEEDED
 	brain.tick(snapshot, order, 0.1)
 	assert(brain.runner.active_task == null)
@@ -979,8 +1068,13 @@ func _test_native_factory_goal() -> void:
 	order.id = 23
 	brain.think(snapshot, order)
 	brain.tick(snapshot, order, 0.1)
-	assert(actuator.action_start_count == 1)
+	assert(actuator.move_to_count == 1)
+	assert(actuator.action_start_count == 0)
 	assert(brain.runner.active_goal_id() == &"factory_work")
+	actuator.arrived_flag = true
+	brain.tick(snapshot, order, 0.1)
+	assert(actuator.stop_count == 1)
+	assert(actuator.action_start_count == 1)
 	actuator.next_action_status = CitizenActuator.ActionStatus.SUCCEEDED
 	brain.tick(snapshot, order, 0.1)
 	assert(brain.runner.active_task == null)
@@ -1254,8 +1348,15 @@ func _test_native_courier_goal() -> void:
 	var snapshot := _snapshot(0.0, citizen)
 	var order := CitizenOrder.new(1, &"courier_delivery", &"logistics.courier", 0.8, AIFactSet.new({&"courier.task_id": &"canteen_food"}))
 	order.id = 24
+	order.target_position = Vector3(6.0, 0.0, 0.0)
 	brain.think(snapshot, order)
 	brain.tick(snapshot, order, 0.1)
+	assert(actuator.move_to_count == 1)
+	assert(actuator.move_to_destination == Vector3(6.0, 0.0, 0.0))
+	assert(actuator.action_start_count == 0)
+	actuator.arrived_flag = true
+	brain.tick(snapshot, order, 0.1)
+	assert(actuator.stop_count == 1)
 	assert(actuator.action_start_count == 1)
 	actuator.next_action_status = CitizenActuator.ActionStatus.SUCCEEDED
 	brain.tick(snapshot, order, 0.1)
@@ -1537,6 +1638,12 @@ func _test_native_cleaning_goal() -> void:
 	order.id = 30
 	brain.think(snapshot, order)
 	brain.tick(snapshot, order, 0.1)
+	assert(actuator.move_to_count == 1)
+	assert(actuator.move_to_destination == Vector3(3.0, 0.0, 0.0))
+	assert(actuator.action_start_count == 0)
+	actuator.arrived_flag = true
+	brain.tick(snapshot, order, 0.1)
+	assert(actuator.stop_count == 1)
 	assert(actuator.action_start_count == 1)
 	assert(snapshot.reservations.owner_of([&"cleaning.pile", &"pile:3:0:branches"], 0.0) == 1)
 	actuator.next_action_status = CitizenActuator.ActionStatus.SUCCEEDED
@@ -1666,6 +1773,7 @@ func _sleep_snapshot(should_sleep: bool) -> WorldSnapshot:
 	var citizen := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
 		&"needs.should_sleep": should_sleep,
 		&"needs.has_home": true,
+		&"needs.home_position": Vector3.ZERO,
 		&"needs.can_start_sleep": true,
 	}))
 	return _snapshot(0.0, citizen)
@@ -1958,3 +2066,32 @@ func _test_toilet_goal_blocked_for_player_controlled() -> void:
 	brain.think(_snapshot(0.0, player_controlled), null)
 	assert(brain.runner.active_goal_id() == &"")
 	assert(actuator.action_start_count == 0)
+
+
+func _test_move_to_step() -> void:
+	var actuator := FakeActuator.new(1)
+	var context := BehaviorContext.new(actuator, AIBlackboard.new())
+	context.refresh(_snapshot(0.0, CitizenSnapshot.new(1)), null)
+	var step := MoveToStepScript.new(Vector3(5.0, 0.0, 3.0), 0.5)
+	assert(step.run(context, 0.1) == BehaviorStep.Status.RUNNING)
+	assert(actuator.move_to_count == 1)
+	assert(actuator.move_to_destination == Vector3(5.0, 0.0, 3.0))
+	actuator.arrived_flag = true
+	assert(step.run(context, 0.1) == BehaviorStep.Status.SUCCESS)
+	assert(step.run(context, 0.1) == BehaviorStep.Status.SUCCESS)
+	assert(actuator.stop_count == 1)
+
+
+func _test_relax_at_position_step() -> void:
+	var actuator := FakeActuator.new(1)
+	var citizen := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
+		&"needs.rest_requested": true,
+		&"needs.rest_duration": 2.0,
+	}))
+	var context := BehaviorContext.new(actuator, AIBlackboard.new())
+	context.refresh(_snapshot(0.0, citizen), null)
+	var step := RelaxAtPositionStepScript.new()
+	assert(step.run(context, 0.1) == BehaviorStep.Status.RUNNING)
+	assert(actuator.action_start_count == 1)
+	actuator.next_action_status = CitizenActuator.ActionStatus.SUCCEEDED
+	assert(step.run(context, 0.1) == BehaviorStep.Status.SUCCESS)

@@ -2,6 +2,8 @@ class_name FarmingGoal
 extends AICitizenGoal
 
 const FarmingWorkStepScript = preload("res://game/features/decision/domain/behavior/farming_work_step.gd")
+const MoveToStepScript = preload("res://game/features/decision/domain/behavior/move_to_step.gd")
+const SequenceStepScript = preload("res://game/features/decision/domain/behavior/sequence_step.gd")
 
 
 func _init() -> void:
@@ -27,7 +29,13 @@ func score(
 func build_task(
 	_snapshot: WorldSnapshot,
 	_citizen: CitizenSnapshot,
-	_order: CitizenOrder,
+	order: CitizenOrder,
 	_blackboard: AIBlackboard
 ) -> BehaviorTask:
-	return BehaviorTask.new(id, FarmingWorkStepScript.new(), false, "Produce farm food")
+	var move_target: Variant = order.target_position if order != null else Vector3.INF
+	if not (move_target is Vector3) or move_target == Vector3.INF:
+		return null
+	return BehaviorTask.new(id, SequenceStepScript.new([
+		MoveToStepScript.new(move_target),
+		FarmingWorkStepScript.new(),
+	]), false, "Produce farm food")

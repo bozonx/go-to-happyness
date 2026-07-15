@@ -652,6 +652,8 @@ func _has_cook() -> bool:
 
 func _employment_center_position() -> Vector3:
 	if is_instance_valid(campfire_node):
+		if campfire_node.has_meta("entrance_position"):
+			return campfire_node.get_meta("entrance_position")
 		return campfire_node.get_meta("service_position", campfire_node.global_position)
 	return Vector3.INF
 
@@ -6066,7 +6068,10 @@ func _activate_kitchen_if_better(building: Node3D, service_position: Vector3) ->
 	var active_capacity := BuildingCatalog.kitchen_food_capacity(str(canteen.get_meta("building_type", ""))) if is_instance_valid(canteen) else 0
 	if capacity >= active_capacity:
 		canteen = building
-		canteen_position = service_position
+		if building.has_meta("entrance_position"):
+			canteen_position = building.get_meta("entrance_position")
+		else:
+			canteen_position = building.get_meta("service_position", building.global_position)
 
 
 func _select_best_canteen() -> void:
@@ -6082,7 +6087,10 @@ func _select_best_canteen() -> void:
 			best_capacity = capacity
 	canteen = best_kitchen
 	if best_kitchen != null:
-		canteen_position = best_kitchen.get_meta("service_position", best_kitchen.global_position)
+		if best_kitchen.has_meta("entrance_position"):
+			canteen_position = best_kitchen.get_meta("entrance_position")
+		else:
+			canteen_position = best_kitchen.get_meta("service_position", best_kitchen.global_position)
 
 func _add_building_selector(building: Node3D, group_name: String, footprint: Vector2i) -> void:
 	var selector := Area3D.new()
@@ -6282,21 +6290,34 @@ func _grant_debug_resources() -> void:
 	_request_courier_dispatch()
 
 func _register_service_entrance(building: Node3D, blueprint: Dictionary, home_entrance := false, show_marker := true) -> void:
+	var building_type := str(blueprint.type)
 	var service_positions := BuildingEntrancePositions.positions(building, blueprint.footprint, SERVICE_PAD_OFFSET)
-	building.set_meta("service_positions", service_positions)
-	building.set_meta("service_position", service_positions[0])
-	if home_entrance:
-		building.set_meta("entrance_positions", service_positions)
-		building.set_meta("entrance_position", service_positions[0])
-	for service_position in service_positions:
-		service_pockets.append({"cell": _cell_from_position(service_position), "node": building})
-	if show_marker:
-		var offsets := BuildingEntrancePositions.offsets(str(blueprint.type))
-		if offsets.is_empty():
-			offsets = [Vector2i(0, -blueprint.footprint.y / 2)]
-		var local_positions := BuildingEntrancePositions.local_positions(blueprint.footprint, offsets, SERVICE_PAD_OFFSET)
-		for local in local_positions:
-			_add_service_entrance_marker(building, local)
+	if not service_positions.is_empty():
+		building.set_meta("service_positions", service_positions)
+		building.set_meta("service_position", service_positions[0])
+		for position in service_positions:
+			service_pockets.append({"cell": _cell_from_position(position), "node": building})
+		if show_marker:
+			var offsets := BuildingEntrancePositions.offsets(building_type)
+			if offsets.is_empty():
+				offsets = [Vector2i(0, -blueprint.footprint.y / 2)]
+			var local_positions := BuildingEntrancePositions.local_positions(blueprint.footprint, offsets, SERVICE_PAD_OFFSET)
+			for local in local_positions:
+				_add_service_entrance_marker(building, local)
+	var visitor_positions := BuildingEntrancePositions.visitor_positions(building, blueprint.footprint, SERVICE_PAD_OFFSET)
+	if visitor_positions.is_empty() and home_entrance and not service_positions.is_empty():
+		visitor_positions = service_positions
+	if not visitor_positions.is_empty():
+		building.set_meta("entrance_positions", visitor_positions)
+		building.set_meta("entrance_position", visitor_positions[0])
+		if service_positions.is_empty():
+			building.set_meta("service_positions", visitor_positions)
+			building.set_meta("service_position", visitor_positions[0])
+		var v_offsets := BuildingEntrancePositions.visitor_offsets(building_type)
+		if not v_offsets.is_empty():
+			var v_local_positions := BuildingEntrancePositions.local_positions(blueprint.footprint, v_offsets, SERVICE_PAD_OFFSET)
+			for local in v_local_positions:
+				_add_visitor_entrance_marker(building, local)
 
 func _add_service_entrance_marker(building: Node3D, marker_local: Vector3) -> void:
 	var marker_position := marker_local
@@ -6318,6 +6339,34 @@ func _add_service_entrance_marker(building: Node3D, marker_local: Vector3) -> vo
 	building.add_child(sign)
 	var light := OmniLight3D.new()
 	light.light_color = Color("ffd58a")
+	light.light_energy = 2.0
+	light.omni_range = 5.0
+	light.shadow_enabled = true
+	light.position = marker_position + Vector3(0.0, 2.2, 0.0)
+	light.visible = false
+	building.add_child(light)
+	entrance_lights.append(light)
+
+func _add_visitor_entrance_marker(building: Node3D, marker_local: Vector3) -> void:
+	var marker_position := marker_local
+	var marker := MeshInstance3D.new()
+	var marker_mesh := BoxMesh.new()
+	marker_mesh.size = Vector3(0.72, 1.45, 0.12)
+	marker.mesh = marker_mesh
+	marker.position = marker_position + Vector3(0.0, 0.73, 0.0)
+	var marker_material := StandardMaterial3D.new()
+	marker_material.albedo_color = Color("1a3a2a")
+	marker_material.roughness = 0.95
+	marker.material_override = marker_material
+	building.add_child(marker)
+	var sign := Label3D.new()
+	sign.text = "VISITOR"
+	sign.position = marker_position + Vector3(0.0, 1.72, 0.0)
+	sign.font_size = 24
+	sign.modulate = Color("7ec8a0")
+	building.add_child(sign)
+	var light := OmniLight3D.new()
+	light.light_color = Color("a8e6c0")
 	light.light_energy = 2.0
 	light.omni_range = 5.0
 	light.shadow_enabled = true
@@ -7888,39 +7937,57 @@ func _refresh_warehouse_menu() -> void:
 	var free := settlement.storage_free_units(warehouses)
 	if selected_warehouse_state != null:
 		var selected_used := selected_warehouse_state.used_units(SettlementState.STORAGE_WEIGHTS)
-		warehouse_menu_title.text = "Warehouse %d balance\nThis warehouse: %d / %d units   Total: %d / %d units   Free to assign: %d\nMove capacity between goods (%d units per click)." % [index + 1, int(ceil(selected_used)), selected_warehouse_state.capacity, int(ceil(total_used)), total_capacity, int(floor(free)), int(SettlementState.STORAGE_STEP)]
+		warehouse_menu_title.text = "Warehouse %d\nThis: %d/%d u   Total: %d/%d u   Free: %d\n+/- adjusts per-resource cap (%d u/click)" % [index + 1, int(ceil(selected_used)), selected_warehouse_state.capacity, int(ceil(total_used)), total_capacity, int(floor(free)), int(SettlementState.STORAGE_STEP)]
 	else:
-		warehouse_menu_title.text = "Storage balance\nTotal: %d / %d units   Free to assign: %d\nMove capacity between goods (%d units per click)." % [int(ceil(total_used)), total_capacity, int(floor(free)), int(SettlementState.STORAGE_STEP)]
+		warehouse_menu_title.text = "Storage\nTotal: %d/%d u   Free: %d\n+/- adjusts per-resource cap (%d u/click)" % [int(ceil(total_used)), total_capacity, int(floor(free)), int(SettlementState.STORAGE_STEP)]
 
 	for child in warehouse_menu.get_children():
 		if child != warehouse_menu_title:
 			child.queue_free()
 
-	var y_offset := 82.0
-	for resource_type in settlement.era_resources():
+	var era_res := settlement.era_resources()
+	var y_offset := 100.0
+	for resource_type in era_res:
 		var limit := settlement.storage_limit(resource_type)
 		var weight := settlement.storage_weight(resource_type)
 		var stored: int = settlement.amount(resource_type) if selected_warehouse_state == null else selected_warehouse_state.amount(resource_type)
 		var stored_units := stored * weight
+		var pct := 0.0
+		if limit > 0.0:
+			pct = stored_units / limit
+		var bar_text := "%s  %d/%d u" % [resource_type, int(ceil(stored_units)), int(round(limit))]
+		if pct >= 1.0:
+			bar_text += " FULL"
+		elif stored > 0 and limit <= 0.0:
+			bar_text += " (no cap)"
 		var row := Label.new()
 		row.position = Vector2(16, y_offset + 4)
-		row.size = Vector2(180, 24)
+		row.size = Vector2(200, 24)
 		row.add_theme_font_size_override("font_size", 13)
-		row.text = "%s  %d (%d/%d u, x%.1f)" % [resource_type, stored, int(ceil(stored_units)), int(round(limit)), weight]
+		row.text = bar_text
 		warehouse_menu.add_child(row)
 		var minus := Button.new()
 		minus.text = "-"
-		minus.position = Vector2(238, y_offset)
+		minus.position = Vector2(224, y_offset)
 		minus.size = Vector2(32, 28)
 		minus.pressed.connect(_adjust_storage.bind(resource_type, -SettlementState.STORAGE_STEP))
 		warehouse_menu.add_child(minus)
 		var plus := Button.new()
 		plus.text = "+"
-		plus.position = Vector2(274, y_offset)
+		plus.position = Vector2(260, y_offset)
 		plus.size = Vector2(32, 28)
 		plus.pressed.connect(_adjust_storage.bind(resource_type, SettlementState.STORAGE_STEP))
 		warehouse_menu.add_child(plus)
 		y_offset += 32.0
+
+	# Reset button: redistribute limits equally among era resources.
+	var reset_btn := Button.new()
+	reset_btn.text = "Reset caps (equal split)"
+	reset_btn.position = Vector2(16, y_offset + 4)
+	reset_btn.size = Vector2(276, 28)
+	reset_btn.pressed.connect(_reset_storage_limits)
+	warehouse_menu.add_child(reset_btn)
+	y_offset += 36.0
 
 	var cover_btn := Button.new()
 	if settlement.warehouse_tarp_covered:
@@ -7953,6 +8020,20 @@ func _refresh_warehouse_menu() -> void:
 
 func _adjust_storage(resource_type: String, delta_units: float) -> void:
 	settlement.adjust_storage_limit(resource_type, delta_units, warehouse_positions.size())
+	_refresh_warehouse_menu()
+
+
+func _reset_storage_limits() -> void:
+	var era_res := settlement.era_resources()
+	var total_capacity := settlement.storage_capacity(warehouse_positions.size())
+	# Clear all limits first.
+	for resource_type in SettlementState.STORED_RESOURCES:
+		settlement.storage_limits[resource_type] = 0.0
+	# Distribute equally among era resources.
+	var share := float(total_capacity) / float(era_res.size())
+	for resource_type in era_res:
+		settlement.storage_limits[resource_type] = share
+	settlement._update_warehouse_resource_limits()
 	_refresh_warehouse_menu()
 
 

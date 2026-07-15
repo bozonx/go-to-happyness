@@ -670,7 +670,11 @@ func start_production_cycle(next_resource_type: String, source: Vector3, workpla
 	uses_courier = next_uses_courier
 	factory = null
 	active_role = "forestry" if next_resource_type == "wood" else "farming"
-	state = State.TO_TREE
+	if is_inside_tree() and global_position.distance_to(source_access_position) <= 0.5:
+		state = State.CHOPPING
+		_start_task(WORK_DURATION / get_efficiency(active_role))
+	else:
+		state = State.TO_TREE
 
 
 func _process_to_cleaning_pile(delta: float) -> void:
@@ -2648,13 +2652,31 @@ func execute_action(action: StringName, target: Node3D, payload: AIFactSet) -> b
 		return false
 	match action:
 		&"sleep":
-			go_home()
+			if not is_instance_valid(home):
+				return false
+			_reset_assignment_navigation()
+			factory = null
+			var home_entrance: Vector3 = home.position
+			if home.is_inside_tree():
+				home_entrance = home.get_meta("entrance_position", home.global_position)
+			if is_inside_tree() and global_position.distance_to(home_entrance) <= 0.5:
+				state = State.RESTING
+			else:
+				state = State.TO_HOME
 			return state in [State.TO_HOME, State.RESTING]
 		&"eat":
 			var destination: Variant = payload.value(&"target.position", Vector3.INF) if payload != null else Vector3.INF
 			if not (destination is Vector3) or destination == Vector3.INF:
 				return false
-			go_to_canteen(destination)
+			_reset_assignment_navigation()
+			canteen_position = destination
+			active_role = ""
+			factory = null
+			if is_inside_tree() and global_position.distance_to(destination) <= 0.5:
+				state = State.EATING
+				_start_task(1.1)
+			else:
+				state = State.TO_CANTEEN
 			return state in [State.TO_CANTEEN, State.EATING]
 		&"relieve":
 			var relief_position: Variant = payload.value(&"target.position", Vector3.INF) if payload != null else Vector3.INF

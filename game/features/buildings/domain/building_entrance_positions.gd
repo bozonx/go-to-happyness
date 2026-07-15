@@ -11,10 +11,36 @@ static func offsets(building_type: String) -> Array[Vector2i]:
 	return BuildingBlueprints.worker_entrance_offsets(building_type)
 
 
+static func visitor_offsets(building_type: String) -> Array[Vector2i]:
+	return BuildingBlueprints.visitor_entrance_offsets(building_type)
+
+
 static func positions(node: Node3D, footprint: Vector2i, pad := DEFAULT_PAD) -> Array[Vector3]:
 	var entrance_offsets := offsets(str(node.get_meta("building_type", "")))
 	if entrance_offsets.is_empty():
-		entrance_offsets = [Vector2i(0, -footprint.y / 2)]
+		return []
+
+	var result: Array[Vector3] = []
+	var half_x := footprint.x * 0.5
+	var half_z := footprint.y * 0.5
+	for offset in entrance_offsets:
+		var local := Vector3.ZERO
+		if offset.x < 0:
+			local.x = -half_x - pad
+		elif offset.x > 0:
+			local.x = half_x + pad
+		if offset.y < 0:
+			local.z = -half_z - pad
+		elif offset.y > 0:
+			local.z = half_z + pad
+		result.append(_to_world(node, local))
+	return result
+
+
+static func visitor_positions(node: Node3D, footprint: Vector2i, pad := DEFAULT_PAD) -> Array[Vector3]:
+	var entrance_offsets := visitor_offsets(str(node.get_meta("building_type", "")))
+	if entrance_offsets.is_empty():
+		return []
 
 	var result: Array[Vector3] = []
 	var half_x := footprint.x * 0.5
