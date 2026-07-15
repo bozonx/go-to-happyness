@@ -149,7 +149,7 @@ func dispatch_queued_trades() -> void:
 			and not simulation.pending_trades.has(worker.get_instance_id())
 		):
 			candidates.append(worker)
-	# Dedicated couriers take new market work first; Helpers are a daily fallback.
+	# Dedicated couriers take new market work first; daily couriers are a fallback.
 	candidates.sort_custom(func(a: Citizen, b: Citizen): return a.is_courier() and not b.is_courier())
 	for worker in candidates:
 		if simulation.queued_trades.is_empty():
@@ -157,7 +157,7 @@ func dispatch_queued_trades() -> void:
 		var order: RefCounted = simulation.queued_trades.pop_front()
 		assign_order_to_worker(worker, order)
 	if not simulation.queued_trades.is_empty():
-		simulation._update_interface("Trade queued: assign a Helper or wait for a free Courier.")
+		simulation._update_interface("Trade queued: assign a Courier or wait for a free Courier.")
 
 
 func assign_order_to_worker(worker: Citizen, order: RefCounted) -> void:
@@ -166,10 +166,10 @@ func assign_order_to_worker(worker: Citizen, order: RefCounted) -> void:
 	simulation.pending_trades[worker.get_instance_id()] = order
 	if _is_pending_entrance_expedition(order):
 		worker.deliver_trade(order.source, order.source)
-		simulation._update_interface("%s is heading to the entrance sign for the outside trade trip." % ("Courier" if worker.is_courier() else "Helper"))
+		simulation._update_interface("%s is heading to the entrance sign for the outside trade trip." % ("Courier" if worker.is_courier() else "Daily courier"))
 	else:
 		worker.deliver_trade(order.source, order.destination)
-		simulation._update_interface("%s is carrying the trade order." % ("Courier" if worker.is_courier() else "Helper"))
+		simulation._update_interface("%s is carrying the trade order." % ("Courier" if worker.is_courier() else "Daily courier"))
 
 
 func update() -> void:

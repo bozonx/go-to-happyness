@@ -56,7 +56,9 @@ const ENTRANCE_GLOVE_PRICE := 20
 const ENTRANCE_BUCKET_PRICE := 15
 const ENTRANCE_WATER_PRICE := 2
 const OUTSIDE_WORK_DURATION_MINUTES := SimulationClock.MINUTES_PER_DAY
-const OUTSIDE_WORK_REWARD := 8
+const OUTSIDE_WORK_BASE_REWARD_MIN := 4
+const OUTSIDE_WORK_BASE_REWARD_MAX := 12
+const OUTSIDE_WORK_UPGRADE_REWARD := 16
 const HOUSE_CAPACITY := 4
 const TENT_CAPACITY := 4
 const CONSTRUCTION_DURATION := 4.0
@@ -223,7 +225,6 @@ var preview_entrance_marker: MeshInstance3D
 var preview_back_entrance_marker: MeshInstance3D
 var wood_label: Label
 var status_label: Label
-var labor_authority_label: Label
 var messages: Array[Dictionary] = []
 var current_day: int:
 	get: return day_cycle.current_day
@@ -275,6 +276,7 @@ var entrance_stone: Node3D
 var selected_entrance: Node3D
 var entrance_menu: Panel
 var entrance_menu_title: Label
+var entrance_work_button: Button
 var entrance_order_modal: Panel
 var entrance_order_food_spin: SpinBox
 var entrance_order_water_spin: SpinBox
@@ -381,6 +383,7 @@ var entrance_lights: Array[OmniLight3D] = []
 var build_category := ""
 var build_menu_is_job_menu := false
 var build_menu_is_daily_order_menu := false
+var build_menu_is_global := false
 var build_buttons: Array[Button] = []
 var build_item_buttons: Array[Button] = []
 var skip_night_button: Button
@@ -549,7 +552,6 @@ func _update_workers() -> void:
 			if is_instance_valid(citizen):
 				citizen.overtime_mode = false
 	_check_unstaffed_employment_center()
-	_refresh_labor_authority_indicator()
 
 
 func daily_order_workday_for_new_order() -> int:
@@ -663,17 +665,6 @@ func _labor_command_block_message() -> String:
 
 func _show_labor_command_blocked() -> void:
 	_update_interface(_labor_command_block_message())
-
-
-func _refresh_labor_authority_indicator() -> void:
-	if labor_authority_label == null:
-		return
-	if _officer_exists():
-		labor_authority_label.visible = false
-	else:
-		labor_authority_label.text = "Постоянные должности недоступны без officer'а\nДневные приказы доступны"
-		labor_authority_label.add_theme_color_override("font_color", Color("e28c8c"))
-		labor_authority_label.visible = true
 
 
 func _registration_official() -> Citizen:
@@ -1129,7 +1120,7 @@ func _publish_courier_tasks(dispatcher: RefCounted) -> void:
 		return _construction_development_priority(a) > _construction_development_priority(b)
 	)
 	for site: ConstructionSite in sorted_sites:
-		if site == null or not is_instance_valid(site.node):
+		if site == null or not is_instance_valid(site.node) or site.node.is_queued_for_deletion():
 			continue
 		for resource_type in site.required_materials:
 			var required := int(site.required_materials[resource_type])
@@ -1146,7 +1137,7 @@ func _construction_material_source(resource_type: String) -> Dictionary:
 		if not warehouse_positions.is_empty():
 			return {"kind": "storage", "id": "storage", "position": warehouse_positions[0]}
 		# Before the first warehouse is built, all resources live in the virtual
-		# stockpile. Helpers pull from that unlimited reserve at the camp entrance
+		# stockpile. Couriers pull from that unlimited reserve at the camp entrance
 		# so the bootstrap warehouse and main campfire can still be supplied.
 		return {"kind": "open_storage", "id": "open_storage", "position": _get_nearest_delivery_position(Vector3.ZERO)}
 	for pile: Dictionary in resource_piles:
@@ -1294,32 +1285,15 @@ func _start_courier_task(courier: Citizen, task: RefCounted) -> bool:
 	return false
 
 
-func begin_native_construction_supply(worker: Citizen, site_node: Node3D, resource_type: String, warehouse: Vector3) -> bool:
-	if worker == null or not is_instance_valid(site_node) or warehouse == Vector3.INF:
-		return false
-	for site: ConstructionSite in construction_sites:
-		if site.node != site_node:
-			continue
-		var required := int(site.required_materials.get(resource_type, 0))
-		var delivered := int(site.delivered_materials.get(resource_type, 0))
-		var reserved := int(site.reserved_materials.get(resource_type, 0))
-		if required <= delivered + reserved or settlement.amount(resource_type) <= 0:
-			return false
-		settlement.add(resource_type, -1)
-		site.reserved_materials[resource_type] = reserved + 1
-		worker.active_role = "construction"
-		worker.assign_construction_delivery(site.node, warehouse, resource_type)
-		return worker.state in [Citizen.State.TO_CONSTRUCTION_PICKUP, Citizen.State.TO_CONSTRUCTION_SITE]
-	return false
-
-
 func _reconcile_construction_reservations(site: ConstructionSite) -> void:
 	# A delivery can be interrupted by the end-of-day scheduler or a route reset.
 	# Return its reservation when no courier still owns it, otherwise the final
 	# material can remain permanently reserved without ever reaching the site.
+	if site == null or not is_instance_valid(site.node) or site.node.is_queued_for_deletion():
+		return
 	var in_transit: Dictionary = {}
 	for citizen in citizens:
-		if citizen.construction_site != site.node:
+		if not is_instance_valid(citizen.construction_site) or citizen.construction_site != site.node:
 			continue
 		if citizen.state not in [Citizen.State.TO_CONSTRUCTION_PICKUP, Citizen.State.TO_CONSTRUCTION_SITE]:
 			continue
@@ -1781,8 +1755,10 @@ func _update_interface(message: String) -> void:
 	else:
 		camera_hint_label.text = "R: view from hero. Select a citizen and choose Manage. Right drag: rotate  Middle drag: pan  Wheel: zoom"
 
+const ERA_CATEGORIES := ["tent", "earth", "clay", "wood", "stone", "brick"]
+
 func _era_name() -> String:
-	return ["Tent", "Earth", "Clay", "Wood", "Brick"][settlement.era]
+	return ["Tent", "Earth", "Clay", "Wood", "Stone", "Brick"][settlement.era]
 
 
 func _resource_display_name(resource_type: String) -> String:
@@ -2421,13 +2397,6 @@ func _create_interface() -> void:
 	wood_label.size = Vector2(150, 240)
 	wood_label.add_theme_font_size_override("font_size", 12)
 	panel.add_child(wood_label)
-	labor_authority_label = Label.new()
-	labor_authority_label.position = Vector2(205, 20)
-	labor_authority_label.size = Vector2(260, 48)
-	labor_authority_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	labor_authority_label.add_theme_font_size_override("font_size", 14)
-	labor_authority_label.visible = false
-	ui.add_child(labor_authority_label)
 	# Hidden status label — kept for backward compatibility.
 	status_label = Label.new()
 	status_label.visible = false
@@ -2528,6 +2497,7 @@ func _create_campfire_story_menu(ui: CanvasLayer) -> void:
 	campfire_story_menu.offset_bottom = 140.0
 	campfire_story_menu.visible = false
 	ui.add_child(campfire_story_menu)
+	campfire_story_menu.gui_input.connect(_on_context_menu_gui_input)
 
 	var title := Label.new()
 	title.text = "Campfire Story"
@@ -2884,7 +2854,7 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	
 	# Daily orders do not require an employment officer.
 	_add_role_button("Clear daily order", "", 136, false, "daily")
-	_add_role_button("Helper", "helper", 170, false, "daily")
+	_add_role_button("Courier", "courier", 170, false, "daily")
 	_add_role_button("Construction", "construction", 204, false, "daily")
 	_add_role_button("Gather branches", "gather_branches", 238, false, "daily")
 	_add_role_button("Gather grass", "gather_grass", 272, false, "daily")
@@ -3001,6 +2971,7 @@ func _create_school_menu(ui: CanvasLayer) -> void:
 	school_menu.offset_bottom = -20.0
 	school_menu.visible = false
 	ui.add_child(school_menu)
+	school_menu.gui_input.connect(_on_context_menu_gui_input)
 	
 	school_menu_title = Label.new()
 	school_menu_title.position = Vector2(16, 14)
@@ -3129,6 +3100,7 @@ func _create_entrance_menu(ui: CanvasLayer) -> void:
 	entrance_menu.offset_bottom = -20.0
 	entrance_menu.visible = false
 	ui.add_child(entrance_menu)
+	entrance_menu.gui_input.connect(_on_context_menu_gui_input)
 	entrance_menu_title = Label.new()
 	entrance_menu_title.position = Vector2(16, 14)
 	entrance_menu_title.size = Vector2(272, 56)
@@ -3142,13 +3114,13 @@ func _create_entrance_menu(ui: CanvasLayer) -> void:
 	create_order_button.size = Vector2(272, 32)
 	create_order_button.pressed.connect(_show_entrance_order_modal)
 	entrance_menu.add_child(create_order_button)
-	var work_button := Button.new()
-	work_button.text = "Send selected resident to outside work"
-	work_button.tooltip_text = "Requires a Helper or Courier. The resident leaves for one full day and returns with 8 coins."
-	work_button.position = Vector2(16, 122)
-	work_button.size = Vector2(272, 32)
-	work_button.pressed.connect(_send_selected_resident_to_outside_work)
-	entrance_menu.add_child(work_button)
+	entrance_work_button = Button.new()
+	entrance_work_button.text = "Send selected resident to outside work"
+	entrance_work_button.tooltip_text = "Requires a Courier. The resident leaves for one full day and returns with %s coins." % _outside_work_reward_text()
+	entrance_work_button.position = Vector2(16, 122)
+	entrance_work_button.size = Vector2(272, 32)
+	entrance_work_button.pressed.connect(_send_selected_resident_to_outside_work)
+	entrance_menu.add_child(entrance_work_button)
 	var close_btn := Button.new()
 	close_btn.text = "Close"
 	close_btn.position = Vector2(16, 162)
@@ -3163,6 +3135,8 @@ func _show_entrance_menu() -> void:
 		return
 	var resident_name := selected_builder.role_label() if is_instance_valid(selected_builder) else "no resident selected"
 	entrance_menu_title.text = "Entrance sign\nEmergency orders. Outside work: %s" % resident_name
+	if is_instance_valid(entrance_work_button):
+		entrance_work_button.tooltip_text = "Requires a Courier. The resident leaves for one full day and returns with %s coins." % _outside_work_reward_text()
 	entrance_menu.visible = true
 
 
@@ -3175,6 +3149,7 @@ func _create_entrance_order_modal(ui: CanvasLayer) -> void:
 	entrance_order_modal.offset_bottom = 180.0
 	entrance_order_modal.visible = false
 	ui.add_child(entrance_order_modal)
+	entrance_order_modal.gui_input.connect(func(event: InputEvent): if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed: entrance_order_modal.visible = false)
 
 	var title := Label.new()
 	title.text = "Create order"
@@ -3275,12 +3250,24 @@ func _send_entrance_order() -> void:
 	_update_interface("Entrance order placed: %d food, %d water, %d gloves, %d buckets." % [food, water, gloves, bucket])
 	_hide_entrance_order_modal()
 
+func _outside_work_reward() -> int:
+	if settlement != null and settlement.is_research_completed("outside_work_earnings"):
+		return OUTSIDE_WORK_UPGRADE_REWARD
+	return random.randi_range(OUTSIDE_WORK_BASE_REWARD_MIN, OUTSIDE_WORK_BASE_REWARD_MAX)
+
+
+func _outside_work_reward_text() -> String:
+	if settlement != null and settlement.is_research_completed("outside_work_earnings"):
+		return "%d" % OUTSIDE_WORK_UPGRADE_REWARD
+	return "%d-%d" % [OUTSIDE_WORK_BASE_REWARD_MIN, OUTSIDE_WORK_BASE_REWARD_MAX]
+
+
 func _send_selected_resident_to_outside_work() -> void:
 	if not is_instance_valid(selected_builder) or selected_builder.is_player_controlled:
-		_update_interface("Select an AI-controlled Helper or Courier before sending them to outside work.")
+		_update_interface("Select an AI-controlled Courier before sending them to outside work.")
 		return
-	if not selected_builder.is_courier() and selected_builder.daily_order_role != "helper":
-		_update_interface("Outside work requires a daily Helper or a Courier.")
+	if not selected_builder.is_courier() and selected_builder.daily_order_role != "courier":
+		_update_interface("Outside work requires a Courier.")
 		return
 	var worker_id := selected_builder.get_instance_id()
 	if outside_workers.has(worker_id):
@@ -3289,13 +3276,15 @@ func _send_selected_resident_to_outside_work() -> void:
 	selected_builder.cancel_current_action()
 	selected_builder.visible = false
 	selected_builder.process_mode = Node.PROCESS_MODE_DISABLED
+	var reward := _outside_work_reward()
 	outside_workers[worker_id] = {
 		"citizen": selected_builder,
 		"return_at_minute": _absolute_game_minutes() + OUTSIDE_WORK_DURATION_MINUTES,
+		"reward": reward,
 	}
 	if citizen_ai != null:
 		citizen_ai.request_decision_refresh()
-	_update_interface("Resident left for outside work and will return in 24 hours with %d coins." % OUTSIDE_WORK_REWARD)
+	_update_interface("Resident left for outside work and will return in 24 hours with %d coins." % reward)
 
 func _absolute_game_minutes() -> int:
 	return (day_cycle.current_day - 1) * SimulationClock.MINUTES_PER_DAY + floori(clock.minutes)
@@ -3310,16 +3299,17 @@ func _return_outside_workers() -> void:
 		elif day_cycle.current_day < int(assignment.get("return_day", 0)):
 			continue
 		var worker := assignment.get("citizen") as Citizen
+		var reward: int = int(assignment.get("reward", OUTSIDE_WORK_BASE_REWARD_MIN))
 		if is_instance_valid(worker):
 			worker.process_mode = Node.PROCESS_MODE_INHERIT
 			worker.visible = true
 			worker.global_position = entrance_stone.global_position + Vector3(0.8, 0.08, 1.2)
 			worker.idle()
-			settlement.money += OUTSIDE_WORK_REWARD
+			settlement.money += reward
 			last_citizen_positions[worker_id] = worker.global_position
 		outside_workers.erase(worker_id)
 		returned_any = true
-		_update_interface("A resident returned from outside work with %d coins." % OUTSIDE_WORK_REWARD)
+		_update_interface("A resident returned from outside work with %d coins." % reward)
 	if returned_any and citizen_ai != null:
 		citizen_ai.request_decision_refresh()
 
@@ -3333,6 +3323,7 @@ func _create_house_menu(ui: CanvasLayer) -> void:
 	house_menu.offset_bottom = -20.0
 	house_menu.visible = false
 	ui.add_child(house_menu)
+	house_menu.gui_input.connect(_on_context_menu_gui_input)
 	house_menu_title = Label.new()
 	house_menu_title.position = Vector2(16, 14)
 	house_menu_title.size = Vector2(272, 42)
@@ -3340,7 +3331,7 @@ func _create_house_menu(ui: CanvasLayer) -> void:
 	house_menu.add_child(house_menu_title)
 	house_spawn_button = Button.new()
 	house_spawn_button.text = "Order a resident"
-	house_spawn_button.tooltip_text = "A Helper or Courier will meet the newcomer at the entrance sign."
+	house_spawn_button.tooltip_text = "A Courier will meet the newcomer at the entrance sign."
 	house_spawn_button.position = Vector2(16, 64)
 	house_spawn_button.size = Vector2(272, 30)
 	house_spawn_button.pressed.connect(_spawn_house_citizen)
@@ -3362,6 +3353,7 @@ func _create_materials_factory_menu(ui: CanvasLayer) -> void:
 	materials_factory_menu.offset_bottom = -20.0
 	materials_factory_menu.visible = false
 	ui.add_child(materials_factory_menu)
+	materials_factory_menu.gui_input.connect(_on_context_menu_gui_input)
 	materials_factory_menu_title = Label.new()
 	materials_factory_menu_title.position = Vector2(16, 14)
 	materials_factory_menu_title.size = Vector2(272, 94)
@@ -3445,6 +3437,7 @@ func _create_research_menu(ui: CanvasLayer) -> void:
 	research_menu.offset_bottom = 250.0
 	research_menu.visible = false
 	ui.add_child(research_menu)
+	research_menu.gui_input.connect(_on_context_menu_gui_input)
 	
 	research_menu_title = Label.new()
 	research_menu_title.position = Vector2(18, 16)
@@ -3624,7 +3617,7 @@ func _spawn_house_citizen() -> void:
 	_show_house_menu()
 	pending_arrivals.append({"house": selected_house})
 	_update_arrivals()
-	_update_interface("A resident is expected at the entrance sign. Assign a Helper or use a Courier to meet them.")
+	_update_interface("A resident is expected at the entrance sign. Assign a Courier to meet them.")
 
 
 func _find_arrival_greeter(allow_busy := false) -> Citizen:
@@ -3906,17 +3899,17 @@ func _on_build_menu_gui_input(event: InputEvent) -> void:
 		_open_build_category("")
 	elif build_menu_is_job_menu or build_menu_is_daily_order_menu:
 		_close_assignment_submenu()
-	elif selected_builder != null:
-		selected_builder = null
-		build_menu.visible = false
 	else:
 		build_menu.visible = false
+		build_menu_is_global = false
+		if selected_builder != null:
+			selected_builder = null
 	get_viewport().set_input_as_handled()
 
 func _refresh_build_menu() -> void:
 	var selected_exists := selected_builder != null
 	var assignment_submenu_open := build_menu_is_job_menu or build_menu_is_daily_order_menu
-	var citizen_actions_visible := selected_exists and not assignment_submenu_open and build_category.is_empty()
+	var citizen_actions_visible := selected_exists and not assignment_submenu_open and build_category.is_empty() and not build_menu_is_global
 	if manage_citizen_button != null:
 		manage_citizen_button.visible = citizen_actions_visible
 		manage_citizen_button.text = "Управлять" if selected_builder != hero_citizen else "Управлять героем"
@@ -3940,17 +3933,24 @@ func _refresh_build_menu() -> void:
 	if job_back_btn != null:
 		job_back_btn.visible = selected_exists and assignment_submenu_open
 	
+	var current_era_category := ERA_CATEGORIES[settlement.era]
 	for button in build_buttons:
 		var category_button: String = button.get_meta("category_button", "")
 		if button.get_meta("category_back", false):
 			button.visible = not build_category.is_empty() and not assignment_submenu_open
 		elif not category_button.is_empty():
-			button.visible = build_category.is_empty() and not assignment_submenu_open and building_availability_service.is_category_available(category_button)
+			if build_menu_is_global:
+				button.visible = build_category.is_empty() and not assignment_submenu_open and category_button != current_era_category and building_availability_service.is_category_available(category_button)
+			else:
+				button.visible = build_category.is_empty() and not assignment_submenu_open and building_availability_service.is_category_available(category_button)
 		else:
 			var build_type: String = button.get_meta("build_type", "")
 			var menu_state: Dictionary = building_availability_service.menu_state(build_type)
 			button.set_meta("build_menu_state", menu_state)
-			button.visible = not build_category.is_empty() and button.get_meta("category", "") == build_category and not assignment_submenu_open and bool(menu_state.visible)
+			if build_menu_is_global and build_category.is_empty():
+				button.visible = not assignment_submenu_open and button.get_meta("category", "") == current_era_category and bool(menu_state.visible)
+			else:
+				button.visible = not build_category.is_empty() and button.get_meta("category", "") == build_category and not assignment_submenu_open and bool(menu_state.visible)
 			
 	for button in role_buttons:
 		var role: String = button.get_meta("role", "")
@@ -4008,6 +4008,8 @@ func _refresh_build_menu() -> void:
 			build_menu_title.text = "Daily Orders\nNo officer required. Evening orders start next workday."
 		elif not build_category.is_empty():
 			build_menu_title.text = "%s buildings\nChoose a building to place." % build_category.capitalize()
+		elif build_menu_is_global:
+			build_menu_title.text = "%s Era Construction\nChoose a building to place." % _era_name()
 		else:
 			_show_selected_citizen_menu()
 
@@ -4100,7 +4102,7 @@ func _is_role_available(role: String) -> bool:
 		return false
 	match role:
 		"": return true
-		"helper": return true
+		"courier": return true
 		"construction":
 			return (not construction_sites.is_empty() or not demolition_sites.is_empty()) and (settlement.era < SettlementState.Era.STONE or _builder_job_capacity() > 0)
 		"forestry": return _available_employer_capacity("forestry") > 0 and bool(settlement.tools.get("axe", false)) and bool(settlement.tools.get("hand_saw", false)) and not tree_positions.is_empty() and not warehouse_positions.is_empty()
@@ -4134,7 +4136,7 @@ func _is_daily_order_role_available(_role: String) -> bool:
 func _min_era_for_role(role: String) -> SettlementState.Era:
 	# Basic outdoor/hand-work roles exist from the tent era even without a dedicated workplace.
 	match role:
-		"construction", "excavation", "gather_branches", "gather_food", "courier", "craftsman", "official", "helper", "":
+		"construction", "excavation", "gather_branches", "gather_food", "courier", "craftsman", "official", "":
 			return SettlementState.Era.TENT
 	var types := _employer_types_for_role(role)
 	if types.is_empty():
@@ -4360,6 +4362,12 @@ func _cancel_build_action() -> void:
 	selected_builder = null
 	_update_interface("Construction mode cancelled.")
 
+func _on_context_menu_gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+		_close_context_menus()
+		get_viewport().set_input_as_handled()
+
+
 func _close_context_menus() -> void:
 	build_mode = ""
 	dig_mode = false
@@ -4391,6 +4399,7 @@ func _close_context_menus() -> void:
 	build_category = ""
 	build_menu_is_job_menu = false
 	build_menu_is_daily_order_menu = false
+	build_menu_is_global = false
 	_refresh_build_menu()
 
 
@@ -4766,12 +4775,13 @@ func _select_citizen(clicked_citizen: Citizen) -> void:
 			return
 		selected_builder.courier_worker = clicked_citizen
 		_request_courier_dispatch()
-		_update_interface("%s assigned to this worker. Click another worker to reassign." % ("Courier" if selected_builder.is_courier() else "Helper"))
+		_update_interface("%s assigned to this worker. Click another worker to reassign." % ("Courier" if selected_builder.is_courier() else "Daily courier"))
 		return
 	selected_builder = clicked_citizen
 	_hide_all_selection_menus()
 	build_mode = ""
 	build_category = ""
+	build_menu_is_global = false
 	selection_marker.visible = false
 	build_menu.visible = true
 	_refresh_build_menu()
@@ -5355,6 +5365,11 @@ func _create_construction_site(cell: Vector2i, building_type: String, position_o
 	_request_courier_dispatch()
 
 func _update_construction(delta: float) -> void:
+	# Reconcile reservations outside work time as well, so interrupted night
+	# deliveries do not strand reserved materials forever.
+	for site: ConstructionSite in construction_sites:
+		if is_instance_valid(site.node):
+			_reconcile_construction_reservations(site)
 	construction.tick(delta)
 
 
@@ -5701,13 +5716,15 @@ func _nearby_player_work_target() -> Node3D:
 	if player_citizen == null:
 		return null
 	for site in construction_sites:
-		var node := site.node as Node3D
-		if is_instance_valid(node) and player_citizen.global_position.distance_to(node.global_position) <= INTERACTION_RANGE:
-			return node
+		if not is_instance_valid(site.node):
+			continue
+		if player_citizen.global_position.distance_to(site.node.global_position) <= INTERACTION_RANGE:
+			return site.node
 	for site in demolition_sites:
-		var building := site.building as Node3D
-		if is_instance_valid(building) and player_citizen.global_position.distance_to(building.global_position) <= INTERACTION_RANGE:
-			return building
+		if not is_instance_valid(site.building):
+			continue
+		if player_citizen.global_position.distance_to(site.building.global_position) <= INTERACTION_RANGE:
+			return site.building
 	return null
 
 
@@ -5760,13 +5777,15 @@ func _update_water_collectors(delta: float) -> void:
 
 
 func _toggle_global_build_menu() -> void:
-	var was_visible := build_menu.visible
+	var was_visible := build_menu.visible and build_menu_is_global
 	_close_context_menus()
-	build_menu.visible = not was_visible
+	build_menu_is_global = not was_visible
+	build_menu.visible = build_menu_is_global
 	if build_menu.visible:
 		build_category = ""
+		build_menu_is_job_menu = false
+		build_menu_is_daily_order_menu = false
 		_refresh_build_menu()
-		_show_selected_citizen_menu()
 
 
 func _create_campfire_menu(ui: CanvasLayer) -> void:
@@ -5778,6 +5797,7 @@ func _create_campfire_menu(ui: CanvasLayer) -> void:
 	campfire_menu.offset_bottom = -20.0
 	campfire_menu.visible = false
 	ui.add_child(campfire_menu)
+	campfire_menu.gui_input.connect(_on_context_menu_gui_input)
 	
 	campfire_menu_title = Label.new()
 	campfire_menu_title.position = Vector2(16, 14)
@@ -5937,6 +5957,7 @@ func _create_campfire_orders_menu(ui: CanvasLayer) -> void:
 	campfire_orders_menu.offset_bottom = 125.0
 	campfire_orders_menu.visible = false
 	ui.add_child(campfire_orders_menu)
+	campfire_orders_menu.gui_input.connect(_on_context_menu_gui_input)
 	var title := Label.new()
 	title.text = "Campfire Orders"
 	title.position = Vector2(18, 16)
@@ -6010,6 +6031,7 @@ func _create_workforce_menu(ui: CanvasLayer) -> void:
 	workforce_menu.offset_bottom = 255.0
 	workforce_menu.visible = false
 	ui.add_child(workforce_menu)
+	workforce_menu.gui_input.connect(_on_context_menu_gui_input)
 	workforce_menu_title = Label.new()
 	workforce_menu_title.position = Vector2(18, 16)
 	workforce_menu_title.size = Vector2(424, 30)
@@ -6063,11 +6085,11 @@ func _refresh_campfire_occupancy_button() -> void:
 
 
 func _workforce_roles() -> Array[String]:
-	return ["construction", "forestry", "farming", "excavation", "gather_branches", "gather_food", "cook", "teacher", "seller", "official", "factory_worker", "engineer", "craftsman"]
+	return ["construction", "forestry", "farming", "excavation", "gather_branches", "gather_food", "courier", "cook", "teacher", "seller", "official", "factory_worker", "engineer", "craftsman"]
 
 
 func _daily_order_roles() -> Array[String]:
-	return ["helper", "construction", "gather_branches", "gather_grass", "gather_water", "cleaning"]
+	return ["courier", "construction", "gather_branches", "gather_grass", "gather_water", "cleaning"]
 
 
 func _workforce_role_label(role: String) -> String:
@@ -6078,7 +6100,7 @@ func _workforce_role_label(role: String) -> String:
 		"gather_water": "Collect water", "cleaning": "Cleaning",
 		"cook": "Cook", "teacher": "Teacher", "seller": "Seller", "official": "Employment officer",
 		"factory_worker": "Factory worker", "engineer": "Engineer",
-		"helper": "Helper", "courier": "Courier", "craftsman": "Craftsman"
+		"courier": "Courier", "craftsman": "Craftsman"
 	}
 	return str(labels.get(role, role.replace("_", " ").capitalize()))
 
@@ -6573,6 +6595,7 @@ func _create_market_menu(ui: CanvasLayer) -> void:
 	market_menu.offset_bottom = -20.0
 	market_menu.visible = false
 	ui.add_child(market_menu)
+	market_menu.gui_input.connect(_on_context_menu_gui_input)
 	
 	market_menu_title = Label.new()
 	market_menu_title.position = Vector2(16, 14)
@@ -6785,6 +6808,7 @@ func _create_building_menu(ui: CanvasLayer) -> void:
 	building_menu.offset_bottom = -20.0
 	building_menu.visible = false
 	ui.add_child(building_menu)
+	building_menu.gui_input.connect(_on_context_menu_gui_input)
 	building_menu_title = Label.new()
 	building_menu_title.position = Vector2(16, 14)
 	building_menu_title.size = Vector2(272, 82)
@@ -7107,6 +7131,7 @@ func _create_warehouse_menu(ui: CanvasLayer) -> void:
 	warehouse_menu.offset_bottom = -20.0
 	warehouse_menu.visible = false
 	ui.add_child(warehouse_menu)
+	warehouse_menu.gui_input.connect(_on_context_menu_gui_input)
 
 	warehouse_menu_title = Label.new()
 	warehouse_menu_title.position = Vector2(16, 12)
@@ -7288,7 +7313,6 @@ func _appoint_official(citizen: Citizen) -> void:
 	citizen.employment_state = Citizen.EmploymentState.EMPLOYED
 	if not is_instance_valid(citizen.employment_workplace):
 		citizen.active_role = ""
-	_refresh_labor_authority_indicator()
 
 
 func _on_hero_official_pressed() -> void:
@@ -7326,7 +7350,6 @@ func _dismiss_hero_official() -> void:
 	hero_citizen.employment_workplace = null
 	hero_citizen.employment_state = Citizen.EmploymentState.NO_PERMANENT_WORK
 	hero_citizen.active_role = ""
-	_refresh_labor_authority_indicator()
 	_update_interface("%s покинул пост управляющего." % hero_citizen.role_label())
 	_update_workers()
 	_refresh_build_menu()

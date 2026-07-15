@@ -116,15 +116,15 @@ func complete_for(courier: Citizen) -> void:
 
 func _available_couriers() -> Array[Citizen]:
 	var couriers: Array[Citizen] = []
-	var helpers: Array[Citizen] = []
+	var daily_couriers: Array[Citizen] = []
 	for citizen in simulation.citizens:
 		if not citizen.can_handle_entry_logistics() or citizen.state != Citizen.State.IDLE:
 			continue
 		if citizen.is_courier():
 			couriers.append(citizen)
-		elif citizen.is_helper():
-			helpers.append(citizen)
-	return couriers if not couriers.is_empty() else helpers
+		elif citizen.is_daily_courier():
+			daily_couriers.append(citizen)
+	return couriers if not couriers.is_empty() else daily_couriers
 
 
 func _nearest_courier(couriers: Array[Citizen], pickup: Vector3) -> Citizen:

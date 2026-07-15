@@ -80,7 +80,7 @@ const RANDOM_HEADS_FEMALE := [
 ]
 
 const DAILY_ORDER_ROLES := {
-	"helper": true,
+	"courier": true,
 	"construction": true,
 	"gather_branches": true,
 	"gather_grass": true,
@@ -946,7 +946,9 @@ func assign_building_supply(target: Node3D, warehouse: Vector3, resource_type: S
 	state = State.TO_CONSTRUCTION_PICKUP
 
 func _process_construction_pickup(delta: float) -> void:
-	if _move_to(warehouse_position, delta):
+	# Pickup must not be redirected by another building's service queue; the
+	# warehouse/source position is the only valid interaction point here.
+	if _move_to(warehouse_position, delta, false, false):
 		# The courier was admitted to the warehouse queue; release it before
 		# walking away so the entrance is not blocked for the whole delivery trip.
 		_reset_assignment_navigation()
@@ -1280,8 +1282,8 @@ func is_registering() -> bool:
 func is_unregistered() -> bool:
 	return employment_state == EmploymentState.UNREGISTERED
 
-func is_helper() -> bool:
-	return has_active_daily_order() and daily_order_role == "helper"
+func is_daily_courier() -> bool:
+	return has_active_daily_order() and daily_order_role == "courier"
 
 func is_daily_order_role(role: String) -> bool:
 	return DAILY_ORDER_ROLES.has(role)
@@ -1293,7 +1295,7 @@ func is_courier() -> bool:
 	return permanent_role == "courier" and is_employed()
 
 func can_handle_entry_logistics() -> bool:
-	return is_helper() or is_courier()
+	return is_daily_courier() or is_courier()
 
 func has_active_daily_order() -> bool:
 	if not has_daily_order():
@@ -1325,7 +1327,7 @@ func _take_registration_ticket() -> void:
 
 
 func has_active_delivery() -> bool:
-	return state in [State.COURIER_TO_WORKER, State.COURIER_TO_WAREHOUSE, State.COURIER_TO_SAWMILL, State.TO_FOOD_PICKUP, State.TO_CANTEEN_DELIVERY, State.TO_CONSTRUCTION_PICKUP, State.TO_CONSTRUCTION_SITE] or carried_amount > 0
+	return state in [State.COURIER_TO_WORKER, State.COURIER_TO_WAREHOUSE, State.COURIER_TO_SAWMILL, State.TO_FOOD_PICKUP, State.TO_CANTEEN_DELIVERY, State.TO_CONSTRUCTION_PICKUP, State.TO_CONSTRUCTION_SITE, State.TO_TRADE_PICKUP, State.TO_TRADE_DESTINATION]
 
 func _move_to(destination: Vector3, delta: float, may_enter_destination_house := false, use_building_queue := true, record_trail := true) -> bool:
 	var movement_destination := destination
@@ -1941,7 +1943,7 @@ func _reachable_construction_approach(site: Node3D) -> Vector3:
 	var primary := _work_position_for(site)
 	if not route_reachability_query.is_valid():
 		return primary
-	if bool(route_reachability_query.call(global_position, primary, false)):
+	if _is_valid_approach_point(primary):
 		return primary
 	var site_position := site.global_position if site.is_inside_tree() else site.position
 	var footprint: Vector2i = site.get_meta("footprint", Vector2i(3, 3))
@@ -1953,11 +1955,21 @@ func _reachable_construction_approach(site: Node3D) -> Vector3:
 		site_position + Vector3(-x_distance, 0.0, slot),
 		site_position + Vector3(slot, 0.0, z_distance),
 		site_position + Vector3(slot, 0.0, -z_distance),
+		site_position + Vector3(x_distance, 0.0, 0.0),
+		site_position + Vector3(-x_distance, 0.0, 0.0),
+		site_position + Vector3(0.0, 0.0, z_distance),
+		site_position + Vector3(0.0, 0.0, -z_distance),
 	]
 	for candidate: Vector3 in candidates:
-		if bool(route_reachability_query.call(global_position, candidate, false)):
+		if _is_valid_approach_point(candidate):
 			return candidate
 	return primary
+
+
+func _is_valid_approach_point(point: Vector3) -> bool:
+	if not route_reachability_query.is_valid():
+		return true
+	return bool(route_reachability_query.call(global_position, point, false))
 
 func get_core_skill_for_role(role: String) -> String:
 	match role:
@@ -1973,7 +1985,7 @@ func get_core_skill_for_role(role: String) -> String:
 			return "factory_worker"
 		"engineering", "engineer":
 			return "engineer"
-		"helper", "courier":
+		"courier":
 			return "courier"
 		"craftsman", "crafting":
 			return "craftsman"
@@ -2647,12 +2659,6 @@ func execute_action(action: StringName, target: Node3D, payload: AIFactSet) -> b
 			if not simulation.courier_dispatcher.start_task(self, task_id):
 				return false
 			return has_active_delivery()
-		&"construction_supply":
-			var supply_resource: Variant = payload.value(&"resource.type", "") if payload != null else ""
-			var supply_warehouse: Variant = payload.value(&"warehouse.position", Vector3.INF) if payload != null else Vector3.INF
-			if not is_instance_valid(target) or not (supply_resource is String) or supply_resource.is_empty() or not (supply_warehouse is Vector3) or supply_warehouse == Vector3.INF or simulation == null:
-				return false
-			return simulation.begin_native_construction_supply(self, target, supply_resource, supply_warehouse)
 		&"register":
 			var center_position: Variant = payload.value(&"center.position", Vector3.INF) if payload != null else Vector3.INF
 			var pending_role: Variant = payload.value(&"workplace.role", "") if payload != null else ""
@@ -2731,11 +2737,6 @@ func get_action_status(action: StringName) -> int:
 				return 2 # SUCCEEDED
 		&"courier_delivery":
 			if has_active_delivery():
-				return 1 # RUNNING
-			if state == State.IDLE:
-				return 2 # SUCCEEDED
-		&"construction_supply":
-			if state in [State.TO_CONSTRUCTION_PICKUP, State.TO_CONSTRUCTION_SITE]:
 				return 1 # RUNNING
 			if state == State.IDLE:
 				return 2 # SUCCEEDED

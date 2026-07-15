@@ -507,6 +507,19 @@ func _test_building_research_service() -> void:
 	assert(state.unlocked_systems.official)
 	assert(state.active_research_tech_id.is_empty())
 
+	# Outside-work earnings upgrade unlocks the bonus system and doubles the reward multiplier.
+	assert(state.outside_work_reward_multiplier() == 1)
+	state.branches = 6
+	state.grass = 4
+	state.money = 25
+	assert(service.visible_tech_ids().has("outside_work_earnings"))
+	assert(service.start_research("outside_work_earnings", 77))
+	service.advance_active(25.0, 1.0)
+	var earnings_completion: Dictionary = service.complete_active()
+	assert(earnings_completion.unlocked_target == "outside_work_bonus")
+	assert(state.unlocked_systems.outside_work_bonus)
+	assert(state.outside_work_reward_multiplier() == 2)
+
 
 func _test_progression_and_volunteers() -> void:
 	var state := SettlementState.new()

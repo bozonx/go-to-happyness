@@ -50,6 +50,7 @@ var campfire_story_target_role := ""
 var campfire_story_target_day := -1
 var unlocked_systems := {
 	"official": false,
+	"outside_work_bonus": false,
 }
 var unlocked_building_levels := {
 	"tent": false,
@@ -601,6 +602,10 @@ func can_start_building_research(research_id: String) -> bool:
 		if target != "campfire_lvl3" and target.ends_with("_lvl3") and not has_building("campfire_lvl3"):
 			return false
 	return can_afford_research(research_id)
+
+
+func outside_work_reward_multiplier() -> int:
+	return 2 if is_research_completed("outside_work_earnings") else 1
 
 
 func is_research_completed(research_id: String) -> bool:

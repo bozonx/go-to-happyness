@@ -92,6 +92,7 @@ const RESEARCH_COSTS := {
 	"campfire_lvl2": {"branches": 8, "grass": 6},
 	"campfire_lvl3": {"branches": 15, "grass": 12},
 	"gathering_place": {"branches": 6, "grass": 4},
+	"outside_work_earnings": {"money": 25, "branches": 6, "grass": 4},
 	"cook_campfire_lvl2": {"branches": 8, "grass": 6},
 	"cook_campfire_lvl3": {"branches": 12, "grass": 10},
 	"house": {"boards": 10, "logs": 5},
@@ -176,6 +177,15 @@ const RESEARCH_TECHS := {
 		"prerequisites": ["campfire"],
 		"effect": "Enables formal workforce automation.",
 		"reward_skill": "official",
+	},
+	"outside_work_earnings": {
+		"name": "Случайные заработки",
+		"base_duration": 25.0,
+		"required_skill": "construction",
+		"target_system": "outside_work_bonus",
+		"prerequisites": ["campfire"],
+		"effect": "Outside work via the entrance sign gives a fixed 16 coins instead of random 4-12.",
+		"reward_skill": "construction",
 	},
 	"campfire_lvl2": {
 		"name": "Главный костер ур. 2",

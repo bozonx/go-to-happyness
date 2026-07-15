@@ -194,7 +194,7 @@ func _init() -> void:
 	assert(simulation.warehouse_positions.is_empty())
 	simulation._create_resource_pile(logistics_worker.global_position, {construction_resource: 1})
 	var source_pile: Dictionary = simulation.resource_piles.back()
-	simulation._assign_daily_order(logistics_worker, "helper")
+	simulation._assign_daily_order(logistics_worker, "courier")
 	simulation._update_couriers()
 	var pile_snapshot := SettlementAIWorldFacade.new(simulation).capture(999)
 	var pile_orders := CourierDeliveryOrderProvider.new().collect_orders(pile_snapshot)
@@ -214,7 +214,7 @@ func _init() -> void:
 	# Ctrl+F grants settlement stock without creating a warehouse or a pile. That
 	# stock is collected from the camp entrance until a warehouse is completed.
 	simulation.settlement.add(construction_resource, 1)
-	simulation._assign_daily_order(logistics_worker, "helper")
+	simulation._assign_daily_order(logistics_worker, "courier")
 	simulation._update_couriers()
 	var debug_stock_snapshot := SettlementAIWorldFacade.new(simulation).capture(1000)
 	var debug_stock_orders := CourierDeliveryOrderProvider.new().collect_orders(debug_stock_snapshot)
@@ -238,7 +238,7 @@ func _init() -> void:
 		added_test_warehouse = true
 	assert(simulation._reserve_player_gather_storage("branches", simulation.HERO_GATHER_YIELD) == simulation.HERO_GATHER_YIELD)
 	simulation._assign_daily_order(supply_worker, "construction")
-	simulation._assign_daily_order(logistics_worker, "helper")
+	simulation._assign_daily_order(logistics_worker, "courier")
 	simulation._update_couriers()
 	var construction_snapshot := SettlementAIWorldFacade.new(simulation).capture(1000)
 	var workforce_orders := WorkforceOrderProvider.new().collect_orders(construction_snapshot)
@@ -249,14 +249,22 @@ func _init() -> void:
 	supply_worker.clear_daily_order()
 	if added_test_warehouse:
 		simulation.warehouse_positions.clear()
-	assert(simulation.begin_native_construction_supply(supply_worker, construction_site.node, construction_resource, supply_worker.global_position))
+
+	# Verify the dispatcher reservation/reconciliation path for construction supply.
+	simulation._assign_daily_order(logistics_worker, "courier")
+	simulation._update_couriers()
+	var final_snapshot := SettlementAIWorldFacade.new(simulation).capture(1001)
+	var final_orders := CourierDeliveryOrderProvider.new().collect_orders(final_snapshot)
+	var final_order: Variant = final_orders.filter(func(order: CitizenOrder): return order.citizen_id == logistics_worker.ai_id and order.kind == &"courier_delivery").front()
+	assert(final_order != null)
+	assert(simulation.courier_dispatcher.start_task(logistics_worker, final_order.payload.value(&"courier.task_id")))
 	assert(simulation.settlement.amount(construction_resource) == material_before - 1)
 	assert(int(construction_site.reserved_materials.get(construction_resource, 0)) == 1)
-	assert(supply_worker.state in [Citizen.State.TO_CONSTRUCTION_PICKUP, Citizen.State.TO_CONSTRUCTION_SITE])
-	supply_worker.idle()
+	logistics_worker.idle()
 	simulation._reconcile_construction_reservations(construction_site)
 	assert(simulation.settlement.amount(construction_resource) == material_before)
 	assert(int(construction_site.reserved_materials.get(construction_resource, 0)) == 0)
+	logistics_worker.clear_daily_order()
 	assert(simulation.construction.cancel_site(simulation.construction_sites[0].node))
 	assert(simulation.construction_sites.is_empty())
 	assert(simulation.building_registry.record_at_cell(cell) == null)
@@ -331,10 +339,14 @@ func _init() -> void:
 	outside_worker.global_position = simulation.entrance_stone.global_position + Vector3(10.0, 0.0, 0.0)
 	simulation.last_citizen_positions[outside_worker.get_instance_id()] = outside_worker.global_position
 	simulation.selected_builder = outside_worker
-	simulation._assign_daily_order(outside_worker, "helper")
+	simulation._assign_daily_order(outside_worker, "courier")
+	assert(outside_worker.daily_order_role == "courier")
+	assert(not outside_worker.is_player_controlled)
 	var money_before_outside_work: int = simulation.settlement.money
 	simulation._send_selected_resident_to_outside_work()
 	assert(simulation.outside_workers.has(outside_worker.get_instance_id()))
+	var outside_reward: int = int(simulation.outside_workers[outside_worker.get_instance_id()].get("reward", 0))
+	assert(outside_reward >= simulation.OUTSIDE_WORK_BASE_REWARD_MIN and outside_reward <= simulation.OUTSIDE_WORK_BASE_REWARD_MAX)
 	assert(not outside_worker.visible)
 	simulation._skip_night()
 	assert(simulation.clock.hour() == 6 and simulation.clock.minute() == 0)
@@ -342,7 +354,7 @@ func _init() -> void:
 	assert(staying_worker.global_position == staying_position)
 	assert(simulation.outside_workers.has(outside_worker.get_instance_id()))
 	assert(not outside_worker.visible)
-	assert(outside_worker.daily_order_role == "helper")
+	assert(outside_worker.daily_order_role == "courier")
 	assert(outside_worker.daily_order_workday_id == 2)
 	assert(simulation.settlement.money == money_before_outside_work)
 	simulation.clock.set_time(9 * 60)
@@ -352,7 +364,7 @@ func _init() -> void:
 	simulation._return_outside_workers()
 	assert(not simulation.outside_workers.has(outside_worker.get_instance_id()))
 	assert(outside_worker.visible)
-	assert(simulation.settlement.money == money_before_outside_work + simulation.OUTSIDE_WORK_REWARD)
+	assert(simulation.settlement.money == money_before_outside_work + outside_reward)
 	var outside_return_position := outside_worker.global_position
 	simulation._guard_citizen_positions()
 	assert(outside_worker.global_position == outside_return_position)

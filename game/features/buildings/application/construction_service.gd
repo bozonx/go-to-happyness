@@ -72,6 +72,13 @@ func start_site(cell: Vector2i, building_type: String, position: Vector3, rotati
 func tick(delta: float) -> void:
 	for index in range(sites.size() - 1, -1, -1):
 		var site := sites[index]
+		if not is_instance_valid(site.node) or site.node.is_queued_for_deletion():
+			# The site node was freed externally (e.g. mid-delivery cancellation).
+			# Return any reserved materials and discard the site record.
+			for resource_type in site.reserved_materials:
+				runtime.settlement.add(resource_type, int(site.reserved_materials[resource_type]))
+			sites.remove_at(index)
+			continue
 		if not site.is_supplied():
 			_update_supply_label(site)
 			continue
@@ -153,6 +160,8 @@ func cancel_site(site_node: Node3D) -> bool:
 
 
 func _update_supply_label(site: ConstructionSite) -> void:
+	if not is_instance_valid(site.node) or site.node.is_queued_for_deletion():
+		return
 	var label := site.node.get_node_or_null("SupplyLabel") as Label3D
 	if label == null:
 		return
