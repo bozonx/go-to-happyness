@@ -193,6 +193,12 @@ func _test_tent_start_config() -> void:
 	assert(state.is_building_unlocked("campfire"))
 	assert(state.is_building_unlocked("tent"))
 	assert(state.is_building_unlocked("cook_campfire"))
+	assert(state.is_building_unlocked("dew_collector"))
+	assert(state.tarp == 1)
+	assert(state.can_cover_warehouse_with_tarp())
+	assert(state.cover_warehouse_with_tarp())
+	assert(state.tarp == 0 and state.warehouse_tarp_covered)
+	assert(not state.is_building_unlocked("straw_tent"))
 	assert(not state.can_afford_building("campfire"))
 	state.buildings["warehouse"] = 1
 	state.warehouse_ever_built = true

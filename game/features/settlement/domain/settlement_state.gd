@@ -43,6 +43,7 @@ var equipment: Dictionary = TENT_STARTING_EQUIPMENT.duplicate(true)
 var trade_sales := 0
 var buildings: Dictionary = {}
 var brick_construction_unlocked := false
+var warehouse_tarp_covered := false
 var unlocked_systems := {
 	"official": false,
 }
@@ -126,6 +127,7 @@ func apply_tent_start(reset_progress := true) -> void:
 	equipment = TENT_STARTING_EQUIPMENT.duplicate(true)
 	trade_sales = 0
 	brick_construction_unlocked = false
+	warehouse_tarp_covered = false
 	active_research_tech_id = ""
 	active_research_worker_id = -1
 	active_research_remaining_time = 0.0
@@ -144,7 +146,7 @@ func apply_tent_start(reset_progress := true) -> void:
 
 
 func _tent_start_unlock_for(building_type: String) -> bool:
-	if building_type in ["tent", "cook_campfire"]:
+	if building_type in ["tent", "cook_campfire", "dew_collector"]:
 		return true
 	return false
 
@@ -202,6 +204,18 @@ var debug_storage_capacity_bonus := 0
 
 func storage_weight(resource_type: String) -> float:
 	return float(STORAGE_WEIGHTS.get(resource_type, 1.0))
+
+
+func can_cover_warehouse_with_tarp() -> bool:
+	return not warehouse_tarp_covered and tarp > 0
+
+
+func cover_warehouse_with_tarp() -> bool:
+	if not can_cover_warehouse_with_tarp():
+		return false
+	tarp -= 1
+	warehouse_tarp_covered = true
+	return true
 
 
 func storage_capacity(warehouses: int) -> int:

@@ -860,6 +860,8 @@ func _apply_hourly_tent_survival(hour: int, survival_day := 0) -> void:
 
 func _apply_rain_damage() -> void:
 	var sheltered_capacity := int(settlement.buildings.get("straw_warehouse", 0)) * 48 + int(settlement.buildings.get("tarp_warehouse", 0)) * 72
+	if settlement.warehouse_tarp_covered:
+		sheltered_capacity += 24
 	var stored_units := settlement.storage_used_units()
 	if stored_units <= sheltered_capacity:
 		return
@@ -6276,6 +6278,7 @@ func _refresh_market_menu() -> void:
 		buy_items.append(["hand_saw", 15])
 		buy_items.append(["shovel", 15])
 		buy_items.append(["bucket", 15])
+		buy_items.append(["tarp", 8])
 	elif market_type in ["earth_market", "clay_market"]:
 		buy_items.append(["hoe", 18])
 	elif market_type in ["wood_market", "stone_market", "brick_market"]:
@@ -6819,16 +6822,30 @@ func _refresh_warehouse_menu() -> void:
 		warehouse_menu.add_child(plus)
 		y_offset += 32.0
 
+	var cover_btn := Button.new()
+	if settlement.warehouse_tarp_covered:
+		cover_btn.text = "Tarp cover active"
+		cover_btn.disabled = true
+	elif settlement.can_cover_warehouse_with_tarp():
+		cover_btn.text = "Stretch tarp cover (-1 tarp)"
+		cover_btn.pressed.connect(_cover_warehouse_with_tarp)
+	else:
+		cover_btn.text = "Needs 1 tarp to cover"
+		cover_btn.disabled = true
+	cover_btn.position = Vector2(16, y_offset + 8)
+	cover_btn.size = Vector2(290, 28)
+	warehouse_menu.add_child(cover_btn)
+
 	var demolish_btn := Button.new()
 	demolish_btn.text = "Mark for demolition"
-	demolish_btn.position = Vector2(16, y_offset + 8)
+	demolish_btn.position = Vector2(16, y_offset + 42)
 	demolish_btn.size = Vector2(290, 28)
 	demolish_btn.pressed.connect(func(): _mark_building_for_demolition(selected_warehouse))
 	warehouse_menu.add_child(demolish_btn)
 
 	var close_btn := Button.new()
 	close_btn.text = "Close Menu"
-	close_btn.position = Vector2(16, y_offset + 42)
+	close_btn.position = Vector2(16, y_offset + 76)
 	close_btn.size = Vector2(290, 28)
 	close_btn.pressed.connect(_close_context_menus)
 	warehouse_menu.add_child(close_btn)
@@ -6836,6 +6853,12 @@ func _refresh_warehouse_menu() -> void:
 
 func _adjust_storage(resource_type: String, delta_units: float) -> void:
 	settlement.adjust_storage_limit(resource_type, delta_units, warehouse_positions.size())
+	_refresh_warehouse_menu()
+
+
+func _cover_warehouse_with_tarp() -> void:
+	if settlement.cover_warehouse_with_tarp():
+		_update_interface("The open heap is now covered with a tarp.")
 	_refresh_warehouse_menu()
 
 

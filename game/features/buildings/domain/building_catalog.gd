@@ -18,7 +18,7 @@ const DEFINITIONS := {
 	"tarp_materials_yard": {"name": "Брезентовый двор материалов", "category": "tent", "costs": {"branches": 8, "grass": 4, "tarp": 1}},
 	"straw_craft_tent": {"name": "Соломенная ремесленная палатка", "category": "tent", "costs": {"branches": 10, "grass": 5}},
 	"tarp_craft_tent": {"name": "Брезентовая ремесленная палатка", "category": "tent", "costs": {"branches": 8, "grass": 4, "tarp": 1}},
-	"dew_collector": {"name": "Сборщик росы", "category": "tent", "costs": {"branches": 6, "grass": 4}},
+	"dew_collector": {"name": "Сборщик росы", "category": "tent", "costs": {"branches": 4, "grass": 4, "tarp": 1}},
 	"advanced_dew_collector": {"name": "Улучшенный сборщик росы", "category": "tent", "costs": {"branches": 12, "grass": 8}},
 	"pond": {"name": "Pond", "category": "tent", "costs": {"branches": 8, "grass": 6}},
 	"warehouse": {"name": "Куча материалов (Склад ур. 1)", "category": "tent", "costs": {}},
