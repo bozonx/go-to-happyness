@@ -236,6 +236,17 @@ func _init() -> void:
 	_test_courier_provider_assigns_unique_tasks()
 	_test_courier_provider_uses_shared_snapshot_tasks()
 	_test_courier_provider_keeps_active_task_order()
+	_test_courier_provider_more_couriers_than_tasks()
+	_test_courier_provider_equal_couriers_and_tasks()
+	_test_courier_provider_fewer_couriers_than_tasks()
+	_test_courier_provider_active_courier_excluded_from_new_tasks()
+	_test_courier_provider_same_site_different_resources()
+	_test_courier_provider_two_couriers_same_task_not_duplicated()
+	_test_courier_dispatcher_start_task_prevents_double_assignment()
+	_test_courier_dispatcher_complete_for_clears_task()
+	_test_courier_dispatcher_cleanup_removes_invalid_tasks()
+	_test_courier_dispatcher_cleanup_unassigns_dead_courier()
+	_test_courier_dispatcher_publish_does_not_duplicate()
 	_test_native_courier_goal()
 	_test_production_sleep_actuator()
 	_test_order_reconciliation()
@@ -944,6 +955,206 @@ func _test_courier_provider_keeps_active_task_order() -> void:
 	assert(orders[0].target_position == Vector3(3.0, 0.0, 4.0))
 
 
+func _test_courier_provider_more_couriers_than_tasks() -> void:
+	var provider := CourierDeliveryOrderProviderScript.new()
+	var tasks := [
+		{&"id": &"task_a", &"priority": 100, &"pickup": Vector3(1.0, 0.0, 0.0)},
+		{&"id": &"task_b", &"priority": 90, &"pickup": Vector3(2.0, 0.0, 0.0)},
+	]
+	var c1 := _courier_citizen_with_tasks(1, tasks)
+	var c2 := _courier_citizen_with_tasks(2, tasks)
+	var c3 := _courier_citizen_with_tasks(3, tasks)
+	var snapshot := WorldSnapshot.new(1, 0.0, 0.0, AIFactSet.new({&"work.courier.tasks": tasks}), {1: c1, 2: c2, 3: c3})
+	var orders := provider.collect_orders(snapshot)
+	assert(orders.size() == 2, "Expected 2 orders for 2 tasks with 3 couriers, got %d" % orders.size())
+	var assigned_ids: Array[StringName] = []
+	for order in orders:
+		assigned_ids.append(order.payload.value(&"courier.task_id") as StringName)
+	assert(assigned_ids.has(&"task_a"))
+	assert(assigned_ids.has(&"task_b"))
+	assert(not assigned_ids.has(&"task_a") or assigned_ids.count(&"task_a") == 1)
+	assert(not assigned_ids.has(&"task_b") or assigned_ids.count(&"task_b") == 1)
+
+
+func _test_courier_provider_equal_couriers_and_tasks() -> void:
+	var provider := CourierDeliveryOrderProviderScript.new()
+	var tasks := [
+		{&"id": &"task_a", &"priority": 100, &"pickup": Vector3(1.0, 0.0, 0.0)},
+		{&"id": &"task_b", &"priority": 90, &"pickup": Vector3(2.0, 0.0, 0.0)},
+	]
+	var c1 := _courier_citizen_with_tasks(1, tasks)
+	var c2 := _courier_citizen_with_tasks(2, tasks)
+	var snapshot := WorldSnapshot.new(1, 0.0, 0.0, AIFactSet.new({&"work.courier.tasks": tasks}), {1: c1, 2: c2})
+	var orders := provider.collect_orders(snapshot)
+	assert(orders.size() == 2, "Expected 2 orders for 2 tasks with 2 couriers, got %d" % orders.size())
+	var task_ids: Array[StringName] = []
+	for order in orders:
+		task_ids.append(order.payload.value(&"courier.task_id") as StringName)
+	assert(task_ids.has(&"task_a"))
+	assert(task_ids.has(&"task_b"))
+	assert(task_ids.count(&"task_a") == 1)
+	assert(task_ids.count(&"task_b") == 1)
+
+
+func _test_courier_provider_fewer_couriers_than_tasks() -> void:
+	var provider := CourierDeliveryOrderProviderScript.new()
+	var tasks := [
+		{&"id": &"task_high", &"priority": 100, &"pickup": Vector3(1.0, 0.0, 0.0)},
+		{&"id": &"task_mid", &"priority": 70, &"pickup": Vector3(2.0, 0.0, 0.0)},
+		{&"id": &"task_low", &"priority": 40, &"pickup": Vector3(3.0, 0.0, 0.0)},
+	]
+	var c1 := _courier_citizen_with_tasks(1, tasks)
+	var snapshot := WorldSnapshot.new(1, 0.0, 0.0, AIFactSet.new({&"work.courier.tasks": tasks}), {1: c1})
+	var orders := provider.collect_orders(snapshot)
+	assert(orders.size() == 1, "Expected 1 order for 1 courier with 3 tasks, got %d" % orders.size())
+	assert(orders[0].payload.value(&"courier.task_id") == &"task_high", "Single courier should get highest-priority task")
+
+
+func _test_courier_provider_active_courier_excluded_from_new_tasks() -> void:
+	var provider := CourierDeliveryOrderProviderScript.new()
+	var tasks := [
+		{&"id": &"task_a", &"priority": 100, &"pickup": Vector3(1.0, 0.0, 0.0)},
+		{&"id": &"task_b", &"priority": 90, &"pickup": Vector3(2.0, 0.0, 0.0)},
+	]
+	var active := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
+		&"work.courier.worker": true,
+		&"work.courier.in_progress": true,
+		&"work.courier.can_start": false,
+		&"work.courier.active_task_id": &"construction_42_branches",
+		&"work.courier.active_pickup": Vector3(5.0, 0.0, 0.0),
+		&"work.courier.active_priority": 70,
+	}))
+	var idle := _courier_citizen_with_tasks(2, tasks)
+	var snapshot := WorldSnapshot.new(1, 0.0, 0.0, AIFactSet.new({&"work.courier.tasks": tasks}), {1: active, 2: idle})
+	var orders := provider.collect_orders(snapshot)
+	assert(orders.size() == 2, "Expected 2 orders (1 active + 1 idle), got %d" % orders.size())
+	var active_orders := orders.filter(func(o: CitizenOrder) -> bool: return o.citizen_id == 1)
+	var idle_orders := orders.filter(func(o: CitizenOrder) -> bool: return o.citizen_id == 2)
+	assert(active_orders.size() == 1)
+	assert(active_orders[0].payload.value(&"courier.task_id") == &"construction_42_branches")
+	assert(idle_orders.size() == 1)
+	assert(idle_orders[0].payload.value(&"courier.task_id") == &"task_a", "Idle courier should get highest available task")
+
+
+func _test_courier_provider_same_site_different_resources() -> void:
+	var provider := CourierDeliveryOrderProviderScript.new()
+	var tasks := [
+		{&"id": &"construction_1_branches_storage", &"priority": 70, &"pickup": Vector3(1.0, 0.0, 0.0)},
+		{&"id": &"construction_1_grass_storage", &"priority": 70, &"pickup": Vector3(1.0, 0.0, 0.0)},
+	]
+	var c1 := _courier_citizen_with_tasks(1, tasks)
+	var c2 := _courier_citizen_with_tasks(2, tasks)
+	var snapshot := WorldSnapshot.new(1, 0.0, 0.0, AIFactSet.new({&"work.courier.tasks": tasks}), {1: c1, 2: c2})
+	var orders := provider.collect_orders(snapshot)
+	assert(orders.size() == 2, "Expected 2 orders for same site different resources, got %d" % orders.size())
+	assert(orders[0].payload.value(&"courier.task_id") != orders[1].payload.value(&"courier.task_id"))
+
+
+func _test_courier_provider_two_couriers_same_task_not_duplicated() -> void:
+	var provider := CourierDeliveryOrderProviderScript.new()
+	var tasks := [
+		{&"id": &"construction_1_branches_storage", &"priority": 70, &"pickup": Vector3(1.0, 0.0, 0.0)},
+	]
+	var c1 := _courier_citizen_with_tasks(1, tasks)
+	var c2 := _courier_citizen_with_tasks(2, tasks)
+	var snapshot := WorldSnapshot.new(1, 0.0, 0.0, AIFactSet.new({&"work.courier.tasks": tasks}), {1: c1, 2: c2})
+	var orders := provider.collect_orders(snapshot)
+	assert(orders.size() == 1, "Expected only 1 order for 1 task with 2 couriers, got %d" % orders.size())
+	assert(orders[0].payload.value(&"courier.task_id") == &"construction_1_branches_storage")
+
+
+func _test_courier_dispatcher_start_task_prevents_double_assignment() -> void:
+	var sim := FakeCourierSimulation.new()
+	root.add_child(sim)
+	var dispatcher := CourierDispatcher.new()
+	dispatcher.configure(sim)
+	dispatcher.publish(&"task_1", CourierTask.Kind.SAWMILL_PICKUP, 50, Vector3(1.0, 0.0, 0.0), Vector3(0.0, 0.0, 0.0), {})
+	var courier_a := Citizen.new()
+	courier_a.ai_id = 1
+	root.add_child(courier_a)
+	var courier_b := Citizen.new()
+	courier_b.ai_id = 2
+	root.add_child(courier_b)
+	assert(dispatcher.start_task(courier_a, &"task_1"), "First courier should start task")
+	assert(not dispatcher.start_task(courier_b, &"task_1"), "Second courier must not start same task")
+	var task := dispatcher.tasks[&"task_1"] as CourierTask
+	assert(task.assigned_courier_id == courier_a.get_instance_id())
+	root.remove_child(courier_a)
+	root.remove_child(courier_b)
+	courier_a.free()
+	courier_b.free()
+	root.remove_child(sim)
+	sim.free()
+
+
+func _test_courier_dispatcher_complete_for_clears_task() -> void:
+	var sim := FakeCourierSimulation.new()
+	root.add_child(sim)
+	var dispatcher := CourierDispatcher.new()
+	dispatcher.configure(sim)
+	dispatcher.publish(&"task_1", CourierTask.Kind.SAWMILL_PICKUP, 50, Vector3(1.0, 0.0, 0.0), Vector3(0.0, 0.0, 0.0), {})
+	var courier := Citizen.new()
+	courier.ai_id = 1
+	root.add_child(courier)
+	assert(dispatcher.start_task(courier, &"task_1"))
+	assert(dispatcher.tasks.has(&"task_1"))
+	dispatcher.complete_for(courier)
+	assert(not dispatcher.tasks.has(&"task_1"), "Task should be removed after complete_for")
+	root.remove_child(courier)
+	courier.free()
+	root.remove_child(sim)
+	sim.free()
+
+
+func _test_courier_dispatcher_cleanup_removes_invalid_tasks() -> void:
+	var sim := FakeCourierSimulation.new()
+	sim.valid_result = false
+	root.add_child(sim)
+	var dispatcher := CourierDispatcher.new()
+	dispatcher.configure(sim)
+	dispatcher.publish(&"task_invalid", CourierTask.Kind.SAWMILL_PICKUP, 50, Vector3(1.0, 0.0, 0.0), Vector3(0.0, 0.0, 0.0), {})
+	assert(dispatcher.tasks.has(&"task_invalid"))
+	dispatcher.dispatch()
+	assert(not dispatcher.tasks.has(&"task_invalid"), "Invalid task should be cleaned up by dispatch")
+	root.remove_child(sim)
+	sim.free()
+
+
+func _test_courier_dispatcher_cleanup_unassigns_dead_courier() -> void:
+	var sim := FakeCourierSimulation.new()
+	root.add_child(sim)
+	var dispatcher := CourierDispatcher.new()
+	dispatcher.configure(sim)
+	dispatcher.publish(&"task_1", CourierTask.Kind.SAWMILL_PICKUP, 50, Vector3(1.0, 0.0, 0.0), Vector3(0.0, 0.0, 0.0), {})
+	var courier := Citizen.new()
+	courier.ai_id = 1
+	root.add_child(courier)
+	assert(dispatcher.start_task(courier, &"task_1"))
+	courier.state = Citizen.State.IDLE
+	dispatcher.dispatch()
+	var task := dispatcher.tasks.get(&"task_1") as CourierTask
+	assert(task != null, "Valid task should still exist after cleanup")
+	assert(task.assigned_courier_id == -1, "Task should be unassigned when courier has no active delivery")
+	root.remove_child(courier)
+	courier.free()
+	root.remove_child(sim)
+	sim.free()
+
+
+func _test_courier_dispatcher_publish_does_not_duplicate() -> void:
+	var sim := FakeCourierSimulation.new()
+	root.add_child(sim)
+	var dispatcher := CourierDispatcher.new()
+	dispatcher.configure(sim)
+	dispatcher.publish(&"task_1", CourierTask.Kind.SAWMILL_PICKUP, 50, Vector3(1.0, 0.0, 0.0), Vector3(0.0, 0.0, 0.0), {})
+	dispatcher.publish(&"task_1", CourierTask.Kind.SAWMILL_PICKUP, 99, Vector3(2.0, 0.0, 0.0), Vector3(0.0, 0.0, 0.0), {})
+	assert(dispatcher.tasks.size() == 1, "Duplicate publish should not create a second task")
+	var task := dispatcher.tasks[&"task_1"] as CourierTask
+	assert(task.priority == 50, "Original task priority should be preserved on duplicate publish")
+	root.remove_child(sim)
+	sim.free()
+
+
 func _test_native_courier_goal() -> void:
 	var goal := CourierDeliveryGoalScript.new()
 	var actuator := FakeActuator.new(1)
@@ -1591,3 +1802,30 @@ func _courier_citizen(citizen_id: int) -> CitizenSnapshot:
 			{&"id": &"worker:2", &"priority": 45, &"pickup": Vector3(4.0, 0.0, 0.0)},
 		],
 	}))
+
+
+func _courier_citizen_with_tasks(citizen_id: int, tasks: Array) -> CitizenSnapshot:
+	return CitizenSnapshot.new(citizen_id, Vector3(float(citizen_id), 0.0, 0.0), false, true, AIFactSet.new({
+		&"work.courier.worker": true,
+		&"work.courier.can_start": true,
+		&"work.courier.tasks": tasks,
+	}))
+
+
+class FakeCourierSimulation extends Node:
+	var citizens: Array[Citizen] = []
+	var warehouse_positions: Array[Vector3] = [Vector3.ZERO]
+	var runtime_seconds := 0.0
+	var valid_result := true
+
+	func _is_work_time() -> bool:
+		return true
+
+	func _publish_courier_tasks(_dispatcher: RefCounted) -> void:
+		pass
+
+	func _is_courier_task_valid(_task: RefCounted) -> bool:
+		return valid_result
+
+	func _start_courier_task(_courier: Citizen, _task: RefCounted) -> bool:
+		return true
