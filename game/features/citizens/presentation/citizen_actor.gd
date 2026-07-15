@@ -2298,10 +2298,6 @@ func _process_gathering(delta: float) -> void:
 				simulation._consume_grass_source(gather_source_position)
 			elif resource_type == "branches":
 				simulation._consume_tree_branches(gather_source_position)
-			if resource_type == "water" and active_role == "gather_water" and not simulation.settlement.use_filter():
-				idle()
-				simulation._update_interface("The water filter is spent. Buy a replacement at the market.")
-				return
 		if active_role == "gather_food" and is_instance_valid(employment_workplace):
 			warehouse_position = employment_workplace.get_meta("service_position", employment_workplace.global_position)
 		# Bootstrap gathering remains self-contained, while food collected by a
@@ -2697,9 +2693,8 @@ func cancel_current_action() -> void:
 func _craft_speed_multiplier_internal() -> float:
 	if not is_instance_valid(employment_workplace):
 		return 1.0
-	match str(employment_workplace.get_meta("building_type", "")):
-		"craft_tent_lvl2": return 1.3
-		"craft_tent_lvl3": return 1.7
+	if str(employment_workplace.get_meta("building_type", "")) == "tarp_craft_tent":
+		return 1.3
 	return 1.0
 
 

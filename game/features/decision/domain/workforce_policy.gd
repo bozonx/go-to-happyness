@@ -64,7 +64,7 @@ static func _role_available(role: String, world: Dictionary) -> bool:
 		"excavation": return int(world.get("warehouses", 0)) > 0 and int(world.get("dig_sites", 0)) > 0
 		"gather_food": return int(world.get("forager_tents", 0)) > 0
 		"gather_dew": return bool(world.get("has_collected_dew", false))
-		"gather_water": return bool(world.get("has_bucket", false)) and bool(world.get("has_filter", false)) and int(world.get("ponds", 0)) > 0
+		"gather_water": return bool(world.get("has_bucket", false)) and int(world.get("ponds", 0)) > 0
 		"cook": return int(world.get("cooking_jobs", 0)) > 0
 		"teacher": return int(world.get("schools", 0)) > 0
 		"seller": return int(world.get("markets", 0)) > 0

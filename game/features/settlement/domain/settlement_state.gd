@@ -31,13 +31,14 @@ var clay := 0
 var boards := 0
 var stone := 0
 var bricks := 0
+var tarp := 0
 var wellbeing := 75
 var workday_hours := 8
 var night_shifts_allowed := false
 var road_walking_order_enabled := false
 var low_wellbeing_days := 0
-var tools := {"axe": false, "hand_saw": false, "shovel": false, "bucket": false, "hoe": false, "pickaxe": false, "filter_1": false}
-var tool_uses := {"filter_1": 0}
+var tools := {"axe": false, "hand_saw": false, "shovel": false, "bucket": false, "hoe": false, "pickaxe": false}
+var tool_uses := {}
 var equipment: Dictionary = TENT_STARTING_EQUIPMENT.duplicate(true)
 var trade_sales := 0
 var buildings: Dictionary = {}
@@ -46,13 +47,33 @@ var unlocked_systems := {
 	"official": false,
 }
 var unlocked_building_levels := {
-	"living_tent": false,
+	"tent": false,
+	"cook_campfire": false,
+	"campfire_lvl2": false,
+	"campfire_lvl3": false,
+	"gathering_place": false,
+	"cook_campfire_lvl2": false,
+	"cook_campfire_lvl3": false,
+	"forager_tent": false,
+	"materials_yard": false,
 	"craft_tent": false,
+	"dew_collector": false,
+	"straw_tent": false,
+	"tarp_tent": false,
+	"straw_forager_tent": false,
+	"tarp_forager_tent": false,
+	"straw_materials_yard": false,
+	"tarp_materials_yard": false,
+	"straw_craft_tent": false,
+	"tarp_craft_tent": false,
+	"advanced_dew_collector": false,
+	"straw_warehouse": false,
+	"tarp_warehouse": false,
+	"straw_trade_tent": false,
+	"tarp_trade_tent": false,
+	"toilet_tent": false,
+	"tarp_toilet": false,
 	"house": false,
-	"living_tent_lvl2": false,
-	"living_tent_lvl3": false,
-	"craft_tent_lvl2": false,
-	"craft_tent_lvl3": false,
 	"house_lvl2": false,
 	"house_lvl3": false,
 	"dugout_kitchen": false,
@@ -60,8 +81,6 @@ var unlocked_building_levels := {
 	"canteen": false,
 	"stone_tavern": false,
 	"brick_restaurant": false,
-	"toilet_tent_lvl2": false,
-	"toilet_tent_lvl3": false,
 	"toilet_earth_lvl2": false,
 	"toilet_earth_lvl3": false,
 	"toilet_clay_lvl2": false,
@@ -72,24 +91,6 @@ var unlocked_building_levels := {
 	"toilet_stone_lvl3": false,
 	"toilet_brick_lvl2": false,
 	"toilet_brick_lvl3": false,
-	"tent": false,
-	"cook_campfire": false,
-	"campfire_lvl2": false,
-	"campfire_lvl3": false,
-	"gathering_place": false,
-	"cook_campfire_lvl2": false,
-	"cook_campfire_lvl3": false,
-	"warehouse_lvl2": false,
-	"dew_collector": false,
-	"dew_collector_lvl2": false,
-	"dew_collector_lvl3": false,
-	"forager_tent": false,
-	"forager_tent_lvl2": false,
-	"forager_tent_lvl3": false,
-	"materials_yard": false,
-	"materials_yard_lvl2": false,
-	"materials_yard_lvl3": false,
-	"trade_tent": false,
 }
 var active_research_tech_id := ""
 var active_research_worker_id := -1
@@ -113,13 +114,15 @@ func apply_tent_start(reset_progress := true) -> void:
 	boards = 0
 	stone = 0
 	bricks = 0
+	tarp = 1
+	water = 8
 	wellbeing = TENT_STARTING_WELLBEING
 	workday_hours = 8
 	night_shifts_allowed = false
 	road_walking_order_enabled = false
 	low_wellbeing_days = 0
-	tools = {"axe": false, "hand_saw": false, "shovel": false, "bucket": false, "hoe": false, "pickaxe": false, "filter_1": false}
-	tool_uses = {"filter_1": 0}
+	tools = {"axe": false, "hand_saw": false, "shovel": false, "bucket": false, "hoe": false, "pickaxe": false}
+	tool_uses = {}
 	equipment = TENT_STARTING_EQUIPMENT.duplicate(true)
 	trade_sales = 0
 	brick_construction_unlocked = false
@@ -176,11 +179,12 @@ func add_construction_glove_set() -> void:
 ## units for the current era; the player splits that budget between resources in
 ## the warehouse menu. Heavy goods (logs, bricks) cost more than a unit each;
 ## water is light and packs several to a unit.
-const STORED_RESOURCES := ["branches", "grass", "water", "food", "hides", "goods", "logs", "wood", "soil", "clay", "boards", "stone", "bricks"]
+const STORED_RESOURCES := ["branches", "grass", "water", "food", "hides", "goods", "logs", "wood", "soil", "clay", "boards", "stone", "bricks", "tarp"]
 const STORAGE_WEIGHTS := {
 	"branches": 1.0, "grass": 1.0, "water": 0.5, "food": 1.0,
 	"hides": 1.0, "goods": 1.0, "logs": 2.0, "wood": 2.0,
 	"soil": 1.0, "clay": 1.0, "boards": 1.5, "stone": 2.0, "bricks": 2.0,
+	"tarp": 1.0,
 }
 const ERA_STORAGE_PER_WAREHOUSE := {Era.TENT: 32, Era.EARTH: 48, Era.CLAY: 70, Era.WOOD: 100, Era.STONE: 120, Era.BRICK: 150}
 const STORAGE_STEP := 4.0
@@ -204,8 +208,9 @@ func storage_capacity(warehouses: int) -> int:
 	if warehouses <= 0:
 		return 0
 	var heap_count := int(buildings.get("warehouse", 0))
-	var tent_count := int(buildings.get("warehouse_lvl2", 0))
-	var capacity := heap_count * 24 + tent_count * 48
+	var straw_count := int(buildings.get("straw_warehouse", 0))
+	var tarp_count := int(buildings.get("tarp_warehouse", 0))
+	var capacity := heap_count * 24 + straw_count * 48 + tarp_count * 72
 	if capacity == 0 and warehouses > 0:
 		capacity = warehouses * int(ERA_STORAGE_PER_WAREHOUSE.get(era, 24))
 	return capacity + debug_storage_capacity_bonus
@@ -348,6 +353,7 @@ func _warehouse_amount(resource_type: String) -> int:
 		"boards": return boards
 		"stone": return stone
 		"bricks": return bricks
+		"tarp": return tarp
 	return 0
 
 
@@ -375,6 +381,7 @@ func _add_to_warehouse(resource_type: String, value: int) -> void:
 		"boards": boards += value
 		"stone": stone += value
 		"bricks": bricks += value
+		"tarp": tarp += value
 
 
 func add(resource_type: String, value: int) -> void:
@@ -393,7 +400,7 @@ func total_stored_resources() -> int:
 		for value in virtual_stock.values():
 			total += int(value)
 	else:
-		total = branches + grass + water + food + hides + goods + logs + wood + soil + clay + boards + stone + bricks
+		total = branches + grass + water + food + hides + goods + logs + wood + soil + clay + boards + stone + bricks + tarp
 	return total
 
 
@@ -493,18 +500,6 @@ func buy_tool(tool_id: String, price: int) -> bool:
 		return false
 	money -= price
 	tools[tool_id] = true
-	if tool_id == "filter_1":
-		tool_uses[tool_id] = 12
-	return true
-
-func use_filter() -> bool:
-	var uses := int(tool_uses.get("filter_1", 0))
-	if not bool(tools.get("filter_1", false)) or uses <= 0:
-		tools["filter_1"] = false
-		return false
-	tool_uses["filter_1"] = uses - 1
-	if uses == 1:
-		tools["filter_1"] = false
 	return true
 
 
@@ -520,7 +515,7 @@ func sell(resource_type: String, quantity: int, unit_price: int) -> bool:
 func can_advance_to(next_era: Era, population: int, housing_slots: int) -> bool:
 	match next_era:
 		Era.EARTH:
-			return era == Era.TENT and _has_tools(["axe", "hand_saw", "shovel", "bucket"])
+			return era == Era.TENT and _has_tools(["axe", "hand_saw", "shovel", "bucket"]) and is_research_completed("earth_buildings") and has_building("tarp_trade_tent")
 		Era.CLAY:
 			return era == Era.EARTH and has_building("earth_assembly") and has_building("smithy") and has_building("earth_market") and housing_slots >= population and clay >= 5 and money >= 5 and trade_sales >= 3 and _has_tools(["hoe"]) and has_building("toilet_earth_lvl3")
 		Era.WOOD:
@@ -591,6 +586,12 @@ func is_research_completed(research_id: String) -> bool:
 	var target_system := str(tech.get("target_system", ""))
 	if not target_system.is_empty():
 		return bool(unlocked_systems.get(target_system, false))
+	var target_buildings: Array = tech.get("target_buildings", [])
+	if not target_buildings.is_empty():
+		for building_type in target_buildings:
+			if not bool(unlocked_building_levels.get(building_type, false)):
+				return false
+		return true
 	var target_building := str(tech.get("target_building", ""))
 	return not target_building.is_empty() and bool(unlocked_building_levels.get(target_building, false))
 
@@ -603,6 +604,11 @@ func complete_research(research_id: String) -> String:
 	if not target_system.is_empty():
 		unlocked_systems[target_system] = true
 		return target_system
+	var target_buildings: Array = tech.get("target_buildings", [])
+	if not target_buildings.is_empty():
+		for building_type in target_buildings:
+			unlocked_building_levels[building_type] = true
+		return str(target_buildings[0])
 	var target_building := str(tech.get("target_building", ""))
 	if not target_building.is_empty():
 		unlocked_building_levels[target_building] = true

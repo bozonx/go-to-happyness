@@ -9,8 +9,10 @@ const COLORS := {
 	"foundation": Color("776d60"),
 	"house": Color("91a9bb"),
 	"warehouse": Color("8a6549"), # Dirt heap color
-	"warehouse_lvl2": Color("c7a96a"),
-	"warehouse_lvl2_roof": Color("78513f"),
+	"straw_warehouse": Color("c7a96a"),
+	"straw_warehouse_roof": Color("78513f"),
+	"tarp_warehouse": Color("8a9aa8"),
+	"tarp_warehouse_roof": Color("5a6a7a"),
 	"sawmill": Color("af6f3b"),
 	"farm": Color("788f45"),
 	"canteen": Color("d4a64f"),
@@ -41,21 +43,19 @@ const COLORS := {
 	"cook_campfire_lvl2": Color("c56a3a"),
 	"cook_campfire_lvl3": Color("d4773e"),
 	"tent": Color("c7a96a"),
+	"straw_tent": Color("c7a96a"),
+	"tarp_tent": Color("8a9aa8"),
 	"forager_tent": Color("739350"),
-	"forager_tent_lvl2": Color("5f7a3f"),
-	"forager_tent_lvl3": Color("4c6230"),
+	"straw_forager_tent": Color("739350"),
+	"tarp_forager_tent": Color("587a3f"),
 	"materials_yard": Color("8a7b4f"),
-	"materials_yard_lvl2": Color("758254"),
-	"materials_yard_lvl3": Color("607044"),
+	"straw_materials_yard": Color("8a7b4f"),
+	"tarp_materials_yard": Color("6e7a8a"),
 	"craft_tent": Color("a46b46"),
-	"craft_tent_lvl2": Color("9a603c"),
-	"craft_tent_lvl3": Color("905532"),
-	"living_tent": Color("bfa070"),
-	"living_tent_lvl2": Color("b89660"),
-	"living_tent_lvl3": Color("b08850"),
+	"straw_craft_tent": Color("a46b46"),
+	"tarp_craft_tent": Color("7a6b8a"),
 	"dew_collector": Color("5f95ab"),
-	"dew_collector_lvl2": Color("4fa2c0"),
-	"dew_collector_lvl3": Color("3eafd3"),
+	"advanced_dew_collector": Color("4fa2c0"),
 	"house_lvl2": Color("859eaf"),
 	"house_lvl3": Color("7992a3"),
 	"pond": Color("3f7fa0"),
@@ -63,7 +63,8 @@ const COLORS := {
 	"earth_house": Color("9b7655"),
 	"smithy": Color("65686d"),
 	"hide_worker": Color("a98259"),
-	"trade_tent": Color("c7a96a"),
+	"straw_trade_tent": Color("c7a96a"),
+	"tarp_trade_tent": Color("8a9aa8"),
 	"earth_market": Color("8a6549"),
 	"clay_house": Color("b87a50"),
 	"clay_workshop": Color("c28558"),
@@ -90,8 +91,7 @@ const COLORS := {
 	"construction_company": Color("a94b3c"),
 	"employment_office": Color("8a8f99"),
 	"toilet_tent": Color("ab8e5b"),
-	"toilet_tent_lvl2": Color("a08350"),
-	"toilet_tent_lvl3": Color("957845"),
+	"tarp_toilet": Color("7a8a9a"),
 	"toilet_earth": Color("8a6549"),
 	"toilet_earth_lvl2": Color("7f5a3e"),
 	"toilet_earth_lvl3": Color("744f33"),
@@ -116,14 +116,9 @@ static func get_blueprint(building_type: String) -> Dictionary:
 		"gathering_place": return _gathering_place_blueprint()
 		"cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3": return _cook_campfire_blueprint(building_type)
 		"dew_collector": return _water_collector_blueprint("dew_collector", Vector2i(2, 2))
-		"dew_collector_lvl2": return _water_collector_blueprint("dew_collector_lvl2", Vector2i(2, 2))
-		"dew_collector_lvl3": return _water_collector_blueprint("dew_collector_lvl3", Vector2i(3, 3))
+		"advanced_dew_collector": return _water_collector_blueprint("advanced_dew_collector", Vector2i(3, 3))
 		"pond": return _pond_blueprint()
-		"tent", "living_tent", "forager_tent", "materials_yard", "materials_yard_lvl2", "materials_yard_lvl3", "craft_tent", "trade_tent": return _enclosed_blueprint(building_type, Vector2i(4, 4), 2, "gable")
-		"forager_tent_lvl2": return _enclosed_blueprint("forager_tent_lvl2", Vector2i(5, 5), 2, "gable")
-		"forager_tent_lvl3": return _enclosed_blueprint("forager_tent_lvl3", Vector2i(6, 6), 2, "gable")
-		"living_tent_lvl2", "craft_tent_lvl2": return _enclosed_blueprint(building_type, Vector2i(5, 5), 2, "gable")
-		"living_tent_lvl3", "craft_tent_lvl3": return _enclosed_blueprint(building_type, Vector2i(6, 6), 2, "gable")
+		"tent", "straw_tent", "tarp_tent", "forager_tent", "straw_forager_tent", "tarp_forager_tent", "materials_yard", "straw_materials_yard", "tarp_materials_yard", "craft_tent", "straw_craft_tent", "tarp_craft_tent", "straw_trade_tent", "tarp_trade_tent": return _enclosed_blueprint(building_type, Vector2i(4, 4), 2, "gable")
 		"house": return _enclosed_blueprint("house", Vector2i(4, 4), 3, "gable")
 		"house_lvl2": return _enclosed_blueprint("house_lvl2", Vector2i(5, 5), 3, "gable")
 		"house_lvl3": return _enclosed_blueprint("house_lvl3", Vector2i(6, 6), 3, "gable")
@@ -137,7 +132,8 @@ static func get_blueprint(building_type: String) -> Dictionary:
 		"construction_company": return _enclosed_blueprint("construction_company", Vector2i(7, 6), 3, "shed")
 		"employment_office": return _enclosed_blueprint("employment_office", Vector2i(5, 5), 3, "hip")
 		"warehouse": return _heap_blueprint("warehouse", Vector2i(5, 5))
-		"warehouse_lvl2": return _enclosed_blueprint("warehouse_lvl2", Vector2i(5, 5), 3, "shed")
+		"straw_warehouse": return _enclosed_blueprint("straw_warehouse", Vector2i(5, 5), 3, "shed")
+		"tarp_warehouse": return _enclosed_blueprint("tarp_warehouse", Vector2i(5, 5), 3, "shed")
 		"sawmill": return _sawmill_blueprint()
 		"farm": return _farm_blueprint()
 		"canteen": return _enclosed_blueprint("canteen", Vector2i(7, 5), 3, "hip")
@@ -150,7 +146,7 @@ static func get_blueprint(building_type: String) -> Dictionary:
 		"city_hall": return _enclosed_blueprint("city_hall", Vector2i(8, 6), 4, "hip")
 		"leisure_center": return _enclosed_blueprint("leisure_center", Vector2i(8, 6), 3, "hip")
 		"wood_market", "brick_market": return _enclosed_blueprint(building_type, Vector2i(5, 5), 3, "shed")
-		"toilet_tent", "toilet_tent_lvl2", "toilet_tent_lvl3": return _enclosed_blueprint(building_type, Vector2i(3, 3), 2, "gable")
+		"toilet_tent", "tarp_toilet": return _enclosed_blueprint(building_type, Vector2i(3, 3), 2, "gable")
 		"toilet_earth", "toilet_earth_lvl2", "toilet_earth_lvl3": return _enclosed_blueprint(building_type, Vector2i(3, 3), 2, "gable")
 		"toilet_clay", "toilet_clay_lvl2", "toilet_clay_lvl3": return _enclosed_blueprint(building_type, Vector2i(3, 3), 2, "gable")
 		"toilet_wood", "toilet_wood_lvl2", "toilet_wood_lvl3": return _enclosed_blueprint(building_type, Vector2i(3, 3), 2, "gable")

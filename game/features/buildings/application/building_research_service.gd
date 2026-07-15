@@ -193,8 +193,6 @@ func _is_visible_for_era(tech_id: String) -> bool:
 
 func _prerequisites_met(tech_id: String) -> bool:
 	var tech: Dictionary = BuildingCatalog.RESEARCH_TECHS[tech_id]
-	if tech_id == "trade_tent" and not settlement.has_building("campfire_lvl3"):
-		return false
 	for prerequisite in tech.get("prerequisites", []):
 		if BuildingCatalog.RESEARCH_TECHS.has(prerequisite):
 			if not settlement.is_research_completed(str(prerequisite)):

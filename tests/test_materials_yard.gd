@@ -16,13 +16,13 @@ func _init() -> void:
 	# Complete a materials yard through the normal building-completion path.
 	var cell := Vector2i(14, 14)
 	var position := Vector3(14.0, 0.0, 14.0)
-	var blueprint := BuildingBlueprints.get_blueprint("materials_yard")
+	var blueprint := BuildingBlueprints.get_blueprint("straw_materials_yard")
 	assert(not blueprint.is_empty())
 	simulation.building_registry.reserve(cell, position, blueprint.footprint)
 	var yard := Node3D.new()
 	yard.position = position
 	simulation.add_child(yard)
-	simulation._complete_building(cell, "materials_yard", position, yard, blueprint)
+	simulation._complete_building(cell, "straw_materials_yard", position, yard, blueprint)
 
 	# It registers a service position and advertises two branch-gathering jobs.
 	assert(simulation.materials_yard_positions.size() == 1)

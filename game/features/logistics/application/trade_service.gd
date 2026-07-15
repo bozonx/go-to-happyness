@@ -92,6 +92,18 @@ func buy_entrance_gloves(price: int) -> void:
 	start_entrance_purchase({"kind": "buy_gloves", "price": price})
 
 
+func buy_entrance_resource(resource_type: String, quantity: int, unit_price: int) -> void:
+	if quantity <= 0 or available_trade_money() < quantity * unit_price:
+		return
+	start_entrance_purchase({"kind": "buy_resource", "resource": resource_type, "quantity": quantity, "price": unit_price})
+
+
+func buy_entrance_tool(tool_id: String, price: int) -> void:
+	if available_trade_money() < price:
+		return
+	start_entrance_purchase({"kind": "buy_tool", "tool": tool_id, "price": price})
+
+
 func trade_orders() -> Array[Dictionary]:
 	var orders: Array[Dictionary] = []
 	for order in simulation.queued_trades:

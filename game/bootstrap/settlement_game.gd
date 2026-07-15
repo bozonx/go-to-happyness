@@ -52,6 +52,8 @@ const POPULATION := 4
 const WAREHOUSE_CAPACITY := 50
 const FOOD_PURCHASE_PRICE := 2
 const ENTRANCE_GLOVE_PRICE := 20
+const ENTRANCE_BUCKET_PRICE := 15
+const ENTRANCE_WATER_PRICE := 2
 const OUTSIDE_WORK_DURATION_MINUTES := SimulationClock.MINUTES_PER_DAY
 const OUTSIDE_WORK_REWARD := 8
 const HOUSE_CAPACITY := 4
@@ -857,7 +859,7 @@ func _apply_hourly_tent_survival(hour: int, survival_day := 0) -> void:
 
 
 func _apply_rain_damage() -> void:
-	var sheltered_capacity := int(settlement.buildings.get("warehouse_lvl2", 0)) * 48
+	var sheltered_capacity := int(settlement.buildings.get("straw_warehouse", 0)) * 48 + int(settlement.buildings.get("tarp_warehouse", 0)) * 72
 	var stored_units := settlement.storage_used_units()
 	if stored_units <= sheltered_capacity:
 		return
@@ -918,8 +920,9 @@ func _apply_daily_settlement_rules() -> void:
 	_apply_building_wear_and_repairs()
 	
 	# Heap (Open-Air) Storage decay:
-	var warehouse_lvl2_count := int(settlement.buildings.get("warehouse_lvl2", 0))
-	var safe_capacity := warehouse_lvl2_count * 48.0
+	var straw_warehouse_count := int(settlement.buildings.get("straw_warehouse", 0))
+	var tarp_warehouse_count := int(settlement.buildings.get("tarp_warehouse", 0))
+	var safe_capacity := straw_warehouse_count * 48.0 + tarp_warehouse_count * 72.0
 	var total_stored := settlement.storage_used_units()
 	var decay_losses := SETTLEMENT_RULES.open_air_storage_decay_losses({
 		"food": food,
@@ -1278,11 +1281,11 @@ func _construction_development_priority(site: ConstructionSite) -> float:
 	var score := float(BuildingCatalog.era_for(building_type)) * 100.0
 	var population := citizens.size()
 	match building_type:
-		"warehouse", "warehouse_lvl2": score += 1000.0 if warehouse_positions.is_empty() else 180.0
+		"warehouse", "straw_warehouse", "tarp_warehouse": score += 1000.0 if warehouse_positions.is_empty() else 180.0
 		"campfire", "campfire_lvl2", "campfire_lvl3": score += 950.0 if not is_instance_valid(campfire_node) else 120.0
-		"tent", "living_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "brick_house":
+		"tent", "straw_tent", "tarp_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "brick_house":
 			score += 850.0 if _total_housing_slots() < population else 140.0
-		"forager_tent", "forager_tent_lvl2", "forager_tent_lvl3", "farm": score += 700.0 if food < population * 2 else 160.0
+		"forager_tent", "straw_forager_tent", "tarp_forager_tent", "farm": score += 700.0 if food < population * 2 else 160.0
 		"cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen": score += 580.0 if not is_instance_valid(canteen) else 120.0
 		"sawmill": score += 420.0 if sawmill_positions.is_empty() else 100.0
 		"gathering_place", "park", "leisure_center": score += 80.0
@@ -2760,27 +2763,23 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_build_button("Бадминтонная площадка", "gathering_place", 193, "tent")
 	_add_build_button("Костер для готовки ур. 1", "cook_campfire", 227, "tent")
 	_add_build_button("Временная палатка на 4 жителя", "tent", 244, "tent")
-	_add_build_button("Жилая палатка на 1 жителя", "living_tent", 278, "tent")
-	_add_build_button("Жилая палатка ур. 2", "living_tent_lvl2", 278, "tent")
-	_add_build_button("Жилая палатка ур. 3", "living_tent_lvl3", 278, "tent")
-	_add_build_button("Forager tent", "forager_tent", 312, "tent")
-	_add_build_button("Forager-Hunter tent", "forager_tent_lvl2", 200, "tent")
-	_add_build_button("Hunting lodge", "forager_tent_lvl3", 200, "tent")
-	_add_build_button("Двор стройматериалов", "materials_yard", 312, "tent")
-	_add_build_button("Двор стройматериалов ур. 2", "materials_yard_lvl2", 200, "tent")
-	_add_build_button("Двор стройматериалов ур. 3", "materials_yard_lvl3", 200, "tent")
-	_add_build_button("Craft tent", "craft_tent", 346, "tent")
-	_add_build_button("Craft tent Level 2", "craft_tent_lvl2", 346, "tent")
-	_add_build_button("Craft tent Level 3", "craft_tent_lvl3", 346, "tent")
-	_add_build_button("Dew collector", "dew_collector", 380, "tent")
-	_add_build_button("Dew collector Level 2", "dew_collector_lvl2", 200, "tent")
-	_add_build_button("Dew collector Level 3", "dew_collector_lvl3", 200, "tent")
-	_add_build_button("Куча материалов (Склад ур. 1)", "warehouse", 414, "tent")
-	_add_build_button("Склад ур. 2 (Палатка)", "warehouse_lvl2", 200, "tent")
-	_add_build_button("Trade tent", "trade_tent", 448, "tent")
-	_add_build_button("Общественный туалет ур. 1", "toilet_tent", 482, "tent")
-	_add_build_button("Общественный туалет ур. 2", "toilet_tent_lvl2", 516, "tent")
-	_add_build_button("Общественный туалет ур. 3", "toilet_tent_lvl3", 550, "tent")
+	_add_build_button("Соломенная палатка", "straw_tent", 278, "tent")
+	_add_build_button("Брезентовая палатка", "tarp_tent", 312, "tent")
+	_add_build_button("Соломенная палатка собирателя", "straw_forager_tent", 346, "tent")
+	_add_build_button("Брезентовая палатка собирателя", "tarp_forager_tent", 380, "tent")
+	_add_build_button("Соломенный двор материалов", "straw_materials_yard", 414, "tent")
+	_add_build_button("Брезентовый двор материалов", "tarp_materials_yard", 448, "tent")
+	_add_build_button("Соломенная ремесленная палатка", "straw_craft_tent", 482, "tent")
+	_add_build_button("Брезентовая ремесленная палатка", "tarp_craft_tent", 516, "tent")
+	_add_build_button("Сборщик росы", "dew_collector", 550, "tent")
+	_add_build_button("Улучшенный сборщик росы", "advanced_dew_collector", 584, "tent")
+	_add_build_button("Куча материалов (Склад ур. 1)", "warehouse", 618, "tent")
+	_add_build_button("Склад с соломенным навесом", "straw_warehouse", 652, "tent")
+	_add_build_button("Склад с брезентовым навесом", "tarp_warehouse", 686, "tent")
+	_add_build_button("Соломенный торговый шатер", "straw_trade_tent", 720, "tent")
+	_add_build_button("Брезентовый торговый шатер", "tarp_trade_tent", 754, "tent")
+	_add_build_button("Соломенный общественный туалет", "toilet_tent", 788, "tent")
+	_add_build_button("Брезентовый общественный туалет", "tarp_toilet", 822, "tent")
 	
 	_add_build_button("Dugout", "dugout", 176, "earth")
 	_add_build_button("Earth house", "earth_house", 210, "earth")
@@ -2971,7 +2970,7 @@ func _create_entrance_menu(ui: CanvasLayer) -> void:
 	entrance_menu = Panel.new()
 	entrance_menu.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	entrance_menu.offset_left = -324.0
-	entrance_menu.offset_top = -292.0
+	entrance_menu.offset_top = -372.0
 	entrance_menu.offset_right = -20.0
 	entrance_menu.offset_bottom = -20.0
 	entrance_menu.visible = false
@@ -2996,16 +2995,30 @@ func _create_entrance_menu(ui: CanvasLayer) -> void:
 	gloves_button.size = Vector2(272, 32)
 	gloves_button.pressed.connect(func(): trade_service.buy_entrance_gloves(ENTRANCE_GLOVE_PRICE))
 	entrance_menu.add_child(gloves_button)
+	var water_button := Button.new()
+	water_button.text = "Order water"
+	water_button.tooltip_text = "Order 4 water; a Helper or Courier makes the trip."
+	water_button.position = Vector2(16, 162)
+	water_button.size = Vector2(272, 32)
+	water_button.pressed.connect(func(): trade_service.buy_entrance_resource("water", 4, ENTRANCE_WATER_PRICE))
+	entrance_menu.add_child(water_button)
+	var bucket_button := Button.new()
+	bucket_button.text = "Order bucket"
+	bucket_button.tooltip_text = "Order one bucket for hauling water."
+	bucket_button.position = Vector2(16, 202)
+	bucket_button.size = Vector2(272, 32)
+	bucket_button.pressed.connect(func(): trade_service.buy_entrance_tool("bucket", ENTRANCE_BUCKET_PRICE))
+	entrance_menu.add_child(bucket_button)
 	var work_button := Button.new()
 	work_button.text = "Send selected resident to outside work"
 	work_button.tooltip_text = "Requires a Helper or Courier. The resident leaves for one full day and returns with 8 coins."
-	work_button.position = Vector2(16, 162)
+	work_button.position = Vector2(16, 242)
 	work_button.size = Vector2(272, 32)
 	work_button.pressed.connect(_send_selected_resident_to_outside_work)
 	entrance_menu.add_child(work_button)
 	var close_btn := Button.new()
 	close_btn.text = "Close"
-	close_btn.position = Vector2(16, 210)
+	close_btn.position = Vector2(16, 290)
 	close_btn.size = Vector2(272, 30)
 	close_btn.pressed.connect(_close_context_menus)
 	entrance_menu.add_child(close_btn)
@@ -3592,7 +3605,7 @@ func _show_house_menu() -> void:
 	house_menu.visible = true
 	var capacity: int = int(selected_house.get_meta("housing_capacity", HOUSE_CAPACITY))
 	var building_type: String = selected_house.get_meta("building_type", "house")
-	var home_name := "Жилая палатка" if building_type == "living_tent" else ("Палатка" if building_type == "tent" else "House")
+	var home_name := "Соломенная палатка" if building_type == "straw_tent" else ("Брезентовая палатка" if building_type == "tarp_tent" else ("Палатка" if building_type == "tent" else "House"))
 	var unhoused := _unhoused_citizen_count()
 	house_menu_title.text = "%s\nFree beds: %d/%d  Unhoused: %d" % [home_name, slots, capacity, unhoused]
 	if house_spawn_button != null:
@@ -3857,7 +3870,7 @@ func _is_role_available(role: String) -> bool:
 		"gather_grass": return settlement.era == SettlementState.Era.TENT
 		"gather_food": return _available_employer_capacity("gather_food") > 0
 		"gather_dew": return _has_collected_dew() and not warehouse_positions.is_empty()
-		"gather_water": return bool(settlement.tools.get("bucket", false)) and bool(settlement.tools.get("filter_1", false)) and not pond_positions.is_empty() and not warehouse_positions.is_empty()
+		"gather_water": return bool(settlement.tools.get("bucket", false)) and not pond_positions.is_empty() and not warehouse_positions.is_empty()
 		"cook": return _available_employer_capacity("cook") > 0
 		"teacher": return _available_employer_capacity("teacher") > 0
 		"seller": return _available_employer_capacity("seller") > 0
@@ -3923,14 +3936,14 @@ func _employer_types_for_role(role: String) -> Array[String]:
 		"construction": return ["builders_guild", "construction_company"]
 		"forestry": return ["sawmill"]
 		"farming": return ["farm"]
-		"gather_food": return ["forager_tent", "forager_tent_lvl2", "forager_tent_lvl3"]
-		"gather_branches", "gather_grass": return ["materials_yard", "materials_yard_lvl2", "materials_yard_lvl3"]
+		"gather_food": return ["straw_forager_tent", "tarp_forager_tent"]
+		"gather_branches", "gather_grass": return ["straw_materials_yard", "tarp_materials_yard"]
 		"cook": return ["cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant"]
 		"teacher": return ["school"]
-		"seller": return ["trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market"]
+		"seller": return ["straw_trade_tent", "tarp_trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market"]
 		"factory_worker": return ["brick_factory", "materials_factory", "recycling_factory", "metal_factory"]
 		"engineer": return ["materials_factory"]
-		"craftsman": return ["craft_tent", "craft_tent_lvl2", "craft_tent_lvl3"]
+		"craftsman": return ["straw_craft_tent", "tarp_craft_tent"]
 		"official": return OFFICIAL_WORKPLACE_TYPES
 	return []
 
@@ -3966,21 +3979,13 @@ func _employer_capacity(role: String, building: Node3D) -> int:
 		return int(building.get_meta("required_factory_workers", 1))
 	if role == "craftsman":
 		var type := str(building.get_meta("building_type", ""))
-		if type == "craft_tent_lvl2":
-			return 2
-		elif type == "craft_tent_lvl3":
-			return 3
-		return 1
+		return 2 if type == "tarp_craft_tent" else 1
 	if role == "gather_food":
 		var type := str(building.get_meta("building_type", ""))
-		if type == "forager_tent_lvl2":
-			return 2
-		elif type == "forager_tent_lvl3":
-			return 3
-		return 1
+		return 2 if type == "tarp_forager_tent" else 1
 	if role in ["gather_branches", "gather_grass"]:
 		var type := str(building.get_meta("building_type", ""))
-		return 4 if type == "materials_yard_lvl3" else 3 if type == "materials_yard_lvl2" else 2
+		return 3 if type == "tarp_materials_yard" else 2
 	return 1
 
 func _start_dig_assignment() -> void:
@@ -4389,7 +4394,7 @@ func _finish_demolition(site: DemolitionSite) -> void:
 	var building_type := site.building_type
 	var active_kitchen_removed := canteen == building
 	var pile_resources: Dictionary = BuildingCatalog.demolition_refund(building_type).duplicate(true)
-	if building_type in ["warehouse", "warehouse_lvl2"]:
+	if building_type in ["warehouse", "straw_warehouse", "tarp_warehouse"]:
 		_move_stored_resources_to_pile(pile_resources)
 	_return_in_transit_building_supplies(building)
 	if active_kitchen_removed:
@@ -4419,25 +4424,25 @@ func _remove_building_services(building: Node3D, building_type: String) -> void:
 	_release_employment_at_building(building)
 	var service_position: Vector3 = building.get_meta("service_position", building.global_position)
 	match building_type:
-		"warehouse", "warehouse_lvl2": warehouse_positions.erase(service_position)
+		"warehouse", "straw_warehouse", "tarp_warehouse": warehouse_positions.erase(service_position)
 		"sawmill": sawmill_positions.erase(service_position)
 		"farm": farm_positions.erase(service_position)
 		"builders_guild": builders_guild_positions.erase(service_position)
 		"construction_company": construction_company_positions.erase(service_position)
-		"forager_tent", "forager_tent_lvl2", "forager_tent_lvl3": forager_positions.erase(service_position)
-		"materials_yard", "materials_yard_lvl2", "materials_yard_lvl3": materials_yard_positions.erase(service_position)
+		"forager_tent", "straw_forager_tent", "tarp_forager_tent": forager_positions.erase(service_position)
+		"materials_yard", "straw_materials_yard", "tarp_materials_yard": materials_yard_positions.erase(service_position)
 		"school": school_positions.erase(service_position)
 		"park": park_positions.erase(service_position)
 		"gathering_place": gathering_place_positions.erase(service_position)
 		"leisure_center": leisure_positions.erase(service_position)
-		"craft_tent", "craft_tent_lvl2", "craft_tent_lvl3": craft_tent_positions.erase(service_position)
-		"trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market":
+		"craft_tent", "straw_craft_tent", "tarp_craft_tent": craft_tent_positions.erase(service_position)
+		"straw_trade_tent", "tarp_trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market":
 			market_positions.erase(service_position)
 		"campfire", "campfire_lvl2", "campfire_lvl3", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall":
 			if campfire_node == building: campfire_node = null
 		"cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant":
 			if canteen == building: canteen = null
-		"dew_collector", "dew_collector_lvl2", "dew_collector_lvl3":
+		"dew_collector", "advanced_dew_collector":
 			for i in range(water_collectors.size() - 1, -1, -1):
 				if water_collectors[i].node == building:
 					water_collectors.remove_at(i)
@@ -4947,7 +4952,7 @@ func _place_building(world_position: Vector3) -> void:
 		_update_interface("Only the hero can approve construction decisions.")
 		return
 	world_position = _snapped_build_position(world_position)
-	if build_mode == "trade_tent" and is_instance_valid(entrance_stone) and world_position.distance_to(entrance_stone.global_position) > 8.0:
+	if build_mode in ["straw_trade_tent", "tarp_trade_tent"] and is_instance_valid(entrance_stone) and world_position.distance_to(entrance_stone.global_position) > 8.0:
 		_update_interface("The tent market must be built beside the entrance sign.")
 		return
 	if not _can_place(world_position):
@@ -5076,12 +5081,12 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 		workplace_priority_counter += 1
 		building.set_meta("accepting_workers", true)
 		building.set_meta("workplace_priority", workplace_priority_counter)
-	if building_type not in ["warehouse", "warehouse_lvl2", "campfire", "campfire_lvl2", "campfire_lvl3", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant", "trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market", "school", "materials_factory", "tent", "living_tent", "living_tent_lvl2", "living_tent_lvl3", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house", "craft_tent", "craft_tent_lvl2", "craft_tent_lvl3", "forager_tent_lvl2", "forager_tent_lvl3"]:
+	if building_type not in ["warehouse", "straw_warehouse", "tarp_warehouse", "campfire", "campfire_lvl2", "campfire_lvl3", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant", "straw_trade_tent", "tarp_trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market", "school", "materials_factory", "tent", "straw_tent", "tarp_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house", "straw_craft_tent", "tarp_craft_tent", "straw_forager_tent", "tarp_forager_tent"]:
 		_add_building_selector(building, "building_selector", blueprint.footprint)
 	_register_service_entrance(building, blueprint.footprint, false, building_type not in ["farm", "park"])
 	var service_position: Vector3 = building.get_meta("service_position")
 	match building_type:
-		"warehouse", "warehouse_lvl2":
+		"warehouse", "straw_warehouse", "tarp_warehouse":
 			warehouse_positions.append(service_position)
 			if warehouse_positions.size() == 1:
 				var overflow := settlement.migrate_virtual_to_warehouse(warehouse_positions.size())
@@ -5120,20 +5125,19 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			cook_fire_light.light_energy = 2.5
 			cook_fire_light.omni_range = 8.0
 			building.add_child(cook_fire_light)
-		"forager_tent", "forager_tent_lvl2", "forager_tent_lvl3":
+		"forager_tent", "straw_forager_tent", "tarp_forager_tent":
 			forager_positions.append(service_position)
 			_update_interface("Forager tent ready. Assign a resident to forage food, or a free hand will.")
-		"materials_yard":
+		"materials_yard", "straw_materials_yard", "tarp_materials_yard":
 			materials_yard_positions.append(service_position)
 			_update_interface("Двор стройматериалов готов. Работники собирают ветки и траву (что в дефиците), или это сделает свободный житель.")
-		"tent", "living_tent", "living_tent_lvl2", "living_tent_lvl3", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house":
+		"tent", "straw_tent", "tarp_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house":
 			if building_type in ["house", "house_lvl2", "house_lvl3", "brick_house"]:
 				completed_house_count += 1
 			var housing_capacity := HOUSE_CAPACITY
 			match building_type:
-				"living_tent": housing_capacity = 1
-				"living_tent_lvl2": housing_capacity = 2
-				"living_tent_lvl3": housing_capacity = 3
+				"straw_tent": housing_capacity = 1
+				"tarp_tent": housing_capacity = 2
 				"tent", "dugout": housing_capacity = 4
 				"earth_house", "clay_house": housing_capacity = 6
 				"house": housing_capacity = 8
@@ -5146,22 +5150,19 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			building.set_meta("entrance_position", service_position)
 			_add_building_selector(building, "house_selector", blueprint.footprint)
 			_add_house_light(building)
-			if building_type in ["tent", "living_tent", "living_tent_lvl2", "living_tent_lvl3"]:
+			if building_type in ["tent", "straw_tent", "tarp_tent"]:
 				building.set_meta("is_tent", true)
 			_house_initial_residents(building)
-		"dew_collector", "dew_collector_lvl2", "dew_collector_lvl3":
+		"dew_collector", "advanced_dew_collector":
 			var rate := 0.12
 			var capacity := 10
-			if building_type == "dew_collector_lvl2":
-				rate = 0.24
-				capacity = 20
-			elif building_type == "dew_collector_lvl3":
-				rate = 0.4
-				capacity = 35
+			if building_type == "advanced_dew_collector":
+				rate = 0.3
+				capacity = 25
 			water_collectors.append({"node": building, "rate": rate, "accum": 0.0, "stored": 0, "capacity": capacity})
-		"craft_tent", "craft_tent_lvl2", "craft_tent_lvl3":
+		"craft_tent", "straw_craft_tent", "tarp_craft_tent":
 			craft_tent_positions.append(service_position)
-		"trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market":
+		"straw_trade_tent", "tarp_trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market":
 			_add_building_selector(building, "market_selector", blueprint.footprint)
 			market_positions.append(service_position)
 		"employment_office":
@@ -5275,12 +5276,10 @@ func _required_staff_for_building(building: Node3D) -> Dictionary:
 	match str(building.get_meta("building_type", "")):
 		"sawmill": return {"role": "forestry", "count": 1}
 		"farm": return {"role": "farming", "count": 1}
-		"forager_tent": return {"role": "gather_food", "count": 1}
-		"forager_tent_lvl2": return {"role": "gather_food", "count": 2}
-		"forager_tent_lvl3": return {"role": "gather_food", "count": 3}
-		"materials_yard": return {"role": "gather_branches", "count": 2}
-		"materials_yard_lvl2": return {"role": "gather_branches", "count": 3}
-		"materials_yard_lvl3": return {"role": "gather_branches", "count": 4}
+		"forager_tent", "straw_forager_tent": return {"role": "gather_food", "count": 1}
+		"tarp_forager_tent": return {"role": "gather_food", "count": 2}
+		"materials_yard", "straw_materials_yard": return {"role": "gather_branches", "count": 2}
+		"tarp_materials_yard": return {"role": "gather_branches", "count": 3}
 		"cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant": return {"role": "cooking", "count": 1}
 		"school": return {"role": "teaching", "count": 1}
 		"brick_factory", "materials_factory", "recycling_factory", "metal_factory": return {"role": "factory_worker", "count": int(building.get_meta("required_factory_workers", 1))}
@@ -6023,9 +6022,13 @@ func _refresh_campfire_menu() -> void:
 		SettlementState.Era.TENT:
 			next_era = SettlementState.Era.EARTH
 			var tools_ok := settlement._has_tools(["axe", "hand_saw", "shovel", "bucket"])
+			var earth_research_ok := settlement.is_research_completed("earth_buildings")
+			var tarp_market_ok := settlement.has_building("tarp_trade_tent")
 			
 			req_text = "Requirements for Earth Era:\n"
 			req_text += "- Tools (axe, saw, shovel, bucket): %s\n" % ("OK" if tools_ok else "Missing")
+			req_text += "- Earth buildings research: %s\n" % ("OK" if earth_research_ok else "Missing")
+			req_text += "- Tarp trade tent built: %s\n" % ("OK" if tarp_market_ok else "Missing")
 			can_advance = settlement.can_advance_to(next_era, citizens.size(), housing_slots)
 		
 		SettlementState.Era.EARTH:
@@ -6247,7 +6250,7 @@ func _show_market_menu() -> void:
 func _refresh_market_menu() -> void:
 	if selected_market == null:
 		return
-	var market_type: String = selected_market.get_meta("building_type", "trade_tent")
+	var market_type: String = selected_market.get_meta("building_type", "straw_trade_tent")
 	var available_money := _available_trade_money()
 	var seller_ok := _is_seller_present_at(selected_market)
 	
@@ -6266,23 +6269,17 @@ func _refresh_market_menu() -> void:
 	var sell_items := []
 	var buy_items := []
 	
-	sell_items.append(["branches", 1])
-	sell_items.append(["grass", 1])
-	sell_items.append(["water", 1])
 	sell_items.append(["goods", 5])
 	
-	if market_type == "trade_tent":
+	if market_type in ["straw_trade_tent", "tarp_trade_tent"]:
 		buy_items.append(["axe", 15])
 		buy_items.append(["hand_saw", 15])
 		buy_items.append(["shovel", 15])
 		buy_items.append(["bucket", 15])
-		buy_items.append(["filter_1", 8])
 	elif market_type in ["earth_market", "clay_market"]:
 		buy_items.append(["hoe", 18])
-		buy_items.append(["filter_1", 8])
 	elif market_type in ["wood_market", "stone_market", "brick_market"]:
 		buy_items.append(["pickaxe", 25])
-		buy_items.append(["filter_1", 8])
 
 	if market_type in ["earth_market", "clay_market", "wood_market", "stone_market", "brick_market"]:
 		sell_items.append(["soil", 1])
@@ -6563,7 +6560,7 @@ func _show_building_menu() -> void:
 		building_teacher_button.disabled = not can_command_labor or selected_builder == null or selected_builder.is_player_controlled or not bool(selected_building.get_meta("accepting_workers", true))
 		building_teacher_button.tooltip_text = blocked_tooltip if not can_command_labor else ""
 		
-		building_seller_button.visible = building_type in ["trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market"]
+		building_seller_button.visible = building_type in ["straw_trade_tent", "tarp_trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market"]
 		building_seller_button.disabled = not can_command_labor or selected_builder == null or selected_builder.is_player_controlled or not bool(selected_building.get_meta("accepting_workers", true))
 		building_seller_button.tooltip_text = blocked_tooltip if not can_command_labor else ""
 
@@ -7209,7 +7206,7 @@ func _has_active_builder() -> bool:
 
 func _destroy_building_to_pile(building: Node3D, building_type: String) -> void:
 	var resources: Dictionary = BuildingCatalog.demolition_refund(building_type).duplicate(true)
-	if building_type in ["warehouse", "warehouse_lvl2"]:
+	if building_type in ["warehouse", "straw_warehouse", "tarp_warehouse"]:
 		_move_stored_resources_to_pile(resources)
 	for citizen in citizens:
 		if citizen.home == building:

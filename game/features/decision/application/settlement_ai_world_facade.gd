@@ -474,7 +474,6 @@ func _world_data() -> Dictionary:
 		"ponds": simulation.pond_positions.size(),
 		"has_collected_dew": simulation._has_collected_dew(),
 		"has_bucket": bool(simulation.settlement.tools.get("bucket", false)),
-		"has_filter": bool(simulation.settlement.tools.get("filter_1", false)),
 		"population": simulation.citizens.size(),
 		"assigned_roles": _assigned_role_counts_internal(),
 		"officer_available": _officer_available_internal(),
