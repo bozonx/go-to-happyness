@@ -915,7 +915,7 @@ func _process_construction_pickup(delta: float) -> void:
 		# The courier was admitted to the warehouse queue; release it before
 		# walking away so the entrance is not blocked for the whole delivery trip.
 		_reset_assignment_navigation()
-		construction_position = _work_position_for(construction_site)
+		construction_position = _reachable_construction_approach(construction_site)
 		state = State.TO_CONSTRUCTION_SITE
 
 func _process_construction_delivery(delta: float) -> void:
@@ -1874,6 +1874,29 @@ func _work_position_for(site: Node3D) -> Vector3:
 		return site_position + Vector3(x_distance if offset.x >= 0.0 else -x_distance, 0.0, slot)
 	var z_distance := footprint.y * 0.5 + CONSTRUCTION_APPROACH_DISTANCE
 	return site_position + Vector3(slot, 0.0, z_distance if offset.z >= 0.0 else -z_distance)
+
+
+func _reachable_construction_approach(site: Node3D) -> Vector3:
+	var primary := _work_position_for(site)
+	if not route_reachability_query.is_valid():
+		return primary
+	if bool(route_reachability_query.call(global_position, primary, false)):
+		return primary
+	var site_position := site.global_position if site.is_inside_tree() else site.position
+	var footprint: Vector2i = site.get_meta("footprint", Vector2i(3, 3))
+	var slot := float(int(get_instance_id() % 3) - 1) * CONSTRUCTION_SLOT_SPACING
+	var x_distance := footprint.x * 0.5 + CONSTRUCTION_APPROACH_DISTANCE
+	var z_distance := footprint.y * 0.5 + CONSTRUCTION_APPROACH_DISTANCE
+	var candidates: Array[Vector3] = [
+		site_position + Vector3(x_distance, 0.0, slot),
+		site_position + Vector3(-x_distance, 0.0, slot),
+		site_position + Vector3(slot, 0.0, z_distance),
+		site_position + Vector3(slot, 0.0, -z_distance),
+	]
+	for candidate: Vector3 in candidates:
+		if bool(route_reachability_query.call(global_position, candidate, false)):
+			return candidate
+	return primary
 
 func get_core_skill_for_role(role: String) -> String:
 	match role:
