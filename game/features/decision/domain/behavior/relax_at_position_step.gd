@@ -1,19 +1,10 @@
-class_name RestAtLeisureStep
+class_name RelaxAtPositionStep
 extends BehaviorStep
 
+## Leaf step that starts and monitors the stationary relax action. The citizen
+## must already be at the rest spot (typically after a MoveToStep).
+
 var _started := false
-
-
-func _enter(context: BehaviorContext) -> void:
-	if context.citizen == null:
-		return
-	var position: Variant = context.citizen.facts.value(&"needs.rest_position", Vector3.INF)
-	var duration := float(context.citizen.facts.value(&"needs.rest_duration", 4.0))
-	if position is Vector3 and position != Vector3.INF:
-		_started = context.actuator.begin_action(&"rest", &"", AIFactSet.new({
-			&"target.position": position,
-			&"action.duration": maxf(duration, 0.1),
-		}))
 
 
 func _tick(context: BehaviorContext, _delta: float) -> Status:
@@ -27,6 +18,17 @@ func _tick(context: BehaviorContext, _delta: float) -> Status:
 	if status == CitizenActuator.ActionStatus.FAILED:
 		return Status.FAILURE
 	return Status.RUNNING
+
+
+func _enter(context: BehaviorContext) -> void:
+	if context.citizen == null:
+		return
+	var duration := float(context.citizen.facts.value(&"needs.rest_duration", 4.0))
+	_started = context.actuator.begin_action(
+		&"relax",
+		&"",
+		AIFactSet.new({&"action.duration": maxf(duration, 0.1)})
+	)
 
 
 func _cancel(context: BehaviorContext) -> void:

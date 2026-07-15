@@ -1,7 +1,8 @@
 class_name RestGoal
 extends AICitizenGoal
 
-const RestAtLeisureStepScript = preload("res://game/features/decision/domain/behavior/rest_at_leisure_step.gd")
+const MoveToStepScript = preload("res://game/features/decision/domain/behavior/move_to_step.gd")
+const RelaxAtPositionStepScript = preload("res://game/features/decision/domain/behavior/relax_at_position_step.gd")
 
 
 const ACTIVE_GOAL_BLACKBOARD_KEY := &"brain.active_goal_id"
@@ -27,8 +28,17 @@ func score(
 
 func build_task(
 	_snapshot: WorldSnapshot,
-	_citizen: CitizenSnapshot,
+	citizen: CitizenSnapshot,
 	_order: CitizenOrder,
 	_blackboard: AIBlackboard
 ) -> BehaviorTask:
-	return BehaviorTask.new(id, RestAtLeisureStepScript.new(), true, "Rest at leisure")
+	if citizen == null:
+		return null
+	var position: Variant = citizen.facts.value(&"needs.rest_position", Vector3.INF)
+	if not (position is Vector3) or position == Vector3.INF:
+		return null
+	var sequence := SequenceStep.new([
+		MoveToStepScript.new(position as Vector3, 0.25),
+		RelaxAtPositionStepScript.new(),
+	])
+	return BehaviorTask.new(id, sequence, false, "Rest at leisure")

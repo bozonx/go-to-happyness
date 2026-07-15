@@ -114,7 +114,13 @@ func _excluded_goal_ids(active_goal_id: StringName) -> Array[StringName]:
 	if active_goal_id in TRIP_BOUND_WORK_GOALS:
 		return PERSONAL_NEED_GOALS.duplicate()
 	if active_goal_id in PERSONAL_NEED_GOALS:
-		return _work_goal_ids()
+		# Personal needs do not interrupt other personal needs; they run to
+		# completion (or external cancellation) before another need is chosen.
+		var all_other_ids := _work_goal_ids()
+		for id in PERSONAL_NEED_GOALS:
+			if id != active_goal_id:
+				all_other_ids.append(id)
+		return all_other_ids
 	return []
 
 

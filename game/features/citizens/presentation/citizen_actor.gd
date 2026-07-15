@@ -52,7 +52,7 @@ const IDLE_PERSONAL_SPACE := 1.15
 const MIN_STATE_DISPLAY_DURATION := 1.0
 const MAX_PENDING_STATE_DISPLAY_TRANSITIONS := 6
 
-enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, COURIER_TO_DEW, TO_GATHER, GATHERING, TO_CLEANING_PILE, CLEANING_PILE, TO_TRADE_PICKUP, TO_TRADE_DESTINATION, TO_EMPLOYMENT_CENTER, EMPLOYMENT_PROCESSING, CANTEEN_WORK, SCHOOL_WORK, TO_MARKET_WORK, MARKET_WORK, TO_CRAFT_WORK, CRAFT_WORK, TO_CONSTRUCTION_PICKUP, TO_CONSTRUCTION_SITE, TO_OFFICIAL_WORK, OFFICIAL_WORK, TO_ARRIVAL_ENTRANCE, ARRIVAL_MEETING, ARRIVAL_WAITING, TO_ARRIVAL_CENTER, RESEARCHING, TO_TOILET, USING_TOILET, WAITING_FOR_TOILET, TO_BUSH, USING_BUSH }
+enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, COURIER_TO_DEW, TO_GATHER, GATHERING, TO_CLEANING_PILE, CLEANING_PILE, TO_TRADE_PICKUP, TO_TRADE_DESTINATION, TO_EMPLOYMENT_CENTER, EMPLOYMENT_PROCESSING, CANTEEN_WORK, SCHOOL_WORK, TO_MARKET_WORK, MARKET_WORK, TO_CRAFT_WORK, CRAFT_WORK, TO_CONSTRUCTION_PICKUP, TO_CONSTRUCTION_SITE, TO_OFFICIAL_WORK, OFFICIAL_WORK, TO_ARRIVAL_ENTRANCE, ARRIVAL_MEETING, ARRIVAL_WAITING, TO_ARRIVAL_CENTER, RESEARCHING, TO_TOILET, USING_TOILET, WAITING_FOR_TOILET, TO_BUSH, USING_BUSH, AI_MOVING }
 
 enum EmploymentState { UNREGISTERED, NO_PERMANENT_WORK, EMPLOYED, REGISTERING }
 
@@ -135,6 +135,7 @@ const STATE_ANIMATIONS := {
 	State.OFFICIAL_WORK: "interact-right",
 	State.RESEARCHING: "interact-right",
 	State.EMPLOYMENT_PROCESSING: "interact-right",
+	State.AI_MOVING: "walk",
 }
 
 signal state_changed(citizen: Citizen, previous_state: int, next_state: int)
@@ -316,6 +317,14 @@ var trade_source_position := Vector3.ZERO
 var trade_destination_position := Vector3.ZERO
 var status_effects: Dictionary = {}
 var simulation: Node
+
+# Generic AI-controlled movement target. Populated by move_to() and consumed
+# by MoveToStep via the actuator.
+var ai_move_target := Vector3.INF
+var ai_move_arrival_radius := 0.25
+var ai_move_arrived := false
+var ai_move_failed := false
+
 var idle_indicator: Label3D
 
 signal employment_processing_finished(citizen: Citizen)
@@ -811,6 +820,8 @@ func _physics_process(delta: float) -> void:
 			_process_to_bush(delta)
 		State.USING_BUSH:
 			_process_using_bush(delta)
+		State.AI_MOVING:
+			_process_ai_moving(delta)
 	if idle_indicator != null:
 		_update_idle_indicator()
 	_update_animations(delta)
@@ -1328,7 +1339,7 @@ func _take_registration_ticket() -> void:
 func has_active_delivery() -> bool:
 	return state in [State.COURIER_TO_WORKER, State.COURIER_TO_WAREHOUSE, State.COURIER_TO_SAWMILL, State.TO_FOOD_PICKUP, State.TO_CANTEEN_DELIVERY, State.TO_CONSTRUCTION_PICKUP, State.TO_CONSTRUCTION_SITE, State.TO_TRADE_PICKUP, State.TO_TRADE_DESTINATION]
 
-func _move_to(destination: Vector3, delta: float, may_enter_destination_house := false, use_building_queue := true, record_trail := true) -> bool:
+func _move_to(destination: Vector3, delta: float, may_enter_destination_house := false, use_building_queue := true, record_trail := true, arrival_radius := 0.08) -> bool:
 	var movement_destination := destination
 	var is_queue_head := true
 	if use_building_queue and queue_position_resolver.is_valid():
@@ -1339,7 +1350,7 @@ func _move_to(destination: Vector3, delta: float, may_enter_destination_house :=
 		_invalidate_route_for_navigation_change()
 	if navigation_failed:
 		return false
-	if path_destination.distance_to(movement_destination) > 0.08 or path_allows_destination_house != may_enter_destination_house:
+	if path_destination.distance_to(movement_destination) > arrival_radius or path_allows_destination_house != may_enter_destination_house:
 		_reset_route(movement_destination)
 		path_allows_destination_house = may_enter_destination_house
 		_plan_route(movement_destination)
@@ -1356,8 +1367,10 @@ func _move_to(destination: Vector3, delta: float, may_enter_destination_house :=
 		var waypoint: Vector3 = movement_path.front()
 		var waypoint_offset := waypoint - global_position
 		waypoint_offset.y = 0.0
-		if waypoint_offset.length() > 0.08:
-			return _move_directly_to(waypoint, delta, record_trail)
+		var is_final_waypoint := movement_path.size() == 1
+		var waypoint_radius := arrival_radius if is_final_waypoint else 0.08
+		if waypoint_offset.length() > waypoint_radius:
+			return _move_directly_to(waypoint, delta, record_trail, waypoint_radius)
 		movement_path.pop_front()
 		_reset_waypoint_progress()
 	_stop_horizontal_movement()
@@ -1403,10 +1416,10 @@ func _invalidate_route_for_navigation_change() -> void:
 	stuck_time = 0.0
 	recovery_repath_done = false
 
-func _move_directly_to(destination: Vector3, delta: float, record_trail := true) -> bool:
+func _move_directly_to(destination: Vector3, delta: float, record_trail := true, arrival_distance := 0.08) -> bool:
 	var offset := destination - global_position
 	offset.y = 0.0
-	if offset.length() <= 0.08:
+	if offset.length() <= arrival_distance:
 		global_position = Vector3(destination.x, global_position.y, destination.z)
 		return true
 	var direction := offset.normalized()
@@ -1580,6 +1593,30 @@ func set_player_controlled(controlled: bool) -> void:
 		path_destination = Vector3.INF
 		route_unreachable_time = 0.0
 		navigation_failed = false
+		ai_move_target = Vector3.INF
+		ai_move_arrived = false
+		ai_move_failed = false
+
+func move_to(destination: Vector3, arrival_radius: float = 0.25) -> bool:
+	if is_player_controlled:
+		return false
+	_reset_assignment_navigation()
+	ai_move_target = destination
+	ai_move_arrival_radius = maxf(arrival_radius, 0.01)
+	ai_move_arrived = false
+	ai_move_failed = false
+	state = State.AI_MOVING
+	return true
+
+
+func has_arrived() -> bool:
+	return ai_move_arrived
+
+
+func stop_movement() -> void:
+	if state == State.AI_MOVING:
+		idle()
+
 
 func set_hero(hero: bool) -> void:
 	is_hero = hero
@@ -2504,6 +2541,9 @@ func _reset_assignment_navigation() -> void:
 	route_retry_timer = 0.0
 	route_unreachable_time = 0.0
 	navigation_failed = false
+	ai_move_target = Vector3.INF
+	ai_move_arrived = false
+	ai_move_failed = false
 
 
 func _process_to_toilet(delta: float) -> void:
@@ -2593,6 +2633,16 @@ func _process_using_bush(delta: float) -> void:
 		relief_finished.emit(self)
 
 
+func _process_ai_moving(delta: float) -> void:
+	if navigation_failed:
+		ai_move_failed = true
+		idle()
+		return
+	if _move_to(ai_move_target, delta, false, false, true, ai_move_arrival_radius):
+		ai_move_arrived = true
+		idle()
+
+
 func execute_action(action: StringName, target: Node3D, payload: AIFactSet) -> bool:
 	if is_player_controlled:
 		return false
@@ -2620,6 +2670,11 @@ func execute_action(action: StringName, target: Node3D, payload: AIFactSet) -> b
 				return false
 			go_to_park(rest_position, 0, rest_duration)
 			return state in [State.TO_PARK, State.RELAXING]
+		&"relax":
+			var relax_duration := float(payload.value(&"action.duration", 4.0)) if payload != null else 4.0
+			state = State.RELAXING
+			_start_task(relax_duration)
+			return true
 		&"forestry":
 			var tree_position: Variant = payload.value(&"target.position", Vector3.INF) if payload != null else Vector3.INF
 			var access_position: Variant = payload.value(&"target.access_position", Vector3.INF) if payload != null else Vector3.INF
@@ -2727,6 +2782,11 @@ func get_action_status(action: StringName) -> int:
 				return 2 # SUCCEEDED
 			if state == State.IDLE:
 				return 2 # SUCCEEDED
+		&"relax":
+			if state == State.RELAXING:
+				return 1 # RUNNING
+			if state == State.IDLE:
+				return 2 # SUCCEEDED
 		&"forestry":
 			if state in [State.TO_TREE, State.CHOPPING, State.TO_SAWMILL]:
 				return 1 # RUNNING
@@ -2793,7 +2853,7 @@ func cancel_current_action() -> void:
 		pending_employment_workplace = null
 		registration_queue_order = -1
 		employment_state = EmploymentState.NO_PERMANENT_WORK
-	if state in [State.TO_HOME, State.RESTING, State.TO_CANTEEN, State.EATING, State.TO_TOILET, State.USING_TOILET, State.WAITING_FOR_TOILET, State.TO_BUSH, State.USING_BUSH, State.TO_PARK, State.RELAXING, State.TO_TREE, State.CHOPPING, State.TO_SAWMILL, State.SAWING, State.WAITING_COURIER, State.CONSTRUCTING, State.TO_GATHER, State.GATHERING, State.TO_CLEANING_PILE, State.CLEANING_PILE, State.TO_WAREHOUSE, State.EXCAVATING, State.TO_CANTEEN_WORK, State.CANTEEN_WORK, State.TO_SCHOOL_WORK, State.SCHOOL_WORK, State.TO_MARKET_WORK, State.MARKET_WORK, State.TO_OFFICIAL_WORK, State.OFFICIAL_WORK, State.TO_CRAFT_WORK, State.CRAFT_WORK, State.TO_FACTORY, State.FACTORY_WORK, State.COURIER_TO_WORKER, State.COURIER_TO_WAREHOUSE, State.COURIER_TO_SAWMILL, State.TO_FOOD_PICKUP, State.TO_CANTEEN_DELIVERY, State.TO_CONSTRUCTION_PICKUP, State.TO_CONSTRUCTION_SITE, State.TO_TRADE_PICKUP, State.TO_TRADE_DESTINATION, State.TO_EMPLOYMENT_CENTER, State.EMPLOYMENT_PROCESSING]:
+	if state in [State.TO_HOME, State.RESTING, State.TO_CANTEEN, State.EATING, State.TO_TOILET, State.USING_TOILET, State.WAITING_FOR_TOILET, State.TO_BUSH, State.USING_BUSH, State.AI_MOVING, State.TO_PARK, State.RELAXING, State.TO_TREE, State.CHOPPING, State.TO_SAWMILL, State.SAWING, State.WAITING_COURIER, State.CONSTRUCTING, State.TO_GATHER, State.GATHERING, State.TO_CLEANING_PILE, State.CLEANING_PILE, State.TO_WAREHOUSE, State.EXCAVATING, State.TO_CANTEEN_WORK, State.CANTEEN_WORK, State.TO_SCHOOL_WORK, State.SCHOOL_WORK, State.TO_MARKET_WORK, State.MARKET_WORK, State.TO_OFFICIAL_WORK, State.OFFICIAL_WORK, State.TO_CRAFT_WORK, State.CRAFT_WORK, State.TO_FACTORY, State.FACTORY_WORK, State.COURIER_TO_WORKER, State.COURIER_TO_WAREHOUSE, State.COURIER_TO_SAWMILL, State.TO_FOOD_PICKUP, State.TO_CANTEEN_DELIVERY, State.TO_CONSTRUCTION_PICKUP, State.TO_CONSTRUCTION_SITE, State.TO_TRADE_PICKUP, State.TO_TRADE_DESTINATION, State.TO_EMPLOYMENT_CENTER, State.EMPLOYMENT_PROCESSING]:
 		idle()
 	if was_construction_delivery:
 		# The site reservation is reconciled by SettlementGame. Clear the actor-side

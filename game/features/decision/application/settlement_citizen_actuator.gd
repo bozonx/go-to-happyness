@@ -23,6 +23,25 @@ func is_valid() -> bool:
 	)
 
 
+func move_to(destination: Vector3, arrival_radius: float = 0.25) -> bool:
+	if not is_valid():
+		return false
+	return citizen.move_to(destination, arrival_radius)
+
+
+func has_arrived() -> bool:
+	return is_valid() and citizen.has_arrived()
+
+
+func stop() -> void:
+	if is_valid():
+		citizen.stop_movement()
+
+
+func movement_failed() -> bool:
+	return is_valid() and citizen.ai_move_failed
+
+
 func begin_action(
 	action: StringName,
 	target_key: StringName = &"",

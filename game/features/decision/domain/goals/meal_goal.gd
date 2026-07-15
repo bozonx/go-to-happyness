@@ -6,6 +6,9 @@ const EatAtCanteenStepScript = preload("res://game/features/decision/domain/beha
 
 func _init() -> void:
 	super(&"meal")
+	# Personal needs are short trips; if interrupted they should be rebuilt
+	# from current facts instead of resuming a stale trip.
+	resumable = false
 
 
 const ACTIVE_GOAL_BLACKBOARD_KEY := &"brain.active_goal_id"

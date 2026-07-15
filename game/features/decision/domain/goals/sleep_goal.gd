@@ -9,6 +9,9 @@ const ACTIVE_GOAL_BLACKBOARD_KEY := &"brain.active_goal_id"
 
 func _init() -> void:
 	super(&"sleep")
+	# Personal needs are short trips; if interrupted they should be rebuilt
+	# from current facts instead of resuming a stale trip.
+	resumable = false
 
 
 func score(

@@ -91,7 +91,7 @@
 | Прием пищи | `CanteenService` | `MealGoal` / `EatAtCanteenStep` | `eat` |
 | Ночной сон | расписание смены в `SimulationDayCycle` | `SleepGoal` / `SleepAtHomeStep` | `sleep` |
 | Физиологическая нужда | `CitizenNeedsService` | `ToiletGoal` / `RelieveStep` | `relieve` |
-| Плановый и фоновый отдых | `CitizenNeedsService` | `RestGoal` / `RestAtLeisureStep` | `rest` |
+| Плановый и фоновый отдых | `CitizenNeedsService` | `RestGoal` / `MoveToStep` + `RelaxAtPositionStep` | `move_to`, `relax` |
 
 `CitizenActor` исполняет только уже выбранную команду: движение, ожидание слота,
 анимацию и сигнал завершения. Он не хранит расписание туалета, не выбирает туалет

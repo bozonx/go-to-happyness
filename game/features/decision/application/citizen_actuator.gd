@@ -41,5 +41,9 @@ func action_status() -> ActionStatus:
 	return ActionStatus.IDLE
 
 
+func movement_failed() -> bool:
+	return false
+
+
 func cancel_action() -> void:
 	pass

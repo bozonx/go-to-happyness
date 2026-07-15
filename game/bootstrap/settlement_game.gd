@@ -6260,14 +6260,19 @@ func _grant_debug_resources() -> void:
 		_update_interface("Resources can only be added after the first warehouse is built.")
 		return
 	var era_resources := settlement.era_resources()
-	var grants := {"money": 30, "branches": 36, "grass": 20, "water": 24, "food": 18, "hides": 8, "goods": 8, "logs": 16, "wood": 10, "soil": 28, "clay": 22, "boards": 18, "stone": 15, "bricks": 14}
+	var total_capacity := settlement.storage_capacity(warehouse_positions.size())
+	var total_used := settlement.storage_used_units()
+	var free_units := maxf(0.0, float(total_capacity) - total_used)
+	# Divide free capacity equally among era resources, accounting for weights.
+	var per_resource_units := free_units / float(era_resources.size())
 	var overflow: Dictionary = {}
 	for resource_type in era_resources:
-		var grant_value: int = int(grants.get(resource_type, 12))
+		var weight := settlement.storage_weight(resource_type)
+		var grant_value := maxi(1, int(floor(per_resource_units / weight)))
 		var leftover := settlement.add_cheat(resource_type, grant_value)
 		if leftover > 0:
 			overflow[resource_type] = leftover
-	settlement.money += int(grants.get("money", 30))
+	settlement.money += 30
 	if not overflow.is_empty() and not warehouse_positions.is_empty():
 		_drop_overflow_as_piles(overflow, warehouse_positions[0])
 		_update_interface("Debug resources added. Some overflow dropped near the warehouse.")

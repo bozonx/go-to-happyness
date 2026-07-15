@@ -112,13 +112,34 @@ class FakeActuator extends CitizenActuator:
 	var stop_count := 0
 	var cancel_action_count := 0
 	var action_start_count := 0
+	var move_to_count := 0
+	var move_to_destination := Vector3.INF
+	var move_started := false
+	var arrived_flag := false
+	var movement_failed_flag := false
 	var next_action_status := ActionStatus.RUNNING
 
 	func stop() -> void:
 		stop_count += 1
+		move_started = false
+		arrived_flag = false
 
 	func cancel_action() -> void:
 		cancel_action_count += 1
+
+	func move_to(destination: Vector3, _arrival_radius: float = 0.25) -> bool:
+		move_to_count += 1
+		move_to_destination = destination
+		move_started = true
+		arrived_flag = false
+		movement_failed_flag = false
+		return true
+
+	func has_arrived() -> bool:
+		return arrived_flag
+
+	func movement_failed() -> bool:
+		return movement_failed_flag
 
 	func begin_action(
 		action: StringName,
@@ -126,7 +147,7 @@ class FakeActuator extends CitizenActuator:
 		_payload: AIFactSet = null
 	) -> bool:
 		action_start_count += 1
-		return action in [&"sleep", &"eat", &"relieve", &"rest", &"register", &"forestry", &"farming", &"construction", &"demolition", &"gathering", &"cleaning", &"excavation", &"cook", &"teacher", &"seller", &"official", &"craftsman", &"factory_work", &"courier_delivery"]
+		return action in [&"sleep", &"eat", &"relieve", &"rest", &"relax", &"register", &"forestry", &"farming", &"construction", &"demolition", &"gathering", &"cleaning", &"excavation", &"cook", &"teacher", &"seller", &"official", &"craftsman", &"factory_work", &"courier_delivery"]
 
 	func action_status() -> ActionStatus:
 		return next_action_status
