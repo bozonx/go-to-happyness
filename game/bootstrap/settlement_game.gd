@@ -531,7 +531,6 @@ func _process(delta: float) -> void:
 	_update_arrivals()
 	_update_fire_status()
 	_update_recovery_arrival()
-	_update_repairs()
 	trade_service.update()
 	_dispatch_queued_trades()
 	_update_sawmills(delta)
@@ -1090,10 +1089,11 @@ func _update_couriers() -> void:
 
 
 func _publish_courier_tasks(dispatcher: RefCounted) -> void:
-	# Repair reservations left by an interrupted or removed carrier before task
+	# Reconcile reservations left by interrupted or removed carriers before task
 	# validity is evaluated. This is the active dispatcher path.
 	for construction_site in construction_sites:
 		_reconcile_construction_reservations(construction_site)
+	_reconcile_repair_reservations()
 	if not warehouse_positions.is_empty():
 		# Emergency food is published before every other task.
 		if is_instance_valid(canteen) and food > 0 and not pending_canteen_delivery:
@@ -1130,6 +1130,30 @@ func _publish_courier_tasks(dispatcher: RefCounted) -> void:
 			if delivered + reserved < required and not source.is_empty():
 				var source_id := str(source.get("id", "storage"))
 				dispatcher.publish(StringName("construction_%s_%s_%s" % [site.node.get_instance_id(), resource_type, source_id]), CourierTask.Kind.CONSTRUCTION, 70, source.position, site.node.global_position, {"site": site, "resource": resource_type, "source": source})
+	if not warehouse_positions.is_empty() and branches > 0:
+		for record in building_registry.records():
+			var building := record.node
+			if not is_instance_valid(building) or not bool(building.get_meta("repair_needed", false)) or bool(building.get_meta("repair_reserved", false)):
+				continue
+			var repair_position: Vector3 = building.get_meta("service_position", building.global_position)
+			dispatcher.publish(StringName("repair_%d" % building.get_instance_id()), CourierTask.Kind.BUILDING_SUPPLY, 60, warehouse_positions[0], repair_position, {"building": building, "supply_kind": "repair", "resource": "branches"})
+
+
+func _reconcile_repair_reservations() -> void:
+	# A repair delivery can be interrupted by the end-of-day scheduler or a route reset.
+	# Return its reservation when no courier still owns it, otherwise the building
+	# can remain permanently reserved without ever being repaired.
+	for record in building_registry.records():
+		var building := record.node
+		if not is_instance_valid(building) or not bool(building.get_meta("repair_reserved", false)):
+			continue
+		var has_carrier := false
+		for citizen in citizens:
+			if citizen != null and citizen.state in [Citizen.State.TO_CONSTRUCTION_PICKUP, Citizen.State.TO_CONSTRUCTION_SITE] and citizen.building_supply_kind == "repair" and citizen.construction_site == building:
+				has_carrier = true
+				break
+		if not has_carrier:
+			building.set_meta("repair_reserved", false)
 
 
 func _construction_material_source(resource_type: String) -> Dictionary:
@@ -1232,6 +1256,15 @@ func _is_courier_task_valid(task: RefCounted) -> bool:
 				var pile := _resource_pile_for_node(source.get("node") as Node3D)
 				source_available = not pile.is_empty() and int(pile.get("resources", {}).get(resource_type, 0)) > 0
 			return int(site.delivered_materials.get(resource_type, 0)) + int(site.reserved_materials.get(resource_type, 0)) < int(site.required_materials.get(resource_type, 0)) and source_available
+		CourierTask.Kind.BUILDING_SUPPLY:
+			var building: Node3D = task.payload.building
+			if not is_instance_valid(building):
+				return false
+			var supply_kind := str(task.payload.get("supply_kind", ""))
+			match supply_kind:
+				"repair":
+					return bool(building.get_meta("repair_needed", false)) and not bool(building.get_meta("repair_reserved", false)) and branches > 0
+			return false
 	return false
 
 
@@ -1282,6 +1315,20 @@ func _start_courier_task(courier: Citizen, task: RefCounted) -> bool:
 			site.reserved_materials = reservations
 			courier.assign_construction_delivery(site.node, source.get("position", Vector3.INF), resource_type)
 			return true
+		CourierTask.Kind.BUILDING_SUPPLY:
+			var building: Node3D = task.payload.building
+			if not is_instance_valid(building):
+				return false
+			var supply_kind := str(task.payload.get("supply_kind", ""))
+			match supply_kind:
+				"repair":
+					if branches <= 0:
+						return false
+					branches -= 1
+					building.set_meta("repair_reserved", true)
+					courier.assign_building_supply(building, warehouse_positions[0], "branches", "repair")
+					return true
+			return false
 	return false
 
 
@@ -1377,56 +1424,6 @@ func _on_building_supply_delivered(_courier: Citizen, target: Node3D, supply_kin
 					reserved[resource_type] = maxi(0, int(reserved.get(resource_type, 0)) - amount)
 					resource_piles[index].reserved = reserved
 					break
-
-func _update_firewood_supplies() -> void:
-	for courier in citizens:
-		if not courier.can_handle_entry_logistics() or courier.state != Citizen.State.IDLE:
-			continue
-		for record in building_registry.records():
-			var building := record.node
-			if not is_instance_valid(building) or str(building.get_meta("building_type", "")) not in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"]:
-				continue
-			var fire_state := _fire_state_for(building)
-			if not fire_state.needs_supply(4) or branches <= 0:
-				continue
-			branches -= 1
-			fire_state.reserve(1)
-			_apply_fire_state(building, fire_state)
-			courier.assign_building_supply(building, warehouse_positions[0], "branches", "firewood")
-			return
-
-func _update_repairs() -> void:
-	if warehouse_positions.is_empty() or branches <= 0 or not _is_work_time():
-		return
-	for builder in citizens:
-		if builder.state != Citizen.State.IDLE or not builder.can_handle_entry_logistics():
-			continue
-		for record in building_registry.records():
-			var building := record.node
-			if not is_instance_valid(building) or not bool(building.get_meta("repair_needed", false)) or bool(building.get_meta("repair_reserved", false)):
-				continue
-			branches -= 1
-			building.set_meta("repair_reserved", true)
-			builder.assign_building_supply(building, warehouse_positions[0], "branches", "repair")
-			return
-
-func _update_resource_pile_supplies() -> void:
-	for courier in citizens:
-		if not courier.can_handle_entry_logistics() or courier.state != Citizen.State.IDLE:
-			continue
-		for index in resource_piles.size():
-			var pile: Dictionary = resource_piles[index]
-			for resource_type in pile.resources:
-				var available := int(pile.resources[resource_type]) - int(pile.reserved.get(resource_type, 0))
-				if available <= 0:
-					continue
-				if not settlement.reserve_storage_room_for(resource_type, 1, warehouse_positions.size()):
-					continue
-				pile.resources[resource_type] = int(pile.resources[resource_type]) - 1
-				pile.reserved[resource_type] = int(pile.reserved.get(resource_type, 0)) + 1
-				resource_piles[index] = pile
-				courier.assign_building_supply(pile.node, warehouse_positions[0], resource_type, "pile")
-				return
 
 func _builder_count(site_node: Node3D) -> int:
 	var count := 0
