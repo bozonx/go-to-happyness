@@ -354,6 +354,8 @@ var building_overtime_button: Button
 var building_relight_button: Button
 var campfire_overtime_button: Button
 var campfire_close_btn: Button
+var campfire_story_menu: Panel
+var campfire_story_buttons: Array[Button] = []
 var building_cancel_construction_button: Button
 var decision_menu: Panel
 var decision_title: Label
@@ -958,6 +960,24 @@ func _apply_daily_settlement_rules() -> void:
 	var housing := _total_housing_slots()
 	var change := SETTLEMENT_RULES.daily_wellbeing_change(housing >= population, float(food) / population, float(water) / population, settlement.workday_hours, settlement.night_shifts_allowed)
 	wellbeing = clampi(wellbeing + change, 0, 100)
+	# Campfire story effects are resolved at dawn.
+	match settlement.campfire_story_effect:
+		"optimistic":
+			wellbeing = mini(100, wellbeing + 10)
+			_add_message("The optimistic stories lifted spirits. Wellbeing recovered an extra 10.")
+		"teaching":
+			if not citizens.is_empty():
+				var pupil: Citizen = citizens.pick_random()
+				var physical_skills := ["construction", "forestry", "farming", "excavation", "factory_worker", "craftsman"]
+				var skill: String = physical_skills.pick_random()
+				pupil.skills[skill] = minf(1.0, float(pupil.skills.get(skill, 0.0)) + 0.1)
+				_add_message("Teaching tales helped %s learn a little %s." % [pupil.role_label(), skill.capitalize()])
+		"plan":
+			_add_message("The plan for tomorrow focuses on %s." % settlement.campfire_story_target_role.capitalize())
+	if settlement.campfire_story_effect != "plan" or day_cycle.current_day > settlement.campfire_story_target_day:
+		settlement.campfire_story_effect = ""
+		settlement.campfire_story_target_role = ""
+		settlement.campfire_story_target_day = -1
 	settlement.low_wellbeing_days = settlement.low_wellbeing_days + 1 if wellbeing < SettlementRules.LOW_WELLBEING else 0
 	if SETTLEMENT_RULES.should_volunteer_leave(settlement.low_wellbeing_days) and not citizens.is_empty():
 		var departing: Citizen = citizens.pop_back()
@@ -2400,6 +2420,7 @@ func _create_interface() -> void:
 	_create_school_menu(ui)
 	_create_materials_factory_menu(ui)
 	_create_campfire_menu(ui)
+	_create_campfire_story_menu(ui)
 	_create_market_menu(ui)
 	_create_warehouse_menu(ui)
 	_create_building_menu(ui)
@@ -2440,6 +2461,55 @@ func _create_survival_decision_menu(ui: CanvasLayer) -> void:
 	decision_menu.add_child(decision_secondary_button)
 
 
+func _create_campfire_story_menu(ui: CanvasLayer) -> void:
+	campfire_story_menu = Panel.new()
+	campfire_story_menu.set_anchors_preset(Control.PRESET_CENTER)
+	campfire_story_menu.offset_left = -220.0
+	campfire_story_menu.offset_top = -140.0
+	campfire_story_menu.offset_right = 220.0
+	campfire_story_menu.offset_bottom = 140.0
+	campfire_story_menu.visible = false
+	ui.add_child(campfire_story_menu)
+
+	var title := Label.new()
+	title.text = "Campfire Story"
+	title.position = Vector2(20, 16)
+	title.size = Vector2(400, 28)
+	title.add_theme_font_size_override("font_size", 17)
+	campfire_story_menu.add_child(title)
+
+	var desc := Label.new()
+	desc.text = "Choose tonight's theme (only after 20:00 in the Tent Era)."
+	desc.position = Vector2(20, 50)
+	desc.size = Vector2(400, 40)
+	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	campfire_story_menu.add_child(desc)
+
+	var stories := [
+		{"id": "optimistic", "label": "Optimistic stories", "tooltip": "Wellbeing recovers faster tonight, but everyone wakes an hour later."},
+		{"id": "teaching", "label": "Teaching tales", "tooltip": "One random resident learns a little of a physical skill overnight."},
+		{"id": "plan", "label": "Plan for tomorrow", "tooltip": "Work speed +15%% for gathering tasks tomorrow; night calorie cost rises."},
+	]
+	var y := 100
+	for story in stories:
+		var btn := Button.new()
+		btn.text = story.label
+		btn.tooltip_text = story.tooltip
+		btn.position = Vector2(20, y)
+		btn.size = Vector2(400, 30)
+		btn.pressed.connect(_select_campfire_story.bind(story.id))
+		campfire_story_menu.add_child(btn)
+		campfire_story_buttons.append(btn)
+		y += 38
+
+	var close := Button.new()
+	close.text = "Close"
+	close.position = Vector2(20, y + 4)
+	close.size = Vector2(400, 28)
+	close.pressed.connect(func(): campfire_story_menu.visible = false)
+	campfire_story_menu.add_child(close)
+
+
 func _maybe_present_survival_decision() -> void:
 	if settlement.era != SettlementState.Era.TENT or decision_menu == null or decision_menu.visible:
 		return
@@ -2456,6 +2526,13 @@ func _maybe_present_survival_decision() -> void:
 		decision_description.text = "Foragers found unfamiliar berries. They may lift the camp's spirits or poison one resident for a day."
 		decision_primary_button.text = "Try the berries"
 		decision_secondary_button.text = "Discard them"
+		decision_menu.visible = true
+	elif random.randf() < 0.25:
+		pending_survival_decision = "traveler"
+		decision_title.text = "Wandering traveler"
+		decision_description.text = "A lost tourist will trade a tarp roll for 3 food and 2 water."
+		decision_primary_button.text = "Trade"
+		decision_secondary_button.text = "Send away"
 		decision_menu.visible = true
 
 
@@ -2477,6 +2554,17 @@ func _resolve_survival_decision(accept: bool) -> void:
 			_add_message("The berries were poisonous. One resident cannot work for 24 hours.")
 	elif pending_survival_decision == "forest_gifts":
 		_add_message("The unknown berries were discarded.")
+	elif pending_survival_decision == "traveler":
+		if accept:
+			if food >= 3 and water >= 2:
+				food -= 3
+				water -= 2
+				settlement.add("tarp", 1)
+				_add_message("Traded 3 food and 2 water for a tarp roll.")
+			else:
+				_add_message("Not enough food or water to trade with the traveler.")
+		else:
+			_add_message("The traveler left without trading.")
 	pending_survival_decision = ""
 	decision_menu.visible = false
 
@@ -3984,10 +4072,10 @@ func _employer_capacity(role: String, building: Node3D) -> int:
 		return 2 if type == "tarp_craft_tent" else 1
 	if role == "gather_food":
 		var type := str(building.get_meta("building_type", ""))
-		return 2 if type == "tarp_forager_tent" else 1
+		return 4 if type == "tarp_forager_tent" else 2
 	if role in ["gather_branches", "gather_grass"]:
 		var type := str(building.get_meta("building_type", ""))
-		return 3 if type == "tarp_materials_yard" else 2
+		return 4 if type == "tarp_materials_yard" else 2
 	return 1
 
 func _start_dig_assignment() -> void:
@@ -4316,6 +4404,8 @@ func _hide_all_selection_menus() -> void:
 	school_menu.visible = false
 	materials_factory_menu.visible = false
 	campfire_menu.visible = false
+	if campfire_story_menu != null:
+		campfire_story_menu.visible = false
 	market_menu.visible = false
 	warehouse_menu.visible = false
 	building_menu.visible = false
@@ -5278,10 +5368,10 @@ func _required_staff_for_building(building: Node3D) -> Dictionary:
 	match str(building.get_meta("building_type", "")):
 		"sawmill": return {"role": "forestry", "count": 1}
 		"farm": return {"role": "farming", "count": 1}
-		"forager_tent", "straw_forager_tent": return {"role": "gather_food", "count": 1}
-		"tarp_forager_tent": return {"role": "gather_food", "count": 2}
+		"forager_tent", "straw_forager_tent": return {"role": "gather_food", "count": 2}
+		"tarp_forager_tent": return {"role": "gather_food", "count": 4}
 		"materials_yard", "straw_materials_yard": return {"role": "gather_branches", "count": 2}
-		"tarp_materials_yard": return {"role": "gather_branches", "count": 3}
+		"tarp_materials_yard": return {"role": "gather_branches", "count": 4}
 		"cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant": return {"role": "cooking", "count": 1}
 		"school": return {"role": "teaching", "count": 1}
 		"brick_factory", "materials_factory", "recycling_factory", "metal_factory": return {"role": "factory_worker", "count": int(building.get_meta("required_factory_workers", 1))}
@@ -5594,6 +5684,13 @@ func _create_campfire_menu(ui: CanvasLayer) -> void:
 	campfire_close_btn.pressed.connect(_close_context_menus)
 	campfire_menu.add_child(campfire_close_btn)
 
+	var campfire_story_button := Button.new()
+	campfire_story_button.text = "Campfire stories"
+	campfire_story_button.position = Vector2(16, 668)
+	campfire_story_button.size = Vector2(272, 32)
+	campfire_story_button.pressed.connect(_show_campfire_story_menu)
+	campfire_menu.add_child(campfire_story_button)
+
 
 func _show_campfire_menu() -> void:
 	# Keep any resident the player picked selected so they can be appointed as the
@@ -5603,6 +5700,33 @@ func _show_campfire_menu() -> void:
 	build_mode = ""
 	campfire_menu.visible = true
 	_refresh_campfire_menu()
+
+
+func _show_campfire_story_menu() -> void:
+	if settlement.era != SettlementState.Era.TENT:
+		_update_interface("Campfire stories are only part of the Tent Era.")
+		return
+	if clock.hour() < 20:
+		_update_interface("Campfire stories can only be chosen after 20:00.")
+		return
+	if not settlement.campfire_story_effect.is_empty():
+		_update_interface("Tonight's story has already been chosen: %s." % settlement.campfire_story_effect.capitalize())
+		return
+	campfire_story_menu.visible = true
+
+
+func _select_campfire_story(story_id: String) -> void:
+	settlement.campfire_story_effect = story_id
+	campfire_story_menu.visible = false
+	var message := ""
+	match story_id:
+		"optimistic": message = "Optimistic stories chosen: wellbeing will recover faster tonight."
+		"teaching": message = "Teaching tales chosen: a resident may learn something overnight."
+		"plan":
+			message = "Plan for tomorrow chosen: gathering work will be faster tomorrow."
+			settlement.campfire_story_target_role = ["gather_branches", "gather_grass", "gather_food", "gather_water"].pick_random()
+			settlement.campfire_story_target_day = day_cycle.current_day + 1
+	_update_interface(message)
 
 
 func _create_campfire_orders_menu(ui: CanvasLayer) -> void:
@@ -7179,6 +7303,12 @@ func fire_smoke_work_multiplier(position_on_board: Vector3) -> float:
 		var building: Node3D = record.node
 		if is_instance_valid(building) and _is_fire_lit(building) and building.global_position.distance_to(position_on_board) <= 15.0:
 			return 0.70
+	return 1.0
+
+
+func campfire_story_efficiency_multiplier(role: String) -> float:
+	if settlement.campfire_story_effect == "plan" and settlement.campfire_story_target_role == role and day_cycle.current_day == settlement.campfire_story_target_day:
+		return 1.15
 	return 1.0
 
 func _update_fire_status() -> void:

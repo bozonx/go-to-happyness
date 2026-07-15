@@ -220,6 +220,9 @@ func _test_tent_start_config() -> void:
 	assert(state.pay_for_building_upgrade("campfire") == "campfire_lvl2")
 	assert(int(state.buildings.get("campfire", 0)) == 0)
 	assert(int(state.buildings.get("campfire_lvl2", 0)) == 1)
+	var tent_refund := BuildingCatalog.demolition_refund("tent")
+	assert(int(tent_refund.get("branches", 0)) == 2)
+	assert(int(tent_refund.get("grass", 0)) == 1)
 	var storage_state := SettlementState.new()
 	assert(storage_state.storage_availability_for("grass", 1, 0) == SettlementState.StorageAvailability.NO_WAREHOUSE)
 	storage_state.branches = 24

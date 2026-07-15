@@ -44,6 +44,9 @@ var trade_sales := 0
 var buildings: Dictionary = {}
 var brick_construction_unlocked := false
 var warehouse_tarp_covered := false
+var campfire_story_effect := "" # "optimistic" | "teaching" | "plan"
+var campfire_story_target_role := ""
+var campfire_story_target_day := -1
 var unlocked_systems := {
 	"official": false,
 }
@@ -128,6 +131,9 @@ func apply_tent_start(reset_progress := true) -> void:
 	trade_sales = 0
 	brick_construction_unlocked = false
 	warehouse_tarp_covered = false
+	campfire_story_effect = ""
+	campfire_story_target_role = ""
+	campfire_story_target_day = -1
 	active_research_tech_id = ""
 	active_research_worker_id = -1
 	active_research_remaining_time = 0.0

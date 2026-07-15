@@ -1973,6 +1973,8 @@ func get_efficiency(role: String) -> float:
 	var efficiency := skill_efficiency_factor * satisfaction_factor * (1.0 + meal_bonus)
 	if is_jack_of_all_trades and role in ["construction", "gather_branches", "gather_grass", "gather_food", "forestry", "farming", "excavation"]:
 		efficiency *= 1.30
+	if simulation != null:
+		efficiency *= simulation.campfire_story_efficiency_multiplier(role)
 	return efficiency
 
 func role_label() -> String:
