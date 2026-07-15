@@ -214,7 +214,7 @@ func storage_capacity(warehouses: int) -> int:
 func storage_used_units() -> float:
 	var total := 0.0
 	for resource_type in STORED_RESOURCES:
-		total += amount(resource_type) * storage_weight(resource_type)
+		total += _warehouse_amount(resource_type) * storage_weight(resource_type)
 	return total
 
 

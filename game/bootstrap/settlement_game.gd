@@ -1586,6 +1586,8 @@ func _format_costs(building_type: String) -> String:
 	return building_availability_service.cost_text(building_type)
 
 func _stored_resources() -> int:
+	if warehouse_positions.is_empty():
+		return 0
 	return int(ceil(settlement.storage_used_units()))
 
 func _warehouse_capacity() -> int:
@@ -1693,7 +1695,7 @@ func _release_building_queue_entry(citizen: Citizen) -> void:
 	building_queue_service.release(citizen)
 
 func _update_interface(message: String) -> void:
-	wood_label.text = "Era: %s\nMoney: %d\nBranches: %d\nGrass: %d\nWater: %d\nFood: %d\nSoil: %d\nClay: %d\nLogs: %d\nTimber: %d\nBoards: %d\nStone: %d\nBricks: %d\nStorage: %d/%d\nPopulation: %d\nWellbeing: %d" % [_era_name(), money, branches, grass, water, food, soil, clay, settlement.logs, wood, boards, stone, bricks, _stored_resources(), _warehouse_capacity(), citizens.size(), wellbeing]
+	wood_label.text = "Era: %s\nMoney: %d\nBranches: %d\nGrass: %d\nWater: %d\nFood: %d\nSoil: %d\nClay: %d\nLogs: %d\nTimber: %d\nBoards: %d\nStone: %d\nBricks: %d\nStorage: %d/%d\nPopulation: %d\nWellbeing: %d" % [_era_name(), money, branches, grass, water, food, soil, clay, logs, wood, boards, stone, bricks, _stored_resources(), _warehouse_capacity(), citizens.size(), wellbeing]
 	_add_message(message)
 	if is_first_person:
 		var build_hint := "  B: construction" if player_citizen == hero_citizen else ""
@@ -6032,7 +6034,7 @@ func _refresh_campfire_menu() -> void:
 			var has_smithy := settlement.has_building("smithy")
 			var has_mkt := settlement.has_building("earth_market")
 			var pop_ok := housing_slots >= citizens.size()
-			var clay_ok := settlement.clay >= 5
+			var clay_ok := settlement.amount("clay") >= 5
 			var money_ok := settlement.money >= 5
 			var trade_ok := settlement.trade_sales >= 3
 			var shovel_ok := settlement._has_tools(["shovel"])
@@ -6042,7 +6044,7 @@ func _refresh_campfire_menu() -> void:
 			req_text += "- Smithy built: %s\n" % ("Yes" if has_smithy else "No")
 			req_text += "- Earth market built: %s\n" % ("Yes" if has_mkt else "No")
 			req_text += "- Housing slots (needs %d): %d (%s)\n" % [citizens.size(), housing_slots, "OK" if pop_ok else "Need more"]
-			req_text += "- Clay (needs 5): %d (%s)\n" % [settlement.clay, "OK" if clay_ok else "Need more"]
+			req_text += "- Clay (needs 5): %d (%s)\n" % [settlement.amount("clay"), "OK" if clay_ok else "Need more"]
 			req_text += "- Money (needs 5): %d (%s)\n" % [settlement.money, "OK" if money_ok else "Need more"]
 			req_text += "- Trade sales (needs 3): %d (%s)\n" % [settlement.trade_sales, "OK" if trade_ok else "Need more"]
 			req_text += "- Tool Shovel owned: %s\n" % ("Yes" if shovel_ok else "No")
@@ -6053,14 +6055,14 @@ func _refresh_campfire_menu() -> void:
 			var has_lodge := settlement.has_building("clay_lodge")
 			var has_mkt := settlement.has_building("clay_market")
 			var water_ok := water >= citizens.size()
-			var logs_ok := settlement.logs >= 10
+			var logs_ok := settlement.amount("logs") >= 10
 			var money_ok := settlement.money >= 10
 			
 			req_text = "Requirements for Wood Era:\n"
 			req_text += "- Clay lodge built: %s\n" % ("Yes" if has_lodge else "No")
 			req_text += "- Clay market built: %s\n" % ("Yes" if has_mkt else "No")
 			req_text += "- Water (needs %d): %d (%s)\n" % [citizens.size(), water, "OK" if water_ok else "Need more"]
-			req_text += "- Logs (needs 10): %d (%s)\n" % [settlement.logs, "OK" if logs_ok else "Need more"]
+			req_text += "- Logs (needs 10): %d (%s)\n" % [settlement.amount("logs"), "OK" if logs_ok else "Need more"]
 			req_text += "- Money (needs 10): %d (%s)\n" % [settlement.money, "OK" if money_ok else "Need more"]
 			can_advance = settlement.can_advance_to(next_era, citizens.size(), housing_slots)
 			
@@ -6087,14 +6089,14 @@ func _refresh_campfire_menu() -> void:
 			var has_pref := settlement.has_building("stone_prefecture")
 			var has_mkt := settlement.has_building("stone_market")
 			var has_mw := settlement.has_building("masonry_workshop")
-			var stone_ok := settlement.stone >= 20
+			var stone_ok := settlement.amount("stone") >= 20
 			var money_ok := settlement.money >= 20
 			
 			req_text = "Requirements for Brick Era:\n"
 			req_text += "- Stone prefecture built: %s\n" % ("Yes" if has_pref else "No")
 			req_text += "- Masonry workshop built: %s\n" % ("Yes" if has_mw else "No")
 			req_text += "- Stone market built: %s\n" % ("Yes" if has_mkt else "No")
-			req_text += "- Stone (needs 20): %d (%s)\n" % [settlement.stone, "OK" if stone_ok else "Need more"]
+			req_text += "- Stone (needs 20): %d (%s)\n" % [settlement.amount("stone"), "OK" if stone_ok else "Need more"]
 			req_text += "- Money (needs 20): %d (%s)\n" % [settlement.money, "OK" if money_ok else "Need more"]
 			can_advance = settlement.can_advance_to(next_era, citizens.size(), housing_slots)
 			

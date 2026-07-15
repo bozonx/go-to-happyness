@@ -319,7 +319,7 @@ func _gathering_targets() -> Array[Dictionary]:
 	var targets: Array[Dictionary] = []
 	if not simulation._is_work_time():
 		return targets
-	if simulation.settlement.grass < simulation.settlement.branches:
+	if simulation.settlement.amount("grass") < simulation.settlement.amount("branches"):
 		for grass_cell_value in simulation.grass_sources.keys():
 			var grass_cell := grass_cell_value as Vector2i
 			var grass_source := simulation.grass_sources.get(grass_cell, {}) as Dictionary
