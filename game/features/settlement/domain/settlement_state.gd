@@ -442,6 +442,11 @@ func add(resource_type: String, value: int) -> void:
 	if not warehouse_ever_built:
 		virtual_stock[resource_type] = int(virtual_stock.get(resource_type, 0)) + value
 		return
+	if warehouses.is_empty():
+		# Resources received while no physical warehouse exists fall back to virtual stock
+		# rather than being silently lost; this matches demolition edge cases.
+		virtual_stock[resource_type] = maxi(0, int(virtual_stock.get(resource_type, 0)) + value)
+		return
 	if value >= 0:
 		_distribute_add(resource_type, value)
 	else:
@@ -455,7 +460,7 @@ func add_cheat(resource_type: String, value: int) -> void:
 	if value <= 0:
 		add(resource_type, value)
 		return
-	if not warehouse_ever_built:
+	if not warehouse_ever_built or warehouses.is_empty():
 		virtual_stock[resource_type] = int(virtual_stock.get(resource_type, 0)) + value
 		return
 	var weight := storage_weight(resource_type)
