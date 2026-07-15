@@ -1552,7 +1552,7 @@ func _work(delta: float) -> bool:
 
 
 func _is_physical_work() -> bool:
-	return active_role in ["construction", "gather_branches", "gather_grass", "gather_food", "forestry", "farming", "excavation", "factory_worker", "craftsman"]
+	return active_role in ["construction", "gather_branches", "gather_grass", "gather_food", "gather_water", "forestry", "farming", "excavation", "factory_worker", "craftsman"]
 
 
 func _start_task(duration: float) -> void:
@@ -1977,7 +1977,7 @@ func get_core_skill_for_role(role: String) -> String:
 			return "construction"
 		"forestry", "gather_branches", "gather_logs":
 			return "forestry"
-		"farming", "gather_water", "gather_food":
+		"farming", "gather_water", "gather_food", "gather_grass":
 			return "farming"
 		"excavation":
 			return "excavation"
@@ -2362,12 +2362,11 @@ func _process_gathering(delta: float) -> void:
 		# Raw bootstrap materials (branches/grass) are gathered two-at-a-time so the
 		# early tent era is not a one-unit-per-trip slog; skill still governs cycle
 		# speed and matters more in later eras. Water hauling keeps its bucket bonus.
+		var gathered_amount := 1
 		if gather_resource_type == "water" and active_role == "gather_water":
-			carried_amount = 3
+			gathered_amount = 3
 		elif gather_resource_type in ["branches", "grass"]:
-			carried_amount = 2
-		else:
-			carried_amount = 1
+			gathered_amount = 2
 		resource_type = gather_resource_type
 		if resource_type == "food" and simulation != null:
 			resource_type = simulation.harvest_wild_food(gather_source_position, self)
@@ -2377,14 +2376,19 @@ func _process_gathering(delta: float) -> void:
 		if resource_type == "logs":
 			tree_harvested.emit(self, gather_source_position)
 			if has_perk("forestry") and randf() < 0.10:
-				carried_amount *= 2
+				gathered_amount *= 2
 				if simulation != null:
 					simulation._update_interface("Lumberjack Master: Forester gathered 2 logs!")
+		var consumed_amount := 1
 		if simulation != null:
 			if resource_type == "grass":
-				simulation._consume_grass_source(gather_source_position)
+				consumed_amount = simulation._consume_grass_source(gather_source_position)
 			elif resource_type == "branches":
-				simulation._consume_tree_branches(gather_source_position)
+				consumed_amount = simulation._consume_tree_branches(gather_source_position)
+		if consumed_amount <= 0 and resource_type in ["grass", "branches"]:
+			idle()
+			return
+		carried_amount = gathered_amount
 		if active_role == "gather_food" and is_instance_valid(employment_workplace):
 			warehouse_position = employment_workplace.get_meta("service_position", employment_workplace.global_position)
 		# Bootstrap gathering remains self-contained, while food collected by a

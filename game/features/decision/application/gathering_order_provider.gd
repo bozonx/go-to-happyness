@@ -56,17 +56,17 @@ func _closest_free_candidate(snapshot: WorldSnapshot, citizen: CitizenSnapshot, 
 	var global_candidates: Array = snapshot.settlement.value(&"work.gathering.targets", []) as Array
 	var role := citizen.facts.value(&"work.gathering.role", &"") as StringName
 	var candidates: Array = citizen.facts.value(&"work.gathering.candidates", []) as Array
-	if candidates.is_empty() and role != &"gather_food":
+	if candidates.is_empty() and role == &"gather_food":
 		candidates = global_candidates
 	var best: Dictionary = {}
 	var best_distance := INF
 	for candidate_value in candidates:
 		var candidate := candidate_value as Dictionary
 		var source_id := candidate.get(&"id", &"") as StringName
-		var position: Variant = candidate.get(&"position", Vector3.INF)
-		if source_id == &"" or not (position is Vector3) or position == Vector3.INF or assigned_sources.has(source_id):
+		var access: Variant = candidate.get(&"access", Vector3.INF)
+		if source_id == &"" or not (access is Vector3) or access == Vector3.INF or assigned_sources.has(source_id):
 			continue
-		var distance := citizen.position.distance_squared_to(position)
+		var distance := citizen.position.distance_squared_to(access)
 		if distance < best_distance or (is_equal_approx(distance, best_distance) and str(source_id) < str(best.get(&"id", &""))):
 			best = candidate.duplicate(true)
 			best_distance = distance

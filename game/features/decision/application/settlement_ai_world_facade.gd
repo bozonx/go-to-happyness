@@ -23,7 +23,6 @@ func capture(sequence: int) -> WorldSnapshot:
 	var forestry_targets := _forestry_targets()
 	var gathering_targets := _gathering_targets()
 	var food_gathering_targets := _food_gathering_targets()
-	var daily_gathering_cache: Dictionary = {}
 	var citizens_by_id: Dictionary = {}
 	for actor: Citizen in simulation.citizens:
 		if not is_instance_valid(actor) or actor.ai_id == 0 or simulation.outside_workers.has(actor.get_instance_id()):
@@ -109,16 +108,12 @@ func capture(sequence: int) -> WorldSnapshot:
 		if gathering_worker and simulation._is_work_time() and simulation._has_storage_room_for_role(actor.permanent_role):
 			if actor.permanent_role == "gather_food":
 				gathering_candidates = food_gathering_targets
+			elif actor.permanent_role == "gather_branches":
+				gathering_candidates = _daily_gathering_targets_for(actor, "gather_branches")
 		var daily_gathering_in_progress := daily_order_active and daily_order_role.begins_with("gather_") and actor.active_role.begins_with("gather_") and actor.state in [Citizen.State.TO_GATHER, Citizen.State.GATHERING, Citizen.State.TO_WAREHOUSE]
 		var daily_gathering_candidates: Array[Dictionary] = []
 		if daily_order_role.begins_with("gather_") and simulation._has_storage_room_for_role(daily_order_role):
-			if daily_order_role == "gather_water":
-				daily_gathering_candidates = _daily_gathering_targets_for(actor, daily_order_role)
-			elif daily_gathering_cache.has(daily_order_role):
-				daily_gathering_candidates = (daily_gathering_cache[daily_order_role] as Array[Dictionary]).duplicate(false)
-			else:
-				daily_gathering_candidates = _daily_gathering_targets_for(actor, daily_order_role)
-				daily_gathering_cache[daily_order_role] = daily_gathering_candidates
+			daily_gathering_candidates = _daily_gathering_targets_for(actor, daily_order_role)
 		var daily_gathering_can_start := daily_order_active and daily_order_role.begins_with("gather_") and not daily_gathering_candidates.is_empty()
 		var daily_cleaning_in_progress := daily_order_active and daily_order_role == "cleaning" and actor.active_role == "cleaning" and actor.state in [Citizen.State.TO_CLEANING_PILE, Citizen.State.CLEANING_PILE, Citizen.State.TO_WAREHOUSE]
 		var daily_cleaning_candidates: Array[Dictionary] = []
@@ -241,7 +236,7 @@ func capture(sequence: int) -> WorldSnapshot:
 				&"work.gathering.can_start": gathering_worker and simulation._is_work_time() and simulation._has_storage_room_for_role(actor.permanent_role),
 				&"work.gathering.role": StringName(actor.permanent_role) if gathering_worker else &"",
 				&"work.gathering.candidates": gathering_candidates,
-				&"work.gathering.warehouse_position": simulation._get_nearest_delivery_position(actor.global_position) if gathering_worker else Vector3.INF,
+				&"work.gathering.warehouse_position": _gathering_warehouse_position(actor, gathering_candidates, actor.permanent_role) if gathering_worker else Vector3.INF,
 				&"work.excavation.worker": excavation_worker,
 				&"work.excavation.in_progress": excavation_in_progress,
 				&"work.excavation.candidates": excavation_candidates,
@@ -275,7 +270,7 @@ func capture(sequence: int) -> WorldSnapshot:
 				&"daily.gathering.can_start": daily_gathering_can_start,
 				&"daily.gathering.role": StringName(daily_order_role) if daily_order_role.begins_with("gather_") else &"",
 				&"daily.gathering.candidates": daily_gathering_candidates,
-				&"daily.gathering.warehouse_position": simulation._get_nearest_delivery_position(actor.global_position) if daily_order_role.begins_with("gather_") else Vector3.INF,
+				&"daily.gathering.warehouse_position": _gathering_warehouse_position(actor, daily_gathering_candidates, daily_order_role) if daily_order_role.begins_with("gather_") else Vector3.INF,
 				&"daily.cleaning.in_progress": daily_cleaning_in_progress,
 				&"daily.cleaning.can_start": daily_cleaning_can_start,
 				&"daily.cleaning.candidates": daily_cleaning_candidates,
@@ -334,7 +329,9 @@ func _gathering_targets() -> Array[Dictionary]:
 			var grass_source := simulation.grass_sources.get(grass_cell, {}) as Dictionary
 			var grass_node := grass_source.get(&"node") as Node3D
 			if int(grass_source.get(&"remaining", 0)) > 0 and is_instance_valid(grass_node):
-				targets.append({&"id": StringName("grass:%d:%d" % [grass_cell.x, grass_cell.y]), &"resource_type": "grass", &"position": grass_node.global_position, &"access": grass_node.global_position})
+				var access := _resource_access_position(grass_node.global_position)
+				if access != Vector3.INF:
+					targets.append({&"id": StringName("grass:%d:%d" % [grass_cell.x, grass_cell.y]), &"resource_type": "grass", &"position": grass_node.global_position, &"access": access})
 		if not targets.is_empty():
 			return targets
 	for tree_position: Vector3 in simulation.tree_positions:
@@ -351,7 +348,9 @@ func _gathering_targets() -> Array[Dictionary]:
 	return targets
 
 
-func _resource_access_position(resource_position: Vector3) -> Vector3:
+func _resource_access_position(resource_position: Vector3, from: Vector3 = Vector3.INF) -> Vector3:
+	if from != Vector3.INF and simulation.has_method(&"_resource_access_position"):
+		return simulation._resource_access_position(from, resource_position)
 	var resource_cell: Vector2i = simulation._cell_from_position(resource_position)
 	for offset in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1)]:
 		var cell: Vector2i = resource_cell + offset
@@ -417,7 +416,7 @@ func _daily_gathering_targets_for(actor: Citizen, role: String) -> Array[Diction
 				var tree := simulation.tree_nodes.get(tree_cell) as Node3D
 				if not is_instance_valid(tree) or bool(tree.get_meta("felled", false)) or int(tree.get_meta("remaining_branches", 0)) <= 0:
 					continue
-				var access := _resource_access_position(tree_position)
+				var access: Vector3 = simulation._resource_access_position(actor.global_position, tree_position)
 				if access != Vector3.INF:
 					targets.append({&"id": StringName("branch:%d:%d" % [tree_cell.x, tree_cell.y]), &"resource_type": "branches", &"position": tree_position, &"access": access})
 		"gather_grass":
@@ -426,13 +425,25 @@ func _daily_gathering_targets_for(actor: Citizen, role: String) -> Array[Diction
 				var grass_source := simulation.grass_sources.get(grass_cell, {}) as Dictionary
 				var grass_node := grass_source.get(&"node") as Node3D
 				if int(grass_source.get(&"remaining", 0)) > 0 and is_instance_valid(grass_node):
-					targets.append({&"id": StringName("grass:%d:%d" % [grass_cell.x, grass_cell.y]), &"resource_type": "grass", &"position": grass_node.global_position, &"access": grass_node.global_position})
+					var access: Vector3 = simulation._resource_access_position(actor.global_position, grass_node.global_position)
+					if access != Vector3.INF:
+						targets.append({&"id": StringName("grass:%d:%d" % [grass_cell.x, grass_cell.y]), &"resource_type": "grass", &"position": grass_node.global_position, &"access": access})
 		"gather_water":
 			for pond_position: Vector3 in simulation.pond_positions:
 				var access: Vector3 = simulation._pond_access_position(actor.global_position, pond_position)
 				if access != Vector3.INF:
 					targets.append({&"id": _target_key(&"water", access), &"resource_type": "water", &"position": access, &"access": access})
 	return targets
+
+
+func _gathering_warehouse_position(actor: Citizen, candidates: Array[Dictionary], role: String) -> Vector3:
+	if role == "gather_food" and is_instance_valid(actor.employment_workplace):
+		return actor.employment_workplace.get_meta("service_position", actor.employment_workplace.global_position)
+	if not candidates.is_empty():
+		var first_position: Variant = candidates[0].get(&"position", actor.global_position)
+		if first_position is Vector3:
+			return simulation._get_nearest_delivery_position(first_position as Vector3)
+	return simulation._get_nearest_delivery_position(actor.global_position)
 
 
 func _worker_data(actor: Citizen) -> Dictionary:

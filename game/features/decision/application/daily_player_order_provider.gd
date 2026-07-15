@@ -123,17 +123,15 @@ func _gathering_order(snapshot: WorldSnapshot, citizen: CitizenSnapshot, assigne
 
 func _closest_free_gathering_candidate(snapshot: WorldSnapshot, citizen: CitizenSnapshot, assigned_sources: Dictionary) -> Dictionary:
 	var candidates: Array = citizen.facts.value(&"daily.gathering.candidates", []) as Array
-	if candidates.is_empty():
-		candidates = snapshot.settlement.value(&"work.gathering.targets", []) as Array
 	var best: Dictionary = {}
 	var best_distance := INF
 	for candidate_value in candidates:
 		var candidate := candidate_value as Dictionary
 		var source_id := candidate.get(&"id", &"") as StringName
-		var position: Variant = candidate.get(&"position", Vector3.INF)
-		if source_id == &"" or assigned_sources.has(source_id) or not (position is Vector3) or position == Vector3.INF:
+		var access: Variant = candidate.get(&"access", Vector3.INF)
+		if source_id == &"" or assigned_sources.has(source_id) or not (access is Vector3) or access == Vector3.INF:
 			continue
-		var distance := citizen.position.distance_squared_to(position)
+		var distance := citizen.position.distance_squared_to(access)
 		if distance < best_distance or (is_equal_approx(distance, best_distance) and str(source_id) < str(best.get(&"id", &""))):
 			best = candidate.duplicate(true)
 			best_distance = distance

@@ -155,6 +155,38 @@ class NullFacade extends AIWorldFacade:
 		return null
 
 
+class FakeSettlement extends RefCounted:
+	func construction_gloves_available() -> bool:
+		return false
+
+
+class FakeGatheringSimulation extends Node:
+	var settlement := FakeSettlement.new()
+	var grass_sources: Dictionary = {}
+	var consumed_count := 0
+
+	func fire_smoke_work_multiplier(_position_on_board: Vector3) -> float:
+		return 1.0
+
+	func _cell_from_position(position: Vector3) -> Vector2i:
+		return Vector2i(floori(position.x), floori(position.z))
+
+	func _consume_grass_source(position: Vector3) -> int:
+		var cell := _cell_from_position(position)
+		if not grass_sources.has(cell):
+			return 0
+		var source: Dictionary = grass_sources[cell]
+		if int(source.get("remaining", 0)) <= 0:
+			return 0
+		consumed_count += 1
+		source.remaining = int(source.remaining) - 1
+		if int(source.remaining) == 0:
+			grass_sources.erase(cell)
+		else:
+			grass_sources[cell] = source
+		return 1
+
+
 func _init() -> void:
 	_test_fact_sets_and_snapshots()
 	_test_blackboard_clear()
@@ -190,6 +222,7 @@ func _init() -> void:
 	_test_native_construction_goal()
 	_test_construction_actuator()
 	_test_gathering_provider_assigns_unique_stable_sources()
+	_test_gathering_provider_prefers_access_position()
 	_test_native_gathering_goal()
 	_test_excavation_provider_assigns_unique_stable_sites()
 	_test_native_excavation_goal()
@@ -700,6 +733,24 @@ func _test_native_gathering_goal() -> void:
 	actuator.next_action_status = CitizenActuator.ActionStatus.SUCCEEDED
 	brain.tick(snapshot, order, 0.1)
 	assert(snapshot.reservations.owner_of([&"gathering.source", &"branch:3:0"], 0.0) == 0)
+
+
+func _test_gathering_provider_prefers_access_position() -> void:
+	var provider := GatheringOrderProviderScript.new()
+	var citizen := CitizenSnapshot.new(1, Vector3(0.0, 0.0, 0.0), false, true, AIFactSet.new({
+		&"work.gathering.worker": true,
+		&"work.gathering.in_progress": false,
+		&"work.gathering.role": &"gather_branches",
+		&"work.gathering.warehouse_position": Vector3(8.0, 0.0, 0.0),
+		&"work.gathering.candidates": [
+			{&"id": &"branch:10:0", &"resource_type": "branches", &"position": Vector3(10.0, 0.0, 0.0), &"access": Vector3(9.5, 0.0, 0.0)},
+			{&"id": &"branch:2:0", &"resource_type": "branches", &"position": Vector3(2.0, 0.0, 0.0), &"access": Vector3(50.0, 0.0, 0.0)},
+		],
+	}))
+	var snapshot := WorldSnapshot.new(1, 0.0, 0.0, AIFactSet.new({&"work.gathering.targets": []}), {1: citizen})
+	var orders := provider.collect_orders(snapshot)
+	assert(orders.size() == 1)
+	assert(orders[0].payload.value(&"work.source_id", &"") == &"branch:10:0")
 
 
 func _test_excavation_provider_assigns_unique_stable_sites() -> void:

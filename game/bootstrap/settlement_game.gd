@@ -3063,6 +3063,7 @@ func _show_school_menu() -> void:
 	if selected_school == null:
 		return
 	build_menu.visible = false
+	build_menu_is_global = false
 	house_menu.visible = false
 	building_menu.visible = false
 	
@@ -3888,7 +3889,7 @@ func _open_build_category(category: String) -> void:
 	build_menu_is_job_menu = false
 	build_menu_is_daily_order_menu = false
 	_refresh_build_menu()
-	if build_category.is_empty():
+	if build_category.is_empty() and not build_menu_is_global:
 		_show_selected_citizen_menu()
 
 
@@ -3933,7 +3934,7 @@ func _refresh_build_menu() -> void:
 	if job_back_btn != null:
 		job_back_btn.visible = selected_exists and assignment_submenu_open
 	
-	var current_era_category := ERA_CATEGORIES[settlement.era]
+	var current_era_category: String = ERA_CATEGORIES[settlement.era]
 	for button in build_buttons:
 		var category_button: String = button.get_meta("category_button", "")
 		if button.get_meta("category_back", false):
@@ -4516,6 +4517,7 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 	if not hit.collider.is_in_group("school_selector"):
 		selected_builder = null
 	build_menu.visible = false
+	build_menu_is_global = false
 	if hit.collider.is_in_group("entrance_selector"):
 		selected_entrance = hit.collider.get_parent() as Node3D
 		selected_building = selected_entrance
@@ -5915,6 +5917,7 @@ func _show_campfire_menu() -> void:
 	# Keep any resident the player picked selected so they can be appointed as the
 	# employment officer here, just like at a canteen/school/market.
 	build_menu.visible = false
+	build_menu_is_global = false
 	selection_marker.visible = false
 	build_mode = ""
 	campfire_menu.visible = true
@@ -6607,6 +6610,7 @@ func _create_market_menu(ui: CanvasLayer) -> void:
 func _show_market_menu() -> void:
 	selected_builder = null
 	build_menu.visible = false
+	build_menu_is_global = false
 	selection_marker.visible = false
 	build_mode = ""
 	market_menu.visible = true
@@ -6889,6 +6893,7 @@ func _show_building_menu() -> void:
 	if not is_instance_valid(selected_building):
 		return
 	build_menu.visible = false
+	build_menu_is_global = false
 	building_menu.visible = true
 	
 	var is_construction := _is_construction_site(selected_building)
@@ -7144,6 +7149,7 @@ func _create_warehouse_menu(ui: CanvasLayer) -> void:
 func _show_warehouse_menu() -> void:
 	selected_builder = null
 	build_menu.visible = false
+	build_menu_is_global = false
 	selection_marker.visible = false
 	build_mode = ""
 	warehouse_menu.visible = true
@@ -7408,7 +7414,7 @@ func _find_forage_position(citizen: Citizen) -> Vector3:
 func _create_grass_sources_near_tree(tree_cell: Vector2i) -> void:
 	for offset in [Vector2i(2, 0), Vector2i(-2, 1), Vector2i(1, -2)]:
 		var cell: Vector2i = tree_cell + offset
-		if grass_sources.has(cell) or tree_cells.has(cell):
+		if grass_sources.has(cell) or tree_cells.has(cell) or _is_navigation_cell_blocked(cell):
 			continue
 		var position := _cell_center(cell)
 		var node := MeshInstance3D.new()
@@ -7510,11 +7516,13 @@ func harvest_wild_food(position: Vector3, worker: Citizen) -> String:
 			return "hides" if randf() < 0.35 else "food"
 	return ""
 
-func _consume_grass_source(position: Vector3) -> void:
+func _consume_grass_source(position: Vector3) -> int:
 	var cell := _cell_from_position(position)
 	if not grass_sources.has(cell):
-		return
+		return 0
 	var source: Dictionary = grass_sources[cell]
+	if int(source.remaining) <= 0:
+		return 0
 	source.remaining = maxi(0, int(source.remaining) - 1)
 	if int(source.remaining) == 0:
 		if is_instance_valid(source.node):
@@ -7522,22 +7530,26 @@ func _consume_grass_source(position: Vector3) -> void:
 		grass_sources.erase(cell)
 	else:
 		grass_sources[cell] = source
+	return 1
 
-func _consume_tree_branches(position: Vector3) -> void:
+func _consume_tree_branches(position: Vector3) -> int:
 	var tree: Node3D = tree_nodes.get(_cell_from_position(position))
 	if not is_instance_valid(tree):
-		return
+		return 0
 	var remaining := int(tree.get_meta("remaining_branches", 0))
+	if remaining <= 0:
+		return 0
 	var hand_taken := int(tree.get_meta("hand_branches", 0))
 	var hand_limit := ceili(float(int(tree.get_meta("initial_branches", remaining))) * 0.3)
 	if not tree.has_meta("initial_branches"):
 		tree.set_meta("initial_branches", remaining)
 		hand_limit = ceili(float(remaining) * 0.3)
 	if not bool(settlement.tools.get("axe", false)) and hand_taken >= hand_limit:
-		return
+		return 0
 	tree.set_meta("remaining_branches", maxi(0, remaining - 1))
 	if not bool(settlement.tools.get("axe", false)):
 		tree.set_meta("hand_branches", hand_taken + 1)
+	return 1
 
 func _create_gathering_place_visual(building: Node3D) -> void:
 	var racket := MeshInstance3D.new()
