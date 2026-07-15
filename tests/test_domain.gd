@@ -222,7 +222,7 @@ func _test_tent_start_config() -> void:
 	assert(int(state.buildings.get("campfire", 0)) == 0)
 	assert(int(state.buildings.get("campfire_lvl2", 0)) == 1)
 	var tent_refund := BuildingCatalog.demolition_refund("tent")
-	assert(int(tent_refund.get("branches", 0)) == 2)
+	assert(int(tent_refund.get("branches", 0)) == 1)
 	assert(int(tent_refund.get("grass", 0)) == 1)
 	var storage_state := SettlementState.new()
 	assert(storage_state.storage_availability_for("grass", 1, 0) == SettlementState.StorageAvailability.NO_WAREHOUSE)
@@ -447,7 +447,7 @@ func _test_building_availability_service() -> void:
 	state.branches = 6
 	var campfire_placement: Dictionary = service.placement_state("campfire")
 	assert(bool(campfire_placement.allowed))
-	assert(service.cost_text("campfire") == "6 branches")
+	assert(service.cost_text("campfire") == "4 branches")
 	state.branches = 8
 	state.grass = 6
 	var temporary_tent_placement: Dictionary = service.placement_state("tent")

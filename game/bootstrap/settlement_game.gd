@@ -116,6 +116,9 @@ var hides: int:
 var goods: int:
 	get: return settlement.amount("goods")
 	set(value): _set_resource_amount("goods", value)
+var tarp: int:
+	get: return settlement.amount("tarp")
+	set(value): _set_resource_amount("tarp", value)
 var logs: int:
 	get: return settlement.amount("logs")
 	set(value): _set_resource_amount("logs", value)
@@ -141,6 +144,7 @@ func _set_resource_amount(resource_type: String, value: int) -> void:
 			"water": settlement.water = value
 			"hides": settlement.hides = value
 			"goods": settlement.goods = value
+			"tarp": settlement.tarp = value
 			"logs": settlement.logs = value
 var wellbeing: int:
 	get: return settlement.wellbeing
@@ -1719,7 +1723,20 @@ func _release_building_queue_entry(citizen: Citizen) -> void:
 	building_queue_service.release(citizen)
 
 func _update_interface(message: String) -> void:
-	wood_label.text = "Era: %s\nMoney: %d\nBranches: %d\nGrass: %d\nWater: %d\nFood: %d\nSoil: %d\nClay: %d\nLogs: %d\nTimber: %d\nBoards: %d\nStone: %d\nBricks: %d\nStorage: %d/%d\nPopulation: %d\nWellbeing: %d" % [_era_name(), money, branches, grass, water, food, soil, clay, logs, wood, boards, stone, bricks, _stored_resources(), _warehouse_capacity(), citizens.size(), wellbeing]
+	var lines: Array[String] = []
+	lines.append("Era: %s" % _era_name())
+	lines.append("Money: %d" % money)
+	var displayed_resources: Array[String]
+	if settlement.era == SettlementState.Era.TENT:
+		displayed_resources = ["branches", "grass", "water", "food", "tarp"]
+	else:
+		displayed_resources = ["branches", "grass", "water", "food", "soil", "clay", "logs", "wood", "boards", "stone", "bricks", "tarp"]
+	for resource_type in displayed_resources:
+		lines.append("%s: %d" % [_resource_display_name(resource_type), settlement.amount(resource_type)])
+	lines.append("Storage: %d/%d" % [_stored_resources(), _warehouse_capacity()])
+	lines.append("Population: %d" % citizens.size())
+	lines.append("Wellbeing: %d" % wellbeing)
+	wood_label.text = "\n".join(lines)
 	_add_message(message)
 	if is_first_person:
 		var build_hint := "  B: construction" if player_citizen == hero_citizen else ""
@@ -1731,6 +1748,12 @@ func _update_interface(message: String) -> void:
 
 func _era_name() -> String:
 	return ["Tent", "Earth", "Clay", "Wood", "Brick"][settlement.era]
+
+
+func _resource_display_name(resource_type: String) -> String:
+	match resource_type:
+		"wood": return "Timber"
+		_: return resource_type.capitalize()
 
 
 # ---------- Message log system ------------------------------------------------
@@ -3456,7 +3479,7 @@ func _start_research(tech_id: String) -> void:
 	if building_research_service.start_block_reason(tech_id, true) != BuildingResearchServiceScript.REASON_OK:
 		_update_interface("Research prerequisites or resources are missing.")
 		return
-	if not building_research_service.start_research(tech_id, researcher.get_instance_id()):
+	if not building_research_service.start_research(tech_id, researcher.ai_id):
 		_update_interface("Research prerequisites or resources are missing.")
 		return
 	
@@ -3807,10 +3830,18 @@ func _refresh_build_menu() -> void:
 		var hero_only: bool = button.get_meta("hero_only", false)
 		var submenu: String = button.get_meta("submenu", "job")
 		var is_daily_submenu := submenu == "daily"
+		var min_era := _min_era_for_role(role)
+		var era_ok := is_daily_submenu or min_era <= settlement.era
 		var role_available := _is_daily_order_role_available(role) if is_daily_submenu else _is_role_available(role)
-		button.visible = selected_exists and ((is_daily_submenu and build_menu_is_daily_order_menu) or (not is_daily_submenu and build_menu_is_job_menu)) and role_available and (not hero_only or selected_builder.is_hero)
-		button.disabled = button.visible and not is_daily_submenu and role != "official" and not _player_can_command_labor()
-		button.tooltip_text = _labor_command_block_message() if button.disabled else ""
+		button.visible = selected_exists and ((is_daily_submenu and build_menu_is_daily_order_menu) or (not is_daily_submenu and build_menu_is_job_menu)) and era_ok and (not hero_only or selected_builder.is_hero)
+		var blocked_by_officer := not is_daily_submenu and role != "official" and not _player_can_command_labor()
+		button.disabled = button.visible and (blocked_by_officer or not role_available)
+		if button.disabled and not role_available:
+			button.tooltip_text = "Нет рабочего места для этой роли."
+		elif button.disabled and blocked_by_officer:
+			button.tooltip_text = _labor_command_block_message()
+		else:
+			button.tooltip_text = ""
 		if button.visible:
 			var base_title: String = button.get_meta("base_title", button.text)
 			if role.is_empty():
@@ -3972,6 +4003,22 @@ func _is_role_available(role: String) -> bool:
 
 func _is_daily_order_role_available(_role: String) -> bool:
 	return true
+
+
+func _min_era_for_role(role: String) -> SettlementState.Era:
+	# Basic outdoor/hand-work roles exist from the tent era even without a dedicated workplace.
+	match role:
+		"construction", "excavation", "gather_branches", "gather_food", "courier", "craftsman", "official", "helper", "":
+			return SettlementState.Era.TENT
+	var types := _employer_types_for_role(role)
+	if types.is_empty():
+		return SettlementState.Era.TENT
+	var min_era := SettlementState.Era.BRICK
+	for type in types:
+		var era: SettlementState.Era = BuildingCatalog.era_for(type)
+		if era < min_era:
+			min_era = era
+	return min_era
 
 
 func _assigned_count_for_role(role: String) -> int:

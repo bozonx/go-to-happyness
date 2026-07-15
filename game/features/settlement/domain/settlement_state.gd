@@ -457,8 +457,6 @@ func migrate_virtual_to_warehouse(warehouses: int) -> Dictionary:
 func can_afford_building(building_type: String) -> bool:
 	if not is_building_unlocked(building_type):
 		return false
-	if building_type == "campfire" and era == Era.TENT and not has_building("warehouse"):
-		return false
 	for resource_type in BuildingCatalog.cost_resources(building_type):
 		if amount(resource_type) < BuildingCatalog.cost_for_resource(building_type, resource_type):
 			return false
@@ -508,8 +506,7 @@ func is_building_unlocked(building_type: String) -> bool:
 	if building_type == "warehouse":
 		return true
 	if building_type == "campfire":
-		# The landmark must be visible in the initial build menu. Placement still
-		# requires the first warehouse so the bootstrap order remains explicit.
+		# The landmark must be visible and placeable from the start of the tent era.
 		return true
 	if unlocked_building_levels.has(building_type):
 		return bool(unlocked_building_levels.get(building_type, false))

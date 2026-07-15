@@ -922,7 +922,10 @@ func _process_construction_delivery(delta: float) -> void:
 	if not is_instance_valid(construction_site):
 		idle()
 		return
-	if _move_to(construction_position, delta):
+	# Construction sites do not use the building-queue system. Using it here
+	# could redirect a courier carrying materials to another building's queue
+	# slot, causing them to walk past the intended site and get stuck.
+	if _move_to(construction_position, delta, false, false):
 		if building_supply_kind == "construction":
 			construction_material_delivered.emit(self, construction_site, construction_delivery_resource, carried_amount)
 		else:
