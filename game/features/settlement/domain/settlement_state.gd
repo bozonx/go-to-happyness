@@ -103,7 +103,7 @@ func apply_tent_start(reset_progress := true) -> void:
 	branches = 0
 	grass = 0
 	water = 0
-	food = TENT_STARTING_FOOD
+	food = 0
 	hides = 0
 	goods = 0
 	logs = 0
@@ -128,7 +128,10 @@ func apply_tent_start(reset_progress := true) -> void:
 	active_research_remaining_time = 0.0
 	active_research_duration = 0.0
 	storage_limits.clear()
+	virtual_stock.clear()
+	warehouse_ever_built = false
 	debug_storage_capacity_bonus = 0
+	virtual_stock["food"] = TENT_STARTING_FOOD
 	if reset_progress:
 		buildings.clear()
 		for system_id in unlocked_systems.keys():
@@ -183,6 +186,11 @@ const ERA_STORAGE_PER_WAREHOUSE := {Era.TENT: 32, Era.EARTH: 48, Era.CLAY: 70, E
 const STORAGE_STEP := 4.0
 
 var storage_limits: Dictionary = {} # resource -> allocated space units (float)
+## Resources earned before the first warehouse is built live in an unlimited
+## virtual stockpile. They migrate to real warehouses on first completion.
+var virtual_stock: Dictionary = {}
+## Becomes true the first time any warehouse is completed and never reverts.
+var warehouse_ever_built: bool = false
 ## Debug grants are intended to unlock test scenarios, not to consume every
 ## physical warehouse slot. The bonus is active only while a warehouse exists.
 var debug_storage_capacity_bonus := 0
@@ -324,7 +332,7 @@ func reserve_storage_room_for(resource_type: String, count: int, warehouses: int
 	return storage_availability_for(resource_type, count, warehouses) == StorageAvailability.OK
 
 
-func amount(resource_type: String) -> int:
+func _warehouse_amount(resource_type: String) -> int:
 	match resource_type:
 		"money": return money
 		"branches": return branches
@@ -343,7 +351,15 @@ func amount(resource_type: String) -> int:
 	return 0
 
 
-func add(resource_type: String, value: int) -> void:
+func amount(resource_type: String) -> int:
+	if resource_type == "money":
+		return money
+	if not warehouse_ever_built:
+		return int(virtual_stock.get(resource_type, 0))
+	return _warehouse_amount(resource_type)
+
+
+func _add_to_warehouse(resource_type: String, value: int) -> void:
 	match resource_type:
 		"money": money += value
 		"branches": branches += value
@@ -361,8 +377,53 @@ func add(resource_type: String, value: int) -> void:
 		"bricks": bricks += value
 
 
+func add(resource_type: String, value: int) -> void:
+	if resource_type == "money":
+		money += value
+		return
+	if not warehouse_ever_built:
+		virtual_stock[resource_type] = int(virtual_stock.get(resource_type, 0)) + value
+	else:
+		_add_to_warehouse(resource_type, value)
+
+
 func total_stored_resources() -> int:
-	return branches + grass + water + food + hides + goods + logs + wood + soil + clay + boards + stone + bricks
+	var total := 0
+	if not warehouse_ever_built:
+		for value in virtual_stock.values():
+			total += int(value)
+	else:
+		total = branches + grass + water + food + hides + goods + logs + wood + soil + clay + boards + stone + bricks
+	return total
+
+
+func uses_virtual_storage() -> bool:
+	return not warehouse_ever_built
+
+
+func migrate_virtual_to_warehouse(warehouses: int) -> Dictionary:
+	warehouse_ever_built = true
+	var overflow := {}
+	var capacity_units := float(storage_capacity(warehouses))
+	var used_units := 0.0
+	for resource_type in STORED_RESOURCES:
+		var virtual_count := int(virtual_stock.get(resource_type, 0))
+		if virtual_count <= 0:
+			continue
+		var weight := storage_weight(resource_type)
+		var remaining_room := maxf(0.0, capacity_units - used_units)
+		var can_fit := int(floor((remaining_room + 0.001) / weight))
+		var accepted := mini(virtual_count, maxi(0, can_fit))
+		if accepted > 0:
+			_add_to_warehouse(resource_type, accepted)
+			used_units += accepted * weight
+		var leftover := virtual_count - accepted
+		if leftover > 0:
+			overflow[resource_type] = leftover
+	virtual_stock.clear()
+	ensure_storage_defaults(warehouses)
+	_clamp_storage_limits(warehouses)
+	return overflow
 
 
 func can_afford_building(building_type: String) -> bool:

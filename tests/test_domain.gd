@@ -85,6 +85,7 @@ class FakeTradeSimulation extends Node:
 func _init() -> void:
 	_test_settlement_economy()
 	_test_tent_start_config()
+	_test_virtual_stockpile_migration()
 	_test_progression_and_volunteers()
 	_test_work_schedule_wellbeing()
 	_test_tent_survival_rules()
@@ -128,6 +129,7 @@ func _init() -> void:
 
 func _test_settlement_economy() -> void:
 	var state := SettlementState.new()
+	state.warehouse_ever_built = true
 	assert(state.money == 20 and state.wood == 0 and state.food == 0)
 	state.branches = 12
 	state.grass = 4
@@ -179,7 +181,7 @@ func _test_tent_start_config() -> void:
 	state.apply_tent_start()
 	assert(state.era == SettlementState.Era.TENT)
 	assert(state.money == SettlementState.TENT_STARTING_MONEY)
-	assert(state.food == SettlementState.TENT_STARTING_FOOD)
+	assert(state.amount("food") == SettlementState.TENT_STARTING_FOOD)
 	assert(state.branches == 0 and state.grass == 0)
 	assert(bool(state.equipment.flint_steel.owned))
 	assert(int(state.equipment.construction_gloves.sets) == 1)
@@ -193,6 +195,7 @@ func _test_tent_start_config() -> void:
 	assert(state.is_building_unlocked("cook_campfire"))
 	assert(not state.can_afford_building("campfire"))
 	state.buildings["warehouse"] = 1
+	state.warehouse_ever_built = true
 	state.branches = 6
 	assert(state.is_building_unlocked("campfire"))
 	assert(state.can_afford_building("campfire"))
@@ -204,6 +207,7 @@ func _test_tent_start_config() -> void:
 	state.buildings["campfire"] = 1
 	assert(not state.can_upgrade_building("campfire"))
 	state.unlocked_building_levels["campfire_lvl2"] = true
+	state.warehouse_ever_built = true
 	state.branches = 15
 	state.grass = 10
 	assert(state.can_upgrade_building("campfire"))
@@ -214,6 +218,7 @@ func _test_tent_start_config() -> void:
 	assert(storage_state.storage_availability_for("grass", 1, 0) == SettlementState.StorageAvailability.NO_WAREHOUSE)
 	storage_state.branches = 24
 	storage_state.buildings["warehouse"] = 1
+	storage_state.warehouse_ever_built = true
 	storage_state.ensure_storage_defaults(1)
 	assert(storage_state.storage_availability_for("grass", 1, 1) == SettlementState.StorageAvailability.NO_ROOM)
 	storage_state.buildings["warehouse"] = 2
@@ -229,6 +234,33 @@ func _test_tent_start_config() -> void:
 	assert(debug_storage_state.reserve_storage_room_for("branches", 3, 1))
 	var decay := SettlementRulesScript.open_air_storage_decay_losses({"food": 16, "grass": 10}, 26.0, 0.0)
 	assert(int(decay.food) == 2 and int(decay.grass) == 1)
+
+
+func _test_virtual_stockpile_migration() -> void:
+	var state := SettlementState.new()
+	state.apply_tent_start()
+	assert(state.uses_virtual_storage())
+	# A small amount that fits into the first open-air warehouse (24 units).
+	# Starting food is 16 and has weight 1.0, so 8 more units of branches fit exactly.
+	state.add("branches", 8)
+	assert(state.amount("branches") == 8)
+	assert(state.branches == 0) # not yet in warehouse
+	state.buildings["warehouse"] = 1
+	var overflow := state.migrate_virtual_to_warehouse(1)
+	assert(not state.uses_virtual_storage())
+	assert(state.branches == 8)
+	assert(overflow.is_empty())
+	assert(state.virtual_stock.is_empty())
+
+	# Overflow scenario: more virtual resources than the first warehouse can hold.
+	var overflow_state := SettlementState.new()
+	overflow_state.apply_tent_start()
+	overflow_state.add("branches", 200)
+	overflow_state.buildings["warehouse"] = 1
+	var big_overflow := overflow_state.migrate_virtual_to_warehouse(1)
+	assert(not big_overflow.is_empty())
+	assert(big_overflow.get("branches", 0) > 0)
+	assert(overflow_state.branches <= overflow_state.storage_capacity(1))
 
 
 func _test_trade_order_model() -> void:
@@ -308,6 +340,7 @@ func _test_storage_delivery_service() -> void:
 	service.configure(simulation)
 	var worker := Citizen.new()
 	simulation.settlement.buildings["warehouse"] = 1
+	simulation.settlement.warehouse_ever_built = true
 	simulation.warehouse_positions = [Vector3.ZERO]
 	simulation.settlement.ensure_storage_defaults(1)
 	service.on_resource_delivered(worker, "grass", 1)
@@ -321,6 +354,7 @@ func _test_storage_delivery_service() -> void:
 	var full_storage_service := StorageDeliveryServiceScript.new()
 	full_storage_service.configure(full_storage_simulation)
 	full_storage_simulation.settlement.buildings["warehouse"] = 1
+	full_storage_simulation.settlement.warehouse_ever_built = true
 	full_storage_simulation.warehouse_positions = [Vector3.ZERO]
 	full_storage_simulation.settlement.ensure_storage_defaults(1)
 	full_storage_simulation.settlement.grass = int(full_storage_simulation.settlement.storage_limit("grass"))
@@ -370,6 +404,7 @@ func _test_building_availability_service() -> void:
 	assert(not bool(upgrade_menu.visible))
 	assert(upgrade_menu.reason == BuildingAvailabilityServiceScript.REASON_UPGRADE_ONLY)
 	state.buildings["warehouse"] = 1
+	state.warehouse_ever_built = true
 	state.branches = 6
 	var campfire_placement: Dictionary = service.placement_state("campfire")
 	assert(bool(campfire_placement.allowed))
@@ -405,6 +440,7 @@ func _test_citizen_living_status_service() -> void:
 func _test_building_research_service() -> void:
 	var state := SettlementState.new()
 	state.apply_tent_start()
+	state.warehouse_ever_built = true
 	state.buildings["campfire"] = 1
 	state.branches = 8
 	state.grass = 8
@@ -434,6 +470,7 @@ func _test_building_research_service() -> void:
 
 func _test_progression_and_volunteers() -> void:
 	var state := SettlementState.new()
+	state.warehouse_ever_built = true
 	state.buildings = {"campfire": 1, "trade_tent": 1, "craft_tent_lvl3": 1, "living_tent_lvl3": 1, "toilet_tent_lvl3": 1}
 	state.food = 4
 	state.water = 4
@@ -1104,6 +1141,7 @@ func _test_courier_equipment_capacity() -> void:
 
 func _test_research_mechanics() -> void:
 	var state := SettlementState.new()
+	state.warehouse_ever_built = true
 	assert(not state.unlocked_building_levels.get("living_tent", false))
 	assert(not state.unlocked_building_levels.get("living_tent_lvl2", false))
 	assert(not state.unlocked_building_levels.get("craft_tent", false))
@@ -1135,6 +1173,7 @@ func _test_research_mechanics() -> void:
 	
 	# Campfire level tech gating tests:
 	var test_state := SettlementState.new()
+	test_state.warehouse_ever_built = true
 	test_state.era = SettlementState.Era.TENT
 	test_state.branches = 100
 	test_state.grass = 100
@@ -1161,6 +1200,7 @@ func _test_research_mechanics() -> void:
 	assert(test_state.can_start_building_research("dew_collector_lvl3"))
 
 	var forager_state := SettlementState.new()
+	forager_state.warehouse_ever_built = true
 	forager_state.branches = 100
 	forager_state.grass = 100
 	forager_state.buildings["campfire_lvl2"] = 1

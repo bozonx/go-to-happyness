@@ -78,38 +78,67 @@ const DIG_REACH := 6.0
 
 var settlement := SettlementState.new()
 var wood: int:
-	get: return settlement.wood
-	set(value): settlement.wood = value
+	get: return settlement.amount("wood")
+	set(value): _set_resource_amount("wood", value)
 var food: int:
-	get: return settlement.food
-	set(value): settlement.food = value
+	get: return settlement.amount("food")
+	set(value): _set_resource_amount("food", value)
 var soil: int:
-	get: return settlement.soil
-	set(value): settlement.soil = value
+	get: return settlement.amount("soil")
+	set(value): _set_resource_amount("soil", value)
 var clay: int:
-	get: return settlement.clay
-	set(value): settlement.clay = value
+	get: return settlement.amount("clay")
+	set(value): _set_resource_amount("clay", value)
 var boards: int:
-	get: return settlement.boards
-	set(value): settlement.boards = value
+	get: return settlement.amount("boards")
+	set(value): _set_resource_amount("boards", value)
 var bricks: int:
-	get: return settlement.bricks
-	set(value): settlement.bricks = value
+	get: return settlement.amount("bricks")
+	set(value): _set_resource_amount("bricks", value)
 var stone: int:
-	get: return settlement.stone
-	set(value): settlement.stone = value
+	get: return settlement.amount("stone")
+	set(value): _set_resource_amount("stone", value)
 var branches: int:
-	get: return settlement.branches
-	set(value): settlement.branches = value
+	get: return settlement.amount("branches")
+	set(value): _set_resource_amount("branches", value)
 var grass: int:
-	get: return settlement.grass
-	set(value): settlement.grass = value
+	get: return settlement.amount("grass")
+	set(value): _set_resource_amount("grass", value)
 var water: int:
-	get: return settlement.water
-	set(value): settlement.water = value
+	get: return settlement.amount("water")
+	set(value): _set_resource_amount("water", value)
+var hides: int:
+	get: return settlement.amount("hides")
+	set(value): _set_resource_amount("hides", value)
+var goods: int:
+	get: return settlement.amount("goods")
+	set(value): _set_resource_amount("goods", value)
+var logs: int:
+	get: return settlement.amount("logs")
+	set(value): _set_resource_amount("logs", value)
 var money: int:
 	get: return settlement.money
 	set(value): settlement.money = value
+
+
+func _set_resource_amount(resource_type: String, value: int) -> void:
+	if settlement.uses_virtual_storage():
+		settlement.virtual_stock[resource_type] = value
+	else:
+		match resource_type:
+			"wood": settlement.wood = value
+			"food": settlement.food = value
+			"soil": settlement.soil = value
+			"clay": settlement.clay = value
+			"boards": settlement.boards = value
+			"bricks": settlement.bricks = value
+			"stone": settlement.stone = value
+			"branches": settlement.branches = value
+			"grass": settlement.grass = value
+			"water": settlement.water = value
+			"hides": settlement.hides = value
+			"goods": settlement.goods = value
+			"logs": settlement.logs = value
 var wellbeing: int:
 	get: return settlement.wellbeing
 	set(value): settlement.wellbeing = value
@@ -1079,9 +1108,9 @@ func _construction_material_source(resource_type: String) -> Dictionary:
 	if settlement.amount(resource_type) > 0:
 		if not warehouse_positions.is_empty():
 			return {"kind": "storage", "id": "storage", "position": warehouse_positions[0]}
-		# Debug grants and cancellation refunds can create settlement stock before
-		# the first warehouse exists. Treat it as open storage at the camp entrance
-		# so a helper can still supply the bootstrap warehouse or main campfire.
+		# Before the first warehouse is built, all resources live in the virtual
+		# stockpile. Helpers pull from that unlimited reserve at the camp entrance
+		# so the bootstrap warehouse and main campfire can still be supplied.
 		return {"kind": "open_storage", "id": "open_storage", "position": _get_nearest_delivery_position(Vector3.ZERO)}
 	for pile: Dictionary in resource_piles:
 		var pile_node := pile.get("node") as Node3D
@@ -4764,6 +4793,8 @@ func _update_interaction(delta: float) -> void:
 
 
 func _reserve_player_gather_storage(resource_type: String, requested: int) -> int:
+	if settlement.uses_virtual_storage():
+		return requested
 	for amount in range(requested, 0, -1):
 		if settlement.reserve_storage_room_for(resource_type, amount, warehouse_positions.size()):
 			return amount
@@ -5050,6 +5081,9 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 	match building_type:
 		"warehouse", "warehouse_lvl2":
 			warehouse_positions.append(service_position)
+			if warehouse_positions.size() == 1:
+				var overflow := settlement.migrate_virtual_to_warehouse(warehouse_positions.size())
+				_drop_overflow_as_piles(overflow, service_position)
 			settlement.ensure_storage_defaults(warehouse_positions.size())
 			_add_building_selector(building, "warehouse_selector", blueprint.footprint)
 		"sawmill":
@@ -5314,12 +5348,14 @@ func _send_citizen_to_leisure(citizen: Citizen, minimum_hours := 0) -> bool:
 func _grant_debug_resources() -> void:
 	# Approximate early-to-late material demand, rather than equal stacks.
 	var grants := {"money": 30, "branches": 36, "grass": 20, "water": 24, "food": 18, "hides": 8, "goods": 8, "logs": 16, "wood": 10, "soil": 28, "clay": 22, "boards": 18, "stone": 15, "bricks": 14}
+	var had_warehouse := not warehouse_positions.is_empty()
 	for resource_type in grants:
 		settlement.add(resource_type, grants[resource_type])
-	# Cover all current stock so hot-reloading this fix also repairs a session in
-	# which Ctrl+F had already overflowed storage before the bonus existed.
-	settlement.debug_storage_capacity_bonus = maxi(settlement.debug_storage_capacity_bonus, ceili(settlement.storage_used_units()))
-	settlement.ensure_storage_defaults(warehouse_positions.size())
+	# Before the first warehouse, resources live in the unlimited virtual stockpile.
+	# Once a warehouse exists, bump capacity to absorb the grant so testing stays smooth.
+	if had_warehouse:
+		settlement.debug_storage_capacity_bonus = maxi(settlement.debug_storage_capacity_bonus, ceili(settlement.storage_used_units()))
+		settlement.ensure_storage_defaults(warehouse_positions.size())
 	_update_workers()
 	_request_courier_dispatch()
 	_update_interface("Debug resources added in normal spending proportions.")
@@ -5416,7 +5452,7 @@ func _fell_tree_at(position_on_board: Vector3) -> void:
 		return
 	tree.set_meta("felled", true)
 	tree.rotation_degrees.z = 82.0
-	settlement.branches += 3
+	branches += 3
 	_update_interface("A tree was felled. Its log is ready for delivery; the living tree is no longer available for gathering.")
 
 func _update_water_collectors(delta: float) -> void:
@@ -7307,6 +7343,27 @@ func _create_resource_pile(position: Vector3, resources: Dictionary) -> void:
 	pile.add_child(label)
 	add_child(pile)
 	resource_piles.append({"node": pile, "resources": normalized, "reserved": {}})
+
+
+func _drop_overflow_as_piles(overflow: Dictionary, base_position: Vector3) -> void:
+	if overflow.is_empty():
+		return
+	# Spread multi-resource overflow into a few nearby piles so the player can see
+	# what did not fit into the first warehouse and send couriers to collect it.
+	var pile_resources := {}
+	var pile_index := 0
+	const PILE_SPREAD := 1.2
+	for resource_type in overflow:
+		pile_resources[resource_type] = int(overflow[resource_type])
+		# Keep each pile focused on a small set of goods for readable labels.
+		if pile_resources.size() >= 3:
+			var offset := Vector3((pile_index % 3) * PILE_SPREAD - PILE_SPREAD, 0.0, (pile_index / 3) * PILE_SPREAD - PILE_SPREAD)
+			_create_resource_pile(base_position + offset, pile_resources)
+			pile_resources = {}
+			pile_index += 1
+	if not pile_resources.is_empty():
+		var offset := Vector3((pile_index % 3) * PILE_SPREAD - PILE_SPREAD, 0.0, (pile_index / 3) * PILE_SPREAD - PILE_SPREAD)
+		_create_resource_pile(base_position + offset, pile_resources)
 
 
 func _drop_resource_pile(position: Vector3, resource_type: String, amount: int) -> void:
