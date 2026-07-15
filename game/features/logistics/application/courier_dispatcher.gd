@@ -73,12 +73,18 @@ func _publish_manual_worker_tasks() -> void:
 		if not worker.has_pending_resource():
 			courier.courier_worker = null
 			continue
+		var resource_type: String = worker.carried_resource_type
+		var amount := worker.carried_amount
+		var worker_position: Vector3 = worker.global_position if worker.is_inside_tree() else worker.position
+		var warehouse_index: int = simulation.settlement.find_warehouse_index(worker_position, resource_type, amount, simulation.warehouse_positions)
+		if warehouse_index < 0:
+			continue
 		publish(
 			StringName("manual_worker_%d" % courier.get_instance_id()),
 			CourierTask.Kind.WORKER_PICKUP,
 			110,
-			worker.global_position,
-			simulation.warehouse_positions[0],
+			worker_position,
+			simulation.warehouse_positions[warehouse_index],
 			{"worker": worker, "courier_id": courier.get_instance_id()}
 		)
 

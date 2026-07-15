@@ -14,29 +14,40 @@ func on_resource_delivered(worker: Citizen, resource_type: String, amount: int) 
 	if simulation == null:
 		return
 	simulation.courier_dispatcher.complete_for(worker)
-	var storage_status: int = simulation.settlement.storage_availability_for(resource_type, amount, simulation.warehouse_positions.size())
-	if storage_status != SettlementState.StorageAvailability.OK:
-		# Cargo already in transit must never disappear or silently overflow the
-		# warehouse allocation. Leave it on the ground at the delivery point so a
-		# courier can recover it after the player makes room.
+	var worker_position: Vector3 = worker.global_position if worker.is_inside_tree() else worker.position
+	var warehouse_index: int = simulation.settlement.find_warehouse_index(worker_position, resource_type, amount, simulation.warehouse_positions)
+	if warehouse_index < 0:
+		if simulation.has_method("_drop_resource_pile"):
+			simulation._drop_resource_pile(_drop_position(worker), resource_type, amount)
+		if simulation.warehouse_positions.is_empty():
+			simulation._update_interface("No warehouse for %d %s; the worker left it in a ground pile." % [amount, resource_type])
+		else:
+			simulation._update_interface("No warehouse room for %d %s; the worker left it in a ground pile." % [amount, resource_type])
+		worker.storage_delivery_result(true)
+		simulation._request_courier_dispatch()
+		return
+	if not simulation.settlement.reserve_warehouse_room(warehouse_index, resource_type, amount):
 		if simulation.has_method("_drop_resource_pile"):
 			simulation._drop_resource_pile(_drop_position(worker), resource_type, amount)
 		worker.storage_delivery_result(true)
-		simulation._update_interface(_drop_message(storage_status, amount, resource_type))
+		simulation._update_interface("No warehouse room for %d %s; the worker left it in a ground pile." % [amount, resource_type])
 		simulation._request_courier_dispatch()
 		return
-	simulation.settlement.reserve_storage_room_for(resource_type, amount, simulation.warehouse_positions.size())
-	simulation.settlement.add(resource_type, amount)
-	_finish_storage_delivery(worker, resource_type, storage_status)
-	simulation._update_interface("Workers delivered %d %s to the warehouse." % [amount, resource_type])
+	var overflow: int = simulation.settlement.add_to_warehouse(resource_type, amount, warehouse_index)
+	if overflow > 0 and simulation.has_method("_drop_resource_pile"):
+		simulation._drop_resource_pile(_drop_position(worker), resource_type, overflow)
+	_finish_storage_delivery(worker, resource_type)
+	simulation._update_interface("Workers delivered %d %s to the warehouse." % [amount - overflow, resource_type])
 	simulation._request_courier_dispatch()
 
 
-func _finish_storage_delivery(worker: Citizen, resource_type: String, storage_status := SettlementState.StorageAvailability.OK) -> void:
-	if storage_status == SettlementState.StorageAvailability.NO_WAREHOUSE:
+func _finish_storage_delivery(worker: Citizen, resource_type: String, _storage_status := SettlementState.StorageAvailability.OK) -> void:
+	if simulation.warehouse_positions.is_empty():
 		worker.storage_delivery_result(false, CitizenStatusEffectScript.STORAGE_NO_WAREHOUSE)
 		return
-	if simulation.settlement.can_make_room_for(resource_type, 1, simulation.warehouse_positions.size()):
+	var worker_position: Vector3 = worker.global_position if worker.is_inside_tree() else worker.position
+	var next_index: int = simulation.settlement.find_warehouse_index(worker_position, resource_type, 1, simulation.warehouse_positions)
+	if next_index >= 0:
 		worker.storage_delivery_result(true)
 		return
 	worker.idle()

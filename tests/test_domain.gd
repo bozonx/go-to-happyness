@@ -228,8 +228,9 @@ func _test_tent_start_config() -> void:
 	assert(int(tent_refund.get("grass", 0)) == 1)
 	var storage_state := SettlementState.new()
 	assert(storage_state.storage_availability_for("grass", 1, 0) == SettlementState.StorageAvailability.NO_WAREHOUSE)
-	storage_state.branches = 24
 	storage_state.add_warehouse("warehouse")
+	storage_state.warehouse_ever_built = true
+	storage_state.branches = 24
 	storage_state.ensure_storage_defaults(1)
 	assert(storage_state.storage_availability_for("grass", 1, 1) == SettlementState.StorageAvailability.NO_ROOM)
 	storage_state.add_warehouse("warehouse")
@@ -238,11 +239,10 @@ func _test_tent_start_config() -> void:
 	var debug_storage_state := SettlementState.new()
 	debug_storage_state.apply_tent_start()
 	debug_storage_state.ensure_storage_defaults(0)
-	debug_storage_state.debug_storage_capacity_bonus = 100
 	debug_storage_state.add_warehouse("warehouse")
 	debug_storage_state.ensure_storage_defaults(1)
-	assert(debug_storage_state.storage_capacity(1) == 124)
-	assert(debug_storage_state.reserve_storage_room_for("branches", 3, 1))
+	assert(debug_storage_state.storage_capacity(1) == 24)
+	assert(debug_storage_state.reserve_warehouse_room(0, "branches", 3))
 	var decay := SettlementRulesScript.open_air_storage_decay_losses({"food": 16, "grass": 10}, 26.0, 0.0)
 	assert(int(decay.food) == 2 and int(decay.grass) == 1)
 
@@ -251,41 +251,49 @@ func _test_virtual_stockpile_migration() -> void:
 	var state := SettlementState.new()
 	state.apply_tent_start()
 	assert(state.uses_virtual_storage())
-	# A small amount that fits into the first open-air warehouse (24 units).
-	# Starting food is 16 and water is 4 units, leaving room for 4 branches.
-	state.add("branches", 4)
-	assert(state.amount("branches") == 4)
+	# Starter backpack holds 16 food (16u), 8 water (4u) and 1 tarp (1u) = 21u.
+	# The first open-air warehouse holds 24u, leaving room for 3 branches.
+	state.add("branches", 3)
+	assert(state.amount("branches") == 3)
 	state.add_warehouse("warehouse")
 	var overflow := state.migrate_virtual_to_warehouse(1)
 	assert(not state.uses_virtual_storage())
-	assert(state.branches == 4)
+	assert(state.branches == 3)
 	assert(overflow.is_empty())
 	assert(state.virtual_stock.is_empty())
 
-	# Overflow scenario: more virtual resources than the first warehouse can hold.
+	# Overflow scenario: adding a fourth branch leaves no room for the starter tarp.
+	var small_overflow_state := SettlementState.new()
+	small_overflow_state.apply_tent_start()
+	small_overflow_state.add("branches", 4)
+	small_overflow_state.add_warehouse("warehouse")
+	var small_overflow := small_overflow_state.migrate_virtual_to_warehouse(1)
+	assert(small_overflow.has("tarp"))
+	assert(small_overflow["tarp"] == 1)
+
+	# Large overflow scenario: most resources are left on the ground once the first
+	# warehouse is full. Branches fill the warehouse first, so 200 - 24 = 176 remain.
 	var overflow_state := SettlementState.new()
 	overflow_state.apply_tent_start()
 	overflow_state.add("branches", 200)
 	overflow_state.add_warehouse("warehouse")
 	var big_overflow := overflow_state.migrate_virtual_to_warehouse(1)
-	assert(big_overflow.is_empty())
-	assert(overflow_state.branches > overflow_state.storage_capacity(1))
+	assert(big_overflow.has("branches"))
+	assert(big_overflow["branches"] == 176)
+	assert(overflow_state.branches <= overflow_state.storage_capacity(1))
 
-	# Debug-grant scenario: a large pre-warehouse grant must not become ground piles
-	# once the first warehouse is built. A matching capacity bonus lets the migration
-	# absorb the whole virtual stock.
+	# Large pre-warehouse grant: resources accumulate in the backpack. Adding enough
+	# warehouses lets the migration absorb the whole stock without ground piles.
 	var debug_state := SettlementState.new()
 	debug_state.apply_tent_start()
 	var debug_grants := {"branches": 36, "grass": 20, "water": 24, "food": 18, "hides": 8, "goods": 8, "logs": 16, "wood": 10, "soil": 28, "clay": 22, "boards": 18, "stone": 15, "bricks": 14}
 	var starting_food := debug_state.amount("food")
-	var grant_units := 0.0
 	for resource_type in debug_grants:
 		debug_state.add(resource_type, debug_grants[resource_type])
-		grant_units += debug_grants[resource_type] * debug_state.storage_weight(resource_type)
-	grant_units += debug_state.amount("food") * debug_state.storage_weight("food")
-	debug_state.debug_storage_capacity_bonus = ceili(grant_units)
-	debug_state.add_warehouse("warehouse")
-	var debug_overflow := debug_state.migrate_virtual_to_warehouse(1)
+	# 13 open-air warehouses provide 312 units, enough for the starter backpack.
+	for i in range(13):
+		debug_state.add_warehouse("warehouse")
+	var debug_overflow := debug_state.migrate_virtual_to_warehouse(13)
 	assert(debug_overflow.is_empty())
 	for resource_type in debug_grants:
 		var expected: int = debug_grants[resource_type]
@@ -378,6 +386,7 @@ func _test_storage_delivery_service() -> void:
 	service.configure(simulation)
 	var worker := Citizen.new()
 	simulation.settlement.add_warehouse("warehouse")
+	simulation.settlement.warehouse_ever_built = true
 	simulation.warehouse_positions = [Vector3.ZERO]
 	simulation.settlement.ensure_storage_defaults(1)
 	service.on_resource_delivered(worker, "grass", 1)
@@ -391,13 +400,14 @@ func _test_storage_delivery_service() -> void:
 	var full_storage_service := StorageDeliveryServiceScript.new()
 	full_storage_service.configure(full_storage_simulation)
 	full_storage_simulation.settlement.add_warehouse("warehouse")
+	full_storage_simulation.settlement.warehouse_ever_built = true
 	full_storage_simulation.warehouse_positions = [Vector3.ZERO]
 	full_storage_simulation.settlement.ensure_storage_defaults(1)
-	full_storage_simulation.settlement.grass = int(full_storage_simulation.settlement.storage_limit("grass"))
+	full_storage_simulation.settlement.warehouses[0].set_amount("grass", 24)
 	var full_storage_worker := Citizen.new()
 	full_storage_worker.carried_amount = 1
 	full_storage_service.on_resource_delivered(full_storage_worker, "grass", 1)
-	assert(full_storage_simulation.settlement.grass == int(full_storage_simulation.settlement.storage_limit("grass")))
+	assert(full_storage_simulation.settlement.grass == 24)
 	assert(full_storage_simulation.dropped_piles.size() == 1)
 	assert(full_storage_simulation.dropped_piles[0].resource_type == "grass")
 	assert(not full_storage_worker.blocked_by_storage)

@@ -198,6 +198,8 @@ const RABBIT_MAX_COUNT := 8
 var outside_workers: Dictionary = {} # citizen instance id -> {citizen, return_at_minute}
 var last_citizen_positions: Dictionary = {}
 var resource_piles: Array[Dictionary] = []
+var backpack_node: Node3D
+var backpack_position: Vector3
 var farm_positions: Array[Vector3] = []
 var builders_guild_positions: Array[Vector3] = []
 var construction_company_positions: Array[Vector3] = []
@@ -492,6 +494,7 @@ func _ready() -> void:
 	_create_ponds()
 	_create_entrance_stone()
 	_create_citizens()
+	_create_starter_backpack()
 	_refresh_living_statuses()
 	if not citizen_ai.configure(
 		SettlementAIWorldFacade.new(self),
@@ -1109,22 +1112,27 @@ func _publish_courier_tasks(dispatcher: RefCounted) -> void:
 		if is_instance_valid(canteen) and food > 0 and not pending_canteen_delivery:
 			var food_capacity := BuildingCatalog.kitchen_food_capacity(str(canteen.get_meta("building_type", "")))
 			if food_capacity > canteen_food:
-				dispatcher.publish(&"canteen_food", CourierTask.Kind.CANTEEN, 100, warehouse_positions[0], canteen_position)
+				var food_source := _get_nearest_delivery_position(canteen_position)
+				dispatcher.publish(&"canteen_food", CourierTask.Kind.CANTEEN, 100, food_source, canteen_position)
 		for order in queued_trades:
 			var trade: Dictionary = order.trade
 			dispatcher.publish(StringName("trade_%s" % str(trade)), CourierTask.Kind.TRADE, 80, order.source, order.destination, {"order": order})
 		for position in sawmill_positions:
 			if int(sawmills.stock_at(position, runtime_seconds).boards) > 0:
-				dispatcher.publish(StringName("sawmill_%s" % _cell_from_position(position)), CourierTask.Kind.SAWMILL_PICKUP, 50, position, warehouse_positions[0], {"position": position})
+				var sawmill_dropoff := _warehouse_delivery_position(position, "boards", 1)
+				dispatcher.publish(StringName("sawmill_%s" % _cell_from_position(position)), CourierTask.Kind.SAWMILL_PICKUP, 50, position, sawmill_dropoff, {"position": position})
 		for collector: Dictionary in water_collectors:
 			if int(collector.get("stored", 0)) > 0:
 				var collector_node: Node3D = collector.get("node") as Node3D
 				if is_instance_valid(collector_node):
 					var collector_position: Vector3 = collector_node.get_meta("service_position", collector_node.global_position)
-					dispatcher.publish(StringName("dew_%s" % _cell_from_position(collector_position)), CourierTask.Kind.DEW_PICKUP, 40, collector_position, warehouse_positions[0], {"position": collector_position})
+					var dew_dropoff := _warehouse_delivery_position(collector_position, "water", int(collector.get("stored", 0)))
+					dispatcher.publish(StringName("dew_%s" % _cell_from_position(collector_position)), CourierTask.Kind.DEW_PICKUP, 40, collector_position, dew_dropoff, {"position": collector_position})
 		for worker in citizens:
 			if worker != null and worker.has_pending_resource() and not courier_dispatcher.is_manually_targeted(worker):
-				dispatcher.publish(StringName("worker_%d" % worker.get_instance_id()), CourierTask.Kind.WORKER_PICKUP, 45, worker.global_position, warehouse_positions[0], {"worker": worker})
+				var worker_position: Vector3 = worker.global_position
+				var worker_dropoff := _warehouse_delivery_position(worker_position, worker.carried_resource_type, worker.carried_amount)
+				dispatcher.publish(StringName("worker_%d" % worker.get_instance_id()), CourierTask.Kind.WORKER_PICKUP, 45, worker_position, worker_dropoff, {"worker": worker})
 	var sorted_sites := construction_sites.duplicate()
 	sorted_sites.sort_custom(func(a: ConstructionSite, b: ConstructionSite) -> bool:
 		return _construction_development_priority(a) > _construction_development_priority(b)
@@ -1146,7 +1154,8 @@ func _publish_courier_tasks(dispatcher: RefCounted) -> void:
 			if not is_instance_valid(building) or not bool(building.get_meta("repair_needed", false)) or bool(building.get_meta("repair_reserved", false)):
 				continue
 			var repair_position: Vector3 = building.get_meta("service_position", building.global_position)
-			dispatcher.publish(StringName("repair_%d" % building.get_instance_id()), CourierTask.Kind.BUILDING_SUPPLY, 60, warehouse_positions[0], repair_position, {"building": building, "supply_kind": "repair", "resource": "branches"})
+			var repair_source := _get_nearest_delivery_position(repair_position)
+			dispatcher.publish(StringName("repair_%d" % building.get_instance_id()), CourierTask.Kind.BUILDING_SUPPLY, 60, repair_source, repair_position, {"building": building, "supply_kind": "repair", "resource": "branches"})
 
 
 func _reconcile_repair_reservations() -> void:
@@ -1288,7 +1297,7 @@ func _start_courier_task(courier: Citizen, task: RefCounted) -> bool:
 			settlement.add("food", -amount)
 			pending_canteen_delivery = true
 			pending_canteen_delivery_amount = amount
-			courier.deliver_food_to_canteen(warehouse_positions[0], canteen_position, amount)
+			courier.deliver_food_to_canteen(task.pickup, canteen_position, amount)
 			return true
 		CourierTask.Kind.TRADE:
 			var order: RefCounted = task.payload.order
@@ -1298,13 +1307,13 @@ func _start_courier_task(courier: Citizen, task: RefCounted) -> bool:
 			trade_service.assign_order_to_worker(courier, order)
 			return true
 		CourierTask.Kind.SAWMILL_PICKUP:
-			courier.assign_sawmill_pickup(task.payload.position, warehouse_positions[0])
+			courier.assign_sawmill_pickup(task.payload.position, task.dropoff)
 			return true
 		CourierTask.Kind.DEW_PICKUP:
-			courier.assign_dew_collector_pickup(task.payload.position, warehouse_positions[0])
+			courier.assign_dew_collector_pickup(task.payload.position, task.dropoff)
 			return true
 		CourierTask.Kind.WORKER_PICKUP:
-			courier.assign_courier_pickup(task.payload.worker, warehouse_positions[0])
+			courier.assign_courier_pickup(task.payload.worker, task.dropoff)
 			return true
 		CourierTask.Kind.CONSTRUCTION:
 			var site: ConstructionSite = task.payload.site
@@ -1335,7 +1344,7 @@ func _start_courier_task(courier: Citizen, task: RefCounted) -> bool:
 						return false
 					settlement.add("branches", -1)
 					building.set_meta("repair_reserved", true)
-					courier.assign_building_supply(building, warehouse_positions[0], "branches", "repair")
+					courier.assign_building_supply(building, task.pickup, "branches", "repair")
 					return true
 			return false
 	return false
@@ -1748,7 +1757,15 @@ func _update_interface(message: String) -> void:
 		displayed_resources = ["branches", "grass", "water", "food", "soil", "clay", "logs", "wood", "boards", "stone", "bricks", "tarp"]
 	for resource_type in displayed_resources:
 		lines.append("%s: %d" % [_resource_display_name(resource_type), settlement.amount(resource_type)])
-	lines.append("Storage: %d/%d" % [_stored_resources(), _warehouse_capacity()])
+	if settlement.uses_virtual_storage():
+		var backpack_units := 0.0
+		for resource_type in displayed_resources:
+			backpack_units += settlement.backpack_amount(resource_type) * settlement.storage_weight(resource_type)
+		lines.append("Backpack: %.1f u" % backpack_units)
+	else:
+		lines.append("Storage: %d/%d" % [_stored_resources(), _warehouse_capacity()])
+	if not resource_piles.is_empty():
+		lines.append("Piles: %d" % resource_piles.size())
 	lines.append("Population: %d" % citizens.size())
 	lines.append("Wellbeing: %d" % wellbeing)
 	wood_label.text = "\n".join(lines)
@@ -2344,6 +2361,19 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 		citizen.employment_state = Citizen.EmploymentState.NO_PERMANENT_WORK if not is_instance_valid(campfire_node) else Citizen.EmploymentState.UNREGISTERED
 	if citizen_needs_service != null:
 		citizen_needs_service.schedule_toilet(citizen.ai_id)
+
+
+func _create_starter_backpack() -> void:
+	if settlement.warehouse_ever_built:
+		return
+	var anchor := entrance_stone.global_position + Vector3(0.0, 0.0, 2.0)
+	backpack_position = anchor + Vector3(-1.5, 0.0, 0.7)
+	var terrain_height := _terrain_height_at(backpack_position.x, backpack_position.z, 0.0)
+	if not is_nan(terrain_height):
+		backpack_position.y = terrain_height + 0.08
+	_create_resource_pile(backpack_position, settlement.backpack)
+	if not resource_piles.is_empty():
+		backpack_node = resource_piles[resource_piles.size() - 1].node
 
 
 func _on_ai_citizen_exiting(citizen_id: int) -> void:
@@ -5311,8 +5341,15 @@ func _occupy_workplace(workplace: Node3D) -> void:
 func _reserve_player_gather_storage(resource_type: String, requested: int) -> int:
 	if settlement.uses_virtual_storage():
 		return requested
-	for amount in range(requested, 0, -1):
-		if settlement.reserve_storage_room_for(resource_type, amount, warehouse_positions.size()):
+	if player_citizen == null or warehouse_positions.is_empty():
+		return 0
+	var origin := player_citizen.global_position
+	var index := settlement.find_warehouse_index(origin, resource_type, requested, warehouse_positions)
+	if index >= 0 and settlement.reserve_warehouse_room(index, resource_type, requested):
+		return requested
+	for amount in range(requested - 1, 0, -1):
+		index = settlement.find_warehouse_index(origin, resource_type, amount, warehouse_positions)
+		if index >= 0 and settlement.reserve_warehouse_room(index, resource_type, amount):
 			return amount
 	return 0
 
@@ -5796,6 +5833,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			warehouse_positions.append(service_position)
 			if warehouse_positions.size() == 1:
 				var overflow := settlement.migrate_virtual_to_warehouse(warehouse_positions.size())
+				_remove_backpack_pile()
 				_drop_overflow_as_piles(overflow, service_position)
 			settlement.ensure_storage_defaults(warehouse_positions.size())
 			_add_building_selector(building, "warehouse_selector", blueprint.footprint)
@@ -6054,21 +6092,8 @@ func _send_citizen_to_leisure(citizen: Citizen, minimum_hours := 0) -> bool:
 func _grant_debug_resources() -> void:
 	# Approximate early-to-late material demand, rather than equal stacks.
 	var grants := {"money": 30, "branches": 36, "grass": 20, "water": 24, "food": 18, "hides": 8, "goods": 8, "logs": 16, "wood": 10, "soil": 28, "clay": 22, "boards": 18, "stone": 15, "bricks": 14}
-	var had_warehouse := not warehouse_positions.is_empty()
 	for resource_type in grants:
 		settlement.add_cheat(resource_type, grants[resource_type])
-	# Before the first warehouse, resources live in the unlimited virtual stockpile.
-	# Once a warehouse exists, bump capacity to absorb the grant so testing stays smooth.
-	if had_warehouse:
-		settlement.debug_storage_capacity_bonus = maxi(settlement.debug_storage_capacity_bonus, ceili(settlement.storage_used_units()))
-		settlement.ensure_storage_defaults(warehouse_positions.size())
-	else:
-		# Reserve enough bonus capacity so the first completed warehouse can hold the
-		# whole debug grant instead of dumping it as ground piles.
-		var grant_units := 0.0
-		for resource_type in grants:
-			grant_units += grants[resource_type] * settlement.storage_weight(resource_type)
-		settlement.debug_storage_capacity_bonus = maxi(settlement.debug_storage_capacity_bonus, ceili(grant_units))
 	_update_workers()
 	_request_courier_dispatch()
 	_update_interface("Debug resources added in normal spending proportions.")
@@ -8473,6 +8498,17 @@ func _create_resource_pile(position: Vector3, resources: Dictionary) -> void:
 	resource_piles.append({"node": pile, "resources": normalized, "reserved": {}})
 
 
+func _remove_backpack_pile() -> void:
+	if not is_instance_valid(backpack_node):
+		return
+	for index in range(resource_piles.size()):
+		if resource_piles[index].get("node") == backpack_node:
+			resource_piles.remove_at(index)
+			break
+	backpack_node.queue_free()
+	backpack_node = null
+
+
 func _drop_overflow_as_piles(overflow: Dictionary, base_position: Vector3) -> void:
 	if overflow.is_empty():
 		return
@@ -8561,6 +8597,15 @@ func _get_nearest_delivery_position(from: Vector3) -> Vector3:
 		return campfire_node.global_position
 	else:
 		return entrance_stone.global_position
+
+
+func _warehouse_delivery_position(from: Vector3, resource_type: String, amount: int) -> Vector3:
+	if warehouse_positions.is_empty():
+		return from
+	var index: int = settlement.find_warehouse_index(from, resource_type, amount, warehouse_positions)
+	if index >= 0:
+		return warehouse_positions[index]
+	return warehouse_positions[0]
 
 func _is_construction_site(node: Node3D) -> bool:
 	return is_instance_valid(node) and construction.has_site(node)

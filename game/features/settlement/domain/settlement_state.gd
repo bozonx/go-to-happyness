@@ -175,14 +175,13 @@ func apply_tent_start(reset_progress := true) -> void:
 	active_research_remaining_time = 0.0
 	active_research_duration = 0.0
 	storage_limits.clear()
-	virtual_stock.clear()
+	backpack.clear()
 	warehouses.clear()
 	warehouse_types.clear()
 	warehouse_ever_built = false
-	debug_storage_capacity_bonus = 0
-	virtual_stock["food"] = TENT_STARTING_FOOD
-	virtual_stock["water"] = TENT_STARTING_WATER
-	virtual_stock["tarp"] = 1
+	backpack["food"] = TENT_STARTING_FOOD
+	backpack["water"] = TENT_STARTING_WATER
+	backpack["tarp"] = 1
 	if reset_progress:
 		buildings.clear()
 		for system_id in unlocked_systems.keys():
@@ -238,16 +237,14 @@ const ERA_STORAGE_PER_WAREHOUSE := {Era.TENT: 32, Era.EARTH: 48, Era.CLAY: 70, E
 const STORAGE_STEP := 4.0
 
 var storage_limits: Dictionary = {} # resource -> allocated space units (float)
-## Resources earned before the first warehouse is built live in an unlimited
-## virtual stockpile. They migrate to real warehouses on first completion.
-var virtual_stock: Dictionary = {}
+## Physical resources before the first warehouse live in the starter backpack.
+## The backpack is a special non-replenishable ground pile shown separately in HUD.
+var backpack: Dictionary = {}
+## Backward-compatible alias used by tests and UI during the refactor.
+var virtual_stock: Dictionary:
+	get: return backpack
 ## Becomes true the first time any warehouse is completed and never reverts.
 var warehouse_ever_built: bool = false
-## Debug grants are intended to unlock test scenarios, not to consume every
-## physical warehouse slot. The bonus is active only while a warehouse exists.
-var debug_storage_capacity_bonus := 0
-
-
 func storage_weight(resource_type: String) -> float:
 	return float(STORAGE_WEIGHTS.get(resource_type, 1.0))
 
@@ -273,7 +270,7 @@ func add_warehouse(building_type: String) -> void:
 
 
 func storage_capacity(_warehouses: int) -> int:
-	var total := debug_storage_capacity_bonus
+	var total := 0
 	for warehouse in warehouses:
 		total += warehouse.capacity
 	return total
@@ -358,13 +355,50 @@ func adjust_storage_limit(resource_type: String, delta_units: float, warehouses:
 func storage_room_for(resource_type: String) -> int:
 	if not STORED_RESOURCES.has(resource_type):
 		return 1 << 30
-	var weight := storage_weight(resource_type)
-	var headroom := float(storage_limits.get(resource_type, 0.0)) - amount(resource_type) * weight
-	return maxi(0, int(floor((headroom + 0.001) / weight)))
+	var total := 0
+	for warehouse in warehouses:
+		total += warehouse.room_for(resource_type, STORAGE_WEIGHTS)
+	return total
 
 
 func storage_can_accept(resource_type: String, count: int) -> bool:
 	return storage_room_for(resource_type) >= count
+
+
+## Pick the nearest warehouse that can hold `count` units of the resource.
+func find_warehouse_index(from_position: Vector3, resource_type: String, count: int, positions: Array[Vector3]) -> int:
+	if warehouses.is_empty() or positions.is_empty() or count <= 0:
+		return -1
+	var best_index := -1
+	var best_distance := INF
+	for i in range(warehouses.size()):
+		if i >= positions.size():
+			continue
+		if warehouses[i].room_for(resource_type, STORAGE_WEIGHTS) < count:
+			continue
+		var distance := from_position.distance_squared_to(positions[i])
+		if distance < best_distance:
+			best_distance = distance
+			best_index = i
+	return best_index
+
+
+func reserve_warehouse_room(index: int, resource_type: String, count: int) -> bool:
+	if index < 0 or index >= warehouses.size():
+		return false
+	return warehouses[index].reserve(resource_type, count, STORAGE_WEIGHTS)
+
+
+func release_warehouse_reservation(index: int, resource_type: String, count: int) -> void:
+	if index < 0 or index >= warehouses.size():
+		return
+	warehouses[index].release(resource_type, count)
+
+
+func warehouse_room_for(index: int, resource_type: String) -> int:
+	if index < 0 or index >= warehouses.size():
+		return 0
+	return warehouses[index].room_for(resource_type, STORAGE_WEIGHTS)
 
 
 func storage_availability_for(resource_type: String, count: int, warehouses: int) -> StorageAvailability:
@@ -376,35 +410,26 @@ func storage_availability_for(resource_type: String, count: int, warehouses: int
 		return StorageAvailability.NO_WAREHOUSE
 	return StorageAvailability.OK if storage_room_for(resource_type) >= count else StorageAvailability.NO_ROOM
 
-func can_make_room_for(resource_type: String, count: int, warehouses: int) -> bool:
-	if not STORED_RESOURCES.has(resource_type):
-		return true
-	var required := count * storage_weight(resource_type)
-	var available := maxf(0.0, float(storage_limits.get(resource_type, 0.0)) - amount(resource_type) * storage_weight(resource_type))
-	return available + storage_free_units(warehouses) + 0.001 >= required
+func can_make_room_for(resource_type: String, count: int, _warehouses: int) -> bool:
+	return storage_room_for(resource_type) >= count
 
 
 func reserve_storage_room_for(resource_type: String, count: int, warehouses: int) -> bool:
 	if count <= 0 or not STORED_RESOURCES.has(resource_type):
 		return count <= 0
-	if storage_availability_for(resource_type, count, warehouses) == StorageAvailability.NO_WAREHOUSE:
+	if warehouses <= 0:
 		return false
-	var required_units := count * storage_weight(resource_type)
-	var current_limit := float(storage_limits.get(resource_type, 0.0))
-	var used_units := amount(resource_type) * storage_weight(resource_type)
-	var current_headroom := maxf(0.0, current_limit - used_units)
-	var additional_committed_units := maxf(0.0, required_units - current_headroom)
-	if additional_committed_units > storage_free_units(warehouses) + 0.001:
-		return false
-	storage_limits[resource_type] = maxf(current_limit, used_units + required_units)
-	return storage_availability_for(resource_type, count, warehouses) == StorageAvailability.OK
+	for i in range(min(warehouses, self.warehouses.size())):
+		if reserve_warehouse_room(i, resource_type, count):
+			return true
+	return false
 
 
 func _set_resource_aggregate(resource_type: String, value: int) -> void:
 	if resource_type == "money":
 		return
 	if not warehouse_ever_built:
-		virtual_stock[resource_type] = value
+		backpack[resource_type] = value
 		return
 	for i in range(warehouses.size()):
 		warehouses[i].set_amount(resource_type, value if i == 0 else 0)
@@ -414,38 +439,53 @@ func amount(resource_type: String) -> int:
 	if resource_type == "money":
 		return money
 	if not warehouse_ever_built:
-		return int(virtual_stock.get(resource_type, 0))
+		return int(backpack.get(resource_type, 0))
 	var total := 0
 	for warehouse in warehouses:
 		total += warehouse.amount(resource_type)
 	return total
 
 
+func backpack_amount(resource_type: String) -> int:
+	if resource_type == "money":
+		return 0
+	return int(backpack.get(resource_type, 0))
+
+
+func warehouse_amount(resource_type: String, index: int) -> int:
+	if index < 0 or index >= warehouses.size():
+		return 0
+	return warehouses[index].amount(resource_type)
+
+
 ## Add resources to a specific warehouse by index. Returns how many could not fit.
+## Callers typically reserve the room first; this helper releases a matching
+## reservation so the cargo actually fits.
 func add_to_warehouse(resource_type: String, value: int, index: int) -> int:
 	if resource_type == "money" or not warehouse_ever_built:
 		return value
 	if index < 0 or index >= warehouses.size():
 		return value
-	var weight := storage_weight(resource_type)
-	return warehouses[index].add(resource_type, value, weight)
+	if value > 0:
+		warehouses[index].release(resource_type, value)
+	return warehouses[index].add(resource_type, value, STORAGE_WEIGHTS)
 
 
 ## Default delivery behaviour: fill warehouses sequentially and remove from them
 ## sequentially. Keeps the first warehouses stocked until they are full, then spills
-## into the next ones, matching the "new warehouse is empty and can be filled"
-## expectation.
+## into the next ones. Excess is silently discarded to preserve the no-overflow
+## invariant; callers that need overflow handling should use add_to_warehouse.
 func add(resource_type: String, value: int) -> void:
 	if resource_type == "money":
 		money += value
 		return
 	if not warehouse_ever_built:
-		virtual_stock[resource_type] = int(virtual_stock.get(resource_type, 0)) + value
+		backpack[resource_type] = int(backpack.get(resource_type, 0)) + value
 		return
 	if warehouses.is_empty():
-		# Resources received while no physical warehouse exists fall back to virtual stock
+		# Resources received while no physical warehouse exists fall back to the backpack
 		# rather than being silently lost; this matches demolition edge cases.
-		virtual_stock[resource_type] = maxi(0, int(virtual_stock.get(resource_type, 0)) + value)
+		backpack[resource_type] = maxi(0, int(backpack.get(resource_type, 0)) + value)
 		return
 	if value >= 0:
 		_distribute_add(resource_type, value)
@@ -454,34 +494,30 @@ func add(resource_type: String, value: int) -> void:
 
 
 ## Used for debug/cheat grants: pull every warehouse toward the average amount of
-## the given resource. Falls back to overfilling the least-stocked warehouse if the
-## total physical capacity is exceeded.
+## the given resource. Never overfills a warehouse; excess is discarded.
 func add_cheat(resource_type: String, value: int) -> void:
 	if value <= 0:
 		add(resource_type, value)
 		return
-	if not warehouse_ever_built or warehouses.is_empty():
-		virtual_stock[resource_type] = int(virtual_stock.get(resource_type, 0)) + value
+	if resource_type == "money":
+		money += value
 		return
-	var weight := storage_weight(resource_type)
+	if not warehouse_ever_built or warehouses.is_empty():
+		return
 	var remaining := value
 	while remaining > 0:
 		var target := _find_least_stocked_warehouse(resource_type)
-		var before := warehouses[target].amount(resource_type)
-		var accepted := warehouses[target].add(resource_type, remaining, weight)
+		var accepted := warehouses[target].add(resource_type, remaining, STORAGE_WEIGHTS)
 		var added := remaining - accepted
+		remaining = accepted
 		if added == 0:
-			warehouses[target].resources[resource_type] = before + remaining
-			remaining = 0
-		else:
-			remaining = accepted
+			break
 
 
 func _distribute_add(resource_type: String, value: int) -> void:
-	var weight := storage_weight(resource_type)
 	var remaining := value
 	for warehouse in warehouses:
-		remaining = warehouse.add(resource_type, remaining, weight)
+		remaining = warehouse.add(resource_type, remaining, STORAGE_WEIGHTS)
 		if remaining <= 0:
 			break
 
@@ -511,7 +547,7 @@ func _find_least_stocked_warehouse(resource_type: String) -> int:
 func total_stored_resources() -> int:
 	var total := 0
 	if not warehouse_ever_built:
-		for value in virtual_stock.values():
+		for value in backpack.values():
 			total += int(value)
 	else:
 		for warehouse in warehouses:
@@ -524,21 +560,30 @@ func uses_virtual_storage() -> bool:
 	return not warehouse_ever_built
 
 
-func migrate_virtual_to_warehouse(_warehouses: int) -> Dictionary:
+func migrate_backpack_to_warehouse() -> Dictionary:
 	warehouse_ever_built = true
 	var overflow := {}
 	if warehouses.is_empty():
-		overflow = virtual_stock.duplicate()
+		overflow = backpack.duplicate()
 	else:
-		var first := warehouses[0]
 		for resource_type in STORED_RESOURCES:
-			var virtual_count := int(virtual_stock.get(resource_type, 0))
-			if virtual_count > 0:
-				first.resources[resource_type] = first.amount(resource_type) + virtual_count
-	virtual_stock.clear()
+			var backpack_count := int(backpack.get(resource_type, 0))
+			var remaining := backpack_count
+			for warehouse in warehouses:
+				remaining = warehouse.add(resource_type, remaining, STORAGE_WEIGHTS)
+				if remaining <= 0:
+					break
+			if remaining > 0:
+				overflow[resource_type] = remaining
+	backpack.clear()
 	ensure_storage_defaults(warehouses.size())
 	_clamp_storage_limits(warehouses.size())
 	return overflow
+
+
+## Backward-compatible alias kept during the refactor.
+func migrate_virtual_to_warehouse(_warehouses: int) -> Dictionary:
+	return migrate_backpack_to_warehouse()
 
 
 func can_afford_building(building_type: String) -> bool:
