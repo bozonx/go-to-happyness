@@ -8,16 +8,21 @@ func _init() -> void:
 	super(&"meal")
 
 
+const ACTIVE_GOAL_BLACKBOARD_KEY := &"brain.active_goal_id"
+
+
 func score(
-	_snapshot: WorldSnapshot,
+	snapshot: WorldSnapshot,
 	citizen: CitizenSnapshot,
-	_order: CitizenOrder,
-	_blackboard: AIBlackboard
+	order: CitizenOrder,
+	blackboard: AIBlackboard
 ) -> float:
 	if citizen == null:
 		return 0.0
 	if not bool(citizen.facts.value(&"needs.meal_requested", false)):
 		return 0.0
+	if blackboard != null and blackboard.value(ACTIVE_GOAL_BLACKBOARD_KEY, &"") == id:
+		return 0.9
 	if not bool(citizen.facts.value(&"needs.can_start_meal", false)):
 		return 0.0
 	return 0.9

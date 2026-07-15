@@ -4,6 +4,9 @@ extends AICitizenGoal
 const SleepAtHomeStepScript = preload("res://game/features/decision/domain/behavior/sleep_at_home_step.gd")
 
 
+const ACTIVE_GOAL_BLACKBOARD_KEY := &"brain.active_goal_id"
+
+
 func _init() -> void:
 	super(&"sleep")
 
@@ -12,7 +15,7 @@ func score(
 	_snapshot: WorldSnapshot,
 	citizen: CitizenSnapshot,
 	_order: CitizenOrder,
-	_blackboard: AIBlackboard
+	blackboard: AIBlackboard
 ) -> float:
 	if citizen == null:
 		return 0.0
@@ -20,6 +23,8 @@ func score(
 		return 0.0
 	if not bool(citizen.facts.value(&"needs.has_home", false)):
 		return 0.0
+	if blackboard != null and blackboard.value(ACTIVE_GOAL_BLACKBOARD_KEY, &"") == id:
+		return 1.0
 	if not bool(citizen.facts.value(&"needs.can_start_sleep", false)):
 		return 0.0
 	return 1.0

@@ -206,6 +206,9 @@ func _init() -> void:
 	_test_native_toilet_goal()
 	_test_toilet_goal_blocked_while_working()
 	_test_toilet_goal_blocked_for_player_controlled()
+	_test_trip_bound_work_blocks_personal_need()
+	_test_active_personal_need_blocks_work()
+	_test_order_board_equivalence_ignores_payload_position()
 	_test_native_rest_goal()
 	_test_register_provider_keeps_order_while_registering()
 	_test_register_provider_distributes_workplaces_by_capacity()
@@ -550,6 +553,71 @@ func _test_native_toilet_goal() -> void:
 		&"needs.relief_candidates": [{&"id": &"tree:0:0:0", &"position": Vector3.ZERO, &"kind": &"tree"}],
 	}))
 	assert(is_zero_approx(goal.score(_snapshot(0.0, blocked), blocked, null, AIBlackboard.new())))
+
+
+func _test_trip_bound_work_blocks_personal_need() -> void:
+	var forestry := ForestryGoalScript.new()
+	var meal := MealGoalScript.new()
+	var actuator := FakeActuator.new(1)
+	var brain := CitizenBrain.new(1, actuator, [forestry, meal])
+	var citizen := _forestry_citizen(1, false)
+	var order := _forestry_order(1, Vector3(3.0, 0.0, 0.0), &"tree:3:0")
+	order.id = 1001
+	var snapshot := _snapshot(0.0, citizen)
+	brain.think(snapshot, order)
+	brain.tick(snapshot, order, 0.1)
+	assert(brain.runner.active_goal_id() == &"forestry")
+	assert(actuator.action_start_count == 1)
+	var hungry_facts := citizen.facts.to_dictionary()
+	hungry_facts[&"needs.meal_requested"] = true
+	hungry_facts[&"needs.can_start_meal"] = true
+	hungry_facts[&"needs.canteen_position"] = Vector3.ZERO
+	var hungry_citizen := CitizenSnapshot.new(1, Vector3(1.0, 0.0, 0.0), false, true, AIFactSet.new(hungry_facts))
+	var hungry_snapshot := _snapshot(1.0, hungry_citizen)
+	brain.think(hungry_snapshot, order)
+	assert(brain.runner.active_goal_id() == &"forestry")
+	assert(actuator.action_start_count == 1)
+
+
+func _test_active_personal_need_blocks_work() -> void:
+	var work := FixedGoal.new(&"work", 0.89)
+	var meal := MealGoalScript.new()
+	var actuator := FakeActuator.new(1)
+	var brain := CitizenBrain.new(1, actuator, [work, meal])
+	var snapshot := _meal_snapshot(true)
+	brain.think(snapshot, null)
+	brain.tick(snapshot, null, 0.1)
+	assert(brain.runner.active_goal_id() == &"meal")
+	assert(actuator.action_start_count == 1)
+	# A highly desirable work goal must not steal control while the citizen is eating.
+	var still_eating := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
+		&"needs.meal_requested": true,
+		&"needs.can_start_meal": true,
+		&"needs.canteen_position": Vector3.ZERO,
+	}))
+	var work_snapshot := _snapshot(1.0, still_eating)
+	brain.think(work_snapshot, null)
+	assert(brain.runner.active_goal_id() == &"meal")
+	assert(actuator.cancel_action_count == 0)
+
+
+func _test_order_board_equivalence_ignores_payload_position() -> void:
+	var board := OrderBoard.new()
+	var order1 := CitizenOrder.new(1, &"gathering", &"workforce.gathering", 0.5, AIFactSet.new({
+		&"warehouse.position": Vector3(1.0, 0.0, 0.0),
+	}))
+	order1.target_key = &"branch:5:5"
+	order1.id = 1
+	order1.issued_at = 0.0
+	var order2 := CitizenOrder.new(1, &"gathering", &"workforce.gathering", 0.5, AIFactSet.new({
+		&"warehouse.position": Vector3(2.0, 0.0, 0.0),
+	}))
+	order2.target_key = &"branch:5:5"
+	board.replace_issuer_orders(&"workforce.gathering", [order1], 0.0)
+	board.replace_issuer_orders(&"workforce.gathering", [order2], 1.0)
+	var best := board.order_for(1, 1.0)
+	assert(best != null)
+	assert(best.id == 1)
 
 
 func _test_native_rest_goal() -> void:

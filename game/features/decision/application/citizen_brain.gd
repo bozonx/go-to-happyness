@@ -4,6 +4,27 @@ extends RefCounted
 ## How long (simulation seconds) a goal is dampened after its task fails.
 const FAILURE_COOLDOWN := 6.0
 
+## Goals that represent a single movement-bound trip; personal needs should wait
+## until the trip finishes instead of making the citizen turn around mid-route.
+const TRIP_BOUND_WORK_GOALS: Array[StringName] = [
+	&"forestry",
+	&"farming",
+	&"gathering",
+	&"cleaning",
+	&"excavation",
+	&"courier_delivery",
+	&"register",
+]
+
+const PERSONAL_NEED_GOALS: Array[StringName] = [
+	&"sleep",
+	&"meal",
+	&"toilet",
+	&"rest",
+]
+
+const ACTIVE_GOAL_BLACKBOARD_KEY := &"brain.active_goal_id"
+
 var citizen_id: int
 var blackboard := AIBlackboard.new()
 var arbiter := UtilityArbiter.new()
@@ -27,12 +48,16 @@ func think(snapshot: WorldSnapshot, order: CitizenOrder) -> void:
 	if context.citizen == null or context.citizen.is_player_controlled or not context.citizen.is_available:
 		runner.cancel_all(context)
 		return
+	var active_goal_id := runner.active_goal_id()
+	blackboard.set_value(ACTIVE_GOAL_BLACKBOARD_KEY, active_goal_id)
+	var excluded := _excluded_goal_ids(active_goal_id)
 	var result := arbiter.choose(
 		snapshot,
 		context.citizen,
 		order,
 		blackboard,
-		runner.active_goal_id()
+		active_goal_id,
+		excluded
 	)
 	if result.goal == null:
 		runner.cancel_all(context)
@@ -59,6 +84,7 @@ func think(snapshot: WorldSnapshot, order: CitizenOrder) -> void:
 	# Once a challenger wins arbitration it must take control immediately. Deferring
 	# it behind an indefinite workplace action starves personal needs for a shift.
 	runner.start(task, context)
+	blackboard.set_value(ACTIVE_GOAL_BLACKBOARD_KEY, runner.active_goal_id())
 
 
 func tick(snapshot: WorldSnapshot, order: CitizenOrder, delta: float) -> void:
@@ -66,7 +92,9 @@ func tick(snapshot: WorldSnapshot, order: CitizenOrder, delta: float) -> void:
 	if context.citizen == null or context.citizen.is_player_controlled or not context.citizen.is_available:
 		runner.cancel_all(context)
 		return
+	blackboard.set_value(ACTIVE_GOAL_BLACKBOARD_KEY, runner.active_goal_id())
 	runner.tick(context, delta)
+	blackboard.set_value(ACTIVE_GOAL_BLACKBOARD_KEY, runner.active_goal_id())
 
 
 func shutdown() -> void:
@@ -80,6 +108,23 @@ func cancel_current_task() -> void:
 func configure_goals(goals: Array[AICitizenGoal]) -> void:
 	runner.cancel_all(context)
 	arbiter.configure(goals)
+
+
+func _excluded_goal_ids(active_goal_id: StringName) -> Array[StringName]:
+	if active_goal_id in TRIP_BOUND_WORK_GOALS:
+		return PERSONAL_NEED_GOALS.duplicate()
+	if active_goal_id in PERSONAL_NEED_GOALS:
+		return _work_goal_ids()
+	return []
+
+
+func _work_goal_ids() -> Array[StringName]:
+	var ids := arbiter.goal_ids()
+	var work_ids: Array[StringName] = []
+	for id in ids:
+		if not id in PERSONAL_NEED_GOALS:
+			work_ids.append(id)
+	return work_ids
 
 
 func _on_task_finished(task: BehaviorTask, status: BehaviorStep.Status) -> void:

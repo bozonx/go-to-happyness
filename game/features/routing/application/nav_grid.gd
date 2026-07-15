@@ -215,10 +215,11 @@ func segment_cost(from: Vector3, to: Vector3, profile: StringName = PEDESTRIAN_P
 func _recompute_minimum_cell_weight() -> void:
 	_minimum_cell_weight = DEFAULT_CELL_WEIGHT
 	for weight in _cell_weights.values():
-		_minimum_cell_weight = minf(_minimum_cell_weight, maxf(0.001, float(weight)))
+		_minimum_cell_weight = minf(_minimum_cell_weight, float(weight))
 	for profile_weights in _profile_cell_weights.values():
 		for weight in (profile_weights as Dictionary).values():
-			_minimum_cell_weight = minf(_minimum_cell_weight, maxf(0.001, float(weight)))
+			_minimum_cell_weight = minf(_minimum_cell_weight, float(weight))
+	_minimum_cell_weight = maxf(0.001, _minimum_cell_weight)
 
 
 func _ensure_walkable_components() -> void:

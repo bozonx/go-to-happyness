@@ -513,16 +513,16 @@ func add(resource_type: String, value: int) -> void:
 
 
 ## Used for debug/cheat grants: pull every warehouse toward the average amount of
-## the given resource. Never overfills a warehouse; excess is discarded.
-func add_cheat(resource_type: String, value: int) -> void:
+## the given resource. Never overfills a warehouse; excess is returned as overflow.
+func add_cheat(resource_type: String, value: int) -> int:
 	if value <= 0:
 		add(resource_type, value)
-		return
+		return 0
 	if resource_type == "money":
 		money += value
-		return
+		return 0
 	if not warehouse_ever_built or warehouses.is_empty():
-		return
+		return value
 	var remaining := value
 	while remaining > 0:
 		var target := _find_least_stocked_warehouse(resource_type)
@@ -531,6 +531,7 @@ func add_cheat(resource_type: String, value: int) -> void:
 		remaining = accepted
 		if added == 0:
 			break
+	return remaining
 
 
 func _distribute_add(resource_type: String, value: int) -> void:

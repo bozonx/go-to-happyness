@@ -103,10 +103,8 @@ func _remove_issuer(issuer: StringName) -> void:
 	_orders_by_issuer.erase(issuer)
 
 
-## Identity of an order for id/issued-at carry-over relies on value equality of its
-## fields. Order payloads must therefore hold only value types (numbers, strings,
-## StringNames, vectors) — never scene nodes — or two identical proposals will look
-## distinct and pointlessly churn their ids each director tick.
+## Finds a previously issued order for the same logical assignment so its id and
+## issued-at time can be reused across director ticks.
 func _matching_order(previous: Array, proposal: CitizenOrder) -> CitizenOrder:
 	for existing in previous:
 		var typed_existing := existing as CitizenOrder
@@ -123,14 +121,17 @@ func _contains_equivalent_order(orders: Array, proposal: CitizenOrder) -> bool:
 	return false
 
 
+## Identity of an order is based on the stable assignment keys. Mutable positions
+## and payload details are intentionally ignored so that a citizen walking toward a
+## tree, farm, or site does not get a brand-new order id every time the nearest
+## warehouse position shifts. The behavior step reads fresh positions from the
+## snapshot, so the order only needs to preserve its logical target.
 func _orders_are_equivalent(left: CitizenOrder, right: CitizenOrder) -> bool:
 	return (
 		left.citizen_id == right.citizen_id
 		and left.kind == right.kind
 		and left.workday_id == right.workday_id
 		and left.target_key == right.target_key
-		and left.target_position == right.target_position
-		and left.payload.is_equal_to(right.payload)
 	)
 
 

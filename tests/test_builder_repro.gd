@@ -27,7 +27,7 @@ func _init() -> void:
 	assert(site.is_supplied(), "site should be supplied")
 
 	var builder: Citizen = simulation.citizens[2]
-	builder.global_position = Vector3(8.0, 0.0, 8.0)
+	builder.global_position = Vector3(11.6, 0.0, 8.4)
 	builder.idle()
 	simulation._assign_daily_order(builder, "construction")
 
@@ -35,11 +35,16 @@ func _init() -> void:
 		return RouteResult.success([target], target)
 	builder.route_reachability_query = func(_from: Vector3, _target: Vector3, _allow: bool) -> bool:
 		return true
+	builder.movement_speed_modifier_query = func(_position: Vector3) -> float:
+		return 1.0
 
-	for i in range(120):
+	var became_constructing := false
+	for i in range(250):
 		await physics_frame
-		if builder.state == Citizen.State.CONSTRUCTING:
+		if not became_constructing and builder.state == Citizen.State.CONSTRUCTING:
 			print("became CONSTRUCTING at frame ", i, " pos ", builder.global_position, " target ", builder.construction_position)
+			became_constructing = true
+		if became_constructing and builder.global_position.distance_to(builder.construction_position) <= 1.0:
 			break
 
 	print("final state ", builder.state, " role ", builder.active_role, " site ", builder.construction_site, " pos ", builder.global_position, " target ", builder.construction_position)

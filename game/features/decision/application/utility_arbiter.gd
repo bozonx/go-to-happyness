@@ -21,7 +21,8 @@ func choose(
 	citizen: CitizenSnapshot,
 	order: CitizenOrder,
 	blackboard: AIBlackboard,
-	current_goal_id: StringName = &""
+	current_goal_id: StringName = &"",
+	excluded_goal_ids: Array[StringName] = []
 ) -> ArbitrationResult:
 	var best_goal: AICitizenGoal
 	var best_utility := minimum_utility
@@ -29,6 +30,8 @@ func choose(
 	var current_utility := 0.0
 	var simulation_seconds := snapshot.simulation_seconds if snapshot != null else 0.0
 	for goal in _goals:
+		if goal.id in excluded_goal_ids:
+			continue
 		var raw_utility := goal.score(snapshot, citizen, order, blackboard)
 		if not is_finite(raw_utility):
 			continue
@@ -56,3 +59,10 @@ func choose(
 
 func goal_count() -> int:
 	return _goals.size()
+
+
+func goal_ids() -> Array[StringName]:
+	var ids: Array[StringName] = []
+	for goal in _goals:
+		ids.append(goal.id)
+	return ids

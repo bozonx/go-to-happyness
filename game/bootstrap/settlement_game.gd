@@ -4862,6 +4862,7 @@ func _finish_demolition(site: DemolitionSite) -> void:
 	var building: Node3D = site.building
 	var building_type := site.building_type
 	var active_kitchen_removed := canteen == building
+	_unregister_service_pockets(building)
 	var pile_resources: Dictionary = BuildingCatalog.demolition_refund(building_type).duplicate(true)
 	if building_type in ["warehouse", "straw_warehouse", "tarp_warehouse"]:
 		var service_position: Vector3 = building.get_meta("service_position", building.global_position)
@@ -5893,8 +5894,24 @@ func _placement_key(world_position: Vector3) -> Vector2i:
 
 func _create_construction_site(cell: Vector2i, building_type: String, position_on_board: Vector3, rotation_quarters := 0, blueprint: Dictionary = {}, occupied_footprint := Vector2i.ZERO) -> ConstructionSite:
 	var site := construction.start_site(cell, building_type, position_on_board, rotation_quarters, blueprint, occupied_footprint)
+	_register_service_pockets(site.node)
 	_request_courier_dispatch()
 	return site
+
+
+func _register_service_pockets(node: Node3D) -> void:
+	if not node.has_meta("service_positions"):
+		return
+	var positions: Array = node.get_meta("service_positions")
+	for position in positions:
+		if position is Vector3:
+			service_pockets.append({"cell": _cell_from_position(position), "node": node})
+
+
+func _unregister_service_pockets(node: Node3D) -> void:
+	for index in range(service_pockets.size() - 1, -1, -1):
+		if service_pockets[index].node == node:
+			service_pockets.remove_at(index)
 
 func _update_construction(delta: float) -> void:
 	# Reconcile reservations outside work time as well, so interrupted night
@@ -5913,6 +5930,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 	settlement.buildings[building_type] = int(settlement.buildings.get(building_type, 0)) + 1
 	building.set_meta("building_type", building_type)
 	building.set_meta("condition", 100.0)
+	_unregister_service_pockets(building)
 	if building_type in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"]:
 		building.set_meta("fire_fuel", 4)
 		building.set_meta("fire_lit", true)
@@ -5927,6 +5945,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 	var service_position: Vector3 = building.get_meta("service_position")
 	match building_type:
 		"warehouse", "straw_warehouse", "tarp_warehouse":
+			settlement.add_warehouse(building_type)
 			warehouse_positions.append(service_position)
 			if warehouse_positions.size() == 1:
 				var overflow := settlement.migrate_virtual_to_warehouse(warehouse_positions.size())
@@ -6240,26 +6259,7 @@ func _grant_debug_resources() -> void:
 	_update_interface("Debug resources added in normal spending proportions.")
 
 func _register_service_entrance(building: Node3D, blueprint: Dictionary, home_entrance := false, show_marker := true) -> void:
-	var footprint: Vector2i = blueprint.footprint
-	var offsets: Array[Vector2i] = BuildingBlueprints.worker_entrance_offsets(blueprint.type)
-	var service_positions: Array[Vector3] = []
-	for offset in offsets:
-		var local := Vector3(offset.x * CELL_SIZE, 0.0, offset.y * CELL_SIZE)
-		if offset.x == -footprint.x / 2:
-			local.x -= SERVICE_PAD_OFFSET
-		elif offset.x == footprint.x / 2:
-			local.x += SERVICE_PAD_OFFSET
-		if offset.y == -footprint.y / 2:
-			local.z -= SERVICE_PAD_OFFSET
-		elif offset.y == footprint.y / 2:
-			local.z += SERVICE_PAD_OFFSET
-		var world := building.to_global(local)
-		world.y = building.global_position.y
-		service_positions.append(world)
-	if service_positions.is_empty():
-		var fallback := building.to_global(Vector3(0.0, 0.0, -footprint.y * 0.5 - SERVICE_PAD_OFFSET))
-		fallback.y = building.global_position.y
-		service_positions.append(fallback)
+	var service_positions := BuildingEntrancePositions.positions(building, blueprint.footprint, SERVICE_PAD_OFFSET)
 	building.set_meta("service_positions", service_positions)
 	building.set_meta("service_position", service_positions[0])
 	if home_entrance:
@@ -6268,23 +6268,15 @@ func _register_service_entrance(building: Node3D, blueprint: Dictionary, home_en
 	for service_position in service_positions:
 		service_pockets.append({"cell": _cell_from_position(service_position), "node": building})
 	if show_marker:
-		for offset in offsets:
-			_add_service_entrance_marker(building, footprint, offset)
+		var offsets := BuildingEntrancePositions.offsets(str(blueprint.type))
 		if offsets.is_empty():
-			_add_service_entrance_marker(building, footprint, Vector2i(0, -footprint.y / 2))
+			offsets = [Vector2i(0, -blueprint.footprint.y / 2)]
+		var local_positions := BuildingEntrancePositions.local_positions(blueprint.footprint, offsets, SERVICE_PAD_OFFSET)
+		for local in local_positions:
+			_add_service_entrance_marker(building, local)
 
-func _add_service_entrance_marker(building: Node3D, footprint: Vector2i, entrance_offset: Vector2i) -> void:
-	var local := Vector3(entrance_offset.x * CELL_SIZE, 0.0, entrance_offset.y * CELL_SIZE)
-	var outward := Vector3.ZERO
-	if entrance_offset.x == -footprint.x / 2:
-		outward.x = -1.0
-	elif entrance_offset.x == footprint.x / 2:
-		outward.x = 1.0
-	if entrance_offset.y == -footprint.y / 2:
-		outward.z = -1.0
-	elif entrance_offset.y == footprint.y / 2:
-		outward.z = 1.0
-	var marker_position := local + outward * SERVICE_PAD_OFFSET
+func _add_service_entrance_marker(building: Node3D, marker_local: Vector3) -> void:
+	var marker_position := marker_local
 	var marker := MeshInstance3D.new()
 	var marker_mesh := BoxMesh.new()
 	marker_mesh.size = Vector3(0.72, 1.45, 0.12)
@@ -8509,6 +8501,7 @@ func _has_active_builder() -> bool:
 	return false
 
 func _destroy_building_to_pile(building: Node3D, building_type: String) -> void:
+	_unregister_service_pockets(building)
 	var resources: Dictionary = BuildingCatalog.demolition_refund(building_type).duplicate(true)
 	if building_type in ["warehouse", "straw_warehouse", "tarp_warehouse"]:
 		var service_position: Vector3 = building.get_meta("service_position", building.global_position)
@@ -8764,28 +8757,34 @@ func _get_delivery_position() -> Vector3:
 	return _get_nearest_delivery_position(Vector3.ZERO)
 
 func _get_nearest_delivery_position(from: Vector3) -> Vector3:
-	if not warehouse_positions.is_empty():
-		var nearest := warehouse_positions[0]
-		var nearest_distance := from.distance_squared_to(nearest)
-		for position in warehouse_positions:
-			var distance := from.distance_squared_to(position)
-			if distance < nearest_distance:
-				nearest = position
-				nearest_distance = distance
+	var nearest: Vector3 = Vector3.INF
+	var nearest_distance := INF
+	for position in warehouse_positions:
+		if not _is_route_reachable(from, position, false):
+			continue
+		var distance := from.distance_squared_to(position)
+		if distance < nearest_distance:
+			nearest = position
+			nearest_distance = distance
+	if nearest != Vector3.INF:
 		return nearest
-	elif is_instance_valid(campfire_node):
+	if is_instance_valid(campfire_node) and _is_route_reachable(from, campfire_node.global_position, false):
 		return campfire_node.global_position
-	else:
+	if is_instance_valid(entrance_stone):
 		return entrance_stone.global_position
+	return Vector3.ZERO
 
 
 func _warehouse_delivery_position(from: Vector3, resource_type: String, amount: int) -> Vector3:
 	if warehouse_positions.is_empty():
 		return from
 	var index: int = settlement.find_warehouse_index(from, resource_type, amount, warehouse_positions)
-	if index >= 0:
+	if index >= 0 and _is_route_reachable(from, warehouse_positions[index], false):
 		return warehouse_positions[index]
-	return warehouse_positions[0]
+	for position in warehouse_positions:
+		if _is_route_reachable(from, position, false):
+			return position
+	return from
 
 func _is_construction_site(node: Node3D) -> bool:
 	return is_instance_valid(node) and construction.has_site(node)
@@ -8796,6 +8795,7 @@ func _get_construction_site_data(node: Node3D) -> ConstructionSite:
 func _cancel_selected_construction() -> void:
 	if not is_instance_valid(selected_building) or not _is_construction_site(selected_building):
 		return
+	_unregister_service_pockets(selected_building)
 	construction.cancel_site(selected_building)
 	_close_context_menus()
 	_update_interface("Construction cancelled. Refunded 50% of costs.")

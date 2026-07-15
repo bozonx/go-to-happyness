@@ -19,6 +19,13 @@ func configure(registry: BuildingRegistry, next_grid: NavGrid) -> void:
 	grid = next_grid
 
 
+func _citizen_id(citizen: Node) -> int:
+	var ai_id: Variant = citizen.get("ai_id")
+	if ai_id != null:
+		return int(ai_id)
+	return citizen.get_instance_id()
+
+
 func resolve(citizen: Node, destination: Vector3) -> Dictionary:
 	if building_registry == null:
 		return {"position": destination, "is_head": true}
@@ -28,7 +35,7 @@ func resolve(citizen: Node, destination: Vector3) -> Dictionary:
 
 	var frame := Engine.get_physics_frames()
 	var building_id := building.get_instance_id()
-	var citizen_id := citizen.get_instance_id()
+	var citizen_id := _citizen_id(citizen)
 	_release_from_other_buildings(citizen_id, building_id)
 
 	var entrance_count := _entrance_count(building)
@@ -83,7 +90,7 @@ func complete_arrival(citizen: Node, destination: Vector3) -> void:
 	if not is_instance_valid(building):
 		return
 	var building_id := building.get_instance_id()
-	var citizen_id := citizen.get_instance_id()
+	var citizen_id := _citizen_id(citizen)
 	var entrance_index := _find_citizen_entrance(building_id, citizen_id)
 	if entrance_index < 0:
 		entrance_index = _entrance_for_destination(building, destination)
@@ -112,7 +119,7 @@ func complete_arrival(citizen: Node, destination: Vector3) -> void:
 func release(citizen: Node) -> void:
 	if not is_instance_valid(citizen):
 		return
-	var citizen_id := citizen.get_instance_id()
+	var citizen_id := _citizen_id(citizen)
 	for building_id in _queues.keys().duplicate():
 		var entrances: Array = _queues[building_id]
 		var became_empty := true
