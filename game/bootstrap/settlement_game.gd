@@ -1795,11 +1795,7 @@ func _update_interface(message: String) -> void:
 	var lines: Array[String] = []
 	lines.append("Era: %s" % _era_name())
 	lines.append("Money: %d" % money)
-	var displayed_resources: Array[String]
-	if settlement.era == SettlementState.Era.TENT:
-		displayed_resources = ["branches", "grass", "water", "food", "tarp"]
-	else:
-		displayed_resources = ["branches", "grass", "water", "food", "soil", "clay", "logs", "wood", "boards", "stone", "bricks", "tarp"]
+	var displayed_resources := settlement.era_resources()
 	for resource_type in displayed_resources:
 		lines.append("%s: %d" % [_resource_display_name(resource_type), settlement.amount(resource_type)])
 	if settlement.uses_virtual_storage():
@@ -2258,7 +2254,8 @@ func _create_tree(position_on_board: Vector3) -> void:
 	tree.set_meta("initial_branches", initial_branches)
 	tree.set_meta("remaining_branches", initial_branches)
 	tree.set_meta("hand_branches", 0)
-	tree_nodes[_cell_from_position(position_on_board)] = tree
+	var cell := _cell_from_position(position_on_board)
+	tree_nodes[cell] = tree
 	add_child(tree)
 	var trunk := MeshInstance3D.new()
 	var trunk_mesh := CylinderMesh.new()
@@ -2282,6 +2279,18 @@ func _create_tree(position_on_board: Vector3) -> void:
 		crown_material.albedo_color = Color("2d633b").lightened(random.randf_range(-0.06, 0.08))
 		crown.material_override = crown_material
 		tree.add_child(crown)
+	var collision_body := StaticBody3D.new()
+	collision_body.name = "TreeCollision"
+	var collision_shape := CollisionShape3D.new()
+	var shape := CylinderShape3D.new()
+	shape.radius = 0.25
+	shape.height = 3.6
+	collision_shape.shape = shape
+	collision_shape.position.y = 1.8
+	collision_body.add_child(collision_shape)
+	tree.add_child(collision_body)
+	terrain_blocked_cells[cell] = true
+	_refresh_navigation_grid()
 
 func _create_entrance_stone() -> void:
 	entrance_stone = Node3D.new()
@@ -6250,13 +6259,22 @@ func _grant_debug_resources() -> void:
 	if not settlement.warehouse_ever_built:
 		_update_interface("Resources can only be added after the first warehouse is built.")
 		return
-	# Approximate early-to-late material demand, rather than equal stacks.
+	var era_resources := settlement.era_resources()
 	var grants := {"money": 30, "branches": 36, "grass": 20, "water": 24, "food": 18, "hides": 8, "goods": 8, "logs": 16, "wood": 10, "soil": 28, "clay": 22, "boards": 18, "stone": 15, "bricks": 14}
-	for resource_type in grants:
-		settlement.add_cheat(resource_type, grants[resource_type])
+	var overflow: Dictionary = {}
+	for resource_type in era_resources:
+		var grant_value: int = int(grants.get(resource_type, 12))
+		var leftover := settlement.add_cheat(resource_type, grant_value)
+		if leftover > 0:
+			overflow[resource_type] = leftover
+	settlement.money += int(grants.get("money", 30))
+	if not overflow.is_empty() and not warehouse_positions.is_empty():
+		_drop_overflow_as_piles(overflow, warehouse_positions[0])
+		_update_interface("Debug resources added. Some overflow dropped near the warehouse.")
+	else:
+		_update_interface("Debug resources added in normal spending proportions.")
 	_update_workers()
 	_request_courier_dispatch()
-	_update_interface("Debug resources added in normal spending proportions.")
 
 func _register_service_entrance(building: Node3D, blueprint: Dictionary, home_entrance := false, show_marker := true) -> void:
 	var service_positions := BuildingEntrancePositions.positions(building, blueprint.footprint, SERVICE_PAD_OFFSET)
@@ -6362,8 +6380,7 @@ func _fell_nearest_tree() -> void:
 		if player_citizen.global_position.distance_to(position_on_board) <= INTERACTION_RANGE:
 			var tree: Node3D = tree_nodes.get(_cell_from_position(position_on_board))
 			if is_instance_valid(tree) and not bool(tree.get_meta("felled", false)):
-				tree.set_meta("felled", true)
-				tree.rotation_degrees.z = 82.0
+				_fell_tree_at(position_on_board)
 				return
 
 
@@ -6376,6 +6393,11 @@ func _fell_tree_at(position_on_board: Vector3) -> void:
 		return
 	tree.set_meta("felled", true)
 	tree.rotation_degrees.z = 82.0
+	var collision_body := tree.get_node_or_null("TreeCollision") as CollisionObject3D
+	if collision_body != null:
+		collision_body.queue_free()
+	terrain_blocked_cells.erase(cell)
+	_refresh_navigation_grid()
 	settlement.add("branches", 3)
 	_update_interface("A tree was felled. Its log is ready for delivery; the living tree is no longer available for gathering.")
 
@@ -7785,11 +7807,7 @@ func _refresh_pocket_take_menu() -> void:
 			return settlement.warehouses[warehouse_index].amount(resource_type)
 		return settlement.amount(resource_type)
 	var y_offset := 52.0
-	var displayed_resources: Array[String]
-	if settlement.era == SettlementState.Era.TENT:
-		displayed_resources = ["branches", "grass", "water", "food", "tarp"]
-	else:
-		displayed_resources = ["branches", "grass", "water", "food", "soil", "clay", "logs", "wood", "boards", "stone", "bricks", "tarp"]
+	var displayed_resources := settlement.era_resources()
 	for resource_type in displayed_resources:
 		var stored: int = warehouse_amount.call(resource_type)
 		if stored <= 0:
@@ -7874,7 +7892,7 @@ func _refresh_warehouse_menu() -> void:
 			child.queue_free()
 
 	var y_offset := 82.0
-	for resource_type in SettlementState.STORED_RESOURCES:
+	for resource_type in settlement.era_resources():
 		var limit := settlement.storage_limit(resource_type)
 		var weight := settlement.storage_weight(resource_type)
 		var stored: int = settlement.amount(resource_type) if selected_warehouse_state == null else selected_warehouse_state.amount(resource_type)

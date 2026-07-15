@@ -110,6 +110,37 @@ const COLORS := {
 }
 
 
+const MULTI_ENTRANCE_BUILDINGS := {
+	"warehouse": true,
+	"straw_warehouse": true,
+	"tarp_warehouse": true,
+	"sawmill": true,
+	"school": true,
+	"canteen": true,
+	"city_hall": true,
+	"wood_town_hall": true,
+	"brick_city_hall": true,
+	"employment_office": true,
+	"construction_company": true,
+	"materials_factory": true,
+	"recycling_factory": true,
+	"metal_factory": true,
+	"brick_factory": true,
+	"leisure_center": true,
+	"builders_guild": true,
+	"stone_prefecture": true,
+	"stone_tavern": true,
+	"stone_market": true,
+	"clay_market": true,
+	"earth_market": true,
+	"wood_market": true,
+	"brick_market": true,
+	"straw_trade_tent": true,
+	"tarp_trade_tent": true,
+	"gathering_place": true,
+}
+
+
 static func get_blueprint(building_type: String) -> Dictionary:
 	match building_type:
 		"campfire", "campfire_lvl2", "campfire_lvl3": return _campfire_blueprint_for(building_type)
@@ -183,9 +214,15 @@ static func create_module(module: Dictionary) -> StaticBody3D:
 static func _enclosed_blueprint(building_type: String, footprint: Vector2i, height: int, roof_style: String) -> Dictionary:
 	var modules: Array[Dictionary] = []
 	_add_floor(modules, footprint, building_type)
-	_add_enclosing_walls(modules, footprint, height, building_type)
+	var worker_entrances: Array[Vector2i] = []
+	if building_type in MULTI_ENTRANCE_BUILDINGS:
+		worker_entrances = [Vector2i(0, -footprint.y / 2), Vector2i(0, footprint.y / 2)]
+	_add_enclosing_walls(modules, footprint, height, building_type, worker_entrances)
 	_add_roof(modules, footprint, height, roof_style, building_type)
-	return {"type": building_type, "footprint": footprint, "entrance": Vector2i(0, -footprint.y / 2), "modules": modules}
+	var blueprint := {"type": building_type, "footprint": footprint, "entrance": Vector2i(0, -footprint.y / 2), "modules": modules}
+	if not worker_entrances.is_empty():
+		blueprint.worker_entrances = worker_entrances
+	return blueprint
 
 
 static func _add_floor(modules: Array[Dictionary], footprint: Vector2i, building_type: String) -> void:
@@ -194,23 +231,38 @@ static func _add_floor(modules: Array[Dictionary], footprint: Vector2i, building
 			modules.append(_module(Vector3(_axis_coordinate(x, footprint.x), 0.25, _axis_coordinate(z, footprint.y)), Vector3(1.0, PANEL_THICKNESS, 1.0), "floor", COLORS.foundation))
 
 
-static func _add_enclosing_walls(modules: Array[Dictionary], footprint: Vector2i, height: int, building_type: String) -> void:
+static func _add_enclosing_walls(modules: Array[Dictionary], footprint: Vector2i, height: int, building_type: String, doorways: Array[Vector2i] = []) -> void:
 	var half_x := (footprint.x - 1) * 0.5
 	var half_z := (footprint.y - 1) * 0.5
+	var front_doors: Dictionary = {}
+	var back_doors: Dictionary = {}
+	var left_doors: Dictionary = {}
+	var right_doors: Dictionary = {}
+	for doorway in doorways:
+		if doorway.y == -footprint.y / 2:
+			front_doors[doorway.x] = true
+		elif doorway.y == footprint.y / 2:
+			back_doors[doorway.x] = true
+		if doorway.x == -footprint.x / 2:
+			left_doors[doorway.y] = true
+		elif doorway.x == footprint.x / 2:
+			right_doors[doorway.y] = true
 	for level in range(height):
 		var y := 0.5 + level
 		for x_index in range(footprint.x):
 			var x := _axis_coordinate(x_index, footprint.x)
-			# The two missing front modules form a real 1x2 metre doorway.
-			if not (is_zero_approx(x) and level < 2):
+			if not (roundi(x) in front_doors and level < 2):
 				modules.append(_module(Vector3(x, y, -half_z), Vector3(1.0, 1.0, PANEL_THICKNESS), "wall", COLORS[building_type]))
-			modules.append(_module(Vector3(x, y, half_z), Vector3(1.0, 1.0, PANEL_THICKNESS), "wall", COLORS[building_type]))
+			if not (roundi(x) in back_doors and level < 2):
+				modules.append(_module(Vector3(x, y, half_z), Vector3(1.0, 1.0, PANEL_THICKNESS), "wall", COLORS[building_type]))
 		for z_index in range(1, footprint.y - 1):
 			var z := _axis_coordinate(z_index, footprint.y)
 			# Window openings are empty modules on both side walls.
 			if not (level == 1 and z_index % 2 == 0):
-				modules.append(_module(Vector3(-half_x, y, z), Vector3(PANEL_THICKNESS, 1.0, 1.0), "wall", COLORS[building_type]))
-				modules.append(_module(Vector3(half_x, y, z), Vector3(PANEL_THICKNESS, 1.0, 1.0), "wall", COLORS[building_type]))
+				if not (roundi(z) in left_doors and level < 2):
+					modules.append(_module(Vector3(-half_x, y, z), Vector3(PANEL_THICKNESS, 1.0, 1.0), "wall", COLORS[building_type]))
+				if not (roundi(z) in right_doors and level < 2):
+					modules.append(_module(Vector3(half_x, y, z), Vector3(PANEL_THICKNESS, 1.0, 1.0), "wall", COLORS[building_type]))
 	# Solid corner columns hide the seam where the front/back and side panels
 	# meet, so the building reads as a proper box instead of four loose walls.
 	var corner_color: Color = COLORS[building_type].darkened(0.18)
@@ -259,7 +311,8 @@ static func _sawmill_blueprint() -> Dictionary:
 			for level in range(3):
 				modules.append(_module(Vector3(x, 0.5 + level, z), Vector3(PANEL_THICKNESS, 1.0, PANEL_THICKNESS), "post", COLORS.sawmill))
 	_add_roof(modules, footprint, 3, "shed", "sawmill")
-	return {"type": "sawmill", "footprint": footprint, "entrance": Vector2i(0, -3), "modules": modules}
+	var worker_entrances := [Vector2i(0, -3), Vector2i(0, 3)]
+	return {"type": "sawmill", "footprint": footprint, "entrance": Vector2i(0, -3), "worker_entrances": worker_entrances, "modules": modules}
 
 
 static func _farm_blueprint() -> Dictionary:
@@ -364,7 +417,8 @@ static func _heap_blueprint(building_type: String, footprint: Vector2i) -> Dicti
 	modules.append(_module(Vector3(-0.4, 0.6, 0.5), Vector3(1.6, 0.3, 0.3), "wood_log", Color("5c4033"), Vector3(0.0, 15.0, 0.0)))
 	modules.append(_module(Vector3(0.6, 0.4, -0.6), Vector3(1.2, 0.4, 1.2), "grass_pile", Color("739350"), Vector3(0.0, -25.0, 0.0)))
 	modules.append(_module(Vector3(0.8, 0.3, 0.8), Vector3(0.5, 0.4, 0.5), "stone", Color("6f747a"), Vector3(15.0, 45.0, 0.0)))
-	return {"type": building_type, "footprint": footprint, "entrance": Vector2i(0, -footprint.y / 2), "modules": modules}
+	var worker_entrances := [Vector2i(0, -footprint.y / 2), Vector2i(0, footprint.y / 2)]
+	return {"type": building_type, "footprint": footprint, "entrance": Vector2i(0, -footprint.y / 2), "worker_entrances": worker_entrances, "modules": modules}
 
 static func _gathering_place_blueprint() -> Dictionary:
 	var modules: Array[Dictionary] = []

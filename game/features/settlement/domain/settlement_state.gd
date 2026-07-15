@@ -238,6 +238,25 @@ const STORAGE_WEIGHTS := {
 const ERA_STORAGE_PER_WAREHOUSE := {Era.TENT: 32, Era.EARTH: 48, Era.CLAY: 70, Era.WOOD: 100, Era.STONE: 120, Era.BRICK: 150}
 const STORAGE_STEP := 4.0
 
+## Resources available in each era. Each era cumulatively adds new resources.
+const ERA_RESOURCES := {
+	Era.TENT: ["branches", "grass", "water", "food", "hides", "goods", "tarp"],
+	Era.EARTH: ["branches", "grass", "water", "food", "hides", "goods", "tarp", "soil", "wood"],
+	Era.CLAY: ["branches", "grass", "water", "food", "hides", "goods", "tarp", "soil", "wood", "clay"],
+	Era.WOOD: ["branches", "grass", "water", "food", "hides", "goods", "tarp", "soil", "wood", "clay", "logs", "boards"],
+	Era.STONE: ["branches", "grass", "water", "food", "hides", "goods", "tarp", "soil", "wood", "clay", "logs", "boards", "stone"],
+	Era.BRICK: ["branches", "grass", "water", "food", "hides", "goods", "tarp", "soil", "wood", "clay", "logs", "boards", "stone", "bricks"],
+}
+
+static func resources_for_era(p_era: Era) -> Array[String]:
+	var list: Array[String] = []
+	for key in ERA_RESOURCES.get(p_era, []):
+		list.append(str(key))
+	return list
+
+func era_resources() -> Array[String]:
+	return resources_for_era(era)
+
 var storage_limits: Dictionary = {} # resource -> allocated space units (float)
 ## Physical resources before the first warehouse live in the starter backpack.
 ## The backpack is a special non-replenishable ground pile shown separately in HUD.
