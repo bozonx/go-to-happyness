@@ -5,8 +5,37 @@ var runtime: ConstructionRuntime
 var sites: Array[ConstructionSite] = []
 
 
+const SERVICE_PAD_OFFSET := 1.0
+
+
 func configure(next_runtime: ConstructionRuntime) -> void:
 	runtime = next_runtime
+
+
+func _service_positions_for(site_node: Node3D, blueprint: Dictionary) -> Array[Vector3]:
+	var footprint: Vector2i = blueprint.footprint
+	var offsets: Array[Vector2i] = BuildingBlueprints.worker_entrance_offsets(blueprint.type)
+	var positions: Array[Vector3] = []
+	for offset in offsets:
+		var local := Vector3(offset.x, 0.0, offset.y)
+		if offset.x == -footprint.x / 2:
+			local.x -= SERVICE_PAD_OFFSET
+		elif offset.x == footprint.x / 2:
+			local.x += SERVICE_PAD_OFFSET
+		if offset.y == -footprint.y / 2:
+			local.z -= SERVICE_PAD_OFFSET
+		elif offset.y == footprint.y / 2:
+			local.z += SERVICE_PAD_OFFSET
+		positions.append(_to_world(site_node, local))
+	if positions.is_empty():
+		positions.append(_to_world(site_node, Vector3(0.0, 0.0, -footprint.y * 0.5 - SERVICE_PAD_OFFSET)))
+	return positions
+
+
+func _to_world(site_node: Node3D, local: Vector3) -> Vector3:
+	if site_node.is_inside_tree():
+		return site_node.to_global(local)
+	return site_node.position + local.rotated(Vector3.UP, site_node.rotation.y)
 
 
 func start_site(cell: Vector2i, building_type: String, position: Vector3, rotation_quarters := 0, supplied_blueprint: Dictionary = {}, occupied_footprint := Vector2i.ZERO) -> ConstructionSite:
@@ -18,6 +47,7 @@ func start_site(cell: Vector2i, building_type: String, position: Vector3, rotati
 	var blueprint := supplied_blueprint if not supplied_blueprint.is_empty() else BuildingBlueprints.get_blueprint(building_type)
 	site_node.set_meta("footprint", blueprint.footprint)
 	site_node.set_meta("occupied_footprint", occupied_footprint if occupied_footprint != Vector2i.ZERO else blueprint.footprint)
+	site_node.set_meta("service_positions", _service_positions_for(site_node, blueprint))
 
 	var territory := MeshInstance3D.new()
 	territory.name = "ConstructionTerritory"
@@ -150,7 +180,11 @@ func cancel_site(site_node: Node3D) -> bool:
 				citizen.idle()
 		for citizen in runtime.citizens:
 			citizen.finish_construction(site_node)
-		runtime.building_registry.cancel_reservation(site.cell)
+		var record := runtime.building_registry.record_at_cell(site.cell)
+		if record != null and record.node == site_node:
+			runtime.building_registry.remove_node(site_node)
+		else:
+			runtime.building_registry.cancel_reservation(site.cell)
 		site_node.queue_free()
 		sites.remove_at(index)
 		runtime.navigation_changed.call()

@@ -262,6 +262,7 @@ var interaction_resource := ""
 var interaction_start_cell := Vector2i(-9999, -9999)
 var interaction_repeat_all := false
 var player_work_target: Node3D
+var interaction_hint_panel: Panel
 var interaction_hint_label: Label
 var interaction_progress: ProgressBar
 var pocket_take_menu: Panel
@@ -392,6 +393,8 @@ var build_buttons: Array[Button] = []
 var build_item_buttons: Array[Button] = []
 var skip_night_button: Button
 var start_workday_button: Button
+var time_controls: HBoxContainer
+var build_toggle_btn: Button
 var water_collectors: Array[Dictionary] = []
 var pending_trades: Dictionary = {} # worker instance id -> TradeOrder
 var queued_trades: Array = []
@@ -2423,26 +2426,39 @@ func _create_interface() -> void:
 	clock_label.add_theme_font_size_override("font_size", 22)
 	ui.add_child(clock_label)
 	_create_time_controls(ui)
+	interaction_hint_panel = Panel.new()
+	interaction_hint_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	interaction_hint_panel.offset_left = -340
+	interaction_hint_panel.offset_top = 28
+	interaction_hint_panel.offset_right = 340
+	interaction_hint_panel.offset_bottom = 96
+	var hint_style := StyleBoxFlat.new()
+	hint_style.bg_color = Color(0.03, 0.06, 0.08, 0.85)
+	hint_style.border_color = Color(0.2, 0.35, 0.45, 0.8)
+	hint_style.set_border_width_all(2)
+	hint_style.set_corner_radius_all(6)
+	interaction_hint_panel.add_theme_stylebox_override("panel", hint_style)
+	interaction_hint_panel.visible = false
+	ui.add_child(interaction_hint_panel)
 	interaction_hint_label = Label.new()
-	interaction_hint_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	interaction_hint_label.offset_left = -300
-	interaction_hint_label.offset_top = 32
-	interaction_hint_label.offset_right = 300
-	interaction_hint_label.offset_bottom = 60
+	interaction_hint_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	interaction_hint_label.offset_left = 12
+	interaction_hint_label.offset_top = 8
+	interaction_hint_label.offset_right = -12
+	interaction_hint_label.offset_bottom = 34
 	interaction_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	interaction_hint_label.add_theme_font_size_override("font_size", 18)
-	interaction_hint_label.visible = false
-	ui.add_child(interaction_hint_label)
+	interaction_hint_label.add_theme_font_size_override("font_size", 16)
+	interaction_hint_panel.add_child(interaction_hint_label)
 	interaction_progress = ProgressBar.new()
-	interaction_progress.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	interaction_progress.offset_left = -155
-	interaction_progress.offset_top = 64
-	interaction_progress.offset_right = 155
-	interaction_progress.offset_bottom = 86
+	interaction_progress.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	interaction_progress.offset_left = 20
+	interaction_progress.offset_top = 40
+	interaction_progress.offset_right = -20
+	interaction_progress.offset_bottom = 60
 	interaction_progress.show_percentage = true
 	interaction_progress.visible = false
-	ui.add_child(interaction_progress)
-	var build_toggle_btn := Button.new()
+	interaction_hint_panel.add_child(interaction_progress)
+	build_toggle_btn = Button.new()
 	build_toggle_btn.text = "Construction Panel"
 	build_toggle_btn.position = Vector2(20, 388)
 	build_toggle_btn.size = Vector2(180, 36)
@@ -2635,21 +2651,21 @@ func _update_survival_busy_workers() -> void:
 		_update_workers()
 
 func _create_time_controls(ui: CanvasLayer) -> void:
-	var controls := HBoxContainer.new()
-	controls.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	controls.offset_left = -220
-	controls.offset_top = 58
-	controls.offset_right = -22
-	controls.offset_bottom = 90
-	controls.alignment = BoxContainer.ALIGNMENT_END
-	ui.add_child(controls)
+	time_controls = HBoxContainer.new()
+	time_controls.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	time_controls.offset_left = -220
+	time_controls.offset_top = 58
+	time_controls.offset_right = -22
+	time_controls.offset_bottom = 90
+	time_controls.alignment = BoxContainer.ALIGNMENT_END
+	ui.add_child(time_controls)
 	for multiplier in [1.0, 2.0, 5.0]:
 		var button := Button.new()
 		button.text = "x%d" % int(multiplier)
 		button.tooltip_text = "Simulation speed x%d" % int(multiplier)
 		button.custom_minimum_size = Vector2(56, 30)
 		button.pressed.connect(_set_time_multiplier.bind(multiplier))
-		controls.add_child(button)
+		time_controls.add_child(button)
 	# Appears as soon as the selected workday is over, including the evening
 	# hours before the world is considered night.
 	skip_night_button = Button.new()
@@ -4856,7 +4872,18 @@ func _enter_first_person(citizen: Citizen, message: String) -> void:
 	build_mode = ""
 	selection_marker.visible = false
 	build_menu.visible = false
+	build_menu_is_global = false
+	build_menu_is_job_menu = false
+	build_menu_is_daily_order_menu = false
 	_close_pocket_take_menu()
+	if time_controls != null:
+		time_controls.visible = false
+	if skip_night_button != null:
+		skip_night_button.visible = false
+	if start_workday_button != null:
+		start_workday_button.visible = false
+	if build_toggle_btn != null:
+		build_toggle_btn.visible = false
 	interaction_action = ""
 	interaction_resource = ""
 	interaction_start_cell = Vector2i(-9999, -9999)
@@ -4878,8 +4905,13 @@ func _leave_first_person_to_hero_overview() -> void:
 	interaction_resource = ""
 	interaction_start_cell = Vector2i(-9999, -9999)
 	interaction_repeat_all = false
-	interaction_hint_label.visible = false
-	interaction_progress.visible = false
+	if interaction_hint_panel != null:
+		interaction_hint_panel.visible = false
+	if time_controls != null:
+		time_controls.visible = true
+	if build_toggle_btn != null:
+		build_toggle_btn.visible = true
+	_update_skip_night_button()
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	if hero_citizen != null:
 		camera_target = hero_citizen.global_position
@@ -5069,6 +5101,8 @@ func _mark_excavation_as_navigation_blocked(center: Vector3, radius: float) -> v
 func _update_interaction(delta: float) -> void:
 	if interaction_action.is_empty():
 		return
+	if interaction_hint_panel != null:
+		interaction_hint_panel.visible = true
 	if interaction_action in ["construction", "demolition"]:
 		if not is_instance_valid(player_work_target) or player_citizen.global_position.distance_to(player_work_target.global_position) > INTERACTION_RANGE:
 			interaction_action = ""
@@ -5422,70 +5456,78 @@ func _format_pocket_hint() -> String:
 	return "Карман %d/%d%s" % [_pocket_total(), POCKET_CAPACITY, (" | " + _pocket_summary()) if not pocket.is_empty() else ""]
 
 
+func _home_occupancy_text() -> String:
+	if player_citizen == null or player_citizen.home == null or not is_instance_valid(player_citizen.home):
+		return ""
+	var home := player_citizen.home
+	var capacity := int(home.get_meta("housing_capacity", 1))
+	var free_slots := int(home.get_meta("spawn_slots", capacity))
+	var occupied := clampi(capacity - free_slots, 0, capacity)
+	return "Дом: %d/%d" % [occupied, capacity]
+
+
 func _refresh_interaction_hint() -> void:
 	if not is_first_person:
+		interaction_hint_panel.visible = false
 		return
+	interaction_hint_panel.visible = true
 	if pocket_menu_open:
-		interaction_hint_label.text = "F/Esc: закрыть меню"
-		interaction_hint_label.visible = true
+		interaction_hint_label.text = "F / Esc / ПКМ — закрыть меню"
+		interaction_progress.visible = false
 		return
 	if not interaction_action.is_empty():
 		return
-	interaction_hint_label.visible = true
+	var lines: Array[String] = []
 	if player_citizen == null or not player_citizen.is_hero:
-		interaction_hint_label.text = "Наблюдение: WASD — двигаться, ПКМ — выйти в обзор"
-		return
+		lines.append("Наблюдение: WASD — двигаться, ПКМ — выйти в обзор")
+	else:
+		var action_hint := _first_person_action_hint()
+		if not action_hint.is_empty():
+			lines.append(action_hint)
+	lines.append(_format_pocket_hint())
+	var home_text := _home_occupancy_text()
+	if not home_text.is_empty():
+		lines.append(home_text)
+	interaction_hint_label.text = "\n".join(lines)
+	interaction_progress.visible = false
+
+
+func _first_person_action_hint() -> String:
 	var work_target := _nearby_player_work_target()
 	if work_target != null:
-		interaction_hint_label.text = "F: %s" % ("разбирать отмеченное здание" if bool(work_target.get_meta("pending_demolition", false)) else "работать на стройке")
-		return
+		return "F: %s" % ("разбирать отмеченное здание" if bool(work_target.get_meta("pending_demolition", false)) else "работать на стройке")
 	var sawmill_pos := _nearby_sawmill_position()
 	if sawmill_pos != Vector3.INF:
 		var sawmill_stock := _sawmill_stock(sawmill_pos)
 		if _pocket_amount("wood") > 0 or _pocket_amount("logs") > 0:
 			var wood_count := _pocket_amount("wood") + _pocket_amount("logs")
-			interaction_hint_label.text = "F: сдать 1 дерево на лесопилку | Shift+F: сдать всё (%d) [%s]" % [wood_count, _format_pocket_hint()]
-			return
+			return "F: сдать 1 дерево на лесопилку | Shift+F: сдать всё (%d)" % wood_count
 		if int(sawmill_stock.boards) > 0 and _pocket_has_room():
-			interaction_hint_label.text = "F: взять 1 доску | Shift+F: взять до заполнения [%s]" % _format_pocket_hint()
-			return
+			return "F: взять 1 доску | Shift+F: взять до заполнения"
 	if _nearby_warehouse():
 		if _pocket_total() > 0:
-			interaction_hint_label.text = "F: сдать 1 (%s) | Shift+F: сдать всё [%s]" % [_primary_pocket_resource().capitalize(), _format_pocket_hint()]
-		else:
-			interaction_hint_label.text = "F: открыть меню взятия товаров [%s]" % _format_pocket_hint()
-		return
+			return "F: сдать 1 (%s) | Shift+F: сдать всё" % _primary_pocket_resource().capitalize()
+		return "F: открыть меню взятия товаров"
 	var workplace := _nearby_workplace_for_job()
 	if workplace != null:
 		var role := _role_for_workplace(workplace)
 		var building_type := str(workplace.get_meta("building_type", " workplace"))
-		interaction_hint_label.text = "F: занять должность %s в %s" % [role, building_type.capitalize().replace("_", " ")]
-		return
+		return "F: занять должность %s в %s" % [role, building_type.capitalize().replace("_", " ")]
 	if _nearby_grass_source():
-		var pct := _resource_remaining_percent("grass")
-		interaction_hint_label.text = "F: собрать траву | Shift+F: собирать до полноты (%d%% осталось) [%s]" % [pct, _format_pocket_hint()]
-		return
+		return "F: собрать траву | Shift+F: собирать до полноты (%d%%)" % _resource_remaining_percent("grass")
 	if _nearby_tree():
 		if settlement.era < SettlementState.Era.WOOD:
-			var pct := _resource_remaining_percent("branches")
-			interaction_hint_label.text = "F: собрать ветки | Shift+F: собирать до полноты (%d%% осталось) [%s]" % [pct, _format_pocket_hint()]
-		else:
-			var pct := _resource_remaining_percent("wood")
-			interaction_hint_label.text = "F: срубить дерево | Shift+F: рубить до полноты (%d%% осталось) [%s]" % [pct, _format_pocket_hint()]
-		return
+			return "F: собрать ветки | Shift+F: собирать до полноты (%d%%)" % _resource_remaining_percent("branches")
+		return "F: срубить дерево | Shift+F: рубить до полноты (%d%%)" % _resource_remaining_percent("wood")
 	if _nearby_farm():
-		interaction_hint_label.text = "F: собрать еду | Shift+F: собирать до полноты [%s]" % _format_pocket_hint()
-		return
+		return "F: собрать еду | Shift+F: собирать до полноты"
 	if _nearby_forage_source() or _nearby_rabbit_source():
-		interaction_hint_label.text = _wild_food_requires_specialist_message()
-		return
+		return _wild_food_requires_specialist_message()
 	if _nearby_pond():
 		if bool(settlement.tools.get("bucket", false)):
-			interaction_hint_label.text = "F: набрать воды | Shift+F: набирать до полноты [%s]" % _format_pocket_hint()
-		else:
-			interaction_hint_label.text = "Нужно ведро, чтобы черпать воду. Купите его на рынке."
-		return
-	interaction_hint_label.visible = false
+			return "F: набрать воды | Shift+F: набирать до полноты"
+		return "Нужно ведро, чтобы черпать воду. Купите его на рынке."
+	return ""
 
 func _terrain_point_at_screen_position(screen_position: Vector2) -> Variant:
 	var from := camera.project_ray_origin(screen_position)
@@ -5539,7 +5581,8 @@ func _place_building(world_position: Vector3) -> void:
 	var occupied_footprint := _rotated_footprint(blueprint.footprint)
 	building_registry.reserve(cell, world_position, occupied_footprint)
 	_refresh_navigation_grid()
-	_create_construction_site(cell, build_mode, world_position, build_rotation_quarters, blueprint, occupied_footprint)
+	var site := _create_construction_site(cell, build_mode, world_position, build_rotation_quarters, blueprint, occupied_footprint)
+	building_registry.attach_node(cell, site.node)
 	build_mode = ""
 	build_rotation_quarters = 0
 	selection_marker.visible = false
@@ -5630,9 +5673,10 @@ func _is_clear_of_objects(world_position: Vector3, minimum_distance: float) -> b
 func _placement_key(world_position: Vector3) -> Vector2i:
 	return Vector2i(roundi(world_position.x), roundi(world_position.z))
 
-func _create_construction_site(cell: Vector2i, building_type: String, position_on_board: Vector3, rotation_quarters := 0, blueprint: Dictionary = {}, occupied_footprint := Vector2i.ZERO) -> void:
-	construction.start_site(cell, building_type, position_on_board, rotation_quarters, blueprint, occupied_footprint)
+func _create_construction_site(cell: Vector2i, building_type: String, position_on_board: Vector3, rotation_quarters := 0, blueprint: Dictionary = {}, occupied_footprint := Vector2i.ZERO) -> ConstructionSite:
+	var site := construction.start_site(cell, building_type, position_on_board, rotation_quarters, blueprint, occupied_footprint)
 	_request_courier_dispatch()
+	return site
 
 func _update_construction(delta: float) -> void:
 	# Reconcile reservations outside work time as well, so interrupted night
@@ -5660,7 +5704,8 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 		building.set_meta("workplace_priority", workplace_priority_counter)
 	if building_type not in ["warehouse", "straw_warehouse", "tarp_warehouse", "campfire", "campfire_lvl2", "campfire_lvl3", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant", "straw_trade_tent", "tarp_trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market", "school", "materials_factory", "tent", "straw_tent", "tarp_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house", "straw_craft_tent", "tarp_craft_tent", "straw_forager_tent", "tarp_forager_tent"]:
 		_add_building_selector(building, "building_selector", blueprint.footprint)
-	_register_service_entrance(building, blueprint.footprint, false, building_type not in ["farm", "park"])
+	var is_home := building_type in ["tent", "straw_tent", "tarp_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house"]
+	_register_service_entrance(building, blueprint, is_home, building_type not in ["farm", "park"])
 	var service_position: Vector3 = building.get_meta("service_position")
 	match building_type:
 		"warehouse", "straw_warehouse", "tarp_warehouse":
@@ -5724,7 +5769,6 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 				"brick_house": housing_capacity = 12
 			building.set_meta("housing_capacity", housing_capacity)
 			building.set_meta("spawn_slots", housing_capacity)
-			building.set_meta("entrance_position", service_position)
 			_add_building_selector(building, "house_selector", blueprint.footprint)
 			_add_house_light(building)
 			if building_type in ["tent", "straw_tent", "tarp_tent"]:
@@ -6046,8 +6090,12 @@ func _add_house_light(house: Node3D) -> void:
 	light.light_energy = 2.2
 	light.omni_range = 5.5
 	light.shadow_enabled = true
-	var footprint: Vector2i = house.get_meta("footprint", Vector2i(5, 5))
-	light.position = Vector3(0.0, 2.0, footprint.y * 0.5 + 0.35)
+	var entrance_local := Vector3(0.0, 2.0, -house.get_meta("footprint", Vector2i(5, 5)).y * 0.5 - 0.35)
+	if house.has_meta("service_positions"):
+		var positions: Array = house.get_meta("service_positions")
+		if not positions.is_empty() and positions[0] is Vector3:
+			entrance_local = house.to_local(positions[0]) + Vector3.UP * 2.0
+	light.position = entrance_local
 	light.visible = false
 	house.add_child(light)
 	house_lights.append({"light": light, "house": house, "off_minute": random.randi_range(22 * 60, 26 * 60) % (24 * 60)})
@@ -7394,7 +7442,8 @@ func _upgrade_selected_building() -> void:
 	for module in blueprint.modules:
 		selected_building.add_child(BuildingBlueprints.create_module(module))
 	_unregister_navigation_footprint(selected_building.global_position, old_footprint)
-	_register_service_entrance(selected_building, blueprint.footprint, false, target_type not in ["farm", "park"])
+	var is_home := target_type in ["tent", "straw_tent", "tarp_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house"]
+	_register_service_entrance(selected_building, blueprint, is_home, target_type not in ["farm", "park"])
 	var service_position: Vector3 = selected_building.get_meta("service_position", selected_building.global_position)
 	if target_type in ["campfire", "campfire_lvl2", "campfire_lvl3", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall"]:
 		campfire_node = selected_building

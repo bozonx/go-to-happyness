@@ -1,7 +1,9 @@
 class_name BuildingQueueService
 extends RefCounted
 
-## Keeps one FIFO line per building and lays that line over walkable grid cells.
+## Keeps FIFO lines per worker entrance of a building and lays each line over
+## walkable grid cells. Citizens distribute evenly across multiple entrances when
+## they first arrive, and once assigned to a line they stay there until served.
 
 var building_registry: BuildingRegistry
 var grid: NavGrid
@@ -23,28 +25,49 @@ func resolve(citizen: Node, destination: Vector3) -> Dictionary:
 	var building := _building_for_destination(destination)
 	if not is_instance_valid(building):
 		return {"position": destination, "is_head": true}
-	var service_position: Vector3 = building.get_meta("service_position", building.position)
 
 	var frame := Engine.get_physics_frames()
 	var building_id := building.get_instance_id()
 	var citizen_id := citizen.get_instance_id()
 	_release_from_other_buildings(citizen_id, building_id)
-	var queue: Array = _queues.get(building_id, [])
+
+	var entrance_count := _entrance_count(building)
+	_ensure_building_queues(building_id, entrance_count)
+	var service_positions := _service_positions(building)
+
+	var entrance_index := _find_citizen_entrance(building_id, citizen_id)
+	if entrance_index < 0:
+		# New arrival: balance across entrances by choosing the shortest queue.
+		entrance_index = 0
+		var shortest: int = (_queues[building_id] as Array)[0].size()
+		for index in range(1, entrance_count):
+			var queue_size: int = (_queues[building_id] as Array)[index].size()
+			if queue_size < shortest:
+				shortest = queue_size
+				entrance_index = index
+
+	var queue: Array = (_queues[building_id] as Array)[entrance_index]
 	_prune_queue(queue)
-	var occupants: Array = _occupants.get(building_id, [])
-	_prune_queue(occupants)
-	_occupants[building_id] = occupants
 	if not queue.has(citizen_id):
 		queue.append(citizen_id)
-	_queues[building_id] = queue
+	(_queues[building_id] as Array)[entrance_index] = queue
 
 	var index := queue.find(citizen_id)
-	if index <= 0 and occupants.size() < _capacity_for(building) and int(_last_admitted_frame.get(building_id, -1)) != frame:
-		return {"position": service_position, "is_head": true}
-	var slots := _build_slots(building, service_position, queue.size() + 1)
+	var capacity := _capacity_for(building)
+	var total_occupants := _total_occupants(building_id)
+	var per_entrance_capacity := maxi(1, ceili(float(capacity) / entrance_count))
+	var entrance_occupants: Array = (_occupants[building_id] as Array)[entrance_index]
+	_prune_queue(entrance_occupants)
+	(_occupants[building_id] as Array)[entrance_index] = entrance_occupants
+
+	if index <= 0 and total_occupants < capacity and entrance_occupants.size() < per_entrance_capacity and int((_last_admitted_frame[building_id] as Array)[entrance_index]) != frame:
+		return {"position": service_positions[entrance_index], "is_head": true}
+
+	var slots := _build_slots(building, service_positions[entrance_index], queue.size() + 1)
 	var waiting_index := maxi(1, index)
 	if waiting_index < slots.size():
 		return {"position": slots[waiting_index], "is_head": false}
+
 	# Do not stack overflow members onto the same final cell. They remain where
 	# they are until a unique slot becomes available.
 	var current_position := destination
@@ -60,20 +83,30 @@ func complete_arrival(citizen: Node, destination: Vector3) -> void:
 	if not is_instance_valid(building):
 		return
 	var building_id := building.get_instance_id()
-	var queue: Array = _queues.get(building_id, [])
-	var index := queue.find(citizen.get_instance_id())
-	if index != 0:
+	var citizen_id := citizen.get_instance_id()
+	var entrance_index := _find_citizen_entrance(building_id, citizen_id)
+	if entrance_index < 0:
+		entrance_index = _entrance_for_destination(building, destination)
+	if entrance_index < 0:
+		entrance_index = 0
+	var entrance_count := _entrance_count(building)
+	_ensure_building_queues(building_id, entrance_count)
+
+	var queue: Array = (_queues[building_id] as Array)[entrance_index]
+	if queue.is_empty() or queue[0] != citizen_id:
 		return
 	queue.pop_front()
-	var occupants: Array = _occupants.get(building_id, [])
-	if not occupants.has(citizen.get_instance_id()):
-		occupants.append(citizen.get_instance_id())
-	_occupants[building_id] = occupants
-	_last_admitted_frame[building_id] = Engine.get_physics_frames()
 	if queue.is_empty():
-		_queues.erase(building_id)
+		(_queues[building_id] as Array)[entrance_index] = []
 	else:
-		_queues[building_id] = queue
+		(_queues[building_id] as Array)[entrance_index] = queue
+
+	var occupants: Array = (_occupants[building_id] as Array)[entrance_index]
+	_prune_queue(occupants)
+	if not occupants.has(citizen_id):
+		occupants.append(citizen_id)
+	(_occupants[building_id] as Array)[entrance_index] = occupants
+	(_last_admitted_frame[building_id] as Array)[entrance_index] = Engine.get_physics_frames()
 
 
 func release(citizen: Node) -> void:
@@ -81,33 +114,64 @@ func release(citizen: Node) -> void:
 		return
 	var citizen_id := citizen.get_instance_id()
 	for building_id in _queues.keys().duplicate():
-		var queue: Array = _queues[building_id]
-		queue.erase(citizen_id)
-		_prune_queue(queue)
-		if queue.is_empty():
+		var entrances: Array = _queues[building_id]
+		var became_empty := true
+		for index in range(entrances.size()):
+			var queue: Array = entrances[index]
+			queue.erase(citizen_id)
+			_prune_queue(queue)
+			if not queue.is_empty():
+				became_empty = false
+			entrances[index] = queue
+		_queues[building_id] = entrances
+		if became_empty:
 			_queues.erase(building_id)
-		else:
-			_queues[building_id] = queue
 	for building_id in _occupants.keys().duplicate():
-		var occupants: Array = _occupants[building_id]
-		occupants.erase(citizen_id)
-		_prune_queue(occupants)
-		if occupants.is_empty():
+		var entrances: Array = _occupants[building_id]
+		var became_empty := true
+		for index in range(entrances.size()):
+			var occupants: Array = entrances[index]
+			occupants.erase(citizen_id)
+			_prune_queue(occupants)
+			if not occupants.is_empty():
+				became_empty = false
+			entrances[index] = occupants
+		_occupants[building_id] = entrances
+		if became_empty:
 			_occupants.erase(building_id)
-		else:
-			_occupants[building_id] = occupants
 
 
 func _release_from_other_buildings(citizen_id: int, retained_building_id: int) -> void:
+	for building_id in _queues.keys().duplicate():
+		if int(building_id) == retained_building_id:
+			continue
+		var entrances: Array = _queues[building_id]
+		var became_empty := true
+		for index in range(entrances.size()):
+			var queue: Array = entrances[index]
+			queue.erase(citizen_id)
+			_prune_queue(queue)
+			if not queue.is_empty():
+				became_empty = false
+			entrances[index] = queue
+		_queues[building_id] = entrances
+		if became_empty:
+			_queues.erase(building_id)
 	for building_id in _occupants.keys().duplicate():
 		if int(building_id) == retained_building_id:
 			continue
-		var occupants: Array = _occupants[building_id]
-		occupants.erase(citizen_id)
-		if occupants.is_empty():
+		var entrances: Array = _occupants[building_id]
+		var became_empty := true
+		for index in range(entrances.size()):
+			var occupants: Array = entrances[index]
+			occupants.erase(citizen_id)
+			_prune_queue(occupants)
+			if not occupants.is_empty():
+				became_empty = false
+			entrances[index] = occupants
+		_occupants[building_id] = entrances
+		if became_empty:
 			_occupants.erase(building_id)
-		else:
-			_occupants[building_id] = occupants
 
 
 func _capacity_for(building: Node3D) -> int:
@@ -126,6 +190,78 @@ func _capacity_for(building: Node3D) -> int:
 	if building.has_meta("required_factory_workers"):
 		return maxi(1, int(building.get_meta("required_factory_workers")))
 	return maxi(1, int(building.get_meta("queue_capacity", 1)))
+
+
+func _entrance_count(building: Node3D) -> int:
+	if building.has_meta("service_positions"):
+		var positions: Array = building.get_meta("service_positions")
+		return maxi(1, positions.size())
+	return 1
+
+
+func _service_positions(building: Node3D) -> Array[Vector3]:
+	var result: Array[Vector3] = []
+	if building.has_meta("service_positions"):
+		for value in building.get_meta("service_positions") as Array:
+			if value is Vector3:
+				result.append(value)
+	if result.is_empty() and building.has_meta("service_position"):
+		result.append(building.get_meta("service_position"))
+	if result.is_empty():
+		result.append(building.position)
+	return result
+
+
+func _entrance_for_destination(building: Node3D, destination: Vector3) -> int:
+	var service_positions := _service_positions(building)
+	for index in range(service_positions.size()):
+		if service_positions[index].distance_squared_to(destination) < 0.01:
+			return index
+	if building.has_meta("entrance_positions"):
+		var positions: Array = building.get_meta("entrance_positions")
+		for index in range(positions.size()):
+			if positions[index] is Vector3 and (positions[index] as Vector3).distance_squared_to(destination) < 0.01:
+				return index
+	if building.has_meta("entrance_position") and (building.get_meta("entrance_position") as Vector3).distance_squared_to(destination) < 0.01:
+		return 0
+	if building.position.distance_squared_to(destination) < 0.01:
+		return 0
+	return -1
+
+
+func _find_citizen_entrance(building_id: int, citizen_id: int) -> int:
+	if not _queues.has(building_id) and not _occupants.has(building_id):
+		return -1
+	var entrances: Array = _queues.get(building_id, [])
+	for index in range(entrances.size()):
+		if citizen_id in (entrances[index] as Array):
+			return index
+	entrances = _occupants.get(building_id, [])
+	for index in range(entrances.size()):
+		if citizen_id in (entrances[index] as Array):
+			return index
+	return -1
+
+
+func _ensure_building_queues(building_id: int, entrance_count: int) -> void:
+	_queues[building_id] = _ensure_entrance_array(_queues.get(building_id, []), entrance_count, [])
+	_occupants[building_id] = _ensure_entrance_array(_occupants.get(building_id, []), entrance_count, [])
+	_last_admitted_frame[building_id] = _ensure_entrance_array(_last_admitted_frame.get(building_id, []), entrance_count, -1)
+
+
+func _ensure_entrance_array(existing: Variant, entrance_count: int, default_value: Variant) -> Array:
+	var result: Array = existing if existing is Array else []
+	while result.size() < entrance_count:
+		result.append(default_value)
+	return result
+
+
+func _total_occupants(building_id: int) -> int:
+	var total := 0
+	if _occupants.has(building_id):
+		for occupants in _occupants[building_id] as Array:
+			total += (occupants as Array).size()
+	return total
 
 
 func _building_for_destination(destination: Vector3) -> Node3D:
@@ -147,13 +283,18 @@ func _building_for_destination(destination: Vector3) -> Node3D:
 
 
 func _matches_destination(building: Node3D, destination: Vector3) -> bool:
-	var service_position: Vector3 = building.get_meta("service_position", building.position)
-	var entrance: Vector3 = building.get_meta("entrance_position", Vector3.INF)
-	return (
-		building.position.distance_squared_to(destination) < 0.01
-		or service_position.distance_squared_to(destination) < 0.01
-		or entrance.distance_squared_to(destination) < 0.01
-	)
+	for position in _service_positions(building):
+		if position.distance_squared_to(destination) < 0.01:
+			return true
+	if building.has_meta("entrance_position"):
+		var entrance: Vector3 = building.get_meta("entrance_position")
+		if entrance.distance_squared_to(destination) < 0.01:
+			return true
+	if building.has_meta("entrance_positions"):
+		for value in building.get_meta("entrance_positions") as Array:
+			if value is Vector3 and (value as Vector3).distance_squared_to(destination) < 0.01:
+				return true
+	return false
 
 
 func _destination_key(destination: Vector3) -> String:

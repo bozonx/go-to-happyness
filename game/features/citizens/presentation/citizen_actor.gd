@@ -959,10 +959,9 @@ func _process_construction_delivery(delta: float) -> void:
 	if not is_instance_valid(construction_site):
 		cancel_current_action()
 		return
-	# Construction sites do not use the building-queue system. Using it here
-	# could redirect a courier carrying materials to another building's queue
-	# slot, causing them to walk past the intended site and get stuck.
-	if _move_to(construction_position, delta, false, false):
+	# Construction sites share the same worker-entrance queue system as completed
+	# buildings, so couriers and builders line up at the future building's entrance.
+	if _move_to(construction_position, delta, false, true):
 		if building_supply_kind == "construction":
 			construction_material_delivered.emit(self, construction_site, construction_delivery_resource, carried_amount)
 		else:
@@ -1926,6 +1925,20 @@ func can_recheck_idle_work() -> bool:
 	return role_recheck_remaining <= 0.0
 
 func _work_position_for(site: Node3D) -> Vector3:
+	if site.has_meta("service_positions"):
+		var positions: Array = site.get_meta("service_positions")
+		var best := Vector3.INF
+		var best_distance := INF
+		for value in positions:
+			if value is Vector3:
+				var position: Vector3 = value
+				var distance := global_position.distance_squared_to(position)
+				if distance < best_distance:
+					best = position
+					best_distance = distance
+		if best != Vector3.INF:
+			return best
+
 	var site_position := site.global_position if site.is_inside_tree() else site.position
 	var footprint: Vector2i = site.get_meta("footprint", Vector2i(3, 3))
 	var actor_position := global_position if is_inside_tree() else position
@@ -1940,6 +1953,21 @@ func _work_position_for(site: Node3D) -> Vector3:
 
 
 func _reachable_construction_approach(site: Node3D) -> Vector3:
+	if site.has_meta("service_positions"):
+		var positions: Array = site.get_meta("service_positions")
+		var best := Vector3.INF
+		var best_distance := INF
+		for value in positions:
+			if value is Vector3:
+				var position: Vector3 = value
+				if not route_reachability_query.is_valid() or _is_valid_approach_point(position):
+					var distance := global_position.distance_squared_to(position)
+					if distance < best_distance:
+						best = position
+						best_distance = distance
+		if best != Vector3.INF:
+			return best
+
 	var primary := _work_position_for(site)
 	if not route_reachability_query.is_valid():
 		return primary

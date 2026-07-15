@@ -976,20 +976,21 @@ func _test_building_queue_routing() -> void:
 	root.add_child(first)
 	root.add_child(second)
 	root.add_child(third)
-	var head: Dictionary = queues.resolve(first, building.position)
-	var middle: Dictionary = queues.resolve(second, building.get_meta("service_position"))
-	var tail: Dictionary = queues.resolve(third, building.position)
-	assert(head.is_head and head.position == building.get_meta("service_position"))
+	var service_position: Vector3 = building.get_meta("service_position")
+	var head: Dictionary = queues.resolve(first, service_position)
+	var middle: Dictionary = queues.resolve(second, service_position)
+	var tail: Dictionary = queues.resolve(third, service_position)
+	assert(head.is_head and head.position == service_position)
 	assert(not middle.is_head and not blocked.has(Vector2i(floori(middle.position.x), floori(middle.position.z))))
 	assert(not tail.is_head and tail.position != middle.position)
-	queues.complete_arrival(first, building.position)
-	assert(not queues.resolve(second, building.position).is_head)
-	queues._last_admitted_frame[building.get_instance_id()] = Engine.get_physics_frames() - 1
-	assert(not queues.resolve(second, building.position).is_head)
+	queues.complete_arrival(first, service_position)
+	assert(not queues.resolve(second, service_position).is_head)
+	queues._last_admitted_frame[building.get_instance_id()][0] = Engine.get_physics_frames() - 1
+	assert(not queues.resolve(second, service_position).is_head)
 	queues.release(first)
-	assert(queues.resolve(second, building.position).is_head)
+	assert(queues.resolve(second, service_position).is_head)
 	queues.release(second)
-	assert(queues.resolve(third, building.position).is_head)
+	assert(queues.resolve(third, service_position).is_head)
 	var overflow_positions: Dictionary = {}
 	var overflow_nodes: Array[Node3D] = []
 	for index in range(24):
@@ -997,7 +998,7 @@ func _test_building_queue_routing() -> void:
 		queued.position = Vector3(-5.0 + index * 0.1, 0.0, -5.0)
 		root.add_child(queued)
 		overflow_nodes.append(queued)
-		var result: Dictionary = queues.resolve(queued, building.position)
+		var result: Dictionary = queues.resolve(queued, service_position)
 		var key := "%0.3f:%0.3f" % [result.position.x, result.position.z]
 		assert(not overflow_positions.has(key))
 		overflow_positions[key] = true
