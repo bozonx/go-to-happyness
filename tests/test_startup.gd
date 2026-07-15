@@ -317,6 +317,9 @@ func _init() -> void:
 	simulation.wellbeing = 100
 	staying_worker.global_position = staying_position
 	simulation.last_citizen_positions[staying_worker.get_instance_id()] = staying_position
+	# Skip-night buttons are only visible in overview mode, not first person.
+	simulation._toggle_hero_view()
+	assert(not simulation.is_first_person)
 	simulation._update_skip_night_button()
 	assert(simulation.skip_night_button.visible)
 	var citizen_count_before_midnight_skip: int = simulation.citizens.size()
@@ -328,6 +331,7 @@ func _init() -> void:
 	simulation._skip_to_workday_start()
 	assert(simulation.clock.hour() == 8 and simulation.clock.minute() == 0)
 	assert(not simulation.start_workday_button.visible)
+	# Stay in overview mode for remaining skip-night button checks.
 	assert(simulation.citizens.size() == citizen_count_before_midnight_skip)
 	assert(staying_worker.visible)
 	assert(staying_worker.global_position == staying_position)
@@ -372,6 +376,9 @@ func _init() -> void:
 	var outside_return_position := outside_worker.global_position
 	simulation._guard_citizen_positions()
 	assert(outside_worker.global_position == outside_return_position)
+	# Return to first person for hero view toggle tests.
+	simulation._toggle_hero_view()
+	assert(simulation.is_first_person)
 	# The game starts in hero view; R toggles between hero FPP and overview.
 	assert(simulation.is_first_person)
 	simulation._toggle_hero_view()

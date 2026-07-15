@@ -238,6 +238,7 @@ var last_survival_hour := -1
 var recovery_arrival_at_minutes := -1.0
 var message_scroll: ScrollContainer
 var message_list: VBoxContainer
+var message_panel: Panel
 var messages_modal: Panel
 var modal_message_list: VBoxContainer
 var selected_builder: Citizen
@@ -281,6 +282,7 @@ var house_spawn_button: Button
 var selected_house: Node3D
 var tent: Node3D
 var entrance_stone: Node3D
+var entrance_highlight: MeshInstance3D
 var selected_entrance: Node3D
 var entrance_menu: Panel
 var entrance_menu_title: Label
@@ -1899,25 +1901,25 @@ func _scroll_to_bottom() -> void:
 
 
 func _create_message_panel(ui: CanvasLayer) -> void:
-	var msg_panel := Panel.new()
+	message_panel = Panel.new()
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.03, 0.06, 0.08, 0.92)
 	style.border_color = Color(0.15, 0.25, 0.32, 0.7)
 	style.set_border_width_all(1)
 	style.set_corner_radius_all(4)
-	msg_panel.add_theme_stylebox_override("panel", style)
-	msg_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	msg_panel.offset_left = 20
-	msg_panel.offset_top = -268
-	msg_panel.offset_right = 400
-	msg_panel.offset_bottom = -38
-	ui.add_child(msg_panel)
+	message_panel.add_theme_stylebox_override("panel", style)
+	message_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	message_panel.offset_left = 20
+	message_panel.offset_top = -268
+	message_panel.offset_right = 400
+	message_panel.offset_bottom = -38
+	ui.add_child(message_panel)
 
 	# Header row
 	var header := HBoxContainer.new()
 	header.position = Vector2(10, 6)
 	header.size = Vector2(368, 26)
-	msg_panel.add_child(header)
+	message_panel.add_child(header)
 
 	var title := Label.new()
 	title.text = "Messages"
@@ -1938,7 +1940,7 @@ func _create_message_panel(ui: CanvasLayer) -> void:
 	message_scroll.position = Vector2(6, 34)
 	message_scroll.size = Vector2(376, 190)
 	message_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	msg_panel.add_child(message_scroll)
+	message_panel.add_child(message_scroll)
 
 	message_list = VBoxContainer.new()
 	message_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1946,20 +1948,10 @@ func _create_message_panel(ui: CanvasLayer) -> void:
 
 
 func _create_messages_modal(ui: CanvasLayer) -> void:
-	messages_modal = Panel.new()
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.025, 0.05, 0.07, 0.96)
-	style.border_color = Color(0.2, 0.35, 0.45, 0.8)
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(6)
-	messages_modal.add_theme_stylebox_override("panel", style)
-	messages_modal.set_anchors_preset(Control.PRESET_CENTER)
-	messages_modal.offset_left = -300
-	messages_modal.offset_top = -240
-	messages_modal.offset_right = 300
-	messages_modal.offset_bottom = 240
-	messages_modal.visible = false
-	ui.add_child(messages_modal)
+	var modal_handler := func(event: InputEvent) -> void:
+		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+			_close_messages_modal()
+	messages_modal = _create_context_menu_panel(ui, Control.PRESET_CENTER, Vector4(-300.0, -240.0, 300.0, 240.0), modal_handler)
 
 	# Title
 	var title := Label.new()
@@ -2337,6 +2329,22 @@ func _create_entrance_stone() -> void:
 	collision.position.y = 1.1
 	selector.add_child(collision)
 	entrance_stone.add_child(selector)
+	# Selection highlight: a slightly larger box with emissive material.
+	entrance_highlight = MeshInstance3D.new()
+	var hl_mesh := BoxMesh.new()
+	hl_mesh.size = Vector3(2.4, 2.6, 1.2)
+	entrance_highlight.mesh = hl_mesh
+	entrance_highlight.position = Vector3(0.0, 1.1, 0.0)
+	var hl_material := StandardMaterial3D.new()
+	hl_material.albedo_color = Color(0.3, 0.85, 1.0, 0.25)
+	hl_material.emission_energy_multiplier = 0.8
+	hl_material.emission = Color(0.3, 0.85, 1.0)
+	hl_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	hl_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	hl_material.no_depth_test = true
+	entrance_highlight.material_override = hl_material
+	entrance_highlight.visible = false
+	entrance_stone.add_child(entrance_highlight)
 	add_child(entrance_stone)
 
 func _create_citizens() -> void:
@@ -2794,6 +2802,12 @@ func _can_skip_to_workday_start() -> bool:
 
 
 func _update_skip_night_button() -> void:
+	if is_first_person:
+		if skip_night_button != null:
+			skip_night_button.visible = false
+		if start_workday_button != null:
+			start_workday_button.visible = false
+		return
 	if skip_night_button != null:
 		skip_night_button.visible = _can_skip_night()
 	if start_workday_button != null:
@@ -3227,6 +3241,8 @@ func _show_entrance_menu() -> void:
 	entrance_menu_title.text = "Entrance sign\nEmergency orders. Outside work: %s" % resident_name
 	if is_instance_valid(entrance_work_button):
 		entrance_work_button.tooltip_text = "Requires a Courier. The resident leaves for one full day and returns with %s coins." % _outside_work_reward_text()
+	if entrance_highlight != null:
+		entrance_highlight.visible = true
 	entrance_menu.visible = true
 
 
@@ -4400,6 +4416,15 @@ func _create_dig_site(cell: Vector2i, world_position: Vector3) -> Dictionary:
 	dig_cells[cell] = true
 	return site
 
+func _set_build_placement_ui_visible(is_visible: bool) -> void:
+	if build_menu != null:
+		build_menu.visible = is_visible and (selected_builder != null or build_menu_is_global)
+	if build_toggle_btn != null:
+		build_toggle_btn.visible = is_visible and not is_first_person
+	if message_panel != null:
+		message_panel.visible = is_visible
+
+
 func _select_build_mode(next_mode: String) -> void:
 	if not _can_hero_build():
 		_update_interface("Only the hero can approve construction decisions.")
@@ -4415,9 +4440,9 @@ func _select_build_mode(next_mode: String) -> void:
 	build_rotation_quarters = 0
 	selection_marker.visible = true
 	_move_selection(selected_world_position)
+	_set_build_placement_ui_visible(false)
 	if is_first_person:
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-		build_menu.visible = false
 	_update_interface("%s selected. Choose a clear point; Q/E rotates the building." % build_mode.capitalize())
 
 func _cancel_build_action() -> void:
@@ -4429,6 +4454,7 @@ func _cancel_build_action() -> void:
 	preview_back_entrance_marker.visible = false
 	build_menu.visible = false
 	selected_builder = null
+	_set_build_placement_ui_visible(true)
 	_update_interface("Construction mode cancelled.")
 
 func _on_context_menu_gui_input(event: InputEvent) -> void:
@@ -4449,6 +4475,8 @@ func _close_context_menus() -> void:
 	selection_marker.visible = false
 	is_rotating_camera = false
 	entrance_menu.visible = false
+	if entrance_highlight != null:
+		entrance_highlight.visible = false
 	if entrance_order_modal != null:
 		entrance_order_modal.visible = false
 	house_menu.visible = false
@@ -4467,6 +4495,8 @@ func _close_context_menus() -> void:
 		decision_menu.visible = false
 	if campfire_story_menu != null:
 		campfire_story_menu.visible = false
+	if messages_modal != null:
+		messages_modal.visible = false
 	_close_pocket_take_menu()
 	_hide_workforce_menu()
 	selected_house = null
@@ -4530,6 +4560,9 @@ func _handle_menu_right_click() -> bool:
 	if entrance_order_modal != null and entrance_order_modal.visible:
 		entrance_order_modal.visible = false
 		entrance_menu.visible = true
+		return true
+	if messages_modal != null and messages_modal.visible:
+		_close_messages_modal()
 		return true
 	var any_menu_visible := entrance_menu.visible or house_menu.visible or school_menu.visible or materials_factory_menu.visible or campfire_menu.visible or market_menu.visible or warehouse_menu.visible or building_menu.visible
 	if decision_menu != null and decision_menu.visible:
@@ -4733,6 +4766,8 @@ func _hide_all_selection_menus() -> void:
 	# the currently selected citizen untouched (the school menu needs it).
 	house_menu.visible = false
 	entrance_menu.visible = false
+	if entrance_highlight != null:
+		entrance_highlight.visible = false
 	school_menu.visible = false
 	materials_factory_menu.visible = false
 	campfire_menu.visible = false
@@ -5772,6 +5807,7 @@ func _place_building(world_position: Vector3) -> void:
 	preview_back_entrance_marker.visible = false
 	build_menu.visible = false
 	selected_builder = null
+	_set_build_placement_ui_visible(true)
 	_update_interface("Construction marked. Couriers must deliver the required materials before builders can start.")
 
 func _place_building_at_crosshair() -> void:
