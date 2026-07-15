@@ -44,6 +44,14 @@ func _init() -> void:
 	assert(construction_daily_button != null)
 	assert(construction_daily_button.visible)
 	assert(not construction_daily_button.disabled)
+	var cleaning_daily_button: Button = null
+	for button in simulation.role_buttons:
+		if str(button.get_meta("submenu", "")) == "daily" and str(button.get_meta("role", "")) == "cleaning":
+			cleaning_daily_button = button
+			break
+	assert(cleaning_daily_button != null)
+	assert(cleaning_daily_button.visible)
+	assert(not cleaning_daily_button.disabled)
 	simulation._close_assignment_submenu()
 	simulation._appoint_official(simulation.hero_citizen)
 	var delegated_officer: Citizen = simulation.citizens[1]

@@ -2889,6 +2889,7 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_role_button("Gather branches", "gather_branches", 238, false, "daily")
 	_add_role_button("Gather grass", "gather_grass", 272, false, "daily")
 	_add_role_button("Collect water", "gather_water", 306, false, "daily")
+	_add_role_button("Cleaning", "cleaning", 340, false, "daily")
 
 	# Permanent jobs require an employment officer, except appointing the officer.
 	_add_role_button("Assign: construction", "construction", 136, false, "job")
@@ -6066,7 +6067,7 @@ func _workforce_roles() -> Array[String]:
 
 
 func _daily_order_roles() -> Array[String]:
-	return ["helper", "construction", "gather_branches", "gather_grass", "gather_water"]
+	return ["helper", "construction", "gather_branches", "gather_grass", "gather_water", "cleaning"]
 
 
 func _workforce_role_label(role: String) -> String:
@@ -6074,7 +6075,7 @@ func _workforce_role_label(role: String) -> String:
 		"construction": "Construction", "forestry": "Forestry", "farming": "Farming",
 		"excavation": "Excavation", "gather_branches": "Gather branches",
 		"gather_grass": "Gather grass", "gather_food": "Foraging",
-		"gather_water": "Collect water",
+		"gather_water": "Collect water", "cleaning": "Cleaning",
 		"cook": "Cook", "teacher": "Teacher", "seller": "Seller", "official": "Employment officer",
 		"factory_worker": "Factory worker", "engineer": "Engineer",
 		"helper": "Helper", "courier": "Courier", "craftsman": "Craftsman"
