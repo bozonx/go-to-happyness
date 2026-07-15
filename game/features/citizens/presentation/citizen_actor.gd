@@ -912,6 +912,9 @@ func assign_building_supply(target: Node3D, warehouse: Vector3, resource_type: S
 
 func _process_construction_pickup(delta: float) -> void:
 	if _move_to(warehouse_position, delta):
+		# The courier was admitted to the warehouse queue; release it before
+		# walking away so the entrance is not blocked for the whole delivery trip.
+		_reset_assignment_navigation()
 		construction_position = _work_position_for(construction_site)
 		state = State.TO_CONSTRUCTION_SITE
 
