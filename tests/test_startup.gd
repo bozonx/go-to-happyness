@@ -36,14 +36,14 @@ func _init() -> void:
 	assert(not simulation.build_menu_is_job_menu)
 	simulation._open_daily_order_submenu()
 	assert(simulation.build_menu_is_daily_order_menu)
-	# The Construction daily-order button was removed from the unit menu;
-	# construction is now triggered from the left-side panel or first-person mode.
 	var construction_daily_button: Button = null
 	for button in simulation.role_buttons:
 		if str(button.get_meta("submenu", "")) == "daily" and str(button.get_meta("role", "")) == "construction":
 			construction_daily_button = button
 			break
-	assert(construction_daily_button == null)
+	assert(construction_daily_button != null)
+	assert(construction_daily_button.visible)
+	assert(not construction_daily_button.disabled)
 	var cleaning_daily_button: Button = null
 	for button in simulation.role_buttons:
 		if str(button.get_meta("submenu", "")) == "daily" and str(button.get_meta("role", "")) == "cleaning":

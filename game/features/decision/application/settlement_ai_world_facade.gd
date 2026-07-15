@@ -28,7 +28,7 @@ func capture(sequence: int) -> WorldSnapshot:
 		if not is_instance_valid(actor) or actor.ai_id == 0 or simulation.outside_workers.has(actor.get_instance_id()):
 			continue
 		var citizen_id := actor.ai_id
-		var can_start_personal_need := not actor.has_active_arrival_task() and not actor.has_active_delivery()
+		var can_start_personal_need := not actor.is_player_controlled and actor.state in [Citizen.State.IDLE, Citizen.State.WAITING]
 		var worker_data := _worker_data(actor)
 		var daily_order_active := actor.has_active_daily_order() and not actor.is_player_controlled
 		var daily_order_role := actor.daily_order_role if daily_order_active else ""
@@ -212,7 +212,7 @@ func capture(sequence: int) -> WorldSnapshot:
 				&"needs.can_start_toilet": can_start_personal_need,
 				&"needs.relief_candidates": relief_candidates,
 				&"needs.rest_requested": needs_service != null and needs_service.has_rest_request(citizen_id),
-				&"needs.can_start_rest": can_start_personal_need and actor.state in [Citizen.State.IDLE, Citizen.State.WAITING],
+				&"needs.can_start_rest": can_start_personal_need,
 				&"needs.rest_position": rest_request.get(&"position", Vector3.INF),
 				&"needs.rest_duration": rest_request.get(&"duration", 4.0),
 				&"work.forestry.worker": forestry_worker,

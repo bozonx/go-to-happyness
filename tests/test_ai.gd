@@ -204,6 +204,8 @@ func _init() -> void:
 	_test_native_sleep_goal()
 	_test_native_meal_goal()
 	_test_native_toilet_goal()
+	_test_toilet_goal_blocked_while_working()
+	_test_toilet_goal_blocked_for_player_controlled()
 	_test_native_rest_goal()
 	_test_register_provider_keeps_order_while_registering()
 	_test_register_provider_distributes_workplaces_by_capacity()
@@ -1829,3 +1831,41 @@ class FakeCourierSimulation extends Node:
 
 	func _start_courier_task(_courier: Citizen, _task: RefCounted) -> bool:
 		return true
+
+
+func _test_toilet_goal_blocked_while_working() -> void:
+	var work := ScriptedGoal.new(&"work", 0.90, [BehaviorStep.Status.RUNNING])
+	var toilet := ToiletGoalScript.new()
+	var actuator := FakeActuator.new(1)
+	var brain := CitizenBrain.new(1, actuator, [work, toilet])
+	var working := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
+		&"needs.toilet_requested": true,
+		&"needs.can_start_toilet": false,
+		&"needs.relief_candidates": [{
+			&"id": &"tree:0:0:0",
+			&"position": Vector3.ZERO,
+			&"kind": &"tree",
+		}],
+	}))
+	brain.think(_snapshot(0.0, working), null)
+	assert(brain.runner.active_goal_id() == &"work")
+	assert(actuator.action_start_count == 0)
+
+
+func _test_toilet_goal_blocked_for_player_controlled() -> void:
+	var work := ScriptedGoal.new(&"work", 0.90, [BehaviorStep.Status.RUNNING])
+	var toilet := ToiletGoalScript.new()
+	var actuator := FakeActuator.new(1)
+	var brain := CitizenBrain.new(1, actuator, [work, toilet])
+	var player_controlled := CitizenSnapshot.new(1, Vector3.ZERO, true, true, AIFactSet.new({
+		&"needs.toilet_requested": true,
+		&"needs.can_start_toilet": false,
+		&"needs.relief_candidates": [{
+			&"id": &"tree:0:0:0",
+			&"position": Vector3.ZERO,
+			&"kind": &"tree",
+		}],
+	}))
+	brain.think(_snapshot(0.0, player_controlled), null)
+	assert(brain.runner.active_goal_id() == &"")
+	assert(actuator.action_start_count == 0)

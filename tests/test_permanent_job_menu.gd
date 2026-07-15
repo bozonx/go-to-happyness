@@ -37,8 +37,7 @@ func _init() -> void:
 			assert(button.visible, "Role %s should be visible in WOOD era" % role)
 			assert(button.disabled, "Role %s should be disabled without a workplace" % role)
 
-	# Daily orders remain visible, but the Construction button was moved out of
-	# the unit menu because building is now started from the left panel or first-person mode.
+	# Daily orders remain visible alongside the job menu.
 	simulation._open_daily_order_submenu()
 	assert(simulation.build_menu_is_daily_order_menu)
 	var construction_daily_button: Button = null
@@ -46,7 +45,9 @@ func _init() -> void:
 		if str(button.get_meta("submenu", "")) == "daily" and str(button.get_meta("role", "")) == "construction":
 			construction_daily_button = button
 			break
-	assert(construction_daily_button == null)
+	assert(construction_daily_button != null)
+	assert(construction_daily_button.visible)
+	assert(not construction_daily_button.disabled)
 
 	print("Permanent job menu tests passed.")
 	quit(0)

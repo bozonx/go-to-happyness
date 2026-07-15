@@ -512,6 +512,7 @@ func _process(delta: float) -> void:
 	if is_first_person:
 		_update_player_control(delta)
 		_update_interaction(delta)
+		_refresh_interaction_hint()
 		if not build_mode.is_empty():
 			var viewport_center := get_viewport().get_visible_rect().size * 0.5
 			var terrain_point: Variant = _terrain_point_at_screen_position(viewport_center)
@@ -2492,15 +2493,27 @@ func _create_interface() -> void:
 	_create_survival_decision_menu(ui)
 
 
+func _create_context_menu_panel(ui: CanvasLayer, anchor: int, offsets: Vector4, input_handler: Callable = _on_context_menu_gui_input) -> Panel:
+	var panel := Panel.new()
+	panel.set_anchors_preset(anchor)
+	panel.offset_left = offsets.x
+	panel.offset_top = offsets.y
+	panel.offset_right = offsets.z
+	panel.offset_bottom = offsets.w
+	panel.visible = false
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.03, 0.06, 0.08, 0.95)
+	style.border_color = Color(0.2, 0.35, 0.45, 0.8)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(6)
+	panel.add_theme_stylebox_override("panel", style)
+	panel.gui_input.connect(input_handler)
+	ui.add_child(panel)
+	return panel
+
+
 func _create_survival_decision_menu(ui: CanvasLayer) -> void:
-	decision_menu = Panel.new()
-	decision_menu.set_anchors_preset(Control.PRESET_CENTER)
-	decision_menu.offset_left = -240.0
-	decision_menu.offset_top = -150.0
-	decision_menu.offset_right = 240.0
-	decision_menu.offset_bottom = 150.0
-	decision_menu.visible = false
-	ui.add_child(decision_menu)
+	decision_menu = _create_context_menu_panel(ui, Control.PRESET_CENTER, Vector4(-240.0, -150.0, 240.0, 150.0))
 	decision_title = Label.new()
 	decision_title.position = Vector2(20, 18)
 	decision_title.size = Vector2(440, 28)
@@ -2524,15 +2537,7 @@ func _create_survival_decision_menu(ui: CanvasLayer) -> void:
 
 
 func _create_campfire_story_menu(ui: CanvasLayer) -> void:
-	campfire_story_menu = Panel.new()
-	campfire_story_menu.set_anchors_preset(Control.PRESET_CENTER)
-	campfire_story_menu.offset_left = -220.0
-	campfire_story_menu.offset_top = -140.0
-	campfire_story_menu.offset_right = 220.0
-	campfire_story_menu.offset_bottom = 140.0
-	campfire_story_menu.visible = false
-	ui.add_child(campfire_story_menu)
-	campfire_story_menu.gui_input.connect(_on_context_menu_gui_input)
+	campfire_story_menu = _create_context_menu_panel(ui, Control.PRESET_CENTER, Vector4(-220.0, -140.0, 220.0, 140.0))
 
 	var title := Label.new()
 	title.text = "Campfire Story"
@@ -2833,22 +2838,14 @@ func _set_time_multiplier(multiplier: float) -> void:
 	_update_interface("Simulation speed set to x%d." % int(multiplier))
 
 func _create_build_menu(ui: CanvasLayer) -> void:
-	build_menu = Panel.new()
-	build_menu.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	build_menu.offset_left = -324.0
-	build_menu.offset_top = -780.0
-	build_menu.offset_right = -20.0
-	build_menu.offset_bottom = -20.0
-	build_menu.visible = false
-	ui.add_child(build_menu)
-	
+	build_menu = _create_context_menu_panel(ui, Control.PRESET_BOTTOM_RIGHT, Vector4(-324.0, -780.0, -20.0, -20.0), _on_build_menu_gui_input)
+
 	build_menu_title = Label.new()
 	build_menu_title.position = Vector2(16, 14)
 	build_menu_title.size = Vector2(272, 74)
 	build_menu_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	build_menu_title.add_theme_font_size_override("font_size", 15)
 	build_menu.add_child(build_menu_title)
-	build_menu.gui_input.connect(_on_build_menu_gui_input)
 
 	manage_citizen_button = Button.new()
 	manage_citizen_button.text = "Управлять"
@@ -2890,20 +2887,22 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	# Daily orders do not require an employment officer.
 	_add_role_button("Clear daily order", "", 136, false, "daily")
 	_add_role_button("Courier", "courier", 170, false, "daily")
-	_add_role_button("Gather branches", "gather_branches", 204, false, "daily")
-	_add_role_button("Gather grass", "gather_grass", 238, false, "daily")
-	_add_role_button("Collect water", "gather_water", 272, false, "daily")
-	_add_role_button("Cleaning", "cleaning", 306, false, "daily")
+	_add_role_button("Construction", "construction", 204, false, "daily")
+	_add_role_button("Gather branches", "gather_branches", 238, false, "daily")
+	_add_role_button("Gather grass", "gather_grass", 272, false, "daily")
+	_add_role_button("Collect water", "gather_water", 306, false, "daily")
+	_add_role_button("Cleaning", "cleaning", 340, false, "daily")
 
 	# Permanent jobs require an employment officer, except appointing the officer.
-	_add_role_button("Assign: forestry (logs/timber)", "forestry", 136, false, "job")
-	_add_role_button("Assign: farming", "farming", 170, false, "job")
-	_add_role_button("Assign: excavation", "excavation", 204, false, "job")
-	_add_role_button("Assign: gather branches", "gather_branches", 238, false, "job")
-	_add_role_button("Assign: forage food", "gather_food", 272, false, "job")
-	_add_role_button("Assign: courier", "courier", 306, false, "job")
-	_add_role_button("Assign: craftsman", "craftsman", 340, false, "job")
-	_add_role_button("Assign: employment officer", "official", 374, false, "job")
+	_add_role_button("Assign: construction", "construction", 136, false, "job")
+	_add_role_button("Assign: forestry (logs/timber)", "forestry", 170, false, "job")
+	_add_role_button("Assign: farming", "farming", 204, false, "job")
+	_add_role_button("Assign: excavation", "excavation", 238, false, "job")
+	_add_role_button("Assign: gather branches", "gather_branches", 272, false, "job")
+	_add_role_button("Assign: forage food", "gather_food", 306, false, "job")
+	_add_role_button("Assign: courier", "courier", 340, false, "job")
+	_add_role_button("Assign: craftsman", "craftsman", 374, false, "job")
+	_add_role_button("Assign: employment officer", "official", 408, false, "job")
 	
 	# Era category buttons (shown on main build menu)
 	_add_build_category_button("Tent era", "tent", 136)
@@ -2996,16 +2995,8 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_refresh_build_menu()
 
 func _create_school_menu(ui: CanvasLayer) -> void:
-	school_menu = Panel.new()
-	school_menu.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	school_menu.offset_left = -520.0
-	school_menu.offset_top = -550.0
-	school_menu.offset_right = -20.0
-	school_menu.offset_bottom = -20.0
-	school_menu.visible = false
-	ui.add_child(school_menu)
-	school_menu.gui_input.connect(_on_context_menu_gui_input)
-	
+	school_menu = _create_context_menu_panel(ui, Control.PRESET_BOTTOM_RIGHT, Vector4(-520.0, -550.0, -20.0, -20.0))
+
 	school_menu_title = Label.new()
 	school_menu_title.position = Vector2(16, 14)
 	school_menu_title.size = Vector2(220, 72)
@@ -3126,15 +3117,8 @@ func _show_school_menu() -> void:
 	_update_interface("School selected: configure morning study and retraining here.")
 
 func _create_entrance_menu(ui: CanvasLayer) -> void:
-	entrance_menu = Panel.new()
-	entrance_menu.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	entrance_menu.offset_left = -324.0
-	entrance_menu.offset_top = -372.0
-	entrance_menu.offset_right = -20.0
-	entrance_menu.offset_bottom = -20.0
-	entrance_menu.visible = false
-	ui.add_child(entrance_menu)
-	entrance_menu.gui_input.connect(_on_context_menu_gui_input)
+	entrance_menu = _create_context_menu_panel(ui, Control.PRESET_BOTTOM_RIGHT, Vector4(-324.0, -372.0, -20.0, -20.0))
+
 	entrance_menu_title = Label.new()
 	entrance_menu_title.position = Vector2(16, 14)
 	entrance_menu_title.size = Vector2(272, 56)
@@ -3175,15 +3159,10 @@ func _show_entrance_menu() -> void:
 
 
 func _create_entrance_order_modal(ui: CanvasLayer) -> void:
-	entrance_order_modal = Panel.new()
-	entrance_order_modal.set_anchors_preset(Control.PRESET_CENTER)
-	entrance_order_modal.offset_left = -210.0
-	entrance_order_modal.offset_top = -180.0
-	entrance_order_modal.offset_right = 210.0
-	entrance_order_modal.offset_bottom = 180.0
-	entrance_order_modal.visible = false
-	ui.add_child(entrance_order_modal)
-	entrance_order_modal.gui_input.connect(func(event: InputEvent): if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed: entrance_order_modal.visible = false)
+	var modal_handler := func(event: InputEvent) -> void:
+		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+			entrance_order_modal.visible = false
+	entrance_order_modal = _create_context_menu_panel(ui, Control.PRESET_CENTER, Vector4(-210.0, -180.0, 210.0, 180.0), modal_handler)
 
 	var title := Label.new()
 	title.text = "Create order"
@@ -3349,15 +3328,8 @@ func _return_outside_workers() -> void:
 
 
 func _create_house_menu(ui: CanvasLayer) -> void:
-	house_menu = Panel.new()
-	house_menu.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	house_menu.offset_left = -324.0
-	house_menu.offset_top = -378.0
-	house_menu.offset_right = -20.0
-	house_menu.offset_bottom = -20.0
-	house_menu.visible = false
-	ui.add_child(house_menu)
-	house_menu.gui_input.connect(_on_context_menu_gui_input)
+	house_menu = _create_context_menu_panel(ui, Control.PRESET_BOTTOM_RIGHT, Vector4(-324.0, -378.0, -20.0, -20.0))
+
 	house_menu_title = Label.new()
 	house_menu_title.position = Vector2(16, 14)
 	house_menu_title.size = Vector2(272, 42)
@@ -3379,15 +3351,8 @@ func _create_house_menu(ui: CanvasLayer) -> void:
 	house_menu.offset_top = -490.0
 
 func _create_materials_factory_menu(ui: CanvasLayer) -> void:
-	materials_factory_menu = Panel.new()
-	materials_factory_menu.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	materials_factory_menu.offset_left = -324.0
-	materials_factory_menu.offset_top = -260.0
-	materials_factory_menu.offset_right = -20.0
-	materials_factory_menu.offset_bottom = -20.0
-	materials_factory_menu.visible = false
-	ui.add_child(materials_factory_menu)
-	materials_factory_menu.gui_input.connect(_on_context_menu_gui_input)
+	materials_factory_menu = _create_context_menu_panel(ui, Control.PRESET_BOTTOM_RIGHT, Vector4(-324.0, -260.0, -20.0, -20.0))
+
 	materials_factory_menu_title = Label.new()
 	materials_factory_menu_title.position = Vector2(16, 14)
 	materials_factory_menu_title.size = Vector2(272, 94)
@@ -3463,16 +3428,8 @@ func _update_building_research(delta: float) -> void:
 			_refresh_research_menu()
 
 func _create_research_menu(ui: CanvasLayer) -> void:
-	research_menu = Panel.new()
-	research_menu.set_anchors_preset(Control.PRESET_CENTER)
-	research_menu.offset_left = -250.0
-	research_menu.offset_top = -250.0
-	research_menu.offset_right = 250.0
-	research_menu.offset_bottom = 250.0
-	research_menu.visible = false
-	ui.add_child(research_menu)
-	research_menu.gui_input.connect(_on_context_menu_gui_input)
-	
+	research_menu = _create_context_menu_panel(ui, Control.PRESET_CENTER, Vector4(-250.0, -250.0, 250.0, 250.0))
+
 	research_menu_title = Label.new()
 	research_menu_title.position = Vector2(18, 16)
 	research_menu_title.size = Vector2(464, 30)
@@ -3973,10 +3930,12 @@ func _refresh_build_menu() -> void:
 		if button.get_meta("category_back", false):
 			button.visible = not build_category.is_empty() and not assignment_submenu_open
 		elif not category_button.is_empty():
+			# Era category buttons belong to the global build menu; they are not
+			# an entry point from the per-citizen unit menu.
 			if build_menu_is_global:
 				button.visible = build_category.is_empty() and not assignment_submenu_open and category_button != current_era_category and building_availability_service.is_category_available(category_button)
 			else:
-				button.visible = build_category.is_empty() and not assignment_submenu_open and building_availability_service.is_category_available(category_button)
+				button.visible = false
 		else:
 			var build_type: String = button.get_meta("build_type", "")
 			var menu_state: Dictionary = building_availability_service.menu_state(build_type)
@@ -4402,6 +4361,12 @@ func _on_context_menu_gui_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
+func _is_first_person_menu_open() -> bool:
+	if not is_first_person:
+		return false
+	return build_menu.visible or pocket_menu_open
+
+
 func _close_context_menus() -> void:
 	build_mode = ""
 	dig_mode = false
@@ -4442,6 +4407,8 @@ func _close_context_menus() -> void:
 	build_menu_is_daily_order_menu = false
 	build_menu_is_global = false
 	_refresh_build_menu()
+	if is_first_person and not _is_first_person_menu_open():
+		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -4481,7 +4448,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 			return
 		elif event is InputEventMouseMotion:
-			if not build_menu.visible:
+			if not _is_first_person_menu_open():
 				player_yaw -= event.relative.x * 0.0035
 				player_pitch = clampf(player_pitch - event.relative.y * 0.003, deg_to_rad(-70.0), deg_to_rad(65.0))
 		elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
@@ -6169,16 +6136,8 @@ func _toggle_global_build_menu() -> void:
 
 
 func _create_campfire_menu(ui: CanvasLayer) -> void:
-	campfire_menu = Panel.new()
-	campfire_menu.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	campfire_menu.offset_left = -324.0
-	campfire_menu.offset_top = -720.0
-	campfire_menu.offset_right = -20.0
-	campfire_menu.offset_bottom = -20.0
-	campfire_menu.visible = false
-	ui.add_child(campfire_menu)
-	campfire_menu.gui_input.connect(_on_context_menu_gui_input)
-	
+	campfire_menu = _create_context_menu_panel(ui, Control.PRESET_BOTTOM_RIGHT, Vector4(-324.0, -720.0, -20.0, -20.0))
+
 	campfire_menu_title = Label.new()
 	campfire_menu_title.position = Vector2(16, 14)
 	campfire_menu_title.size = Vector2(272, 40)
@@ -6330,15 +6289,8 @@ func _select_campfire_story(story_id: String) -> void:
 
 
 func _create_campfire_orders_menu(ui: CanvasLayer) -> void:
-	campfire_orders_menu = Panel.new()
-	campfire_orders_menu.set_anchors_preset(Control.PRESET_CENTER)
-	campfire_orders_menu.offset_left = -210.0
-	campfire_orders_menu.offset_top = -125.0
-	campfire_orders_menu.offset_right = 210.0
-	campfire_orders_menu.offset_bottom = 125.0
-	campfire_orders_menu.visible = false
-	ui.add_child(campfire_orders_menu)
-	campfire_orders_menu.gui_input.connect(_on_context_menu_gui_input)
+	campfire_orders_menu = _create_context_menu_panel(ui, Control.PRESET_CENTER, Vector4(-210.0, -125.0, 210.0, 125.0))
+
 	var title := Label.new()
 	title.text = "Campfire Orders"
 	title.position = Vector2(18, 16)
@@ -6404,15 +6356,8 @@ func _cheer_up_settlement() -> void:
 
 
 func _create_workforce_menu(ui: CanvasLayer) -> void:
-	workforce_menu = Panel.new()
-	workforce_menu.set_anchors_preset(Control.PRESET_CENTER)
-	workforce_menu.offset_left = -230.0
-	workforce_menu.offset_top = -255.0
-	workforce_menu.offset_right = 230.0
-	workforce_menu.offset_bottom = 255.0
-	workforce_menu.visible = false
-	ui.add_child(workforce_menu)
-	workforce_menu.gui_input.connect(_on_context_menu_gui_input)
+	workforce_menu = _create_context_menu_panel(ui, Control.PRESET_CENTER, Vector4(-230.0, -255.0, 230.0, 255.0))
+
 	workforce_menu_title = Label.new()
 	workforce_menu_title.position = Vector2(18, 16)
 	workforce_menu_title.size = Vector2(424, 30)
@@ -6968,16 +6913,8 @@ func _on_campfire_advance_pressed() -> void:
 
 
 func _create_market_menu(ui: CanvasLayer) -> void:
-	market_menu = Panel.new()
-	market_menu.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	market_menu.offset_left = -324.0
-	market_menu.offset_top = -650.0
-	market_menu.offset_right = -20.0
-	market_menu.offset_bottom = -20.0
-	market_menu.visible = false
-	ui.add_child(market_menu)
-	market_menu.gui_input.connect(_on_context_menu_gui_input)
-	
+	market_menu = _create_context_menu_panel(ui, Control.PRESET_BOTTOM_RIGHT, Vector4(-324.0, -650.0, -20.0, -20.0))
+
 	market_menu_title = Label.new()
 	market_menu_title.position = Vector2(16, 14)
 	market_menu_title.size = Vector2(272, 70)
@@ -7182,15 +7119,8 @@ func _on_trade_delivery_finished(worker: Citizen) -> void:
 	courier_dispatcher.complete_for(worker)
 
 func _create_building_menu(ui: CanvasLayer) -> void:
-	building_menu = Panel.new()
-	building_menu.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	building_menu.offset_left = -324.0
-	building_menu.offset_top = -300.0
-	building_menu.offset_right = -20.0
-	building_menu.offset_bottom = -20.0
-	building_menu.visible = false
-	ui.add_child(building_menu)
-	building_menu.gui_input.connect(_on_context_menu_gui_input)
+	building_menu = _create_context_menu_panel(ui, Control.PRESET_BOTTOM_RIGHT, Vector4(-324.0, -300.0, -20.0, -20.0))
+
 	building_menu_title = Label.new()
 	building_menu_title.position = Vector2(16, 14)
 	building_menu_title.size = Vector2(272, 82)
@@ -7507,15 +7437,7 @@ func _workplace_priority_position(building: Node3D) -> int:
 
 
 func _create_warehouse_menu(ui: CanvasLayer) -> void:
-	warehouse_menu = Panel.new()
-	warehouse_menu.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	warehouse_menu.offset_left = -344.0
-	warehouse_menu.offset_top = -660.0
-	warehouse_menu.offset_right = -20.0
-	warehouse_menu.offset_bottom = -20.0
-	warehouse_menu.visible = false
-	ui.add_child(warehouse_menu)
-	warehouse_menu.gui_input.connect(_on_context_menu_gui_input)
+	warehouse_menu = _create_context_menu_panel(ui, Control.PRESET_BOTTOM_RIGHT, Vector4(-344.0, -660.0, -20.0, -20.0))
 
 	warehouse_menu_title = Label.new()
 	warehouse_menu_title.position = Vector2(16, 12)
@@ -7526,21 +7448,7 @@ func _create_warehouse_menu(ui: CanvasLayer) -> void:
 
 
 func _create_pocket_take_menu(ui: CanvasLayer) -> void:
-	pocket_take_menu = Panel.new()
-	pocket_take_menu.set_anchors_preset(Control.PRESET_CENTER)
-	pocket_take_menu.offset_left = -220.0
-	pocket_take_menu.offset_top = -260.0
-	pocket_take_menu.offset_right = 220.0
-	pocket_take_menu.offset_bottom = 260.0
-	pocket_take_menu.visible = false
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.03, 0.06, 0.08, 0.95)
-	style.border_color = Color(0.2, 0.35, 0.45, 0.8)
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(6)
-	pocket_take_menu.add_theme_stylebox_override("panel", style)
-	ui.add_child(pocket_take_menu)
-	pocket_take_menu.gui_input.connect(_on_context_menu_gui_input)
+	pocket_take_menu = _create_context_menu_panel(ui, Control.PRESET_CENTER, Vector4(-220.0, -260.0, 220.0, 260.0))
 
 	pocket_take_menu_title = Label.new()
 	pocket_take_menu_title.text = "Взять товары со склада"
@@ -7553,12 +7461,16 @@ func _create_pocket_take_menu(ui: CanvasLayer) -> void:
 func _show_pocket_take_menu() -> void:
 	pocket_take_menu.visible = true
 	pocket_menu_open = true
+	if is_first_person:
+		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	_refresh_pocket_take_menu()
 
 
 func _close_pocket_take_menu() -> void:
 	pocket_take_menu.visible = false
 	pocket_menu_open = false
+	if is_first_person:
+		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 
 func _refresh_pocket_take_menu() -> void:
