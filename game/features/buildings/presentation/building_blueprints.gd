@@ -407,6 +407,18 @@ static func _cook_campfire_blueprint(building_type: String) -> Dictionary:
 	return {"type": building_type, "footprint": footprint, "entrance": Vector2i(0, -1), "modules": modules}
 
 
+static func worker_entrance_offsets(building_type: String) -> Array[Vector2i]:
+	var blueprint := get_blueprint(building_type)
+	var offsets: Array[Vector2i] = []
+	if blueprint.has("worker_entrances"):
+		for value in blueprint.worker_entrances:
+			if value is Vector2i:
+				offsets.append(value)
+	elif blueprint.has("entrance"):
+		offsets.append(blueprint.entrance)
+	return offsets
+
+
 static func _module(position: Vector3, size: Vector3, kind: String, color: Color, rotation := Vector3.ZERO) -> Dictionary:
 	return {"position": position, "size": size, "kind": kind, "color": color, "rotation": rotation}
 

@@ -42,6 +42,24 @@ dummy-renderer diagnostics in headless mode; their exit status remains authorita
 Without `--quit-after`, scene tests that `await process_frame` / `await physics_frame`
 hang because the headless main loop does not know when to stop.
 
+## First-person controls
+
+Press `R` to switch between the hero overview and first-person view.
+
+- `WASD` / arrows — move.
+- `Space` — jump, `Shift` — sprint.
+- `Mouse` — look around.
+- `F` — perform one context action.
+- `Shift+F` — perform the "all" version of the action (deliver everything, gather until pocket is full, etc.).
+- `B` — open construction menu (hero only).
+- `RMB` — dig terrain (hero only); for other citizens it returns to overview.
+
+The hero has an 8-slot pocket that can hold any mix of resources. Gathered items go
+into the pocket first and can be delivered to the sawmill or warehouse. After the
+pocket is empty at a warehouse, `F` opens a menu to take goods back into the pocket.
+Only the hero can gather, deliver, or occupy workplace jobs from first-person mode.
+Other citizens can be controlled only for movement (observation / rescue).
+
 ## Tent Era Survival
 
 The Tent Era implements the following systems:

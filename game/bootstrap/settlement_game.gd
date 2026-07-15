@@ -70,7 +70,9 @@ const PLAYER_GRAVITY := 18.0
 const PLAYER_EYE_HEIGHT := 1.65
 const HARVEST_DURATION := 1.25
 const INTERACTION_RANGE := 4.5
-const POCKET_WOOD_CAPACITY := 8
+const JOB_ENTRANCE_RANGE := 3.5
+const POCKET_CAPACITY := 8
+const POCKET_WOOD_CAPACITY := POCKET_CAPACITY
 # The hero gathers raw bootstrap materials in a batch per action, unlike NPCs who
 # fetch one-to-two at a time. This is the player's lever to force a direction:
 # playing the hero rushes what the officer's plan would otherwise trickle in.
@@ -253,16 +255,18 @@ var hero_citizen: Citizen
 var is_first_person := false
 var player_yaw := 0.0
 var player_pitch := -8.0
-var pocket_wood := 0
-var pocket_food := 0
-var pocket_boards := 0
-var pocket_water := 0
+var pocket: Dictionary = {} # resource_type -> count, total limited by POCKET_CAPACITY
 var interaction_time := 0.0
 var interaction_action := ""
 var interaction_resource := ""
+var interaction_start_cell := Vector2i(-9999, -9999)
+var interaction_repeat_all := false
 var player_work_target: Node3D
 var interaction_hint_label: Label
 var interaction_progress: ProgressBar
+var pocket_take_menu: Panel
+var pocket_take_menu_title: Label
+var pocket_menu_open := false
 var dig_sites: Array[Dictionary] = []
 var dig_cells: Dictionary = {}
 var exhausted_dig_cells: Dictionary = {}
@@ -1745,12 +1749,12 @@ func _update_interface(message: String) -> void:
 	wood_label.text = "\n".join(lines)
 	_add_message(message)
 	if is_first_person:
-		var build_hint := "  B: construction" if player_citizen == hero_citizen else ""
+		var build_hint := "  B: стройка" if player_citizen == hero_citizen else ""
 		if not build_mode.is_empty():
-			build_hint += "  Q/E: rotate"
-		camera_hint_label.text = "R: hero/overview  WASD/arrows: move  Space: jump  Shift: sprint  Mouse: look  LMB: interact  RMB: dig%s" % build_hint
+			build_hint += "  Q/E: поворот"
+		camera_hint_label.text = "R: герой/обзор  WASD: ходить  Пробел: прыжок  Shift: бег  Мышь: осмотр  F: действие  Shift+F: всё  ПКМ: копать%s" % build_hint
 	else:
-		camera_hint_label.text = "R: view from hero. Select a citizen and choose Manage. Right drag: rotate  Middle drag: pan  Wheel: zoom"
+		camera_hint_label.text = "R: вид от героя. Выберите жителя и нажмите Управлять. ПКМ+перетаскивание: поворот  СКМ: панорама  Колесо: масштаб"
 
 const ERA_CATEGORIES := ["tent", "earth", "clay", "wood", "stone", "brick"]
 
@@ -2420,15 +2424,22 @@ func _create_interface() -> void:
 	ui.add_child(clock_label)
 	_create_time_controls(ui)
 	interaction_hint_label = Label.new()
-	interaction_hint_label.position = Vector2(20, 592)
-	interaction_hint_label.size = Vector2(500, 28)
+	interaction_hint_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	interaction_hint_label.offset_left = -300
+	interaction_hint_label.offset_top = 32
+	interaction_hint_label.offset_right = 300
+	interaction_hint_label.offset_bottom = 60
+	interaction_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	interaction_hint_label.add_theme_font_size_override("font_size", 18)
 	interaction_hint_label.visible = false
 	ui.add_child(interaction_hint_label)
 	interaction_progress = ProgressBar.new()
-	interaction_progress.position = Vector2(20, 625)
-	interaction_progress.size = Vector2(310, 22)
-	interaction_progress.show_percentage = false
+	interaction_progress.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	interaction_progress.offset_left = -155
+	interaction_progress.offset_top = 64
+	interaction_progress.offset_right = 155
+	interaction_progress.offset_bottom = 86
+	interaction_progress.show_percentage = true
 	interaction_progress.visible = false
 	ui.add_child(interaction_progress)
 	var build_toggle_btn := Button.new()
@@ -2447,6 +2458,7 @@ func _create_interface() -> void:
 	_create_campfire_story_menu(ui)
 	_create_market_menu(ui)
 	_create_warehouse_menu(ui)
+	_create_pocket_take_menu(ui)
 	_create_building_menu(ui)
 	_create_workforce_menu(ui)
 	_create_research_menu(ui)
@@ -4384,6 +4396,7 @@ func _close_context_menus() -> void:
 	market_menu.visible = false
 	warehouse_menu.visible = false
 	building_menu.visible = false
+	_close_pocket_take_menu()
 	_hide_workforce_menu()
 	selected_house = null
 	selected_entrance = null
@@ -4421,24 +4434,30 @@ func _unhandled_input(event: InputEvent) -> void:
 		_move_selection(selected_world_position)
 		get_viewport().set_input_as_handled()
 		return
+	if event is InputEventKey and event.keycode == KEY_ESCAPE and event.pressed and not event.echo:
+		if pocket_menu_open:
+			_close_pocket_take_menu()
+			get_viewport().set_input_as_handled()
+			return
 	if is_first_person:
 		if event is InputEventKey and event.keycode == KEY_B and event.pressed and not event.echo:
 			if _can_hero_build():
 				_toggle_global_build_menu()
 				Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE if build_menu.visible else Input.MOUSE_MODE_CAPTURED)
 			else:
-				_update_interface("Only the hero can approve construction decisions.")
+				_update_interface("Только герой может утверждать строительство.")
+		elif event is InputEventKey and event.keycode == KEY_F and event.pressed and not event.echo:
+			_start_interaction(event.shift_pressed)
+			get_viewport().set_input_as_handled()
+			return
 		elif event is InputEventMouseMotion:
 			if not build_menu.visible:
 				player_yaw -= event.relative.x * 0.0035
 				player_pitch = clampf(player_pitch - event.relative.y * 0.003, deg_to_rad(-70.0), deg_to_rad(65.0))
-		elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-			if not build_mode.is_empty() and _can_hero_build():
-				_place_building_at_crosshair()
-			else:
-				_start_interaction()
 		elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
-			if not build_mode.is_empty():
+			if pocket_menu_open:
+				_close_pocket_take_menu()
+			elif not build_mode.is_empty():
 				_cancel_build_action()
 			elif player_citizen == hero_citizen:
 				_dig_voxel_at_crosshair()
@@ -4837,6 +4856,11 @@ func _enter_first_person(citizen: Citizen, message: String) -> void:
 	build_mode = ""
 	selection_marker.visible = false
 	build_menu.visible = false
+	_close_pocket_take_menu()
+	interaction_action = ""
+	interaction_resource = ""
+	interaction_start_cell = Vector2i(-9999, -9999)
+	interaction_repeat_all = false
 	player_yaw = player_citizen.rotation.y
 	player_pitch = 0.0
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
@@ -4849,7 +4873,11 @@ func _leave_first_person_to_hero_overview() -> void:
 		player_citizen.set_player_controlled(false)
 		player_citizen.set_head_visible(true)
 	player_citizen = null
+	_close_pocket_take_menu()
 	interaction_action = ""
+	interaction_resource = ""
+	interaction_start_cell = Vector2i(-9999, -9999)
+	interaction_repeat_all = false
 	interaction_hint_label.visible = false
 	interaction_progress.visible = false
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
@@ -4902,7 +4930,15 @@ func _update_player_control(delta: float) -> void:
 	camera.rotation = Vector3(player_pitch, player_yaw, 0.0)
 	_refresh_interaction_hint()
 
-func _start_interaction() -> void:
+func _start_interaction(all: bool) -> void:
+	if not is_first_person or player_citizen == null:
+		return
+	if pocket_menu_open:
+		_close_pocket_take_menu()
+		return
+	if not player_citizen.is_hero:
+		_update_interface("Только герой может выполнять действия. Остальными жителями можно только двигаться.")
+		return
 	if not interaction_action.is_empty():
 		return
 	var work_target := _nearby_player_work_target()
@@ -4910,92 +4946,101 @@ func _start_interaction() -> void:
 		player_work_target = work_target
 		interaction_action = "demolition" if bool(work_target.get_meta("pending_demolition", false)) else "construction"
 		interaction_time = 0.0
+		interaction_start_cell = _cell_from_position(player_citizen.global_position)
 		interaction_progress.visible = true
-		interaction_hint_label.text = "Working on %s..." % ("demolition" if interaction_action == "demolition" else "construction")
+		interaction_hint_label.text = "Работаем: %s..." % ("снос" if interaction_action == "demolition" else "стройка")
 		return
-	if _nearby_sawmill() and pocket_wood > 0:
-		var sawmill_position := _nearby_sawmill_position()
-		var stock := _sawmill_stock(sawmill_position)
-		stock.logs = int(stock.logs) + pocket_wood
-		_store_sawmill_stock(sawmill_position, stock)
-		var unloaded := pocket_wood
-		pocket_wood = 0
-		_update_interface("Unloaded %d logs at the sawmill. Boards will be ready after processing." % unloaded)
-		_refresh_interaction_hint()
-		return
-	if _nearby_sawmill():
-		var pickup_sawmill_position := _nearby_sawmill_position()
-		var pickup_stock := _sawmill_stock(pickup_sawmill_position)
-		var free_capacity := POCKET_WOOD_CAPACITY - pocket_wood - pocket_food - pocket_boards
-		var amount := mini(int(pickup_stock.boards), free_capacity)
-		if amount > 0:
-			pickup_stock.boards = int(pickup_stock.boards) - amount
-			_store_sawmill_stock(pickup_sawmill_position, pickup_stock)
-			pocket_boards += amount
-			_update_interface("Picked up %d boards from the sawmill." % amount)
-		else:
-			_update_interface("The sawmill has no ready boards, or your pocket is full.")
-		_refresh_interaction_hint()
-		return
-	if _nearby_warehouse() and (pocket_food > 0 or pocket_boards > 0 or pocket_water > 0):
-		var delivered_food := mini(pocket_food, settlement.storage_room_for("food"))
-		var delivered_boards := mini(pocket_boards, settlement.storage_room_for("boards"))
-		var delivered_water := mini(pocket_water, settlement.storage_room_for("water"))
-		if delivered_food + delivered_boards + delivered_water <= 0:
-			_update_interface("No storage room. Rebalance the warehouse or build another.")
+	var sawmill_pos := _nearby_sawmill_position()
+	if sawmill_pos != Vector3.INF:
+		var wood_count := _pocket_amount("wood") + _pocket_amount("logs")
+		if wood_count > 0:
+			var delivered := 0
+			if all:
+				var wood_delivered := _remove_from_pocket("wood", wood_count)
+				var logs_delivered := _remove_from_pocket("logs", wood_count - wood_delivered)
+				delivered = wood_delivered + logs_delivered
+			else:
+				delivered = _remove_from_pocket("wood", 1)
+				if delivered == 0:
+					delivered = _remove_from_pocket("logs", 1)
+			if delivered > 0:
+				var stock := _sawmill_stock(sawmill_pos)
+				stock.logs = int(stock.logs) + delivered
+				_store_sawmill_stock(sawmill_pos, stock)
+				_update_interface("Сдано %d дерева на лесопилку." % delivered)
+			_refresh_interaction_hint()
 			return
-		food += delivered_food
-		boards += delivered_boards
-		water += delivered_water
-		pocket_food -= delivered_food
-		pocket_boards -= delivered_boards
-		pocket_water -= delivered_water
-		_update_interface("Delivered %d food, %d boards, %d water to the warehouse." % [delivered_food, delivered_boards, delivered_water])
-		_refresh_interaction_hint()
+		var sawmill_stock := _sawmill_stock(sawmill_pos)
+		var available_boards := int(sawmill_stock.boards)
+		if available_boards > 0 and _pocket_has_room():
+			var take_amount := mini(available_boards, _pocket_space_for("boards")) if all else 1
+			take_amount = _add_to_pocket("boards", take_amount)
+			if take_amount > 0:
+				sawmill_stock.boards = int(sawmill_stock.boards) - take_amount
+				_store_sawmill_stock(sawmill_pos, sawmill_stock)
+				_update_interface("Взяли %d досок с лесопилки." % take_amount)
+			_refresh_interaction_hint()
+			return
+	if _nearby_warehouse():
+		if _pocket_total() > 0:
+			if all:
+				_deliver_all_pocket_to_warehouse()
+			else:
+				_deliver_one_pocket_to_warehouse()
+			_refresh_interaction_hint()
+		else:
+			_show_pocket_take_menu()
+		return
+	var workplace := _nearby_workplace_for_job()
+	if workplace != null:
+		_occupy_workplace(workplace)
 		return
 	if _nearby_pond() and not (_nearby_tree() or _nearby_farm()):
 		if not bool(settlement.tools.get("bucket", false)):
-			_update_interface("You need a bucket to draw water. Buy one at a market.")
+			_update_interface("Нужно ведро, чтобы черпать воду. Купите его на рынке.")
 			return
-		if _pocket_total() >= POCKET_WOOD_CAPACITY:
-			_update_interface("Pocket is full. Take water to the warehouse.")
+		if not _pocket_has_room():
+			_update_interface("Карман полон. Отнесите воду на склад.")
 			_refresh_interaction_hint()
 			return
 		interaction_resource = "water"
 		interaction_action = "harvesting"
 		interaction_time = 0.0
+		interaction_start_cell = _cell_from_position(player_citizen.global_position)
+		interaction_repeat_all = all
 		interaction_progress.visible = true
-		interaction_hint_label.text = "Filling bucket..."
+		interaction_hint_label.text = "Набираем воду..."
 		return
 	if _nearby_grass_source():
-		if not settlement.can_make_room_for("grass", 1, warehouse_positions.size()):
-			_update_interface("No storage room for grass. Rebalance the warehouse or build another.")
+		if not _pocket_has_room():
+			_update_interface("Карман полон.")
+			_refresh_interaction_hint()
 			return
 		interaction_resource = "grass"
 		interaction_action = "harvesting"
 		interaction_time = 0.0
+		interaction_start_cell = _cell_from_position(player_citizen.global_position)
+		interaction_repeat_all = all
 		interaction_progress.visible = true
-		interaction_hint_label.text = "Gathering grass..."
+		interaction_hint_label.text = "Собираем траву..."
 		return
 	if _nearby_forage_source() or _nearby_rabbit_source():
 		_update_interface(_wild_food_requires_specialist_message())
 		return
 	if _nearby_tree() or _nearby_farm():
 		var gathering_branches := _nearby_tree() and settlement.era < SettlementState.Era.WOOD
-		if not gathering_branches and _pocket_total() >= POCKET_WOOD_CAPACITY:
-			_update_interface("Pocket is full. Take wood to the sawmill or food to the warehouse.")
+		if not gathering_branches and not _pocket_has_room():
+			_update_interface("Карман полон. Дерево — на лесопилку, еду — на склад.")
 			_refresh_interaction_hint()
 			return
 		interaction_resource = "branches" if gathering_branches else ("wood" if _nearby_tree() else "food")
 		interaction_action = "harvesting"
 		interaction_time = 0.0
+		interaction_start_cell = _cell_from_position(player_citizen.global_position)
+		interaction_repeat_all = all
 		interaction_progress.visible = true
-		interaction_hint_label.text = "Gathering %s..." % interaction_resource
+		interaction_hint_label.text = "Собираем %s..." % interaction_resource
 		return
-	if _nearby_warehouse():
-		_update_interface("Food pocket is empty. Wood must go to a sawmill first.")
-	else:
-		_update_interface("Move closer to a tree, farm, pond, warehouse or sawmill.")
 
 func _dig_voxel_at_crosshair() -> void:
 	if voxel_tool == null:
@@ -5032,46 +5077,124 @@ func _update_interaction(delta: float) -> void:
 			_refresh_interaction_hint()
 			return
 		interaction_progress.value = 100.0
-		interaction_hint_label.text = "Working on %s..." % interaction_action
+		interaction_hint_label.text = "Работаем: %s..." % interaction_action
+		return
+	if _cell_from_position(player_citizen.global_position) != interaction_start_cell:
+		interaction_action = ""
+		interaction_progress.visible = false
+		_update_interface("Действие прервано: вы отошли от клетки.")
+		_refresh_interaction_hint()
 		return
 	if (interaction_resource in ["wood", "branches"] and not _nearby_tree()) or (interaction_resource == "food" and not _nearby_farm()) or (interaction_resource == "water" and not _nearby_pond()) or (interaction_resource == "grass" and not _nearby_grass_source()):
 		interaction_action = ""
 		interaction_progress.visible = false
-		_update_interface("Gathering cancelled: you moved away from the resource.")
+		_update_interface("Добыча отменена: вы отошли от источника.")
 		return
 	interaction_time += delta
-	interaction_progress.value = interaction_time / HARVEST_DURATION * 100.0
-	interaction_hint_label.text = "Gathering %s: %d%%" % [interaction_resource, roundi(interaction_progress.value)]
+	var progress_pct := clampi(int(interaction_time / HARVEST_DURATION * 100.0), 0, 100)
+	interaction_progress.value = progress_pct
+	var remaining_pct := _resource_remaining_percent(interaction_resource)
+	interaction_hint_label.text = "%s %d%% (источник %d%%)" % [_gather_action_name(interaction_resource), progress_pct, remaining_pct]
 	if interaction_time >= HARVEST_DURATION:
 		interaction_action = ""
-		if interaction_resource == "wood":
-			pocket_wood += 1
-		elif interaction_resource == "branches":
-			var branch_batch := _reserve_player_gather_storage("branches", HERO_GATHER_YIELD)
-			if branch_batch > 0:
-				branches += branch_batch
-				_update_interface("Gathered %d branches. Branches: %d." % [branch_batch, branches])
-			else:
-				_update_interface("No storage room for branches. Rebalance the warehouse or build another.")
-		elif interaction_resource == "grass":
-			var grass_batch := _reserve_player_gather_storage("grass", HERO_GATHER_YIELD)
-			if grass_batch > 0:
-				grass += grass_batch
-				_consume_grass_near_player(grass_batch)
-				_update_interface("Gathered %d grass. Grass: %d." % [grass_batch, grass])
-			else:
-				_update_interface("No storage room for grass. Rebalance the warehouse or build another.")
-		elif interaction_resource == "water":
-			pocket_water += 1
+		var gathered := 0
+		match interaction_resource:
+			"wood":
+				gathered = _add_to_pocket("wood", 1)
+				if gathered > 0:
+					_fell_nearest_tree()
+			"branches":
+				var branch_batch := HERO_GATHER_YIELD
+				gathered = _add_to_pocket("branches", branch_batch)
+				if gathered > 0:
+					_consume_tree_near_player()
+			"grass":
+				var grass_batch := HERO_GATHER_YIELD
+				gathered = _add_to_pocket("grass", grass_batch)
+				if gathered > 0:
+					_consume_grass_near_player(gathered)
+			"water":
+				gathered = _add_to_pocket("water", 1)
+			"food":
+				gathered = _add_to_pocket("food", 1)
+		if gathered > 0:
+			_update_interface("Собрано %s. %s" % [interaction_resource, _format_pocket_hint()])
 		else:
-			pocket_food += 1
+			_update_interface("Карман полон. Невозможно собрать %s." % interaction_resource)
 		interaction_progress.visible = false
-		_consume_tree_near_player() if interaction_resource == "wood" else null
-		if interaction_resource in ["branches", "grass"]:
-			pass
-		else:
-			_update_interface("Gathered. Wood: %d, food: %d, water: %d, boards: %d, pocket: %d/%d." % [pocket_wood, pocket_food, pocket_water, pocket_boards, _pocket_total(), POCKET_WOOD_CAPACITY])
 		_refresh_interaction_hint()
+		if interaction_repeat_all and _pocket_has_room() and _can_continue_harvesting(interaction_resource):
+			_start_interaction(true)
+
+
+func _gather_action_name(resource_type: String) -> String:
+	match resource_type:
+		"wood": return "Срубить дерево"
+		"branches": return "Собрать ветки"
+		"grass": return "Собрать траву"
+		"water": return "Набрать воду"
+		"food": return "Собрать еду"
+	return "Действие"
+
+
+func _can_continue_harvesting(resource_type: String) -> bool:
+	match resource_type:
+		"wood", "branches": return _nearby_tree()
+		"food": return _nearby_farm()
+		"water": return _nearby_pond()
+		"grass": return _nearby_grass_source()
+	return false
+
+
+func _deliver_all_pocket_to_warehouse() -> void:
+	var delivered_total := 0
+	var summary: Array[String] = []
+	for resource_type in _pocket_resources():
+		var amount := _pocket_amount(resource_type)
+		if amount <= 0:
+			continue
+		var to_deliver := amount
+		if not settlement.uses_virtual_storage():
+			to_deliver = mini(amount, settlement.storage_room_for(resource_type))
+		if to_deliver <= 0:
+			continue
+		settlement.add(resource_type, to_deliver)
+		_remove_from_pocket(resource_type, to_deliver)
+		delivered_total += to_deliver
+		summary.append("%d %s" % [to_deliver, resource_type])
+	if delivered_total > 0:
+		_update_interface("Сдано на склад: %s." % ", ".join(summary))
+	else:
+		_update_interface("Нет места на складе. Перераспределите лимиты или постройте склад.")
+
+
+func _deliver_one_pocket_to_warehouse() -> void:
+	var resource_type := _primary_pocket_resource()
+	if resource_type.is_empty():
+		return
+	var amount := _pocket_amount(resource_type)
+	if amount <= 0:
+		return
+	var to_deliver := 1
+	if not settlement.uses_virtual_storage():
+		to_deliver = mini(1, settlement.storage_room_for(resource_type))
+	if to_deliver <= 0:
+		_update_interface("Нет места для %s на складе." % resource_type)
+		return
+	settlement.add(resource_type, to_deliver)
+	_remove_from_pocket(resource_type, to_deliver)
+	_update_interface("Сдано 1 %s на склад. %s" % [resource_type, _format_pocket_hint()])
+
+
+func _occupy_workplace(workplace: Node3D) -> void:
+	var role := _role_for_workplace(workplace)
+	if role.is_empty():
+		return
+	selected_builder = player_citizen
+	_set_selected_work_role(role, false)
+	selected_builder = null
+	_update_interface("%s занял должность %s." % [player_citizen.role_label(), role.replace("_", " ")])
+	_refresh_interaction_hint()
 
 
 func _reserve_player_gather_storage(resource_type: String, requested: int) -> int:
@@ -5088,7 +5211,9 @@ func _nearby_tree() -> bool:
 		return false
 	for tree_position in tree_positions:
 		if player_citizen.global_position.distance_to(tree_position) <= INTERACTION_RANGE:
-			return true
+			var tree: Node3D = tree_nodes.get(_cell_from_position(tree_position))
+			if is_instance_valid(tree) and not bool(tree.get_meta("felled", false)):
+				return true
 	return false
 
 func _nearby_warehouse() -> bool:
@@ -5178,43 +5303,189 @@ func _wild_food_requires_specialist_message() -> String:
 	return "Forest gifts and rabbits can only be gathered by a trained specialist. Build a forager/hunter tent first."
 
 func _pocket_total() -> int:
-	return pocket_wood + pocket_food + pocket_boards + pocket_water
+	var total := 0
+	for amount in pocket.values():
+		total += int(amount)
+	return total
+
+
+func _pocket_space_for(resource_type: String) -> int:
+	return POCKET_CAPACITY - _pocket_total()
+
+
+func _pocket_has_room() -> bool:
+	return _pocket_total() < POCKET_CAPACITY
+
+
+func _pocket_amount(resource_type: String) -> int:
+	return int(pocket.get(resource_type, 0))
+
+
+func _add_to_pocket(resource_type: String, amount: int) -> int:
+	if amount <= 0 or resource_type.is_empty():
+		return 0
+	var added := mini(amount, _pocket_space_for(resource_type))
+	if added > 0:
+		pocket[resource_type] = _pocket_amount(resource_type) + added
+	return added
+
+
+func _remove_from_pocket(resource_type: String, amount: int) -> int:
+	if amount <= 0 or resource_type.is_empty() or not pocket.has(resource_type):
+		return 0
+	var current := _pocket_amount(resource_type)
+	var removed := mini(amount, current)
+	if removed <= 0:
+		return 0
+	if current <= removed:
+		pocket.erase(resource_type)
+	else:
+		pocket[resource_type] = current - removed
+	return removed
+
+
+func _pocket_resources() -> Array:
+	return pocket.keys().duplicate()
+
+
+func _primary_pocket_resource() -> String:
+	for resource_type in pocket.keys():
+		if int(pocket.get(resource_type, 0)) > 0:
+			return str(resource_type)
+	return ""
+
+
+func _pocket_summary() -> String:
+	if pocket.is_empty():
+		return ""
+	var parts: Array[String] = []
+	for resource_type in pocket:
+		parts.append("%s x%d" % [str(resource_type).capitalize(), int(pocket[resource_type])])
+	return " | ".join(parts)
+
+
+func _nearby_workplace_for_job() -> Node3D:
+	if player_citizen == null:
+		return null
+	var best: Node3D
+	var best_dist := JOB_ENTRANCE_RANGE
+	for record in building_registry.records():
+		var building := record.node as Node3D
+		if not is_instance_valid(building):
+			continue
+		var role := _role_for_workplace(building)
+		if role.is_empty():
+			continue
+		var service_pos: Vector3 = building.get_meta("service_position", building.global_position)
+		var dist := player_citizen.global_position.distance_to(service_pos)
+		if dist <= best_dist:
+			best = building
+			best_dist = dist
+	return best
+
+
+func _role_for_workplace(building: Node3D) -> String:
+	var building_type := str(building.get_meta("building_type", ""))
+	for candidate in ["forestry", "farming", "gather_food", "gather_branches", "cook", "teacher", "seller", "factory_worker", "engineer", "official"]:
+		if building_type in _employer_types_for_role(candidate):
+			return candidate
+	return ""
+
+
+func _resource_remaining_percent(resource_type: String) -> int:
+	if player_citizen == null:
+		return 0
+	match resource_type:
+		"wood", "branches":
+			for position in tree_positions:
+				if player_citizen.global_position.distance_to(position) <= INTERACTION_RANGE:
+					var tree: Node3D = tree_nodes.get(_cell_from_position(position))
+					if is_instance_valid(tree) and not bool(tree.get_meta("felled", false)):
+						return 100
+			return 0
+		"grass":
+			var pos := _nearby_grass_source_position()
+			if pos != Vector3.INF:
+				var cell := _cell_from_position(pos)
+				var source: Dictionary = grass_sources.get(cell, {})
+				var remaining := int(source.get("remaining", 0))
+				return int(round(float(remaining) / 12.0 * 100.0))
+			return 0
+		"water":
+			return 100
+		"food":
+			return 100
+	return 0
+
+
+func _format_pocket_hint() -> String:
+	return "Карман %d/%d%s" % [_pocket_total(), POCKET_CAPACITY, (" | " + _pocket_summary()) if not pocket.is_empty() else ""]
+
 
 func _refresh_interaction_hint() -> void:
-	if not is_first_person or not interaction_action.is_empty():
+	if not is_first_person:
+		return
+	if pocket_menu_open:
+		interaction_hint_label.text = "F/Esc: закрыть меню"
+		interaction_hint_label.visible = true
+		return
+	if not interaction_action.is_empty():
 		return
 	interaction_hint_label.visible = true
+	if player_citizen == null or not player_citizen.is_hero:
+		interaction_hint_label.text = "Наблюдение: WASD — двигаться, ПКМ — выйти в обзор"
+		return
 	var work_target := _nearby_player_work_target()
 	if work_target != null:
-		interaction_hint_label.text = "LMB: %s" % ("dismantle marked building" if bool(work_target.get_meta("pending_demolition", false)) else "build marked site")
+		interaction_hint_label.text = "F: %s" % ("разбирать отмеченное здание" if bool(work_target.get_meta("pending_demolition", false)) else "работать на стройке")
 		return
-	if _nearby_sawmill() and pocket_wood > 0:
-		interaction_hint_label.text = "LMB: unload wood at sawmill (%d wood)" % pocket_wood
-	elif _nearby_sawmill() and int(_sawmill_stock(_nearby_sawmill_position()).boards) > 0:
-		interaction_hint_label.text = "LMB: take ready boards from sawmill"
-	elif _nearby_warehouse() and (pocket_food > 0 or pocket_boards > 0 or pocket_water > 0):
-		interaction_hint_label.text = "LMB: unload food %d / boards %d / water %d at warehouse" % [pocket_food, pocket_boards, pocket_water]
-	elif _nearby_grass_source():
-		interaction_hint_label.text = "LMB: gather grass (x%d)" % HERO_GATHER_YIELD
-	elif _nearby_tree():
-		interaction_hint_label.text = "LMB: gather branches" if settlement.era < SettlementState.Era.WOOD else "LMB: gather wood (%d/%d in pocket)" % [_pocket_total(), POCKET_WOOD_CAPACITY]
-	elif _nearby_farm():
-		interaction_hint_label.text = "LMB: gather food (%d/%d in pocket)" % [_pocket_total(), POCKET_WOOD_CAPACITY]
-	elif _nearby_forage_source() or _nearby_rabbit_source():
-		interaction_hint_label.text = _wild_food_requires_specialist_message()
-	elif _nearby_pond():
-		if bool(settlement.tools.get("bucket", false)):
-			interaction_hint_label.text = "LMB: fill bucket with water (%d/%d in pocket)" % [_pocket_total(), POCKET_WOOD_CAPACITY]
+	var sawmill_pos := _nearby_sawmill_position()
+	if sawmill_pos != Vector3.INF:
+		var sawmill_stock := _sawmill_stock(sawmill_pos)
+		if _pocket_amount("wood") > 0 or _pocket_amount("logs") > 0:
+			var wood_count := _pocket_amount("wood") + _pocket_amount("logs")
+			interaction_hint_label.text = "F: сдать 1 дерево на лесопилку | Shift+F: сдать всё (%d) [%s]" % [wood_count, _format_pocket_hint()]
+			return
+		if int(sawmill_stock.boards) > 0 and _pocket_has_room():
+			interaction_hint_label.text = "F: взять 1 доску | Shift+F: взять до заполнения [%s]" % _format_pocket_hint()
+			return
+	if _nearby_warehouse():
+		if _pocket_total() > 0:
+			interaction_hint_label.text = "F: сдать 1 (%s) | Shift+F: сдать всё [%s]" % [_primary_pocket_resource().capitalize(), _format_pocket_hint()]
 		else:
-			interaction_hint_label.text = "Buy a bucket at a market to draw water here."
-	else:
-		interaction_hint_label.text = "LMB: gather. Logs go to sawmill, boards and food go to warehouse."
-	if player_citizen != null and is_instance_valid(player_citizen.employment_workplace):
-		var workplace := player_citizen.employment_workplace
-		var service_pos: Vector3 = workplace.get_meta("service_position", workplace.global_position)
-		if player_citizen.global_position.distance_to(service_pos) <= 3.5:
-			var type: String = workplace.get_meta("building_type", "Workplace")
-			interaction_hint_label.text = "You are occupying your workplace: %s" % type.capitalize().replace("_", " ")
+			interaction_hint_label.text = "F: открыть меню взятия товаров [%s]" % _format_pocket_hint()
+		return
+	var workplace := _nearby_workplace_for_job()
+	if workplace != null:
+		var role := _role_for_workplace(workplace)
+		var building_type := str(workplace.get_meta("building_type", " workplace"))
+		interaction_hint_label.text = "F: занять должность %s в %s" % [role, building_type.capitalize().replace("_", " ")]
+		return
+	if _nearby_grass_source():
+		var pct := _resource_remaining_percent("grass")
+		interaction_hint_label.text = "F: собрать траву | Shift+F: собирать до полноты (%d%% осталось) [%s]" % [pct, _format_pocket_hint()]
+		return
+	if _nearby_tree():
+		if settlement.era < SettlementState.Era.WOOD:
+			var pct := _resource_remaining_percent("branches")
+			interaction_hint_label.text = "F: собрать ветки | Shift+F: собирать до полноты (%d%% осталось) [%s]" % [pct, _format_pocket_hint()]
+		else:
+			var pct := _resource_remaining_percent("wood")
+			interaction_hint_label.text = "F: срубить дерево | Shift+F: рубить до полноты (%d%% осталось) [%s]" % [pct, _format_pocket_hint()]
+		return
+	if _nearby_farm():
+		interaction_hint_label.text = "F: собрать еду | Shift+F: собирать до полноты [%s]" % _format_pocket_hint()
+		return
+	if _nearby_forage_source() or _nearby_rabbit_source():
+		interaction_hint_label.text = _wild_food_requires_specialist_message()
+		return
+	if _nearby_pond():
+		if bool(settlement.tools.get("bucket", false)):
+			interaction_hint_label.text = "F: набрать воды | Shift+F: набирать до полноты [%s]" % _format_pocket_hint()
+		else:
+			interaction_hint_label.text = "Нужно ведро, чтобы черпать воду. Купите его на рынке."
+		return
+	interaction_hint_label.visible = false
 
 func _terrain_point_at_screen_position(screen_position: Vector2) -> Variant:
 	var from := camera.project_ray_origin(screen_position)
@@ -5674,22 +5945,58 @@ func _grant_debug_resources() -> void:
 	_request_courier_dispatch()
 	_update_interface("Debug resources added in normal spending proportions.")
 
-func _register_service_entrance(building: Node3D, footprint: Vector2i, home_entrance := false, show_marker := true) -> void:
-	var service_position := building.to_global(Vector3(0.0, 0.0, footprint.y * 0.5 + SERVICE_PAD_OFFSET))
-	service_position.y = building.global_position.y
-	building.set_meta("service_position", service_position)
+func _register_service_entrance(building: Node3D, blueprint: Dictionary, home_entrance := false, show_marker := true) -> void:
+	var footprint: Vector2i = blueprint.footprint
+	var offsets: Array[Vector2i] = BuildingBlueprints.worker_entrance_offsets(blueprint.type)
+	var service_positions: Array[Vector3] = []
+	for offset in offsets:
+		var local := Vector3(offset.x * CELL_SIZE, 0.0, offset.y * CELL_SIZE)
+		if offset.x == -footprint.x / 2:
+			local.x -= SERVICE_PAD_OFFSET
+		elif offset.x == footprint.x / 2:
+			local.x += SERVICE_PAD_OFFSET
+		if offset.y == -footprint.y / 2:
+			local.z -= SERVICE_PAD_OFFSET
+		elif offset.y == footprint.y / 2:
+			local.z += SERVICE_PAD_OFFSET
+		var world := building.to_global(local)
+		world.y = building.global_position.y
+		service_positions.append(world)
+	if service_positions.is_empty():
+		var fallback := building.to_global(Vector3(0.0, 0.0, -footprint.y * 0.5 - SERVICE_PAD_OFFSET))
+		fallback.y = building.global_position.y
+		service_positions.append(fallback)
+	building.set_meta("service_positions", service_positions)
+	building.set_meta("service_position", service_positions[0])
 	if home_entrance:
-		building.set_meta("entrance_position", service_position)
-	service_pockets.append({"cell": _cell_from_position(service_position), "node": building})
+		building.set_meta("entrance_positions", service_positions)
+		building.set_meta("entrance_position", service_positions[0])
+	for service_position in service_positions:
+		service_pockets.append({"cell": _cell_from_position(service_position), "node": building})
 	if show_marker:
-		_add_service_entrance_marker(building, footprint)
+		for offset in offsets:
+			_add_service_entrance_marker(building, footprint, offset)
+		if offsets.is_empty():
+			_add_service_entrance_marker(building, footprint, Vector2i(0, -footprint.y / 2))
 
-func _add_service_entrance_marker(building: Node3D, footprint: Vector2i) -> void:
+func _add_service_entrance_marker(building: Node3D, footprint: Vector2i, entrance_offset: Vector2i) -> void:
+	var local := Vector3(entrance_offset.x * CELL_SIZE, 0.0, entrance_offset.y * CELL_SIZE)
+	var outward := Vector3.ZERO
+	if entrance_offset.x == -footprint.x / 2:
+		outward.x = -1.0
+	elif entrance_offset.x == footprint.x / 2:
+		outward.x = 1.0
+	if entrance_offset.y == -footprint.y / 2:
+		outward.z = -1.0
+	elif entrance_offset.y == footprint.y / 2:
+		outward.z = 1.0
+	var door_position := local
+	var marker_position := local + outward * SERVICE_PAD_OFFSET
 	var marker := MeshInstance3D.new()
 	var marker_mesh := BoxMesh.new()
 	marker_mesh.size = Vector3(0.72, 1.45, 0.12)
 	marker.mesh = marker_mesh
-	marker.position = Vector3(0.0, 0.73, footprint.y * 0.5 + 0.08)
+	marker.position = marker_position + Vector3(0.0, 0.73, 0.0)
 	var marker_material := StandardMaterial3D.new()
 	marker_material.albedo_color = Color("17191c")
 	marker_material.roughness = 0.95
@@ -5697,7 +6004,7 @@ func _add_service_entrance_marker(building: Node3D, footprint: Vector2i) -> void
 	building.add_child(marker)
 	var sign := Label3D.new()
 	sign.text = "STAFF"
-	sign.position = Vector3(0.0, 1.72, footprint.y * 0.5 + 0.16)
+	sign.position = marker_position + Vector3(0.0, 1.72, 0.0)
 	sign.font_size = 24
 	sign.modulate = Color("e5c86b")
 	building.add_child(sign)
@@ -5706,7 +6013,7 @@ func _add_service_entrance_marker(building: Node3D, footprint: Vector2i) -> void
 	light.light_energy = 2.0
 	light.omni_range = 5.0
 	light.shadow_enabled = true
-	light.position = Vector3(0.0, 2.2, footprint.y * 0.5 + 0.45)
+	light.position = marker_position + Vector3(0.0, 2.2, 0.0)
 	light.visible = false
 	building.add_child(light)
 	entrance_lights.append(light)
@@ -5755,9 +6062,21 @@ func _consume_tree_near_player() -> void:
 		if player_citizen.global_position.distance_to(position_on_board) <= INTERACTION_RANGE:
 			var tree: Node3D = tree_nodes.get(_cell_from_position(position_on_board))
 			if is_instance_valid(tree) and not bool(tree.get_meta("felled", false)):
-				branches += 1
 				_update_interface("Collected branches. The tree remains standing.")
 				return
+
+
+func _fell_nearest_tree() -> void:
+	if player_citizen == null:
+		return
+	for position_on_board in tree_positions:
+		if player_citizen.global_position.distance_to(position_on_board) <= INTERACTION_RANGE:
+			var tree: Node3D = tree_nodes.get(_cell_from_position(position_on_board))
+			if is_instance_valid(tree) and not bool(tree.get_meta("felled", false)):
+				tree.set_meta("felled", true)
+				tree.rotation_degrees.z = 82.0
+				return
+
 
 func _fell_tree_at(position_on_board: Vector3) -> void:
 	var cell := _cell_from_position(position_on_board)
@@ -7141,6 +7460,98 @@ func _create_warehouse_menu(ui: CanvasLayer) -> void:
 	warehouse_menu_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	warehouse_menu_title.add_theme_font_size_override("font_size", 15)
 	warehouse_menu.add_child(warehouse_menu_title)
+
+
+func _create_pocket_take_menu(ui: CanvasLayer) -> void:
+	pocket_take_menu = Panel.new()
+	pocket_take_menu.set_anchors_preset(Control.PRESET_CENTER)
+	pocket_take_menu.offset_left = -220.0
+	pocket_take_menu.offset_top = -260.0
+	pocket_take_menu.offset_right = 220.0
+	pocket_take_menu.offset_bottom = 260.0
+	pocket_take_menu.visible = false
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.03, 0.06, 0.08, 0.95)
+	style.border_color = Color(0.2, 0.35, 0.45, 0.8)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(6)
+	pocket_take_menu.add_theme_stylebox_override("panel", style)
+	ui.add_child(pocket_take_menu)
+	pocket_take_menu.gui_input.connect(_on_context_menu_gui_input)
+
+	pocket_take_menu_title = Label.new()
+	pocket_take_menu_title.text = "Взять товары со склада"
+	pocket_take_menu_title.position = Vector2(20, 12)
+	pocket_take_menu_title.size = Vector2(400, 28)
+	pocket_take_menu_title.add_theme_font_size_override("font_size", 17)
+	pocket_take_menu.add_child(pocket_take_menu_title)
+
+
+func _show_pocket_take_menu() -> void:
+	pocket_take_menu.visible = true
+	pocket_menu_open = true
+	_refresh_pocket_take_menu()
+
+
+func _close_pocket_take_menu() -> void:
+	pocket_take_menu.visible = false
+	pocket_menu_open = false
+
+
+func _refresh_pocket_take_menu() -> void:
+	if pocket_take_menu == null:
+		return
+	for child in pocket_take_menu.get_children():
+		if child != pocket_take_menu_title:
+			child.queue_free()
+	var y_offset := 52.0
+	var displayed_resources: Array[String]
+	if settlement.era == SettlementState.Era.TENT:
+		displayed_resources = ["branches", "grass", "water", "food", "tarp"]
+	else:
+		displayed_resources = ["branches", "grass", "water", "food", "soil", "clay", "logs", "wood", "boards", "stone", "bricks", "tarp"]
+	for resource_type in displayed_resources:
+		var stored := settlement.amount(resource_type)
+		if stored <= 0:
+			continue
+		var row := Label.new()
+		row.position = Vector2(20, y_offset + 4)
+		row.size = Vector2(220, 24)
+		row.add_theme_font_size_override("font_size", 13)
+		row.text = "%s: %d" % [resource_type.capitalize(), stored]
+		pocket_take_menu.add_child(row)
+		var take_one := Button.new()
+		take_one.text = "+1"
+		take_one.position = Vector2(260, y_offset)
+		take_one.size = Vector2(60, 28)
+		take_one.pressed.connect(_take_resource_into_pocket.bind(resource_type, 1))
+		pocket_take_menu.add_child(take_one)
+		var take_all := Button.new()
+		take_all.text = "+max"
+		take_all.position = Vector2(326, y_offset)
+		take_all.size = Vector2(74, 28)
+		take_all.pressed.connect(_take_resource_into_pocket.bind(resource_type, _pocket_space_for(resource_type)))
+		pocket_take_menu.add_child(take_all)
+		y_offset += 34.0
+	var close_btn := Button.new()
+	close_btn.text = "Закрыть (F/Esc)"
+	close_btn.position = Vector2(20, y_offset + 8)
+	close_btn.size = Vector2(380, 30)
+	close_btn.pressed.connect(_close_pocket_take_menu)
+	pocket_take_menu.add_child(close_btn)
+	pocket_take_menu_title.text = "Взять товары со склада (карман %d/%d)" % [_pocket_total(), POCKET_CAPACITY]
+
+
+func _take_resource_into_pocket(resource_type: String, amount: int) -> void:
+	if amount <= 0:
+		return
+	amount = mini(amount, settlement.amount(resource_type))
+	amount = _add_to_pocket(resource_type, amount)
+	if amount > 0:
+		settlement.add(resource_type, -amount)
+		_update_interface("Взяли %d %s со склада." % [amount, resource_type])
+	_refresh_pocket_take_menu()
+	_refresh_interaction_hint()
 
 
 func _show_warehouse_menu() -> void:
