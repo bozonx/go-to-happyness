@@ -517,6 +517,7 @@ func _process(delta: float) -> void:
 		_update_player_control(delta)
 		_update_interaction(delta)
 		_refresh_interaction_hint()
+		_update_warehouse_fill_labels()
 		if not build_mode.is_empty():
 			var viewport_center := get_viewport().get_visible_rect().size * 0.5
 			var terrain_point: Variant = _terrain_point_at_screen_position(viewport_center)
@@ -5668,9 +5669,27 @@ func _first_person_action_hint() -> String:
 		if int(sawmill_stock.boards) > 0 and _pocket_has_room():
 			return "F: взять 1 доску | Shift+F: взять до заполнения"
 	if _nearby_warehouse():
+		var wh_index := _nearby_warehouse_index()
 		if _pocket_total() > 0:
-			return "F: сдать 1 (%s) | Shift+F: сдать всё" % _primary_pocket_resource().capitalize()
-		return "F: открыть меню взятия товаров"
+			var primary_res := _primary_pocket_resource()
+			var wh_room := settlement.warehouse_room_for(wh_index, primary_res) if wh_index >= 0 else settlement.storage_room_for(primary_res)
+			if wh_room <= 0:
+				return "Склад заполнен"
+			return "F: сдать 1 (%s) | Shift+F: сдать всё" % primary_res.capitalize()
+		var wh_has_goods := false
+		if wh_index >= 0 and wh_index < settlement.warehouses.size():
+			for res_type in SettlementState.STORED_RESOURCES:
+				if settlement.warehouses[wh_index].amount(res_type) > 0:
+					wh_has_goods = true
+					break
+		elif settlement.uses_virtual_storage():
+			for res_type in SettlementState.STORED_RESOURCES:
+				if int(settlement.backpack.get(res_type, 0)) > 0:
+					wh_has_goods = true
+					break
+		if wh_has_goods:
+			return "F: открыть меню взятия товаров"
+		return ""
 	var workplace := _nearby_workplace_for_job()
 	if workplace != null:
 		var role := _role_for_workplace(workplace)
@@ -5879,6 +5898,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 				_drop_overflow_as_piles(overflow, service_position)
 			settlement.ensure_storage_defaults(warehouse_positions.size())
 			_add_building_selector(building, "warehouse_selector", blueprint.footprint)
+			_add_warehouse_fill_label(building)
 		"sawmill":
 			sawmill_positions.append(service_position)
 			_sawmill_stock(service_position)
@@ -6036,6 +6056,46 @@ func _add_building_status_indicator(building: Node3D) -> void:
 	building.add_child(indicator)
 	building.set_meta("status_indicator", indicator)
 	building_status_indicators.append(indicator)
+
+
+func _add_warehouse_fill_label(building: Node3D) -> void:
+	if not is_instance_valid(building) or building.has_meta("warehouse_fill_label"):
+		return
+	var label := Label3D.new()
+	label.position = Vector3(0.0, 3.6, 0.0)
+	label.font_size = 22
+	label.outline_size = 4
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.visible = false
+	building.add_child(label)
+	building.set_meta("warehouse_fill_label", label)
+
+
+func _update_warehouse_fill_labels() -> void:
+	for i in range(warehouse_positions.size()):
+		var service_pos: Vector3 = warehouse_positions[i]
+		var building := _building_at_service_position(service_pos)
+		if not is_instance_valid(building):
+			continue
+		var label := building.get_meta("warehouse_fill_label") as Label3D
+		if label == null:
+			continue
+		if not is_first_person:
+			label.visible = false
+			continue
+		var is_nearby := player_citizen != null and player_citizen.global_position.distance_to(service_pos) <= INTERACTION_RANGE
+		if not is_nearby:
+			label.visible = false
+			continue
+		var wh_state: WarehouseState = settlement.warehouses[i] if i < settlement.warehouses.size() else null
+		if wh_state == null:
+			label.visible = false
+			continue
+		var used := int(ceil(wh_state.used_units(SettlementState.STORAGE_WEIGHTS)))
+		label.text = "%d / %d" % [used, wh_state.capacity]
+		label.modulate = Color("8ecae6") if used < wh_state.capacity else Color("ef6b5b")
+		label.visible = true
 
 func _update_building_status_indicators(delta: float) -> void:
 	building_status_update_time -= delta
@@ -7589,6 +7649,8 @@ func _upgrade_selected_building() -> void:
 		child.queue_free()
 	if selected_building.has_meta("status_indicator"):
 		selected_building.remove_meta("status_indicator")
+	if selected_building.has_meta("warehouse_fill_label"):
+		selected_building.remove_meta("warehouse_fill_label")
 	selected_building.set_meta("building_type", target_type)
 	selected_building.set_meta("footprint", blueprint.footprint)
 	selected_building.set_meta("occupied_footprint", blueprint.footprint)
@@ -7607,6 +7669,8 @@ func _upgrade_selected_building() -> void:
 		_add_building_selector(selected_building, "cook_campfire_selector", blueprint.footprint)
 		_add_fire_light(selected_building)
 	_add_building_status_indicator(selected_building)
+	if target_type in ["warehouse", "straw_warehouse", "tarp_warehouse"]:
+		_add_warehouse_fill_label(selected_building)
 	_refresh_navigation_grid()
 	_update_workers()
 	_update_interface("%s upgraded to %s." % [str(BuildingCatalog.definition_for(old_type).get("name", old_type)), str(BuildingCatalog.definition_for(target_type).get("name", target_type))])
