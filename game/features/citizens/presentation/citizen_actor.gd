@@ -1606,7 +1606,7 @@ func assign_construction(site: Node3D) -> void:
 	_reset_assignment_navigation()
 	construction_site = site
 	factory = null
-	construction_position = _work_position_for(site)
+	construction_position = _reachable_construction_approach(site)
 	movement_path.clear()
 	active_role = "construction"
 	state = State.CONSTRUCTING
@@ -1617,7 +1617,7 @@ func assign_demolition(building: Node3D) -> void:
 	_reset_assignment_navigation()
 	construction_site = building
 	factory = null
-	construction_position = _work_position_for(building)
+	construction_position = _reachable_construction_approach(building)
 	movement_path.clear()
 	active_role = "demolition"
 	state = State.CONSTRUCTING

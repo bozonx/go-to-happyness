@@ -2440,12 +2440,12 @@ func _create_interface() -> void:
 	interaction_hint_panel = Panel.new()
 	interaction_hint_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	interaction_hint_panel.offset_left = -340
-	interaction_hint_panel.offset_top = 28
+	interaction_hint_panel.offset_top = -80
 	interaction_hint_panel.offset_right = 340
-	interaction_hint_panel.offset_bottom = 96
+	interaction_hint_panel.offset_bottom = -12
 	var hint_style := StyleBoxFlat.new()
-	hint_style.bg_color = Color(0.03, 0.06, 0.08, 0.85)
-	hint_style.border_color = Color(0.2, 0.35, 0.45, 0.8)
+	hint_style.bg_color = Color(0.08, 0.14, 0.18, 0.75)
+	hint_style.border_color = Color(0.25, 0.4, 0.5, 0.7)
 	hint_style.set_border_width_all(2)
 	hint_style.set_corner_radius_all(6)
 	interaction_hint_panel.add_theme_stylebox_override("panel", hint_style)
@@ -2502,8 +2502,8 @@ func _create_context_menu_panel(ui: CanvasLayer, anchor: int, offsets: Vector4, 
 	panel.offset_bottom = offsets.w
 	panel.visible = false
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.03, 0.06, 0.08, 0.95)
-	style.border_color = Color(0.2, 0.35, 0.45, 0.8)
+	style.bg_color = Color(0.08, 0.14, 0.18, 0.75)
+	style.border_color = Color(0.25, 0.4, 0.5, 0.7)
 	style.set_border_width_all(2)
 	style.set_corner_radius_all(6)
 	panel.add_theme_stylebox_override("panel", style)
@@ -2574,7 +2574,7 @@ func _create_campfire_story_menu(ui: CanvasLayer) -> void:
 	close.text = "Close"
 	close.position = Vector2(20, y + 4)
 	close.size = Vector2(400, 28)
-	close.pressed.connect(func(): campfire_story_menu.visible = false)
+	close.pressed.connect(_close_campfire_story_menu)
 	campfire_story_menu.add_child(close)
 
 
@@ -3217,12 +3217,14 @@ func _create_entrance_order_spin(label_text: String, unit_price: int, x: float, 
 
 
 func _show_entrance_order_modal() -> void:
+	entrance_menu.visible = false
 	entrance_order_modal.visible = true
 	_update_entrance_order_total()
 
 
 func _hide_entrance_order_modal() -> void:
 	entrance_order_modal.visible = false
+	entrance_menu.visible = true
 
 
 func _update_entrance_order_total(_value := 0.0) -> void:
@@ -3456,12 +3458,14 @@ func _create_research_menu(ui: CanvasLayer) -> void:
 func _show_research_menu() -> void:
 	if research_menu == null:
 		return
+	campfire_menu.visible = false
 	research_menu.visible = true
 	_refresh_research_menu()
 
 func _hide_research_menu() -> void:
 	if research_menu != null:
 		research_menu.visible = false
+	campfire_menu.visible = true
 
 func _get_available_researcher(required_skill: String) -> Citizen:
 	# The hero, once appointed as the campfire/town-hall officer, becomes the
@@ -4411,6 +4415,59 @@ func _close_context_menus() -> void:
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 
+func _input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+		if _handle_menu_right_click():
+			get_viewport().set_input_as_handled()
+
+
+func _handle_menu_right_click() -> bool:
+	if build_menu.visible:
+		if not build_category.is_empty():
+			_open_build_category("")
+		elif build_menu_is_job_menu or build_menu_is_daily_order_menu:
+			_close_assignment_submenu()
+		else:
+			build_menu.visible = false
+			build_menu_is_global = false
+			if selected_builder != null:
+				selected_builder = null
+			_refresh_build_menu()
+		if is_first_person and not _is_first_person_menu_open():
+			Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+		return true
+	if pocket_menu_open:
+		_close_pocket_take_menu()
+		return true
+	if campfire_orders_menu != null and campfire_orders_menu.visible:
+		campfire_orders_menu.visible = false
+		campfire_menu.visible = true
+		return true
+	if campfire_story_menu != null and campfire_story_menu.visible:
+		campfire_story_menu.visible = false
+		campfire_menu.visible = true
+		return true
+	if research_menu != null and research_menu.visible:
+		research_menu.visible = false
+		campfire_menu.visible = true
+		return true
+	if workforce_menu != null and workforce_menu.visible:
+		_hide_workforce_menu()
+		campfire_menu.visible = true
+		return true
+	if entrance_order_modal != null and entrance_order_modal.visible:
+		entrance_order_modal.visible = false
+		entrance_menu.visible = true
+		return true
+	var any_menu_visible := entrance_menu.visible or house_menu.visible or school_menu.visible or materials_factory_menu.visible or campfire_menu.visible or market_menu.visible or warehouse_menu.visible or building_menu.visible
+	if decision_menu != null and decision_menu.visible:
+		any_menu_visible = true
+	if any_menu_visible:
+		_close_context_menus()
+		return true
+	return false
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.keycode == KEY_F and event.ctrl_pressed and event.pressed and not event.echo:
 		if OS.is_debug_build():
@@ -4451,6 +4508,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			if not _is_first_person_menu_open():
 				player_yaw -= event.relative.x * 0.0035
 				player_pitch = clampf(player_pitch - event.relative.y * 0.003, deg_to_rad(-70.0), deg_to_rad(65.0))
+		elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+			if not build_mode.is_empty() and not _is_first_person_menu_open():
+				var viewport_center := get_viewport().get_visible_rect().size * 0.5
+				var build_point: Variant = _terrain_point_at_screen_position(viewport_center)
+				if build_point != null:
+					_place_building(build_point)
 		elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
 			if pocket_menu_open:
 				_close_pocket_take_menu()
@@ -4603,9 +4666,19 @@ func _hide_all_selection_menus() -> void:
 	campfire_menu.visible = false
 	if campfire_story_menu != null:
 		campfire_story_menu.visible = false
+	if campfire_orders_menu != null:
+		campfire_orders_menu.visible = false
 	market_menu.visible = false
 	warehouse_menu.visible = false
 	building_menu.visible = false
+	if research_menu != null:
+		research_menu.visible = false
+	if decision_menu != null:
+		decision_menu.visible = false
+	_hide_workforce_menu()
+	build_category = ""
+	build_menu_is_job_menu = false
+	build_menu_is_daily_order_menu = false
 	selected_house = null
 	selected_entrance = null
 	selected_school = null
@@ -4713,7 +4786,12 @@ func _remove_building_services(building: Node3D, building_type: String) -> void:
 	_release_employment_at_building(building)
 	var service_position: Vector3 = building.get_meta("service_position", building.global_position)
 	match building_type:
-		"warehouse", "straw_warehouse", "tarp_warehouse": warehouse_positions.erase(service_position)
+		"warehouse", "straw_warehouse", "tarp_warehouse":
+			var index := warehouse_positions.find(service_position)
+			if index >= 0:
+				warehouse_positions.remove_at(index)
+				settlement.warehouses.remove_at(index)
+				settlement.warehouse_types.remove_at(index)
 		"sawmill": sawmill_positions.erase(service_position)
 		"farm": farm_positions.erase(service_position)
 		"builders_guild": builders_guild_positions.erase(service_position)
@@ -5163,6 +5241,7 @@ func _can_continue_harvesting(resource_type: String) -> bool:
 
 
 func _deliver_all_pocket_to_warehouse() -> void:
+	var warehouse_index := _nearby_warehouse_index()
 	var delivered_total := 0
 	var summary: Array[String] = []
 	for resource_type in _pocket_resources():
@@ -5174,10 +5253,16 @@ func _deliver_all_pocket_to_warehouse() -> void:
 			to_deliver = mini(amount, settlement.storage_room_for(resource_type))
 		if to_deliver <= 0:
 			continue
-		settlement.add(resource_type, to_deliver)
-		_remove_from_pocket(resource_type, to_deliver)
-		delivered_total += to_deliver
-		summary.append("%d %s" % [to_deliver, resource_type])
+		var overflow := 0
+		if warehouse_index >= 0 and not settlement.uses_virtual_storage():
+			overflow = settlement.add_to_warehouse(resource_type, to_deliver, warehouse_index)
+		else:
+			settlement.add(resource_type, to_deliver)
+		var actually_delivered := to_deliver - overflow
+		if actually_delivered > 0:
+			_remove_from_pocket(resource_type, actually_delivered)
+			delivered_total += actually_delivered
+			summary.append("%d %s" % [actually_delivered, resource_type])
 	if delivered_total > 0:
 		_update_interface("Сдано на склад: %s." % ", ".join(summary))
 	else:
@@ -5185,6 +5270,7 @@ func _deliver_all_pocket_to_warehouse() -> void:
 
 
 func _deliver_one_pocket_to_warehouse() -> void:
+	var warehouse_index := _nearby_warehouse_index()
 	var resource_type := _primary_pocket_resource()
 	if resource_type.is_empty():
 		return
@@ -5197,9 +5283,17 @@ func _deliver_one_pocket_to_warehouse() -> void:
 	if to_deliver <= 0:
 		_update_interface("Нет места для %s на складе." % resource_type)
 		return
-	settlement.add(resource_type, to_deliver)
-	_remove_from_pocket(resource_type, to_deliver)
-	_update_interface("Сдано 1 %s на склад. %s" % [resource_type, _format_pocket_hint()])
+	var overflow := 0
+	if warehouse_index >= 0 and not settlement.uses_virtual_storage():
+		overflow = settlement.add_to_warehouse(resource_type, to_deliver, warehouse_index)
+	else:
+		settlement.add(resource_type, to_deliver)
+	var actually_delivered := to_deliver - overflow
+	if actually_delivered <= 0:
+		_update_interface("Нет места для %s в этом складе." % resource_type)
+		return
+	_remove_from_pocket(resource_type, actually_delivered)
+	_update_interface("Сдано %d %s на склад. %s" % [actually_delivered, resource_type, _format_pocket_hint()])
 
 
 func _occupy_workplace(workplace: Node3D) -> void:
@@ -5232,13 +5326,17 @@ func _nearby_tree() -> bool:
 				return true
 	return false
 
-func _nearby_warehouse() -> bool:
+func _nearby_warehouse_index() -> int:
 	if player_citizen == null:
-		return false
-	for warehouse_position in warehouse_positions:
-		if player_citizen.global_position.distance_to(warehouse_position) <= INTERACTION_RANGE:
-			return true
-	return false
+		return -1
+	for i in range(warehouse_positions.size()):
+		if player_citizen.global_position.distance_to(warehouse_positions[i]) <= INTERACTION_RANGE:
+			return i
+	return -1
+
+
+func _nearby_warehouse() -> bool:
+	return _nearby_warehouse_index() >= 0
 
 func _nearby_sawmill() -> bool:
 	return _nearby_sawmill_position() != Vector3.INF
@@ -5450,6 +5548,9 @@ func _home_occupancy_text() -> String:
 
 func _refresh_interaction_hint() -> void:
 	if not is_first_person:
+		interaction_hint_panel.visible = false
+		return
+	if _is_first_person_menu_open():
 		interaction_hint_panel.visible = false
 		return
 	interaction_hint_panel.visible = true
@@ -5954,7 +6055,7 @@ func _grant_debug_resources() -> void:
 	var grants := {"money": 30, "branches": 36, "grass": 20, "water": 24, "food": 18, "hides": 8, "goods": 8, "logs": 16, "wood": 10, "soil": 28, "clay": 22, "boards": 18, "stone": 15, "bricks": 14}
 	var had_warehouse := not warehouse_positions.is_empty()
 	for resource_type in grants:
-		settlement.add(resource_type, grants[resource_type])
+		settlement.add_cheat(resource_type, grants[resource_type])
 	# Before the first warehouse, resources live in the unlimited virtual stockpile.
 	# Once a warehouse exists, bump capacity to absorb the grant so testing stays smooth.
 	if had_warehouse:
@@ -6271,7 +6372,14 @@ func _show_campfire_story_menu() -> void:
 	if not settlement.campfire_story_effect.is_empty():
 		_update_interface("Tonight's story has already been chosen: %s." % settlement.campfire_story_effect.capitalize())
 		return
+	campfire_menu.visible = false
 	campfire_story_menu.visible = true
+
+
+func _close_campfire_story_menu() -> void:
+	if campfire_story_menu != null:
+		campfire_story_menu.visible = false
+	campfire_menu.visible = true
 
 
 func _select_campfire_story(story_id: String) -> void:
@@ -6322,13 +6430,14 @@ func _create_campfire_orders_menu(ui: CanvasLayer) -> void:
 	close_button.text = "Close"
 	close_button.position = Vector2(286, 196)
 	close_button.size = Vector2(116, 32)
-	close_button.pressed.connect(func() -> void: campfire_orders_menu.visible = false)
+	close_button.pressed.connect(_close_campfire_orders_menu)
 	campfire_orders_menu.add_child(close_button)
 
 
 func _show_campfire_orders_menu() -> void:
 	if campfire_orders_menu == null or campfire_orders_toggle == null or campfire_cheer_button == null:
 		return
+	campfire_menu.visible = false
 	campfire_orders_toggle.set_pressed_no_signal(settlement.road_walking_order_enabled)
 	campfire_orders_toggle.disabled = settlement.era != SettlementState.Era.TENT
 	campfire_orders_toggle.tooltip_text = "Available in the Tent Era." if campfire_orders_toggle.disabled else "Residents trample trails faster. Route selection is unchanged."
@@ -6337,6 +6446,12 @@ func _show_campfire_orders_menu() -> void:
 	campfire_cheer_button.disabled = not can_cheer
 	campfire_cheer_button.tooltip_text = "Available once each morning after 06:00." if not can_cheer else "Raise wellbeing by 5%%."
 	campfire_orders_menu.visible = true
+
+
+func _close_campfire_orders_menu() -> void:
+	if campfire_orders_menu != null:
+		campfire_orders_menu.visible = false
+	campfire_menu.visible = true
 
 
 func _set_road_walking_order(enabled: bool) -> void:
@@ -6375,13 +6490,14 @@ func _create_workforce_menu(ui: CanvasLayer) -> void:
 	close_btn.text = "Close"
 	close_btn.position = Vector2(18, 458)
 	close_btn.size = Vector2(424, 32)
-	close_btn.pressed.connect(_hide_workforce_menu)
+	close_btn.pressed.connect(_close_workforce_menu)
 	workforce_menu.add_child(close_btn)
 
 
 func _show_workforce_menu() -> void:
 	if workforce_menu == null:
 		return
+	campfire_menu.visible = false
 	if not _officer_exists():
 		_update_interface(_labor_command_block_message())
 		return
@@ -6392,6 +6508,11 @@ func _show_workforce_menu() -> void:
 func _hide_workforce_menu() -> void:
 	if workforce_menu != null:
 		workforce_menu.visible = false
+
+
+func _close_workforce_menu() -> void:
+	_hide_workforce_menu()
+	campfire_menu.visible = true
 
 
 func _refresh_campfire_occupancy_button() -> void:
@@ -7479,6 +7600,11 @@ func _refresh_pocket_take_menu() -> void:
 	for child in pocket_take_menu.get_children():
 		if child != pocket_take_menu_title:
 			child.queue_free()
+	var warehouse_index := _nearby_warehouse_index()
+	var warehouse_amount := func(resource_type: String) -> int:
+		if warehouse_index >= 0:
+			return settlement.warehouses[warehouse_index].amount(resource_type)
+		return settlement.amount(resource_type)
 	var y_offset := 52.0
 	var displayed_resources: Array[String]
 	if settlement.era == SettlementState.Era.TENT:
@@ -7486,7 +7612,7 @@ func _refresh_pocket_take_menu() -> void:
 	else:
 		displayed_resources = ["branches", "grass", "water", "food", "soil", "clay", "logs", "wood", "boards", "stone", "bricks", "tarp"]
 	for resource_type in displayed_resources:
-		var stored := settlement.amount(resource_type)
+		var stored: int = warehouse_amount.call(resource_type)
 		if stored <= 0:
 			continue
 		var row := Label.new()
@@ -7520,10 +7646,17 @@ func _refresh_pocket_take_menu() -> void:
 func _take_resource_into_pocket(resource_type: String, amount: int) -> void:
 	if amount <= 0:
 		return
-	amount = mini(amount, settlement.amount(resource_type))
+	var warehouse_index := _nearby_warehouse_index()
+	if warehouse_index >= 0:
+		amount = mini(amount, settlement.warehouses[warehouse_index].amount(resource_type))
+	else:
+		amount = mini(amount, settlement.amount(resource_type))
 	amount = _add_to_pocket(resource_type, amount)
 	if amount > 0:
-		settlement.add(resource_type, -amount)
+		if warehouse_index >= 0:
+			settlement.add_to_warehouse(resource_type, -amount, warehouse_index)
+		else:
+			settlement.add(resource_type, -amount)
 		_update_interface("Взяли %d %s со склада." % [amount, resource_type])
 	_refresh_pocket_take_menu()
 	_refresh_interaction_hint()
@@ -7542,11 +7675,20 @@ func _show_warehouse_menu() -> void:
 func _refresh_warehouse_menu() -> void:
 	if selected_warehouse == null:
 		return
+	var selected_position: Vector3 = selected_warehouse.get_meta("service_position", selected_warehouse.global_position)
+	var index := warehouse_positions.find(selected_position)
+	var selected_warehouse_state: WarehouseState = null
+	if index >= 0 and index < settlement.warehouses.size():
+		selected_warehouse_state = settlement.warehouses[index]
 	var warehouses := warehouse_positions.size()
-	var capacity := settlement.storage_capacity(warehouses)
-	var used := settlement.storage_used_units()
+	var total_capacity := settlement.storage_capacity(warehouses)
+	var total_used := settlement.storage_used_units()
 	var free := settlement.storage_free_units(warehouses)
-	warehouse_menu_title.text = "Storage balance\nUsed %d / %d units   Free to assign: %d\nMove capacity between goods (%d units per click)." % [int(ceil(used)), capacity, int(floor(free)), int(SettlementState.STORAGE_STEP)]
+	if selected_warehouse_state != null:
+		var selected_used := selected_warehouse_state.used_units(SettlementState.STORAGE_WEIGHTS)
+		warehouse_menu_title.text = "Warehouse %d balance\nThis warehouse: %d / %d units   Total: %d / %d units   Free to assign: %d\nMove capacity between goods (%d units per click)." % [index + 1, int(ceil(selected_used)), selected_warehouse_state.capacity, int(ceil(total_used)), total_capacity, int(floor(free)), int(SettlementState.STORAGE_STEP)]
+	else:
+		warehouse_menu_title.text = "Storage balance\nTotal: %d / %d units   Free to assign: %d\nMove capacity between goods (%d units per click)." % [int(ceil(total_used)), total_capacity, int(floor(free)), int(SettlementState.STORAGE_STEP)]
 
 	for child in warehouse_menu.get_children():
 		if child != warehouse_menu_title:
@@ -7556,12 +7698,13 @@ func _refresh_warehouse_menu() -> void:
 	for resource_type in SettlementState.STORED_RESOURCES:
 		var limit := settlement.storage_limit(resource_type)
 		var weight := settlement.storage_weight(resource_type)
-		var stored_units := settlement.amount(resource_type) * weight
+		var stored: int = settlement.amount(resource_type) if selected_warehouse_state == null else selected_warehouse_state.amount(resource_type)
+		var stored_units := stored * weight
 		var row := Label.new()
 		row.position = Vector2(16, y_offset + 4)
 		row.size = Vector2(180, 24)
 		row.add_theme_font_size_override("font_size", 13)
-		row.text = "%s  %d (%d/%d u, x%.1f)" % [resource_type, settlement.amount(resource_type), int(ceil(stored_units)), int(round(limit)), weight]
+		row.text = "%s  %d (%d/%d u, x%.1f)" % [resource_type, stored, int(ceil(stored_units)), int(round(limit)), weight]
 		warehouse_menu.add_child(row)
 		var minus := Button.new()
 		minus.text = "-"

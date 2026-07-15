@@ -34,6 +34,7 @@ godot --headless --path . --script res://tests/test_navigation_performance.gd
 # Scene smoke tests (need a frame budget so awaited frames resolve in headless mode)
 godot --headless --path . --script res://tests/test_startup.gd --quit-after 300
 godot --headless --path . --script res://tests/test_materials_yard.gd --quit-after 300
+godot --headless --path . --script res://tests/test_toilet_needs.gd --quit-after 300
 ```
 
 `test_ai.gd` covers the native AI runtime without a gameplay scene. `test_startup.gd`

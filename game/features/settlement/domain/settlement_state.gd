@@ -19,20 +19,56 @@ const TENT_STARTING_EQUIPMENT := {
 
 var era := Era.TENT
 var money := 20
-var branches := 0
-var grass := 0
-var water := 0
-var food := 0
-var hides := 0
-var goods := 0
-var logs := 0
-var wood := 0 # Hand-cut timber used by existing buildings.
-var soil := 0
-var clay := 0
-var boards := 0
-var stone := 0
-var bricks := 0
-var tarp := 0
+
+## Per-warehouse inventories. Each WarehouseState holds the contents of one
+## physical warehouse; the scalar resource properties below aggregate across
+## all of them. The virtual stock is used only before the first warehouse.
+var warehouses: Array[WarehouseState] = []
+var warehouse_types: Array[String] = []
+
+var branches: int:
+	get: return amount("branches")
+	set(value): _set_resource_aggregate("branches", value)
+var grass: int:
+	get: return amount("grass")
+	set(value): _set_resource_aggregate("grass", value)
+var water: int:
+	get: return amount("water")
+	set(value): _set_resource_aggregate("water", value)
+var food: int:
+	get: return amount("food")
+	set(value): _set_resource_aggregate("food", value)
+var hides: int:
+	get: return amount("hides")
+	set(value): _set_resource_aggregate("hides", value)
+var goods: int:
+	get: return amount("goods")
+	set(value): _set_resource_aggregate("goods", value)
+var logs: int:
+	get: return amount("logs")
+	set(value): _set_resource_aggregate("logs", value)
+var wood: int:
+	get: return amount("wood")
+	set(value): _set_resource_aggregate("wood", value)
+var soil: int:
+	get: return amount("soil")
+	set(value): _set_resource_aggregate("soil", value)
+var clay: int:
+	get: return amount("clay")
+	set(value): _set_resource_aggregate("clay", value)
+var boards: int:
+	get: return amount("boards")
+	set(value): _set_resource_aggregate("boards", value)
+var stone: int:
+	get: return amount("stone")
+	set(value): _set_resource_aggregate("stone", value)
+var bricks: int:
+	get: return amount("bricks")
+	set(value): _set_resource_aggregate("bricks", value)
+var tarp: int:
+	get: return amount("tarp")
+	set(value): _set_resource_aggregate("tarp", value)
+
 var wellbeing := 75
 var workday_hours := 8
 var night_shifts_allowed := false
@@ -141,6 +177,8 @@ func apply_tent_start(reset_progress := true) -> void:
 	active_research_duration = 0.0
 	storage_limits.clear()
 	virtual_stock.clear()
+	warehouses.clear()
+	warehouse_types.clear()
 	warehouse_ever_built = false
 	debug_storage_capacity_bonus = 0
 	virtual_stock["food"] = TENT_STARTING_FOOD
@@ -226,22 +264,25 @@ func cover_warehouse_with_tarp() -> bool:
 	return true
 
 
-func storage_capacity(warehouses: int) -> int:
-	if warehouses <= 0:
-		return 0
-	var heap_count := int(buildings.get("warehouse", 0))
-	var straw_count := int(buildings.get("straw_warehouse", 0))
-	var tarp_count := int(buildings.get("tarp_warehouse", 0))
-	var capacity := heap_count * 24 + straw_count * 48 + tarp_count * 72
-	if capacity == 0 and warehouses > 0:
-		capacity = warehouses * int(ERA_STORAGE_PER_WAREHOUSE.get(era, 24))
-	return capacity + debug_storage_capacity_bonus
+func add_warehouse(building_type: String) -> void:
+	var capacity := WarehouseState.capacity_for_building_type(building_type, era)
+	warehouses.append(WarehouseState.new(capacity))
+	warehouse_types.append(building_type)
+	if storage_limits.is_empty():
+		ensure_storage_defaults(warehouses.size())
+
+
+func storage_capacity(_warehouses: int) -> int:
+	var total := debug_storage_capacity_bonus
+	for warehouse in warehouses:
+		total += warehouse.capacity
+	return total
 
 
 func storage_used_units() -> float:
 	var total := 0.0
-	for resource_type in STORED_RESOURCES:
-		total += _warehouse_amount(resource_type) * storage_weight(resource_type)
+	for warehouse in warehouses:
+		total += warehouse.used_units(STORAGE_WEIGHTS)
 	return total
 
 
@@ -359,24 +400,14 @@ func reserve_storage_room_for(resource_type: String, count: int, warehouses: int
 	return storage_availability_for(resource_type, count, warehouses) == StorageAvailability.OK
 
 
-func _warehouse_amount(resource_type: String) -> int:
-	match resource_type:
-		"money": return money
-		"branches": return branches
-		"grass": return grass
-		"water": return water
-		"food": return food
-		"hides": return hides
-		"goods": return goods
-		"logs": return logs
-		"wood": return wood
-		"soil": return soil
-		"clay": return clay
-		"boards": return boards
-		"stone": return stone
-		"bricks": return bricks
-		"tarp": return tarp
-	return 0
+func _set_resource_aggregate(resource_type: String, value: int) -> void:
+	if resource_type == "money":
+		return
+	if not warehouse_ever_built:
+		virtual_stock[resource_type] = value
+		return
+	for i in range(warehouses.size()):
+		warehouses[i].set_amount(resource_type, value if i == 0 else 0)
 
 
 func amount(resource_type: String) -> int:
@@ -384,36 +415,92 @@ func amount(resource_type: String) -> int:
 		return money
 	if not warehouse_ever_built:
 		return int(virtual_stock.get(resource_type, 0))
-	return _warehouse_amount(resource_type)
+	var total := 0
+	for warehouse in warehouses:
+		total += warehouse.amount(resource_type)
+	return total
 
 
-func _add_to_warehouse(resource_type: String, value: int) -> void:
-	match resource_type:
-		"money": money += value
-		"branches": branches += value
-		"grass": grass += value
-		"water": water += value
-		"food": food += value
-		"hides": hides += value
-		"goods": goods += value
-		"logs": logs += value
-		"wood": wood += value
-		"soil": soil += value
-		"clay": clay += value
-		"boards": boards += value
-		"stone": stone += value
-		"bricks": bricks += value
-		"tarp": tarp += value
+## Add resources to a specific warehouse by index. Returns how many could not fit.
+func add_to_warehouse(resource_type: String, value: int, index: int) -> int:
+	if resource_type == "money" or not warehouse_ever_built:
+		return value
+	if index < 0 or index >= warehouses.size():
+		return value
+	var weight := storage_weight(resource_type)
+	return warehouses[index].add(resource_type, value, weight)
 
 
+## Default delivery behaviour: fill warehouses sequentially and remove from them
+## sequentially. Keeps the first warehouses stocked until they are full, then spills
+## into the next ones, matching the "new warehouse is empty and can be filled"
+## expectation.
 func add(resource_type: String, value: int) -> void:
 	if resource_type == "money":
 		money += value
 		return
 	if not warehouse_ever_built:
 		virtual_stock[resource_type] = int(virtual_stock.get(resource_type, 0)) + value
+		return
+	if value >= 0:
+		_distribute_add(resource_type, value)
 	else:
-		_add_to_warehouse(resource_type, value)
+		_distribute_remove(resource_type, -value)
+
+
+## Used for debug/cheat grants: pull every warehouse toward the average amount of
+## the given resource. Falls back to overfilling the least-stocked warehouse if the
+## total physical capacity is exceeded.
+func add_cheat(resource_type: String, value: int) -> void:
+	if value <= 0:
+		add(resource_type, value)
+		return
+	if not warehouse_ever_built:
+		virtual_stock[resource_type] = int(virtual_stock.get(resource_type, 0)) + value
+		return
+	var weight := storage_weight(resource_type)
+	var remaining := value
+	while remaining > 0:
+		var target := _find_least_stocked_warehouse(resource_type)
+		var before := warehouses[target].amount(resource_type)
+		var accepted := warehouses[target].add(resource_type, remaining, weight)
+		var added := remaining - accepted
+		if added == 0:
+			warehouses[target].resources[resource_type] = before + remaining
+			remaining = 0
+		else:
+			remaining = accepted
+
+
+func _distribute_add(resource_type: String, value: int) -> void:
+	var weight := storage_weight(resource_type)
+	var remaining := value
+	for warehouse in warehouses:
+		remaining = warehouse.add(resource_type, remaining, weight)
+		if remaining <= 0:
+			break
+
+
+func _distribute_remove(resource_type: String, value: int) -> void:
+	var remaining := value
+	for warehouse in warehouses:
+		var current := warehouse.amount(resource_type)
+		var removed := mini(remaining, current)
+		warehouse.set_amount(resource_type, current - removed)
+		remaining -= removed
+		if remaining <= 0:
+			break
+
+
+func _find_least_stocked_warehouse(resource_type: String) -> int:
+	var best := 0
+	var best_amount := warehouses[0].amount(resource_type)
+	for i in range(1, warehouses.size()):
+		var count := warehouses[i].amount(resource_type)
+		if count < best_amount:
+			best_amount = count
+			best = i
+	return best
 
 
 func total_stored_resources() -> int:
@@ -422,7 +509,9 @@ func total_stored_resources() -> int:
 		for value in virtual_stock.values():
 			total += int(value)
 	else:
-		total = branches + grass + water + food + hides + goods + logs + wood + soil + clay + boards + stone + bricks + tarp
+		for warehouse in warehouses:
+			for resource_type in STORED_RESOURCES:
+				total += warehouse.amount(resource_type)
 	return total
 
 
@@ -430,28 +519,20 @@ func uses_virtual_storage() -> bool:
 	return not warehouse_ever_built
 
 
-func migrate_virtual_to_warehouse(warehouses: int) -> Dictionary:
+func migrate_virtual_to_warehouse(_warehouses: int) -> Dictionary:
 	warehouse_ever_built = true
 	var overflow := {}
-	var capacity_units := float(storage_capacity(warehouses))
-	var used_units := 0.0
-	for resource_type in STORED_RESOURCES:
-		var virtual_count := int(virtual_stock.get(resource_type, 0))
-		if virtual_count <= 0:
-			continue
-		var weight := storage_weight(resource_type)
-		var remaining_room := maxf(0.0, capacity_units - used_units)
-		var can_fit := int(floor((remaining_room + 0.001) / weight))
-		var accepted := mini(virtual_count, maxi(0, can_fit))
-		if accepted > 0:
-			_add_to_warehouse(resource_type, accepted)
-			used_units += accepted * weight
-		var leftover := virtual_count - accepted
-		if leftover > 0:
-			overflow[resource_type] = leftover
+	if warehouses.is_empty():
+		overflow = virtual_stock.duplicate()
+	else:
+		var first := warehouses[0]
+		for resource_type in STORED_RESOURCES:
+			var virtual_count := int(virtual_stock.get(resource_type, 0))
+			if virtual_count > 0:
+				first.resources[resource_type] = first.amount(resource_type) + virtual_count
 	virtual_stock.clear()
-	ensure_storage_defaults(warehouses)
-	_clamp_storage_limits(warehouses)
+	ensure_storage_defaults(warehouses.size())
+	_clamp_storage_limits(warehouses.size())
 	return overflow
 
 
@@ -470,6 +551,9 @@ func pay_for_building(building_type: String) -> bool:
 	for resource_type in BuildingCatalog.cost_resources(building_type):
 		add(resource_type, -BuildingCatalog.cost_for_resource(building_type, resource_type))
 	buildings[building_type] = int(buildings.get(building_type, 0)) + 1
+	if building_type in ["warehouse", "straw_warehouse", "tarp_warehouse"]:
+		add_warehouse(building_type)
+		warehouse_ever_built = true
 	return true
 
 func next_building_upgrade(building_type: String) -> String:
@@ -496,6 +580,12 @@ func pay_for_building_upgrade(building_type: String) -> String:
 		add(resource_type, -BuildingCatalog.cost_for_resource(target, resource_type))
 	buildings[building_type] = maxi(0, int(buildings.get(building_type, 0)) - 1)
 	buildings[target] = int(buildings.get(target, 0)) + 1
+	if building_type in ["warehouse", "straw_warehouse", "tarp_warehouse"] and target in ["warehouse", "straw_warehouse", "tarp_warehouse"]:
+		for i in range(warehouse_types.size()):
+			if warehouse_types[i] == building_type:
+				warehouse_types[i] = target
+				warehouses[i].capacity = WarehouseState.capacity_for_building_type(target, era)
+				break
 	return target
 
 

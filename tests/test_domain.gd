@@ -139,15 +139,14 @@ func _init() -> void:
 
 func _test_settlement_economy() -> void:
 	var state := SettlementState.new()
-	state.warehouse_ever_built = true
 	assert(state.money == 20 and state.wood == 0 and state.food == 0)
 	state.branches = 12
 	state.grass = 4
 	assert(state.can_afford_building("warehouse"))
 	assert(state.pay_for_building("warehouse"))
+	assert(state.warehouse_ever_built)
 	assert(state.branches == 12 and state.grass == 4)
-	state.ensure_storage_defaults(0)
-	assert(state.storage_capacity(0) == 0)
+	assert(state.storage_capacity(1) == 24)
 	assert(not state.reserve_storage_room_for("grass", 1, 0))
 	state.ensure_storage_defaults(1)
 	assert(state.reserve_storage_room_for("grass", 1, 1))
