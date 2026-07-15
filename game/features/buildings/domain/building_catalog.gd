@@ -82,7 +82,6 @@ const DEFINITIONS := {
 }
 
 const RESEARCH_COSTS := {
-	"brick_construction": {"bricks": 15, "boards": 10},
 	"straw_tents": {"branches": 8, "grass": 6},
 	"tarp_tents": {"branches": 12, "grass": 8, "tarp": 1},
 	"trade": {"branches": 10, "grass": 6},

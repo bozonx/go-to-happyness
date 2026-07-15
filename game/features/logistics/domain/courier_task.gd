@@ -1,7 +1,7 @@
 class_name CourierTask
 extends RefCounted
 
-enum Kind { CANTEEN, TRADE, CONSTRUCTION, BUILDING_SUPPLY, SAWMILL_PICKUP, WORKER_PICKUP }
+enum Kind { CANTEEN, TRADE, CONSTRUCTION, BUILDING_SUPPLY, SAWMILL_PICKUP, WORKER_PICKUP, DEW_PICKUP }
 
 var id: StringName
 var kind: Kind

@@ -36,6 +36,7 @@ const SettlementCitizenActuatorScript = preload("res://game/features/decision/ap
 const RegisterGoalScript = preload("res://game/features/decision/domain/goals/register_goal.gd")
 const WorkforceOrderProviderScript = preload("res://game/features/decision/application/workforce_order_provider.gd")
 const DailyPlayerOrderProviderScript = preload("res://game/features/decision/application/daily_player_order_provider.gd")
+const CleaningGoalScript = preload("res://game/features/decision/domain/goals/cleaning_goal.gd")
 const RouteRequestScript = preload("res://game/features/routing/application/route_request.gd")
 const TrailFieldServiceScript = preload("res://game/features/roads/application/trail_field_service.gd")
 const TrailOverlayShader = preload("res://game/features/roads/presentation/trail_overlay.gdshader")
@@ -48,7 +49,6 @@ const TREE_BUILD_CLEARANCE_BLOCKS := 1.0
 const NAVIGATION_CLEARANCE_MARGIN := 1.0
 const SERVICE_PAD_OFFSET := 1.0
 const MAX_BUILD_SLOPE := 0.35
-const BRICK_RESEARCH_DURATION := 20.0
 const POPULATION := 4
 const WAREHOUSE_CAPACITY := 50
 const FOOD_PURCHASE_PRICE := 2
@@ -207,11 +207,6 @@ var park_positions: Array[Vector3] = []
 var leisure_positions: Array[Vector3] = []
 var gathering_place_positions: Array[Vector3] = []
 var factories: Array[Node3D] = []
-var brick_construction_unlocked: bool:
-	get: return settlement.brick_construction_unlocked
-	set(value): settlement.brick_construction_unlocked = value
-var brick_research_progress := -1.0
-var brick_research_factory: Node3D
 var tree_positions: Array[Vector3] = []
 var tree_nodes: Dictionary = {}
 var citizens: Array[Citizen] = []
@@ -280,6 +275,12 @@ var entrance_stone: Node3D
 var selected_entrance: Node3D
 var entrance_menu: Panel
 var entrance_menu_title: Label
+var entrance_order_modal: Panel
+var entrance_order_food_spin: SpinBox
+var entrance_order_water_spin: SpinBox
+var entrance_order_gloves_spin: SpinBox
+var entrance_order_bucket_spin: SpinBox
+var entrance_order_total_label: Label
 var pending_arrivals: Array[Dictionary] = []
 var arrival_greeters: Dictionary = {}
 var arrival_waiting_greeters: Dictionary = {}
@@ -392,6 +393,7 @@ var building_status_indicators: Array[Label3D] = []
 var building_status_update_time := 0.0
 var workplace_priority_counter := 0
 var manage_citizen_button: Button
+var hero_official_button: Button
 var citizen_ai: CitizenAISystem
 var citizen_needs_service: CitizenNeedsService
 var citizen_living_status_service: RefCounted
@@ -415,6 +417,7 @@ var trail_overlay: MeshInstance3D
 var trail_overlay_material: ShaderMaterial
 var campfire_orders_menu: Panel
 var campfire_orders_toggle: CheckButton
+var campfire_cheer_button: Button
 
 
 func _ready() -> void:
@@ -481,7 +484,7 @@ func _ready() -> void:
 	_refresh_living_statuses()
 	if not citizen_ai.configure(
 		SettlementAIWorldFacade.new(self),
-		[SleepGoalScript.new(), MealGoalScript.new(), ToiletGoalScript.new(), RestGoalScript.new(), RegisterGoalScript.new(), ForestryGoalScript.new(), FarmingGoalScript.new(), ConstructionGoalScript.new(), GatheringGoalScript.new(), ExcavationGoalScript.new(), ServiceWorkGoalScript.new(), FactoryWorkGoalScript.new(), CourierDeliveryGoalScript.new()],
+		[SleepGoalScript.new(), MealGoalScript.new(), ToiletGoalScript.new(), RestGoalScript.new(), RegisterGoalScript.new(), ForestryGoalScript.new(), FarmingGoalScript.new(), ConstructionGoalScript.new(), GatheringGoalScript.new(), CleaningGoalScript.new(), ExcavationGoalScript.new(), ServiceWorkGoalScript.new(), FactoryWorkGoalScript.new(), CourierDeliveryGoalScript.new()],
 		[WorkforceOrderProviderScript.new(), DailyPlayerOrderProviderScript.new(), ForestryOrderProviderScript.new(), FarmingOrderProviderScript.new(), ConstructionOrderProviderScript.new(), GatheringOrderProviderScript.new(), ExcavationOrderProviderScript.new(), ServiceWorkOrderProviderScript.new(), FactoryWorkOrderProviderScript.new(), CourierDeliveryOrderProviderScript.new()]
 	):
 		push_error("Native citizen AI failed to capture its initial world snapshot")
@@ -529,7 +532,6 @@ func _process(delta: float) -> void:
 	trade_service.update()
 	_dispatch_queued_trades()
 	_update_sawmills(delta)
-	_update_brick_research(delta)
 	_update_building_research(delta)
 	_update_building_status_indicators(delta)
 	if _is_work_time():
@@ -827,6 +829,7 @@ func _handle_day_cycle_event(event: SimulationDayEvent) -> void:
 			_update_interface("Forecast: %s." % TentEraSurvivalRulesScript.WEATHER_NAMES[tent_weather])
 			_maybe_present_survival_decision()
 			_refresh_living_statuses()
+			settlement.cheer_up_used_today = false
 			_apply_daily_settlement_rules()
 			_return_outside_workers()
 
@@ -1112,6 +1115,12 @@ func _publish_courier_tasks(dispatcher: RefCounted) -> void:
 		for position in sawmill_positions:
 			if int(sawmills.stock_at(position, runtime_seconds).boards) > 0:
 				dispatcher.publish(StringName("sawmill_%s" % _cell_from_position(position)), CourierTask.Kind.SAWMILL_PICKUP, 50, position, warehouse_positions[0], {"position": position})
+		for collector: Dictionary in water_collectors:
+			if int(collector.get("stored", 0)) > 0:
+				var collector_node: Node3D = collector.get("node") as Node3D
+				if is_instance_valid(collector_node):
+					var collector_position: Vector3 = collector_node.get_meta("service_position", collector_node.global_position)
+					dispatcher.publish(StringName("dew_%s" % _cell_from_position(collector_position)), CourierTask.Kind.DEW_PICKUP, 40, collector_position, warehouse_positions[0], {"position": collector_position})
 		for worker in citizens:
 			if worker != null and worker.has_pending_resource() and not courier_dispatcher.is_manually_targeted(worker):
 				dispatcher.publish(StringName("worker_%d" % worker.get_instance_id()), CourierTask.Kind.WORKER_PICKUP, 45, worker.global_position, warehouse_positions[0], {"worker": worker})
@@ -1178,6 +1187,37 @@ func _take_resource_from_pile(pile_node: Node3D, resource_type: String) -> bool:
 	return false
 
 
+func _take_resource_from_pile_at(position: Vector3, resource_type: String, max_amount: int) -> int:
+	if max_amount <= 0 or resource_type.is_empty():
+		return 0
+	for index in resource_piles.size():
+		var pile: Dictionary = resource_piles[index]
+		var pile_node := pile.get("node") as Node3D
+		if not is_instance_valid(pile_node) or pile_node.global_position.distance_squared_to(position) > 0.25:
+			continue
+		var available := int(pile.resources.get(resource_type, 0))
+		if available <= 0:
+			continue
+		var taken := mini(max_amount, available)
+		pile.resources[resource_type] = available - taken
+		var labels: Array[String] = []
+		for piled_resource in pile.resources:
+			var amount := int(pile.resources[piled_resource])
+			if amount > 0:
+				labels.append("%s x%d" % [str(piled_resource).to_upper(), amount])
+		labels.sort()
+		var label := pile_node.get_node_or_null("Label3D") as Label3D
+		if label != null:
+			label.text = "\n".join(labels)
+		if labels.is_empty():
+			resource_piles.remove_at(index)
+			pile_node.queue_free()
+		else:
+			resource_piles[index] = pile
+		return taken
+	return 0
+
+
 func _is_courier_task_valid(task: RefCounted) -> bool:
 	match task.kind:
 		CourierTask.Kind.CANTEEN:
@@ -1188,6 +1228,8 @@ func _is_courier_task_valid(task: RefCounted) -> bool:
 			return int(sawmills.stock_at(task.payload.position, runtime_seconds).boards) > 0
 		CourierTask.Kind.WORKER_PICKUP:
 			return is_instance_valid(task.payload.worker) and task.payload.worker.has_pending_resource()
+		CourierTask.Kind.DEW_PICKUP:
+			return water_collector_service.stored_at(task.payload.position) > 0
 		CourierTask.Kind.CONSTRUCTION:
 			var site: ConstructionSite = task.payload.site
 			if site == null or not is_instance_valid(site.node):
@@ -1224,6 +1266,9 @@ func _start_courier_task(courier: Citizen, task: RefCounted) -> bool:
 			return true
 		CourierTask.Kind.SAWMILL_PICKUP:
 			courier.assign_sawmill_pickup(task.payload.position, warehouse_positions[0])
+			return true
+		CourierTask.Kind.DEW_PICKUP:
+			courier.assign_dew_collector_pickup(task.payload.position, warehouse_positions[0])
 			return true
 		CourierTask.Kind.WORKER_PICKUP:
 			courier.assign_courier_pickup(task.payload.worker, warehouse_positions[0])
@@ -1449,23 +1494,6 @@ func _on_factory_cycle(worker: Citizen, factory: Node3D) -> void:
 			_update_interface("Brick factory produced 1 brick.")
 		bricks += produced
 
-func _materials_factory_staffed(factory: Node3D) -> bool:
-	var has_worker := false
-	var has_builder := false
-	var has_engineer := false
-	for citizen in citizens:
-		if citizen.factory != factory:
-			continue
-		if citizen.is_player_controlled:
-			if citizen.global_position.distance_to(factory.global_position) > 6.0:
-				continue
-		elif citizen.state not in [Citizen.State.TO_FACTORY, Citizen.State.FACTORY_WORK]:
-			continue
-		has_worker = has_worker or citizen.specialization == "factory_worker"
-		has_builder = has_builder or citizen.specialization == "builder"
-		has_engineer = has_engineer or citizen.specialization == "engineer"
-	return has_worker and has_builder and has_engineer
-
 func _on_resource_ready(worker: Citizen, resource_type: String, amount: int) -> void:
 	worker.register_pending_resource(resource_type, amount)
 	_request_courier_dispatch()
@@ -1492,6 +1520,13 @@ func _decide_forestry_delivery(worker: Citizen, sawmill_position: Vector3) -> vo
 func _on_sawmill_boards_collected(courier: Citizen, sawmill_position: Vector3) -> void:
 	sawmills.collect_boards(courier, sawmill_position, runtime_seconds)
 	_request_courier_dispatch()
+
+
+func _on_dew_collected(courier: Citizen, collector_position: Vector3) -> void:
+	var amount := water_collector_service.collect_water(collector_position, courier.courier_capacity())
+	courier.collect_dew(amount)
+	_request_courier_dispatch()
+
 
 func _request_courier_dispatch() -> void:
 	if _is_work_time():
@@ -2293,6 +2328,7 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	citizen.tree_harvested.connect(_on_tree_harvested)
 	citizen.logs_delivered.connect(_on_logs_delivered)
 	citizen.sawmill_boards_collected.connect(_on_sawmill_boards_collected)
+	citizen.dew_collected.connect(_on_dew_collected)
 	citizen.meal_finished.connect(_on_meal_finished)
 	citizen.relief_finished.connect(_on_relief_finished)
 	citizen.leisure_finished.connect(_on_leisure_finished)
@@ -2807,6 +2843,7 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	build_menu_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	build_menu_title.add_theme_font_size_override("font_size", 15)
 	build_menu.add_child(build_menu_title)
+	build_menu.gui_input.connect(_on_build_menu_gui_input)
 
 	manage_citizen_button = Button.new()
 	manage_citizen_button.text = "Управлять"
@@ -2814,6 +2851,13 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	manage_citizen_button.size = Vector2(272, 30)
 	manage_citizen_button.pressed.connect(_take_control_of_selected_citizen)
 	build_menu.add_child(manage_citizen_button)
+
+	hero_official_button = Button.new()
+	hero_official_button.text = "занять место управляющего"
+	hero_official_button.position = Vector2(16, 130)
+	hero_official_button.size = Vector2(272, 30)
+	hero_official_button.pressed.connect(_on_hero_official_pressed)
+	build_menu.add_child(hero_official_button)
 	
 	# Add the citizen assignment submenus.
 	daily_order_submenu_btn = Button.new()
@@ -2844,9 +2888,7 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_role_button("Construction", "construction", 204, false, "daily")
 	_add_role_button("Gather branches", "gather_branches", 238, false, "daily")
 	_add_role_button("Gather grass", "gather_grass", 272, false, "daily")
-	_add_role_button("Forage food", "gather_food", 306, false, "daily")
-	_add_role_button("Collect dew", "gather_dew", 340, false, "daily")
-	_add_role_button("Collect water", "gather_water", 374, false, "daily")
+	_add_role_button("Collect water", "gather_water", 306, false, "daily")
 
 	# Permanent jobs require an employment officer, except appointing the officer.
 	_add_role_button("Assign: construction", "construction", 136, false, "job")
@@ -3092,47 +3134,27 @@ func _create_entrance_menu(ui: CanvasLayer) -> void:
 	entrance_menu_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	entrance_menu_title.add_theme_font_size_override("font_size", 16)
 	entrance_menu.add_child(entrance_menu_title)
-	var food_button := Button.new()
-	food_button.text = "Order food"
-	food_button.tooltip_text = "Order 4 food; a Helper or Courier makes the trip."
-	food_button.position = Vector2(16, 82)
-	food_button.size = Vector2(272, 32)
-	food_button.pressed.connect(func(): trade_service.buy_entrance_food(4, FOOD_PURCHASE_PRICE))
-	entrance_menu.add_child(food_button)
-	var gloves_button := Button.new()
-	gloves_button.text = "Order construction gloves"
-	gloves_button.tooltip_text = "Order one construction glove set."
-	gloves_button.position = Vector2(16, 122)
-	gloves_button.size = Vector2(272, 32)
-	gloves_button.pressed.connect(func(): trade_service.buy_entrance_gloves(ENTRANCE_GLOVE_PRICE))
-	entrance_menu.add_child(gloves_button)
-	var water_button := Button.new()
-	water_button.text = "Order water"
-	water_button.tooltip_text = "Order 4 water; a Helper or Courier makes the trip."
-	water_button.position = Vector2(16, 162)
-	water_button.size = Vector2(272, 32)
-	water_button.pressed.connect(func(): trade_service.buy_entrance_resource("water", 4, ENTRANCE_WATER_PRICE))
-	entrance_menu.add_child(water_button)
-	var bucket_button := Button.new()
-	bucket_button.text = "Order bucket"
-	bucket_button.tooltip_text = "Order one bucket for hauling water."
-	bucket_button.position = Vector2(16, 202)
-	bucket_button.size = Vector2(272, 32)
-	bucket_button.pressed.connect(func(): trade_service.buy_entrance_tool("bucket", ENTRANCE_BUCKET_PRICE))
-	entrance_menu.add_child(bucket_button)
+	var create_order_button := Button.new()
+	create_order_button.text = "Create order"
+	create_order_button.tooltip_text = "Choose quantities and send a courier."
+	create_order_button.position = Vector2(16, 82)
+	create_order_button.size = Vector2(272, 32)
+	create_order_button.pressed.connect(_show_entrance_order_modal)
+	entrance_menu.add_child(create_order_button)
 	var work_button := Button.new()
 	work_button.text = "Send selected resident to outside work"
 	work_button.tooltip_text = "Requires a Helper or Courier. The resident leaves for one full day and returns with 8 coins."
-	work_button.position = Vector2(16, 242)
+	work_button.position = Vector2(16, 122)
 	work_button.size = Vector2(272, 32)
 	work_button.pressed.connect(_send_selected_resident_to_outside_work)
 	entrance_menu.add_child(work_button)
 	var close_btn := Button.new()
 	close_btn.text = "Close"
-	close_btn.position = Vector2(16, 290)
+	close_btn.position = Vector2(16, 162)
 	close_btn.size = Vector2(272, 30)
 	close_btn.pressed.connect(_close_context_menus)
 	entrance_menu.add_child(close_btn)
+	_create_entrance_order_modal(ui)
 
 
 func _show_entrance_menu() -> void:
@@ -3141,6 +3163,116 @@ func _show_entrance_menu() -> void:
 	var resident_name := selected_builder.role_label() if is_instance_valid(selected_builder) else "no resident selected"
 	entrance_menu_title.text = "Entrance sign\nEmergency orders. Outside work: %s" % resident_name
 	entrance_menu.visible = true
+
+
+func _create_entrance_order_modal(ui: CanvasLayer) -> void:
+	entrance_order_modal = Panel.new()
+	entrance_order_modal.set_anchors_preset(Control.PRESET_CENTER)
+	entrance_order_modal.offset_left = -210.0
+	entrance_order_modal.offset_top = -180.0
+	entrance_order_modal.offset_right = 210.0
+	entrance_order_modal.offset_bottom = 180.0
+	entrance_order_modal.visible = false
+	ui.add_child(entrance_order_modal)
+
+	var title := Label.new()
+	title.text = "Create order"
+	title.position = Vector2(20, 14)
+	title.size = Vector2(380, 30)
+	title.add_theme_font_size_override("font_size", 18)
+	entrance_order_modal.add_child(title)
+
+	entrance_order_food_spin = _create_entrance_order_spin("Food", FOOD_PURCHASE_PRICE, 20, 50)
+	entrance_order_water_spin = _create_entrance_order_spin("Water", ENTRANCE_WATER_PRICE, 20, 90)
+	entrance_order_gloves_spin = _create_entrance_order_spin("Gloves", ENTRANCE_GLOVE_PRICE, 20, 130)
+	entrance_order_bucket_spin = _create_entrance_order_spin("Bucket", ENTRANCE_BUCKET_PRICE, 20, 170)
+
+	entrance_order_total_label = Label.new()
+	entrance_order_total_label.position = Vector2(20, 210)
+	entrance_order_total_label.size = Vector2(380, 30)
+	entrance_order_total_label.add_theme_font_size_override("font_size", 15)
+	entrance_order_modal.add_child(entrance_order_total_label)
+
+	var send_btn := Button.new()
+	send_btn.text = "Send courier"
+	send_btn.position = Vector2(20, 250)
+	send_btn.size = Vector2(180, 34)
+	send_btn.pressed.connect(_send_entrance_order)
+	entrance_order_modal.add_child(send_btn)
+
+	var close_btn := Button.new()
+	close_btn.text = "Close"
+	close_btn.position = Vector2(210, 250)
+	close_btn.size = Vector2(180, 34)
+	close_btn.pressed.connect(_hide_entrance_order_modal)
+	entrance_order_modal.add_child(close_btn)
+
+
+func _create_entrance_order_spin(label_text: String, unit_price: int, x: float, y: float) -> SpinBox:
+	var label := Label.new()
+	label.text = "%s (%d coins each)" % [label_text, unit_price]
+	label.position = Vector2(x, y + 4)
+	label.size = Vector2(180, 24)
+	entrance_order_modal.add_child(label)
+	var spin := SpinBox.new()
+	spin.min_value = 0
+	spin.max_value = 99
+	spin.value = 0
+	spin.step = 1
+	spin.alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	spin.position = Vector2(x + 200, y)
+	spin.size = Vector2(100, 26)
+	spin.value_changed.connect(_update_entrance_order_total)
+	entrance_order_modal.add_child(spin)
+	return spin
+
+
+func _show_entrance_order_modal() -> void:
+	entrance_order_modal.visible = true
+	_update_entrance_order_total()
+
+
+func _hide_entrance_order_modal() -> void:
+	entrance_order_modal.visible = false
+
+
+func _update_entrance_order_total(_value := 0.0) -> void:
+	var total := (
+		int(entrance_order_food_spin.value) * FOOD_PURCHASE_PRICE
+		+ int(entrance_order_water_spin.value) * ENTRANCE_WATER_PRICE
+		+ int(entrance_order_gloves_spin.value) * ENTRANCE_GLOVE_PRICE
+		+ int(entrance_order_bucket_spin.value) * ENTRANCE_BUCKET_PRICE
+	)
+	var available := trade_service.available_trade_money()
+	entrance_order_total_label.text = "Total: %d / %d coins" % [total, available]
+
+
+func _send_entrance_order() -> void:
+	var food := int(entrance_order_food_spin.value)
+	var water := int(entrance_order_water_spin.value)
+	var gloves := int(entrance_order_gloves_spin.value)
+	var bucket := int(entrance_order_bucket_spin.value)
+	var total := (
+		food * FOOD_PURCHASE_PRICE
+		+ water * ENTRANCE_WATER_PRICE
+		+ gloves * ENTRANCE_GLOVE_PRICE
+		+ bucket * ENTRANCE_BUCKET_PRICE
+	)
+	if total <= 0:
+		return
+	if total > trade_service.available_trade_money():
+		_update_interface("Not enough available coins for this order.")
+		return
+	if food > 0:
+		trade_service.buy_entrance_food(food, FOOD_PURCHASE_PRICE)
+	for _i in range(gloves):
+		trade_service.buy_entrance_gloves(ENTRANCE_GLOVE_PRICE)
+	if water > 0:
+		trade_service.buy_entrance_resource("water", water, ENTRANCE_WATER_PRICE)
+	for _i in range(bucket):
+		trade_service.buy_entrance_tool("bucket", ENTRANCE_BUCKET_PRICE)
+	_update_interface("Entrance order placed: %d food, %d water, %d gloves, %d buckets." % [food, water, gloves, bucket])
+	_hide_entrance_order_modal()
 
 func _send_selected_resident_to_outside_work() -> void:
 	if not is_instance_valid(selected_builder) or selected_builder.is_player_controlled:
@@ -3234,69 +3366,17 @@ func _create_materials_factory_menu(ui: CanvasLayer) -> void:
 	materials_factory_menu_title.size = Vector2(272, 94)
 	materials_factory_menu_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	materials_factory_menu.add_child(materials_factory_menu_title)
-	var research_button := Button.new()
-	research_button.text = "Research brick construction"
-	research_button.position = Vector2(16, 120)
-	research_button.size = Vector2(272, 32)
-	research_button.pressed.connect(_start_brick_research)
-	materials_factory_menu.add_child(research_button)
 
 func _show_materials_factory_menu() -> void:
 	if selected_materials_factory == null:
 		return
 	materials_factory_menu.visible = true
-	if brick_construction_unlocked:
-		materials_factory_menu_title.text = "Materials factory\nBrick construction unlocked."
-	elif brick_research_progress >= 0.0:
-		materials_factory_menu_title.text = "Materials factory\nResearch: %d%%" % roundi(brick_research_progress * 100.0)
-	else:
-		materials_factory_menu_title.text = "Materials factory\nNeeds factory worker, builder and engineer.\nResearch cost: %d bricks, %d boards." % [BuildingCatalog.research_cost("brick_construction", "bricks"), BuildingCatalog.research_cost("brick_construction", "boards")]
-
-func _start_brick_research() -> void:
-	if selected_materials_factory == null or brick_construction_unlocked or brick_research_progress >= 0.0:
-		return
-	if not _materials_factory_staffed(selected_materials_factory):
-		_update_interface("Research needs a factory worker, builder and engineer assigned to this factory.")
-		return
-	var brick_cost := BuildingCatalog.research_cost("brick_construction", "bricks")
-	var board_cost := BuildingCatalog.research_cost("brick_construction", "boards")
-	if not settlement.can_afford_research("brick_construction"):
-		_update_interface("Research needs %d bricks and %d boards." % [brick_cost, board_cost])
-		return
-	settlement.pay_for_research("brick_construction")
-	brick_research_progress = 0.0
-	brick_research_factory = selected_materials_factory
-	_show_materials_factory_menu()
-	_update_interface("Brick construction research started.")
-
-func _update_brick_research(delta: float) -> void:
-	if brick_research_progress < 0.0 or brick_construction_unlocked:
-		return
-	if not is_instance_valid(brick_research_factory) or not _materials_factory_staffed(brick_research_factory):
-		if materials_factory_menu != null and materials_factory_menu.visible:
-			_show_materials_factory_menu()
-		return
-	
-	var speed_mult := 1.0
-	for citizen in citizens:
-		if citizen.factory == brick_research_factory and citizen.specialization == "engineer" and citizen.state in [Citizen.State.TO_FACTORY, Citizen.State.FACTORY_WORK]:
-			if citizen.skills.get("engineer", 0.0) >= 1.0:
-				speed_mult = 1.30
-				break
-
-	brick_research_progress = minf(1.0, brick_research_progress + (delta * speed_mult) / BRICK_RESEARCH_DURATION)
-	if brick_research_progress >= 1.0:
-		brick_construction_unlocked = true
-		brick_research_progress = -1.0
-		brick_research_factory = null
-		_update_interface("Brick construction unlocked: recycling, metal, city hall and leisure center are available.")
-	if materials_factory_menu != null and materials_factory_menu.visible:
-		_show_materials_factory_menu()
+	materials_factory_menu_title.text = "Materials factory\nAssign workers to produce materials."
 
 func _update_building_research(delta: float) -> void:
 	if settlement.active_research_tech_id == "":
 		return
-	
+
 	var tech_id := settlement.active_research_tech_id
 	if not BuildingCatalog.RESEARCH_TECHS.has(tech_id):
 		_cancel_active_building_research(true, "Research cancelled: invalid technology.")
@@ -3306,27 +3386,35 @@ func _update_building_research(delta: float) -> void:
 		_cancel_active_building_research(true, "Research cancelled: the Campfire is unavailable. Resources refunded.")
 		return
 	var worker: Citizen = null
-	
+
 	for citizen in citizens:
-		if citizen.get_instance_id() == settlement.active_research_worker_id:
+		if citizen.ai_id == settlement.active_research_worker_id:
 			worker = citizen
 			break
-			
+
 	if worker == null:
 		_cancel_active_building_research(true, "Research cancelled: researcher citizen is no longer available. Resources refunded.")
 		return
-	if worker.state != Citizen.State.RESEARCHING:
-		_cancel_active_building_research(true, "Research cancelled: researcher stopped working. Resources refunded.")
-		return
-		
+
+	var is_hero_officer := worker == hero_citizen and worker.permanent_role == "official"
+	if is_hero_officer:
+		if worker.is_player_controlled or _registration_official() != worker:
+			# Wait until the hero is actually manning his post.
+			return
+	else:
+		if worker.state != Citizen.State.RESEARCHING:
+			_cancel_active_building_research(true, "Research cancelled: researcher stopped working. Resources refunded.")
+			return
+
 	var skill_name: String = tech.required_skill
 	var skill_val := float(worker.skills.get(skill_name, 0.0))
 	var speed_mult := 1.0 + skill_val
-	
-	if worker.global_position.distance_to(campfire_node.get_meta("service_position", campfire_node.global_position)) > 0.15:
+
+	var research_pos: Vector3 = campfire_node.get_meta("service_position", campfire_node.global_position)
+	if worker.global_position.distance_to(research_pos) > 0.5:
 		return
 	building_research_service.advance_active(delta, speed_mult)
-	
+
 	if research_menu != null and research_menu.visible:
 		_refresh_research_menu()
 
@@ -3335,10 +3423,13 @@ func _update_building_research(delta: float) -> void:
 		var skill_to_upgrade: String = str(completion.get("reward_skill", "construction"))
 		worker.skills[skill_to_upgrade] = minf(1.0, float(worker.skills.get(skill_to_upgrade, 0.0)) + 0.20)
 
-		worker.idle()
+		if is_hero_officer and is_instance_valid(campfire_node):
+			worker.assign_official_work(campfire_node.get_meta("service_position", campfire_node.global_position))
+		else:
+			worker.idle()
 		var b_name := str(completion.get("display_name", tech_id))
 		_update_interface("Research completed: %s unlocked! %s skill improved by 20%%." % [b_name, skill_to_upgrade.capitalize()])
-		
+
 		_refresh_campfire_menu()
 		_refresh_build_menu()
 		if research_menu != null and research_menu.visible:
@@ -3388,6 +3479,10 @@ func _hide_research_menu() -> void:
 		research_menu.visible = false
 
 func _get_available_researcher(required_skill: String) -> Citizen:
+	# The hero, once appointed as the campfire/town-hall officer, becomes the
+	# settlement's researcher and civic manager.
+	if hero_citizen != null and hero_citizen.permanent_role == "official" and not hero_citizen.is_player_controlled:
+		return hero_citizen
 	var best_researcher: Citizen = null
 	var best_skill_val := -1.0
 	for citizen in citizens:
@@ -3486,7 +3581,9 @@ func _start_research(tech_id: String) -> void:
 	var research_pos := global_position
 	if is_instance_valid(campfire_node):
 		research_pos = campfire_node.get_meta("service_position", campfire_node.global_position)
-	researcher.assign_research_work(research_pos)
+	# The hero-official researches from his post; other citizens move to the campfire.
+	if not (researcher == hero_citizen and researcher.permanent_role == "official"):
+		researcher.assign_research_work(research_pos)
 	
 	_update_interface("Research started: %s. %s is studying at the Campfire." % [tech.name, researcher.role_label()])
 	_refresh_research_menu()
@@ -3502,10 +3599,16 @@ func _cancel_research() -> void:
 
 func _cancel_active_building_research(refund: bool, message: String) -> void:
 	var worker_id := settlement.active_research_worker_id
+	var worker: Citizen = null
 	for citizen in citizens:
-		if citizen.get_instance_id() == worker_id:
-			citizen.idle()
+		if citizen.ai_id == worker_id:
+			worker = citizen
 			break
+	if worker != null:
+		if worker == hero_citizen and worker.permanent_role == "official" and is_instance_valid(campfire_node):
+			worker.assign_official_work(campfire_node.get_meta("service_position", campfire_node.global_position))
+		else:
+			worker.idle()
 	building_research_service.cancel_active(refund)
 	_update_interface(message)
 	_refresh_campfire_menu()
@@ -3794,6 +3897,21 @@ func _open_build_category(category: String) -> void:
 	if build_category.is_empty():
 		_show_selected_citizen_menu()
 
+
+func _on_build_menu_gui_input(event: InputEvent) -> void:
+	if not (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed):
+		return
+	if not build_category.is_empty():
+		_open_build_category("")
+	elif build_menu_is_job_menu or build_menu_is_daily_order_menu:
+		_close_assignment_submenu()
+	elif selected_builder != null:
+		selected_builder = null
+		build_menu.visible = false
+	else:
+		build_menu.visible = false
+	get_viewport().set_input_as_handled()
+
 func _refresh_build_menu() -> void:
 	var selected_exists := selected_builder != null
 	var assignment_submenu_open := build_menu_is_job_menu or build_menu_is_daily_order_menu
@@ -3801,6 +3919,14 @@ func _refresh_build_menu() -> void:
 	if manage_citizen_button != null:
 		manage_citizen_button.visible = citizen_actions_visible
 		manage_citizen_button.text = "Управлять" if selected_builder != hero_citizen else "Управлять героем"
+
+	if hero_official_button != null:
+		hero_official_button.visible = citizen_actions_visible and selected_builder == hero_citizen
+		var has_campfire := is_instance_valid(campfire_node)
+		var is_hero_official := hero_citizen != null and hero_citizen.permanent_role == "official"
+		hero_official_button.disabled = not has_campfire
+		hero_official_button.text = "Оставить управление" if is_hero_official else "Занять место управляющего"
+		hero_official_button.tooltip_text = "Требуется построенный костер." if not has_campfire else ""
 	
 	if daily_order_submenu_btn != null:
 		daily_order_submenu_btn.visible = citizen_actions_visible
@@ -3988,7 +4114,6 @@ func _is_role_available(role: String) -> bool:
 		"gather_branches": return not tree_positions.is_empty()
 		"gather_grass": return settlement.era == SettlementState.Era.TENT
 		"gather_food": return _available_employer_capacity("gather_food") > 0
-		"gather_dew": return _has_collected_dew() and not warehouse_positions.is_empty()
 		"gather_water": return bool(settlement.tools.get("bucket", false)) and not pond_positions.is_empty() and not warehouse_positions.is_empty()
 		"cook": return _available_employer_capacity("cook") > 0
 		"teacher": return _available_employer_capacity("teacher") > 0
@@ -4240,6 +4365,8 @@ func _close_context_menus() -> void:
 	selection_marker.visible = false
 	is_rotating_camera = false
 	entrance_menu.visible = false
+	if entrance_order_modal != null:
+		entrance_order_modal.visible = false
 	house_menu.visible = false
 	school_menu.visible = false
 	materials_factory_menu.visible = false
@@ -4427,7 +4554,7 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 		school_menu.visible = false
 		build_menu.visible = false
 		_show_materials_factory_menu()
-		_update_interface("Materials factory selected. Start brick construction research here.")
+		_update_interface("Materials factory selected. Assign workers to produce materials.")
 		return
 	if hit.collider.is_in_group("construction_selector"):
 		selected_building = hit.collider.get_parent() as Node3D
@@ -4652,8 +4779,6 @@ func _select_citizen(clicked_citizen: Citizen) -> void:
 
 func _show_selected_citizen_menu() -> void:
 	if selected_builder == null:
-		build_menu_title.text = "Construction Panel\nChoose an era category below."
-		build_menu_title.add_theme_color_override("font_color", Color("ffffff"))
 		return
 	var assignment := "Unregistered"
 	if selected_builder.employment_state == Citizen.EmploymentState.NO_PERMANENT_WORK:
@@ -4842,6 +4967,9 @@ func _start_interaction() -> void:
 		interaction_progress.visible = true
 		interaction_hint_label.text = "Gathering grass..."
 		return
+	if _nearby_forage_source() or _nearby_rabbit_source():
+		_update_interface(_wild_food_requires_specialist_message())
+		return
 	if _nearby_tree() or _nearby_farm():
 		var gathering_branches := _nearby_tree() and settlement.era < SettlementState.Era.WOOD
 		if not gathering_branches and _pocket_total() >= POCKET_WOOD_CAPACITY:
@@ -5018,6 +5146,27 @@ func _consume_grass_near_player(amount: int) -> void:
 		_consume_grass_source(pos)
 		remaining_to_take -= 1
 
+func _nearby_forage_source() -> bool:
+	if player_citizen == null:
+		return false
+	var player_cell := _cell_from_position(player_citizen.global_position)
+	for cell in forage_sources:
+		if cell == player_cell:
+			return true
+	return false
+
+func _nearby_rabbit_source() -> bool:
+	if player_citizen == null:
+		return false
+	for source: Dictionary in rabbit_sources.values():
+		var rabbit := source.get("node") as Node3D
+		if is_instance_valid(rabbit) and rabbit.global_position.distance_to(player_citizen.global_position) <= INTERACTION_RANGE:
+			return true
+	return false
+
+func _wild_food_requires_specialist_message() -> String:
+	return "Forest gifts and rabbits can only be gathered by a trained specialist. Build a forager/hunter tent first."
+
 func _pocket_total() -> int:
 	return pocket_wood + pocket_food + pocket_boards + pocket_water
 
@@ -5041,6 +5190,8 @@ func _refresh_interaction_hint() -> void:
 		interaction_hint_label.text = "LMB: gather branches" if settlement.era < SettlementState.Era.WOOD else "LMB: gather wood (%d/%d in pocket)" % [_pocket_total(), POCKET_WOOD_CAPACITY]
 	elif _nearby_farm():
 		interaction_hint_label.text = "LMB: gather food (%d/%d in pocket)" % [_pocket_total(), POCKET_WOOD_CAPACITY]
+	elif _nearby_forage_source() or _nearby_rabbit_source():
+		interaction_hint_label.text = _wild_food_requires_specialist_message()
 	elif _nearby_pond():
 		if bool(settlement.tools.get("bucket", false)):
 			interaction_hint_label.text = "LMB: fill bucket with water (%d/%d in pocket)" % [_pocket_total(), POCKET_WOOD_CAPACITY]
@@ -5452,7 +5603,7 @@ func _has_storage_room_for_role(role: String) -> bool:
 				return settlement.can_make_room_for(resource, 1, warehouse_positions.size())
 		return settlement.can_make_room_for("soil", 1, warehouse_positions.size())
 		
-	var resource_for_role := {"forestry": "logs", "farming": "food", "gather_branches": "branches", "gather_grass": "grass", "gather_food": "food", "gather_water": "water", "gather_dew": "water"}
+	var resource_for_role := {"forestry": "logs", "farming": "food", "gather_branches": "branches", "gather_grass": "grass", "gather_food": "food", "gather_water": "water"}
 	if not resource_for_role.has(role):
 		return true
 	return settlement.can_make_room_for(resource_for_role[role], 1, warehouse_positions.size())
@@ -5605,14 +5756,6 @@ func _fell_tree_at(position_on_board: Vector3) -> void:
 
 func _update_water_collectors(delta: float) -> void:
 	water_collector_service.tick(delta)
-
-
-func _reserve_dew_collector() -> Vector3:
-	return water_collector_service.reserve_dew_collector()
-
-
-func _has_collected_dew() -> bool:
-	return water_collector_service.has_collected_dew()
 
 
 func _toggle_global_build_menu() -> void:
@@ -5809,10 +5952,17 @@ func _create_campfire_orders_menu(ui: CanvasLayer) -> void:
 	var description := Label.new()
 	description.text = "This order only strengthens new trail marks. Roads are not used for route selection yet."
 	description.position = Vector2(18, 98)
-	description.size = Vector2(384, 62)
+	description.size = Vector2(384, 52)
 	description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	description.add_theme_font_size_override("font_size", 13)
 	campfire_orders_menu.add_child(description)
+	campfire_cheer_button = Button.new()
+	campfire_cheer_button.text = "Cheer up"
+	campfire_cheer_button.position = Vector2(18, 156)
+	campfire_cheer_button.size = Vector2(384, 32)
+	campfire_cheer_button.tooltip_text = "Once per day. Raises wellbeing by 5%%."
+	campfire_cheer_button.pressed.connect(_cheer_up_settlement)
+	campfire_orders_menu.add_child(campfire_cheer_button)
 	var close_button := Button.new()
 	close_button.text = "Close"
 	close_button.position = Vector2(286, 196)
@@ -5822,11 +5972,15 @@ func _create_campfire_orders_menu(ui: CanvasLayer) -> void:
 
 
 func _show_campfire_orders_menu() -> void:
-	if campfire_orders_menu == null or campfire_orders_toggle == null:
+	if campfire_orders_menu == null or campfire_orders_toggle == null or campfire_cheer_button == null:
 		return
 	campfire_orders_toggle.set_pressed_no_signal(settlement.road_walking_order_enabled)
 	campfire_orders_toggle.disabled = settlement.era != SettlementState.Era.TENT
 	campfire_orders_toggle.tooltip_text = "Available in the Tent Era." if campfire_orders_toggle.disabled else "Residents trample trails faster. Route selection is unchanged."
+	var hour := clock.hour()
+	var can_cheer := hour >= 6 and not settlement.cheer_up_used_today
+	campfire_cheer_button.disabled = not can_cheer
+	campfire_cheer_button.tooltip_text = "Available once each morning after 06:00." if not can_cheer else "Raise wellbeing by 5%%."
 	campfire_orders_menu.visible = true
 
 
@@ -5835,6 +5989,15 @@ func _set_road_walking_order(enabled: bool) -> void:
 		return
 	settlement.road_walking_order_enabled = enabled
 	_update_interface("Trail-walking order %s. It does not change routes yet." % ("enabled" if enabled else "disabled"))
+
+
+func _cheer_up_settlement() -> void:
+	if clock.hour() < 6:
+		return
+	if settlement.apply_cheer_up():
+		campfire_cheer_button.disabled = true
+		campfire_cheer_button.tooltip_text = "Already used today. Available again tomorrow at 06:00."
+		_update_interface("You cheered up the settlement. Wellbeing rose by 5%%.")
 
 
 func _create_workforce_menu(ui: CanvasLayer) -> void:
@@ -5903,7 +6066,7 @@ func _workforce_roles() -> Array[String]:
 
 
 func _daily_order_roles() -> Array[String]:
-	return ["helper", "construction", "gather_branches", "gather_grass", "gather_food", "gather_dew", "gather_water"]
+	return ["helper", "construction", "gather_branches", "gather_grass", "gather_water"]
 
 
 func _workforce_role_label(role: String) -> String:
@@ -5911,7 +6074,7 @@ func _workforce_role_label(role: String) -> String:
 		"construction": "Construction", "forestry": "Forestry", "farming": "Farming",
 		"excavation": "Excavation", "gather_branches": "Gather branches",
 		"gather_grass": "Gather grass", "gather_food": "Foraging",
-		"gather_dew": "Collect dew", "gather_water": "Collect water",
+		"gather_water": "Collect water",
 		"cook": "Cook", "teacher": "Teacher", "seller": "Seller", "official": "Employment officer",
 		"factory_worker": "Factory worker", "engineer": "Engineer",
 		"helper": "Helper", "courier": "Courier", "craftsman": "Craftsman"
@@ -7125,6 +7288,47 @@ func _appoint_official(citizen: Citizen) -> void:
 	if not is_instance_valid(citizen.employment_workplace):
 		citizen.active_role = ""
 	_refresh_labor_authority_indicator()
+
+
+func _on_hero_official_pressed() -> void:
+	if hero_citizen == null:
+		return
+	if hero_citizen.permanent_role == "official":
+		_dismiss_hero_official()
+		return
+	if not is_instance_valid(campfire_node):
+		_update_interface("Требуется построенный костер.")
+		return
+	if hero_citizen.is_player_controlled:
+		hero_citizen.set_player_controlled(false)
+		if is_first_person:
+			_leave_first_person_to_hero_overview()
+	_appoint_official(hero_citizen)
+	_activate_employment_centre(campfire_node)
+	_update_interface("%s назначен управляющим у костра." % hero_citizen.role_label())
+	_update_workers()
+	_refresh_build_menu()
+
+
+func _dismiss_hero_official() -> void:
+	if hero_citizen == null or hero_citizen.permanent_role != "official":
+		return
+	if settlement.active_research_tech_id != "" and settlement.active_research_worker_id == hero_citizen.ai_id:
+		_cancel_active_building_research(true, "Research cancelled: the hero left the official post. Resources refunded.")
+	hero_citizen.idle()
+	hero_citizen.setup_specialization("unassigned")
+	hero_citizen.clear_daily_order()
+	hero_citizen.assigned_dig_site = null
+	hero_citizen.pending_employment_role = ""
+	hero_citizen.pending_employment_workplace = null
+	hero_citizen.permanent_role = ""
+	hero_citizen.employment_workplace = null
+	hero_citizen.employment_state = Citizen.EmploymentState.NO_PERMANENT_WORK
+	hero_citizen.active_role = ""
+	_refresh_labor_authority_indicator()
+	_update_interface("%s покинул пост управляющего." % hero_citizen.role_label())
+	_update_workers()
+	_refresh_build_menu()
 
 
 func _activate_employment_centre(centre: Node3D) -> void:

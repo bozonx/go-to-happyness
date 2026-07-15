@@ -12,6 +12,7 @@ signal resource_ready(worker: Citizen, resource_type: String, amount: int)
 signal tree_harvested(worker: Citizen, position_on_board: Vector3)
 signal logs_delivered(worker: Citizen, sawmill_position: Vector3, amount: int)
 signal sawmill_boards_collected(courier: Citizen, sawmill_position: Vector3)
+signal dew_collected(courier: Citizen, collector_position: Vector3)
 signal meal_finished(worker: Citizen)
 signal relief_finished(worker: Citizen)
 signal leisure_finished(worker: Citizen)
@@ -51,7 +52,7 @@ const IDLE_PERSONAL_SPACE := 1.15
 const MIN_STATE_DISPLAY_DURATION := 1.0
 const MAX_PENDING_STATE_DISPLAY_TRANSITIONS := 6
 
-enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, TO_GATHER, GATHERING, TO_TRADE_PICKUP, TO_TRADE_DESTINATION, TO_EMPLOYMENT_CENTER, EMPLOYMENT_PROCESSING, CANTEEN_WORK, SCHOOL_WORK, TO_MARKET_WORK, MARKET_WORK, TO_CRAFT_WORK, CRAFT_WORK, TO_CONSTRUCTION_PICKUP, TO_CONSTRUCTION_SITE, TO_OFFICIAL_WORK, OFFICIAL_WORK, TO_ARRIVAL_ENTRANCE, ARRIVAL_MEETING, ARRIVAL_WAITING, TO_ARRIVAL_CENTER, RESEARCHING, TO_TOILET, USING_TOILET, WAITING_FOR_TOILET, TO_BUSH, USING_BUSH }
+enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, COURIER_TO_DEW, TO_GATHER, GATHERING, TO_CLEANING_PILE, CLEANING_PILE, TO_TRADE_PICKUP, TO_TRADE_DESTINATION, TO_EMPLOYMENT_CENTER, EMPLOYMENT_PROCESSING, CANTEEN_WORK, SCHOOL_WORK, TO_MARKET_WORK, MARKET_WORK, TO_CRAFT_WORK, CRAFT_WORK, TO_CONSTRUCTION_PICKUP, TO_CONSTRUCTION_SITE, TO_OFFICIAL_WORK, OFFICIAL_WORK, TO_ARRIVAL_ENTRANCE, ARRIVAL_MEETING, ARRIVAL_WAITING, TO_ARRIVAL_CENTER, RESEARCHING, TO_TOILET, USING_TOILET, WAITING_FOR_TOILET, TO_BUSH, USING_BUSH }
 
 enum EmploymentState { UNREGISTERED, NO_PERMANENT_WORK, EMPLOYED, REGISTERING }
 
@@ -83,9 +84,8 @@ const DAILY_ORDER_ROLES := {
 	"construction": true,
 	"gather_branches": true,
 	"gather_grass": true,
-	"gather_food": true,
-	"gather_dew": true,
 	"gather_water": true,
+	"cleaning": true,
 }
 
 const SKIN_COLORS := [
@@ -663,6 +663,29 @@ func start_production_cycle(next_resource_type: String, source: Vector3, workpla
 	active_role = "forestry" if next_resource_type == "wood" else "farming"
 	state = State.TO_TREE
 
+
+func _process_to_cleaning_pile(delta: float) -> void:
+	if _move_to(gather_access_position, delta, false, false):
+		state = State.CLEANING_PILE
+		_start_task(WORK_DURATION)
+
+
+func _process_cleaning_pile(delta: float) -> void:
+	if not _work(delta):
+		return
+	if simulation == null or gather_resource_type.is_empty():
+		idle()
+		return
+	var collected: int = int(simulation._take_resource_from_pile_at(gather_source_position, gather_resource_type, 3))
+	if collected <= 0:
+		idle()
+		return
+	resource_type = gather_resource_type
+	carried_amount = collected
+	state = State.TO_WAREHOUSE
+
+
+
 func _physics_process(delta: float) -> void:
 	if is_player_controlled:
 		return
@@ -702,6 +725,8 @@ func _physics_process(delta: float) -> void:
 			_process_courier_pickup(delta)
 		State.COURIER_TO_SAWMILL:
 			_process_sawmill_pickup(delta)
+		State.COURIER_TO_DEW:
+			_process_dew_collector_pickup(delta)
 		State.COURIER_TO_WAREHOUSE:
 			_process_courier_delivery(delta)
 		State.TO_HOME:
@@ -742,6 +767,10 @@ func _physics_process(delta: float) -> void:
 			_process_to_gather(delta)
 		State.GATHERING:
 			_process_gathering(delta)
+		State.TO_CLEANING_PILE:
+			_process_to_cleaning_pile(delta)
+		State.CLEANING_PILE:
+			_process_cleaning_pile(delta)
 		State.TO_TRADE_PICKUP:
 			_process_trade_pickup(delta)
 		State.TO_TRADE_DESTINATION:
@@ -889,6 +918,12 @@ func _process_sawmill_pickup(delta: float) -> void:
 	if _move_to(workplace_position, delta):
 		sawmill_boards_collected.emit(self, workplace_position)
 
+
+func _process_dew_collector_pickup(delta: float) -> void:
+	if _move_to(workplace_position, delta):
+		dew_collected.emit(self, workplace_position)
+
+
 func _process_courier_delivery(delta: float) -> void:
 	_refresh_warehouse_position()
 	if _move_to(warehouse_position, delta):
@@ -920,7 +955,7 @@ func _process_construction_pickup(delta: float) -> void:
 
 func _process_construction_delivery(delta: float) -> void:
 	if not is_instance_valid(construction_site):
-		idle()
+		cancel_current_action()
 		return
 	# Construction sites do not use the building-queue system. Using it here
 	# could redirect a courier carrying materials to another building's queue
@@ -1685,6 +1720,22 @@ func collect_sawmill_boards(amount: int) -> void:
 	courier_resource_type = "boards"
 	state = State.COURIER_TO_WAREHOUSE if amount > 0 else State.IDLE
 
+
+func assign_dew_collector_pickup(collector: Vector3, warehouse: Vector3) -> void:
+	_reset_assignment_navigation()
+	workplace_position = collector
+	warehouse_position = warehouse
+	active_role = ""
+	factory = null
+	state = State.COURIER_TO_DEW
+
+
+func collect_dew(amount: int) -> void:
+	carried_amount = maxi(amount, 0)
+	courier_resource_type = "water"
+	state = State.COURIER_TO_WAREHOUSE if carried_amount > 0 else State.IDLE
+
+
 func deliver_sawmill_boards(amount: int) -> void:
 	resource_type = "boards"
 	carried_amount = amount
@@ -1914,7 +1965,7 @@ func get_core_skill_for_role(role: String) -> String:
 			return "construction"
 		"forestry", "gather_branches", "gather_logs":
 			return "forestry"
-		"farming", "gather_water", "gather_dew", "gather_food":
+		"farming", "gather_water", "gather_food":
 			return "farming"
 		"excavation":
 			return "excavation"
@@ -2270,6 +2321,18 @@ func assign_gathering(res_type: String, source_pos: Vector3, delivery_pos: Vecto
 	active_role = "gather_" + res_type
 	state = State.TO_GATHER
 
+func assign_cleaning(res_type: String, source_pos: Vector3, access_pos: Vector3, delivery_pos: Vector3) -> void:
+	if is_player_controlled:
+		return
+	_reset_assignment_navigation()
+	gather_resource_type = res_type
+	gather_source_position = source_pos
+	gather_access_position = access_pos
+	warehouse_position = delivery_pos
+	active_role = "cleaning"
+	state = State.TO_CLEANING_PILE
+
+
 func _process_to_gather(delta: float) -> void:
 	if _move_to(gather_access_position, delta, false, false):
 		state = State.GATHERING
@@ -2546,6 +2609,15 @@ func execute_action(action: StringName, target: Node3D, payload: AIFactSet) -> b
 				return false
 			assign_gathering(resource_type, source_position, gathering_warehouse_position, access_position)
 			return state in [State.TO_GATHER, State.GATHERING, State.TO_WAREHOUSE]
+		&"cleaning":
+			var cleaning_resource_type: Variant = payload.value(&"resource.type", "") if payload != null else ""
+			var pile_position: Variant = payload.value(&"target.position", Vector3.INF) if payload != null else Vector3.INF
+			var pile_access_position: Variant = payload.value(&"target.access_position", Vector3.INF) if payload != null else Vector3.INF
+			var cleaning_warehouse_position: Variant = payload.value(&"warehouse.position", Vector3.INF) if payload != null else Vector3.INF
+			if not (cleaning_resource_type is String) or cleaning_resource_type.is_empty() or not (pile_position is Vector3) or pile_position == Vector3.INF or not (pile_access_position is Vector3) or pile_access_position == Vector3.INF or not (cleaning_warehouse_position is Vector3) or cleaning_warehouse_position == Vector3.INF:
+				return false
+			assign_cleaning(cleaning_resource_type, pile_position, pile_access_position, cleaning_warehouse_position)
+			return state in [State.TO_CLEANING_PILE, State.CLEANING_PILE, State.TO_WAREHOUSE]
 		&"excavation":
 			if not is_instance_valid(target):
 				return false
@@ -2637,6 +2709,11 @@ func get_action_status(action: StringName) -> int:
 				return 1 # RUNNING
 			if state == State.IDLE:
 				return 2 # SUCCEEDED
+		&"cleaning":
+			if state in [State.TO_CLEANING_PILE, State.CLEANING_PILE, State.TO_WAREHOUSE]:
+				return 1 # RUNNING
+			if state == State.IDLE:
+				return 2 # SUCCEEDED
 		&"excavation":
 			if state in [State.EXCAVATING, State.WAITING_COURIER]:
 				return 1 # RUNNING
@@ -2673,9 +2750,9 @@ func get_action_status(action: StringName) -> int:
 func cancel_current_action() -> void:
 	var was_relief_action := state in [State.TO_TOILET, State.USING_TOILET, State.WAITING_FOR_TOILET, State.TO_BUSH, State.USING_BUSH]
 	var was_construction_delivery := state in [State.TO_CONSTRUCTION_PICKUP, State.TO_CONSTRUCTION_SITE]
-	# A gathering action can be interrupted after the resource has been picked
+	# A gathering or cleaning action can be interrupted after the resource has been picked
 	# up. Put that cargo on the ground rather than leaving it attached to an idle worker.
-	if active_role.begins_with("gather_") and carried_amount > 0 and not resource_type.is_empty():
+	if (active_role.begins_with("gather_") or active_role == "cleaning") and carried_amount > 0 and not resource_type.is_empty():
 		resource_dropped.emit(self, resource_type, carried_amount)
 		carried_amount = 0
 	if is_registering():
@@ -2683,7 +2760,7 @@ func cancel_current_action() -> void:
 		pending_employment_workplace = null
 		registration_queue_order = -1
 		employment_state = EmploymentState.NO_PERMANENT_WORK
-	if state in [State.TO_HOME, State.RESTING, State.TO_CANTEEN, State.EATING, State.TO_TOILET, State.USING_TOILET, State.WAITING_FOR_TOILET, State.TO_BUSH, State.USING_BUSH, State.TO_PARK, State.RELAXING, State.TO_TREE, State.CHOPPING, State.TO_SAWMILL, State.SAWING, State.WAITING_COURIER, State.CONSTRUCTING, State.TO_GATHER, State.GATHERING, State.TO_WAREHOUSE, State.EXCAVATING, State.TO_CANTEEN_WORK, State.CANTEEN_WORK, State.TO_SCHOOL_WORK, State.SCHOOL_WORK, State.TO_MARKET_WORK, State.MARKET_WORK, State.TO_OFFICIAL_WORK, State.OFFICIAL_WORK, State.TO_CRAFT_WORK, State.CRAFT_WORK, State.TO_FACTORY, State.FACTORY_WORK, State.COURIER_TO_WORKER, State.COURIER_TO_WAREHOUSE, State.COURIER_TO_SAWMILL, State.TO_FOOD_PICKUP, State.TO_CANTEEN_DELIVERY, State.TO_CONSTRUCTION_PICKUP, State.TO_CONSTRUCTION_SITE, State.TO_TRADE_PICKUP, State.TO_TRADE_DESTINATION, State.TO_EMPLOYMENT_CENTER, State.EMPLOYMENT_PROCESSING]:
+	if state in [State.TO_HOME, State.RESTING, State.TO_CANTEEN, State.EATING, State.TO_TOILET, State.USING_TOILET, State.WAITING_FOR_TOILET, State.TO_BUSH, State.USING_BUSH, State.TO_PARK, State.RELAXING, State.TO_TREE, State.CHOPPING, State.TO_SAWMILL, State.SAWING, State.WAITING_COURIER, State.CONSTRUCTING, State.TO_GATHER, State.GATHERING, State.TO_CLEANING_PILE, State.CLEANING_PILE, State.TO_WAREHOUSE, State.EXCAVATING, State.TO_CANTEEN_WORK, State.CANTEEN_WORK, State.TO_SCHOOL_WORK, State.SCHOOL_WORK, State.TO_MARKET_WORK, State.MARKET_WORK, State.TO_OFFICIAL_WORK, State.OFFICIAL_WORK, State.TO_CRAFT_WORK, State.CRAFT_WORK, State.TO_FACTORY, State.FACTORY_WORK, State.COURIER_TO_WORKER, State.COURIER_TO_WAREHOUSE, State.COURIER_TO_SAWMILL, State.TO_FOOD_PICKUP, State.TO_CANTEEN_DELIVERY, State.TO_CONSTRUCTION_PICKUP, State.TO_CONSTRUCTION_SITE, State.TO_TRADE_PICKUP, State.TO_TRADE_DESTINATION, State.TO_EMPLOYMENT_CENTER, State.EMPLOYMENT_PROCESSING]:
 		idle()
 	if was_construction_delivery:
 		# The site reservation is reconciled by SettlementGame. Clear the actor-side

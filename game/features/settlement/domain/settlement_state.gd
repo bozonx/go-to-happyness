@@ -37,13 +37,13 @@ var wellbeing := 75
 var workday_hours := 8
 var night_shifts_allowed := false
 var road_walking_order_enabled := false
+var cheer_up_used_today := false
 var low_wellbeing_days := 0
 var tools := {"axe": false, "hand_saw": false, "shovel": false, "bucket": false, "hoe": false, "pickaxe": false}
 var tool_uses := {}
 var equipment: Dictionary = TENT_STARTING_EQUIPMENT.duplicate(true)
 var trade_sales := 0
 var buildings: Dictionary = {}
-var brick_construction_unlocked := false
 var warehouse_tarp_covered := false
 var campfire_story_effect := "" # "optimistic" | "teaching" | "plan"
 var campfire_story_target_role := ""
@@ -124,12 +124,12 @@ func apply_tent_start(reset_progress := true) -> void:
 	workday_hours = 8
 	night_shifts_allowed = false
 	road_walking_order_enabled = false
+	cheer_up_used_today = false
 	low_wellbeing_days = 0
 	tools = {"axe": false, "hand_saw": false, "shovel": false, "bucket": false, "hoe": false, "pickaxe": false}
 	tool_uses = {}
 	equipment = TENT_STARTING_EQUIPMENT.duplicate(true)
 	trade_sales = 0
-	brick_construction_unlocked = false
 	warehouse_tarp_covered = false
 	campfire_story_effect = ""
 	campfire_story_target_role = ""
@@ -510,7 +510,7 @@ func is_building_unlocked(building_type: String) -> bool:
 		return true
 	if unlocked_building_levels.has(building_type):
 		return bool(unlocked_building_levels.get(building_type, false))
-	return era > Era.TENT
+	return era >= BuildingCatalog.era_for(building_type)
 
 
 func buy_tool(tool_id: String, price: int) -> bool:
@@ -549,8 +549,14 @@ func advance_era(next_era: Era, population: int, housing_slots: int) -> bool:
 	if not can_advance_to(next_era, population, housing_slots):
 		return false
 	era = next_era
-	if era == Era.BRICK:
-		brick_construction_unlocked = true
+	return true
+
+
+func apply_cheer_up() -> bool:
+	if cheer_up_used_today:
+		return false
+	wellbeing = mini(100, wellbeing + 5)
+	cheer_up_used_today = true
 	return true
 
 

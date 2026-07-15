@@ -12,6 +12,7 @@ const CanteenServiceScript = preload("res://game/features/logistics/application/
 const StorageDeliveryServiceScript = preload("res://game/features/logistics/application/storage_delivery_service.gd")
 const TradeServiceScript = preload("res://game/features/logistics/application/trade_service.gd")
 const TradeOrderScript = preload("res://game/features/logistics/domain/trade_order.gd")
+const WaterCollectorServiceScript = preload("res://game/features/logistics/application/water_collector_service.gd")
 const FireSourceStateScript = preload("res://game/features/settlement/domain/fire_source_state.gd")
 const CitizenStatusEffectScript = preload("res://game/features/citizens/domain/citizen_status_effect.gd")
 const TrailFieldServiceScript = preload("res://game/features/roads/application/trail_field_service.gd")
@@ -82,6 +83,10 @@ class FakeTradeSimulation extends Node:
 		last_interface_message = message
 
 
+class FakeWaterCollectorSimulation extends Node:
+	var water_collectors: Array[Dictionary] = []
+
+
 func _init() -> void:
 	_test_settlement_economy()
 	_test_tent_start_config()
@@ -124,6 +129,8 @@ func _init() -> void:
 	_test_building_availability_service()
 	_test_citizen_living_status_service()
 	_test_building_research_service()
+	_test_cheer_up_mechanic()
+	_test_water_collector_service()
 	quit(0)
 
 
@@ -160,12 +167,6 @@ func _test_settlement_economy() -> void:
 	assert(state.can_afford_building("stone_house"))
 	assert(state.pay_for_building("stone_house"))
 	assert(state.stone == 0 and state.clay == 0)
-
-	state.bricks = 15
-	state.boards = 10
-	assert(state.can_afford_research("brick_construction"))
-	assert(state.pay_for_research("brick_construction"))
-	assert(state.bricks == 0 and state.boards == 0)
 
 	# Verify Brick house costs bricks and boards
 	state.era = SettlementState.Era.BRICK
@@ -681,6 +682,14 @@ func _test_workforce_policy() -> void:
 	assert(is_equal_approx(artisan.craft_speed_multiplier, 1.7))
 	artisan.free()
 
+	# Foraging is a permanent job tied to forager tents; collecting dew is not a job.
+	var forager_world := {"hour": 9, "warehouses": 1, "forager_tents": 1, "assigned_roles": {}, "officer_available": true}
+	assert(WorkforcePolicy.permanent_vacancy_for({"specialization": "unassigned"}, forager_world) == "gather_food")
+	assert(not WorkforcePolicy._role_available("gather_dew", {"has_collected_dew": true, "warehouses": 1}))
+	var forager := {"specialization": "unassigned", "permanent_role": "gather_food", "player_controlled": false, "blocked_by_storage": false}
+	assert(WorkforcePolicy.can_assign(forager, forager_world))
+	forager_world.forager_tents = 0
+	assert(not WorkforcePolicy.can_assign(forager, forager_world))
 
 func _test_citizen_task_state() -> void:
 	var task := CitizenTaskState.new()
@@ -1273,3 +1282,46 @@ func _test_research_mechanics() -> void:
 	citizen.state = Citizen.State.RESEARCHING
 	assert(not citizen.is_available_for_schedule())
 	citizen.free()
+
+
+func _test_cheer_up_mechanic() -> void:
+	var state := SettlementState.new()
+	state.apply_tent_start()
+	assert(not state.cheer_up_used_today)
+	state.wellbeing = 70
+	assert(state.apply_cheer_up())
+	assert(state.wellbeing == 75)
+	assert(state.cheer_up_used_today)
+	assert(not state.apply_cheer_up())
+	assert(state.wellbeing == 75)
+	state.wellbeing = 98
+	state.cheer_up_used_today = false
+	assert(state.apply_cheer_up())
+	assert(state.wellbeing == 100)
+	state.apply_tent_start()
+	assert(not state.cheer_up_used_today)
+
+func _test_water_collector_service() -> void:
+	var simulation := FakeWaterCollectorSimulation.new()
+	var service := WaterCollectorServiceScript.new()
+	service.configure(simulation)
+
+	var collector := Node3D.new()
+	collector.position = Vector3(2.0, 0.0, 3.0)
+	collector.set_meta("service_position", collector.position)
+	simulation.water_collectors = [{
+		"node": collector,
+		"rate": 1.0,
+		"accum": 0.0,
+		"stored": 0,
+		"capacity": 10,
+	}]
+
+	service.tick(2.5)
+	assert(service.stored_at(collector.position) == 2)
+	assert(service.collect_water(collector.position, 5) == 2)
+	assert(service.stored_at(collector.position) == 0)
+	assert(service.collect_water(collector.position, 1) == 0)
+
+	collector.free()
+	simulation.free()

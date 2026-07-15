@@ -13,6 +13,7 @@ const ConstructionGoalScript = preload("res://game/features/decision/domain/goal
 const ConstructionOrderProviderScript = preload("res://game/features/decision/application/construction_order_provider.gd")
 const GatheringGoalScript = preload("res://game/features/decision/domain/goals/gathering_goal.gd")
 const GatheringOrderProviderScript = preload("res://game/features/decision/application/gathering_order_provider.gd")
+const CleaningGoalScript = preload("res://game/features/decision/domain/goals/cleaning_goal.gd")
 const ExcavationGoalScript = preload("res://game/features/decision/domain/goals/excavation_goal.gd")
 const ExcavationOrderProviderScript = preload("res://game/features/decision/application/excavation_order_provider.gd")
 const ServiceWorkGoalScript = preload("res://game/features/decision/domain/goals/service_work_goal.gd")
@@ -125,7 +126,7 @@ class FakeActuator extends CitizenActuator:
 		_payload: AIFactSet = null
 	) -> bool:
 		action_start_count += 1
-		return action in [&"sleep", &"eat", &"relieve", &"rest", &"register", &"forestry", &"farming", &"construction", &"demolition", &"gathering", &"excavation", &"cook", &"teacher", &"seller", &"official", &"craftsman", &"factory_work", &"courier_delivery"]
+		return action in [&"sleep", &"eat", &"relieve", &"rest", &"register", &"forestry", &"farming", &"construction", &"demolition", &"gathering", &"cleaning", &"excavation", &"cook", &"teacher", &"seller", &"official", &"craftsman", &"factory_work", &"courier_delivery"]
 
 	func action_status() -> ActionStatus:
 		return next_action_status
@@ -176,6 +177,8 @@ func _init() -> void:
 	_test_register_provider_distributes_workplaces_by_capacity()
 	_test_daily_player_order_provider_keeps_gathering_assignment()
 	_test_daily_player_order_provider_publishes_construction_order()
+	_test_daily_player_order_provider_publishes_cleaning_order()
+	_test_native_cleaning_goal()
 	_test_runner_cancels_stale_active_order_and_releases_reservation()
 	_test_reserved_step_renews_lease()
 	_test_forestry_provider_assigns_unique_stable_targets()
@@ -1144,6 +1147,50 @@ func _test_daily_player_order_provider_publishes_construction_order() -> void:
 	assert(orders[0].target_position == Vector3(1.0, 0.0, 2.0))
 
 
+func _test_daily_player_order_provider_publishes_cleaning_order() -> void:
+	var provider := DailyPlayerOrderProviderScript.new()
+	var citizen := _cleaning_citizen(1, false)
+	var snapshot := WorldSnapshot.new(1, 0.0, 0.0, AIFactSet.new(), {1: citizen})
+	var orders := provider.collect_orders(snapshot)
+	assert(orders.size() == 1)
+	var order: CitizenOrder = orders[0]
+	assert(order.kind == &"cleaning")
+	assert(order.issuer == &"player")
+	assert(order.workday_id == 3)
+	assert(is_equal_approx(order.expires_at, 42.0))
+	assert(order.payload.value(&"work.source_id") == &"pile:3:0:branches")
+	assert(order.payload.value(&"resource.type") == "branches")
+	assert(order.target_position == Vector3(3.0, 0.0, 0.0))
+
+	var running := _cleaning_citizen(1, true)
+	var continued := provider.collect_orders(WorldSnapshot.new(2, 1.0, 0.0, AIFactSet.new(), {1: running}))
+	assert(continued.size() == 1)
+	assert(continued[0].payload.to_dictionary() == order.payload.to_dictionary())
+
+	var inactive := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
+		&"daily.order.active": false,
+		&"daily.order.role": "cleaning",
+	}))
+	assert(provider.collect_orders(WorldSnapshot.new(3, 2.0, 0.0, AIFactSet.new(), {1: inactive})).is_empty())
+
+
+func _test_native_cleaning_goal() -> void:
+	var goal := CleaningGoalScript.new()
+	var actuator := FakeActuator.new(1)
+	var brain := CitizenBrain.new(1, actuator, [goal])
+	var citizen := _cleaning_citizen(1, false)
+	var snapshot := _snapshot(0.0, citizen)
+	var order := _cleaning_order(1, Vector3(3.0, 0.0, 0.0), &"pile:3:0:branches")
+	order.id = 30
+	brain.think(snapshot, order)
+	brain.tick(snapshot, order, 0.1)
+	assert(actuator.action_start_count == 1)
+	assert(snapshot.reservations.owner_of([&"cleaning.pile", &"pile:3:0:branches"], 0.0) == 1)
+	actuator.next_action_status = CitizenActuator.ActionStatus.SUCCEEDED
+	brain.tick(snapshot, order, 0.1)
+	assert(snapshot.reservations.owner_of([&"cleaning.pile", &"pile:3:0:branches"], 0.0) == 0)
+
+
 func _test_register_provider_keeps_order_while_registering() -> void:
 	var provider := WorkforceOrderProviderScript.new()
 	var settlement := AIFactSet.new({
@@ -1394,6 +1441,37 @@ func _gathering_order(citizen_id: int, source_position: Vector3, source_id: Stri
 		&"target.access_position": source_position + Vector3(-0.5, 0.0, 0.0),
 		&"warehouse.position": Vector3(8.0, 0.0, 0.0),
 	}))
+	order.target_position = source_position
+	return order
+
+
+func _cleaning_citizen(citizen_id: int, in_progress: bool) -> CitizenSnapshot:
+	return CitizenSnapshot.new(citizen_id, Vector3(float(citizen_id), 0.0, 0.0), false, true, AIFactSet.new({
+		&"daily.order.active": true,
+		&"daily.order.role": "cleaning",
+		&"daily.order.workday_id": 3,
+		&"daily.order.expires_at": 42.0,
+		&"daily.cleaning.in_progress": in_progress,
+		&"daily.cleaning.can_start": true,
+		&"daily.cleaning.candidates": [
+			{&"id": &"pile:3:0:branches", &"pile_id": &"pile:3:0", &"resource_type": "branches", &"position": Vector3(3.0, 0.0, 0.0), &"access": Vector3(3.0, 0.0, 0.0)},
+			{&"id": &"pile:9:0:branches", &"pile_id": &"pile:9:0", &"resource_type": "branches", &"position": Vector3(9.0, 0.0, 0.0), &"access": Vector3(9.0, 0.0, 0.0)},
+		],
+		&"daily.cleaning.warehouse_position": Vector3(8.0, 0.0, 0.0),
+	}))
+
+
+func _cleaning_order(citizen_id: int, source_position: Vector3, source_id: StringName) -> CitizenOrder:
+	var order := CitizenOrder.new(citizen_id, &"cleaning", &"player", 0.82, AIFactSet.new({
+		&"work.source_id": source_id,
+		&"resource.type": "branches",
+		&"target.access_position": source_position,
+		&"warehouse.position": Vector3(8.0, 0.0, 0.0),
+		&"daily.role": "cleaning",
+		&"daily.workday_id": 3,
+	}))
+	order.workday_id = 3
+	order.expires_at = 42.0
 	order.target_position = source_position
 	return order
 
