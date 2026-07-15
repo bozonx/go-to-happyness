@@ -26,14 +26,21 @@ See [docs/architecture.md](docs/architecture.md) and
 Run the deterministic domain checks with:
 
 ```sh
-for t in tests/test_domain.gd tests/test_startup.gd tests/test_materials_yard.gd tests/test_navigation_performance.gd tests/test_ai.gd; do
-  godot --headless --path . --script res://$t || exit 1
-done
+# Deterministic domain tests
+godot --headless --path . --script res://tests/test_domain.gd
+godot --headless --path . --script res://tests/test_ai.gd
+godot --headless --path . --script res://tests/test_navigation_performance.gd
+
+# Scene smoke tests (need a frame budget so awaited frames resolve in headless mode)
+godot --headless --path . --script res://tests/test_startup.gd --quit-after 300
+godot --headless --path . --script res://tests/test_materials_yard.gd --quit-after 300
 ```
 
 `test_ai.gd` covers the native AI runtime without a gameplay scene. `test_startup.gd`
-is an integration smoke test and may print known dummy-renderer diagnostics in
-headless mode; its exit status remains authoritative.
+and `test_materials_yard.gd` are integration smoke tests and may print known
+dummy-renderer diagnostics in headless mode; their exit status remains authoritative.
+Without `--quit-after`, scene tests that `await process_frame` / `await physics_frame`
+hang because the headless main loop does not know when to stop.
 
 ## Tent Era Survival
 

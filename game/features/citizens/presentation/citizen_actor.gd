@@ -1500,7 +1500,14 @@ func _work(delta: float) -> bool:
 			set_status_effect(CitizenStatusEffect.BARE_HANDS, "Bare hands", 1.0)
 			speed_multiplier = 0.60
 	if simulation != null:
-		speed_multiplier *= simulation.fire_smoke_work_multiplier(global_position)
+		var smoke_multiplier: float = simulation.fire_smoke_work_multiplier(global_position)
+		if smoke_multiplier < 1.0:
+			set_status_effect(CitizenStatusEffectScript.SMOKY_EYES, "Smoky eyes", 1.0)
+		else:
+			clear_status_effect(CitizenStatusEffectScript.SMOKY_EYES)
+		speed_multiplier *= smoke_multiplier
+	else:
+		clear_status_effect(CitizenStatusEffectScript.SMOKY_EYES)
 	return task_timer.advance(delta * speed_multiplier)
 
 

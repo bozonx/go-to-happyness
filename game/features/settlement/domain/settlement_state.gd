@@ -535,7 +535,7 @@ func sell(resource_type: String, quantity: int, unit_price: int) -> bool:
 func can_advance_to(next_era: Era, population: int, housing_slots: int) -> bool:
 	match next_era:
 		Era.EARTH:
-			return era == Era.TENT and _has_tools(["axe", "hand_saw", "shovel", "bucket"]) and is_research_completed("earth_buildings") and has_building("tarp_trade_tent")
+			return era == Era.TENT and _has_tools(["axe", "hand_saw", "shovel", "bucket"]) and is_research_completed("earth_buildings")
 		Era.CLAY:
 			return era == Era.EARTH and has_building("earth_assembly") and has_building("smithy") and has_building("earth_market") and housing_slots >= population and clay >= 5 and money >= 5 and trade_sales >= 3 and _has_tools(["hoe"]) and has_building("toilet_earth_lvl3")
 		Era.WOOD:

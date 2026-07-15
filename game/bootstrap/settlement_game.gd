@@ -11,6 +11,7 @@ const BuildingAvailabilityServiceScript = preload("res://game/features/buildings
 const BuildingResearchServiceScript = preload("res://game/features/buildings/application/building_research_service.gd")
 const BuildingQueueServiceScript = preload("res://game/features/citizens/application/building_queue_service.gd")
 const CitizenLivingStatusServiceScript = preload("res://game/features/citizens/application/citizen_living_status_service.gd")
+const CitizenStatusEffectScript = preload("res://game/features/citizens/domain/citizen_status_effect.gd")
 const SleepGoalScript = preload("res://game/features/decision/domain/goals/sleep_goal.gd")
 const MealGoalScript = preload("res://game/features/decision/domain/goals/meal_goal.gd")
 const ToiletGoalScript = preload("res://game/features/decision/domain/goals/toilet_goal.gd")
@@ -821,7 +822,6 @@ func _handle_day_cycle_event(event: SimulationDayEvent) -> void:
 			tent_weather = TentEraSurvivalRulesScript.weather_for_day(day_cycle.current_day)
 			_update_interface("Forecast: %s." % TentEraSurvivalRulesScript.WEATHER_NAMES[tent_weather])
 			_maybe_present_survival_decision()
-			_expire_temporary_tents()
 			_refresh_living_statuses()
 			_apply_daily_settlement_rules()
 			_return_outside_workers()
@@ -880,15 +880,6 @@ func _apply_rain_damage() -> void:
 			_apply_fire_state(building, fire_state)
 
 
-func _expire_temporary_tents() -> void:
-	for record in building_registry.records().duplicate():
-		var building: Node3D = record.node
-		if not is_instance_valid(building) or str(building.get_meta("building_type", "")) != "tent":
-			continue
-		_destroy_building_to_pile(building, "tent")
-		_add_message("The temporary tent was dismantled at dawn.")
-
-
 func _schedule_recovery_arrival() -> void:
 	if citizens.size() >= POPULATION:
 		return
@@ -914,6 +905,10 @@ func _update_recovery_arrival() -> void:
 func _apply_daily_settlement_rules() -> void:
 	if trail_field != null:
 		trail_field.apply_daily_decay()
+	if smoky_firewood_day != day_cycle.current_day:
+		for citizen in citizens:
+			if is_instance_valid(citizen):
+				citizen.clear_status_effect(CitizenStatusEffectScript.SMOKY_EYES)
 	var population := citizens.size()
 	if population == 0:
 		return
@@ -2698,7 +2693,6 @@ func _skip_night() -> void:
 	# Living through the night crosses 06:00, when the daily water/food sink runs and
 	# frees storage. Skipping must apply the same rules, otherwise stores stay full,
 	# no production is assignable, and workers have nothing to wake up for.
-	_expire_temporary_tents()
 	_refresh_living_statuses()
 	_apply_daily_settlement_rules()
 	_return_outside_workers()
@@ -5047,6 +5041,9 @@ func _place_building(world_position: Vector3) -> void:
 	if build_mode in ["straw_trade_tent", "tarp_trade_tent"] and is_instance_valid(entrance_stone) and world_position.distance_to(entrance_stone.global_position) > 8.0:
 		_update_interface("The tent market must be built beside the entrance sign.")
 		return
+	if build_mode == "campfire" and is_instance_valid(campfire_node):
+		_update_interface("Only one main campfire is allowed. Upgrade the existing one.")
+		return
 	if not _can_place(world_position):
 		_update_interface("Construction is not allowed at this point.")
 		return
@@ -6149,12 +6146,10 @@ func _refresh_campfire_menu() -> void:
 			next_era = SettlementState.Era.EARTH
 			var tools_ok := settlement._has_tools(["axe", "hand_saw", "shovel", "bucket"])
 			var earth_research_ok := settlement.is_research_completed("earth_buildings")
-			var tarp_market_ok := settlement.has_building("tarp_trade_tent")
-			
+
 			req_text = "Requirements for Earth Era:\n"
 			req_text += "- Tools (axe, saw, shovel, bucket): %s\n" % ("OK" if tools_ok else "Missing")
 			req_text += "- Earth buildings research: %s\n" % ("OK" if earth_research_ok else "Missing")
-			req_text += "- Tarp trade tent built: %s\n" % ("OK" if tarp_market_ok else "Missing")
 			can_advance = settlement.can_advance_to(next_era, citizens.size(), housing_slots)
 		
 		SettlementState.Era.EARTH:

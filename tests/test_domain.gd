@@ -340,6 +340,12 @@ func _test_citizen_status_effects() -> void:
 	citizen.storage_delivery_result(true)
 	assert(not citizen.blocked_by_storage)
 	assert(not citizen.has_status_effect(CitizenStatusEffectScript.STORAGE_NO_WAREHOUSE))
+
+	citizen.set_status_effect(CitizenStatusEffectScript.SMOKY_EYES, "Smoky eyes", 1.0)
+	assert(citizen.has_status_effect(CitizenStatusEffectScript.SMOKY_EYES))
+	assert(citizen.status_effect_labels().has("Smoky eyes"))
+	citizen.clear_status_effect(CitizenStatusEffectScript.SMOKY_EYES)
+	assert(not citizen.has_status_effect(CitizenStatusEffectScript.SMOKY_EYES))
 	citizen.free()
 
 
@@ -488,6 +494,15 @@ func _test_progression_and_volunteers() -> void:
 		state.tools[tool_id] = true
 	state.complete_research("earth_buildings")
 	assert(state.can_advance_to(SettlementState.Era.EARTH, 4, 4))
+
+	var no_market_state := SettlementState.new()
+	no_market_state.warehouse_ever_built = true
+	no_market_state.buildings = {"campfire": 1}
+	for tool_id in no_market_state.tools:
+		no_market_state.tools[tool_id] = true
+	no_market_state.complete_research("earth_buildings")
+	assert(no_market_state.can_advance_to(SettlementState.Era.EARTH, 4, 4))
+
 	assert(state.advance_era(SettlementState.Era.EARTH, 4, 4))
 
 	state.buildings = {"earth_assembly": 1, "smithy": 1, "earth_market": 1, "toilet_earth_lvl3": 1}
