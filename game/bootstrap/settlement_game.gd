@@ -213,6 +213,7 @@ var gathering_place_positions: Array[Vector3] = []
 var factories: Array[Node3D] = []
 var tree_positions: Array[Vector3] = []
 var tree_nodes: Dictionary = {}
+var gather_progress_labels: Dictionary = {} # resource Node3D -> Label3D
 var citizens: Array[Citizen] = []
 var camera: Camera3D
 var sun: DirectionalLight3D
@@ -543,6 +544,7 @@ func _process(delta: float) -> void:
 	_update_sawmills(delta)
 	_update_building_research(delta)
 	_update_building_status_indicators(delta)
+	_update_gathering_indicators(delta)
 	if _is_work_time():
 		_update_couriers()
 		_worker_poll_timer -= delta
@@ -2197,8 +2199,12 @@ func _resource_access_position(from: Vector3, resource_position: Vector3) -> Vec
 func _create_tree(position_on_board: Vector3) -> void:
 	var tree := Node3D.new()
 	tree.position = position_on_board
-	tree.set_meta("remaining_wood", random.randi_range(4, 7))
-	tree.set_meta("remaining_branches", random.randi_range(5, 9))
+	var initial_wood := random.randi_range(4, 7)
+	tree.set_meta("initial_wood", initial_wood)
+	tree.set_meta("remaining_wood", initial_wood)
+	var initial_branches := random.randi_range(5, 9)
+	tree.set_meta("initial_branches", initial_branches)
+	tree.set_meta("remaining_branches", initial_branches)
 	tree.set_meta("hand_branches", 0)
 	tree_nodes[_cell_from_position(position_on_board)] = tree
 	add_child(tree)
@@ -2231,6 +2237,7 @@ func _create_entrance_stone() -> void:
 	# build area: every resident visibly arrives from outside the settlement.
 	entrance_stone.position = _cell_center(Vector2i(-22, 1))
 	entrance_stone.name = "EntranceSign"
+	entrance_stone.rotation.y = PI * 0.5
 	for x: float in [-0.62, 0.62]:
 		var post := MeshInstance3D.new()
 		var post_mesh := BoxMesh.new()
@@ -2254,7 +2261,7 @@ func _create_entrance_stone() -> void:
 	entrance_stone.add_child(board)
 	var label := Label3D.new()
 	label.text = "Settlement"
-	label.position = Vector3(0.0, 1.26, -0.09)
+	label.position = Vector3(0.0, 1.26, 0.09)
 	label.font_size = 28
 	label.modulate = Color("f0dfb2")
 	label.billboard = BaseMaterial3D.BILLBOARD_DISABLED
@@ -2274,8 +2281,11 @@ func _create_entrance_stone() -> void:
 
 func _create_citizens() -> void:
 	var spawn_anchor: Vector3 = entrance_stone.global_position + Vector3(0.0, 0.0, 2.0)
+	var columns := 3
 	for index in range(POPULATION):
-		var spawn_position := spawn_anchor + Vector3(-0.55 + (index % 2) * 1.1, 0.0, (index / 2) * 0.85)
+		var col := index % columns
+		var row := index / columns
+		var spawn_position := spawn_anchor + Vector3((col - 1) * 1.5, 0.0, row * 1.4)
 		var terrain_height := _terrain_height_at(spawn_position.x, spawn_position.z, 0.0)
 		if not is_nan(terrain_height):
 			spawn_position.y = terrain_height + 0.08
@@ -2880,22 +2890,20 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	# Daily orders do not require an employment officer.
 	_add_role_button("Clear daily order", "", 136, false, "daily")
 	_add_role_button("Courier", "courier", 170, false, "daily")
-	_add_role_button("Construction", "construction", 204, false, "daily")
-	_add_role_button("Gather branches", "gather_branches", 238, false, "daily")
-	_add_role_button("Gather grass", "gather_grass", 272, false, "daily")
-	_add_role_button("Collect water", "gather_water", 306, false, "daily")
-	_add_role_button("Cleaning", "cleaning", 340, false, "daily")
+	_add_role_button("Gather branches", "gather_branches", 204, false, "daily")
+	_add_role_button("Gather grass", "gather_grass", 238, false, "daily")
+	_add_role_button("Collect water", "gather_water", 272, false, "daily")
+	_add_role_button("Cleaning", "cleaning", 306, false, "daily")
 
 	# Permanent jobs require an employment officer, except appointing the officer.
-	_add_role_button("Assign: construction", "construction", 136, false, "job")
-	_add_role_button("Assign: forestry (logs/timber)", "forestry", 170, false, "job")
-	_add_role_button("Assign: farming", "farming", 204, false, "job")
-	_add_role_button("Assign: excavation", "excavation", 238, false, "job")
-	_add_role_button("Assign: gather branches", "gather_branches", 272, false, "job")
-	_add_role_button("Assign: forage food", "gather_food", 306, false, "job")
-	_add_role_button("Assign: courier", "courier", 340, false, "job")
-	_add_role_button("Assign: craftsman", "craftsman", 374, false, "job")
-	_add_role_button("Assign: employment officer", "official", 408, false, "job")
+	_add_role_button("Assign: forestry (logs/timber)", "forestry", 136, false, "job")
+	_add_role_button("Assign: farming", "farming", 170, false, "job")
+	_add_role_button("Assign: excavation", "excavation", 204, false, "job")
+	_add_role_button("Assign: gather branches", "gather_branches", 238, false, "job")
+	_add_role_button("Assign: forage food", "gather_food", 272, false, "job")
+	_add_role_button("Assign: courier", "courier", 306, false, "job")
+	_add_role_button("Assign: craftsman", "craftsman", 340, false, "job")
+	_add_role_button("Assign: employment officer", "official", 374, false, "job")
 	
 	# Era category buttons (shown on main build menu)
 	_add_build_category_button("Tent era", "tent", 136)
@@ -4412,6 +4420,12 @@ func _close_context_menus() -> void:
 	market_menu.visible = false
 	warehouse_menu.visible = false
 	building_menu.visible = false
+	if research_menu != null:
+		research_menu.visible = false
+	if decision_menu != null:
+		decision_menu.visible = false
+	if campfire_story_menu != null:
+		campfire_story_menu.visible = false
 	_close_pocket_take_menu()
 	_hide_workforce_menu()
 	selected_house = null
@@ -4860,6 +4874,7 @@ func _take_control_of_selected_citizen() -> void:
 func _enter_first_person(citizen: Citizen, message: String) -> void:
 	if citizen == null:
 		return
+	_close_context_menus()
 	if is_first_person and player_citizen != null and player_citizen != citizen:
 		player_citizen.set_player_controlled(false)
 		player_citizen.set_head_visible(true)
@@ -6034,7 +6049,6 @@ func _add_service_entrance_marker(building: Node3D, footprint: Vector2i, entranc
 		outward.z = -1.0
 	elif entrance_offset.y == footprint.y / 2:
 		outward.z = 1.0
-	var door_position := local
 	var marker_position := local + outward * SERVICE_PAD_OFFSET
 	var marker := MeshInstance3D.new()
 	var marker_mesh := BoxMesh.new()
@@ -7887,23 +7901,38 @@ func _create_grass_sources_near_tree(tree_cell: Vector2i) -> void:
 		material.emission = Color("245b2a")
 		node.material_override = material
 		add_child(node)
-		grass_sources[cell] = {"node": node, "remaining": random.randi_range(2, 5)}
+		var initial_remaining := random.randi_range(2, 5)
+		grass_sources[cell] = {"node": node, "remaining": initial_remaining, "initial": initial_remaining}
 
 func _create_forage_sources_near_tree(tree_cell: Vector2i) -> void:
 	for offset in [Vector2i(3, 1), Vector2i(-3, -1)]:
 		var cell: Vector2i = tree_cell + offset
 		if forage_sources.has(cell) or tree_cells.has(cell) or _is_navigation_cell_blocked(cell):
 			continue
-		var node := MeshInstance3D.new()
-		var mesh := BoxMesh.new()
-		mesh.size = Vector3(0.42, 0.22, 0.42)
-		node.mesh = mesh
-		node.position = _cell_center(cell) + Vector3.UP * 0.12
+		var node := Node3D.new()
+		node.position = _cell_center(cell) + Vector3.UP * 0.05
+		var stem := MeshInstance3D.new()
+		var stem_mesh := CylinderMesh.new()
+		stem_mesh.top_radius = 0.05
+		stem_mesh.bottom_radius = 0.06
+		stem_mesh.height = 0.16
+		stem.mesh = stem_mesh
+		stem.position.y = 0.08
+		var cap := MeshInstance3D.new()
+		var cap_mesh := SphereMesh.new()
+		cap_mesh.radius = 0.16
+		cap_mesh.height = 0.32
+		cap.mesh = cap_mesh
+		cap.position.y = 0.19
+		cap.scale.y = 0.5
 		var material := StandardMaterial3D.new()
 		material.albedo_color = Color("75a84c")
 		material.emission_enabled = true
 		material.emission = Color("27451c")
-		node.material_override = material
+		stem.material_override = material
+		cap.material_override = material
+		node.add_child(stem)
+		node.add_child(cap)
 		add_child(node)
 		forage_sources[cell] = {"node": node}
 
@@ -8006,7 +8035,137 @@ func _consume_tree_branches(position: Vector3) -> int:
 	tree.set_meta("remaining_branches", maxi(0, remaining - 1))
 	if not bool(settlement.tools.get("axe", false)):
 		tree.set_meta("hand_branches", hand_taken + 1)
+		if hand_taken + 1 >= hand_limit:
+			_mark_tree_branch_exhausted(tree)
 	return 1
+
+func _mark_tree_branch_exhausted(tree: Node3D) -> void:
+	if bool(tree.get_meta("branch_exhausted", false)):
+		return
+	tree.set_meta("branch_exhausted", true)
+	for child in tree.get_children():
+		var mesh := child as MeshInstance3D
+		if mesh == null or not (mesh.mesh is SphereMesh):
+			continue
+		var material := mesh.material_override as StandardMaterial3D
+		if material != null:
+			material.albedo_color = Color("6b4c2a")
+
+func _nearest_tree_node(from: Vector3) -> Node3D:
+	var best: Node3D = null
+	var best_dist := INF
+	for position in tree_positions:
+		var dist := from.distance_to(position)
+		if dist > INTERACTION_RANGE:
+			continue
+		var tree: Node3D = tree_nodes.get(_cell_from_position(position))
+		if not is_instance_valid(tree) or bool(tree.get_meta("felled", false)):
+			continue
+		if dist < best_dist:
+			best_dist = dist
+			best = tree
+	return best
+
+func _nearest_grass_node(from: Vector3) -> Node3D:
+	var best: Node3D = null
+	var best_dist := INTERACTION_RANGE
+	for cell in grass_sources:
+		var source: Dictionary = grass_sources[cell]
+		if int(source.remaining) <= 0 or not is_instance_valid(source.node):
+			continue
+		var dist := from.distance_to(source.node.global_position)
+		if dist <= best_dist:
+			best_dist = dist
+			best = source.node
+	return best
+
+func _player_gather_target_node() -> Node3D:
+	if player_citizen == null:
+		return null
+	match interaction_resource:
+		"wood", "branches": return _nearest_tree_node(player_citizen.global_position)
+		"grass": return _nearest_grass_node(player_citizen.global_position)
+	return null
+
+func _gather_node_at(position: Vector3, resource_type: String) -> Node3D:
+	if resource_type in ["wood", "branches", "logs"]:
+		return tree_nodes.get(_cell_from_position(position))
+	if resource_type == "grass":
+		var source: Dictionary = grass_sources.get(_cell_from_position(position))
+		if source != null:
+			return source.node
+	return null
+
+func _gather_progress_amounts(resource_type: String, node: Node3D) -> Dictionary:
+	var current := 0
+	var max_amount := 1
+	if node.has_meta("initial_wood"):
+		if resource_type in ["wood", "logs"]:
+			max_amount = int(node.get_meta("initial_wood", 1))
+			current = max_amount - int(node.get_meta("remaining_wood", 0))
+		elif resource_type == "branches":
+			max_amount = int(node.get_meta("initial_branches", 1))
+			current = int(node.get_meta("hand_branches", 0))
+	else:
+		for cell in grass_sources:
+			var source: Dictionary = grass_sources[cell]
+			if source.get("node") == node:
+				max_amount = int(source.get("initial", 1))
+				current = max_amount - int(source.get("remaining", 0))
+				break
+	return {"current": current, "max": max_amount}
+
+func _ensure_gather_progress_label(node: Node3D) -> Label3D:
+	var existing := gather_progress_labels.get(node) as Label3D
+	if is_instance_valid(existing):
+		return existing
+	var label := Label3D.new()
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.font_size = 22
+	label.outline_size = 5
+	label.modulate = Color("ffffff")
+	label.position = Vector3(0.0, 4.8, 0.0) if node.has_meta("initial_wood") else Vector3(0.0, 0.5, 0.0)
+	node.add_child(label)
+	gather_progress_labels[node] = label
+	return label
+
+func _update_gather_progress_label(node: Node3D, resource_type: String, partial: float) -> void:
+	var amounts := _gather_progress_amounts(resource_type, node)
+	var value := float(amounts.current) + partial
+	var max_amount := maxi(int(amounts.max), 1)
+	var pct := clampi(int(value / float(max_amount) * 100.0), 0, 100)
+	var label := _ensure_gather_progress_label(node)
+	label.text = "%d%%" % pct
+	label.modulate = Color("76c893") if pct >= 100 else Color("ffffff")
+
+func _update_gathering_indicators(_delta: float) -> void:
+	var active_targets: Dictionary = {} # Node3D -> {resource_type: String, partial: float}
+	if is_first_person and interaction_action == "harvesting" and player_citizen != null and interaction_resource in ["wood", "branches", "grass"]:
+		var node: Node3D = _player_gather_target_node()
+		if is_instance_valid(node):
+			active_targets[node] = {"resource_type": interaction_resource, "partial": clampf(interaction_time / HARVEST_DURATION, 0.0, 1.0)}
+	for citizen in citizens:
+		if not is_instance_valid(citizen):
+			continue
+		if citizen.state == citizen.State.GATHERING and not citizen.gather_resource_type.is_empty():
+			var node: Node3D = _gather_node_at(citizen.gather_source_position, citizen.gather_resource_type)
+			if is_instance_valid(node):
+				active_targets[node] = {"resource_type": citizen.gather_resource_type, "partial": citizen.task_timer.progress()}
+		elif citizen.state == citizen.State.CHOPPING:
+			var node: Node3D = tree_nodes.get(_cell_from_position(citizen.source_position))
+			if is_instance_valid(node):
+				active_targets[node] = {"resource_type": "wood", "partial": citizen.task_timer.progress()}
+	var nodes_to_remove: Array = gather_progress_labels.keys().duplicate()
+	for node in active_targets:
+		nodes_to_remove.erase(node)
+		var data: Dictionary = active_targets[node]
+		_update_gather_progress_label(node, data.resource_type, data.partial)
+	for node in nodes_to_remove:
+		var label: Label3D = gather_progress_labels.get(node)
+		if is_instance_valid(label):
+			label.queue_free()
+		gather_progress_labels.erase(node)
 
 func _create_gathering_place_visual(building: Node3D) -> void:
 	var racket := MeshInstance3D.new()

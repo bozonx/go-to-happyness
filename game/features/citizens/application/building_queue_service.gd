@@ -252,7 +252,10 @@ func _ensure_building_queues(building_id: int, entrance_count: int) -> void:
 func _ensure_entrance_array(existing: Variant, entrance_count: int, default_value: Variant) -> Array:
 	var result: Array = existing if existing is Array else []
 	while result.size() < entrance_count:
-		result.append(default_value)
+		if default_value is Array:
+			result.append([])
+		else:
+			result.append(default_value)
 	return result
 
 

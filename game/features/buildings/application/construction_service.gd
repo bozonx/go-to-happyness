@@ -49,6 +49,32 @@ func start_site(cell: Vector2i, building_type: String, position: Vector3, rotati
 	site_node.set_meta("occupied_footprint", occupied_footprint if occupied_footprint != Vector2i.ZERO else blueprint.footprint)
 	site_node.set_meta("service_positions", _service_positions_for(site_node, blueprint))
 
+	var entrance_parent := Node3D.new()
+	entrance_parent.name = "ConstructionEntrance"
+	var entrance_material := StandardMaterial3D.new()
+	entrance_material.albedo_color = Color("f0c45d")
+	entrance_material.emission_enabled = true
+	entrance_material.emission = Color("f0c45d")
+	for service_position: Vector3 in site_node.get_meta("service_positions"):
+		var post := MeshInstance3D.new()
+		var post_mesh := CylinderMesh.new()
+		post_mesh.top_radius = 0.07
+		post_mesh.bottom_radius = 0.07
+		post_mesh.height = 1.4
+		post.mesh = post_mesh
+		post.material_override = entrance_material
+		post.position = (service_position - site_node.position).rotated(Vector3.UP, -site_node.rotation.y)
+		post.position.y = 0.7
+		entrance_parent.add_child(post)
+		var flag := MeshInstance3D.new()
+		var flag_mesh := BoxMesh.new()
+		flag_mesh.size = Vector3(0.26, 0.16, 0.04)
+		flag.mesh = flag_mesh
+		flag.material_override = entrance_material
+		flag.position = post.position + Vector3.UP * 0.7
+		entrance_parent.add_child(flag)
+	site_node.add_child(entrance_parent)
+
 	var territory := MeshInstance3D.new()
 	territory.name = "ConstructionTerritory"
 	var territory_mesh := BoxMesh.new()
@@ -226,7 +252,7 @@ func _add_selector(site_node: Node3D, footprint: Vector2i) -> void:
 func _cleanup_completed_site(site: ConstructionSite) -> void:
 	# Construction-only visuals and hit area must not survive as UI on the
 	# completed building. Blueprint modules are StaticBody3D children and remain.
-	for child_name in ["ConstructionTerritory", "ConstructionProgressBack", "ConstructionProgressFill", "SupplyLabel", "ConstructionSelector"]:
+	for child_name in ["ConstructionTerritory", "ConstructionProgressBack", "ConstructionProgressFill", "SupplyLabel", "ConstructionSelector", "ConstructionEntrance"]:
 		var child := site.node.get_node_or_null(child_name)
 		if child != null:
 			child.queue_free()
