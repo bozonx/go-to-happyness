@@ -38,9 +38,16 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 			_assignments.erase(citizen_id)
 			continue
 		var assignment := _assignments.get(citizen_id, {}) as Dictionary
-		if not assignment.is_empty() and (in_progress or _contains_candidate(snapshot, citizen, assignment)):
-			orders.append(_order_for(citizen_id, assignment))
-			continue
+		if not assignment.is_empty():
+			if in_progress:
+				orders.append(_order_for(citizen_id, assignment))
+				continue
+			var refreshed_assignment := _candidate_for(citizen, assignment.get(&"id", &"") as StringName)
+			if not refreshed_assignment.is_empty():
+				refreshed_assignment[&"warehouse_position"] = citizen.facts.value(&"work.gathering.warehouse_position", refreshed_assignment.get(&"warehouse_position", Vector3.INF))
+				_assignments[citizen_id] = refreshed_assignment
+				orders.append(_order_for(citizen_id, refreshed_assignment))
+				continue
 		_assignments.erase(citizen_id)
 		var next_assignment := _closest_free_candidate(snapshot, citizen, assigned_sources)
 		if next_assignment.is_empty():
@@ -61,6 +68,16 @@ func _contains_candidate(snapshot: WorldSnapshot, citizen: CitizenSnapshot, assi
 		if (candidate_value as Dictionary).get(&"id", &"") == source_id:
 			return true
 	return false
+
+
+func _candidate_for(citizen: CitizenSnapshot, source_id: StringName) -> Dictionary:
+	if source_id == &"":
+		return {}
+	for candidate_value in (citizen.facts.value(&"work.gathering.candidates", []) as Array):
+		var candidate := candidate_value as Dictionary
+		if candidate.get(&"id", &"") == source_id:
+			return candidate.duplicate(true)
+	return {}
 
 
 func _closest_free_candidate(snapshot: WorldSnapshot, citizen: CitizenSnapshot, assigned_sources: Dictionary) -> Dictionary:

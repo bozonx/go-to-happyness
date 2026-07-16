@@ -1375,17 +1375,9 @@ func _construction_material_source(resource_type: String, from_position: Vector3
 		# stockpile. Couriers pull from that unlimited reserve at the camp entrance
 		# so the bootstrap warehouse and main campfire can still be supplied.
 		return {"kind": "open_storage", "id": "open_storage", "position": _get_nearest_delivery_position(from_position)}
-	var best_pile: Dictionary = {}
-	var best_pile_distance := INF
-	for pile: Dictionary in resource_piles:
-		var pile_node := pile.get("node") as Node3D
-		if not is_instance_valid(pile_node) or int(pile.get("resources", {}).get(resource_type, 0)) <= 0:
-			continue
-		var distance := from_position.distance_squared_to(pile_node.global_position)
-		if distance < best_pile_distance:
-			best_pile_distance = distance
-			best_pile = {"kind": "pile", "id": pile_node.get_instance_id(), "position": pile_node.global_position, "node": pile_node}
-	return best_pile
+	# Ground piles belong exclusively to cleaners. Construction starts only after
+	# their contents have been delivered to the settlement stock.
+	return {}
 
 
 func _resource_pile_for_node(pile_node: Node3D) -> Dictionary:

@@ -257,6 +257,7 @@ func _init() -> void:
 	_test_construction_actuator()
 	_test_construction_work_step_times_out_on_stuck_action()
 	_test_gathering_provider_assigns_unique_stable_sources()
+	_test_gathering_provider_refreshes_moving_source()
 	_test_gathering_provider_prefers_access_position()
 	_test_native_gathering_goal()
 	_test_excavation_provider_assigns_unique_stable_sites()
@@ -937,6 +938,32 @@ func _test_gathering_provider_assigns_unique_stable_sources() -> void:
 	assert(active_orders.size() == 2)
 	assert(active_orders[0].target_position == orders[0].target_position)
 	assert(active_orders[1].target_position == orders[1].target_position)
+
+
+func _test_gathering_provider_refreshes_moving_source() -> void:
+	var provider := GatheringOrderProviderScript.new()
+	var initial := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
+		&"work.gathering.worker": true,
+		&"work.gathering.in_progress": false,
+		&"work.gathering.can_start": true,
+		&"work.gathering.role": &"gather_food",
+		&"work.gathering.warehouse_position": Vector3(8.0, 0.0, 0.0),
+		&"work.gathering.candidates": [{&"id": &"rabbit:2:0", &"resource_type": "food", &"position": Vector3(2.0, 0.0, 0.0), &"access": Vector3(2.0, 0.0, 0.0)}],
+	}))
+	var first_orders := provider.collect_orders(WorldSnapshot.new(1, 0.0, 0.0, AIFactSet.new(), {1: initial}))
+	assert(first_orders.size() == 1)
+	assert(first_orders[0].target_position == Vector3(2.0, 0.0, 0.0))
+	var moved := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
+		&"work.gathering.worker": true,
+		&"work.gathering.in_progress": false,
+		&"work.gathering.can_start": true,
+		&"work.gathering.role": &"gather_food",
+		&"work.gathering.warehouse_position": Vector3(8.0, 0.0, 0.0),
+		&"work.gathering.candidates": [{&"id": &"rabbit:2:0", &"resource_type": "food", &"position": Vector3(5.0, 0.0, 0.0), &"access": Vector3(5.0, 0.0, 0.0)}],
+	}))
+	var refreshed_orders := provider.collect_orders(WorldSnapshot.new(2, 1.0, 0.0, AIFactSet.new(), {1: moved}))
+	assert(refreshed_orders.size() == 1)
+	assert(refreshed_orders[0].target_position == Vector3(5.0, 0.0, 0.0))
 
 
 func _test_native_gathering_goal() -> void:
