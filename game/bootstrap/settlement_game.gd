@@ -509,7 +509,6 @@ func _ready() -> void:
 	):
 		push_error("Native citizen AI failed to capture its initial world snapshot")
 
-	settlement.ensure_storage_defaults(warehouse_positions.size())
 	_update_workers()
 	_update_interface("Build a simple store, then gather materials for the first campfire and tents.")
 	_enter_first_person(hero_citizen, "Hero view enabled.")
@@ -4979,7 +4978,6 @@ func _finish_demolition(site: DemolitionSite) -> void:
 	if active_kitchen_removed:
 		_select_best_canteen()
 	settlement.buildings[building_type] = maxi(0, int(settlement.buildings.get(building_type, 1)) - 1)
-	settlement.ensure_storage_defaults(warehouse_positions.size())
 	if campfire_node == null:
 		_select_best_campfire()
 	_create_resource_pile(building.global_position, pile_resources)
@@ -5448,6 +5446,9 @@ func _deliver_all_pocket_to_warehouse() -> void:
 		var amount := _pocket_amount(resource_type)
 		if amount <= 0:
 			continue
+		if warehouse_index >= 0 and not settlement.uses_virtual_storage() and not settlement.warehouse_accepts(warehouse_index, resource_type):
+			_update_interface("Склад не принимает %s." % resource_type)
+			continue
 		var to_deliver := amount
 		if not settlement.uses_virtual_storage():
 			to_deliver = mini(amount, settlement.storage_room_for(resource_type))
@@ -5465,8 +5466,10 @@ func _deliver_all_pocket_to_warehouse() -> void:
 			summary.append("%d %s" % [actually_delivered, resource_type])
 	if delivered_total > 0:
 		_update_interface("Сдано на склад: %s." % ", ".join(summary))
+	elif _pocket_resources().is_empty():
+		_update_interface("Карман пуст.")
 	else:
-		_update_interface("Нет места на складе. Перераспределите лимиты или постройте склад.")
+		_update_interface("Нет места на складе. Постройте или расширьте склад.")
 
 
 func _deliver_one_pocket_to_warehouse() -> void:
@@ -5476,6 +5479,9 @@ func _deliver_one_pocket_to_warehouse() -> void:
 		return
 	var amount := _pocket_amount(resource_type)
 	if amount <= 0:
+		return
+	if warehouse_index >= 0 and not settlement.uses_virtual_storage() and not settlement.warehouse_accepts(warehouse_index, resource_type):
+		_update_interface("Склад не принимает %s." % resource_type)
 		return
 	var to_deliver := 1
 	if not settlement.uses_virtual_storage():
@@ -6039,6 +6045,8 @@ func _first_person_action_hint() -> String:
 			var wh_index := _nearby_warehouse_index()
 			if _pocket_total() > 0:
 				var primary_res := _primary_pocket_resource()
+				if wh_index >= 0 and not settlement.warehouse_accepts(wh_index, primary_res):
+					return "Склад не принимает %s" % primary_res.capitalize()
 				var wh_room := settlement.warehouse_room_for(wh_index, primary_res) if wh_index >= 0 else settlement.storage_room_for(primary_res)
 				if wh_room <= 0:
 					return "Склад заполнен"
@@ -6290,7 +6298,6 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 				var overflow := settlement.migrate_virtual_to_warehouse(warehouse_positions.size())
 				_remove_backpack_pile()
 				_drop_overflow_as_piles(overflow, service_position)
-			settlement.ensure_storage_defaults(warehouse_positions.size())
 			_add_building_selector(building, "warehouse_selector", blueprint.footprint)
 			_add_warehouse_fill_label(building)
 		"sawmill":
@@ -6595,25 +6602,13 @@ func _grant_debug_resources() -> void:
 	if not settlement.warehouse_ever_built:
 		_update_interface("Resources can only be added after the first warehouse is built.")
 		return
-	var era_resources := settlement.era_resources()
-	var total_capacity := settlement.storage_capacity(warehouse_positions.size())
-	var total_used := settlement.storage_used_units()
-	var free_units := maxf(0.0, float(total_capacity) - total_used)
-	# Divide free capacity equally among era resources, accounting for weights.
-	var per_resource_units := free_units / float(era_resources.size())
-	var overflow: Dictionary = {}
-	for resource_type in era_resources:
-		var weight := settlement.storage_weight(resource_type)
-		var grant_value := maxi(1, int(floor(per_resource_units / weight)))
-		var leftover := settlement.add_cheat(resource_type, grant_value)
-		if leftover > 0:
-			overflow[resource_type] = leftover
+	var overflow := settlement.fill_least_warehouse_cheat(90.0)
 	settlement.money += 30
 	if not overflow.is_empty() and not warehouse_positions.is_empty():
 		_drop_overflow_as_piles(overflow, warehouse_positions[0])
 		_update_interface("Debug resources added. Some overflow dropped near the warehouse.")
 	else:
-		_update_interface("Debug resources added in normal spending proportions.")
+		_update_interface("Debug resources added to the least stocked warehouse.")
 	_update_workers()
 	_request_courier_dispatch()
 
@@ -7603,7 +7598,6 @@ func _on_campfire_advance_pressed() -> void:
 		SettlementState.Era.STONE: next_era = SettlementState.Era.BRICK
 	
 	if settlement.advance_era(next_era, citizens.size(), housing_slots):
-		settlement.ensure_storage_defaults(warehouse_positions.size())
 		_update_interface("Advanced to the %s Era! New buildings unlocked." % _era_name())
 		_refresh_campfire_menu()
 		_refresh_build_menu()
@@ -8265,9 +8259,9 @@ func _refresh_warehouse_menu() -> void:
 	var free := settlement.storage_free_units(warehouses)
 	if selected_warehouse_state != null:
 		var selected_used := selected_warehouse_state.used_units(SettlementState.STORAGE_WEIGHTS)
-		warehouse_menu_title.text = "Warehouse %d\nThis: %d/%d u   Total: %d/%d u   Free: %d\n+/- adjusts per-resource cap (%d u/click)" % [index + 1, int(ceil(selected_used)), selected_warehouse_state.capacity, int(ceil(total_used)), total_capacity, int(floor(free)), int(SettlementState.STORAGE_STEP)]
+		warehouse_menu_title.text = "Warehouse %d\nThis: %d/%d u   Total: %d/%d u   Free: %d" % [index + 1, int(ceil(selected_used)), selected_warehouse_state.capacity, int(ceil(total_used)), total_capacity, int(floor(free))]
 	else:
-		warehouse_menu_title.text = "Storage\nTotal: %d/%d u   Free: %d\n+/- adjusts per-resource cap (%d u/click)" % [int(ceil(total_used)), total_capacity, int(floor(free)), int(SettlementState.STORAGE_STEP)]
+		warehouse_menu_title.text = "Storage\nTotal: %d/%d u   Free: %d" % [int(ceil(total_used)), total_capacity, int(floor(free))]
 
 	for child in warehouse_menu.get_children():
 		if child != warehouse_menu_title:
@@ -8276,46 +8270,31 @@ func _refresh_warehouse_menu() -> void:
 	var era_res := settlement.era_resources()
 	var y_offset := 100.0
 	for resource_type in era_res:
-		var limit := settlement.storage_limit(resource_type)
 		var weight := settlement.storage_weight(resource_type)
 		var stored: int = settlement.amount(resource_type) if selected_warehouse_state == null else selected_warehouse_state.amount(resource_type)
 		var stored_units := stored * weight
-		var pct := 0.0
-		if limit > 0.0:
-			pct = stored_units / limit
-		var bar_text := "%s  %d/%d u" % [resource_type, int(ceil(stored_units)), int(round(limit))]
-		if pct >= 1.0:
-			bar_text += " FULL"
-		elif stored > 0 and limit <= 0.0:
-			bar_text += " (no cap)"
+		var accepted := selected_warehouse_state != null and selected_warehouse_state.accepts(resource_type)
 		var row := Label.new()
 		row.position = Vector2(16, y_offset + 4)
-		row.size = Vector2(200, 24)
+		row.size = Vector2(150, 24)
 		row.add_theme_font_size_override("font_size", 13)
-		row.text = bar_text
+		row.text = "%s  %d u" % [resource_type, int(ceil(stored_units))]
 		warehouse_menu.add_child(row)
-		var minus := Button.new()
-		minus.text = "-"
-		minus.position = Vector2(224, y_offset)
-		minus.size = Vector2(32, 28)
-		minus.pressed.connect(_adjust_storage.bind(resource_type, -SettlementState.STORAGE_STEP))
-		warehouse_menu.add_child(minus)
-		var plus := Button.new()
-		plus.text = "+"
-		plus.position = Vector2(260, y_offset)
-		plus.size = Vector2(32, 28)
-		plus.pressed.connect(_adjust_storage.bind(resource_type, SettlementState.STORAGE_STEP))
-		warehouse_menu.add_child(plus)
+		var accept_cb := CheckBox.new()
+		accept_cb.text = "Accept"
+		accept_cb.position = Vector2(170, y_offset)
+		accept_cb.size = Vector2(80, 28)
+		accept_cb.button_pressed = accepted
+		accept_cb.toggled.connect(_toggle_warehouse_accept.bind(resource_type))
+		warehouse_menu.add_child(accept_cb)
+		var dump_btn := Button.new()
+		dump_btn.text = "Dump"
+		dump_btn.position = Vector2(250, y_offset)
+		dump_btn.size = Vector2(50, 28)
+		dump_btn.disabled = stored <= 0
+		dump_btn.pressed.connect(_dump_warehouse_resource.bind(resource_type))
+		warehouse_menu.add_child(dump_btn)
 		y_offset += 32.0
-
-	# Reset button: redistribute limits equally among era resources.
-	var reset_btn := Button.new()
-	reset_btn.text = "Reset caps (equal split)"
-	reset_btn.position = Vector2(16, y_offset + 4)
-	reset_btn.size = Vector2(276, 28)
-	reset_btn.pressed.connect(_reset_storage_limits)
-	warehouse_menu.add_child(reset_btn)
-	y_offset += 36.0
 
 	var cover_btn := Button.new()
 	if settlement.warehouse_tarp_covered:
@@ -8346,22 +8325,28 @@ func _refresh_warehouse_menu() -> void:
 	warehouse_menu.add_child(close_btn)
 
 
-func _adjust_storage(resource_type: String, delta_units: float) -> void:
-	settlement.adjust_storage_limit(resource_type, delta_units, warehouse_positions.size())
+func _toggle_warehouse_accept(resource_type: String, accepted: bool) -> void:
+	if selected_warehouse == null:
+		return
+	var selected_position: Vector3 = selected_warehouse.get_meta("service_position", selected_warehouse.global_position)
+	var index := warehouse_positions.find(selected_position)
+	settlement.set_warehouse_accepted(index, resource_type, accepted)
 	_refresh_warehouse_menu()
 
 
-func _reset_storage_limits() -> void:
-	var era_res := settlement.era_resources()
-	var total_capacity := settlement.storage_capacity(warehouse_positions.size())
-	# Clear all limits first.
-	for resource_type in SettlementState.STORED_RESOURCES:
-		settlement.storage_limits[resource_type] = 0.0
-	# Distribute equally among era resources.
-	var share := float(total_capacity) / float(era_res.size())
-	for resource_type in era_res:
-		settlement.storage_limits[resource_type] = share
-	settlement._update_warehouse_resource_limits()
+func _dump_warehouse_resource(resource_type: String) -> void:
+	if selected_warehouse == null:
+		return
+	var selected_position: Vector3 = selected_warehouse.get_meta("service_position", selected_warehouse.global_position)
+	var index := warehouse_positions.find(selected_position)
+	var count := settlement.warehouse_amount(resource_type, index)
+	if count <= 0:
+		return
+	var dumped := settlement.dump_warehouse_resource(index, resource_type, count)
+	if dumped > 0:
+		var pile := {resource_type: dumped}
+		_drop_overflow_as_piles(pile, selected_position)
+		_update_interface("Dumped %d %s from the warehouse." % [dumped, resource_type])
 	_refresh_warehouse_menu()
 
 
@@ -8949,7 +8934,6 @@ func _destroy_building_to_pile(building: Node3D, building_type: String) -> void:
 	if removed_record != null:
 		_unregister_navigation_footprint(removed_record.center, removed_record.footprint)
 	settlement.buildings[building_type] = maxi(0, int(settlement.buildings.get(building_type, 1)) - 1)
-	settlement.ensure_storage_defaults(warehouse_positions.size())
 	if campfire_node == null:
 		_select_best_campfire()
 	_create_resource_pile(building.global_position, resources)

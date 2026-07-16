@@ -157,7 +157,6 @@ func _test_settlement_economy() -> void:
 	assert(state.branches == 12 and state.grass == 4)
 	assert(state.storage_capacity(1) == 24)
 	assert(not state.reserve_storage_room_for("grass", 1, 0))
-	state.ensure_storage_defaults(1)
 	assert(state.reserve_storage_room_for("grass", 1, 1))
 	state.add("grass", 1)
 	assert(state.grass == 5 and state.wood == 0)
@@ -239,16 +238,12 @@ func _test_tent_start_config() -> void:
 	storage_state.add_warehouse("warehouse")
 	storage_state.warehouse_ever_built = true
 	storage_state.branches = 24
-	storage_state.ensure_storage_defaults(1)
 	assert(storage_state.storage_availability_for("grass", 1, 1) == SettlementState.StorageAvailability.NO_ROOM)
 	storage_state.add_warehouse("warehouse")
-	storage_state.adjust_storage_limit("grass", 1.0, 2)
 	assert(storage_state.storage_availability_for("grass", 1, 1) == SettlementState.StorageAvailability.OK)
 	var debug_storage_state := SettlementState.new()
 	debug_storage_state.apply_tent_start()
-	debug_storage_state.ensure_storage_defaults(0)
 	debug_storage_state.add_warehouse("warehouse")
-	debug_storage_state.ensure_storage_defaults(1)
 	assert(debug_storage_state.storage_capacity(1) == 24)
 	assert(debug_storage_state.reserve_warehouse_room(0, "branches", 3))
 	var decay := SettlementRulesScript.open_air_storage_decay_losses({"food": 16, "grass": 10}, 26.0, 0.0)
@@ -396,7 +391,6 @@ func _test_storage_delivery_service() -> void:
 	simulation.settlement.add_warehouse("warehouse")
 	simulation.settlement.warehouse_ever_built = true
 	simulation.warehouse_positions = [Vector3.ZERO]
-	simulation.settlement.ensure_storage_defaults(1)
 	service.on_resource_delivered(worker, "grass", 1)
 	assert(simulation.settlement.grass == 1)
 	assert(not worker.blocked_by_storage)
@@ -410,7 +404,6 @@ func _test_storage_delivery_service() -> void:
 	full_storage_simulation.settlement.add_warehouse("warehouse")
 	full_storage_simulation.settlement.warehouse_ever_built = true
 	full_storage_simulation.warehouse_positions = [Vector3.ZERO]
-	full_storage_simulation.settlement.ensure_storage_defaults(1)
 	full_storage_simulation.settlement.warehouses[0].set_amount("grass", 24)
 	var full_storage_worker := Citizen.new()
 	full_storage_worker.carried_amount = 1
@@ -1515,7 +1508,6 @@ func _test_warehouse_reservation_at_assignment() -> void:
 	state.apply_tent_start()
 	state.add_warehouse("warehouse")
 	state.warehouse_ever_built = true
-	state.ensure_storage_defaults(1)
 	state.branches = 10
 
 	var warehouse := state.warehouses[0]
@@ -1533,7 +1525,6 @@ func _test_balanced_warehouse_mode() -> void:
 	state.add_warehouse("warehouse")
 	state.add_warehouse("warehouse")
 	state.warehouse_ever_built = true
-	state.ensure_storage_defaults(2)
 	state.balanced_warehouse_mode = true
 	state.warehouses[0].add("branches", 10, SettlementState.STORAGE_WEIGHTS)
 	state.warehouses[1].add("branches", 2, SettlementState.STORAGE_WEIGHTS)
@@ -1561,7 +1552,6 @@ func _test_backpack_invariants() -> void:
 	# After building a warehouse, backpack migrates and future additions go to warehouses.
 	state.add_warehouse("warehouse")
 	state.warehouse_ever_built = true
-	state.ensure_storage_defaults(1)
 	state.migrate_virtual_to_warehouse(1)
 	assert(state.backpack_amount("branches") == 0)
 	assert(state.amount("branches") == 10)

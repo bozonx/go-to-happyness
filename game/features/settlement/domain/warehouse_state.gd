@@ -16,8 +16,9 @@ const TYPE_CAPACITIES := {
 
 ## Total space units this warehouse can hold.
 var capacity: int = 0
-## resource_type -> max units this warehouse can hold of that resource.
-var resource_limits: Dictionary = {}
+## resource_type -> true if this warehouse currently refuses the resource.
+## Rejected resources are not delivered here; existing stock is kept until dumped.
+var blacklisted: Dictionary = {}
 ## resource_type -> count stored in this warehouse only.
 var resources: Dictionary = {}
 ## resource_type -> count reserved by in-flight deliveries to this warehouse.
@@ -29,7 +30,7 @@ func _init(p_capacity: int = 0) -> void:
 	for resource_type in STORED_RESOURCES:
 		resources[resource_type] = 0
 		reserved[resource_type] = 0
-		resource_limits[resource_type] = float(p_capacity)
+		blacklisted[resource_type] = false
 
 
 static func capacity_for_building_type(building_type: String, era: int) -> int:
@@ -50,7 +51,7 @@ func set_amount(resource_type: String, value: int) -> void:
 
 
 ## Tries to add `value` (positive or negative). Returns how many units could not be
-## applied because the warehouse is full; negative values are always applied in full.
+## applied because the warehouse is full or blacklisted; negative values are always applied in full.
 func add(resource_type: String, value: int, weights: Dictionary) -> int:
 	if value < 0:
 		var current := amount(resource_type)
@@ -59,6 +60,8 @@ func add(resource_type: String, value: int, weights: Dictionary) -> int:
 		return -value - removed
 	if value == 0:
 		return 0
+	if blacklisted.get(resource_type, false):
+		return value
 	var can_fit := room_for(resource_type, weights)
 	var accepted := mini(value, can_fit)
 	resources[resource_type] = amount(resource_type) + accepted
@@ -84,26 +87,45 @@ func free_units(weights: Dictionary) -> float:
 
 
 func room_for(resource_type: String, weights: Dictionary) -> int:
+	if not STORED_RESOURCES.has(resource_type):
+		return 0
+	if blacklisted.get(resource_type, false):
+		return 0
 	var weight := float(weights.get(resource_type, 1.0))
 	if weight <= 0.0:
 		return 1 << 30
-	var reserved_count := int(reserved.get(resource_type, 0))
-	var free := maxf(0.0, free_units(weights) - float(reserved_count) * weight)
+	var free := free_units(weights)
 	return maxi(0, int(floor(free / weight)))
 
 
-func set_resource_limit(resource_type: String, limit_units: float) -> void:
-	resource_limits[resource_type] = maxf(0.0, limit_units)
+func accepts(resource_type: String) -> bool:
+	return not blacklisted.get(resource_type, false)
 
 
-func resource_limit(resource_type: String) -> float:
-	return float(resource_limits.get(resource_type, float(capacity)))
+func set_accepted(resource_type: String, accepted: bool) -> void:
+	if not STORED_RESOURCES.has(resource_type):
+		return
+	blacklisted[resource_type] = not accepted
+
+
+## Moves up to `count` units of the given resource out of the warehouse.
+## Returns how many units were actually removed.
+func dump_resource(resource_type: String, count: int) -> int:
+	if count <= 0:
+		return 0
+	var current := amount(resource_type)
+	var removed := mini(count, current)
+	if removed > 0:
+		resources[resource_type] = current - removed
+	return removed
 
 
 func reserve(resource_type: String, count: int, weights: Dictionary) -> bool:
 	if count <= 0:
 		return true
 	if not STORED_RESOURCES.has(resource_type):
+		return false
+	if blacklisted.get(resource_type, false):
 		return false
 	if count > room_for(resource_type, weights):
 		return false

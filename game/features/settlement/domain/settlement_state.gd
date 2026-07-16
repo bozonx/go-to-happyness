@@ -176,7 +176,6 @@ func apply_tent_start(reset_progress := true) -> void:
 	active_research_worker_id = -1
 	active_research_remaining_time = 0.0
 	active_research_duration = 0.0
-	storage_limits.clear()
 	backpack.clear()
 	warehouses.clear()
 	warehouse_types.clear()
@@ -235,8 +234,6 @@ const STORAGE_WEIGHTS := {
 	"soil": 1.0, "clay": 1.0, "boards": 1.5, "stone": 2.0, "bricks": 2.0,
 	"tarp": 1.0,
 }
-const ERA_STORAGE_PER_WAREHOUSE := {Era.TENT: 32, Era.EARTH: 48, Era.CLAY: 70, Era.WOOD: 100, Era.STONE: 120, Era.BRICK: 150}
-const STORAGE_STEP := 4.0
 
 ## Resources available in each era. Each era cumulatively adds new resources.
 const ERA_RESOURCES := {
@@ -257,7 +254,6 @@ static func resources_for_era(p_era: Era) -> Array[String]:
 func era_resources() -> Array[String]:
 	return resources_for_era(era)
 
-var storage_limits: Dictionary = {} # resource -> allocated space units (float)
 ## Physical resources before the first warehouse live in the starter backpack.
 ## The backpack is a special non-replenishable ground pile shown separately in HUD.
 var backpack: Dictionary = {}
@@ -284,11 +280,15 @@ func cover_warehouse_with_tarp() -> bool:
 
 func add_warehouse(building_type: String) -> void:
 	var capacity := WarehouseState.capacity_for_building_type(building_type, era)
-	warehouses.append(WarehouseState.new(capacity))
+	var warehouse := WarehouseState.new(capacity)
+	_ensure_warehouse_accepts_era_resources(warehouse)
+	warehouses.append(warehouse)
 	warehouse_types.append(building_type)
-	if storage_limits.is_empty():
-		ensure_storage_defaults(warehouses.size())
-	_update_warehouse_resource_limits()
+
+
+func _ensure_warehouse_accepts_era_resources(warehouse: WarehouseState) -> void:
+	for resource_type in era_resources():
+		warehouse.set_accepted(resource_type, true)
 
 
 func storage_capacity(_warehouses: int) -> int:
@@ -305,90 +305,35 @@ func storage_used_units() -> float:
 	return total
 
 
-func _storage_allocated_units() -> float:
+func storage_committed_units() -> float:
 	var total := 0.0
-	for resource_type in STORED_RESOURCES:
-		total += float(storage_limits.get(resource_type, 0.0))
-	return total
-
-
-func _storage_committed_units() -> float:
-	var total := 0.0
-	for resource_type in STORED_RESOURCES:
-		var used := amount(resource_type) * storage_weight(resource_type)
-		total += maxf(float(storage_limits.get(resource_type, 0.0)), used)
-	return total
-
-
-func storage_free_units(warehouses: int) -> float:
-	return maxf(0.0, storage_capacity(warehouses) - _storage_committed_units())
-
-
-func storage_limit(resource_type: String) -> float:
-	return float(storage_limits.get(resource_type, 0.0))
-
-
-func ensure_storage_defaults(warehouses: int) -> void:
-	# Capacity exists only in placed warehouses. Existing overflow (for example a
-	# debug grant) is preserved, but does not create additional free capacity.
-	if storage_limits.is_empty():
-		for resource_type in STORED_RESOURCES:
-			storage_limits[resource_type] = 0.0
-		var primary := ["branches", "grass", "water", "food"]
-		for resource_type in primary:
-			storage_limits[resource_type] = amount(resource_type) * storage_weight(resource_type)
-		var share := storage_free_units(warehouses) / primary.size()
-		for resource_type in primary:
-			storage_limits[resource_type] += share
-	_clamp_storage_limits(warehouses)
-	_update_warehouse_resource_limits()
-
-
-## Distribute global storage_limits to each warehouse proportionally by capacity.
-## Each warehouse gets a share of each resource limit based on its capacity fraction.
-func _update_warehouse_resource_limits() -> void:
-	if warehouses.is_empty():
-		return
-	var total_cap := float(storage_capacity(warehouses.size()))
-	if total_cap <= 0.0:
-		return
 	for warehouse in warehouses:
-		var share := float(warehouse.capacity) / total_cap
-		for resource_type in STORED_RESOURCES:
-			var global_limit := float(storage_limits.get(resource_type, 0.0))
-			warehouse.set_resource_limit(resource_type, global_limit * share)
+		total += warehouse.committed_units(STORAGE_WEIGHTS)
+	return total
 
 
-func _clamp_storage_limits(warehouses: int) -> void:
-	# Never let allocations exceed the capacity or drop below what is already stored.
-	var capacity := float(storage_capacity(warehouses))
-	for resource_type in STORED_RESOURCES:
-		var used := amount(resource_type) * storage_weight(resource_type)
-		storage_limits[resource_type] = maxf(float(storage_limits.get(resource_type, 0.0)), used)
-	if _storage_allocated_units() > capacity:
-		# Trim the fat proportionally from any headroom above what is stored.
-		var overflow := _storage_allocated_units() - capacity
-		for resource_type in STORED_RESOURCES:
-			if overflow <= 0.0:
-				break
-			var used := amount(resource_type) * storage_weight(resource_type)
-			var slack := float(storage_limits[resource_type]) - used
-			var cut := minf(slack, overflow)
-			storage_limits[resource_type] -= cut
-			overflow -= cut
+func storage_free_units(_warehouses: int) -> float:
+	return maxf(0.0, float(storage_capacity(warehouses.size())) - storage_committed_units())
 
 
-func adjust_storage_limit(resource_type: String, delta_units: float, warehouses: int) -> void:
-	if not STORED_RESOURCES.has(resource_type):
+func warehouse_accepts(index: int, resource_type: String) -> bool:
+	if index < 0 or index >= warehouses.size():
+		return false
+	return warehouses[index].accepts(resource_type)
+
+
+func set_warehouse_accepted(index: int, resource_type: String, accepted: bool) -> void:
+	if index < 0 or index >= warehouses.size():
 		return
-	var current := float(storage_limits.get(resource_type, 0.0))
-	var used := amount(resource_type) * storage_weight(resource_type)
-	var target := current + delta_units
-	if delta_units > 0.0:
-		target = minf(target, current + storage_free_units(warehouses))
-	target = maxf(target, used) # cannot squeeze below what is already there
-	storage_limits[resource_type] = maxf(0.0, target)
-	_update_warehouse_resource_limits()
+	warehouses[index].set_accepted(resource_type, accepted)
+
+
+## Moves up to `count` units of the resource out of the given warehouse.
+## Returns how many units were actually removed.
+func dump_warehouse_resource(index: int, resource_type: String, count: int) -> int:
+	if index < 0 or index >= warehouses.size():
+		return 0
+	return warehouses[index].dump_resource(resource_type, count)
 
 
 func storage_room_for(resource_type: String) -> int:
@@ -397,12 +342,7 @@ func storage_room_for(resource_type: String) -> int:
 	var total := 0
 	for warehouse in warehouses:
 		total += warehouse.room_for(resource_type, STORAGE_WEIGHTS)
-	# Also cap by the global per-resource limit.
-	var weight := storage_weight(resource_type)
-	var res_limit := float(storage_limits.get(resource_type, 0.0))
-	var current_units := amount(resource_type) * weight
-	var by_limit := maxi(0, int(floor(maxf(0.0, res_limit - current_units) / weight)))
-	return mini(total, by_limit)
+	return total
 
 
 func storage_can_accept(resource_type: String, count: int) -> bool:
@@ -529,11 +469,6 @@ func add_to_warehouse(resource_type: String, value: int, index: int) -> int:
 		return value
 	if value > 0:
 		warehouses[index].release(resource_type, value)
-		# Cap by per-resource limit.
-		var room := storage_room_for(resource_type)
-		value = mini(value, room)
-		if value <= 0:
-			return value
 	return warehouses[index].add(resource_type, value, STORAGE_WEIGHTS)
 
 
@@ -570,8 +505,7 @@ func add_cheat(resource_type: String, value: int) -> int:
 		return 0
 	if not warehouse_ever_built or warehouses.is_empty():
 		return value
-	# Cheat resources ignore per-resource player limits; they are only bounded
-	# by the physical warehouse capacity.
+	# Cheat resources are only bounded by the physical warehouse capacity and accept filters.
 	var total_room := 0
 	for warehouse in warehouses:
 		total_room += warehouse.room_for(resource_type, STORAGE_WEIGHTS)
@@ -590,12 +524,7 @@ func add_cheat(resource_type: String, value: int) -> int:
 
 
 func _distribute_add(resource_type: String, value: int) -> void:
-	# Cap by per-resource limit.
-	var room := storage_room_for(resource_type)
-	var to_add := mini(value, room)
-	if to_add <= 0:
-		return
-	var remaining := to_add
+	var remaining := value
 	for warehouse in warehouses:
 		remaining = warehouse.add(resource_type, remaining, STORAGE_WEIGHTS)
 		if remaining <= 0:
@@ -620,6 +549,45 @@ func _find_least_stocked_warehouse(resource_type: String) -> int:
 		var count := warehouses[i].amount(resource_type)
 		if count < best_amount:
 			best_amount = count
+			best = i
+	return best
+
+
+## Fills the warehouse with the least used units up to `percent` of its capacity.
+## Returns any resources that could not be placed.
+func fill_least_warehouse_cheat(percent: float) -> Dictionary:
+	var overflow := {}
+	if not warehouse_ever_built or warehouses.is_empty():
+		return overflow
+	var target_index := _find_least_used_warehouse()
+	var target := warehouses[target_index]
+	var era_res := era_resources()
+	if era_res.is_empty():
+		return overflow
+	var fill_target := float(target.capacity) * clampf(percent / 100.0, 0.0, 1.0)
+	var free_units := maxf(0.0, fill_target - target.used_units(STORAGE_WEIGHTS))
+	var share := free_units / float(era_res.size())
+	for resource_type in era_res:
+		if not target.accepts(resource_type):
+			continue
+		var weight := storage_weight(resource_type)
+		if weight <= 0.0:
+			continue
+		var grant_units := maxf(0.0, share)
+		var grant_count := maxi(1, int(floor(grant_units / weight)))
+		var leftover := target.add(resource_type, grant_count, STORAGE_WEIGHTS)
+		if leftover > 0:
+			overflow[resource_type] = leftover
+	return overflow
+
+
+func _find_least_used_warehouse() -> int:
+	var best := 0
+	var best_used := warehouses[0].used_units(STORAGE_WEIGHTS)
+	for i in range(1, warehouses.size()):
+		var used := warehouses[i].used_units(STORAGE_WEIGHTS)
+		if used < best_used:
+			best_used = used
 			best = i
 	return best
 
@@ -656,8 +624,6 @@ func migrate_backpack_to_warehouse() -> Dictionary:
 			if remaining > 0:
 				overflow[resource_type] = remaining
 	backpack.clear()
-	ensure_storage_defaults(warehouses.size())
-	_clamp_storage_limits(warehouses.size())
 	return overflow
 
 
@@ -720,7 +686,6 @@ func pay_for_building_upgrade(building_type: String, warehouse_index := -1) -> S
 		if index >= 0 and index < warehouse_types.size():
 			warehouse_types[index] = target
 			warehouses[index].capacity = WarehouseState.capacity_for_building_type(target, era)
-			_update_warehouse_resource_limits()
 	return target
 
 
@@ -775,7 +740,13 @@ func advance_era(next_era: Era, population: int, housing_slots: int) -> bool:
 	if not can_advance_to(next_era, population, housing_slots):
 		return false
 	era = next_era
+	_refresh_warehouse_accepted_resources()
 	return true
+
+
+func _refresh_warehouse_accepted_resources() -> void:
+	for warehouse in warehouses:
+		_ensure_warehouse_accepts_era_resources(warehouse)
 
 
 func apply_cheer_up() -> bool:
