@@ -11,6 +11,7 @@ const FarmingGoalScript = preload("res://game/features/decision/domain/goals/far
 const FarmingOrderProviderScript = preload("res://game/features/decision/application/farming_order_provider.gd")
 const ConstructionGoalScript = preload("res://game/features/decision/domain/goals/construction_goal.gd")
 const ConstructionOrderProviderScript = preload("res://game/features/decision/application/construction_order_provider.gd")
+const ConstructionWorkStepScript = preload("res://game/features/decision/domain/behavior/construction_work_step.gd")
 const GatheringGoalScript = preload("res://game/features/decision/domain/goals/gathering_goal.gd")
 const GatheringOrderProviderScript = preload("res://game/features/decision/application/gathering_order_provider.gd")
 const CleaningGoalScript = preload("res://game/features/decision/domain/goals/cleaning_goal.gd")
@@ -252,6 +253,7 @@ func _init() -> void:
 	_test_construction_provider_keeps_active_cycle()
 	_test_native_construction_goal()
 	_test_construction_actuator()
+	_test_construction_work_step_times_out_on_stuck_action()
 	_test_gathering_provider_assigns_unique_stable_sources()
 	_test_gathering_provider_prefers_access_position()
 	_test_native_gathering_goal()
@@ -875,6 +877,24 @@ func _test_construction_actuator() -> void:
 	root.remove_child(citizen)
 	target.free()
 	citizen.free()
+
+
+func _test_construction_work_step_times_out_on_stuck_action() -> void:
+	var actuator := FakeActuator.new(1)
+	actuator.next_action_status = CitizenActuator.ActionStatus.RUNNING
+	var order := CitizenOrder.new(1, &"construction", &"test", 1.0, AIFactSet.new({
+		&"work.construction.mode": &"construction",
+	}))
+	order.target_key = &"construction:5"
+	order.target_position = Vector3(5.0, 0.0, 0.0)
+	var snapshot := WorldSnapshot.new(1, 0.0, 0.0, AIFactSet.new(), {1: CitizenSnapshot.new(1)})
+	var context := BehaviorContext.new(actuator, AIBlackboard.new())
+	context.refresh(snapshot, order)
+	var step := ConstructionWorkStepScript.new()
+	step._enter(context)
+	assert(step._tick(context, 0.1) == BehaviorStep.Status.RUNNING, "Running action should keep the step running")
+	assert(step._tick(context, ConstructionWorkStepScript.MAX_STEP_SECONDS + 1.0) == BehaviorStep.Status.FAILURE, "Step should fail after running too long")
+	assert(actuator.cancel_action_count == 1, "Timeout should cancel the action")
 
 
 func _test_gathering_provider_assigns_unique_stable_sources() -> void:

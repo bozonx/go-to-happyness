@@ -30,11 +30,15 @@ func is_category_available(category: String) -> bool:
 
 
 func menu_state(building_type: String) -> Dictionary:
+	return menu_state_with_inventory(building_type, {})
+
+
+func menu_state_with_inventory(building_type: String, extra_inventory: Dictionary) -> Dictionary:
 	var visible_state := _visibility_state(building_type)
 	var affordable := false
 	var disabled_reason: StringName = visible_state.reason
 	if bool(visible_state.visible):
-		affordable = settlement.can_afford_building(building_type)
+		affordable = _can_afford_with_inventory(building_type, extra_inventory)
 		disabled_reason = REASON_OK if affordable else REASON_NOT_ENOUGH_RESOURCES
 	return {
 		"visible": bool(visible_state.visible),
@@ -46,6 +50,10 @@ func menu_state(building_type: String) -> Dictionary:
 
 
 func placement_state(building_type: String) -> Dictionary:
+	return placement_state_with_inventory(building_type, {})
+
+
+func placement_state_with_inventory(building_type: String, extra_inventory: Dictionary) -> Dictionary:
 	var visible_state := _visibility_state(building_type)
 	if not bool(visible_state.visible):
 		return {
@@ -54,7 +62,7 @@ func placement_state(building_type: String) -> Dictionary:
 			"reason": visible_state.reason,
 			"message": message_for_reason(visible_state.reason),
 		}
-	var affordable := settlement.can_afford_building(building_type)
+	var affordable := _can_afford_with_inventory(building_type, extra_inventory)
 	if not affordable:
 		return {
 			"allowed": false,
@@ -68,6 +76,20 @@ func placement_state(building_type: String) -> Dictionary:
 		"reason": REASON_OK,
 		"message": "",
 	}
+
+
+func _can_afford_with_inventory(building_type: String, extra_inventory: Dictionary) -> bool:
+	if not settlement.is_building_unlocked(building_type):
+		return false
+	if BuildingCatalog.era_for(building_type) > settlement.era:
+		return false
+	for resource_type in BuildingCatalog.cost_resources(building_type):
+		var available := settlement.amount(resource_type)
+		if extra_inventory.has(resource_type):
+			available += int(extra_inventory[resource_type])
+		if available < BuildingCatalog.cost_for_resource(building_type, resource_type):
+			return false
+	return true
 
 
 func cost_text(building_type: String) -> String:

@@ -40,6 +40,7 @@ const CleaningGoalScript = preload("res://game/features/decision/domain/goals/cl
 const RouteRequestScript = preload("res://game/features/routing/application/route_request.gd")
 const TrailFieldServiceScript = preload("res://game/features/roads/application/trail_field_service.gd")
 const TrailOverlayShader = preload("res://game/features/roads/presentation/trail_overlay.gdshader")
+const FirstPersonCrosshair = preload("res://game/features/citizens/presentation/first_person_crosshair.gd")
 
 
 const BOARD_CELLS := 48
@@ -272,6 +273,7 @@ var interaction_progress: ProgressBar
 var pocket_take_menu: Panel
 var pocket_take_menu_title: Label
 var pocket_menu_open := false
+var crosshair: FirstPersonCrosshair
 var dig_sites: Array[Dictionary] = []
 var dig_cells: Dictionary = {}
 var exhausted_dig_cells: Dictionary = {}
@@ -520,6 +522,7 @@ func _process(delta: float) -> void:
 		_update_player_control(delta)
 		_update_interaction(delta)
 		_refresh_interaction_hint()
+		_update_first_person_mouse_and_crosshair()
 		_update_warehouse_fill_labels()
 		if not build_mode.is_empty():
 			var viewport_center := get_viewport().get_visible_rect().size * 0.5
@@ -1139,7 +1142,7 @@ func _publish_courier_tasks(dispatcher: RefCounted) -> void:
 			if worker != null and worker.has_pending_resource() and not courier_dispatcher.is_manually_targeted(worker):
 				var worker_position: Vector3 = worker.global_position
 				var worker_dropoff := _warehouse_delivery_position(worker_position, worker.resource_type, worker.carried_amount)
-				dispatcher.publish(StringName("worker_%d" % worker.get_instance_id()), CourierTask.Kind.WORKER_PICKUP, 45, worker_position, worker_dropoff, {"worker": worker})
+				dispatcher.publish(StringName("worker_%d" % worker.ai_id), CourierTask.Kind.WORKER_PICKUP, 45, worker_position, worker_dropoff, {"worker": worker})
 	var sorted_sites := construction_sites.duplicate()
 	sorted_sites.sort_custom(func(a: ConstructionSite, b: ConstructionSite) -> bool:
 		return _construction_development_priority(a) > _construction_development_priority(b)
@@ -1183,19 +1186,32 @@ func _reconcile_repair_reservations() -> void:
 			building.set_meta("repair_reserved", false)
 
 
-func _construction_material_source(resource_type: String) -> Dictionary:
+func _construction_material_source(resource_type: String, from_position: Vector3 = Vector3.ZERO) -> Dictionary:
 	if settlement.amount(resource_type) > 0:
 		if not warehouse_positions.is_empty():
-			return {"kind": "storage", "id": "storage", "position": warehouse_positions[0]}
+			var nearest_warehouse := Vector3.INF
+			var nearest_distance := INF
+			for position in warehouse_positions:
+				var distance := from_position.distance_squared_to(position)
+				if distance < nearest_distance:
+					nearest_distance = distance
+					nearest_warehouse = position
+			return {"kind": "storage", "id": "storage", "position": nearest_warehouse}
 		# Before the first warehouse is built, all resources live in the virtual
 		# stockpile. Couriers pull from that unlimited reserve at the camp entrance
 		# so the bootstrap warehouse and main campfire can still be supplied.
-		return {"kind": "open_storage", "id": "open_storage", "position": _get_nearest_delivery_position(Vector3.ZERO)}
+		return {"kind": "open_storage", "id": "open_storage", "position": _get_nearest_delivery_position(from_position)}
+	var best_pile: Dictionary = {}
+	var best_pile_distance := INF
 	for pile: Dictionary in resource_piles:
 		var pile_node := pile.get("node") as Node3D
-		if is_instance_valid(pile_node) and int(pile.get("resources", {}).get(resource_type, 0)) > 0:
-			return {"kind": "pile", "id": pile_node.get_instance_id(), "position": pile_node.global_position, "node": pile_node}
-	return {}
+		if not is_instance_valid(pile_node) or int(pile.get("resources", {}).get(resource_type, 0)) <= 0:
+			continue
+		var distance := from_position.distance_squared_to(pile_node.global_position)
+		if distance < best_pile_distance:
+			best_pile_distance = distance
+			best_pile = {"kind": "pile", "id": pile_node.get_instance_id(), "position": pile_node.global_position, "node": pile_node}
+	return best_pile
 
 
 func _resource_pile_for_node(pile_node: Node3D) -> Dictionary:
@@ -2600,6 +2616,7 @@ func _create_interface() -> void:
 	_create_research_menu(ui)
 	_create_campfire_orders_menu(ui)
 	_create_survival_decision_menu(ui)
+	_create_crosshair(ui)
 
 
 func _create_context_menu_panel(ui: CanvasLayer, anchor: int, offsets: Vector4, input_handler: Callable = _on_context_menu_gui_input) -> Panel:
@@ -2643,6 +2660,12 @@ func _create_survival_decision_menu(ui: CanvasLayer) -> void:
 	decision_secondary_button.size = Vector2(440, 32)
 	decision_secondary_button.pressed.connect(_resolve_survival_decision.bind(false))
 	decision_menu.add_child(decision_secondary_button)
+
+
+func _create_crosshair(ui: CanvasLayer) -> void:
+	crosshair = FirstPersonCrosshair.new()
+	crosshair.visible = false
+	ui.add_child(crosshair)
 
 
 func _create_campfire_story_menu(ui: CanvasLayer) -> void:
@@ -4059,7 +4082,7 @@ func _refresh_build_menu() -> void:
 				button.visible = false
 		else:
 			var build_type: String = button.get_meta("build_type", "")
-			var menu_state: Dictionary = building_availability_service.menu_state(build_type)
+			var menu_state: Dictionary = building_availability_service.menu_state_with_inventory(build_type, pocket)
 			button.set_meta("build_menu_state", menu_state)
 			if build_menu_is_global and build_category.is_empty():
 				button.visible = not assignment_submenu_open and button.get_meta("category", "") == current_era_category and bool(menu_state.visible)
@@ -4105,7 +4128,7 @@ func _refresh_build_menu() -> void:
 		button.position = Vector2(16, row_y)
 		row_y += 50.0
 		var building_type: String = button.get_meta("build_type", "")
-		var menu_state: Dictionary = button.get_meta("build_menu_state", building_availability_service.menu_state(building_type))
+		var menu_state: Dictionary = button.get_meta("build_menu_state", building_availability_service.menu_state_with_inventory(building_type, pocket))
 		var enabled := bool(menu_state.enabled)
 		button.disabled = not enabled
 		button.tooltip_text = "" if enabled else building_availability_service.message_for_reason(menu_state.reason)
@@ -4461,7 +4484,7 @@ func _select_build_mode(next_mode: String) -> void:
 	if next_mode == "tent" and clock.hour() >= 22:
 		_update_interface("The temporary tent must be marked before 22:00.")
 		return
-	var placement_state: Dictionary = building_availability_service.placement_state(next_mode)
+	var placement_state: Dictionary = building_availability_service.placement_state_with_inventory(next_mode, pocket)
 	if not bool(placement_state.allowed):
 		_update_interface(str(placement_state.message))
 		return
@@ -4495,7 +4518,34 @@ func _on_context_menu_gui_input(event: InputEvent) -> void:
 func _is_first_person_menu_open() -> bool:
 	if not is_first_person:
 		return false
-	return build_menu.visible or pocket_menu_open
+	if pocket_menu_open or build_menu.visible:
+		return true
+	if entrance_menu.visible or house_menu.visible or school_menu.visible or materials_factory_menu.visible or campfire_menu.visible or market_menu.visible or warehouse_menu.visible or building_menu.visible:
+		return true
+	if entrance_order_modal != null and entrance_order_modal.visible:
+		return true
+	if campfire_orders_menu != null and campfire_orders_menu.visible:
+		return true
+	if campfire_story_menu != null and campfire_story_menu.visible:
+		return true
+	if research_menu != null and research_menu.visible:
+		return true
+	if workforce_menu != null and workforce_menu.visible:
+		return true
+	if decision_menu != null and decision_menu.visible:
+		return true
+	if messages_modal != null and messages_modal.visible:
+		return true
+	return false
+
+
+func _update_first_person_mouse_and_crosshair() -> void:
+	if not is_first_person:
+		return
+	var menu_open := _is_first_person_menu_open()
+	if crosshair != null:
+		crosshair.visible = not menu_open
+	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE if menu_open else Input.MOUSE_MODE_CAPTURED)
 
 
 func _close_context_menus() -> void:
@@ -4648,6 +4698,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				var build_point: Variant = _terrain_point_at_screen_position(viewport_center)
 				if build_point != null:
 					_place_building(build_point)
+			elif not _is_first_person_menu_open():
+				_first_person_select_at_crosshair()
 		elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
 			if pocket_menu_open:
 				_close_pocket_take_menu()
@@ -4789,6 +4841,12 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 	if not hit.collider.is_in_group("citizen_selector"):
 		return
 	_select_citizen(hit.collider.get_parent() as Citizen)
+
+
+func _first_person_select_at_crosshair() -> void:
+	var viewport_center := get_viewport().get_visible_rect().size * 0.5
+	_select_citizen_at(viewport_center)
+
 
 func _hide_all_selection_menus() -> void:
 	# Hides every building context menu and clears their selections, but leaves
@@ -5090,6 +5148,8 @@ func _enter_first_person(citizen: Citizen, message: String) -> void:
 	player_yaw = player_citizen.rotation.y
 	player_pitch = 0.0
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+	if crosshair != null:
+		crosshair.visible = true
 	Engine.time_scale = 1.0
 	_update_interface(message)
 
@@ -5112,6 +5172,8 @@ func _leave_first_person_to_hero_overview() -> void:
 		build_toggle_btn.visible = true
 	_update_skip_night_button()
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+	if crosshair != null:
+		crosshair.visible = false
 	if hero_citizen != null:
 		camera_target = hero_citizen.global_position
 	_update_camera_position()
@@ -6047,7 +6109,7 @@ func _place_building(world_position: Vector3) -> void:
 		return
 	var cell := _placement_key(world_position)
 	if not _can_pay_building_cost(build_mode):
-		var placement_state: Dictionary = building_availability_service.placement_state(build_mode)
+		var placement_state: Dictionary = building_availability_service.placement_state_with_inventory(build_mode, pocket)
 		_update_interface(str(placement_state.message))
 		return
 	var blueprint := BuildingBlueprints.get_blueprint(build_mode)
@@ -6055,6 +6117,7 @@ func _place_building(world_position: Vector3) -> void:
 	building_registry.reserve(cell, world_position, occupied_footprint)
 	_refresh_navigation_grid()
 	var site := _create_construction_site(cell, build_mode, world_position, build_rotation_quarters, blueprint, occupied_footprint)
+	_deliver_pocket_to_site(site, true)
 	building_registry.attach_node(cell, site.node)
 	build_mode = ""
 	build_rotation_quarters = 0
@@ -6084,7 +6147,7 @@ func _can_place(world_position: Vector3) -> bool:
 	return _is_footprint_level(world_position, footprint) and _is_footprint_clear(world_position, footprint)
 
 func _can_pay_building_cost(building_type: String) -> bool:
-	return bool(building_availability_service.placement_state(building_type).allowed)
+	return bool(building_availability_service.placement_state_with_inventory(building_type, pocket).allowed)
 
 func _pay_building_cost(building_type: String) -> void:
 	settlement.pay_for_building(building_type)

@@ -91,7 +91,9 @@ static func can_assign(worker: Dictionary, world: Dictionary) -> bool:
 		if assigned_role == "construction" and _construction_capacity(world) <= 0:
 			return false
 		return _role_available(assigned_role, world)
-	if str(worker.get("daily_order_role", "")).is_empty() or int(world.get("hour", 0)) < 8:
+	var daily_order_role := str(worker.get("daily_order_role", ""))
+	var workday_start := int(world.get("workday_start_hour", 8))
+	if daily_order_role.is_empty() or int(world.get("hour", 0)) < workday_start:
 		return false
 	return _role_available(assigned_role, world)
 

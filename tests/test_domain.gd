@@ -113,6 +113,7 @@ func _init() -> void:
 	_test_building_queue_routing()
 	_test_building_queue_multiple_entrances()
 	_test_building_queue_keeps_assigned_entrance()
+	_test_building_queue_keeps_ai_citizens()
 	_test_construction_site_uses_building_entrance()
 	_test_canteen_meal_requests()
 	_test_construction_progress()
@@ -467,6 +468,16 @@ func _test_building_availability_service() -> void:
 	assert(bool(temporary_tent_placement.allowed))
 	var cooking_campfire_placement: Dictionary = service.placement_state("cook_campfire")
 	assert(bool(cooking_campfire_placement.allowed))
+	# Pocket resources should count toward building costs.
+	state.branches = 0
+	state.grass = 0
+	var pocket := {"branches": 4}
+	var pocket_campfire_menu: Dictionary = service.menu_state_with_inventory("campfire", pocket)
+	assert(bool(pocket_campfire_menu.visible))
+	assert(bool(pocket_campfire_menu.enabled))
+	var pocket_campfire_placement: Dictionary = service.placement_state_with_inventory("campfire", pocket)
+	assert(bool(pocket_campfire_placement.allowed))
+	assert(not bool(service.placement_state_with_inventory("campfire", {"branches": 3}).allowed))
 
 
 func _test_citizen_living_status_service() -> void:
@@ -1095,6 +1106,34 @@ func _test_building_queue_keeps_assigned_entrance() -> void:
 	queues.release(beta)
 	alpha.free()
 	beta.free()
+	root.remove_child(building)
+	building.free()
+
+
+func _test_building_queue_keeps_ai_citizens() -> void:
+	var registry := BuildingRegistry.new()
+	var building := Node3D.new()
+	building.position = Vector3(1.5, 0.0, 1.5)
+	root.add_child(building)
+	var entrance := Vector3(2.5, 0.0, 1.5)
+	building.set_meta("service_position", entrance)
+	registry.reserve(Vector2i(1, 1), building.position, Vector2i.ONE)
+	registry.attach_node(Vector2i(1, 1), building)
+	var grid := NavGrid.new()
+	grid.configure(1.0, 12)
+	var queues = BuildingQueueServiceScript.new()
+	queues.configure(registry, grid)
+
+	var alive_ids: Array[int] = [1]
+	queues.set_citizen_alive_checker(func(citizen_id: int) -> bool: return citizen_id in alive_ids)
+
+	var citizen := Node3D.new()
+	citizen.set_meta("ai_id", 1)
+	root.add_child(citizen)
+	var result: Dictionary = queues.resolve(citizen, entrance)
+	assert(result.is_head, "AI citizen with small ai_id should be treated as a valid queue member")
+	queues.release(citizen)
+	citizen.free()
 	root.remove_child(building)
 	building.free()
 

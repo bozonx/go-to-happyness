@@ -525,6 +525,7 @@ func _world_data() -> Dictionary:
 		"population": simulation.citizens.size(),
 		"assigned_roles": _assigned_role_counts_internal(),
 		"officer_available": _officer_available_internal(),
+		"workday_start_hour": 8,
 	}
 
 
@@ -561,8 +562,6 @@ func _assigned_role_counts_internal() -> Dictionary:
 		var role: String = citizen.permanent_role
 		if role.is_empty() and citizen.is_registering():
 			role = citizen.pending_employment_role
-		if role.is_empty():
-			role = citizen.active_role
 		if role.is_empty() or role in ["trade", "relaxing", "training"]:
 			continue
 		if role == "gather_wood":
