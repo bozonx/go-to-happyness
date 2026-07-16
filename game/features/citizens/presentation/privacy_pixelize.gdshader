@@ -2,7 +2,7 @@ shader_type spatial;
 render_mode unshaded, cull_disabled, depth_test_disabled, blend_mix;
 
 uniform sampler2D screen_texture : hint_screen_texture, repeat_disable;
-uniform float pixel_size : hint_range(4.0, 256.0) = 48.0;
+uniform float pixel_size : hint_range(4.0, 256.0) = 24.0;
 uniform float edge_softness : hint_range(0.0, 0.5) = 0.1;
 
 void vertex() {

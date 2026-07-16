@@ -16,6 +16,7 @@ const WaterCollectorServiceScript = preload("res://game/features/logistics/appli
 const FireSourceStateScript = preload("res://game/features/settlement/domain/fire_source_state.gd")
 const CitizenStatusEffectScript = preload("res://game/features/citizens/domain/citizen_status_effect.gd")
 const TrailFieldServiceScript = preload("res://game/features/roads/application/trail_field_service.gd")
+const WeatherStateScript = preload("res://game/features/simulation/domain/weather_state.gd")
 
 
 class FakeCanteenSimulation extends Node:
@@ -99,6 +100,7 @@ func _init() -> void:
 	_test_tent_survival_rules()
 	_test_clock_wraps_and_reports_elapsed_minutes()
 	_test_day_cycle_schedule()
+	_test_weather_state()
 	_test_sawmill_rules()
 	_test_workforce_policy()
 	_test_citizen_task_state()
@@ -1555,3 +1557,37 @@ func _test_backpack_invariants() -> void:
 	state.migrate_virtual_to_warehouse(1)
 	assert(state.backpack_amount("branches") == 0)
 	assert(state.amount("branches") == 10)
+
+
+func _test_weather_state() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 12345
+
+	# Non-rain day stays clear all day.
+	var clear := WeatherStateScript.new()
+	clear.new_day(TentEraSurvivalRulesScript.Weather.WARMING, rng, 6 * 60)
+	assert(clear.intensity_at(6 * 60) == 0.0)
+	assert(clear.intensity_at(12 * 60) == 0.0)
+	assert(not clear.update(12 * 60.0))
+	assert(not clear.is_raining)
+
+	# Rain day schedules a window after the announcement with at least 3 hours.
+	var rain := WeatherStateScript.new()
+	rain.new_day(TentEraSurvivalRulesScript.Weather.RAIN, rng, 6 * 60)
+	assert(rain.rain_start_minute >= 6 * 60)
+	assert(rain.rain_end_minute <= 24 * 60)
+	assert(rain.rain_end_minute - rain.rain_start_minute >= 3 * 60)
+
+	# Intensity is zero before and after the window, and reaches one in the middle.
+	assert(rain.intensity_at(rain.rain_start_minute - 1.0) == 0.0)
+	assert(rain.intensity_at(rain.rain_end_minute + 1.0) == 0.0)
+	var middle := (rain.rain_start_minute + rain.rain_end_minute) * 0.5
+	assert(rain.intensity_at(middle) == 1.0)
+
+	# update() reports a change only at the start and end of rain.
+	assert(rain.update(rain.rain_start_minute))
+	assert(rain.is_raining)
+	assert(not rain.update(rain.rain_start_minute + 1.0))
+	assert(rain.update(rain.rain_end_minute))
+	assert(not rain.is_raining)
+	assert(not rain.update(rain.rain_end_minute + 1.0))

@@ -41,6 +41,7 @@ const RouteRequestScript = preload("res://game/features/routing/application/rout
 const TrailFieldServiceScript = preload("res://game/features/roads/application/trail_field_service.gd")
 const TrailOverlayShader = preload("res://game/features/roads/presentation/trail_overlay.gdshader")
 const FirstPersonCrosshair = preload("res://game/features/citizens/presentation/first_person_crosshair.gd")
+const WeatherStateScript = preload("res://game/features/simulation/domain/weather_state.gd")
 
 
 const BOARD_CELLS := 48
@@ -221,6 +222,8 @@ var citizens: Array[Citizen] = []
 var camera: Camera3D
 var sun: DirectionalLight3D
 var world_environment: Environment
+var weather_state := WeatherStateScript.new()
+var rain_particles: GPUParticles3D
 var camera_target := Vector3.ZERO
 var camera_distance := 30.0
 var camera_yaw := 42.0
@@ -494,6 +497,7 @@ func _ready() -> void:
 	courier_dispatcher.configure(self)
 	settlement.apply_tent_start()
 	tent_weather = TentEraSurvivalRulesScript.weather_for_day(day_cycle.current_day)
+	weather_state.new_day(tent_weather, random, int(clock.minutes))
 	_create_world()
 	_create_interface()
 	_create_forest()
@@ -789,25 +793,42 @@ func _update_daylight() -> void:
 		return
 	var hour := game_minutes / 60.0
 	var solar_height := sin((hour - 6.0) / 12.0 * PI)
-	var direct_light := smoothstep(0.0, 0.28, solar_height)
+	var solar_intensity := smoothstep(0.0, 0.28, solar_height)
 	var twilight := 1.0 - smoothstep(0.0, 0.28, absf(solar_height))
+	var overcast := weather_state.intensity_at(clock.minutes)
+	var direct_light := solar_intensity * (1.0 - overcast)
 	var night_color := Color("101a2b")
 	var twilight_color := Color("d87850")
 	var day_color := Color("78a9c5")
+	var overcast_color := Color("60707a")
+	var base_background: Color
 	if solar_height <= 0.0:
-		world_environment.background_color = night_color.lerp(twilight_color, twilight)
+		base_background = night_color.lerp(twilight_color, twilight)
 	else:
-		world_environment.background_color = twilight_color.lerp(day_color, direct_light)
-	world_environment.ambient_light_color = Color("4b5872").lerp(Color("d7ebef"), maxf(direct_light, twilight * 0.35))
-	world_environment.ambient_light_energy = lerpf(0.18, 0.65, maxf(direct_light, twilight * 0.3))
+		base_background = twilight_color.lerp(day_color, solar_intensity)
+	world_environment.background_color = base_background.lerp(overcast_color, overcast)
+	var base_ambient_color := Color("4b5872").lerp(Color("d7ebef"), maxf(solar_intensity, twilight * 0.35))
+	var base_ambient_energy := lerpf(0.18, 0.65, maxf(solar_intensity, twilight * 0.3))
+	world_environment.ambient_light_color = base_ambient_color.lerp(Color("8a9aa3"), overcast)
+	world_environment.ambient_light_energy = lerpf(base_ambient_energy, 0.78, overcast)
 	sun.rotation_degrees = Vector3(-90.0 + (hour - 12.0) * 15.0, -32.0, 0.0)
-	sun.light_color = Color("f08a5d").lerp(Color("fff2d1"), direct_light)
+	var base_sun_color := Color("f08a5d").lerp(Color("fff2d1"), solar_intensity)
+	sun.light_color = base_sun_color.lerp(Color("a8b8c0"), overcast)
 	sun.light_energy = lerpf(0.0, 1.2, direct_light)
 	sun.shadow_enabled = direct_light > 0.05
+	sun.shadow_opacity = lerpf(1.0, 0.0, overcast)
+	if rain_particles != null:
+		rain_particles.amount_ratio = overcast
+		rain_particles.emitting = overcast > 0.0
 
 func _update_clock(delta: float) -> void:
 	var previous_hour := clock.hour()
 	var events := day_cycle.advance(delta, GAME_MINUTES_PER_SECOND, settlement.workday_hours)
+	if weather_state.update(clock.minutes):
+		if weather_state.is_raining:
+			_update_interface("Rain has started.")
+		else:
+			_update_interface("Rain has stopped.")
 	if clock.hour() != previous_hour:
 		_apply_hourly_tent_survival(clock.hour())
 	clock_label.text = "%s  %02d:%02d  x%d" % ["Night" if clock.is_night() else "Day", clock.hour(), clock.minute(), int(time_multiplier)]
@@ -839,6 +860,7 @@ func _handle_day_cycle_event(event: SimulationDayEvent) -> void:
 			_update_workers()
 		SimulationDayEvent.Kind.DAILY_SETTLEMENT_UPDATE:
 			tent_weather = TentEraSurvivalRulesScript.weather_for_day(day_cycle.current_day)
+			weather_state.new_day(tent_weather, random, int(clock.minutes))
 			_update_interface("Forecast: %s." % TentEraSurvivalRulesScript.WEATHER_NAMES[tent_weather])
 			_maybe_present_survival_decision()
 			_refresh_living_statuses()
@@ -871,7 +893,7 @@ func _apply_hourly_tent_survival(hour: int, survival_day := 0) -> void:
 				bare_handed_workers += 1
 		if bare_handed_workers > 0:
 			wellbeing = maxi(0, wellbeing - ceili(float(bare_handed_workers) / maxi(1, citizens.size())))
-	if tent_weather == TentEraSurvivalRulesScript.Weather.RAIN and hour > 0:
+	if weather_state.is_raining and hour > 0:
 		_apply_rain_damage()
 	if wellbeing_before_hour > 0 and wellbeing <= 0 and not citizens.is_empty():
 		var departing: Citizen = citizens.pop_back()
@@ -2034,6 +2056,7 @@ func _create_world() -> void:
 	sun.light_energy = 1.2
 	sun.shadow_enabled = true
 	add_child(sun)
+	_create_rain_particles()
 	_update_daylight()
 
 	camera = Camera3D.new()
@@ -2043,6 +2066,43 @@ func _create_world() -> void:
 	_create_trail_overlay()
 	_refresh_navigation_grid()
 	_create_selection_marker()
+
+
+func _create_rain_particles() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	rain_particles = GPUParticles3D.new()
+	rain_particles.name = "RainParticles"
+	rain_particles.position = Vector3(0.0, 20.0, 0.0)
+	var rain_material := ParticleProcessMaterial.new()
+	rain_material.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	rain_material.emission_box_extents = Vector3(BOARD_CELLS * CELL_SIZE * 0.5, 1.0, BOARD_CELLS * CELL_SIZE * 0.5)
+	rain_material.direction = Vector3(0.0, -1.0, 0.0)
+	rain_material.spread = 0.0
+	rain_material.initial_velocity_min = 15.0
+	rain_material.initial_velocity_max = 20.0
+	rain_material.gravity = Vector3(0.0, -25.0, 0.0)
+	rain_material.scale_min = 0.04
+	rain_material.scale_max = 0.08
+	rain_material.set_particle_flag(ParticleProcessMaterial.PARTICLE_FLAG_ALIGN_Y_TO_VELOCITY, true)
+	rain_material.flatness = 1.0
+	rain_particles.process_material = rain_material
+	rain_particles.amount = 2000
+	rain_particles.lifetime = 1.2
+	rain_particles.visibility_aabb = AABB(Vector3(-BOARD_CELLS * CELL_SIZE * 0.5, -5.0, -BOARD_CELLS * CELL_SIZE * 0.5), Vector3(BOARD_CELLS * CELL_SIZE, 25.0, BOARD_CELLS * CELL_SIZE))
+	rain_particles.amount_ratio = 0.0
+	rain_particles.emitting = false
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.04, 0.8)
+	var streak_material := StandardMaterial3D.new()
+	streak_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	streak_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	streak_material.albedo_color = Color("a8c4d9", 0.55)
+	streak_material.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	quad.material = streak_material
+	rain_particles.draw_pass_1 = quad
+	add_child(rain_particles)
+
 
 func _create_voxel_terrain() -> void:
 	if DisplayServer.get_name() == "headless":
@@ -9261,7 +9321,7 @@ func _drop_resource_pile(position: Vector3, resource_type: String, amount: int) 
 	_create_resource_pile(position, {resource_type: amount})
 
 func _decay_resource_piles() -> void:
-	var is_raining := tent_weather == TentEraSurvivalRulesScript.Weather.RAIN
+	var is_raining := weather_state.is_raining
 	for index in range(resource_piles.size() - 1, -1, -1):
 		var pile: Dictionary = resource_piles[index]
 		if pile.get("is_backpack", false):
