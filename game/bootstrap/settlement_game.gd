@@ -855,6 +855,7 @@ func _update_clock(delta: float) -> void:
 			_update_interface("Rain has stopped.")
 	if clock.hour() != previous_hour:
 		_apply_hourly_tent_survival(clock.hour())
+		_apply_hourly_bare_hands_penalty()
 	clock_label.text = "%s  %02d:%02d  x%d" % ["Night" if clock.is_night() else "Day", clock.hour(), clock.minute(), int(time_multiplier)]
 	_update_skip_night_button()
 	for event in events:
@@ -910,13 +911,6 @@ func _apply_hourly_tent_survival(hour: int, survival_day := 0) -> void:
 		total_loss += TentEraSurvivalRulesScript.hourly_wellbeing_loss(has_home, has_fire, tent_weather, night)
 	if total_loss > 0:
 		wellbeing = maxi(0, wellbeing - ceili(float(total_loss) / maxi(1, citizens.size())))
-	if not settlement.construction_gloves_available():
-		var bare_handed_workers := 0
-		for citizen in citizens:
-			if is_instance_valid(citizen) and citizen._is_physical_work():
-				bare_handed_workers += 1
-		if bare_handed_workers > 0:
-			wellbeing = maxi(0, wellbeing - ceili(float(bare_handed_workers) / maxi(1, citizens.size())))
 	if weather_state.is_raining and hour > 0:
 		_apply_rain_damage()
 	if wellbeing_before_hour > 0 and wellbeing <= 0 and not citizens.is_empty():
@@ -924,6 +918,17 @@ func _apply_hourly_tent_survival(hour: int, survival_day := 0) -> void:
 		departing.queue_free()
 		_add_message("A resident left the camp after wellbeing reached zero.")
 		_schedule_recovery_arrival()
+
+
+func _apply_hourly_bare_hands_penalty() -> void:
+	if settlement.construction_gloves_available():
+		return
+	var bare_handed_workers := 0
+	for citizen in citizens:
+		if is_instance_valid(citizen) and citizen._is_physical_work():
+			bare_handed_workers += 1
+	if bare_handed_workers > 0:
+		wellbeing = maxi(0, wellbeing - ceili(float(bare_handed_workers) / maxi(1, citizens.size())))
 
 
 func _apply_rain_damage() -> void:

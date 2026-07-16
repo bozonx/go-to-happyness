@@ -7,8 +7,10 @@ func _init() -> void:
 	super(&"courier_delivery")
 	resumable = false
 
-func score(_snapshot: WorldSnapshot, citizen: CitizenSnapshot, order: CitizenOrder, _blackboard: AIBlackboard) -> float:
+func score(snapshot: WorldSnapshot, citizen: CitizenSnapshot, order: CitizenOrder, _blackboard: AIBlackboard) -> float:
 	if citizen == null or order == null or order.kind != &"courier_delivery":
+		return 0.0
+	if wellbeing_too_low_for_work(snapshot):
 		return 0.0
 	if not bool(citizen.facts.value(&"work.courier.worker", false)):
 		return 0.0

@@ -292,6 +292,7 @@ func capture(sequence: int) -> WorldSnapshot:
 	var settlement_facts := AIFactSet.new({
 		&"population": citizens_by_id.size(),
 		&"era": simulation.settlement.era,
+		&"settlement.wellbeing": simulation.wellbeing,
 		&"workforce.world_data": workforce_world,
 		&"workforce.employment_center_position": simulation._employment_center_position(),
 		&"workforce.role_employers": _role_employers(),

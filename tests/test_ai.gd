@@ -288,6 +288,7 @@ func _init() -> void:
 	_test_reservations()
 	_test_runtime_configuration_and_identity()
 	_test_runtime_reconfiguration_updates_registered_brains()
+	_test_work_refusal_when_wellbeing_low()
 	_test_runtime_think_budget_is_fair()
 	quit(0)
 
@@ -2109,3 +2110,38 @@ func _test_relax_at_position_step() -> void:
 	assert(actuator.action_start_count == 1)
 	actuator.next_action_status = CitizenActuator.ActionStatus.SUCCEEDED
 	assert(step.run(context, 0.1) == BehaviorStep.Status.SUCCESS)
+
+
+func _snapshot_with_wellbeing(wellbeing: int, citizen: CitizenSnapshot) -> WorldSnapshot:
+	var settlement_facts := AIFactSet.new({&"settlement.wellbeing": wellbeing})
+	return WorldSnapshot.new(0, 0.0, 0.0, settlement_facts, {citizen.id: citizen})
+
+
+func _test_work_refusal_when_wellbeing_low() -> void:
+	var forestry_goal := ForestryGoalScript.new()
+	var construction_goal := ConstructionGoalScript.new()
+	var gathering_goal := GatheringGoalScript.new()
+	var excavation_goal := ExcavationGoalScript.new()
+	var farming_goal := FarmingGoalScript.new()
+	var service_goal := ServiceWorkGoalScript.new()
+	var factory_goal := FactoryWorkGoalScript.new()
+	var courier_goal := CourierDeliveryGoalScript.new()
+
+	var forestry_citizen := _forestry_citizen(1, false)
+	var forestry_order := _forestry_order(1, Vector3(3.0, 0.0, 0.0), &"tree:3:0")
+
+	var low_snapshot := _snapshot_with_wellbeing(25, forestry_citizen)
+	assert(is_zero_approx(forestry_goal.score(low_snapshot, forestry_citizen, forestry_order, AIBlackboard.new())))
+	assert(is_zero_approx(construction_goal.score(low_snapshot, forestry_citizen, forestry_order, AIBlackboard.new())))
+	assert(is_zero_approx(gathering_goal.score(low_snapshot, forestry_citizen, forestry_order, AIBlackboard.new())))
+	assert(is_zero_approx(excavation_goal.score(low_snapshot, forestry_citizen, forestry_order, AIBlackboard.new())))
+	assert(is_zero_approx(farming_goal.score(low_snapshot, forestry_citizen, forestry_order, AIBlackboard.new())))
+	assert(is_zero_approx(service_goal.score(low_snapshot, forestry_citizen, forestry_order, AIBlackboard.new())))
+	assert(is_zero_approx(factory_goal.score(low_snapshot, forestry_citizen, forestry_order, AIBlackboard.new())))
+	assert(is_zero_approx(courier_goal.score(low_snapshot, forestry_citizen, forestry_order, AIBlackboard.new())))
+
+	var ok_snapshot := _snapshot_with_wellbeing(30, forestry_citizen)
+	assert(not is_zero_approx(forestry_goal.score(ok_snapshot, forestry_citizen, forestry_order, AIBlackboard.new())))
+
+	var high_snapshot := _snapshot_with_wellbeing(75, forestry_citizen)
+	assert(not is_zero_approx(forestry_goal.score(high_snapshot, forestry_citizen, forestry_order, AIBlackboard.new())))
