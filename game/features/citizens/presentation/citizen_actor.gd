@@ -355,6 +355,8 @@ var ai_move_failure_reason := BehaviorStep.FailureReason.NONE
 
 var idle_indicator: Label3D
 var _privacy_blur: MeshInstance3D
+# Multiplier set by the game controller to fade the idle indicator with camera distance.
+var label_distance_alpha := 1.0
 
 signal employment_processing_finished(citizen: Citizen)
 
@@ -883,6 +885,8 @@ func _physics_process(delta: float) -> void:
 			pass
 	if idle_indicator != null:
 		_update_idle_indicator()
+		if idle_indicator.visible:
+			idle_indicator.modulate.a *= label_distance_alpha
 	_update_privacy_blur()
 	_update_animations(delta)
 

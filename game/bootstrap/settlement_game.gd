@@ -91,6 +91,9 @@ const SAWMILL_WORKER_DELIVERY_THRESHOLD := 4
 const COURIER_LATE_SECONDS := 12.0
 const DIG_RADIUS := 2.2
 const DIG_REACH := 6.0
+# In first-person view, 3D labels fade out with camera distance.
+const LABEL_FADE_NEAR := 8.0
+const LABEL_FADE_FAR := 22.0
 
 var settlement := SettlementState.new()
 var wood: int:
@@ -571,6 +574,7 @@ func _process(delta: float) -> void:
 	_update_building_research(delta)
 	_update_building_status_indicators(delta)
 	_update_gathering_indicators(delta)
+	_update_label_distance_fading()
 	if _is_work_time():
 		_update_couriers()
 		_worker_poll_timer -= delta
@@ -579,6 +583,67 @@ func _process(delta: float) -> void:
 			_update_workers()
 	if selected_builder != null and build_menu.visible:
 		_show_selected_citizen_menu()
+
+
+func _label_alpha_for_distance(dist: float) -> float:
+	if dist <= LABEL_FADE_NEAR:
+		return 1.0
+	if dist >= LABEL_FADE_FAR:
+		return 0.0
+	return 1.0 - (dist - LABEL_FADE_NEAR) / (LABEL_FADE_FAR - LABEL_FADE_NEAR)
+
+
+func _update_label_distance_fading() -> void:
+	if camera == null:
+		return
+	var cam_pos := camera.global_position
+	# Resource pile labels
+	for pile in resource_piles:
+		var pile_node := pile.get("node") as Node3D
+		if not is_instance_valid(pile_node):
+			continue
+		var label := pile_node.get_node_or_null("Label3D") as Label3D
+		if label == null:
+			continue
+		if not is_first_person:
+			label.modulate.a = 1.0
+			continue
+		var dist := cam_pos.distance_to(pile_node.global_position)
+		var alpha := _label_alpha_for_distance(dist)
+		if alpha <= 0.0:
+			label.visible = false
+		else:
+			label.visible = true
+			label.modulate.a = alpha
+	# Gather progress labels
+	for node in gather_progress_labels:
+		var gp_label := gather_progress_labels[node] as Label3D
+		if not is_instance_valid(gp_label):
+			continue
+		if not is_first_person:
+			gp_label.modulate.a = 1.0
+			continue
+		var node3d := node as Node3D
+		if not is_instance_valid(node3d):
+			continue
+		var dist := cam_pos.distance_to(node3d.global_position)
+		var alpha := _label_alpha_for_distance(dist)
+		if alpha <= 0.0:
+			gp_label.visible = false
+		else:
+			gp_label.visible = true
+			gp_label.modulate.a = alpha
+	# Citizen idle indicators
+	for citizen in citizens:
+		if not is_instance_valid(citizen):
+			continue
+		if not is_first_person:
+			citizen.label_distance_alpha = 1.0
+			continue
+		var dist := cam_pos.distance_to(citizen.global_position)
+		var alpha := _label_alpha_for_distance(dist)
+		citizen.label_distance_alpha = alpha
+
 
 func _update_workers() -> void:
 	_check_unstaffed_employment_center()
