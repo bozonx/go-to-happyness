@@ -25,15 +25,15 @@ func _init() -> void:
 	assert(simulation.hero_citizen.employment_state == Citizen.EmploymentState.NO_PERMANENT_WORK)
 	assert(simulation.is_first_person)
 	assert(simulation.player_citizen == simulation.hero_citizen)
-	assert(not simulation._player_can_command_labor())
+	assert(simulation._player_can_command_labor())
 	simulation.selected_builder = simulation.hero_citizen
 	simulation._refresh_build_menu()
 	assert(simulation.daily_order_submenu_btn.visible)
 	assert(not simulation.daily_order_submenu_btn.disabled)
 	assert(simulation.job_submenu_btn.visible)
-	assert(simulation.job_submenu_btn.disabled)
+	assert(not simulation.job_submenu_btn.disabled)
 	simulation._open_job_submenu()
-	assert(not simulation.build_menu_is_job_menu)
+	assert(simulation.build_menu_is_job_menu)
 	simulation._open_daily_order_submenu()
 	assert(simulation.build_menu_is_daily_order_menu)
 	var construction_daily_button: Button = null

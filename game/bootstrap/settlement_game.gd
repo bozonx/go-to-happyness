@@ -42,6 +42,7 @@ const TrailFieldServiceScript = preload("res://game/features/roads/application/t
 const TrailOverlayShader = preload("res://game/features/roads/presentation/trail_overlay.gdshader")
 const FirstPersonCrosshair = preload("res://game/features/citizens/presentation/first_person_crosshair.gd")
 const WeatherStateScript = preload("res://game/features/simulation/domain/weather_state.gd")
+const FirefliesEffectScript = preload("res://game/features/world/presentation/fireflies_effect.gd")
 
 
 const BOARD_CELLS := 48
@@ -224,6 +225,7 @@ var sun: DirectionalLight3D
 var world_environment: Environment
 var weather_state := WeatherStateScript.new()
 var rain_particles: GPUParticles3D
+var fireflies: Array[GPUParticles3D] = []
 var camera_target := Vector3.ZERO
 var camera_distance := 30.0
 var camera_yaw := 42.0
@@ -650,7 +652,16 @@ func _has_cook() -> bool:
 	if not _is_fire_lit(canteen):
 		return false
 	for citizen in citizens:
-		if citizen.specialization == "cook" and is_instance_valid(canteen) and citizen.global_position.distance_to(canteen_position) <= 2.2:
+		if not is_instance_valid(canteen):
+			continue
+		if not citizen.global_position.distance_to(canteen_position) <= 2.2:
+			continue
+		if not citizen.is_player_controlled:
+			if citizen.specialization == "cook":
+				return true
+			if citizen.daily_order_role == "cook" and citizen.has_active_daily_order():
+				return true
+		if citizen.work_position_locked and citizen.work_position_role == "cook":
 			return true
 	return false
 
@@ -679,15 +690,25 @@ func _officer_exists() -> bool:
 
 
 func _player_can_command_labor() -> bool:
-	return _officer_exists()
+	# Daily orders, earthworks, and workplace management (accept/dismiss/overtime)
+	# no longer require an officer. They are direct player actions.
+	return true
 
 
 func _labor_command_block_message() -> String:
+	return ""
+
+
+func _player_can_manage_permanent_professions() -> bool:
+	return _officer_exists()
+
+
+func _permanent_profession_block_message() -> String:
 	return "Автоматизация труда требует назначенного чиновника. До этого раздавайте указания жителям вручную."
 
 
 func _show_labor_command_blocked() -> void:
-	_update_interface(_labor_command_block_message())
+	_update_interface(_permanent_profession_block_message())
 
 
 func _registration_official() -> Citizen:
@@ -817,6 +838,12 @@ func _update_daylight() -> void:
 	if rain_particles != null:
 		rain_particles.amount_ratio = overcast
 		rain_particles.emitting = overcast > 0.0
+	# Fireflies appear when it gets dark; fade out with weather overcast
+	var night_factor := 1.0 - smoothstep(0.0, 0.28, solar_height)
+	var firefly_factor := night_factor * (1.0 - overcast * 0.5)
+	for ff in fireflies:
+		if is_instance_valid(ff):
+			ff.set_night_factor(firefly_factor)
 
 func _update_clock(delta: float) -> void:
 	var previous_hour := clock.hour()
@@ -2392,6 +2419,22 @@ func _create_tree(position_on_board: Vector3) -> void:
 	tree.add_child(collision_body)
 	terrain_blocked_cells[cell] = true
 	_refresh_navigation_grid()
+	_create_fireflies(position_on_board)
+
+func _create_fireflies(tree_position: Vector3) -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	var fireflies_node := FirefliesEffectScript.new()
+	fireflies_node.name = "Fireflies"
+	fireflies_node.position = tree_position + Vector3(0.0, 1.5, 0.0)
+	fireflies_node.amount = 25
+	fireflies_node.lifetime = 5.0
+	fireflies_node.explosiveness = 0.0
+	fireflies_node.randomness = 1.0
+	fireflies_node.local_coords = true
+	fireflies_node.visibility_aabb = AABB(Vector3(-4.0, -1.0, -4.0), Vector3(8.0, 7.0, 8.0))
+	add_child(fireflies_node)
+	fireflies.append(fireflies_node)
 
 func _create_entrance_stone() -> void:
 	entrance_stone = Node3D.new()
@@ -3276,7 +3319,7 @@ func _create_school_menu(ui: CanvasLayer) -> void:
 	school_menu.add_child(close_btn)
 
 func _toggle_school_development(role: String, pressed: bool) -> void:
-	if not _player_can_command_labor():
+	if not _player_can_manage_permanent_professions():
 		_show_labor_command_blocked()
 		return
 	school_developed_professions[role] = pressed
@@ -3286,7 +3329,7 @@ func _toggle_school_development(role: String, pressed: bool) -> void:
 		_update_interface("Stopped school training for %ss." % role.capitalize())
 
 func _start_school_training(role: String) -> void:
-	if not _player_can_command_labor():
+	if not _player_can_manage_permanent_professions():
 		_show_labor_command_blocked()
 		return
 	if selected_builder == null or selected_school == null:
@@ -3303,18 +3346,18 @@ func _show_school_menu() -> void:
 	house_menu.visible = false
 	building_menu.visible = false
 	
-	var can_command_labor := _player_can_command_labor()
-	var blocked_tooltip := _labor_command_block_message()
+	var can_manage_professions := _player_can_manage_permanent_professions()
+	var blocked_tooltip := _permanent_profession_block_message()
 	if selected_builder != null:
 		school_menu_title.text = "Student: %s\nSelect individual retraining (takes 10 mornings):" % selected_builder.role_label()
 		for btn in school_retrain_buttons:
-			btn.disabled = not can_command_labor
+			btn.disabled = not can_manage_professions
 			btn.tooltip_text = blocked_tooltip if btn.disabled else ""
 	else:
 		school_menu_title.text = "Student: None\n(Select a resident first to enable retraining)"
 		for btn in school_retrain_buttons:
 			btn.disabled = true
-			btn.tooltip_text = blocked_tooltip if not can_command_labor else "Select a resident first."
+			btn.tooltip_text = blocked_tooltip if not can_manage_professions else "Select a resident first."
 			
 	for role in school_developed_professions:
 		if school_dev_checkboxes.has(role):
@@ -3322,7 +3365,7 @@ func _show_school_menu() -> void:
 			cb.set_block_signals(true)
 			cb.button_pressed = school_developed_professions[role]
 			cb.set_block_signals(false)
-			cb.disabled = not can_command_labor
+			cb.disabled = not can_manage_professions
 			cb.tooltip_text = blocked_tooltip if cb.disabled else ""
 			
 	school_menu.visible = true
@@ -3604,15 +3647,12 @@ func _update_building_research(delta: float) -> void:
 		_cancel_active_building_research(true, "Research cancelled: researcher citizen is no longer available. Resources refunded.")
 		return
 
-	var is_hero_officer := worker == hero_citizen and worker.permanent_role == "official"
-	if is_hero_officer:
-		if worker.is_player_controlled or _registration_official() != worker:
-			# Wait until the hero is actually manning his post.
-			return
-	else:
-		if worker.state != Citizen.State.RESEARCHING:
-			_cancel_active_building_research(true, "Research cancelled: researcher stopped working. Resources refunded.")
-			return
+	# The researcher must be physically at the campfire work position
+	# (FPP researcher/official) or actively performing AI research work.
+	var is_at_research_position := worker.work_position_locked and worker.work_position_role in ["researcher", "official"] and worker.work_position_node == campfire_node
+	if not is_at_research_position and worker.state != Citizen.State.RESEARCHING:
+		_cancel_active_building_research(true, "Research cancelled: researcher stopped working. Resources refunded.")
+		return
 
 	var skill_name: String = tech.required_skill
 	var skill_val := float(worker.skills.get(skill_name, 0.0))
@@ -3631,10 +3671,12 @@ func _update_building_research(delta: float) -> void:
 		var skill_to_upgrade: String = str(completion.get("reward_skill", "construction"))
 		worker.skills[skill_to_upgrade] = minf(1.0, float(worker.skills.get(skill_to_upgrade, 0.0)) + 0.20)
 
-		if is_hero_officer and is_instance_valid(campfire_node):
-			worker.assign_official_work(campfire_node.get_meta("service_position", campfire_node.global_position))
-		else:
-			worker.idle()
+		# Do not disrupt a player-controlled citizen who is still at the post.
+		if not worker.is_player_controlled:
+			if worker.permanent_role == "official" and is_instance_valid(campfire_node):
+				worker.assign_official_work(campfire_node.get_meta("service_position", campfire_node.global_position))
+			else:
+				worker.idle()
 		var b_name := str(completion.get("display_name", tech_id))
 		_update_interface("Research completed: %s unlocked! %s skill improved by 20%%." % [b_name, skill_to_upgrade.capitalize()])
 
@@ -3682,10 +3724,15 @@ func _hide_research_menu() -> void:
 	campfire_menu.visible = true
 
 func _get_available_researcher(required_skill: String) -> Citizen:
-	# The hero, once appointed as the campfire/town-hall officer, becomes the
-	# settlement's researcher and civic manager.
-	if hero_citizen != null and hero_citizen.permanent_role == "official" and not hero_citizen.is_player_controlled:
-		return hero_citizen
+	# A player-controlled citizen physically occupying the campfire research
+	# position takes priority. In the tent era this is the temporary researcher
+	# or the official; in later eras it is the dedicated researcher.
+	for citizen in citizens:
+		if not citizen.is_player_controlled:
+			continue
+		if citizen.work_position_locked and citizen.work_position_role in ["researcher", "official"]:
+			if is_instance_valid(citizen.work_position_node) and citizen.work_position_node == campfire_node:
+				return citizen
 	var best_researcher: Citizen = null
 	var best_skill_val := -1.0
 	for citizen in citizens:
@@ -3784,8 +3831,9 @@ func _start_research(tech_id: String) -> void:
 	var research_pos := global_position
 	if is_instance_valid(campfire_node):
 		research_pos = campfire_node.get_meta("service_position", campfire_node.global_position)
-	# The hero-official researches from his post; other citizens move to the campfire.
-	if not (researcher == hero_citizen and researcher.permanent_role == "official"):
+	# Player-controlled researchers are already at the work position via FPP.
+	# AI researchers still need to walk to the campfire and enter research state.
+	if not researcher.is_player_controlled:
 		researcher.assign_research_work(research_pos)
 	
 	_update_interface("Research started: %s. %s is studying at the Campfire." % [tech.name, researcher.role_label()])
@@ -4129,8 +4177,8 @@ func _refresh_build_menu() -> void:
 		daily_order_submenu_btn.tooltip_text = ""
 	if job_submenu_btn != null:
 		job_submenu_btn.visible = citizen_actions_visible
-		job_submenu_btn.disabled = citizen_actions_visible and not _player_can_command_labor()
-		job_submenu_btn.tooltip_text = _labor_command_block_message() if job_submenu_btn.disabled else ""
+		job_submenu_btn.disabled = false
+		job_submenu_btn.tooltip_text = ""
 	if job_back_btn != null:
 		job_back_btn.visible = selected_exists and assignment_submenu_open
 	
@@ -4164,12 +4212,12 @@ func _refresh_build_menu() -> void:
 		var era_ok := is_daily_submenu or min_era <= settlement.era
 		var role_available := _is_daily_order_role_available(role) if is_daily_submenu else _is_role_available(role)
 		button.visible = selected_exists and ((is_daily_submenu and build_menu_is_daily_order_menu) or (not is_daily_submenu and build_menu_is_job_menu)) and era_ok and (not hero_only or selected_builder.is_hero)
-		var blocked_by_officer := not is_daily_submenu and role != "official" and not _player_can_command_labor()
+		var blocked_by_officer := not is_daily_submenu and role != "official" and not _player_can_manage_permanent_professions()
 		button.disabled = button.visible and (blocked_by_officer or not role_available)
 		if button.disabled and not role_available:
 			button.tooltip_text = "Нет рабочего места для этой роли."
 		elif button.disabled and blocked_by_officer:
-			button.tooltip_text = _labor_command_block_message()
+			button.tooltip_text = _permanent_profession_block_message()
 		else:
 			button.tooltip_text = ""
 		if button.visible:
@@ -4218,9 +4266,6 @@ func _refresh_build_menu() -> void:
 			_show_selected_citizen_menu()
 
 func _open_job_submenu() -> void:
-	if not _player_can_command_labor():
-		_show_labor_command_blocked()
-		return
 	build_menu_is_job_menu = true
 	build_menu_is_daily_order_menu = false
 	build_category = ""
@@ -4266,9 +4311,6 @@ func _set_selected_work_role(role: String, daily_order := false) -> void:
 		if selected_builder.employment_state == Citizen.EmploymentState.UNREGISTERED and _employment_center_position() != Vector3.INF:
 			selected_builder.request_no_permanent_work_registration()
 	elif role == "excavation":
-		if not _player_can_command_labor():
-			_show_labor_command_blocked()
-			return
 		_start_dig_assignment()
 		build_menu_is_job_menu = false
 		build_menu_is_daily_order_menu = false
@@ -4279,7 +4321,7 @@ func _set_selected_work_role(role: String, daily_order := false) -> void:
 		# the bootstrap deadlock of "you need an officer to appoint an officer".
 		_appoint_official(selected_builder)
 	else:
-		if not _player_can_command_labor():
+		if not _player_can_manage_permanent_professions():
 			_show_labor_command_blocked()
 			return
 		if selected_builder.has_no_permanent_work() or selected_builder.is_unregistered():
@@ -4333,7 +4375,10 @@ func _is_role_available(role: String) -> bool:
 	return false
 
 
-func _is_daily_order_role_available(_role: String) -> bool:
+func _is_daily_order_role_available(role: String) -> bool:
+	match role:
+		"cook": return _available_employer_capacity("cook") > 0
+		"gather_water": return bool(settlement.tools.get("bucket", false)) and not pond_positions.is_empty() and not warehouse_positions.is_empty()
 	return true
 
 
@@ -4456,9 +4501,6 @@ func _employer_capacity(role: String, building: Node3D) -> int:
 	return 1
 
 func _start_dig_assignment() -> void:
-	if not _player_can_command_labor():
-		_show_labor_command_blocked()
-		return
 	if selected_builder == null:
 		return
 	dig_mode = true
@@ -5135,9 +5177,6 @@ func _select_citizen(clicked_citizen: Citizen) -> void:
 	if clicked_citizen == null:
 		return
 	if selected_builder != null and selected_builder.can_handle_entry_logistics() and clicked_citizen != selected_builder:
-		if selected_builder.is_courier() and not _player_can_command_labor():
-			_show_labor_command_blocked()
-			return
 		selected_builder.courier_worker = clicked_citizen
 		_request_courier_dispatch()
 		_update_interface("%s assigned to this worker. Click another worker to reassign." % ("Courier" if selected_builder.is_courier() else "Daily courier"))
@@ -6276,11 +6315,21 @@ func _first_person_action_hint() -> String:
 					if player_citizen != null and player_citizen.permanent_role == "official" and player_citizen.work_position_node == target.node:
 						return "F — покинуть место чиновника"
 					return "F — занять место чиновника"
-				return "F — исследовать (требуется чиновник)"
+				return "F — исследовать"
 			var role := _role_for_workplace(target.node)
 			if role.is_empty():
 				return ""
-			return "F — занять рабочее место (%s)" % role.replace("_", " ")
+			match role:
+				"cook":
+					return "F — готовить еду"
+				"teacher":
+					return "F — учить"
+				"seller":
+					return "F — торговать"
+				"craftsman":
+					return "F — ремесло"
+				_:
+					return "F — занять рабочее место (%s)" % role.replace("_", " ")
 		"tree":
 			if settlement.era < SettlementState.Era.WOOD:
 				return "F: собрать ветки | Shift+F: собирать до полноты (%d%%)" % _resource_remaining_percent("branches")
@@ -7329,7 +7378,7 @@ func _workforce_roles() -> Array[String]:
 
 
 func _daily_order_roles() -> Array[String]:
-	return ["courier", "construction", "gather_branches", "gather_grass", "gather_water", "cleaning"]
+	return ["courier", "construction", "gather_branches", "gather_grass", "gather_water", "cleaning", "cook"]
 
 
 func _workforce_role_label(role: String) -> String:
@@ -7452,8 +7501,8 @@ func _add_workforce_summary(text: String) -> void:
 
 
 func _add_workforce_job_row(role: String, employed: int, pending: int) -> void:
-	var can_command_labor := _player_can_command_labor()
-	var blocked_tooltip := _labor_command_block_message()
+	var can_manage_professions := _player_can_manage_permanent_professions()
+	var blocked_tooltip := _permanent_profession_block_message()
 	var row := HBoxContainer.new()
 	row.custom_minimum_size = Vector2(424, 38)
 	var label := Label.new()
@@ -7466,8 +7515,8 @@ func _add_workforce_job_row(role: String, employed: int, pending: int) -> void:
 	dismiss.text = "Dismiss"
 	dismiss.tooltip_text = "Dismiss one resident from this job"
 	dismiss.custom_minimum_size = Vector2(78, 34)
-	dismiss.disabled = employed + pending == 0 or not can_command_labor
-	if not can_command_labor:
+	dismiss.disabled = employed + pending == 0 or not can_manage_professions
+	if not can_manage_professions:
 		dismiss.tooltip_text = blocked_tooltip
 	dismiss.pressed.connect(_remove_worker_from_role.bind(role))
 	row.add_child(dismiss)
@@ -7475,8 +7524,8 @@ func _add_workforce_job_row(role: String, employed: int, pending: int) -> void:
 	assign.text = "Assign"
 	assign.tooltip_text = "Assign a resident without permanent work"
 	assign.custom_minimum_size = Vector2(72, 34)
-	assign.disabled = (role != "official" and not can_command_labor) or not _is_role_available(role) or (limit >= 0 and employed + pending >= limit) or not _has_assignable_resident()
-	if assign.disabled and role != "official" and not can_command_labor:
+	assign.disabled = (role != "official" and not can_manage_professions) or not _is_role_available(role) or (limit >= 0 and employed + pending >= limit) or not _has_assignable_resident()
+	if assign.disabled and role != "official" and not can_manage_professions:
 		assign.tooltip_text = blocked_tooltip
 	assign.pressed.connect(_assign_unemployed_worker.bind(role))
 	row.add_child(assign)
@@ -7484,6 +7533,8 @@ func _add_workforce_job_row(role: String, employed: int, pending: int) -> void:
 
 
 func _add_unemployed_resident_row(citizen: Citizen) -> void:
+	var can_manage_professions := _player_can_manage_permanent_professions()
+	var blocked_tooltip := _permanent_profession_block_message()
 	var row := HBoxContainer.new()
 	row.custom_minimum_size = Vector2(424, 34)
 	var label := Label.new()
@@ -7494,9 +7545,9 @@ func _add_unemployed_resident_row(citizen: Citizen) -> void:
 	auto_button.text = "Registering" if citizen.employment_state == Citizen.EmploymentState.REGISTERING else "Register"
 	auto_button.tooltip_text = "Register this resident for workforce assignment"
 	auto_button.custom_minimum_size = Vector2(72, 30)
-	auto_button.disabled = not _player_can_command_labor() or citizen.employment_state != Citizen.EmploymentState.UNREGISTERED or _employment_center_position() == Vector3.INF
-	if not _player_can_command_labor():
-		auto_button.tooltip_text = _labor_command_block_message()
+	auto_button.disabled = not can_manage_professions or citizen.employment_state != Citizen.EmploymentState.UNREGISTERED or _employment_center_position() == Vector3.INF
+	if not can_manage_professions:
+		auto_button.tooltip_text = blocked_tooltip
 	auto_button.pressed.connect(_enable_auto_for_citizen.bind(citizen))
 	row.add_child(auto_button)
 	workforce_list.add_child(row)
@@ -7554,7 +7605,7 @@ func _has_assignable_resident() -> bool:
 
 
 func _remove_worker_from_role(role: String) -> void:
-	if not _player_can_command_labor():
+	if not _player_can_manage_permanent_professions():
 		_show_labor_command_blocked()
 		return
 	for citizen in citizens:
@@ -7574,7 +7625,7 @@ func _remove_worker_from_role(role: String) -> void:
 
 
 func _assign_unemployed_worker(role: String) -> void:
-	if role != "official" and not _player_can_command_labor():
+	if role != "official" and not _player_can_manage_permanent_professions():
 		_show_labor_command_blocked()
 		return
 	if not _is_role_available(role):
@@ -7602,7 +7653,7 @@ func _assign_unemployed_worker(role: String) -> void:
 
 
 func _enable_auto_for_citizen(citizen: Citizen) -> void:
-	if not _player_can_command_labor():
+	if not _player_can_manage_permanent_professions():
 		_show_labor_command_blocked()
 		return
 	if not is_instance_valid(citizen) or citizen.is_player_controlled:
@@ -7774,9 +7825,6 @@ func _handle_campfire_primary_action() -> void:
 
 
 func _toggle_campfire_acceptance() -> void:
-	if not _player_can_command_labor():
-		_show_labor_command_blocked()
-		return
 	if not is_instance_valid(selected_campfire):
 		return
 	selected_building = selected_campfire
@@ -7784,9 +7832,6 @@ func _toggle_campfire_acceptance() -> void:
 
 
 func _dismiss_campfire_worker() -> void:
-	if not _player_can_command_labor():
-		_show_labor_command_blocked()
-		return
 	if not is_instance_valid(selected_campfire):
 		return
 	selected_building = selected_campfire
@@ -8126,18 +8171,18 @@ func _show_building_menu() -> void:
 		var definition := BuildingCatalog.definition_for(building_type)
 		building_menu_title.text = "%s\n%s" % [str(definition.get("name", building_type.capitalize())), "Press Delete to mark this building for demolition."]
 		building_cook_button.visible = building_type in ["cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant"]
-		var can_command_labor := _player_can_command_labor()
-		var blocked_tooltip := _labor_command_block_message()
-		building_cook_button.disabled = not can_command_labor or selected_builder == null or selected_builder.is_player_controlled or not bool(selected_building.get_meta("accepting_workers", true))
-		building_cook_button.tooltip_text = blocked_tooltip if not can_command_labor else ""
+		var can_manage_professions := _player_can_manage_permanent_professions()
+		var profession_blocked_tooltip := _permanent_profession_block_message()
+		building_cook_button.disabled = not can_manage_professions or selected_builder == null or selected_builder.is_player_controlled or not bool(selected_building.get_meta("accepting_workers", true))
+		building_cook_button.tooltip_text = profession_blocked_tooltip if not can_manage_professions else ""
 		
 		building_teacher_button.visible = building_type == "school"
-		building_teacher_button.disabled = not can_command_labor or selected_builder == null or selected_builder.is_player_controlled or not bool(selected_building.get_meta("accepting_workers", true))
-		building_teacher_button.tooltip_text = blocked_tooltip if not can_command_labor else ""
+		building_teacher_button.disabled = not can_manage_professions or selected_builder == null or selected_builder.is_player_controlled or not bool(selected_building.get_meta("accepting_workers", true))
+		building_teacher_button.tooltip_text = profession_blocked_tooltip if not can_manage_professions else ""
 		
 		building_seller_button.visible = building_type in ["straw_trade_tent", "tarp_trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market"]
-		building_seller_button.disabled = not can_command_labor or selected_builder == null or selected_builder.is_player_controlled or not bool(selected_building.get_meta("accepting_workers", true))
-		building_seller_button.tooltip_text = blocked_tooltip if not can_command_labor else ""
+		building_seller_button.disabled = not can_manage_professions or selected_builder == null or selected_builder.is_player_controlled or not bool(selected_building.get_meta("accepting_workers", true))
+		building_seller_button.tooltip_text = profession_blocked_tooltip if not can_manage_professions else ""
 
 		var is_workplace := _is_staffed_workplace(selected_building)
 		building_accept_workers_button.visible = is_workplace
@@ -8147,22 +8192,24 @@ func _show_building_menu() -> void:
 		building_upgrade_button.text = "Upgrade to %s" % str(BuildingCatalog.definition_for(next_upgrade).get("name", next_upgrade))
 		building_upgrade_button.disabled = not settlement.can_upgrade_building(building_type)
 		building_upgrade_button.tooltip_text = "" if not building_upgrade_button.disabled else "Research the next level and gather its resources."
+		var can_command_labor := _player_can_command_labor()
+		var labor_blocked_tooltip := _labor_command_block_message()
 		building_accept_workers_button.disabled = not can_command_labor
-		building_accept_workers_button.tooltip_text = blocked_tooltip if not can_command_labor else ""
+		building_accept_workers_button.tooltip_text = labor_blocked_tooltip if not can_command_labor else ""
 		building_cancel_construction_button.visible = false
 		building_relight_button.visible = building_type in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"] and not _is_fire_lit(selected_building)
 		
 		var officer := _workplace_worker(selected_building)
 		building_overtime_button.visible = is_workplace and not _is_work_time() and officer != null
 		building_overtime_button.disabled = not can_command_labor
-		building_overtime_button.tooltip_text = blocked_tooltip if not can_command_labor else ""
+		building_overtime_button.tooltip_text = labor_blocked_tooltip if not can_command_labor else ""
 		
 		if is_workplace:
 			var accepting := bool(selected_building.get_meta("accepting_workers", true))
 			building_accept_workers_button.text = "Stop accepting workers" if accepting else "Start accepting workers"
 			building_accept_workers_button.tooltip_text = "This workplace is priority #%d among open workplaces of the same profession." % _workplace_priority_position(selected_building) if accepting else "Reopen this workplace and move it to the front of the hiring queue."
 			building_dismiss_worker_button.disabled = officer == null or not can_command_labor
-			building_dismiss_worker_button.tooltip_text = blocked_tooltip if not can_command_labor else ""
+			building_dismiss_worker_button.tooltip_text = labor_blocked_tooltip if not can_command_labor else ""
 		
 		var next_y := 104.0
 		if building_accept_workers_button.visible:
@@ -8209,9 +8256,6 @@ func _relight_selected_fire() -> void:
 
 
 func _toggle_selected_workplace_acceptance() -> void:
-	if not _player_can_command_labor():
-		_show_labor_command_blocked()
-		return
 	if not is_instance_valid(selected_building) or not _is_staffed_workplace(selected_building):
 		return
 	var accepting := bool(selected_building.get_meta("accepting_workers", true))
@@ -8228,9 +8272,6 @@ func _toggle_selected_workplace_acceptance() -> void:
 
 
 func _dismiss_selected_workplace_worker() -> void:
-	if not _player_can_command_labor():
-		_show_labor_command_blocked()
-		return
 	var worker := _workplace_worker(selected_building)
 	if worker == null:
 		return
@@ -8557,7 +8598,7 @@ func _cover_warehouse_with_tarp() -> void:
 
 
 func _assign_cook_at_campfire() -> void:
-	if not _player_can_command_labor():
+	if not _player_can_manage_permanent_professions():
 		_show_labor_command_blocked()
 		return
 	if selected_builder == null:
@@ -8574,7 +8615,7 @@ func _assign_cook_at_campfire() -> void:
 
 
 func _assign_teacher_at_school() -> void:
-	if not _player_can_command_labor():
+	if not _player_can_manage_permanent_professions():
 		_show_labor_command_blocked()
 		return
 	if selected_builder == null:
@@ -8591,7 +8632,7 @@ func _assign_teacher_at_school() -> void:
 
 
 func _assign_seller_at_market() -> void:
-	if not _player_can_command_labor():
+	if not _player_can_manage_permanent_professions():
 		_show_labor_command_blocked()
 		return
 	if selected_builder == null:
@@ -8674,7 +8715,7 @@ func _activate_employment_centre(centre: Node3D) -> void:
 
 
 func _set_manual_specialist_employment(citizen: Citizen, role: String) -> bool:
-	if not _player_can_command_labor():
+	if not _player_can_manage_permanent_professions():
 		_show_labor_command_blocked()
 		return false
 	if citizen.employment_state != Citizen.EmploymentState.NO_PERMANENT_WORK:
@@ -9449,9 +9490,6 @@ func _check_unstaffed_employment_center() -> void:
 
 
 func _call_worker_overtime() -> void:
-	if not _player_can_command_labor():
-		_show_labor_command_blocked()
-		return
 	if not is_instance_valid(selected_building):
 		return
 	var workers_found := false

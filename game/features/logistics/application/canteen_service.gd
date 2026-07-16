@@ -4,32 +4,42 @@ extends RefCounted
 var simulation: Node
 var _meal_requests: Dictionary = {}
 
+# Whether the current meal is cooked. Set when start_meal() runs and used by
+# on_meal_finished() to apply the correct nutritional effect.
+var _current_meal_cooked: bool = false
+
 
 func configure(next_simulation: Node) -> void:
 	simulation = next_simulation
 
 
 func start_meal(hour: int) -> void:
-	if not is_instance_valid(simulation.canteen) or not simulation._is_fire_lit(simulation.canteen):
+	var has_canteen := is_instance_valid(simulation.canteen)
+	if not has_canteen:
+		# No kitchen/cooking campfire yet: residents eat raw rations straight from
+		# the backpack or warehouse. Food is consumed by the daily survival update.
 		for citizen in simulation.citizens:
 			if not citizen.is_player_controlled:
-				citizen.receive_meal(false)
-		simulation._update_interface("%02d:00 meal missed: no canteen." % hour)
+				citizen.receive_meal(true, false, true)
+		simulation._update_interface("%02d:00 meal: raw rations from stores." % hour)
 		return
-	if not simulation._has_cook():
-		for citizen in simulation.citizens:
-			if not citizen.is_player_controlled:
-				citizen.receive_meal(false)
-		simulation._update_interface("%02d:00 meal missed: the canteen needs a cook." % hour)
-		return
+
+	var fire_lit: bool = simulation._is_fire_lit(simulation.canteen)
+	var has_cook: bool = simulation._has_cook()
+	_current_meal_cooked = fire_lit and has_cook
+
 	for citizen in simulation.citizens:
 		# The cook keeps the canteen staffed during the lunch service and receives
 		# their park break after the rush.
-		if citizen.specialization == "cook" and hour == 13:
+		var is_cook: bool = citizen.specialization == "cook" or (citizen.daily_order_role == "cook" and citizen.has_active_daily_order())
+		if is_cook and hour == 13:
 			continue
 		if citizen.ai_id > 0 and citizen.is_available_for_schedule():
 			_meal_requests[citizen.ai_id] = true
-	simulation._update_interface("%02d:00 meal service started. Residents are heading to the canteen." % hour)
+	if _current_meal_cooked:
+		simulation._update_interface("%02d:00 meal service started. Residents are heading to the canteen." % hour)
+	else:
+		simulation._update_interface("%02d:00 meal started. No cook or fire is out; residents will eat raw rations." % hour)
 
 
 func update_canteen_delivery() -> void:
@@ -58,16 +68,17 @@ func on_canteen_delivery_finished(worker: Citizen, amount: int) -> void:
 	simulation.pending_canteen_delivery = false
 	simulation.pending_canteen_carrier = null
 	simulation.pending_canteen_delivery_amount = 0
-	if worker.specialization == "cook":
+	var is_cook: bool = worker.specialization == "cook" or (worker.daily_order_role == "cook" and worker.has_active_daily_order())
+	if is_cook:
 		worker.assign_canteen_work(simulation.canteen_position)
 	simulation._update_interface("Canteen received %d food. Stock: %d." % [amount, simulation.canteen_food])
 
 
 func on_meal_finished(citizen: Citizen) -> void:
-	var served: bool = is_instance_valid(simulation.canteen) and simulation._has_cook() and simulation.canteen_food > 0
+	var served: bool = is_instance_valid(simulation.canteen) and simulation.canteen_food > 0
 	if served:
 		simulation.canteen_food -= 1
-	citizen.receive_meal(served)
+	citizen.receive_meal(served, _current_meal_cooked, true)
 	_meal_requests.erase(citizen.ai_id)
 	if not served:
 		simulation._update_interface("Canteen ran out of food. A worker missed their meal.")

@@ -86,6 +86,7 @@ const DAILY_ORDER_ROLES := {
 	"gather_grass": true,
 	"gather_water": true,
 	"cleaning": true,
+	"cook": true,
 }
 
 const SKIN_COLORS := [
@@ -935,7 +936,7 @@ func _process_courier_wait(delta: float) -> void:
 
 func _process_construction(delta: float) -> void:
 	if is_instance_valid(construction_site):
-		_move_to(construction_position, delta)
+		_move_to(construction_position, delta, false, false)
 	else:
 		state = State.IDLE
 		construction_site = null
@@ -2432,14 +2433,22 @@ func get_satisfaction_cap() -> float:
 		cap -= float(penalty)
 	return maxf(10.0, cap)
 
-func receive_meal(served: bool) -> void:
-	if served:
-		hunger = minf(100.0, hunger + 35.0)
-		satisfaction = minf(get_satisfaction_cap(), satisfaction + 8.0)
-		buffs["canteen_meal"] = 8.0
-	else:
+func receive_meal(served: bool, cooked := true, water_available := true) -> void:
+	if not served:
 		hunger = maxf(0.0, hunger - 18.0)
 		satisfaction = maxf(0.0, satisfaction - 12.0)
+		return
+	if cooked:
+		hunger = minf(100.0, hunger + 35.0)
+		if water_available:
+			satisfaction = minf(get_satisfaction_cap(), satisfaction + 8.0)
+		else:
+			satisfaction = minf(get_satisfaction_cap(), satisfaction + 4.0)
+		buffs["canteen_meal"] = 8.0
+	else:
+		# Raw emergency ration: half the nutrition, no satisfaction bonus.
+		# Used in the tent era when there is no cook or the cooking fire is out.
+		hunger = minf(100.0, hunger + 17.5)
 
 func _update_effects(delta: float) -> void:
 	for buff_id in buffs.keys():

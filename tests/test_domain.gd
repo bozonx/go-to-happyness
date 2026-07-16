@@ -25,12 +25,14 @@ class FakeCanteenSimulation extends Node:
 	var canteen_food := 2
 	var last_interface_message := ""
 	var workers_updated := false
+	var fire_lit := true
+	var has_cook := true
 
 	func _is_fire_lit(_canteen: Node3D) -> bool:
-		return true
+		return fire_lit
 
 	func _has_cook() -> bool:
-		return true
+		return has_cook
 
 	func _update_interface(message: String) -> void:
 		last_interface_message = message
@@ -105,6 +107,7 @@ func _init() -> void:
 	_test_workforce_policy()
 	_test_citizen_task_state()
 	_test_citizen_state_display_queue()
+	_test_citizen_work_position_lock()
 	_test_grid_routing()
 	_test_weighted_grid_routing()
 	_test_navigation_grid_revision()
@@ -118,6 +121,8 @@ func _init() -> void:
 	_test_building_queue_keeps_ai_citizens()
 	_test_construction_site_uses_building_entrance()
 	_test_canteen_meal_requests()
+	_test_canteen_raw_rations()
+	_test_no_canteen_raw_rations()
 	_test_construction_progress()
 	_test_construction_reservation_blocks_other_spending()
 	_test_construction_progress_limited_by_materials()
@@ -754,6 +759,40 @@ func _test_citizen_state_display_queue() -> void:
 	citizen.free()
 
 
+func _test_citizen_work_position_lock() -> void:
+	var building := Node3D.new()
+	building.position = Vector3(10.0, 0.0, 10.0)
+	
+	var player := Citizen.new()
+	player.is_player_controlled = true
+	player.state = Citizen.State.IDLE
+	player.enter_work_position(Vector3(1.0, 0.0, 1.0), "researcher", building, true)
+	assert(player.work_position_locked)
+	assert(player.state == Citizen.State.WORK_POSITION)
+	assert(player.work_position_role == "researcher")
+	assert(player.work_position_node == building)
+	assert(player.work_position_temporary)
+	player.exit_work_position()
+	assert(not player.work_position_locked)
+	assert(player.state == Citizen.State.IDLE)
+	player.free()
+	
+	var ai := Citizen.new()
+	ai.is_player_controlled = false
+	ai.state = Citizen.State.AI_MOVING
+	ai.active_role = "teacher"
+	ai.enter_work_position(Vector3(2.0, 0.0, 2.0), "teacher", building, true, false)
+	assert(ai.work_position_locked)
+	assert(ai.state == Citizen.State.AI_MOVING)
+	ai.exit_work_position()
+	assert(not ai.work_position_locked)
+	assert(ai.state == Citizen.State.AI_MOVING)
+	assert(ai.active_role == "teacher")
+	ai.free()
+	
+	building.free()
+
+
 func _test_canteen_meal_requests() -> void:
 	var simulation := FakeCanteenSimulation.new()
 	simulation.canteen = Node3D.new()
@@ -778,6 +817,46 @@ func _test_canteen_meal_requests() -> void:
 	assert(not service.is_meal_requested(citizen.ai_id))
 	citizen.free()
 	simulation.canteen.free()
+	simulation.free()
+
+
+func _test_canteen_raw_rations() -> void:
+	var simulation := FakeCanteenSimulation.new()
+	simulation.canteen = Node3D.new()
+	simulation.has_cook = false
+	var citizen := Citizen.new()
+	citizen.ai_id = 42
+	citizen.hunger = 50.0
+	simulation.citizens.append(citizen)
+	var service := CanteenServiceScript.new()
+	service.configure(simulation)
+
+	service.start_meal(13)
+	assert(service.is_meal_requested(citizen.ai_id))
+	assert(simulation.last_interface_message.contains("raw rations"))
+
+	service.on_meal_finished(citizen)
+	assert(simulation.canteen_food == 1)
+	assert(is_equal_approx(citizen.hunger, 67.5))
+	citizen.free()
+	simulation.canteen.free()
+	simulation.free()
+
+
+func _test_no_canteen_raw_rations() -> void:
+	var simulation := FakeCanteenSimulation.new()
+	var citizen := Citizen.new()
+	citizen.ai_id = 42
+	citizen.hunger = 50.0
+	simulation.citizens.append(citizen)
+	var service := CanteenServiceScript.new()
+	service.configure(simulation)
+
+	service.start_meal(13)
+	assert(not service.is_meal_requested(citizen.ai_id))
+	assert(simulation.last_interface_message.contains("raw rations from stores"))
+	assert(is_equal_approx(citizen.hunger, 67.5))
+	citizen.free()
 	simulation.free()
 
 

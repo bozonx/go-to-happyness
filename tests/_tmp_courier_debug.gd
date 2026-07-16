@@ -11,9 +11,9 @@ func _init() -> void:
 
 	var cell := Vector2i(12, 12)
 	var site_position := Vector3(12.0, 0.0, 12.0)
-	var blueprint := BuildingBlueprints.get_blueprint("warehouse")
+	var blueprint := BuildingBlueprints.get_blueprint("straw_warehouse")
 	simulation.building_registry.reserve(cell, site_position, blueprint.footprint)
-	simulation._create_construction_site(cell, "warehouse", site_position, 0, blueprint, blueprint.footprint)
+	simulation._create_construction_site(cell, "straw_warehouse", site_position, 0, blueprint, blueprint.footprint)
 
 	for res in ["logs", "boards", "grass", "branches"]:
 		simulation.settlement.add(res, 50)
@@ -31,7 +31,7 @@ func _init() -> void:
 	simulation._assign_daily_order(courier, "courier")
 
 	var frames := 0
-	var max_frames := 2000
+	var max_frames := 3000
 	while frames < max_frames:
 		await physics_frame
 		frames += 1
@@ -39,12 +39,14 @@ func _init() -> void:
 			print("completed at frame %d" % frames)
 			break
 		var site = simulation.construction_sites[0]
-		if frames % 200 == 0:
-			print("frame=%d site_progress=%.3f delivered=%s reserved=%s courier_state=%s courier_pos=%s tasks=%d" % [
+		if frames % 100 == 0:
+			print("frame=%d site_progress=%.3f delivered=%s reserved=%s builder_state=%s builder_pos=%s courier_state=%s courier_pos=%s tasks=%d" % [
 				frames,
 				site.progress,
 				site.delivered_materials,
 				site.reserved_materials,
+				builder.state,
+				builder.global_position,
 				courier.state,
 				courier.global_position,
 				simulation.courier_dispatcher.available_tasks().size()
