@@ -292,6 +292,7 @@ func _init() -> void:
 	_test_courier_dispatcher_cleanup_removes_invalid_tasks()
 	_test_courier_dispatcher_cleanup_unassigns_dead_courier()
 	_test_courier_dispatcher_publish_does_not_duplicate()
+	_test_courier_dispatcher_publishes_outside_regular_work_hours()
 	_test_native_courier_goal()
 	_test_production_sleep_actuator()
 	_test_order_reconciliation()
@@ -1443,6 +1444,18 @@ func _test_courier_dispatcher_publish_does_not_duplicate() -> void:
 	sim.free()
 
 
+func _test_courier_dispatcher_publishes_outside_regular_work_hours() -> void:
+	var sim := FakeCourierSimulation.new()
+	sim.work_time = false
+	root.add_child(sim)
+	var dispatcher := CourierDispatcher.new()
+	dispatcher.configure(sim)
+	dispatcher.dispatch()
+	assert(sim.publish_count == 1, "Dispatcher must publish tasks for couriers with an active night-work order")
+	root.remove_child(sim)
+	sim.free()
+
+
 func _test_native_courier_goal() -> void:
 	var goal := CourierDeliveryGoalScript.new()
 	var actuator := FakeActuator.new(1)
@@ -2170,12 +2183,14 @@ class FakeCourierSimulation extends Node:
 	var warehouse_positions: Array[Vector3] = [Vector3.ZERO]
 	var runtime_seconds := 0.0
 	var valid_result := true
+	var work_time := true
+	var publish_count := 0
 
 	func _is_work_time() -> bool:
-		return true
+		return work_time
 
 	func _publish_courier_tasks(_dispatcher: RefCounted) -> void:
-		pass
+		publish_count += 1
 
 	func _is_courier_task_valid(_task: RefCounted) -> bool:
 		return valid_result

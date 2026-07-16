@@ -575,7 +575,7 @@ func _process(delta: float) -> void:
 	_update_building_status_indicators(delta)
 	_update_gathering_indicators(delta)
 	_update_label_distance_fading()
-	if _is_work_time():
+	if _is_work_time() or _has_active_night_work_order():
 		_update_couriers()
 		_worker_poll_timer -= delta
 		if _worker_poll_timer <= 0.0:
@@ -1930,7 +1930,7 @@ func _on_dew_collected(courier: Citizen, collector_position: Vector3) -> void:
 
 
 func _request_courier_dispatch() -> void:
-	if _is_work_time():
+	if _is_work_time() or _has_active_night_work_order():
 		_update_couriers()
 		if citizen_ai != null:
 			citizen_ai.request_decision_refresh()

@@ -38,13 +38,13 @@ func roll_daily_event(context: EventContext, rng: RandomNumberGenerator) -> RefC
 ## Resolves the player's choice. Returns resolved outcomes for the presentation
 ## layer to apply (RESOURCE_CHANGE, WELLBEING_CHANGE, WORKER_BUSY, MESSAGE).
 ## SET_FLAG and DELAYED are handled internally.
-func resolve_choice(choice_index: int, context: EventContext, rng: RandomNumberGenerator) -> Array:
+func resolve_choice(choice_index: int, context: EventContext, rng: RandomNumberGenerator) -> Array[EventOutcome]:
 	if pending_event == null:
 		return []
 	if choice_index < 0 or choice_index >= pending_event.choices.size():
 		return []
 	var choice: RefCounted = pending_event.choices[choice_index]
-	var resolved: Array = []
+	var resolved: Array[EventOutcome] = []
 	for outcome in choice.outcomes:
 		_resolve_outcome(outcome, context, rng, resolved)
 	if choice.sets_flag != &"":
@@ -58,8 +58,8 @@ func resolve_choice(choice_index: int, context: EventContext, rng: RandomNumberG
 
 ## Called on day change. Applies any delayed effects whose trigger day has arrived.
 ## Returns resolved outcomes for the presentation layer to apply.
-func advance_day(day: int, context: EventContext, rng: RandomNumberGenerator) -> Array:
-	var resolved: Array = []
+func advance_day(day: int, context: EventContext, rng: RandomNumberGenerator) -> Array[EventOutcome]:
+	var resolved: Array[EventOutcome] = []
 	var remaining: Array = []
 	for effect in pending_delayed:
 		if effect.trigger_day <= day:
@@ -101,7 +101,7 @@ func _weighted_pick(eligible: Array, rng: RandomNumberGenerator) -> RefCounted:
 	return eligible.back()
 
 
-func _resolve_outcome(outcome: RefCounted, context: EventContext, rng: RandomNumberGenerator, resolved: Array) -> void:
+func _resolve_outcome(outcome: RefCounted, context: EventContext, rng: RandomNumberGenerator, resolved: Array[EventOutcome]) -> void:
 	if outcome.random_chance < 1.0 and not outcome.random_outcomes.is_empty():
 		var success: bool = rng.randf() < outcome.random_chance
 		var half: int = outcome.random_outcomes.size() / 2
@@ -125,4 +125,4 @@ func _resolve_outcome(outcome: RefCounted, context: EventContext, rng: RandomNum
 			if outcome.delayed_outcome != null:
 				pending_delayed.append(DelayedEffectScript.create(context.day + outcome.delay_days, outcome.delayed_outcome))
 		_:
-			resolved.append(outcome)
+			resolved.append(outcome as EventOutcome)

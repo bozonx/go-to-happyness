@@ -20,8 +20,6 @@ func dispatch() -> void:
 	if simulation == null:
 		return
 	_cleanup_invalid_tasks()
-	if not simulation._is_work_time():
-		return
 	simulation._publish_courier_tasks(self)
 	_publish_manual_worker_tasks()
 	_cleanup_invalid_tasks()
