@@ -1176,9 +1176,24 @@ func _publish_courier_tasks(dispatcher: RefCounted) -> void:
 		for resource_type in site.required_materials:
 			var required := int(site.required_materials[resource_type])
 			var delivered := int(site.delivered_materials.get(resource_type, 0))
-			var reserved := int(site.reserved_materials.get(resource_type, 0))
+			var in_transit := int(site.reserved_materials.get(resource_type, 0))
 			var source := _construction_material_source(str(resource_type), site_position)
-			if delivered + reserved < required and not source.is_empty():
+			if source.is_empty():
+				continue
+			if str(source.get("kind", "storage")) == "pile":
+				# Pile resources are not tracked by settlement reservations; just
+				# publish a delivery task while the site still needs them.
+				if delivered + in_transit < required:
+					var pile_source_id := str(source.get("id", "pile"))
+					dispatcher.publish(StringName("construction_%s_%s_%s" % [site.node.get_instance_id(), resource_type, pile_source_id]), CourierTask.Kind.CONSTRUCTION, 70, source.position, site.node.global_position, {"site": site, "resource": resource_type, "source": source})
+				continue
+			var total_reserved := settlement.construction_reserved_for_site(site.site_id, str(resource_type))
+			var still_needed := maxi(0, required - delivered - total_reserved)
+			if still_needed > 0:
+				settlement.reserve_for_construction(site.site_id, str(resource_type), still_needed)
+			total_reserved = settlement.construction_reserved_for_site(site.site_id, str(resource_type))
+			var storage_reserved := maxi(0, total_reserved - in_transit)
+			if storage_reserved > 0:
 				var source_id := str(source.get("id", "storage"))
 				dispatcher.publish(StringName("construction_%s_%s_%s" % [site.node.get_instance_id(), resource_type, source_id]), CourierTask.Kind.CONSTRUCTION, 70, source.position, site.node.global_position, {"site": site, "resource": resource_type, "source": source})
 	if not warehouse_positions.is_empty() and branches > 0:
@@ -1316,11 +1331,19 @@ func _is_courier_task_valid(task: RefCounted) -> bool:
 				return false
 			var resource_type := str(task.payload.resource)
 			var source: Dictionary = task.payload.get("source", {})
-			var source_available := settlement.amount(resource_type) > 0
+			var total_reserved := settlement.construction_reserved_for_site(site.site_id, resource_type)
+			var in_transit := int(site.reserved_materials.get(resource_type, 0))
+			var source_available := false
 			if str(source.get("kind", "storage")) == "pile":
 				var pile := _resource_pile_for_node(source.get("node") as Node3D)
 				source_available = not pile.is_empty() and int(pile.get("resources", {}).get(resource_type, 0)) > 0
-			return int(site.delivered_materials.get(resource_type, 0)) + int(site.reserved_materials.get(resource_type, 0)) < int(site.required_materials.get(resource_type, 0)) and source_available
+			else:
+				var storage_reserved := maxi(0, total_reserved - in_transit)
+				source_available = storage_reserved > 0
+			# Outstanding need is measured by what is neither delivered nor already
+			# being carried. Storage reservations pre-commit the full requirement, so
+			# they must not be counted here or the task would look complete at once.
+			return int(site.delivered_materials.get(resource_type, 0)) + in_transit < int(site.required_materials.get(resource_type, 0)) and source_available
 		CourierTask.Kind.BUILDING_SUPPLY:
 			var building: Node3D = task.payload.building
 			if not is_instance_valid(building):
@@ -1501,6 +1524,7 @@ func _on_construction_material_delivered(_courier: Citizen, site_node: Node3D, r
 		var site := construction.site_for_node(site_node)
 		if site != null:
 			site.reserved_materials[resource_type] = maxi(0, int(site.reserved_materials.get(resource_type, 0)) - amount)
+			settlement.release_for_construction(site.site_id, resource_type, amount)
 		_update_interface("Construction site is full; courier returned %d %s to storage." % [amount, resource_type])
 	courier_dispatcher.complete_for(_courier)
 	_request_courier_dispatch()
@@ -4190,13 +4214,14 @@ func _refresh_build_menu() -> void:
 		var building_type: String = button.get_meta("build_type", "")
 		var menu_state: Dictionary = button.get_meta("build_menu_state", building_availability_service.menu_state_with_inventory(building_type, pocket))
 		var enabled := bool(menu_state.enabled)
+		var affordable := bool(menu_state.affordable)
 		button.disabled = not enabled
 		button.tooltip_text = "" if enabled else building_availability_service.message_for_reason(menu_state.reason)
 		button.modulate = Color(1, 1, 1, 1) if enabled else Color(0.55, 0.55, 0.6, 1)
 		var cost_label: Label = button.get_meta("cost_label")
 		if cost_label != null:
 			cost_label.text = str(menu_state.cost_text)
-			cost_label.add_theme_color_override("font_color", Color("cdd6df") if enabled else Color("d98a86"))
+			cost_label.add_theme_color_override("font_color", Color("cdd6df") if affordable else Color("d98a86"))
 
 	if build_menu_title != null:
 		if build_menu_is_job_menu:
@@ -7574,7 +7599,7 @@ func _refresh_campfire_menu() -> void:
 			var has_smithy := settlement.has_building("smithy")
 			var has_mkt := settlement.has_building("earth_market")
 			var pop_ok := housing_slots >= citizens.size()
-			var clay_ok := settlement.amount("clay") >= 5
+			var clay_ok := settlement.available_amount("clay") >= 5
 			var money_ok := settlement.money >= 5
 			var trade_ok := settlement.trade_sales >= 3
 			var shovel_ok := settlement._has_tools(["shovel"])
@@ -7595,7 +7620,7 @@ func _refresh_campfire_menu() -> void:
 			var has_lodge := settlement.has_building("clay_lodge")
 			var has_mkt := settlement.has_building("clay_market")
 			var water_ok := water >= citizens.size()
-			var logs_ok := settlement.amount("logs") >= 10
+			var logs_ok := settlement.available_amount("logs") >= 10
 			var money_ok := settlement.money >= 10
 			
 			req_text = "Requirements for Wood Era:\n"
@@ -7629,7 +7654,7 @@ func _refresh_campfire_menu() -> void:
 			var has_pref := settlement.has_building("stone_prefecture")
 			var has_mkt := settlement.has_building("stone_market")
 			var has_mw := settlement.has_building("masonry_workshop")
-			var stone_ok := settlement.amount("stone") >= 20
+			var stone_ok := settlement.available_amount("stone") >= 20
 			var money_ok := settlement.money >= 20
 			
 			req_text = "Requirements for Brick Era:\n"
@@ -8438,7 +8463,7 @@ func _refresh_warehouse_menu() -> void:
 		accept_cb.text = "Accept"
 		accept_cb.position = Vector2(170, y_offset)
 		accept_cb.size = Vector2(80, 28)
-		accept_cb.button_pressed = accepted
+		accept_cb.set_pressed_no_signal(accepted)
 		accept_cb.toggled.connect(_toggle_warehouse_accept.bind(resource_type))
 		warehouse_menu.add_child(accept_cb)
 		var dump_btn := Button.new()

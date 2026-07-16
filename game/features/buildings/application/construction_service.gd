@@ -93,7 +93,14 @@ func start_site(cell: Vector2i, building_type: String, position: Vector3, rotati
 
 	var required: Dictionary = BuildingCatalog.definition_for(building_type).get("costs", {}).duplicate(true)
 	var site := ConstructionSite.new(cell, building_type, position, site_node, fill, blueprint, required)
+	site.site_id = site_node.get_instance_id()
 	sites.append(site)
+	# Commit any resources that are already in storage to this site so they cannot
+	# be accidentally spent on research, trade, or another building.
+	for resource_type in required:
+		var needed := int(required.get(resource_type, 0))
+		if needed > 0:
+			runtime.settlement.reserve_for_construction(site.site_id, str(resource_type), needed)
 	_add_selector(site_node, display_footprint)
 	runtime.workers_changed.call()
 	return site
@@ -104,17 +111,19 @@ func tick(delta: float) -> void:
 		var site := sites[index]
 		if not is_instance_valid(site.node) or site.node.is_queued_for_deletion():
 			# The site node was freed externally (e.g. mid-delivery cancellation).
-			# Return any reserved materials and discard the site record.
+			# Return in-transit cargo to storage and release any remaining reservations.
 			for resource_type in site.reserved_materials:
 				runtime.settlement.add(resource_type, int(site.reserved_materials[resource_type]))
+			runtime.settlement.release_site_construction_reservations(site.site_id)
 			sites.remove_at(index)
 			continue
-		if not site.is_supplied():
-			_update_supply_label(site)
-			continue
 		_update_supply_label(site)
+		var material_progress: float = site.material_progress()
+		if material_progress <= 0.0:
+			continue
 		var builder_power: float = runtime.builder_power.call(site.node)
 		var progress := ConstructionProgress.advance(site.progress, delta, runtime.duration, builder_power)
+		progress = minf(progress, material_progress)
 		if index == 0:
 			runtime.set_status.call("Building %s: %d builder(s), %.1fx speed." % [site.building_type, runtime.builder_count.call(site.node), builder_power])
 		site.progress = progress
@@ -147,6 +156,7 @@ func accept_delivery(site_node: Node3D, resource_type: String, amount: int) -> b
 		return false
 	site.delivered_materials[resource_type] = int(site.delivered_materials.get(resource_type, 0)) + amount
 	site.reserved_materials[resource_type] = maxi(0, int(site.reserved_materials.get(resource_type, 0)) - amount)
+	runtime.settlement.release_for_construction(site.site_id, resource_type, amount)
 	return true
 
 
@@ -167,12 +177,13 @@ func cancel_site(site_node: Node3D) -> bool:
 		if site.node != site_node:
 			continue
 		# Delivered stock is returned at the normal cancellation rate. In-transit
-		# reservations are returned in full so cargo can never vanish.
+		# cargo is returned in full so resources can never vanish.
 		for resource_type in site.delivered_materials:
 			var refund := maxi(1, floori(int(site.delivered_materials[resource_type]) * 0.5))
 			runtime.settlement.add(resource_type, refund)
 		for resource_type in site.reserved_materials:
 			runtime.settlement.add(resource_type, int(site.reserved_materials[resource_type]))
+		runtime.settlement.release_site_construction_reservations(site.site_id)
 		for citizen in runtime.citizens:
 			if citizen.construction_site == site_node and citizen.state in [Citizen.State.TO_CONSTRUCTION_PICKUP, Citizen.State.TO_CONSTRUCTION_SITE]:
 				citizen.carried_amount = 0

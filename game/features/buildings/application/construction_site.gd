@@ -10,6 +10,7 @@ var position: Vector3
 var node: Node3D
 var fill: MeshInstance3D
 var blueprint: Dictionary
+var site_id: int
 var progress := 0.0
 var modules_built := 0
 var required_materials: Dictionary
@@ -32,3 +33,16 @@ func is_supplied() -> bool:
 		if int(delivered_materials.get(resource_type, 0)) < int(required_materials[resource_type]):
 			return false
 	return true
+
+
+## How far the building can be built based on the resources that have actually
+## been delivered to the site. Each required unit counts equally.
+func material_progress() -> float:
+	var delivered_total := 0
+	var required_total := 0
+	for resource_type in required_materials:
+		delivered_total += int(delivered_materials.get(resource_type, 0))
+		required_total += int(required_materials[resource_type])
+	if required_total <= 0:
+		return 1.0
+	return float(delivered_total) / float(required_total)

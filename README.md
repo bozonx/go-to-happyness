@@ -74,6 +74,7 @@ Other citizens can be controlled only for movement (observation / rescue).
 - **Balanced warehouse mode**: In the campfire orders menu you can enable balanced storage, which spreads each resource evenly across warehouses by fill percentage instead of always filling the nearest one.
 - **Daily Courier order**: In the daily orders menu, assign a citizen as a Courier for the day. They will move ground piles (and backpack leftovers if any) into the warehouse.
 - **Warehouse reservation**: When a courier is assigned to move resources to a warehouse, the destination room is reserved immediately so another delivery cannot steal the space before arrival.
+- **Construction sites**: You can place a building even if you do not have all required resources. The missing resources are shown in red in the construction menu. Available resources are reserved for the site, couriers transport them from warehouses, and builders can start working as soon as the first materials arrive. Construction pauses when it catches up to the delivered resources and resumes when more arrive.
 - **FPP storage interaction**: In first-person mode, stand next to a warehouse and press `F` to deposit one pocket item or `Shift+F` to deposit everything. With an empty pocket, `F` opens a menu to take goods from the warehouse.
 
 ## Cheats

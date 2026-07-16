@@ -180,6 +180,7 @@ func apply_tent_start(reset_progress := true) -> void:
 	warehouses.clear()
 	warehouse_types.clear()
 	warehouse_ever_built = false
+	construction_reservations.clear()
 	backpack["food"] = TENT_STARTING_FOOD
 	backpack["water"] = TENT_STARTING_WATER
 	backpack["tarp"] = 1
@@ -262,8 +263,73 @@ var virtual_stock: Dictionary:
 	get: return backpack
 ## Becomes true the first time any warehouse is completed and never reverts.
 var warehouse_ever_built: bool = false
+
+## Resources committed to active construction sites. Maps a stable site id to
+## a Dictionary of resource_type -> reserved amount. These resources are still on
+## a warehouse/backpack, but they cannot be spent elsewhere until delivered or
+## the site is cancelled.
+var construction_reservations: Dictionary = {}
+
+
 func storage_weight(resource_type: String) -> float:
 	return float(STORAGE_WEIGHTS.get(resource_type, 1.0))
+
+
+func _construction_reserved_total(resource_type: String) -> int:
+	var total := 0
+	for site_id in construction_reservations:
+		var site_reservations: Dictionary = construction_reservations[site_id]
+		total += int(site_reservations.get(resource_type, 0))
+	return total
+
+
+## Amount of a resource that is not already committed to a construction site.
+## Other spending (research, upgrades, trade, another building) must use this value.
+func available_amount(resource_type: String) -> int:
+	return maxi(0, amount(resource_type) - _construction_reserved_total(resource_type))
+
+
+## Reserves up to `amount` units of `resource_type` for the given construction site.
+## Returns how many units were actually reserved.
+func reserve_for_construction(site_id: int, resource_type: String, amount: int) -> int:
+	if amount <= 0:
+		return 0
+	var reserve := mini(amount, available_amount(resource_type))
+	if reserve <= 0:
+		return 0
+	var site: Dictionary = construction_reservations.get(site_id, {})
+	site[resource_type] = int(site.get(resource_type, 0)) + reserve
+	construction_reservations[site_id] = site
+	return reserve
+
+
+## Releases a previously reserved amount for a construction site.
+func release_for_construction(site_id: int, resource_type: String, amount: int) -> void:
+	var site: Dictionary = construction_reservations.get(site_id, {})
+	var current := int(site.get(resource_type, 0))
+	var release := mini(amount, current)
+	if release <= 0:
+		return
+	current -= release
+	if current <= 0:
+		site.erase(resource_type)
+	else:
+		site[resource_type] = current
+	if site.is_empty():
+		construction_reservations.erase(site_id)
+	else:
+		construction_reservations[site_id] = site
+
+
+## Releases all reservations belonging to a single construction site.
+func release_site_construction_reservations(site_id: int) -> void:
+	construction_reservations.erase(site_id)
+
+
+## Returns how many units of a resource are reserved for a specific construction site.
+func construction_reserved_for_site(site_id: int, resource_type: String) -> int:
+	var site: Dictionary = construction_reservations.get(site_id, {})
+	return int(site.get(resource_type, 0))
 
 
 func can_cover_warehouse_with_tarp() -> bool:
@@ -515,6 +581,8 @@ func add_cheat(resource_type: String, value: int) -> int:
 	var remaining := to_add
 	while remaining > 0:
 		var target := _find_least_stocked_warehouse(resource_type)
+		if target < 0:
+			break
 		var accepted := warehouses[target].add(resource_type, remaining, STORAGE_WEIGHTS)
 		var added := remaining - accepted
 		remaining = accepted
@@ -543,9 +611,11 @@ func _distribute_remove(resource_type: String, value: int) -> void:
 
 
 func _find_least_stocked_warehouse(resource_type: String) -> int:
-	var best := 0
-	var best_amount := warehouses[0].amount(resource_type)
-	for i in range(1, warehouses.size()):
+	var best := -1
+	var best_amount := INF
+	for i in range(warehouses.size()):
+		if not warehouses[i].accepts(resource_type):
+			continue
 		var count := warehouses[i].amount(resource_type)
 		if count < best_amount:
 			best_amount = count
@@ -563,11 +633,21 @@ func fill_least_warehouse_cheat(percent: float) -> Dictionary:
 	if not warehouse_ever_built or warehouses.is_empty():
 		return result
 	var threshold := clampf(percent / 100.0, 0.0, 1.0)
+	var era_res := era_resources()
 	var candidates: Array[int] = []
 	for i in range(warehouses.size()):
-		var used := warehouses[i].used_units(STORAGE_WEIGHTS)
-		if used < float(warehouses[i].capacity) * threshold:
-			candidates.append(i)
+		var warehouse := warehouses[i]
+		var used := warehouse.used_units(STORAGE_WEIGHTS)
+		if used >= float(warehouse.capacity) * threshold:
+			continue
+		var accepts_any := false
+		for resource_type in era_res:
+			if warehouse.accepts(resource_type):
+				accepts_any = true
+				break
+		if not accepts_any:
+			continue
+		candidates.append(i)
 	if candidates.is_empty():
 		return result
 	candidates.sort_custom(func(a: int, b: int) -> bool:
@@ -576,17 +656,18 @@ func fill_least_warehouse_cheat(percent: float) -> Dictionary:
 	var target_index := candidates[0]
 	var target := warehouses[target_index]
 	result["target_index"] = target_index
-	var era_res := era_resources()
-	if era_res.is_empty():
+	var accepted_era_res: Array[String] = []
+	for resource_type in era_res:
+		if target.accepts(resource_type):
+			accepted_era_res.append(resource_type)
+	if accepted_era_res.is_empty():
 		return result
 	var fill_target := float(target.capacity) * threshold
 	var free_units := maxf(0.0, fill_target - target.used_units(STORAGE_WEIGHTS))
 	if free_units <= 0.0:
 		return result
-	var share := free_units / float(era_res.size())
-	for resource_type in era_res:
-		if not target.accepts(resource_type):
-			continue
+	var share := free_units / float(accepted_era_res.size())
+	for resource_type in accepted_era_res:
 		var weight := storage_weight(resource_type)
 		if weight <= 0.0:
 			continue
@@ -657,7 +738,7 @@ func can_afford_building(building_type: String) -> bool:
 	if not is_building_unlocked(building_type):
 		return false
 	for resource_type in BuildingCatalog.cost_resources(building_type):
-		if amount(resource_type) < BuildingCatalog.cost_for_resource(building_type, resource_type):
+		if available_amount(resource_type) < BuildingCatalog.cost_for_resource(building_type, resource_type):
 			return false
 	return BuildingCatalog.era_for(building_type) <= era
 
@@ -685,7 +766,7 @@ func can_upgrade_building(building_type: String) -> bool:
 	if BuildingCatalog.era_for(target) > era:
 		return false
 	for resource_type in BuildingCatalog.cost_resources(target):
-		if amount(resource_type) < BuildingCatalog.cost_for_resource(target, resource_type):
+		if available_amount(resource_type) < BuildingCatalog.cost_for_resource(target, resource_type):
 			return false
 	return true
 
@@ -734,7 +815,7 @@ func buy_tool(tool_id: String, price: int) -> bool:
 
 
 func sell(resource_type: String, quantity: int, unit_price: int) -> bool:
-	if quantity <= 0 or amount(resource_type) < quantity:
+	if quantity <= 0 or available_amount(resource_type) < quantity:
 		return false
 	add(resource_type, -quantity)
 	money += quantity * unit_price
@@ -747,13 +828,13 @@ func can_advance_to(next_era: Era, population: int, housing_slots: int) -> bool:
 		Era.EARTH:
 			return era == Era.TENT and _has_tools(["axe", "hand_saw", "shovel", "bucket"]) and is_research_completed("earth_buildings")
 		Era.CLAY:
-			return era == Era.EARTH and has_building("earth_assembly") and has_building("smithy") and has_building("earth_market") and housing_slots >= population and clay >= 5 and money >= 5 and trade_sales >= 3 and _has_tools(["hoe"]) and has_building("toilet_earth_lvl3")
+			return era == Era.EARTH and has_building("earth_assembly") and has_building("smithy") and has_building("earth_market") and housing_slots >= population and available_amount("clay") >= 5 and money >= 5 and trade_sales >= 3 and _has_tools(["hoe"]) and has_building("toilet_earth_lvl3")
 		Era.WOOD:
-			return era == Era.CLAY and has_building("clay_lodge") and has_building("clay_market") and water >= population and logs >= 10 and money >= 10 and has_building("toilet_clay_lvl3")
+			return era == Era.CLAY and has_building("clay_lodge") and has_building("clay_market") and available_amount("water") >= population and available_amount("logs") >= 10 and money >= 10 and has_building("toilet_clay_lvl3")
 		Era.STONE:
 			return era == Era.WOOD and has_building("wood_town_hall") and has_building("wood_market") and money >= 15 and _has_tools(["pickaxe"]) and has_building("house_lvl3") and has_building("toilet_wood_lvl3")
 		Era.BRICK:
-			return era == Era.STONE and has_building("stone_prefecture") and has_building("stone_market") and has_building("masonry_workshop") and stone >= 20 and money >= 20 and has_building("toilet_stone_lvl3")
+			return era == Era.STONE and has_building("stone_prefecture") and has_building("stone_market") and has_building("masonry_workshop") and available_amount("stone") >= 20 and money >= 20 and has_building("toilet_stone_lvl3")
 	return false
 
 
@@ -789,7 +870,7 @@ func can_afford_research(research_id: String) -> bool:
 	if not BuildingCatalog.RESEARCH_COSTS.has(research_id):
 		return false
 	for resource_type in BuildingCatalog.research_resources(research_id):
-		if amount(resource_type) < BuildingCatalog.research_cost(research_id, resource_type): return false
+		if available_amount(resource_type) < BuildingCatalog.research_cost(research_id, resource_type): return false
 	return true
 
 

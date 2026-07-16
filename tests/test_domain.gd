@@ -119,6 +119,8 @@ func _init() -> void:
 	_test_construction_site_uses_building_entrance()
 	_test_canteen_meal_requests()
 	_test_construction_progress()
+	_test_construction_reservation_blocks_other_spending()
+	_test_construction_progress_limited_by_materials()
 	_test_construction_service_cancellation()
 	_test_completed_construction_cleans_temporary_ui()
 	_test_demolition_service_completion()
@@ -144,6 +146,8 @@ func _init() -> void:
 	_test_warehouse_reservation_at_assignment()
 	_test_balanced_warehouse_mode()
 	_test_backpack_invariants()
+	_test_warehouse_cheat_respects_accept_filters()
+	_test_dump_preserves_warehouse_accept_filters()
 	quit(0)
 
 
@@ -448,7 +452,8 @@ func _test_building_availability_service() -> void:
 	assert(str(warehouse_menu.cost_text) == "free")
 	var campfire_menu: Dictionary = service.menu_state("campfire")
 	assert(bool(campfire_menu.visible))
-	assert(not bool(campfire_menu.enabled))
+	assert(bool(campfire_menu.enabled))
+	assert(not bool(campfire_menu.affordable))
 	var upgrade_menu: Dictionary = service.menu_state("campfire_lvl2")
 	assert(not bool(upgrade_menu.visible))
 	assert(upgrade_menu.reason == BuildingAvailabilityServiceScript.REASON_UPGRADE_ONLY)
@@ -456,7 +461,8 @@ func _test_building_availability_service() -> void:
 	state.branches = 6
 	var campfire_placement: Dictionary = service.placement_state("campfire")
 	assert(bool(campfire_placement.allowed))
-	assert(service.cost_text("campfire") == "4 branches")
+	assert(bool(campfire_placement.affordable))
+	assert(service.cost_text("campfire") == "6/4 branches")
 	state.branches = 8
 	state.grass = 6
 	var temporary_tent_placement: Dictionary = service.placement_state("tent")
@@ -470,9 +476,13 @@ func _test_building_availability_service() -> void:
 	var pocket_campfire_menu: Dictionary = service.menu_state_with_inventory("campfire", pocket)
 	assert(bool(pocket_campfire_menu.visible))
 	assert(bool(pocket_campfire_menu.enabled))
+	assert(bool(pocket_campfire_menu.affordable))
 	var pocket_campfire_placement: Dictionary = service.placement_state_with_inventory("campfire", pocket)
 	assert(bool(pocket_campfire_placement.allowed))
-	assert(not bool(service.placement_state_with_inventory("campfire", {"branches": 3}).allowed))
+	assert(bool(pocket_campfire_placement.affordable))
+	var partial_campfire_placement: Dictionary = service.placement_state_with_inventory("campfire", {"branches": 3})
+	assert(bool(partial_campfire_placement.allowed))
+	assert(not bool(partial_campfire_placement.affordable))
 
 
 func _test_citizen_living_status_service() -> void:
@@ -1170,6 +1180,66 @@ func _test_construction_progress() -> void:
 	assert(ConstructionProgress.advance(0.9, 4.0, 4.0, 1.0) == 1.0)
 
 
+func _test_construction_reservation_blocks_other_spending() -> void:
+	var scene_root := Node3D.new()
+	var runtime := ConstructionRuntime.new()
+	runtime.scene_root = scene_root
+	runtime.settlement = SettlementState.new()
+	runtime.settlement.apply_tent_start()
+	runtime.settlement.add_warehouse("warehouse")
+	runtime.settlement.add("branches", 4)
+	runtime.building_registry = BuildingRegistry.new()
+	runtime.citizens = []
+	runtime.workers_changed = func() -> void: pass
+	runtime.navigation_changed = func() -> void: pass
+	var service := ConstructionService.new()
+	service.configure(runtime)
+
+	var site := service.start_site(Vector2i(1, 1), "campfire", Vector3(1, 0, 1))
+	assert(runtime.settlement.construction_reserved_for_site(site.site_id, "branches") == 4)
+	assert(runtime.settlement.available_amount("branches") == 0)
+	assert(not runtime.settlement.can_afford_building("campfire"))
+	assert(service.cancel_site(site.node))
+	assert(runtime.settlement.construction_reserved_for_site(site.site_id, "branches") == 0)
+	assert(runtime.settlement.available_amount("branches") == 4)
+	scene_root.free()
+
+
+func _test_construction_progress_limited_by_materials() -> void:
+	var scene_root := Node3D.new()
+	var runtime := ConstructionRuntime.new()
+	runtime.scene_root = scene_root
+	runtime.settlement = SettlementState.new()
+	runtime.building_registry = BuildingRegistry.new()
+	runtime.citizens = []
+	runtime.duration = 1.0
+	runtime.builder_power = func(_site: Node3D) -> float: return 1.0
+	runtime.builder_count = func(_site: Node3D) -> int: return 1
+	runtime.set_status = func(_text: String) -> void: pass
+	runtime.workers_changed = func() -> void: pass
+	runtime.navigation_changed = func() -> void: pass
+	runtime.building_completed = func(_cell: Vector2i, _type: String, _position: Vector3, _building: Node3D, _blueprint: Dictionary) -> void: pass
+	var service := ConstructionService.new()
+	service.configure(runtime)
+
+	var site := service.start_site(Vector2i.ZERO, "campfire", Vector3.ZERO)
+	# No materials means no progress.
+	site.progress = 0.0
+	service.tick(10.0)
+	assert(site.progress == 0.0)
+	# Deliver half the required branches: progress can only reach 50%.
+	assert(service.accept_delivery(site.node, "branches", 2))
+	site.progress = 0.0
+	service.tick(10.0)
+	assert(site.progress > 0.0 and site.progress <= 0.5)
+	# Deliver the rest; the building can now finish.
+	var remaining := int(site.required_materials.get("branches", 0)) - 2
+	assert(service.accept_delivery(site.node, "branches", remaining))
+	service.tick(10.0)
+	assert(site.progress == 1.0)
+	scene_root.free()
+
+
 func _test_construction_service_cancellation() -> void:
 	var scene_root := Node3D.new()
 	var runtime := ConstructionRuntime.new()
@@ -1591,3 +1661,46 @@ func _test_weather_state() -> void:
 	assert(rain.update(rain.rain_end_minute))
 	assert(not rain.is_raining)
 	assert(not rain.update(rain.rain_end_minute + 1.0))
+
+
+func _test_warehouse_cheat_respects_accept_filters() -> void:
+	var state := SettlementState.new()
+	state.add_warehouse("warehouse")
+	state.add_warehouse("warehouse")
+	state.warehouse_ever_built = true
+
+	# Disable every resource in the first warehouse.
+	for resource_type in state.era_resources():
+		state.set_warehouse_accepted(0, resource_type, false)
+
+	# add_cheat should skip the disabled warehouse entirely.
+	var overflow := state.add_cheat("branches", 10)
+	assert(overflow == 0)
+	assert(state.warehouse_amount("branches", 0) == 0)
+	assert(state.warehouse_amount("branches", 1) == 10)
+
+	# fill_least_warehouse_cheat should also ignore the disabled warehouse.
+	var result := state.fill_least_warehouse_cheat(90.0)
+	assert(result.filled)
+	assert(int(result.target_index) == 1)
+
+	# When every warehouse rejects everything, the cheat adds nothing.
+	for resource_type in state.era_resources():
+		state.set_warehouse_accepted(1, resource_type, false)
+	var empty_result := state.fill_least_warehouse_cheat(90.0)
+	assert(not empty_result.filled)
+
+
+func _test_dump_preserves_warehouse_accept_filters() -> void:
+	var state := SettlementState.new()
+	state.add_warehouse("warehouse")
+	state.warehouse_ever_built = true
+	state.add("branches", 5)
+
+	state.set_warehouse_accepted(0, "branches", false)
+	state.set_warehouse_accepted(0, "grass", true)
+	state.dump_warehouse_resource(0, "branches", 5)
+
+	assert(not state.warehouse_accepts(0, "branches"))
+	assert(state.warehouse_accepts(0, "grass"))
+	assert(state.warehouse_amount("branches", 0) == 0)

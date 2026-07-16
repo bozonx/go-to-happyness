@@ -74,7 +74,7 @@ func capture(sequence: int) -> WorldSnapshot:
 					construction_position = demolition_site.building.global_position
 			elif simulation._preferred_construction_site() != null:
 				var construction_site: ConstructionSite = simulation._preferred_construction_site()
-				if construction_site.is_supplied() and is_instance_valid(construction_site.node):
+				if is_instance_valid(construction_site.node):
 					construction_mode = &"construction"
 					construction_target_key = _target_key(&"construction", construction_site.node.global_position)
 					construction_position = construction_site.node.global_position
@@ -97,7 +97,7 @@ func capture(sequence: int) -> WorldSnapshot:
 					daily_construction_position = daily_demolition_site.building.global_position
 			elif simulation._preferred_construction_site() != null:
 				var daily_construction_site: ConstructionSite = simulation._preferred_construction_site()
-				if daily_construction_site.is_supplied() and is_instance_valid(daily_construction_site.node):
+				if is_instance_valid(daily_construction_site.node):
 					daily_construction_mode = &"construction"
 					daily_construction_target_key = _target_key(&"construction", daily_construction_site.node.global_position)
 					daily_construction_position = daily_construction_site.node.global_position
