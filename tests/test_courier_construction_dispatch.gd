@@ -36,6 +36,22 @@ func _init() -> void:
 	)
 	assert(construction_tasks.size() >= 2, "Expected construction tasks for multiple sites, got %d" % construction_tasks.size())
 
+	# Dispatch must result in an actual stock-to-site delivery, not merely a task
+	# visible to the director. Keep a single daily courier idle at the warehouse
+	# so the full order/goal/actuator route is exercised.
+	var courier: Citizen = simulation.citizens[0]
+	courier.global_position = Vector3.ZERO
+	courier.idle()
+	simulation._assign_daily_order(courier, "courier")
+	var branch_delivery_completed := false
+	for _frame in range(1200):
+		await physics_frame
+		var campfire_site: ConstructionSite = simulation.construction.site_for_node(simulation.construction_sites[0].node)
+		if campfire_site != null and int(campfire_site.delivered_materials.get("branches", 0)) > 0:
+			branch_delivery_completed = true
+			break
+	assert(branch_delivery_completed, "Courier should deliver a construction material from the warehouse to the site")
+
 	root.remove_child(simulation)
 	simulation.free()
 	quit(0)

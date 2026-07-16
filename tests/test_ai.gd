@@ -2209,6 +2209,12 @@ func _test_work_refusal_when_wellbeing_low() -> void:
 	assert(is_zero_approx(service_goal.score(low_snapshot, forestry_citizen, forestry_order, AIBlackboard.new())))
 	assert(is_zero_approx(factory_goal.score(low_snapshot, forestry_citizen, forestry_order, AIBlackboard.new())))
 	assert(is_zero_approx(courier_goal.score(low_snapshot, forestry_citizen, forestry_order, AIBlackboard.new())))
+	var active_courier := CitizenSnapshot.new(2, Vector3.ZERO, false, true, AIFactSet.new({
+		&"work.courier.worker": true,
+		&"work.courier.in_progress": true,
+	}))
+	var delivery_order := CitizenOrder.new(2, &"courier_delivery", &"logistics.courier", 0.7)
+	assert(is_equal_approx(courier_goal.score(_snapshot_with_wellbeing(25, active_courier), active_courier, delivery_order, AIBlackboard.new()), 1.0), "An in-progress delivery must finish even when wellbeing drops")
 
 	var ok_snapshot := _snapshot_with_wellbeing(30, forestry_citizen)
 	assert(not is_zero_approx(forestry_goal.score(ok_snapshot, forestry_citizen, forestry_order, AIBlackboard.new())))
