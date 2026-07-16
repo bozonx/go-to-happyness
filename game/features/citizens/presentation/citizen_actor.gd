@@ -1536,11 +1536,10 @@ func _reset_route(destination: Vector3) -> void:
 	navigation_failed = false
 
 func _update_route_progress(distance_before: float, distance_after: float, delta: float, direction: Vector3) -> void:
-	if distance_after + ROUTE_PROGRESS_EPSILON < minf(distance_before, route_best_distance):
+	if distance_after < route_best_distance - ROUTE_PROGRESS_EPSILON:
 		route_best_distance = distance_after
 		route_no_progress_time = 0.0
 		return
-	route_best_distance = minf(route_best_distance, distance_after)
 	route_no_progress_time += delta
 	if route_no_progress_time < ROUTE_RETRY_INTERVAL:
 		return
