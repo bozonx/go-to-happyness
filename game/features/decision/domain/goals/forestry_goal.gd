@@ -11,7 +11,6 @@ func _init() -> void:
 	# A personal need cancels the current cycle and releases its tree. The director
 	# will publish a fresh order after the citizen becomes available again.
 	resumable = false
-	blocks_personal_needs = true
 
 
 func score(

@@ -602,7 +602,7 @@ func _update_label_distance_fading() -> void:
 		var pile_node := pile.get("node") as Node3D
 		if not is_instance_valid(pile_node):
 			continue
-		var label := pile_node.get_node_or_null("Label3D") as Label3D
+		var label := pile_node.get_node_or_null("PileLabel") as Label3D
 		if label == null:
 			continue
 		if not is_first_person:
@@ -1483,7 +1483,7 @@ func _take_resource_from_pile_at(position: Vector3, resource_type: String, max_a
 			if amount > 0:
 				labels.append("%s x%d" % [str(piled_resource).to_upper(), amount])
 		labels.sort()
-		var label := pile_node.get_node_or_null("Label3D") as Label3D
+		var label := pile_node.get_node_or_null("PileLabel") as Label3D
 		if label != null:
 			label.text = "\n".join(labels)
 		if labels.is_empty():
@@ -1548,7 +1548,10 @@ func _is_courier_task_valid(task: RefCounted) -> bool:
 				return false
 			for arrival_order: Dictionary in pending_arrivals:
 				if arrival_order.get("house") == arrival_house:
-					return not bool(arrival_order.get("dispatched", false)) or int(arrival_order.get("greeter_id", -1)) == task.assigned_courier_id
+					if not bool(arrival_order.get("dispatched", false)):
+						return true
+					var greeter := instance_from_id(int(arrival_order.get("greeter_id", -1))) as Citizen
+					return is_instance_valid(greeter) and greeter.ai_id == task.assigned_courier_ai_id
 			return false
 		CourierTask.Kind.OUTSIDE_WORK:
 			var selected: Citizen = task.payload.get("courier") as Citizen
@@ -9830,6 +9833,7 @@ func _create_resource_pile(position: Vector3, resources: Dictionary, is_backpack
 	pile.position = position
 
 	var label := Label3D.new()
+	label.name = "PileLabel"
 	var labels: Array[String] = []
 	for resource_type in normalized:
 		labels.append("%s x%d" % [str(resource_type).to_upper(), int(normalized[resource_type])])
@@ -9968,7 +9972,7 @@ func _refresh_resource_pile_label(pile: Dictionary) -> void:
 	var pile_node := pile.get("node") as Node3D
 	if not is_instance_valid(pile_node):
 		return
-	var label := pile_node.get_node_or_null("Label3D") as Label3D
+	var label := pile_node.get_node_or_null("PileLabel") as Label3D
 	if label == null:
 		return
 	var labels: Array[String] = []
@@ -9991,7 +9995,7 @@ func _drop_resource_pile(position: Vector3, resource_type: String, amount: int) 
 			continue
 		pile.resources[resource_type] = int(pile.resources.get(resource_type, 0)) + amount
 		resource_piles[index] = pile
-		var label := pile_node.get_node_or_null("Label3D") as Label3D
+		var label := pile_node.get_node_or_null("PileLabel") as Label3D
 		if label != null:
 			var labels: Array[String] = []
 			for piled_resource in pile.resources:

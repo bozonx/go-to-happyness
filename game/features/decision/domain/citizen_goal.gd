@@ -11,9 +11,6 @@ const WORK_REFUSAL_WELLBEING := 30
 
 var id: StringName
 var resumable := true
-## Work trips are atomic from assignment through completion. Personal needs wait
-## for their terminal state, while external invalidation may still cancel them.
-var blocks_personal_needs := false
 
 
 func _init(next_id: StringName = &"") -> void:

@@ -18,7 +18,7 @@ func capture(sequence: int) -> WorldSnapshot:
 	var courier_tasks: Array[Dictionary] = []
 	if simulation.courier_dispatcher != null:
 		for task: CourierTask in simulation.courier_dispatcher.available_tasks():
-			courier_tasks.append({&"id": task.id, &"priority": task.priority, &"pickup": task.pickup, &"requested_courier_id": int((task.payload.get("courier") as Citizen).get_instance_id()) if is_instance_valid(task.payload.get("courier") as Citizen) else -1})
+			courier_tasks.append({&"id": task.id, &"priority": task.priority, &"pickup": task.pickup, &"requested_courier_id": int(task.payload.get("courier_ai_id", 0))})
 	var workforce_world := _world_data()
 	var forestry_targets := _forestry_targets()
 	var gathering_targets := _gathering_targets()
@@ -279,7 +279,7 @@ func capture(sequence: int) -> WorldSnapshot:
 				&"work.factory.position": factory_position,
 				&"work.courier.worker": courier_worker,
 				&"work.courier.permanent": actor.is_courier(),
-				&"work.courier.actor_instance_id": actor.get_instance_id(),
+				&"work.courier.actor_id": citizen_id,
 				&"work.courier.in_progress": courier_in_progress,
 				&"work.courier.can_start": courier_can_start,
 				&"work.courier.active_task_id": courier_active_task_id,

@@ -8,10 +8,11 @@ var order_id: int
 ## this order instead of a later board publication for another target.
 var order: CitizenOrder
 var resumable: bool
-## Prevents personal needs from preempting an atomic work trip.
-var blocks_personal_needs := false
 var label: String
 var failure_reason := BehaviorStep.FailureReason.NONE
+## Hard watchdog for actuator actions that otherwise keep returning RUNNING.
+var max_run_seconds := 180.0
+var elapsed_seconds := 0.0
 ## Optional `(BehaviorContext) -> bool` predicate. Checked before a suspended task
 ## resumes: if the world moved on (target claimed, order expired, tree felled) the
 ## stale task is dropped instead of resumed, letting the arbiter build a fresh one.
@@ -28,6 +29,8 @@ func invalid_reason(context: BehaviorContext) -> BehaviorStep.FailureReason:
 	if order != null:
 		if order.is_expired(context.snapshot.simulation_seconds):
 			return BehaviorStep.FailureReason.ORDER_EXPIRED
+		if context.order == null or context.order.id != order_id:
+			return BehaviorStep.FailureReason.ORDER_CHANGED
 	elif order_id != 0:
 		# Compatibility for manually assembled tasks that do not own an order.
 		if context.order == null or context.order.id != order_id:

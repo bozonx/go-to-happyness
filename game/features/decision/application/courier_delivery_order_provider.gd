@@ -37,8 +37,8 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 			var task_id := task.get(&"id", &"") as StringName
 			var pickup: Variant = task.get(&"pickup", Vector3.INF)
 			var requested_courier_id := int(task.get(&"requested_courier_id", -1))
-			var actor_instance_id := int(citizen.facts.value(&"work.courier.actor_instance_id", -1))
-			if task_id == &"" or claimed.has(task_id) or not (pickup is Vector3) or (requested_courier_id >= 0 and requested_courier_id != actor_instance_id):
+			var actor_id := int(citizen.facts.value(&"work.courier.actor_id", citizen.id))
+			if task_id == &"" or claimed.has(task_id) or not (pickup is Vector3) or (requested_courier_id > 0 and requested_courier_id != actor_id):
 				continue
 			claimed[task_id] = true
 			orders.append(_order_for_task(citizen_id, task_id, int(task.get(&"priority", 0)), pickup))

@@ -29,6 +29,7 @@ func start(task: BehaviorTask, context: BehaviorContext) -> bool:
 		else:
 			active_task.root.cancel(context)
 	active_task = task
+	active_task.elapsed_seconds = 0.0
 	active_task.root.reset()
 	_record_trace(&"start", active_task, BehaviorStep.Status.RUNNING, BehaviorStep.FailureReason.NONE, context)
 	task_started.emit(active_task)
@@ -54,15 +55,27 @@ func tick(context: BehaviorContext, delta: float) -> BehaviorStep.Status:
 		return BehaviorStep.Status.SUCCESS
 	var invalid_reason := active_task.invalid_reason(context)
 	if invalid_reason != BehaviorStep.FailureReason.NONE:
-		active_task.failure_reason = invalid_reason
-		active_task.root.set_failure_reason(invalid_reason)
-		active_task.root.cancel(context)
-		_record_trace(&"invalid", active_task, BehaviorStep.Status.FAILURE, invalid_reason, context)
+		var invalid_task := active_task
+		invalid_task.failure_reason = invalid_reason
+		invalid_task.root.set_failure_reason(invalid_reason)
+		invalid_task.root.cancel(context)
+		_record_trace(&"invalid", invalid_task, BehaviorStep.Status.FAILURE, invalid_reason, context)
 		active_task = null
+		task_finished.emit(invalid_task, BehaviorStep.Status.FAILURE)
 		_start_pending_or_resume(context)
 		return BehaviorStep.Status.FAILURE
 	_bind_active_order(context)
 	var completed_task := active_task
+	completed_task.elapsed_seconds += maxf(delta, 0.0)
+	if completed_task.elapsed_seconds >= completed_task.max_run_seconds:
+		completed_task.failure_reason = BehaviorStep.FailureReason.TIMEOUT
+		completed_task.root.set_failure_reason(BehaviorStep.FailureReason.TIMEOUT)
+		completed_task.root.cancel(context)
+		active_task = null
+		_record_trace(&"timeout", completed_task, BehaviorStep.Status.FAILURE, completed_task.failure_reason, context)
+		task_finished.emit(completed_task, BehaviorStep.Status.FAILURE)
+		_start_pending_or_resume(context)
+		return BehaviorStep.Status.FAILURE
 	var status := active_task.root.run(context, delta)
 	if status == BehaviorStep.Status.RUNNING:
 		return status
@@ -109,6 +122,7 @@ func _resume_previous(context: BehaviorContext) -> void:
 			candidate.root.set_failure_reason(invalid_reason)
 			candidate.root.cancel(context)
 			_record_trace(&"drop_suspended", candidate, BehaviorStep.Status.FAILURE, invalid_reason, context)
+			task_finished.emit(candidate, BehaviorStep.Status.FAILURE)
 			continue
 		active_task = candidate
 		_bind_active_order(context)
@@ -143,6 +157,7 @@ func _start_pending_or_resume(context: BehaviorContext) -> void:
 		next_task.root.set_failure_reason(invalid_reason)
 		next_task.root.cancel(context)
 		_record_trace(&"drop_pending", next_task, BehaviorStep.Status.FAILURE, invalid_reason, context)
+		task_finished.emit(next_task, BehaviorStep.Status.FAILURE)
 	_resume_previous(context)
 
 

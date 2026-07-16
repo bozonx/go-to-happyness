@@ -10,7 +10,8 @@ var pickup := Vector3.ZERO
 var dropoff := Vector3.ZERO
 var payload: Dictionary = {}
 var created_at := 0.0
-var assigned_courier_id := -1
+## Stable AI identity. Runtime ObjectIDs are not valid task ownership keys.
+var assigned_courier_ai_id := 0
 ## Warehouse reservation made when the task was assigned; used to free space if the delivery is cancelled.
 var reserved_warehouse_index := -1
 var reserved_resource_type := ""
@@ -18,7 +19,7 @@ var reserved_amount := 0
 
 
 func is_assigned() -> bool:
-	return assigned_courier_id >= 0
+	return assigned_courier_ai_id > 0
 
 
 func has_reservation() -> bool:

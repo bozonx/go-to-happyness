@@ -11,7 +11,6 @@ func _init() -> void:
 	# A personal need cancels the current production cycle. The provider issues a
 	# fresh order after the resident becomes available again.
 	resumable = false
-	blocks_personal_needs = true
 
 
 func score(

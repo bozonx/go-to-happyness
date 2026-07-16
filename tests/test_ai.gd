@@ -234,8 +234,8 @@ func _init() -> void:
 	_test_native_toilet_goal()
 	_test_toilet_goal_blocked_while_working()
 	_test_toilet_goal_blocked_for_player_controlled()
-	_test_trip_bound_work_blocks_personal_need()
-	_test_trip_bound_work_keeps_captured_order()
+	_test_personal_need_preempts_work_trip()
+	_test_changed_work_order_cancels_captured_trip()
 	_test_active_personal_need_blocks_work()
 	_test_personal_need_blocks_other_personal_need()
 	_test_order_board_equivalence_ignores_payload_position()
@@ -252,6 +252,8 @@ func _init() -> void:
 	_test_native_cleaning_goal()
 	_test_runner_cancels_stale_active_order_and_releases_reservation()
 	_test_runner_trace_records_invalid_task_reason()
+	_test_invalid_task_applies_failure_cooldown()
+	_test_runner_times_out_nonterminating_task()
 	_test_reserved_step_renews_lease()
 	_test_forestry_provider_assigns_unique_stable_targets()
 	_test_native_forestry_goal()
@@ -285,6 +287,7 @@ func _init() -> void:
 	_test_courier_provider_same_site_different_resources()
 	_test_courier_provider_two_couriers_same_task_not_duplicated()
 	_test_courier_dispatcher_start_task_prevents_double_assignment()
+	_test_courier_dispatcher_rejects_wrong_requested_courier()
 	_test_courier_dispatcher_complete_for_clears_task()
 	_test_courier_dispatcher_cleanup_removes_invalid_tasks()
 	_test_courier_dispatcher_cleanup_unassigns_dead_courier()
@@ -605,7 +608,7 @@ func _test_native_toilet_goal() -> void:
 	assert(is_zero_approx(goal.score(_snapshot(0.0, blocked), blocked, null, AIBlackboard.new())))
 
 
-func _test_trip_bound_work_blocks_personal_need() -> void:
+func _test_personal_need_preempts_work_trip() -> void:
 	var forestry := ForestryGoalScript.new()
 	var meal := MealGoalScript.new()
 	var actuator := FakeActuator.new(1)
@@ -626,11 +629,12 @@ func _test_trip_bound_work_blocks_personal_need() -> void:
 	var hungry_citizen := CitizenSnapshot.new(1, Vector3(1.0, 0.0, 0.0), false, true, AIFactSet.new(hungry_facts))
 	var hungry_snapshot := _snapshot(1.0, hungry_citizen)
 	brain.think(hungry_snapshot, order)
-	assert(brain.runner.active_goal_id() == &"forestry")
+	assert(brain.runner.active_goal_id() == &"meal")
+	assert(actuator.stop_count == 1)
 	assert(actuator.action_start_count == 0)
 
 
-func _test_trip_bound_work_keeps_captured_order() -> void:
+func _test_changed_work_order_cancels_captured_trip() -> void:
 	var forestry := ForestryGoalScript.new()
 	var meal := MealGoalScript.new()
 	var actuator := FakeActuator.new(1)
@@ -646,11 +650,9 @@ func _test_trip_bound_work_keeps_captured_order() -> void:
 	brain.think(snapshot, replacement)
 	brain.tick(snapshot, replacement, 0.1)
 	assert(brain.runner.active_goal_id() == &"forestry")
-	assert(actuator.cancel_action_count == 0)
-	assert(actuator.move_to_destination == Vector3(2.5, 0.0, 0.0))
-	actuator.arrived_flag = true
-	brain.tick(snapshot, replacement, 0.1)
-	assert(snapshot.reservations.owner_of([&"forestry.tree", &"tree:3:0"], 0.0) == 1)
+	assert(actuator.stop_count == 1)
+	assert(actuator.move_to_destination == Vector3(8.5, 0.0, 0.0))
+	assert(snapshot.reservations.owner_of([&"forestry.tree", &"tree:3:0"], 0.0) == 0)
 
 
 func _test_active_personal_need_blocks_work() -> void:
@@ -1342,11 +1344,33 @@ func _test_courier_dispatcher_start_task_prevents_double_assignment() -> void:
 	assert(dispatcher.start_task(courier_a, &"task_1"), "First courier should start task")
 	assert(not dispatcher.start_task(courier_b, &"task_1"), "Second courier must not start same task")
 	var task := dispatcher.tasks[&"task_1"] as CourierTask
-	assert(task.assigned_courier_id == courier_a.get_instance_id())
+	assert(task.assigned_courier_ai_id == courier_a.ai_id)
 	root.remove_child(courier_a)
 	root.remove_child(courier_b)
 	courier_a.free()
 	courier_b.free()
+	root.remove_child(sim)
+	sim.free()
+
+
+func _test_courier_dispatcher_rejects_wrong_requested_courier() -> void:
+	var sim := FakeCourierSimulation.new()
+	root.add_child(sim)
+	var dispatcher := CourierDispatcher.new()
+	dispatcher.configure(sim)
+	dispatcher.publish(&"manual_task", CourierTask.Kind.SAWMILL_PICKUP, 50, Vector3(1.0, 0.0, 0.0), Vector3.ZERO, {"courier_ai_id": 2})
+	var wrong := Citizen.new()
+	wrong.ai_id = 1
+	root.add_child(wrong)
+	var requested := Citizen.new()
+	requested.ai_id = 2
+	root.add_child(requested)
+	assert(not dispatcher.start_task(wrong, &"manual_task"))
+	assert(dispatcher.start_task(requested, &"manual_task"))
+	root.remove_child(wrong)
+	root.remove_child(requested)
+	wrong.free()
+	requested.free()
 	root.remove_child(sim)
 	sim.free()
 
@@ -1398,7 +1422,7 @@ func _test_courier_dispatcher_cleanup_unassigns_dead_courier() -> void:
 	dispatcher.dispatch()
 	var task := dispatcher.tasks.get(&"task_1") as CourierTask
 	assert(task != null, "Valid task should still exist after cleanup")
-	assert(task.assigned_courier_id == -1, "Task should be unassigned when courier has no active delivery")
+	assert(task.assigned_courier_ai_id == 0, "Task should be unassigned when courier has no active delivery")
 	root.remove_child(courier)
 	courier.free()
 	root.remove_child(sim)
@@ -1838,6 +1862,29 @@ func _test_runner_trace_records_invalid_task_reason() -> void:
 	assert(last_trace.get(&"event") == &"invalid")
 	assert(last_trace.get(&"goal") == &"work")
 	assert(last_trace.get(&"reason") == BehaviorStep.FailureReason.GUARD_REJECTED)
+
+
+func _test_invalid_task_applies_failure_cooldown() -> void:
+	var goal := ScriptedGoal.new(&"blocked", 0.8, [BehaviorStep.Status.RUNNING])
+	var brain := CitizenBrain.new(1, FakeActuator.new(1), [goal])
+	var snapshot := _snapshot(0.0, CitizenSnapshot.new(1))
+	brain.think(snapshot, null)
+	assert(brain.runner.active_task != null)
+	brain.runner.active_task.guard = func(_context: BehaviorContext) -> bool: return false
+	brain.tick(snapshot, null, 0.1)
+	assert(brain.blackboard.is_on_cooldown(&"blocked", 0.0))
+	brain.think(snapshot, null)
+	assert(goal.build_count == 1)
+
+
+func _test_runner_times_out_nonterminating_task() -> void:
+	var context := _context()
+	var task := BehaviorTask.new(&"stuck", ScriptedStep.new([BehaviorStep.Status.RUNNING]))
+	task.max_run_seconds = 0.05
+	var runner := BehaviorRunner.new()
+	assert(runner.start(task, context))
+	assert(runner.tick(context, 0.1) == BehaviorStep.Status.FAILURE)
+	assert(task.failure_reason == BehaviorStep.FailureReason.TIMEOUT)
 
 
 func _test_reserved_step_renews_lease() -> void:

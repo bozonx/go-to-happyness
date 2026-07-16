@@ -9,7 +9,6 @@ const SequenceStepScript = preload("res://game/features/decision/domain/behavior
 func _init() -> void:
 	super(&"factory_work")
 	resumable = false
-	blocks_personal_needs = true
 
 
 func score(snapshot: WorldSnapshot, citizen: CitizenSnapshot, order: CitizenOrder, _blackboard: AIBlackboard) -> float:

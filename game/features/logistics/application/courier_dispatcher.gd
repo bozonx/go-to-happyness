@@ -17,7 +17,10 @@ func configure(next_simulation: Node) -> void:
 
 
 func dispatch() -> void:
-	if simulation == null or not simulation._is_work_time():
+	if simulation == null:
+		return
+	_cleanup_invalid_tasks()
+	if not simulation._is_work_time():
 		return
 	simulation._publish_courier_tasks(self)
 	_publish_manual_worker_tasks()
@@ -36,22 +39,23 @@ func available_tasks() -> Array[CourierTask]:
 func task_for(courier: Citizen) -> CourierTask:
 	if not is_instance_valid(courier):
 		return null
-	var courier_id := courier.get_instance_id()
+	var courier_id := courier.ai_id
 	var task := _tasks_by_courier_id.get(courier_id) as CourierTask
-	if task != null and tasks.get(task.id) == task and task.assigned_courier_id == courier_id:
+	if task != null and tasks.get(task.id) == task and task.assigned_courier_ai_id == courier_id:
 		return task
 	_tasks_by_courier_id.erase(courier_id)
 	return null
 
 
 func start_task(courier: Citizen, task_id: StringName) -> bool:
-	if not is_instance_valid(courier) or not tasks.has(task_id):
+	if not is_instance_valid(courier) or courier.ai_id <= 0 or not tasks.has(task_id):
 		return false
 	var task: CourierTask = tasks[task_id]
-	if task.is_assigned() or not simulation._is_courier_task_valid(task) or not simulation._start_courier_task(courier, task):
+	var requested_courier_ai_id := int(task.payload.get("courier_ai_id", 0))
+	if task.is_assigned() or (requested_courier_ai_id > 0 and requested_courier_ai_id != courier.ai_id) or not simulation._is_courier_task_valid(task) or not simulation._start_courier_task(courier, task):
 		return false
-	task.assigned_courier_id = courier.get_instance_id()
-	_tasks_by_courier_id[task.assigned_courier_id] = task
+	task.assigned_courier_ai_id = courier.ai_id
+	_tasks_by_courier_id[task.assigned_courier_ai_id] = task
 	return true
 
 
@@ -83,23 +87,13 @@ func _publish_manual_worker_tasks() -> void:
 		if warehouse_index < 0:
 			continue
 		publish(
-			StringName("manual_worker_%d" % courier.get_instance_id()),
+			StringName("manual_worker_%d" % courier.ai_id),
 			CourierTask.Kind.WORKER_PICKUP,
 			110,
 			worker_position,
 			simulation.warehouse_positions[warehouse_index],
-			{"worker": worker, "courier_id": courier.get_instance_id()}
+			{"worker": worker, "courier_ai_id": courier.ai_id}
 		)
-
-
-func _requested_courier(task: CourierTask, available: Array[Citizen]) -> Citizen:
-	var requested_id := int(task.payload.get("courier_id", -1))
-	if requested_id >= 0:
-		for courier in available:
-			if courier.get_instance_id() == requested_id:
-				return courier
-		return null
-	return _nearest_courier(available, task.pickup)
 
 
 func publish(id: StringName, kind: CourierTask.Kind, priority: int, pickup: Vector3, dropoff: Vector3, payload := {}) -> void:
@@ -119,7 +113,7 @@ func publish(id: StringName, kind: CourierTask.Kind, priority: int, pickup: Vect
 func complete_for(courier: Citizen) -> void:
 	if not is_instance_valid(courier):
 		return
-	var courier_id := courier.get_instance_id()
+	var courier_id := courier.ai_id
 	var task := _tasks_by_courier_id.get(courier_id) as CourierTask
 	_tasks_by_courier_id.erase(courier_id)
 	if task != null and tasks.get(task.id) == task:
@@ -161,17 +155,26 @@ func _cleanup_invalid_tasks() -> void:
 		var task: CourierTask = tasks[id]
 		var became_unassigned := false
 		if task.is_assigned():
-			var courier := instance_from_id(task.assigned_courier_id) as Citizen
+			var courier := _courier_for_ai_id(task.assigned_courier_ai_id)
 			if is_instance_valid(courier) and courier.has_active_delivery():
 				continue
 			if simulation.has_method("_cancel_courier_task"):
 				simulation._cancel_courier_task(courier, task)
-			_tasks_by_courier_id.erase(task.assigned_courier_id)
-			task.assigned_courier_id = -1
+			_tasks_by_courier_id.erase(task.assigned_courier_ai_id)
+			task.assigned_courier_ai_id = 0
 			became_unassigned = true
 		if not simulation._is_courier_task_valid(task) or became_unassigned:
 			if task.has_reservation() and simulation.has_method("_release_task_warehouse_reservation"):
 				simulation._release_task_warehouse_reservation(task)
 		if not simulation._is_courier_task_valid(task):
-			_tasks_by_courier_id.erase(task.assigned_courier_id)
+			_tasks_by_courier_id.erase(task.assigned_courier_ai_id)
 			tasks.erase(id)
+
+
+func _courier_for_ai_id(citizen_id: int) -> Citizen:
+	if simulation == null or citizen_id <= 0:
+		return null
+	for candidate in simulation.citizens:
+		if is_instance_valid(candidate) and candidate.ai_id == citizen_id:
+			return candidate
+	return null
