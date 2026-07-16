@@ -553,19 +553,36 @@ func _find_least_stocked_warehouse(resource_type: String) -> int:
 	return best
 
 
-## Fills the warehouse with the least used units up to `percent` of its capacity.
-## Returns any resources that could not be placed.
+## Fills the least-stocked warehouse up to `percent` of its capacity.
+## Only warehouses below the threshold are considered; repeated calls move to
+## the next least-stocked qualifying warehouse. Resources are added evenly,
+## prioritising types that are currently low in the chosen warehouse.
+## Returns a dictionary with `filled` (bool) and `overflow` (resource -> leftover).
 func fill_least_warehouse_cheat(percent: float) -> Dictionary:
-	var overflow := {}
+	var result := {"filled": false, "overflow": {}}
 	if not warehouse_ever_built or warehouses.is_empty():
-		return overflow
-	var target_index := _find_least_used_warehouse()
+		return result
+	var threshold := clampf(percent / 100.0, 0.0, 1.0)
+	var candidates: Array[int] = []
+	for i in range(warehouses.size()):
+		var used := warehouses[i].used_units(STORAGE_WEIGHTS)
+		if used < float(warehouses[i].capacity) * threshold:
+			candidates.append(i)
+	if candidates.is_empty():
+		return result
+	candidates.sort_custom(func(a: int, b: int) -> bool:
+		return warehouses[a].used_units(STORAGE_WEIGHTS) < warehouses[b].used_units(STORAGE_WEIGHTS)
+	)
+	var target_index := candidates[0]
 	var target := warehouses[target_index]
+	result["target_index"] = target_index
 	var era_res := era_resources()
 	if era_res.is_empty():
-		return overflow
-	var fill_target := float(target.capacity) * clampf(percent / 100.0, 0.0, 1.0)
+		return result
+	var fill_target := float(target.capacity) * threshold
 	var free_units := maxf(0.0, fill_target - target.used_units(STORAGE_WEIGHTS))
+	if free_units <= 0.0:
+		return result
 	var share := free_units / float(era_res.size())
 	for resource_type in era_res:
 		if not target.accepts(resource_type):
@@ -573,12 +590,16 @@ func fill_least_warehouse_cheat(percent: float) -> Dictionary:
 		var weight := storage_weight(resource_type)
 		if weight <= 0.0:
 			continue
-		var grant_units := maxf(0.0, share)
-		var grant_count := maxi(1, int(floor(grant_units / weight)))
+		var current_units := float(target.amount(resource_type)) * weight
+		var needed_units := maxf(0.0, share - current_units)
+		var grant_count := int(floor(needed_units / weight))
+		if grant_count <= 0:
+			continue
 		var leftover := target.add(resource_type, grant_count, STORAGE_WEIGHTS)
 		if leftover > 0:
-			overflow[resource_type] = leftover
-	return overflow
+			result.overflow[resource_type] = leftover
+		result.filled = true
+	return result
 
 
 func _find_least_used_warehouse() -> int:

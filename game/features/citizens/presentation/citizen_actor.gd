@@ -326,6 +326,7 @@ var ai_move_arrived := false
 var ai_move_failed := false
 
 var idle_indicator: Label3D
+var _privacy_blur: MeshInstance3D
 
 signal employment_processing_finished(citizen: Citizen)
 
@@ -392,6 +393,7 @@ func _setup_selector() -> void:
 func _setup_visuals() -> void:
 	_update_character_model()
 	_setup_idle_indicator()
+	_setup_privacy_blur()
 
 func _setup_idle_indicator() -> void:
 	idle_indicator = Label3D.new()
@@ -404,6 +406,27 @@ func _setup_idle_indicator() -> void:
 	idle_indicator.no_depth_test = true
 	idle_indicator.visible = false
 	add_child(idle_indicator)
+
+
+func _setup_privacy_blur() -> void:
+	var blur := MeshInstance3D.new()
+	blur.name = "PrivacyBlur"
+	blur.visible = false
+	blur.position = Vector3(0.0, 1.1, 0.0)
+	blur.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+	var quad := QuadMesh.new()
+	quad.size = Vector2(2.2, 2.4)
+	blur.mesh = quad
+
+	var material := ShaderMaterial.new()
+	material.shader = load("res://game/features/citizens/presentation/privacy_pixelize.gdshader")
+	material.render_priority = 1
+	blur.material_override = material
+
+	add_child(blur)
+	_privacy_blur = blur
+
 
 func _setup_body_mesh() -> void:
 	var body := MeshInstance3D.new()
@@ -828,6 +851,7 @@ func _physics_process(delta: float) -> void:
 			_process_ai_moving(delta)
 	if idle_indicator != null:
 		_update_idle_indicator()
+	_update_privacy_blur()
 	_update_animations(delta)
 
 func _process_to_source(delta: float) -> void:
@@ -2231,6 +2255,13 @@ func _update_idle_indicator() -> void:
 			else:
 				idle_indicator.text = "Work order: %s%s" % [visible_role.replace("_", " "), " (planned)" if automatic else ""]
 			idle_indicator.modulate = Color("f0c45d")
+
+
+func _update_privacy_blur() -> void:
+	if _privacy_blur == null:
+		return
+	var active := not is_player_controlled and state == State.USING_BUSH
+	_privacy_blur.visible = active
 
 
 func _advance_state_display(delta: float) -> void:

@@ -273,6 +273,7 @@ var interaction_progress: ProgressBar
 var pocket_take_menu: Panel
 var pocket_take_menu_title: Label
 var pocket_menu_open := false
+var pocket_take_warehouse_index: int = -1
 var crosshair: FirstPersonCrosshair
 var dig_sites: Array[Dictionary] = []
 var dig_cells: Dictionary = {}
@@ -3569,17 +3570,17 @@ func _update_building_research(delta: float) -> void:
 			_refresh_research_menu()
 
 func _create_research_menu(ui: CanvasLayer) -> void:
-	research_menu = _create_context_menu_panel(ui, Control.PRESET_CENTER, Vector4(-250.0, -250.0, 250.0, 250.0))
+	research_menu = _create_context_menu_panel(ui, Control.PRESET_CENTER, Vector4(-310.0, -250.0, 310.0, 250.0))
 
 	research_menu_title = Label.new()
 	research_menu_title.position = Vector2(18, 16)
-	research_menu_title.size = Vector2(464, 30)
+	research_menu_title.size = Vector2(604, 30)
 	research_menu_title.add_theme_font_size_override("font_size", 18)
 	research_menu.add_child(research_menu_title)
 	
 	var scroll := ScrollContainer.new()
 	scroll.position = Vector2(18, 54)
-	scroll.size = Vector2(464, 330)
+	scroll.size = Vector2(604, 330)
 	research_menu.add_child(scroll)
 	
 	research_list = VBoxContainer.new()
@@ -3590,7 +3591,7 @@ func _create_research_menu(ui: CanvasLayer) -> void:
 	var close_btn := Button.new()
 	close_btn.text = "Close"
 	close_btn.position = Vector2(18, 398)
-	close_btn.size = Vector2(464, 32)
+	close_btn.size = Vector2(604, 32)
 	close_btn.pressed.connect(_hide_research_menu)
 	research_menu.add_child(close_btn)
 
@@ -3636,7 +3637,7 @@ func _refresh_research_menu() -> void:
 		var research_state: Dictionary = building_research_service.menu_state(tech_id, researcher != null)
 
 		var row := HBoxContainer.new()
-		row.custom_minimum_size = Vector2(464, 40)
+		row.custom_minimum_size = Vector2(604, 40)
 		research_list.add_child(row)
 
 		var details_vbox := VBoxContainer.new()
@@ -3644,13 +3645,13 @@ func _refresh_research_menu() -> void:
 		row.add_child(details_vbox)
 
 		var title_lbl := Label.new()
-		title_lbl.text = tech.name
+		title_lbl.text = "%s (%s)" % [tech.name, research_state.cost_text]
 		title_lbl.add_theme_font_size_override("font_size", 14)
 		details_vbox.add_child(title_lbl)
 
 		var desc_lbl := Label.new()
 		var effect_str: String = str(tech.get("effect", ""))
-		desc_lbl.text = "Duration: %ds | Cost: %s | Skill: %s%s" % [int(research_state.duration), str(research_state.cost_text), str(research_state.required_skill).capitalize(), " | %s" % effect_str if not effect_str.is_empty() else ""]
+		desc_lbl.text = "Duration: %ds | Skill: %s%s" % [int(research_state.duration), str(research_state.required_skill).capitalize(), " | %s" % effect_str if not effect_str.is_empty() else ""]
 		desc_lbl.add_theme_font_size_override("font_size", 10)
 		desc_lbl.add_theme_color_override("font_color", Color("a5b5c5"))
 		details_vbox.add_child(desc_lbl)
@@ -5270,7 +5271,12 @@ func _start_interaction(all: bool) -> void:
 			_handle_sawmill_interaction(all, target.position)
 			return
 		"warehouse":
-			_handle_warehouse_interaction(all)
+			_handle_warehouse_interaction(all, int(target.get("warehouse_index", -1)))
+			return
+		"forage", "rabbit":
+			_update_interface("Лесные дары и зайца может собирать только специалист. Постройте палатку охотников-собирателей.")
+			return
+		"citizen", "building":
 			return
 		"workplace":
 			_occupy_workplace(target.node)
@@ -5438,8 +5444,9 @@ func _can_continue_harvesting(resource_type: String) -> bool:
 	return false
 
 
-func _deliver_all_pocket_to_warehouse() -> void:
-	var warehouse_index := _nearby_warehouse_index()
+func _deliver_all_pocket_to_warehouse(warehouse_index := -1) -> void:
+	if warehouse_index < 0:
+		warehouse_index = _nearby_warehouse_index()
 	var delivered_total := 0
 	var summary: Array[String] = []
 	for resource_type in _pocket_resources():
@@ -5472,8 +5479,9 @@ func _deliver_all_pocket_to_warehouse() -> void:
 		_update_interface("Нет места на складе. Постройте или расширьте склад.")
 
 
-func _deliver_one_pocket_to_warehouse() -> void:
-	var warehouse_index := _nearby_warehouse_index()
+func _deliver_one_pocket_to_warehouse(warehouse_index := -1) -> void:
+	if warehouse_index < 0:
+		warehouse_index = _nearby_warehouse_index()
 	var resource_type := _primary_pocket_resource()
 	if resource_type.is_empty():
 		return
@@ -5854,7 +5862,13 @@ func _first_person_target() -> Dictionary:
 				if not pile.is_empty():
 					result = {"kind": "pile", "node": area_parent, "pile": pile, "position": area_parent.global_position}
 			elif collider.is_in_group("warehouse_selector"):
-				result = {"kind": "warehouse", "node": area_parent, "position": area_parent.global_position}
+				result = {"kind": "warehouse", "node": area_parent, "position": area_parent.global_position, "warehouse_index": _warehouse_index_for_building(area_parent)}
+			elif collider.is_in_group("citizen_selector") and area_parent is Citizen:
+				result = {"kind": "citizen", "node": area_parent as Citizen, "position": area_parent.global_position}
+			elif collider.is_in_group("forage_selector") and is_instance_valid(area_parent):
+				result = {"kind": "forage", "node": area_parent, "position": area_parent.global_position}
+			elif collider.is_in_group("rabbit_selector") and is_instance_valid(area_parent):
+				result = {"kind": "rabbit", "node": area_parent, "position": area_parent.global_position}
 			elif collider.is_in_group("building_selector") and is_instance_valid(area_parent):
 				var building_type := str(area_parent.get_meta("building_type", ""))
 				if bool(area_parent.get_meta("pending_demolition", false)):
@@ -5863,6 +5877,11 @@ func _first_person_target() -> Dictionary:
 					result = {"kind": "sawmill", "node": area_parent, "position": area_parent.global_position}
 				elif _role_for_workplace(area_parent) != "":
 					result = {"kind": "workplace", "node": area_parent, "position": area_parent.global_position}
+				else:
+					result = {"kind": "building", "node": area_parent, "position": area_parent.global_position}
+			elif collider.is_in_group("campfire_selector") or collider.is_in_group("cook_campfire_selector") or collider.is_in_group("market_selector") or collider.is_in_group("school_selector") or collider.is_in_group("house_selector") or collider.is_in_group("materials_factory_selector"):
+				if is_instance_valid(area_parent):
+					result = {"kind": "building", "node": area_parent, "position": area_parent.global_position}
 	if result.kind != "":
 		return result
 	if hit_position == Vector3.INF:
@@ -5935,15 +5954,15 @@ func _handle_sawmill_interaction(all: bool, sawmill_pos: Vector3) -> void:
 	_refresh_interaction_hint()
 
 
-func _handle_warehouse_interaction(all: bool) -> void:
+func _handle_warehouse_interaction(all: bool, warehouse_index := -1) -> void:
 	if _pocket_total() > 0:
 		if all:
-			_deliver_all_pocket_to_warehouse()
+			_deliver_all_pocket_to_warehouse(warehouse_index)
 		else:
-			_deliver_one_pocket_to_warehouse()
+			_deliver_one_pocket_to_warehouse(warehouse_index)
 		_refresh_interaction_hint()
 	else:
-		_show_pocket_take_menu()
+		_show_pocket_take_menu(warehouse_index)
 
 
 func _deliver_pocket_to_site(site: ConstructionSite, all: bool) -> void:
@@ -6021,6 +6040,57 @@ func _take_from_pile(pile: Dictionary, all: bool) -> void:
 	_refresh_interaction_hint()
 
 
+func _citizen_state_name(state: int) -> String:
+	var state_names := Citizen.State.keys()
+	if state < 0 or state >= state_names.size():
+		return "Unknown state"
+	return str(state_names[state]).capitalize().replace("_", " ")
+
+
+func _warehouse_index_for_building(building: Node3D) -> int:
+	if not is_instance_valid(building):
+		return -1
+	var service_pos: Vector3 = building.get_meta("service_position", building.global_position)
+	var index := warehouse_positions.find(service_pos)
+	if index >= 0:
+		return index
+	var best := -1
+	var best_dist := 999999.0
+	for i in range(warehouse_positions.size()):
+		var dist := warehouse_positions[i].distance_to(service_pos)
+		if dist < best_dist:
+			best_dist = dist
+			best = i
+	return best
+
+
+func _building_action_hint(building: Node3D) -> String:
+	if not is_instance_valid(building):
+		return ""
+	var building_type := str(building.get_meta("building_type", ""))
+	var name := str(BuildingCatalog.definition_for(building_type).get("name", building_type)).capitalize()
+	var info_parts: Array[String] = []
+	if building_type in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"]:
+		if bool(building.get_meta("fire_lit", false)):
+			info_parts.append("Fire lit")
+		else:
+			info_parts.append("Fire out")
+	if building_type in BuildingCatalog.KITCHEN_FOOD_CAPACITIES:
+		info_parts.append("Food cap: %d" % BuildingCatalog.kitchen_food_capacity(building_type))
+	var required := _required_staff_for_building(building)
+	if not required.is_empty():
+		var assigned := _assigned_staff_for_building(building, required)
+		info_parts.append("Staff %d/%d" % [assigned, int(required.count)])
+	if building.has_meta("housing_capacity"):
+		var capacity := int(building.get_meta("housing_capacity", 1))
+		var free_slots := int(building.get_meta("spawn_slots", capacity))
+		var occupied := clampi(capacity - free_slots, 0, capacity)
+		info_parts.append("Residents %d/%d" % [occupied, capacity])
+	if info_parts.is_empty():
+		return name
+	return "%s | %s" % [name, " | ".join(info_parts)]
+
+
 func _first_person_action_hint() -> String:
 	var target := _first_person_target()
 	match target.kind:
@@ -6042,7 +6112,11 @@ func _first_person_action_hint() -> String:
 				return "Карман полон"
 			return "F: взять %s из кучи | Shift+F: взять всё" % _resource_display_name(available[0]).to_lower()
 		"warehouse":
-			var wh_index := _nearby_warehouse_index()
+			var wh_index := int(target.get("warehouse_index", -1))
+			if wh_index < 0:
+				wh_index = _warehouse_index_for_building(target.node)
+			if wh_index < 0:
+				wh_index = _nearby_warehouse_index()
 			if _pocket_total() > 0:
 				var primary_res := _primary_pocket_resource()
 				if wh_index >= 0 and not settlement.warehouse_accepts(wh_index, primary_res):
@@ -6051,20 +6125,11 @@ func _first_person_action_hint() -> String:
 				if wh_room <= 0:
 					return "Склад заполнен"
 				return "F: сдать 1 (%s) | Shift+F: сдать всё" % primary_res.capitalize()
-			var wh_has_goods := false
 			if wh_index >= 0 and wh_index < settlement.warehouses.size():
-				for res_type in SettlementState.STORED_RESOURCES:
-					if settlement.warehouses[wh_index].amount(res_type) > 0:
-						wh_has_goods = true
-						break
-			elif settlement.uses_virtual_storage():
-				for res_type in SettlementState.STORED_RESOURCES:
-					if int(settlement.backpack.get(res_type, 0)) > 0:
-						wh_has_goods = true
-						break
-			if wh_has_goods:
-				return "F: открыть меню взятия товаров"
-			return ""
+				var wh_state: WarehouseState = settlement.warehouses[wh_index]
+				var used := int(ceil(wh_state.used_units(SettlementState.STORAGE_WEIGHTS)))
+				return "Склад: %d/%d заполнено" % [used, wh_state.capacity]
+			return "Склад"
 		"sawmill":
 			var sawmill_pos: Vector3 = target.position
 			var sawmill_stock := _sawmill_stock(sawmill_pos)
@@ -6090,6 +6155,17 @@ func _first_person_action_hint() -> String:
 			if bool(settlement.tools.get("bucket", false)):
 				return "F: набрать воды | Shift+F: набирать до полноты"
 			return "Нужно ведро, чтобы черпать воду. Купите его на рынке."
+		"forage", "rabbit":
+			return "Лесные дары и зайца может собирать только специалист. Постройте палатку охотников-собирателей."
+		"citizen":
+			var citizen := target.node as Citizen
+			if not is_instance_valid(citizen):
+				return ""
+			var status := citizen.status_effect_labels()
+			var status_text := ", ".join(status) if not status.is_empty() else "OK"
+			return "%s | %s | %s" % [citizen.role_label(), _citizen_state_name(citizen.state), status_text]
+		"building":
+			return _building_action_hint(target.node)
 	return ""
 
 func _terrain_point_at_screen_position(screen_position: Vector2) -> Variant:
@@ -6441,6 +6517,20 @@ func _add_building_selector(building: Node3D, group_name: String, footprint: Vec
 	building.add_child(selector)
 
 
+func _add_selector_to_node(node: Node3D, group_name: String, shape_size: Vector3, offset := Vector3.ZERO) -> void:
+	var selector := Area3D.new()
+	selector.add_to_group(group_name)
+	selector.collision_layer = 4
+	selector.collision_mask = 0
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = shape_size
+	collision.shape = shape
+	collision.position = offset
+	selector.add_child(collision)
+	node.add_child(selector)
+
+
 func _add_fire_light(building: Node3D, energy := 2.5, light_range := 8.0) -> void:
 	var fire_light := OmniLight3D.new()
 	fire_light.position = Vector3(0.0, 0.5, 0.0)
@@ -6602,10 +6692,12 @@ func _grant_debug_resources() -> void:
 	if not settlement.warehouse_ever_built:
 		_update_interface("Resources can only be added after the first warehouse is built.")
 		return
-	var overflow := settlement.fill_least_warehouse_cheat(90.0)
+	var result := settlement.fill_least_warehouse_cheat(90.0)
 	settlement.money += 30
-	if not overflow.is_empty() and not warehouse_positions.is_empty():
-		_drop_overflow_as_piles(overflow, warehouse_positions[0])
+	if not result.filled:
+		_update_interface("Нет складов с заполненностью меньше 90%.")
+	elif not result.overflow.is_empty() and not warehouse_positions.is_empty():
+		_drop_overflow_as_piles(result.overflow, warehouse_positions[0])
 		_update_interface("Debug resources added. Some overflow dropped near the warehouse.")
 	else:
 		_update_interface("Debug resources added to the least stocked warehouse.")
@@ -8156,7 +8248,8 @@ func _create_pocket_take_menu(ui: CanvasLayer) -> void:
 	pocket_take_menu.add_child(pocket_take_menu_title)
 
 
-func _show_pocket_take_menu() -> void:
+func _show_pocket_take_menu(warehouse_index := -1) -> void:
+	pocket_take_warehouse_index = warehouse_index
 	pocket_take_menu.visible = true
 	pocket_menu_open = true
 	if is_first_person:
@@ -8167,6 +8260,7 @@ func _show_pocket_take_menu() -> void:
 func _close_pocket_take_menu() -> void:
 	pocket_take_menu.visible = false
 	pocket_menu_open = false
+	pocket_take_warehouse_index = -1
 	if is_first_person:
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
@@ -8177,7 +8271,7 @@ func _refresh_pocket_take_menu() -> void:
 	for child in pocket_take_menu.get_children():
 		if child != pocket_take_menu_title:
 			child.queue_free()
-	var warehouse_index := _nearby_warehouse_index()
+	var warehouse_index := pocket_take_warehouse_index if pocket_take_warehouse_index >= 0 else _nearby_warehouse_index()
 	var warehouse_amount := func(resource_type: String) -> int:
 		if warehouse_index >= 0:
 			return settlement.warehouses[warehouse_index].amount(resource_type)
@@ -8584,6 +8678,7 @@ func _create_forage_sources_near_tree(tree_cell: Vector2i) -> void:
 		cap.material_override = material
 		node.add_child(stem)
 		node.add_child(cap)
+		_add_selector_to_node(node, "forage_selector", Vector3(0.5, 0.5, 0.5), Vector3.UP * 0.25)
 		add_child(node)
 		forage_sources[cell] = {"node": node}
 
@@ -8606,6 +8701,7 @@ func _spawn_rabbit_near_tree(tree_cell: Vector2i) -> void:
 		var material := StandardMaterial3D.new()
 		material.albedo_color = Color("d5d1c3")
 		node.material_override = material
+		_add_selector_to_node(node, "rabbit_selector", Vector3(0.5, 0.4, 0.5), Vector3.UP * 0.2)
 		add_child(node)
 		rabbit_sources[cell] = {"node": node, "direction": Vector3(randf_range(-1.0, 1.0), 0.0, randf_range(-1.0, 1.0)).normalized()}
 		return
