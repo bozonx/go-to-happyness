@@ -52,7 +52,7 @@ const IDLE_PERSONAL_SPACE := 1.15
 const MIN_STATE_DISPLAY_DURATION := 1.0
 const MAX_PENDING_STATE_DISPLAY_TRANSITIONS := 6
 
-enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, COURIER_TO_DEW, TO_GATHER, GATHERING, TO_CLEANING_PILE, CLEANING_PILE, TO_TRADE_PICKUP, TO_TRADE_DESTINATION, TO_EMPLOYMENT_CENTER, EMPLOYMENT_PROCESSING, CANTEEN_WORK, SCHOOL_WORK, TO_MARKET_WORK, MARKET_WORK, TO_CRAFT_WORK, CRAFT_WORK, TO_CONSTRUCTION_PICKUP, TO_CONSTRUCTION_SITE, TO_OFFICIAL_WORK, OFFICIAL_WORK, TO_ARRIVAL_ENTRANCE, ARRIVAL_MEETING, ARRIVAL_WAITING, TO_ARRIVAL_CENTER, RESEARCHING, TO_TOILET, USING_TOILET, WAITING_FOR_TOILET, TO_BUSH, USING_BUSH, AI_MOVING }
+enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, COURIER_TO_DEW, TO_GATHER, GATHERING, TO_CLEANING_PILE, CLEANING_PILE, TO_TRADE_PICKUP, TO_TRADE_DESTINATION, TO_EMPLOYMENT_CENTER, EMPLOYMENT_PROCESSING, CANTEEN_WORK, SCHOOL_WORK, TO_MARKET_WORK, MARKET_WORK, TO_CRAFT_WORK, CRAFT_WORK, TO_CONSTRUCTION_PICKUP, TO_CONSTRUCTION_SITE, TO_OFFICIAL_WORK, OFFICIAL_WORK, TO_ARRIVAL_ENTRANCE, ARRIVAL_MEETING, ARRIVAL_WAITING, TO_ARRIVAL_CENTER, RESEARCHING, TO_TOILET, USING_TOILET, WAITING_FOR_TOILET, TO_BUSH, USING_BUSH, AI_MOVING, WORK_POSITION }
 
 enum EmploymentState { UNREGISTERED, NO_PERMANENT_WORK, EMPLOYED, REGISTERING }
 
@@ -136,6 +136,7 @@ const STATE_ANIMATIONS := {
 	State.RESEARCHING: "interact-right",
 	State.EMPLOYMENT_PROCESSING: "interact-right",
 	State.AI_MOVING: "walk",
+	State.WORK_POSITION: "interact-right",
 }
 
 signal state_changed(citizen: Citizen, previous_state: int, next_state: int)
@@ -150,6 +151,8 @@ var state: int:
 	set(next_state):
 		if _state == next_state:
 			return
+		if work_position_locked and not _is_work_position_state(next_state):
+			_clear_work_position_lock()
 		var previous_state: int = _state
 		_state = next_state
 		if next_state == State.IDLE and queue_release_notifier.is_valid():
@@ -162,6 +165,19 @@ var state: int:
 var _displayed_state := State.IDLE
 var _displayed_state_elapsed := 0.0
 var _pending_state_display: Array[int] = []
+
+# Work-position lock shared by FPP and AI service workers. While locked, the
+# citizen is anchored to a workplace and movement input is ignored.
+var work_position_locked := false
+var work_position_anchor := Vector3.INF
+var work_position_role := ""
+var work_position_node: Node3D
+var work_position_temporary := true
+var work_position_target := Vector3.INF
+var _work_position_previous_state: int = State.IDLE
+var _work_position_previous_active_role := ""
+var _work_position_player_controlled := false
+
 var resource_type := "wood"
 var gather_resource_type := ""
 var gather_source_position := Vector3.ZERO
@@ -1624,6 +1640,63 @@ func set_player_controlled(controlled: bool) -> void:
 		ai_move_target = Vector3.INF
 		ai_move_arrived = false
 		ai_move_failed = false
+
+func _is_work_position_state(s: int) -> bool:
+	return s in [
+		State.WORK_POSITION,
+		State.CANTEEN_WORK,
+		State.SCHOOL_WORK,
+		State.MARKET_WORK,
+		State.OFFICIAL_WORK,
+		State.CRAFT_WORK,
+		State.RESEARCHING,
+		State.FACTORY_WORK,
+	]
+
+
+func _clear_work_position_lock() -> void:
+	work_position_locked = false
+	work_position_anchor = Vector3.INF
+	work_position_role = ""
+	work_position_node = null
+	work_position_temporary = true
+	work_position_target = Vector3.INF
+	_work_position_previous_state = State.IDLE
+	_work_position_previous_active_role = ""
+	_work_position_player_controlled = false
+
+
+func enter_work_position(position: Vector3, role: String, building: Node3D = null, temporary := true, set_state := true) -> void:
+	if work_position_locked:
+		_clear_work_position_lock()
+	_work_position_previous_state = state
+	_work_position_previous_active_role = active_role
+	_work_position_player_controlled = is_player_controlled
+	work_position_locked = true
+	work_position_anchor = position
+	work_position_role = role
+	work_position_node = building
+	work_position_temporary = temporary
+	work_position_target = Vector3.INF
+	_reset_assignment_navigation()
+	velocity = Vector3.ZERO
+	if set_state:
+		state = State.WORK_POSITION
+
+
+func exit_work_position() -> void:
+	if not work_position_locked:
+		return
+	var was_player_controlled := _work_position_player_controlled
+	_clear_work_position_lock()
+	if was_player_controlled:
+		state = State.IDLE
+		active_role = ""
+	else:
+		if state in [State.WORK_POSITION, State.CANTEEN_WORK, State.SCHOOL_WORK, State.MARKET_WORK, State.OFFICIAL_WORK, State.CRAFT_WORK, State.RESEARCHING, State.FACTORY_WORK]:
+			state = _work_position_previous_state if _work_position_previous_state != State.WORK_POSITION else State.IDLE
+			active_role = _work_position_previous_active_role
+
 
 func move_to(destination: Vector3, arrival_radius: float = 0.25) -> bool:
 	if is_player_controlled:
