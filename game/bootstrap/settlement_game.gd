@@ -1257,6 +1257,13 @@ func _publish_courier_tasks(dispatcher: RefCounted) -> void:
 	for construction_site in construction_sites:
 		_reconcile_construction_reservations(construction_site)
 	_reconcile_repair_reservations()
+	if is_instance_valid(entrance_stone):
+		for arrival_order: Dictionary in pending_arrivals:
+			if bool(arrival_order.get("dispatched", false)):
+				continue
+			var arrival_house := arrival_order.get("house") as Node3D
+			if is_instance_valid(arrival_house) and not bool(arrival_house.get_meta("pending_demolition", false)):
+				dispatcher.publish(StringName("arrival_%d" % arrival_house.get_instance_id()), CourierTask.Kind.ARRIVAL, 95, entrance_stone.global_position, entrance_stone.global_position, {"house": arrival_house})
 	if not warehouse_positions.is_empty():
 		# Emergency food is published before every other task.
 		if is_instance_valid(canteen) and food > 0 and not pending_canteen_delivery:
@@ -1322,6 +1329,18 @@ func _publish_courier_tasks(dispatcher: RefCounted) -> void:
 			var repair_position: Vector3 = building.get_meta("service_position", building.global_position)
 			var repair_source := _get_nearest_delivery_position(repair_position)
 			dispatcher.publish(StringName("repair_%d" % building.get_instance_id()), CourierTask.Kind.BUILDING_SUPPLY, 60, repair_source, repair_position, {"building": building, "supply_kind": "repair", "resource": "branches"})
+		for record in building_registry.records():
+			var fire_building := record.node as Node3D
+			if not is_instance_valid(fire_building):
+				continue
+			var building_type := str(fire_building.get_meta("building_type", ""))
+			if building_type not in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"]:
+				continue
+			var fire_state := _fire_state_for(fire_building)
+			if not fire_state.needs_supply(4) or branches <= 0:
+				continue
+			var fire_position: Vector3 = fire_building.get_meta("service_position", fire_building.global_position)
+			dispatcher.publish(StringName("firewood_%d" % fire_building.get_instance_id()), CourierTask.Kind.BUILDING_SUPPLY, 90, _get_nearest_delivery_position(fire_position), fire_position, {"building": fire_building, "supply_kind": "firewood", "resource": "branches"})
 
 
 func _reconcile_repair_reservations() -> void:
@@ -1470,11 +1489,26 @@ func _is_courier_task_valid(task: RefCounted) -> bool:
 			match supply_kind:
 				"repair":
 					return bool(building.get_meta("repair_needed", false)) and not bool(building.get_meta("repair_reserved", false)) and branches > 0
+				"firewood":
+					return _fire_state_for(building).needs_supply(4) and branches > 0
 			return false
+		CourierTask.Kind.ARRIVAL:
+			var arrival_house := task.payload.get("house") as Node3D
+			if not is_instance_valid(arrival_house) or bool(arrival_house.get_meta("pending_demolition", false)):
+				return false
+			for arrival_order: Dictionary in pending_arrivals:
+				if arrival_order.get("house") == arrival_house:
+					return not bool(arrival_order.get("dispatched", false)) or int(arrival_order.get("greeter_id", -1)) == task.assigned_courier_id
+			return false
+		CourierTask.Kind.OUTSIDE_WORK:
+			var selected: Citizen = task.payload.get("courier") as Citizen
+			return is_instance_valid(selected) and not outside_workers.has(selected.get_instance_id())
 	return false
 
 
 func _start_courier_task(courier: Citizen, task: RefCounted) -> bool:
+	if not _is_courier_task_reachable(courier, task):
+		return false
 	match task.kind:
 		CourierTask.Kind.CANTEEN:
 			var capacity := BuildingCatalog.kitchen_food_capacity(str(canteen.get_meta("building_type", "")))
@@ -1483,6 +1517,7 @@ func _start_courier_task(courier: Citizen, task: RefCounted) -> bool:
 				return false
 			settlement.add("food", -amount)
 			pending_canteen_delivery = true
+			pending_canteen_carrier = courier
 			pending_canteen_delivery_amount = amount
 			courier.deliver_food_to_canteen(task.pickup, canteen_position, amount)
 			return true
@@ -1549,7 +1584,36 @@ func _start_courier_task(courier: Citizen, task: RefCounted) -> bool:
 					building.set_meta("repair_reserved", true)
 					courier.assign_building_supply(building, task.pickup, "branches", "repair")
 					return true
+				"firewood":
+					if branches <= 0:
+						return false
+					var fire_state := _fire_state_for(building)
+					if not fire_state.needs_supply(4):
+						return false
+					settlement.add("branches", -1)
+					fire_state.reserve(1)
+					_apply_fire_state(building, fire_state)
+					courier.assign_building_supply(building, task.pickup, "branches", "firewood")
+					return true
 			return false
+		CourierTask.Kind.ARRIVAL:
+			var arrival_house := task.payload.get("house") as Node3D
+			for index in pending_arrivals.size():
+				var arrival_order: Dictionary = pending_arrivals[index]
+				if arrival_order.get("house") != arrival_house or bool(arrival_order.get("dispatched", false)):
+					continue
+				arrival_order.dispatched = true
+				arrival_order.greeter_id = courier.get_instance_id()
+				pending_arrivals[index] = arrival_order
+				arrival_greeters[courier.get_instance_id()] = arrival_order
+				courier.go_to_arrival_entrance(task.dropoff)
+				return true
+			return false
+		CourierTask.Kind.OUTSIDE_WORK:
+			if task.payload.get("courier") != courier or not is_instance_valid(entrance_stone):
+				return false
+			courier.assign_outside_work(entrance_stone.global_position)
+			return true
 	return false
 
 
@@ -1576,6 +1640,63 @@ func _release_task_warehouse_reservation(task: RefCounted) -> void:
 	task.reserved_warehouse_index = -1
 	task.reserved_resource_type = ""
 	task.reserved_amount = 0
+
+
+func _is_courier_task_reachable(courier: Citizen, task: RefCounted) -> bool:
+	if not is_instance_valid(courier) or task == null:
+		return false
+	var dropoff: Vector3 = task.dropoff
+	if task.kind == CourierTask.Kind.CONSTRUCTION:
+		var site: ConstructionSite = task.payload.get("site") as ConstructionSite
+		if site == null or not is_instance_valid(site.node):
+			return false
+		dropoff = courier._reachable_construction_approach(site.node)
+	if task.pickup == Vector3.INF or dropoff == Vector3.INF:
+		return false
+	return _is_route_reachable(courier.global_position, task.pickup) and _is_route_reachable(task.pickup, dropoff)
+
+
+func _cancel_courier_task(courier: Citizen, task: RefCounted) -> void:
+	if task == null:
+		return
+	var carried := courier.carried_amount if is_instance_valid(courier) else 0
+	match task.kind:
+		CourierTask.Kind.CANTEEN:
+			if pending_canteen_delivery and pending_canteen_carrier == courier:
+				canteen_service.cancel_canteen_delivery()
+		CourierTask.Kind.TRADE:
+			if is_instance_valid(courier):
+				var order: RefCounted = pending_trades.get(courier.get_instance_id(), null)
+				if order != null:
+					pending_trades.erase(courier.get_instance_id())
+					queued_trades.push_front(order)
+		CourierTask.Kind.WORKER_PICKUP:
+			var worker: Citizen = task.payload.get("worker") as Citizen
+			if carried > 0 and is_instance_valid(worker) and is_instance_valid(courier):
+				worker.register_pending_resource(courier.courier_resource_type, carried)
+				courier.carried_amount = 0
+		CourierTask.Kind.SAWMILL_PICKUP:
+			if carried > 0 and is_instance_valid(courier) and courier.courier_resource_type == "boards":
+				sawmills.return_boards(task.pickup, carried, runtime_seconds)
+				courier.carried_amount = 0
+		CourierTask.Kind.DEW_PICKUP:
+			if carried > 0 and is_instance_valid(courier) and courier.courier_resource_type == "water":
+				water_collector_service.return_water(task.pickup, carried)
+				courier.carried_amount = 0
+		CourierTask.Kind.BUILDING_SUPPLY:
+			var supply_kind := str(task.payload.get("supply_kind", ""))
+			if supply_kind == "repair":
+				var building: Node3D = task.payload.get("building") as Node3D
+				if is_instance_valid(building):
+					building.set_meta("repair_reserved", false)
+				settlement.add(str(task.payload.get("resource", "branches")), 1)
+			elif supply_kind == "firewood":
+				var fire_building: Node3D = task.payload.get("building") as Node3D
+				if is_instance_valid(fire_building):
+					var fire_state := _fire_state_for(fire_building)
+					fire_state.reserved_fuel = maxi(0, fire_state.reserved_fuel - 1)
+					_apply_fire_state(fire_building, fire_state)
+				settlement.add(str(task.payload.get("resource", "branches")), 1)
 
 
 func _reconcile_construction_reservations(site: ConstructionSite) -> void:
@@ -2651,6 +2772,7 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	citizen.trade_delivery_finished.connect(_on_trade_delivery_finished)
 	citizen.employment_processing_finished.connect(_on_employment_processing_finished)
 	citizen.arrival_greeter_ready.connect(_on_arrival_greeter_ready)
+	citizen.outside_work_departed.connect(_on_outside_work_departed)
 	citizens.append(citizen)
 	citizen.ai_id = _next_ai_citizen_id
 	_next_ai_citizen_id += 1
@@ -3668,25 +3790,37 @@ func _send_selected_resident_to_outside_work() -> void:
 	if not is_instance_valid(selected_builder) or selected_builder.is_player_controlled:
 		_update_interface("Select an AI-controlled Courier before sending them to outside work.")
 		return
-	if not selected_builder.is_courier() and selected_builder.daily_order_role != "courier":
+	if not selected_builder.can_handle_entry_logistics() or not _is_work_time():
 		_update_interface("Outside work requires a Courier.")
 		return
 	var worker_id := selected_builder.get_instance_id()
 	if outside_workers.has(worker_id):
 		_update_interface("This resident is already working in a neighboring settlement.")
 		return
-	selected_builder.cancel_current_action()
-	selected_builder.visible = false
-	selected_builder.process_mode = Node.PROCESS_MODE_DISABLED
 	var reward := _outside_work_reward()
+	if courier_dispatcher.task_for(selected_builder) != null:
+		_update_interface("Courier is already assigned to a logistics task.")
+		return
+	courier_dispatcher.publish(StringName("outside_work_%d" % worker_id), CourierTask.Kind.OUTSIDE_WORK, 85, entrance_stone.global_position, entrance_stone.global_position, {"courier": selected_builder, "reward": reward})
+	_request_courier_dispatch()
+	_update_interface("Outside work assigned. The courier is heading to the entrance sign.")
+
+
+func _on_outside_work_departed(worker: Citizen) -> void:
+	var task: CourierTask = courier_dispatcher.task_for(worker)
+	if task == null or task.kind != CourierTask.Kind.OUTSIDE_WORK:
+		return
+	var reward := int(task.payload.get("reward", OUTSIDE_WORK_BASE_REWARD_MIN))
+	var worker_id := worker.get_instance_id()
 	outside_workers[worker_id] = {
-		"citizen": selected_builder,
+		"citizen": worker,
 		"return_at_minute": _absolute_game_minutes() + OUTSIDE_WORK_DURATION_MINUTES,
 		"reward": reward,
 	}
-	if citizen_ai != null:
-		citizen_ai.request_decision_refresh()
-	_update_interface("Resident left for outside work and will return in 24 hours with %d coins." % reward)
+	worker.visible = false
+	worker.process_mode = Node.PROCESS_MODE_DISABLED
+	courier_dispatcher.complete_for(worker)
+	_update_interface("Courier left for outside work and will return in 24 hours with %d coins." % reward)
 
 func _absolute_game_minutes() -> int:
 	return (day_cycle.current_day - 1) * SimulationClock.MINUTES_PER_DAY + floori(clock.minutes)
@@ -4071,33 +4205,15 @@ func _update_arrivals() -> void:
 			waiting_greeter.go_to_arrival_entrance(entrance_stone.global_position)
 			arrival_waiting_greeters.erase(greeter_id)
 			arrival_greeters[greeter_id] = waiting_order
-	for index in pending_arrivals.size():
-		var order: Dictionary = pending_arrivals[index]
-		if bool(order.get("dispatched", false)):
-			continue
-		var greeter := _find_arrival_greeter()
-		var deferred := false
-		if greeter == null:
-			greeter = _find_arrival_greeter(true)
-			deferred = greeter != null
-		if greeter == null:
-			continue
-		order.dispatched = true
-		order.greeter_id = greeter.get_instance_id()
-		pending_arrivals[index] = order
-		if deferred:
-			arrival_waiting_greeters[greeter.get_instance_id()] = order
-			greeter.request_arrival_greeting(entrance_stone.global_position)
-			continue
-		arrival_greeters[greeter.get_instance_id()] = order
-		if not _is_work_time():
-			greeter.satisfaction = maxf(0.0, greeter.satisfaction - 6.0)
-		greeter.go_to_arrival_entrance(entrance_stone.global_position)
+	# Undispatched arrivals are published by CourierDispatcher. They use the same
+	# order/goal/actuator path as material and trade deliveries.
+	_request_courier_dispatch()
 
 
 func _on_arrival_greeter_ready(greeter: Citizen) -> void:
 	var order: Dictionary = arrival_greeters.get(greeter.get_instance_id(), {})
 	arrival_greeters.erase(greeter.get_instance_id())
+	courier_dispatcher.complete_for(greeter)
 	if order.is_empty():
 		greeter.idle()
 		return

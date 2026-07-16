@@ -8,7 +8,15 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 	var orders: Array[CitizenOrder] = []
 	var claimed: Dictionary = {}
 	var shared_tasks: Array = snapshot.settlement.value(&"work.courier.tasks", []) as Array
-	for citizen_id in snapshot.citizen_ids():
+	var citizen_ids := snapshot.citizen_ids()
+	citizen_ids.sort_custom(func(left: int, right: int) -> bool:
+		var left_citizen := snapshot.citizen(left)
+		var right_citizen := snapshot.citizen(right)
+		var left_permanent := left_citizen != null and bool(left_citizen.facts.value(&"work.courier.permanent", false))
+		var right_permanent := right_citizen != null and bool(right_citizen.facts.value(&"work.courier.permanent", false))
+		return left_permanent and not right_permanent
+	)
+	for citizen_id in citizen_ids:
 		var citizen := snapshot.citizen(citizen_id)
 		if citizen == null or not bool(citizen.facts.value(&"work.courier.worker", false)):
 			continue
@@ -21,12 +29,16 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 				continue
 		if not bool(citizen.facts.value(&"work.courier.can_start", false)):
 			continue
-		var tasks: Array = shared_tasks if not shared_tasks.is_empty() else citizen.facts.value(&"work.courier.tasks", []) as Array
+		var personal_tasks: Array = citizen.facts.value(&"work.courier.tasks", []) as Array
+		var use_personal_tasks := bool(citizen.facts.value(&"work.courier.use_personal_tasks", false))
+		var tasks: Array = personal_tasks if use_personal_tasks else (shared_tasks if not shared_tasks.is_empty() else personal_tasks)
 		for task_value in tasks:
 			var task := task_value as Dictionary
 			var task_id := task.get(&"id", &"") as StringName
 			var pickup: Variant = task.get(&"pickup", Vector3.INF)
-			if task_id == &"" or claimed.has(task_id) or not (pickup is Vector3):
+			var requested_courier_id := int(task.get(&"requested_courier_id", -1))
+			var actor_instance_id := int(citizen.facts.value(&"work.courier.actor_instance_id", -1))
+			if task_id == &"" or claimed.has(task_id) or not (pickup is Vector3) or (requested_courier_id >= 0 and requested_courier_id != actor_instance_id):
 				continue
 			claimed[task_id] = true
 			orders.append(_order_for_task(citizen_id, task_id, int(task.get(&"priority", 0)), pickup))

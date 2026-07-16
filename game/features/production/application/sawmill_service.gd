@@ -46,6 +46,14 @@ func collect_boards(courier: Citizen, position: Vector3, now_seconds: float) -> 
 	courier.collect_sawmill_boards(amount)
 
 
+func return_boards(position: Vector3, amount: int, now_seconds: float) -> void:
+	if amount <= 0:
+		return
+	var stock := stock_at(position, now_seconds)
+	stock.boards = int(stock.boards) + amount
+	store(position, stock)
+
+
 func position_with_boards(now_seconds: float) -> Vector3:
 	var best_position := Vector3.INF
 	var highest_board_count := 0

@@ -18,7 +18,7 @@ func capture(sequence: int) -> WorldSnapshot:
 	var courier_tasks: Array[Dictionary] = []
 	if simulation.courier_dispatcher != null:
 		for task: CourierTask in simulation.courier_dispatcher.available_tasks():
-			courier_tasks.append({&"id": task.id, &"priority": task.priority, &"pickup": task.pickup})
+			courier_tasks.append({&"id": task.id, &"priority": task.priority, &"pickup": task.pickup, &"requested_courier_id": int((task.payload.get("courier") as Citizen).get_instance_id()) if is_instance_valid(task.payload.get("courier") as Citizen) else -1})
 	var workforce_world := _world_data()
 	var forestry_targets := _forestry_targets()
 	var gathering_targets := _gathering_targets()
@@ -198,6 +198,11 @@ func capture(sequence: int) -> WorldSnapshot:
 			if factory_position_value is Vector3:
 				factory_position = factory_position_value
 		var courier_worker: bool = actor.can_handle_entry_logistics() and not actor.is_player_controlled
+		var courier_task_candidates: Array[Dictionary] = []
+		if courier_worker and simulation.courier_dispatcher != null:
+			for task: CourierTask in simulation.courier_dispatcher.available_tasks():
+				if simulation._is_courier_task_reachable(actor, task):
+					courier_task_candidates.append({&"id": task.id, &"priority": task.priority, &"pickup": task.pickup, &"requested_courier_id": int((task.payload.get("courier") as Citizen).get_instance_id()) if is_instance_valid(task.payload.get("courier") as Citizen) else -1})
 		var courier_active_task_id: StringName = &""
 		var courier_active_pickup := Vector3.INF
 		var courier_active_priority := 0
@@ -271,11 +276,15 @@ func capture(sequence: int) -> WorldSnapshot:
 				&"work.factory.target_key": _target_key(&"factory", factory_node.global_position) if is_instance_valid(factory_node) else &"",
 				&"work.factory.position": factory_position,
 				&"work.courier.worker": courier_worker,
+				&"work.courier.permanent": actor.is_courier(),
+				&"work.courier.actor_instance_id": actor.get_instance_id(),
 				&"work.courier.in_progress": courier_in_progress,
 				&"work.courier.can_start": courier_can_start,
 				&"work.courier.active_task_id": courier_active_task_id,
 				&"work.courier.active_pickup": courier_active_pickup,
 				&"work.courier.active_priority": courier_active_priority,
+				&"work.courier.tasks": courier_task_candidates,
+				&"work.courier.use_personal_tasks": true,
 				&"daily.order.active": daily_order_active,
 				&"daily.order.role": daily_order_role,
 				&"daily.order.workday_id": actor.daily_order_workday_id,
@@ -652,8 +661,8 @@ func _role_employers() -> Dictionary:
 			employers[role] = candidates
 	# Couriers are formally employed in the tent era but do not yet own a
 	# workplace node. The employment centre is only the registration destination.
-	var courier_slots := simulation._available_employer_capacity("courier") - int(_assigned_role_counts_internal().get("courier", 0))
-	var centre_position := simulation._employment_center_position()
+	var courier_slots: int = simulation._available_employer_capacity("courier") - int(_assigned_role_counts_internal().get("courier", 0))
+	var centre_position: Vector3 = simulation._employment_center_position()
 	if courier_slots > 0 and centre_position != Vector3.INF:
 		employers["courier"] = [{
 			"position": centre_position,

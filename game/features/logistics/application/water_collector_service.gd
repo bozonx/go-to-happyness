@@ -52,3 +52,13 @@ func collect_water(position: Vector3, max_amount: int) -> int:
 			collector.stored = available - taken
 		return taken
 	return 0
+
+
+func return_water(position: Vector3, amount: int) -> void:
+	if amount <= 0:
+		return
+	for collector in _collectors():
+		var node: Node3D = collector.get("node") as Node3D
+		if is_instance_valid(node) and _service_position(node).is_equal_approx(position):
+			collector.stored = int(collector.get("stored", 0)) + amount
+			return

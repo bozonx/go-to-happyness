@@ -20,6 +20,7 @@ signal canteen_delivery_finished(worker: Citizen, amount: int)
 signal factory_cycle(worker: Citizen, factory: Node3D)
 signal trade_delivery_finished(worker: Citizen)
 signal arrival_greeter_ready(worker: Citizen)
+signal outside_work_departed(worker: Citizen)
 
 const WALK_SPEED := 2.2
 const WORK_DURATION := 1.4
@@ -53,7 +54,7 @@ const IDLE_PERSONAL_SPACE := 1.15
 const MIN_STATE_DISPLAY_DURATION := 1.0
 const MAX_PENDING_STATE_DISPLAY_TRANSITIONS := 6
 
-enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, COURIER_TO_DEW, TO_GATHER, GATHERING, TO_CLEANING_PILE, CLEANING_PILE, TO_TRADE_PICKUP, TO_TRADE_DESTINATION, TO_EMPLOYMENT_CENTER, EMPLOYMENT_PROCESSING, CANTEEN_WORK, SCHOOL_WORK, TO_MARKET_WORK, MARKET_WORK, TO_CRAFT_WORK, CRAFT_WORK, TO_CONSTRUCTION_PICKUP, TO_CONSTRUCTION_SITE, TO_OFFICIAL_WORK, OFFICIAL_WORK, TO_ARRIVAL_ENTRANCE, ARRIVAL_MEETING, ARRIVAL_WAITING, TO_ARRIVAL_CENTER, RESEARCHING, TO_TOILET, USING_TOILET, WAITING_FOR_TOILET, TO_BUSH, USING_BUSH, AI_MOVING, WORK_POSITION }
+enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, COURIER_TO_DEW, TO_GATHER, GATHERING, TO_CLEANING_PILE, CLEANING_PILE, TO_TRADE_PICKUP, TO_TRADE_DESTINATION, TO_EMPLOYMENT_CENTER, EMPLOYMENT_PROCESSING, CANTEEN_WORK, SCHOOL_WORK, TO_MARKET_WORK, MARKET_WORK, TO_CRAFT_WORK, CRAFT_WORK, TO_CONSTRUCTION_PICKUP, TO_CONSTRUCTION_SITE, TO_OFFICIAL_WORK, OFFICIAL_WORK, TO_ARRIVAL_ENTRANCE, ARRIVAL_MEETING, ARRIVAL_WAITING, TO_ARRIVAL_CENTER, TO_OUTSIDE_WORK, RESEARCHING, TO_TOILET, USING_TOILET, WAITING_FOR_TOILET, TO_BUSH, USING_BUSH, AI_MOVING, WORK_POSITION }
 
 enum EmploymentState { UNREGISTERED, NO_PERMANENT_WORK, EMPLOYED, REGISTERING }
 
@@ -861,6 +862,8 @@ func _physics_process(delta: float) -> void:
 			_process_arrival_meeting(delta)
 		State.TO_ARRIVAL_CENTER:
 			_process_arrival_center(delta)
+		State.TO_OUTSIDE_WORK:
+			_process_outside_work_departure(delta)
 		State.TO_TOILET:
 			_process_to_toilet(delta)
 		State.USING_TOILET:
@@ -1251,6 +1254,20 @@ func _process_arrival_center(delta: float) -> void:
 		idle()
 
 
+func assign_outside_work(entrance_position: Vector3) -> void:
+	if is_player_controlled or entrance_position == Vector3.INF:
+		return
+	_reset_assignment_navigation()
+	arrival_position = entrance_position
+	state = State.TO_OUTSIDE_WORK
+
+
+func _process_outside_work_departure(delta: float) -> void:
+	if _move_to(arrival_position, delta, false, false):
+		state = State.IDLE
+		outside_work_departed.emit(self)
+
+
 func queue_employment_processing(next_pending_role := "", next_workplace: Node3D = null) -> void:
 	pending_employment_role = next_pending_role
 	pending_employment_workplace = next_workplace
@@ -1423,7 +1440,7 @@ func _take_registration_ticket() -> void:
 
 
 func has_active_delivery() -> bool:
-	return state in [State.COURIER_TO_WORKER, State.COURIER_TO_WAREHOUSE, State.COURIER_TO_SAWMILL, State.TO_FOOD_PICKUP, State.TO_CANTEEN_DELIVERY, State.TO_CONSTRUCTION_PICKUP, State.TO_CONSTRUCTION_SITE, State.TO_TRADE_PICKUP, State.TO_TRADE_DESTINATION]
+	return state in [State.COURIER_TO_WORKER, State.COURIER_TO_WAREHOUSE, State.COURIER_TO_SAWMILL, State.TO_FOOD_PICKUP, State.TO_CANTEEN_DELIVERY, State.TO_CONSTRUCTION_PICKUP, State.TO_CONSTRUCTION_SITE, State.TO_TRADE_PICKUP, State.TO_TRADE_DESTINATION, State.TO_ARRIVAL_ENTRANCE, State.ARRIVAL_MEETING, State.TO_OUTSIDE_WORK]
 
 func _move_to(destination: Vector3, delta: float, may_enter_destination_house := false, use_building_queue := true, record_trail := true, arrival_radius := 0.08) -> bool:
 	var movement_destination := destination

@@ -152,6 +152,8 @@ func _cleanup_invalid_tasks() -> void:
 			var courier := instance_from_id(task.assigned_courier_id) as Citizen
 			if is_instance_valid(courier) and courier.has_active_delivery():
 				continue
+			if simulation.has_method("_cancel_courier_task"):
+				simulation._cancel_courier_task(courier, task)
 			task.assigned_courier_id = -1
 			became_unassigned = true
 		if not simulation._is_courier_task_valid(task) or became_unassigned:
