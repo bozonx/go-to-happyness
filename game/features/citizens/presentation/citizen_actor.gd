@@ -2671,11 +2671,9 @@ func _process_using_bush(delta: float) -> void:
 func _process_ai_moving(delta: float) -> void:
 	if navigation_failed:
 		ai_move_failed = true
-		idle()
 		return
 	if _move_to(ai_move_target, delta, false, false, true, ai_move_arrival_radius):
 		ai_move_arrived = true
-		idle()
 
 
 func execute_action(action: StringName, target: Node3D, payload: AIFactSet) -> bool:
