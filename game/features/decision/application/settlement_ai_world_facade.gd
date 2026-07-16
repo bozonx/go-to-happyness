@@ -42,13 +42,13 @@ func capture(sequence: int) -> WorldSnapshot:
 		var warehouse_position := Vector3.INF
 		if forestry_worker and actor_work_time and not simulation.sawmill_positions.is_empty() and not simulation.warehouse_positions.is_empty() and simulation._has_storage_room_for_role("forestry"):
 			sawmill_position = actor.employment_workplace.get_meta("service_position", actor.employment_workplace.global_position) if is_instance_valid(actor.employment_workplace) else simulation.sawmill_positions[0]
-			warehouse_position = simulation._get_nearest_delivery_position(actor.global_position)
+			warehouse_position = _storage_position_for(actor.global_position, "boards")
 		var forestry_in_progress := actor.state in [Citizen.State.TO_TREE, Citizen.State.CHOPPING, Citizen.State.TO_SAWMILL]
 		var forestry_candidates: Array[Dictionary] = []
 		if forestry_worker and actor_work_time:
 			# Tree validity and walkable interaction cells are snapshot-wide facts.
 			# Reusing the shared list avoids rebuilding it once per forestry worker.
-			forestry_candidates = forestry_targets
+			forestry_candidates = _forestry_targets(actor.global_position)
 		var farming_worker := actor.permanent_role == "farming" and actor.is_employed() and not actor.is_player_controlled
 		var farming_in_progress := farming_worker and actor.active_role == "farming" and actor.state in [Citizen.State.TO_TREE, Citizen.State.TO_SAWMILL, Citizen.State.SAWING, Citizen.State.WAITING_COURIER]
 		var farming_position := Vector3.INF
@@ -58,7 +58,7 @@ func capture(sequence: int) -> WorldSnapshot:
 			farming_warehouse_position = actor.warehouse_position
 		elif farming_worker and not simulation.farm_positions.is_empty() and not simulation.warehouse_positions.is_empty():
 			farming_position = actor.employment_workplace.get_meta("service_position", actor.employment_workplace.global_position) if is_instance_valid(actor.employment_workplace) else simulation.farm_positions[0]
-			farming_warehouse_position = simulation._get_nearest_delivery_position(actor.global_position)
+			farming_warehouse_position = _storage_position_for(actor.global_position, "food")
 		var farming_can_start: bool = farming_worker and actor_work_time and simulation._has_storage_room_for_role("farming") and farming_position != Vector3.INF and farming_warehouse_position != Vector3.INF
 		var construction_worker := actor.permanent_role == "construction" and actor.is_employed() and not actor.is_player_controlled
 		var construction_in_progress := construction_worker and actor.active_role in ["construction", "demolition"] and actor.state == Citizen.State.CONSTRUCTING and is_instance_valid(actor.construction_site)
@@ -77,8 +77,8 @@ func capture(sequence: int) -> WorldSnapshot:
 					construction_mode = &"demolition"
 					construction_target_key = _target_key(&"demolition", demolition_site.building.global_position)
 					construction_position = actor._reachable_construction_approach(demolition_site.building)
-			elif simulation._preferred_construction_site() != null:
-				var construction_site: ConstructionSite = simulation._preferred_construction_site()
+			elif _construction_site_for(actor) != null:
+				var construction_site: ConstructionSite = _construction_site_for(actor)
 				if is_instance_valid(construction_site.node):
 					construction_mode = &"construction"
 					construction_target_key = _target_key(&"construction", construction_site.node.global_position)
@@ -100,8 +100,8 @@ func capture(sequence: int) -> WorldSnapshot:
 					daily_construction_mode = &"demolition"
 					daily_construction_target_key = _target_key(&"demolition", daily_demolition_site.building.global_position)
 					daily_construction_position = actor._reachable_construction_approach(daily_demolition_site.building)
-			elif simulation._preferred_construction_site() != null:
-				var daily_construction_site: ConstructionSite = simulation._preferred_construction_site()
+			elif _construction_site_for(actor) != null:
+				var daily_construction_site: ConstructionSite = _construction_site_for(actor)
 				if is_instance_valid(daily_construction_site.node):
 					daily_construction_mode = &"construction"
 					daily_construction_target_key = _target_key(&"construction", daily_construction_site.node.global_position)
@@ -304,7 +304,7 @@ func capture(sequence: int) -> WorldSnapshot:
 				&"daily.cleaning.in_progress": daily_cleaning_in_progress,
 				&"daily.cleaning.can_start": daily_cleaning_can_start,
 				&"daily.cleaning.candidates": daily_cleaning_candidates,
-				&"daily.cleaning.warehouse_position": simulation._get_nearest_delivery_position(actor.global_position) if daily_order_role == "cleaning" else Vector3.INF,
+				&"daily.cleaning.warehouse_position": _cleaning_warehouse_position(actor, daily_cleaning_candidates) if daily_order_role == "cleaning" else Vector3.INF,
 				&"workforce.worker_data": worker_data,
 				&"workforce.pending_workplace_key": _workplace_target_key(actor.pending_employment_workplace),
 				&"workforce.pending_workplace_position": actor.pending_employment_workplace.global_position if is_instance_valid(actor.pending_employment_workplace) else Vector3.INF,
@@ -344,8 +344,30 @@ func _forestry_targets(from: Vector3 = Vector3.INF) -> Array[Dictionary]:
 			continue
 		var access := _resource_access_position(tree_position, from)
 		if access != Vector3.INF:
-			targets.append({&"id": StringName("tree:%d:%d" % [cell.x, cell.y]), &"position": tree_position, &"access": access})
+			var cost := _route_cost(from, access)
+			if cost < INF:
+				targets.append({&"id": StringName("tree:%d:%d" % [cell.x, cell.y]), &"position": tree_position, &"access": access, &"route_cost": cost})
 	return targets
+
+
+func _construction_site_for(actor: Citizen) -> ConstructionSite:
+	if not is_instance_valid(actor):
+		return null
+	var preferred: ConstructionSite = simulation._preferred_construction_site()
+	if preferred != null and is_instance_valid(preferred.node) and actor._reachable_construction_approach(preferred.node) != Vector3.INF:
+		return preferred
+	var best: ConstructionSite = null
+	var best_score := -INF
+	for candidate: ConstructionSite in simulation.construction_sites:
+		if candidate == null or not is_instance_valid(candidate.node) or candidate.node.is_queued_for_deletion():
+			continue
+		if actor._reachable_construction_approach(candidate.node) == Vector3.INF:
+			continue
+		var score: float = simulation._construction_development_priority(candidate)
+		if score > best_score:
+			best = candidate
+			best_score = score
+	return best
 
 
 func _gathering_targets() -> Array[Dictionary]:
@@ -384,6 +406,13 @@ func _resource_access_position(resource_position: Vector3, from: Vector3 = Vecto
 		if simulation._is_board_cell(cell) and not simulation._is_navigation_cell_blocked(cell):
 			return simulation._cell_center(cell)
 	return Vector3.INF
+
+
+func _route_cost(from: Vector3, destination: Vector3) -> float:
+	if from == Vector3.INF or destination == Vector3.INF:
+		return INF
+	var route: RouteResult = simulation._find_path_around_houses(from, destination, false)
+	return simulation._route_cost(from, route)
 
 
 func _cleaning_targets(actor: Citizen) -> Array[Dictionary]:
@@ -439,12 +468,12 @@ func _food_gathering_targets(actor: Citizen) -> Array[Dictionary]:
 		var cell := cell_value as Vector2i
 		var node := (simulation.forage_sources[cell] as Dictionary).get("node") as Node3D
 		if is_instance_valid(node) and simulation._is_route_reachable(actor.global_position, node.global_position):
-			targets.append({&"id": StringName("plant:%d:%d" % [cell.x, cell.y]), &"resource_type": "food", &"position": node.global_position, &"access": node.global_position})
+			targets.append({&"id": StringName("plant:%d:%d" % [cell.x, cell.y]), &"resource_type": "food", &"position": node.global_position, &"access": node.global_position, &"route_cost": _route_cost(actor.global_position, node.global_position)})
 	for cell_value in simulation.rabbit_sources:
 		var cell := cell_value as Vector2i
 		var node := (simulation.rabbit_sources[cell] as Dictionary).get("node") as Node3D
 		if is_instance_valid(node) and simulation._is_route_reachable(actor.global_position, node.global_position):
-			targets.append({&"id": StringName("rabbit:%d:%d" % [cell.x, cell.y]), &"resource_type": "food", &"position": node.global_position, &"access": node.global_position})
+			targets.append({&"id": StringName("rabbit:%d:%d" % [cell.x, cell.y]), &"resource_type": "food", &"position": node.global_position, &"access": node.global_position, &"route_cost": _route_cost(actor.global_position, node.global_position)})
 	return targets
 
 
@@ -464,7 +493,7 @@ func _daily_gathering_targets_for(actor: Citizen, role: String) -> Array[Diction
 						continue
 				var access: Vector3 = simulation._resource_access_position(actor.global_position, tree_position)
 				if access != Vector3.INF:
-					targets.append({&"id": StringName("branch:%d:%d" % [tree_cell.x, tree_cell.y]), &"resource_type": "branches", &"position": tree_position, &"access": access})
+					targets.append({&"id": StringName("branch:%d:%d" % [tree_cell.x, tree_cell.y]), &"resource_type": "branches", &"position": tree_position, &"access": access, &"route_cost": _route_cost(actor.global_position, access)})
 		"gather_grass":
 			for grass_cell_value in simulation.grass_sources.keys():
 				var grass_cell := grass_cell_value as Vector2i
@@ -473,12 +502,12 @@ func _daily_gathering_targets_for(actor: Citizen, role: String) -> Array[Diction
 				if int(grass_source.get(&"remaining", 0)) > 0 and is_instance_valid(grass_node):
 					var access: Vector3 = simulation._resource_access_position(actor.global_position, grass_node.global_position)
 					if access != Vector3.INF:
-						targets.append({&"id": StringName("grass:%d:%d" % [grass_cell.x, grass_cell.y]), &"resource_type": "grass", &"position": grass_node.global_position, &"access": access})
+						targets.append({&"id": StringName("grass:%d:%d" % [grass_cell.x, grass_cell.y]), &"resource_type": "grass", &"position": grass_node.global_position, &"access": access, &"route_cost": _route_cost(actor.global_position, access)})
 		"gather_water":
 			for pond_position: Vector3 in simulation.pond_positions:
 				var access: Vector3 = simulation._pond_access_position(actor.global_position, pond_position)
 				if access != Vector3.INF:
-					targets.append({&"id": _target_key(&"water", access), &"resource_type": "water", &"position": access, &"access": access})
+					targets.append({&"id": _target_key(&"water", access), &"resource_type": "water", &"position": access, &"access": access, &"route_cost": _route_cost(actor.global_position, access)})
 	return targets
 
 
@@ -487,9 +516,22 @@ func _gathering_warehouse_position(actor: Citizen, candidates: Array[Dictionary]
 		return actor.employment_workplace.get_meta("service_position", actor.employment_workplace.global_position)
 	if not candidates.is_empty():
 		var first_position: Variant = candidates[0].get(&"position", actor.global_position)
+		var resource_type := str(candidates[0].get(&"resource_type", ""))
 		if first_position is Vector3:
-			return simulation._get_nearest_delivery_position(first_position as Vector3)
-	return simulation._get_nearest_delivery_position(actor.global_position)
+			return _storage_position_for(first_position as Vector3, resource_type)
+	return Vector3.INF
+
+
+func _cleaning_warehouse_position(actor: Citizen, candidates: Array[Dictionary]) -> Vector3:
+	if not candidates.is_empty():
+		var resource_type := str(candidates[0].get(&"resource_type", ""))
+		return _storage_position_for(actor.global_position, resource_type)
+	return Vector3.INF
+
+
+func _storage_position_for(from: Vector3, resource_type: String) -> Vector3:
+	var index: int = simulation._find_reachable_warehouse_index(from, resource_type, 1)
+	return simulation.warehouse_positions[index] if index >= 0 else Vector3.INF
 
 
 func _worker_data(actor: Citizen) -> Dictionary:
@@ -625,6 +667,7 @@ func _factory_for_role_internal(role: String) -> Node3D:
 
 func _role_employers() -> Dictionary:
 	var employers := {}
+	var employment_center: Vector3 = simulation._employment_center_position()
 	var occupancy: Dictionary = {}
 	for citizen in simulation.citizens:
 		if not is_instance_valid(citizen):
@@ -651,10 +694,14 @@ func _role_employers() -> Dictionary:
 			var occupied := int(occupancy.get("%s:%d" % [role, workplace.get_instance_id()], 0))
 			var available_slots: int = simulation._employer_capacity(role, workplace) - occupied
 			if available_slots > 0:
+				var service_position: Vector3 = workplace.get_meta("service_position", workplace.global_position)
+				if employment_center == Vector3.INF or not simulation._is_route_reachable(employment_center, service_position):
+					continue
 				candidates.append({
-					"position": workplace.global_position,
+					"position": service_position,
 					"target_key": _workplace_target_key(workplace),
 					"available_slots": available_slots,
+					"route_cost": _route_cost(employment_center, service_position),
 				})
 		if candidates.is_empty():
 			var fallback: Node3D = simulation._employer_for_role(role)
@@ -665,6 +712,9 @@ func _role_employers() -> Dictionary:
 					"available_slots": 1,
 				})
 		if not candidates.is_empty():
+			candidates.sort_custom(func(left: Dictionary, right: Dictionary) -> bool:
+				return float(left.get("route_cost", INF)) < float(right.get("route_cost", INF))
+			)
 			employers[role] = candidates
 	# Couriers are formally employed in the tent era but do not yet own a
 	# workplace node. The employment centre is only the registration destination.

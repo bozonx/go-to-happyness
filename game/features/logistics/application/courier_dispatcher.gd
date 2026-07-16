@@ -79,7 +79,7 @@ func _publish_manual_worker_tasks() -> void:
 		var resource_type: String = worker.resource_type
 		var amount := worker.carried_amount
 		var worker_position: Vector3 = worker.global_position if worker.is_inside_tree() else worker.position
-		var warehouse_index: int = simulation.settlement.find_warehouse_index(worker_position, resource_type, amount, simulation.warehouse_positions)
+		var warehouse_index: int = _warehouse_index(worker_position, resource_type, amount)
 		if warehouse_index < 0:
 			continue
 		publish(
@@ -148,6 +148,12 @@ func _nearest_courier(couriers: Array[Citizen], pickup: Vector3) -> Citizen:
 			best = courier
 			distance = candidate_distance
 	return best
+
+
+func _warehouse_index(from: Vector3, resource_type: String, amount: int) -> int:
+	if simulation.has_method(&"_find_reachable_warehouse_index"):
+		return simulation._find_reachable_warehouse_index(from, resource_type, amount)
+	return simulation.settlement.find_warehouse_index(from, resource_type, amount, simulation.warehouse_positions)
 
 
 func _cleanup_invalid_tasks() -> void:

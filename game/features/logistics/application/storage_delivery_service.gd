@@ -24,7 +24,7 @@ func on_resource_delivered(worker: Citizen, resource_type: String, amount: int) 
 			simulation._release_task_warehouse_reservation(task)
 	simulation.courier_dispatcher.complete_for(worker)
 	var worker_position: Vector3 = worker.global_position if worker.is_inside_tree() else worker.position
-	var warehouse_index: int = reserved_index if reserved_index >= 0 else simulation.settlement.find_warehouse_index(worker_position, resource_type, amount, simulation.warehouse_positions)
+	var warehouse_index: int = reserved_index if reserved_index >= 0 else _warehouse_index(worker_position, resource_type, amount)
 	if warehouse_index < 0:
 		if simulation.has_method("_drop_resource_pile"):
 			simulation._drop_resource_pile(_drop_position(worker), resource_type, amount)
@@ -53,7 +53,7 @@ func _finish_storage_delivery(worker: Citizen, resource_type: String, _storage_s
 		worker.storage_delivery_result(false, CitizenStatusEffectScript.STORAGE_NO_WAREHOUSE)
 		return
 	var worker_position: Vector3 = worker.global_position if worker.is_inside_tree() else worker.position
-	var next_index: int = simulation.settlement.find_warehouse_index(worker_position, resource_type, 1, simulation.warehouse_positions)
+	var next_index: int = _warehouse_index(worker_position, resource_type, 1)
 	if next_index >= 0:
 		worker.storage_delivery_result(true)
 		return
@@ -69,3 +69,9 @@ func _drop_message(storage_status: int, amount: int, resource_type: String) -> S
 
 func _drop_position(worker: Citizen) -> Vector3:
 	return worker.global_position if worker.is_inside_tree() else worker.position
+
+
+func _warehouse_index(from: Vector3, resource_type: String, amount: int) -> int:
+	if simulation.has_method(&"_find_reachable_warehouse_index"):
+		return simulation._find_reachable_warehouse_index(from, resource_type, amount)
+	return simulation.settlement.find_warehouse_index(from, resource_type, amount, simulation.warehouse_positions)

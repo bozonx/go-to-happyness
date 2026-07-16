@@ -94,7 +94,7 @@ func _closest_free_candidate(snapshot: WorldSnapshot, citizen: CitizenSnapshot, 
 		var access: Variant = candidate.get(&"access", Vector3.INF)
 		if source_id == &"" or not (access is Vector3) or access == Vector3.INF or assigned_sources.has(source_id):
 			continue
-		var distance := citizen.position.distance_squared_to(access)
+		var distance := float(candidate.get(&"route_cost", citizen.position.distance_squared_to(access)))
 		if distance < best_distance or (is_equal_approx(distance, best_distance) and str(source_id) < str(best.get(&"id", &""))):
 			best = candidate.duplicate(true)
 			best_distance = distance

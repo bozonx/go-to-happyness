@@ -43,6 +43,12 @@ const TrailOverlayShader = preload("res://game/features/roads/presentation/trail
 const FirstPersonCrosshair = preload("res://game/features/citizens/presentation/first_person_crosshair.gd")
 const WeatherStateScript = preload("res://game/features/simulation/domain/weather_state.gd")
 const FirefliesEffectScript = preload("res://game/features/world/presentation/fireflies_effect.gd")
+const EventServiceScript = preload("res://game/features/events/application/event_service.gd")
+const EventRegistryScript = preload("res://game/features/events/domain/event_registry.gd")
+const EventLogScript = preload("res://game/features/events/domain/event_log.gd")
+const EventContextScript = preload("res://game/features/events/domain/event_context.gd")
+const EventOutcomeScript = preload("res://game/features/events/domain/event_outcome.gd")
+const TentEraEventsScript = preload("res://game/features/events/application/tent_era_events.gd")
 
 
 const BOARD_CELLS := 48
@@ -387,10 +393,11 @@ var decision_title: Label
 var decision_description: Label
 var decision_primary_button: Button
 var decision_secondary_button: Button
-var pending_survival_decision := ""
+var event_service: EventService
 var survival_busy_until: Dictionary = {}
 var protected_firewood_day := -1
 var smoky_firewood_day := -1
+var _decision_buttons: Array[Button] = []
 var job_submenu_btn: Button
 var daily_order_submenu_btn: Button
 var job_back_btn: Button
@@ -498,6 +505,9 @@ func _ready() -> void:
 	courier_dispatcher = CourierDispatcherScript.new()
 	courier_dispatcher.configure(self)
 	settlement.apply_tent_start()
+	var _event_registry := EventRegistryScript.new()
+	_event_registry.register_all(TentEraEventsScript.build())
+	event_service = EventServiceScript.new(_event_registry)
 	tent_weather = TentEraSurvivalRulesScript.weather_for_day(day_cycle.current_day)
 	weather_state.new_day(tent_weather, random, int(clock.minutes))
 	_create_world()
@@ -1708,6 +1718,7 @@ func _preferred_construction_site() -> ConstructionSite:
 			chosen = site
 			best_score = score
 	return chosen if chosen != null else waiting_chosen
+
 
 func _construction_development_priority(site: ConstructionSite) -> float:
 	var building_type := site.building_type
@@ -9899,17 +9910,9 @@ func _get_delivery_position() -> Vector3:
 	return _get_nearest_delivery_position(Vector3.ZERO)
 
 func _get_nearest_delivery_position(from: Vector3) -> Vector3:
-	var nearest: Vector3 = Vector3.INF
-	var nearest_distance := INF
-	for position in warehouse_positions:
-		if not _is_route_reachable(from, position, false):
-			continue
-		var distance := from.distance_squared_to(position)
-		if distance < nearest_distance:
-			nearest = position
-			nearest_distance = distance
-	if nearest != Vector3.INF:
-		return nearest
+	var warehouse_index := _find_reachable_warehouse_index(from, "", 1, false)
+	if warehouse_index >= 0:
+		return warehouse_positions[warehouse_index]
 	if is_instance_valid(campfire_node) and _is_route_reachable(from, campfire_node.global_position, false):
 		return campfire_node.global_position
 	if is_instance_valid(entrance_stone):
@@ -9920,13 +9923,50 @@ func _get_nearest_delivery_position(from: Vector3) -> Vector3:
 func _warehouse_delivery_position(from: Vector3, resource_type: String, amount: int) -> Vector3:
 	if warehouse_positions.is_empty():
 		return from
-	var index: int = settlement.find_warehouse_index(from, resource_type, amount, warehouse_positions)
-	if index >= 0 and _is_route_reachable(from, warehouse_positions[index], false):
+	var index := _find_reachable_warehouse_index(from, resource_type, amount)
+	if index >= 0:
 		return warehouse_positions[index]
-	for position in warehouse_positions:
-		if _is_route_reachable(from, position, false):
-			return position
 	return from
+
+
+func _find_reachable_warehouse_index(from: Vector3, resource_type: String, amount: int, require_room := true) -> int:
+	var best_index := -1
+	var best_cost := INF
+	var best_ratio := INF
+	for index in range(mini(warehouse_positions.size(), settlement.warehouses.size())):
+		if require_room and not resource_type.is_empty() and settlement.warehouse_room_for(index, resource_type) < amount:
+			continue
+		var position := warehouse_positions[index]
+		if not _is_route_reachable(from, position, false):
+			continue
+		var route := _find_path_around_houses(from, position, false)
+		if not route.reachable:
+			continue
+		var cost := _route_cost(from, route)
+		var ratio := float(settlement.warehouses[index].amount(resource_type)) / float(maxi(1, settlement.warehouses[index].capacity)) if not resource_type.is_empty() else 0.0
+		if settlement.balanced_warehouse_mode:
+			if ratio < best_ratio or (is_equal_approx(ratio, best_ratio) and cost < best_cost):
+				best_index = index
+				best_ratio = ratio
+				best_cost = cost
+		elif cost < best_cost:
+			best_index = index
+			best_cost = cost
+	return best_index
+
+
+func _route_cost(from: Vector3, route: RouteResult) -> float:
+	if route == null or not route.reachable:
+		return INF
+	var cost := 0.0
+	var previous := from
+	for waypoint: Vector3 in route.waypoints:
+		var segment := nav_grid.segment_cost(previous, waypoint)
+		if not is_finite(segment):
+			return INF
+		cost += segment
+		previous = waypoint
+	return cost
 
 func _is_construction_site(node: Node3D) -> bool:
 	return is_instance_valid(node) and construction.has_site(node)

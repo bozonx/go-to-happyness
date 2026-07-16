@@ -97,6 +97,8 @@ func relief_candidates_for(citizen: Citizen) -> Array[Dictionary]:
 		var position: Vector3 = toilet.get_meta("service_position") if toilet.has_meta("service_position") else toilet.global_position
 		if citizen.global_position.distance_to(position) > RELIEF_SEARCH_RADIUS:
 			continue
+		if not simulation._is_route_reachable(citizen.global_position, position):
+			continue
 		var building_type := str(toilet.get_meta("building_type", ""))
 		var capacity := _toilet_capacity(building_type)
 		for slot in range(capacity):
@@ -105,6 +107,9 @@ func relief_candidates_for(citizen: Citizen) -> Array[Dictionary]:
 				&"position": position,
 				&"kind": &"toilet",
 			})
+	candidates.sort_custom(func(left: Dictionary, right: Dictionary) -> bool:
+		return citizen.global_position.distance_squared_to(left.position) < citizen.global_position.distance_squared_to(right.position)
+	)
 	if not candidates.is_empty():
 		_cache_relief_candidates(citizen.ai_id, topology_revision, candidates)
 		return candidates

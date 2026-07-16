@@ -63,7 +63,7 @@ func _closest_free_candidate(citizen: CitizenSnapshot, assigned_sites: Dictionar
 		var position: Variant = candidate.get(&"position", Vector3.INF)
 		if site_id == &"" or not (position is Vector3) or position == Vector3.INF or assigned_sites.has(site_id):
 			continue
-		var distance := citizen.position.distance_squared_to(position)
+		var distance := float(candidate.get(&"route_cost", citizen.position.distance_squared_to(position)))
 		if distance < best_distance or (is_equal_approx(distance, best_distance) and str(site_id) < str(best.get(&"id", &""))):
 			best = candidate.duplicate(true)
 			best_distance = distance
