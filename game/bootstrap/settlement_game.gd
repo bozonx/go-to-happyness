@@ -391,12 +391,8 @@ var building_cancel_construction_button: Button
 var decision_menu: Panel
 var decision_title: Label
 var decision_description: Label
-var decision_primary_button: Button
-var decision_secondary_button: Button
 var event_service: EventService
 var survival_busy_until: Dictionary = {}
-var protected_firewood_day := -1
-var smoky_firewood_day := -1
 var _decision_buttons: Array[Button] = []
 var job_submenu_btn: Button
 var daily_order_submenu_btn: Button
@@ -902,6 +898,12 @@ func _handle_day_cycle_event(event: SimulationDayEvent) -> void:
 			tent_weather = TentEraSurvivalRulesScript.weather_for_day(day_cycle.current_day)
 			weather_state.new_day(tent_weather, random, int(clock.minutes))
 			_update_interface("Forecast: %s." % TentEraSurvivalRulesScript.WEATHER_NAMES[tent_weather])
+			if event_service != null:
+				event_service.log.clear_flag(&"smoky_firewood")
+				event_service.log.clear_flag(&"firewood_protected_today")
+				var delayed_outcomes: Array[EventOutcome] = event_service.advance_day(day_cycle.current_day, _build_event_context(), random)
+				for outcome in delayed_outcomes:
+					_apply_event_outcome(outcome)
 			_maybe_present_survival_decision()
 			_refresh_living_statuses()
 			settlement.cheer_up_used_today = false
@@ -1032,7 +1034,8 @@ func _apply_rain_damage() -> void:
 	if stored_units <= sheltered_capacity:
 		return
 	var exposed_ratio := (stored_units - sheltered_capacity) / stored_units
-	var rain_amounts := {"food": food, "grass": grass, "branches": 0 if protected_firewood_day == day_cycle.current_day else branches, "wood": wood, "logs": settlement.logs}
+	var _firewood_protected := event_service != null and event_service.log.has_flag(&"firewood_protected_today")
+	var rain_amounts := {"food": food, "grass": grass, "branches": 0 if _firewood_protected else branches, "wood": wood, "logs": settlement.logs}
 	var losses := TentEraSurvivalRulesScript.rain_hourly_decay_losses(rain_amounts, exposed_ratio)
 	for resource_type in losses:
 		settlement.add(resource_type, -int(losses[resource_type]))
@@ -1069,7 +1072,12 @@ func _update_recovery_arrival() -> void:
 func _apply_daily_settlement_rules() -> void:
 	if trail_field != null:
 		trail_field.apply_daily_decay()
-	if smoky_firewood_day != day_cycle.current_day:
+	var _is_smoky := event_service != null and event_service.log.has_flag(&"smoky_firewood")
+	if _is_smoky:
+		for citizen in citizens:
+			if is_instance_valid(citizen):
+				citizen.set_status_effect(CitizenStatusEffectScript.SMOKY_EYES, "Smoky eyes", 1.0, -1.0)
+	else:
 		for citizen in citizens:
 			if is_instance_valid(citizen):
 				citizen.clear_status_effect(CitizenStatusEffectScript.SMOKY_EYES)
@@ -2039,6 +2047,43 @@ func _find_path_around_houses(from: Vector3, destination: Vector3, may_enter_des
 	return route_service.find_route_request(request)
 
 
+## A repeated physical blockage needs a different first leg; replanning the
+## identical A* request would otherwise select the same waypoint forever.
+func _find_recovery_path(from: Vector3, destination: Vector3, may_enter_destination_house: bool) -> RouteResult:
+	var fallback := _find_path_around_houses(from, destination, may_enter_destination_house)
+	if nav_grid == null or route_service == null or not fallback.reachable:
+		return fallback
+	var from_cell := nav_grid.cell_from_position(from)
+	var desired := Vector2(destination.x - from.x, destination.z - from.z)
+	if desired.length_squared() <= 0.0001:
+		return fallback
+	desired = desired.normalized()
+	var best: RouteResult = null
+	var best_cost := INF
+	for offset: Vector2i in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN, Vector2i(-1, -1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(1, 1)]:
+		var candidate_cell: Vector2i = from_cell + offset
+		if not nav_grid.is_walkable(candidate_cell):
+			continue
+		var candidate: Vector3 = nav_grid.cell_center(candidate_cell)
+		var direction := Vector2(candidate.x - from.x, candidate.z - from.z).normalized()
+		# Keep the first leg lateral or backward. A forward cell repeats the blocked
+		# physical approach that just failed.
+		if direction.dot(desired) > 0.25 or not nav_grid.is_segment_clear(from, candidate):
+			continue
+		var prefix := _find_path_around_houses(from, candidate, false)
+		var suffix := _find_path_around_houses(candidate, destination, may_enter_destination_house)
+		if not prefix.reachable or not suffix.reachable:
+			continue
+		var waypoints := prefix.waypoints.duplicate()
+		waypoints.append_array(suffix.waypoints)
+		var candidate_route := RouteResult.success(waypoints, destination, nav_grid.revision(), nav_grid.topology_revision())
+		var cost := _route_cost(from, candidate_route)
+		if cost < best_cost:
+			best = candidate_route
+			best_cost = cost
+	return best if best != null else fallback
+
+
 func _movement_speed_modifier_at(position_on_board: Vector3) -> float:
 	return nav_grid.movement_speed_modifier_at(position_on_board) if nav_grid != null else 1.0
 
@@ -2744,7 +2789,7 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	add_child(citizen)
 	citizen.simulation = self
 	citizen.setup_specialization(primary_specialization if not primary_specialization.is_empty() else "unassigned")
-	citizen.setup_navigation(_find_path_around_houses, _get_nearest_delivery_position, _resolve_building_queue_position, _movement_speed_modifier_at, _navigation_revision, _record_trail_movement, _is_route_reachable, _complete_building_queue_arrival, _release_building_queue_entry)
+	citizen.setup_navigation(_find_path_around_houses, _get_nearest_delivery_position, _resolve_building_queue_position, _movement_speed_modifier_at, _navigation_revision, _record_trail_movement, _is_route_reachable, _complete_building_queue_arrival, _release_building_queue_entry, _find_recovery_path)
 	citizen.setup_registration_service(_can_start_registration, _registration_duration)
 	citizen.resource_delivered.connect(_on_resource_delivered)
 	citizen.resource_dropped.connect(_on_resource_dropped)
@@ -3008,16 +3053,6 @@ func _create_survival_decision_menu(ui: CanvasLayer) -> void:
 	decision_description.size = Vector2(440, 116)
 	decision_description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	decision_menu.add_child(decision_description)
-	decision_primary_button = Button.new()
-	decision_primary_button.position = Vector2(20, 194)
-	decision_primary_button.size = Vector2(440, 32)
-	decision_primary_button.pressed.connect(_resolve_survival_decision.bind(true))
-	decision_menu.add_child(decision_primary_button)
-	decision_secondary_button = Button.new()
-	decision_secondary_button.position = Vector2(20, 236)
-	decision_secondary_button.size = Vector2(440, 32)
-	decision_secondary_button.pressed.connect(_resolve_survival_decision.bind(false))
-	decision_menu.add_child(decision_secondary_button)
 
 
 func _create_crosshair(ui: CanvasLayer) -> void:
@@ -3069,62 +3104,89 @@ func _create_campfire_story_menu(ui: CanvasLayer) -> void:
 
 
 func _maybe_present_survival_decision() -> void:
-	if settlement.era != SettlementState.Era.TENT or decision_menu == null or decision_menu.visible:
+	if decision_menu == null or decision_menu.visible:
 		return
-	if tent_weather == TentEraSurvivalRulesScript.Weather.RAIN and branches > 0:
-		pending_survival_decision = "protect_firewood"
-		decision_title.text = "Threat of wet firewood"
-		decision_description.text = "The open storage will be soaked by rain. Protect the branch supply for three hours, or keep everyone working and risk smoky fires tomorrow."
-		decision_primary_button.text = "Assign a resident to protect the firewood"
-		decision_secondary_button.text = "Ignore the risk"
-		decision_menu.visible = true
-	elif random.randf() < 0.35:
-		pending_survival_decision = "forest_gifts"
-		decision_title.text = "Unknown forest gifts"
-		decision_description.text = "Foragers found unfamiliar berries. They may lift the camp's spirits or poison one resident for a day."
-		decision_primary_button.text = "Try the berries"
-		decision_secondary_button.text = "Discard them"
-		decision_menu.visible = true
-	elif random.randf() < 0.25:
-		pending_survival_decision = "traveler"
-		decision_title.text = "Wandering traveler"
-		decision_description.text = "A lost tourist will trade a tarp roll for 3 food and 2 water."
-		decision_primary_button.text = "Trade"
-		decision_secondary_button.text = "Send away"
-		decision_menu.visible = true
+	if event_service == null or event_service.has_pending():
+		return
+	var ctx := _build_event_context()
+	var event_def := event_service.roll_daily_event(ctx, random)
+	if event_def == null:
+		return
+	_show_event_decision(event_def)
 
 
-func _resolve_survival_decision(accept: bool) -> void:
-	if pending_survival_decision == "protect_firewood":
-		if accept:
-			protected_firewood_day = day_cycle.current_day
-			_assign_survival_busy_worker(3.0, "Protecting firewood")
-			_add_message("A resident is protecting the firewood from rain.")
-		else:
-			smoky_firewood_day = day_cycle.current_day + 1
-			_add_message("The firewood was left exposed and will smoke tomorrow.")
-	elif pending_survival_decision == "forest_gifts" and accept:
-		if random.randf() < 0.5:
-			wellbeing = mini(100, wellbeing + 20)
-			_add_message("The berries were safe. Wellbeing rose by 20.")
-		else:
-			_assign_survival_busy_worker(24.0, "Poisoned")
-			_add_message("The berries were poisonous. One resident cannot work for 24 hours.")
-	elif pending_survival_decision == "forest_gifts":
-		_add_message("The unknown berries were discarded.")
-	elif pending_survival_decision == "traveler":
-		if accept:
-			if food >= 3 and water >= 2:
-				settlement.add("food", -3)
-				settlement.add("water", -2)
-				settlement.add("tarp", 1)
-				_add_message("Traded 3 food and 2 water for a tarp roll.")
-			else:
-				_add_message("Not enough food or water to trade with the traveler.")
-		else:
-			_add_message("The traveler left without trading.")
-	pending_survival_decision = ""
+func _show_event_decision(event_def: GameEventDef) -> void:
+	decision_title.text = event_def.title
+	decision_description.text = event_def.description
+	for btn in _decision_buttons:
+		btn.queue_free()
+	_decision_buttons.clear()
+	var y_offset := 194
+	for i in range(event_def.choices.size()):
+		var btn := Button.new()
+		btn.position = Vector2(20, y_offset)
+		btn.size = Vector2(440, 32)
+		btn.text = event_def.choices[i].label
+		btn.pressed.connect(_resolve_event_decision.bind(i))
+		decision_menu.add_child(btn)
+		_decision_buttons.append(btn)
+		y_offset += 42
+	decision_menu.visible = true
+
+
+func _resolve_event_decision(choice_index: int) -> void:
+	if event_service == null or not event_service.has_pending():
+		decision_menu.visible = false
+		return
+	var ctx := _build_event_context()
+	var outcomes: Array[EventOutcome] = event_service.resolve_choice(choice_index, ctx, random)
+	for outcome in outcomes:
+		_apply_event_outcome(outcome)
 	decision_menu.visible = false
+
+
+func _build_event_context() -> EventContext:
+	var res := {
+		"food": food,
+		"water": water,
+		"branches": branches,
+		"grass": grass,
+		"wood": wood,
+		"stone": stone,
+		"hides": hides,
+		"goods": settlement.goods,
+		"tarp": settlement.tarp,
+		"logs": settlement.logs,
+	}
+	var flags: Dictionary = {}
+	if event_service != null and event_service.log != null:
+		flags = event_service.log.flags.duplicate()
+	return EventContextScript.create(
+		settlement.era,
+		day_cycle.current_day,
+		tent_weather,
+		res,
+		wellbeing,
+		citizens.size(),
+		flags,
+	)
+
+
+func _apply_event_outcome(outcome: EventOutcome) -> void:
+	match outcome.kind:
+		EventOutcome.Kind.MESSAGE:
+			if not outcome.text.is_empty():
+				_add_message(outcome.text)
+		EventOutcome.Kind.RESOURCE_CHANGE:
+			settlement.add(outcome.resource, outcome.amount)
+		EventOutcome.Kind.WELLBEING_CHANGE:
+			wellbeing = clampi(wellbeing + outcome.wellbeing_delta, 0, 100)
+		EventOutcome.Kind.WORKER_BUSY:
+			_assign_survival_busy_worker(outcome.worker_busy_hours, outcome.worker_busy_label)
+		EventOutcome.Kind.SET_FLAG:
+			pass
+		EventOutcome.Kind.DELAYED:
+			pass
 
 
 func _assign_survival_busy_worker(hours: float, status_label: String) -> void:
@@ -9566,7 +9628,8 @@ func _is_fire_lit(building: Node3D) -> bool:
 
 
 func fire_smoke_work_multiplier(position_on_board: Vector3) -> float:
-	if smoky_firewood_day != day_cycle.current_day:
+	var _is_smoky := event_service != null and event_service.log.has_flag(&"smoky_firewood")
+	if not _is_smoky:
 		return 1.0
 	for record in building_registry.records():
 		var building: Node3D = record.node

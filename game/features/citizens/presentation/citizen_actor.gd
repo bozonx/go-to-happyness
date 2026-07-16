@@ -36,7 +36,6 @@ const GRAVITY := 18.0
 const AI_JUMP_VELOCITY := 7.6
 const STUCK_TIME_BEFORE_JUMP := 0.75
 const STUCK_TIME_BEFORE_REPATH := 1.5
-const STUCK_TIME_BEFORE_SIDESTEP := 2.25
 const CONSTRUCTION_SLOT_SPACING := 0.42
 const CONSTRUCTION_APPROACH_DISTANCE := 1.0
 const ROUTE_PROGRESS_EPSILON := 0.06
@@ -301,6 +300,7 @@ var construction_delivery_resource := ""
 var building_supply_kind := "construction"
 var park_rest_duration := 4.0
 var pathfinder: Callable
+var recovery_pathfinder: Callable
 var movement_speed_modifier_query: Callable
 var trail_movement_recorder: Callable
 var navigation_revision_query: Callable
@@ -326,6 +326,7 @@ var recovery_repath_done := false
 var route_no_progress_time := 0.0
 var route_best_distance := INF
 var route_recovery_attempt := 0
+var recovery_detour_requested := false
 var jump_cooldown := 0.0
 var ground_contact_confirmed := false
 var blocked_by_storage := false
@@ -1467,6 +1468,7 @@ func _move_to(destination: Vector3, delta: float, may_enter_destination_house :=
 	if _route_uses_stale_navigation():
 		_invalidate_route_for_navigation_change()
 	if navigation_failed:
+		_stop_horizontal_movement()
 		if ai_move_failure_reason == BehaviorStep.FailureReason.NONE:
 			ai_move_failure_reason = BehaviorStep.FailureReason.MOVEMENT_FAILED
 		return false
@@ -1483,6 +1485,7 @@ func _move_to(destination: Vector3, delta: float, may_enter_destination_house :=
 			if route_unreachable_time >= ROUTE_UNREACHABLE_FAILURE_TIME:
 				navigation_failed = true
 				ai_move_failure_reason = BehaviorStep.FailureReason.UNREACHABLE
+				_stop_horizontal_movement()
 			return false
 	while not movement_path.is_empty():
 		var waypoint: Vector3 = movement_path.front()
@@ -1505,6 +1508,12 @@ func _plan_route(destination: Vector3) -> void:
 	var result: Variant = RouteResult.success([destination], destination)
 	if pathfinder.is_valid():
 		result = pathfinder.call(global_position, destination, path_allows_destination_house)
+	if recovery_detour_requested:
+		recovery_detour_requested = false
+		if recovery_pathfinder.is_valid():
+			var detour: Variant = recovery_pathfinder.call(global_position, destination, path_allows_destination_house)
+			if detour is RouteResult and (detour as RouteResult).reachable:
+				result = detour
 	if not result is RouteResult or not (result as RouteResult).reachable:
 		var failed_revision := int(navigation_revision_query.call()) if navigation_revision_query.is_valid() else -1
 		var reason := (result as RouteResult).unreachable_reason if result is RouteResult else RouteResult.UnreachableReason.UNKNOWN
@@ -1609,8 +1618,13 @@ func _force_repath() -> void:
 	if route_recovery_attempt >= ROUTE_RECOVERY_FAILURE_ATTEMPTS:
 		navigation_failed = true
 		ai_move_failure_reason = BehaviorStep.FailureReason.TIMEOUT
+		active_route = null
+		movement_path.clear()
+		_stop_horizontal_movement()
+		return
 	active_route = null
 	movement_path.clear()
+	recovery_detour_requested = route_recovery_attempt > 1
 	route_retry_timer = 0.0
 	route_retry_delay = ROUTE_RETRY_INTERVAL
 	route_no_progress_time = 0.0
@@ -1620,6 +1634,7 @@ func _force_repath() -> void:
 func _reset_waypoint_progress() -> void:
 	route_no_progress_time = 0.0
 	route_best_distance = INF
+	route_recovery_attempt = 0
 	stuck_time = 0.0
 	recovery_repath_done = false
 
@@ -1632,6 +1647,7 @@ func _reset_route(destination: Vector3) -> void:
 	route_no_progress_time = 0.0
 	route_best_distance = INF
 	route_recovery_attempt = 0
+	recovery_detour_requested = false
 	recovery_repath_done = false
 	route_retry_delay = ROUTE_RETRY_INTERVAL
 	route_unreachable_time = 0.0
@@ -1643,6 +1659,7 @@ func _update_route_progress(distance_before: float, distance_after: float, delta
 	if distance_after < route_best_distance - ROUTE_PROGRESS_EPSILON:
 		route_best_distance = distance_after
 		route_no_progress_time = 0.0
+		route_recovery_attempt = 0
 		return
 	route_no_progress_time += delta
 	if route_no_progress_time < ROUTE_RETRY_INTERVAL:
@@ -2119,8 +2136,9 @@ func apply_daily_decay() -> void:
 func is_building_site(site: Node3D) -> bool:
 	return not is_player_controlled and state == State.CONSTRUCTING and construction_site == site and global_position.distance_to(construction_position) <= 0.7
 
-func setup_navigation(next_pathfinder: Callable, next_delivery_position_resolver := Callable(), next_queue_position_resolver := Callable(), next_movement_speed_modifier_query := Callable(), next_navigation_revision_query := Callable(), next_trail_movement_recorder := Callable(), next_route_reachability_query := Callable(), next_queue_arrival_notifier := Callable(), next_queue_release_notifier := Callable()) -> void:
+func setup_navigation(next_pathfinder: Callable, next_delivery_position_resolver := Callable(), next_queue_position_resolver := Callable(), next_movement_speed_modifier_query := Callable(), next_navigation_revision_query := Callable(), next_trail_movement_recorder := Callable(), next_route_reachability_query := Callable(), next_queue_arrival_notifier := Callable(), next_queue_release_notifier := Callable(), next_recovery_pathfinder := Callable()) -> void:
 	pathfinder = next_pathfinder
+	recovery_pathfinder = next_recovery_pathfinder
 	delivery_position_resolver = next_delivery_position_resolver
 	queue_position_resolver = next_queue_position_resolver
 	queue_arrival_notifier = next_queue_arrival_notifier

@@ -4,7 +4,7 @@ extends RefCounted
 ## Journal of past events and a flag store for event chains.
 ## Pure domain — no references to nodes or UI.
 
-var entries: Array[EventLogEntry] = []
+var entries: Array = []
 var flags: Dictionary = {}
 var _last_day_for: Dictionary = {}
 

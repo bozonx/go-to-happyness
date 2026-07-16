@@ -12,8 +12,8 @@ const EventOutcome = preload("res://game/features/events/domain/event_outcome.gd
 const EventCondition = preload("res://game/features/events/domain/event_condition.gd")
 
 
-static func build() -> Array[GameEventDef]:
-	var defs: Array[GameEventDef] = []
+static func build() -> Array:
+	var defs: Array = []
 	defs.append(_protect_firewood())
 	defs.append(_forest_gifts())
 	defs.append(_traveler())
@@ -31,13 +31,13 @@ static func build() -> Array[GameEventDef]:
 
 # --- Existing events (ported from hardcoded logic) -----------------------------
 
-static func _protect_firewood() -> GameEventDef:
-	var conditions: Array[EventCondition] = [
+static func _protect_firewood() -> RefCounted:
+	var conditions: Array = [
 		EventCondition.era_is(SettlementStateScript.Era.TENT),
 		EventCondition.weather_is(TentEraSurvivalRulesScript.Weather.RAIN),
 		EventCondition.resource_at_least("branches", 1),
 	]
-	var choices: Array[EventChoiceDef] = [
+	var choices: Array = [
 		EventChoice.create(
 			"Assign a resident to protect the firewood",
 			[
@@ -62,16 +62,16 @@ static func _protect_firewood() -> GameEventDef:
 	)
 
 
-static func _forest_gifts() -> GameEventDef:
-	var conditions: Array[EventCondition] = [
+static func _forest_gifts() -> RefCounted:
+	var conditions: Array = [
 		EventCondition.era_is(SettlementStateScript.Era.TENT),
 		EventCondition.day_at_least(2),
 	]
-	var try_outcomes: Array[EventOutcome] = [
+	var try_outcomes: Array = [
 		EventOutcome.wellbeing(20),
 		EventOutcome.message("The berries were safe. Wellbeing rose by 20."),
 	]
-	var fail_outcomes: Array[EventOutcome] = [
+	var fail_outcomes: Array = [
 		EventOutcome.worker_busy(24.0, "Poisoned"),
 		EventOutcome.message("The berries were poisonous. One resident cannot work for 24 hours."),
 	]
@@ -79,7 +79,7 @@ static func _forest_gifts() -> GameEventDef:
 	random_outcome.kind = EventOutcome.Kind.MESSAGE
 	random_outcome.random_chance = 0.5
 	random_outcome.random_outcomes = try_outcomes + fail_outcomes
-	var choices: Array[EventChoiceDef] = [
+	var choices: Array = [
 		EventChoice.create("Try the berries", [random_outcome]),
 		EventChoice.create("Discard them", [EventOutcome.message("The unknown berries were discarded.")]),
 	]
@@ -91,14 +91,14 @@ static func _forest_gifts() -> GameEventDef:
 	)
 
 
-static func _traveler() -> GameEventDef:
-	var conditions: Array[EventCondition] = [
+static func _traveler() -> RefCounted:
+	var conditions: Array = [
 		EventCondition.era_is(SettlementStateScript.Era.TENT),
 		EventCondition.resource_at_least("food", 3),
 		EventCondition.resource_at_least("water", 2),
 		EventCondition.day_at_least(3),
 	]
-	var choices: Array[EventChoiceDef] = [
+	var choices: Array = [
 		EventChoice.create(
 			"Trade",
 			[
@@ -120,13 +120,13 @@ static func _traveler() -> GameEventDef:
 
 # --- New events ----------------------------------------------------------------
 
-static func _lost_child() -> GameEventDef:
-	var conditions: Array[EventCondition] = [
+static func _lost_child() -> RefCounted:
+	var conditions: Array = [
 		EventCondition.era_is(SettlementStateScript.Era.TENT),
 		EventCondition.day_at_least(3),
 		EventCondition.population_at_least(3),
 	]
-	var choices: Array[EventChoiceDef] = [
+	var choices: Array = [
 		EventChoice.create(
 			"Take them in",
 			[
@@ -151,8 +151,8 @@ static func _lost_child() -> GameEventDef:
 	)
 
 
-static func _strange_illness() -> GameEventDef:
-	var conditions: Array[EventCondition] = [
+static func _strange_illness() -> RefCounted:
+	var conditions: Array = [
 		EventCondition.era_is(SettlementStateScript.Era.TENT),
 		EventCondition.day_at_least(4),
 		EventCondition.population_at_least(3),
@@ -166,7 +166,7 @@ static func _strange_illness() -> GameEventDef:
 		EventOutcome.message("It was just a mild cold. Everyone recovered."),
 		EventOutcome.message("It was just a mild cold. Everyone recovered."),
 	]
-	var choices: Array[EventChoiceDef] = [
+	var choices: Array = [
 		EventChoice.create(
 			"Quarantine them",
 			[
@@ -193,8 +193,8 @@ static func _strange_illness() -> GameEventDef:
 	)
 
 
-static func _wild_boars() -> GameEventDef:
-	var conditions: Array[EventCondition] = [
+static func _wild_boars() -> RefCounted:
+	var conditions: Array = [
 		EventCondition.era_is(SettlementStateScript.Era.TENT),
 		EventCondition.flag_set(&"boar_warning"),
 	]
@@ -207,7 +207,7 @@ static func _wild_boars() -> GameEventDef:
 		EventOutcome.resource_change("food", -2),
 		EventOutcome.message("The boars got some food before being chased off."),
 	]
-	var choices: Array[EventChoiceDef] = [
+	var choices: Array = [
 		EventChoice.create(
 			"Chase them off",
 			[
@@ -232,12 +232,12 @@ static func _wild_boars() -> GameEventDef:
 	)
 
 
-static func _forest_ranger() -> GameEventDef:
-	var conditions: Array[EventCondition] = [
+static func _forest_ranger() -> RefCounted:
+	var conditions: Array = [
 		EventCondition.era_is(SettlementStateScript.Era.TENT),
 		EventCondition.day_at_least(5),
 	]
-	var choices: Array[EventChoiceDef] = [
+	var choices: Array = [
 		EventChoice.create(
 			"Trade and heed the warning",
 			[
@@ -266,13 +266,13 @@ static func _forest_ranger() -> GameEventDef:
 	)
 
 
-static func _refugees() -> GameEventDef:
-	var conditions: Array[EventCondition] = [
+static func _refugees() -> RefCounted:
+	var conditions: Array = [
 		EventCondition.era_is(SettlementStateScript.Era.TENT),
 		EventCondition.day_at_least(6),
 		EventCondition.resource_at_most("food", 999),
 	]
-	var choices: Array[EventChoiceDef] = [
+	var choices: Array = [
 		EventChoice.create(
 			"Welcome them",
 			[
@@ -297,8 +297,8 @@ static func _refugees() -> GameEventDef:
 	)
 
 
-static func _strange_light() -> GameEventDef:
-	var conditions: Array[EventCondition] = [
+static func _strange_light() -> RefCounted:
+	var conditions: Array = [
 		EventCondition.era_is(SettlementStateScript.Era.TENT),
 		EventCondition.day_at_least(4),
 	]
@@ -311,7 +311,7 @@ static func _strange_light() -> GameEventDef:
 		EventOutcome.worker_busy(24.0, "Lost"),
 		EventOutcome.message("The investigator got lost and took a day to return."),
 	]
-	var choices: Array[EventChoiceDef] = [
+	var choices: Array = [
 		EventChoice.create("Investigate", [EventOutcome.worker_busy(12.0, "Investigating"), investigate_random]),
 		EventChoice.create("Ignore it", [EventOutcome.message("The light faded by morning. Nothing happened.")]),
 	]
@@ -323,13 +323,13 @@ static func _strange_light() -> GameEventDef:
 	)
 
 
-static func _broken_tools() -> GameEventDef:
-	var conditions: Array[EventCondition] = [
+static func _broken_tools() -> RefCounted:
+	var conditions: Array = [
 		EventCondition.era_is(SettlementStateScript.Era.TENT),
 		EventCondition.day_at_least(5),
 		EventCondition.resource_at_least("branches", 2),
 	]
-	var choices: Array[EventChoiceDef] = [
+	var choices: Array = [
 		EventChoice.create(
 			"Repair it",
 			[
@@ -354,8 +354,8 @@ static func _broken_tools() -> GameEventDef:
 	)
 
 
-static func _tainted_water() -> GameEventDef:
-	var conditions: Array[EventCondition] = [
+static func _tainted_water() -> RefCounted:
+	var conditions: Array = [
 		EventCondition.era_is(SettlementStateScript.Era.TENT),
 		EventCondition.day_at_least(4),
 		EventCondition.resource_at_least("water", 3),
@@ -369,7 +369,7 @@ static func _tainted_water() -> GameEventDef:
 		EventOutcome.worker_busy(12.0, "Sick"),
 		EventOutcome.message("The water was contaminated. One resident got sick."),
 	]
-	var choices: Array[EventChoiceDef] = [
+	var choices: Array = [
 		EventChoice.create(
 			"Boil it all",
 			[
@@ -388,8 +388,8 @@ static func _tainted_water() -> GameEventDef:
 	)
 
 
-static func _forest_cache() -> GameEventDef:
-	var conditions: Array[EventCondition] = [
+static func _forest_cache() -> RefCounted:
+	var conditions: Array = [
 		EventCondition.era_is(SettlementStateScript.Era.TENT),
 		EventCondition.day_at_least(7),
 	]
@@ -404,7 +404,7 @@ static func _forest_cache() -> GameEventDef:
 		EventOutcome.worker_busy(24.0, "Trapped"),
 		EventOutcome.message("It was a trap! A forager got caught and took a day to free themselves."),
 	]
-	var choices: Array[EventChoiceDef] = [
+	var choices: Array = [
 		EventChoice.create("Open it", [open_random]),
 		EventChoice.create("Leave it", [EventOutcome.message("The cache was left untouched. Better safe than sorry.")]),
 	]

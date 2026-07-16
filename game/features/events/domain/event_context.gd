@@ -13,6 +13,9 @@ var population: int = 0
 var flags: Dictionary = {}
 
 
+const _script = preload("res://game/features/events/domain/event_context.gd")
+
+
 static func create(
 		p_era: int,
 		p_day: int,
@@ -21,8 +24,8 @@ static func create(
 		p_wellbeing: int,
 		p_population: int,
 		p_flags: Dictionary,
-) -> EventContext:
-	var ctx := EventContext.new()
+) -> RefCounted:
+	var ctx: RefCounted = _script.new()
 	ctx.era = p_era
 	ctx.day = p_day
 	ctx.weather = p_weather

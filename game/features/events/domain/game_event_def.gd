@@ -10,10 +10,13 @@ var description: String = ""
 var era: int = 0
 var weight: float = 1.0
 var cooldown_days: int = 2
-var conditions: Array[EventCondition] = []
-var choices: Array[EventChoiceDef] = []
+var conditions: Array = []
+var choices: Array = []
 var chain_flag: StringName = &""
 var sets_flag: StringName = &""
+
+
+const _script = preload("res://game/features/events/domain/game_event_def.gd")
 
 
 static func create(
@@ -21,14 +24,14 @@ static func create(
 		p_title: String,
 		p_description: String,
 		p_era: int,
-		p_choices: Array[EventChoiceDef],
-		p_conditions: Array[EventCondition] = [],
+		p_choices: Array,
+		p_conditions: Array = [],
 		p_weight: float = 1.0,
 		p_cooldown_days: int = 2,
 		p_chain_flag: StringName = &"",
 		p_sets_flag: StringName = &"",
-) -> GameEventDef:
-	var d := GameEventDef.new()
+) -> RefCounted:
+	var d: RefCounted = _script.new()
 	d.id = p_id
 	d.title = p_title
 	d.description = p_description

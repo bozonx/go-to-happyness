@@ -20,6 +20,8 @@ var _component_topology_revision := -1
 var _walkable_components: Dictionary = {}
 
 const DEFAULT_CELL_WEIGHT := 2.0
+const MIN_CELL_WEIGHT := 0.05
+const MAX_CELL_WEIGHT := 32.0
 const PEDESTRIAN_PROFILE := &"pedestrian"
 const CONNECTED_DIRECTIONS: Array[Vector2i] = [
 	Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN,
@@ -50,21 +52,23 @@ func set_blocked_cells(next_blocked: Dictionary) -> void:
 ## Replaces terrain traversal weights wholesale. Cells not listed here use the
 ## default grass cost. Blocked cells remain impassable regardless of a weight.
 func set_cell_weights(next_weights: Dictionary) -> void:
-	if _cell_weights == next_weights:
+	var sanitized := _sanitize_weights(next_weights)
+	if _cell_weights == sanitized:
 		return
-	_cell_weights = next_weights.duplicate()
+	_cell_weights = sanitized
 	_recompute_minimum_cell_weight()
 	_revision += 1
 
 
 func set_profile_cell_weights(profile: StringName, next_weights: Dictionary) -> void:
+	var sanitized := _sanitize_weights(next_weights)
 	var current: Dictionary = _profile_cell_weights.get(profile, {})
-	if current == next_weights:
+	if current == sanitized:
 		return
-	if next_weights.is_empty():
+	if sanitized.is_empty():
 		_profile_cell_weights.erase(profile)
 	else:
-		_profile_cell_weights[profile] = next_weights.duplicate()
+		_profile_cell_weights[profile] = sanitized
 	_recompute_minimum_cell_weight()
 	_revision += 1
 
@@ -72,8 +76,8 @@ func set_profile_cell_weights(profile: StringName, next_weights: Dictionary) -> 
 func get_cell_weight(cell: Vector2i, profile: StringName = PEDESTRIAN_PROFILE) -> float:
 	var profile_weights: Dictionary = _profile_cell_weights.get(profile, {})
 	if profile_weights.has(cell):
-		return maxf(0.001, float(profile_weights[cell]))
-	return maxf(0.001, float(_cell_weights.get(cell, DEFAULT_CELL_WEIGHT)))
+		return clampf(float(profile_weights[cell]), MIN_CELL_WEIGHT, MAX_CELL_WEIGHT)
+	return clampf(float(_cell_weights.get(cell, DEFAULT_CELL_WEIGHT)), MIN_CELL_WEIGHT, MAX_CELL_WEIGHT)
 
 
 func movement_speed_modifier_at(position_on_board: Vector3, profile: StringName = PEDESTRIAN_PROFILE) -> float:
@@ -225,7 +229,22 @@ func _recompute_minimum_cell_weight() -> void:
 	for profile_weights in _profile_cell_weights.values():
 		for weight in (profile_weights as Dictionary).values():
 			_minimum_cell_weight = minf(_minimum_cell_weight, float(weight))
-	_minimum_cell_weight = maxf(0.001, _minimum_cell_weight)
+	_minimum_cell_weight = clampf(_minimum_cell_weight, MIN_CELL_WEIGHT, MAX_CELL_WEIGHT)
+
+
+func _sanitize_weights(next_weights: Dictionary) -> Dictionary:
+	var sanitized: Dictionary = {}
+	for cell: Variant in next_weights:
+		if not cell is Vector2i:
+			continue
+		var value: Variant = next_weights[cell]
+		if not (value is float or value is int):
+			continue
+		var weight := float(value)
+		if not is_finite(weight) or weight <= 0.0:
+			continue
+		sanitized[cell] = clampf(weight, MIN_CELL_WEIGHT, MAX_CELL_WEIGHT)
+	return sanitized
 
 
 func _ensure_walkable_components() -> void:

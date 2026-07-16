@@ -14,8 +14,8 @@ const DelayedEffectScript = preload("res://game/features/events/application/dela
 
 var registry: EventRegistry
 var log: EventLog
-var pending_event: GameEventDef = null
-var pending_delayed: Array[DelayedEffect] = []
+var pending_event: RefCounted = null
+var pending_delayed: Array = []
 
 
 func _init(p_registry: EventRegistry = null, p_log: EventLog = null) -> void:
@@ -24,7 +24,7 @@ func _init(p_registry: EventRegistry = null, p_log: EventLog = null) -> void:
 
 
 ## Called each in-game day at 06:00. Returns the selected event def or null.
-func roll_daily_event(context: EventContext, rng: RandomNumberGenerator) -> GameEventDef:
+func roll_daily_event(context: EventContext, rng: RandomNumberGenerator) -> RefCounted:
 	if pending_event != null:
 		return pending_event
 	var eligible := _filter_eligible(context)
@@ -38,13 +38,13 @@ func roll_daily_event(context: EventContext, rng: RandomNumberGenerator) -> Game
 ## Resolves the player's choice. Returns resolved outcomes for the presentation
 ## layer to apply (RESOURCE_CHANGE, WELLBEING_CHANGE, WORKER_BUSY, MESSAGE).
 ## SET_FLAG and DELAYED are handled internally.
-func resolve_choice(choice_index: int, context: EventContext, rng: RandomNumberGenerator) -> Array[EventOutcome]:
+func resolve_choice(choice_index: int, context: EventContext, rng: RandomNumberGenerator) -> Array:
 	if pending_event == null:
 		return []
 	if choice_index < 0 or choice_index >= pending_event.choices.size():
 		return []
-	var choice: EventChoiceDef = pending_event.choices[choice_index]
-	var resolved: Array[EventOutcome] = []
+	var choice: RefCounted = pending_event.choices[choice_index]
+	var resolved: Array = []
 	for outcome in choice.outcomes:
 		_resolve_outcome(outcome, context, rng, resolved)
 	if choice.sets_flag != &"":
@@ -58,9 +58,9 @@ func resolve_choice(choice_index: int, context: EventContext, rng: RandomNumberG
 
 ## Called on day change. Applies any delayed effects whose trigger day has arrived.
 ## Returns resolved outcomes for the presentation layer to apply.
-func advance_day(day: int, context: EventContext, rng: RandomNumberGenerator) -> Array[EventOutcome]:
-	var resolved: Array[EventOutcome] = []
-	var remaining: Array[DelayedEffect] = []
+func advance_day(day: int, context: EventContext, rng: RandomNumberGenerator) -> Array:
+	var resolved: Array = []
+	var remaining: Array = []
 	for effect in pending_delayed:
 		if effect.trigger_day <= day:
 			_resolve_outcome(effect.outcome, context, rng, resolved)
@@ -78,15 +78,15 @@ func clear_pending() -> void:
 	pending_event = null
 
 
-func _filter_eligible(context: EventContext) -> Array[GameEventDef]:
-	var result: Array[GameEventDef] = []
+func _filter_eligible(context: EventContext) -> Array:
+	var result: Array = []
 	for def in registry.by_era(context.era):
 		if def.is_eligible(context, log):
 			result.append(def)
 	return result
 
 
-func _weighted_pick(eligible: Array[GameEventDef], rng: RandomNumberGenerator) -> GameEventDef:
+func _weighted_pick(eligible: Array, rng: RandomNumberGenerator) -> RefCounted:
 	if eligible.size() == 1:
 		return eligible[0]
 	var total_weight := 0.0
@@ -101,11 +101,11 @@ func _weighted_pick(eligible: Array[GameEventDef], rng: RandomNumberGenerator) -
 	return eligible.back()
 
 
-func _resolve_outcome(outcome: EventOutcome, context: EventContext, rng: RandomNumberGenerator, resolved: Array[EventOutcome]) -> void:
+func _resolve_outcome(outcome: RefCounted, context: EventContext, rng: RandomNumberGenerator, resolved: Array) -> void:
 	if outcome.random_chance < 1.0 and not outcome.random_outcomes.is_empty():
-		var success := rng.randf() < outcome.random_chance
-		var half := outcome.random_outcomes.size() / 2
-		var picked: Array[EventOutcome] = []
+		var success: bool = rng.randf() < outcome.random_chance
+		var half: int = outcome.random_outcomes.size() / 2
+		var picked: Array = []
 		if outcome.random_outcomes.size() == 2:
 			picked = [outcome.random_outcomes[0]] if success else [outcome.random_outcomes[1]]
 		else:

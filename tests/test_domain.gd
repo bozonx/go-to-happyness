@@ -112,6 +112,7 @@ func _init() -> void:
 	_test_weighted_grid_routing()
 	_test_route_result_unreachable_reasons()
 	_test_navigation_grid_revision()
+	_test_navigation_weight_validation()
 	_test_weight_change_stales_active_route()
 	_test_navigation_recovery_guards()
 	_test_trail_field()
@@ -985,6 +986,24 @@ func _test_navigation_grid_revision() -> void:
 	assert(grid.topology_revision() == route.grid_revision + 1)
 
 
+func _test_navigation_weight_validation() -> void:
+	var grid := NavGrid.new()
+	grid.configure(1.0, 10)
+	var cell := Vector2i(1, 1)
+	grid.set_cell_weights({
+		cell: 999.0,
+		Vector2i(2, 2): -4.0,
+		Vector2i(3, 3): INF,
+		"not_a_cell": 0.5,
+	})
+	assert(is_equal_approx(grid.get_cell_weight(cell), NavGrid.MAX_CELL_WEIGHT))
+	assert(is_equal_approx(grid.get_cell_weight(Vector2i(2, 2)), NavGrid.DEFAULT_CELL_WEIGHT))
+	assert(is_equal_approx(grid.get_cell_weight(Vector2i(3, 3)), NavGrid.DEFAULT_CELL_WEIGHT))
+	assert(is_equal_approx(grid.movement_speed_modifier_at(grid.cell_center(cell)), 1.0 / NavGrid.MAX_CELL_WEIGHT))
+	grid.set_profile_cell_weights(&"cart", {cell: 0.0001})
+	assert(is_equal_approx(grid.get_cell_weight(cell, &"cart"), NavGrid.MIN_CELL_WEIGHT))
+
+
 func _test_weight_change_stales_active_route() -> void:
 	var grid := NavGrid.new()
 	grid.configure(1.0, 10)
@@ -1016,6 +1035,17 @@ func _test_navigation_recovery_guards() -> void:
 	var attempts := citizen.route_recovery_attempt
 	citizen._force_repath()
 	assert(citizen.route_recovery_attempt == attempts)
+	citizen.route_recovery_attempt = 3
+	citizen.recovery_repath_done = false
+	citizen.velocity = Vector3(1.0, 0.0, 1.0)
+	citizen._force_repath()
+	assert(citizen.navigation_failed)
+	assert(is_zero_approx(citizen.velocity.x) and is_zero_approx(citizen.velocity.z))
+	citizen.navigation_failed = false
+	citizen.route_recovery_attempt = 2
+	citizen._reset_waypoint_progress()
+	assert(citizen.route_recovery_attempt == 0)
+
 	citizen.free()
 
 
