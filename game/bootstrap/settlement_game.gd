@@ -4505,6 +4505,7 @@ func _cancel_build_action() -> void:
 	preview_entrance_marker.visible = false
 	preview_back_entrance_marker.visible = false
 	build_menu.visible = false
+	build_menu_is_global = false
 	selected_builder = null
 	_set_build_placement_ui_visible(true)
 	_update_interface("Construction mode cancelled.")
@@ -4667,6 +4668,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		_toggle_hero_view()
 		get_viewport().set_input_as_handled()
 		return
+	if event is InputEventKey and event.keycode == KEY_B and event.pressed and not event.echo:
+		if _can_hero_build():
+			_toggle_global_build_menu()
+			if is_first_person:
+				Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE if build_menu.visible else Input.MOUSE_MODE_CAPTURED)
+		else:
+			_update_interface("Только герой может утверждать строительство.")
+		get_viewport().set_input_as_handled()
+		return
 	if not build_mode.is_empty() and event is InputEventKey and event.pressed and not event.echo and event.keycode in [KEY_Q, KEY_E]:
 		build_rotation_quarters = posmod(build_rotation_quarters + (-1 if event.keycode == KEY_Q else 1), 4)
 		_move_selection(selected_world_position)
@@ -4678,12 +4688,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 			return
 	if is_first_person:
-		if event is InputEventKey and event.keycode == KEY_B and event.pressed and not event.echo:
-			if _can_hero_build():
-				_toggle_global_build_menu()
-				Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE if build_menu.visible else Input.MOUSE_MODE_CAPTURED)
-			else:
-				_update_interface("Только герой может утверждать строительство.")
+		if event is InputEventKey and event.keycode == KEY_T and event.pressed and not event.echo:
+			if not _is_first_person_menu_open():
+				_drop_pocket_on_ground()
+			get_viewport().set_input_as_handled()
+			return
 		elif event is InputEventKey and event.keycode == KEY_F and event.pressed and not event.echo:
 			_start_interaction(event.shift_pressed)
 			get_viewport().set_input_as_handled()
@@ -5734,6 +5743,15 @@ func _format_pocket_hint() -> String:
 	return "Карман %d/%d%s" % [_pocket_total(), POCKET_CAPACITY, (" | " + _pocket_summary()) if not pocket.is_empty() else ""]
 
 
+func _drop_pocket_on_ground() -> void:
+	if player_citizen == null or pocket.is_empty():
+		return
+	_create_resource_pile(player_citizen.global_position, pocket.duplicate())
+	pocket.clear()
+	_update_interface("Содержимое карманов выброшено на землю.")
+	_refresh_interaction_hint()
+
+
 func _home_occupancy_text() -> String:
 	if player_citizen == null or player_citizen.home == null or not is_instance_valid(player_citizen.home):
 		return ""
@@ -5766,6 +5784,8 @@ func _refresh_interaction_hint() -> void:
 		if not action_hint.is_empty():
 			lines.append(action_hint)
 	lines.append(_format_pocket_hint())
+	if not pocket.is_empty():
+		lines.append("T: выбросить карманы на землю")
 	var home_text := _home_occupancy_text()
 	if not home_text.is_empty():
 		lines.append(home_text)
@@ -6125,6 +6145,7 @@ func _place_building(world_position: Vector3) -> void:
 	preview_entrance_marker.visible = false
 	preview_back_entrance_marker.visible = false
 	build_menu.visible = false
+	build_menu_is_global = false
 	selected_builder = null
 	_set_build_placement_ui_visible(true)
 	_update_interface("Construction marked. Couriers must deliver the required materials before builders can start.")

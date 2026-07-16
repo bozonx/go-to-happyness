@@ -52,7 +52,8 @@ Press `R` to switch between the hero overview and first-person view.
 - `Mouse` — look around.
 - `F` — perform one context action.
 - `Shift+F` — perform the "all" version of the action (deliver everything, gather until pocket is full, etc.).
-- `B` — open construction menu (hero only).
+- `B` — open construction menu (works in overview and first-person; first-person requires the hero).
+- `T` — drop all pocket contents at your feet as a ground pile (first-person).
 - `RMB` — dig terrain (hero only); for other citizens it returns to overview.
 
 The hero has an 8-slot pocket that can hold any mix of resources. Gathered items go

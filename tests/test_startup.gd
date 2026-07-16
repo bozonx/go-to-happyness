@@ -391,6 +391,40 @@ func _init() -> void:
 	assert(simulation.player_citizen == simulation.citizens[1])
 	simulation._toggle_hero_view()
 	assert(simulation.player_citizen == simulation.hero_citizen)
+
+	# B opens the global build menu in overview mode, not only in first-person.
+	simulation._toggle_hero_view()
+	assert(not simulation.is_first_person)
+	var b_event := InputEventKey.new()
+	b_event.keycode = KEY_B
+	b_event.pressed = true
+	simulation._unhandled_input(b_event)
+	assert(simulation.build_menu.visible)
+	assert(simulation.build_menu_is_global)
+	var b_release := InputEventKey.new()
+	b_release.keycode = KEY_B
+	b_release.pressed = false
+	simulation._unhandled_input(b_release)
+	simulation._toggle_hero_view()
+	assert(simulation.is_first_person)
+
+	# T in first-person drops the controlled unit's pocket contents as a ground pile.
+	simulation.pocket = {"wood": 3, "food": 2}
+	var piles_before_drop: int = simulation.resource_piles.size()
+	var t_event := InputEventKey.new()
+	t_event.keycode = KEY_T
+	t_event.pressed = true
+	simulation._unhandled_input(t_event)
+	assert(simulation.pocket.is_empty())
+	assert(simulation.resource_piles.size() == piles_before_drop + 1)
+	var dropped_pile: Dictionary = simulation.resource_piles[simulation.resource_piles.size() - 1]
+	assert(int(dropped_pile.resources.get("wood", 0)) == 3)
+	assert(int(dropped_pile.resources.get("food", 0)) == 2)
+	var t_release := InputEventKey.new()
+	t_release.keycode = KEY_T
+	t_release.pressed = false
+	simulation._unhandled_input(t_release)
+
 	# A skipped night evaluates survival hour by hour. Reaching zero wellbeing may
 	# make one resident leave, but the remaining night must not remove another
 	# resident for every hour spent at zero.
