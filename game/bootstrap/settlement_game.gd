@@ -1303,13 +1303,6 @@ func _publish_courier_tasks(dispatcher: RefCounted) -> void:
 			var source := _construction_material_source(str(resource_type), site_position)
 			if source.is_empty():
 				continue
-			if str(source.get("kind", "storage")) == "pile":
-				# Pile resources are not tracked by settlement reservations; just
-				# publish a delivery task while the site still needs them.
-				if delivered + in_transit < required:
-					var pile_source_id := str(source.get("id", "pile"))
-					dispatcher.publish(StringName("construction_%s_%s_%s" % [site.node.get_instance_id(), resource_type, pile_source_id]), CourierTask.Kind.CONSTRUCTION, 70, source.position, site.node.global_position, {"site": site, "resource": resource_type, "source": source})
-				continue
 			var total_reserved := settlement.construction_reserved_for_site(site.site_id, str(resource_type))
 			var still_needed := maxi(0, required - delivered - total_reserved)
 			if still_needed > 0:
@@ -1388,30 +1381,6 @@ func _resource_pile_for_node(pile_node: Node3D) -> Dictionary:
 	return {}
 
 
-func _take_resource_from_pile(pile_node: Node3D, resource_type: String) -> bool:
-	for index in resource_piles.size():
-		var pile: Dictionary = resource_piles[index]
-		if pile.get("node") != pile_node or int(pile.get("resources", {}).get(resource_type, 0)) <= 0:
-			continue
-		pile.resources[resource_type] = int(pile.resources[resource_type]) - 1
-		var labels: Array[String] = []
-		for piled_resource in pile.resources:
-			var amount := int(pile.resources[piled_resource])
-			if amount > 0:
-				labels.append("%s x%d" % [str(piled_resource).to_upper(), amount])
-		labels.sort()
-		var label := pile_node.get_node_or_null("Label3D") as Label3D
-		if label != null:
-			label.text = "\n".join(labels)
-		if labels.is_empty():
-			resource_piles.remove_at(index)
-			pile_node.queue_free()
-		else:
-			resource_piles[index] = pile
-		return true
-	return false
-
-
 func _take_resource_from_pile_at(position: Vector3, resource_type: String, max_amount: int) -> int:
 	if max_amount <= 0 or resource_type.is_empty():
 		return 0
@@ -1473,13 +1442,8 @@ func _is_courier_task_valid(task: RefCounted) -> bool:
 					return false
 			var total_reserved := settlement.construction_reserved_for_site(site.site_id, resource_type)
 			var in_transit := int(site.reserved_materials.get(resource_type, 0))
-			var source_available := false
-			if str(source.get("kind", "storage")) == "pile":
-				var pile := _resource_pile_for_node(source.get("node") as Node3D)
-				source_available = not pile.is_empty() and int(pile.get("resources", {}).get(resource_type, 0)) > 0
-			else:
-				var storage_reserved := maxi(0, total_reserved - in_transit)
-				source_available = storage_reserved > 0
+			var storage_reserved := maxi(0, total_reserved - in_transit)
+			var source_available := storage_reserved > 0
 			# Outstanding need is measured by what is neither delivered nor already
 			# being carried. Storage reservations pre-commit the full requirement, so
 			# they must not be counted here or the task would look complete at once.
@@ -1562,13 +1526,9 @@ func _start_courier_task(courier: Citizen, task: RefCounted) -> bool:
 			var source: Dictionary = task.payload.get("source", {})
 			if site == null or not is_instance_valid(site.node):
 				return false
-			if str(source.get("kind", "storage")) == "pile":
-				if not _take_resource_from_pile(source.get("node") as Node3D, resource_type):
-					return false
-			else:
-				if settlement.amount(resource_type) <= 0:
-					return false
-				settlement.add(resource_type, -1)
+			if settlement.amount(resource_type) <= 0:
+				return false
+			settlement.add(resource_type, -1)
 			var reservations := site.reserved_materials
 			reservations[resource_type] = int(reservations.get(resource_type, 0)) + 1
 			site.reserved_materials = reservations

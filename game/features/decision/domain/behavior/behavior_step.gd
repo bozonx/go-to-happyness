@@ -2,11 +2,27 @@ class_name BehaviorStep
 extends RefCounted
 
 enum Status { RUNNING, SUCCESS, FAILURE }
+enum FailureReason {
+	NONE,
+	UNKNOWN,
+	CONTEXT_INVALID,
+	ORDER_EXPIRED,
+	ORDER_CHANGED,
+	GUARD_REJECTED,
+	ACTUATOR_REJECTED,
+	MOVEMENT_FAILED,
+	RESERVATION_LOST,
+	TIMEOUT,
+	TARGET_INVALID,
+	UNREACHABLE,
+	STALE_ROUTE,
+}
 
 var _entered := false
 var _suspended := false
 var _finished := false
 var _final_status := Status.RUNNING
+var failure_reason := FailureReason.NONE
 
 
 func run(context: BehaviorContext, delta: float) -> Status:
@@ -19,6 +35,8 @@ func run(context: BehaviorContext, delta: float) -> Status:
 		_enter(context)
 	var status := _tick(context, delta)
 	if status != Status.RUNNING:
+		if status == Status.FAILURE and failure_reason == FailureReason.NONE:
+			failure_reason = FailureReason.UNKNOWN
 		_finished = true
 		_final_status = status
 		_finish(context, status)
@@ -30,6 +48,7 @@ func reset() -> void:
 	_suspended = false
 	_finished = false
 	_final_status = Status.RUNNING
+	failure_reason = FailureReason.NONE
 	_reset()
 
 
@@ -79,3 +98,13 @@ func _suspend(_context: BehaviorContext) -> void:
 
 func _resume(_context: BehaviorContext) -> void:
 	pass
+
+
+func fail(reason: FailureReason) -> Status:
+	failure_reason = reason
+	return Status.FAILURE
+
+
+func set_failure_reason(reason: FailureReason) -> void:
+	if failure_reason == FailureReason.NONE:
+		failure_reason = reason

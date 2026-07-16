@@ -14,6 +14,7 @@ var _night_factor := 0.0
 func _ready() -> void:
 	if DisplayServer.get_name() == "headless":
 		return
+	lifetime = 8.0
 	_setup_process_material()
 	_setup_draw_material()
 	emitting = false
@@ -36,11 +37,11 @@ func _setup_process_material() -> void:
 	# No gravity — fireflies drift
 	mat.gravity = Vector3.ZERO
 
-	# Turbulence for organic wandering motion
+	# Turbulence for slow organic wandering motion
 	mat.turbulence_enabled = true
-	mat.turbulence_noise_scale = 1.5
-	mat.turbulence_influence_min = 0.2
-	mat.turbulence_influence_max = 0.6
+	mat.turbulence_noise_scale = 0.8
+	mat.turbulence_influence_min = 0.03
+	mat.turbulence_influence_max = 0.12
 
 	# Small particles
 	mat.scale_min = 0.03
@@ -48,11 +49,11 @@ func _setup_process_material() -> void:
 
 	mat.color = FIREFLY_COLOR
 
-	# Slight upward drift
-	mat.direction = Vector3(0.0, 0.15, 0.0)
-	mat.spread = 25.0
-	mat.initial_velocity_min = 0.1
-	mat.initial_velocity_max = 0.3
+	# Very slight upward drift
+	mat.direction = Vector3(0.0, 0.05, 0.0)
+	mat.spread = 15.0
+	mat.initial_velocity_min = 0.02
+	mat.initial_velocity_max = 0.06
 
 	process_material = mat
 

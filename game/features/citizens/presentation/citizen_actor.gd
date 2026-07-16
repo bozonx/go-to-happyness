@@ -980,15 +980,19 @@ func _process_courier_pickup(delta: float) -> void:
 		courier_target.set_meta("last_courier_pickup", simulation.runtime_seconds if simulation != null else 0.0)
 		courier_resource_type = cargo.get("type", "")
 		carried_amount = int(cargo.get("amount", 0))
+		if carried_amount > 0:
+			play_one_shot("pick-up")
 		state = State.COURIER_TO_WAREHOUSE if carried_amount > 0 else State.IDLE
 
 func _process_sawmill_pickup(delta: float) -> void:
 	if _move_to(workplace_position, delta):
+		play_one_shot("pick-up")
 		sawmill_boards_collected.emit(self, workplace_position)
 
 
 func _process_dew_collector_pickup(delta: float) -> void:
 	if _move_to(workplace_position, delta):
+		play_one_shot("pick-up")
 		dew_collected.emit(self, workplace_position)
 
 
@@ -1017,6 +1021,7 @@ func _process_construction_pickup(delta: float) -> void:
 	# Pickup must not be redirected by another building's service queue; the
 	# warehouse/source position is the only valid interaction point here.
 	if _move_to(warehouse_position, delta, false, false):
+		play_one_shot("pick-up")
 		# The courier was admitted to the warehouse queue; release it before
 		# walking away so the entrance is not blocked for the whole delivery trip.
 		_reset_assignment_navigation()
@@ -1031,6 +1036,7 @@ func _process_construction_delivery(delta: float) -> void:
 	# the queue here would only risk misrouting a courier to a different building
 	# whose position happens to coincide with the construction approach point.
 	if _move_to(construction_position, delta, false, false):
+		play_one_shot("pick-up")
 		if building_supply_kind == "construction":
 			construction_material_delivered.emit(self, construction_site, construction_delivery_resource, carried_amount)
 		else:
@@ -1074,10 +1080,12 @@ func _process_eating(delta: float) -> void:
 func _process_food_pickup(delta: float) -> void:
 	_refresh_warehouse_position()
 	if _move_to(warehouse_position, delta):
+		play_one_shot("pick-up")
 		state = State.TO_CANTEEN_DELIVERY
 
 func _process_canteen_delivery(delta: float) -> void:
 	if _move_to(canteen_position, delta):
+		play_one_shot("pick-up")
 		state = State.IDLE
 		canteen_delivery_finished.emit(self, delivery_amount)
 		delivery_amount = 0
