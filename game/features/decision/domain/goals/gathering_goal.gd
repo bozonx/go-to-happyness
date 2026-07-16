@@ -23,7 +23,7 @@ func score(snapshot: WorldSnapshot, citizen: CitizenSnapshot, order: CitizenOrde
 
 
 func build_task(_snapshot: WorldSnapshot, _citizen: CitizenSnapshot, order: CitizenOrder, _blackboard: AIBlackboard) -> BehaviorTask:
-	var move_target: Variant = order.target_position if order != null else Vector3.INF
+	var move_target: Variant = order.payload.value(&"target.access_position", Vector3.INF) if order != null and order.payload != null else Vector3.INF
 	if not (move_target is Vector3) or move_target == Vector3.INF:
 		return null
 	var source_id := order.payload.value(&"work.source_id", &"") as StringName

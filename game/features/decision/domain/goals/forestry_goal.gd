@@ -35,7 +35,7 @@ func build_task(
 	order: CitizenOrder,
 	_blackboard: AIBlackboard
 ) -> BehaviorTask:
-	var move_target: Variant = order.target_position if order != null else Vector3.INF
+	var move_target: Variant = order.payload.value(&"work.tree_access", Vector3.INF) if order != null and order.payload != null else Vector3.INF
 	if not (move_target is Vector3) or move_target == Vector3.INF:
 		return null
 	var tree_id := order.payload.value(&"work.tree_id", &"") as StringName

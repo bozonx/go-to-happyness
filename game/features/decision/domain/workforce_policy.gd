@@ -27,6 +27,7 @@ static func permanent_vacancy_for(worker: Dictionary, world: Dictionary) -> Stri
 	_add_empty_workplace_score(scores, world, "factory_worker", int(world.get("factory_jobs", 0)))
 	_add_empty_workplace_score(scores, world, "craftsman", int(world.get("craftsman_jobs", 0)))
 	_add_empty_workplace_score(scores, world, "engineer", int(world.get("engineer_jobs", 0)))
+	_add_empty_workplace_score(scores, world, "courier", int(world.get("courier_jobs", 0)))
 	if scores.is_empty():
 		return ""
 	var best_role := ""
@@ -70,6 +71,7 @@ static func _role_available(role: String, world: Dictionary) -> bool:
 		"factory_worker": return int(world.get("factory_jobs", 0)) > 0
 		"engineer": return int(world.get("engineer_jobs", 0)) > 0
 		"craftsman": return int(world.get("craftsman_jobs", 0)) > 0
+		"courier": return int(world.get("courier_jobs", 0)) > 0
 		# Employment officers can operate in the field before the first campfire
 		# or town hall has been built. They are appointed directly, not selected
 		# by the automatic-vacancy pass, so this does not create extra officers.

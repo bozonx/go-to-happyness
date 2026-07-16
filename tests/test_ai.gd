@@ -239,6 +239,7 @@ func _init() -> void:
 	_test_move_to_step()
 	_test_relax_at_position_step()
 	_test_register_provider_keeps_order_while_registering()
+	_test_register_provider_supports_tent_era_couriers()
 	_test_register_provider_distributes_workplaces_by_capacity()
 	_test_daily_player_order_provider_keeps_gathering_assignment()
 	_test_daily_player_order_provider_publishes_construction_order()
@@ -639,7 +640,7 @@ func _test_trip_bound_work_keeps_captured_order() -> void:
 	brain.tick(snapshot, replacement, 0.1)
 	assert(brain.runner.active_goal_id() == &"forestry")
 	assert(actuator.cancel_action_count == 0)
-	assert(actuator.move_to_destination == Vector3(3.0, 0.0, 0.0))
+	assert(actuator.move_to_destination == Vector3(2.5, 0.0, 0.0))
 	actuator.arrived_flag = true
 	brain.tick(snapshot, replacement, 0.1)
 	assert(snapshot.reservations.owner_of([&"forestry.tree", &"tree:3:0"], 0.0) == 1)
@@ -776,7 +777,7 @@ func _test_native_forestry_goal() -> void:
 	brain.think(snapshot, order)
 	brain.tick(snapshot, order, 0.1)
 	assert(actuator.move_to_count == 1)
-	assert(actuator.move_to_destination == Vector3(3.0, 0.0, 0.0))
+	assert(actuator.move_to_destination == Vector3(2.5, 0.0, 0.0))
 	assert(actuator.action_start_count == 0)
 	assert(brain.runner.active_goal_id() == &"forestry")
 	actuator.arrived_flag = true
@@ -949,7 +950,7 @@ func _test_native_gathering_goal() -> void:
 	brain.think(snapshot, order)
 	brain.tick(snapshot, order, 0.1)
 	assert(actuator.move_to_count == 1)
-	assert(actuator.move_to_destination == Vector3(3.0, 0.0, 0.0))
+	assert(actuator.move_to_destination == Vector3(2.5, 0.0, 0.0))
 	assert(actuator.action_start_count == 0)
 	actuator.arrived_flag = true
 	brain.tick(snapshot, order, 0.1)
@@ -1717,6 +1718,24 @@ func _test_register_provider_keeps_order_while_registering() -> void:
 	assert(continued_orders[0].kind == &"register")
 	assert(continued_orders[0].payload.value(&"workplace.role") == "forestry")
 	assert(continued_orders[0].target_position == initial_orders[0].target_position)
+
+
+func _test_register_provider_supports_tent_era_couriers() -> void:
+	var provider := WorkforceOrderProviderScript.new()
+	var settlement := AIFactSet.new({
+		&"workforce.world_data": {"officer_available": true, "assigned_roles": {}, "courier_jobs": 1},
+		&"workforce.employment_center_position": Vector3(2.0, 0.0, 0.0),
+		&"workforce.role_employers": {
+			"courier": {"position": Vector3(2.0, 0.0, 0.0), "target_key": &""},
+		},
+	})
+	var citizen := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
+		&"workforce.worker_data": {"workforce_status": "no_permanent_work", "skills": {}},
+	}))
+	var orders := provider.collect_orders(WorldSnapshot.new(1, 0.0, 0.0, settlement, {1: citizen}))
+	assert(orders.size() == 1)
+	assert(orders[0].payload.value(&"workplace.role") == "courier")
+	assert(orders[0].payload.value(&"workplace.node_key") == &"")
 
 
 func _test_register_provider_distributes_workplaces_by_capacity() -> void:

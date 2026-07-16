@@ -67,7 +67,7 @@ func capture(sequence: int) -> WorldSnapshot:
 		var construction_position := Vector3.INF
 		if construction_in_progress:
 			construction_mode = StringName(actor.active_role)
-			construction_target_key = _target_key(&"construction", actor.construction_site.global_position)
+			construction_target_key = _target_key(construction_mode, actor.construction_site.global_position)
 			construction_position = actor._reachable_construction_approach(actor.construction_site)
 		elif construction_worker and actor_work_time:
 			if not simulation.demolition_sites.is_empty():
@@ -90,7 +90,7 @@ func capture(sequence: int) -> WorldSnapshot:
 		var daily_construction_position := Vector3.INF
 		if daily_construction_in_progress:
 			daily_construction_mode = StringName(actor.active_role)
-			daily_construction_target_key = _target_key(&"construction", actor.construction_site.global_position)
+			daily_construction_target_key = _target_key(daily_construction_mode, actor.construction_site.global_position)
 			daily_construction_position = actor._reachable_construction_approach(actor.construction_site)
 		elif daily_order_role == "construction":
 			if not simulation.demolition_sites.is_empty():
@@ -105,7 +105,7 @@ func capture(sequence: int) -> WorldSnapshot:
 					daily_construction_mode = &"construction"
 					daily_construction_target_key = _target_key(&"construction", daily_construction_site.node.global_position)
 					daily_construction_position = actor._reachable_construction_approach(daily_construction_site.node)
-				daily_construction_can_start = daily_construction_target_key != &"" and daily_construction_position != Vector3.INF
+			daily_construction_can_start = daily_construction_target_key != &"" and daily_construction_position != Vector3.INF
 		var gathering_worker: bool = actor.permanent_role in ["gather_branches", "gather_food"] and actor.is_employed() and not actor.is_player_controlled
 		var gathering_in_progress: bool = gathering_worker and actor.active_role.begins_with("gather_") and actor.state in [Citizen.State.TO_GATHER, Citizen.State.GATHERING, Citizen.State.TO_WAREHOUSE]
 		var gathering_candidates: Array[Dictionary] = []
@@ -522,6 +522,7 @@ func _world_data() -> Dictionary:
 		"factory_jobs": simulation._available_employer_capacity("factory_worker"),
 		"engineer_jobs": simulation._available_employer_capacity("engineer"),
 		"craftsman_jobs": simulation._available_employer_capacity("craftsman"),
+		"courier_jobs": simulation._available_employer_capacity("courier"),
 		"construction_sites": simulation.construction_sites.size() + simulation.demolition_sites.size(),
 		"warehouses": simulation.warehouse_positions.size(),
 		"sawmills": simulation.sawmill_positions.size(),
@@ -649,4 +650,14 @@ func _role_employers() -> Dictionary:
 				})
 		if not candidates.is_empty():
 			employers[role] = candidates
+	# Couriers are formally employed in the tent era but do not yet own a
+	# workplace node. The employment centre is only the registration destination.
+	var courier_slots := simulation._available_employer_capacity("courier") - int(_assigned_role_counts_internal().get("courier", 0))
+	var centre_position := simulation._employment_center_position()
+	if courier_slots > 0 and centre_position != Vector3.INF:
+		employers["courier"] = [{
+			"position": centre_position,
+			"target_key": &"",
+			"available_slots": courier_slots,
+		}]
 	return employers

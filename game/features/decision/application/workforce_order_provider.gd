@@ -28,7 +28,7 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 			if worker_data.is_empty():
 				continue
 			var status := str(worker_data.get("workforce_status", ""))
-			if status not in ["unregistered", "registering"]:
+			if status not in ["unregistered", "no_permanent_work", "registering"]:
 				continue
 
 			var pending_role := str(worker_data.get("pending_employment_role", "")) if status == "registering" else ""
@@ -46,7 +46,9 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 
 			var target_pos := workplace_pos as Vector3 if workplace_pos is Vector3 else Vector3.INF
 			var target_key := workplace_key as StringName if workplace_key is StringName else &""
-			if target_pos == Vector3.INF or target_key == &"":
+			# Tent-era couriers are registered professionals without a workplace node.
+			# They still use the employment-centre position to complete registration.
+			if target_pos == Vector3.INF or (target_key == &"" and pending_role != "courier"):
 				continue
 
 			var order := CitizenOrder.new(citizen_id, &"register", id, 0.74, AIFactSet.new({
@@ -73,7 +75,7 @@ func _available_employers(raw_employers: Dictionary) -> Dictionary:
 			var candidate := candidate_value as Dictionary
 			var position: Variant = candidate.get("position", Vector3.INF)
 			var target_key: Variant = candidate.get("target_key", &"")
-			if not (position is Vector3) or position == Vector3.INF or not (target_key is StringName) or target_key == &"":
+			if not (position is Vector3) or position == Vector3.INF or not (target_key is StringName) or (target_key == &"" and role != "courier"):
 				continue
 			var slots := int(candidate.get("available_slots", 1))
 			if slots <= 0:

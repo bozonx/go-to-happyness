@@ -22,7 +22,7 @@ func score(
 		return 0.0
 	
 	var worker_data: Dictionary = citizen.facts.value(&"workforce.worker_data", {})
-	if worker_data.is_empty() or worker_data.get("workforce_status") != "unregistered":
+	if worker_data.is_empty() or str(worker_data.get("workforce_status", "")) not in ["unregistered", "no_permanent_work", "registering"]:
 		return 0.0
 
 	return clampf(order.priority, 0.0, 1.0)
