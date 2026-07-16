@@ -6,7 +6,8 @@
 
 Дизайн-описание эр находится в [eras_overview.md](eras_overview.md). Точные
 условия переходов между эрами находятся в
-[era_progression_gates.md](era_progression_gates.md).
+[era_progression_gates.md](era_progression_gates.md). Прогрессия еды и воды
+описана в [food_water_progression.md](food_water_progression.md).
 
 ## 1. Принципы апгрейдов
 

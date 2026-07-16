@@ -865,6 +865,8 @@ func _physics_process(delta: float) -> void:
 			_process_using_bush(delta)
 		State.AI_MOVING:
 			_process_ai_moving(delta)
+		State.WORK_POSITION:
+			pass
 	if idle_indicator != null:
 		_update_idle_indicator()
 	_update_privacy_blur()
@@ -1072,6 +1074,7 @@ func _process_canteen_delivery(delta: float) -> void:
 func _process_canteen_work(delta: float) -> void:
 	if _move_to(canteen_position, delta, false, false):
 		state = State.CANTEEN_WORK
+		enter_work_position(canteen_position, "cook", null, true, false)
 
 func _process_go_to_school(delta: float) -> void:
 	if _move_to(school_position, delta):
@@ -1081,14 +1084,17 @@ func _process_go_to_school(delta: float) -> void:
 func _process_school_work(delta: float) -> void:
 	if _move_to(school_position, delta, false, false):
 		state = State.SCHOOL_WORK
+		enter_work_position(school_position, "teacher", null, true, false)
 
 func _process_official_work(delta: float) -> void:
 	if _move_to(official_position, delta, false, false):
 		state = State.OFFICIAL_WORK
+		enter_work_position(official_position, "official", null, false, false)
 
 func _process_market_work_arrival(delta: float) -> void:
 	if _move_to(market_position, delta, false, false):
 		state = State.MARKET_WORK
+		enter_work_position(market_position, "seller", null, true, false)
 
 func _process_to_factory(delta: float) -> void:
 	if not is_instance_valid(factory):
@@ -1096,6 +1102,7 @@ func _process_to_factory(delta: float) -> void:
 		return
 	if _move_to(factory_position, delta, false, false):
 		state = State.FACTORY_WORK
+		enter_work_position(factory_position, active_role, factory, true, false)
 		_start_task(WORK_DURATION / get_efficiency(active_role))
 
 func _process_factory_work(delta: float) -> void:
@@ -1937,12 +1944,13 @@ func assign_research_work(next_research_position: Vector3) -> void:
 
 func _process_research(delta: float) -> void:
 	if _move_to(research_position, delta, false, false):
-		pass
+		enter_work_position(research_position, "research", null, true, false)
 
 func _process_craft_work_arrival(delta: float) -> void:
 	if _move_to(craft_position, delta, false, false):
 		craft_timer = 10.0 / (get_efficiency("craftsman") * craft_speed_multiplier)
 		state = State.CRAFT_WORK
+		enter_work_position(craft_position, "craftsman", null, true, false)
 
 func _process_craft_work(delta: float) -> void:
 	craft_timer -= delta
@@ -2291,6 +2299,12 @@ func _update_idle_indicator() -> void:
 		idle_indicator.text = "Researching"
 		idle_indicator.modulate = Color("6ab0df")
 		return
+	if visible_state == State.WORK_POSITION:
+		idle_indicator.visible = true
+		var display_role := work_position_role.replace("_", " ")
+		idle_indicator.text = "Working: %s" % display_role if not display_role.is_empty() else "At work position"
+		idle_indicator.modulate = Color("7bb7e8")
+		return
 	if visible_state == State.WAITING:
 		idle_indicator.visible = true
 		var remaining_hours := int(task_timer.remaining / WAIT_DURATION) + 1
@@ -2438,7 +2452,7 @@ func _update_effects(delta: float) -> void:
 func is_available_for_schedule() -> bool:
 	if has_active_arrival_task():
 		return false
-	return not is_player_controlled and not has_active_delivery() and state != State.TO_CANTEEN and state != State.EATING and state != State.TO_HOME and state != State.RESTING and state != State.STUDYING and state != State.TO_PARK and state != State.RELAXING and state != State.RESEARCHING and state != State.TO_TOILET and state != State.USING_TOILET and state != State.WAITING_FOR_TOILET and state != State.TO_BUSH and state != State.USING_BUSH
+	return not is_player_controlled and not has_active_delivery() and state != State.TO_CANTEEN and state != State.EATING and state != State.TO_HOME and state != State.RESTING and state != State.STUDYING and state != State.TO_PARK and state != State.RELAXING and state != State.RESEARCHING and state != State.TO_TOILET and state != State.USING_TOILET and state != State.WAITING_FOR_TOILET and state != State.TO_BUSH and state != State.USING_BUSH and state != State.WORK_POSITION
 
 func _update_satisfaction(delta: float) -> void:
 	satisfaction_tick += delta

@@ -349,7 +349,6 @@ var campfire_upgrade_button: Button
 var campfire_advance_button: Button
 var campfire_orders_button: Button
 var campfire_occupancy_button: Button
-var campfire_official_button: Button
 var campfire_accept_button: Button
 var campfire_dismiss_button: Button
 var workforce_menu: Panel
@@ -369,7 +368,6 @@ var building_menu_title: Label
 var building_cook_button: Button
 var building_teacher_button: Button
 var building_seller_button: Button
-var building_official_button: Button
 var building_accept_workers_button: Button
 var building_dismiss_worker_button: Button
 var building_upgrade_button: Button
@@ -414,7 +412,6 @@ var building_status_indicators: Array[Label3D] = []
 var building_status_update_time := 0.0
 var workplace_priority_counter := 0
 var manage_citizen_button: Button
-var hero_official_button: Button
 var citizen_ai: CitizenAISystem
 var citizen_needs_service: CitizenNeedsService
 var citizen_living_status_service: RefCounted
@@ -3076,13 +3073,6 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	manage_citizen_button.pressed.connect(_take_control_of_selected_citizen)
 	build_menu.add_child(manage_citizen_button)
 
-	hero_official_button = Button.new()
-	hero_official_button.text = "занять место управляющего"
-	hero_official_button.position = Vector2(16, 130)
-	hero_official_button.size = Vector2(272, 30)
-	hero_official_button.pressed.connect(_on_hero_official_pressed)
-	build_menu.add_child(hero_official_button)
-	
 	# Add the citizen assignment submenus.
 	daily_order_submenu_btn = Button.new()
 	daily_order_submenu_btn.text = "Daily Orders..."
@@ -4133,14 +4123,6 @@ func _refresh_build_menu() -> void:
 		manage_citizen_button.visible = citizen_actions_visible
 		manage_citizen_button.text = "Управлять" if selected_builder != hero_citizen else "Управлять героем"
 
-	if hero_official_button != null:
-		hero_official_button.visible = citizen_actions_visible and selected_builder == hero_citizen
-		var has_campfire := is_instance_valid(campfire_node)
-		var is_hero_official := hero_citizen != null and hero_citizen.permanent_role == "official"
-		hero_official_button.disabled = not has_campfire
-		hero_official_button.text = "Оставить управление" if is_hero_official else "Занять место управляющего"
-		hero_official_button.tooltip_text = "Требуется построенный костер." if not has_campfire else ""
-	
 	if daily_order_submenu_btn != null:
 		daily_order_submenu_btn.visible = citizen_actions_visible
 		daily_order_submenu_btn.disabled = false
@@ -5279,6 +5261,11 @@ func _update_player_control(delta: float) -> void:
 	if player_citizen == null:
 		_leave_first_person_to_hero_overview()
 		return
+	if player_citizen.work_position_locked:
+		camera.global_position = player_citizen.global_position + Vector3(0.0, PLAYER_EYE_HEIGHT, 0.0)
+		camera.rotation = Vector3(player_pitch, player_yaw, 0.0)
+		_refresh_interaction_hint()
+		return
 	var move_direction := Vector3.ZERO
 	var forward := Vector3(-sin(player_yaw), 0.0, -cos(player_yaw))
 	var right := Vector3(cos(player_yaw), 0.0, -sin(player_yaw))
@@ -5322,12 +5309,18 @@ func _start_interaction(all: bool) -> void:
 	if pocket_menu_open:
 		_close_pocket_take_menu()
 		return
-	if not player_citizen.is_hero:
-		_update_interface("Только герой может выполнять действия. Остальными жителями можно только двигаться.")
+	if player_citizen.work_position_locked:
+		_exit_player_work_position()
 		return
 	if not interaction_action.is_empty():
 		return
 	var target := _first_person_target()
+	if target.kind == "workplace":
+		_occupy_workplace(target.node)
+		return
+	if not player_citizen.is_hero:
+		_update_interface("Только герой может выполнять действия. Остальными жителями можно только двигаться.")
+		return
 	match target.kind:
 		"construction":
 			var site := construction.site_for_node(target.node)
@@ -5362,9 +5355,6 @@ func _start_interaction(all: bool) -> void:
 			_update_interface("Лесные дары и зайца может собирать только специалист. Постройте палатку охотников-собирателей.")
 			return
 		"citizen", "building":
-			return
-		"workplace":
-			_occupy_workplace(target.node)
 			return
 		"tree":
 			var gathering_branches := settlement.era < SettlementState.Era.WOOD
@@ -5595,14 +5585,66 @@ func _deliver_one_pocket_to_warehouse(warehouse_index := -1) -> void:
 	_update_interface("Сдано %d %s на склад. %s" % [actually_delivered, resource_type, _format_pocket_hint()])
 
 
-func _occupy_workplace(workplace: Node3D) -> void:
-	var role := _role_for_workplace(workplace)
-	if role.is_empty():
+func _nearest_service_position(building: Node3D, from: Vector3) -> Vector3:
+	if not is_instance_valid(building):
+		return Vector3.INF
+	if building.has_meta("service_positions"):
+		var positions: Array = building.get_meta("service_positions")
+		var best := Vector3.INF
+		var best_distance := INF
+		for value in positions:
+			if value is Vector3:
+				var position: Vector3 = value
+				var distance := from.distance_squared_to(position)
+				if distance < best_distance:
+					best = position
+					best_distance = distance
+		if best != Vector3.INF:
+			return best
+	return building.get_meta("service_position", building.global_position)
+
+
+func _exit_player_work_position() -> void:
+	if player_citizen == null or not player_citizen.work_position_locked:
 		return
-	selected_builder = player_citizen
-	_set_selected_work_role(role, false)
-	selected_builder = null
-	_update_interface("%s занял должность %s." % [player_citizen.role_label(), role.replace("_", " ")])
+	var was_official_appointment := player_citizen.work_position_role == "official" and not player_citizen.work_position_temporary
+	player_citizen.exit_work_position()
+	if was_official_appointment:
+		_dismiss_official(player_citizen)
+		_update_interface("%s покинул пост управляющего." % player_citizen.role_label())
+	else:
+		_update_interface("%s покинул рабочее место." % player_citizen.role_label())
+	_refresh_interaction_hint()
+
+
+func _occupy_workplace(workplace: Node3D) -> void:
+	if not is_instance_valid(workplace) or player_citizen == null:
+		return
+	var building_type := str(workplace.get_meta("building_type", ""))
+	var is_official_building := building_type in OFFICIAL_WORKPLACE_TYPES
+	var service_position := _nearest_service_position(workplace, player_citizen.global_position)
+	# Move the citizen onto the nearest service position. Smooth walking can be
+	# added later; the design requires automatic positioning at the workplace.
+	player_citizen.global_position = service_position
+	if is_official_building:
+		if settlement.is_research_completed("official"):
+			var current_officer := _officer_holder()
+			if current_officer != null and current_officer != player_citizen:
+				_update_interface("Это место уже занято чиновником.")
+				return
+			_appoint_official(player_citizen, workplace)
+			player_citizen.enter_work_position(service_position, "official", workplace, false)
+			_update_interface("Ваш герой стал чиновником. Переключитесь на вид сверху для управления посёлком — клавиша R.")
+		else:
+			player_citizen.enter_work_position(service_position, "researcher", workplace, true)
+			_show_research_menu()
+			_update_interface("Ваш герой занял позицию исследователя.")
+	else:
+		var role := _role_for_workplace(workplace)
+		if role.is_empty():
+			return
+		player_citizen.enter_work_position(service_position, role, workplace, true)
+		_update_interface("%s занял временную должность %s." % [player_citizen.role_label(), role.replace("_", " ")])
 	_refresh_interaction_hint()
 
 
@@ -6177,6 +6219,8 @@ func _building_action_hint(building: Node3D) -> String:
 
 
 func _first_person_action_hint() -> String:
+	if player_citizen != null and player_citizen.work_position_locked:
+		return "F — покинуть рабочее место"
 	var target := _first_person_target()
 	match target.kind:
 		"construction":
@@ -6225,9 +6269,18 @@ func _first_person_action_hint() -> String:
 				return "F: взять 1 доску | Shift+F: взять до заполнения"
 			return ""
 		"workplace":
-			var role := _role_for_workplace(target.node)
 			var building_type := str(target.node.get_meta("building_type", " workplace"))
-			return "F: занять должность %s в %s" % [role, building_type.capitalize().replace("_", " ")]
+			var is_official_building := building_type in OFFICIAL_WORKPLACE_TYPES
+			if is_official_building:
+				if settlement.is_research_completed("official"):
+					if player_citizen != null and player_citizen.permanent_role == "official" and player_citizen.work_position_node == target.node:
+						return "F — покинуть место чиновника"
+					return "F — занять место чиновника"
+				return "F — исследовать (требуется чиновник)"
+			var role := _role_for_workplace(target.node)
+			if role.is_empty():
+				return ""
+			return "F — занять рабочее место (%s)" % role.replace("_", " ")
 		"tree":
 			if settlement.era < SettlementState.Era.WOOD:
 				return "F: собрать ветки | Shift+F: собирать до полноты (%d%%)" % _resource_remaining_percent("branches")
@@ -7041,16 +7094,6 @@ func _create_campfire_menu(ui: CanvasLayer) -> void:
 	campfire_research_button.pressed.connect(_show_research_menu)
 	campfire_menu.add_child(campfire_research_button)
 
-	# The town hall is the employment centre: manage its officer here, exactly
-	# like assigning a cook/teacher/seller at their own workplace.
-	campfire_official_button = Button.new()
-	campfire_official_button.text = "Assign selected resident as employment officer"
-	campfire_official_button.position = Vector2(16, 518)
-	campfire_official_button.size = Vector2(272, 32)
-	campfire_official_button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	campfire_official_button.pressed.connect(_assign_official_at_campfire)
-	campfire_menu.add_child(campfire_official_button)
-
 	campfire_accept_button = Button.new()
 	campfire_accept_button.position = Vector2(16, 556)
 	campfire_accept_button.size = Vector2(272, 32)
@@ -7695,14 +7738,10 @@ func _refresh_campfire_menu() -> void:
 
 
 func _refresh_campfire_worker_controls() -> void:
-	if campfire_official_button == null:
-		return
 	var is_center := is_instance_valid(selected_campfire) and str(selected_campfire.get_meta("building_type", "")) in OFFICIAL_WORKPLACE_TYPES
 	var accepting := is_center and bool(selected_campfire.get_meta("accepting_workers", true))
 	var can_command_labor := _player_can_command_labor()
 	var blocked_tooltip := _labor_command_block_message()
-	campfire_official_button.visible = is_center
-	campfire_official_button.disabled = selected_builder == null or selected_builder.is_player_controlled or not accepting
 	campfire_accept_button.visible = is_center
 	campfire_accept_button.text = "Stop accepting officer" if accepting else "Start accepting officer"
 	campfire_accept_button.disabled = not can_command_labor
@@ -7711,7 +7750,7 @@ func _refresh_campfire_worker_controls() -> void:
 	campfire_dismiss_button.visible = is_center
 	campfire_dismiss_button.disabled = officer == null or not can_command_labor
 	campfire_dismiss_button.tooltip_text = blocked_tooltip if not can_command_labor else ""
-	
+
 	if campfire_overtime_button != null:
 		campfire_overtime_button.visible = is_center and not _is_work_time() and officer != null
 		campfire_overtime_button.disabled = not can_command_labor
@@ -7732,14 +7771,6 @@ func _handle_campfire_primary_action() -> void:
 		_refresh_campfire_menu()
 		return
 	_upgrade_selected_building()
-
-
-func _assign_official_at_campfire() -> void:
-	if not is_instance_valid(selected_campfire):
-		return
-	selected_building = selected_campfire
-	_assign_official()
-	_refresh_campfire_menu()
 
 
 func _toggle_campfire_acceptance() -> void:
@@ -8017,12 +8048,6 @@ func _create_building_menu(ui: CanvasLayer) -> void:
 	building_seller_button.pressed.connect(_assign_seller_at_market)
 	building_menu.add_child(building_seller_button)
 
-	building_official_button = Button.new()
-	building_official_button.text = "Assign selected resident as employment officer"
-	building_official_button.position = Vector2(16, 104)
-	building_official_button.size = Vector2(272, 30)
-	building_official_button.pressed.connect(_assign_official)
-	building_menu.add_child(building_official_button)
 	building_accept_workers_button = Button.new()
 	building_accept_workers_button.position = Vector2(16, 104)
 	building_accept_workers_button.size = Vector2(272, 30)
@@ -8089,7 +8114,6 @@ func _show_building_menu() -> void:
 		building_cook_button.visible = false
 		building_teacher_button.visible = false
 		building_seller_button.visible = false
-		building_official_button.visible = false
 		building_accept_workers_button.visible = false
 		building_dismiss_worker_button.visible = false
 		building_upgrade_button.visible = false
@@ -8114,9 +8138,6 @@ func _show_building_menu() -> void:
 		building_seller_button.visible = building_type in ["straw_trade_tent", "tarp_trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market"]
 		building_seller_button.disabled = not can_command_labor or selected_builder == null or selected_builder.is_player_controlled or not bool(selected_building.get_meta("accepting_workers", true))
 		building_seller_button.tooltip_text = blocked_tooltip if not can_command_labor else ""
-
-		building_official_button.visible = building_type in OFFICIAL_WORKPLACE_TYPES
-		building_official_button.disabled = selected_builder == null or selected_builder.is_player_controlled or not bool(selected_building.get_meta("accepting_workers", true))
 
 		var is_workplace := _is_staffed_workplace(selected_building)
 		building_accept_workers_button.visible = is_workplace
@@ -8160,8 +8181,8 @@ func _show_building_menu() -> void:
 			building_upgrade_button.position.y = next_y
 			next_y += 36.0
 			
-		var special_button_visible := building_cook_button.visible or building_teacher_button.visible or building_seller_button.visible or building_official_button.visible
-		for button in [building_cook_button, building_teacher_button, building_seller_button, building_official_button]:
+		var special_button_visible := building_cook_button.visible or building_teacher_button.visible or building_seller_button.visible
+		for button in [building_cook_button, building_teacher_button, building_seller_button]:
 			if button.visible:
 				button.position.y = next_y
 		if special_button_visible:
@@ -8586,78 +8607,45 @@ func _assign_seller_at_market() -> void:
 	_update_workers()
 
 
-func _assign_official() -> void:
-	if selected_builder == null:
-		_update_interface("Select a resident first, then assign them as the officer at the main campfire or town hall.")
-		return
-	if selected_builder.is_player_controlled:
-		_update_interface("Pick a settler, not the character you are controlling.")
-		return
-	_appoint_official(selected_builder)
-	_update_interface("%s is now the employment officer." % selected_builder.role_label())
-	_update_workers()
-
-
-func _appoint_official(citizen: Citizen) -> void:
+func _appoint_official(citizen: Citizen, workplace: Node3D = null) -> void:
 	# A mayoral appointment selects the settlement's single registration officer.
-	# It is independent of who the player currently controls.
+	# In the new work-position design this happens only through physical FPP
+	# occupation of an official workplace (campfire/town hall) after the
+	# "official" technology has been researched.
 	if citizen == null:
 		return
 	for other in citizens:
 		if not is_instance_valid(other) or other == citizen or other.permanent_role != "official":
 			continue
-		other.idle()
-		other.setup_specialization("unassigned")
-		other.release_to_no_permanent_work()
-	citizen.idle()
+		_dismiss_official(other)
 	citizen.setup_specialization("official")
 	citizen.clear_daily_order()
 	citizen.assigned_dig_site = null
 	citizen.pending_employment_role = ""
 	citizen.pending_employment_workplace = null
 	citizen.permanent_role = "official"
-	citizen.employment_workplace = _employer_for_role("official")
+	citizen.employment_workplace = workplace if is_instance_valid(workplace) else _employer_for_role("official")
 	citizen.employment_state = Citizen.EmploymentState.EMPLOYED
 	if not is_instance_valid(citizen.employment_workplace):
 		citizen.active_role = ""
 
 
-func _on_hero_official_pressed() -> void:
-	if hero_citizen == null:
+func _dismiss_official(citizen: Citizen) -> void:
+	if citizen == null or citizen.permanent_role != "official":
 		return
-	if hero_citizen.permanent_role == "official":
-		_dismiss_hero_official()
-		return
-	if not is_instance_valid(campfire_node):
-		_update_interface("Требуется построенный костер.")
-		return
-	if hero_citizen.is_player_controlled:
-		hero_citizen.set_player_controlled(false)
-		if is_first_person:
-			_leave_first_person_to_hero_overview()
-	_appoint_official(hero_citizen)
-	_activate_employment_centre(campfire_node)
-	_update_interface("%s назначен управляющим у костра." % hero_citizen.role_label())
-	_update_workers()
-	_refresh_build_menu()
-
-
-func _dismiss_hero_official() -> void:
-	if hero_citizen == null or hero_citizen.permanent_role != "official":
-		return
-	if settlement.active_research_tech_id != "" and settlement.active_research_worker_id == hero_citizen.ai_id:
-		_cancel_active_building_research(true, "Research cancelled: the hero left the official post. Resources refunded.")
-	hero_citizen.idle()
-	hero_citizen.setup_specialization("unassigned")
-	hero_citizen.clear_daily_order()
-	hero_citizen.assigned_dig_site = null
-	hero_citizen.pending_employment_role = ""
-	hero_citizen.pending_employment_workplace = null
-	hero_citizen.permanent_role = ""
-	hero_citizen.employment_workplace = null
-	hero_citizen.employment_state = Citizen.EmploymentState.NO_PERMANENT_WORK
-	hero_citizen.active_role = ""
-	_update_interface("%s покинул пост управляющего." % hero_citizen.role_label())
+	if settlement.active_research_tech_id != "" and settlement.active_research_worker_id == citizen.ai_id:
+		_cancel_active_building_research(true, "Research cancelled: the official left the post. Resources refunded.")
+	citizen.idle()
+	citizen.setup_specialization("unassigned")
+	citizen.clear_daily_order()
+	citizen.assigned_dig_site = null
+	citizen.pending_employment_role = ""
+	citizen.pending_employment_workplace = null
+	citizen.permanent_role = ""
+	citizen.employment_workplace = null
+	citizen.employment_state = Citizen.EmploymentState.NO_PERMANENT_WORK
+	citizen.active_role = ""
+	_update_interface("%s покинул пост управляющего." % citizen.role_label())
 	_update_workers()
 	_refresh_build_menu()
 
@@ -8672,9 +8660,13 @@ func _activate_employment_centre(centre: Node3D) -> void:
 		citizen.employment_workplace = centre
 		citizen.pending_employment_workplace = null
 		citizen.employment_state = Citizen.EmploymentState.EMPLOYED
+		if citizen.is_player_controlled:
+			# A player-controlled official is already physically at a work position;
+			# do not cancel their current FPP state.
+			continue
 		# Start the post in the same hand-off so another scheduler tick cannot
 		# replace the job before the route starts.
-		if not citizen.is_player_controlled and _is_work_time():
+		if _is_work_time():
 			citizen.assign_official_work(service_position)
 		else:
 			citizen.idle()
