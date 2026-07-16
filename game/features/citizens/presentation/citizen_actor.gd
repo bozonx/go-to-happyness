@@ -1510,10 +1510,10 @@ func _plan_route(destination: Vector3) -> void:
 
 
 func _route_uses_stale_navigation() -> bool:
-	if active_route == null or not navigation_revision_query.is_valid():
+	if active_route == null or active_route.topology_revision < 0 or not navigation_revision_query.is_valid():
 		return false
 	var current_revision := int(navigation_revision_query.call())
-	return current_revision >= 0 and active_route.grid_revision != current_revision
+	return current_revision >= 0 and active_route.topology_revision != current_revision
 
 
 func _invalidate_route_for_navigation_change() -> void:

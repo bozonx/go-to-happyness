@@ -2062,12 +2062,12 @@ func _movement_speed_modifier_at(position_on_board: Vector3) -> float:
 
 
 func _navigation_revision() -> int:
-	return nav_grid.revision() if nav_grid != null else -1
+	return nav_grid.topology_revision() if nav_grid != null else -1
 
 
 ## Candidate discovery asks only whether a destination can be reached. Cache the
-## result per topology revision so snapshot construction does not repeatedly run
-## the same synchronous A* searches before an actor starts moving.
+## result per topology revision and use connected components, reserving A* for
+## blocked interaction destinations that need an approach cell.
 func _is_route_reachable(from: Vector3, destination: Vector3, may_enter_destination_house := false) -> bool:
 	if nav_grid == null:
 		return false
@@ -2084,7 +2084,11 @@ func _is_route_reachable(from: Vector3, destination: Vector3, may_enter_destinat
 	]
 	if _route_reachability_cache.has(key):
 		return bool(_route_reachability_cache[key])
-	var reachable := _find_path_around_houses(from, destination, may_enter_destination_house).reachable
+	var reachable := false
+	if not may_enter_destination_house:
+		reachable = nav_grid.are_cells_connected(nav_grid.cell_from_position(from), nav_grid.cell_from_position(destination))
+	else:
+		reachable = _find_path_around_houses(from, destination, true).reachable
 	if _route_reachability_cache.size() < ROUTE_REACHABILITY_CACHE_LIMIT:
 		_route_reachability_cache[key] = reachable
 	return reachable
@@ -2504,7 +2508,7 @@ func _create_forest() -> void:
 		var tree_position := _cell_center(cell)
 		tree_cells[cell] = true
 		tree_positions.append(tree_position)
-		_create_tree(tree_position)
+		_create_tree(tree_position, false)
 		_create_grass_sources_near_tree(cell)
 		_create_forage_sources_near_tree(cell)
 	_refresh_navigation_grid()
@@ -2591,7 +2595,7 @@ func _resource_access_position(from: Vector3, resource_position: Vector3) -> Vec
 			best_distance = distance
 	return best
 
-func _create_tree(position_on_board: Vector3) -> void:
+func _create_tree(position_on_board: Vector3, refresh_navigation := true) -> void:
 	var tree := Node3D.new()
 	tree.position = position_on_board
 	var initial_wood := random.randi_range(4, 7)
@@ -2637,7 +2641,8 @@ func _create_tree(position_on_board: Vector3) -> void:
 	collision_body.add_child(collision_shape)
 	tree.add_child(collision_body)
 	terrain_blocked_cells[cell] = true
-	_refresh_navigation_grid()
+	if refresh_navigation:
+		_refresh_navigation_grid()
 	_create_fireflies(position_on_board)
 
 func _create_fireflies(tree_position: Vector3) -> void:

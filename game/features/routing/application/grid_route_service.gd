@@ -7,6 +7,8 @@ extends RefCounted
 ## removes only bends that do not materially increase traversal cost.
 
 var grid: NavGrid
+var last_search_expanded_nodes := 0
+var last_search_peak_frontier := 0
 
 const RouteRequestScript = preload("res://game/features/routing/application/route_request.gd")
 const DIRECTIONS: Array[Vector2i] = [
@@ -35,18 +37,19 @@ func find_route_request(request: RefCounted) -> RouteResult:
 	if grid == null:
 		return RouteResult.unreachable()
 	var grid_revision := grid.revision()
+	var topology_revision := grid.topology_revision()
 	var start: Vector2i = grid.cell_from_position(request.from)
 	var goal: Vector2i = grid.cell_from_position(request.destination)
 	if not grid.is_board_cell(start) or not grid.is_board_cell(goal):
-		return RouteResult.unreachable(grid_revision)
+		return RouteResult.unreachable(grid_revision, topology_revision)
 	# A task must name an actual reachable interaction point. Snapping an
 	# inaccessible target to a nearby cell causes false task completion.
 	if grid.is_blocked(goal) and not request.allow_destination_cell:
-		return RouteResult.unreachable(grid_revision)
+		return RouteResult.unreachable(grid_revision, topology_revision)
 
 	var came_from := _search(start, goal, request.traveler_profile, request.allow_destination_cell)
 	if not came_from.has(goal):
-		return RouteResult.unreachable(grid_revision)
+		return RouteResult.unreachable(grid_revision, topology_revision)
 
 	# Reconstruct the coarse path as world points: the start, each cell centre,
 	# and finally the exact service/work interaction point requested by the task.
@@ -65,7 +68,7 @@ func find_route_request(request: RefCounted) -> RouteResult:
 	var waypoints := _smooth(points, request.traveler_profile, request.allow_destination_cell)
 	if waypoints.is_empty():
 		waypoints = [request.destination]
-	return RouteResult.success(waypoints, request.destination, grid_revision)
+	return RouteResult.success(waypoints, request.destination, grid_revision, topology_revision)
 
 
 func _make_request(from: Vector3, destination: Vector3, allow_destination := false) -> RefCounted:
@@ -82,13 +85,17 @@ func _search(start: Vector2i, goal: Vector2i, traveler_profile: StringName, allo
 	var came_from: Dictionary = {start: start}
 	var costs: Dictionary = {start: 0.0}
 	var closed: Dictionary = {}
+	last_search_expanded_nodes = 0
+	last_search_peak_frontier = 0
 	var minimum_weight := grid.minimum_cell_weight()
 	_heap_push(frontier_cells, frontier_priorities, start, _octile_distance(start, goal) * minimum_weight)
+	last_search_peak_frontier = frontier_cells.size()
 	while not frontier_cells.is_empty():
 		var current := _heap_pop(frontier_cells, frontier_priorities)
 		if closed.has(current):
 			continue
 		closed[current] = true
+		last_search_expanded_nodes += 1
 		if current == goal:
 			break
 		for direction in DIRECTIONS:
@@ -107,6 +114,7 @@ func _search(start: Vector2i, goal: Vector2i, traveler_profile: StringName, allo
 			came_from[next] = current
 			costs[next] = next_cost
 			_heap_push(frontier_cells, frontier_priorities, next, next_cost + _octile_distance(next, goal) * minimum_weight)
+			last_search_peak_frontier = maxi(last_search_peak_frontier, frontier_cells.size())
 	return came_from
 
 

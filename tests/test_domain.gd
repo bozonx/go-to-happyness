@@ -959,10 +959,12 @@ func _test_weight_change_stales_active_route() -> void:
 	var route := router.find_route(Vector3(-2.5, 0.0, 0.5), Vector3(2.5, 0.0, 0.5))
 	assert(route.reachable)
 	var citizen := Citizen.new()
-	citizen.navigation_revision_query = func() -> int: return grid.revision()
+	citizen.navigation_revision_query = func() -> int: return grid.topology_revision()
 	citizen.active_route = route
 	assert(not citizen._route_uses_stale_navigation())
 	grid.set_cell_weights({Vector2i(0, 1): 0.5})
+	assert(not citizen._route_uses_stale_navigation())
+	grid.set_blocked_cells({Vector2i(0, 1): true})
 	assert(citizen._route_uses_stale_navigation())
 	citizen.free()
 
@@ -1047,7 +1049,7 @@ func _test_citizen_replans_on_navigation_revision() -> void:
 	var citizen := Citizen.new()
 	var navigation_revisions := [3]
 	citizen.navigation_revision_query = func() -> int: return navigation_revisions[0]
-	citizen.active_route = RouteResult.success([Vector3(1.0, 0.0, 0.0)], Vector3(1.0, 0.0, 0.0), navigation_revisions[0])
+	citizen.active_route = RouteResult.success([Vector3(1.0, 0.0, 0.0)], Vector3(1.0, 0.0, 0.0), navigation_revisions[0], navigation_revisions[0])
 	assert(not citizen._route_uses_stale_navigation())
 	navigation_revisions[0] += 1
 	assert(citizen._route_uses_stale_navigation())
