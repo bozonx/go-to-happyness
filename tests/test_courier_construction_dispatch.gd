@@ -27,7 +27,13 @@ func _init() -> void:
 	# Stock enough resources for both sites to need deliveries.
 	simulation.settlement.add("branches", 20)
 	simulation.settlement.add("grass", 20)
-	simulation.warehouse_positions.append(Vector3.ZERO)
+	# Keep two storages so task identity and source selection are exercised. The
+	# nearest source is removed below to emulate demolition or a blocked route.
+	var nearest_warehouse := Vector3(11.0, 0.0, 10.0)
+	var fallback_warehouse := Vector3.ZERO
+	simulation.warehouse_positions.append(nearest_warehouse)
+	simulation.warehouse_positions.append(fallback_warehouse)
+	simulation.settlement.add_warehouse("warehouse")
 	simulation.settlement.add_warehouse("warehouse")
 
 	simulation._update_couriers()
@@ -38,12 +44,24 @@ func _init() -> void:
 	for task in construction_tasks:
 		var task_site: ConstructionSite = task.payload.get("site") as ConstructionSite
 		assert(task_site != null and task_site.node == simulation.construction_sites[0].node, "Construction deliveries must stay focused on the builder's current project")
+		assert(task.pickup == nearest_warehouse, "Construction task should use the nearest warehouse")
+
+	# An unassigned task must not remain bound to a warehouse that has disappeared.
+	# The next dispatch should replace it with a task for the remaining warehouse.
+	simulation.warehouse_positions.remove_at(0)
+	simulation._update_couriers()
+	construction_tasks = simulation.courier_dispatcher.available_tasks().filter(
+		func(task: CourierTask) -> bool: return task.kind == CourierTask.Kind.CONSTRUCTION
+	)
+	assert(not construction_tasks.is_empty(), "Expected a replacement construction task after the source warehouse changed")
+	for task in construction_tasks:
+		assert(task.pickup == fallback_warehouse, "Construction task should be republished for the remaining warehouse")
 
 	# Dispatch must result in an actual stock-to-site delivery, not merely a task
 	# visible to the director. Keep a single daily courier idle at the warehouse
 	# so the full order/goal/actuator route is exercised.
 	var courier: Citizen = simulation.citizens[0]
-	courier.global_position = Vector3.ZERO
+	courier.global_position = fallback_warehouse
 	courier.idle()
 	simulation._assign_daily_order(courier, "courier")
 	var branch_delivery_completed := false

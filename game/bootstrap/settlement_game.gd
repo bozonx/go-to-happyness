@@ -1368,7 +1368,10 @@ func _construction_material_source(resource_type: String, from_position: Vector3
 				if distance < nearest_distance:
 					nearest_distance = distance
 					nearest_warehouse = position
-			return {"kind": "storage", "id": "storage", "position": nearest_warehouse}
+			# Use the position rather than the array index as the source identity.
+			# Warehouse indices shift when one is demolished, while an existing task
+			# must be invalidated and republished for the actual remaining warehouse.
+			return {"kind": "storage", "id": "storage_%s" % _cell_from_position(nearest_warehouse), "position": nearest_warehouse}
 		# Before the first warehouse is built, all resources live in the virtual
 		# stockpile. Couriers pull from that unlimited reserve at the camp entrance
 		# so the bootstrap warehouse and main campfire can still be supplied.
@@ -1460,6 +1463,14 @@ func _is_courier_task_valid(task: RefCounted) -> bool:
 				return false
 			var resource_type := str(task.payload.resource)
 			var source: Dictionary = task.payload.get("source", {})
+			# An idle task must follow the current warehouse source. Its source can
+			# change when warehouses are built or removed.
+			# Do not invalidate a carrier already in transit merely because another
+			# warehouse became a better source after pickup.
+			if not task.is_assigned():
+				var current_source := _construction_material_source(resource_type, site.node.global_position)
+				if current_source.is_empty() or str(current_source.get("id", "")) != str(source.get("id", "")):
+					return false
 			var total_reserved := settlement.construction_reserved_for_site(site.site_id, resource_type)
 			var in_transit := int(site.reserved_materials.get(resource_type, 0))
 			var source_available := false
