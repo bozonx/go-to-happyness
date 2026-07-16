@@ -7341,7 +7341,7 @@ func _show_workforce_menu() -> void:
 		return
 	campfire_menu.visible = false
 	if not _officer_exists():
-		_update_interface(_labor_command_block_message())
+		_update_interface(_permanent_profession_block_message())
 		return
 	workforce_menu.visible = true
 	_refresh_workforce_menu()
@@ -7366,7 +7366,7 @@ func _refresh_campfire_occupancy_button() -> void:
 	if not _officer_exists():
 		campfire_occupancy_button.text = "Workers automation: assign officer"
 		campfire_occupancy_button.disabled = true
-		campfire_occupancy_button.tooltip_text = _labor_command_block_message()
+		campfire_occupancy_button.tooltip_text = _permanent_profession_block_message()
 	else:
 		campfire_occupancy_button.text = "Employment: %d/%d  No permanent: %d" % [employed, total, daily_order]
 		campfire_occupancy_button.disabled = false
@@ -8566,11 +8566,10 @@ func _refresh_warehouse_menu() -> void:
 	warehouse_menu.add_child(close_btn)
 
 
-func _toggle_warehouse_accept(resource_type: String, accepted: bool) -> void:
+func _toggle_warehouse_accept(accepted: bool, resource_type: String) -> void:
 	if selected_warehouse == null:
 		return
-	var selected_position: Vector3 = selected_warehouse.get_meta("service_position", selected_warehouse.global_position)
-	var index := warehouse_positions.find(selected_position)
+	var index := _warehouse_index_for_building(selected_warehouse)
 	settlement.set_warehouse_accepted(index, resource_type, accepted)
 	_refresh_warehouse_menu()
 
@@ -8579,7 +8578,7 @@ func _dump_warehouse_resource(resource_type: String) -> void:
 	if selected_warehouse == null:
 		return
 	var selected_position: Vector3 = selected_warehouse.get_meta("service_position", selected_warehouse.global_position)
-	var index := warehouse_positions.find(selected_position)
+	var index := _warehouse_index_for_building(selected_warehouse)
 	var count := settlement.warehouse_amount(resource_type, index)
 	if count <= 0:
 		return

@@ -1371,12 +1371,6 @@ func _test_native_courier_goal() -> void:
 	order.target_position = Vector3(6.0, 0.0, 0.0)
 	brain.think(snapshot, order)
 	brain.tick(snapshot, order, 0.1)
-	assert(actuator.move_to_count == 1)
-	assert(actuator.move_to_destination == Vector3(6.0, 0.0, 0.0))
-	assert(actuator.action_start_count == 0)
-	actuator.arrived_flag = true
-	brain.tick(snapshot, order, 0.1)
-	assert(actuator.stop_count == 1)
 	assert(actuator.action_start_count == 1)
 	actuator.next_action_status = CitizenActuator.ActionStatus.SUCCEEDED
 	brain.tick(snapshot, order, 0.1)

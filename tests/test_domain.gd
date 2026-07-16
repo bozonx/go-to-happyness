@@ -153,6 +153,7 @@ func _init() -> void:
 	_test_backpack_invariants()
 	_test_warehouse_cheat_respects_accept_filters()
 	_test_dump_preserves_warehouse_accept_filters()
+	_test_warehouse_accept_toggle_persists_after_refresh()
 	quit(0)
 
 
@@ -1783,3 +1784,38 @@ func _test_dump_preserves_warehouse_accept_filters() -> void:
 	assert(not state.warehouse_accepts(0, "branches"))
 	assert(state.warehouse_accepts(0, "grass"))
 	assert(state.warehouse_amount("branches", 0) == 0)
+
+
+func _test_warehouse_accept_toggle_persists_after_refresh() -> void:
+	var state := SettlementState.new()
+	state.add_warehouse("warehouse")
+	state.add_warehouse("warehouse")
+	state.warehouse_ever_built = true
+
+	# Simulate UI toggle: uncheck "branches" on warehouse 0, keep "grass" accepted.
+	# The toggle callback receives (accepted: bool, resource_type: String) from
+	# CheckBox.toggled signal + bind(resource_type).
+	state.set_warehouse_accepted(0, "branches", false)
+	state.set_warehouse_accepted(0, "grass", true)
+
+	# Simulate _refresh_warehouse_menu reading state back.
+	assert(not state.warehouse_accepts(0, "branches"))
+	assert(state.warehouse_accepts(0, "grass"))
+
+	# Toggle a different resource on the same warehouse; verify branches stays rejected.
+	state.set_warehouse_accepted(0, "water", false)
+	assert(not state.warehouse_accepts(0, "branches"))
+	assert(not state.warehouse_accepts(0, "water"))
+	assert(state.warehouse_accepts(0, "grass"))
+
+	# Warehouse 1 should be unaffected by warehouse 0 toggles.
+	assert(state.warehouse_accepts(1, "branches"))
+	assert(state.warehouse_accepts(1, "grass"))
+	assert(state.warehouse_accepts(1, "water"))
+
+	# Simulate dump + refresh cycle: dump should not reset accept filters.
+	state.add("grass", 3)
+	state.dump_warehouse_resource(0, "grass", 3)
+	assert(state.warehouse_accepts(0, "grass"))
+	assert(not state.warehouse_accepts(0, "branches"))
+	assert(state.warehouse_amount("grass", 0) == 0)
