@@ -120,6 +120,7 @@ class FakeActuator extends CitizenActuator:
 	var move_started := false
 	var arrived_flag := false
 	var movement_failed_flag := false
+	var next_movement_failure_reason := BehaviorStep.FailureReason.MOVEMENT_FAILED
 	var next_action_status := ActionStatus.RUNNING
 
 	func stop() -> void:
@@ -143,6 +144,9 @@ class FakeActuator extends CitizenActuator:
 
 	func movement_failed() -> bool:
 		return movement_failed_flag
+
+	func movement_failure_reason() -> BehaviorStep.FailureReason:
+		return next_movement_failure_reason
 
 	func begin_action(
 		action: StringName,
@@ -237,6 +241,7 @@ func _init() -> void:
 	_test_order_board_equivalence_ignores_payload_position()
 	_test_native_rest_goal()
 	_test_move_to_step()
+	_test_move_to_step_records_failure_reason()
 	_test_relax_at_position_step()
 	_test_register_provider_keeps_order_while_registering()
 	_test_register_provider_supports_tent_era_couriers()
@@ -246,6 +251,7 @@ func _init() -> void:
 	_test_daily_player_order_provider_publishes_cleaning_order()
 	_test_native_cleaning_goal()
 	_test_runner_cancels_stale_active_order_and_releases_reservation()
+	_test_runner_trace_records_invalid_task_reason()
 	_test_reserved_step_renews_lease()
 	_test_forestry_provider_assigns_unique_stable_targets()
 	_test_native_forestry_goal()
@@ -1818,6 +1824,22 @@ func _test_runner_cancels_stale_active_order_and_releases_reservation() -> void:
 	assert(snapshot.reservations.owner_of([&"forestry.tree", &"tree:3:0"], 0.0) == 0)
 
 
+func _test_runner_trace_records_invalid_task_reason() -> void:
+	var context := _context()
+	var work_step := ScriptedStep.new([BehaviorStep.Status.RUNNING])
+	var runner := BehaviorRunner.new()
+	var task := BehaviorTask.new(&"work", work_step)
+	task.guard = func(_ctx: BehaviorContext) -> bool: return false
+	assert(runner.start(task, context))
+	assert(runner.tick(context, 0.1) == BehaviorStep.Status.FAILURE)
+	assert(task.failure_reason == BehaviorStep.FailureReason.GUARD_REJECTED)
+	assert(not runner.trace.is_empty())
+	var last_trace: Dictionary = runner.trace.back()
+	assert(last_trace.get(&"event") == &"invalid")
+	assert(last_trace.get(&"goal") == &"work")
+	assert(last_trace.get(&"reason") == BehaviorStep.FailureReason.GUARD_REJECTED)
+
+
 func _test_reserved_step_renews_lease() -> void:
 	var ledger := ReservationLedger.new()
 	var citizen := CitizenSnapshot.new(1)
@@ -2165,6 +2187,25 @@ func _test_move_to_step() -> void:
 	assert(step.run(context, 0.1) == BehaviorStep.Status.SUCCESS)
 	assert(step.run(context, 0.1) == BehaviorStep.Status.SUCCESS)
 	assert(actuator.stop_count == 1)
+
+
+func _test_move_to_step_records_failure_reason() -> void:
+	var actuator := FakeActuator.new(1)
+	var context := BehaviorContext.new(actuator, AIBlackboard.new())
+	context.refresh(_snapshot(0.0, CitizenSnapshot.new(1)), null)
+	var step := MoveToStepScript.new(Vector3(5.0, 0.0, 3.0), 0.5)
+	assert(step.run(context, 0.1) == BehaviorStep.Status.RUNNING)
+	actuator.movement_failed_flag = true
+	actuator.next_movement_failure_reason = BehaviorStep.FailureReason.UNREACHABLE
+	assert(step.run(context, 0.1) == BehaviorStep.Status.FAILURE)
+	assert(step.failure_reason == BehaviorStep.FailureReason.UNREACHABLE)
+
+	var blocked := MoveToStepScript.new(Vector3.ONE, 0.5, [&"target", &"one"])
+	var other_snapshot := _snapshot(0.0, CitizenSnapshot.new(1))
+	other_snapshot.reservations.claim([&"target", &"one"], 2, 0.0, 30.0)
+	context.refresh(other_snapshot, null)
+	assert(blocked.run(context, 0.1) == BehaviorStep.Status.FAILURE)
+	assert(blocked.failure_reason == BehaviorStep.FailureReason.RESERVATION_LOST)
 
 
 func _test_relax_at_position_step() -> void:

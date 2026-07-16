@@ -110,6 +110,7 @@ func _init() -> void:
 	_test_citizen_work_position_lock()
 	_test_grid_routing()
 	_test_weighted_grid_routing()
+	_test_route_result_unreachable_reasons()
 	_test_navigation_grid_revision()
 	_test_weight_change_stales_active_route()
 	_test_navigation_recovery_guards()
@@ -927,6 +928,39 @@ func _test_weighted_grid_routing() -> void:
 	assert(router.find_route_request(allowed_request).reachable)
 
 
+func _test_route_result_unreachable_reasons() -> void:
+	var router_without_grid := GridRouteServiceScript.new()
+	var no_grid := router_without_grid.find_route(Vector3.ZERO, Vector3.ONE)
+	assert(not no_grid.reachable)
+	assert(no_grid.unreachable_reason == RouteResult.UnreachableReason.NO_GRID)
+
+	var grid := NavGrid.new()
+	grid.configure(1.0, 6)
+	var router := GridRouteServiceScript.new()
+	router.configure(grid)
+	var outside := router.find_route(Vector3.ZERO, Vector3(20.0, 0.0, 0.0))
+	assert(not outside.reachable)
+	assert(outside.unreachable_reason == RouteResult.UnreachableReason.OUTSIDE_BOARD)
+
+	var destination := Vector3(2.5, 0.0, 0.5)
+	grid.set_blocked_cells({Vector2i(2, 0): true})
+	var goal_blocked := router.find_route(Vector3(-2.5, 0.0, 0.5), destination)
+	assert(not goal_blocked.reachable)
+	assert(goal_blocked.unreachable_reason == RouteResult.UnreachableReason.GOAL_BLOCKED)
+
+	grid.set_blocked_cells({
+		Vector2i(0, -3): true,
+		Vector2i(0, -2): true,
+		Vector2i(0, -1): true,
+		Vector2i(0, 0): true,
+		Vector2i(0, 1): true,
+		Vector2i(0, 2): true,
+	})
+	var disconnected := router.find_route(Vector3(-2.5, 0.0, 0.5), destination)
+	assert(not disconnected.reachable)
+	assert(disconnected.unreachable_reason == RouteResult.UnreachableReason.DISCONNECTED)
+
+
 func _test_navigation_grid_revision() -> void:
 	var grid := NavGrid.new()
 	grid.configure(1.0, 10)
@@ -1071,6 +1105,7 @@ func _test_citizen_route_failure_marks_action_failed() -> void:
 	for _i in range(ceili(Citizen.ROUTE_UNREACHABLE_FAILURE_TIME / 0.5) + 1):
 		citizen._process_to_source(0.5)
 	assert(citizen.get_action_status(&"forestry") == CitizenActuator.ActionStatus.FAILED)
+	assert(citizen.ai_move_failure_reason == BehaviorStep.FailureReason.UNREACHABLE)
 	citizen.free()
 
 

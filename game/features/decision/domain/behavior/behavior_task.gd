@@ -11,6 +11,7 @@ var resumable: bool
 ## Prevents personal needs from preempting an atomic work trip.
 var blocks_personal_needs := false
 var label: String
+var failure_reason := BehaviorStep.FailureReason.NONE
 ## Optional `(BehaviorContext) -> bool` predicate. Checked before a suspended task
 ## resumes: if the world moved on (target claimed, order expired, tree felled) the
 ## stale task is dropped instead of resumed, letting the arbiter build a fresh one.
@@ -18,16 +19,22 @@ var guard: Callable
 
 
 func is_still_valid(context: BehaviorContext) -> bool:
+	return invalid_reason(context) == BehaviorStep.FailureReason.NONE
+
+
+func invalid_reason(context: BehaviorContext) -> BehaviorStep.FailureReason:
 	if context == null or context.snapshot == null:
-		return false
+		return BehaviorStep.FailureReason.CONTEXT_INVALID
 	if order != null:
 		if order.is_expired(context.snapshot.simulation_seconds):
-			return false
+			return BehaviorStep.FailureReason.ORDER_EXPIRED
 	elif order_id != 0:
 		# Compatibility for manually assembled tasks that do not own an order.
 		if context.order == null or context.order.id != order_id:
-			return false
-	return not guard.is_valid() or bool(guard.call(context))
+			return BehaviorStep.FailureReason.ORDER_CHANGED
+	if guard.is_valid() and not bool(guard.call(context)):
+		return BehaviorStep.FailureReason.GUARD_REJECTED
+	return BehaviorStep.FailureReason.NONE
 
 
 func _init(

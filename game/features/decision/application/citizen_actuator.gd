@@ -45,5 +45,9 @@ func movement_failed() -> bool:
 	return false
 
 
+func movement_failure_reason() -> BehaviorStep.FailureReason:
+	return BehaviorStep.FailureReason.MOVEMENT_FAILED
+
+
 func cancel_action() -> void:
 	pass

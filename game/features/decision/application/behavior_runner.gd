@@ -11,6 +11,8 @@ signal task_resumed(task: BehaviorTask)
 var active_task: BehaviorTask
 var pending_task: BehaviorTask
 var _suspended: Array[BehaviorTask] = []
+var trace_limit := 20
+var trace: Array[Dictionary] = []
 
 
 func start(task: BehaviorTask, context: BehaviorContext) -> bool:
@@ -28,6 +30,7 @@ func start(task: BehaviorTask, context: BehaviorContext) -> bool:
 			active_task.root.cancel(context)
 	active_task = task
 	active_task.root.reset()
+	_record_trace(&"start", active_task, BehaviorStep.Status.RUNNING, BehaviorStep.FailureReason.NONE, context)
 	task_started.emit(active_task)
 	return true
 
@@ -49,8 +52,12 @@ func tick(context: BehaviorContext, delta: float) -> BehaviorStep.Status:
 	if active_task == null:
 		_start_pending_or_resume(context)
 		return BehaviorStep.Status.SUCCESS
-	if not active_task.is_still_valid(context):
+	var invalid_reason := active_task.invalid_reason(context)
+	if invalid_reason != BehaviorStep.FailureReason.NONE:
+		active_task.failure_reason = invalid_reason
+		active_task.root.set_failure_reason(invalid_reason)
 		active_task.root.cancel(context)
+		_record_trace(&"invalid", active_task, BehaviorStep.Status.FAILURE, invalid_reason, context)
 		active_task = null
 		_start_pending_or_resume(context)
 		return BehaviorStep.Status.FAILURE
@@ -60,6 +67,8 @@ func tick(context: BehaviorContext, delta: float) -> BehaviorStep.Status:
 	if status == BehaviorStep.Status.RUNNING:
 		return status
 	active_task = null
+	completed_task.failure_reason = completed_task.root.failure_reason if status == BehaviorStep.Status.FAILURE else BehaviorStep.FailureReason.NONE
+	_record_trace(&"finish", completed_task, status, completed_task.failure_reason, context)
 	task_finished.emit(completed_task, status)
 	_start_pending_or_resume(context)
 	return status
@@ -94,12 +103,17 @@ func clear_pending(context: BehaviorContext) -> void:
 func _resume_previous(context: BehaviorContext) -> void:
 	while not _suspended.is_empty():
 		var candidate: BehaviorTask = _suspended.pop_back()
-		if not candidate.is_still_valid(context):
+		var invalid_reason := candidate.invalid_reason(context)
+		if invalid_reason != BehaviorStep.FailureReason.NONE:
+			candidate.failure_reason = invalid_reason
+			candidate.root.set_failure_reason(invalid_reason)
 			candidate.root.cancel(context)
+			_record_trace(&"drop_suspended", candidate, BehaviorStep.Status.FAILURE, invalid_reason, context)
 			continue
 		active_task = candidate
 		_bind_active_order(context)
 		active_task.root.resume(context)
+		_record_trace(&"resume", active_task, BehaviorStep.Status.RUNNING, BehaviorStep.FailureReason.NONE, context)
 		task_resumed.emit(active_task)
 		return
 
@@ -121,13 +135,39 @@ func _start_pending_or_resume(context: BehaviorContext) -> void:
 	if pending_task != null:
 		var next_task := pending_task
 		pending_task = null
-		if next_task.is_still_valid(context):
+		var invalid_reason := next_task.invalid_reason(context)
+		if invalid_reason == BehaviorStep.FailureReason.NONE:
 			start(next_task, context)
 			return
+		next_task.failure_reason = invalid_reason
+		next_task.root.set_failure_reason(invalid_reason)
 		next_task.root.cancel(context)
+		_record_trace(&"drop_pending", next_task, BehaviorStep.Status.FAILURE, invalid_reason, context)
 	_resume_previous(context)
 
 
 func _bind_active_order(context: BehaviorContext) -> void:
 	if active_task != null and active_task.order != null:
 		context.order = active_task.order
+
+
+func _record_trace(
+	event: StringName,
+	task: BehaviorTask,
+	status: BehaviorStep.Status,
+	reason: BehaviorStep.FailureReason,
+	context: BehaviorContext
+) -> void:
+	if task == null:
+		return
+	trace.append({
+		&"event": event,
+		&"goal": task.goal_id,
+		&"order_id": task.order_id,
+		&"status": status,
+		&"reason": reason,
+		&"sequence": context.snapshot.sequence if context != null and context.snapshot != null else -1,
+		&"time": context.snapshot.simulation_seconds if context != null and context.snapshot != null else 0.0,
+	})
+	while trace.size() > trace_limit:
+		trace.pop_front()

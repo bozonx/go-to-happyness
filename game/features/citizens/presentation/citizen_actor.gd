@@ -319,6 +319,7 @@ var active_route: RouteResult
 var route_retry_timer := 0.0
 var route_retry_delay := ROUTE_RETRY_INTERVAL
 var route_unreachable_time := 0.0
+var route_unreachable_reason := RouteResult.UnreachableReason.NONE
 var navigation_failed := false
 var stuck_time := 0.0
 var recovery_repath_done := false
@@ -349,6 +350,7 @@ var ai_move_target := Vector3.INF
 var ai_move_arrival_radius := 0.25
 var ai_move_arrived := false
 var ai_move_failed := false
+var ai_move_failure_reason := BehaviorStep.FailureReason.NONE
 
 var idle_indicator: Label3D
 var _privacy_blur: MeshInstance3D
@@ -1465,6 +1467,8 @@ func _move_to(destination: Vector3, delta: float, may_enter_destination_house :=
 	if _route_uses_stale_navigation():
 		_invalidate_route_for_navigation_change()
 	if navigation_failed:
+		if ai_move_failure_reason == BehaviorStep.FailureReason.NONE:
+			ai_move_failure_reason = BehaviorStep.FailureReason.MOVEMENT_FAILED
 		return false
 	if path_destination.distance_to(movement_destination) > arrival_radius or path_allows_destination_house != may_enter_destination_house:
 		_reset_route(movement_destination)
@@ -1478,6 +1482,7 @@ func _move_to(destination: Vector3, delta: float, may_enter_destination_house :=
 			route_unreachable_time += delta
 			if route_unreachable_time >= ROUTE_UNREACHABLE_FAILURE_TIME:
 				navigation_failed = true
+				ai_move_failure_reason = BehaviorStep.FailureReason.UNREACHABLE
 			return false
 	while not movement_path.is_empty():
 		var waypoint: Vector3 = movement_path.front()
@@ -1502,7 +1507,9 @@ func _plan_route(destination: Vector3) -> void:
 		result = pathfinder.call(global_position, destination, path_allows_destination_house)
 	if not result is RouteResult or not (result as RouteResult).reachable:
 		var failed_revision := int(navigation_revision_query.call()) if navigation_revision_query.is_valid() else -1
-		active_route = RouteResult.unreachable(failed_revision)
+		var reason := (result as RouteResult).unreachable_reason if result is RouteResult else RouteResult.UnreachableReason.UNKNOWN
+		route_unreachable_reason = reason
+		active_route = RouteResult.unreachable(failed_revision, failed_revision, reason)
 		movement_path.clear()
 		route_retry_timer = route_retry_delay
 		route_retry_delay = minf(ROUTE_MAX_RETRY_INTERVAL, route_retry_delay * 2.0)
@@ -1514,6 +1521,8 @@ func _plan_route(destination: Vector3) -> void:
 	route_retry_timer = 0.0
 	route_retry_delay = ROUTE_RETRY_INTERVAL
 	route_unreachable_time = 0.0
+	route_unreachable_reason = RouteResult.UnreachableReason.NONE
+	ai_move_failure_reason = BehaviorStep.FailureReason.NONE
 	recovery_repath_done = false
 
 
@@ -1530,7 +1539,9 @@ func _invalidate_route_for_navigation_change() -> void:
 	route_retry_timer = randf_range(0.0, STALE_NAVIGATION_REPLAN_JITTER)
 	route_retry_delay = ROUTE_RETRY_INTERVAL
 	route_unreachable_time = 0.0
+	route_unreachable_reason = RouteResult.UnreachableReason.NONE
 	navigation_failed = false
+	ai_move_failure_reason = BehaviorStep.FailureReason.STALE_ROUTE
 	stuck_time = 0.0
 	recovery_repath_done = false
 	velocity.x = 0.0
@@ -1597,6 +1608,7 @@ func _force_repath() -> void:
 	route_recovery_attempt += 1
 	if route_recovery_attempt >= ROUTE_RECOVERY_FAILURE_ATTEMPTS:
 		navigation_failed = true
+		ai_move_failure_reason = BehaviorStep.FailureReason.TIMEOUT
 	active_route = null
 	movement_path.clear()
 	route_retry_timer = 0.0
@@ -1623,7 +1635,9 @@ func _reset_route(destination: Vector3) -> void:
 	recovery_repath_done = false
 	route_retry_delay = ROUTE_RETRY_INTERVAL
 	route_unreachable_time = 0.0
+	route_unreachable_reason = RouteResult.UnreachableReason.NONE
 	navigation_failed = false
+	ai_move_failure_reason = BehaviorStep.FailureReason.NONE
 
 func _update_route_progress(distance_before: float, distance_after: float, delta: float, direction: Vector3) -> void:
 	if distance_after < route_best_distance - ROUTE_PROGRESS_EPSILON:
@@ -1781,6 +1795,7 @@ func move_to(destination: Vector3, arrival_radius: float = 0.25) -> bool:
 	ai_move_arrival_radius = maxf(arrival_radius, 0.01)
 	ai_move_arrived = false
 	ai_move_failed = false
+	ai_move_failure_reason = BehaviorStep.FailureReason.NONE
 	state = State.AI_MOVING
 	return true
 

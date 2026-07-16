@@ -42,6 +42,12 @@ func movement_failed() -> bool:
 	return is_valid() and citizen.ai_move_failed
 
 
+func movement_failure_reason() -> BehaviorStep.FailureReason:
+	if not is_valid():
+		return BehaviorStep.FailureReason.CONTEXT_INVALID
+	return citizen.ai_move_failure_reason
+
+
 func begin_action(
 	action: StringName,
 	target_key: StringName = &"",

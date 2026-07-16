@@ -26,19 +26,21 @@ func _init(
 
 func _enter(context: BehaviorContext) -> void:
 	if not _claim(context):
+		set_failure_reason(FailureReason.RESERVATION_LOST)
 		return
 	_started = context.actuator.move_to(_destination, _arrival_radius)
 	if not _started:
+		set_failure_reason(FailureReason.ACTUATOR_REJECTED)
 		_release(context)
 
 
 func _tick(context: BehaviorContext, _delta: float) -> Status:
 	if not _started:
-		return Status.FAILURE
+		return fail(failure_reason if failure_reason != FailureReason.NONE else FailureReason.ACTUATOR_REJECTED)
 	if not _claim(context):
-		return Status.FAILURE
+		return fail(FailureReason.RESERVATION_LOST)
 	if context.actuator.movement_failed():
-		return Status.FAILURE
+		return fail(context.actuator.movement_failure_reason())
 	if context.actuator.has_arrived():
 		return Status.SUCCESS
 	return Status.RUNNING
