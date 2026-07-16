@@ -64,21 +64,21 @@ func capture(sequence: int) -> WorldSnapshot:
 		if construction_in_progress:
 			construction_mode = StringName(actor.active_role)
 			construction_target_key = _target_key(&"construction", actor.construction_site.global_position)
-			construction_position = actor.construction_site.global_position
+			construction_position = actor._reachable_construction_approach(actor.construction_site)
 		elif construction_worker and simulation._is_work_time():
 			if not simulation.demolition_sites.is_empty():
 				var demolition_site: DemolitionSite = simulation.demolition_sites[(citizen_id - 1) % simulation.demolition_sites.size()]
 				if is_instance_valid(demolition_site.building):
 					construction_mode = &"demolition"
 					construction_target_key = _target_key(&"demolition", demolition_site.building.global_position)
-					construction_position = demolition_site.building.global_position
+					construction_position = actor._reachable_construction_approach(demolition_site.building)
 			elif simulation._preferred_construction_site() != null:
 				var construction_site: ConstructionSite = simulation._preferred_construction_site()
 				if is_instance_valid(construction_site.node):
 					construction_mode = &"construction"
 					construction_target_key = _target_key(&"construction", construction_site.node.global_position)
-					construction_position = construction_site.node.global_position
-			construction_can_start = construction_target_key != &""
+					construction_position = actor._reachable_construction_approach(construction_site.node)
+			construction_can_start = construction_target_key != &"" and construction_position != Vector3.INF
 		var daily_construction_in_progress := daily_order_active and daily_order_role == "construction" and actor.active_role in ["construction", "demolition"] and actor.state == Citizen.State.CONSTRUCTING and is_instance_valid(actor.construction_site)
 		var daily_construction_can_start := false
 		var daily_construction_mode: StringName = &""
@@ -87,21 +87,21 @@ func capture(sequence: int) -> WorldSnapshot:
 		if daily_construction_in_progress:
 			daily_construction_mode = StringName(actor.active_role)
 			daily_construction_target_key = _target_key(&"construction", actor.construction_site.global_position)
-			daily_construction_position = actor.construction_site.global_position
+			daily_construction_position = actor._reachable_construction_approach(actor.construction_site)
 		elif daily_order_role == "construction":
 			if not simulation.demolition_sites.is_empty():
 				var daily_demolition_site: DemolitionSite = simulation.demolition_sites[(citizen_id - 1) % simulation.demolition_sites.size()]
 				if is_instance_valid(daily_demolition_site.building):
 					daily_construction_mode = &"demolition"
 					daily_construction_target_key = _target_key(&"demolition", daily_demolition_site.building.global_position)
-					daily_construction_position = daily_demolition_site.building.global_position
+					daily_construction_position = actor._reachable_construction_approach(daily_demolition_site.building)
 			elif simulation._preferred_construction_site() != null:
 				var daily_construction_site: ConstructionSite = simulation._preferred_construction_site()
 				if is_instance_valid(daily_construction_site.node):
 					daily_construction_mode = &"construction"
 					daily_construction_target_key = _target_key(&"construction", daily_construction_site.node.global_position)
-					daily_construction_position = daily_construction_site.node.global_position
-				daily_construction_can_start = daily_construction_target_key != &""
+					daily_construction_position = actor._reachable_construction_approach(daily_construction_site.node)
+				daily_construction_can_start = daily_construction_target_key != &"" and daily_construction_position != Vector3.INF
 		var gathering_worker: bool = actor.permanent_role in ["gather_branches", "gather_food"] and actor.is_employed() and not actor.is_player_controlled
 		var gathering_in_progress: bool = gathering_worker and actor.active_role.begins_with("gather_") and actor.state in [Citizen.State.TO_GATHER, Citizen.State.GATHERING, Citizen.State.TO_WAREHOUSE]
 		var gathering_candidates: Array[Dictionary] = []
