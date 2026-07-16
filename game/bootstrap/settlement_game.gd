@@ -1290,13 +1290,11 @@ func _publish_courier_tasks(dispatcher: RefCounted) -> void:
 				var worker_position: Vector3 = worker.global_position
 				var worker_dropoff := _warehouse_delivery_position(worker_position, worker.resource_type, worker.carried_amount)
 				dispatcher.publish(StringName("worker_%d" % worker.ai_id), CourierTask.Kind.WORKER_PICKUP, 45, worker_position, worker_dropoff, {"worker": worker})
-	var sorted_sites := construction_sites.duplicate()
-	sorted_sites.sort_custom(func(a: ConstructionSite, b: ConstructionSite) -> bool:
-		return _construction_development_priority(a) > _construction_development_priority(b)
-	)
-	for site: ConstructionSite in sorted_sites:
-		if site == null or not is_instance_valid(site.node) or site.node.is_queued_for_deletion():
-			continue
+	# Builders and couriers must concentrate on the same project. Publishing
+	# deliveries for every site lets scarce stock strand across projects that no
+	# builder is currently advancing.
+	var site := _preferred_construction_site()
+	if site != null and is_instance_valid(site.node) and not site.node.is_queued_for_deletion():
 		var site_position: Vector3 = site.node.global_position
 		for resource_type in site.required_materials:
 			var required := int(site.required_materials[resource_type])
@@ -1457,6 +1455,8 @@ func _is_courier_task_valid(task: RefCounted) -> bool:
 		CourierTask.Kind.CONSTRUCTION:
 			var site: ConstructionSite = task.payload.site
 			if site == null or not is_instance_valid(site.node):
+				return false
+			if site != _preferred_construction_site():
 				return false
 			var resource_type := str(task.payload.resource)
 			var source: Dictionary = task.payload.get("source", {})
@@ -1717,14 +1717,26 @@ func _reconcile_construction_reservations(site: ConstructionSite) -> void:
 	site.reserved_materials = reservations
 
 func _preferred_construction_site() -> ConstructionSite:
-	var chosen: ConstructionSite
+	var chosen: ConstructionSite = null
 	var best_score := -INF
+	var waiting_chosen: ConstructionSite = null
+	var waiting_score := -INF
 	for site in construction_sites:
+		if site == null or not is_instance_valid(site.node) or site.node.is_queued_for_deletion():
+			continue
 		var score := _construction_development_priority(site)
+		if score > waiting_score:
+			waiting_chosen = site
+			waiting_score = score
+		# A builder can only advance up to the fraction of materials already on
+		# site. Prefer any project with work available over a higher-priority site
+		# where everyone would only wait for a courier.
+		if site.material_progress() <= site.progress + 0.0001:
+			continue
 		if score > best_score:
 			chosen = site
 			best_score = score
-	return chosen
+	return chosen if chosen != null else waiting_chosen
 
 func _construction_development_priority(site: ConstructionSite) -> float:
 	var building_type := site.building_type
@@ -5315,17 +5327,29 @@ func _demolition_ready(site: DemolitionSite) -> bool:
 	var building: Node3D = site.building
 	if not is_instance_valid(building):
 		return false
+	var residents_to_relocate := 0
+	for citizen in citizens:
+		if citizen.home == building:
+			residents_to_relocate += 1
+	var available_slots := 0
+	for record in building_registry.records():
+		var candidate: Node3D = record.node
+		if not is_instance_valid(candidate) or candidate == building or bool(candidate.get_meta("pending_demolition", false)):
+			continue
+		available_slots += maxi(0, int(candidate.get_meta("spawn_slots", 0)))
+	if available_slots < residents_to_relocate:
+		return false
 	for citizen in citizens:
 		if citizen.home != building:
 			continue
 		var replacement := _find_relocation_home(building)
-		if replacement != null:
-			citizen.assign_home(replacement)
-			_refresh_living_status(citizen)
-			replacement.set_meta("spawn_slots", int(replacement.get_meta("spawn_slots", 0)) - 1)
-		else:
-			citizen.home = null
-			_refresh_living_status(citizen)
+		# Capacity was checked before mutating resident homes, so this should only
+		# fail if an external system changed the registry during this tick.
+		if replacement == null:
+			return false
+		citizen.assign_home(replacement)
+		_refresh_living_status(citizen)
+		replacement.set_meta("spawn_slots", int(replacement.get_meta("spawn_slots", 0)) - 1)
 	return true
 
 func _find_relocation_home(excluded: Node3D) -> Node3D:

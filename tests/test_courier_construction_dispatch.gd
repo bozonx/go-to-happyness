@@ -34,7 +34,10 @@ func _init() -> void:
 	var construction_tasks: Array[CourierTask] = simulation.courier_dispatcher.available_tasks().filter(
 		func(task: CourierTask) -> bool: return task.kind == CourierTask.Kind.CONSTRUCTION
 	)
-	assert(construction_tasks.size() >= 2, "Expected construction tasks for multiple sites, got %d" % construction_tasks.size())
+	assert(not construction_tasks.is_empty(), "Expected a construction task for the focused site")
+	for task in construction_tasks:
+		var task_site: ConstructionSite = task.payload.get("site") as ConstructionSite
+		assert(task_site != null and task_site.node == simulation.construction_sites[0].node, "Construction deliveries must stay focused on the builder's current project")
 
 	# Dispatch must result in an actual stock-to-site delivery, not merely a task
 	# visible to the director. Keep a single daily courier idle at the warehouse
