@@ -11,6 +11,7 @@ func _init() -> void:
 	# Construction progress is shared by all assigned builders. An interrupted
 	# resident may be replaced immediately by the next director publication.
 	resumable = false
+	blocks_personal_needs = true
 
 
 func score(

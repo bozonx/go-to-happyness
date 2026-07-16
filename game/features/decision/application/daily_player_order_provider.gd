@@ -58,7 +58,7 @@ func _running_gathering_sources(snapshot: WorldSnapshot) -> Dictionary:
 		if citizen == null:
 			continue
 		var assignment := _gathering_assignments.get(citizen_id, {}) as Dictionary
-		if bool(citizen.facts.value(&"daily.gathering.in_progress", false)) and not assignment.is_empty():
+		if not assignment.is_empty():
 			assigned_sources[assignment.get(&"id", &"")] = true
 	return assigned_sources
 
@@ -70,7 +70,7 @@ func _running_cleaning_piles(snapshot: WorldSnapshot) -> Dictionary:
 		if citizen == null:
 			continue
 		var assignment := _cleaning_assignments.get(citizen_id, {}) as Dictionary
-		if bool(citizen.facts.value(&"daily.cleaning.in_progress", false)) and not assignment.is_empty():
+		if not assignment.is_empty():
 			assigned_piles[assignment.get(&"id", &"")] = true
 	return assigned_piles
 
@@ -108,9 +108,7 @@ func _gathering_order(snapshot: WorldSnapshot, citizen: CitizenSnapshot, assigne
 		_gathering_assignments.erase(citizen_id)
 		return null
 	var assignment := _gathering_assignments.get(citizen_id, {}) as Dictionary
-	if in_progress:
-		if assignment.is_empty():
-			return null
+	if not assignment.is_empty() and (in_progress or _contains_gathering_candidate(citizen, assignment)):
 		return _gathering_order_for(citizen, assignment)
 	_gathering_assignments.erase(citizen_id)
 	var next_assignment := _closest_free_gathering_candidate(snapshot, citizen, assigned_sources)
@@ -147,9 +145,7 @@ func _cleaning_order(snapshot: WorldSnapshot, citizen: CitizenSnapshot, assigned
 		_cleaning_assignments.erase(citizen_id)
 		return null
 	var assignment := _cleaning_assignments.get(citizen_id, {}) as Dictionary
-	if in_progress:
-		if assignment.is_empty():
-			return null
+	if not assignment.is_empty() and (in_progress or _contains_cleaning_candidate(citizen, assignment)):
 		return _cleaning_order_for(citizen, assignment)
 	_cleaning_assignments.erase(citizen_id)
 	var next_assignment := _closest_free_cleaning_candidate(snapshot, citizen, assigned_piles)
@@ -179,6 +175,22 @@ func _closest_free_cleaning_candidate(snapshot: WorldSnapshot, citizen: CitizenS
 	return best
 
 
+func _contains_gathering_candidate(citizen: CitizenSnapshot, assignment: Dictionary) -> bool:
+	var source_id := assignment.get(&"id", &"") as StringName
+	for candidate_value in (citizen.facts.value(&"daily.gathering.candidates", []) as Array):
+		if (candidate_value as Dictionary).get(&"id", &"") == source_id:
+			return true
+	return false
+
+
+func _contains_cleaning_candidate(citizen: CitizenSnapshot, assignment: Dictionary) -> bool:
+	var pile_id := assignment.get(&"id", &"") as StringName
+	for candidate_value in (citizen.facts.value(&"daily.cleaning.candidates", []) as Array):
+		if (candidate_value as Dictionary).get(&"id", &"") == pile_id:
+			return true
+	return false
+
+
 func _cleaning_order_for(citizen: CitizenSnapshot, assignment: Dictionary) -> CitizenOrder:
 	var order := CitizenOrder.new(
 		citizen.id,
@@ -196,6 +208,7 @@ func _cleaning_order_for(citizen: CitizenSnapshot, assignment: Dictionary) -> Ci
 	)
 	order.workday_id = int(citizen.facts.value(&"daily.order.workday_id", 0))
 	order.expires_at = float(citizen.facts.value(&"daily.order.expires_at", -1.0))
+	order.target_key = StringName("pile:%s" % str(assignment.get(&"id", &"")))
 	order.target_position = assignment.get(&"position", Vector3.INF)
 	return order
 
@@ -217,5 +230,6 @@ func _gathering_order_for(citizen: CitizenSnapshot, assignment: Dictionary) -> C
 	)
 	order.workday_id = int(citizen.facts.value(&"daily.order.workday_id", 0))
 	order.expires_at = float(citizen.facts.value(&"daily.order.expires_at", -1.0))
+	order.target_key = StringName("source:%s" % str(assignment.get(&"id", &"")))
 	order.target_position = assignment.get(&"position", Vector3.INF)
 	return order

@@ -231,6 +231,7 @@ func _init() -> void:
 	_test_toilet_goal_blocked_while_working()
 	_test_toilet_goal_blocked_for_player_controlled()
 	_test_trip_bound_work_blocks_personal_need()
+	_test_trip_bound_work_keeps_captured_order()
 	_test_active_personal_need_blocks_work()
 	_test_personal_need_blocks_other_personal_need()
 	_test_order_board_equivalence_ignores_payload_position()
@@ -619,6 +620,29 @@ func _test_trip_bound_work_blocks_personal_need() -> void:
 	brain.think(hungry_snapshot, order)
 	assert(brain.runner.active_goal_id() == &"forestry")
 	assert(actuator.action_start_count == 0)
+
+
+func _test_trip_bound_work_keeps_captured_order() -> void:
+	var forestry := ForestryGoalScript.new()
+	var meal := MealGoalScript.new()
+	var actuator := FakeActuator.new(1)
+	var brain := CitizenBrain.new(1, actuator, [forestry, meal])
+	var citizen := _forestry_citizen(1, false)
+	var original := _forestry_order(1, Vector3(3.0, 0.0, 0.0), &"tree:3:0")
+	original.id = 1101
+	var snapshot := _snapshot(0.0, citizen)
+	brain.think(snapshot, original)
+	brain.tick(snapshot, original, 0.1)
+	var replacement := _forestry_order(1, Vector3(9.0, 0.0, 0.0), &"tree:9:0")
+	replacement.id = 1102
+	brain.think(snapshot, replacement)
+	brain.tick(snapshot, replacement, 0.1)
+	assert(brain.runner.active_goal_id() == &"forestry")
+	assert(actuator.cancel_action_count == 0)
+	assert(actuator.move_to_destination == Vector3(3.0, 0.0, 0.0))
+	actuator.arrived_flag = true
+	brain.tick(snapshot, replacement, 0.1)
+	assert(snapshot.reservations.owner_of([&"forestry.tree", &"tree:3:0"], 0.0) == 1)
 
 
 func _test_active_personal_need_blocks_work() -> void:

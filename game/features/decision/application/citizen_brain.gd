@@ -4,18 +4,6 @@ extends RefCounted
 ## How long (simulation seconds) a goal is dampened after its task fails.
 const FAILURE_COOLDOWN := 6.0
 
-## Goals that represent a single movement-bound trip; personal needs should wait
-## until the trip finishes instead of making the citizen turn around mid-route.
-const TRIP_BOUND_WORK_GOALS: Array[StringName] = [
-	&"forestry",
-	&"farming",
-	&"gathering",
-	&"cleaning",
-	&"excavation",
-	&"courier_delivery",
-	&"register",
-]
-
 const PERSONAL_NEED_GOALS: Array[StringName] = [
 	&"sleep",
 	&"meal",
@@ -50,6 +38,11 @@ func think(snapshot: WorldSnapshot, order: CitizenOrder) -> void:
 		return
 	var active_goal_id := runner.active_goal_id()
 	blackboard.set_value(ACTIVE_GOAL_BLACKBOARD_KEY, active_goal_id)
+	# A work trip owns its captured assignment until it reaches a terminal state.
+	# Board publications are proposals, not permission to redirect a resident already
+	# travelling or carrying out that assignment.
+	if runner.active_task != null and runner.active_task.blocks_personal_needs:
+		return
 	var excluded := _excluded_goal_ids(active_goal_id)
 	var result := arbiter.choose(
 		snapshot,
@@ -80,7 +73,9 @@ func think(snapshot: WorldSnapshot, order: CitizenOrder) -> void:
 		return
 	task.goal_id = result.goal.id
 	task.resumable = result.goal.resumable
+	task.blocks_personal_needs = result.goal.blocks_personal_needs
 	task.order_id = next_order_id
+	task.order = order
 	# Once a challenger wins arbitration it must take control immediately. Deferring
 	# it behind an indefinite workplace action starves personal needs for a shift.
 	runner.start(task, context)
@@ -111,7 +106,7 @@ func configure_goals(goals: Array[AICitizenGoal]) -> void:
 
 
 func _excluded_goal_ids(active_goal_id: StringName) -> Array[StringName]:
-	if active_goal_id in TRIP_BOUND_WORK_GOALS:
+	if runner.active_task != null and runner.active_task.blocks_personal_needs:
 		return PERSONAL_NEED_GOALS.duplicate()
 	if active_goal_id in PERSONAL_NEED_GOALS:
 		# Personal needs do not interrupt other personal needs; they run to

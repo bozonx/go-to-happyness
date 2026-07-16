@@ -870,6 +870,7 @@ func _handle_day_cycle_event(event: SimulationDayEvent) -> void:
 		SimulationDayEvent.Kind.PARK_REST:
 			_start_park_rest(event.cooks_only)
 		SimulationDayEvent.Kind.WORKDAY_ENDED:
+			_end_ai_work_shift()
 			_clear_daily_orders(day_cycle.current_day)
 			_update_interface("Workday ended: residents are returning to their assigned homes.")
 		SimulationDayEvent.Kind.NIGHTFALL:
@@ -894,6 +895,15 @@ func _handle_day_cycle_event(event: SimulationDayEvent) -> void:
 			settlement.cheer_up_used_today = false
 			_apply_daily_settlement_rules()
 			_return_outside_workers()
+
+
+func _end_ai_work_shift() -> void:
+	for citizen: Citizen in citizens:
+		if not is_instance_valid(citizen) or citizen.is_player_controlled:
+			continue
+		if citizen_ai != null:
+			citizen_ai.cancel_citizen_work(citizen.ai_id)
+		citizen.end_work_shift()
 
 
 func _apply_hourly_tent_survival(hour: int, survival_day := 0) -> void:
@@ -3901,7 +3911,14 @@ func _spawn_house_citizen() -> void:
 	if selected_house == null or bool(selected_house.get_meta("pending_demolition", false)):
 		return
 	var slots: int = selected_house.get_meta("spawn_slots", 0)
-	if slots <= 0 or _unhoused_citizen_count() > 0:
+	if slots <= 0:
+		return
+	var is_tent: bool = selected_house.has_meta("is_tent")
+	if is_tent:
+		if int(selected_house.get_meta("tent_order_day", -1)) == day_cycle.current_day:
+			return
+		selected_house.set_meta("tent_order_day", day_cycle.current_day)
+	elif _unhoused_citizen_count() > 0:
 		return
 	selected_house.set_meta("spawn_slots", slots - 1)
 	_show_house_menu()
@@ -4103,12 +4120,23 @@ func _show_house_menu() -> void:
 	house_menu.visible = true
 	var capacity: int = int(selected_house.get_meta("housing_capacity", HOUSE_CAPACITY))
 	var building_type: String = selected_house.get_meta("building_type", "house")
+	var is_tent: bool = selected_house.has_meta("is_tent")
 	var home_name := "Соломенная палатка" if building_type == "straw_tent" else ("Брезентовая палатка" if building_type == "tarp_tent" else ("Палатка" if building_type == "tent" else "House"))
 	var unhoused := _unhoused_citizen_count()
-	house_menu_title.text = "%s\nFree beds: %d/%d  Unhoused: %d" % [home_name, slots, capacity, unhoused]
+	var residents := capacity - slots
+	if is_tent:
+		house_menu_title.text = "%s\nResidents: %d/%d" % [home_name, residents, capacity]
+	else:
+		house_menu_title.text = "%s\nFree beds: %d/%d  Unhoused: %d" % [home_name, slots, capacity, unhoused]
 	if house_spawn_button != null:
-		house_spawn_button.disabled = slots <= 0 or unhoused > 0 or bool(selected_house.get_meta("pending_demolition", false))
-		house_spawn_button.text = "House the initial residents first" if unhoused > 0 else ("No free beds" if slots <= 0 else "Order a resident")
+		var pending_demolition := bool(selected_house.get_meta("pending_demolition", false))
+		if is_tent:
+			var ordered_today := int(selected_house.get_meta("tent_order_day", -1)) == day_cycle.current_day
+			house_spawn_button.disabled = slots <= 0 or ordered_today or pending_demolition
+			house_spawn_button.text = "Already ordered today" if ordered_today else ("No free beds" if slots <= 0 else "Order a resident")
+		else:
+			house_spawn_button.disabled = slots <= 0 or unhoused > 0 or pending_demolition
+			house_spawn_button.text = "House the initial residents first" if unhoused > 0 else ("No free beds" if slots <= 0 else "Order a resident")
 	var settle_button := house_menu.get_node_or_null("SettleUnhoused") as Button
 	if settle_button == null:
 		settle_button = Button.new()
@@ -4117,8 +4145,13 @@ func _show_house_menu() -> void:
 		settle_button.size = Vector2(272, 30)
 		settle_button.pressed.connect(_settle_unhoused_resident)
 		house_menu.add_child(settle_button)
-	settle_button.text = "Settle unhoused resident"
-	settle_button.disabled = slots <= 0 or unhoused <= 0 or bool(selected_house.get_meta("pending_demolition", false))
+	if is_tent:
+		settle_button.visible = false
+		settle_button.disabled = true
+	else:
+		settle_button.visible = true
+		settle_button.text = "Settle unhoused resident"
+		settle_button.disabled = slots <= 0 or unhoused <= 0 or bool(selected_house.get_meta("pending_demolition", false))
 
 func _unhoused_citizen_count() -> int:
 	var count := 0
@@ -4128,8 +4161,19 @@ func _unhoused_citizen_count() -> int:
 	return count
 
 func _house_initial_residents(house: Node3D) -> void:
-	# The player explicitly assigns each resident through the house menu.
-	pass
+	# Tents auto-assign unhoused residents up to their capacity.
+	# Regular houses still require explicit player assignment via the house menu.
+	if not house.has_meta("is_tent"):
+		return
+	var slots: int = int(house.get_meta("spawn_slots", 0))
+	for citizen in citizens:
+		if slots <= 0:
+			break
+		if not is_instance_valid(citizen.home):
+			citizen.assign_home(house)
+			_refresh_living_status(citizen)
+			slots -= 1
+	house.set_meta("spawn_slots", slots)
 
 func _add_build_button(title: String, building_type: String, y_position: float, category: String) -> void:
 	var button := Button.new()
@@ -5270,6 +5314,7 @@ func _enter_first_person(citizen: Citizen, message: String) -> void:
 		if citizen_ai != null:
 			citizen_ai.request_decision_refresh()
 	player_citizen = citizen
+	_player_toilet_notified = false
 	player_citizen.set_head_visible(false)
 	# Watching a citizen must not cancel their current AI task. Manual control
 	# starts only after the player presses a movement key.
@@ -5310,6 +5355,7 @@ func _leave_first_person_to_hero_overview() -> void:
 		if citizen_ai != null:
 			citizen_ai.request_decision_refresh()
 	player_citizen = null
+	_player_toilet_notified = false
 	_close_pocket_take_menu()
 	interaction_action = ""
 	interaction_resource = ""
@@ -5338,6 +5384,11 @@ func _update_player_control(delta: float) -> void:
 		_leave_first_person_to_hero_overview()
 		return
 	if player_citizen.work_position_locked:
+		camera.global_position = player_citizen.global_position + Vector3(0.0, PLAYER_EYE_HEIGHT, 0.0)
+		camera.rotation = Vector3(player_pitch, player_yaw, 0.0)
+		_refresh_interaction_hint()
+		return
+	if player_citizen.player_using_toilet:
 		camera.global_position = player_citizen.global_position + Vector3(0.0, PLAYER_EYE_HEIGHT, 0.0)
 		camera.rotation = Vector3(player_pitch, player_yaw, 0.0)
 		_refresh_interaction_hint()
@@ -5394,6 +5445,9 @@ func _start_interaction(all: bool) -> void:
 	if target.kind == "workplace":
 		_occupy_workplace(target.node)
 		return
+	if target.kind == "toilet":
+		_player_use_toilet(target.node)
+		return
 	if not player_citizen.is_hero:
 		_update_interface("Только герой может выполнять действия. Остальными жителями можно только двигаться.")
 		return
@@ -5429,9 +5483,6 @@ func _start_interaction(all: bool) -> void:
 			return
 		"forage", "rabbit":
 			_update_interface("Лесные дары и зайца может собирать только специалист. Постройте палатку охотников-собирателей.")
-			return
-		"toilet":
-			_player_use_toilet(target.node)
 			return
 		"citizen", "building":
 			return
@@ -5555,8 +5606,8 @@ func _update_interaction(delta: float) -> void:
 	interaction_time += delta
 	var progress_pct := clampi(int(interaction_time / HARVEST_DURATION * 100.0), 0, 100)
 	interaction_progress.value = progress_pct
-	var remaining_pct := _resource_remaining_percent(interaction_resource)
-	interaction_hint_label.text = "%s %d%% (источник %d%%)" % [_gather_action_name(interaction_resource), progress_pct, remaining_pct]
+	var source_info := _harvest_source_info(interaction_resource)
+	interaction_hint_label.text = "%s %d%% (%s)" % [_gather_action_name(interaction_resource), progress_pct, source_info]
 	if interaction_time >= HARVEST_DURATION:
 		interaction_action = ""
 		var gathered := 0
@@ -5569,7 +5620,7 @@ func _update_interaction(delta: float) -> void:
 				var branch_batch := HERO_GATHER_YIELD
 				gathered = _add_to_pocket("branches", branch_batch)
 				if gathered > 0:
-					_consume_tree_near_player()
+					_consume_tree_near_player(gathered)
 			"grass":
 				var grass_batch := HERO_GATHER_YIELD
 				gathered = _add_to_pocket("grass", grass_batch)
@@ -5599,9 +5650,40 @@ func _gather_action_name(resource_type: String) -> String:
 	return "Действие"
 
 
+func _harvest_source_info(resource_type: String) -> String:
+	if player_citizen == null:
+		return ""
+	match resource_type:
+		"branches":
+			var tree := _nearest_tree_node(player_citizen.global_position)
+			if is_instance_valid(tree):
+				var rem := int(tree.get_meta("remaining_branches", 0))
+				var init := maxi(1, int(tree.get_meta("initial_branches", rem)))
+				return "ветки %d/%d" % [rem, init]
+			return ""
+		"grass":
+			var node := _nearest_grass_node(player_citizen.global_position)
+			if is_instance_valid(node):
+				for cell in grass_sources:
+					var source: Dictionary = grass_sources[cell]
+					if source.get("node") == node:
+						var rem := int(source.get("remaining", 0))
+						var init := maxi(1, int(source.get("initial", rem)))
+						return "трава %d/%d" % [rem, init]
+			return ""
+		"wood":
+			return "дерево"
+		"water":
+			return "вода"
+		"food":
+			return "еда"
+	return ""
+
+
 func _can_continue_harvesting(resource_type: String) -> bool:
 	match resource_type:
-		"wood", "branches": return _nearby_tree()
+		"wood": return _nearby_tree()
+		"branches": return _nearby_tree_with_branches()
 		"food": return _nearby_farm()
 		"water": return _nearby_pond()
 		"grass": return _nearby_grass_source()
@@ -5761,6 +5843,17 @@ func _nearby_tree() -> bool:
 			var tree: Node3D = tree_nodes.get(_cell_from_position(tree_position))
 			if is_instance_valid(tree) and not bool(tree.get_meta("felled", false)):
 				return true
+	return false
+
+func _nearby_tree_with_branches() -> bool:
+	if player_citizen == null:
+		return false
+	for tree_position in tree_positions:
+		if player_citizen.global_position.distance_to(tree_position) <= INTERACTION_RANGE:
+			var tree: Node3D = tree_nodes.get(_cell_from_position(tree_position))
+			if is_instance_valid(tree) and not bool(tree.get_meta("felled", false)):
+				if int(tree.get_meta("remaining_branches", 0)) > 0:
+					return true
 	return false
 
 func _nearby_warehouse_index() -> int:
@@ -5947,12 +6040,21 @@ func _resource_remaining_percent(resource_type: String) -> int:
 	if player_citizen == null:
 		return 0
 	match resource_type:
-		"wood", "branches":
+		"wood":
 			for position in tree_positions:
 				if player_citizen.global_position.distance_to(position) <= INTERACTION_RANGE:
 					var tree: Node3D = tree_nodes.get(_cell_from_position(position))
 					if is_instance_valid(tree) and not bool(tree.get_meta("felled", false)):
 						return 100
+			return 0
+		"branches":
+			for position in tree_positions:
+				if player_citizen.global_position.distance_to(position) <= INTERACTION_RANGE:
+					var tree: Node3D = tree_nodes.get(_cell_from_position(position))
+					if is_instance_valid(tree) and not bool(tree.get_meta("felled", false)):
+						var remaining := int(tree.get_meta("remaining_branches", 0))
+						var initial := maxi(1, int(tree.get_meta("initial_branches", remaining)))
+						return clampi(int(round(float(remaining) / float(initial) * 100.0)), 0, 100)
 			return 0
 		"grass":
 			var pos := _nearby_grass_source_position()
@@ -5960,7 +6062,8 @@ func _resource_remaining_percent(resource_type: String) -> int:
 				var cell := _cell_from_position(pos)
 				var source: Dictionary = grass_sources.get(cell, {})
 				var remaining := int(source.get("remaining", 0))
-				return int(round(float(remaining) / 12.0 * 100.0))
+				var initial := maxi(1, int(source.get("initial", remaining)))
+				return clampi(int(round(float(remaining) / float(initial) * 100.0)), 0, 100)
 			return 0
 		"water":
 			return 100
@@ -6007,7 +6110,14 @@ func _refresh_interaction_hint() -> void:
 	if not interaction_action.is_empty():
 		return
 	var lines: Array[String] = []
-	if player_citizen == null or not player_citizen.is_hero:
+	if player_citizen != null and not player_citizen.is_hero:
+		var target := _first_person_target()
+		if target.kind == "toilet":
+			var needs_toilet := citizen_needs_service != null and citizen_needs_service.has_toilet_request(player_citizen.ai_id)
+			if needs_toilet:
+				lines.append("F: воспользоваться туалетом (потребность)")
+			else:
+				lines.append("F: воспользоваться туалетом")
 		lines.append("Наблюдение: WASD — двигаться, ПКМ — выйти в обзор")
 	else:
 		var action_hint := _first_person_action_hint()
@@ -6109,7 +6219,10 @@ func _first_person_target() -> Dictionary:
 		return result
 	var grass_pos := _nearest_grass_source_to_point(hit_position, 1.0)
 	if grass_pos != Vector3.INF and player_pos.distance_to(grass_pos) <= INTERACTION_RANGE:
-		return {"kind": "grass", "position": grass_pos}
+		var grass_cell := _cell_from_position(grass_pos)
+		var grass_source: Dictionary = grass_sources.get(grass_cell, {})
+		var grass_node := grass_source.get("node") as Node3D
+		return {"kind": "grass", "position": grass_pos, "node": grass_node}
 	var pond_pos := _nearest_point_to_point_array(pond_positions, hit_position, 1.2)
 	if pond_pos != Vector3.INF and player_pos.distance_to(pond_pos) <= INTERACTION_RANGE:
 		return {"kind": "pond", "position": pond_pos}
@@ -6312,6 +6425,8 @@ func _building_action_hint(building: Node3D) -> String:
 func _first_person_action_hint() -> String:
 	if player_citizen != null and player_citizen.work_position_locked:
 		return "F — покинуть рабочее место"
+	if player_citizen != null and player_citizen.player_using_toilet:
+		return "Пользуемся туалетом..."
 	var target := _first_person_target()
 	match target.kind:
 		"construction":
@@ -6383,11 +6498,19 @@ func _first_person_action_hint() -> String:
 				_:
 					return "F — занять рабочее место (%s)" % role.replace("_", " ")
 		"tree":
+			var tree_node := target.node as Node3D
 			if settlement.era < SettlementState.Era.WOOD:
-				return "F: собрать ветки | Shift+F: собирать до полноты (%d%%)" % _resource_remaining_percent("branches")
-			return "F: срубить дерево | Shift+F: рубить до полноты (%d%%)" % _resource_remaining_percent("wood")
+				var rem := int(tree_node.get_meta("remaining_branches", 0))
+				if rem <= 0:
+					return "Ветки иссякли (топор откроет полный сбор)"
+				var init := maxi(1, int(tree_node.get_meta("initial_branches", rem)))
+				return "F: собрать ветки (%d/%d) | Shift+F: до полноты" % [rem, init]
+			return "F: срубить дерево | Shift+F: рубить до полноты"
 		"grass":
-			return "F: собрать траву | Shift+F: собирать до полноты (%d%%)" % _resource_remaining_percent("grass")
+			var grass_info := _targeted_grass_info(target)
+			if grass_info.is_empty():
+				return "F: собрать траву | Shift+F: собирать до полноты"
+			return "F: собрать траву (%d/%d) | Shift+F: до полноты" % [int(grass_info.remaining), int(grass_info.initial)]
 		"farm":
 			return "F: собрать еду | Shift+F: собирать до полноты"
 		"pond":
@@ -6411,6 +6534,16 @@ func _first_person_action_hint() -> String:
 		"building":
 			return _building_action_hint(target.node)
 	return ""
+
+func _targeted_grass_info(target: Dictionary) -> Dictionary:
+	var target_node := target.get("node") as Node3D
+	if not is_instance_valid(target_node):
+		return {}
+	for cell in grass_sources:
+		var source: Dictionary = grass_sources[cell]
+		if source.get("node") == target_node:
+			return {"remaining": int(source.get("remaining", 0)), "initial": maxi(1, int(source.get("initial", 1)))}
+	return {}
 
 func _terrain_point_at_screen_position(screen_position: Vector2) -> Variant:
 	var from := camera.project_ray_origin(screen_position)
@@ -7078,14 +7211,23 @@ func _add_house_light(house: Node3D) -> void:
 func _on_tree_harvested(worker: Citizen, position_on_board: Vector3) -> void:
 	_fell_tree_at(position_on_board)
 
-func _consume_tree_near_player() -> void:
+func _consume_tree_near_player(amount: int) -> void:
 	if player_citizen == null:
 		return
 	for position_on_board in tree_positions:
 		if player_citizen.global_position.distance_to(position_on_board) <= INTERACTION_RANGE:
 			var tree: Node3D = tree_nodes.get(_cell_from_position(position_on_board))
 			if is_instance_valid(tree) and not bool(tree.get_meta("felled", false)):
-				_update_interface("Collected branches. The tree remains standing.")
+				var consumed := 0
+				while consumed < amount:
+					var result := _consume_tree_branches(position_on_board)
+					if result <= 0:
+						break
+					consumed += result
+				if consumed > 0:
+					_update_interface("Собрано веток: %d. Дерево стоит." % consumed)
+				else:
+					_update_interface("У дерева не осталось веток для ручного сбора.")
 				return
 
 
@@ -9060,8 +9202,16 @@ func _update_gather_progress_label(node: Node3D, resource_type: String, partial:
 	var max_amount := maxi(int(amounts.max), 1)
 	var pct := clampi(int(value / float(max_amount) * 100.0), 0, 100)
 	var label := _ensure_gather_progress_label(node)
-	label.text = "%d%%" % pct
-	label.modulate = Color("76c893") if pct >= 100 else Color("ffffff")
+	if partial < 0.0:
+		# Hover mode: show remaining/initial instead of harvest progress
+		var remaining := max_amount - int(amounts.current)
+		label.text = "%d/%d" % [remaining, max_amount]
+		label.modulate = Color("abcfd6") if remaining > 0 else Color("c97b5e")
+		label.font_size = 18
+	else:
+		label.text = "%d%%" % pct
+		label.modulate = Color("76c893") if pct >= 100 else Color("ffffff")
+		label.font_size = 22
 
 func _update_gathering_indicators(_delta: float) -> void:
 	var active_targets: Dictionary = {} # Node3D -> {resource_type: String, partial: float}
@@ -9069,6 +9219,14 @@ func _update_gathering_indicators(_delta: float) -> void:
 		var node: Node3D = _player_gather_target_node()
 		if is_instance_valid(node):
 			active_targets[node] = {"resource_type": interaction_resource, "partial": clampf(interaction_time / HARVEST_DURATION, 0.0, 1.0)}
+	elif is_first_person and interaction_action.is_empty() and player_citizen != null:
+		# Hover: show remaining/initial on the targeted tree or grass
+		var target := _first_person_target()
+		if target.kind == "tree" and is_instance_valid(target.node):
+			var res_type := "branches" if settlement.era < SettlementState.Era.WOOD else "wood"
+			active_targets[target.node] = {"resource_type": res_type, "partial": -1.0}
+		elif target.kind == "grass" and is_instance_valid(target.get("node")):
+			active_targets[target.node] = {"resource_type": "grass", "partial": -1.0}
 	for citizen in citizens:
 		if not is_instance_valid(citizen):
 			continue

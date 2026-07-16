@@ -6,6 +6,7 @@ const CourierDeliveryStepScript = preload("res://game/features/decision/domain/b
 func _init() -> void:
 	super(&"courier_delivery")
 	resumable = false
+	blocks_personal_needs = true
 
 func score(snapshot: WorldSnapshot, citizen: CitizenSnapshot, order: CitizenOrder, _blackboard: AIBlackboard) -> float:
 	if citizen == null or order == null or order.kind != &"courier_delivery":

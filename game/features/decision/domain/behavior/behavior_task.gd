@@ -4,7 +4,12 @@ extends RefCounted
 var goal_id: StringName
 var root: BehaviorStep
 var order_id: int
+## Immutable assignment captured when the task starts. Steps must execute against
+## this order instead of a later board publication for another target.
+var order: CitizenOrder
 var resumable: bool
+## Prevents personal needs from preempting an atomic work trip.
+var blocks_personal_needs := false
 var label: String
 ## Optional `(BehaviorContext) -> bool` predicate. Checked before a suspended task
 ## resumes: if the world moved on (target claimed, order expired, tree felled) the
@@ -15,10 +20,12 @@ var guard: Callable
 func is_still_valid(context: BehaviorContext) -> bool:
 	if context == null or context.snapshot == null:
 		return false
-	if order_id != 0:
-		if context.order == null or context.order.id != order_id:
+	if order != null:
+		if order.is_expired(context.snapshot.simulation_seconds):
 			return false
-		if context.order.is_expired(context.snapshot.simulation_seconds):
+	elif order_id != 0:
+		# Compatibility for manually assembled tasks that do not own an order.
+		if context.order == null or context.order.id != order_id:
 			return false
 	return not guard.is_valid() or bool(guard.call(context))
 
@@ -34,3 +41,4 @@ func _init(
 	resumable = next_resumable
 	label = next_label
 	order_id = 0
+	order = null

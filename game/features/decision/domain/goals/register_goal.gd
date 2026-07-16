@@ -9,6 +9,7 @@ const SequenceStepScript = preload("res://game/features/decision/domain/behavior
 func _init() -> void:
 	super(&"register")
 	resumable = false
+	blocks_personal_needs = true
 
 
 func score(

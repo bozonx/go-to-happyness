@@ -11,6 +11,7 @@ func _init() -> void:
 	# A personal need cancels the current cycle and releases its tree. The director
 	# will publish a fresh order after the citizen becomes available again.
 	resumable = false
+	blocks_personal_needs = true
 
 
 func score(
@@ -37,7 +38,10 @@ func build_task(
 	var move_target: Variant = order.target_position if order != null else Vector3.INF
 	if not (move_target is Vector3) or move_target == Vector3.INF:
 		return null
+	var tree_id := order.payload.value(&"work.tree_id", &"") as StringName
+	if tree_id == &"":
+		return null
 	return BehaviorTask.new(id, SequenceStepScript.new([
-		MoveToStepScript.new(move_target),
+		MoveToStepScript.new(move_target, 0.25, [&"forestry.tree", tree_id]),
 		ForestryWorkStepScript.new(),
 	]), false, "Harvest tree for sawmill")

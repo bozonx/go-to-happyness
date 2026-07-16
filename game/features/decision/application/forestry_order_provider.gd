@@ -28,7 +28,7 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 			_assignments.erase(citizen_id)
 			continue
 		var assignment := _assignments.get(citizen_id, {}) as Dictionary
-		if bool(citizen.facts.value(&"work.forestry.in_progress", false)) and not assignment.is_empty():
+		if not assignment.is_empty():
 			assigned_targets[assignment.get(&"id", &"")] = true
 	for citizen_id in citizen_ids:
 		var citizen := snapshot.citizen(citizen_id)
@@ -39,9 +39,7 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 			_assignments.erase(citizen_id)
 			continue
 		var assignment := _assignments.get(citizen_id, {}) as Dictionary
-		if in_progress:
-			if assignment.is_empty():
-				continue
+		if not assignment.is_empty() and (in_progress or _contains_candidate(snapshot, citizen, assignment)):
 			orders.append(_order_for(citizen_id, assignment))
 			continue
 		_assignments.erase(citizen_id)
@@ -52,6 +50,17 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 		assigned_targets[next_assignment.get(&"id", &"")] = true
 		orders.append(_order_for(citizen_id, next_assignment))
 	return orders
+
+
+func _contains_candidate(snapshot: WorldSnapshot, citizen: CitizenSnapshot, assignment: Dictionary) -> bool:
+	var target_id := assignment.get(&"id", &"") as StringName
+	var candidates: Array = citizen.facts.value(&"work.forestry.candidates", []) as Array
+	if candidates.is_empty():
+		candidates = snapshot.settlement.value(&"work.forestry.targets", []) as Array
+	for candidate_value in candidates:
+		if (candidate_value as Dictionary).get(&"id", &"") == target_id:
+			return true
+	return false
 
 
 func _closest_free_candidate(snapshot: WorldSnapshot, citizen: CitizenSnapshot, assigned_targets: Dictionary) -> Dictionary:

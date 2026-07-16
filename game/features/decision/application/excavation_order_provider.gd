@@ -24,7 +24,7 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 			_assignments.erase(citizen_id)
 			continue
 		var assignment := _assignments.get(citizen_id, {}) as Dictionary
-		if bool(citizen.facts.value(&"work.excavation.in_progress", false)) and not assignment.is_empty():
+		if not assignment.is_empty():
 			assigned_sites[assignment.get(&"id", &"")] = true
 	for citizen_id in citizen_ids:
 		var citizen := snapshot.citizen(citizen_id)
@@ -32,9 +32,8 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 			continue
 		var in_progress := bool(citizen.facts.value(&"work.excavation.in_progress", false))
 		var assignment := _assignments.get(citizen_id, {}) as Dictionary
-		if in_progress:
-			if not assignment.is_empty():
-				orders.append(_order_for(citizen_id, assignment))
+		if not assignment.is_empty() and (in_progress or _contains_candidate(citizen, assignment)):
+			orders.append(_order_for(citizen_id, assignment))
 			continue
 		_assignments.erase(citizen_id)
 		var next_assignment := _closest_free_candidate(citizen, assigned_sites)
@@ -44,6 +43,14 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 		assigned_sites[next_assignment.get(&"id", &"")] = true
 		orders.append(_order_for(citizen_id, next_assignment))
 	return orders
+
+
+func _contains_candidate(citizen: CitizenSnapshot, assignment: Dictionary) -> bool:
+	var site_id := assignment.get(&"id", &"") as StringName
+	for candidate_value in (citizen.facts.value(&"work.excavation.candidates", []) as Array):
+		if (candidate_value as Dictionary).get(&"id", &"") == site_id:
+			return true
+	return false
 
 
 func _closest_free_candidate(citizen: CitizenSnapshot, assigned_sites: Dictionary) -> Dictionary:

@@ -54,6 +54,7 @@ func tick(context: BehaviorContext, delta: float) -> BehaviorStep.Status:
 		active_task = null
 		_start_pending_or_resume(context)
 		return BehaviorStep.Status.FAILURE
+	_bind_active_order(context)
 	var completed_task := active_task
 	var status := active_task.root.run(context, delta)
 	if status == BehaviorStep.Status.RUNNING:
@@ -97,6 +98,7 @@ func _resume_previous(context: BehaviorContext) -> void:
 			candidate.root.cancel(context)
 			continue
 		active_task = candidate
+		_bind_active_order(context)
 		active_task.root.resume(context)
 		task_resumed.emit(active_task)
 		return
@@ -124,3 +126,8 @@ func _start_pending_or_resume(context: BehaviorContext) -> void:
 			return
 		next_task.root.cancel(context)
 	_resume_previous(context)
+
+
+func _bind_active_order(context: BehaviorContext) -> void:
+	if active_task != null and active_task.order != null:
+		context.order = active_task.order

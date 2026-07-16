@@ -3040,6 +3040,13 @@ func cancel_current_action() -> void:
 		toilet_resume_idle_wander_pause = 0.0
 
 
+func end_work_shift() -> void:
+	if is_player_controlled:
+		return
+	if state in [State.TO_TREE, State.CHOPPING, State.TO_SAWMILL, State.SAWING, State.WAITING_COURIER, State.CONSTRUCTING, State.EXCAVATING, State.TO_GATHER, State.GATHERING, State.TO_CLEANING_PILE, State.CLEANING_PILE, State.TO_WAREHOUSE, State.TO_CANTEEN_WORK, State.CANTEEN_WORK, State.TO_SCHOOL_WORK, State.SCHOOL_WORK, State.TO_MARKET_WORK, State.MARKET_WORK, State.TO_OFFICIAL_WORK, State.OFFICIAL_WORK, State.TO_CRAFT_WORK, State.CRAFT_WORK, State.TO_FACTORY, State.FACTORY_WORK]:
+		cancel_current_action()
+
+
 func _craft_speed_multiplier_internal() -> float:
 	if not is_instance_valid(employment_workplace):
 		return 1.0

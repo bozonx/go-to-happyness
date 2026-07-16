@@ -9,6 +9,7 @@ const SequenceStepScript = preload("res://game/features/decision/domain/behavior
 func _init() -> void:
 	super(&"gathering")
 	resumable = false
+	blocks_personal_needs = true
 
 
 func score(snapshot: WorldSnapshot, citizen: CitizenSnapshot, order: CitizenOrder, _blackboard: AIBlackboard) -> float:
@@ -25,7 +26,10 @@ func build_task(_snapshot: WorldSnapshot, _citizen: CitizenSnapshot, order: Citi
 	var move_target: Variant = order.target_position if order != null else Vector3.INF
 	if not (move_target is Vector3) or move_target == Vector3.INF:
 		return null
+	var source_id := order.payload.value(&"work.source_id", &"") as StringName
+	if source_id == &"":
+		return null
 	return BehaviorTask.new(id, SequenceStepScript.new([
-		MoveToStepScript.new(move_target),
+		MoveToStepScript.new(move_target, 0.25, [&"gathering.source", source_id]),
 		GatheringWorkStepScript.new(),
 	]), false, "Gather resource for warehouse")
