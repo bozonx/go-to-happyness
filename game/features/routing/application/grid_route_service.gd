@@ -34,7 +34,7 @@ func find_route_for_profile(from: Vector3, destination: Vector3, traveler_profil
 func find_route_request(request: RefCounted) -> RouteResult:
 	if grid == null:
 		return RouteResult.unreachable()
-	var grid_revision := grid.topology_revision()
+	var grid_revision := grid.revision()
 	var start: Vector2i = grid.cell_from_position(request.from)
 	var goal: Vector2i = grid.cell_from_position(request.destination)
 	if not grid.is_board_cell(start) or not grid.is_board_cell(goal):

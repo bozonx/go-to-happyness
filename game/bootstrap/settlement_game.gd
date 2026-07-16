@@ -1937,7 +1937,7 @@ func _movement_speed_modifier_at(position_on_board: Vector3) -> float:
 
 
 func _navigation_revision() -> int:
-	return nav_grid.topology_revision() if nav_grid != null else -1
+	return nav_grid.revision() if nav_grid != null else -1
 
 
 ## Candidate discovery asks only whether a destination can be reached. Cache the

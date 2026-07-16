@@ -88,8 +88,8 @@ func revision() -> int:
 	return _revision
 
 
-## Changes to traversal cost alter the best future route but never make an
-## existing route unsafe. Consumers that need collision safety use this value.
+## Topology revision changes only when passability changes. Consumers that need
+## collision safety can ignore terrain-cost-only updates through this value.
 func topology_revision() -> int:
 	return _topology_revision
 

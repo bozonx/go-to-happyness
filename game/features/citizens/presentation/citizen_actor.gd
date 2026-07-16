@@ -2180,7 +2180,7 @@ func _reachable_construction_approach(site: Node3D) -> Vector3:
 	for candidate: Vector3 in candidates:
 		if _is_valid_approach_point(candidate):
 			return candidate
-	return primary
+	return Vector3.INF
 
 
 func _is_valid_approach_point(point: Vector3) -> bool:

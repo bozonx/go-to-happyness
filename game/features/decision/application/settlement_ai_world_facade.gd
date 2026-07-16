@@ -45,6 +45,9 @@ func capture(sequence: int) -> WorldSnapshot:
 			sawmill_position = actor.employment_workplace.get_meta("service_position", actor.employment_workplace.global_position) if is_instance_valid(actor.employment_workplace) else simulation.sawmill_positions[0]
 			warehouse_position = simulation._get_nearest_delivery_position(actor.global_position)
 		var forestry_in_progress := actor.state in [Citizen.State.TO_TREE, Citizen.State.CHOPPING, Citizen.State.TO_SAWMILL]
+		var forestry_candidates: Array[Dictionary] = []
+		if forestry_worker and actor_work_time:
+			forestry_candidates = _forestry_targets(actor.global_position)
 		var farming_worker := actor.permanent_role == "farming" and actor.is_employed() and not actor.is_player_controlled
 		var farming_in_progress := farming_worker and actor.active_role == "farming" and actor.state in [Citizen.State.TO_TREE, Citizen.State.TO_SAWMILL, Citizen.State.SAWING, Citizen.State.WAITING_COURIER]
 		var farming_position := Vector3.INF
@@ -130,6 +133,8 @@ func capture(sequence: int) -> WorldSnapshot:
 				var dig_site := dig_site_value as Dictionary
 				var dig_node := dig_site.get(&"node") as Node3D
 				if not is_instance_valid(dig_node) or not simulation._can_work_at_dig_site(dig_site):
+					continue
+				if not simulation._is_route_reachable(actor.global_position, dig_node.global_position):
 					continue
 				excavation_candidates.append({
 					&"id": _target_key(&"dig", dig_node.global_position),
@@ -233,6 +238,7 @@ func capture(sequence: int) -> WorldSnapshot:
 				&"work.forestry.can_start": sawmill_position != Vector3.INF and warehouse_position != Vector3.INF,
 				&"work.forestry.sawmill_position": sawmill_position,
 				&"work.forestry.warehouse_position": warehouse_position,
+				&"work.forestry.candidates": forestry_candidates,
 				&"work.farming.worker": farming_worker,
 				&"work.farming.in_progress": farming_in_progress,
 				&"work.farming.can_start": farming_can_start,
@@ -318,14 +324,14 @@ func _target_key(kind: StringName, position: Vector3) -> StringName:
 	return StringName("%s:%d:%d" % [kind, cell.x, cell.y])
 
 
-func _forestry_targets() -> Array[Dictionary]:
+func _forestry_targets(from: Vector3 = Vector3.INF) -> Array[Dictionary]:
 	var targets: Array[Dictionary] = []
 	for tree_position: Vector3 in simulation.tree_positions:
 		var cell: Vector2i = simulation._cell_from_position(tree_position)
 		var tree: Node3D = simulation.tree_nodes.get(cell) as Node3D
 		if not is_instance_valid(tree) or bool(tree.get_meta("felled", false)):
 			continue
-		var access := _resource_access_position(tree_position)
+		var access := _resource_access_position(tree_position, from)
 		if access != Vector3.INF:
 			targets.append({&"id": StringName("tree:%d:%d" % [cell.x, cell.y]), &"position": tree_position, &"access": access})
 	return targets
