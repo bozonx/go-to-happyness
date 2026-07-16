@@ -448,6 +448,7 @@ func _ready() -> void:
 	route_service.configure(nav_grid)
 	building_queue_service = BuildingQueueServiceScript.new()
 	building_queue_service.configure(building_registry, nav_grid)
+	building_queue_service.set_citizen_alive_checker(_is_ai_citizen_id_alive)
 	building_availability_service = BuildingAvailabilityServiceScript.new()
 	building_availability_service.configure(settlement)
 	building_research_service = BuildingResearchServiceScript.new()
@@ -1146,11 +1147,12 @@ func _publish_courier_tasks(dispatcher: RefCounted) -> void:
 	for site: ConstructionSite in sorted_sites:
 		if site == null or not is_instance_valid(site.node) or site.node.is_queued_for_deletion():
 			continue
+		var site_position: Vector3 = site.node.global_position
 		for resource_type in site.required_materials:
 			var required := int(site.required_materials[resource_type])
 			var delivered := int(site.delivered_materials.get(resource_type, 0))
 			var reserved := int(site.reserved_materials.get(resource_type, 0))
-			var source := _construction_material_source(str(resource_type))
+			var source := _construction_material_source(str(resource_type), site_position)
 			if delivered + reserved < required and not source.is_empty():
 				var source_id := str(source.get("id", "storage"))
 				dispatcher.publish(StringName("construction_%s_%s_%s" % [site.node.get_instance_id(), resource_type, source_id]), CourierTask.Kind.CONSTRUCTION, 70, source.position, site.node.global_position, {"site": site, "resource": resource_type, "source": source})
@@ -2356,6 +2358,15 @@ func _create_entrance_stone() -> void:
 	entrance_highlight.material_override = hl_material
 	entrance_highlight.visible = false
 	entrance_stone.add_child(entrance_highlight)
+	var entrance_sign_light := OmniLight3D.new()
+	entrance_sign_light.light_color = Color("ffd58a")
+	entrance_sign_light.light_energy = 2.0
+	entrance_sign_light.omni_range = 5.0
+	entrance_sign_light.shadow_enabled = true
+	entrance_sign_light.position = Vector3(0.0, 2.2, 0.0)
+	entrance_sign_light.visible = false
+	entrance_stone.add_child(entrance_sign_light)
+	entrance_lights.append(entrance_sign_light)
 	add_child(entrance_stone)
 
 func _create_citizens() -> void:
@@ -2447,6 +2458,13 @@ func _on_ai_citizen_exiting(citizen_id: int) -> void:
 		canteen_service.remove_citizen(citizen_id)
 	if citizen_needs_service != null:
 		citizen_needs_service.remove_citizen(citizen_id)
+
+
+func _is_ai_citizen_id_alive(citizen_id: int) -> bool:
+	for citizen in citizens:
+		if is_instance_valid(citizen) and citizen.ai_id == citizen_id:
+			return true
+	return false
 
 
 func _ai_target_for_key(target_key: StringName) -> Node3D:
@@ -5154,106 +5172,96 @@ func _start_interaction(all: bool) -> void:
 		return
 	if not interaction_action.is_empty():
 		return
-	var work_target := _nearby_player_work_target()
-	if work_target != null:
-		player_work_target = work_target
-		interaction_action = "demolition" if bool(work_target.get_meta("pending_demolition", false)) else "construction"
-		interaction_time = 0.0
-		interaction_start_cell = _cell_from_position(player_citizen.global_position)
-		interaction_progress.visible = true
-		interaction_hint_label.text = "Работаем: %s..." % ("снос" if interaction_action == "demolition" else "стройка")
-		return
-	var sawmill_pos := _nearby_sawmill_position()
-	if sawmill_pos != Vector3.INF:
-		var wood_count := _pocket_amount("wood") + _pocket_amount("logs")
-		if wood_count > 0:
-			var delivered := 0
-			if all:
-				var wood_delivered := _remove_from_pocket("wood", wood_count)
-				var logs_delivered := _remove_from_pocket("logs", wood_count - wood_delivered)
-				delivered = wood_delivered + logs_delivered
+	var target := _first_person_target()
+	match target.kind:
+		"construction":
+			var site := construction.site_for_node(target.node)
+			if site != null and not site.is_supplied():
+				_deliver_pocket_to_site(site, all)
 			else:
-				delivered = _remove_from_pocket("wood", 1)
-				if delivered == 0:
-					delivered = _remove_from_pocket("logs", 1)
-			if delivered > 0:
-				var stock := _sawmill_stock(sawmill_pos)
-				stock.logs = int(stock.logs) + delivered
-				_store_sawmill_stock(sawmill_pos, stock)
-				_update_interface("Сдано %d дерева на лесопилку." % delivered)
-			_refresh_interaction_hint()
+				player_work_target = target.node
+				interaction_action = "construction"
+				interaction_time = 0.0
+				interaction_start_cell = _cell_from_position(player_citizen.global_position)
+				interaction_progress.visible = true
+				interaction_hint_label.text = "Работаем: стройка..."
 			return
-		var sawmill_stock := _sawmill_stock(sawmill_pos)
-		var available_boards := int(sawmill_stock.boards)
-		if available_boards > 0 and _pocket_has_room():
-			var take_amount := mini(available_boards, _pocket_space_for("boards")) if all else 1
-			take_amount = _add_to_pocket("boards", take_amount)
-			if take_amount > 0:
-				sawmill_stock.boards = int(sawmill_stock.boards) - take_amount
-				_store_sawmill_stock(sawmill_pos, sawmill_stock)
-				_update_interface("Взяли %d досок с лесопилки." % take_amount)
-			_refresh_interaction_hint()
+		"demolition":
+			player_work_target = target.node
+			interaction_action = "demolition"
+			interaction_time = 0.0
+			interaction_start_cell = _cell_from_position(player_citizen.global_position)
+			interaction_progress.visible = true
+			interaction_hint_label.text = "Работаем: снос..."
 			return
-	if _nearby_warehouse():
-		if _pocket_total() > 0:
-			if all:
-				_deliver_all_pocket_to_warehouse()
-			else:
-				_deliver_one_pocket_to_warehouse()
-			_refresh_interaction_hint()
-		else:
-			_show_pocket_take_menu()
-		return
-	var workplace := _nearby_workplace_for_job()
-	if workplace != null:
-		_occupy_workplace(workplace)
-		return
-	if _nearby_pond() and not (_nearby_tree() or _nearby_farm()):
-		if not bool(settlement.tools.get("bucket", false)):
-			_update_interface("Нужно ведро, чтобы черпать воду. Купите его на рынке.")
+		"pile":
+			_take_from_pile(target.pile, all)
 			return
-		if not _pocket_has_room():
-			_update_interface("Карман полон. Отнесите воду на склад.")
-			_refresh_interaction_hint()
+		"sawmill":
+			_handle_sawmill_interaction(all, target.position)
 			return
-		interaction_resource = "water"
-		interaction_action = "harvesting"
-		interaction_time = 0.0
-		interaction_start_cell = _cell_from_position(player_citizen.global_position)
-		interaction_repeat_all = all
-		interaction_progress.visible = true
-		interaction_hint_label.text = "Набираем воду..."
-		return
-	if _nearby_grass_source():
-		if not _pocket_has_room():
-			_update_interface("Карман полон.")
-			_refresh_interaction_hint()
+		"warehouse":
+			_handle_warehouse_interaction(all)
 			return
-		interaction_resource = "grass"
-		interaction_action = "harvesting"
-		interaction_time = 0.0
-		interaction_start_cell = _cell_from_position(player_citizen.global_position)
-		interaction_repeat_all = all
-		interaction_progress.visible = true
-		interaction_hint_label.text = "Собираем траву..."
-		return
-	if _nearby_forage_source() or _nearby_rabbit_source():
-		_update_interface(_wild_food_requires_specialist_message())
-		return
-	if _nearby_tree() or _nearby_farm():
-		var gathering_branches := _nearby_tree() and settlement.era < SettlementState.Era.WOOD
-		if not gathering_branches and not _pocket_has_room():
-			_update_interface("Карман полон. Дерево — на лесопилку, еду — на склад.")
-			_refresh_interaction_hint()
+		"workplace":
+			_occupy_workplace(target.node)
 			return
-		interaction_resource = "branches" if gathering_branches else ("wood" if _nearby_tree() else "food")
-		interaction_action = "harvesting"
-		interaction_time = 0.0
-		interaction_start_cell = _cell_from_position(player_citizen.global_position)
-		interaction_repeat_all = all
-		interaction_progress.visible = true
-		interaction_hint_label.text = "Собираем %s..." % interaction_resource
-		return
+		"tree":
+			var gathering_branches := settlement.era < SettlementState.Era.WOOD
+			if not gathering_branches and not _pocket_has_room():
+				_update_interface("Карман полон. Дерево — на лесопилку, еду — на склад.")
+				_refresh_interaction_hint()
+				return
+			interaction_resource = "branches" if gathering_branches else "wood"
+			interaction_action = "harvesting"
+			interaction_time = 0.0
+			interaction_start_cell = _cell_from_position(player_citizen.global_position)
+			interaction_repeat_all = all
+			interaction_progress.visible = true
+			interaction_hint_label.text = "Собираем %s..." % interaction_resource
+			return
+		"grass":
+			if not _pocket_has_room():
+				_update_interface("Карман полон.")
+				_refresh_interaction_hint()
+				return
+			interaction_resource = "grass"
+			interaction_action = "harvesting"
+			interaction_time = 0.0
+			interaction_start_cell = _cell_from_position(player_citizen.global_position)
+			interaction_repeat_all = all
+			interaction_progress.visible = true
+			interaction_hint_label.text = "Собираем траву..."
+			return
+		"farm":
+			if not _pocket_has_room():
+				_update_interface("Карман полон. Дерево — на лесопилку, еду — на склад.")
+				_refresh_interaction_hint()
+				return
+			interaction_resource = "food"
+			interaction_action = "harvesting"
+			interaction_time = 0.0
+			interaction_start_cell = _cell_from_position(player_citizen.global_position)
+			interaction_repeat_all = all
+			interaction_progress.visible = true
+			interaction_hint_label.text = "Собираем food..."
+			return
+		"pond":
+			if not bool(settlement.tools.get("bucket", false)):
+				_update_interface("Нужно ведро, чтобы черпать воду. Купите его на рынке.")
+				return
+			if not _pocket_has_room():
+				_update_interface("Карман полон. Отнесите воду на склад.")
+				_refresh_interaction_hint()
+				return
+			interaction_resource = "water"
+			interaction_action = "harvesting"
+			interaction_time = 0.0
+			interaction_start_cell = _cell_from_position(player_citizen.global_position)
+			interaction_repeat_all = all
+			interaction_progress.visible = true
+			interaction_hint_label.text = "Набираем воду..."
+			return
 
 func _dig_voxel_at_crosshair() -> void:
 	if voxel_tool == null:
@@ -5703,59 +5711,295 @@ func _refresh_interaction_hint() -> void:
 	interaction_progress.visible = false
 
 
+func _nearest_point_to_point_array(points: Array[Vector3], target: Vector3, max_distance: float) -> Vector3:
+	var best := Vector3.INF
+	var best_dist := max_distance
+	for point in points:
+		var dist := point.distance_to(target)
+		if dist <= best_dist:
+			best_dist = dist
+			best = point
+	return best
+
+
+func _nearest_grass_source_to_point(point: Vector3, max_distance: float) -> Vector3:
+	var best := Vector3.INF
+	var best_dist := max_distance
+	for cell in grass_sources:
+		var source: Dictionary = grass_sources[cell]
+		if int(source.remaining) <= 0 or not is_instance_valid(source.node):
+			continue
+		var node_pos: Vector3 = (source.node as Node3D).global_position
+		var dist := point.distance_to(node_pos)
+		if dist <= best_dist:
+			best_dist = dist
+			best = node_pos
+	return best
+
+
+func _first_person_target() -> Dictionary:
+	var result := {"kind": ""}
+	if not is_first_person or player_citizen == null or camera == null:
+		return result
+	var from := camera.global_position
+	var direction := -camera.global_transform.basis.z
+	var to := from + direction * INTERACTION_RANGE
+	var query := PhysicsRayQueryParameters3D.create(from, to)
+	query.collide_with_areas = true
+	query.collide_with_bodies = true
+	query.collision_mask = 1 | 4
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	var hit_position := Vector3.INF
+	if not hit.is_empty():
+		hit_position = hit.position
+		var collider = hit.collider
+		if collider is StaticBody3D and collider.name == "TreeCollision":
+			var tree := collider.get_parent() as Node3D
+			if is_instance_valid(tree) and not bool(tree.get_meta("felled", false)):
+				result = {"kind": "tree", "node": tree, "position": tree.global_position}
+		elif collider is Area3D:
+			var area_parent := collider.get_parent() as Node3D
+			if collider.is_in_group("construction_selector") and is_instance_valid(area_parent):
+				result = {"kind": "construction", "node": area_parent, "position": area_parent.global_position}
+			elif collider.is_in_group("resource_pile_selector"):
+				var pile := _resource_pile_for_node(area_parent)
+				if not pile.is_empty():
+					result = {"kind": "pile", "node": area_parent, "pile": pile, "position": area_parent.global_position}
+			elif collider.is_in_group("warehouse_selector"):
+				result = {"kind": "warehouse", "node": area_parent, "position": area_parent.global_position}
+			elif collider.is_in_group("building_selector") and is_instance_valid(area_parent):
+				var building_type := str(area_parent.get_meta("building_type", ""))
+				if bool(area_parent.get_meta("pending_demolition", false)):
+					result = {"kind": "demolition", "node": area_parent, "position": area_parent.global_position}
+				elif building_type == "sawmill":
+					result = {"kind": "sawmill", "node": area_parent, "position": area_parent.global_position}
+				elif _role_for_workplace(area_parent) != "":
+					result = {"kind": "workplace", "node": area_parent, "position": area_parent.global_position}
+	if result.kind != "":
+		return result
+	if hit_position == Vector3.INF:
+		hit_position = to
+	var player_pos := player_citizen.global_position
+	if player_pos.distance_to(hit_position) > INTERACTION_RANGE:
+		return result
+	var grass_pos := _nearest_grass_source_to_point(hit_position, 1.0)
+	if grass_pos != Vector3.INF and player_pos.distance_to(grass_pos) <= INTERACTION_RANGE:
+		return {"kind": "grass", "position": grass_pos}
+	var pond_pos := _nearest_point_to_point_array(pond_positions, hit_position, 1.2)
+	if pond_pos != Vector3.INF and player_pos.distance_to(pond_pos) <= INTERACTION_RANGE:
+		return {"kind": "pond", "position": pond_pos}
+	var farm_pos := _nearest_point_to_point_array(farm_positions, hit_position, 1.2)
+	if farm_pos != Vector3.INF and player_pos.distance_to(farm_pos) <= INTERACTION_RANGE:
+		return {"kind": "farm", "position": farm_pos}
+	var sawmill_pos := _nearest_point_to_point_array(sawmill_positions, hit_position, 1.2)
+	if sawmill_pos != Vector3.INF and player_pos.distance_to(sawmill_pos) <= INTERACTION_RANGE:
+		return {"kind": "sawmill", "position": sawmill_pos}
+	return result
+
+
+func _missing_site_materials_text(site: ConstructionSite) -> String:
+	var parts: Array[String] = []
+	for resource_type in site.required_materials:
+		var required := int(site.required_materials.get(resource_type, 0))
+		var delivered := int(site.delivered_materials.get(resource_type, 0))
+		if delivered < required:
+			parts.append("%s %d/%d" % [resource_type.capitalize(), delivered, required])
+	return ", ".join(parts)
+
+
+func _pile_available_resources(pile: Dictionary) -> Array[String]:
+	var resources: Dictionary = pile.get("resources", {})
+	var result: Array[String] = []
+	for resource_type in resources:
+		if int(resources.get(resource_type, 0)) > 0:
+			result.append(str(resource_type))
+	return result
+
+
+func _handle_sawmill_interaction(all: bool, sawmill_pos: Vector3) -> void:
+	var wood_count := _pocket_amount("wood") + _pocket_amount("logs")
+	if wood_count > 0:
+		var delivered := 0
+		if all:
+			var wood_delivered := _remove_from_pocket("wood", wood_count)
+			var logs_delivered := _remove_from_pocket("logs", wood_count - wood_delivered)
+			delivered = wood_delivered + logs_delivered
+		else:
+			delivered = _remove_from_pocket("wood", 1)
+			if delivered == 0:
+				delivered = _remove_from_pocket("logs", 1)
+		if delivered > 0:
+			var stock := _sawmill_stock(sawmill_pos)
+			stock.logs = int(stock.logs) + delivered
+			_store_sawmill_stock(sawmill_pos, stock)
+			_update_interface("Сдано %d дерева на лесопилку." % delivered)
+		_refresh_interaction_hint()
+		return
+	var sawmill_stock := _sawmill_stock(sawmill_pos)
+	var available_boards := int(sawmill_stock.boards)
+	if available_boards > 0 and _pocket_has_room():
+		var take_amount := mini(available_boards, _pocket_space_for("boards")) if all else 1
+		take_amount = _add_to_pocket("boards", take_amount)
+		if take_amount > 0:
+			sawmill_stock.boards = int(sawmill_stock.boards) - take_amount
+			_store_sawmill_stock(sawmill_pos, sawmill_stock)
+			_update_interface("Взяли %d досок с лесопилки." % take_amount)
+	_refresh_interaction_hint()
+
+
+func _handle_warehouse_interaction(all: bool) -> void:
+	if _pocket_total() > 0:
+		if all:
+			_deliver_all_pocket_to_warehouse()
+		else:
+			_deliver_one_pocket_to_warehouse()
+		_refresh_interaction_hint()
+	else:
+		_show_pocket_take_menu()
+
+
+func _deliver_pocket_to_site(site: ConstructionSite, all: bool) -> void:
+	var delivered_any := false
+	for resource_type in site.required_materials:
+		var required := int(site.required_materials.get(resource_type, 0))
+		var delivered := int(site.delivered_materials.get(resource_type, 0))
+		var needed := required - delivered
+		if needed <= 0:
+			continue
+		var in_pocket := _pocket_amount(resource_type)
+		if in_pocket <= 0:
+			continue
+		var amount := mini(in_pocket, needed) if all else mini(1, needed)
+		amount = mini(amount, in_pocket)
+		if amount <= 0:
+			continue
+		_remove_from_pocket(resource_type, amount)
+		construction.accept_delivery(site.node, resource_type, amount)
+		delivered_any = true
+		if not all:
+			break
+	if delivered_any:
+		_update_interface("Материалы сданы на стройплощадку.")
+		_refresh_interaction_hint()
+	else:
+		var missing := _missing_site_materials_text(site)
+		if missing.is_empty():
+			_update_interface("Стройплощадка уже полностью снабжена.")
+		else:
+			_update_interface("В кармане нет нужных материалов: %s." % missing)
+		_refresh_interaction_hint()
+
+
+func _take_from_pile(pile: Dictionary, all: bool) -> void:
+	var pile_node := pile.get("node") as Node3D
+	if not is_instance_valid(pile_node):
+		return
+	var resources: Dictionary = pile.get("resources", {})
+	var taken_any := false
+	for resource_type in resources.keys():
+		var available := int(resources.get(resource_type, 0))
+		if available <= 0:
+			continue
+		if not _pocket_has_room():
+			break
+		var amount := mini(available, _pocket_space_for(resource_type)) if all else 1
+		amount = mini(amount, available)
+		var taken := _add_to_pocket(resource_type, amount)
+		if taken <= 0:
+			continue
+		taken_any = true
+		resources[resource_type] = available - taken
+		if resources[resource_type] <= 0:
+			resources.erase(resource_type)
+		if not all:
+			break
+	if not taken_any:
+		if not _pocket_has_room():
+			_update_interface("Карман полон.")
+		else:
+			_update_interface("Куча пуста или в ней нет подходящих ресурсов.")
+		_refresh_interaction_hint()
+		return
+	pile.resources = resources
+	if resources.is_empty():
+		for index in range(resource_piles.size()):
+			if resource_piles[index].get("node") == pile_node:
+				resource_piles.remove_at(index)
+				break
+		pile_node.queue_free()
+	else:
+		_refresh_resource_pile_label(pile)
+	_update_interface("Взяли из кучи. %s" % _format_pocket_hint())
+	_refresh_interaction_hint()
+
+
 func _first_person_action_hint() -> String:
-	var work_target := _nearby_player_work_target()
-	if work_target != null:
-		return "F: %s" % ("разбирать отмеченное здание" if bool(work_target.get_meta("pending_demolition", false)) else "работать на стройке")
-	var sawmill_pos := _nearby_sawmill_position()
-	if sawmill_pos != Vector3.INF:
-		var sawmill_stock := _sawmill_stock(sawmill_pos)
-		if _pocket_amount("wood") > 0 or _pocket_amount("logs") > 0:
-			var wood_count := _pocket_amount("wood") + _pocket_amount("logs")
-			return "F: сдать 1 дерево на лесопилку | Shift+F: сдать всё (%d)" % wood_count
-		if int(sawmill_stock.boards) > 0 and _pocket_has_room():
-			return "F: взять 1 доску | Shift+F: взять до заполнения"
-	if _nearby_warehouse():
-		var wh_index := _nearby_warehouse_index()
-		if _pocket_total() > 0:
-			var primary_res := _primary_pocket_resource()
-			var wh_room := settlement.warehouse_room_for(wh_index, primary_res) if wh_index >= 0 else settlement.storage_room_for(primary_res)
-			if wh_room <= 0:
-				return "Склад заполнен"
-			return "F: сдать 1 (%s) | Shift+F: сдать всё" % primary_res.capitalize()
-		var wh_has_goods := false
-		if wh_index >= 0 and wh_index < settlement.warehouses.size():
-			for res_type in SettlementState.STORED_RESOURCES:
-				if settlement.warehouses[wh_index].amount(res_type) > 0:
-					wh_has_goods = true
-					break
-		elif settlement.uses_virtual_storage():
-			for res_type in SettlementState.STORED_RESOURCES:
-				if int(settlement.backpack.get(res_type, 0)) > 0:
-					wh_has_goods = true
-					break
-		if wh_has_goods:
-			return "F: открыть меню взятия товаров"
-		return ""
-	var workplace := _nearby_workplace_for_job()
-	if workplace != null:
-		var role := _role_for_workplace(workplace)
-		var building_type := str(workplace.get_meta("building_type", " workplace"))
-		return "F: занять должность %s в %s" % [role, building_type.capitalize().replace("_", " ")]
-	if _nearby_grass_source():
-		return "F: собрать траву | Shift+F: собирать до полноты (%d%%)" % _resource_remaining_percent("grass")
-	if _nearby_tree():
-		if settlement.era < SettlementState.Era.WOOD:
-			return "F: собрать ветки | Shift+F: собирать до полноты (%d%%)" % _resource_remaining_percent("branches")
-		return "F: срубить дерево | Shift+F: рубить до полноты (%d%%)" % _resource_remaining_percent("wood")
-	if _nearby_farm():
-		return "F: собрать еду | Shift+F: собирать до полноты"
-	if _nearby_forage_source() or _nearby_rabbit_source():
-		return _wild_food_requires_specialist_message()
-	if _nearby_pond():
-		if bool(settlement.tools.get("bucket", false)):
-			return "F: набрать воды | Shift+F: набирать до полноты"
-		return "Нужно ведро, чтобы черпать воду. Купите его на рынке."
+	var target := _first_person_target()
+	match target.kind:
+		"construction":
+			var site := construction.site_for_node(target.node)
+			if site != null and not site.is_supplied():
+				var missing := _missing_site_materials_text(site)
+				if not missing.is_empty():
+					return "F: сдать стройматериалы (%s)" % missing
+			return "F: работать на стройке"
+		"demolition":
+			return "F: разбирать отмеченное здание"
+		"pile":
+			var pile: Dictionary = target.pile
+			var available := _pile_available_resources(pile)
+			if available.is_empty():
+				return ""
+			if not _pocket_has_room():
+				return "Карман полон"
+			return "F: взять %s из кучи | Shift+F: взять всё" % _resource_display_name(available[0]).to_lower()
+		"warehouse":
+			var wh_index := _nearby_warehouse_index()
+			if _pocket_total() > 0:
+				var primary_res := _primary_pocket_resource()
+				var wh_room := settlement.warehouse_room_for(wh_index, primary_res) if wh_index >= 0 else settlement.storage_room_for(primary_res)
+				if wh_room <= 0:
+					return "Склад заполнен"
+				return "F: сдать 1 (%s) | Shift+F: сдать всё" % primary_res.capitalize()
+			var wh_has_goods := false
+			if wh_index >= 0 and wh_index < settlement.warehouses.size():
+				for res_type in SettlementState.STORED_RESOURCES:
+					if settlement.warehouses[wh_index].amount(res_type) > 0:
+						wh_has_goods = true
+						break
+			elif settlement.uses_virtual_storage():
+				for res_type in SettlementState.STORED_RESOURCES:
+					if int(settlement.backpack.get(res_type, 0)) > 0:
+						wh_has_goods = true
+						break
+			if wh_has_goods:
+				return "F: открыть меню взятия товаров"
+			return ""
+		"sawmill":
+			var sawmill_pos: Vector3 = target.position
+			var sawmill_stock := _sawmill_stock(sawmill_pos)
+			if _pocket_amount("wood") > 0 or _pocket_amount("logs") > 0:
+				var wood_count := _pocket_amount("wood") + _pocket_amount("logs")
+				return "F: сдать 1 дерево на лесопилку | Shift+F: сдать всё (%d)" % wood_count
+			if int(sawmill_stock.boards) > 0 and _pocket_has_room():
+				return "F: взять 1 доску | Shift+F: взять до заполнения"
+			return ""
+		"workplace":
+			var role := _role_for_workplace(target.node)
+			var building_type := str(target.node.get_meta("building_type", " workplace"))
+			return "F: занять должность %s в %s" % [role, building_type.capitalize().replace("_", " ")]
+		"tree":
+			if settlement.era < SettlementState.Era.WOOD:
+				return "F: собрать ветки | Shift+F: собирать до полноты (%d%%)" % _resource_remaining_percent("branches")
+			return "F: срубить дерево | Shift+F: рубить до полноты (%d%%)" % _resource_remaining_percent("wood")
+		"grass":
+			return "F: собрать траву | Shift+F: собирать до полноты (%d%%)" % _resource_remaining_percent("grass")
+		"farm":
+			return "F: собрать еду | Shift+F: собирать до полноты"
+		"pond":
+			if bool(settlement.tools.get("bucket", false)):
+				return "F: набрать воды | Shift+F: набирать до полноты"
+			return "Нужно ведро, чтобы черпать воду. Купите его на рынке."
 	return ""
 
 func _terrain_point_at_screen_position(screen_position: Vector2) -> Variant:
@@ -8680,68 +8924,6 @@ func _create_resource_pile(position: Vector3, resources: Dictionary, is_backpack
 	var pile := Node3D.new()
 	pile.position = position
 
-	# Base dirt mound
-	var base_mesh_node := MeshInstance3D.new()
-	var base_mesh := CylinderMesh.new()
-	base_mesh.top_radius = 0.03
-	base_mesh.bottom_radius = 0.62
-	base_mesh.height = 0.62
-	base_mesh_node.mesh = base_mesh
-	base_mesh_node.position.y = 0.2
-	var base_mat := StandardMaterial3D.new()
-	base_mat.albedo_color = Color("5c4033")
-	base_mesh_node.material_override = base_mat
-	pile.add_child(base_mesh_node)
-
-	# Logs
-	var log_mesh := BoxMesh.new()
-	log_mesh.size = Vector3(1.2, 0.25, 0.25)
-	var log_mat := StandardMaterial3D.new()
-	log_mat.albedo_color = Color("4a3225")
-
-	var log1 := MeshInstance3D.new()
-	log1.mesh = log_mesh
-	log1.position = Vector3(-0.3, 0.35, 0.2)
-	log1.rotation_degrees = Vector3(10, 25, 5)
-	log1.material_override = log_mat
-	log1.visible = normalized.has("branches") or normalized.has("wood") or normalized.has("logs")
-	pile.add_child(log1)
-
-	var log2 := MeshInstance3D.new()
-	log2.mesh = log_mesh
-	log2.position = Vector3(0.2, 0.4, -0.2)
-	log2.rotation_degrees = Vector3(-15, -35, -8)
-	log2.material_override = log_mat
-	log2.visible = log1.visible
-	pile.add_child(log2)
-
-	# A compact grass cone makes dropped harvesting cargo recognizable at a glance.
-	var grass_pile := MeshInstance3D.new()
-	var grass_mesh := CylinderMesh.new()
-	grass_mesh.top_radius = 0.02
-	grass_mesh.bottom_radius = 0.40
-	grass_mesh.height = 0.45
-	grass_pile.mesh = grass_mesh
-	grass_pile.position = Vector3(0.22, 0.42, 0.22)
-	grass_pile.visible = normalized.has("grass")
-	var grass_mat := StandardMaterial3D.new()
-	grass_mat.albedo_color = Color("739350")
-	grass_pile.material_override = grass_mat
-	pile.add_child(grass_pile)
-
-	# A stone
-	var stone_pile := MeshInstance3D.new()
-	var stone_mesh := BoxMesh.new()
-	stone_mesh.size = Vector3(0.4, 0.3, 0.4)
-	stone_pile.mesh = stone_mesh
-	stone_pile.position = Vector3(-0.2, 0.3, -0.4)
-	stone_pile.rotation_degrees = Vector3(20, 45, 10)
-	var stone_mat := StandardMaterial3D.new()
-	stone_mat.albedo_color = Color("6f747a")
-	stone_pile.material_override = stone_mat
-	stone_pile.visible = normalized.has("stone") or normalized.has("soil") or normalized.has("clay") or normalized.has("bricks")
-	pile.add_child(stone_pile)
-
 	var label := Label3D.new()
 	var labels: Array[String] = []
 	for resource_type in normalized:
@@ -8750,7 +8932,97 @@ func _create_resource_pile(position: Vector3, resources: Dictionary, is_backpack
 	label.text = "\n".join(labels)
 	label.position.y = 1.7
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	pile.add_child(label)
+
+	if is_backpack_pile:
+		var backpack_mesh := MeshInstance3D.new()
+		var box := BoxMesh.new()
+		box.size = Vector3(0.5, 0.5, 0.5)
+		backpack_mesh.mesh = box
+		backpack_mesh.position.y = 0.25
+		var red_mat := StandardMaterial3D.new()
+		red_mat.albedo_color = Color("c44b4b")
+		red_mat.roughness = 0.6
+		backpack_mesh.material_override = red_mat
+		pile.add_child(backpack_mesh)
+		label.position.y = 0.8
+		pile.add_child(label)
+	else:
+		# Base dirt mound
+		var base_mesh_node := MeshInstance3D.new()
+		var base_mesh := CylinderMesh.new()
+		base_mesh.top_radius = 0.03
+		base_mesh.bottom_radius = 0.62
+		base_mesh.height = 0.62
+		base_mesh_node.mesh = base_mesh
+		base_mesh_node.position.y = 0.2
+		var base_mat := StandardMaterial3D.new()
+		base_mat.albedo_color = Color("5c4033")
+		base_mesh_node.material_override = base_mat
+		pile.add_child(base_mesh_node)
+
+		# Logs
+		var log_mesh := BoxMesh.new()
+		log_mesh.size = Vector3(1.2, 0.25, 0.25)
+		var log_mat := StandardMaterial3D.new()
+		log_mat.albedo_color = Color("4a3225")
+
+		var log1 := MeshInstance3D.new()
+		log1.mesh = log_mesh
+		log1.position = Vector3(-0.3, 0.35, 0.2)
+		log1.rotation_degrees = Vector3(10, 25, 5)
+		log1.material_override = log_mat
+		log1.visible = normalized.has("branches") or normalized.has("wood") or normalized.has("logs")
+		pile.add_child(log1)
+
+		var log2 := MeshInstance3D.new()
+		log2.mesh = log_mesh
+		log2.position = Vector3(0.2, 0.4, -0.2)
+		log2.rotation_degrees = Vector3(-15, -35, -8)
+		log2.material_override = log_mat
+		log2.visible = log1.visible
+		pile.add_child(log2)
+
+		# A compact grass cone makes dropped harvesting cargo recognizable at a glance.
+		var grass_pile := MeshInstance3D.new()
+		var grass_mesh := CylinderMesh.new()
+		grass_mesh.top_radius = 0.02
+		grass_mesh.bottom_radius = 0.40
+		grass_mesh.height = 0.45
+		grass_pile.mesh = grass_mesh
+		grass_pile.position = Vector3(0.22, 0.42, 0.22)
+		grass_pile.visible = normalized.has("grass")
+		var grass_mat := StandardMaterial3D.new()
+		grass_mat.albedo_color = Color("739350")
+		grass_pile.material_override = grass_mat
+		pile.add_child(grass_pile)
+
+		# A stone
+		var stone_pile := MeshInstance3D.new()
+		var stone_mesh := BoxMesh.new()
+		stone_mesh.size = Vector3(0.4, 0.3, 0.4)
+		stone_pile.mesh = stone_mesh
+		stone_pile.position = Vector3(-0.2, 0.3, -0.4)
+		stone_pile.rotation_degrees = Vector3(20, 45, 10)
+		var stone_mat := StandardMaterial3D.new()
+		stone_mat.albedo_color = Color("6f747a")
+		stone_pile.material_override = stone_mat
+		stone_pile.visible = normalized.has("stone") or normalized.has("soil") or normalized.has("clay") or normalized.has("bricks")
+		pile.add_child(stone_pile)
+		pile.add_child(label)
+
+	var pile_area := Area3D.new()
+	pile_area.name = "PileSelector"
+	pile_area.add_to_group("resource_pile_selector")
+	pile_area.collision_layer = 4
+	pile_area.collision_mask = 0
+	var pile_shape := CollisionShape3D.new()
+	var pile_box := BoxShape3D.new()
+	pile_box.size = Vector3(1.0, 1.2, 1.0)
+	pile_shape.shape = pile_box
+	pile_shape.position.y = 0.4
+	pile_area.add_child(pile_shape)
+	pile.add_child(pile_area)
+
 	add_child(pile)
 	resource_piles.append({"node": pile, "resources": normalized, "reserved": {}, "is_backpack": is_backpack_pile})
 

@@ -570,9 +570,12 @@ func add_cheat(resource_type: String, value: int) -> int:
 		return 0
 	if not warehouse_ever_built or warehouses.is_empty():
 		return value
-	# Cap by per-resource limit.
-	var room := storage_room_for(resource_type)
-	var to_add := mini(value, room)
+	# Cheat resources ignore per-resource player limits; they are only bounded
+	# by the physical warehouse capacity.
+	var total_room := 0
+	for warehouse in warehouses:
+		total_room += warehouse.room_for(resource_type, STORAGE_WEIGHTS)
+	var to_add := mini(value, total_room)
 	if to_add <= 0:
 		return value
 	var remaining := to_add

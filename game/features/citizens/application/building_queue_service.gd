@@ -11,12 +11,17 @@ var _queues: Dictionary = {}
 var _occupants: Dictionary = {}
 var _last_admitted_frame: Dictionary = {}
 var _building_lookup_cache: Dictionary = {}
+var _citizen_alive_checker: Callable
 const BUILDING_LOOKUP_CACHE_LIMIT := 512
 
 
 func configure(registry: BuildingRegistry, next_grid: NavGrid) -> void:
 	building_registry = registry
 	grid = next_grid
+
+
+func set_citizen_alive_checker(checker: Callable) -> void:
+	_citizen_alive_checker = checker
 
 
 func _citizen_id(citizen: Node) -> int:
@@ -312,9 +317,11 @@ func _destination_key(destination: Vector3) -> String:
 
 
 func _prune_queue(queue: Array) -> void:
+	if not _citizen_alive_checker.is_valid():
+		return
 	for index in range(queue.size() - 1, -1, -1):
 		var citizen_id: int = queue[index]
-		if not is_instance_id_valid(citizen_id):
+		if not bool(_citizen_alive_checker.call(citizen_id)):
 			queue.remove_at(index)
 
 

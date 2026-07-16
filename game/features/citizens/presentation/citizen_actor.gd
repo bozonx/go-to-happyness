@@ -974,9 +974,10 @@ func _process_construction_delivery(delta: float) -> void:
 	if not is_instance_valid(construction_site):
 		cancel_current_action()
 		return
-	# Construction sites share the same worker-entrance queue system as completed
-	# buildings, so couriers and builders line up at the future building's entrance.
-	if _move_to(construction_position, delta, false, true):
+	# Construction sites are not registered in the building queue system, so using
+	# the queue here would only risk misrouting a courier to a different building
+	# whose position happens to coincide with the construction approach point.
+	if _move_to(construction_position, delta, false, false):
 		if building_supply_kind == "construction":
 			construction_material_delivered.emit(self, construction_site, construction_delivery_resource, carried_amount)
 		else:
