@@ -173,7 +173,7 @@ func _tick_brains(delta: float) -> void:
 		return
 	for citizen_id in _citizen_ids:
 		var brain := _brains.get(citizen_id) as CitizenBrain
-		if brain == null:
+		if brain == null or not brain.has_runnable_task():
 			continue
 		brain.tick(latest_snapshot, _order_cache.get(citizen_id), delta)
 

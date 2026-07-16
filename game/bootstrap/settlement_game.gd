@@ -2447,6 +2447,7 @@ func _refresh_navigation_grid() -> void:
 	_rebuild_navigation_obstacles()
 	if nav_grid != null:
 		nav_grid.set_blocked_cells(navigation_blocked_cells)
+		nav_grid.refresh_connectivity()
 
 func _is_navigation_cell_blocked(cell: Vector2i) -> bool:
 	return navigation_blocked_cells.has(cell)

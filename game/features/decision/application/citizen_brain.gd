@@ -100,6 +100,10 @@ func cancel_current_task() -> void:
 	runner.cancel_all(context)
 
 
+func has_runnable_task() -> bool:
+	return runner.active_task != null or runner.pending_task != null or runner.suspended_count() > 0
+
+
 func configure_goals(goals: Array[AICitizenGoal]) -> void:
 	runner.cancel_all(context)
 	arbiter.configure(goals)

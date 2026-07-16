@@ -128,6 +128,12 @@ func are_cells_connected(from: Vector2i, to: Vector2i) -> bool:
 	return _walkable_components.get(from, -1) == _walkable_components.get(to, -2)
 
 
+## Builds the component cache at a controlled caller-owned time instead of on
+## the first AI candidate query after a topology update.
+func refresh_connectivity() -> void:
+	_ensure_walkable_components()
+
+
 ## True when a straight line between two world points crosses only walkable cells.
 ## Uses Amanatides & Woo grid traversal so every cell the segment touches is
 ## tested — no corner is cut past an obstacle. This is what lets routes collapse

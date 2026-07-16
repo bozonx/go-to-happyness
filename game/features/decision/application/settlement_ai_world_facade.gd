@@ -46,7 +46,9 @@ func capture(sequence: int) -> WorldSnapshot:
 		var forestry_in_progress := actor.state in [Citizen.State.TO_TREE, Citizen.State.CHOPPING, Citizen.State.TO_SAWMILL]
 		var forestry_candidates: Array[Dictionary] = []
 		if forestry_worker and actor_work_time:
-			forestry_candidates = _forestry_targets(actor.global_position)
+			# Tree validity and walkable interaction cells are snapshot-wide facts.
+			# Reusing the shared list avoids rebuilding it once per forestry worker.
+			forestry_candidates = forestry_targets
 		var farming_worker := actor.permanent_role == "farming" and actor.is_employed() and not actor.is_player_controlled
 		var farming_in_progress := farming_worker and actor.active_role == "farming" and actor.state in [Citizen.State.TO_TREE, Citizen.State.TO_SAWMILL, Citizen.State.SAWING, Citizen.State.WAITING_COURIER]
 		var farming_position := Vector3.INF
@@ -198,9 +200,11 @@ func capture(sequence: int) -> WorldSnapshot:
 		var courier_worker: bool = actor.can_handle_entry_logistics() and not actor.is_player_controlled
 		var courier_task_candidates: Array[Dictionary] = []
 		if courier_worker and simulation.courier_dispatcher != null:
-			for task: CourierTask in simulation.courier_dispatcher.available_tasks():
-				if simulation._is_courier_task_reachable(actor, task):
-					courier_task_candidates.append({&"id": task.id, &"priority": task.priority, &"pickup": task.pickup, &"requested_courier_id": int((task.payload.get("courier") as Citizen).get_instance_id()) if is_instance_valid(task.payload.get("courier") as Citizen) else -1})
+			for task_data in courier_tasks:
+				var task_id := task_data.get(&"id", &"") as StringName
+				var task := simulation.courier_dispatcher.tasks.get(task_id) as CourierTask
+				if task != null and simulation._is_courier_task_reachable(actor, task):
+					courier_task_candidates.append(task_data)
 		var courier_active_task_id: StringName = &""
 		var courier_active_pickup := Vector3.INF
 		var courier_active_priority := 0
@@ -217,7 +221,7 @@ func capture(sequence: int) -> WorldSnapshot:
 			actor.global_position,
 			actor.is_player_controlled,
 			not actor.is_player_controlled,
-			AIFactSet.new({
+			AIFactSet.from_owned_values({
 				&"hero": actor.is_hero,
 				&"needs.should_sleep": not actor_work_time,
 				&"needs.fatigue_level": actor.fatigue,
@@ -306,7 +310,7 @@ func capture(sequence: int) -> WorldSnapshot:
 				&"workforce.pending_workplace_position": actor.pending_employment_workplace.global_position if is_instance_valid(actor.pending_employment_workplace) else Vector3.INF,
 			})
 		)
-	var settlement_facts := AIFactSet.new({
+	var settlement_facts := AIFactSet.from_owned_values({
 		&"population": citizens_by_id.size(),
 		&"era": simulation.settlement.era,
 		&"settlement.wellbeing": simulation.wellbeing,

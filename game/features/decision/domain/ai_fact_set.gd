@@ -11,6 +11,12 @@ func _init(values: Dictionary = {}) -> void:
 	_values = values.duplicate(true)
 
 
+## Takes ownership of a freshly built dictionary. Callers must not mutate it after
+## construction; this avoids copying large snapshot candidate lists every cycle.
+static func from_owned_values(values: Dictionary) -> AIFactSet:
+	return _from_owned_values(values)
+
+
 func has(key: StringName) -> bool:
 	return _values.has(key)
 

@@ -9,6 +9,7 @@ const CourierTaskScript = preload("res://game/features/logistics/domain/courier_
 
 var simulation: Node
 var tasks: Dictionary = {}
+var _tasks_by_courier_id: Dictionary = {}
 
 
 func configure(next_simulation: Node) -> void:
@@ -36,9 +37,10 @@ func task_for(courier: Citizen) -> CourierTask:
 	if not is_instance_valid(courier):
 		return null
 	var courier_id := courier.get_instance_id()
-	for task: CourierTask in tasks.values():
-		if task.assigned_courier_id == courier_id:
-			return task
+	var task := _tasks_by_courier_id.get(courier_id) as CourierTask
+	if task != null and tasks.get(task.id) == task and task.assigned_courier_id == courier_id:
+		return task
+	_tasks_by_courier_id.erase(courier_id)
 	return null
 
 
@@ -49,6 +51,7 @@ func start_task(courier: Citizen, task_id: StringName) -> bool:
 	if task.is_assigned() or not simulation._is_courier_task_valid(task) or not simulation._start_courier_task(courier, task):
 		return false
 	task.assigned_courier_id = courier.get_instance_id()
+	_tasks_by_courier_id[task.assigned_courier_id] = task
 	return true
 
 
@@ -114,10 +117,13 @@ func publish(id: StringName, kind: CourierTask.Kind, priority: int, pickup: Vect
 
 
 func complete_for(courier: Citizen) -> void:
-	for task: CourierTask in tasks.values():
-		if task.assigned_courier_id == courier.get_instance_id():
-			tasks.erase(task.id)
-			return
+	if not is_instance_valid(courier):
+		return
+	var courier_id := courier.get_instance_id()
+	var task := _tasks_by_courier_id.get(courier_id) as CourierTask
+	_tasks_by_courier_id.erase(courier_id)
+	if task != null and tasks.get(task.id) == task:
+		tasks.erase(task.id)
 
 
 func _available_couriers() -> Array[Citizen]:
@@ -154,10 +160,12 @@ func _cleanup_invalid_tasks() -> void:
 				continue
 			if simulation.has_method("_cancel_courier_task"):
 				simulation._cancel_courier_task(courier, task)
+			_tasks_by_courier_id.erase(task.assigned_courier_id)
 			task.assigned_courier_id = -1
 			became_unassigned = true
 		if not simulation._is_courier_task_valid(task) or became_unassigned:
 			if task.has_reservation() and simulation.has_method("_release_task_warehouse_reservation"):
 				simulation._release_task_warehouse_reservation(task)
 		if not simulation._is_courier_task_valid(task):
+			_tasks_by_courier_id.erase(task.assigned_courier_id)
 			tasks.erase(id)
