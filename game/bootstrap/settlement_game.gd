@@ -440,6 +440,8 @@ var campfire_orders_menu: Panel
 var campfire_orders_toggle: CheckButton
 var campfire_balanced_warehouse_toggle: CheckButton
 var campfire_cheer_button: Button
+var campfire_night_work_button: Button
+var personal_night_work_button: Button
 
 
 func _ready() -> void:
@@ -501,6 +503,7 @@ func _ready() -> void:
 	_create_world()
 	_create_interface()
 	_create_forest()
+	_spawn_trash_piles()
 	_spawn_initial_rabbits()
 	_create_ponds()
 	_create_entrance_stone()
@@ -572,10 +575,6 @@ func _process(delta: float) -> void:
 		_show_selected_citizen_menu()
 
 func _update_workers() -> void:
-	if _is_work_time():
-		for citizen in citizens:
-			if is_instance_valid(citizen):
-				citizen.overtime_mode = false
 	_check_unstaffed_employment_center()
 
 
@@ -595,7 +594,7 @@ func is_daily_order_active(citizen: Citizen) -> bool:
 	return (
 		is_instance_valid(citizen)
 		and citizen.daily_order_workday_id == day_cycle.current_day
-		and _is_work_time()
+		and _is_citizen_work_time(citizen)
 	)
 
 
@@ -858,6 +857,7 @@ func _update_clock(delta: float) -> void:
 	if clock.hour() != previous_hour:
 		_apply_hourly_tent_survival(clock.hour())
 		_apply_hourly_bare_hands_penalty()
+		_apply_hourly_work_fatigue()
 	clock_label.text = "%s  %02d:%02d  x%d" % ["Night" if clock.is_night() else "Day", clock.hour(), clock.minute(), int(time_multiplier)]
 	_update_skip_night_button()
 	for event in events:
@@ -871,13 +871,15 @@ func _handle_day_cycle_event(event: SimulationDayEvent) -> void:
 			_start_park_rest(event.cooks_only)
 		SimulationDayEvent.Kind.WORKDAY_ENDED:
 			_end_ai_work_shift()
-			_clear_daily_orders(day_cycle.current_day)
-			_update_interface("Workday ended: residents are returning to their assigned homes.")
+			_clear_finished_daily_orders(day_cycle.current_day)
+			_update_interface("Workday ended: residents without a night-work order are returning home.")
 		SimulationDayEvent.Kind.NIGHTFALL:
 			_refresh_living_statuses()
 			_update_workers()
 			_update_interface("Nightfall: workers are returning to their assigned homes.")
 		SimulationDayEvent.Kind.WORKDAY_STARTED:
+			_clear_expired_overtime_orders()
+			_resume_overtime_daily_orders()
 			_refresh_living_statuses()
 			_update_workers()
 			_update_interface("Morning: workers left their homes for their assignments.")
@@ -901,9 +903,78 @@ func _end_ai_work_shift() -> void:
 	for citizen: Citizen in citizens:
 		if not is_instance_valid(citizen) or citizen.is_player_controlled:
 			continue
+		if citizen.has_active_overtime(day_cycle.current_day) and citizen.overtime_until_workday_id > day_cycle.current_day:
+			continue
 		if citizen_ai != null:
 			citizen_ai.cancel_citizen_work(citizen.ai_id)
 		citizen.end_work_shift()
+
+
+func _clear_finished_daily_orders(workday_id: int) -> void:
+	for citizen in citizens:
+		if not is_instance_valid(citizen):
+			continue
+		if citizen.has_active_overtime(workday_id) and citizen.overtime_until_workday_id > workday_id:
+			continue
+		citizen.clear_daily_order(workday_id)
+		if citizen.overtime_until_workday_id == workday_id:
+			citizen.clear_expired_overtime(workday_id + 1)
+	if citizen_ai != null:
+		citizen_ai.request_decision_refresh()
+
+
+func _clear_expired_overtime_orders() -> void:
+	for citizen in citizens:
+		if is_instance_valid(citizen):
+			citizen.clear_expired_overtime(day_cycle.current_day)
+
+
+func _resume_overtime_daily_orders() -> void:
+	for citizen in citizens:
+		if not is_instance_valid(citizen):
+			continue
+		if citizen.has_active_overtime(day_cycle.current_day) and citizen.daily_order_workday_id == day_cycle.current_day - 1:
+			citizen.daily_order_workday_id = day_cycle.current_day
+
+
+func _apply_hourly_work_fatigue() -> void:
+	for citizen in citizens:
+		if not is_instance_valid(citizen) or citizen.is_player_controlled:
+			continue
+		if citizen.is_recovering(day_cycle.current_day):
+			citizen.fatigue = maxf(0.0, citizen.fatigue - 18.0)
+			continue
+		if _is_citizen_work_time(citizen) and not citizen.active_role.is_empty():
+			var overtime := citizen.has_active_overtime(day_cycle.current_day)
+			citizen.continuous_work_hours += 1.0
+			citizen.fatigue = minf(100.0, citizen.fatigue + (6.0 if overtime else 2.0) + maxf(0.0, settlement.workday_hours - 8) * 0.75)
+			if overtime:
+				citizen.satisfaction = maxf(0.0, citizen.satisfaction - 2.0)
+			elif settlement.workday_hours < 8:
+				citizen.satisfaction = minf(citizen.get_satisfaction_cap(), citizen.satisfaction + 0.6)
+			elif settlement.workday_hours > 8:
+				var long_day_penalty := pow(float(settlement.workday_hours - 8), 1.25) * 0.22
+				citizen.satisfaction = maxf(0.0, citizen.satisfaction - long_day_penalty)
+		elif _is_work_time():
+			citizen.continuous_work_hours = maxf(0.0, citizen.continuous_work_hours - 3.0)
+			citizen.fatigue = maxf(0.0, citizen.fatigue - 4.0)
+	if clock.hour() == 6:
+		_resolve_exhausted_homecomings()
+
+
+func _resolve_exhausted_homecomings() -> void:
+	for citizen in citizens:
+		if not is_instance_valid(citizen) or not citizen.is_dangerously_tired():
+			continue
+		var food_factor := 0.15 if citizen.hunger >= 60.0 else -0.10
+		var distance_factor := 0.0 if not is_instance_valid(citizen.home) else clampf(citizen.global_position.distance_to(citizen.home.global_position) / 120.0, 0.0, 0.25)
+		var risk := clampf(0.15 + citizen.fatigue / 160.0 + distance_factor + food_factor, 0.0, 0.90)
+		if random.randf() < risk:
+			citizen.recovery_until_workday_id = day_cycle.current_day
+			citizen.continuous_work_hours = 0.0
+			citizen.fatigue = maxf(35.0, citizen.fatigue - 25.0)
+			citizen.end_work_shift()
+			_add_message("%s collapsed from exhaustion and will recover at home today." % citizen.role_label())
 
 
 func _apply_hourly_tent_survival(hour: int, survival_day := 0) -> void:
@@ -1036,7 +1107,7 @@ func _apply_daily_settlement_rules() -> void:
 	if not is_instance_valid(canteen):
 		settlement.add("food", -TentEraSurvivalRulesScript.daily_food_consumption(population, tent_weather))
 	var housing := _total_housing_slots()
-	var change := SETTLEMENT_RULES.daily_wellbeing_change(housing >= population, float(food) / population, float(water) / population, settlement.workday_hours, settlement.night_shifts_allowed)
+	var change := SETTLEMENT_RULES.daily_wellbeing_change(housing >= population, float(food) / population, float(water) / population, settlement.workday_hours)
 	wellbeing = clampi(wellbeing + change, 0, 100)
 	# Campfire story effects are resolved at dawn.
 	match settlement.campfire_story_effect:
@@ -1139,7 +1210,13 @@ func _refresh_living_status(citizen: Citizen) -> void:
 	citizen_living_status_service.refresh_citizen(citizen, _has_lit_communal_fire(), _is_night())
 
 func _is_work_time() -> bool:
-	return day_cycle.is_work_time(settlement.workday_hours, settlement.night_shifts_allowed)
+	return day_cycle.is_work_time(settlement.workday_hours)
+
+
+func _is_citizen_work_time(citizen: Citizen) -> bool:
+	if not is_instance_valid(citizen) or citizen.is_recovering(day_cycle.current_day):
+		return false
+	return _is_work_time() or citizen.has_active_overtime(day_cycle.current_day)
 
 func _start_meal(hour: int) -> void:
 	canteen_service.start_meal(hour)
@@ -3007,14 +3084,14 @@ func _create_time_controls(ui: CanvasLayer) -> void:
 
 
 func _can_skip_night() -> bool:
-	if settlement.night_shifts_allowed:
+	if _has_active_night_work_order():
 		return false
 	var hour := clock.hour()
 	return hour >= 8 + settlement.workday_hours or hour < 6
 
 
 func _can_skip_to_workday_start() -> bool:
-	if settlement.night_shifts_allowed:
+	if _has_active_night_work_order():
 		return false
 	var hour := clock.hour()
 	return hour >= 6 and hour < 8
@@ -3125,14 +3202,17 @@ func _apply_skip_night_incident() -> void:
 
 
 func _set_workday_hours(hours: int) -> void:
+	if hours not in [6, 8, 10, 12, 14]:
+		return
 	settlement.workday_hours = hours
 	_update_skip_night_button()
 	_update_interface("Workday set to %d hours." % hours)
 
-func _set_night_shifts(enabled: bool) -> void:
-	settlement.night_shifts_allowed = enabled
-	_update_skip_night_button()
-	_update_interface("Night shifts %s." % ("allowed" if enabled else "disabled"))
+func _has_active_night_work_order() -> bool:
+	for citizen in citizens:
+		if is_instance_valid(citizen) and citizen.has_active_overtime(day_cycle.current_day):
+			return true
+	return false
 
 func _set_time_multiplier(multiplier: float) -> void:
 	time_multiplier = multiplier
@@ -3166,6 +3246,13 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	daily_order_submenu_btn.size = Vector2(272, 30)
 	daily_order_submenu_btn.pressed.connect(_open_daily_order_submenu)
 	build_menu.add_child(daily_order_submenu_btn)
+	personal_night_work_button = Button.new()
+	personal_night_work_button.text = "Work through the night"
+	personal_night_work_button.position = Vector2(16, 344)
+	personal_night_work_button.size = Vector2(272, 30)
+	personal_night_work_button.tooltip_text = "Available only for a resident with a daily order."
+	personal_night_work_button.pressed.connect(_order_selected_citizen_night_work)
+	build_menu.add_child(personal_night_work_button)
 
 	job_submenu_btn = Button.new()
 	job_submenu_btn.text = "Permanent Jobs..."
@@ -4256,6 +4343,11 @@ func _refresh_build_menu() -> void:
 		job_submenu_btn.visible = citizen_actions_visible
 		job_submenu_btn.disabled = false
 		job_submenu_btn.tooltip_text = ""
+	if personal_night_work_button != null:
+		var can_personal_night_work := citizen_actions_visible and selected_builder != null and not selected_builder.is_employed() and selected_builder.has_daily_order() and not selected_builder.has_active_overtime(day_cycle.current_day)
+		personal_night_work_button.visible = citizen_actions_visible
+		personal_night_work_button.disabled = not can_personal_night_work
+		personal_night_work_button.tooltip_text = "Already ordered for this work period." if selected_builder != null and selected_builder.has_active_overtime(day_cycle.current_day) else "Assign a daily order first. Permanent workers receive this command from their workplace." if not can_personal_night_work else "Continue the daily order through the night and next day."
 	if job_back_btn != null:
 		job_back_btn.visible = selected_exists and assignment_submenu_open
 	
@@ -7320,17 +7412,12 @@ func _create_campfire_menu(ui: CanvasLayer) -> void:
 	var labour_controls := HBoxContainer.new()
 	labour_controls.position = Vector2(16, 393)
 	campfire_menu.add_child(labour_controls)
-	for hours in [6, 8, 10, 12]:
+	for hours in [6, 8, 10, 12, 14]:
 		var day_button := Button.new()
 		day_button.text = "%dh" % hours
 		day_button.tooltip_text = "Set workday duration"
 		day_button.pressed.connect(_set_workday_hours.bind(hours))
 		labour_controls.add_child(day_button)
-	var night_button := CheckButton.new()
-	night_button.text = "Night shifts"
-	night_button.tooltip_text = "Night shifts increase output and reduce wellbeing"
-	night_button.toggled.connect(_set_night_shifts)
-	labour_controls.add_child(night_button)
 	
 	campfire_occupancy_button = Button.new()
 	campfire_occupancy_button.position = Vector2(16, 438)
@@ -7426,7 +7513,7 @@ func _select_campfire_story(story_id: String) -> void:
 
 
 func _create_campfire_orders_menu(ui: CanvasLayer) -> void:
-	campfire_orders_menu = _create_context_menu_panel(ui, Control.PRESET_CENTER, Vector4(-210.0, -125.0, 210.0, 125.0))
+	campfire_orders_menu = _create_context_menu_panel(ui, Control.PRESET_CENTER, Vector4(-210.0, -155.0, 210.0, 155.0))
 
 	var title := Label.new()
 	title.text = "Campfire Orders"
@@ -7448,30 +7535,37 @@ func _create_campfire_orders_menu(ui: CanvasLayer) -> void:
 	campfire_balanced_warehouse_toggle.tooltip_text = "Spread each good evenly between warehouses instead of filling the nearest one."
 	campfire_balanced_warehouse_toggle.toggled.connect(_set_balanced_warehouse_mode)
 	campfire_orders_menu.add_child(campfire_balanced_warehouse_toggle)
+	campfire_night_work_button = Button.new()
+	campfire_night_work_button.text = "Work through the night"
+	campfire_night_work_button.position = Vector2(18, 134)
+	campfire_night_work_button.size = Vector2(384, 32)
+	campfire_night_work_button.tooltip_text = "Once per day. Affected workers continue through the night and next workday."
+	campfire_night_work_button.pressed.connect(_order_settlement_night_work)
+	campfire_orders_menu.add_child(campfire_night_work_button)
 	var description := Label.new()
-	description.text = "This order only strengthens new trail marks. Roads are not used for route selection yet."
-	description.position = Vector2(18, 136)
+	description.text = "Night work raises fatigue and lowers satisfaction. Dangerously tired residents may collapse while returning home."
+	description.position = Vector2(18, 174)
 	description.size = Vector2(384, 44)
 	description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	description.add_theme_font_size_override("font_size", 13)
 	campfire_orders_menu.add_child(description)
 	campfire_cheer_button = Button.new()
 	campfire_cheer_button.text = "Cheer up"
-	campfire_cheer_button.position = Vector2(18, 188)
+	campfire_cheer_button.position = Vector2(18, 222)
 	campfire_cheer_button.size = Vector2(384, 32)
 	campfire_cheer_button.tooltip_text = "Once per day. Raises wellbeing by 5%%."
 	campfire_cheer_button.pressed.connect(_cheer_up_settlement)
 	campfire_orders_menu.add_child(campfire_cheer_button)
 	var close_button := Button.new()
 	close_button.text = "Close"
-	close_button.position = Vector2(286, 196)
+	close_button.position = Vector2(286, 230)
 	close_button.size = Vector2(116, 32)
 	close_button.pressed.connect(_close_campfire_orders_menu)
 	campfire_orders_menu.add_child(close_button)
 
 
 func _show_campfire_orders_menu() -> void:
-	if campfire_orders_menu == null or campfire_orders_toggle == null or campfire_cheer_button == null or campfire_balanced_warehouse_toggle == null:
+	if campfire_orders_menu == null or campfire_orders_toggle == null or campfire_cheer_button == null or campfire_balanced_warehouse_toggle == null or campfire_night_work_button == null:
 		return
 	campfire_menu.visible = false
 	campfire_orders_toggle.set_pressed_no_signal(settlement.road_walking_order_enabled)
@@ -7484,6 +7578,9 @@ func _show_campfire_orders_menu() -> void:
 	var can_cheer := hour >= 6 and not settlement.cheer_up_used_today
 	campfire_cheer_button.disabled = not can_cheer
 	campfire_cheer_button.tooltip_text = "Available once each morning after 06:00." if not can_cheer else "Raise wellbeing by 5%%."
+	var can_order_night_work := settlement.night_work_order_day != day_cycle.current_day and _has_night_work_candidates()
+	campfire_night_work_button.disabled = not can_order_night_work
+	campfire_night_work_button.tooltip_text = "Already ordered today." if settlement.night_work_order_day == day_cycle.current_day else "No active workers can receive this order." if not _has_night_work_candidates() else "Once per day. Raises fatigue and lowers satisfaction."
 	campfire_orders_menu.visible = true
 
 
@@ -7512,6 +7609,49 @@ func _cheer_up_settlement() -> void:
 		campfire_cheer_button.disabled = true
 		campfire_cheer_button.tooltip_text = "Already used today. Available again tomorrow at 06:00."
 		_update_interface("You cheered up the settlement. Wellbeing rose by 5%%.")
+
+
+func _has_night_work_candidates() -> bool:
+	for citizen in citizens:
+		if is_instance_valid(citizen) and not citizen.is_player_controlled and not citizen.is_recovering(day_cycle.current_day) and (citizen.has_active_daily_order() or citizen.is_employed()):
+			return true
+	return false
+
+
+func _order_settlement_night_work() -> void:
+	if settlement.night_work_order_day == day_cycle.current_day:
+		return
+	var affected := 0
+	for citizen in citizens:
+		if not is_instance_valid(citizen) or citizen.is_player_controlled or citizen.is_recovering(day_cycle.current_day):
+			continue
+		if citizen.has_active_daily_order() or citizen.is_employed():
+			citizen.activate_overtime(day_cycle.current_day + 1, "settlement")
+			affected += 1
+	if affected <= 0:
+		return
+	settlement.night_work_order_day = day_cycle.current_day
+	_update_interface("Night-work order issued to %d residents. They will work through the night and next day." % affected)
+	_update_skip_night_button()
+	if citizen_ai != null:
+		citizen_ai.request_decision_refresh()
+	_show_campfire_orders_menu()
+
+
+func _order_selected_citizen_night_work() -> void:
+	if not is_instance_valid(selected_builder) or selected_builder.is_employed() or not selected_builder.has_daily_order() or selected_builder.has_active_overtime(day_cycle.current_day):
+		return
+	# Evening daily orders normally wait for tomorrow. A personal night-work
+	# order explicitly starts that new task now and keeps it through tomorrow.
+	if selected_builder.daily_order_workday_id > day_cycle.current_day:
+		selected_builder.daily_order_workday_id = day_cycle.current_day
+		selected_builder.daily_order_expires_at = daily_order_expiration_for_workday(day_cycle.current_day + 1)
+	selected_builder.activate_overtime(day_cycle.current_day + 1, "personal")
+	_update_interface("%s received a personal night-work order." % selected_builder.role_label())
+	_update_skip_night_button()
+	if citizen_ai != null:
+		citizen_ai.request_decision_refresh()
+	_refresh_build_menu()
 
 
 func _create_workforce_menu(ui: CanvasLayer) -> void:
@@ -8402,9 +8542,10 @@ func _show_building_menu() -> void:
 		building_relight_button.visible = building_type in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"] and not _is_fire_lit(selected_building)
 		
 		var officer := _workplace_worker(selected_building)
-		building_overtime_button.visible = is_workplace and not _is_work_time() and officer != null
-		building_overtime_button.disabled = not can_command_labor
-		building_overtime_button.tooltip_text = labor_blocked_tooltip if not can_command_labor else ""
+		building_overtime_button.visible = is_workplace and officer != null
+		var night_order_used := int(selected_building.get_meta("night_work_order_day", -1)) == day_cycle.current_day
+		building_overtime_button.disabled = not can_command_labor or night_order_used
+		building_overtime_button.tooltip_text = labor_blocked_tooltip if not can_command_labor else "Already ordered today." if night_order_used else "Work through the night and the next workday."
 		
 		if is_workplace:
 			var accepting := bool(selected_building.get_meta("accepting_workers", true))
@@ -9000,6 +9141,23 @@ func _create_forage_sources_near_tree(tree_cell: Vector2i) -> void:
 		_add_selector_to_node(node, "forage_selector", Vector3(0.5, 0.5, 0.5), Vector3.UP * 0.25)
 		add_child(node)
 		forage_sources[cell] = {"node": node}
+
+func _spawn_trash_piles() -> void:
+	# Scattered junk on the meadow: mostly grass and branches, but one pile
+	# has a set of construction gloves someone dropped.
+	var trash_cells := [Vector2i(-10, -3), Vector2i(7, 12), Vector2i(-14, 6), Vector2i(5, -12)]
+	var trash_contents := [
+		{"grass": random.randi_range(8, 14), "branches": random.randi_range(4, 8)},
+		{"grass": random.randi_range(6, 12), "branches": random.randi_range(3, 7)},
+		{"grass": random.randi_range(10, 16), "branches": random.randi_range(5, 9)},
+		{"grass": random.randi_range(4, 8), "branches": random.randi_range(2, 5), "gloves": 1},
+	]
+	for i in range(trash_cells.size()):
+		var cell: Vector2i = trash_cells[i]
+		if not _is_board_cell(cell) or terrain_blocked_cells.has(cell):
+			continue
+		_create_resource_pile(_cell_center(cell), trash_contents[i])
+
 
 func _spawn_initial_rabbits() -> void:
 	for tree_cell in tree_cells.keys():
@@ -9709,15 +9867,20 @@ func _check_unstaffed_employment_center() -> void:
 func _call_worker_overtime() -> void:
 	if not is_instance_valid(selected_building):
 		return
+	if int(selected_building.get_meta("night_work_order_day", -1)) == day_cycle.current_day:
+		return
 	var workers_found := false
 	for citizen in citizens:
 		if is_instance_valid(citizen) and (citizen.employment_workplace == selected_building or citizen.pending_employment_workplace == selected_building):
-			citizen.overtime_mode = true
-			citizen.satisfaction = maxf(0.0, citizen.satisfaction - 25.0)
+			citizen.activate_overtime(day_cycle.current_day + 1, "workplace")
 			workers_found = true
-			_add_message("Работник %s вызван сверхурочно. Уровень удовольствия снизился." % [citizen.role_label()])
 	if workers_found:
+		selected_building.set_meta("night_work_order_day", day_cycle.current_day)
+		_add_message("Night-work order issued for %s." % str(selected_building.get_meta("building_type", "workplace")).replace("_", " "))
 		_update_workers()
+		_update_skip_night_button()
+		if citizen_ai != null:
+			citizen_ai.request_decision_refresh()
 		_reopen_workplace_menu()
 
 

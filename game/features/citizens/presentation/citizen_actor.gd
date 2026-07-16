@@ -216,6 +216,11 @@ var pending_employment_workplace: Node3D
 var employment_center_position := Vector3.INF
 var registration_queue_order := -1
 var overtime_mode := false
+var overtime_until_workday_id := 0
+var overtime_source := ""
+var fatigue := 0.0
+var continuous_work_hours := 0.0
+var recovery_until_workday_id := 0
 var satisfaction := 72.0
 var satisfaction_tick := 0.0
 var body_material: StandardMaterial3D
@@ -1369,6 +1374,32 @@ func has_active_daily_order() -> bool:
 		return true
 	return bool(simulation.is_daily_order_active(self))
 
+
+func activate_overtime(until_workday_id: int, source: String) -> void:
+	overtime_until_workday_id = maxi(overtime_until_workday_id, until_workday_id)
+	overtime_source = source
+	overtime_mode = true
+
+
+func has_active_overtime(current_workday_id: int) -> bool:
+	return overtime_mode and overtime_until_workday_id >= current_workday_id
+
+
+func clear_expired_overtime(current_workday_id: int) -> void:
+	if overtime_until_workday_id >= current_workday_id:
+		return
+	overtime_mode = false
+	overtime_until_workday_id = 0
+	overtime_source = ""
+
+
+func is_recovering(current_workday_id: int) -> bool:
+	return recovery_until_workday_id >= current_workday_id
+
+
+func is_dangerously_tired() -> bool:
+	return continuous_work_hours > 48.0 or fatigue >= 80.0
+
 func clear_daily_order(workday_id := 0) -> void:
 	if not has_daily_order():
 		return
@@ -2230,6 +2261,7 @@ func get_efficiency(role: String) -> float:
 	var satisfaction_factor := lerpf(0.45, 1.0, satisfaction / 100.0)
 	var meal_bonus := 0.15 if buffs.has("canteen_meal") else 0.0
 	var efficiency := skill_efficiency_factor * satisfaction_factor * (1.0 + meal_bonus)
+	efficiency *= lerpf(1.0, 0.55, fatigue / 100.0)
 	if is_jack_of_all_trades and role in ["construction", "gather_branches", "gather_grass", "gather_food", "forestry", "farming", "excavation"]:
 		efficiency *= 1.30
 	if simulation != null:
@@ -2277,6 +2309,11 @@ func begin_waiting() -> void:
 func _update_idle_indicator() -> void:
 	if is_player_controlled:
 		idle_indicator.visible = false
+		return
+	if is_dangerously_tired():
+		idle_indicator.visible = true
+		idle_indicator.text = "Dangerously tired"
+		idle_indicator.modulate = Color("e57373")
 		return
 	var visible_state := _displayed_state
 	if visible_state == State.TO_TOILET:

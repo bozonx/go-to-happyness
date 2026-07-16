@@ -64,8 +64,6 @@ func set_to_workday_start() -> void:
 	_active_meal_hour = -1
 
 
-func is_work_time(workday_hours: int, night_shifts_allowed: bool) -> bool:
-	if night_shifts_allowed:
-		return true
+func is_work_time(workday_hours: int) -> bool:
 	var hour := clock.hour()
 	return hour >= 8 and hour < 8 + workday_hours

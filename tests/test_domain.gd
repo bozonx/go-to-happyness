@@ -610,10 +610,10 @@ func _test_progression_and_volunteers() -> void:
 
 
 func _test_work_schedule_wellbeing() -> void:
-	var short_day: int = SettlementRulesScript.daily_wellbeing_change(true, 1.0, 1.0, 6, false)
-	var long_night_day: int = SettlementRulesScript.daily_wellbeing_change(true, 1.0, 1.0, 10, true)
-	assert(short_day > long_night_day)
-	assert(SettlementRulesScript.production_multiplier(10, true) > SettlementRulesScript.production_multiplier(6, false))
+	var short_day: int = SettlementRulesScript.daily_wellbeing_change(true, 1.0, 1.0, 6)
+	var long_day: int = SettlementRulesScript.daily_wellbeing_change(true, 1.0, 1.0, 10)
+	assert(short_day > long_day)
+	assert(SettlementRulesScript.production_multiplier(10) > SettlementRulesScript.production_multiplier(6))
 
 
 func _test_tent_survival_rules() -> void:
@@ -654,7 +654,7 @@ func _test_day_cycle_schedule() -> void:
 	assert(midnight_events.size() == 1 and midnight_events[0].kind == SimulationDayEvent.Kind.DAY_STARTED)
 	assert(cycle.current_day == 2)
 	cycle.clock.set_time(0)
-	assert(not cycle.is_work_time(8, false) and cycle.is_work_time(8, true))
+	assert(not cycle.is_work_time(8))
 
 
 func _test_sawmill_rules() -> void:

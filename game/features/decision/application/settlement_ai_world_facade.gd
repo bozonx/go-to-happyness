@@ -16,7 +16,7 @@ func capture(sequence: int) -> WorldSnapshot:
 		return WorldSnapshot.new(sequence)
 	var canteen_service: CanteenService = simulation.canteen_service
 	var courier_tasks: Array[Dictionary] = []
-	if simulation.courier_dispatcher != null and simulation._is_work_time():
+	if simulation.courier_dispatcher != null:
 		for task: CourierTask in simulation.courier_dispatcher.available_tasks():
 			courier_tasks.append({&"id": task.id, &"priority": task.priority, &"pickup": task.pickup})
 	var workforce_world := _world_data()
@@ -28,6 +28,7 @@ func capture(sequence: int) -> WorldSnapshot:
 		if not is_instance_valid(actor) or actor.ai_id == 0 or simulation.outside_workers.has(actor.get_instance_id()):
 			continue
 		var citizen_id := actor.ai_id
+		var actor_work_time: bool = simulation._is_citizen_work_time(actor)
 		var can_start_personal_need := not actor.is_player_controlled and actor.state in [Citizen.State.IDLE, Citizen.State.WAITING]
 		var worker_data := _worker_data(actor)
 		var daily_order_active := actor.has_active_daily_order() and not actor.is_player_controlled
@@ -40,7 +41,7 @@ func capture(sequence: int) -> WorldSnapshot:
 		var forestry_worker := actor.permanent_role == "forestry" and actor.is_employed() and not actor.is_player_controlled
 		var sawmill_position := Vector3.INF
 		var warehouse_position := Vector3.INF
-		if forestry_worker and simulation._is_work_time() and not simulation.sawmill_positions.is_empty() and not simulation.warehouse_positions.is_empty() and simulation._has_storage_room_for_role("forestry"):
+		if forestry_worker and actor_work_time and not simulation.sawmill_positions.is_empty() and not simulation.warehouse_positions.is_empty() and simulation._has_storage_room_for_role("forestry"):
 			sawmill_position = actor.employment_workplace.get_meta("service_position", actor.employment_workplace.global_position) if is_instance_valid(actor.employment_workplace) else simulation.sawmill_positions[0]
 			warehouse_position = simulation._get_nearest_delivery_position(actor.global_position)
 		var forestry_in_progress := actor.state in [Citizen.State.TO_TREE, Citizen.State.CHOPPING, Citizen.State.TO_SAWMILL]
@@ -54,7 +55,7 @@ func capture(sequence: int) -> WorldSnapshot:
 		elif farming_worker and not simulation.farm_positions.is_empty() and not simulation.warehouse_positions.is_empty():
 			farming_position = actor.employment_workplace.get_meta("service_position", actor.employment_workplace.global_position) if is_instance_valid(actor.employment_workplace) else simulation.farm_positions[0]
 			farming_warehouse_position = simulation._get_nearest_delivery_position(actor.global_position)
-		var farming_can_start: bool = farming_worker and simulation._is_work_time() and simulation._has_storage_room_for_role("farming") and farming_position != Vector3.INF and farming_warehouse_position != Vector3.INF
+		var farming_can_start: bool = farming_worker and actor_work_time and simulation._has_storage_room_for_role("farming") and farming_position != Vector3.INF and farming_warehouse_position != Vector3.INF
 		var construction_worker := actor.permanent_role == "construction" and actor.is_employed() and not actor.is_player_controlled
 		var construction_in_progress := construction_worker and actor.active_role in ["construction", "demolition"] and actor.state == Citizen.State.CONSTRUCTING and is_instance_valid(actor.construction_site)
 		var construction_can_start := false
@@ -65,7 +66,7 @@ func capture(sequence: int) -> WorldSnapshot:
 			construction_mode = StringName(actor.active_role)
 			construction_target_key = _target_key(&"construction", actor.construction_site.global_position)
 			construction_position = actor._reachable_construction_approach(actor.construction_site)
-		elif construction_worker and simulation._is_work_time():
+		elif construction_worker and actor_work_time:
 			if not simulation.demolition_sites.is_empty():
 				var demolition_site: DemolitionSite = simulation.demolition_sites[(citizen_id - 1) % simulation.demolition_sites.size()]
 				if is_instance_valid(demolition_site.building):
@@ -105,7 +106,7 @@ func capture(sequence: int) -> WorldSnapshot:
 		var gathering_worker: bool = actor.permanent_role in ["gather_branches", "gather_food"] and actor.is_employed() and not actor.is_player_controlled
 		var gathering_in_progress: bool = gathering_worker and actor.active_role.begins_with("gather_") and actor.state in [Citizen.State.TO_GATHER, Citizen.State.GATHERING, Citizen.State.TO_WAREHOUSE]
 		var gathering_candidates: Array[Dictionary] = []
-		if gathering_worker and simulation._is_work_time() and simulation._has_storage_room_for_role(actor.permanent_role):
+		if gathering_worker and actor_work_time and simulation._has_storage_room_for_role(actor.permanent_role):
 			if actor.permanent_role == "gather_food":
 				gathering_candidates = food_gathering_targets
 			elif actor.permanent_role == "gather_branches":
@@ -118,13 +119,13 @@ func capture(sequence: int) -> WorldSnapshot:
 		var is_daily_courier := daily_order_active and daily_order_role == "courier"
 		var daily_cleaning_in_progress := (daily_order_active and daily_order_role == "cleaning" and actor.active_role == "cleaning" and actor.state in [Citizen.State.TO_CLEANING_PILE, Citizen.State.CLEANING_PILE, Citizen.State.TO_WAREHOUSE]) or (is_daily_courier and actor.active_role == "cleaning" and actor.state in [Citizen.State.TO_CLEANING_PILE, Citizen.State.CLEANING_PILE, Citizen.State.TO_WAREHOUSE])
 		var daily_cleaning_candidates: Array[Dictionary] = []
-		if (daily_order_role == "cleaning" or is_daily_courier) and daily_order_active and simulation._is_work_time():
+		if (daily_order_role == "cleaning" or is_daily_courier) and daily_order_active and actor_work_time:
 			daily_cleaning_candidates = _cleaning_targets()
-		var daily_cleaning_can_start: bool = (daily_order_active and daily_order_role == "cleaning" and simulation._is_work_time() and not daily_cleaning_candidates.is_empty()) or (is_daily_courier and simulation._is_work_time() and not daily_cleaning_candidates.is_empty())
+		var daily_cleaning_can_start: bool = (daily_order_active and daily_order_role == "cleaning" and actor_work_time and not daily_cleaning_candidates.is_empty()) or (is_daily_courier and actor_work_time and not daily_cleaning_candidates.is_empty())
 		var excavation_worker := actor.permanent_role == "excavation" and actor.is_employed() and not actor.is_player_controlled
 		var excavation_in_progress := excavation_worker and actor.active_role == "excavation" and actor.state in [Citizen.State.EXCAVATING, Citizen.State.WAITING_COURIER]
 		var excavation_candidates: Array[Dictionary] = []
-		if excavation_worker and simulation._is_work_time():
+		if excavation_worker and actor_work_time:
 			for dig_site_value in simulation.dig_sites:
 				var dig_site := dig_site_value as Dictionary
 				var dig_node := dig_site.get(&"node") as Node3D
@@ -156,7 +157,7 @@ func capture(sequence: int) -> WorldSnapshot:
 				"seller": service_position = actor.market_position
 				"official": service_position = actor.official_position
 				"craftsman": service_position = actor.craft_position
-		elif not service_role.is_empty() and simulation._is_work_time():
+		elif not service_role.is_empty() and actor_work_time:
 			if service_role == "cook":
 				service_position = simulation.canteen_position if is_instance_valid(simulation.canteen) else Vector3.INF
 			elif service_role == "official":
@@ -174,10 +175,10 @@ func capture(sequence: int) -> WorldSnapshot:
 			elif actor.permanent_role == "construction" and actor.specialization == "builder":
 				factory_role = &"construction"
 				factory_node = actor.factory
-		elif factory_worker and simulation._is_work_time() and is_instance_valid(actor.employment_workplace):
+		elif factory_worker and actor_work_time and is_instance_valid(actor.employment_workplace):
 			factory_role = &"factory_work" if actor.permanent_role == "factory_worker" else &"engineering"
 			factory_node = actor.employment_workplace as Node3D
-		elif actor.permanent_role == "construction" and actor.specialization == "builder" and simulation._is_work_time() and simulation.construction_sites.is_empty() and simulation.demolition_sites.is_empty():
+		elif actor.permanent_role == "construction" and actor.specialization == "builder" and actor_work_time and simulation.construction_sites.is_empty() and simulation.demolition_sites.is_empty():
 			for factory_value in simulation.factories:
 				var candidate_factory := factory_value as Node3D
 				if is_instance_valid(candidate_factory) and candidate_factory.get_meta("building_type", "") == "materials_factory":
@@ -202,7 +203,7 @@ func capture(sequence: int) -> WorldSnapshot:
 				courier_active_pickup = active_courier_task.pickup
 				courier_active_priority = active_courier_task.priority
 		var courier_in_progress := courier_active_task_id != &""
-		var courier_can_start: bool = courier_worker and actor.state == Citizen.State.IDLE and simulation._is_work_time()
+		var courier_can_start: bool = courier_worker and actor.state == Citizen.State.IDLE and actor_work_time
 		citizens_by_id[citizen_id] = CitizenSnapshot.new(
 			citizen_id,
 			actor.global_position,
@@ -210,7 +211,10 @@ func capture(sequence: int) -> WorldSnapshot:
 			not actor.is_player_controlled,
 			AIFactSet.new({
 				&"hero": actor.is_hero,
-				&"needs.should_sleep": not simulation._is_work_time() and not actor.overtime_mode,
+				&"needs.should_sleep": not actor_work_time,
+				&"needs.fatigue_level": actor.fatigue,
+				&"needs.dangerously_tired": actor.is_dangerously_tired(),
+				&"needs.recovering": actor.is_recovering(simulation.day_cycle.current_day),
 				&"needs.has_home": is_instance_valid(actor.home),
 				&"needs.home_position": actor.home.global_position if is_instance_valid(actor.home) else Vector3.INF,
 				&"needs.can_start_sleep": can_start_personal_need,
@@ -242,7 +246,7 @@ func capture(sequence: int) -> WorldSnapshot:
 				&"work.construction.position": construction_position,
 				&"work.gathering.worker": gathering_worker,
 				&"work.gathering.in_progress": gathering_in_progress,
-				&"work.gathering.can_start": gathering_worker and simulation._is_work_time() and simulation._has_storage_room_for_role(actor.permanent_role),
+				&"work.gathering.can_start": gathering_worker and actor_work_time and simulation._has_storage_room_for_role(actor.permanent_role),
 				&"work.gathering.role": StringName(actor.permanent_role) if gathering_worker else &"",
 				&"work.gathering.candidates": gathering_candidates,
 				&"work.gathering.warehouse_position": _gathering_warehouse_position(actor, gathering_candidates, actor.permanent_role) if gathering_worker else Vector3.INF,
@@ -316,8 +320,6 @@ func _target_key(kind: StringName, position: Vector3) -> StringName:
 
 func _forestry_targets() -> Array[Dictionary]:
 	var targets: Array[Dictionary] = []
-	if not simulation._is_work_time():
-		return targets
 	for tree_position: Vector3 in simulation.tree_positions:
 		var cell: Vector2i = simulation._cell_from_position(tree_position)
 		var tree: Node3D = simulation.tree_nodes.get(cell) as Node3D
@@ -331,8 +333,6 @@ func _forestry_targets() -> Array[Dictionary]:
 
 func _gathering_targets() -> Array[Dictionary]:
 	var targets: Array[Dictionary] = []
-	if not simulation._is_work_time():
-		return targets
 	if simulation.settlement.amount("grass") < simulation.settlement.amount("branches"):
 		for grass_cell_value in simulation.grass_sources.keys():
 			var grass_cell := grass_cell_value as Vector2i
@@ -371,7 +371,7 @@ func _resource_access_position(resource_position: Vector3, from: Vector3 = Vecto
 
 func _cleaning_targets() -> Array[Dictionary]:
 	var targets: Array[Dictionary] = []
-	if not simulation._is_work_time() or simulation.warehouse_positions.is_empty():
+	if simulation.warehouse_positions.is_empty():
 		return targets
 	for pile: Dictionary in simulation.resource_piles:
 		var pile_node := pile.get(&"node") as Node3D
@@ -416,7 +416,7 @@ func _workplace_target_key(workplace: Node3D) -> StringName:
 
 func _food_gathering_targets() -> Array[Dictionary]:
 	var targets: Array[Dictionary] = []
-	if not simulation._is_work_time() or simulation.forager_positions.is_empty() or simulation.warehouse_positions.is_empty():
+	if simulation.forager_positions.is_empty() or simulation.warehouse_positions.is_empty():
 		return targets
 	for cell_value in simulation.forage_sources:
 		var cell := cell_value as Vector2i
