@@ -44,6 +44,7 @@ const ROUTE_MAX_RETRY_INTERVAL := 16.0
 const ROUTE_UNREACHABLE_FAILURE_TIME := 8.0
 const ROUTE_RECOVERY_FAILURE_ATTEMPTS := 4
 const STALE_NAVIGATION_REPLAN_JITTER := 0.35
+const PHYSICAL_ARRIVAL_RADIUS := 0.34
 const IDLE_WANDER_RADIUS := 3.0
 const IDLE_WANDER_MIN_PAUSE := 2.5
 const IDLE_WANDER_MAX_PAUSE := 6.0
@@ -284,6 +285,7 @@ var has_toilet_resume_state := false
 var toilet_resume_idle_wander_anchor := Vector3.INF
 var toilet_resume_idle_wander_target := Vector3.INF
 var toilet_resume_idle_wander_pause := 0.0
+var player_using_toilet := false
 var market_position := Vector3.ZERO
 var craft_position := Vector3.ZERO
 var craft_timer := 0.0
@@ -740,7 +742,7 @@ func _process_cleaning_pile(delta: float) -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if is_player_controlled:
+	if is_player_controlled and not player_using_toilet:
 		return
 	# Engine.time_scale accelerates simulation delta. Statuses are a diagnostic
 	# surface, so keep their minimum lifetime in real seconds at every speed.
@@ -1399,6 +1401,11 @@ func _move_to(destination: Vector3, delta: float, may_enter_destination_house :=
 		var queue_result: Dictionary = queue_position_resolver.call(self, destination)
 		movement_destination = queue_result.get("position", destination)
 		is_queue_head = bool(queue_result.get("is_head", true))
+		# An overflowed queue member has no slot yet. Keep its current position
+		# without creating a zero-length route every physics frame.
+		if not is_queue_head and movement_destination.distance_to(global_position) <= 0.05:
+			_stop_horizontal_movement()
+			return false
 	if _route_uses_stale_navigation():
 		_invalidate_route_for_navigation_change()
 	if navigation_failed:
@@ -1421,7 +1428,9 @@ func _move_to(destination: Vector3, delta: float, may_enter_destination_house :=
 		var waypoint_offset := waypoint - global_position
 		waypoint_offset.y = 0.0
 		var is_final_waypoint := movement_path.size() == 1
-		var waypoint_radius := arrival_radius if is_final_waypoint else 0.08
+		# Do not drive the capsule centre into an entrance marker or wall. The
+		# interaction systems already accept a small area around service points.
+		var waypoint_radius := maxf(arrival_radius, PHYSICAL_ARRIVAL_RADIUS) if is_final_waypoint else 0.08
 		if waypoint_offset.length() > waypoint_radius:
 			return _move_directly_to(waypoint, delta, record_trail, waypoint_radius)
 		movement_path.pop_front()
@@ -1468,12 +1477,13 @@ func _invalidate_route_for_navigation_change() -> void:
 	navigation_failed = false
 	stuck_time = 0.0
 	recovery_repath_done = false
+	velocity.x = 0.0
+	velocity.z = 0.0
 
 func _move_directly_to(destination: Vector3, delta: float, record_trail := true, arrival_distance := 0.08) -> bool:
 	var offset := destination - global_position
 	offset.y = 0.0
 	if offset.length() <= arrival_distance:
-		global_position = Vector3(destination.x, global_position.y, destination.z)
 		return true
 	var direction := offset.normalized()
 	var speed_modifier := float(movement_speed_modifier_query.call(global_position)) if movement_speed_modifier_query.is_valid() else 1.0
@@ -1635,6 +1645,7 @@ func set_player_controlled(controlled: bool) -> void:
 		toilet_resume_idle_wander_anchor = Vector3.INF
 		toilet_resume_idle_wander_target = Vector3.INF
 		toilet_resume_idle_wander_pause = 0.0
+		player_using_toilet = false
 		if queue_release_notifier.is_valid():
 			queue_release_notifier.call(self)
 		state = State.IDLE
@@ -2620,6 +2631,15 @@ func go_to_relief(destination: Vector3, relief_kind: StringName) -> void:
 	_begin_toilet_trip(State.TO_BUSH)
 
 
+func begin_player_toilet_use(toilet_node: Node3D) -> void:
+	if not is_instance_valid(toilet_node):
+		return
+	current_toilet_target = toilet_node
+	state = State.USING_TOILET
+	toilet_timer.start(TOILET_USE_DURATION)
+	player_using_toilet = true
+
+
 func _begin_toilet_trip(next_state: int) -> void:
 	if not has_toilet_resume_state:
 		toilet_resume_state = state
@@ -2641,6 +2661,7 @@ func _reset_toilet_navigation() -> void:
 
 
 func _resume_after_toilet() -> void:
+	player_using_toilet = false
 	current_toilet_target = null
 	toilet_relief_position = Vector3.INF
 	toilet_relief_type = ""

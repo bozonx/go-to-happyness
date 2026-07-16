@@ -39,6 +39,7 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 				&"workplace.position": position,
 			})
 		)
+		order.target_key = StringName("service:%s:%0.3f:%0.3f" % [str(role), position.x, position.z])
 		order.target_position = position
 		orders.append(order)
 	return orders

@@ -36,5 +36,6 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 
 func _order_for_task(citizen_id: int, task_id: StringName, priority: int, pickup: Vector3) -> CitizenOrder:
 	var order := CitizenOrder.new(citizen_id, &"courier_delivery", id, clampf(float(priority) / 100.0, 0.0, 1.0), AIFactSet.new({&"courier.task_id": task_id}))
+	order.target_key = task_id
 	order.target_position = pickup
 	return order

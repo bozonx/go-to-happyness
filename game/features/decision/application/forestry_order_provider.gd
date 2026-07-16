@@ -89,5 +89,6 @@ func _order_for(citizen_id: int, assignment: Dictionary) -> CitizenOrder:
 			&"work.warehouse_position": assignment.get(&"warehouse_position", Vector3.INF),
 		})
 	)
+	order.target_key = StringName("tree:%s" % str(assignment.get(&"id", &"")))
 	order.target_position = assignment.get(&"position", Vector3.INF)
 	return order

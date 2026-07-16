@@ -36,6 +36,7 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 				&"work.warehouse_position": warehouse_position,
 			})
 		)
+		order.target_key = StringName("farm:%0.3f:%0.3f" % [farm_position.x, farm_position.z])
 		order.target_position = farm_position
 		orders.append(order)
 	return orders

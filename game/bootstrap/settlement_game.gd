@@ -272,6 +272,7 @@ var interaction_resource := ""
 var interaction_start_cell := Vector2i(-9999, -9999)
 var interaction_repeat_all := false
 var player_work_target: Node3D
+var _player_toilet_notified := false
 var interaction_hint_panel: Panel
 var interaction_hint_label: Label
 var interaction_progress: ProgressBar
@@ -521,6 +522,7 @@ func _process(delta: float) -> void:
 	runtime_seconds += delta
 	if citizen_needs_service != null:
 		citizen_needs_service.tick(game_minutes)
+		_check_player_toilet_request()
 	if is_first_person:
 		_update_player_control(delta)
 		_update_interaction(delta)
@@ -2645,6 +2647,32 @@ func _ai_target_for_key(target_key: StringName) -> Node3D:
 func _on_relief_finished(citizen: Citizen) -> void:
 	if citizen_needs_service != null:
 		citizen_needs_service.fulfill_toilet(citizen.ai_id)
+
+
+func _player_use_toilet(toilet_node: Node3D) -> void:
+	if not is_first_person or player_citizen == null or not is_instance_valid(toilet_node):
+		return
+	if player_citizen.player_using_toilet:
+		return
+	player_citizen.begin_player_toilet_use(toilet_node)
+	interaction_action = "toilet"
+	interaction_time = 0.0
+	interaction_progress.visible = true
+	interaction_hint_label.text = "Пользуемся туалетом..."
+	_update_interface("Туалет используется.")
+
+
+func _check_player_toilet_request() -> void:
+	if not is_first_person or player_citizen == null:
+		_player_toilet_notified = false
+		return
+	var has_request := citizen_needs_service.has_toilet_request(player_citizen.ai_id)
+	if has_request and not _player_toilet_notified:
+		_player_toilet_notified = true
+		var name := player_citizen.role_label() if player_citizen != hero_citizen else "Герой"
+		_update_interface("%s хочет в туалет. Подойдите к туалету и нажмите F, либо передайте управление ИИ." % name)
+	elif not has_request:
+		_player_toilet_notified = false
 
 
 func _on_leisure_finished(citizen: Citizen) -> void:
@@ -5239,6 +5267,8 @@ func _enter_first_person(citizen: Citizen, message: String) -> void:
 	if is_first_person and player_citizen != null and player_citizen != citizen:
 		player_citizen.set_player_controlled(false)
 		player_citizen.set_head_visible(true)
+		if citizen_ai != null:
+			citizen_ai.request_decision_refresh()
 	player_citizen = citizen
 	player_citizen.set_head_visible(false)
 	# Watching a citizen must not cancel their current AI task. Manual control
@@ -5277,6 +5307,8 @@ func _leave_first_person_to_hero_overview() -> void:
 	if player_citizen != null:
 		player_citizen.set_player_controlled(false)
 		player_citizen.set_head_visible(true)
+		if citizen_ai != null:
+			citizen_ai.request_decision_refresh()
 	player_citizen = null
 	_close_pocket_take_menu()
 	interaction_action = ""
@@ -5398,6 +5430,9 @@ func _start_interaction(all: bool) -> void:
 		"forage", "rabbit":
 			_update_interface("Лесные дары и зайца может собирать только специалист. Постройте палатку охотников-собирателей.")
 			return
+		"toilet":
+			_player_use_toilet(target.node)
+			return
 		"citizen", "building":
 			return
 		"tree":
@@ -5495,6 +5530,16 @@ func _update_interaction(delta: float) -> void:
 			return
 		interaction_progress.value = 100.0
 		interaction_hint_label.text = "Работаем: %s..." % interaction_action
+		return
+	if interaction_action == "toilet":
+		if player_citizen == null or not player_citizen.player_using_toilet:
+			interaction_action = ""
+			interaction_progress.visible = false
+			_refresh_interaction_hint()
+			return
+		var toilet_pct := int((1.0 - player_citizen.toilet_timer.remaining / Citizen.TOILET_USE_DURATION) * 100.0)
+		interaction_progress.value = clampi(toilet_pct, 0, 100)
+		interaction_hint_label.text = "Пользуемся туалетом %d%%" % clampi(toilet_pct, 0, 100)
 		return
 	if _cell_from_position(player_citizen.global_position) != interaction_start_cell:
 		interaction_action = ""
@@ -6046,6 +6091,8 @@ func _first_person_target() -> Dictionary:
 					result = {"kind": "demolition", "node": area_parent, "position": area_parent.global_position}
 				elif building_type == "sawmill":
 					result = {"kind": "sawmill", "node": area_parent, "position": area_parent.global_position}
+				elif building_type.begins_with("toilet_"):
+					result = {"kind": "toilet", "node": area_parent, "position": area_parent.global_position}
 				elif _role_for_workplace(area_parent) != "":
 					result = {"kind": "workplace", "node": area_parent, "position": area_parent.global_position}
 				else:
@@ -6349,6 +6396,11 @@ func _first_person_action_hint() -> String:
 			return "Нужно ведро, чтобы черпать воду. Купите его на рынке."
 		"forage", "rabbit":
 			return "Лесные дары и зайца может собирать только специалист. Постройте палатку охотников-собирателей."
+		"toilet":
+			var needs_toilet := citizen_needs_service != null and citizen_needs_service.has_toilet_request(player_citizen.ai_id)
+			if needs_toilet:
+				return "F: воспользоваться туалетом (потребность)"
+			return "F: воспользоваться туалетом"
 		"citizen":
 			var citizen := target.node as Citizen
 			if not is_instance_valid(citizen):
@@ -6510,6 +6562,9 @@ func _placement_key(world_position: Vector3) -> Vector2i:
 func _create_construction_site(cell: Vector2i, building_type: String, position_on_board: Vector3, rotation_quarters := 0, blueprint: Dictionary = {}, occupied_footprint := Vector2i.ZERO) -> ConstructionSite:
 	var site := construction.start_site(cell, building_type, position_on_board, rotation_quarters, blueprint, occupied_footprint)
 	_register_service_pockets(site.node)
+	# The reservation refresh runs before the site exists. Publish its entrance
+	# pockets immediately so couriers and builders can route to the new site.
+	_refresh_navigation_grid()
 	_request_courier_dispatch()
 	return site
 
