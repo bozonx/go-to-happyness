@@ -106,6 +106,7 @@ func _init() -> void:
 	_test_sawmill_rules()
 	_test_workforce_policy()
 	_test_citizen_task_state()
+	_test_overtime_sources_are_independent()
 	_test_citizen_state_display_queue()
 	_test_citizen_work_position_lock()
 	_test_grid_routing()
@@ -749,6 +750,18 @@ func _test_citizen_task_state() -> void:
 	task.start(1.0)
 	assert(not task.advance(0.4))
 	assert(task.advance(0.6))
+
+
+func _test_overtime_sources_are_independent() -> void:
+	var citizen := Citizen.new()
+	assert(citizen.activate_overtime(2, "settlement", 1))
+	assert(citizen.activate_overtime(2, "workplace", 1))
+	assert(citizen.has_overtime_source("settlement", 1))
+	assert(citizen.has_overtime_source("workplace", 1))
+	citizen.deactivate_overtime("workplace")
+	assert(citizen.has_overtime_source("settlement", 1))
+	assert(not citizen.activate_overtime(2, "settlement", 1))
+	assert(citizen.activate_overtime(3, "settlement", 2))
 
 
 func _test_citizen_state_display_queue() -> void:

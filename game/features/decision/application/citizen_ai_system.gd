@@ -102,6 +102,10 @@ func goal_count() -> int:
 	return _goals.size()
 
 
+func has_current_order(citizen_id: int) -> bool:
+	return _order_cache.has(citizen_id)
+
+
 ## Manual role changes must be visible on the next physics tick instead of
 ## waiting for the periodic director pass.
 func request_decision_refresh() -> void:

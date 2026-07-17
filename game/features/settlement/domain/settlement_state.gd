@@ -71,6 +71,8 @@ var tarp: int:
 
 var wellbeing := 75
 var workday_hours := 8
+## Chosen during a shift and applied when the next workday opens.
+var pending_workday_hours := 0
 var night_work_order_day := -1
 var double_time_order_day := -1
 var road_walking_order_enabled := false
@@ -159,6 +161,7 @@ func apply_tent_start(reset_progress := true) -> void:
 	bricks = 0
 	wellbeing = TENT_STARTING_WELLBEING
 	workday_hours = 8
+	pending_workday_hours = 0
 	night_work_order_day = -1
 	double_time_order_day = -1
 	road_walking_order_enabled = false

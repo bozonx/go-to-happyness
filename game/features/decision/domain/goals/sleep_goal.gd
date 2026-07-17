@@ -24,7 +24,12 @@ func score(
 ) -> float:
 	if citizen == null:
 		return 0.0
-	if not bool(citizen.facts.value(&"needs.should_sleep", false)):
+	var should_sleep := bool(citizen.facts.value(&"needs.should_sleep", false))
+	# Overtime is an exception to the schedule, not a command to stand idle. If
+	# its source can no longer publish a job, the resident returns home.
+	if not should_sleep and bool(citizen.facts.value(&"work.overtime.active", false)) and _order == null:
+		should_sleep = true
+	if not should_sleep:
 		return 0.0
 	if not bool(citizen.facts.value(&"needs.has_home", false)):
 		return 0.0

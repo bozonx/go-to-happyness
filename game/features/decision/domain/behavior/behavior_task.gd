@@ -27,10 +27,13 @@ func invalid_reason(context: BehaviorContext) -> BehaviorStep.FailureReason:
 	if context == null or context.snapshot == null:
 		return BehaviorStep.FailureReason.CONTEXT_INVALID
 	if order != null:
-		if order.is_expired(context.snapshot.simulation_seconds):
-			return BehaviorStep.FailureReason.ORDER_EXPIRED
 		if context.order == null or context.order.id != order_id:
 			return BehaviorStep.FailureReason.ORDER_CHANGED
+		# A logical order may have its deadline extended (notably by overtime)
+		# without changing its stable id, target, or payload. The board owns that
+		# current deadline; the task only owns the immutable assignment.
+		if context.order.is_expired(context.snapshot.simulation_seconds):
+			return BehaviorStep.FailureReason.ORDER_EXPIRED
 	elif order_id != 0:
 		# Compatibility for manually assembled tasks that do not own an order.
 		if context.order == null or context.order.id != order_id:

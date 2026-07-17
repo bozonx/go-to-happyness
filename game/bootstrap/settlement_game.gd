@@ -564,6 +564,7 @@ func _process(delta: float) -> void:
 	_update_demolition(delta)
 	_update_water_collectors(delta)
 	_update_clock(delta)
+	_release_unassigned_overtime_workers()
 	_update_survival_busy_workers()
 	_return_outside_workers()
 	_update_wild_food(delta)
@@ -662,9 +663,29 @@ func daily_order_workday_for_new_order() -> int:
 
 
 func daily_order_expiration_for_workday(workday_id: int) -> float:
-	var end_minute := (workday_id - 1) * SimulationClock.MINUTES_PER_DAY + (8 + settlement.workday_hours) * 60
+	var end_minute := (workday_id - 1) * SimulationClock.MINUTES_PER_DAY + (8 + _workday_hours_for(workday_id)) * 60
 	var remaining_minutes := maxi(0, end_minute - _absolute_game_minutes())
 	return runtime_seconds + float(remaining_minutes) / GAME_MINUTES_PER_SECOND
+
+
+func _workday_hours_for(workday_id: int) -> int:
+	if settlement.pending_workday_hours > 0 and (workday_id > day_cycle.current_day or (workday_id == day_cycle.current_day and clock.hour() < 8)):
+		return settlement.pending_workday_hours
+	return settlement.workday_hours
+
+
+func _activate_citizen_overtime(citizen: Citizen, source: String) -> bool:
+	if not is_instance_valid(citizen):
+		return false
+	if not citizen.activate_overtime(day_cycle.current_day + 1, source, day_cycle.current_day):
+		return false
+	if citizen.has_daily_order():
+		# A daily order becomes a two-workday order only through this explicit
+		# command. Its board expiration must match the resident overtime window.
+		if citizen.daily_order_workday_id > day_cycle.current_day:
+			citizen.daily_order_workday_id = day_cycle.current_day
+		citizen.daily_order_expires_at = daily_order_expiration_for_workday(day_cycle.current_day + 1)
+	return true
 
 
 func is_daily_order_active(citizen: Citizen) -> bool:
@@ -1009,6 +1030,7 @@ func _handle_day_cycle_event(event: SimulationDayEvent) -> void:
 			_update_workers()
 			_update_interface("Nightfall: workers are returning to their assigned homes.")
 		SimulationDayEvent.Kind.WORKDAY_STARTED:
+			_apply_pending_workday_hours()
 			_clear_expired_overtime_orders()
 			_reset_building_night_work_toggles()
 			_resume_overtime_daily_orders()
@@ -1064,6 +1086,7 @@ func _clear_finished_daily_orders(workday_id: int) -> void:
 			citizen.clear_expired_overtime(workday_id + 1)
 	if citizen_ai != null:
 		citizen_ai.request_decision_refresh()
+	_sync_overtime_scope_indicators()
 
 
 func _clear_expired_overtime_orders() -> void:
@@ -1073,13 +1096,27 @@ func _clear_expired_overtime_orders() -> void:
 
 
 func _reset_building_night_work_toggles() -> void:
+	# Keep an active overnight scope visible through the following workday. The
+	# previous implementation cleared this at 08:00 while its workers still had
+	# overtime, turning the next click into an accidental extension.
+	_sync_overtime_scope_indicators()
+
+
+func _sync_overtime_scope_indicators() -> void:
+	settlement.night_work_order_day = day_cycle.current_day if _has_overtime_source("settlement") else -1
 	for record in building_registry.records():
 		var node := record.node as Node3D
-		if is_instance_valid(node) and node.has_meta("night_work_order_day"):
+		if is_instance_valid(node) and node.has_meta("night_work_order_day") and not _has_overtime_source("workplace", node):
 			node.set_meta("night_work_order_day", -1)
-	if is_instance_valid(selected_campfire) and selected_campfire.has_meta("night_work_order_day"):
-		selected_campfire.set_meta("night_work_order_day", -1)
-	settlement.night_work_order_day = -1
+
+
+func _has_overtime_source(source: String, workplace: Node3D = null) -> bool:
+	for citizen in citizens:
+		if not is_instance_valid(citizen) or not citizen.has_overtime_source(source, day_cycle.current_day):
+			continue
+		if workplace == null or citizen.employment_workplace == workplace:
+			return true
+	return false
 
 
 func _resume_overtime_daily_orders() -> void:
@@ -1088,6 +1125,7 @@ func _resume_overtime_daily_orders() -> void:
 			continue
 		if citizen.has_active_overtime(day_cycle.current_day) and citizen.daily_order_workday_id == day_cycle.current_day - 1:
 			citizen.daily_order_workday_id = day_cycle.current_day
+			citizen.daily_order_expires_at = maxf(citizen.daily_order_expires_at, daily_order_expiration_for_workday(day_cycle.current_day))
 
 
 func _apply_hourly_work_fatigue() -> void:
@@ -3609,15 +3647,41 @@ func _apply_skip_night_incident() -> void:
 func _set_workday_hours(hours: int) -> void:
 	if hours not in [6, 8, 10, 12, 14]:
 		return
-	settlement.workday_hours = hours
+	settlement.pending_workday_hours = hours
 	_update_skip_night_button()
-	_update_interface("Workday set to %d hours." % hours)
+	_update_interface("Workday set to %d hours for the next shift." % hours)
+
+
+func _apply_pending_workday_hours() -> void:
+	if settlement.pending_workday_hours <= 0:
+		return
+	settlement.workday_hours = settlement.pending_workday_hours
+	settlement.pending_workday_hours = 0
 
 func _has_active_night_work_order() -> bool:
 	for citizen in citizens:
 		if is_instance_valid(citizen) and citizen.has_active_overtime(day_cycle.current_day):
 			return true
 	return false
+
+
+func _release_unassigned_overtime_workers() -> void:
+	if citizen_ai == null:
+		return
+	var changed := false
+	for citizen in citizens:
+		if not is_instance_valid(citizen) or not citizen.has_active_overtime(day_cycle.current_day):
+			continue
+		# Critical needs may send an otherwise assigned worker home temporarily. Only
+		# release overtime after the director has no work proposal left for them.
+		if citizen_ai.has_current_order(citizen.ai_id):
+			continue
+		if citizen.state in [Citizen.State.TO_HOME, Citizen.State.RESTING]:
+			citizen.deactivate_overtime()
+			changed = true
+	if changed:
+		_sync_overtime_scope_indicators()
+		_update_skip_night_button()
 
 func _set_time_multiplier(multiplier: float) -> void:
 	time_multiplier = multiplier
@@ -4743,8 +4807,8 @@ func _refresh_build_menu() -> void:
 		job_submenu_btn.disabled = false
 		job_submenu_btn.tooltip_text = ""
 	if personal_night_work_button != null:
-		var can_personal_night_work := citizen_actions_visible and selected_builder != null and (selected_builder.has_daily_order() or selected_builder.is_employed())
-		var has_overtime := selected_builder != null and selected_builder.has_active_overtime(day_cycle.current_day)
+		var can_personal_night_work := citizen_actions_visible and selected_builder != null and selected_builder.has_daily_order() and not selected_builder.is_employed()
+		var has_overtime := selected_builder != null and selected_builder.has_overtime_source("personal", day_cycle.current_day)
 		personal_night_work_button.visible = citizen_actions_visible
 		personal_night_work_button.disabled = not can_personal_night_work
 		personal_night_work_button.set_pressed_no_signal(has_overtime)
@@ -7999,8 +8063,8 @@ func _show_campfire_orders_menu() -> void:
 	campfire_cheer_button.disabled = not can_cheer
 	campfire_cheer_button.tooltip_text = "Available once each morning after 06:00." if not can_cheer else "Raise wellbeing by 5%%."
 	var can_order_night_work := _has_night_work_candidates()
-	var settlement_night_active := settlement.night_work_order_day == day_cycle.current_day
-	campfire_night_work_button.disabled = not can_order_night_work
+	var settlement_night_active := _has_overtime_source("settlement")
+	campfire_night_work_button.disabled = not settlement_night_active and (not can_order_night_work or settlement.night_work_order_day == day_cycle.current_day)
 	campfire_night_work_button.set_pressed_no_signal(settlement_night_active)
 	campfire_night_work_button.tooltip_text = "No active workers can receive this order." if not can_order_night_work else "Affected workers continue through the night and next workday. Raises fatigue and lowers satisfaction."
 	var double_time_active := settlement.double_time_order_day == day_cycle.current_day
@@ -8053,8 +8117,8 @@ func _toggle_settlement_night_work(checked: bool) -> void:
 			if not is_instance_valid(citizen) or citizen.is_player_controlled or citizen.is_recovering(day_cycle.current_day):
 				continue
 			if citizen.has_active_daily_order() or citizen.is_employed():
-				citizen.activate_overtime(day_cycle.current_day + 1, "settlement")
-				affected += 1
+				if _activate_citizen_overtime(citizen, "settlement"):
+					affected += 1
 		if affected <= 0:
 			campfire_night_work_button.set_pressed_no_signal(false)
 			return
@@ -8064,12 +8128,12 @@ func _toggle_settlement_night_work(checked: bool) -> void:
 		if citizen_ai != null:
 			citizen_ai.request_decision_refresh()
 	else:
-		settlement.night_work_order_day = -1
 		for citizen in citizens:
 			if not is_instance_valid(citizen) or citizen.is_player_controlled:
 				continue
-			if citizen.overtime_source == "settlement":
-				citizen.deactivate_overtime()
+			if citizen.has_overtime_source("settlement", day_cycle.current_day):
+				citizen.deactivate_overtime("settlement")
+		_sync_overtime_scope_indicators()
 		_update_interface("Settlement night work cancelled. Workers will return home.")
 		_update_skip_night_button()
 		if citizen_ai != null:
@@ -8095,23 +8159,22 @@ func _toggle_selected_citizen_night_work(checked: bool) -> void:
 		personal_night_work_button.set_pressed_no_signal(false)
 		return
 	if checked:
-		if (not selected_builder.has_daily_order() and not selected_builder.is_employed()) or selected_builder.has_active_overtime(day_cycle.current_day):
+		if not selected_builder.has_daily_order() or selected_builder.is_employed() or selected_builder.has_overtime_source("personal", day_cycle.current_day):
 			personal_night_work_button.set_pressed_no_signal(false)
 			return
 		# Evening daily orders normally wait for tomorrow. A personal night-work
 		# order explicitly starts that new task now and keeps it through tomorrow.
 		# Permanent jobs already have an active assignment, including courier jobs
 		# that do not belong to a workplace, so they only need the overtime flag.
-		if selected_builder.has_daily_order() and selected_builder.daily_order_workday_id > day_cycle.current_day:
-			selected_builder.daily_order_workday_id = day_cycle.current_day
-			selected_builder.daily_order_expires_at = daily_order_expiration_for_workday(day_cycle.current_day + 1)
-		selected_builder.activate_overtime(day_cycle.current_day + 1, "personal")
+		if not _activate_citizen_overtime(selected_builder, "personal"):
+			personal_night_work_button.set_pressed_no_signal(false)
+			return
 		_update_interface("%s received a personal night-work order." % selected_builder.role_label())
 		_update_skip_night_button()
 		if citizen_ai != null:
 			citizen_ai.request_decision_refresh()
 	else:
-		selected_builder.deactivate_overtime()
+		selected_builder.deactivate_overtime("personal")
 		_update_interface("Night work cancelled for %s." % selected_builder.role_label())
 		_update_skip_night_button()
 		if citizen_ai != null:
@@ -9010,9 +9073,10 @@ func _show_building_menu() -> void:
 		
 		var officer := _workplace_worker(selected_building)
 		building_overtime_button.visible = is_workplace and officer != null
+		var workplace_night_active := _has_overtime_source("workplace", selected_building)
 		var night_order_used := int(selected_building.get_meta("night_work_order_day", -1)) == day_cycle.current_day
-		building_overtime_button.disabled = not can_command_labor
-		building_overtime_button.set_pressed_no_signal(night_order_used)
+		building_overtime_button.disabled = not can_command_labor or (not workplace_night_active and night_order_used)
+		building_overtime_button.set_pressed_no_signal(workplace_night_active)
 		building_overtime_button.tooltip_text = labor_blocked_tooltip if not can_command_labor else "Work through the night and the next workday."
 		
 		if is_workplace:
@@ -10395,9 +10459,9 @@ func _toggle_worker_overtime(checked: bool) -> void:
 			return
 		var workers_found := false
 		for citizen in citizens:
-			if is_instance_valid(citizen) and (citizen.employment_workplace == selected_building or citizen.pending_employment_workplace == selected_building):
-				citizen.activate_overtime(day_cycle.current_day + 1, "workplace")
-				workers_found = true
+			if is_instance_valid(citizen) and citizen.is_employed() and citizen.employment_workplace == selected_building:
+				if _activate_citizen_overtime(citizen, "workplace"):
+					workers_found = true
 		if workers_found:
 			selected_building.set_meta("night_work_order_day", day_cycle.current_day)
 			_add_message("Night-work order issued for %s." % str(selected_building.get_meta("building_type", "workplace")).replace("_", " "))
@@ -10408,10 +10472,10 @@ func _toggle_worker_overtime(checked: bool) -> void:
 		else:
 			building_overtime_button.set_pressed_no_signal(false)
 	else:
-		selected_building.set_meta("night_work_order_day", -1)
 		for citizen in citizens:
-			if is_instance_valid(citizen) and (citizen.employment_workplace == selected_building or citizen.pending_employment_workplace == selected_building):
-				citizen.deactivate_overtime()
+			if is_instance_valid(citizen) and citizen.employment_workplace == selected_building:
+				citizen.deactivate_overtime("workplace")
+		_sync_overtime_scope_indicators()
 		_add_message("Night work cancelled for %s." % str(selected_building.get_meta("building_type", "workplace")).replace("_", " "))
 		_update_workers()
 		_update_skip_night_button()

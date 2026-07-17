@@ -226,11 +226,13 @@ func _init() -> void:
 	_test_runner_interrupt_and_resume()
 	_test_resume_drops_stale_task()
 	_test_resume_drops_changed_order()
+	_test_extended_order_keeps_active_task_alive()
 	_test_citizen_brain_cancels_for_player_control()
 	_test_citizen_brain_interrupts_active_work_immediately()
 	_test_citizen_brain_failure_cooldown()
 	_test_citizen_brain_cancels_when_winning_goal_has_no_task()
 	_test_native_sleep_goal()
+	_test_overtime_without_order_allows_sleep()
 	_test_native_meal_goal()
 	_test_native_toilet_goal()
 	_test_toilet_goal_blocked_while_working()
@@ -474,6 +476,21 @@ func _test_resume_drops_changed_order() -> void:
 	assert(runner.active_task == null and work_step.cancels == 1)
 
 
+func _test_extended_order_keeps_active_task_alive() -> void:
+	var expired_order := CitizenOrder.new(1, &"work", &"jobs", 1.0)
+	expired_order.id = 11
+	expired_order.expires_at = 1.0
+	var renewed_order := CitizenOrder.new(1, &"work", &"jobs", 1.0)
+	renewed_order.id = 11
+	renewed_order.expires_at = 10.0
+	var context := _context(expired_order)
+	context.refresh(_snapshot(2.0, CitizenSnapshot.new(1)), renewed_order)
+	var task := BehaviorTask.new(&"work", ScriptedStep.new([BehaviorStep.Status.RUNNING]))
+	task.order_id = expired_order.id
+	task.order = expired_order
+	assert(task.invalid_reason(context) == BehaviorStep.FailureReason.NONE)
+
+
 func _test_citizen_brain_cancels_for_player_control() -> void:
 	var goal := ScriptedGoal.new(&"work", 0.5, [BehaviorStep.Status.RUNNING])
 	var brain := CitizenBrain.new(1, FakeActuator.new(1), [goal])
@@ -572,6 +589,20 @@ func _test_native_sleep_goal() -> void:
 		&"needs.can_start_sleep": true,
 	}))
 	assert(is_zero_approx(goal.score(_snapshot(0.0, no_home), no_home, null, AIBlackboard.new())))
+
+
+func _test_overtime_without_order_allows_sleep() -> void:
+	var goal := SleepGoalScript.new()
+	var citizen := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
+		&"needs.should_sleep": false,
+		&"needs.has_home": true,
+		&"needs.home_position": Vector3.ZERO,
+		&"needs.can_start_sleep": true,
+		&"work.overtime.active": true,
+	}))
+	assert(is_equal_approx(goal.score(_snapshot(0.0, citizen), citizen, null, AIBlackboard.new()), 1.0))
+	var order := CitizenOrder.new(1, &"gathering", &"test", 0.5)
+	assert(is_zero_approx(goal.score(_snapshot(0.0, citizen), citizen, order, AIBlackboard.new())))
 
 
 func _test_native_meal_goal() -> void:

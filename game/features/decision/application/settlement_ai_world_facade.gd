@@ -229,6 +229,7 @@ func capture(sequence: int) -> WorldSnapshot:
 			AIFactSet.from_owned_values({
 				&"hero": actor.is_hero,
 				&"needs.should_sleep": not actor_work_time,
+				&"work.overtime.active": actor.has_active_overtime(simulation.day_cycle.current_day),
 				&"needs.fatigue_level": actor.fatigue,
 				&"needs.dangerously_tired": actor.is_dangerously_tired(),
 				&"needs.recovering": actor.is_recovering(simulation.day_cycle.current_day),

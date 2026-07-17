@@ -220,6 +220,12 @@ var registration_queue_order := -1
 var overtime_mode := false
 var overtime_until_workday_id := 0
 var overtime_source := ""
+## Source -> final workday. Sources are independent so cancelling a workplace
+## order cannot cancel a concurrent settlement order.
+var overtime_sources: Dictionary = {}
+## Source -> day on which that source was last issued. Kept after cancellation
+## to enforce the once-per-day command limit.
+var overtime_issued_days: Dictionary = {}
 var fatigue := 0.0
 var continuous_work_hours := 0.0
 var recovery_until_workday_id := 0
@@ -1438,30 +1444,72 @@ func has_active_daily_order() -> bool:
 	return bool(simulation.is_daily_order_active(self))
 
 
-func activate_overtime(until_workday_id: int, source: String) -> void:
-	overtime_until_workday_id = maxi(overtime_until_workday_id, until_workday_id)
-	overtime_source = source
-	overtime_mode = true
+func activate_overtime(until_workday_id: int, source: String, issued_day := 0) -> bool:
+	if source.is_empty():
+		return false
+	if issued_day > 0 and int(overtime_issued_days.get(source, -1)) == issued_day:
+		return false
+	if not overtime_mode:
+		overtime_sources.clear()
+	var previous_until := int(overtime_sources.get(source, 0))
+	overtime_sources[source] = maxi(previous_until, until_workday_id)
+	if issued_day > 0:
+		overtime_issued_days[source] = issued_day
+	_sync_overtime_state()
+	return true
 
 
 func has_active_overtime(current_workday_id: int) -> bool:
-	return overtime_mode and overtime_until_workday_id >= current_workday_id
+	if not overtime_mode:
+		return false
+	if overtime_sources.is_empty():
+		return overtime_until_workday_id >= current_workday_id
+	for until_workday in overtime_sources.values():
+		if int(until_workday) >= current_workday_id:
+			return true
+	return false
+
+
+func has_overtime_source(source: String, current_workday_id: int) -> bool:
+	return overtime_mode and int(overtime_sources.get(source, 0)) >= current_workday_id
 
 
 func clear_expired_overtime(current_workday_id: int) -> void:
-	if overtime_until_workday_id >= current_workday_id:
+	# Keep compatibility with existing callers that clear the legacy flag
+	# directly while migrating to source-owned overtime.
+	if not overtime_mode:
+		overtime_sources.clear()
+		overtime_until_workday_id = 0
+		overtime_source = ""
 		return
-	overtime_mode = false
-	overtime_until_workday_id = 0
-	overtime_source = ""
+	if overtime_sources.is_empty():
+		if overtime_until_workday_id < current_workday_id:
+			overtime_mode = false
+			overtime_until_workday_id = 0
+			overtime_source = ""
+		return
+	for source in overtime_sources.keys().duplicate():
+		if int(overtime_sources[source]) < current_workday_id:
+			overtime_sources.erase(source)
+	_sync_overtime_state()
 
 
-func deactivate_overtime() -> void:
-	overtime_mode = false
-	overtime_until_workday_id = 0
-	overtime_source = ""
-	if simulation != null and not simulation._is_work_time():
+func deactivate_overtime(source := "") -> void:
+	if source.is_empty():
+		overtime_sources.clear()
+	else:
+		overtime_sources.erase(source)
+	_sync_overtime_state()
+	if not overtime_mode and simulation != null and not simulation._is_work_time():
 		end_work_shift()
+
+
+func _sync_overtime_state() -> void:
+	overtime_until_workday_id = 0
+	for until_workday in overtime_sources.values():
+		overtime_until_workday_id = maxi(overtime_until_workday_id, int(until_workday))
+	overtime_mode = overtime_until_workday_id > 0
+	overtime_source = str(overtime_sources.keys().back()) if not overtime_sources.is_empty() else ""
 
 
 func is_recovering(current_workday_id: int) -> bool:
