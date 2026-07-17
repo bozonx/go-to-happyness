@@ -125,6 +125,8 @@ const STATE_ANIMATIONS := {
 	State.SAWING: "interact-right",
 	State.CONSTRUCTING: "interact-right",
 	State.EXCAVATING: "interact-right",
+	State.GATHERING: "interact-right",
+	State.CLEANING_PILE: "interact-right",
 	State.EATING: "sit",
 	State.RESTING: "sit",
 	State.STUDYING: "sit",

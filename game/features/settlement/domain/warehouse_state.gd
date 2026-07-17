@@ -5,7 +5,7 @@ extends RefCounted
 
 const STORED_RESOURCES: Array[String] = [
 	"branches", "grass", "water", "food", "hides", "goods",
-	"logs", "wood", "soil", "clay", "boards", "stone", "bricks", "tarp"
+	"logs", "wood", "soil", "clay", "boards", "stone", "bricks", "tarp", "construction_gloves"
 ]
 
 const TYPE_CAPACITIES := {

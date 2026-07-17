@@ -586,6 +586,7 @@ func _process(delta: float) -> void:
 	_update_building_status_indicators(delta)
 	_update_gathering_indicators(delta)
 	_update_label_distance_fading()
+	_sync_backpack_pile()
 	if _is_work_time() or _has_active_night_work_order():
 		_update_couriers()
 		_worker_poll_timer -= delta
@@ -1525,8 +1526,8 @@ func _publish_courier_tasks(dispatcher: RefCounted) -> void:
 			var required := int(site.required_materials[resource_type])
 			var delivered := int(site.delivered_materials.get(resource_type, 0))
 			var in_transit := int(site.reserved_materials.get(resource_type, 0))
-			var source := _construction_material_source(str(resource_type), site_position)
-			if source.is_empty():
+			var sources := _construction_material_sources(str(resource_type), site_position)
+			if sources.is_empty():
 				continue
 			var total_reserved := settlement.construction_reserved_for_site(site.site_id, str(resource_type))
 			var still_needed := maxi(0, required - delivered - total_reserved)
@@ -1535,17 +1536,26 @@ func _publish_courier_tasks(dispatcher: RefCounted) -> void:
 			total_reserved = settlement.construction_reserved_for_site(site.site_id, str(resource_type))
 			var storage_reserved := maxi(0, total_reserved - in_transit)
 			if storage_reserved > 0:
-				var source_id := str(source.get("id", "storage"))
-				# One task may be assigned to only one courier. Publish enough stable
-				# delivery slots for the outstanding load so several couriers can supply
-				# the same construction site concurrently.
+				# One task may be assigned to only one courier. Split the outstanding
+				# reservation across its actual warehouses: otherwise every slot points
+				# at the nearest warehouse and only its first courier can start.
 				var largest_courier_capacity := 1
 				for citizen: Citizen in citizens:
 					if is_instance_valid(citizen) and citizen.can_handle_entry_logistics():
 						largest_courier_capacity = maxi(largest_courier_capacity, citizen.courier_capacity())
-				var delivery_slots := ceili(float(storage_reserved) / float(largest_courier_capacity))
-				for slot in range(delivery_slots):
-					dispatcher.publish(StringName("construction_%s_%s_%s_%d" % [site.node.get_instance_id(), resource_type, source_id, slot]), CourierTask.Kind.CONSTRUCTION, 70, source.position, site.node.global_position, {"site": site, "resource": resource_type, "source": source})
+				var unallocated := storage_reserved
+				for source: Dictionary in sources:
+					if unallocated <= 0:
+						break
+					var source_available := _construction_source_available(str(resource_type), source)
+					var source_allocation := mini(unallocated, source_available)
+					if source_allocation <= 0:
+						continue
+					var source_id := str(source.get("id", "storage"))
+					var delivery_slots := ceili(float(source_allocation) / float(largest_courier_capacity))
+					for slot in range(delivery_slots):
+						dispatcher.publish(StringName("construction_%s_%s_%s_%d" % [site.node.get_instance_id(), resource_type, source_id, slot]), CourierTask.Kind.CONSTRUCTION, 70, source.position, site.node.global_position, {"site": site, "resource": resource_type, "source": source})
+					unallocated -= source_allocation
 	if not warehouse_positions.is_empty() and branches > 0:
 		for record in building_registry.records():
 			var building := record.node
@@ -1585,32 +1595,33 @@ func _reconcile_repair_reservations() -> void:
 			building.set_meta("repair_reserved", false)
 
 
-func _construction_material_source(resource_type: String, from_position: Vector3 = Vector3.ZERO) -> Dictionary:
+func _construction_material_sources(resource_type: String, from_position: Vector3 = Vector3.ZERO) -> Array[Dictionary]:
+	var sources: Array[Dictionary] = []
 	if settlement.amount(resource_type) > 0:
 		if not warehouse_positions.is_empty():
-			var nearest_index := -1
-			var nearest_distance := INF
 			for index in range(mini(warehouse_positions.size(), settlement.warehouses.size())):
 				if settlement.warehouse_amount(resource_type, index) <= 0:
 					continue
 				var position := warehouse_positions[index]
-				var distance := from_position.distance_squared_to(position)
-				if distance < nearest_distance:
-					nearest_distance = distance
-					nearest_index = index
-			if nearest_index < 0:
-				return {}
-			var nearest_warehouse := warehouse_positions[nearest_index]
-			# The position keeps task identity stable enough to invalidate a task when
-			# warehouses are demolished; the index makes pickup remove the same stock.
-			return {"kind": "storage", "id": "storage_%s" % _cell_from_position(nearest_warehouse), "position": nearest_warehouse, "warehouse_index": nearest_index}
+				# The position keeps task identity stable enough to invalidate a task when
+				# warehouses are demolished; the index makes pickup remove the same stock.
+				sources.append({"kind": "storage", "id": "storage_%s" % _cell_from_position(position), "position": position, "warehouse_index": index})
+			sources.sort_custom(func(left: Dictionary, right: Dictionary) -> bool:
+				return from_position.distance_squared_to(left.position) < from_position.distance_squared_to(right.position)
+			)
+			return sources
 		# Before the first warehouse is built, all resources live in the virtual
 		# stockpile. Couriers pull from that unlimited reserve at the camp entrance
 		# so the bootstrap warehouse and main campfire can still be supplied.
-		return {"kind": "open_storage", "id": "open_storage", "position": _get_nearest_delivery_position(from_position)}
+		sources.append({"kind": "open_storage", "id": "open_storage", "position": _get_nearest_delivery_position(from_position)})
 	# Ground piles belong exclusively to cleaners. Construction starts only after
 	# their contents have been delivered to the settlement stock.
-	return {}
+	return sources
+
+
+func _construction_source_available(resource_type: String, source: Dictionary) -> int:
+	var warehouse_index := int(source.get("warehouse_index", -1))
+	return settlement.warehouse_amount(resource_type, warehouse_index) if warehouse_index >= 0 else settlement.amount(resource_type)
 
 
 func _resource_pile_for_node(pile_node: Node3D) -> Dictionary:
@@ -1673,13 +1684,11 @@ func _is_courier_task_valid(task: RefCounted) -> bool:
 				return false
 			var resource_type := str(task.payload.resource)
 			var source: Dictionary = task.payload.get("source", {})
-			# An idle task must follow the current warehouse source. Its source can
-			# change when warehouses are built or removed.
-			# Do not invalidate a carrier already in transit merely because another
-			# warehouse became a better source after pickup.
+			# Do not invalidate a carrier already in transit merely because its source
+			# is depleted after pickup. Idle tasks remain valid only while their own
+			# source still contains stock; other warehouses may supply in parallel.
 			if not task.is_assigned():
-				var current_source := _construction_material_source(resource_type, site.node.global_position)
-				if current_source.is_empty() or str(current_source.get("id", "")) != str(source.get("id", "")):
+				if source.is_empty() or _construction_source_available(resource_type, source) <= 0:
 					return false
 			var total_reserved := settlement.construction_reserved_for_site(site.site_id, resource_type)
 			var in_transit := int(site.reserved_materials.get(resource_type, 0))
@@ -10248,6 +10257,31 @@ func _remove_backpack_pile() -> void:
 			break
 	backpack_node.queue_free()
 	backpack_node = null
+
+
+func _sync_backpack_pile() -> void:
+	if not is_instance_valid(backpack_node):
+		return
+	if settlement.warehouse_ever_built:
+		return
+	for index in range(resource_piles.size()):
+		var pile: Dictionary = resource_piles[index]
+		if pile.get("node") != backpack_node:
+			continue
+		var synced: Dictionary = {}
+		for resource_type in settlement.backpack:
+			var amount := int(settlement.backpack[resource_type])
+			if amount > 0:
+				synced[str(resource_type)] = amount
+		if synced.is_empty():
+			resource_piles.remove_at(index)
+			backpack_node.queue_free()
+			backpack_node = null
+		else:
+			pile["resources"] = synced
+			resource_piles[index] = pile
+			_refresh_resource_pile_label(pile)
+		break
 
 
 func _convert_backpack_pile_to_regular() -> void:
