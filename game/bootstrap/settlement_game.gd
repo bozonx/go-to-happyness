@@ -1529,17 +1529,22 @@ func _reconcile_repair_reservations() -> void:
 func _construction_material_source(resource_type: String, from_position: Vector3 = Vector3.ZERO) -> Dictionary:
 	if settlement.amount(resource_type) > 0:
 		if not warehouse_positions.is_empty():
-			var nearest_warehouse := Vector3.INF
+			var nearest_index := -1
 			var nearest_distance := INF
-			for position in warehouse_positions:
+			for index in range(mini(warehouse_positions.size(), settlement.warehouses.size())):
+				if settlement.warehouse_amount(resource_type, index) <= 0:
+					continue
+				var position := warehouse_positions[index]
 				var distance := from_position.distance_squared_to(position)
 				if distance < nearest_distance:
 					nearest_distance = distance
-					nearest_warehouse = position
-			# Use the position rather than the array index as the source identity.
-			# Warehouse indices shift when one is demolished, while an existing task
-			# must be invalidated and republished for the actual remaining warehouse.
-			return {"kind": "storage", "id": "storage_%s" % _cell_from_position(nearest_warehouse), "position": nearest_warehouse}
+					nearest_index = index
+			if nearest_index < 0:
+				return {}
+			var nearest_warehouse := warehouse_positions[nearest_index]
+			# The position keeps task identity stable enough to invalidate a task when
+			# warehouses are demolished; the index makes pickup remove the same stock.
+			return {"kind": "storage", "id": "storage_%s" % _cell_from_position(nearest_warehouse), "position": nearest_warehouse, "warehouse_index": nearest_index}
 		# Before the first warehouse is built, all resources live in the virtual
 		# stockpile. Couriers pull from that unlimited reserve at the camp entrance
 		# so the bootstrap warehouse and main campfire can still be supplied.
@@ -1706,13 +1711,26 @@ func _start_courier_task(courier: Citizen, task: RefCounted) -> bool:
 			var source: Dictionary = task.payload.get("source", {})
 			if site == null or not is_instance_valid(site.node):
 				return false
-			if settlement.amount(resource_type) <= 0:
+			var total_reserved := settlement.construction_reserved_for_site(site.site_id, resource_type)
+			var in_transit := int(site.reserved_materials.get(resource_type, 0))
+			var remaining := int(site.required_materials.get(resource_type, 0)) - int(site.delivered_materials.get(resource_type, 0)) - in_transit
+			var storage_reserved := maxi(0, total_reserved - in_transit)
+			var source_available: int = settlement.amount(resource_type)
+			var warehouse_index := int(source.get("warehouse_index", -1))
+			if warehouse_index >= 0:
+				source_available = settlement.warehouse_amount(resource_type, warehouse_index)
+			var amount: int = mini(courier.courier_capacity(), mini(source_available, mini(storage_reserved, remaining)))
+			if amount <= 0:
 				return false
-			settlement.add(resource_type, -1)
+			if warehouse_index >= 0:
+				if settlement.add_to_warehouse(resource_type, -amount, warehouse_index) != 0:
+					return false
+			else:
+				settlement.add(resource_type, -amount)
 			var reservations := site.reserved_materials
-			reservations[resource_type] = int(reservations.get(resource_type, 0)) + 1
+			reservations[resource_type] = int(reservations.get(resource_type, 0)) + amount
 			site.reserved_materials = reservations
-			courier.assign_construction_delivery(site.node, source.get("position", Vector3.INF), resource_type)
+			courier.assign_construction_delivery(site.node, source.get("position", Vector3.INF), resource_type, amount)
 			return true
 		CourierTask.Kind.BUILDING_SUPPLY:
 			var building: Node3D = task.payload.building

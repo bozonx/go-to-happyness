@@ -24,9 +24,6 @@ func _init() -> void:
 
 	assert(simulation.construction_sites.size() == 2)
 
-	# Stock enough resources for both sites to need deliveries.
-	simulation.settlement.add("branches", 20)
-	simulation.settlement.add("grass", 20)
 	# Keep two storages so task identity and source selection are exercised. The
 	# nearest source is removed below to emulate demolition or a blocked route.
 	var nearest_warehouse := Vector3(11.0, 0.0, 10.0)
@@ -35,6 +32,10 @@ func _init() -> void:
 	simulation.warehouse_positions.append(fallback_warehouse)
 	simulation.settlement.add_warehouse("warehouse")
 	simulation.settlement.add_warehouse("warehouse")
+	simulation.settlement.warehouse_ever_built = true
+	# Stock enough physical warehouse resources for both sites to need deliveries.
+	simulation.settlement.add("branches", 20)
+	simulation.settlement.add("grass", 20)
 
 	simulation._update_couriers()
 	var construction_tasks: Array[CourierTask] = simulation.courier_dispatcher.available_tasks().filter(
@@ -46,9 +47,24 @@ func _init() -> void:
 		assert(task_site != null and task_site.node == simulation.construction_sites[0].node, "Construction deliveries must stay focused on the builder's current project")
 		assert(task.pickup == nearest_warehouse, "Construction task should use the nearest warehouse")
 
-	# An unassigned task must not remain bound to a warehouse that has disappeared.
-	# The next dispatch should replace it with a task for the remaining warehouse.
+	# An unassigned task must follow the physical stock when another warehouse is
+	# closer but empty.
+	for resource_type in ["branches", "grass"]:
+		var stored: int = simulation.settlement.warehouse_amount(resource_type, 0)
+		simulation.settlement.warehouses[0].set_amount(resource_type, 0)
+		simulation.settlement.warehouses[1].set_amount(resource_type, stored)
+	simulation._update_couriers()
+	construction_tasks = simulation.courier_dispatcher.available_tasks().filter(
+		func(task: CourierTask) -> bool: return task.kind == CourierTask.Kind.CONSTRUCTION
+	)
+	assert(not construction_tasks.is_empty(), "Expected a replacement construction task after stock moved")
+	for task in construction_tasks:
+		assert(task.pickup == fallback_warehouse, "Construction task should use a warehouse that contains the material")
+
+	# Removing the empty warehouse must preserve the task for the remaining source.
 	simulation.warehouse_positions.remove_at(0)
+	simulation.settlement.warehouses.remove_at(0)
+	simulation.settlement.warehouse_types.remove_at(0)
 	simulation._update_couriers()
 	construction_tasks = simulation.courier_dispatcher.available_tasks().filter(
 		func(task: CourierTask) -> bool: return task.kind == CourierTask.Kind.CONSTRUCTION
@@ -63,6 +79,7 @@ func _init() -> void:
 	var courier: Citizen = simulation.citizens[0]
 	courier.global_position = fallback_warehouse
 	courier.idle()
+	courier.set_courier_equipment("reinforced_backpack")
 	simulation._assign_daily_order(courier, "courier")
 	var branch_delivery_completed := false
 	for _frame in range(1200):
@@ -72,6 +89,8 @@ func _init() -> void:
 			branch_delivery_completed = true
 			break
 	assert(branch_delivery_completed, "Courier should deliver a construction material from the warehouse to the site")
+	var campfire_site: ConstructionSite = simulation.construction.site_for_node(simulation.construction_sites[0].node)
+	assert(int(campfire_site.delivered_materials.get("branches", 0)) == courier.courier_capacity(), "Construction delivery should use the courier's carrying capacity")
 
 	root.remove_child(simulation)
 	simulation.free()

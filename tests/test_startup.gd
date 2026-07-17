@@ -287,6 +287,8 @@ func _init() -> void:
 	if simulation.warehouse_positions.is_empty():
 		simulation.warehouse_positions.append(supply_worker.global_position)
 		simulation.settlement.add_warehouse("warehouse")
+		simulation.settlement.warehouse_ever_built = true
+		simulation.settlement.add(construction_resource, 1)
 		added_test_warehouse = true
 	assert(simulation._reserve_player_gather_storage("branches", simulation.HERO_GATHER_YIELD) == simulation.HERO_GATHER_YIELD)
 	simulation._assign_daily_order(supply_worker, "construction")

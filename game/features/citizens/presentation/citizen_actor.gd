@@ -1028,10 +1028,10 @@ func _process_courier_delivery(delta: float) -> void:
 		play_one_shot("pick-up")
 		resource_delivered.emit(self, courier_resource_type, carried_amount)
 
-func assign_construction_delivery(site: Node3D, warehouse: Vector3, resource_type: String) -> void:
-	assign_building_supply(site, warehouse, resource_type, "construction")
+func assign_construction_delivery(site: Node3D, warehouse: Vector3, resource_type: String, amount: int = 1) -> void:
+	assign_building_supply(site, warehouse, resource_type, "construction", amount)
 
-func assign_building_supply(target: Node3D, warehouse: Vector3, resource_type: String, supply_kind: String) -> void:
+func assign_building_supply(target: Node3D, warehouse: Vector3, resource_type: String, supply_kind: String, amount: int = 1) -> void:
 	if is_player_controlled or not is_instance_valid(target):
 		return
 	_reset_assignment_navigation()
@@ -1039,7 +1039,7 @@ func assign_building_supply(target: Node3D, warehouse: Vector3, resource_type: S
 	warehouse_position = warehouse
 	construction_delivery_resource = resource_type
 	building_supply_kind = supply_kind
-	carried_amount = 1
+	carried_amount = maxi(1, amount)
 	state = State.TO_CONSTRUCTION_PICKUP
 
 func _process_construction_pickup(delta: float) -> void:
