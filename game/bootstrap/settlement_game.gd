@@ -1486,7 +1486,16 @@ func _publish_courier_tasks(dispatcher: RefCounted) -> void:
 			var storage_reserved := maxi(0, total_reserved - in_transit)
 			if storage_reserved > 0:
 				var source_id := str(source.get("id", "storage"))
-				dispatcher.publish(StringName("construction_%s_%s_%s" % [site.node.get_instance_id(), resource_type, source_id]), CourierTask.Kind.CONSTRUCTION, 70, source.position, site.node.global_position, {"site": site, "resource": resource_type, "source": source})
+				# One task may be assigned to only one courier. Publish enough stable
+				# delivery slots for the outstanding load so several couriers can supply
+				# the same construction site concurrently.
+				var largest_courier_capacity := 1
+				for citizen: Citizen in citizens:
+					if is_instance_valid(citizen) and citizen.can_handle_entry_logistics():
+						largest_courier_capacity = maxi(largest_courier_capacity, citizen.courier_capacity())
+				var delivery_slots := ceili(float(storage_reserved) / float(largest_courier_capacity))
+				for slot in range(delivery_slots):
+					dispatcher.publish(StringName("construction_%s_%s_%s_%d" % [site.node.get_instance_id(), resource_type, source_id, slot]), CourierTask.Kind.CONSTRUCTION, 70, source.position, site.node.global_position, {"site": site, "resource": resource_type, "source": source})
 	if not warehouse_positions.is_empty() and branches > 0:
 		for record in building_registry.records():
 			var building := record.node
@@ -1941,6 +1950,10 @@ func _on_construction_material_delivered(_courier: Citizen, site_node: Node3D, r
 		_update_interface("Construction site is full; courier returned %d %s to storage." % [amount, resource_type])
 	courier_dispatcher.complete_for(_courier)
 	_request_courier_dispatch()
+	# The delivery may have made a waiting construction site buildable. Refresh
+	# the snapshot immediately so its builders receive the updated order.
+	if citizen_ai != null:
+		citizen_ai.request_decision_refresh()
 
 func _on_building_supply_delivered(_courier: Citizen, target: Node3D, supply_kind: String, resource_type: String, amount: int) -> void:
 	courier_dispatcher.complete_for(_courier)

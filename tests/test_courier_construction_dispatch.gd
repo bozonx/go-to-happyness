@@ -46,6 +46,10 @@ func _init() -> void:
 		var task_site: ConstructionSite = task.payload.get("site") as ConstructionSite
 		assert(task_site != null and task_site.node == simulation.construction_sites[0].node, "Construction deliveries must stay focused on the builder's current project")
 		assert(task.pickup == nearest_warehouse, "Construction task should use the nearest warehouse")
+	var branch_tasks := construction_tasks.filter(
+		func(task: CourierTask) -> bool: return str(task.payload.get("resource", "")) == "branches"
+	)
+	assert(branch_tasks.size() >= 2, "A construction load larger than one courier capacity must publish parallel delivery tasks")
 
 	# An unassigned task must follow the physical stock when another warehouse is
 	# closer but empty.
