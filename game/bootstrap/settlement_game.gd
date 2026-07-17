@@ -3760,6 +3760,7 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_role_button("Gather grass", "gather_grass", 272, false, "daily")
 	_add_role_button("Collect water", "gather_water", 306, false, "daily")
 	_add_role_button("Cleaning", "cleaning", 340, false, "daily")
+	_add_role_button("Cook", "cook", 374, false, "daily")
 
 	# Permanent jobs require an employment officer, except appointing the officer.
 	_add_role_button("Assign: construction", "construction", 136, false, "job")
