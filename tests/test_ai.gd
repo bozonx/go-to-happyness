@@ -1,6 +1,7 @@
 extends SceneTree
 
 const SleepGoalScript = preload("res://game/features/decision/domain/goals/sleep_goal.gd")
+const ReturnHomeWhenIdleGoalScript = preload("res://game/features/decision/domain/goals/return_home_when_idle_goal.gd")
 const MealGoalScript = preload("res://game/features/decision/domain/goals/meal_goal.gd")
 const ToiletGoalScript = preload("res://game/features/decision/domain/goals/toilet_goal.gd")
 const RestGoalScript = preload("res://game/features/decision/domain/goals/rest_goal.gd")
@@ -233,6 +234,8 @@ func _init() -> void:
 	_test_citizen_brain_cancels_when_winning_goal_has_no_task()
 	_test_native_sleep_goal()
 	_test_overtime_without_order_allows_sleep()
+	_test_permanent_worker_returns_home_without_live_work_order()
+	_test_stale_permanent_work_order_switches_to_return_home()
 	_test_native_meal_goal()
 	_test_native_toilet_goal()
 	_test_toilet_goal_blocked_while_working()
@@ -603,6 +606,52 @@ func _test_overtime_without_order_allows_sleep() -> void:
 	assert(is_equal_approx(goal.score(_snapshot(0.0, citizen), citizen, null, AIBlackboard.new()), 1.0))
 	var order := CitizenOrder.new(1, &"gathering", &"test", 0.5)
 	assert(is_zero_approx(goal.score(_snapshot(0.0, citizen), citizen, order, AIBlackboard.new())))
+
+
+func _test_permanent_worker_returns_home_without_live_work_order() -> void:
+	var goal := ReturnHomeWhenIdleGoalScript.new()
+	var actuator := FakeActuator.new(1)
+	var brain := CitizenBrain.new(1, actuator, [goal])
+	var citizen := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
+		&"work.permanent.active": true,
+		&"needs.has_home": true,
+		&"needs.home_position": Vector3(4.0, 0.0, 0.0),
+	}))
+	var snapshot := _snapshot(0.0, citizen)
+	brain.think(snapshot, null)
+	brain.tick(snapshot, null, 0.1)
+	assert(brain.runner.active_goal_id() == &"return_home_when_idle")
+	assert(actuator.move_to_count == 1)
+	assert(actuator.move_to_destination == Vector3(4.0, 0.0, 0.0))
+	var active_order := CitizenOrder.new(1, &"construction", &"test", 0.6)
+	assert(is_zero_approx(goal.score(snapshot, citizen, active_order, AIBlackboard.new())))
+	var no_home := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
+		&"work.permanent.active": true,
+		&"needs.has_home": false,
+	}))
+	assert(is_zero_approx(goal.score(_snapshot(0.0, no_home), no_home, null, AIBlackboard.new())))
+
+
+func _test_stale_permanent_work_order_switches_to_return_home() -> void:
+	var return_home := ReturnHomeWhenIdleGoalScript.new()
+	var actuator := FakeActuator.new(1)
+	var brain := CitizenBrain.new(1, actuator, [ConstructionGoalScript.new(), return_home])
+	var citizen := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
+		&"work.construction.worker": true,
+		&"needs.has_home": true,
+		&"needs.home_position": Vector3(4.0, 0.0, 0.0),
+		&"work.permanent.active": true,
+	}))
+	var snapshot := _snapshot(0.0, citizen)
+	var construction_order := _construction_order(1, &"construction", 41)
+	construction_order.id = 19
+	brain.think(snapshot, construction_order)
+	brain.tick(snapshot, construction_order, 0.1)
+	assert(brain.runner.active_goal_id() == &"construction")
+	brain.think(snapshot, null)
+	brain.tick(snapshot, null, 0.1)
+	assert(brain.runner.active_goal_id() == &"return_home_when_idle")
+	assert(actuator.move_to_destination == Vector3(4.0, 0.0, 0.0))
 
 
 func _test_native_meal_goal() -> void:

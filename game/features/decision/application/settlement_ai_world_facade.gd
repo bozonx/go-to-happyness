@@ -246,6 +246,7 @@ func capture(sequence: int) -> WorldSnapshot:
 				&"needs.can_start_rest": can_start_personal_need,
 				&"needs.rest_position": rest_request.get(&"position", Vector3.INF),
 				&"needs.rest_duration": rest_request.get(&"duration", 4.0),
+				&"work.permanent.active": actor.is_employed(),
 				&"work.forestry.worker": forestry_worker,
 				&"work.forestry.in_progress": forestry_in_progress,
 				&"work.forestry.can_start": sawmill_position != Vector3.INF and warehouse_position != Vector3.INF,
