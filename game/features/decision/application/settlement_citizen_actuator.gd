@@ -38,6 +38,11 @@ func stop() -> void:
 		citizen.stop_movement()
 
 
+func set_activity_label(label: String) -> void:
+	if is_valid():
+		citizen.ai_activity_label = label
+
+
 func movement_failed() -> bool:
 	return is_valid() and citizen.ai_move_failed
 

@@ -209,6 +209,8 @@ var ai_id := 0
 var construction_site: Node3D
 var specialization := "unassigned"
 var active_role := ""
+## Human-readable label of the native AI task, supplied through CitizenActuator.
+var ai_activity_label := ""
 var employment_state := EmploymentState.UNREGISTERED
 var daily_order_role := ""
 var daily_order_workday_id := 0
@@ -2514,6 +2516,11 @@ func _update_idle_indicator() -> void:
 		var remaining_hours := int(task_timer.remaining / WAIT_DURATION) + 1
 		idle_indicator.text = "No work (waiting %dh)" % clamp(remaining_hours, 1, 24)
 		idle_indicator.modulate = Color("f0873d")
+		return
+	if visible_state == State.AI_MOVING:
+		idle_indicator.visible = true
+		idle_indicator.text = "Going to: %s" % ai_activity_label if not ai_activity_label.is_empty() else "Moving"
+		idle_indicator.modulate = Color("7bb7e8")
 		return
 	if visible_state != State.IDLE:
 		idle_indicator.visible = true

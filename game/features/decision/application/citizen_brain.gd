@@ -31,12 +31,15 @@ func _init(
 	context = BehaviorContext.new(actuator, blackboard)
 	arbiter.configure(goals)
 	runner.task_finished.connect(_on_task_finished)
+	runner.task_started.connect(_on_task_started)
+	runner.task_resumed.connect(_on_task_started)
 
 
 func think(snapshot: WorldSnapshot, order: CitizenOrder) -> void:
 	context.refresh(snapshot, order)
 	if context.citizen == null or context.citizen.is_player_controlled or not context.citizen.is_available:
 		runner.cancel_all(context)
+		context.actuator.set_activity_label("")
 		return
 	var active_goal_id := runner.active_goal_id()
 	blackboard.set_value(ACTIVE_GOAL_BLACKBOARD_KEY, active_goal_id)
@@ -61,6 +64,7 @@ func think(snapshot: WorldSnapshot, order: CitizenOrder) -> void:
 	)
 	if result.goal == null:
 		runner.cancel_all(context)
+		context.actuator.set_activity_label("")
 		return
 	var task_uses_order := not result.goal.id in PERSONAL_NEED_GOALS
 	var next_order_id := order.id if task_uses_order and order != null else 0
@@ -101,10 +105,12 @@ func tick(snapshot: WorldSnapshot, order: CitizenOrder, delta: float) -> void:
 
 func shutdown() -> void:
 	runner.cancel_all(context)
+	context.actuator.set_activity_label("")
 
 
 func cancel_current_task() -> void:
 	runner.cancel_all(context)
+	context.actuator.set_activity_label("")
 
 
 func has_runnable_task() -> bool:
@@ -113,6 +119,7 @@ func has_runnable_task() -> bool:
 
 func configure_goals(goals: Array[AICitizenGoal]) -> void:
 	runner.cancel_all(context)
+	context.actuator.set_activity_label("")
 	arbiter.configure(goals)
 
 
@@ -138,6 +145,8 @@ func _work_goal_ids() -> Array[StringName]:
 
 
 func _on_task_finished(task: BehaviorTask, status: BehaviorStep.Status) -> void:
+	if runner.active_task == null:
+		context.actuator.set_activity_label("")
 	if status == BehaviorStep.Status.SUCCESS and task.order != null and task.order_id != 0:
 		_completed_order = task.order
 		_completed_order_goal_id = task.goal_id
@@ -146,3 +155,7 @@ func _on_task_finished(task: BehaviorTask, status: BehaviorStep.Status) -> void:
 		return
 	var now := context.snapshot.simulation_seconds if context.snapshot != null else 0.0
 	blackboard.set_cooldown(task.goal_id, now + FAILURE_COOLDOWN)
+
+
+func _on_task_started(task: BehaviorTask) -> void:
+	context.actuator.set_activity_label(task.label if task != null else "")

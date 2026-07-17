@@ -29,6 +29,11 @@ func stop() -> void:
 	pass
 
 
+## Publishes the current AI task for presentation without exposing FSM details.
+func set_activity_label(_label: String) -> void:
+	pass
+
+
 func begin_action(
 	_action: StringName,
 	_target_key: StringName = &"",
