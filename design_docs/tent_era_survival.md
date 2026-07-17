@@ -5,7 +5,8 @@
 - [food_water_progression.md](food_water_progression.md) — прогрессия еды и воды от рюкзака до столовых;
 - [storage_warehouses.md](storage_warehouses.md) — склады, рюкзак, кучи;
 - [building_progression.md](building_progression.md) — цепочки зданий;
-- [work_positions.md](work_positions.md) — рабочие позиции, FPP-роли, чиновник.
+- [work_positions.md](work_positions.md) — рабочие позиции, FPP-роли, чиновник;
+- [village_territory.md](village_territory.md) — область деревни, радиусы застройки, границы.
 
 ## 1. Введение и общая концепция
 
