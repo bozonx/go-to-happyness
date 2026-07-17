@@ -83,6 +83,7 @@ const INTERACTION_RANGE := 4.5
 const JOB_ENTRANCE_RANGE := 3.5
 const SUN_FLARE_OCCLUSION_MASK := 1
 const SUN_FLARE_OCCLUSION_DISTANCE := 96.0
+const SUN_FLARE_OCCLUSION_SMOOTHING := 0.08
 const POCKET_CAPACITY := 8
 const POCKET_WOOD_CAPACITY := POCKET_CAPACITY
 # The hero gathers raw bootstrap materials in a batch per action, unlike NPCs who
@@ -240,6 +241,7 @@ var rain_effect: RainEffect
 var fireflies: Array[FirefliesEffect] = []
 var lens_flare_material: ShaderMaterial
 var lens_flare_visibility := 0.0
+var lens_flare_occlusion := 1.0
 var camera_target := Vector3.ZERO
 var camera_distance := 30.0
 var camera_yaw := 42.0
@@ -893,14 +895,15 @@ func _update_daylight() -> void:
 	var overcast := weather_state.intensity_at(clock.minutes)
 	var direct_light := solar_intensity * (1.0 - overcast)
 	var night_color := Color("101a2b")
-	var twilight_color := Color("d87850")
-	var day_color := Color("78a9c5")
+	var twilight_color := Color("c66b52")
+	var night_twilight_color := Color("503149")
+	var day_color := Color("6fa9d6")
 	var overcast_color := Color("60707a")
 	var base_background: Color
 	if solar_height <= 0.0:
-		base_background = night_color.lerp(twilight_color, twilight)
+		base_background = night_color.lerp(night_twilight_color, twilight * 0.55)
 	else:
-		base_background = twilight_color.lerp(day_color, solar_intensity)
+		base_background = twilight_color.lerp(day_color, smoothstep(0.0, 0.42, solar_height))
 	world_environment.background_color = base_background.lerp(overcast_color, overcast)
 	var base_ambient_color := Color("4b5872").lerp(Color("d7ebef"), maxf(solar_intensity, twilight * 0.35))
 	var base_ambient_energy := lerpf(0.18, 0.65, maxf(solar_intensity, twilight * 0.3))
@@ -914,7 +917,8 @@ func _update_daylight() -> void:
 	sun.shadow_opacity = lerpf(1.0, 0.0, overcast)
 	if rain_effect != null:
 		rain_effect.set_intensity(overcast)
-	_update_lens_flare(direct_light, overcast)
+	var visible_direct_light := direct_light if solar_height > 0.01 else 0.0
+	_update_lens_flare(visible_direct_light, overcast)
 	# Fireflies appear when it gets dark; fade out with weather overcast
 	var night_factor := 1.0 - smoothstep(0.0, 0.28, solar_height)
 	var firefly_factor := night_factor * (1.0 - overcast * 0.5)
@@ -940,7 +944,13 @@ func _update_lens_flare(direct_light: float, overcast: float) -> void:
 	var edge_distance := minf(minf(uv.x, 1.0 - uv.x), minf(uv.y, 1.0 - uv.y))
 	var edge_fade := smoothstep(-0.12, 0.10, edge_distance)
 	var occlusion := _sun_flare_occlusion(sun_dir)
-	var flare_intensity := direct_light * (1.0 - overcast * 0.85) * edge_fade * occlusion
+	lens_flare_occlusion = lerpf(lens_flare_occlusion, occlusion, SUN_FLARE_OCCLUSION_SMOOTHING)
+	var flare_intensity := direct_light * (1.0 - overcast * 0.85) * edge_fade * lens_flare_occlusion
+	if direct_light <= 0.001:
+		lens_flare_visibility = 0.0
+		lens_flare_material.set_shader_parameter("u_intensity", 0.0)
+		lens_flare_material.set_shader_parameter("u_time", runtime_seconds)
+		return
 	lens_flare_visibility = lerpf(lens_flare_visibility, flare_intensity, 0.16)
 	lens_flare_material.set_shader_parameter("u_intensity", lens_flare_visibility)
 	lens_flare_material.set_shader_parameter("u_time", runtime_seconds)
@@ -949,16 +959,21 @@ func _sun_flare_occlusion(sun_dir: Vector3) -> float:
 	var world := get_world_3d()
 	if world == null:
 		return 1.0
-	var from := camera.global_position + sun_dir * 0.75
-	var to := from + sun_dir * SUN_FLARE_OCCLUSION_DISTANCE
-	var query := PhysicsRayQueryParameters3D.create(from, to)
-	query.collide_with_areas = false
-	query.collide_with_bodies = true
-	query.collision_mask = SUN_FLARE_OCCLUSION_MASK
-	var hit := world.direct_space_state.intersect_ray(query)
-	if hit.is_empty():
-		return 1.0
-	return 0.0
+	var right := camera.global_transform.basis.x.normalized()
+	var up := camera.global_transform.basis.y.normalized()
+	var offsets: Array[Vector3] = [Vector3.ZERO, right * 0.28, up * 0.28]
+	var visible_rays := 0
+	for offset in offsets:
+		var from := camera.global_position + offset + sun_dir * 0.75
+		var to := from + sun_dir * SUN_FLARE_OCCLUSION_DISTANCE
+		var query := PhysicsRayQueryParameters3D.create(from, to)
+		query.collide_with_areas = false
+		query.collide_with_bodies = true
+		query.collision_mask = SUN_FLARE_OCCLUSION_MASK
+		var hit := world.direct_space_state.intersect_ray(query)
+		if hit.is_empty():
+			visible_rays += 1
+	return float(visible_rays) / float(offsets.size())
 
 
 func _update_clock(delta: float) -> void:
@@ -2495,13 +2510,13 @@ func _create_world() -> void:
 	world_environment.glow_strength = 0.72
 	world_environment.glow_bloom = 0.05
 	world_environment.volumetric_fog_enabled = true
-	world_environment.volumetric_fog_density = 0.04
-	world_environment.volumetric_fog_anisotropy = 0.85
+	world_environment.volumetric_fog_density = 0.012
+	world_environment.volumetric_fog_anisotropy = 0.35
 	world_environment.volumetric_fog_length = 64.0
 	world_environment.volumetric_fog_detail_spread = 0.5
 	world_environment.fog_enabled = true
-	world_environment.fog_light_color = Color("fff2d1")
-	world_environment.fog_density = 0.001
+	world_environment.fog_light_color = Color("cfe2ed")
+	world_environment.fog_density = 0.00035
 	environment.environment = world_environment
 	add_child(environment)
 
