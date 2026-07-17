@@ -4704,12 +4704,12 @@ func _refresh_build_menu() -> void:
 		job_submenu_btn.disabled = false
 		job_submenu_btn.tooltip_text = ""
 	if personal_night_work_button != null:
-		var can_personal_night_work := citizen_actions_visible and selected_builder != null and not selected_builder.is_employed() and selected_builder.has_daily_order()
+		var can_personal_night_work := citizen_actions_visible and selected_builder != null and (selected_builder.has_daily_order() or selected_builder.is_employed())
 		var has_overtime := selected_builder != null and selected_builder.has_active_overtime(day_cycle.current_day)
 		personal_night_work_button.visible = citizen_actions_visible
 		personal_night_work_button.disabled = not can_personal_night_work
 		personal_night_work_button.set_pressed_no_signal(has_overtime)
-		personal_night_work_button.tooltip_text = "Assign a daily order first. Permanent workers receive this command from their workplace." if not can_personal_night_work else "Continue the daily order through the night and next day."
+		personal_night_work_button.tooltip_text = "Assign a job or daily order first." if not can_personal_night_work else "Continue working through the night and next workday."
 	if job_back_btn != null:
 		job_back_btn.visible = selected_exists and assignment_submenu_open
 	
@@ -8033,12 +8033,14 @@ func _toggle_selected_citizen_night_work(checked: bool) -> void:
 		personal_night_work_button.set_pressed_no_signal(false)
 		return
 	if checked:
-		if selected_builder.is_employed() or not selected_builder.has_daily_order() or selected_builder.has_active_overtime(day_cycle.current_day):
+		if (not selected_builder.has_daily_order() and not selected_builder.is_employed()) or selected_builder.has_active_overtime(day_cycle.current_day):
 			personal_night_work_button.set_pressed_no_signal(false)
 			return
 		# Evening daily orders normally wait for tomorrow. A personal night-work
 		# order explicitly starts that new task now and keeps it through tomorrow.
-		if selected_builder.daily_order_workday_id > day_cycle.current_day:
+		# Permanent jobs already have an active assignment, including courier jobs
+		# that do not belong to a workplace, so they only need the overtime flag.
+		if selected_builder.has_daily_order() and selected_builder.daily_order_workday_id > day_cycle.current_day:
 			selected_builder.daily_order_workday_id = day_cycle.current_day
 			selected_builder.daily_order_expires_at = daily_order_expiration_for_workday(day_cycle.current_day + 1)
 		selected_builder.activate_overtime(day_cycle.current_day + 1, "personal")
