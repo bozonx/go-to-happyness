@@ -5,10 +5,6 @@ extends RefCounted
 ## arbiter nor CitizenBrain needs to change when a new goal is introduced. Scores
 ## must be finite and normalized to [0, 1].
 
-## Below this wellbeing threshold, residents refuse to perform any work. Personal
-## needs (sleep, meal, toilet, rest) are unaffected.
-const WORK_REFUSAL_WELLBEING := 30
-
 var id: StringName
 var resumable := true
 
@@ -24,11 +20,6 @@ func score(
 	_blackboard: AIBlackboard
 ) -> float:
 	return 0.0
-
-
-## Returns true when settlement wellbeing is too low for work goals to score.
-func wellbeing_too_low_for_work(snapshot: WorldSnapshot) -> bool:
-	return snapshot != null and int(snapshot.settlement.value(&"settlement.wellbeing", 100)) < WORK_REFUSAL_WELLBEING
 
 
 func build_task(

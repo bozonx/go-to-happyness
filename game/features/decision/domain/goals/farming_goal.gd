@@ -21,8 +21,6 @@ func score(
 ) -> float:
 	if citizen == null or order == null or order.kind != &"farming":
 		return 0.0
-	if wellbeing_too_low_for_work(snapshot):
-		return 0.0
 	if not bool(citizen.facts.value(&"work.farming.worker", false)):
 		return 0.0
 	return clampf(order.priority, 0.0, 1.0)

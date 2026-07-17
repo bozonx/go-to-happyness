@@ -40,8 +40,8 @@ func think(snapshot: WorldSnapshot, order: CitizenOrder) -> void:
 		return
 	var active_goal_id := runner.active_goal_id()
 	blackboard.set_value(ACTIVE_GOAL_BLACKBOARD_KEY, active_goal_id)
-	# Work may be interrupted for a personal need. The runner cancels the old task,
-	# allowing its next director publication to rebuild a task from current facts.
+	# A personal need may preempt work. The runner cancels non-resumable work so the
+	# next director publication can rebuild it from current facts.
 	var excluded := _excluded_goal_ids(active_goal_id)
 	# A completed action may remain on the board until the next director tick. Do
 	# not immediately replay that exact proposal; a freshly published order object
@@ -62,7 +62,8 @@ func think(snapshot: WorldSnapshot, order: CitizenOrder) -> void:
 	if result.goal == null:
 		runner.cancel_all(context)
 		return
-	var next_order_id := order.id if order != null else 0
+	var task_uses_order := not result.goal.id in PERSONAL_NEED_GOALS
+	var next_order_id := order.id if task_uses_order and order != null else 0
 	if result.goal.id == runner.active_goal_id():
 		var active_order_id := runner.active_task.order_id if runner.active_task != null else 0
 		if active_order_id == next_order_id:
@@ -81,9 +82,9 @@ func think(snapshot: WorldSnapshot, order: CitizenOrder) -> void:
 	task.goal_id = result.goal.id
 	task.resumable = result.goal.resumable
 	task.order_id = next_order_id
-	task.order = order
-	# Once a challenger wins arbitration it must take control immediately. Deferring
-	# it behind an indefinite workplace action starves personal needs for a shift.
+	task.order = order if task_uses_order else null
+	# Once a challenger wins arbitration it takes control immediately. Deferring it
+	# behind an indefinite workplace action can starve a personal need for a shift.
 	runner.start(task, context)
 	blackboard.set_value(ACTIVE_GOAL_BLACKBOARD_KEY, runner.active_goal_id())
 

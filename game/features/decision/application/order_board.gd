@@ -121,10 +121,9 @@ func _contains_equivalent_order(orders: Array, proposal: CitizenOrder) -> bool:
 	return false
 
 
-## Identity of an order is based on the stable assignment keys and its primary
-## destination. Payload details such as the selected warehouse are intentionally
-## ignored because actors can refresh them during a cycle. A moved primary target
-## must receive a new id: behavior tasks capture their route when they are built.
+## Identity of an order includes every value a task may capture. Reusing an id for
+## changed payload would leave an active task executing stale route or destination
+## data, because tasks intentionally retain an immutable assignment while running.
 func _orders_are_equivalent(left: CitizenOrder, right: CitizenOrder) -> bool:
 	return (
 		left.citizen_id == right.citizen_id
@@ -132,6 +131,7 @@ func _orders_are_equivalent(left: CitizenOrder, right: CitizenOrder) -> bool:
 		and left.workday_id == right.workday_id
 		and left.target_key == right.target_key
 		and _positions_are_equivalent(left.target_position, right.target_position)
+		and _payloads_are_equivalent(left.payload, right.payload)
 	)
 
 
@@ -139,6 +139,10 @@ func _positions_are_equivalent(left: Vector3, right: Vector3) -> bool:
 	if left == Vector3.INF or right == Vector3.INF:
 		return left == right
 	return left.is_equal_approx(right)
+
+
+func _payloads_are_equivalent(left: AIFactSet, right: AIFactSet) -> bool:
+	return left == right or (left != null and left.is_equal_to(right))
 
 
 func next_expiration_after(simulation_seconds: float) -> float:

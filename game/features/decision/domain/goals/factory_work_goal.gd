@@ -14,8 +14,6 @@ func _init() -> void:
 func score(snapshot: WorldSnapshot, citizen: CitizenSnapshot, order: CitizenOrder, _blackboard: AIBlackboard) -> float:
 	if citizen == null or order == null or order.kind != &"factory_work":
 		return 0.0
-	if wellbeing_too_low_for_work(snapshot):
-		return 0.0
 	return clampf(order.priority, 0.0, 1.0) if bool(citizen.facts.value(&"work.factory.worker", false)) else 0.0
 
 

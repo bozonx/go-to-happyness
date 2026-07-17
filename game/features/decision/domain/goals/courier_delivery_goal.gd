@@ -16,8 +16,6 @@ func score(snapshot: WorldSnapshot, citizen: CitizenSnapshot, order: CitizenOrde
 	# personal need; boost it above typical need thresholds.
 	if bool(citizen.facts.value(&"work.courier.in_progress", false)):
 		return 1.0
-	if wellbeing_too_low_for_work(snapshot):
-		return 0.0
 	return order.priority
 
 func build_task(_snapshot: WorldSnapshot, _citizen: CitizenSnapshot, order: CitizenOrder, _blackboard: AIBlackboard) -> BehaviorTask:

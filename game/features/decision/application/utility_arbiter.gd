@@ -52,7 +52,10 @@ func choose(
 			best_utility = utility
 	if current_goal != null and best_goal != current_goal:
 		var challenger_utility := best_utility
-		if challenger_utility < current_utility + stickiness_bonus + switch_margin:
+		# Scores are normalized to [0, 1]. A hysteresis threshold above that range
+		# would make an active goal impossible to preempt, even by a critical need.
+		var switch_threshold := minf(1.0, current_utility + stickiness_bonus + switch_margin)
+		if challenger_utility < switch_threshold:
 			return ArbitrationResult.new(current_goal, current_utility + stickiness_bonus)
 	return ArbitrationResult.new(best_goal, best_utility if best_goal != null else 0.0)
 

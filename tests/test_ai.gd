@@ -219,6 +219,7 @@ func _init() -> void:
 	_test_fact_sets_and_snapshots()
 	_test_blackboard_clear()
 	_test_utility_hysteresis()
+	_test_utility_hysteresis_allows_critical_preemption()
 	_test_failure_cooldown()
 	_test_emergency_goal_bypasses_cooldown()
 	_test_behavior_composites_and_lifecycle()
@@ -235,12 +236,13 @@ func _init() -> void:
 	_test_toilet_goal_blocked_while_working()
 	_test_toilet_goal_blocked_for_player_controlled()
 	_test_personal_need_preempts_work_trip()
+	_test_personal_need_ignores_changed_work_order()
 	_test_changed_work_order_cancels_captured_trip()
 	_test_moved_target_rebuilds_captured_trip()
 	_test_completed_order_waits_for_fresh_publication()
 	_test_active_personal_need_blocks_work()
 	_test_personal_need_blocks_other_personal_need()
-	_test_order_board_equivalence_ignores_payload_position()
+	_test_order_board_payload_change_replaces_order()
 	_test_native_rest_goal()
 	_test_move_to_step()
 	_test_move_to_step_records_failure_reason()
@@ -347,6 +349,15 @@ func _test_utility_hysteresis() -> void:
 	work.utility = 0.0
 	eat.utility = 0.02
 	assert(arbiter.choose(snapshot, citizen, null, memory, &"work").goal == eat)
+
+
+func _test_utility_hysteresis_allows_critical_preemption() -> void:
+	var work := FixedGoal.new(&"work", 0.90)
+	var emergency := FixedGoal.new(&"emergency", 1.0)
+	var arbiter := UtilityArbiter.new()
+	arbiter.configure([work, emergency])
+	var result := arbiter.choose(WorldSnapshot.new(), CitizenSnapshot.new(1), null, AIBlackboard.new(), &"work")
+	assert(result.goal == emergency)
 
 
 func _test_failure_cooldown() -> void:
@@ -640,6 +651,22 @@ func _test_personal_need_preempts_work_trip() -> void:
 	assert(actuator.action_start_count == 0)
 
 
+func _test_personal_need_ignores_changed_work_order() -> void:
+	var meal := MealGoalScript.new()
+	var actuator := FakeActuator.new(1)
+	var brain := CitizenBrain.new(1, actuator, [meal])
+	var snapshot := _meal_snapshot(true)
+	var original := CitizenOrder.new(1, &"forestry", &"workforce.forestry", 0.55)
+	original.id = 1201
+	brain.think(snapshot, original)
+	assert(brain.runner.active_goal_id() == &"meal")
+	assert(brain.runner.active_task.order == null)
+	assert(brain.runner.active_task.order_id == 0)
+	brain.tick(snapshot, null, 0.1)
+	assert(brain.runner.active_goal_id() == &"meal")
+	assert(not brain.blackboard.is_on_cooldown(&"meal", snapshot.simulation_seconds))
+
+
 func _test_changed_work_order_cancels_captured_trip() -> void:
 	var forestry := ForestryGoalScript.new()
 	var meal := MealGoalScript.new()
@@ -762,23 +789,23 @@ func _test_personal_need_blocks_other_personal_need() -> void:
 	assert(actuator.cancel_action_count == 0)
 
 
-func _test_order_board_equivalence_ignores_payload_position() -> void:
+func _test_order_board_payload_change_replaces_order() -> void:
 	var board := OrderBoard.new()
 	var order1 := CitizenOrder.new(1, &"gathering", &"workforce.gathering", 0.5, AIFactSet.new({
 		&"warehouse.position": Vector3(1.0, 0.0, 0.0),
 	}))
 	order1.target_key = &"branch:5:5"
-	order1.id = 1
-	order1.issued_at = 0.0
 	var order2 := CitizenOrder.new(1, &"gathering", &"workforce.gathering", 0.5, AIFactSet.new({
 		&"warehouse.position": Vector3(2.0, 0.0, 0.0),
 	}))
 	order2.target_key = &"branch:5:5"
 	board.replace_issuer_orders(&"workforce.gathering", [order1], 0.0)
+	var initial := board.order_for(1, 0.0)
+	assert(initial != null)
 	board.replace_issuer_orders(&"workforce.gathering", [order2], 1.0)
 	var best := board.order_for(1, 1.0)
 	assert(best != null)
-	assert(best.id == 1)
+	assert(best.id != initial.id)
 
 
 func _test_native_rest_goal() -> void:
@@ -2447,27 +2474,18 @@ func _snapshot_with_wellbeing(wellbeing: int, citizen: CitizenSnapshot) -> World
 
 
 func _test_work_refusal_when_wellbeing_low() -> void:
+	# Work goals must NOT refuse work at any wellbeing level. Speed penalties
+	# are applied via efficiency, not via goal scoring. Only personal needs
+	# (sleep, meal, toilet, rest) may preempt work.
 	var forestry_goal := ForestryGoalScript.new()
-	var construction_goal := ConstructionGoalScript.new()
-	var gathering_goal := GatheringGoalScript.new()
-	var excavation_goal := ExcavationGoalScript.new()
-	var farming_goal := FarmingGoalScript.new()
-	var service_goal := ServiceWorkGoalScript.new()
-	var factory_goal := FactoryWorkGoalScript.new()
 	var courier_goal := CourierDeliveryGoalScript.new()
 
 	var forestry_citizen := _forestry_citizen(1, false)
 	var forestry_order := _forestry_order(1, Vector3(3.0, 0.0, 0.0), &"tree:3:0")
 
 	var low_snapshot := _snapshot_with_wellbeing(25, forestry_citizen)
-	assert(is_zero_approx(forestry_goal.score(low_snapshot, forestry_citizen, forestry_order, AIBlackboard.new())))
-	assert(is_zero_approx(construction_goal.score(low_snapshot, forestry_citizen, forestry_order, AIBlackboard.new())))
-	assert(is_zero_approx(gathering_goal.score(low_snapshot, forestry_citizen, forestry_order, AIBlackboard.new())))
-	assert(is_zero_approx(excavation_goal.score(low_snapshot, forestry_citizen, forestry_order, AIBlackboard.new())))
-	assert(is_zero_approx(farming_goal.score(low_snapshot, forestry_citizen, forestry_order, AIBlackboard.new())))
-	assert(is_zero_approx(service_goal.score(low_snapshot, forestry_citizen, forestry_order, AIBlackboard.new())))
-	assert(is_zero_approx(factory_goal.score(low_snapshot, forestry_citizen, forestry_order, AIBlackboard.new())))
-	assert(is_zero_approx(courier_goal.score(low_snapshot, forestry_citizen, forestry_order, AIBlackboard.new())))
+	assert(not is_zero_approx(forestry_goal.score(low_snapshot, forestry_citizen, forestry_order, AIBlackboard.new())), "Forestry must not refuse work at low wellbeing")
+
 	var active_courier := CitizenSnapshot.new(2, Vector3.ZERO, false, true, AIFactSet.new({
 		&"work.courier.worker": true,
 		&"work.courier.in_progress": true,
