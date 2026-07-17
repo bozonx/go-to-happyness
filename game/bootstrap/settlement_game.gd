@@ -81,6 +81,8 @@ const PLAYER_EYE_HEIGHT := 1.65
 const HARVEST_DURATION := 1.25
 const INTERACTION_RANGE := 4.5
 const JOB_ENTRANCE_RANGE := 3.5
+const SUN_FLARE_OCCLUSION_MASK := 1
+const SUN_FLARE_OCCLUSION_DISTANCE := 96.0
 const POCKET_CAPACITY := 8
 const POCKET_WOOD_CAPACITY := POCKET_CAPACITY
 # The hero gathers raw bootstrap materials in a batch per action, unlike NPCs who
@@ -237,6 +239,7 @@ var weather_state := WeatherStateScript.new()
 var rain_effect: RainEffect
 var fireflies: Array[FirefliesEffect] = []
 var lens_flare_material: ShaderMaterial
+var lens_flare_visibility := 0.0
 var camera_target := Vector3.ZERO
 var camera_distance := 30.0
 var camera_yaw := 42.0
@@ -922,18 +925,40 @@ func _update_daylight() -> void:
 func _update_lens_flare(direct_light: float, overcast: float) -> void:
 	if lens_flare_material == null or camera == null or sun == null:
 		return
-	# Sun direction in world space (opposite of light forward)
 	var sun_dir := -sun.global_transform.basis.z.normalized()
-	# Project a point far along the sun direction onto screen space
 	var sun_world_pos := camera.global_position + sun_dir * 1000.0
-	var screen_pos := camera.unproject_position(sun_world_pos)
 	var viewport_size := get_viewport().get_visible_rect().size
+	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0 or camera.is_position_behind(sun_world_pos):
+		lens_flare_visibility = lerpf(lens_flare_visibility, 0.0, 0.2)
+		lens_flare_material.set_shader_parameter("u_intensity", lens_flare_visibility)
+		return
+	var screen_pos := camera.unproject_position(sun_world_pos)
 	var uv := Vector2(screen_pos.x / viewport_size.x, screen_pos.y / viewport_size.y)
 	lens_flare_material.set_shader_parameter("u_sun_screen_pos", uv)
-	# Fade flare with direct light and hide when overcast
-	var flare_intensity := direct_light * (1.0 - overcast * 0.7)
-	lens_flare_material.set_shader_parameter("u_intensity", flare_intensity)
+	lens_flare_material.set_shader_parameter("u_aspect", viewport_size.x / viewport_size.y)
+	lens_flare_material.set_shader_parameter("u_sun_color", sun.light_color)
+	var edge_distance := minf(minf(uv.x, 1.0 - uv.x), minf(uv.y, 1.0 - uv.y))
+	var edge_fade := smoothstep(-0.12, 0.10, edge_distance)
+	var occlusion := _sun_flare_occlusion(sun_dir)
+	var flare_intensity := direct_light * (1.0 - overcast * 0.85) * edge_fade * occlusion
+	lens_flare_visibility = lerpf(lens_flare_visibility, flare_intensity, 0.16)
+	lens_flare_material.set_shader_parameter("u_intensity", lens_flare_visibility)
 	lens_flare_material.set_shader_parameter("u_time", runtime_seconds)
+
+func _sun_flare_occlusion(sun_dir: Vector3) -> float:
+	var world := get_world_3d()
+	if world == null:
+		return 1.0
+	var from := camera.global_position + sun_dir * 0.75
+	var to := from + sun_dir * SUN_FLARE_OCCLUSION_DISTANCE
+	var query := PhysicsRayQueryParameters3D.create(from, to)
+	query.collide_with_areas = false
+	query.collide_with_bodies = true
+	query.collision_mask = SUN_FLARE_OCCLUSION_MASK
+	var hit := world.direct_space_state.intersect_ray(query)
+	if hit.is_empty():
+		return 1.0
+	return 0.0
 
 
 func _update_clock(delta: float) -> void:
@@ -2465,7 +2490,7 @@ func _create_world() -> void:
 	world_environment.ambient_light_energy = 0.65
 	world_environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	world_environment.glow_enabled = true
-	world_environment.glow_normalized = true
+	world_environment.glow_normalized = false
 	world_environment.glow_intensity = 0.18
 	world_environment.glow_strength = 0.72
 	world_environment.glow_bloom = 0.05
@@ -2506,6 +2531,8 @@ func _create_lens_flare() -> void:
 	lens_flare_material.shader = shader
 	lens_flare_material.set_shader_parameter("u_sun_screen_pos", Vector2(0.5, 0.5))
 	lens_flare_material.set_shader_parameter("u_intensity", 0.0)
+	lens_flare_material.set_shader_parameter("u_aspect", 1.0)
+	lens_flare_material.set_shader_parameter("u_sun_color", Color("fff2d1"))
 	lens_flare_material.set_shader_parameter("u_time", 0.0)
 	var rect := ColorRect.new()
 	rect.material = lens_flare_material
@@ -2801,14 +2828,14 @@ func _create_tree(position_on_board: Vector3, refresh_navigation := true) -> voi
 func _create_firefly_clusters() -> void:
 	if DisplayServer.get_name() == "headless":
 		return
-	_create_firefly_cluster("FirefliesNorthWest", [Vector2i(-16, -15), Vector2i(-15, -18), Vector2i(-18, -12), Vector2i(-12, -19)], 38, 5.8, 3.5)
-	_create_firefly_cluster("FirefliesNorthEast", [Vector2i(16, -15), Vector2i(15, -18), Vector2i(18, -12), Vector2i(12, -19)], 38, 5.8, 3.5)
-	_create_firefly_cluster("FirefliesSouthWest", [Vector2i(-16, 15), Vector2i(-15, 18), Vector2i(-18, 12), Vector2i(-12, 19)], 38, 5.8, 3.5)
-	_create_firefly_cluster("FirefliesSouthEast", [Vector2i(16, 15), Vector2i(15, 18), Vector2i(18, 12), Vector2i(12, 19)], 38, 5.8, 3.5)
-	_create_firefly_cluster("FirefliesWestGrove", [Vector2i(-20, -5), Vector2i(-20, 5)], 24, 4.6, 2.8)
-	_create_firefly_cluster("FirefliesEastGrove", [Vector2i(20, -5), Vector2i(20, 5)], 24, 4.6, 2.8)
-	_create_firefly_cluster("FirefliesNorthGrove", [Vector2i(-5, -20), Vector2i(5, -20)], 24, 4.6, 2.8)
-	_create_firefly_cluster("FirefliesSouthGrove", [Vector2i(-5, 20), Vector2i(5, 20)], 24, 4.6, 2.8)
+	_create_firefly_cluster("FirefliesNorthWest", [Vector2i(-16, -15), Vector2i(-15, -18), Vector2i(-18, -12), Vector2i(-12, -19)], 38, 4.4, 3.5)
+	_create_firefly_cluster("FirefliesNorthEast", [Vector2i(16, -15), Vector2i(15, -18), Vector2i(18, -12), Vector2i(12, -19)], 38, 4.4, 3.5)
+	_create_firefly_cluster("FirefliesSouthWest", [Vector2i(-16, 15), Vector2i(-15, 18), Vector2i(-18, 12), Vector2i(-12, 19)], 38, 4.4, 3.5)
+	_create_firefly_cluster("FirefliesSouthEast", [Vector2i(16, 15), Vector2i(15, 18), Vector2i(18, 12), Vector2i(12, 19)], 38, 4.4, 3.5)
+	_create_firefly_cluster("FirefliesWestGrove", [Vector2i(-20, -5), Vector2i(-20, 5)], 24, 3.6, 2.8)
+	_create_firefly_cluster("FirefliesEastGrove", [Vector2i(20, -5), Vector2i(20, 5)], 24, 3.6, 2.8)
+	_create_firefly_cluster("FirefliesNorthGrove", [Vector2i(-5, -20), Vector2i(5, -20)], 24, 3.6, 2.8)
+	_create_firefly_cluster("FirefliesSouthGrove", [Vector2i(-5, 20), Vector2i(5, 20)], 24, 3.6, 2.8)
 
 
 func _create_firefly_cluster(cluster_name: String, cells: Array, amount_count: int, radius: float, height: float) -> void:

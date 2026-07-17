@@ -1,14 +1,15 @@
 class_name RainEffect
 extends Node3D
 
-## Camera-following rain built from cheap particle layers:
-## distant slanted streaks, camera-local near drops, and small ground splashes.
+## A world-anchored, GPU-particle rain volume. It is only recentered on a coarse
+## grid, which keeps the weather from visibly sliding with the camera.
 
-@export var streak_amount := 900
-@export var near_drop_amount := 180
-@export var splash_amount := 140
+@export var streak_amount := 620
+@export var near_drop_amount := 80
+@export var splash_amount := 75
 @export var follow_radius := 20.0
 @export var overhead_height := 8.0
+@export var anchor_grid_size := 10.0
 
 var _camera: Camera3D
 var _streaks: GPUParticles3D
@@ -16,6 +17,7 @@ var _near_drops: GPUParticles3D
 var _splashes: GPUParticles3D
 var _target_intensity := 0.0
 var _visible_intensity := 0.0
+var _horizontal_view_factor := 1.0
 
 
 func _ready() -> void:
@@ -49,7 +51,7 @@ func _process(delta: float) -> void:
 		return
 	visible = true
 	_follow_camera()
-	_set_layer_intensity(_visible_intensity)
+	_set_layer_intensity(_visible_intensity, _horizontal_view_factor)
 
 
 func _create_streak_layer() -> void:
@@ -85,19 +87,19 @@ func _create_near_drop_layer() -> void:
 	_near_drops = GPUParticles3D.new()
 	_near_drops.name = "RainNearDrops"
 	_near_drops.amount = near_drop_amount
-	_near_drops.lifetime = 0.42
+	_near_drops.lifetime = 0.65
 	_near_drops.preprocess = 0.18
-	_near_drops.local_coords = true
-	_near_drops.visibility_aabb = AABB(Vector3(-3.6, -2.2, -0.5), Vector3(7.2, 4.4, 1.0))
+	_near_drops.local_coords = false
+	_near_drops.visibility_aabb = AABB(Vector3(-8.0, -18.0, -8.0), Vector3(16.0, 28.0, 16.0))
 
 	var drop_material := ParticleProcessMaterial.new()
 	drop_material.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
-	drop_material.emission_box_extents = Vector3(3.0, 1.8, 0.12)
+	drop_material.emission_box_extents = Vector3(7.0, 1.8, 7.0)
 	drop_material.direction = Vector3(0.08, -1.0, 0.0).normalized()
 	drop_material.spread = 8.0
-	drop_material.initial_velocity_min = 2.8
-	drop_material.initial_velocity_max = 4.4
-	drop_material.gravity = Vector3.ZERO
+	drop_material.initial_velocity_min = 12.0
+	drop_material.initial_velocity_max = 16.0
+	drop_material.gravity = Vector3(0.0, -8.0, 0.0)
 	drop_material.scale_min = 0.7
 	drop_material.scale_max = 1.25
 	drop_material.set_particle_flag(ParticleProcessMaterial.PARTICLE_FLAG_ALIGN_Y_TO_VELOCITY, true)
@@ -107,7 +109,6 @@ func _create_near_drop_layer() -> void:
 	quad.size = Vector2(0.018, 0.14)
 	quad.material = _create_particle_material(Color("d7edf7", 0.32), BaseMaterial3D.BILLBOARD_PARTICLES)
 	_near_drops.draw_pass_1 = quad
-	_near_drops.top_level = true
 	add_child(_near_drops)
 
 
@@ -161,9 +162,16 @@ func _follow_camera() -> void:
 		return
 
 	var focus := _camera_focus_point(active_camera)
-	global_position = Vector3(focus.x, maxf(active_camera.global_position.y + overhead_height, 9.0), focus.z)
-	_near_drops.global_transform = active_camera.global_transform.translated_local(Vector3(0.0, -0.05, -2.8))
-	_splashes.global_position = Vector3(focus.x, 0.22, focus.z)
+	var anchor := Vector3(
+		snappedf(focus.x, anchor_grid_size),
+		maxf(active_camera.global_position.y + overhead_height, 9.0),
+		snappedf(focus.z, anchor_grid_size),
+	)
+	global_position = anchor
+	_splashes.global_position = Vector3(anchor.x, 0.22, anchor.z)
+	var forward := -active_camera.global_transform.basis.z.normalized()
+	# Long streaks read as poles from above. Surface hits carry the rain there.
+	_horizontal_view_factor = 1.0 - smoothstep(0.48, 0.86, absf(forward.y))
 
 
 func _camera_focus_point(active_camera: Camera3D) -> Vector3:
@@ -180,13 +188,15 @@ func _camera_focus_point(active_camera: Camera3D) -> Vector3:
 	return camera_position + flat_forward.normalized() * 6.0
 
 
-func _set_layer_intensity(intensity: float) -> void:
+func _set_layer_intensity(intensity: float, horizontal_view_factor: float = 1.0) -> void:
 	if _streaks == null or _near_drops == null or _splashes == null:
 		return
 	var eased := smoothstep(0.0, 1.0, intensity)
-	_streaks.amount_ratio = lerpf(0.15, 1.0, eased) if intensity > 0.005 else 0.0
-	_streaks.emitting = intensity > 0.005
-	_near_drops.amount_ratio = lerpf(0.08, 0.82, eased) if intensity > 0.005 else 0.0
-	_near_drops.emitting = intensity > 0.005
-	_splashes.amount_ratio = lerpf(0.0, 0.7, eased)
-	_splashes.emitting = intensity > 0.08
+	var streak_factor := eased * horizontal_view_factor
+	var splash_factor := eased * lerpf(1.0, 0.45, horizontal_view_factor)
+	_streaks.amount_ratio = lerpf(0.18, 1.0, streak_factor) if streak_factor > 0.005 else 0.0
+	_streaks.emitting = streak_factor > 0.005
+	_near_drops.amount_ratio = lerpf(0.12, 0.85, streak_factor) if streak_factor > 0.005 else 0.0
+	_near_drops.emitting = streak_factor > 0.005
+	_splashes.amount_ratio = lerpf(0.0, 0.8, splash_factor)
+	_splashes.emitting = splash_factor > 0.08

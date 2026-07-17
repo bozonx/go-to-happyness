@@ -11,8 +11,8 @@ const FIREFLY_SOFT_GREEN := Color(0.62, 1.0, 0.54)
 @export var swarm_radius := 5.0
 @export var swarm_height := 3.2
 @export var minimum_height := 0.45
-@export var visibility_distance_begin := 46.0
-@export var visibility_distance_end := 78.0
+@export var visibility_distance_begin := 32.0
+@export var visibility_distance_end := 58.0
 
 var _rng := RandomNumberGenerator.new()
 var _records: Array[FireflyRecord] = []
@@ -92,7 +92,7 @@ func _create_firefly_material() -> ShaderMaterial:
 shader_type spatial;
 render_mode unshaded, blend_add, depth_draw_never, cull_disabled, fog_disabled, skip_vertex_transform;
 
-uniform float glow_strength = 3.8;
+uniform float glow_strength = 3.2;
 
 void vertex() {
 	vec3 center = (MODELVIEW_MATRIX * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
@@ -131,7 +131,7 @@ func _spawn_fireflies() -> void:
 		record.drift_speed = _rng.randf_range(0.18, 0.42)
 		record.radius_scale = _rng.randf_range(0.55, 1.15)
 		record.height_scale = _rng.randf_range(0.55, 1.05)
-		record.size = _rng.randf_range(0.18, 0.34)
+		record.size = _rng.randf_range(0.11, 0.22)
 		record.blink_speed = _rng.randf_range(0.62, 1.18)
 		record.color = FIREFLY_WARM.lerp(FIREFLY_SOFT_GREEN, _rng.randf_range(0.0, 0.42))
 		_records.append(record)
@@ -141,7 +141,10 @@ func _spawn_fireflies() -> void:
 
 func _update_instances() -> void:
 	var distance_factor := _camera_distance_factor()
-	var final_visibility := _visibility * distance_factor
+	var final_visibility := _visibility * pow(distance_factor, 2.2)
+	_instance.visible = final_visibility > 0.01
+	if not _instance.visible:
+		return
 	for index in _records.size():
 		var record := _records[index]
 		var position := _position_for(record)
