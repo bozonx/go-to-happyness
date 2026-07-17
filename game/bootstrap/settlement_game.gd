@@ -52,7 +52,10 @@ const EventOutcomeScript = preload("res://game/features/events/domain/event_outc
 const TentEraEventsScript = preload("res://game/features/events/application/tent_era_events.gd")
 
 
-const BOARD_CELLS := 48
+# The playable routing and construction board must cover the terrain visible
+# beyond the starter forest. The former 48-cell board ended just behind the
+# trees, while the rendered ground continued much farther out.
+const BOARD_CELLS := 96
 const CELL_SIZE := BuildingBlueprints.BLOCK_SIZE
 const BUILDING_CLEARANCE_BLOCKS := 3.0
 const TREE_BUILD_CLEARANCE_BLOCKS := 1.0
@@ -389,6 +392,7 @@ var building_seller_button: Button
 var building_accept_workers_button: Button
 var building_dismiss_worker_button: Button
 var building_upgrade_button: Button
+var building_demolish_button: Button
 var building_close_button: Button
 var building_overtime_button: CheckButton
 var building_relight_button: Button
@@ -2681,7 +2685,7 @@ func _create_headless_ground() -> void:
 	ground.name = "HeadlessGround"
 	var collision := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
-	shape.size = Vector3(BOARD_CELLS * CELL_SIZE * 2.0, 0.2, BOARD_CELLS * CELL_SIZE * 2.0)
+	shape.size = Vector3(BOARD_CELLS * CELL_SIZE, 0.2, BOARD_CELLS * CELL_SIZE)
 	collision.shape = shape
 	collision.position.y = -0.1
 	ground.add_child(collision)
@@ -8995,6 +8999,12 @@ func _create_building_menu(ui: CanvasLayer) -> void:
 	building_upgrade_button.pressed.connect(_upgrade_selected_building)
 	building_menu.add_child(building_upgrade_button)
 
+	building_demolish_button = Button.new()
+	building_demolish_button.text = "Mark for demolition"
+	building_demolish_button.size = Vector2(272, 30)
+	building_demolish_button.pressed.connect(_demolish_selected_building)
+	building_menu.add_child(building_demolish_button)
+
 	building_close_button = Button.new()
 	building_close_button.text = "Close"
 	building_close_button.position = Vector2(16, 184)
@@ -9035,13 +9045,14 @@ func _show_building_menu() -> void:
 		building_dismiss_worker_button.visible = false
 		building_upgrade_button.visible = false
 		building_relight_button.visible = false
+		building_demolish_button.visible = false
 		building_cancel_construction_button.visible = true
 		building_cancel_construction_button.position.y = 104.0
 		building_close_button.position.y = 140.0
 	else:
 		var building_type := str(selected_building.get_meta("building_type", "building"))
 		var definition := BuildingCatalog.definition_for(building_type)
-		building_menu_title.text = "%s\n%s" % [str(definition.get("name", building_type.capitalize())), "Press Delete to mark this building for demolition."]
+		building_menu_title.text = str(definition.get("name", building_type.capitalize()))
 		building_cook_button.visible = building_type in ["cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant"]
 		var can_manage_professions := _player_can_manage_permanent_professions()
 		var profession_blocked_tooltip := _permanent_profession_block_message()
@@ -9069,6 +9080,8 @@ func _show_building_menu() -> void:
 		building_accept_workers_button.disabled = not can_command_labor
 		building_accept_workers_button.tooltip_text = labor_blocked_tooltip if not can_command_labor else ""
 		building_cancel_construction_button.visible = false
+		var is_demolishable := BuildingCatalog.is_demolishable(building_type) and selected_building != entrance_stone
+		building_demolish_button.visible = is_demolishable
 		building_relight_button.visible = building_type in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"] and not _is_fire_lit(selected_building)
 		
 		var officer := _workplace_worker(selected_building)
@@ -9102,7 +9115,10 @@ func _show_building_menu() -> void:
 		if building_upgrade_button.visible:
 			building_upgrade_button.position.y = next_y
 			next_y += 36.0
-			
+		if building_demolish_button.visible:
+			building_demolish_button.position.y = next_y
+			next_y += 36.0
+
 		var special_button_visible := building_cook_button.visible or building_teacher_button.visible or building_seller_button.visible
 		for button in [building_cook_button, building_teacher_button, building_seller_button]:
 			if button.visible:
@@ -9112,6 +9128,11 @@ func _show_building_menu() -> void:
 		else:
 			next_y += 8.0
 		building_close_button.position.y = next_y
+
+
+func _demolish_selected_building() -> void:
+	if is_instance_valid(selected_building):
+		_mark_building_for_demolition(selected_building)
 
 
 func _relight_selected_fire() -> void:

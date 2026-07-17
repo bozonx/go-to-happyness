@@ -236,6 +236,11 @@ func _init() -> void:
 	assert(pond_access != Vector3.INF)
 	var pond_access_route: RouteResult = simulation._find_path_around_houses(simulation.citizens[0].global_position, pond_access, false)
 	assert(pond_access_route.reachable)
+	# The terrain continues behind the starter forest. Its cells must remain part
+	# of the shared construction and navigation board so citizens can work there.
+	var beyond_forest := Vector3(30.5, 0.0, 0.5)
+	assert(simulation._is_board_cell(simulation._cell_from_position(beyond_forest)))
+	assert(simulation._find_path_around_houses(simulation.citizens[0].global_position, beyond_forest, false).reachable)
 	var cell := Vector2i(12, 12)
 	var position := Vector3(12.0, 0.0, 12.0)
 	var blueprint := BuildingBlueprints.get_blueprint("campfire")
