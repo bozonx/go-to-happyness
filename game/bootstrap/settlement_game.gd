@@ -453,6 +453,7 @@ var campfire_orders_toggle: CheckButton
 var campfire_balanced_warehouse_toggle: CheckButton
 var campfire_cheer_button: Button
 var campfire_night_work_button: CheckButton
+var campfire_double_time_button: CheckButton
 var personal_night_work_button: CheckButton
 
 
@@ -1036,6 +1037,7 @@ func _handle_day_cycle_event(event: SimulationDayEvent) -> void:
 			_maybe_present_survival_decision()
 			_refresh_living_statuses()
 			settlement.cheer_up_used_today = false
+			settlement.double_time_order_day = -1
 			_apply_daily_settlement_rules()
 			_return_outside_workers()
 
@@ -1089,6 +1091,7 @@ func _resume_overtime_daily_orders() -> void:
 
 
 func _apply_hourly_work_fatigue() -> void:
+	var double_time_active := settlement.double_time_order_day == day_cycle.current_day
 	for citizen in citizens:
 		if not is_instance_valid(citizen) or citizen.is_player_controlled:
 			continue
@@ -1098,7 +1101,10 @@ func _apply_hourly_work_fatigue() -> void:
 		if _is_citizen_work_time(citizen) and not citizen.active_role.is_empty():
 			var overtime := citizen.has_active_overtime(day_cycle.current_day)
 			citizen.continuous_work_hours += 1.0
-			citizen.fatigue = minf(100.0, citizen.fatigue + (6.0 if overtime else 2.0) + maxf(0.0, settlement.workday_hours - 8) * 0.75)
+			var fatigue_gain := (6.0 if overtime else 2.0) + maxf(0.0, settlement.workday_hours - 8) * 0.75
+			if double_time_active:
+				fatigue_gain *= 1.5
+			citizen.fatigue = minf(100.0, citizen.fatigue + fatigue_gain)
 			if overtime:
 				citizen.satisfaction = maxf(0.0, citizen.satisfaction - 2.0)
 			elif settlement.workday_hours < 8:
@@ -1106,6 +1112,8 @@ func _apply_hourly_work_fatigue() -> void:
 			elif settlement.workday_hours > 8:
 				var long_day_penalty := pow(float(settlement.workday_hours - 8), 1.25) * 0.22
 				citizen.satisfaction = maxf(0.0, citizen.satisfaction - long_day_penalty)
+			if double_time_active and not overtime:
+				citizen.satisfaction = maxf(0.0, citizen.satisfaction - 1.0)
 		elif _is_work_time():
 			citizen.continuous_work_hours = maxf(0.0, citizen.continuous_work_hours - 3.0)
 			citizen.fatigue = maxf(0.0, citizen.fatigue - 4.0)
@@ -7918,7 +7926,7 @@ func _select_campfire_story(story_id: String) -> void:
 
 
 func _create_campfire_orders_menu(ui: CanvasLayer) -> void:
-	campfire_orders_menu = _create_context_menu_panel(ui, Control.PRESET_CENTER, Vector4(-210.0, -155.0, 210.0, 155.0))
+	campfire_orders_menu = _create_context_menu_panel(ui, Control.PRESET_CENTER, Vector4(-210.0, -190.0, 210.0, 190.0))
 
 	var title := Label.new()
 	title.text = "Campfire Orders"
@@ -7947,30 +7955,37 @@ func _create_campfire_orders_menu(ui: CanvasLayer) -> void:
 	campfire_night_work_button.tooltip_text = "Affected workers continue through the night and next workday."
 	campfire_night_work_button.toggled.connect(_toggle_settlement_night_work)
 	campfire_orders_menu.add_child(campfire_night_work_button)
+	campfire_double_time_button = CheckButton.new()
+	campfire_double_time_button.text = "Double time"
+	campfire_double_time_button.position = Vector2(18, 172)
+	campfire_double_time_button.size = Vector2(384, 32)
+	campfire_double_time_button.tooltip_text = "All residents walk twice as fast today. Fatigue accumulates 50%% faster and satisfaction drops."
+	campfire_double_time_button.toggled.connect(_toggle_double_time_order)
+	campfire_orders_menu.add_child(campfire_double_time_button)
 	var description := Label.new()
-	description.text = "Night work raises fatigue and lowers satisfaction. Dangerously tired residents may collapse while returning home."
-	description.position = Vector2(18, 174)
-	description.size = Vector2(384, 44)
+	description.text = "Night work raises fatigue and lowers satisfaction. Dangerously tired residents may collapse while returning home.\nDouble time doubles walk speed but accelerates fatigue by 50%% and lowers satisfaction."
+	description.position = Vector2(18, 212)
+	description.size = Vector2(384, 60)
 	description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	description.add_theme_font_size_override("font_size", 13)
 	campfire_orders_menu.add_child(description)
 	campfire_cheer_button = Button.new()
 	campfire_cheer_button.text = "Cheer up"
-	campfire_cheer_button.position = Vector2(18, 222)
+	campfire_cheer_button.position = Vector2(18, 280)
 	campfire_cheer_button.size = Vector2(384, 32)
 	campfire_cheer_button.tooltip_text = "Once per day. Raises wellbeing by 5%%."
 	campfire_cheer_button.pressed.connect(_cheer_up_settlement)
 	campfire_orders_menu.add_child(campfire_cheer_button)
 	var close_button := Button.new()
 	close_button.text = "Close"
-	close_button.position = Vector2(286, 230)
+	close_button.position = Vector2(286, 288)
 	close_button.size = Vector2(116, 32)
 	close_button.pressed.connect(_close_campfire_orders_menu)
 	campfire_orders_menu.add_child(close_button)
 
 
 func _show_campfire_orders_menu() -> void:
-	if campfire_orders_menu == null or campfire_orders_toggle == null or campfire_cheer_button == null or campfire_balanced_warehouse_toggle == null or campfire_night_work_button == null:
+	if campfire_orders_menu == null or campfire_orders_toggle == null or campfire_cheer_button == null or campfire_balanced_warehouse_toggle == null or campfire_night_work_button == null or campfire_double_time_button == null:
 		return
 	campfire_menu.visible = false
 	campfire_orders_toggle.set_pressed_no_signal(settlement.road_walking_order_enabled)
@@ -7988,6 +8003,9 @@ func _show_campfire_orders_menu() -> void:
 	campfire_night_work_button.disabled = not can_order_night_work
 	campfire_night_work_button.set_pressed_no_signal(settlement_night_active)
 	campfire_night_work_button.tooltip_text = "No active workers can receive this order." if not can_order_night_work else "Affected workers continue through the night and next workday. Raises fatigue and lowers satisfaction."
+	var double_time_active := settlement.double_time_order_day == day_cycle.current_day
+	campfire_double_time_button.set_pressed_no_signal(double_time_active)
+	campfire_double_time_button.tooltip_text = "All residents walk twice as fast today. Fatigue accumulates 50%% faster and satisfaction drops." if not double_time_active else "Active. Residents are marching at double speed."
 	campfire_orders_menu.visible = true
 
 
@@ -8056,6 +8074,19 @@ func _toggle_settlement_night_work(checked: bool) -> void:
 		_update_skip_night_button()
 		if citizen_ai != null:
 			citizen_ai.request_decision_refresh()
+	_show_campfire_orders_menu()
+
+
+func _toggle_double_time_order(checked: bool) -> void:
+	if checked:
+		if settlement.double_time_order_day == day_cycle.current_day:
+			campfire_double_time_button.set_pressed_no_signal(false)
+			return
+		settlement.double_time_order_day = day_cycle.current_day
+		_update_interface("Double time order issued. All residents walk twice as fast today, but fatigue accumulates faster.")
+	else:
+		settlement.double_time_order_day = -1
+		_update_interface("Double time order cancelled. Residents resume normal pace.")
 	_show_campfire_orders_menu()
 
 

@@ -2326,6 +2326,9 @@ func get_walk_speed() -> float:
 	var speed := WALK_SPEED * float(COURIER_EQUIPMENT.get(courier_equipment, COURIER_EQUIPMENT.hands).speed)
 	if has_perk("construction"):
 		speed *= 1.15
+	if simulation != null and simulation.settlement != null:
+		if simulation.settlement.double_time_order_day == simulation.day_cycle.current_day:
+			speed *= 2.0
 	return speed
 
 

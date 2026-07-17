@@ -122,7 +122,7 @@ func capture(sequence: int) -> WorldSnapshot:
 				gathering_candidates = _daily_gathering_targets_for(actor, "gather_branches")
 		var daily_gathering_in_progress := daily_order_active and daily_order_role.begins_with("gather_") and actor.active_role.begins_with("gather_") and actor.state in [Citizen.State.TO_GATHER, Citizen.State.GATHERING, Citizen.State.TO_WAREHOUSE]
 		var daily_gathering_candidates: Array[Dictionary] = []
-		if daily_order_role.begins_with("gather_") and simulation._has_storage_room_for_role(daily_order_role):
+		if daily_order_role.begins_with("gather_"):
 			daily_gathering_candidates = _daily_gathering_targets_for(actor, daily_order_role)
 		var daily_gathering_can_start := daily_order_active and daily_order_role.begins_with("gather_") and not daily_gathering_candidates.is_empty()
 		var daily_cleaning_in_progress := daily_order_active and daily_order_role == "cleaning" and actor.active_role == "cleaning" and actor.state in [Citizen.State.TO_CLEANING_PILE, Citizen.State.CLEANING_PILE, Citizen.State.TO_WAREHOUSE]
@@ -565,7 +565,15 @@ func _gathering_warehouse_position(actor: Citizen, candidates: Array[Dictionary]
 		var first_position: Variant = candidates[0].get(&"position", actor.global_position)
 		var resource_type := str(candidates[0].get(&"resource_type", ""))
 		if first_position is Vector3:
-			return _storage_position_for(first_position as Vector3, resource_type)
+			var storage_position := _storage_position_for(first_position as Vector3, resource_type)
+			if storage_position != Vector3.INF:
+				return storage_position
+		# Manual gathering remains useful before a warehouse exists or when all
+		# storage is full. Deliver at the walkable source access point and let the
+		# storage service leave the cargo in a ground pile.
+		var access_position: Variant = candidates[0].get(&"access", Vector3.INF)
+		if access_position is Vector3:
+			return access_position
 	return Vector3.INF
 
 

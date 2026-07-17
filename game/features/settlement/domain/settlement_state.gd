@@ -72,6 +72,7 @@ var tarp: int:
 var wellbeing := 75
 var workday_hours := 8
 var night_work_order_day := -1
+var double_time_order_day := -1
 var road_walking_order_enabled := false
 var balanced_warehouse_mode := false
 var cheer_up_used_today := false
@@ -159,6 +160,7 @@ func apply_tent_start(reset_progress := true) -> void:
 	wellbeing = TENT_STARTING_WELLBEING
 	workday_hours = 8
 	night_work_order_day = -1
+	double_time_order_day = -1
 	road_walking_order_enabled = false
 	balanced_warehouse_mode = false
 	cheer_up_used_today = false
