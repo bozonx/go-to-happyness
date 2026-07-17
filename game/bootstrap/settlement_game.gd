@@ -1013,6 +1013,10 @@ func _handle_day_cycle_event(event: SimulationDayEvent) -> void:
 			_resume_overtime_daily_orders()
 			_refresh_living_statuses()
 			_update_workers()
+			# The previous shift cancels all brains. Rebuild the snapshot and player
+			# orders as soon as the next workday opens so queued daily orders resume.
+			if citizen_ai != null:
+				citizen_ai.request_decision_refresh()
 			_update_interface("Morning: workers left their homes for their assignments.")
 		SimulationDayEvent.Kind.SCHOOL_DAY_ENDED:
 			var teacher_ok := _is_teacher_present_at_school()
