@@ -75,7 +75,6 @@ var night_work_order_day := -1
 var road_walking_order_enabled := false
 var balanced_warehouse_mode := false
 var cheer_up_used_today := false
-var low_wellbeing_days := 0
 var tools := {"axe": false, "hand_saw": false, "shovel": false, "bucket": false, "hoe": false, "pickaxe": false}
 var tool_uses := {}
 var equipment: Dictionary = TENT_STARTING_EQUIPMENT.duplicate(true)
@@ -163,7 +162,6 @@ func apply_tent_start(reset_progress := true) -> void:
 	road_walking_order_enabled = false
 	balanced_warehouse_mode = false
 	cheer_up_used_today = false
-	low_wellbeing_days = 0
 	tools = {"axe": false, "hand_saw": false, "shovel": false, "bucket": false, "hoe": false, "pickaxe": false}
 	tool_uses = {}
 	equipment = TENT_STARTING_EQUIPMENT.duplicate(true)
@@ -199,51 +197,69 @@ func _tent_start_unlock_for(building_type: String) -> bool:
 
 
 func construction_gloves_available() -> bool:
-	return int(equipment.get("construction_gloves", {}).get("sets", 0)) > 0
+	if int(equipment.get("construction_gloves", {}).get("sets", 0)) > 0:
+		return true
+	return amount("construction_gloves") > 0
 
 
-func wear_construction_gloves(amount: float) -> bool:
+func wear_construction_gloves(wear_amount: float) -> bool:
 	var gloves: Dictionary = equipment.get("construction_gloves", {})
 	if int(gloves.get("sets", 0)) <= 0:
-		return false
-	gloves["active_durability"] = float(gloves.get("active_durability", 100.0)) - amount
+		# Try to equip a set from warehouse/backpack storage
+		if _take_construction_gloves_from_storage():
+			gloves = equipment.get("construction_gloves", {})
+		else:
+			return false
+	gloves["active_durability"] = float(gloves.get("active_durability", 100.0)) - wear_amount
 	while float(gloves["active_durability"]) <= 0.0 and int(gloves.get("sets", 0)) > 0:
 		gloves["sets"] = int(gloves["sets"]) - 1
 		gloves["active_durability"] = float(gloves["active_durability"]) + 100.0
+	# When the active set wears out, try to equip a spare from storage
 	if int(gloves["sets"]) <= 0:
-		gloves["active_durability"] = 0.0
+		if _take_construction_gloves_from_storage():
+			gloves = equipment.get("construction_gloves", {})
+		else:
+			gloves["active_durability"] = 0.0
 	equipment["construction_gloves"] = gloves
 	return int(gloves.get("sets", 0)) > 0
 
 
 func add_construction_glove_set() -> void:
+	add("construction_gloves", 1)
+
+func _take_construction_gloves_from_storage() -> bool:
+	if amount("construction_gloves") <= 0:
+		return false
 	var gloves: Dictionary = equipment.get("construction_gloves", {})
 	gloves["sets"] = int(gloves.get("sets", 0)) + 1
 	if float(gloves.get("active_durability", 0.0)) <= 0.0:
 		gloves["active_durability"] = 100.0
 	equipment["construction_gloves"] = gloves
+	add("construction_gloves", -1)
+	return true
 
 ## --- Weighted, reallocatable storage ------------------------------------------
 ## Every stored good takes up "space units". The warehouse holds a fixed number of
 ## units for the current era; the player splits that budget between resources in
 ## the warehouse menu. Heavy goods (logs, bricks) cost more than a unit each;
 ## water is light and packs several to a unit.
-const STORED_RESOURCES := ["branches", "grass", "water", "food", "hides", "goods", "logs", "wood", "soil", "clay", "boards", "stone", "bricks", "tarp"]
+const STORED_RESOURCES := ["branches", "grass", "water", "food", "hides", "goods", "logs", "wood", "soil", "clay", "boards", "stone", "bricks", "tarp", "construction_gloves"]
 const STORAGE_WEIGHTS := {
 	"branches": 1.0, "grass": 1.0, "water": 0.5, "food": 1.0,
 	"hides": 1.0, "goods": 1.0, "logs": 2.0, "wood": 2.0,
 	"soil": 1.0, "clay": 1.0, "boards": 1.5, "stone": 2.0, "bricks": 2.0,
 	"tarp": 1.0,
+	"construction_gloves": 1.0,
 }
 
 ## Resources available in each era. Each era cumulatively adds new resources.
 const ERA_RESOURCES := {
-	Era.TENT: ["branches", "grass", "water", "food", "hides", "goods", "tarp"],
-	Era.EARTH: ["branches", "grass", "water", "food", "hides", "goods", "tarp", "soil", "wood"],
-	Era.CLAY: ["branches", "grass", "water", "food", "hides", "goods", "tarp", "soil", "wood", "clay"],
-	Era.WOOD: ["branches", "grass", "water", "food", "hides", "goods", "tarp", "soil", "wood", "clay", "logs", "boards"],
-	Era.STONE: ["branches", "grass", "water", "food", "hides", "goods", "tarp", "soil", "wood", "clay", "logs", "boards", "stone"],
-	Era.BRICK: ["branches", "grass", "water", "food", "hides", "goods", "tarp", "soil", "wood", "clay", "logs", "boards", "stone", "bricks"],
+	Era.TENT: ["branches", "grass", "water", "food", "hides", "goods", "tarp", "construction_gloves"],
+	Era.EARTH: ["branches", "grass", "water", "food", "hides", "goods", "tarp", "construction_gloves", "soil", "wood"],
+	Era.CLAY: ["branches", "grass", "water", "food", "hides", "goods", "tarp", "construction_gloves", "soil", "wood", "clay"],
+	Era.WOOD: ["branches", "grass", "water", "food", "hides", "goods", "tarp", "construction_gloves", "soil", "wood", "clay", "logs", "boards"],
+	Era.STONE: ["branches", "grass", "water", "food", "hides", "goods", "tarp", "construction_gloves", "soil", "wood", "clay", "logs", "boards", "stone"],
+	Era.BRICK: ["branches", "grass", "water", "food", "hides", "goods", "tarp", "construction_gloves", "soil", "wood", "clay", "logs", "boards", "stone", "bricks"],
 }
 
 static func resources_for_era(p_era: Era) -> Array[String]:

@@ -4,6 +4,11 @@ extends AIWorldFacade
 ## Scene adapter for the native AI. Each migrated mechanic adds only its owned
 ## facts here, without mirroring SettlementGame's private API.
 
+## Route finding is the expensive part of source selection. A worker only needs
+## one target, so inspect a small, deterministic set of nearby sources instead
+## of pathfinding to every tree or grass clump on every snapshot.
+const MAX_GATHERING_ROUTE_CANDIDATES := 12
+
 var simulation: Node
 
 
@@ -77,9 +82,9 @@ func capture(sequence: int) -> WorldSnapshot:
 					construction_mode = &"demolition"
 					construction_target_key = _target_key(&"demolition", demolition_site.building.global_position)
 					construction_position = actor._reachable_construction_approach(demolition_site.building)
-			elif _construction_site_for(actor) != null:
-				var construction_site: ConstructionSite = _construction_site_for(actor)
-				if is_instance_valid(construction_site.node):
+			else:
+				var construction_site := _construction_site_for(actor)
+				if construction_site != null and is_instance_valid(construction_site.node):
 					construction_mode = &"construction"
 					construction_target_key = _target_key(&"construction", construction_site.node.global_position)
 					construction_position = actor._reachable_construction_approach(construction_site.node)
@@ -100,9 +105,9 @@ func capture(sequence: int) -> WorldSnapshot:
 					daily_construction_mode = &"demolition"
 					daily_construction_target_key = _target_key(&"demolition", daily_demolition_site.building.global_position)
 					daily_construction_position = actor._reachable_construction_approach(daily_demolition_site.building)
-			elif _construction_site_for(actor) != null:
-				var daily_construction_site: ConstructionSite = _construction_site_for(actor)
-				if is_instance_valid(daily_construction_site.node):
+			else:
+				var daily_construction_site := _construction_site_for(actor)
+				if daily_construction_site != null and is_instance_valid(daily_construction_site.node):
 					daily_construction_mode = &"construction"
 					daily_construction_target_key = _target_key(&"construction", daily_construction_site.node.global_position)
 					daily_construction_position = actor._reachable_construction_approach(daily_construction_site.node)
@@ -478,7 +483,9 @@ func _food_gathering_targets(actor: Citizen) -> Array[Dictionary]:
 
 
 func _daily_gathering_targets_for(actor: Citizen, role: String) -> Array[Dictionary]:
-	var targets: Array[Dictionary] = []
+	var nearby: Array[Dictionary] = []
+	if not is_instance_valid(actor):
+		return nearby
 	match role:
 		"gather_branches":
 			for tree_position: Vector3 in simulation.tree_positions:
@@ -491,24 +498,64 @@ func _daily_gathering_targets_for(actor: Citizen, role: String) -> Array[Diction
 					var hand_limit := ceili(float(initial_branches) * 0.3)
 					if int(tree.get_meta("hand_branches", 0)) >= hand_limit:
 						continue
-				var access: Vector3 = simulation._resource_access_position(actor.global_position, tree_position)
+				var access := _resource_access_position(tree_position)
 				if access != Vector3.INF:
-					targets.append({&"id": StringName("branch:%d:%d" % [tree_cell.x, tree_cell.y]), &"resource_type": "branches", &"position": tree_position, &"access": access, &"route_cost": _route_cost(actor.global_position, access)})
+					_insert_nearby_gathering_candidate(nearby, {
+						&"id": StringName("branch:%d:%d" % [tree_cell.x, tree_cell.y]),
+						&"resource_type": "branches",
+						&"position": tree_position,
+						&"access": access,
+						&"direct_distance": actor.global_position.distance_squared_to(access),
+					})
 		"gather_grass":
 			for grass_cell_value in simulation.grass_sources.keys():
 				var grass_cell := grass_cell_value as Vector2i
 				var grass_source := simulation.grass_sources.get(grass_cell, {}) as Dictionary
 				var grass_node := grass_source.get(&"node") as Node3D
 				if int(grass_source.get(&"remaining", 0)) > 0 and is_instance_valid(grass_node):
-					var access: Vector3 = simulation._resource_access_position(actor.global_position, grass_node.global_position)
+					var access := _resource_access_position(grass_node.global_position)
 					if access != Vector3.INF:
-						targets.append({&"id": StringName("grass:%d:%d" % [grass_cell.x, grass_cell.y]), &"resource_type": "grass", &"position": grass_node.global_position, &"access": access, &"route_cost": _route_cost(actor.global_position, access)})
+						_insert_nearby_gathering_candidate(nearby, {
+							&"id": StringName("grass:%d:%d" % [grass_cell.x, grass_cell.y]),
+							&"resource_type": "grass",
+							&"position": grass_node.global_position,
+							&"access": access,
+							&"direct_distance": actor.global_position.distance_squared_to(access),
+						})
 		"gather_water":
 			for pond_position: Vector3 in simulation.pond_positions:
 				var access: Vector3 = simulation._pond_access_position(actor.global_position, pond_position)
 				if access != Vector3.INF:
-					targets.append({&"id": _target_key(&"water", access), &"resource_type": "water", &"position": access, &"access": access, &"route_cost": _route_cost(actor.global_position, access)})
+					_insert_nearby_gathering_candidate(nearby, {
+						&"id": _target_key(&"water", access),
+						&"resource_type": "water",
+						&"position": access,
+						&"access": access,
+						&"direct_distance": actor.global_position.distance_squared_to(access),
+					})
+	var targets: Array[Dictionary] = []
+	for candidate in nearby:
+		var route_cost := _route_cost(actor.global_position, candidate[&"access"] as Vector3)
+		if route_cost >= INF:
+			continue
+		candidate[&"route_cost"] = route_cost
+		candidate.erase(&"direct_distance")
+		targets.append(candidate)
 	return targets
+
+
+func _insert_nearby_gathering_candidate(candidates: Array[Dictionary], candidate: Dictionary) -> void:
+	var distance := float(candidate.get(&"direct_distance", INF))
+	var insert_at := candidates.size()
+	for index in candidates.size():
+		var existing := candidates[index]
+		var existing_distance := float(existing.get(&"direct_distance", INF))
+		if distance < existing_distance or (is_equal_approx(distance, existing_distance) and str(candidate[&"id"]) < str(existing[&"id"])):
+			insert_at = index
+			break
+	candidates.insert(insert_at, candidate)
+	if candidates.size() > MAX_GATHERING_ROUTE_CANDIDATES:
+		candidates.pop_back()
 
 
 func _gathering_warehouse_position(actor: Citizen, candidates: Array[Dictionary], role: String) -> Vector3:

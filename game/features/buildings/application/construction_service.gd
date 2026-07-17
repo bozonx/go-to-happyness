@@ -120,7 +120,9 @@ func tick(delta: float) -> void:
 		_update_supply_label(site)
 		var material_progress: float = site.material_progress()
 		if material_progress <= 0.0:
+			site.node.set_meta("can_advance", false)
 			continue
+		site.node.set_meta("can_advance", material_progress > site.progress + 0.0001)
 		var builder_power: float = runtime.builder_power.call(site.node)
 		var progress := ConstructionProgress.advance(site.progress, delta, runtime.duration, builder_power)
 		progress = minf(progress, material_progress)

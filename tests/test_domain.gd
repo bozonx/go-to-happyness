@@ -609,7 +609,10 @@ func _test_progression_and_volunteers() -> void:
 
 	assert(SettlementRulesScript.volunteer_can_arrive(1, 2, 60.0))
 	assert(not SettlementRulesScript.volunteer_can_arrive(0, 2, 60.0))
-	assert(SettlementRulesScript.should_volunteer_leave(3))
+	assert(SettlementRulesScript.should_citizen_leave(5.0))
+	assert(not SettlementRulesScript.should_citizen_leave(15.0))
+	assert(SettlementRulesScript.is_satisfaction_warning(20.0))
+	assert(not SettlementRulesScript.is_satisfaction_warning(40.0))
 
 
 func _test_work_schedule_wellbeing() -> void:

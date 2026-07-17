@@ -21,6 +21,7 @@ signal factory_cycle(worker: Citizen, factory: Node3D)
 signal trade_delivery_finished(worker: Citizen)
 signal arrival_greeter_ready(worker: Citizen)
 signal outside_work_departed(worker: Citizen)
+signal citizen_leaving_departed(citizen: Citizen)
 
 const WALK_SPEED := 2.2
 const WORK_DURATION := 1.4
@@ -53,7 +54,7 @@ const IDLE_PERSONAL_SPACE := 1.15
 const MIN_STATE_DISPLAY_DURATION := 1.0
 const MAX_PENDING_STATE_DISPLAY_TRANSITIONS := 6
 
-enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, COURIER_TO_DEW, TO_GATHER, GATHERING, TO_CLEANING_PILE, CLEANING_PILE, TO_TRADE_PICKUP, TO_TRADE_DESTINATION, TO_EMPLOYMENT_CENTER, EMPLOYMENT_PROCESSING, CANTEEN_WORK, SCHOOL_WORK, TO_MARKET_WORK, MARKET_WORK, TO_CRAFT_WORK, CRAFT_WORK, TO_CONSTRUCTION_PICKUP, TO_CONSTRUCTION_SITE, TO_OFFICIAL_WORK, OFFICIAL_WORK, TO_ARRIVAL_ENTRANCE, ARRIVAL_MEETING, ARRIVAL_WAITING, TO_ARRIVAL_CENTER, TO_OUTSIDE_WORK, RESEARCHING, TO_TOILET, USING_TOILET, WAITING_FOR_TOILET, TO_BUSH, USING_BUSH, AI_MOVING, WORK_POSITION }
+enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, COURIER_TO_DEW, TO_GATHER, GATHERING, TO_CLEANING_PILE, CLEANING_PILE, TO_TRADE_PICKUP, TO_TRADE_DESTINATION, TO_EMPLOYMENT_CENTER, EMPLOYMENT_PROCESSING, CANTEEN_WORK, SCHOOL_WORK, TO_MARKET_WORK, MARKET_WORK, TO_CRAFT_WORK, CRAFT_WORK, TO_CONSTRUCTION_PICKUP, TO_CONSTRUCTION_SITE, TO_OFFICIAL_WORK, OFFICIAL_WORK, TO_ARRIVAL_ENTRANCE, ARRIVAL_MEETING, ARRIVAL_WAITING, TO_ARRIVAL_CENTER, TO_OUTSIDE_WORK, RESEARCHING, TO_TOILET, USING_TOILET, WAITING_FOR_TOILET, TO_BUSH, USING_BUSH, AI_MOVING, WORK_POSITION, LEAVING }
 
 enum EmploymentState { UNREGISTERED, NO_PERMANENT_WORK, EMPLOYED, REGISTERING }
 
@@ -139,6 +140,7 @@ const STATE_ANIMATIONS := {
 	State.EMPLOYMENT_PROCESSING: "interact-right",
 	State.AI_MOVING: "walk",
 	State.WORK_POSITION: "interact-right",
+	State.LEAVING: "walk",
 }
 
 signal state_changed(citizen: Citizen, previous_state: int, next_state: int)
@@ -296,6 +298,7 @@ var craft_position := Vector3.ZERO
 var craft_timer := 0.0
 var craft_speed_multiplier := 1.0
 var construction_position := Vector3.ZERO
+var is_waiting_for_materials := false
 var construction_delivery_resource := ""
 var building_supply_kind := "construction"
 var park_rest_duration := 4.0
@@ -695,7 +698,10 @@ func _update_animations(delta: float) -> void:
 			return
 		_one_shot_anim = ""
 	var locomotion := _locomotion_animation(horizontal_speed)
-	var anim_to_play := locomotion if not locomotion.is_empty() else STATE_ANIMATIONS.get(state, "idle") as String
+	var state_anim := STATE_ANIMATIONS.get(state, "idle") as String
+	if state == State.CONSTRUCTING and is_waiting_for_materials:
+		state_anim = "idle"
+	var anim_to_play := locomotion if not locomotion.is_empty() else state_anim
 	_play_animation(anim_to_play)
 
 # Driven every frame by the settlement while the hero is under direct control, so
@@ -869,6 +875,8 @@ func _physics_process(delta: float) -> void:
 			_process_arrival_center(delta)
 		State.TO_OUTSIDE_WORK:
 			_process_outside_work_departure(delta)
+		State.LEAVING:
+			_process_leaving(delta)
 		State.TO_TOILET:
 			_process_to_toilet(delta)
 		State.USING_TOILET:
@@ -952,11 +960,21 @@ func _process_courier_wait(delta: float) -> void:
 		state = State.TO_TREE
 
 func _process_construction(delta: float) -> void:
-	if is_instance_valid(construction_site):
-		_move_to(construction_position, delta, false, false)
-	else:
+	if not is_instance_valid(construction_site):
 		state = State.IDLE
 		construction_site = null
+		is_waiting_for_materials = false
+		return
+	var arrived := _move_to(construction_position, delta, false, false)
+	if arrived:
+		var site_pos := construction_site.global_position if construction_site.is_inside_tree() else construction_site.position
+		var direction := (site_pos - global_position)
+		direction.y = 0.0
+		if direction.length() > 0.01:
+			look_at(global_position + direction.normalized(), Vector3.UP)
+		is_waiting_for_materials = not bool(construction_site.get_meta("can_advance", false))
+	else:
+		is_waiting_for_materials = false
 
 func _process_excavation(delta: float) -> void:
 	if not is_instance_valid(assigned_dig_site):
@@ -1283,6 +1301,19 @@ func _process_outside_work_departure(delta: float) -> void:
 		outside_work_departed.emit(self)
 
 
+func begin_leaving(entrance_position: Vector3) -> void:
+	if is_player_controlled or is_hero:
+		return
+	_reset_assignment_navigation()
+	arrival_position = entrance_position
+	state = State.LEAVING
+
+
+func _process_leaving(delta: float) -> void:
+	if _move_to(arrival_position, delta, false, false):
+		citizen_leaving_departed.emit(self)
+
+
 func queue_employment_processing(next_pending_role := "", next_workplace: Node3D = null) -> void:
 	pending_employment_role = next_pending_role
 	pending_employment_workplace = next_workplace
@@ -1423,6 +1454,14 @@ func clear_expired_overtime(current_workday_id: int) -> void:
 	overtime_mode = false
 	overtime_until_workday_id = 0
 	overtime_source = ""
+
+
+func deactivate_overtime() -> void:
+	overtime_mode = false
+	overtime_until_workday_id = 0
+	overtime_source = ""
+	if simulation != null and not simulation._is_work_time():
+		end_work_shift()
 
 
 func is_recovering(current_workday_id: int) -> bool:
@@ -1876,6 +1915,7 @@ func finish_construction(site: Node3D) -> void:
 		return
 	construction_site = null
 	active_role = ""
+	is_waiting_for_materials = false
 	movement_path.clear()
 	path_destination = Vector3.INF
 	state = State.IDLE
@@ -2571,7 +2611,7 @@ func _update_effects(delta: float) -> void:
 func is_available_for_schedule() -> bool:
 	if has_active_arrival_task():
 		return false
-	return not is_player_controlled and not has_active_delivery() and state != State.TO_CANTEEN and state != State.EATING and state != State.TO_HOME and state != State.RESTING and state != State.STUDYING and state != State.TO_PARK and state != State.RELAXING and state != State.RESEARCHING and state != State.TO_TOILET and state != State.USING_TOILET and state != State.WAITING_FOR_TOILET and state != State.TO_BUSH and state != State.USING_BUSH and state != State.WORK_POSITION
+	return not is_player_controlled and not has_active_delivery() and state != State.TO_CANTEEN and state != State.EATING and state != State.TO_HOME and state != State.RESTING and state != State.STUDYING and state != State.TO_PARK and state != State.RELAXING and state != State.RESEARCHING and state != State.TO_TOILET and state != State.USING_TOILET and state != State.WAITING_FOR_TOILET and state != State.TO_BUSH and state != State.USING_BUSH and state != State.WORK_POSITION and state != State.LEAVING
 
 func _update_satisfaction(delta: float) -> void:
 	satisfaction_tick += delta

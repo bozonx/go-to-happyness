@@ -1,8 +1,9 @@
 class_name SettlementRules
 extends RefCounted
 
-const LOW_WELLBEING := 30
-const LEAVE_AFTER_DAYS := 3
+const LEAVE_SATISFACTION_THRESHOLD := 10.0
+const WARNING_SATISFACTION_THRESHOLD := 30.0
+const MIN_SETTLEMENT_POPULATION := 2
 const OPEN_AIR_ORGANIC_DECAY_RATES := {
 	"food": 0.10,
 	"grass": 0.05,
@@ -25,8 +26,11 @@ static func daily_wellbeing_change(has_home: bool, food_per_person: float, water
 static func volunteer_can_arrive(free_beds: int, water: int, average_wellbeing: float) -> bool:
 	return free_beds > 0 and water > 0 and average_wellbeing >= 50.0
 
-static func should_volunteer_leave(consecutive_low_days: int) -> bool:
-	return consecutive_low_days >= LEAVE_AFTER_DAYS
+static func should_citizen_leave(satisfaction_value: float) -> bool:
+	return satisfaction_value < LEAVE_SATISFACTION_THRESHOLD
+
+static func is_satisfaction_warning(satisfaction_value: float) -> bool:
+	return satisfaction_value < WARNING_SATISFACTION_THRESHOLD
 
 
 static func open_air_storage_decay_losses(amounts: Dictionary, total_stored_units: float, safe_capacity_units: float) -> Dictionary:

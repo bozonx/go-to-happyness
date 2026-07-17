@@ -43,6 +43,7 @@ const TrailOverlayShader = preload("res://game/features/roads/presentation/trail
 const FirstPersonCrosshair = preload("res://game/features/citizens/presentation/first_person_crosshair.gd")
 const WeatherStateScript = preload("res://game/features/simulation/domain/weather_state.gd")
 const FirefliesEffectScript = preload("res://game/features/world/presentation/fireflies_effect.gd")
+const RainEffectScript = preload("res://game/features/world/presentation/rain_effect.gd")
 const EventServiceScript = preload("res://game/features/events/application/event_service.gd")
 const EventRegistryScript = preload("res://game/features/events/domain/event_registry.gd")
 const EventLogScript = preload("res://game/features/events/domain/event_log.gd")
@@ -233,8 +234,8 @@ var camera: Camera3D
 var sun: DirectionalLight3D
 var world_environment: Environment
 var weather_state := WeatherStateScript.new()
-var rain_particles: GPUParticles3D
-var fireflies: Array[GPUParticles3D] = []
+var rain_effect: RainEffect
+var fireflies: Array[FirefliesEffect] = []
 var camera_target := Vector3.ZERO
 var camera_distance := 30.0
 var camera_yaw := 42.0
@@ -250,7 +251,6 @@ var current_day: int:
 	get: return day_cycle.current_day
 var tent_weather: int = TentEraSurvivalRulesScript.Weather.WARMING
 var last_survival_hour := -1
-var recovery_arrival_at_minutes := -1.0
 var message_scroll: ScrollContainer
 var message_list: VBoxContainer
 var message_panel: Panel
@@ -384,9 +384,9 @@ var building_accept_workers_button: Button
 var building_dismiss_worker_button: Button
 var building_upgrade_button: Button
 var building_close_button: Button
-var building_overtime_button: Button
+var building_overtime_button: CheckButton
 var building_relight_button: Button
-var campfire_overtime_button: Button
+var campfire_overtime_button: CheckButton
 var campfire_close_btn: Button
 var campfire_story_menu: Panel
 var campfire_story_buttons: Array[Button] = []
@@ -447,7 +447,7 @@ var campfire_orders_toggle: CheckButton
 var campfire_balanced_warehouse_toggle: CheckButton
 var campfire_cheer_button: Button
 var campfire_night_work_button: Button
-var personal_night_work_button: Button
+var personal_night_work_button: CheckButton
 
 
 func _ready() -> void:
@@ -567,7 +567,6 @@ func _process(delta: float) -> void:
 	_update_canteen_delivery()
 	_update_arrivals()
 	_update_fire_status()
-	_update_recovery_arrival()
 	trade_service.update()
 	_dispatch_queued_trades()
 	_update_sawmills(delta)
@@ -674,6 +673,8 @@ func _assign_daily_order(citizen: Citizen, role: String) -> void:
 		return
 	var workday_id := daily_order_workday_for_new_order()
 	citizen.assign_daily_order(role, workday_id, daily_order_expiration_for_workday(workday_id))
+	if citizen_ai != null:
+		citizen_ai.request_decision_refresh()
 
 
 func _clear_daily_orders(workday_id := 0) -> void:
@@ -907,9 +908,8 @@ func _update_daylight() -> void:
 	sun.light_energy = lerpf(0.0, 1.2, direct_light)
 	sun.shadow_enabled = direct_light > 0.05
 	sun.shadow_opacity = lerpf(1.0, 0.0, overcast)
-	if rain_particles != null:
-		rain_particles.amount_ratio = overcast
-		rain_particles.emitting = overcast > 0.0
+	if rain_effect != null:
+		rain_effect.set_intensity(overcast)
 	# Fireflies appear when it gets dark; fade out with weather overcast
 	var night_factor := 1.0 - smoothstep(0.0, 0.28, solar_height)
 	var firefly_factor := night_factor * (1.0 - overcast * 0.5)
@@ -950,6 +950,7 @@ func _handle_day_cycle_event(event: SimulationDayEvent) -> void:
 			_update_interface("Nightfall: workers are returning to their assigned homes.")
 		SimulationDayEvent.Kind.WORKDAY_STARTED:
 			_clear_expired_overtime_orders()
+			_reset_building_night_work_toggles()
 			_resume_overtime_daily_orders()
 			_refresh_living_statuses()
 			_update_workers()
@@ -1073,11 +1074,6 @@ func _apply_hourly_tent_survival(hour: int, survival_day := 0) -> void:
 		wellbeing = maxi(0, wellbeing - ceili(float(total_loss) / maxi(1, citizens.size())))
 	if weather_state.is_raining and hour > 0:
 		_apply_rain_damage()
-	if wellbeing_before_hour > 0 and wellbeing <= 0 and not citizens.is_empty():
-		var departing: Citizen = citizens.pop_back()
-		departing.queue_free()
-		_add_message("A resident left the camp after wellbeing reached zero.")
-		_schedule_recovery_arrival()
 
 
 func _apply_hourly_bare_hands_penalty() -> void:
@@ -1112,27 +1108,55 @@ func _apply_rain_damage() -> void:
 			_apply_fire_state(building, fire_state)
 
 
-func _schedule_recovery_arrival() -> void:
-	if citizens.size() >= POPULATION:
+func _check_daily_departures() -> void:
+	# Warning: any citizen with satisfaction below WARNING threshold
+	for citizen in citizens:
+		if not is_instance_valid(citizen) or citizen.is_hero:
+			continue
+		if SETTLEMENT_RULES.is_satisfaction_warning(citizen.satisfaction):
+			_add_message("Warning: %s is unhappy (satisfaction %d). They may leave if conditions don't improve." % [citizen.role_label(), int(citizen.satisfaction)])
+	# Find the most dissatisfied non-hero citizen below the leave threshold
+	var candidate: Citizen = null
+	for citizen in citizens:
+		if not is_instance_valid(citizen) or citizen.is_hero:
+			continue
+		if citizen.state == Citizen.State.LEAVING:
+			continue
+		if SETTLEMENT_RULES.should_citizen_leave(citizen.satisfaction):
+			if candidate == null or citizen.satisfaction < candidate.satisfaction:
+				candidate = citizen
+	if candidate == null:
 		return
-	if recovery_arrival_at_minutes < 0.0:
-		recovery_arrival_at_minutes = _total_game_minutes() + 24.0 * 60.0
+	# Protect minimum population: hero + at least one companion
+	var non_hero_count := 0
+	for citizen in citizens:
+		if is_instance_valid(citizen) and not citizen.is_hero:
+			non_hero_count += 1
+	if non_hero_count <= 1:
+		_add_message("Despite the hardship, your loyal companion stays and believes you will fix things.")
+		return
+	# Send the most dissatisfied citizen to the entrance to leave
+	if is_instance_valid(entrance_stone):
+		candidate.begin_leaving(entrance_stone.global_position)
+		_add_message("%s has decided to leave the settlement (satisfaction %d)." % [candidate.role_label(), int(candidate.satisfaction)])
+
+
+func _on_citizen_leaving_departed(citizen: Citizen) -> void:
+	if not is_instance_valid(citizen):
+		return
+	citizens.erase(citizen)
+	if citizen_ai != null:
+		citizen_ai.unregister_citizen(citizen.ai_id)
+	if canteen_service != null:
+		canteen_service.remove_citizen(citizen.ai_id)
+	if citizen_needs_service != null:
+		citizen_needs_service.remove_citizen(citizen.ai_id)
+	citizen.queue_free()
 
 
 func _total_game_minutes() -> float:
 	return float(day_cycle.current_day - 1) * 24.0 * 60.0 + game_minutes
 
-
-func _update_recovery_arrival() -> void:
-	if recovery_arrival_at_minutes < 0.0 or _total_game_minutes() < recovery_arrival_at_minutes:
-		return
-	if citizens.size() < POPULATION and is_instance_valid(entrance_stone):
-		_add_citizen(entrance_stone.global_position + Vector3(0.8, 0.1, 1.2), "unassigned")
-		money += 100
-		settlement.add("food", 4)
-		settlement.add_construction_glove_set()
-		_add_message("A survivor arrived with emergency supplies.")
-	recovery_arrival_at_minutes = _total_game_minutes() + random.randi_range(24, 48) * 60.0 if citizens.size() < POPULATION else -1.0
 
 func _apply_daily_settlement_rules() -> void:
 	if trail_field != null:
@@ -1210,12 +1234,7 @@ func _apply_daily_settlement_rules() -> void:
 		settlement.campfire_story_effect = ""
 		settlement.campfire_story_target_role = ""
 		settlement.campfire_story_target_day = -1
-	settlement.low_wellbeing_days = settlement.low_wellbeing_days + 1 if wellbeing < SettlementRules.LOW_WELLBEING else 0
-	if SETTLEMENT_RULES.should_volunteer_leave(settlement.low_wellbeing_days) and not citizens.is_empty():
-		var departing: Citizen = citizens.pop_back()
-		departing.queue_free()
-		settlement.low_wellbeing_days = 0
-		_update_interface("A volunteer left after several days of poor living conditions.")
+	_check_daily_departures()
 	# --- Daily settlement warnings ---
 	if food == 0:
 		_add_message("CRITICAL: Food supplies exhausted! Workers are starving.")
@@ -1230,8 +1249,8 @@ func _apply_daily_settlement_rules() -> void:
 		_add_message("CRITICAL: Storage nearly full (%d%%). Build another warehouse or rebalance." % [int(storage_ratio * 100)])
 	elif storage_ratio >= 0.80:
 		_add_message("Warning: Storage filling up (%d%% used)." % [int(storage_ratio * 100)])
-	if wellbeing < SettlementRules.LOW_WELLBEING:
-		_add_message("Warning: Low wellbeing (%d). Unhappiness is accumulating — volunteers may leave!" % wellbeing)
+	if wellbeing < 30:
+		_add_message("Warning: Low wellbeing (%d). Unhappiness is accumulating — residents may leave!" % wellbeing)
 	elif change < 0:
 		_add_message("Wellbeing is declining (change: %d). Consider improving living conditions." % change)
 
@@ -1477,6 +1496,8 @@ func _take_resource_from_pile_at(position: Vector3, resource_type: String, max_a
 			continue
 		var taken := mini(max_amount, available)
 		pile.resources[resource_type] = available - taken
+		if int(pile.resources[resource_type]) <= 0:
+			pile.resources.erase(resource_type)
 		var labels: Array[String] = []
 		for piled_resource in pile.resources:
 			var amount := int(pile.resources[piled_resource])
@@ -1486,7 +1507,7 @@ func _take_resource_from_pile_at(position: Vector3, resource_type: String, max_a
 		var label := pile_node.get_node_or_null("PileLabel") as Label3D
 		if label != null:
 			label.text = "\n".join(labels)
-		if labels.is_empty():
+		if pile.resources.is_empty():
 			resource_piles.remove_at(index)
 			pile_node.queue_free()
 		else:
@@ -2414,6 +2435,11 @@ func _create_world() -> void:
 	world_environment.ambient_light_color = Color("d7ebef")
 	world_environment.ambient_light_energy = 0.65
 	world_environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	world_environment.glow_enabled = true
+	world_environment.glow_normalized = true
+	world_environment.glow_intensity = 0.18
+	world_environment.glow_strength = 0.72
+	world_environment.glow_bloom = 0.05
 	environment.environment = world_environment
 	add_child(environment)
 
@@ -2422,52 +2448,25 @@ func _create_world() -> void:
 	sun.light_energy = 1.2
 	sun.shadow_enabled = true
 	add_child(sun)
-	_create_rain_particles()
-	_update_daylight()
 
 	camera = Camera3D.new()
 	add_child(camera)
 	_update_camera_position()
+	_create_rain_effect()
+	_update_daylight()
 	_create_voxel_terrain()
 	_create_trail_overlay()
 	_refresh_navigation_grid()
 	_create_selection_marker()
 
 
-func _create_rain_particles() -> void:
+func _create_rain_effect() -> void:
 	if DisplayServer.get_name() == "headless":
 		return
-	rain_particles = GPUParticles3D.new()
-	rain_particles.name = "RainParticles"
-	rain_particles.position = Vector3(0.0, 20.0, 0.0)
-	var rain_material := ParticleProcessMaterial.new()
-	rain_material.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
-	rain_material.emission_box_extents = Vector3(BOARD_CELLS * CELL_SIZE * 0.5, 1.0, BOARD_CELLS * CELL_SIZE * 0.5)
-	rain_material.direction = Vector3(0.0, -1.0, 0.0)
-	rain_material.spread = 0.0
-	rain_material.initial_velocity_min = 15.0
-	rain_material.initial_velocity_max = 20.0
-	rain_material.gravity = Vector3(0.0, -25.0, 0.0)
-	rain_material.scale_min = 0.04
-	rain_material.scale_max = 0.08
-	rain_material.set_particle_flag(ParticleProcessMaterial.PARTICLE_FLAG_ALIGN_Y_TO_VELOCITY, true)
-	rain_material.flatness = 1.0
-	rain_particles.process_material = rain_material
-	rain_particles.amount = 2000
-	rain_particles.lifetime = 1.2
-	rain_particles.visibility_aabb = AABB(Vector3(-BOARD_CELLS * CELL_SIZE * 0.5, -5.0, -BOARD_CELLS * CELL_SIZE * 0.5), Vector3(BOARD_CELLS * CELL_SIZE, 25.0, BOARD_CELLS * CELL_SIZE))
-	rain_particles.amount_ratio = 0.0
-	rain_particles.emitting = false
-	var quad := QuadMesh.new()
-	quad.size = Vector2(0.04, 0.8)
-	var streak_material := StandardMaterial3D.new()
-	streak_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	streak_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	streak_material.albedo_color = Color("a8c4d9", 0.55)
-	streak_material.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
-	quad.material = streak_material
-	rain_particles.draw_pass_1 = quad
-	add_child(rain_particles)
+	rain_effect = RainEffectScript.new()
+	rain_effect.name = "RainEffect"
+	rain_effect.set_camera(camera)
+	add_child(rain_effect)
 
 
 func _create_voxel_terrain() -> void:
@@ -2608,6 +2607,7 @@ func _create_forest() -> void:
 		_create_grass_sources_near_tree(cell)
 		_create_forage_sources_near_tree(cell)
 	_refresh_navigation_grid()
+	_create_firefly_clusters()
 
 func _create_ponds() -> void:
 	# Natural ponds are part of the terrain, not a building. Residents cannot fill
@@ -2739,22 +2739,40 @@ func _create_tree(position_on_board: Vector3, refresh_navigation := true) -> voi
 	terrain_blocked_cells[cell] = true
 	if refresh_navigation:
 		_refresh_navigation_grid()
-	_create_fireflies(position_on_board)
 
-func _create_fireflies(tree_position: Vector3) -> void:
+
+func _create_firefly_clusters() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	_create_firefly_cluster("FirefliesNorthWest", [Vector2i(-16, -15), Vector2i(-15, -18), Vector2i(-18, -12), Vector2i(-12, -19)], 38, 5.8, 3.5)
+	_create_firefly_cluster("FirefliesNorthEast", [Vector2i(16, -15), Vector2i(15, -18), Vector2i(18, -12), Vector2i(12, -19)], 38, 5.8, 3.5)
+	_create_firefly_cluster("FirefliesSouthWest", [Vector2i(-16, 15), Vector2i(-15, 18), Vector2i(-18, 12), Vector2i(-12, 19)], 38, 5.8, 3.5)
+	_create_firefly_cluster("FirefliesSouthEast", [Vector2i(16, 15), Vector2i(15, 18), Vector2i(18, 12), Vector2i(12, 19)], 38, 5.8, 3.5)
+	_create_firefly_cluster("FirefliesWestGrove", [Vector2i(-20, -5), Vector2i(-20, 5)], 24, 4.6, 2.8)
+	_create_firefly_cluster("FirefliesEastGrove", [Vector2i(20, -5), Vector2i(20, 5)], 24, 4.6, 2.8)
+	_create_firefly_cluster("FirefliesNorthGrove", [Vector2i(-5, -20), Vector2i(5, -20)], 24, 4.6, 2.8)
+	_create_firefly_cluster("FirefliesSouthGrove", [Vector2i(-5, 20), Vector2i(5, 20)], 24, 4.6, 2.8)
+
+
+func _create_firefly_cluster(cluster_name: String, cells: Array, amount_count: int, radius: float, height: float) -> void:
 	if DisplayServer.get_name() == "headless":
 		return
 	var fireflies_node := FirefliesEffectScript.new()
-	fireflies_node.name = "Fireflies"
-	fireflies_node.position = tree_position + Vector3(0.0, 1.5, 0.0)
-	fireflies_node.amount = 25
-	fireflies_node.lifetime = 5.0
-	fireflies_node.explosiveness = 0.0
-	fireflies_node.randomness = 1.0
-	fireflies_node.local_coords = true
-	fireflies_node.visibility_aabb = AABB(Vector3(-4.0, -1.0, -4.0), Vector3(8.0, 7.0, 8.0))
+	fireflies_node.name = cluster_name
+	fireflies_node.position = _firefly_cluster_center(cells)
+	fireflies_node.amount = amount_count
+	fireflies_node.swarm_radius = radius
+	fireflies_node.swarm_height = height
+	fireflies_node.minimum_height = 0.45
 	add_child(fireflies_node)
 	fireflies.append(fireflies_node)
+
+
+func _firefly_cluster_center(cells: Array) -> Vector3:
+	var center := Vector3.ZERO
+	for cell: Vector2i in cells:
+		center += _cell_center(cell)
+	return center / float(cells.size()) + Vector3(0.0, 1.0, 0.0)
 
 func _create_entrance_stone() -> void:
 	entrance_stone = Node3D.new()
@@ -2878,6 +2896,7 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	citizen.employment_processing_finished.connect(_on_employment_processing_finished)
 	citizen.arrival_greeter_ready.connect(_on_arrival_greeter_ready)
 	citizen.outside_work_departed.connect(_on_outside_work_departed)
+	citizen.citizen_leaving_departed.connect(_on_citizen_leaving_departed)
 	citizens.append(citizen)
 	citizen.ai_id = _next_ai_citizen_id
 	_next_ai_citizen_id += 1
@@ -3490,12 +3509,12 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	daily_order_submenu_btn.size = Vector2(272, 30)
 	daily_order_submenu_btn.pressed.connect(_open_daily_order_submenu)
 	build_menu.add_child(daily_order_submenu_btn)
-	personal_night_work_button = Button.new()
+	personal_night_work_button = CheckButton.new()
 	personal_night_work_button.text = "Work through the night"
 	personal_night_work_button.position = Vector2(16, 344)
 	personal_night_work_button.size = Vector2(272, 30)
 	personal_night_work_button.tooltip_text = "Available only for a resident with a daily order."
-	personal_night_work_button.pressed.connect(_order_selected_citizen_night_work)
+	personal_night_work_button.toggled.connect(_toggle_selected_citizen_night_work)
 	build_menu.add_child(personal_night_work_button)
 
 	job_submenu_btn = Button.new()
@@ -4582,10 +4601,12 @@ func _refresh_build_menu() -> void:
 		job_submenu_btn.disabled = false
 		job_submenu_btn.tooltip_text = ""
 	if personal_night_work_button != null:
-		var can_personal_night_work := citizen_actions_visible and selected_builder != null and not selected_builder.is_employed() and selected_builder.has_daily_order() and not selected_builder.has_active_overtime(day_cycle.current_day)
+		var can_personal_night_work := citizen_actions_visible and selected_builder != null and not selected_builder.is_employed() and selected_builder.has_daily_order()
+		var has_overtime := selected_builder != null and selected_builder.has_active_overtime(day_cycle.current_day)
 		personal_night_work_button.visible = citizen_actions_visible
 		personal_night_work_button.disabled = not can_personal_night_work
-		personal_night_work_button.tooltip_text = "Already ordered for this work period." if selected_builder != null and selected_builder.has_active_overtime(day_cycle.current_day) else "Assign a daily order first. Permanent workers receive this command from their workplace." if not can_personal_night_work else "Continue the daily order through the night and next day."
+		personal_night_work_button.set_pressed_no_signal(has_overtime)
+		personal_night_work_button.tooltip_text = "Assign a daily order first. Permanent workers receive this command from their workplace." if not can_personal_night_work else "Continue the daily order through the night and next day."
 	if job_back_btn != null:
 		job_back_btn.visible = selected_exists and assignment_submenu_open
 	
@@ -7093,9 +7114,9 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			settlement.add_warehouse(building_type)
 			warehouse_positions.append(service_position)
 			if warehouse_positions.size() == 1:
-				var overflow := settlement.migrate_virtual_to_warehouse(warehouse_positions.size())
-				_remove_backpack_pile()
-				_drop_overflow_as_piles(overflow, service_position)
+				_convert_backpack_pile_to_regular()
+				settlement.warehouse_ever_built = true
+				settlement.backpack.clear()
 			_add_building_selector(building, "warehouse_selector", blueprint.footprint)
 			_add_warehouse_fill_label(building)
 		"sawmill":
@@ -7695,11 +7716,11 @@ func _create_campfire_menu(ui: CanvasLayer) -> void:
 	campfire_dismiss_button.pressed.connect(_dismiss_campfire_worker)
 	campfire_menu.add_child(campfire_dismiss_button)
 
-	campfire_overtime_button = Button.new()
-	campfire_overtime_button.text = "Вызвать работника сверхурочно"
+	campfire_overtime_button = CheckButton.new()
+	campfire_overtime_button.text = "Work through the night"
 	campfire_overtime_button.position = Vector2(16, 632)
 	campfire_overtime_button.size = Vector2(272, 32)
-	campfire_overtime_button.pressed.connect(_call_campfire_worker_overtime)
+	campfire_overtime_button.toggled.connect(_toggle_campfire_worker_overtime)
 	campfire_menu.add_child(campfire_overtime_button)
 
 	campfire_close_btn = Button.new()
@@ -7888,19 +7909,30 @@ func _order_settlement_night_work() -> void:
 	_show_campfire_orders_menu()
 
 
-func _order_selected_citizen_night_work() -> void:
-	if not is_instance_valid(selected_builder) or selected_builder.is_employed() or not selected_builder.has_daily_order() or selected_builder.has_active_overtime(day_cycle.current_day):
+func _toggle_selected_citizen_night_work(checked: bool) -> void:
+	if not is_instance_valid(selected_builder):
+		personal_night_work_button.set_pressed_no_signal(false)
 		return
-	# Evening daily orders normally wait for tomorrow. A personal night-work
-	# order explicitly starts that new task now and keeps it through tomorrow.
-	if selected_builder.daily_order_workday_id > day_cycle.current_day:
-		selected_builder.daily_order_workday_id = day_cycle.current_day
-		selected_builder.daily_order_expires_at = daily_order_expiration_for_workday(day_cycle.current_day + 1)
-	selected_builder.activate_overtime(day_cycle.current_day + 1, "personal")
-	_update_interface("%s received a personal night-work order." % selected_builder.role_label())
-	_update_skip_night_button()
-	if citizen_ai != null:
-		citizen_ai.request_decision_refresh()
+	if checked:
+		if selected_builder.is_employed() or not selected_builder.has_daily_order() or selected_builder.has_active_overtime(day_cycle.current_day):
+			personal_night_work_button.set_pressed_no_signal(false)
+			return
+		# Evening daily orders normally wait for tomorrow. A personal night-work
+		# order explicitly starts that new task now and keeps it through tomorrow.
+		if selected_builder.daily_order_workday_id > day_cycle.current_day:
+			selected_builder.daily_order_workday_id = day_cycle.current_day
+			selected_builder.daily_order_expires_at = daily_order_expiration_for_workday(day_cycle.current_day + 1)
+		selected_builder.activate_overtime(day_cycle.current_day + 1, "personal")
+		_update_interface("%s received a personal night-work order." % selected_builder.role_label())
+		_update_skip_night_button()
+		if citizen_ai != null:
+			citizen_ai.request_decision_refresh()
+	else:
+		selected_builder.deactivate_overtime()
+		_update_interface("Night work cancelled for %s." % selected_builder.role_label())
+		_update_skip_night_button()
+		if citizen_ai != null:
+			citizen_ai.request_decision_refresh()
 	_refresh_build_menu()
 
 
@@ -8395,9 +8427,11 @@ func _refresh_campfire_worker_controls() -> void:
 	campfire_dismiss_button.tooltip_text = blocked_tooltip if not can_command_labor else ""
 
 	if campfire_overtime_button != null:
-		campfire_overtime_button.visible = is_center and not _is_work_time() and officer != null
+		campfire_overtime_button.visible = is_center and officer != null
 		campfire_overtime_button.disabled = not can_command_labor
-		campfire_overtime_button.tooltip_text = blocked_tooltip if not can_command_labor else ""
+		var campfire_night_order_used := int(selected_campfire.get_meta("night_work_order_day", -1)) == day_cycle.current_day
+		campfire_overtime_button.set_pressed_no_signal(campfire_night_order_used)
+		campfire_overtime_button.tooltip_text = blocked_tooltip if not can_command_labor else "Work through the night and the next workday."
 		if campfire_overtime_button.visible:
 			campfire_overtime_button.position.y = 632.0
 			campfire_close_btn.position.y = 670.0
@@ -8696,11 +8730,11 @@ func _create_building_menu(ui: CanvasLayer) -> void:
 	building_dismiss_worker_button.size = Vector2(272, 30)
 	building_dismiss_worker_button.pressed.connect(_dismiss_selected_workplace_worker)
 	building_menu.add_child(building_dismiss_worker_button)
-	building_overtime_button = Button.new()
-	building_overtime_button.text = "Вызвать работника сверхурочно"
+	building_overtime_button = CheckButton.new()
+	building_overtime_button.text = "Work through the night"
 	building_overtime_button.position = Vector2(16, 176)
 	building_overtime_button.size = Vector2(272, 30)
-	building_overtime_button.pressed.connect(_call_worker_overtime)
+	building_overtime_button.toggled.connect(_toggle_worker_overtime)
 	building_menu.add_child(building_overtime_button)
 	building_relight_button = Button.new()
 	building_relight_button.text = "Relight with flint and steel"
@@ -8794,8 +8828,9 @@ func _show_building_menu() -> void:
 		var officer := _workplace_worker(selected_building)
 		building_overtime_button.visible = is_workplace and officer != null
 		var night_order_used := int(selected_building.get_meta("night_work_order_day", -1)) == day_cycle.current_day
-		building_overtime_button.disabled = not can_command_labor or night_order_used
-		building_overtime_button.tooltip_text = labor_blocked_tooltip if not can_command_labor else "Already ordered today." if night_order_used else "Work through the night and the next workday."
+		building_overtime_button.disabled = not can_command_labor
+		building_overtime_button.set_pressed_no_signal(night_order_used)
+		building_overtime_button.tooltip_text = labor_blocked_tooltip if not can_command_labor else "Work through the night and the next workday."
 		
 		if is_workplace:
 			var accepting := bool(selected_building.get_meta("accepting_workers", true))
@@ -9947,6 +9982,28 @@ func _remove_backpack_pile() -> void:
 	backpack_node = null
 
 
+func _convert_backpack_pile_to_regular() -> void:
+	if not is_instance_valid(backpack_node):
+		return
+	for index in range(resource_piles.size()):
+		var pile: Dictionary = resource_piles[index]
+		if pile.get("node") == backpack_node:
+			# Sync the physical pile with the virtual backpack so all
+			# resources are present for cleaners to pick up and deliver.
+			var synced: Dictionary = {}
+			for resource_type in settlement.backpack:
+				var amount := int(settlement.backpack[resource_type])
+				if amount > 0:
+					synced[resource_type] = amount
+			if not synced.is_empty():
+				pile["resources"] = synced
+			pile["is_backpack"] = false
+			resource_piles[index] = pile
+			_refresh_resource_pile_label(pile)
+			break
+	backpack_node = null
+
+
 func _drop_overflow_as_piles(overflow: Dictionary, base_position: Vector3) -> void:
 	if overflow.is_empty():
 		return
@@ -10145,29 +10202,43 @@ func _check_unstaffed_employment_center() -> void:
 			_add_message("Предупреждение: В службе занятости нет чиновника! Оформление жителей приостановлено.")
 
 
-func _call_worker_overtime() -> void:
+func _toggle_worker_overtime(checked: bool) -> void:
 	if not is_instance_valid(selected_building):
 		return
-	if int(selected_building.get_meta("night_work_order_day", -1)) == day_cycle.current_day:
-		return
-	var workers_found := false
-	for citizen in citizens:
-		if is_instance_valid(citizen) and (citizen.employment_workplace == selected_building or citizen.pending_employment_workplace == selected_building):
-			citizen.activate_overtime(day_cycle.current_day + 1, "workplace")
-			workers_found = true
-	if workers_found:
-		selected_building.set_meta("night_work_order_day", day_cycle.current_day)
-		_add_message("Night-work order issued for %s." % str(selected_building.get_meta("building_type", "workplace")).replace("_", " "))
+	if checked:
+		var night_order_used := int(selected_building.get_meta("night_work_order_day", -1)) == day_cycle.current_day
+		if night_order_used:
+			building_overtime_button.set_pressed_no_signal(false)
+			return
+		var workers_found := false
+		for citizen in citizens:
+			if is_instance_valid(citizen) and (citizen.employment_workplace == selected_building or citizen.pending_employment_workplace == selected_building):
+				citizen.activate_overtime(day_cycle.current_day + 1, "workplace")
+				workers_found = true
+		if workers_found:
+			selected_building.set_meta("night_work_order_day", day_cycle.current_day)
+			_add_message("Night-work order issued for %s." % str(selected_building.get_meta("building_type", "workplace")).replace("_", " "))
+			_update_workers()
+			_update_skip_night_button()
+			if citizen_ai != null:
+				citizen_ai.request_decision_refresh()
+		else:
+			building_overtime_button.set_pressed_no_signal(false)
+	else:
+		selected_building.set_meta("night_work_order_day", -1)
+		for citizen in citizens:
+			if is_instance_valid(citizen) and (citizen.employment_workplace == selected_building or citizen.pending_employment_workplace == selected_building):
+				citizen.deactivate_overtime()
+		_add_message("Night work cancelled for %s." % str(selected_building.get_meta("building_type", "workplace")).replace("_", " "))
 		_update_workers()
 		_update_skip_night_button()
 		if citizen_ai != null:
 			citizen_ai.request_decision_refresh()
-		_reopen_workplace_menu()
 
 
-func _call_campfire_worker_overtime() -> void:
+func _toggle_campfire_worker_overtime(checked: bool) -> void:
 	if not is_instance_valid(selected_campfire):
 		return
 	selected_building = selected_campfire
-	_call_worker_overtime()
+	_toggle_worker_overtime(checked)
 	_refresh_campfire_menu()
