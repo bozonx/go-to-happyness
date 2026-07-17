@@ -344,7 +344,7 @@ func _init() -> void:
 	simulation.selected_building = civic_centre
 	simulation.game_minutes = 20.0 * 60.0
 	field_officer.overtime_mode = false
-	simulation._call_worker_overtime()
+	simulation._toggle_worker_overtime(true)
 	assert(field_officer.overtime_mode)
 	simulation.game_minutes = 9.0 * 60.0
 	var first_in_queue: Citizen = simulation.citizens[2]

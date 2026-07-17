@@ -19,29 +19,40 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 	for citizen_id in _assignments.keys():
 		if not snapshot.has_citizen(citizen_id):
 			_assignments.erase(citizen_id)
-	var assigned_targets: Dictionary = {}
 	var citizen_ids := snapshot.citizen_ids()
 	citizen_ids.sort()
+	var assigned_targets: Dictionary = {}
 	for citizen_id in citizen_ids:
 		var citizen := snapshot.citizen(citizen_id)
-		if citizen == null or not bool(citizen.facts.value(&"work.forestry.worker", false)):
-			_assignments.erase(citizen_id)
-			continue
 		var assignment := _assignments.get(citizen_id, {}) as Dictionary
-		if not assignment.is_empty():
+		if (
+			citizen != null
+			and bool(citizen.facts.value(&"work.forestry.worker", false))
+			and bool(citizen.facts.value(&"work.forestry.in_progress", false))
+			and not assignment.is_empty()
+		):
 			assigned_targets[assignment.get(&"id", &"")] = true
 	for citizen_id in citizen_ids:
 		var citizen := snapshot.citizen(citizen_id)
 		if citizen == null or not bool(citizen.facts.value(&"work.forestry.worker", false)):
+			_assignments.erase(citizen_id)
 			continue
 		var in_progress := bool(citizen.facts.value(&"work.forestry.in_progress", false))
 		if not in_progress and not bool(citizen.facts.value(&"work.forestry.can_start", true)):
 			_assignments.erase(citizen_id)
 			continue
 		var assignment := _assignments.get(citizen_id, {}) as Dictionary
-		if not assignment.is_empty() and (in_progress or _contains_candidate(snapshot, citizen, assignment)):
+		var assignment_id := assignment.get(&"id", &"") as StringName
+		if in_progress and not assignment.is_empty():
 			orders.append(_order_for(citizen_id, assignment))
 			continue
+		if not assignment.is_empty() and not assigned_targets.has(assignment_id):
+			var refreshed := _candidate_for(snapshot, citizen, assignment_id)
+			if not refreshed.is_empty():
+				_assignments[citizen_id] = refreshed
+				assigned_targets[assignment_id] = true
+				orders.append(_order_for(citizen_id, refreshed))
+				continue
 		_assignments.erase(citizen_id)
 		var next_assignment := _closest_free_candidate(snapshot, citizen, assigned_targets)
 		if next_assignment.is_empty():
@@ -52,15 +63,15 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 	return orders
 
 
-func _contains_candidate(snapshot: WorldSnapshot, citizen: CitizenSnapshot, assignment: Dictionary) -> bool:
-	var target_id := assignment.get(&"id", &"") as StringName
+func _candidate_for(snapshot: WorldSnapshot, citizen: CitizenSnapshot, target_id: StringName) -> Dictionary:
 	var candidates: Array = citizen.facts.value(&"work.forestry.candidates", []) as Array
 	if candidates.is_empty():
 		candidates = snapshot.settlement.value(&"work.forestry.targets", []) as Array
 	for candidate_value in candidates:
-		if (candidate_value as Dictionary).get(&"id", &"") == target_id:
-			return true
-	return false
+		var candidate := candidate_value as Dictionary
+		if candidate.get(&"id", &"") == target_id:
+			return _decorate_candidate(citizen, candidate)
+	return {}
 
 
 func _closest_free_candidate(snapshot: WorldSnapshot, citizen: CitizenSnapshot, assigned_targets: Dictionary) -> Dictionary:
@@ -80,9 +91,15 @@ func _closest_free_candidate(snapshot: WorldSnapshot, citizen: CitizenSnapshot, 
 			best = candidate.duplicate(true)
 			best_distance = distance
 	if not best.is_empty():
-		best[&"sawmill_position"] = citizen.facts.value(&"work.forestry.sawmill_position", best.get(&"sawmill_position", Vector3.INF))
-		best[&"warehouse_position"] = citizen.facts.value(&"work.forestry.warehouse_position", best.get(&"warehouse_position", Vector3.INF))
+		best = _decorate_candidate(citizen, best)
 	return best
+
+
+func _decorate_candidate(citizen: CitizenSnapshot, candidate: Dictionary) -> Dictionary:
+	var decorated := candidate.duplicate(true)
+	decorated[&"sawmill_position"] = citizen.facts.value(&"work.forestry.sawmill_position", decorated.get(&"sawmill_position", Vector3.INF))
+	decorated[&"warehouse_position"] = citizen.facts.value(&"work.forestry.warehouse_position", decorated.get(&"warehouse_position", Vector3.INF))
+	return decorated
 
 
 func _order_for(citizen_id: int, assignment: Dictionary) -> CitizenOrder:

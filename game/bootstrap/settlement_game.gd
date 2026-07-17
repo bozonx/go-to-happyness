@@ -236,6 +236,7 @@ var world_environment: Environment
 var weather_state := WeatherStateScript.new()
 var rain_effect: RainEffect
 var fireflies: Array[FirefliesEffect] = []
+var lens_flare_material: ShaderMaterial
 var camera_target := Vector3.ZERO
 var camera_distance := 30.0
 var camera_yaw := 42.0
@@ -446,7 +447,7 @@ var campfire_orders_menu: Panel
 var campfire_orders_toggle: CheckButton
 var campfire_balanced_warehouse_toggle: CheckButton
 var campfire_cheer_button: Button
-var campfire_night_work_button: Button
+var campfire_night_work_button: CheckButton
 var personal_night_work_button: CheckButton
 
 
@@ -910,12 +911,30 @@ func _update_daylight() -> void:
 	sun.shadow_opacity = lerpf(1.0, 0.0, overcast)
 	if rain_effect != null:
 		rain_effect.set_intensity(overcast)
+	_update_lens_flare(direct_light, overcast)
 	# Fireflies appear when it gets dark; fade out with weather overcast
 	var night_factor := 1.0 - smoothstep(0.0, 0.28, solar_height)
 	var firefly_factor := night_factor * (1.0 - overcast * 0.5)
 	for ff in fireflies:
 		if is_instance_valid(ff):
 			ff.set_night_factor(firefly_factor)
+
+func _update_lens_flare(direct_light: float, overcast: float) -> void:
+	if lens_flare_material == null or camera == null or sun == null:
+		return
+	# Sun direction in world space (opposite of light forward)
+	var sun_dir := -sun.global_transform.basis.z.normalized()
+	# Project a point far along the sun direction onto screen space
+	var sun_world_pos := camera.global_position + sun_dir * 1000.0
+	var screen_pos := camera.unproject_position(sun_world_pos)
+	var viewport_size := get_viewport().get_visible_rect().size
+	var uv := Vector2(screen_pos.x / viewport_size.x, screen_pos.y / viewport_size.y)
+	lens_flare_material.set_shader_parameter("u_sun_screen_pos", uv)
+	# Fade flare with direct light and hide when overcast
+	var flare_intensity := direct_light * (1.0 - overcast * 0.7)
+	lens_flare_material.set_shader_parameter("u_intensity", flare_intensity)
+	lens_flare_material.set_shader_parameter("u_time", runtime_seconds)
+
 
 func _update_clock(delta: float) -> void:
 	var previous_hour := clock.hour()
@@ -1005,6 +1024,16 @@ func _clear_expired_overtime_orders() -> void:
 	for citizen in citizens:
 		if is_instance_valid(citizen):
 			citizen.clear_expired_overtime(day_cycle.current_day)
+
+
+func _reset_building_night_work_toggles() -> void:
+	for record in building_registry.records():
+		var node := record.node as Node3D
+		if is_instance_valid(node) and node.has_meta("night_work_order_day"):
+			node.set_meta("night_work_order_day", -1)
+	if is_instance_valid(selected_campfire) and selected_campfire.has_meta("night_work_order_day"):
+		selected_campfire.set_meta("night_work_order_day", -1)
+	settlement.night_work_order_day = -1
 
 
 func _resume_overtime_daily_orders() -> void:
@@ -2440,6 +2469,14 @@ func _create_world() -> void:
 	world_environment.glow_intensity = 0.18
 	world_environment.glow_strength = 0.72
 	world_environment.glow_bloom = 0.05
+	world_environment.volumetric_fog_enabled = true
+	world_environment.volumetric_fog_density = 0.04
+	world_environment.volumetric_fog_anisotropy = 0.85
+	world_environment.volumetric_fog_length = 64.0
+	world_environment.volumetric_fog_detail_spread = 0.5
+	world_environment.fog_enabled = true
+	world_environment.fog_light_color = Color("fff2d1")
+	world_environment.fog_density = 0.001
 	environment.environment = world_environment
 	add_child(environment)
 
@@ -2452,12 +2489,32 @@ func _create_world() -> void:
 	camera = Camera3D.new()
 	add_child(camera)
 	_update_camera_position()
+	_create_lens_flare()
 	_create_rain_effect()
 	_update_daylight()
 	_create_voxel_terrain()
 	_create_trail_overlay()
 	_refresh_navigation_grid()
 	_create_selection_marker()
+
+
+func _create_lens_flare() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	var shader := load("res://game/features/world/presentation/lens_flare.gdshader")
+	lens_flare_material = ShaderMaterial.new()
+	lens_flare_material.shader = shader
+	lens_flare_material.set_shader_parameter("u_sun_screen_pos", Vector2(0.5, 0.5))
+	lens_flare_material.set_shader_parameter("u_intensity", 0.0)
+	lens_flare_material.set_shader_parameter("u_time", 0.0)
+	var rect := ColorRect.new()
+	rect.material = lens_flare_material
+	rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var layer := CanvasLayer.new()
+	layer.layer = 100
+	layer.add_child(rect)
+	add_child(layer)
 
 
 func _create_rain_effect() -> void:
@@ -7806,12 +7863,12 @@ func _create_campfire_orders_menu(ui: CanvasLayer) -> void:
 	campfire_balanced_warehouse_toggle.tooltip_text = "Spread each good evenly between warehouses instead of filling the nearest one."
 	campfire_balanced_warehouse_toggle.toggled.connect(_set_balanced_warehouse_mode)
 	campfire_orders_menu.add_child(campfire_balanced_warehouse_toggle)
-	campfire_night_work_button = Button.new()
+	campfire_night_work_button = CheckButton.new()
 	campfire_night_work_button.text = "Work through the night"
 	campfire_night_work_button.position = Vector2(18, 134)
 	campfire_night_work_button.size = Vector2(384, 32)
-	campfire_night_work_button.tooltip_text = "Once per day. Affected workers continue through the night and next workday."
-	campfire_night_work_button.pressed.connect(_order_settlement_night_work)
+	campfire_night_work_button.tooltip_text = "Affected workers continue through the night and next workday."
+	campfire_night_work_button.toggled.connect(_toggle_settlement_night_work)
 	campfire_orders_menu.add_child(campfire_night_work_button)
 	var description := Label.new()
 	description.text = "Night work raises fatigue and lowers satisfaction. Dangerously tired residents may collapse while returning home."
@@ -7849,9 +7906,11 @@ func _show_campfire_orders_menu() -> void:
 	var can_cheer := hour >= 6 and not settlement.cheer_up_used_today
 	campfire_cheer_button.disabled = not can_cheer
 	campfire_cheer_button.tooltip_text = "Available once each morning after 06:00." if not can_cheer else "Raise wellbeing by 5%%."
-	var can_order_night_work := settlement.night_work_order_day != day_cycle.current_day and _has_night_work_candidates()
+	var can_order_night_work := _has_night_work_candidates()
+	var settlement_night_active := settlement.night_work_order_day == day_cycle.current_day
 	campfire_night_work_button.disabled = not can_order_night_work
-	campfire_night_work_button.tooltip_text = "Already ordered today." if settlement.night_work_order_day == day_cycle.current_day else "No active workers can receive this order." if not _has_night_work_candidates() else "Once per day. Raises fatigue and lowers satisfaction."
+	campfire_night_work_button.set_pressed_no_signal(settlement_night_active)
+	campfire_night_work_button.tooltip_text = "No active workers can receive this order." if not can_order_night_work else "Affected workers continue through the night and next workday. Raises fatigue and lowers satisfaction."
 	campfire_orders_menu.visible = true
 
 
@@ -7889,23 +7948,37 @@ func _has_night_work_candidates() -> bool:
 	return false
 
 
-func _order_settlement_night_work() -> void:
-	if settlement.night_work_order_day == day_cycle.current_day:
-		return
-	var affected := 0
-	for citizen in citizens:
-		if not is_instance_valid(citizen) or citizen.is_player_controlled or citizen.is_recovering(day_cycle.current_day):
-			continue
-		if citizen.has_active_daily_order() or citizen.is_employed():
-			citizen.activate_overtime(day_cycle.current_day + 1, "settlement")
-			affected += 1
-	if affected <= 0:
-		return
-	settlement.night_work_order_day = day_cycle.current_day
-	_update_interface("Night-work order issued to %d residents. They will work through the night and next day." % affected)
-	_update_skip_night_button()
-	if citizen_ai != null:
-		citizen_ai.request_decision_refresh()
+func _toggle_settlement_night_work(checked: bool) -> void:
+	if checked:
+		if settlement.night_work_order_day == day_cycle.current_day:
+			campfire_night_work_button.set_pressed_no_signal(false)
+			return
+		var affected := 0
+		for citizen in citizens:
+			if not is_instance_valid(citizen) or citizen.is_player_controlled or citizen.is_recovering(day_cycle.current_day):
+				continue
+			if citizen.has_active_daily_order() or citizen.is_employed():
+				citizen.activate_overtime(day_cycle.current_day + 1, "settlement")
+				affected += 1
+		if affected <= 0:
+			campfire_night_work_button.set_pressed_no_signal(false)
+			return
+		settlement.night_work_order_day = day_cycle.current_day
+		_update_interface("Night-work order issued to %d residents. They will work through the night and next day." % affected)
+		_update_skip_night_button()
+		if citizen_ai != null:
+			citizen_ai.request_decision_refresh()
+	else:
+		settlement.night_work_order_day = -1
+		for citizen in citizens:
+			if not is_instance_valid(citizen) or citizen.is_player_controlled:
+				continue
+			if citizen.overtime_source == "settlement":
+				citizen.deactivate_overtime()
+		_update_interface("Settlement night work cancelled. Workers will return home.")
+		_update_skip_night_button()
+		if citizen_ai != null:
+			citizen_ai.request_decision_refresh()
 	_show_campfire_orders_menu()
 
 

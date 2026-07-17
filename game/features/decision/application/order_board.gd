@@ -121,18 +121,24 @@ func _contains_equivalent_order(orders: Array, proposal: CitizenOrder) -> bool:
 	return false
 
 
-## Identity of an order is based on the stable assignment keys. Mutable positions
-## and payload details are intentionally ignored so that a citizen walking toward a
-## tree, farm, or site does not get a brand-new order id every time the nearest
-## warehouse position shifts. The behavior step reads fresh positions from the
-## snapshot, so the order only needs to preserve its logical target.
+## Identity of an order is based on the stable assignment keys and its primary
+## destination. Payload details such as the selected warehouse are intentionally
+## ignored because actors can refresh them during a cycle. A moved primary target
+## must receive a new id: behavior tasks capture their route when they are built.
 func _orders_are_equivalent(left: CitizenOrder, right: CitizenOrder) -> bool:
 	return (
 		left.citizen_id == right.citizen_id
 		and left.kind == right.kind
 		and left.workday_id == right.workday_id
 		and left.target_key == right.target_key
+		and _positions_are_equivalent(left.target_position, right.target_position)
 	)
+
+
+func _positions_are_equivalent(left: Vector3, right: Vector3) -> bool:
+	if left == Vector3.INF or right == Vector3.INF:
+		return left == right
+	return left.is_equal_approx(right)
 
 
 func next_expiration_after(simulation_seconds: float) -> float:

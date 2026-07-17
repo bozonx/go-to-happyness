@@ -236,6 +236,8 @@ func _init() -> void:
 	_test_toilet_goal_blocked_for_player_controlled()
 	_test_personal_need_preempts_work_trip()
 	_test_changed_work_order_cancels_captured_trip()
+	_test_moved_target_rebuilds_captured_trip()
+	_test_completed_order_waits_for_fresh_publication()
 	_test_active_personal_need_blocks_work()
 	_test_personal_need_blocks_other_personal_need()
 	_test_order_board_equivalence_ignores_payload_position()
@@ -265,6 +267,9 @@ func _init() -> void:
 	_test_construction_actuator()
 	_test_construction_work_step_times_out_on_stuck_action()
 	_test_gathering_provider_assigns_unique_stable_sources()
+	_test_gathering_provider_protects_active_assignment()
+	_test_gathering_provider_swaps_invalid_assignments_without_gap()
+	_test_gathering_provider_scales_across_many_targets_and_warehouses()
 	_test_gathering_provider_refreshes_moving_source()
 	_test_gathering_provider_prefers_access_position()
 	_test_native_gathering_goal()
@@ -656,6 +661,54 @@ func _test_changed_work_order_cancels_captured_trip() -> void:
 	assert(snapshot.reservations.owner_of([&"forestry.tree", &"tree:3:0"], 0.0) == 0)
 
 
+func _test_moved_target_rebuilds_captured_trip() -> void:
+	var board := OrderBoard.new()
+	var provider := GatheringOrderProviderScript.new()
+	var actuator := FakeActuator.new(1)
+	var brain := CitizenBrain.new(1, actuator, [GatheringGoalScript.new()])
+	var initial_citizen := _gathering_citizen_with_candidates(1, [
+		{&"id": &"rabbit:2:0", &"resource_type": "food", &"position": Vector3(2.0, 0.0, 0.0), &"access": Vector3(2.0, 0.0, 0.0)},
+	])
+	var initial_snapshot := _snapshot(0.0, initial_citizen)
+	board.replace_issuer_orders(provider.id, provider.collect_orders(initial_snapshot), 0.0)
+	var initial_order := board.order_for(1, 0.0)
+	brain.think(initial_snapshot, initial_order)
+	brain.tick(initial_snapshot, initial_order, 0.1)
+	assert(actuator.move_to_destination == Vector3(2.0, 0.0, 0.0))
+
+	var moved_citizen := _gathering_citizen_with_candidates(1, [
+		{&"id": &"rabbit:2:0", &"resource_type": "food", &"position": Vector3(5.0, 0.0, 0.0), &"access": Vector3(5.0, 0.0, 0.0)},
+	])
+	var moved_snapshot := _snapshot(1.0, moved_citizen)
+	board.replace_issuer_orders(provider.id, provider.collect_orders(moved_snapshot), 1.0)
+	var moved_order := board.order_for(1, 1.0)
+	assert(moved_order.id != initial_order.id)
+	brain.think(moved_snapshot, moved_order)
+	brain.tick(moved_snapshot, moved_order, 0.1)
+	assert(actuator.stop_count == 1)
+	assert(actuator.move_to_destination == Vector3(5.0, 0.0, 0.0))
+
+
+func _test_completed_order_waits_for_fresh_publication() -> void:
+	var goal := ScriptedGoal.new(&"work", 0.8, [BehaviorStep.Status.SUCCESS])
+	var brain := CitizenBrain.new(1, FakeActuator.new(1), [goal])
+	var snapshot := _snapshot(0.0, CitizenSnapshot.new(1))
+	var order := CitizenOrder.new(1, &"work", &"test", 0.8)
+	order.id = 41
+	brain.think(snapshot, order)
+	brain.tick(snapshot, order, 0.1)
+	assert(goal.build_count == 1)
+
+	# Thinking faster than the director publishes must not replay the completed
+	# proposal. A new proposal object with the stable id starts the next cycle.
+	brain.think(snapshot, order)
+	assert(goal.build_count == 1)
+	var republished := CitizenOrder.new(1, &"work", &"test", 0.8)
+	republished.id = order.id
+	brain.think(snapshot, republished)
+	assert(goal.build_count == 2)
+
+
 func _test_active_personal_need_blocks_work() -> void:
 	var work := FixedGoal.new(&"work", 0.89)
 	var meal := MealGoalScript.new()
@@ -947,6 +1000,87 @@ func _test_gathering_provider_assigns_unique_stable_sources() -> void:
 	assert(active_orders.size() == 2)
 	assert(active_orders[0].target_position == orders[0].target_position)
 	assert(active_orders[1].target_position == orders[1].target_position)
+
+
+func _test_gathering_provider_swaps_invalid_assignments_without_gap() -> void:
+	var provider := GatheringOrderProviderScript.new()
+	var initial := provider.collect_orders(WorldSnapshot.new(1, 0.0, 0.0, AIFactSet.new(), {
+		1: _gathering_citizen(1, false),
+		2: _gathering_citizen(2, false),
+	}))
+	assert(initial.size() == 2)
+	var first_target := initial[0].payload.value(&"work.source_id") as StringName
+	var second_target := initial[1].payload.value(&"work.source_id") as StringName
+	var swapped := provider.collect_orders(WorldSnapshot.new(2, 1.0, 0.0, AIFactSet.new(), {
+		1: _gathering_citizen_with_candidates(1, [_gathering_candidate(second_target)]),
+		2: _gathering_citizen_with_candidates(2, [_gathering_candidate(first_target)]),
+	}))
+	assert(swapped.size() == 2)
+	assert(swapped[0].payload.value(&"work.source_id") == second_target)
+	assert(swapped[1].payload.value(&"work.source_id") == first_target)
+
+
+func _test_gathering_provider_protects_active_assignment() -> void:
+	var provider := GatheringOrderProviderScript.new()
+	var initial := provider.collect_orders(WorldSnapshot.new(1, 0.0, 0.0, AIFactSet.new(), {
+		1: _gathering_citizen(1, false),
+		2: _gathering_citizen(2, false),
+	}))
+	assert(initial.size() == 2)
+	var active_target := initial[1].payload.value(&"work.source_id") as StringName
+	var blocked_worker := _gathering_citizen_with_candidates(1, [_gathering_candidate(active_target)])
+	var active_facts := _gathering_citizen_with_candidates(2, []).facts.to_dictionary()
+	active_facts[&"work.gathering.in_progress"] = true
+	var active_worker := CitizenSnapshot.new(2, Vector3(2.0, 0.0, 0.0), false, true, AIFactSet.new(active_facts))
+	var orders := provider.collect_orders(WorldSnapshot.new(2, 1.0, 0.0, AIFactSet.new(), {
+		1: blocked_worker,
+		2: active_worker,
+	}))
+	assert(orders.size() == 1)
+	assert(orders[0].citizen_id == 2)
+	assert(orders[0].payload.value(&"work.source_id") == active_target)
+
+
+func _test_gathering_provider_scales_across_many_targets_and_warehouses() -> void:
+	const WORKER_COUNT := 24
+	const TARGET_COUNT := 48
+	var provider := GatheringOrderProviderScript.new()
+	var candidates: Array[Dictionary] = []
+	for target_index in TARGET_COUNT:
+		var x := float(target_index + 1)
+		candidates.append({
+			&"id": StringName("branch:%d:0" % target_index),
+			&"resource_type": "branches",
+			&"position": Vector3(x, 0.0, 0.0),
+			&"access": Vector3(x, 0.0, 0.0),
+			&"route_cost": x,
+		})
+	var expected_targets: Dictionary = {}
+	for publication in 12:
+		var citizens: Dictionary = {}
+		for citizen_id in range(1, WORKER_COUNT + 1):
+			var warehouse := Vector3(80.0 if citizen_id % 2 == 0 else -80.0, 0.0, 0.0)
+			citizens[citizen_id] = CitizenSnapshot.new(citizen_id, Vector3.ZERO, false, true, AIFactSet.new({
+				&"work.gathering.worker": true,
+				&"work.gathering.in_progress": false,
+				&"work.gathering.can_start": true,
+				&"work.gathering.role": &"gather_branches",
+				&"work.gathering.warehouse_position": warehouse,
+				&"work.gathering.candidates": candidates,
+			}))
+		var orders := provider.collect_orders(WorldSnapshot.new(publication + 1, float(publication), 0.0, AIFactSet.new(), citizens))
+		assert(orders.size() == WORKER_COUNT)
+		var unique_targets: Dictionary = {}
+		for order in orders:
+			var target_id := order.payload.value(&"work.source_id") as StringName
+			assert(not unique_targets.has(target_id))
+			unique_targets[target_id] = true
+			var expected_warehouse := Vector3(80.0 if order.citizen_id % 2 == 0 else -80.0, 0.0, 0.0)
+			assert(order.payload.value(&"warehouse.position") == expected_warehouse)
+			if publication == 0:
+				expected_targets[order.citizen_id] = target_id
+			else:
+				assert(expected_targets[order.citizen_id] == target_id)
 
 
 func _test_gathering_provider_refreshes_moving_source() -> void:
@@ -2060,6 +2194,28 @@ func _gathering_citizen(citizen_id: int, in_progress: bool) -> CitizenSnapshot:
 			{&"id": &"branch:9:0", &"resource_type": "branches", &"position": Vector3(9.0, 0.0, 0.0), &"access": Vector3(8.5, 0.0, 0.0), &"warehouse_position": Vector3(8.0, 0.0, 0.0)},
 		],
 	}))
+
+
+func _gathering_citizen_with_candidates(citizen_id: int, candidates: Array) -> CitizenSnapshot:
+	return CitizenSnapshot.new(citizen_id, Vector3(float(citizen_id), 0.0, 0.0), false, true, AIFactSet.new({
+		&"work.gathering.worker": true,
+		&"work.gathering.in_progress": false,
+		&"work.gathering.can_start": true,
+		&"work.gathering.role": &"gather_food",
+		&"work.gathering.warehouse_position": Vector3(8.0, 0.0, 0.0),
+		&"work.gathering.candidates": candidates,
+	}))
+
+
+func _gathering_candidate(source_id: StringName) -> Dictionary:
+	var x := 3.0 if source_id == &"branch:3:0" else 9.0
+	return {
+		&"id": source_id,
+		&"resource_type": "branches",
+		&"position": Vector3(x, 0.0, 0.0),
+		&"access": Vector3(x - 0.5, 0.0, 0.0),
+		&"warehouse_position": Vector3(8.0, 0.0, 0.0),
+	}
 
 
 func _gathering_order(citizen_id: int, source_position: Vector3, source_id: StringName) -> CitizenOrder:

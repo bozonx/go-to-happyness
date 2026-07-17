@@ -18,6 +18,8 @@ var blackboard := AIBlackboard.new()
 var arbiter := UtilityArbiter.new()
 var runner := BehaviorRunner.new()
 var context: BehaviorContext
+var _completed_order: CitizenOrder
+var _completed_order_goal_id: StringName
 
 
 func _init(
@@ -41,6 +43,14 @@ func think(snapshot: WorldSnapshot, order: CitizenOrder) -> void:
 	# Work may be interrupted for a personal need. The runner cancels the old task,
 	# allowing its next director publication to rebuild a task from current facts.
 	var excluded := _excluded_goal_ids(active_goal_id)
+	# A completed action may remain on the board until the next director tick. Do
+	# not immediately replay that exact proposal; a freshly published order object
+	# (even with the same stable id) represents the next production cycle.
+	if runner.active_task == null and order != null and order == _completed_order:
+		excluded.append(_completed_order_goal_id)
+	elif order != _completed_order:
+		_completed_order = null
+		_completed_order_goal_id = &""
 	var result := arbiter.choose(
 		snapshot,
 		context.citizen,
@@ -127,6 +137,10 @@ func _work_goal_ids() -> Array[StringName]:
 
 
 func _on_task_finished(task: BehaviorTask, status: BehaviorStep.Status) -> void:
+	if status == BehaviorStep.Status.SUCCESS and task.order != null and task.order_id != 0:
+		_completed_order = task.order
+		_completed_order_goal_id = task.goal_id
+		return
 	if status != BehaviorStep.Status.FAILURE or task.goal_id == &"":
 		return
 	var now := context.snapshot.simulation_seconds if context.snapshot != null else 0.0
