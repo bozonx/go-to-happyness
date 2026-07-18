@@ -51,6 +51,8 @@ const EventLogScript = preload("res://game/features/events/domain/event_log.gd")
 const EventContextScript = preload("res://game/features/events/domain/event_context.gd")
 const EventOutcomeScript = preload("res://game/features/events/domain/event_outcome.gd")
 const TentEraEventsScript = preload("res://game/features/events/application/tent_era_events.gd")
+const VillageTerritoryServiceScript = preload("res://game/features/buildings/application/village_territory_service.gd")
+const VillageBoundaryMarkersScript = preload("res://game/features/buildings/presentation/village_boundary_markers.gd")
 
 
 # The playable routing and construction board must cover the terrain visible
@@ -442,6 +444,7 @@ var route_service: GridRouteService
 var building_queue_service: RefCounted
 var building_availability_service: RefCounted
 var building_research_service: RefCounted
+var village_territory_service: RefCounted
 var sawmills: SawmillService
 var construction: ConstructionService
 var demolition: DemolitionService
@@ -453,6 +456,7 @@ var courier_dispatcher: RefCounted
 var trail_field: TrailFieldService
 var trail_overlay: MeshInstance3D
 var trail_overlay_material: ShaderMaterial
+var village_boundary_markers: Node3D
 var campfire_orders_menu: Panel
 var campfire_orders_toggle: CheckButton
 var campfire_balanced_warehouse_toggle: CheckButton
@@ -479,6 +483,8 @@ func _ready() -> void:
 	building_availability_service.configure(settlement)
 	building_research_service = BuildingResearchServiceScript.new()
 	building_research_service.configure(settlement)
+	village_territory_service = VillageTerritoryServiceScript.new()
+	village_territory_service.configure(building_registry, int(settlement.era))
 	sawmills = SawmillService.new()
 	sawmills.configure(self)
 	var construction_runtime := ConstructionRuntime.new()
@@ -2615,6 +2621,10 @@ func _create_world() -> void:
 	environment.environment = world_environment
 	add_child(environment)
 
+	village_boundary_markers = VillageBoundaryMarkersScript.new()
+	village_boundary_markers.configure(CELL_SIZE)
+	add_child(village_boundary_markers)
+
 	sun = DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-52.0, -32.0, 0.0)
 	sun.light_energy = 1.2
@@ -3805,6 +3815,7 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_build_button("Брезентовый торговый шатер", "tarp_trade_tent", 754, "tent")
 	_add_build_button("Соломенный общественный туалет", "toilet_tent", 788, "tent")
 	_add_build_button("Брезентовый общественный туалет", "tarp_toilet", 822, "tent")
+	_add_build_button("Столб границы", "boundary_post", 856, "tent")
 	
 	_add_build_button("Dugout", "dugout", 176, "earth")
 	_add_build_button("Earth house", "earth_house", 210, "earth")
@@ -4847,10 +4858,11 @@ func _refresh_build_menu() -> void:
 			var build_type: String = button.get_meta("build_type", "")
 			var menu_state: Dictionary = building_availability_service.menu_state_with_inventory(build_type, pocket)
 			button.set_meta("build_menu_state", menu_state)
+			var territory_ok: bool = village_territory_service.has_campfire() or not BuildingCatalog.requires_village_area(build_type)
 			if build_menu_is_global and build_category.is_empty():
-				button.visible = not assignment_submenu_open and button.get_meta("category", "") == current_era_category and bool(menu_state.visible)
+				button.visible = not assignment_submenu_open and button.get_meta("category", "") == current_era_category and bool(menu_state.visible) and territory_ok
 			else:
-				button.visible = not build_category.is_empty() and button.get_meta("category", "") == build_category and not assignment_submenu_open and bool(menu_state.visible)
+				button.visible = not build_category.is_empty() and button.get_meta("category", "") == build_category and not assignment_submenu_open and bool(menu_state.visible) and territory_ok
 			
 	for button in role_buttons:
 		var role: String = button.get_meta("role", "")
@@ -5746,6 +5758,8 @@ func _finish_demolition(site: DemolitionSite) -> void:
 	var removed_record := building_registry.remove_node(building)
 	if removed_record != null:
 		_unregister_navigation_footprint(removed_record.center, removed_record.footprint)
+		village_territory_service.on_building_removed(removed_record.cell)
+	_refresh_boundary_markers()
 	if active_kitchen_removed:
 		_select_best_canteen()
 	settlement.buildings[building_type] = maxi(0, int(settlement.buildings.get(building_type, 1)) - 1)
@@ -7166,13 +7180,14 @@ func _place_building(world_position: Vector3) -> void:
 	if build_mode in ["straw_trade_tent", "tarp_trade_tent"] and is_instance_valid(entrance_stone) and world_position.distance_to(entrance_stone.global_position) > 8.0:
 		_update_interface("The tent market must be built beside the entrance sign.")
 		return
-	if build_mode == "campfire" and is_instance_valid(campfire_node):
-		_update_interface("Only one main campfire is allowed. Upgrade the existing one.")
+	var cell := _placement_key(world_position)
+	var territory_reason: StringName = village_territory_service.placement_reason(build_mode, cell)
+	if territory_reason != village_territory_service.REASON_OK:
+		_update_interface(village_territory_service.placement_message(territory_reason))
 		return
 	if not _can_place(world_position):
 		_update_interface("Construction is not allowed at this point.")
 		return
-	var cell := _placement_key(world_position)
 	if not _can_pay_building_cost(build_mode):
 		var placement_state: Dictionary = building_availability_service.placement_state_with_inventory(build_mode, pocket)
 		_update_interface(str(placement_state.message))
@@ -7325,7 +7340,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 		workplace_priority_counter += 1
 		building.set_meta("accepting_workers", true)
 		building.set_meta("workplace_priority", workplace_priority_counter)
-	if building_type not in ["warehouse", "straw_warehouse", "tarp_warehouse", "campfire", "campfire_lvl2", "campfire_lvl3", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant", "straw_trade_tent", "tarp_trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market", "school", "materials_factory", "tent", "straw_tent", "tarp_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house", "straw_craft_tent", "tarp_craft_tent", "straw_forager_tent", "tarp_forager_tent"]:
+	if building_type not in ["warehouse", "straw_warehouse", "tarp_warehouse", "campfire", "campfire_lvl2", "campfire_lvl3", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant", "straw_trade_tent", "tarp_trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market", "school", "materials_factory", "tent", "straw_tent", "tarp_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house", "straw_craft_tent", "tarp_craft_tent", "straw_forager_tent", "tarp_forager_tent", "boundary_post"]:
 		_add_building_selector(building, "building_selector", blueprint.footprint)
 	var is_home := building_type in ["tent", "straw_tent", "tarp_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house"]
 	_register_service_entrance(building, blueprint, is_home, building_type not in ["farm", "park"])
@@ -7426,11 +7441,16 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			factories.append(building)
 			if building_type == "materials_factory":
 				_add_building_selector(building, "materials_factory_selector", blueprint.footprint)
+		"boundary_post":
+			_add_building_selector(building, "building_selector", blueprint.footprint)
 	building_registry.attach_node(cell, building)
 	var occupied_footprint: Vector2i = building.get_meta("occupied_footprint", blueprint.footprint)
+	village_territory_service.on_building_added(cell, building_type)
+	_refresh_boundary_markers()
 	_add_building_status_indicator(building)
 	_refresh_navigation_grid()
 	_update_workers()
+	_refresh_build_menu()
 	var completion_message := "%s construction completed." % building_type.capitalize()
 	if building_type in ["recycling_factory", "metal_factory"]:
 		completion_message += " It requires 3 factory workers."
@@ -8738,6 +8758,7 @@ func _on_campfire_advance_pressed() -> void:
 		SettlementState.Era.STONE: next_era = SettlementState.Era.BRICK
 	
 	if settlement.advance_era(next_era, citizens.size(), housing_slots):
+		village_territory_service.set_era(int(settlement.era))
 		_update_interface("Advanced to the %s Era! New buildings unlocked." % _era_name())
 		_refresh_campfire_menu()
 		_refresh_build_menu()
@@ -10087,6 +10108,8 @@ func _destroy_building_to_pile(building: Node3D, building_type: String) -> void:
 	var removed_record := building_registry.remove_node(building)
 	if removed_record != null:
 		_unregister_navigation_footprint(removed_record.center, removed_record.footprint)
+		village_territory_service.on_building_removed(removed_record.cell)
+	_refresh_boundary_markers()
 	settlement.buildings[building_type] = maxi(0, int(settlement.buildings.get(building_type, 1)) - 1)
 	if campfire_node == null:
 		_select_best_campfire()
@@ -10132,6 +10155,11 @@ func _select_best_campfire() -> void:
 	campfire_node = best_campfire
 	if is_instance_valid(campfire_node):
 		_activate_employment_centre(campfire_node)
+
+
+func _refresh_boundary_markers() -> void:
+	if village_boundary_markers != null:
+		village_boundary_markers.refresh(village_territory_service.territory())
 
 func _create_resource_pile(position: Vector3, resources: Dictionary, is_backpack_pile := false) -> void:
 	if resources.is_empty():

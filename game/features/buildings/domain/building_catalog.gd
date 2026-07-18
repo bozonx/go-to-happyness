@@ -2,9 +2,9 @@ class_name BuildingCatalog
 extends RefCounted
 
 const DEFINITIONS := {
-	"campfire": {"name": "Главный костер ур. 1", "category": "tent", "costs": {"branches": 4}, "landmark": true, "demolishable": false},
-	"campfire_lvl2": {"name": "Главный костер ур. 2", "category": "tent", "costs": {"branches": 15, "grass": 10}, "landmark": true, "demolishable": false, "upgrade_only": true, "upgrades_from": "campfire"},
-	"campfire_lvl3": {"name": "Главный костер ур. 3", "category": "tent", "costs": {"branches": 25, "grass": 18}, "landmark": true, "demolishable": false, "upgrade_only": true, "upgrades_from": "campfire_lvl2"},
+	"campfire": {"name": "Главный костер ур. 1", "category": "tent", "costs": {"branches": 4}, "landmark": true, "demolishable": false, "is_campfire": true, "requires_village_area": false, "expands_village_area": true},
+	"campfire_lvl2": {"name": "Главный костер ур. 2", "category": "tent", "costs": {"branches": 15, "grass": 10}, "landmark": true, "demolishable": false, "upgrade_only": true, "upgrades_from": "campfire", "is_campfire": true, "requires_village_area": false, "expands_village_area": true},
+	"campfire_lvl3": {"name": "Главный костер ур. 3", "category": "tent", "costs": {"branches": 25, "grass": 18}, "landmark": true, "demolishable": false, "upgrade_only": true, "upgrades_from": "campfire_lvl2", "is_campfire": true, "requires_village_area": false, "expands_village_area": true},
 	"gathering_place": {"name": "Бадминтонная площадка", "category": "tent", "costs": {"branches": 8, "grass": 6}},
 	"cook_campfire": {"name": "Костер для готовки ур. 1", "category": "tent", "costs": {"branches": 8, "grass": 6}},
 	"cook_campfire_lvl2": {"name": "Костер для готовки ур. 2", "category": "tent", "costs": {"branches": 14, "grass": 10}, "upgrade_only": true, "upgrades_from": "cook_campfire"},
@@ -21,7 +21,7 @@ const DEFINITIONS := {
 	"dew_collector": {"name": "Сборщик росы", "category": "tent", "costs": {"branches": 1, "tarp": 1}},
 	"advanced_dew_collector": {"name": "Улучшенный сборщик росы", "category": "tent", "costs": {"branches": 12, "grass": 8}},
 	"pond": {"name": "Pond", "category": "tent", "costs": {"branches": 8, "grass": 6}},
-	"warehouse": {"name": "Склад под открытым небом", "category": "tent", "costs": {}},
+	"warehouse": {"name": "Склад под открытым небом", "category": "tent", "costs": {}, "requires_village_area": false, "expands_village_area": false},
 	"straw_warehouse": {"name": "Склад с соломенным навесом", "category": "tent", "costs": {"branches": 15, "grass": 12}},
 	"tarp_warehouse": {"name": "Склад с брезентовым навесом", "category": "tent", "costs": {"branches": 12, "grass": 8, "tarp": 2}},
 	"straw_trade_tent": {"name": "Соломенный торговый шатер", "category": "tent", "costs": {"branches": 10, "grass": 5}},
@@ -30,18 +30,18 @@ const DEFINITIONS := {
 	"tarp_toilet": {"name": "Брезентовый общественный туалет", "category": "tent", "costs": {"branches": 6, "grass": 3, "tarp": 1}},
 	"dugout": {"name": "Dugout", "category": "earth", "costs": {"soil": 12, "branches": 8}},
 	"earth_house": {"name": "Earth house", "category": "earth", "costs": {"soil": 20, "branches": 12}},
-	"earth_assembly": {"name": "Earth Assembly", "category": "earth", "costs": {"soil": 15, "branches": 10}},
+	"earth_assembly": {"name": "Earth Assembly", "category": "earth", "costs": {"soil": 15, "branches": 10}, "is_campfire": true, "requires_village_area": false, "expands_village_area": true},
 	"dugout_kitchen": {"name": "Dugout kitchen", "category": "earth", "costs": {"soil": 14, "branches": 8}},
 	"smithy": {"name": "Smithy", "category": "earth", "costs": {"soil": 18, "branches": 16}},
 	"hide_worker": {"name": "Hide workshop", "category": "earth", "costs": {"soil": 12, "branches": 10}},
 	"earth_market": {"name": "Earth market", "category": "earth", "costs": {"soil": 15, "branches": 10}},
 	"clay_house": {"name": "Clay house", "category": "clay", "costs": {"clay": 12, "grass": 10, "branches": 8}},
-	"clay_lodge": {"name": "Clay lodge", "category": "clay", "costs": {"clay": 12, "branches": 10, "grass": 8}},
+	"clay_lodge": {"name": "Clay lodge", "category": "clay", "costs": {"clay": 12, "branches": 10, "grass": 8}, "is_campfire": true, "requires_village_area": false, "expands_village_area": true},
 	"clay_bakery": {"name": "Clay bakery", "category": "clay", "costs": {"clay": 16, "branches": 10, "grass": 6}},
 	"clay_workshop": {"name": "Clay workshop", "category": "clay", "costs": {"clay": 15, "grass": 10, "branches": 10}},
 	"clay_market": {"name": "Clay market", "category": "clay", "costs": {"clay": 12, "grass": 8, "branches": 6}},
 	"stone_house": {"name": "Stone house", "category": "stone", "costs": {"stone": 15, "clay": 8}},
-	"stone_prefecture": {"name": "Stone prefecture", "category": "stone", "costs": {"stone": 25, "boards": 12}},
+	"stone_prefecture": {"name": "Stone prefecture", "category": "stone", "costs": {"stone": 25, "boards": 12}, "is_campfire": true, "requires_village_area": false, "expands_village_area": true},
 	"stone_tavern": {"name": "Stone tavern", "category": "stone", "costs": {"stone": 20, "boards": 10}},
 	"builders_guild": {"name": "Гильдия строителей", "category": "stone", "costs": {"stone": 18, "boards": 8}},
 	"masonry_workshop": {"name": "Masonry workshop", "category": "stone", "costs": {"stone": 12, "boards": 12}},
@@ -49,7 +49,7 @@ const DEFINITIONS := {
 	"sawmill": {"name": "Sawmill", "category": "wood", "costs": {"logs": 4, "money": 1}},
 	"farm": {"name": "Farm", "category": "wood", "costs": {"boards": 12}},
 	"canteen": {"name": "Canteen", "category": "wood", "costs": {"boards": 16}},
-	"wood_town_hall": {"name": "Wooden town hall", "category": "wood", "costs": {"boards": 20}},
+	"wood_town_hall": {"name": "Wooden town hall", "category": "wood", "costs": {"boards": 20}, "is_campfire": true, "requires_village_area": false, "expands_village_area": true},
 	"house": {"name": "Wood house", "category": "wood", "costs": {"boards": 12}},
 	"house_lvl2": {"name": "Wood house Level 2", "category": "wood", "costs": {"boards": 18, "logs": 5}},
 	"house_lvl3": {"name": "Wood house Level 3", "category": "wood", "costs": {"boards": 24, "logs": 10}},
@@ -59,7 +59,7 @@ const DEFINITIONS := {
 	"brick_factory": {"name": "Brick kiln", "category": "brick", "costs": {"boards": 12, "soil": 12}},
 	"materials_factory": {"name": "Materials factory", "category": "brick", "costs": {"bricks": 18, "boards": 8}},
 	"brick_market": {"name": "Brick market", "category": "brick", "costs": {"bricks": 20}},
-	"brick_city_hall": {"name": "Brick City Hall", "category": "brick", "costs": {"bricks": 30, "boards": 15}},
+	"brick_city_hall": {"name": "Brick City Hall", "category": "brick", "costs": {"bricks": 30, "boards": 15}, "is_campfire": true, "requires_village_area": false, "expands_village_area": true},
 	"brick_restaurant": {"name": "Brick restaurant", "category": "brick", "costs": {"bricks": 24, "boards": 12}},
 	"brick_house": {"name": "Brick house", "category": "brick", "costs": {"bricks": 22, "boards": 10}},
 	"construction_company": {"name": "Строительная фирма", "category": "brick", "costs": {"bricks": 26, "boards": 14}},
@@ -79,6 +79,7 @@ const DEFINITIONS := {
 	"toilet_brick": {"name": "Кирпичный туалет ур. 1", "category": "brick", "costs": {"bricks": 10, "boards": 6}},
 	"toilet_brick_lvl2": {"name": "Кирпичный туалет ур. 2", "category": "brick", "costs": {"bricks": 15, "boards": 8}},
 	"toilet_brick_lvl3": {"name": "Кирпичный туалет ур. 3", "category": "brick", "costs": {"bricks": 22, "boards": 12}},
+	"boundary_post": {"name": "Столб границы", "category": "tent", "costs": {"branches": 2}, "requires_village_area": true, "expands_village_area": true, "demolishable": true},
 }
 
 const RESEARCH_COSTS := {
@@ -414,3 +415,12 @@ static func research_resources(research_id: String) -> Array[String]:
 
 static func kitchen_food_capacity(building_type: String) -> int:
 	return int(KITCHEN_FOOD_CAPACITIES.get(building_type, 0))
+
+static func is_campfire(building_type: String) -> bool:
+	return bool(definition_for(building_type).get("is_campfire", false))
+
+static func requires_village_area(building_type: String) -> bool:
+	return bool(definition_for(building_type).get("requires_village_area", true))
+
+static func expands_village_area(building_type: String) -> bool:
+	return bool(definition_for(building_type).get("expands_village_area", false))

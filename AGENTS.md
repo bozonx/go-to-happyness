@@ -4,7 +4,7 @@ This document contains the essential context for AI assistants working on **Go T
 
 ## Project basics
 
-- Engine: **Godot 4.6**, Forward Plus renderer, **Jolt Physics** for 3D.
+- Engine: **Godot 4.7**, Forward Plus renderer, **Jolt Physics** for 3D.
 - Main scene: `game/bootstrap/settlement_game.tscn`.
 - Optional voxel extension: install with `./install_voxel.sh`. It is Git-ignored because it contains large platform binaries.
 - Language: GDScript. Prefer typed classes, `StringName` for stable identifiers, and interfaces (object shapes) over `type` aliases.

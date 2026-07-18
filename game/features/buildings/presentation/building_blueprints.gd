@@ -107,6 +107,7 @@ const COLORS := {
 	"toilet_brick": Color("b85e42"),
 	"toilet_brick_lvl2": Color("ad5337"),
 	"toilet_brick_lvl3": Color("a2482c"),
+	"boundary_post": Color("8a7b4f"),
 }
 
 
@@ -210,6 +211,7 @@ static func get_blueprint(building_type: String) -> Dictionary:
 		"toilet_wood", "toilet_wood_lvl2", "toilet_wood_lvl3": return _enclosed_blueprint(building_type, Vector2i(3, 3), 2, "gable")
 		"toilet_stone", "toilet_stone_lvl2", "toilet_stone_lvl3": return _enclosed_blueprint(building_type, Vector2i(3, 3), 2, "hip")
 		"toilet_brick", "toilet_brick_lvl2", "toilet_brick_lvl3": return _enclosed_blueprint(building_type, Vector2i(3, 3), 2, "shed")
+		"boundary_post": return _boundary_post_blueprint()
 		_: return _enclosed_blueprint(building_type, Vector2i(5, 5), 3, "gable")
 
 
@@ -524,3 +526,16 @@ static func _module(position: Vector3, size: Vector3, kind: String, color: Color
 
 static func _axis_coordinate(index: int, count: int) -> float:
 	return index - (count - 1) * 0.5
+
+
+static func _boundary_post_blueprint() -> Dictionary:
+	var color := COLORS["boundary_post"]
+	var modules: Array[Dictionary] = [
+		_module(Vector3(0.0, 0.25, 0.0), Vector3(0.12, 0.5, 0.12), "post", color),
+	]
+	return {
+		"footprint": Vector2i(1, 1),
+		"height": 1,
+		"modules": modules,
+		"entrance": Vector2i(0, 0),
+	}
