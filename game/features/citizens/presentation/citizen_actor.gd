@@ -326,6 +326,7 @@ var queue_position_resolver: Callable
 var queue_arrival_notifier: Callable
 var queue_release_notifier: Callable
 var route_reachability_query: Callable
+var route_safety_query: Callable
 var idle_wander_anchor := Vector3.INF
 var idle_wander_target := Vector3.INF
 var idle_wander_pause := 0.0
@@ -1693,7 +1694,13 @@ func _route_uses_stale_navigation() -> bool:
 	if active_route == null or active_route.topology_revision < 0 or not navigation_revision_query.is_valid():
 		return false
 	var current_revision := int(navigation_revision_query.call())
-	return active_route.is_topologically_stale(current_revision)
+	if not active_route.is_topologically_stale(current_revision):
+		return false
+	var route_origin := global_position if is_inside_tree() else position
+	if route_safety_query.is_valid() and bool(route_safety_query.call(route_origin, movement_path, path_allows_destination_house)):
+		active_route.topology_revision = current_revision
+		return false
+	return true
 
 
 func _invalidate_route_for_navigation_change() -> void:
@@ -2290,7 +2297,7 @@ func apply_daily_decay() -> void:
 func is_building_site(site: Node3D) -> bool:
 	return not is_player_controlled and state == State.CONSTRUCTING and construction_site == site and global_position.distance_to(construction_position) <= 0.7
 
-func setup_navigation(next_pathfinder: Callable, next_delivery_position_resolver := Callable(), next_queue_position_resolver := Callable(), next_movement_speed_modifier_query := Callable(), next_navigation_revision_query := Callable(), next_trail_movement_recorder := Callable(), next_route_reachability_query := Callable(), next_queue_arrival_notifier := Callable(), next_queue_release_notifier := Callable(), next_recovery_pathfinder := Callable()) -> void:
+func setup_navigation(next_pathfinder: Callable, next_delivery_position_resolver := Callable(), next_queue_position_resolver := Callable(), next_movement_speed_modifier_query := Callable(), next_navigation_revision_query := Callable(), next_trail_movement_recorder := Callable(), next_route_reachability_query := Callable(), next_queue_arrival_notifier := Callable(), next_queue_release_notifier := Callable(), next_recovery_pathfinder := Callable(), next_route_safety_query := Callable()) -> void:
 	pathfinder = next_pathfinder
 	recovery_pathfinder = next_recovery_pathfinder
 	delivery_position_resolver = next_delivery_position_resolver
@@ -2298,6 +2305,7 @@ func setup_navigation(next_pathfinder: Callable, next_delivery_position_resolver
 	queue_arrival_notifier = next_queue_arrival_notifier
 	queue_release_notifier = next_queue_release_notifier
 	route_reachability_query = next_route_reachability_query
+	route_safety_query = next_route_safety_query
 	movement_speed_modifier_query = next_movement_speed_modifier_query
 	navigation_revision_query = next_navigation_revision_query
 	trail_movement_recorder = next_trail_movement_recorder

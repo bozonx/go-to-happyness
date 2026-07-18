@@ -15,7 +15,7 @@ uniform float u_overcast : hint_range(0.0, 1.0) = 0.0;
 uniform float u_solar_intensity : hint_range(0.0, 1.0) = 1.0;
 
 // --- static art-direction knobs --------------------------------------------
-uniform float u_cloud_scale = 1.6;      // bigger = smaller cloud cells
+uniform float u_cloud_scale = 1.15;     // bigger = smaller cloud cells
 uniform vec2 u_wind = vec2(0.006, 0.002);
 uniform float u_edge_softness = 0.16;   // lower = harder, more cartoon edges
 uniform float u_coverage_clear = 0.52;  // threshold when sunny (few clouds)
@@ -79,8 +79,10 @@ void sky() {
 	sky_col += u_sun_color * pow(sun_amt, 8.0) * 0.12 * clear_sky * u_solar_intensity;
 
 	// --- clouds live on a virtual ceiling; project view dir onto it ---
-	float ceil_mask = smoothstep(0.02, 0.22, horizon); // hide seam at horizon
-	vec2 uv = dir.xz / max(horizon, 0.10);
+	// Fade well above the true horizon so the projection stretch near y=0
+	// (the vertical streaks) never shows; clouds read as an overhead ceiling.
+	float ceil_mask = smoothstep(0.08, 0.34, horizon);
+	vec2 uv = dir.xz / max(horizon, 0.16);
 	uv = uv * u_cloud_scale + u_wind * TIME;
 
 	float n = cloud_field(uv);

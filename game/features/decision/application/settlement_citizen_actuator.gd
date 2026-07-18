@@ -75,6 +75,14 @@ func action_status() -> ActionStatus:
 	return status_int as ActionStatus
 
 
+func action_failure_reason() -> BehaviorStep.FailureReason:
+	if not is_valid():
+		return BehaviorStep.FailureReason.CONTEXT_INVALID
+	if citizen.navigation_failed and citizen.ai_move_failure_reason != BehaviorStep.FailureReason.NONE:
+		return citizen.ai_move_failure_reason
+	return BehaviorStep.FailureReason.UNKNOWN
+
+
 func cancel_action() -> void:
 	if not _can_cancel():
 		return

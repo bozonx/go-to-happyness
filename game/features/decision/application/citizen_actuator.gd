@@ -46,6 +46,10 @@ func action_status() -> ActionStatus:
 	return ActionStatus.IDLE
 
 
+func action_failure_reason() -> BehaviorStep.FailureReason:
+	return BehaviorStep.FailureReason.UNKNOWN
+
+
 func movement_failed() -> bool:
 	return false
 

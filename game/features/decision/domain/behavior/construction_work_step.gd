@@ -24,7 +24,7 @@ func _tick(context: BehaviorContext, delta: float) -> Status:
 	if status == CitizenActuator.ActionStatus.SUCCEEDED:
 		return Status.SUCCESS
 	if status == CitizenActuator.ActionStatus.FAILED:
-		return Status.FAILURE
+		return fail(context.actuator.action_failure_reason())
 	_elapsed += delta
 	if _elapsed >= MAX_STEP_SECONDS:
 		context.actuator.cancel_action()

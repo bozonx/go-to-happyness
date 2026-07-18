@@ -2420,6 +2420,10 @@ func _is_route_reachable(from: Vector3, destination: Vector3, may_enter_destinat
 		_route_reachability_cache[key] = reachable
 	return reachable
 
+
+func _is_route_path_clear(from: Vector3, waypoints: Array[Vector3], may_enter_destination_house := false) -> bool:
+	return nav_grid != null and nav_grid.is_waypoint_path_clear(from, waypoints, may_enter_destination_house)
+
 func _resolve_building_queue_position(citizen: Citizen, destination: Vector3) -> Dictionary:
 	return building_queue_service.resolve(citizen, destination)
 
@@ -2660,6 +2664,10 @@ func _create_world() -> void:
 	world_environment.fog_enabled = true
 	world_environment.fog_light_color = Color("cfe2ed")
 	world_environment.fog_density = 0.00035
+	# Fog is for grounding distant geometry only — keep it off the sky/clouds,
+	# otherwise it washes the whole sky into fog_light_color (was the grey haze).
+	world_environment.fog_sky_affect = 0.0
+	world_environment.volumetric_fog_sky_affect = 0.0
 	environment.environment = world_environment
 	add_child(environment)
 
@@ -3146,7 +3154,7 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	add_child(citizen)
 	citizen.simulation = self
 	citizen.setup_specialization(primary_specialization if not primary_specialization.is_empty() else "unassigned")
-	citizen.setup_navigation(_find_path_around_houses, _get_nearest_delivery_position, _resolve_building_queue_position, _movement_speed_modifier_at, _navigation_revision, _record_trail_movement, _is_route_reachable, _complete_building_queue_arrival, _release_building_queue_entry, _find_recovery_path)
+	citizen.setup_navigation(_find_path_around_houses, _get_nearest_delivery_position, _resolve_building_queue_position, _movement_speed_modifier_at, _navigation_revision, _record_trail_movement, _is_route_reachable, _complete_building_queue_arrival, _release_building_queue_entry, _find_recovery_path, _is_route_path_clear)
 	citizen.setup_registration_service(_can_start_registration, _registration_duration)
 	citizen.resource_delivered.connect(_on_resource_delivered)
 	citizen.resource_dropped.connect(_on_resource_dropped)

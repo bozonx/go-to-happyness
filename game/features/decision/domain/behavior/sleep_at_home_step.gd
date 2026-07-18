@@ -16,7 +16,7 @@ func _tick(context: BehaviorContext, _delta: float) -> Status:
 	if not bool(context.citizen.facts.value(&"needs.should_sleep", false)):
 		return Status.SUCCESS
 	if context.actuator.action_status() == CitizenActuator.ActionStatus.FAILED:
-		return Status.FAILURE
+		return fail(context.actuator.action_failure_reason())
 	return Status.RUNNING
 
 

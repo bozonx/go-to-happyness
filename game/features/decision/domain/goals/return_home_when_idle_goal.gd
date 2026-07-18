@@ -26,6 +26,8 @@ func score(
 		return 0.0
 	if not bool(citizen.facts.value(&"needs.has_home", false)):
 		return 0.0
+	if not bool(citizen.facts.value(&"needs.home_reachable", true)):
+		return 0.0
 	var home_position: Variant = citizen.facts.value(&"needs.home_position", Vector3.INF)
 	if not (home_position is Vector3) or home_position == Vector3.INF:
 		return 0.0

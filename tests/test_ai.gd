@@ -133,6 +133,7 @@ class FakeActuator extends CitizenActuator:
 	var arrived_flag := false
 	var movement_failed_flag := false
 	var next_movement_failure_reason := BehaviorStep.FailureReason.MOVEMENT_FAILED
+	var next_action_failure_reason := BehaviorStep.FailureReason.UNKNOWN
 	var next_action_status := ActionStatus.RUNNING
 
 	func stop() -> void:
@@ -171,6 +172,9 @@ class FakeActuator extends CitizenActuator:
 	func action_status() -> ActionStatus:
 		return next_action_status
 
+	func action_failure_reason() -> BehaviorStep.FailureReason:
+		return next_action_failure_reason
+
 
 class FakeFacade extends AIWorldFacade:
 	var citizens: Dictionary
@@ -188,6 +192,17 @@ class FakeFacade extends AIWorldFacade:
 			AIFactSet.new(),
 			citizens
 		)
+
+
+class FakeRouteCacheSimulation extends Node:
+	var nav_grid := NavGrid.new()
+	var runtime_seconds := 0.0
+
+	func _init() -> void:
+		nav_grid.configure(1.0, 10)
+
+	func _cell_from_position(position: Vector3) -> Vector2i:
+		return nav_grid.cell_from_position(position)
 
 
 class NullFacade extends AIWorldFacade:
@@ -267,6 +282,8 @@ func _init() -> void:
 	_test_move_to_step()
 	_test_move_to_step_records_failure_reason()
 	_test_relax_at_position_step()
+	_test_action_step_records_failure_reason()
+	_test_route_candidate_cache()
 	_test_register_provider_keeps_order_while_registering()
 	_test_register_provider_supports_tent_era_couriers()
 	_test_register_provider_distributes_workplaces_by_capacity()
@@ -294,6 +311,7 @@ func _init() -> void:
 	_test_gathering_provider_scales_across_many_targets_and_warehouses()
 	_test_gathering_provider_refreshes_moving_source()
 	_test_gathering_provider_prefers_access_position()
+	_test_gather_food_does_not_fallback_to_other_resources()
 	_test_native_gathering_goal()
 	_test_excavation_provider_assigns_unique_stable_sites()
 	_test_native_excavation_goal()
@@ -1308,6 +1326,21 @@ func _test_gathering_provider_prefers_access_position() -> void:
 	var orders := provider.collect_orders(snapshot)
 	assert(orders.size() == 1)
 	assert(orders[0].payload.value(&"work.source_id", &"") == &"branch:10:0")
+
+
+func _test_gather_food_does_not_fallback_to_other_resources() -> void:
+	var provider := GatheringOrderProviderScript.new()
+	var citizen := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
+		&"work.gathering.worker": true,
+		&"work.gathering.in_progress": false,
+		&"work.gathering.can_start": true,
+		&"work.gathering.role": &"gather_food",
+		&"work.gathering.warehouse_position": Vector3(8.0, 0.0, 0.0),
+		&"work.gathering.candidates": [],
+	}))
+	var global_non_food := [{&"id": &"branch:1:0", &"resource_type": "branches", &"position": Vector3.ONE, &"access": Vector3.ONE}]
+	var snapshot := WorldSnapshot.new(1, 0.0, 0.0, AIFactSet.new({&"work.gathering.targets": global_non_food}), {1: citizen})
+	assert(provider.collect_orders(snapshot).is_empty())
 
 
 func _test_excavation_provider_assigns_unique_stable_sites() -> void:
@@ -2621,6 +2654,39 @@ func _test_relax_at_position_step() -> void:
 	assert(actuator.action_start_count == 1)
 	actuator.next_action_status = CitizenActuator.ActionStatus.SUCCEEDED
 	assert(step.run(context, 0.1) == BehaviorStep.Status.SUCCESS)
+
+
+func _test_action_step_records_failure_reason() -> void:
+	var actuator := FakeActuator.new(1)
+	var citizen := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
+		&"needs.rest_requested": true,
+		&"needs.rest_duration": 2.0,
+	}))
+	var context := BehaviorContext.new(actuator, AIBlackboard.new())
+	context.refresh(_snapshot(0.0, citizen), null)
+	var step := RelaxAtPositionStepScript.new()
+	assert(step.run(context, 0.1) == BehaviorStep.Status.RUNNING)
+	actuator.next_action_status = CitizenActuator.ActionStatus.FAILED
+	actuator.next_action_failure_reason = BehaviorStep.FailureReason.UNREACHABLE
+	assert(step.run(context, 0.1) == BehaviorStep.Status.FAILURE)
+	assert(step.failure_reason == BehaviorStep.FailureReason.UNREACHABLE)
+
+
+func _test_route_candidate_cache() -> void:
+	var simulation := FakeRouteCacheSimulation.new()
+	var facade := SettlementAIWorldFacadeScript.new(simulation)
+	var counter := {&"builds": 0}
+	var producer := func() -> Array[Dictionary]:
+		counter[&"builds"] = int(counter[&"builds"]) + 1
+		return [{&"id": &"food:1:0", &"access": Vector3(1.5, 0.0, 0.5)}]
+	var first := facade._cached_route_candidates(&"test:1", Vector3.ZERO, producer)
+	var second := facade._cached_route_candidates(&"test:1", Vector3.ZERO, producer)
+	assert(first == second)
+	assert(int(counter[&"builds"]) == 1)
+	simulation.runtime_seconds = 1.01
+	facade._cached_route_candidates(&"test:1", Vector3.ZERO, producer)
+	assert(int(counter[&"builds"]) == 2)
+	simulation.free()
 
 
 func _snapshot_with_wellbeing(wellbeing: int, citizen: CitizenSnapshot) -> WorldSnapshot:

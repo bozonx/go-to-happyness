@@ -187,6 +187,23 @@ func is_segment_clear(from: Vector3, to: Vector3) -> bool:
 	return is_finite(segment_cost(from, to))
 
 
+## Revalidates only the remaining route after a topology change. A route that ends
+## inside an explicitly allowed blocked destination is safe when every segment up
+## to that destination cell remains clear.
+func is_waypoint_path_clear(from: Vector3, waypoints: Array[Vector3], allow_blocked_destination := false) -> bool:
+	if waypoints.is_empty():
+		return true
+	var destination_cell := cell_from_position(waypoints.back())
+	var previous := from
+	for waypoint: Vector3 in waypoints:
+		if allow_blocked_destination and is_blocked(destination_cell) and cell_from_position(waypoint) == destination_cell:
+			return true
+		if not is_segment_clear(previous, waypoint):
+			return false
+		previous = waypoint
+	return true
+
+
 ## Traverses every cell crossed by a world-space segment and returns its
 ## weighted length. INF means the segment crosses a blocked cell or cuts an
 ## obstacle corner. This is deliberately shared by visibility and smoothing so

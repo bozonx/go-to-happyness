@@ -118,6 +118,7 @@ func _init() -> void:
 	_test_navigation_recovery_guards()
 	_test_trail_field()
 	_test_citizen_replans_on_navigation_revision()
+	_test_citizen_keeps_unaffected_route_on_navigation_revision()
 	_test_citizen_route_failure_marks_action_failed()
 	_test_building_queue_routing()
 	_test_building_queue_multiple_entrances()
@@ -1136,6 +1137,30 @@ func _test_citizen_replans_on_navigation_revision() -> void:
 	citizen._invalidate_route_for_navigation_change()
 	assert(citizen.active_route == null)
 	assert(citizen.route_retry_timer >= 0.0 and citizen.route_retry_timer <= Citizen.STALE_NAVIGATION_REPLAN_JITTER)
+	citizen.free()
+
+
+func _test_citizen_keeps_unaffected_route_on_navigation_revision() -> void:
+	var grid := NavGrid.new()
+	grid.configure(1.0, 10)
+	var router := GridRouteServiceScript.new()
+	router.configure(grid)
+	var start := Vector3(-3.5, 0.0, 0.5)
+	var destination := Vector3(3.5, 0.0, 0.5)
+	var route := router.find_route(start, destination)
+	assert(route.reachable)
+	var citizen := Citizen.new()
+	citizen.position = start
+	citizen.active_route = route
+	citizen.movement_path = route.waypoints.duplicate()
+	citizen.navigation_revision_query = func() -> int: return grid.topology_revision()
+	citizen.route_safety_query = func(from: Vector3, waypoints: Array[Vector3], allow_blocked: bool) -> bool:
+		return grid.is_waypoint_path_clear(from, waypoints, allow_blocked)
+	grid.set_blocked_cells({Vector2i(0, 3): true})
+	assert(not citizen._route_uses_stale_navigation())
+	assert(citizen.active_route.topology_revision == grid.topology_revision())
+	grid.set_blocked_cells({Vector2i(0, 0): true})
+	assert(citizen._route_uses_stale_navigation())
 	citizen.free()
 
 
