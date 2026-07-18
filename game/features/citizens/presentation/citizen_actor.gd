@@ -334,6 +334,9 @@ var route_retry_delay := ROUTE_RETRY_INTERVAL
 var route_unreachable_time := 0.0
 var route_unreachable_reason := RouteResult.UnreachableReason.NONE
 var navigation_failed := false
+# Topology revision captured when navigation_failed was raised, so a later
+# passability change (demolition/excavation) can retract the give-up.
+var navigation_failed_topology := -999
 var stuck_time := 0.0
 var recovery_repath_done := false
 var route_no_progress_time := 0.0
@@ -1195,6 +1198,15 @@ func _process_idle_wander(delta: float) -> void:
 		idle_wander_anchor = global_position
 		idle_wander_pause = randf_range(IDLE_WANDER_MIN_PAUSE, IDLE_WANDER_MAX_PAUSE)
 	if idle_wander_target != Vector3.INF:
+		# A wander stroll is disposable: if it cannot be reached, drop it and clear
+		# the failure so the citizen keeps loitering instead of standing frozen.
+		if navigation_failed:
+			idle_wander_target = Vector3.INF
+			navigation_failed = false
+			ai_move_failure_reason = BehaviorStep.FailureReason.NONE
+			idle_wander_pause = randf_range(IDLE_WANDER_MIN_PAUSE, IDLE_WANDER_MAX_PAUSE)
+			_stop_horizontal_movement()
+			return
 		if _move_to(idle_wander_target, delta, false, false, false):
 			idle_wander_target = Vector3.INF
 			idle_wander_pause = randf_range(IDLE_WANDER_MIN_PAUSE, IDLE_WANDER_MAX_PAUSE)
@@ -1562,15 +1574,25 @@ func _move_to(destination: Vector3, delta: float, may_enter_destination_house :=
 			return false
 	if _route_uses_stale_navigation():
 		_invalidate_route_for_navigation_change()
-	if navigation_failed:
-		_stop_horizontal_movement()
-		if ai_move_failure_reason == BehaviorStep.FailureReason.NONE:
-			ai_move_failure_reason = BehaviorStep.FailureReason.MOVEMENT_FAILED
-		return false
-	if path_destination.distance_to(movement_destination) > arrival_radius or path_allows_destination_house != may_enter_destination_house:
+	# Detect a changed goal before honouring a prior failure: a new destination
+	# (or a house-entry change) is a fresh navigation problem and must clear a
+	# stale give-up flag, otherwise the citizen freezes on the old target forever.
+	var goal_changed := path_destination.distance_to(movement_destination) > arrival_radius or path_allows_destination_house != may_enter_destination_house
+	if goal_changed:
 		_reset_route(movement_destination)
 		path_allows_destination_house = may_enter_destination_house
 		_plan_route(movement_destination)
+	if navigation_failed:
+		# The world may have opened up since we gave up (a blocking building was
+		# demolished, terrain excavated). Retry once when the topology changed.
+		if _navigation_topology_changed_since_failure():
+			_reset_route(movement_destination)
+			_plan_route(movement_destination)
+		else:
+			_stop_horizontal_movement()
+			if ai_move_failure_reason == BehaviorStep.FailureReason.NONE:
+				ai_move_failure_reason = BehaviorStep.FailureReason.MOVEMENT_FAILED
+			return false
 	if active_route == null or not active_route.reachable:
 		route_retry_timer = maxf(0.0, route_retry_timer - delta)
 		if route_retry_timer <= 0.0:
@@ -1578,8 +1600,7 @@ func _move_to(destination: Vector3, delta: float, may_enter_destination_house :=
 		if active_route == null or not active_route.reachable:
 			route_unreachable_time += delta
 			if route_unreachable_time >= ROUTE_UNREACHABLE_FAILURE_TIME:
-				navigation_failed = true
-				ai_move_failure_reason = BehaviorStep.FailureReason.UNREACHABLE
+				_raise_navigation_failure(BehaviorStep.FailureReason.UNREACHABLE)
 				_stop_horizontal_movement()
 			return false
 	while not movement_path.is_empty():
@@ -1628,6 +1649,19 @@ func _plan_route(destination: Vector3) -> void:
 	route_unreachable_reason = RouteResult.UnreachableReason.NONE
 	ai_move_failure_reason = BehaviorStep.FailureReason.NONE
 	recovery_repath_done = false
+
+
+func _raise_navigation_failure(reason: int) -> void:
+	navigation_failed = true
+	ai_move_failure_reason = reason
+	navigation_failed_topology = int(navigation_revision_query.call()) if navigation_revision_query.is_valid() else -999
+
+
+func _navigation_topology_changed_since_failure() -> bool:
+	if not navigation_revision_query.is_valid():
+		return false
+	var current := int(navigation_revision_query.call())
+	return current >= 0 and current != navigation_failed_topology
 
 
 func _route_uses_stale_navigation() -> bool:
@@ -1711,8 +1745,7 @@ func _force_repath() -> void:
 		return
 	route_recovery_attempt += 1
 	if route_recovery_attempt >= ROUTE_RECOVERY_FAILURE_ATTEMPTS:
-		navigation_failed = true
-		ai_move_failure_reason = BehaviorStep.FailureReason.TIMEOUT
+		_raise_navigation_failure(BehaviorStep.FailureReason.TIMEOUT)
 		active_route = null
 		movement_path.clear()
 		_stop_horizontal_movement()

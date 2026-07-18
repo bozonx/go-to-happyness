@@ -2757,14 +2757,20 @@ func _is_navigation_cell_blocked(cell: Vector2i) -> bool:
 
 func _rebuild_navigation_obstacles() -> void:
 	var building_blocked: Dictionary = {}
-	var margin := ceili(NAVIGATION_CLEARANCE_MARGIN)
+	var margin := NAVIGATION_CLEARANCE_MARGIN
 	for record in building_registry.records():
 		var center: Vector3 = record.center
 		var footprint: Vector2i = record.footprint
-		var min_x := roundi(center.x - (footprint.x - 1) * 0.5)
-		var min_z := roundi(center.z - (footprint.y - 1) * 0.5)
-		for x in range(min_x - margin, min_x + footprint.x + margin):
-			for z in range(min_z - margin, min_z + footprint.y + margin):
+		# Block every cell the physical footprint (expanded by clearance) overlaps.
+		# Deriving the range from the actual world rectangle keeps the clearance
+		# symmetric: the old cell-index rounding shifted even footprints, leaving a
+		# wall flush against a walkable cell on one side and double margin on the other.
+		var min_x := floori(center.x - footprint.x * 0.5 - margin)
+		var max_x := ceili(center.x + footprint.x * 0.5 + margin) - 1
+		var min_z := floori(center.z - footprint.y * 0.5 - margin)
+		var max_z := ceili(center.z + footprint.y * 0.5 + margin) - 1
+		for x in range(min_x, max_x + 1):
+			for z in range(min_z, max_z + 1):
 				building_blocked[Vector2i(x, z)] = true
 	for pocket in service_pockets:
 		if is_instance_valid(pocket.node):
@@ -2939,7 +2945,9 @@ func _create_tree(position_on_board: Vector3, refresh_navigation := true) -> voi
 	collision_body.name = "TreeCollision"
 	var collision_shape := CollisionShape3D.new()
 	var shape := CylinderShape3D.new()
-	shape.radius = 0.25
+	# Kept slimmer than the visual trunk so a citizen capsule (radius 0.32) walking
+	# the edge of an adjacent cell clears the blocked tree cell without snagging.
+	shape.radius = 0.18
 	shape.height = 3.6
 	collision_shape.shape = shape
 	collision_shape.position.y = 1.8

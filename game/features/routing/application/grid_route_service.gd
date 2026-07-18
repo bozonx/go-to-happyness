@@ -47,6 +47,14 @@ func find_route_request(request: RefCounted) -> RouteResult:
 	if grid.is_blocked(goal) and not request.allow_destination_cell:
 		return RouteResult.unreachable(grid_revision, topology_revision, RouteResult.UnreachableReason.GOAL_BLOCKED)
 
+	# Connected components answer reachability in O(1). Skip the full flood of a
+	# board-sized A* when start and goal sit in different walkable islands (the
+	# common cost sink when a target is walled off and its route is retried often).
+	# A start pushed into a blocked cell is left to A*, which does not require a
+	# walkable start and can still walk the citizen out.
+	if not request.allow_destination_cell and grid.is_walkable(start) and grid.is_walkable(goal) and not grid.are_cells_connected(start, goal):
+		return RouteResult.unreachable(grid_revision, topology_revision, RouteResult.UnreachableReason.DISCONNECTED)
+
 	var came_from := _search(start, goal, request.traveler_profile, request.allow_destination_cell)
 	if not came_from.has(goal):
 		return RouteResult.unreachable(grid_revision, topology_revision, RouteResult.UnreachableReason.DISCONNECTED)
