@@ -26,6 +26,7 @@ func _tick(context: BehaviorContext, delta: float) -> Status:
 			continue
 		var status := children[index].run(context, delta)
 		if status == Status.FAILURE:
+			set_failure_reason(children[index].failure_reason)
 			_cancel_unfinished(context, index)
 			return Status.FAILURE
 		if status == Status.SUCCESS:

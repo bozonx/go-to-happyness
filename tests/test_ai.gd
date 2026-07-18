@@ -29,6 +29,7 @@ const MoveToStepScript = preload("res://game/features/decision/domain/behavior/m
 const RelaxAtPositionStepScript = preload("res://game/features/decision/domain/behavior/relax_at_position_step.gd")
 const WorkforceOrderProviderScript = preload("res://game/features/decision/application/workforce_order_provider.gd")
 const DailyPlayerOrderProviderScript = preload("res://game/features/decision/application/daily_player_order_provider.gd")
+const SettlementAIWorldFacadeScript = preload("res://game/features/decision/application/settlement_ai_world_facade.gd")
 
 
 class ScriptedStep extends BehaviorStep:
@@ -60,6 +61,16 @@ class ScriptedStep extends BehaviorStep:
 	func _finish(_context: BehaviorContext, status: Status) -> void:
 		finishes += 1
 		final_status = status
+
+
+class FailingStep extends BehaviorStep:
+	var reason: FailureReason
+
+	func _init(next_reason: FailureReason) -> void:
+		reason = next_reason
+
+	func _tick(_context: BehaviorContext, _delta: float) -> Status:
+		return fail(reason)
 
 
 class FixedGoal extends AICitizenGoal:
@@ -218,12 +229,14 @@ class FakeGatheringSimulation extends Node:
 
 func _init() -> void:
 	_test_fact_sets_and_snapshots()
+	_test_fact_values_are_isolated()
 	_test_blackboard_clear()
 	_test_utility_hysteresis()
 	_test_utility_hysteresis_allows_critical_preemption()
 	_test_failure_cooldown()
 	_test_emergency_goal_bypasses_cooldown()
 	_test_behavior_composites_and_lifecycle()
+	_test_composites_preserve_failure_reason()
 	_test_runner_interrupt_and_resume()
 	_test_resume_drops_stale_task()
 	_test_resume_drops_changed_order()
@@ -290,6 +303,7 @@ func _init() -> void:
 	_test_native_factory_goal()
 	_test_factory_actuator()
 	_test_courier_provider_assigns_unique_tasks()
+	_test_courier_provider_uses_stable_citizen_tie_break()
 	_test_courier_provider_uses_shared_snapshot_tasks()
 	_test_courier_provider_keeps_active_task_order()
 	_test_courier_provider_more_couriers_than_tasks()
@@ -307,6 +321,7 @@ func _init() -> void:
 	_test_courier_dispatcher_publishes_outside_regular_work_hours()
 	_test_native_courier_goal()
 	_test_production_sleep_actuator()
+	_test_facade_reports_no_permanent_work()
 	_test_order_reconciliation()
 	_test_order_board_deduplicates_provider_output()
 	_test_director_reconfiguration_clears_orders()
@@ -328,6 +343,13 @@ func _test_fact_sets_and_snapshots() -> void:
 	assert(snapshot.sequence == 3)
 	assert(snapshot.citizen_count() == 1)
 	assert(snapshot.citizen(7) == citizen)
+
+
+func _test_fact_values_are_isolated() -> void:
+	var facts := AIFactSet.from_owned_values({&"targets": [{&"id": &"tree:1"}]})
+	var targets: Array = facts.value(&"targets", []) as Array
+	(targets[0] as Dictionary)[&"id"] = &"tree:changed"
+	assert(((facts.value(&"targets", []) as Array)[0] as Dictionary)[&"id"] == &"tree:1")
 
 
 func _test_blackboard_clear() -> void:
@@ -428,6 +450,19 @@ func _test_behavior_composites_and_lifecycle() -> void:
 		ScriptedStep.new([BehaviorStep.Status.RUNNING]),
 	], ParallelStep.SuccessPolicy.ANY)
 	assert(failed_any.run(context, 0.1) == BehaviorStep.Status.FAILURE)
+
+
+func _test_composites_preserve_failure_reason() -> void:
+	var context := _context()
+	var sequence := SequenceStep.new([FailingStep.new(BehaviorStep.FailureReason.UNREACHABLE)])
+	assert(sequence.run(context, 0.1) == BehaviorStep.Status.FAILURE)
+	assert(sequence.failure_reason == BehaviorStep.FailureReason.UNREACHABLE)
+	var selector := SelectorStep.new([FailingStep.new(BehaviorStep.FailureReason.RESERVATION_LOST)])
+	assert(selector.run(context, 0.1) == BehaviorStep.Status.FAILURE)
+	assert(selector.failure_reason == BehaviorStep.FailureReason.RESERVATION_LOST)
+	var parallel := ParallelStep.new([FailingStep.new(BehaviorStep.FailureReason.ACTUATOR_REJECTED)])
+	assert(parallel.run(context, 0.1) == BehaviorStep.Status.FAILURE)
+	assert(parallel.failure_reason == BehaviorStep.FailureReason.ACTUATOR_REJECTED)
 
 
 func _test_runner_interrupt_and_resume() -> void:
@@ -1430,6 +1465,17 @@ func _test_courier_provider_assigns_unique_tasks() -> void:
 	assert(orders[0].payload.value(&"courier.task_id") != orders[1].payload.value(&"courier.task_id"))
 
 
+func _test_courier_provider_uses_stable_citizen_tie_break() -> void:
+	var provider := CourierDeliveryOrderProviderScript.new()
+	var tasks := [{&"id": &"task", &"priority": 100, &"pickup": Vector3.ZERO}]
+	var first := _courier_citizen_with_tasks(1, tasks)
+	var second := _courier_citizen_with_tasks(2, tasks)
+	var snapshot := WorldSnapshot.new(1, 0.0, 0.0, AIFactSet.new(), {2: second, 1: first})
+	var orders := provider.collect_orders(snapshot)
+	assert(orders.size() == 1)
+	assert(orders[0].citizen_id == 1)
+
+
 func _test_courier_provider_uses_shared_snapshot_tasks() -> void:
 	var provider := CourierDeliveryOrderProviderScript.new()
 	var first := _courier_citizen(1)
@@ -1759,6 +1805,17 @@ func _test_production_sleep_actuator() -> void:
 	actuator.cancel_action()
 	assert(citizen.state == Citizen.State.IDLE)
 	home.free()
+	citizen.free()
+
+
+func _test_facade_reports_no_permanent_work() -> void:
+	var citizen := Citizen.new()
+	citizen.training_role = "forestry"
+	citizen.training_days_completed = 0
+	citizen.employment_state = Citizen.EmploymentState.NO_PERMANENT_WORK
+	var facade := SettlementAIWorldFacadeScript.new()
+	var data := facade._worker_data(citizen)
+	assert(data["workforce_status"] == "no_permanent_work")
 	citizen.free()
 
 

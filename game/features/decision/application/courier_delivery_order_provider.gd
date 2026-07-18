@@ -14,7 +14,9 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 		var right_citizen := snapshot.citizen(right)
 		var left_permanent := left_citizen != null and bool(left_citizen.facts.value(&"work.courier.permanent", false))
 		var right_permanent := right_citizen != null and bool(right_citizen.facts.value(&"work.courier.permanent", false))
-		return left_permanent and not right_permanent
+		if left_permanent != right_permanent:
+			return left_permanent
+		return left < right
 	)
 	for citizen_id in citizen_ids:
 		var citizen := snapshot.citizen(citizen_id)

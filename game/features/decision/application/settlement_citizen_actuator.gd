@@ -34,7 +34,7 @@ func has_arrived() -> bool:
 
 
 func stop() -> void:
-	if is_valid():
+	if _can_cancel():
 		citizen.stop_movement()
 
 
@@ -76,10 +76,14 @@ func action_status() -> ActionStatus:
 
 
 func cancel_action() -> void:
-	if not is_valid():
+	if not _can_cancel():
 		return
 	citizen.cancel_current_action()
 	_active_action = &""
+
+
+func _can_cancel() -> bool:
+	return is_instance_valid(citizen) and citizen.ai_id == citizen_id
 
 
 func _resolve_target(target_key: StringName) -> Node3D:

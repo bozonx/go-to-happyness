@@ -264,6 +264,9 @@ var current_day: int:
 	get: return day_cycle.current_day
 var tent_weather: int = TentEraSurvivalRulesScript.Weather.WARMING
 var last_survival_hour := -1
+var last_zero_wellbeing_departure_day := -1
+var _is_skipping_night := false
+var _skip_zero_wellbeing_departure_applied := false
 var message_scroll: ScrollContainer
 var message_list: VBoxContainer
 var message_panel: Panel
@@ -1205,8 +1208,31 @@ func _apply_hourly_tent_survival(hour: int, survival_day := 0) -> void:
 		total_loss += TentEraSurvivalRulesScript.hourly_wellbeing_loss(has_home, has_fire, tent_weather, night)
 	if total_loss > 0:
 		wellbeing = maxi(0, wellbeing - ceili(float(total_loss) / maxi(1, citizens.size())))
+	if wellbeing == 0 and last_zero_wellbeing_departure_day != day and (not _is_skipping_night or not _skip_zero_wellbeing_departure_applied):
+		last_zero_wellbeing_departure_day = day
+		_skip_zero_wellbeing_departure_applied = true
+		_trigger_zero_wellbeing_departure()
 	if weather_state.is_raining and hour > 0:
 		_apply_rain_damage()
+
+
+func _trigger_zero_wellbeing_departure() -> void:
+	var candidate: Citizen = null
+	for citizen in citizens:
+		if not is_instance_valid(citizen) or citizen.is_hero or citizen.state == Citizen.State.LEAVING:
+			continue
+		if candidate == null or citizen.satisfaction < candidate.satisfaction:
+			candidate = citizen
+	if candidate == null or not is_instance_valid(entrance_stone):
+		return
+	var non_hero_count := 0
+	for citizen in citizens:
+		if is_instance_valid(citizen) and not citizen.is_hero:
+			non_hero_count += 1
+	if non_hero_count <= SettlementRules.MIN_SETTLEMENT_POPULATION - 1:
+		return
+	candidate.begin_leaving(entrance_stone.global_position)
+	_add_message("%s left after the settlement's wellbeing collapsed." % candidate.role_label())
 
 
 func _apply_hourly_bare_hands_penalty() -> void:
@@ -3620,8 +3646,11 @@ func _skip_night() -> void:
 		if is_instance_valid(citizen) and not outside_workers.has(citizen.get_instance_id()):
 			positions[citizen.get_instance_id()] = citizen.global_position
 	var target_day := day_cycle.current_day + (1 if clock.hour() >= 6 else 0)
+	_is_skipping_night = true
+	_skip_zero_wellbeing_departure_applied = false
 	for survival_hour in _skip_night_survival_hours():
 		_apply_hourly_tent_survival(int(survival_hour.hour), int(survival_hour.day))
+	_is_skipping_night = false
 	day_cycle.current_day = target_day
 	tent_weather = TentEraSurvivalRulesScript.weather_for_day(day_cycle.current_day)
 	clock.set_time(6 * 60)
@@ -3630,6 +3659,11 @@ func _skip_night() -> void:
 	# no production is assignable, and workers have nothing to wake up for.
 	_refresh_living_statuses()
 	_apply_daily_settlement_rules()
+	# A skipped night has no intervening movement frames for a departing resident.
+	# Remove dawn departures immediately so the simulated result matches elapsed time.
+	for citizen in citizens.duplicate():
+		if is_instance_valid(citizen) and citizen.state == Citizen.State.LEAVING:
+			_on_citizen_leaving_departed(citizen)
 	_return_outside_workers()
 	_apply_skip_night_incident()
 	_update_workers()

@@ -7,7 +7,7 @@ extends AIWorldFacade
 ## Route finding is the expensive part of source selection. A worker only needs
 ## one target, so inspect a small, deterministic set of nearby sources instead
 ## of pathfinding to every tree or grass clump on every snapshot.
-const MAX_GATHERING_ROUTE_CANDIDATES := 12
+const MAX_ROUTE_CANDIDATES := 12
 
 var simulation: Node
 
@@ -25,7 +25,6 @@ func capture(sequence: int) -> WorldSnapshot:
 		for task: CourierTask in simulation.courier_dispatcher.available_tasks():
 			courier_tasks.append({&"id": task.id, &"priority": task.priority, &"pickup": task.pickup, &"requested_courier_id": int(task.payload.get("courier_ai_id", 0))})
 	var workforce_world := _world_data()
-	var forestry_targets := _forestry_targets()
 	var gathering_targets := _gathering_targets()
 	var citizens_by_id: Dictionary = {}
 	for actor: Citizen in simulation.citizens:
@@ -51,8 +50,6 @@ func capture(sequence: int) -> WorldSnapshot:
 		var forestry_in_progress := actor.state in [Citizen.State.TO_TREE, Citizen.State.CHOPPING, Citizen.State.TO_SAWMILL]
 		var forestry_candidates: Array[Dictionary] = []
 		if forestry_worker and actor_work_time:
-			# Tree validity and walkable interaction cells are snapshot-wide facts.
-			# Reusing the shared list avoids rebuilding it once per forestry worker.
 			forestry_candidates = _forestry_targets(actor.global_position)
 		var farming_worker := actor.permanent_role == "farming" and actor.is_employed() and not actor.is_player_controlled
 		var farming_in_progress := farming_worker and actor.active_role == "farming" and actor.state in [Citizen.State.TO_TREE, Citizen.State.TO_SAWMILL, Citizen.State.SAWING, Citizen.State.WAITING_COURIER]
@@ -324,7 +321,6 @@ func capture(sequence: int) -> WorldSnapshot:
 		&"workforce.world_data": workforce_world,
 		&"workforce.employment_center_position": simulation._employment_center_position(),
 		&"workforce.role_employers": _role_employers(),
-		&"work.forestry.targets": forestry_targets,
 		&"work.gathering.targets": gathering_targets,
 		&"work.courier.tasks": courier_tasks,
 	})
@@ -343,17 +339,30 @@ func _target_key(kind: StringName, position: Vector3) -> StringName:
 
 
 func _forestry_targets(from: Vector3 = Vector3.INF) -> Array[Dictionary]:
-	var targets: Array[Dictionary] = []
+	var nearby: Array[Dictionary] = []
 	for tree_position: Vector3 in simulation.tree_positions:
 		var cell: Vector2i = simulation._cell_from_position(tree_position)
 		var tree: Node3D = simulation.tree_nodes.get(cell) as Node3D
 		if not is_instance_valid(tree) or bool(tree.get_meta("felled", false)):
 			continue
 		var access := _resource_access_position(tree_position, from)
-		if access != Vector3.INF:
-			var cost := _route_cost(from, access)
-			if cost < INF:
-				targets.append({&"id": StringName("tree:%d:%d" % [cell.x, cell.y]), &"position": tree_position, &"access": access, &"route_cost": cost})
+		if access == Vector3.INF:
+			continue
+		_insert_nearby_gathering_candidate(nearby, {
+			&"id": StringName("tree:%d:%d" % [cell.x, cell.y]),
+			&"position": tree_position,
+			&"access": access,
+			&"direct_distance": from.distance_squared_to(access) if from != Vector3.INF else 0.0,
+		})
+	var targets: Array[Dictionary] = []
+	for candidate in nearby:
+		var access: Vector3 = candidate[&"access"]
+		var cost := _route_cost(from, access)
+		if cost >= INF:
+			continue
+		candidate[&"route_cost"] = cost
+		candidate.erase(&"direct_distance")
+		targets.append(candidate)
 	return targets
 
 
@@ -567,7 +576,7 @@ func _insert_nearby_gathering_candidate(candidates: Array[Dictionary], candidate
 			insert_at = index
 			break
 	candidates.insert(insert_at, candidate)
-	if candidates.size() > MAX_GATHERING_ROUTE_CANDIDATES:
+	if candidates.size() > MAX_ROUTE_CANDIDATES:
 		candidates.pop_back()
 
 
@@ -620,9 +629,9 @@ func _worker_data(actor: Citizen) -> Dictionary:
 		"training_days_completed": actor.training_days_completed,
 		"permanent_role": actor.permanent_role,
 		"pending_employment_role": actor.pending_employment_role,
-		"skills": actor.skills,
+		"skills": actor.skills.duplicate(true),
 		"should_study": should_study,
-		"workforce_status": "unregistered" if actor.is_unregistered() else "registering" if actor.is_registering() else "active",
+		"workforce_status": "unregistered" if actor.is_unregistered() else "registering" if actor.is_registering() else "no_permanent_work" if actor.has_no_permanent_work() else "active",
 		"is_hero": actor.is_hero,
 	}
 

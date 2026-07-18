@@ -16,6 +16,7 @@ func _tick(context: BehaviorContext, delta: float) -> Status:
 			return Status.RUNNING
 		if status == Status.SUCCESS:
 			return Status.SUCCESS
+		set_failure_reason(children[_current].failure_reason)
 		_current += 1
 	return Status.FAILURE
 

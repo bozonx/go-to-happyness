@@ -22,7 +22,7 @@ func has(key: StringName) -> bool:
 
 
 func value(key: StringName, default_value: Variant = null) -> Variant:
-	return _values.get(key, default_value)
+	return _copy_value(_values.get(key, default_value))
 
 
 func with_value(key: StringName, next_value: Variant) -> AIFactSet:
@@ -50,3 +50,9 @@ static func _from_owned_values(values: Dictionary) -> AIFactSet:
 	var facts := AIFactSet.new()
 	facts._values = values
 	return facts
+
+
+static func _copy_value(value: Variant) -> Variant:
+	if value is Dictionary or value is Array:
+		return value.duplicate(true)
+	return value
