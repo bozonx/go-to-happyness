@@ -592,7 +592,8 @@ func _process(delta: float) -> void:
 	_update_arrivals()
 	_update_fire_status()
 	trade_service.update()
-	_dispatch_queued_trades()
+	# Queued trades are delivered as courier tasks; a dispatch pass picks them up.
+	_request_courier_dispatch()
 	_update_sawmills(delta)
 	_update_building_research(delta)
 	_update_building_status_indicators(delta)
@@ -1524,7 +1525,9 @@ func _publish_courier_tasks(dispatcher: RefCounted) -> void:
 				continue
 			var arrival_house := arrival_order.get("house") as Node3D
 			if is_instance_valid(arrival_house) and not bool(arrival_house.get_meta("pending_demolition", false)):
-				dispatcher.publish(StringName("arrival_%d" % arrival_house.get_instance_id()), CourierTask.Kind.ARRIVAL, 95, entrance_stone.global_position, entrance_stone.global_position, {"house": arrival_house})
+				# Greeting stays below emergency food (100) and firewood (90) so a new
+				# arrival never pulls the only courier off keeping fires and meals alive.
+				dispatcher.publish(StringName("arrival_%d" % arrival_house.get_instance_id()), CourierTask.Kind.ARRIVAL, 89, entrance_stone.global_position, entrance_stone.global_position, {"house": arrival_house})
 	if not warehouse_positions.is_empty():
 		# Emergency food is published before every other task.
 		if is_instance_valid(canteen) and food > 0 and not pending_canteen_delivery:
@@ -1574,10 +1577,11 @@ func _publish_courier_tasks(dispatcher: RefCounted) -> void:
 				# One task may be assigned to only one courier. Split the outstanding
 				# reservation across its actual warehouses: otherwise every slot points
 				# at the nearest warehouse and only its first courier can start.
-				var largest_courier_capacity := 1
+				var smallest_courier_capacity := 0
 				for citizen: Citizen in citizens:
 					if is_instance_valid(citizen) and citizen.can_handle_entry_logistics():
-						largest_courier_capacity = maxi(largest_courier_capacity, citizen.courier_capacity())
+						var courier_capacity := citizen.courier_capacity()
+						smallest_courier_capacity = courier_capacity if smallest_courier_capacity == 0 else mini(smallest_courier_capacity, courier_capacity)
 				var unallocated := storage_reserved
 				for source: Dictionary in sources:
 					if unallocated <= 0:
@@ -1587,7 +1591,7 @@ func _publish_courier_tasks(dispatcher: RefCounted) -> void:
 					if source_allocation <= 0:
 						continue
 					var source_id := str(source.get("id", "storage"))
-					var delivery_slots := ceili(float(source_allocation) / float(largest_courier_capacity))
+					var delivery_slots := ceili(float(source_allocation) / float(maxi(1, smallest_courier_capacity)))
 					for slot in range(delivery_slots):
 						dispatcher.publish(StringName("construction_%s_%s_%s_%d" % [site.node.get_instance_id(), resource_type, source_id, slot]), CourierTask.Kind.CONSTRUCTION, 70, source.position, site.node.global_position, {"site": site, "resource": resource_type, "source": source})
 					unallocated -= source_allocation
@@ -9016,10 +9020,6 @@ func _trade_incoming_resource(resource_type: String) -> int:
 
 func _trade_has_tool_order(tool_id: String) -> bool:
 	return trade_service.trade_has_tool_order(tool_id)
-
-
-func _dispatch_queued_trades() -> void:
-	_request_courier_dispatch()
 
 
 func _on_trade_delivery_finished(worker: Citizen) -> void:

@@ -138,28 +138,6 @@ func trade_has_tool_order(tool_id: String) -> bool:
 	return false
 
 
-func dispatch_queued_trades() -> void:
-	if simulation.queued_trades.is_empty():
-		return
-	var candidates: Array[Citizen] = []
-	for worker in simulation.citizens:
-		if (
-			worker.can_handle_entry_logistics()
-			and worker.state == Citizen.State.IDLE
-			and not simulation.pending_trades.has(worker.get_instance_id())
-		):
-			candidates.append(worker)
-	# Dedicated couriers take new market work first; daily couriers are a fallback.
-	candidates.sort_custom(func(a: Citizen, b: Citizen): return a.is_courier() and not b.is_courier())
-	for worker in candidates:
-		if simulation.queued_trades.is_empty():
-			return
-		var order: RefCounted = simulation.queued_trades.pop_front()
-		assign_order_to_worker(worker, order)
-	if not simulation.queued_trades.is_empty():
-		simulation._update_interface("Trade queued: assign a Courier or wait for a free Courier.")
-
-
 func assign_order_to_worker(worker: Citizen, order: RefCounted) -> void:
 	if not is_instance_valid(worker) or order == null:
 		return

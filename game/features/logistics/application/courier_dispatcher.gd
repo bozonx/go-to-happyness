@@ -118,30 +118,6 @@ func complete_for(courier: Citizen) -> void:
 		tasks.erase(task.id)
 
 
-func _available_couriers() -> Array[Citizen]:
-	var couriers: Array[Citizen] = []
-	var daily_couriers: Array[Citizen] = []
-	for citizen in simulation.citizens:
-		if not citizen.can_handle_entry_logistics() or citizen.state not in [Citizen.State.IDLE, Citizen.State.WAITING]:
-			continue
-		if citizen.is_courier():
-			couriers.append(citizen)
-		elif citizen.is_daily_courier():
-			daily_couriers.append(citizen)
-	return couriers if not couriers.is_empty() else daily_couriers
-
-
-func _nearest_courier(couriers: Array[Citizen], pickup: Vector3) -> Citizen:
-	var best: Citizen = null
-	var distance := INF
-	for courier in couriers:
-		var candidate_distance := courier.global_position.distance_squared_to(pickup)
-		if candidate_distance < distance:
-			best = courier
-			distance = candidate_distance
-	return best
-
-
 func _warehouse_index(from: Vector3, resource_type: String, amount: int) -> int:
 	if simulation.has_method(&"_find_reachable_warehouse_index"):
 		return simulation._find_reachable_warehouse_index(from, resource_type, amount)
