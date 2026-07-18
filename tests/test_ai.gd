@@ -230,6 +230,7 @@ class FakeGatheringSimulation extends Node:
 func _init() -> void:
 	_test_fact_sets_and_snapshots()
 	_test_fact_values_are_isolated()
+	_test_fact_values_reject_runtime_references()
 	_test_blackboard_clear()
 	_test_utility_hysteresis()
 	_test_utility_hysteresis_allows_critical_preemption()
@@ -261,6 +262,7 @@ func _init() -> void:
 	_test_active_personal_need_blocks_work()
 	_test_personal_need_blocks_other_personal_need()
 	_test_order_board_payload_change_replaces_order()
+	_test_order_board_owns_proposal_ids()
 	_test_native_rest_goal()
 	_test_move_to_step()
 	_test_move_to_step_records_failure_reason()
@@ -350,6 +352,14 @@ func _test_fact_values_are_isolated() -> void:
 	var targets: Array = facts.value(&"targets", []) as Array
 	(targets[0] as Dictionary)[&"id"] = &"tree:changed"
 	assert(((facts.value(&"targets", []) as Array)[0] as Dictionary)[&"id"] == &"tree:1")
+
+
+func _test_fact_values_reject_runtime_references() -> void:
+	assert(AIFactSet.is_value_safe({&"target": Vector3.ZERO}))
+	var runtime_node := Node.new()
+	assert(not AIFactSet.is_value_safe({&"target": runtime_node}))
+	runtime_node.free()
+	assert(not AIFactSet.is_value_safe(func() -> void: pass))
 
 
 func _test_blackboard_clear() -> void:
@@ -921,6 +931,14 @@ func _test_order_board_payload_change_replaces_order() -> void:
 	var best := board.order_for(1, 1.0)
 	assert(best != null)
 	assert(best.id != initial.id)
+
+
+func _test_order_board_owns_proposal_ids() -> void:
+	var board := OrderBoard.new()
+	var proposal := CitizenOrder.new(1, &"gathering", &"workforce.gathering", 0.5)
+	proposal.id = 9001
+	board.replace_issuer_orders(&"workforce.gathering", [proposal], 0.0)
+	assert(proposal.id == 1)
 
 
 func _test_native_rest_goal() -> void:

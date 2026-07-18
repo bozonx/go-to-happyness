@@ -30,7 +30,7 @@ func score(
 		return 0.9
 	if not bool(citizen.facts.value(&"needs.can_start_meal", false)):
 		return 0.0
-	return 0.9
+	return 0.96 if float(citizen.facts.value(&"needs.hunger_level", 100.0)) <= 15.0 else 0.9
 
 
 func build_task(

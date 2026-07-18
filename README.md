@@ -1,11 +1,11 @@
 # Go To Happyness
 
-Godot 4.6 settlement simulation prototype.
+Redot 26.2 settlement simulation prototype.
 
 ## Run
 
 1. Install the optional voxel extension with `./install_voxel.sh`.
-2. Open `project.godot` in Godot 4.6.
+2. Open `project.godot` in Redot 26.2.
 3. Run the `SettlementPrototype` main scene at `game/bootstrap/settlement_game.tscn`.
 
 The voxel extension is intentionally ignored by Git because it contains large platform binaries.
@@ -18,8 +18,10 @@ The voxel extension is intentionally ignored by Git because it contains large pl
 - `game/features/<feature>/presentation/` contains Godot nodes, procedural visuals and scene-facing actors.
 - Citizen decisions use the native `decision` feature; there is no GOAP runtime or editor dependency.
 
-See [docs/architecture.md](docs/architecture.md) and
-[design_docs/citizen_ai.md](design_docs/citizen_ai.md) before adding AI behavior.
+See [docs/architecture.md](docs/architecture.md),
+[design_docs/core/citizen_ai.md](design_docs/core/citizen_ai.md), and
+[design_docs/core/navigation_and_roads.md](design_docs/core/navigation_and_roads.md)
+before changing AI or navigation behavior.
 
 ## Checks
 

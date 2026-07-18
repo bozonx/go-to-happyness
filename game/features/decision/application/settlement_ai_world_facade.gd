@@ -33,6 +33,8 @@ func capture(sequence: int) -> WorldSnapshot:
 		var citizen_id := actor.ai_id
 		var actor_work_time: bool = simulation._is_citizen_work_time(actor)
 		var can_start_personal_need := not actor.is_player_controlled and actor.state in [Citizen.State.IDLE, Citizen.State.WAITING]
+		var critically_hungry := actor.hunger <= 15.0
+		var dangerously_tired := actor.is_dangerously_tired()
 		var worker_data := _worker_data(actor)
 		var daily_order_active := actor.has_active_daily_order() and not actor.is_player_controlled
 		var daily_order_role := actor.daily_order_role if daily_order_active else ""
@@ -228,13 +230,16 @@ func capture(sequence: int) -> WorldSnapshot:
 				&"needs.should_sleep": not actor_work_time,
 				&"work.overtime.active": actor.has_active_overtime(simulation.day_cycle.current_day),
 				&"needs.fatigue_level": actor.fatigue,
-				&"needs.dangerously_tired": actor.is_dangerously_tired(),
+				&"needs.hunger_level": actor.hunger,
+				&"needs.dangerously_tired": dangerously_tired,
 				&"needs.recovering": actor.is_recovering(simulation.day_cycle.current_day),
 				&"needs.has_home": is_instance_valid(actor.home),
 				&"needs.home_position": _home_entrance_position(actor.home),
-				&"needs.can_start_sleep": can_start_personal_need,
+				# Survival overrides may interrupt work. Ordinary needs wait until the
+				# actor is idle, preserving stable work cycles.
+				&"needs.can_start_sleep": can_start_personal_need or dangerously_tired,
 				&"needs.meal_requested": canteen_service != null and canteen_service.is_meal_requested(citizen_id),
-				&"needs.can_start_meal": canteen_service != null and can_start_personal_need and is_instance_valid(simulation.canteen),
+				&"needs.can_start_meal": canteen_service != null and (can_start_personal_need or critically_hungry) and is_instance_valid(simulation.canteen),
 				&"needs.canteen_position": simulation.canteen_position,
 				&"needs.toilet_requested": needs_service != null and needs_service.has_toilet_request(citizen_id),
 				&"needs.can_start_toilet": can_start_personal_need,

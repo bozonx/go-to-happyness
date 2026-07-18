@@ -17,19 +17,27 @@ func replace_issuer_orders(
 	var previous_by_citizen: Dictionary = _orders_by_issuer.get(issuer, {})
 	var next_by_citizen: Dictionary = {}
 	for order in orders:
-		if order == null or order.citizen_id == 0 or order.is_expired(simulation_seconds):
+		if (
+			order == null
+			or order.citizen_id <= 0
+			or order.kind == &""
+			or order.is_expired(simulation_seconds)
+			or order.payload == null
+			or not AIFactSet.is_value_safe(order.payload.to_dictionary())
+		):
 			continue
 		order.issuer = issuer
 		var previous: Array = previous_by_citizen.get(order.citizen_id, [])
-		if order.id == 0:
-			var matching := _matching_order(previous, order)
-			if matching != null:
-				order.id = matching.id
-				order.issued_at = matching.issued_at
-			else:
-				order.id = _next_order_id
-				order.issued_at = simulation_seconds
-				_next_order_id += 1
+		# Providers submit proposals, not ids. Only a prior equivalent order from
+		# this issuer may retain its board-assigned identity.
+		var matching := _matching_order(previous, order)
+		if matching != null:
+			order.id = matching.id
+			order.issued_at = matching.issued_at
+		else:
+			order.id = _next_order_id
+			order.issued_at = simulation_seconds
+			_next_order_id += 1
 		var next_orders: Array = next_by_citizen.get(order.citizen_id, [])
 		if _contains_equivalent_order(next_orders, order):
 			continue

@@ -243,6 +243,7 @@ var citizens: Array[Citizen] = []
 var camera: Camera3D
 var sun: DirectionalLight3D
 var world_environment: Environment
+var sky_material: ShaderMaterial
 var weather_state := WeatherStateScript.new()
 var rain_effect: RainEffect
 var fireflies: Array[FirefliesEffect] = []
@@ -955,6 +956,14 @@ func _update_daylight() -> void:
 	sun.light_energy = lerpf(0.0, 1.2, direct_light)
 	sun.shadow_enabled = direct_light > 0.05
 	sun.shadow_opacity = lerpf(1.0, 0.0, overcast)
+	if sky_material != null:
+		var sky_horizon := base_background.lerp(overcast_color, overcast)
+		var sky_zenith := sky_horizon.darkened(0.18)
+		sky_material.set_shader_parameter("u_horizon_color", sky_horizon)
+		sky_material.set_shader_parameter("u_zenith_color", sky_zenith)
+		sky_material.set_shader_parameter("u_sun_color", sun.light_color)
+		sky_material.set_shader_parameter("u_overcast", overcast)
+		sky_material.set_shader_parameter("u_solar_intensity", solar_intensity)
 	if rain_effect != null:
 		rain_effect.set_intensity(overcast)
 	var visible_direct_light := direct_light if solar_height > 0.01 else 0.0
@@ -2633,6 +2642,7 @@ func _create_world() -> void:
 	world_environment = Environment.new()
 	world_environment.background_mode = Environment.BG_COLOR
 	world_environment.background_color = Color("78a9c5")
+	_create_sky()
 	world_environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	world_environment.ambient_light_color = Color("d7ebef")
 	world_environment.ambient_light_energy = 0.65
@@ -2676,6 +2686,20 @@ func _create_world() -> void:
 	_create_trail_overlay()
 	_refresh_navigation_grid()
 	_create_selection_marker()
+
+
+func _create_sky() -> void:
+	# Headless keeps the flat BG_COLOR background (no rendering, faster tests).
+	if DisplayServer.get_name() == "headless":
+		return
+	var shader := load("res://game/features/world/presentation/sky_clouds.gdshader")
+	sky_material = ShaderMaterial.new()
+	sky_material.shader = shader
+	var sky := Sky.new()
+	sky.sky_material = sky_material
+	sky.process_mode = Sky.PROCESS_MODE_INCREMENTAL # cheap: spreads sky update over frames
+	world_environment.background_mode = Environment.BG_SKY
+	world_environment.sky = sky
 
 
 func _create_lens_flare() -> void:

@@ -13,6 +13,12 @@ var topology_revision := -1
 var unreachable_reason := UnreachableReason.NONE
 
 
+## A route stays safe while passability is unchanged. A different grid revision
+## may offer a cheaper route, but does not require an actor to abandon its path.
+func is_topologically_stale(current_topology_revision: int) -> bool:
+	return topology_revision >= 0 and current_topology_revision >= 0 and topology_revision != current_topology_revision
+
+
 static func success(next_waypoints: Array[Vector3], next_arrival_position: Vector3, next_grid_revision := -1, next_topology_revision := -1) -> RouteResult:
 	var result := RouteResult.new()
 	result.reachable = true
