@@ -37,18 +37,18 @@ func _test_territory_campfire_radius() -> void:
 	assert(t.has_campfire(), "Territory with campfire anchor should have_campfire")
 	assert(t.campfire_count() == 1, "Should have 1 campfire")
 	assert(t.is_inside(Vector2i(0, 0)), "Center cell should be inside")
-	assert(t.is_inside(Vector2i(7, 0)), "Cell at radius 7 should be inside campfire r=8")
-	assert(not t.is_inside(Vector2i(9, 0)), "Cell at radius 9 should be outside campfire r=8")
+	assert(t.is_inside(Vector2i(11, 0)), "Cell at radius 11 should be inside campfire r=12")
+	assert(not t.is_inside(Vector2i(13, 0)), "Cell at radius 13 should be outside campfire r=12")
 
 
 func _test_territory_house_expansion() -> void:
 	var t := VillageTerritoryScript.new()
 	t.add_anchor(Vector2i(0, 0), "campfire")
-	t.add_anchor(Vector2i(10, 0), "house")
-	assert(t.is_inside(Vector2i(10, 0)), "House center should be inside")
-	assert(t.is_inside(Vector2i(14, 0)), "Cell at house radius edge should be inside")
-	# Gap between campfire r=8 and house r=5 at distance 10: 8+5=13 > 10, so no gap
-	assert(t.is_inside(Vector2i(5, 0)), "Midpoint between campfire and house should be inside")
+	t.add_anchor(Vector2i(15, 0), "house")
+	assert(t.is_inside(Vector2i(15, 0)), "House center should be inside")
+	assert(t.is_inside(Vector2i(22, 0)), "Cell at house radius edge should be inside")
+	# Gap between campfire r=12 and house r=8 at distance 15: 12+8=20 > 15, so no gap
+	assert(t.is_inside(Vector2i(7, 0)), "Midpoint between campfire and house should be inside")
 
 
 func _test_territory_post_expansion() -> void:
@@ -56,16 +56,16 @@ func _test_territory_post_expansion() -> void:
 	t.add_anchor(Vector2i(0, 0), "campfire")
 	t.add_anchor(Vector2i(9, 0), "boundary_post")
 	assert(t.is_inside(Vector2i(9, 0)), "Post center should be inside")
-	assert(t.is_inside(Vector2i(11, 0)), "Cell at post radius edge should be inside")
+	assert(t.is_inside(Vector2i(13, 0)), "Cell at post radius edge should be inside")
 
 
 func _test_territory_removal() -> void:
 	var t := VillageTerritoryScript.new()
 	t.add_anchor(Vector2i(0, 0), "campfire")
-	t.add_anchor(Vector2i(10, 0), "house")
-	assert(t.is_inside(Vector2i(10, 0)))
-	t.remove_anchor(Vector2i(10, 0))
-	assert(not t.is_inside(Vector2i(14, 0)), "House area should be gone after removal")
+	t.add_anchor(Vector2i(15, 0), "house")
+	assert(t.is_inside(Vector2i(15, 0)))
+	t.remove_anchor(Vector2i(15, 0))
+	assert(not t.is_inside(Vector2i(22, 0)), "House area should be gone after removal")
 	assert(t.is_inside(Vector2i(0, 0)), "Campfire area should remain")
 
 
@@ -122,7 +122,7 @@ func _test_service_campfire_placement() -> void:
 	service.on_building_added(Vector2i(0, 0), "campfire")
 	assert(service.has_campfire(), "Service should have campfire after adding")
 	# House inside territory should be OK
-	assert(service.placement_reason("house", Vector2i(3, 0)) == service.REASON_OK, \
+	assert(service.placement_reason("house", Vector2i(5, 0)) == service.REASON_OK, \
 		"House inside territory should be OK")
 	# Second campfire in tent era should be rejected (limit=1)
 	assert(service.placement_reason("campfire", Vector2i(50, 50)) == service.REASON_CAMPFIRE_LIMIT, \
@@ -132,7 +132,7 @@ func _test_service_campfire_placement() -> void:
 func _test_service_outside_territory() -> void:
 	var service := _make_service(0)
 	service.on_building_added(Vector2i(0, 0), "campfire")
-	assert(service.placement_reason("house", Vector2i(20, 20)) == service.REASON_OUTSIDE_TERRITORY, \
+	assert(service.placement_reason("house", Vector2i(30, 30)) == service.REASON_OUTSIDE_TERRITORY, \
 		"House far from territory should be REASON_OUTSIDE_TERRITORY")
 
 
@@ -158,11 +158,11 @@ func _test_service_foreign_territory() -> void:
 	service.on_building_added(Vector2i(0, 0), "campfire")
 	# Add foreign territory overlapping the edge of own territory
 	var foreign := VillageTerritoryScript.new()
-	foreign.add_anchor(Vector2i(7, 0), "campfire")
+	foreign.add_anchor(Vector2i(11, 0), "campfire")
 	service.add_foreign_territory(foreign)
-	# Cell (7,0) is inside own territory (r=8 from origin) and inside foreign territory
-	assert(service.placement_reason("house", Vector2i(7, 0)) == service.REASON_FOREIGN_TERRITORY, \
+	# Cell (11,0) is inside own territory (r=12 from origin) and inside foreign territory
+	assert(service.placement_reason("house", Vector2i(11, 0)) == service.REASON_FOREIGN_TERRITORY, \
 		"House in foreign territory should be REASON_FOREIGN_TERRITORY")
 	# Warehouse at foreign-only cell should also be blocked
-	assert(service.placement_reason("warehouse", Vector2i(10, 0)) == service.REASON_FOREIGN_TERRITORY, \
+	assert(service.placement_reason("warehouse", Vector2i(14, 0)) == service.REASON_FOREIGN_TERRITORY, \
 		"Warehouse in foreign territory should be REASON_FOREIGN_TERRITORY")

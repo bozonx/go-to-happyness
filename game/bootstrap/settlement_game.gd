@@ -53,6 +53,7 @@ const EventOutcomeScript = preload("res://game/features/events/domain/event_outc
 const TentEraEventsScript = preload("res://game/features/events/application/tent_era_events.gd")
 const VillageTerritoryServiceScript = preload("res://game/features/buildings/application/village_territory_service.gd")
 const VillageBoundaryMarkersScript = preload("res://game/features/buildings/presentation/village_boundary_markers.gd")
+const VillageTerritoryOverlayScript = preload("res://game/features/buildings/presentation/village_territory_overlay.gd")
 
 
 # The playable routing and construction board must cover the terrain visible
@@ -457,6 +458,7 @@ var trail_field: TrailFieldService
 var trail_overlay: MeshInstance3D
 var trail_overlay_material: ShaderMaterial
 var village_boundary_markers: Node3D
+var village_territory_overlay: Node3D
 var campfire_orders_menu: Panel
 var campfire_orders_toggle: CheckButton
 var campfire_balanced_warehouse_toggle: CheckButton
@@ -2624,6 +2626,9 @@ func _create_world() -> void:
 	village_boundary_markers = VillageBoundaryMarkersScript.new()
 	village_boundary_markers.configure(CELL_SIZE)
 	add_child(village_boundary_markers)
+	village_territory_overlay = VillageTerritoryOverlayScript.new()
+	village_territory_overlay.configure(CELL_SIZE)
+	add_child(village_territory_overlay)
 
 	sun = DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-52.0, -32.0, 0.0)
@@ -5167,6 +5172,7 @@ func _start_dig_assignment() -> void:
 	dig_mode = true
 	build_mode = ""
 	selection_marker.visible = true
+	_show_territory_overlay(false)
 	selection_material.albedo_color = Color(0.65, 0.42, 0.2, 0.55)
 	_move_selection(selected_world_position)
 	_update_interface("Choose a clear point on the voxel terrain for excavation.")
@@ -5263,6 +5269,7 @@ func _select_build_mode(next_mode: String) -> void:
 	selection_marker.visible = true
 	_move_selection(selected_world_position)
 	_set_build_placement_ui_visible(false)
+	_show_territory_overlay(true)
 	if is_first_person:
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	_update_interface("%s selected. Choose a clear point; Q/E rotates the building." % build_mode.capitalize())
@@ -5277,6 +5284,7 @@ func _cancel_build_action() -> void:
 	build_menu.visible = false
 	build_menu_is_global = false
 	selected_builder = null
+	_show_territory_overlay(false)
 	_set_build_placement_ui_visible(true)
 	_update_interface("Construction mode cancelled.")
 
@@ -5323,6 +5331,7 @@ func _close_context_menus() -> void:
 	build_mode = ""
 	dig_mode = false
 	selection_marker.visible = false
+	_show_territory_overlay(false)
 	is_rotating_camera = false
 	entrance_menu.visible = false
 	if entrance_highlight != null:
@@ -5862,6 +5871,7 @@ func _select_citizen(clicked_citizen: Citizen) -> void:
 	build_category = ""
 	build_menu_is_global = false
 	selection_marker.visible = false
+	_show_territory_overlay(false)
 	build_menu.visible = true
 	_refresh_build_menu()
 	_show_selected_citizen_menu()
@@ -5920,6 +5930,7 @@ func _enter_first_person(citizen: Citizen, message: String) -> void:
 	is_first_person = true
 	build_mode = ""
 	selection_marker.visible = false
+	_show_territory_overlay(false)
 	build_menu.visible = false
 	build_menu_is_global = false
 	build_menu_is_job_menu = false
@@ -7204,6 +7215,7 @@ func _place_building(world_position: Vector3) -> void:
 	selection_marker.visible = false
 	preview_entrance_marker.visible = false
 	preview_back_entrance_marker.visible = false
+	_show_territory_overlay(false)
 	build_menu.visible = false
 	build_menu_is_global = false
 	selected_builder = null
@@ -10158,8 +10170,18 @@ func _select_best_campfire() -> void:
 
 
 func _refresh_boundary_markers() -> void:
+	var territory: RefCounted = village_territory_service.territory()
 	if village_boundary_markers != null:
-		village_boundary_markers.refresh(village_territory_service.territory())
+		village_boundary_markers.refresh(territory)
+	if village_territory_overlay != null:
+		village_territory_overlay.refresh(territory)
+
+
+func _show_territory_overlay(show: bool) -> void:
+	if village_territory_overlay != null:
+		if show:
+			village_territory_overlay.refresh(village_territory_service.territory())
+		village_territory_overlay.visible = show
 
 func _create_resource_pile(position: Vector3, resources: Dictionary, is_backpack_pile := false) -> void:
 	if resources.is_empty():
