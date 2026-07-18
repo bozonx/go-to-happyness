@@ -122,7 +122,7 @@ func _available_couriers() -> Array[Citizen]:
 	var couriers: Array[Citizen] = []
 	var daily_couriers: Array[Citizen] = []
 	for citizen in simulation.citizens:
-		if not citizen.can_handle_entry_logistics() or citizen.state != Citizen.State.IDLE:
+		if not citizen.can_handle_entry_logistics() or citizen.state not in [Citizen.State.IDLE, Citizen.State.WAITING]:
 			continue
 		if citizen.is_courier():
 			couriers.append(citizen)

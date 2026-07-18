@@ -27,6 +27,7 @@ var _snapshot_elapsed := 0.0
 var _director_elapsed := 0.0
 var _snapshot_sequence := 0
 var _think_cursor := 0
+var _capture_failures := 0
 
 
 func configure(
@@ -123,8 +124,14 @@ func _physics_process(delta: float) -> void:
 	_director_elapsed += delta
 	if latest_snapshot == null or _snapshot_elapsed >= snapshot_interval:
 		if not _capture_snapshot():
-			facade = null
+			# A failed capture must not silently kill the whole AI. Log once per
+			# streak and retry on the next tick; the previous snapshot (if any)
+			# keeps brains running in the meantime.
+			if _capture_failures == 0:
+				push_error("CitizenAISystem: snapshot capture failed; retrying")
+			_capture_failures += 1
 			return
+		_capture_failures = 0
 	if latest_snapshot == null:
 		return
 	reservations.expire(latest_snapshot.simulation_seconds)

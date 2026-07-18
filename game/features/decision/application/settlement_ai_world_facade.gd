@@ -220,7 +220,7 @@ func capture(sequence: int) -> WorldSnapshot:
 				courier_active_pickup = active_courier_task.pickup
 				courier_active_priority = active_courier_task.priority
 		var courier_in_progress := courier_active_task_id != &""
-		var courier_can_start: bool = courier_worker and actor.state == Citizen.State.IDLE and actor_work_time
+		var courier_can_start: bool = courier_worker and actor.state in [Citizen.State.IDLE, Citizen.State.WAITING] and actor_work_time
 		citizens_by_id[citizen_id] = CitizenSnapshot.new(
 			citizen_id,
 			actor.global_position,
@@ -234,7 +234,7 @@ func capture(sequence: int) -> WorldSnapshot:
 				&"needs.dangerously_tired": actor.is_dangerously_tired(),
 				&"needs.recovering": actor.is_recovering(simulation.day_cycle.current_day),
 				&"needs.has_home": is_instance_valid(actor.home),
-				&"needs.home_position": actor.home.global_position if is_instance_valid(actor.home) else Vector3.INF,
+				&"needs.home_position": _home_entrance_position(actor.home),
 				&"needs.can_start_sleep": can_start_personal_need,
 				&"needs.meal_requested": canteen_service != null and canteen_service.is_meal_requested(citizen_id),
 				&"needs.can_start_meal": canteen_service != null and can_start_personal_need and is_instance_valid(simulation.canteen),
@@ -402,6 +402,17 @@ func _gathering_targets() -> Array[Dictionary]:
 		if access != Vector3.INF:
 			targets.append({&"id": StringName("branch:%d:%d" % [tree_cell.x, tree_cell.y]), &"resource_type": "branches", &"position": tree_position, &"access": access})
 	return targets
+
+
+## The reachable approach point for a home. AI move steps drive the capsule to a
+## fixed world point without house-entry, so they must target the walkable
+## entrance marker the sleep FSM uses, not the (possibly blocked) building centre.
+func _home_entrance_position(home: Node3D) -> Vector3:
+	if not is_instance_valid(home):
+		return Vector3.INF
+	if not home.is_inside_tree():
+		return home.position
+	return home.get_meta("entrance_position", home.global_position)
 
 
 func _resource_access_position(resource_position: Vector3, from: Vector3 = Vector3.INF) -> Vector3:

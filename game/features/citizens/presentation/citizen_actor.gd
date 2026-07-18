@@ -294,7 +294,11 @@ var delivery_amount := 0
 var canteen_position := Vector3.ZERO
 var current_toilet_target: Node3D = null
 const TOILET_USE_DURATION := 5.0
+## Upper bound on how long a citizen queues for an occupied toilet before giving
+## up, so a permanently-full facility cannot freeze it until the task watchdog.
+const TOILET_WAIT_TIMEOUT := 30.0
 var toilet_timer := CitizenTaskState.new()
+var toilet_wait_time := 0.0
 var toilet_relief_position := Vector3.INF
 var toilet_relief_type := ""
 var toilet_resume_state := State.IDLE
@@ -964,13 +968,16 @@ func _process_courier_wait(delta: float) -> void:
 	if task_timer.advance(delta):
 		if _start_pending_arrival_if_any():
 			return
-		if permanent_role in ["farming", "excavation"] and active_role in ["farming", "excavation"]:
+		if has_pending_resource():
 			# Native cycles complete only when a courier takes their pending output.
 			# Keep the worker available to the dispatcher without starting another
 			# cycle while the previous output is still pending.
 			_start_task(COURIER_WAIT_DURATION)
 			return
-		state = State.TO_TREE
+		# The output has already been collected (or none was produced). Return to
+		# idle so the native AI can publish the next work order, instead of forcing
+		# a stale forestry route via TO_TREE (which misfires for gather/farm roles).
+		idle()
 
 func _process_construction(delta: float) -> void:
 	if not is_instance_valid(construction_site):
@@ -2081,14 +2088,14 @@ func take_pending_resource(max_amount := 0) -> Dictionary:
 			var taken := amount if max_amount <= 0 else mini(amount, max_amount)
 			pending_resources[pending_type] = amount - taken
 			if state == State.WAITING_COURIER and int(pending_resources[pending_type]) == 0:
-				# A production task owns one production-and-handoff cycle.
-				if permanent_role in ["farming", "excavation"] and active_role == permanent_role:
-					state = State.IDLE
-					active_role = ""
-					if permanent_role == "excavation":
-						assigned_dig_site = null
-				else:
-					state = State.TO_TREE
+				# A production task owns one production-and-handoff cycle. Once the
+				# courier collects the output the cycle is complete for every role;
+				# return to idle so the native AI publishes the next order instead of
+				# forcing a forestry TO_TREE that misfires for gather/farm workers.
+				state = State.IDLE
+				active_role = ""
+				if permanent_role == "excavation":
+					assigned_dig_site = null
 			return {"type": pending_type, "amount": taken}
 	return {}
 
@@ -2978,6 +2985,7 @@ func _process_to_toilet(delta: float) -> void:
 			state = State.USING_TOILET
 			toilet_timer.start(TOILET_USE_DURATION)
 		else:
+			toilet_wait_time = 0.0
 			state = State.WAITING_FOR_TOILET
 
 
@@ -2993,6 +3001,14 @@ func _process_using_toilet(delta: float) -> void:
 
 func _process_waiting_for_toilet(delta: float) -> void:
 	if not is_instance_valid(current_toilet_target):
+		_resume_after_toilet()
+		return
+	toilet_wait_time += delta
+	if toilet_wait_time >= TOILET_WAIT_TIMEOUT:
+		# The facility never freed up. Give up and resume normal activity so the
+		# citizen is not wedged here; the outstanding need lets the AI re-plan
+		# (a different toilet, or a bush fallback) on a later cycle.
+		toilet_wait_time = 0.0
 		_resume_after_toilet()
 		return
 	var users_count := 0
@@ -3211,7 +3227,7 @@ func get_action_status(action: StringName) -> int:
 			if state == State.IDLE:
 				return 2 # SUCCEEDED
 		&"farming":
-			if state in [State.TO_TREE, State.TO_SAWMILL, State.SAWING, State.WAITING_COURIER]:
+			if state in [State.TO_TREE, State.CHOPPING, State.TO_SAWMILL, State.SAWING, State.WAITING_COURIER]:
 				return 1 # RUNNING
 			if state == State.IDLE:
 				return 2 # SUCCEEDED
@@ -3221,7 +3237,7 @@ func get_action_status(action: StringName) -> int:
 			if state == State.IDLE:
 				return 2 # SUCCEEDED
 		&"gathering":
-			if state in [State.TO_GATHER, State.GATHERING, State.TO_WAREHOUSE]:
+			if state in [State.TO_GATHER, State.GATHERING, State.TO_WAREHOUSE, State.WAITING_COURIER]:
 				return 1 # RUNNING
 			if state == State.IDLE:
 				return 2 # SUCCEEDED
