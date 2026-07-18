@@ -10007,7 +10007,7 @@ func _gather_progress_amounts(resource_type: String, node: Node3D) -> Dictionary
 			if source.get("node") == node:
 				max_amount = int(source.get("initial", 1))
 				current = max_amount - int(source.get("remaining", 0))
-				break
+www				break
 	return {"current": current, "max": max_amount}
 
 func _ensure_gather_progress_label(node: Node3D) -> Label3D:

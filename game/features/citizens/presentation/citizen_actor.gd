@@ -145,6 +145,12 @@ const STATE_ANIMATIONS := {
 	State.LEAVING: "walk",
 }
 
+# These clips represent persistent states, not one-off gestures. Imported GLB
+# animations default to non-looping, so configure the runtime copy explicitly.
+const LOOPING_ANIMATIONS := [
+	"idle", "walk", "sprint", "crouch", "sit", "interact-right",
+]
+
 signal state_changed(citizen: Citizen, previous_state: int, next_state: int)
 
 # State changes drive simulation immediately. The label intentionally follows a
@@ -603,10 +609,11 @@ func _update_character_model() -> void:
 		# Set up animations
 		animation_player = inst.get_node_or_null("AnimationPlayer") as AnimationPlayer
 		if animation_player != null:
-			for anim_name in ["idle", "walk", "sprint", "crouch", "sit"]:
+			for anim_name in LOOPING_ANIMATIONS:
 				var anim = animation_player.get_animation(anim_name)
 				if anim != null:
 					anim.loop_mode = Animation.LOOP_LINEAR
+			_play_animation("idle")
 
 func _update_mesh_colors() -> void:
 	if current_character_mesh == null:
@@ -702,7 +709,11 @@ func _locomotion_animation(horizontal_speed: float) -> String:
 	return "sprint" if horizontal_speed > WALK_SPEED * 1.3 else "walk"
 
 func _play_animation(anim_to_play: String) -> void:
-	if animation_player.current_animation != anim_to_play:
+	if animation_player == null or animation_player.get_animation(anim_to_play) == null:
+		return
+	# A non-looping imported clip can have the right current name after it has
+	# ended. Restart it instead of leaving the character frozen in its last pose.
+	if animation_player.current_animation != anim_to_play or not animation_player.is_playing():
 		animation_player.play(anim_to_play, 0.2)
 
 func _update_animations(delta: float) -> void:
