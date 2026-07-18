@@ -18,8 +18,13 @@ const PATH_CREATE_THRESHOLD := 4.0
 const PATH_MATURE_THRESHOLD := 9.0
 const PATH_DEGRADE_THRESHOLD := 2.5
 const PATH_DEGRADE_DAYS := 3
-const YOUNG_PATH_WEIGHT := 1.4
-const MATURE_PATH_WEIGHT := 1.0
+# Kept close to the grass baseline (DEFAULT_CELL_WEIGHT = 2.0) on purpose: a trail
+# only modestly discounts travel (mature ~1.43x faster than grass, not 2x). This
+# keeps the global minimum weight near the default so the weighted-A* heuristic
+# stays tight across the whole board once trails appear, without changing grass
+# walking speed. Lowering these further widens every route search.
+const YOUNG_PATH_WEIGHT := 1.7
+const MATURE_PATH_WEIGHT := 1.4
 
 enum TrailState { NONE, YOUNG, MATURE, DEGRADING }
 
@@ -142,7 +147,6 @@ func _stamp_segment(from: Vector3, to: Vector3, strength: int) -> void:
 
 func _register_segment_cell_entries(walker_id: int, from: Vector3, to: Vector3, traffic_strength: float) -> void:
 	var previous_registered: Vector2i = _last_cells.get(walker_id, _cell_from_position(from))
-	var changed := false
 	for cell in _cells_crossed_by_segment(from, to):
 		if cell == previous_registered:
 			continue
@@ -152,15 +156,13 @@ func _register_segment_cell_entries(walker_id: int, from: Vector3, to: Vector3, 
 			continue
 		_cell_strengths[cell] = float(_cell_strengths.get(cell, 0.0)) + traffic_strength
 		_cell_low_days.erase(cell)
-		changed = _update_cell_state(cell, false) or changed
-	if changed:
-		_sync_nav_grid_weights()
+		# _update_cell_state pushes just this cell to the grid incrementally.
+		_update_cell_state(cell, false)
 
 
 func _decay_nav_cells() -> void:
 	if _cell_strengths.is_empty() and _cell_states.is_empty():
 		return
-	var changed := false
 	for cell in _cell_strengths.keys().duplicate():
 		var strength := float(_cell_strengths[cell]) * (1.0 - CELL_DAILY_DECAY_RATE)
 		if strength < CELL_EPSILON and not _cell_states.has(cell):
@@ -168,9 +170,7 @@ func _decay_nav_cells() -> void:
 			_cell_low_days.erase(cell)
 			continue
 		_cell_strengths[cell] = strength
-		changed = _update_cell_state(cell, true) or changed
-	if changed:
-		_sync_nav_grid_weights()
+		_update_cell_state(cell, true)
 
 
 func _update_cell_state(cell: Vector2i, from_daily_decay: bool) -> bool:
@@ -193,6 +193,7 @@ func _update_cell_state(cell: Vector2i, from_daily_decay: bool) -> bool:
 			_cell_strengths.erase(cell)
 			_cell_low_days.erase(cell)
 			_trail_weight_overrides.erase(cell)
+			_sync_nav_grid_cell(cell)
 			return previous_state != TrailState.NONE or previous_weight != null
 		next_state = TrailState.DEGRADING
 	elif previous_state != TrailState.NONE:
@@ -207,12 +208,24 @@ func _update_cell_state(cell: Vector2i, from_daily_decay: bool) -> bool:
 	else:
 		_cell_states[cell] = next_state
 		_trail_weight_overrides[cell] = YOUNG_PATH_WEIGHT
+	_sync_nav_grid_cell(cell)
 	return previous_state != next_state or previous_weight != _trail_weight_overrides.get(cell, null)
 
 
+## Wholesale reset of the pedestrian profile, used only when the field is
+## (re)configured. Per-cell changes go through _sync_nav_grid_cell.
 func _sync_nav_grid_weights() -> void:
 	if _nav_grid != null:
 		_nav_grid.set_profile_cell_weights(NavGrid.PEDESTRIAN_PROFILE, _trail_weight_overrides)
+
+
+func _sync_nav_grid_cell(cell: Vector2i) -> void:
+	if _nav_grid == null:
+		return
+	if _trail_weight_overrides.has(cell):
+		_nav_grid.set_profile_cell_weight(NavGrid.PEDESTRIAN_PROFILE, cell, float(_trail_weight_overrides[cell]))
+	else:
+		_nav_grid.erase_profile_cell_weight(NavGrid.PEDESTRIAN_PROFILE, cell)
 
 
 func _cells_crossed_by_segment(from: Vector3, to: Vector3) -> Array[Vector2i]:

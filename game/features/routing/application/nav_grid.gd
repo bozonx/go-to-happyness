@@ -14,6 +14,10 @@ var _blocked: Dictionary = {}
 var _cell_weights: Dictionary = {}
 var _profile_cell_weights: Dictionary = {}
 var _minimum_cell_weight := DEFAULT_CELL_WEIGHT
+# Set when an incremental erase may have removed the cell that held the current
+# minimum. The recompute is deferred to the next minimum_cell_weight() query so a
+# batch of per-cell trail updates costs at most one full scan, not one per cell.
+var _minimum_dirty := false
 var _revision := 0
 var _topology_revision := 0
 var _component_topology_revision := -1
@@ -73,6 +77,41 @@ func set_profile_cell_weights(profile: StringName, next_weights: Dictionary) -> 
 	_revision += 1
 
 
+## Incremental single-cell update of a profile weight. The trail field pushes one
+## cell at a time as walkers reinforce or decay it; this avoids re-sanitizing and
+## comparing the entire (ever-growing) overrides dictionary on every change.
+func set_profile_cell_weight(profile: StringName, cell: Vector2i, weight: float) -> void:
+	if not is_finite(weight) or weight <= 0.0:
+		erase_profile_cell_weight(profile, cell)
+		return
+	var clamped := clampf(weight, MIN_CELL_WEIGHT, MAX_CELL_WEIGHT)
+	var profile_weights: Dictionary = _profile_cell_weights.get(profile, {})
+	if profile_weights.has(cell) and is_equal_approx(float(profile_weights[cell]), clamped):
+		return
+	profile_weights[cell] = clamped
+	_profile_cell_weights[profile] = profile_weights
+	# A lower weight only lowers the minimum, which is O(1) to fold in.
+	if clamped < _minimum_cell_weight:
+		_minimum_cell_weight = clamped
+	_revision += 1
+
+
+func erase_profile_cell_weight(profile: StringName, cell: Vector2i) -> void:
+	var profile_weights: Dictionary = _profile_cell_weights.get(profile, {})
+	if not profile_weights.has(cell):
+		return
+	var removed := float(profile_weights[cell])
+	profile_weights.erase(cell)
+	if profile_weights.is_empty():
+		_profile_cell_weights.erase(profile)
+	else:
+		_profile_cell_weights[profile] = profile_weights
+	# Removing the cell that held the minimum may raise it; defer the scan.
+	if removed <= _minimum_cell_weight + 0.0001:
+		_minimum_dirty = true
+	_revision += 1
+
+
 func get_cell_weight(cell: Vector2i, profile: StringName = PEDESTRIAN_PROFILE) -> float:
 	var profile_weights: Dictionary = _profile_cell_weights.get(profile, {})
 	if profile_weights.has(cell):
@@ -85,6 +124,8 @@ func movement_speed_modifier_at(position_on_board: Vector3, profile: StringName 
 
 
 func minimum_cell_weight() -> float:
+	if _minimum_dirty:
+		_recompute_minimum_cell_weight()
 	return _minimum_cell_weight
 
 
@@ -230,6 +271,7 @@ func _recompute_minimum_cell_weight() -> void:
 		for weight in (profile_weights as Dictionary).values():
 			_minimum_cell_weight = minf(_minimum_cell_weight, float(weight))
 	_minimum_cell_weight = clampf(_minimum_cell_weight, MIN_CELL_WEIGHT, MAX_CELL_WEIGHT)
+	_minimum_dirty = false
 
 
 func _sanitize_weights(next_weights: Dictionary) -> Dictionary:

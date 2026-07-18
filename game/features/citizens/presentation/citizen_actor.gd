@@ -1222,6 +1222,12 @@ func _process_idle_wander(delta: float) -> void:
 
 
 func _choose_idle_wander_target() -> Vector3:
+	# Gather the neighbours that could affect scoring once, instead of scanning the
+	# whole roster per candidate. The personal-space score caps at IDLE_WANDER_RADIUS
+	# * 2, and every candidate lies within IDLE_WANDER_RADIUS of the anchor, so a
+	# citizen farther than 3x the radius from the anchor can never be the nearest to
+	# any candidate and is safely ignored.
+	var nearby_positions := _nearby_citizen_positions(idle_wander_anchor, IDLE_WANDER_RADIUS * 3.0)
 	var best := Vector3.INF
 	var best_score := -INF
 	for ignored in range(IDLE_WANDER_CANDIDATES):
@@ -1232,15 +1238,27 @@ func _choose_idle_wander_target() -> Vector3:
 		if not reachable:
 			continue
 		var nearest_neighbor := IDLE_WANDER_RADIUS * 2.0
-		if simulation != null:
-			for other in simulation.citizens:
-				if other != self and is_instance_valid(other):
-					nearest_neighbor = minf(nearest_neighbor, candidate.distance_to(other.global_position))
+		for other_position in nearby_positions:
+			nearest_neighbor = minf(nearest_neighbor, candidate.distance_to(other_position))
 		var score := nearest_neighbor - candidate.distance_to(idle_wander_anchor) * 0.08
 		if score > best_score:
 			best_score = score
 			best = candidate
 	return best
+
+
+func _nearby_citizen_positions(center: Vector3, radius: float) -> Array[Vector3]:
+	var positions: Array[Vector3] = []
+	if simulation == null:
+		return positions
+	var radius_squared := radius * radius
+	for other in simulation.citizens:
+		if other == self or not is_instance_valid(other):
+			continue
+		var other_position: Vector3 = other.global_position
+		if center.distance_squared_to(other_position) <= radius_squared:
+			positions.append(other_position)
+	return positions
 
 
 func begin_employment_processing(center_position: Vector3, next_pending_role := "", next_workplace: Node3D = null) -> void:
