@@ -198,6 +198,8 @@ const WORKER_POLL_INTERVAL := 0.5
 const OFFICIAL_WORKPLACE_TYPES: Array[String] = ["campfire", "campfire_lvl2", "campfire_lvl3", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall"]
 # How close the officer must stand to their post to count as manning it.
 const OFFICER_POST_RADIUS := 3.5
+# Maximum branches a fire source holds before couriers stop delivering.
+const FIRE_SUPPLY_TARGET := 4
 var _worker_poll_timer := 0.0
 var _registration_queue_counter := 0
 var _last_unstaffed_warning_time := -1000.0
@@ -8220,13 +8222,13 @@ func _create_campfire_menu(ui: CanvasLayer) -> void:
 
 	campfire_menu_title = Label.new()
 	campfire_menu_title.position = Vector2(16, 14)
-	campfire_menu_title.size = Vector2(272, 40)
+	campfire_menu_title.size = Vector2(272, 50)
 	campfire_menu_title.add_theme_font_size_override("font_size", 17)
 	campfire_menu.add_child(campfire_menu_title)
 	
 	campfire_requirements_label = Label.new()
-	campfire_requirements_label.position = Vector2(16, 60)
-	campfire_requirements_label.size = Vector2(272, 220)
+	campfire_requirements_label.position = Vector2(16, 70)
+	campfire_requirements_label.size = Vector2(272, 210)
 	campfire_requirements_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	campfire_requirements_label.add_theme_font_size_override("font_size", 13)
 	campfire_menu.add_child(campfire_requirements_label)
@@ -8926,7 +8928,9 @@ func _refresh_campfire_menu() -> void:
 	if selected_campfire == null:
 		return
 	var era_str := _era_name()
-	campfire_menu_title.text = "Campfire (Era: %s)" % era_str
+	var fire_state := _fire_state_for(selected_campfire)
+	var fuel_current: int = fire_state.total_committed_fuel()
+	campfire_menu_title.text = "Campfire (Era: %s)\nВетки: %d/%d" % [era_str, fuel_current, FIRE_SUPPLY_TARGET]
 	
 	var req_text := ""
 	var next_era := SettlementState.Era.TENT
@@ -9032,10 +9036,10 @@ func _refresh_campfire_menu() -> void:
 		var selected_type := str(selected_campfire.get_meta("building_type", "campfire")) if is_instance_valid(selected_campfire) else ""
 		var next_upgrade := settlement.next_building_upgrade(selected_type)
 		if is_instance_valid(selected_campfire) and not _is_fire_lit(selected_campfire):
-			var fire_state := _fire_state_for(selected_campfire)
+			var relight_state := _fire_state_for(selected_campfire)
 			campfire_upgrade_button.visible = true
 			campfire_upgrade_button.text = "Relight with flint and steel"
-			campfire_upgrade_button.disabled = fire_state.fuel <= 0
+			campfire_upgrade_button.disabled = relight_state.fuel <= 0
 			campfire_upgrade_button.tooltip_text = "Deliver branches before relighting." if campfire_upgrade_button.disabled else "Use the permanent flint and steel."
 		else:
 			campfire_upgrade_button.visible = not next_upgrade.is_empty()
@@ -9063,7 +9067,9 @@ func _refresh_campfire_worker_controls() -> void:
 		var can_be_official := settlement.is_research_completed("official")
 		campfire_occupy_position_button.visible = controlled_unit_nearby
 		campfire_occupy_position_button.text = "Занять место чиновника" if can_be_official else "Занять место исследователя"
-		campfire_occupy_position_button.disabled = can_be_official and _officer_exists() and player_citizen.permanent_role != "official"
+		# Guard against nil/invalid player_citizen: the button is invisible in that case anyway.
+		var player_role := player_citizen.permanent_role if is_instance_valid(player_citizen) else ""
+		campfire_occupy_position_button.disabled = can_be_official and _officer_exists() and player_role != "official"
 		campfire_occupy_position_button.tooltip_text = "Место уже занято чиновником." if campfire_occupy_position_button.disabled else ""
 	var officer := _workplace_worker(selected_campfire) if is_center else null
 
@@ -9446,6 +9452,10 @@ func _show_building_menu() -> void:
 		var building_type := str(selected_building.get_meta("building_type", "building"))
 		var definition := BuildingCatalog.definition_for(building_type)
 		building_menu_title.text = str(definition.get("name", building_type.capitalize()))
+		if building_type in ["cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"]:
+			var cook_fire_state := _fire_state_for(selected_building)
+			var cook_fuel: int = cook_fire_state.total_committed_fuel()
+			building_menu_title.text += "\nВетки: %d/%d" % [cook_fuel, FIRE_SUPPLY_TARGET]
 		building_cook_button.visible = building_type in ["cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant"]
 		var can_manage_professions := _player_can_manage_permanent_professions()
 		var profession_blocked_tooltip := _permanent_profession_block_message()
