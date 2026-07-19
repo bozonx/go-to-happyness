@@ -4,6 +4,7 @@ extends CharacterBody3D
 const CitizenStatusEffectScript = preload("res://game/features/citizens/domain/citizen_status_effect.gd")
 const CitizenProfileScript = preload("res://game/features/citizens/domain/citizen_profile.gd")
 const CitizenEmploymentStateScript = preload("res://game/features/citizens/domain/citizen_employment_state.gd")
+const CitizenNeedsStateScript = preload("res://game/features/citizens/domain/citizen_needs_state.gd")
 
 signal resource_delivered(worker: Citizen, resource_type: String, amount: int)
 signal resource_dropped(worker: Citizen, resource_type: String, amount: int)
@@ -275,11 +276,32 @@ var overtime_issued_days: Dictionary:
 		return _employment.overtime_issued_days
 	set(value):
 		_employment.overtime_issued_days = value
-var fatigue := 0.0
-var continuous_work_hours := 0.0
-var recovery_until_workday_id := 0
-var satisfaction := 72.0
-var satisfaction_tick := 0.0
+var _needs := CitizenNeedsStateScript.new()
+var fatigue: float:
+	get:
+		return _needs.fatigue
+	set(value):
+		_needs.fatigue = value
+var continuous_work_hours: float:
+	get:
+		return _needs.continuous_work_hours
+	set(value):
+		_needs.continuous_work_hours = value
+var recovery_until_workday_id: int:
+	get:
+		return _needs.recovery_until_workday_id
+	set(value):
+		_needs.recovery_until_workday_id = value
+var satisfaction: float:
+	get:
+		return _needs.satisfaction
+	set(value):
+		_needs.satisfaction = value
+var satisfaction_tick: float:
+	get:
+		return _needs.satisfaction_tick
+	set(value):
+		_needs.satisfaction_tick = value
 var body_material: StandardMaterial3D
 var gender: String = ""
 var current_model_path: String = ""
@@ -345,9 +367,21 @@ var courier_resource_type := ""
 var courier_worker: Citizen
 var courier_equipment := "hands"
 var home: Node3D
-var hunger := 78.0
-var buffs: Dictionary = {}
-var debuffs: Dictionary = {}
+var hunger: float:
+	get:
+		return _needs.hunger
+	set(value):
+		_needs.hunger = value
+var buffs: Dictionary:
+	get:
+		return _needs.buffs
+	set(value):
+		_needs.buffs = value
+var debuffs: Dictionary:
+	get:
+		return _needs.debuffs
+	set(value):
+		_needs.debuffs = value
 var delivery_amount := 0
 var canteen_position := Vector3.ZERO
 var current_toilet_target: Node3D = null
@@ -421,7 +455,11 @@ var factory_position := Vector3.ZERO
 var park_position := Vector3.ZERO
 var trade_source_position := Vector3.ZERO
 var trade_destination_position := Vector3.ZERO
-var status_effects: Dictionary = {}
+var status_effects: Dictionary:
+	get:
+		return _needs.status_effects
+	set(value):
+		_needs.status_effects = value
 var simulation: Node
 
 # Generic AI-controlled movement target. Populated by move_to() and consumed
@@ -1572,11 +1610,11 @@ func deactivate_overtime(source := "") -> void:
 
 
 func is_recovering(current_workday_id: int) -> bool:
-	return recovery_until_workday_id >= current_workday_id
+	return _needs.is_recovering(current_workday_id)
 
 
 func is_dangerously_tired() -> bool:
-	return continuous_work_hours > 48.0 or fatigue >= 80.0
+	return _needs.is_dangerously_tired()
 
 func clear_daily_order(workday_id := 0) -> void:
 	if not has_daily_order():
@@ -2670,57 +2708,31 @@ func deliver_food_to_canteen(warehouse: Vector3, next_canteen_position: Vector3,
 		state = State.TO_FOOD_PICKUP
 
 func add_debuff(debuff_id: String, value: float) -> void:
-	debuffs[debuff_id] = value
+	_needs.add_debuff(debuff_id, value)
 
 func remove_debuff(debuff_id: String) -> void:
-	debuffs.erase(debuff_id)
+	_needs.remove_debuff(debuff_id)
 
 func set_status_effect(status_id: StringName, label: String, severity := 0.0, duration_hours := -1.0) -> void:
-	status_effects[status_id] = CitizenStatusEffectScript.create(status_id, label, severity, duration_hours)
+	_needs.set_status_effect(status_id, label, severity, duration_hours)
 
 func clear_status_effect(status_id: StringName) -> void:
-	status_effects.erase(status_id)
+	_needs.clear_status_effect(status_id)
 
 func has_status_effect(status_id: StringName) -> bool:
-	return status_effects.has(status_id)
+	return _needs.has_status_effect(status_id)
 
 func status_effect_labels() -> Array[String]:
-	var labels: Array[String] = []
-	for status in status_effects.values():
-		if status != null and not str(status.label).is_empty():
-			labels.append(str(status.label))
-	return labels
+	return _needs.status_effect_labels()
 
 func get_satisfaction_cap() -> float:
-	var cap := 100.0
-	for penalty in debuffs.values():
-		cap -= float(penalty)
-	return maxf(10.0, cap)
+	return _needs.get_satisfaction_cap()
 
 func receive_meal(served: bool, cooked := true, water_available := true) -> void:
-	if not served:
-		hunger = maxf(0.0, hunger - 18.0)
-		satisfaction = maxf(0.0, satisfaction - 12.0)
-		return
-	if cooked:
-		hunger = minf(100.0, hunger + 35.0)
-		if water_available:
-			satisfaction = minf(get_satisfaction_cap(), satisfaction + 8.0)
-		else:
-			satisfaction = minf(get_satisfaction_cap(), satisfaction + 4.0)
-		buffs["canteen_meal"] = 8.0
-	else:
-		# Raw emergency ration: half the nutrition, no satisfaction bonus.
-		# Used in the tent era when there is no cook or the cooking fire is out.
-		hunger = minf(100.0, hunger + 17.5)
+	_needs.receive_meal(served, cooked, water_available)
 
 func _update_effects(delta: float) -> void:
-	for buff_id in buffs.keys():
-		var time_left := float(buffs[buff_id]) - delta
-		if time_left <= 0.0:
-			buffs.erase(buff_id)
-		else:
-			buffs[buff_id] = time_left
+	_needs.update_effects(delta)
 
 func is_available_for_schedule() -> bool:
 	if has_active_arrival_task():
