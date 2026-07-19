@@ -88,7 +88,11 @@ const PLAYER_EYE_HEIGHT := 1.65
 const HARVEST_DURATION := 1.25
 const INTERACTION_RANGE := 4.5
 const JOB_ENTRANCE_RANGE := 3.5
-const SUN_FLARE_OCCLUSION_MASK := 1
+# Layer 8 carries invisible occluders for the sun-flare raycast only (e.g. tree
+# crowns, which have no physics collider of their own), so the flare hides behind
+# foliage without the occluders affecting citizen movement or navigation.
+const FLARE_OCCLUDER_LAYER := 8
+const SUN_FLARE_OCCLUSION_MASK := 1 | FLARE_OCCLUDER_LAYER
 const SUN_FLARE_OCCLUSION_DISTANCE := 96.0
 const SUN_FLARE_OCCLUSION_SMOOTHING := 0.08
 const POCKET_CAPACITY := 8
@@ -277,6 +281,7 @@ var selected_builder: Citizen
 var selected_building: Node3D
 var build_menu: Panel
 var build_menu_title: Label
+var citizen_skills_label: Label
 var camera_hint_label: Label
 var is_panning_camera := false
 var is_rotating_camera := false
@@ -379,6 +384,7 @@ var campfire_advance_button: Button
 var campfire_orders_button: Button
 var campfire_occupancy_button: Button
 var campfire_research_post_button: Button
+var campfire_occupy_position_button: Button
 var campfire_accept_button: Button
 var campfire_dismiss_button: Button
 var workforce_menu: Panel
@@ -1031,11 +1037,22 @@ func _sun_flare_occlusion(sun_dir: Vector3) -> float:
 		return 1.0
 	var right := camera.global_transform.basis.x.normalized()
 	var up := camera.global_transform.basis.y.normalized()
-	var offsets: Array[Vector3] = [Vector3.ZERO, right * 0.28, up * 0.28]
+	# Spread the rays ANGULARLY around the sun direction (a small cone) rather than
+	# shifting the origin — over 96m an origin offset is negligible, but an angular
+	# spread samples a disc around the sun so the flare fades smoothly along the
+	# edge of an occluder (tree crown, roof) instead of popping on/off.
+	const SPREAD := 0.06
+	var dirs: Array[Vector3] = [
+		sun_dir,
+		(sun_dir + right * SPREAD).normalized(),
+		(sun_dir - right * SPREAD).normalized(),
+		(sun_dir + up * SPREAD).normalized(),
+		(sun_dir - up * SPREAD).normalized(),
+	]
 	var visible_rays := 0
-	for offset in offsets:
-		var from := camera.global_position + offset + sun_dir * 0.75
-		var to := from + sun_dir * SUN_FLARE_OCCLUSION_DISTANCE
+	for dir in dirs:
+		var from := camera.global_position + dir * 0.75
+		var to := from + dir * SUN_FLARE_OCCLUSION_DISTANCE
 		var query := PhysicsRayQueryParameters3D.create(from, to)
 		query.collide_with_areas = false
 		query.collide_with_bodies = true
@@ -1043,7 +1060,7 @@ func _sun_flare_occlusion(sun_dir: Vector3) -> float:
 		var hit := world.direct_space_state.intersect_ray(query)
 		if hit.is_empty():
 			visible_rays += 1
-	return float(visible_rays) / float(offsets.size())
+	return float(visible_rays) / float(dirs.size())
 
 
 # --- cloud cover in front of the sun (CPU mirror of sky_clouds.gdshader) -----
@@ -1160,6 +1177,7 @@ func _handle_day_cycle_event(event: SimulationDayEvent) -> void:
 			_refresh_living_statuses()
 			settlement.cheer_up_used_today = false
 			settlement.double_time_order_day = -1
+			_remove_expired_temporary_tents()
 			_apply_daily_settlement_rules()
 			_return_outside_workers()
 
@@ -1314,8 +1332,8 @@ func _trigger_zero_wellbeing_departure() -> void:
 			non_hero_count += 1
 	if non_hero_count <= SettlementRules.MIN_SETTLEMENT_POPULATION - 1:
 		return
-	candidate.begin_leaving(entrance_stone.global_position)
-	_add_message("%s left after the settlement's wellbeing collapsed." % candidate.role_label())
+	candidate.set_meta("leave_at_morning", true)
+	_add_message("%s will leave at dawn after the settlement's wellbeing collapsed." % candidate.role_label())
 
 
 func _apply_hourly_bare_hands_penalty() -> void:
@@ -1364,6 +1382,9 @@ func _check_daily_departures() -> void:
 			continue
 		if citizen.state == Citizen.State.LEAVING:
 			continue
+		if bool(citizen.get_meta("leave_at_morning", false)):
+			candidate = citizen
+			break
 		if SETTLEMENT_RULES.should_citizen_leave(citizen.satisfaction):
 			if candidate == null or citizen.satisfaction < candidate.satisfaction:
 				candidate = citizen
@@ -1379,6 +1400,7 @@ func _check_daily_departures() -> void:
 		return
 	# Send the most dissatisfied citizen to the entrance to leave
 	if is_instance_valid(entrance_stone):
+		candidate.remove_meta("leave_at_morning")
 		candidate.begin_leaving(entrance_stone.global_position)
 		_add_message("%s has decided to leave the settlement (satisfaction %d)." % [candidate.role_label(), int(candidate.satisfaction)])
 
@@ -1398,6 +1420,28 @@ func _on_citizen_leaving_departed(citizen: Citizen) -> void:
 
 func _total_game_minutes() -> float:
 	return float(day_cycle.current_day - 1) * 24.0 * 60.0 + game_minutes
+
+
+func _remove_expired_temporary_tents() -> void:
+	for record in building_registry.records().duplicate():
+		var tent := record.node as Node3D
+		if not is_instance_valid(tent) or str(tent.get_meta("building_type", "")) != "tent":
+			continue
+		for citizen in citizens:
+			if is_instance_valid(citizen) and citizen.home == tent:
+				citizen.home = null
+				_refresh_living_status(citizen)
+		_cancel_arrivals_for_house(tent)
+		_unregister_service_pockets(tent)
+		_remove_building_services(tent, "tent")
+		var removed_record := building_registry.remove_node(tent)
+		if removed_record != null:
+			_unregister_navigation_footprint(removed_record.center, removed_record.footprint)
+			village_territory_service.on_building_removed(removed_record.cell)
+		settlement.buildings["tent"] = maxi(0, int(settlement.buildings.get("tent", 1)) - 1)
+		tent.queue_free()
+	_refresh_navigation_grid()
+	_update_workers()
 
 
 func _apply_daily_settlement_rules() -> void:
@@ -1703,10 +1747,10 @@ func _firewood_task_priority(building: Node3D, fire_state: RefCounted) -> int:
 	var phase: int = fire_state.phase_at(int(game_minutes))
 	var is_main := building == campfire_node
 	if phase == FireSourceStateScript.Phase.EMBERS or fire_state.fuel <= 1:
-		return 98 if is_main else 96
+		return 120 if is_main else 115
 	if phase == FireSourceStateScript.Phase.DYING:
-		return 92
-	return 90
+		return 112 if is_main else 110
+	return 108 if is_main else 105
 
 
 func _reconcile_repair_reservations() -> void:
@@ -3090,6 +3134,20 @@ func _create_tree(position_on_board: Vector3, refresh_navigation := true) -> voi
 		crown_material.albedo_color = Color("2d633b").lightened(random.randf_range(-0.06, 0.08))
 		crown.material_override = crown_material
 		tree.add_child(crown)
+	# Invisible occluder covering the leafy crown, on the flare-only layer, so the
+	# sun flare is hidden when the sun passes behind the foliage (the crown meshes
+	# have no collider themselves). collision_mask 0 => it detects nothing.
+	var crown_occluder := StaticBody3D.new()
+	crown_occluder.name = "TreeFlareOccluder"
+	crown_occluder.collision_layer = FLARE_OCCLUDER_LAYER
+	crown_occluder.collision_mask = 0
+	var crown_occluder_shape := CollisionShape3D.new()
+	var crown_sphere := SphereShape3D.new()
+	crown_sphere.radius = 1.5
+	crown_occluder_shape.shape = crown_sphere
+	crown_occluder_shape.position.y = 4.15
+	crown_occluder.add_child(crown_occluder_shape)
+	tree.add_child(crown_occluder)
 	var collision_body := StaticBody3D.new()
 	collision_body.name = "TreeCollision"
 	var collision_shape := CollisionShape3D.new()
@@ -3894,6 +3952,12 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	build_menu_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	build_menu_title.add_theme_font_size_override("font_size", 15)
 	build_menu.add_child(build_menu_title)
+	citizen_skills_label = Label.new()
+	citizen_skills_label.position = Vector2(16, 650)
+	citizen_skills_label.size = Vector2(272, 92)
+	citizen_skills_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	citizen_skills_label.add_theme_font_size_override("font_size", 13)
+	build_menu.add_child(citizen_skills_label)
 
 	manage_citizen_button = Button.new()
 	manage_citizen_button.text = "Управлять"
@@ -4997,6 +5061,8 @@ func _refresh_build_menu() -> void:
 	var selected_exists := selected_builder != null
 	var assignment_submenu_open := build_menu_is_job_menu or build_menu_is_daily_order_menu
 	var citizen_actions_visible := selected_exists and not assignment_submenu_open and build_category.is_empty() and not build_menu_is_global
+	if citizen_skills_label != null:
+		citizen_skills_label.visible = citizen_actions_visible
 	if manage_citizen_button != null:
 		manage_citizen_button.visible = citizen_actions_visible
 		manage_citizen_button.text = "Управлять" if selected_builder != hero_citizen else "Управлять героем"
@@ -5034,12 +5100,15 @@ func _refresh_build_menu() -> void:
 		else:
 			var build_type: String = button.get_meta("build_type", "")
 			var menu_state: Dictionary = building_availability_service.menu_state_with_inventory(build_type, pocket)
-			button.set_meta("build_menu_state", menu_state)
 			var territory_ok: bool = village_territory_service.has_campfire() or not BuildingCatalog.requires_village_area(build_type)
+			if not territory_ok:
+				menu_state["enabled"] = false
+				menu_state["reason"] = village_territory_service.REASON_NO_CAMPFIRE
+			button.set_meta("build_menu_state", menu_state)
 			if build_menu_is_global and build_category.is_empty():
-				button.visible = not assignment_submenu_open and button.get_meta("category", "") == current_era_category and bool(menu_state.visible) and territory_ok
+				button.visible = not assignment_submenu_open and button.get_meta("category", "") == current_era_category and bool(menu_state.visible)
 			else:
-				button.visible = not build_category.is_empty() and button.get_meta("category", "") == build_category and not assignment_submenu_open and bool(menu_state.visible) and territory_ok
+				button.visible = not build_category.is_empty() and button.get_meta("category", "") == build_category and not assignment_submenu_open and bool(menu_state.visible)
 			
 	for button in role_buttons:
 		var role: String = button.get_meta("role", "")
@@ -5085,7 +5154,7 @@ func _refresh_build_menu() -> void:
 		var enabled := bool(menu_state.enabled)
 		var affordable := bool(menu_state.affordable)
 		button.disabled = not enabled
-		button.tooltip_text = "" if enabled else building_availability_service.message_for_reason(menu_state.reason)
+		button.tooltip_text = "" if enabled else (village_territory_service.placement_message(menu_state.reason) if menu_state.reason == village_territory_service.REASON_NO_CAMPFIRE else building_availability_service.message_for_reason(menu_state.reason))
 		button.modulate = Color(1, 1, 1, 1) if enabled else Color(0.55, 0.55, 0.6, 1)
 		var cost_label: Label = button.get_meta("cost_label")
 		if cost_label != null:
@@ -5804,6 +5873,13 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 
 
 func _first_person_select_at_crosshair() -> void:
+	var target := _first_person_target()
+	if target.kind == "building" and is_instance_valid(target.node) and str(target.node.get_meta("building_type", "")) in OFFICIAL_WORKPLACE_TYPES:
+		selected_campfire = target.node
+		selected_building = target.node
+		_show_campfire_menu()
+		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+		return
 	var viewport_center := get_viewport().get_visible_rect().size * 0.5
 	_select_citizen_at(viewport_center)
 
@@ -6066,7 +6142,9 @@ func _show_selected_citizen_menu() -> void:
 	var home_label := "No home" if not is_instance_valid(selected_builder.home) else "House"
 	var effect_label := "Meal buff" if selected_builder.buffs.has("canteen_meal") else ("Tent debuff" if selected_builder.debuffs.has("tent") else "None")
 	if build_category.is_empty():
-		build_menu_title.text = "%s  Sat: %d/%d%%  Food: %d%%\nHome: %s  Effect: %s  Task: %s\nBuild %.0f%% Wood %.0f%% Farm %.0f%% Dig %.0f%%" % [selected_builder.role_label(), roundi(selected_builder.satisfaction), roundi(selected_builder.get_satisfaction_cap()), roundi(selected_builder.hunger), home_label, effect_label, assignment, float(selected_builder.skills.get("construction", 0.0)) * 100.0, float(selected_builder.skills.get("forestry", 0.0)) * 100.0, float(selected_builder.skills.get("farming", 0.0)) * 100.0, float(selected_builder.skills.get("excavation", 0.0)) * 100.0]
+		build_menu_title.text = "%s  Sat: %d/%d%%  Food: %d%%\nHome: %s  Effect: %s\nTask: %s" % [selected_builder.role_label(), roundi(selected_builder.satisfaction), roundi(selected_builder.get_satisfaction_cap()), roundi(selected_builder.hunger), home_label, effect_label, assignment]
+		citizen_skills_label.text = "Skills\nBuild %.0f%%  Wood %.0f%%\nFarm %.0f%%  Dig %.0f%%" % [float(selected_builder.skills.get("construction", 0.0)) * 100.0, float(selected_builder.skills.get("forestry", 0.0)) * 100.0, float(selected_builder.skills.get("farming", 0.0)) * 100.0, float(selected_builder.skills.get("excavation", 0.0)) * 100.0]
+		citizen_skills_label.visible = true
 	build_menu_title.add_theme_color_override("font_color", selected_builder.specialization_color())
 
 func _toggle_hero_view() -> void:
@@ -6222,8 +6300,11 @@ func _start_interaction(all: bool) -> void:
 	if not interaction_action.is_empty():
 		return
 	var target := _first_person_target()
-	if target.kind == "workplace":
-		_occupy_workplace(target.node)
+	if target.kind == "entrance":
+		_meet_arrival_at_entrance()
+		return
+	if target.kind == "building" and _is_managed_fire_source(target.node):
+		_refuel_fire_from_pocket(target.node, all)
 		return
 	if target.kind == "toilet":
 		_player_use_toilet(target.node)
@@ -6966,6 +7047,8 @@ func _first_person_target() -> Dictionary:
 			var area_parent := collider.get_parent() as Node3D
 			if collider.is_in_group("construction_selector") and is_instance_valid(area_parent):
 				result = {"kind": "construction", "node": area_parent, "position": area_parent.global_position}
+			elif collider.is_in_group("entrance_selector") and is_instance_valid(area_parent):
+				result = {"kind": "entrance", "node": area_parent, "position": area_parent.global_position}
 			elif collider.is_in_group("resource_pile_selector"):
 				var pile := _resource_pile_for_node(area_parent)
 				if not pile.is_empty():
@@ -7111,6 +7194,43 @@ func _deliver_pocket_to_site(site: ConstructionSite, all: bool) -> void:
 		_refresh_interaction_hint()
 
 
+func _refuel_fire_from_pocket(building: Node3D, all: bool) -> void:
+	if not is_instance_valid(building):
+		return
+	var available := _pocket_amount("branches")
+	if available <= 0:
+		_update_interface("В кармане нет веток для костра.")
+		_refresh_interaction_hint()
+		return
+	var fire_state := _fire_state_for(building)
+	var amount := available if all else 1
+	amount = mini(amount, available)
+	var delivered := _remove_from_pocket("branches", amount)
+	if delivered <= 0:
+		return
+	fire_state.add_delivered(delivered, int(game_minutes))
+	_apply_fire_state(building, fire_state)
+	_refresh_living_statuses()
+	_update_interface("В костер добавлено веток: %d." % delivered)
+	_refresh_interaction_hint()
+
+
+func _meet_arrival_at_entrance() -> void:
+	for index in pending_arrivals.size():
+		var order: Dictionary = pending_arrivals[index]
+		if bool(order.get("dispatched", false)):
+			continue
+		order.dispatched = true
+		order.greeter_id = player_citizen.get_instance_id()
+		pending_arrivals[index] = order
+		arrival_greeters[player_citizen.get_instance_id()] = order
+		_on_arrival_greeter_ready(player_citizen)
+		_refresh_interaction_hint()
+		return
+	_update_interface("Никого не нужно встречать у входа.")
+	_refresh_interaction_hint()
+
+
 func _take_from_pile(pile: Dictionary, all: bool) -> void:
 	var pile_node := pile.get("node") as Node3D
 	if not is_instance_valid(pile_node):
@@ -7155,6 +7275,19 @@ func _take_from_pile(pile: Dictionary, all: bool) -> void:
 
 
 func _citizen_state_name(state: int) -> String:
+	match state:
+		Citizen.State.TO_EMPLOYMENT_CENTER:
+			return "Идет в службу занятости"
+		Citizen.State.EMPLOYMENT_PROCESSING:
+			return "Оформляется на работу"
+		Citizen.State.TO_ARRIVAL_ENTRANCE:
+			return "Идет встречать прибывшего"
+		Citizen.State.ARRIVAL_MEETING:
+			return "Встречает прибывшего"
+		Citizen.State.ARRIVAL_WAITING:
+			return "Ждет утра у входа"
+		Citizen.State.TO_ARRIVAL_CENTER:
+			return "Сопровождает прибывшего к регистрации"
 	var state_names := Citizen.State.keys()
 	if state < 0 or state >= state_names.size():
 		return "Unknown state"
@@ -7213,6 +7346,16 @@ func _first_person_action_hint() -> String:
 		return "Пользуемся туалетом..."
 	var target := _first_person_target()
 	match target.kind:
+		"entrance":
+			for order: Dictionary in pending_arrivals:
+				if not bool(order.get("dispatched", false)):
+					return "F: встретить прибывшего жителя"
+			return "Входной знак"
+		"building":
+			if _is_managed_fire_source(target.node):
+				var branch_count := _pocket_amount("branches")
+				return "F: добавить 1 ветку в костер | Shift+F: добавить все (%d)" % branch_count if branch_count > 0 else "Нужны ветки в кармане, чтобы пополнить костер"
+			return _building_action_hint(target.node)
 		"construction":
 			var site := construction.site_for_node(target.node)
 			if site != null and not site.is_supplied():
@@ -7262,11 +7405,7 @@ func _first_person_action_hint() -> String:
 			var building_type := str(target.node.get_meta("building_type", " workplace"))
 			var is_official_building := building_type in OFFICIAL_WORKPLACE_TYPES
 			if is_official_building:
-				if settlement.is_research_completed("official"):
-					if player_citizen != null and player_citizen.permanent_role == "official" and player_citizen.work_position_node == target.node:
-						return "F — покинуть место чиновника"
-					return "F — занять место чиновника"
-				return "F — исследовать"
+				return "Откройте меню главного костра, чтобы занять место"
 			var role := _role_for_workplace(target.node)
 			if role.is_empty():
 				return ""
@@ -7878,7 +8017,7 @@ func _grant_debug_resources() -> void:
 	_request_courier_dispatch()
 
 func _register_service_entrance(building: Node3D, blueprint: Dictionary, home_entrance := false, show_marker := true) -> void:
-	var building_type := str(blueprint.type)
+	var building_type := str(blueprint.get("type", ""))
 	var service_positions := BuildingEntrancePositions.positions(building, blueprint.footprint, SERVICE_PAD_OFFSET)
 	if not service_positions.is_empty():
 		building.set_meta("service_positions", service_positions)
@@ -8069,7 +8208,7 @@ func _toggle_global_build_menu() -> void:
 
 
 func _create_campfire_menu(ui: CanvasLayer) -> void:
-	campfire_menu = _create_context_menu_panel(ui, Control.PRESET_BOTTOM_RIGHT, Vector4(-324.0, -720.0, -20.0, -20.0))
+	campfire_menu = _create_context_menu_panel(ui, Control.PRESET_BOTTOM_RIGHT, Vector4(-324.0, -800.0, -20.0, -20.0))
 
 	campfire_menu_title = Label.new()
 	campfire_menu_title.position = Vector2(16, 14)
@@ -8139,36 +8278,42 @@ func _create_campfire_menu(ui: CanvasLayer) -> void:
 	campfire_research_post_button.pressed.connect(_handle_civic_post_assignment)
 	campfire_menu.add_child(campfire_research_post_button)
 
+	campfire_occupy_position_button = Button.new()
+	campfire_occupy_position_button.position = Vector2(16, 556)
+	campfire_occupy_position_button.size = Vector2(272, 32)
+	campfire_occupy_position_button.pressed.connect(_occupy_selected_campfire_position)
+	campfire_menu.add_child(campfire_occupy_position_button)
+
 	campfire_accept_button = Button.new()
-	campfire_accept_button.position = Vector2(16, 556)
+	campfire_accept_button.position = Vector2(16, 594)
 	campfire_accept_button.size = Vector2(272, 32)
 	campfire_accept_button.pressed.connect(_toggle_campfire_acceptance)
 	campfire_menu.add_child(campfire_accept_button)
 
 	campfire_dismiss_button = Button.new()
 	campfire_dismiss_button.text = "Dismiss employment officer"
-	campfire_dismiss_button.position = Vector2(16, 594)
+	campfire_dismiss_button.position = Vector2(16, 632)
 	campfire_dismiss_button.size = Vector2(272, 32)
 	campfire_dismiss_button.pressed.connect(_dismiss_campfire_worker)
 	campfire_menu.add_child(campfire_dismiss_button)
 
 	campfire_overtime_button = CheckButton.new()
 	campfire_overtime_button.text = "Work through the night"
-	campfire_overtime_button.position = Vector2(16, 632)
+	campfire_overtime_button.position = Vector2(16, 670)
 	campfire_overtime_button.size = Vector2(272, 32)
 	campfire_overtime_button.toggled.connect(_toggle_campfire_worker_overtime)
 	campfire_menu.add_child(campfire_overtime_button)
 
 	campfire_close_btn = Button.new()
 	campfire_close_btn.text = "Close Menu"
-	campfire_close_btn.position = Vector2(16, 634)
+	campfire_close_btn.position = Vector2(16, 746)
 	campfire_close_btn.size = Vector2(272, 28)
 	campfire_close_btn.pressed.connect(_close_context_menus)
 	campfire_menu.add_child(campfire_close_btn)
 
 	var campfire_story_button := Button.new()
 	campfire_story_button.text = "Campfire stories"
-	campfire_story_button.position = Vector2(16, 668)
+	campfire_story_button.position = Vector2(16, 708)
 	campfire_story_button.size = Vector2(272, 32)
 	campfire_story_button.pressed.connect(_show_campfire_story_menu)
 	campfire_menu.add_child(campfire_story_button)
@@ -8294,7 +8439,9 @@ func _show_campfire_orders_menu() -> void:
 	campfire_cheer_button.tooltip_text = "Available once each morning after 06:00." if not can_cheer else "Raise wellbeing by 5%%."
 	var can_order_night_work := _has_night_work_candidates()
 	var settlement_night_active := _has_overtime_source("settlement")
-	campfire_night_work_button.disabled = not settlement_night_active and (not can_order_night_work or settlement.night_work_order_day == day_cycle.current_day)
+	# Cancellation must remain possible even when clearing an assignment removed the
+	# last affected worker from the current snapshot.
+	campfire_night_work_button.disabled = not settlement_night_active and not can_order_night_work
 	campfire_night_work_button.set_pressed_no_signal(settlement_night_active)
 	campfire_night_work_button.tooltip_text = "No active workers can receive this order." if not can_order_night_work else "Affected workers continue through the night and next workday. Raises fatigue and lowers satisfaction."
 	var double_time_active := settlement.double_time_order_day == day_cycle.current_day
@@ -8903,6 +9050,13 @@ func _refresh_campfire_worker_controls() -> void:
 		var researcher := _daily_researcher_at(selected_campfire)
 		campfire_research_post_button.disabled = not settlement.is_research_completed("official") or researcher == null
 		campfire_research_post_button.tooltip_text = "Research the officer profession, then select a daily researcher working at this campfire." if campfire_research_post_button.disabled else "Promote this researcher to a permanent officer role."
+	if campfire_occupy_position_button != null:
+		var controlled_unit_nearby := is_first_person and is_instance_valid(player_citizen) and is_center and player_citizen.global_position.distance_to(_nearest_service_position(selected_campfire, player_citizen.global_position)) <= OFFICER_POST_RADIUS
+		var can_be_official := settlement.is_research_completed("official")
+		campfire_occupy_position_button.visible = controlled_unit_nearby
+		campfire_occupy_position_button.text = "Занять место чиновника" if can_be_official else "Занять место исследователя"
+		campfire_occupy_position_button.disabled = can_be_official and _officer_exists() and player_citizen.permanent_role != "official"
+		campfire_occupy_position_button.tooltip_text = "Место уже занято чиновником." if campfire_occupy_position_button.disabled else ""
 	var officer := _workplace_worker(selected_campfire) if is_center else null
 
 	if campfire_overtime_button != null:
@@ -8911,11 +9065,16 @@ func _refresh_campfire_worker_controls() -> void:
 		var campfire_night_order_used := int(selected_campfire.get_meta("night_work_order_day", -1)) == day_cycle.current_day
 		campfire_overtime_button.set_pressed_no_signal(campfire_night_order_used)
 		campfire_overtime_button.tooltip_text = "Work through the night and the next workday."
-		if campfire_overtime_button.visible:
-			campfire_overtime_button.position.y = 556.0
-			campfire_close_btn.position.y = 594.0
-		else:
-			campfire_close_btn.position.y = 556.0
+		campfire_close_btn.position.y = 746.0
+
+
+func _occupy_selected_campfire_position() -> void:
+	if not is_instance_valid(selected_campfire) or not is_instance_valid(player_citizen):
+		return
+	if player_citizen.global_position.distance_to(_nearest_service_position(selected_campfire, player_citizen.global_position)) > OFFICER_POST_RADIUS:
+		return
+	_occupy_workplace(selected_campfire)
+	_refresh_campfire_menu()
 
 
 func _handle_campfire_primary_action() -> void:
@@ -9320,8 +9479,7 @@ func _show_building_menu() -> void:
 		var officer := _workplace_worker(selected_building)
 		building_overtime_button.visible = is_workplace and officer != null
 		var workplace_night_active := _has_overtime_source("workplace", selected_building)
-		var night_order_used := int(selected_building.get_meta("night_work_order_day", -1)) == day_cycle.current_day
-		building_overtime_button.disabled = not can_command_labor or (not workplace_night_active and night_order_used)
+		building_overtime_button.disabled = not can_command_labor
 		building_overtime_button.set_pressed_no_signal(workplace_night_active)
 		building_overtime_button.tooltip_text = labor_blocked_tooltip if not can_command_labor else "Work through the night and the next workday."
 		
