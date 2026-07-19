@@ -491,9 +491,18 @@ var _privacy_blur: MeshInstance3D
 # Multiplier set by the game controller to fade the idle indicator with camera distance.
 var label_distance_alpha := 1.0
 
+const CitizenToiletHandlerScript = preload("res://game/features/citizens/presentation/citizen_toilet_handler.gd")
+const CitizenTaskExecutorScript = preload("res://game/features/citizens/presentation/citizen_task_executor.gd")
+
+var toilet_handler: RefCounted = CitizenToiletHandlerScript.new()
+var task_executor: RefCounted = CitizenTaskExecutorScript.new()
+
 signal employment_processing_finished(citizen: Citizen)
 
 func _ready() -> void:
+
+
+
 	if gender.is_empty():
 		gender = "male" if randf() > 0.5 else "female"
 	if skin_color == Color.WHITE:
@@ -2077,287 +2086,98 @@ func set_head_visible(value: bool) -> void:
 		fallback_head.visible = value
 
 func assign_construction(site: Node3D) -> void:
-	if is_player_controlled:
-		return
-	_reset_assignment_navigation()
-	construction_site = site
-	factory = null
-	construction_position = _reachable_construction_approach(site)
-	movement_path.clear()
-	active_role = "construction"
-	state = State.CONSTRUCTING
+	task_executor.assign_construction(self, site)
 
 func assign_demolition(building: Node3D) -> void:
-	if is_player_controlled:
-		return
-	_reset_assignment_navigation()
-	construction_site = building
-	factory = null
-	construction_position = _reachable_construction_approach(building)
-	movement_path.clear()
-	active_role = "demolition"
-	state = State.CONSTRUCTING
+	task_executor.assign_demolition(self, building)
 
 func finish_construction(site: Node3D) -> void:
-	if construction_site != site:
-		return
-	construction_site = null
-	active_role = ""
-	is_waiting_for_materials = false
-	movement_path.clear()
-	path_destination = Vector3.INF
-	state = State.IDLE
-	begin_role_recheck_cooldown()
+	task_executor.finish_construction(self, site)
 
 func assign_excavation(site: Node3D) -> void:
-	if is_player_controlled:
-		return
-	_reset_assignment_navigation()
-	assigned_dig_site = site
-	factory = null
-	active_role = "excavation"
-	state = State.EXCAVATING
+	task_executor.assign_excavation(self, site)
 
 func deliver_excavation(next_resource_type: String, warehouse: Vector3) -> void:
-	resource_type = next_resource_type
-	warehouse_position = warehouse
-	carried_amount = 1
-	returning_to_excavation = true
-	state = State.TO_WAREHOUSE
+	task_executor.deliver_excavation(self, next_resource_type, warehouse)
 
 func storage_delivery_result(accepted: bool, reason := StringName()) -> void:
-	if accepted:
-		carried_amount = 0
-		blocked_by_storage = false
-		clear_status_effect(CitizenStatusEffectScript.STORAGE_NO_WAREHOUSE)
-		if is_courier():
-			state = State.IDLE
-			return
-		if returning_to_excavation:
-			state = State.EXCAVATING
-		elif active_role == "forestry":
-			idle()
-		elif active_role.begins_with("gather_"):
-			state = State.IDLE
-			begin_role_recheck_cooldown()
-		else:
-			state = State.TO_TREE
-		returning_to_excavation = false
-	else:
-		carried_amount = 0
-		blocked_by_storage = true
-		if reason == CitizenStatusEffectScript.STORAGE_NO_WAREHOUSE:
-			set_status_effect(CitizenStatusEffectScript.STORAGE_NO_WAREHOUSE, "No warehouse", 1.0)
-		go_home()
+	task_executor.storage_delivery_result(self, accepted, reason)
 
 func register_pending_resource(next_resource_type: String, amount: int) -> void:
-	pending_resources[next_resource_type] = int(pending_resources.get(next_resource_type, 0)) + amount
+	task_executor.register_pending_resource(self, next_resource_type, amount)
 
 func has_pending_resource() -> bool:
-	for amount in pending_resources.values():
-		if amount > 0:
-			return true
-	return false
+	return task_executor.has_pending_resource(self)
 
 func take_pending_resource(max_amount := 0) -> Dictionary:
-	for pending_type in pending_resources.keys():
-		var amount: int = pending_resources[pending_type]
-		if amount > 0:
-			var taken := amount if max_amount <= 0 else mini(amount, max_amount)
-			pending_resources[pending_type] = amount - taken
-			if state == State.WAITING_COURIER and int(pending_resources[pending_type]) == 0:
-				# A production task owns one production-and-handoff cycle. Once the
-				# courier collects the output the cycle is complete for every role;
-				# return to idle so the native AI publishes the next order instead of
-				# forcing a forestry TO_TREE that misfires for gather/farm workers.
-				state = State.IDLE
-				active_role = ""
-				if permanent_role == "excavation":
-					assigned_dig_site = null
-			return {"type": pending_type, "amount": taken}
-	return {}
+	return task_executor.take_pending_resource(self, max_amount)
 
 func assign_courier_pickup(worker: Citizen, warehouse: Vector3) -> void:
-	_reset_assignment_navigation()
-	courier_target = worker
-	warehouse_position = warehouse
-	active_role = ""
-	factory = null
-	state = State.COURIER_TO_WORKER
+	task_executor.assign_courier_pickup(self, worker, warehouse)
 
 func assign_sawmill_pickup(sawmill: Vector3, warehouse: Vector3) -> void:
-	_reset_assignment_navigation()
-	workplace_position = sawmill
-	warehouse_position = warehouse
-	active_role = ""
-	factory = null
-	state = State.COURIER_TO_SAWMILL
+	task_executor.assign_sawmill_pickup(self, sawmill, warehouse)
 
 func collect_sawmill_boards(amount: int) -> void:
-	carried_amount = mini(amount, courier_capacity())
-	courier_resource_type = "boards"
-	state = State.COURIER_TO_WAREHOUSE if amount > 0 else State.IDLE
-
+	task_executor.collect_sawmill_boards(self, amount)
 
 func assign_dew_collector_pickup(collector: Vector3, warehouse: Vector3) -> void:
-	_reset_assignment_navigation()
-	workplace_position = collector
-	warehouse_position = warehouse
-	active_role = ""
-	factory = null
-	state = State.COURIER_TO_DEW
-
+	task_executor.assign_dew_collector_pickup(self, collector, warehouse)
 
 func collect_dew(amount: int) -> void:
-	carried_amount = maxi(amount, 0)
-	courier_resource_type = "water"
-	state = State.COURIER_TO_WAREHOUSE if carried_amount > 0 else State.IDLE
-
+	task_executor.collect_dew(self, amount)
 
 func deliver_sawmill_boards(amount: int) -> void:
-	resource_type = "boards"
-	carried_amount = amount
-	state = State.TO_WAREHOUSE
+	task_executor.deliver_sawmill_boards(self, amount)
 
 func assign_next_forestry_tree(tree_position: Vector3) -> void:
-	if _start_pending_arrival_if_any():
-		return
-	source_position = tree_position
-	state = State.TO_TREE
+	task_executor.assign_next_forestry_tree(self, tree_position)
 
 func assign_canteen_work(next_canteen_position: Vector3) -> void:
-	if not is_player_controlled:
-		_reset_assignment_navigation()
-		canteen_position = next_canteen_position
-		active_role = "cooking"
-		factory = null
-		state = State.TO_CANTEEN_WORK
+	task_executor.assign_canteen_work(self, next_canteen_position)
 
 func assign_teacher_work(next_school_position: Vector3) -> void:
-	if not is_player_controlled:
-		_reset_assignment_navigation()
-		school_position = next_school_position
-		active_role = "teaching"
-		factory = null
-		state = State.TO_SCHOOL_WORK
+	task_executor.assign_teacher_work(self, next_school_position)
 
 func assign_seller_work(next_market_position: Vector3) -> void:
-	if not is_player_controlled:
-		_reset_assignment_navigation()
-		market_position = next_market_position
-		active_role = "selling"
-		factory = null
-		state = State.TO_MARKET_WORK
+	task_executor.assign_seller_work(self, next_market_position)
 
 func assign_official_work(next_office_position: Vector3) -> void:
-	if not is_player_controlled:
-		_reset_assignment_navigation()
-		official_position = next_office_position
-		active_role = "registration"
-		factory = null
-		state = State.TO_OFFICIAL_WORK
+	task_executor.assign_official_work(self, next_office_position)
 
 func assign_craft_work(next_craft_position: Vector3, next_speed_multiplier := 1.0) -> void:
-	if not is_player_controlled:
-		_reset_assignment_navigation()
-		craft_position = next_craft_position
-		craft_speed_multiplier = next_speed_multiplier
-		active_role = "crafting"
-		factory = null
-		state = State.TO_CRAFT_WORK
+	task_executor.assign_craft_work(self, next_craft_position, next_speed_multiplier)
 
 func assign_research_work(next_research_position: Vector3) -> void:
-	if not is_player_controlled:
-		_reset_assignment_navigation()
-		research_position = next_research_position
-		active_role = "research"
-		factory = null
-		state = State.RESEARCHING
+	task_executor.assign_research_work(self, next_research_position)
 
 func _process_research(delta: float) -> void:
-	if _move_to(research_position, delta, false, false):
-		enter_work_position(research_position, "researcher", null, true, false)
+	task_executor.process_research(self, delta)
 
 func _process_craft_work_arrival(delta: float) -> void:
-	if _move_to(craft_position, delta, false, false):
-		craft_timer = 10.0 / (get_efficiency("craftsman") * craft_speed_multiplier)
-		state = State.CRAFT_WORK
-		enter_work_position(craft_position, "craftsman", null, true, false)
+	task_executor.process_craft_work_arrival(self, delta)
 
 func _process_craft_work(delta: float) -> void:
-	craft_timer -= delta
-	if craft_timer <= 0.0:
-		resource_ready.emit(self, "goods", 1)
-		craft_timer = 10.0 / (get_efficiency("craftsman") * craft_speed_multiplier)
+	task_executor.process_craft_work(self, delta)
 
 func assign_factory_work(next_factory: Node3D, role: String) -> void:
-	if not is_player_controlled:
-		_reset_assignment_navigation()
-		factory = next_factory
-		factory_position = next_factory.get_meta("service_position", next_factory.global_position if next_factory.is_inside_tree() else next_factory.position)
-		active_role = role
-		state = State.TO_FACTORY
+	task_executor.assign_factory_work(self, next_factory, role)
 
 func go_to_park(next_park_position: Vector3, minimum_hours := 0, duration_override := -1.0) -> void:
-	if not is_player_controlled:
-		_reset_assignment_navigation()
-		park_position = next_park_position
-		park_rest_duration = maxf(duration_override, 0.1) if duration_override > 0.0 else maxf(4.0, float(minimum_hours) * 12.5) if minimum_hours > 0 else 4.0
-		active_role = "relaxing"
-		factory = null
-		state = State.TO_PARK
+	task_executor.go_to_park(self, next_park_position, minimum_hours, duration_override)
 
 func deliver_trade(source: Vector3, destination: Vector3) -> void:
-	if is_player_controlled:
-		return
-	_reset_assignment_navigation()
-	trade_source_position = source
-	trade_destination_position = destination
-	active_role = "trade"
-	factory = null
-	state = State.TO_TRADE_PICKUP
+	task_executor.deliver_trade(self, source, destination)
 
 func start_training(next_role: String, next_school_position: Vector3) -> void:
-	training_role = next_role
-	training_days_completed = 0
-	school_position = next_school_position
+	task_executor.start_training(self, next_role, next_school_position)
 
 func attend_school(school_pos: Vector3, role_to_train: String) -> void:
-	if not is_player_controlled:
-		_reset_assignment_navigation()
-		school_position = school_pos
-		temp_training_role = role_to_train
-		factory = null
-		state = State.TO_SCHOOL
+	task_executor.attend_school(self, school_pos, role_to_train)
 
 func finish_school_day(teacher_present := true) -> void:
-	if state != State.STUDYING:
-		return
-	
-	var trained_role := training_role
-	if trained_role.is_empty():
-		trained_role = temp_training_role
-		
-	if not trained_role.is_empty() and teacher_present:
-		var current_val := float(skills.get(trained_role, 0.0))
-		var learning_multiplier := 1.20 if is_jack_of_all_trades and trained_role in ["construction", "forestry", "farming", "excavation", "factory_worker", "craftsman"] else 1.0
-		skills[trained_role] = minf(1.0, current_val + SKILL_GROWTH_PER_SCHOOL_DAY * learning_multiplier)
-		practiced_today[trained_role] = true
-		
-		if not training_role.is_empty():
-			training_days_completed += 1
-			if training_days_completed >= 10:
-				specialization = "builder" if training_role == "construction" else training_role
-				clear_daily_order()
-				permanent_role = ""
-				pending_employment_role = ""
-				employment_state = EmploymentState.NO_PERMANENT_WORK
-				setup_specialization(specialization)
-				training_role = ""
-				training_days_completed = 0
-				
-	temp_training_role = ""
-	state = State.IDLE
+	task_executor.finish_school_day(self, teacher_present)
+
 
 func apply_daily_decay() -> void:
 	profile.apply_daily_decay()
@@ -2893,76 +2713,6 @@ func _process_trade_destination(delta: float) -> void:
 		trade_delivery_finished.emit(self)
 
 
-func go_to_relief(destination: Vector3, relief_kind: StringName) -> void:
-	if is_player_controlled or destination == Vector3.INF:
-		return
-	if relief_kind == &"toilet":
-		current_toilet_target = null
-		if simulation != null:
-			for toilet in simulation.get_toilets():
-				var service_position: Vector3 = toilet.get_meta("service_position") if toilet.has_meta("service_position") else toilet.global_position
-				if service_position.distance_squared_to(destination) < 0.01:
-					current_toilet_target = toilet
-					break
-		if is_instance_valid(current_toilet_target):
-			_begin_toilet_trip(State.TO_TOILET)
-		return
-	toilet_relief_position = destination
-	toilet_relief_type = str(relief_kind)
-	_begin_toilet_trip(State.TO_BUSH)
-
-
-func begin_player_toilet_use(toilet_node: Node3D) -> void:
-	if not is_instance_valid(toilet_node):
-		return
-	current_toilet_target = toilet_node
-	state = State.USING_TOILET
-	toilet_timer.start(TOILET_USE_DURATION)
-	player_using_toilet = true
-
-
-func _begin_toilet_trip(next_state: int) -> void:
-	if not has_toilet_resume_state:
-		toilet_resume_state = state
-		has_toilet_resume_state = true
-		toilet_resume_idle_wander_anchor = idle_wander_anchor
-		toilet_resume_idle_wander_target = idle_wander_target
-		toilet_resume_idle_wander_pause = idle_wander_pause
-	_reset_toilet_navigation()
-	state = next_state
-
-
-func _reset_toilet_navigation() -> void:
-	movement_path.clear()
-	active_route = null
-	path_destination = Vector3.INF
-	route_retry_timer = 0.0
-	route_unreachable_time = 0.0
-	navigation_failed = false
-
-
-func _resume_after_toilet() -> void:
-	player_using_toilet = false
-	current_toilet_target = null
-	toilet_relief_position = Vector3.INF
-	toilet_relief_type = ""
-	_reset_toilet_navigation()
-	if queue_release_notifier.is_valid():
-		queue_release_notifier.call(self)
-	if has_toilet_resume_state:
-		state = toilet_resume_state
-		idle_wander_anchor = toilet_resume_idle_wander_anchor
-		idle_wander_target = toilet_resume_idle_wander_target
-		idle_wander_pause = toilet_resume_idle_wander_pause
-	else:
-		state = State.IDLE
-	has_toilet_resume_state = false
-	toilet_resume_state = State.IDLE
-	toilet_resume_idle_wander_anchor = Vector3.INF
-	toilet_resume_idle_wander_target = Vector3.INF
-	toilet_resume_idle_wander_pause = 0.0
-
-
 func _reset_assignment_navigation() -> void:
 	if queue_release_notifier.is_valid():
 		queue_release_notifier.call(self)
@@ -2979,100 +2729,37 @@ func _reset_assignment_navigation() -> void:
 	ai_move_failed = false
 
 
-func _process_to_toilet(delta: float) -> void:
-	if not is_instance_valid(current_toilet_target):
-		_resume_after_toilet()
-		return
-	var serv_pos: Vector3 = current_toilet_target.get_meta("service_position") if current_toilet_target.has_meta("service_position") else current_toilet_target.global_position
-	if _move_to(serv_pos, delta):
-		# Arrived! Check capacity
-		var users_count := 0
-		for other in simulation.citizens:
-			if other != self and other.state == State.USING_TOILET and other.current_toilet_target == current_toilet_target:
-				users_count += 1
-		
-		var b_type: String = current_toilet_target.get_meta("building_type", "")
-		var base_cap := 1
-		if "tent" in b_type: base_cap = 1
-		elif "earth" in b_type: base_cap = 2
-		elif "clay" in b_type: base_cap = 3
-		elif "wood" in b_type: base_cap = 4
-		elif "stone" in b_type: base_cap = 5
-		elif "brick" in b_type: base_cap = 6
-		
-		var lvl := 1
-		if "lvl2" in b_type: lvl = 2
-		elif "lvl3" in b_type: lvl = 3
-		var capacity := base_cap + lvl - 1
-		
-		if users_count < capacity:
-			state = State.USING_TOILET
-			toilet_timer.start(TOILET_USE_DURATION)
-		else:
-			toilet_wait_time = 0.0
-			state = State.WAITING_FOR_TOILET
+func go_to_relief(destination: Vector3, relief_kind: StringName) -> void:
 
+	toilet_handler.go_to_relief(self, destination, relief_kind)
+
+func begin_player_toilet_use(toilet_node: Node3D) -> void:
+	toilet_handler.begin_player_toilet_use(self, toilet_node)
+
+func _begin_toilet_trip(next_state: int) -> void:
+	toilet_handler.begin_toilet_trip(self, next_state)
+
+func _reset_toilet_navigation() -> void:
+	toilet_handler.reset_toilet_navigation(self)
+
+func _resume_after_toilet() -> void:
+	toilet_handler.resume_after_toilet(self)
+
+func _process_to_toilet(delta: float) -> void:
+	toilet_handler.process_to_toilet(self, delta)
 
 func _process_using_toilet(delta: float) -> void:
-	if not is_instance_valid(current_toilet_target):
-		_resume_after_toilet()
-		return
-	if toilet_timer.advance(delta):
-		satisfaction = minf(get_satisfaction_cap(), satisfaction + 10.0)
-		_resume_after_toilet()
-		relief_finished.emit(self)
-
+	toilet_handler.process_using_toilet(self, delta)
 
 func _process_waiting_for_toilet(delta: float) -> void:
-	if not is_instance_valid(current_toilet_target):
-		_resume_after_toilet()
-		return
-	toilet_wait_time += delta
-	if toilet_wait_time >= TOILET_WAIT_TIMEOUT:
-		# The facility never freed up. Give up and resume normal activity so the
-		# citizen is not wedged here; the outstanding need lets the AI re-plan
-		# (a different toilet, or a bush fallback) on a later cycle.
-		toilet_wait_time = 0.0
-		_resume_after_toilet()
-		return
-	var users_count := 0
-	for other in simulation.citizens:
-		if other != self and other.state == State.USING_TOILET and other.current_toilet_target == current_toilet_target:
-			users_count += 1
-			
-	var b_type: String = current_toilet_target.get_meta("building_type", "")
-	var base_cap := 1
-	if "tent" in b_type: base_cap = 1
-	elif "earth" in b_type: base_cap = 2
-	elif "clay" in b_type: base_cap = 3
-	elif "wood" in b_type: base_cap = 4
-	elif "stone" in b_type: base_cap = 5
-	elif "brick" in b_type: base_cap = 6
-	
-	var lvl := 1
-	if "lvl2" in b_type: lvl = 2
-	elif "lvl3" in b_type: lvl = 3
-	var capacity := base_cap + lvl - 1
-	
-	if users_count < capacity:
-		state = State.USING_TOILET
-		toilet_timer.start(TOILET_USE_DURATION)
-
+	toilet_handler.process_waiting_for_toilet(self, delta)
 
 func _process_to_bush(delta: float) -> void:
-	if toilet_relief_position == Vector3.INF:
-		_resume_after_toilet()
-		return
-	if _move_to(toilet_relief_position, delta):
-		state = State.USING_BUSH
-		toilet_timer.start(TOILET_USE_DURATION)
-
+	toilet_handler.process_to_bush(self, delta)
 
 func _process_using_bush(delta: float) -> void:
-	if toilet_timer.advance(delta):
-		satisfaction = minf(get_satisfaction_cap(), satisfaction + 10.0)
-		_resume_after_toilet()
-		relief_finished.emit(self)
+	toilet_handler.process_using_bush(self, delta)
+
 
 
 func _process_ai_moving(delta: float) -> void:
