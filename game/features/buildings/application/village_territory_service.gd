@@ -48,11 +48,14 @@ func campfire_limit() -> int:
 	return VillageTerritoryScript.campfire_limit_for_era(_era)
 
 
-func can_place(building_type: String, cell: Vector2i) -> bool:
-	return placement_reason(building_type, cell) == REASON_OK
+func can_place(building_type: String, cell: Vector2i, footprint := Vector2i.ONE) -> bool:
+	return placement_reason(building_type, cell, footprint) == REASON_OK
 
 
-func placement_reason(building_type: String, cell: Vector2i) -> StringName:
+func placement_reason(building_type: String, cell: Vector2i, footprint := Vector2i.ONE) -> StringName:
+	if _footprint_overlaps_foreign(cell, footprint):
+		return REASON_FOREIGN_TERRITORY
+
 	# Warehouse and campfire do not require existing territory.
 	if BuildingCatalog.is_campfire(building_type):
 		if _territory.campfire_count() >= campfire_limit():
@@ -60,23 +63,22 @@ func placement_reason(building_type: String, cell: Vector2i) -> StringName:
 		# New campfire must be outside existing territory (new settlement).
 		if _territory.is_inside(cell):
 			return REASON_OUTSIDE_TERRITORY
-		# New campfire must not overlap foreign territory.
-		if _is_in_foreign_territory(cell):
+		if _anchor_overlaps_foreign(cell, building_type):
 			return REASON_FOREIGN_TERRITORY
 		return REASON_OK
 
 	if not BuildingCatalog.requires_village_area(building_type):
 		# Warehouse: can be placed anywhere, but not in foreign territory.
-		if _is_in_foreign_territory(cell):
-			return REASON_FOREIGN_TERRITORY
 		return REASON_OK
 
 	# Buildings that require village area: must be inside territory.
 	if not _territory.has_campfire():
 		return REASON_NO_CAMPFIRE
-	if not _territory.is_inside(cell):
+	if not _footprint_is_inside_territory(cell, footprint):
 		return REASON_OUTSIDE_TERRITORY
-	if _is_in_foreign_territory(cell):
+	# A house or boundary post must not extend this settlement into a foreign
+	# territory, even when its own placement cell is still unclaimed.
+	if BuildingCatalog.expands_village_area(building_type) and _anchor_overlaps_foreign(cell, building_type):
 		return REASON_FOREIGN_TERRITORY
 	return REASON_OK
 
@@ -132,3 +134,34 @@ func _is_in_foreign_territory(cell: Vector2i) -> bool:
 		if foreign.is_inside(cell):
 			return true
 	return false
+
+
+func _anchor_overlaps_foreign(cell: Vector2i, building_type: String) -> bool:
+	for foreign in _foreign_territories:
+		if _territory.anchor_overlaps_cells(cell, building_type, foreign.cells()):
+			return true
+	return false
+
+
+func _footprint_overlaps_foreign(center_cell: Vector2i, footprint: Vector2i) -> bool:
+	for cell in _footprint_cells(center_cell, footprint):
+		if _is_in_foreign_territory(cell):
+			return true
+	return false
+
+
+func _footprint_is_inside_territory(center_cell: Vector2i, footprint: Vector2i) -> bool:
+	for cell in _footprint_cells(center_cell, footprint):
+		if not _territory.is_inside(cell):
+			return false
+	return true
+
+
+func _footprint_cells(center_cell: Vector2i, footprint: Vector2i) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	var min_x := center_cell.x - floori((footprint.x - 1) * 0.5)
+	var min_y := center_cell.y - floori((footprint.y - 1) * 0.5)
+	for x in range(min_x, min_x + footprint.x):
+		for y in range(min_y, min_y + footprint.y):
+			result.append(Vector2i(x, y))
+	return result

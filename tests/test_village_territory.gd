@@ -10,6 +10,7 @@ func _init() -> void:
 	_test_territory_house_expansion()
 	_test_territory_post_expansion()
 	_test_territory_removal()
+	_test_territory_requires_campfire()
 	_test_territory_perimeter()
 	_test_campfire_limits()
 	_test_catalog_flags()
@@ -19,6 +20,9 @@ func _init() -> void:
 	_test_service_campfire_limit()
 	_test_service_warehouse_anywhere()
 	_test_service_foreign_territory()
+	_test_service_foreign_expansion()
+	_test_service_foreign_footprint()
+	_test_service_footprint_outside_territory()
 	print("All village territory tests passed.")
 	quit(0)
 
@@ -67,6 +71,14 @@ func _test_territory_removal() -> void:
 	t.remove_anchor(Vector2i(15, 0))
 	assert(not t.is_inside(Vector2i(22, 0)), "House area should be gone after removal")
 	assert(t.is_inside(Vector2i(0, 0)), "Campfire area should remain")
+
+
+func _test_territory_requires_campfire() -> void:
+	var t := VillageTerritoryScript.new()
+	t.add_anchor(Vector2i(0, 0), "campfire")
+	t.add_anchor(Vector2i(10, 0), "boundary_post")
+	t.remove_anchor(Vector2i(0, 0))
+	assert(not t.is_inside(Vector2i(10, 0)), "Posts cannot retain territory after the final campfire is removed")
 
 
 func _test_territory_perimeter() -> void:
@@ -166,3 +178,29 @@ func _test_service_foreign_territory() -> void:
 	# Warehouse at foreign-only cell should also be blocked
 	assert(service.placement_reason("warehouse", Vector2i(14, 0)) == service.REASON_FOREIGN_TERRITORY, \
 		"Warehouse in foreign territory should be REASON_FOREIGN_TERRITORY")
+
+
+func _test_service_foreign_expansion() -> void:
+	var service := _make_service(0)
+	service.on_building_added(Vector2i(0, 0), "campfire")
+	var foreign := VillageTerritoryScript.new()
+	foreign.add_anchor(Vector2i(28, 0), "campfire")
+	service.add_foreign_territory(foreign)
+	assert(service.placement_reason("boundary_post", Vector2i(11, 0)) == service.REASON_FOREIGN_TERRITORY, \
+		"A boundary post whose new radius intersects foreign territory must be blocked")
+
+
+func _test_service_foreign_footprint() -> void:
+	var service := _make_service(0)
+	var foreign := VillageTerritoryScript.new()
+	foreign.add_anchor(Vector2i(3, 0), "campfire")
+	service.add_foreign_territory(foreign)
+	assert(service.placement_reason("warehouse", Vector2i(18, 0), Vector2i(8, 1)) == service.REASON_FOREIGN_TERRITORY, \
+		"A building footprint overlapping foreign territory must be blocked")
+
+
+func _test_service_footprint_outside_territory() -> void:
+	var service := _make_service(0)
+	service.on_building_added(Vector2i(0, 0), "campfire")
+	assert(service.placement_reason("house", Vector2i(11, 0), Vector2i(4, 1)) == service.REASON_OUTSIDE_TERRITORY, \
+		"A village building footprint must stay inside the village territory")

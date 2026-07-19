@@ -119,6 +119,18 @@ func cells() -> Dictionary:
 	return _cells.duplicate()
 
 
+## Returns whether the area contributed by a prospective anchor intersects
+## another territory. Used before committing an expanding building.
+func anchor_overlaps_cells(cell: Vector2i, building_type: String, other_cells: Dictionary) -> bool:
+	var radius := anchor_radius_for(building_type)
+	if radius <= 0.0:
+		return false
+	for candidate in _circle_cells(cell, radius):
+		if other_cells.has(candidate):
+			return true
+	return false
+
+
 func anchor_count() -> int:
 	return _anchors.size()
 
@@ -154,18 +166,27 @@ func perimeter_cells() -> Array[Vector2i]:
 
 func _recalculate() -> void:
 	_cells.clear()
+	# Houses and posts only extend an existing settlement. Once its final
+	# campfire is gone, their anchors remain as buildings but do not create land.
+	if not has_campfire():
+		return
 	for anchor in _anchors:
 		_add_circle(anchor.cell, anchor.radius)
 
 
 func _add_circle(center_cell: Vector2i, radius: float) -> void:
+	for cell in _circle_cells(center_cell, radius):
+		_cells[cell] = true
+
+
+func _circle_cells(center_cell: Vector2i, radius: float) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
 	var cell_radius := ceili(radius)
 	var center := Vector3(center_cell.x + 0.5, 0.0, center_cell.y + 0.5)
 	for x in range(center_cell.x - cell_radius, center_cell.x + cell_radius + 1):
 		for z in range(center_cell.y - cell_radius, center_cell.y + cell_radius + 1):
 			var cell := Vector2i(x, z)
-			if _cells.has(cell):
-				continue
 			var cell_center := Vector3(x + 0.5, 0.0, z + 0.5)
 			if cell_center.distance_to(center) <= radius:
-				_cells[cell] = true
+				result.append(cell)
+	return result

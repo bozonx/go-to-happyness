@@ -7346,7 +7346,9 @@ func _place_building(world_position: Vector3) -> void:
 		_update_interface("The tent market must be built beside the entrance sign.")
 		return
 	var cell := _placement_key(world_position)
-	var territory_reason: StringName = village_territory_service.placement_reason(build_mode, cell)
+	var blueprint := BuildingBlueprints.get_blueprint(build_mode)
+	var occupied_footprint := _rotated_footprint(blueprint.footprint)
+	var territory_reason: StringName = village_territory_service.placement_reason(build_mode, cell, occupied_footprint)
 	if territory_reason != village_territory_service.REASON_OK:
 		_update_interface(village_territory_service.placement_message(territory_reason))
 		return
@@ -7357,8 +7359,6 @@ func _place_building(world_position: Vector3) -> void:
 		var placement_state: Dictionary = building_availability_service.placement_state_with_inventory(build_mode, pocket)
 		_update_interface(str(placement_state.message))
 		return
-	var blueprint := BuildingBlueprints.get_blueprint(build_mode)
-	var occupied_footprint := _rotated_footprint(blueprint.footprint)
 	building_registry.reserve(cell, world_position, occupied_footprint)
 	_refresh_navigation_grid()
 	var site := _create_construction_site(cell, build_mode, world_position, build_rotation_quarters, blueprint, occupied_footprint)
@@ -9445,6 +9445,8 @@ func _upgrade_selected_building() -> void:
 	_add_building_status_indicator(selected_building)
 	if target_type in ["warehouse", "straw_warehouse", "tarp_warehouse"]:
 		_add_warehouse_fill_label(selected_building)
+	village_territory_service.recalculate()
+	_refresh_boundary_markers()
 	_refresh_navigation_grid()
 	_update_workers()
 	_update_interface("%s upgraded to %s." % [str(BuildingCatalog.definition_for(old_type).get("name", old_type)), str(BuildingCatalog.definition_for(target_type).get("name", target_type))])
