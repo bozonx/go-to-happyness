@@ -594,6 +594,8 @@ var village_boundary_markers: Node3D
 var village_territory_overlay: Node3D
 var resource_pile_service: ResourcePileService
 var foraging_service: ForagingService
+var fire_management_service: FireManagementService
+var building_maintenance_service: BuildingMaintenanceService
 
 
 func _ready() -> void:
@@ -659,6 +661,38 @@ func _ready() -> void:
 		_cell_from_position,
 		_first_person_target
 	)
+	fire_management_service = FireManagementService.new()
+	fire_management_service.setup(
+		building_registry,
+		event_service,
+		settlement,
+		day_cycle,
+		func() -> int: return int(game_minutes),
+		func() -> Node3D: return campfire_node,
+		_add_message,
+		_refresh_living_statuses,
+		func() -> void: wellbeing = maxi(0, wellbeing - 1)
+	)
+	building_maintenance_service = BuildingMaintenanceService.new()
+	building_maintenance_service.setup(
+		building_registry,
+		settlement,
+		village_territory_service,
+		resource_pile_service,
+		{
+			"unregister_pockets": _unregister_service_pockets,
+			"move_stored_resources": _move_stored_resources_to_pile,
+			"return_supplies": _return_in_transit_building_supplies,
+			"remove_services": _remove_building_services,
+			"unregister_nav_footprint": _unregister_navigation_footprint,
+			"refresh_boundary": _refresh_boundary_markers,
+			"select_best_campfire": _select_best_campfire,
+			"refresh_nav_grid": _refresh_navigation_grid,
+			"update_workers": _update_workers,
+			"refresh_living_status": _refresh_living_status
+		}
+	)
+
 	citizen_needs_service = CitizenNeedsService.new()
 	citizen_needs_service.configure(self)
 	citizen_living_status_service = CitizenLivingStatusServiceScript.new()
@@ -8441,154 +8475,41 @@ func _building_at_service_position(position: Vector3) -> Node3D:
 
 
 func _fire_state_for(building: Node3D) -> RefCounted:
-	if not is_instance_valid(building):
-		return FireSourceStateScript.new()
-	return FireSourceStateScript.from_values(
-		int(building.get_meta("fire_fuel", 0)),
-		int(building.get_meta("fire_reserved", 0)),
-		bool(building.get_meta("fire_lit", true)),
-		int(building.get_meta("fire_embers_until", -1))
-	)
-
+	return fire_management_service.fire_state_for(building)
 
 func _is_managed_fire_source(building: Node3D) -> bool:
-	if not is_instance_valid(building):
-		return false
-	return str(building.get_meta("building_type", "")) in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"]
-
+	return fire_management_service.is_managed_fire_source(building)
 
 func _apply_fire_state(building: Node3D, fire_state: RefCounted) -> void:
-	if not is_instance_valid(building) or fire_state == null:
-		return
-	building.set_meta("fire_fuel", fire_state.fuel)
-	building.set_meta("fire_reserved", fire_state.reserved_fuel)
-	building.set_meta("fire_lit", fire_state.is_burning_at(int(game_minutes)))
-	building.set_meta("fire_embers_until", fire_state.embers_until_minute)
-
+	fire_management_service.apply_fire_state(building, fire_state)
 
 func _is_fire_lit(building: Node3D) -> bool:
-	if not is_instance_valid(building):
-		return false
-	if not _is_managed_fire_source(building):
-		return bool(building.get_meta("fire_lit", true))
-	return _fire_state_for(building).is_burning_at(int(game_minutes))
-
+	return fire_management_service.is_fire_lit(building)
 
 func fire_smoke_work_multiplier(position_on_board: Vector3) -> float:
-	var _is_smoky := event_service != null and event_service.log.has_flag(&"smoky_firewood")
-	if not _is_smoky:
-		return 1.0
-	for record in building_registry.records():
-		var building: Node3D = record.node
-		if is_instance_valid(building) and _is_fire_lit(building) and building.global_position.distance_to(position_on_board) <= 15.0:
-			return 0.70
-	return 1.0
-
+	return fire_management_service.fire_smoke_work_multiplier(position_on_board)
 
 func campfire_story_efficiency_multiplier(role: String) -> float:
-	if settlement.campfire_story_effect == "plan" and settlement.campfire_story_target_role == role and day_cycle.current_day == settlement.campfire_story_target_day:
-		return 1.15
-	return 1.0
+	return fire_management_service.campfire_story_efficiency_multiplier(role)
 
 func _update_fire_status() -> void:
-	var minute := int(game_minutes)
-	var consume_tick: bool = minute % (4 * 60) == 0 and get_meta("last_fire_tick", -1) != minute
-	if consume_tick:
-		set_meta("last_fire_tick", minute)
-	for record in building_registry.records():
-		var building := record.node
-		if not is_instance_valid(building) or str(building.get_meta("building_type", "")) not in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"]:
-			continue
-		var fire_state := _fire_state_for(building)
-		if consume_tick and fire_state.is_burning_at(minute):
-			fire_state.consume(1, minute)
-		_apply_fire_state(building, fire_state)
-		_update_fire_visual(building, fire_state, minute)
-		_report_fire_phase_change(building, fire_state, minute)
-	if consume_tick and is_instance_valid(campfire_node) and _fire_state_for(campfire_node).phase_at(minute) == FireSourceStateScript.Phase.OUT:
-		wellbeing = maxi(0, wellbeing - 1)
-	_refresh_living_statuses()
-
+	fire_management_service.update_fire_status(self, branches)
 
 func _update_fire_visual(building: Node3D, fire_state: RefCounted, minute: int) -> void:
-	var phase: int = fire_state.phase_at(minute)
-	for child in building.get_children():
-		if child is OmniLight3D:
-			child.visible = phase != FireSourceStateScript.Phase.OUT
-			child.light_energy = 0.22 if phase == FireSourceStateScript.Phase.EMBERS else 1.0
-
+	fire_management_service.update_fire_visual(building, fire_state, minute)
 
 func _report_fire_phase_change(building: Node3D, fire_state: RefCounted, minute: int) -> void:
-	var phase: int = fire_state.phase_at(minute)
-	var phase_name := str(FireSourceStateScript.Phase.keys()[phase]).to_lower()
-	var previous_phase := str(building.get_meta("fire_phase", phase_name))
-	if previous_phase == phase_name:
-		return
-	building.set_meta("fire_phase", phase_name)
-	var is_main := building == campfire_node
-	var fire_name := "Главный костер" if is_main else "Костер для готовки"
-	match phase:
-		FireSourceStateScript.Phase.DYING:
-			if fire_state.reserved_fuel <= 0 and branches <= 0:
-				_add_message("%s догорает: топлива осталось примерно на 4 часа." % fire_name)
-		FireSourceStateScript.Phase.EMBERS:
-			_add_message("%s превратился в угли. Доставьте ветки в течение 2 часов, чтобы он разгорелся сам." % fire_name)
-		FireSourceStateScript.Phase.OUT:
-			var consequence := "Оформление жителей и исследования приостановлены." if is_main else "Следующий прием пищи будет сырым рационом."
-			_add_message("%s погас. %s" % [fire_name, consequence])
-		FireSourceStateScript.Phase.BURNING:
-			if previous_phase in ["embers", "out", "dying"]:
-				_add_message("%s снова горит." % fire_name)
+	fire_management_service.report_fire_phase_change(building, fire_state, minute, campfire_node, branches)
 
 func _apply_building_wear_and_repairs() -> void:
-	for record in building_registry.records():
-		var building := record.node
-		if not is_instance_valid(building):
-			continue
-		var building_type := str(building.get_meta("building_type", ""))
-		if bool(building.get_meta("ruined", false)):
-			continue
-		var era := BuildingCatalog.era_for(building_type)
-		if era > SettlementState.Era.EARTH:
-			continue
-		var wear := 8.0 if era == SettlementState.Era.TENT else 3.0
-		var condition := maxf(0.0, float(building.get_meta("condition", 100.0)) - wear)
-		building.set_meta("condition", condition)
-		building.set_meta("repair_needed", condition < 82.0)
-		if condition <= 0.0:
-			_destroy_building_to_pile(building, building_type)
+	building_maintenance_service.apply_building_wear_and_repairs(_destroy_building_to_pile)
 
 func _has_active_builder() -> bool:
-	for citizen in citizens:
-		if citizen.permanent_role == "construction" or citizen.specialization == "builder":
-			return true
-	return false
+	return building_maintenance_service.has_active_builder(citizens)
 
 func _destroy_building_to_pile(building: Node3D, building_type: String) -> void:
-	_unregister_service_pockets(building)
-	var resources: Dictionary = BuildingCatalog.demolition_refund(building_type).duplicate(true)
-	if building_type in ["warehouse", "straw_warehouse", "tarp_warehouse"]:
-		var service_position: Vector3 = building.get_meta("service_position", building.global_position)
-		var warehouse_index := warehouse_positions.find(service_position)
-		_move_stored_resources_to_pile(resources, warehouse_index)
-	for citizen in citizens:
-		if citizen.home == building:
-			citizen.home = null
-			_refresh_living_status(citizen)
-	_return_in_transit_building_supplies(building)
-	_remove_building_services(building, building_type)
-	var removed_record := building_registry.remove_node(building)
-	if removed_record != null:
-		_unregister_navigation_footprint(removed_record.center, removed_record.footprint)
-		village_territory_service.on_building_removed(removed_record.cell)
-	_refresh_boundary_markers()
-	settlement.buildings[building_type] = maxi(0, int(settlement.buildings.get(building_type, 1)) - 1)
-	if campfire_node == null:
-		_select_best_campfire()
-	_create_resource_pile(building.global_position, resources)
-	building.queue_free()
-	_refresh_navigation_grid()
-	_update_workers()
+	building_maintenance_service.destroy_building_to_pile(building, building_type, citizens, warehouse_positions, campfire_node)
+
 
 
 func _move_stored_resources_to_pile(resources: Dictionary, warehouse_index := -1) -> void:
