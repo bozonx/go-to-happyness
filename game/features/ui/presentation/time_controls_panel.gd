@@ -5,56 +5,18 @@ signal skip_night_requested
 signal skip_to_workday_start_requested
 signal time_multiplier_changed(multiplier: float)
 
-var _speed_controls: HBoxContainer
-var skip_night_button: Button
-var start_workday_button: Button
+@onready var _speed_controls: HBoxContainer = $SpeedControls
+@onready var skip_night_button: Button = $SkipNightButton
+@onready var start_workday_button: Button = $StartWorkdayButton
 
 
 func _ready() -> void:
-	set_anchors_preset(Control.PRESET_FULL_RECT)
-	_build_ui()
-
-
-func _build_ui() -> void:
-	_speed_controls = HBoxContainer.new()
-	_speed_controls.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	_speed_controls.offset_left = -220
-	_speed_controls.offset_top = 58
-	_speed_controls.offset_right = -22
-	_speed_controls.offset_bottom = 90
-	_speed_controls.alignment = BoxContainer.ALIGNMENT_END
-	add_child(_speed_controls)
-	for multiplier in [1.0, 2.0, 5.0]:
-		var button := Button.new()
-		button.text = "x%d" % int(multiplier)
-		button.tooltip_text = "Simulation speed x%d" % int(multiplier)
-		button.custom_minimum_size = Vector2(56, 30)
-		button.pressed.connect(_on_speed_button_pressed.bind(multiplier))
-		_speed_controls.add_child(button)
-	# Appears as soon as the selected workday is over, including the evening
-	# hours before the world is considered night.
-	skip_night_button = Button.new()
-	skip_night_button.text = "Skip night »"
-	skip_night_button.tooltip_text = "Jump to the next morning (06:00)"
-	skip_night_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	skip_night_button.offset_left = -220
-	skip_night_button.offset_top = 96
-	skip_night_button.offset_right = -22
-	skip_night_button.offset_bottom = 128
-	skip_night_button.visible = false
+	$SpeedControls/Speed1.pressed.connect(_on_speed_button_pressed.bind(1.0))
+	$SpeedControls/Speed2.pressed.connect(_on_speed_button_pressed.bind(2.0))
+	$SpeedControls/Speed5.pressed.connect(_on_speed_button_pressed.bind(5.0))
+	
 	skip_night_button.pressed.connect(skip_night_requested.emit)
-	add_child(skip_night_button)
-	start_workday_button = Button.new()
-	start_workday_button.text = "К началу рабочего дня"
-	start_workday_button.tooltip_text = "Jump to 08:00"
-	start_workday_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	start_workday_button.offset_left = -220
-	start_workday_button.offset_top = 96
-	start_workday_button.offset_right = -22
-	start_workday_button.offset_bottom = 128
-	start_workday_button.visible = false
 	start_workday_button.pressed.connect(skip_to_workday_start_requested.emit)
-	add_child(start_workday_button)
 
 
 func _on_speed_button_pressed(multiplier: float) -> void:

@@ -1,0 +1,83 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://game/features/settlement/presentation/campfire_story_menu.gd" id="1_story"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_1"]
+bg_color = Color(0.08, 0.14, 0.18, 0.75)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.25, 0.4, 0.5, 0.7)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[node name="CampfireStoryMenu" type="Panel"]
+visible = false
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -220.0
+offset_top = -140.0
+offset_right = 220.0
+offset_bottom = 140.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_1")
+script = ExtResource("1_story")
+
+[node name="Title" type="Label" parent="."]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 16.0
+offset_right = 420.0
+offset_bottom = 44.0
+theme_override_font_sizes/font_size = 17
+text = "Campfire Story"
+
+[node name="Description" type="Label" parent="."]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 50.0
+offset_right = 420.0
+offset_bottom = 90.0
+text = "Choose tonight's theme (only after 20:00 in the Tent Era)."
+autowrap_mode = 2
+
+[node name="StoryList" type="VBoxContainer" parent="."]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 100.0
+offset_right = 420.0
+offset_bottom = 214.0
+theme_override_constants/separation = 8
+
+[node name="Optimistic" type="Button" parent="StoryList"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 30)
+tooltip_text = "Wellbeing recovers faster tonight, but everyone wakes an hour later."
+text = "Optimistic stories"
+
+[node name="Teaching" type="Button" parent="StoryList"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 30)
+tooltip_text = "One random resident learns a little of a physical skill overnight."
+text = "Teaching tales"
+
+[node name="Plan" type="Button" parent="StoryList"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 30)
+tooltip_text = "Work speed +15% for gathering tasks tomorrow; night calorie cost rises."
+text = "Plan for tomorrow"
+
+[node name="CloseButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 222.0
+offset_right = 420.0
+offset_bottom = 250.0
+text = "Close"

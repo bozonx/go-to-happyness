@@ -1,0 +1,56 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://game/features/buildings/presentation/house_menu.gd" id="1_house"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_1"]
+bg_color = Color(0.08, 0.14, 0.18, 0.75)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.25, 0.4, 0.5, 0.7)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[node name="HouseMenu" type="Panel"]
+visible = false
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -324.0
+offset_top = -490.0
+offset_right = -20.0
+offset_bottom = -20.0
+grow_horizontal = 0
+grow_vertical = 0
+theme_override_styles/panel = SubResource("StyleBoxFlat_1")
+script = ExtResource("1_house")
+
+[node name="TitleLabel" type="Label" parent="."]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 14.0
+offset_right = 288.0
+offset_bottom = 56.0
+theme_override_font_sizes/font_size = 17
+
+[node name="SpawnButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 64.0
+offset_right = 272.0
+offset_bottom = 94.0
+tooltip_text = "A Courier will meet the newcomer at the entrance sign."
+text = "Order a resident"
+
+[node name="DemolishButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 140.0
+offset_right = 272.0
+offset_bottom = 170.0
+text = "Mark for demolition"

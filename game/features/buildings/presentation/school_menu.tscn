@@ -1,0 +1,173 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://game/features/buildings/presentation/school_menu.gd" id="1_school"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_1"]
+bg_color = Color(0.08, 0.14, 0.18, 0.75)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.25, 0.4, 0.5, 0.7)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[node name="SchoolMenu" type="Panel"]
+visible = false
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -520.0
+offset_top = -550.0
+offset_right = -20.0
+offset_bottom = -20.0
+grow_horizontal = 0
+grow_vertical = 0
+theme_override_styles/panel = SubResource("StyleBoxFlat_1")
+script = ExtResource("1_school")
+
+[node name="TitleLabel" type="Label" parent="."]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 14.0
+offset_right = 236.0
+offset_bottom = 86.0
+theme_override_font_sizes/font_size = 13
+autowrap_mode = 2
+
+[node name="DevTitle" type="Label" parent="."]
+layout_mode = 0
+offset_left = 250.0
+offset_top = 14.0
+offset_right = 500.0
+offset_bottom = 86.0
+theme_override_font_sizes/font_size = 13
+text = "Global Skill Development
+(Check to train all in morning):"
+autowrap_mode = 2
+
+[node name="TrainList" type="VBoxContainer" parent="."]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 94.0
+offset_right = 236.0
+offset_bottom = 466.0
+theme_override_constants/separation = 10
+
+[node name="TrainConstruction" type="Button" parent="TrainList"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+text = "Train: Construction"
+
+[node name="TrainForestry" type="Button" parent="TrainList"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+text = "Train: Forestry"
+
+[node name="TrainFarming" type="Button" parent="TrainList"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+text = "Train: Farming"
+
+[node name="TrainExcavation" type="Button" parent="TrainList"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+text = "Train: Excavation"
+
+[node name="TrainFactoryWorker" type="Button" parent="TrainList"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+text = "Train: Factory worker"
+
+[node name="TrainEngineer" type="Button" parent="TrainList"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+text = "Train: Engineer"
+
+[node name="TrainCook" type="Button" parent="TrainList"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+text = "Train: Cook"
+
+[node name="TrainTeacher" type="Button" parent="TrainList"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+text = "Train: Teacher"
+
+[node name="TrainSeller" type="Button" parent="TrainList"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+text = "Train: Seller"
+
+[node name="DevList" type="VBoxContainer" parent="."]
+layout_mode = 0
+offset_left = 250.0
+offset_top = 94.0
+offset_right = 500.0
+offset_bottom = 466.0
+theme_override_constants/separation = 10
+
+[node name="DevelopConstruction" type="CheckBox" parent="DevList"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+text = "Develop Construction"
+
+[node name="DevelopForestry" type="CheckBox" parent="DevList"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+text = "Develop Forestry"
+
+[node name="DevelopFarming" type="CheckBox" parent="DevList"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+text = "Develop Farming"
+
+[node name="DevelopExcavation" type="CheckBox" parent="DevList"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+text = "Develop Excavation"
+
+[node name="DevelopFactoryWorker" type="CheckBox" parent="DevList"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+text = "Develop Factory worker"
+
+[node name="DevelopEngineer" type="CheckBox" parent="DevList"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+text = "Develop Engineer"
+
+[node name="DevelopCook" type="CheckBox" parent="DevList"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+text = "Develop Cook"
+
+[node name="DevelopTeacher" type="CheckBox" parent="DevList"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+text = "Develop Teacher"
+
+[node name="DevelopSeller" type="CheckBox" parent="DevList"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+text = "Develop Seller"
+
+[node name="DemolishButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 480.0
+offset_right = 236.0
+offset_bottom = 512.0
+text = "Demolish School"
+
+[node name="CloseButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 250.0
+offset_top = 480.0
+offset_right = 500.0
+offset_bottom = 512.0
+text = "Close"

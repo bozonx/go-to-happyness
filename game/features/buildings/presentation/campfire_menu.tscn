@@ -1,0 +1,180 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://game/features/buildings/presentation/campfire_menu.gd" id="1_campfire"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_1"]
+bg_color = Color(0.08, 0.14, 0.18, 0.75)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.25, 0.4, 0.5, 0.7)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[node name="CampfireMenu" type="Panel"]
+visible = false
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -324.0
+offset_top = -800.0
+offset_right = -20.0
+offset_bottom = -20.0
+grow_horizontal = 0
+grow_vertical = 0
+theme_override_styles/panel = SubResource("StyleBoxFlat_1")
+script = ExtResource("1_campfire")
+
+[node name="TitleLabel" type="Label" parent="."]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 14.0
+offset_right = 288.0
+offset_bottom = 64.0
+theme_override_font_sizes/font_size = 17
+
+[node name="RequirementsLabel" type="Label" parent="."]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 70.0
+offset_right = 288.0
+offset_bottom = 280.0
+theme_override_font_sizes/font_size = 13
+autowrap_mode = 2
+
+[node name="AdvanceButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 290.0
+offset_right = 146.0
+offset_bottom = 326.0
+text = "Advance Era"
+
+[node name="OrdersButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 158.0
+offset_top = 290.0
+offset_right = 288.0
+offset_bottom = 326.0
+text = "Orders"
+
+[node name="UpgradeButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 330.0
+offset_right = 288.0
+offset_bottom = 362.0
+text = "Upgrade campfire"
+
+[node name="LabourLabel" type="Label" parent="."]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 368.0
+offset_right = 288.0
+offset_bottom = 391.0
+text = "Labor Policy:"
+
+[node name="LabourControls" type="HBoxContainer" parent="."]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 393.0
+offset_right = 288.0
+offset_bottom = 425.0
+
+[node name="Hour6" type="Button" parent="LabourControls"]
+layout_mode = 2
+tooltip_text = "Set workday duration"
+text = "6h"
+
+[node name="Hour8" type="Button" parent="LabourControls"]
+layout_mode = 2
+tooltip_text = "Set workday duration"
+text = "8h"
+
+[node name="Hour10" type="Button" parent="LabourControls"]
+layout_mode = 2
+tooltip_text = "Set workday duration"
+text = "10h"
+
+[node name="Hour12" type="Button" parent="LabourControls"]
+layout_mode = 2
+tooltip_text = "Set workday duration"
+text = "12h"
+
+[node name="Hour14" type="Button" parent="LabourControls"]
+layout_mode = 2
+tooltip_text = "Set workday duration"
+text = "14h"
+
+[node name="OccupancyButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 438.0
+offset_right = 272.0
+offset_bottom = 470.0
+
+[node name="ResearchButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 478.0
+offset_right = 272.0
+offset_bottom = 510.0
+text = "Research Building Levels"
+
+[node name="ResearchPostButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 516.0
+offset_right = 272.0
+offset_bottom = 548.0
+
+[node name="OccupyPositionButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 556.0
+offset_right = 272.0
+offset_bottom = 588.0
+
+[node name="AcceptButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 594.0
+offset_right = 272.0
+offset_bottom = 626.0
+
+[node name="DismissButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 632.0
+offset_right = 272.0
+offset_bottom = 664.0
+text = "Dismiss employment officer"
+
+[node name="OvertimeButton" type="CheckButton" parent="."]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 670.0
+offset_right = 272.0
+offset_bottom = 702.0
+text = "Work through the night"
+
+[node name="StoryButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 708.0
+offset_right = 272.0
+offset_bottom = 740.0
+text = "Campfire stories"
+
+[node name="CloseButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 746.0
+offset_right = 272.0
+offset_bottom = 774.0
+text = "Close Menu"

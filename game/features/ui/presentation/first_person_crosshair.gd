@@ -5,6 +5,7 @@ extends Control
 @export var color: Color = Color(1.0, 1.0, 1.0, 0.85)
 @export var line_width: float = 2.0
 
+
 func _ready() -> void:
 	mouse_filter = MOUSE_FILTER_IGNORE
 	size = Vector2(radius * 2.0 + line_width * 2.0, radius * 2.0 + line_width * 2.0)
@@ -13,6 +14,7 @@ func _ready() -> void:
 	offset_top = -size.y * 0.5
 	offset_right = size.x * 0.5
 	offset_bottom = size.y * 0.5
+
 
 func _draw() -> void:
 	var center := size * 0.5

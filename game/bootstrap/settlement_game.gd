@@ -41,7 +41,7 @@ const CleaningGoalScript = preload("res://game/features/decision/domain/goals/cl
 const RouteRequestScript = preload("res://game/features/routing/application/route_request.gd")
 const TrailFieldServiceScript = preload("res://game/features/roads/application/trail_field_service.gd")
 const TrailOverlayShader = preload("res://game/features/roads/presentation/trail_overlay.gdshader")
-const FirstPersonCrosshair = preload("res://game/features/citizens/presentation/first_person_crosshair.gd")
+const FirstPersonCrosshairScene = preload("res://game/features/ui/presentation/first_person_crosshair.tscn")
 const WeatherStateScript = preload("res://game/features/simulation/domain/weather_state.gd")
 const FirefliesEffectScript = preload("res://game/features/world/presentation/fireflies_effect.gd")
 const RainEffectScript = preload("res://game/features/world/presentation/rain_effect.gd")
@@ -54,15 +54,25 @@ const TentEraEventsScript = preload("res://game/features/events/application/tent
 const VillageTerritoryServiceScript = preload("res://game/features/buildings/application/village_territory_service.gd")
 const VillageBoundaryMarkersScript = preload("res://game/features/buildings/presentation/village_boundary_markers.gd")
 const VillageTerritoryOverlayScript = preload("res://game/features/buildings/presentation/village_territory_overlay.gd")
-const TimeControlsPanelScript = preload("res://game/features/ui/presentation/time_controls_panel.gd")
-const MessageLogPanelScript = preload("res://game/features/ui/presentation/message_log_panel.gd")
-const InteractionHintPanelScript = preload("res://game/features/ui/presentation/interaction_hint_panel.gd")
-const SurvivalDecisionPanelScript = preload("res://game/features/ui/presentation/survival_decision_panel.gd")
-const CampfireStoryMenuScript = preload("res://game/features/ui/presentation/campfire_story_menu.gd")
-const CampfireOrdersMenuScript = preload("res://game/features/ui/presentation/campfire_orders_menu.gd")
-const ResearchMenuScript = preload("res://game/features/ui/presentation/research_menu.gd")
-const WorkforceMenuScript = preload("res://game/features/ui/presentation/workforce_menu.gd")
-const PocketTakeMenuScript = preload("res://game/features/ui/presentation/pocket_take_menu.gd")
+const TimeControlsPanelScene = preload("res://game/features/ui/presentation/time_controls_panel.tscn")
+const MessageLogPanelScene = preload("res://game/features/ui/presentation/message_log_panel.tscn")
+const InteractionHintPanelScene = preload("res://game/features/ui/presentation/interaction_hint_panel.tscn")
+const SurvivalDecisionPanelScene = preload("res://game/features/settlement/presentation/survival_decision_panel.tscn")
+const CampfireStoryMenuScene = preload("res://game/features/settlement/presentation/campfire_story_menu.tscn")
+const CampfireOrdersMenuScene = preload("res://game/features/settlement/presentation/campfire_orders_menu.tscn")
+const ResearchMenuScene = preload("res://game/features/settlement/presentation/research_menu.tscn")
+const WorkforceMenuScene = preload("res://game/features/decision/presentation/workforce_menu.tscn")
+const PocketTakeMenuScene = preload("res://game/features/citizens/presentation/pocket_take_menu.tscn")
+const HUDScene = preload("res://game/features/ui/presentation/hud.tscn")
+const BuildMenuScene = preload("res://game/features/buildings/presentation/build_menu.tscn")
+const BuildingMenuScene = preload("res://game/features/buildings/presentation/building_menu.tscn")
+const HouseMenuScene = preload("res://game/features/buildings/presentation/house_menu.tscn")
+const SchoolMenuScene = preload("res://game/features/buildings/presentation/school_menu.tscn")
+const CampfireMenuScene = preload("res://game/features/buildings/presentation/campfire_menu.tscn")
+const WarehouseMenuScene = preload("res://game/features/logistics/presentation/warehouse_menu.tscn")
+const MarketMenuScene = preload("res://game/features/logistics/presentation/market_menu.tscn")
+const MaterialsFactoryMenuScene = preload("res://game/features/production/presentation/materials_factory_menu.tscn")
+const EntranceMenuScene = preload("res://game/features/settlement/presentation/entrance_menu.tscn")
 
 
 # The playable routing and construction board must cover the terrain visible
@@ -2631,7 +2641,7 @@ func _add_message(text: String) -> void:
 
 
 func _create_message_panel(ui: CanvasLayer) -> void:
-	message_log_panel = MessageLogPanelScript.new()
+	message_log_panel = MessageLogPanelScene.instantiate()
 	ui.add_child(message_log_panel)
 
 
@@ -3312,50 +3322,27 @@ func _on_leisure_finished(citizen: Citizen) -> void:
 func _create_interface() -> void:
 	var ui := CanvasLayer.new()
 	add_child(ui)
-	# Resources: a compact vertical list in its own small panel.
-	var panel := ColorRect.new()
-	panel.color = Color(0.035, 0.07, 0.09, 0.88)
-	panel.position = Vector2(20, 20)
-	panel.size = Vector2(172, 256)
-	ui.add_child(panel)
-	wood_label = Label.new()
-	wood_label.position = Vector2(14, 10)
-	wood_label.size = Vector2(150, 240)
-	wood_label.add_theme_font_size_override("font_size", 12)
-	panel.add_child(wood_label)
-	# Hidden status label — kept for backward compatibility.
+	
+	var hud: HUD = HUDScene.instantiate()
+	ui.add_child(hud)
+	
+	wood_label = hud.wood_label
+	clock_label = hud.clock_label
+	camera_hint_label = hud.camera_hint_label
+	build_toggle_btn = hud.build_toggle_btn
+	
 	status_label = Label.new()
 	status_label.visible = false
 	ui.add_child(status_label)
-	# Message log panel — bottom-left.
+	
+	build_toggle_btn.pressed.connect(_toggle_global_build_menu)
+	
 	_create_message_panel(ui)
 	_create_messages_modal(ui)
-	camera_hint_label = Label.new()
-	camera_hint_label.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	camera_hint_label.offset_left = 20
-	camera_hint_label.offset_top = -30
-	camera_hint_label.offset_right = 800
-	camera_hint_label.offset_bottom = -6
-	camera_hint_label.add_theme_font_size_override("font_size", 14)
-	ui.add_child(camera_hint_label)
-	clock_label = Label.new()
-	clock_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	clock_label.offset_left = -220
-	clock_label.offset_top = 22
-	clock_label.offset_right = -22
-	clock_label.offset_bottom = 52
-	clock_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	clock_label.add_theme_font_size_override("font_size", 22)
-	ui.add_child(clock_label)
 	_create_time_controls(ui)
-	interaction_hint_panel = InteractionHintPanelScript.new()
+	
+	interaction_hint_panel = InteractionHintPanelScene.instantiate()
 	ui.add_child(interaction_hint_panel)
-	build_toggle_btn = Button.new()
-	build_toggle_btn.text = "Construction Panel"
-	build_toggle_btn.position = Vector2(20, 388)
-	build_toggle_btn.size = Vector2(180, 36)
-	build_toggle_btn.pressed.connect(_toggle_global_build_menu)
-	ui.add_child(build_toggle_btn)
 	
 	_create_build_menu(ui)
 	_create_entrance_menu(ui)
@@ -3395,19 +3382,19 @@ func _create_context_menu_panel(ui: CanvasLayer, anchor: int, offsets: Vector4, 
 
 
 func _create_survival_decision_menu(ui: CanvasLayer) -> void:
-	decision_menu = SurvivalDecisionPanelScript.new()
+	decision_menu = SurvivalDecisionPanelScene.instantiate()
 	ui.add_child(decision_menu)
 	decision_menu.choice_selected.connect(_resolve_event_decision)
 
 
 func _create_crosshair(ui: CanvasLayer) -> void:
-	crosshair = FirstPersonCrosshair.new()
+	crosshair = FirstPersonCrosshairScene.instantiate()
 	crosshair.visible = false
 	ui.add_child(crosshair)
 
 
 func _create_campfire_story_menu(ui: CanvasLayer) -> void:
-	campfire_story_menu = CampfireStoryMenuScript.new()
+	campfire_story_menu = CampfireStoryMenuScene.instantiate()
 	ui.add_child(campfire_story_menu)
 	campfire_story_menu.story_selected.connect(_select_campfire_story)
 	campfire_story_menu.close_requested.connect(_close_campfire_story_menu)
@@ -3516,7 +3503,7 @@ func _update_survival_busy_workers() -> void:
 		_update_workers()
 
 func _create_time_controls(ui: CanvasLayer) -> void:
-	time_controls_panel = TimeControlsPanelScript.new()
+	time_controls_panel = TimeControlsPanelScene.instantiate()
 	ui.add_child(time_controls_panel)
 	time_controls_panel.skip_night_requested.connect(_skip_night)
 	time_controls_panel.skip_to_workday_start_requested.connect(_skip_to_workday_start)
@@ -3689,57 +3676,23 @@ func _set_time_multiplier(multiplier: float) -> void:
 	_update_interface("Simulation speed set to x%d." % int(multiplier))
 
 func _create_build_menu(ui: CanvasLayer) -> void:
-	build_menu = _create_context_menu_panel(ui, Control.PRESET_BOTTOM_RIGHT, Vector4(-324.0, -780.0, -20.0, -20.0), _on_build_menu_gui_input)
+	var menu: BuildMenu = BuildMenuScene.instantiate()
+	ui.add_child(menu)
+	build_menu = menu
+	build_menu_title = menu.title_label
+	citizen_skills_label = menu.citizen_skills_label
+	manage_citizen_button = menu.manage_citizen_button
+	daily_order_submenu_btn = menu.daily_order_submenu_btn
+	personal_night_work_button = menu.personal_night_work_button
+	job_submenu_btn = menu.job_submenu_btn
+	job_back_btn = menu.job_back_btn
 
-	build_menu_title = Label.new()
-	build_menu_title.position = Vector2(16, 14)
-	build_menu_title.size = Vector2(272, 74)
-	build_menu_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	build_menu_title.add_theme_font_size_override("font_size", 15)
-	build_menu.add_child(build_menu_title)
-	citizen_skills_label = Label.new()
-	citizen_skills_label.position = Vector2(16, 650)
-	citizen_skills_label.size = Vector2(272, 92)
-	citizen_skills_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	citizen_skills_label.add_theme_font_size_override("font_size", 13)
-	build_menu.add_child(citizen_skills_label)
-
-	manage_citizen_button = Button.new()
-	manage_citizen_button.text = "Управлять"
-	manage_citizen_button.position = Vector2(16, 96)
-	manage_citizen_button.size = Vector2(272, 30)
+	menu.gui_input_received.connect(_on_build_menu_gui_input)
 	manage_citizen_button.pressed.connect(_take_control_of_selected_citizen)
-	build_menu.add_child(manage_citizen_button)
-
-	# Add the citizen assignment submenus.
-	daily_order_submenu_btn = Button.new()
-	daily_order_submenu_btn.text = "Daily Orders..."
-	daily_order_submenu_btn.position = Vector2(16, 276)
-	daily_order_submenu_btn.size = Vector2(272, 30)
 	daily_order_submenu_btn.pressed.connect(_open_daily_order_submenu)
-	build_menu.add_child(daily_order_submenu_btn)
-	personal_night_work_button = CheckButton.new()
-	personal_night_work_button.text = "Work through the night"
-	personal_night_work_button.position = Vector2(16, 344)
-	personal_night_work_button.size = Vector2(272, 30)
-	personal_night_work_button.tooltip_text = "Available only for a resident with a daily order."
 	personal_night_work_button.toggled.connect(_toggle_selected_citizen_night_work)
-	build_menu.add_child(personal_night_work_button)
-
-	job_submenu_btn = Button.new()
-	job_submenu_btn.text = "Permanent Jobs..."
-	job_submenu_btn.position = Vector2(16, 310)
-	job_submenu_btn.size = Vector2(272, 30)
 	job_submenu_btn.pressed.connect(_open_job_submenu)
-	build_menu.add_child(job_submenu_btn)
-	
-	# Job Back Button
-	job_back_btn = Button.new()
-	job_back_btn.text = "Back to categories"
-	job_back_btn.position = Vector2(16, 96)
-	job_back_btn.size = Vector2(272, 30)
 	job_back_btn.pressed.connect(_close_assignment_submenu)
-	build_menu.add_child(job_back_btn)
 	
 	# Daily orders do not require an employment officer.
 	_add_role_button("Clear daily order", "", 136, false, "daily")
@@ -3856,73 +3809,21 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_refresh_build_menu()
 
 func _create_school_menu(ui: CanvasLayer) -> void:
-	school_menu = _create_context_menu_panel(ui, Control.PRESET_BOTTOM_RIGHT, Vector4(-520.0, -550.0, -20.0, -20.0))
-
-	school_menu_title = Label.new()
-	school_menu_title.position = Vector2(16, 14)
-	school_menu_title.size = Vector2(220, 72)
-	school_menu_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	school_menu_title.add_theme_font_size_override("font_size", 13)
-	school_menu.add_child(school_menu_title)
+	var menu: SchoolMenu = SchoolMenuScene.instantiate()
+	ui.add_child(menu)
+	school_menu = menu
+	school_menu_title = menu.title_label
 	
-	var dev_title := Label.new()
-	dev_title.text = "Global Skill Development\n(Check to train all in morning):"
-	dev_title.position = Vector2(250, 14)
-	dev_title.size = Vector2(250, 72)
-	dev_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	dev_title.add_theme_font_size_override("font_size", 13)
-	school_menu.add_child(dev_title)
-	
-	var roles := [
-		["Construction", "construction"],
-		["Forestry", "forestry"],
-		["Farming", "farming"],
-		["Excavation", "excavation"],
-		["Factory worker", "factory_worker"],
-		["Engineer", "engineer"],
-		["Cook", "cook"],
-		["Teacher", "teacher"],
-		["Seller", "seller"]
-	]
-	
-	school_retrain_buttons.clear()
-	for index in range(roles.size()):
-		var button := Button.new()
-		button.text = "Train: %s" % roles[index][0]
-		button.position = Vector2(16, 94 + index * 42)
-		button.size = Vector2(220, 32)
-		button.pressed.connect(_start_school_training.bind(roles[index][1]))
-		school_menu.add_child(button)
-		school_retrain_buttons.append(button)
-		
-	school_dev_checkboxes.clear()
-	for index in range(roles.size()):
-		var role_id: String = roles[index][1]
-		var cb := CheckBox.new()
-		cb.text = "Develop %s" % roles[index][0]
-		cb.position = Vector2(250, 94 + index * 42)
-		cb.size = Vector2(250, 32)
-		cb.toggled.connect(func(pressed: bool): _toggle_school_development(role_id, pressed))
-		school_menu.add_child(cb)
-		school_dev_checkboxes[role_id] = cb
-		
-	var demolish_btn := Button.new()
-	demolish_btn.text = "Demolish School"
-	demolish_btn.position = Vector2(16, 480)
-	demolish_btn.size = Vector2(220, 32)
-	demolish_btn.pressed.connect(func():
+	menu.train_requested.connect(_start_school_training)
+	menu.dev_toggled.connect(_toggle_school_development)
+	menu.demolish_requested.connect(func():
 		if selected_school != null:
 			_mark_building_for_demolition(selected_school)
 			school_menu.visible = false
 	)
-	school_menu.add_child(demolish_btn)
 	
-	var close_btn := Button.new()
-	close_btn.text = "Close"
-	close_btn.position = Vector2(250, 480)
-	close_btn.size = Vector2(250, 32)
-	close_btn.pressed.connect(func(): school_menu.visible = false)
-	school_menu.add_child(close_btn)
+	school_retrain_buttons = menu.train_buttons
+	school_dev_checkboxes = menu.dev_checkboxes
 
 func _toggle_school_development(role: String, pressed: bool) -> void:
 	if not _player_can_manage_permanent_professions():
@@ -3978,35 +3879,33 @@ func _show_school_menu() -> void:
 	_update_interface("School selected: configure morning study and retraining here.")
 
 func _create_entrance_menu(ui: CanvasLayer) -> void:
-	entrance_menu = _create_context_menu_panel(ui, Control.PRESET_BOTTOM_RIGHT, Vector4(-324.0, -372.0, -20.0, -20.0))
+	var menu: EntranceMenu = EntranceMenuScene.instantiate()
+	ui.add_child(menu)
+	entrance_menu = menu
+	entrance_menu_title = menu.title_label
+	entrance_work_button = menu.entrance_work_button
+	entrance_order_modal = menu.entrance_order_modal
+	entrance_order_food_spin = menu.entrance_order_food_spin
+	entrance_order_water_spin = menu.entrance_order_water_spin
+	entrance_order_gloves_spin = menu.entrance_order_gloves_spin
+	entrance_order_bucket_spin = menu.entrance_order_bucket_spin
+	entrance_order_total_label = menu.entrance_order_total_label
 
-	entrance_menu_title = Label.new()
-	entrance_menu_title.position = Vector2(16, 14)
-	entrance_menu_title.size = Vector2(272, 56)
-	entrance_menu_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	entrance_menu_title.add_theme_font_size_override("font_size", 16)
-	entrance_menu.add_child(entrance_menu_title)
-	var create_order_button := Button.new()
-	create_order_button.text = "Create order"
-	create_order_button.tooltip_text = "Choose quantities and send a courier."
-	create_order_button.position = Vector2(16, 82)
-	create_order_button.size = Vector2(272, 32)
-	create_order_button.pressed.connect(_show_entrance_order_modal)
-	entrance_menu.add_child(create_order_button)
-	entrance_work_button = Button.new()
-	entrance_work_button.text = "Send selected resident to outside work"
-	entrance_work_button.tooltip_text = "Requires a Courier. The resident leaves for one full day and returns with %s coins." % _outside_work_reward_text()
-	entrance_work_button.position = Vector2(16, 122)
-	entrance_work_button.size = Vector2(272, 32)
+	menu.modal_gui_input_received.connect(func(event):
+		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+			entrance_order_modal.visible = false
+	)
+	menu.get_node("CreateOrderButton").pressed.connect(_show_entrance_order_modal)
 	entrance_work_button.pressed.connect(_send_selected_resident_to_outside_work)
-	entrance_menu.add_child(entrance_work_button)
-	var close_btn := Button.new()
-	close_btn.text = "Close"
-	close_btn.position = Vector2(16, 162)
-	close_btn.size = Vector2(272, 30)
-	close_btn.pressed.connect(_close_context_menus)
-	entrance_menu.add_child(close_btn)
-	_create_entrance_order_modal(ui)
+	menu.get_node("CloseButton").pressed.connect(_close_context_menus)
+	
+	entrance_order_food_spin.value_changed.connect(_update_entrance_order_total)
+	entrance_order_water_spin.value_changed.connect(_update_entrance_order_total)
+	entrance_order_gloves_spin.value_changed.connect(_update_entrance_order_total)
+	entrance_order_bucket_spin.value_changed.connect(_update_entrance_order_total)
+	
+	entrance_order_modal.get_node("SendButton").pressed.connect(_send_entrance_order)
+	entrance_order_modal.get_node("CloseButton").pressed.connect(_hide_entrance_order_modal)
 
 
 func _show_entrance_menu() -> void:
@@ -4019,64 +3918,6 @@ func _show_entrance_menu() -> void:
 	if entrance_highlight != null:
 		entrance_highlight.visible = true
 	entrance_menu.visible = true
-
-
-func _create_entrance_order_modal(ui: CanvasLayer) -> void:
-	var modal_handler := func(event: InputEvent) -> void:
-		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
-			entrance_order_modal.visible = false
-	entrance_order_modal = _create_context_menu_panel(ui, Control.PRESET_CENTER, Vector4(-210.0, -180.0, 210.0, 180.0), modal_handler)
-
-	var title := Label.new()
-	title.text = "Create order"
-	title.position = Vector2(20, 14)
-	title.size = Vector2(380, 30)
-	title.add_theme_font_size_override("font_size", 18)
-	entrance_order_modal.add_child(title)
-
-	entrance_order_food_spin = _create_entrance_order_spin("Food", FOOD_PURCHASE_PRICE, 20, 50)
-	entrance_order_water_spin = _create_entrance_order_spin("Water", ENTRANCE_WATER_PRICE, 20, 90)
-	entrance_order_gloves_spin = _create_entrance_order_spin("Gloves", ENTRANCE_GLOVE_PRICE, 20, 130)
-	entrance_order_bucket_spin = _create_entrance_order_spin("Bucket", ENTRANCE_BUCKET_PRICE, 20, 170)
-
-	entrance_order_total_label = Label.new()
-	entrance_order_total_label.position = Vector2(20, 210)
-	entrance_order_total_label.size = Vector2(380, 30)
-	entrance_order_total_label.add_theme_font_size_override("font_size", 15)
-	entrance_order_modal.add_child(entrance_order_total_label)
-
-	var send_btn := Button.new()
-	send_btn.text = "Send courier"
-	send_btn.position = Vector2(20, 250)
-	send_btn.size = Vector2(180, 34)
-	send_btn.pressed.connect(_send_entrance_order)
-	entrance_order_modal.add_child(send_btn)
-
-	var close_btn := Button.new()
-	close_btn.text = "Close"
-	close_btn.position = Vector2(210, 250)
-	close_btn.size = Vector2(180, 34)
-	close_btn.pressed.connect(_hide_entrance_order_modal)
-	entrance_order_modal.add_child(close_btn)
-
-
-func _create_entrance_order_spin(label_text: String, unit_price: int, x: float, y: float) -> SpinBox:
-	var label := Label.new()
-	label.text = "%s (%d coins each)" % [label_text, unit_price]
-	label.position = Vector2(x, y + 4)
-	label.size = Vector2(180, 24)
-	entrance_order_modal.add_child(label)
-	var spin := SpinBox.new()
-	spin.min_value = 0
-	spin.max_value = 99
-	spin.value = 0
-	spin.step = 1
-	spin.alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	spin.position = Vector2(x + 200, y)
-	spin.size = Vector2(100, 26)
-	spin.value_changed.connect(_update_entrance_order_total)
-	entrance_order_modal.add_child(spin)
-	return spin
 
 
 func _show_entrance_order_modal() -> void:
@@ -4205,36 +4046,19 @@ func _return_outside_workers() -> void:
 
 
 func _create_house_menu(ui: CanvasLayer) -> void:
-	house_menu = _create_context_menu_panel(ui, Control.PRESET_BOTTOM_RIGHT, Vector4(-324.0, -378.0, -20.0, -20.0))
-
-	house_menu_title = Label.new()
-	house_menu_title.position = Vector2(16, 14)
-	house_menu_title.size = Vector2(272, 42)
-	house_menu_title.add_theme_font_size_override("font_size", 17)
-	house_menu.add_child(house_menu_title)
-	house_spawn_button = Button.new()
-	house_spawn_button.text = "Order a resident"
-	house_spawn_button.tooltip_text = "A Courier will meet the newcomer at the entrance sign."
-	house_spawn_button.position = Vector2(16, 64)
-	house_spawn_button.size = Vector2(272, 30)
+	var menu: HouseMenu = HouseMenuScene.instantiate()
+	ui.add_child(menu)
+	house_menu = menu
+	house_menu_title = menu.title_label
+	house_spawn_button = menu.spawn_button
 	house_spawn_button.pressed.connect(_spawn_house_citizen)
-	house_menu.add_child(house_spawn_button)
-	var demolish_button := Button.new()
-	demolish_button.text = "Mark for demolition"
-	demolish_button.position = Vector2(16, 140)
-	demolish_button.size = Vector2(272, 30)
-	demolish_button.pressed.connect(func(): _mark_building_for_demolition(selected_house))
-	house_menu.add_child(demolish_button)
-	house_menu.offset_top = -490.0
+	menu.demolish_button.pressed.connect(func(): _mark_building_for_demolition(selected_house))
 
 func _create_materials_factory_menu(ui: CanvasLayer) -> void:
-	materials_factory_menu = _create_context_menu_panel(ui, Control.PRESET_BOTTOM_RIGHT, Vector4(-324.0, -260.0, -20.0, -20.0))
-
-	materials_factory_menu_title = Label.new()
-	materials_factory_menu_title.position = Vector2(16, 14)
-	materials_factory_menu_title.size = Vector2(272, 94)
-	materials_factory_menu_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	materials_factory_menu.add_child(materials_factory_menu_title)
+	var menu: MaterialsFactoryMenu = MaterialsFactoryMenuScene.instantiate()
+	ui.add_child(menu)
+	materials_factory_menu = menu
+	materials_factory_menu_title = menu.title_label
 
 func _show_materials_factory_menu() -> void:
 	if selected_materials_factory == null:
@@ -4304,7 +4128,7 @@ func _update_building_research(delta: float) -> void:
 			_refresh_research_menu()
 
 func _create_research_menu(ui: CanvasLayer) -> void:
-	research_menu = ResearchMenuScript.new()
+	research_menu = ResearchMenuScene.instantiate()
 	ui.add_child(research_menu)
 	research_menu.close_requested.connect(_hide_research_menu)
 
@@ -7937,115 +7761,35 @@ func _toggle_global_build_menu() -> void:
 
 
 func _create_campfire_menu(ui: CanvasLayer) -> void:
-	campfire_menu = _create_context_menu_panel(ui, Control.PRESET_BOTTOM_RIGHT, Vector4(-324.0, -800.0, -20.0, -20.0))
+	var menu: CampfireMenu = CampfireMenuScene.instantiate()
+	ui.add_child(menu)
+	campfire_menu = menu
+	campfire_menu_title = menu.title_label
+	campfire_requirements_label = menu.requirements_label
+	campfire_advance_button = menu.advance_button
+	campfire_orders_button = menu.orders_button
+	campfire_upgrade_button = menu.upgrade_button
+	campfire_occupancy_button = menu.occupancy_button
+	campfire_research_post_button = menu.research_post_button
+	campfire_occupy_position_button = menu.occupy_position_button
+	campfire_accept_button = menu.accept_button
+	campfire_dismiss_button = menu.dismiss_button
+	campfire_overtime_button = menu.overtime_button
+	campfire_close_btn = menu.close_btn
 
-	campfire_menu_title = Label.new()
-	campfire_menu_title.position = Vector2(16, 14)
-	campfire_menu_title.size = Vector2(272, 50)
-	campfire_menu_title.add_theme_font_size_override("font_size", 17)
-	campfire_menu.add_child(campfire_menu_title)
-	
-	campfire_requirements_label = Label.new()
-	campfire_requirements_label.position = Vector2(16, 70)
-	campfire_requirements_label.size = Vector2(272, 210)
-	campfire_requirements_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	campfire_requirements_label.add_theme_font_size_override("font_size", 13)
-	campfire_menu.add_child(campfire_requirements_label)
-	
-	campfire_advance_button = Button.new()
-	campfire_advance_button.text = "Advance Era"
-	campfire_advance_button.position = Vector2(16, 290)
-	campfire_advance_button.size = Vector2(130, 36)
+	menu.workday_hours_changed.connect(_set_workday_hours)
 	campfire_advance_button.pressed.connect(_on_campfire_advance_pressed)
-	campfire_menu.add_child(campfire_advance_button)
-
-	campfire_orders_button = Button.new()
-	campfire_orders_button.text = "Orders"
-	campfire_orders_button.position = Vector2(158, 290)
-	campfire_orders_button.size = Vector2(130, 36)
 	campfire_orders_button.pressed.connect(_show_campfire_orders_menu)
-	campfire_menu.add_child(campfire_orders_button)
-
-	campfire_upgrade_button = Button.new()
-	campfire_upgrade_button.text = "Upgrade campfire"
-	campfire_upgrade_button.position = Vector2(16, 330)
-	campfire_upgrade_button.size = Vector2(272, 32)
 	campfire_upgrade_button.pressed.connect(_handle_campfire_primary_action)
-	campfire_menu.add_child(campfire_upgrade_button)
-
-	var labour_label := Label.new()
-	labour_label.text = "Labor Policy:"
-	labour_label.position = Vector2(16, 368)
-	campfire_menu.add_child(labour_label)
-	
-	var labour_controls := HBoxContainer.new()
-	labour_controls.position = Vector2(16, 393)
-	campfire_menu.add_child(labour_controls)
-	for hours in [6, 8, 10, 12, 14]:
-		var day_button := Button.new()
-		day_button.text = "%dh" % hours
-		day_button.tooltip_text = "Set workday duration"
-		day_button.pressed.connect(_set_workday_hours.bind(hours))
-		labour_controls.add_child(day_button)
-	
-	campfire_occupancy_button = Button.new()
-	campfire_occupancy_button.position = Vector2(16, 438)
-	campfire_occupancy_button.size = Vector2(272, 32)
 	campfire_occupancy_button.pressed.connect(_show_workforce_menu)
-	campfire_menu.add_child(campfire_occupancy_button)
-
-	var campfire_research_button := Button.new()
-	campfire_research_button.text = "Research Building Levels"
-	campfire_research_button.position = Vector2(16, 478)
-	campfire_research_button.size = Vector2(272, 32)
-	campfire_research_button.pressed.connect(_show_research_menu)
-	campfire_menu.add_child(campfire_research_button)
-
-	campfire_research_post_button = Button.new()
-	campfire_research_post_button.position = Vector2(16, 516)
-	campfire_research_post_button.size = Vector2(272, 32)
+	menu.research_button.pressed.connect(_show_research_menu)
 	campfire_research_post_button.pressed.connect(_handle_civic_post_assignment)
-	campfire_menu.add_child(campfire_research_post_button)
-
-	campfire_occupy_position_button = Button.new()
-	campfire_occupy_position_button.position = Vector2(16, 556)
-	campfire_occupy_position_button.size = Vector2(272, 32)
 	campfire_occupy_position_button.pressed.connect(_occupy_selected_campfire_position)
-	campfire_menu.add_child(campfire_occupy_position_button)
-
-	campfire_accept_button = Button.new()
-	campfire_accept_button.position = Vector2(16, 594)
-	campfire_accept_button.size = Vector2(272, 32)
 	campfire_accept_button.pressed.connect(_toggle_campfire_acceptance)
-	campfire_menu.add_child(campfire_accept_button)
-
-	campfire_dismiss_button = Button.new()
-	campfire_dismiss_button.text = "Dismiss employment officer"
-	campfire_dismiss_button.position = Vector2(16, 632)
-	campfire_dismiss_button.size = Vector2(272, 32)
 	campfire_dismiss_button.pressed.connect(_dismiss_campfire_worker)
-	campfire_menu.add_child(campfire_dismiss_button)
-
-	campfire_overtime_button = CheckButton.new()
-	campfire_overtime_button.text = "Work through the night"
-	campfire_overtime_button.position = Vector2(16, 670)
-	campfire_overtime_button.size = Vector2(272, 32)
 	campfire_overtime_button.toggled.connect(_toggle_campfire_worker_overtime)
-	campfire_menu.add_child(campfire_overtime_button)
-
-	campfire_close_btn = Button.new()
-	campfire_close_btn.text = "Close Menu"
-	campfire_close_btn.position = Vector2(16, 746)
-	campfire_close_btn.size = Vector2(272, 28)
 	campfire_close_btn.pressed.connect(_close_context_menus)
-	campfire_menu.add_child(campfire_close_btn)
-
-	var campfire_story_button := Button.new()
-	campfire_story_button.text = "Campfire stories"
-	campfire_story_button.position = Vector2(16, 708)
-	campfire_story_button.size = Vector2(272, 32)
-	campfire_story_button.pressed.connect(_show_campfire_story_menu)
-	campfire_menu.add_child(campfire_story_button)
+	menu.story_button.pressed.connect(_show_campfire_story_menu)
 
 
 func _show_campfire_menu() -> void:
@@ -8094,7 +7838,7 @@ func _select_campfire_story(story_id: String) -> void:
 
 
 func _create_campfire_orders_menu(ui: CanvasLayer) -> void:
-	campfire_orders_menu = CampfireOrdersMenuScript.new()
+	campfire_orders_menu = CampfireOrdersMenuScene.instantiate()
 	ui.add_child(campfire_orders_menu)
 	campfire_orders_menu.road_walking_toggle.toggled.connect(_set_road_walking_order)
 	campfire_orders_menu.balanced_warehouse_toggle.toggled.connect(_set_balanced_warehouse_mode)
@@ -8241,7 +7985,7 @@ func _toggle_selected_citizen_night_work(checked: bool) -> void:
 
 
 func _create_workforce_menu(ui: CanvasLayer) -> void:
-	workforce_menu = WorkforceMenuScript.new()
+	workforce_menu = WorkforceMenuScene.instantiate()
 	ui.add_child(workforce_menu)
 	workforce_menu.close_requested.connect(_close_workforce_menu)
 
@@ -8791,13 +8535,10 @@ func _on_campfire_advance_pressed() -> void:
 
 
 func _create_market_menu(ui: CanvasLayer) -> void:
-	market_menu = _create_context_menu_panel(ui, Control.PRESET_BOTTOM_RIGHT, Vector4(-324.0, -650.0, -20.0, -20.0))
-
-	market_menu_title = Label.new()
-	market_menu_title.position = Vector2(16, 14)
-	market_menu_title.size = Vector2(272, 70)
-	market_menu_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	market_menu.add_child(market_menu_title)
+	var menu: MarketMenu = MarketMenuScene.instantiate()
+	ui.add_child(menu)
+	market_menu = menu
+	market_menu_title = menu.title_label
 
 
 func _show_market_menu() -> void:
@@ -8993,83 +8734,33 @@ func _on_trade_delivery_finished(worker: Citizen) -> void:
 	courier_dispatcher.complete_for(worker)
 
 func _create_building_menu(ui: CanvasLayer) -> void:
-	building_menu = _create_context_menu_panel(ui, Control.PRESET_BOTTOM_RIGHT, Vector4(-324.0, -300.0, -20.0, -20.0))
+	var menu: BuildingMenu = BuildingMenuScene.instantiate()
+	ui.add_child(menu)
+	building_menu = menu
+	building_menu_title = menu.title_label
+	building_cook_button = menu.cook_button
+	building_teacher_button = menu.teacher_button
+	building_seller_button = menu.seller_button
+	building_accept_workers_button = menu.accept_workers_button
+	building_dismiss_worker_button = menu.dismiss_worker_button
+	building_overtime_button = menu.overtime_button
+	building_relight_button = menu.relight_button
+	building_upgrade_button = menu.upgrade_button
+	building_demolish_button = menu.demolish_button
+	building_close_button = menu.close_button
+	building_cancel_construction_button = menu.cancel_construction_button
 
-	building_menu_title = Label.new()
-	building_menu_title.position = Vector2(16, 14)
-	building_menu_title.size = Vector2(272, 82)
-	building_menu_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	building_menu.add_child(building_menu_title)
-	building_cook_button = Button.new()
-	building_cook_button.text = "Assign selected resident as cook"
-	building_cook_button.position = Vector2(16, 104)
-	building_cook_button.size = Vector2(272, 30)
 	building_cook_button.pressed.connect(_assign_cook_at_campfire)
-	building_menu.add_child(building_cook_button)
-	
-	building_teacher_button = Button.new()
-	building_teacher_button.text = "Assign selected resident as teacher"
-	building_teacher_button.position = Vector2(16, 104)
-	building_teacher_button.size = Vector2(272, 30)
 	building_teacher_button.pressed.connect(_assign_teacher_at_school)
-	building_menu.add_child(building_teacher_button)
-	
-	building_seller_button = Button.new()
-	building_seller_button.text = "Assign selected resident as seller"
-	building_seller_button.position = Vector2(16, 104)
-	building_seller_button.size = Vector2(272, 30)
 	building_seller_button.pressed.connect(_assign_seller_at_market)
-	building_menu.add_child(building_seller_button)
-
-	building_accept_workers_button = Button.new()
-	building_accept_workers_button.position = Vector2(16, 104)
-	building_accept_workers_button.size = Vector2(272, 30)
 	building_accept_workers_button.pressed.connect(_toggle_selected_workplace_acceptance)
-	building_menu.add_child(building_accept_workers_button)
-	building_dismiss_worker_button = Button.new()
-	building_dismiss_worker_button.text = "Dismiss worker"
-	building_dismiss_worker_button.position = Vector2(16, 140)
-	building_dismiss_worker_button.size = Vector2(272, 30)
 	building_dismiss_worker_button.pressed.connect(_dismiss_selected_workplace_worker)
-	building_menu.add_child(building_dismiss_worker_button)
-	building_overtime_button = CheckButton.new()
-	building_overtime_button.text = "Work through the night"
-	building_overtime_button.position = Vector2(16, 176)
-	building_overtime_button.size = Vector2(272, 30)
 	building_overtime_button.toggled.connect(_toggle_worker_overtime)
-	building_menu.add_child(building_overtime_button)
-	building_relight_button = Button.new()
-	building_relight_button.text = "Relight with flint and steel"
-	building_relight_button.size = Vector2(272, 30)
 	building_relight_button.pressed.connect(_relight_selected_fire)
-	building_menu.add_child(building_relight_button)
-
-	building_upgrade_button = Button.new()
-	building_upgrade_button.text = "Upgrade"
-	building_upgrade_button.position = Vector2(16, 212)
-	building_upgrade_button.size = Vector2(272, 30)
 	building_upgrade_button.pressed.connect(_upgrade_selected_building)
-	building_menu.add_child(building_upgrade_button)
-
-	building_demolish_button = Button.new()
-	building_demolish_button.text = "Mark for demolition"
-	building_demolish_button.size = Vector2(272, 30)
 	building_demolish_button.pressed.connect(_demolish_selected_building)
-	building_menu.add_child(building_demolish_button)
-
-	building_close_button = Button.new()
-	building_close_button.text = "Close"
-	building_close_button.position = Vector2(16, 184)
-	building_close_button.size = Vector2(272, 30)
 	building_close_button.pressed.connect(_close_context_menus)
-	building_menu.add_child(building_close_button)
-	
-	building_cancel_construction_button = Button.new()
-	building_cancel_construction_button.text = "Cancel construction"
-	building_cancel_construction_button.position = Vector2(16, 140)
-	building_cancel_construction_button.size = Vector2(272, 30)
 	building_cancel_construction_button.pressed.connect(_cancel_selected_construction)
-	building_menu.add_child(building_cancel_construction_button)
 
 func _show_building_menu() -> void:
 	if not is_instance_valid(selected_building):
@@ -9337,19 +9028,16 @@ func _workplace_priority_position(building: Node3D) -> int:
 
 
 func _create_warehouse_menu(ui: CanvasLayer) -> void:
-	warehouse_menu = _create_context_menu_panel(ui, Control.PRESET_BOTTOM_RIGHT, Vector4(-344.0, -660.0, -20.0, -20.0))
-
-	warehouse_menu_title = Label.new()
-	warehouse_menu_title.position = Vector2(16, 12)
-	warehouse_menu_title.size = Vector2(292, 60)
-	warehouse_menu_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	warehouse_menu_title.add_theme_font_size_override("font_size", 15)
-	warehouse_menu.add_child(warehouse_menu_title)
-
+	var menu: WarehouseMenu = WarehouseMenuScene.instantiate()
+	ui.add_child(menu)
+	warehouse_menu = menu
+	warehouse_menu_title = menu.title_label
 
 func _create_pocket_take_menu(ui: CanvasLayer) -> void:
-	pocket_take_menu = PocketTakeMenuScript.new()
-	ui.add_child(pocket_take_menu)
+	var menu: PocketTakeMenu = PocketTakeMenuScene.instantiate()
+	ui.add_child(menu)
+	pocket_take_menu = menu
+	pocket_take_menu_title = menu.title_label
 
 
 func _show_pocket_take_menu(warehouse_index := -1) -> void:

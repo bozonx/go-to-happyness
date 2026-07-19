@@ -1,0 +1,71 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/features/ui/presentation/time_controls_panel.gd" id="1_time"]
+
+[node name="TimeControlsPanel" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1_time")
+
+[node name="SpeedControls" type="HBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -220.0
+offset_top = 58.0
+offset_right = -22.0
+offset_bottom = 90.0
+grow_horizontal = 0
+alignment = 2
+
+[node name="Speed1" type="Button" parent="SpeedControls"]
+custom_minimum_size = Vector2(56, 30)
+layout_mode = 2
+tooltip_text = "Simulation speed x1"
+text = "x1"
+
+[node name="Speed2" type="Button" parent="SpeedControls"]
+custom_minimum_size = Vector2(56, 30)
+layout_mode = 2
+tooltip_text = "Simulation speed x2"
+text = "x2"
+
+[node name="Speed5" type="Button" parent="SpeedControls"]
+custom_minimum_size = Vector2(56, 30)
+layout_mode = 2
+tooltip_text = "Simulation speed x5"
+text = "x5"
+
+[node name="SkipNightButton" type="Button" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -220.0
+offset_top = 96.0
+offset_right = -22.0
+offset_bottom = 128.0
+grow_horizontal = 0
+tooltip_text = "Jump to the next morning (06:00)"
+text = "Skip night »"
+
+[node name="StartWorkdayButton" type="Button" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -220.0
+offset_top = 96.0
+offset_right = -22.0
+offset_bottom = 128.0
+grow_horizontal = 0
+tooltip_text = "Jump to 08:00"
+text = "К началу рабочего дня"
