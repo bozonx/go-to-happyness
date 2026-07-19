@@ -1549,9 +1549,9 @@ func _update_house_lights() -> void:
 	house_light_update_minute = clock_minute
 	var minute_of_day := hour * 60 + minute
 	for record in house_lights:
-		var light: OmniLight3D = record.light
-		if not is_instance_valid(light):
+		if not is_instance_valid(record.light):
 			continue
+		var light: OmniLight3D = record.light
 		var house: Node3D = record.house
 		var off_minute: int = int(house.get_meta("light_off_minute", record.off_minute))
 		# A home is lit only after someone moves in. It turns on with evening
@@ -6022,6 +6022,14 @@ func _finish_demolition(site: DemolitionSite) -> void:
 	settlement.buildings[building_type] = maxi(0, int(settlement.buildings.get(building_type, 1)) - 1)
 	if campfire_node == null:
 		_select_best_campfire()
+	for i in range(house_lights.size() - 1, -1, -1):
+		if house_lights[i].house == building:
+			house_lights.remove_at(i)
+	for i in range(entrance_lights.size() - 1, -1, -1):
+		if not is_instance_valid(entrance_lights[i]):
+			entrance_lights.remove_at(i)
+		elif entrance_lights[i].get_parent() == building:
+			entrance_lights.remove_at(i)
 	_create_resource_pile(building.global_position, pile_resources)
 	building.queue_free()
 	_refresh_navigation_grid()
