@@ -15,7 +15,7 @@ const TradeOrderScript = preload("res://game/features/logistics/domain/trade_ord
 const WaterCollectorServiceScript = preload("res://game/features/logistics/application/water_collector_service.gd")
 const FireSourceStateScript = preload("res://game/features/settlement/domain/fire_source_state.gd")
 const CitizenStatusEffectScript = preload("res://game/features/citizens/domain/citizen_status_effect.gd")
-const TrailFieldServiceScript = preload("res://game/features/roads/application/trail_field_service.gd")
+const TrailFieldServiceScript = preload("res://game/features/routing/application/trail_field_service.gd")
 const WeatherStateScript = preload("res://game/features/simulation/domain/weather_state.gd")
 
 
