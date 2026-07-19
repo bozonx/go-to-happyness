@@ -55,6 +55,10 @@ const VillageTerritoryServiceScript = preload("res://game/features/buildings/app
 const VillageBoundaryMarkersScript = preload("res://game/features/buildings/presentation/village_boundary_markers.gd")
 const VillageTerritoryOverlayScript = preload("res://game/features/buildings/presentation/village_territory_overlay.gd")
 const TimeControlsPanelScript = preload("res://game/features/ui/presentation/time_controls_panel.gd")
+const MessageLogPanelScript = preload("res://game/features/ui/presentation/message_log_panel.gd")
+const InteractionHintPanelScript = preload("res://game/features/ui/presentation/interaction_hint_panel.gd")
+const SurvivalDecisionPanelScript = preload("res://game/features/ui/presentation/survival_decision_panel.gd")
+const CampfireStoryMenuScript = preload("res://game/features/ui/presentation/campfire_story_menu.gd")
 
 
 # The playable routing and construction board must cover the terrain visible
@@ -267,7 +271,7 @@ var preview_entrance_marker: MeshInstance3D
 var preview_back_entrance_marker: MeshInstance3D
 var wood_label: Label
 var status_label: Label
-var messages: Array[Dictionary] = []
+var message_log_panel: Control
 var current_day: int:
 	get: return day_cycle.current_day
 var tent_weather: int = TentEraSurvivalRulesScript.Weather.WARMING
@@ -275,11 +279,6 @@ var last_survival_hour := -1
 var last_zero_wellbeing_departure_day := -1
 var _is_skipping_night := false
 var _skip_zero_wellbeing_departure_applied := false
-var message_scroll: ScrollContainer
-var message_list: VBoxContainer
-var message_panel: Panel
-var messages_modal: Panel
-var modal_message_list: VBoxContainer
 var selected_builder: Citizen
 var selected_building: Node3D
 var build_menu: Panel
@@ -307,9 +306,11 @@ var interaction_start_cell := Vector2i(-9999, -9999)
 var interaction_repeat_all := false
 var player_work_target: Node3D
 var _player_toilet_notified := false
-var interaction_hint_panel: Panel
-var interaction_hint_label: Label
-var interaction_progress: ProgressBar
+var interaction_hint_panel: Control
+var interaction_hint_label: Label:
+	get: return interaction_hint_panel.hint_label if interaction_hint_panel != null else null
+var interaction_progress: ProgressBar:
+	get: return interaction_hint_panel.progress_bar if interaction_hint_panel != null else null
 var pocket_take_menu: Panel
 var pocket_take_menu_title: Label
 var pocket_menu_open := false
@@ -416,15 +417,15 @@ var building_overtime_button: CheckButton
 var building_relight_button: Button
 var campfire_overtime_button: CheckButton
 var campfire_close_btn: Button
-var campfire_story_menu: Panel
+var campfire_story_menu: Control
 var campfire_story_buttons: Array[Button] = []
 var building_cancel_construction_button: Button
-var decision_menu: Panel
-var decision_title: Label
-var decision_description: Label
+var decision_menu: Control
+var survival_decision_panel: Control:
+	get: return decision_menu
+var _decision_buttons: Array[Button] = []
 var event_service: EventService
 var survival_busy_until: Dictionary = {}
-var _decision_buttons: Array[Button] = []
 var job_submenu_btn: Button
 var daily_order_submenu_btn: Button
 var job_back_btn: Button
@@ -2610,166 +2611,18 @@ func _resource_display_name(resource_type: String) -> String:
 # ---------- Message log system ------------------------------------------------
 
 func _add_message(text: String) -> void:
-	if message_list == null or text.is_empty() or not _is_gameplay_message(text):
-		return
-	var msg_type := _classify_message(text)
-	var timestamp := "[Day %d, %02d:%02d]" % [current_day, clock.hour(), clock.minute()]
-	var entry := {"text": text, "type": msg_type, "timestamp": timestamp}
-	messages.append(entry)
-	var color := _message_color(msg_type)
-	var formatted := "[color=%s]%s[/color] %s" % [color, timestamp, text]
-	_append_message_label(message_list, formatted, 12, 356)
-	_scroll_to_bottom.call_deferred()
-	# Keep only last 60 visible in the compact panel.
-	while message_list.get_child_count() > 60:
-		var old_node := message_list.get_child(0)
-		message_list.remove_child(old_node)
-		old_node.queue_free()
-
-func _is_gameplay_message(text: String) -> bool:
-	var lower := text.to_lower()
-	for noise in [" selected", "view enabled", "overview centered", "simulation speed", "workday set", "night shifts", "construction mode cancelled"]:
-		if lower.contains(noise):
-			return false
-	return true
-
-
-func _classify_message(text: String) -> String:
-	var lower := text.to_lower()
-	# Error-level
-	if lower.contains("critical") or lower.contains("missed") or lower.contains("ran out") or lower.contains("left after") or lower.contains("no canteen") or lower.contains("needs a cook") or lower.contains("no storage room") or lower.contains("interrupted") or lower.contains("not allowed") or lower.contains("exhausted") or lower.contains("starving") or lower.contains("dehydrated"):
-		return "error"
-	# Warning-level
-	if lower.contains("warning") or lower.contains("rebalance") or lower.contains("low wellbeing") or lower.contains("declining") or lower.contains("filling up") or lower.contains("running low") or lower.contains("needs") or lower.contains("requires"):
-		return "warning"
-	# Success-level
-	if lower.contains("unlocked") or lower.contains("completed") or lower.contains("delivered") or lower.contains("produced") or lower.contains("joined") or lower.contains("built") or lower.contains("advanced") or lower.contains("received") or lower.contains("research started"):
-		return "success"
-	return "info"
-
-
-func _message_color(msg_type: String) -> String:
-	match msg_type:
-		"error": return "#e85555"
-		"warning": return "#f0a030"
-		"success": return "#7dce82"
-		_: return "#8ab4cc"
-
-
-func _append_message_label(container: VBoxContainer, formatted_text: String, font_size: int, min_width: float) -> void:
-	var label := RichTextLabel.new()
-	label.bbcode_enabled = true
-	label.fit_content = true
-	label.scroll_active = false
-	label.text = formatted_text
-	label.add_theme_font_size_override("normal_font_size", font_size)
-	label.custom_minimum_size = Vector2(min_width, 0)
-	container.add_child(label)
-
-
-func _scroll_to_bottom() -> void:
-	if message_scroll != null:
-		message_scroll.scroll_vertical = int(message_scroll.get_v_scroll_bar().max_value)
+	if message_log_panel != null:
+		var timestamp := "[Day %d, %02d:%02d]" % [current_day, clock.hour(), clock.minute()]
+		message_log_panel.add_message(text, timestamp)
 
 
 func _create_message_panel(ui: CanvasLayer) -> void:
-	message_panel = Panel.new()
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.03, 0.06, 0.08, 0.92)
-	style.border_color = Color(0.15, 0.25, 0.32, 0.7)
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(4)
-	message_panel.add_theme_stylebox_override("panel", style)
-	message_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	message_panel.offset_left = 20
-	message_panel.offset_top = -268
-	message_panel.offset_right = 400
-	message_panel.offset_bottom = -38
-	ui.add_child(message_panel)
-
-	# Header row
-	var header := HBoxContainer.new()
-	header.position = Vector2(10, 6)
-	header.size = Vector2(368, 26)
-	message_panel.add_child(header)
-
-	var title := Label.new()
-	title.text = "Messages"
-	title.add_theme_font_size_override("font_size", 13)
-	title.add_theme_color_override("font_color", Color(0.7, 0.85, 0.95))
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_child(title)
-
-	var history_btn := Button.new()
-	history_btn.text = "History"
-	history_btn.add_theme_font_size_override("font_size", 12)
-	history_btn.custom_minimum_size = Vector2(70, 24)
-	history_btn.pressed.connect(_open_messages_modal)
-	header.add_child(history_btn)
-
-	# Scrollable message list
-	message_scroll = ScrollContainer.new()
-	message_scroll.position = Vector2(6, 34)
-	message_scroll.size = Vector2(376, 190)
-	message_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	message_panel.add_child(message_scroll)
-
-	message_list = VBoxContainer.new()
-	message_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	message_scroll.add_child(message_list)
+	message_log_panel = MessageLogPanelScript.new()
+	ui.add_child(message_log_panel)
 
 
 func _create_messages_modal(ui: CanvasLayer) -> void:
-	var modal_handler := func(event: InputEvent) -> void:
-		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
-			_close_messages_modal()
-	messages_modal = _create_context_menu_panel(ui, Control.PRESET_CENTER, Vector4(-300.0, -240.0, 300.0, 240.0), modal_handler)
-
-	# Title
-	var title := Label.new()
-	title.text = "Message History"
-	title.position = Vector2(20, 12)
-	title.size = Vector2(460, 30)
-	title.add_theme_font_size_override("font_size", 18)
-	title.add_theme_color_override("font_color", Color(0.8, 0.9, 1.0))
-	messages_modal.add_child(title)
-
-	# Close button
-	var close_btn := Button.new()
-	close_btn.text = "Close"
-	close_btn.position = Vector2(510, 10)
-	close_btn.size = Vector2(78, 30)
-	close_btn.pressed.connect(_close_messages_modal)
-	messages_modal.add_child(close_btn)
-
-	# Scroll container
-	var scroll := ScrollContainer.new()
-	scroll.position = Vector2(12, 48)
-	scroll.size = Vector2(576, 420)
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	messages_modal.add_child(scroll)
-
-	modal_message_list = VBoxContainer.new()
-	modal_message_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(modal_message_list)
-
-
-func _open_messages_modal() -> void:
-	if messages_modal == null:
-		return
-	# Rebuild modal content from full history.
-	for child in modal_message_list.get_children():
-		child.queue_free()
-	for entry in messages:
-		var color := _message_color(entry.type)
-		var formatted := "[color=%s]%s[/color] %s" % [color, entry.timestamp, entry.text]
-		_append_message_label(modal_message_list, formatted, 13, 564)
-	messages_modal.visible = true
-
-
-func _close_messages_modal() -> void:
-	if messages_modal != null:
-		messages_modal.visible = false
+	pass
 
 # ---------- End message log system --------------------------------------------
 
@@ -3481,38 +3334,8 @@ func _create_interface() -> void:
 	clock_label.add_theme_font_size_override("font_size", 22)
 	ui.add_child(clock_label)
 	_create_time_controls(ui)
-	interaction_hint_panel = Panel.new()
-	interaction_hint_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	interaction_hint_panel.offset_left = -340
-	interaction_hint_panel.offset_top = -80
-	interaction_hint_panel.offset_right = 340
-	interaction_hint_panel.offset_bottom = -12
-	var hint_style := StyleBoxFlat.new()
-	hint_style.bg_color = Color(0.08, 0.14, 0.18, 0.75)
-	hint_style.border_color = Color(0.25, 0.4, 0.5, 0.7)
-	hint_style.set_border_width_all(2)
-	hint_style.set_corner_radius_all(6)
-	interaction_hint_panel.add_theme_stylebox_override("panel", hint_style)
-	interaction_hint_panel.visible = false
+	interaction_hint_panel = InteractionHintPanelScript.new()
 	ui.add_child(interaction_hint_panel)
-	interaction_hint_label = Label.new()
-	interaction_hint_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	interaction_hint_label.offset_left = 12
-	interaction_hint_label.offset_top = 8
-	interaction_hint_label.offset_right = -12
-	interaction_hint_label.offset_bottom = 34
-	interaction_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	interaction_hint_label.add_theme_font_size_override("font_size", 16)
-	interaction_hint_panel.add_child(interaction_hint_label)
-	interaction_progress = ProgressBar.new()
-	interaction_progress.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	interaction_progress.offset_left = 20
-	interaction_progress.offset_top = 40
-	interaction_progress.offset_right = -20
-	interaction_progress.offset_bottom = 60
-	interaction_progress.show_percentage = true
-	interaction_progress.visible = false
-	interaction_hint_panel.add_child(interaction_progress)
 	build_toggle_btn = Button.new()
 	build_toggle_btn.text = "Construction Panel"
 	build_toggle_btn.position = Vector2(20, 388)
@@ -3558,17 +3381,9 @@ func _create_context_menu_panel(ui: CanvasLayer, anchor: int, offsets: Vector4, 
 
 
 func _create_survival_decision_menu(ui: CanvasLayer) -> void:
-	decision_menu = _create_context_menu_panel(ui, Control.PRESET_CENTER, Vector4(-240.0, -150.0, 240.0, 150.0))
-	decision_title = Label.new()
-	decision_title.position = Vector2(20, 18)
-	decision_title.size = Vector2(440, 28)
-	decision_title.add_theme_font_size_override("font_size", 19)
-	decision_menu.add_child(decision_title)
-	decision_description = Label.new()
-	decision_description.position = Vector2(20, 58)
-	decision_description.size = Vector2(440, 116)
-	decision_description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	decision_menu.add_child(decision_description)
+	decision_menu = SurvivalDecisionPanelScript.new()
+	ui.add_child(decision_menu)
+	decision_menu.choice_selected.connect(_resolve_event_decision)
 
 
 func _create_crosshair(ui: CanvasLayer) -> void:
@@ -3578,45 +3393,10 @@ func _create_crosshair(ui: CanvasLayer) -> void:
 
 
 func _create_campfire_story_menu(ui: CanvasLayer) -> void:
-	campfire_story_menu = _create_context_menu_panel(ui, Control.PRESET_CENTER, Vector4(-220.0, -140.0, 220.0, 140.0))
-
-	var title := Label.new()
-	title.text = "Campfire Story"
-	title.position = Vector2(20, 16)
-	title.size = Vector2(400, 28)
-	title.add_theme_font_size_override("font_size", 17)
-	campfire_story_menu.add_child(title)
-
-	var desc := Label.new()
-	desc.text = "Choose tonight's theme (only after 20:00 in the Tent Era)."
-	desc.position = Vector2(20, 50)
-	desc.size = Vector2(400, 40)
-	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	campfire_story_menu.add_child(desc)
-
-	var stories := [
-		{"id": "optimistic", "label": "Optimistic stories", "tooltip": "Wellbeing recovers faster tonight, but everyone wakes an hour later."},
-		{"id": "teaching", "label": "Teaching tales", "tooltip": "One random resident learns a little of a physical skill overnight."},
-		{"id": "plan", "label": "Plan for tomorrow", "tooltip": "Work speed +15%% for gathering tasks tomorrow; night calorie cost rises."},
-	]
-	var y := 100
-	for story in stories:
-		var btn := Button.new()
-		btn.text = story.label
-		btn.tooltip_text = story.tooltip
-		btn.position = Vector2(20, y)
-		btn.size = Vector2(400, 30)
-		btn.pressed.connect(_select_campfire_story.bind(story.id))
-		campfire_story_menu.add_child(btn)
-		campfire_story_buttons.append(btn)
-		y += 38
-
-	var close := Button.new()
-	close.text = "Close"
-	close.position = Vector2(20, y + 4)
-	close.size = Vector2(400, 28)
-	close.pressed.connect(_close_campfire_story_menu)
-	campfire_story_menu.add_child(close)
+	campfire_story_menu = CampfireStoryMenuScript.new()
+	ui.add_child(campfire_story_menu)
+	campfire_story_menu.story_selected.connect(_select_campfire_story)
+	campfire_story_menu.close_requested.connect(_close_campfire_story_menu)
 
 
 func _maybe_present_survival_decision() -> void:
@@ -3632,22 +3412,10 @@ func _maybe_present_survival_decision() -> void:
 
 
 func _show_event_decision(event_def: GameEventDef) -> void:
-	decision_title.text = event_def.title
-	decision_description.text = event_def.description
-	for btn in _decision_buttons:
-		btn.queue_free()
-	_decision_buttons.clear()
-	var y_offset := 194
-	for i in range(event_def.choices.size()):
-		var btn := Button.new()
-		btn.position = Vector2(20, y_offset)
-		btn.size = Vector2(440, 32)
-		btn.text = event_def.choices[i].label
-		btn.pressed.connect(_resolve_event_decision.bind(i))
-		decision_menu.add_child(btn)
-		_decision_buttons.append(btn)
-		y_offset += 42
-	decision_menu.visible = true
+	var choice_labels: Array[String] = []
+	for choice in event_def.choices:
+		choice_labels.append(choice.label)
+	decision_menu.show_event(event_def.title, event_def.description, choice_labels)
 
 
 func _resolve_event_decision(choice_index: int) -> void:
@@ -5453,8 +5221,8 @@ func _set_build_placement_ui_visible(is_visible: bool) -> void:
 		build_menu.visible = is_visible and (selected_builder != null or build_menu_is_global)
 	if build_toggle_btn != null:
 		build_toggle_btn.visible = is_visible and not is_first_person
-	if message_panel != null:
-		message_panel.visible = is_visible
+	if message_log_panel != null:
+		message_log_panel.visible = is_visible
 
 
 func _select_build_mode(next_mode: String) -> void:
@@ -5517,7 +5285,7 @@ func _is_first_person_menu_open() -> bool:
 		return true
 	if decision_menu != null and decision_menu.visible:
 		return true
-	if messages_modal != null and messages_modal.visible:
+	if message_log_panel != null and message_log_panel.is_modal_visible():
 		return true
 	return false
 
@@ -5558,8 +5326,8 @@ func _close_context_menus() -> void:
 		decision_menu.visible = false
 	if campfire_story_menu != null:
 		campfire_story_menu.visible = false
-	if messages_modal != null:
-		messages_modal.visible = false
+	if message_log_panel != null:
+		message_log_panel.close_modal()
 	_close_pocket_take_menu()
 	_hide_workforce_menu()
 	selected_house = null
@@ -5624,8 +5392,8 @@ func _handle_menu_right_click() -> bool:
 		entrance_order_modal.visible = false
 		entrance_menu.visible = true
 		return true
-	if messages_modal != null and messages_modal.visible:
-		_close_messages_modal()
+	if message_log_panel != null and message_log_panel.is_modal_visible():
+		message_log_panel.close_modal()
 		return true
 	var any_menu_visible := entrance_menu.visible or house_menu.visible or school_menu.visible or materials_factory_menu.visible or campfire_menu.visible or market_menu.visible or warehouse_menu.visible or building_menu.visible
 	if decision_menu != null and decision_menu.visible:
