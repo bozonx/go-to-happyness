@@ -59,6 +59,10 @@ const MessageLogPanelScript = preload("res://game/features/ui/presentation/messa
 const InteractionHintPanelScript = preload("res://game/features/ui/presentation/interaction_hint_panel.gd")
 const SurvivalDecisionPanelScript = preload("res://game/features/ui/presentation/survival_decision_panel.gd")
 const CampfireStoryMenuScript = preload("res://game/features/ui/presentation/campfire_story_menu.gd")
+const CampfireOrdersMenuScript = preload("res://game/features/ui/presentation/campfire_orders_menu.gd")
+const ResearchMenuScript = preload("res://game/features/ui/presentation/research_menu.gd")
+const WorkforceMenuScript = preload("res://game/features/ui/presentation/workforce_menu.gd")
+const PocketTakeMenuScript = preload("res://game/features/ui/presentation/pocket_take_menu.gd")
 
 
 # The playable routing and construction board must cover the terrain visible
@@ -311,8 +315,9 @@ var interaction_hint_label: Label:
 	get: return interaction_hint_panel.hint_label if interaction_hint_panel != null else null
 var interaction_progress: ProgressBar:
 	get: return interaction_hint_panel.progress_bar if interaction_hint_panel != null else null
-var pocket_take_menu: Panel
-var pocket_take_menu_title: Label
+var pocket_take_menu: Control
+var pocket_take_menu_title: Label:
+	get: return pocket_take_menu.title_label if pocket_take_menu != null else null
 var pocket_menu_open := false
 var pocket_take_warehouse_index: int = -1
 var crosshair: FirstPersonCrosshair
@@ -391,12 +396,16 @@ var campfire_research_post_button: Button
 var campfire_occupy_position_button: Button
 var campfire_accept_button: Button
 var campfire_dismiss_button: Button
-var workforce_menu: Panel
-var workforce_menu_title: Label
-var workforce_list: VBoxContainer
-var research_menu: Panel
-var research_menu_title: Label
-var research_list: VBoxContainer
+var workforce_menu: Control
+var workforce_menu_title: Label:
+	get: return workforce_menu.title_label if workforce_menu != null else null
+var workforce_list: VBoxContainer:
+	get: return workforce_menu.list if workforce_menu != null else null
+var research_menu: Control
+var research_menu_title: Label:
+	get: return research_menu.title_label if research_menu != null else null
+var research_list: VBoxContainer:
+	get: return research_menu.research_list if research_menu != null else null
 var selected_market: Node3D = null
 var market_menu: Panel
 var market_menu_title: Label
@@ -476,12 +485,17 @@ var trail_overlay: MeshInstance3D
 var trail_overlay_material: ShaderMaterial
 var village_boundary_markers: Node3D
 var village_territory_overlay: Node3D
-var campfire_orders_menu: Panel
-var campfire_orders_toggle: CheckButton
-var campfire_balanced_warehouse_toggle: CheckButton
-var campfire_cheer_button: Button
-var campfire_night_work_button: CheckButton
-var campfire_double_time_button: CheckButton
+var campfire_orders_menu: Control
+var campfire_orders_toggle: CheckButton:
+	get: return campfire_orders_menu.road_walking_toggle if campfire_orders_menu != null else null
+var campfire_balanced_warehouse_toggle: CheckButton:
+	get: return campfire_orders_menu.balanced_warehouse_toggle if campfire_orders_menu != null else null
+var campfire_cheer_button: Button:
+	get: return campfire_orders_menu.cheer_button if campfire_orders_menu != null else null
+var campfire_night_work_button: CheckButton:
+	get: return campfire_orders_menu.night_work_button if campfire_orders_menu != null else null
+var campfire_double_time_button: CheckButton:
+	get: return campfire_orders_menu.double_time_button if campfire_orders_menu != null else null
 var personal_night_work_button: CheckButton
 
 
@@ -4290,30 +4304,9 @@ func _update_building_research(delta: float) -> void:
 			_refresh_research_menu()
 
 func _create_research_menu(ui: CanvasLayer) -> void:
-	research_menu = _create_context_menu_panel(ui, Control.PRESET_CENTER, Vector4(-310.0, -250.0, 310.0, 250.0))
-
-	research_menu_title = Label.new()
-	research_menu_title.position = Vector2(18, 16)
-	research_menu_title.size = Vector2(604, 30)
-	research_menu_title.add_theme_font_size_override("font_size", 18)
-	research_menu.add_child(research_menu_title)
-	
-	var scroll := ScrollContainer.new()
-	scroll.position = Vector2(18, 54)
-	scroll.size = Vector2(604, 330)
-	research_menu.add_child(scroll)
-	
-	research_list = VBoxContainer.new()
-	research_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	research_list.add_theme_constant_override("separation", 8)
-	scroll.add_child(research_list)
-	
-	var close_btn := Button.new()
-	close_btn.text = "Close"
-	close_btn.position = Vector2(18, 398)
-	close_btn.size = Vector2(604, 32)
-	close_btn.pressed.connect(_hide_research_menu)
-	research_menu.add_child(close_btn)
+	research_menu = ResearchMenuScript.new()
+	ui.add_child(research_menu)
+	research_menu.close_requested.connect(_hide_research_menu)
 
 func _show_research_menu() -> void:
 	if research_menu == null:
@@ -8101,62 +8094,14 @@ func _select_campfire_story(story_id: String) -> void:
 
 
 func _create_campfire_orders_menu(ui: CanvasLayer) -> void:
-	campfire_orders_menu = _create_context_menu_panel(ui, Control.PRESET_CENTER, Vector4(-210.0, -190.0, 210.0, 190.0))
-
-	var title := Label.new()
-	title.text = "Campfire Orders"
-	title.position = Vector2(18, 16)
-	title.size = Vector2(384, 28)
-	title.add_theme_font_size_override("font_size", 18)
-	campfire_orders_menu.add_child(title)
-	campfire_orders_toggle = CheckButton.new()
-	campfire_orders_toggle.text = "Walk as if on roads"
-	campfire_orders_toggle.position = Vector2(18, 58)
-	campfire_orders_toggle.size = Vector2(384, 32)
-	campfire_orders_toggle.tooltip_text = "Residents trample trails faster. Route selection is unchanged."
-	campfire_orders_toggle.toggled.connect(_set_road_walking_order)
-	campfire_orders_menu.add_child(campfire_orders_toggle)
-	campfire_balanced_warehouse_toggle = CheckButton.new()
-	campfire_balanced_warehouse_toggle.text = "Balanced warehouse storage"
-	campfire_balanced_warehouse_toggle.position = Vector2(18, 96)
-	campfire_balanced_warehouse_toggle.size = Vector2(384, 32)
-	campfire_balanced_warehouse_toggle.tooltip_text = "Spread each good evenly between warehouses instead of filling the nearest one."
-	campfire_balanced_warehouse_toggle.toggled.connect(_set_balanced_warehouse_mode)
-	campfire_orders_menu.add_child(campfire_balanced_warehouse_toggle)
-	campfire_night_work_button = CheckButton.new()
-	campfire_night_work_button.text = "Work through the night"
-	campfire_night_work_button.position = Vector2(18, 134)
-	campfire_night_work_button.size = Vector2(384, 32)
-	campfire_night_work_button.tooltip_text = "Affected workers continue through the night and next workday."
-	campfire_night_work_button.toggled.connect(_toggle_settlement_night_work)
-	campfire_orders_menu.add_child(campfire_night_work_button)
-	campfire_double_time_button = CheckButton.new()
-	campfire_double_time_button.text = "Double time"
-	campfire_double_time_button.position = Vector2(18, 172)
-	campfire_double_time_button.size = Vector2(384, 32)
-	campfire_double_time_button.tooltip_text = "All residents walk twice as fast today. Fatigue accumulates 50%% faster and satisfaction drops."
-	campfire_double_time_button.toggled.connect(_toggle_double_time_order)
-	campfire_orders_menu.add_child(campfire_double_time_button)
-	var description := Label.new()
-	description.text = "Night work raises fatigue and lowers satisfaction. Dangerously tired residents may collapse while returning home.\nDouble time doubles walk speed but accelerates fatigue by 50%% and lowers satisfaction."
-	description.position = Vector2(18, 212)
-	description.size = Vector2(384, 60)
-	description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	description.add_theme_font_size_override("font_size", 13)
-	campfire_orders_menu.add_child(description)
-	campfire_cheer_button = Button.new()
-	campfire_cheer_button.text = "Cheer up"
-	campfire_cheer_button.position = Vector2(18, 280)
-	campfire_cheer_button.size = Vector2(384, 32)
-	campfire_cheer_button.tooltip_text = "Once per day. Raises wellbeing by 5%%."
-	campfire_cheer_button.pressed.connect(_cheer_up_settlement)
-	campfire_orders_menu.add_child(campfire_cheer_button)
-	var close_button := Button.new()
-	close_button.text = "Close"
-	close_button.position = Vector2(286, 288)
-	close_button.size = Vector2(116, 32)
-	close_button.pressed.connect(_close_campfire_orders_menu)
-	campfire_orders_menu.add_child(close_button)
+	campfire_orders_menu = CampfireOrdersMenuScript.new()
+	ui.add_child(campfire_orders_menu)
+	campfire_orders_menu.road_walking_toggle.toggled.connect(_set_road_walking_order)
+	campfire_orders_menu.balanced_warehouse_toggle.toggled.connect(_set_balanced_warehouse_mode)
+	campfire_orders_menu.night_work_button.toggled.connect(_toggle_settlement_night_work)
+	campfire_orders_menu.double_time_button.toggled.connect(_toggle_double_time_order)
+	campfire_orders_menu.cheer_button.pressed.connect(_cheer_up_settlement)
+	campfire_orders_menu.close_requested.connect(_close_campfire_orders_menu)
 
 
 func _show_campfire_orders_menu() -> void:
@@ -8296,27 +8241,9 @@ func _toggle_selected_citizen_night_work(checked: bool) -> void:
 
 
 func _create_workforce_menu(ui: CanvasLayer) -> void:
-	workforce_menu = _create_context_menu_panel(ui, Control.PRESET_CENTER, Vector4(-230.0, -255.0, 230.0, 255.0))
-
-	workforce_menu_title = Label.new()
-	workforce_menu_title.position = Vector2(18, 16)
-	workforce_menu_title.size = Vector2(424, 30)
-	workforce_menu_title.add_theme_font_size_override("font_size", 18)
-	workforce_menu.add_child(workforce_menu_title)
-	var scroll := ScrollContainer.new()
-	scroll.position = Vector2(18, 54)
-	scroll.size = Vector2(424, 390)
-	workforce_menu.add_child(scroll)
-	workforce_list = VBoxContainer.new()
-	workforce_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	workforce_list.add_theme_constant_override("separation", 6)
-	scroll.add_child(workforce_list)
-	var close_btn := Button.new()
-	close_btn.text = "Close"
-	close_btn.position = Vector2(18, 458)
-	close_btn.size = Vector2(424, 32)
-	close_btn.pressed.connect(_close_workforce_menu)
-	workforce_menu.add_child(close_btn)
+	workforce_menu = WorkforceMenuScript.new()
+	ui.add_child(workforce_menu)
+	workforce_menu.close_requested.connect(_close_workforce_menu)
 
 
 func _show_workforce_menu() -> void:
@@ -9421,14 +9348,8 @@ func _create_warehouse_menu(ui: CanvasLayer) -> void:
 
 
 func _create_pocket_take_menu(ui: CanvasLayer) -> void:
-	pocket_take_menu = _create_context_menu_panel(ui, Control.PRESET_CENTER, Vector4(-220.0, -260.0, 220.0, 260.0))
-
-	pocket_take_menu_title = Label.new()
-	pocket_take_menu_title.text = "Взять товары со склада"
-	pocket_take_menu_title.position = Vector2(20, 12)
-	pocket_take_menu_title.size = Vector2(400, 28)
-	pocket_take_menu_title.add_theme_font_size_override("font_size", 17)
-	pocket_take_menu.add_child(pocket_take_menu_title)
+	pocket_take_menu = PocketTakeMenuScript.new()
+	ui.add_child(pocket_take_menu)
 
 
 func _show_pocket_take_menu(warehouse_index := -1) -> void:
