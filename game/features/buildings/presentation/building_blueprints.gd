@@ -534,6 +534,7 @@ static func _boundary_post_blueprint() -> Dictionary:
 		_module(Vector3(0.0, 0.25, 0.0), Vector3(0.12, 0.5, 0.12), "post", color),
 	]
 	return {
+		"type": "boundary_post",
 		"footprint": Vector2i(1, 1),
 		"height": 1,
 		"modules": modules,

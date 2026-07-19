@@ -1425,7 +1425,7 @@ func _total_game_minutes() -> float:
 func _remove_expired_temporary_tents() -> void:
 	for record in building_registry.records().duplicate():
 		var tent := record.node as Node3D
-		if not is_instance_valid(tent) or str(tent.get_meta("building_type", "")) != "tent":
+		if not is_instance_valid(tent) or _is_construction_site(tent) or str(tent.get_meta("building_type", "")) != "tent":
 			continue
 		for citizen in citizens:
 			if is_instance_valid(citizen) and citizen.home == tent:
