@@ -362,6 +362,7 @@ var training_days_completed := 0
 var school_position := Vector3.ZERO
 var official_position := Vector3.ZERO
 var research_position := Vector3.ZERO
+var research_workplace: Node3D
 var arrival_position := Vector3.INF
 var pending_arrival_entrance := Vector3.INF
 var factory: Node3D
@@ -2206,17 +2207,18 @@ func assign_craft_work(next_craft_position: Vector3, next_speed_multiplier := 1.
 		factory = null
 		state = State.TO_CRAFT_WORK
 
-func assign_research_work(next_research_position: Vector3) -> void:
+func assign_research_work(next_research_position: Vector3, next_research_workplace: Node3D = null) -> void:
 	if not is_player_controlled:
 		_reset_assignment_navigation()
 		research_position = next_research_position
+		research_workplace = next_research_workplace
 		active_role = "research"
 		factory = null
 		state = State.RESEARCHING
 
 func _process_research(delta: float) -> void:
 	if _move_to(research_position, delta, false, false):
-		enter_work_position(research_position, "research", null, true, false)
+		enter_work_position(research_position, "researcher", research_workplace, true, false)
 
 func _process_craft_work_arrival(delta: float) -> void:
 	if _move_to(craft_position, delta, false, false):
@@ -3175,7 +3177,7 @@ func execute_action(action: StringName, target: Node3D, payload: AIFactSet) -> b
 				return false
 			assign_excavation(target)
 			return state == State.EXCAVATING
-		&"cook", &"teacher", &"seller", &"official", &"craftsman":
+		&"cook", &"teacher", &"seller", &"official", &"craftsman", &"researcher":
 			var service_position: Variant = payload.value(&"workplace.position", Vector3.INF) if payload != null else Vector3.INF
 			if not (service_position is Vector3) or service_position == Vector3.INF:
 				return false
@@ -3185,6 +3187,7 @@ func execute_action(action: StringName, target: Node3D, payload: AIFactSet) -> b
 				&"seller": assign_seller_work(service_position)
 				&"official": assign_official_work(service_position)
 				&"craftsman": assign_craft_work(service_position, _craft_speed_multiplier_internal())
+				&"researcher": assign_research_work(service_position, research_workplace)
 			return state in _service_states_for_internal(action)
 		&"factory_work":
 			var factory_role: Variant = payload.value(&"factory.role", &"") if payload != null else &""
@@ -3270,7 +3273,7 @@ func get_action_status(action: StringName) -> int:
 				return 1 # RUNNING
 			if state == State.IDLE:
 				return 2 # SUCCEEDED
-		&"cook", &"teacher", &"seller", &"official", &"craftsman":
+		&"cook", &"teacher", &"seller", &"official", &"craftsman", &"researcher":
 			if state in _service_states_for_internal(action):
 				return 1 # RUNNING
 			if state == State.IDLE:
@@ -3306,7 +3309,7 @@ func cancel_current_action() -> void:
 		pending_employment_workplace = null
 		registration_queue_order = -1
 		employment_state = EmploymentState.NO_PERMANENT_WORK
-	if state in [State.TO_HOME, State.RESTING, State.TO_CANTEEN, State.EATING, State.TO_TOILET, State.USING_TOILET, State.WAITING_FOR_TOILET, State.TO_BUSH, State.USING_BUSH, State.AI_MOVING, State.TO_PARK, State.RELAXING, State.TO_TREE, State.CHOPPING, State.TO_SAWMILL, State.SAWING, State.WAITING_COURIER, State.CONSTRUCTING, State.TO_GATHER, State.GATHERING, State.TO_CLEANING_PILE, State.CLEANING_PILE, State.TO_WAREHOUSE, State.EXCAVATING, State.TO_CANTEEN_WORK, State.CANTEEN_WORK, State.TO_SCHOOL_WORK, State.SCHOOL_WORK, State.TO_MARKET_WORK, State.MARKET_WORK, State.TO_OFFICIAL_WORK, State.OFFICIAL_WORK, State.TO_CRAFT_WORK, State.CRAFT_WORK, State.TO_FACTORY, State.FACTORY_WORK, State.COURIER_TO_WORKER, State.COURIER_TO_WAREHOUSE, State.COURIER_TO_SAWMILL, State.TO_FOOD_PICKUP, State.TO_CANTEEN_DELIVERY, State.TO_CONSTRUCTION_PICKUP, State.TO_CONSTRUCTION_SITE, State.TO_TRADE_PICKUP, State.TO_TRADE_DESTINATION, State.TO_EMPLOYMENT_CENTER, State.EMPLOYMENT_PROCESSING]:
+	if state in [State.TO_HOME, State.RESTING, State.TO_CANTEEN, State.EATING, State.TO_TOILET, State.USING_TOILET, State.WAITING_FOR_TOILET, State.TO_BUSH, State.USING_BUSH, State.AI_MOVING, State.TO_PARK, State.RELAXING, State.TO_TREE, State.CHOPPING, State.TO_SAWMILL, State.SAWING, State.WAITING_COURIER, State.CONSTRUCTING, State.TO_GATHER, State.GATHERING, State.TO_CLEANING_PILE, State.CLEANING_PILE, State.TO_WAREHOUSE, State.EXCAVATING, State.TO_CANTEEN_WORK, State.CANTEEN_WORK, State.TO_SCHOOL_WORK, State.SCHOOL_WORK, State.TO_MARKET_WORK, State.MARKET_WORK, State.TO_OFFICIAL_WORK, State.OFFICIAL_WORK, State.TO_CRAFT_WORK, State.CRAFT_WORK, State.RESEARCHING, State.TO_FACTORY, State.FACTORY_WORK, State.COURIER_TO_WORKER, State.COURIER_TO_WAREHOUSE, State.COURIER_TO_SAWMILL, State.TO_FOOD_PICKUP, State.TO_CANTEEN_DELIVERY, State.TO_CONSTRUCTION_PICKUP, State.TO_CONSTRUCTION_SITE, State.TO_TRADE_PICKUP, State.TO_TRADE_DESTINATION, State.TO_EMPLOYMENT_CENTER, State.EMPLOYMENT_PROCESSING]:
 		idle()
 	if was_construction_delivery:
 		# The site reservation is reconciled by SettlementGame. Clear the actor-side
@@ -3328,7 +3331,7 @@ func cancel_current_action() -> void:
 func end_work_shift() -> void:
 	if is_player_controlled:
 		return
-	if state in [State.TO_TREE, State.CHOPPING, State.TO_SAWMILL, State.SAWING, State.WAITING_COURIER, State.CONSTRUCTING, State.EXCAVATING, State.TO_GATHER, State.GATHERING, State.TO_CLEANING_PILE, State.CLEANING_PILE, State.TO_WAREHOUSE, State.TO_CANTEEN_WORK, State.CANTEEN_WORK, State.TO_SCHOOL_WORK, State.SCHOOL_WORK, State.TO_MARKET_WORK, State.MARKET_WORK, State.TO_OFFICIAL_WORK, State.OFFICIAL_WORK, State.TO_CRAFT_WORK, State.CRAFT_WORK, State.TO_FACTORY, State.FACTORY_WORK]:
+	if state in [State.TO_TREE, State.CHOPPING, State.TO_SAWMILL, State.SAWING, State.WAITING_COURIER, State.CONSTRUCTING, State.EXCAVATING, State.TO_GATHER, State.GATHERING, State.TO_CLEANING_PILE, State.CLEANING_PILE, State.TO_WAREHOUSE, State.TO_CANTEEN_WORK, State.CANTEEN_WORK, State.TO_SCHOOL_WORK, State.SCHOOL_WORK, State.TO_MARKET_WORK, State.MARKET_WORK, State.TO_OFFICIAL_WORK, State.OFFICIAL_WORK, State.TO_CRAFT_WORK, State.CRAFT_WORK, State.RESEARCHING, State.TO_FACTORY, State.FACTORY_WORK]:
 		cancel_current_action()
 
 
@@ -3346,5 +3349,6 @@ func _service_states_for_internal(action: StringName) -> Array:
 		&"teacher": return [State.TO_SCHOOL_WORK, State.SCHOOL_WORK]
 		&"seller": return [State.TO_MARKET_WORK, State.MARKET_WORK]
 		&"official": return [State.TO_OFFICIAL_WORK, State.OFFICIAL_WORK]
+		&"researcher": return [State.RESEARCHING]
 		&"craftsman": return [State.TO_CRAFT_WORK, State.CRAFT_WORK]
 	return []

@@ -1,5 +1,15 @@
 extends SceneTree
 
+func _appoint_test_official(simulation: Node, citizen: Citizen) -> void:
+	simulation.settlement.complete_research("official")
+	if not is_instance_valid(simulation.campfire_node):
+		var centre := Node3D.new()
+		centre.set_meta("service_position", citizen.global_position)
+		simulation.add_child(centre)
+		simulation.campfire_node = centre
+	citizen.global_position = simulation._employment_center_position()
+	simulation._appoint_official(citizen, simulation.campfire_node)
+
 
 func _init() -> void:
 	var scene := load("res://game/bootstrap/settlement_game.tscn") as PackedScene
@@ -53,11 +63,11 @@ func _init() -> void:
 	assert(cleaning_daily_button.visible)
 	assert(not cleaning_daily_button.disabled)
 	simulation._close_assignment_submenu()
-	simulation._appoint_official(simulation.hero_citizen)
+	_appoint_test_official(simulation, simulation.hero_citizen)
 	var delegated_officer: Citizen = simulation.citizens[1]
-	simulation._appoint_official(delegated_officer)
+	_appoint_test_official(simulation, delegated_officer)
 	assert(simulation._player_can_command_labor())
-	simulation._appoint_official(simulation.hero_citizen)
+	_appoint_test_official(simulation, simulation.hero_citizen)
 	assert(simulation._player_can_command_labor())
 	# A daily order releases first-person control but does not break the permanent job.
 	simulation.selected_builder = simulation.hero_citizen
@@ -67,7 +77,7 @@ func _init() -> void:
 	assert(simulation.hero_citizen.employment_state == Citizen.EmploymentState.EMPLOYED)
 	assert(simulation.hero_citizen.permanent_role == "official")
 	assert(simulation.hero_citizen.daily_order_role == "gather_grass")
-	simulation._appoint_official(simulation.hero_citizen)
+	_appoint_test_official(simulation, simulation.hero_citizen)
 	assert(is_instance_valid(simulation.entrance_stone))
 	var hero_count := 0
 	for citizen in simulation.citizens:
@@ -331,8 +341,7 @@ func _init() -> void:
 	assert(simulation.construction_sites.is_empty())
 	assert(simulation.building_registry.record_at_cell(cell) == null)
 	var field_officer: Citizen = simulation.citizens[1]
-	simulation._appoint_official(field_officer)
-	assert(simulation._employment_center_position() == Vector3.INF)
+	_appoint_test_official(simulation, field_officer)
 	assert(simulation._registration_official() == null)
 	var civic_centre := Node3D.new()
 	civic_centre.position = field_officer.global_position

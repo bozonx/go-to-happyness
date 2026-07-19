@@ -9,7 +9,7 @@ func _enter(context: BehaviorContext) -> void:
 		return
 	var role := context.order.payload.value(&"work.service.role", &"") as StringName
 	var position: Variant = context.order.payload.value(&"workplace.position", context.order.target_position)
-	if role not in [&"cook", &"teacher", &"seller", &"official", &"craftsman"] or not (position is Vector3) or position == Vector3.INF:
+	if role not in [&"cook", &"teacher", &"seller", &"official", &"craftsman", &"researcher"] or not (position is Vector3) or position == Vector3.INF:
 		return
 	_started = context.actuator.begin_action(role, &"", AIFactSet.new({&"workplace.position": position}))
 

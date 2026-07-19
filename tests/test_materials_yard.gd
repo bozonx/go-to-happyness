@@ -1,5 +1,15 @@
 extends SceneTree
 
+func _appoint_test_official(simulation: Node, citizen: Citizen) -> void:
+	simulation.settlement.complete_research("official")
+	if not is_instance_valid(simulation.campfire_node):
+		var centre := Node3D.new()
+		centre.set_meta("service_position", citizen.global_position)
+		simulation.add_child(centre)
+		simulation.campfire_node = centre
+	citizen.global_position = simulation._employment_center_position()
+	simulation._appoint_official(citizen, simulation.campfire_node)
+
 ## Scene-level smoke test for the materials yard: builds one and verifies it
 ## registers as a branch-gathering workplace that a resident can be employed at.
 
@@ -39,7 +49,7 @@ func _init() -> void:
 	civic_centre.set_meta("accepting_workers", true)
 	simulation.add_child(civic_centre)
 	simulation.campfire_node = civic_centre
-	simulation._appoint_official(simulation.citizens[1])
+	_appoint_test_official(simulation, simulation.citizens[1])
 
 	# The workforce menu's Assign action must create a permanent yard contract;
 	# this is the same handler connected to the visible UI button.

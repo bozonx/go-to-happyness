@@ -378,6 +378,7 @@ var campfire_upgrade_button: Button
 var campfire_advance_button: Button
 var campfire_orders_button: Button
 var campfire_occupancy_button: Button
+var campfire_research_post_button: Button
 var campfire_accept_button: Button
 var campfire_dismiss_button: Button
 var workforce_menu: Panel
@@ -3921,7 +3922,8 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_role_button("Cleaning", "cleaning", 340, false, "daily")
 	_add_role_button("Cook", "cook", 374, false, "daily")
 
-	# Permanent jobs require an employment officer, except appointing the officer.
+	# Permanent jobs require an employment officer. The officer is promoted from
+	# the civic research post, never assigned as a regular profession.
 	_add_role_button("Assign: construction", "construction", 136, false, "job")
 	_add_role_button("Assign: forestry (logs/timber)", "forestry", 170, false, "job")
 	_add_role_button("Assign: farming", "farming", 204, false, "job")
@@ -3930,7 +3932,6 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_role_button("Assign: forage food", "gather_food", 306, false, "job")
 	_add_role_button("Assign: courier", "courier", 340, false, "job")
 	_add_role_button("Assign: craftsman", "craftsman", 374, false, "job")
-	_add_role_button("Assign: employment officer", "official", 408, false, "job")
 	
 	# Era category buttons (shown on main build menu)
 	_add_build_category_button("Tent era", "tent", 136)
@@ -4509,26 +4510,18 @@ func _hide_research_menu() -> void:
 		research_menu.visible = false
 	campfire_menu.visible = true
 
-func _get_available_researcher(required_skill: String) -> Citizen:
-	# A player-controlled citizen physically occupying the campfire research
-	# position takes priority. In the tent era this is the temporary researcher
-	# or the official; in later eras it is the dedicated researcher.
+func _get_available_researcher(_required_skill: String) -> Citizen:
+	# Research starts only from the civic post. It can be occupied manually in
+	# FPP or by an NPC explicitly assigned through the campfire panel.
 	for citizen in citizens:
-		if not citizen.is_player_controlled:
-			continue
 		if citizen.work_position_locked and citizen.work_position_role in ["researcher", "official"]:
 			if is_instance_valid(citizen.work_position_node) and citizen.work_position_node == campfire_node:
 				return citizen
-	var best_researcher: Citizen = null
-	var best_skill_val := -1.0
-	for citizen in citizens:
-		if citizen.is_player_controlled or citizen.state != Citizen.State.IDLE:
-			continue
-		var skill_val := float(citizen.skills.get(required_skill, 0.0))
-		if skill_val > best_skill_val:
-			best_researcher = citizen
-			best_skill_val = skill_val
-	return best_researcher
+		if citizen.permanent_role == "official" and citizen.employment_workplace == campfire_node and citizen.state == Citizen.State.OFFICIAL_WORK:
+			return citizen
+		if citizen.research_workplace == campfire_node and citizen.state == Citizen.State.RESEARCHING:
+			return citizen
+	return null
 
 func _refresh_research_menu() -> void:
 	if research_menu == null or research_list == null:
@@ -4604,7 +4597,7 @@ func _start_research(tech_id: String) -> void:
 		
 	var researcher := _get_available_researcher(tech.required_skill)
 	if researcher == null:
-		_update_interface("Requires an idle resident.")
+		_update_interface("Assign a researcher to the civic post or occupy it in first person.")
 		return
 		
 	if building_research_service.start_block_reason(tech_id, true) != BuildingResearchServiceScript.REASON_OK:
@@ -4613,14 +4606,6 @@ func _start_research(tech_id: String) -> void:
 	if not building_research_service.start_research(tech_id, researcher.ai_id):
 		_update_interface("Research prerequisites or resources are missing.")
 		return
-	
-	var research_pos := global_position
-	if is_instance_valid(campfire_node):
-		research_pos = campfire_node.get_meta("service_position", campfire_node.global_position)
-	# Player-controlled researchers are already at the work position via FPP.
-	# AI researchers still need to walk to the campfire and enter research state.
-	if not researcher.is_player_controlled:
-		researcher.assign_research_work(research_pos)
 	
 	_update_interface("Research started: %s. %s is studying at the Campfire." % [tech.name, researcher.role_label()])
 	_refresh_research_menu()
@@ -4642,13 +4627,66 @@ func _cancel_active_building_research(refund: bool, message: String) -> void:
 			worker = citizen
 			break
 	if worker != null:
-		if worker == hero_citizen and worker.permanent_role == "official" and is_instance_valid(campfire_node):
+		if worker.permanent_role == "official" and is_instance_valid(campfire_node):
 			worker.assign_official_work(campfire_node.get_meta("service_position", campfire_node.global_position))
 		else:
 			worker.idle()
 	building_research_service.cancel_active(refund)
 	_update_interface(message)
 	_refresh_campfire_menu()
+
+
+func _research_post_holder(centre: Node3D) -> Citizen:
+	if not is_instance_valid(centre):
+		return null
+	for citizen in citizens:
+		if is_instance_valid(citizen) and citizen.research_workplace == centre:
+			return citizen
+	return null
+
+
+func _handle_civic_post_assignment() -> void:
+	var centre := selected_campfire if is_instance_valid(selected_campfire) else _employment_centre_building()
+	if not is_instance_valid(centre):
+		return
+	if settlement.is_research_completed("official"):
+		_promote_researcher_to_official(centre)
+	else:
+		_assign_selected_researcher(centre)
+	_refresh_campfire_menu()
+
+
+func _assign_selected_researcher(centre: Node3D) -> void:
+	if selected_builder == null:
+		_update_interface("Select a resident, then assign them to the research post.")
+		return
+	if selected_builder.is_player_controlled:
+		_update_interface("Use first person to place the controlled resident at the research post.")
+		return
+	if not selected_builder.has_no_permanent_work():
+		_update_interface("Only a resident without a permanent profession can occupy the research post.")
+		return
+	var holder := _research_post_holder(centre)
+	if holder != null and holder != selected_builder:
+		_update_interface("The research post is already occupied.")
+		return
+	selected_builder.clear_daily_order()
+	selected_builder.idle()
+	selected_builder.research_workplace = centre
+	if citizen_ai != null:
+		citizen_ai.request_decision_refresh()
+	_update_interface("%s is going to the research post." % selected_builder.role_label())
+
+
+func _promote_researcher_to_official(centre: Node3D) -> void:
+	var researcher := _research_post_holder(centre)
+	if researcher == null:
+		_update_interface("Assign a researcher to the civic post before appointing an official.")
+		return
+	if researcher.global_position.distance_to(_employment_center_position()) > OFFICER_POST_RADIUS:
+		_update_interface("The researcher must reach the civic post before promotion.")
+		return
+	_appoint_official(researcher, centre)
 
 func _spawn_house_citizen() -> void:
 	if selected_house == null or bool(selected_house.get_meta("pending_demolition", false)):
@@ -5022,7 +5060,7 @@ func _refresh_build_menu() -> void:
 		var era_ok := is_daily_submenu or min_era <= settlement.era
 		var role_available := _is_daily_order_role_available(role) if is_daily_submenu else _is_role_available(role)
 		button.visible = selected_exists and ((is_daily_submenu and build_menu_is_daily_order_menu) or (not is_daily_submenu and build_menu_is_job_menu)) and era_ok and (not hero_only or selected_builder.is_hero)
-		var blocked_by_officer := not is_daily_submenu and role != "official" and not _player_can_manage_permanent_professions()
+		var blocked_by_officer := not is_daily_submenu and not _player_can_manage_permanent_professions()
 		button.disabled = button.visible and (blocked_by_officer or not role_available)
 		if button.disabled and not role_available:
 			button.tooltip_text = "Нет рабочего места для этой роли."
@@ -5125,11 +5163,6 @@ func _set_selected_work_role(role: String, daily_order := false) -> void:
 		build_menu_is_job_menu = false
 		build_menu_is_daily_order_menu = false
 		return
-	elif role == "official":
-		# The employment officer is appointed directly by the mayor. They run job
-		# registration, so they cannot themselves queue for it — this also breaks
-		# the bootstrap deadlock of "you need an officer to appoint an officer".
-		_appoint_official(selected_builder)
 	else:
 		if not _player_can_manage_permanent_professions():
 			_show_labor_command_blocked()
@@ -5962,16 +5995,15 @@ func _remove_building_services(building: Node3D, building_type: String) -> void:
 
 func _release_employment_at_building(building: Node3D) -> void:
 	for citizen in citizens:
+		if citizen.research_workplace == building:
+			if settlement.active_research_tech_id != "" and settlement.active_research_worker_id == citizen.ai_id:
+				_cancel_active_building_research(true, "Research cancelled: the civic post was removed. Resources refunded.")
+			citizen.research_workplace = null
+			citizen.idle()
 		if citizen.employment_workplace != building and citizen.pending_employment_workplace != building:
 			continue
 		if citizen.permanent_role == "official":
-			# Civic upgrades temporarily remove the post. Keep the appointment so it
-			# transfers to the next main campfire instead of silently disappearing.
-			if citizen_ai != null:
-				citizen_ai.cancel_citizen_work(citizen.ai_id)
-			citizen.idle()
-			citizen.employment_workplace = null
-			citizen.pending_employment_workplace = null
+			_dismiss_official(citizen)
 			continue
 		_send_to_unemployment_registration(citizen)
 
@@ -6556,8 +6588,11 @@ func _occupy_workplace(workplace: Node3D) -> void:
 			if current_officer != null and current_officer != player_citizen:
 				_update_interface("Это место уже занято чиновником.")
 				return
-			_appoint_official(player_citizen, workplace)
 			player_citizen.enter_work_position(service_position, "official", workplace, false)
+			_appoint_official(player_citizen, workplace)
+			if player_citizen.permanent_role != "official":
+				player_citizen.exit_work_position()
+				return
 			_update_interface("Ваш герой стал чиновником. Переключитесь на вид сверху для управления посёлком — клавиша R.")
 		else:
 			player_citizen.enter_work_position(service_position, "researcher", workplace, true)
@@ -8100,6 +8135,12 @@ func _create_campfire_menu(ui: CanvasLayer) -> void:
 	campfire_research_button.pressed.connect(_show_research_menu)
 	campfire_menu.add_child(campfire_research_button)
 
+	campfire_research_post_button = Button.new()
+	campfire_research_post_button.position = Vector2(16, 516)
+	campfire_research_post_button.size = Vector2(272, 32)
+	campfire_research_post_button.pressed.connect(_handle_civic_post_assignment)
+	campfire_menu.add_child(campfire_research_post_button)
+
 	campfire_accept_button = Button.new()
 	campfire_accept_button.position = Vector2(16, 556)
 	campfire_accept_button.size = Vector2(272, 32)
@@ -8851,29 +8892,34 @@ func _refresh_campfire_menu() -> void:
 
 func _refresh_campfire_worker_controls() -> void:
 	var is_center := is_instance_valid(selected_campfire) and str(selected_campfire.get_meta("building_type", "")) in OFFICIAL_WORKPLACE_TYPES
-	var accepting := is_center and bool(selected_campfire.get_meta("accepting_workers", true))
-	var can_command_labor := _player_can_command_labor()
-	var blocked_tooltip := _labor_command_block_message()
-	campfire_accept_button.visible = is_center
-	campfire_accept_button.text = "Stop accepting officer" if accepting else "Start accepting officer"
-	campfire_accept_button.disabled = not can_command_labor
-	campfire_accept_button.tooltip_text = blocked_tooltip if campfire_accept_button.disabled else ""
+	# The civic post is not part of the permanent-job menu. It is filled here
+	# and later promotes its current researcher to the officer role.
+	campfire_accept_button.visible = false
+	campfire_dismiss_button.visible = false
+	if campfire_research_post_button != null:
+		var researcher := _research_post_holder(selected_campfire)
+		campfire_research_post_button.visible = is_center and not _officer_exists()
+		if settlement.is_research_completed("official"):
+			campfire_research_post_button.text = "Promote researcher to officer"
+			campfire_research_post_button.disabled = researcher == null
+			campfire_research_post_button.tooltip_text = "The researcher must be at this post." if researcher == null else ""
+		else:
+			campfire_research_post_button.text = "Assign selected resident: researcher"
+			campfire_research_post_button.disabled = researcher != null and researcher != selected_builder
+			campfire_research_post_button.tooltip_text = "The research post is already occupied." if campfire_research_post_button.disabled else ""
 	var officer := _workplace_worker(selected_campfire) if is_center else null
-	campfire_dismiss_button.visible = is_center
-	campfire_dismiss_button.disabled = officer == null or not can_command_labor
-	campfire_dismiss_button.tooltip_text = blocked_tooltip if not can_command_labor else ""
 
 	if campfire_overtime_button != null:
 		campfire_overtime_button.visible = is_center and officer != null
-		campfire_overtime_button.disabled = not can_command_labor
+		campfire_overtime_button.disabled = false
 		var campfire_night_order_used := int(selected_campfire.get_meta("night_work_order_day", -1)) == day_cycle.current_day
 		campfire_overtime_button.set_pressed_no_signal(campfire_night_order_used)
-		campfire_overtime_button.tooltip_text = blocked_tooltip if not can_command_labor else "Work through the night and the next workday."
+		campfire_overtime_button.tooltip_text = "Work through the night and the next workday."
 		if campfire_overtime_button.visible:
-			campfire_overtime_button.position.y = 632.0
-			campfire_close_btn.position.y = 670.0
+			campfire_overtime_button.position.y = 556.0
+			campfire_close_btn.position.y = 594.0
 		else:
-			campfire_close_btn.position.y = 634.0
+			campfire_close_btn.position.y = 556.0
 
 
 func _handle_campfire_primary_action() -> void:
@@ -9356,7 +9402,10 @@ func _dismiss_selected_workplace_worker() -> void:
 	if worker == null:
 		return
 	selected_building.set_meta("accepting_workers", false)
-	_send_to_unemployment_registration(worker)
+	if worker.permanent_role == "official":
+		_dismiss_official(worker)
+	else:
+		_send_to_unemployment_registration(worker)
 	_update_workers()
 	_reopen_workplace_menu()
 
@@ -9728,11 +9777,12 @@ func _assign_seller_at_market() -> void:
 
 
 func _appoint_official(citizen: Citizen, workplace: Node3D = null) -> void:
-	# A mayoral appointment selects the settlement's single registration officer.
-	# In the new work-position design this happens only through physical FPP
-	# occupation of an official workplace (campfire/town hall) after the
-	# "official" technology has been researched.
-	if citizen == null:
+	# Promotion requires both the researched technology and physical occupation
+	# of the civic post. This keeps FPP and NPC assignment on the same contract.
+	if citizen == null or not settlement.is_research_completed("official"):
+		return
+	var centre := workplace if is_instance_valid(workplace) else _employment_centre_building()
+	if not is_instance_valid(centre) or citizen.global_position.distance_to(_employment_center_position()) > OFFICER_POST_RADIUS:
 		return
 	for other in citizens:
 		if not is_instance_valid(other) or other == citizen or other.permanent_role != "official":
@@ -9744,7 +9794,8 @@ func _appoint_official(citizen: Citizen, workplace: Node3D = null) -> void:
 	citizen.pending_employment_role = ""
 	citizen.pending_employment_workplace = null
 	citizen.permanent_role = "official"
-	citizen.employment_workplace = workplace if is_instance_valid(workplace) else _employer_for_role("official")
+	citizen.research_workplace = null
+	citizen.employment_workplace = centre
 	citizen.employment_state = Citizen.EmploymentState.EMPLOYED
 	if not is_instance_valid(citizen.employment_workplace):
 		citizen.active_role = ""

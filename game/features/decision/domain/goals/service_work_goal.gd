@@ -24,4 +24,4 @@ func build_task(_snapshot: WorldSnapshot, _citizen: CitizenSnapshot, order: Citi
 	return BehaviorTask.new(id, SequenceStepScript.new([
 		MoveToStepScript.new(move_target),
 		ServiceWorkStepScript.new(),
-	]), false, "Run permanent service workplace")
+	]), false, "Run assigned service post")

@@ -1,8 +1,8 @@
 class_name ServiceWorkOrderProvider
 extends OrderProvider
 
-## Permanent service jobs share one immutable workplace order. Individual
-## building services continue to own their production and availability rules.
+## Service posts share one immutable workplace order. Research posts are
+## explicit building assignments, not permanent professions or daily orders.
 
 
 func _init() -> void:
@@ -23,7 +23,7 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 		var can_start := bool(citizen.facts.value(&"work.service.can_start", false))
 		var role := citizen.facts.value(&"work.service.role", &"") as StringName
 		var position: Variant = citizen.facts.value(&"work.service.position", Vector3.INF)
-		if role not in [&"cook", &"teacher", &"seller", &"official", &"craftsman"]:
+		if role not in [&"cook", &"teacher", &"seller", &"official", &"craftsman", &"researcher"]:
 			continue
 		if not in_progress and not can_start:
 			continue

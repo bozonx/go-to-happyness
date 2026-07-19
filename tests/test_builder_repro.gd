@@ -1,5 +1,15 @@
 extends SceneTree
 
+func _appoint_test_official(simulation: Node, citizen: Citizen) -> void:
+	simulation.settlement.complete_research("official")
+	if not is_instance_valid(simulation.campfire_node):
+		var centre := Node3D.new()
+		centre.set_meta("service_position", citizen.global_position)
+		simulation.add_child(centre)
+		simulation.campfire_node = centre
+	citizen.global_position = simulation._employment_center_position()
+	simulation._appoint_official(citizen, simulation.campfire_node)
+
 
 func _init() -> void:
 	var scene := load("res://game/bootstrap/settlement_game.tscn") as PackedScene
@@ -11,7 +21,7 @@ func _init() -> void:
 		await physics_frame
 
 	simulation.selected_builder = simulation.hero_citizen
-	simulation._appoint_official(simulation.hero_citizen)
+	_appoint_test_official(simulation, simulation.hero_citizen)
 	assert(simulation._player_can_command_labor())
 
 	var position := Vector3(12.0, 0.0, 12.0)
