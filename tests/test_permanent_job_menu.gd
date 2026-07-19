@@ -27,7 +27,7 @@ func _init() -> void:
 
 	# In the tent era, permanent jobs tied to later-era buildings are hidden.
 	var hidden_in_tent := ["forestry", "farming"]
-	for button in simulation.role_buttons:
+	for button in simulation.build_menu.role_buttons:
 		if str(button.get_meta("submenu", "")) != "job":
 			continue
 		var role := str(button.get_meta("role", ""))
@@ -39,7 +39,7 @@ func _init() -> void:
 	simulation.settlement.era = SettlementState.Era.WOOD
 	simulation._refresh_build_menu()
 
-	for button in simulation.role_buttons:
+	for button in simulation.build_menu.role_buttons:
 		if str(button.get_meta("submenu", "")) != "job":
 			continue
 		var role := str(button.get_meta("role", ""))
@@ -51,7 +51,7 @@ func _init() -> void:
 	simulation._open_daily_order_submenu()
 	assert(simulation.build_menu_is_daily_order_menu)
 	var construction_daily_button: Button = null
-	for button in simulation.role_buttons:
+	for button in simulation.build_menu.role_buttons:
 		if str(button.get_meta("submenu", "")) == "daily" and str(button.get_meta("role", "")) == "construction":
 			construction_daily_button = button
 			break

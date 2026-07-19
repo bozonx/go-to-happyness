@@ -12,3 +12,23 @@ signal build_toggle_pressed
 
 func _ready() -> void:
 	build_toggle_btn.pressed.connect(func(): build_toggle_pressed.emit())
+
+
+func update_resources(text: String) -> void:
+	wood_label.text = text
+
+
+func update_clock(text: String) -> void:
+	clock_label.text = text
+
+
+func update_camera_hint(text: String) -> void:
+	camera_hint_label.text = text
+
+
+func set_status(text: String) -> void:
+	status_label.text = text
+
+
+func set_status_visible(vis: bool) -> void:
+	status_label.visible = vis
