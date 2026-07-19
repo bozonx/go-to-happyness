@@ -349,6 +349,7 @@ func _init() -> void:
 	_test_reservations()
 	_test_runtime_configuration_and_identity()
 	_test_runtime_reconfiguration_updates_registered_brains()
+	_test_requested_refresh_thinks_immediately()
 	_test_work_refusal_when_wellbeing_low()
 	_test_runtime_think_budget_is_fair()
 	quit(0)
@@ -1995,6 +1996,21 @@ func _test_runtime_reconfiguration_updates_registered_brains() -> void:
 	var goal := ScriptedGoal.new(&"idle", 0.5, [BehaviorStep.Status.RUNNING])
 	system.configure(facade, [goal])
 	system._physics_process(0.1)
+	assert(goal.build_count == 1)
+	system.unregister_citizen(1)
+	system.free()
+
+
+func _test_requested_refresh_thinks_immediately() -> void:
+	var goal := ScriptedGoal.new(&"idle", 0.5, [BehaviorStep.Status.RUNNING])
+	var system := CitizenAISystem.new()
+	system.think_interval = 100.0
+	system.configure(FakeFacade.new({1: CitizenSnapshot.new(1)}), [goal])
+	system.register_citizen(1, FakeActuator.new(1))
+	system._physics_process(0.01)
+	assert(goal.build_count == 0)
+	system.request_decision_refresh()
+	system._physics_process(0.01)
 	assert(goal.build_count == 1)
 	system.unregister_citizen(1)
 	system.free()

@@ -159,6 +159,9 @@ func accept_delivery(site_node: Node3D, resource_type: String, amount: int) -> b
 	site.delivered_materials[resource_type] = int(site.delivered_materials.get(resource_type, 0)) + amount
 	site.reserved_materials[resource_type] = maxi(0, int(site.reserved_materials.get(resource_type, 0)) - amount)
 	runtime.settlement.release_for_construction(site.site_id, resource_type, amount)
+	# Delivery is an event boundary. Publish buildability synchronously so builders
+	# and presentation do not wait for the next general construction tick.
+	site.node.set_meta("can_advance", site.material_progress() > site.progress + 0.0001)
 	return true
 
 

@@ -107,13 +107,15 @@ func has_current_order(citizen_id: int) -> bool:
 	return _order_cache.has(citizen_id)
 
 
-## Manual role changes must be visible on the next physics tick instead of
-## waiting for the periodic director pass.
+## External state changes must be visible on the next physics tick instead of
+## waiting for the periodic director and per-citizen think passes.
 func request_decision_refresh() -> void:
 	if facade == null:
 		return
 	_snapshot_elapsed = snapshot_interval
 	_director_elapsed = director_interval
+	for citizen_id in _citizen_ids:
+		_next_think_at[citizen_id] = minf(float(_next_think_at.get(citizen_id, _elapsed)), _elapsed)
 
 
 func _physics_process(delta: float) -> void:

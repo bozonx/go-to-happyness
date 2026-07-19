@@ -294,6 +294,7 @@ func _init() -> void:
 	logistics_worker.global_position = logistics_worker.construction_position
 	logistics_worker._process_construction_delivery(0.1)
 	assert(int(construction_site.delivered_materials.get(construction_resource, 0)) == 1)
+	assert(bool(construction_site.node.get_meta("can_advance", false)), "A delivered material must unblock builders immediately")
 	logistics_worker.clear_daily_order()
 
 	simulation.settlement.add(construction_resource, 1)
