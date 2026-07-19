@@ -376,7 +376,6 @@ const ROUTE_REACHABILITY_CACHE_LIMIT := 1024
 var service_pockets: Array[Dictionary] = []
 var selected_school: Node3D
 var school_menu: Panel
-var school_menu_title: Label
 var school_developed_professions: Dictionary = {
 	"construction": false,
 	"forestry": false,
@@ -388,8 +387,6 @@ var school_developed_professions: Dictionary = {
 	"teacher": false,
 	"seller": false
 }
-var school_retrain_buttons: Array[Button] = []
-var school_dev_checkboxes: Dictionary = {}
 var materials_factory_menu: Panel
 var materials_factory_menu_title: Label
 var selected_materials_factory: Node3D
@@ -496,16 +493,6 @@ var trail_overlay_material: ShaderMaterial
 var village_boundary_markers: Node3D
 var village_territory_overlay: Node3D
 var campfire_orders_menu: Control
-var campfire_orders_toggle: CheckButton:
-	get: return campfire_orders_menu.road_walking_toggle if campfire_orders_menu != null else null
-var campfire_balanced_warehouse_toggle: CheckButton:
-	get: return campfire_orders_menu.balanced_warehouse_toggle if campfire_orders_menu != null else null
-var campfire_cheer_button: Button:
-	get: return campfire_orders_menu.cheer_button if campfire_orders_menu != null else null
-var campfire_night_work_button: CheckButton:
-	get: return campfire_orders_menu.night_work_button if campfire_orders_menu != null else null
-var campfire_double_time_button: CheckButton:
-	get: return campfire_orders_menu.double_time_button if campfire_orders_menu != null else null
 var personal_night_work_button: CheckButton
 
 
@@ -3812,7 +3799,6 @@ func _create_school_menu(ui: CanvasLayer) -> void:
 	var menu: SchoolMenu = SchoolMenuScene.instantiate()
 	ui.add_child(menu)
 	school_menu = menu
-	school_menu_title = menu.title_label
 	
 	menu.train_requested.connect(_start_school_training)
 	menu.dev_toggled.connect(_toggle_school_development)
@@ -3821,9 +3807,6 @@ func _create_school_menu(ui: CanvasLayer) -> void:
 			_mark_building_for_demolition(selected_school)
 			school_menu.visible = false
 	)
-	
-	school_retrain_buttons = menu.train_buttons
-	school_dev_checkboxes = menu.dev_checkboxes
 
 func _toggle_school_development(role: String, pressed: bool) -> void:
 	if not _player_can_manage_permanent_professions():
@@ -3853,28 +3836,11 @@ func _show_school_menu() -> void:
 	house_menu.visible = false
 	building_menu.visible = false
 	
-	var can_manage_professions := _player_can_manage_permanent_professions()
-	var blocked_tooltip := _permanent_profession_block_message()
-	if selected_builder != null:
-		school_menu_title.text = "Student: %s\nSelect individual retraining (takes 10 mornings):" % selected_builder.role_label()
-		for btn in school_retrain_buttons:
-			btn.disabled = not can_manage_professions
-			btn.tooltip_text = blocked_tooltip if btn.disabled else ""
-	else:
-		school_menu_title.text = "Student: None\n(Select a resident first to enable retraining)"
-		for btn in school_retrain_buttons:
-			btn.disabled = true
-			btn.tooltip_text = blocked_tooltip if not can_manage_professions else "Select a resident first."
-			
-	for role in school_developed_professions:
-		if school_dev_checkboxes.has(role):
-			var cb: CheckBox = school_dev_checkboxes[role]
-			cb.set_block_signals(true)
-			cb.button_pressed = school_developed_professions[role]
-			cb.set_block_signals(false)
-			cb.disabled = not can_manage_professions
-			cb.tooltip_text = blocked_tooltip if cb.disabled else ""
-			
+	var student_label := selected_builder.role_label() if selected_builder != null else ""
+	var can_manage := _player_can_manage_permanent_professions()
+	var block_tooltip := _permanent_profession_block_message()
+	
+	school_menu.update_state(student_label, can_manage, block_tooltip, school_developed_professions)
 	school_menu.visible = true
 	_update_interface("School selected: configure morning study and retraining here.")
 
@@ -7840,38 +7806,53 @@ func _select_campfire_story(story_id: String) -> void:
 func _create_campfire_orders_menu(ui: CanvasLayer) -> void:
 	campfire_orders_menu = CampfireOrdersMenuScene.instantiate()
 	ui.add_child(campfire_orders_menu)
-	campfire_orders_menu.road_walking_toggle.toggled.connect(_set_road_walking_order)
-	campfire_orders_menu.balanced_warehouse_toggle.toggled.connect(_set_balanced_warehouse_mode)
-	campfire_orders_menu.night_work_button.toggled.connect(_toggle_settlement_night_work)
-	campfire_orders_menu.double_time_button.toggled.connect(_toggle_double_time_order)
-	campfire_orders_menu.cheer_button.pressed.connect(_cheer_up_settlement)
+	campfire_orders_menu.road_walking_toggled.connect(_set_road_walking_order)
+	campfire_orders_menu.balanced_warehouse_toggled.connect(_set_balanced_warehouse_mode)
+	campfire_orders_menu.night_work_toggled.connect(_toggle_settlement_night_work)
+	campfire_orders_menu.double_time_toggled.connect(_toggle_double_time_order)
+	campfire_orders_menu.cheer_pressed.connect(_cheer_up_settlement)
 	campfire_orders_menu.close_requested.connect(_close_campfire_orders_menu)
 
 
 func _show_campfire_orders_menu() -> void:
-	if campfire_orders_menu == null or campfire_orders_toggle == null or campfire_cheer_button == null or campfire_balanced_warehouse_toggle == null or campfire_night_work_button == null or campfire_double_time_button == null:
+	if campfire_orders_menu == null:
 		return
 	campfire_menu.visible = false
-	campfire_orders_toggle.set_pressed_no_signal(settlement.road_walking_order_enabled)
-	campfire_orders_toggle.disabled = settlement.era != SettlementState.Era.TENT
-	campfire_orders_toggle.tooltip_text = "Available in the Tent Era." if campfire_orders_toggle.disabled else "Residents trample trails faster. Route selection is unchanged."
-	campfire_balanced_warehouse_toggle.set_pressed_no_signal(settlement.balanced_warehouse_mode)
-	campfire_balanced_warehouse_toggle.disabled = warehouse_positions.is_empty()
-	campfire_balanced_warehouse_toggle.tooltip_text = "Build a warehouse first." if campfire_balanced_warehouse_toggle.disabled else "Spread each good evenly between warehouses instead of filling the nearest one."
+	
 	var hour := clock.hour()
 	var can_cheer := hour >= 6 and not settlement.cheer_up_used_today
-	campfire_cheer_button.disabled = not can_cheer
-	campfire_cheer_button.tooltip_text = "Available once each morning after 06:00." if not can_cheer else "Raise wellbeing by 5%%."
 	var can_order_night_work := _has_night_work_candidates()
 	var settlement_night_active := _has_overtime_source("settlement")
-	# Cancellation must remain possible even when clearing an assignment removed the
-	# last affected worker from the current snapshot.
-	campfire_night_work_button.disabled = not settlement_night_active and not can_order_night_work
-	campfire_night_work_button.set_pressed_no_signal(settlement_night_active)
-	campfire_night_work_button.tooltip_text = "No active workers can receive this order." if not can_order_night_work else "Affected workers continue through the night and next workday. Raises fatigue and lowers satisfaction."
 	var double_time_active := settlement.double_time_order_day == day_cycle.current_day
-	campfire_double_time_button.set_pressed_no_signal(double_time_active)
-	campfire_double_time_button.tooltip_text = "All residents walk twice as fast today. Fatigue accumulates 50%% faster and satisfaction drops." if not double_time_active else "Active. Residents are marching at double speed."
+	
+	var balanced_warehouse_disabled := warehouse_positions.is_empty()
+	var road_walking_disabled := settlement.era != SettlementState.Era.TENT
+
+	var cheer_tooltip := "Already used today. Available again tomorrow at 06:00." if settlement.cheer_up_used_today else ("Available once each morning after 06:00." if not can_cheer else "Raise wellbeing by 5%%.")
+	if not can_cheer and not settlement.cheer_up_used_today:
+		cheer_tooltip = "Available once each morning after 06:00."
+
+	var state := {
+		"road_walking_enabled": settlement.road_walking_order_enabled,
+		"road_walking_disabled": road_walking_disabled,
+		"road_walking_tooltip": "Available in the Tent Era." if road_walking_disabled else "Residents trample trails faster. Route selection is unchanged.",
+		
+		"balanced_warehouse_enabled": settlement.balanced_warehouse_mode,
+		"balanced_warehouse_disabled": balanced_warehouse_disabled,
+		"balanced_warehouse_tooltip": "Build a warehouse first." if balanced_warehouse_disabled else "Spread each good evenly between warehouses instead of filling the nearest one.",
+		
+		"cheer_disabled": not can_cheer,
+		"cheer_tooltip": cheer_tooltip,
+		
+		"night_work_enabled": settlement_night_active,
+		"night_work_disabled": not settlement_night_active and not can_order_night_work,
+		"night_work_tooltip": "No active workers can receive this order." if not can_order_night_work else "Affected workers continue through the night and next workday. Raises fatigue and lowers satisfaction.",
+		
+		"double_time_enabled": double_time_active,
+		"double_time_tooltip": "All residents walk twice as fast today. Fatigue accumulates 50%% faster and satisfaction drops." if not double_time_active else "Active. Residents are marching at double speed."
+	}
+	
+	campfire_orders_menu.update_state(state)
 	campfire_orders_menu.visible = true
 
 
@@ -7897,8 +7878,7 @@ func _cheer_up_settlement() -> void:
 	if clock.hour() < 6:
 		return
 	if settlement.apply_cheer_up():
-		campfire_cheer_button.disabled = true
-		campfire_cheer_button.tooltip_text = "Already used today. Available again tomorrow at 06:00."
+		_show_campfire_orders_menu()
 		_update_interface("You cheered up the settlement. Wellbeing rose by 5%%.")
 
 
@@ -7912,7 +7892,7 @@ func _has_night_work_candidates() -> bool:
 func _toggle_settlement_night_work(checked: bool) -> void:
 	if checked:
 		if settlement.night_work_order_day == day_cycle.current_day:
-			campfire_night_work_button.set_pressed_no_signal(false)
+			_show_campfire_orders_menu()
 			return
 		var affected := 0
 		for citizen in citizens:
@@ -7922,7 +7902,7 @@ func _toggle_settlement_night_work(checked: bool) -> void:
 				if _activate_citizen_overtime(citizen, "settlement"):
 					affected += 1
 		if affected <= 0:
-			campfire_night_work_button.set_pressed_no_signal(false)
+			_show_campfire_orders_menu()
 			return
 		settlement.night_work_order_day = day_cycle.current_day
 		_update_interface("Night-work order issued to %d residents. They will work through the night and next day." % affected)
@@ -7946,7 +7926,7 @@ func _toggle_settlement_night_work(checked: bool) -> void:
 func _toggle_double_time_order(checked: bool) -> void:
 	if checked:
 		if settlement.double_time_order_day == day_cycle.current_day:
-			campfire_double_time_button.set_pressed_no_signal(false)
+			_show_campfire_orders_menu()
 			return
 		settlement.double_time_order_day = day_cycle.current_day
 		_update_interface("Double time order issued. All residents walk twice as fast today, but fatigue accumulates faster.")

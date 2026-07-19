@@ -9,8 +9,8 @@ signal demolish_requested
 @onready var demolish_btn: Button = $DemolishButton
 @onready var close_btn: Button = $CloseButton
 
-var train_buttons: Array[Button] = []
-var dev_checkboxes: Dictionary = {}
+var _train_buttons: Array[Button] = []
+var _dev_checkboxes: Dictionary = {}
 
 
 func _ready() -> void:
@@ -37,7 +37,7 @@ func _ready() -> void:
 	demolish_btn.pressed.connect(func(): demolish_requested.emit())
 	close_btn.pressed.connect(func(): visible = false)
 	
-	train_buttons = [
+	_train_buttons = [
 		$TrainList/TrainConstruction,
 		$TrainList/TrainForestry,
 		$TrainList/TrainFarming,
@@ -49,7 +49,7 @@ func _ready() -> void:
 		$TrainList/TrainSeller
 	]
 	
-	dev_checkboxes = {
+	_dev_checkboxes = {
 		"construction": $DevList/DevelopConstruction,
 		"forestry": $DevList/DevelopForestry,
 		"farming": $DevList/DevelopFarming,
@@ -60,3 +60,28 @@ func _ready() -> void:
 		"teacher": $DevList/DevelopTeacher,
 		"seller": $DevList/DevelopSeller
 	}
+
+
+func update_state(student_label: String, can_manage: bool, block_tooltip: String, developed_professions: Dictionary) -> void:
+	if student_label != "":
+		title_label.text = "Student: %s\nSelect individual retraining (takes 10 mornings):" % student_label
+		for btn in _train_buttons:
+			if btn != null:
+				btn.disabled = not can_manage
+				btn.tooltip_text = block_tooltip if btn.disabled else ""
+	else:
+		title_label.text = "Student: None\n(Select a resident first to enable retraining)"
+		for btn in _train_buttons:
+			if btn != null:
+				btn.disabled = true
+				btn.tooltip_text = block_tooltip if not can_manage else "Select a resident first."
+				
+	for role in developed_professions:
+		if _dev_checkboxes.has(role):
+			var cb: CheckBox = _dev_checkboxes[role]
+			if cb != null:
+				cb.set_block_signals(true)
+				cb.button_pressed = developed_professions[role]
+				cb.set_block_signals(false)
+				cb.disabled = not can_manage
+				cb.tooltip_text = block_tooltip if cb.disabled else ""
