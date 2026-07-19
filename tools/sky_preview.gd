@@ -2,7 +2,7 @@ extends Node3D
 
 # Standalone sky preview: reuses sky_clouds.gdshader with a sun, renders a few
 # frames and saves screenshots at a couple of overcast/sun settings, then quits.
-# Run: redot --path . res://tools/sky_preview.tscn
+# Run: godot --path . res://tools/sky_preview.tscn
 
 const OUT := "user://sky_preview"
 

@@ -1,11 +1,11 @@
 # Go To Happyness
 
-Redot 26.2 settlement simulation prototype.
+Godot 4.7 settlement simulation prototype.
 
 ## Run
 
 1. Install the optional voxel extension with `./install_voxel.sh`.
-2. Open `project.godot` in Redot 26.2.
+2. Open `project.godot` in Godot 4.7.
 3. Run the `SettlementPrototype` main scene at `game/bootstrap/settlement_game.tscn`.
 
 The voxel extension is intentionally ignored by Git because it contains large platform binaries.

@@ -825,7 +825,7 @@ func _player_can_manage_permanent_professions() -> bool:
 
 
 func _permanent_profession_block_message() -> String:
-	return "Автоматизация труда требует назначенного чиновника. До этого раздавайте указания жителям вручную."
+	return "Автоматизация труда требует чиновника. Назначьте свободного жителя исследователем, изучите технологию «Чиновник», затем повысьте его у поста."
 
 
 func _show_labor_command_blocked() -> void:
@@ -8899,13 +8899,29 @@ func _refresh_campfire_worker_controls() -> void:
 		var researcher := _research_post_holder(selected_campfire)
 		campfire_research_post_button.visible = is_center and not _officer_exists()
 		if settlement.is_research_completed("official"):
-			campfire_research_post_button.text = "Promote researcher to officer"
-			campfire_research_post_button.disabled = researcher == null
-			campfire_research_post_button.tooltip_text = "The researcher must be at this post." if researcher == null else ""
+			campfire_research_post_button.text = "2. Назначить исследователя чиновником"
+			var researcher_at_post := researcher != null and researcher.global_position.distance_to(_employment_center_position()) <= OFFICER_POST_RADIUS
+			campfire_research_post_button.disabled = not researcher_at_post
+			if researcher == null:
+				campfire_research_post_button.tooltip_text = "Сначала назначьте свободного жителя исследователем."
+			elif not researcher_at_post:
+				campfire_research_post_button.tooltip_text = "Исследователь ещё идёт к исследовательскому посту."
+			else:
+				campfire_research_post_button.tooltip_text = "Технология «Чиновник» изучена. Назначение включит автоматизацию труда."
 		else:
-			campfire_research_post_button.text = "Assign selected resident: researcher"
-			campfire_research_post_button.disabled = researcher != null and researcher != selected_builder
-			campfire_research_post_button.tooltip_text = "The research post is already occupied." if campfire_research_post_button.disabled else ""
+			campfire_research_post_button.text = "1. Назначить выбранного жителя исследователем"
+			campfire_research_post_button.disabled = true
+			if researcher != null:
+				campfire_research_post_button.tooltip_text = "Исследователь уже назначен и направляется к посту. После изучения технологии «Чиновник» повысьте его здесь."
+			elif selected_builder == null:
+				campfire_research_post_button.tooltip_text = "Выберите свободного жителя, затем назначьте его исследователем."
+			elif selected_builder.is_player_controlled:
+				campfire_research_post_button.tooltip_text = "Управляемый персонаж занимает пост вручную в режиме от первого лица."
+			elif not selected_builder.has_no_permanent_work():
+				campfire_research_post_button.tooltip_text = "Исследовательский пост может занять только житель без постоянной профессии."
+			else:
+				campfire_research_post_button.disabled = false
+				campfire_research_post_button.tooltip_text = "Житель пойдёт к посту и будет проводить исследования."
 	var officer := _workplace_worker(selected_campfire) if is_center else null
 
 	if campfire_overtime_button != null:

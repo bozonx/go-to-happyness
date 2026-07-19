@@ -1,6 +1,6 @@
 # Agent Guide
 
-This document contains the essential context for AI assistants working on **Go To Happyness**, a Redot 26.2 settlement-simulation prototype.
+This document contains the essential context for AI assistants working on **Go To Happyness**, a Godot 4.7 settlement-simulation prototype.
 
 ## Project basics
 
