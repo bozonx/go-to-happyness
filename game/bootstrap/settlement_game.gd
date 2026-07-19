@@ -4652,29 +4652,33 @@ func _handle_civic_post_assignment() -> void:
 		_promote_researcher_to_official(centre)
 	else:
 		_assign_selected_researcher(centre)
-	_refresh_campfire_menu()
+		_refresh_campfire_menu()
+
+
+func _researcher_candidate() -> Citizen:
+	if is_instance_valid(selected_builder) and not selected_builder.is_player_controlled and selected_builder.has_no_permanent_work():
+		return selected_builder
+	for citizen in citizens:
+		if is_instance_valid(citizen) and not citizen.is_player_controlled and citizen.has_no_permanent_work():
+			return citizen
+	return null
 
 
 func _assign_selected_researcher(centre: Node3D) -> void:
-	if selected_builder == null:
-		_update_interface("Select a resident, then assign them to the research post.")
-		return
-	if selected_builder.is_player_controlled:
-		_update_interface("Use first person to place the controlled resident at the research post.")
-		return
-	if not selected_builder.has_no_permanent_work():
-		_update_interface("Only a resident without a permanent profession can occupy the research post.")
+	var researcher := _researcher_candidate()
+	if researcher == null:
+		_update_interface("Нет свободного жителя для исследовательского поста.")
 		return
 	var holder := _research_post_holder(centre)
-	if holder != null and holder != selected_builder:
+	if holder != null and holder != researcher:
 		_update_interface("The research post is already occupied.")
 		return
-	selected_builder.clear_daily_order()
-	selected_builder.idle()
-	selected_builder.research_workplace = centre
+	researcher.clear_daily_order()
+	researcher.idle()
+	researcher.research_workplace = centre
 	if citizen_ai != null:
 		citizen_ai.request_decision_refresh()
-	_update_interface("%s is going to the research post." % selected_builder.role_label())
+	_update_interface("%s направляется к исследовательскому посту." % researcher.role_label())
 
 
 func _promote_researcher_to_official(centre: Node3D) -> void:
@@ -8909,19 +8913,14 @@ func _refresh_campfire_worker_controls() -> void:
 			else:
 				campfire_research_post_button.tooltip_text = "Технология «Чиновник» изучена. Назначение включит автоматизацию труда."
 		else:
-			campfire_research_post_button.text = "1. Назначить выбранного жителя исследователем"
-			campfire_research_post_button.disabled = true
+			campfire_research_post_button.text = "1. Назначить свободного жителя исследователем"
+			campfire_research_post_button.disabled = researcher != null or _researcher_candidate() == null
 			if researcher != null:
 				campfire_research_post_button.tooltip_text = "Исследователь уже назначен и направляется к посту. После изучения технологии «Чиновник» повысьте его здесь."
-			elif selected_builder == null:
-				campfire_research_post_button.tooltip_text = "Выберите свободного жителя, затем назначьте его исследователем."
-			elif selected_builder.is_player_controlled:
-				campfire_research_post_button.tooltip_text = "Управляемый персонаж занимает пост вручную в режиме от первого лица."
-			elif not selected_builder.has_no_permanent_work():
-				campfire_research_post_button.tooltip_text = "Исследовательский пост может занять только житель без постоянной профессии."
+			elif _researcher_candidate() == null:
+				campfire_research_post_button.tooltip_text = "Нет свободных жителей без постоянной профессии."
 			else:
-				campfire_research_post_button.disabled = false
-				campfire_research_post_button.tooltip_text = "Житель пойдёт к посту и будет проводить исследования."
+				campfire_research_post_button.tooltip_text = "Будет назначен свободный житель. Выбранный вручную свободный житель имеет приоритет."
 	var officer := _workplace_worker(selected_campfire) if is_center else null
 
 	if campfire_overtime_button != null:
