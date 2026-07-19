@@ -3920,7 +3920,6 @@ func _create_build_menu(ui: CanvasLayer) -> void:
 	_add_role_button("Gather grass", "gather_grass", 272, false, "daily")
 	_add_role_button("Collect water", "gather_water", 306, false, "daily")
 	_add_role_button("Cleaning", "cleaning", 340, false, "daily")
-	_add_role_button("Cook", "cook", 374, false, "daily")
 
 	# Permanent jobs require an employment officer. The officer is promoted from
 	# the civic research post, never assigned as a regular profession.
@@ -8480,7 +8479,7 @@ func _workforce_roles() -> Array[String]:
 
 
 func _daily_order_roles() -> Array[String]:
-	return ["courier", "construction", "gather_branches", "gather_grass", "gather_water", "cleaning", "cook"]
+	return ["courier", "construction", "gather_branches", "gather_grass", "gather_water", "cleaning"]
 
 
 func _workforce_role_label(role: String) -> String:
@@ -9286,8 +9285,15 @@ func _show_building_menu() -> void:
 		building_cook_button.visible = building_type in ["cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant"]
 		var can_manage_professions := _player_can_manage_permanent_professions()
 		var profession_blocked_tooltip := _permanent_profession_block_message()
-		building_cook_button.disabled = not can_manage_professions or selected_builder == null or selected_builder.is_player_controlled or not bool(selected_building.get_meta("accepting_workers", true))
-		building_cook_button.tooltip_text = profession_blocked_tooltip if not can_manage_professions else ""
+		var is_active_kitchen := selected_building == canteen
+		building_cook_button.text = "Register selected resident as permanent cook" if can_manage_professions else "Assign selected resident: cook today"
+		building_cook_button.disabled = selected_builder == null or selected_builder.is_player_controlled or not is_active_kitchen or not bool(selected_building.get_meta("accepting_workers", true))
+		if not is_active_kitchen:
+			building_cook_button.tooltip_text = "Only the active kitchen can serve meals."
+		elif building_cook_button.disabled:
+			building_cook_button.tooltip_text = "Select a resident who is not under direct control."
+		else:
+			building_cook_button.tooltip_text = "Registers a permanent profession." if can_manage_professions else "A temporary cooking shift for the current workday."
 		
 		building_teacher_button.visible = building_type == "school"
 		building_teacher_button.disabled = not can_manage_professions or selected_builder == null or selected_builder.is_player_controlled or not bool(selected_building.get_meta("accepting_workers", true))
@@ -9726,14 +9732,23 @@ func _cover_warehouse_with_tarp() -> void:
 
 
 func _assign_cook_at_campfire() -> void:
-	if not _player_can_manage_permanent_professions():
-		_show_labor_command_blocked()
-		return
 	if selected_builder == null:
-		_update_interface("Select a resident first, then click the cooking campfire to make them the cook.")
+		_update_interface("Select a resident first, then choose a cooking shift.")
 		return
 	if selected_builder.is_player_controlled:
 		_update_interface("Pick a settler, not the character you are controlling.")
+		return
+	if selected_building != canteen:
+		_update_interface("Choose the active kitchen to assign a cook.")
+		return
+	if not _player_can_manage_permanent_professions():
+		if not selected_builder.has_no_permanent_work():
+			_update_interface("A resident with a permanent profession cannot take a temporary cooking shift.")
+			return
+		selected_builder.idle()
+		_assign_daily_order(selected_builder, "cook")
+		_update_interface("%s will cook for this workday." % selected_builder.role_label())
+		_show_building_menu()
 		return
 	if not _set_manual_specialist_employment(selected_builder, "cook"):
 		return

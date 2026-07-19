@@ -21,6 +21,18 @@ func _init() -> void:
 	assert(researcher.research_workplace == civic_post)
 	assert(researcher.permanent_role.is_empty())
 
+	var kitchen := Node3D.new()
+	kitchen.set_meta("accepting_workers", true)
+	simulation.add_child(kitchen)
+	simulation.canteen = kitchen
+	simulation.selected_building = kitchen
+	simulation.selected_builder = simulation.citizens[2]
+	simulation._assign_cook_at_campfire()
+	assert(simulation.citizens[2].daily_order_role == "cook")
+	assert(simulation.citizens[2].permanent_role.is_empty())
+	simulation.citizens[2].clear_daily_order()
+	simulation.selected_builder = researcher
+
 	# The native service order owns the movement. Simulate its completed arrival
 	# here and verify that only a resident physically at the post can be promoted.
 	researcher.global_position = simulation._employment_center_position()
