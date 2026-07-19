@@ -9,9 +9,9 @@ const OUT := "user://sky_preview"
 var sky_material: ShaderMaterial
 var sun: DirectionalLight3D
 var shots := [
-	{"name": "clear_noon", "overcast": 0.0, "sun_deg": Vector3(-55.0, -32.0, 0.0)},
-	{"name": "clear_low", "overcast": 0.0, "sun_deg": Vector3(-18.0, -60.0, 0.0)},
-	{"name": "storm", "overcast": 1.0, "sun_deg": Vector3(-55.0, -32.0, 0.0)},
+	{"name": "clear_noon", "overcast": 0.0, "sun_deg": Vector3(48.0, -32.0, 0.0)},
+	{"name": "clear_low", "overcast": 0.0, "sun_deg": Vector3(8.0, -60.0, 0.0)},
+	{"name": "storm", "overcast": 1.0, "sun_deg": Vector3(48.0, -32.0, 0.0)},
 ]
 var idx := 0
 var frame := 0
@@ -35,7 +35,7 @@ func _ready() -> void:
 	add_child(sun)
 
 	var cam := Camera3D.new()
-	cam.rotation_degrees = Vector3(8.0, 0.0, 0.0) # look slightly up toward sky
+	cam.rotation_degrees = Vector3(20.0, -32.0, 0.0) # look up toward the sun
 	add_child(cam)
 	cam.make_current()
 
