@@ -305,19 +305,54 @@ var construction_sites: Array[ConstructionSite]:
 var demolition_sites: Array[DemolitionSite]:
 	get: return demolition.sites if demolition != null else []
 var completed_house_count := 0
-var player_citizen: Citizen
+var player_controller: PlayerController
 var hero_citizen: Citizen
-var is_first_person := false
-var player_yaw := 0.0
-var player_pitch := -8.0
+
+var is_first_person: bool:
+	get: return player_controller.is_first_person if player_controller != null else false
+	set(val):
+		if player_controller != null: player_controller.is_first_person = val
+var player_citizen: Citizen:
+	get: return player_controller.player_citizen if player_controller != null else null
+	set(val):
+		if player_controller != null: player_controller.player_citizen = val
+var player_yaw: float:
+	get: return player_controller.player_yaw if player_controller != null else 0.0
+	set(val):
+		if player_controller != null: player_controller.player_yaw = val
+var player_pitch: float:
+	get: return player_controller.player_pitch if player_controller != null else 0.0
+	set(val):
+		if player_controller != null: player_controller.player_pitch = val
+var interaction_action: String:
+	get: return player_controller.interaction_action if player_controller != null else ""
+	set(val):
+		if player_controller != null: player_controller.interaction_action = val
+var interaction_resource: String:
+	get: return player_controller.interaction_resource if player_controller != null else ""
+	set(val):
+		if player_controller != null: player_controller.interaction_resource = val
+var interaction_time: float:
+	get: return player_controller.interaction_time if player_controller != null else 0.0
+	set(val):
+		if player_controller != null: player_controller.interaction_time = val
+var interaction_start_cell: Vector2i:
+	get: return player_controller.interaction_start_cell if player_controller != null else Vector2i(-9999, -9999)
+	set(val):
+		if player_controller != null: player_controller.interaction_start_cell = val
+var interaction_repeat_all: bool:
+	get: return player_controller.interaction_repeat_all if player_controller != null else false
+	set(val):
+		if player_controller != null: player_controller.interaction_repeat_all = val
+var player_work_target: Node3D:
+	get: return player_controller.player_work_target if player_controller != null else null
+	set(val):
+		if player_controller != null: player_controller.player_work_target = val
+var _player_toilet_notified: bool:
+	get: return player_controller.player_toilet_notified if player_controller != null else false
+	set(val):
+		if player_controller != null: player_controller.player_toilet_notified = val
 var pocket: Dictionary = {} # resource_type -> count, total limited by POCKET_CAPACITY
-var interaction_time := 0.0
-var interaction_action := ""
-var interaction_resource := ""
-var interaction_start_cell := Vector2i(-9999, -9999)
-var interaction_repeat_all := false
-var player_work_target: Node3D
-var _player_toilet_notified := false
 var interaction_hint_panel: Control
 var interaction_hint_label: Label:
 	get: return interaction_hint_panel.hint_label if interaction_hint_panel != null else null
@@ -527,6 +562,9 @@ func _ready() -> void:
 	ambient_spawner = AmbientSpawner.new()
 	add_child(ambient_spawner)
 	ambient_spawner.setup(self)
+	player_controller = PlayerController.new()
+	add_child(player_controller)
+	player_controller.setup(self)
 	_create_world()
 	_create_interface()
 	ambient_spawner.create_forest()
@@ -5033,258 +5071,28 @@ func _show_selected_citizen_menu() -> void:
 	build_menu.title_label.add_theme_color_override("font_color", selected_builder.specialization_color())
 
 func _toggle_hero_view() -> void:
-	if is_first_person:
-		if player_citizen == hero_citizen:
-			_leave_first_person_to_hero_overview()
-		else:
-			_enter_first_person(hero_citizen, "Returned to the hero.")
-		return
-	_enter_first_person(hero_citizen, "Hero view enabled.")
+	if player_controller != null:
+		player_controller.toggle_hero_view()
 
 func _take_control_of_selected_citizen() -> void:
-	if selected_builder == null:
-		return
-	_enter_first_person(selected_builder, "%s is now under direct control." % selected_builder.role_label())
+	if player_controller != null:
+		player_controller.take_control_of_selected_citizen()
 
 func _enter_first_person(citizen: Citizen, message: String) -> void:
-	if citizen == null:
-		return
-	_close_context_menus()
-	if is_first_person and player_citizen != null and player_citizen != citizen:
-		player_citizen.set_player_controlled(false)
-		player_citizen.set_head_visible(true)
-		if citizen_ai != null:
-			citizen_ai.request_decision_refresh()
-	player_citizen = citizen
-	_player_toilet_notified = false
-	player_citizen.set_head_visible(false)
-	# Watching a citizen must not cancel their current AI task. Manual control
-	# starts only after the player presses a movement key.
-	player_citizen.set_player_controlled(false)
-	is_first_person = true
-	build_mode = ""
-	selection_marker.visible = false
-	_show_territory_overlay(false)
-	build_menu.visible = false
-	build_menu_is_global = false
-	build_menu_is_job_menu = false
-	build_menu_is_daily_order_menu = false
-	_close_pocket_take_menu()
-	if time_controls_panel != null:
-		time_controls_panel.set_speed_controls_visible(false)
-		time_controls_panel.hide_skip_buttons()
-	if build_toggle_btn != null:
-		build_toggle_btn.visible = false
-	interaction_action = ""
-	interaction_resource = ""
-	interaction_start_cell = Vector2i(-9999, -9999)
-	interaction_repeat_all = false
-	player_yaw = player_citizen.rotation.y
-	player_pitch = 0.0
-	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-	if crosshair != null:
-		crosshair.visible = true
-	Engine.time_scale = 1.0
-	_update_interface(message)
+	if player_controller != null:
+		player_controller.enter_first_person(citizen, message)
 
 func _leave_first_person_to_hero_overview() -> void:
-	is_first_person = false
-	if player_citizen != null:
-		player_citizen.set_player_controlled(false)
-		player_citizen.set_head_visible(true)
-		if citizen_ai != null:
-			citizen_ai.request_decision_refresh()
-	player_citizen = null
-	_player_toilet_notified = false
-	_close_pocket_take_menu()
-	interaction_action = ""
-	interaction_resource = ""
-	interaction_start_cell = Vector2i(-9999, -9999)
-	interaction_repeat_all = false
-	if interaction_hint_panel != null:
-		interaction_hint_panel.visible = false
-	if time_controls_panel != null:
-		time_controls_panel.set_speed_controls_visible(true)
-	if build_toggle_btn != null:
-		build_toggle_btn.visible = true
-	_update_skip_night_button()
-	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
-	if crosshair != null:
-		crosshair.visible = false
-	if hero_citizen != null:
-		camera_target = hero_citizen.global_position
-	_update_camera_position()
-	build_menu.visible = selected_builder != null
-	_update_workers()
-	Engine.time_scale = time_multiplier
-	_update_interface("Overview centered on the hero.")
+	if player_controller != null:
+		player_controller.leave_first_person_to_hero_overview()
 
 func _update_player_control(delta: float) -> void:
-	if player_citizen == null:
-		_leave_first_person_to_hero_overview()
-		return
-	if player_citizen.work_position_locked:
-		camera.global_position = player_citizen.global_position + Vector3(0.0, PLAYER_EYE_HEIGHT, 0.0)
-		camera.rotation = Vector3(player_pitch, player_yaw, 0.0)
-		_refresh_interaction_hint()
-		return
-	if player_citizen.player_using_toilet:
-		camera.global_position = player_citizen.global_position + Vector3(0.0, PLAYER_EYE_HEIGHT, 0.0)
-		camera.rotation = Vector3(player_pitch, player_yaw, 0.0)
-		_refresh_interaction_hint()
-		return
-	var move_direction := Vector3.ZERO
-	var forward := Vector3(-sin(player_yaw), 0.0, -cos(player_yaw))
-	var right := Vector3(cos(player_yaw), 0.0, -sin(player_yaw))
-	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP): move_direction += forward
-	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN): move_direction -= forward
-	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT): move_direction += right
-	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT): move_direction -= right
-	if not player_citizen.is_player_controlled:
-		if move_direction.is_zero_approx():
-			camera.global_position = player_citizen.global_position + Vector3(0.0, PLAYER_EYE_HEIGHT, 0.0)
-			camera.rotation = Vector3(player_pitch, player_yaw, 0.0)
-			_refresh_interaction_hint()
-			return
-		if citizen_ai != null:
-			citizen_ai.cancel_citizen_work(player_citizen.ai_id)
-		player_citizen.set_player_controlled(true)
-	var speed := PLAYER_SPEED * (PLAYER_SPRINT_MULTIPLIER if Input.is_key_pressed(KEY_SHIFT) else 1.0)
-	if not move_direction.is_zero_approx():
-		move_direction = move_direction.normalized()
-		player_citizen.velocity.x = move_direction.x * speed
-		player_citizen.velocity.z = move_direction.z * speed
-		player_citizen.rotation.y = player_yaw
-	else:
-		player_citizen.velocity.x = move_toward(player_citizen.velocity.x, 0.0, speed * 8.0 * delta)
-		player_citizen.velocity.z = move_toward(player_citizen.velocity.z, 0.0, speed * 8.0 * delta)
-	if player_citizen.is_on_floor():
-		player_citizen.velocity.y = -0.5
-		if Input.is_key_pressed(KEY_SPACE):
-			player_citizen.velocity.y = PLAYER_JUMP_VELOCITY
-	else:
-		player_citizen.velocity.y -= PLAYER_GRAVITY * delta
-	player_citizen.move_and_slide()
-	player_citizen.drive_player_animation(Input.is_key_pressed(KEY_SHIFT))
-	camera.global_position = player_citizen.global_position + Vector3(0.0, PLAYER_EYE_HEIGHT, 0.0)
-	camera.rotation = Vector3(player_pitch, player_yaw, 0.0)
-	_refresh_interaction_hint()
+	if player_controller != null:
+		player_controller.update_player_control(delta)
 
 func _start_interaction(all: bool) -> void:
-	if not is_first_person or player_citizen == null:
-		return
-	if pocket_menu_open:
-		_close_pocket_take_menu()
-		return
-	if player_citizen.work_position_locked:
-		_exit_player_work_position()
-		return
-	if not interaction_action.is_empty():
-		return
-	var target := _first_person_target()
-	if target.kind == "entrance":
-		_meet_arrival_at_entrance()
-		return
-	if target.kind == "building" and _is_managed_fire_source(target.node):
-		_refuel_fire_from_pocket(target.node, all)
-		return
-	if target.kind == "toilet":
-		_player_use_toilet(target.node)
-		return
-	if not player_citizen.is_hero:
-		_update_interface("Только герой может выполнять действия. Остальными жителями можно только двигаться.")
-		return
-	match target.kind:
-		"construction":
-			var site := construction.site_for_node(target.node)
-			if site != null and not site.is_supplied():
-				_deliver_pocket_to_site(site, all)
-			else:
-				player_work_target = target.node
-				interaction_action = "construction"
-				interaction_time = 0.0
-				interaction_start_cell = _cell_from_position(player_citizen.global_position)
-				interaction_progress.visible = true
-				interaction_hint_label.text = "Работаем: стройка..."
-			return
-		"demolition":
-			player_work_target = target.node
-			interaction_action = "demolition"
-			interaction_time = 0.0
-			interaction_start_cell = _cell_from_position(player_citizen.global_position)
-			interaction_progress.visible = true
-			interaction_hint_label.text = "Работаем: снос..."
-			return
-		"pile":
-			_take_from_pile(target.pile, all)
-			return
-		"sawmill":
-			_handle_sawmill_interaction(all, target.position)
-			return
-		"warehouse":
-			_handle_warehouse_interaction(all, int(target.get("warehouse_index", -1)))
-			return
-		"forage", "rabbit":
-			_update_interface("Лесные дары и зайца может собирать только специалист. Постройте палатку охотников-собирателей.")
-			return
-		"citizen", "building":
-			return
-		"tree":
-			var gathering_branches := settlement.era < SettlementState.Era.WOOD
-			if not gathering_branches and not _pocket_has_room():
-				_update_interface("Карман полон. Дерево — на лесопилку, еду — на склад.")
-				_refresh_interaction_hint()
-				return
-			interaction_resource = "branches" if gathering_branches else "wood"
-			interaction_action = "harvesting"
-			interaction_time = 0.0
-			interaction_start_cell = _cell_from_position(player_citizen.global_position)
-			interaction_repeat_all = all
-			interaction_progress.visible = true
-			interaction_hint_label.text = "Собираем %s..." % interaction_resource
-			return
-		"grass":
-			if not _pocket_has_room():
-				_update_interface("Карман полон.")
-				_refresh_interaction_hint()
-				return
-			interaction_resource = "grass"
-			interaction_action = "harvesting"
-			interaction_time = 0.0
-			interaction_start_cell = _cell_from_position(player_citizen.global_position)
-			interaction_repeat_all = all
-			interaction_progress.visible = true
-			interaction_hint_label.text = "Собираем траву..."
-			return
-		"farm":
-			if not _pocket_has_room():
-				_update_interface("Карман полон. Дерево — на лесопилку, еду — на склад.")
-				_refresh_interaction_hint()
-				return
-			interaction_resource = "food"
-			interaction_action = "harvesting"
-			interaction_time = 0.0
-			interaction_start_cell = _cell_from_position(player_citizen.global_position)
-			interaction_repeat_all = all
-			interaction_progress.visible = true
-			interaction_hint_label.text = "Собираем food..."
-			return
-		"pond":
-			if not bool(settlement.tools.get("bucket", false)):
-				_update_interface("Нужно ведро, чтобы черпать воду. Купите его на рынке.")
-				return
-			if not _pocket_has_room():
-				_update_interface("Карман полон. Отнесите воду на склад.")
-				_refresh_interaction_hint()
-				return
-			interaction_resource = "water"
-			interaction_action = "harvesting"
-			interaction_time = 0.0
-			interaction_start_cell = _cell_from_position(player_citizen.global_position)
-			interaction_repeat_all = all
-			interaction_progress.visible = true
-			interaction_hint_label.text = "Набираем воду..."
-			return
+	if player_controller != null:
+		player_controller.start_interaction(all)
 
 func _dig_voxel_at_crosshair() -> void:
 	if voxel_tool == null:
@@ -5311,76 +5119,8 @@ func _mark_excavation_as_navigation_blocked(center: Vector3, radius: float) -> v
 				terrain_blocked_cells[cell] = true
 
 func _update_interaction(delta: float) -> void:
-	if interaction_action.is_empty():
-		return
-	if interaction_hint_panel != null:
-		interaction_hint_panel.visible = true
-	if interaction_action in ["construction", "demolition"]:
-		if not is_instance_valid(player_work_target) or player_citizen.global_position.distance_to(player_work_target.global_position) > INTERACTION_RANGE:
-			interaction_action = ""
-			player_work_target = null
-			interaction_progress.visible = false
-			_refresh_interaction_hint()
-			return
-		interaction_progress.value = 100.0
-		interaction_hint_label.text = "Работаем: %s..." % interaction_action
-		return
-	if interaction_action == "toilet":
-		if player_citizen == null or not player_citizen.player_using_toilet:
-			interaction_action = ""
-			interaction_progress.visible = false
-			_refresh_interaction_hint()
-			return
-		var toilet_pct := int((1.0 - player_citizen.toilet_timer.remaining / Citizen.TOILET_USE_DURATION) * 100.0)
-		interaction_progress.value = clampi(toilet_pct, 0, 100)
-		interaction_hint_label.text = "Пользуемся туалетом %d%%" % clampi(toilet_pct, 0, 100)
-		return
-	if _cell_from_position(player_citizen.global_position) != interaction_start_cell:
-		interaction_action = ""
-		interaction_progress.visible = false
-		_update_interface("Действие прервано: вы отошли от клетки.")
-		_refresh_interaction_hint()
-		return
-	if (interaction_resource in ["wood", "branches"] and not _nearby_tree()) or (interaction_resource == "food" and not _nearby_farm()) or (interaction_resource == "water" and not _nearby_pond()) or (interaction_resource == "grass" and not _nearby_grass_source()):
-		interaction_action = ""
-		interaction_progress.visible = false
-		_update_interface("Добыча отменена: вы отошли от источника.")
-		return
-	interaction_time += delta
-	var progress_pct := clampi(int(interaction_time / HARVEST_DURATION * 100.0), 0, 100)
-	interaction_progress.value = progress_pct
-	var source_info := _harvest_source_info(interaction_resource)
-	interaction_hint_label.text = "%s %d%% (%s)" % [_gather_action_name(interaction_resource), progress_pct, source_info]
-	if interaction_time >= HARVEST_DURATION:
-		interaction_action = ""
-		var gathered := 0
-		match interaction_resource:
-			"wood":
-				gathered = _add_to_pocket("wood", 1)
-				if gathered > 0:
-					_fell_nearest_tree()
-			"branches":
-				var branch_batch := HERO_GATHER_YIELD
-				gathered = _add_to_pocket("branches", branch_batch)
-				if gathered > 0:
-					_consume_tree_near_player(gathered)
-			"grass":
-				var grass_batch := HERO_GATHER_YIELD
-				gathered = _add_to_pocket("grass", grass_batch)
-				if gathered > 0:
-					_consume_grass_near_player(gathered)
-			"water":
-				gathered = _add_to_pocket("water", 1)
-			"food":
-				gathered = _add_to_pocket("food", 1)
-		if gathered > 0:
-			_update_interface("Собрано %s. %s" % [interaction_resource, _format_pocket_hint()])
-		else:
-			_update_interface("Карман полон. Невозможно собрать %s." % interaction_resource)
-		interaction_progress.visible = false
-		_refresh_interaction_hint()
-		if interaction_repeat_all and _pocket_has_room() and _can_continue_harvesting(interaction_resource):
-			_start_interaction(true)
+	if player_controller != null:
+		player_controller.update_interaction(delta)
 
 
 func _gather_action_name(resource_type: String) -> String:
@@ -5906,81 +5646,9 @@ func _nearest_grass_source_to_point(point: Vector3, max_distance: float) -> Vect
 
 
 func _first_person_target() -> Dictionary:
-	var result := {"kind": ""}
-	if not is_first_person or player_citizen == null or camera == null:
-		return result
-	var from := camera.global_position
-	var direction := -camera.global_transform.basis.z
-	var to := from + direction * INTERACTION_RANGE
-	var query := PhysicsRayQueryParameters3D.create(from, to)
-	query.collide_with_areas = true
-	query.collide_with_bodies = true
-	query.collision_mask = 1 | 4
-	var hit := get_world_3d().direct_space_state.intersect_ray(query)
-	var hit_position := Vector3.INF
-	if not hit.is_empty():
-		hit_position = hit.position
-		var collider = hit.collider
-		if collider is StaticBody3D and collider.name == "TreeCollision":
-			var tree := collider.get_parent() as Node3D
-			if is_instance_valid(tree) and not bool(tree.get_meta("felled", false)):
-				result = {"kind": "tree", "node": tree, "position": tree.global_position}
-		elif collider is Area3D:
-			var area_parent := collider.get_parent() as Node3D
-			if collider.is_in_group("construction_selector") and is_instance_valid(area_parent):
-				result = {"kind": "construction", "node": area_parent, "position": area_parent.global_position}
-			elif collider.is_in_group("entrance_selector") and is_instance_valid(area_parent):
-				result = {"kind": "entrance", "node": area_parent, "position": area_parent.global_position}
-			elif collider.is_in_group("resource_pile_selector"):
-				var pile := _resource_pile_for_node(area_parent)
-				if not pile.is_empty():
-					result = {"kind": "pile", "node": area_parent, "pile": pile, "position": area_parent.global_position}
-			elif collider.is_in_group("warehouse_selector"):
-				result = {"kind": "warehouse", "node": area_parent, "position": area_parent.global_position, "warehouse_index": _warehouse_index_for_building(area_parent)}
-			elif collider.is_in_group("citizen_selector") and area_parent is Citizen:
-				result = {"kind": "citizen", "node": area_parent as Citizen, "position": area_parent.global_position}
-			elif collider.is_in_group("forage_selector") and is_instance_valid(area_parent):
-				result = {"kind": "forage", "node": area_parent, "position": area_parent.global_position}
-			elif collider.is_in_group("rabbit_selector") and is_instance_valid(area_parent):
-				result = {"kind": "rabbit", "node": area_parent, "position": area_parent.global_position}
-			elif collider.is_in_group("building_selector") and is_instance_valid(area_parent):
-				var building_type := str(area_parent.get_meta("building_type", ""))
-				if bool(area_parent.get_meta("pending_demolition", false)):
-					result = {"kind": "demolition", "node": area_parent, "position": area_parent.global_position}
-				elif building_type == "sawmill":
-					result = {"kind": "sawmill", "node": area_parent, "position": area_parent.global_position}
-				elif building_type.begins_with("toilet_"):
-					result = {"kind": "toilet", "node": area_parent, "position": area_parent.global_position}
-				elif _role_for_workplace(area_parent) != "":
-					result = {"kind": "workplace", "node": area_parent, "position": area_parent.global_position}
-				else:
-					result = {"kind": "building", "node": area_parent, "position": area_parent.global_position}
-			elif collider.is_in_group("campfire_selector") or collider.is_in_group("cook_campfire_selector") or collider.is_in_group("market_selector") or collider.is_in_group("school_selector") or collider.is_in_group("house_selector") or collider.is_in_group("materials_factory_selector"):
-				if is_instance_valid(area_parent):
-					result = {"kind": "building", "node": area_parent, "position": area_parent.global_position}
-	if result.kind != "":
-		return result
-	if hit_position == Vector3.INF:
-		hit_position = to
-	var player_pos := player_citizen.global_position
-	if player_pos.distance_to(hit_position) > INTERACTION_RANGE:
-		return result
-	var grass_pos := _nearest_grass_source_to_point(hit_position, 1.0)
-	if grass_pos != Vector3.INF and player_pos.distance_to(grass_pos) <= INTERACTION_RANGE:
-		var grass_cell := _cell_from_position(grass_pos)
-		var grass_source: Dictionary = grass_sources.get(grass_cell, {})
-		var grass_node := grass_source.get("node") as Node3D
-		return {"kind": "grass", "position": grass_pos, "node": grass_node}
-	var pond_pos := _nearest_point_to_point_array(pond_positions, hit_position, 1.2)
-	if pond_pos != Vector3.INF and player_pos.distance_to(pond_pos) <= INTERACTION_RANGE:
-		return {"kind": "pond", "position": pond_pos}
-	var farm_pos := _nearest_point_to_point_array(farm_positions, hit_position, 1.2)
-	if farm_pos != Vector3.INF and player_pos.distance_to(farm_pos) <= INTERACTION_RANGE:
-		return {"kind": "farm", "position": farm_pos}
-	var sawmill_pos := _nearest_point_to_point_array(sawmill_positions, hit_position, 1.2)
-	if sawmill_pos != Vector3.INF and player_pos.distance_to(sawmill_pos) <= INTERACTION_RANGE:
-		return {"kind": "sawmill", "position": sawmill_pos}
-	return result
+	if player_controller != null:
+		return player_controller.first_person_target()
+	return {"kind": ""}
 
 
 func _missing_site_materials_text(site: ConstructionSite) -> String:
