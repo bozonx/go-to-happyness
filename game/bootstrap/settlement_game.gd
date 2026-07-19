@@ -285,8 +285,18 @@ var selection_marker: MeshInstance3D
 var selection_material: StandardMaterial3D
 var preview_entrance_marker: MeshInstance3D
 var preview_back_entrance_marker: MeshInstance3D
-var hud: HUD
-var message_log_panel: Control
+var hud: HUD:
+	get: return ui_manager.hud if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.hud = val
+var message_log_panel: MessageLogPanel:
+	get: return ui_manager.message_log_panel if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.message_log_panel = val
+var message_panel: Control:
+	get: return ui_manager.message_panel if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.message_panel = val
+var messages_modal: Control:
+	get: return ui_manager.messages_modal if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.messages_modal = val
 var current_day: int:
 	get: return day_cycle.current_day
 var tent_weather: int = TentEraSurvivalRulesScript.Weather.WARMING
@@ -296,7 +306,9 @@ var _is_skipping_night := false
 var _skip_zero_wellbeing_departure_applied := false
 var selected_builder: Citizen
 var selected_building: Node3D
-var build_menu: BuildMenu
+var build_menu: BuildMenu:
+	get: return ui_manager.build_menu if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.build_menu = val
 var is_panning_camera := false
 var is_rotating_camera := false
 var right_mouse_dragged := false
@@ -353,38 +365,148 @@ var _player_toilet_notified: bool:
 	set(val):
 		if player_controller != null: player_controller.player_toilet_notified = val
 var pocket: Dictionary = {} # resource_type -> count, total limited by POCKET_CAPACITY
-var interaction_hint_panel: Control
+var ui_manager: UIManager
+
+var build_toggle_btn: Button:
+	get: return ui_manager.build_toggle_btn if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.build_toggle_btn = val
+var interaction_hint_panel: Control:
+	get: return ui_manager.interaction_hint_panel if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.interaction_hint_panel = val
 var interaction_hint_label: Label:
 	get: return interaction_hint_panel.hint_label if interaction_hint_panel != null else null
 var interaction_progress: ProgressBar:
 	get: return interaction_hint_panel.progress_bar if interaction_hint_panel != null else null
-var pocket_take_menu: Control
+var pocket_take_menu: PocketTakeMenu:
+	get: return ui_manager.pocket_take_menu if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.pocket_take_menu = val
+var crosshair: FirstPersonCrosshair:
+	get: return ui_manager.crosshair if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.crosshair = val
+var house_menu: Panel:
+	get: return ui_manager.house_menu if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.house_menu = val
+var house_menu_title: Label:
+	get: return ui_manager.house_menu_title if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.house_menu_title = val
+var house_spawn_button: Button:
+	get: return ui_manager.house_spawn_button if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.house_spawn_button = val
+var entrance_menu: Panel:
+	get: return ui_manager.entrance_menu if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.entrance_menu = val
+var entrance_menu_title: Label:
+	get: return ui_manager.entrance_menu_title if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.entrance_menu_title = val
+var entrance_work_button: Button:
+	get: return ui_manager.entrance_work_button if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.entrance_work_button = val
+var entrance_order_modal: Panel:
+	get: return ui_manager.entrance_order_modal if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.entrance_order_modal = val
+var entrance_order_food_spin: SpinBox:
+	get: return ui_manager.entrance_order_food_spin if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.entrance_order_food_spin = val
+var entrance_order_water_spin: SpinBox:
+	get: return ui_manager.entrance_order_water_spin if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.entrance_order_water_spin = val
+var entrance_order_gloves_spin: SpinBox:
+	get: return ui_manager.entrance_order_gloves_spin if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.entrance_order_gloves_spin = val
+var entrance_order_bucket_spin: SpinBox:
+	get: return ui_manager.entrance_order_bucket_spin if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.entrance_order_bucket_spin = val
+var entrance_order_total_label: Label:
+	get: return ui_manager.entrance_order_total_label if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.entrance_order_total_label = val
+var school_menu: Panel:
+	get: return ui_manager.school_menu if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.school_menu = val
+var materials_factory_menu: Panel:
+	get: return ui_manager.materials_factory_menu if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.materials_factory_menu = val
+var materials_factory_menu_title: Label:
+	get: return ui_manager.materials_factory_menu_title if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.materials_factory_menu_title = val
+var campfire_menu: CampfireMenu:
+	get: return ui_manager.campfire_menu if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.campfire_menu = val
+var workforce_menu: WorkforceMenu:
+	get: return ui_manager.workforce_menu if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.workforce_menu = val
+var research_menu: ResearchMenu:
+	get: return ui_manager.research_menu if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.research_menu = val
+var market_menu: MarketMenu:
+	get: return ui_manager.market_menu if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.market_menu = val
+var warehouse_menu: WarehouseMenu:
+	get: return ui_manager.warehouse_menu if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.warehouse_menu = val
+var building_menu: Panel:
+	get: return ui_manager.building_menu if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.building_menu = val
+var building_menu_title: Label:
+	get: return ui_manager.building_menu_title if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.building_menu_title = val
+var building_cook_button: Button:
+	get: return ui_manager.building_cook_button if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.building_cook_button = val
+var building_teacher_button: Button:
+	get: return ui_manager.building_teacher_button if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.building_teacher_button = val
+var building_seller_button: Button:
+	get: return ui_manager.building_seller_button if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.building_seller_button = val
+var building_accept_workers_button: Button:
+	get: return ui_manager.building_accept_workers_button if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.building_accept_workers_button = val
+var building_dismiss_worker_button: Button:
+	get: return ui_manager.building_dismiss_worker_button if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.building_dismiss_worker_button = val
+var building_upgrade_button: Button:
+	get: return ui_manager.building_upgrade_button if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.building_upgrade_button = val
+var building_demolish_button: Button:
+	get: return ui_manager.building_demolish_button if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.building_demolish_button = val
+var building_close_button: Button:
+	get: return ui_manager.building_close_button if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.building_close_button = val
+var building_overtime_button: CheckButton:
+	get: return ui_manager.building_overtime_button if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.building_overtime_button = val
+var building_relight_button: Button:
+	get: return ui_manager.building_relight_button if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.building_relight_button = val
+var campfire_story_menu: Control:
+	get: return ui_manager.campfire_story_menu if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.campfire_story_menu = val
+var building_cancel_construction_button: Button:
+	get: return ui_manager.building_cancel_construction_button if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.building_cancel_construction_button = val
+var decision_menu: Control:
+	get: return ui_manager.decision_menu if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.decision_menu = val
+var time_controls_panel: TimeControlsPanel:
+	get: return ui_manager.time_controls_panel if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.time_controls_panel = val
+var campfire_orders_menu: CampfireOrdersMenu:
+	get: return ui_manager.campfire_orders_menu if ui_manager != null else null
+	set(val): if ui_manager != null: ui_manager.campfire_orders_menu = val
 var pocket_take_menu_title: Label:
 	get: return pocket_take_menu.title_label if pocket_take_menu != null else null
 var pocket_menu_open := false
 var pocket_take_warehouse_index: int = -1
-var crosshair: FirstPersonCrosshair
 var dig_sites: Array[Dictionary] = []
 var dig_cells: Dictionary = {}
 var exhausted_dig_cells: Dictionary = {}
 var dig_mode := false
-var house_menu: Panel
-var house_menu_title: Label
-var house_spawn_button: Button
 var selected_house: Node3D
 var tent: Node3D
 var entrance_stone: Node3D
 var entrance_highlight: MeshInstance3D
 var selected_entrance: Node3D
-var entrance_menu: Panel
-var entrance_menu_title: Label
-var entrance_work_button: Button
-var entrance_order_modal: Panel
-var entrance_order_food_spin: SpinBox
-var entrance_order_water_spin: SpinBox
-var entrance_order_gloves_spin: SpinBox
-var entrance_order_bucket_spin: SpinBox
-var entrance_order_total_label: Label
 var pending_arrivals: Array[Dictionary] = []
 var arrival_greeters: Dictionary = {}
 var arrival_waiting_greeters: Dictionary = {}
@@ -407,7 +529,6 @@ var _route_reachability_cache_revision := -1
 const ROUTE_REACHABILITY_CACHE_LIMIT := 1024
 var service_pockets: Array[Dictionary] = []
 var selected_school: Node3D
-var school_menu: Panel
 var school_developed_professions: Dictionary = {
 	"construction": false,
 	"forestry": false,
@@ -419,34 +540,12 @@ var school_developed_professions: Dictionary = {
 	"teacher": false,
 	"seller": false
 }
-var materials_factory_menu: Panel
-var materials_factory_menu_title: Label
 var selected_materials_factory: Node3D
 var campfire_node: Node3D = null
 var selected_campfire: Node3D = null
-var campfire_menu: CampfireMenu
-var workforce_menu: WorkforceMenu
-var research_menu: ResearchMenu
 var selected_market: Node3D = null
-var market_menu: MarketMenu
 var selected_warehouse: Node3D = null
-var warehouse_menu: WarehouseMenu
-var building_menu: Panel
-var building_menu_title: Label
-var building_cook_button: Button
-var building_teacher_button: Button
-var building_seller_button: Button
-var building_accept_workers_button: Button
-var building_dismiss_worker_button: Button
-var building_upgrade_button: Button
-var building_demolish_button: Button
-var building_close_button: Button
-var building_overtime_button: CheckButton
-var building_relight_button: Button
-var campfire_story_menu: Control
 var campfire_story_buttons: Array[Button] = []
-var building_cancel_construction_button: Button
-var decision_menu: Control
 var survival_decision_panel: Control:
 	get: return decision_menu
 var _decision_buttons: Array[Button] = []
@@ -459,12 +558,10 @@ var build_category := ""
 var build_menu_is_job_menu := false
 var build_menu_is_daily_order_menu := false
 var build_menu_is_global := false
-var time_controls_panel: Control
 var skip_night_button: Button:
 	get: return time_controls_panel.skip_night_button if time_controls_panel != null else null
 var start_workday_button: Button:
 	get: return time_controls_panel.start_workday_button if time_controls_panel != null else null
-var build_toggle_btn: Button
 var water_collectors: Array[Dictionary] = []
 var pending_trades: Dictionary = {} # worker instance id -> TradeOrder
 var queued_trades: Array = []
@@ -495,7 +592,6 @@ var trail_overlay: MeshInstance3D
 var trail_overlay_material: ShaderMaterial
 var village_boundary_markers: Node3D
 var village_territory_overlay: Node3D
-var campfire_orders_menu: Control
 
 
 func _ready() -> void:
@@ -565,6 +661,9 @@ func _ready() -> void:
 	player_controller = PlayerController.new()
 	add_child(player_controller)
 	player_controller.setup(self)
+	ui_manager = UIManager.new()
+	add_child(ui_manager)
+	ui_manager.setup(self)
 	_create_world()
 	_create_interface()
 	ambient_spawner.create_forest()
@@ -2928,56 +3027,14 @@ func _on_leisure_finished(citizen: Citizen) -> void:
 
 
 func _create_interface() -> void:
-	var ui := CanvasLayer.new()
-	add_child(ui)
-
-	hud = HUDScene.instantiate()
-	ui.add_child(hud)
-	build_toggle_btn = hud.build_toggle_btn
-	build_toggle_btn.pressed.connect(_toggle_global_build_menu)
-	
-	_create_message_panel(ui)
-	_create_messages_modal(ui)
-	_create_time_controls(ui)
-	
-	interaction_hint_panel = InteractionHintPanelScene.instantiate()
-	ui.add_child(interaction_hint_panel)
-	
-	_create_build_menu(ui)
-	_create_entrance_menu(ui)
-	_create_house_menu(ui)
-	_create_school_menu(ui)
-	_create_materials_factory_menu(ui)
-	_create_campfire_menu(ui)
-	_create_campfire_story_menu(ui)
-	_create_market_menu(ui)
-	_create_warehouse_menu(ui)
-	_create_pocket_take_menu(ui)
-	_create_building_menu(ui)
-	_create_workforce_menu(ui)
-	_create_research_menu(ui)
-	_create_campfire_orders_menu(ui)
-	_create_survival_decision_menu(ui)
-	_create_crosshair(ui)
+	if ui_manager != null:
+		ui_manager.create_interface()
 
 
 func _create_context_menu_panel(ui: CanvasLayer, anchor: int, offsets: Vector4, input_handler: Callable = _on_context_menu_gui_input) -> Panel:
-	var panel := Panel.new()
-	panel.set_anchors_preset(anchor)
-	panel.offset_left = offsets.x
-	panel.offset_top = offsets.y
-	panel.offset_right = offsets.z
-	panel.offset_bottom = offsets.w
-	panel.visible = false
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.08, 0.14, 0.18, 0.75)
-	style.border_color = Color(0.25, 0.4, 0.5, 0.7)
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(6)
-	panel.add_theme_stylebox_override("panel", style)
-	panel.gui_input.connect(input_handler)
-	ui.add_child(panel)
-	return panel
+	if ui_manager != null:
+		return ui_manager.create_context_menu_panel(anchor, offsets, input_handler)
+	return null
 
 
 func _create_survival_decision_menu(ui: CanvasLayer) -> void:
