@@ -154,10 +154,8 @@ func capture(sequence: int) -> WorldSnapshot:
 		var service_role := ""
 		if actor.permanent_role in ["cook", "teacher", "seller", "official", "craftsman"] and actor.is_employed() and not actor.is_player_controlled:
 			service_role = actor.permanent_role
-		elif is_instance_valid(actor.research_workplace) and actor.research_workplace == simulation._employment_centre_building() and not actor.is_player_controlled:
-			service_role = "researcher"
-		elif daily_order_active and daily_order_role == "cook" and not actor.is_player_controlled:
-			service_role = "cook"
+		elif daily_order_active and daily_order_role in ["cook", "researcher"] and not actor.is_player_controlled:
+			service_role = daily_order_role
 		var service_states := {
 			"cook": [Citizen.State.TO_CANTEEN_WORK, Citizen.State.CANTEEN_WORK],
 			"teacher": [Citizen.State.TO_SCHOOL_WORK, Citizen.State.SCHOOL_WORK],
@@ -182,7 +180,7 @@ func capture(sequence: int) -> WorldSnapshot:
 			elif service_role == "official":
 				service_position = simulation._employment_center_position()
 			elif service_role == "researcher":
-				service_position = actor.research_workplace.get_meta("service_position", actor.research_workplace.global_position)
+				service_position = simulation._employment_center_position()
 			else:
 				service_position = actor.employment_workplace.get_meta("service_position", actor.employment_workplace.global_position) if is_instance_valid(actor.employment_workplace) else Vector3.INF
 		var service_can_start: bool = not service_role.is_empty() and service_position != Vector3.INF and simulation._is_route_reachable(actor.global_position, service_position)

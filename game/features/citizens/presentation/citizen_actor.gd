@@ -89,6 +89,7 @@ const DAILY_ORDER_ROLES := {
 	"gather_water": true,
 	"cleaning": true,
 	"cook": true,
+	"researcher": true,
 }
 
 const SKIN_COLORS := [
@@ -362,7 +363,6 @@ var training_days_completed := 0
 var school_position := Vector3.ZERO
 var official_position := Vector3.ZERO
 var research_position := Vector3.ZERO
-var research_workplace: Node3D
 var arrival_position := Vector3.INF
 var pending_arrival_entrance := Vector3.INF
 var factory: Node3D
@@ -2207,18 +2207,17 @@ func assign_craft_work(next_craft_position: Vector3, next_speed_multiplier := 1.
 		factory = null
 		state = State.TO_CRAFT_WORK
 
-func assign_research_work(next_research_position: Vector3, next_research_workplace: Node3D = null) -> void:
+func assign_research_work(next_research_position: Vector3) -> void:
 	if not is_player_controlled:
 		_reset_assignment_navigation()
 		research_position = next_research_position
-		research_workplace = next_research_workplace
 		active_role = "research"
 		factory = null
 		state = State.RESEARCHING
 
 func _process_research(delta: float) -> void:
 	if _move_to(research_position, delta, false, false):
-		enter_work_position(research_position, "researcher", research_workplace, true, false)
+		enter_work_position(research_position, "researcher", null, true, false)
 
 func _process_craft_work_arrival(delta: float) -> void:
 	if _move_to(craft_position, delta, false, false):
@@ -3187,7 +3186,7 @@ func execute_action(action: StringName, target: Node3D, payload: AIFactSet) -> b
 				&"seller": assign_seller_work(service_position)
 				&"official": assign_official_work(service_position)
 				&"craftsman": assign_craft_work(service_position, _craft_speed_multiplier_internal())
-				&"researcher": assign_research_work(service_position, research_workplace)
+				&"researcher": assign_research_work(service_position)
 			return state in _service_states_for_internal(action)
 		&"factory_work":
 			var factory_role: Variant = payload.value(&"factory.role", &"") if payload != null else &""
