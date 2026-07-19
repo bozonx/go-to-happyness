@@ -372,12 +372,18 @@ func _test_fire_source_state() -> void:
 	var fire := FireSourceStateScript.from_values(1, 0, true)
 	assert(fire.total_committed_fuel() == 1)
 	assert(fire.needs_supply(4))
+	assert(fire.phase_at(0) == FireSourceStateScript.Phase.DYING)
 	fire.reserve(2)
 	assert(fire.total_committed_fuel() == 3)
-	fire.add_delivered(2)
+	fire.add_delivered(2, 0)
 	assert(fire.fuel == 3 and fire.reserved_fuel == 0 and fire.lit)
-	fire.consume(3)
+	fire.consume(3, 240)
 	assert(fire.fuel == 0 and not fire.lit)
+	assert(fire.phase_at(241) == FireSourceStateScript.Phase.EMBERS)
+	fire.add_delivered(1, 241)
+	assert(fire.lit and fire.phase_at(241) == FireSourceStateScript.Phase.DYING)
+	var exhausted_fire := FireSourceStateScript.from_values(0, 0, false, 360)
+	assert(exhausted_fire.phase_at(360) == FireSourceStateScript.Phase.OUT)
 
 
 func _test_citizen_status_effects() -> void:

@@ -1686,7 +1686,17 @@ func _publish_courier_tasks(dispatcher: RefCounted) -> void:
 			if not fire_state.needs_supply(4) or branches <= 0:
 				continue
 			var fire_position: Vector3 = fire_building.get_meta("service_position", fire_building.global_position)
-			dispatcher.publish(StringName("firewood_%d" % fire_building.get_instance_id()), CourierTask.Kind.BUILDING_SUPPLY, 90, _get_nearest_delivery_position(fire_position), fire_position, {"building": fire_building, "supply_kind": "firewood", "resource": "branches"})
+			dispatcher.publish(StringName("firewood_%d" % fire_building.get_instance_id()), CourierTask.Kind.BUILDING_SUPPLY, _firewood_task_priority(fire_building, fire_state), _get_nearest_delivery_position(fire_position), fire_position, {"building": fire_building, "supply_kind": "firewood", "resource": "branches"})
+
+
+func _firewood_task_priority(building: Node3D, fire_state: RefCounted) -> int:
+	var phase: int = fire_state.phase_at(int(game_minutes))
+	var is_main := building == campfire_node
+	if phase == FireSourceStateScript.Phase.EMBERS or fire_state.fuel <= 1:
+		return 98 if is_main else 96
+	if phase == FireSourceStateScript.Phase.DYING:
+		return 92
+	return 90
 
 
 func _reconcile_repair_reservations() -> void:
@@ -2133,7 +2143,7 @@ func _on_building_supply_delivered(_courier: Citizen, target: Node3D, supply_kin
 	match supply_kind:
 		"firewood":
 			var fire_state := _fire_state_for(target)
-			fire_state.add_delivered(amount)
+			fire_state.add_delivered(amount, int(game_minutes))
 			_apply_fire_state(target, fire_state)
 			_refresh_living_statuses()
 		"repair":
@@ -7165,10 +7175,11 @@ func _building_action_hint(building: Node3D) -> String:
 	var name := str(BuildingCatalog.definition_for(building_type).get("name", building_type)).capitalize()
 	var info_parts: Array[String] = []
 	if building_type in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"]:
-		if bool(building.get_meta("fire_lit", false)):
-			info_parts.append("Fire lit")
-		else:
-			info_parts.append("Fire out")
+		var fire_state := _fire_state_for(building)
+		var phase: int = fire_state.phase_at(int(game_minutes))
+		var phase_label: String = ["burning", "dying", "embers", "out"][phase]
+		var delivery_hint := ", %d in transit" % fire_state.reserved_fuel if fire_state.reserved_fuel > 0 else ""
+		info_parts.append("Fire: %s (%d fuel%s)" % [phase_label, fire_state.fuel, delivery_hint])
 	if building_type in BuildingCatalog.KITCHEN_FOOD_CAPACITIES:
 		info_parts.append("Food cap: %d" % BuildingCatalog.kitchen_food_capacity(building_type))
 	var required := _required_staff_for_building(building)
@@ -7502,6 +7513,8 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 	if building_type in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"]:
 		building.set_meta("fire_fuel", 4)
 		building.set_meta("fire_lit", true)
+		building.set_meta("fire_embers_until", -1)
+		building.set_meta("fire_phase", "burning")
 	if _is_staffed_workplace(building):
 		workplace_priority_counter += 1
 		building.set_meta("accepting_workers", true)
@@ -10206,8 +10219,15 @@ func _fire_state_for(building: Node3D) -> RefCounted:
 	return FireSourceStateScript.from_values(
 		int(building.get_meta("fire_fuel", 0)),
 		int(building.get_meta("fire_reserved", 0)),
-		bool(building.get_meta("fire_lit", true))
+		bool(building.get_meta("fire_lit", true)),
+		int(building.get_meta("fire_embers_until", -1))
 	)
+
+
+func _is_managed_fire_source(building: Node3D) -> bool:
+	if not is_instance_valid(building):
+		return false
+	return str(building.get_meta("building_type", "")) in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"]
 
 
 func _apply_fire_state(building: Node3D, fire_state: RefCounted) -> void:
@@ -10215,11 +10235,16 @@ func _apply_fire_state(building: Node3D, fire_state: RefCounted) -> void:
 		return
 	building.set_meta("fire_fuel", fire_state.fuel)
 	building.set_meta("fire_reserved", fire_state.reserved_fuel)
-	building.set_meta("fire_lit", fire_state.lit)
+	building.set_meta("fire_lit", fire_state.is_burning_at(int(game_minutes)))
+	building.set_meta("fire_embers_until", fire_state.embers_until_minute)
 
 
 func _is_fire_lit(building: Node3D) -> bool:
-	return is_instance_valid(building) and _fire_state_for(building).lit
+	if not is_instance_valid(building):
+		return false
+	if not _is_managed_fire_source(building):
+		return bool(building.get_meta("fire_lit", true))
+	return _fire_state_for(building).is_burning_at(int(game_minutes))
 
 
 func fire_smoke_work_multiplier(position_on_board: Vector3) -> float:
@@ -10239,26 +10264,54 @@ func campfire_story_efficiency_multiplier(role: String) -> float:
 	return 1.0
 
 func _update_fire_status() -> void:
-	# Fires consume one large branch each four simulated hours. Keeping them
-	# supplied from storage is a logistics task; without branches the service is
-	# deliberately unavailable.
 	var minute := int(game_minutes)
-	if minute % (4 * 60) != 0 or get_meta("last_fire_tick", -1) == minute:
-		return
-	set_meta("last_fire_tick", minute)
+	var consume_tick: bool = minute % (4 * 60) == 0 and get_meta("last_fire_tick", -1) != minute
+	if consume_tick:
+		set_meta("last_fire_tick", minute)
 	for record in building_registry.records():
 		var building := record.node
 		if not is_instance_valid(building) or str(building.get_meta("building_type", "")) not in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"]:
 			continue
 		var fire_state := _fire_state_for(building)
-		fire_state.consume(1)
+		if consume_tick and fire_state.is_burning_at(minute):
+			fire_state.consume(1, minute)
 		_apply_fire_state(building, fire_state)
-		for child in building.get_children():
-			if child is OmniLight3D:
-				child.visible = fire_state.lit
-	if is_instance_valid(campfire_node) and not _is_fire_lit(campfire_node):
+		_update_fire_visual(building, fire_state, minute)
+		_report_fire_phase_change(building, fire_state, minute)
+	if consume_tick and is_instance_valid(campfire_node) and _fire_state_for(campfire_node).phase_at(minute) == FireSourceStateScript.Phase.OUT:
 		wellbeing = maxi(0, wellbeing - 1)
 	_refresh_living_statuses()
+
+
+func _update_fire_visual(building: Node3D, fire_state: RefCounted, minute: int) -> void:
+	var phase: int = fire_state.phase_at(minute)
+	for child in building.get_children():
+		if child is OmniLight3D:
+			child.visible = phase != FireSourceStateScript.Phase.OUT
+			child.light_energy = 0.22 if phase == FireSourceStateScript.Phase.EMBERS else 1.0
+
+
+func _report_fire_phase_change(building: Node3D, fire_state: RefCounted, minute: int) -> void:
+	var phase: int = fire_state.phase_at(minute)
+	var phase_name := str(FireSourceStateScript.Phase.keys()[phase]).to_lower()
+	var previous_phase := str(building.get_meta("fire_phase", phase_name))
+	if previous_phase == phase_name:
+		return
+	building.set_meta("fire_phase", phase_name)
+	var is_main := building == campfire_node
+	var fire_name := "Главный костер" if is_main else "Костер для готовки"
+	match phase:
+		FireSourceStateScript.Phase.DYING:
+			if fire_state.reserved_fuel <= 0 and branches <= 0:
+				_add_message("%s догорает: топлива осталось примерно на 4 часа." % fire_name)
+		FireSourceStateScript.Phase.EMBERS:
+			_add_message("%s превратился в угли. Доставьте ветки в течение 2 часов, чтобы он разгорелся сам." % fire_name)
+		FireSourceStateScript.Phase.OUT:
+			var consequence := "Оформление жителей и исследования приостановлены." if is_main else "Следующий прием пищи будет сырым рационом."
+			_add_message("%s погас. %s" % [fire_name, consequence])
+		FireSourceStateScript.Phase.BURNING:
+			if previous_phase in ["embers", "out", "dying"]:
+				_add_message("%s снова горит." % fire_name)
 
 func _apply_building_wear_and_repairs() -> void:
 	for record in building_registry.records():
