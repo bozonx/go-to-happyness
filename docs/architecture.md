@@ -21,6 +21,7 @@ game/
     production/{domain,application}/
     simulation/{domain,application}/
     world/{application,presentation}/
+    ui/presentation/
 ```
 
 `game/bootstrap/settlement_game.tscn` is the configured main scene. Its
@@ -67,6 +68,9 @@ create generic `utils`, `helpers`, `managers` or catch-all `services` directorie
 - `world`: terrain, obstacle publication and world-only presentation.
 - `routing`: navigation grid, route selection and route results. UI belongs in a
   future `ui/presentation` feature.
+- `ui`: reusable UI panels that read view models or query results and emit user
+  intent as signals. The bootstrap controller wires panel signals to application
+  commands; panels never mutate settlement state directly.
 
 ## Building model
 

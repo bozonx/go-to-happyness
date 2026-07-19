@@ -54,6 +54,7 @@ const TentEraEventsScript = preload("res://game/features/events/application/tent
 const VillageTerritoryServiceScript = preload("res://game/features/buildings/application/village_territory_service.gd")
 const VillageBoundaryMarkersScript = preload("res://game/features/buildings/presentation/village_boundary_markers.gd")
 const VillageTerritoryOverlayScript = preload("res://game/features/buildings/presentation/village_territory_overlay.gd")
+const TimeControlsPanelScript = preload("res://game/features/ui/presentation/time_controls_panel.gd")
 
 
 # The playable routing and construction board must cover the terrain visible
@@ -436,9 +437,11 @@ var build_menu_is_daily_order_menu := false
 var build_menu_is_global := false
 var build_buttons: Array[Button] = []
 var build_item_buttons: Array[Button] = []
-var skip_night_button: Button
-var start_workday_button: Button
-var time_controls: HBoxContainer
+var time_controls_panel: Control
+var skip_night_button: Button:
+	get: return time_controls_panel.skip_night_button if time_controls_panel != null else null
+var start_workday_button: Button:
+	get: return time_controls_panel.start_workday_button if time_controls_panel != null else null
 var build_toggle_btn: Button
 var water_collectors: Array[Dictionary] = []
 var pending_trades: Dictionary = {} # worker instance id -> TradeOrder
@@ -3731,45 +3734,11 @@ func _update_survival_busy_workers() -> void:
 		_update_workers()
 
 func _create_time_controls(ui: CanvasLayer) -> void:
-	time_controls = HBoxContainer.new()
-	time_controls.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	time_controls.offset_left = -220
-	time_controls.offset_top = 58
-	time_controls.offset_right = -22
-	time_controls.offset_bottom = 90
-	time_controls.alignment = BoxContainer.ALIGNMENT_END
-	ui.add_child(time_controls)
-	for multiplier in [1.0, 2.0, 5.0]:
-		var button := Button.new()
-		button.text = "x%d" % int(multiplier)
-		button.tooltip_text = "Simulation speed x%d" % int(multiplier)
-		button.custom_minimum_size = Vector2(56, 30)
-		button.pressed.connect(_set_time_multiplier.bind(multiplier))
-		time_controls.add_child(button)
-	# Appears as soon as the selected workday is over, including the evening
-	# hours before the world is considered night.
-	skip_night_button = Button.new()
-	skip_night_button.text = "Skip night »"
-	skip_night_button.tooltip_text = "Jump to the next morning (06:00)"
-	skip_night_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	skip_night_button.offset_left = -220
-	skip_night_button.offset_top = 96
-	skip_night_button.offset_right = -22
-	skip_night_button.offset_bottom = 128
-	skip_night_button.visible = false
-	skip_night_button.pressed.connect(_skip_night)
-	ui.add_child(skip_night_button)
-	start_workday_button = Button.new()
-	start_workday_button.text = "К началу рабочего дня"
-	start_workday_button.tooltip_text = "Jump to 08:00"
-	start_workday_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	start_workday_button.offset_left = -220
-	start_workday_button.offset_top = 96
-	start_workday_button.offset_right = -22
-	start_workday_button.offset_bottom = 128
-	start_workday_button.visible = false
-	start_workday_button.pressed.connect(_skip_to_workday_start)
-	ui.add_child(start_workday_button)
+	time_controls_panel = TimeControlsPanelScript.new()
+	ui.add_child(time_controls_panel)
+	time_controls_panel.skip_night_requested.connect(_skip_night)
+	time_controls_panel.skip_to_workday_start_requested.connect(_skip_to_workday_start)
+	time_controls_panel.time_multiplier_changed.connect(_set_time_multiplier)
 
 
 func _can_skip_night() -> bool:
@@ -3787,16 +3756,8 @@ func _can_skip_to_workday_start() -> bool:
 
 
 func _update_skip_night_button() -> void:
-	if is_first_person:
-		if skip_night_button != null:
-			skip_night_button.visible = false
-		if start_workday_button != null:
-			start_workday_button.visible = false
-		return
-	if skip_night_button != null:
-		skip_night_button.visible = _can_skip_night()
-	if start_workday_button != null:
-		start_workday_button.visible = _can_skip_to_workday_start()
+	if time_controls_panel != null:
+		time_controls_panel.update_skip_buttons(_can_skip_night(), _can_skip_to_workday_start(), is_first_person)
 
 
 func _skip_night_survival_hours() -> Array[Dictionary]:
@@ -6195,12 +6156,9 @@ func _enter_first_person(citizen: Citizen, message: String) -> void:
 	build_menu_is_job_menu = false
 	build_menu_is_daily_order_menu = false
 	_close_pocket_take_menu()
-	if time_controls != null:
-		time_controls.visible = false
-	if skip_night_button != null:
-		skip_night_button.visible = false
-	if start_workday_button != null:
-		start_workday_button.visible = false
+	if time_controls_panel != null:
+		time_controls_panel.set_speed_controls_visible(false)
+		time_controls_panel.hide_skip_buttons()
 	if build_toggle_btn != null:
 		build_toggle_btn.visible = false
 	interaction_action = ""
@@ -6231,8 +6189,8 @@ func _leave_first_person_to_hero_overview() -> void:
 	interaction_repeat_all = false
 	if interaction_hint_panel != null:
 		interaction_hint_panel.visible = false
-	if time_controls != null:
-		time_controls.visible = true
+	if time_controls_panel != null:
+		time_controls_panel.set_speed_controls_visible(true)
 	if build_toggle_btn != null:
 		build_toggle_btn.visible = true
 	_update_skip_night_button()
