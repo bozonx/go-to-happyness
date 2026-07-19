@@ -592,6 +592,8 @@ var trail_overlay: MeshInstance3D
 var trail_overlay_material: ShaderMaterial
 var village_boundary_markers: Node3D
 var village_territory_overlay: Node3D
+var resource_pile_service: ResourcePileService
+var foraging_service: ForagingService
 
 
 func _ready() -> void:
@@ -640,6 +642,23 @@ func _ready() -> void:
 	water_collector_service.configure(self)
 	canteen_service = CanteenService.new()
 	canteen_service.configure(self)
+	resource_pile_service = ResourcePileService.new(self, resource_piles, settlement, weather_state)
+	foraging_service = ForagingService.new()
+	foraging_service.setup(
+		settlement,
+		forager_positions,
+		forage_sources,
+		forage_respawn_at,
+		rabbit_sources,
+		rabbit_respawn_at,
+		grass_sources,
+		tree_nodes,
+		tree_positions,
+		gather_progress_labels,
+		_terrain_height_at,
+		_cell_from_position,
+		_first_person_target
+	)
 	citizen_needs_service = CitizenNeedsService.new()
 	citizen_needs_service.configure(self)
 	citizen_living_status_service = CitizenLivingStatusServiceScript.new()
@@ -687,6 +706,8 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	runtime_seconds += delta
+	if foraging_service != null:
+		foraging_service.runtime_seconds = runtime_seconds
 	if citizen_needs_service != null:
 		citizen_needs_service.tick(game_minutes)
 		_check_player_toilet_request()
@@ -8364,227 +8385,44 @@ func _set_manual_specialist_employment(citizen: Citizen, role: String) -> bool:
 
 
 func _find_forage_position(citizen: Citizen) -> Vector3:
-	# Foragers wander a short way out from their tent to pick wild food, then carry
-	# it back to storage. Without a forager tent there is nowhere to forage.
-	if forager_positions.is_empty():
-		return Vector3.INF
-	var hut := forager_positions[0]
-	var closest_dist := INF
-	for pos in forager_positions:
-		var dist := citizen.global_position.distance_squared_to(pos)
-		if dist < closest_dist:
-			closest_dist = dist
-			hut = pos
-	var angle := randf_range(0.0, 2.0 * PI)
-	var radius := randf_range(2.5, 6.0)
-	var spot := hut + Vector3(cos(angle) * radius, 0.0, sin(angle) * radius)
-	var height := _terrain_height_at(spot.x, spot.z, 0.0)
-	if not is_nan(height):
-		spot.y = height
-	return spot
-
-
+	return foraging_service.find_forage_position(citizen)
 
 func harvest_wild_food(position: Vector3, worker: Citizen) -> String:
-	var plant_cell := _cell_from_position(position)
-	if forage_sources.has(plant_cell):
-		var plant := (forage_sources[plant_cell] as Dictionary).get("node") as Node3D
-		if is_instance_valid(plant):
-			plant.queue_free()
-		forage_sources.erase(plant_cell)
-		forage_respawn_at[plant_cell] = runtime_seconds + WILD_FOOD_RESPAWN_SECONDS
-		return "food"
-	for cell in rabbit_sources:
-		var source := rabbit_sources[cell] as Dictionary
-		var rabbit := source.get("node") as Node3D
-		if is_instance_valid(rabbit) and rabbit.global_position.distance_to(position) <= 1.6:
-			worker.play_hunting_shot()
-			rabbit.queue_free()
-			rabbit_sources.erase(cell)
-			rabbit_respawn_at[cell] = runtime_seconds + RABBIT_RESPAWN_SECONDS
-			return "hides" if randf() < 0.35 else "food"
-	return ""
+	return foraging_service.harvest_wild_food(position, worker)
 
 func _consume_grass_source(position: Vector3) -> int:
-	var cell := _cell_from_position(position)
-	if not grass_sources.has(cell):
-		return 0
-	var source: Dictionary = grass_sources[cell]
-	if int(source.remaining) <= 0:
-		return 0
-	source.remaining = maxi(0, int(source.remaining) - 1)
-	if int(source.remaining) == 0:
-		if is_instance_valid(source.node):
-			source.node.queue_free()
-		grass_sources.erase(cell)
-	else:
-		grass_sources[cell] = source
-	return 1
+	return foraging_service.consume_grass_source(position)
 
 func _consume_tree_branches(position: Vector3) -> int:
-	var tree: Node3D = tree_nodes.get(_cell_from_position(position))
-	if not is_instance_valid(tree):
-		return 0
-	var remaining := int(tree.get_meta("remaining_branches", 0))
-	if remaining <= 0:
-		return 0
-	var hand_taken := int(tree.get_meta("hand_branches", 0))
-	var hand_limit := ceili(float(int(tree.get_meta("initial_branches", remaining))) * 0.3)
-	if not tree.has_meta("initial_branches"):
-		tree.set_meta("initial_branches", remaining)
-		hand_limit = ceili(float(remaining) * 0.3)
-	if not bool(settlement.tools.get("axe", false)) and hand_taken >= hand_limit:
-		return 0
-	tree.set_meta("remaining_branches", maxi(0, remaining - 1))
-	if not bool(settlement.tools.get("axe", false)):
-		tree.set_meta("hand_branches", hand_taken + 1)
-		if hand_taken + 1 >= hand_limit:
-			_mark_tree_branch_exhausted(tree)
-	return 1
+	return foraging_service.consume_tree_branches(position)
 
 func _mark_tree_branch_exhausted(tree: Node3D) -> void:
-	if bool(tree.get_meta("branch_exhausted", false)):
-		return
-	tree.set_meta("branch_exhausted", true)
-	for child in tree.get_children():
-		var mesh := child as MeshInstance3D
-		if mesh == null or not (mesh.mesh is SphereMesh):
-			continue
-		var material := mesh.material_override as StandardMaterial3D
-		if material != null:
-			material.albedo_color = Color("6b4c2a")
+	foraging_service.mark_tree_branch_exhausted(tree)
 
 func _nearest_tree_node(from: Vector3) -> Node3D:
-	var best: Node3D = null
-	var best_dist := INF
-	for position in tree_positions:
-		var dist := from.distance_to(position)
-		if dist > INTERACTION_RANGE:
-			continue
-		var tree: Node3D = tree_nodes.get(_cell_from_position(position))
-		if not is_instance_valid(tree) or bool(tree.get_meta("felled", false)):
-			continue
-		if dist < best_dist:
-			best_dist = dist
-			best = tree
-	return best
+	return foraging_service.nearest_tree_node(from)
 
 func _nearest_grass_node(from: Vector3) -> Node3D:
-	var best: Node3D = null
-	var best_dist := INTERACTION_RANGE
-	for cell in grass_sources:
-		var source: Dictionary = grass_sources[cell]
-		if int(source.remaining) <= 0 or not is_instance_valid(source.node):
-			continue
-		var dist := from.distance_to(source.node.global_position)
-		if dist <= best_dist:
-			best_dist = dist
-			best = source.node
-	return best
+	return foraging_service.nearest_grass_node(from)
 
 func _player_gather_target_node() -> Node3D:
-	if player_citizen == null:
-		return null
-	match interaction_resource:
-		"wood", "branches": return _nearest_tree_node(player_citizen.global_position)
-		"grass": return _nearest_grass_node(player_citizen.global_position)
-	return null
+	return foraging_service.player_gather_target_node(player_citizen, interaction_resource)
 
 func _gather_node_at(position: Vector3, resource_type: String) -> Node3D:
-	if resource_type in ["wood", "branches", "logs"]:
-		return tree_nodes.get(_cell_from_position(position))
-	if resource_type == "grass":
-		var source: Dictionary = grass_sources.get(_cell_from_position(position))
-		if source != null:
-			return source.node
-	return null
+	return foraging_service.gather_node_at(position, resource_type)
 
 func _gather_progress_amounts(resource_type: String, node: Node3D) -> Dictionary:
-	var current := 0
-	var max_amount := 1
-	if node.has_meta("initial_wood"):
-		if resource_type in ["wood", "logs"]:
-			max_amount = int(node.get_meta("initial_wood", 1))
-			current = max_amount - int(node.get_meta("remaining_wood", 0))
-		elif resource_type == "branches":
-			max_amount = int(node.get_meta("initial_branches", 1))
-			current = int(node.get_meta("hand_branches", 0))
-	else:
-		for cell in grass_sources:
-			var source: Dictionary = grass_sources[cell]
-			if source.get("node") == node:
-				max_amount = int(source.get("initial", 1))
-				current = max_amount - int(source.get("remaining", 0))
-				break
-	return {"current": current, "max": max_amount}
+	return foraging_service.gather_progress_amounts(resource_type, node)
 
 func _ensure_gather_progress_label(node: Node3D) -> Label3D:
-	var existing := gather_progress_labels.get(node) as Label3D
-	if is_instance_valid(existing):
-		return existing
-	var label := Label3D.new()
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.no_depth_test = true
-	label.font_size = 22
-	label.outline_size = 5
-	label.modulate = Color("ffffff")
-	label.position = Vector3(0.0, 4.8, 0.0) if node.has_meta("initial_wood") else Vector3(0.0, 0.5, 0.0)
-	node.add_child(label)
-	gather_progress_labels[node] = label
-	return label
+	return foraging_service.ensure_gather_progress_label(node)
 
 func _update_gather_progress_label(node: Node3D, resource_type: String, partial: float) -> void:
-	var amounts := _gather_progress_amounts(resource_type, node)
-	var value := float(amounts.current) + partial
-	var max_amount := maxi(int(amounts.max), 1)
-	var pct := clampi(int(value / float(max_amount) * 100.0), 0, 100)
-	var label := _ensure_gather_progress_label(node)
-	if partial < 0.0:
-		# Hover mode: show remaining/initial instead of harvest progress
-		var remaining := max_amount - int(amounts.current)
-		label.text = "%d/%d" % [remaining, max_amount]
-		label.modulate = Color("abcfd6") if remaining > 0 else Color("c97b5e")
-		label.font_size = 18
-	else:
-		label.text = "%d%%" % pct
-		label.modulate = Color("76c893") if pct >= 100 else Color("ffffff")
-		label.font_size = 22
+	foraging_service.update_gather_progress_label(node, resource_type, partial)
 
 func _update_gathering_indicators(_delta: float) -> void:
-	var active_targets: Dictionary = {} # Node3D -> {resource_type: String, partial: float}
-	if is_first_person and interaction_action == "harvesting" and player_citizen != null and interaction_resource in ["wood", "branches", "grass"]:
-		var node: Node3D = _player_gather_target_node()
-		if is_instance_valid(node):
-			active_targets[node] = {"resource_type": interaction_resource, "partial": clampf(interaction_time / HARVEST_DURATION, 0.0, 1.0)}
-	elif is_first_person and interaction_action.is_empty() and player_citizen != null:
-		# Hover: show remaining/initial on the targeted tree or grass
-		var target := _first_person_target()
-		if target.kind == "tree" and is_instance_valid(target.node):
-			var res_type := "branches" if settlement.era < SettlementState.Era.WOOD else "wood"
-			active_targets[target.node] = {"resource_type": res_type, "partial": -1.0}
-		elif target.kind == "grass" and is_instance_valid(target.get("node")):
-			active_targets[target.node] = {"resource_type": "grass", "partial": -1.0}
-	for citizen in citizens:
-		if not is_instance_valid(citizen):
-			continue
-		if citizen.state == citizen.State.GATHERING and not citizen.gather_resource_type.is_empty():
-			var node: Node3D = _gather_node_at(citizen.gather_source_position, citizen.gather_resource_type)
-			if is_instance_valid(node):
-				active_targets[node] = {"resource_type": citizen.gather_resource_type, "partial": citizen.task_timer.progress()}
-		elif citizen.state == citizen.State.CHOPPING:
-			var node: Node3D = tree_nodes.get(_cell_from_position(citizen.source_position))
-			if is_instance_valid(node):
-				active_targets[node] = {"resource_type": "wood", "partial": citizen.task_timer.progress()}
-	var nodes_to_remove: Array = gather_progress_labels.keys().duplicate()
-	for node in active_targets:
-		nodes_to_remove.erase(node)
-		var data: Dictionary = active_targets[node]
-		_update_gather_progress_label(node, data.resource_type, data.partial)
-	for node in nodes_to_remove:
-		var label: Label3D = gather_progress_labels.get(node)
-		if is_instance_valid(label):
-			label.queue_free()
-		gather_progress_labels.erase(node)
+	foraging_service.update_gathering_indicators(is_first_person, interaction_action, interaction_resource, interaction_time, player_citizen, citizens)
+
 
 func _create_gathering_place_visual(building: Node3D) -> void:
 	var racket := MeshInstance3D.new()
@@ -8806,260 +8644,29 @@ func _show_territory_overlay(show: bool) -> void:
 		village_territory_overlay.visible = show
 
 func _create_resource_pile(position: Vector3, resources: Dictionary, is_backpack_pile := false) -> void:
-	if resources.is_empty():
-		return
-	var normalized: Dictionary = {}
-	for resource_type in resources:
-		var amount := int(resources[resource_type])
-		if amount > 0:
-			normalized[str(resource_type)] = amount
-	if normalized.is_empty():
-		return
-	var pile := Node3D.new()
-	pile.position = position
-
-	var label := Label3D.new()
-	label.name = "PileLabel"
-	var labels: Array[String] = []
-	for resource_type in normalized:
-		labels.append("%s x%d" % [str(resource_type).to_upper(), int(normalized[resource_type])])
-	labels.sort()
-	label.text = "\n".join(labels)
-	label.position.y = 1.7
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-
-	if is_backpack_pile:
-		var backpack_mesh := MeshInstance3D.new()
-		var box := BoxMesh.new()
-		box.size = Vector3(0.5, 0.5, 0.5)
-		backpack_mesh.mesh = box
-		backpack_mesh.position.y = 0.25
-		var red_mat := StandardMaterial3D.new()
-		red_mat.albedo_color = Color("c44b4b")
-		red_mat.roughness = 0.6
-		backpack_mesh.material_override = red_mat
-		pile.add_child(backpack_mesh)
-		label.position.y = 0.8
-		pile.add_child(label)
-	else:
-		# Base dirt mound
-		var base_mesh_node := MeshInstance3D.new()
-		var base_mesh := CylinderMesh.new()
-		base_mesh.top_radius = 0.03
-		base_mesh.bottom_radius = 0.62
-		base_mesh.height = 0.62
-		base_mesh_node.mesh = base_mesh
-		base_mesh_node.position.y = 0.2
-		var base_mat := StandardMaterial3D.new()
-		base_mat.albedo_color = Color("5c4033")
-		base_mesh_node.material_override = base_mat
-		pile.add_child(base_mesh_node)
-
-		# Logs
-		var log_mesh := BoxMesh.new()
-		log_mesh.size = Vector3(1.2, 0.25, 0.25)
-		var log_mat := StandardMaterial3D.new()
-		log_mat.albedo_color = Color("4a3225")
-
-		var log1 := MeshInstance3D.new()
-		log1.mesh = log_mesh
-		log1.position = Vector3(-0.3, 0.35, 0.2)
-		log1.rotation_degrees = Vector3(10, 25, 5)
-		log1.material_override = log_mat
-		log1.visible = normalized.has("branches") or normalized.has("wood") or normalized.has("logs")
-		pile.add_child(log1)
-
-		var log2 := MeshInstance3D.new()
-		log2.mesh = log_mesh
-		log2.position = Vector3(0.2, 0.4, -0.2)
-		log2.rotation_degrees = Vector3(-15, -35, -8)
-		log2.material_override = log_mat
-		log2.visible = log1.visible
-		pile.add_child(log2)
-
-		# A compact grass cone makes dropped harvesting cargo recognizable at a glance.
-		var grass_pile := MeshInstance3D.new()
-		var grass_mesh := CylinderMesh.new()
-		grass_mesh.top_radius = 0.02
-		grass_mesh.bottom_radius = 0.40
-		grass_mesh.height = 0.45
-		grass_pile.mesh = grass_mesh
-		grass_pile.position = Vector3(0.22, 0.42, 0.22)
-		grass_pile.visible = normalized.has("grass")
-		var grass_mat := StandardMaterial3D.new()
-		grass_mat.albedo_color = Color("739350")
-		grass_pile.material_override = grass_mat
-		pile.add_child(grass_pile)
-
-		# A stone
-		var stone_pile := MeshInstance3D.new()
-		var stone_mesh := BoxMesh.new()
-		stone_mesh.size = Vector3(0.4, 0.3, 0.4)
-		stone_pile.mesh = stone_mesh
-		stone_pile.position = Vector3(-0.2, 0.3, -0.4)
-		stone_pile.rotation_degrees = Vector3(20, 45, 10)
-		var stone_mat := StandardMaterial3D.new()
-		stone_mat.albedo_color = Color("6f747a")
-		stone_pile.material_override = stone_mat
-		stone_pile.visible = normalized.has("stone") or normalized.has("soil") or normalized.has("clay") or normalized.has("bricks")
-		pile.add_child(stone_pile)
-		pile.add_child(label)
-
-	var pile_area := Area3D.new()
-	pile_area.name = "PileSelector"
-	pile_area.add_to_group("resource_pile_selector")
-	pile_area.collision_layer = 4
-	pile_area.collision_mask = 0
-	var pile_shape := CollisionShape3D.new()
-	var pile_box := BoxShape3D.new()
-	pile_box.size = Vector3(1.0, 1.2, 1.0)
-	pile_shape.shape = pile_box
-	pile_shape.position.y = 0.4
-	pile_area.add_child(pile_shape)
-	pile.add_child(pile_area)
-
-	add_child(pile)
-	resource_piles.append({"node": pile, "resources": normalized, "reserved": {}, "is_backpack": is_backpack_pile})
-
+	resource_pile_service.create_resource_pile(position, resources, is_backpack_pile)
 
 func _remove_backpack_pile() -> void:
-	if not is_instance_valid(backpack_node):
-		return
-	for index in range(resource_piles.size()):
-		if resource_piles[index].get("node") == backpack_node:
-			resource_piles.remove_at(index)
-			break
-	backpack_node.queue_free()
-	backpack_node = null
-
+	backpack_node = resource_pile_service.remove_backpack_pile(backpack_node)
 
 func _sync_backpack_pile() -> void:
-	if not is_instance_valid(backpack_node):
-		return
-	if settlement.warehouse_ever_built:
-		return
-	for index in range(resource_piles.size()):
-		var pile: Dictionary = resource_piles[index]
-		if pile.get("node") != backpack_node:
-			continue
-		var synced: Dictionary = {}
-		for resource_type in settlement.backpack:
-			var amount := int(settlement.backpack[resource_type])
-			if amount > 0:
-				synced[str(resource_type)] = amount
-		if synced.is_empty():
-			resource_piles.remove_at(index)
-			backpack_node.queue_free()
-			backpack_node = null
-		else:
-			pile["resources"] = synced
-			resource_piles[index] = pile
-			_refresh_resource_pile_label(pile)
-		break
-
+	backpack_node = resource_pile_service.sync_backpack_pile(backpack_node)
 
 func _convert_backpack_pile_to_regular() -> void:
-	if not is_instance_valid(backpack_node):
-		return
-	for index in range(resource_piles.size()):
-		var pile: Dictionary = resource_piles[index]
-		if pile.get("node") == backpack_node:
-			# Sync the physical pile with the virtual backpack so all
-			# resources are present for cleaners to pick up and deliver.
-			var synced: Dictionary = {}
-			for resource_type in settlement.backpack:
-				var amount := int(settlement.backpack[resource_type])
-				if amount > 0:
-					synced[resource_type] = amount
-			if not synced.is_empty():
-				pile["resources"] = synced
-			pile["is_backpack"] = false
-			resource_piles[index] = pile
-			_refresh_resource_pile_label(pile)
-			break
-	backpack_node = null
-
+	backpack_node = resource_pile_service.convert_backpack_pile_to_regular(backpack_node)
 
 func _drop_overflow_as_piles(overflow: Dictionary, base_position: Vector3) -> void:
-	if overflow.is_empty():
-		return
-	# Spread multi-resource overflow into a few nearby piles so the player can see
-	# what did not fit into the first warehouse and send couriers to collect it.
-	var pile_resources := {}
-	var pile_index := 0
-	const PILE_SPREAD := 1.2
-	for resource_type in overflow:
-		pile_resources[resource_type] = int(overflow[resource_type])
-		# Keep each pile focused on a small set of goods for readable labels.
-		if pile_resources.size() >= 3:
-			var offset := Vector3((pile_index % 3) * PILE_SPREAD - PILE_SPREAD, 0.0, (pile_index / 3) * PILE_SPREAD - PILE_SPREAD)
-			_create_resource_pile(base_position + offset, pile_resources)
-			pile_resources = {}
-			pile_index += 1
-	if not pile_resources.is_empty():
-		var offset := Vector3((pile_index % 3) * PILE_SPREAD - PILE_SPREAD, 0.0, (pile_index / 3) * PILE_SPREAD - PILE_SPREAD)
-		_create_resource_pile(base_position + offset, pile_resources)
-
+	resource_pile_service.drop_overflow_as_piles(overflow, base_position)
 
 func _refresh_resource_pile_label(pile: Dictionary) -> void:
-	var pile_node := pile.get("node") as Node3D
-	if not is_instance_valid(pile_node):
-		return
-	var label := pile_node.get_node_or_null("PileLabel") as Label3D
-	if label == null:
-		return
-	var labels: Array[String] = []
-	for piled_resource in pile.resources:
-		var amount := int(pile.resources[piled_resource])
-		if amount > 0:
-			labels.append("%s x%d" % [str(piled_resource).to_upper(), amount])
-	labels.sort()
-	label.text = "\n".join(labels)
-
+	resource_pile_service.refresh_resource_pile_label(pile)
 
 func _drop_resource_pile(position: Vector3, resource_type: String, amount: int) -> void:
-	if resource_type.is_empty() or amount <= 0:
-		return
-	# Repeated deliveries to one entrance form a single readable pile.
-	for index in resource_piles.size():
-		var pile: Dictionary = resource_piles[index]
-		var pile_node := pile.get("node") as Node3D
-		if not is_instance_valid(pile_node) or pile.resources.size() != 1 or not pile.resources.has(resource_type) or pile_node.global_position.distance_squared_to(position) > 2.25:
-			continue
-		pile.resources[resource_type] = int(pile.resources.get(resource_type, 0)) + amount
-		resource_piles[index] = pile
-		var label := pile_node.get_node_or_null("PileLabel") as Label3D
-		if label != null:
-			var labels: Array[String] = []
-			for piled_resource in pile.resources:
-				labels.append("%s x%d" % [str(piled_resource).to_upper(), int(pile.resources[piled_resource])])
-			labels.sort()
-			label.text = "\n".join(labels)
-		return
-	_create_resource_pile(position, {resource_type: amount})
+	resource_pile_service.drop_resource_pile(position, resource_type, amount)
 
 func _decay_resource_piles() -> void:
-	var is_raining := weather_state.is_raining
-	for index in range(resource_piles.size() - 1, -1, -1):
-		var pile: Dictionary = resource_piles[index]
-		if pile.get("is_backpack", false):
-			continue
-		for resource_type in pile.resources.keys():
-			var remaining := int(pile.resources[resource_type])
-			var daily_rate := TentEraSurvivalRulesScript.pile_decay_rate(str(resource_type), is_raining)
-			if remaining > 0 and daily_rate > 0.0:
-				pile.resources[resource_type] = maxi(0, remaining - maxi(1, ceili(remaining * daily_rate)))
-		var empty := true
-		for amount in pile.resources.values():
-			if int(amount) > 0:
-				empty = false
-		if empty:
-			if is_instance_valid(pile.node):
-				pile.node.queue_free()
-			resource_piles.remove_at(index)
-		else:
-			resource_piles[index] = pile
-			_refresh_resource_pile_label(pile)
+	resource_pile_service.decay_resource_piles()
+
 
 func _return_in_transit_building_supplies(building: Node3D) -> void:
 	for citizen in citizens:
