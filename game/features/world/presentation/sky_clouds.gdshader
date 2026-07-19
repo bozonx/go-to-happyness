@@ -11,8 +11,10 @@ render_mode use_debanding;
 uniform vec3 u_horizon_color : source_color = vec3(0.47, 0.66, 0.77);
 uniform vec3 u_zenith_color : source_color = vec3(0.28, 0.48, 0.66);
 uniform vec3 u_sun_color : source_color = vec3(1.0, 0.95, 0.82);
+uniform vec3 u_horizon_glow_color : source_color = vec3(1.0, 0.45, 0.2); // sunset scatter tint
 uniform float u_overcast : hint_range(0.0, 1.0) = 0.0;
 uniform float u_solar_intensity : hint_range(0.0, 1.0) = 1.0;
+uniform float u_sun_disc_energy = 6.0;  // HDR overdrive so filmic tonemap + glow bloom the disc
 
 // --- static art-direction knobs --------------------------------------------
 uniform float u_cloud_scale = 1.15;     // bigger = smaller cloud cells
@@ -75,8 +77,25 @@ void sky() {
 	// Soft sun disc + halo (subtle; lens flare handles the rest). Fades in storms.
 	float sun_amt = max(dot(dir, sun_dir), 0.0);
 	float clear_sky = 1.0 - u_overcast;
-	sky_col += u_sun_color * pow(sun_amt, 900.0) * u_solar_intensity;
-	sky_col += u_sun_color * pow(sun_amt, 8.0) * 0.12 * clear_sky * u_solar_intensity;
+
+	// Redden the disc and its scattering as the sun sinks toward the horizon.
+	float sun_low = 1.0 - smoothstep(0.0, 0.35, sun_dir.y);
+	vec3 warm_sun = mix(u_sun_color, u_horizon_glow_color, sun_low);
+
+	// HDR sun with a real angular size + layered glow so it actually reads as a
+	// sun in the sky (the old pow(sun_amt, 900) disc was ~1deg and never in frame).
+	float disc = smoothstep(0.9986, 0.99965, sun_amt); // crisp core, ~2-3deg radius
+	float inner = pow(sun_amt, 220.0);                 // tight bright glow around it
+	sky_col += warm_sun * disc * u_solar_intensity * u_sun_disc_energy;
+	sky_col += warm_sun * inner * 0.6 * u_solar_intensity * u_sun_disc_energy;
+
+	// Mie-like scattering halo: broad, warm, and much stronger near the horizon.
+	float halo_strength = mix(0.14, 0.55, sun_low);
+	sky_col += warm_sun * pow(sun_amt, 6.0) * halo_strength * clear_sky * u_solar_intensity;
+
+	// Warm band along the whole horizon at sunrise/sunset.
+	float horizon_band = pow(1.0 - abs(dir.y), 6.0);
+	sky_col += u_horizon_glow_color * horizon_band * sun_low * 0.35 * clear_sky * u_solar_intensity;
 
 	// --- clouds live on a virtual ceiling; project view dir onto it ---
 	// Fade well above the true horizon so the projection stretch near y=0

@@ -86,6 +86,8 @@ func action_failure_reason() -> BehaviorStep.FailureReason:
 func cancel_action() -> void:
 	if not _can_cancel():
 		return
+	if _active_action == &"courier_delivery" and citizen.simulation != null and citizen.simulation.courier_dispatcher != null:
+		citizen.simulation.courier_dispatcher.cancel_for(citizen)
 	citizen.cancel_current_action()
 	_active_action = &""
 

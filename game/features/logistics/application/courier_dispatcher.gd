@@ -118,6 +118,25 @@ func complete_for(courier: Citizen) -> void:
 		tasks.erase(task.id)
 
 
+## Ends an interrupted assignment without completing its underlying request. The
+## producer-specific cancellation callback restores cargo or reservations, then a
+## still-valid task becomes available for the next courier immediately.
+func cancel_for(courier: Citizen) -> void:
+	if not is_instance_valid(courier):
+		return
+	var task := task_for(courier)
+	if task == null:
+		return
+	if simulation.has_method("_cancel_courier_task"):
+		simulation._cancel_courier_task(courier, task)
+	_tasks_by_courier_id.erase(courier.ai_id)
+	task.assigned_courier_ai_id = 0
+	if task.has_reservation() and simulation.has_method("_release_task_warehouse_reservation"):
+		simulation._release_task_warehouse_reservation(task)
+	if not simulation._is_courier_task_valid(task):
+		tasks.erase(task.id)
+
+
 func _warehouse_index(from: Vector3, resource_type: String, amount: int) -> int:
 	if simulation.has_method(&"_find_reachable_warehouse_index"):
 		return simulation._find_reachable_warehouse_index(from, resource_type, amount)
@@ -127,19 +146,17 @@ func _warehouse_index(from: Vector3, resource_type: String, amount: int) -> int:
 func _cleanup_invalid_tasks() -> void:
 	for id: StringName in tasks.keys():
 		var task: CourierTask = tasks[id]
-		var became_unassigned := false
 		if task.is_assigned():
 			var courier := _courier_for_ai_id(task.assigned_courier_ai_id)
 			if is_instance_valid(courier) and courier.has_active_delivery():
 				continue
-			if simulation.has_method("_cancel_courier_task"):
-				simulation._cancel_courier_task(courier, task)
-			_tasks_by_courier_id.erase(task.assigned_courier_ai_id)
-			task.assigned_courier_ai_id = 0
-			became_unassigned = true
-		if not simulation._is_courier_task_valid(task) or became_unassigned:
-			if task.has_reservation() and simulation.has_method("_release_task_warehouse_reservation"):
-				simulation._release_task_warehouse_reservation(task)
+			if is_instance_valid(courier):
+				cancel_for(courier)
+			else:
+				_tasks_by_courier_id.erase(task.assigned_courier_ai_id)
+				task.assigned_courier_ai_id = 0
+				if task.has_reservation() and simulation.has_method("_release_task_warehouse_reservation"):
+					simulation._release_task_warehouse_reservation(task)
 		if not simulation._is_courier_task_valid(task):
 			_tasks_by_courier_id.erase(task.assigned_courier_ai_id)
 			tasks.erase(id)

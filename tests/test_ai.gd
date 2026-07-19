@@ -335,6 +335,7 @@ func _init() -> void:
 	_test_courier_dispatcher_start_task_prevents_double_assignment()
 	_test_courier_dispatcher_rejects_wrong_requested_courier()
 	_test_courier_dispatcher_complete_for_clears_task()
+	_test_courier_dispatcher_cancel_for_requeues_task()
 	_test_courier_dispatcher_cleanup_removes_invalid_tasks()
 	_test_courier_dispatcher_cleanup_unassigns_dead_courier()
 	_test_courier_dispatcher_publish_does_not_duplicate()
@@ -1733,6 +1734,37 @@ func _test_courier_dispatcher_complete_for_clears_task() -> void:
 	sim.free()
 
 
+func _test_courier_dispatcher_cancel_for_requeues_task() -> void:
+	var sim := FakeCourierSimulation.new()
+	root.add_child(sim)
+	var dispatcher := CourierDispatcher.new()
+	dispatcher.configure(sim)
+	sim.courier_dispatcher = dispatcher
+	dispatcher.publish(&"task_1", CourierTask.Kind.SAWMILL_PICKUP, 50, Vector3(1.0, 0.0, 0.0), Vector3.ZERO, {})
+	var courier := Citizen.new()
+	courier.ai_id = 1
+	courier.simulation = sim
+	root.add_child(courier)
+	var actuator := SettlementCitizenActuatorScript.new(courier)
+	assert(actuator.begin_action(&"courier_delivery", &"", AIFactSet.new({&"courier.task_id": &"task_1"})))
+	var assigned_task := dispatcher.tasks[&"task_1"] as CourierTask
+	assigned_task.reserved_warehouse_index = 0
+	assigned_task.reserved_resource_type = "branches"
+	assigned_task.reserved_amount = 2
+	actuator.cancel_action()
+	var task := dispatcher.tasks.get(&"task_1") as CourierTask
+	assert(task != null, "A valid interrupted delivery should remain queued")
+	assert(task.assigned_courier_ai_id == 0, "Interrupted delivery must release its courier immediately")
+	assert(sim.released_reservations == 1, "Interrupted delivery must release reserved warehouse room")
+	assert(not task.has_reservation())
+	assert(dispatcher.task_for(courier) == null)
+	assert(dispatcher.available_tasks().size() == 1, "Interrupted delivery should be available without another dispatch pass")
+	root.remove_child(courier)
+	courier.free()
+	root.remove_child(sim)
+	sim.free()
+
+
 func _test_courier_dispatcher_cleanup_removes_invalid_tasks() -> void:
 	var sim := FakeCourierSimulation.new()
 	sim.valid_result = false
@@ -2551,11 +2583,13 @@ func _courier_citizen_with_tasks(citizen_id: int, tasks: Array) -> CitizenSnapsh
 
 class FakeCourierSimulation extends Node:
 	var citizens: Array[Citizen] = []
+	var courier_dispatcher: CourierDispatcher
 	var warehouse_positions: Array[Vector3] = [Vector3.ZERO]
 	var runtime_seconds := 0.0
 	var valid_result := true
 	var work_time := true
 	var publish_count := 0
+	var released_reservations := 0
 
 	func _is_work_time() -> bool:
 		return work_time
@@ -2566,8 +2600,15 @@ class FakeCourierSimulation extends Node:
 	func _is_courier_task_valid(_task: RefCounted) -> bool:
 		return valid_result
 
-	func _start_courier_task(_courier: Citizen, _task: RefCounted) -> bool:
+	func _start_courier_task(courier: Citizen, _task: RefCounted) -> bool:
+		courier.state = Citizen.State.COURIER_TO_WAREHOUSE
 		return true
+
+	func _release_task_warehouse_reservation(task: RefCounted) -> void:
+		released_reservations += 1
+		task.reserved_warehouse_index = -1
+		task.reserved_resource_type = ""
+		task.reserved_amount = 0
 
 
 func _test_toilet_goal_blocked_while_working() -> void:

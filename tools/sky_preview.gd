@@ -10,7 +10,7 @@ var sky_material: ShaderMaterial
 var sun: DirectionalLight3D
 var shots := [
 	{"name": "clear_noon", "overcast": 0.0, "sun_deg": Vector3(-55.0, -32.0, 0.0)},
-	{"name": "clear_low", "overcast": 0.0, "sun_deg": Vector3(-18.0, -60.0, 0.0)},
+	{"name": "clear_low", "overcast": 0.0, "sun_deg": Vector3(-14.0, 0.0, 0.0)},
 	{"name": "storm", "overcast": 1.0, "sun_deg": Vector3(-55.0, -32.0, 0.0)},
 ]
 var idx := 0
