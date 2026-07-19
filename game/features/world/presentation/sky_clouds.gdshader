@@ -71,8 +71,10 @@ void sky() {
 	float grad = smoothstep(0.0, 0.65, horizon);
 	vec3 sky_col = mix(u_horizon_color, u_zenith_color, grad);
 
-	// Direction toward the sun (LIGHT0 is the scene DirectionalLight).
-	vec3 sun_dir = LIGHT0_ENABLED ? normalize(-LIGHT0_DIRECTION) : vec3(0.0, 1.0, 0.0);
+	// Direction toward the sun. In this engine LIGHT0_DIRECTION already points
+	// toward the light, so we must NOT negate it (the old -LIGHT0_DIRECTION drew
+	// the disc on the anti-sun side, opposite where the scene is actually lit).
+	vec3 sun_dir = LIGHT0_ENABLED ? normalize(LIGHT0_DIRECTION) : vec3(0.0, 1.0, 0.0);
 
 	// Soft sun disc + halo (subtle; lens flare handles the rest). Fades in storms.
 	float sun_amt = max(dot(dir, sun_dir), 0.0);

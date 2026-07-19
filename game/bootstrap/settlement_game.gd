@@ -955,14 +955,14 @@ func _update_daylight() -> void:
 	# noon (not the zenith), so it stays inside the tilted camera's sky band. The
 	# azimuth sweeps east->west across the day so the sun visibly travels and the
 	# shadows rotate, instead of being pinned to one compass direction.
-	# NOTE: positive pitch raises the sun into the sky (and lights the scene from
-	# above); negative pitch sinks it below the horizon. The old
-	# `-90 + (hour-12)*15` mapping pushed it below the horizon in the afternoon,
-	# which is why the sun disc showed up "on the ground".
+	# Negative pitch points the light DOWN onto the scene (lit from above, correct
+	# shadows). The sky shader now reads +LIGHT0_DIRECTION so the sun disc sits on
+	# the same side as this light instead of the anti-sun side. Azimuth sweeps
+	# east->west across the day so the sun travels and shadows rotate.
 	var day_progress := clampf((hour - 6.0) / 12.0, 0.0, 1.0)
 	var sun_elevation := 3.0 + maxf(solar_height, 0.0) * 45.0
 	var sun_azimuth := lerpf(-75.0, 11.0, day_progress)
-	sun.rotation_degrees = Vector3(sun_elevation, sun_azimuth, 0.0)
+	sun.rotation_degrees = Vector3(-sun_elevation, sun_azimuth, 0.0)
 	var base_sun_color := Color("f08a5d").lerp(Color("fff2d1"), solar_intensity)
 	sun.light_color = base_sun_color.lerp(Color("a8b8c0"), overcast)
 	sun.light_energy = lerpf(0.0, 1.2, direct_light)
