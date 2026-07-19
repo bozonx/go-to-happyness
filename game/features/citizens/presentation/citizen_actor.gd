@@ -2,6 +2,7 @@ class_name Citizen
 extends CharacterBody3D
 
 const CitizenStatusEffectScript = preload("res://game/features/citizens/domain/citizen_status_effect.gd")
+const CitizenProfileScript = preload("res://game/features/citizens/domain/citizen_profile.gd")
 
 signal resource_delivered(worker: Citizen, resource_type: String, amount: int)
 signal resource_dropped(worker: Citizen, resource_type: String, amount: int)
@@ -262,14 +263,27 @@ var hair_color: Color = Color.WHITE
 # face for life, even when a promotion swaps their body model.
 var head_model_name: String = ""
 var head_visible: bool = true
-var skills := {}
-var is_jack_of_all_trades := false
-var practiced_today: Dictionary = {}
+var profile := CitizenProfileScript.new()
+var skills: Dictionary:
+	get:
+		return profile.skills
+	set(value):
+		profile.skills = value
+var is_jack_of_all_trades: bool:
+	get:
+		return profile.is_jack_of_all_trades
+	set(value):
+		profile.is_jack_of_all_trades = value
+var practiced_today: Dictionary:
+	get:
+		return profile.practiced_today
+	set(value):
+		profile.practiced_today = value
 var temp_training_role := ""
 
-const DEVELOPED_SKILL_THRESHOLD := 0.15
-const SKILL_GROWTH_PER_SECOND_WORK := 0.0001
-const DAILY_CONSTRUCTION_SKILL_CAP := 0.20
+const DEVELOPED_SKILL_THRESHOLD := CitizenProfileScript.DEVELOPED_SKILL_THRESHOLD
+const SKILL_GROWTH_PER_SECOND_WORK := CitizenProfileScript.SKILL_GROWTH_PER_SECOND_WORK
+const DAILY_CONSTRUCTION_SKILL_CAP := CitizenProfileScript.DAILY_CONSTRUCTION_SKILL_CAP
 const COURIER_EQUIPMENT := {
 	"hands": {"capacity": 1, "speed": 1.0},
 	"simple_backpack": {"capacity": 2, "speed": 1.0},
@@ -278,9 +292,9 @@ const COURIER_EQUIPMENT := {
 	"bicycle": {"capacity": 4, "speed": 1.40},
 	"bicycle_trailer": {"capacity": 6, "speed": 1.30}
 }
-const SKILL_GROWTH_PER_SCHOOL_DAY := 0.01
-const SKILL_DECAY_RATE := 0.005
-const SKILL_MIN_FLOOR := 0.10
+const SKILL_GROWTH_PER_SCHOOL_DAY := CitizenProfileScript.SKILL_GROWTH_PER_SCHOOL_DAY
+const SKILL_DECAY_RATE := CitizenProfileScript.SKILL_DECAY_RATE
+const SKILL_MIN_FLOOR := CitizenProfileScript.SKILL_MIN_FLOOR
 const ROLE_RECHECK_MIN_DELAY := 0.75
 const ROLE_RECHECK_MAX_DELAY := 1.5
 var role_recheck_remaining := 0.0
@@ -2301,10 +2315,7 @@ func finish_school_day(teacher_present := true) -> void:
 	state = State.IDLE
 
 func apply_daily_decay() -> void:
-	for skill_name in skills.keys():
-		if not practiced_today.get(skill_name, false):
-			skills[skill_name] = maxf(SKILL_MIN_FLOOR, float(skills.get(skill_name, 0.0)) - SKILL_DECAY_RATE)
-	practiced_today.clear()
+	profile.apply_daily_decay()
 
 func is_building_site(site: Node3D) -> bool:
 	return not is_player_controlled and state == State.CONSTRUCTING and construction_site == site and global_position.distance_to(construction_position) <= 0.7
@@ -2421,36 +2432,10 @@ func _is_valid_approach_point(point: Vector3) -> bool:
 	return bool(route_reachability_query.call(global_position, point, false))
 
 func get_core_skill_for_role(role: String) -> String:
-	match role:
-		"construction", "demolition":
-			return "construction"
-		"forestry", "gather_branches", "gather_logs":
-			return "forestry"
-		"farming", "gather_water", "gather_food", "gather_grass":
-			return "farming"
-		"excavation":
-			return "excavation"
-		"factory_work", "factory_worker":
-			return "factory_worker"
-		"engineering", "engineer":
-			return "engineer"
-		"courier":
-			return "courier"
-		"craftsman", "crafting":
-			return "craftsman"
-		"cooking", "cook":
-			return "cook"
-		"teaching", "teacher":
-			return "teacher"
-		"selling", "seller":
-			return "seller"
-		"registration", "official":
-			return "official"
-		_:
-			return ""
+	return CitizenProfileScript.get_core_skill_for_role(role)
 
 func has_perk(skill_name: String) -> bool:
-	return skills.get(skill_name, 0.0) >= 1.0
+	return profile.has_perk(skill_name)
 
 func get_walk_speed() -> float:
 	var speed := WALK_SPEED * float(COURIER_EQUIPMENT.get(courier_equipment, COURIER_EQUIPMENT.hands).speed)
