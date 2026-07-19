@@ -34,6 +34,9 @@ var overtime_sources: Dictionary = {}
 ## Source -> day on which that source was last issued. Kept after cancellation
 ## to enforce the once-per-day command limit.
 var overtime_issued_days: Dictionary = {}
+var training_role := ""
+var training_days_completed := 0
+var temp_training_role := ""
 
 
 func is_employed() -> bool:

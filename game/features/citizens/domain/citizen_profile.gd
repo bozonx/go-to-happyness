@@ -12,6 +12,7 @@ const SKILL_GROWTH_PER_SCHOOL_DAY := 0.01
 const SKILL_DECAY_RATE := 0.005
 const SKILL_MIN_FLOOR := 0.10
 
+var specialization := "unassigned"
 var skills := {}
 var is_jack_of_all_trades := false
 var practiced_today: Dictionary = {}

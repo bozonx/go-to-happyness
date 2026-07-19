@@ -208,7 +208,11 @@ var is_hero := false
 ## with the roster once save/load is introduced.
 var ai_id := 0
 var construction_site: Node3D
-var specialization := "unassigned"
+var specialization: String:
+	get:
+		return profile.specialization
+	set(value):
+		profile.specialization = value
 var active_role := ""
 ## Human-readable label of the native AI task, supplied through CitizenActuator.
 var ai_activity_label := ""
@@ -338,7 +342,11 @@ var practiced_today: Dictionary:
 		return profile.practiced_today
 	set(value):
 		profile.practiced_today = value
-var temp_training_role := ""
+var temp_training_role: String:
+	get:
+		return _employment.temp_training_role
+	set(value):
+		_employment.temp_training_role = value
 
 const DEVELOPED_SKILL_THRESHOLD := CitizenProfileScript.DEVELOPED_SKILL_THRESHOLD
 const SKILL_GROWTH_PER_SECOND_WORK := CitizenProfileScript.SKILL_GROWTH_PER_SECOND_WORK
@@ -443,8 +451,16 @@ var recovery_detour_requested := false
 var jump_cooldown := 0.0
 var ground_contact_confirmed := false
 var blocked_by_storage := false
-var training_role := ""
-var training_days_completed := 0
+var training_role: String:
+	get:
+		return _employment.training_role
+	set(value):
+		_employment.training_role = value
+var training_days_completed: int:
+	get:
+		return _employment.training_days_completed
+	set(value):
+		_employment.training_days_completed = value
 var school_position := Vector3.ZERO
 var official_position := Vector3.ZERO
 var research_position := Vector3.ZERO
