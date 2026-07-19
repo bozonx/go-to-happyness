@@ -3,6 +3,7 @@ extends CharacterBody3D
 
 const CitizenStatusEffectScript = preload("res://game/features/citizens/domain/citizen_status_effect.gd")
 const CitizenProfileScript = preload("res://game/features/citizens/domain/citizen_profile.gd")
+const CitizenEmploymentStateScript = preload("res://game/features/citizens/domain/citizen_employment_state.gd")
 
 signal resource_delivered(worker: Citizen, resource_type: String, amount: int)
 signal resource_dropped(worker: Citizen, resource_type: String, amount: int)
@@ -57,7 +58,7 @@ const MAX_PENDING_STATE_DISPLAY_TRANSITIONS := 6
 
 enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE, CONSTRUCTING, EXCAVATING, COURIER_TO_WORKER, COURIER_TO_WAREHOUSE, WAITING_COURIER, TO_HOME, RESTING, TO_CANTEEN, EATING, TO_FOOD_PICKUP, TO_CANTEEN_DELIVERY, TO_CANTEEN_WORK, TO_SCHOOL, STUDYING, TO_SCHOOL_WORK, TO_FACTORY, FACTORY_WORK, TO_PARK, RELAXING, COURIER_TO_SAWMILL, COURIER_TO_DEW, TO_GATHER, GATHERING, TO_CLEANING_PILE, CLEANING_PILE, TO_TRADE_PICKUP, TO_TRADE_DESTINATION, TO_EMPLOYMENT_CENTER, EMPLOYMENT_PROCESSING, CANTEEN_WORK, SCHOOL_WORK, TO_MARKET_WORK, MARKET_WORK, TO_CRAFT_WORK, CRAFT_WORK, TO_CONSTRUCTION_PICKUP, TO_CONSTRUCTION_SITE, TO_OFFICIAL_WORK, OFFICIAL_WORK, TO_ARRIVAL_ENTRANCE, ARRIVAL_MEETING, ARRIVAL_WAITING, TO_ARRIVAL_CENTER, TO_OUTSIDE_WORK, RESEARCHING, TO_TOILET, USING_TOILET, WAITING_FOR_TOILET, TO_BUSH, USING_BUSH, AI_MOVING, WORK_POSITION, LEAVING }
 
-enum EmploymentState { UNREGISTERED, NO_PERMANENT_WORK, EMPLOYED, REGISTERING }
+const EmploymentState = CitizenEmploymentStateScript.EmploymentState
 
 const MODEL_PREFIXES := {
 	"unassigned": "common",
@@ -82,16 +83,7 @@ const RANDOM_HEADS_FEMALE := [
 	"common-female", "courier-female", "official-female", "teacher-female", "worker-female"
 ]
 
-const DAILY_ORDER_ROLES := {
-	"courier": true,
-	"construction": true,
-	"gather_branches": true,
-	"gather_grass": true,
-	"gather_water": true,
-	"cleaning": true,
-	"cook": true,
-	"researcher": true,
-}
+const DAILY_ORDER_ROLES := CitizenEmploymentStateScript.DAILY_ORDER_ROLES
 
 const SKIN_COLORS := [
 	Color("f1976e"),
@@ -219,25 +211,70 @@ var specialization := "unassigned"
 var active_role := ""
 ## Human-readable label of the native AI task, supplied through CitizenActuator.
 var ai_activity_label := ""
-var employment_state := EmploymentState.UNREGISTERED
-var daily_order_role := ""
-var daily_order_workday_id := 0
-var daily_order_expires_at := -1.0
-var permanent_role := ""
-var pending_employment_role := ""
+var _employment := CitizenEmploymentStateScript.new()
+var employment_state:
+	get:
+		return _employment.employment_state
+	set(value):
+		_employment.employment_state = value
+var daily_order_role: String:
+	get:
+		return _employment.daily_order_role
+	set(value):
+		_employment.daily_order_role = value
+var daily_order_workday_id: int:
+	get:
+		return _employment.daily_order_workday_id
+	set(value):
+		_employment.daily_order_workday_id = value
+var daily_order_expires_at: float:
+	get:
+		return _employment.daily_order_expires_at
+	set(value):
+		_employment.daily_order_expires_at = value
+var permanent_role: String:
+	get:
+		return _employment.permanent_role
+	set(value):
+		_employment.permanent_role = value
+var pending_employment_role: String:
+	get:
+		return _employment.pending_employment_role
+	set(value):
+		_employment.pending_employment_role = value
 var employment_workplace: Node3D
 var pending_employment_workplace: Node3D
 var employment_center_position := Vector3.INF
-var registration_queue_order := -1
-var overtime_mode := false
-var overtime_until_workday_id := 0
-var overtime_source := ""
-## Source -> final workday. Sources are independent so cancelling a workplace
-## order cannot cancel a concurrent settlement order.
-var overtime_sources: Dictionary = {}
-## Source -> day on which that source was last issued. Kept after cancellation
-## to enforce the once-per-day command limit.
-var overtime_issued_days: Dictionary = {}
+var registration_queue_order: int:
+	get:
+		return _employment.registration_queue_order
+	set(value):
+		_employment.registration_queue_order = value
+var overtime_mode: bool:
+	get:
+		return _employment.overtime_mode
+	set(value):
+		_employment.overtime_mode = value
+var overtime_until_workday_id: int:
+	get:
+		return _employment.overtime_until_workday_id
+	set(value):
+		_employment.overtime_until_workday_id = value
+var overtime_source: String:
+	get:
+		return _employment.overtime_source
+	set(value):
+		_employment.overtime_source = value
+var overtime_sources: Dictionary:
+	get:
+		return _employment.overtime_sources
+	set(value):
+		_employment.overtime_sources = value
+var overtime_issued_days: Dictionary:
+	get:
+		return _employment.overtime_issued_days
+	set(value):
+		_employment.overtime_issued_days = value
 var fatigue := 0.0
 var continuous_work_hours := 0.0
 var recovery_until_workday_id := 0
@@ -1478,28 +1515,28 @@ func release_to_no_permanent_work() -> void:
 # directly, so that collapsing the stored EmploymentState later (see
 # design_docs/workforce_system.md) only has to change these bodies.
 func is_employed() -> bool:
-	return employment_state == EmploymentState.EMPLOYED
+	return _employment.is_employed()
 
 func has_no_permanent_work() -> bool:
-	return employment_state == EmploymentState.NO_PERMANENT_WORK
+	return _employment.has_no_permanent_work()
 
 func is_registering() -> bool:
-	return employment_state == EmploymentState.REGISTERING
+	return _employment.is_registering()
 
 func is_unregistered() -> bool:
-	return employment_state == EmploymentState.UNREGISTERED
+	return _employment.is_unregistered()
 
 func is_daily_courier() -> bool:
 	return has_active_daily_order() and daily_order_role == "courier"
 
 func is_daily_order_role(role: String) -> bool:
-	return DAILY_ORDER_ROLES.has(role)
+	return _employment.is_daily_order_role(role)
 
 func has_daily_order() -> bool:
-	return is_daily_order_role(daily_order_role)
+	return _employment.has_daily_order()
 
 func is_courier() -> bool:
-	return permanent_role == "courier" and is_employed()
+	return _employment.is_courier()
 
 func can_handle_entry_logistics() -> bool:
 	return is_daily_courier() or is_courier()
@@ -1513,71 +1550,25 @@ func has_active_daily_order() -> bool:
 
 
 func activate_overtime(until_workday_id: int, source: String, issued_day := 0) -> bool:
-	if source.is_empty():
-		return false
-	if issued_day > 0 and int(overtime_issued_days.get(source, -1)) == issued_day:
-		return false
-	if not overtime_mode:
-		overtime_sources.clear()
-	var previous_until := int(overtime_sources.get(source, 0))
-	overtime_sources[source] = maxi(previous_until, until_workday_id)
-	if issued_day > 0:
-		overtime_issued_days[source] = issued_day
-	_sync_overtime_state()
-	return true
+	return _employment.activate_overtime(until_workday_id, source, issued_day)
 
 
 func has_active_overtime(current_workday_id: int) -> bool:
-	if not overtime_mode:
-		return false
-	if overtime_sources.is_empty():
-		return overtime_until_workday_id >= current_workday_id
-	for until_workday in overtime_sources.values():
-		if int(until_workday) >= current_workday_id:
-			return true
-	return false
+	return _employment.has_active_overtime(current_workday_id)
 
 
 func has_overtime_source(source: String, current_workday_id: int) -> bool:
-	return overtime_mode and int(overtime_sources.get(source, 0)) >= current_workday_id
+	return _employment.has_overtime_source(source, current_workday_id)
 
 
 func clear_expired_overtime(current_workday_id: int) -> void:
-	# Keep compatibility with existing callers that clear the legacy flag
-	# directly while migrating to source-owned overtime.
-	if not overtime_mode:
-		overtime_sources.clear()
-		overtime_until_workday_id = 0
-		overtime_source = ""
-		return
-	if overtime_sources.is_empty():
-		if overtime_until_workday_id < current_workday_id:
-			overtime_mode = false
-			overtime_until_workday_id = 0
-			overtime_source = ""
-		return
-	for source in overtime_sources.keys().duplicate():
-		if int(overtime_sources[source]) < current_workday_id:
-			overtime_sources.erase(source)
-	_sync_overtime_state()
+	_employment.clear_expired_overtime(current_workday_id)
 
 
 func deactivate_overtime(source := "") -> void:
-	if source.is_empty():
-		overtime_sources.clear()
-	else:
-		overtime_sources.erase(source)
-	_sync_overtime_state()
+	_employment.clear_overtime_source(source)
 	if not overtime_mode and simulation != null and not simulation._is_work_time():
 		end_work_shift()
-
-
-func _sync_overtime_state() -> void:
-	overtime_until_workday_id = 0
-	for until_workday in overtime_sources.values():
-		overtime_until_workday_id = maxi(overtime_until_workday_id, int(until_workday))
-	overtime_mode = overtime_until_workday_id > 0
-	overtime_source = str(overtime_sources.keys().back()) if not overtime_sources.is_empty() else ""
 
 
 func is_recovering(current_workday_id: int) -> bool:
