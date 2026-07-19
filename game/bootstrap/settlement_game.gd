@@ -951,11 +951,14 @@ func _update_daylight() -> void:
 	var base_ambient_energy := lerpf(0.18, 0.65, maxf(solar_intensity, twilight * 0.3))
 	world_environment.ambient_light_color = base_ambient_color.lerp(Color("8a9aa3"), overcast)
 	world_environment.ambient_light_energy = lerpf(base_ambient_energy, 0.78, overcast)
-	# Symmetric arc: sun sits at the horizon at dawn/dusk and peaks at ~55deg at
-	# noon (not the zenith), so it stays inside the tilted camera's sky band and
-	# throws longer, more readable shadows. Azimuth stays fixed.
-	var sun_elevation := 3.0 + maxf(solar_height, 0.0) * 52.0
-	sun.rotation_degrees = Vector3(-sun_elevation, -32.0, 0.0)
+	# Symmetric arc: sun sits at the horizon at dawn/dusk and peaks at ~48deg at
+	# noon (not the zenith), so it stays inside the tilted camera's sky band. The
+	# azimuth sweeps east->west across the day so the sun visibly travels and the
+	# shadows rotate, instead of being pinned to one compass direction.
+	var day_progress := clampf((hour - 6.0) / 12.0, 0.0, 1.0)
+	var sun_elevation := 3.0 + maxf(solar_height, 0.0) * 45.0
+	var sun_azimuth := lerpf(-75.0, 11.0, day_progress)
+	sun.rotation_degrees = Vector3(-sun_elevation, sun_azimuth, 0.0)
 	var base_sun_color := Color("f08a5d").lerp(Color("fff2d1"), solar_intensity)
 	sun.light_color = base_sun_color.lerp(Color("a8b8c0"), overcast)
 	sun.light_energy = lerpf(0.0, 1.2, direct_light)
