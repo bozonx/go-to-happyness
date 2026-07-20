@@ -15,6 +15,7 @@ const TentEraSurvivalRulesScript = preload("res://game/features/settlement/domai
 const CampfireMenuControllerScript = preload("res://game/features/settlement/presentation/campfire_menu_controller.gd")
 const FireSourceStateScript = preload("res://game/features/settlement/domain/fire_source_state.gd")
 const CourierDispatcherScript = preload("res://game/features/logistics/application/courier_dispatcher.gd")
+const CourierTaskServiceScript = preload("res://game/features/logistics/application/courier_task_service.gd")
 const CourierTaskPublisherScript = preload("res://game/features/logistics/application/courier_task_publisher.gd")
 const CourierTaskScript = preload("res://game/features/logistics/domain/courier_task.gd")
 const TradeServiceScript = preload("res://game/features/logistics/application/trade_service.gd")
@@ -599,6 +600,7 @@ var trade_service: TradeService
 var storage_delivery_service: RefCounted
 var courier_dispatcher: RefCounted
 var courier_task_publisher: RefCounted
+var courier_task_service: CourierTaskServiceScript
 var campfire_menu_controller: RefCounted
 var market_menu_controller: RefCounted
 var building_menu_controller: RefCounted
@@ -730,6 +732,8 @@ func _ready() -> void:
 	courier_dispatcher.configure(self)
 	courier_task_publisher = CourierTaskPublisherScript.new()
 	courier_task_publisher.configure(self)
+	courier_task_service = CourierTaskServiceScript.new()
+	courier_task_service.configure(self)
 	campfire_menu_controller = CampfireMenuControllerScript.new()
 	campfire_menu_controller.configure(self)
 	market_menu_controller = MarketMenuControllerScript.new()
@@ -1625,244 +1629,39 @@ func _start_courier_task(courier: Citizen, task: RefCounted) -> bool:
 
 
 func _start_courier_canteen_or_trade(courier: Citizen, task: RefCounted) -> bool:
-	match task.kind:
-		CourierTask.Kind.CANTEEN:
-			var capacity := BuildingCatalog.kitchen_food_capacity(str(canteen.get_meta("building_type", "")))
-			var amount := mini(courier.courier_capacity(), mini(food, capacity - canteen_food))
-			if amount <= 0:
-				return false
-			settlement.add("food", -amount)
-			pending_canteen_delivery = true
-			pending_canteen_carrier = courier
-			pending_canteen_delivery_amount = amount
-			courier.deliver_food_to_canteen(task.pickup, canteen_position, amount)
-			return true
-		CourierTask.Kind.TRADE:
-			var order: RefCounted = task.payload.order
-			if not queued_trades.has(order):
-				return false
-			queued_trades.erase(order)
-			trade_service.assign_order_to_worker(courier, order)
-			return true
-	return false
+	return courier_task_service.start_courier_canteen_or_trade(courier, task)
 
 
 func _start_courier_pickup_task(courier: Citizen, task: RefCounted) -> bool:
-	match task.kind:
-		CourierTask.Kind.SAWMILL_PICKUP:
-			var sawmill_stock := sawmills.stock_at(task.payload.position, runtime_seconds)
-			var sawmill_amount := mini(courier.courier_capacity(), int(sawmill_stock.boards))
-			if sawmill_amount <= 0 or not _reserve_task_warehouse_space(task, "boards", sawmill_amount):
-				return false
-			courier.assign_sawmill_pickup(task.payload.position, task.dropoff)
-			return true
-		CourierTask.Kind.DEW_PICKUP:
-			var dew_stored := water_collector_service.stored_at(task.payload.position)
-			var dew_amount := mini(courier.courier_capacity(), dew_stored)
-			if dew_amount <= 0 or not _reserve_task_warehouse_space(task, "water", dew_amount):
-				return false
-			courier.assign_dew_collector_pickup(task.payload.position, task.dropoff)
-			return true
-		CourierTask.Kind.WORKER_PICKUP:
-			var worker: Citizen = task.payload.worker
-			var worker_resource: String = worker.resource_type
-			var worker_amount := worker.carried_amount
-			if worker_amount <= 0:
-				worker_amount = int(worker.pending_resources.get(worker_resource, 0))
-			worker_amount = mini(courier.courier_capacity(), worker_amount)
-			if worker_amount <= 0 or worker_resource.is_empty() or not _reserve_task_warehouse_space(task, worker_resource, worker_amount):
-				return false
-			courier.assign_courier_pickup(task.payload.worker, task.dropoff)
-			return true
-	return false
+	return courier_task_service.start_courier_pickup_task(courier, task)
 
 
 func _start_courier_construction_or_supply(courier: Citizen, task: RefCounted) -> bool:
-	match task.kind:
-		CourierTask.Kind.CONSTRUCTION:
-			var site: ConstructionSite = task.payload.site
-			var resource_type := str(task.payload.resource)
-			var source: Dictionary = task.payload.get("source", {})
-			if site == null or not is_instance_valid(site.node):
-				return false
-			var total_reserved := settlement.construction_reserved_for_site(site.site_id, resource_type)
-			var in_transit := int(site.reserved_materials.get(resource_type, 0))
-			var remaining := int(site.required_materials.get(resource_type, 0)) - int(site.delivered_materials.get(resource_type, 0)) - in_transit
-			var storage_reserved := maxi(0, total_reserved - in_transit)
-			var source_available: int = settlement.amount(resource_type)
-			var warehouse_index := int(source.get("warehouse_index", -1))
-			if warehouse_index >= 0:
-				source_available = settlement.warehouse_amount(resource_type, warehouse_index)
-			var amount: int = mini(courier.courier_capacity(), mini(source_available, mini(storage_reserved, remaining)))
-			if amount <= 0:
-				return false
-			if warehouse_index >= 0:
-				if settlement.add_to_warehouse(resource_type, -amount, warehouse_index) != 0:
-					return false
-			else:
-				settlement.add(resource_type, -amount)
-			var reservations := site.reserved_materials
-			reservations[resource_type] = int(reservations.get(resource_type, 0)) + amount
-			site.reserved_materials = reservations
-			courier.assign_construction_delivery(site.node, source.get("position", Vector3.INF), resource_type, amount)
-			return true
-		CourierTask.Kind.BUILDING_SUPPLY:
-			var building: Node3D = task.payload.building
-			if not is_instance_valid(building):
-				return false
-			var supply_kind := str(task.payload.get("supply_kind", ""))
-			match supply_kind:
-				"repair":
-					if branches <= 0:
-						return false
-					settlement.add("branches", -1)
-					building.set_meta("repair_reserved", true)
-					courier.assign_building_supply(building, task.pickup, "branches", "repair")
-					return true
-				"firewood":
-					if branches <= 0:
-						return false
-					var fire_state := _fire_state_for(building)
-					if not fire_state.needs_supply(4):
-						return false
-					settlement.add("branches", -1)
-					fire_state.reserve(1)
-					_apply_fire_state(building, fire_state)
-					courier.assign_building_supply(building, task.pickup, "branches", "firewood")
-					return true
-			return false
-	return false
+	return courier_task_service.start_courier_construction_or_supply(courier, task)
 
 
 func _start_courier_arrival_or_outside(courier: Citizen, task: RefCounted) -> bool:
-	match task.kind:
-		CourierTask.Kind.ARRIVAL:
-			var arrival_house := task.payload.get("house") as Node3D
-			for index in pending_arrivals.size():
-				var arrival_order: Dictionary = pending_arrivals[index]
-				if arrival_order.get("house") != arrival_house or bool(arrival_order.get("dispatched", false)):
-					continue
-				arrival_order.dispatched = true
-				arrival_order.greeter_id = courier.get_instance_id()
-				pending_arrivals[index] = arrival_order
-				arrival_greeters[courier.get_instance_id()] = arrival_order
-				courier.go_to_arrival_entrance(task.dropoff)
-				return true
-			return false
-		CourierTask.Kind.OUTSIDE_WORK:
-			if task.payload.get("courier") != courier or not is_instance_valid(entrance_stone):
-				return false
-			courier.assign_outside_work(entrance_stone.global_position)
-			return true
-	return false
+	return courier_task_service.start_courier_arrival_or_outside(courier, task)
 
 
 func _reserve_task_warehouse_space(task: RefCounted, resource_type: String, amount: int) -> bool:
-	if task == null or amount <= 0 or resource_type.is_empty() or warehouse_positions.is_empty():
-		return false
-	var index := warehouse_positions.find(task.dropoff)
-	if index < 0:
-		index = settlement.find_warehouse_index(task.dropoff, resource_type, amount, warehouse_positions)
-	if index < 0:
-		return false
-	if not settlement.reserve_warehouse_room(index, resource_type, amount):
-		return false
-	task.reserved_warehouse_index = index
-	task.reserved_resource_type = resource_type
-	task.reserved_amount = amount
-	return true
+	return courier_task_service.reserve_task_warehouse_space(task, resource_type, amount)
 
 
 func _release_task_warehouse_reservation(task: RefCounted) -> void:
-	if task == null or task.reserved_warehouse_index < 0 or task.reserved_amount <= 0 or task.reserved_resource_type.is_empty():
-		return
-	settlement.release_warehouse_reservation(task.reserved_warehouse_index, task.reserved_resource_type, task.reserved_amount)
-	task.reserved_warehouse_index = -1
-	task.reserved_resource_type = ""
-	task.reserved_amount = 0
+	courier_task_service.release_task_warehouse_reservation(task)
 
 
 func _is_courier_task_reachable(courier: Citizen, task: RefCounted) -> bool:
-	if not is_instance_valid(courier) or task == null:
-		return false
-	var dropoff: Vector3 = task.dropoff
-	if task.kind == CourierTask.Kind.CONSTRUCTION:
-		var site: ConstructionSite = task.payload.get("site") as ConstructionSite
-		if site == null or not is_instance_valid(site.node):
-			return false
-		dropoff = courier._reachable_construction_approach(site.node)
-	if task.pickup == Vector3.INF or dropoff == Vector3.INF:
-		return false
-	return _is_route_reachable(courier.global_position, task.pickup) and _is_route_reachable(task.pickup, dropoff)
+	return courier_task_service.is_courier_task_reachable(courier, task)
 
 
 func _cancel_courier_task(courier: Citizen, task: RefCounted) -> void:
-	if task == null:
-		return
-	var carried := courier.carried_amount if is_instance_valid(courier) else 0
-	match task.kind:
-		CourierTask.Kind.CANTEEN:
-			if pending_canteen_delivery and pending_canteen_carrier == courier:
-				canteen_service.cancel_canteen_delivery()
-		CourierTask.Kind.TRADE:
-			if is_instance_valid(courier):
-				var order: RefCounted = pending_trades.get(courier.get_instance_id(), null)
-				if order != null:
-					pending_trades.erase(courier.get_instance_id())
-					queued_trades.push_front(order)
-		CourierTask.Kind.WORKER_PICKUP:
-			var worker: Citizen = task.payload.get("worker") as Citizen
-			if carried > 0 and is_instance_valid(worker) and is_instance_valid(courier):
-				worker.register_pending_resource(courier.courier_resource_type, carried)
-				courier.carried_amount = 0
-		CourierTask.Kind.SAWMILL_PICKUP:
-			if carried > 0 and is_instance_valid(courier) and courier.courier_resource_type == "boards":
-				sawmills.return_boards(task.pickup, carried, runtime_seconds)
-				courier.carried_amount = 0
-		CourierTask.Kind.DEW_PICKUP:
-			if carried > 0 and is_instance_valid(courier) and courier.courier_resource_type == "water":
-				water_collector_service.return_water(task.pickup, carried)
-				courier.carried_amount = 0
-		CourierTask.Kind.BUILDING_SUPPLY:
-			var supply_kind := str(task.payload.get("supply_kind", ""))
-			if supply_kind == "repair":
-				var building: Node3D = task.payload.get("building") as Node3D
-				if is_instance_valid(building):
-					building.set_meta("repair_reserved", false)
-				settlement.add(str(task.payload.get("resource", "branches")), 1)
-			elif supply_kind == "firewood":
-				var fire_building: Node3D = task.payload.get("building") as Node3D
-				if is_instance_valid(fire_building):
-					var fire_state := _fire_state_for(fire_building)
-					fire_state.reserved_fuel = maxi(0, fire_state.reserved_fuel - 1)
-					_apply_fire_state(fire_building, fire_state)
-				settlement.add(str(task.payload.get("resource", "branches")), 1)
+	courier_task_service.cancel_courier_task(courier, task)
 
 
 func _reconcile_construction_reservations(site: ConstructionSite) -> void:
-	# A delivery can be interrupted by the end-of-day scheduler or a route reset.
-	# Return its reservation when no courier still owns it, otherwise the final
-	# material can remain permanently reserved without ever reaching the site.
-	if site == null or not is_instance_valid(site.node) or site.node.is_queued_for_deletion():
-		return
-	var in_transit: Dictionary = {}
-	for citizen in citizens:
-		if not is_instance_valid(citizen.construction_site) or citizen.construction_site != site.node:
-			continue
-		if citizen.state not in [Citizen.State.TO_CONSTRUCTION_PICKUP, Citizen.State.TO_CONSTRUCTION_SITE]:
-			continue
-		if citizen.building_supply_kind != "construction" or citizen.construction_delivery_resource.is_empty():
-			continue
-		in_transit[citizen.construction_delivery_resource] = int(in_transit.get(citizen.construction_delivery_resource, 0)) + citizen.carried_amount
-	var reservations := site.reserved_materials
-	for resource_type in reservations:
-		var reserved := int(reservations[resource_type])
-		var active := int(in_transit.get(resource_type, 0))
-		if reserved <= active:
-			continue
-		settlement.add(resource_type, reserved - active)
-		reservations[resource_type] = active
-	site.reserved_materials = reservations
+	courier_task_service.reconcile_construction_reservations(site)
 
 func _preferred_construction_site() -> ConstructionSite:
 	var chosen: ConstructionSite = null
