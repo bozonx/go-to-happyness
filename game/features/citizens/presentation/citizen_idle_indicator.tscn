@@ -1,0 +1,11 @@
+[gd_scene format=3]
+
+[node name="CitizenIdleIndicator" type="Label3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.05, 0)
+visible = false
+no_depth_test = true
+billboard = 1
+modulate = Color(0.941176, 0.768627, 0.364706, 1)
+text = "No permanent work"
+font_size = 32
+outline_size = 6

@@ -2,6 +2,8 @@ class_name BuildingBlueprints
 extends RefCounted
 
 
+const BuildingModuleScene = preload("res://game/features/buildings/presentation/building_module.tscn")
+
 const BLOCK_SIZE := 1.0
 const PANEL_THICKNESS := 0.5
 
@@ -216,13 +218,13 @@ static func get_blueprint(building_type: String) -> Dictionary:
 
 
 static func create_module(module: Dictionary) -> StaticBody3D:
-	var body := StaticBody3D.new()
+	var body: StaticBody3D = BuildingModuleScene.instantiate()
 	body.position = module.position
 	body.rotation_degrees = module.get("rotation", Vector3.ZERO)
 	body.set_meta("building_module", true)
 	body.set_meta("module_kind", module.kind)
 
-	var mesh_instance := MeshInstance3D.new()
+	var mesh_instance := body.get_node("MeshInstance3D") as MeshInstance3D
 	var mesh := BoxMesh.new()
 	mesh.size = module.size
 	mesh_instance.mesh = mesh
@@ -230,13 +232,11 @@ static func create_module(module: Dictionary) -> StaticBody3D:
 	material.albedo_color = module.color
 	material.roughness = 0.9
 	mesh_instance.material_override = material
-	body.add_child(mesh_instance)
 
-	var collision := CollisionShape3D.new()
+	var collision := body.get_node("CollisionShape3D") as CollisionShape3D
 	var shape := BoxShape3D.new()
 	shape.size = module.size
 	collision.shape = shape
-	body.add_child(collision)
 	return body
 
 

@@ -2,6 +2,7 @@ class_name ResourcePileService
 extends RefCounted
 
 const TentEraSurvivalRulesScript = preload("res://game/features/settlement/domain/tent_era_survival_rules.gd")
+const ResourcePileScene = preload("res://game/features/logistics/presentation/resource_pile.tscn")
 
 var parent_node: Node3D
 var resource_piles: Array[Dictionary]
@@ -31,18 +32,16 @@ func create_resource_pile(position: Vector3, resources: Dictionary, is_backpack_
 	if normalized.is_empty():
 		return null
 
-	var pile := Node3D.new()
+	var pile: Node3D = ResourcePileScene.instantiate()
 	pile.position = position
 
-	var label := Label3D.new()
-	label.name = "PileLabel"
+	var label := pile.get_node("PileLabel") as Label3D
 	var labels: Array[String] = []
 	for resource_type in normalized:
 		labels.append("%s x%d" % [str(resource_type).to_upper(), int(normalized[resource_type])])
 	labels.sort()
 	label.text = "\n".join(labels)
 	label.position.y = 1.7
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 
 	if is_backpack_pile:
 		var backpack_mesh := MeshInstance3D.new()
@@ -56,7 +55,6 @@ func create_resource_pile(position: Vector3, resources: Dictionary, is_backpack_
 		backpack_mesh.material_override = red_mat
 		pile.add_child(backpack_mesh)
 		label.position.y = 0.8
-		pile.add_child(label)
 	else:
 		var base_mesh_node := MeshInstance3D.new()
 		var base_mesh := CylinderMesh.new()
@@ -115,7 +113,6 @@ func create_resource_pile(position: Vector3, resources: Dictionary, is_backpack_
 		stone_pile.material_override = stone_mat
 		stone_pile.visible = normalized.has("stone") or normalized.has("soil") or normalized.has("clay") or normalized.has("bricks")
 		pile.add_child(stone_pile)
-		pile.add_child(label)
 
 	var pile_area := Area3D.new()
 	pile_area.name = "PileSelector"

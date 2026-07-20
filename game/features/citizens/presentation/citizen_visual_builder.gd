@@ -1,6 +1,8 @@
 class_name CitizenVisualBuilder
 extends RefCounted
 
+const CitizenIdleIndicatorScene = preload("res://game/features/citizens/presentation/citizen_idle_indicator.tscn")
+
 const MODEL_PREFIXES := {
 	"unassigned": "common",
 	"builder": "worker",
@@ -87,15 +89,7 @@ func _randomize_appearance(actor: Citizen) -> void:
 
 
 func _setup_idle_indicator(actor: Citizen) -> void:
-	var idle_indicator := Label3D.new()
-	idle_indicator.position = Vector3(0.0, 2.05, 0.0)
-	idle_indicator.text = "No permanent work"
-	idle_indicator.font_size = 32
-	idle_indicator.outline_size = 6
-	idle_indicator.modulate = Color("f0c45d")
-	idle_indicator.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	idle_indicator.no_depth_test = true
-	idle_indicator.visible = false
+	var idle_indicator: Label3D = CitizenIdleIndicatorScene.instantiate()
 	actor.add_child(idle_indicator)
 	actor.idle_indicator = idle_indicator
 

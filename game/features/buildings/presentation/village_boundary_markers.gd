@@ -6,6 +6,7 @@ extends Node3D
 ## whenever the territory changes.
 
 const VillageTerritoryScript = preload("res://game/features/buildings/domain/village_territory.gd")
+const VillageBoundaryMarkerScene = preload("res://game/features/buildings/presentation/village_boundary_marker.tscn")
 
 var _markers: Array[MeshInstance3D] = []
 var _cell_size: float = 1.0
@@ -34,19 +35,10 @@ func _clear_markers() -> void:
 
 
 func _create_marker(cell: Vector2i) -> MeshInstance3D:
-	var marker := MeshInstance3D.new()
-	var mesh := CylinderMesh.new()
-	mesh.top_radius = 0.12
-	mesh.bottom_radius = 0.12
-	mesh.height = 0.08
-	marker.mesh = mesh
+	var marker: MeshInstance3D = VillageBoundaryMarkerScene.instantiate()
 	marker.position = Vector3(
 		(cell.x + 0.5) * _cell_size,
 		0.04,
 		(cell.y + 0.5) * _cell_size,
 	)
-	var material := StandardMaterial3D.new()
-	material.albedo_color = Color("c4a35a")
-	material.roughness = 0.9
-	marker.material_override = material
 	return marker
