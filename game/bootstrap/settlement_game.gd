@@ -69,6 +69,7 @@ const EventOutcomeScript = preload("res://game/features/events/domain/event_outc
 const TentEraEventsScript = preload("res://game/features/events/application/tent_era_events.gd")
 const VillageTerritoryServiceScript = preload("res://game/features/buildings/application/village_territory_service.gd")
 const DigSiteScene = preload("res://game/features/world/presentation/dig_site.tscn")
+const ExcavationServiceScript = preload("res://game/features/production/application/excavation_service.gd")
 const SettlementSurvivalServiceScript = preload("res://game/features/settlement/application/settlement_survival_service.gd")
 const SettlementDailyRulesServiceScript = preload("res://game/features/settlement/application/settlement_daily_rules_service.gd")
 
@@ -518,6 +519,7 @@ var dig_sites: Array[Dictionary] = []
 var dig_cells: Dictionary = {}
 var exhausted_dig_cells: Dictionary = {}
 var dig_mode := false
+var excavation_service: ExcavationServiceScript
 var selected_house: Node3D
 var tent: Node3D
 var entrance_stone: Node3D
@@ -728,6 +730,8 @@ func _ready() -> void:
 	settlement_daily_rules_service.configure(self)
 	building_lifecycle_service = BuildingLifecycleServiceScript.new()
 	building_lifecycle_service.configure(self)
+	excavation_service = ExcavationServiceScript.new()
+	excavation_service.configure(self)
 
 	citizen_needs_service = CitizenNeedsService.new()
 	citizen_needs_service.configure(self)
@@ -1786,109 +1790,22 @@ func _sawmill_with_boards() -> Vector3:
 	return sawmills.position_with_boards(runtime_seconds)
 
 func _on_excavation_cycle(worker: Citizen, site_node: Node3D, efficiency: float) -> void:
-	for index in range(dig_sites.size()):
-		var site: Dictionary = dig_sites[index]
-		if site.node != site_node:
-			continue
-		
-		# Check if the next layer is blocked by tool requirement BEFORE incrementing depth
-		var next_depth = site.depth + 1
-		var tool_id = _tool_for_depth(site, next_depth)
-		if tool_id != "" and not bool(settlement.tools.get(tool_id, false)):
-			# Settlement doesn't have the tool for this layer! Stop the worker.
-			worker.assigned_dig_site = null
-			worker.idle()
-			_update_interface("Excavation paused: missing tool '%s' for the next layer." % tool_id)
-			_update_workers()
-			return
-			
-		site.depth += 1
-		if site.depth <= site.grass_limit:
-			worker.register_pending_resource("grass", 1)
-			var pit_material := StandardMaterial3D.new()
-			pit_material.albedo_color = Color("3e612c") # Grass green
-			site.pit.material_override = pit_material
-			_update_interface("Digger is carrying grass to the warehouse.")
-		elif site.depth <= site.soil_limit:
-			var res := "soil"
-			if worker.skills.get("excavation", 0.0) >= 1.0 and randf() < 0.10:
-				res = "clay" if randf() < 0.5 else "stone"
-				_update_interface("Deep Digger: Digger found rare %s in soil!" % res.capitalize())
-			worker.register_pending_resource(res, 1)
-			var pit_material := StandardMaterial3D.new()
-			pit_material.albedo_color = Color("78533b") # Soil brown
-			site.pit.material_override = pit_material
-			_update_interface("Digger is carrying %s to the warehouse." % res)
-		elif site.depth <= site.clay_limit:
-			worker.register_pending_resource("clay", 1)
-			var pit_material := StandardMaterial3D.new()
-			pit_material.albedo_color = Color("a96445") # Clay reddish-brown
-			site.pit.material_override = pit_material
-			_update_interface("Digger is carrying clay to the warehouse.")
-		elif site.depth <= site.stone_limit:
-			worker.register_pending_resource("stone", 1)
-			var pit_material := StandardMaterial3D.new()
-			pit_material.albedo_color = Color("62676a") # Stone grey
-			site.pit.material_override = pit_material
-			_update_interface("Digger is carrying stone to the warehouse.")
-		else:
-			site_node.queue_free()
-			dig_sites.remove_at(index)
-			dig_cells.erase(site.cell)
-			exhausted_dig_cells[site.cell] = true
-			for citizen in citizens:
-				if citizen.assigned_dig_site == site_node:
-					citizen.assigned_dig_site = null
-			_update_workers()
-			_update_interface("Stone excavation is exhausted; choose another cell.")
-			return
-		dig_sites[index] = site
-		_request_courier_dispatch()
-		return
+	excavation_service.on_excavation_cycle(worker, site_node, efficiency)
 
 func _can_work_at_dig_site(site: Dictionary) -> bool:
-	var next_depth = site.depth + 1
-	if next_depth > site.stone_limit:
-		return false
-	var tool_id = _tool_for_depth(site, next_depth)
-	if tool_id != "" and not bool(settlement.tools.get(tool_id, false)):
-		return false
-	return true
+	return excavation_service.can_work_at_dig_site(site)
 
 func _tool_for_depth(site: Dictionary, depth: int) -> String:
-	if depth <= site.grass_limit:
-		return ""
-	elif depth <= site.soil_limit:
-		return "shovel"
-	elif depth <= site.clay_limit:
-		return "hoe"
-	elif depth <= site.stone_limit:
-		return "pickaxe"
-	return ""
+	return excavation_service.tool_for_depth(site, depth)
 
 func _resource_for_depth(site: Dictionary, depth: int) -> String:
-	if depth <= site.grass_limit:
-		return "grass"
-	elif depth <= site.soil_limit:
-		return "soil"
-	elif depth <= site.clay_limit:
-		return "clay"
-	elif depth <= site.stone_limit:
-		return "stone"
-	return "soil"
+	return excavation_service.resource_for_depth(site, depth)
 
 func _count_valid_dig_sites() -> int:
-	var count := 0
-	for site in dig_sites:
-		if _can_work_at_dig_site(site):
-			count += 1
-	return count
+	return excavation_service.count_valid_dig_sites()
 
 func _dig_site_for_node(site_node: Node3D) -> Dictionary:
-	for site in dig_sites:
-		if site.node == site_node:
-			return site
-	return {}
+	return excavation_service.dig_site_for_node(site_node)
 
 func _building_cost() -> int:
 	return BuildingCatalog.cost_for(build_mode)
@@ -3311,72 +3228,19 @@ func _employer_capacity(role: String, building: Node3D) -> int:
 	return 1
 
 func _start_dig_assignment() -> void:
-	if selected_builder == null:
-		return
-	dig_mode = true
-	build_mode = ""
-	selection_marker.visible = true
-	_show_territory_overlay(false)
-	selection_material.albedo_color = Color(0.65, 0.42, 0.2, 0.55)
-	_move_selection(selected_world_position)
-	_update_interface("Choose a clear point on the terrain for excavation.")
+	excavation_service.start_dig_assignment()
 
 func _place_dig_site(world_position: Vector3) -> void:
-	var cell := _placement_key(world_position)
-	if not _can_excavate(world_position):
-		_update_interface("Excavation is not allowed at this point.")
-		return
-	var site := _dig_site_at(cell)
-	if site.is_empty():
-		site = _create_dig_site(cell, world_position)
-	selected_builder.assigned_dig_site = site.node
-	if selected_builder.employment_state == Citizen.EmploymentState.NO_PERMANENT_WORK:
-		selected_builder.begin_employment_processing(_employment_center_position(), "excavation", site.node)
-	dig_mode = false
-	selection_marker.visible = false
-	_update_workers()
-	_show_selected_citizen_menu()
-	_update_interface("Excavation assigned. Grass, soil and clay will be exposed before stone.")
+	excavation_service.place_dig_site(world_position)
 
 func _can_excavate(world_position: Vector3) -> bool:
-	var cell := _placement_key(world_position)
-	return not exhausted_dig_cells.has(cell) and _is_clear_of_objects(world_position, 1.0)
+	return excavation_service.can_excavate(world_position)
 
 func _dig_site_at(cell: Vector2i) -> Dictionary:
-	for site in dig_sites:
-		if site.cell == cell:
-			return site
-	return {}
+	return excavation_service.dig_site_at(cell)
 
 func _create_dig_site(cell: Vector2i, world_position: Vector3) -> Dictionary:
-	var site_node: Node3D = DigSiteScene.instantiate()
-	site_node.position = world_position
-	add_child(site_node)
-	var pit := site_node.get_node("Pit") as MeshInstance3D
-	
-	var grass_depth := random.randi_range(2, 4)
-	var soil_depth := random.randi_range(3, 6)
-	var clay_depth := random.randi_range(4, 8)
-	var stone_depth := random.randi_range(5, 10)
-	
-	var grass_limit := grass_depth
-	var soil_limit := grass_limit + soil_depth
-	var clay_limit := soil_limit + clay_depth
-	var stone_limit := clay_limit + stone_depth
-	
-	var site := {
-		"cell": cell,
-		"node": site_node,
-		"pit": pit,
-		"grass_limit": grass_limit,
-		"soil_limit": soil_limit,
-		"clay_limit": clay_limit,
-		"stone_limit": stone_limit,
-		"depth": 0
-	}
-	dig_sites.append(site)
-	dig_cells[cell] = true
-	return site
+	return excavation_service.create_dig_site(cell, world_position)
 
 func _set_build_placement_ui_visible(is_visible: bool) -> void:
 	if build_menu != null:
