@@ -24,6 +24,7 @@ const StorageDeliveryServiceScript = preload("res://game/features/logistics/appl
 const BuildingAvailabilityServiceScript = preload("res://game/features/buildings/application/building_availability_service.gd")
 const BuildingMenuControllerScript = preload("res://game/features/buildings/presentation/building_menu_controller.gd")
 const FirstPersonHUDControllerScript = preload("res://game/features/ui/presentation/first_person_hud_controller.gd")
+const BuildingLifecycleServiceScript = preload("res://game/features/buildings/application/building_lifecycle_service.gd")
 const BuildingResearchServiceScript = preload("res://game/features/buildings/application/building_research_service.gd")
 const BuildingQueueServiceScript = preload("res://game/features/citizens/application/building_queue_service.gd")
 const CitizenLifecycleServiceScript = preload("res://game/features/citizens/application/citizen_lifecycle_service.gd")
@@ -620,6 +621,7 @@ var resource_pile_service: ResourcePileService
 var foraging_service: ForagingService
 var fire_management_service: FireManagementService
 var building_maintenance_service: BuildingMaintenanceService
+var building_lifecycle_service: BuildingLifecycleServiceScript
 var settlement_survival_service: SettlementSurvivalServiceScript
 var settlement_daily_rules_service: SettlementDailyRulesServiceScript
 
@@ -724,6 +726,8 @@ func _ready() -> void:
 	settlement_survival_service.configure(self)
 	settlement_daily_rules_service = SettlementDailyRulesServiceScript.new()
 	settlement_daily_rules_service.configure(self)
+	building_lifecycle_service = BuildingLifecycleServiceScript.new()
+	building_lifecycle_service.configure(self)
 
 	citizen_needs_service = CitizenNeedsService.new()
 	citizen_needs_service.configure(self)
@@ -1322,66 +1326,20 @@ func _total_game_minutes() -> float:
 
 
 func _remove_expired_temporary_tents() -> void:
-	for record in building_registry.records().duplicate():
-		var tent := record.node as Node3D
-		if not is_instance_valid(tent) or _is_construction_site(tent) or str(tent.get_meta("building_type", "")) != "tent":
-			continue
-		for citizen in citizens:
-			if is_instance_valid(citizen) and citizen.home == tent:
-				citizen.home = null
-				_refresh_living_status(citizen)
-		_cancel_arrivals_for_house(tent)
-		_unregister_service_pockets(tent)
-		_remove_building_services(tent, "tent")
-		var removed_record := building_registry.remove_node(tent)
-		if removed_record != null:
-			_unregister_navigation_footprint(removed_record.center, removed_record.footprint)
-			village_territory_service.on_building_removed(removed_record.cell)
-		settlement.buildings["tent"] = maxi(0, int(settlement.buildings.get("tent", 1)) - 1)
-		tent.queue_free()
-	_refresh_navigation_grid()
-	_update_workers()
+	building_lifecycle_service.remove_expired_temporary_tents()
 
 
 func _apply_daily_settlement_rules() -> void:
 	settlement_daily_rules_service.apply_daily_settlement_rules()
 
 func _update_house_lights() -> void:
-	var hour := int(game_minutes) / 60
-	var minute := int(game_minutes) % 60
-	var clock_minute := int(game_minutes)
-	if house_light_update_minute == clock_minute:
-		return
-	house_light_update_minute = clock_minute
-	var minute_of_day := hour * 60 + minute
-	for record in house_lights:
-		if not is_instance_valid(record.light):
-			continue
-		var light: OmniLight3D = record.light
-		var house: Node3D = record.house
-		var off_minute: int = int(house.get_meta("light_off_minute", record.off_minute))
-		# A home is lit only after someone moves in. It turns on with evening
-		# twilight and each household chooses one stable
-		# switch-off time between 22:00 and 02:00, including after midnight.
-		var occupied := _house_has_residents(house)
-		light.visible = occupied and _house_has_people_at_home(house) and (minute_of_day >= 17 * 60 and minute_of_day < off_minute if off_minute >= 17 * 60 else minute_of_day >= 17 * 60 or minute_of_day < off_minute)
-	for light in entrance_lights:
-		if is_instance_valid(light):
-			light.visible = minute_of_day >= 17 * 60 or minute_of_day < 7 * 60
+	building_lifecycle_service.update_house_lights()
 
 func _house_has_residents(house: Node3D) -> bool:
-	if not is_instance_valid(house):
-		return false
-	for citizen in citizens:
-		if citizen.home == house:
-			return true
-	return false
+	return building_lifecycle_service.house_has_residents(house)
 
 func _house_has_people_at_home(house: Node3D) -> bool:
-	for citizen in citizens:
-		if citizen.home == house and citizen.state == Citizen.State.RESTING:
-			return true
-	return false
+	return building_lifecycle_service.house_has_people_at_home(house)
 
 func _is_night() -> bool:
 	return clock.is_night()
@@ -3852,170 +3810,29 @@ func _hide_all_selection_menus() -> void:
 	selected_building = null
 
 func _mark_building_for_demolition(building: Node3D) -> void:
-	if not _can_hero_build() or not is_instance_valid(building):
-		return
-	if demolition.has_site(building):
-		return
-	if building == entrance_stone:
-		_update_interface("This building cannot be demolished.")
-		return
-	var building_type := str(building.get_meta("building_type", "house"))
-	if not BuildingCatalog.is_demolishable(building_type):
-		_update_interface("This landmark cannot be demolished.")
-		return
-	_release_employment_at_building(building)
-	building.set_meta("pending_demolition", true)
-	_cancel_arrivals_for_house(building)
-	_add_demolition_marker(building)
-	demolition.mark(building, building_type)
-	_update_workers()
-	_update_interface("Building marked for demolition. Residents and stored goods must be relocated first.")
+	building_lifecycle_service.mark_building_for_demolition(building)
 
 func _add_demolition_marker(building: Node3D) -> void:
-	if building.has_meta("demolition_marker"):
-		return
-	var marker := BillboardLabelScene.instantiate() as Label3D
-	marker.text = "DEMOLISH"
-	marker.position = Vector3(0.0, 5.2, 0.0)
-	marker.font_size = 32
-	marker.outline_size = 6
-	marker.modulate = Color("ef4f45")
-	building.add_child(marker)
-	building.set_meta("demolition_marker", marker)
+	building_lifecycle_service.add_demolition_marker(building)
 
 func _demolition_ready(site: DemolitionSite) -> bool:
-	var building: Node3D = site.building
-	if not is_instance_valid(building):
-		return false
-	var residents_to_relocate := 0
-	for citizen in citizens:
-		if citizen.home == building:
-			residents_to_relocate += 1
-	var available_slots := 0
-	for record in building_registry.records():
-		var candidate: Node3D = record.node
-		if not is_instance_valid(candidate) or candidate == building or bool(candidate.get_meta("pending_demolition", false)):
-			continue
-		available_slots += maxi(0, int(candidate.get_meta("spawn_slots", 0)))
-	if available_slots < residents_to_relocate:
-		return false
-	for citizen in citizens:
-		if citizen.home != building:
-			continue
-		var replacement := _find_relocation_home(building)
-		# Capacity was checked before mutating resident homes, so this should only
-		# fail if an external system changed the registry during this tick.
-		if replacement == null:
-			return false
-		citizen.assign_home(replacement)
-		_refresh_living_status(citizen)
-		replacement.set_meta("spawn_slots", int(replacement.get_meta("spawn_slots", 0)) - 1)
-	return true
+	return building_lifecycle_service.demolition_ready(site)
 
 func _find_relocation_home(excluded: Node3D) -> Node3D:
-	for record in building_registry.records():
-		var candidate: Node3D = record.node
-		if not is_instance_valid(candidate) or candidate == excluded or bool(candidate.get_meta("pending_demolition", false)):
-			continue
-		if int(candidate.get_meta("spawn_slots", 0)) > 0:
-			return candidate
-	return null
+	return building_lifecycle_service.find_relocation_home(excluded)
 
 func _update_demolition(delta: float) -> void:
 	demolition.tick(delta)
 
 func _finish_demolition(site: DemolitionSite) -> void:
-	var building: Node3D = site.building
-	var building_type := site.building_type
-	var active_kitchen_removed := canteen == building
-	_unregister_service_pockets(building)
-	var pile_resources: Dictionary = BuildingCatalog.demolition_refund(building_type).duplicate(true)
-	if building_type in ["warehouse", "straw_warehouse", "tarp_warehouse"]:
-		var service_position: Vector3 = building.get_meta("service_position", building.global_position)
-		var warehouse_index := warehouse_positions.find(service_position)
-		_move_stored_resources_to_pile(pile_resources, warehouse_index)
-	_return_in_transit_building_supplies(building)
-	if active_kitchen_removed:
-		if pending_canteen_delivery:
-			_cancel_canteen_delivery()
-		settlement.add("food", canteen_food)
-		canteen_food = 0
-	for citizen in citizens:
-		citizen.finish_construction(building)
-	_remove_building_services(building, building_type)
-	var removed_record := building_registry.remove_node(building)
-	if removed_record != null:
-		_unregister_navigation_footprint(removed_record.center, removed_record.footprint)
-		village_territory_service.on_building_removed(removed_record.cell)
-	_refresh_boundary_markers()
-	if active_kitchen_removed:
-		_select_best_canteen()
-	settlement.buildings[building_type] = maxi(0, int(settlement.buildings.get(building_type, 1)) - 1)
-	if campfire_node == null:
-		_select_best_campfire()
-	for i in range(house_lights.size() - 1, -1, -1):
-		if house_lights[i].house == building:
-			house_lights.remove_at(i)
-	for i in range(entrance_lights.size() - 1, -1, -1):
-		if not is_instance_valid(entrance_lights[i]):
-			entrance_lights.remove_at(i)
-		elif entrance_lights[i].get_parent() == building:
-			entrance_lights.remove_at(i)
-	_create_resource_pile(building.global_position, pile_resources)
-	building.queue_free()
-	_refresh_navigation_grid()
-	_update_workers()
-	_update_interface("%s dismantled; recovered materials are waiting in a resource pile." % building_type.capitalize())
+	building_lifecycle_service.finish_demolition(site)
 
 func _remove_building_services(building: Node3D, building_type: String) -> void:
-	_release_employment_at_building(building)
-	var service_position: Vector3 = building.get_meta("service_position", building.global_position)
-	match building_type:
-		"warehouse", "straw_warehouse", "tarp_warehouse":
-			var index := warehouse_positions.find(service_position)
-			if index >= 0:
-				warehouse_positions.remove_at(index)
-				settlement.warehouses.remove_at(index)
-				settlement.warehouse_types.remove_at(index)
-		"sawmill": sawmill_positions.erase(service_position)
-		"farm": farm_positions.erase(service_position)
-		"builders_guild": builders_guild_positions.erase(service_position)
-		"construction_company": construction_company_positions.erase(service_position)
-		"forager_tent", "straw_forager_tent", "tarp_forager_tent": forager_positions.erase(service_position)
-		"materials_yard", "straw_materials_yard", "tarp_materials_yard": materials_yard_positions.erase(service_position)
-		"school": school_positions.erase(service_position)
-		"park": park_positions.erase(service_position)
-		"gathering_place": gathering_place_positions.erase(service_position)
-		"leisure_center": leisure_positions.erase(service_position)
-		"craft_tent", "straw_craft_tent", "tarp_craft_tent": craft_tent_positions.erase(service_position)
-		"straw_trade_tent", "tarp_trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market":
-			market_positions.erase(service_position)
-		"campfire", "campfire_lvl2", "campfire_lvl3", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall":
-			if campfire_node == building: campfire_node = null
-		"cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant":
-			if canteen == building: canteen = null
-		"dew_collector", "advanced_dew_collector":
-			for i in range(water_collectors.size() - 1, -1, -1):
-				if water_collectors[i].node == building:
-					water_collectors.remove_at(i)
-		"employment_office":
-			if employment_office == building: employment_office = null
-		"brick_factory", "materials_factory", "recycling_factory", "metal_factory": factories.erase(building)
+	building_lifecycle_service.remove_building_services(building, building_type)
 
 
 func _release_employment_at_building(building: Node3D) -> void:
-	for citizen in citizens:
-		if building == campfire_node and citizen.daily_order_role == "researcher":
-			if settlement.active_research_tech_id != "" and settlement.active_research_worker_id == citizen.ai_id:
-				_cancel_active_building_research(true, "Research cancelled: the civic post was removed. Resources refunded.")
-			citizen.clear_daily_order()
-			citizen.idle()
-		if citizen.employment_workplace != building and citizen.pending_employment_workplace != building:
-			continue
-		if citizen.permanent_role == "official":
-			_dismiss_official(citizen)
-			continue
-		_send_to_unemployment_registration(citizen)
+	building_lifecycle_service.release_employment_at_building(building)
 
 
 func _send_to_unemployment_registration(citizen: Citizen) -> void:
@@ -6621,41 +6438,11 @@ func _destroy_building_to_pile(building: Node3D, building_type: String) -> void:
 
 
 func _move_stored_resources_to_pile(resources: Dictionary, warehouse_index := -1) -> void:
-	if warehouse_index >= 0 and warehouse_index < settlement.warehouses.size():
-		for resource_type in SettlementState.STORED_RESOURCES:
-			var amount := settlement.warehouses[warehouse_index].amount(resource_type)
-			if amount <= 0:
-				continue
-			resources[resource_type] = int(resources.get(resource_type, 0)) + amount
-			settlement.warehouses[warehouse_index].set_amount(resource_type, 0)
-		return
-	for resource_type in SettlementState.STORED_RESOURCES:
-		var amount := settlement.amount(resource_type)
-		if amount <= 0:
-			continue
-		resources[resource_type] = int(resources.get(resource_type, 0)) + amount
-		settlement.add(resource_type, -amount)
+	building_lifecycle_service.move_stored_resources_to_pile(resources, warehouse_index)
 
 
 func _select_best_campfire() -> void:
-	var best_campfire: Node3D = null
-	var best_rank := -1
-	var ranks := {
-		"campfire": 1, "campfire_lvl2": 2, "campfire_lvl3": 3,
-		"earth_assembly": 4, "clay_lodge": 5, "wood_town_hall": 6,
-		"stone_prefecture": 7, "brick_city_hall": 8,
-	}
-	for record in building_registry.records():
-		var candidate: Node3D = record.node
-		if not is_instance_valid(candidate):
-			continue
-		var rank := int(ranks.get(str(candidate.get_meta("building_type", "")), -1))
-		if rank > best_rank:
-			best_campfire = candidate
-			best_rank = rank
-	campfire_node = best_campfire
-	if is_instance_valid(campfire_node):
-		_activate_employment_centre(campfire_node)
+	building_lifecycle_service.select_best_campfire()
 
 
 func _refresh_boundary_markers() -> void:
