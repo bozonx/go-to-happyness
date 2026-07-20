@@ -21,6 +21,7 @@ const CourierTaskScript = preload("res://game/features/logistics/domain/courier_
 const TradeServiceScript = preload("res://game/features/logistics/application/trade_service.gd")
 const MarketMenuControllerScript = preload("res://game/features/logistics/presentation/market_menu_controller.gd")
 const StorageDeliveryServiceScript = preload("res://game/features/logistics/application/storage_delivery_service.gd")
+const StorageRoutingServiceScript = preload("res://game/features/logistics/application/storage_routing_service.gd")
 const BuildingAvailabilityServiceScript = preload("res://game/features/buildings/application/building_availability_service.gd")
 const BuildingMenuControllerScript = preload("res://game/features/buildings/presentation/building_menu_controller.gd")
 const FirstPersonHUDControllerScript = preload("res://game/features/ui/presentation/first_person_hud_controller.gd")
@@ -603,6 +604,7 @@ var water_collector_service: WaterCollectorService
 var canteen_service: CanteenService
 var trade_service: TradeService
 var storage_delivery_service: RefCounted
+var storage_routing_service: StorageRoutingServiceScript
 var courier_dispatcher: RefCounted
 var courier_task_publisher: RefCounted
 var courier_task_service: CourierTaskServiceScript
@@ -740,6 +742,8 @@ func _ready() -> void:
 	trade_service.configure(self)
 	storage_delivery_service = StorageDeliveryServiceScript.new()
 	storage_delivery_service.configure(self)
+	storage_routing_service = StorageRoutingServiceScript.new()
+	storage_routing_service.configure(self)
 	courier_dispatcher = CourierDispatcherScript.new()
 	courier_dispatcher.configure(self)
 	courier_task_publisher = CourierTaskPublisherScript.new()
@@ -1469,43 +1473,11 @@ func _construction_source_available(resource_type: String, source: Dictionary) -
 
 
 func _resource_pile_for_node(pile_node: Node3D) -> Dictionary:
-	for pile: Dictionary in resource_piles:
-		if pile.get("node") == pile_node:
-			return pile
-	return {}
+	return storage_routing_service.resource_pile_for_node(pile_node)
 
 
 func _take_resource_from_pile_at(position: Vector3, resource_type: String, max_amount: int) -> int:
-	if max_amount <= 0 or resource_type.is_empty():
-		return 0
-	for index in resource_piles.size():
-		var pile: Dictionary = resource_piles[index]
-		var pile_node := pile.get("node") as Node3D
-		if not is_instance_valid(pile_node) or pile_node.global_position.distance_squared_to(position) > 0.25:
-			continue
-		var available := int(pile.resources.get(resource_type, 0))
-		if available <= 0:
-			continue
-		var taken := mini(max_amount, available)
-		pile.resources[resource_type] = available - taken
-		if int(pile.resources[resource_type]) <= 0:
-			pile.resources.erase(resource_type)
-		var labels: Array[String] = []
-		for piled_resource in pile.resources:
-			var amount := int(pile.resources[piled_resource])
-			if amount > 0:
-				labels.append("%s x%d" % [str(piled_resource).to_upper(), amount])
-		labels.sort()
-		var label := pile_node.get_node_or_null("PileLabel") as Label3D
-		if label != null:
-			label.text = "\n".join(labels)
-		if pile.resources.is_empty():
-			resource_piles.remove_at(index)
-			pile_node.queue_free()
-		else:
-			resource_piles[index] = pile
-		return taken
-	return 0
+	return storage_routing_service.take_resource_from_pile_at(position, resource_type, max_amount)
 
 
 func _is_courier_task_valid(task: RefCounted) -> bool:
@@ -1814,12 +1786,10 @@ func _format_costs(building_type: String) -> String:
 	return building_availability_service.cost_text(building_type)
 
 func _stored_resources() -> int:
-	if warehouse_positions.is_empty():
-		return 0
-	return int(ceil(settlement.storage_used_units()))
+	return storage_routing_service.stored_resources()
 
 func _warehouse_capacity() -> int:
-	return settlement.storage_capacity(warehouse_positions.size())
+	return storage_routing_service.warehouse_capacity()
 
 func _total_housing_slots() -> int:
 	return building_registry.housing_capacity()
@@ -4006,16 +3976,11 @@ func _nearby_tree_with_branches() -> bool:
 	return false
 
 func _nearby_warehouse_index() -> int:
-	if player_citizen == null:
-		return -1
-	for i in range(warehouse_positions.size()):
-		if player_citizen.global_position.distance_to(warehouse_positions[i]) <= INTERACTION_RANGE:
-			return i
-	return -1
+	return storage_routing_service.nearby_warehouse_index()
 
 
 func _nearby_warehouse() -> bool:
-	return _nearby_warehouse_index() >= 0
+	return storage_routing_service.nearby_warehouse()
 
 func _nearby_sawmill() -> bool:
 	return _nearby_sawmill_position() != Vector3.INF
@@ -4325,12 +4290,7 @@ func _missing_site_materials_text(site: ConstructionSite) -> String:
 
 
 func _pile_available_resources(pile: Dictionary) -> Array[String]:
-	var resources: Dictionary = pile.get("resources", {})
-	var result: Array[String] = []
-	for resource_type in resources:
-		if int(resources.get(resource_type, 0)) > 0:
-			result.append(str(resource_type))
-	return result
+	return storage_routing_service.pile_available_resources(pile)
 
 
 func _handle_sawmill_interaction(all: bool, sawmill_pos: Vector3) -> void:
@@ -4508,20 +4468,7 @@ func _citizen_state_name(state: int) -> String:
 
 
 func _warehouse_index_for_building(building: Node3D) -> int:
-	if not is_instance_valid(building):
-		return -1
-	var service_pos: Vector3 = building.get_meta("service_position", building.global_position)
-	var index := warehouse_positions.find(service_pos)
-	if index >= 0:
-		return index
-	var best := -1
-	var best_dist := 999999.0
-	for i in range(warehouse_positions.size()):
-		var dist := warehouse_positions[i].distance_to(service_pos)
-		if dist < best_dist:
-			best_dist = dist
-			best = i
-	return best
+	return storage_routing_service.warehouse_index_for_building(building)
 
 
 func _building_action_hint(building: Node3D) -> String:
@@ -5018,18 +4965,7 @@ func _assigned_staff_for_building(building: Node3D, required: Dictionary) -> int
 	return count
 
 func _has_storage_room_for_role(role: String) -> bool:
-	if role == "excavation":
-		for site in dig_sites:
-			if _can_work_at_dig_site(site):
-				var next_depth = site.depth + 1
-				var resource = _resource_for_depth(site, next_depth)
-				return settlement.can_make_room_for(resource, 1, warehouse_positions.size())
-		return settlement.can_make_room_for("soil", 1, warehouse_positions.size())
-		
-	var resource_for_role := {"forestry": "logs", "farming": "food", "gather_branches": "branches", "gather_grass": "grass", "gather_food": "food", "gather_water": "water"}
-	if not resource_for_role.has(role):
-		return true
-	return settlement.can_make_room_for(resource_for_role[role], 1, warehouse_positions.size())
+	return storage_routing_service.has_storage_room_for_role(role)
 
 func _send_citizen_to_leisure(citizen: Citizen, minimum_hours := 0) -> bool:
 	# Returns whether the citizen was actually placed somewhere to rest so the
@@ -5276,8 +5212,7 @@ func _set_road_walking_order(enabled: bool) -> void:
 
 
 func _set_balanced_warehouse_mode(enabled: bool) -> void:
-	settlement.balanced_warehouse_mode = enabled
-	_update_interface("Balanced warehouse storage %s." % ("enabled" if enabled else "disabled"))
+	storage_routing_service.set_balanced_warehouse_mode(enabled)
 
 
 func _cheer_up_settlement() -> void:
@@ -6373,52 +6308,15 @@ func _get_nearest_delivery_position(from: Vector3) -> Vector3:
 
 
 func _warehouse_delivery_position(from: Vector3, resource_type: String, amount: int) -> Vector3:
-	if warehouse_positions.is_empty():
-		return from
-	var index := _find_reachable_warehouse_index(from, resource_type, amount)
-	if index >= 0:
-		return warehouse_positions[index]
-	return from
+	return storage_routing_service.warehouse_delivery_position(from, resource_type, amount)
 
 
 func _find_reachable_warehouse_index(from: Vector3, resource_type: String, amount: int, require_room := true) -> int:
-	var best_index := -1
-	var best_cost := INF
-	var best_ratio := INF
-	for index in range(mini(warehouse_positions.size(), settlement.warehouses.size())):
-		if require_room and not resource_type.is_empty() and settlement.warehouse_room_for(index, resource_type) < amount:
-			continue
-		var position := warehouse_positions[index]
-		if not _is_route_reachable(from, position, false):
-			continue
-		var route := _find_path_around_houses(from, position, false)
-		if not route.reachable:
-			continue
-		var cost := _route_cost(from, route)
-		var ratio := float(settlement.warehouses[index].amount(resource_type)) / float(maxi(1, settlement.warehouses[index].capacity)) if not resource_type.is_empty() else 0.0
-		if settlement.balanced_warehouse_mode:
-			if ratio < best_ratio or (is_equal_approx(ratio, best_ratio) and cost < best_cost):
-				best_index = index
-				best_ratio = ratio
-				best_cost = cost
-		elif cost < best_cost:
-			best_index = index
-			best_cost = cost
-	return best_index
+	return storage_routing_service.find_reachable_warehouse_index(from, resource_type, amount, require_room)
 
 
 func _route_cost(from: Vector3, route: RouteResult) -> float:
-	if route == null or not route.reachable:
-		return INF
-	var cost := 0.0
-	var previous := from
-	for waypoint: Vector3 in route.waypoints:
-		var segment := nav_grid.segment_cost(previous, waypoint)
-		if not is_finite(segment):
-			return INF
-		cost += segment
-		previous = waypoint
-	return cost
+	return storage_routing_service.route_cost(from, route)
 
 func _is_construction_site(node: Node3D) -> bool:
 	return is_instance_valid(node) and construction.has_site(node)
