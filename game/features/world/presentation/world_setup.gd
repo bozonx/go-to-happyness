@@ -7,8 +7,8 @@ var sky_material: ShaderMaterial
 var sun: DirectionalLight3D
 var rain_effect: RainEffect
 var sky_and_weather_controller: SkyAndWeatherController
-var voxel_terrain: VoxelLodTerrain
-var voxel_tool: VoxelTool
+var ground_body: StaticBody3D
+var ground_mesh: MeshInstance3D
 var trail_overlay: MeshInstance3D
 var trail_overlay_material: ShaderMaterial
 var selection_marker: MeshInstance3D
@@ -41,7 +41,7 @@ func build(parent: Node) -> void:
 	_build_lens_flare(parent)
 	_build_rain_effect(parent)
 	_build_sky_and_weather_controller(parent)
-	_build_voxel_terrain(parent)
+	_build_plane_ground(parent)
 	_build_trail_overlay(parent)
 	_build_selection_marker(parent)
 
@@ -156,43 +156,31 @@ func _build_sky_and_weather_controller(parent: Node) -> void:
 	)
 
 
-func _build_voxel_terrain(parent: Node) -> void:
-	if DisplayServer.get_name() == "headless":
-		_build_headless_ground(parent)
-		return
-	voxel_terrain = VoxelLodTerrain.new()
-	voxel_terrain.mesher = VoxelMesherTransvoxel.new()
-	var generator := VoxelGeneratorNoise2D.new()
-	var noise := FastNoiseLite.new()
-	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
-	noise.frequency = 0.025
-	generator.noise = noise
-	generator.channel = VoxelBuffer.CHANNEL_SDF
-	generator.height_start = -0.15
-	generator.height_range = 0.3
-	voxel_terrain.generator = generator
-	voxel_terrain.generate_collisions = true
-	voxel_terrain.view_distance = 192
-	var material := StandardMaterial3D.new()
-	material.albedo_color = Color("5f8953")
-	material.roughness = 0.95
-	voxel_terrain.material = material
-	parent.add_child(voxel_terrain)
-	_camera.add_child(VoxelViewer.new())
-	voxel_tool = voxel_terrain.get_voxel_tool()
-	voxel_tool.channel = VoxelBuffer.CHANNEL_SDF
-
-
-func _build_headless_ground(parent: Node) -> void:
-	var ground := StaticBody3D.new()
-	ground.name = "HeadlessGround"
+func _build_plane_ground(parent: Node) -> void:
+	ground_body = StaticBody3D.new()
+	ground_body.name = "Ground"
 	var collision := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
-	shape.size = Vector3(_board_cells * _cell_size, 0.2, _board_cells * _cell_size)
+	var board_extent: float = maxf(_board_cells * _cell_size * 2.0, 500.0)
+	shape.size = Vector3(board_extent, 0.2, board_extent)
 	collision.shape = shape
 	collision.position.y = -0.1
-	ground.add_child(collision)
-	parent.add_child(ground)
+	ground_body.add_child(collision)
+
+	if DisplayServer.get_name() != "headless":
+		ground_mesh = MeshInstance3D.new()
+		ground_mesh.name = "GroundMesh"
+		var mesh := PlaneMesh.new()
+		mesh.size = Vector2(board_extent, board_extent)
+		ground_mesh.mesh = mesh
+		var material := StandardMaterial3D.new()
+		material.albedo_color = Color("5f8953")
+		material.roughness = 0.95
+		ground_mesh.material_override = material
+		ground_mesh.position.y = 0.0
+		ground_body.add_child(ground_mesh)
+
+	parent.add_child(ground_body)
 
 
 func _build_trail_overlay(parent: Node) -> void:

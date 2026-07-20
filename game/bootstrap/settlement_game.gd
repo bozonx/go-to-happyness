@@ -529,10 +529,6 @@ var pending_canteen_delivery := false
 var pending_canteen_carrier: Citizen
 var pending_canteen_delivery_amount := 0
 var tent_dismantle_progress := -1.0
-var voxel_terrain: VoxelLodTerrain:
-	get: return world_setup.voxel_terrain if world_setup != null else null
-var voxel_tool: VoxelTool:
-	get: return world_setup.voxel_tool if world_setup != null else null
 var nav_grid: NavGrid
 var _route_reachability_cache: Dictionary = {}
 var _route_reachability_cache_revision := -1
@@ -4133,7 +4129,7 @@ func _start_dig_assignment() -> void:
 	_show_territory_overlay(false)
 	selection_material.albedo_color = Color(0.65, 0.42, 0.2, 0.55)
 	_move_selection(selected_world_position)
-	_update_interface("Choose a clear point on the voxel terrain for excavation.")
+	_update_interface("Choose a clear point on the terrain for excavation.")
 
 func _place_dig_site(world_position: Vector3) -> void:
 	var cell := _placement_key(world_position)
@@ -4887,17 +4883,7 @@ func _start_interaction(all: bool) -> void:
 		player_controller.start_interaction(all)
 
 func _dig_voxel_at_crosshair() -> void:
-	if voxel_tool == null:
-		return
-	var origin := camera.global_position
-	var direction := -camera.global_transform.basis.z
-	var hit := voxel_tool.raycast(origin, direction, DIG_REACH)
-	if hit == null:
-		return
-	voxel_tool.mode = VoxelTool.MODE_REMOVE
-	voxel_tool.do_sphere(hit.position, DIG_RADIUS)
-	_mark_excavation_as_navigation_blocked(hit.position, DIG_RADIUS)
-	_refresh_navigation_grid()
+	pass
 
 func _mark_excavation_as_navigation_blocked(center: Vector3, radius: float) -> void:
 	var center_cell := _cell_from_position(center)

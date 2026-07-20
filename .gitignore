@@ -2,6 +2,3 @@
 .godot/
 /android/
 
-# godot_voxel GDExtension — не коммитим (100 МБ бинарников).
-# Ставится скриптом: ./install_voxel.sh
-/addons/zylann.voxel/
