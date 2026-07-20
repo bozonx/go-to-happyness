@@ -44,6 +44,7 @@ Feature ownership:
 4. Use `StringName` or constants for stable IDs. Do not use runtime `ObjectID` as saved or cross-system identity.
 5. Keep service dependencies narrow. Inject the specific state, registry, or callable a service needs.
 6. Emit typed gameplay events at feature boundaries. UI formatting and colours belong in a future UI feature.
+7. Prefer `.tscn` scenes for static node hierarchies; use procedural creation only for dynamic/runtime-generated content.
 
 ## AI system
 
