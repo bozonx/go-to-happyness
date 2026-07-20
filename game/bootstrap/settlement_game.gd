@@ -41,8 +41,8 @@ const CleaningGoalScript = preload("res://game/features/decision/domain/goals/cl
 const RouteRequestScript = preload("res://game/features/routing/application/route_request.gd")
 const TrailFieldServiceScript = preload("res://game/features/routing/application/trail_field_service.gd")
 const TrailOverlayShader = preload("res://game/features/routing/presentation/trail_overlay.gdshader")
-const FirstPersonCrosshairScene = preload("res://game/features/ui/presentation/first_person_crosshair.tscn")
 const WeatherStateScript = preload("res://game/features/simulation/domain/weather_state.gd")
+const CameraControllerScript = preload("res://game/features/world/presentation/camera_controller.gd")
 const FirefliesEffectScript = preload("res://game/features/world/presentation/fireflies_effect.gd")
 const RainEffectScript = preload("res://game/features/world/presentation/rain_effect.gd")
 const EventServiceScript = preload("res://game/features/events/application/event_service.gd")
@@ -54,25 +54,6 @@ const TentEraEventsScript = preload("res://game/features/events/application/tent
 const VillageTerritoryServiceScript = preload("res://game/features/buildings/application/village_territory_service.gd")
 const VillageBoundaryMarkersScript = preload("res://game/features/buildings/presentation/village_boundary_markers.gd")
 const VillageTerritoryOverlayScript = preload("res://game/features/buildings/presentation/village_territory_overlay.gd")
-const TimeControlsPanelScene = preload("res://game/features/ui/presentation/time_controls_panel.tscn")
-const MessageLogPanelScene = preload("res://game/features/ui/presentation/message_log_panel.tscn")
-const InteractionHintPanelScene = preload("res://game/features/ui/presentation/interaction_hint_panel.tscn")
-const SurvivalDecisionPanelScene = preload("res://game/features/settlement/presentation/survival_decision_panel.tscn")
-const CampfireStoryMenuScene = preload("res://game/features/settlement/presentation/campfire_story_menu.tscn")
-const CampfireOrdersMenuScene = preload("res://game/features/settlement/presentation/campfire_orders_menu.tscn")
-const ResearchMenuScene = preload("res://game/features/settlement/presentation/research_menu.tscn")
-const WorkforceMenuScene = preload("res://game/features/decision/presentation/workforce_menu.tscn")
-const PocketTakeMenuScene = preload("res://game/features/citizens/presentation/pocket_take_menu.tscn")
-const HUDScene = preload("res://game/features/ui/presentation/hud.tscn")
-const BuildMenuScene = preload("res://game/features/buildings/presentation/build_menu.tscn")
-const BuildingMenuScene = preload("res://game/features/buildings/presentation/building_menu.tscn")
-const HouseMenuScene = preload("res://game/features/buildings/presentation/house_menu.tscn")
-const SchoolMenuScene = preload("res://game/features/buildings/presentation/school_menu.tscn")
-const CampfireMenuScene = preload("res://game/features/buildings/presentation/campfire_menu.tscn")
-const WarehouseMenuScene = preload("res://game/features/logistics/presentation/warehouse_menu.tscn")
-const MarketMenuScene = preload("res://game/features/logistics/presentation/market_menu.tscn")
-const MaterialsFactoryMenuScene = preload("res://game/features/production/presentation/materials_factory_menu.tscn")
-const EntranceMenuScene = preload("res://game/features/settlement/presentation/entrance_menu.tscn")
 
 
 # The playable routing and construction board must cover the terrain visible
@@ -265,7 +246,9 @@ var tree_positions: Array[Vector3] = []
 var tree_nodes: Dictionary = {}
 var gather_progress_labels: Dictionary = {} # resource Node3D -> Label3D
 var citizens: Array[Citizen] = []
-var camera: Camera3D
+var camera: Camera3D:
+	get: return camera_controller.camera if camera_controller != null else null
+var camera_controller: CameraController
 var sun: DirectionalLight3D
 var world_environment: Environment
 var sky_material: ShaderMaterial
@@ -277,10 +260,18 @@ var lens_flare_visibility := 0.0
 var lens_flare_occlusion := 1.0
 var sky_and_weather_controller: SkyAndWeatherController
 var ambient_spawner: AmbientSpawner
-var camera_target := Vector3.ZERO
-var camera_distance := 30.0
-var camera_yaw := 42.0
-var camera_pitch := 52.0
+var camera_target: Vector3:
+	get: return camera_controller.camera_target if camera_controller != null else Vector3.ZERO
+	set(val): if camera_controller != null: camera_controller.camera_target = val
+var camera_distance: float:
+	get: return camera_controller.camera_distance if camera_controller != null else 30.0
+	set(val): if camera_controller != null: camera_controller.camera_distance = val
+var camera_yaw: float:
+	get: return camera_controller.camera_yaw if camera_controller != null else 42.0
+	set(val): if camera_controller != null: camera_controller.camera_yaw = val
+var camera_pitch: float:
+	get: return camera_controller.camera_pitch if camera_controller != null else 52.0
+	set(val): if camera_controller != null: camera_controller.camera_pitch = val
 var selection_marker: MeshInstance3D
 var selection_material: StandardMaterial3D
 var preview_entrance_marker: MeshInstance3D
@@ -2422,41 +2413,20 @@ func _total_housing_slots() -> int:
 	return building_registry.housing_capacity()
 
 func _update_camera(delta: float) -> void:
-	var move_direction := Vector3.ZERO
-	var yaw_radians := deg_to_rad(camera_yaw)
-	var forward := Vector3(-sin(yaw_radians), 0.0, -cos(yaw_radians))
-	var right := Vector3(cos(yaw_radians), 0.0, -sin(yaw_radians))
-	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP): move_direction += forward
-	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN): move_direction -= forward
-	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT): move_direction += right
-	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT): move_direction -= right
-	if not move_direction.is_zero_approx():
-		camera_target += move_direction.normalized() * 9.0 * delta
-	_update_camera_position()
+	if camera_controller != null:
+		camera_controller.update(delta)
 
 func _pan_camera(mouse_delta: Vector2) -> void:
-	var right := camera.global_transform.basis.x
-	right.y = 0.0
-	right = right.normalized()
-	var forward := -camera.global_transform.basis.z
-	forward.y = 0.0
-	forward = forward.normalized()
-	camera_target -= right * mouse_delta.x * 0.035
-	camera_target += forward * mouse_delta.y * 0.035
-	_update_camera_position()
+	if camera_controller != null:
+		camera_controller.pan(mouse_delta)
 
 func _rotate_camera(mouse_delta: Vector2) -> void:
-	camera_yaw -= mouse_delta.x * 0.35
-	camera_pitch = clampf(camera_pitch - mouse_delta.y * 0.25, 8.0, 85.0)
-	_update_camera_position()
+	if camera_controller != null:
+		camera_controller.rotate_yaw_pitch(mouse_delta)
 
 func _update_camera_position() -> void:
-	if camera == null: return
-	var yaw_radians := deg_to_rad(camera_yaw)
-	var pitch_radians := deg_to_rad(camera_pitch)
-	var offset := Vector3(sin(yaw_radians) * cos(pitch_radians), sin(pitch_radians), cos(yaw_radians) * cos(pitch_radians)) * camera_distance
-	camera.position = camera_target + offset
-	camera.look_at(camera_target)
+	if camera_controller != null:
+		camera_controller.apply_position()
 
 func _cell_center(cell: Vector2i) -> Vector3:
 	return Vector3((cell.x + 0.5) * CELL_SIZE, 0.0, (cell.y + 0.5) * CELL_SIZE)
@@ -2612,14 +2582,6 @@ func _add_message(text: String) -> void:
 		message_log_panel.add_message(text, timestamp)
 
 
-func _create_message_panel(ui: CanvasLayer) -> void:
-	message_log_panel = MessageLogPanelScene.instantiate()
-	ui.add_child(message_log_panel)
-
-
-func _create_messages_modal(ui: CanvasLayer) -> void:
-	pass
-
 # ---------- End message log system --------------------------------------------
 
 func _create_world() -> void:
@@ -2669,9 +2631,8 @@ func _create_world() -> void:
 	sun.light_volumetric_fog_energy = 2.0
 	add_child(sun)
 
-	camera = Camera3D.new()
-	add_child(camera)
-	_update_camera_position()
+	camera_controller = CameraControllerScript.new()
+	add_child(camera_controller)
 	_create_lens_flare()
 	_create_rain_effect()
 	sky_and_weather_controller = SkyAndWeatherController.new()
@@ -3092,24 +3053,6 @@ func _create_context_menu_panel(ui: CanvasLayer, anchor: int, offsets: Vector4, 
 	return null
 
 
-func _create_survival_decision_menu(ui: CanvasLayer) -> void:
-	decision_menu = SurvivalDecisionPanelScene.instantiate()
-	ui.add_child(decision_menu)
-	decision_menu.choice_selected.connect(_resolve_event_decision)
-
-
-func _create_crosshair(ui: CanvasLayer) -> void:
-	crosshair = FirstPersonCrosshairScene.instantiate()
-	crosshair.visible = false
-	ui.add_child(crosshair)
-
-
-func _create_campfire_story_menu(ui: CanvasLayer) -> void:
-	campfire_story_menu = CampfireStoryMenuScene.instantiate()
-	ui.add_child(campfire_story_menu)
-	campfire_story_menu.story_selected.connect(_select_campfire_story)
-	campfire_story_menu.close_requested.connect(_close_campfire_story_menu)
-
 
 func _maybe_present_survival_decision() -> void:
 	if decision_menu == null or decision_menu.visible:
@@ -3212,14 +3155,6 @@ func _update_survival_busy_workers() -> void:
 			worker.idle()
 		survival_busy_until.erase(worker_id)
 		_update_workers()
-
-func _create_time_controls(ui: CanvasLayer) -> void:
-	time_controls_panel = TimeControlsPanelScene.instantiate()
-	ui.add_child(time_controls_panel)
-	time_controls_panel.skip_night_requested.connect(_skip_night)
-	time_controls_panel.skip_to_workday_start_requested.connect(_skip_to_workday_start)
-	time_controls_panel.time_multiplier_changed.connect(_set_time_multiplier)
-
 
 func _can_skip_night() -> bool:
 	if _has_active_night_work_order():
@@ -3386,34 +3321,6 @@ func _set_time_multiplier(multiplier: float) -> void:
 		Engine.time_scale = multiplier
 	_update_interface("Simulation speed set to x%d." % int(multiplier))
 
-func _create_build_menu(ui: CanvasLayer) -> void:
-	var menu: BuildMenu = BuildMenuScene.instantiate()
-	ui.add_child(menu)
-	build_menu = menu
-
-	menu.gui_input_received.connect(_on_build_menu_gui_input)
-	menu.manage_citizen_pressed.connect(_take_control_of_selected_citizen)
-	menu.daily_order_submenu_requested.connect(_open_daily_order_submenu)
-	menu.personal_night_work_toggled.connect(_toggle_selected_citizen_night_work)
-	menu.job_submenu_requested.connect(_open_job_submenu)
-	menu.category_opened.connect(_open_build_category)
-	menu.build_selected.connect(_select_build_mode)
-	menu.role_selected.connect(_set_selected_work_role)
-	_refresh_build_menu()
-
-func _create_school_menu(ui: CanvasLayer) -> void:
-	var menu: SchoolMenu = SchoolMenuScene.instantiate()
-	ui.add_child(menu)
-	school_menu = menu
-	
-	menu.train_requested.connect(_start_school_training)
-	menu.dev_toggled.connect(_toggle_school_development)
-	menu.demolish_requested.connect(func():
-		if selected_school != null:
-			_mark_building_for_demolition(selected_school)
-			school_menu.visible = false
-	)
-
 func _toggle_school_development(role: String, pressed: bool) -> void:
 	if not _player_can_manage_permanent_professions():
 		_show_labor_command_blocked()
@@ -3449,36 +3356,6 @@ func _show_school_menu() -> void:
 	school_menu.update_state(student_label, can_manage, block_tooltip, school_developed_professions)
 	school_menu.visible = true
 	_update_interface("School selected: configure morning study and retraining here.")
-
-func _create_entrance_menu(ui: CanvasLayer) -> void:
-	var menu: EntranceMenu = EntranceMenuScene.instantiate()
-	ui.add_child(menu)
-	entrance_menu = menu
-	entrance_menu_title = menu.title_label
-	entrance_work_button = menu.entrance_work_button
-	entrance_order_modal = menu.entrance_order_modal
-	entrance_order_food_spin = menu.entrance_order_food_spin
-	entrance_order_water_spin = menu.entrance_order_water_spin
-	entrance_order_gloves_spin = menu.entrance_order_gloves_spin
-	entrance_order_bucket_spin = menu.entrance_order_bucket_spin
-	entrance_order_total_label = menu.entrance_order_total_label
-
-	menu.modal_gui_input_received.connect(func(event):
-		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
-			entrance_order_modal.visible = false
-	)
-	menu.get_node("CreateOrderButton").pressed.connect(_show_entrance_order_modal)
-	entrance_work_button.pressed.connect(_send_selected_resident_to_outside_work)
-	menu.get_node("CloseButton").pressed.connect(_close_context_menus)
-	
-	entrance_order_food_spin.value_changed.connect(_update_entrance_order_total)
-	entrance_order_water_spin.value_changed.connect(_update_entrance_order_total)
-	entrance_order_gloves_spin.value_changed.connect(_update_entrance_order_total)
-	entrance_order_bucket_spin.value_changed.connect(_update_entrance_order_total)
-	
-	entrance_order_modal.get_node("SendButton").pressed.connect(_send_entrance_order)
-	entrance_order_modal.get_node("CloseButton").pressed.connect(_hide_entrance_order_modal)
-
 
 func _show_entrance_menu() -> void:
 	if not is_instance_valid(selected_entrance):
@@ -3617,21 +3494,6 @@ func _return_outside_workers() -> void:
 		citizen_ai.request_decision_refresh()
 
 
-func _create_house_menu(ui: CanvasLayer) -> void:
-	var menu: HouseMenu = HouseMenuScene.instantiate()
-	ui.add_child(menu)
-	house_menu = menu
-	house_menu_title = menu.title_label
-	house_spawn_button = menu.spawn_button
-	house_spawn_button.pressed.connect(_spawn_house_citizen)
-	menu.demolish_button.pressed.connect(func(): _mark_building_for_demolition(selected_house))
-
-func _create_materials_factory_menu(ui: CanvasLayer) -> void:
-	var menu: MaterialsFactoryMenu = MaterialsFactoryMenuScene.instantiate()
-	ui.add_child(menu)
-	materials_factory_menu = menu
-	materials_factory_menu_title = menu.title_label
-
 func _show_materials_factory_menu() -> void:
 	if selected_materials_factory == null:
 		return
@@ -3698,13 +3560,6 @@ func _update_building_research(delta: float) -> void:
 		_refresh_build_menu()
 		if research_menu != null and research_menu.visible:
 			_refresh_research_menu()
-
-func _create_research_menu(ui: CanvasLayer) -> void:
-	research_menu = ResearchMenuScene.instantiate()
-	ui.add_child(research_menu)
-	research_menu.close_requested.connect(_hide_research_menu)
-	research_menu.start_requested.connect(_start_research)
-	research_menu.cancel_requested.connect(_cancel_research)
 
 func _show_research_menu() -> void:
 	if research_menu == null:
@@ -6869,26 +6724,6 @@ func _toggle_global_build_menu() -> void:
 		_refresh_build_menu()
 
 
-func _create_campfire_menu(ui: CanvasLayer) -> void:
-	var menu: CampfireMenu = CampfireMenuScene.instantiate()
-	ui.add_child(menu)
-	campfire_menu = menu
-
-	menu.workday_hours_changed.connect(_set_workday_hours)
-	menu.advance_button.pressed.connect(_on_campfire_advance_pressed)
-	menu.orders_button.pressed.connect(_show_campfire_orders_menu)
-	menu.upgrade_button.pressed.connect(_handle_campfire_primary_action)
-	menu.occupancy_button.pressed.connect(_show_workforce_menu)
-	menu.research_button.pressed.connect(_show_research_menu)
-	menu.research_post_button.pressed.connect(_handle_civic_post_assignment)
-	menu.occupy_position_button.pressed.connect(_occupy_selected_campfire_position)
-	menu.accept_button.pressed.connect(_toggle_campfire_acceptance)
-	menu.dismiss_button.pressed.connect(_dismiss_campfire_worker)
-	menu.overtime_button.toggled.connect(_toggle_campfire_worker_overtime)
-	menu.close_btn.pressed.connect(_close_context_menus)
-	menu.story_button.pressed.connect(_show_campfire_story_menu)
-
-
 func _show_campfire_menu() -> void:
 	# Keep any resident the player picked selected so they can be appointed as the
 	# employment officer here, just like at a canteen/school/market.
@@ -6932,17 +6767,6 @@ func _select_campfire_story(story_id: String) -> void:
 			settlement.campfire_story_target_role = ["gather_branches", "gather_grass", "gather_food", "gather_water"].pick_random()
 			settlement.campfire_story_target_day = day_cycle.current_day + 1
 	_update_interface(message)
-
-
-func _create_campfire_orders_menu(ui: CanvasLayer) -> void:
-	campfire_orders_menu = CampfireOrdersMenuScene.instantiate()
-	ui.add_child(campfire_orders_menu)
-	campfire_orders_menu.road_walking_toggled.connect(_set_road_walking_order)
-	campfire_orders_menu.balanced_warehouse_toggled.connect(_set_balanced_warehouse_mode)
-	campfire_orders_menu.night_work_toggled.connect(_toggle_settlement_night_work)
-	campfire_orders_menu.double_time_toggled.connect(_toggle_double_time_order)
-	campfire_orders_menu.cheer_pressed.connect(_cheer_up_settlement)
-	campfire_orders_menu.close_requested.connect(_close_campfire_orders_menu)
 
 
 func _show_campfire_orders_menu() -> void:
@@ -7093,15 +6917,6 @@ func _toggle_selected_citizen_night_work(checked: bool) -> void:
 		if citizen_ai != null:
 			citizen_ai.request_decision_refresh()
 	_refresh_build_menu()
-
-
-func _create_workforce_menu(ui: CanvasLayer) -> void:
-	workforce_menu = WorkforceMenuScene.instantiate()
-	ui.add_child(workforce_menu)
-	workforce_menu.close_requested.connect(_close_workforce_menu)
-	workforce_menu.dismiss_requested.connect(_remove_worker_from_role)
-	workforce_menu.assign_requested.connect(_assign_unemployed_worker)
-	workforce_menu.register_requested.connect(_enable_auto_for_citizen)
 
 
 func _show_workforce_menu() -> void:
@@ -7611,17 +7426,6 @@ func _on_campfire_advance_pressed() -> void:
 		_update_interface("Failed to advance era. Double-check requirements.")
 
 
-func _create_market_menu(ui: CanvasLayer) -> void:
-	var menu: MarketMenu = MarketMenuScene.instantiate()
-	ui.add_child(menu)
-	market_menu = menu
-	market_menu.sell_requested.connect(_sell_resource)
-	market_menu.buy_tool_requested.connect(_buy_tool)
-	market_menu.buy_equipment_requested.connect(_buy_courier_equipment)
-	market_menu.buy_food_requested.connect(_buy_food)
-	market_menu.close_requested.connect(_close_context_menus)
-
-
 func _show_market_menu() -> void:
 	selected_builder = null
 	build_menu.visible = false
@@ -7794,35 +7598,6 @@ func _trade_has_tool_order(tool_id: String) -> bool:
 func _on_trade_delivery_finished(worker: Citizen) -> void:
 	trade_service.on_trade_delivery_finished(worker)
 	courier_dispatcher.complete_for(worker)
-
-func _create_building_menu(ui: CanvasLayer) -> void:
-	var menu: BuildingMenu = BuildingMenuScene.instantiate()
-	ui.add_child(menu)
-	building_menu = menu
-	building_menu_title = menu.title_label
-	building_cook_button = menu.cook_button
-	building_teacher_button = menu.teacher_button
-	building_seller_button = menu.seller_button
-	building_accept_workers_button = menu.accept_workers_button
-	building_dismiss_worker_button = menu.dismiss_worker_button
-	building_overtime_button = menu.overtime_button
-	building_relight_button = menu.relight_button
-	building_upgrade_button = menu.upgrade_button
-	building_demolish_button = menu.demolish_button
-	building_close_button = menu.close_button
-	building_cancel_construction_button = menu.cancel_construction_button
-
-	building_cook_button.pressed.connect(_assign_cook_at_campfire)
-	building_teacher_button.pressed.connect(_assign_teacher_at_school)
-	building_seller_button.pressed.connect(_assign_seller_at_market)
-	building_accept_workers_button.pressed.connect(_toggle_selected_workplace_acceptance)
-	building_dismiss_worker_button.pressed.connect(_dismiss_selected_workplace_worker)
-	building_overtime_button.toggled.connect(_toggle_worker_overtime)
-	building_relight_button.pressed.connect(_relight_selected_fire)
-	building_upgrade_button.pressed.connect(_upgrade_selected_building)
-	building_demolish_button.pressed.connect(_demolish_selected_building)
-	building_close_button.pressed.connect(_close_context_menus)
-	building_cancel_construction_button.pressed.connect(_cancel_selected_construction)
 
 func _show_building_menu() -> void:
 	if not is_instance_valid(selected_building):
@@ -8087,23 +7862,6 @@ func _workplace_priority_position(building: Node3D) -> int:
 		if str(candidate.get_meta("building_type", "")) in _employer_types_for_role(role) and int(candidate.get_meta("workplace_priority", 0)) > priority:
 			position += 1
 	return position
-
-
-func _create_warehouse_menu(ui: CanvasLayer) -> void:
-	var menu: WarehouseMenu = WarehouseMenuScene.instantiate()
-	ui.add_child(menu)
-	warehouse_menu = menu
-	warehouse_menu.accept_toggled.connect(_toggle_warehouse_accept)
-	warehouse_menu.dump_requested.connect(_dump_warehouse_resource)
-	warehouse_menu.cover_requested.connect(_cover_warehouse_with_tarp)
-	warehouse_menu.demolish_requested.connect(func(): _mark_building_for_demolition(selected_warehouse))
-	warehouse_menu.close_requested.connect(_close_context_menus)
-
-func _create_pocket_take_menu(ui: CanvasLayer) -> void:
-	var menu: PocketTakeMenu = PocketTakeMenuScene.instantiate()
-	ui.add_child(menu)
-	pocket_take_menu = menu
-	pocket_take_menu_title = menu.title_label
 
 
 func _show_pocket_take_menu(warehouse_index := -1) -> void:

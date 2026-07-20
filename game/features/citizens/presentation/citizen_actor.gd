@@ -61,90 +61,7 @@ enum State { IDLE, WAITING, TO_TREE, CHOPPING, TO_SAWMILL, SAWING, TO_WAREHOUSE,
 
 const EmploymentState = CitizenEmploymentStateScript.EmploymentState
 
-const MODEL_PREFIXES := {
-	"unassigned": "common",
-	"builder": "worker",
-	"forestry": "worker",
-	"farming": "worker",
-	"excavation": "worker",
-	"courier": "courier",
-	"cook": "common",
-	"teacher": "teacher",
-	"factory_worker": "worker",
-	"engineer": "worker",
-	"seller": "common",
-	"craftsman": "worker",
-	"official": "official",
-}
-
-const RANDOM_HEADS_MALE := [
-	"common-male", "courier-male", "official-male", "teacher-male", "worker-male"
-]
-const RANDOM_HEADS_FEMALE := [
-	"common-female", "courier-female", "official-female", "teacher-female", "worker-female"
-]
-
 const DAILY_ORDER_ROLES := CitizenEmploymentStateScript.DAILY_ORDER_ROLES
-
-const SKIN_COLORS := [
-	Color("f1976e"),
-	Color("f1c09a"),
-	Color("af6142"),
-	Color("d8a27d"),
-	Color("753a22"),
-]
-
-const HAIR_COLORS := [
-	Color("1c1d1f"),
-	Color("3b2219"),
-	Color("7a431d"),
-	Color("b58135"),
-	Color("5a5c5e"),
-]
-
-const CLOTHING_COLORS := [
-	Color("1e3d59"),
-	Color("ff6e40"),
-	Color("17b890"),
-	Color("868ba2"),
-	Color("4a4552"),
-	Color("a83232"),
-	Color("d4af37"),
-	Color("228b22"),
-]
-
-const STATE_ANIMATIONS := {
-	State.IDLE: "idle",
-	State.WAITING: "idle",
-	State.CHOPPING: "interact-right",
-	State.SAWING: "interact-right",
-	State.CONSTRUCTING: "interact-right",
-	State.EXCAVATING: "interact-right",
-	State.GATHERING: "interact-right",
-	State.CLEANING_PILE: "interact-right",
-	State.EATING: "sit",
-	State.RESTING: "sit",
-	State.STUDYING: "sit",
-	State.RELAXING: "sit",
-	State.USING_TOILET: "crouch",
-	State.USING_BUSH: "crouch",
-	State.FACTORY_WORK: "interact-right",
-	State.CRAFT_WORK: "interact-right",
-	State.SCHOOL_WORK: "interact-right",
-	State.MARKET_WORK: "interact-right",
-	State.OFFICIAL_WORK: "interact-right",
-	State.RESEARCHING: "interact-right",
-	State.EMPLOYMENT_PROCESSING: "interact-right",
-	State.AI_MOVING: "walk",
-	State.WORK_POSITION: "interact-right",
-	State.LEAVING: "walk",
-}
-
-# These clips represent persistent states, not one-off gestures. Imported GLB
-# animations default to non-looping, so configure the runtime copy explicitly.
-const LOOPING_ANIMATIONS := [
-	"idle", "walk", "sprint", "crouch", "sit", "interact-right",
-]
 
 signal state_changed(citizen: Citizen, previous_state: int, next_state: int)
 
@@ -313,11 +230,6 @@ var current_character_mesh: Node3D
 var current_body_mesh: MeshInstance3D
 var current_head_mesh: MeshInstance3D
 var animation_player: AnimationPlayer
-# A transient full-body gesture (e.g. "pick-up") that plays once and then hands
-# control back to the state/locomotion animation. Cleared as soon as it elapses
-# or the citizen starts moving.
-var _one_shot_anim: String = ""
-var _one_shot_remaining: float = 0.0
 var skin_color: Color = Color.WHITE
 var shirt_color: Color = Color.WHITE
 var pants_color: Color = Color.WHITE
@@ -493,28 +405,26 @@ var label_distance_alpha := 1.0
 
 const CitizenToiletHandlerScript = preload("res://game/features/citizens/presentation/citizen_toilet_handler.gd")
 const CitizenTaskExecutorScript = preload("res://game/features/citizens/presentation/citizen_task_executor.gd")
+const CitizenVisualBuilderScript = preload("res://game/features/citizens/presentation/citizen_visual_builder.gd")
+const CitizenAnimationControllerScript = preload("res://game/features/citizens/presentation/citizen_animation_controller.gd")
+const CitizenIdleIndicatorScript = preload("res://game/features/citizens/presentation/citizen_idle_indicator.gd")
+const CitizenEfficiencyServiceScript = preload("res://game/features/citizens/application/citizen_efficiency_service.gd")
+const CitizenSatisfactionServiceScript = preload("res://game/features/citizens/application/citizen_satisfaction_service.gd")
 
 var toilet_handler: RefCounted = CitizenToiletHandlerScript.new()
 var task_executor: RefCounted = CitizenTaskExecutorScript.new()
+var visual_builder: RefCounted = CitizenVisualBuilderScript.new()
+var animation_controller: RefCounted = CitizenAnimationControllerScript.new()
+var idle_indicator_controller: RefCounted = CitizenIdleIndicatorScript.new()
+var efficiency_service: RefCounted = CitizenEfficiencyServiceScript.new()
+var satisfaction_service: RefCounted = CitizenSatisfactionServiceScript.new()
 
 signal employment_processing_finished(citizen: Citizen)
 
 func _ready() -> void:
 
-
-
 	if gender.is_empty():
 		gender = "male" if randf() > 0.5 else "female"
-	if skin_color == Color.WHITE:
-		skin_color = SKIN_COLORS.pick_random()
-	if shirt_color == Color.WHITE:
-		shirt_color = CLOTHING_COLORS.pick_random()
-	if pants_color == Color.WHITE:
-		pants_color = CLOTHING_COLORS.pick_random()
-		while pants_color == shirt_color:
-			pants_color = CLOTHING_COLORS.pick_random()
-	if hair_color == Color.WHITE:
-		hair_color = HAIR_COLORS.pick_random()
 	skills = {
 		"construction": randf_range(0.0, 0.1),
 		"forestry": randf_range(0.0, 0.1),
@@ -528,7 +438,7 @@ func _ready() -> void:
 	add_to_group("citizens")
 	_setup_collision()
 	_setup_selector()
-	_setup_visuals()
+	visual_builder.setup_visuals(self)
 
 func _setup_collision() -> void:
 	# Bodies collide with terrain and buildings, but not with each other.
@@ -562,304 +472,20 @@ func _setup_selector() -> void:
 	selector.add_child(selector_shape)
 	add_child(selector)
 
-func _setup_visuals() -> void:
-	_update_character_model()
-	_setup_idle_indicator()
-	_setup_privacy_blur()
-
-func _setup_idle_indicator() -> void:
-	idle_indicator = Label3D.new()
-	idle_indicator.position = Vector3(0.0, 2.05, 0.0)
-	idle_indicator.text = "No permanent work"
-	idle_indicator.font_size = 32
-	idle_indicator.outline_size = 6
-	idle_indicator.modulate = Color("f0c45d")
-	idle_indicator.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	idle_indicator.no_depth_test = true
-	idle_indicator.visible = false
-	add_child(idle_indicator)
-
-
-func _setup_privacy_blur() -> void:
-	var blur := MeshInstance3D.new()
-	blur.name = "PrivacyBlur"
-	blur.visible = false
-	blur.position = Vector3(0.0, 1.1, 0.0)
-	blur.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-
-	var quad := QuadMesh.new()
-	quad.size = Vector2(2.2, 2.4)
-	blur.mesh = quad
-
-	var material := ShaderMaterial.new()
-	material.shader = load("res://game/features/citizens/presentation/privacy_pixelize.gdshader")
-	material.render_priority = 1
-	blur.material_override = material
-
-	add_child(blur)
-	_privacy_blur = blur
-
-
-func _setup_body_mesh() -> void:
-	var body := MeshInstance3D.new()
-	body.name = "FallbackBody"
-	var body_mesh := CapsuleMesh.new()
-	body_mesh.radius = 0.25
-	body_mesh.height = 1.15
-	body.mesh = body_mesh
-	body.position.y = 0.65
-	body_material = StandardMaterial3D.new()
-	body_material.albedo_color = Color("5d92b2")
-	body.material_override = body_material
-	add_child(body)
-
-func _setup_head_mesh() -> void:
-	var head := MeshInstance3D.new()
-	head.name = "FallbackHead"
-	var head_mesh := SphereMesh.new()
-	head_mesh.radius = 0.25
-	head_mesh.height = 0.5
-	head.mesh = head_mesh
-	head.position.y = 1.5
-	var head_material := StandardMaterial3D.new()
-	head_material.albedo_color = Color("b8d8c1")
-	head.material_override = head_material
-	add_child(head)
-
-static var _shared_shader_material: ShaderMaterial
-static var _model_scene_cache: Dictionary = {}
-static var _head_mesh_cache: Dictionary = {}
-
-func _resolve_model_prefix() -> String:
-	# The hero always wears the constable model, regardless of their civic role.
-	if is_hero:
-		return "policeman"
-	return MODEL_PREFIXES.get(specialization, "common")
-
-func _update_character_model() -> void:
-	var prefix := _resolve_model_prefix()
-	var path := "res://assets/characters/%s-%s.glb" % [prefix, gender]
-	if DisplayServer.get_name() == "headless":
-		if is_instance_valid(current_character_mesh):
-			current_character_mesh.queue_free()
-			current_character_mesh = null
-		current_body_mesh = null
-		current_head_mesh = null
-		animation_player = null
-		current_model_path = ""
-		_setup_fallback_mesh()
-		return
-		
-	if not FileAccess.file_exists(path):
-		path = "res://assets/characters/common-%s.glb" % [gender]
-		
-	if not FileAccess.file_exists(path):
-		current_body_mesh = null
-		current_head_mesh = null
-		animation_player = null
-		current_model_path = ""
-		_setup_fallback_mesh()
-		return
-		
-	if current_model_path == path:
-		_update_mesh_colors()
-		return
-		
-	# Clean up fallback mesh or previous model if it exists
-	if is_instance_valid(current_character_mesh):
-		current_character_mesh.queue_free()
-		current_character_mesh = null
-	current_body_mesh = null
-	current_head_mesh = null
-	animation_player = null
-	
-	var fallback_body = get_node_or_null("FallbackBody")
-	if fallback_body:
-		fallback_body.queue_free()
-	var fallback_head = get_node_or_null("FallbackHead")
-	if fallback_head:
-		fallback_head.queue_free()
-	var dummy_mesh = get_node_or_null("VisualMeshAnchor")
-	if dummy_mesh:
-		dummy_mesh.queue_free()
-		
-	var scene := _character_scene(path)
-	if scene != null:
-		var inst := scene.instantiate() as Node3D
-		# Rotate 180 degrees to align face with movement direction (-Z forward)
-		inst.rotation.y = PI
-		inst.scale = Vector3(2.65, 2.65, 2.65)
-		
-		# Regular citizens get a stable, randomly assigned head; the hero keeps the
-		# constable model's own head so their appearance never shuffles.
-		if not is_hero:
-			_randomize_head_on_instance(inst)
-			
-		add_child(inst)
-		current_character_mesh = inst
-		current_model_path = path
-		
-		# Apply shader material and colors
-		if _shared_shader_material == null:
-			_shared_shader_material = ShaderMaterial.new()
-			_shared_shader_material.shader = load("res://game/features/citizens/presentation/citizen_color_swap.gdshader")
-			_shared_shader_material.set_shader_parameter("albedo_texture", load("res://assets/characters/Textures/colormap.png"))
-			
-		current_body_mesh = _find_node_by_name(inst, "body-mesh") as MeshInstance3D
-		current_head_mesh = _find_node_by_name(inst, "head-mesh") as MeshInstance3D
-		if current_body_mesh:
-			current_body_mesh.material_override = _shared_shader_material
-		if current_head_mesh:
-			current_head_mesh.material_override = _shared_shader_material
-			current_head_mesh.visible = head_visible
-			
-		_update_mesh_colors()
-		
-		# To satisfy existing startup tests that assert an immediate MeshInstance3D child exists:
-		var anchor := MeshInstance3D.new()
-		anchor.name = "VisualMeshAnchor"
-		anchor.visible = false
-		add_child(anchor)
-		
-		# Set up animations
-		animation_player = inst.get_node_or_null("AnimationPlayer") as AnimationPlayer
-		if animation_player != null:
-			for anim_name in LOOPING_ANIMATIONS:
-				var anim = animation_player.get_animation(anim_name)
-				if anim != null:
-					anim.loop_mode = Animation.LOOP_LINEAR
-			_play_animation("idle")
-
-func _update_mesh_colors() -> void:
-	if current_character_mesh == null:
-		return
-	# Clothing is only recoloured on the generic "common" citizen, so the tailored
-	# professional models (worker/teacher/courier/official) keep their uniform. The
-	# hero keeps everything the constable texture provides and only takes a skin tone.
-	var uses_common_model := _resolve_model_prefix() == "common"
-	var swap_clothing := 1.0 if uses_common_model and not is_hero else 0.0
-	var swap_hair := 0.0 if is_hero else 1.0
-	for mesh in [current_body_mesh, current_head_mesh]:
-		if mesh == null:
-			continue
-		mesh.set_instance_shader_parameter("skin_color", skin_color)
-		mesh.set_instance_shader_parameter("shirt_color", shirt_color)
-		mesh.set_instance_shader_parameter("pants_color", pants_color)
-		mesh.set_instance_shader_parameter("hair_color", hair_color)
-		mesh.set_instance_shader_parameter("swap_skin", 1.0)
-		mesh.set_instance_shader_parameter("swap_shirt", swap_clothing)
-		mesh.set_instance_shader_parameter("swap_pants", swap_clothing)
-		mesh.set_instance_shader_parameter("swap_hair", swap_hair)
-
-func _randomize_head_on_instance(inst: Node3D) -> void:
-	# Pick the donor head exactly once; every later rebuild reuses it so the face
-	# stays constant for the citizen's whole life.
-	if head_model_name.is_empty():
-		var pool := RANDOM_HEADS_MALE if gender == "male" else RANDOM_HEADS_FEMALE
-		head_model_name = pool.pick_random()
-	var donor_mesh := _donor_head_mesh(head_model_name)
-	var target_head = _find_node_by_name(inst, "head-mesh") as MeshInstance3D
-	if donor_mesh != null and target_head != null:
-		target_head.mesh = donor_mesh
-
-static func _character_scene(path: String) -> PackedScene:
-	if not _model_scene_cache.has(path):
-		_model_scene_cache[path] = load(path) as PackedScene
-	return _model_scene_cache[path] as PackedScene
-
-static func _donor_head_mesh(model_name: String) -> Mesh:
-	if _head_mesh_cache.has(model_name):
-		return _head_mesh_cache[model_name] as Mesh
-	var path := "res://assets/characters/%s.glb" % model_name
-	var mesh: Mesh = null
-	if FileAccess.file_exists(path):
-		var donor_scene := _character_scene(path)
-		if donor_scene != null:
-			var donor_inst := donor_scene.instantiate()
-			var donor_head = _find_node_by_name(donor_inst, "head-mesh") as MeshInstance3D
-			if donor_head != null:
-				mesh = donor_head.mesh
-			donor_inst.free()
-	_head_mesh_cache[model_name] = mesh
-	return mesh
-
-static func _find_node_by_name(node: Node, node_name: String) -> Node:
-	if node.name == node_name:
-		return node
-	for child in node.get_children():
-		var res = _find_node_by_name(child, node_name)
-		if res:
-			return res
-	return null
-
-func _setup_fallback_mesh() -> void:
-	if not has_node("FallbackBody"):
-		_setup_body_mesh()
-	if not has_node("FallbackHead"):
-		_setup_head_mesh()
-
-# Queue a one-shot gesture (e.g. picking an item up). It plays to completion and
-# then locomotion/state animation resumes; movement cancels it immediately.
 func play_one_shot(anim_name: String) -> void:
-	if animation_player == null:
-		return
-	var anim := animation_player.get_animation(anim_name)
-	if anim == null:
-		return
-	_one_shot_anim = anim_name
-	_one_shot_remaining = anim.length
-	animation_player.play(anim_name, 0.15)
+	animation_controller.play_one_shot(self, anim_name)
 
 func play_hunting_shot() -> void:
-	for anim_name in ["shoot", "shot", "rifle-shot", "interact-right"]:
-		if animation_player != null and animation_player.get_animation(anim_name) != null:
-			play_one_shot(anim_name)
-			return
-
-# Locomotion picker shared by AI and the player-controlled hero. Walking speeds
-# past the sprint threshold (bicycle couriers, hero holding shift) break into a run.
-func _locomotion_animation(horizontal_speed: float) -> String:
-	if horizontal_speed <= 0.15:
-		return ""
-	return "sprint" if horizontal_speed > WALK_SPEED * 1.3 else "walk"
+	animation_controller.play_hunting_shot(self)
 
 func _play_animation(anim_to_play: String) -> void:
-	if animation_player == null or animation_player.get_animation(anim_to_play) == null:
-		return
-	# A non-looping imported clip can have the right current name after it has
-	# ended. Restart it instead of leaving the character frozen in its last pose.
-	if animation_player.current_animation != anim_to_play or not animation_player.is_playing():
-		animation_player.play(anim_to_play, 0.2)
+	animation_controller.play_animation(self, anim_to_play)
 
 func _update_animations(delta: float) -> void:
-	if animation_player == null:
-		return
-	var horizontal_speed := Vector3(velocity.x, 0.0, velocity.z).length()
-	# A running one-shot owns the rig until it ends or the citizen starts moving.
-	if not _one_shot_anim.is_empty():
-		_one_shot_remaining -= delta
-		if _one_shot_remaining > 0.0 and horizontal_speed <= 0.15:
-			return
-		_one_shot_anim = ""
-	var locomotion := _locomotion_animation(horizontal_speed)
-	var state_anim := STATE_ANIMATIONS.get(state, "idle") as String
-	if state == State.CONSTRUCTING and is_waiting_for_materials:
-		state_anim = "idle"
-	var anim_to_play := locomotion if not locomotion.is_empty() else state_anim
-	_play_animation(anim_to_play)
+	animation_controller.update_animations(self, delta)
 
-# Driven every frame by the settlement while the hero is under direct control, so
-# the player character animates (walk/run/jump/fall) just like an AI citizen.
 func drive_player_animation(is_sprinting: bool) -> void:
-	if animation_player == null:
-		return
-	var horizontal_speed := Vector3(velocity.x, 0.0, velocity.z).length()
-	var anim_to_play := "idle"
-	if not is_on_floor():
-		anim_to_play = "jump" if velocity.y > 0.5 else "fall"
-	elif horizontal_speed > 0.15:
-		anim_to_play = "sprint" if is_sprinting else "walk"
-	_play_animation(anim_to_play)
+	animation_controller.drive_player_animation(self, is_sprinting)
 
 func start_production_cycle(next_resource_type: String, source: Vector3, workplace: Vector3, warehouse: Vector3, next_uses_courier := false, access_pos := Vector3.INF) -> void:
 	if is_player_controlled:
@@ -2075,7 +1701,7 @@ func set_hero(hero: bool) -> void:
 		# _ready() already built a regular citizen model; rebuild it as the constable
 		# so the hero is instantly recognisable (skin-only recolour, fixed head).
 		if current_model_path != "":
-			_update_character_model()
+			visual_builder.update_character_model(self)
 
 func set_head_visible(value: bool) -> void:
 	head_visible = value
@@ -2324,34 +1950,20 @@ func setup_specialization(next_specialization: String) -> void:
 	specialization = next_specialization
 	if body_material != null:
 		body_material.albedo_color = Color("e6c857") if is_hero else CitizenRoleProfile.color_for(specialization)
-	_update_character_model()
+	visual_builder.update_character_model(self)
 
 func get_efficiency(role: String) -> float:
-	var core_skill := get_core_skill_for_role(role)
-	var S := float(skills.get(core_skill, 0.0)) if not core_skill.is_empty() else 0.5
-	
-	# Determine era index (0 to 5)
 	var era_index := 0
 	if simulation != null and simulation.settlement != null:
 		era_index = int(simulation.settlement.era)
-	
-	# Max penalty is era-dependent
-	var max_penalty := 0.15 + 0.11 * float(era_index)
-	var skill_efficiency_factor := lerpf(1.0 - max_penalty, 1.30, S)
-	
-	# Farmer perk bonus
-	if role == "farming" and has_perk("farming"):
-		skill_efficiency_factor += 0.15
-		
-	var satisfaction_factor := lerpf(0.45, 1.0, satisfaction / 100.0)
-	var meal_bonus := 0.15 if buffs.has("canteen_meal") else 0.0
-	var efficiency := skill_efficiency_factor * satisfaction_factor * (1.0 + meal_bonus)
-	efficiency *= lerpf(1.0, 0.55, fatigue / 100.0)
-	if is_jack_of_all_trades and role in ["construction", "gather_branches", "gather_grass", "gather_food", "forestry", "farming", "excavation"]:
-		efficiency *= 1.30
+	var story_fn := Callable()
 	if simulation != null:
-		efficiency *= simulation.campfire_story_efficiency_multiplier(role)
-	return efficiency
+		story_fn = Callable(simulation, "campfire_story_efficiency_multiplier")
+	return efficiency_service.compute_efficiency(
+		role, skills, satisfaction, fatigue, buffs,
+		Callable(self, "has_perk"), is_jack_of_all_trades,
+		era_index, story_fn
+	)
 
 func role_label() -> String:
 	var role := CitizenRoleProfile.label_for(specialization)
@@ -2392,101 +2004,11 @@ func begin_waiting() -> void:
 	wait_recheck = WAIT_RECHECK_INTERVAL
 
 func _update_idle_indicator() -> void:
-	if is_player_controlled:
-		idle_indicator.visible = false
-		return
-	if is_dangerously_tired():
-		idle_indicator.visible = true
-		idle_indicator.text = "Dangerously tired"
-		idle_indicator.modulate = Color("e57373")
-		return
-	var visible_state := _displayed_state
-	if visible_state == State.TO_TOILET:
-		idle_indicator.visible = true
-		idle_indicator.text = "Going to Toilet"
-		idle_indicator.modulate = Color("a5d6a7")
-		return
-	if visible_state == State.WAITING_FOR_TOILET:
-		idle_indicator.visible = true
-		idle_indicator.text = "Waiting in Queue"
-		idle_indicator.modulate = Color("ffb74d")
-		return
-	if visible_state == State.USING_TOILET:
-		idle_indicator.visible = true
-		var pct := int((1.0 - toilet_timer.remaining / TOILET_USE_DURATION) * 100.0)
-		idle_indicator.text = "Using Toilet (%d%%)" % clamp(pct, 0, 100)
-		idle_indicator.modulate = Color("81c784")
-		return
-	if visible_state == State.TO_BUSH:
-		idle_indicator.visible = true
-		idle_indicator.text = "Going to %s" % ("Tree" if toilet_relief_type == "tree" else "Grass")
-		idle_indicator.modulate = Color("a5d6a7")
-		return
-	if visible_state == State.USING_BUSH:
-		idle_indicator.visible = true
-		var pct := int((1.0 - toilet_timer.remaining / TOILET_USE_DURATION) * 100.0)
-		idle_indicator.text = "Relieving by %s (%d%%)" % ["Tree" if toilet_relief_type == "tree" else "Grass", clamp(pct, 0, 100)]
-		idle_indicator.modulate = Color("81c784")
-		return
-	if visible_state == State.RESEARCHING:
-		idle_indicator.visible = true
-		idle_indicator.text = "Researching"
-		idle_indicator.modulate = Color("6ab0df")
-		return
-	if visible_state == State.WORK_POSITION:
-		idle_indicator.visible = true
-		var display_role := work_position_role.replace("_", " ")
-		idle_indicator.text = "Working: %s" % display_role if not display_role.is_empty() else "At work position"
-		idle_indicator.modulate = Color("7bb7e8")
-		return
-	if visible_state == State.WAITING:
-		idle_indicator.visible = true
-		var remaining_hours := int(task_timer.remaining / WAIT_DURATION) + 1
-		idle_indicator.text = "No work (waiting %dh)" % clamp(remaining_hours, 1, 24)
-		idle_indicator.modulate = Color("f0873d")
-		return
-	if visible_state == State.AI_MOVING:
-		idle_indicator.visible = true
-		idle_indicator.text = "Going to: %s" % ai_activity_label if not ai_activity_label.is_empty() else "Moving"
-		idle_indicator.modulate = Color("7bb7e8")
-		return
-	if visible_state != State.IDLE:
-		idle_indicator.visible = true
-		idle_indicator.text = _state_display_name(visible_state)
-		idle_indicator.modulate = Color("7bb7e8")
-		return
-	idle_indicator.visible = true
-	match employment_state:
-		EmploymentState.EMPLOYED:
-			idle_indicator.text = "Employed: %s%s" % [permanent_role.replace("_", " "), _employment_workplace_suffix(employment_workplace)]
-			idle_indicator.modulate = Color("76c893")
-		EmploymentState.REGISTERING:
-			var registration_label := "no permanent work" if pending_employment_role.is_empty() else pending_employment_role.replace("_", " ")
-			idle_indicator.text = "Registering: %s%s" % [registration_label, _employment_workplace_suffix(pending_employment_workplace)]
-			idle_indicator.modulate = Color("7bb7e8")
-		EmploymentState.UNREGISTERED:
-			idle_indicator.text = "Unregistered"
-			idle_indicator.modulate = Color("f0873d")
-		_:
-			var visible_role := daily_order_role
-			var automatic := false
-			if visible_role.is_empty() and not active_role.is_empty():
-				visible_role = active_role
-				automatic = true
-			if is_daily_order_role(visible_role):
-				idle_indicator.text = "Daily order: %s" % visible_role.replace("_", " ")
-			elif visible_role.is_empty():
-				idle_indicator.text = "No permanent work"
-			else:
-				idle_indicator.text = "Work order: %s%s" % [visible_role.replace("_", " "), " (planned)" if automatic else ""]
-			idle_indicator.modulate = Color("f0c45d")
+	idle_indicator_controller.update_idle_indicator(self)
 
 
 func _update_privacy_blur() -> void:
-	if _privacy_blur == null:
-		return
-	var active := not is_player_controlled and state == State.USING_BUSH
-	_privacy_blur.visible = active
+	idle_indicator_controller.update_privacy_blur(self)
 
 
 func _advance_state_display(delta: float) -> void:
@@ -2501,16 +2023,11 @@ func _advance_state_display(delta: float) -> void:
 
 
 func _state_display_name(displayed_state: int) -> String:
-	var state_names := State.keys()
-	if displayed_state < 0 or displayed_state >= state_names.size():
-		return "Unknown state"
-	return str(state_names[displayed_state]).capitalize().replace("_", " ")
+	return idle_indicator_controller.state_display_name(displayed_state)
 
 
 func _employment_workplace_suffix(workplace: Node3D) -> String:
-	if not is_instance_valid(workplace):
-		return ""
-	return " (%s)" % str(workplace.get_meta("building_type", "site")).replace("_", " ")
+	return idle_indicator_controller.employment_workplace_suffix(workplace)
 
 func assign_home(next_home: Node3D) -> void:
 	home = next_home
@@ -2579,55 +2096,31 @@ func _update_satisfaction(delta: float) -> void:
 	satisfaction_tick += delta
 	if satisfaction_tick < 1.0:
 		return
-	if active_role.is_empty():
-		satisfaction = minf(get_satisfaction_cap(), satisfaction + 1.2 * satisfaction_tick)
-		satisfaction_tick = 0.0
-		return
-		
-	# Satisfaction rules based on job matching and developed skills
-	var core_pref_role := get_core_skill_for_role(preferred_role())
-	var core_active_role := get_core_skill_for_role(active_role)
-	var change := 0.0
-	
-	if overtime_mode:
-		change -= 3.0
-	
-	if not core_active_role.is_empty() and core_active_role == core_pref_role:
-		change = 1.2
-	else:
-		var has_developed := false
-		for val in skills.values():
-			if float(val) > DEVELOPED_SKILL_THRESHOLD:
-				has_developed = true
-				break
-		if has_developed:
-			change = -2.0
-		else:
-			change = 0.0
-			
-	satisfaction = clampf(satisfaction + change * satisfaction_tick, 0.0, get_satisfaction_cap())
-	
-	# Skill growth with mentor synergy
-	var core_skill := get_core_skill_for_role(active_role)
-	if not core_skill.is_empty():
-		var growth_multiplier := 1.0
-		if simulation != null:
-			for other in simulation.citizens:
-				if other != self and not other.is_player_controlled:
-					var other_core: String = other.get_core_skill_for_role(other.active_role)
-					if other_core == core_skill and float(other.skills.get(core_skill, 0.0)) >= 0.80:
-						if global_position.distance_to(other.global_position) <= 5.0:
-							growth_multiplier = 1.5
-							break
-							
-		var current_val := float(skills.get(core_skill, 0.0))
-		var skill_cap := 1.0
-		if has_active_daily_order() and core_skill == "construction":
-			skill_cap = DAILY_CONSTRUCTION_SKILL_CAP
-		skills[core_skill] = minf(skill_cap, current_val + SKILL_GROWTH_PER_SECOND_WORK * growth_multiplier * satisfaction_tick)
-		practiced_today[core_skill] = true
-		
-	satisfaction_tick = 0.0
+	var mentor_fn := Callable()
+	if simulation != null:
+		mentor_fn = Callable(self, "_check_mentor_synergy")
+	var result: RefCounted = satisfaction_service.compute_tick(
+		active_role, preferred_role(), overtime_mode,
+		satisfaction, satisfaction_tick, skills,
+		get_satisfaction_cap(), has_active_daily_order(),
+		mentor_fn, global_position
+	)
+	satisfaction = result.satisfaction
+	satisfaction_tick = result.satisfaction_tick
+	skills = result.skills
+	for skill_name in result.practiced_skills:
+		practiced_today[skill_name] = true
+
+func _check_mentor_synergy(core_skill: String, position: Vector3) -> float:
+	if simulation == null:
+		return 1.0
+	for other in simulation.citizens:
+		if other != self and not other.is_player_controlled:
+			var other_core: String = other.get_core_skill_for_role(other.active_role)
+			if other_core == core_skill and float(other.skills.get(core_skill, 0.0)) >= 0.80:
+				if position.distance_to(other.global_position) <= 5.0:
+					return 1.5
+	return 1.0
 
 
 func assign_gathering(res_type: String, source_pos: Vector3, delivery_pos: Vector3, access_pos := Vector3.INF) -> void:
