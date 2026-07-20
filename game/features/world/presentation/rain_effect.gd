@@ -24,9 +24,16 @@ func _ready() -> void:
 	if DisplayServer.get_name() == "headless":
 		set_process(false)
 		return
-	_create_streak_layer()
-	_create_near_drop_layer()
-	_create_splash_layer()
+	_streaks = get_node_or_null("RainStreaks") as GPUParticles3D
+	_near_drops = get_node_or_null("RainNearDrops") as GPUParticles3D
+	_splashes = get_node_or_null("RainSplashes") as GPUParticles3D
+	if _streaks == null:
+		_create_streak_layer()
+	if _near_drops == null:
+		_create_near_drop_layer()
+	if _splashes == null:
+		_create_splash_layer()
+	_apply_dynamic_params()
 	_set_layer_intensity(0.0)
 	visible = false
 	set_process(true)
@@ -81,6 +88,23 @@ func _create_streak_layer() -> void:
 	quad.material = _create_particle_material(Color("b6d0df", 0.38), BaseMaterial3D.BILLBOARD_PARTICLES)
 	_streaks.draw_pass_1 = quad
 	add_child(_streaks)
+
+
+func _apply_dynamic_params() -> void:
+	if _streaks != null:
+		_streaks.amount = streak_amount
+		_streaks.visibility_aabb = AABB(Vector3(-follow_radius - 4.0, -18.0, -follow_radius - 4.0), Vector3((follow_radius + 4.0) * 2.0, 34.0, (follow_radius + 4.0) * 2.0))
+		var streak_mat := _streaks.process_material as ParticleProcessMaterial
+		if streak_mat != null:
+			streak_mat.emission_box_extents = Vector3(follow_radius, 1.4, follow_radius)
+	if _near_drops != null:
+		_near_drops.amount = near_drop_amount
+	if _splashes != null:
+		_splashes.amount = splash_amount
+		_splashes.visibility_aabb = AABB(Vector3(-follow_radius * 0.75, -0.5, -follow_radius * 0.75), Vector3(follow_radius * 1.5, 1.8, follow_radius * 1.5))
+		var splash_mat := _splashes.process_material as ParticleProcessMaterial
+		if splash_mat != null:
+			splash_mat.emission_box_extents = Vector3(follow_radius * 0.55, 0.03, follow_radius * 0.55)
 
 
 func _create_near_drop_layer() -> void:

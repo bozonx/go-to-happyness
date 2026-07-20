@@ -1,6 +1,10 @@
 class_name WorldSetup
 extends Node
 
+const SelectionMarkerScene = preload("res://game/features/world/presentation/selection_marker.tscn")
+const PreviewEntranceMarkerScene = preload("res://game/features/world/presentation/preview_entrance_marker.tscn")
+const RainEffectScene = preload("res://game/features/world/presentation/rain_effect.tscn")
+
 var environment_node: WorldEnvironment
 var world_environment: Environment
 var sky_material: ShaderMaterial
@@ -137,7 +141,7 @@ func _build_lens_flare(parent: Node) -> void:
 func _build_rain_effect(parent: Node) -> void:
 	if DisplayServer.get_name() == "headless":
 		return
-	rain_effect = RainEffect.new()
+	rain_effect = RainEffectScene.instantiate() as RainEffect
 	rain_effect.name = "RainEffect"
 	rain_effect.set_camera(_camera)
 	parent.add_child(rain_effect)
@@ -182,16 +186,8 @@ func _build_trail_overlay(parent: Node) -> void:
 
 
 func _build_selection_marker(parent: Node) -> void:
-	selection_marker = MeshInstance3D.new()
-	var marker_mesh := BoxMesh.new()
-	marker_mesh.size = Vector3(1.0, 0.04, 1.0)
-	selection_marker.mesh = marker_mesh
-	selection_material = StandardMaterial3D.new()
-	selection_material.albedo_color = Color(0.95, 0.79, 0.24, 0.55)
-	selection_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	selection_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	selection_marker.material_override = selection_material
-	selection_marker.visible = false
+	selection_marker = SelectionMarkerScene.instantiate() as MeshInstance3D
+	selection_material = selection_marker.material_override as StandardMaterial3D
 	parent.add_child(selection_marker)
 	preview_entrance_marker = _create_preview_entrance_marker(Color("4ecb71"))
 	preview_back_entrance_marker = _create_preview_entrance_marker(Color("30343a"))
@@ -200,16 +196,8 @@ func _build_selection_marker(parent: Node) -> void:
 
 
 func _create_preview_entrance_marker(color: Color) -> MeshInstance3D:
-	var marker := MeshInstance3D.new()
-	var mesh := CylinderMesh.new()
-	mesh.top_radius = 0.32
-	mesh.bottom_radius = 0.32
-	mesh.height = 0.08
-	marker.mesh = mesh
-	var material := StandardMaterial3D.new()
+	var marker := PreviewEntranceMarkerScene.instantiate() as MeshInstance3D
+	var material := marker.material_override as StandardMaterial3D
 	material.albedo_color = color
-	material.emission_enabled = true
 	material.emission = color
-	marker.material_override = material
-	marker.visible = false
 	return marker

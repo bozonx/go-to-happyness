@@ -5,9 +5,13 @@ const CitizenActorScene = preload("res://game/features/citizens/presentation/cit
 const UIManagerScene = preload("res://game/features/ui/presentation/ui_manager.tscn")
 const CameraControllerScene = preload("res://game/features/world/presentation/camera_controller.tscn")
 const SkyAndWeatherControllerScene = preload("res://game/features/world/presentation/sky_and_weather_controller.tscn")
-const RainEffectScene = preload("res://game/features/world/presentation/rain_effect.tscn")
-const FirefliesEffectScene = preload("res://game/features/world/presentation/fireflies_effect.tscn")
 const VillageTerritoryOverlayScene = preload("res://game/features/buildings/presentation/village_territory_overlay.tscn")
+const FireLightScene = preload("res://game/features/buildings/presentation/fire_light.tscn")
+const HouseLightScene = preload("res://game/features/buildings/presentation/house_light.tscn")
+const BuildingSelectorScene = preload("res://game/features/buildings/presentation/building_selector.tscn")
+const EntranceMarkerScene = preload("res://game/features/buildings/presentation/entrance_marker.tscn")
+const BillboardLabelScene = preload("res://game/features/ui/presentation/billboard_label.tscn")
+const GatheringPlaceVisualScene = preload("res://game/features/buildings/presentation/gathering_place_visual.tscn")
 const PocketTakeItemRowScene = preload("res://game/features/citizens/presentation/pocket_take_item_row.tscn")
 const TentEraSurvivalRulesScript = preload("res://game/features/settlement/domain/tent_era_survival_rules.gd")
 const FireSourceStateScript = preload("res://game/features/settlement/domain/fire_source_state.gd")
@@ -4642,13 +4646,11 @@ func _mark_building_for_demolition(building: Node3D) -> void:
 func _add_demolition_marker(building: Node3D) -> void:
 	if building.has_meta("demolition_marker"):
 		return
-	var marker := Label3D.new()
+	var marker := BillboardLabelScene.instantiate() as Label3D
 	marker.text = "DEMOLISH"
 	marker.position = Vector3(0.0, 5.2, 0.0)
 	marker.font_size = 32
 	marker.outline_size = 6
-	marker.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	marker.no_depth_test = true
 	marker.modulate = Color("ef4f45")
 	building.add_child(marker)
 	building.set_meta("demolition_marker", marker)
@@ -6007,11 +6009,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 			campfire_node = building
 			_activate_employment_centre(building)
 			_add_building_selector(building, "campfire_selector", blueprint.footprint)
-			var fire_light := OmniLight3D.new()
-			fire_light.position = Vector3(0.0, 0.5, 0.0)
-			fire_light.light_color = Color("ff9d3b")
-			fire_light.light_energy = 2.5
-			fire_light.omni_range = 8.0
+			var fire_light := FireLightScene.instantiate()
 			building.add_child(fire_light)
 		"gathering_place":
 			gathering_place_positions.append(service_position)
@@ -6020,11 +6018,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 		"cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant":
 			_activate_kitchen_if_better(building, service_position)
 			_add_building_selector(building, "cook_campfire_selector", blueprint.footprint)
-			var cook_fire_light := OmniLight3D.new()
-			cook_fire_light.position = Vector3(0.0, 0.5, 0.0)
-			cook_fire_light.light_color = Color("ff9d3b")
-			cook_fire_light.light_energy = 2.5
-			cook_fire_light.omni_range = 8.0
+			var cook_fire_light := FireLightScene.instantiate()
 			building.add_child(cook_fire_light)
 		"forager_tent", "straw_forager_tent", "tarp_forager_tent":
 			forager_positions.append(service_position)
@@ -6127,37 +6121,27 @@ func _select_best_canteen() -> void:
 			canteen_position = best_kitchen.get_meta("service_position", best_kitchen.global_position)
 
 func _add_building_selector(building: Node3D, group_name: String, footprint: Vector2i) -> void:
-	var selector := Area3D.new()
+	var selector := BuildingSelectorScene.instantiate() as Area3D
 	selector.add_to_group(group_name)
-	selector.collision_layer = 4
-	selector.collision_mask = 0
-	var collision := CollisionShape3D.new()
-	var shape := BoxShape3D.new()
+	var collision := selector.get_node("CollisionShape3D") as CollisionShape3D
+	var shape := collision.shape as BoxShape3D
 	shape.size = Vector3(footprint.x + 0.25, 4.5, footprint.y + 0.25)
-	collision.shape = shape
 	collision.position.y = 2.0
-	selector.add_child(collision)
 	building.add_child(selector)
 
 
 func _add_selector_to_node(node: Node3D, group_name: String, shape_size: Vector3, offset := Vector3.ZERO) -> void:
-	var selector := Area3D.new()
+	var selector := BuildingSelectorScene.instantiate() as Area3D
 	selector.add_to_group(group_name)
-	selector.collision_layer = 4
-	selector.collision_mask = 0
-	var collision := CollisionShape3D.new()
-	var shape := BoxShape3D.new()
+	var collision := selector.get_node("CollisionShape3D") as CollisionShape3D
+	var shape := collision.shape as BoxShape3D
 	shape.size = shape_size
-	collision.shape = shape
 	collision.position = offset
-	selector.add_child(collision)
 	node.add_child(selector)
 
 
 func _add_fire_light(building: Node3D, energy := 2.5, light_range := 8.0) -> void:
-	var fire_light := OmniLight3D.new()
-	fire_light.position = Vector3(0.0, 0.5, 0.0)
-	fire_light.light_color = Color("ff9d3b")
+	var fire_light := FireLightScene.instantiate() as OmniLight3D
 	fire_light.light_energy = energy
 	fire_light.omni_range = light_range
 	building.add_child(fire_light)
@@ -6166,12 +6150,10 @@ func _add_fire_light(building: Node3D, energy := 2.5, light_range := 8.0) -> voi
 func _add_building_status_indicator(building: Node3D) -> void:
 	if not is_instance_valid(building) or building.has_meta("status_indicator"):
 		return
-	var indicator := Label3D.new()
+	var indicator := BillboardLabelScene.instantiate() as Label3D
 	indicator.position = Vector3(0.0, 4.2, 0.0)
 	indicator.font_size = 28
 	indicator.outline_size = 5
-	indicator.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	indicator.no_depth_test = true
 	indicator.visible = false
 	building.add_child(indicator)
 	building.set_meta("status_indicator", indicator)
@@ -6181,12 +6163,10 @@ func _add_building_status_indicator(building: Node3D) -> void:
 func _add_warehouse_fill_label(building: Node3D) -> void:
 	if not is_instance_valid(building) or building.has_meta("warehouse_fill_label"):
 		return
-	var label := Label3D.new()
+	var label := BillboardLabelScene.instantiate() as Label3D
 	label.position = Vector3(0.0, 3.6, 0.0)
 	label.font_size = 22
 	label.outline_size = 4
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.no_depth_test = true
 	label.visible = false
 	building.add_child(label)
 	building.set_meta("warehouse_fill_label", label)
@@ -6358,59 +6338,34 @@ func _register_service_entrance(building: Node3D, blueprint: Dictionary, home_en
 				_add_visitor_entrance_marker(building, local)
 
 func _add_service_entrance_marker(building: Node3D, marker_local: Vector3) -> void:
-	var marker_position := marker_local
-	var marker := MeshInstance3D.new()
-	var marker_mesh := BoxMesh.new()
-	marker_mesh.size = Vector3(0.72, 1.45, 0.12)
-	marker.mesh = marker_mesh
-	marker.position = marker_position + Vector3(0.0, 0.73, 0.0)
+	var marker_node := EntranceMarkerScene.instantiate() as Node3D
+	marker_node.position = marker_local
+	var marker := marker_node.get_node("Marker") as MeshInstance3D
 	var marker_material := StandardMaterial3D.new()
 	marker_material.albedo_color = Color("17191c")
 	marker_material.roughness = 0.95
 	marker.material_override = marker_material
-	building.add_child(marker)
-	var sign := Label3D.new()
+	var sign := marker_node.get_node("Sign") as Label3D
 	sign.text = "STAFF"
-	sign.position = marker_position + Vector3(0.0, 1.72, 0.0)
-	sign.font_size = 24
 	sign.modulate = Color("e5c86b")
-	building.add_child(sign)
-	var light := OmniLight3D.new()
-	light.light_color = Color("ffd58a")
-	light.light_energy = 2.0
-	light.omni_range = 5.0
-	light.shadow_enabled = true
-	light.position = marker_position + Vector3(0.0, 2.2, 0.0)
-	light.visible = false
-	building.add_child(light)
+	var light := marker_node.get_node("Light") as OmniLight3D
+	building.add_child(marker_node)
 	entrance_lights.append(light)
 
 func _add_visitor_entrance_marker(building: Node3D, marker_local: Vector3) -> void:
-	var marker_position := marker_local
-	var marker := MeshInstance3D.new()
-	var marker_mesh := BoxMesh.new()
-	marker_mesh.size = Vector3(0.72, 1.45, 0.12)
-	marker.mesh = marker_mesh
-	marker.position = marker_position + Vector3(0.0, 0.73, 0.0)
+	var marker_node := EntranceMarkerScene.instantiate() as Node3D
+	marker_node.position = marker_local
+	var marker := marker_node.get_node("Marker") as MeshInstance3D
 	var marker_material := StandardMaterial3D.new()
 	marker_material.albedo_color = Color("1a3a2a")
 	marker_material.roughness = 0.95
 	marker.material_override = marker_material
-	building.add_child(marker)
-	var sign := Label3D.new()
+	var sign := marker_node.get_node("Sign") as Label3D
 	sign.text = "VISITOR"
-	sign.position = marker_position + Vector3(0.0, 1.72, 0.0)
-	sign.font_size = 24
 	sign.modulate = Color("7ec8a0")
-	building.add_child(sign)
-	var light := OmniLight3D.new()
+	var light := marker_node.get_node("Light") as OmniLight3D
 	light.light_color = Color("a8e6c0")
-	light.light_energy = 2.0
-	light.omni_range = 5.0
-	light.shadow_enabled = true
-	light.position = marker_position + Vector3(0.0, 2.2, 0.0)
-	light.visible = false
-	building.add_child(light)
+	building.add_child(marker_node)
 	entrance_lights.append(light)
 
 func _nearby_player_work_target() -> Node3D:
@@ -6436,18 +6391,13 @@ func _unregister_navigation_footprint(center: Vector3, footprint: Vector2i) -> v
 			service_pockets.remove_at(index)
 
 func _add_house_light(house: Node3D) -> void:
-	var light := OmniLight3D.new()
-	light.light_color = Color("ffd58a")
-	light.light_energy = 2.2
-	light.omni_range = 5.5
-	light.shadow_enabled = true
+	var light := HouseLightScene.instantiate() as OmniLight3D
 	var entrance_local := Vector3(0.0, 2.0, -house.get_meta("footprint", Vector2i(5, 5)).y * 0.5 - 0.35)
 	if house.has_meta("service_positions"):
 		var positions: Array = house.get_meta("service_positions")
 		if not positions.is_empty() and positions[0] is Vector3:
 			entrance_local = house.to_local(positions[0]) + Vector3.UP * 2.0
 	light.position = entrance_local
-	light.visible = false
 	house.add_child(light)
 	house_lights.append({"light": light, "house": house, "off_minute": random.randi_range(22 * 60, 26 * 60) % (24 * 60)})
 
@@ -7990,16 +7940,8 @@ func _update_gathering_indicators(_delta: float) -> void:
 
 
 func _create_gathering_place_visual(building: Node3D) -> void:
-	var racket := MeshInstance3D.new()
-	var mesh := BoxMesh.new()
-	mesh.size = Vector3(0.18, 0.06, 1.0)
-	racket.mesh = mesh
-	racket.position = Vector3(-1.7, 0.22, -2.6)
-	racket.rotation_degrees = Vector3(0.0, 28.0, 0.0)
-	var material := StandardMaterial3D.new()
-	material.albedo_color = Color("3a3a3a")
-	racket.material_override = material
-	building.add_child(racket)
+	var visual := GatheringPlaceVisualScene.instantiate() as Node3D
+	building.add_child(visual)
 
 func _building_at_service_position(position: Vector3) -> Node3D:
 	return building_registry.building_at_service_position(position)

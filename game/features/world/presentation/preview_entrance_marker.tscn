@@ -1,0 +1,14 @@
+[gd_scene load_steps=3 format=3]
+
+[sub_resource type="CylinderMesh" id="PreviewMesh"]
+top_radius = 0.32
+bottom_radius = 0.32
+height = 0.08
+
+[sub_resource type="StandardMaterial3D" id="PreviewMaterial"]
+emission_enabled = true
+
+[node name="PreviewEntranceMarker" type="MeshInstance3D"]
+mesh = SubResource("PreviewMesh")
+material_override = SubResource("PreviewMaterial")
+visible = false

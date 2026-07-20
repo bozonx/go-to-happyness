@@ -16,8 +16,8 @@ const FIREFLY_SOFT_GREEN := Color(0.62, 1.0, 0.54)
 
 var _rng := RandomNumberGenerator.new()
 var _records: Array[FireflyRecord] = []
-var _multimesh := MultiMesh.new()
-var _instance := MultiMeshInstance3D.new()
+var _multimesh: MultiMesh
+var _instance: MultiMeshInstance3D
 var _runtime := 0.0
 var _target_visibility := 0.0
 var _visibility := 0.0
@@ -38,10 +38,14 @@ func _ready() -> void:
 	if DisplayServer.get_name() == "headless":
 		set_process(false)
 		return
+	_instance = get_node_or_null("FireflyMultimesh") as MultiMeshInstance3D
+	if _instance == null:
+		_setup_multimesh()
+	else:
+		_multimesh = _instance.multimesh
 	_seed_from_position()
-	_setup_multimesh()
+	_configure_multimesh()
 	_spawn_fireflies()
-	add_child(_instance)
 	set_process(true)
 
 
@@ -73,17 +77,23 @@ func _setup_multimesh() -> void:
 	quad.size = Vector2.ONE
 	quad.material = _create_firefly_material()
 
+	_multimesh = MultiMesh.new()
 	_multimesh.transform_format = MultiMesh.TRANSFORM_3D
 	_multimesh.use_colors = true
-	_multimesh.instance_count = amount
 	_multimesh.mesh = quad
+
+	_instance = MultiMeshInstance3D.new()
+	_instance.name = "FireflyMultimesh"
+	_instance.multimesh = _multimesh
+	add_child(_instance)
+
+
+func _configure_multimesh() -> void:
+	_multimesh.instance_count = amount
 	_multimesh.custom_aabb = AABB(
 		Vector3(-swarm_radius * 1.35, minimum_height - 0.6, -swarm_radius * 1.35),
 		Vector3(swarm_radius * 2.7, swarm_height + 1.2, swarm_radius * 2.7)
 	)
-
-	_instance.name = "FireflyMultimesh"
-	_instance.multimesh = _multimesh
 
 
 func _create_firefly_material() -> ShaderMaterial:

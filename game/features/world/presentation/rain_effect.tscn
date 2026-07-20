@@ -1,6 +1,105 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://game/features/world/presentation/rain_effect.gd" id="1_re"]
 
+[sub_resource type="ParticleProcessMaterial" id="StreakProcess"]
+emission_shape = 3
+emission_box_extents = Vector3(20, 1.4, 20)
+direction = Vector3(0.1767, -0.9818, 0.0687)
+spread = 3.0
+initial_velocity_min = 17.0
+initial_velocity_max = 23.0
+gravity = Vector3(0, -14, 0)
+scale_min = 0.75
+scale_max = 1.2
+particle_flag_align_y_to_velocity = true
+
+[sub_resource type="StandardMaterial3D" id="StreakDrawMaterial"]
+shading_mode = 0
+transparency = 1
+blend_mode = 1
+cull_mode = 2
+albedo_color = Color(0.7137, 0.8157, 0.8745, 0.38)
+billboard_mode = 3
+
+[sub_resource type="QuadMesh" id="StreakQuad"]
+size = Vector2(0.028, 0.42)
+material = SubResource("StreakDrawMaterial")
+
+[sub_resource type="ParticleProcessMaterial" id="NearDropProcess"]
+emission_shape = 3
+emission_box_extents = Vector3(7, 1.8, 7)
+direction = Vector3(0.0797, -0.9968, 0)
+spread = 8.0
+initial_velocity_min = 12.0
+initial_velocity_max = 16.0
+gravity = Vector3(0, -8, 0)
+scale_min = 0.7
+scale_max = 1.25
+particle_flag_align_y_to_velocity = true
+
+[sub_resource type="StandardMaterial3D" id="NearDropDrawMaterial"]
+shading_mode = 0
+transparency = 1
+blend_mode = 1
+cull_mode = 2
+albedo_color = Color(0.8431, 0.9294, 0.9686, 0.32)
+billboard_mode = 3
+
+[sub_resource type="QuadMesh" id="NearDropQuad"]
+size = Vector2(0.018, 0.14)
+material = SubResource("NearDropDrawMaterial")
+
+[sub_resource type="ParticleProcessMaterial" id="SplashProcess"]
+emission_shape = 3
+emission_box_extents = Vector3(11, 0.03, 11)
+direction = Vector3(0, 1, 0)
+spread = 55.0
+initial_velocity_min = 0.45
+initial_velocity_max = 1.1
+gravity = Vector3(0, -5, 0)
+scale_min = 0.45
+scale_max = 1.0
+
+[sub_resource type="StandardMaterial3D" id="SplashDrawMaterial"]
+shading_mode = 0
+transparency = 1
+blend_mode = 1
+cull_mode = 2
+albedo_color = Color(0.851, 0.9294, 0.9608, 0.24)
+billboard_mode = 1
+
+[sub_resource type="QuadMesh" id="SplashQuad"]
+size = Vector2(0.055, 0.055)
+material = SubResource("SplashDrawMaterial")
+
 [node name="RainEffect" type="Node3D"]
 script = ExtResource("1_re")
+
+[node name="RainStreaks" type="GPUParticles3D" parent="."]
+amount = 620
+lifetime = 0.9
+preprocess = 0.35
+local_coords = false
+visibility_aabb = AABB(-24, -18, -24, 48, 34, 48)
+process_material = SubResource("StreakProcess")
+draw_pass_1 = SubResource("StreakQuad")
+
+[node name="RainNearDrops" type="GPUParticles3D" parent="."]
+amount = 80
+lifetime = 0.65
+preprocess = 0.18
+local_coords = false
+visibility_aabb = AABB(-8, -18, -8, 16, 28, 16)
+process_material = SubResource("NearDropProcess")
+draw_pass_1 = SubResource("NearDropQuad")
+
+[node name="RainSplashes" type="GPUParticles3D" parent="."]
+amount = 75
+lifetime = 0.22
+preprocess = 0.1
+local_coords = false
+visibility_aabb = AABB(-15, -0.5, -15, 30, 1.8, 30)
+process_material = SubResource("SplashProcess")
+draw_pass_1 = SubResource("SplashQuad")
+top_level = true

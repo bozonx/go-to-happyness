@@ -1,0 +1,27 @@
+[gd_scene load_steps=3 format=3]
+
+[sub_resource type="BoxMesh" id="MarkerMesh"]
+size = Vector3(0.72, 1.45, 0.12)
+
+[sub_resource type="StandardMaterial3D" id="MarkerMaterial"]
+albedo_color = Color(0.09, 0.098, 0.11, 1)
+roughness = 0.95
+
+[node name="EntranceMarker" type="Node3D"]
+
+[node name="Marker" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.73, 0)
+mesh = SubResource("MarkerMesh")
+material_override = SubResource("MarkerMaterial")
+
+[node name="Sign" type="Label3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.72, 0)
+font_size = 24
+
+[node name="Light" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.2, 0)
+light_color = Color(1, 0.835, 0.541, 1)
+light_energy = 2.0
+omni_range = 5.0
+shadow_enabled = true
+visible = false

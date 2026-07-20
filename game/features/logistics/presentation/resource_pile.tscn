@@ -1,7 +1,91 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=12 format=3]
+
+[sub_resource type="BoxMesh" id="BackpackMesh"]
+size = Vector3(0.5, 0.5, 0.5)
+
+[sub_resource type="StandardMaterial3D" id="BackpackMaterial"]
+albedo_color = Color(0.769, 0.294, 0.294, 1)
+roughness = 0.6
+
+[sub_resource type="CylinderMesh" id="BaseMesh"]
+top_radius = 0.03
+bottom_radius = 0.62
+height = 0.62
+
+[sub_resource type="StandardMaterial3D" id="BaseMaterial"]
+albedo_color = Color(0.361, 0.251, 0.200, 1)
+
+[sub_resource type="BoxMesh" id="LogMesh"]
+size = Vector3(1.2, 0.25, 0.25)
+
+[sub_resource type="StandardMaterial3D" id="LogMaterial"]
+albedo_color = Color(0.290, 0.196, 0.145, 1)
+
+[sub_resource type="CylinderMesh" id="GrassMesh"]
+top_radius = 0.02
+bottom_radius = 0.40
+height = 0.45
+
+[sub_resource type="StandardMaterial3D" id="GrassMaterial"]
+albedo_color = Color(0.451, 0.576, 0.314, 1)
+
+[sub_resource type="BoxMesh" id="StoneMesh"]
+size = Vector3(0.4, 0.3, 0.4)
+
+[sub_resource type="StandardMaterial3D" id="StoneMaterial"]
+albedo_color = Color(0.435, 0.455, 0.478, 1)
+
+[sub_resource type="BoxShape3D" id="PileShape"]
+size = Vector3(1.0, 1.2, 1.0)
 
 [node name="ResourcePile" type="Node3D"]
 
 [node name="PileLabel" type="Label3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.7, 0)
 billboard = 1
+
+[node name="BackpackMesh" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.25, 0)
+mesh = SubResource("BackpackMesh")
+material_override = SubResource("BackpackMaterial")
+visible = false
+
+[node name="BaseMesh" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.2, 0)
+mesh = SubResource("BaseMesh")
+material_override = SubResource("BaseMaterial")
+
+[node name="Log1" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.3, 0.35, 0.2)
+rotation_degrees = Vector3(10, 25, 5)
+mesh = SubResource("LogMesh")
+material_override = SubResource("LogMaterial")
+visible = false
+
+[node name="Log2" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.2, 0.4, -0.2)
+rotation_degrees = Vector3(-15, -35, -8)
+mesh = SubResource("LogMesh")
+material_override = SubResource("LogMaterial")
+visible = false
+
+[node name="GrassPile" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.22, 0.42, 0.22)
+mesh = SubResource("GrassMesh")
+material_override = SubResource("GrassMaterial")
+visible = false
+
+[node name="StonePile" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.2, 0.3, -0.4)
+rotation_degrees = Vector3(20, 45, 10)
+mesh = SubResource("StoneMesh")
+material_override = SubResource("StoneMaterial")
+visible = false
+
+[node name="PileSelector" type="Area3D" parent="." groups=["resource_pile_selector"]]
+collision_layer = 4
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="PileSelector"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, 0)
+shape = SubResource("PileShape")

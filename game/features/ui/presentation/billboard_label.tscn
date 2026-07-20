@@ -1,0 +1,5 @@
+[gd_scene load_steps=1 format=3]
+
+[node name="BillboardLabel" type="Label3D"]
+billboard = 1
+no_depth_test = true

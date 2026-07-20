@@ -1,0 +1,8 @@
+[gd_scene load_steps=1 format=3]
+
+[node name="HouseLight" type="OmniLight3D"]
+light_color = Color(1, 0.835, 0.541, 1)
+light_energy = 2.2
+omni_range = 5.5
+shadow_enabled = true
+visible = false

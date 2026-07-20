@@ -1,0 +1,12 @@
+[gd_scene load_steps=3 format=3]
+
+[sub_resource type="BoxMesh" id="RacketMesh"]
+size = Vector3(0.18, 0.06, 1.0)
+
+[sub_resource type="StandardMaterial3D" id="RacketMaterial"]
+albedo_color = Color(0.227, 0.227, 0.227, 1)
+
+[node name="GatheringPlaceVisual" type="MeshInstance3D"]
+transform = Transform3D(0.8829, 0, 0.4695, 0, 1, 0, -0.4695, 0, 0.8829, -1.7, 0.22, -2.6)
+mesh = SubResource("RacketMesh")
+material_override = SubResource("RacketMaterial")

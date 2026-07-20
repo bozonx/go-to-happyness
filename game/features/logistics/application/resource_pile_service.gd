@@ -43,89 +43,23 @@ func create_resource_pile(position: Vector3, resources: Dictionary, is_backpack_
 	label.text = "\n".join(labels)
 	label.position.y = 1.7
 
+	var backpack_mesh := pile.get_node("BackpackMesh") as MeshInstance3D
+	var base_mesh_node := pile.get_node("BaseMesh") as MeshInstance3D
+	var log1 := pile.get_node("Log1") as MeshInstance3D
+	var log2 := pile.get_node("Log2") as MeshInstance3D
+	var grass_pile := pile.get_node("GrassPile") as MeshInstance3D
+	var stone_pile := pile.get_node("StonePile") as MeshInstance3D
+
 	if is_backpack_pile:
-		var backpack_mesh := MeshInstance3D.new()
-		var box := BoxMesh.new()
-		box.size = Vector3(0.5, 0.5, 0.5)
-		backpack_mesh.mesh = box
-		backpack_mesh.position.y = 0.25
-		var red_mat := StandardMaterial3D.new()
-		red_mat.albedo_color = Color("c44b4b")
-		red_mat.roughness = 0.6
-		backpack_mesh.material_override = red_mat
-		pile.add_child(backpack_mesh)
+		backpack_mesh.visible = true
+		base_mesh_node.visible = false
 		label.position.y = 0.8
 	else:
-		var base_mesh_node := MeshInstance3D.new()
-		var base_mesh := CylinderMesh.new()
-		base_mesh.top_radius = 0.03
-		base_mesh.bottom_radius = 0.62
-		base_mesh.height = 0.62
-		base_mesh_node.mesh = base_mesh
-		base_mesh_node.position.y = 0.2
-		var base_mat := StandardMaterial3D.new()
-		base_mat.albedo_color = Color("5c4033")
-		base_mesh_node.material_override = base_mat
-		pile.add_child(base_mesh_node)
-
-		var log_mesh := BoxMesh.new()
-		log_mesh.size = Vector3(1.2, 0.25, 0.25)
-		var log_mat := StandardMaterial3D.new()
-		log_mat.albedo_color = Color("4a3225")
-
-		var log1 := MeshInstance3D.new()
-		log1.mesh = log_mesh
-		log1.position = Vector3(-0.3, 0.35, 0.2)
-		log1.rotation_degrees = Vector3(10, 25, 5)
-		log1.material_override = log_mat
-		log1.visible = normalized.has("branches") or normalized.has("wood") or normalized.has("logs")
-		pile.add_child(log1)
-
-		var log2 := MeshInstance3D.new()
-		log2.mesh = log_mesh
-		log2.position = Vector3(0.2, 0.4, -0.2)
-		log2.rotation_degrees = Vector3(-15, -35, -8)
-		log2.material_override = log_mat
-		log2.visible = log1.visible
-		pile.add_child(log2)
-
-		var grass_pile := MeshInstance3D.new()
-		var grass_mesh := CylinderMesh.new()
-		grass_mesh.top_radius = 0.02
-		grass_mesh.bottom_radius = 0.40
-		grass_mesh.height = 0.45
-		grass_pile.mesh = grass_mesh
-		grass_pile.position = Vector3(0.22, 0.42, 0.22)
+		var has_wood := normalized.has("branches") or normalized.has("wood") or normalized.has("logs")
+		log1.visible = has_wood
+		log2.visible = has_wood
 		grass_pile.visible = normalized.has("grass")
-		var grass_mat := StandardMaterial3D.new()
-		grass_mat.albedo_color = Color("739350")
-		grass_pile.material_override = grass_mat
-		pile.add_child(grass_pile)
-
-		var stone_pile := MeshInstance3D.new()
-		var stone_mesh := BoxMesh.new()
-		stone_mesh.size = Vector3(0.4, 0.3, 0.4)
-		stone_pile.mesh = stone_mesh
-		stone_pile.position = Vector3(-0.2, 0.3, -0.4)
-		stone_pile.rotation_degrees = Vector3(20, 45, 10)
-		var stone_mat := StandardMaterial3D.new()
-		stone_mat.albedo_color = Color("6f747a")
-		stone_pile.material_override = stone_mat
 		stone_pile.visible = normalized.has("stone") or normalized.has("soil") or normalized.has("clay") or normalized.has("bricks")
-		pile.add_child(stone_pile)
-
-	var pile_area := Area3D.new()
-	pile_area.name = "PileSelector"
-	pile_area.add_to_group("resource_pile_selector")
-	pile_area.collision_layer = 4
-	pile_area.collision_mask = 0
-	var pile_shape := CollisionShape3D.new()
-	var pile_box := BoxShape3D.new()
-	pile_box.size = Vector3(1.0, 1.2, 1.0)
-	pile_shape.shape = pile_box
-	pile_shape.position.y = 0.4
-	pile_area.add_child(pile_shape)
-	pile.add_child(pile_area)
 
 	if parent_node != null:
 		parent_node.add_child(pile)

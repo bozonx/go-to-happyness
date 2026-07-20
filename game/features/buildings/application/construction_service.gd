@@ -2,6 +2,7 @@ class_name ConstructionService
 extends RefCounted
 
 const ConstructionSiteScene = preload("res://game/features/buildings/presentation/construction_site.tscn")
+const ConstructionEntrancePostScene = preload("res://game/features/buildings/presentation/construction_entrance_post.tscn")
 
 var runtime: ConstructionRuntime
 var sites: Array[ConstructionSite] = []
@@ -29,28 +30,11 @@ func start_site(cell: Vector2i, building_type: String, position: Vector3, rotati
 
 	# Entrance posts and flags are positioned dynamically based on the building footprint.
 	var entrance_parent := site_node.get_node("ConstructionEntrance") as Node3D
-	var entrance_material := StandardMaterial3D.new()
-	entrance_material.albedo_color = Color("f0c45d")
-	entrance_material.emission_enabled = true
-	entrance_material.emission = Color("f0c45d")
 	for service_position: Vector3 in site_node.get_meta("service_positions"):
-		var post := MeshInstance3D.new()
-		var post_mesh := CylinderMesh.new()
-		post_mesh.top_radius = 0.07
-		post_mesh.bottom_radius = 0.07
-		post_mesh.height = 1.4
-		post.mesh = post_mesh
-		post.material_override = entrance_material
+		var post := ConstructionEntrancePostScene.instantiate() as Node3D
 		post.position = (service_position - site_node.position).rotated(Vector3.UP, -site_node.rotation.y)
-		post.position.y = 0.7
+		post.position.y = 0.0
 		entrance_parent.add_child(post)
-		var flag := MeshInstance3D.new()
-		var flag_mesh := BoxMesh.new()
-		flag_mesh.size = Vector3(0.26, 0.16, 0.04)
-		flag.mesh = flag_mesh
-		flag.material_override = entrance_material
-		flag.position = post.position + Vector3.UP * 0.7
-		entrance_parent.add_child(flag)
 
 	# Territory mesh size depends on the building footprint.
 	var territory := site_node.get_node("ConstructionTerritory") as MeshInstance3D

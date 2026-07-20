@@ -1,7 +1,7 @@
 class_name AmbientSpawner
 extends Node3D
 
-const FirefliesEffectScript = preload("res://game/features/world/presentation/fireflies_effect.gd")
+const FirefliesEffectScene = preload("res://game/features/world/presentation/fireflies_effect.tscn")
 const PondScene = preload("res://game/features/world/presentation/pond.tscn")
 const TreeScene = preload("res://game/features/world/presentation/tree.tscn")
 const GrassSourceScene = preload("res://game/features/world/presentation/grass_source.tscn")
@@ -127,7 +127,7 @@ func _create_firefly_clusters() -> void:
 func _create_firefly_cluster(cluster_name: String, cells: Array, amount_count: int, radius: float, height: float) -> void:
 	if DisplayServer.get_name() == "headless":
 		return
-	var fireflies_node: FirefliesEffect = FirefliesEffectScript.new()
+	var fireflies_node := FirefliesEffectScene.instantiate() as FirefliesEffect
 	fireflies_node.name = cluster_name
 	fireflies_node.position = _firefly_cluster_center(cells)
 	fireflies_node.amount = amount_count
