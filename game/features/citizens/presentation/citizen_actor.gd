@@ -546,6 +546,17 @@ func _physics_process(delta: float) -> void:
 	_update_effects(delta)
 	_update_satisfaction(delta)
 	
+	_process_state_behavior(delta)
+
+	if idle_indicator != null:
+		_update_idle_indicator()
+		if idle_indicator.visible:
+			idle_indicator.modulate.a *= label_distance_alpha
+	_update_privacy_blur()
+	_update_animations(delta)
+
+
+func _process_state_behavior(delta: float) -> void:
 	match state:
 		State.IDLE:
 			_process_idle_wander(delta)
@@ -665,12 +676,6 @@ func _physics_process(delta: float) -> void:
 			_process_ai_moving(delta)
 		State.WORK_POSITION:
 			pass
-	if idle_indicator != null:
-		_update_idle_indicator()
-		if idle_indicator.visible:
-			idle_indicator.modulate.a *= label_distance_alpha
-	_update_privacy_blur()
-	_update_animations(delta)
 
 func _process_to_source(delta: float) -> void:
 	if _move_to(source_access_position, delta, false, false):
@@ -2273,6 +2278,19 @@ func execute_action(action: StringName, target: Node3D, payload: AIFactSet) -> b
 	if is_player_controlled:
 		return false
 	match action:
+		&"sleep", &"eat", &"relieve", &"rest", &"relax":
+			return _execute_personal_need_action(action, payload)
+		&"forestry", &"farming", &"gathering", &"cleaning", &"excavation", &"factory_work":
+			return _execute_production_action(action, target, payload)
+		&"construction", &"demolition", &"cook", &"teacher", &"seller", &"official", &"craftsman", &"researcher", &"register":
+			return _execute_workforce_action(action, target, payload)
+		&"courier_delivery":
+			return _execute_logistics_action(action, target, payload)
+	return false
+
+
+func _execute_personal_need_action(action: StringName, payload: AIFactSet) -> bool:
+	match action:
 		&"sleep":
 			if not is_instance_valid(home):
 				return false
@@ -2319,6 +2337,11 @@ func execute_action(action: StringName, target: Node3D, payload: AIFactSet) -> b
 			state = State.RELAXING
 			_start_task(relax_duration)
 			return true
+	return false
+
+
+func _execute_production_action(action: StringName, target: Node3D, payload: AIFactSet) -> bool:
+	match action:
 		&"forestry":
 			var tree_position: Variant = payload.value(&"target.position", Vector3.INF) if payload != null else Vector3.INF
 			var access_position: Variant = payload.value(&"target.access_position", Vector3.INF) if payload != null else Vector3.INF
@@ -2335,14 +2358,6 @@ func execute_action(action: StringName, target: Node3D, payload: AIFactSet) -> b
 				return false
 			start_production_cycle("food", farm_position, farm_position, farm_warehouse_position, true)
 			return state in [State.TO_TREE, State.TO_SAWMILL, State.SAWING, State.WAITING_COURIER]
-		&"construction", &"demolition":
-			if not is_instance_valid(target):
-				return false
-			if action == &"construction":
-				assign_construction(target)
-			else:
-				assign_demolition(target)
-			return state == State.CONSTRUCTING
 		&"gathering":
 			var resource_type: Variant = payload.value(&"resource.type", "") if payload != null else ""
 			var source_position: Variant = payload.value(&"target.position", Vector3.INF) if payload != null else Vector3.INF
@@ -2366,6 +2381,25 @@ func execute_action(action: StringName, target: Node3D, payload: AIFactSet) -> b
 				return false
 			assign_excavation(target)
 			return state == State.EXCAVATING
+		&"factory_work":
+			var factory_role: Variant = payload.value(&"factory.role", &"") if payload != null else &""
+			if not is_instance_valid(target) or not (factory_role is StringName) or factory_role == &"":
+				return false
+			assign_factory_work(target, String(factory_role))
+			return state in [State.TO_FACTORY, State.FACTORY_WORK]
+	return false
+
+
+func _execute_workforce_action(action: StringName, target: Node3D, payload: AIFactSet) -> bool:
+	match action:
+		&"construction", &"demolition":
+			if not is_instance_valid(target):
+				return false
+			if action == &"construction":
+				assign_construction(target)
+			else:
+				assign_demolition(target)
+			return state == State.CONSTRUCTING
 		&"cook", &"teacher", &"seller", &"official", &"craftsman", &"researcher":
 			var service_position: Variant = payload.value(&"workplace.position", Vector3.INF) if payload != null else Vector3.INF
 			if not (service_position is Vector3) or service_position == Vector3.INF:
@@ -2378,19 +2412,6 @@ func execute_action(action: StringName, target: Node3D, payload: AIFactSet) -> b
 				&"craftsman": assign_craft_work(service_position, _craft_speed_multiplier_internal())
 				&"researcher": assign_research_work(service_position)
 			return state in _service_states_for_internal(action)
-		&"factory_work":
-			var factory_role: Variant = payload.value(&"factory.role", &"") if payload != null else &""
-			if not is_instance_valid(target) or not (factory_role is StringName) or factory_role == &"":
-				return false
-			assign_factory_work(target, String(factory_role))
-			return state in [State.TO_FACTORY, State.FACTORY_WORK]
-		&"courier_delivery":
-			var task_id: Variant = payload.value(&"courier.task_id", &"") if payload != null else &""
-			if not (task_id is StringName) or task_id == &"" or simulation == null or simulation.courier_dispatcher == null:
-				return false
-			if not simulation.courier_dispatcher.start_task(self, task_id):
-				return false
-			return has_active_delivery()
 		&"register":
 			var center_position: Variant = payload.value(&"center.position", Vector3.INF) if payload != null else Vector3.INF
 			var pending_role: Variant = payload.value(&"workplace.role", "") if payload != null else ""
@@ -2398,6 +2419,17 @@ func execute_action(action: StringName, target: Node3D, payload: AIFactSet) -> b
 				return false
 			begin_employment_processing(center_position, pending_role, target)
 			return state in [State.TO_EMPLOYMENT_CENTER, State.EMPLOYMENT_PROCESSING]
+	return false
+
+
+func _execute_logistics_action(action: StringName, target: Node3D, payload: AIFactSet) -> bool:
+	if action == &"courier_delivery":
+		var task_id: Variant = payload.value(&"courier.task_id", &"") if payload != null else &""
+		if not (task_id is StringName) or task_id == &"" or simulation == null or simulation.courier_dispatcher == null:
+			return false
+		if not simulation.courier_dispatcher.start_task(self, task_id):
+			return false
+		return has_active_delivery()
 	return false
 
 

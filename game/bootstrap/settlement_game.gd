@@ -1921,6 +1921,19 @@ func _start_courier_task(courier: Citizen, task: RefCounted) -> bool:
 	if not _is_courier_task_reachable(courier, task):
 		return false
 	match task.kind:
+		CourierTask.Kind.CANTEEN, CourierTask.Kind.TRADE:
+			return _start_courier_canteen_or_trade(courier, task)
+		CourierTask.Kind.SAWMILL_PICKUP, CourierTask.Kind.DEW_PICKUP, CourierTask.Kind.WORKER_PICKUP:
+			return _start_courier_pickup_task(courier, task)
+		CourierTask.Kind.CONSTRUCTION, CourierTask.Kind.BUILDING_SUPPLY:
+			return _start_courier_construction_or_supply(courier, task)
+		CourierTask.Kind.ARRIVAL, CourierTask.Kind.OUTSIDE_WORK:
+			return _start_courier_arrival_or_outside(courier, task)
+	return false
+
+
+func _start_courier_canteen_or_trade(courier: Citizen, task: RefCounted) -> bool:
+	match task.kind:
 		CourierTask.Kind.CANTEEN:
 			var capacity := BuildingCatalog.kitchen_food_capacity(str(canteen.get_meta("building_type", "")))
 			var amount := mini(courier.courier_capacity(), mini(food, capacity - canteen_food))
@@ -1939,6 +1952,11 @@ func _start_courier_task(courier: Citizen, task: RefCounted) -> bool:
 			queued_trades.erase(order)
 			trade_service.assign_order_to_worker(courier, order)
 			return true
+	return false
+
+
+func _start_courier_pickup_task(courier: Citizen, task: RefCounted) -> bool:
+	match task.kind:
 		CourierTask.Kind.SAWMILL_PICKUP:
 			var sawmill_stock := sawmills.stock_at(task.payload.position, runtime_seconds)
 			var sawmill_amount := mini(courier.courier_capacity(), int(sawmill_stock.boards))
@@ -1964,6 +1982,11 @@ func _start_courier_task(courier: Citizen, task: RefCounted) -> bool:
 				return false
 			courier.assign_courier_pickup(task.payload.worker, task.dropoff)
 			return true
+	return false
+
+
+func _start_courier_construction_or_supply(courier: Citizen, task: RefCounted) -> bool:
+	match task.kind:
 		CourierTask.Kind.CONSTRUCTION:
 			var site: ConstructionSite = task.payload.site
 			var resource_type := str(task.payload.resource)
@@ -2016,6 +2039,11 @@ func _start_courier_task(courier: Citizen, task: RefCounted) -> bool:
 					courier.assign_building_supply(building, task.pickup, "branches", "firewood")
 					return true
 			return false
+	return false
+
+
+func _start_courier_arrival_or_outside(courier: Citizen, task: RefCounted) -> bool:
+	match task.kind:
 		CourierTask.Kind.ARRIVAL:
 			var arrival_house := task.payload.get("house") as Node3D
 			for index in pending_arrivals.size():
@@ -5986,6 +6014,24 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 	var is_home := building_type in ["tent", "straw_tent", "tarp_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house"]
 	_register_service_entrance(building, blueprint, is_home, building_type not in ["farm", "park"])
 	var service_position: Vector3 = building.get_meta("service_position")
+	_register_completed_building_type_features(building_type, building, blueprint, service_position)
+
+	building_registry.attach_node(cell, building)
+	var occupied_footprint: Vector2i = building.get_meta("occupied_footprint", blueprint.footprint)
+	village_territory_service.on_building_added(cell, building_type)
+	_refresh_boundary_markers()
+	_add_building_status_indicator(building)
+	_refresh_navigation_grid()
+	_update_workers()
+	_refresh_build_menu()
+	var completion_message := "%s construction completed." % building_type.capitalize()
+	if building_type in ["recycling_factory", "metal_factory"]:
+		completion_message += " It requires 3 factory workers."
+	_update_interface(completion_message)
+	_request_courier_dispatch()
+
+
+func _register_completed_building_type_features(building_type: String, building: Node3D, blueprint: Dictionary, service_position: Vector3) -> void:
 	match building_type:
 		"warehouse", "straw_warehouse", "tarp_warehouse":
 			settlement.add_warehouse(building_type)
@@ -6076,19 +6122,6 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 				_add_building_selector(building, "materials_factory_selector", blueprint.footprint)
 		"boundary_post":
 			_add_building_selector(building, "building_selector", blueprint.footprint)
-	building_registry.attach_node(cell, building)
-	var occupied_footprint: Vector2i = building.get_meta("occupied_footprint", blueprint.footprint)
-	village_territory_service.on_building_added(cell, building_type)
-	_refresh_boundary_markers()
-	_add_building_status_indicator(building)
-	_refresh_navigation_grid()
-	_update_workers()
-	_refresh_build_menu()
-	var completion_message := "%s construction completed." % building_type.capitalize()
-	if building_type in ["recycling_factory", "metal_factory"]:
-		completion_message += " It requires 3 factory workers."
-	_update_interface(completion_message)
-	_request_courier_dispatch()
 
 
 func _activate_kitchen_if_better(building: Node3D, service_position: Vector3) -> void:
@@ -6956,99 +6989,11 @@ func _refresh_campfire_menu() -> void:
 	var fuel_current: int = fire_state.total_committed_fuel()
 	var title_text := "Campfire (Era: %s)\nВетки: %d/%d" % [era_str, fuel_current, FIRE_SUPPLY_TARGET]
 	
-	var req_text := ""
-	var next_era := SettlementState.Era.TENT
-	var can_advance := false
-	
 	var housing_slots := _total_housing_slots()
-	
-	match settlement.era:
-		SettlementState.Era.TENT:
-			next_era = SettlementState.Era.EARTH
-			var tools_ok := settlement._has_tools(["axe", "hand_saw", "shovel", "bucket"])
-			var earth_research_ok := settlement.is_research_completed("earth_buildings")
+	var era_info := _build_campfire_era_requirements(housing_slots)
+	var req_text: String = era_info[0]
+	var can_advance: bool = era_info[1]
 
-			req_text = "Requirements for Earth Era:\n"
-			req_text += "- Tools (axe, saw, shovel, bucket): %s\n" % ("OK" if tools_ok else "Missing")
-			req_text += "- Earth buildings research: %s\n" % ("OK" if earth_research_ok else "Missing")
-			can_advance = settlement.can_advance_to(next_era, citizens.size(), housing_slots)
-		
-		SettlementState.Era.EARTH:
-			next_era = SettlementState.Era.CLAY
-			var has_assembly := settlement.has_building("earth_assembly")
-			var has_smithy := settlement.has_building("smithy")
-			var has_mkt := settlement.has_building("earth_market")
-			var pop_ok := housing_slots >= citizens.size()
-			var clay_ok := settlement.available_amount("clay") >= 5
-			var money_ok := settlement.money >= 5
-			var trade_ok := settlement.trade_sales >= 3
-			var shovel_ok := settlement._has_tools(["shovel"])
-			
-			req_text = "Requirements for Clay Era:\n"
-			req_text += "- Earth Assembly built: %s\n" % ("Yes" if has_assembly else "No")
-			req_text += "- Smithy built: %s\n" % ("Yes" if has_smithy else "No")
-			req_text += "- Earth market built: %s\n" % ("Yes" if has_mkt else "No")
-			req_text += "- Housing slots (needs %d): %d (%s)\n" % [citizens.size(), housing_slots, "OK" if pop_ok else "Need more"]
-			req_text += "- Clay (needs 5): %d (%s)\n" % [settlement.amount("clay"), "OK" if clay_ok else "Need more"]
-			req_text += "- Money (needs 5): %d (%s)\n" % [settlement.money, "OK" if money_ok else "Need more"]
-			req_text += "- Trade sales (needs 3): %d (%s)\n" % [settlement.trade_sales, "OK" if trade_ok else "Need more"]
-			req_text += "- Tool Shovel owned: %s\n" % ("Yes" if shovel_ok else "No")
-			can_advance = settlement.can_advance_to(next_era, citizens.size(), housing_slots)
-			
-		SettlementState.Era.CLAY:
-			next_era = SettlementState.Era.WOOD
-			var has_lodge := settlement.has_building("clay_lodge")
-			var has_mkt := settlement.has_building("clay_market")
-			var water_ok := water >= citizens.size()
-			var logs_ok := settlement.available_amount("logs") >= 10
-			var money_ok := settlement.money >= 10
-			
-			req_text = "Requirements for Wood Era:\n"
-			req_text += "- Clay lodge built: %s\n" % ("Yes" if has_lodge else "No")
-			req_text += "- Clay market built: %s\n" % ("Yes" if has_mkt else "No")
-			req_text += "- Water (needs %d): %d (%s)\n" % [citizens.size(), water, "OK" if water_ok else "Need more"]
-			req_text += "- Logs (needs 10): %d (%s)\n" % [settlement.amount("logs"), "OK" if logs_ok else "Need more"]
-			req_text += "- Money (needs 10): %d (%s)\n" % [settlement.money, "OK" if money_ok else "Need more"]
-			can_advance = settlement.can_advance_to(next_era, citizens.size(), housing_slots)
-			
-		SettlementState.Era.WOOD:
-			next_era = SettlementState.Era.STONE
-			var has_th := settlement.has_building("wood_town_hall")
-			var has_mkt := settlement.has_building("wood_market")
-			var has_sm := settlement.has_building("sawmill")
-			var has_house3 := settlement.has_building("house_lvl3")
-			var pickaxe_ok := settlement._has_tools(["pickaxe"])
-			var money_ok := settlement.money >= 15
-			
-			req_text = "Requirements for Stone Era:\n"
-			req_text += "- Wooden town hall built: %s\n" % ("Yes" if has_th else "No")
-			req_text += "- Sawmill built: %s\n" % ("Yes" if has_sm else "No")
-			req_text += "- Wood market built: %s\n" % ("Yes" if has_mkt else "No")
-			req_text += "- Wood house Level 3 built: %s\n" % ("Yes" if has_house3 else "No")
-			req_text += "- Tool Pickaxe owned: %s\n" % ("Yes" if pickaxe_ok else "No")
-			req_text += "- Money (needs 15): %d (%s)\n" % [settlement.money, "OK" if money_ok else "Need more"]
-			can_advance = settlement.can_advance_to(next_era, citizens.size(), housing_slots)
-
-		SettlementState.Era.STONE:
-			next_era = SettlementState.Era.BRICK
-			var has_pref := settlement.has_building("stone_prefecture")
-			var has_mkt := settlement.has_building("stone_market")
-			var has_mw := settlement.has_building("masonry_workshop")
-			var stone_ok := settlement.available_amount("stone") >= 20
-			var money_ok := settlement.money >= 20
-			
-			req_text = "Requirements for Brick Era:\n"
-			req_text += "- Stone prefecture built: %s\n" % ("Yes" if has_pref else "No")
-			req_text += "- Masonry workshop built: %s\n" % ("Yes" if has_mw else "No")
-			req_text += "- Stone market built: %s\n" % ("Yes" if has_mkt else "No")
-			req_text += "- Stone (needs 20): %d (%s)\n" % [settlement.amount("stone"), "OK" if stone_ok else "Need more"]
-			req_text += "- Money (needs 20): %d (%s)\n" % [settlement.money, "OK" if money_ok else "Need more"]
-			can_advance = settlement.can_advance_to(next_era, citizens.size(), housing_slots)
-			
-		SettlementState.Era.BRICK:
-			req_text = "Maximum era reached! Your settlement is fully advanced."
-			can_advance = false
-			
 	var unhoused := _unhoused_citizen_count()
 	if unhoused > 0:
 		req_text += "\nProblems:\n- Unhoused residents: %d. Settle them in a home before inviting anyone new.\n" % unhoused
@@ -7113,6 +7058,96 @@ func _refresh_campfire_menu() -> void:
 		state["close_btn_y"] = 746.0
 	campfire_menu.update_state(state)
 	_refresh_campfire_occupancy_button()
+
+
+func _build_campfire_era_requirements(housing_slots: int) -> Array:
+	var req_text := ""
+	var can_advance := false
+	var next_era := SettlementState.Era.TENT
+
+	match settlement.era:
+		SettlementState.Era.TENT:
+			next_era = SettlementState.Era.EARTH
+			var tools_ok := settlement._has_tools(["axe", "hand_saw", "shovel", "bucket"])
+			var earth_research_ok := settlement.is_research_completed("earth_buildings")
+			req_text = "Requirements for Earth Era:\n"
+			req_text += "- Tools (axe, saw, shovel, bucket): %s\n" % ("OK" if tools_ok else "Missing")
+			req_text += "- Earth buildings research: %s\n" % ("OK" if earth_research_ok else "Missing")
+			can_advance = settlement.can_advance_to(next_era, citizens.size(), housing_slots)
+
+		SettlementState.Era.EARTH:
+			next_era = SettlementState.Era.CLAY
+			var has_assembly := settlement.has_building("earth_assembly")
+			var has_smithy := settlement.has_building("smithy")
+			var has_mkt := settlement.has_building("earth_market")
+			var pop_ok := housing_slots >= citizens.size()
+			var clay_ok := settlement.available_amount("clay") >= 5
+			var money_ok := settlement.money >= 5
+			var trade_ok := settlement.trade_sales >= 3
+			var shovel_ok := settlement._has_tools(["shovel"])
+			req_text = "Requirements for Clay Era:\n"
+			req_text += "- Earth Assembly built: %s\n" % ("Yes" if has_assembly else "No")
+			req_text += "- Smithy built: %s\n" % ("Yes" if has_smithy else "No")
+			req_text += "- Earth market built: %s\n" % ("Yes" if has_mkt else "No")
+			req_text += "- Housing slots (needs %d): %d (%s)\n" % [citizens.size(), housing_slots, "OK" if pop_ok else "Need more"]
+			req_text += "- Clay (needs 5): %d (%s)\n" % [settlement.amount("clay"), "OK" if clay_ok else "Need more"]
+			req_text += "- Money (needs 5): %d (%s)\n" % [settlement.money, "OK" if money_ok else "Need more"]
+			req_text += "- Trade sales (needs 3): %d (%s)\n" % [settlement.trade_sales, "OK" if trade_ok else "Need more"]
+			req_text += "- Tool Shovel owned: %s\n" % ("Yes" if shovel_ok else "No")
+			can_advance = settlement.can_advance_to(next_era, citizens.size(), housing_slots)
+
+		SettlementState.Era.CLAY:
+			next_era = SettlementState.Era.WOOD
+			var has_lodge := settlement.has_building("clay_lodge")
+			var has_mkt := settlement.has_building("clay_market")
+			var water_ok := water >= citizens.size()
+			var logs_ok := settlement.available_amount("logs") >= 10
+			var money_ok := settlement.money >= 10
+			req_text = "Requirements for Wood Era:\n"
+			req_text += "- Clay lodge built: %s\n" % ("Yes" if has_lodge else "No")
+			req_text += "- Clay market built: %s\n" % ("Yes" if has_mkt else "No")
+			req_text += "- Water (needs %d): %d (%s)\n" % [citizens.size(), water, "OK" if water_ok else "Need more"]
+			req_text += "- Logs (needs 10): %d (%s)\n" % [settlement.amount("logs"), "OK" if logs_ok else "Need more"]
+			req_text += "- Money (needs 10): %d (%s)\n" % [settlement.money, "OK" if money_ok else "Need more"]
+			can_advance = settlement.can_advance_to(next_era, citizens.size(), housing_slots)
+
+		SettlementState.Era.WOOD:
+			next_era = SettlementState.Era.STONE
+			var has_th := settlement.has_building("wood_town_hall")
+			var has_mkt := settlement.has_building("wood_market")
+			var has_sm := settlement.has_building("sawmill")
+			var has_house3 := settlement.has_building("house_lvl3")
+			var pickaxe_ok := settlement._has_tools(["pickaxe"])
+			var money_ok := settlement.money >= 15
+			req_text = "Requirements for Stone Era:\n"
+			req_text += "- Wooden town hall built: %s\n" % ("Yes" if has_th else "No")
+			req_text += "- Sawmill built: %s\n" % ("Yes" if has_sm else "No")
+			req_text += "- Wood market built: %s\n" % ("Yes" if has_mkt else "No")
+			req_text += "- Wood house Level 3 built: %s\n" % ("Yes" if has_house3 else "No")
+			req_text += "- Tool Pickaxe owned: %s\n" % ("Yes" if pickaxe_ok else "No")
+			req_text += "- Money (needs 15): %d (%s)\n" % [settlement.money, "OK" if money_ok else "Need more"]
+			can_advance = settlement.can_advance_to(next_era, citizens.size(), housing_slots)
+
+		SettlementState.Era.STONE:
+			next_era = SettlementState.Era.BRICK
+			var has_pref := settlement.has_building("stone_prefecture")
+			var has_mkt := settlement.has_building("stone_market")
+			var has_mw := settlement.has_building("masonry_workshop")
+			var stone_ok := settlement.available_amount("stone") >= 20
+			var money_ok := settlement.money >= 20
+			req_text = "Requirements for Brick Era:\n"
+			req_text += "- Stone prefecture built: %s\n" % ("Yes" if has_pref else "No")
+			req_text += "- Masonry workshop built: %s\n" % ("Yes" if has_mw else "No")
+			req_text += "- Stone market built: %s\n" % ("Yes" if has_mkt else "No")
+			req_text += "- Stone (needs 20): %d (%s)\n" % [settlement.amount("stone"), "OK" if stone_ok else "Need more"]
+			req_text += "- Money (needs 20): %d (%s)\n" % [settlement.money, "OK" if money_ok else "Need more"]
+			can_advance = settlement.can_advance_to(next_era, citizens.size(), housing_slots)
+
+		SettlementState.Era.BRICK:
+			req_text = "Maximum era reached! Your settlement is fully advanced."
+			can_advance = false
+
+	return [req_text, can_advance]
 
 
 func _occupy_selected_campfire_position() -> void:
