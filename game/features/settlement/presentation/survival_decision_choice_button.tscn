@@ -1,0 +1,9 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/features/settlement/presentation/survival_decision_choice_button.gd" id="1_d_btn"]
+
+[node name="SurvivalDecisionChoiceButton" type="Button"]
+custom_minimum_size = Vector2(440, 32)
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 14
+script = ExtResource("1_d_btn")

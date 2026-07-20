@@ -1,0 +1,25 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/features/logistics/presentation/warehouse_item_row.gd" id="1_wh_row"]
+
+[node name="WarehouseItemRow" type="HBoxContainer"]
+custom_minimum_size = Vector2(290, 32)
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+script = ExtResource("1_wh_row")
+
+[node name="Label" type="Label" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 13
+vertical_alignment = 1
+
+[node name="AcceptCheckBox" type="CheckBox" parent="."]
+custom_minimum_size = Vector2(80, 28)
+layout_mode = 2
+text = "Accept"
+
+[node name="DumpButton" type="Button" parent="."]
+custom_minimum_size = Vector2(50, 28)
+layout_mode = 2
+text = "Dump"

@@ -1,0 +1,9 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/features/logistics/presentation/market_item_button.gd" id="1_m_btn"]
+
+[node name="MarketItemButton" type="Button"]
+custom_minimum_size = Vector2(272, 28)
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 13
+script = ExtResource("1_m_btn")

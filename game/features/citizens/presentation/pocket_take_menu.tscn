@@ -38,3 +38,23 @@ offset_right = 420.0
 offset_bottom = 40.0
 theme_override_font_sizes/font_size = 17
 text = "Взять товары со склада"
+
+[node name="ScrollContainer" type="ScrollContainer" parent="."]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 48.0
+offset_right = 420.0
+offset_bottom = 464.0
+
+[node name="ItemList" type="VBoxContainer" parent="ScrollContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="CloseButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 474.0
+offset_right = 420.0
+offset_bottom = 506.0
+text = "Закрыть (F/Esc)"

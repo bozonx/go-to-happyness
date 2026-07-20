@@ -1,6 +1,7 @@
 extends Node3D
 
 const SETTLEMENT_RULES = preload("res://game/features/settlement/domain/settlement_rules.gd")
+const PocketTakeItemRowScene = preload("res://game/features/citizens/presentation/pocket_take_item_row.tscn")
 const TentEraSurvivalRulesScript = preload("res://game/features/settlement/domain/tent_era_survival_rules.gd")
 const FireSourceStateScript = preload("res://game/features/settlement/domain/fire_source_state.gd")
 const CourierDispatcherScript = preload("res://game/features/logistics/application/courier_dispatcher.gd")
@@ -7710,45 +7711,24 @@ func _close_pocket_take_menu() -> void:
 func _refresh_pocket_take_menu() -> void:
 	if pocket_take_menu == null:
 		return
-	for child in pocket_take_menu.get_children():
-		if child != pocket_take_menu_title:
-			child.queue_free()
+	pocket_take_menu.clear_items()
 	var warehouse_index := pocket_take_warehouse_index if pocket_take_warehouse_index >= 0 else _nearby_warehouse_index()
 	var warehouse_amount := func(resource_type: String) -> int:
 		if warehouse_index >= 0:
 			return settlement.warehouses[warehouse_index].amount(resource_type)
 		return settlement.amount(resource_type)
-	var y_offset := 52.0
 	var displayed_resources := settlement.era_resources()
 	for resource_type in displayed_resources:
 		var stored: int = warehouse_amount.call(resource_type)
 		if stored <= 0:
 			continue
-		var row := Label.new()
-		row.position = Vector2(20, y_offset + 4)
-		row.size = Vector2(220, 24)
-		row.add_theme_font_size_override("font_size", 13)
-		row.text = "%s: %d" % [resource_type.capitalize(), stored]
-		pocket_take_menu.add_child(row)
-		var take_one := Button.new()
-		take_one.text = "+1"
-		take_one.position = Vector2(260, y_offset)
-		take_one.size = Vector2(60, 28)
-		take_one.pressed.connect(_take_resource_into_pocket.bind(resource_type, 1))
-		pocket_take_menu.add_child(take_one)
-		var take_all := Button.new()
-		take_all.text = "+max"
-		take_all.position = Vector2(326, y_offset)
-		take_all.size = Vector2(74, 28)
-		take_all.pressed.connect(_take_resource_into_pocket.bind(resource_type, _pocket_space_for(resource_type)))
-		pocket_take_menu.add_child(take_all)
-		y_offset += 34.0
-	var close_btn := Button.new()
-	close_btn.text = "Закрыть (F/Esc)"
-	close_btn.position = Vector2(20, y_offset + 8)
-	close_btn.size = Vector2(380, 30)
-	close_btn.pressed.connect(_close_pocket_take_menu)
-	pocket_take_menu.add_child(close_btn)
+		var row: PocketTakeItemRow = PocketTakeItemRowScene.instantiate()
+		row.setup(resource_type, stored)
+		row.take_one_requested.connect(_take_resource_into_pocket.bind(resource_type, 1))
+		row.take_all_requested.connect(func():
+			_take_resource_into_pocket(resource_type, _pocket_space_for(resource_type))
+		)
+		pocket_take_menu.item_list.add_child(row)
 	pocket_take_menu_title.text = "Взять товары со склада (карман %d/%d)" % [_pocket_total(), POCKET_CAPACITY]
 
 

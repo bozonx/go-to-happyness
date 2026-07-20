@@ -1,0 +1,24 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/features/decision/presentation/workforce_job_row.gd" id="1_job"]
+
+[node name="WorkforceJobRow" type="HBoxContainer"]
+custom_minimum_size = Vector2(400, 38)
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+script = ExtResource("1_job")
+
+[node name="Label" type="Label" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+vertical_alignment = 1
+
+[node name="DismissButton" type="Button" parent="."]
+custom_minimum_size = Vector2(78, 34)
+layout_mode = 2
+text = "Dismiss"
+
+[node name="AssignButton" type="Button" parent="."]
+custom_minimum_size = Vector2(72, 34)
+layout_mode = 2
+text = "Assign"

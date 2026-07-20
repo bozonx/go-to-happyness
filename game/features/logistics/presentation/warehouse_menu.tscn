@@ -38,3 +38,38 @@ offset_right = 308.0
 offset_bottom = 72.0
 theme_override_font_sizes/font_size = 15
 autowrap_mode = 2
+
+[node name="ScrollContainer" type="ScrollContainer" parent="."]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 80.0
+offset_right = 308.0
+offset_bottom = 480.0
+
+[node name="ItemList" type="VBoxContainer" parent="ScrollContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 4
+
+[node name="ActionsVBox" type="VBoxContainer" parent="."]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 490.0
+offset_right = 308.0
+offset_bottom = 620.0
+theme_override_constants/separation = 6
+
+[node name="CoverButton" type="Button" parent="ActionsVBox"]
+custom_minimum_size = Vector2(0, 28)
+layout_mode = 2
+text = "Cover materials"
+
+[node name="DemolishButton" type="Button" parent="ActionsVBox"]
+custom_minimum_size = Vector2(0, 28)
+layout_mode = 2
+text = "Mark for demolition"
+
+[node name="CloseButton" type="Button" parent="ActionsVBox"]
+custom_minimum_size = Vector2(0, 28)
+layout_mode = 2
+text = "Close Menu"

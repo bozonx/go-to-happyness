@@ -1,0 +1,47 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/features/settlement/presentation/research_item_row.gd" id="1_r_row"]
+
+[node name="ResearchItemRow" type="HBoxContainer"]
+custom_minimum_size = Vector2(604, 40)
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+script = ExtResource("1_r_row")
+
+[node name="DetailsVBox" type="VBoxContainer" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="TitleLabel" type="Label" parent="DetailsVBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+
+[node name="DescLabel" type="Label" parent="DetailsVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.647059, 0.709804, 0.772549, 1)
+theme_override_font_sizes/font_size = 10
+
+[node name="StatusLabel" type="Label" parent="."]
+visible = false
+layout_mode = 2
+theme_override_colors/font_color = Color(0.462745, 0.784314, 0.576471, 1)
+text = "Researched"
+
+[node name="ProgressVBox" type="VBoxContainer" parent="."]
+visible = false
+layout_mode = 2
+
+[node name="ProgressLabel" type="Label" parent="ProgressVBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "Researching: 0%"
+
+[node name="CancelButton" type="Button" parent="ProgressVBox"]
+layout_mode = 2
+text = "Cancel"
+
+[node name="StartButton" type="Button" parent="."]
+visible = false
+custom_minimum_size = Vector2(64, 28)
+layout_mode = 2
+text = "Start"

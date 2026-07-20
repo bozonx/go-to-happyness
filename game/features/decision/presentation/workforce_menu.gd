@@ -6,6 +6,9 @@ signal dismiss_requested(role: String)
 signal assign_requested(role: String)
 signal register_requested(citizen: Citizen)
 
+const WorkforceJobRowScene = preload("res://game/features/decision/presentation/workforce_job_row.tscn")
+const WorkforceUnregisteredRowScene = preload("res://game/features/decision/presentation/workforce_unregistered_row.tscn")
+
 @onready var title_label: Label = $TitleLabel
 @onready var list: VBoxContainer = $ScrollContainer/List
 
@@ -54,41 +57,15 @@ func _add_summary(text: String) -> void:
 
 
 func _add_job_row(job: Dictionary) -> void:
-	var row := HBoxContainer.new()
-	row.custom_minimum_size = Vector2(424, 38)
-	var label := Label.new()
-	label.text = job.label
-	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(label)
-	var dismiss := Button.new()
-	dismiss.text = "Dismiss"
-	dismiss.tooltip_text = job.dismiss_tooltip
-	dismiss.custom_minimum_size = Vector2(78, 34)
-	dismiss.disabled = job.dismiss_disabled
-	dismiss.pressed.connect(dismiss_requested.emit.bind(job.role))
-	row.add_child(dismiss)
-	var assign := Button.new()
-	assign.text = "Assign"
-	assign.tooltip_text = job.assign_tooltip
-	assign.custom_minimum_size = Vector2(72, 34)
-	assign.disabled = job.assign_disabled
-	assign.pressed.connect(assign_requested.emit.bind(job.role))
-	row.add_child(assign)
+	var row: WorkforceJobRow = WorkforceJobRowScene.instantiate()
+	row.setup(job)
+	row.dismiss_requested.connect(dismiss_requested.emit.bind(job.role))
+	row.assign_requested.connect(assign_requested.emit.bind(job.role))
 	list.add_child(row)
 
 
 func _add_unregistered_resident_row(resident: Dictionary) -> void:
-	var row := HBoxContainer.new()
-	row.custom_minimum_size = Vector2(424, 34)
-	var label := Label.new()
-	label.text = resident.label
-	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(label)
-	var auto_button := Button.new()
-	auto_button.text = resident.button_text
-	auto_button.tooltip_text = resident.tooltip
-	auto_button.custom_minimum_size = Vector2(72, 30)
-	auto_button.disabled = resident.disabled
-	auto_button.pressed.connect(register_requested.emit.bind(resident.citizen))
-	row.add_child(auto_button)
+	var row: WorkforceUnregisteredRow = WorkforceUnregisteredRowScene.instantiate()
+	row.setup(resident)
+	row.action_requested.connect(register_requested.emit.bind(resident.citizen))
 	list.add_child(row)

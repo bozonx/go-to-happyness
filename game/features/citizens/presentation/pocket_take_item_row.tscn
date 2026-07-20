@@ -1,0 +1,28 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/features/citizens/presentation/pocket_take_item_row.gd" id="1_row"]
+
+[node name="PocketTakeItemRow" type="HBoxContainer"]
+custom_minimum_size = Vector2(380, 32)
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+script = ExtResource("1_row")
+
+[node name="Label" type="Label" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 13
+text = "Wood: 0"
+vertical_alignment = 1
+
+[node name="TakeOneButton" type="Button" parent="."]
+custom_minimum_size = Vector2(60, 28)
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "+1"
+
+[node name="TakeAllButton" type="Button" parent="."]
+custom_minimum_size = Vector2(74, 28)
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "+max"

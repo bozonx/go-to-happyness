@@ -21,6 +21,7 @@ const WarehouseMenuScene = preload("res://game/features/logistics/presentation/w
 const MarketMenuScene = preload("res://game/features/logistics/presentation/market_menu.tscn")
 const MaterialsFactoryMenuScene = preload("res://game/features/production/presentation/materials_factory_menu.tscn")
 const EntranceMenuScene = preload("res://game/features/settlement/presentation/entrance_menu.tscn")
+const ContextMenuPanelScene = preload("res://game/features/ui/presentation/context_menu_panel.tscn")
 
 var simulation: Node
 
@@ -110,19 +111,13 @@ func create_interface() -> void:
 
 
 func create_context_menu_panel(anchor: int, offsets: Vector4, input_handler: Callable) -> Panel:
-	var panel := Panel.new()
+	var panel := ContextMenuPanelScene.instantiate() as Panel
 	panel.set_anchors_preset(anchor)
 	panel.offset_left = offsets.x
 	panel.offset_top = offsets.y
 	panel.offset_right = offsets.z
 	panel.offset_bottom = offsets.w
 	panel.visible = false
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.08, 0.14, 0.18, 0.75)
-	style.border_color = Color(0.25, 0.4, 0.5, 0.7)
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(6)
-	panel.add_theme_stylebox_override("panel", style)
 	panel.gui_input.connect(input_handler)
 	add_child(panel)
 	return panel
@@ -271,6 +266,7 @@ func _create_pocket_take_menu() -> void:
 	add_child(menu)
 	pocket_take_menu = menu
 	pocket_take_menu_title = menu.title_label
+	menu.close_requested.connect(Callable(simulation, "_close_pocket_take_menu"))
 
 
 func _create_building_menu() -> void:

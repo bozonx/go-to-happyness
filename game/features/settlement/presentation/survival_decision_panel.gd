@@ -3,28 +3,26 @@ extends Panel
 
 signal choice_selected(index: int)
 
+const SurvivalDecisionChoiceButtonScene = preload("res://game/features/settlement/presentation/survival_decision_choice_button.tscn")
+
 @onready var title_label: Label = $TitleLabel
 @onready var description_label: Label = $DescriptionLabel
-
-var _choice_buttons: Array[Button] = []
+@onready var choices_vbox: VBoxContainer = $ChoicesVBox
 
 
 func show_event(title: String, description: String, choice_labels: Array[String]) -> void:
 	title_label.text = title
 	description_label.text = description
-	for btn in _choice_buttons:
-		btn.queue_free()
-	_choice_buttons.clear()
-	var y_offset := 194
+
+	for child in choices_vbox.get_children():
+		child.queue_free()
+
 	for i in range(choice_labels.size()):
-		var btn := Button.new()
-		btn.position = Vector2(20, y_offset)
-		btn.size = Vector2(440, 32)
-		btn.text = choice_labels[i]
+		var btn: SurvivalDecisionChoiceButton = SurvivalDecisionChoiceButtonScene.instantiate()
+		btn.setup(choice_labels[i])
 		btn.pressed.connect(choice_selected.emit.bind(i))
-		add_child(btn)
-		_choice_buttons.append(btn)
-		y_offset += 42
+		choices_vbox.add_child(btn)
+
 	visible = true
 
 
