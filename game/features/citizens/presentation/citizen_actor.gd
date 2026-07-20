@@ -410,6 +410,9 @@ const CitizenAnimationControllerScript = preload("res://game/features/citizens/p
 const CitizenIdleIndicatorScript = preload("res://game/features/citizens/presentation/citizen_idle_indicator.gd")
 const CitizenEfficiencyServiceScript = preload("res://game/features/citizens/application/citizen_efficiency_service.gd")
 const CitizenSatisfactionServiceScript = preload("res://game/features/citizens/application/citizen_satisfaction_service.gd")
+const CitizenMovementControllerScript = preload("res://game/features/citizens/presentation/citizen_movement_controller.gd")
+const CitizenStateProcessorScript = preload("res://game/features/citizens/presentation/citizen_state_processor.gd")
+const CitizenActuatorBridgeScript = preload("res://game/features/citizens/presentation/citizen_actuator_bridge.gd")
 
 var toilet_handler: RefCounted = CitizenToiletHandlerScript.new()
 var task_executor: RefCounted = CitizenTaskExecutorScript.new()
@@ -418,6 +421,9 @@ var animation_controller: RefCounted = CitizenAnimationControllerScript.new()
 var idle_indicator_controller: RefCounted = CitizenIdleIndicatorScript.new()
 var efficiency_service: RefCounted = CitizenEfficiencyServiceScript.new()
 var satisfaction_service: RefCounted = CitizenSatisfactionServiceScript.new()
+var movement_controller: RefCounted = CitizenMovementControllerScript.new()
+var state_processor: RefCounted = CitizenStateProcessorScript.new()
+var actuator_bridge: RefCounted = CitizenActuatorBridgeScript.new()
 
 signal employment_processing_finished(citizen: Citizen)
 
@@ -557,125 +563,8 @@ func _physics_process(delta: float) -> void:
 
 
 func _process_state_behavior(delta: float) -> void:
-	match state:
-		State.IDLE:
-			_process_idle_wander(delta)
-		State.WAITING:
-			_process_waiting(delta)
-		State.TO_TREE:
-			_process_to_source(delta)
-		State.CHOPPING:
-			_process_source_work(delta)
-		State.TO_SAWMILL:
-			_process_to_workplace(delta)
-		State.SAWING:
-			_process_workplace_work(delta)
-		State.TO_WAREHOUSE:
-			_process_resource_delivery(delta)
-		State.WAITING_COURIER:
-			_process_courier_wait(delta)
-		State.CONSTRUCTING:
-			_process_construction(delta)
-		State.EXCAVATING:
-			_process_excavation(delta)
-		State.COURIER_TO_WORKER:
-			_process_courier_pickup(delta)
-		State.COURIER_TO_SAWMILL:
-			_process_sawmill_pickup(delta)
-		State.COURIER_TO_DEW:
-			_process_dew_collector_pickup(delta)
-		State.COURIER_TO_WAREHOUSE:
-			_process_courier_delivery(delta)
-		State.TO_HOME:
-			_process_go_home(delta)
-		State.RESTING:
-			_process_resting(delta)
-		State.TO_CANTEEN:
-			_process_go_to_canteen(delta)
-		State.EATING:
-			_process_eating(delta)
-		State.TO_FOOD_PICKUP:
-			_process_food_pickup(delta)
-		State.TO_CANTEEN_DELIVERY:
-			_process_canteen_delivery(delta)
-		State.TO_CANTEEN_WORK:
-			_process_canteen_work(delta)
-		State.TO_SCHOOL:
-			_process_go_to_school(delta)
-		State.STUDYING:
-			pass
-		State.RESEARCHING:
-			_process_research(delta)
-		State.TO_SCHOOL_WORK:
-			_process_school_work(delta)
-		State.TO_OFFICIAL_WORK:
-			_process_official_work(delta)
-		State.OFFICIAL_WORK:
-			pass
-		State.TO_FACTORY:
-			_process_to_factory(delta)
-		State.FACTORY_WORK:
-			_process_factory_work(delta)
-		State.TO_PARK:
-			_process_go_to_park(delta)
-		State.RELAXING:
-			_process_relaxing(delta)
-		State.TO_GATHER:
-			_process_to_gather(delta)
-		State.GATHERING:
-			_process_gathering(delta)
-		State.TO_CLEANING_PILE:
-			_process_to_cleaning_pile(delta)
-		State.CLEANING_PILE:
-			_process_cleaning_pile(delta)
-		State.TO_TRADE_PICKUP:
-			_process_trade_pickup(delta)
-		State.TO_TRADE_DESTINATION:
-			_process_trade_destination(delta)
-		State.TO_EMPLOYMENT_CENTER:
-			_process_to_employment_center(delta)
-		State.EMPLOYMENT_PROCESSING:
-			_process_employment_processing(delta)
-		State.CANTEEN_WORK:
-			pass
-		State.SCHOOL_WORK:
-			pass
-		State.TO_MARKET_WORK:
-			_process_market_work_arrival(delta)
-		State.MARKET_WORK:
-			pass
-		State.TO_CRAFT_WORK:
-			_process_craft_work_arrival(delta)
-		State.CRAFT_WORK:
-			_process_craft_work(delta)
-		State.TO_CONSTRUCTION_PICKUP:
-			_process_construction_pickup(delta)
-		State.TO_CONSTRUCTION_SITE:
-			_process_construction_delivery(delta)
-		State.TO_ARRIVAL_ENTRANCE:
-			_process_arrival_entrance(delta)
-		State.ARRIVAL_MEETING:
-			_process_arrival_meeting(delta)
-		State.TO_ARRIVAL_CENTER:
-			_process_arrival_center(delta)
-		State.TO_OUTSIDE_WORK:
-			_process_outside_work_departure(delta)
-		State.LEAVING:
-			_process_leaving(delta)
-		State.TO_TOILET:
-			_process_to_toilet(delta)
-		State.USING_TOILET:
-			_process_using_toilet(delta)
-		State.WAITING_FOR_TOILET:
-			_process_waiting_for_toilet(delta)
-		State.TO_BUSH:
-			_process_to_bush(delta)
-		State.USING_BUSH:
-			_process_using_bush(delta)
-		State.AI_MOVING:
-			_process_ai_moving(delta)
-		State.WORK_POSITION:
-			pass
+	if state_processor != null:
+		state_processor.process_state_behavior(self, delta)
 
 func _process_to_source(delta: float) -> void:
 	if _move_to(source_access_position, delta, false, false):
@@ -1302,268 +1191,74 @@ func has_active_delivery() -> bool:
 	return state in [State.COURIER_TO_WORKER, State.COURIER_TO_WAREHOUSE, State.COURIER_TO_SAWMILL, State.TO_FOOD_PICKUP, State.TO_CANTEEN_DELIVERY, State.TO_CONSTRUCTION_PICKUP, State.TO_CONSTRUCTION_SITE, State.TO_TRADE_PICKUP, State.TO_TRADE_DESTINATION, State.TO_ARRIVAL_ENTRANCE, State.ARRIVAL_MEETING, State.TO_OUTSIDE_WORK]
 
 func _move_to(destination: Vector3, delta: float, may_enter_destination_house := false, use_building_queue := true, record_trail := true, arrival_radius := 0.08) -> bool:
-	var movement_destination := destination
-	var is_queue_head := true
-	if use_building_queue and queue_position_resolver.is_valid():
-		var queue_result: Dictionary = queue_position_resolver.call(self, destination)
-		movement_destination = queue_result.get("position", destination)
-		is_queue_head = bool(queue_result.get("is_head", true))
-		# An overflowed queue member has no slot yet. Keep its current position
-		# without creating a zero-length route every physics frame.
-		if not is_queue_head and movement_destination.distance_to(global_position) <= 0.05:
-			_stop_horizontal_movement()
-			return false
-	if _route_uses_stale_navigation():
-		_invalidate_route_for_navigation_change()
-	# Detect a changed goal before honouring a prior failure: a new destination
-	# (or a house-entry change) is a fresh navigation problem and must clear a
-	# stale give-up flag, otherwise the citizen freezes on the old target forever.
-	var goal_changed := path_destination.distance_to(movement_destination) > arrival_radius or path_allows_destination_house != may_enter_destination_house
-	if goal_changed:
-		_reset_route(movement_destination)
-		path_allows_destination_house = may_enter_destination_house
-		_plan_route(movement_destination)
-	if navigation_failed:
-		# The world may have opened up since we gave up (a blocking building was
-		# demolished, terrain excavated). Retry once when the topology changed.
-		if _navigation_topology_changed_since_failure():
-			_reset_route(movement_destination)
-			_plan_route(movement_destination)
-		else:
-			_stop_horizontal_movement()
-			if ai_move_failure_reason == BehaviorStep.FailureReason.NONE:
-				ai_move_failure_reason = BehaviorStep.FailureReason.MOVEMENT_FAILED
-			return false
-	if active_route == null or not active_route.reachable:
-		route_retry_timer = maxf(0.0, route_retry_timer - delta)
-		if route_retry_timer <= 0.0:
-			_plan_route(movement_destination)
-		if active_route == null or not active_route.reachable:
-			route_unreachable_time += delta
-			if route_unreachable_time >= ROUTE_UNREACHABLE_FAILURE_TIME:
-				_raise_navigation_failure(BehaviorStep.FailureReason.UNREACHABLE)
-				_stop_horizontal_movement()
-			return false
-	while not movement_path.is_empty():
-		var waypoint: Vector3 = movement_path.front()
-		var waypoint_offset := waypoint - global_position
-		waypoint_offset.y = 0.0
-		var is_final_waypoint := movement_path.size() == 1
-		# Do not drive the capsule centre into an entrance marker or wall. The
-		# interaction systems already accept a small area around service points.
-		var waypoint_radius := maxf(arrival_radius, PHYSICAL_ARRIVAL_RADIUS) if is_final_waypoint else 0.08
-		if waypoint_offset.length() > waypoint_radius:
-			return _move_directly_to(waypoint, delta, record_trail, waypoint_radius)
-		movement_path.pop_front()
-		_reset_waypoint_progress()
-	_stop_horizontal_movement()
-	if is_queue_head and use_building_queue and queue_arrival_notifier.is_valid():
-		queue_arrival_notifier.call(self, destination)
-	return is_queue_head
+	if movement_controller != null:
+		return movement_controller.move_to(self, destination, delta, may_enter_destination_house, use_building_queue, record_trail, arrival_radius)
+	return false
 
 func _plan_route(destination: Vector3) -> void:
-	var result: Variant = RouteResult.success([destination], destination)
-	if pathfinder.is_valid():
-		result = pathfinder.call(global_position, destination, path_allows_destination_house)
-	if recovery_detour_requested:
-		recovery_detour_requested = false
-		if recovery_pathfinder.is_valid():
-			var detour: Variant = recovery_pathfinder.call(global_position, destination, path_allows_destination_house)
-			if detour is RouteResult and (detour as RouteResult).reachable:
-				result = detour
-	if not result is RouteResult or not (result as RouteResult).reachable:
-		var failed_revision := int(navigation_revision_query.call()) if navigation_revision_query.is_valid() else -1
-		var reason := (result as RouteResult).unreachable_reason if result is RouteResult else RouteResult.UnreachableReason.UNKNOWN
-		route_unreachable_reason = reason
-		active_route = RouteResult.unreachable(failed_revision, failed_revision, reason)
-		movement_path.clear()
-		route_retry_timer = route_retry_delay
-		route_retry_delay = minf(ROUTE_MAX_RETRY_INTERVAL, route_retry_delay * 2.0)
-		velocity.x = 0.0
-		velocity.z = 0.0
-		return
-	active_route = result as RouteResult
-	movement_path = active_route.waypoints.duplicate()
-	route_retry_timer = 0.0
-	route_retry_delay = ROUTE_RETRY_INTERVAL
-	route_unreachable_time = 0.0
-	route_unreachable_reason = RouteResult.UnreachableReason.NONE
-	ai_move_failure_reason = BehaviorStep.FailureReason.NONE
-	recovery_repath_done = false
-
+	if movement_controller != null:
+		movement_controller.plan_route(self, destination)
 
 func _raise_navigation_failure(reason: int) -> void:
-	navigation_failed = true
-	ai_move_failure_reason = reason
-	navigation_failed_topology = int(navigation_revision_query.call()) if navigation_revision_query.is_valid() else -999
-
+	if movement_controller != null:
+		movement_controller.raise_navigation_failure(self, reason)
 
 func _navigation_topology_changed_since_failure() -> bool:
-	if not navigation_revision_query.is_valid():
-		return false
-	var current := int(navigation_revision_query.call())
-	return current >= 0 and current != navigation_failed_topology
-
+	if movement_controller != null:
+		return movement_controller.navigation_topology_changed_since_failure(self)
+	return false
 
 func _route_uses_stale_navigation() -> bool:
-	if active_route == null or active_route.topology_revision < 0 or not navigation_revision_query.is_valid():
-		return false
-	var current_revision := int(navigation_revision_query.call())
-	if not active_route.is_topologically_stale(current_revision):
-		return false
-	var route_origin := global_position if is_inside_tree() else position
-	if route_safety_query.is_valid() and bool(route_safety_query.call(route_origin, movement_path, path_allows_destination_house)):
-		active_route.topology_revision = current_revision
-		return false
-	return true
-
+	if movement_controller != null:
+		return movement_controller.route_uses_stale_navigation(self)
+	return false
 
 func _invalidate_route_for_navigation_change() -> void:
-	active_route = null
-	movement_path.clear()
-	route_retry_timer = randf_range(0.0, STALE_NAVIGATION_REPLAN_JITTER)
-	route_retry_delay = ROUTE_RETRY_INTERVAL
-	route_unreachable_time = 0.0
-	route_unreachable_reason = RouteResult.UnreachableReason.NONE
-	navigation_failed = false
-	ai_move_failure_reason = BehaviorStep.FailureReason.STALE_ROUTE
-	stuck_time = 0.0
-	recovery_repath_done = false
-	velocity.x = 0.0
-	velocity.z = 0.0
+	if movement_controller != null:
+		movement_controller.invalidate_route_for_navigation_change(self)
 
 func _move_directly_to(destination: Vector3, delta: float, record_trail := true, arrival_distance := 0.08) -> bool:
-	var offset := destination - global_position
-	offset.y = 0.0
-	if offset.length() <= arrival_distance:
-		return true
-	var direction := offset.normalized()
-	var speed_modifier := float(movement_speed_modifier_query.call(global_position)) if movement_speed_modifier_query.is_valid() else 1.0
-	var current_walk_speed := get_walk_speed() * speed_modifier
-	var desired_velocity := direction * current_walk_speed
-	velocity.x = desired_velocity.x
-	velocity.z = desired_velocity.z
-	jump_cooldown = maxf(0.0, jump_cooldown - delta)
-	var position_before_move := global_position
-	var distance_before_move := offset.length()
-	move_and_slide()
-	var horizontal_progress := Vector2(global_position.x - position_before_move.x, global_position.z - position_before_move.z).length()
-	if record_trail and horizontal_progress > 0.01 and trail_movement_recorder.is_valid():
-		trail_movement_recorder.call(ai_id, global_position)
-	var distance_after_move := Vector2(destination.x - global_position.x, destination.z - global_position.z).length()
-	_update_route_progress(distance_before_move, distance_after_move, delta, direction)
-	if is_on_floor() and horizontal_progress < current_walk_speed * delta * 0.15:
-		stuck_time += delta
-		if jump_cooldown <= 0.0:
-			if stuck_time >= STUCK_TIME_BEFORE_REPATH and not recovery_repath_done:
-				_force_repath()
-			elif stuck_time >= STUCK_TIME_BEFORE_JUMP and _has_low_obstacle_ahead(direction):
-				_jump_out_of_obstacle()
-	else:
-		stuck_time = 0.0
-		recovery_repath_done = false
-	look_at(global_position + direction, Vector3.UP)
+	if movement_controller != null:
+		return movement_controller.move_directly_to(self, destination, delta, record_trail, arrival_distance)
 	return false
 
 func _has_low_obstacle_ahead(direction: Vector3) -> bool:
-	var space_state := get_world_3d().direct_space_state
-	var forward := direction * 0.62
-	var low_query := PhysicsRayQueryParameters3D.create(global_position + Vector3.UP * 0.22, global_position + Vector3.UP * 0.22 + forward, collision_mask)
-	low_query.exclude = [get_rid()]
-	var low_hit := space_state.intersect_ray(low_query)
-	if low_hit.is_empty():
-		return false
-	# Never hop onto buildings: a wall or platform ahead means the path must go
-	# around it, not over it.
-	var collider: Object = low_hit.get("collider")
-	if collider is Node and (collider as Node).has_meta("building_module"):
-		return false
-	var high_query := PhysicsRayQueryParameters3D.create(global_position + Vector3.UP * 0.9, global_position + Vector3.UP * 0.9 + forward, collision_mask)
-	high_query.exclude = [get_rid()]
-	return space_state.intersect_ray(high_query).is_empty()
+	if movement_controller != null:
+		return movement_controller.has_low_obstacle_ahead(self, direction)
+	return false
 
 func _jump_out_of_obstacle() -> void:
-	velocity.y = AI_JUMP_VELOCITY
-	jump_cooldown = 0.45
-	stuck_time = 0.0
+	if movement_controller != null:
+		movement_controller.jump_out_of_obstacle(self)
 
 func _force_repath() -> void:
-	if recovery_repath_done:
-		return
-	route_recovery_attempt += 1
-	if route_recovery_attempt >= ROUTE_RECOVERY_FAILURE_ATTEMPTS:
-		_raise_navigation_failure(BehaviorStep.FailureReason.TIMEOUT)
-		active_route = null
-		movement_path.clear()
-		_stop_horizontal_movement()
-		return
-	active_route = null
-	movement_path.clear()
-	recovery_detour_requested = route_recovery_attempt > 1
-	route_retry_timer = 0.0
-	route_retry_delay = ROUTE_RETRY_INTERVAL
-	route_no_progress_time = 0.0
-	stuck_time = 0.0
-	recovery_repath_done = true
+	if movement_controller != null:
+		movement_controller.force_repath(self)
 
 func _reset_waypoint_progress() -> void:
-	route_no_progress_time = 0.0
-	route_best_distance = INF
-	route_recovery_attempt = 0
-	stuck_time = 0.0
-	recovery_repath_done = false
+	if movement_controller != null:
+		movement_controller.reset_waypoint_progress(self)
 
 func _stop_horizontal_movement() -> void:
-	velocity.x = 0.0
-	velocity.z = 0.0
+	if movement_controller != null:
+		movement_controller.stop_horizontal_movement(self)
 
 func _reset_route(destination: Vector3) -> void:
-	path_destination = destination
-	route_no_progress_time = 0.0
-	route_best_distance = INF
-	route_recovery_attempt = 0
-	recovery_detour_requested = false
-	recovery_repath_done = false
-	route_retry_delay = ROUTE_RETRY_INTERVAL
-	route_unreachable_time = 0.0
-	route_unreachable_reason = RouteResult.UnreachableReason.NONE
-	navigation_failed = false
-	ai_move_failure_reason = BehaviorStep.FailureReason.NONE
+	if movement_controller != null:
+		movement_controller.reset_route(self, destination)
 
 func _update_route_progress(distance_before: float, distance_after: float, delta: float, direction: Vector3) -> void:
-	if distance_after < route_best_distance - ROUTE_PROGRESS_EPSILON:
-		route_best_distance = distance_after
-		route_no_progress_time = 0.0
-		route_recovery_attempt = 0
-		return
-	route_no_progress_time += delta
-	if route_no_progress_time < ROUTE_RETRY_INTERVAL:
-		return
-	route_no_progress_time = 0.0
-	_force_repath()
+	if movement_controller != null:
+		movement_controller.update_route_progress(self, distance_before, distance_after, delta, direction)
 
 func _apply_gravity(delta: float) -> void:
-	if not ground_contact_confirmed:
-		if not _has_ground_below():
-			velocity = Vector3.ZERO
-			return
-		ground_contact_confirmed = true
-	if not is_on_floor() or velocity.y > 0.0:
-		velocity.y -= GRAVITY * delta
-	else:
-		velocity.y = -0.5
-	if state == State.IDLE or state == State.RESTING or state == State.WAITING:
-		velocity.x = 0.0
-		velocity.z = 0.0
-		move_and_slide()
-
+	if movement_controller != null:
+		movement_controller.apply_gravity(self, delta)
 
 func _has_ground_below() -> bool:
-	var space_state := get_world_3d().direct_space_state
-	var origin := global_position + Vector3.UP * 0.25
-	var query := PhysicsRayQueryParameters3D.create(origin, origin + Vector3.DOWN * 2.0, collision_mask)
-	query.exclude = [get_rid()]
-	return not space_state.intersect_ray(query).is_empty()
+	if movement_controller != null:
+		return movement_controller.has_ground_below(self)
+	return false
 
 func _work(delta: float) -> bool:
 	var speed_multiplier := 1.0
@@ -2275,285 +1970,42 @@ func _process_ai_moving(delta: float) -> void:
 
 
 func execute_action(action: StringName, target: Node3D, payload: AIFactSet) -> bool:
-	if is_player_controlled:
-		return false
-	match action:
-		&"sleep", &"eat", &"relieve", &"rest", &"relax":
-			return _execute_personal_need_action(action, payload)
-		&"forestry", &"farming", &"gathering", &"cleaning", &"excavation", &"factory_work":
-			return _execute_production_action(action, target, payload)
-		&"construction", &"demolition", &"cook", &"teacher", &"seller", &"official", &"craftsman", &"researcher", &"register":
-			return _execute_workforce_action(action, target, payload)
-		&"courier_delivery":
-			return _execute_logistics_action(action, target, payload)
+	if actuator_bridge != null:
+		return actuator_bridge.execute_action(self, action, target, payload)
 	return false
-
 
 func _execute_personal_need_action(action: StringName, payload: AIFactSet) -> bool:
-	match action:
-		&"sleep":
-			if not is_instance_valid(home):
-				return false
-			_reset_assignment_navigation()
-			factory = null
-			var home_entrance: Vector3 = home.position
-			if home.is_inside_tree():
-				home_entrance = home.get_meta("entrance_position", home.global_position)
-			if is_inside_tree() and global_position.distance_to(home_entrance) <= 0.5:
-				state = State.RESTING
-			else:
-				state = State.TO_HOME
-			return state in [State.TO_HOME, State.RESTING]
-		&"eat":
-			var destination: Variant = payload.value(&"target.position", Vector3.INF) if payload != null else Vector3.INF
-			if not (destination is Vector3) or destination == Vector3.INF:
-				return false
-			_reset_assignment_navigation()
-			canteen_position = destination
-			active_role = ""
-			factory = null
-			if is_inside_tree() and global_position.distance_to(destination) <= 0.5:
-				state = State.EATING
-				_start_task(1.1)
-			else:
-				state = State.TO_CANTEEN
-			return state in [State.TO_CANTEEN, State.EATING]
-		&"relieve":
-			var relief_position: Variant = payload.value(&"target.position", Vector3.INF) if payload != null else Vector3.INF
-			var relief_kind: Variant = payload.value(&"target.kind", &"") if payload != null else &""
-			if not (relief_position is Vector3) or relief_position == Vector3.INF or not (relief_kind is StringName):
-				return false
-			go_to_relief(relief_position, relief_kind)
-			return state in [State.TO_TOILET, State.USING_TOILET, State.WAITING_FOR_TOILET, State.TO_BUSH, State.USING_BUSH]
-		&"rest":
-			var rest_position: Variant = payload.value(&"target.position", Vector3.INF) if payload != null else Vector3.INF
-			var rest_duration := float(payload.value(&"action.duration", 4.0)) if payload != null else 4.0
-			if not (rest_position is Vector3) or rest_position == Vector3.INF:
-				return false
-			go_to_park(rest_position, 0, rest_duration)
-			return state in [State.TO_PARK, State.RELAXING]
-		&"relax":
-			var relax_duration := float(payload.value(&"action.duration", 4.0)) if payload != null else 4.0
-			state = State.RELAXING
-			_start_task(relax_duration)
-			return true
+	if actuator_bridge != null:
+		return actuator_bridge.execute_personal_need_action(self, action, payload)
 	return false
-
 
 func _execute_production_action(action: StringName, target: Node3D, payload: AIFactSet) -> bool:
-	match action:
-		&"forestry":
-			var tree_position: Variant = payload.value(&"target.position", Vector3.INF) if payload != null else Vector3.INF
-			var access_position: Variant = payload.value(&"target.access_position", Vector3.INF) if payload != null else Vector3.INF
-			var sawmill_position: Variant = payload.value(&"workplace.position", Vector3.INF) if payload != null else Vector3.INF
-			var warehouse_position: Variant = payload.value(&"warehouse.position", Vector3.INF) if payload != null else Vector3.INF
-			if not (tree_position is Vector3) or tree_position == Vector3.INF or not (access_position is Vector3) or access_position == Vector3.INF or not (sawmill_position is Vector3) or sawmill_position == Vector3.INF or not (warehouse_position is Vector3) or warehouse_position == Vector3.INF:
-				return false
-			start_production_cycle("wood", tree_position, sawmill_position, warehouse_position, false, access_position)
-			return state in [State.TO_TREE, State.CHOPPING, State.TO_SAWMILL]
-		&"farming":
-			var farm_position: Variant = payload.value(&"workplace.position", Vector3.INF) if payload != null else Vector3.INF
-			var farm_warehouse_position: Variant = payload.value(&"warehouse.position", Vector3.INF) if payload != null else Vector3.INF
-			if not (farm_position is Vector3) or farm_position == Vector3.INF or not (farm_warehouse_position is Vector3) or farm_warehouse_position == Vector3.INF:
-				return false
-			start_production_cycle("food", farm_position, farm_position, farm_warehouse_position, true)
-			return state in [State.TO_TREE, State.TO_SAWMILL, State.SAWING, State.WAITING_COURIER]
-		&"gathering":
-			var resource_type: Variant = payload.value(&"resource.type", "") if payload != null else ""
-			var source_position: Variant = payload.value(&"target.position", Vector3.INF) if payload != null else Vector3.INF
-			var access_position: Variant = payload.value(&"target.access_position", Vector3.INF) if payload != null else Vector3.INF
-			var gathering_warehouse_position: Variant = payload.value(&"warehouse.position", Vector3.INF) if payload != null else Vector3.INF
-			if not (resource_type is String) or resource_type.is_empty() or not (source_position is Vector3) or source_position == Vector3.INF or not (access_position is Vector3) or access_position == Vector3.INF or not (gathering_warehouse_position is Vector3) or gathering_warehouse_position == Vector3.INF:
-				return false
-			assign_gathering(resource_type, source_position, gathering_warehouse_position, access_position)
-			return state in [State.TO_GATHER, State.GATHERING, State.TO_WAREHOUSE]
-		&"cleaning":
-			var cleaning_resource_type: Variant = payload.value(&"resource.type", "") if payload != null else ""
-			var pile_position: Variant = payload.value(&"target.position", Vector3.INF) if payload != null else Vector3.INF
-			var pile_access_position: Variant = payload.value(&"target.access_position", Vector3.INF) if payload != null else Vector3.INF
-			var cleaning_warehouse_position: Variant = payload.value(&"warehouse.position", Vector3.INF) if payload != null else Vector3.INF
-			if not (cleaning_resource_type is String) or cleaning_resource_type.is_empty() or not (pile_position is Vector3) or pile_position == Vector3.INF or not (pile_access_position is Vector3) or pile_access_position == Vector3.INF or not (cleaning_warehouse_position is Vector3) or cleaning_warehouse_position == Vector3.INF:
-				return false
-			assign_cleaning(cleaning_resource_type, pile_position, pile_access_position, cleaning_warehouse_position)
-			return state in [State.TO_CLEANING_PILE, State.CLEANING_PILE, State.TO_WAREHOUSE]
-		&"excavation":
-			if not is_instance_valid(target):
-				return false
-			assign_excavation(target)
-			return state == State.EXCAVATING
-		&"factory_work":
-			var factory_role: Variant = payload.value(&"factory.role", &"") if payload != null else &""
-			if not is_instance_valid(target) or not (factory_role is StringName) or factory_role == &"":
-				return false
-			assign_factory_work(target, String(factory_role))
-			return state in [State.TO_FACTORY, State.FACTORY_WORK]
+	if actuator_bridge != null:
+		return actuator_bridge.execute_production_action(self, action, target, payload)
 	return false
-
 
 func _execute_workforce_action(action: StringName, target: Node3D, payload: AIFactSet) -> bool:
-	match action:
-		&"construction", &"demolition":
-			if not is_instance_valid(target):
-				return false
-			if action == &"construction":
-				assign_construction(target)
-			else:
-				assign_demolition(target)
-			return state == State.CONSTRUCTING
-		&"cook", &"teacher", &"seller", &"official", &"craftsman", &"researcher":
-			var service_position: Variant = payload.value(&"workplace.position", Vector3.INF) if payload != null else Vector3.INF
-			if not (service_position is Vector3) or service_position == Vector3.INF:
-				return false
-			match action:
-				&"cook": assign_canteen_work(service_position)
-				&"teacher": assign_teacher_work(service_position)
-				&"seller": assign_seller_work(service_position)
-				&"official": assign_official_work(service_position)
-				&"craftsman": assign_craft_work(service_position, _craft_speed_multiplier_internal())
-				&"researcher": assign_research_work(service_position)
-			return state in _service_states_for_internal(action)
-		&"register":
-			var center_position: Variant = payload.value(&"center.position", Vector3.INF) if payload != null else Vector3.INF
-			var pending_role: Variant = payload.value(&"workplace.role", "") if payload != null else ""
-			if not (center_position is Vector3) or center_position == Vector3.INF or not (pending_role is String) or pending_role.is_empty():
-				return false
-			begin_employment_processing(center_position, pending_role, target)
-			return state in [State.TO_EMPLOYMENT_CENTER, State.EMPLOYMENT_PROCESSING]
+	if actuator_bridge != null:
+		return actuator_bridge.execute_workforce_action(self, action, target, payload)
 	return false
-
 
 func _execute_logistics_action(action: StringName, target: Node3D, payload: AIFactSet) -> bool:
-	if action == &"courier_delivery":
-		var task_id: Variant = payload.value(&"courier.task_id", &"") if payload != null else &""
-		if not (task_id is StringName) or task_id == &"" or simulation == null or simulation.courier_dispatcher == null:
-			return false
-		if not simulation.courier_dispatcher.start_task(self, task_id):
-			return false
-		return has_active_delivery()
+	if actuator_bridge != null:
+		return actuator_bridge.execute_logistics_action(self, action, target, payload)
 	return false
 
-
 func get_action_status(action: StringName) -> int:
-	if navigation_failed:
-		return 3 # FAILED
-	match action:
-		&"sleep":
-			if state in [State.TO_HOME, State.RESTING]:
-				return 1 # RUNNING
-		&"eat":
-			if state in [State.TO_CANTEEN, State.EATING]:
-				return 1 # RUNNING
-			if state == State.IDLE:
-				return 2 # SUCCEEDED
-		&"relieve":
-			if state in [State.TO_TOILET, State.USING_TOILET, State.WAITING_FOR_TOILET, State.TO_BUSH, State.USING_BUSH]:
-				return 1 # RUNNING
-			if simulation != null and simulation.citizen_needs_service != null and not simulation.citizen_needs_service.has_toilet_request(ai_id):
-				return 2 # SUCCEEDED
-			if state == State.IDLE:
-				return 2 # SUCCEEDED
-		&"rest":
-			if state in [State.TO_PARK, State.RELAXING]:
-				return 1 # RUNNING
-			if simulation != null and simulation.citizen_needs_service != null and not simulation.citizen_needs_service.has_rest_request(ai_id):
-				return 2 # SUCCEEDED
-			if state == State.IDLE:
-				return 2 # SUCCEEDED
-		&"relax":
-			if state == State.RELAXING:
-				return 1 # RUNNING
-			if state == State.IDLE:
-				return 2 # SUCCEEDED
-		&"forestry":
-			if state in [State.TO_TREE, State.CHOPPING, State.TO_SAWMILL]:
-				return 1 # RUNNING
-			if state == State.IDLE:
-				return 2 # SUCCEEDED
-		&"farming":
-			if state in [State.TO_TREE, State.CHOPPING, State.TO_SAWMILL, State.SAWING, State.WAITING_COURIER]:
-				return 1 # RUNNING
-			if state == State.IDLE:
-				return 2 # SUCCEEDED
-		&"construction", &"demolition":
-			if state == State.CONSTRUCTING and active_role == str(action):
-				return 1 # RUNNING
-			if state == State.IDLE:
-				return 2 # SUCCEEDED
-		&"gathering":
-			if state in [State.TO_GATHER, State.GATHERING, State.TO_WAREHOUSE, State.WAITING_COURIER]:
-				return 1 # RUNNING
-			if state == State.IDLE:
-				return 2 # SUCCEEDED
-		&"cleaning":
-			if state in [State.TO_CLEANING_PILE, State.CLEANING_PILE, State.TO_WAREHOUSE]:
-				return 1 # RUNNING
-			if state == State.IDLE:
-				return 2 # SUCCEEDED
-		&"excavation":
-			if state in [State.EXCAVATING, State.WAITING_COURIER]:
-				return 1 # RUNNING
-			if state == State.IDLE:
-				return 2 # SUCCEEDED
-		&"cook", &"teacher", &"seller", &"official", &"craftsman", &"researcher":
-			if state in _service_states_for_internal(action):
-				return 1 # RUNNING
-			if state == State.IDLE:
-				return 2 # SUCCEEDED
-		&"factory_work":
-			if state in [State.TO_FACTORY, State.FACTORY_WORK]:
-				return 1 # RUNNING
-			if state == State.IDLE:
-				return 2 # SUCCEEDED
-		&"courier_delivery":
-			if has_active_delivery():
-				return 1 # RUNNING
-			if state == State.IDLE:
-				return 2 # SUCCEEDED
-		&"register":
-			if state in [State.TO_EMPLOYMENT_CENTER, State.EMPLOYMENT_PROCESSING]:
-				return 1 # RUNNING
-			if employment_state == EmploymentState.EMPLOYED or state == State.IDLE:
-				return 2 # SUCCEEDED
+	if actuator_bridge != null:
+		return actuator_bridge.get_action_status(self, action)
 	return 3 # FAILED
 
-
 func cancel_current_action() -> void:
-	var was_relief_action := state in [State.TO_TOILET, State.USING_TOILET, State.WAITING_FOR_TOILET, State.TO_BUSH, State.USING_BUSH]
-	var was_construction_delivery := state in [State.TO_CONSTRUCTION_PICKUP, State.TO_CONSTRUCTION_SITE]
-	# A gathering or cleaning action can be interrupted after the resource has been picked
-	# up. Put that cargo on the ground rather than leaving it attached to an idle worker.
-	if (active_role.begins_with("gather_") or active_role == "cleaning") and carried_amount > 0 and not resource_type.is_empty():
-		resource_dropped.emit(self, resource_type, carried_amount)
-		carried_amount = 0
-	if is_registering():
-		pending_employment_role = ""
-		pending_employment_workplace = null
-		registration_queue_order = -1
-		employment_state = EmploymentState.NO_PERMANENT_WORK
-	if state in [State.TO_HOME, State.RESTING, State.TO_CANTEEN, State.EATING, State.TO_TOILET, State.USING_TOILET, State.WAITING_FOR_TOILET, State.TO_BUSH, State.USING_BUSH, State.AI_MOVING, State.TO_PARK, State.RELAXING, State.TO_TREE, State.CHOPPING, State.TO_SAWMILL, State.SAWING, State.WAITING_COURIER, State.CONSTRUCTING, State.TO_GATHER, State.GATHERING, State.TO_CLEANING_PILE, State.CLEANING_PILE, State.TO_WAREHOUSE, State.EXCAVATING, State.TO_CANTEEN_WORK, State.CANTEEN_WORK, State.TO_SCHOOL_WORK, State.SCHOOL_WORK, State.TO_MARKET_WORK, State.MARKET_WORK, State.TO_OFFICIAL_WORK, State.OFFICIAL_WORK, State.TO_CRAFT_WORK, State.CRAFT_WORK, State.RESEARCHING, State.TO_FACTORY, State.FACTORY_WORK, State.COURIER_TO_WORKER, State.COURIER_TO_WAREHOUSE, State.COURIER_TO_SAWMILL, State.TO_FOOD_PICKUP, State.TO_CANTEEN_DELIVERY, State.TO_CONSTRUCTION_PICKUP, State.TO_CONSTRUCTION_SITE, State.TO_TRADE_PICKUP, State.TO_TRADE_DESTINATION, State.TO_EMPLOYMENT_CENTER, State.EMPLOYMENT_PROCESSING]:
-		idle()
-	if was_construction_delivery:
-		# The site reservation is reconciled by SettlementGame. Clear the actor-side
-		# cargo so a cancelled route cannot remain an assigned delivery forever.
-		carried_amount = 0
-		construction_delivery_resource = ""
-		building_supply_kind = "construction"
-	if was_relief_action:
-		current_toilet_target = null
-		toilet_relief_position = Vector3.INF
-		toilet_relief_type = ""
-		has_toilet_resume_state = false
-		toilet_resume_state = State.IDLE
-		toilet_resume_idle_wander_anchor = Vector3.INF
-		toilet_resume_idle_wander_target = Vector3.INF
-		toilet_resume_idle_wander_pause = 0.0
-
+	if actuator_bridge != null:
+		actuator_bridge.cancel_current_action(self)
 
 func end_work_shift() -> void:
-	if is_player_controlled:
-		return
-	if state in [State.TO_TREE, State.CHOPPING, State.TO_SAWMILL, State.SAWING, State.WAITING_COURIER, State.CONSTRUCTING, State.EXCAVATING, State.TO_GATHER, State.GATHERING, State.TO_CLEANING_PILE, State.CLEANING_PILE, State.TO_WAREHOUSE, State.TO_CANTEEN_WORK, State.CANTEEN_WORK, State.TO_SCHOOL_WORK, State.SCHOOL_WORK, State.TO_MARKET_WORK, State.MARKET_WORK, State.TO_OFFICIAL_WORK, State.OFFICIAL_WORK, State.TO_CRAFT_WORK, State.CRAFT_WORK, State.RESEARCHING, State.TO_FACTORY, State.FACTORY_WORK]:
-		cancel_current_action()
+	if actuator_bridge != null:
+		actuator_bridge.end_work_shift(self)
 
 
 func _craft_speed_multiplier_internal() -> float:
