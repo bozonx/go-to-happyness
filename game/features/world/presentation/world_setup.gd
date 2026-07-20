@@ -9,6 +9,7 @@ var rain_effect: RainEffect
 var sky_and_weather_controller: SkyAndWeatherController
 var ground_body: StaticBody3D
 var ground_mesh: MeshInstance3D
+var terrain: Terrain3D
 var trail_overlay: MeshInstance3D
 var trail_overlay_material: ShaderMaterial
 var selection_marker: MeshInstance3D
@@ -41,7 +42,7 @@ func build(parent: Node) -> void:
 	_build_lens_flare(parent)
 	_build_rain_effect(parent)
 	_build_sky_and_weather_controller(parent)
-	_build_plane_ground(parent)
+	_build_terrain(parent)
 	_build_trail_overlay(parent)
 	_build_selection_marker(parent)
 
@@ -156,31 +157,13 @@ func _build_sky_and_weather_controller(parent: Node) -> void:
 	)
 
 
-func _build_plane_ground(parent: Node) -> void:
-	ground_body = StaticBody3D.new()
-	ground_body.name = "Ground"
-	var collision := CollisionShape3D.new()
-	var shape := BoxShape3D.new()
-	var board_extent: float = maxf(_board_cells * _cell_size * 2.0, 500.0)
-	shape.size = Vector3(board_extent, 0.2, board_extent)
-	collision.shape = shape
-	collision.position.y = -0.1
-	ground_body.add_child(collision)
-
-	if DisplayServer.get_name() != "headless":
-		ground_mesh = MeshInstance3D.new()
-		ground_mesh.name = "GroundMesh"
-		var mesh := PlaneMesh.new()
-		mesh.size = Vector2(board_extent, board_extent)
-		ground_mesh.mesh = mesh
-		var material := StandardMaterial3D.new()
-		material.albedo_color = Color("5f8953")
-		material.roughness = 0.95
-		ground_mesh.material_override = material
-		ground_mesh.position.y = 0.0
-		ground_body.add_child(ground_mesh)
-
-	parent.add_child(ground_body)
+func _build_terrain(parent: Node) -> void:
+	terrain = parent.get_node_or_null("Terrain3dWorld/Terrain3D") as Terrain3D
+	if terrain == null:
+		push_error("Settlement scene is missing Terrain3dWorld/Terrain3D.")
+		return
+	# Dynamic collision follows the active camera by default, keeping raycasts and
+	# physics accurate without generating collision for the whole data set.
 
 
 func _build_trail_overlay(parent: Node) -> void:

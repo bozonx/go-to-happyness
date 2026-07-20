@@ -1,0 +1,15 @@
+[gd_scene load_steps=2 format=3 uid="uid://cec4aedx8k516"]
+
+[ext_resource type="Terrain3DAssets" path="res://demo/data/assets.tres" id="1_assets"]
+
+[node name="Terrain3dWorld" type="Node3D" unique_id=1149892102]
+
+[node name="Terrain3D" type="Terrain3D" parent="."]
+data_directory = "res://demo/data"
+assets = ExtResource("1_assets")
+collision_mode = 1
+collision_radius = 80
+collision_shape_size = 16
+collision_mask = 1
+mesh_size = 64
+top_level = true
