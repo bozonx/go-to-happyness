@@ -9,8 +9,11 @@ var camera_pitch := 52.0
 
 
 func _ready() -> void:
-	camera = Camera3D.new()
-	add_child(camera)
+	if has_node("Camera3D"):
+		camera = get_node("Camera3D") as Camera3D
+	else:
+		camera = Camera3D.new()
+		add_child(camera)
 	_update_camera_position()
 
 

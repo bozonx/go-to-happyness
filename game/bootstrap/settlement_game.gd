@@ -1,6 +1,13 @@
 extends Node3D
 
 const SETTLEMENT_RULES = preload("res://game/features/settlement/domain/settlement_rules.gd")
+const CitizenActorScene = preload("res://game/features/citizens/presentation/citizen_actor.tscn")
+const UIManagerScene = preload("res://game/features/ui/presentation/ui_manager.tscn")
+const CameraControllerScene = preload("res://game/features/world/presentation/camera_controller.tscn")
+const SkyAndWeatherControllerScene = preload("res://game/features/world/presentation/sky_and_weather_controller.tscn")
+const RainEffectScene = preload("res://game/features/world/presentation/rain_effect.tscn")
+const FirefliesEffectScene = preload("res://game/features/world/presentation/fireflies_effect.tscn")
+const VillageTerritoryOverlayScene = preload("res://game/features/buildings/presentation/village_territory_overlay.tscn")
 const PocketTakeItemRowScene = preload("res://game/features/citizens/presentation/pocket_take_item_row.tscn")
 const TentEraSurvivalRulesScript = preload("res://game/features/settlement/domain/tent_era_survival_rules.gd")
 const FireSourceStateScript = preload("res://game/features/settlement/domain/fire_source_state.gd")
@@ -720,7 +727,7 @@ func _ready() -> void:
 	player_controller = PlayerController.new()
 	add_child(player_controller)
 	player_controller.setup(self)
-	ui_manager = UIManager.new()
+	ui_manager = UIManagerScene.instantiate() as UIManager
 	add_child(ui_manager)
 	ui_manager.setup(self)
 	_create_world()
@@ -2600,7 +2607,7 @@ func _add_message(text: String) -> void:
 # ---------- End message log system --------------------------------------------
 
 func _create_world() -> void:
-	camera_controller = CameraControllerScript.new()
+	camera_controller = CameraControllerScene.instantiate() as CameraController
 	add_child(camera_controller)
 	world_setup = WorldSetupScript.new()
 	world_setup.setup(camera, CELL_SIZE, BOARD_CELLS, trail_field)
@@ -2718,7 +2725,7 @@ func _create_citizens() -> void:
 		citizens[random.randi_range(0, citizens.size() - 1)].is_jack_of_all_trades = true
 
 func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void:
-	var citizen := Citizen.new()
+	var citizen: Citizen = CitizenActorScene.instantiate()
 	citizen.position = spawn_position
 	if citizens.size() < POPULATION:
 		citizen.gender = "male" if citizens.size() % 2 == 0 else "female"

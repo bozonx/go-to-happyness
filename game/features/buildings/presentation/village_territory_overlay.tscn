@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/features/buildings/presentation/village_territory_overlay.gd" id="1_vto"]
+
+[node name="VillageTerritoryOverlay" type="Node3D"]
+script = ExtResource("1_vto")

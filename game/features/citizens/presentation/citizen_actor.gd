@@ -450,27 +450,31 @@ func _setup_collision() -> void:
 	floor_snap_length = 0.38
 	floor_constant_speed = true
 	floor_stop_on_slope = true
-	var body_collision := CollisionShape3D.new()
-	var body_shape := CapsuleShape3D.new()
-	body_shape.radius = 0.32
-	body_shape.height = 1.75
-	body_collision.shape = body_shape
-	body_collision.position.y = 0.875
-	add_child(body_collision)
+	if not has_node("CollisionShape3D"):
+		var body_collision := CollisionShape3D.new()
+		body_collision.name = "CollisionShape3D"
+		var body_shape := CapsuleShape3D.new()
+		body_shape.radius = 0.32
+		body_shape.height = 1.75
+		body_collision.shape = body_shape
+		body_collision.position.y = 0.875
+		add_child(body_collision)
 
 func _setup_selector() -> void:
-	var selector := Area3D.new()
-	selector.add_to_group("citizen_selector")
-	selector.collision_layer = 4
-	selector.collision_mask = 0
-	var selector_shape := CollisionShape3D.new()
-	var capsule_shape := CapsuleShape3D.new()
-	capsule_shape.radius = 0.4
-	capsule_shape.height = 1.8
-	selector_shape.shape = capsule_shape
-	selector_shape.position.y = 0.9
-	selector.add_child(selector_shape)
-	add_child(selector)
+	if not has_node("Selector"):
+		var selector := Area3D.new()
+		selector.name = "Selector"
+		selector.add_to_group("citizen_selector")
+		selector.collision_layer = 4
+		selector.collision_mask = 0
+		var selector_shape := CollisionShape3D.new()
+		var capsule_shape := CapsuleShape3D.new()
+		capsule_shape.radius = 0.4
+		capsule_shape.height = 1.8
+		selector_shape.shape = capsule_shape
+		selector_shape.position.y = 0.9
+		selector.add_child(selector_shape)
+		add_child(selector)
 
 func play_one_shot(anim_name: String) -> void:
 	animation_controller.play_one_shot(self, anim_name)
