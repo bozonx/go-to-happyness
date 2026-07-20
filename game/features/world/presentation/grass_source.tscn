@@ -1,0 +1,15 @@
+[gd_scene load_steps=3 format=3]
+
+[sub_resource type="CylinderMesh" id="GrassMesh"]
+top_radius = 0.3
+bottom_radius = 0.3
+height = 0.06
+
+[sub_resource type="StandardMaterial3D" id="GrassMaterial"]
+albedo_color = Color(0.3098, 0.7373, 0.3333, 1)
+emission_enabled = true
+emission = Color(0.1412, 0.3569, 0.1647, 1)
+
+[node name="GrassSource" type="MeshInstance3D"]
+mesh = SubResource("GrassMesh")
+material_override = SubResource("GrassMaterial")

@@ -1,0 +1,27 @@
+[gd_scene load_steps=6 format=3]
+
+[sub_resource type="CapsuleMesh" id="BodyMesh"]
+radius = 0.25
+height = 1.15
+
+[sub_resource type="StandardMaterial3D" id="BodyMaterial"]
+albedo_color = Color(0.3647, 0.5725, 0.698, 1)
+
+[sub_resource type="SphereMesh" id="HeadMesh"]
+radius = 0.25
+height = 0.5
+
+[sub_resource type="StandardMaterial3D" id="HeadMaterial"]
+albedo_color = Color(0.7216, 0.8471, 0.7569, 1)
+
+[node name="FallbackMesh" type="Node3D"]
+
+[node name="FallbackBody" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.65, 0)
+mesh = SubResource("BodyMesh")
+material_override = SubResource("BodyMaterial")
+
+[node name="FallbackHead" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 0)
+mesh = SubResource("HeadMesh")
+material_override = SubResource("HeadMaterial")

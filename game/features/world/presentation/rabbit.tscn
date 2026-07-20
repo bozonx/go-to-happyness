@@ -1,0 +1,11 @@
+[gd_scene load_steps=3 format=3]
+
+[sub_resource type="BoxMesh" id="RabbitMesh"]
+size = Vector3(0.48, 0.32, 0.32)
+
+[sub_resource type="StandardMaterial3D" id="RabbitMaterial"]
+albedo_color = Color(0.8353, 0.8196, 0.7647, 1)
+
+[node name="Rabbit" type="MeshInstance3D"]
+mesh = SubResource("RabbitMesh")
+material_override = SubResource("RabbitMaterial")

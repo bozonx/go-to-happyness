@@ -1,0 +1,30 @@
+[gd_scene load_steps=5 format=3]
+
+[sub_resource type="CylinderMesh" id="RimMesh"]
+top_radius = 2.6
+bottom_radius = 2.6
+height = 0.3
+
+[sub_resource type="StandardMaterial3D" id="RimMaterial"]
+albedo_color = Color(0.4353, 0.4549, 0.4784, 1)
+
+[sub_resource type="CylinderMesh" id="SurfaceMesh"]
+top_radius = 2.3
+bottom_radius = 2.3
+height = 0.24
+
+[sub_resource type="StandardMaterial3D" id="SurfaceMaterial"]
+albedo_color = Color(0.2471, 0.498, 0.6275, 1)
+roughness = 0.2
+
+[node name="Pond" type="Node3D"]
+
+[node name="Rim" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.12, 0)
+mesh = SubResource("RimMesh")
+material_override = SubResource("RimMaterial")
+
+[node name="Surface" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.2, 0)
+mesh = SubResource("SurfaceMesh")
+material_override = SubResource("SurfaceMaterial")

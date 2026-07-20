@@ -1,0 +1,16 @@
+[gd_scene load_steps=3 format=3]
+
+[sub_resource type="CylinderMesh" id="PitMesh"]
+top_radius = 0.62
+bottom_radius = 0.72
+height = 0.12
+
+[sub_resource type="StandardMaterial3D" id="PitMaterial"]
+albedo_color = Color(0.2431, 0.3804, 0.1725, 1)
+
+[node name="DigSite" type="Node3D"]
+
+[node name="Pit" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.03, 0)
+mesh = SubResource("PitMesh")
+material_override = SubResource("PitMaterial")

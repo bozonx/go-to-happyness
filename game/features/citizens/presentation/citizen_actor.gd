@@ -1711,9 +1711,11 @@ func set_head_visible(value: bool) -> void:
 	head_visible = value
 	if current_head_mesh != null:
 		current_head_mesh.visible = value
-	var fallback_head = get_node_or_null("FallbackHead")
-	if fallback_head:
-		fallback_head.visible = value
+	var fallback_mesh = get_node_or_null("FallbackMesh")
+	if fallback_mesh:
+		var fallback_head = fallback_mesh.get_node_or_null("FallbackHead")
+		if fallback_head:
+			fallback_head.visible = value
 
 func assign_construction(site: Node3D) -> void:
 	task_executor.assign_construction(self, site)

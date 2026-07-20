@@ -1,0 +1,54 @@
+[gd_scene load_steps=7 format=3]
+
+[sub_resource type="StandardMaterial3D" id="TerritoryMaterial"]
+albedo_color = Color(0.22, 0.72, 0.43, 0.35)
+transparency = 1
+shading_mode = 0
+
+[sub_resource type="BoxMesh" id="ProgressBarMesh"]
+size = Vector3(1.45, 0.11, 0.12)
+
+[sub_resource type="StandardMaterial3D" id="ProgressBackMaterial"]
+albedo_color = Color(0.2235, 0.1765, 0.1804, 1)
+
+[sub_resource type="StandardMaterial3D" id="ProgressFillMaterial"]
+albedo_color = Color(0.3373, 0.7412, 0.3451, 1)
+
+[sub_resource type="BoxMesh" id="TerritoryMesh"]
+
+[sub_resource type="BoxShape3D" id="SelectorShape"]
+
+[node name="ConstructionSite" type="Node3D"]
+
+[node name="ConstructionEntrance" type="Node3D" parent="."]
+
+[node name="ConstructionTerritory" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.025, 0)
+mesh = SubResource("TerritoryMesh")
+material_override = SubResource("TerritoryMaterial")
+
+[node name="ConstructionProgressBack" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.15, 0)
+mesh = SubResource("ProgressBarMesh")
+material_override = SubResource("ProgressBackMaterial")
+
+[node name="ConstructionProgressFill" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.725, 2.17, -0.07)
+mesh = SubResource("ProgressBarMesh")
+material_override = SubResource("ProgressFillMaterial")
+scale = Vector3(0.01, 1, 1)
+
+[node name="SupplyLabel" type="Label3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.45, 0)
+font_size = 26
+outline_size = 5
+billboard = 1
+no_depth_test = true
+
+[node name="ConstructionSelector" type="Area3D" parent="." groups=["construction_selector"]]
+collision_layer = 4
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="ConstructionSelector"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.25, 0)
+shape = SubResource("SelectorShape")

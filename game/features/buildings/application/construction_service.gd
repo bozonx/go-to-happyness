@@ -1,6 +1,8 @@
 class_name ConstructionService
 extends RefCounted
 
+const ConstructionSiteScene = preload("res://game/features/buildings/presentation/construction_site.tscn")
+
 var runtime: ConstructionRuntime
 var sites: Array[ConstructionSite] = []
 
@@ -13,7 +15,7 @@ func configure(next_runtime: ConstructionRuntime) -> void:
 
 
 func start_site(cell: Vector2i, building_type: String, position: Vector3, rotation_quarters := 0, supplied_blueprint: Dictionary = {}, occupied_footprint := Vector2i.ZERO) -> ConstructionSite:
-	var site_node := Node3D.new()
+	var site_node: Node3D = ConstructionSiteScene.instantiate()
 	site_node.position = position
 	site_node.rotation.y = rotation_quarters * PI * 0.5
 	site_node.set_meta("building_type", building_type)
@@ -23,8 +25,10 @@ func start_site(cell: Vector2i, building_type: String, position: Vector3, rotati
 	site_node.set_meta("occupied_footprint", occupied_footprint if occupied_footprint != Vector2i.ZERO else blueprint.footprint)
 	site_node.set_meta("service_positions", BuildingEntrancePositions.positions(site_node, blueprint.footprint, SERVICE_PAD_OFFSET))
 
-	var entrance_parent := Node3D.new()
-	entrance_parent.name = "ConstructionEntrance"
+	var display_footprint: Vector2i = blueprint.footprint
+
+	# Entrance posts and flags are positioned dynamically based on the building footprint.
+	var entrance_parent := site_node.get_node("ConstructionEntrance") as Node3D
 	var entrance_material := StandardMaterial3D.new()
 	entrance_material.albedo_color = Color("f0c45d")
 	entrance_material.emission_enabled = true
@@ -47,49 +51,21 @@ func start_site(cell: Vector2i, building_type: String, position: Vector3, rotati
 		flag.material_override = entrance_material
 		flag.position = post.position + Vector3.UP * 0.7
 		entrance_parent.add_child(flag)
-	site_node.add_child(entrance_parent)
 
-	var territory := MeshInstance3D.new()
-	territory.name = "ConstructionTerritory"
+	# Territory mesh size depends on the building footprint.
+	var territory := site_node.get_node("ConstructionTerritory") as MeshInstance3D
 	var territory_mesh := BoxMesh.new()
-	var display_footprint: Vector2i = blueprint.footprint
 	territory_mesh.size = Vector3(display_footprint.x, 0.035, display_footprint.y)
 	territory.mesh = territory_mesh
-	territory.position.y = 0.025
-	var territory_material := StandardMaterial3D.new()
-	territory_material.albedo_color = Color(0.22, 0.72, 0.43, 0.35)
-	territory_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	territory_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	territory.material_override = territory_material
-	site_node.add_child(territory)
 
-	var bar_mesh := BoxMesh.new()
-	bar_mesh.size = Vector3(1.45, 0.11, 0.12)
-	var back := MeshInstance3D.new()
-	back.name = "ConstructionProgressBack"
-	back.mesh = bar_mesh
-	back.position = Vector3(0.0, 2.15, 0.0)
-	var back_material := StandardMaterial3D.new()
-	back_material.albedo_color = Color("392d2e")
-	back.material_override = back_material
-	site_node.add_child(back)
-	var fill := MeshInstance3D.new()
-	fill.name = "ConstructionProgressFill"
-	fill.mesh = bar_mesh
-	fill.position = Vector3(-0.725, 2.17, -0.07)
-	var fill_material := StandardMaterial3D.new()
-	fill_material.albedo_color = Color("56bd58")
-	fill.material_override = fill_material
-	fill.scale.x = 0.01
-	site_node.add_child(fill)
-	var material_label := Label3D.new()
-	material_label.name = "SupplyLabel"
-	material_label.position = Vector3(0.0, 2.45, 0.0)
-	material_label.font_size = 26
-	material_label.outline_size = 5
-	material_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	material_label.no_depth_test = true
-	site_node.add_child(material_label)
+	var fill := site_node.get_node("ConstructionProgressFill") as MeshInstance3D
+
+	# Selector collision shape size depends on the building footprint.
+	var selector := site_node.get_node("ConstructionSelector") as Area3D
+	var selector_shape := selector.get_node("CollisionShape3D") as CollisionShape3D
+	var box := BoxShape3D.new()
+	box.size = Vector3(display_footprint.x, 2.5, display_footprint.y)
+	selector_shape.shape = box
 
 	var required: Dictionary = BuildingCatalog.definition_for(building_type).get("costs", {}).duplicate(true)
 	var site := ConstructionSite.new(cell, building_type, position, site_node, fill, blueprint, required)
@@ -101,7 +77,6 @@ func start_site(cell: Vector2i, building_type: String, position: Vector3, rotati
 		var needed := int(required.get(resource_type, 0))
 		if needed > 0:
 			runtime.settlement.reserve_for_construction(site.site_id, str(resource_type), needed)
-	_add_selector(site_node, display_footprint)
 	runtime.workers_changed.call()
 	return site
 
@@ -222,21 +197,6 @@ func _update_supply_label(site: ConstructionSite) -> void:
 		required += int(site.required_materials[resource_type])
 	label.text = "MATERIALS %d/%d" % [delivered, required]
 	label.modulate = Color("f0c45d") if delivered < required else Color("56bd58")
-
-
-func _add_selector(site_node: Node3D, footprint: Vector2i) -> void:
-	var selector := Area3D.new()
-	selector.name = "ConstructionSelector"
-	selector.add_to_group("construction_selector")
-	selector.collision_layer = 4
-	selector.collision_mask = 0
-	var shape := CollisionShape3D.new()
-	var box := BoxShape3D.new()
-	box.size = Vector3(footprint.x, 2.5, footprint.y)
-	shape.shape = box
-	shape.position = Vector3(0.0, 1.25, 0.0)
-	selector.add_child(shape)
-	site_node.add_child(selector)
 
 
 func _cleanup_completed_site(site: ConstructionSite) -> void:

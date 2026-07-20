@@ -1,0 +1,74 @@
+[gd_scene load_steps=9 format=3]
+
+[sub_resource type="BoxMesh" id="PostMesh"]
+size = Vector3(0.16, 1.55, 0.16)
+
+[sub_resource type="StandardMaterial3D" id="PostMaterial"]
+albedo_color = Color(0.3608, 0.251, 0.2, 1)
+roughness = 0.95
+
+[sub_resource type="BoxMesh" id="BoardMesh"]
+size = Vector3(1.8, 0.65, 0.14)
+
+[sub_resource type="StandardMaterial3D" id="BoardMaterial"]
+albedo_color = Color(0.5412, 0.3961, 0.2863, 1)
+roughness = 0.9
+
+[sub_resource type="BoxShape3D" id="SelectorShape"]
+size = Vector3(2.2, 2.4, 1.0)
+
+[sub_resource type="BoxMesh" id="HighlightMesh"]
+size = Vector3(2.4, 2.6, 1.2)
+
+[sub_resource type="StandardMaterial3D" id="HighlightMaterial"]
+albedo_color = Color(0.3, 0.85, 1.0, 0.25)
+emission = Color(0.3, 0.85, 1.0, 1)
+emission_energy_multiplier = 0.8
+transparency = 1
+shading_mode = 0
+no_depth_test = true
+
+[node name="EntranceSign" type="Node3D"]
+
+[node name="PostLeft" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.62, 0.78, 0)
+mesh = SubResource("PostMesh")
+material_override = SubResource("PostMaterial")
+
+[node name="PostRight" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.62, 0.78, 0)
+mesh = SubResource("PostMesh")
+material_override = SubResource("PostMaterial")
+
+[node name="Board" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.25, 0)
+mesh = SubResource("BoardMesh")
+material_override = SubResource("BoardMaterial")
+
+[node name="Label" type="Label3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.26, 0.09)
+text = "Settlement"
+font_size = 28
+modulate = Color(0.9412, 0.8745, 0.698, 1)
+
+[node name="Selector" type="Area3D" parent="." groups=["entrance_selector"]]
+collision_layer = 4
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Selector"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, 0)
+shape = SubResource("SelectorShape")
+
+[node name="EntranceHighlight" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, 0)
+mesh = SubResource("HighlightMesh")
+material_override = SubResource("HighlightMaterial")
+visible = false
+
+[node name="EntranceSignLight" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.2, 0)
+light_color = Color(1, 0.8353, 0.5412, 1)
+light_energy = 2.0
+omni_range = 5.0
+shadow_enabled = true
+visible = false

@@ -58,6 +58,7 @@ const EventContextScript = preload("res://game/features/events/domain/event_cont
 const EventOutcomeScript = preload("res://game/features/events/domain/event_outcome.gd")
 const TentEraEventsScript = preload("res://game/features/events/application/tent_era_events.gd")
 const VillageTerritoryServiceScript = preload("res://game/features/buildings/application/village_territory_service.gd")
+const DigSiteScene = preload("res://game/features/world/presentation/dig_site.tscn")
 
 
 # The playable routing and construction board must cover the terrain visible
@@ -4162,20 +4163,10 @@ func _dig_site_at(cell: Vector2i) -> Dictionary:
 	return {}
 
 func _create_dig_site(cell: Vector2i, world_position: Vector3) -> Dictionary:
-	var site_node := Node3D.new()
+	var site_node: Node3D = DigSiteScene.instantiate()
 	site_node.position = world_position
 	add_child(site_node)
-	var pit := MeshInstance3D.new()
-	var pit_mesh := CylinderMesh.new()
-	pit_mesh.top_radius = 0.62
-	pit_mesh.bottom_radius = 0.72
-	pit_mesh.height = 0.12
-	pit.mesh = pit_mesh
-	pit.position.y = 0.03
-	var pit_material := StandardMaterial3D.new()
-	pit_material.albedo_color = Color("3e612c") # Start with grass green
-	pit.material_override = pit_material
-	site_node.add_child(pit)
+	var pit := site_node.get_node("Pit") as MeshInstance3D
 	
 	var grass_depth := random.randi_range(2, 4)
 	var soil_depth := random.randi_range(3, 6)

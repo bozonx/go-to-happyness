@@ -2,6 +2,8 @@ class_name CitizenVisualBuilder
 extends RefCounted
 
 const CitizenIdleIndicatorScene = preload("res://game/features/citizens/presentation/citizen_idle_indicator.tscn")
+const PrivacyBlurScene = preload("res://game/features/citizens/presentation/privacy_blur.tscn")
+const FallbackMeshScene = preload("res://game/features/citizens/presentation/citizen_fallback_mesh.tscn")
 
 const MODEL_PREFIXES := {
 	"unassigned": "common",
@@ -95,52 +97,9 @@ func _setup_idle_indicator(actor: Citizen) -> void:
 
 
 func _setup_privacy_blur(actor: Citizen) -> void:
-	var blur := MeshInstance3D.new()
-	blur.name = "PrivacyBlur"
-	blur.visible = false
-	blur.position = Vector3(0.0, 1.1, 0.0)
-	blur.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-
-	var quad := QuadMesh.new()
-	quad.size = Vector2(2.2, 2.4)
-	blur.mesh = quad
-
-	var material := ShaderMaterial.new()
-	material.shader = load("res://game/features/citizens/presentation/privacy_pixelize.gdshader")
-	material.render_priority = 1
-	blur.material_override = material
-
+	var blur: MeshInstance3D = PrivacyBlurScene.instantiate()
 	actor.add_child(blur)
 	actor._privacy_blur = blur
-
-
-func _setup_body_mesh(actor: Citizen) -> void:
-	var body := MeshInstance3D.new()
-	body.name = "FallbackBody"
-	var body_mesh := CapsuleMesh.new()
-	body_mesh.radius = 0.25
-	body_mesh.height = 1.15
-	body.mesh = body_mesh
-	body.position.y = 0.65
-	var body_material := StandardMaterial3D.new()
-	body_material.albedo_color = Color("5d92b2")
-	body.material_override = body_material
-	actor.add_child(body)
-	actor.body_material = body_material
-
-
-func _setup_head_mesh(actor: Citizen) -> void:
-	var head := MeshInstance3D.new()
-	head.name = "FallbackHead"
-	var head_mesh := SphereMesh.new()
-	head_mesh.radius = 0.25
-	head_mesh.height = 0.5
-	head.mesh = head_mesh
-	head.position.y = 1.5
-	var head_material := StandardMaterial3D.new()
-	head_material.albedo_color = Color("b8d8c1")
-	head.material_override = head_material
-	actor.add_child(head)
 
 
 func _resolve_model_prefix(actor: Citizen) -> String:
@@ -187,12 +146,9 @@ func _update_character_model(actor: Citizen) -> void:
 	actor.current_head_mesh = null
 	actor.animation_player = null
 
-	var fallback_body = actor.get_node_or_null("FallbackBody")
-	if fallback_body:
-		fallback_body.queue_free()
-	var fallback_head = actor.get_node_or_null("FallbackHead")
-	if fallback_head:
-		fallback_head.queue_free()
+	var fallback_mesh = actor.get_node_or_null("FallbackMesh")
+	if fallback_mesh:
+		fallback_mesh.queue_free()
 	var dummy_mesh = actor.get_node_or_null("VisualMeshAnchor")
 	if dummy_mesh:
 		dummy_mesh.queue_free()
@@ -280,10 +236,15 @@ func _randomize_head_on_instance(actor: Citizen, inst: Node3D) -> void:
 
 
 func _setup_fallback_mesh(actor: Citizen) -> void:
-	if not actor.has_node("FallbackBody"):
-		_setup_body_mesh(actor)
-	if not actor.has_node("FallbackHead"):
-		_setup_head_mesh(actor)
+	if not actor.has_node("FallbackMesh"):
+		var fallback: Node3D = FallbackMeshScene.instantiate()
+		actor.add_child(fallback)
+		var body := fallback.get_node("FallbackBody") as MeshInstance3D
+		if body != null:
+			# Duplicate the scene's material so each citizen can be recoloured independently.
+			var unique_material := (body.material_override as StandardMaterial3D).duplicate() as StandardMaterial3D
+			body.material_override = unique_material
+			actor.body_material = unique_material
 
 
 static func _character_scene(path: String) -> PackedScene:
