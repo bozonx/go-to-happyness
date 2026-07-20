@@ -4437,8 +4437,6 @@ func _unhandled_input(event: InputEvent) -> void:
 				_close_pocket_take_menu()
 			elif not build_mode.is_empty():
 				_cancel_build_action()
-			elif player_citizen == hero_citizen:
-				_dig_voxel_at_crosshair()
 			else:
 				_leave_first_person_to_hero_overview()
 		get_viewport().set_input_as_handled()
@@ -4882,24 +4880,9 @@ func _start_interaction(all: bool) -> void:
 	if player_controller != null:
 		player_controller.start_interaction(all)
 
-func _dig_voxel_at_crosshair() -> void:
-	pass
-
-func _mark_excavation_as_navigation_blocked(center: Vector3, radius: float) -> void:
-	var center_cell := _cell_from_position(center)
-	var cell_radius := ceili(radius + 0.75)
-	for x in range(center_cell.x - cell_radius, center_cell.x + cell_radius + 1):
-		for z in range(center_cell.y - cell_radius, center_cell.y + cell_radius + 1):
-			var cell := Vector2i(x, z)
-			if not _is_board_cell(cell):
-				continue
-			if _cell_center(cell).distance_to(Vector3(center.x, 0.0, center.z)) <= radius + 0.75:
-				terrain_blocked_cells[cell] = true
-
 func _update_interaction(delta: float) -> void:
 	if player_controller != null:
 		player_controller.update_interaction(delta)
-
 
 func _gather_action_name(resource_type: String) -> String:
 	match resource_type:
