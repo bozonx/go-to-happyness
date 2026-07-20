@@ -66,6 +66,8 @@ const EventOutcomeScript = preload("res://game/features/events/domain/event_outc
 const TentEraEventsScript = preload("res://game/features/events/application/tent_era_events.gd")
 const VillageTerritoryServiceScript = preload("res://game/features/buildings/application/village_territory_service.gd")
 const DigSiteScene = preload("res://game/features/world/presentation/dig_site.tscn")
+const SettlementSurvivalServiceScript = preload("res://game/features/settlement/application/settlement_survival_service.gd")
+const SettlementDailyRulesServiceScript = preload("res://game/features/settlement/application/settlement_daily_rules_service.gd")
 
 
 # The playable routing and construction board must cover the terrain visible
@@ -315,10 +317,6 @@ var messages_modal: Control:
 var current_day: int:
 	get: return day_cycle.current_day
 var tent_weather: int = TentEraSurvivalRulesScript.Weather.WARMING
-var last_survival_hour := -1
-var last_zero_wellbeing_departure_day := -1
-var _is_skipping_night := false
-var _skip_zero_wellbeing_departure_applied := false
 var selected_builder: Citizen
 var selected_building: Node3D
 var build_menu: BuildMenu:
@@ -618,6 +616,8 @@ var resource_pile_service: ResourcePileService
 var foraging_service: ForagingService
 var fire_management_service: FireManagementService
 var building_maintenance_service: BuildingMaintenanceService
+var settlement_survival_service: SettlementSurvivalServiceScript
+var settlement_daily_rules_service: SettlementDailyRulesServiceScript
 
 
 func _ready() -> void:
@@ -714,6 +714,10 @@ func _ready() -> void:
 			"refresh_living_status": _refresh_living_status
 		}
 	)
+	settlement_survival_service = SettlementSurvivalServiceScript.new()
+	settlement_survival_service.configure(self)
+	settlement_daily_rules_service = SettlementDailyRulesServiceScript.new()
+	settlement_daily_rules_service.configure(self)
 
 	citizen_needs_service = CitizenNeedsService.new()
 	citizen_needs_service.configure(self)
@@ -1282,162 +1286,23 @@ func _resume_overtime_daily_orders() -> void:
 
 
 func _apply_hourly_work_fatigue() -> void:
-	var double_time_active := settlement.double_time_order_day == day_cycle.current_day
-	for citizen in citizens:
-		if not is_instance_valid(citizen) or citizen.is_player_controlled:
-			continue
-		if citizen.is_recovering(day_cycle.current_day):
-			citizen.fatigue = maxf(0.0, citizen.fatigue - 18.0)
-			continue
-		if _is_citizen_work_time(citizen) and not citizen.active_role.is_empty():
-			var overtime := citizen.has_active_overtime(day_cycle.current_day)
-			citizen.continuous_work_hours += 1.0
-			var fatigue_gain := (6.0 if overtime else 2.0) + maxf(0.0, settlement.workday_hours - 8) * 0.75
-			if double_time_active:
-				fatigue_gain *= 1.5
-			citizen.fatigue = minf(100.0, citizen.fatigue + fatigue_gain)
-			if overtime:
-				citizen.satisfaction = maxf(0.0, citizen.satisfaction - 2.0)
-			elif settlement.workday_hours < 8:
-				citizen.satisfaction = minf(citizen.get_satisfaction_cap(), citizen.satisfaction + 0.6)
-			elif settlement.workday_hours > 8:
-				var long_day_penalty := pow(float(settlement.workday_hours - 8), 1.25) * 0.22
-				citizen.satisfaction = maxf(0.0, citizen.satisfaction - long_day_penalty)
-			if double_time_active and not overtime:
-				citizen.satisfaction = maxf(0.0, citizen.satisfaction - 1.0)
-		elif _is_work_time():
-			citizen.continuous_work_hours = maxf(0.0, citizen.continuous_work_hours - 3.0)
-			citizen.fatigue = maxf(0.0, citizen.fatigue - 4.0)
-	if clock.hour() == 6:
-		_resolve_exhausted_homecomings()
+	settlement_survival_service.apply_hourly_work_fatigue()
 
 
 func _resolve_exhausted_homecomings() -> void:
-	for citizen in citizens:
-		if not is_instance_valid(citizen) or not citizen.is_dangerously_tired():
-			continue
-		var food_factor := 0.15 if citizen.hunger >= 60.0 else -0.10
-		var distance_factor := 0.0 if not is_instance_valid(citizen.home) else clampf(citizen.global_position.distance_to(citizen.home.global_position) / 120.0, 0.0, 0.25)
-		var risk := clampf(0.15 + citizen.fatigue / 160.0 + distance_factor + food_factor, 0.0, 0.90)
-		if random.randf() < risk:
-			citizen.recovery_until_workday_id = day_cycle.current_day
-			citizen.continuous_work_hours = 0.0
-			citizen.fatigue = maxf(35.0, citizen.fatigue - 25.0)
-			citizen.end_work_shift()
-			_add_message("%s collapsed from exhaustion and will recover at home today." % citizen.role_label())
+	settlement_survival_service.resolve_exhausted_homecomings()
 
 
 func _apply_hourly_tent_survival(hour: int, survival_day := 0) -> void:
-	var day := day_cycle.current_day if survival_day <= 0 else survival_day
-	var survival_hour := day * 24 + hour
-	if settlement.era != SettlementState.Era.TENT or last_survival_hour == survival_hour:
-		return
-	last_survival_hour = survival_hour
-	var wellbeing_before_hour := wellbeing
-	var night := hour >= 22 or hour < 6
-	var has_fire := _has_lit_communal_fire()
-	var total_loss := 0
-	for citizen in citizens:
-		if not is_instance_valid(citizen):
-			continue
-		var has_home := is_instance_valid(citizen.home)
-		total_loss += TentEraSurvivalRulesScript.hourly_wellbeing_loss(has_home, has_fire, tent_weather, night)
-	if total_loss > 0:
-		wellbeing = maxi(0, wellbeing - ceili(float(total_loss) / maxi(1, citizens.size())))
-	if wellbeing == 0 and last_zero_wellbeing_departure_day != day and (not _is_skipping_night or not _skip_zero_wellbeing_departure_applied):
-		last_zero_wellbeing_departure_day = day
-		_skip_zero_wellbeing_departure_applied = true
-		_trigger_zero_wellbeing_departure()
-	if weather_state.is_raining and hour > 0:
-		_apply_rain_damage()
-
-
-func _trigger_zero_wellbeing_departure() -> void:
-	var candidate: Citizen = null
-	for citizen in citizens:
-		if not is_instance_valid(citizen) or citizen.is_hero or citizen.state == Citizen.State.LEAVING:
-			continue
-		if candidate == null or citizen.satisfaction < candidate.satisfaction:
-			candidate = citizen
-	if candidate == null or not is_instance_valid(entrance_stone):
-		return
-	var non_hero_count := 0
-	for citizen in citizens:
-		if is_instance_valid(citizen) and not citizen.is_hero:
-			non_hero_count += 1
-	if non_hero_count <= SettlementRules.MIN_SETTLEMENT_POPULATION - 1:
-		return
-	candidate.set_meta("leave_at_morning", true)
-	_add_message("%s will leave at dawn after the settlement's wellbeing collapsed." % candidate.role_label())
+	settlement_survival_service.apply_hourly_tent_survival(hour, survival_day)
 
 
 func _apply_hourly_bare_hands_penalty() -> void:
-	if settlement.construction_gloves_available():
-		return
-	var bare_handed_workers := 0
-	for citizen in citizens:
-		if is_instance_valid(citizen) and citizen._is_physical_work():
-			bare_handed_workers += 1
-	if bare_handed_workers > 0:
-		wellbeing = maxi(0, wellbeing - ceili(float(bare_handed_workers) / maxi(1, citizens.size())))
-
-
-func _apply_rain_damage() -> void:
-	var sheltered_capacity := int(settlement.buildings.get("straw_warehouse", 0)) * 48 + int(settlement.buildings.get("tarp_warehouse", 0)) * 72
-	if settlement.warehouse_tarp_covered:
-		sheltered_capacity += 24
-	var stored_units := settlement.storage_used_units()
-	if stored_units <= sheltered_capacity:
-		return
-	var exposed_ratio := (stored_units - sheltered_capacity) / stored_units
-	var _firewood_protected := event_service != null and event_service.log.has_flag(&"firewood_protected_today")
-	var rain_amounts := {"food": food, "grass": grass, "branches": 0 if _firewood_protected else branches, "wood": wood, "logs": settlement.logs}
-	var losses := TentEraSurvivalRulesScript.rain_hourly_decay_losses(rain_amounts, exposed_ratio)
-	for resource_type in losses:
-		settlement.add(resource_type, -int(losses[resource_type]))
-	for record in building_registry.records():
-		var building: Node3D = record.node
-		if is_instance_valid(building) and str(building.get_meta("building_type", "")) in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"]:
-			var fire_state := _fire_state_for(building)
-			fire_state.lit = false
-			_apply_fire_state(building, fire_state)
+	settlement_survival_service.apply_hourly_bare_hands_penalty()
 
 
 func _check_daily_departures() -> void:
-	# Warning: any citizen with satisfaction below WARNING threshold
-	for citizen in citizens:
-		if not is_instance_valid(citizen) or citizen.is_hero:
-			continue
-		if SETTLEMENT_RULES.is_satisfaction_warning(citizen.satisfaction):
-			_add_message("Warning: %s is unhappy (satisfaction %d). They may leave if conditions don't improve." % [citizen.role_label(), int(citizen.satisfaction)])
-	# Find the most dissatisfied non-hero citizen below the leave threshold
-	var candidate: Citizen = null
-	for citizen in citizens:
-		if not is_instance_valid(citizen) or citizen.is_hero:
-			continue
-		if citizen.state == Citizen.State.LEAVING:
-			continue
-		if bool(citizen.get_meta("leave_at_morning", false)):
-			candidate = citizen
-			break
-		if SETTLEMENT_RULES.should_citizen_leave(citizen.satisfaction):
-			if candidate == null or citizen.satisfaction < candidate.satisfaction:
-				candidate = citizen
-	if candidate == null:
-		return
-	# Protect minimum population: hero + at least one companion
-	var non_hero_count := 0
-	for citizen in citizens:
-		if is_instance_valid(citizen) and not citizen.is_hero:
-			non_hero_count += 1
-	if non_hero_count <= 1:
-		_add_message("Despite the hardship, your loyal companion stays and believes you will fix things.")
-		return
-	# Send the most dissatisfied citizen to the entrance to leave
-	if is_instance_valid(entrance_stone):
-		candidate.remove_meta("leave_at_morning")
-		candidate.begin_leaving(entrance_stone.global_position)
-		_add_message("%s has decided to leave the settlement (satisfaction %d)." % [candidate.role_label(), int(candidate.satisfaction)])
+	settlement_survival_service.check_daily_departures()
 
 
 func _on_citizen_leaving_departed(citizen: Citizen) -> void:
@@ -1480,100 +1345,7 @@ func _remove_expired_temporary_tents() -> void:
 
 
 func _apply_daily_settlement_rules() -> void:
-	if trail_field != null:
-		trail_field.apply_daily_decay()
-	var _is_smoky := event_service != null and event_service.log.has_flag(&"smoky_firewood")
-	if _is_smoky:
-		for citizen in citizens:
-			if is_instance_valid(citizen):
-				citizen.set_status_effect(CitizenStatusEffectScript.SMOKY_EYES, "Smoky eyes", 1.0, -1.0)
-	else:
-		for citizen in citizens:
-			if is_instance_valid(citizen):
-				citizen.clear_status_effect(CitizenStatusEffectScript.SMOKY_EYES)
-	var population := citizens.size()
-	if population == 0:
-		return
-	for citizen in citizens:
-		citizen.apply_daily_decay()
-	if citizen_needs_service != null:
-		citizen_needs_service.schedule_daily_toilets(citizens)
-	_apply_building_wear_and_repairs()
-	
-	# Heap (Open-Air) Storage decay:
-	var straw_warehouse_count := int(settlement.buildings.get("straw_warehouse", 0))
-	var tarp_warehouse_count := int(settlement.buildings.get("tarp_warehouse", 0))
-	var safe_capacity := straw_warehouse_count * 48.0 + tarp_warehouse_count * 72.0
-	var total_stored := settlement.storage_used_units()
-	var decay_losses := SETTLEMENT_RULES.open_air_storage_decay_losses({
-		"food": food,
-		"grass": grass,
-		"branches": branches,
-		"wood": wood,
-		"logs": settlement.logs,
-	}, total_stored, safe_capacity)
-	if not decay_losses.is_empty():
-		var decay_msg := ""
-		for res in decay_losses:
-			var lost := int(decay_losses[res])
-			settlement.add(res, -lost)
-			if decay_msg.is_empty():
-				decay_msg = "Daily decay: lost "
-			else:
-				decay_msg += ", "
-			decay_msg += "%d %s" % [lost, res]
-		if not decay_msg.is_empty():
-			decay_msg += " due to open-air Heap storage."
-			_add_message(decay_msg)
-			_update_interface(decay_msg)
-
-	_decay_resource_piles()
-	# Everyone drinks each day. When there is no kitchen running meals, they also
-	# eat straight from the stores; a working cooking campfire/canteen already
-	# draws food through the meal pipeline, so we don't double-count there.
-	settlement.add("water", -population)
-	if not is_instance_valid(canteen):
-		settlement.add("food", -TentEraSurvivalRulesScript.daily_food_consumption(population, tent_weather))
-	var housing := _total_housing_slots()
-	var change := SETTLEMENT_RULES.daily_wellbeing_change(housing >= population, float(food) / population, float(water) / population, settlement.workday_hours)
-	wellbeing = clampi(wellbeing + change, 0, 100)
-	# Campfire story effects are resolved at dawn.
-	match settlement.campfire_story_effect:
-		"optimistic":
-			wellbeing = mini(100, wellbeing + 10)
-			_add_message("The optimistic stories lifted spirits. Wellbeing recovered an extra 10.")
-		"teaching":
-			if not citizens.is_empty():
-				var pupil: Citizen = citizens.pick_random()
-				var physical_skills := ["construction", "forestry", "farming", "excavation", "factory_worker", "craftsman"]
-				var skill: String = physical_skills.pick_random()
-				pupil.skills[skill] = minf(1.0, float(pupil.skills.get(skill, 0.0)) + 0.1)
-				_add_message("Teaching tales helped %s learn a little %s." % [pupil.role_label(), skill.capitalize()])
-		"plan":
-			_add_message("The plan for tomorrow focuses on %s." % settlement.campfire_story_target_role.capitalize())
-	if settlement.campfire_story_effect != "plan" or day_cycle.current_day > settlement.campfire_story_target_day:
-		settlement.campfire_story_effect = ""
-		settlement.campfire_story_target_role = ""
-		settlement.campfire_story_target_day = -1
-	_check_daily_departures()
-	# --- Daily settlement warnings ---
-	if food == 0:
-		_add_message("CRITICAL: Food supplies exhausted! Workers are starving.")
-	elif float(food) / population < 1.0:
-		_add_message("Warning: Food is running low (%d for %d people)." % [food, population])
-	if water == 0:
-		_add_message("CRITICAL: Water supplies exhausted! Settlement is dehydrated.")
-	elif float(water) / population < 1.0:
-		_add_message("Warning: Water is running low (%d for %d people)." % [water, population])
-	var storage_ratio := float(_stored_resources()) / float(maxi(1, _warehouse_capacity()))
-	if storage_ratio >= 0.95:
-		_add_message("CRITICAL: Storage nearly full (%d%%). Build another warehouse or rebalance." % [int(storage_ratio * 100)])
-	elif storage_ratio >= 0.80:
-		_add_message("Warning: Storage filling up (%d%% used)." % [int(storage_ratio * 100)])
-	if wellbeing < 30:
-		_add_message("Warning: Low wellbeing (%d). Unhappiness is accumulating — residents may leave!" % wellbeing)
-	elif change < 0:
-		_add_message("Wellbeing is declining (change: %d). Consider improving living conditions." % change)
+	settlement_daily_rules_service.apply_daily_settlement_rules()
 
 func _update_house_lights() -> void:
 	var hour := int(game_minutes) / 60
@@ -2988,11 +2760,11 @@ func _skip_night() -> void:
 		if is_instance_valid(citizen) and not outside_workers.has(citizen.get_instance_id()):
 			positions[citizen.get_instance_id()] = citizen.global_position
 	var target_day := day_cycle.current_day + (1 if clock.hour() >= 6 else 0)
-	_is_skipping_night = true
-	_skip_zero_wellbeing_departure_applied = false
+	settlement_survival_service.is_skipping_night = true
+	settlement_survival_service.skip_zero_wellbeing_departure_applied = false
 	for survival_hour in _skip_night_survival_hours():
 		_apply_hourly_tent_survival(int(survival_hour.hour), int(survival_hour.day))
-	_is_skipping_night = false
+	settlement_survival_service.is_skipping_night = false
 	day_cycle.current_day = target_day
 	tent_weather = TentEraSurvivalRulesScript.weather_for_day(day_cycle.current_day)
 	clock.set_time(6 * 60)

@@ -407,7 +407,7 @@ func _init() -> void:
 	assert(staying_worker.global_position == staying_position)
 	var outside_worker: Citizen = simulation.citizens[3]
 	simulation.day_cycle.current_day = 1
-	simulation.last_survival_hour = -1
+	simulation.settlement_survival_service.last_survival_hour = -1
 	simulation.clock.set_time(21 * 60)
 	staying_position = simulation.entrance_stone.global_position + Vector3(12.0, 0.0, 2.0)
 	staying_worker.global_position = staying_position
@@ -514,7 +514,7 @@ func _init() -> void:
 	# make one resident leave, but the remaining night must not remove another
 	# resident for every hour spent at zero.
 	simulation.wellbeing = 1
-	simulation.last_survival_hour = -1
+	simulation.settlement_survival_service.last_survival_hour = -1
 	simulation.clock.set_time(21 * 60)
 	var citizen_count_before_zero_wellbeing_skip: int = simulation.citizens.size()
 	simulation._skip_night()
