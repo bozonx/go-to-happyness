@@ -5,24 +5,8 @@ extends Node3D
 ## ground. Intended to be shown only in build mode so the player can see
 ## where buildings can be placed.
 
-var _multimesh_instance: MultiMeshInstance3D
+@onready var _multimesh_instance: MultiMeshInstance3D = $OverlayMultiMeshInstance
 var _cell_size: float = 1.0
-
-
-func _ready() -> void:
-	_multimesh_instance = MultiMeshInstance3D.new()
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.mesh = _create_quad_mesh()
-	_multimesh_instance.multimesh = mm
-	var material := StandardMaterial3D.new()
-	material.albedo_color = Color(0.3, 0.75, 0.4, 0.25)
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.no_depth_test = true
-	_multimesh_instance.material_override = material
-	add_child(_multimesh_instance)
-	visible = false
 
 
 func configure(cell_size: float) -> void:
@@ -56,9 +40,3 @@ func show_overlay() -> void:
 func hide_overlay() -> void:
 	visible = false
 
-
-func _create_quad_mesh() -> PlaneMesh:
-	var mesh := PlaneMesh.new()
-	mesh.size = Vector2(1.0, 1.0)
-	mesh.orientation = PlaneMesh.FACE_Y
-	return mesh

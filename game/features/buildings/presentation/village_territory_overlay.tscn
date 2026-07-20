@@ -1,6 +1,24 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://game/features/buildings/presentation/village_territory_overlay.gd" id="1_vto"]
 
+[sub_resource type="StandardMaterial3D" id="OverlayMaterial"]
+transparency = 1
+shading_mode = 0
+no_depth_test = true
+albedo_color = Color(0.3, 0.75, 0.4, 0.25)
+
+[sub_resource type="PlaneMesh" id="OverlayQuad"]
+size = Vector2(1, 1)
+
+[sub_resource type="MultiMesh" id="OverlayMultiMesh"]
+transform_format = 1
+mesh = SubResource("OverlayQuad")
+
 [node name="VillageTerritoryOverlay" type="Node3D"]
+visible = false
 script = ExtResource("1_vto")
+
+[node name="OverlayMultiMeshInstance" type="MultiMeshInstance3D" parent="."]
+multimesh = SubResource("OverlayMultiMesh")
+material_override = SubResource("OverlayMaterial")

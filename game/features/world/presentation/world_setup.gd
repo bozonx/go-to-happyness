@@ -4,6 +4,9 @@ extends Node
 const SelectionMarkerScene = preload("res://game/features/world/presentation/selection_marker.tscn")
 const PreviewEntranceMarkerScene = preload("res://game/features/world/presentation/preview_entrance_marker.tscn")
 const RainEffectScene = preload("res://game/features/world/presentation/rain_effect.tscn")
+const SkyAndWeatherControllerScene = preload("res://game/features/world/presentation/sky_and_weather_controller.tscn")
+const VillageBoundaryMarkersScene = preload("res://game/features/buildings/presentation/village_boundary_markers.tscn")
+const VillageTerritoryOverlayScene = preload("res://game/features/buildings/presentation/village_territory_overlay.tscn")
 
 var environment_node: WorldEnvironment
 var world_environment: Environment
@@ -39,11 +42,16 @@ func setup(p_camera: Camera3D, p_cell_size: float, p_board_cells: int, p_trail_f
 
 
 func build(parent: Node) -> void:
-	_build_environment(parent)
-	_build_boundary(parent)
-	_build_sun(parent)
+	environment_node = get_node_or_null("WorldEnvironment") as WorldEnvironment
+	if environment_node != null:
+		world_environment = environment_node.environment
+	sun = get_node_or_null("Sun") as DirectionalLight3D
+	if DisplayServer.get_name() != "headless":
+		var flare_rect := get_node_or_null("LensFlareLayer/ColorRect") as ColorRect
+		if flare_rect != null:
+			lens_flare_material = flare_rect.material as ShaderMaterial
 	_build_sky()
-	_build_lens_flare(parent)
+	_build_boundary(parent)
 	_build_rain_effect(parent)
 	_build_sky_and_weather_controller(parent)
 	_build_terrain(parent)
@@ -56,52 +64,13 @@ func update_daylight(game_minutes: float, overcast: float, runtime_seconds: floa
 		sky_and_weather_controller.update_daylight(game_minutes, overcast, runtime_seconds)
 
 
-func _build_environment(parent: Node) -> void:
-	environment_node = WorldEnvironment.new()
-	world_environment = Environment.new()
-	world_environment.background_mode = Environment.BG_COLOR
-	world_environment.background_color = Color("78a9c5")
-	_build_sky()
-	world_environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	world_environment.ambient_light_color = Color("d7ebef")
-	world_environment.ambient_light_energy = 0.65
-	world_environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	world_environment.glow_enabled = true
-	world_environment.glow_normalized = false
-	world_environment.glow_intensity = 0.18
-	world_environment.glow_strength = 0.72
-	world_environment.glow_bloom = 0.05
-	world_environment.volumetric_fog_enabled = true
-	world_environment.volumetric_fog_density = 0.012
-	world_environment.volumetric_fog_anisotropy = 0.35
-	world_environment.volumetric_fog_length = 64.0
-	world_environment.volumetric_fog_detail_spread = 0.5
-	world_environment.fog_enabled = true
-	world_environment.fog_light_color = Color("cfe2ed")
-	world_environment.fog_density = 0.00035
-	world_environment.fog_sky_affect = 0.0
-	world_environment.volumetric_fog_sky_affect = 0.0
-	environment_node.environment = world_environment
-	parent.add_child(environment_node)
-
-
 func _build_boundary(parent: Node) -> void:
-	village_boundary_markers = VillageBoundaryMarkers.new()
+	village_boundary_markers = VillageBoundaryMarkersScene.instantiate() as VillageBoundaryMarkers
 	village_boundary_markers.configure(_cell_size)
 	parent.add_child(village_boundary_markers)
-	village_territory_overlay = VillageTerritoryOverlay.new()
+	village_territory_overlay = VillageTerritoryOverlayScene.instantiate() as VillageTerritoryOverlay
 	village_territory_overlay.configure(_cell_size)
 	parent.add_child(village_territory_overlay)
-
-
-func _build_sun(parent: Node) -> void:
-	sun = DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-52.0, -32.0, 0.0)
-	sun.light_energy = 1.2
-	sun.shadow_enabled = true
-	sun.shadow_blur = 1.5
-	sun.light_volumetric_fog_energy = 2.0
-	parent.add_child(sun)
 
 
 func _build_sky() -> void:
@@ -117,27 +86,6 @@ func _build_sky() -> void:
 	world_environment.sky = sky
 
 
-func _build_lens_flare(parent: Node) -> void:
-	if DisplayServer.get_name() == "headless":
-		return
-	var shader := load("res://game/features/world/presentation/lens_flare.gdshader")
-	lens_flare_material = ShaderMaterial.new()
-	lens_flare_material.shader = shader
-	lens_flare_material.set_shader_parameter("u_sun_screen_pos", Vector2(0.5, 0.5))
-	lens_flare_material.set_shader_parameter("u_intensity", 0.0)
-	lens_flare_material.set_shader_parameter("u_aspect", 1.0)
-	lens_flare_material.set_shader_parameter("u_sun_color", Color("fff2d1"))
-	lens_flare_material.set_shader_parameter("u_time", 0.0)
-	var rect := ColorRect.new()
-	rect.material = lens_flare_material
-	rect.set_anchors_preset(Control.PRESET_FULL_RECT)
-	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var layer := CanvasLayer.new()
-	layer.layer = 100
-	layer.add_child(rect)
-	parent.add_child(layer)
-
-
 func _build_rain_effect(parent: Node) -> void:
 	if DisplayServer.get_name() == "headless":
 		return
@@ -148,7 +96,7 @@ func _build_rain_effect(parent: Node) -> void:
 
 
 func _build_sky_and_weather_controller(parent: Node) -> void:
-	sky_and_weather_controller = SkyAndWeatherController.new()
+	sky_and_weather_controller = SkyAndWeatherControllerScene.instantiate() as SkyAndWeatherController
 	parent.add_child(sky_and_weather_controller)
 	sky_and_weather_controller.setup(
 		_camera,
