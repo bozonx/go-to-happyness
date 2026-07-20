@@ -14,12 +14,17 @@ const BillboardLabelScene = preload("res://game/features/ui/presentation/billboa
 const GatheringPlaceVisualScene = preload("res://game/features/buildings/presentation/gathering_place_visual.tscn")
 const PocketTakeItemRowScene = preload("res://game/features/citizens/presentation/pocket_take_item_row.tscn")
 const TentEraSurvivalRulesScript = preload("res://game/features/settlement/domain/tent_era_survival_rules.gd")
+const CampfireMenuControllerScript = preload("res://game/features/settlement/presentation/campfire_menu_controller.gd")
 const FireSourceStateScript = preload("res://game/features/settlement/domain/fire_source_state.gd")
 const CourierDispatcherScript = preload("res://game/features/logistics/application/courier_dispatcher.gd")
+const CourierTaskPublisherScript = preload("res://game/features/logistics/application/courier_task_publisher.gd")
 const CourierTaskScript = preload("res://game/features/logistics/domain/courier_task.gd")
 const TradeServiceScript = preload("res://game/features/logistics/application/trade_service.gd")
+const MarketMenuControllerScript = preload("res://game/features/logistics/presentation/market_menu_controller.gd")
 const StorageDeliveryServiceScript = preload("res://game/features/logistics/application/storage_delivery_service.gd")
 const BuildingAvailabilityServiceScript = preload("res://game/features/buildings/application/building_availability_service.gd")
+const BuildingMenuControllerScript = preload("res://game/features/buildings/presentation/building_menu_controller.gd")
+const FirstPersonHUDControllerScript = preload("res://game/features/ui/presentation/first_person_hud_controller.gd")
 const BuildingResearchServiceScript = preload("res://game/features/buildings/application/building_research_service.gd")
 const BuildingQueueServiceScript = preload("res://game/features/citizens/application/building_queue_service.gd")
 const CitizenLivingStatusServiceScript = preload("res://game/features/citizens/application/citizen_living_status_service.gd")
@@ -597,6 +602,11 @@ var canteen_service: CanteenService
 var trade_service: TradeService
 var storage_delivery_service: RefCounted
 var courier_dispatcher: RefCounted
+var courier_task_publisher: RefCounted
+var campfire_menu_controller: RefCounted
+var market_menu_controller: RefCounted
+var building_menu_controller: RefCounted
+var first_person_hud_controller: RefCounted
 var trail_field: TrailFieldService
 var trail_overlay: MeshInstance3D:
 	get: return world_setup.trail_overlay if world_setup != null else null
@@ -716,6 +726,16 @@ func _ready() -> void:
 	storage_delivery_service.configure(self)
 	courier_dispatcher = CourierDispatcherScript.new()
 	courier_dispatcher.configure(self)
+	courier_task_publisher = CourierTaskPublisherScript.new()
+	courier_task_publisher.configure(self)
+	campfire_menu_controller = CampfireMenuControllerScript.new()
+	campfire_menu_controller.configure(self)
+	market_menu_controller = MarketMenuControllerScript.new()
+	market_menu_controller.configure(self)
+	building_menu_controller = BuildingMenuControllerScript.new()
+	building_menu_controller.configure(self)
+	first_person_hud_controller = FirstPersonHUDControllerScript.new()
+	first_person_hud_controller.configure(self)
 	settlement.apply_tent_start()
 	var _event_registry := EventRegistryScript.new()
 	_event_registry.register_all(TentEraEventsScript.build())
@@ -1143,7 +1163,8 @@ func _update_clock(delta: float) -> void:
 		_apply_hourly_tent_survival(clock.hour())
 		_apply_hourly_bare_hands_penalty()
 		_apply_hourly_work_fatigue()
-	hud.update_clock("%s  %02d:%02d  x%d" % ["Night" if clock.is_night() else "Day", clock.hour(), clock.minute(), int(time_multiplier)])
+	if hud != null:
+		hud.update_clock("%s  %02d:%02d  x%d" % ["Night" if clock.is_night() else "Day", clock.hour(), clock.minute(), int(time_multiplier)])
 	_update_skip_night_button()
 	for event in events:
 		_handle_day_cycle_event(event)
@@ -1656,107 +1677,8 @@ func _update_couriers() -> void:
 
 
 func _publish_courier_tasks(dispatcher: RefCounted) -> void:
-	# Reconcile reservations left by interrupted or removed carriers before task
-	# validity is evaluated. This is the active dispatcher path.
-	for construction_site in construction_sites:
-		_reconcile_construction_reservations(construction_site)
-	_reconcile_repair_reservations()
-	if is_instance_valid(entrance_stone):
-		for arrival_order: Dictionary in pending_arrivals:
-			if bool(arrival_order.get("dispatched", false)):
-				continue
-			var arrival_house := arrival_order.get("house") as Node3D
-			if is_instance_valid(arrival_house) and not bool(arrival_house.get_meta("pending_demolition", false)):
-				# Greeting stays below emergency food (100) and firewood (90) so a new
-				# arrival never pulls the only courier off keeping fires and meals alive.
-				dispatcher.publish(StringName("arrival_%d" % arrival_house.get_instance_id()), CourierTask.Kind.ARRIVAL, 89, entrance_stone.global_position, entrance_stone.global_position, {"house": arrival_house})
-	if not warehouse_positions.is_empty():
-		# Emergency food is published before every other task.
-		if is_instance_valid(canteen) and food > 0 and not pending_canteen_delivery:
-			var food_capacity := BuildingCatalog.kitchen_food_capacity(str(canteen.get_meta("building_type", "")))
-			if food_capacity > canteen_food:
-				var food_source := _get_nearest_delivery_position(canteen_position)
-				dispatcher.publish(&"canteen_food", CourierTask.Kind.CANTEEN, 100, food_source, canteen_position)
-		for order in queued_trades:
-			var trade: Dictionary = order.trade
-			dispatcher.publish(StringName("trade_%s" % str(trade)), CourierTask.Kind.TRADE, 80, order.source, order.destination, {"order": order})
-		for position in sawmill_positions:
-			if int(sawmills.stock_at(position, runtime_seconds).boards) > 0:
-				var sawmill_dropoff := _warehouse_delivery_position(position, "boards", 1)
-				dispatcher.publish(StringName("sawmill_%s" % _cell_from_position(position)), CourierTask.Kind.SAWMILL_PICKUP, 50, position, sawmill_dropoff, {"position": position})
-		for collector: Dictionary in water_collectors:
-			if int(collector.get("stored", 0)) > 0:
-				var collector_node: Node3D = collector.get("node") as Node3D
-				if is_instance_valid(collector_node):
-					var collector_position: Vector3 = collector_node.get_meta("service_position", collector_node.global_position)
-					var dew_dropoff := _warehouse_delivery_position(collector_position, "water", int(collector.get("stored", 0)))
-					dispatcher.publish(StringName("dew_%s" % _cell_from_position(collector_position)), CourierTask.Kind.DEW_PICKUP, 40, collector_position, dew_dropoff, {"position": collector_position})
-		for worker in citizens:
-			if worker != null and worker.has_pending_resource() and not courier_dispatcher.is_manually_targeted(worker):
-				var worker_position: Vector3 = worker.global_position
-				var worker_dropoff := _warehouse_delivery_position(worker_position, worker.resource_type, worker.carried_amount)
-				dispatcher.publish(StringName("worker_%d" % worker.ai_id), CourierTask.Kind.WORKER_PICKUP, 45, worker_position, worker_dropoff, {"worker": worker})
-	# Builders and couriers must concentrate on the same project. Publishing
-	# deliveries for every site lets scarce stock strand across projects that no
-	# builder is currently advancing.
-	var site := _preferred_construction_site()
-	if site != null and is_instance_valid(site.node) and not site.node.is_queued_for_deletion():
-		var site_position: Vector3 = site.node.global_position
-		for resource_type in site.required_materials:
-			var required := int(site.required_materials[resource_type])
-			var delivered := int(site.delivered_materials.get(resource_type, 0))
-			var in_transit := int(site.reserved_materials.get(resource_type, 0))
-			var sources := _construction_material_sources(str(resource_type), site_position)
-			if sources.is_empty():
-				continue
-			var total_reserved := settlement.construction_reserved_for_site(site.site_id, str(resource_type))
-			var still_needed := maxi(0, required - delivered - total_reserved)
-			if still_needed > 0:
-				settlement.reserve_for_construction(site.site_id, str(resource_type), still_needed)
-			total_reserved = settlement.construction_reserved_for_site(site.site_id, str(resource_type))
-			var storage_reserved := maxi(0, total_reserved - in_transit)
-			if storage_reserved > 0:
-				# One task may be assigned to only one courier. Split the outstanding
-				# reservation across its actual warehouses: otherwise every slot points
-				# at the nearest warehouse and only its first courier can start.
-				var smallest_courier_capacity := 0
-				for citizen: Citizen in citizens:
-					if is_instance_valid(citizen) and citizen.can_handle_entry_logistics():
-						var courier_capacity := citizen.courier_capacity()
-						smallest_courier_capacity = courier_capacity if smallest_courier_capacity == 0 else mini(smallest_courier_capacity, courier_capacity)
-				var unallocated := storage_reserved
-				for source: Dictionary in sources:
-					if unallocated <= 0:
-						break
-					var source_available := _construction_source_available(str(resource_type), source)
-					var source_allocation := mini(unallocated, source_available)
-					if source_allocation <= 0:
-						continue
-					var source_id := str(source.get("id", "storage"))
-					var delivery_slots := ceili(float(source_allocation) / float(maxi(1, smallest_courier_capacity)))
-					for slot in range(delivery_slots):
-						dispatcher.publish(StringName("construction_%s_%s_%s_%d" % [site.node.get_instance_id(), resource_type, source_id, slot]), CourierTask.Kind.CONSTRUCTION, 70, source.position, site.node.global_position, {"site": site, "resource": resource_type, "source": source})
-					unallocated -= source_allocation
-	if not warehouse_positions.is_empty() and branches > 0:
-		for record in building_registry.records():
-			var building := record.node
-			if not is_instance_valid(building) or not bool(building.get_meta("repair_needed", false)) or bool(building.get_meta("repair_reserved", false)):
-				continue
-			var repair_position: Vector3 = building.get_meta("service_position", building.global_position)
-			var repair_source := _get_nearest_delivery_position(repair_position)
-			dispatcher.publish(StringName("repair_%d" % building.get_instance_id()), CourierTask.Kind.BUILDING_SUPPLY, 60, repair_source, repair_position, {"building": building, "supply_kind": "repair", "resource": "branches"})
-		for record in building_registry.records():
-			var fire_building := record.node as Node3D
-			if not is_instance_valid(fire_building):
-				continue
-			var building_type := str(fire_building.get_meta("building_type", ""))
-			if building_type not in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"]:
-				continue
-			var fire_state := _fire_state_for(fire_building)
-			if not fire_state.needs_supply(4) or branches <= 0:
-				continue
-			var fire_position: Vector3 = fire_building.get_meta("service_position", fire_building.global_position)
-			dispatcher.publish(StringName("firewood_%d" % fire_building.get_instance_id()), CourierTask.Kind.BUILDING_SUPPLY, _firewood_task_priority(fire_building, fire_state), _get_nearest_delivery_position(fire_position), fire_position, {"building": fire_building, "supply_kind": "firewood", "resource": "branches"})
+	if courier_task_publisher != null:
+		courier_task_publisher.publish_courier_tasks(dispatcher)
 
 
 func _firewood_task_priority(building: Node3D, fire_state: RefCounted) -> int:
@@ -3816,120 +3738,8 @@ func _on_build_menu_gui_input(event: InputEvent) -> void:
 	get_viewport().set_input_as_handled()
 
 func _refresh_build_menu() -> void:
-	var selected_exists := selected_builder != null
-	var assignment_submenu_open := build_menu_is_job_menu or build_menu_is_daily_order_menu
-	var citizen_actions_visible := selected_exists and not assignment_submenu_open and build_category.is_empty() and not build_menu_is_global
-	if build_menu.citizen_skills_label != null:
-		build_menu.citizen_skills_label.visible = citizen_actions_visible
-	if build_menu.manage_citizen_button != null:
-		build_menu.manage_citizen_button.visible = citizen_actions_visible
-		build_menu.manage_citizen_button.text = "Управлять" if selected_builder != hero_citizen else "Управлять героем"
-
-	if build_menu.daily_order_submenu_btn != null:
-		build_menu.daily_order_submenu_btn.visible = citizen_actions_visible
-		build_menu.daily_order_submenu_btn.disabled = false
-		build_menu.daily_order_submenu_btn.tooltip_text = ""
-	if build_menu.job_submenu_btn != null:
-		build_menu.job_submenu_btn.visible = citizen_actions_visible
-		build_menu.job_submenu_btn.disabled = false
-		build_menu.job_submenu_btn.tooltip_text = ""
-	if build_menu.personal_night_work_button != null:
-		var can_personal_night_work := citizen_actions_visible and selected_builder != null and selected_builder.has_daily_order() and not selected_builder.is_employed()
-		var has_overtime := selected_builder != null and selected_builder.has_overtime_source("personal", day_cycle.current_day)
-		build_menu.personal_night_work_button.visible = citizen_actions_visible
-		build_menu.personal_night_work_button.disabled = not can_personal_night_work
-		build_menu.personal_night_work_button.set_pressed_no_signal(has_overtime)
-		build_menu.personal_night_work_button.tooltip_text = "Assign a job or daily order first." if not can_personal_night_work else "Continue working through the night and next workday."
-	if build_menu.job_back_btn != null:
-		build_menu.job_back_btn.visible = selected_exists and assignment_submenu_open
-	
-	var current_era_category: String = ERA_CATEGORIES[settlement.era]
-	for button in build_menu.build_buttons:
-		var category_button: String = button.get_meta("category_button", "")
-		if button.get_meta("category_back", false):
-			button.visible = not build_category.is_empty() and not assignment_submenu_open
-		elif not category_button.is_empty():
-			# Era category buttons belong to the global build menu; they are not
-			# an entry point from the per-citizen unit menu.
-			if build_menu_is_global:
-				button.visible = build_category.is_empty() and not assignment_submenu_open and category_button != current_era_category and building_availability_service.is_category_available(category_button)
-			else:
-				button.visible = false
-		else:
-			var build_type: String = button.get_meta("build_type", "")
-			var menu_state: Dictionary = building_availability_service.menu_state_with_inventory(build_type, pocket)
-			var territory_ok: bool = village_territory_service.has_campfire() or not BuildingCatalog.requires_village_area(build_type)
-			if not territory_ok:
-				menu_state["enabled"] = false
-				menu_state["reason"] = village_territory_service.REASON_NO_CAMPFIRE
-			button.set_meta("build_menu_state", menu_state)
-			if build_menu_is_global and build_category.is_empty():
-				button.visible = not assignment_submenu_open and button.get_meta("category", "") == current_era_category and bool(menu_state.visible)
-			else:
-				button.visible = not build_category.is_empty() and button.get_meta("category", "") == build_category and not assignment_submenu_open and bool(menu_state.visible)
-			
-	for button in build_menu.role_buttons:
-		var role: String = button.get_meta("role", "")
-		var hero_only: bool = button.get_meta("hero_only", false)
-		var submenu: String = button.get_meta("submenu", "job")
-		var is_daily_submenu := submenu == "daily"
-		var daily_role_enabled := not is_daily_submenu or role.is_empty() or role in _daily_order_roles()
-		var min_era := _min_era_for_role(role)
-		var era_ok := is_daily_submenu or min_era <= settlement.era
-		var role_available := _is_daily_order_role_available(role) if is_daily_submenu else _is_role_available(role)
-		button.visible = selected_exists and ((is_daily_submenu and build_menu_is_daily_order_menu) or (not is_daily_submenu and build_menu_is_job_menu)) and daily_role_enabled and era_ok and (not hero_only or selected_builder.is_hero)
-		var blocked_by_officer := not is_daily_submenu and role != "official" and not _player_can_manage_permanent_professions()
-		button.disabled = button.visible and (blocked_by_officer or not role_available)
-		if button.disabled and not role_available:
-			button.tooltip_text = "Нет рабочего места для этой роли."
-		elif button.disabled and blocked_by_officer:
-			button.tooltip_text = _permanent_profession_block_message()
-		else:
-			button.tooltip_text = ""
-		if button.visible:
-			var base_title: String = button.get_meta("base_title", button.text)
-			if role.is_empty():
-				button.text = base_title
-			else:
-				var skill_val := float(selected_builder.skills.get(role, 0.0))
-				var active_cnt := _daily_order_role_count(role) if is_daily_submenu else _workforce_role_count(role)
-				var limit := -1 if is_daily_submenu else _workforce_role_limit(role)
-				var limit_str := ""
-				if limit >= 0:
-					limit_str = "/%d" % limit
-				button.text = "%s (Skill: %d%%) [%d%s]" % [base_title, roundi(skill_val * 100.0), active_cnt, limit_str]
-
-	# Lay the visible building buttons out in a single column and annotate each
-	# with its resource cost. Unaffordable buildings are disabled and dimmed.
-	var row_y := 176.0
-	for button in build_menu.build_item_buttons:
-		if not button.visible:
-			continue
-		button.position = Vector2(16, row_y)
-		row_y += 50.0
-		var building_type: String = button.get_meta("build_type", "")
-		var menu_state: Dictionary = button.get_meta("build_menu_state", building_availability_service.menu_state_with_inventory(building_type, pocket))
-		var enabled := bool(menu_state.enabled)
-		var affordable := bool(menu_state.affordable)
-		button.disabled = not enabled
-		button.tooltip_text = "" if enabled else (village_territory_service.placement_message(menu_state.reason) if menu_state.reason == village_territory_service.REASON_NO_CAMPFIRE else building_availability_service.message_for_reason(menu_state.reason))
-		button.modulate = Color(1, 1, 1, 1) if enabled else Color(0.55, 0.55, 0.6, 1)
-		var cost_label: Label = button.get_meta("cost_label")
-		if cost_label != null:
-			cost_label.text = str(menu_state.cost_text)
-			cost_label.add_theme_color_override("font_color", Color("cdd6df") if affordable else Color("d98a86"))
-
-	if build_menu.title_label != null:
-		if build_menu_is_job_menu:
-			build_menu.title_label.text = "Permanent Jobs\nRequires an employment officer. [n] = assigned residents."
-		elif build_menu_is_daily_order_menu:
-			build_menu.title_label.text = "Daily Orders\nNo officer required. Evening orders start next workday."
-		elif not build_category.is_empty():
-			build_menu.title_label.text = "%s buildings\nChoose a building to place." % build_category.capitalize()
-		elif build_menu_is_global:
-			build_menu.title_label.text = "%s Era Construction\nChoose a building to place." % _era_name()
-		else:
-			_show_selected_citizen_menu()
+	if building_menu_controller != null:
+		building_menu_controller.refresh_build_menu()
 
 func _open_job_submenu() -> void:
 	build_menu_is_job_menu = true
@@ -5653,150 +5463,14 @@ func _warehouse_index_for_building(building: Node3D) -> int:
 
 
 func _building_action_hint(building: Node3D) -> String:
-	if not is_instance_valid(building):
-		return ""
-	var building_type := str(building.get_meta("building_type", ""))
-	var name := str(BuildingCatalog.definition_for(building_type).get("name", building_type)).capitalize()
-	var info_parts: Array[String] = []
-	if building_type in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"]:
-		var fire_state := _fire_state_for(building)
-		var phase: int = fire_state.phase_at(int(game_minutes))
-		var phase_label: String = ["burning", "dying", "embers", "out"][phase]
-		var delivery_hint := ", %d in transit" % fire_state.reserved_fuel if fire_state.reserved_fuel > 0 else ""
-		info_parts.append("Fire: %s (%d fuel%s)" % [phase_label, fire_state.fuel, delivery_hint])
-	if building_type in BuildingCatalog.KITCHEN_FOOD_CAPACITIES:
-		info_parts.append("Food cap: %d" % BuildingCatalog.kitchen_food_capacity(building_type))
-	var required := _required_staff_for_building(building)
-	if not required.is_empty():
-		var assigned := _assigned_staff_for_building(building, required)
-		info_parts.append("Staff %d/%d" % [assigned, int(required.count)])
-	if building.has_meta("housing_capacity"):
-		var capacity := int(building.get_meta("housing_capacity", 1))
-		var free_slots := int(building.get_meta("spawn_slots", capacity))
-		var occupied := clampi(capacity - free_slots, 0, capacity)
-		info_parts.append("Residents %d/%d" % [occupied, capacity])
-	if info_parts.is_empty():
-		return name
-	return "%s | %s" % [name, " | ".join(info_parts)]
+	if first_person_hud_controller != null:
+		return first_person_hud_controller.building_action_hint(building)
+	return ""
 
 
 func _first_person_action_hint() -> String:
-	if player_citizen != null and player_citizen.work_position_locked:
-		return "F — покинуть рабочее место"
-	if player_citizen != null and player_citizen.player_using_toilet:
-		return "Пользуемся туалетом..."
-	var target := _first_person_target()
-	match target.kind:
-		"entrance":
-			for order: Dictionary in pending_arrivals:
-				if not bool(order.get("dispatched", false)):
-					return "F: встретить прибывшего жителя"
-			return "Входной знак"
-		"building":
-			if _is_managed_fire_source(target.node):
-				var branch_count := _pocket_amount("branches")
-				return "F: добавить 1 ветку в костер | Shift+F: добавить все (%d)" % branch_count if branch_count > 0 else "Нужны ветки в кармане, чтобы пополнить костер"
-			return _building_action_hint(target.node)
-		"construction":
-			var site := construction.site_for_node(target.node)
-			if site != null and not site.is_supplied():
-				var missing := _missing_site_materials_text(site)
-				if not missing.is_empty():
-					return "F: сдать стройматериалы (%s)" % missing
-			return "F: работать на стройке"
-		"demolition":
-			return "F: разбирать отмеченное здание"
-		"pile":
-			var pile: Dictionary = target.pile
-			var available := _pile_available_resources(pile)
-			if available.is_empty():
-				return ""
-			if not _pocket_has_room():
-				return "Карман полон"
-			return "F: взять %s из кучи | Shift+F: взять всё" % _resource_display_name(available[0]).to_lower()
-		"warehouse":
-			var wh_index := int(target.get("warehouse_index", -1))
-			if wh_index < 0:
-				wh_index = _warehouse_index_for_building(target.node)
-			if wh_index < 0:
-				wh_index = _nearby_warehouse_index()
-			if _pocket_total() > 0:
-				var primary_res := _primary_pocket_resource()
-				if wh_index >= 0 and not settlement.warehouse_accepts(wh_index, primary_res):
-					return "Склад не принимает %s" % primary_res.capitalize()
-				var wh_room := settlement.warehouse_room_for(wh_index, primary_res) if wh_index >= 0 else settlement.storage_room_for(primary_res)
-				if wh_room <= 0:
-					return "Склад заполнен"
-				return "F: сдать 1 (%s) | Shift+F: сдать всё" % primary_res.capitalize()
-			if wh_index >= 0 and wh_index < settlement.warehouses.size():
-				var wh_state: WarehouseState = settlement.warehouses[wh_index]
-				var used := int(ceil(wh_state.used_units(SettlementState.STORAGE_WEIGHTS)))
-				return "Склад: %d/%d заполнено" % [used, wh_state.capacity]
-			return "Склад"
-		"sawmill":
-			var sawmill_pos: Vector3 = target.position
-			var sawmill_stock := _sawmill_stock(sawmill_pos)
-			if _pocket_amount("wood") > 0 or _pocket_amount("logs") > 0:
-				var wood_count := _pocket_amount("wood") + _pocket_amount("logs")
-				return "F: сдать 1 дерево на лесопилку | Shift+F: сдать всё (%d)" % wood_count
-			if int(sawmill_stock.boards) > 0 and _pocket_has_room():
-				return "F: взять 1 доску | Shift+F: взять до заполнения"
-			return ""
-		"workplace":
-			var building_type := str(target.node.get_meta("building_type", " workplace"))
-			var is_official_building := building_type in OFFICIAL_WORKPLACE_TYPES
-			if is_official_building:
-				return "Откройте меню главного костра, чтобы занять место"
-			var role := _role_for_workplace(target.node)
-			if role.is_empty():
-				return ""
-			match role:
-				"cook":
-					return "F — готовить еду"
-				"teacher":
-					return "F — учить"
-				"seller":
-					return "F — торговать"
-				"craftsman":
-					return "F — ремесло"
-				_:
-					return "F — занять рабочее место (%s)" % role.replace("_", " ")
-		"tree":
-			var tree_node := target.node as Node3D
-			if settlement.era < SettlementState.Era.WOOD:
-				var rem := int(tree_node.get_meta("remaining_branches", 0))
-				if rem <= 0:
-					return "Ветки иссякли (топор откроет полный сбор)"
-				var init := maxi(1, int(tree_node.get_meta("initial_branches", rem)))
-				return "F: собрать ветки (%d/%d) | Shift+F: до полноты" % [rem, init]
-			return "F: срубить дерево | Shift+F: рубить до полноты"
-		"grass":
-			var grass_info := _targeted_grass_info(target)
-			if grass_info.is_empty():
-				return "F: собрать траву | Shift+F: собирать до полноты"
-			return "F: собрать траву (%d/%d) | Shift+F: до полноты" % [int(grass_info.remaining), int(grass_info.initial)]
-		"farm":
-			return "F: собрать еду | Shift+F: собирать до полноты"
-		"pond":
-			if bool(settlement.tools.get("bucket", false)):
-				return "F: набрать воды | Shift+F: набирать до полноты"
-			return "Нужно ведро, чтобы черпать воду. Купите его на рынке."
-		"forage", "rabbit":
-			return "Лесные дары и зайца может собирать только специалист. Постройте палатку охотников-собирателей."
-		"toilet":
-			var needs_toilet := citizen_needs_service != null and citizen_needs_service.has_toilet_request(player_citizen.ai_id)
-			if needs_toilet:
-				return "F: воспользоваться туалетом (потребность)"
-			return "F: воспользоваться туалетом"
-		"citizen":
-			var citizen := target.node as Citizen
-			if not is_instance_valid(citizen):
-				return ""
-			var status := citizen.status_effect_labels()
-			var status_text := ", ".join(status) if not status.is_empty() else "OK"
-			return "%s | %s | %s" % [citizen.role_label(), _citizen_state_name(citizen.state), status_text]
-		"building":
-			return _building_action_hint(target.node)
+	if first_person_hud_controller != null:
+		return first_person_hud_controller.first_person_action_hint()
 	return ""
 
 func _targeted_grass_info(target: Dictionary) -> Dictionary:
@@ -6502,95 +6176,33 @@ func _toggle_global_build_menu() -> void:
 
 
 func _show_campfire_menu() -> void:
-	# Keep any resident the player picked selected so they can be appointed as the
-	# employment officer here, just like at a canteen/school/market.
-	build_menu.visible = false
-	build_menu_is_global = false
-	selection_marker.visible = false
-	build_mode = ""
-	campfire_menu.visible = true
-	_refresh_campfire_menu()
+	if campfire_menu_controller != null:
+		campfire_menu_controller.show_campfire_menu()
 
 
 func _show_campfire_story_menu() -> void:
-	if settlement.era != SettlementState.Era.TENT:
-		_update_interface("Campfire stories are only part of the Tent Era.")
-		return
-	if clock.hour() < 20:
-		_update_interface("Campfire stories can only be chosen after 20:00.")
-		return
-	if not settlement.campfire_story_effect.is_empty():
-		_update_interface("Tonight's story has already been chosen: %s." % settlement.campfire_story_effect.capitalize())
-		return
-	campfire_menu.visible = false
-	campfire_story_menu.visible = true
+	if campfire_menu_controller != null:
+		campfire_menu_controller.show_campfire_story_menu()
 
 
 func _close_campfire_story_menu() -> void:
-	if campfire_story_menu != null:
-		campfire_story_menu.visible = false
-	campfire_menu.visible = true
+	if campfire_menu_controller != null:
+		campfire_menu_controller.close_campfire_story_menu()
 
 
 func _select_campfire_story(story_id: String) -> void:
-	settlement.campfire_story_effect = story_id
-	campfire_story_menu.visible = false
-	var message := ""
-	match story_id:
-		"optimistic": message = "Optimistic stories chosen: wellbeing will recover faster tonight."
-		"teaching": message = "Teaching tales chosen: a resident may learn something overnight."
-		"plan":
-			message = "Plan for tomorrow chosen: gathering work will be faster tomorrow."
-			settlement.campfire_story_target_role = ["gather_branches", "gather_grass", "gather_food", "gather_water"].pick_random()
-			settlement.campfire_story_target_day = day_cycle.current_day + 1
-	_update_interface(message)
+	if campfire_menu_controller != null:
+		campfire_menu_controller.select_campfire_story(story_id)
 
 
 func _show_campfire_orders_menu() -> void:
-	if campfire_orders_menu == null:
-		return
-	campfire_menu.visible = false
-	
-	var hour := clock.hour()
-	var can_cheer := hour >= 6 and not settlement.cheer_up_used_today
-	var can_order_night_work := _has_night_work_candidates()
-	var settlement_night_active := _has_overtime_source("settlement")
-	var double_time_active := settlement.double_time_order_day == day_cycle.current_day
-	
-	var balanced_warehouse_disabled := warehouse_positions.is_empty()
-	var road_walking_disabled := settlement.era != SettlementState.Era.TENT
-
-	var cheer_tooltip := "Already used today. Available again tomorrow at 06:00." if settlement.cheer_up_used_today else ("Available once each morning after 06:00." if not can_cheer else "Raise wellbeing by 5%%.")
-	if not can_cheer and not settlement.cheer_up_used_today:
-		cheer_tooltip = "Available once each morning after 06:00."
-
-	var state := {
-		"road_walking_enabled": settlement.road_walking_order_enabled,
-		"road_walking_disabled": road_walking_disabled,
-		"road_walking_tooltip": "Available in the Tent Era." if road_walking_disabled else "Residents trample trails faster. Route selection is unchanged.",
-		
-		"balanced_warehouse_enabled": settlement.balanced_warehouse_mode,
-		"balanced_warehouse_disabled": balanced_warehouse_disabled,
-		"balanced_warehouse_tooltip": "Build a warehouse first." if balanced_warehouse_disabled else "Spread each good evenly between warehouses instead of filling the nearest one.",
-		
-		"cheer_disabled": not can_cheer,
-		"cheer_tooltip": cheer_tooltip,
-		
-		"night_work_enabled": settlement_night_active,
-		"night_work_disabled": not settlement_night_active and not can_order_night_work,
-		"night_work_tooltip": "No active workers can receive this order." if not can_order_night_work else "Affected workers continue through the night and next workday. Raises fatigue and lowers satisfaction.",
-		
-		"double_time_enabled": double_time_active,
-		"double_time_tooltip": "All residents walk twice as fast today. Fatigue accumulates 50%% faster and satisfaction drops." if not double_time_active else "Active. Residents are marching at double speed."
-	}
-	
-	campfire_orders_menu.update_state(state)
-	campfire_orders_menu.visible = true
+	if campfire_menu_controller != null:
+		campfire_menu_controller.show_campfire_orders_menu()
 
 
 func _close_campfire_orders_menu() -> void:
-	if campfire_orders_menu != null:
-		campfire_orders_menu.visible = false
+	if campfire_menu_controller != null:
+		campfire_menu_controller.close_campfire_orders_menu()
 	campfire_menu.visible = true
 
 
@@ -6982,172 +6594,14 @@ func _enable_auto_for_citizen(citizen: Citizen) -> void:
 
 
 func _refresh_campfire_menu() -> void:
-	if selected_campfire == null:
-		return
-	var era_str := _era_name()
-	var fire_state := _fire_state_for(selected_campfire)
-	var fuel_current: int = fire_state.total_committed_fuel()
-	var title_text := "Campfire (Era: %s)\nВетки: %d/%d" % [era_str, fuel_current, FIRE_SUPPLY_TARGET]
-	
-	var housing_slots := _total_housing_slots()
-	var era_info := _build_campfire_era_requirements(housing_slots)
-	var req_text: String = era_info[0]
-	var can_advance: bool = era_info[1]
-
-	var unhoused := _unhoused_citizen_count()
-	if unhoused > 0:
-		req_text += "\nProblems:\n- Unhoused residents: %d. Settle them in a home before inviting anyone new.\n" % unhoused
-	if not _officer_exists():
-		req_text += "\nУправление трудом: officer не назначен. Резерв простаивает, но стройка доступна.\n"
-
-	# Upgrade button state
-	var upgrade_state := {"visible": false, "text": "", "disabled": false, "tooltip": ""}
-	var selected_type := str(selected_campfire.get_meta("building_type", "campfire")) if is_instance_valid(selected_campfire) else ""
-	var next_upgrade := settlement.next_building_upgrade(selected_type)
-	if is_instance_valid(selected_campfire) and not _is_fire_lit(selected_campfire):
-		var relight_state := _fire_state_for(selected_campfire)
-		upgrade_state["visible"] = true
-		upgrade_state["text"] = "Relight with flint and steel"
-		upgrade_state["disabled"] = relight_state.fuel <= 0
-		upgrade_state["tooltip"] = "Deliver branches before relighting." if upgrade_state["disabled"] else "Use the permanent flint and steel."
-	else:
-		upgrade_state["visible"] = not next_upgrade.is_empty()
-		upgrade_state["text"] = "Upgrade to %s" % str(BuildingCatalog.definition_for(next_upgrade).get("name", next_upgrade))
-		upgrade_state["disabled"] = not settlement.can_upgrade_building(selected_type)
-		upgrade_state["tooltip"] = "" if not upgrade_state["disabled"] else "Research the next level and gather its resources."
-
-	# Worker controls state
-	var is_center := is_instance_valid(selected_campfire) and str(selected_campfire.get_meta("building_type", "")) in OFFICIAL_WORKPLACE_TYPES
-	var researcher := _daily_researcher_at(selected_campfire)
-	var research_post_disabled := not settlement.is_research_completed("official") or researcher == null
-	var research_post_state := {
-		"visible": is_center and not _officer_exists(),
-		"text": "Promote daily researcher to officer",
-		"disabled": research_post_disabled,
-		"tooltip": "Research the officer profession, then select a daily researcher working at this campfire." if research_post_disabled else "Promote this researcher to a permanent officer role.",
-	}
-	var controlled_unit_nearby := is_first_person and is_instance_valid(player_citizen) and is_center and player_citizen.global_position.distance_to(_nearest_service_position(selected_campfire, player_citizen.global_position)) <= OFFICER_POST_RADIUS
-	var can_be_official := settlement.is_research_completed("official")
-	var player_role := player_citizen.permanent_role if is_instance_valid(player_citizen) else ""
-	var occupy_disabled := can_be_official and _officer_exists() and player_role != "official"
-	var occupy_state := {
-		"visible": controlled_unit_nearby,
-		"text": "Занять место чиновника" if can_be_official else "Занять место исследователя",
-		"disabled": occupy_disabled,
-		"tooltip": "Место уже занято чиновником." if occupy_disabled else "",
-	}
-	var officer := _workplace_worker(selected_campfire) if is_center else null
-	var campfire_night_order_used := is_instance_valid(selected_campfire) and int(selected_campfire.get_meta("night_work_order_day", -1)) == day_cycle.current_day
-	var overtime_state := {
-		"visible": is_center and officer != null,
-		"disabled": false,
-		"pressed": campfire_night_order_used,
-		"tooltip": "Work through the night and the next workday.",
-	}
-
-	var state := {
-		"title_text": title_text,
-		"requirements_text": req_text,
-		"advance_disabled": not can_advance,
-		"upgrade": upgrade_state,
-		"research_post": research_post_state,
-		"occupy_position": occupy_state,
-		"overtime": overtime_state,
-	}
-	if is_center and officer != null:
-		state["close_btn_y"] = 746.0
-	campfire_menu.update_state(state)
-	_refresh_campfire_occupancy_button()
+	if campfire_menu_controller != null:
+		campfire_menu_controller.refresh_campfire_menu()
 
 
 func _build_campfire_era_requirements(housing_slots: int) -> Array:
-	var req_text := ""
-	var can_advance := false
-	var next_era := SettlementState.Era.TENT
-
-	match settlement.era:
-		SettlementState.Era.TENT:
-			next_era = SettlementState.Era.EARTH
-			var tools_ok := settlement._has_tools(["axe", "hand_saw", "shovel", "bucket"])
-			var earth_research_ok := settlement.is_research_completed("earth_buildings")
-			req_text = "Requirements for Earth Era:\n"
-			req_text += "- Tools (axe, saw, shovel, bucket): %s\n" % ("OK" if tools_ok else "Missing")
-			req_text += "- Earth buildings research: %s\n" % ("OK" if earth_research_ok else "Missing")
-			can_advance = settlement.can_advance_to(next_era, citizens.size(), housing_slots)
-
-		SettlementState.Era.EARTH:
-			next_era = SettlementState.Era.CLAY
-			var has_assembly := settlement.has_building("earth_assembly")
-			var has_smithy := settlement.has_building("smithy")
-			var has_mkt := settlement.has_building("earth_market")
-			var pop_ok := housing_slots >= citizens.size()
-			var clay_ok := settlement.available_amount("clay") >= 5
-			var money_ok := settlement.money >= 5
-			var trade_ok := settlement.trade_sales >= 3
-			var shovel_ok := settlement._has_tools(["shovel"])
-			req_text = "Requirements for Clay Era:\n"
-			req_text += "- Earth Assembly built: %s\n" % ("Yes" if has_assembly else "No")
-			req_text += "- Smithy built: %s\n" % ("Yes" if has_smithy else "No")
-			req_text += "- Earth market built: %s\n" % ("Yes" if has_mkt else "No")
-			req_text += "- Housing slots (needs %d): %d (%s)\n" % [citizens.size(), housing_slots, "OK" if pop_ok else "Need more"]
-			req_text += "- Clay (needs 5): %d (%s)\n" % [settlement.amount("clay"), "OK" if clay_ok else "Need more"]
-			req_text += "- Money (needs 5): %d (%s)\n" % [settlement.money, "OK" if money_ok else "Need more"]
-			req_text += "- Trade sales (needs 3): %d (%s)\n" % [settlement.trade_sales, "OK" if trade_ok else "Need more"]
-			req_text += "- Tool Shovel owned: %s\n" % ("Yes" if shovel_ok else "No")
-			can_advance = settlement.can_advance_to(next_era, citizens.size(), housing_slots)
-
-		SettlementState.Era.CLAY:
-			next_era = SettlementState.Era.WOOD
-			var has_lodge := settlement.has_building("clay_lodge")
-			var has_mkt := settlement.has_building("clay_market")
-			var water_ok := water >= citizens.size()
-			var logs_ok := settlement.available_amount("logs") >= 10
-			var money_ok := settlement.money >= 10
-			req_text = "Requirements for Wood Era:\n"
-			req_text += "- Clay lodge built: %s\n" % ("Yes" if has_lodge else "No")
-			req_text += "- Clay market built: %s\n" % ("Yes" if has_mkt else "No")
-			req_text += "- Water (needs %d): %d (%s)\n" % [citizens.size(), water, "OK" if water_ok else "Need more"]
-			req_text += "- Logs (needs 10): %d (%s)\n" % [settlement.amount("logs"), "OK" if logs_ok else "Need more"]
-			req_text += "- Money (needs 10): %d (%s)\n" % [settlement.money, "OK" if money_ok else "Need more"]
-			can_advance = settlement.can_advance_to(next_era, citizens.size(), housing_slots)
-
-		SettlementState.Era.WOOD:
-			next_era = SettlementState.Era.STONE
-			var has_th := settlement.has_building("wood_town_hall")
-			var has_mkt := settlement.has_building("wood_market")
-			var has_sm := settlement.has_building("sawmill")
-			var has_house3 := settlement.has_building("house_lvl3")
-			var pickaxe_ok := settlement._has_tools(["pickaxe"])
-			var money_ok := settlement.money >= 15
-			req_text = "Requirements for Stone Era:\n"
-			req_text += "- Wooden town hall built: %s\n" % ("Yes" if has_th else "No")
-			req_text += "- Sawmill built: %s\n" % ("Yes" if has_sm else "No")
-			req_text += "- Wood market built: %s\n" % ("Yes" if has_mkt else "No")
-			req_text += "- Wood house Level 3 built: %s\n" % ("Yes" if has_house3 else "No")
-			req_text += "- Tool Pickaxe owned: %s\n" % ("Yes" if pickaxe_ok else "No")
-			req_text += "- Money (needs 15): %d (%s)\n" % [settlement.money, "OK" if money_ok else "Need more"]
-			can_advance = settlement.can_advance_to(next_era, citizens.size(), housing_slots)
-
-		SettlementState.Era.STONE:
-			next_era = SettlementState.Era.BRICK
-			var has_pref := settlement.has_building("stone_prefecture")
-			var has_mkt := settlement.has_building("stone_market")
-			var has_mw := settlement.has_building("masonry_workshop")
-			var stone_ok := settlement.available_amount("stone") >= 20
-			var money_ok := settlement.money >= 20
-			req_text = "Requirements for Brick Era:\n"
-			req_text += "- Stone prefecture built: %s\n" % ("Yes" if has_pref else "No")
-			req_text += "- Masonry workshop built: %s\n" % ("Yes" if has_mw else "No")
-			req_text += "- Stone market built: %s\n" % ("Yes" if has_mkt else "No")
-			req_text += "- Stone (needs 20): %d (%s)\n" % [settlement.amount("stone"), "OK" if stone_ok else "Need more"]
-			req_text += "- Money (needs 20): %d (%s)\n" % [settlement.money, "OK" if money_ok else "Need more"]
-			can_advance = settlement.can_advance_to(next_era, citizens.size(), housing_slots)
-
-		SettlementState.Era.BRICK:
-			req_text = "Maximum era reached! Your settlement is fully advanced."
-			can_advance = false
-
-	return [req_text, can_advance]
+	if campfire_menu_controller != null:
+		return campfire_menu_controller.build_campfire_era_requirements(housing_slots)
+	return ["", false]
 
 
 func _occupy_selected_campfire_position() -> void:
@@ -7206,132 +6660,13 @@ func _on_campfire_advance_pressed() -> void:
 
 
 func _show_market_menu() -> void:
-	selected_builder = null
-	build_menu.visible = false
-	build_menu_is_global = false
-	selection_marker.visible = false
-	build_mode = ""
-	market_menu.visible = true
-	_refresh_market_menu()
+	if market_menu_controller != null:
+		market_menu_controller.show_market_menu()
 
 
 func _refresh_market_menu() -> void:
-	if selected_market == null:
-		return
-	if market_menu == null:
-		return
-	var market_type: String = selected_market.get_meta("building_type", "straw_trade_tent")
-	var available_money := _available_trade_money()
-	var seller_ok := _is_seller_present_at(selected_market)
-
-	var title_text := "%s Menu\nCoins: %d  Available: %d\nCompleted sales: %d" % [market_type.capitalize().replace("_", " "), settlement.money, available_money, settlement.trade_sales]
-	if not seller_ok:
-		title_text += "\nINACTIVE: Seller is missing!\n(Seller must be working at the market to trade)"
-
-	var y_offset := 104.0 if not seller_ok else 80.0
-
-	var raw_sell_items := [["goods", 5]]
-	var raw_buy_items: Array = []
-
-	if market_type in ["straw_trade_tent", "tarp_trade_tent"]:
-		raw_buy_items.append(["axe", 15])
-		raw_buy_items.append(["hand_saw", 15])
-		raw_buy_items.append(["shovel", 15])
-		raw_buy_items.append(["bucket", 15])
-		raw_buy_items.append(["tarp", 8])
-	elif market_type in ["earth_market", "clay_market"]:
-		raw_buy_items.append(["hoe", 18])
-	elif market_type in ["wood_market", "stone_market", "brick_market"]:
-		raw_buy_items.append(["pickaxe", 25])
-
-	if market_type in ["earth_market", "clay_market", "wood_market", "stone_market", "brick_market"]:
-		raw_sell_items.append(["soil", 1])
-
-	if market_type in ["clay_market", "wood_market", "stone_market", "brick_market"]:
-		raw_sell_items.append(["clay", 2])
-
-	if market_type in ["wood_market", "stone_market", "brick_market"]:
-		raw_sell_items.append(["wood", 2])
-		raw_sell_items.append(["boards", 3])
-
-	if market_type in ["stone_market", "brick_market"]:
-		raw_sell_items.append(["stone", 3])
-
-	if market_type == "brick_market":
-		raw_sell_items.append(["bricks", 4])
-
-	var sell_items: Array[Dictionary] = []
-	for item in raw_sell_items:
-		var res: String = item[0]
-		var price: int = item[1]
-		var sellable := mini(5, settlement.amount(res))
-		sell_items.append({
-			"text": "Sell %d %s (+%d)  Stock: %d" % [sellable, res, price * sellable, settlement.amount(res)],
-			"disabled": sellable <= 0 or not seller_ok,
-			"tooltip": "Seller is missing" if not seller_ok else ("Nothing left to sell" if sellable <= 0 else "Sell up to five units from available stock"),
-			"resource": res,
-			"quantity": sellable,
-			"price": price,
-		})
-
-	var buy_items: Array[Dictionary] = []
-	for item in raw_buy_items:
-		var tool_name: String = item[0]
-		var price: int = item[1]
-		var already_ordered := _trade_has_tool_order(tool_name)
-		var owned := bool(settlement.tools.get(tool_name, false))
-		buy_items.append({
-			"text": "Buy %s (%d Coins)" % [tool_name.replace("_", " "), price],
-			"disabled": owned or already_ordered or available_money < price or not seller_ok,
-			"tooltip": "Seller is missing" if not seller_ok else ("Already owned" if owned else ("Already ordered" if already_ordered else "Not enough available coins" if available_money < price else "")),
-			"tool_id": tool_name,
-			"price": price,
-		})
-
-	var state := {
-		"title_text": title_text,
-		"y_offset": y_offset,
-		"sell_items": sell_items,
-		"buy_items": buy_items,
-	}
-
-	var equipment_target: Citizen = selected_builder if is_instance_valid(selected_builder) and selected_builder.is_courier() else null
-	var raw_equipment_offers: Array[Array] = []
-	if settlement.era == SettlementState.Era.TENT:
-		raw_equipment_offers.append(["simple_backpack", 12])
-	elif settlement.era >= SettlementState.Era.CLAY:
-		raw_equipment_offers.append(["reinforced_backpack", 22])
-		raw_equipment_offers.append(["bicycle", 30])
-		if settlement.era >= SettlementState.Era.WOOD:
-			raw_equipment_offers.append(["cargo_backpack", 36])
-			raw_equipment_offers.append(["bicycle_trailer", 48])
-	if not raw_equipment_offers.is_empty():
-		state["equipment_label"] = "Courier equipment: %s" % (equipment_target.role_label() if equipment_target != null else "select a courier")
-		var equipment_offers: Array[Dictionary] = []
-		for offer in raw_equipment_offers:
-			var equipment_id: String = offer[0]
-			var equipment_price: int = offer[1]
-			equipment_offers.append({
-				"text": "Buy %s (%d Coins)" % [equipment_id.replace("_", " "), equipment_price],
-				"disabled": not seller_ok or equipment_target == null or equipment_target.courier_equipment == equipment_id or available_money < equipment_price,
-				"tooltip": "Select a pinned courier first" if equipment_target == null else "",
-				"courier": equipment_target,
-				"equipment_id": equipment_id,
-				"price": equipment_price,
-			})
-		state["equipment_offers"] = equipment_offers
-
-	var room := maxi(0, settlement.storage_room_for("food") - _trade_incoming_resource("food"))
-	var buyable := mini(5, mini(room, available_money / FOOD_PURCHASE_PRICE))
-	state["food_button"] = {
-		"text": "Buy %d food (%d Coins)  Room: %d" % [buyable, buyable * FOOD_PURCHASE_PRICE, room],
-		"disabled": buyable <= 0 or not seller_ok,
-		"tooltip": "Seller is missing" if not seller_ok else ("No storage room or available coins" if buyable <= 0 else "Buy food for the settlement"),
-		"quantity": buyable,
-		"unit_price": FOOD_PURCHASE_PRICE,
-	}
-
-	market_menu.update_state(state)
+	if market_menu_controller != null:
+		market_menu_controller.refresh_market_menu()
 
 
 func _buy_food(quantity: int, unit_price: int) -> void:
@@ -7379,124 +6714,8 @@ func _on_trade_delivery_finished(worker: Citizen) -> void:
 	courier_dispatcher.complete_for(worker)
 
 func _show_building_menu() -> void:
-	if not is_instance_valid(selected_building):
-		return
-	build_menu.visible = false
-	build_menu_is_global = false
-	building_menu.visible = true
-	
-	var is_construction := _is_construction_site(selected_building)
-	
-	if is_construction:
-		var site_data := _get_construction_site_data(selected_building)
-		var type := site_data.building_type
-		var progress := site_data.progress
-		var builders := _builder_count(selected_building)
-		var supplied_parts: Array[String] = []
-		for resource_type in site_data.required_materials:
-			supplied_parts.append("%s %d/%d" % [resource_type, int(site_data.delivered_materials.get(resource_type, 0)), int(site_data.required_materials[resource_type])])
-		building_menu_title.text = "Under Construction: %s\nMaterials: %s\nProgress: %d%%  Builders: %d" % [type.capitalize().replace("_", " "), ", ".join(supplied_parts), roundi(progress * 100.0), builders]
-		
-		building_cook_button.visible = false
-		building_teacher_button.visible = false
-		building_seller_button.visible = false
-		building_accept_workers_button.visible = false
-		building_dismiss_worker_button.visible = false
-		building_upgrade_button.visible = false
-		building_relight_button.visible = false
-		building_demolish_button.visible = false
-		building_cancel_construction_button.visible = true
-		building_cancel_construction_button.position.y = 104.0
-		building_close_button.position.y = 140.0
-	else:
-		var building_type := str(selected_building.get_meta("building_type", "building"))
-		var definition := BuildingCatalog.definition_for(building_type)
-		building_menu_title.text = str(definition.get("name", building_type.capitalize()))
-		if building_type in ["cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"]:
-			var cook_fire_state := _fire_state_for(selected_building)
-			var cook_fuel: int = cook_fire_state.total_committed_fuel()
-			building_menu_title.text += "\nВетки: %d/%d" % [cook_fuel, FIRE_SUPPLY_TARGET]
-		building_cook_button.visible = building_type in ["cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant"]
-		var can_manage_professions := _player_can_manage_permanent_professions()
-		var profession_blocked_tooltip := _permanent_profession_block_message()
-		var is_active_kitchen := selected_building == canteen
-		building_cook_button.text = "Register selected resident as permanent cook"
-		building_cook_button.disabled = not can_manage_professions or selected_builder == null or selected_builder.is_player_controlled or not is_active_kitchen or not bool(selected_building.get_meta("accepting_workers", true))
-		if not is_active_kitchen:
-			building_cook_button.tooltip_text = "Only the active kitchen can serve meals."
-		elif building_cook_button.disabled:
-			building_cook_button.tooltip_text = _permanent_profession_block_message() if not can_manage_professions else "Select a resident who is not under direct control."
-		else:
-			building_cook_button.tooltip_text = "Registers a permanent profession."
-		
-		building_teacher_button.visible = building_type == "school"
-		building_teacher_button.disabled = not can_manage_professions or selected_builder == null or selected_builder.is_player_controlled or not bool(selected_building.get_meta("accepting_workers", true))
-		building_teacher_button.tooltip_text = profession_blocked_tooltip if not can_manage_professions else ""
-		
-		building_seller_button.visible = building_type in ["straw_trade_tent", "tarp_trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market"]
-		building_seller_button.disabled = not can_manage_professions or selected_builder == null or selected_builder.is_player_controlled or not bool(selected_building.get_meta("accepting_workers", true))
-		building_seller_button.tooltip_text = profession_blocked_tooltip if not can_manage_professions else ""
-
-		var is_workplace := _is_staffed_workplace(selected_building)
-		building_accept_workers_button.visible = is_workplace
-		building_dismiss_worker_button.visible = is_workplace
-		var next_upgrade := settlement.next_building_upgrade(building_type)
-		building_upgrade_button.visible = not next_upgrade.is_empty()
-		building_upgrade_button.text = "Upgrade to %s" % str(BuildingCatalog.definition_for(next_upgrade).get("name", next_upgrade))
-		building_upgrade_button.disabled = not settlement.can_upgrade_building(building_type)
-		building_upgrade_button.tooltip_text = "" if not building_upgrade_button.disabled else "Research the next level and gather its resources."
-		var can_command_labor := _player_can_command_labor()
-		var labor_blocked_tooltip := _labor_command_block_message()
-		building_accept_workers_button.disabled = not can_command_labor
-		building_accept_workers_button.tooltip_text = labor_blocked_tooltip if not can_command_labor else ""
-		building_cancel_construction_button.visible = false
-		var is_demolishable := BuildingCatalog.is_demolishable(building_type) and selected_building != entrance_stone
-		building_demolish_button.visible = is_demolishable
-		building_relight_button.visible = building_type in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"] and not _is_fire_lit(selected_building)
-		
-		var officer := _workplace_worker(selected_building)
-		building_overtime_button.visible = is_workplace and officer != null
-		var workplace_night_active := _has_overtime_source("workplace", selected_building)
-		building_overtime_button.disabled = not can_command_labor
-		building_overtime_button.set_pressed_no_signal(workplace_night_active)
-		building_overtime_button.tooltip_text = labor_blocked_tooltip if not can_command_labor else "Work through the night and the next workday."
-		
-		if is_workplace:
-			var accepting := bool(selected_building.get_meta("accepting_workers", true))
-			building_accept_workers_button.text = "Stop accepting workers" if accepting else "Start accepting workers"
-			building_accept_workers_button.tooltip_text = "This workplace is priority #%d among open workplaces of the same profession." % _workplace_priority_position(selected_building) if accepting else "Reopen this workplace and move it to the front of the hiring queue."
-			building_dismiss_worker_button.disabled = officer == null or not can_command_labor
-			building_dismiss_worker_button.tooltip_text = labor_blocked_tooltip if not can_command_labor else ""
-		
-		var next_y := 104.0
-		if building_accept_workers_button.visible:
-			building_accept_workers_button.position.y = next_y
-			next_y += 36.0
-		if building_dismiss_worker_button.visible:
-			building_dismiss_worker_button.position.y = next_y
-			next_y += 36.0
-		if building_overtime_button.visible:
-			building_overtime_button.position.y = next_y
-			next_y += 36.0
-		if building_relight_button.visible:
-			building_relight_button.position.y = next_y
-			next_y += 36.0
-		if building_upgrade_button.visible:
-			building_upgrade_button.position.y = next_y
-			next_y += 36.0
-		if building_demolish_button.visible:
-			building_demolish_button.position.y = next_y
-			next_y += 36.0
-
-		var special_button_visible := building_cook_button.visible or building_teacher_button.visible or building_seller_button.visible
-		for button in [building_cook_button, building_teacher_button, building_seller_button]:
-			if button.visible:
-				button.position.y = next_y
-		if special_button_visible:
-			next_y += 44.0
-		else:
-			next_y += 8.0
-		building_close_button.position.y = next_y
+	if building_menu_controller != null:
+		building_menu_controller.show_building_menu()
 
 
 func _demolish_selected_building() -> void:
