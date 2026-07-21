@@ -18,6 +18,7 @@ const ResearchMenuControllerScript = preload("res://game/features/buildings/pres
 const SchoolMenuControllerScript = preload("res://game/features/buildings/presentation/school_menu_controller.gd")
 const EntranceMenuControllerScript = preload("res://game/features/buildings/presentation/entrance_menu_controller.gd")
 const HouseMenuControllerScript = preload("res://game/features/buildings/presentation/house_menu_controller.gd")
+const PocketTakeMenuControllerScript = preload("res://game/features/citizens/presentation/pocket_take_menu_controller.gd")
 const FireSourceStateScript = preload("res://game/features/settlement/domain/fire_source_state.gd")
 const CourierDispatcherScript = preload("res://game/features/logistics/application/courier_dispatcher.gd")
 const CourierTaskServiceScript = preload("res://game/features/logistics/application/courier_task_service.gd")
@@ -25,6 +26,7 @@ const CourierTaskPublisherScript = preload("res://game/features/logistics/applic
 const CourierTaskScript = preload("res://game/features/logistics/domain/courier_task.gd")
 const TradeServiceScript = preload("res://game/features/logistics/application/trade_service.gd")
 const MarketMenuControllerScript = preload("res://game/features/logistics/presentation/market_menu_controller.gd")
+const WarehouseMenuControllerScript = preload("res://game/features/logistics/presentation/warehouse_menu_controller.gd")
 const StorageDeliveryServiceScript = preload("res://game/features/logistics/application/storage_delivery_service.gd")
 const StorageRoutingServiceScript = preload("res://game/features/logistics/application/storage_routing_service.gd")
 const BuildingAvailabilityServiceScript = preload("res://game/features/buildings/application/building_availability_service.gd")
@@ -620,7 +622,9 @@ var research_menu_controller: RefCounted
 var school_menu_controller: RefCounted
 var entrance_menu_controller: RefCounted
 var house_menu_controller: RefCounted
+var pocket_take_menu_controller: RefCounted
 var market_menu_controller: RefCounted
+var warehouse_menu_controller: RefCounted
 var building_menu_controller: RefCounted
 var first_person_hud_controller: RefCounted
 var trail_field: TrailFieldService
@@ -783,8 +787,12 @@ func _ready() -> void:
 	entrance_menu_controller.configure(self)
 	house_menu_controller = HouseMenuControllerScript.new()
 	house_menu_controller.configure(self)
+	pocket_take_menu_controller = PocketTakeMenuControllerScript.new()
+	pocket_take_menu_controller.configure(self)
 	market_menu_controller = MarketMenuControllerScript.new()
 	market_menu_controller.configure(self)
+	warehouse_menu_controller = WarehouseMenuControllerScript.new()
+	warehouse_menu_controller.configure(self)
 	building_menu_controller = BuildingMenuControllerScript.new()
 	building_menu_controller.configure(self)
 	first_person_hud_controller = FirstPersonHUDControllerScript.new()
@@ -1512,96 +1520,11 @@ func _take_resource_from_pile_at(position: Vector3, resource_type: String, max_a
 
 
 func _is_courier_task_valid(task: RefCounted) -> bool:
-	match task.kind:
-		CourierTask.Kind.CANTEEN:
-			return is_instance_valid(canteen) and food > 0 and not pending_canteen_delivery and canteen_food < BuildingCatalog.kitchen_food_capacity(str(canteen.get_meta("building_type", "")))
-		CourierTask.Kind.TRADE:
-			return queued_trades.has(task.payload.order)
-		CourierTask.Kind.SAWMILL_PICKUP:
-			return int(sawmills.stock_at(task.payload.position, runtime_seconds).boards) > 0
-		CourierTask.Kind.WORKER_PICKUP:
-			return is_instance_valid(task.payload.worker) and task.payload.worker.has_pending_resource()
-		CourierTask.Kind.DEW_PICKUP:
-			return water_collector_service.stored_at(task.payload.position) > 0
-		CourierTask.Kind.CONSTRUCTION:
-			var site: ConstructionSite = task.payload.site
-			if site == null or not is_instance_valid(site.node):
-				return false
-			if site != _preferred_construction_site():
-				return false
-			var resource_type := str(task.payload.resource)
-			var source: Dictionary = task.payload.get("source", {})
-			# Do not invalidate a carrier already in transit merely because its source
-			# is depleted after pickup. Idle tasks remain valid only while their own
-			# source still contains stock; other warehouses may supply in parallel.
-			if not task.is_assigned():
-				if source.is_empty() or _construction_source_available(resource_type, source) <= 0:
-					return false
-			var total_reserved := settlement.construction_reserved_for_site(site.site_id, resource_type)
-			var in_transit := int(site.reserved_materials.get(resource_type, 0))
-			var storage_reserved := maxi(0, total_reserved - in_transit)
-			var source_available := storage_reserved > 0
-			# Outstanding need is measured by what is neither delivered nor already
-			# being carried. Storage reservations pre-commit the full requirement, so
-			# they must not be counted here or the task would look complete at once.
-			return int(site.delivered_materials.get(resource_type, 0)) + in_transit < int(site.required_materials.get(resource_type, 0)) and source_available
-		CourierTask.Kind.BUILDING_SUPPLY:
-			var building: Node3D = task.payload.building
-			if not is_instance_valid(building):
-				return false
-			var supply_kind := str(task.payload.get("supply_kind", ""))
-			match supply_kind:
-				"repair":
-					return bool(building.get_meta("repair_needed", false)) and not bool(building.get_meta("repair_reserved", false)) and branches > 0
-				"firewood":
-					return _fire_state_for(building).needs_supply(4) and branches > 0
-			return false
-		CourierTask.Kind.ARRIVAL:
-			var arrival_house := task.payload.get("house") as Node3D
-			if not is_instance_valid(arrival_house) or bool(arrival_house.get_meta("pending_demolition", false)):
-				return false
-			for arrival_order: Dictionary in pending_arrivals:
-				if arrival_order.get("house") == arrival_house:
-					if not bool(arrival_order.get("dispatched", false)):
-						return true
-					var greeter := instance_from_id(int(arrival_order.get("greeter_id", -1))) as Citizen
-					return is_instance_valid(greeter) and greeter.ai_id == task.assigned_courier_ai_id
-			return false
-		CourierTask.Kind.OUTSIDE_WORK:
-			var selected: Citizen = task.payload.get("courier") as Citizen
-			return is_instance_valid(selected) and not outside_workers.has(selected.get_instance_id())
-	return false
+	return courier_task_service.is_courier_task_valid(task)
 
 
 func _start_courier_task(courier: Citizen, task: RefCounted) -> bool:
-	if not _is_courier_task_reachable(courier, task):
-		return false
-	match task.kind:
-		CourierTask.Kind.CANTEEN, CourierTask.Kind.TRADE:
-			return _start_courier_canteen_or_trade(courier, task)
-		CourierTask.Kind.SAWMILL_PICKUP, CourierTask.Kind.DEW_PICKUP, CourierTask.Kind.WORKER_PICKUP:
-			return _start_courier_pickup_task(courier, task)
-		CourierTask.Kind.CONSTRUCTION, CourierTask.Kind.BUILDING_SUPPLY:
-			return _start_courier_construction_or_supply(courier, task)
-		CourierTask.Kind.ARRIVAL, CourierTask.Kind.OUTSIDE_WORK:
-			return _start_courier_arrival_or_outside(courier, task)
-	return false
-
-
-func _start_courier_canteen_or_trade(courier: Citizen, task: RefCounted) -> bool:
-	return courier_task_service.start_courier_canteen_or_trade(courier, task)
-
-
-func _start_courier_pickup_task(courier: Citizen, task: RefCounted) -> bool:
-	return courier_task_service.start_courier_pickup_task(courier, task)
-
-
-func _start_courier_construction_or_supply(courier: Citizen, task: RefCounted) -> bool:
-	return courier_task_service.start_courier_construction_or_supply(courier, task)
-
-
-func _start_courier_arrival_or_outside(courier: Citizen, task: RefCounted) -> bool:
-	return courier_task_service.start_courier_arrival_or_outside(courier, task)
+	return courier_task_service.start_courier_task(courier, task)
 
 
 func _reserve_task_warehouse_space(task: RefCounted, resource_type: String, amount: int) -> bool:
@@ -5572,44 +5495,18 @@ func _workplace_priority_position(building: Node3D) -> int:
 
 
 func _show_pocket_take_menu(warehouse_index := -1) -> void:
-	pocket_take_warehouse_index = warehouse_index
-	pocket_take_menu.visible = true
-	pocket_menu_open = true
-	if is_first_person:
-		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
-	_refresh_pocket_take_menu()
+	if pocket_take_menu_controller != null:
+		pocket_take_menu_controller.show_pocket_take_menu(warehouse_index)
 
 
 func _close_pocket_take_menu() -> void:
-	pocket_take_menu.visible = false
-	pocket_menu_open = false
-	pocket_take_warehouse_index = -1
-	if is_first_person:
-		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+	if pocket_take_menu_controller != null:
+		pocket_take_menu_controller.close_pocket_take_menu()
 
 
 func _refresh_pocket_take_menu() -> void:
-	if pocket_take_menu == null:
-		return
-	pocket_take_menu.clear_items()
-	var warehouse_index := pocket_take_warehouse_index if pocket_take_warehouse_index >= 0 else _nearby_warehouse_index()
-	var warehouse_amount := func(resource_type: String) -> int:
-		if warehouse_index >= 0:
-			return settlement.warehouses[warehouse_index].amount(resource_type)
-		return settlement.amount(resource_type)
-	var displayed_resources := settlement.era_resources()
-	for resource_type in displayed_resources:
-		var stored: int = warehouse_amount.call(resource_type)
-		if stored <= 0:
-			continue
-		var row: PocketTakeItemRow = PocketTakeItemRowScene.instantiate()
-		row.setup(resource_type, stored)
-		row.take_one_requested.connect(_take_resource_into_pocket.bind(resource_type, 1))
-		row.take_all_requested.connect(func():
-			_take_resource_into_pocket(resource_type, _pocket_space_for(resource_type))
-		)
-		pocket_take_menu.item_list.add_child(row)
-	pocket_take_menu_title.text = "Взять товары со склада (карман %d/%d)" % [_pocket_total(), POCKET_CAPACITY]
+	if pocket_take_menu_controller != null:
+		pocket_take_menu_controller.refresh_pocket_take_menu()
 
 
 func _take_resource_into_pocket(resource_type: String, amount: int) -> void:
@@ -5632,97 +5529,28 @@ func _take_resource_into_pocket(resource_type: String, amount: int) -> void:
 
 
 func _show_warehouse_menu() -> void:
-	selected_builder = null
-	build_menu.visible = false
-	build_menu_is_global = false
-	selection_marker.visible = false
-	build_mode = ""
-	warehouse_menu.visible = true
-	_refresh_warehouse_menu()
+	if warehouse_menu_controller != null:
+		warehouse_menu_controller.show_warehouse_menu()
 
 
 func _refresh_warehouse_menu() -> void:
-	if selected_warehouse == null:
-		return
-	if warehouse_menu == null:
-		return
-	var selected_position: Vector3 = selected_warehouse.get_meta("service_position", selected_warehouse.global_position)
-	var index := warehouse_positions.find(selected_position)
-	var selected_warehouse_state: WarehouseState = null
-	if index >= 0 and index < settlement.warehouses.size():
-		selected_warehouse_state = settlement.warehouses[index]
-	var warehouses := warehouse_positions.size()
-	var total_capacity := settlement.storage_capacity(warehouses)
-	var total_used := settlement.storage_used_units()
-	var free := settlement.storage_free_units(warehouses)
-	var title_text := ""
-	if selected_warehouse_state != null:
-		var selected_used := selected_warehouse_state.used_units(SettlementState.STORAGE_WEIGHTS)
-		title_text = "Warehouse %d\nThis: %d/%d u   Total: %d/%d u   Free: %d" % [index + 1, int(ceil(selected_used)), selected_warehouse_state.capacity, int(ceil(total_used)), total_capacity, int(floor(free))]
-	else:
-		title_text = "Storage\nTotal: %d/%d u   Free: %d" % [int(ceil(total_used)), total_capacity, int(floor(free))]
-
-	var resource_rows: Array[Dictionary] = []
-	var era_res := settlement.era_resources()
-	for resource_type in era_res:
-		var weight := settlement.storage_weight(resource_type)
-		var stored: int = settlement.amount(resource_type) if selected_warehouse_state == null else selected_warehouse_state.amount(resource_type)
-		var stored_units := stored * weight
-		var accepted := selected_warehouse_state != null and selected_warehouse_state.accepts(resource_type)
-		resource_rows.append({
-			"label": "%s  %d u" % [resource_type, int(ceil(stored_units))],
-			"accepted": accepted,
-			"stored": stored,
-			"resource_type": resource_type,
-		})
-
-	var cover_text := ""
-	var cover_disabled := false
-	if settlement.warehouse_tarp_covered:
-		cover_text = "Tarp cover active"
-		cover_disabled = true
-	elif settlement.can_cover_warehouse_with_tarp():
-		cover_text = "Stretch tarp cover (-1 tarp)"
-	else:
-		cover_text = "Needs 1 tarp to cover"
-		cover_disabled = true
-
-	var state := {
-		"title_text": title_text,
-		"resource_rows": resource_rows,
-		"cover_button": {"text": cover_text, "disabled": cover_disabled},
-	}
-	warehouse_menu.update_state(state)
+	if warehouse_menu_controller != null:
+		warehouse_menu_controller.refresh_warehouse_menu()
 
 
 func _toggle_warehouse_accept(accepted: bool, resource_type: String) -> void:
-	if selected_warehouse == null:
-		return
-	var index := _warehouse_index_for_building(selected_warehouse)
-	settlement.set_warehouse_accepted(index, resource_type, accepted)
-	_refresh_warehouse_menu()
+	if warehouse_menu_controller != null:
+		warehouse_menu_controller.toggle_warehouse_accept(accepted, resource_type)
 
 
 func _dump_warehouse_resource(resource_type: String) -> void:
-	if selected_warehouse == null:
-		return
-	var selected_position: Vector3 = selected_warehouse.get_meta("service_position", selected_warehouse.global_position)
-	var index := _warehouse_index_for_building(selected_warehouse)
-	var count := settlement.warehouse_amount(resource_type, index)
-	if count <= 0:
-		return
-	var dumped := settlement.dump_warehouse_resource(index, resource_type, count)
-	if dumped > 0:
-		var pile := {resource_type: dumped}
-		_drop_overflow_as_piles(pile, selected_position)
-		_update_interface("Dumped %d %s from the warehouse." % [dumped, resource_type])
-	_refresh_warehouse_menu()
+	if warehouse_menu_controller != null:
+		warehouse_menu_controller.dump_warehouse_resource(resource_type)
 
 
 func _cover_warehouse_with_tarp() -> void:
-	if settlement.cover_warehouse_with_tarp():
-		_update_interface("The open heap is now covered with a tarp.")
-	_refresh_warehouse_menu()
+	if warehouse_menu_controller != null:
+		warehouse_menu_controller.cover_warehouse_with_tarp()
 
 
 func _assign_cook_at_campfire() -> void:

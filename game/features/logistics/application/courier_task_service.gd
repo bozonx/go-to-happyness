@@ -7,6 +7,8 @@ extends RefCounted
 ## and construction reservation reconciliation.
 
 const CourierTaskScript = preload("res://game/features/logistics/domain/courier_task.gd")
+const BuildingCatalog = preload("res://game/features/buildings/domain/building_catalog.gd")
+const FireSourceStateScript = preload("res://game/features/settlement/domain/fire_source_state.gd")
 
 var simulation: Node
 
@@ -252,3 +254,74 @@ func reconcile_construction_reservations(site: ConstructionSite) -> void:
 		simulation.settlement.add(resource_type, reserved - active)
 		reservations[resource_type] = active
 	site.reserved_materials = reservations
+
+
+func start_courier_task(courier: Citizen, task: RefCounted) -> bool:
+	if not is_courier_task_reachable(courier, task):
+		return false
+	match task.kind:
+		CourierTask.Kind.CANTEEN, CourierTask.Kind.TRADE:
+			return start_courier_canteen_or_trade(courier, task)
+		CourierTask.Kind.SAWMILL_PICKUP, CourierTask.Kind.DEW_PICKUP, CourierTask.Kind.WORKER_PICKUP:
+			return start_courier_pickup_task(courier, task)
+		CourierTask.Kind.CONSTRUCTION, CourierTask.Kind.BUILDING_SUPPLY:
+			return start_courier_construction_or_supply(courier, task)
+		CourierTask.Kind.ARRIVAL, CourierTask.Kind.OUTSIDE_WORK:
+			return start_courier_arrival_or_outside(courier, task)
+	return false
+
+
+func is_courier_task_valid(task: RefCounted) -> bool:
+	match task.kind:
+		CourierTask.Kind.CANTEEN:
+			return is_instance_valid(simulation.canteen) and simulation.food > 0 and not simulation.pending_canteen_delivery and simulation.canteen_food < BuildingCatalog.kitchen_food_capacity(str(simulation.canteen.get_meta("building_type", "")))
+		CourierTask.Kind.TRADE:
+			return simulation.queued_trades.has(task.payload.order)
+		CourierTask.Kind.SAWMILL_PICKUP:
+			return int(simulation.sawmills.stock_at(task.payload.position, simulation.runtime_seconds).boards) > 0
+		CourierTask.Kind.WORKER_PICKUP:
+			return is_instance_valid(task.payload.worker) and task.payload.worker.has_pending_resource()
+		CourierTask.Kind.DEW_PICKUP:
+			return simulation.water_collector_service.stored_at(task.payload.position) > 0
+		CourierTask.Kind.CONSTRUCTION:
+			var site: ConstructionSite = task.payload.site
+			if site == null or not is_instance_valid(site.node):
+				return false
+			if site != simulation._preferred_construction_site():
+				return false
+			var resource_type := str(task.payload.resource)
+			var source: Dictionary = task.payload.get("source", {})
+			if not task.is_assigned():
+				if source.is_empty() or simulation._construction_source_available(resource_type, source) <= 0:
+					return false
+			var total_reserved: int = simulation.settlement.construction_reserved_for_site(site.site_id, resource_type)
+			var in_transit := int(site.reserved_materials.get(resource_type, 0))
+			var storage_reserved := maxi(0, total_reserved - in_transit)
+			var source_available := storage_reserved > 0
+			return int(site.delivered_materials.get(resource_type, 0)) + in_transit < int(site.required_materials.get(resource_type, 0)) and source_available
+		CourierTask.Kind.BUILDING_SUPPLY:
+			var building: Node3D = task.payload.building
+			if not is_instance_valid(building):
+				return false
+			var supply_kind := str(task.payload.get("supply_kind", ""))
+			match supply_kind:
+				"repair":
+					return bool(building.get_meta("repair_needed", false)) and not bool(building.get_meta("repair_reserved", false)) and simulation.branches > 0
+				"firewood":
+					return simulation._fire_state_for(building).needs_supply(4) and simulation.branches > 0
+			return false
+		CourierTask.Kind.ARRIVAL:
+			var arrival_house := task.payload.get("house") as Node3D
+			if not is_instance_valid(arrival_house) or bool(arrival_house.get_meta("pending_demolition", false)):
+				return false
+			for arrival_order: Dictionary in simulation.pending_arrivals:
+				if arrival_order.get("house") == arrival_house:
+					if not bool(arrival_order.get("dispatched", false)):
+						return true
+					var greeter := instance_from_id(int(arrival_order.get("greeter_id", -1))) as Citizen
+					return is_instance_valid(greeter) and greeter.ai_id == task.assigned_courier_ai_id
+			return false
+		CourierTask.Kind.OUTSIDE_WORK:
+			var selected: Citizen = task.payload.get("courier") as Citizen
+			return is_instance_valid(selected) and not simulation.outside_workers.has(selected.get_instance_id())
+	return false
