@@ -142,19 +142,15 @@ func _create_entrance_menu() -> void:
 			entrance_order_gloves_spin = menu.entrance_order_gloves_spin
 			entrance_order_bucket_spin = menu.entrance_order_bucket_spin
 			entrance_order_total_label = menu.entrance_order_total_label
-			menu.modal_gui_input_received.connect(func(event):
-				if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
-					entrance_order_modal.visible = false
-			)
-			menu.get_node("CreateOrderButton").pressed.connect(Callable(simulation, "_show_entrance_order_modal"))
-			entrance_work_button.pressed.connect(Callable(simulation, "_send_selected_resident_to_outside_work"))
-			menu.get_node("CloseButton").pressed.connect(Callable(simulation, "_close_context_menus"))
+
+			menu.work_outside_requested.connect(Callable(simulation, "_send_selected_resident_to_outside_work"))
+			menu.send_order_requested.connect(Callable(simulation, "_send_entrance_order"))
+			menu.close_requested.connect(Callable(simulation, "_close_context_menus"))
+
 			entrance_order_food_spin.value_changed.connect(Callable(simulation, "_update_entrance_order_total"))
 			entrance_order_water_spin.value_changed.connect(Callable(simulation, "_update_entrance_order_total"))
 			entrance_order_gloves_spin.value_changed.connect(Callable(simulation, "_update_entrance_order_total"))
 			entrance_order_bucket_spin.value_changed.connect(Callable(simulation, "_update_entrance_order_total"))
-			entrance_order_modal.get_node("SendButton").pressed.connect(Callable(simulation, "_send_entrance_order"))
-			entrance_order_modal.get_node("CloseButton").pressed.connect(Callable(simulation, "_hide_entrance_order_modal"))
 
 
 func _create_house_menu() -> void:
@@ -163,8 +159,8 @@ func _create_house_menu() -> void:
 		if menu != null:
 			house_menu_title = menu.title_label
 			house_spawn_button = menu.spawn_button
-			house_spawn_button.pressed.connect(Callable(simulation, "_spawn_house_citizen"))
-			menu.demolish_button.pressed.connect(func(): if simulation != null: simulation._mark_building_for_demolition(simulation.selected_house))
+			menu.spawn_requested.connect(Callable(simulation, "_spawn_house_citizen"))
+			menu.demolish_requested.connect(func(): if simulation != null: simulation._mark_building_for_demolition(simulation.selected_house))
 
 
 func _create_school_menu() -> void:
@@ -252,17 +248,18 @@ func _create_building_menu() -> void:
 			building_demolish_button = menu.demolish_button
 			building_close_button = menu.close_button
 			building_cancel_construction_button = menu.cancel_construction_button
-			building_cook_button.pressed.connect(Callable(simulation, "_assign_cook_at_campfire"))
-			building_teacher_button.pressed.connect(Callable(simulation, "_assign_teacher_at_school"))
-			building_seller_button.pressed.connect(Callable(simulation, "_assign_seller_at_market"))
-			building_accept_workers_button.pressed.connect(Callable(simulation, "_toggle_selected_workplace_acceptance"))
-			building_dismiss_worker_button.pressed.connect(Callable(simulation, "_dismiss_selected_workplace_worker"))
-			building_overtime_button.toggled.connect(Callable(simulation, "_toggle_worker_overtime"))
-			building_relight_button.pressed.connect(Callable(simulation, "_relight_selected_fire"))
-			building_upgrade_button.pressed.connect(Callable(simulation, "_upgrade_selected_building"))
-			building_demolish_button.pressed.connect(Callable(simulation, "_demolish_selected_building"))
-			building_close_button.pressed.connect(Callable(simulation, "_close_context_menus"))
-			building_cancel_construction_button.pressed.connect(Callable(simulation, "_cancel_selected_construction"))
+
+			menu.cook_assigned.connect(Callable(simulation, "_assign_cook_at_campfire"))
+			menu.teacher_assigned.connect(Callable(simulation, "_assign_teacher_at_school"))
+			menu.seller_assigned.connect(Callable(simulation, "_assign_seller_at_market"))
+			menu.acceptance_toggled.connect(Callable(simulation, "_toggle_selected_workplace_acceptance"))
+			menu.worker_dismissed.connect(Callable(simulation, "_dismiss_selected_workplace_worker"))
+			menu.overtime_toggled.connect(Callable(simulation, "_toggle_worker_overtime"))
+			menu.relight_requested.connect(Callable(simulation, "_relight_selected_fire"))
+			menu.upgrade_requested.connect(Callable(simulation, "_upgrade_selected_building"))
+			menu.demolish_requested.connect(Callable(simulation, "_demolish_selected_building"))
+			menu.close_requested.connect(Callable(simulation, "_close_context_menus"))
+			menu.cancel_construction_requested.connect(Callable(simulation, "_cancel_selected_construction"))
 
 
 func _create_workforce_menu() -> void:
