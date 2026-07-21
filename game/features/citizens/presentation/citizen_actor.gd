@@ -1190,71 +1190,16 @@ func _process_waiting(delta: float) -> void:
 
 
 func _process_idle_wander(delta: float) -> void:
-	if idle_wander_anchor == Vector3.INF:
-		idle_wander_anchor = global_position
-		idle_wander_pause = randf_range(IDLE_WANDER_MIN_PAUSE, IDLE_WANDER_MAX_PAUSE)
-	if idle_wander_target != Vector3.INF:
-		# A wander stroll is disposable: if it cannot be reached, drop it and clear
-		# the failure so the citizen keeps loitering instead of standing frozen.
-		if navigation_failed:
-			idle_wander_target = Vector3.INF
-			navigation_failed = false
-			ai_move_failure_reason = BehaviorStep.FailureReason.NONE
-			idle_wander_pause = randf_range(IDLE_WANDER_MIN_PAUSE, IDLE_WANDER_MAX_PAUSE)
-			_stop_horizontal_movement()
-			return
-		if _move_to(idle_wander_target, delta, false, false, false):
-			idle_wander_target = Vector3.INF
-			idle_wander_pause = randf_range(IDLE_WANDER_MIN_PAUSE, IDLE_WANDER_MAX_PAUSE)
-		return
-	idle_wander_pause -= delta
-	velocity.x = 0.0
-	velocity.z = 0.0
-	if idle_wander_pause > 0.0:
-		return
-	idle_wander_target = _choose_idle_wander_target()
-	if idle_wander_target == Vector3.INF:
-		idle_wander_pause = IDLE_WANDER_MIN_PAUSE
+	movement_controller.process_idle_wander(self, delta)
 
 
 func _choose_idle_wander_target() -> Vector3:
-	# Gather the neighbours that could affect scoring once, instead of scanning the
-	# whole roster per candidate. The personal-space score caps at IDLE_WANDER_RADIUS
-	# * 2, and every candidate lies within IDLE_WANDER_RADIUS of the anchor, so a
-	# citizen farther than 3x the radius from the anchor can never be the nearest to
-	# any candidate and is safely ignored.
-	var nearby_positions := _nearby_citizen_positions(idle_wander_anchor, IDLE_WANDER_RADIUS * 3.0)
-	var best := Vector3.INF
-	var best_score := -INF
-	for ignored in range(IDLE_WANDER_CANDIDATES):
-		var angle := randf() * TAU
-		var radius := randf_range(IDLE_PERSONAL_SPACE, IDLE_WANDER_RADIUS)
-		var candidate := idle_wander_anchor + Vector3(cos(angle) * radius, 0.0, sin(angle) * radius)
-		var reachable := bool(route_reachability_query.call(global_position, candidate, false)) if route_reachability_query.is_valid() else true
-		if not reachable:
-			continue
-		var nearest_neighbor := IDLE_WANDER_RADIUS * 2.0
-		for other_position in nearby_positions:
-			nearest_neighbor = minf(nearest_neighbor, candidate.distance_to(other_position))
-		var score := nearest_neighbor - candidate.distance_to(idle_wander_anchor) * 0.08
-		if score > best_score:
-			best_score = score
-			best = candidate
-	return best
+	return movement_controller.choose_idle_wander_target(self)
 
 
 func _nearby_citizen_positions(center: Vector3, radius: float) -> Array[Vector3]:
-	var positions: Array[Vector3] = []
-	if simulation == null:
-		return positions
-	var radius_squared := radius * radius
-	for other in simulation.citizens:
-		if other == self or not is_instance_valid(other):
-			continue
-		var other_position: Vector3 = other.global_position
-		if center.distance_squared_to(other_position) <= radius_squared:
-			positions.append(other_position)
-	return positions
+	return movement_controller.nearby_citizen_positions(self, center, radius)
+
 
 
 func begin_employment_processing(center_position: Vector3, next_pending_role := "", next_workplace: Node3D = null) -> void:
