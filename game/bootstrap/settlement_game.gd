@@ -31,7 +31,9 @@ const StorageDeliveryServiceScript = preload("res://game/features/logistics/appl
 const StorageRoutingServiceScript = preload("res://game/features/logistics/application/storage_routing_service.gd")
 const BuildingAvailabilityServiceScript = preload("res://game/features/buildings/application/building_availability_service.gd")
 const BuildingMenuControllerScript = preload("res://game/features/buildings/presentation/building_menu_controller.gd")
+const BuildingStatusIndicatorControllerScript = preload("res://game/features/buildings/presentation/building_status_indicator_controller.gd")
 const FirstPersonHUDControllerScript = preload("res://game/features/ui/presentation/first_person_hud_controller.gd")
+const LabelDistanceFadeControllerScript = preload("res://game/features/ui/presentation/label_distance_fade_controller.gd")
 const BuildingLifecycleServiceScript = preload("res://game/features/buildings/application/building_lifecycle_service.gd")
 const BuildingResearchServiceScript = preload("res://game/features/buildings/application/building_research_service.gd")
 const BuildingQueueServiceScript = preload("res://game/features/citizens/application/building_queue_service.gd")
@@ -626,7 +628,9 @@ var pocket_take_menu_controller: RefCounted
 var market_menu_controller: RefCounted
 var warehouse_menu_controller: RefCounted
 var building_menu_controller: RefCounted
+var building_status_indicator_controller: RefCounted
 var first_person_hud_controller: RefCounted
+var label_distance_fade_controller: RefCounted
 var trail_field: TrailFieldService
 var trail_overlay: MeshInstance3D:
 	get: return world_setup.trail_overlay if world_setup != null else null
@@ -795,8 +799,12 @@ func _ready() -> void:
 	warehouse_menu_controller.configure(self)
 	building_menu_controller = BuildingMenuControllerScript.new()
 	building_menu_controller.configure(self)
+	building_status_indicator_controller = BuildingStatusIndicatorControllerScript.new()
+	building_status_indicator_controller.configure(self)
 	first_person_hud_controller = FirstPersonHUDControllerScript.new()
 	first_person_hud_controller.configure(self)
+	label_distance_fade_controller = LabelDistanceFadeControllerScript.new()
+	label_distance_fade_controller.configure(self)
 	settlement.apply_tent_start()
 	var _event_registry := EventRegistryScript.new()
 	_event_registry.register_all(TentEraEventsScript.build())
@@ -893,64 +901,9 @@ func _process(delta: float) -> void:
 		_show_selected_citizen_menu()
 
 
-func _label_alpha_for_distance(dist: float) -> float:
-	if dist <= LABEL_FADE_NEAR:
-		return 1.0
-	if dist >= LABEL_FADE_FAR:
-		return 0.0
-	return 1.0 - (dist - LABEL_FADE_NEAR) / (LABEL_FADE_FAR - LABEL_FADE_NEAR)
-
-
 func _update_label_distance_fading() -> void:
-	if camera == null:
-		return
-	var cam_pos := camera.global_position
-	# Resource pile labels
-	for pile in resource_piles:
-		var pile_node := pile.get("node") as Node3D
-		if not is_instance_valid(pile_node):
-			continue
-		var label := pile_node.get_node_or_null("PileLabel") as Label3D
-		if label == null:
-			continue
-		if not is_first_person:
-			label.modulate.a = 1.0
-			continue
-		var dist := cam_pos.distance_to(pile_node.global_position)
-		var alpha := _label_alpha_for_distance(dist)
-		if alpha <= 0.0:
-			label.visible = false
-		else:
-			label.visible = true
-			label.modulate.a = alpha
-	# Gather progress labels
-	for node in gather_progress_labels:
-		var gp_label := gather_progress_labels[node] as Label3D
-		if not is_instance_valid(gp_label):
-			continue
-		if not is_first_person:
-			gp_label.modulate.a = 1.0
-			continue
-		var node3d := node as Node3D
-		if not is_instance_valid(node3d):
-			continue
-		var dist := cam_pos.distance_to(node3d.global_position)
-		var alpha := _label_alpha_for_distance(dist)
-		if alpha <= 0.0:
-			gp_label.visible = false
-		else:
-			gp_label.visible = true
-			gp_label.modulate.a = alpha
-	# Citizen idle indicators
-	for citizen in citizens:
-		if not is_instance_valid(citizen):
-			continue
-		if not is_first_person:
-			citizen.label_distance_alpha = 1.0
-			continue
-		var dist := cam_pos.distance_to(citizen.global_position)
-		var alpha := _label_alpha_for_distance(dist)
-		citizen.label_distance_alpha = alpha
+	if label_distance_fade_controller != null:
+		label_distance_fade_controller.update_label_distance_fading()
 
 
 func _update_workers() -> void:
@@ -4716,55 +4669,18 @@ func _update_warehouse_fill_labels() -> void:
 		label.visible = true
 
 func _update_building_status_indicators(delta: float) -> void:
-	building_status_update_time -= delta
-	if building_status_update_time > 0.0:
-		return
-	building_status_update_time = 0.5
-	for indicator in building_status_indicators:
-		if not is_instance_valid(indicator):
-			continue
-		var building := indicator.get_parent() as Node3D
-		if not is_instance_valid(building):
-			continue
-		var required := _required_staff_for_building(building)
-		if required.is_empty():
-			indicator.visible = false
-			continue
-		var assigned := _assigned_staff_for_building(building, required)
-		indicator.visible = assigned < int(required.count)
-		indicator.text = "NO WORKER" if assigned == 0 else "STAFF %d/%d" % [assigned, int(required.count)]
-		indicator.modulate = Color("ef6b5b") if assigned == 0 else Color("f0c45d")
+	if building_status_indicator_controller != null:
+		building_status_indicator_controller.update_building_status_indicators(delta)
 
 func _required_staff_for_building(building: Node3D) -> Dictionary:
-	match str(building.get_meta("building_type", "")):
-		"sawmill": return {"role": "forestry", "count": 1}
-		"farm": return {"role": "farming", "count": 1}
-		"forager_tent", "straw_forager_tent": return {"role": "gather_food", "count": 2}
-		"tarp_forager_tent": return {"role": "gather_food", "count": 4}
-		"materials_yard", "straw_materials_yard": return {"role": "gather_branches", "count": 2}
-		"tarp_materials_yard": return {"role": "gather_branches", "count": 4}
-		"cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant": return {"role": "cooking", "count": 1}
-		"school": return {"role": "teaching", "count": 1}
-		"brick_factory", "materials_factory", "recycling_factory", "metal_factory": return {"role": "factory_worker", "count": int(building.get_meta("required_factory_workers", 1))}
+	if building_status_indicator_controller != null:
+		return building_status_indicator_controller.required_staff_for_building(building)
 	return {}
 
 func _assigned_staff_for_building(building: Node3D, required: Dictionary) -> int:
-	var count := 0
-	var role: String = required.role
-	for citizen in citizens:
-		if role == "cooking" and citizen.active_role == "cooking":
-			count += 1
-		elif role == "teaching" and citizen.active_role == "teaching":
-			count += 1
-		elif role == "factory_worker" and citizen.factory == building and citizen.state in [Citizen.State.TO_FACTORY, Citizen.State.FACTORY_WORK]:
-			count += 1
-		elif role == "forestry" and citizen.active_role == "forestry":
-			count += 1
-		elif role == "farming" and citizen.active_role == "farming":
-			count += 1
-		elif role == "gather_food" and citizen.active_role == "gather_food":
-			count += 1
-	return count
+	if building_status_indicator_controller != null:
+		return building_status_indicator_controller.assigned_staff_for_building(building, required)
+	return 0
 
 func _has_storage_room_for_role(role: String) -> bool:
 	return storage_routing_service.has_storage_room_for_role(role)
