@@ -11,6 +11,7 @@ const CitizenToiletStateScript = preload("res://game/features/citizens/domain/ci
 const CitizenArrivalStateScript = preload("res://game/features/citizens/domain/citizen_arrival_state.gd")
 const CitizenTaskAssignmentStateScript = preload("res://game/features/citizens/domain/citizen_task_assignment_state.gd")
 const CitizenWorkLocationStateScript = preload("res://game/features/citizens/domain/citizen_work_location_state.gd")
+const CitizenNavigationStateScript = preload("res://game/features/citizens/domain/citizen_navigation_state.gd")
 
 signal resource_delivered(worker: Citizen, resource_type: String, amount: int)
 signal resource_dropped(worker: Citizen, resource_type: String, amount: int)
@@ -527,30 +528,117 @@ var queue_arrival_notifier: Callable
 var queue_release_notifier: Callable
 var route_reachability_query: Callable
 var route_safety_query: Callable
-var idle_wander_anchor := Vector3.INF
-var idle_wander_target := Vector3.INF
-var idle_wander_pause := 0.0
-var movement_path: Array[Vector3] = []
-var path_destination := Vector3.INF
-var path_allows_destination_house := false
-var active_route: RouteResult
-var route_retry_timer := 0.0
-var route_retry_delay := ROUTE_RETRY_INTERVAL
-var route_unreachable_time := 0.0
-var route_unreachable_reason := RouteResult.UnreachableReason.NONE
-var navigation_failed := false
-# Topology revision captured when navigation_failed was raised, so a later
-# passability change (demolition/excavation) can retract the give-up.
-var navigation_failed_topology := -999
-var stuck_time := 0.0
-var recovery_repath_done := false
-var route_no_progress_time := 0.0
-var route_best_distance := INF
-var route_recovery_attempt := 0
-var recovery_detour_requested := false
-var jump_cooldown := 0.0
-var ground_contact_confirmed := false
-var blocked_by_storage := false
+var _navigation := CitizenNavigationStateScript.new()
+var idle_wander_anchor: Vector3:
+	get:
+		return _navigation.idle_wander_anchor
+	set(value):
+		_navigation.idle_wander_anchor = value
+var idle_wander_target: Vector3:
+	get:
+		return _navigation.idle_wander_target
+	set(value):
+		_navigation.idle_wander_target = value
+var idle_wander_pause: float:
+	get:
+		return _navigation.idle_wander_pause
+	set(value):
+		_navigation.idle_wander_pause = value
+var movement_path: Array[Vector3]:
+	get:
+		return _navigation.movement_path
+	set(value):
+		_navigation.movement_path = value
+var path_destination: Vector3:
+	get:
+		return _navigation.path_destination
+	set(value):
+		_navigation.path_destination = value
+var path_allows_destination_house: bool:
+	get:
+		return _navigation.path_allows_destination_house
+	set(value):
+		_navigation.path_allows_destination_house = value
+var active_route: RouteResult:
+	get:
+		return _navigation.active_route
+	set(value):
+		_navigation.active_route = value
+var route_retry_timer: float:
+	get:
+		return _navigation.route_retry_timer
+	set(value):
+		_navigation.route_retry_timer = value
+var route_retry_delay: float:
+	get:
+		return _navigation.route_retry_delay
+	set(value):
+		_navigation.route_retry_delay = value
+var route_unreachable_time: float:
+	get:
+		return _navigation.route_unreachable_time
+	set(value):
+		_navigation.route_unreachable_time = value
+var route_unreachable_reason: int:
+	get:
+		return _navigation.route_unreachable_reason
+	set(value):
+		_navigation.route_unreachable_reason = value
+var navigation_failed: bool:
+	get:
+		return _navigation.navigation_failed
+	set(value):
+		_navigation.navigation_failed = value
+var navigation_failed_topology: int:
+	get:
+		return _navigation.navigation_failed_topology
+	set(value):
+		_navigation.navigation_failed_topology = value
+var stuck_time: float:
+	get:
+		return _navigation.stuck_time
+	set(value):
+		_navigation.stuck_time = value
+var recovery_repath_done: bool:
+	get:
+		return _navigation.recovery_repath_done
+	set(value):
+		_navigation.recovery_repath_done = value
+var route_no_progress_time: float:
+	get:
+		return _navigation.route_no_progress_time
+	set(value):
+		_navigation.route_no_progress_time = value
+var route_best_distance: float:
+	get:
+		return _navigation.route_best_distance
+	set(value):
+		_navigation.route_best_distance = value
+var route_recovery_attempt: int:
+	get:
+		return _navigation.route_recovery_attempt
+	set(value):
+		_navigation.route_recovery_attempt = value
+var recovery_detour_requested: bool:
+	get:
+		return _navigation.recovery_detour_requested
+	set(value):
+		_navigation.recovery_detour_requested = value
+var jump_cooldown: float:
+	get:
+		return _navigation.jump_cooldown
+	set(value):
+		_navigation.jump_cooldown = value
+var ground_contact_confirmed: bool:
+	get:
+		return _navigation.ground_contact_confirmed
+	set(value):
+		_navigation.ground_contact_confirmed = value
+var blocked_by_storage: bool:
+	get:
+		return _navigation.blocked_by_storage
+	set(value):
+		_navigation.blocked_by_storage = value
 var training_role: String:
 	get:
 		return _employment.training_role
