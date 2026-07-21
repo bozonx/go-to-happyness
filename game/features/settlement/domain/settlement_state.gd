@@ -179,46 +179,22 @@ func apply_tent_start(reset_progress := true) -> void:
 
 
 func construction_gloves_available() -> bool:
-	if int(equipment.get("construction_gloves", {}).get("sets", 0)) > 0:
-		return true
-	return amount("construction_gloves") > 0
+	return equipment_state.construction_gloves_available(amount("construction_gloves"))
 
 
 func wear_construction_gloves(wear_amount: float) -> bool:
-	var gloves: Dictionary = equipment.get("construction_gloves", {})
-	if int(gloves.get("sets", 0)) <= 0:
-		# Try to equip a set from warehouse/backpack storage
-		if _take_construction_gloves_from_storage():
-			gloves = equipment.get("construction_gloves", {})
-		else:
-			return false
-	gloves["active_durability"] = float(gloves.get("active_durability", 100.0)) - wear_amount
-	while float(gloves["active_durability"]) <= 0.0 and int(gloves.get("sets", 0)) > 0:
-		gloves["sets"] = int(gloves["sets"]) - 1
-		gloves["active_durability"] = float(gloves["active_durability"]) + 100.0
-	# When the active set wears out, try to equip a spare from storage
-	if int(gloves["sets"]) <= 0:
-		if _take_construction_gloves_from_storage():
-			gloves = equipment.get("construction_gloves", {})
-		else:
-			gloves["active_durability"] = 0.0
-	equipment["construction_gloves"] = gloves
-	return int(gloves.get("sets", 0)) > 0
+	return equipment_state.wear_construction_gloves(wear_amount, _take_construction_gloves_from_storage)
 
 
 func add_construction_glove_set() -> void:
 	add("construction_gloves", 1)
 
+
 func _take_construction_gloves_from_storage() -> bool:
-	if amount("construction_gloves") <= 0:
-		return false
-	var gloves: Dictionary = equipment.get("construction_gloves", {})
-	gloves["sets"] = int(gloves.get("sets", 0)) + 1
-	if float(gloves.get("active_durability", 0.0)) <= 0.0:
-		gloves["active_durability"] = 100.0
-	equipment["construction_gloves"] = gloves
-	add("construction_gloves", -1)
-	return true
+	if equipment_state.take_construction_gloves_from_storage(amount("construction_gloves")):
+		add("construction_gloves", -1)
+		return true
+	return false
 
 ## --- Weighted, reallocatable storage ------------------------------------------
 ## Every stored good takes up "space units". The warehouse holds a fixed number of
@@ -529,26 +505,27 @@ func sell(resource_type: String, quantity: int, unit_price: int) -> bool:
 
 
 func can_advance_to(next_era: Era, population: int, housing_slots: int) -> bool:
-	match next_era:
-		Era.EARTH:
-			return era == Era.TENT and _has_tools(["axe", "hand_saw", "shovel", "bucket"]) and is_research_completed("earth_buildings")
-		Era.CLAY:
-			return era == Era.EARTH and has_building("earth_assembly") and has_building("smithy") and has_building("earth_market") and housing_slots >= population and available_amount("clay") >= 5 and money >= 5 and trade_sales >= 3 and _has_tools(["hoe"]) and has_building("toilet_earth_lvl3")
-		Era.WOOD:
-			return era == Era.CLAY and has_building("clay_lodge") and has_building("clay_market") and available_amount("water") >= population and available_amount("logs") >= 10 and money >= 10 and has_building("toilet_clay_lvl3")
-		Era.STONE:
-			return era == Era.WOOD and has_building("wood_town_hall") and has_building("wood_market") and money >= 15 and _has_tools(["pickaxe"]) and has_building("house_lvl3") and has_building("toilet_wood_lvl3")
-		Era.BRICK:
-			return era == Era.STONE and has_building("stone_prefecture") and has_building("stone_market") and has_building("masonry_workshop") and available_amount("stone") >= 20 and money >= 20 and has_building("toilet_stone_lvl3")
-	return false
+	var context := {
+		"has_tools": _has_tools,
+		"is_research_completed": is_research_completed,
+		"has_building": has_building,
+		"available_amount": available_amount,
+		"money": money,
+		"trade_sales": trade_sales,
+	}
+	return era_progress.can_advance_to(int(next_era), population, housing_slots, context)
 
 
 func advance_era(next_era: Era, population: int, housing_slots: int) -> bool:
-	if not can_advance_to(next_era, population, housing_slots):
-		return false
-	era = next_era
-	_refresh_warehouse_accepted_resources()
-	return true
+	var context := {
+		"has_tools": _has_tools,
+		"is_research_completed": is_research_completed,
+		"has_building": has_building,
+		"available_amount": available_amount,
+		"money": money,
+		"trade_sales": trade_sales,
+	}
+	return era_progress.advance_era(int(next_era), population, housing_slots, context, _refresh_warehouse_accepted_resources)
 
 
 func _refresh_warehouse_accepted_resources() -> void:

@@ -37,3 +37,41 @@ func buy_tool(tool_id: String, price: int, money: int) -> bool:
 		return false
 	tools[tool_id] = true
 	return true
+
+
+func construction_gloves_available(stored_gloves_amount: int) -> bool:
+	if int(equipment.get("construction_gloves", {}).get("sets", 0)) > 0:
+		return true
+	return stored_gloves_amount > 0
+
+
+func wear_construction_gloves(wear_amount: float, take_from_storage_fn: Callable) -> bool:
+	var gloves: Dictionary = equipment.get("construction_gloves", {})
+	if int(gloves.get("sets", 0)) <= 0:
+		if take_from_storage_fn.call():
+			gloves = equipment.get("construction_gloves", {})
+		else:
+			return false
+	gloves["active_durability"] = float(gloves.get("active_durability", 100.0)) - wear_amount
+	while float(gloves["active_durability"]) <= 0.0 and int(gloves.get("sets", 0)) > 0:
+		gloves["sets"] = int(gloves["sets"]) - 1
+		gloves["active_durability"] = float(gloves["active_durability"]) + 100.0
+	if int(gloves["sets"]) <= 0:
+		if take_from_storage_fn.call():
+			gloves = equipment.get("construction_gloves", {})
+		else:
+			gloves["active_durability"] = 0.0
+	equipment["construction_gloves"] = gloves
+	return int(gloves.get("sets", 0)) > 0
+
+
+func take_construction_gloves_from_storage(stored_gloves_amount: int) -> bool:
+	if stored_gloves_amount <= 0:
+		return false
+	var gloves: Dictionary = equipment.get("construction_gloves", {})
+	gloves["sets"] = int(gloves.get("sets", 0)) + 1
+	if float(gloves.get("active_durability", 0.0)) <= 0.0:
+		gloves["active_durability"] = 100.0
+	equipment["construction_gloves"] = gloves
+	return true
+
