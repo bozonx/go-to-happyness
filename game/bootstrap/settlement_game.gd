@@ -47,6 +47,7 @@ const BuildingPlacementServiceScript = preload("res://game/features/buildings/ap
 const CitizenDailyOrderServiceScript = preload("res://game/features/citizens/application/citizen_daily_order_service.gd")
 const HeroPocketServiceScript = preload("res://game/features/citizens/application/hero_pocket_service.gd")
 const HeroInteractionServiceScript = preload("res://game/features/citizens/application/hero_interaction_service.gd")
+const WorkplaceLaborServiceScript = preload("res://game/features/settlement/application/workplace_labor_service.gd")
 const SleepGoalScript = preload("res://game/features/decision/domain/goals/sleep_goal.gd")
 const ReturnHomeWhenIdleGoalScript = preload("res://game/features/decision/domain/goals/return_home_when_idle_goal.gd")
 const MealGoalScript = preload("res://game/features/decision/domain/goals/meal_goal.gd")
@@ -664,6 +665,7 @@ var building_placement_service: RefCounted
 var citizen_daily_order_service: RefCounted
 var hero_pocket_service: RefCounted
 var hero_interaction_service: RefCounted
+var workplace_labor_service: RefCounted
 
 
 func _ready() -> void:
@@ -671,6 +673,8 @@ func _ready() -> void:
 	hero_pocket_service.configure(self)
 	hero_interaction_service = HeroInteractionServiceScript.new()
 	hero_interaction_service.configure(self)
+	workplace_labor_service = WorkplaceLaborServiceScript.new()
+	workplace_labor_service.configure(self)
 	territory_service = TerritoryServiceScript.new()
 	var summer_valley_biome := load("res://game/features/world/presentation/biomes/summer/summer_valley/summer_valley_biome.tres") as BiomeDefinition
 	var summer_plains_biome := load("res://game/features/world/presentation/biomes/summer/summer_plains/summer_plains_biome.tres") as BiomeDefinition
@@ -987,82 +991,57 @@ func _guard_citizen_positions() -> void:
 		last_citizen_positions[citizen_id] = citizen.global_position
 
 func _work_role_for(citizen: Citizen) -> String:
-	return citizen.permanent_role
+	return workplace_labor_service.work_role_for(citizen) if workplace_labor_service != null else ""
 
 func _factory_for_role(role: String) -> Node3D:
 	return _employer_for_role(role)
 
 
 func _is_factory_worker_active(citizen: Citizen, factory: Node3D) -> bool:
-	return citizen.factory == factory and citizen.specialization == "factory_worker" and citizen.state in [Citizen.State.TO_FACTORY, Citizen.State.FACTORY_WORK]
+	return workplace_labor_service.is_factory_worker_active(citizen, factory) if workplace_labor_service != null else false
 
 func _has_courier() -> bool:
-	for citizen in citizens:
-		if citizen.can_handle_entry_logistics():
-			return true
-	return false
+	return workplace_labor_service.has_courier() if workplace_labor_service != null else false
 
 func _has_cook() -> bool:
-	if not _is_fire_lit(canteen):
-		return false
-	for citizen in citizens:
-		if not is_instance_valid(canteen):
-			continue
-		if not citizen.global_position.distance_to(canteen_position) <= 2.2:
-			continue
-		if not citizen.is_player_controlled:
-			if citizen.specialization == "cook":
-				return true
-			if citizen.daily_order_role == "cook" and citizen.has_active_daily_order():
-				return true
-		if citizen.work_position_locked and citizen.work_position_role == "cook":
-			return true
-	return false
+	return workplace_labor_service.has_cook() if workplace_labor_service != null else false
 
 
 func _employment_center_position() -> Vector3:
-	if is_instance_valid(campfire_node):
-		if campfire_node.has_meta("entrance_position"):
-			return campfire_node.get_meta("entrance_position")
-		return campfire_node.get_meta("service_position", campfire_node.global_position)
-	return Vector3.INF
+	return workplace_labor_service.employment_center_position() if workplace_labor_service != null else Vector3.INF
 
 
 func _employment_centre_building() -> Node3D:
-	return campfire_node if is_instance_valid(campfire_node) else null
+	return workplace_labor_service.employment_centre_building() if workplace_labor_service != null else null
 
 
 func _officer_holder() -> Citizen:
-	for citizen in citizens:
-		if is_instance_valid(citizen) and citizen.permanent_role == "official":
-			return citizen
-	return null
+	return workplace_labor_service.officer_holder() if workplace_labor_service != null else null
 
 
 func _officer_exists() -> bool:
-	return _officer_holder() != null
+	return workplace_labor_service.officer_exists() if workplace_labor_service != null else false
 
 
 func _player_can_command_labor() -> bool:
-	# Daily orders, earthworks, and workplace management (accept/dismiss/overtime)
-	# no longer require an officer. They are direct player actions.
-	return true
+	return workplace_labor_service.player_can_command_labor() if workplace_labor_service != null else true
 
 
 func _labor_command_block_message() -> String:
-	return ""
+	return workplace_labor_service.labor_command_block_message() if workplace_labor_service != null else ""
 
 
 func _player_can_manage_permanent_professions() -> bool:
-	return _officer_exists()
+	return workplace_labor_service.player_can_manage_permanent_professions() if workplace_labor_service != null else false
 
 
 func _permanent_profession_block_message() -> String:
-	return "Автоматизация труда требует чиновника. Назначьте свободного жителя исследователем, изучите технологию «Чиновник», затем повысьте его у поста."
+	return workplace_labor_service.permanent_profession_block_message() if workplace_labor_service != null else ""
 
 
 func _show_labor_command_blocked() -> void:
-	_update_interface(_permanent_profession_block_message())
+	if workplace_labor_service != null:
+		workplace_labor_service.show_labor_command_blocked()
 
 
 func _registration_official() -> Citizen:
