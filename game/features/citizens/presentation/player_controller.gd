@@ -377,6 +377,9 @@ func first_person_target() -> Dictionary:
 				result = {"kind": "warehouse", "node": area_parent, "position": area_parent.global_position, "warehouse_index": simulation._warehouse_index_for_building(area_parent)}
 			elif collider.is_in_group("citizen_selector") and area_parent is Citizen:
 				result = {"kind": "citizen", "node": area_parent as Citizen, "position": area_parent.global_position}
+			elif collider.is_in_group("tree_selector") and is_instance_valid(area_parent):
+				if not bool(area_parent.get_meta("felled", false)):
+					result = {"kind": "tree", "node": area_parent, "position": area_parent.global_position}
 			elif collider.is_in_group("forage_selector") and is_instance_valid(area_parent):
 				result = {"kind": "forage", "node": area_parent, "position": area_parent.global_position}
 			elif collider.is_in_group("rabbit_selector") and is_instance_valid(area_parent):

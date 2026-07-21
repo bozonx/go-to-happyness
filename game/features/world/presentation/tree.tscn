@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=9 format=3]
 
 [sub_resource type="CylinderMesh" id="TrunkMesh"]
 top_radius = 0.16
@@ -26,6 +26,9 @@ radius = 1.5
 [sub_resource type="CylinderShape3D" id="TreeCollisionShape"]
 radius = 0.18
 height = 3.6
+
+[sub_resource type="BoxShape3D" id="TreeInteractionShape"]
+size = Vector3(1, 4.5, 1)
 
 [node name="Tree" type="Node3D"]
 
@@ -59,3 +62,11 @@ shape = SubResource("FlareOccluderShape")
 [node name="CollisionShape3D" type="CollisionShape3D" parent="TreeCollision"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.8, 0)
 shape = SubResource("TreeCollisionShape")
+
+[node name="TreeInteractionSelector" type="Area3D" parent="."]
+collision_layer = 4
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="TreeInteractionSelector"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.25, 0)
+shape = SubResource("TreeInteractionShape")

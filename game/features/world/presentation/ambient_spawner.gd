@@ -73,6 +73,11 @@ func _create_tree(position_on_board: Vector3, refresh_navigation := true) -> voi
 	simulation.tree_nodes[cell] = tree
 	simulation.add_child(tree)
 	
+	# Add the tree interaction selector group so first-person raycast can find it.
+	var interaction_selector := tree.get_node_or_null("TreeInteractionSelector") as Area3D
+	if interaction_selector != null:
+		interaction_selector.add_to_group("tree_selector")
+
 	# Crown colour is randomised per tree, so override the material in code.
 	for crown_name in ["Crown1", "Crown2", "Crown3"]:
 		var crown := tree.get_node(crown_name) as MeshInstance3D
