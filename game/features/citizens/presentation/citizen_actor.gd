@@ -1437,15 +1437,8 @@ func _is_work_position_state(s: int) -> bool:
 
 
 func _clear_work_position_lock() -> void:
-	work_position_locked = false
-	work_position_anchor = Vector3.INF
-	work_position_role = ""
+	_work_position.clear()
 	work_position_node = null
-	work_position_temporary = true
-	work_position_target = Vector3.INF
-	_work_position_previous_state = State.IDLE
-	_work_position_previous_active_role = ""
-	_work_position_player_controlled = false
 
 
 func enter_work_position(position: Vector3, role: String, building: Node3D = null, temporary := true, set_state := true) -> void:
