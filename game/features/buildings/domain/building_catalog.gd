@@ -2,6 +2,7 @@ class_name BuildingCatalog
 extends RefCounted
 
 const DEFINITIONS := {
+	"settlement_flag": {"name": "Флаг поселения", "category": "tent", "costs": {}, "landmark": true, "demolishable": false, "is_flag": true, "requires_village_area": false, "expands_village_area": true},
 	"campfire": {"name": "Главный костер ур. 1", "category": "tent", "costs": {"branches": 4}, "landmark": true, "demolishable": false, "is_campfire": true, "requires_village_area": false, "expands_village_area": true},
 	"campfire_lvl2": {"name": "Главный костер ур. 2", "category": "tent", "costs": {"branches": 15, "grass": 10}, "landmark": true, "demolishable": false, "upgrade_only": true, "upgrades_from": "campfire", "is_campfire": true, "requires_village_area": false, "expands_village_area": true},
 	"campfire_lvl3": {"name": "Главный костер ур. 3", "category": "tent", "costs": {"branches": 25, "grass": 18}, "landmark": true, "demolishable": false, "upgrade_only": true, "upgrades_from": "campfire_lvl2", "is_campfire": true, "requires_village_area": false, "expands_village_area": true},
@@ -418,6 +419,9 @@ static func kitchen_food_capacity(building_type: String) -> int:
 
 static func is_campfire(building_type: String) -> bool:
 	return bool(definition_for(building_type).get("is_campfire", false))
+
+static func is_flag(building_type: String) -> bool:
+	return bool(definition_for(building_type).get("is_flag", false))
 
 static func requires_village_area(building_type: String) -> bool:
 	return bool(definition_for(building_type).get("requires_village_area", true))

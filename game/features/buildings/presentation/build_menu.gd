@@ -126,6 +126,7 @@ func _create_buttons() -> void:
 	add_build_category_button("Brick era", "brick", 306)
 	add_build_category_back_button()
 
+	add_build_button("Флаг поселения", "settlement_flag", 142, "tent")
 	add_build_button("Campfire", "campfire", 176, "tent")
 	add_build_button("Campfire Level 2", "campfire_lvl2", 200, "tent")
 	add_build_button("Campfire Level 3", "campfire_lvl3", 200, "tent")

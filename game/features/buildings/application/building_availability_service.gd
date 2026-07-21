@@ -7,6 +7,8 @@ const REASON_LOCKED := &"locked"
 const REASON_UPGRADE_ONLY := &"upgrade_only"
 const REASON_NOT_ENOUGH_RESOURCES := &"not_enough_resources"
 const REASON_EMPTY := &"empty"
+const REASON_NO_FLAG := &"no_flag"
+const REASON_NO_CAMPFIRE := &"no_campfire"
 
 var settlement: SettlementState
 
@@ -100,6 +102,10 @@ func cost_text(building_type: String, extra_inventory: Dictionary = {}) -> Strin
 
 func message_for_reason(reason: StringName) -> String:
 	match reason:
+		REASON_NO_FLAG:
+			return "Build a settlement flag first."
+		REASON_NO_CAMPFIRE:
+			return "Build a campfire first."
 		REASON_LATER_ERA:
 			return "This building belongs to a later era. Complete the current settlement requirements first."
 		REASON_LOCKED:

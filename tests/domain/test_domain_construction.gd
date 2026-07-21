@@ -19,6 +19,7 @@ static func run_all() -> void:
 	_test_building_availability_service()
 	_test_building_research_service()
 	_test_research_mechanics()
+	_test_flag_and_campfire_progression_flow()
 
 
 static func _test_sawmill_rules() -> void:
@@ -310,3 +311,37 @@ static func _test_research_mechanics() -> void:
 	var state := SettlementState.new()
 	state.apply_tent_start()
 	assert(state.active_research_tech_id.is_empty())
+
+
+static func _test_flag_and_campfire_progression_flow() -> void:
+	var registry := BuildingRegistry.new()
+	var territory_service := VillageTerritoryService.new()
+	territory_service.configure(registry, 0)
+
+	assert(not territory_service.has_flag())
+	assert(not territory_service.has_campfire())
+
+	# Before flag exists: flag can be placed anywhere.
+	assert(territory_service.placement_reason("settlement_flag", Vector2i(0, 0)) == VillageTerritoryService.REASON_OK)
+	# Buildings requiring campfire/flag are blocked.
+	assert(territory_service.placement_reason("tent", Vector2i(0, 0)) == VillageTerritoryService.REASON_NO_FLAG)
+	assert(territory_service.placement_reason("warehouse", Vector2i(0, 0)) == VillageTerritoryService.REASON_NO_FLAG)
+
+	# Build flag.
+	territory_service.on_building_added(Vector2i(0, 0), "settlement_flag")
+	assert(territory_service.has_flag())
+	assert(not territory_service.has_campfire())
+
+	# Inside flag territory: campfire and warehouse allowed.
+	assert(territory_service.placement_reason("campfire", Vector2i(1, 1)) == VillageTerritoryService.REASON_OK)
+	assert(territory_service.placement_reason("warehouse", Vector2i(1, 1)) == VillageTerritoryService.REASON_OK)
+	# Other buildings blocked by REASON_NO_CAMPFIRE.
+	assert(territory_service.placement_reason("tent", Vector2i(1, 1)) == VillageTerritoryService.REASON_NO_CAMPFIRE)
+
+	# Build campfire.
+	territory_service.on_building_added(Vector2i(1, 1), "campfire")
+	assert(territory_service.has_campfire())
+
+	# Inside campfire/village territory: tent is now allowed!
+	assert(territory_service.placement_reason("tent", Vector2i(1, 1)) == VillageTerritoryService.REASON_OK)
+

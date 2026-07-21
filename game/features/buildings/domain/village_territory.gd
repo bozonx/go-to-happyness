@@ -19,8 +19,11 @@ const CAMPFIRE_RADII := {
 	"brick_city_hall": 104.0,
 }
 
+const FLAG_RADIUS := 32.0
 const HOUSE_RADIUS := 32.0
 const POST_RADIUS := 20.0
+
+const FLAG_TYPES: Array[String] = ["settlement_flag"]
 
 const CAMPFIRE_TYPES: Array[String] = [
 	"campfire", "campfire_lvl2", "campfire_lvl3",
@@ -65,6 +68,10 @@ static func campfire_limit_for_era(era: int) -> int:
 	return CAMPFIRE_LIMITS[era]
 
 
+static func is_flag_type(building_type: String) -> bool:
+	return building_type in FLAG_TYPES
+
+
 static func is_campfire_type(building_type: String) -> bool:
 	return building_type in CAMPFIRE_TYPES
 
@@ -78,6 +85,8 @@ static func is_boundary_post_type(building_type: String) -> bool:
 
 
 static func anchor_radius_for(building_type: String) -> float:
+	if is_flag_type(building_type):
+		return FLAG_RADIUS
 	if is_campfire_type(building_type):
 		return campfire_radius_for(building_type)
 	if is_housing_type(building_type):
@@ -135,6 +144,13 @@ func anchor_count() -> int:
 	return _anchors.size()
 
 
+func has_flag() -> bool:
+	for anchor in _anchors:
+		if is_flag_type(anchor.building_type):
+			return true
+	return false
+
+
 func has_campfire() -> bool:
 	for anchor in _anchors:
 		if is_campfire_type(anchor.building_type):
@@ -166,12 +182,13 @@ func perimeter_cells() -> Array[Vector2i]:
 
 func _recalculate() -> void:
 	_cells.clear()
-	# Houses and posts only extend an existing settlement. Once its final
-	# campfire is gone, their anchors remain as buildings but do not create land.
-	if not has_campfire():
+	var campfire_exists := has_campfire()
+	var flag_exists := has_flag()
+	if not campfire_exists and not flag_exists:
 		return
 	for anchor in _anchors:
-		_add_circle(anchor.cell, anchor.radius)
+		if campfire_exists or is_flag_type(anchor.building_type):
+			_add_circle(anchor.cell, anchor.radius)
 
 
 func _add_circle(center_cell: Vector2i, radius: float) -> void:

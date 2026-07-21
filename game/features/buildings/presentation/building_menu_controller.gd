@@ -55,10 +55,16 @@ func refresh_build_menu() -> void:
 		else:
 			var build_type: String = button.get_meta("build_type", "")
 			var menu_state: Dictionary = simulation.building_availability_service.menu_state_with_inventory(build_type, simulation.pocket)
-			var territory_ok: bool = simulation.village_territory_service.has_campfire() or not BuildingCatalogScript.requires_village_area(build_type)
-			if not territory_ok:
-				menu_state["enabled"] = false
-				menu_state["reason"] = simulation.village_territory_service.REASON_NO_CAMPFIRE
+			var has_flag: bool = simulation.village_territory_service.has_flag()
+			var has_campfire: bool = simulation.village_territory_service.has_campfire()
+			if not has_flag:
+				if build_type != "settlement_flag":
+					menu_state["enabled"] = false
+					menu_state["reason"] = simulation.village_territory_service.REASON_NO_FLAG
+			elif not has_campfire:
+				if build_type != "campfire" and build_type != "warehouse" and build_type != "settlement_flag":
+					menu_state["enabled"] = false
+					menu_state["reason"] = simulation.village_territory_service.REASON_NO_CAMPFIRE
 			button.set_meta("build_menu_state", menu_state)
 			if simulation.build_menu_is_global and simulation.build_category.is_empty():
 				button.visible = not assignment_submenu_open and button.get_meta("category", "") == current_era_category and bool(menu_state.visible)
@@ -107,7 +113,7 @@ func refresh_build_menu() -> void:
 		var enabled := bool(menu_state.enabled)
 		var affordable := bool(menu_state.affordable)
 		button.disabled = not enabled
-		button.tooltip_text = "" if enabled else (simulation.village_territory_service.placement_message(menu_state.reason) if menu_state.reason == simulation.village_territory_service.REASON_NO_CAMPFIRE else simulation.building_availability_service.message_for_reason(menu_state.reason))
+		button.tooltip_text = "" if enabled else (simulation.village_territory_service.placement_message(menu_state.reason) if (menu_state.reason == simulation.village_territory_service.REASON_NO_CAMPFIRE or menu_state.reason == simulation.village_territory_service.REASON_NO_FLAG) else simulation.building_availability_service.message_for_reason(menu_state.reason))
 		button.modulate = Color(1, 1, 1, 1) if enabled else Color(0.55, 0.55, 0.6, 1)
 		var cost_label: Label = button.get_meta("cost_label")
 		if cost_label != null:

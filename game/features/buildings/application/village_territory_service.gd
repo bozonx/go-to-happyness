@@ -12,6 +12,7 @@ const VillageTerritoryScript = preload("res://game/features/buildings/domain/vil
 
 const REASON_OK := &"ok"
 const REASON_OUTSIDE_TERRITORY := &"outside_territory"
+const REASON_NO_FLAG := &"no_flag"
 const REASON_NO_CAMPFIRE := &"no_campfire"
 const REASON_CAMPFIRE_LIMIT := &"campfire_limit"
 const REASON_FOREIGN_TERRITORY := &"foreign_territory"
@@ -36,6 +37,10 @@ func territory() -> RefCounted:
 	return _territory
 
 
+func has_flag() -> bool:
+	return _territory.has_flag()
+
+
 func has_campfire() -> bool:
 	return _territory.has_campfire()
 
@@ -56,28 +61,42 @@ func placement_reason(building_type: String, cell: Vector2i, footprint := Vector
 	if _footprint_overlaps_foreign(cell, footprint):
 		return REASON_FOREIGN_TERRITORY
 
-	# Warehouse and campfire do not require existing territory.
+	if BuildingCatalog.is_flag(building_type):
+		if _anchor_overlaps_foreign(cell, building_type):
+			return REASON_FOREIGN_TERRITORY
+		return REASON_OK
+
 	if BuildingCatalog.is_campfire(building_type):
 		if _territory.campfire_count() >= campfire_limit():
 			return REASON_CAMPFIRE_LIMIT
-		# New campfire must be outside existing territory (new settlement).
+		if _territory.has_flag() and not _territory.has_campfire():
+			if not _footprint_is_inside_territory(cell, footprint):
+				return REASON_OUTSIDE_TERRITORY
+			return REASON_OK
 		if _territory.is_inside(cell):
 			return REASON_OUTSIDE_TERRITORY
 		if _anchor_overlaps_foreign(cell, building_type):
 			return REASON_FOREIGN_TERRITORY
 		return REASON_OK
 
-	if not BuildingCatalog.requires_village_area(building_type):
-		# Warehouse: can be placed anywhere, but not in foreign territory.
+	if building_type == "warehouse":
+		if not _territory.has_campfire():
+			if not _territory.has_flag():
+				return REASON_NO_FLAG
+			if not _footprint_is_inside_territory(cell, footprint):
+				return REASON_OUTSIDE_TERRITORY
+			return REASON_OK
 		return REASON_OK
 
-	# Buildings that require village area: must be inside territory.
+	if not BuildingCatalog.requires_village_area(building_type):
+		return REASON_OK
+
+	if not _territory.has_flag():
+		return REASON_NO_FLAG
 	if not _territory.has_campfire():
 		return REASON_NO_CAMPFIRE
 	if not _footprint_is_inside_territory(cell, footprint):
 		return REASON_OUTSIDE_TERRITORY
-	# A house or boundary post must not extend this settlement into a foreign
-	# territory, even when its own placement cell is still unclaimed.
 	if BuildingCatalog.expands_village_area(building_type) and _anchor_overlaps_foreign(cell, building_type):
 		return REASON_FOREIGN_TERRITORY
 	return REASON_OK
@@ -87,6 +106,8 @@ func placement_message(reason: StringName) -> String:
 	match reason:
 		REASON_OUTSIDE_TERRITORY:
 			return "Outside village territory."
+		REASON_NO_FLAG:
+			return "Build a settlement flag first."
 		REASON_NO_CAMPFIRE:
 			return "Build a campfire first."
 		REASON_CAMPFIRE_LIMIT:
