@@ -722,6 +722,7 @@ func _ready() -> void:
 	construction_runtime.building_completed = _complete_building
 	construction_runtime.workers_changed = _update_workers
 	construction_runtime.navigation_changed = _refresh_navigation_grid
+	construction_runtime.update_supply_label = _update_construction_supply_label
 	construction = ConstructionService.new()
 	construction.configure(construction_runtime)
 	var demolition_runtime := DemolitionRuntime.new()
@@ -4353,6 +4354,21 @@ func _update_construction(delta: float) -> void:
 func _set_construction_status(text: String) -> void:
 	if hud != null:
 		hud.set_status(text)
+
+
+func _update_construction_supply_label(site: ConstructionSite) -> void:
+	if not is_instance_valid(site.node) or site.node.is_queued_for_deletion():
+		return
+	var label := site.node.get_node_or_null("SupplyLabel") as Label3D
+	if label == null:
+		return
+	var delivered := 0
+	var required := 0
+	for resource_type in site.required_materials:
+		delivered += int(site.delivered_materials.get(resource_type, 0))
+		required += int(site.required_materials[resource_type])
+	label.text = "MATERIALS %d/%d" % [delivered, required]
+	label.modulate = Color("f0c45d") if delivered < required else Color("56bd58")
 
 func _complete_building(cell: Vector2i, building_type: String, position_on_board: Vector3, building: Node3D, blueprint: Dictionary) -> void:
 	settlement.buildings[building_type] = int(settlement.buildings.get(building_type, 0)) + 1

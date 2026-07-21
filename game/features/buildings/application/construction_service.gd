@@ -42,8 +42,6 @@ func start_site(cell: Vector2i, building_type: String, position: Vector3, rotati
 	territory_mesh.size = Vector3(display_footprint.x, 0.035, display_footprint.y)
 	territory.mesh = territory_mesh
 
-	var fill := site_node.get_node("ConstructionProgressFill") as MeshInstance3D
-
 	# Selector collision shape size depends on the building footprint.
 	var selector := site_node.get_node("ConstructionSelector") as Area3D
 	var selector_shape := selector.get_node("CollisionShape3D") as CollisionShape3D
@@ -52,7 +50,7 @@ func start_site(cell: Vector2i, building_type: String, position: Vector3, rotati
 	selector_shape.shape = box
 
 	var required: Dictionary = BuildingCatalog.definition_for(building_type).get("costs", {}).duplicate(true)
-	var site := ConstructionSite.new(cell, building_type, position, site_node, fill, blueprint, required)
+	var site := ConstructionSite.new(cell, building_type, position, site_node, blueprint, required)
 	site.site_id = site_node.get_instance_id()
 	sites.append(site)
 	# Commit any resources that are already in storage to this site so they cannot
@@ -76,7 +74,8 @@ func tick(delta: float) -> void:
 			runtime.settlement.release_site_construction_reservations(site.site_id)
 			sites.remove_at(index)
 			continue
-		_update_supply_label(site)
+		if runtime.update_supply_label.is_valid():
+			runtime.update_supply_label.call(site)
 		var material_progress: float = site.material_progress()
 		if material_progress <= 0.0:
 			site.node.set_meta("can_advance", false)
@@ -93,9 +92,10 @@ func tick(delta: float) -> void:
 		while site.modules_built < target_module_count:
 			site.node.add_child(BuildingBlueprints.create_module(modules[site.modules_built]))
 			site.modules_built += 1
-		if is_instance_valid(site.fill):
-			site.fill.scale.x = maxf(0.01, progress)
-			site.fill.position.x = -0.725 + 0.725 * progress
+		var fill := site.node.get_node_or_null("ConstructionProgressFill") as MeshInstance3D
+		if is_instance_valid(fill):
+			fill.scale.x = maxf(0.01, progress)
+			fill.position.x = -0.725 + 0.725 * progress
 		if progress < 1.0:
 			continue
 		_cleanup_completed_site(site)
@@ -166,21 +166,6 @@ func cancel_site(site_node: Node3D) -> bool:
 		runtime.workers_changed.call()
 		return true
 	return false
-
-
-func _update_supply_label(site: ConstructionSite) -> void:
-	if not is_instance_valid(site.node) or site.node.is_queued_for_deletion():
-		return
-	var label := site.node.get_node_or_null("SupplyLabel") as Label3D
-	if label == null:
-		return
-	var delivered := 0
-	var required := 0
-	for resource_type in site.required_materials:
-		delivered += int(site.delivered_materials.get(resource_type, 0))
-		required += int(site.required_materials[resource_type])
-	label.text = "MATERIALS %d/%d" % [delivered, required]
-	label.modulate = Color("f0c45d") if delivered < required else Color("56bd58")
 
 
 func _cleanup_completed_site(site: ConstructionSite) -> void:

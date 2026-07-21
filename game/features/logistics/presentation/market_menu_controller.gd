@@ -2,6 +2,7 @@ class_name MarketMenuController
 extends RefCounted
 
 const SettlementStateScript = preload("res://game/features/settlement/domain/settlement_state.gd")
+const TradeCatalogScript = preload("res://game/features/logistics/domain/trade_catalog.gd")
 
 var simulation: Node
 
@@ -35,35 +36,8 @@ func refresh_market_menu() -> void:
 
 	var y_offset := 104.0 if not seller_ok else 80.0
 
-	var raw_sell_items := [["goods", 5]]
-	var raw_buy_items: Array = []
-
-	if market_type in ["straw_trade_tent", "tarp_trade_tent"]:
-		raw_buy_items.append(["axe", 15])
-		raw_buy_items.append(["hand_saw", 15])
-		raw_buy_items.append(["shovel", 15])
-		raw_buy_items.append(["bucket", 15])
-		raw_buy_items.append(["tarp", 8])
-	elif market_type in ["earth_market", "clay_market"]:
-		raw_buy_items.append(["hoe", 18])
-	elif market_type in ["wood_market", "stone_market", "brick_market"]:
-		raw_buy_items.append(["pickaxe", 25])
-
-	if market_type in ["earth_market", "clay_market", "wood_market", "stone_market", "brick_market"]:
-		raw_sell_items.append(["soil", 1])
-
-	if market_type in ["clay_market", "wood_market", "stone_market", "brick_market"]:
-		raw_sell_items.append(["clay", 2])
-
-	if market_type in ["wood_market", "stone_market", "brick_market"]:
-		raw_sell_items.append(["wood", 2])
-		raw_sell_items.append(["boards", 3])
-
-	if market_type in ["stone_market", "brick_market"]:
-		raw_sell_items.append(["stone", 3])
-
-	if market_type == "brick_market":
-		raw_sell_items.append(["bricks", 4])
+	var raw_sell_items := TradeCatalogScript.sell_items_for(market_type)
+	var raw_buy_items: Array = TradeCatalogScript.buy_items_for(market_type)
 
 	var sell_items: Array[Dictionary] = []
 	for item in raw_sell_items:
@@ -101,15 +75,7 @@ func refresh_market_menu() -> void:
 	}
 
 	var equipment_target = simulation.selected_builder if is_instance_valid(simulation.selected_builder) and simulation.selected_builder.is_courier() else null
-	var raw_equipment_offers: Array[Array] = []
-	if simulation.settlement.era == SettlementStateScript.Era.TENT:
-		raw_equipment_offers.append(["simple_backpack", 12])
-	elif simulation.settlement.era >= SettlementStateScript.Era.CLAY:
-		raw_equipment_offers.append(["reinforced_backpack", 22])
-		raw_equipment_offers.append(["bicycle", 30])
-		if simulation.settlement.era >= SettlementStateScript.Era.WOOD:
-			raw_equipment_offers.append(["cargo_backpack", 36])
-			raw_equipment_offers.append(["bicycle_trailer", 48])
+	var raw_equipment_offers: Array[Array] = TradeCatalogScript.equipment_offers_for(int(simulation.settlement.era))
 	if not raw_equipment_offers.is_empty():
 		state["equipment_label"] = "Courier equipment: %s" % (equipment_target.role_label() if equipment_target != null else "select a courier")
 		var equipment_offers: Array[Dictionary] = []
