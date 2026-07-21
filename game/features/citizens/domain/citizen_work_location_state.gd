@@ -14,6 +14,7 @@ var craft_position := Vector3.ZERO
 var canteen_position := Vector3.ZERO
 var trade_source_position := Vector3.ZERO
 var trade_destination_position := Vector3.ZERO
+var employment_center_position := Vector3.INF
 var park_rest_duration := 4.0
 var craft_timer := 0.0
 var craft_speed_multiplier := 1.0

@@ -243,7 +243,11 @@ var pending_employment_role: String:
 		_employment.pending_employment_role = value
 var employment_workplace: Node3D
 var pending_employment_workplace: Node3D
-var employment_center_position := Vector3.INF
+var employment_center_position: Vector3:
+	get:
+		return _work_locations.employment_center_position
+	set(value):
+		_work_locations.employment_center_position = value
 var registration_queue_order: int:
 	get:
 		return _employment.registration_queue_order
