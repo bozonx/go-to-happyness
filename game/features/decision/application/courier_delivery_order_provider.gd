@@ -32,13 +32,21 @@ func collect_orders(snapshot: WorldSnapshot) -> Array[CitizenOrder]:
 		var actor_id := int(citizen.facts.value(&"work.courier.actor_id", citizen.id))
 		var candidates: Dictionary = {}
 		for task_value in candidate_source:
-			var task := task_value as Dictionary
-			var task_id := task.get(&"id", &"") as StringName
-			var pickup: Variant = task.get(&"pickup", Vector3.INF)
-			var requested_courier_id := int(task.get(&"requested_courier_id", -1))
-			if task_id == &"" or not (pickup is Vector3) or (requested_courier_id > 0 and requested_courier_id != actor_id):
-				continue
-			candidates[task_id] = {&"priority": int(task.get(&"priority", 0)), &"pickup": pickup}
+			if task_value is CourierTask:
+				var task := task_value as CourierTask
+				var requested_courier_id := int(task.payload.get("courier_ai_id", 0))
+				if task.id == &"" or task.pickup == Vector3.INF or (requested_courier_id > 0 and requested_courier_id != actor_id):
+					continue
+				candidates[task.id] = {&"priority": task.priority, &"pickup": task.pickup}
+			elif task_value is Dictionary:
+				var task := task_value as Dictionary
+				var task_id := task.get(&"id", &"") as StringName
+				var pickup: Variant = task.get(&"pickup", Vector3.INF)
+				var requested_courier_id := int(task.get(&"requested_courier_id", -1))
+				if task_id == &"" or not (pickup is Vector3) or (requested_courier_id > 0 and requested_courier_id != actor_id):
+					continue
+				candidates[task_id] = {&"priority": int(task.get(&"priority", 0)), &"pickup": pickup}
+
 		if candidates.is_empty():
 			continue
 		free_couriers.append({

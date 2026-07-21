@@ -14,9 +14,11 @@ func collect(ctx: FacadeContext, courier_tasks: Array[Dictionary]) -> Dictionary
 	if courier_worker and ctx.simulation.courier_dispatcher != null:
 		for task_data in courier_tasks:
 			var task_id := task_data.get(&"id", &"") as StringName
-			var task := ctx.simulation.courier_dispatcher.tasks.get(task_id) as CourierTask
+			var task: CourierTask = ctx.simulation.courier_dispatcher.tasks.get(task_id)
 			if task != null and ctx.simulation._is_courier_task_reachable(actor, task):
 				courier_task_candidates.append(task_data)
+
+
 	var courier_active_task_id: StringName = &""
 	var courier_active_pickup := Vector3.INF
 	var courier_active_priority := 0

@@ -31,6 +31,8 @@ func capture(sequence: int) -> WorldSnapshot:
 	if simulation.courier_dispatcher != null:
 		for task: CourierTask in simulation.courier_dispatcher.available_tasks():
 			courier_tasks.append({&"id": task.id, &"priority": task.priority, &"pickup": task.pickup, &"requested_courier_id": int(task.payload.get("courier_ai_id", 0))})
+
+
 	var workforce_world := _world_data()
 	var citizens_by_id: Dictionary = {}
 	for actor: Citizen in simulation.citizens:
