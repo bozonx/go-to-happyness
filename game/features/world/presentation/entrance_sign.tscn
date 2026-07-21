@@ -69,6 +69,7 @@ visible = false
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.2, 0)
 light_color = Color(1, 0.8353, 0.5412, 1)
 light_energy = 2.0
+light_volumetric_fog_energy = 0.5
 omni_range = 5.0
 shadow_enabled = true
 visible = false

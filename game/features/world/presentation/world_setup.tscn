@@ -17,8 +17,10 @@ glow_bloom = 0.05
 volumetric_fog_enabled = true
 volumetric_fog_density = 0.012
 volumetric_fog_anisotropy = 0.35
-volumetric_fog_length = 64.0
-volumetric_fog_detail_spread = 0.5
+volumetric_fog_length = 40.0
+volumetric_fog_detail_spread = 1.5
+volumetric_fog_temporal_reprojection_enabled = true
+volumetric_fog_temporal_reprojection_amount = 0.92
 fog_enabled = true
 fog_light_color = Color(0.8118, 0.8863, 0.9294, 1)
 fog_density = 0.00035
@@ -44,7 +46,7 @@ rotation_degrees = Vector3(-52, -32, 0)
 light_energy = 1.2
 shadow_enabled = true
 shadow_blur = 1.5
-light_volumetric_fog_energy = 2.0
+light_volumetric_fog_energy = 1.4
 
 [node name="LensFlareLayer" type="CanvasLayer" parent="."]
 layer = 100
