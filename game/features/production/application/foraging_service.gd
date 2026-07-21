@@ -73,7 +73,7 @@ func find_forage_position(citizen: Node3D) -> Vector3:
 	return spot
 
 func harvest_wild_food(position: Vector3, worker: Node3D) -> String:
-	var plant_cell: Vector3i = cell_query.call(position) if cell_query.is_valid() else Vector3i.ZERO
+	var plant_cell: Vector2i = cell_query.call(position) if cell_query.is_valid() else Vector2i.ZERO
 	if forage_sources.has(plant_cell):
 		var plant := (forage_sources[plant_cell] as Dictionary).get("node") as Node3D
 		if is_instance_valid(plant):
@@ -94,7 +94,7 @@ func harvest_wild_food(position: Vector3, worker: Node3D) -> String:
 	return ""
 
 func consume_grass_source(position: Vector3) -> int:
-	var cell: Vector3i = cell_query.call(position) if cell_query.is_valid() else Vector3i.ZERO
+	var cell: Vector2i = cell_query.call(position) if cell_query.is_valid() else Vector2i.ZERO
 	if not grass_sources.has(cell):
 		return 0
 	var source: Dictionary = grass_sources[cell]
@@ -110,7 +110,7 @@ func consume_grass_source(position: Vector3) -> int:
 	return 1
 
 func consume_tree_branches(position: Vector3) -> int:
-	var cell: Vector3i = cell_query.call(position) if cell_query.is_valid() else Vector3i.ZERO
+	var cell: Vector2i = cell_query.call(position) if cell_query.is_valid() else Vector2i.ZERO
 	var tree: Node3D = tree_nodes.get(cell)
 	if not is_instance_valid(tree):
 		return 0
@@ -153,7 +153,7 @@ func nearest_tree_node(from: Vector3) -> Node3D:
 		var dist := from.distance_to(position)
 		if dist > INTERACTION_RANGE:
 			continue
-		var cell: Vector3i = cell_query.call(position) if cell_query.is_valid() else Vector3i.ZERO
+		var cell: Vector2i = cell_query.call(position) if cell_query.is_valid() else Vector2i.ZERO
 		var tree: Node3D = tree_nodes.get(cell)
 		if not is_instance_valid(tree) or bool(tree.get_meta("felled", false)):
 			continue
@@ -184,7 +184,7 @@ func player_gather_target_node(player_citizen: Node3D, interaction_resource: Str
 	return null
 
 func gather_node_at(position: Vector3, resource_type: String) -> Node3D:
-	var cell: Vector3i = cell_query.call(position) if cell_query.is_valid() else Vector3i.ZERO
+	var cell: Vector2i = cell_query.call(position) if cell_query.is_valid() else Vector2i.ZERO
 	if resource_type in ["wood", "branches", "logs"]:
 		return tree_nodes.get(cell)
 	if resource_type == "grass":
@@ -281,7 +281,7 @@ func update_gathering_indicators(
 				var progress: float = task_timer.progress() if task_timer != null and task_timer.has_method("progress") else 0.0
 				active_targets[node] = {"resource_type": c_gather_type, "partial": progress}
 		elif citizen_state == 4:
-			var cell: Vector3i = cell_query.call(c_source_pos) if cell_query.is_valid() else Vector3i.ZERO
+			var cell: Vector2i = cell_query.call(c_source_pos) if cell_query.is_valid() else Vector2i.ZERO
 			var node: Node3D = tree_nodes.get(cell)
 			if is_instance_valid(node):
 				var task_timer: Variant = citizen.get("task_timer")
