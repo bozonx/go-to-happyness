@@ -1,0 +1,84 @@
+class_name UIEvents
+extends RefCounted
+
+signal global_build_menu_toggled
+signal skip_night_requested
+signal skip_to_workday_start_requested
+signal time_multiplier_changed(multiplier: float)
+
+signal build_menu_gui_input(event: InputEvent)
+signal manage_citizen_requested
+signal daily_order_submenu_requested
+signal personal_night_work_toggled
+signal job_submenu_requested
+signal category_opened(category_id: StringName)
+signal build_selected(build_id: StringName)
+signal role_selected(role_id: StringName)
+
+signal send_resident_outside_requested
+signal send_entrance_order_requested
+signal context_menus_close_requested
+signal entrance_order_total_update_requested
+
+signal spawn_house_citizen_requested
+signal house_demolish_requested
+
+signal school_train_requested
+signal school_dev_toggled
+signal school_demolish_requested
+
+signal workday_hours_changed(hours: int)
+signal campfire_advance_pressed
+signal campfire_orders_menu_show_requested
+signal campfire_primary_action_requested
+signal workforce_menu_show_requested
+signal research_menu_show_requested
+signal civic_post_assignment_requested
+signal occupy_campfire_position_requested
+signal campfire_acceptance_toggled
+signal dismiss_campfire_worker_requested
+signal campfire_worker_overtime_toggled(enabled: bool)
+signal campfire_story_menu_show_requested
+signal campfire_story_selected(story_id: StringName)
+signal campfire_story_menu_close_requested
+
+signal sell_resource_requested(resource_id: StringName)
+signal buy_tool_requested
+signal buy_equipment_requested
+signal buy_food_requested
+
+signal warehouse_accept_toggled
+signal dump_warehouse_resource_requested
+signal cover_warehouse_requested
+signal warehouse_demolish_requested
+
+signal pocket_take_menu_close_requested
+
+signal cook_assigned
+signal teacher_assigned
+signal seller_assigned
+signal workplace_acceptance_toggled
+signal workplace_worker_dismissed
+signal worker_overtime_toggled
+signal relight_fire_requested
+signal upgrade_building_requested
+signal demolish_building_requested
+signal cancel_construction_requested
+
+signal workforce_menu_close_requested
+signal remove_worker_role_requested
+signal assign_unemployed_worker_requested
+signal enable_auto_citizen_requested
+
+signal research_menu_hide_requested
+signal start_research_requested
+signal cancel_research_requested
+
+signal road_walking_order_set
+signal balanced_warehouse_mode_set
+signal settlement_night_work_toggled
+signal double_time_order_toggled
+signal cheer_up_settlement_requested
+signal campfire_orders_menu_close_requested
+
+signal event_decision_choice_selected(choice_index: int)

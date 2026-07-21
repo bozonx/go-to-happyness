@@ -21,9 +21,12 @@
 [ext_resource type="PackedScene" path="res://game/features/settlement/presentation/research_menu.tscn" id="19_research"]
 [ext_resource type="PackedScene" path="res://game/features/settlement/presentation/campfire_orders_menu.tscn" id="20_orders"]
 [ext_resource type="PackedScene" path="res://game/features/settlement/presentation/survival_decision_panel.tscn" id="21_decision"]
+[ext_resource type="Theme" path="res://game/features/ui/presentation/theme/ui_theme.tres" id="22_theme"]
 
 [node name="UIManager" type="CanvasLayer"]
 script = ExtResource("1_uim")
+
+
 
 [node name="HUD" parent="." instance=ExtResource("2_hud")]
 

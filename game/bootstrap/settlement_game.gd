@@ -3343,6 +3343,19 @@ func _hide_all_selection_menus() -> void:
 func _mark_building_for_demolition(building: Node3D) -> void:
 	building_lifecycle_service.mark_building_for_demolition(building)
 
+func _demolish_selected_house() -> void:
+	if selected_house != null:
+		_mark_building_for_demolition(selected_house)
+
+func _demolish_selected_school() -> void:
+	if selected_school != null:
+		_mark_building_for_demolition(selected_school)
+
+func _demolish_selected_warehouse() -> void:
+	if selected_warehouse != null:
+		_mark_building_for_demolition(selected_warehouse)
+
+
 func _add_demolition_marker(building: Node3D) -> void:
 	building_lifecycle_service.add_demolition_marker(building)
 
