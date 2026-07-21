@@ -9,6 +9,8 @@ const CitizenWorkPositionStateScript = preload("res://game/features/citizens/dom
 const CitizenAIMoveStateScript = preload("res://game/features/citizens/domain/citizen_ai_move_state.gd")
 const CitizenToiletStateScript = preload("res://game/features/citizens/domain/citizen_toilet_state.gd")
 const CitizenArrivalStateScript = preload("res://game/features/citizens/domain/citizen_arrival_state.gd")
+const CitizenTaskAssignmentStateScript = preload("res://game/features/citizens/domain/citizen_task_assignment_state.gd")
+const CitizenWorkLocationStateScript = preload("res://game/features/citizens/domain/citizen_work_location_state.gd")
 
 signal resource_delivered(worker: Citizen, resource_type: String, amount: int)
 signal resource_dropped(worker: Citizen, resource_type: String, amount: int)
@@ -139,16 +141,53 @@ var _work_position_player_controlled: bool:
 	set(value):
 		_work_position.previous_player_controlled = value
 
-var resource_type := "wood"
-var gather_resource_type := ""
-var gather_source_position := Vector3.ZERO
-var gather_access_position := Vector3.ZERO
-var source_position := Vector3.ZERO
-var source_access_position := Vector3.ZERO
-var workplace_position := Vector3.ZERO
-var warehouse_position := Vector3.ZERO
+var _task_assignment := CitizenTaskAssignmentStateScript.new()
+var resource_type: String:
+	get:
+		return _task_assignment.resource_type
+	set(value):
+		_task_assignment.resource_type = value
+var gather_resource_type: String:
+	get:
+		return _task_assignment.gather_resource_type
+	set(value):
+		_task_assignment.gather_resource_type = value
+var gather_source_position: Vector3:
+	get:
+		return _task_assignment.gather_source_position
+	set(value):
+		_task_assignment.gather_source_position = value
+var gather_access_position: Vector3:
+	get:
+		return _task_assignment.gather_access_position
+	set(value):
+		_task_assignment.gather_access_position = value
+var source_position: Vector3:
+	get:
+		return _task_assignment.source_position
+	set(value):
+		_task_assignment.source_position = value
+var source_access_position: Vector3:
+	get:
+		return _task_assignment.source_access_position
+	set(value):
+		_task_assignment.source_access_position = value
+var workplace_position: Vector3:
+	get:
+		return _task_assignment.workplace_position
+	set(value):
+		_task_assignment.workplace_position = value
+var warehouse_position: Vector3:
+	get:
+		return _task_assignment.warehouse_position
+	set(value):
+		_task_assignment.warehouse_position = value
 var task_timer := CitizenTaskState.new()
-var wait_recheck := 0.0
+var wait_recheck: float:
+	get:
+		return _task_assignment.wait_recheck
+	set(value):
+		_task_assignment.wait_recheck = value
 	# Injected: registration_staff_checker(Citizen) -> bool reports whether this
 	# citizen is currently first in a staffed employment-centre queue;
 	# registration_duration_resolver()
@@ -313,16 +352,44 @@ const SKILL_DECAY_RATE := CitizenProfileScript.SKILL_DECAY_RATE
 const SKILL_MIN_FLOOR := CitizenProfileScript.SKILL_MIN_FLOOR
 const ROLE_RECHECK_MIN_DELAY := 0.75
 const ROLE_RECHECK_MAX_DELAY := 1.5
-var role_recheck_remaining := 0.0
+var role_recheck_remaining: float:
+	get:
+		return _task_assignment.role_recheck_remaining
+	set(value):
+		_task_assignment.role_recheck_remaining = value
 var assigned_dig_site: Node3D
-var uses_courier := false
-var returning_to_excavation := false
-var carried_amount := 0
-var pending_resources: Dictionary = {}
+var uses_courier: bool:
+	get:
+		return _task_assignment.uses_courier
+	set(value):
+		_task_assignment.uses_courier = value
+var returning_to_excavation: bool:
+	get:
+		return _task_assignment.returning_to_excavation
+	set(value):
+		_task_assignment.returning_to_excavation = value
+var carried_amount: int:
+	get:
+		return _task_assignment.carried_amount
+	set(value):
+		_task_assignment.carried_amount = value
+var pending_resources: Dictionary:
+	get:
+		return _task_assignment.pending_resources
+	set(value):
+		_task_assignment.pending_resources = value
 var courier_target: Citizen
-var courier_resource_type := ""
+var courier_resource_type: String:
+	get:
+		return _task_assignment.courier_resource_type
+	set(value):
+		_task_assignment.courier_resource_type = value
 var courier_worker: Citizen
-var courier_equipment := "hands"
+var courier_equipment: String:
+	get:
+		return _task_assignment.courier_equipment
+	set(value):
+		_task_assignment.courier_equipment = value
 var home: Node3D
 var hunger: float:
 	get:
@@ -339,8 +406,17 @@ var debuffs: Dictionary:
 		return _needs.debuffs
 	set(value):
 		_needs.debuffs = value
-var delivery_amount := 0
-var canteen_position := Vector3.ZERO
+var delivery_amount: int:
+	get:
+		return _task_assignment.delivery_amount
+	set(value):
+		_task_assignment.delivery_amount = value
+var _work_locations := CitizenWorkLocationStateScript.new()
+var canteen_position: Vector3:
+	get:
+		return _work_locations.canteen_position
+	set(value):
+		_work_locations.canteen_position = value
 var current_toilet_target: Node3D = null
 const TOILET_USE_DURATION := 5.0
 ## Upper bound on how long a citizen queues for an occupied toilet before giving
@@ -395,15 +471,51 @@ var player_using_toilet: bool:
 		return _toilet.player_using
 	set(value):
 		_toilet.player_using = value
-var market_position := Vector3.ZERO
-var craft_position := Vector3.ZERO
-var craft_timer := 0.0
-var craft_speed_multiplier := 1.0
-var construction_position := Vector3.ZERO
-var is_waiting_for_materials := false
-var construction_delivery_resource := ""
-var building_supply_kind := "construction"
-var park_rest_duration := 4.0
+var market_position: Vector3:
+	get:
+		return _work_locations.market_position
+	set(value):
+		_work_locations.market_position = value
+var craft_position: Vector3:
+	get:
+		return _work_locations.craft_position
+	set(value):
+		_work_locations.craft_position = value
+var craft_timer: float:
+	get:
+		return _work_locations.craft_timer
+	set(value):
+		_work_locations.craft_timer = value
+var craft_speed_multiplier: float:
+	get:
+		return _work_locations.craft_speed_multiplier
+	set(value):
+		_work_locations.craft_speed_multiplier = value
+var construction_position: Vector3:
+	get:
+		return _task_assignment.construction_position
+	set(value):
+		_task_assignment.construction_position = value
+var is_waiting_for_materials: bool:
+	get:
+		return _task_assignment.is_waiting_for_materials
+	set(value):
+		_task_assignment.is_waiting_for_materials = value
+var construction_delivery_resource: String:
+	get:
+		return _task_assignment.construction_delivery_resource
+	set(value):
+		_task_assignment.construction_delivery_resource = value
+var building_supply_kind: String:
+	get:
+		return _task_assignment.building_supply_kind
+	set(value):
+		_task_assignment.building_supply_kind = value
+var park_rest_duration: float:
+	get:
+		return _work_locations.park_rest_duration
+	set(value):
+		_work_locations.park_rest_duration = value
 var pathfinder: Callable
 var recovery_pathfinder: Callable
 var movement_speed_modifier_query: Callable
@@ -449,9 +561,21 @@ var training_days_completed: int:
 		return _employment.training_days_completed
 	set(value):
 		_employment.training_days_completed = value
-var school_position := Vector3.ZERO
-var official_position := Vector3.ZERO
-var research_position := Vector3.ZERO
+var school_position: Vector3:
+	get:
+		return _work_locations.school_position
+	set(value):
+		_work_locations.school_position = value
+var official_position: Vector3:
+	get:
+		return _work_locations.official_position
+	set(value):
+		_work_locations.official_position = value
+var research_position: Vector3:
+	get:
+		return _work_locations.research_position
+	set(value):
+		_work_locations.research_position = value
 var _arrival := CitizenArrivalStateScript.new()
 var arrival_position: Vector3:
 	get:
@@ -464,10 +588,26 @@ var pending_arrival_entrance: Vector3:
 	set(value):
 		_arrival.pending_entrance = value
 var factory: Node3D
-var factory_position := Vector3.ZERO
-var park_position := Vector3.ZERO
-var trade_source_position := Vector3.ZERO
-var trade_destination_position := Vector3.ZERO
+var factory_position: Vector3:
+	get:
+		return _work_locations.factory_position
+	set(value):
+		_work_locations.factory_position = value
+var park_position: Vector3:
+	get:
+		return _work_locations.park_position
+	set(value):
+		_work_locations.park_position = value
+var trade_source_position: Vector3:
+	get:
+		return _work_locations.trade_source_position
+	set(value):
+		_work_locations.trade_source_position = value
+var trade_destination_position: Vector3:
+	get:
+		return _work_locations.trade_destination_position
+	set(value):
+		_work_locations.trade_destination_position = value
 var status_effects: Dictionary:
 	get:
 		return _needs.status_effects
