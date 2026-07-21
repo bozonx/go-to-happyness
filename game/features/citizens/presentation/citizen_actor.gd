@@ -5,6 +5,10 @@ const CitizenStatusEffectScript = preload("res://game/features/citizens/domain/c
 const CitizenProfileScript = preload("res://game/features/citizens/domain/citizen_profile.gd")
 const CitizenEmploymentStateScript = preload("res://game/features/citizens/domain/citizen_employment_state.gd")
 const CitizenNeedsStateScript = preload("res://game/features/citizens/domain/citizen_needs_state.gd")
+const CitizenWorkPositionStateScript = preload("res://game/features/citizens/domain/citizen_work_position_state.gd")
+const CitizenAIMoveStateScript = preload("res://game/features/citizens/domain/citizen_ai_move_state.gd")
+const CitizenToiletStateScript = preload("res://game/features/citizens/domain/citizen_toilet_state.gd")
+const CitizenArrivalStateScript = preload("res://game/features/citizens/domain/citizen_arrival_state.gd")
 
 signal resource_delivered(worker: Citizen, resource_type: String, amount: int)
 signal resource_dropped(worker: Citizen, resource_type: String, amount: int)
@@ -92,15 +96,48 @@ var _pending_state_display: Array[int] = []
 
 # Work-position lock shared by FPP and AI service workers. While locked, the
 # citizen is anchored to a workplace and movement input is ignored.
-var work_position_locked := false
-var work_position_anchor := Vector3.INF
-var work_position_role := ""
+var _work_position := CitizenWorkPositionStateScript.new()
 var work_position_node: Node3D
-var work_position_temporary := true
-var work_position_target := Vector3.INF
-var _work_position_previous_state: int = State.IDLE
-var _work_position_previous_active_role := ""
-var _work_position_player_controlled := false
+var work_position_locked: bool:
+	get:
+		return _work_position.locked
+	set(value):
+		_work_position.locked = value
+var work_position_anchor: Vector3:
+	get:
+		return _work_position.anchor
+	set(value):
+		_work_position.anchor = value
+var work_position_role: String:
+	get:
+		return _work_position.role
+	set(value):
+		_work_position.role = value
+var work_position_temporary: bool:
+	get:
+		return _work_position.temporary
+	set(value):
+		_work_position.temporary = value
+var work_position_target: Vector3:
+	get:
+		return _work_position.target
+	set(value):
+		_work_position.target = value
+var _work_position_previous_state: int:
+	get:
+		return _work_position.previous_state
+	set(value):
+		_work_position.previous_state = value
+var _work_position_previous_active_role: String:
+	get:
+		return _work_position.previous_active_role
+	set(value):
+		_work_position.previous_active_role = value
+var _work_position_player_controlled: bool:
+	get:
+		return _work_position.previous_player_controlled
+	set(value):
+		_work_position.previous_player_controlled = value
 
 var resource_type := "wood"
 var gather_resource_type := ""
@@ -309,16 +346,55 @@ const TOILET_USE_DURATION := 5.0
 ## Upper bound on how long a citizen queues for an occupied toilet before giving
 ## up, so a permanently-full facility cannot freeze it until the task watchdog.
 const TOILET_WAIT_TIMEOUT := 30.0
-var toilet_timer := CitizenTaskState.new()
-var toilet_wait_time := 0.0
-var toilet_relief_position := Vector3.INF
-var toilet_relief_type := ""
-var toilet_resume_state := State.IDLE
-var has_toilet_resume_state := false
-var toilet_resume_idle_wander_anchor := Vector3.INF
-var toilet_resume_idle_wander_target := Vector3.INF
-var toilet_resume_idle_wander_pause := 0.0
-var player_using_toilet := false
+var _toilet := CitizenToiletStateScript.new()
+var toilet_timer: RefCounted:
+	get:
+		return _toilet.timer
+var toilet_wait_time: float:
+	get:
+		return _toilet.wait_time
+	set(value):
+		_toilet.wait_time = value
+var toilet_relief_position: Vector3:
+	get:
+		return _toilet.relief_position
+	set(value):
+		_toilet.relief_position = value
+var toilet_relief_type: String:
+	get:
+		return _toilet.relief_type
+	set(value):
+		_toilet.relief_type = value
+var toilet_resume_state: int:
+	get:
+		return _toilet.resume_state
+	set(value):
+		_toilet.resume_state = value
+var has_toilet_resume_state: bool:
+	get:
+		return _toilet.has_resume_state
+	set(value):
+		_toilet.has_resume_state = value
+var toilet_resume_idle_wander_anchor: Vector3:
+	get:
+		return _toilet.resume_idle_wander_anchor
+	set(value):
+		_toilet.resume_idle_wander_anchor = value
+var toilet_resume_idle_wander_target: Vector3:
+	get:
+		return _toilet.resume_idle_wander_target
+	set(value):
+		_toilet.resume_idle_wander_target = value
+var toilet_resume_idle_wander_pause: float:
+	get:
+		return _toilet.resume_idle_wander_pause
+	set(value):
+		_toilet.resume_idle_wander_pause = value
+var player_using_toilet: bool:
+	get:
+		return _toilet.player_using
+	set(value):
+		_toilet.player_using = value
 var market_position := Vector3.ZERO
 var craft_position := Vector3.ZERO
 var craft_timer := 0.0
@@ -376,8 +452,17 @@ var training_days_completed: int:
 var school_position := Vector3.ZERO
 var official_position := Vector3.ZERO
 var research_position := Vector3.ZERO
-var arrival_position := Vector3.INF
-var pending_arrival_entrance := Vector3.INF
+var _arrival := CitizenArrivalStateScript.new()
+var arrival_position: Vector3:
+	get:
+		return _arrival.position
+	set(value):
+		_arrival.position = value
+var pending_arrival_entrance: Vector3:
+	get:
+		return _arrival.pending_entrance
+	set(value):
+		_arrival.pending_entrance = value
 var factory: Node3D
 var factory_position := Vector3.ZERO
 var park_position := Vector3.ZERO
@@ -392,11 +477,32 @@ var simulation: Node
 
 # Generic AI-controlled movement target. Populated by move_to() and consumed
 # by MoveToStep via the actuator.
-var ai_move_target := Vector3.INF
-var ai_move_arrival_radius := 0.25
-var ai_move_arrived := false
-var ai_move_failed := false
-var ai_move_failure_reason := BehaviorStep.FailureReason.NONE
+var _ai_move := CitizenAIMoveStateScript.new()
+var ai_move_target: Vector3:
+	get:
+		return _ai_move.target
+	set(value):
+		_ai_move.target = value
+var ai_move_arrival_radius: float:
+	get:
+		return _ai_move.arrival_radius
+	set(value):
+		_ai_move.arrival_radius = value
+var ai_move_arrived: bool:
+	get:
+		return _ai_move.arrived
+	set(value):
+		_ai_move.arrived = value
+var ai_move_failed: bool:
+	get:
+		return _ai_move.failed
+	set(value):
+		_ai_move.failed = value
+var ai_move_failure_reason: int:
+	get:
+		return _ai_move.failure_reason
+	set(value):
+		_ai_move.failure_reason = value
 
 var idle_indicator: Label3D
 var _privacy_blur: MeshInstance3D

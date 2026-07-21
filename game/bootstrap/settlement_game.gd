@@ -44,6 +44,7 @@ const CitizenStatusEffectScript = preload("res://game/features/citizens/domain/c
 const CitizenRegistrationServiceScript = preload("res://game/features/citizens/application/citizen_registration_service.gd")
 const SchoolServiceScript = preload("res://game/features/buildings/application/school_service.gd")
 const BuildingPlacementServiceScript = preload("res://game/features/buildings/application/building_placement_service.gd")
+const BuildingVisualsServiceScript = preload("res://game/features/buildings/presentation/building_visuals_service.gd")
 const CitizenDailyOrderServiceScript = preload("res://game/features/citizens/application/citizen_daily_order_service.gd")
 const HeroPocketServiceScript = preload("res://game/features/citizens/application/hero_pocket_service.gd")
 const HeroInteractionServiceScript = preload("res://game/features/citizens/application/hero_interaction_service.gd")
@@ -666,6 +667,7 @@ var citizen_daily_order_service: RefCounted
 var hero_pocket_service: RefCounted
 var hero_interaction_service: RefCounted
 var workplace_labor_service: RefCounted
+var building_visuals_service: RefCounted
 
 
 func _ready() -> void:
@@ -675,6 +677,8 @@ func _ready() -> void:
 	hero_interaction_service.configure(self)
 	workplace_labor_service = WorkplaceLaborServiceScript.new()
 	workplace_labor_service.configure(self)
+	building_visuals_service = BuildingVisualsServiceScript.new()
+	building_visuals_service.configure(self)
 	territory_service = TerritoryServiceScript.new()
 	var summer_valley_biome := load("res://game/features/world/presentation/biomes/summer/summer_valley/summer_valley_biome.tres") as BiomeDefinition
 	var summer_plains_biome := load("res://game/features/world/presentation/biomes/summer/summer_plains/summer_plains_biome.tres") as BiomeDefinition
@@ -4557,35 +4561,12 @@ func _register_service_entrance(building: Node3D, blueprint: Dictionary, home_en
 				_add_visitor_entrance_marker(building, local)
 
 func _add_service_entrance_marker(building: Node3D, marker_local: Vector3) -> void:
-	var marker_node := EntranceMarkerScene.instantiate() as Node3D
-	marker_node.position = marker_local
-	var marker := marker_node.get_node("Marker") as MeshInstance3D
-	var marker_material := StandardMaterial3D.new()
-	marker_material.albedo_color = Color("17191c")
-	marker_material.roughness = 0.95
-	marker.material_override = marker_material
-	var sign := marker_node.get_node("Sign") as Label3D
-	sign.text = "STAFF"
-	sign.modulate = Color("e5c86b")
-	var light := marker_node.get_node("Light") as OmniLight3D
-	building.add_child(marker_node)
-	entrance_lights.append(light)
+	if building_visuals_service != null:
+		building_visuals_service.add_service_entrance_marker(building, marker_local)
 
 func _add_visitor_entrance_marker(building: Node3D, marker_local: Vector3) -> void:
-	var marker_node := EntranceMarkerScene.instantiate() as Node3D
-	marker_node.position = marker_local
-	var marker := marker_node.get_node("Marker") as MeshInstance3D
-	var marker_material := StandardMaterial3D.new()
-	marker_material.albedo_color = Color("1a3a2a")
-	marker_material.roughness = 0.95
-	marker.material_override = marker_material
-	var sign := marker_node.get_node("Sign") as Label3D
-	sign.text = "VISITOR"
-	sign.modulate = Color("7ec8a0")
-	var light := marker_node.get_node("Light") as OmniLight3D
-	light.light_color = Color("a8e6c0")
-	building.add_child(marker_node)
-	entrance_lights.append(light)
+	if building_visuals_service != null:
+		building_visuals_service.add_visitor_entrance_marker(building, marker_local)
 
 func _nearby_player_work_target() -> Node3D:
 	if player_citizen == null:
@@ -4610,15 +4591,8 @@ func _unregister_navigation_footprint(center: Vector3, footprint: Vector2i) -> v
 			service_pockets.remove_at(index)
 
 func _add_house_light(house: Node3D) -> void:
-	var light := HouseLightScene.instantiate() as OmniLight3D
-	var entrance_local := Vector3(0.0, 2.0, -house.get_meta("footprint", Vector2i(5, 5)).y * 0.5 - 0.35)
-	if house.has_meta("service_positions"):
-		var positions: Array = house.get_meta("service_positions")
-		if not positions.is_empty() and positions[0] is Vector3:
-			entrance_local = house.to_local(positions[0]) + Vector3.UP * 2.0
-	light.position = entrance_local
-	house.add_child(light)
-	house_lights.append({"light": light, "house": house, "off_minute": random.randi_range(22 * 60, 26 * 60) % (24 * 60)})
+	if building_visuals_service != null:
+		building_visuals_service.add_house_light(house)
 
 func _on_tree_harvested(worker: Citizen, position_on_board: Vector3) -> void:
 	_fell_tree_at(position_on_board)
