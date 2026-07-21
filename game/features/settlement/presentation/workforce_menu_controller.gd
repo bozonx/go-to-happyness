@@ -14,8 +14,8 @@ func show_workforce_menu() -> void:
 	if simulation == null or simulation.workforce_menu == null:
 		return
 	simulation.campfire_menu.visible = false
-	if not simulation._officer_exists():
-		simulation._update_interface(simulation._permanent_profession_block_message())
+	if not simulation.officer_exists():
+		simulation._update_interface(simulation.permanent_profession_block_message())
 		return
 	simulation.workforce_menu.visible = true
 	refresh_workforce_menu()
@@ -40,8 +40,8 @@ func refresh_campfire_occupancy_button() -> void:
 	var total := employment_resident_count()
 	var employed := employment_state_count(Citizen.EmploymentState.EMPLOYED) + employment_state_count(Citizen.EmploymentState.REGISTERING)
 	var daily_order := employment_state_count(Citizen.EmploymentState.NO_PERMANENT_WORK)
-	if not simulation._officer_exists():
-		simulation.campfire_menu.update_occupancy_button("Workers automation: assign officer", true, simulation._permanent_profession_block_message())
+	if not simulation.officer_exists():
+		simulation.campfire_menu.update_occupancy_button("Workers automation: assign officer", true, simulation.permanent_profession_block_message())
 	else:
 		simulation.campfire_menu.update_occupancy_button("Employment: %d/%d  No permanent: %d" % [employed, total, daily_order], false, "")
 
@@ -73,19 +73,19 @@ func workforce_role_label(role: String) -> String:
 
 func workforce_role_limit(role: String) -> int:
 	match role:
-		"construction": return simulation._builder_job_capacity() if simulation.settlement.era >= SettlementStateScript.Era.STONE else -1
+		"construction": return simulation.builder_job_capacity() if simulation.settlement.era >= SettlementStateScript.Era.STONE else -1
 		"forestry": return simulation.sawmill_positions.size()
 		"farming": return simulation.farm_positions.size()
-		"gather_branches": return simulation._available_employer_capacity("gather_branches")
-		"gather_food": return simulation._available_employer_capacity("gather_food")
+		"gather_branches": return simulation.available_employer_capacity("gather_branches")
+		"gather_food": return simulation.available_employer_capacity("gather_food")
 		"courier": return simulation.warehouse_positions.size()
 		"cook": return 1 if is_instance_valid(simulation.canteen) else 0
-		"official": return simulation._available_employer_capacity("official")
+		"official": return simulation.available_employer_capacity("official")
 		"teacher": return simulation.school_positions.size()
 		"seller": return simulation.market_positions.size()
-		"factory_worker": return simulation._available_employer_capacity("factory_worker")
-		"engineer": return simulation._available_employer_capacity("engineer")
-		"craftsman": return simulation._available_employer_capacity("craftsman")
+		"factory_worker": return simulation.available_employer_capacity("factory_worker")
+		"engineer": return simulation.available_employer_capacity("engineer")
+		"craftsman": return simulation.available_employer_capacity("craftsman")
 	return -1
 
 
@@ -98,7 +98,7 @@ func workforce_role_count(role: String) -> int:
 			if citizen.is_courier():
 				count += 1
 		else:
-			if simulation._work_role_for(citizen) == role:
+			if simulation.work_role_for(citizen) == role:
 				count += 1
 	return count
 
@@ -131,20 +131,20 @@ func refresh_workforce_menu() -> void:
 	var hiring := employment_state_count(Citizen.EmploymentState.REGISTERING)
 	var no_permanent_work := employment_state_count(Citizen.EmploymentState.NO_PERMANENT_WORK)
 	var unregistered := employment_state_count(Citizen.EmploymentState.UNREGISTERED)
-	var can_manage_professions: bool = simulation._player_can_manage_permanent_professions()
-	var blocked_tooltip: String = simulation._permanent_profession_block_message()
+	var can_manage_professions: bool = simulation.player_can_manage_permanent_professions()
+	var blocked_tooltip: String = simulation.permanent_profession_block_message()
 
 	var job_rows: Array[Dictionary] = []
 	var shown_jobs := 0
 	for role in workforce_roles():
 		var employed_for_role := employment_role_count(role, Citizen.EmploymentState.EMPLOYED)
 		var pending_for_role := employment_role_count(role, Citizen.EmploymentState.REGISTERING)
-		if not simulation._is_role_available(role) and employed_for_role == 0 and pending_for_role == 0:
+		if not simulation.is_role_available(role) and employed_for_role == 0 and pending_for_role == 0:
 			continue
 		var limit := workforce_role_limit(role)
 		var capacity := " / %d" % limit if limit >= 0 else ""
 		var dismiss_disabled: bool = employed + pending_for_role == 0 or not can_manage_professions
-		var assign_disabled: bool = (role != "official" and not can_manage_professions) or not simulation._is_role_available(role) or (limit >= 0 and employed_for_role + pending_for_role >= limit) or not has_assignable_resident()
+		var assign_disabled: bool = (role != "official" and not can_manage_professions) or not simulation.is_role_available(role) or (limit >= 0 and employed_for_role + pending_for_role >= limit) or not has_assignable_resident()
 		job_rows.append({
 			"label": "%s\nEmployed %d%s  Hiring %d" % [workforce_role_label(role), employed_for_role, capacity, pending_for_role],
 			"role": role,
@@ -166,7 +166,7 @@ func refresh_workforce_menu() -> void:
 	if not unregistered_residents.is_empty():
 		unregistered_header = "Unregistered residents"
 		for citizen in unregistered_residents:
-			var citizen_disabled: bool = not can_manage_professions or citizen.employment_state != Citizen.EmploymentState.UNREGISTERED or simulation._employment_center_position() == Vector3.INF
+			var citizen_disabled: bool = not can_manage_professions or citizen.employment_state != Citizen.EmploymentState.UNREGISTERED or simulation.employment_center_position() == Vector3.INF
 			unregistered_rows.append({
 				"label": "%s%s" % [citizen.role_label(), " (registering)" if citizen.employment_state == Citizen.EmploymentState.REGISTERING else ""],
 				"button_text": "Registering" if citizen.employment_state == Citizen.EmploymentState.REGISTERING else "Register",
@@ -240,8 +240,8 @@ func has_assignable_resident() -> bool:
 
 
 func remove_worker_from_role(role: String) -> void:
-	if not simulation._player_can_manage_permanent_professions():
-		simulation._show_labor_command_blocked()
+	if not simulation.player_can_manage_permanent_professions():
+		simulation.show_labor_command_blocked()
 		return
 	for citizen in simulation.citizens:
 		if citizen.is_player_controlled:
@@ -260,10 +260,10 @@ func remove_worker_from_role(role: String) -> void:
 
 
 func assign_unemployed_worker(role: String) -> void:
-	if role != "official" and not simulation._player_can_manage_permanent_professions():
-		simulation._show_labor_command_blocked()
+	if role != "official" and not simulation.player_can_manage_permanent_professions():
+		simulation.show_labor_command_blocked()
 		return
-	if not simulation._is_role_available(role):
+	if not simulation.is_role_available(role):
 		return
 	var best: Citizen = null
 	var best_score := -INF
@@ -288,8 +288,8 @@ func assign_unemployed_worker(role: String) -> void:
 
 
 func enable_auto_for_citizen(citizen: Citizen) -> void:
-	if not simulation._player_can_manage_permanent_professions():
-		simulation._show_labor_command_blocked()
+	if not simulation.player_can_manage_permanent_professions():
+		simulation.show_labor_command_blocked()
 		return
 	if not is_instance_valid(citizen) or citizen.is_player_controlled:
 		return

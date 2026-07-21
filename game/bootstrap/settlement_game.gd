@@ -2800,8 +2800,88 @@ func _assigned_count_for_role(role: String) -> int:
 	return count
 
 
-func _builder_job_capacity() -> int:
+func builder_job_capacity() -> int:
 	return _available_employer_capacity("construction")
+
+
+func available_employer_capacity(role: String) -> int:
+	return _available_employer_capacity(role)
+
+
+func officer_exists() -> bool:
+	return _officer_exists()
+
+
+func permanent_profession_block_message() -> String:
+	return _permanent_profession_block_message()
+
+
+func player_can_manage_permanent_professions() -> bool:
+	return _player_can_manage_permanent_professions()
+
+
+func show_labor_command_blocked() -> void:
+	_show_labor_command_blocked()
+
+
+func work_role_for(citizen: Citizen) -> String:
+	return _work_role_for(citizen)
+
+
+func is_role_available(role: String) -> bool:
+	return _is_role_available(role)
+
+
+func employment_center_position() -> Vector3:
+	return _employment_center_position()
+
+
+func daily_order_roles() -> Array[String]:
+	return _daily_order_roles()
+
+
+func daily_order_role_count(role: String) -> int:
+	return _daily_order_role_count(role)
+
+
+func min_era_for_role(role: String) -> int:
+	return _min_era_for_role(role)
+
+
+func is_daily_order_role_available(role: String) -> bool:
+	return _is_daily_order_role_available(role)
+
+
+func era_name() -> String:
+	return _era_name()
+
+
+func is_construction_site(building: Node3D) -> bool:
+	return _is_construction_site(building)
+
+
+func get_construction_site_data(building: Node3D) -> ConstructionSite:
+	return _get_construction_site_data(building)
+
+
+func player_can_command_labor() -> bool:
+	return _player_can_command_labor()
+
+
+func labor_command_block_message() -> String:
+	return _labor_command_block_message()
+
+
+func workforce_role_count(role: String) -> int:
+	return _workforce_role_count(role)
+
+
+func workforce_role_limit(role: String) -> int:
+	return _workforce_role_limit(role)
+
+
+func _builder_job_capacity() -> int:
+	return builder_job_capacity()
 
 
 func _employer_for_role(role: String) -> Node3D:

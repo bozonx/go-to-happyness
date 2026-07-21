@@ -18,6 +18,15 @@ func refresh_build_menu() -> void:
 	var assignment_submenu_open: bool = simulation.build_menu_is_job_menu or simulation.build_menu_is_daily_order_menu
 	var citizen_actions_visible: bool = selected_exists and not assignment_submenu_open and simulation.build_category.is_empty() and not simulation.build_menu_is_global
 
+	_refresh_citizen_skills_section(selected_exists, assignment_submenu_open, citizen_actions_visible)
+	var current_era_category: String = simulation.ERA_CATEGORIES[simulation.settlement.era]
+	_refresh_build_buttons(current_era_category, assignment_submenu_open)
+	_refresh_role_buttons(selected_exists, assignment_submenu_open)
+	_refresh_build_item_positions()
+	_refresh_build_title_label()
+
+
+func _refresh_citizen_skills_section(selected_exists: bool, assignment_submenu_open: bool, citizen_actions_visible: bool) -> void:
 	if simulation.build_menu.citizen_skills_label != null:
 		simulation.build_menu.citizen_skills_label.visible = citizen_actions_visible
 	if simulation.build_menu.manage_citizen_button != null:
@@ -42,7 +51,8 @@ func refresh_build_menu() -> void:
 	if simulation.build_menu.job_back_btn != null:
 		simulation.build_menu.job_back_btn.visible = selected_exists and assignment_submenu_open
 
-	var current_era_category: String = simulation.ERA_CATEGORIES[simulation.settlement.era]
+
+func _refresh_build_buttons(current_era_category: String, assignment_submenu_open: bool) -> void:
 	for button in simulation.build_menu.build_buttons:
 		var category_button: String = button.get_meta("category_button", "")
 		if button.get_meta("category_back", false):
@@ -75,22 +85,24 @@ func refresh_build_menu() -> void:
 			else:
 				button.visible = not simulation.build_category.is_empty() and button.get_meta("category", "") == simulation.build_category and not assignment_submenu_open and bool(menu_state.visible)
 
+
+func _refresh_role_buttons(selected_exists: bool, assignment_submenu_open: bool) -> void:
 	for button in simulation.build_menu.role_buttons:
 		var role: String = button.get_meta("role", "")
 		var hero_only: bool = button.get_meta("hero_only", false)
 		var submenu: String = button.get_meta("submenu", "job")
 		var is_daily_submenu: bool = submenu == "daily"
-		var daily_role_enabled: bool = not is_daily_submenu or role.is_empty() or role in simulation._daily_order_roles()
-		var min_era: int = simulation._min_era_for_role(role)
+		var daily_role_enabled: bool = not is_daily_submenu or role.is_empty() or role in simulation.daily_order_roles()
+		var min_era: int = simulation.min_era_for_role(role)
 		var era_ok: bool = is_daily_submenu or min_era <= simulation.settlement.era
-		var role_available: bool = simulation._is_daily_order_role_available(role) if is_daily_submenu else simulation._is_role_available(role)
+		var role_available: bool = simulation.is_daily_order_role_available(role) if is_daily_submenu else simulation.is_role_available(role)
 		button.visible = selected_exists and ((is_daily_submenu and simulation.build_menu_is_daily_order_menu) or (not is_daily_submenu and simulation.build_menu_is_job_menu)) and daily_role_enabled and era_ok and (not hero_only or simulation.selected_builder.is_hero)
-		var blocked_by_officer: bool = not is_daily_submenu and role != "official" and not simulation._player_can_manage_permanent_professions()
+		var blocked_by_officer: bool = not is_daily_submenu and role != "official" and not simulation.player_can_manage_permanent_professions()
 		button.disabled = button.visible and (blocked_by_officer or not role_available)
 		if button.disabled and not role_available:
 			button.tooltip_text = "Нет рабочего места для этой роли."
 		elif button.disabled and blocked_by_officer:
-			button.tooltip_text = simulation._permanent_profession_block_message()
+			button.tooltip_text = simulation.permanent_profession_block_message()
 		else:
 			button.tooltip_text = ""
 		if button.visible:
@@ -99,13 +111,15 @@ func refresh_build_menu() -> void:
 				button.text = base_title
 			else:
 				var skill_val := float(simulation.selected_builder.skills.get(role, 0.0))
-				var active_cnt: int = simulation._daily_order_role_count(role) if is_daily_submenu else simulation._workforce_role_count(role)
-				var limit: int = -1 if is_daily_submenu else simulation._workforce_role_limit(role)
+				var active_cnt: int = simulation.daily_order_role_count(role) if is_daily_submenu else simulation.workforce_role_count(role)
+				var limit: int = -1 if is_daily_submenu else simulation.workforce_role_limit(role)
 				var limit_str := ""
 				if limit >= 0:
 					limit_str = "/%d" % limit
 				button.text = "%s (Skill: %d%%) [%d%s]" % [base_title, roundi(skill_val * 100.0), active_cnt, limit_str]
 
+
+func _refresh_build_item_positions() -> void:
 	var row_y := 176.0
 	for button in simulation.build_menu.build_item_buttons:
 		if not button.visible:
@@ -124,6 +138,8 @@ func refresh_build_menu() -> void:
 			cost_label.text = str(menu_state.cost_text)
 			cost_label.add_theme_color_override("font_color", Color("cdd6df") if affordable else Color("d98a86"))
 
+
+func _refresh_build_title_label() -> void:
 	if simulation.build_menu.title_label != null:
 		if simulation.build_menu_is_job_menu:
 			simulation.build_menu.title_label.text = "Permanent Jobs\nRequires an employment officer. [n] = assigned residents."
@@ -132,7 +148,7 @@ func refresh_build_menu() -> void:
 		elif not simulation.build_category.is_empty():
 			simulation.build_menu.title_label.text = "%s buildings\nChoose a building to place." % simulation.build_category.capitalize()
 		elif simulation.build_menu_is_global:
-			simulation.build_menu.title_label.text = "%s Era Construction\nChoose a building to place." % simulation._era_name()
+			simulation.build_menu.title_label.text = "%s Era Construction\nChoose a building to place." % simulation.era_name()
 		else:
 			simulation._show_selected_citizen_menu()
 
@@ -144,10 +160,10 @@ func show_building_menu() -> void:
 	simulation.build_menu_is_global = false
 	simulation.building_menu.visible = true
 
-	var is_construction: bool = simulation._is_construction_site(simulation.selected_building)
+	var is_construction: bool = simulation.is_construction_site(simulation.selected_building)
 
 	if is_construction:
-		var site_data = simulation._get_construction_site_data(simulation.selected_building)
+		var site_data = simulation.get_construction_site_data(simulation.selected_building)
 		var type: String = site_data.building_type
 		var progress: float = site_data.progress
 		var builders: int = simulation._builder_count(simulation.selected_building)
@@ -176,15 +192,15 @@ func show_building_menu() -> void:
 			var cook_fuel: int = cook_fire_state.total_committed_fuel()
 			simulation.building_menu_title.text += "\nВетки: %d/%d" % [cook_fuel, simulation.FIRE_SUPPLY_TARGET]
 		simulation.building_cook_button.visible = building_type in ["cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant"]
-		var can_manage_professions: bool = simulation._player_can_manage_permanent_professions()
-		var profession_blocked_tooltip: String = simulation._permanent_profession_block_message()
+		var can_manage_professions: bool = simulation.player_can_manage_permanent_professions()
+		var profession_blocked_tooltip: String = simulation.permanent_profession_block_message()
 		var is_active_kitchen: bool = simulation.selected_building == simulation.canteen
 		simulation.building_cook_button.text = "Register selected resident as permanent cook"
 		simulation.building_cook_button.disabled = not can_manage_professions or simulation.selected_builder == null or simulation.selected_builder.is_player_controlled or not is_active_kitchen or not bool(simulation.selected_building.get_meta("accepting_workers", true))
 		if not is_active_kitchen:
 			simulation.building_cook_button.tooltip_text = "Only the active kitchen can serve meals."
 		elif simulation.building_cook_button.disabled:
-			simulation.building_cook_button.tooltip_text = simulation._permanent_profession_block_message() if not can_manage_professions else "Select a resident who is not under direct control."
+			simulation.building_cook_button.tooltip_text = simulation.permanent_profession_block_message() if not can_manage_professions else "Select a resident who is not under direct control."
 		else:
 			simulation.building_cook_button.tooltip_text = "Registers a permanent profession."
 
@@ -204,8 +220,8 @@ func show_building_menu() -> void:
 		simulation.building_upgrade_button.text = "Upgrade to %s" % str(BuildingCatalogScript.definition_for(next_upgrade).get("name", next_upgrade))
 		simulation.building_upgrade_button.disabled = not simulation.settlement.can_upgrade_building(building_type)
 		simulation.building_upgrade_button.tooltip_text = "" if not simulation.building_upgrade_button.disabled else "Research the next level and gather its resources."
-		var can_command_labor: bool = simulation._player_can_command_labor()
-		var labor_blocked_tooltip: String = simulation._labor_command_block_message()
+		var can_command_labor: bool = simulation.player_can_command_labor()
+		var labor_blocked_tooltip: String = simulation.labor_command_block_message()
 		simulation.building_accept_workers_button.disabled = not can_command_labor
 		simulation.building_accept_workers_button.tooltip_text = labor_blocked_tooltip if not can_command_labor else ""
 		simulation.building_cancel_construction_button.visible = false
