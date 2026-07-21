@@ -44,6 +44,8 @@ const CitizenStatusEffectScript = preload("res://game/features/citizens/domain/c
 const CitizenRegistrationServiceScript = preload("res://game/features/citizens/application/citizen_registration_service.gd")
 const SchoolServiceScript = preload("res://game/features/buildings/application/school_service.gd")
 const BuildingPlacementServiceScript = preload("res://game/features/buildings/application/building_placement_service.gd")
+const CitizenDailyOrderServiceScript = preload("res://game/features/citizens/application/citizen_daily_order_service.gd")
+const HeroPocketServiceScript = preload("res://game/features/citizens/application/hero_pocket_service.gd")
 const SleepGoalScript = preload("res://game/features/decision/domain/goals/sleep_goal.gd")
 const ReturnHomeWhenIdleGoalScript = preload("res://game/features/decision/domain/goals/return_home_when_idle_goal.gd")
 const MealGoalScript = preload("res://game/features/decision/domain/goals/meal_goal.gd")
@@ -396,7 +398,9 @@ var _player_toilet_notified: bool:
 	get: return player_controller.player_toilet_notified if player_controller != null else false
 	set(val):
 		if player_controller != null: player_controller.player_toilet_notified = val
-var pocket: Dictionary = {} # resource_type -> count, total limited by POCKET_CAPACITY
+var pocket: Dictionary:
+	get: return hero_pocket_service.pocket if hero_pocket_service != null else {}
+	set(val): if hero_pocket_service != null: hero_pocket_service.pocket = val
 var ui_manager: UIManager
 
 var build_toggle_btn: Button:
@@ -656,9 +660,13 @@ var territory_service: TerritoryServiceScript
 var citizen_registration_service: RefCounted
 var school_service: RefCounted
 var building_placement_service: RefCounted
+var citizen_daily_order_service: RefCounted
+var hero_pocket_service: RefCounted
 
 
 func _ready() -> void:
+	hero_pocket_service = HeroPocketServiceScript.new()
+	hero_pocket_service.configure(self)
 	territory_service = TerritoryServiceScript.new()
 	var summer_valley_biome := load("res://game/features/world/presentation/biomes/summer/summer_valley/summer_valley_biome.tres") as BiomeDefinition
 	var summer_plains_biome := load("res://game/features/world/presentation/biomes/summer/summer_plains/summer_plains_biome.tres") as BiomeDefinition
@@ -777,6 +785,8 @@ func _ready() -> void:
 	school_service.configure(self)
 	building_placement_service = BuildingPlacementServiceScript.new()
 	building_placement_service.configure(self)
+	citizen_daily_order_service = CitizenDailyOrderServiceScript.new()
+	citizen_daily_order_service.configure(self)
 
 	citizen_needs_service = CitizenNeedsService.new()
 	citizen_needs_service.configure(self)
@@ -927,64 +937,33 @@ func _update_workers() -> void:
 
 
 func daily_order_workday_for_new_order() -> int:
-	if _is_work_time() or clock.hour() < 8:
-		return day_cycle.current_day
-	return day_cycle.current_day + 1
+	return citizen_daily_order_service.daily_order_workday_for_new_order() if citizen_daily_order_service != null else day_cycle.current_day
 
 
 func daily_order_expiration_for_workday(workday_id: int) -> float:
-	var end_minute := (workday_id - 1) * SimulationClock.MINUTES_PER_DAY + (8 + _workday_hours_for(workday_id)) * 60
-	var remaining_minutes := maxi(0, end_minute - _absolute_game_minutes())
-	return runtime_seconds + float(remaining_minutes) / GAME_MINUTES_PER_SECOND
+	return citizen_daily_order_service.daily_order_expiration_for_workday(workday_id) if citizen_daily_order_service != null else 0.0
 
 
 func _workday_hours_for(workday_id: int) -> int:
-	if settlement.pending_workday_hours > 0 and (workday_id > day_cycle.current_day or (workday_id == day_cycle.current_day and clock.hour() < 8)):
-		return settlement.pending_workday_hours
-	return settlement.workday_hours
+	return citizen_daily_order_service.workday_hours_for(workday_id) if citizen_daily_order_service != null else settlement.workday_hours
 
 
 func _activate_citizen_overtime(citizen: Citizen, source: String) -> bool:
-	if not is_instance_valid(citizen):
-		return false
-	if not citizen.activate_overtime(day_cycle.current_day + 1, source, day_cycle.current_day):
-		return false
-	if citizen.has_daily_order():
-		# A daily order becomes a two-workday order only through this explicit
-		# command. Its board expiration must match the resident overtime window.
-		if citizen.daily_order_workday_id > day_cycle.current_day:
-			citizen.daily_order_workday_id = day_cycle.current_day
-		citizen.daily_order_expires_at = daily_order_expiration_for_workday(day_cycle.current_day + 1)
-	return true
+	return citizen_daily_order_service.activate_citizen_overtime(citizen, source) if citizen_daily_order_service != null else false
 
 
 func is_daily_order_active(citizen: Citizen) -> bool:
-	return (
-		is_instance_valid(citizen)
-		and citizen.daily_order_workday_id == day_cycle.current_day
-		and _is_citizen_work_time(citizen)
-	)
+	return citizen_daily_order_service.is_daily_order_active(citizen) if citizen_daily_order_service != null else false
 
 
 func _assign_daily_order(citizen: Citizen, role: String) -> void:
-	if not is_instance_valid(citizen) or citizen.is_player_controlled:
-		return
-	var workday_id := daily_order_workday_for_new_order()
-	citizen.assign_daily_order(role, workday_id, daily_order_expiration_for_workday(workday_id))
-	if citizen_ai != null:
-		citizen_ai.request_decision_refresh()
+	if citizen_daily_order_service != null:
+		citizen_daily_order_service.assign_daily_order(citizen, role)
 
 
 func _clear_daily_orders(workday_id := 0) -> void:
-	var changed := false
-	for citizen in citizens:
-		if not is_instance_valid(citizen):
-			continue
-		if citizen.has_daily_order():
-			citizen.clear_daily_order(workday_id)
-			changed = true
-	if changed and citizen_ai != null:
-		citizen_ai.request_decision_refresh()
+	if citizen_daily_order_service != null:
+		citizen_daily_order_service.clear_daily_orders(workday_id)
 
 func _guard_citizen_positions() -> void:
 	if not is_instance_valid(entrance_stone):

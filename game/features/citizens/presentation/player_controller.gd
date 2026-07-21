@@ -13,7 +13,7 @@ const HARVEST_DURATION := 2.0
 const HERO_GATHER_YIELD := 3
 
 var simulation: Node
-var _target_resolver: PlayerInteractionTargetResolver
+var _target_resolver: PlayerInteractionTargetResolverScript
 
 var is_first_person := false
 var player_citizen: Citizen
