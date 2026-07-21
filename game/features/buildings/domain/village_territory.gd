@@ -9,18 +9,18 @@ extends RefCounted
 ## fixed radius from the campfire.
 
 const CAMPFIRE_RADII := {
-	"campfire": 12.0,
-	"campfire_lvl2": 14.0,
-	"campfire_lvl3": 16.0,
-	"earth_assembly": 18.0,
-	"clay_lodge": 20.0,
-	"wood_town_hall": 22.0,
-	"stone_prefecture": 24.0,
-	"brick_city_hall": 26.0,
+	"campfire": 48.0,
+	"campfire_lvl2": 56.0,
+	"campfire_lvl3": 64.0,
+	"earth_assembly": 72.0,
+	"clay_lodge": 80.0,
+	"wood_town_hall": 88.0,
+	"stone_prefecture": 96.0,
+	"brick_city_hall": 104.0,
 }
 
-const HOUSE_RADIUS := 8.0
-const POST_RADIUS := 5.0
+const HOUSE_RADIUS := 32.0
+const POST_RADIUS := 20.0
 
 const CAMPFIRE_TYPES: Array[String] = [
 	"campfire", "campfire_lvl2", "campfire_lvl3",

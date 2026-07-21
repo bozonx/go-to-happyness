@@ -302,7 +302,7 @@ func start_interaction(all: bool) -> void:
 			return
 		"tree":
 			var gathering_branches: bool = int(simulation.settlement.era) < int(SettlementState.Era.WOOD)
-			if not gathering_branches and not simulation._pocket_has_room():
+			if not simulation._pocket_has_room():
 				simulation._update_interface("Карман полон. Дерево — на лесопилку, еду — на склад.")
 				return
 			interaction_action = "harvesting"
