@@ -38,7 +38,15 @@ func territory() -> RefCounted:
 
 
 func has_flag() -> bool:
-	return _territory.has_flag()
+	if _territory.has_flag():
+		return true
+	if _building_registry != null:
+		for record in _building_registry.records():
+			if is_instance_valid(record.node):
+				var b_type := str(record.node.get_meta("building_type", ""))
+				if BuildingCatalog.is_flag(b_type):
+					return true
+	return false
 
 
 func has_campfire() -> bool:
@@ -62,6 +70,8 @@ func placement_reason(building_type: String, cell: Vector2i, footprint := Vector
 		return REASON_FOREIGN_TERRITORY
 
 	if BuildingCatalog.is_flag(building_type):
+		if has_flag():
+			return REASON_CAMPFIRE_LIMIT
 		if _anchor_overlaps_foreign(cell, building_type):
 			return REASON_FOREIGN_TERRITORY
 		return REASON_OK
@@ -111,7 +121,7 @@ func placement_message(reason: StringName) -> String:
 		REASON_NO_CAMPFIRE:
 			return "Build a campfire first."
 		REASON_CAMPFIRE_LIMIT:
-			return "Campfire limit reached for this era."
+			return "Limit reached for this era."
 		REASON_FOREIGN_TERRITORY:
 			return "Foreign settlement territory."
 		_:
@@ -128,13 +138,15 @@ func recalculate() -> void:
 		if building_type.is_empty():
 			continue
 		if BuildingCatalog.expands_village_area(building_type) or BuildingCatalog.is_campfire(building_type):
-			_territory.add_anchor(record.cell, building_type)
+			_territory.add_anchor(record.cell, building_type, record.footprint)
 
 
 ## Called when a building is completed (node attached and metas set).
 func on_building_added(cell: Vector2i, building_type: String) -> void:
 	if BuildingCatalog.expands_village_area(building_type) or BuildingCatalog.is_campfire(building_type):
-		_territory.add_anchor(cell, building_type)
+		var record := _building_registry.record_at_cell(cell) if _building_registry != null else null
+		var footprint := record.footprint if record != null else Vector2i.ONE
+		_territory.add_anchor(cell, building_type, footprint)
 
 
 ## Called when a building is demolished.

@@ -61,10 +61,14 @@ func refresh_build_menu() -> void:
 				if build_type != "settlement_flag":
 					menu_state["enabled"] = false
 					menu_state["reason"] = simulation.village_territory_service.REASON_NO_FLAG
-			elif not has_campfire:
-				if build_type != "campfire" and build_type != "warehouse" and build_type != "settlement_flag":
+			else:
+				if build_type == "settlement_flag":
+					menu_state["visible"] = false
 					menu_state["enabled"] = false
-					menu_state["reason"] = simulation.village_territory_service.REASON_NO_CAMPFIRE
+				elif not has_campfire:
+					if build_type != "campfire" and build_type != "warehouse":
+						menu_state["enabled"] = false
+						menu_state["reason"] = simulation.village_territory_service.REASON_NO_CAMPFIRE
 			button.set_meta("build_menu_state", menu_state)
 			if simulation.build_menu_is_global and simulation.build_category.is_empty():
 				button.visible = not assignment_submenu_open and button.get_meta("category", "") == current_era_category and bool(menu_state.visible)

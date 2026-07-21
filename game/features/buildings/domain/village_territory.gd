@@ -8,20 +8,7 @@ extends RefCounted
 ## placement checks go through this model — there is no longer a simple
 ## fixed radius from the campfire.
 
-const CAMPFIRE_RADII := {
-	"campfire": 48.0,
-	"campfire_lvl2": 56.0,
-	"campfire_lvl3": 64.0,
-	"earth_assembly": 72.0,
-	"clay_lodge": 80.0,
-	"wood_town_hall": 88.0,
-	"stone_prefecture": 96.0,
-	"brick_city_hall": 104.0,
-}
-
-const FLAG_RADIUS := 32.0
-const HOUSE_RADIUS := 32.0
-const POST_RADIUS := 20.0
+const BUILDING_RADIUS := 16.0
 
 const FLAG_TYPES: Array[String] = ["settlement_flag"]
 
@@ -47,19 +34,21 @@ class TerritoryAnchor:
 	var cell: Vector2i
 	var radius: float
 	var building_type: String
+	var footprint: Vector2i
 
-	func _init(p_cell: Vector2i, p_radius: float, p_building_type: String) -> void:
+	func _init(p_cell: Vector2i, p_radius: float, p_building_type: String, p_footprint := Vector2i.ONE) -> void:
 		cell = p_cell
 		radius = p_radius
 		building_type = p_building_type
+		footprint = p_footprint
 
 
 var _anchors: Array[TerritoryAnchor] = []
 var _cells: Dictionary = {}
 
 
-static func campfire_radius_for(building_type: String) -> float:
-	return CAMPFIRE_RADII.get(building_type, CAMPFIRE_RADII["campfire"])
+static func campfire_radius_for(_building_type: String) -> float:
+	return BUILDING_RADIUS
 
 
 static func campfire_limit_for_era(era: int) -> int:
@@ -85,22 +74,16 @@ static func is_boundary_post_type(building_type: String) -> bool:
 
 
 static func anchor_radius_for(building_type: String) -> float:
-	if is_flag_type(building_type):
-		return FLAG_RADIUS
-	if is_campfire_type(building_type):
-		return campfire_radius_for(building_type)
-	if is_housing_type(building_type):
-		return HOUSE_RADIUS
-	if is_boundary_post_type(building_type):
-		return POST_RADIUS
+	if is_flag_type(building_type) or is_campfire_type(building_type) or is_housing_type(building_type) or is_boundary_post_type(building_type):
+		return BUILDING_RADIUS
 	return 0.0
 
 
-func add_anchor(cell: Vector2i, building_type: String) -> void:
+func add_anchor(cell: Vector2i, building_type: String, footprint := Vector2i.ONE) -> void:
 	var radius := anchor_radius_for(building_type)
 	if radius <= 0.0:
 		return
-	_anchors.append(TerritoryAnchor.new(cell, radius, building_type))
+	_anchors.append(TerritoryAnchor.new(cell, radius, building_type, footprint))
 	_recalculate()
 
 
@@ -130,11 +113,11 @@ func cells() -> Dictionary:
 
 ## Returns whether the area contributed by a prospective anchor intersects
 ## another territory. Used before committing an expanding building.
-func anchor_overlaps_cells(cell: Vector2i, building_type: String, other_cells: Dictionary) -> bool:
+func anchor_overlaps_cells(cell: Vector2i, building_type: String, other_cells: Dictionary, footprint := Vector2i.ONE) -> bool:
 	var radius := anchor_radius_for(building_type)
 	if radius <= 0.0:
 		return false
-	for candidate in _circle_cells(cell, radius):
+	for candidate in _circle_cells(cell, radius, footprint):
 		if other_cells.has(candidate):
 			return true
 	return false
@@ -188,22 +171,28 @@ func _recalculate() -> void:
 		return
 	for anchor in _anchors:
 		if campfire_exists or is_flag_type(anchor.building_type):
-			_add_circle(anchor.cell, anchor.radius)
+			_add_circle(anchor.cell, anchor.radius, anchor.footprint)
 
 
-func _add_circle(center_cell: Vector2i, radius: float) -> void:
-	for cell in _circle_cells(center_cell, radius):
+func _add_circle(center_cell: Vector2i, radius: float, footprint := Vector2i.ONE) -> void:
+	for cell in _circle_cells(center_cell, radius, footprint):
 		_cells[cell] = true
 
 
-func _circle_cells(center_cell: Vector2i, radius: float) -> Array[Vector2i]:
+func _circle_cells(center_cell: Vector2i, radius: float, footprint := Vector2i.ONE) -> Array[Vector2i]:
 	var result: Array[Vector2i] = []
-	var cell_radius := ceili(radius)
-	var center := Vector3(center_cell.x + 0.5, 0.0, center_cell.y + 0.5)
-	for x in range(center_cell.x - cell_radius, center_cell.x + cell_radius + 1):
-		for z in range(center_cell.y - cell_radius, center_cell.y + cell_radius + 1):
-			var cell := Vector2i(x, z)
-			var cell_center := Vector3(x + 0.5, 0.0, z + 0.5)
-			if cell_center.distance_to(center) <= radius:
-				result.append(cell)
+	var min_x := center_cell.x - floori((footprint.x - 1) * 0.5)
+	var max_x := min_x + footprint.x - 1
+	var min_z := center_cell.y - floori((footprint.y - 1) * 0.5)
+	var max_z := min_z + footprint.y - 1
+
+	var r_ceil := ceili(radius)
+	for x in range(min_x - r_ceil, max_x + r_ceil + 1):
+		for z in range(min_z - r_ceil, max_z + r_ceil + 1):
+			var closest_x := clampi(x, min_x, max_x)
+			var closest_z := clampi(z, min_z, max_z)
+			var dx := float(x - closest_x)
+			var dz := float(z - closest_z)
+			if sqrt(dx * dx + dz * dz) <= radius:
+				result.append(Vector2i(x, z))
 	return result

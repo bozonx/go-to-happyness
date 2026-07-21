@@ -332,6 +332,13 @@ static func _test_flag_and_campfire_progression_flow() -> void:
 	assert(territory_service.has_flag())
 	assert(not territory_service.has_campfire())
 
+	# Second flag is blocked (only 1 flag allowed).
+	assert(territory_service.placement_reason("settlement_flag", Vector2i(10, 10)) == VillageTerritoryService.REASON_CAMPFIRE_LIMIT)
+
+	# 16-block radius check from (0,0): (16,0) is inside, (17,0) is outside.
+	assert(territory_service.territory().is_inside(Vector2i(16, 0)))
+	assert(not territory_service.territory().is_inside(Vector2i(17, 0)))
+
 	# Inside flag territory: campfire and warehouse allowed.
 	assert(territory_service.placement_reason("campfire", Vector2i(1, 1)) == VillageTerritoryService.REASON_OK)
 	assert(territory_service.placement_reason("warehouse", Vector2i(1, 1)) == VillageTerritoryService.REASON_OK)
