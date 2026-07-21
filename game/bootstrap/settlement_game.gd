@@ -13,6 +13,11 @@ const GatheringPlaceVisualScene = preload("res://game/features/buildings/present
 const PocketTakeItemRowScene = preload("res://game/features/citizens/presentation/pocket_take_item_row.tscn")
 const TentEraSurvivalRulesScript = preload("res://game/features/settlement/domain/tent_era_survival_rules.gd")
 const CampfireMenuControllerScript = preload("res://game/features/settlement/presentation/campfire_menu_controller.gd")
+const WorkforceMenuControllerScript = preload("res://game/features/settlement/presentation/workforce_menu_controller.gd")
+const ResearchMenuControllerScript = preload("res://game/features/buildings/presentation/research_menu_controller.gd")
+const SchoolMenuControllerScript = preload("res://game/features/buildings/presentation/school_menu_controller.gd")
+const EntranceMenuControllerScript = preload("res://game/features/buildings/presentation/entrance_menu_controller.gd")
+const HouseMenuControllerScript = preload("res://game/features/buildings/presentation/house_menu_controller.gd")
 const FireSourceStateScript = preload("res://game/features/settlement/domain/fire_source_state.gd")
 const CourierDispatcherScript = preload("res://game/features/logistics/application/courier_dispatcher.gd")
 const CourierTaskServiceScript = preload("res://game/features/logistics/application/courier_task_service.gd")
@@ -610,6 +615,11 @@ var courier_dispatcher: RefCounted
 var courier_task_publisher: RefCounted
 var courier_task_service: CourierTaskServiceScript
 var campfire_menu_controller: RefCounted
+var workforce_menu_controller: RefCounted
+var research_menu_controller: RefCounted
+var school_menu_controller: RefCounted
+var entrance_menu_controller: RefCounted
+var house_menu_controller: RefCounted
 var market_menu_controller: RefCounted
 var building_menu_controller: RefCounted
 var first_person_hud_controller: RefCounted
@@ -763,6 +773,16 @@ func _ready() -> void:
 	courier_task_service.configure(self)
 	campfire_menu_controller = CampfireMenuControllerScript.new()
 	campfire_menu_controller.configure(self)
+	workforce_menu_controller = WorkforceMenuControllerScript.new()
+	workforce_menu_controller.configure(self)
+	research_menu_controller = ResearchMenuControllerScript.new()
+	research_menu_controller.configure(self)
+	school_menu_controller = SchoolMenuControllerScript.new()
+	school_menu_controller.configure(self)
+	entrance_menu_controller = EntranceMenuControllerScript.new()
+	entrance_menu_controller.configure(self)
+	house_menu_controller = HouseMenuControllerScript.new()
+	house_menu_controller.configure(self)
 	market_menu_controller = MarketMenuControllerScript.new()
 	market_menu_controller.configure(self)
 	building_menu_controller = BuildingMenuControllerScript.new()
@@ -2527,101 +2547,40 @@ func _set_time_multiplier(multiplier: float) -> void:
 	_update_interface("Simulation speed set to x%d." % int(multiplier))
 
 func _toggle_school_development(role: String, pressed: bool) -> void:
-	if not _player_can_manage_permanent_professions():
-		_show_labor_command_blocked()
-		return
-	school_developed_professions[role] = pressed
-	if pressed:
-		_update_interface("School developed: all %ss will train in mornings." % role.capitalize())
-	else:
-		_update_interface("Stopped school training for %ss." % role.capitalize())
+	if school_menu_controller != null:
+		school_menu_controller.toggle_school_development(role, pressed)
 
 func _start_school_training(role: String) -> void:
-	if not _player_can_manage_permanent_professions():
-		_show_labor_command_blocked()
-		return
-	if selected_builder == null or selected_school == null:
-		return
-	selected_builder.start_training(role, selected_school.global_position)
-	school_menu.visible = false
-	_update_interface("Training started: 10 mornings in school, then regular work.")
+	if school_menu_controller != null:
+		school_menu_controller.start_school_training(role)
 
 func _show_school_menu() -> void:
-	if selected_school == null:
-		return
-	build_menu.visible = false
-	build_menu_is_global = false
-	house_menu.visible = false
-	building_menu.visible = false
-	
-	var student_label := selected_builder.role_label() if selected_builder != null else ""
-	var can_manage := _player_can_manage_permanent_professions()
-	var block_tooltip := _permanent_profession_block_message()
-	
-	school_menu.update_state(student_label, can_manage, block_tooltip, school_developed_professions)
-	school_menu.visible = true
-	_update_interface("School selected: configure morning study and retraining here.")
+	if school_menu_controller != null:
+		school_menu_controller.show_school_menu()
 
 func _show_entrance_menu() -> void:
-	if not is_instance_valid(selected_entrance):
-		return
-	var resident_name := selected_builder.role_label() if is_instance_valid(selected_builder) else "no resident selected"
-	entrance_menu_title.text = "Entrance sign\nEmergency orders. Outside work: %s" % resident_name
-	if is_instance_valid(entrance_work_button):
-		entrance_work_button.tooltip_text = "Requires a Courier. The resident leaves for one full day and returns with %s coins." % _outside_work_reward_text()
-	if entrance_highlight != null:
-		entrance_highlight.visible = true
-	entrance_menu.visible = true
+	if entrance_menu_controller != null:
+		entrance_menu_controller.show_entrance_menu()
 
 
 func _show_entrance_order_modal() -> void:
-	entrance_menu.visible = false
-	entrance_order_modal.visible = true
-	_update_entrance_order_total()
+	if entrance_menu_controller != null:
+		entrance_menu_controller.show_entrance_order_modal()
 
 
 func _hide_entrance_order_modal() -> void:
-	entrance_order_modal.visible = false
-	entrance_menu.visible = true
+	if entrance_menu_controller != null:
+		entrance_menu_controller.hide_entrance_order_modal()
 
 
 func _update_entrance_order_total(_value := 0.0) -> void:
-	var total := (
-		int(entrance_order_food_spin.value) * FOOD_PURCHASE_PRICE
-		+ int(entrance_order_water_spin.value) * ENTRANCE_WATER_PRICE
-		+ int(entrance_order_gloves_spin.value) * ENTRANCE_GLOVE_PRICE
-		+ int(entrance_order_bucket_spin.value) * ENTRANCE_BUCKET_PRICE
-	)
-	var available := trade_service.available_trade_money()
-	entrance_order_total_label.text = "Total: %d / %d coins" % [total, available]
+	if entrance_menu_controller != null:
+		entrance_menu_controller.update_entrance_order_total(_value)
 
 
 func _send_entrance_order() -> void:
-	var food := int(entrance_order_food_spin.value)
-	var water := int(entrance_order_water_spin.value)
-	var gloves := int(entrance_order_gloves_spin.value)
-	var bucket := int(entrance_order_bucket_spin.value)
-	var total := (
-		food * FOOD_PURCHASE_PRICE
-		+ water * ENTRANCE_WATER_PRICE
-		+ gloves * ENTRANCE_GLOVE_PRICE
-		+ bucket * ENTRANCE_BUCKET_PRICE
-	)
-	if total <= 0:
-		return
-	if total > trade_service.available_trade_money():
-		_update_interface("Not enough available coins for this order.")
-		return
-	if food > 0:
-		trade_service.buy_entrance_food(food, FOOD_PURCHASE_PRICE)
-	for _i in range(gloves):
-		trade_service.buy_entrance_gloves(ENTRANCE_GLOVE_PRICE)
-	if water > 0:
-		trade_service.buy_entrance_resource("water", water, ENTRANCE_WATER_PRICE)
-	for _i in range(bucket):
-		trade_service.buy_entrance_tool("bucket", ENTRANCE_BUCKET_PRICE)
-	_update_interface("Entrance order placed: %d food, %d water, %d gloves, %d buckets." % [food, water, gloves, bucket])
-	_hide_entrance_order_modal()
+	if entrance_menu_controller != null:
+		entrance_menu_controller.send_entrance_order()
 
 func _outside_work_reward() -> int:
 	if settlement != null and settlement.is_research_completed("outside_work_earnings"):
@@ -2630,9 +2589,9 @@ func _outside_work_reward() -> int:
 
 
 func _outside_work_reward_text() -> String:
-	if settlement != null and settlement.is_research_completed("outside_work_earnings"):
-		return "%d" % OUTSIDE_WORK_UPGRADE_REWARD
-	return "%d-%d" % [OUTSIDE_WORK_BASE_REWARD_MIN, OUTSIDE_WORK_BASE_REWARD_MAX]
+	if entrance_menu_controller != null:
+		return entrance_menu_controller.outside_work_reward_text()
+	return ""
 
 
 func _send_selected_resident_to_outside_work() -> void:
@@ -2767,84 +2726,29 @@ func _update_building_research(delta: float) -> void:
 			_refresh_research_menu()
 
 func _show_research_menu() -> void:
-	if research_menu == null:
-		return
-	campfire_menu.visible = false
-	research_menu.visible = true
-	_refresh_research_menu()
+	if research_menu_controller != null:
+		research_menu_controller.show_research_menu()
 
 func _hide_research_menu() -> void:
-	if research_menu != null:
-		research_menu.visible = false
-	campfire_menu.visible = true
+	if research_menu_controller != null:
+		research_menu_controller.hide_research_menu()
 
 func _get_available_researcher(_required_skill: String) -> Citizen:
-	# Research starts only from the civic post. It can be occupied manually in
-	# FPP or by an NPC working under the daily researcher order.
-	for citizen in citizens:
-		if citizen.work_position_locked and citizen.work_position_role in ["researcher", "official"]:
-			if is_instance_valid(citizen.work_position_node) and citizen.work_position_node == campfire_node:
-				return citizen
-		if citizen.permanent_role == "official" and citizen.employment_workplace == campfire_node and citizen.state == Citizen.State.OFFICIAL_WORK:
-			return citizen
-		if citizen.has_active_daily_order() and citizen.daily_order_role == "researcher" and citizen.state == Citizen.State.RESEARCHING:
-			return citizen
+	if research_menu_controller != null:
+		return research_menu_controller.get_available_researcher(_required_skill)
 	return null
 
 func _refresh_research_menu() -> void:
-	if research_menu == null:
-		return
-	var tech_rows: Array[Dictionary] = []
-	for tech_id in building_research_service.visible_tech_ids():
-		var tech: Dictionary = BuildingCatalog.RESEARCH_TECHS[tech_id]
-		var researcher := _get_available_researcher(str(tech.get("required_skill", "construction")))
-		var research_state: Dictionary = building_research_service.menu_state(tech_id, researcher != null)
-		var effect_str: String = str(tech.get("effect", ""))
-		tech_rows.append({
-			"title": "%s (%s)" % [tech.name, research_state.cost_text],
-			"description": "Duration: %ds | Skill: %s%s" % [int(research_state.duration), str(research_state.required_skill).capitalize(), " | %s" % effect_str if not effect_str.is_empty() else ""],
-			"completed": bool(research_state.completed),
-			"active": bool(research_state.active),
-			"progress_pct": int(research_state.progress_pct),
-			"can_start": bool(research_state.can_start),
-			"tooltip": building_research_service.message_for_reason(research_state.reason) if not bool(research_state.can_start) else "",
-			"tech_id": tech_id,
-		})
-	research_menu.update_state({"title_text": "Research (Campfire)", "tech_rows": tech_rows})
+	if research_menu_controller != null:
+		research_menu_controller.refresh_research_menu()
 
 func _start_research(tech_id: String) -> void:
-	if not BuildingCatalog.RESEARCH_TECHS.has(tech_id):
-		return
-	var tech: Dictionary = BuildingCatalog.RESEARCH_TECHS[tech_id]
-	if settlement.active_research_tech_id != "":
-		_update_interface("Already researching another technology.")
-		return
-	if not is_instance_valid(campfire_node) or not _is_fire_lit(campfire_node):
-		_update_interface("Research requires an active Campfire.")
-		return
-		
-	var researcher := _get_available_researcher(tech.required_skill)
-	if researcher == null:
-		_update_interface("Assign a researcher to the civic post or occupy it in first person.")
-		return
-		
-	if building_research_service.start_block_reason(tech_id, true) != BuildingResearchServiceScript.REASON_OK:
-		_update_interface("Research prerequisites or resources are missing.")
-		return
-	if not building_research_service.start_research(tech_id, researcher.ai_id):
-		_update_interface("Research prerequisites or resources are missing.")
-		return
-	
-	_update_interface("Research started: %s. %s is studying at the Campfire." % [tech.name, researcher.role_label()])
-	_refresh_research_menu()
-	_refresh_campfire_menu()
+	if research_menu_controller != null:
+		research_menu_controller.start_research(tech_id)
 
 func _cancel_research() -> void:
-	if settlement.active_research_tech_id == "":
-		return
-	_cancel_active_building_research(true, "Research cancelled. Resources refunded.")
-	_refresh_research_menu()
-	_refresh_campfire_menu()
+	if research_menu_controller != null:
+		research_menu_controller.cancel_research()
 
 
 func _cancel_active_building_research(refund: bool, message: String) -> void:
@@ -2915,44 +2819,8 @@ func _settle_unhoused_resident() -> void:
 	citizen_lifecycle_service.settle_unhoused_resident()
 
 func _show_house_menu() -> void:
-	if selected_house == null:
-		return
-	var slots: int = selected_house.get_meta("spawn_slots", 0)
-	house_menu.visible = true
-	var capacity: int = int(selected_house.get_meta("housing_capacity", HOUSE_CAPACITY))
-	var building_type: String = selected_house.get_meta("building_type", "house")
-	var is_tent: bool = selected_house.has_meta("is_tent")
-	var home_name := "Соломенная палатка" if building_type == "straw_tent" else ("Брезентовая палатка" if building_type == "tarp_tent" else ("Палатка" if building_type == "tent" else "House"))
-	var unhoused := _unhoused_citizen_count()
-	var residents := capacity - slots
-	if is_tent:
-		house_menu_title.text = "%s\nResidents: %d/%d" % [home_name, residents, capacity]
-	else:
-		house_menu_title.text = "%s\nFree beds: %d/%d  Unhoused: %d" % [home_name, slots, capacity, unhoused]
-	if house_spawn_button != null:
-		var pending_demolition := bool(selected_house.get_meta("pending_demolition", false))
-		if is_tent:
-			var ordered_today := int(selected_house.get_meta("tent_order_day", -1)) == day_cycle.current_day
-			house_spawn_button.disabled = slots <= 0 or ordered_today or pending_demolition
-			house_spawn_button.text = "Already ordered today" if ordered_today else ("No free beds" if slots <= 0 else "Order a resident")
-		else:
-			house_spawn_button.disabled = slots <= 0 or unhoused > 0 or pending_demolition
-			house_spawn_button.text = "House the initial residents first" if unhoused > 0 else ("No free beds" if slots <= 0 else "Order a resident")
-	var settle_button := house_menu.get_node_or_null("SettleUnhoused") as Button
-	if settle_button == null:
-		settle_button = Button.new()
-		settle_button.name = "SettleUnhoused"
-		settle_button.position = Vector2(16, 102)
-		settle_button.size = Vector2(272, 30)
-		settle_button.pressed.connect(_settle_unhoused_resident)
-		house_menu.add_child(settle_button)
-	if is_tent:
-		settle_button.visible = false
-		settle_button.disabled = true
-	else:
-		settle_button.visible = true
-		settle_button.text = "Settle unhoused resident"
-		settle_button.disabled = slots <= 0 or unhoused <= 0 or bool(selected_house.get_meta("pending_demolition", false))
+	if house_menu_controller != null:
+		house_menu_controller.show_house_menu()
 
 func _unhoused_citizen_count() -> int:
 	return citizen_lifecycle_service.unhoused_citizen_count()
@@ -5317,288 +5185,121 @@ func _toggle_selected_citizen_night_work(checked: bool) -> void:
 
 
 func _show_workforce_menu() -> void:
-	if workforce_menu == null:
-		return
-	campfire_menu.visible = false
-	if not _officer_exists():
-		_update_interface(_permanent_profession_block_message())
-		return
-	workforce_menu.visible = true
-	_refresh_workforce_menu()
+	if workforce_menu_controller != null:
+		workforce_menu_controller.show_workforce_menu()
 
 
 func _hide_workforce_menu() -> void:
-	if workforce_menu != null:
-		workforce_menu.visible = false
+	if workforce_menu_controller != null:
+		workforce_menu_controller.hide_workforce_menu()
 
 
 func _close_workforce_menu() -> void:
-	_hide_workforce_menu()
-	campfire_menu.visible = true
+	if workforce_menu_controller != null:
+		workforce_menu_controller.close_workforce_menu()
 
 
 func _refresh_campfire_occupancy_button() -> void:
-	if campfire_menu == null:
-		return
-	var total := _employment_resident_count()
-	var employed := _employment_state_count(Citizen.EmploymentState.EMPLOYED) + _employment_state_count(Citizen.EmploymentState.REGISTERING)
-	var daily_order := _employment_state_count(Citizen.EmploymentState.NO_PERMANENT_WORK)
-	if not _officer_exists():
-		campfire_menu.update_occupancy_button("Workers automation: assign officer", true, _permanent_profession_block_message())
-	else:
-		campfire_menu.update_occupancy_button("Employment: %d/%d  No permanent: %d" % [employed, total, daily_order], false, "")
+	if workforce_menu_controller != null:
+		workforce_menu_controller.refresh_campfire_occupancy_button()
 
 
 func _workforce_roles() -> Array[String]:
-	return ["construction", "forestry", "farming", "excavation", "gather_branches", "gather_food", "courier", "cook", "teacher", "seller", "official", "factory_worker", "engineer", "craftsman"]
+	if workforce_menu_controller != null:
+		return workforce_menu_controller.workforce_roles()
+	return []
 
 
 func _daily_order_roles() -> Array[String]:
-	var roles := ["courier", "construction", "gather_branches", "gather_grass", "gather_water", "cleaning", "cook"]
-	if not settlement.is_research_completed("official"):
-		roles.append("researcher")
-	return roles
+	if workforce_menu_controller != null:
+		return workforce_menu_controller.daily_order_roles()
+	return []
 
 
 func _workforce_role_label(role: String) -> String:
-	var labels := {
-		"construction": "Construction", "forestry": "Forestry", "farming": "Farming",
-		"excavation": "Excavation", "gather_branches": "Gather branches",
-		"gather_grass": "Gather grass", "gather_food": "Foraging",
-		"gather_water": "Collect water", "cleaning": "Cleaning",
-		"cook": "Cook", "researcher": "Researcher", "teacher": "Teacher", "seller": "Seller", "official": "Employment officer",
-		"factory_worker": "Factory worker", "engineer": "Engineer",
-		"courier": "Courier", "craftsman": "Craftsman"
-	}
-	return str(labels.get(role, role.replace("_", " ").capitalize()))
+	if workforce_menu_controller != null:
+		return workforce_menu_controller.workforce_role_label(role)
+	return role
 
 
 func _workforce_role_limit(role: String) -> int:
-	match role:
-		"construction": return _builder_job_capacity() if settlement.era >= SettlementState.Era.STONE else -1
-		"forestry": return sawmill_positions.size()
-		"farming": return farm_positions.size()
-		"gather_branches": return _available_employer_capacity("gather_branches")
-		"gather_food": return _available_employer_capacity("gather_food")
-		"courier": return warehouse_positions.size()
-		"cook": return 1 if is_instance_valid(canteen) else 0
-		"official": return _available_employer_capacity("official")
-		"teacher": return school_positions.size()
-		"seller": return market_positions.size()
-		"factory_worker": return _available_employer_capacity("factory_worker")
-		"engineer": return _available_employer_capacity("engineer")
-		"craftsman": return _available_employer_capacity("craftsman")
+	if workforce_menu_controller != null:
+		return workforce_menu_controller.workforce_role_limit(role)
 	return -1
 
 
 func _workforce_role_count(role: String) -> int:
-	var count := 0
-	for citizen in citizens:
-		if citizen.is_player_controlled:
-			continue
-		if role == "courier":
-			if citizen.is_courier():
-				count += 1
-		else:
-			if _work_role_for(citizen) == role:
-				count += 1
-	return count
+	if workforce_menu_controller != null:
+		return workforce_menu_controller.workforce_role_count(role)
+	return 0
 
 
 func _manually_assigned_count(role: String) -> int:
-	var count := 0
-	for citizen in citizens:
-		if not citizen.is_player_controlled:
-			if role == "courier" and citizen.is_courier():
-				count += 1
-			elif citizen.daily_order_role == role:
-				count += 1
-	return count
+	if workforce_menu_controller != null:
+		return workforce_menu_controller.manually_assigned_count(role)
+	return 0
 
 
 func _auto_or_unassigned_worker_count() -> int:
-	var count := 0
-	for citizen in citizens:
-		if not citizen.is_player_controlled:
-			if citizen.daily_order_role.is_empty() and citizen.specialization not in ["courier", "cook", "teacher", "factory_worker", "engineer"]:
-				count += 1
-	return count
+	if workforce_menu_controller != null:
+		return workforce_menu_controller.auto_or_unassigned_worker_count()
+	return 0
 
 
 func _refresh_workforce_menu() -> void:
-	if workforce_menu == null:
-		return
-	var total := _employment_resident_count()
-	var employed := _employment_state_count(Citizen.EmploymentState.EMPLOYED)
-	var hiring := _employment_state_count(Citizen.EmploymentState.REGISTERING)
-	var no_permanent_work := _employment_state_count(Citizen.EmploymentState.NO_PERMANENT_WORK)
-	var unregistered := _employment_state_count(Citizen.EmploymentState.UNREGISTERED)
-	var can_manage_professions := _player_can_manage_permanent_professions()
-	var blocked_tooltip := _permanent_profession_block_message()
-
-	var job_rows: Array[Dictionary] = []
-	var shown_jobs := 0
-	for role in _workforce_roles():
-		var employed_for_role := _employment_role_count(role, Citizen.EmploymentState.EMPLOYED)
-		var pending_for_role := _employment_role_count(role, Citizen.EmploymentState.REGISTERING)
-		if not _is_role_available(role) and employed_for_role == 0 and pending_for_role == 0:
-			continue
-		var limit := _workforce_role_limit(role)
-		var capacity := " / %d" % limit if limit >= 0 else ""
-		var dismiss_disabled := employed + pending_for_role == 0 or not can_manage_professions
-		var assign_disabled := (role != "official" and not can_manage_professions) or not _is_role_available(role) or (limit >= 0 and employed_for_role + pending_for_role >= limit) or not _has_assignable_resident()
-		job_rows.append({
-			"label": "%s\nEmployed %d%s  Hiring %d" % [_workforce_role_label(role), employed_for_role, capacity, pending_for_role],
-			"role": role,
-			"dismiss_disabled": dismiss_disabled,
-			"dismiss_tooltip": blocked_tooltip if not can_manage_professions else "Dismiss one resident from this job",
-			"assign_disabled": assign_disabled,
-			"assign_tooltip": blocked_tooltip if (assign_disabled and role != "official" and not can_manage_professions) else "Assign a resident without permanent work",
-		})
-		shown_jobs += 1
-	var no_jobs_text := "No workplaces are available. Registered residents remain without permanent work." if shown_jobs == 0 else ""
-
-	var daily_order_rows: Array[String] = []
-	for role in _daily_order_roles():
-		daily_order_rows.append("Daily order: %s  %d" % [_workforce_role_label(role), _daily_order_role_count(role)])
-
-	var unregistered_header := ""
-	var unregistered_rows: Array[Dictionary] = []
-	var unregistered_residents := _citizens_with_employment_states([Citizen.EmploymentState.UNREGISTERED, Citizen.EmploymentState.REGISTERING])
-	if not unregistered_residents.is_empty():
-		unregistered_header = "Unregistered residents"
-		for citizen in unregistered_residents:
-			var citizen_disabled: bool = not can_manage_professions or citizen.employment_state != Citizen.EmploymentState.UNREGISTERED or _employment_center_position() == Vector3.INF
-			unregistered_rows.append({
-				"label": "%s%s" % [citizen.role_label(), " (registering)" if citizen.employment_state == Citizen.EmploymentState.REGISTERING else ""],
-				"button_text": "Registering" if citizen.employment_state == Citizen.EmploymentState.REGISTERING else "Register",
-				"tooltip": blocked_tooltip if not can_manage_professions else "Register this resident for workforce assignment",
-				"disabled": citizen_disabled,
-				"citizen": citizen,
-			})
-
-	var state := {
-		"title_text": "Employment: %d residents" % total,
-		"summary_text": "Employed %d   Registering %d   No permanent work %d   Unregistered %d" % [employed, hiring, no_permanent_work, unregistered],
-		"job_rows": job_rows,
-		"no_jobs_text": no_jobs_text,
-		"daily_orders_available": "Available %d" % _daily_order_role_count(""),
-		"daily_order_rows": daily_order_rows,
-		"unregistered_header": unregistered_header,
-		"unregistered_rows": unregistered_rows,
-	}
-	workforce_menu.update_state(state)
+	if workforce_menu_controller != null:
+		workforce_menu_controller.refresh_workforce_menu()
 
 
 func _employment_resident_count() -> int:
-	var count := 0
-	for citizen in citizens:
-		count += 1 if not citizen.is_player_controlled else 0
-	return count
+	if workforce_menu_controller != null:
+		return workforce_menu_controller.employment_resident_count()
+	return 0
 
 
 func _employment_state_count(state: int) -> int:
-	var count := 0
-	for citizen in citizens:
-		if not citizen.is_player_controlled and citizen.employment_state == state:
-			count += 1
-	return count
+	if workforce_menu_controller != null:
+		return workforce_menu_controller.employment_state_count(state)
+	return 0
 
 
 func _daily_order_role_count(role: String) -> int:
-	var count := 0
-	for citizen in citizens:
-		if not citizen.is_player_controlled and citizen.daily_order_role == role:
-			count += 1
-	return count
+	if workforce_menu_controller != null:
+		return workforce_menu_controller.daily_order_role_count(role)
+	return 0
 
 
 func _employment_role_count(role: String, state: int) -> int:
-	var count := 0
-	for citizen in citizens:
-		if citizen.is_player_controlled:
-			continue
-		if citizen.employment_state != state:
-			continue
-		var citizen_role := citizen.permanent_role if state == Citizen.EmploymentState.EMPLOYED else citizen.pending_employment_role
-		if citizen_role == role:
-			count += 1
-	return count
+	if workforce_menu_controller != null:
+		return workforce_menu_controller.employment_role_count(role, state)
+	return 0
 
 
 func _citizens_with_employment_states(states: Array) -> Array[Citizen]:
-	var result: Array[Citizen] = []
-	for citizen in citizens:
-		if not citizen.is_player_controlled and citizen.employment_state in states:
-			result.append(citizen)
-	return result
+	if workforce_menu_controller != null:
+		return workforce_menu_controller.citizens_with_employment_states(states)
+	return []
 
 
 func _has_assignable_resident() -> bool:
-	for citizen in citizens:
-		if not citizen.is_player_controlled and citizen.employment_state == Citizen.EmploymentState.NO_PERMANENT_WORK:
-			return true
+	if workforce_menu_controller != null:
+		return workforce_menu_controller.has_assignable_resident()
 	return false
 
 
 func _remove_worker_from_role(role: String) -> void:
-	if not _player_can_manage_permanent_professions():
-		_show_labor_command_blocked()
-		return
-	for citizen in citizens:
-		if citizen.is_player_controlled:
-			continue
-		if citizen.daily_order_role == role:
-			citizen.clear_daily_order()
-		elif citizen.permanent_role == role or citizen.pending_employment_role == role:
-			citizen.release_to_no_permanent_work()
-			citizen.assigned_dig_site = null
-		else:
-			continue
-		_update_workers()
-		_refresh_workforce_menu()
-		_refresh_campfire_occupancy_button()
-		return
+	if workforce_menu_controller != null:
+		workforce_menu_controller.remove_worker_from_role(role)
 
 
 func _assign_unemployed_worker(role: String) -> void:
-	if role != "official" and not _player_can_manage_permanent_professions():
-		_show_labor_command_blocked()
-		return
-	if not _is_role_available(role):
-		return
-	var best: Citizen = null
-	var best_score := -INF
-	for citizen in citizens:
-		if citizen.is_player_controlled:
-			continue
-		if citizen.employment_state == Citizen.EmploymentState.NO_PERMANENT_WORK:
-			var score := float(citizen.skills.get(role, 0.0))
-			if citizen.preferred_role() == role:
-				score += 1.0
-			if score > best_score:
-				best = citizen
-				best_score = score
-	if best != null:
-		selected_builder = best
-		if role == "gather_branches":
-			_set_manual_specialist_employment(best, role)
-		else:
-			_set_selected_work_role(role)
-		_refresh_workforce_menu()
-		_refresh_campfire_occupancy_button()
+	if workforce_menu_controller != null:
+		workforce_menu_controller.assign_unemployed_worker(role)
 
 
 func _enable_auto_for_citizen(citizen: Citizen) -> void:
-	if not _player_can_manage_permanent_professions():
-		_show_labor_command_blocked()
-		return
-	if not is_instance_valid(citizen) or citizen.is_player_controlled:
-		return
-	citizen.request_no_permanent_work_registration()
-	_update_workers()
-	_refresh_workforce_menu()
-	_refresh_campfire_occupancy_button()
+	if workforce_menu_controller != null:
+		workforce_menu_controller.enable_auto_for_citizen(citizen)
 
 
 func _refresh_campfire_menu() -> void:
