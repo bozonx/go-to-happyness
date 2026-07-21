@@ -1,17 +1,12 @@
 class_name UIManager
 extends CanvasLayer
 
-const FirstPersonCrosshairScene = preload("res://game/features/ui/presentation/first_person_crosshair.tscn")
-const TimeControlsPanelScene = preload("res://game/features/ui/presentation/time_controls_panel.tscn")
-const MessageLogPanelScene = preload("res://game/features/ui/presentation/message_log_panel.tscn")
-const InteractionHintPanelScene = preload("res://game/features/ui/presentation/interaction_hint_panel.tscn")
 const SurvivalDecisionPanelScene = preload("res://game/features/settlement/presentation/survival_decision_panel.tscn")
 const CampfireStoryMenuScene = preload("res://game/features/settlement/presentation/campfire_story_menu.tscn")
 const CampfireOrdersMenuScene = preload("res://game/features/settlement/presentation/campfire_orders_menu.tscn")
 const ResearchMenuScene = preload("res://game/features/settlement/presentation/research_menu.tscn")
 const WorkforceMenuScene = preload("res://game/features/decision/presentation/workforce_menu.tscn")
 const PocketTakeMenuScene = preload("res://game/features/citizens/presentation/pocket_take_menu.tscn")
-const HUDScene = preload("res://game/features/ui/presentation/hud.tscn")
 const BuildMenuScene = preload("res://game/features/buildings/presentation/build_menu.tscn")
 const BuildingMenuScene = preload("res://game/features/buildings/presentation/building_menu.tscn")
 const HouseMenuScene = preload("res://game/features/buildings/presentation/house_menu.tscn")
@@ -25,12 +20,15 @@ const ContextMenuPanelScene = preload("res://game/features/ui/presentation/conte
 
 var simulation: Node
 
-var hud: HUD
+@onready var hud: HUD = $HUD
+@onready var message_log_panel: MessageLogPanel = $MessageLogPanel
+@onready var time_controls_panel: TimeControlsPanel = $TimeControlsPanel
+@onready var interaction_hint_panel: Control = $InteractionHintPanel
+@onready var crosshair: FirstPersonCrosshair = $FirstPersonCrosshair
+
 var build_toggle_btn: Button
 var message_panel: Control
-var message_log_panel: MessageLogPanel
 var messages_modal: Control
-var interaction_hint_panel: Control
 var build_menu: BuildMenu
 var house_menu: Panel
 var house_menu_title: Label
@@ -67,11 +65,9 @@ var building_relight_button: Button
 var campfire_story_menu: Control
 var building_cancel_construction_button: Button
 var decision_menu: Control
-var time_controls_panel: TimeControlsPanel
 var pocket_take_menu: PocketTakeMenu
 var pocket_take_menu_title: Label
 var campfire_orders_menu: CampfireOrdersMenu
-var crosshair: FirstPersonCrosshair
 
 
 func setup(p_simulation: Node) -> void:
@@ -79,18 +75,14 @@ func setup(p_simulation: Node) -> void:
 
 
 func create_interface() -> void:
-	hud = HUDScene.instantiate()
-	add_child(hud)
-	build_toggle_btn = hud.build_toggle_btn
-	if simulation != null and simulation.has_method("_toggle_global_build_menu"):
-		build_toggle_btn.pressed.connect(Callable(simulation, "_toggle_global_build_menu"))
+	if hud != null:
+		build_toggle_btn = hud.build_toggle_btn
+		if simulation != null and simulation.has_method("_toggle_global_build_menu"):
+			build_toggle_btn.pressed.connect(Callable(simulation, "_toggle_global_build_menu"))
 
 	_create_message_panel()
 	_create_messages_modal()
 	_create_time_controls()
-
-	interaction_hint_panel = InteractionHintPanelScene.instantiate()
-	add_child(interaction_hint_panel)
 
 	_create_build_menu()
 	_create_entrance_menu()
@@ -124,8 +116,7 @@ func create_context_menu_panel(anchor: int, offsets: Vector4, input_handler: Cal
 
 
 func _create_message_panel() -> void:
-	message_log_panel = MessageLogPanelScene.instantiate()
-	add_child(message_log_panel)
+	pass
 
 
 func _create_messages_modal() -> void:
@@ -133,11 +124,10 @@ func _create_messages_modal() -> void:
 
 
 func _create_time_controls() -> void:
-	time_controls_panel = TimeControlsPanelScene.instantiate()
-	add_child(time_controls_panel)
-	time_controls_panel.skip_night_requested.connect(Callable(simulation, "_skip_night"))
-	time_controls_panel.skip_to_workday_start_requested.connect(Callable(simulation, "_skip_to_workday_start"))
-	time_controls_panel.time_multiplier_changed.connect(Callable(simulation, "_set_time_multiplier"))
+	if time_controls_panel != null and simulation != null:
+		time_controls_panel.skip_night_requested.connect(Callable(simulation, "_skip_night"))
+		time_controls_panel.skip_to_workday_start_requested.connect(Callable(simulation, "_skip_to_workday_start"))
+		time_controls_panel.time_multiplier_changed.connect(Callable(simulation, "_set_time_multiplier"))
 
 
 func _create_build_menu() -> void:
@@ -334,6 +324,5 @@ func _create_survival_decision_menu() -> void:
 
 
 func _create_crosshair() -> void:
-	crosshair = FirstPersonCrosshairScene.instantiate()
-	crosshair.visible = false
-	add_child(crosshair)
+	if crosshair != null:
+		crosshair.visible = false

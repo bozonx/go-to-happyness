@@ -1,6 +1,22 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://game/features/ui/presentation/ui_manager.gd" id="1_uim"]
+[ext_resource type="PackedScene" path="res://game/features/ui/presentation/hud.tscn" id="2_hud"]
+[ext_resource type="PackedScene" path="res://game/features/ui/presentation/message_log_panel.tscn" id="3_msg"]
+[ext_resource type="PackedScene" path="res://game/features/ui/presentation/time_controls_panel.tscn" id="4_time"]
+[ext_resource type="PackedScene" path="res://game/features/ui/presentation/interaction_hint_panel.tscn" id="5_hint"]
+[ext_resource type="PackedScene" path="res://game/features/ui/presentation/first_person_crosshair.tscn" id="6_cross"]
 
 [node name="UIManager" type="CanvasLayer"]
 script = ExtResource("1_uim")
+
+[node name="HUD" parent="." instance=ExtResource("2_hud")]
+
+[node name="MessageLogPanel" parent="." instance=ExtResource("3_msg")]
+
+[node name="TimeControlsPanel" parent="." instance=ExtResource("4_time")]
+
+[node name="InteractionHintPanel" parent="." instance=ExtResource("5_hint")]
+
+[node name="FirstPersonCrosshair" parent="." instance=ExtResource("6_cross")]
+visible = false
