@@ -688,9 +688,10 @@ func _ready() -> void:
 		territory_service.register_biome(summer_plains_biome)
 	territory_service.set_active_biome(&"summer_valley")
 
-	citizen_ai = CitizenAISystem.new()
-	citizen_ai.name = "CitizenAI"
-	add_child(citizen_ai)
+	if citizen_ai == null:
+		citizen_ai = CitizenAISystem.new()
+		citizen_ai.name = "CitizenAI"
+		add_child(citizen_ai)
 	nav_grid = NavGrid.new()
 	nav_grid.configure(CELL_SIZE, BOARD_CELLS)
 	trail_field = TrailFieldServiceScript.new()
@@ -828,6 +829,8 @@ func _ready() -> void:
 	entrance_menu_controller.configure(self)
 	house_menu_controller = HouseMenuControllerScript.new()
 	house_menu_controller.configure(self)
+
+
 	pocket_take_menu_controller = PocketTakeMenuControllerScript.new()
 	pocket_take_menu_controller.configure(self)
 	market_menu_controller = MarketMenuControllerScript.new()
@@ -921,7 +924,9 @@ func _process(delta: float) -> void:
 	_update_canteen_delivery()
 	_update_arrivals()
 	_update_fire_status()
-	trade_service.update()
+	if trade_service != null:
+		trade_service.update()
+
 	# Queued trades are delivered as courier tasks; a dispatch pass picks them up.
 	_request_courier_dispatch()
 	_update_sawmills(delta)
@@ -1269,20 +1274,27 @@ func _total_game_minutes() -> float:
 
 
 func _remove_expired_temporary_tents() -> void:
-	building_lifecycle_service.remove_expired_temporary_tents()
+	if building_lifecycle_service != null:
+		building_lifecycle_service.remove_expired_temporary_tents()
 
 
 func _apply_daily_settlement_rules() -> void:
-	settlement_daily_rules_service.apply_daily_settlement_rules()
+	if settlement_daily_rules_service != null:
+		settlement_daily_rules_service.apply_daily_settlement_rules()
+
 
 func _update_house_lights() -> void:
-	building_lifecycle_service.update_house_lights()
+	if building_lifecycle_service != null:
+		building_lifecycle_service.update_house_lights()
+
 
 func _house_has_residents(house: Node3D) -> bool:
-	return building_lifecycle_service.house_has_residents(house)
+	return building_lifecycle_service.house_has_residents(house) if building_lifecycle_service != null else false
+
 
 func _house_has_people_at_home(house: Node3D) -> bool:
-	return building_lifecycle_service.house_has_people_at_home(house)
+	return building_lifecycle_service.house_has_people_at_home(house) if building_lifecycle_service != null else false
+
 
 func _is_night() -> bool:
 	return clock.is_night()
@@ -2738,43 +2750,12 @@ func _set_selected_work_role(role: String, daily_order := false) -> void:
 		_refresh_workforce_menu()
 
 func _is_role_available(role: String) -> bool:
-	if not settlement.construction_gloves_available() and wellbeing < 30 and role in ["construction", "gather_branches", "gather_grass", "gather_food", "forestry", "farming", "excavation", "factory_worker", "craftsman"]:
-		return false
-	match role:
-		"": return true
-		"courier": return true
-		"construction":
-			return (not construction_sites.is_empty() or not demolition_sites.is_empty()) and (settlement.era < SettlementState.Era.STONE or _builder_job_capacity() > 0)
-		"forestry": return _available_employer_capacity("forestry") > 0 and bool(settlement.tools.get("axe", false)) and bool(settlement.tools.get("hand_saw", false)) and not tree_positions.is_empty() and not warehouse_positions.is_empty()
-		"farming": return _available_employer_capacity("farming") > 0 and not warehouse_positions.is_empty()
-		"excavation":
-			if dig_sites.is_empty() or warehouse_positions.is_empty():
-				return false
-			for site in dig_sites:
-				if _can_work_at_dig_site(site):
-					return true
-			return false
-		"gather_branches": return not tree_positions.is_empty()
-		"gather_grass": return settlement.era == SettlementState.Era.TENT
-		"gather_food": return _available_employer_capacity("gather_food") > 0
-		"gather_water": return bool(settlement.tools.get("bucket", false)) and not pond_positions.is_empty() and not warehouse_positions.is_empty()
-		"cook": return _available_employer_capacity("cook") > 0
-		"teacher": return _available_employer_capacity("teacher") > 0
-		"seller": return _available_employer_capacity("seller") > 0
-		"factory_worker": return _available_employer_capacity("factory_worker") > 0
-		"engineer": return _available_employer_capacity("engineer") > 0
-		"courier": return not warehouse_positions.is_empty()
-		"craftsman": return not craft_tent_positions.is_empty()
-		"official": return settlement.is_research_completed("official") and is_instance_valid(_employment_centre_building())
-	return false
+	return workplace_labor_service.is_role_available(role)
 
 
 func _is_daily_order_role_available(role: String) -> bool:
-	match role:
-		"cook": return _available_employer_capacity("cook") > 0
-		"researcher": return not settlement.is_research_completed("official") and is_instance_valid(_employment_centre_building()) and _is_fire_lit(_employment_centre_building())
-		"gather_water": return bool(settlement.tools.get("bucket", false)) and not pond_positions.is_empty() and not warehouse_positions.is_empty()
-	return true
+	return workplace_labor_service.is_daily_order_role_available(role)
+
 
 
 func _min_era_for_role(role: String) -> SettlementState.Era:
@@ -4407,96 +4388,8 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 
 
 func _register_completed_building_type_features(building_type: String, building: Node3D, blueprint: Dictionary, service_position: Vector3) -> void:
-	match building_type:
-		"warehouse", "straw_warehouse", "tarp_warehouse":
-			settlement.add_warehouse(building_type)
-			warehouse_positions.append(service_position)
-			if warehouse_positions.size() == 1:
-				_convert_backpack_pile_to_regular()
-				settlement.warehouse_ever_built = true
-				settlement.backpack.clear()
-			_add_building_selector(building, "warehouse_selector", blueprint.footprint)
-			_add_warehouse_fill_label(building)
-		"sawmill":
-			sawmill_positions.append(service_position)
-			_sawmill_stock(service_position)
-		"farm":
-			farm_positions.append(service_position)
-		"builders_guild":
-			builders_guild_positions.append(service_position)
-		"construction_company":
-			construction_company_positions.append(service_position)
-		"campfire", "campfire_lvl2", "campfire_lvl3", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall":
-			campfire_node = building
-			_activate_employment_centre(building)
-			_add_building_selector(building, "campfire_selector", blueprint.footprint)
-			var fire_light := FireLightScene.instantiate()
-			building.add_child(fire_light)
-		"gathering_place":
-			gathering_place_positions.append(service_position)
-			_create_gathering_place_visual(building)
-			_add_building_selector(building, "building_selector", blueprint.footprint)
-		"cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant":
-			_activate_kitchen_if_better(building, service_position)
-			_add_building_selector(building, "cook_campfire_selector", blueprint.footprint)
-			var cook_fire_light := FireLightScene.instantiate()
-			building.add_child(cook_fire_light)
-		"forager_tent", "straw_forager_tent", "tarp_forager_tent":
-			forager_positions.append(service_position)
-			_update_interface("Forager tent ready. Assign a resident to forage food, or a free hand will.")
-		"materials_yard", "straw_materials_yard", "tarp_materials_yard":
-			materials_yard_positions.append(service_position)
-			_update_interface("Двор стройматериалов готов. Работники собирают ветки и траву (что в дефиците), или это сделает свободный житель.")
-		"tent", "straw_tent", "tarp_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house":
-			if building_type in ["house", "house_lvl2", "house_lvl3", "brick_house"]:
-				completed_house_count += 1
-			var housing_capacity := HOUSE_CAPACITY
-			match building_type:
-				"straw_tent": housing_capacity = 1
-				"tarp_tent": housing_capacity = 2
-				"tent", "dugout": housing_capacity = 4
-				"earth_house", "clay_house": housing_capacity = 6
-				"house": housing_capacity = 8
-				"house_lvl2": housing_capacity = 10
-				"house_lvl3": housing_capacity = 12
-				"stone_house": housing_capacity = 10
-				"brick_house": housing_capacity = 12
-			building.set_meta("housing_capacity", housing_capacity)
-			building.set_meta("spawn_slots", housing_capacity)
-			_add_building_selector(building, "house_selector", blueprint.footprint)
-			_add_house_light(building)
-			if building_type in ["tent", "straw_tent", "tarp_tent"]:
-				building.set_meta("is_tent", true)
-			_house_initial_residents(building)
-		"dew_collector", "advanced_dew_collector":
-			var rate := 0.12
-			var capacity := 10
-			if building_type == "advanced_dew_collector":
-				rate = 0.3
-				capacity = 25
-			water_collectors.append({"node": building, "rate": rate, "accum": 0.0, "stored": 0, "capacity": capacity})
-		"craft_tent", "straw_craft_tent", "tarp_craft_tent":
-			craft_tent_positions.append(service_position)
-		"straw_trade_tent", "tarp_trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market":
-			_add_building_selector(building, "market_selector", blueprint.footprint)
-			market_positions.append(service_position)
-		"employment_office":
-			employment_office = building
-			employment_office_position = service_position
-		"school":
-			school_positions.append(service_position)
-			_add_building_selector(building, "school_selector", blueprint.footprint)
-		"park":
-			park_positions.append(service_position)
-		"leisure_center":
-			leisure_positions.append(service_position)
-		"brick_factory", "materials_factory", "recycling_factory", "metal_factory":
-			building.set_meta("required_factory_workers", 3 if building_type in ["recycling_factory", "metal_factory"] else 1)
-			factories.append(building)
-			if building_type == "materials_factory":
-				_add_building_selector(building, "materials_factory_selector", blueprint.footprint)
-		"boundary_post":
-			_add_building_selector(building, "building_selector", blueprint.footprint)
+	building_lifecycle_service.register_completed_building_type_features(building_type, building, blueprint, service_position)
+
 
 
 func _activate_kitchen_if_better(building: Node3D, service_position: Vector3) -> void:

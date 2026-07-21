@@ -277,3 +277,100 @@ func select_best_campfire() -> void:
 	simulation.campfire_node = best_campfire
 	if is_instance_valid(simulation.campfire_node):
 		simulation._activate_employment_centre(simulation.campfire_node)
+
+
+func register_completed_building_type_features(building_type: String, building: Node3D, blueprint: Dictionary, service_position: Vector3) -> void:
+	match building_type:
+		"warehouse", "straw_warehouse", "tarp_warehouse":
+			simulation.settlement.add_warehouse(building_type)
+			simulation.warehouse_positions.append(service_position)
+			if simulation.warehouse_positions.size() == 1:
+				simulation._convert_backpack_pile_to_regular()
+				simulation.settlement.warehouse_ever_built = true
+				simulation.settlement.backpack.clear()
+			simulation._add_building_selector(building, "warehouse_selector", blueprint.footprint)
+			simulation._add_warehouse_fill_label(building)
+		"sawmill":
+			simulation.sawmill_positions.append(service_position)
+			simulation._sawmill_stock(service_position)
+		"farm":
+			simulation.farm_positions.append(service_position)
+		"builders_guild":
+			simulation.builders_guild_positions.append(service_position)
+		"construction_company":
+			simulation.construction_company_positions.append(service_position)
+		"campfire", "campfire_lvl2", "campfire_lvl3", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall":
+			simulation.campfire_node = building
+			simulation._activate_employment_centre(building)
+			simulation._add_building_selector(building, "campfire_selector", blueprint.footprint)
+			var fire_light: Node3D = simulation.FireLightScene.instantiate()
+			building.add_child(fire_light)
+		"gathering_place":
+			simulation.gathering_place_positions.append(service_position)
+			simulation._create_gathering_place_visual(building)
+			simulation._add_building_selector(building, "building_selector", blueprint.footprint)
+		"cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant":
+			simulation._activate_kitchen_if_better(building, service_position)
+			simulation._add_building_selector(building, "cook_campfire_selector", blueprint.footprint)
+			var cook_fire_light: Node3D = simulation.FireLightScene.instantiate()
+			building.add_child(cook_fire_light)
+		"forager_tent", "straw_forager_tent", "tarp_forager_tent":
+			simulation.forager_positions.append(service_position)
+			simulation._update_interface("Forager tent ready. Assign a resident to forage food, or a free hand will.")
+		"materials_yard", "straw_materials_yard", "tarp_materials_yard":
+			simulation.materials_yard_positions.append(service_position)
+			simulation._update_interface("Двор стройматериалов готов. Работники собирают ветки и траву (что в дефиците), или это сделает свободный житель.")
+		"tent", "straw_tent", "tarp_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house":
+			if building_type in ["house", "house_lvl2", "house_lvl3", "brick_house"]:
+				simulation.completed_house_count += 1
+			var housing_capacity: int = simulation.HOUSE_CAPACITY
+
+			match building_type:
+				"straw_tent": housing_capacity = 1
+				"tarp_tent": housing_capacity = 2
+				"tent", "dugout": housing_capacity = 4
+				"earth_house", "clay_house": housing_capacity = 6
+				"house": housing_capacity = 8
+				"house_lvl2": housing_capacity = 10
+				"house_lvl3": housing_capacity = 12
+				"stone_house": housing_capacity = 10
+				"brick_house": housing_capacity = 12
+			building.set_meta("housing_capacity", housing_capacity)
+			building.set_meta("spawn_slots", housing_capacity)
+			simulation._add_building_selector(building, "house_selector", blueprint.footprint)
+			simulation._add_house_light(building)
+			if building_type in ["tent", "straw_tent", "tarp_tent"]:
+				building.set_meta("is_tent", true)
+			simulation._house_initial_residents(building)
+		"dew_collector", "advanced_dew_collector":
+			var rate := 0.12
+			var capacity := 10
+			if building_type == "advanced_dew_collector":
+				rate = 0.3
+				capacity = 25
+			simulation.water_collectors.append({"node": building, "rate": rate, "accum": 0.0, "stored": 0, "capacity": capacity})
+		"craft_tent", "straw_craft_tent", "tarp_craft_tent":
+			simulation.craft_tent_positions.append(service_position)
+		"straw_trade_tent", "tarp_trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market":
+			simulation._add_building_selector(building, "market_selector", blueprint.footprint)
+			simulation.market_positions.append(service_position)
+		"employment_office":
+			simulation.employment_office = building
+			simulation.employment_office_position = service_position
+		"school":
+			simulation.school_positions.append(service_position)
+			simulation._add_building_selector(building, "school_selector", blueprint.footprint)
+		"park":
+			simulation.park_positions.append(service_position)
+		"leisure_center":
+			simulation.leisure_positions.append(service_position)
+			simulation._add_building_selector(building, "building_selector", blueprint.footprint)
+		"brick_factory", "materials_factory", "recycling_factory", "metal_factory":
+			building.set_meta("required_factory_workers", 3 if building_type in ["recycling_factory", "metal_factory"] else 1)
+			simulation.factories.append(building)
+			if building_type == "materials_factory":
+				simulation._add_building_selector(building, "materials_factory_selector", blueprint.footprint)
+		"boundary_post":
+			simulation._add_building_selector(building, "building_selector", blueprint.footprint)
+
+
