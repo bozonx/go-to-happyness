@@ -1,6 +1,8 @@
 class_name LabelDistanceFadeController
 extends RefCounted
 
+const ResourcePileScript = preload("res://game/features/logistics/domain/resource_pile.gd")
+
 const LABEL_FADE_NEAR := 8.0
 const LABEL_FADE_FAR := 22.0
 
@@ -16,8 +18,8 @@ func update_label_distance_fading() -> void:
 		return
 	var cam_pos: Vector3 = simulation.camera.global_position
 	# Resource pile labels
-	for pile in simulation.resource_piles:
-		var pile_node := pile.get("node") as Node3D
+	for pile: ResourcePileScript in simulation.resource_piles:
+		var pile_node := pile.node
 		if not is_instance_valid(pile_node):
 			continue
 		var label := pile_node.get_node_or_null("PileLabel") as Label3D

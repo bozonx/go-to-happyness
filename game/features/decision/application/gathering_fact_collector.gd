@@ -1,6 +1,8 @@
 class_name GatheringFactCollector
 extends RefCounted
 
+const ResourcePileScript = preload("res://game/features/logistics/domain/resource_pile.gd")
+
 ## Collects permanent gathering, daily gathering, and daily cleaning facts for
 ## one citizen.
 
@@ -179,8 +181,8 @@ func _cleaning_targets(ctx: FacadeContext, actor: Citizen) -> Array[Dictionary]:
 	var targets: Array[Dictionary] = []
 	if not is_instance_valid(actor) or ctx.simulation.warehouse_positions.is_empty():
 		return targets
-	for pile: Dictionary in ctx.simulation.resource_piles:
-		var pile_node := pile.get(&"node") as Node3D
+	for pile: ResourcePileScript in ctx.simulation.resource_piles:
+		var pile_node := pile.node
 		if not is_instance_valid(pile_node) or not ctx.simulation._is_route_reachable(actor.global_position, pile_node.global_position):
 			continue
 		var pile_cell: Vector2i = ctx.simulation._cell_from_position(pile_node.global_position)

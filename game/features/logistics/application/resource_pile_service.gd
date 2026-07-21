@@ -3,20 +3,21 @@ extends RefCounted
 
 const TentEraSurvivalRulesScript = preload("res://game/features/settlement/domain/tent_era_survival_rules.gd")
 const ResourcePileVisualsScript = preload("res://game/features/logistics/presentation/resource_pile_visuals.gd")
+const ResourcePileScript = preload("res://game/features/logistics/domain/resource_pile.gd")
 
 var parent_node: Node3D
-var resource_piles: Array[Dictionary]
+var resource_piles: Array[ResourcePileScript]
 var settlement: RefCounted
 var weather_state: RefCounted
 var _visuals := ResourcePileVisualsScript.new()
 
-func _init(parent: Node3D = null, piles: Array[Dictionary] = [], settlement_ref: RefCounted = null, weather_ref: RefCounted = null) -> void:
+func _init(parent: Node3D = null, piles: Array[ResourcePileScript] = [], settlement_ref: RefCounted = null, weather_ref: RefCounted = null) -> void:
 	parent_node = parent
 	resource_piles = piles
 	settlement = settlement_ref
 	weather_state = weather_ref
 
-func setup(parent: Node3D, piles: Array[Dictionary], settlement_ref: RefCounted, weather_ref: RefCounted) -> void:
+func setup(parent: Node3D, piles: Array[ResourcePileScript], settlement_ref: RefCounted, weather_ref: RefCounted) -> void:
 	parent_node = parent
 	resource_piles = piles
 	settlement = settlement_ref
@@ -37,14 +38,14 @@ func create_resource_pile(position: Vector3, resources: Dictionary, is_backpack_
 
 	if parent_node != null:
 		parent_node.add_child(pile)
-	resource_piles.append({"node": pile, "resources": normalized, "reserved": {}, "is_backpack": is_backpack_pile})
+	resource_piles.append(ResourcePileScript.new(pile, normalized, is_backpack_pile))
 	return pile
 
 func remove_backpack_pile(backpack_node: Node3D) -> Node3D:
 	if not is_instance_valid(backpack_node):
 		return null
 	for index in range(resource_piles.size()):
-		if resource_piles[index].get("node") == backpack_node:
+		if resource_piles[index].node == backpack_node:
 			resource_piles.remove_at(index)
 			break
 	backpack_node.queue_free()
@@ -56,8 +57,8 @@ func sync_backpack_pile(backpack_node: Node3D) -> Node3D:
 	if settlement != null and settlement.warehouse_ever_built:
 		return backpack_node
 	for index in range(resource_piles.size()):
-		var pile: Dictionary = resource_piles[index]
-		if pile.get("node") != backpack_node:
+		var pile: ResourcePileScript = resource_piles[index]
+		if pile.node != backpack_node:
 			continue
 		var synced: Dictionary = {}
 		if settlement != null and settlement.backpack != null:
@@ -70,8 +71,7 @@ func sync_backpack_pile(backpack_node: Node3D) -> Node3D:
 			backpack_node.queue_free()
 			return null
 		else:
-			pile["resources"] = synced
-			resource_piles[index] = pile
+			pile.resources = synced
 			refresh_resource_pile_label(pile)
 		break
 	return backpack_node
@@ -80,8 +80,8 @@ func convert_backpack_pile_to_regular(backpack_node: Node3D) -> Node3D:
 	if not is_instance_valid(backpack_node):
 		return null
 	for index in range(resource_piles.size()):
-		var pile: Dictionary = resource_piles[index]
-		if pile.get("node") == backpack_node:
+		var pile: ResourcePileScript = resource_piles[index]
+		if pile.node == backpack_node:
 			var synced: Dictionary = {}
 			if settlement != null and settlement.backpack != null:
 				for resource_type in settlement.backpack:
@@ -89,9 +89,8 @@ func convert_backpack_pile_to_regular(backpack_node: Node3D) -> Node3D:
 					if amount > 0:
 						synced[resource_type] = amount
 			if not synced.is_empty():
-				pile["resources"] = synced
-			pile["is_backpack"] = false
-			resource_piles[index] = pile
+				pile.resources = synced
+			pile.is_backpack = false
 			refresh_resource_pile_label(pile)
 			break
 	return null
@@ -113,19 +112,18 @@ func drop_overflow_as_piles(overflow: Dictionary, base_position: Vector3) -> voi
 		var offset := Vector3((pile_index % 3) * PILE_SPREAD - PILE_SPREAD, 0.0, (pile_index / 3) * PILE_SPREAD - PILE_SPREAD)
 		create_resource_pile(base_position + offset, pile_resources)
 
-func refresh_resource_pile_label(pile: Dictionary) -> void:
-	_visuals.refresh_label(pile.get("node") as Node3D, pile.resources)
+func refresh_resource_pile_label(pile: ResourcePileScript) -> void:
+	_visuals.refresh_label(pile.node, pile.resources)
 
 func drop_resource_pile(position: Vector3, resource_type: String, amount: int) -> void:
 	if resource_type.is_empty() or amount <= 0:
 		return
 	for index in resource_piles.size():
-		var pile: Dictionary = resource_piles[index]
-		var pile_node := pile.get("node") as Node3D
+		var pile: ResourcePileScript = resource_piles[index]
+		var pile_node := pile.node
 		if not is_instance_valid(pile_node) or pile.resources.size() != 1 or not pile.resources.has(resource_type) or pile_node.global_position.distance_squared_to(position) > 2.25:
 			continue
 		pile.resources[resource_type] = int(pile.resources.get(resource_type, 0)) + amount
-		resource_piles[index] = pile
 		_visuals.refresh_label(pile_node, pile.resources)
 		return
 	create_resource_pile(position, {resource_type: amount})
@@ -135,8 +133,8 @@ func decay_resource_piles() -> void:
 	if weather_state != null and "is_raining" in weather_state:
 		is_raining = bool(weather_state.is_raining)
 	for index in range(resource_piles.size() - 1, -1, -1):
-		var pile: Dictionary = resource_piles[index]
-		if pile.get("is_backpack", false):
+		var pile: ResourcePileScript = resource_piles[index]
+		if pile.is_backpack:
 			continue
 		for resource_type in pile.resources.keys():
 			var remaining := int(pile.resources[resource_type])
@@ -152,5 +150,4 @@ func decay_resource_piles() -> void:
 				pile.node.queue_free()
 			resource_piles.remove_at(index)
 		else:
-			resource_piles[index] = pile
 			refresh_resource_pile_label(pile)

@@ -355,6 +355,13 @@ func amount(resource_type: String) -> int:
 	return storage.amount(resource_type)
 
 
+func set_amount(resource_type: String, value: int) -> void:
+	if resource_type == "money":
+		money = value
+		return
+	storage._set_resource_aggregate(resource_type, value)
+
+
 func backpack_amount(resource_type: String) -> int:
 	if resource_type == "money":
 		return 0

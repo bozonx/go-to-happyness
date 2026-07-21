@@ -4,6 +4,7 @@ extends RefCounted
 const BuildingCatalogScript = preload("res://game/features/buildings/domain/building_catalog.gd")
 const WarehouseStateScript = preload("res://game/features/settlement/domain/warehouse_state.gd")
 const SettlementStateScript = preload("res://game/features/settlement/domain/settlement_state.gd")
+const ResourcePileScript = preload("res://game/features/logistics/domain/resource_pile.gd")
 
 var simulation: Node
 
@@ -69,7 +70,7 @@ func first_person_action_hint() -> String:
 		"demolition":
 			return "F: разбирать отмеченное здание"
 		"pile":
-			var pile: Dictionary = target.pile
+			var pile: ResourcePileScript = target.pile
 			var available: Array[String] = simulation._pile_available_resources(pile)
 			if available.is_empty():
 				return ""
@@ -157,6 +158,4 @@ func first_person_action_hint() -> String:
 			var status: Array[String] = citizen.status_effect_labels()
 			var status_text: String = ", ".join(status) if not status.is_empty() else "OK"
 			return "%s | %s | %s" % [citizen.role_label(), simulation._citizen_state_name(citizen.state), status_text]
-		"building":
-			return building_action_hint(target.node)
 	return ""

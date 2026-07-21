@@ -92,6 +92,7 @@ const ExcavationServiceScript = preload("res://game/features/production/applicat
 const SettlementSurvivalServiceScript = preload("res://game/features/settlement/application/settlement_survival_service.gd")
 const SettlementDailyRulesServiceScript = preload("res://game/features/settlement/application/settlement_daily_rules_service.gd")
 const TerritoryServiceScript = preload("res://game/features/world/application/territory_service.gd")
+const ResourcePileScript = preload("res://game/features/logistics/domain/resource_pile.gd")
 
 
 # The playable routing and construction board must cover the terrain visible
@@ -197,24 +198,7 @@ var money: int:
 
 
 func _set_resource_amount(resource_type: String, value: int) -> void:
-	if settlement.uses_virtual_storage():
-		settlement.virtual_stock[resource_type] = value
-	else:
-		match resource_type:
-			"wood": settlement.wood = value
-			"food": settlement.food = value
-			"soil": settlement.soil = value
-			"clay": settlement.clay = value
-			"boards": settlement.boards = value
-			"bricks": settlement.bricks = value
-			"stone": settlement.stone = value
-			"branches": settlement.branches = value
-			"grass": settlement.grass = value
-			"water": settlement.water = value
-			"hides": settlement.hides = value
-			"goods": settlement.goods = value
-			"tarp": settlement.tarp = value
-			"logs": settlement.logs = value
+	settlement.set_amount(resource_type, value)
 var wellbeing: int:
 	get: return settlement.wellbeing
 	set(value): settlement.wellbeing = value
@@ -264,7 +248,7 @@ const RABBIT_RESPAWN_SECONDS := 60.0
 const RABBIT_MAX_COUNT := 8
 var outside_workers: Dictionary = {} # citizen instance id -> {citizen, return_at_minute}
 var last_citizen_positions: Dictionary = {}
-var resource_piles: Array[Dictionary] = []
+var resource_piles: Array[ResourcePileScript] = []
 var backpack_node: Node3D
 var backpack_position: Vector3
 var farm_positions: Array[Vector3] = []
@@ -1419,7 +1403,7 @@ func _construction_source_available(resource_type: String, source: Dictionary) -
 	return settlement.warehouse_amount(resource_type, warehouse_index) if warehouse_index >= 0 else settlement.amount(resource_type)
 
 
-func _resource_pile_for_node(pile_node: Node3D) -> Dictionary:
+func _resource_pile_for_node(pile_node: Node3D) -> ResourcePileScript:
 	return storage_routing_service.resource_pile_for_node(pile_node)
 
 
@@ -1535,9 +1519,7 @@ func _on_building_supply_delivered(_courier: Citizen, target: Node3D, supply_kin
 			settlement.add(resource_type, amount)
 			for index in resource_piles.size():
 				if resource_piles[index].node == target:
-					var reserved: Dictionary = resource_piles[index].reserved
-					reserved[resource_type] = maxi(0, int(reserved.get(resource_type, 0)) - amount)
-					resource_piles[index].reserved = reserved
+					resource_piles[index].reserved[resource_type] = maxi(0, int(resource_piles[index].reserved.get(resource_type, 0)) - amount)
 					break
 
 func _builder_count(site_node: Node3D) -> int:
@@ -3967,7 +3949,7 @@ func _missing_site_materials_text(site: ConstructionSite) -> String:
 	return ", ".join(parts)
 
 
-func _pile_available_resources(pile: Dictionary) -> Array[String]:
+func _pile_available_resources(pile: ResourcePileScript) -> Array[String]:
 	return storage_routing_service.pile_available_resources(pile)
 
 
@@ -4082,11 +4064,13 @@ func _meet_arrival_at_entrance() -> void:
 	_refresh_interaction_hint()
 
 
-func _take_from_pile(pile: Dictionary, all: bool) -> void:
-	var pile_node := pile.get("node") as Node3D
+func _take_from_pile(pile: ResourcePileScript, all: bool) -> void:
+	if pile == null:
+		return
+	var pile_node := pile.node
 	if not is_instance_valid(pile_node):
 		return
-	var resources: Dictionary = pile.get("resources", {})
+	var resources: Dictionary = pile.resources
 	var taken_any := false
 	for resource_type in resources.keys():
 		var available := int(resources.get(resource_type, 0))
@@ -4115,7 +4099,7 @@ func _take_from_pile(pile: Dictionary, all: bool) -> void:
 	pile.resources = resources
 	if resources.is_empty():
 		for index in range(resource_piles.size()):
-			if resource_piles[index].get("node") == pile_node:
+			if resource_piles[index].node == pile_node:
 				resource_piles.remove_at(index)
 				break
 		pile_node.queue_free()
@@ -5501,7 +5485,7 @@ func _convert_backpack_pile_to_regular() -> void:
 func _drop_overflow_as_piles(overflow: Dictionary, base_position: Vector3) -> void:
 	resource_pile_service.drop_overflow_as_piles(overflow, base_position)
 
-func _refresh_resource_pile_label(pile: Dictionary) -> void:
+func _refresh_resource_pile_label(pile: ResourcePileScript) -> void:
 	resource_pile_service.refresh_resource_pile_label(pile)
 
 func _drop_resource_pile(position: Vector3, resource_type: String, amount: int) -> void:

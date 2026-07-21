@@ -1,5 +1,7 @@
 extends SceneTree
 
+const ResourcePileScript = preload("res://game/features/logistics/domain/resource_pile.gd")
+
 func _appoint_test_official(simulation: Node, citizen: Citizen) -> void:
 	simulation.settlement.complete_research("official")
 	if not is_instance_valid(simulation.campfire_node):
@@ -267,7 +269,7 @@ func _init() -> void:
 	# construction delivery into an implicit cleaning task.
 	assert(simulation.warehouse_positions.is_empty())
 	simulation._create_resource_pile(logistics_worker.global_position, {construction_resource: 1})
-	var source_pile: Dictionary = simulation.resource_piles.back()
+	var source_pile: ResourcePileScript = simulation.resource_piles.back()
 	simulation._assign_daily_order(logistics_worker, "courier")
 	simulation._update_couriers()
 	var pile_snapshot := SettlementAIWorldFacade.new(simulation).capture(999)
@@ -502,7 +504,7 @@ func _init() -> void:
 	simulation._unhandled_input(t_event)
 	assert(simulation.pocket.is_empty())
 	assert(simulation.resource_piles.size() == piles_before_drop + 1)
-	var dropped_pile: Dictionary = simulation.resource_piles[simulation.resource_piles.size() - 1]
+	var dropped_pile: ResourcePileScript = simulation.resource_piles[simulation.resource_piles.size() - 1]
 	assert(int(dropped_pile.resources.get("wood", 0)) == 3)
 	assert(int(dropped_pile.resources.get("food", 0)) == 2)
 	var t_release := InputEventKey.new()

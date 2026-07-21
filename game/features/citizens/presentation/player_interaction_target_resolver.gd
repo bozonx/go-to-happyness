@@ -1,6 +1,8 @@
 class_name PlayerInteractionTargetResolver
 extends RefCounted
 
+const ResourcePileScript = preload("res://game/features/logistics/domain/resource_pile.gd")
+
 ## Resolves the interactable target in front of the first-person camera.
 ## Performs a raycast from the camera and classifies the hit collider
 ## (building, tree, warehouse, construction site, etc.), then falls back
@@ -54,8 +56,8 @@ func _classify_area_hit(collider: Area3D, simulation: Node) -> Dictionary:
 	if collider.is_in_group("entrance_selector") and is_instance_valid(area_parent):
 		return {"kind": "entrance", "node": area_parent, "position": area_parent.global_position}
 	if collider.is_in_group("resource_pile_selector"):
-		var pile: Dictionary = simulation._resource_pile_for_node(area_parent)
-		if not pile.is_empty():
+		var pile: ResourcePileScript = simulation._resource_pile_for_node(area_parent)
+		if pile != null:
 			return {"kind": "pile", "node": area_parent, "pile": pile, "position": area_parent.global_position}
 		return {"kind": ""}
 	if collider.is_in_group("warehouse_selector"):

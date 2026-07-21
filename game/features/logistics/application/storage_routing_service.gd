@@ -1,6 +1,8 @@
 class_name StorageRoutingService
 extends RefCounted
 
+const ResourcePileScript = preload("res://game/features/logistics/domain/resource_pile.gd")
+
 ## Handles warehouse routing (reachable index search, delivery position,
 ## route cost), storage capacity queries, pile lookups, and storage room
 ## checks for worker roles.
@@ -12,19 +14,19 @@ func configure(next_simulation: Node) -> void:
 	simulation = next_simulation
 
 
-func resource_pile_for_node(pile_node: Node3D) -> Dictionary:
-	for pile: Dictionary in simulation.resource_piles:
-		if pile.get("node") == pile_node:
+func resource_pile_for_node(pile_node: Node3D) -> ResourcePileScript:
+	for pile: ResourcePileScript in simulation.resource_piles:
+		if pile.node == pile_node:
 			return pile
-	return {}
+	return null
 
 
 func take_resource_from_pile_at(position: Vector3, resource_type: String, max_amount: int) -> int:
 	if max_amount <= 0 or resource_type.is_empty():
 		return 0
 	for index in simulation.resource_piles.size():
-		var pile: Dictionary = simulation.resource_piles[index]
-		var pile_node: Node3D = pile.get("node") as Node3D
+		var pile: ResourcePileScript = simulation.resource_piles[index]
+		var pile_node: Node3D = pile.node
 		if not is_instance_valid(pile_node) or pile_node.global_position.distance_squared_to(position) > 0.25:
 			continue
 		var available: int = int(pile.resources.get(resource_type, 0))
@@ -46,17 +48,16 @@ func take_resource_from_pile_at(position: Vector3, resource_type: String, max_am
 		if pile.resources.is_empty():
 			simulation.resource_piles.remove_at(index)
 			pile_node.queue_free()
-		else:
-			simulation.resource_piles[index] = pile
 		return taken
 	return 0
 
 
-func pile_available_resources(pile: Dictionary) -> Array[String]:
-	var resources: Dictionary = pile.get("resources", {})
+func pile_available_resources(pile: ResourcePileScript) -> Array[String]:
 	var result: Array[String] = []
-	for resource_type in resources:
-		if int(resources.get(resource_type, 0)) > 0:
+	if pile == null:
+		return result
+	for resource_type in pile.resources:
+		if int(pile.resources.get(resource_type, 0)) > 0:
 			result.append(str(resource_type))
 	return result
 
