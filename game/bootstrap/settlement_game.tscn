@@ -1,7 +1,7 @@
 [gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://game/bootstrap/settlement_game.gd" id="1_main"]
-[ext_resource type="PackedScene" path="res://game/features/world/presentation/terrain_3d_world.tscn" id="2_terrain"]
+[ext_resource type="PackedScene" path="res://game/features/world/presentation/biomes/summer/summer_valley/summer_valley_territory.tscn" id="2_terrain"]
 
 [node name="SettlementPrototype" type="Node3D"]
 script = ExtResource("1_main")

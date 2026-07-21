@@ -112,7 +112,9 @@ func _build_sky_and_weather_controller(parent: Node) -> void:
 func _build_terrain(parent: Node) -> void:
 	terrain = parent.get_node_or_null("Terrain3dWorld/Terrain3D") as Terrain3D
 	if terrain == null:
-		push_error("Settlement scene is missing Terrain3dWorld/Terrain3D.")
+		terrain = parent.find_child("Terrain3D", true, false) as Terrain3D
+	if terrain == null:
+		push_error("Settlement scene is missing Terrain3D node.")
 		return
 	# Dynamic collision follows the active camera by default, keeping raycasts and
 	# physics accurate without generating collision for the whole data set.

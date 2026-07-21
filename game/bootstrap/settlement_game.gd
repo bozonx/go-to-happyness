@@ -73,6 +73,7 @@ const DigSiteScene = preload("res://game/features/world/presentation/dig_site.ts
 const ExcavationServiceScript = preload("res://game/features/production/application/excavation_service.gd")
 const SettlementSurvivalServiceScript = preload("res://game/features/settlement/application/settlement_survival_service.gd")
 const SettlementDailyRulesServiceScript = preload("res://game/features/settlement/application/settlement_daily_rules_service.gd")
+const TerritoryServiceScript = preload("res://game/features/world/application/territory_service.gd")
 
 
 # The playable routing and construction board must cover the terrain visible
@@ -628,9 +629,19 @@ var building_maintenance_service: BuildingMaintenanceService
 var building_lifecycle_service: BuildingLifecycleServiceScript
 var settlement_survival_service: SettlementSurvivalServiceScript
 var settlement_daily_rules_service: SettlementDailyRulesServiceScript
+var territory_service: TerritoryServiceScript
 
 
 func _ready() -> void:
+	territory_service = TerritoryServiceScript.new()
+	var summer_valley_biome := load("res://game/features/world/presentation/biomes/summer/summer_valley/summer_valley_biome.tres") as BiomeDefinition
+	var summer_plains_biome := load("res://game/features/world/presentation/biomes/summer/summer_plains/summer_plains_biome.tres") as BiomeDefinition
+	if summer_valley_biome != null:
+		territory_service.register_biome(summer_valley_biome)
+	if summer_plains_biome != null:
+		territory_service.register_biome(summer_plains_biome)
+	territory_service.set_active_biome(&"summer_valley")
+
 	citizen_ai = CitizenAISystem.new()
 	citizen_ai.name = "CitizenAI"
 	add_child(citizen_ai)
