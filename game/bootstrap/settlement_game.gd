@@ -27,6 +27,7 @@ const CourierTaskScript = preload("res://game/features/logistics/domain/courier_
 const TradeServiceScript = preload("res://game/features/logistics/application/trade_service.gd")
 const MarketMenuControllerScript = preload("res://game/features/logistics/presentation/market_menu_controller.gd")
 const WarehouseMenuControllerScript = preload("res://game/features/logistics/presentation/warehouse_menu_controller.gd")
+const WarehouseFillLabelControllerScript = preload("res://game/features/logistics/presentation/warehouse_fill_label_controller.gd")
 const StorageDeliveryServiceScript = preload("res://game/features/logistics/application/storage_delivery_service.gd")
 const StorageRoutingServiceScript = preload("res://game/features/logistics/application/storage_routing_service.gd")
 const BuildingAvailabilityServiceScript = preload("res://game/features/buildings/application/building_availability_service.gd")
@@ -627,6 +628,7 @@ var house_menu_controller: RefCounted
 var pocket_take_menu_controller: RefCounted
 var market_menu_controller: RefCounted
 var warehouse_menu_controller: RefCounted
+var warehouse_fill_label_controller: RefCounted
 var building_menu_controller: RefCounted
 var building_status_indicator_controller: RefCounted
 var first_person_hud_controller: RefCounted
@@ -797,6 +799,8 @@ func _ready() -> void:
 	market_menu_controller.configure(self)
 	warehouse_menu_controller = WarehouseMenuControllerScript.new()
 	warehouse_menu_controller.configure(self)
+	warehouse_fill_label_controller = WarehouseFillLabelControllerScript.new()
+	warehouse_fill_label_controller.configure(self)
 	building_menu_controller = BuildingMenuControllerScript.new()
 	building_menu_controller.configure(self)
 	building_status_indicator_controller = BuildingStatusIndicatorControllerScript.new()
@@ -4632,41 +4636,13 @@ func _add_building_status_indicator(building: Node3D) -> void:
 
 
 func _add_warehouse_fill_label(building: Node3D) -> void:
-	if not is_instance_valid(building) or building.has_meta("warehouse_fill_label"):
-		return
-	var label := BillboardLabelScene.instantiate() as Label3D
-	label.position = Vector3(0.0, 3.6, 0.0)
-	label.font_size = 22
-	label.outline_size = 4
-	label.visible = false
-	building.add_child(label)
-	building.set_meta("warehouse_fill_label", label)
+	if warehouse_fill_label_controller != null:
+		warehouse_fill_label_controller.add_warehouse_fill_label(building)
 
 
 func _update_warehouse_fill_labels() -> void:
-	for i in range(warehouse_positions.size()):
-		var service_pos: Vector3 = warehouse_positions[i]
-		var building := _building_at_service_position(service_pos)
-		if not is_instance_valid(building):
-			continue
-		var label := building.get_meta("warehouse_fill_label") as Label3D
-		if label == null:
-			continue
-		if not is_first_person:
-			label.visible = false
-			continue
-		var is_nearby := player_citizen != null and player_citizen.global_position.distance_to(service_pos) <= INTERACTION_RANGE
-		if not is_nearby:
-			label.visible = false
-			continue
-		var wh_state: WarehouseState = settlement.warehouses[i] if i < settlement.warehouses.size() else null
-		if wh_state == null:
-			label.visible = false
-			continue
-		var used := int(ceil(wh_state.used_units(SettlementState.STORAGE_WEIGHTS)))
-		label.text = "%d / %d" % [used, wh_state.capacity]
-		label.modulate = Color("8ecae6") if used < wh_state.capacity else Color("ef6b5b")
-		label.visible = true
+	if warehouse_fill_label_controller != null:
+		warehouse_fill_label_controller.update_warehouse_fill_labels()
 
 func _update_building_status_indicators(delta: float) -> void:
 	if building_status_indicator_controller != null:
