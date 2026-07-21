@@ -41,6 +41,9 @@ const BuildingQueueServiceScript = preload("res://game/features/citizens/applica
 const CitizenLifecycleServiceScript = preload("res://game/features/citizens/application/citizen_lifecycle_service.gd")
 const CitizenLivingStatusServiceScript = preload("res://game/features/citizens/application/citizen_living_status_service.gd")
 const CitizenStatusEffectScript = preload("res://game/features/citizens/domain/citizen_status_effect.gd")
+const CitizenRegistrationServiceScript = preload("res://game/features/citizens/application/citizen_registration_service.gd")
+const SchoolServiceScript = preload("res://game/features/buildings/application/school_service.gd")
+const BuildingPlacementServiceScript = preload("res://game/features/buildings/application/building_placement_service.gd")
 const SleepGoalScript = preload("res://game/features/decision/domain/goals/sleep_goal.gd")
 const ReturnHomeWhenIdleGoalScript = preload("res://game/features/decision/domain/goals/return_home_when_idle_goal.gd")
 const MealGoalScript = preload("res://game/features/decision/domain/goals/meal_goal.gd")
@@ -650,6 +653,9 @@ var building_lifecycle_service: BuildingLifecycleServiceScript
 var settlement_survival_service: SettlementSurvivalServiceScript
 var settlement_daily_rules_service: SettlementDailyRulesServiceScript
 var territory_service: TerritoryServiceScript
+var citizen_registration_service: RefCounted
+var school_service: RefCounted
+var building_placement_service: RefCounted
 
 
 func _ready() -> void:
@@ -765,6 +771,12 @@ func _ready() -> void:
 	building_lifecycle_service.configure(self)
 	excavation_service = ExcavationServiceScript.new()
 	excavation_service.configure(self)
+	citizen_registration_service = CitizenRegistrationServiceScript.new()
+	citizen_registration_service.configure(self)
+	school_service = SchoolServiceScript.new()
+	school_service.configure(self)
+	building_placement_service = BuildingPlacementServiceScript.new()
+	building_placement_service.configure(self)
 
 	citizen_needs_service = CitizenNeedsService.new()
 	citizen_needs_service.configure(self)
@@ -1071,66 +1083,27 @@ func _show_labor_command_blocked() -> void:
 
 
 func _registration_official() -> Citizen:
-	# Any citizen can be the officer, but they must physically staff the active
-	# civic centre. Player control does not grant remote registration privileges.
-	var centre := _employment_centre_building()
-	if not is_instance_valid(centre):
-		return null
-	var center := _employment_center_position()
-	for citizen in citizens:
-		if not is_instance_valid(citizen) or citizen.permanent_role != "official":
-			continue
-		if citizen.employment_workplace != centre:
-			continue
-		if citizen.global_position.distance_to(center) > OFFICER_POST_RADIUS:
-			continue
-		if citizen.is_player_controlled or citizen.state == Citizen.State.OFFICIAL_WORK:
-			return citizen
-	return null
+	return citizen_registration_service.registration_official() if citizen_registration_service != null else null
 
 
 func _is_registration_staffed() -> bool:
-	return _is_work_time() and _registration_official() != null
+	return citizen_registration_service.is_registration_staffed() if citizen_registration_service != null else false
 
 
 func _next_registration_ticket() -> int:
-	_registration_queue_counter += 1
-	return _registration_queue_counter
+	return citizen_registration_service.next_registration_ticket() if citizen_registration_service != null else 0
 
 
 func _can_start_registration(citizen: Citizen) -> bool:
-	if not _is_registration_staffed() or citizen.employment_state != Citizen.EmploymentState.REGISTERING:
-		return false
-	for other in citizens:
-		if not is_instance_valid(other) or other == citizen:
-			continue
-		if other.state == Citizen.State.EMPLOYMENT_PROCESSING:
-			return false
-		if other.employment_state == Citizen.EmploymentState.REGISTERING and other.registration_queue_order >= 0 and other.registration_queue_order < citizen.registration_queue_order:
-			return false
-	return true
+	return citizen_registration_service.can_start_registration(citizen) if citizen_registration_service != null else false
 
 
 func _registration_duration() -> float:
-	var official := _registration_official()
-	if official == null:
-		return Citizen.EMPLOYMENT_PROCESS_DURATION
-	return Citizen.EMPLOYMENT_PROCESS_DURATION / official.get_efficiency("official")
+	return citizen_registration_service.registration_duration() if citizen_registration_service != null else Citizen.EMPLOYMENT_PROCESS_DURATION
 
 
 func _is_teacher_present_at_school() -> bool:
-	if school_positions.is_empty():
-		return false
-	var school_pos := school_positions[0]
-	for citizen in citizens:
-		if citizen.specialization == "teacher":
-			if citizen.is_player_controlled:
-				if citizen.global_position.distance_to(school_pos) <= 3.5:
-					return true
-			elif citizen.state == Citizen.State.SCHOOL_WORK:
-				if citizen.global_position.distance_to(school_pos) <= 3.5:
-					return true
-	return false
+	return school_service.is_teacher_present() if school_service != null else false
 
 
 func _is_seller_present_at(market_node: Node3D) -> bool:
@@ -1153,15 +1126,14 @@ func _is_seller_present_at(market_node: Node3D) -> bool:
 
 
 func _on_employment_processing_finished(citizen: Citizen) -> void:
-	# Do not grant a profession outside the shift. Keep the reservation/status and
-	# restart the one-hour registration at the next working morning.
-	if not _is_work_time():
-		citizen.state = Citizen.State.IDLE
-		return
-	citizen.finish_employment_processing()
-	# The native runtime observes the employment state in its next snapshot and
-	# owns the first work command. Do not invoke a second scheduler here.
-	_update_workers()
+	if citizen_registration_service != null:
+		citizen_registration_service.on_employment_processing_finished(citizen)
+	else:
+		if not _is_work_time():
+			citizen.state = Citizen.State.IDLE
+			return
+		citizen.finish_employment_processing()
+		_update_workers()
 
 func _update_daylight() -> void:
 	if world_setup != null:
@@ -4354,24 +4326,10 @@ func _is_footprint_clear(world_position: Vector3, footprint: Vector2i) -> bool:
 	return true
 
 func _footprint_overlaps_terrain_obstacle(center: Vector3, footprint: Vector2i) -> bool:
-	var min_x := roundi(center.x - (footprint.x - 1) * 0.5)
-	var min_z := roundi(center.z - (footprint.y - 1) * 0.5)
-	for x in range(footprint.x):
-		for z in range(footprint.y):
-			if terrain_blocked_cells.has(Vector2i(min_x + x, min_z + z)):
-				return true
-	return false
+	return building_placement_service.footprint_overlaps_terrain_obstacle(center, footprint) if building_placement_service != null else false
 
 func _is_footprint_level(world_position: Vector3, footprint: Vector2i) -> bool:
-	var heights: Array[float] = []
-	var half_x := footprint.x * 0.5 - 0.25
-	var half_z := footprint.y * 0.5 - 0.25
-	for offset in [Vector2(-half_x, -half_z), Vector2(half_x, -half_z), Vector2(-half_x, half_z), Vector2(half_x, half_z), Vector2.ZERO]:
-		var height := _terrain_height_at(world_position.x + offset.x, world_position.z + offset.y, world_position.y)
-		if is_nan(height):
-			return false
-		heights.append(height)
-	return heights.max() - heights.min() <= MAX_BUILD_SLOPE
+	return building_placement_service.is_footprint_level(world_position, footprint) if building_placement_service != null else false
 
 func _terrain_height_at(x: float, z: float, near_y: float) -> float:
 	if DisplayServer.get_name() == "headless":
@@ -4389,13 +4347,7 @@ func _snapped_build_position(world_position: Vector3) -> Vector3:
 	return snapped
 
 func _is_clear_of_objects(world_position: Vector3, minimum_distance: float) -> bool:
-	for occupied_position in building_registry.positions() + tree_positions:
-		if Vector2(occupied_position.x, occupied_position.z).distance_to(Vector2(world_position.x, world_position.z)) < minimum_distance:
-			return false
-	for site in dig_sites:
-		if Vector2(site.node.global_position.x, site.node.global_position.z).distance_to(Vector2(world_position.x, world_position.z)) < minimum_distance:
-			return false
-	return true
+	return building_placement_service.is_clear_of_objects(world_position, minimum_distance) if building_placement_service != null else false
 
 func _placement_key(world_position: Vector3) -> Vector2i:
 	return Vector2i(roundi(world_position.x), roundi(world_position.z))

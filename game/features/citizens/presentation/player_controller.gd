@@ -1,6 +1,8 @@
 class_name PlayerController
 extends Node
 
+const PlayerInteractionTargetResolverScript = preload("res://game/features/citizens/presentation/player_interaction_target_resolver.gd")
+
 const PLAYER_SPEED := 6.5
 const PLAYER_SPRINT_MULTIPLIER := 1.7
 const PLAYER_JUMP_VELOCITY := 4.8
@@ -11,6 +13,7 @@ const HARVEST_DURATION := 2.0
 const HERO_GATHER_YIELD := 3
 
 var simulation: Node
+var _target_resolver: PlayerInteractionTargetResolver
 
 var is_first_person := false
 var player_citizen: Citizen
@@ -28,6 +31,7 @@ var player_toilet_notified := false
 
 func setup(p_simulation: Node) -> void:
 	simulation = p_simulation
+	_target_resolver = PlayerInteractionTargetResolverScript.new()
 
 
 func toggle_hero_view() -> void:
@@ -344,82 +348,6 @@ func start_interaction(all: bool) -> void:
 
 
 func first_person_target() -> Dictionary:
-	var result := {"kind": ""}
 	if not is_first_person or player_citizen == null or simulation.camera == null:
-		return result
-	var from: Vector3 = simulation.camera.global_position
-	var direction: Vector3 = -simulation.camera.global_transform.basis.z
-	var to := from + direction * INTERACTION_RANGE
-	var query := PhysicsRayQueryParameters3D.create(from, to)
-	query.collide_with_areas = true
-	query.collide_with_bodies = true
-	query.collision_mask = 1 | 4
-	var hit: Dictionary = simulation.get_world_3d().direct_space_state.intersect_ray(query)
-	var hit_position := Vector3.INF
-	if not hit.is_empty():
-		hit_position = hit.position
-		var collider: Object = hit.get("collider", null)
-		if collider is StaticBody3D and collider.name == "TreeCollision":
-			var tree := collider.get_parent() as Node3D
-			if is_instance_valid(tree) and not bool(tree.get_meta("felled", false)):
-				result = {"kind": "tree", "node": tree, "position": tree.global_position}
-		elif collider is Area3D:
-			var area_parent := collider.get_parent() as Node3D
-			if collider.is_in_group("construction_selector") and is_instance_valid(area_parent):
-				result = {"kind": "construction", "node": area_parent, "position": area_parent.global_position}
-			elif collider.is_in_group("entrance_selector") and is_instance_valid(area_parent):
-				result = {"kind": "entrance", "node": area_parent, "position": area_parent.global_position}
-			elif collider.is_in_group("resource_pile_selector"):
-				var pile: Dictionary = simulation._resource_pile_for_node(area_parent)
-				if not pile.is_empty():
-					result = {"kind": "pile", "node": area_parent, "pile": pile, "position": area_parent.global_position}
-			elif collider.is_in_group("warehouse_selector"):
-				result = {"kind": "warehouse", "node": area_parent, "position": area_parent.global_position, "warehouse_index": simulation._warehouse_index_for_building(area_parent)}
-			elif collider.is_in_group("citizen_selector") and area_parent is Citizen:
-				result = {"kind": "citizen", "node": area_parent as Citizen, "position": area_parent.global_position}
-			elif collider.is_in_group("tree_selector") and is_instance_valid(area_parent):
-				if not bool(area_parent.get_meta("felled", false)):
-					result = {"kind": "tree", "node": area_parent, "position": area_parent.global_position}
-			elif collider.is_in_group("forage_selector") and is_instance_valid(area_parent):
-				result = {"kind": "forage", "node": area_parent, "position": area_parent.global_position}
-			elif collider.is_in_group("rabbit_selector") and is_instance_valid(area_parent):
-				result = {"kind": "rabbit", "node": area_parent, "position": area_parent.global_position}
-			elif collider.is_in_group("building_selector") and is_instance_valid(area_parent):
-				var building_type := str(area_parent.get_meta("building_type", ""))
-				if bool(area_parent.get_meta("pending_demolition", false)):
-					result = {"kind": "demolition", "node": area_parent, "position": area_parent.global_position}
-				elif building_type == "sawmill":
-					result = {"kind": "sawmill", "node": area_parent, "position": area_parent.global_position}
-				elif building_type.begins_with("toilet_"):
-					result = {"kind": "toilet", "node": area_parent, "position": area_parent.global_position}
-				elif simulation._role_for_workplace(area_parent) != "":
-					result = {"kind": "workplace", "node": area_parent, "position": area_parent.global_position}
-				else:
-					result = {"kind": "building", "node": area_parent, "position": area_parent.global_position}
-			elif collider.is_in_group("campfire_selector") or collider.is_in_group("cook_campfire_selector") or collider.is_in_group("market_selector") or collider.is_in_group("school_selector") or collider.is_in_group("house_selector") or collider.is_in_group("materials_factory_selector"):
-				if is_instance_valid(area_parent):
-					result = {"kind": "building", "node": area_parent, "position": area_parent.global_position}
-	if result.kind != "":
-		return result
-	if hit_position == Vector3.INF:
-		hit_position = to
-	var player_pos: Vector3 = player_citizen.global_position
-	if player_pos.distance_to(hit_position) > INTERACTION_RANGE:
-		return result
-	var grass_pos: Vector3 = simulation._nearest_grass_source_to_point(hit_position, 1.0)
-	if grass_pos != Vector3.INF and player_pos.distance_to(grass_pos) <= INTERACTION_RANGE:
-		var grass_cell: Vector2i = simulation._cell_from_position(grass_pos)
-		if simulation.grass_sources.has(grass_cell):
-			return {"kind": "grass", "position": grass_pos}
-	var farm_pos: Vector3 = simulation._nearest_point_to_point_array(simulation.farm_positions, hit_position, 5.0)
-	if farm_pos != Vector3.INF and player_pos.distance_to(farm_pos) <= INTERACTION_RANGE:
-		return {"kind": "farm", "position": farm_pos}
-	var pond_pos: Vector3 = simulation._nearest_point_to_point_array(simulation.pond_positions, hit_position, 2.5)
-	if pond_pos != Vector3.INF and player_pos.distance_to(pond_pos) <= INTERACTION_RANGE:
-		return {"kind": "pond", "position": pond_pos}
-	var tree_pos: Vector3 = simulation._nearest_point_to_point_array(simulation.tree_positions, hit_position, 1.5)
-	if tree_pos != Vector3.INF and player_pos.distance_to(tree_pos) <= INTERACTION_RANGE:
-		var tree_node: Node3D = simulation.tree_nodes.get(simulation._cell_from_position(tree_pos))
-		if is_instance_valid(tree_node) and not bool(tree_node.get_meta("felled", false)):
-			return {"kind": "tree", "node": tree_node, "position": tree_pos}
-	return result
+		return {"kind": ""}
+	return _target_resolver.resolve(simulation.camera, player_citizen, simulation)
