@@ -46,6 +46,7 @@ const SchoolServiceScript = preload("res://game/features/buildings/application/s
 const BuildingPlacementServiceScript = preload("res://game/features/buildings/application/building_placement_service.gd")
 const CitizenDailyOrderServiceScript = preload("res://game/features/citizens/application/citizen_daily_order_service.gd")
 const HeroPocketServiceScript = preload("res://game/features/citizens/application/hero_pocket_service.gd")
+const HeroInteractionServiceScript = preload("res://game/features/citizens/application/hero_interaction_service.gd")
 const SleepGoalScript = preload("res://game/features/decision/domain/goals/sleep_goal.gd")
 const ReturnHomeWhenIdleGoalScript = preload("res://game/features/decision/domain/goals/return_home_when_idle_goal.gd")
 const MealGoalScript = preload("res://game/features/decision/domain/goals/meal_goal.gd")
@@ -662,11 +663,14 @@ var school_service: RefCounted
 var building_placement_service: RefCounted
 var citizen_daily_order_service: RefCounted
 var hero_pocket_service: RefCounted
+var hero_interaction_service: RefCounted
 
 
 func _ready() -> void:
 	hero_pocket_service = HeroPocketServiceScript.new()
 	hero_pocket_service.configure(self)
+	hero_interaction_service = HeroInteractionServiceScript.new()
+	hero_interaction_service.configure(self)
 	territory_service = TerritoryServiceScript.new()
 	var summer_valley_biome := load("res://game/features/world/presentation/biomes/summer/summer_valley/summer_valley_biome.tres") as BiomeDefinition
 	var summer_plains_biome := load("res://game/features/world/presentation/biomes/summer/summer_plains/summer_plains_biome.tres") as BiomeDefinition
@@ -3665,25 +3669,10 @@ func _reserve_player_gather_storage(resource_type: String, requested: int) -> in
 
 
 func _nearby_tree() -> bool:
-	if player_citizen == null:
-		return false
-	for tree_position in tree_positions:
-		if player_citizen.global_position.distance_to(tree_position) <= INTERACTION_RANGE:
-			var tree: Node3D = tree_nodes.get(_cell_from_position(tree_position))
-			if is_instance_valid(tree) and not bool(tree.get_meta("felled", false)):
-				return true
-	return false
+	return hero_interaction_service.nearby_tree() if hero_interaction_service != null else false
 
 func _nearby_tree_with_branches() -> bool:
-	if player_citizen == null:
-		return false
-	for tree_position in tree_positions:
-		if player_citizen.global_position.distance_to(tree_position) <= INTERACTION_RANGE:
-			var tree: Node3D = tree_nodes.get(_cell_from_position(tree_position))
-			if is_instance_valid(tree) and not bool(tree.get_meta("felled", false)):
-				if int(tree.get_meta("remaining_branches", 0)) > 0:
-					return true
-	return false
+	return hero_interaction_service.nearby_tree_with_branches() if hero_interaction_service != null else false
 
 func _nearby_warehouse_index() -> int:
 	return storage_routing_service.nearby_warehouse_index()
@@ -3693,79 +3682,32 @@ func _nearby_warehouse() -> bool:
 	return storage_routing_service.nearby_warehouse()
 
 func _nearby_sawmill() -> bool:
-	return _nearby_sawmill_position() != Vector3.INF
+	return hero_interaction_service.nearby_sawmill() if hero_interaction_service != null else false
 
 func _nearby_sawmill_position() -> Vector3:
-	if player_citizen == null:
-		return Vector3.INF
-	for sawmill_position in sawmill_positions:
-		if player_citizen.global_position.distance_to(sawmill_position) <= INTERACTION_RANGE:
-			return sawmill_position
-	return Vector3.INF
+	return hero_interaction_service.nearby_sawmill_position() if hero_interaction_service != null else Vector3.INF
 
 func _nearby_farm() -> bool:
-	if player_citizen == null:
-		return false
-	for farm_position in farm_positions:
-		if player_citizen.global_position.distance_to(farm_position) <= INTERACTION_RANGE:
-			return true
-	return false
+	return hero_interaction_service.nearby_farm() if hero_interaction_service != null else false
 
 func _nearby_pond() -> bool:
-	if player_citizen == null:
-		return false
-	for pond_position in pond_positions:
-		if player_citizen.global_position.distance_to(pond_position) <= INTERACTION_RANGE:
-			return true
-	return false
+	return hero_interaction_service.nearby_pond() if hero_interaction_service != null else false
 
 func _nearby_grass_source() -> bool:
-	return _nearby_grass_source_position() != Vector3.INF
+	return hero_interaction_service.nearby_grass_source() if hero_interaction_service != null else false
 
 func _nearby_grass_source_position() -> Vector3:
-	if player_citizen == null:
-		return Vector3.INF
-	var best := Vector3.INF
-	var best_dist := INTERACTION_RANGE
-	for cell in grass_sources:
-		var source: Dictionary = grass_sources[cell]
-		if int(source.remaining) <= 0 or not is_instance_valid(source.node):
-			continue
-		var node_pos: Vector3 = (source.node as Node3D).global_position
-		var dist := player_citizen.global_position.distance_to(node_pos)
-		if dist <= best_dist:
-			best_dist = dist
-			best = node_pos
-	return best
+	return hero_interaction_service.nearby_grass_source_position() if hero_interaction_service != null else Vector3.INF
 
 func _consume_grass_near_player(amount: int) -> void:
-	# The hero's batch harvest draws from the nearest patch and rolls onto adjacent
-	# patches if the closest one is exhausted, so one action can clear a small tuft.
-	var remaining_to_take := amount
-	while remaining_to_take > 0:
-		var pos := _nearby_grass_source_position()
-		if pos == Vector3.INF:
-			return
-		_consume_grass_source(pos)
-		remaining_to_take -= 1
+	if hero_interaction_service != null:
+		hero_interaction_service.consume_grass_near_player(amount)
 
 func _nearby_forage_source() -> bool:
-	if player_citizen == null:
-		return false
-	var player_cell := _cell_from_position(player_citizen.global_position)
-	for cell in forage_sources:
-		if cell == player_cell:
-			return true
-	return false
+	return hero_interaction_service.nearby_forage_source() if hero_interaction_service != null else false
 
 func _nearby_rabbit_source() -> bool:
-	if player_citizen == null:
-		return false
-	for source: Dictionary in rabbit_sources.values():
-		var rabbit := source.get("node") as Node3D
-		if is_instance_valid(rabbit) and rabbit.global_position.distance_to(player_citizen.global_position) <= INTERACTION_RANGE:
-			return true
-	return false
+	return hero_interaction_service.nearby_rabbit_source() if hero_interaction_service != null else false
 
 func _wild_food_requires_specialist_message() -> String:
 	return "Forest gifts and rabbits can only be gathered by a trained specialist. Build a forager/hunter tent first."
@@ -3861,39 +3803,7 @@ func _role_for_workplace(building: Node3D) -> String:
 
 
 func _resource_remaining_percent(resource_type: String) -> int:
-	if player_citizen == null:
-		return 0
-	match resource_type:
-		"wood":
-			for position in tree_positions:
-				if player_citizen.global_position.distance_to(position) <= INTERACTION_RANGE:
-					var tree: Node3D = tree_nodes.get(_cell_from_position(position))
-					if is_instance_valid(tree) and not bool(tree.get_meta("felled", false)):
-						return 100
-			return 0
-		"branches":
-			for position in tree_positions:
-				if player_citizen.global_position.distance_to(position) <= INTERACTION_RANGE:
-					var tree: Node3D = tree_nodes.get(_cell_from_position(position))
-					if is_instance_valid(tree) and not bool(tree.get_meta("felled", false)):
-						var remaining := int(tree.get_meta("remaining_branches", 0))
-						var initial := maxi(1, int(tree.get_meta("initial_branches", remaining)))
-						return clampi(int(round(float(remaining) / float(initial) * 100.0)), 0, 100)
-			return 0
-		"grass":
-			var pos := _nearby_grass_source_position()
-			if pos != Vector3.INF:
-				var cell := _cell_from_position(pos)
-				var source: Dictionary = grass_sources.get(cell, {})
-				var remaining := int(source.get("remaining", 0))
-				var initial := maxi(1, int(source.get("initial", remaining)))
-				return clampi(int(round(float(remaining) / float(initial) * 100.0)), 0, 100)
-			return 0
-		"water":
-			return 100
-		"food":
-			return 100
-	return 0
+	return hero_interaction_service.resource_remaining_percent(resource_type) if hero_interaction_service != null else 0
 
 
 func _format_pocket_hint() -> String:
