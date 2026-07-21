@@ -1,4 +1,4 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=22 format=3]
 
 [ext_resource type="Script" path="res://game/features/ui/presentation/ui_manager.gd" id="1_uim"]
 [ext_resource type="PackedScene" path="res://game/features/ui/presentation/hud.tscn" id="2_hud"]
@@ -6,6 +6,21 @@
 [ext_resource type="PackedScene" path="res://game/features/ui/presentation/time_controls_panel.tscn" id="4_time"]
 [ext_resource type="PackedScene" path="res://game/features/ui/presentation/interaction_hint_panel.tscn" id="5_hint"]
 [ext_resource type="PackedScene" path="res://game/features/ui/presentation/first_person_crosshair.tscn" id="6_cross"]
+[ext_resource type="PackedScene" path="res://game/features/buildings/presentation/build_menu.tscn" id="7_build"]
+[ext_resource type="PackedScene" path="res://game/features/settlement/presentation/entrance_menu.tscn" id="8_entrance"]
+[ext_resource type="PackedScene" path="res://game/features/buildings/presentation/house_menu.tscn" id="9_house"]
+[ext_resource type="PackedScene" path="res://game/features/buildings/presentation/school_menu.tscn" id="10_school"]
+[ext_resource type="PackedScene" path="res://game/features/production/presentation/materials_factory_menu.tscn" id="11_factory"]
+[ext_resource type="PackedScene" path="res://game/features/buildings/presentation/campfire_menu.tscn" id="12_campfire"]
+[ext_resource type="PackedScene" path="res://game/features/settlement/presentation/campfire_story_menu.tscn" id="13_story"]
+[ext_resource type="PackedScene" path="res://game/features/logistics/presentation/market_menu.tscn" id="14_market"]
+[ext_resource type="PackedScene" path="res://game/features/logistics/presentation/warehouse_menu.tscn" id="15_warehouse"]
+[ext_resource type="PackedScene" path="res://game/features/citizens/presentation/pocket_take_menu.tscn" id="16_pocket"]
+[ext_resource type="PackedScene" path="res://game/features/buildings/presentation/building_menu.tscn" id="17_building"]
+[ext_resource type="PackedScene" path="res://game/features/decision/presentation/workforce_menu.tscn" id="18_workforce"]
+[ext_resource type="PackedScene" path="res://game/features/settlement/presentation/research_menu.tscn" id="19_research"]
+[ext_resource type="PackedScene" path="res://game/features/settlement/presentation/campfire_orders_menu.tscn" id="20_orders"]
+[ext_resource type="PackedScene" path="res://game/features/settlement/presentation/survival_decision_panel.tscn" id="21_decision"]
 
 [node name="UIManager" type="CanvasLayer"]
 script = ExtResource("1_uim")
@@ -19,4 +34,49 @@ script = ExtResource("1_uim")
 [node name="InteractionHintPanel" parent="." instance=ExtResource("5_hint")]
 
 [node name="FirstPersonCrosshair" parent="." instance=ExtResource("6_cross")]
+visible = false
+
+[node name="BuildMenu" parent="." instance=ExtResource("7_build")]
+visible = false
+
+[node name="EntranceMenu" parent="." instance=ExtResource("8_entrance")]
+visible = false
+
+[node name="HouseMenu" parent="." instance=ExtResource("9_house")]
+visible = false
+
+[node name="SchoolMenu" parent="." instance=ExtResource("10_school")]
+visible = false
+
+[node name="MaterialsFactoryMenu" parent="." instance=ExtResource("11_factory")]
+visible = false
+
+[node name="CampfireMenu" parent="." instance=ExtResource("12_campfire")]
+visible = false
+
+[node name="CampfireStoryMenu" parent="." instance=ExtResource("13_story")]
+visible = false
+
+[node name="MarketMenu" parent="." instance=ExtResource("14_market")]
+visible = false
+
+[node name="WarehouseMenu" parent="." instance=ExtResource("15_warehouse")]
+visible = false
+
+[node name="PocketTakeMenu" parent="." instance=ExtResource("16_pocket")]
+visible = false
+
+[node name="BuildingMenu" parent="." instance=ExtResource("17_building")]
+visible = false
+
+[node name="WorkforceMenu" parent="." instance=ExtResource("18_workforce")]
+visible = false
+
+[node name="ResearchMenu" parent="." instance=ExtResource("19_research")]
+visible = false
+
+[node name="CampfireOrdersMenu" parent="." instance=ExtResource("20_orders")]
+visible = false
+
+[node name="SurvivalDecisionPanel" parent="." instance=ExtResource("21_decision")]
 visible = false
