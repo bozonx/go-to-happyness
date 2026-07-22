@@ -2,7 +2,7 @@ class_name TestDomainRouting
 extends RefCounted
 
 const GridRouteServiceScript = preload("res://game/features/routing/application/grid_route_service.gd")
-const RouteRequestScript = preload("res://game/features/routing/application/route_request.gd")
+const RouteRequestScript = preload("res://game/features/routing/domain/route_request.gd")
 const BuildingQueueServiceScript = preload("res://game/features/citizens/application/building_queue_service.gd")
 const TrailFieldServiceScript = preload("res://game/features/routing/application/trail_field_service.gd")
 

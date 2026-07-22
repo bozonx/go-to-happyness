@@ -75,7 +75,7 @@ const RegisterGoalScript = preload("res://game/features/decision/domain/goals/re
 const WorkforceOrderProviderScript = preload("res://game/features/decision/application/workforce_order_provider.gd")
 const DailyPlayerOrderProviderScript = preload("res://game/features/decision/application/daily_player_order_provider.gd")
 const CleaningGoalScript = preload("res://game/features/decision/domain/goals/cleaning_goal.gd")
-const RouteRequestScript = preload("res://game/features/routing/application/route_request.gd")
+const RouteRequestScript = preload("res://game/features/routing/domain/route_request.gd")
 const TrailFieldServiceScript = preload("res://game/features/routing/application/trail_field_service.gd")
 const WeatherStateScript = preload("res://game/features/simulation/domain/weather_state.gd")
 const CameraControllerScript = preload("res://game/features/world/presentation/camera_controller.gd")
@@ -3349,7 +3349,16 @@ func _demolish_selected_warehouse() -> void:
 
 
 func _add_demolition_marker(building: Node3D) -> void:
-	building_lifecycle_service.add_demolition_marker(building)
+	if building.has_meta("demolition_marker"):
+		return
+	var marker: Label3D = BillboardLabelScene.instantiate() as Label3D
+	marker.text = "DEMOLISH"
+	marker.position = Vector3(0.0, 5.2, 0.0)
+	marker.font_size = 32
+	marker.outline_size = 6
+	marker.modulate = Color("ef4f45")
+	building.add_child(marker)
+	building.set_meta("demolition_marker", marker)
 
 func _demolition_ready(site: DemolitionSite) -> bool:
 	return building_lifecycle_service.demolition_ready(site)

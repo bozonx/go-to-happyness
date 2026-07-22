@@ -3,7 +3,7 @@ extends Panel
 
 signal choice_selected(index: int)
 
-const SurvivalDecisionChoiceButtonScene = preload("res://game/features/settlement/presentation/survival_decision_choice_button.tscn")
+const SurvivalDecisionChoiceButtonScene = preload("res://game/features/events/presentation/survival_decision_choice_button.tscn")
 
 @onready var title_label: Label = $TitleLabel
 @onready var description_label: Label = $DescriptionLabel

@@ -10,7 +10,7 @@ var grid: NavGrid
 var last_search_expanded_nodes := 0
 var last_search_peak_frontier := 0
 
-const RouteRequestScript = preload("res://game/features/routing/application/route_request.gd")
+const RouteRequestScript = preload("res://game/features/routing/domain/route_request.gd")
 const DIRECTIONS: Array[Vector2i] = [
 	Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN,
 	Vector2i(-1, -1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(1, 1),

@@ -6,18 +6,11 @@ extends RefCounted
 ## resource recovery, navigation/territory updates), expired tent cleanup,
 ## house light updates, and campfire selection.
 
-var billboard_label_scene: PackedScene = null
 var simulation: Node
 
 
 func configure(next_simulation: Node) -> void:
 	simulation = next_simulation
-
-
-func _get_billboard_label_scene() -> PackedScene:
-	if billboard_label_scene == null:
-		billboard_label_scene = load("res://game/features/ui/presentation/billboard_label.tscn") as PackedScene
-	return billboard_label_scene
 
 
 func mark_building_for_demolition(building: Node3D) -> void:
@@ -35,23 +28,10 @@ func mark_building_for_demolition(building: Node3D) -> void:
 	release_employment_at_building(building)
 	building.set_meta("pending_demolition", true)
 	simulation._cancel_arrivals_for_house(building)
-	add_demolition_marker(building)
+	simulation._add_demolition_marker(building)
 	simulation.demolition.mark(building, building_type)
 	simulation._update_workers()
 	simulation._update_interface("Building marked for demolition. Residents and stored goods must be relocated first.")
-
-
-func add_demolition_marker(building: Node3D) -> void:
-	if building.has_meta("demolition_marker"):
-		return
-	var marker: Label3D = _get_billboard_label_scene().instantiate() as Label3D
-	marker.text = "DEMOLISH"
-	marker.position = Vector3(0.0, 5.2, 0.0)
-	marker.font_size = 32
-	marker.outline_size = 6
-	marker.modulate = Color("ef4f45")
-	building.add_child(marker)
-	building.set_meta("demolition_marker", marker)
 
 
 func demolition_ready(site: DemolitionSite) -> bool:

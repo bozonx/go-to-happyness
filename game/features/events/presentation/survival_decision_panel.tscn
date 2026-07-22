@@ -1,6 +1,6 @@
 [gd_scene load_steps=3 format=3]
 
-[ext_resource type="Script" path="res://game/features/settlement/presentation/survival_decision_panel.gd" id="1_decision"]
+[ext_resource type="Script" path="res://game/features/events/presentation/survival_decision_panel.gd" id="1_decision"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_1"]
 bg_color = Color(0.08, 0.14, 0.18, 0.75)

@@ -34,7 +34,8 @@ Feature ownership:
 - `production`: production-specific rules, currently the sawmill.
 - `simulation`: deterministic clock, day-cycle events, simulation-wide scheduling.
 - `world`: terrain, obstacle publication, world-only presentation.
-- `routing`: navigation grid, route selection, route results.
+- `routing`: navigation grid, route selection, route results, route requests.
+- `events`: random event definitions, event resolution, survival decision UI.
 
 ## Key rules
 
@@ -45,6 +46,7 @@ Feature ownership:
 5. Keep service dependencies narrow. Inject the specific state, registry, or callable a service needs.
 6. Emit typed gameplay events at feature boundaries. UI formatting and colours belong in a future UI feature.
 7. Prefer `.tscn` scenes for static node hierarchies; use procedural creation only for dynamic/runtime-generated content.
+8. Application services must not load presentation scenes or create visual nodes. Emit events or call bootstrap callbacks for visual side-effects.
 
 ## AI system
 
