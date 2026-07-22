@@ -25,10 +25,21 @@ func set_citizen_alive_checker(checker: Callable) -> void:
 
 
 func _citizen_id(citizen: Node) -> int:
+	if citizen.has_meta("ai_id"):
+		return int(citizen.get_meta("ai_id"))
 	var ai_id: Variant = citizen.get("ai_id")
 	if ai_id != null and int(ai_id) != 0:
 		return int(ai_id)
 	return citizen.get_instance_id()
+
+
+func _building_id(building: Node) -> int:
+	if building.has_meta("cell"):
+		var cell: Vector2i = building.get_meta("cell")
+		return ((cell.x & 0xFFFF) << 16) | (cell.y & 0xFFFF)
+	if building.has_meta("building_id"):
+		return int(building.get_meta("building_id"))
+	return building.get_instance_id()
 
 
 func resolve(citizen: Node, destination: Vector3) -> Dictionary:
@@ -39,7 +50,7 @@ func resolve(citizen: Node, destination: Vector3) -> Dictionary:
 		return {"position": destination, "is_head": true}
 
 	var frame := Engine.get_physics_frames()
-	var building_id := building.get_instance_id()
+	var building_id := _building_id(building)
 	var citizen_id := _citizen_id(citizen)
 	_release_from_other_buildings(citizen_id, building_id)
 
@@ -94,7 +105,7 @@ func complete_arrival(citizen: Node, destination: Vector3) -> void:
 	var building := _building_for_destination(destination)
 	if not is_instance_valid(building):
 		return
-	var building_id := building.get_instance_id()
+	var building_id := _building_id(building)
 	var citizen_id := _citizen_id(citizen)
 	var entrance_index := _find_citizen_entrance(building_id, citizen_id)
 	if entrance_index < 0:

@@ -126,7 +126,7 @@ func _daily_gathering_targets_for(ctx: FacadeContext, actor: Citizen, role: Stri
 				var tree := ctx.simulation.tree_nodes.get(tree_cell) as Node3D
 				if not is_instance_valid(tree) or bool(tree.get_meta("felled", false)) or int(tree.get_meta("remaining_branches", 0)) <= 0:
 					continue
-				if not bool(ctx.simulation.settlement.tools.get("axe", false)):
+				if not ctx.has_tool("axe"):
 					var initial_branches := int(tree.get_meta("initial_branches", tree.get_meta("remaining_branches", 0)))
 					var hand_limit := ceili(float(initial_branches) * 0.3)
 					if int(tree.get_meta("hand_branches", 0)) >= hand_limit:
@@ -200,8 +200,9 @@ func _cleaning_targets(ctx: FacadeContext, actor: Citizen) -> Array[Dictionary]:
 	# The starter backpack is a non-decaying pile that couriers can empty into warehouses.
 	if ctx.simulation.backpack_position != Vector3.ZERO and ctx.simulation._is_route_reachable(actor.global_position, ctx.simulation.backpack_position):
 		var backpack_cell: Vector2i = ctx.simulation._cell_from_position(ctx.simulation.backpack_position)
-		for resource_type in ctx.simulation.settlement.backpack:
-			var available := int(ctx.simulation.settlement.backpack.get(resource_type, 0))
+		var backpack: Dictionary = ctx.backpack_resources()
+		for resource_type in backpack:
+			var available := int(backpack.get(resource_type, 0))
 			if available <= 0 or not ctx.simulation.settlement.can_make_room_for(str(resource_type), 1, ctx.simulation.warehouse_positions.size()):
 				continue
 			targets.append({

@@ -982,7 +982,7 @@ func _process_construction(delta: float) -> void:
 		var site_pos := construction_site.global_position if construction_site.is_inside_tree() else construction_site.position
 		var direction := (site_pos - global_position)
 		direction.y = 0.0
-		if direction.length() > 0.01:
+		if direction.length_squared() > 0.0001:
 			look_at(global_position + direction.normalized(), Vector3.UP)
 		is_waiting_for_materials = not bool(construction_site.get_meta("can_advance", false))
 	else:

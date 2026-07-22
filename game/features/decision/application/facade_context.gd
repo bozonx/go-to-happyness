@@ -29,3 +29,21 @@ func _init(
 	actor_work_time = next_actor_work_time
 	daily_order_active = next_daily_order_active
 	daily_order_role = next_daily_order_role
+
+
+func has_tool(tool_name: String) -> bool:
+	if is_instance_valid(simulation) and simulation.get("settlement") != null:
+		var settlement: Object = simulation.get("settlement")
+		var tools: Variant = settlement.get("tools")
+		if tools is Dictionary:
+			return bool((tools as Dictionary).get(tool_name, false))
+	return false
+
+
+func backpack_resources() -> Dictionary:
+	if is_instance_valid(simulation) and simulation.get("settlement") != null:
+		var settlement: Object = simulation.get("settlement")
+		var backpack: Variant = settlement.get("backpack")
+		if backpack is Dictionary:
+			return (backpack as Dictionary).duplicate(true)
+	return {}

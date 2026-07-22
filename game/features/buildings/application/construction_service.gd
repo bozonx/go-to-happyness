@@ -7,6 +7,7 @@ var runtime: ConstructionRuntime
 var sites: Array[ConstructionSite] = []
 
 
+const BuildingEntrancePositionsScript = preload("res://game/features/buildings/domain/building_entrance_positions.gd")
 const SERVICE_PAD_OFFSET := 1.0
 
 
@@ -35,7 +36,7 @@ func start_site(cell: Vector2i, building_type: String, position: Vector3, rotati
 	var blueprint := supplied_blueprint if not supplied_blueprint.is_empty() else BuildingBlueprints.get_blueprint(building_type)
 	site_node.set_meta("footprint", blueprint.footprint)
 	site_node.set_meta("occupied_footprint", occupied_footprint if occupied_footprint != Vector2i.ZERO else blueprint.footprint)
-	site_node.set_meta("service_positions", BuildingEntrancePositions.positions(site_node, blueprint.footprint, SERVICE_PAD_OFFSET))
+	site_node.set_meta("service_positions", BuildingEntrancePositionsScript.positions(site_node, blueprint.footprint, SERVICE_PAD_OFFSET))
 
 	var display_footprint: Vector2i = blueprint.footprint
 

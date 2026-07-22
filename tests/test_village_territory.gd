@@ -41,8 +41,8 @@ func _test_territory_campfire_radius() -> void:
 	assert(t.has_campfire(), "Territory with campfire anchor should have_campfire")
 	assert(t.campfire_count() == 1, "Should have 1 campfire")
 	assert(t.is_inside(Vector2i(0, 0)), "Center cell should be inside")
-	assert(t.is_inside(Vector2i(11, 0)), "Cell at radius 11 should be inside campfire r=12")
-	assert(not t.is_inside(Vector2i(13, 0)), "Cell at radius 13 should be outside campfire r=12")
+	assert(t.is_inside(Vector2i(15, 0)), "Cell at radius 15 should be inside campfire r=16")
+	assert(not t.is_inside(Vector2i(17, 0)), "Cell at radius 17 should be outside campfire r=16")
 
 
 func _test_territory_house_expansion() -> void:
@@ -115,17 +115,22 @@ func _make_service(era: int) -> RefCounted:
 	var registry := BuildingRegistry.new()
 	var service := VillageTerritoryServiceScript.new()
 	service.configure(registry, era)
+	service.on_building_added(Vector2i(-99, -99), "settlement_flag")
 	return service
 
 
 func _test_service_no_campfire() -> void:
-	var service := _make_service(0)
-	assert(service.placement_reason("house", Vector2i(0, 0)) == service.REASON_NO_CAMPFIRE, \
-		"House without campfire should be REASON_NO_CAMPFIRE")
+	var service := VillageTerritoryServiceScript.new()
+	service.configure(BuildingRegistry.new(), 0)
 	assert(service.placement_reason("campfire", Vector2i(50, 50)) == service.REASON_OK, \
 		"First campfire should be placeable anywhere")
-	assert(service.placement_reason("warehouse", Vector2i(50, 50)) == service.REASON_OK, \
-		"Warehouse should be placeable without campfire")
+	assert(service.placement_reason("house", Vector2i(0, 0)) == service.REASON_NO_FLAG, \
+		"House without flag should be REASON_NO_FLAG")
+	service.on_building_added(Vector2i(-99, -99), "settlement_flag")
+	assert(service.placement_reason("house", Vector2i(-99, -99)) == service.REASON_NO_CAMPFIRE, \
+		"House without campfire should be REASON_NO_CAMPFIRE")
+	assert(service.placement_reason("warehouse", Vector2i(-99, -99)) == service.REASON_OK, \
+		"Warehouse should be placeable inside flag territory without campfire")
 
 
 func _test_service_campfire_placement() -> void:
@@ -172,7 +177,7 @@ func _test_service_foreign_territory() -> void:
 	var foreign := VillageTerritoryScript.new()
 	foreign.add_anchor(Vector2i(11, 0), "campfire")
 	service.add_foreign_territory(foreign)
-	# Cell (11,0) is inside own territory (r=12 from origin) and inside foreign territory
+	# Cell (11,0) is inside own territory (r=16 from origin) and inside foreign territory
 	assert(service.placement_reason("house", Vector2i(11, 0)) == service.REASON_FOREIGN_TERRITORY, \
 		"House in foreign territory should be REASON_FOREIGN_TERRITORY")
 	# Warehouse at foreign-only cell should also be blocked
@@ -202,5 +207,5 @@ func _test_service_foreign_footprint() -> void:
 func _test_service_footprint_outside_territory() -> void:
 	var service := _make_service(0)
 	service.on_building_added(Vector2i(0, 0), "campfire")
-	assert(service.placement_reason("house", Vector2i(11, 0), Vector2i(4, 1)) == service.REASON_OUTSIDE_TERRITORY, \
+	assert(service.placement_reason("house", Vector2i(15, 0), Vector2i(4, 1)) == service.REASON_OUTSIDE_TERRITORY, \
 		"A village building footprint must stay inside the village territory")

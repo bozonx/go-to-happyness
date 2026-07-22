@@ -97,7 +97,7 @@ func relief_candidates_for(citizen: Citizen) -> Array[Dictionary]:
 		var position: Vector3 = toilet.get_meta("service_position") if toilet.has_meta("service_position") else toilet.global_position
 		if citizen.global_position.distance_to(position) > RELIEF_SEARCH_RADIUS:
 			continue
-		if not simulation._is_route_reachable(citizen.global_position, position):
+		if simulation.has_method("_is_route_reachable") and not simulation._is_route_reachable(citizen.global_position, position):
 			continue
 		var building_type := str(toilet.get_meta("building_type", ""))
 		var capacity := _toilet_capacity(building_type)

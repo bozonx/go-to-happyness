@@ -6,13 +6,43 @@ extends RefCounted
 
 const DEFAULT_PAD := 1.0
 
+const VISITOR_ONLY_BUILDINGS: Array[String] = [
+	"cook_campfire", "gathering_place", "dugout_kitchen",
+	"clay_bakery", "stone_tavern", "brick_restaurant"
+]
+
+const VISITOR_ENTRANCE_BUILDINGS: Array[String] = [
+	"canteen", "school", "park", "leisure_center", "city_hall", "house",
+	"dugout_kitchen", "clay_bakery", "stone_tavern", "brick_restaurant"
+]
+
+const TWO_WORKER_ENTRANCE_BUILDINGS: Array[String] = [
+	"sawmill", "materials_factory", "brick_factory", "metal_factory", "recycling_factory", "construction_company"
+]
+
 
 static func offsets(building_type: String) -> Array[Vector2i]:
-	return BuildingBlueprints.worker_entrance_offsets(building_type)
+	if building_type in VISITOR_ONLY_BUILDINGS:
+		return []
+	if building_type == "sawmill":
+		return [Vector2i(0, -3), Vector2i(0, 3)]
+	if building_type == "gathering_place":
+		return [Vector2i(0, -5)]
+	if building_type == "pond":
+		return [Vector2i(0, -2)]
+	if building_type in TWO_WORKER_ENTRANCE_BUILDINGS:
+		return [Vector2i(0, -2), Vector2i(0, 2)]
+	return [Vector2i(0, -1)]
 
 
 static func visitor_offsets(building_type: String) -> Array[Vector2i]:
-	return BuildingBlueprints.visitor_entrance_offsets(building_type)
+	if building_type not in VISITOR_ENTRANCE_BUILDINGS and building_type not in VISITOR_ONLY_BUILDINGS:
+		return []
+	if building_type == "gathering_place":
+		return [Vector2i(0, -5)]
+	if building_type == "pond":
+		return [Vector2i(0, -2)]
+	return [Vector2i(0, -1)]
 
 
 static func positions(node: Object, footprint: Vector2i, pad := DEFAULT_PAD) -> Array[Vector3]:
@@ -61,11 +91,11 @@ static func visitor_positions(node: Object, footprint: Vector2i, pad := DEFAULT_
 	return result
 
 
-static func local_positions(footprint: Vector2i, offsets: Array[Vector2i], pad := DEFAULT_PAD) -> Array[Vector3]:
+static func local_positions(footprint: Vector2i, offsets_list: Array[Vector2i], pad := DEFAULT_PAD) -> Array[Vector3]:
 	var result: Array[Vector3] = []
 	var half_x := footprint.x * 0.5
 	var half_z := footprint.y * 0.5
-	for offset in offsets:
+	for offset in offsets_list:
 		var local := Vector3.ZERO
 		if offset.x < 0:
 			local.x = -half_x - pad

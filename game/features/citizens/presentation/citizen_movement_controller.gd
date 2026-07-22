@@ -65,11 +65,15 @@ func move_to(actor: Citizen, destination: Vector3, delta: float, may_enter_desti
 func move_directly_to(actor: Citizen, destination: Vector3, delta: float, record_trail := true, arrival_distance := 0.08) -> bool:
 	if actor == null:
 		return false
+	if not destination.is_finite() or not actor.global_position.is_finite():
+		return false
 	var offset := destination - actor.global_position
 	offset.y = 0.0
 	if offset.length() <= arrival_distance:
 		return true
-	var direction := offset.normalized()
+	var direction := Vector3.ZERO
+	if offset.length_squared() > 0.0001:
+		direction = offset.normalized()
 	var speed_modifier := float(actor.movement_speed_modifier_query.call(actor.global_position)) if actor.movement_speed_modifier_query.is_valid() else 1.0
 	var current_walk_speed := actor.get_walk_speed() * speed_modifier
 	var desired_velocity := direction * current_walk_speed
@@ -93,8 +97,8 @@ func move_directly_to(actor: Citizen, destination: Vector3, delta: float, record
 				jump_out_of_obstacle(actor)
 	else:
 		actor.stuck_time = 0.0
-		actor.recovery_repath_done = false
-	actor.look_at(actor.global_position + direction, Vector3.UP)
+	if direction.length_squared() > 0.0001:
+		actor.look_at(actor.global_position + direction, Vector3.UP)
 	return false
 
 

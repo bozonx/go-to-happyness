@@ -3,6 +3,7 @@ extends RefCounted
 
 
 const BuildingModuleScene = preload("res://game/features/buildings/presentation/building_module.tscn")
+const BuildingEntrancePositionsScript = preload("res://game/features/buildings/domain/building_entrance_positions.gd")
 
 const BLOCK_SIZE := 1.0
 const PANEL_THICKNESS := 0.5
@@ -492,26 +493,11 @@ static func _cook_campfire_blueprint(building_type: String) -> Dictionary:
 
 
 static func worker_entrance_offsets(building_type: String) -> Array[Vector2i]:
-	if building_type in VISITOR_ONLY_BUILDINGS:
-		return []
-	var blueprint := get_blueprint(building_type)
-	var offsets: Array[Vector2i] = []
-	if blueprint.has("worker_entrances"):
-		for value in blueprint.worker_entrances:
-			if value is Vector2i:
-				offsets.append(value)
-	elif blueprint.has("entrance"):
-		offsets.append(blueprint.entrance)
-	return offsets
+	return BuildingEntrancePositionsScript.offsets(building_type)
 
 
 static func visitor_entrance_offsets(building_type: String) -> Array[Vector2i]:
-	if building_type not in VISITOR_ENTRANCE_BUILDINGS and building_type not in VISITOR_ONLY_BUILDINGS:
-		return []
-	var blueprint := get_blueprint(building_type)
-	if blueprint.has("entrance"):
-		return [blueprint.entrance]
-	return []
+	return BuildingEntrancePositionsScript.visitor_offsets(building_type)
 
 
 static func has_worker_entrance(building_type: String) -> bool:

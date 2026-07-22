@@ -18,6 +18,9 @@ class FakeToiletSimulation extends Node:
 				valid.append(toilet)
 		return valid
 
+	func _is_route_reachable(_origin: Vector3, _target: Vector3) -> bool:
+		return true
+
 
 func _test_toilet_candidates_prefer_toilets() -> void:
 	var simulation := FakeToiletSimulation.new()
