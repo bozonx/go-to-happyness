@@ -7,12 +7,18 @@ extends RefCounted
 const POCKET_CAPACITY := 8
 const S = preload("res://game/features/ui/domain/game_strings.gd")
 
-var simulation: Node
+var _player_citizen_getter: Callable = Callable()
+var _create_resource_pile: Callable = Callable()
+var _update_interface: Callable = Callable()
+var _refresh_interaction_hint: Callable = Callable()
 var pocket: Dictionary = {} # resource_type -> count, total limited by POCKET_CAPACITY
 
 
-func configure(p_simulation: Node) -> void:
-	simulation = p_simulation
+func configure(player_citizen_getter: Callable, create_resource_pile: Callable, update_interface: Callable, refresh_interaction_hint: Callable) -> void:
+	_player_citizen_getter = player_citizen_getter
+	_create_resource_pile = create_resource_pile
+	_update_interface = update_interface
+	_refresh_interaction_hint = refresh_interaction_hint
 
 
 func pocket_total() -> int:
@@ -82,9 +88,10 @@ func format_pocket_hint() -> String:
 
 
 func drop_pocket_on_ground() -> void:
-	if simulation.player_citizen == null or pocket.is_empty():
+	var player_citizen: Citizen = _player_citizen_getter.call()
+	if player_citizen == null or pocket.is_empty():
 		return
-	simulation._create_resource_pile(simulation.player_citizen.global_position, pocket.duplicate())
+	_create_resource_pile.call(player_citizen.global_position, pocket.duplicate())
 	pocket.clear()
-	simulation._update_interface(S.POCKET_DROPPED)
-	simulation._refresh_interaction_hint()
+	_update_interface.call(S.POCKET_DROPPED)
+	_refresh_interaction_hint.call()

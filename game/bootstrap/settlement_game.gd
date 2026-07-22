@@ -596,7 +596,7 @@ var building_visuals_service: BuildingVisualsService
 
 func _ready() -> void:
 	hero_pocket_service = HeroPocketServiceScript.new()
-	hero_pocket_service.configure(self)
+	hero_pocket_service.configure(func() -> Citizen: return player_citizen, _create_resource_pile, _update_interface, _refresh_interaction_hint)
 	hero_interaction_service = HeroInteractionServiceScript.new()
 	hero_interaction_service.configure(self)
 	workplace_labor_service = WorkplaceLaborServiceScript.new()
@@ -634,7 +634,7 @@ func _ready() -> void:
 	village_territory_service = VillageTerritoryServiceScript.new()
 	village_territory_service.configure(building_registry, int(settlement.era))
 	sawmills = SawmillService.new()
-	sawmills.configure(self)
+	sawmills.configure(sawmill_stocks, sawmill_positions, SAWMILL_PROCESS_DURATION, _cell_from_position)
 	var construction_runtime := ConstructionRuntime.new()
 	construction_runtime.scene_root = self
 	construction_runtime.settlement = settlement
@@ -660,7 +660,7 @@ func _ready() -> void:
 	demolition = DemolitionService.new()
 	demolition.configure(demolition_runtime)
 	water_collector_service = WaterCollectorService.new()
-	water_collector_service.configure(self)
+	water_collector_service.configure(water_collectors)
 	canteen_service = CanteenService.new()
 	canteen_service.configure(self)
 	resource_pile_service = ResourcePileService.new(self, resource_piles, settlement, weather_state)
@@ -725,14 +725,21 @@ func _ready() -> void:
 	citizen_registration_service = CitizenRegistrationServiceScript.new()
 	citizen_registration_service.configure(self)
 	school_service = SchoolServiceScript.new()
-	school_service.configure(self)
+	school_service.configure(school_positions, citizens)
 	building_placement_service = BuildingPlacementServiceScript.new()
 	building_placement_service.configure(self)
 	citizen_daily_order_service = CitizenDailyOrderServiceScript.new()
 	citizen_daily_order_service.configure(self)
 
 	citizen_needs_service = CitizenNeedsService.new()
-	citizen_needs_service.configure(self)
+	citizen_needs_service.configure(
+		nav_grid,
+		get_toilets,
+		_is_route_reachable,
+		building_registry.building_type_for_node,
+		tree_positions,
+		grass_sources,
+	)
 	citizen_living_status_service = CitizenLivingStatusServiceScript.new()
 	trade_service = TradeServiceScript.new()
 	trade_service.configure(self)

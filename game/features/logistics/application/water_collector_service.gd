@@ -1,17 +1,15 @@
 class_name WaterCollectorService
 extends RefCounted
 
-var simulation: Node
+var _collectors_array: Array[Dictionary] = []
 
 
-func configure(next_simulation: Node) -> void:
-	simulation = next_simulation
+func configure(collectors: Array[Dictionary]) -> void:
+	_collectors_array = collectors
 
 
 func _collectors() -> Array:
-	if simulation.has_meta("water_collectors"):
-		return simulation.get_meta("water_collectors")
-	return simulation.water_collectors
+	return _collectors_array
 
 
 func tick(delta: float) -> void:

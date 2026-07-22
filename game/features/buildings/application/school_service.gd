@@ -3,7 +3,8 @@ extends RefCounted
 
 ## Manages school state, developed professions status, and teacher presence checks.
 
-var simulation: Node
+var _school_positions: Array[Vector3] = []
+var _citizens: Array = []
 
 var developed_professions: Dictionary = {
 	"construction": false,
@@ -18,15 +19,16 @@ var developed_professions: Dictionary = {
 }
 
 
-func configure(p_simulation: Node) -> void:
-	simulation = p_simulation
+func configure(school_positions: Array[Vector3], citizens: Array) -> void:
+	_school_positions = school_positions
+	_citizens = citizens
 
 
 func is_teacher_present() -> bool:
-	if simulation.school_positions.is_empty():
+	if _school_positions.is_empty():
 		return false
-	var school_pos: Vector3 = simulation.school_positions[0]
-	for citizen in simulation.citizens:
+	var school_pos: Vector3 = _school_positions[0]
+	for citizen in _citizens:
 		if citizen.specialization == "teacher":
 			if citizen.is_player_controlled:
 				if citizen.global_position.distance_to(school_pos) <= 3.5:

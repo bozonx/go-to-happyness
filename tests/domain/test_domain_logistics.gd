@@ -467,9 +467,6 @@ static func _test_citizen_living_status_service() -> void:
 
 static func _test_water_collector_service() -> void:
 	var simulation := FakeWaterCollectorSimulation.new()
-	var service := WaterCollectorServiceScript.new()
-	service.configure(simulation)
-
 	var collector := Node3D.new()
 	collector.position = Vector3(2.0, 0.0, 3.0)
 	collector.set_meta("service_position", collector.position)
@@ -480,6 +477,8 @@ static func _test_water_collector_service() -> void:
 		"stored": 0,
 		"capacity": 10,
 	}]
+	var service := WaterCollectorServiceScript.new()
+	service.configure(simulation.water_collectors)
 
 	service.tick(2.5)
 	assert(service.stored_at(collector.position) == 2)

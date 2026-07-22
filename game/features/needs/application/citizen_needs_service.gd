@@ -12,15 +12,32 @@ const TREE_ACCESS_OFFSETS: Array[Vector2i] = [
 	Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1),
 ]
 
-var simulation: Node
+var _nav_grid: Variant = null
+var _toilets_getter: Callable = Callable()
+var _is_route_reachable: Callable = Callable()
+var _building_type_for_node: Callable = Callable()
+var _tree_positions: Array[Vector3] = []
+var _grass_sources: Dictionary = {}
 var _toilet_due_minutes: Dictionary = {}
 var _toilet_requests: Dictionary = {}
 var _rest_requests: Dictionary = {}
 var _relief_candidates_by_citizen: Dictionary = {}
 
 
-func configure(next_simulation: Node) -> void:
-	simulation = next_simulation
+func configure(
+	nav_grid: Variant,
+	toilets_getter: Callable,
+	is_route_reachable: Callable,
+	building_type_for_node: Callable,
+	tree_positions: Array[Vector3],
+	grass_sources: Dictionary,
+) -> void:
+	_nav_grid = nav_grid
+	_toilets_getter = toilets_getter
+	_is_route_reachable = is_route_reachable
+	_building_type_for_node = building_type_for_node
+	_tree_positions = tree_positions
+	_grass_sources = grass_sources
 
 
 func schedule_toilet(citizen_id: int) -> void:
@@ -87,21 +104,21 @@ func rest_request(citizen_id: int) -> Dictionary:
 
 func relief_candidates_for(citizen: Citizen) -> Array[Dictionary]:
 	var candidates: Array[Dictionary] = []
-	if not is_instance_valid(simulation) or not is_instance_valid(citizen):
+	if not is_instance_valid(citizen):
 		return candidates
-	var topology_revision: int = simulation.nav_grid.topology_revision()
+	var topology_revision: int = _nav_grid.topology_revision()
 	var cached: Dictionary = _relief_candidates_by_citizen.get(citizen.ai_id, {})
 	if int(cached.get(&"topology_revision", -1)) == topology_revision:
 		return (cached.get(&"candidates", []) as Array[Dictionary]).duplicate(true)
-	for toilet in simulation.get_toilets():
+	for toilet in _toilets_getter.call():
 		var position: Vector3 = toilet.get_meta("service_position") if toilet.has_meta("service_position") else toilet.global_position
 		if citizen.global_position.distance_to(position) > RELIEF_SEARCH_RADIUS:
 			continue
-		if simulation.has_method("_is_route_reachable") and not simulation._is_route_reachable(citizen.global_position, position):
+		if not _is_route_reachable.call(citizen.global_position, position):
 			continue
 		var building_type: String = ""
-		if "building_registry" in simulation and simulation.building_registry != null and simulation.building_registry.has_method("building_type_for_node"):
-			building_type = simulation.building_registry.building_type_for_node(toilet)
+		if _building_type_for_node.is_valid():
+			building_type = _building_type_for_node.call(toilet)
 		elif toilet.has_meta("building_type"):
 			building_type = str(toilet.get_meta("building_type"))
 		var capacity := _toilet_capacity(building_type)
@@ -162,24 +179,24 @@ func _nearest_relief_position(citizen: Citizen, relief_type: StringName) -> Vect
 	var closest := Vector3.INF
 	var closest_distance := INF
 	if relief_type == &"tree":
-		for tree_position in simulation.tree_positions:
+		for tree_position in _tree_positions:
 			if citizen.global_position.distance_to(tree_position) > RELIEF_SEARCH_RADIUS:
 				continue
-			var tree_cell: Vector2i = simulation.nav_grid.cell_from_position(tree_position)
+			var tree_cell: Vector2i = _nav_grid.cell_from_position(tree_position)
 			for offset in TREE_ACCESS_OFFSETS:
 				var access_cell := tree_cell + offset
-				if not simulation.nav_grid.are_cells_connected(
-					simulation.nav_grid.cell_from_position(citizen.global_position), access_cell
+				if not _nav_grid.are_cells_connected(
+					_nav_grid.cell_from_position(citizen.global_position), access_cell
 				):
 					continue
-				var position: Vector3 = simulation.nav_grid.cell_center(access_cell)
+				var position: Vector3 = _nav_grid.cell_center(access_cell)
 				var distance := citizen.global_position.distance_squared_to(position)
 				if distance < closest_distance:
 					closest = position
 					closest_distance = distance
 	elif relief_type == &"grass":
 		var positions_by_distance: Array[Dictionary] = []
-		for source in simulation.grass_sources.values():
+		for source in _grass_sources.values():
 			var grass_node := source.get("node") as Node3D
 			if not is_instance_valid(grass_node) or citizen.global_position.distance_to(grass_node.global_position) > RELIEF_SEARCH_RADIUS:
 				continue
@@ -192,7 +209,7 @@ func _nearest_relief_position(citizen: Citizen, relief_type: StringName) -> Vect
 		)
 		for candidate in positions_by_distance:
 			var position: Vector3 = candidate[&"position"]
-			if simulation.nav_grid.are_positions_connected(citizen.global_position, position):
+			if _nav_grid.are_positions_connected(citizen.global_position, position):
 				return position
 	return closest
 
