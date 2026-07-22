@@ -4,6 +4,8 @@ extends RefCounted
 ## Manages workplace labor permissions, officer checks, permanent profession rules,
 ## employment center positions, and role checks (courier, cook, factory worker).
 
+const S = preload("res://game/features/ui/domain/game_strings.gd")
+
 var simulation: Node
 
 
@@ -47,7 +49,7 @@ func player_can_manage_permanent_professions() -> bool:
 
 
 func permanent_profession_block_message() -> String:
-	return "Автоматизация труда требует чиновника. Назначьте свободного жителя исследователем, изучите технологию «Чиновник», затем повысьте его у поста."
+	return S.AUTOMATION_REQUIRES_OFFICER
 
 
 func show_labor_command_blocked() -> void:

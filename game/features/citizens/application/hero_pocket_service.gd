@@ -5,6 +5,7 @@ extends RefCounted
 ## formatting, and ground dropping.
 
 const POCKET_CAPACITY := 8
+const S = preload("res://game/features/ui/domain/game_strings.gd")
 
 var simulation: Node
 var pocket: Dictionary = {} # resource_type -> count, total limited by POCKET_CAPACITY
@@ -77,7 +78,7 @@ func pocket_summary() -> String:
 
 
 func format_pocket_hint() -> String:
-	return "Карман %d/%d%s" % [pocket_total(), POCKET_CAPACITY, (" | " + pocket_summary()) if not pocket.is_empty() else ""]
+	return S.POCKET_FORMAT % [pocket_total(), POCKET_CAPACITY, (" | " + pocket_summary()) if not pocket.is_empty() else ""]
 
 
 func drop_pocket_on_ground() -> void:
@@ -85,5 +86,5 @@ func drop_pocket_on_ground() -> void:
 		return
 	simulation._create_resource_pile(simulation.player_citizen.global_position, pocket.duplicate())
 	pocket.clear()
-	simulation._update_interface("Содержимое карманов выброшено на землю.")
+	simulation._update_interface(S.POCKET_DROPPED)
 	simulation._refresh_interaction_hint()

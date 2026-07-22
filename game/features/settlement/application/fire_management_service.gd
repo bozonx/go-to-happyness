@@ -2,6 +2,7 @@ class_name FireManagementService
 extends RefCounted
 
 const FireSourceStateScript = preload("res://game/features/settlement/domain/fire_source_state.gd")
+const S = preload("res://game/features/ui/domain/game_strings.gd")
 
 var building_registry: RefCounted
 var event_service: RefCounted
@@ -130,19 +131,19 @@ func report_fire_phase_change(building: Node3D, fire_state: RefCounted, minute: 
 		return
 	building.set_meta("fire_phase", phase_name)
 	var is_main := building == campfire_node
-	var fire_name := "Главный костер" if is_main else "Костер для готовки"
+	var fire_name := S.FIRE_NAME_MAIN if is_main else S.FIRE_NAME_COOKING
 	match phase:
 		FireSourceStateScript.Phase.DYING:
 			if fire_state.reserved_fuel <= 0 and branches_count <= 0:
-				_send_msg("%s догорает: топлива осталось примерно на 4 часа." % fire_name)
+				_send_msg(S.FIRE_DYING_FORMAT % fire_name)
 		FireSourceStateScript.Phase.EMBERS:
-			_send_msg("%s превратился в угли. Доставьте ветки в течение 2 часов, чтобы он разгорелся сам." % fire_name)
+			_send_msg(S.FIRE_EMBERS_FORMAT % fire_name)
 		FireSourceStateScript.Phase.OUT:
-			var consequence := "Оформление жителей и исследования приостановлены." if is_main else "Следующий прием пищи будет сырым рационом."
-			_send_msg("%s погас. %s" % [fire_name, consequence])
+			var consequence := S.FIRE_OUT_MAIN_CONSEQUENCE if is_main else S.FIRE_OUT_COOK_CONSEQUENCE
+			_send_msg(S.FIRE_OUT_FORMAT % [fire_name, consequence])
 		FireSourceStateScript.Phase.BURNING:
 			if previous_phase in ["embers", "out", "dying"]:
-				_send_msg("%s снова горит." % fire_name)
+				_send_msg(S.FIRE_RELIT_FORMAT % fire_name)
 
 func _send_msg(text: String) -> void:
 	if add_message_callback.is_valid():

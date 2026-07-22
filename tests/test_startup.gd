@@ -1,6 +1,7 @@
 extends SceneTree
 
 const ResourcePileScript = preload("res://game/features/logistics/domain/resource_pile.gd")
+const PlayerController = preload("res://game/features/citizens/presentation/player_controller.gd")
 
 func _appoint_test_official(simulation: Node, citizen: Citizen) -> void:
 	simulation.settlement.complete_research("official")
@@ -308,7 +309,7 @@ func _init() -> void:
 		simulation.settlement.warehouse_ever_built = true
 		simulation.settlement.add(construction_resource, 1)
 		added_test_warehouse = true
-	assert(simulation._reserve_player_gather_storage("branches", simulation.HERO_GATHER_YIELD) == simulation.HERO_GATHER_YIELD)
+	assert(simulation._reserve_player_gather_storage("branches", PlayerController.HERO_GATHER_YIELD) == PlayerController.HERO_GATHER_YIELD)
 	simulation._assign_daily_order(supply_worker, "construction")
 	simulation._assign_daily_order(logistics_worker, "courier")
 	simulation._update_couriers()

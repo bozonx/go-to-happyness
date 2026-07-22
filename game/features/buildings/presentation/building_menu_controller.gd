@@ -3,6 +3,7 @@ extends RefCounted
 
 const BuildingCatalogScript = preload("res://game/features/buildings/domain/building_catalog.gd")
 const BuildingBlueprintsScript = preload("res://game/features/buildings/presentation/building_blueprints.gd")
+const S = preload("res://game/features/ui/domain/game_strings.gd")
 
 var simulation: Node
 
@@ -31,7 +32,7 @@ func _refresh_citizen_skills_section(selected_exists: bool, assignment_submenu_o
 		simulation.build_menu.citizen_skills_label.visible = citizen_actions_visible
 	if simulation.build_menu.manage_citizen_button != null:
 		simulation.build_menu.manage_citizen_button.visible = citizen_actions_visible
-		simulation.build_menu.manage_citizen_button.text = "Управлять" if simulation.selected_builder != simulation.hero_citizen else "Управлять героем"
+		simulation.build_menu.manage_citizen_button.text = S.MANAGE if simulation.selected_builder != simulation.hero_citizen else S.MANAGE_HERO
 
 	if simulation.build_menu.daily_order_submenu_btn != null:
 		simulation.build_menu.daily_order_submenu_btn.visible = citizen_actions_visible
@@ -100,7 +101,7 @@ func _refresh_role_buttons(selected_exists: bool, assignment_submenu_open: bool)
 		var blocked_by_officer: bool = not is_daily_submenu and role != "official" and not simulation.player_can_manage_permanent_professions()
 		button.disabled = button.visible and (blocked_by_officer or not role_available)
 		if button.disabled and not role_available:
-			button.tooltip_text = "Нет рабочего места для этой роли."
+			button.tooltip_text = S.NO_WORKPLACE_FOR_ROLE
 		elif button.disabled and blocked_by_officer:
 			button.tooltip_text = simulation.permanent_profession_block_message()
 		else:
@@ -190,7 +191,7 @@ func show_building_menu() -> void:
 		if BuildingTypes.is_cook_campfire(building_type):
 			var cook_fire_state: Variant = simulation._fire_state_for(simulation.selected_building)
 			var cook_fuel: int = cook_fire_state.total_committed_fuel()
-			simulation.building_menu_title.text += "\nВетки: %d/%d" % [cook_fuel, simulation.FIRE_SUPPLY_TARGET]
+			simulation.building_menu_title.text += S.COOK_FIRE_BRANCHES_FORMAT % [cook_fuel, simulation.FIRE_SUPPLY_TARGET]
 		simulation.building_cook_button.visible = BuildingTypes.is_kitchen(building_type)
 		var can_manage_professions: bool = simulation.player_can_manage_permanent_professions()
 		var profession_blocked_tooltip: String = simulation.permanent_profession_block_message()

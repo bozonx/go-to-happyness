@@ -5,6 +5,7 @@ const BuildingCatalogScript = preload("res://game/features/buildings/domain/buil
 const WarehouseStateScript = preload("res://game/features/settlement/domain/warehouse_state.gd")
 const SettlementStateScript = preload("res://game/features/settlement/domain/settlement_state.gd")
 const ResourcePileScript = preload("res://game/features/logistics/domain/resource_pile.gd")
+const S = preload("res://game/features/ui/domain/game_strings.gd")
 
 var simulation: Node
 
@@ -45,38 +46,38 @@ func first_person_action_hint() -> String:
 	if simulation == null:
 		return ""
 	if simulation.player_citizen != null and simulation.player_citizen.work_position_locked:
-		return "F — покинуть рабочее место"
+		return S.F_LEAVE_WORK_POSITION
 	if simulation.player_citizen != null and simulation.player_citizen.player_using_toilet:
-		return "Пользуемся туалетом..."
+		return S.USING_TOILET
 	var target: Dictionary = simulation._first_person_target()
 	match target.get("kind", ""):
 		"entrance":
 			for order: Dictionary in simulation.pending_arrivals:
 				if not bool(order.get("dispatched", false)):
-					return "F: встретить прибывшего жителя"
-			return "Входной знак"
+					return S.F_MEET_ARRIVAL
+			return S.ENTRANCE_SIGN
 		"building":
 			if simulation._is_managed_fire_source(target.node):
 				var branch_count: int = simulation._pocket_amount("branches")
-				return "F: добавить 1 ветку в костер | Shift+F: добавить все (%d)" % branch_count if branch_count > 0 else "Нужны ветки в кармане, чтобы пополнить костер"
+				return S.F_ADD_BRANCH_TO_FIRE % branch_count if branch_count > 0 else S.NEED_BRANCHES_FOR_FIRE
 			return building_action_hint(target.node)
 		"construction":
 			var site = simulation.construction.site_for_node(target.node)
 			if site != null and not site.is_supplied():
 				var missing: String = simulation._missing_site_materials_text(site)
 				if not missing.is_empty():
-					return "F: сдать стройматериалы (%s)" % missing
-			return "F: работать на стройке"
+					return S.F_DELIVER_MATERIALS % missing
+			return S.F_WORK_ON_CONSTRUCTION
 		"demolition":
-			return "F: разбирать отмеченное здание"
+			return S.F_DEMOLISH
 		"pile":
 			var pile: ResourcePileScript = target.pile
 			var available: Array[String] = simulation._pile_available_resources(pile)
 			if available.is_empty():
 				return ""
 			if not simulation._pocket_has_room():
-				return "Карман полон"
-			return "F: взять %s из кучи | Shift+F: взять всё" % simulation._resource_display_name(available[0]).to_lower()
+				return S.POCKET_FULL
+			return S.F_TAKE_FROM_PILE % simulation._resource_display_name(available[0]).to_lower()
 		"warehouse":
 			var wh_index: int = int(target.get("warehouse_index", -1))
 			if wh_index < 0:
@@ -86,71 +87,71 @@ func first_person_action_hint() -> String:
 			if simulation._pocket_total() > 0:
 				var primary_res: String = simulation._primary_pocket_resource()
 				if wh_index >= 0 and not simulation.settlement.warehouse_accepts(wh_index, primary_res):
-					return "Склад не принимает %s" % primary_res.capitalize()
+					return S.WAREHOUSE_REJECTS % primary_res.capitalize()
 				var wh_room: int = simulation.settlement.warehouse_room_for(wh_index, primary_res) if wh_index >= 0 else simulation.settlement.storage_room_for(primary_res)
 				if wh_room <= 0:
-					return "Склад заполнен"
-				return "F: сдать 1 (%s) | Shift+F: сдать всё" % primary_res.capitalize()
+					return S.WAREHOUSE_FULL
+				return S.F_DEPOSIT_ONE % primary_res.capitalize()
 			if wh_index >= 0 and wh_index < simulation.settlement.warehouses.size():
 				var wh_state: WarehouseState = simulation.settlement.warehouses[wh_index]
 				var used := int(ceil(wh_state.used_units(SettlementStateScript.STORAGE_WEIGHTS)))
-				return "Склад: %d/%d заполнено" % [used, wh_state.capacity]
-			return "Склад"
+				return S.WAREHOUSE_FILL_FORMAT % [used, wh_state.capacity]
+			return S.WAREHOUSE
 		"sawmill":
 			var sawmill_pos: Vector3 = target.position
 			var sawmill_stock = simulation._sawmill_stock(sawmill_pos)
 			if simulation._pocket_amount("wood") > 0 or simulation._pocket_amount("logs") > 0:
 				var wood_count: int = simulation._pocket_amount("wood") + simulation._pocket_amount("logs")
-				return "F: сдать 1 дерево на лесопилку | Shift+F: сдать всё (%d)" % wood_count
+				return S.F_DEPOSIT_WOOD_SAWMILL % wood_count
 			if int(sawmill_stock.boards) > 0 and simulation._pocket_has_room():
-				return "F: взять 1 доску | Shift+F: взять до заполнения"
+				return S.F_TAKE_BOARD
 			return ""
 		"workplace":
 			var building_type: String = simulation.building_registry.building_type_for_node(target.node)
 			var is_official_building: bool = building_type in simulation.OFFICIAL_WORKPLACE_TYPES
 			if is_official_building:
-				return "Откройте меню главного костра, чтобы занять место"
+				return S.OPEN_CAMPFIRE_MENU_FOR_OFFICIAL
 			var role: String = simulation._role_for_workplace(target.node)
 			if role.is_empty():
 				return ""
 			match role:
 				"cook":
-					return "F — готовить еду"
+					return S.F_COOK
 				"teacher":
-					return "F — учить"
+					return S.F_TEACH
 				"seller":
-					return "F — торговать"
+					return S.F_TRADE
 				"craftsman":
-					return "F — ремесло"
+					return S.F_CRAFT
 				_:
-					return "F — занять рабочее место (%s)" % role.replace("_", " ")
+					return S.F_OCCUPY_WORKPLACE % role.replace("_", " ")
 		"tree":
 			var tree_node := target.node as Node3D
 			if simulation.settlement.era < SettlementStateScript.Era.WOOD:
 				var rem: int = int(tree_node.get_meta("remaining_branches", 0))
 				if rem <= 0:
-					return "Ветки иссякли (топор откроет полный сбор)"
+					return S.BRANCHES_DEPLETED
 				var init: int = maxi(1, int(tree_node.get_meta("initial_branches", rem)))
-				return "F: собрать ветки (%d/%d) | Shift+F: до полноты" % [rem, init]
-			return "F: срубить дерево | Shift+F: рубить до полноты"
+				return S.F_GATHER_BRANCHES % [rem, init]
+			return S.F_CHOP_TREE
 		"grass":
 			var grass_info: Dictionary = simulation._targeted_grass_info(target)
 			if grass_info.is_empty():
-				return "F: собрать траву | Shift+F: собирать до полноты"
-			return "F: собрать траву (%d/%d) | Shift+F: до полноты" % [int(grass_info.remaining), int(grass_info.initial)]
+				return S.F_GATHER_GRASS
+			return S.F_GATHER_GRASS_COUNT % [int(grass_info.remaining), int(grass_info.initial)]
 		"farm":
-			return "F: собрать еду | Shift+F: собирать до полноты"
+			return S.F_HARVEST_FARM
 		"pond":
 			if bool(simulation.settlement.tools.get("bucket", false)):
-				return "F: набрать воды | Shift+F: набирать до полноты"
-			return "Нужно ведро, чтобы черпать воду. Купите его на рынке."
+				return S.F_COLLECT_WATER
+			return S.NEED_BUCKET_FOR_WATER
 		"forage", "rabbit":
-			return "Лесные дары и зайца может собирать только специалист. Постройте палатку охотников-собирателей."
+			return S.FORAGE_SPECIALIST_ONLY
 		"toilet":
 			var needs_toilet: bool = simulation.citizen_needs_service != null and simulation.citizen_needs_service.has_toilet_request(simulation.player_citizen.ai_id)
 			if needs_toilet:
-				return "F: воспользоваться туалетом (потребность)"
-			return "F: воспользоваться туалетом"
+				return S.F_USE_TOILET_NEED
+			return S.F_USE_TOILET
 		"citizen":
 			var citizen := target.node as Citizen
 			if not is_instance_valid(citizen):

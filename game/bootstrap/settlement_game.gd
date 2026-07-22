@@ -97,6 +97,7 @@ const SettlementSurvivalServiceScript = preload("res://game/features/settlement/
 const SettlementDailyRulesServiceScript = preload("res://game/features/settlement/application/settlement_daily_rules_service.gd")
 const TerritoryServiceScript = preload("res://game/features/world/application/territory_service.gd")
 const ResourcePileScript = preload("res://game/features/logistics/domain/resource_pile.gd")
+const S = preload("res://game/features/ui/domain/game_strings.gd")
 
 
 # The playable routing and construction board must cover the terrain visible
@@ -123,12 +124,6 @@ const HOUSE_CAPACITY := 4
 const TENT_CAPACITY := 4
 const CONSTRUCTION_DURATION := 4.0
 const DEMOLITION_DURATION := 3.0
-const PLAYER_SPEED := 4.2
-const PLAYER_SPRINT_MULTIPLIER := 1.8
-const PLAYER_JUMP_VELOCITY := 6.5
-const PLAYER_GRAVITY := 18.0
-const PLAYER_EYE_HEIGHT := 1.65
-const HARVEST_DURATION := 1.25
 const INTERACTION_RANGE := 4.5
 const JOB_ENTRANCE_RANGE := 3.5
 # Layer 8 carries invisible occluders for the sun-flare raycast only (e.g. tree
@@ -140,18 +135,11 @@ const SUN_FLARE_OCCLUSION_DISTANCE := 96.0
 const SUN_FLARE_OCCLUSION_SMOOTHING := 0.08
 const POCKET_CAPACITY := 8
 const POCKET_WOOD_CAPACITY := POCKET_CAPACITY
-# The hero gathers raw bootstrap materials in a batch per action, unlike NPCs who
-# fetch one-to-two at a time. This is the player's lever to force a direction:
-# playing the hero rushes what the officer's plan would otherwise trickle in.
-const HERO_GATHER_YIELD := 3
 const SAWMILL_PROCESS_DURATION := 4.0
 const SAWMILL_WORKER_DELIVERY_THRESHOLD := 4
 const COURIER_LATE_SECONDS := 12.0
 const DIG_RADIUS := 2.2
 const DIG_REACH := 6.0
-# In first-person view, 3D labels fade out with camera distance.
-const LABEL_FADE_NEAR := 8.0
-const LABEL_FADE_FAR := 22.0
 
 var settlement := SettlementState.new()
 var day_cycle := SimulationDayCycle.new()
@@ -1739,12 +1727,12 @@ func _update_interface(message: String) -> void:
 	hud.update_resources("\n".join(lines))
 	_add_message(message)
 	if is_first_person:
-		var build_hint := "  B: стройка" if player_citizen == hero_citizen else ""
+		var build_hint := S.HUD_BUILD_HINT_FP if player_citizen == hero_citizen else ""
 		if not build_mode.is_empty():
-			build_hint += "  Q/E: поворот"
-		hud.update_camera_hint("R: герой/обзор  WASD: ходить  Пробел: прыжок  Shift: бег  Мышь: осмотр  F: действие  Shift+F: всё  ПКМ: копать%s" % build_hint)
+			build_hint += S.HUD_BUILD_ROTATE_HINT
+		hud.update_camera_hint(S.HUD_FIRST_PERSON_HINT % build_hint)
 	else:
-		hud.update_camera_hint("R: вид от героя. Выберите жителя и нажмите Управлять. ПКМ+перетаскивание: поворот  СКМ: панорама  Колесо: масштаб")
+		hud.update_camera_hint(S.HUD_OVERVIEW_HINT)
 
 const ERA_CATEGORIES := ["tent", "earth", "clay", "wood", "stone", "brick"]
 
@@ -2025,8 +2013,8 @@ func _player_use_toilet(toilet_node: Node3D) -> void:
 	interaction_action = "toilet"
 	interaction_time = 0.0
 	interaction_progress.visible = true
-	interaction_hint_label.text = "Пользуемся туалетом..."
-	_update_interface("Туалет используется.")
+	interaction_hint_label.text = S.USING_TOILET
+	_update_interface(S.TOILET_IN_USE)
 
 
 func _check_player_toilet_request() -> void:
@@ -2036,8 +2024,8 @@ func _check_player_toilet_request() -> void:
 	var has_request := citizen_needs_service.has_toilet_request(player_citizen.ai_id)
 	if has_request and not _player_toilet_notified:
 		_player_toilet_notified = true
-		var name := player_citizen.role_label() if player_citizen != hero_citizen else "Герой"
-		_update_interface("%s хочет в туалет. Подойдите к туалету и нажмите F, либо передайте управление ИИ." % name)
+		var name := player_citizen.role_label() if player_citizen != hero_citizen else S.HERO_NAME
+		_update_interface(S.TOILET_NEED_HINT % name)
 	elif not has_request:
 		_player_toilet_notified = false
 
@@ -3129,7 +3117,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			if is_first_person:
 				Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE if build_menu.visible else Input.MOUSE_MODE_CAPTURED)
 		else:
-			_update_interface("Только герой может утверждать строительство.")
+			_update_interface(S.ONLY_HERO_CAN_APPROVE_BUILD)
 		get_viewport().set_input_as_handled()
 		return
 	if not build_mode.is_empty() and event is InputEventKey and event.pressed and not event.echo and event.keycode in [KEY_Q, KEY_E]:
@@ -3488,12 +3476,12 @@ func _update_interaction(delta: float) -> void:
 
 func _gather_action_name(resource_type: String) -> String:
 	match resource_type:
-		"wood": return "Срубить дерево"
-		"branches": return "Собрать ветки"
-		"grass": return "Собрать траву"
-		"water": return "Набрать воду"
-		"food": return "Собрать еду"
-	return "Действие"
+		"wood": return S.GATHER_ACTION_WOOD
+		"branches": return S.GATHER_ACTION_BRANCHES
+		"grass": return S.GATHER_ACTION_GRASS
+		"water": return S.GATHER_ACTION_WATER
+		"food": return S.GATHER_ACTION_FOOD
+	return S.GATHER_ACTION_DEFAULT
 
 
 func _harvest_source_info(resource_type: String) -> String:
@@ -3505,7 +3493,7 @@ func _harvest_source_info(resource_type: String) -> String:
 			if is_instance_valid(tree):
 				var rem := int(tree.get_meta("remaining_branches", 0))
 				var init := maxi(1, int(tree.get_meta("initial_branches", rem)))
-				return "ветки %d/%d" % [rem, init]
+				return S.SOURCE_INFO_BRANCHES % [rem, init]
 			return ""
 		"grass":
 			var node := _nearest_grass_node(player_citizen.global_position)
@@ -3515,14 +3503,14 @@ func _harvest_source_info(resource_type: String) -> String:
 					if source.get("node") == node:
 						var rem := int(source.get("remaining", 0))
 						var init := maxi(1, int(source.get("initial", rem)))
-						return "трава %d/%d" % [rem, init]
+						return S.SOURCE_INFO_GRASS % [rem, init]
 			return ""
 		"wood":
-			return "дерево"
+			return S.SOURCE_INFO_WOOD
 		"water":
-			return "вода"
+			return S.SOURCE_INFO_WATER
 		"food":
-			return "еда"
+			return S.SOURCE_INFO_FOOD
 	return ""
 
 
@@ -3546,7 +3534,7 @@ func _deliver_all_pocket_to_warehouse(warehouse_index := -1) -> void:
 		if amount <= 0:
 			continue
 		if warehouse_index >= 0 and not settlement.uses_virtual_storage() and not settlement.warehouse_accepts(warehouse_index, resource_type):
-			_update_interface("Склад не принимает %s." % resource_type)
+			_update_interface(S.WAREHOUSE_REJECTS_FORMAT % resource_type)
 			continue
 		var to_deliver := amount
 		if not settlement.uses_virtual_storage():
@@ -3564,11 +3552,11 @@ func _deliver_all_pocket_to_warehouse(warehouse_index := -1) -> void:
 			delivered_total += actually_delivered
 			summary.append("%d %s" % [actually_delivered, resource_type])
 	if delivered_total > 0:
-		_update_interface("Сдано на склад: %s." % ", ".join(summary))
+		_update_interface(S.DELIVERED_TO_WAREHOUSE_SUMMARY % ", ".join(summary))
 	elif _pocket_resources().is_empty():
-		_update_interface("Карман пуст.")
+		_update_interface(S.POCKET_EMPTY)
 	else:
-		_update_interface("Нет места на складе. Постройте или расширьте склад.")
+		_update_interface(S.WAREHOUSE_NO_ROOM)
 
 
 func _deliver_one_pocket_to_warehouse(warehouse_index := -1) -> void:
@@ -3581,13 +3569,13 @@ func _deliver_one_pocket_to_warehouse(warehouse_index := -1) -> void:
 	if amount <= 0:
 		return
 	if warehouse_index >= 0 and not settlement.uses_virtual_storage() and not settlement.warehouse_accepts(warehouse_index, resource_type):
-		_update_interface("Склад не принимает %s." % resource_type)
+		_update_interface(S.WAREHOUSE_REJECTS_FORMAT % resource_type)
 		return
 	var to_deliver := 1
 	if not settlement.uses_virtual_storage():
 		to_deliver = mini(1, settlement.storage_room_for(resource_type))
 	if to_deliver <= 0:
-		_update_interface("Нет места для %s на складе." % resource_type)
+		_update_interface(S.WAREHOUSE_NO_ROOM_FOR_RESOURCE % resource_type)
 		return
 	var overflow := 0
 	if warehouse_index >= 0 and not settlement.uses_virtual_storage():
@@ -3596,10 +3584,10 @@ func _deliver_one_pocket_to_warehouse(warehouse_index := -1) -> void:
 		settlement.add(resource_type, to_deliver)
 	var actually_delivered := to_deliver - overflow
 	if actually_delivered <= 0:
-		_update_interface("Нет места для %s в этом складе." % resource_type)
+		_update_interface(S.WAREHOUSE_NO_ROOM_IN_THIS % resource_type)
 		return
 	_remove_from_pocket(resource_type, actually_delivered)
-	_update_interface("Сдано %d %s на склад. %s" % [actually_delivered, resource_type, _format_pocket_hint()])
+	_update_interface(S.DELIVERED_ONE_TO_WAREHOUSE % [actually_delivered, resource_type, _format_pocket_hint()])
 
 
 func _nearest_service_position(building: Node3D, from: Vector3) -> Vector3:
@@ -3628,9 +3616,9 @@ func _exit_player_work_position() -> void:
 	player_citizen.exit_work_position()
 	if was_official_appointment:
 		_dismiss_official(player_citizen)
-		_update_interface("%s покинул пост управляющего." % player_citizen.role_label())
+		_update_interface(S.LEFT_OFFICER_POST_FORMAT % player_citizen.role_label())
 	else:
-		_update_interface("%s покинул рабочее место." % player_citizen.role_label())
+		_update_interface(S.LEFT_WORKPLACE_FORMAT % player_citizen.role_label())
 	_refresh_interaction_hint()
 
 
@@ -3647,24 +3635,24 @@ func _occupy_workplace(workplace: Node3D) -> void:
 		if settlement.is_research_completed("official"):
 			var current_officer := _officer_holder()
 			if current_officer != null and current_officer != player_citizen:
-				_update_interface("Это место уже занято чиновником.")
+				_update_interface(S.OFFICER_POSITION_TAKEN)
 				return
 			player_citizen.enter_work_position(service_position, "official", workplace, false)
 			_appoint_official(player_citizen, workplace)
 			if player_citizen.permanent_role != "official":
 				player_citizen.exit_work_position()
 				return
-			_update_interface("Ваш герой стал чиновником. Переключитесь на вид сверху для управления посёлком — клавиша R.")
+			_update_interface(S.HERO_BECAME_OFFICER)
 		else:
 			player_citizen.enter_work_position(service_position, "researcher", workplace, true)
 			_show_research_menu()
-			_update_interface("Ваш герой занял позицию исследователя.")
+			_update_interface(S.HERO_TOOK_RESEARCHER)
 	else:
 		var role := _role_for_workplace(workplace)
 		if role.is_empty():
 			return
 		player_citizen.enter_work_position(service_position, role, workplace, true)
-		_update_interface("%s занял временную должность %s." % [player_citizen.role_label(), role.replace("_", " ")])
+		_update_interface(S.TOOK_TEMP_ROLE_FORMAT % [player_citizen.role_label(), role.replace("_", " ")])
 	_refresh_interaction_hint()
 
 
@@ -3823,7 +3811,7 @@ func _resource_remaining_percent(resource_type: String) -> int:
 
 
 func _format_pocket_hint() -> String:
-	return "Карман %d/%d%s" % [_pocket_total(), POCKET_CAPACITY, (" | " + _pocket_summary()) if not pocket.is_empty() else ""]
+	return S.POCKET_FORMAT_INTERNAL % [_pocket_total(), POCKET_CAPACITY, (" | " + _pocket_summary()) if not pocket.is_empty() else ""]
 
 
 func _drop_pocket_on_ground() -> void:
@@ -3831,7 +3819,7 @@ func _drop_pocket_on_ground() -> void:
 		return
 	_create_resource_pile(player_citizen.global_position, pocket.duplicate())
 	pocket.clear()
-	_update_interface("Содержимое карманов выброшено на землю.")
+	_update_interface(S.POCKET_DROPPED_INTERNAL)
 	_refresh_interaction_hint()
 
 
@@ -3842,7 +3830,7 @@ func _home_occupancy_text() -> String:
 	var capacity := int(home.get_meta("housing_capacity", 1))
 	var free_slots := int(home.get_meta("spawn_slots", capacity))
 	var occupied := clampi(capacity - free_slots, 0, capacity)
-	return "Дом: %d/%d" % [occupied, capacity]
+	return S.HOME_OCCUPANCY_FORMAT % [occupied, capacity]
 
 
 func _refresh_interaction_hint() -> void:
@@ -3854,7 +3842,7 @@ func _refresh_interaction_hint() -> void:
 		return
 	interaction_hint_panel.visible = true
 	if pocket_menu_open:
-		interaction_hint_label.text = "F / Esc / ПКМ — закрыть меню"
+		interaction_hint_label.text = S.CLOSE_MENU_HINT
 		interaction_progress.visible = false
 		return
 	if not interaction_action.is_empty():
@@ -3865,17 +3853,17 @@ func _refresh_interaction_hint() -> void:
 		if target.kind == "toilet":
 			var needs_toilet := citizen_needs_service != null and citizen_needs_service.has_toilet_request(player_citizen.ai_id)
 			if needs_toilet:
-				lines.append("F: воспользоваться туалетом (потребность)")
+				lines.append(S.F_USE_TOILET_NEED)
 			else:
-				lines.append("F: воспользоваться туалетом")
-		lines.append("Наблюдение: WASD — двигаться, ПКМ — выйти в обзор")
+				lines.append(S.F_USE_TOILET)
+		lines.append(S.OBSERVE_HINT)
 	else:
 		var action_hint := _first_person_action_hint()
 		if not action_hint.is_empty():
 			lines.append(action_hint)
 	lines.append(_format_pocket_hint())
 	if not pocket.is_empty():
-		lines.append("T: выбросить карманы на землю")
+		lines.append(S.DROP_POCKET_HINT)
 	var home_text := _home_occupancy_text()
 	if not home_text.is_empty():
 		lines.append(home_text)
@@ -3945,7 +3933,7 @@ func _handle_sawmill_interaction(all: bool, sawmill_pos: Vector3) -> void:
 			var stock := _sawmill_stock(sawmill_pos)
 			stock.logs = int(stock.logs) + delivered
 			_store_sawmill_stock(sawmill_pos, stock)
-			_update_interface("Сдано %d дерева на лесопилку." % delivered)
+			_update_interface(S.DELIVERED_WOOD_TO_SAWMILL % delivered)
 		_refresh_interaction_hint()
 		return
 	var sawmill_stock := _sawmill_stock(sawmill_pos)
@@ -3956,7 +3944,7 @@ func _handle_sawmill_interaction(all: bool, sawmill_pos: Vector3) -> void:
 		if take_amount > 0:
 			sawmill_stock.boards = int(sawmill_stock.boards) - take_amount
 			_store_sawmill_stock(sawmill_pos, sawmill_stock)
-			_update_interface("Взяли %d досок с лесопилки." % take_amount)
+			_update_interface(S.TOOK_BOARDS_FROM_SAWMILL % take_amount)
 	_refresh_interaction_hint()
 
 
@@ -3992,14 +3980,14 @@ func _deliver_pocket_to_site(site: ConstructionSite, all: bool) -> void:
 		if not all:
 			break
 	if delivered_any:
-		_update_interface("Материалы сданы на стройплощадку.")
+		_update_interface(S.MATERIALS_DELIVERED_TO_SITE)
 		_refresh_interaction_hint()
 	else:
 		var missing := _missing_site_materials_text(site)
 		if missing.is_empty():
-			_update_interface("Стройплощадка уже полностью снабжена.")
+			_update_interface(S.SITE_FULLY_SUPPLIED)
 		else:
-			_update_interface("В кармане нет нужных материалов: %s." % missing)
+			_update_interface(S.POCKET_MISSING_MATERIALS % missing)
 		_refresh_interaction_hint()
 
 
@@ -4008,7 +3996,7 @@ func _refuel_fire_from_pocket(building: Node3D, all: bool) -> void:
 		return
 	var available := _pocket_amount("branches")
 	if available <= 0:
-		_update_interface("В кармане нет веток для костра.")
+		_update_interface(S.NO_BRANCHES_FOR_FIRE)
 		_refresh_interaction_hint()
 		return
 	var fire_state := _fire_state_for(building)
@@ -4020,7 +4008,7 @@ func _refuel_fire_from_pocket(building: Node3D, all: bool) -> void:
 	fire_state.add_delivered(delivered, int(game_minutes))
 	_apply_fire_state(building, fire_state)
 	_refresh_living_statuses()
-	_update_interface("В костер добавлено веток: %d." % delivered)
+	_update_interface(S.BRANCHES_ADDED_TO_FIRE % delivered)
 	_refresh_interaction_hint()
 
 
@@ -4036,7 +4024,7 @@ func _meet_arrival_at_entrance() -> void:
 		_on_arrival_greeter_ready(player_citizen)
 		_refresh_interaction_hint()
 		return
-	_update_interface("Никого не нужно встречать у входа.")
+	_update_interface(S.NO_ONE_TO_MEET)
 	_refresh_interaction_hint()
 
 
@@ -4067,9 +4055,9 @@ func _take_from_pile(pile: ResourcePileScript, all: bool) -> void:
 			break
 	if not taken_any:
 		if not _pocket_has_room():
-			_update_interface("Карман полон.")
+			_update_interface(S.POCKET_FULL_SHORT)
 		else:
-			_update_interface("Куча пуста или в ней нет подходящих ресурсов.")
+			_update_interface(S.PILE_EMPTY_NO_RESOURCES)
 		_refresh_interaction_hint()
 		return
 	pile.resources = resources
@@ -4081,24 +4069,24 @@ func _take_from_pile(pile: ResourcePileScript, all: bool) -> void:
 		pile_node.queue_free()
 	else:
 		_refresh_resource_pile_label(pile)
-	_update_interface("Взяли из кучи. %s" % _format_pocket_hint())
+	_update_interface(S.TOOK_FROM_PILE % _format_pocket_hint())
 	_refresh_interaction_hint()
 
 
 func _citizen_state_name(state: int) -> String:
 	match state:
 		Citizen.State.TO_EMPLOYMENT_CENTER:
-			return "Идет в службу занятости"
+			return S.STATE_GOING_TO_EMPLOYMENT
 		Citizen.State.EMPLOYMENT_PROCESSING:
-			return "Оформляется на работу"
+			return S.STATE_PROCESSING_EMPLOYMENT
 		Citizen.State.TO_ARRIVAL_ENTRANCE:
-			return "Идет встречать прибывшего"
+			return S.STATE_GOING_TO_MEET_ARRIVAL
 		Citizen.State.ARRIVAL_MEETING:
-			return "Встречает прибывшего"
+			return S.STATE_MEETING_ARRIVAL
 		Citizen.State.ARRIVAL_WAITING:
-			return "Ждет утра у входа"
+			return S.STATE_WAITING_MORNING_AT_ENTRANCE
 		Citizen.State.TO_ARRIVAL_CENTER:
-			return "Сопровождает прибывшего к регистрации"
+			return S.STATE_ESCORTING_ARRIVAL
 	var state_names := Citizen.State.keys()
 	if state < 0 or state >= state_names.size():
 		return "Unknown state"
@@ -4483,7 +4471,7 @@ func _grant_debug_resources() -> void:
 	var result := settlement.fill_least_warehouse_cheat(90.0)
 	settlement.money += 30
 	if not result.filled:
-		_update_interface("Нет складов с заполненностью меньше 90%.")
+		_update_interface(S.NO_WAREHOUSE_BELOW_90)
 	elif not result.overflow.is_empty() and not warehouse_positions.is_empty():
 		_drop_overflow_as_piles(result.overflow, warehouse_positions[0])
 		_update_interface("Debug resources added. Some overflow dropped near the warehouse.")
@@ -4573,9 +4561,9 @@ func _consume_tree_near_player(amount: int) -> void:
 						break
 					consumed += result
 				if consumed > 0:
-					_update_interface("Собрано веток: %d. Дерево стоит." % consumed)
+					_update_interface(S.BRANCHES_GATHERED_TREE_STANDING % consumed)
 				else:
-					_update_interface("У дерева не осталось веток для ручного сбора.")
+					_update_interface(S.TREE_NO_BRANCHES_LEFT)
 				return
 
 
@@ -5171,7 +5159,7 @@ func _take_resource_into_pocket(resource_type: String, amount: int) -> void:
 			settlement.add_to_warehouse(resource_type, -amount, warehouse_index)
 		else:
 			settlement.add(resource_type, -amount)
-		_update_interface("Взяли %d %s со склада." % [amount, resource_type])
+		_update_interface(S.TOOK_FROM_WAREHOUSE % [amount, resource_type])
 	_refresh_pocket_take_menu()
 	_refresh_interaction_hint()
 
@@ -5299,7 +5287,7 @@ func _dismiss_official(citizen: Citizen) -> void:
 	citizen.employment_workplace = null
 	citizen.employment_state = Citizen.EmploymentState.NO_PERMANENT_WORK
 	citizen.active_role = ""
-	_update_interface("%s покинул пост управляющего." % citizen.role_label())
+	_update_interface(S.CITIZEN_LEFT_OFFICER_POST % citizen.role_label())
 	_update_workers()
 	_refresh_build_menu()
 
@@ -5548,7 +5536,7 @@ func _check_unstaffed_employment_center() -> void:
 		var current_time := runtime_seconds
 		if current_time - _last_unstaffed_warning_time > 60.0:
 			_last_unstaffed_warning_time = current_time
-			_add_message("Предупреждение: В службе занятости нет чиновника! Оформление жителей приостановлено.")
+			_add_message(S.WARNING_NO_OFFICER)
 
 
 func _toggle_worker_overtime(checked: bool) -> void:

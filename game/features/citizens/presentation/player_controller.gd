@@ -2,6 +2,7 @@ class_name PlayerController
 extends Node
 
 const PlayerInteractionTargetResolverScript = preload("res://game/features/citizens/presentation/player_interaction_target_resolver.gd")
+const S = preload("res://game/features/ui/domain/game_strings.gd")
 
 const PLAYER_SPEED := 6.5
 const PLAYER_SPRINT_MULTIPLIER := 1.7
@@ -188,7 +189,7 @@ func update_interaction(delta: float) -> void:
 			simulation._refresh_interaction_hint()
 			return
 		simulation.interaction_progress.value = 100.0
-		simulation.interaction_hint_label.text = "Работаем: %s..." % interaction_action
+		simulation.interaction_hint_label.text = S.WORKING_FORMAT % interaction_action
 		return
 	if interaction_action == "toilet":
 		if player_citizen == null or not player_citizen.player_using_toilet:
@@ -198,18 +199,18 @@ func update_interaction(delta: float) -> void:
 			return
 		var toilet_pct := int((1.0 - player_citizen.toilet_timer.remaining / Citizen.TOILET_USE_DURATION) * 100.0)
 		simulation.interaction_progress.value = clampi(toilet_pct, 0, 100)
-		simulation.interaction_hint_label.text = "Пользуемся туалетом %d%%" % clampi(toilet_pct, 0, 100)
+		simulation.interaction_hint_label.text = S.USING_TOILET_PERCENT % clampi(toilet_pct, 0, 100)
 		return
 	if simulation._cell_from_position(player_citizen.global_position) != interaction_start_cell:
 		interaction_action = ""
 		simulation.interaction_progress.visible = false
-		simulation._update_interface("Действие прервано: вы отошли от клетки.")
+		simulation._update_interface(S.ACTION_CANCELLED_AWAY)
 		simulation._refresh_interaction_hint()
 		return
 	if (interaction_resource in ["wood", "branches"] and not simulation._nearby_tree()) or (interaction_resource == "food" and not simulation._nearby_farm()) or (interaction_resource == "water" and not simulation._nearby_pond()) or (interaction_resource == "grass" and not simulation._nearby_grass_source()):
 		interaction_action = ""
 		simulation.interaction_progress.visible = false
-		simulation._update_interface("Добыча отменена: вы отошли от источника.")
+		simulation._update_interface(S.HARVEST_CANCELLED_AWAY_SOURCE)
 		return
 	interaction_time += delta
 	var progress_pct := clampi(int(interaction_time / HARVEST_DURATION * 100.0), 0, 100)
@@ -239,9 +240,9 @@ func update_interaction(delta: float) -> void:
 			"food":
 				gathered = simulation._add_to_pocket("food", 1)
 		if gathered > 0:
-			simulation._update_interface("Собрано %s. %s" % [interaction_resource, simulation._format_pocket_hint()])
+			simulation._update_interface(S.GATHERED_FORMAT % [interaction_resource, simulation._format_pocket_hint()])
 		else:
-			simulation._update_interface("Карман полон. Невозможно собрать %s." % interaction_resource)
+			simulation._update_interface(S.POCKET_FULL_CANNOT_GATHER % interaction_resource)
 		simulation.interaction_progress.visible = false
 
 
@@ -267,7 +268,7 @@ func start_interaction(all: bool) -> void:
 		simulation._player_use_toilet(target.node)
 		return
 	if not player_citizen.is_hero:
-		simulation._update_interface("Только герой может выполнять действия. Остальными жителями можно только двигаться.")
+		simulation._update_interface(S.ONLY_HERO_CAN_ACT)
 		return
 	match target.kind:
 		"construction":
@@ -280,7 +281,7 @@ func start_interaction(all: bool) -> void:
 				interaction_time = 0.0
 				interaction_start_cell = simulation._cell_from_position(player_citizen.global_position)
 				simulation.interaction_progress.visible = true
-				simulation.interaction_hint_label.text = "Работаем: стройка..."
+				simulation.interaction_hint_label.text = S.WORKING_CONSTRUCTION
 			return
 		"demolition":
 			player_work_target = target.node
@@ -288,7 +289,7 @@ func start_interaction(all: bool) -> void:
 			interaction_time = 0.0
 			interaction_start_cell = simulation._cell_from_position(player_citizen.global_position)
 			simulation.interaction_progress.visible = true
-			simulation.interaction_hint_label.text = "Работаем: снос..."
+			simulation.interaction_hint_label.text = S.WORKING_DEMOLITION
 			return
 		"pile":
 			simulation._take_from_pile(target.pile, all)
@@ -300,14 +301,14 @@ func start_interaction(all: bool) -> void:
 			simulation._handle_warehouse_interaction(all, int(target.get("warehouse_index", -1)))
 			return
 		"forage", "rabbit":
-			simulation._update_interface("Лесные дары и зайца может собирать только специалист. Постройте палатку охотников-собирателей.")
+			simulation._update_interface(S.FORAGE_SPECIALIST_ONLY_SHORT)
 			return
 		"citizen", "building":
 			return
 		"tree":
 			var gathering_branches: bool = int(simulation.settlement.era) < int(SettlementState.Era.WOOD)
 			if not simulation._pocket_has_room():
-				simulation._update_interface("Карман полон. Дерево — на лесопилку, еду — на склад.")
+				simulation._update_interface(S.POCKET_FULL_TREE_HINT)
 				return
 			interaction_action = "harvesting"
 			interaction_resource = "branches" if gathering_branches else "wood"
@@ -317,7 +318,7 @@ func start_interaction(all: bool) -> void:
 			return
 		"farm":
 			if not simulation._pocket_has_room():
-				simulation._update_interface("Карман полон.")
+				simulation._update_interface(S.POCKET_FULL_SHORT)
 				return
 			interaction_action = "harvesting"
 			interaction_resource = "food"
@@ -327,7 +328,7 @@ func start_interaction(all: bool) -> void:
 			return
 		"pond":
 			if not simulation._pocket_has_room():
-				simulation._update_interface("Карман полон.")
+				simulation._update_interface(S.POCKET_FULL_SHORT)
 				return
 			interaction_action = "harvesting"
 			interaction_resource = "water"
@@ -337,7 +338,7 @@ func start_interaction(all: bool) -> void:
 			return
 		"grass":
 			if not simulation._pocket_has_room():
-				simulation._update_interface("Карман полон.")
+				simulation._update_interface(S.POCKET_FULL_SHORT)
 				return
 			interaction_action = "harvesting"
 			interaction_resource = "grass"

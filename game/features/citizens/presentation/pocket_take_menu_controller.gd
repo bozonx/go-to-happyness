@@ -2,6 +2,7 @@ class_name PocketTakeMenuController
 extends RefCounted
 
 const PocketTakeItemRowScene = preload("res://game/features/citizens/presentation/pocket_take_item_row.tscn")
+const S = preload("res://game/features/ui/domain/game_strings.gd")
 
 var simulation: Node
 
@@ -52,4 +53,4 @@ func refresh_pocket_take_menu() -> void:
 			simulation._take_resource_into_pocket(resource_type, simulation._pocket_space_for(resource_type))
 		)
 		simulation.pocket_take_menu.item_list.add_child(row)
-	simulation.pocket_take_menu_title.text = "Взять товары со склада (карман %d/%d)" % [simulation._pocket_total(), simulation.POCKET_CAPACITY]
+	simulation.pocket_take_menu_title.text = S.TAKE_FROM_WAREHOUSE_FORMAT % [simulation._pocket_total(), simulation.POCKET_CAPACITY]

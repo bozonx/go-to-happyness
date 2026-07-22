@@ -1,6 +1,8 @@
 class_name HouseMenuController
 extends RefCounted
 
+const S = preload("res://game/features/ui/domain/game_strings.gd")
+
 var simulation: Node
 
 
@@ -18,7 +20,7 @@ func show_house_menu() -> void:
 	if building_type.is_empty():
 		building_type = "house"
 	var is_tent: bool = simulation.selected_house.has_meta("is_tent")
-	var home_name := "Соломенная палатка" if building_type == "straw_tent" else ("Брезентовая палатка" if building_type == "tarp_tent" else ("Палатка" if building_type == "tent" else "House"))
+	var home_name := S.HOUSE_NAME_STRAW_TENT if building_type == "straw_tent" else (S.HOUSE_NAME_TARP_TENT if building_type == "tarp_tent" else (S.HOUSE_NAME_TENT if building_type == "tent" else S.HOUSE_NAME_HOUSE))
 	var unhoused: int = simulation._unhoused_citizen_count()
 	var residents: int = capacity - slots
 	if is_tent:

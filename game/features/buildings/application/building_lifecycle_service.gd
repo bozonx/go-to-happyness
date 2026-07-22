@@ -6,6 +6,8 @@ extends RefCounted
 ## resource recovery, navigation/territory updates), expired tent cleanup,
 ## house light updates, and campfire selection.
 
+const S = preload("res://game/features/ui/domain/game_strings.gd")
+
 var simulation: Node
 
 
@@ -304,7 +306,7 @@ func register_completed_building_type_features(building_type: String, building: 
 			simulation._update_interface("Forager tent ready. Assign a resident to forage food, or a free hand will.")
 		"materials_yard", "straw_materials_yard", "tarp_materials_yard":
 			simulation.materials_yard_positions.append(service_position)
-			simulation._update_interface("Двор стройматериалов готов. Работники собирают ветки и траву (что в дефиците), или это сделает свободный житель.")
+			simulation._update_interface(S.MATERIALS_YARD_READY)
 		"tent", "straw_tent", "tarp_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house":
 			if building_type in ["house", "house_lvl2", "house_lvl3", "brick_house"]:
 				simulation.completed_house_count += 1

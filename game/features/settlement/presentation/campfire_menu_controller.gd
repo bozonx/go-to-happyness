@@ -3,6 +3,7 @@ extends RefCounted
 
 const BuildingCatalogScript = preload("res://game/features/buildings/domain/building_catalog.gd")
 const SettlementStateScript = preload("res://game/features/settlement/domain/settlement_state.gd")
+const S = preload("res://game/features/ui/domain/game_strings.gd")
 
 var simulation: Node
 
@@ -118,7 +119,7 @@ func refresh_campfire_menu() -> void:
 	var era_str: String = simulation._era_name()
 	var fire_state: Variant = simulation._fire_state_for(simulation.selected_campfire)
 	var fuel_current: int = fire_state.total_committed_fuel()
-	var title_text := "Campfire (Era: %s)\nВетки: %d/%d" % [era_str, fuel_current, simulation.FIRE_SUPPLY_TARGET]
+	var title_text := S.CAMPFIRE_ERA_FORMAT % [era_str, fuel_current, simulation.FIRE_SUPPLY_TARGET]
 
 	var housing_slots: int = simulation._total_housing_slots()
 	var era_info: Array = build_campfire_era_requirements(housing_slots)
@@ -129,7 +130,7 @@ func refresh_campfire_menu() -> void:
 	if unhoused > 0:
 		req_text += "\nProblems:\n- Unhoused residents: %d. Settle them in a home before inviting anyone new.\n" % unhoused
 	if not simulation._officer_exists():
-		req_text += "\nУправление трудом: officer не назначен. Резерв простаивает, но стройка доступна.\n"
+		req_text += S.CAMPFIRE_NO_OFFICER_HINT
 
 	var upgrade_state := {"visible": false, "text": "", "disabled": false, "tooltip": ""}
 	var selected_type: String = simulation.building_registry.building_type_for_node(simulation.selected_campfire) if is_instance_valid(simulation.selected_campfire) else ""
@@ -161,9 +162,9 @@ func refresh_campfire_menu() -> void:
 	var occupy_disabled: bool = can_be_official and simulation._officer_exists() and player_role != "official"
 	var occupy_state := {
 		"visible": controlled_unit_nearby,
-		"text": "Занять место чиновника" if can_be_official else "Занять место исследователя",
+		"text": S.CAMPFIRE_OCCUPY_OFFICIAL if can_be_official else S.CAMPFIRE_OCCUPY_RESEARCHER,
 		"disabled": occupy_disabled,
-		"tooltip": "Место уже занято чиновником." if occupy_disabled else "",
+		"tooltip": S.CAMPFIRE_OFFICIAL_TAKEN if occupy_disabled else "",
 	}
 	var officer: Variant = simulation._workplace_worker(simulation.selected_campfire) if is_center else null
 	var campfire_night_order_used: bool = is_instance_valid(simulation.selected_campfire) and int(simulation.selected_campfire.get_meta("night_work_order_day", -1)) == simulation.day_cycle.current_day
