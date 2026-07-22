@@ -15,7 +15,7 @@ var duration_hours := -1.0
 
 
 static func create(next_id: StringName, next_label: String, next_severity := 0.0, next_duration_hours := -1.0) -> RefCounted:
-	var status: RefCounted = load("res://game/features/citizens/domain/citizen_status_effect.gd").new()
+	var status := CitizenStatusEffect.new()
 	status.id = next_id
 	status.label = next_label
 	status.severity = maxf(0.0, next_severity)

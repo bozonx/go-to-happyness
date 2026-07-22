@@ -12,6 +12,10 @@ func configure(next_simulation: Node) -> void:
 	simulation = next_simulation
 
 
+func set_dig_site_scene(scene: PackedScene) -> void:
+	dig_site_scene = scene
+
+
 func _get_dig_site_scene() -> PackedScene:
 	if dig_site_scene == null:
 		dig_site_scene = load("res://game/features/world/presentation/dig_site.tscn") as PackedScene

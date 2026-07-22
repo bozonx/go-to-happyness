@@ -21,7 +21,7 @@ static func create(
 	next_source_endpoint := ENDPOINT_MARKET,
 	next_destination_endpoint := ENDPOINT_STORAGE
 ) -> RefCounted:
-	var order: RefCounted = load("res://game/features/logistics/domain/trade_order.gd").new()
+	var order := TradeOrder.new()
 	order.trade = next_trade.duplicate(true)
 	order.source = next_source
 	order.destination = next_destination

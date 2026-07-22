@@ -10,6 +10,10 @@ var settlement: RefCounted
 var weather_state: RefCounted
 var _visuals: RefCounted = null
 
+func set_visuals(visuals_ref: RefCounted) -> void:
+	_visuals = visuals_ref
+
+
 func _get_visuals() -> RefCounted:
 	if _visuals == null:
 		var script_cls: Script = load("res://game/features/logistics/presentation/resource_pile_visuals.gd") as Script

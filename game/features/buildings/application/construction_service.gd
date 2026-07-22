@@ -15,6 +15,11 @@ func configure(next_runtime: ConstructionRuntime) -> void:
 	runtime = next_runtime
 
 
+func configure_scenes(next_site_scene: PackedScene, next_entrance_post_scene: PackedScene) -> void:
+	site_scene = next_site_scene
+	entrance_post_scene = next_entrance_post_scene
+
+
 func _get_site_scene() -> PackedScene:
 	if site_scene == null:
 		site_scene = load("res://game/features/buildings/presentation/construction_site.tscn") as PackedScene

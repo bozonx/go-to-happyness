@@ -8,6 +8,10 @@ const HARVEST_DURATION := 3.5
 const CitizenTaskStateScript = preload("res://game/features/citizens/domain/citizen_task_state.gd")
 var billboard_label_scene: PackedScene = null
 
+func set_billboard_label_scene(scene: PackedScene) -> void:
+	billboard_label_scene = scene
+
+
 func _get_billboard_label_scene() -> PackedScene:
 	if billboard_label_scene == null:
 		billboard_label_scene = load("res://game/features/ui/presentation/billboard_label.tscn") as PackedScene

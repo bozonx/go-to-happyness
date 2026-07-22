@@ -13,7 +13,7 @@ var embers_until_minute := -1
 
 
 static func from_values(next_fuel: int, next_reserved_fuel: int, next_lit: bool, next_embers_until_minute: int = -1) -> RefCounted:
-	var state: RefCounted = load("res://game/features/settlement/domain/fire_source_state.gd").new()
+	var state := FireSourceState.new()
 	state.fuel = maxi(0, next_fuel)
 	state.reserved_fuel = maxi(0, next_reserved_fuel)
 	state.lit = next_lit

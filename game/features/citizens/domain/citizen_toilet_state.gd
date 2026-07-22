@@ -17,7 +17,7 @@ var player_using := false
 
 
 func _init() -> void:
-	timer = load("res://game/features/citizens/domain/citizen_task_state.gd").new()
+	timer = CitizenTaskState.new()
 
 
 func reset_relief() -> void:

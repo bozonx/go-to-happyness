@@ -38,6 +38,7 @@ const BuildingMenuControllerScript = preload("res://game/features/buildings/pres
 const BuildingStatusIndicatorControllerScript = preload("res://game/features/buildings/presentation/building_status_indicator_controller.gd")
 const FirstPersonHUDControllerScript = preload("res://game/features/ui/presentation/first_person_hud_controller.gd")
 const LabelDistanceFadeControllerScript = preload("res://game/features/ui/presentation/label_distance_fade_controller.gd")
+const ResourcePileVisualsScript = preload("res://game/features/logistics/presentation/resource_pile_visuals.gd")
 const BuildingLifecycleServiceScript = preload("res://game/features/buildings/application/building_lifecycle_service.gd")
 const BuildingResearchServiceScript = preload("res://game/features/buildings/application/building_research_service.gd")
 const BuildingQueueServiceScript = preload("res://game/features/citizens/application/building_queue_service.gd")
@@ -675,6 +676,7 @@ func _ready() -> void:
 	canteen_service = CanteenService.new()
 	canteen_service.configure(self)
 	resource_pile_service = ResourcePileService.new(self, resource_piles, settlement, weather_state)
+	resource_pile_service.set_visuals(ResourcePileVisualsScript.new())
 	foraging_service = ForagingService.new()
 	foraging_service.billboard_label_scene = BillboardLabelScene
 	foraging_service.setup(
