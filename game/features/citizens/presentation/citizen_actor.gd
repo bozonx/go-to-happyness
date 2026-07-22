@@ -203,7 +203,7 @@ var is_hero := false
 var ai_id := 0
 
 func get_stable_id() -> int:
-	return ai_id if ai_id != 0 else get_instance_id()
+	return ai_id
 var construction_site: Node3D
 var specialization: String:
 	get:

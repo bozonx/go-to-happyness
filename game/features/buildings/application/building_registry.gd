@@ -19,11 +19,12 @@ func reserve(cell: Vector2i, center: Vector3, footprint: Vector2i) -> BuildingRe
 	return record
 
 
-func attach_node(cell: Vector2i, node: Node3D) -> BuildingRecord:
+func attach_node(cell: Vector2i, node: Node3D, building_type: String = "") -> BuildingRecord:
 	var record := record_at_cell(cell)
 	if record == null:
 		return null
 	record.node = node
+	record.building_type = building_type
 	return record
 
 
@@ -32,6 +33,20 @@ func cancel_reservation(cell: Vector2i) -> BuildingRecord:
 	if record == null or is_instance_valid(record.node):
 		return null
 	return _remove(record)
+
+
+func record_for_node(node: Node3D) -> BuildingRecord:
+	for record in _records:
+		if record.node == node:
+			return record
+	return null
+
+
+func building_type_for_node(node: Node3D) -> String:
+	var record := record_for_node(node)
+	if record != null:
+		return record.building_type
+	return str(node.get_meta("building_type", ""))
 
 
 func remove_node(node: Node3D) -> BuildingRecord:

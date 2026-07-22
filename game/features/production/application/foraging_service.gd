@@ -5,6 +5,7 @@ const INTERACTION_RANGE := 2.8
 const WILD_FOOD_RESPAWN_SECONDS := 90.0
 const RABBIT_RESPAWN_SECONDS := 120.0
 const HARVEST_DURATION := 3.5
+const CitizenTaskStateScript = preload("res://game/features/citizens/domain/citizen_task_state.gd")
 var billboard_label_scene: PackedScene = null
 
 func _get_billboard_label_scene() -> PackedScene:
@@ -90,8 +91,8 @@ func harvest_wild_food(position: Vector3, worker: Node3D) -> String:
 		var source := rabbit_sources[cell] as Dictionary
 		var rabbit := source.get("node") as Node3D
 		if is_instance_valid(rabbit) and rabbit.global_position.distance_to(position) <= 1.6:
-			if worker != null and worker.has_method("play_hunting_shot"):
-				worker.call("play_hunting_shot")
+			if worker is Citizen:
+				worker.play_hunting_shot()
 			rabbit.queue_free()
 			rabbit_sources.erase(cell)
 			rabbit_respawn_at[cell] = runtime_seconds + RABBIT_RESPAWN_SECONDS
@@ -283,14 +284,14 @@ func update_gathering_indicators(
 			var node: Node3D = gather_node_at(c_gather_pos, c_gather_type)
 			if is_instance_valid(node):
 				var task_timer: Variant = citizen.get("task_timer")
-				var progress: float = task_timer.progress() if task_timer != null and task_timer.has_method("progress") else 0.0
+				var progress: float = task_timer.progress() if task_timer is CitizenTaskStateScript else 0.0
 				active_targets[node] = {"resource_type": c_gather_type, "partial": progress}
 		elif citizen_state == 4:
 			var cell: Vector2i = cell_query.call(c_source_pos) if cell_query.is_valid() else Vector2i.ZERO
 			var node: Node3D = tree_nodes.get(cell)
 			if is_instance_valid(node):
 				var task_timer: Variant = citizen.get("task_timer")
-				var progress: float = task_timer.progress() if task_timer != null and task_timer.has_method("progress") else 0.0
+				var progress: float = task_timer.progress() if task_timer is CitizenTaskStateScript else 0.0
 				active_targets[node] = {"resource_type": "wood", "partial": progress}
 
 	var nodes_to_remove: Array = gather_progress_labels.keys().duplicate()

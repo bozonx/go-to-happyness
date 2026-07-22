@@ -26,7 +26,7 @@ func set_citizen_alive_checker(checker: Callable) -> void:
 
 func _citizen_id(citizen: Node) -> int:
 	var ai_id: Variant = citizen.get("ai_id")
-	if ai_id != null:
+	if ai_id != null and int(ai_id) != 0:
 		return int(ai_id)
 	return citizen.get_instance_id()
 
@@ -187,7 +187,7 @@ func _release_from_other_buildings(citizen_id: int, retained_building_id: int) -
 
 
 func _capacity_for(building: Node3D) -> int:
-	var building_type := str(building.get_meta("building_type", ""))
+	var building_type := building_registry.building_type_for_node(building)
 	if building_type.begins_with("toilet_"):
 		var base_capacity := 1
 		if "earth" in building_type: base_capacity = 2

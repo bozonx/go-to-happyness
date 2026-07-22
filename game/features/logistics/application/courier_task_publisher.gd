@@ -29,7 +29,7 @@ func publish_courier_tasks(dispatcher: RefCounted) -> void:
 			var arrival_house := arrival_order.get("house") as Node3D
 			if is_instance_valid(arrival_house) and not bool(arrival_house.get_meta("pending_demolition", false)):
 				dispatcher.publish(
-					StringName("arrival_%d" % arrival_house.get_instance_id()),
+					StringName("arrival_%s" % simulation._cell_from_position(arrival_house.global_position)),
 					CourierTaskScript.Kind.ARRIVAL,
 					89,
 					simulation.entrance_stone.global_position,
@@ -97,7 +97,7 @@ func publish_courier_tasks(dispatcher: RefCounted) -> void:
 					var delivery_slots: int = ceili(float(source_allocation) / float(maxi(1, smallest_courier_capacity)))
 					for slot in range(delivery_slots):
 						dispatcher.publish(
-							StringName("construction_%s_%s_%s_%d" % [site.node.get_instance_id(), resource_type, source_id, slot]),
+							StringName("construction_%s_%s_%s_%d" % [site.cell, resource_type, source_id, slot]),
 							CourierTaskScript.Kind.CONSTRUCTION,
 							70,
 							source.position,
@@ -114,7 +114,7 @@ func publish_courier_tasks(dispatcher: RefCounted) -> void:
 			var repair_position: Vector3 = building.get_meta("service_position", building.global_position)
 			var repair_source: Vector3 = simulation._get_nearest_delivery_position(repair_position)
 			dispatcher.publish(
-				StringName("repair_%d" % building.get_instance_id()),
+				StringName("repair_%s" % record.cell),
 				CourierTaskScript.Kind.BUILDING_SUPPLY,
 				60,
 				repair_source,
@@ -125,7 +125,7 @@ func publish_courier_tasks(dispatcher: RefCounted) -> void:
 			var fire_building: Node3D = record.node as Node3D
 			if not is_instance_valid(fire_building):
 				continue
-			var building_type: String = str(fire_building.get_meta("building_type", ""))
+			var building_type: String = record.building_type
 			if building_type not in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"]:
 				continue
 			var fire_state = simulation._fire_state_for(fire_building)
@@ -133,7 +133,7 @@ func publish_courier_tasks(dispatcher: RefCounted) -> void:
 				continue
 			var fire_position: Vector3 = fire_building.get_meta("service_position", fire_building.global_position)
 			dispatcher.publish(
-				StringName("firewood_%d" % fire_building.get_instance_id()),
+				StringName("firewood_%s" % record.cell),
 				CourierTaskScript.Kind.BUILDING_SUPPLY,
 				simulation._firewood_task_priority(fire_building, fire_state),
 				simulation._get_nearest_delivery_position(fire_position),

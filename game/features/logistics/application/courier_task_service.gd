@@ -318,7 +318,7 @@ func is_courier_task_valid(task: RefCounted) -> bool:
 				if arrival_order.get("house") == arrival_house:
 					if not bool(arrival_order.get("dispatched", false)):
 						return true
-					var greeter := simulation._citizen_for_ai_id(int(arrival_order.get("greeter_id", -1)))
+					var greeter: Citizen = simulation._citizen_for_ai_id(int(arrival_order.get("greeter_id", -1)))
 					return is_instance_valid(greeter) and greeter.ai_id == task.assigned_courier_ai_id
 			return false
 		CourierTask.Kind.OUTSIDE_WORK:

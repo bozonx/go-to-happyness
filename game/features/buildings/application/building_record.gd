@@ -8,6 +8,7 @@ var cell: Vector2i
 var center: Vector3
 var footprint: Vector2i
 var node: Node3D
+var building_type: String
 
 
 func _init(next_cell: Vector2i, next_center: Vector3, next_footprint: Vector2i) -> void:

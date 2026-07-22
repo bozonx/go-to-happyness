@@ -254,7 +254,7 @@ func _role_employers() -> Dictionary:
 		var candidates: Array[Dictionary] = []
 		for record in simulation.building_registry.records():
 			var workplace: Node3D = record.node
-			if not is_instance_valid(workplace) or str(workplace.get_meta("building_type", "")) not in simulation._employer_types_for_role(role):
+			if not is_instance_valid(workplace) or record.building_type not in simulation._employer_types_for_role(role):
 				continue
 			if not bool(workplace.get_meta("accepting_workers", true)):
 				continue

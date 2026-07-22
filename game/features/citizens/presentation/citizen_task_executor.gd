@@ -149,7 +149,7 @@ func assign_sawmill_pickup(actor: Node3D, sawmill: Vector3, warehouse: Vector3) 
 func collect_sawmill_boards(actor: Node3D, amount: int) -> void:
 	if actor == null:
 		return
-	var cap: int = int(actor.call("courier_capacity")) if actor.has_method("courier_capacity") else 1
+	var cap: int = actor.courier_capacity() if actor is Citizen else 1
 	actor.set("carried_amount", mini(amount, cap))
 	actor.set("courier_resource_type", "boards")
 	actor.set("state", Citizen.State.COURIER_TO_WAREHOUSE if amount > 0 else Citizen.State.IDLE)

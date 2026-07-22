@@ -48,7 +48,7 @@ func fire_state_for(building: Node3D) -> RefCounted:
 func is_managed_fire_source(building: Node3D) -> bool:
 	if not is_instance_valid(building):
 		return false
-	return str(building.get_meta("building_type", "")) in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"]
+	return building_registry.building_type_for_node(building) in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"]
 
 func apply_fire_state(building: Node3D, fire_state: RefCounted) -> void:
 	if not is_instance_valid(building) or fire_state == null:
@@ -71,7 +71,7 @@ func fire_smoke_work_multiplier(position_on_board: Vector3) -> float:
 	var is_smoky: bool = event_service != null and event_service.log.has_flag(&"smoky_firewood")
 	if not is_smoky:
 		return 1.0
-	if building_registry != null and building_registry.has_method("records"):
+	if building_registry != null:
 		for record in building_registry.records():
 			var building: Node3D = record.node
 			if is_instance_valid(building) and is_fire_lit(building) and building.global_position.distance_to(position_on_board) <= 15.0:
@@ -93,10 +93,10 @@ func update_fire_status(host_node: Node, branches_count: int) -> void:
 
 	var campfire_node: Node3D = campfire_node_query.call() if campfire_node_query.is_valid() else null
 
-	if building_registry != null and building_registry.has_method("records"):
+	if building_registry != null:
 		for record in building_registry.records():
 			var building: Node3D = record.node
-			if not is_instance_valid(building) or str(building.get_meta("building_type", "")) not in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"]:
+			if not is_instance_valid(building) or record.building_type not in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"]:
 				continue
 			var fire_state := fire_state_for(building)
 			if consume_tick and fire_state.is_burning_at(minute):

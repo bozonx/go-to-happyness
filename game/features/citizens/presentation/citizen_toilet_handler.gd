@@ -3,6 +3,7 @@ extends RefCounted
 
 const TOILET_USE_DURATION := 8.0
 const TOILET_WAIT_TIMEOUT := 12.0
+const CitizenTaskStateScript = preload("res://game/features/citizens/domain/citizen_task_state.gd")
 
 func go_to_relief(actor: Node3D, destination: Vector3, relief_kind: StringName) -> void:
 	if actor == null or bool(actor.get("is_player_controlled")) or destination == Vector3.INF:
@@ -33,7 +34,7 @@ func begin_player_toilet_use(actor: Node3D, toilet_node: Node3D) -> void:
 	actor.set("current_toilet_target", toilet_node)
 	actor.set("state", Citizen.State.USING_TOILET)
 	var timer: Variant = actor.get("toilet_timer")
-	if timer != null and timer.has_method("start"):
+	if timer is CitizenTaskStateScript:
 		timer.start(TOILET_USE_DURATION)
 	actor.set("player_using_toilet", true)
 
@@ -117,7 +118,7 @@ func process_to_toilet(actor: Node3D, delta: float) -> void:
 		if users_count < capacity:
 			actor.set("state", Citizen.State.USING_TOILET)
 			var timer: Variant = actor.get("toilet_timer")
-			if timer != null and timer.has_method("start"):
+			if timer is CitizenTaskStateScript:
 				timer.start(TOILET_USE_DURATION)
 		else:
 			actor.set("toilet_wait_time", 0.0)
@@ -131,12 +132,12 @@ func process_using_toilet(actor: Node3D, delta: float) -> void:
 		resume_after_toilet(actor)
 		return
 	var timer: Variant = actor.get("toilet_timer")
-	if timer != null and timer.has_method("advance") and bool(timer.advance(delta)):
-		var sat_cap: float = float(actor.call("get_satisfaction_cap")) if actor.has_method("get_satisfaction_cap") else 100.0
+	if timer is CitizenTaskStateScript and bool(timer.advance(delta)):
+		var sat_cap: float = actor.get_satisfaction_cap() if actor is Citizen else 100.0
 		var cur_sat: float = float(actor.get("satisfaction"))
 		actor.set("satisfaction", minf(sat_cap, cur_sat + 10.0))
 		resume_after_toilet(actor)
-		if actor.has_signal("relief_finished"):
+		if actor is Citizen:
 			actor.emit_signal("relief_finished", actor)
 
 func process_waiting_for_toilet(actor: Node3D, delta: float) -> void:
@@ -175,7 +176,7 @@ func process_waiting_for_toilet(actor: Node3D, delta: float) -> void:
 	if users_count < capacity:
 		actor.set("state", Citizen.State.USING_TOILET)
 		var timer: Variant = actor.get("toilet_timer")
-		if timer != null and timer.has_method("start"):
+		if timer is CitizenTaskStateScript:
 			timer.start(TOILET_USE_DURATION)
 
 func process_to_bush(actor: Node3D, delta: float) -> void:
@@ -188,17 +189,17 @@ func process_to_bush(actor: Node3D, delta: float) -> void:
 	if bool(actor.call("_move_to", pos, delta)):
 		actor.set("state", Citizen.State.USING_BUSH)
 		var timer: Variant = actor.get("toilet_timer")
-		if timer != null and timer.has_method("start"):
+		if timer is CitizenTaskStateScript:
 			timer.start(TOILET_USE_DURATION)
 
 func process_using_bush(actor: Node3D, delta: float) -> void:
 	if actor == null:
 		return
 	var timer: Variant = actor.get("toilet_timer")
-	if timer != null and timer.has_method("advance") and bool(timer.advance(delta)):
-		var sat_cap: float = float(actor.call("get_satisfaction_cap")) if actor.has_method("get_satisfaction_cap") else 100.0
+	if timer is CitizenTaskStateScript and bool(timer.advance(delta)):
+		var sat_cap: float = actor.get_satisfaction_cap() if actor is Citizen else 100.0
 		var cur_sat: float = float(actor.get("satisfaction"))
 		actor.set("satisfaction", minf(sat_cap, cur_sat + 10.0))
 		resume_after_toilet(actor)
-		if actor.has_signal("relief_finished"):
+		if actor is Citizen:
 			actor.emit_signal("relief_finished", actor)

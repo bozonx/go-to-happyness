@@ -86,7 +86,7 @@ func update_arrivals() -> void:
 					citizen.employment_state = Citizen.EmploymentState.NO_PERMANENT_WORK
 					citizen.idle()
 	for greeter_id in simulation.arrival_waiting_greeters.keys():
-		var waiting_greeter := simulation._citizen_for_ai_id(int(greeter_id))
+		var waiting_greeter: Citizen = simulation._citizen_for_ai_id(int(greeter_id))
 		var waiting_order: Dictionary = simulation.arrival_waiting_greeters[greeter_id]
 		if not is_instance_valid(waiting_greeter) or not waiting_greeter.can_handle_entry_logistics():
 			simulation.arrival_waiting_greeters.erase(greeter_id)
@@ -145,7 +145,7 @@ func on_arrival_greeter_ready(greeter: Citizen) -> void:
 
 func requeue_interrupted_arrivals() -> void:
 	for greeter_id in simulation.arrival_waiting_greeters.keys():
-		var waiting_greeter := simulation._citizen_for_ai_id(int(greeter_id))
+		var waiting_greeter: Citizen = simulation._citizen_for_ai_id(int(greeter_id))
 		if is_instance_valid(waiting_greeter) and waiting_greeter.has_active_arrival_task():
 			simulation.arrival_greeters[greeter_id] = simulation.arrival_waiting_greeters[greeter_id]
 			simulation.arrival_waiting_greeters.erase(greeter_id)

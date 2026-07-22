@@ -88,14 +88,14 @@ func destroy_building_to_pile(building: Node3D, building_type: String, citizens:
 		remove_services.call(building, building_type)
 
 	var removed_record: RefCounted = null
-	if building_registry != null and building_registry.has_method("remove_node"):
+	if building_registry != null:
 		removed_record = building_registry.remove_node(building)
 
 	if removed_record != null:
 		var unregister_nav: Callable = callbacks.get("unregister_nav_footprint", Callable())
 		if unregister_nav.is_valid():
 			unregister_nav.call(removed_record.center, removed_record.footprint)
-		if village_territory_service != null and village_territory_service.has_method("on_building_removed"):
+		if village_territory_service != null:
 			village_territory_service.on_building_removed(removed_record.cell)
 
 	var refresh_boundary: Callable = callbacks.get("refresh_boundary", Callable())

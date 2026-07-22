@@ -62,7 +62,7 @@ func start_site(cell: Vector2i, building_type: String, position: Vector3, rotati
 
 	var required: Dictionary = BuildingCatalog.definition_for(building_type).get("costs", {}).duplicate(true)
 	var site := ConstructionSite.new(cell, building_type, position, site_node, blueprint, required)
-	site.site_id = site_node.get_instance_id()
+	site.site_id = cell.x * 100000 + cell.y
 	sites.append(site)
 	# Commit any resources that are already in storage to this site so they cannot
 	# be accidentally spent on research, trade, or another building.

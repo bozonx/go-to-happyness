@@ -1240,7 +1240,7 @@ func _is_night() -> bool:
 func _has_lit_communal_fire() -> bool:
 	for record in building_registry.records():
 		var building: Node3D = record.node
-		if is_instance_valid(building) and str(building.get_meta("building_type", "")) in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"] and _is_fire_lit(building):
+		if is_instance_valid(building) and record.building_type in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"] and _is_fire_lit(building):
 			return true
 	return false
 
@@ -1503,7 +1503,7 @@ func _on_resource_dropped(worker: Citizen, resource_type: String, amount: int) -
 func _on_factory_cycle(worker: Citizen, factory: Node3D) -> void:
 	if not is_instance_valid(factory):
 		return
-	var type: String = factory.get_meta("building_type", "")
+	var type: String = building_registry.building_type_for_node(factory)
 	if type == "brick_factory":
 		if settlement.amount("clay") < 1:
 			return
@@ -2827,7 +2827,7 @@ func _employer_for_role(role: String) -> Node3D:
 	var best_priority := -1
 	for record in building_registry.records():
 		var building := record.node
-		if not is_instance_valid(building) or str(building.get_meta("building_type", "")) not in types:
+		if not is_instance_valid(building) or record.building_type not in types:
 			continue
 		if not bool(building.get_meta("accepting_workers", true)):
 			continue
@@ -2868,7 +2868,7 @@ func _available_employer_capacity(role: String) -> int:
 	var capacity := 0
 	for record in building_registry.records():
 		var building := record.node
-		if not is_instance_valid(building) or str(building.get_meta("building_type", "")) not in _employer_types_for_role(role):
+		if not is_instance_valid(building) or record.building_type not in _employer_types_for_role(role):
 			continue
 		if bool(building.get_meta("accepting_workers", true)):
 			capacity += _employer_capacity(role, building)
@@ -2878,7 +2878,7 @@ func _available_employer_capacity(role: String) -> int:
 func _is_staffed_workplace(building: Node3D) -> bool:
 	if not is_instance_valid(building):
 		return false
-	var building_type := str(building.get_meta("building_type", ""))
+	var building_type := building_registry.building_type_for_node(building)
 	for role in ["construction", "forestry", "farming", "gather_food", "gather_branches", "gather_grass", "cook", "teacher", "seller", "factory_worker", "engineer", "craftsman", "official"]:
 		if building_type in _employer_types_for_role(role):
 			return true
@@ -2887,17 +2887,17 @@ func _is_staffed_workplace(building: Node3D) -> bool:
 
 func _employer_capacity(role: String, building: Node3D) -> int:
 	if role == "construction":
-		return 3 if building.get_meta("building_type", "") == "construction_company" else 1
+		return 3 if building_registry.building_type_for_node(building) == "construction_company" else 1
 	if role == "factory_worker":
 		return int(building.get_meta("required_factory_workers", 1))
 	if role == "craftsman":
-		var type := str(building.get_meta("building_type", ""))
+		var type := building_registry.building_type_for_node(building)
 		return 2 if type == "tarp_craft_tent" else 1
 	if role == "gather_food":
-		var type := str(building.get_meta("building_type", ""))
+		var type := building_registry.building_type_for_node(building)
 		return 4 if type == "tarp_forager_tent" else 2
 	if role in ["gather_branches", "gather_grass"]:
-		var type := str(building.get_meta("building_type", ""))
+		var type := building_registry.building_type_for_node(building)
 		return 4 if type == "tarp_materials_yard" else 2
 	return 1
 
@@ -3303,7 +3303,7 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 
 func _first_person_select_at_crosshair() -> void:
 	var target := _first_person_target()
-	if target.kind == "building" and is_instance_valid(target.node) and str(target.node.get_meta("building_type", "")) in OFFICIAL_WORKPLACE_TYPES:
+	if target.kind == "building" and is_instance_valid(target.node) and building_registry.building_type_for_node(target.node) in OFFICIAL_WORKPLACE_TYPES:
 		selected_campfire = target.node
 		selected_building = target.node
 		_show_campfire_menu()
@@ -3633,7 +3633,7 @@ func _exit_player_work_position() -> void:
 func _occupy_workplace(workplace: Node3D) -> void:
 	if not is_instance_valid(workplace) or player_citizen == null:
 		return
-	var building_type := str(workplace.get_meta("building_type", ""))
+	var building_type := building_registry.building_type_for_node(workplace)
 	var is_official_building := building_type in OFFICIAL_WORKPLACE_TYPES
 	var service_position := _nearest_service_position(workplace, player_citizen.global_position)
 	# Move the citizen onto the nearest service position. Smooth walking can be
@@ -3807,7 +3807,7 @@ func _nearby_workplace_for_job() -> Node3D:
 
 
 func _role_for_workplace(building: Node3D) -> String:
-	var building_type := str(building.get_meta("building_type", ""))
+	var building_type := building_registry.building_type_for_node(building)
 	for candidate in ["forestry", "farming", "gather_food", "gather_branches", "cook", "teacher", "seller", "factory_worker", "engineer", "official"]:
 		if building_type in _employer_types_for_role(candidate):
 			return candidate
@@ -4181,7 +4181,7 @@ func _place_building(world_position: Vector3) -> void:
 	_refresh_navigation_grid()
 	var site := _create_construction_site(cell, build_mode, world_position, build_rotation_quarters, blueprint, occupied_footprint)
 	_deliver_pocket_to_site(site, true)
-	building_registry.attach_node(cell, site.node)
+	building_registry.attach_node(cell, site.node, build_mode)
 	build_mode = ""
 	build_rotation_quarters = 0
 	selection_marker.visible = false
@@ -4328,7 +4328,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 	var service_position: Vector3 = building.get_meta("service_position")
 	_register_completed_building_type_features(building_type, building, blueprint, service_position)
 
-	building_registry.attach_node(cell, building)
+	building_registry.attach_node(cell, building, building_type)
 	var occupied_footprint: Vector2i = building.get_meta("occupied_footprint", blueprint.footprint)
 	village_territory_service.on_building_added(cell, building_type)
 	_refresh_boundary_markers()
@@ -4349,8 +4349,8 @@ func _register_completed_building_type_features(building_type: String, building:
 
 
 func _activate_kitchen_if_better(building: Node3D, service_position: Vector3) -> void:
-	var capacity := BuildingCatalog.kitchen_food_capacity(str(building.get_meta("building_type", "")))
-	var active_capacity := BuildingCatalog.kitchen_food_capacity(str(canteen.get_meta("building_type", ""))) if is_instance_valid(canteen) else 0
+	var capacity := BuildingCatalog.kitchen_food_capacity(building_registry.building_type_for_node(building))
+	var active_capacity := BuildingCatalog.kitchen_food_capacity(building_registry.building_type_for_node(canteen)) if is_instance_valid(canteen) else 0
 	if capacity >= active_capacity:
 		canteen = building
 		if building.has_meta("entrance_position"):
@@ -4366,7 +4366,7 @@ func _select_best_canteen() -> void:
 		var candidate: Node3D = record.node
 		if not is_instance_valid(candidate):
 			continue
-		var capacity := BuildingCatalog.kitchen_food_capacity(str(candidate.get_meta("building_type", "")))
+		var capacity := BuildingCatalog.kitchen_food_capacity(record.building_type)
 		if capacity > best_capacity:
 			best_kitchen = candidate
 			best_capacity = capacity
@@ -5056,7 +5056,7 @@ func _reopen_workplace_menu() -> void:
 func _upgrade_selected_building() -> void:
 	if not is_instance_valid(selected_building):
 		return
-	var old_type := str(selected_building.get_meta("building_type", ""))
+	var old_type := building_registry.building_type_for_node(selected_building)
 	var target_type := settlement.next_building_upgrade(old_type)
 	if target_type.is_empty():
 		return
@@ -5122,7 +5122,7 @@ func _workplace_worker(building: Node3D) -> Citizen:
 func _workplace_priority_position(building: Node3D) -> int:
 	var role := ""
 	for candidate_role in ["construction", "forestry", "farming", "gather_food", "cook", "teacher", "seller", "official", "factory_worker", "engineer"]:
-		if str(building.get_meta("building_type", "")) in _employer_types_for_role(candidate_role):
+		if building_registry.building_type_for_node(building) in _employer_types_for_role(candidate_role):
 			role = candidate_role
 			break
 	if role.is_empty():
@@ -5133,7 +5133,7 @@ func _workplace_priority_position(building: Node3D) -> int:
 		var candidate := record.node
 		if not is_instance_valid(candidate) or candidate == building or not bool(candidate.get_meta("accepting_workers", true)):
 			continue
-		if str(candidate.get_meta("building_type", "")) in _employer_types_for_role(role) and int(candidate.get_meta("workplace_priority", 0)) > priority:
+		if record.building_type in _employer_types_for_role(role) and int(candidate.get_meta("workplace_priority", 0)) > priority:
 			position += 1
 	return position
 
@@ -5521,7 +5521,7 @@ func get_toilets() -> Array[Node3D]:
 	var toilets: Array[Node3D] = []
 	for record in building_registry.records():
 		if is_instance_valid(record.node):
-			var b_type: String = record.node.get_meta("building_type", "")
+			var b_type: String = record.building_type
 			if b_type.begins_with("toilet_"):
 				toilets.append(record.node)
 	return toilets
@@ -5562,7 +5562,7 @@ func _toggle_worker_overtime(checked: bool) -> void:
 					workers_found = true
 		if workers_found:
 			selected_building.set_meta("night_work_order_day", day_cycle.current_day)
-			_add_message("Night-work order issued for %s." % str(selected_building.get_meta("building_type", "workplace")).replace("_", " "))
+			_add_message("Night-work order issued for %s." % building_registry.building_type_for_node(selected_building).replace("_", " "))
 			_update_workers()
 			_update_skip_night_button()
 			if citizen_ai != null:
@@ -5574,7 +5574,7 @@ func _toggle_worker_overtime(checked: bool) -> void:
 			if is_instance_valid(citizen) and citizen.employment_workplace == selected_building:
 				citizen.deactivate_overtime("workplace")
 		_sync_overtime_scope_indicators()
-		_add_message("Night work cancelled for %s." % str(selected_building.get_meta("building_type", "workplace")).replace("_", " "))
+		_add_message("Night work cancelled for %s." % building_registry.building_type_for_node(selected_building).replace("_", " "))
 		_update_workers()
 		_update_skip_night_button()
 		if citizen_ai != null:

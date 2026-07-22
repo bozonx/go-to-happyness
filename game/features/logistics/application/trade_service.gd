@@ -232,15 +232,15 @@ func _is_pending_entrance_expedition(order: RefCounted) -> bool:
 func _all_orders() -> Array:
 	var orders: Array = []
 	for order in simulation.queued_trades:
-		if order != null and order.has_method("reserved_money"):
+		if order is TradeOrderScript:
 			orders.append(order)
 	for order in simulation.pending_trades.values():
-		if order != null and order.has_method("reserved_money"):
+		if order is TradeOrderScript:
 			orders.append(order)
 	return orders
 
 
 func _payload_for_order(order: Variant) -> Dictionary:
-	if order != null and order is RefCounted and order.has_method("reserved_money"):
+	if order is TradeOrderScript:
 		return order.trade
 	return order if order is Dictionary else {}
