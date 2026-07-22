@@ -39,10 +39,6 @@ func is_teacher_present() -> bool:
 	return false
 
 
-func is_profession_developed(profession: String) -> bool:
-	return bool(developed_professions.get(profession, false))
-
-
-func develop_profession(profession: String) -> void:
+func set_profession_developed(profession: String, developed: bool) -> void:
 	if developed_professions.has(profession):
-		developed_professions[profession] = true
+		developed_professions[profession] = developed

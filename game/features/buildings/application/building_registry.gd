@@ -5,6 +5,8 @@ extends RefCounted
 ## It deliberately stores runtime nodes here because it is an application registry;
 ## immutable building definitions remain in the buildings domain.
 
+const BuildingRuntimeStateScript = preload("res://game/features/buildings/domain/building_runtime_state.gd")
+
 var _records: Array[BuildingRecord] = []
 var _records_by_cell: Dictionary = {}
 
@@ -84,14 +86,16 @@ func housing_capacity() -> int:
 	var count := 0
 	for record in _records:
 		if is_instance_valid(record.node):
-			count += int(record.node.get_meta("housing_capacity", 0))
+			var state: BuildingRuntimeStateScript = record.runtime_state()
+			count += state.housing_capacity
 	return count
 
 
 func building_at_service_position(position: Vector3) -> Node3D:
 	for record in _records:
 		if is_instance_valid(record.node):
-			var service_position: Vector3 = record.node.get_meta("service_position") if record.node.has_meta("service_position") else record.node.global_position
+			var state: BuildingRuntimeStateScript = record.runtime_state()
+			var service_position: Vector3 = state.service_position if state.service_position != Vector3.INF else record.node.global_position
 			if service_position.distance_squared_to(position) < 0.01:
 				return record.node
 	return null

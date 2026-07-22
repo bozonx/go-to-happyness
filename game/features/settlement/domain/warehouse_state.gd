@@ -3,10 +3,8 @@ extends RefCounted
 
 ## Persistent inventory for a single physical warehouse.
 
-const STORED_RESOURCES: Array[StringName] = [
-	&"branches", &"grass", &"water", &"food", &"hides", &"goods",
-	&"logs", &"wood", &"soil", &"clay", &"boards", &"stone", &"bricks", &"tarp", &"construction_gloves"
-]
+const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
+const STORED_RESOURCES: Array[StringName] = ResourceIds.ALL
 
 const TYPE_CAPACITIES := {
 	"warehouse": 24,

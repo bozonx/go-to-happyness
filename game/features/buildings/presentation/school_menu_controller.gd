@@ -29,7 +29,7 @@ func toggle_school_development(role: String, pressed: bool) -> void:
 	if not simulation._player_can_manage_permanent_professions():
 		simulation._show_labor_command_blocked()
 		return
-	simulation.school_developed_professions[role] = pressed
+	simulation.school_service.set_profession_developed(role, pressed)
 	if pressed:
 		simulation._update_interface("School developed: all %ss will train in mornings." % role.capitalize())
 	else:

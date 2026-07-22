@@ -14,6 +14,8 @@ Godot 4.7 settlement simulation prototype.
 - `game/features/<feature>/application/` coordinates gameplay use cases and services.
 - `game/features/<feature>/presentation/` contains Godot nodes, procedural visuals and scene-facing actors.
 - Citizen decisions use the native `decision` feature; there is no GOAP runtime or editor dependency.
+- `ResourceIds` (`game/features/settlement/domain/resource_ids.gd`) is the single source of truth for resource `StringName` constants, era-scoped resource lists, and storage weights. Use these constants instead of raw string literals.
+- `BuildingRuntimeState` (`game/features/buildings/domain/building_runtime_state.gd`) provides typed access to building node metadata (condition, repair, accepting_workers, service_position, etc.) via `BuildingRecord.runtime_state()`. New code should use this instead of raw `get_meta`/`set_meta` calls.
 
 See [docs/architecture.md](docs/architecture.md),
 [design_docs/core/citizen_ai.md](design_docs/core/citizen_ai.md), and

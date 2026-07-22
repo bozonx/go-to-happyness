@@ -5,14 +5,9 @@ extends RefCounted
 ## Manages physical inventories, capacity, delivery reservations,
 ## and the transition from starter backpack to warehouse storage.
 
-const STORED_RESOURCES := ["branches", "grass", "water", "food", "hides", "goods", "logs", "wood", "soil", "clay", "boards", "stone", "bricks", "tarp", "construction_gloves"]
-const STORAGE_WEIGHTS := {
-	"branches": 1.0, "grass": 1.0, "water": 0.5, "food": 1.0,
-	"hides": 1.0, "goods": 1.0, "logs": 2.0, "wood": 2.0,
-	"soil": 1.0, "clay": 1.0, "boards": 1.5, "stone": 2.0, "bricks": 2.0,
-	"tarp": 1.0,
-	"construction_gloves": 1.0,
-}
+const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
+const STORED_RESOURCES = ResourceIds.ALL
+const STORAGE_WEIGHTS = ResourceIds.STORAGE_WEIGHTS
 
 ## Per-warehouse inventories. Each WarehouseState holds the contents of one
 ## physical warehouse; the scalar resource properties above aggregate across

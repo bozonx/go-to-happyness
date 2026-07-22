@@ -46,6 +46,8 @@ const FirstPersonHUDControllerScript = preload("res://game/features/ui/presentat
 const LabelDistanceFadeControllerScript = preload("res://game/features/ui/presentation/label_distance_fade_controller.gd")
 const ResourcePileVisualsScript = preload("res://game/features/logistics/presentation/resource_pile_visuals.gd")
 const BuildingLifecycleServiceScript = preload("res://game/features/buildings/application/building_lifecycle_service.gd")
+const ConstructionPriorityServiceScript = preload("res://game/features/buildings/application/construction_priority_service.gd")
+const BuildingRuntimeStateScript = preload("res://game/features/buildings/domain/building_runtime_state.gd")
 const BuildingResearchServiceScript = preload("res://game/features/buildings/application/building_research_service.gd")
 const BuildingQueueServiceScript = preload("res://game/features/citizens/application/building_queue_service.gd")
 const CitizenLifecycleServiceScript = preload("res://game/features/citizens/application/citizen_lifecycle_service.gd")
@@ -99,6 +101,7 @@ const TentEraEventsScript = preload("res://game/features/events/application/tent
 const VillageTerritoryServiceScript = preload("res://game/features/buildings/application/village_territory_service.gd")
 const DigSiteScene = preload("res://game/features/world/presentation/dig_site.tscn")
 const ExcavationServiceScript = preload("res://game/features/production/application/excavation_service.gd")
+const FactoryServiceScript = preload("res://game/features/production/application/factory_service.gd")
 const SettlementSurvivalServiceScript = preload("res://game/features/settlement/application/settlement_survival_service.gd")
 const SettlementDailyRulesServiceScript = preload("res://game/features/settlement/application/settlement_daily_rules_service.gd")
 const TerritoryServiceScript = preload("res://game/features/world/application/territory_service.gd")
@@ -472,6 +475,7 @@ var dig_cells: Dictionary = {}
 var exhausted_dig_cells: Dictionary = {}
 var dig_mode := false
 var excavation_service: ExcavationServiceScript
+var factory_service: FactoryServiceScript
 var selected_house: Node3D
 var tent: Node3D
 var entrance_stone: Node3D
@@ -497,17 +501,8 @@ var _route_reachability_cache_revision := -1
 const ROUTE_REACHABILITY_CACHE_LIMIT := 1024
 var service_pockets: Array[Dictionary] = []
 var selected_school: Node3D
-var school_developed_professions: Dictionary = {
-	"construction": false,
-	"forestry": false,
-	"farming": false,
-	"excavation": false,
-	"factory_worker": false,
-	"engineer": false,
-	"cook": false,
-	"teacher": false,
-	"seller": false
-}
+var school_developed_professions: Dictionary:
+	get: return school_service.developed_professions if school_service != null else {}
 var selected_materials_factory: Node3D
 var campfire_node: Node3D = null
 var selected_campfire: Node3D = null
@@ -587,6 +582,7 @@ var foraging_service: ForagingService
 var fire_management_service: FireManagementService
 var building_maintenance_service: BuildingMaintenanceService
 var building_lifecycle_service: BuildingLifecycleService
+var construction_priority_service: ConstructionPriorityServiceScript
 var settlement_survival_service: SettlementSurvivalService
 var settlement_daily_rules_service: SettlementDailyRulesService
 var territory_service: TerritoryService
@@ -725,9 +721,22 @@ func _ready() -> void:
 	settlement_daily_rules_service.configure(self)
 	building_lifecycle_service = BuildingLifecycleServiceScript.new()
 	building_lifecycle_service.configure(self)
+	construction_priority_service = ConstructionPriorityServiceScript.new()
+	construction_priority_service.configure(
+		construction_sites,
+		warehouse_positions,
+		sawmill_positions,
+		campfire_node,
+		canteen,
+		func() -> int: return citizens.size(),
+		_total_housing_slots,
+		func() -> int: return settlement.amount("food")
+	)
 	excavation_service = ExcavationServiceScript.new()
 	excavation_service.dig_site_scene = DigSiteScene
 	excavation_service.configure(self)
+	factory_service = FactoryServiceScript.new()
+	factory_service.configure(settlement, building_registry, _add_message, random)
 	citizen_registration_service = CitizenRegistrationServiceScript.new()
 	citizen_registration_service.configure(self)
 	school_service = SchoolServiceScript.new()
@@ -1021,22 +1030,7 @@ func _is_teacher_present_at_school() -> bool:
 
 
 func _is_seller_present_at(market_node: Node3D) -> bool:
-	if not is_instance_valid(market_node):
-		return false
-	var service_position: Vector3 = market_node.get_meta("service_position", market_node.global_position)
-	for citizen in citizens:
-		var is_seller := citizen.permanent_role == "seller" or citizen.specialization == "seller"
-		if not is_seller:
-			continue
-		if is_instance_valid(citizen.employment_workplace) and citizen.employment_workplace != market_node:
-			continue
-		if citizen.is_player_controlled:
-			if citizen.global_position.distance_to(service_position) <= 3.5:
-				return true
-		elif citizen.state in [Citizen.State.TO_MARKET_WORK, Citizen.State.MARKET_WORK]:
-			if citizen.global_position.distance_to(service_position) <= 3.5:
-				return true
-	return false
+	return trade_service.is_seller_present_at(market_node) if trade_service != null else false
 
 
 func _on_employment_processing_finished(citizen: Citizen) -> void:
@@ -1165,8 +1159,11 @@ func _sync_overtime_scope_indicators() -> void:
 	settlement.night_work_order_day = day_cycle.current_day if _has_overtime_source("settlement") else -1
 	for record in building_registry.records():
 		var node := record.node as Node3D
-		if is_instance_valid(node) and node.has_meta("night_work_order_day") and not _has_overtime_source("workplace", node):
-			node.set_meta("night_work_order_day", -1)
+		if is_instance_valid(node) and not _has_overtime_source("workplace", node):
+			var state: BuildingRuntimeStateScript = record.runtime_state()
+			if state.night_work_order_day != -1:
+				state.night_work_order_day = -1
+				node.set_meta("night_work_order_day", -1)
 
 
 func _has_overtime_source(source: String, workplace: Node3D = null) -> bool:
@@ -1321,7 +1318,10 @@ func _reconcile_repair_reservations() -> void:
 	# can remain permanently reserved without ever being repaired.
 	for record in building_registry.records():
 		var building := record.node
-		if not is_instance_valid(building) or not bool(building.get_meta("repair_reserved", false)):
+		if not is_instance_valid(building):
+			continue
+		var state: BuildingRuntimeStateScript = record.runtime_state()
+		if not state.repair_reserved:
 			continue
 		var has_carrier := false
 		for citizen in citizens:
@@ -1398,48 +1398,11 @@ func _reconcile_construction_reservations(site: ConstructionSite) -> void:
 		courier_task_service.reconcile_construction_reservations(site)
 
 func _preferred_construction_site() -> ConstructionSite:
-	var chosen: ConstructionSite = null
-	var best_score := -INF
-	var waiting_chosen: ConstructionSite = null
-	var waiting_score := -INF
-	for site in construction_sites:
-		if site == null or not is_instance_valid(site.node) or site.node.is_queued_for_deletion():
-			continue
-		var score := _construction_development_priority(site)
-		if score > waiting_score:
-			waiting_chosen = site
-			waiting_score = score
-		# A builder can only advance up to the fraction of materials already on
-		# site. Prefer any project with work available over a higher-priority site
-		# where everyone would only wait for a courier.
-		if site.material_progress() <= site.progress + 0.0001:
-			continue
-		if score > best_score:
-			chosen = site
-			best_score = score
-	return chosen if chosen != null else waiting_chosen
+	return construction_priority_service.preferred_construction_site() if construction_priority_service != null else null
 
 
 func _construction_development_priority(site: ConstructionSite) -> float:
-	var building_type := site.building_type
-	var score := float(BuildingCatalog.era_for(building_type)) * 100.0
-	var population := citizens.size()
-	match building_type:
-		"warehouse", "straw_warehouse", "tarp_warehouse": score += 1000.0 if warehouse_positions.is_empty() else 180.0
-		"campfire", "campfire_lvl2", "campfire_lvl3": score += 950.0 if not is_instance_valid(campfire_node) else 120.0
-		"tent", "straw_tent", "tarp_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "brick_house":
-			score += 850.0 if _total_housing_slots() < population else 140.0
-		"forager_tent", "straw_forager_tent", "tarp_forager_tent", "farm": score += 700.0 if settlement.amount("food") < population * 2 else 160.0
-		"cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant": score += 580.0 if not is_instance_valid(canteen) else 120.0
-		"sawmill": score += 420.0 if sawmill_positions.is_empty() else 100.0
-		"gathering_place", "park", "leisure_center": score += 80.0
-		_: score += 250.0
-	# Once a project has started receiving stock, preserve the focus and avoid
-	# oscillating between equally valuable plans.
-	var supplied := 0
-	for resource_type in site.delivered_materials:
-		supplied += int(site.delivered_materials[resource_type])
-	return score + supplied * 2.0
+	return construction_priority_service.development_priority(site) if construction_priority_service != null else 0.0
 
 func _on_construction_material_delivered(_courier: Citizen, site_node: Node3D, resource_type: String, amount: int) -> void:
 	if not construction.accept_delivery(site_node, resource_type, amount):
@@ -1470,10 +1433,12 @@ func _on_building_supply_delivered(_courier: Citizen, target: Node3D, supply_kin
 			_apply_fire_state(target, fire_state)
 			_refresh_living_statuses()
 		"repair":
-			target.set_meta("repair_reserved", false)
-			var repaired_condition := minf(100.0, float(target.get_meta("condition", 0.0)) + 18.0)
-			target.set_meta("condition", repaired_condition)
-			target.set_meta("repair_needed", repaired_condition < 82.0)
+			var repair_record := building_registry.record_for_node(target)
+			var repair_state: BuildingRuntimeStateScript = repair_record.runtime_state() if repair_record != null else BuildingRuntimeStateScript.from_node(target)
+			repair_state.repair_reserved = false
+			repair_state.condition = minf(100.0, repair_state.condition + 18.0)
+			repair_state.repair_needed = repair_state.condition < 82.0
+			repair_state.apply_to_node(target)
 		"pile":
 			settlement.add(resource_type, amount)
 			for index in resource_piles.size():
@@ -1506,20 +1471,8 @@ func _on_resource_dropped(worker: Citizen, resource_type: String, amount: int) -
 	_update_interface("Worker dropped %d %s in a ground pile after the order was interrupted." % [amount, resource_type])
 
 func _on_factory_cycle(worker: Citizen, factory: Node3D) -> void:
-	if not is_instance_valid(factory):
-		return
-	var type: String = building_registry.building_type_for_node(factory)
-	if type == "brick_factory":
-		if settlement.amount("clay") < 1:
-			return
-		settlement.add("clay", -1)
-		var produced := 1
-		if worker.skills.get("factory_worker", 0.0) >= 1.0 and randf() < 0.10:
-			produced = 2
-			_update_interface("Industrialist: Brick factory produced 2 bricks from 1 clay!")
-		else:
-			_update_interface("Brick factory produced 1 brick.")
-		settlement.add("bricks", produced)
+	if factory_service != null:
+		factory_service.on_factory_cycle(worker, factory)
 
 func _on_resource_ready(worker: Citizen, resource_type: String, amount: int) -> void:
 	worker.register_pending_resource(resource_type, amount)

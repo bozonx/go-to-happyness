@@ -244,3 +244,22 @@ func _payload_for_order(order: Variant) -> Dictionary:
 	if order is TradeOrderScript:
 		return order.trade
 	return order if order is Dictionary else {}
+
+
+func is_seller_present_at(market_node: Node3D) -> bool:
+	if not is_instance_valid(market_node):
+		return false
+	var service_position: Vector3 = market_node.get_meta("service_position", market_node.global_position)
+	for citizen in simulation.citizens:
+		var is_seller: bool = citizen.permanent_role == "seller" or citizen.specialization == "seller"
+		if not is_seller:
+			continue
+		if is_instance_valid(citizen.employment_workplace) and citizen.employment_workplace != market_node:
+			continue
+		if citizen.is_player_controlled:
+			if citizen.global_position.distance_to(service_position) <= 3.5:
+				return true
+		elif citizen.state in [Citizen.State.TO_MARKET_WORK, Citizen.State.MARKET_WORK]:
+			if citizen.global_position.distance_to(service_position) <= 3.5:
+				return true
+	return false
