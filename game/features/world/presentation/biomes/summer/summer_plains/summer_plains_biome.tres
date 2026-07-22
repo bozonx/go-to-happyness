@@ -1,7 +1,6 @@
-[gd_resource type="Resource" script_class="BiomeDefinition" load_steps=3 format=3]
+[gd_resource type="Resource" script_class="BiomeDefinition" load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://game/features/world/domain/biome_definition.gd" id="1_script"]
-[ext_resource type="PackedScene" path="res://game/features/world/presentation/biomes/summer/summer_plains/summer_plains_territory.tscn" id="2_scene"]
 
 [resource]
 script = ExtResource("1_script")
@@ -11,5 +10,5 @@ theme = &"summer"
 gravity = Vector3(0, -9.8, 0)
 base_temperature = 24.0
 has_breathable_atmosphere = true
-territory_scene = ExtResource("2_scene")
+territory_scene_path = "res://game/features/world/presentation/biomes/summer/summer_plains/summer_plains_territory.tscn"
 terrain_data_directory = "res://game/features/world/data/terrain3d"

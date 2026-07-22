@@ -11,5 +11,5 @@ extends Resource
 @export var has_breathable_atmosphere: bool = true
 
 @export_group("Presentation")
-@export var territory_scene: PackedScene
+@export var territory_scene_path: String = ""
 @export var terrain_data_directory: String = "res://game/features/world/data/terrain3d"

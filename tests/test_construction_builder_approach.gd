@@ -16,6 +16,7 @@ func _init() -> void:
 	runtime.navigation_changed = func() -> void: pass
 	var service := ConstructionService.new()
 	service.configure(runtime)
+	service.configure_scenes(load("res://game/features/buildings/presentation/construction_site.tscn") as PackedScene, load("res://game/features/buildings/presentation/construction_entrance_post.tscn") as PackedScene)
 
 	var cell := Vector2i(2, 3)
 	runtime.building_registry.reserve(cell, Vector3(2.0, 0.0, 3.0), Vector2i(3, 3))
