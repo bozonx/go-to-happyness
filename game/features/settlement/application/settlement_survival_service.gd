@@ -40,8 +40,8 @@ func apply_hourly_tent_survival(hour: int, survival_day := 0) -> void:
 		var has_home := is_instance_valid(citizen.home)
 		total_loss += TentEraSurvivalRulesScript.hourly_wellbeing_loss(has_home, has_fire, simulation.tent_weather, night)
 	if total_loss > 0:
-		simulation.wellbeing = maxi(0, simulation.wellbeing - ceili(float(total_loss) / maxi(1, simulation.citizens.size())))
-	if simulation.wellbeing == 0 and last_zero_wellbeing_departure_day != day and (not is_skipping_night or not skip_zero_wellbeing_departure_applied):
+		settlement.wellbeing = maxi(0, settlement.wellbeing - ceili(float(total_loss) / maxi(1, simulation.citizens.size())))
+	if settlement.wellbeing == 0 and last_zero_wellbeing_departure_day != day and (not is_skipping_night or not skip_zero_wellbeing_departure_applied):
 		last_zero_wellbeing_departure_day = day
 		skip_zero_wellbeing_departure_applied = true
 		_trigger_zero_wellbeing_departure()
@@ -77,7 +77,7 @@ func apply_hourly_bare_hands_penalty() -> void:
 		if is_instance_valid(citizen) and citizen._is_physical_work():
 			bare_handed_workers += 1
 	if bare_handed_workers > 0:
-		simulation.wellbeing = maxi(0, simulation.wellbeing - ceili(float(bare_handed_workers) / maxi(1, simulation.citizens.size())))
+		settlement.wellbeing = maxi(0, settlement.wellbeing - ceili(float(bare_handed_workers) / maxi(1, simulation.citizens.size())))
 
 
 func apply_rain_damage() -> void:
@@ -91,11 +91,11 @@ func apply_rain_damage() -> void:
 	var exposed_ratio := (stored_units - sheltered_capacity) / stored_units
 	var _firewood_protected: bool = simulation.event_service != null and simulation.event_service.log.has_flag(&"firewood_protected_today")
 	var rain_amounts := {
-		"food": simulation.food,
-		"grass": simulation.grass,
-		"branches": 0 if _firewood_protected else simulation.branches,
-		"wood": simulation.wood,
-		"logs": settlement.logs,
+		"food": settlement.amount("food"),
+		"grass": settlement.amount("grass"),
+		"branches": 0 if _firewood_protected else settlement.amount("branches"),
+		"wood": settlement.amount("wood"),
+		"logs": settlement.amount("logs"),
 	}
 	var losses := TentEraSurvivalRulesScript.rain_hourly_decay_losses(rain_amounts, exposed_ratio)
 	for resource_type in losses:

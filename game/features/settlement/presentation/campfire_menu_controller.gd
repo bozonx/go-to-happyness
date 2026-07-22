@@ -231,13 +231,13 @@ func build_campfire_era_requirements(housing_slots: int) -> Array:
 			next_era = SettlementStateScript.Era.WOOD
 			var has_lodge: bool = simulation.settlement.has_building("clay_lodge")
 			var has_mkt: bool = simulation.settlement.has_building("clay_market")
-			var water_ok: bool = simulation.water >= simulation.citizens.size()
+			var water_ok: bool = simulation.settlement.amount("water") >= simulation.citizens.size()
 			var logs_ok: bool = simulation.settlement.available_amount("logs") >= 10
 			var money_ok: bool = simulation.settlement.money >= 10
 			req_text = "Requirements for Wood Era:\n"
 			req_text += "- Clay lodge built: %s\n" % ("Yes" if has_lodge else "No")
 			req_text += "- Clay market built: %s\n" % ("Yes" if has_mkt else "No")
-			req_text += "- Water (needs %d): %d (%s)\n" % [simulation.citizens.size(), simulation.water, "OK" if water_ok else "Need more"]
+			req_text += "- Water (needs %d): %d (%s)\n" % [simulation.citizens.size(), simulation.settlement.amount("water"), "OK" if water_ok else "Need more"]
 			req_text += "- Logs (needs 10): %d (%s)\n" % [simulation.settlement.amount("logs"), "OK" if logs_ok else "Need more"]
 			req_text += "- Money (needs 10): %d (%s)\n" % [simulation.settlement.money, "OK" if money_ok else "Need more"]
 			can_advance = simulation.settlement.can_advance_to(next_era, simulation.citizens.size(), housing_slots)

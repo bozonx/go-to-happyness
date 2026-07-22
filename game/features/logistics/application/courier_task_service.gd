@@ -21,7 +21,7 @@ func start_courier_canteen_or_trade(courier: Citizen, task: RefCounted) -> bool:
 	match task.kind:
 		CourierTask.Kind.CANTEEN:
 			var capacity: int = BuildingCatalog.kitchen_food_capacity(str(simulation.canteen.get_meta("building_type", "")))
-			var amount: int = mini(courier.courier_capacity(), mini(simulation.food, capacity - simulation.canteen_food))
+			var amount: int = mini(courier.courier_capacity(), mini(simulation.settlement.amount("food"), capacity - simulation.canteen_food))
 			if amount <= 0:
 				return false
 			simulation.settlement.add("food", -amount)
@@ -107,14 +107,14 @@ func start_courier_construction_or_supply(courier: Citizen, task: RefCounted) ->
 			var supply_kind: String = str(task.payload.get("supply_kind", ""))
 			match supply_kind:
 				"repair":
-					if simulation.branches <= 0:
+					if simulation.settlement.amount("branches") <= 0:
 						return false
 					simulation.settlement.add("branches", -1)
 					building.set_meta("repair_reserved", true)
 					courier.assign_building_supply(building, task.pickup, "branches", "repair")
 					return true
 				"firewood":
-					if simulation.branches <= 0:
+					if simulation.settlement.amount("branches") <= 0:
 						return false
 					var fire_state: RefCounted = simulation._fire_state_for(building)
 					if not fire_state.needs_supply(4):
@@ -274,7 +274,7 @@ func start_courier_task(courier: Citizen, task: RefCounted) -> bool:
 func is_courier_task_valid(task: RefCounted) -> bool:
 	match task.kind:
 		CourierTask.Kind.CANTEEN:
-			return is_instance_valid(simulation.canteen) and simulation.food > 0 and not simulation.pending_canteen_delivery and simulation.canteen_food < BuildingCatalog.kitchen_food_capacity(str(simulation.canteen.get_meta("building_type", "")))
+			return is_instance_valid(simulation.canteen) and simulation.settlement.amount("food") > 0 and not simulation.pending_canteen_delivery and simulation.canteen_food < BuildingCatalog.kitchen_food_capacity(str(simulation.canteen.get_meta("building_type", "")))
 		CourierTask.Kind.TRADE:
 			return simulation.queued_trades.has(task.payload.order)
 		CourierTask.Kind.SAWMILL_PICKUP:
@@ -306,9 +306,9 @@ func is_courier_task_valid(task: RefCounted) -> bool:
 			var supply_kind := str(task.payload.get("supply_kind", ""))
 			match supply_kind:
 				"repair":
-					return bool(building.get_meta("repair_needed", false)) and not bool(building.get_meta("repair_reserved", false)) and simulation.branches > 0
+					return bool(building.get_meta("repair_needed", false)) and not bool(building.get_meta("repair_reserved", false)) and simulation.settlement.amount("branches") > 0
 				"firewood":
-					return simulation._fire_state_for(building).needs_supply(4) and simulation.branches > 0
+					return simulation._fire_state_for(building).needs_supply(4) and simulation.settlement.amount("branches") > 0
 			return false
 		CourierTask.Kind.ARRIVAL:
 			var arrival_house := task.payload.get("house") as Node3D

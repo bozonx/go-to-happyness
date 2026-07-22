@@ -88,7 +88,7 @@ func has_cook() -> bool:
 
 
 func is_role_available(role: String) -> bool:
-	if not simulation.settlement.construction_gloves_available() and simulation.wellbeing < 30 and role in ["construction", "gather_branches", "gather_grass", "gather_food", "forestry", "farming", "excavation", "factory_worker", "craftsman"]:
+	if not simulation.settlement.construction_gloves_available() and simulation.settlement.wellbeing < 30 and role in ["construction", "gather_branches", "gather_grass", "gather_food", "forestry", "farming", "excavation", "factory_worker", "craftsman"]:
 		return false
 	match role:
 		"": return true

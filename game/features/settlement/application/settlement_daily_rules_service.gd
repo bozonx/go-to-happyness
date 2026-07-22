@@ -45,11 +45,11 @@ func apply_daily_settlement_rules() -> void:
 	var safe_capacity := straw_warehouse_count * 48.0 + tarp_warehouse_count * 72.0
 	var total_stored := settlement.storage_used_units()
 	var decay_losses := SETTLEMENT_RULES.open_air_storage_decay_losses({
-		"food": simulation.food,
-		"grass": simulation.grass,
-		"branches": simulation.branches,
-		"wood": simulation.wood,
-		"logs": settlement.logs,
+		"food": settlement.amount("food"),
+		"grass": settlement.amount("grass"),
+		"branches": settlement.amount("branches"),
+		"wood": settlement.amount("wood"),
+		"logs": settlement.amount("logs"),
 	}, total_stored, safe_capacity)
 	if not decay_losses.is_empty():
 		var decay_msg := ""
@@ -74,12 +74,12 @@ func apply_daily_settlement_rules() -> void:
 	if not is_instance_valid(simulation.canteen):
 		settlement.add("food", -TentEraSurvivalRulesScript.daily_food_consumption(population, simulation.tent_weather))
 	var housing: int = simulation._total_housing_slots()
-	var change := SETTLEMENT_RULES.daily_wellbeing_change(housing >= population, float(simulation.food) / population, float(simulation.water) / population, settlement.workday_hours)
-	simulation.wellbeing = clampi(simulation.wellbeing + change, 0, 100)
+	var change := SETTLEMENT_RULES.daily_wellbeing_change(housing >= population, float(settlement.amount("food")) / population, float(settlement.amount("water")) / population, settlement.workday_hours)
+	settlement.wellbeing = clampi(settlement.wellbeing + change, 0, 100)
 	# Campfire story effects are resolved at dawn.
 	match settlement.campfire_story_effect:
 		"optimistic":
-			simulation.wellbeing = mini(100, simulation.wellbeing + 10)
+			settlement.wellbeing = mini(100, settlement.wellbeing + 10)
 			simulation._add_message("The optimistic stories lifted spirits. Wellbeing recovered an extra 10.")
 		"teaching":
 			if not simulation.citizens.is_empty():
@@ -96,20 +96,20 @@ func apply_daily_settlement_rules() -> void:
 		settlement.campfire_story_target_day = -1
 	simulation._check_daily_departures()
 	# --- Daily settlement warnings ---
-	if simulation.food == 0:
+	if settlement.amount("food") == 0:
 		simulation._add_message("CRITICAL: Food supplies exhausted! Workers are starving.")
-	elif float(simulation.food) / population < 1.0:
-		simulation._add_message("Warning: Food is running low (%d for %d people)." % [simulation.food, population])
-	if simulation.water == 0:
+	elif float(settlement.amount("food")) / population < 1.0:
+		simulation._add_message("Warning: Food is running low (%d for %d people)." % [settlement.amount("food"), population])
+	if settlement.amount("water") == 0:
 		simulation._add_message("CRITICAL: Water supplies exhausted! Settlement is dehydrated.")
-	elif float(simulation.water) / population < 1.0:
-		simulation._add_message("Warning: Water is running low (%d for %d people)." % [simulation.water, population])
+	elif float(settlement.amount("water")) / population < 1.0:
+		simulation._add_message("Warning: Water is running low (%d for %d people)." % [settlement.amount("water"), population])
 	var storage_ratio := float(simulation._stored_resources()) / float(maxi(1, simulation._warehouse_capacity()))
 	if storage_ratio >= 0.95:
 		simulation._add_message("CRITICAL: Storage nearly full (%d%%). Build another warehouse or rebalance." % [int(storage_ratio * 100)])
 	elif storage_ratio >= 0.80:
 		simulation._add_message("Warning: Storage filling up (%d%% used)." % [int(storage_ratio * 100)])
-	if simulation.wellbeing < 30:
-		simulation._add_message("Warning: Low wellbeing (%d). Unhappiness is accumulating — residents may leave!" % simulation.wellbeing)
+	if settlement.wellbeing < 30:
+		simulation._add_message("Warning: Low wellbeing (%d). Unhappiness is accumulating — residents may leave!" % settlement.wellbeing)
 	elif change < 0:
 		simulation._add_message("Wellbeing is declining (change: %d). Consider improving living conditions." % change)

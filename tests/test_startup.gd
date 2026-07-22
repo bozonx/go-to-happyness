@@ -386,7 +386,7 @@ func _init() -> void:
 	var staying_position: Vector3 = simulation.entrance_stone.global_position + Vector3(8.0, 0.0, 3.0)
 	simulation.day_cycle.current_day = 2
 	simulation.clock.set_time(2 * 60 + 30)
-	simulation.wellbeing = 100
+	simulation.settlement.wellbeing = 100
 	staying_worker.global_position = staying_position
 	simulation.last_citizen_positions[staying_worker.get_instance_id()] = staying_position
 	# Skip-night buttons are only visible in overview mode, not first person.
@@ -515,7 +515,7 @@ func _init() -> void:
 	# A skipped night evaluates survival hour by hour. Reaching zero wellbeing may
 	# make one resident leave, but the remaining night must not remove another
 	# resident for every hour spent at zero.
-	simulation.wellbeing = 1
+	simulation.settlement.wellbeing = 1
 	simulation.settlement_survival_service.last_survival_hour = -1
 	simulation.clock.set_time(21 * 60)
 	var citizen_count_before_zero_wellbeing_skip: int = simulation.citizens.size()

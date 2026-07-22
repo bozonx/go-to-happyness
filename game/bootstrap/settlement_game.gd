@@ -150,58 +150,6 @@ const LABEL_FADE_NEAR := 8.0
 const LABEL_FADE_FAR := 22.0
 
 var settlement := SettlementState.new()
-var wood: int:
-	get: return settlement.amount("wood")
-	set(value): _set_resource_amount("wood", value)
-var food: int:
-	get: return settlement.amount("food")
-	set(value): _set_resource_amount("food", value)
-var soil: int:
-	get: return settlement.amount("soil")
-	set(value): _set_resource_amount("soil", value)
-var clay: int:
-	get: return settlement.amount("clay")
-	set(value): _set_resource_amount("clay", value)
-var boards: int:
-	get: return settlement.amount("boards")
-	set(value): _set_resource_amount("boards", value)
-var bricks: int:
-	get: return settlement.amount("bricks")
-	set(value): _set_resource_amount("bricks", value)
-var stone: int:
-	get: return settlement.amount("stone")
-	set(value): _set_resource_amount("stone", value)
-var branches: int:
-	get: return settlement.amount("branches")
-	set(value): _set_resource_amount("branches", value)
-var grass: int:
-	get: return settlement.amount("grass")
-	set(value): _set_resource_amount("grass", value)
-var water: int:
-	get: return settlement.amount("water")
-	set(value): _set_resource_amount("water", value)
-var hides: int:
-	get: return settlement.amount("hides")
-	set(value): _set_resource_amount("hides", value)
-var goods: int:
-	get: return settlement.amount("goods")
-	set(value): _set_resource_amount("goods", value)
-var tarp: int:
-	get: return settlement.amount("tarp")
-	set(value): _set_resource_amount("tarp", value)
-var logs: int:
-	get: return settlement.amount("logs")
-	set(value): _set_resource_amount("logs", value)
-var money: int:
-	get: return settlement.money
-	set(value): settlement.money = value
-
-
-func _set_resource_amount(resource_type: String, value: int) -> void:
-	settlement.set_amount(resource_type, value)
-var wellbeing: int:
-	get: return settlement.wellbeing
-	set(value): settlement.wellbeing = value
 var day_cycle := SimulationDayCycle.new()
 var clock: SimulationClock = day_cycle.clock
 var game_minutes: float:
@@ -748,7 +696,7 @@ func _ready() -> void:
 		func() -> Node3D: return campfire_node,
 		_add_message,
 		_refresh_living_statuses,
-		func() -> void: wellbeing = maxi(0, wellbeing - 1)
+		func() -> void: settlement.wellbeing = maxi(0, settlement.wellbeing - 1)
 	)
 	building_maintenance_service = BuildingMaintenanceService.new()
 	building_maintenance_service.setup(
@@ -1470,7 +1418,7 @@ func _construction_development_priority(site: ConstructionSite) -> float:
 		"campfire", "campfire_lvl2", "campfire_lvl3": score += 950.0 if not is_instance_valid(campfire_node) else 120.0
 		"tent", "straw_tent", "tarp_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "brick_house":
 			score += 850.0 if _total_housing_slots() < population else 140.0
-		"forager_tent", "straw_forager_tent", "tarp_forager_tent", "farm": score += 700.0 if food < population * 2 else 160.0
+		"forager_tent", "straw_forager_tent", "tarp_forager_tent", "farm": score += 700.0 if settlement.amount("food") < population * 2 else 160.0
 		"cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen": score += 580.0 if not is_instance_valid(canteen) else 120.0
 		"sawmill": score += 420.0 if sawmill_positions.is_empty() else 100.0
 		"gathering_place", "park", "leisure_center": score += 80.0
@@ -1551,7 +1499,7 @@ func _on_factory_cycle(worker: Citizen, factory: Node3D) -> void:
 		return
 	var type: String = factory.get_meta("building_type", "")
 	if type == "brick_factory":
-		if clay < 1:
+		if settlement.amount("clay") < 1:
 			return
 		settlement.add("clay", -1)
 		var produced := 1
@@ -1763,7 +1711,7 @@ func _release_building_queue_entry(citizen: Citizen) -> void:
 func _update_interface(message: String) -> void:
 	var lines: Array[String] = []
 	lines.append("Era: %s" % _era_name())
-	lines.append("Money: %d" % money)
+	lines.append("Money: %d" % settlement.money)
 	var displayed_resources := settlement.era_resources()
 	for resource_type in displayed_resources:
 		lines.append("%s: %d" % [_resource_display_name(resource_type), settlement.amount(resource_type)])
@@ -1777,7 +1725,7 @@ func _update_interface(message: String) -> void:
 	if not resource_piles.is_empty():
 		lines.append("Piles: %d" % resource_piles.size())
 	lines.append("Population: %d" % citizens.size())
-	lines.append("Wellbeing: %d" % wellbeing)
+	lines.append("Wellbeing: %d" % settlement.wellbeing)
 	hud.update_resources("\n".join(lines))
 	_add_message(message)
 	if is_first_person:
@@ -2124,13 +2072,13 @@ func _resolve_event_decision(choice_index: int) -> void:
 
 func _build_event_context() -> EventContext:
 	var res := {
-		"food": food,
-		"water": water,
-		"branches": branches,
-		"grass": grass,
-		"wood": wood,
-		"stone": stone,
-		"hides": hides,
+		"food": settlement.amount("food"),
+		"water": settlement.amount("water"),
+		"branches": settlement.amount("branches"),
+		"grass": settlement.amount("grass"),
+		"wood": settlement.amount("wood"),
+		"stone": settlement.amount("stone"),
+		"hides": settlement.amount("hides"),
 		"goods": settlement.goods,
 		"tarp": settlement.tarp,
 		"logs": settlement.logs,
@@ -2143,7 +2091,7 @@ func _build_event_context() -> EventContext:
 		day_cycle.current_day,
 		tent_weather,
 		res,
-		wellbeing,
+		settlement.wellbeing,
 		citizens.size(),
 		flags,
 	)
@@ -2157,7 +2105,7 @@ func _apply_event_outcome(outcome: EventOutcome) -> void:
 		EventOutcome.Kind.RESOURCE_CHANGE:
 			settlement.add(outcome.resource, outcome.amount)
 		EventOutcome.Kind.WELLBEING_CHANGE:
-			wellbeing = clampi(wellbeing + outcome.wellbeing_delta, 0, 100)
+			settlement.wellbeing = clampi(settlement.wellbeing + outcome.wellbeing_delta, 0, 100)
 		EventOutcome.Kind.WORKER_BUSY:
 			_assign_survival_busy_worker(outcome.worker_busy_hours, outcome.worker_busy_label)
 		EventOutcome.Kind.SET_FLAG:
@@ -5429,13 +5377,13 @@ func campfire_story_efficiency_multiplier(role: String) -> float:
 	return fire_management_service.campfire_story_efficiency_multiplier(role)
 
 func _update_fire_status() -> void:
-	fire_management_service.update_fire_status(self, branches)
+	fire_management_service.update_fire_status(self, settlement.amount("branches"))
 
 func _update_fire_visual(building: Node3D, fire_state: RefCounted, minute: int) -> void:
 	fire_management_service.update_fire_visual(building, fire_state, minute)
 
 func _report_fire_phase_change(building: Node3D, fire_state: RefCounted, minute: int) -> void:
-	fire_management_service.report_fire_phase_change(building, fire_state, minute, campfire_node, branches)
+	fire_management_service.report_fire_phase_change(building, fire_state, minute, campfire_node, settlement.amount("branches"))
 
 func _apply_building_wear_and_repairs() -> void:
 	building_maintenance_service.apply_building_wear_and_repairs(_destroy_building_to_pile)
