@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://cec4aedx8k516"]
 
-[ext_resource type="Terrain3DAssets" uid="uid://dal3jhw6241qg" path="res://demo/data/assets.tres" id="1_assets"]
+[ext_resource type="Terrain3DAssets" uid="uid://dal3jhw6241qg" path="res://assets/terrain3d/assets.tres" id="1_assets"]
 [ext_resource type="Script" uid="uid://b0qxytp8a5oxs" path="res://game/features/world/presentation/terrain_3d_world.gd" id="2_setup"]
 
 [sub_resource type="Gradient" id="Gradient_p168k"]

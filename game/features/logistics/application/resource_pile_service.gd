@@ -2,14 +2,19 @@ class_name ResourcePileService
 extends RefCounted
 
 const TentEraSurvivalRulesScript = preload("res://game/features/settlement/domain/tent_era_survival_rules.gd")
-const ResourcePileVisualsScript = preload("res://game/features/logistics/presentation/resource_pile_visuals.gd")
 const ResourcePileScript = preload("res://game/features/logistics/domain/resource_pile.gd")
 
 var parent_node: Node3D
 var resource_piles: Array[ResourcePileScript]
 var settlement: RefCounted
 var weather_state: RefCounted
-var _visuals := ResourcePileVisualsScript.new()
+var _visuals: RefCounted = null
+
+func _get_visuals() -> RefCounted:
+	if _visuals == null:
+		var script_cls: Script = load("res://game/features/logistics/presentation/resource_pile_visuals.gd") as Script
+		_visuals = script_cls.new()
+	return _visuals
 
 func _init(parent: Node3D = null, piles: Array[ResourcePileScript] = [], settlement_ref: RefCounted = null, weather_ref: RefCounted = null) -> void:
 	parent_node = parent
@@ -34,7 +39,7 @@ func create_resource_pile(position: Vector3, resources: Dictionary, is_backpack_
 	if normalized.is_empty():
 		return null
 
-	var pile: Node3D = _visuals.create_visual(position, normalized, is_backpack_pile)
+	var pile: Node3D = _get_visuals().create_visual(position, normalized, is_backpack_pile)
 
 	if parent_node != null:
 		parent_node.add_child(pile)
@@ -113,7 +118,7 @@ func drop_overflow_as_piles(overflow: Dictionary, base_position: Vector3) -> voi
 		create_resource_pile(base_position + offset, pile_resources)
 
 func refresh_resource_pile_label(pile: ResourcePileScript) -> void:
-	_visuals.refresh_label(pile.node, pile.resources)
+	_get_visuals().refresh_label(pile.node, pile.resources)
 
 func drop_resource_pile(position: Vector3, resource_type: String, amount: int) -> void:
 	if resource_type.is_empty() or amount <= 0:
@@ -124,7 +129,7 @@ func drop_resource_pile(position: Vector3, resource_type: String, amount: int) -
 		if not is_instance_valid(pile_node) or pile.resources.size() != 1 or not pile.resources.has(resource_type) or pile_node.global_position.distance_squared_to(position) > 2.25:
 			continue
 		pile.resources[resource_type] = int(pile.resources.get(resource_type, 0)) + amount
-		_visuals.refresh_label(pile_node, pile.resources)
+		_get_visuals().refresh_label(pile_node, pile.resources)
 		return
 	create_resource_pile(position, {resource_type: amount})
 

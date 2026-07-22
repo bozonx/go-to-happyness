@@ -5,7 +5,12 @@ const INTERACTION_RANGE := 2.8
 const WILD_FOOD_RESPAWN_SECONDS := 90.0
 const RABBIT_RESPAWN_SECONDS := 120.0
 const HARVEST_DURATION := 3.5
-const BillboardLabelScene = preload("res://game/features/ui/presentation/billboard_label.tscn")
+var billboard_label_scene: PackedScene = null
+
+func _get_billboard_label_scene() -> PackedScene:
+	if billboard_label_scene == null:
+		billboard_label_scene = load("res://game/features/ui/presentation/billboard_label.tscn") as PackedScene
+	return billboard_label_scene
 
 var forager_positions: Array[Vector3] = []
 var forage_sources: Dictionary = {}
@@ -216,7 +221,7 @@ func ensure_gather_progress_label(node: Node3D) -> Label3D:
 	var existing := gather_progress_labels.get(node) as Label3D
 	if is_instance_valid(existing):
 		return existing
-	var label := BillboardLabelScene.instantiate() as Label3D
+	var label := _get_billboard_label_scene().instantiate() as Label3D
 	label.font_size = 22
 	label.outline_size = 5
 	label.modulate = Color("ffffff")

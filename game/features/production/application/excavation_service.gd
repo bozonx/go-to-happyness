@@ -4,13 +4,18 @@ extends RefCounted
 ## Manages excavation/dig site lifecycle: site creation, excavation cycles,
 ## tool/depth checks, resource discovery, pit visuals, and site exhaustion.
 
-const DigSiteScene = preload("res://game/features/world/presentation/dig_site.tscn")
-
+var dig_site_scene: PackedScene = null
 var simulation: Node
 
 
 func configure(next_simulation: Node) -> void:
 	simulation = next_simulation
+
+
+func _get_dig_site_scene() -> PackedScene:
+	if dig_site_scene == null:
+		dig_site_scene = load("res://game/features/world/presentation/dig_site.tscn") as PackedScene
+	return dig_site_scene
 
 
 func on_excavation_cycle(worker: Citizen, site_node: Node3D, efficiency: float) -> void:
@@ -165,7 +170,7 @@ func dig_site_at(cell: Vector2i) -> Dictionary:
 
 
 func create_dig_site(cell: Vector2i, world_position: Vector3) -> Dictionary:
-	var site_node: Node3D = DigSiteScene.instantiate()
+	var site_node: Node3D = _get_dig_site_scene().instantiate()
 	site_node.position = world_position
 	simulation.add_child(site_node)
 	var pit: MeshInstance3D = site_node.get_node("Pit") as MeshInstance3D

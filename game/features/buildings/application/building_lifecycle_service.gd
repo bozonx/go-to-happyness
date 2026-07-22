@@ -6,13 +6,18 @@ extends RefCounted
 ## resource recovery, navigation/territory updates), expired tent cleanup,
 ## house light updates, and campfire selection.
 
-const BillboardLabelScene = preload("res://game/features/ui/presentation/billboard_label.tscn")
-
+var billboard_label_scene: PackedScene = null
 var simulation: Node
 
 
 func configure(next_simulation: Node) -> void:
 	simulation = next_simulation
+
+
+func _get_billboard_label_scene() -> PackedScene:
+	if billboard_label_scene == null:
+		billboard_label_scene = load("res://game/features/ui/presentation/billboard_label.tscn") as PackedScene
+	return billboard_label_scene
 
 
 func mark_building_for_demolition(building: Node3D) -> void:
@@ -39,7 +44,7 @@ func mark_building_for_demolition(building: Node3D) -> void:
 func add_demolition_marker(building: Node3D) -> void:
 	if building.has_meta("demolition_marker"):
 		return
-	var marker: Label3D = BillboardLabelScene.instantiate() as Label3D
+	var marker: Label3D = _get_billboard_label_scene().instantiate() as Label3D
 	marker.text = "DEMOLISH"
 	marker.position = Vector3(0.0, 5.2, 0.0)
 	marker.font_size = 32

@@ -2081,11 +2081,12 @@ func _update_satisfaction(delta: float) -> void:
 	var mentor_fn := Callable()
 	if simulation != null:
 		mentor_fn = Callable(self, "_check_mentor_synergy")
+	var current_pos: Vector3 = global_position if is_inside_tree() else position
 	var result: RefCounted = satisfaction_service.compute_tick(
 		active_role, preferred_role(), overtime_mode,
 		satisfaction, satisfaction_tick, skills,
 		get_satisfaction_cap(), has_active_daily_order(),
-		mentor_fn, global_position
+		mentor_fn, current_pos
 	)
 	satisfaction = result.satisfaction
 	satisfaction_tick = result.satisfaction_tick

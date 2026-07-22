@@ -5,13 +5,13 @@ extends RefCounted
 ## resources are dropped on the ground; lives until all contents are consumed
 ## or decayed.
 
-var node: Node3D
+var node: Object = null
 var resources: Dictionary = {}
 var reserved: Dictionary = {}
 var is_backpack: bool = false
 
 
-func _init(next_node: Node3D = null, next_resources: Dictionary = {}, next_is_backpack: bool = false) -> void:
+func _init(next_node: Object = null, next_resources: Dictionary = {}, next_is_backpack: bool = false) -> void:
 	node = next_node
 	resources = next_resources
 	is_backpack = next_is_backpack

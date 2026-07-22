@@ -1,9 +1,8 @@
 class_name ConstructionService
 extends RefCounted
 
-const ConstructionSiteScene = preload("res://game/features/buildings/presentation/construction_site.tscn")
-const ConstructionEntrancePostScene = preload("res://game/features/buildings/presentation/construction_entrance_post.tscn")
-
+var site_scene: PackedScene = null
+var entrance_post_scene: PackedScene = null
 var runtime: ConstructionRuntime
 var sites: Array[ConstructionSite] = []
 
@@ -15,8 +14,20 @@ func configure(next_runtime: ConstructionRuntime) -> void:
 	runtime = next_runtime
 
 
+func _get_site_scene() -> PackedScene:
+	if site_scene == null:
+		site_scene = load("res://game/features/buildings/presentation/construction_site.tscn") as PackedScene
+	return site_scene
+
+
+func _get_entrance_post_scene() -> PackedScene:
+	if entrance_post_scene == null:
+		entrance_post_scene = load("res://game/features/buildings/presentation/construction_entrance_post.tscn") as PackedScene
+	return entrance_post_scene
+
+
 func start_site(cell: Vector2i, building_type: String, position: Vector3, rotation_quarters := 0, supplied_blueprint: Dictionary = {}, occupied_footprint := Vector2i.ZERO) -> ConstructionSite:
-	var site_node: Node3D = ConstructionSiteScene.instantiate()
+	var site_node: Node3D = _get_site_scene().instantiate()
 	site_node.position = position
 	site_node.rotation.y = rotation_quarters * PI * 0.5
 	site_node.set_meta("building_type", building_type)
@@ -31,7 +42,7 @@ func start_site(cell: Vector2i, building_type: String, position: Vector3, rotati
 	# Entrance posts and flags are positioned dynamically based on the building footprint.
 	var entrance_parent := site_node.get_node("ConstructionEntrance") as Node3D
 	for service_position: Vector3 in site_node.get_meta("service_positions"):
-		var post := ConstructionEntrancePostScene.instantiate() as Node3D
+		var post := _get_entrance_post_scene().instantiate() as Node3D
 		post.position = (service_position - site_node.position).rotated(Vector3.UP, -site_node.rotation.y)
 		post.position.y = 0.0
 		entrance_parent.add_child(post)
