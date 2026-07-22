@@ -7,6 +7,7 @@ extends RefCounted
 ## house light updates, and campfire selection.
 
 const S = preload("res://game/features/ui/domain/game_strings.gd")
+const WaterCollectorRecordScript = preload("res://game/features/logistics/domain/water_collector_record.gd")
 
 var simulation: Node
 
@@ -335,7 +336,7 @@ func register_completed_building_type_features(building_type: String, building: 
 			if building_type == "advanced_dew_collector":
 				rate = 0.3
 				capacity = 25
-			simulation.water_collectors.append({"node": building, "rate": rate, "accum": 0.0, "stored": 0, "capacity": capacity})
+			simulation.water_collectors.append(WaterCollectorRecordScript.new(building, rate, 0.0, 0, capacity))
 		"craft_tent", "straw_craft_tent", "tarp_craft_tent":
 			simulation.craft_tent_positions.append(service_position)
 		"straw_trade_tent", "tarp_trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market":

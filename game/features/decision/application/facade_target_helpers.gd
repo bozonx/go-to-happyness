@@ -56,7 +56,8 @@ func route_cost(from: Vector3, destination: Vector3) -> float:
 func workplace_target_key(workplace: Node3D) -> StringName:
 	if not is_instance_valid(workplace):
 		return &""
-	if workplace == simulation._dig_site_for_node(workplace).get(&"node"):
+	var dig_site = simulation._dig_site_for_node(workplace)
+	if dig_site != null and dig_site.node == workplace:
 		return target_key(&"dig", workplace.global_position)
 	return target_key(&"building", workplace.global_position)
 

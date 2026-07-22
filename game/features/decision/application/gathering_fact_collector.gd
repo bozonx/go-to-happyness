@@ -2,6 +2,7 @@ class_name GatheringFactCollector
 extends RefCounted
 
 const ResourcePileScript = preload("res://game/features/logistics/domain/resource_pile.gd")
+const GrassSourceRecord = preload("res://game/features/production/domain/grass_source_record.gd")
 
 ## Collects permanent gathering, daily gathering, and daily cleaning facts for
 ## one citizen.
@@ -141,17 +142,15 @@ func _daily_gathering_targets_for(ctx: FacadeContext, actor: Citizen, role: Stri
 						&"direct_distance": actor.global_position.distance_squared_to(access),
 					})
 		"gather_grass":
-			for grass_cell_value in ctx.simulation.grass_sources.keys():
-				var grass_cell := grass_cell_value as Vector2i
-				var grass_source := ctx.simulation.grass_sources.get(grass_cell, {}) as Dictionary
-				var grass_node := grass_source.get(&"node") as Node3D
-				if int(grass_source.get(&"remaining", 0)) > 0 and is_instance_valid(grass_node):
-					var access := ctx.helpers.resource_access_position(grass_node.global_position)
+			for grass_cell in ctx.simulation.grass_sources.keys():
+				var grass_source: GrassSourceRecord = ctx.simulation.grass_sources.get(grass_cell)
+				if grass_source != null and grass_source.remaining > 0 and is_instance_valid(grass_source.node):
+					var access := ctx.helpers.resource_access_position(grass_source.node.global_position)
 					if access != Vector3.INF:
 						ctx.helpers.insert_nearby_gathering_candidate(nearby, {
 							&"id": StringName("grass:%d:%d" % [grass_cell.x, grass_cell.y]),
 							&"resource_type": "grass",
-							&"position": grass_node.global_position,
+							&"position": grass_source.node.global_position,
 							&"access": access,
 							&"direct_distance": actor.global_position.distance_squared_to(access),
 						})

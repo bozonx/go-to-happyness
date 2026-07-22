@@ -27,6 +27,11 @@ const CourierDispatcherScript = preload("res://game/features/logistics/applicati
 const CourierTaskServiceScript = preload("res://game/features/logistics/application/courier_task_service.gd")
 const CourierTaskPublisherScript = preload("res://game/features/logistics/application/courier_task_publisher.gd")
 const CourierTaskScript = preload("res://game/features/logistics/domain/courier_task.gd")
+const WaterCollectorRecordScript = preload("res://game/features/logistics/domain/water_collector_record.gd")
+const DigSiteRecordScript = preload("res://game/features/production/domain/dig_site_record.gd")
+const GrassSourceRecordScript = preload("res://game/features/production/domain/grass_source_record.gd")
+const ForageSourceRecordScript = preload("res://game/features/production/domain/forage_source_record.gd")
+const RabbitSourceRecordScript = preload("res://game/features/production/domain/rabbit_source_record.gd")
 const TradeServiceScript = preload("res://game/features/logistics/application/trade_service.gd")
 const MarketMenuControllerScript = preload("res://game/features/logistics/presentation/market_menu_controller.gd")
 const WarehouseMenuControllerScript = preload("res://game/features/logistics/presentation/warehouse_menu_controller.gd")
@@ -178,9 +183,9 @@ var navigation_blocked_cells: Dictionary[Vector2i, bool] = {}
 var warehouse_positions: Array[Vector3] = []
 var sawmill_positions: Array[Vector3] = []
 var sawmill_stocks: Dictionary = {}
-var grass_sources: Dictionary[Vector2i, Dictionary] = {} # cell -> {node, remaining}; finite patches around trees
-var forage_sources: Dictionary[Vector2i, Dictionary] = {} # cell -> {node}; wild edible plants, one harvest each
-var rabbit_sources: Dictionary[Vector2i, Dictionary] = {} # cell -> {node, direction}; simple moving meadow animals
+var grass_sources: Dictionary[Vector2i, GrassSourceRecordScript] = {} # cell -> GrassSourceRecord; finite patches around trees
+var forage_sources: Dictionary[Vector2i, ForageSourceRecordScript] = {} # cell -> ForageSourceRecord; wild edible plants, one harvest each
+var rabbit_sources: Dictionary[Vector2i, RabbitSourceRecordScript] = {} # cell -> RabbitSourceRecord; simple moving meadow animals
 var forage_respawn_at: Dictionary[Vector2i, float] = {}
 var rabbit_respawn_at: Dictionary[Vector2i, float] = {}
 const WILD_FOOD_RESPAWN_SECONDS := 45.0
@@ -461,7 +466,7 @@ var pocket_take_menu_title: Label:
 	get: return pocket_take_menu.title_label if pocket_take_menu != null else null
 var pocket_menu_open := false
 var pocket_take_warehouse_index: int = -1
-var dig_sites: Array[Dictionary] = []
+var dig_sites: Array[DigSiteRecordScript] = []
 var dig_cells: Dictionary = {}
 var exhausted_dig_cells: Dictionary = {}
 var dig_mode := false
@@ -524,7 +529,7 @@ var skip_night_button: Button:
 	get: return time_controls_panel.skip_night_button if time_controls_panel != null else null
 var start_workday_button: Button:
 	get: return time_controls_panel.start_workday_button if time_controls_panel != null else null
-var water_collectors: Array[Dictionary] = []
+var water_collectors: Array[WaterCollectorRecordScript] = []
 var pending_trades: Dictionary = {} # worker ai_id -> TradeOrder
 var queued_trades: Array = []
 var building_status_indicators: Array[Label3D] = []
@@ -1561,19 +1566,19 @@ func _sawmill_with_boards() -> Vector3:
 func _on_excavation_cycle(worker: Citizen, site_node: Node3D, efficiency: float) -> void:
 	excavation_service.on_excavation_cycle(worker, site_node, efficiency)
 
-func _can_work_at_dig_site(site: Dictionary) -> bool:
+func _can_work_at_dig_site(site: DigSiteRecordScript) -> bool:
 	return excavation_service.can_work_at_dig_site(site)
 
-func _tool_for_depth(site: Dictionary, depth: int) -> String:
+func _tool_for_depth(site: DigSiteRecordScript, depth: int) -> String:
 	return excavation_service.tool_for_depth(site, depth)
 
-func _resource_for_depth(site: Dictionary, depth: int) -> String:
+func _resource_for_depth(site: DigSiteRecordScript, depth: int) -> String:
 	return excavation_service.resource_for_depth(site, depth)
 
 func _count_valid_dig_sites() -> int:
 	return excavation_service.count_valid_dig_sites()
 
-func _dig_site_for_node(site_node: Node3D) -> Dictionary:
+func _dig_site_for_node(site_node: Node3D) -> DigSiteRecordScript:
 	return excavation_service.dig_site_for_node(site_node)
 
 func _building_cost() -> int:
@@ -1997,8 +2002,7 @@ func _ai_target_for_key(target_key: StringName) -> Node3D:
 					return site.building
 		"dig":
 			var site := _dig_site_at(cell)
-			var node := site.get(&"node") as Node3D
-			return node if is_instance_valid(node) else null
+			return site.node if is_instance_valid(site.node) else null
 		"factory":
 			for factory: Node3D in factories:
 				if is_instance_valid(factory) and _cell_from_position(factory.global_position) == cell:
@@ -2909,10 +2913,10 @@ func _place_dig_site(world_position: Vector3) -> void:
 func _can_excavate(world_position: Vector3) -> bool:
 	return excavation_service.can_excavate(world_position)
 
-func _dig_site_at(cell: Vector2i) -> Dictionary:
+func _dig_site_at(cell: Vector2i) -> DigSiteRecordScript:
 	return excavation_service.dig_site_at(cell)
 
-func _create_dig_site(cell: Vector2i, world_position: Vector3) -> Dictionary:
+func _create_dig_site(cell: Vector2i, world_position: Vector3) -> DigSiteRecordScript:
 	return excavation_service.create_dig_site(cell, world_position)
 
 func _set_build_placement_ui_visible(is_visible: bool) -> void:
@@ -3506,10 +3510,10 @@ func _harvest_source_info(resource_type: String) -> String:
 			var node := _nearest_grass_node(player_citizen.global_position)
 			if is_instance_valid(node):
 				for cell in grass_sources:
-					var source: Dictionary = grass_sources[cell]
-					if source.get("node") == node:
-						var rem := int(source.get("remaining", 0))
-						var init := maxi(1, int(source.get("initial", rem)))
+					var source: GrassSourceRecordScript = grass_sources[cell]
+					if source.node == node:
+						var rem := source.remaining
+						var init := maxi(1, source.initial)
 						return S.SOURCE_INFO_GRASS % [rem, init]
 			return ""
 		"wood":
@@ -3893,10 +3897,10 @@ func _nearest_grass_source_to_point(point: Vector3, max_distance: float) -> Vect
 	var best := Vector3.INF
 	var best_dist := max_distance
 	for cell in grass_sources:
-		var source: Dictionary = grass_sources[cell]
-		if int(source.remaining) <= 0 or not is_instance_valid(source.node):
+		var source: GrassSourceRecordScript = grass_sources[cell]
+		if source.remaining <= 0 or not is_instance_valid(source.node):
 			continue
-		var node_pos: Vector3 = (source.node as Node3D).global_position
+		var node_pos: Vector3 = source.node.global_position
 		var dist := point.distance_to(node_pos)
 		if dist <= best_dist:
 			best_dist = dist
@@ -4120,9 +4124,9 @@ func _targeted_grass_info(target: Dictionary) -> Dictionary:
 	if not is_instance_valid(target_node):
 		return {}
 	for cell in grass_sources:
-		var source: Dictionary = grass_sources[cell]
-		if source.get("node") == target_node:
-			return {"remaining": int(source.get("remaining", 0)), "initial": maxi(1, int(source.get("initial", 1)))}
+		var source: GrassSourceRecordScript = grass_sources[cell]
+		if source.node == target_node:
+			return {"remaining": source.remaining, "initial": maxi(1, source.initial)}
 	return {}
 
 func _terrain_point_at_screen_position(screen_position: Vector2) -> Variant:

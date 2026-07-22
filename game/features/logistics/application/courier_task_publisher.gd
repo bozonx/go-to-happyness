@@ -4,6 +4,7 @@ extends RefCounted
 const CourierTaskScript = preload("res://game/features/logistics/domain/courier_task.gd")
 const BuildingCatalogScript = preload("res://game/features/buildings/domain/building_catalog.gd")
 const FireSourceStateScript = preload("res://game/features/settlement/domain/fire_source_state.gd")
+const WaterCollectorRecordScript = preload("res://game/features/logistics/domain/water_collector_record.gd")
 
 var simulation: Node
 
@@ -50,12 +51,11 @@ func publish_courier_tasks(dispatcher: RefCounted) -> void:
 			if int(simulation.sawmills.stock_at(position, simulation.runtime_seconds).boards) > 0:
 				var sawmill_dropoff: Vector3 = simulation._warehouse_delivery_position(position, "boards", 1)
 				dispatcher.publish(StringName("sawmill_%s" % simulation._cell_from_position(position)), CourierTaskScript.Kind.SAWMILL_PICKUP, 50, position, sawmill_dropoff, {"position": position})
-		for collector: Dictionary in simulation.water_collectors:
-			if int(collector.get("stored", 0)) > 0:
-				var collector_node: Node3D = collector.get("node") as Node3D
-				if is_instance_valid(collector_node):
-					var collector_position: Vector3 = collector_node.get_meta("service_position", collector_node.global_position)
-					var dew_dropoff: Vector3 = simulation._warehouse_delivery_position(collector_position, "water", int(collector.get("stored", 0)))
+		for collector: WaterCollectorRecordScript in simulation.water_collectors:
+			if collector.stored > 0:
+				if is_instance_valid(collector.node):
+					var collector_position: Vector3 = collector.node.get_meta("service_position", collector.node.global_position)
+					var dew_dropoff: Vector3 = simulation._warehouse_delivery_position(collector_position, "water", collector.stored)
 					dispatcher.publish(StringName("dew_%s" % simulation._cell_from_position(collector_position)), CourierTaskScript.Kind.DEW_PICKUP, 40, collector_position, dew_dropoff, {"position": collector_position})
 		for worker in simulation.citizens:
 			if worker != null and worker.has_pending_resource() and not simulation.courier_dispatcher.is_manually_targeted(worker):

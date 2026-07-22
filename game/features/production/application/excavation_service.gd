@@ -4,6 +4,8 @@ extends RefCounted
 ## Manages excavation/dig site lifecycle: site creation, excavation cycles,
 ## tool/depth checks, resource discovery, pit visuals, and site exhaustion.
 
+const DigSiteRecord = preload("res://game/features/production/domain/dig_site_record.gd")
+
 var dig_site_scene: PackedScene = null
 var simulation: Node
 
@@ -24,7 +26,7 @@ func _get_dig_site_scene() -> PackedScene:
 
 func on_excavation_cycle(worker: Citizen, site_node: Node3D, efficiency: float) -> void:
 	for index in range(simulation.dig_sites.size()):
-		var site: Dictionary = simulation.dig_sites[index]
+		var site: DigSiteRecord = simulation.dig_sites[index]
 		if site.node != site_node:
 			continue
 
@@ -77,12 +79,11 @@ func on_excavation_cycle(worker: Citizen, site_node: Node3D, efficiency: float) 
 			simulation._update_workers()
 			simulation._update_interface("Stone excavation is exhausted; choose another cell.")
 			return
-		simulation.dig_sites[index] = site
 		simulation._request_courier_dispatch()
 		return
 
 
-func can_work_at_dig_site(site: Dictionary) -> bool:
+func can_work_at_dig_site(site: DigSiteRecord) -> bool:
 	var next_depth: int = site.depth + 1
 	if next_depth > site.stone_limit:
 		return false
@@ -92,7 +93,7 @@ func can_work_at_dig_site(site: Dictionary) -> bool:
 	return true
 
 
-func tool_for_depth(site: Dictionary, depth: int) -> String:
+func tool_for_depth(site: DigSiteRecord, depth: int) -> String:
 	if depth <= site.grass_limit:
 		return ""
 	elif depth <= site.soil_limit:
@@ -104,7 +105,7 @@ func tool_for_depth(site: Dictionary, depth: int) -> String:
 	return ""
 
 
-func resource_for_depth(site: Dictionary, depth: int) -> String:
+func resource_for_depth(site: DigSiteRecord, depth: int) -> String:
 	if depth <= site.grass_limit:
 		return "grass"
 	elif depth <= site.soil_limit:
@@ -124,11 +125,11 @@ func count_valid_dig_sites() -> int:
 	return count
 
 
-func dig_site_for_node(site_node: Node3D) -> Dictionary:
+func dig_site_for_node(site_node: Node3D) -> DigSiteRecord:
 	for site in simulation.dig_sites:
 		if site.node == site_node:
 			return site
-	return {}
+	return null
 
 
 func start_dig_assignment() -> void:
@@ -148,8 +149,8 @@ func place_dig_site(world_position: Vector3) -> void:
 	if not can_excavate(world_position):
 		simulation._update_interface("Excavation is not allowed at this point.")
 		return
-	var site: Dictionary = dig_site_at(cell)
-	if site.is_empty():
+	var site: DigSiteRecord = dig_site_at(cell)
+	if site == null:
 		site = create_dig_site(cell, world_position)
 	simulation.selected_builder.assigned_dig_site = site.node
 	if simulation.selected_builder.employment_state == Citizen.EmploymentState.NO_PERMANENT_WORK:
@@ -166,14 +167,14 @@ func can_excavate(world_position: Vector3) -> bool:
 	return not simulation.exhausted_dig_cells.has(cell) and simulation._is_clear_of_objects(world_position, 1.0)
 
 
-func dig_site_at(cell: Vector2i) -> Dictionary:
+func dig_site_at(cell: Vector2i) -> DigSiteRecord:
 	for site in simulation.dig_sites:
 		if site.cell == cell:
 			return site
-	return {}
+	return null
 
 
-func create_dig_site(cell: Vector2i, world_position: Vector3) -> Dictionary:
+func create_dig_site(cell: Vector2i, world_position: Vector3) -> DigSiteRecord:
 	var site_node: Node3D = _get_dig_site_scene().instantiate()
 	site_node.position = world_position
 	simulation.add_child(site_node)
@@ -189,16 +190,7 @@ func create_dig_site(cell: Vector2i, world_position: Vector3) -> Dictionary:
 	var clay_limit: int = soil_limit + clay_depth
 	var stone_limit: int = clay_limit + stone_depth
 
-	var site: Dictionary = {
-		"cell": cell,
-		"node": site_node,
-		"pit": pit,
-		"grass_limit": grass_limit,
-		"soil_limit": soil_limit,
-		"clay_limit": clay_limit,
-		"stone_limit": stone_limit,
-		"depth": 0
-	}
+	var site := DigSiteRecord.new(cell, site_node, pit, grass_limit, soil_limit, clay_limit, stone_limit, 0)
 	simulation.dig_sites.append(site)
 	simulation.dig_cells[cell] = true
 	return site

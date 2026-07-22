@@ -8,6 +8,7 @@ const StorageDeliveryServiceScript = preload("res://game/features/logistics/appl
 const TradeServiceScript = preload("res://game/features/logistics/application/trade_service.gd")
 const TradeOrderScript = preload("res://game/features/logistics/domain/trade_order.gd")
 const WaterCollectorServiceScript = preload("res://game/features/logistics/application/water_collector_service.gd")
+const WaterCollectorRecordScript = preload("res://game/features/logistics/domain/water_collector_record.gd")
 const FireSourceStateScript = preload("res://game/features/settlement/domain/fire_source_state.gd")
 const CitizenStatusEffectScript = preload("res://game/features/citizens/domain/citizen_status_effect.gd")
 
@@ -96,7 +97,7 @@ class FakeTradeSimulation extends Node:
 
 
 class FakeWaterCollectorSimulation extends Node:
-	var water_collectors: Array[Dictionary] = []
+	var water_collectors: Array[WaterCollectorRecordScript] = []
 
 
 static func run_all() -> void:
@@ -470,13 +471,9 @@ static func _test_water_collector_service() -> void:
 	var collector := Node3D.new()
 	collector.position = Vector3(2.0, 0.0, 3.0)
 	collector.set_meta("service_position", collector.position)
-	simulation.water_collectors = [{
-		"node": collector,
-		"rate": 1.0,
-		"accum": 0.0,
-		"stored": 0,
-		"capacity": 10,
-	}]
+	simulation.water_collectors = [
+		WaterCollectorRecordScript.new(collector, 1.0, 0.0, 0, 10),
+	]
 	var service := WaterCollectorServiceScript.new()
 	service.configure(simulation.water_collectors)
 

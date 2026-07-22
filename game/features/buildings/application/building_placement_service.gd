@@ -14,8 +14,7 @@ func configure(p_simulation: Node) -> void:
 func is_clear_of_dig_sites(world_position: Vector3, footprint: Vector2i) -> bool:
 	var half := Vector2(footprint.x, footprint.y) * 0.5
 	for site in simulation.dig_sites:
-		var node: Node3D = site.get("node")
-		if is_instance_valid(node) and absf(world_position.x - node.global_position.x) < half.x + 1.0 and absf(world_position.z - node.global_position.z) < half.y + 1.0:
+		if is_instance_valid(site.node) and absf(world_position.x - site.node.global_position.x) < half.x + 1.0 and absf(world_position.z - site.node.global_position.z) < half.y + 1.0:
 			return false
 	return true
 
@@ -47,7 +46,6 @@ func is_clear_of_objects(world_position: Vector3, minimum_distance: float) -> bo
 		if Vector2(occupied_position.x, occupied_position.z).distance_to(Vector2(world_position.x, world_position.z)) < minimum_distance:
 			return false
 	for site in simulation.dig_sites:
-		var node: Node3D = site.get("node")
-		if is_instance_valid(node) and Vector2(node.global_position.x, node.global_position.z).distance_to(Vector2(world_position.x, world_position.z)) < minimum_distance:
+		if is_instance_valid(site.node) and Vector2(site.node.global_position.x, site.node.global_position.z).distance_to(Vector2(world_position.x, world_position.z)) < minimum_distance:
 			return false
 	return true

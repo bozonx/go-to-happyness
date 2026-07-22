@@ -6,6 +6,9 @@ const WILD_FOOD_RESPAWN_SECONDS := 90.0
 const RABBIT_RESPAWN_SECONDS := 120.0
 const HARVEST_DURATION := 3.5
 const CitizenTaskStateScript = preload("res://game/features/citizens/domain/citizen_task_state.gd")
+const GrassSourceRecord = preload("res://game/features/production/domain/grass_source_record.gd")
+const ForageSourceRecord = preload("res://game/features/production/domain/forage_source_record.gd")
+const RabbitSourceRecord = preload("res://game/features/production/domain/rabbit_source_record.gd")
 var billboard_label_scene: PackedScene = null
 
 func set_billboard_label_scene(scene: PackedScene) -> void:
@@ -85,19 +88,18 @@ func find_forage_position(citizen: Node3D) -> Vector3:
 func harvest_wild_food(position: Vector3, worker: Node3D) -> String:
 	var plant_cell: Vector2i = cell_query.call(position) if cell_query.is_valid() else Vector2i.ZERO
 	if forage_sources.has(plant_cell):
-		var plant := (forage_sources[plant_cell] as Dictionary).get("node") as Node3D
-		if is_instance_valid(plant):
-			plant.queue_free()
+		var plant: ForageSourceRecord = forage_sources[plant_cell]
+		if is_instance_valid(plant.node):
+			plant.node.queue_free()
 		forage_sources.erase(plant_cell)
 		forage_respawn_at[plant_cell] = runtime_seconds + WILD_FOOD_RESPAWN_SECONDS
 		return "food"
 	for cell in rabbit_sources:
-		var source := rabbit_sources[cell] as Dictionary
-		var rabbit := source.get("node") as Node3D
-		if is_instance_valid(rabbit) and rabbit.global_position.distance_to(position) <= 1.6:
+		var source: RabbitSourceRecord = rabbit_sources[cell]
+		if is_instance_valid(source.node) and source.node.global_position.distance_to(position) <= 1.6:
 			if worker is Citizen:
 				worker.play_hunting_shot()
-			rabbit.queue_free()
+			source.node.queue_free()
 			rabbit_sources.erase(cell)
 			rabbit_respawn_at[cell] = runtime_seconds + RABBIT_RESPAWN_SECONDS
 			return "hides" if randf() < 0.35 else "food"
@@ -107,16 +109,14 @@ func consume_grass_source(position: Vector3) -> int:
 	var cell: Vector2i = cell_query.call(position) if cell_query.is_valid() else Vector2i.ZERO
 	if not grass_sources.has(cell):
 		return 0
-	var source: Dictionary = grass_sources[cell]
-	if int(source.remaining) <= 0:
+	var source: GrassSourceRecord = grass_sources[cell]
+	if source.remaining <= 0:
 		return 0
-	source.remaining = maxi(0, int(source.remaining) - 1)
-	if int(source.remaining) == 0:
+	source.remaining = maxi(0, source.remaining - 1)
+	if source.remaining == 0:
 		if is_instance_valid(source.node):
 			source.node.queue_free()
 		grass_sources.erase(cell)
-	else:
-		grass_sources[cell] = source
 	return 1
 
 func consume_tree_branches(position: Vector3) -> int:
@@ -176,8 +176,8 @@ func nearest_grass_node(from: Vector3) -> Node3D:
 	var best: Node3D = null
 	var best_dist := INTERACTION_RANGE
 	for cell in grass_sources:
-		var source: Dictionary = grass_sources[cell]
-		if int(source.remaining) <= 0 or not is_instance_valid(source.node):
+		var source: GrassSourceRecord = grass_sources[cell]
+		if source.remaining <= 0 or not is_instance_valid(source.node):
 			continue
 		var dist := from.distance_to(source.node.global_position)
 		if dist <= best_dist:
@@ -198,7 +198,7 @@ func gather_node_at(position: Vector3, resource_type: String) -> Node3D:
 	if resource_type in ["wood", "branches", "logs"]:
 		return tree_nodes.get(cell)
 	if resource_type == "grass":
-		var source: Dictionary = grass_sources.get(cell)
+		var source: GrassSourceRecord = grass_sources.get(cell)
 		if source != null:
 			return source.node
 	return null
@@ -215,10 +215,10 @@ func gather_progress_amounts(resource_type: String, node: Node3D) -> Dictionary:
 			current = int(node.get_meta("hand_branches", 0))
 	else:
 		for cell in grass_sources:
-			var source: Dictionary = grass_sources[cell]
-			if source.get("node") == node:
-				max_amount = int(source.get("initial", 1))
-				current = max_amount - int(source.get("remaining", 0))
+			var source: GrassSourceRecord = grass_sources[cell]
+			if source.node == node:
+				max_amount = source.initial
+				current = max_amount - source.remaining
 				break
 	return {"current": current, "max": max_amount}
 

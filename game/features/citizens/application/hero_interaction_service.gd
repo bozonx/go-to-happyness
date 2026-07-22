@@ -4,6 +4,8 @@ extends RefCounted
 ## Handles hero proximity queries for nearby trees, sawmills, farms, ponds,
 ## grass patches, forage sources, rabbits, and interaction percentages.
 
+const GrassSourceRecord = preload("res://game/features/production/domain/grass_source_record.gd")
+
 var simulation: Node
 
 
@@ -75,10 +77,10 @@ func nearby_grass_source_position() -> Vector3:
 	var best: Vector3 = Vector3.INF
 	var best_dist: float = float(simulation.INTERACTION_RANGE)
 	for cell in simulation.grass_sources:
-		var source: Dictionary = simulation.grass_sources[cell]
-		if int(source.get("remaining", 0)) <= 0 or not is_instance_valid(source.get("node")):
+		var source: GrassSourceRecord = simulation.grass_sources[cell]
+		if source.remaining <= 0 or not is_instance_valid(source.node):
 			continue
-		var node_pos: Vector3 = (source.node as Node3D).global_position
+		var node_pos: Vector3 = source.node.global_position
 		var dist: float = simulation.player_citizen.global_position.distance_to(node_pos)
 		if dist <= best_dist:
 			best_dist = dist
@@ -140,9 +142,11 @@ func resource_remaining_percent(resource_type: String) -> int:
 			var pos: Vector3 = nearby_grass_source_position()
 			if pos != Vector3.INF:
 				var cell: Vector2i = simulation._cell_from_position(pos)
-				var source: Dictionary = simulation.grass_sources.get(cell, {})
-				var remaining := int(source.get("remaining", 0))
-				var initial := maxi(1, int(source.get("initial", remaining)))
+				var source: GrassSourceRecord = simulation.grass_sources.get(cell)
+				if source == null:
+					return 0
+				var remaining := source.remaining
+				var initial := maxi(1, source.initial)
 				return clampi(int(round(float(remaining) / float(initial) * 100.0)), 0, 100)
 			return 0
 		"water":

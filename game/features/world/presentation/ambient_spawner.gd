@@ -8,6 +8,9 @@ const GrassSourceScene = preload("res://game/features/world/presentation/grass_s
 const ForageSourceScene = preload("res://game/features/world/presentation/forage_source.tscn")
 const RabbitScene = preload("res://game/features/world/presentation/rabbit.tscn")
 const EntranceSignScene = preload("res://game/features/world/presentation/entrance_sign.tscn")
+const GrassSourceRecord = preload("res://game/features/production/domain/grass_source_record.gd")
+const ForageSourceRecord = preload("res://game/features/production/domain/forage_source_record.gd")
+const RabbitSourceRecord = preload("res://game/features/production/domain/rabbit_source_record.gd")
 
 var simulation: Node
 
@@ -101,7 +104,7 @@ func _create_grass_sources_near_tree(tree_cell: Vector2i) -> void:
 		node.position = position + Vector3.UP * 0.05
 		simulation.add_child(node)
 		var initial_remaining: int = simulation.random.randi_range(2, 5)
-		simulation.grass_sources[cell] = {"node": node, "remaining": initial_remaining, "initial": initial_remaining}
+		simulation.grass_sources[cell] = GrassSourceRecord.new(node, initial_remaining, initial_remaining)
 
 
 func _create_forage_sources_near_tree(tree_cell: Vector2i) -> void:
@@ -113,7 +116,7 @@ func _create_forage_sources_near_tree(tree_cell: Vector2i) -> void:
 		node.position = simulation._cell_center(cell) + Vector3.UP * 0.05
 		simulation._add_selector_to_node(node, "forage_selector", Vector3(0.5, 0.5, 0.5), Vector3.UP * 0.25)
 		simulation.add_child(node)
-		simulation.forage_sources[cell] = {"node": node}
+		simulation.forage_sources[cell] = ForageSourceRecord.new(node)
 
 
 func _create_firefly_clusters() -> void:
@@ -196,23 +199,23 @@ func _spawn_rabbit_near_tree(tree_cell: Vector2i) -> void:
 		node.position = simulation._cell_center(cell) + Vector3.UP * 0.16
 		simulation._add_selector_to_node(node, "rabbit_selector", Vector3(0.5, 0.4, 0.5), Vector3.UP * 0.2)
 		simulation.add_child(node)
-		simulation.rabbit_sources[cell] = {"node": node, "direction": Vector3(simulation.random.randf_range(-1.0, 1.0), 0.0, simulation.random.randf_range(-1.0, 1.0)).normalized()}
+		simulation.rabbit_sources[cell] = RabbitSourceRecord.new(node, Vector3(simulation.random.randf_range(-1.0, 1.0), 0.0, simulation.random.randf_range(-1.0, 1.0)).normalized())
 
 
 func update_wild_food(delta: float) -> void:
 	for source in simulation.rabbit_sources.values():
-		var rabbit := source.get("node") as Node3D
-		if not is_instance_valid(rabbit):
+		var rabbit: RabbitSourceRecord = source
+		if not is_instance_valid(rabbit.node):
 			continue
-		var direction: Vector3 = source.get("direction", Vector3.FORWARD)
+		var direction: Vector3 = rabbit.direction
 		if simulation.random.randf() < delta * 0.7:
 			direction = Vector3(simulation.random.randf_range(-1.0, 1.0), 0.0, simulation.random.randf_range(-1.0, 1.0)).normalized()
-			source.direction = direction
-		var next := rabbit.global_position + direction * delta * 0.7
+			rabbit.direction = direction
+		var next := rabbit.node.global_position + direction * delta * 0.7
 		if simulation._is_navigation_cell_blocked(simulation._cell_from_position(next)):
-			source.direction = -direction
+			rabbit.direction = -direction
 		else:
-			rabbit.global_position = next
+			rabbit.node.global_position = next
 	for cell in simulation.forage_respawn_at.keys().duplicate():
 		if simulation.runtime_seconds >= float(simulation.forage_respawn_at[cell]):
 			_create_forage_sources_near_tree((cell as Vector2i) - Vector2i(3, 1))
