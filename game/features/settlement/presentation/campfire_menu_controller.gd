@@ -49,16 +49,16 @@ func close_campfire_story_menu() -> void:
 func select_campfire_story(story_id: String) -> void:
 	if simulation == null:
 		return
-	simulation.settlement.campfire_story_effect = story_id
+	if simulation.daily_rules_service != null:
+		simulation.daily_rules_service.set_campfire_story(story_id, simulation.day_cycle.current_day + 1)
+	else:
+		simulation.settlement.campfire_story_effect = story_id
 	simulation.campfire_story_menu.visible = false
 	var message := ""
 	match story_id:
 		"optimistic": message = "Optimistic stories chosen: wellbeing will recover faster tonight."
 		"teaching": message = "Teaching tales chosen: a resident may learn something overnight."
-		"plan":
-			message = "Plan for tomorrow chosen: gathering work will be faster tomorrow."
-			simulation.settlement.campfire_story_target_role = ["gather_branches", "gather_grass", "gather_food", "gather_water"].pick_random()
-			simulation.settlement.campfire_story_target_day = simulation.day_cycle.current_day + 1
+		"plan": message = "Plan for tomorrow chosen: gathering work will be faster tomorrow."
 	simulation._update_interface(message)
 
 
@@ -116,7 +116,7 @@ func refresh_campfire_menu() -> void:
 	if simulation == null or simulation.selected_campfire == null:
 		return
 	var era_str: String = simulation._era_name()
-	var fire_state = simulation._fire_state_for(simulation.selected_campfire)
+	var fire_state: Variant = simulation._fire_state_for(simulation.selected_campfire)
 	var fuel_current: int = fire_state.total_committed_fuel()
 	var title_text := "Campfire (Era: %s)\nВетки: %d/%d" % [era_str, fuel_current, simulation.FIRE_SUPPLY_TARGET]
 
@@ -135,7 +135,7 @@ func refresh_campfire_menu() -> void:
 	var selected_type: String = simulation.building_registry.building_type_for_node(simulation.selected_campfire) if is_instance_valid(simulation.selected_campfire) else ""
 	var next_upgrade: String = simulation.settlement.next_building_upgrade(selected_type)
 	if is_instance_valid(simulation.selected_campfire) and not simulation._is_fire_lit(simulation.selected_campfire):
-		var relight_state = simulation._fire_state_for(simulation.selected_campfire)
+		var relight_state: Variant = simulation._fire_state_for(simulation.selected_campfire)
 		upgrade_state["visible"] = true
 		upgrade_state["text"] = "Relight with flint and steel"
 		upgrade_state["disabled"] = relight_state.fuel <= 0
@@ -147,7 +147,7 @@ func refresh_campfire_menu() -> void:
 		upgrade_state["tooltip"] = "" if not upgrade_state["disabled"] else "Research the next level and gather its resources."
 
 	var is_center: bool = is_instance_valid(simulation.selected_campfire) and simulation.building_registry.building_type_for_node(simulation.selected_campfire) in simulation.OFFICIAL_WORKPLACE_TYPES
-	var researcher = simulation._daily_researcher_at(simulation.selected_campfire)
+	var researcher: Variant = simulation._daily_researcher_at(simulation.selected_campfire)
 	var research_post_disabled: bool = not simulation.settlement.is_research_completed("official") or researcher == null
 	var research_post_state := {
 		"visible": is_center and not simulation._officer_exists(),
@@ -165,7 +165,7 @@ func refresh_campfire_menu() -> void:
 		"disabled": occupy_disabled,
 		"tooltip": "Место уже занято чиновником." if occupy_disabled else "",
 	}
-	var officer = simulation._workplace_worker(simulation.selected_campfire) if is_center else null
+	var officer: Variant = simulation._workplace_worker(simulation.selected_campfire) if is_center else null
 	var campfire_night_order_used: bool = is_instance_valid(simulation.selected_campfire) and int(simulation.selected_campfire.get_meta("night_work_order_day", -1)) == simulation.day_cycle.current_day
 	var overtime_state := {
 		"visible": is_center and officer != null,

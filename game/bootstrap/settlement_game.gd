@@ -1393,7 +1393,8 @@ func _cancel_courier_task(courier: Citizen, task: RefCounted) -> void:
 
 
 func _reconcile_construction_reservations(site: ConstructionSite) -> void:
-	courier_task_service.reconcile_construction_reservations(site)
+	if courier_task_service != null:
+		courier_task_service.reconcile_construction_reservations(site)
 
 func _preferred_construction_site() -> ConstructionSite:
 	var chosen: ConstructionSite = null

@@ -113,3 +113,13 @@ func apply_daily_settlement_rules() -> void:
 		simulation._add_message("Warning: Low wellbeing (%d). Unhappiness is accumulating — residents may leave!" % settlement.wellbeing)
 	elif change < 0:
 		simulation._add_message("Wellbeing is declining (change: %d). Consider improving living conditions." % change)
+
+
+func set_campfire_story(story_id: String, next_day: int) -> void:
+	if simulation == null or simulation.settlement == null:
+		return
+	simulation.settlement.campfire_story_effect = story_id
+	if story_id == "plan":
+		var roles: Array[String] = ["gather_branches", "gather_grass", "gather_food", "gather_water"]
+		simulation.settlement.campfire_story_target_role = roles.pick_random()
+		simulation.settlement.campfire_story_target_day = next_day

@@ -163,7 +163,7 @@ func show_building_menu() -> void:
 	var is_construction: bool = simulation.is_construction_site(simulation.selected_building)
 
 	if is_construction:
-		var site_data = simulation.get_construction_site_data(simulation.selected_building)
+		var site_data: Variant = simulation.get_construction_site_data(simulation.selected_building)
 		var type: String = site_data.building_type
 		var progress: float = site_data.progress
 		var builders: int = simulation._builder_count(simulation.selected_building)
@@ -188,7 +188,7 @@ func show_building_menu() -> void:
 		var definition: Dictionary = BuildingCatalogScript.definition_for(building_type)
 		simulation.building_menu_title.text = str(definition.get("name", building_type.capitalize()))
 		if BuildingTypes.is_cook_campfire(building_type):
-			var cook_fire_state = simulation._fire_state_for(simulation.selected_building)
+			var cook_fire_state: Variant = simulation._fire_state_for(simulation.selected_building)
 			var cook_fuel: int = cook_fire_state.total_committed_fuel()
 			simulation.building_menu_title.text += "\nВетки: %d/%d" % [cook_fuel, simulation.FIRE_SUPPLY_TARGET]
 		simulation.building_cook_button.visible = BuildingTypes.is_kitchen(building_type)
@@ -229,7 +229,7 @@ func show_building_menu() -> void:
 		simulation.building_demolish_button.visible = is_demolishable
 		simulation.building_relight_button.visible = BuildingTypes.is_fire_source(building_type) and not simulation._is_fire_lit(simulation.selected_building)
 
-		var officer = simulation._workplace_worker(simulation.selected_building)
+		var officer: Variant = simulation._workplace_worker(simulation.selected_building)
 		simulation.building_overtime_button.visible = is_workplace and officer != null
 		var workplace_night_active: bool = simulation._has_overtime_source("workplace", simulation.selected_building)
 		simulation.building_overtime_button.disabled = not can_command_labor

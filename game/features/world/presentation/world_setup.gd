@@ -5,8 +5,9 @@ const SelectionMarkerScene = preload("res://game/features/world/presentation/sel
 const PreviewEntranceMarkerScene = preload("res://game/features/world/presentation/preview_entrance_marker.tscn")
 const RainEffectScene = preload("res://game/features/world/presentation/rain_effect.tscn")
 const SkyAndWeatherControllerScene = preload("res://game/features/world/presentation/sky_and_weather_controller.tscn")
-const VillageBoundaryMarkersScene = preload("res://game/features/buildings/presentation/village_boundary_markers.tscn")
-const VillageTerritoryOverlayScene = preload("res://game/features/buildings/presentation/village_territory_overlay.tscn")
+@export var village_boundary_markers_scene: PackedScene = preload("res://game/features/buildings/presentation/village_boundary_markers.tscn")
+@export var village_territory_overlay_scene: PackedScene = preload("res://game/features/buildings/presentation/village_territory_overlay.tscn")
+@export var trail_overlay_shader: Shader = preload("res://game/features/routing/presentation/trail_overlay.gdshader")
 
 var environment_node: WorldEnvironment
 var world_environment: Environment
@@ -65,10 +66,10 @@ func update_daylight(game_minutes: float, overcast: float, runtime_seconds: floa
 
 
 func _build_boundary(parent: Node) -> void:
-	village_boundary_markers = VillageBoundaryMarkersScene.instantiate() as VillageBoundaryMarkers
+	village_boundary_markers = village_boundary_markers_scene.instantiate() as VillageBoundaryMarkers
 	village_boundary_markers.configure(_cell_size)
 	parent.add_child(village_boundary_markers)
-	village_territory_overlay = VillageTerritoryOverlayScene.instantiate() as VillageTerritoryOverlay
+	village_territory_overlay = village_territory_overlay_scene.instantiate() as VillageTerritoryOverlay
 	village_territory_overlay.configure(_cell_size)
 	parent.add_child(village_territory_overlay)
 
@@ -130,7 +131,7 @@ func _build_trail_overlay(parent: Node) -> void:
 	trail_overlay.mesh = mesh
 	trail_overlay.position.y = 0.12
 	trail_overlay_material = ShaderMaterial.new()
-	trail_overlay_material.shader = load("res://game/features/routing/presentation/trail_overlay.gdshader")
+	trail_overlay_material.shader = trail_overlay_shader
 	trail_overlay.material_override = trail_overlay_material
 	parent.add_child(trail_overlay)
 
