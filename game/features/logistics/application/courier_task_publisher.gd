@@ -39,7 +39,7 @@ func publish_courier_tasks(dispatcher: RefCounted) -> void:
 
 	if not simulation.warehouse_positions.is_empty():
 		if is_instance_valid(simulation.canteen) and simulation.settlement.amount("food") > 0 and not simulation.pending_canteen_delivery:
-			var food_capacity: int = BuildingCatalogScript.kitchen_food_capacity(str(simulation.canteen.get_meta("building_type", "")))
+			var food_capacity: int = BuildingCatalogScript.kitchen_food_capacity(simulation.building_registry.building_type_for_node(simulation.canteen))
 			if food_capacity > simulation.canteen_food:
 				var food_source: Vector3 = simulation._get_nearest_delivery_position(simulation.canteen_position)
 				dispatcher.publish(&"canteen_food", CourierTaskScript.Kind.CANTEEN, 100, food_source, simulation.canteen_position)
@@ -126,7 +126,7 @@ func publish_courier_tasks(dispatcher: RefCounted) -> void:
 			if not is_instance_valid(fire_building):
 				continue
 			var building_type: String = record.building_type
-			if building_type not in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"]:
+			if not BuildingTypes.is_fire_source(building_type):
 				continue
 			var fire_state = simulation._fire_state_for(fire_building)
 			if not fire_state.needs_supply(4) or simulation.settlement.amount("branches") <= 0:

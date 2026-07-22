@@ -26,7 +26,9 @@ func show_market_menu() -> void:
 func refresh_market_menu() -> void:
 	if simulation == null or simulation.selected_market == null or simulation.market_menu == null:
 		return
-	var market_type: String = simulation.selected_market.get_meta("building_type", "straw_trade_tent")
+	var market_type: String = simulation.building_registry.building_type_for_node(simulation.selected_market)
+	if market_type.is_empty():
+		market_type = "straw_trade_tent"
 	var available_money: int = simulation._available_trade_money()
 	var seller_ok: bool = simulation._is_seller_present_at(simulation.selected_market)
 

@@ -12,17 +12,9 @@ const BUILDING_RADIUS := 16.0
 
 const FLAG_TYPES: Array[String] = ["settlement_flag"]
 
-const CAMPFIRE_TYPES: Array[String] = [
-	"campfire", "campfire_lvl2", "campfire_lvl3",
-	"earth_assembly", "clay_lodge", "wood_town_hall",
-	"stone_prefecture", "brick_city_hall",
-]
+const CAMPFIRE_TYPES: Array[String] = BuildingTypes.CIVIC_TYPES
 
-const HOUSING_TYPES: Array[String] = [
-	"tent", "straw_tent", "tarp_tent",
-	"dugout", "earth_house", "clay_house", "stone_house",
-	"house", "house_lvl2", "house_lvl3", "brick_house",
-]
+const HOUSING_TYPES: Array[String] = BuildingTypes.HOUSING_TYPES
 
 ## Era-indexed campfire (settlement) limits.
 # Era enum: TENT=0, EARTH=1, CLAY=2, WOOD=3, STONE=4, BRICK=5

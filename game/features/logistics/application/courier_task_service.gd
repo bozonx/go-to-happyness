@@ -20,7 +20,7 @@ func configure(next_simulation: Node) -> void:
 func start_courier_canteen_or_trade(courier: Citizen, task: RefCounted) -> bool:
 	match task.kind:
 		CourierTask.Kind.CANTEEN:
-			var capacity: int = BuildingCatalog.kitchen_food_capacity(str(simulation.canteen.get_meta("building_type", "")))
+			var capacity: int = BuildingCatalog.kitchen_food_capacity(simulation.building_registry.building_type_for_node(simulation.canteen))
 			var amount: int = mini(courier.courier_capacity(), mini(simulation.settlement.amount("food"), capacity - simulation.canteen_food))
 			if amount <= 0:
 				return false
@@ -274,7 +274,7 @@ func start_courier_task(courier: Citizen, task: RefCounted) -> bool:
 func is_courier_task_valid(task: RefCounted) -> bool:
 	match task.kind:
 		CourierTask.Kind.CANTEEN:
-			return is_instance_valid(simulation.canteen) and simulation.settlement.amount("food") > 0 and not simulation.pending_canteen_delivery and simulation.canteen_food < BuildingCatalog.kitchen_food_capacity(str(simulation.canteen.get_meta("building_type", "")))
+			return is_instance_valid(simulation.canteen) and simulation.settlement.amount("food") > 0 and not simulation.pending_canteen_delivery and simulation.canteen_food < BuildingCatalog.kitchen_food_capacity(simulation.building_registry.building_type_for_node(simulation.canteen))
 		CourierTask.Kind.TRADE:
 			return simulation.queued_trades.has(task.payload.order)
 		CourierTask.Kind.SAWMILL_PICKUP:

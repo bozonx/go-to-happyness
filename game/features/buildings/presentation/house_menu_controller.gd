@@ -14,7 +14,9 @@ func show_house_menu() -> void:
 	var slots: int = simulation.selected_house.get_meta("spawn_slots", 0)
 	simulation.house_menu.visible = true
 	var capacity: int = int(simulation.selected_house.get_meta("housing_capacity", simulation.HOUSE_CAPACITY))
-	var building_type: String = simulation.selected_house.get_meta("building_type", "house")
+	var building_type: String = simulation.building_registry.building_type_for_node(simulation.selected_house)
+	if building_type.is_empty():
+		building_type = "house"
 	var is_tent: bool = simulation.selected_house.has_meta("is_tent")
 	var home_name := "Соломенная палатка" if building_type == "straw_tent" else ("Брезентовая палатка" if building_type == "tarp_tent" else ("Палатка" if building_type == "tent" else "House"))
 	var unhoused: int = simulation._unhoused_citizen_count()

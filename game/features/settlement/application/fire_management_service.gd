@@ -48,7 +48,7 @@ func fire_state_for(building: Node3D) -> RefCounted:
 func is_managed_fire_source(building: Node3D) -> bool:
 	if not is_instance_valid(building):
 		return false
-	return building_registry.building_type_for_node(building) in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"]
+	return BuildingTypes.is_fire_source(building_registry.building_type_for_node(building))
 
 func apply_fire_state(building: Node3D, fire_state: RefCounted) -> void:
 	if not is_instance_valid(building) or fire_state == null:
@@ -96,7 +96,7 @@ func update_fire_status(host_node: Node, branches_count: int) -> void:
 	if building_registry != null:
 		for record in building_registry.records():
 			var building: Node3D = record.node
-			if not is_instance_valid(building) or record.building_type not in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"]:
+			if not is_instance_valid(building) or not BuildingTypes.is_fire_source(record.building_type):
 				continue
 			var fire_state := fire_state_for(building)
 			if consume_tick and fire_state.is_burning_at(minute):

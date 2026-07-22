@@ -43,7 +43,7 @@ func has_flag() -> bool:
 	if _building_registry != null:
 		for record in _building_registry.records():
 			if is_instance_valid(record.node):
-				var b_type := str(record.node.get_meta("building_type", ""))
+				var b_type := _building_registry.building_type_for_node(record.node)
 				if BuildingCatalog.is_flag(b_type):
 					return true
 	return false
@@ -134,7 +134,7 @@ func recalculate() -> void:
 	if _building_registry == null:
 		return
 	for record in _building_registry.records():
-		var building_type := str(record.node.get_meta("building_type", "")) if is_instance_valid(record.node) else ""
+		var building_type: String = record.building_type if is_instance_valid(record.node) else ""
 		if building_type.is_empty():
 			continue
 		if BuildingCatalog.expands_village_area(building_type) or BuildingCatalog.is_campfire(building_type):

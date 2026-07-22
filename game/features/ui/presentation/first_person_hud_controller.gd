@@ -16,10 +16,10 @@ func configure(next_simulation: Node) -> void:
 func building_action_hint(building: Node3D) -> String:
 	if not is_instance_valid(building) or simulation == null:
 		return ""
-	var building_type: String = str(building.get_meta("building_type", ""))
+	var building_type: String = simulation.building_registry.building_type_for_node(building)
 	var name: String = str(BuildingCatalogScript.definition_for(building_type).get("name", building_type)).capitalize()
 	var info_parts: Array[String] = []
-	if building_type in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"]:
+	if BuildingTypes.is_fire_source(building_type):
 		var fire_state = simulation._fire_state_for(building)
 		var phase: int = fire_state.phase_at(int(simulation.game_minutes))
 		var phase_label: String = ["burning", "dying", "embers", "out"][phase]
@@ -106,7 +106,7 @@ func first_person_action_hint() -> String:
 				return "F: взять 1 доску | Shift+F: взять до заполнения"
 			return ""
 		"workplace":
-			var building_type: String = str(target.node.get_meta("building_type", " workplace"))
+			var building_type: String = simulation.building_registry.building_type_for_node(target.node)
 			var is_official_building: bool = building_type in simulation.OFFICIAL_WORKPLACE_TYPES
 			if is_official_building:
 				return "Откройте меню главного костра, чтобы занять место"

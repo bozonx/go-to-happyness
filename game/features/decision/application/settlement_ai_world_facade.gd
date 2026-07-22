@@ -190,7 +190,7 @@ func _factory_job_capacity() -> int:
 func _engineer_job_capacity() -> int:
 	var capacity := 0
 	for factory in simulation.factories:
-		if is_instance_valid(factory) and factory.get_meta("building_type", "") == "materials_factory":
+		if is_instance_valid(factory) and simulation.building_registry.building_type_for_node(factory) == "materials_factory":
 			capacity += 1
 	return capacity
 
@@ -215,9 +215,9 @@ func _assigned_role_counts_internal() -> Dictionary:
 
 func _factory_for_role_internal(role: String) -> Node3D:
 	if role == "factory_worker":
-		for building_type in ["materials_factory", "brick_factory", "recycling_factory", "metal_factory"]:
+		for building_type in BuildingTypes.FACTORY_TYPES:
 			for factory in simulation.factories:
-				if factory.get_meta("building_type", "") != building_type:
+				if simulation.building_registry.building_type_for_node(factory) != building_type:
 					continue
 				var assigned_workers := 0
 				for citizen in simulation.citizens:
@@ -227,8 +227,8 @@ func _factory_for_role_internal(role: String) -> Node3D:
 	for factory in simulation.factories:
 		if not is_instance_valid(factory):
 			continue
-		var building_type: String = factory.get_meta("building_type", "")
-		if role == "factory_worker" and building_type in ["brick_factory", "materials_factory", "recycling_factory", "metal_factory"]:
+		var building_type: String = simulation.building_registry.building_type_for_node(factory)
+		if role == "factory_worker" and BuildingTypes.is_factory(building_type):
 			return factory
 		if role == "engineer" and building_type == "materials_factory":
 			return factory

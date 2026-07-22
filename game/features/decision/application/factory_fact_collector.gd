@@ -24,7 +24,7 @@ func collect(ctx: FacadeContext) -> Dictionary:
 	elif actor.permanent_role == "construction" and actor.specialization == "builder" and actor_work_time and ctx.simulation.construction_sites.is_empty() and ctx.simulation.demolition_sites.is_empty():
 		for factory_value in ctx.simulation.factories:
 			var candidate_factory := factory_value as Node3D
-			if is_instance_valid(candidate_factory) and candidate_factory.get_meta("building_type", "") == "materials_factory":
+			if is_instance_valid(candidate_factory) and ctx.simulation.building_registry.building_type_for_node(candidate_factory) == "materials_factory":
 				factory_node = candidate_factory
 				factory_role = &"construction"
 				break

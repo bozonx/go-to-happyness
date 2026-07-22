@@ -21,7 +21,7 @@ func mark_building_for_demolition(building: Node3D) -> void:
 	if building == simulation.entrance_stone:
 		simulation._update_interface("This building cannot be demolished.")
 		return
-	var building_type: String = str(building.get_meta("building_type", "house"))
+	var building_type: String = simulation.building_registry.building_type_for_node(building)
 	if not BuildingCatalog.is_demolishable(building_type):
 		simulation._update_interface("This landmark cannot be demolished.")
 		return
@@ -78,7 +78,7 @@ func finish_demolition(site: DemolitionSite) -> void:
 	var active_kitchen_removed: bool = simulation.canteen == building
 	simulation._unregister_service_pockets(building)
 	var pile_resources: Dictionary = BuildingCatalog.demolition_refund(building_type).duplicate(true)
-	if building_type in ["warehouse", "straw_warehouse", "tarp_warehouse"]:
+	if BuildingTypes.is_warehouse(building_type):
 		var service_position: Vector3 = building.get_meta("service_position", building.global_position)
 		var warehouse_index: int = simulation.warehouse_positions.find(service_position)
 		move_stored_resources_to_pile(pile_resources, warehouse_index)
@@ -187,7 +187,7 @@ func move_stored_resources_to_pile(resources: Dictionary, warehouse_index := -1)
 func remove_expired_temporary_tents() -> void:
 	for record in simulation.building_registry.records().duplicate():
 		var tent: Node3D = record.node as Node3D
-		if not is_instance_valid(tent) or simulation._is_construction_site(tent) or str(tent.get_meta("building_type", "")) != "tent":
+		if not is_instance_valid(tent) or simulation._is_construction_site(tent) or record.building_type != "tent":
 			continue
 		for citizen in simulation.citizens:
 			if is_instance_valid(citizen) and citizen.home == tent:
@@ -255,7 +255,7 @@ func select_best_campfire() -> void:
 		var candidate: Node3D = record.node
 		if not is_instance_valid(candidate):
 			continue
-		var rank: int = int(ranks.get(str(candidate.get_meta("building_type", "")), -1))
+		var rank: int = int(ranks.get(record.building_type, -1))
 		if rank > best_rank:
 			best_campfire = candidate
 			best_rank = rank

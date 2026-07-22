@@ -30,7 +30,7 @@ func apply_building_wear_and_repairs(destroy_callback: Callable) -> void:
 		var building: Node3D = record.node
 		if not is_instance_valid(building):
 			continue
-		var building_type := str(building.get_meta("building_type", ""))
+		var building_type: String = record.building_type
 		if bool(building.get_meta("ruined", false)):
 			continue
 		var era: int = BuildingCatalogScript.era_for(building_type)
@@ -62,7 +62,7 @@ func destroy_building_to_pile(building: Node3D, building_type: String, citizens:
 
 	var resources: Dictionary = BuildingCatalogScript.demolition_refund(building_type).duplicate(true)
 
-	if building_type in ["warehouse", "straw_warehouse", "tarp_warehouse"]:
+	if BuildingTypes.is_warehouse(building_type):
 		var service_position: Vector3 = building.get_meta("service_position", building.global_position)
 		var warehouse_index := warehouse_positions.find(service_position)
 		var move_resources: Callable = callbacks.get("move_stored_resources", Callable())

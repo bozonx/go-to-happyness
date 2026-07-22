@@ -184,14 +184,14 @@ func show_building_menu() -> void:
 		simulation.building_cancel_construction_button.position.y = 104.0
 		simulation.building_close_button.position.y = 140.0
 	else:
-		var building_type: String = str(simulation.selected_building.get_meta("building_type", "building"))
+		var building_type: String = simulation.building_registry.building_type_for_node(simulation.selected_building)
 		var definition: Dictionary = BuildingCatalogScript.definition_for(building_type)
 		simulation.building_menu_title.text = str(definition.get("name", building_type.capitalize()))
-		if building_type in ["cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"]:
+		if BuildingTypes.is_cook_campfire(building_type):
 			var cook_fire_state = simulation._fire_state_for(simulation.selected_building)
 			var cook_fuel: int = cook_fire_state.total_committed_fuel()
 			simulation.building_menu_title.text += "\nВетки: %d/%d" % [cook_fuel, simulation.FIRE_SUPPLY_TARGET]
-		simulation.building_cook_button.visible = building_type in ["cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant"]
+		simulation.building_cook_button.visible = BuildingTypes.is_kitchen(building_type)
 		var can_manage_professions: bool = simulation.player_can_manage_permanent_professions()
 		var profession_blocked_tooltip: String = simulation.permanent_profession_block_message()
 		var is_active_kitchen: bool = simulation.selected_building == simulation.canteen
@@ -208,7 +208,7 @@ func show_building_menu() -> void:
 		simulation.building_teacher_button.disabled = not can_manage_professions or simulation.selected_builder == null or simulation.selected_builder.is_player_controlled or not bool(simulation.selected_building.get_meta("accepting_workers", true))
 		simulation.building_teacher_button.tooltip_text = profession_blocked_tooltip if not can_manage_professions else ""
 
-		simulation.building_seller_button.visible = building_type in ["straw_trade_tent", "tarp_trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market"]
+		simulation.building_seller_button.visible = BuildingTypes.is_market(building_type)
 		simulation.building_seller_button.disabled = not can_manage_professions or simulation.selected_builder == null or simulation.selected_builder.is_player_controlled or not bool(simulation.selected_building.get_meta("accepting_workers", true))
 		simulation.building_seller_button.tooltip_text = profession_blocked_tooltip if not can_manage_professions else ""
 
@@ -227,7 +227,7 @@ func show_building_menu() -> void:
 		simulation.building_cancel_construction_button.visible = false
 		var is_demolishable: bool = BuildingCatalogScript.is_demolishable(building_type) and simulation.selected_building != simulation.entrance_stone
 		simulation.building_demolish_button.visible = is_demolishable
-		simulation.building_relight_button.visible = building_type in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"] and not simulation._is_fire_lit(simulation.selected_building)
+		simulation.building_relight_button.visible = BuildingTypes.is_fire_source(building_type) and not simulation._is_fire_lit(simulation.selected_building)
 
 		var officer = simulation._workplace_worker(simulation.selected_building)
 		simulation.building_overtime_button.visible = is_workplace and officer != null

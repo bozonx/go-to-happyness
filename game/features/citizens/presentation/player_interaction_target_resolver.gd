@@ -81,7 +81,7 @@ func _classify_area_hit(collider: Area3D, simulation: Node) -> Dictionary:
 
 
 func _classify_building_hit(area_parent: Node3D, simulation: Node) -> Dictionary:
-	var building_type := str(area_parent.get_meta("building_type", ""))
+	var building_type: String = simulation.building_registry.building_type_for_node(area_parent)
 	if bool(area_parent.get_meta("pending_demolition", false)):
 		return {"kind": "demolition", "node": area_parent, "position": area_parent.global_position}
 	if building_type == "sawmill":

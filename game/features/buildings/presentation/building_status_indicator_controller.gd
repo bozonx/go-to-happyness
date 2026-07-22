@@ -32,7 +32,7 @@ func update_building_status_indicators(delta: float) -> void:
 
 
 func required_staff_for_building(building: Node3D) -> Dictionary:
-	match str(building.get_meta("building_type", "")):
+	match simulation.building_registry.building_type_for_node(building):
 		"sawmill": return {"role": "forestry", "count": 1}
 		"farm": return {"role": "farming", "count": 1}
 		"forager_tent", "straw_forager_tent": return {"role": "gather_food", "count": 2}

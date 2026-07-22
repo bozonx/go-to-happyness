@@ -168,7 +168,7 @@ const WORKER_POLL_INTERVAL := 0.5
 # The main campfire progression (town hall) doubles as the employment centre:
 # the employment officer must man it to register residents. The civic centre
 # is always the main campfire or its town-hall upgrade.
-const OFFICIAL_WORKPLACE_TYPES: Array[String] = ["campfire", "campfire_lvl2", "campfire_lvl3", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall"]
+const OFFICIAL_WORKPLACE_TYPES: Array[String] = BuildingTypes.CIVIC_TYPES
 # How close the officer must stand to their post to count as manning it.
 const OFFICER_POST_RADIUS := 3.5
 # Maximum branches a fire source holds before couriers stop delivering.
@@ -1241,7 +1241,7 @@ func _is_night() -> bool:
 func _has_lit_communal_fire() -> bool:
 	for record in building_registry.records():
 		var building: Node3D = record.node
-		if is_instance_valid(building) and record.building_type in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"] and _is_fire_lit(building):
+		if is_instance_valid(building) and BuildingTypes.is_fire_source(record.building_type) and _is_fire_lit(building):
 			return true
 	return false
 
@@ -1426,7 +1426,7 @@ func _construction_development_priority(site: ConstructionSite) -> float:
 		"tent", "straw_tent", "tarp_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "brick_house":
 			score += 850.0 if _total_housing_slots() < population else 140.0
 		"forager_tent", "straw_forager_tent", "tarp_forager_tent", "farm": score += 700.0 if settlement.amount("food") < population * 2 else 160.0
-		"cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen": score += 580.0 if not is_instance_valid(canteen) else 120.0
+		"cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant": score += 580.0 if not is_instance_valid(canteen) else 120.0
 		"sawmill": score += 420.0 if sawmill_positions.is_empty() else 100.0
 		"gathering_place", "park", "leisure_center": score += 80.0
 		_: score += 250.0
@@ -2852,10 +2852,10 @@ func _employer_types_for_role(role: String) -> Array[String]:
 		"farming": return ["farm"]
 		"gather_food": return ["straw_forager_tent", "tarp_forager_tent"]
 		"gather_branches", "gather_grass": return ["straw_materials_yard", "tarp_materials_yard"]
-		"cook": return ["cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant"]
+		"cook": return BuildingTypes.KITCHEN_TYPES
 		"teacher": return ["school"]
-		"seller": return ["straw_trade_tent", "tarp_trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market"]
-		"factory_worker": return ["brick_factory", "materials_factory", "recycling_factory", "metal_factory"]
+		"seller": return BuildingTypes.MARKET_TYPES
+		"factory_worker": return BuildingTypes.FACTORY_TYPES
 		"engineer": return ["materials_factory"]
 		"craftsman": return ["straw_craft_tent", "tarp_craft_tent"]
 		"official": return OFFICIAL_WORKPLACE_TYPES
@@ -4313,7 +4313,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 	building.set_meta("building_type", building_type)
 	building.set_meta("condition", 100.0)
 	_unregister_service_pockets(building)
-	if building_type in ["campfire", "campfire_lvl2", "campfire_lvl3", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3"]:
+	if BuildingTypes.is_fire_source(building_type):
 		building.set_meta("fire_fuel", 4)
 		building.set_meta("fire_lit", true)
 		building.set_meta("fire_embers_until", -1)
@@ -4324,7 +4324,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 		building.set_meta("workplace_priority", workplace_priority_counter)
 	if building_type not in ["warehouse", "straw_warehouse", "tarp_warehouse", "campfire", "campfire_lvl2", "campfire_lvl3", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant", "straw_trade_tent", "tarp_trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market", "school", "materials_factory", "tent", "straw_tent", "tarp_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house", "straw_craft_tent", "tarp_craft_tent", "straw_forager_tent", "tarp_forager_tent", "boundary_post"]:
 		_add_building_selector(building, "building_selector", blueprint.footprint)
-	var is_home := building_type in ["tent", "straw_tent", "tarp_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house"]
+	var is_home := BuildingTypes.is_housing(building_type)
 	_register_service_entrance(building, blueprint, is_home, building_type not in ["farm", "park"])
 	var service_position: Vector3 = building.get_meta("service_position")
 	_register_completed_building_type_features(building_type, building, blueprint, service_position)
@@ -5093,12 +5093,12 @@ func _upgrade_selected_building() -> void:
 		_activate_employment_centre(selected_building)
 		_add_building_selector(selected_building, "campfire_selector", blueprint.footprint)
 		_add_fire_light(selected_building)
-	elif target_type in ["cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant"]:
+	elif BuildingTypes.is_kitchen(target_type):
 		_activate_kitchen_if_better(selected_building, service_position)
 		_add_building_selector(selected_building, "cook_campfire_selector", blueprint.footprint)
 		_add_fire_light(selected_building)
 	_add_building_status_indicator(selected_building)
-	if target_type in ["warehouse", "straw_warehouse", "tarp_warehouse"]:
+	if BuildingTypes.is_warehouse(target_type):
 		_add_warehouse_fill_label(selected_building)
 	village_territory_service.recalculate()
 	_refresh_boundary_markers()

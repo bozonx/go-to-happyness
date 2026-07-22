@@ -99,7 +99,7 @@ func relief_candidates_for(citizen: Citizen) -> Array[Dictionary]:
 			continue
 		if simulation.has_method("_is_route_reachable") and not simulation._is_route_reachable(citizen.global_position, position):
 			continue
-		var building_type := str(toilet.get_meta("building_type", ""))
+		var building_type: String = simulation.building_registry.building_type_for_node(toilet)
 		var capacity := _toilet_capacity(building_type)
 		for slot in range(capacity):
 			candidates.append({

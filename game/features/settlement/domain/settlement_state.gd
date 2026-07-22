@@ -445,7 +445,7 @@ func pay_for_building(building_type: String) -> bool:
 	for resource_type in BuildingCatalog.cost_resources(building_type):
 		add(resource_type, -BuildingCatalog.cost_for_resource(building_type, resource_type))
 	buildings[building_type] = int(buildings.get(building_type, 0)) + 1
-	if building_type in ["warehouse", "straw_warehouse", "tarp_warehouse"]:
+	if BuildingTypes.is_warehouse(building_type):
 		add_warehouse(building_type)
 		warehouse_ever_built = true
 	return true
@@ -474,7 +474,7 @@ func pay_for_building_upgrade(building_type: String, warehouse_index := -1) -> S
 		add(resource_type, -BuildingCatalog.cost_for_resource(target, resource_type))
 	buildings[building_type] = maxi(0, int(buildings.get(building_type, 0)) - 1)
 	buildings[target] = int(buildings.get(target, 0)) + 1
-	if building_type in ["warehouse", "straw_warehouse", "tarp_warehouse"] and target in ["warehouse", "straw_warehouse", "tarp_warehouse"]:
+	if BuildingTypes.is_warehouse(building_type) and BuildingTypes.is_warehouse(target):
 		var index := warehouse_index
 		if index < 0 or index >= warehouse_types.size():
 			for i in range(warehouse_types.size()):

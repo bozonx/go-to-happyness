@@ -132,7 +132,7 @@ func refresh_campfire_menu() -> void:
 		req_text += "\nУправление трудом: officer не назначен. Резерв простаивает, но стройка доступна.\n"
 
 	var upgrade_state := {"visible": false, "text": "", "disabled": false, "tooltip": ""}
-	var selected_type: String = str(simulation.selected_campfire.get_meta("building_type", "campfire")) if is_instance_valid(simulation.selected_campfire) else ""
+	var selected_type: String = simulation.building_registry.building_type_for_node(simulation.selected_campfire) if is_instance_valid(simulation.selected_campfire) else ""
 	var next_upgrade: String = simulation.settlement.next_building_upgrade(selected_type)
 	if is_instance_valid(simulation.selected_campfire) and not simulation._is_fire_lit(simulation.selected_campfire):
 		var relight_state = simulation._fire_state_for(simulation.selected_campfire)
@@ -146,7 +146,7 @@ func refresh_campfire_menu() -> void:
 		upgrade_state["disabled"] = not simulation.settlement.can_upgrade_building(selected_type)
 		upgrade_state["tooltip"] = "" if not upgrade_state["disabled"] else "Research the next level and gather its resources."
 
-	var is_center: bool = is_instance_valid(simulation.selected_campfire) and str(simulation.selected_campfire.get_meta("building_type", "")) in simulation.OFFICIAL_WORKPLACE_TYPES
+	var is_center: bool = is_instance_valid(simulation.selected_campfire) and simulation.building_registry.building_type_for_node(simulation.selected_campfire) in simulation.OFFICIAL_WORKPLACE_TYPES
 	var researcher = simulation._daily_researcher_at(simulation.selected_campfire)
 	var research_post_disabled: bool = not simulation.settlement.is_research_completed("official") or researcher == null
 	var research_post_state := {
