@@ -8,6 +8,7 @@ extends RefCounted
 
 const S = preload("res://game/features/ui/domain/game_strings.gd")
 const WaterCollectorRecordScript = preload("res://game/features/logistics/domain/water_collector_record.gd")
+const HouseLightRecord = preload("res://game/features/buildings/domain/house_light_record.gd")
 
 var simulation: Node
 

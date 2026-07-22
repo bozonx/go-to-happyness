@@ -6,6 +6,7 @@ extends RefCounted
 
 const EntranceMarkerScene = preload("res://game/features/buildings/presentation/entrance_marker.tscn")
 const HouseLightScene = preload("res://game/features/buildings/presentation/house_light.tscn")
+const HouseLightRecord = preload("res://game/features/buildings/domain/house_light_record.gd")
 
 var simulation: Node
 
@@ -57,4 +58,4 @@ func add_house_light(house: Node3D) -> void:
 	light.position = entrance_local
 	house.add_child(light)
 	var off_minute: int = simulation.random.randi_range(22 * 60, 26 * 60) % (24 * 60)
-	simulation.house_lights.append({"light": light, "house": house, "off_minute": off_minute})
+	simulation.house_lights.append(HouseLightRecord.new(light, house, off_minute))

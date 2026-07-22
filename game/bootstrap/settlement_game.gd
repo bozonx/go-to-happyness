@@ -32,6 +32,7 @@ const DigSiteRecordScript = preload("res://game/features/production/domain/dig_s
 const GrassSourceRecordScript = preload("res://game/features/production/domain/grass_source_record.gd")
 const ForageSourceRecordScript = preload("res://game/features/production/domain/forage_source_record.gd")
 const RabbitSourceRecordScript = preload("res://game/features/production/domain/rabbit_source_record.gd")
+const HouseLightRecordScript = preload("res://game/features/buildings/domain/house_light_record.gd")
 const TradeServiceScript = preload("res://game/features/logistics/application/trade_service.gd")
 const MarketMenuControllerScript = preload("res://game/features/logistics/presentation/market_menu_controller.gd")
 const WarehouseMenuControllerScript = preload("res://game/features/logistics/presentation/warehouse_menu_controller.gd")
@@ -518,7 +519,7 @@ var survival_decision_panel: Control:
 var _decision_buttons: Array[Button] = []
 var event_service: EventService
 var survival_busy_until: Dictionary = {}
-var house_lights: Array[Dictionary] = []
+var house_lights: Array[HouseLightRecordScript] = []
 var house_light_update_minute := -1
 var entrance_lights: Array[OmniLight3D] = []
 var build_category := ""
