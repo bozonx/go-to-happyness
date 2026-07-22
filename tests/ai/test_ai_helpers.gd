@@ -275,6 +275,9 @@ class FakeCourierSimulation extends Node:
 		task.reserved_resource_type = ""
 		task.reserved_amount = 0
 
+	func _cancel_courier_task(_courier: Citizen, _task: RefCounted) -> void:
+		pass
+
 
 static func context(order: CitizenOrder = null) -> BehaviorContext:
 	var actuator := FakeActuator.new(1)

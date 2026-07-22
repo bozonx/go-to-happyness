@@ -229,7 +229,7 @@ func _create_build_menu() -> void:
 		build_menu.category_opened.connect(func(cat): events.category_opened.emit(cat))
 		build_menu.build_selected.connect(func(b_id): events.build_selected.emit(b_id))
 		build_menu.role_selected.connect(func(r_id): events.role_selected.emit(r_id))
-		if simulation != null and simulation.has_method("_refresh_build_menu"):
+		if simulation != null:
 			simulation._refresh_build_menu()
 
 

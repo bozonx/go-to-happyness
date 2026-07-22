@@ -76,9 +76,9 @@ func update_arrivals() -> void:
 		for citizen in simulation.citizens:
 			if citizen.state != Citizen.State.ARRIVAL_WAITING:
 				continue
-			if simulation.arrival_escort_ids.has(citizen.get_instance_id()):
+			if simulation.arrival_escort_ids.has(citizen.ai_id):
 				citizen.escort_arrivals_to(simulation._employment_center_position())
-				simulation.arrival_escort_ids.erase(citizen.get_instance_id())
+				simulation.arrival_escort_ids.erase(citizen.ai_id)
 			else:
 				if simulation._employment_center_position() != Vector3.INF:
 					citizen.begin_employment_processing(simulation._employment_center_position())
@@ -86,7 +86,7 @@ func update_arrivals() -> void:
 					citizen.employment_state = Citizen.EmploymentState.NO_PERMANENT_WORK
 					citizen.idle()
 	for greeter_id in simulation.arrival_waiting_greeters.keys():
-		var waiting_greeter := instance_from_id(greeter_id) as Citizen
+		var waiting_greeter := simulation._citizen_for_ai_id(int(greeter_id))
 		var waiting_order: Dictionary = simulation.arrival_waiting_greeters[greeter_id]
 		if not is_instance_valid(waiting_greeter) or not waiting_greeter.can_handle_entry_logistics():
 			simulation.arrival_waiting_greeters.erase(greeter_id)
@@ -104,8 +104,8 @@ func update_arrivals() -> void:
 
 
 func on_arrival_greeter_ready(greeter: Citizen) -> void:
-	var order: Dictionary = simulation.arrival_greeters.get(greeter.get_instance_id(), {})
-	simulation.arrival_greeters.erase(greeter.get_instance_id())
+	var order: Dictionary = simulation.arrival_greeters.get(greeter.ai_id, {})
+	simulation.arrival_greeters.erase(greeter.ai_id)
 	simulation.courier_dispatcher.complete_for(greeter)
 	if order.is_empty():
 		greeter.idle()
@@ -136,7 +136,7 @@ func on_arrival_greeter_ready(greeter: Citizen) -> void:
 			newcomer.idle()
 			simulation._update_interface("The newcomer joined the settlement without a permanent job.")
 	else:
-		simulation.arrival_escort_ids[greeter.get_instance_id()] = true
+		simulation.arrival_escort_ids[greeter.ai_id] = true
 		greeter.wait_for_arrival_morning()
 		newcomer.wait_for_arrival_morning()
 		simulation._update_interface("The newcomer and greeter are waiting at the entrance for the workday.")
@@ -145,7 +145,7 @@ func on_arrival_greeter_ready(greeter: Citizen) -> void:
 
 func requeue_interrupted_arrivals() -> void:
 	for greeter_id in simulation.arrival_waiting_greeters.keys():
-		var waiting_greeter := instance_from_id(greeter_id) as Citizen
+		var waiting_greeter := simulation._citizen_for_ai_id(int(greeter_id))
 		if is_instance_valid(waiting_greeter) and waiting_greeter.has_active_arrival_task():
 			simulation.arrival_greeters[greeter_id] = simulation.arrival_waiting_greeters[greeter_id]
 			simulation.arrival_waiting_greeters.erase(greeter_id)
@@ -156,7 +156,7 @@ func requeue_interrupted_arrivals() -> void:
 		simulation.arrival_waiting_greeters.erase(greeter_id)
 		requeue_arrival_order(waiting_order)
 	for greeter_id in simulation.arrival_greeters.keys():
-		var greeter: Citizen = instance_from_id(greeter_id) as Citizen
+		var greeter: Citizen = simulation._citizen_for_ai_id(int(greeter_id))
 		if is_instance_valid(greeter) and greeter.has_active_arrival_task():
 			continue
 		var order: Dictionary = simulation.arrival_greeters[greeter_id]
@@ -183,7 +183,7 @@ func cancel_arrivals_for_house(house: Node3D) -> void:
 		if greeter_id >= 0:
 			simulation.arrival_greeters.erase(greeter_id)
 			simulation.arrival_waiting_greeters.erase(greeter_id)
-			var greeter: Citizen = instance_from_id(greeter_id) as Citizen
+			var greeter: Citizen = simulation._citizen_for_ai_id(greeter_id)
 			if is_instance_valid(greeter):
 				greeter.pending_arrival_entrance = Vector3.INF
 				if greeter.has_active_arrival_task():

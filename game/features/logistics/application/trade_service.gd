@@ -4,7 +4,7 @@ extends RefCounted
 const TradeOrderScript = preload("res://game/features/logistics/domain/trade_order.gd")
 
 var simulation: Node
-var entrance_expeditions: Dictionary = {} # citizen id -> TradeOrder
+var entrance_expeditions: Dictionary = {} # citizen ai_id -> TradeOrder
 
 
 func configure(next_simulation: Node) -> void:
@@ -49,7 +49,7 @@ func buy_courier_equipment(courier: Citizen, equipment_id: String, price: int) -
 		return
 	if not courier.is_courier() or courier.courier_equipment == equipment_id or available_trade_money() < price:
 		return
-	start_trade({"kind": "buy_courier_equipment", "courier_id": courier.get_instance_id(), "equipment": equipment_id, "price": price}, simulation.selected_market.global_position, simulation._get_delivery_position())
+	start_trade({"kind": "buy_courier_equipment", "courier_id": courier.ai_id, "equipment": equipment_id, "price": price}, simulation.selected_market.global_position, simulation._get_delivery_position())
 	simulation._refresh_market_menu()
 
 
@@ -141,7 +141,7 @@ func trade_has_tool_order(tool_id: String) -> bool:
 func assign_order_to_worker(worker: Citizen, order: RefCounted) -> void:
 	if not is_instance_valid(worker) or order == null:
 		return
-	simulation.pending_trades[worker.get_instance_id()] = order
+	simulation.pending_trades[worker.ai_id] = order
 	if _is_pending_entrance_expedition(order):
 		worker.deliver_trade(order.source, order.source)
 		simulation._update_interface("%s is heading to the entrance sign for the outside trade trip." % ("Courier" if worker.is_courier() else "Daily courier"))
@@ -155,7 +155,7 @@ func update() -> void:
 		var order: RefCounted = entrance_expeditions[worker_id]
 		if simulation._total_game_minutes() < order.return_at_minutes:
 			continue
-		var worker := instance_from_id(int(worker_id)) as Citizen
+		var worker: Citizen = simulation._citizen_for_ai_id(int(worker_id))
 		entrance_expeditions.erase(worker_id)
 		if not is_instance_valid(worker):
 			continue
@@ -171,19 +171,19 @@ func _begin_entrance_expedition(worker: Citizen, order: RefCounted) -> void:
 	worker.visible = false
 	worker.process_mode = Node.PROCESS_MODE_DISABLED
 	order.return_at_minutes = simulation._total_game_minutes() + order.outside_duration_minutes
-	entrance_expeditions[worker.get_instance_id()] = order
+	entrance_expeditions[worker.ai_id] = order
 	simulation._update_interface("A resident left through the entrance sign and will return in 2 hours.")
 
 
 func on_trade_delivery_finished(worker: Citizen) -> void:
-	var order: RefCounted = simulation.pending_trades.get(worker.get_instance_id(), null)
+	var order: RefCounted = simulation.pending_trades.get(worker.ai_id, null)
 	if order == null:
 		return
 	if _is_pending_entrance_expedition(order):
 		_begin_entrance_expedition(worker, order)
 		return
 	var trade: Dictionary = order.trade
-	simulation.pending_trades.erase(worker.get_instance_id())
+	simulation.pending_trades.erase(worker.ai_id)
 	match str(trade.kind):
 		"sell":
 			simulation.settlement.money += int(trade.quantity) * int(trade.price)
@@ -211,7 +211,7 @@ func on_trade_delivery_finished(worker: Citizen) -> void:
 				simulation._update_interface("Purchased a construction glove set at the entrance sign.")
 		"buy_courier_equipment":
 			var price := int(trade.price)
-			var courier := instance_from_id(int(trade.courier_id)) as Citizen
+			var courier: Citizen = simulation._citizen_for_ai_id(int(trade.courier_id))
 			if is_instance_valid(courier) and simulation.settlement.money >= price:
 				simulation.settlement.money -= price
 				courier.set_courier_equipment(str(trade.equipment))

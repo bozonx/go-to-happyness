@@ -1417,7 +1417,7 @@ func can_handle_entry_logistics() -> bool:
 func has_active_daily_order() -> bool:
 	if not has_daily_order():
 		return false
-	if simulation == null or not simulation.has_method("is_daily_order_active"):
+	if simulation == null:
 		return true
 	return bool(simulation.is_daily_order_active(self))
 
@@ -1469,7 +1469,7 @@ func clear_daily_order(workday_id := 0) -> void:
 func _take_registration_ticket() -> void:
 	if registration_queue_order >= 0:
 		return
-	if simulation != null and simulation.has_method("_next_registration_ticket"):
+	if simulation != null:
 		registration_queue_order = int(simulation.call("_next_registration_ticket"))
 
 
@@ -1852,7 +1852,7 @@ func _work_position_for(site: Node3D) -> Vector3:
 	var actor_position := global_position if is_inside_tree() else position
 	var offset := actor_position - site_position
 	offset.y = 0.0
-	var slot := float(int(get_instance_id() % 3) - 1) * CONSTRUCTION_SLOT_SPACING
+	var slot := float(int(ai_id % 3) - 1) * CONSTRUCTION_SLOT_SPACING
 	if absf(offset.x) > absf(offset.z):
 		var x_distance := footprint.x * 0.5 + CONSTRUCTION_APPROACH_DISTANCE
 		return site_position + Vector3(x_distance if offset.x >= 0.0 else -x_distance, 0.0, slot)
@@ -1883,7 +1883,7 @@ func _reachable_construction_approach(site: Node3D) -> Vector3:
 		return primary
 	var site_position := site.global_position if site.is_inside_tree() else site.position
 	var footprint: Vector2i = site.get_meta("footprint", Vector2i(3, 3))
-	var slot := float(int(get_instance_id() % 3) - 1) * CONSTRUCTION_SLOT_SPACING
+	var slot := float(int(ai_id % 3) - 1) * CONSTRUCTION_SLOT_SPACING
 	var x_distance := footprint.x * 0.5 + CONSTRUCTION_APPROACH_DISTANCE
 	var z_distance := footprint.y * 0.5 + CONSTRUCTION_APPROACH_DISTANCE
 	var candidates: Array[Vector3] = [

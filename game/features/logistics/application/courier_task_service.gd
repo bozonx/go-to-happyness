@@ -137,9 +137,9 @@ func start_courier_arrival_or_outside(courier: Citizen, task: RefCounted) -> boo
 				if arrival_order.get("house") != arrival_house or bool(arrival_order.get("dispatched", false)):
 					continue
 				arrival_order.dispatched = true
-				arrival_order.greeter_id = courier.get_instance_id()
+				arrival_order.greeter_id = courier.ai_id
 				simulation.pending_arrivals[index] = arrival_order
-				simulation.arrival_greeters[courier.get_instance_id()] = arrival_order
+				simulation.arrival_greeters[courier.ai_id] = arrival_order
 				courier.go_to_arrival_entrance(task.dropoff)
 				return true
 			return false
@@ -200,9 +200,9 @@ func cancel_courier_task(courier: Citizen, task: RefCounted) -> void:
 				simulation.canteen_service.cancel_canteen_delivery()
 		CourierTask.Kind.TRADE:
 			if is_instance_valid(courier):
-				var order: RefCounted = simulation.pending_trades.get(courier.get_instance_id(), null)
+				var order: RefCounted = simulation.pending_trades.get(courier.ai_id, null)
 				if order != null:
-					simulation.pending_trades.erase(courier.get_instance_id())
+					simulation.pending_trades.erase(courier.ai_id)
 					simulation.queued_trades.push_front(order)
 		CourierTask.Kind.WORKER_PICKUP:
 			var worker: Citizen = task.payload.get("worker") as Citizen
@@ -318,7 +318,7 @@ func is_courier_task_valid(task: RefCounted) -> bool:
 				if arrival_order.get("house") == arrival_house:
 					if not bool(arrival_order.get("dispatched", false)):
 						return true
-					var greeter := instance_from_id(int(arrival_order.get("greeter_id", -1))) as Citizen
+					var greeter := simulation._citizen_for_ai_id(int(arrival_order.get("greeter_id", -1)))
 					return is_instance_valid(greeter) and greeter.ai_id == task.assigned_courier_ai_id
 			return false
 		CourierTask.Kind.OUTSIDE_WORK:

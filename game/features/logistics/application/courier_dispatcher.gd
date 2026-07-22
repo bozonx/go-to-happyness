@@ -81,7 +81,7 @@ func _publish_manual_worker_tasks() -> void:
 		var resource_type: String = worker.resource_type
 		var amount := worker.carried_amount
 		var worker_position: Vector3 = worker.global_position if worker.is_inside_tree() else worker.position
-		var warehouse_index: int = _warehouse_index(worker_position, resource_type, amount)
+		var warehouse_index: int = simulation.storage_routing_service.find_reachable_warehouse_index(worker_position, resource_type, amount)
 		if warehouse_index < 0:
 			continue
 		publish(
@@ -127,20 +127,13 @@ func cancel_for(courier: Citizen) -> void:
 	var task := task_for(courier)
 	if task == null:
 		return
-	if simulation.has_method("_cancel_courier_task"):
-		simulation._cancel_courier_task(courier, task)
+	simulation._cancel_courier_task(courier, task)
 	_tasks_by_courier_id.erase(courier.ai_id)
 	task.assigned_courier_ai_id = 0
-	if task.has_reservation() and simulation.has_method("_release_task_warehouse_reservation"):
+	if task.has_reservation():
 		simulation._release_task_warehouse_reservation(task)
 	if not simulation._is_courier_task_valid(task):
 		tasks.erase(task.id)
-
-
-func _warehouse_index(from: Vector3, resource_type: String, amount: int) -> int:
-	if simulation.has_method(&"_find_reachable_warehouse_index"):
-		return simulation._find_reachable_warehouse_index(from, resource_type, amount)
-	return simulation.settlement.find_warehouse_index(from, resource_type, amount, simulation.warehouse_positions)
 
 
 func _cleanup_invalid_tasks() -> void:
@@ -155,7 +148,7 @@ func _cleanup_invalid_tasks() -> void:
 			else:
 				_tasks_by_courier_id.erase(task.assigned_courier_ai_id)
 				task.assigned_courier_ai_id = 0
-				if task.has_reservation() and simulation.has_method("_release_task_warehouse_reservation"):
+				if task.has_reservation():
 					simulation._release_task_warehouse_reservation(task)
 		if not simulation._is_courier_task_valid(task):
 			_tasks_by_courier_id.erase(task.assigned_courier_ai_id)

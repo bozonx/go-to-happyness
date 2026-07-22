@@ -24,7 +24,7 @@ func setup(
 	callbacks = callbacks_dict
 
 func apply_building_wear_and_repairs(destroy_callback: Callable) -> void:
-	if building_registry == null or not building_registry.has_method("records"):
+	if building_registry == null:
 		return
 	for record in building_registry.records():
 		var building: Node3D = record.node

@@ -243,7 +243,7 @@ func _role_employers() -> Dictionary:
 		var workplace: Node3D = citizen.employment_workplace if citizen.is_employed() else citizen.pending_employment_workplace
 		if assigned_role.is_empty() or not is_instance_valid(workplace):
 			continue
-		var occupancy_key := "%s:%d" % [assigned_role, workplace.get_instance_id()]
+		var occupancy_key := "%s:%s" % [assigned_role, simulation._cell_from_position(workplace.global_position)]
 		occupancy[occupancy_key] = int(occupancy.get(occupancy_key, 0)) + 1
 	var roles := [
 		"forestry", "farming", "construction", "gather_branches", "gather_food",
@@ -258,7 +258,7 @@ func _role_employers() -> Dictionary:
 				continue
 			if not bool(workplace.get_meta("accepting_workers", true)):
 				continue
-			var occupied := int(occupancy.get("%s:%d" % [role, workplace.get_instance_id()], 0))
+			var occupied := int(occupancy.get("%s:%s" % [role, simulation._cell_from_position(workplace.global_position)], 0))
 			var available_slots: int = simulation._employer_capacity(role, workplace) - occupied
 			if available_slots > 0:
 				var service_position: Vector3 = workplace.get_meta("service_position", workplace.global_position)

@@ -535,7 +535,7 @@ var skip_night_button: Button:
 var start_workday_button: Button:
 	get: return time_controls_panel.start_workday_button if time_controls_panel != null else null
 var water_collectors: Array[Dictionary] = []
-var pending_trades: Dictionary = {} # worker instance id -> TradeOrder
+var pending_trades: Dictionary = {} # worker ai_id -> TradeOrder
 var queued_trades: Array = []
 var building_status_indicators: Array[Label3D] = []
 var building_status_update_time := 0.0
@@ -1968,6 +1968,15 @@ func _is_ai_citizen_id_alive(citizen_id: int) -> bool:
 	return false
 
 
+func _citizen_for_ai_id(citizen_id: int) -> Citizen:
+	if citizen_id <= 0:
+		return null
+	for citizen in citizens:
+		if is_instance_valid(citizen) and citizen.ai_id == citizen_id:
+			return citizen
+	return null
+
+
 func _ai_target_for_key(target_key: StringName) -> Node3D:
 	var parts := String(target_key).split(":")
 	if parts.size() != 3:
@@ -2133,14 +2142,14 @@ func _assign_survival_busy_worker(hours: float, status_label: String) -> void:
 	worker.cancel_current_action()
 	worker.set_player_controlled(true)
 	worker.set_status_effect(&"survival_assignment", status_label, 1.0, hours)
-	survival_busy_until[worker.get_instance_id()] = _total_game_minutes() + hours * 60.0
+	survival_busy_until[worker.ai_id] = _total_game_minutes() + hours * 60.0
 
 
 func _update_survival_busy_workers() -> void:
 	for worker_id in survival_busy_until.keys().duplicate():
 		if _total_game_minutes() < float(survival_busy_until[worker_id]):
 			continue
-		var worker := instance_from_id(int(worker_id)) as Citizen
+		var worker := _citizen_for_ai_id(int(worker_id))
 		if is_instance_valid(worker):
 			worker.set_player_controlled(false)
 			worker.clear_status_effect(&"survival_assignment")
@@ -4017,9 +4026,9 @@ func _meet_arrival_at_entrance() -> void:
 		if bool(order.get("dispatched", false)):
 			continue
 		order.dispatched = true
-		order.greeter_id = player_citizen.get_instance_id()
+		order.greeter_id = player_citizen.ai_id
 		pending_arrivals[index] = order
-		arrival_greeters[player_citizen.get_instance_id()] = order
+		arrival_greeters[player_citizen.ai_id] = order
 		_on_arrival_greeter_ready(player_citizen)
 		_refresh_interaction_hint()
 		return

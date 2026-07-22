@@ -10,7 +10,7 @@ func go_to_relief(actor: Node3D, destination: Vector3, relief_kind: StringName) 
 	if relief_kind == &"toilet":
 		actor.set("current_toilet_target", null)
 		var simulation: Variant = actor.get("simulation")
-		if simulation != null and simulation.has_method("get_toilets"):
+		if simulation != null:
 			for toilet_item in simulation.get_toilets():
 				var toilet := toilet_item as Node3D
 				if not is_instance_valid(toilet):

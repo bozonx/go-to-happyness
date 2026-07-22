@@ -47,14 +47,27 @@ class FakeCourierDispatcher extends RefCounted:
 		return null
 
 
+class FakeStorageRoutingService extends RefCounted:
+	var settlement: SettlementState
+	var warehouse_positions: Array[Vector3] = []
+
+	func find_reachable_warehouse_index(from: Vector3, resource_type: String, amount: int, _require_room := true) -> int:
+		return settlement.find_warehouse_index(from, resource_type, amount, warehouse_positions)
+
+
 class FakeStorageSimulation extends Node:
 	var settlement := SettlementState.new()
 	var warehouse_positions: Array[Vector3] = []
 	var courier_dispatcher := FakeCourierDispatcher.new()
+	var storage_routing_service := FakeStorageRoutingService.new()
 	var last_interface_message := ""
 	var dispatch_requested := false
 	var leisure_worker: Citizen
 	var dropped_piles: Array[Dictionary] = []
+
+	func _init() -> void:
+		storage_routing_service.settlement = settlement
+		storage_routing_service.warehouse_positions = warehouse_positions
 
 	func _update_interface(message: String) -> void:
 		last_interface_message = message
@@ -326,15 +339,15 @@ static func _test_trade_service_entrance_expedition_walks_to_sign_before_departu
 	)
 
 	service.assign_order_to_worker(worker, order)
-	assert(simulation.pending_trades.has(worker.get_instance_id()))
+	assert(simulation.pending_trades.has(worker.ai_id))
 	assert(worker.position == Vector3(12.0, 0.0, 0.0))
 	assert(worker.state == Citizen.State.TO_TRADE_PICKUP)
 	assert(worker.trade_source_position == entrance)
 	assert(worker.trade_destination_position == entrance)
 
 	service.on_trade_delivery_finished(worker)
-	assert(simulation.pending_trades.has(worker.get_instance_id()))
-	assert(service.entrance_expeditions.has(worker.get_instance_id()))
+	assert(simulation.pending_trades.has(worker.ai_id))
+	assert(service.entrance_expeditions.has(worker.ai_id))
 	assert(not worker.visible)
 	assert(worker.process_mode == Node.PROCESS_MODE_DISABLED)
 	assert(order.return_at_minutes == order.outside_duration_minutes)
@@ -388,6 +401,7 @@ static func _test_storage_delivery_service() -> void:
 	simulation.settlement.add_warehouse("warehouse")
 	simulation.settlement.warehouse_ever_built = true
 	simulation.warehouse_positions = [Vector3.ZERO]
+	simulation.storage_routing_service.warehouse_positions = simulation.warehouse_positions
 	service.on_resource_delivered(worker, "grass", 1)
 	assert(simulation.settlement.grass == 1)
 	assert(not worker.blocked_by_storage)
@@ -401,6 +415,7 @@ static func _test_storage_delivery_service() -> void:
 	full_storage_simulation.settlement.add_warehouse("warehouse")
 	full_storage_simulation.settlement.warehouse_ever_built = true
 	full_storage_simulation.warehouse_positions = [Vector3.ZERO]
+	full_storage_simulation.storage_routing_service.warehouse_positions = full_storage_simulation.warehouse_positions
 	full_storage_simulation.settlement.warehouses[0].set_amount("grass", 24)
 	var full_storage_worker := Citizen.new()
 	full_storage_worker.carried_amount = 1
