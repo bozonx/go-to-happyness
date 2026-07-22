@@ -4,6 +4,8 @@ extends RefCounted
 ## Persistent, scene-free settlement economy. All progression gates live here so
 ## UI and simulation code cannot accidentally create a second rule set.
 
+const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
+
 enum Era { TENT, EARTH, CLAY, WOOD, STONE, BRICK }
 enum StorageAvailability { OK, UNKNOWN_RESOURCE, NO_WAREHOUSE, NO_ROOM }
 
@@ -38,47 +40,47 @@ var warehouse_types: Array[String]:
 	set(value): storage.warehouse_types = value
 
 var branches: int:
-	get: return amount("branches")
-	set(value): storage._set_resource_aggregate("branches", value)
+	get: return amount(ResourceIds.BRANCHES)
+	set(value): storage._set_resource_aggregate(ResourceIds.BRANCHES, value)
 var grass: int:
-	get: return amount("grass")
-	set(value): storage._set_resource_aggregate("grass", value)
+	get: return amount(ResourceIds.GRASS)
+	set(value): storage._set_resource_aggregate(ResourceIds.GRASS, value)
 var water: int:
-	get: return amount("water")
-	set(value): storage._set_resource_aggregate("water", value)
+	get: return amount(ResourceIds.WATER)
+	set(value): storage._set_resource_aggregate(ResourceIds.WATER, value)
 var food: int:
-	get: return amount("food")
-	set(value): storage._set_resource_aggregate("food", value)
+	get: return amount(ResourceIds.FOOD)
+	set(value): storage._set_resource_aggregate(ResourceIds.FOOD, value)
 var hides: int:
-	get: return amount("hides")
-	set(value): storage._set_resource_aggregate("hides", value)
+	get: return amount(ResourceIds.HIDES)
+	set(value): storage._set_resource_aggregate(ResourceIds.HIDES, value)
 var goods: int:
-	get: return amount("goods")
-	set(value): storage._set_resource_aggregate("goods", value)
+	get: return amount(ResourceIds.GOODS)
+	set(value): storage._set_resource_aggregate(ResourceIds.GOODS, value)
 var logs: int:
-	get: return amount("logs")
-	set(value): storage._set_resource_aggregate("logs", value)
+	get: return amount(ResourceIds.LOGS)
+	set(value): storage._set_resource_aggregate(ResourceIds.LOGS, value)
 var wood: int:
-	get: return amount("wood")
-	set(value): storage._set_resource_aggregate("wood", value)
+	get: return amount(ResourceIds.WOOD)
+	set(value): storage._set_resource_aggregate(ResourceIds.WOOD, value)
 var soil: int:
-	get: return amount("soil")
-	set(value): storage._set_resource_aggregate("soil", value)
+	get: return amount(ResourceIds.SOIL)
+	set(value): storage._set_resource_aggregate(ResourceIds.SOIL, value)
 var clay: int:
-	get: return amount("clay")
-	set(value): storage._set_resource_aggregate("clay", value)
+	get: return amount(ResourceIds.CLAY)
+	set(value): storage._set_resource_aggregate(ResourceIds.CLAY, value)
 var boards: int:
-	get: return amount("boards")
-	set(value): storage._set_resource_aggregate("boards", value)
+	get: return amount(ResourceIds.BOARDS)
+	set(value): storage._set_resource_aggregate(ResourceIds.BOARDS, value)
 var stone: int:
-	get: return amount("stone")
-	set(value): storage._set_resource_aggregate("stone", value)
+	get: return amount(ResourceIds.STONE)
+	set(value): storage._set_resource_aggregate(ResourceIds.STONE, value)
 var bricks: int:
-	get: return amount("bricks")
-	set(value): storage._set_resource_aggregate("bricks", value)
+	get: return amount(ResourceIds.BRICKS)
+	set(value): storage._set_resource_aggregate(ResourceIds.BRICKS, value)
 var tarp: int:
-	get: return amount("tarp")
-	set(value): storage._set_resource_aggregate("tarp", value)
+	get: return amount(ResourceIds.TARP)
+	set(value): storage._set_resource_aggregate(ResourceIds.TARP, value)
 
 var work_policy := WorkPolicy.new()
 var equipment_state := EquipmentState.new()
@@ -170,16 +172,16 @@ func apply_tent_start(reset_progress := true) -> void:
 	warehouse_types.clear()
 	warehouse_ever_built = false
 	construction_reservations.clear()
-	backpack["food"] = TENT_STARTING_FOOD
-	backpack["water"] = TENT_STARTING_WATER
-	backpack["tarp"] = 1
+	backpack[ResourceIds.FOOD] = TENT_STARTING_FOOD
+	backpack[ResourceIds.WATER] = TENT_STARTING_WATER
+	backpack[ResourceIds.TARP] = 1
 	if reset_progress:
 		buildings.clear()
 		unlock_state.reset()
 
 
 func construction_gloves_available() -> bool:
-	return equipment_state.construction_gloves_available(amount("construction_gloves"))
+	return equipment_state.construction_gloves_available(amount(ResourceIds.CONSTRUCTION_GLOVES))
 
 
 func wear_construction_gloves(wear_amount: float) -> bool:
@@ -187,12 +189,12 @@ func wear_construction_gloves(wear_amount: float) -> bool:
 
 
 func add_construction_glove_set() -> void:
-	add("construction_gloves", 1)
+	add(ResourceIds.CONSTRUCTION_GLOVES, 1)
 
 
 func _take_construction_gloves_from_storage() -> bool:
-	if equipment_state.take_construction_gloves_from_storage(amount("construction_gloves")):
-		add("construction_gloves", -1)
+	if equipment_state.take_construction_gloves_from_storage(amount(ResourceIds.CONSTRUCTION_GLOVES)):
+		add(ResourceIds.CONSTRUCTION_GLOVES, -1)
 		return true
 	return false
 

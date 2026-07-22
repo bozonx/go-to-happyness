@@ -23,6 +23,19 @@ class FakeToiletSimulation extends Node:
 	func _is_route_reachable(_origin: Vector3, _target: Vector3) -> bool:
 		return true
 
+	func _building_type_for_node(node: Node3D) -> String:
+		return str(node.get_meta("building_type", ""))
+
+	func configure_needs_service(service: CitizenNeedsService) -> void:
+		service.configure(
+			nav_grid,
+			get_toilets,
+			_is_route_reachable,
+			_building_type_for_node,
+			tree_positions,
+			grass_sources,
+		)
+
 
 func _test_toilet_candidates_prefer_toilets() -> void:
 	var simulation := FakeToiletSimulation.new()
@@ -45,7 +58,7 @@ func _test_toilet_candidates_prefer_toilets() -> void:
 	citizen.position = Vector3.ZERO
 	simulation.add_child(citizen)
 	var service := CitizenNeedsService.new()
-	service.configure(simulation)
+	simulation.configure_needs_service(service)
 	var candidates := service.relief_candidates_for(citizen)
 	assert(candidates.size() == 2)
 	assert(candidates[0].get(&"kind") == &"toilet")
@@ -63,7 +76,7 @@ func _test_toilet_candidates_by_gender() -> void:
 	simulation.add_child(grass_node)
 	simulation.grass_sources[Vector2i(-10, 0)] = GrassSourceRecord.new(grass_node)
 	var service := CitizenNeedsService.new()
-	service.configure(simulation)
+	simulation.configure_needs_service(service)
 	var male := Citizen.new()
 	male.ai_id = 1
 	male.gender = "male"
@@ -102,7 +115,7 @@ func _test_toilet_candidates_fall_back_after_demolition() -> void:
 	simulation.add_child(toilet)
 	simulation.toilets.append(toilet)
 	var service := CitizenNeedsService.new()
-	service.configure(simulation)
+	simulation.configure_needs_service(service)
 	var citizen := Citizen.new()
 	citizen.ai_id = 1
 	citizen.gender = "male"

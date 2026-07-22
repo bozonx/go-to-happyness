@@ -48,6 +48,7 @@ const ResourcePileVisualsScript = preload("res://game/features/logistics/present
 const BuildingLifecycleServiceScript = preload("res://game/features/buildings/application/building_lifecycle_service.gd")
 const ConstructionPriorityServiceScript = preload("res://game/features/buildings/application/construction_priority_service.gd")
 const BuildingRuntimeStateScript = preload("res://game/features/buildings/domain/building_runtime_state.gd")
+const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 const BuildingResearchServiceScript = preload("res://game/features/buildings/application/building_research_service.gd")
 const BuildingQueueServiceScript = preload("res://game/features/citizens/application/building_queue_service.gd")
 const CitizenLifecycleServiceScript = preload("res://game/features/citizens/application/citizen_lifecycle_service.gd")
@@ -730,7 +731,7 @@ func _ready() -> void:
 		canteen,
 		func() -> int: return citizens.size(),
 		_total_housing_slots,
-		func() -> int: return settlement.amount("food")
+		func() -> int: return settlement.amount(ResourceIds.FOOD)
 	)
 	excavation_service = ExcavationServiceScript.new()
 	excavation_service.dig_site_scene = DigSiteScene
@@ -1708,7 +1709,7 @@ func _era_name() -> String:
 
 func _resource_display_name(resource_type: String) -> String:
 	match resource_type:
-		"wood": return "Timber"
+		ResourceIds.WOOD: return "Timber"
 		_: return resource_type.capitalize()
 
 
@@ -1882,7 +1883,7 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	citizen_ai.register_citizen(citizen.ai_id, SettlementCitizenActuatorScript.new(citizen, _ai_target_for_key))
 	citizen.tree_exiting.connect(_on_ai_citizen_exiting.bind(citizen.ai_id), CONNECT_ONE_SHOT)
 	if citizens.size() > POPULATION:
-		settlement.add("food", random.randi_range(2, 5))
+		settlement.add(ResourceIds.FOOD, random.randi_range(2, 5))
 	if hero_citizen == null:
 		hero_citizen = citizen
 		citizen.set_hero(true)
@@ -2044,13 +2045,13 @@ func _resolve_event_decision(choice_index: int) -> void:
 
 func _build_event_context() -> EventContext:
 	var res := {
-		"food": settlement.amount("food"),
-		"water": settlement.amount("water"),
-		"branches": settlement.amount("branches"),
-		"grass": settlement.amount("grass"),
-		"wood": settlement.amount("wood"),
-		"stone": settlement.amount("stone"),
-		"hides": settlement.amount("hides"),
+		"food": settlement.amount(ResourceIds.FOOD),
+		"water": settlement.amount(ResourceIds.WATER),
+		"branches": settlement.amount(ResourceIds.BRANCHES),
+		"grass": settlement.amount(ResourceIds.GRASS),
+		"wood": settlement.amount(ResourceIds.WOOD),
+		"stone": settlement.amount(ResourceIds.STONE),
+		"hides": settlement.amount(ResourceIds.HIDES),
 		"goods": settlement.goods,
 		"tarp": settlement.tarp,
 		"logs": settlement.logs,
@@ -2213,17 +2214,17 @@ func _skip_to_workday_start() -> void:
 
 func _apply_skip_night_incident() -> void:
 	var incidents := [
-		{"resource": "food", "min": 3, "max": 5, "message": "Night scavengers took %d food."},
-		{"resource": "grass", "min": 10, "max": 15, "message": "A stray animal ate %d grass."},
-		{"resource": "branches", "min": 5, "max": 8, "message": "Wind scattered %d branches."},
+		{"resource": ResourceIds.FOOD, "min": 3, "max": 5, "message": "Night scavengers took %d food."},
+		{"resource": ResourceIds.GRASS, "min": 10, "max": 15, "message": "A stray animal ate %d grass."},
+		{"resource": ResourceIds.BRANCHES, "min": 5, "max": 8, "message": "Wind scattered %d branches."},
 		{"resource": "gloves", "min": 20, "max": 20, "message": "Night scavengers damaged a glove set by %d%%."},
 	]
 	var incident: Dictionary = incidents[random.randi_range(0, incidents.size() - 1)]
 	if str(incident.resource) == "gloves":
-		var gloves: Dictionary = settlement.equipment.get("construction_gloves", {})
+		var gloves: Dictionary = settlement.equipment.get(ResourceIds.CONSTRUCTION_GLOVES, {})
 		if int(gloves.get("sets", 0)) > 0:
 			gloves["active_durability"] = maxf(0.0, float(gloves.get("active_durability", 100.0)) - float(incident.max))
-			settlement.equipment["construction_gloves"] = gloves
+			settlement.equipment[ResourceIds.CONSTRUCTION_GLOVES] = gloves
 			_add_message(str(incident.message) % int(incident.max))
 		return
 	var amount := mini(settlement.amount(str(incident.resource)), random.randi_range(int(incident.min), int(incident.max)))
@@ -3441,11 +3442,11 @@ func _update_interaction(delta: float) -> void:
 
 func _gather_action_name(resource_type: String) -> String:
 	match resource_type:
-		"wood": return S.GATHER_ACTION_WOOD
-		"branches": return S.GATHER_ACTION_BRANCHES
-		"grass": return S.GATHER_ACTION_GRASS
-		"water": return S.GATHER_ACTION_WATER
-		"food": return S.GATHER_ACTION_FOOD
+		ResourceIds.WOOD: return S.GATHER_ACTION_WOOD
+		ResourceIds.BRANCHES: return S.GATHER_ACTION_BRANCHES
+		ResourceIds.GRASS: return S.GATHER_ACTION_GRASS
+		ResourceIds.WATER: return S.GATHER_ACTION_WATER
+		ResourceIds.FOOD: return S.GATHER_ACTION_FOOD
 	return S.GATHER_ACTION_DEFAULT
 
 
@@ -3453,14 +3454,14 @@ func _harvest_source_info(resource_type: String) -> String:
 	if player_citizen == null:
 		return ""
 	match resource_type:
-		"branches":
+		ResourceIds.BRANCHES:
 			var tree := _nearest_tree_node(player_citizen.global_position)
 			if is_instance_valid(tree):
 				var rem := int(tree.get_meta("remaining_branches", 0))
 				var init := maxi(1, int(tree.get_meta("initial_branches", rem)))
 				return S.SOURCE_INFO_BRANCHES % [rem, init]
 			return ""
-		"grass":
+		ResourceIds.GRASS:
 			var node := _nearest_grass_node(player_citizen.global_position)
 			if is_instance_valid(node):
 				for cell in grass_sources:
@@ -3470,22 +3471,22 @@ func _harvest_source_info(resource_type: String) -> String:
 						var init := maxi(1, source.initial)
 						return S.SOURCE_INFO_GRASS % [rem, init]
 			return ""
-		"wood":
+		ResourceIds.WOOD:
 			return S.SOURCE_INFO_WOOD
-		"water":
+		ResourceIds.WATER:
 			return S.SOURCE_INFO_WATER
-		"food":
+		ResourceIds.FOOD:
 			return S.SOURCE_INFO_FOOD
 	return ""
 
 
 func _can_continue_harvesting(resource_type: String) -> bool:
 	match resource_type:
-		"wood": return _nearby_tree()
-		"branches": return _nearby_tree_with_branches()
-		"food": return _nearby_farm()
-		"water": return _nearby_pond()
-		"grass": return _nearby_grass_source()
+		ResourceIds.WOOD: return _nearby_tree()
+		ResourceIds.BRANCHES: return _nearby_tree_with_branches()
+		ResourceIds.FOOD: return _nearby_farm()
+		ResourceIds.WATER: return _nearby_pond()
+		ResourceIds.GRASS: return _nearby_grass_source()
 	return false
 
 
@@ -3883,17 +3884,17 @@ func _pile_available_resources(pile: ResourcePileScript) -> Array[String]:
 
 
 func _handle_sawmill_interaction(all: bool, sawmill_pos: Vector3) -> void:
-	var wood_count := _pocket_amount("wood") + _pocket_amount("logs")
+	var wood_count := _pocket_amount(ResourceIds.WOOD) + _pocket_amount(ResourceIds.LOGS)
 	if wood_count > 0:
 		var delivered := 0
 		if all:
-			var wood_delivered := _remove_from_pocket("wood", wood_count)
-			var logs_delivered := _remove_from_pocket("logs", wood_count - wood_delivered)
+			var wood_delivered := _remove_from_pocket(ResourceIds.WOOD, wood_count)
+			var logs_delivered := _remove_from_pocket(ResourceIds.LOGS, wood_count - wood_delivered)
 			delivered = wood_delivered + logs_delivered
 		else:
-			delivered = _remove_from_pocket("wood", 1)
+			delivered = _remove_from_pocket(ResourceIds.WOOD, 1)
 			if delivered == 0:
-				delivered = _remove_from_pocket("logs", 1)
+				delivered = _remove_from_pocket(ResourceIds.LOGS, 1)
 		if delivered > 0:
 			var stock := _sawmill_stock(sawmill_pos)
 			stock.logs = int(stock.logs) + delivered
@@ -3904,8 +3905,8 @@ func _handle_sawmill_interaction(all: bool, sawmill_pos: Vector3) -> void:
 	var sawmill_stock := _sawmill_stock(sawmill_pos)
 	var available_boards := int(sawmill_stock.boards)
 	if available_boards > 0 and _pocket_has_room():
-		var take_amount := mini(available_boards, _pocket_space_for("boards")) if all else 1
-		take_amount = _add_to_pocket("boards", take_amount)
+		var take_amount := mini(available_boards, _pocket_space_for(ResourceIds.BOARDS)) if all else 1
+		take_amount = _add_to_pocket(ResourceIds.BOARDS, take_amount)
 		if take_amount > 0:
 			sawmill_stock.boards = int(sawmill_stock.boards) - take_amount
 			_store_sawmill_stock(sawmill_pos, sawmill_stock)
@@ -3959,7 +3960,7 @@ func _deliver_pocket_to_site(site: ConstructionSite, all: bool) -> void:
 func _refuel_fire_from_pocket(building: Node3D, all: bool) -> void:
 	if not is_instance_valid(building):
 		return
-	var available := _pocket_amount("branches")
+	var available := _pocket_amount(ResourceIds.BRANCHES)
 	if available <= 0:
 		_update_interface(S.NO_BRANCHES_FOR_FIRE)
 		_refresh_interaction_hint()
@@ -3967,7 +3968,7 @@ func _refuel_fire_from_pocket(building: Node3D, all: bool) -> void:
 	var fire_state := _fire_state_for(building)
 	var amount := available if all else 1
 	amount = mini(amount, available)
-	var delivered := _remove_from_pocket("branches", amount)
+	var delivered := _remove_from_pocket(ResourceIds.BRANCHES, amount)
 	if delivered <= 0:
 		return
 	fire_state.add_delivered(delivered, int(game_minutes))
@@ -4557,7 +4558,7 @@ func _fell_tree_at(position_on_board: Vector3) -> void:
 		collision_body.queue_free()
 	terrain_blocked_cells.erase(cell)
 	_refresh_navigation_grid()
-	settlement.add("branches", 3)
+	settlement.add(ResourceIds.BRANCHES, 3)
 	_update_interface("A tree was felled. Its log is ready for delivery; the living tree is no longer available for gathering.")
 
 func _update_water_collectors(delta: float) -> void:
@@ -5358,13 +5359,13 @@ func campfire_story_efficiency_multiplier(role: String) -> float:
 	return fire_management_service.campfire_story_efficiency_multiplier(role)
 
 func _update_fire_status() -> void:
-	fire_management_service.update_fire_status(self, settlement.amount("branches"))
+	fire_management_service.update_fire_status(self, settlement.amount(ResourceIds.BRANCHES))
 
 func _update_fire_visual(building: Node3D, fire_state: RefCounted, minute: int) -> void:
 	fire_management_service.update_fire_visual(building, fire_state, minute)
 
 func _report_fire_phase_change(building: Node3D, fire_state: RefCounted, minute: int) -> void:
-	fire_management_service.report_fire_phase_change(building, fire_state, minute, campfire_node, settlement.amount("branches"))
+	fire_management_service.report_fire_phase_change(building, fire_state, minute, campfire_node, settlement.amount(ResourceIds.BRANCHES))
 
 func _apply_building_wear_and_repairs() -> void:
 	building_maintenance_service.apply_building_wear_and_repairs(_destroy_building_to_pile)
