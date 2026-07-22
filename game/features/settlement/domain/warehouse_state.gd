@@ -3,9 +3,9 @@ extends RefCounted
 
 ## Persistent inventory for a single physical warehouse.
 
-const STORED_RESOURCES: Array[String] = [
-	"branches", "grass", "water", "food", "hides", "goods",
-	"logs", "wood", "soil", "clay", "boards", "stone", "bricks", "tarp", "construction_gloves"
+const STORED_RESOURCES: Array[StringName] = [
+	&"branches", &"grass", &"water", &"food", &"hides", &"goods",
+	&"logs", &"wood", &"soil", &"clay", &"boards", &"stone", &"bricks", &"tarp", &"construction_gloves"
 ]
 
 const TYPE_CAPACITIES := {
@@ -18,11 +18,11 @@ const TYPE_CAPACITIES := {
 var capacity: int = 0
 ## resource_type -> true if this warehouse currently refuses the resource.
 ## Rejected resources are not delivered here; existing stock is kept until dumped.
-var blacklisted: Dictionary = {}
+var blacklisted: Dictionary[StringName, bool] = {}
 ## resource_type -> count stored in this warehouse only.
-var resources: Dictionary = {}
+var resources: Dictionary[StringName, int] = {}
 ## resource_type -> count reserved by in-flight deliveries to this warehouse.
-var reserved: Dictionary = {}
+var reserved: Dictionary[StringName, int] = {}
 
 
 func _init(p_capacity: int = 0) -> void:

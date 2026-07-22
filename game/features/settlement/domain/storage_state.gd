@@ -22,7 +22,7 @@ var warehouse_types: Array[String] = []
 
 ## Physical resources before the first warehouse live in the starter backpack.
 ## The backpack is a special non-replenishable ground pile shown separately in HUD.
-var backpack: Dictionary = {}
+var backpack: Dictionary[StringName, int] = {}
 ## Backward-compatible alias used by tests and UI during the refactor.
 var virtual_stock: Dictionary:
 	get: return backpack
