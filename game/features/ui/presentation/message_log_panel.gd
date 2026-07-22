@@ -31,7 +31,8 @@ func add_message(text: String, timestamp: String) -> void:
 	var color := _message_color(msg_type)
 	var formatted := "[color=%s]%s[/color] %s" % [color, timestamp, text]
 	_append_message_label(_compact_list, formatted, 12, 356)
-	_scroll_to_bottom.call_deferred()
+	await get_tree().process_frame
+	_scroll_to_bottom()
 	while _compact_list.get_child_count() > _MAX_COMPACT_MESSAGES:
 		var old_node := _compact_list.get_child(0)
 		_compact_list.remove_child(old_node)
