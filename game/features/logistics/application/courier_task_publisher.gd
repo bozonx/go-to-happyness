@@ -5,6 +5,7 @@ const CourierTaskScript = preload("res://game/features/logistics/domain/courier_
 const BuildingCatalogScript = preload("res://game/features/buildings/domain/building_catalog.gd")
 const FireSourceStateScript = preload("res://game/features/settlement/domain/fire_source_state.gd")
 const WaterCollectorRecordScript = preload("res://game/features/logistics/domain/water_collector_record.gd")
+const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 
 var simulation: Node
 
@@ -39,7 +40,7 @@ func publish_courier_tasks(dispatcher: RefCounted) -> void:
 				)
 
 	if not simulation.warehouse_positions.is_empty():
-		if is_instance_valid(simulation.canteen) and simulation.settlement.amount("food") > 0 and not simulation.pending_canteen_delivery:
+		if is_instance_valid(simulation.canteen) and simulation.settlement.amount(ResourceIds.FOOD) > 0 and not simulation.pending_canteen_delivery:
 			var food_capacity: int = BuildingCatalogScript.kitchen_food_capacity(simulation.building_registry.building_type_for_node(simulation.canteen))
 			if food_capacity > simulation.canteen_food:
 				var food_source: Vector3 = simulation._get_nearest_delivery_position(simulation.canteen_position)
@@ -49,13 +50,13 @@ func publish_courier_tasks(dispatcher: RefCounted) -> void:
 			dispatcher.publish(StringName("trade_%s" % str(trade)), CourierTaskScript.Kind.TRADE, 80, order.source, order.destination, {"order": order})
 		for position in simulation.sawmill_positions:
 			if int(simulation.sawmills.stock_at(position, simulation.runtime_seconds).boards) > 0:
-				var sawmill_dropoff: Vector3 = simulation._warehouse_delivery_position(position, "boards", 1)
+				var sawmill_dropoff: Vector3 = simulation._warehouse_delivery_position(position, ResourceIds.BOARDS, 1)
 				dispatcher.publish(StringName("sawmill_%s" % simulation._cell_from_position(position)), CourierTaskScript.Kind.SAWMILL_PICKUP, 50, position, sawmill_dropoff, {"position": position})
 		for collector: WaterCollectorRecordScript in simulation.water_collectors:
 			if collector.stored > 0:
 				if is_instance_valid(collector.node):
 					var collector_position: Vector3 = collector.node.get_meta("service_position", collector.node.global_position)
-					var dew_dropoff: Vector3 = simulation._warehouse_delivery_position(collector_position, "water", collector.stored)
+					var dew_dropoff: Vector3 = simulation._warehouse_delivery_position(collector_position, ResourceIds.WATER, collector.stored)
 					dispatcher.publish(StringName("dew_%s" % simulation._cell_from_position(collector_position)), CourierTaskScript.Kind.DEW_PICKUP, 40, collector_position, dew_dropoff, {"position": collector_position})
 		for worker in simulation.citizens:
 			if worker != null and worker.has_pending_resource() and not simulation.courier_dispatcher.is_manually_targeted(worker):
@@ -106,7 +107,7 @@ func publish_courier_tasks(dispatcher: RefCounted) -> void:
 						)
 					unallocated -= source_allocation
 
-	if not simulation.warehouse_positions.is_empty() and simulation.settlement.amount("branches") > 0:
+	if not simulation.warehouse_positions.is_empty() and simulation.settlement.amount(ResourceIds.BRANCHES) > 0:
 		for record in simulation.building_registry.records():
 			var building: Node3D = record.node as Node3D
 			if not is_instance_valid(building) or not bool(building.get_meta("repair_needed", false)) or bool(building.get_meta("repair_reserved", false)):
@@ -119,7 +120,7 @@ func publish_courier_tasks(dispatcher: RefCounted) -> void:
 				60,
 				repair_source,
 				repair_position,
-				{"building": building, "supply_kind": "repair", "resource": "branches"}
+				{"building": building, "supply_kind": "repair", "resource": ResourceIds.BRANCHES}
 			)
 		for record in simulation.building_registry.records():
 			var fire_building: Node3D = record.node as Node3D
@@ -129,7 +130,7 @@ func publish_courier_tasks(dispatcher: RefCounted) -> void:
 			if not BuildingTypes.is_fire_source(building_type):
 				continue
 			var fire_state = simulation._fire_state_for(fire_building)
-			if not fire_state.needs_supply(4) or simulation.settlement.amount("branches") <= 0:
+			if not fire_state.needs_supply(4) or simulation.settlement.amount(ResourceIds.BRANCHES) <= 0:
 				continue
 			var fire_position: Vector3 = fire_building.get_meta("service_position", fire_building.global_position)
 			dispatcher.publish(
@@ -138,5 +139,5 @@ func publish_courier_tasks(dispatcher: RefCounted) -> void:
 				simulation._firewood_task_priority(fire_building, fire_state),
 				simulation._get_nearest_delivery_position(fire_position),
 				fire_position,
-				{"building": fire_building, "supply_kind": "firewood", "resource": "branches"}
+				{"building": fire_building, "supply_kind": "firewood", "resource": ResourceIds.BRANCHES}
 			)

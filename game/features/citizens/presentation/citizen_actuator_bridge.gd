@@ -2,6 +2,7 @@ class_name CitizenActuatorBridge
 extends RefCounted
 
 const CitizenStatusEffectScript = preload("res://game/features/citizens/domain/citizen_status_effect.gd")
+const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 
 
 func execute_action(actor: Citizen, action: StringName, target: Node3D, payload: AIFactSet) -> bool:
@@ -79,14 +80,14 @@ func execute_production_action(actor: Citizen, action: StringName, target: Node3
 			var warehouse_position: Variant = payload.value(&"warehouse.position", Vector3.INF) if payload != null else Vector3.INF
 			if not (tree_position is Vector3) or tree_position == Vector3.INF or not (access_position is Vector3) or access_position == Vector3.INF or not (sawmill_position is Vector3) or sawmill_position == Vector3.INF or not (warehouse_position is Vector3) or warehouse_position == Vector3.INF:
 				return false
-			actor.start_production_cycle("wood", tree_position, sawmill_position, warehouse_position, false, access_position)
+			actor.start_production_cycle(ResourceIds.WOOD, tree_position, sawmill_position, warehouse_position, false, access_position)
 			return actor.state in [Citizen.State.TO_TREE, Citizen.State.CHOPPING, Citizen.State.TO_SAWMILL]
 		&"farming":
 			var farm_position: Variant = payload.value(&"workplace.position", Vector3.INF) if payload != null else Vector3.INF
 			var farm_warehouse_position: Variant = payload.value(&"warehouse.position", Vector3.INF) if payload != null else Vector3.INF
 			if not (farm_position is Vector3) or farm_position == Vector3.INF or not (farm_warehouse_position is Vector3) or farm_warehouse_position == Vector3.INF:
 				return false
-			actor.start_production_cycle("food", farm_position, farm_position, farm_warehouse_position, true)
+			actor.start_production_cycle(ResourceIds.FOOD, farm_position, farm_position, farm_warehouse_position, true)
 			return actor.state in [Citizen.State.TO_TREE, Citizen.State.TO_SAWMILL, Citizen.State.SAWING, Citizen.State.WAITING_COURIER]
 		&"gathering":
 			var resource_type: Variant = payload.value(&"resource.type", "") if payload != null else ""

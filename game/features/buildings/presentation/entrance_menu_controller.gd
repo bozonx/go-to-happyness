@@ -1,6 +1,8 @@
 class_name EntranceMenuController
 extends RefCounted
 
+const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
+
 var simulation: Node
 
 
@@ -63,7 +65,7 @@ func send_entrance_order() -> void:
 	for _i in range(gloves):
 		simulation.trade_service.buy_entrance_gloves(simulation.ENTRANCE_GLOVE_PRICE)
 	if water > 0:
-		simulation.trade_service.buy_entrance_resource("water", water, simulation.ENTRANCE_WATER_PRICE)
+		simulation.trade_service.buy_entrance_resource(ResourceIds.WATER, water, simulation.ENTRANCE_WATER_PRICE)
 	for _i in range(bucket):
 		simulation.trade_service.buy_entrance_tool("bucket", simulation.ENTRANCE_BUCKET_PRICE)
 	simulation._update_interface("Entrance order placed: %d food, %d water, %d gloves, %d buckets." % [food, water, gloves, bucket])

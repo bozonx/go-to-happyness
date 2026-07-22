@@ -12,6 +12,7 @@ const CitizenArrivalStateScript = preload("res://game/features/citizens/domain/c
 const CitizenTaskAssignmentStateScript = preload("res://game/features/citizens/domain/citizen_task_assignment_state.gd")
 const CitizenWorkLocationStateScript = preload("res://game/features/citizens/domain/citizen_work_location_state.gd")
 const CitizenNavigationStateScript = preload("res://game/features/citizens/domain/citizen_navigation_state.gd")
+const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 
 signal resource_delivered(worker: Citizen, resource_type: String, amount: int)
 signal resource_dropped(worker: Citizen, resource_type: String, amount: int)
@@ -849,7 +850,7 @@ func start_production_cycle(next_resource_type: String, source: Vector3, workpla
 	warehouse_position = warehouse
 	uses_courier = next_uses_courier
 	factory = null
-	active_role = "forestry" if next_resource_type == "wood" else "farming"
+	active_role = "forestry" if next_resource_type == ResourceIds.WOOD else "farming"
 	if is_inside_tree() and global_position.distance_to(source_access_position) <= 0.5:
 		state = State.CHOPPING
 		_start_task(WORK_DURATION / get_efficiency(active_role))
@@ -914,13 +915,13 @@ func _process_to_source(delta: float) -> void:
 
 func _process_source_work(delta: float) -> void:
 	if _work(delta):
-		if resource_type == "wood":
+		if resource_type == ResourceIds.WOOD:
 			tree_harvested.emit(self, source_position)
 		state = State.TO_SAWMILL
 
 func _process_to_workplace(delta: float) -> void:
 	if _move_to(workplace_position, delta):
-		if resource_type == "wood":
+		if resource_type == ResourceIds.WOOD:
 			var count := 1
 			if has_perk("forestry") and randf() < 0.10:
 				count = 2
@@ -2135,7 +2136,7 @@ func assign_cleaning(res_type: String, source_pos: Vector3, access_pos: Vector3,
 func _process_to_gather(delta: float) -> void:
 	if _move_to(gather_access_position, delta, false, false):
 		state = State.GATHERING
-		var base_duration := 2.0 / get_efficiency("forestry" if gather_resource_type in ["branches", "logs"] else "farming")
+		var base_duration := 2.0 / get_efficiency("forestry" if gather_resource_type in [ResourceIds.BRANCHES, ResourceIds.LOGS] else "farming")
 		if is_instance_valid(employment_workplace):
 			var b_type := str(employment_workplace.get_meta("building_type", ""))
 			if b_type.ends_with("_lvl2"):
@@ -2150,17 +2151,17 @@ func _process_gathering(delta: float) -> void:
 		# early tent era is not a one-unit-per-trip slog; skill still governs cycle
 		# speed and matters more in later eras. Water hauling keeps its bucket bonus.
 		var gathered_amount := 1
-		if gather_resource_type == "water" and active_role == "gather_water":
+		if gather_resource_type == ResourceIds.WATER and active_role == "gather_water":
 			gathered_amount = 3
-		elif gather_resource_type in ["branches", "grass"]:
+		elif gather_resource_type in [ResourceIds.BRANCHES, ResourceIds.GRASS]:
 			gathered_amount = 2
 		resource_type = gather_resource_type
-		if resource_type == "food" and simulation != null:
+		if resource_type == ResourceIds.FOOD and simulation != null:
 			resource_type = simulation.harvest_wild_food(gather_source_position, self)
 			if resource_type.is_empty():
 				idle()
 				return
-		if resource_type == "logs":
+		if resource_type == ResourceIds.LOGS:
 			tree_harvested.emit(self, gather_source_position)
 			if has_perk("forestry") and randf() < 0.10:
 				gathered_amount *= 2
@@ -2168,11 +2169,11 @@ func _process_gathering(delta: float) -> void:
 					simulation._update_interface("Lumberjack Master: Forester gathered 2 logs!")
 		var consumed_amount := 1
 		if simulation != null:
-			if resource_type == "grass":
+			if resource_type == ResourceIds.GRASS:
 				consumed_amount = simulation._consume_grass_source(gather_source_position)
-			elif resource_type == "branches":
+			elif resource_type == ResourceIds.BRANCHES:
 				consumed_amount = simulation._consume_tree_branches(gather_source_position)
-		if consumed_amount <= 0 and resource_type in ["grass", "branches"]:
+		if consumed_amount <= 0 and resource_type in [ResourceIds.GRASS, ResourceIds.BRANCHES]:
 			idle()
 			return
 		carried_amount = gathered_amount

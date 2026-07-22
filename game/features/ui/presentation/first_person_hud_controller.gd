@@ -6,6 +6,7 @@ const WarehouseStateScript = preload("res://game/features/settlement/domain/ware
 const SettlementStateScript = preload("res://game/features/settlement/domain/settlement_state.gd")
 const ResourcePileScript = preload("res://game/features/logistics/domain/resource_pile.gd")
 const S = preload("res://game/features/ui/domain/game_strings.gd")
+const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 
 var simulation: Node
 
@@ -58,7 +59,7 @@ func first_person_action_hint() -> String:
 			return S.ENTRANCE_SIGN
 		"building":
 			if simulation._is_managed_fire_source(target.node):
-				var branch_count: int = simulation._pocket_amount("branches")
+				var branch_count: int = simulation._pocket_amount(ResourceIds.BRANCHES)
 				return S.F_ADD_BRANCH_TO_FIRE % branch_count if branch_count > 0 else S.NEED_BRANCHES_FOR_FIRE
 			return building_action_hint(target.node)
 		"construction":
@@ -100,8 +101,8 @@ func first_person_action_hint() -> String:
 		"sawmill":
 			var sawmill_pos: Vector3 = target.position
 			var sawmill_stock = simulation._sawmill_stock(sawmill_pos)
-			if simulation._pocket_amount("wood") > 0 or simulation._pocket_amount("logs") > 0:
-				var wood_count: int = simulation._pocket_amount("wood") + simulation._pocket_amount("logs")
+			if simulation._pocket_amount(ResourceIds.WOOD) > 0 or simulation._pocket_amount(ResourceIds.LOGS) > 0:
+				var wood_count: int = simulation._pocket_amount(ResourceIds.WOOD) + simulation._pocket_amount(ResourceIds.LOGS)
 				return S.F_DEPOSIT_WOOD_SAWMILL % wood_count
 			if int(sawmill_stock.boards) > 0 and simulation._pocket_has_room():
 				return S.F_TAKE_BOARD

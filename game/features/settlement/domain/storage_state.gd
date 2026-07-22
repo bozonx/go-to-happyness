@@ -34,13 +34,13 @@ func storage_weight(resource_type: String) -> float:
 
 
 func can_cover_warehouse_with_tarp() -> bool:
-	return not warehouse_tarp_covered and amount("tarp") > 0
+	return not warehouse_tarp_covered and amount(ResourceIds.TARP) > 0
 
 
 func cover_warehouse_with_tarp() -> bool:
 	if not can_cover_warehouse_with_tarp():
 		return false
-	_set_resource_aggregate("tarp", amount("tarp") - 1)
+	_set_resource_aggregate(ResourceIds.TARP, amount(ResourceIds.TARP) - 1)
 	warehouse_tarp_covered = true
 	return true
 

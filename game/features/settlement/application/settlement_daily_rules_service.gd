@@ -9,6 +9,7 @@ extends RefCounted
 const SETTLEMENT_RULES = preload("res://game/features/settlement/domain/settlement_rules.gd")
 const TentEraSurvivalRulesScript = preload("res://game/features/settlement/domain/tent_era_survival_rules.gd")
 const CitizenStatusEffectScript = preload("res://game/features/citizens/domain/citizen_status_effect.gd")
+const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 
 var simulation: Node
 
@@ -45,11 +46,11 @@ func apply_daily_settlement_rules() -> void:
 	var safe_capacity := straw_warehouse_count * 48.0 + tarp_warehouse_count * 72.0
 	var total_stored := settlement.storage_used_units()
 	var decay_losses := SETTLEMENT_RULES.open_air_storage_decay_losses({
-		"food": settlement.amount("food"),
-		"grass": settlement.amount("grass"),
-		"branches": settlement.amount("branches"),
-		"wood": settlement.amount("wood"),
-		"logs": settlement.amount("logs"),
+	"food": settlement.amount(ResourceIds.FOOD),
+		"grass": settlement.amount(ResourceIds.GRASS),
+		"branches": settlement.amount(ResourceIds.BRANCHES),
+		"wood": settlement.amount(ResourceIds.WOOD),
+		"logs": settlement.amount(ResourceIds.LOGS),
 	}, total_stored, safe_capacity)
 	if not decay_losses.is_empty():
 		var decay_msg := ""
@@ -70,11 +71,11 @@ func apply_daily_settlement_rules() -> void:
 	# Everyone drinks each day. When there is no kitchen running meals, they also
 	# eat straight from the stores; a working cooking campfire/canteen already
 	# draws food through the meal pipeline, so we don't double-count there.
-	settlement.add("water", -population)
+	settlement.add(ResourceIds.WATER, -population)
 	if not is_instance_valid(simulation.canteen):
-		settlement.add("food", -TentEraSurvivalRulesScript.daily_food_consumption(population, simulation.tent_weather))
+		settlement.add(ResourceIds.FOOD, -TentEraSurvivalRulesScript.daily_food_consumption(population, simulation.tent_weather))
 	var housing: int = simulation._total_housing_slots()
-	var change := SETTLEMENT_RULES.daily_wellbeing_change(housing >= population, float(settlement.amount("food")) / population, float(settlement.amount("water")) / population, settlement.workday_hours)
+	var change := SETTLEMENT_RULES.daily_wellbeing_change(housing >= population, float(settlement.amount(ResourceIds.FOOD)) / population, float(settlement.amount(ResourceIds.WATER)) / population, settlement.workday_hours)
 	settlement.wellbeing = clampi(settlement.wellbeing + change, 0, 100)
 	# Campfire story effects are resolved at dawn.
 	match settlement.campfire_story_effect:
@@ -96,14 +97,14 @@ func apply_daily_settlement_rules() -> void:
 		settlement.campfire_story_target_day = -1
 	simulation._check_daily_departures()
 	# --- Daily settlement warnings ---
-	if settlement.amount("food") == 0:
+	if settlement.amount(ResourceIds.FOOD) == 0:
 		simulation._add_message("CRITICAL: Food supplies exhausted! Workers are starving.")
-	elif float(settlement.amount("food")) / population < 1.0:
-		simulation._add_message("Warning: Food is running low (%d for %d people)." % [settlement.amount("food"), population])
-	if settlement.amount("water") == 0:
+	elif float(settlement.amount(ResourceIds.FOOD)) / population < 1.0:
+		simulation._add_message("Warning: Food is running low (%d for %d people)." % [settlement.amount(ResourceIds.FOOD), population])
+	if settlement.amount(ResourceIds.WATER) == 0:
 		simulation._add_message("CRITICAL: Water supplies exhausted! Settlement is dehydrated.")
-	elif float(settlement.amount("water")) / population < 1.0:
-		simulation._add_message("Warning: Water is running low (%d for %d people)." % [settlement.amount("water"), population])
+	elif float(settlement.amount(ResourceIds.WATER)) / population < 1.0:
+		simulation._add_message("Warning: Water is running low (%d for %d people)." % [settlement.amount(ResourceIds.WATER), population])
 	var storage_ratio := float(simulation._stored_resources()) / float(maxi(1, simulation._warehouse_capacity()))
 	if storage_ratio >= 0.95:
 		simulation._add_message("CRITICAL: Storage nearly full (%d%%). Build another warehouse or rebalance." % [int(storage_ratio * 100)])

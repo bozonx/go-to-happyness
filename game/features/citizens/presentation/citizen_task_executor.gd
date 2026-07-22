@@ -3,6 +3,7 @@ extends RefCounted
 
 const SKILL_GROWTH_PER_SCHOOL_DAY := 0.05
 const CitizenEmploymentStateScript = preload("res://game/features/citizens/domain/citizen_employment_state.gd")
+const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 
 func assign_construction(actor: Node3D, site: Node3D) -> void:
 	if actor == null or bool(actor.get("is_player_controlled")):
@@ -151,7 +152,7 @@ func collect_sawmill_boards(actor: Node3D, amount: int) -> void:
 		return
 	var cap: int = actor.courier_capacity() if actor is Citizen else 1
 	actor.set("carried_amount", mini(amount, cap))
-	actor.set("courier_resource_type", "boards")
+	actor.set("courier_resource_type", ResourceIds.BOARDS)
 	actor.set("state", Citizen.State.COURIER_TO_WAREHOUSE if amount > 0 else Citizen.State.IDLE)
 
 func assign_dew_collector_pickup(actor: Node3D, collector: Vector3, warehouse: Vector3) -> void:
@@ -169,13 +170,13 @@ func collect_dew(actor: Node3D, amount: int) -> void:
 		return
 	var carried := maxi(amount, 0)
 	actor.set("carried_amount", carried)
-	actor.set("courier_resource_type", "water")
+	actor.set("courier_resource_type", ResourceIds.WATER)
 	actor.set("state", Citizen.State.COURIER_TO_WAREHOUSE if carried > 0 else Citizen.State.IDLE)
 
 func deliver_sawmill_boards(actor: Node3D, amount: int) -> void:
 	if actor == null:
 		return
-	actor.set("resource_type", "boards")
+	actor.set("resource_type", ResourceIds.BOARDS)
 	actor.set("carried_amount", amount)
 	actor.set("state", Citizen.State.TO_WAREHOUSE)
 
@@ -267,7 +268,7 @@ func process_craft_work(actor: Node3D, delta: float) -> void:
 	actor.set("craft_timer", craft_timer)
 	if craft_timer <= 0.0:
 		if actor.has_signal("resource_ready"):
-			actor.emit_signal("resource_ready", actor, "goods", 1)
+			actor.emit_signal("resource_ready", actor, ResourceIds.GOODS, 1)
 		var eff: float = float(actor.call("get_efficiency", "craftsman"))
 		var mult: float = float(actor.get("craft_speed_multiplier"))
 		actor.set("craft_timer", 10.0 / (eff * mult))

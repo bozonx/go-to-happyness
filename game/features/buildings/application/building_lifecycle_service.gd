@@ -9,6 +9,7 @@ extends RefCounted
 const S = preload("res://game/features/ui/domain/game_strings.gd")
 const WaterCollectorRecordScript = preload("res://game/features/logistics/domain/water_collector_record.gd")
 const HouseLightRecord = preload("res://game/features/buildings/domain/house_light_record.gd")
+const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 
 var simulation: Node
 
@@ -90,7 +91,7 @@ func finish_demolition(site: DemolitionSite) -> void:
 	if active_kitchen_removed:
 		if simulation.pending_canteen_delivery:
 			simulation._cancel_canteen_delivery()
-		simulation.settlement.add("food", simulation.canteen_food)
+		simulation.settlement.add(ResourceIds.FOOD, simulation.canteen_food)
 		simulation.canteen_food = 0
 	for citizen in simulation.citizens:
 		citizen.finish_construction(building)

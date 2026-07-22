@@ -10,6 +10,7 @@ extends RefCounted
 const SETTLEMENT_RULES = preload("res://game/features/settlement/domain/settlement_rules.gd")
 const TentEraSurvivalRulesScript = preload("res://game/features/settlement/domain/tent_era_survival_rules.gd")
 const SettlementStateScript = preload("res://game/features/settlement/domain/settlement_state.gd")
+const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 
 var simulation: Node
 
@@ -91,11 +92,11 @@ func apply_rain_damage() -> void:
 	var exposed_ratio := (stored_units - sheltered_capacity) / stored_units
 	var _firewood_protected: bool = simulation.event_service != null and simulation.event_service.log.has_flag(&"firewood_protected_today")
 	var rain_amounts := {
-		"food": settlement.amount("food"),
-		"grass": settlement.amount("grass"),
-		"branches": 0 if _firewood_protected else settlement.amount("branches"),
-		"wood": settlement.amount("wood"),
-		"logs": settlement.amount("logs"),
+		ResourceIds.FOOD: settlement.amount(ResourceIds.FOOD),
+		ResourceIds.GRASS: settlement.amount(ResourceIds.GRASS),
+		ResourceIds.BRANCHES: 0 if _firewood_protected else settlement.amount(ResourceIds.BRANCHES),
+		ResourceIds.WOOD: settlement.amount(ResourceIds.WOOD),
+		ResourceIds.LOGS: settlement.amount(ResourceIds.LOGS),
 	}
 	var losses := TentEraSurvivalRulesScript.rain_hourly_decay_losses(rain_amounts, exposed_ratio)
 	for resource_type in losses:

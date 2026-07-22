@@ -4,6 +4,8 @@ extends AIWorldFacade
 ## Scene adapter for the native AI. Each migrated mechanic adds only its owned
 ## facts here, without mirroring SettlementGame's private API.
 
+const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
+
 var simulation: Node
 var _route_cache := RouteCandidateCache.new()
 var _helpers: FacadeTargetHelpers
@@ -160,9 +162,9 @@ func _world_data() -> Dictionary:
 		"dig_sites": simulation._count_valid_dig_sites(),
 		"has_factory_job": _factory_for_role_internal("factory_worker") != null,
 		"has_engineer_job": _factory_for_role_internal("engineer") != null,
-		"food": simulation.settlement.amount("food"),
-		"water": simulation.settlement.amount("water"),
-		"wood": simulation.settlement.amount("wood"),
+		"food": simulation.settlement.amount(ResourceIds.FOOD),
+		"water": simulation.settlement.amount(ResourceIds.WATER),
+		"wood": simulation.settlement.amount(ResourceIds.WOOD),
 		"ponds": simulation.pond_positions.size(),
 		"has_bucket": bool(simulation.settlement.tools.get("bucket", false)),
 		"population": simulation.citizens.size(),

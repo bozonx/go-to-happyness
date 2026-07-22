@@ -3,6 +3,7 @@ extends RefCounted
 
 const ResourcePileScript = preload("res://game/features/logistics/domain/resource_pile.gd")
 const GrassSourceRecord = preload("res://game/features/production/domain/grass_source_record.gd")
+const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 
 ## Collects permanent gathering, daily gathering, and daily cleaning facts for
 ## one citizen.
@@ -99,12 +100,12 @@ func _food_gathering_targets(ctx: FacadeContext, actor: Citizen) -> Array[Dictio
 		var cell := cell_value as Vector2i
 		var node := (ctx.simulation.forage_sources[cell] as Dictionary).get("node") as Node3D
 		if is_instance_valid(node):
-			ctx.helpers.insert_nearby_gathering_candidate(nearby, {&"id": StringName("plant:%d:%d" % [cell.x, cell.y]), &"resource_type": "food", &"position": node.global_position, &"access": node.global_position, &"direct_distance": actor.global_position.distance_squared_to(node.global_position)})
+			ctx.helpers.insert_nearby_gathering_candidate(nearby, {&"id": StringName("plant:%d:%d" % [cell.x, cell.y]), &"resource_type": ResourceIds.FOOD, &"position": node.global_position, &"access": node.global_position, &"direct_distance": actor.global_position.distance_squared_to(node.global_position)})
 	for cell_value in ctx.simulation.rabbit_sources:
 		var cell := cell_value as Vector2i
 		var node := (ctx.simulation.rabbit_sources[cell] as Dictionary).get("node") as Node3D
 		if is_instance_valid(node):
-			ctx.helpers.insert_nearby_gathering_candidate(nearby, {&"id": StringName("rabbit:%d:%d" % [cell.x, cell.y]), &"resource_type": "food", &"position": node.global_position, &"access": node.global_position, &"direct_distance": actor.global_position.distance_squared_to(node.global_position)})
+			ctx.helpers.insert_nearby_gathering_candidate(nearby, {&"id": StringName("rabbit:%d:%d" % [cell.x, cell.y]), &"resource_type": ResourceIds.FOOD, &"position": node.global_position, &"access": node.global_position, &"direct_distance": actor.global_position.distance_squared_to(node.global_position)})
 	var targets: Array[Dictionary] = []
 	for candidate in nearby:
 		var route_cost := ctx.helpers.route_cost(actor.global_position, candidate[&"access"] as Vector3)
@@ -136,7 +137,7 @@ func _daily_gathering_targets_for(ctx: FacadeContext, actor: Citizen, role: Stri
 				if access != Vector3.INF:
 					ctx.helpers.insert_nearby_gathering_candidate(nearby, {
 						&"id": StringName("branch:%d:%d" % [tree_cell.x, tree_cell.y]),
-						&"resource_type": "branches",
+						&"resource_type": ResourceIds.BRANCHES,
 						&"position": tree_position,
 						&"access": access,
 						&"direct_distance": actor.global_position.distance_squared_to(access),
@@ -149,7 +150,7 @@ func _daily_gathering_targets_for(ctx: FacadeContext, actor: Citizen, role: Stri
 					if access != Vector3.INF:
 						ctx.helpers.insert_nearby_gathering_candidate(nearby, {
 							&"id": StringName("grass:%d:%d" % [grass_cell.x, grass_cell.y]),
-							&"resource_type": "grass",
+							&"resource_type": ResourceIds.GRASS,
 							&"position": grass_source.node.global_position,
 							&"access": access,
 							&"direct_distance": actor.global_position.distance_squared_to(access),
@@ -160,7 +161,7 @@ func _daily_gathering_targets_for(ctx: FacadeContext, actor: Citizen, role: Stri
 				if access != Vector3.INF:
 					ctx.helpers.insert_nearby_gathering_candidate(nearby, {
 						&"id": ctx.helpers.target_key(&"water", access),
-						&"resource_type": "water",
+						&"resource_type": ResourceIds.WATER,
 						&"position": access,
 						&"access": access,
 						&"direct_distance": actor.global_position.distance_squared_to(access),

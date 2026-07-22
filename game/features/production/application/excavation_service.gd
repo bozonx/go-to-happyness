@@ -5,6 +5,7 @@ extends RefCounted
 ## tool/depth checks, resource discovery, pit visuals, and site exhaustion.
 
 const DigSiteRecord = preload("res://game/features/production/domain/dig_site_record.gd")
+const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 
 var dig_site_scene: PackedScene = null
 var simulation: Node
@@ -41,15 +42,15 @@ func on_excavation_cycle(worker: Citizen, site_node: Node3D, efficiency: float) 
 
 		site.depth += 1
 		if site.depth <= site.grass_limit:
-			worker.register_pending_resource("grass", 1)
+			worker.register_pending_resource(ResourceIds.GRASS, 1)
 			var pit_material := StandardMaterial3D.new()
 			pit_material.albedo_color = Color("3e612c")
 			site.pit.material_override = pit_material
 			simulation._update_interface("Digger is carrying grass to the warehouse.")
 		elif site.depth <= site.soil_limit:
-			var res: String = "soil"
+			var res: String = ResourceIds.SOIL
 			if worker.skills.get("excavation", 0.0) >= 1.0 and randf() < 0.10:
-				res = "clay" if randf() < 0.5 else "stone"
+				res = ResourceIds.CLAY if randf() < 0.5 else ResourceIds.STONE
 				simulation._update_interface("Deep Digger: Digger found rare %s in soil!" % res.capitalize())
 			worker.register_pending_resource(res, 1)
 			var pit_material := StandardMaterial3D.new()
@@ -57,13 +58,13 @@ func on_excavation_cycle(worker: Citizen, site_node: Node3D, efficiency: float) 
 			site.pit.material_override = pit_material
 			simulation._update_interface("Digger is carrying %s to the warehouse." % res)
 		elif site.depth <= site.clay_limit:
-			worker.register_pending_resource("clay", 1)
+			worker.register_pending_resource(ResourceIds.CLAY, 1)
 			var pit_material := StandardMaterial3D.new()
 			pit_material.albedo_color = Color("a96445")
 			site.pit.material_override = pit_material
 			simulation._update_interface("Digger is carrying clay to the warehouse.")
 		elif site.depth <= site.stone_limit:
-			worker.register_pending_resource("stone", 1)
+			worker.register_pending_resource(ResourceIds.STONE, 1)
 			var pit_material := StandardMaterial3D.new()
 			pit_material.albedo_color = Color("62676a")
 			site.pit.material_override = pit_material
@@ -107,14 +108,14 @@ func tool_for_depth(site: DigSiteRecord, depth: int) -> String:
 
 func resource_for_depth(site: DigSiteRecord, depth: int) -> String:
 	if depth <= site.grass_limit:
-		return "grass"
+		return ResourceIds.GRASS
 	elif depth <= site.soil_limit:
-		return "soil"
+		return ResourceIds.SOIL
 	elif depth <= site.clay_limit:
-		return "clay"
+		return ResourceIds.CLAY
 	elif depth <= site.stone_limit:
-		return "stone"
-	return "soil"
+		return ResourceIds.STONE
+	return ResourceIds.SOIL
 
 
 func count_valid_dig_sites() -> int:

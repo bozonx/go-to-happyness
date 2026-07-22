@@ -1,10 +1,12 @@
 class_name CitizenTaskAssignmentState
 extends RefCounted
 
+const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
+
 ## Deterministic task assignment, production, and courier state for a citizen.
 ## No nodes, physics, rendering, simulation, or wall-clock time.
 
-var resource_type := "wood"
+var resource_type := ResourceIds.WOOD
 var gather_resource_type := ""
 var gather_source_position := Vector3.ZERO
 var gather_access_position := Vector3.ZERO

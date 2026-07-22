@@ -2,6 +2,7 @@ class_name TradeService
 extends RefCounted
 
 const TradeOrderScript = preload("res://game/features/logistics/domain/trade_order.gd")
+const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 
 var simulation: Node
 var entrance_expeditions: Dictionary = {} # citizen ai_id -> TradeOrder
@@ -14,12 +15,12 @@ func configure(next_simulation: Node) -> void:
 func buy_food(quantity: int, unit_price: int) -> void:
 	if simulation.selected_market == null:
 		return
-	var room := maxi(0, simulation.settlement.storage_room_for("food") - trade_incoming_resource("food"))
+	var room := maxi(0, simulation.settlement.storage_room_for(ResourceIds.FOOD) - trade_incoming_resource(ResourceIds.FOOD))
 	var buyable := mini(quantity, mini(room, available_trade_money() / unit_price))
 	if buyable <= 0:
 		simulation._update_interface("Cannot buy food: check storage space and available coins.")
 		return
-	start_trade({"kind": "buy_resource", "resource": "food", "quantity": buyable, "price": unit_price}, simulation.selected_market.global_position, simulation._get_delivery_position())
+	start_trade({"kind": "buy_resource", "resource": ResourceIds.FOOD, "quantity": buyable, "price": unit_price}, simulation.selected_market.global_position, simulation._get_delivery_position())
 	simulation._refresh_market_menu()
 
 
@@ -83,7 +84,7 @@ func start_entrance_purchase(trade: Dictionary) -> void:
 func buy_entrance_food(quantity: int, unit_price: int) -> void:
 	if quantity <= 0 or available_trade_money() < quantity * unit_price:
 		return
-	start_entrance_purchase({"kind": "buy_resource", "resource": "food", "quantity": quantity, "price": unit_price})
+	start_entrance_purchase({"kind": "buy_resource", "resource": ResourceIds.FOOD, "quantity": quantity, "price": unit_price})
 
 
 func buy_entrance_gloves(price: int) -> void:

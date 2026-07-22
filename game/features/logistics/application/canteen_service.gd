@@ -1,6 +1,8 @@
 class_name CanteenService
 extends RefCounted
 
+const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
+
 var simulation: Node
 var _meal_requests: Dictionary = {}
 
@@ -54,7 +56,7 @@ func update_canteen_delivery() -> void:
 
 
 func cancel_canteen_delivery() -> void:
-	simulation.settlement.add("food", simulation.pending_canteen_delivery_amount)
+	simulation.settlement.add(ResourceIds.FOOD, simulation.pending_canteen_delivery_amount)
 	simulation.pending_canteen_delivery = false
 	simulation.pending_canteen_carrier = null
 	simulation.pending_canteen_delivery_amount = 0

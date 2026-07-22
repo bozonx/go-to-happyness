@@ -35,13 +35,13 @@ func can_advance_to(next_era: int, population: int, housing_slots: int, state_co
 		1: # EARTH
 			return era == 0 and has_tools_fn.call(["axe", "hand_saw", "shovel", "bucket"]) and is_research_completed_fn.call("earth_buildings")
 		2: # CLAY
-			return era == 1 and has_building_fn.call("earth_assembly") and has_building_fn.call("smithy") and has_building_fn.call("earth_market") and housing_slots >= population and available_amount_fn.call("clay") >= 5 and money_val >= 5 and trade_sales_val >= 3 and has_tools_fn.call(["hoe"]) and has_building_fn.call("toilet_earth_lvl3")
+			return era == 1 and has_building_fn.call("earth_assembly") and has_building_fn.call("smithy") and has_building_fn.call("earth_market") and housing_slots >= population and available_amount_fn.call(ResourceIds.CLAY) >= 5 and money_val >= 5 and trade_sales_val >= 3 and has_tools_fn.call(["hoe"]) and has_building_fn.call("toilet_earth_lvl3")
 		3: # WOOD
-			return era == 2 and has_building_fn.call("clay_lodge") and has_building_fn.call("clay_market") and available_amount_fn.call("water") >= population and available_amount_fn.call("logs") >= 10 and money_val >= 10 and has_building_fn.call("toilet_clay_lvl3")
+			return era == 2 and has_building_fn.call("clay_lodge") and has_building_fn.call("clay_market") and available_amount_fn.call(ResourceIds.WATER) >= population and available_amount_fn.call(ResourceIds.LOGS) >= 10 and money_val >= 10 and has_building_fn.call("toilet_clay_lvl3")
 		4: # STONE
 			return era == 3 and has_building_fn.call("wood_town_hall") and has_building_fn.call("wood_market") and money_val >= 15 and has_tools_fn.call(["pickaxe"]) and has_building_fn.call("house_lvl3") and has_building_fn.call("toilet_wood_lvl3")
 		5: # BRICK
-			return era == 4 and has_building_fn.call("stone_prefecture") and has_building_fn.call("stone_market") and has_building_fn.call("masonry_workshop") and available_amount_fn.call("stone") >= 20 and money_val >= 20 and has_building_fn.call("toilet_stone_lvl3")
+			return era == 4 and has_building_fn.call("stone_prefecture") and has_building_fn.call("stone_market") and has_building_fn.call("masonry_workshop") and available_amount_fn.call(ResourceIds.STONE) >= 20 and money_val >= 20 and has_building_fn.call("toilet_stone_lvl3")
 	return false
 
 

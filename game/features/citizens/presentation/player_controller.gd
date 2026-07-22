@@ -3,6 +3,7 @@ extends Node
 
 const PlayerInteractionTargetResolverScript = preload("res://game/features/citizens/presentation/player_interaction_target_resolver.gd")
 const S = preload("res://game/features/ui/domain/game_strings.gd")
+const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 
 const PLAYER_SPEED := 6.5
 const PLAYER_SPRINT_MULTIPLIER := 1.7
@@ -207,7 +208,7 @@ func update_interaction(delta: float) -> void:
 		simulation._update_interface(S.ACTION_CANCELLED_AWAY)
 		simulation._refresh_interaction_hint()
 		return
-	if (interaction_resource in ["wood", "branches"] and not simulation._nearby_tree()) or (interaction_resource == "food" and not simulation._nearby_farm()) or (interaction_resource == "water" and not simulation._nearby_pond()) or (interaction_resource == "grass" and not simulation._nearby_grass_source()):
+	if (interaction_resource in [ResourceIds.WOOD, ResourceIds.BRANCHES] and not simulation._nearby_tree()) or (interaction_resource == ResourceIds.FOOD and not simulation._nearby_farm()) or (interaction_resource == ResourceIds.WATER and not simulation._nearby_pond()) or (interaction_resource == ResourceIds.GRASS and not simulation._nearby_grass_source()):
 		interaction_action = ""
 		simulation.interaction_progress.visible = false
 		simulation._update_interface(S.HARVEST_CANCELLED_AWAY_SOURCE)
@@ -221,24 +222,24 @@ func update_interaction(delta: float) -> void:
 		interaction_action = ""
 		var gathered := 0
 		match interaction_resource:
-			"wood":
-				gathered = simulation._add_to_pocket("wood", 1)
+			ResourceIds.WOOD:
+				gathered = simulation._add_to_pocket(ResourceIds.WOOD, 1)
 				if gathered > 0:
 					simulation._fell_nearest_tree()
-			"branches":
+			ResourceIds.BRANCHES:
 				var branch_batch := HERO_GATHER_YIELD
-				gathered = simulation._add_to_pocket("branches", branch_batch)
+				gathered = simulation._add_to_pocket(ResourceIds.BRANCHES, branch_batch)
 				if gathered > 0:
 					simulation._consume_tree_near_player(gathered)
-			"grass":
+			ResourceIds.GRASS:
 				var grass_batch := HERO_GATHER_YIELD
-				gathered = simulation._add_to_pocket("grass", grass_batch)
+				gathered = simulation._add_to_pocket(ResourceIds.GRASS, grass_batch)
 				if gathered > 0:
 					simulation._consume_grass_near_player(gathered)
-			"water":
-				gathered = simulation._add_to_pocket("water", 1)
-			"food":
-				gathered = simulation._add_to_pocket("food", 1)
+			ResourceIds.WATER:
+				gathered = simulation._add_to_pocket(ResourceIds.WATER, 1)
+			ResourceIds.FOOD:
+				gathered = simulation._add_to_pocket(ResourceIds.FOOD, 1)
 		if gathered > 0:
 			simulation._update_interface(S.GATHERED_FORMAT % [interaction_resource, simulation._format_pocket_hint()])
 		else:
@@ -311,7 +312,7 @@ func start_interaction(all: bool) -> void:
 				simulation._update_interface(S.POCKET_FULL_TREE_HINT)
 				return
 			interaction_action = "harvesting"
-			interaction_resource = "branches" if gathering_branches else "wood"
+			interaction_resource = ResourceIds.BRANCHES if gathering_branches else ResourceIds.WOOD
 			interaction_time = 0.0
 			interaction_start_cell = simulation._cell_from_position(player_citizen.global_position)
 			interaction_repeat_all = all
@@ -321,7 +322,7 @@ func start_interaction(all: bool) -> void:
 				simulation._update_interface(S.POCKET_FULL_SHORT)
 				return
 			interaction_action = "harvesting"
-			interaction_resource = "food"
+			interaction_resource = ResourceIds.FOOD
 			interaction_time = 0.0
 			interaction_start_cell = simulation._cell_from_position(player_citizen.global_position)
 			interaction_repeat_all = all
@@ -331,7 +332,7 @@ func start_interaction(all: bool) -> void:
 				simulation._update_interface(S.POCKET_FULL_SHORT)
 				return
 			interaction_action = "harvesting"
-			interaction_resource = "water"
+			interaction_resource = ResourceIds.WATER
 			interaction_time = 0.0
 			interaction_start_cell = simulation._cell_from_position(player_citizen.global_position)
 			interaction_repeat_all = all
@@ -341,7 +342,7 @@ func start_interaction(all: bool) -> void:
 				simulation._update_interface(S.POCKET_FULL_SHORT)
 				return
 			interaction_action = "harvesting"
-			interaction_resource = "grass"
+			interaction_resource = ResourceIds.GRASS
 			interaction_time = 0.0
 			interaction_start_cell = simulation._cell_from_position(player_citizen.global_position)
 			interaction_repeat_all = all

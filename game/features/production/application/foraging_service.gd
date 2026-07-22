@@ -9,6 +9,7 @@ const CitizenTaskStateScript = preload("res://game/features/citizens/domain/citi
 const GrassSourceRecord = preload("res://game/features/production/domain/grass_source_record.gd")
 const ForageSourceRecord = preload("res://game/features/production/domain/forage_source_record.gd")
 const RabbitSourceRecord = preload("res://game/features/production/domain/rabbit_source_record.gd")
+const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 var billboard_label_scene: PackedScene = null
 
 func set_billboard_label_scene(scene: PackedScene) -> void:
@@ -93,7 +94,7 @@ func harvest_wild_food(position: Vector3, worker: Node3D) -> String:
 			plant.node.queue_free()
 		forage_sources.erase(plant_cell)
 		forage_respawn_at[plant_cell] = runtime_seconds + WILD_FOOD_RESPAWN_SECONDS
-		return "food"
+		return ResourceIds.FOOD
 	for cell in rabbit_sources:
 		var source: RabbitSourceRecord = rabbit_sources[cell]
 		if is_instance_valid(source.node) and source.node.global_position.distance_to(position) <= 1.6:
@@ -102,7 +103,7 @@ func harvest_wild_food(position: Vector3, worker: Node3D) -> String:
 			source.node.queue_free()
 			rabbit_sources.erase(cell)
 			rabbit_respawn_at[cell] = runtime_seconds + RABBIT_RESPAWN_SECONDS
-			return "hides" if randf() < 0.35 else "food"
+			return ResourceIds.HIDES if randf() < 0.35 else ResourceIds.FOOD
 	return ""
 
 func consume_grass_source(position: Vector3) -> int:
@@ -189,15 +190,15 @@ func player_gather_target_node(player_citizen: Node3D, interaction_resource: Str
 	if player_citizen == null:
 		return null
 	match interaction_resource:
-		"wood", "branches": return nearest_tree_node(player_citizen.global_position)
-		"grass": return nearest_grass_node(player_citizen.global_position)
+		ResourceIds.WOOD, ResourceIds.BRANCHES: return nearest_tree_node(player_citizen.global_position)
+		ResourceIds.GRASS: return nearest_grass_node(player_citizen.global_position)
 	return null
 
 func gather_node_at(position: Vector3, resource_type: String) -> Node3D:
 	var cell: Vector2i = cell_query.call(position) if cell_query.is_valid() else Vector2i.ZERO
-	if resource_type in ["wood", "branches", "logs"]:
+	if resource_type in [ResourceIds.WOOD, ResourceIds.BRANCHES, ResourceIds.LOGS]:
 		return tree_nodes.get(cell)
-	if resource_type == "grass":
+	if resource_type == ResourceIds.GRASS:
 		var source: GrassSourceRecord = grass_sources.get(cell)
 		if source != null:
 			return source.node
@@ -207,10 +208,10 @@ func gather_progress_amounts(resource_type: String, node: Node3D) -> Dictionary:
 	var current := 0
 	var max_amount := 1
 	if node.has_meta("initial_wood"):
-		if resource_type in ["wood", "logs"]:
+		if resource_type in [ResourceIds.WOOD, ResourceIds.LOGS]:
 			max_amount = int(node.get_meta("initial_wood", 1))
 			current = max_amount - int(node.get_meta("remaining_wood", 0))
-		elif resource_type == "branches":
+		elif resource_type == ResourceIds.BRANCHES:
 			max_amount = int(node.get_meta("initial_branches", 1))
 			current = int(node.get_meta("hand_branches", 0))
 	else:
@@ -260,7 +261,7 @@ func update_gathering_indicators(
 	citizens: Array
 ) -> void:
 	var active_targets: Dictionary = {}
-	if is_first_person and interaction_action == "harvesting" and player_citizen != null and interaction_resource in ["wood", "branches", "grass"]:
+	if is_first_person and interaction_action == "harvesting" and player_citizen != null and interaction_resource in [ResourceIds.WOOD, ResourceIds.BRANCHES, ResourceIds.GRASS]:
 		var node: Node3D = player_gather_target_node(player_citizen, interaction_resource)
 		if is_instance_valid(node):
 			active_targets[node] = {"resource_type": interaction_resource, "partial": clampf(interaction_time / HARVEST_DURATION, 0.0, 1.0)}
@@ -269,10 +270,10 @@ func update_gathering_indicators(
 		var kind: String = str(target.get("kind", ""))
 		if kind == "tree" and is_instance_valid(target.get("node")):
 			var era_val: int = int(settlement.era) if settlement != null and "era" in settlement else 0
-			var res_type := "branches" if era_val < 1 else "wood"
+			var res_type := ResourceIds.BRANCHES if era_val < 1 else ResourceIds.WOOD
 			active_targets[target.get("node")] = {"resource_type": res_type, "partial": -1.0}
 		elif kind == "grass" and is_instance_valid(target.get("node")):
-			active_targets[target.get("node")] = {"resource_type": "grass", "partial": -1.0}
+			active_targets[target.get("node")] = {"resource_type": ResourceIds.GRASS, "partial": -1.0}
 
 	for citizen_item in citizens:
 		var citizen := citizen_item as Node3D
@@ -296,7 +297,7 @@ func update_gathering_indicators(
 			if is_instance_valid(node):
 				var task_timer: Variant = citizen.get("task_timer")
 				var progress: float = task_timer.progress() if task_timer is CitizenTaskStateScript else 0.0
-				active_targets[node] = {"resource_type": "wood", "partial": progress}
+				active_targets[node] = {"resource_type": ResourceIds.WOOD, "partial": progress}
 
 	var nodes_to_remove: Array = gather_progress_labels.keys().duplicate()
 	for node in active_targets:

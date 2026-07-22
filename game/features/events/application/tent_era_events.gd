@@ -10,6 +10,7 @@ const EventDef = preload("res://game/features/events/domain/game_event_def.gd")
 const EventChoice = preload("res://game/features/events/domain/event_choice_def.gd")
 const EventOutcome = preload("res://game/features/events/domain/event_outcome.gd")
 const EventCondition = preload("res://game/features/events/domain/event_condition.gd")
+const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 
 
 static func build() -> Array:
@@ -35,7 +36,7 @@ static func _protect_firewood() -> RefCounted:
 	var conditions: Array = [
 		EventCondition.era_is(SettlementStateScript.Era.TENT),
 		EventCondition.weather_is(TentEraSurvivalRulesScript.Weather.RAIN),
-		EventCondition.resource_at_least("branches", 1),
+		EventCondition.resource_at_least(ResourceIds.BRANCHES, 1),
 	]
 	var choices: Array = [
 		EventChoice.create(
@@ -94,17 +95,17 @@ static func _forest_gifts() -> RefCounted:
 static func _traveler() -> RefCounted:
 	var conditions: Array = [
 		EventCondition.era_is(SettlementStateScript.Era.TENT),
-		EventCondition.resource_at_least("food", 3),
-		EventCondition.resource_at_least("water", 2),
+		EventCondition.resource_at_least(ResourceIds.FOOD, 3),
+		EventCondition.resource_at_least(ResourceIds.WATER, 2),
 		EventCondition.day_at_least(3),
 	]
 	var choices: Array = [
 		EventChoice.create(
 			"Trade",
 			[
-				EventOutcome.resource_change("food", -3),
-				EventOutcome.resource_change("water", -2),
-				EventOutcome.resource_change("tarp", 1),
+				EventOutcome.resource_change(ResourceIds.FOOD, -3),
+				EventOutcome.resource_change(ResourceIds.WATER, -2),
+				EventOutcome.resource_change(ResourceIds.TARP, 1),
 				EventOutcome.message("Traded 3 food and 2 water for a tarp roll."),
 			],
 		),
@@ -131,7 +132,7 @@ static func _lost_child() -> RefCounted:
 			"Take them in",
 			[
 				EventOutcome.wellbeing(10),
-				EventOutcome.resource_change("food", -2),
+				EventOutcome.resource_change(ResourceIds.FOOD, -2),
 				EventOutcome.message("The child joined the settlement. Wellbeing rose by 10."),
 			],
 		),
@@ -179,7 +180,7 @@ static func _strange_illness() -> RefCounted:
 		EventChoice.create(
 			"Use the last medicine",
 			[
-				EventOutcome.resource_change("goods", -1),
+				EventOutcome.resource_change(ResourceIds.GOODS, -1),
 				EventOutcome.wellbeing(5),
 				EventOutcome.message("The medicine worked. The resident recovered quickly."),
 			],
@@ -204,7 +205,7 @@ static func _wild_boars() -> RefCounted:
 	chase_random.random_outcomes = [
 		EventOutcome.message("Residents chased the boars away."),
 		EventOutcome.message("Residents chased the boars away."),
-		EventOutcome.resource_change("food", -2),
+		EventOutcome.resource_change(ResourceIds.FOOD, -2),
 		EventOutcome.message("The boars got some food before being chased off."),
 	]
 	var choices: Array = [
@@ -218,7 +219,7 @@ static func _wild_boars() -> RefCounted:
 		EventChoice.create(
 			"Let them take what they want",
 			[
-				EventOutcome.resource_change("food", -4),
+				EventOutcome.resource_change(ResourceIds.FOOD, -4),
 				EventOutcome.message("The boars raided the storage and left."),
 			],
 		),
@@ -241,7 +242,7 @@ static func _forest_ranger() -> RefCounted:
 		EventChoice.create(
 			"Trade and heed the warning",
 			[
-				EventOutcome.resource_change("food", -1),
+				EventOutcome.resource_change(ResourceIds.FOOD, -1),
 				EventOutcome.set_flag(&"boar_warning"),
 				EventOutcome.message("The ranger traded and warned about boars nearby."),
 			],
@@ -270,13 +271,13 @@ static func _refugees() -> RefCounted:
 	var conditions: Array = [
 		EventCondition.era_is(SettlementStateScript.Era.TENT),
 		EventCondition.day_at_least(6),
-		EventCondition.resource_at_most("food", 999),
+		EventCondition.resource_at_most(ResourceIds.FOOD, 999),
 	]
 	var choices: Array = [
 		EventChoice.create(
 			"Welcome them",
 			[
-				EventOutcome.resource_change("food", -4),
+				EventOutcome.resource_change(ResourceIds.FOOD, -4),
 				EventOutcome.wellbeing(8),
 				EventOutcome.message("The refugees joined the settlement. Population increased."),
 			],
@@ -306,7 +307,7 @@ static func _strange_light() -> RefCounted:
 	investigate_random.kind = EventOutcome.Kind.MESSAGE
 	investigate_random.random_chance = 0.6
 	investigate_random.random_outcomes = [
-		EventOutcome.resource_change("goods", 2),
+		EventOutcome.resource_change(ResourceIds.GOODS, 2),
 		EventOutcome.message("The search party found abandoned supplies."),
 		EventOutcome.worker_busy(24.0, "Lost"),
 		EventOutcome.message("The investigator got lost and took a day to return."),
@@ -327,14 +328,14 @@ static func _broken_tools() -> RefCounted:
 	var conditions: Array = [
 		EventCondition.era_is(SettlementStateScript.Era.TENT),
 		EventCondition.day_at_least(5),
-		EventCondition.resource_at_least("branches", 2),
+		EventCondition.resource_at_least(ResourceIds.BRANCHES, 2),
 	]
 	var choices: Array = [
 		EventChoice.create(
 			"Repair it",
 			[
 				EventOutcome.worker_busy(4.0, "Repairing tools"),
-				EventOutcome.resource_change("branches", -2),
+				EventOutcome.resource_change(ResourceIds.BRANCHES, -2),
 				EventOutcome.message("The tool was repaired with branches and effort."),
 			],
 		),
@@ -358,7 +359,7 @@ static func _tainted_water() -> RefCounted:
 	var conditions: Array = [
 		EventCondition.era_is(SettlementStateScript.Era.TENT),
 		EventCondition.day_at_least(4),
-		EventCondition.resource_at_least("water", 3),
+		EventCondition.resource_at_least(ResourceIds.WATER, 3),
 	]
 	var risk_random := EventOutcome.new()
 	risk_random.kind = EventOutcome.Kind.MESSAGE
@@ -374,7 +375,7 @@ static func _tainted_water() -> RefCounted:
 			"Boil it all",
 			[
 				EventOutcome.worker_busy(3.0, "Boiling water"),
-				EventOutcome.resource_change("branches", -1),
+				EventOutcome.resource_change(ResourceIds.BRANCHES, -1),
 				EventOutcome.message("The water was boiled and is now safe."),
 			],
 		),
@@ -397,9 +398,9 @@ static func _forest_cache() -> RefCounted:
 	open_random.kind = EventOutcome.Kind.MESSAGE
 	open_random.random_chance = 0.5
 	open_random.random_outcomes = [
-		EventOutcome.resource_change("goods", 3),
+		EventOutcome.resource_change(ResourceIds.GOODS, 3),
 		EventOutcome.message("The cache contained preserved goods."),
-		EventOutcome.resource_change("food", 4),
+		EventOutcome.resource_change(ResourceIds.FOOD, 4),
 		EventOutcome.message("The cache had canned food."),
 		EventOutcome.worker_busy(24.0, "Trapped"),
 		EventOutcome.message("It was a trap! A forager got caught and took a day to free themselves."),

@@ -6,21 +6,22 @@ extends RefCounted
 ## is available. These are domain rules, not presentation formatting.
 
 const SettlementStateScript = preload("res://game/features/settlement/domain/settlement_state.gd")
+const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 
 
 static func sell_items_for(market_type: String) -> Array:
-	var items := [["goods", 5]]
+	var items := [[ResourceIds.GOODS, 5]]
 	if market_type in ["earth_market", "clay_market", "wood_market", "stone_market", "brick_market"]:
-		items.append(["soil", 1])
+		items.append([ResourceIds.SOIL, 1])
 	if market_type in ["clay_market", "wood_market", "stone_market", "brick_market"]:
-		items.append(["clay", 2])
+		items.append([ResourceIds.CLAY, 2])
 	if market_type in ["wood_market", "stone_market", "brick_market"]:
-		items.append(["wood", 2])
-		items.append(["boards", 3])
+		items.append([ResourceIds.WOOD, 2])
+		items.append([ResourceIds.BOARDS, 3])
 	if market_type in ["stone_market", "brick_market"]:
-		items.append(["stone", 3])
+		items.append([ResourceIds.STONE, 3])
 	if market_type == "brick_market":
-		items.append(["bricks", 4])
+		items.append([ResourceIds.BRICKS, 4])
 	return items
 
 
@@ -31,7 +32,7 @@ static func buy_items_for(market_type: String) -> Array:
 		items.append(["hand_saw", 15])
 		items.append(["shovel", 15])
 		items.append(["bucket", 15])
-		items.append(["tarp", 8])
+		items.append([ResourceIds.TARP, 8])
 	elif market_type in ["earth_market", "clay_market"]:
 		items.append(["hoe", 18])
 	elif market_type in ["wood_market", "stone_market", "brick_market"]:

@@ -1,15 +1,17 @@
 class_name SettlementRules
 extends RefCounted
 
+const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
+
 const LEAVE_SATISFACTION_THRESHOLD := 10.0
 const WARNING_SATISFACTION_THRESHOLD := 30.0
 const MIN_SETTLEMENT_POPULATION := 2
 const OPEN_AIR_ORGANIC_DECAY_RATES := {
-	"food": 0.10,
-	"grass": 0.05,
-	"branches": 0.05,
-	"wood": 0.05,
-	"logs": 0.05,
+	ResourceIds.FOOD: 0.10,
+	ResourceIds.GRASS: 0.05,
+	ResourceIds.BRANCHES: 0.05,
+	ResourceIds.WOOD: 0.05,
+	ResourceIds.LOGS: 0.05,
 }
 
 static func production_multiplier(workday_hours: int) -> float:

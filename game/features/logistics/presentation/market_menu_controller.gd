@@ -3,6 +3,7 @@ extends RefCounted
 
 const SettlementStateScript = preload("res://game/features/settlement/domain/settlement_state.gd")
 const TradeCatalogScript = preload("res://game/features/logistics/domain/trade_catalog.gd")
+const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 
 var simulation: Node
 
@@ -94,7 +95,7 @@ func refresh_market_menu() -> void:
 			})
 		state["equipment_offers"] = equipment_offers
 
-	var room: int = maxi(0, simulation.settlement.storage_room_for("food") - simulation._trade_incoming_resource("food"))
+	var room: int = maxi(0, simulation.settlement.storage_room_for(ResourceIds.FOOD) - simulation._trade_incoming_resource(ResourceIds.FOOD))
 	var buyable: int = mini(5, mini(room, available_money / simulation.FOOD_PURCHASE_PRICE))
 	state["food_button"] = {
 		"text": "Buy %d food (%d Coins)  Room: %d" % [buyable, buyable * simulation.FOOD_PURCHASE_PRICE, room],

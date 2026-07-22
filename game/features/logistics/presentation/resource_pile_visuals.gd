@@ -5,6 +5,7 @@ extends RefCounted
 ## mesh visibility, and label formatting. No domain or state logic.
 
 const ResourcePileScene = preload("res://game/features/logistics/presentation/resource_pile.tscn")
+const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 
 
 func create_visual(position: Vector3, resources: Dictionary, is_backpack_pile: bool) -> Node3D:
@@ -26,11 +27,11 @@ func create_visual(position: Vector3, resources: Dictionary, is_backpack_pile: b
 		backpack_mesh.visible = true
 		base_mesh_node.visible = false
 	else:
-		var has_wood := resources.has("branches") or resources.has("wood") or resources.has("logs")
+		var has_wood := resources.has(ResourceIds.BRANCHES) or resources.has(ResourceIds.WOOD) or resources.has(ResourceIds.LOGS)
 		log1.visible = has_wood
 		log2.visible = has_wood
-		grass_pile.visible = resources.has("grass")
-		stone_pile.visible = resources.has("stone") or resources.has("soil") or resources.has("clay") or resources.has("bricks")
+		grass_pile.visible = resources.has(ResourceIds.GRASS)
+		stone_pile.visible = resources.has(ResourceIds.STONE) or resources.has(ResourceIds.SOIL) or resources.has(ResourceIds.CLAY) or resources.has(ResourceIds.BRICKS)
 
 	return pile
 

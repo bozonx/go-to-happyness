@@ -11,6 +11,7 @@ const EntranceSignScene = preload("res://game/features/world/presentation/entran
 const GrassSourceRecord = preload("res://game/features/production/domain/grass_source_record.gd")
 const ForageSourceRecord = preload("res://game/features/production/domain/forage_source_record.gd")
 const RabbitSourceRecord = preload("res://game/features/production/domain/rabbit_source_record.gd")
+const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 
 var simulation: Node
 
@@ -171,10 +172,10 @@ func create_entrance_stone() -> void:
 func spawn_trash_piles() -> void:
 	var trash_cells := [Vector2i(-10, -3), Vector2i(7, 12), Vector2i(-14, 6), Vector2i(5, -12)]
 	var trash_contents := [
-		{"grass": simulation.random.randi_range(8, 14), "branches": simulation.random.randi_range(4, 8)},
-		{"grass": simulation.random.randi_range(6, 12), "branches": simulation.random.randi_range(3, 7)},
-		{"grass": simulation.random.randi_range(10, 16), "branches": simulation.random.randi_range(5, 9)},
-		{"grass": simulation.random.randi_range(4, 8), "branches": simulation.random.randi_range(2, 5), "gloves": 1},
+		{ResourceIds.GRASS: simulation.random.randi_range(8, 14), ResourceIds.BRANCHES: simulation.random.randi_range(4, 8)},
+		{ResourceIds.GRASS: simulation.random.randi_range(6, 12), ResourceIds.BRANCHES: simulation.random.randi_range(3, 7)},
+		{ResourceIds.GRASS: simulation.random.randi_range(10, 16), ResourceIds.BRANCHES: simulation.random.randi_range(5, 9)},
+		{ResourceIds.GRASS: simulation.random.randi_range(4, 8), ResourceIds.BRANCHES: simulation.random.randi_range(2, 5), "gloves": 1},
 	]
 	for i in range(trash_cells.size()):
 		var cell: Vector2i = trash_cells[i]

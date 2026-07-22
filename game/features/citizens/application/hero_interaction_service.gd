@@ -5,6 +5,7 @@ extends RefCounted
 ## grass patches, forage sources, rabbits, and interaction percentages.
 
 const GrassSourceRecord = preload("res://game/features/production/domain/grass_source_record.gd")
+const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 
 var simulation: Node
 
@@ -122,14 +123,14 @@ func resource_remaining_percent(resource_type: String) -> int:
 	if simulation.player_citizen == null:
 		return 0
 	match resource_type:
-		"wood":
+		ResourceIds.WOOD:
 			for position in simulation.tree_positions:
 				if simulation.player_citizen.global_position.distance_to(position) <= float(simulation.INTERACTION_RANGE):
 					var tree: Node3D = simulation.tree_nodes.get(simulation._cell_from_position(position))
 					if is_instance_valid(tree) and not bool(tree.get_meta("felled", false)):
 						return 100
 			return 0
-		"branches":
+		ResourceIds.BRANCHES:
 			for position in simulation.tree_positions:
 				if simulation.player_citizen.global_position.distance_to(position) <= float(simulation.INTERACTION_RANGE):
 					var tree: Node3D = simulation.tree_nodes.get(simulation._cell_from_position(position))
@@ -138,7 +139,7 @@ func resource_remaining_percent(resource_type: String) -> int:
 						var initial := maxi(1, int(tree.get_meta("initial_branches", remaining)))
 						return clampi(int(round(float(remaining) / float(initial) * 100.0)), 0, 100)
 			return 0
-		"grass":
+		ResourceIds.GRASS:
 			var pos: Vector3 = nearby_grass_source_position()
 			if pos != Vector3.INF:
 				var cell: Vector2i = simulation._cell_from_position(pos)
@@ -149,8 +150,8 @@ func resource_remaining_percent(resource_type: String) -> int:
 				var initial := maxi(1, source.initial)
 				return clampi(int(round(float(remaining) / float(initial) * 100.0)), 0, 100)
 			return 0
-		"water":
+		ResourceIds.WATER:
 			return 100
-		"food":
+		ResourceIds.FOOD:
 			return 100
 	return 0

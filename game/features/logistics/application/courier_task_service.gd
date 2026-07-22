@@ -9,6 +9,7 @@ extends RefCounted
 const CourierTaskScript = preload("res://game/features/logistics/domain/courier_task.gd")
 const BuildingCatalog = preload("res://game/features/buildings/domain/building_catalog.gd")
 const FireSourceStateScript = preload("res://game/features/settlement/domain/fire_source_state.gd")
+const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 
 var simulation: Node
 
@@ -21,10 +22,10 @@ func start_courier_canteen_or_trade(courier: Citizen, task: RefCounted) -> bool:
 	match task.kind:
 		CourierTask.Kind.CANTEEN:
 			var capacity: int = BuildingCatalog.kitchen_food_capacity(simulation.building_registry.building_type_for_node(simulation.canteen))
-			var amount: int = mini(courier.courier_capacity(), mini(simulation.settlement.amount("food"), capacity - simulation.canteen_food))
+			var amount: int = mini(courier.courier_capacity(), mini(simulation.settlement.amount(ResourceIds.FOOD), capacity - simulation.canteen_food))
 			if amount <= 0:
 				return false
-			simulation.settlement.add("food", -amount)
+			simulation.settlement.add(ResourceIds.FOOD, -amount)
 			simulation.pending_canteen_delivery = true
 			simulation.pending_canteen_carrier = courier
 			simulation.pending_canteen_delivery_amount = amount
@@ -45,14 +46,14 @@ func start_courier_pickup_task(courier: Citizen, task: RefCounted) -> bool:
 		CourierTask.Kind.SAWMILL_PICKUP:
 			var sawmill_stock: Dictionary = simulation.sawmills.stock_at(task.payload.position, simulation.runtime_seconds)
 			var sawmill_amount: int = mini(courier.courier_capacity(), int(sawmill_stock.boards))
-			if sawmill_amount <= 0 or not reserve_task_warehouse_space(task, "boards", sawmill_amount):
+			if sawmill_amount <= 0 or not reserve_task_warehouse_space(task, ResourceIds.BOARDS, sawmill_amount):
 				return false
 			courier.assign_sawmill_pickup(task.payload.position, task.dropoff)
 			return true
 		CourierTask.Kind.DEW_PICKUP:
 			var dew_stored: int = simulation.water_collector_service.stored_at(task.payload.position)
 			var dew_amount: int = mini(courier.courier_capacity(), dew_stored)
-			if dew_amount <= 0 or not reserve_task_warehouse_space(task, "water", dew_amount):
+			if dew_amount <= 0 or not reserve_task_warehouse_space(task, ResourceIds.WATER, dew_amount):
 				return false
 			courier.assign_dew_collector_pickup(task.payload.position, task.dropoff)
 			return true
@@ -107,22 +108,22 @@ func start_courier_construction_or_supply(courier: Citizen, task: RefCounted) ->
 			var supply_kind: String = str(task.payload.get("supply_kind", ""))
 			match supply_kind:
 				"repair":
-					if simulation.settlement.amount("branches") <= 0:
+					if simulation.settlement.amount(ResourceIds.BRANCHES) <= 0:
 						return false
-					simulation.settlement.add("branches", -1)
+					simulation.settlement.add(ResourceIds.BRANCHES, -1)
 					building.set_meta("repair_reserved", true)
-					courier.assign_building_supply(building, task.pickup, "branches", "repair")
+					courier.assign_building_supply(building, task.pickup, ResourceIds.BRANCHES, "repair")
 					return true
 				"firewood":
-					if simulation.settlement.amount("branches") <= 0:
+					if simulation.settlement.amount(ResourceIds.BRANCHES) <= 0:
 						return false
 					var fire_state: RefCounted = simulation._fire_state_for(building)
 					if not fire_state.needs_supply(4):
 						return false
-					simulation.settlement.add("branches", -1)
+					simulation.settlement.add(ResourceIds.BRANCHES, -1)
 					fire_state.reserve(1)
 					simulation._apply_fire_state(building, fire_state)
-					courier.assign_building_supply(building, task.pickup, "branches", "firewood")
+					courier.assign_building_supply(building, task.pickup, ResourceIds.BRANCHES, "firewood")
 					return true
 			return false
 	return false
@@ -210,11 +211,11 @@ func cancel_courier_task(courier: Citizen, task: RefCounted) -> void:
 				worker.register_pending_resource(courier.courier_resource_type, carried)
 				courier.carried_amount = 0
 		CourierTask.Kind.SAWMILL_PICKUP:
-			if carried > 0 and is_instance_valid(courier) and courier.courier_resource_type == "boards":
+			if carried > 0 and is_instance_valid(courier) and courier.courier_resource_type == ResourceIds.BOARDS:
 				simulation.sawmills.return_boards(task.pickup, carried, simulation.runtime_seconds)
 				courier.carried_amount = 0
 		CourierTask.Kind.DEW_PICKUP:
-			if carried > 0 and is_instance_valid(courier) and courier.courier_resource_type == "water":
+			if carried > 0 and is_instance_valid(courier) and courier.courier_resource_type == ResourceIds.WATER:
 				simulation.water_collector_service.return_water(task.pickup, carried)
 				courier.carried_amount = 0
 		CourierTask.Kind.BUILDING_SUPPLY:
@@ -223,14 +224,14 @@ func cancel_courier_task(courier: Citizen, task: RefCounted) -> void:
 				var building: Node3D = task.payload.get("building") as Node3D
 				if is_instance_valid(building):
 					building.set_meta("repair_reserved", false)
-				simulation.settlement.add(str(task.payload.get("resource", "branches")), 1)
+				simulation.settlement.add(str(task.payload.get("resource", ResourceIds.BRANCHES)), 1)
 			elif supply_kind == "firewood":
 				var fire_building: Node3D = task.payload.get("building") as Node3D
 				if is_instance_valid(fire_building):
 					var fire_state: RefCounted = simulation._fire_state_for(fire_building)
 					fire_state.reserved_fuel = maxi(0, fire_state.reserved_fuel - 1)
 					simulation._apply_fire_state(fire_building, fire_state)
-				simulation.settlement.add(str(task.payload.get("resource", "branches")), 1)
+				simulation.settlement.add(str(task.payload.get("resource", ResourceIds.BRANCHES)), 1)
 
 
 func reconcile_construction_reservations(site: ConstructionSite) -> void:
@@ -274,7 +275,7 @@ func start_courier_task(courier: Citizen, task: RefCounted) -> bool:
 func is_courier_task_valid(task: RefCounted) -> bool:
 	match task.kind:
 		CourierTask.Kind.CANTEEN:
-			return is_instance_valid(simulation.canteen) and simulation.settlement.amount("food") > 0 and not simulation.pending_canteen_delivery and simulation.canteen_food < BuildingCatalog.kitchen_food_capacity(simulation.building_registry.building_type_for_node(simulation.canteen))
+			return is_instance_valid(simulation.canteen) and simulation.settlement.amount(ResourceIds.FOOD) > 0 and not simulation.pending_canteen_delivery and simulation.canteen_food < BuildingCatalog.kitchen_food_capacity(simulation.building_registry.building_type_for_node(simulation.canteen))
 		CourierTask.Kind.TRADE:
 			return simulation.queued_trades.has(task.payload.order)
 		CourierTask.Kind.SAWMILL_PICKUP:
@@ -306,9 +307,9 @@ func is_courier_task_valid(task: RefCounted) -> bool:
 			var supply_kind := str(task.payload.get("supply_kind", ""))
 			match supply_kind:
 				"repair":
-					return bool(building.get_meta("repair_needed", false)) and not bool(building.get_meta("repair_reserved", false)) and simulation.settlement.amount("branches") > 0
+					return bool(building.get_meta("repair_needed", false)) and not bool(building.get_meta("repair_reserved", false)) and simulation.settlement.amount(ResourceIds.BRANCHES) > 0
 				"firewood":
-					return simulation._fire_state_for(building).needs_supply(4) and simulation.settlement.amount("branches") > 0
+					return simulation._fire_state_for(building).needs_supply(4) and simulation.settlement.amount(ResourceIds.BRANCHES) > 0
 			return false
 		CourierTask.Kind.ARRIVAL:
 			var arrival_house := task.payload.get("house") as Node3D

@@ -2,6 +2,7 @@ class_name StorageRoutingService
 extends RefCounted
 
 const ResourcePileScript = preload("res://game/features/logistics/domain/resource_pile.gd")
+const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 
 ## Handles warehouse routing (reachable index search, delivery position,
 ## route cost), storage capacity queries, pile lookups, and storage room
@@ -109,9 +110,9 @@ func has_storage_room_for_role(role: String) -> bool:
 				var next_depth: int = site.depth + 1
 				var resource: String = simulation._resource_for_depth(site, next_depth)
 				return simulation.settlement.can_make_room_for(resource, 1, simulation.warehouse_positions.size())
-		return simulation.settlement.can_make_room_for("soil", 1, simulation.warehouse_positions.size())
+		return simulation.settlement.can_make_room_for(ResourceIds.SOIL, 1, simulation.warehouse_positions.size())
 
-	var resource_for_role := {"forestry": "logs", "farming": "food", "gather_branches": "branches", "gather_grass": "grass", "gather_food": "food", "gather_water": "water"}
+	var resource_for_role := {"forestry": ResourceIds.LOGS, "farming": ResourceIds.FOOD, "gather_branches": ResourceIds.BRANCHES, "gather_grass": ResourceIds.GRASS, "gather_food": ResourceIds.FOOD, "gather_water": ResourceIds.WATER}
 	if not resource_for_role.has(role):
 		return true
 	return simulation.settlement.can_make_room_for(resource_for_role[role], 1, simulation.warehouse_positions.size())

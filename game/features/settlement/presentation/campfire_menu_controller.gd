@@ -4,6 +4,7 @@ extends RefCounted
 const BuildingCatalogScript = preload("res://game/features/buildings/domain/building_catalog.gd")
 const SettlementStateScript = preload("res://game/features/settlement/domain/settlement_state.gd")
 const S = preload("res://game/features/ui/domain/game_strings.gd")
+const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 
 var simulation: Node
 
@@ -232,14 +233,14 @@ func build_campfire_era_requirements(housing_slots: int) -> Array:
 			next_era = SettlementStateScript.Era.WOOD
 			var has_lodge: bool = simulation.settlement.has_building("clay_lodge")
 			var has_mkt: bool = simulation.settlement.has_building("clay_market")
-			var water_ok: bool = simulation.settlement.amount("water") >= simulation.citizens.size()
-			var logs_ok: bool = simulation.settlement.available_amount("logs") >= 10
+			var water_ok: bool = simulation.settlement.amount(ResourceIds.WATER) >= simulation.citizens.size()
+			var logs_ok: bool = simulation.settlement.available_amount(ResourceIds.LOGS) >= 10
 			var money_ok: bool = simulation.settlement.money >= 10
 			req_text = "Requirements for Wood Era:\n"
 			req_text += "- Clay lodge built: %s\n" % ("Yes" if has_lodge else "No")
 			req_text += "- Clay market built: %s\n" % ("Yes" if has_mkt else "No")
-			req_text += "- Water (needs %d): %d (%s)\n" % [simulation.citizens.size(), simulation.settlement.amount("water"), "OK" if water_ok else "Need more"]
-			req_text += "- Logs (needs 10): %d (%s)\n" % [simulation.settlement.amount("logs"), "OK" if logs_ok else "Need more"]
+			req_text += "- Water (needs %d): %d (%s)\n" % [simulation.citizens.size(), simulation.settlement.amount(ResourceIds.WATER), "OK" if water_ok else "Need more"]
+			req_text += "- Logs (needs 10): %d (%s)\n" % [simulation.settlement.amount(ResourceIds.LOGS), "OK" if logs_ok else "Need more"]
 			req_text += "- Money (needs 10): %d (%s)\n" % [simulation.settlement.money, "OK" if money_ok else "Need more"]
 			can_advance = simulation.settlement.can_advance_to(next_era, simulation.citizens.size(), housing_slots)
 
@@ -265,13 +266,13 @@ func build_campfire_era_requirements(housing_slots: int) -> Array:
 			var has_pref: bool = simulation.settlement.has_building("stone_prefecture")
 			var has_mkt: bool = simulation.settlement.has_building("stone_market")
 			var has_mw: bool = simulation.settlement.has_building("masonry_workshop")
-			var stone_ok: bool = simulation.settlement.available_amount("stone") >= 20
+			var stone_ok: bool = simulation.settlement.available_amount(ResourceIds.STONE) >= 20
 			var money_ok: bool = simulation.settlement.money >= 20
 			req_text = "Requirements for Brick Era:\n"
 			req_text += "- Stone prefecture built: %s\n" % ("Yes" if has_pref else "No")
 			req_text += "- Masonry workshop built: %s\n" % ("Yes" if has_mw else "No")
 			req_text += "- Stone market built: %s\n" % ("Yes" if has_mkt else "No")
-			req_text += "- Stone (needs 20): %d (%s)\n" % [simulation.settlement.amount("stone"), "OK" if stone_ok else "Need more"]
+			req_text += "- Stone (needs 20): %d (%s)\n" % [simulation.settlement.amount(ResourceIds.STONE), "OK" if stone_ok else "Need more"]
 			req_text += "- Money (needs 20): %d (%s)\n" % [simulation.settlement.money, "OK" if money_ok else "Need more"]
 			can_advance = simulation.settlement.can_advance_to(next_era, simulation.citizens.size(), housing_slots)
 

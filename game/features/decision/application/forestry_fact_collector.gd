@@ -1,6 +1,8 @@
 class_name ForestryFactCollector
 extends RefCounted
 
+const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
+
 ## Collects forestry work facts for one citizen.
 
 func collect(ctx: FacadeContext) -> Dictionary:
@@ -12,7 +14,7 @@ func collect(ctx: FacadeContext) -> Dictionary:
 	var warehouse_position := Vector3.INF
 	if forestry_worker and actor_work_time and not ctx.simulation.sawmill_positions.is_empty() and not ctx.simulation.warehouse_positions.is_empty() and ctx.simulation._has_storage_room_for_role("forestry"):
 		sawmill_position = actor.employment_workplace.get_meta("service_position", actor.employment_workplace.global_position) if is_instance_valid(actor.employment_workplace) else ctx.simulation.sawmill_positions[0]
-		warehouse_position = ctx.helpers.storage_position_for(actor.global_position, "boards")
+		warehouse_position = ctx.helpers.storage_position_for(actor.global_position, ResourceIds.BOARDS)
 	var forestry_in_progress := actor.state in [Citizen.State.TO_TREE, Citizen.State.CHOPPING, Citizen.State.TO_SAWMILL]
 	var forestry_candidates: Array[Dictionary] = []
 	if forestry_worker and actor_work_time and not forestry_in_progress and sawmill_position != Vector3.INF and warehouse_position != Vector3.INF:
