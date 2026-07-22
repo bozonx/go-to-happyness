@@ -1,3 +1,4 @@
+class_name SettlementGame
 extends Node3D
 
 const SETTLEMENT_RULES = preload("res://game/features/settlement/domain/settlement_rules.gd")
@@ -542,41 +543,41 @@ var building_status_update_time := 0.0
 var workplace_priority_counter := 0
 var citizen_ai: CitizenAISystem
 var citizen_needs_service: CitizenNeedsService
-var citizen_living_status_service: RefCounted
+var citizen_living_status_service: CitizenLivingStatusService
 ## Monotonic source of stable citizen AI identity. Persist it alongside the roster
 ## once save/load is introduced so reloaded games issue non-colliding ids.
 var _next_ai_citizen_id := 1
 var route_service: GridRouteService
-var building_queue_service: RefCounted
-var citizen_lifecycle_service: CitizenLifecycleServiceScript
-var building_availability_service: RefCounted
-var building_research_service: RefCounted
-var village_territory_service: RefCounted
+var building_queue_service: BuildingQueueService
+var citizen_lifecycle_service: CitizenLifecycleService
+var building_availability_service: BuildingAvailabilityService
+var building_research_service: BuildingResearchService
+var village_territory_service: VillageTerritoryService
 var sawmills: SawmillService
 var construction: ConstructionService
 var demolition: DemolitionService
 var water_collector_service: WaterCollectorService
 var canteen_service: CanteenService
 var trade_service: TradeService
-var storage_delivery_service: RefCounted
-var storage_routing_service: StorageRoutingServiceScript
-var courier_dispatcher: RefCounted
-var courier_task_publisher: RefCounted
-var courier_task_service: CourierTaskServiceScript
-var campfire_menu_controller: RefCounted
-var workforce_menu_controller: RefCounted
-var research_menu_controller: RefCounted
-var school_menu_controller: RefCounted
-var entrance_menu_controller: RefCounted
-var house_menu_controller: RefCounted
-var pocket_take_menu_controller: RefCounted
-var market_menu_controller: RefCounted
-var warehouse_menu_controller: RefCounted
-var warehouse_fill_label_controller: RefCounted
-var building_menu_controller: RefCounted
-var building_status_indicator_controller: RefCounted
-var first_person_hud_controller: RefCounted
-var label_distance_fade_controller: RefCounted
+var storage_delivery_service: StorageDeliveryService
+var storage_routing_service: StorageRoutingService
+var courier_dispatcher: CourierDispatcher
+var courier_task_publisher: CourierTaskPublisher
+var courier_task_service: CourierTaskService
+var campfire_menu_controller: CampfireMenuController
+var workforce_menu_controller: WorkforceMenuController
+var research_menu_controller: ResearchMenuController
+var school_menu_controller: SchoolMenuController
+var entrance_menu_controller: EntranceMenuController
+var house_menu_controller: HouseMenuController
+var pocket_take_menu_controller: PocketTakeMenuController
+var market_menu_controller: MarketMenuController
+var warehouse_menu_controller: WarehouseMenuController
+var warehouse_fill_label_controller: WarehouseFillLabelController
+var building_menu_controller: BuildingMenuController
+var building_status_indicator_controller: BuildingStatusIndicatorController
+var first_person_hud_controller: FirstPersonHUDController
+var label_distance_fade_controller: LabelDistanceFadeController
 var trail_field: TrailFieldService
 var trail_overlay: MeshInstance3D:
 	get: return world_setup.trail_overlay if world_setup != null else null
@@ -590,18 +591,18 @@ var resource_pile_service: ResourcePileService
 var foraging_service: ForagingService
 var fire_management_service: FireManagementService
 var building_maintenance_service: BuildingMaintenanceService
-var building_lifecycle_service: BuildingLifecycleServiceScript
-var settlement_survival_service: SettlementSurvivalServiceScript
-var settlement_daily_rules_service: SettlementDailyRulesServiceScript
-var territory_service: TerritoryServiceScript
-var citizen_registration_service: RefCounted
-var school_service: RefCounted
-var building_placement_service: RefCounted
-var citizen_daily_order_service: RefCounted
-var hero_pocket_service: RefCounted
-var hero_interaction_service: RefCounted
-var workplace_labor_service: RefCounted
-var building_visuals_service: RefCounted
+var building_lifecycle_service: BuildingLifecycleService
+var settlement_survival_service: SettlementSurvivalService
+var settlement_daily_rules_service: SettlementDailyRulesService
+var territory_service: TerritoryService
+var citizen_registration_service: CitizenRegistrationService
+var school_service: SchoolService
+var building_placement_service: BuildingPlacementService
+var citizen_daily_order_service: CitizenDailyOrderService
+var hero_pocket_service: HeroPocketService
+var hero_interaction_service: HeroInteractionService
+var workplace_labor_service: WorkplaceLaborService
+var building_visuals_service: BuildingVisualsService
 
 
 func _ready() -> void:
