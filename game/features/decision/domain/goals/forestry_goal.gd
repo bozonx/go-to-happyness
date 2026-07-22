@@ -1,29 +1,11 @@
 class_name ForestryGoal
-extends AICitizenGoal
+extends "res://game/features/decision/domain/goals/work_goal_base.gd"
 
 const ForestryWorkStepScript = preload("res://game/features/decision/domain/behavior/forestry_work_step.gd")
-const MoveToStepScript = preload("res://game/features/decision/domain/behavior/move_to_step.gd")
-const SequenceStepScript = preload("res://game/features/decision/domain/behavior/sequence_step.gd")
 
 
 func _init() -> void:
-	super(&"forestry")
-	# A personal need cancels the current cycle and releases its tree. The director
-	# will publish a fresh order after the citizen becomes available again.
-	resumable = false
-
-
-func score(
-	snapshot: WorldSnapshot,
-	citizen: CitizenSnapshot,
-	order: CitizenOrder,
-	_blackboard: AIBlackboard
-) -> float:
-	if citizen == null or order == null or order.kind != &"forestry":
-		return 0.0
-	if not bool(citizen.facts.value(&"work.forestry.worker", false)):
-		return 0.0
-	return clampf(order.priority, 0.0, 1.0)
+	super(&"forestry", &"work.forestry.worker", "Harvest tree for sawmill")
 
 
 func build_task(
@@ -41,4 +23,4 @@ func build_task(
 	return BehaviorTask.new(id, SequenceStepScript.new([
 		MoveToStepScript.new(move_target, 0.25, [&"forestry.tree", tree_id]),
 		ForestryWorkStepScript.new(),
-	]), false, "Harvest tree for sawmill")
+	]), false, work_description)

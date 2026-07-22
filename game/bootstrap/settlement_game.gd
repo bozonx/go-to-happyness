@@ -8,6 +8,8 @@ const FireLightScene = preload("res://game/features/buildings/presentation/fire_
 const HouseLightScene = preload("res://game/features/buildings/presentation/house_light.tscn")
 const BuildingSelectorScene = preload("res://game/features/buildings/presentation/building_selector.tscn")
 const EntranceMarkerScene = preload("res://game/features/buildings/presentation/entrance_marker.tscn")
+const ConstructionSiteScene = preload("res://game/features/buildings/presentation/construction_site.tscn")
+const ConstructionEntrancePostScene = preload("res://game/features/buildings/presentation/construction_entrance_post.tscn")
 const BillboardLabelScene = preload("res://game/features/ui/presentation/billboard_label.tscn")
 const GatheringPlaceVisualScene = preload("res://game/features/buildings/presentation/gathering_place_visual.tscn")
 const PocketTakeItemRowScene = preload("res://game/features/citizens/presentation/pocket_take_item_row.tscn")
@@ -657,6 +659,8 @@ func _ready() -> void:
 	construction_runtime.navigation_changed = _refresh_navigation_grid
 	construction_runtime.update_supply_label = _update_construction_supply_label
 	construction = ConstructionService.new()
+	construction.site_scene = ConstructionSiteScene
+	construction.entrance_post_scene = ConstructionEntrancePostScene
 	construction.configure(construction_runtime)
 	var demolition_runtime := DemolitionRuntime.new()
 	demolition_runtime.duration = DEMOLITION_DURATION
@@ -671,6 +675,7 @@ func _ready() -> void:
 	canteen_service.configure(self)
 	resource_pile_service = ResourcePileService.new(self, resource_piles, settlement, weather_state)
 	foraging_service = ForagingService.new()
+	foraging_service.billboard_label_scene = BillboardLabelScene
 	foraging_service.setup(
 		settlement,
 		forager_positions,
@@ -724,6 +729,7 @@ func _ready() -> void:
 	building_lifecycle_service = BuildingLifecycleServiceScript.new()
 	building_lifecycle_service.configure(self)
 	excavation_service = ExcavationServiceScript.new()
+	excavation_service.dig_site_scene = DigSiteScene
 	excavation_service.configure(self)
 	citizen_registration_service = CitizenRegistrationServiceScript.new()
 	citizen_registration_service.configure(self)
