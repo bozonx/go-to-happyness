@@ -201,6 +201,9 @@ var is_hero := false
 ## it is deterministic within a loaded settlement and is designed to be persisted
 ## with the roster once save/load is introduced.
 var ai_id := 0
+
+func get_stable_id() -> int:
+	return ai_id if ai_id != 0 else get_instance_id()
 var construction_site: Node3D
 var specialization: String:
 	get:

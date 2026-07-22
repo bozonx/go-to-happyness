@@ -925,9 +925,9 @@ func _guard_citizen_positions() -> void:
 	if not is_instance_valid(entrance_stone):
 		return
 	for citizen in citizens:
-		if not is_instance_valid(citizen) or outside_workers.has(citizen.get_instance_id()):
+		if not is_instance_valid(citizen) or outside_workers.has(citizen.get_stable_id()):
 			continue
-		var citizen_id := citizen.get_instance_id()
+		var citizen_id := citizen.get_stable_id()
 		var previous: Vector3 = last_citizen_positions.get(citizen_id, citizen.global_position)
 		var intentionally_at_entrance := citizen.state in [Citizen.State.TO_ARRIVAL_ENTRANCE, Citizen.State.ARRIVAL_MEETING, Citizen.State.ARRIVAL_WAITING, Citizen.State.TO_ARRIVAL_CENTER, Citizen.State.TO_TRADE_PICKUP, Citizen.State.TO_TRADE_DESTINATION]
 		# No normal work transition moves an established resident from across the
@@ -2194,8 +2194,8 @@ func _skip_night() -> void:
 	# locations are valid even when the morning scheduler assigns fresh work.
 	var positions: Dictionary = {}
 	for citizen in citizens:
-		if is_instance_valid(citizen) and not outside_workers.has(citizen.get_instance_id()):
-			positions[citizen.get_instance_id()] = citizen.global_position
+		if is_instance_valid(citizen) and not outside_workers.has(citizen.get_stable_id()):
+			positions[citizen.get_stable_id()] = citizen.global_position
 	var target_day := day_cycle.current_day + (1 if clock.hour() >= 6 else 0)
 	settlement_survival_service.is_skipping_night = true
 	settlement_survival_service.skip_zero_wellbeing_departure_applied = false
@@ -2219,10 +2219,10 @@ func _skip_night() -> void:
 	_apply_skip_night_incident()
 	_update_workers()
 	for citizen in citizens:
-		if is_instance_valid(citizen) and positions.has(citizen.get_instance_id()):
-			citizen.global_position = positions[citizen.get_instance_id()]
+		if is_instance_valid(citizen) and positions.has(citizen.get_stable_id()):
+			citizen.global_position = positions[citizen.get_stable_id()]
 			citizen.velocity = Vector3.ZERO
-			last_citizen_positions[citizen.get_instance_id()] = citizen.global_position
+			last_citizen_positions[citizen.get_stable_id()] = citizen.global_position
 	if citizen_ai != null:
 		citizen_ai.request_decision_refresh()
 	_update_skip_night_button()
@@ -2368,7 +2368,7 @@ func _send_selected_resident_to_outside_work() -> void:
 	if not selected_builder.can_handle_entry_logistics() or not _is_work_time():
 		_update_interface("Outside work requires a Courier.")
 		return
-	var worker_id := selected_builder.get_instance_id()
+	var worker_id := selected_builder.get_stable_id()
 	if outside_workers.has(worker_id):
 		_update_interface("This resident is already working in a neighboring settlement.")
 		return
@@ -2386,7 +2386,7 @@ func _on_outside_work_departed(worker: Citizen) -> void:
 	if task == null or task.kind != CourierTask.Kind.OUTSIDE_WORK:
 		return
 	var reward := int(task.payload.get("reward", OUTSIDE_WORK_BASE_REWARD_MIN))
-	var worker_id := worker.get_instance_id()
+	var worker_id := worker.get_stable_id()
 	outside_workers[worker_id] = {
 		"citizen": worker,
 		"return_at_minute": _absolute_game_minutes() + OUTSIDE_WORK_DURATION_MINUTES,

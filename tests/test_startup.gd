@@ -116,15 +116,15 @@ func _init() -> void:
 	var original_resident_position := resident.global_position
 	var entrance: Vector3 = simulation.entrance_stone.global_position
 	resident.global_position = entrance + Vector3(2.4, 0.0, 0.0)
-	simulation.last_citizen_positions[resident.get_instance_id()] = entrance + Vector3(2.6, 0.0, 0.0)
+	simulation.last_citizen_positions[resident.get_stable_id()] = entrance + Vector3(2.6, 0.0, 0.0)
 	simulation._guard_citizen_positions()
 	assert(resident.global_position.distance_to(entrance) < 2.5)
 	resident.global_position = entrance
-	simulation.last_citizen_positions[resident.get_instance_id()] = entrance + Vector3(10.0, 0.0, 0.0)
+	simulation.last_citizen_positions[resident.get_stable_id()] = entrance + Vector3(10.0, 0.0, 0.0)
 	simulation._guard_citizen_positions()
 	assert(resident.global_position.distance_to(entrance) > 5.0)
 	resident.global_position = original_resident_position
-	simulation.last_citizen_positions[resident.get_instance_id()] = original_resident_position
+	simulation.last_citizen_positions[resident.get_stable_id()] = original_resident_position
 	# The needs service schedules relief; the actor receives only a selected target
 	# through the native actuator and preserves its interrupted work state.
 	var work_target: Vector3 = simulation._resource_access_position(resident.global_position, simulation.tree_positions[0])
@@ -438,8 +438,8 @@ func _init() -> void:
 	assert(simulation.courier_dispatcher.start_task(outside_worker, outside_task.id))
 	outside_worker.global_position = simulation.entrance_stone.global_position
 	outside_worker._process_outside_work_departure(0.1)
-	assert(simulation.outside_workers.has(outside_worker.get_instance_id()))
-	var outside_reward: int = int(simulation.outside_workers[outside_worker.get_instance_id()].get("reward", 0))
+	assert(simulation.outside_workers.has(outside_worker.get_stable_id()))
+	var outside_reward: int = int(simulation.outside_workers[outside_worker.get_stable_id()].get("reward", 0))
 	assert(outside_reward >= simulation.OUTSIDE_WORK_BASE_REWARD_MIN and outside_reward <= simulation.OUTSIDE_WORK_BASE_REWARD_MAX)
 	assert(not outside_worker.visible)
 	outside_worker.overtime_mode = false
@@ -450,14 +450,14 @@ func _init() -> void:
 	assert(simulation.clock.hour() == 6 and simulation.clock.minute() == 0)
 	assert(not simulation.skip_night_button.visible)
 	assert(staying_worker.global_position == staying_position)
-	assert(simulation.outside_workers.has(outside_worker.get_instance_id()))
+	assert(simulation.outside_workers.has(outside_worker.get_stable_id()))
 	assert(not outside_worker.visible)
 	assert(outside_worker.daily_order_role == "courier")
 	assert(outside_worker.daily_order_workday_id == 2)
 	assert(simulation.settlement.money == money_before_outside_work)
 	simulation.clock.set_time(9 * 60)
 	simulation._return_outside_workers()
-	assert(not simulation.outside_workers.has(outside_worker.get_instance_id()))
+	assert(not simulation.outside_workers.has(outside_worker.get_stable_id()))
 	assert(outside_worker.visible)
 	assert(simulation.settlement.money == money_before_outside_work + outside_reward)
 	var outside_return_position := outside_worker.global_position

@@ -36,7 +36,7 @@ func capture(sequence: int) -> WorldSnapshot:
 	var workforce_world := _world_data()
 	var citizens_by_id: Dictionary = {}
 	for actor: Citizen in simulation.citizens:
-		if not is_instance_valid(actor) or actor.ai_id == 0 or simulation.outside_workers.has(actor.get_instance_id()):
+		if not is_instance_valid(actor) or actor.ai_id == 0 or simulation.outside_workers.has(actor.get_stable_id()):
 			continue
 		var citizen_id := actor.ai_id
 		var actor_work_time: bool = simulation._is_citizen_work_time(actor)

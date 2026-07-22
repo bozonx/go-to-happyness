@@ -323,5 +323,5 @@ func is_courier_task_valid(task: RefCounted) -> bool:
 			return false
 		CourierTask.Kind.OUTSIDE_WORK:
 			var selected: Citizen = task.payload.get("courier") as Citizen
-			return is_instance_valid(selected) and not simulation.outside_workers.has(selected.get_instance_id())
+			return is_instance_valid(selected) and not simulation.outside_workers.has(selected.get_stable_id())
 	return false
