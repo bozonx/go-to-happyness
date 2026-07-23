@@ -1,3 +1,4 @@
+## Scene fact collector for factory work.
 class_name FactoryFactCollector
 extends RefCounted
 

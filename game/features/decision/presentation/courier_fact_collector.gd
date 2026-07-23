@@ -1,3 +1,4 @@
+## Scene fact collector for logistics.
 class_name CourierFactCollector
 extends RefCounted
 

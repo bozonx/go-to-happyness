@@ -1,3 +1,4 @@
+## Godot-facing input for fact collectors.
 class_name FacadeContext
 extends RefCounted
 

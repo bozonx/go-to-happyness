@@ -1,3 +1,4 @@
+## Godot-facing signal adapter for citizen execution.
 class_name SettlementActuatorBridge
 extends RefCounted
 

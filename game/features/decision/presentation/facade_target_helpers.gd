@@ -1,3 +1,4 @@
+## Godot-facing target and route helper.
 class_name FacadeTargetHelpers
 extends RefCounted
 

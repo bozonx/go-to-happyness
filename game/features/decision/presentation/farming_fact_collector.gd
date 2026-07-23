@@ -1,3 +1,4 @@
+## Scene fact collector for farming.
 class_name FarmingFactCollector
 extends RefCounted
 

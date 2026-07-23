@@ -1,3 +1,4 @@
+## Scene fact collector for gathering.
 class_name GatheringFactCollector
 extends RefCounted
 

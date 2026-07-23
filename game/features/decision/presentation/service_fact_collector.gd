@@ -1,3 +1,4 @@
+## Scene fact collector for service work.
 class_name ServiceFactCollector
 extends RefCounted
 

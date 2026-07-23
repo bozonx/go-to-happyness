@@ -1,3 +1,4 @@
+## Scene fact collector for construction.
 class_name ConstructionFactCollector
 extends RefCounted
 

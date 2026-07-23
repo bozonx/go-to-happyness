@@ -1,3 +1,4 @@
+## Godot-facing implementation of the CitizenActuator port.
 class_name SettlementCitizenActuator
 extends CitizenActuator
 

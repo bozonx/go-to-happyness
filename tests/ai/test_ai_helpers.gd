@@ -26,12 +26,12 @@ const FactoryWorkGoalScript = preload("res://game/features/decision/domain/goals
 const FactoryWorkOrderProviderScript = preload("res://game/features/decision/application/factory_work_order_provider.gd")
 const CourierDeliveryGoalScript = preload("res://game/features/decision/domain/goals/courier_delivery_goal.gd")
 const CourierDeliveryOrderProviderScript = preload("res://game/features/decision/application/courier_delivery_order_provider.gd")
-const SettlementCitizenActuatorScript = preload("res://game/features/decision/application/settlement_citizen_actuator.gd")
+const SettlementCitizenActuatorScript = preload("res://game/features/decision/presentation/settlement_citizen_actuator.gd")
 const MoveToStepScript = preload("res://game/features/decision/domain/behavior/move_to_step.gd")
 const RelaxAtPositionStepScript = preload("res://game/features/decision/domain/behavior/relax_at_position_step.gd")
 const WorkforceOrderProviderScript = preload("res://game/features/decision/application/workforce_order_provider.gd")
 const DailyPlayerOrderProviderScript = preload("res://game/features/decision/application/daily_player_order_provider.gd")
-const SettlementAIWorldFacadeScript = preload("res://game/features/decision/application/settlement_ai_world_facade.gd")
+const SettlementAIWorldFacadeScript = preload("res://game/features/decision/presentation/settlement_ai_world_facade.gd")
 
 
 class ScriptedStep extends BehaviorStep:

@@ -9,8 +9,8 @@ const RegisterStepScript = preload("res://game/features/decision/domain/behavior
 const SleepAtHomeStepScript = preload("res://game/features/decision/domain/behavior/sleep_at_home_step.gd")
 const EatAtCanteenStepScript = preload("res://game/features/decision/domain/behavior/eat_at_canteen_step.gd")
 const CourierDeliveryStepScript = preload("res://game/features/decision/domain/behavior/courier_delivery_step.gd")
-const FacadeTargetHelpersScript = preload("res://game/features/decision/application/facade_target_helpers.gd")
-const FacadeContextScript = preload("res://game/features/decision/application/facade_context.gd")
+const FacadeTargetHelpersScript = preload("res://game/features/decision/presentation/facade_target_helpers.gd")
+const FacadeContextScript = preload("res://game/features/decision/presentation/facade_context.gd")
 const RelieveStepScript = preload("res://game/features/decision/domain/behavior/relieve_step.gd")
 const ReturnHomeWhenIdleGoalScript = preload("res://game/features/decision/domain/goals/return_home_when_idle_goal.gd")
 

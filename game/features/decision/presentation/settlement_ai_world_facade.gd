@@ -1,8 +1,8 @@
 class_name SettlementAIWorldFacade
 extends AIWorldFacade
 
-## Scene adapter for the native AI. Each migrated mechanic adds only its owned
-## facts here, without mirroring SettlementGame's private API.
+## Scene adapter for the native AI. It is intentionally Godot-facing: the
+## application runtime receives only the immutable WorldSnapshot it produces.
 
 const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 

@@ -1,3 +1,4 @@
+## Scene fact collector for forestry.
 class_name ForestryFactCollector
 extends RefCounted
 

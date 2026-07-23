@@ -1,3 +1,4 @@
+## Scene fact collector that projects needs state into AI facts.
 class_name NeedsFactCollector
 extends RefCounted
 

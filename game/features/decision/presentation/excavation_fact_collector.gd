@@ -1,3 +1,4 @@
+## Scene fact collector for excavation.
 class_name ExcavationFactCollector
 extends RefCounted
 
