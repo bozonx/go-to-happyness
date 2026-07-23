@@ -139,14 +139,14 @@ func update_survival_busy_workers() -> void:
 func can_skip_night() -> bool:
 	if simulation._has_active_night_work_order():
 		return false
-	var hour := simulation.clock.hour()
+	var hour: int = simulation.clock.hour()
 	return hour >= 8 + simulation.settlement.workday_hours or hour < 6
 
 
 func can_skip_to_workday_start() -> bool:
 	if simulation._has_active_night_work_order():
 		return false
-	var hour := simulation.clock.hour()
+	var hour: int = simulation.clock.hour()
 	return hour >= 6 and hour < 8
 
 
@@ -157,16 +157,16 @@ func update_skip_night_button() -> void:
 
 func _skip_night_survival_hours() -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
-	var current_hour := simulation.clock.hour()
-	var first_hour := current_hour if simulation.clock.minute() == 0 else posmod(current_hour + 1, 24)
+	var current_hour: int = simulation.clock.hour()
+	var first_hour: int = current_hour if simulation.clock.minute() == 0 else posmod(current_hour + 1, 24)
 	if current_hour >= 6 and current_hour < 22:
 		first_hour = 22
 	var offset := 0
 	while offset < 24:
-		var hour := posmod(first_hour + offset, 24)
+		var hour: int = posmod(first_hour + offset, 24)
 		if hour == 6:
 			break
-		var survival_day := simulation.day_cycle.current_day
+		var survival_day: int = simulation.day_cycle.current_day
 		if current_hour >= 6 and hour < current_hour:
 			survival_day += 1
 		result.append({"day": survival_day, "hour": hour})
@@ -184,7 +184,7 @@ func skip_night() -> void:
 	for citizen in simulation.citizens:
 		if is_instance_valid(citizen) and not simulation.outside_workers.has(citizen.get_stable_id()):
 			positions[citizen.get_stable_id()] = citizen.global_position
-	var target_day := simulation.day_cycle.current_day + (1 if simulation.clock.hour() >= 6 else 0)
+	var target_day: int = simulation.day_cycle.current_day + (1 if simulation.clock.hour() >= 6 else 0)
 	simulation.settlement_survival_service.is_skipping_night = true
 	simulation.settlement_survival_service.skip_zero_wellbeing_departure_applied = false
 	for survival_hour in _skip_night_survival_hours():

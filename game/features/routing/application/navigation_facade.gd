@@ -41,5 +41,9 @@ func topology_revision() -> int:
 	return _grid.topology_revision() if _grid != null else -1
 
 
+func route_cost(from: Vector3, route: RouteResult, profile: StringName = NavGrid.PEDESTRIAN_PROFILE) -> float:
+	return _grid.route_cost(from, route, profile) if _grid != null else INF
+
+
 func metrics() -> Dictionary:
 	return {"requests": route_requests, "failures": route_failures, "expanded_nodes": expanded_nodes}

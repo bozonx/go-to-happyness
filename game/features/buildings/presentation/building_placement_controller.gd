@@ -33,8 +33,9 @@ func pay_building_cost(building_type: String) -> void:
 	simulation.settlement.pay_for_building(building_type)
 
 
-func rotated_footprint(footprint: Vector2i, rotation_quarters := simulation.build_rotation_quarters) -> Vector2i:
-	return Vector2i(footprint.y, footprint.x) if rotation_quarters % 2 != 0 else footprint
+func rotated_footprint(footprint: Vector2i, rotation_quarters := -1) -> Vector2i:
+	var quarters := rotation_quarters if rotation_quarters >= 0 else (int(simulation.build_rotation_quarters) if simulation != null else 0)
+	return Vector2i(footprint.y, footprint.x) if quarters % 2 != 0 else footprint
 
 
 func placement_key(world_position: Vector3) -> Vector2i:
@@ -74,7 +75,7 @@ func is_clear_of_objects(world_position: Vector3, minimum_distance: float) -> bo
 
 func snapped_build_position(world_position: Vector3) -> Vector3:
 	var snapped := Vector3(roundf(world_position.x), world_position.y, roundf(world_position.z))
-	var ground_height := simulation._terrain_height_at(snapped.x, snapped.z, world_position.y)
+	var ground_height: float = simulation._terrain_height_at(snapped.x, snapped.z, world_position.y)
 	if not is_nan(ground_height):
 		snapped.y = ground_height
 	return snapped

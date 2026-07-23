@@ -5623,7 +5623,7 @@ func _find_reachable_warehouse_index(from: Vector3, resource_type: String, amoun
 
 
 func _route_cost(from: Vector3, route: RouteResult) -> float:
-	return storage_routing_service.route_cost(from, route)
+	return navigation_facade.route_cost(from, route) if navigation_facade != null else INF
 
 func _is_construction_site(node: Node3D) -> bool:
 	return is_instance_valid(node) and construction.has_site(node)

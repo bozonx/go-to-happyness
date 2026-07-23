@@ -190,17 +190,7 @@ func find_reachable_warehouse_index(from: Vector3, resource_type: String, amount
 
 
 func route_cost(from: Vector3, route: RouteResult) -> float:
-	if route == null or not route.reachable:
-		return INF
-	var cost: float = 0.0
-	var previous: Vector3 = from
-	for waypoint: Vector3 in route.waypoints:
-		var segment: float = _nav_grid.segment_cost(previous, waypoint)
-		if not is_finite(segment):
-			return INF
-		cost += segment
-		previous = waypoint
-	return cost
+	return _nav_grid.route_cost(from, route) if _nav_grid != null else INF
 
 
 func set_balanced_warehouse_mode(enabled: bool) -> void:

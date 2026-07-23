@@ -50,6 +50,8 @@ static func run_all() -> void:
 	_test_road_network_validates_and_batches_changes()
 	_test_navigation_obstacle_publisher()
 	_test_navigation_facade_metrics()
+	_test_nav_grid_and_facade_route_cost()
+	_test_navigation_bridge_direct_configuration()
 
 
 static func _route_polyline_cost(grid: NavGrid, start: Vector3, waypoints: Array[Vector3]) -> float:
@@ -892,3 +894,52 @@ static func _test_navigation_facade_metrics() -> void:
 	assert(not navigation.find_route(Vector3.ZERO, Vector3(99.0, 0.0, 0.0)).reachable)
 	var metrics: Dictionary = navigation.metrics()
 	assert(metrics.requests == 2 and metrics.failures == 1 and int(metrics.expanded_nodes) > 0)
+
+
+static func _test_nav_grid_and_facade_route_cost() -> void:
+	var grid := NavGrid.new()
+	grid.configure(1.0, 10)
+	var router: GridRouteService = GridRouteServiceScript.new()
+	router.configure(grid)
+	var facade: RefCounted = NavigationFacadeScript.new()
+	facade.configure(grid, router)
+
+	var start := Vector3(0.5, 0.0, 0.5)
+	var destination := Vector3(2.5, 0.0, 0.5)
+	var route: RouteResult = facade.find_route(start, destination)
+	assert(route.reachable)
+
+	var grid_cost: float = grid.route_cost(start, route)
+	var facade_cost: float = facade.route_cost(start, route)
+	assert(is_finite(grid_cost) and grid_cost > 0.0)
+	assert(is_equal_approx(grid_cost, facade_cost))
+
+	# Blocked path segment cost must be INF
+	grid.set_blocked_cells({Vector2i(1, 0): true})
+	assert(is_inf(grid.route_cost(start, route)))
+	assert(is_inf(facade.route_cost(start, route)))
+	assert(is_inf(grid.route_cost(start, null)))
+
+
+static func _test_navigation_bridge_direct_configuration() -> void:
+	var bridge_script = load("res://game/features/routing/presentation/navigation_bridge.gd")
+	var bridge: Node = bridge_script.new()
+	var grid := NavGrid.new()
+	grid.configure(1.0, 10)
+	var router: GridRouteService = GridRouteServiceScript.new()
+	router.configure(grid)
+	var facade: RefCounted = NavigationFacadeScript.new()
+	facade.configure(grid, router)
+
+	bridge.configure(grid, facade, router)
+	var from := Vector3(0.5, 0.0, 0.5)
+	var destination := Vector3(2.5, 0.0, 0.5)
+
+	assert(bridge.is_route_reachable(from, destination))
+	var path: RouteResult = bridge.find_path_around_houses(from, destination, false)
+	assert(path.reachable)
+
+	var recovery: RouteResult = bridge.find_recovery_path(from, destination, false)
+	assert(recovery.reachable)
+
+	bridge.free()

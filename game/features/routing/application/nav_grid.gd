@@ -218,8 +218,23 @@ func is_waypoint_path_clear(from: Vector3, waypoints: Array[Vector3], allow_bloc
 			return true
 		if not is_segment_clear(previous, waypoint):
 			return false
-		previous = waypoint
 	return true
+
+
+## Calculates the total weighted traversal cost of a route's waypoint chain.
+## Returns INF if the route is null, unreachable, or any segment crosses a blocked cell.
+func route_cost(from: Vector3, route: RefCounted, profile: StringName = PEDESTRIAN_PROFILE) -> float:
+	if route == null or not route.reachable:
+		return INF
+	var cost := 0.0
+	var previous := from
+	for waypoint: Vector3 in route.waypoints:
+		var segment := segment_cost(previous, waypoint, profile)
+		if not is_finite(segment):
+			return INF
+		cost += segment
+		previous = waypoint
+	return cost
 
 
 ## Traverses every cell crossed by a world-space segment and returns its
