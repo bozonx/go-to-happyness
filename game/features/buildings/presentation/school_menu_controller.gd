@@ -11,17 +11,17 @@ func configure(next_simulation: Node) -> void:
 func show_school_menu() -> void:
 	if simulation == null or simulation.selected_school == null:
 		return
-	simulation.build_menu.visible = false
+	simulation.ui_manager.build_menu.visible = false
 	simulation.build_menu_is_global = false
-	simulation.house_menu.visible = false
-	simulation.building_menu.visible = false
+	simulation.ui_manager.house_menu.visible = false
+	simulation.ui_manager.building_menu.visible = false
 
 	var student_label: String = simulation.selected_builder.role_label() if simulation.selected_builder != null else ""
 	var can_manage: bool = simulation._player_can_manage_permanent_professions()
 	var block_tooltip: String = simulation._permanent_profession_block_message()
 
-	simulation.school_menu.update_state(student_label, can_manage, block_tooltip, simulation.school_developed_professions)
-	simulation.school_menu.visible = true
+	simulation.ui_manager.school_menu.update_state(student_label, can_manage, block_tooltip, simulation.school_developed_professions)
+	simulation.ui_manager.school_menu.visible = true
 	simulation._update_interface("School selected: configure morning study and retraining here.")
 
 
@@ -43,5 +43,5 @@ func start_school_training(role: String) -> void:
 	if simulation.selected_builder == null or simulation.selected_school == null:
 		return
 	simulation.selected_builder.start_training(role, simulation.selected_school.global_position)
-	simulation.school_menu.visible = false
+	simulation.ui_manager.school_menu.visible = false
 	simulation._update_interface("Training started: 10 mornings in school, then regular work.")

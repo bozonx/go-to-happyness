@@ -15,7 +15,7 @@ func show_pocket_take_menu(warehouse_index := -1) -> void:
 	if simulation == null:
 		return
 	simulation.pocket_take_warehouse_index = warehouse_index
-	simulation.pocket_take_menu.visible = true
+	simulation.ui_manager.pocket_take_menu.visible = true
 	simulation.pocket_menu_open = true
 	if simulation.is_first_person:
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
@@ -25,7 +25,7 @@ func show_pocket_take_menu(warehouse_index := -1) -> void:
 func close_pocket_take_menu() -> void:
 	if simulation == null:
 		return
-	simulation.pocket_take_menu.visible = false
+	simulation.ui_manager.pocket_take_menu.visible = false
 	simulation.pocket_menu_open = false
 	simulation.pocket_take_warehouse_index = -1
 	if simulation.is_first_person:
@@ -33,9 +33,9 @@ func close_pocket_take_menu() -> void:
 
 
 func refresh_pocket_take_menu() -> void:
-	if simulation == null or simulation.pocket_take_menu == null:
+	if simulation == null or simulation.ui_manager.pocket_take_menu == null:
 		return
-	simulation.pocket_take_menu.clear_items()
+	simulation.ui_manager.pocket_take_menu.clear_items()
 	var warehouse_index: int = simulation.pocket_take_warehouse_index if simulation.pocket_take_warehouse_index >= 0 else simulation._nearby_warehouse_index()
 	var warehouse_amount := func(resource_type: String) -> int:
 		if warehouse_index >= 0:
@@ -52,5 +52,5 @@ func refresh_pocket_take_menu() -> void:
 		row.take_all_requested.connect(func():
 			simulation._take_resource_into_pocket(resource_type, simulation._pocket_space_for(resource_type))
 		)
-		simulation.pocket_take_menu.item_list.add_child(row)
-	simulation.pocket_take_menu_title.text = S.TAKE_FROM_WAREHOUSE_FORMAT % [simulation._pocket_total(), simulation.POCKET_CAPACITY]
+		simulation.ui_manager.pocket_take_menu.item_list.add_child(row)
+	simulation.ui_manager.pocket_take_menu_title.text = S.TAKE_FROM_WAREHOUSE_FORMAT % [simulation._pocket_total(), simulation.POCKET_CAPACITY]

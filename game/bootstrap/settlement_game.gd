@@ -263,19 +263,11 @@ var camera: Camera3D:
 	get: return camera_controller.camera if camera_controller != null else null
 var camera_controller: CameraController
 var world_setup: Node
-var sun: DirectionalLight3D:
-	get: return world_setup.sun if world_setup != null else null
-var world_environment: Environment:
-	get: return world_setup.world_environment if world_setup != null else null
-var sky_material: ShaderMaterial:
-	get: return world_setup.sky_material if world_setup != null else null
-var weather_state := WeatherStateScript.new()
-var rain_effect: RainEffect:
-	get: return world_setup.rain_effect if world_setup != null else null
+var selection_marker: MeshInstance3D:
+	get: return world_setup.selection_marker if world_setup != null else null
 var fireflies: Array[FirefliesEffect]:
 	get: return world_setup.fireflies if world_setup != null else []
-var sky_and_weather_controller: SkyAndWeatherController:
-	get: return world_setup.sky_and_weather_controller if world_setup != null else null
+var weather_state := WeatherStateScript.new()
 var ambient_spawner: AmbientSpawner
 var camera_target: Vector3:
 	get: return camera_controller.camera_target if camera_controller != null else Vector3.ZERO
@@ -289,36 +281,11 @@ var camera_yaw: float:
 var camera_pitch: float:
 	get: return camera_controller.camera_pitch if camera_controller != null else 52.0
 	set(val): if camera_controller != null: camera_controller.camera_pitch = val
-var selection_marker: MeshInstance3D:
-	get: return world_setup.selection_marker if world_setup != null else null
-var selection_material: StandardMaterial3D:
-	get: return world_setup.selection_material if world_setup != null else null
-var preview_entrance_marker: MeshInstance3D:
-	get: return world_setup.preview_entrance_marker if world_setup != null else null
-var preview_back_entrance_marker: MeshInstance3D:
-	get: return world_setup.preview_back_entrance_marker if world_setup != null else null
-var hero_build_radius_marker: MeshInstance3D:
-	get: return world_setup.hero_build_radius_marker if world_setup != null else null
-var hud: HUD:
-	get: return ui_manager.hud if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.hud = val
-var message_log_panel: MessageLogPanel:
-	get: return ui_manager.message_log_panel if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.message_log_panel = val
-var message_panel: Control:
-	get: return ui_manager.message_panel if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.message_panel = val
-var messages_modal: Control:
-	get: return ui_manager.messages_modal if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.messages_modal = val
 var current_day: int:
 	get: return day_cycle.current_day
 var tent_weather: int = TentEraSurvivalRulesScript.Weather.WARMING
 var selected_builder: Citizen
 var selected_building: Node3D
-var build_menu: BuildMenu:
-	get: return ui_manager.build_menu if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.build_menu = val
 var is_panning_camera := false
 var is_rotating_camera := false
 var right_mouse_dragged := false
@@ -379,135 +346,6 @@ var pocket: Dictionary:
 	set(val): if hero_pocket_service != null: hero_pocket_service.pocket = val
 var ui_manager: UIManager
 
-var build_toggle_btn: Button:
-	get: return ui_manager.build_toggle_btn if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.build_toggle_btn = val
-var interaction_hint_panel: Control:
-	get: return ui_manager.interaction_hint_panel if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.interaction_hint_panel = val
-var interaction_hint_label: Label:
-	get: return interaction_hint_panel.hint_label if interaction_hint_panel != null else null
-var interaction_progress: ProgressBar:
-	get: return interaction_hint_panel.progress_bar if interaction_hint_panel != null else null
-var pocket_take_menu: PocketTakeMenu:
-	get: return ui_manager.pocket_take_menu if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.pocket_take_menu = val
-var crosshair: FirstPersonCrosshair:
-	get: return ui_manager.crosshair if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.crosshair = val
-var house_menu: Panel:
-	get: return ui_manager.house_menu if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.house_menu = val
-var house_menu_title: Label:
-	get: return ui_manager.house_menu_title if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.house_menu_title = val
-var house_spawn_button: Button:
-	get: return ui_manager.house_spawn_button if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.house_spawn_button = val
-var entrance_menu: Panel:
-	get: return ui_manager.entrance_menu if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.entrance_menu = val
-var entrance_menu_title: Label:
-	get: return ui_manager.entrance_menu_title if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.entrance_menu_title = val
-var entrance_work_button: Button:
-	get: return ui_manager.entrance_work_button if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.entrance_work_button = val
-var entrance_order_modal: Panel:
-	get: return ui_manager.entrance_order_modal if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.entrance_order_modal = val
-var entrance_order_food_spin: SpinBox:
-	get: return ui_manager.entrance_order_food_spin if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.entrance_order_food_spin = val
-var entrance_order_water_spin: SpinBox:
-	get: return ui_manager.entrance_order_water_spin if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.entrance_order_water_spin = val
-var entrance_order_gloves_spin: SpinBox:
-	get: return ui_manager.entrance_order_gloves_spin if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.entrance_order_gloves_spin = val
-var entrance_order_bucket_spin: SpinBox:
-	get: return ui_manager.entrance_order_bucket_spin if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.entrance_order_bucket_spin = val
-var entrance_order_total_label: Label:
-	get: return ui_manager.entrance_order_total_label if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.entrance_order_total_label = val
-var school_menu: Panel:
-	get: return ui_manager.school_menu if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.school_menu = val
-var materials_factory_menu: Panel:
-	get: return ui_manager.materials_factory_menu if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.materials_factory_menu = val
-var materials_factory_menu_title: Label:
-	get: return ui_manager.materials_factory_menu_title if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.materials_factory_menu_title = val
-var campfire_menu: CampfireMenu:
-	get: return ui_manager.campfire_menu if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.campfire_menu = val
-var workforce_menu: WorkforceMenu:
-	get: return ui_manager.workforce_menu if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.workforce_menu = val
-var research_menu: ResearchMenu:
-	get: return ui_manager.research_menu if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.research_menu = val
-var market_menu: MarketMenu:
-	get: return ui_manager.market_menu if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.market_menu = val
-var warehouse_menu: WarehouseMenu:
-	get: return ui_manager.warehouse_menu if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.warehouse_menu = val
-var building_menu: Panel:
-	get: return ui_manager.building_menu if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.building_menu = val
-var building_menu_title: Label:
-	get: return ui_manager.building_menu_title if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.building_menu_title = val
-var building_cook_button: Button:
-	get: return ui_manager.building_cook_button if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.building_cook_button = val
-var building_teacher_button: Button:
-	get: return ui_manager.building_teacher_button if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.building_teacher_button = val
-var building_seller_button: Button:
-	get: return ui_manager.building_seller_button if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.building_seller_button = val
-var building_accept_workers_button: Button:
-	get: return ui_manager.building_accept_workers_button if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.building_accept_workers_button = val
-var building_dismiss_worker_button: Button:
-	get: return ui_manager.building_dismiss_worker_button if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.building_dismiss_worker_button = val
-var building_upgrade_button: Button:
-	get: return ui_manager.building_upgrade_button if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.building_upgrade_button = val
-var building_demolish_button: Button:
-	get: return ui_manager.building_demolish_button if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.building_demolish_button = val
-var building_close_button: Button:
-	get: return ui_manager.building_close_button if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.building_close_button = val
-var building_overtime_button: CheckButton:
-	get: return ui_manager.building_overtime_button if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.building_overtime_button = val
-var building_relight_button: Button:
-	get: return ui_manager.building_relight_button if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.building_relight_button = val
-var campfire_story_menu: Control:
-	get: return ui_manager.campfire_story_menu if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.campfire_story_menu = val
-var building_cancel_construction_button: Button:
-	get: return ui_manager.building_cancel_construction_button if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.building_cancel_construction_button = val
-var decision_menu: Control:
-	get: return ui_manager.decision_menu if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.decision_menu = val
-var time_controls_panel: TimeControlsPanel:
-	get: return ui_manager.time_controls_panel if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.time_controls_panel = val
-var campfire_orders_menu: CampfireOrdersMenu:
-	get: return ui_manager.campfire_orders_menu if ui_manager != null else null
-	set(val): if ui_manager != null: ui_manager.campfire_orders_menu = val
-var pocket_take_menu_title: Label:
-	get: return pocket_take_menu.title_label if pocket_take_menu != null else null
 var pocket_menu_open := false
 var pocket_take_warehouse_index: int = -1
 var dig_sites: Array[DigSiteRecordScript] = []
@@ -547,8 +385,6 @@ var selected_campfire: Node3D = null
 var selected_market: Node3D = null
 var selected_warehouse: Node3D = null
 var campfire_story_buttons: Array[Button] = []
-var survival_decision_panel: Control:
-	get: return decision_menu
 var _decision_buttons: Array[Button] = []
 var event_service: EventService
 var survival_busy_until: Dictionary = {}
@@ -560,9 +396,9 @@ var build_menu_is_job_menu := false
 var build_menu_is_daily_order_menu := false
 var build_menu_is_global := false
 var skip_night_button: Button:
-	get: return time_controls_panel.skip_night_button if time_controls_panel != null else null
+	get: return ui_manager.time_controls_panel.skip_night_button if ui_manager.time_controls_panel != null else null
 var start_workday_button: Button:
-	get: return time_controls_panel.start_workday_button if time_controls_panel != null else null
+	get: return ui_manager.time_controls_panel.start_workday_button if ui_manager.time_controls_panel != null else null
 var water_collectors: Array[WaterCollectorRecordScript] = []
 var pending_trades: Dictionary = {} # worker ai_id -> TradeOrder
 var queued_trades: Array = []
@@ -621,14 +457,6 @@ var building_status_indicator_controller: BuildingStatusIndicatorController
 var first_person_hud_controller: FirstPersonHUDController
 var label_distance_fade_controller: LabelDistanceFadeController
 var trail_field: TrailFieldService
-var trail_overlay: MeshInstance3D:
-	get: return world_setup.trail_overlay if world_setup != null else null
-var trail_overlay_material: ShaderMaterial:
-	get: return world_setup.trail_overlay_material if world_setup != null else null
-var village_boundary_markers: Node3D:
-	get: return world_setup.village_boundary_markers if world_setup != null else null
-var village_territory_overlay: Node3D:
-	get: return world_setup.village_territory_overlay if world_setup != null else null
 var resource_pile_service: ResourcePileService
 var foraging_service: ForagingService
 var fire_management_service: FireManagementService
@@ -1005,8 +833,8 @@ func _ready() -> void:
 		_show_selected_citizen_menu,
 		func() -> Citizen: return selected_builder,
 		func() -> Vector3: return selected_world_position,
-		func() -> Node3D: return selection_marker,
-		func() -> StandardMaterial3D: return selection_material,
+		func() -> Node3D: return world_setup.selection_marker,
+		func() -> StandardMaterial3D: return world_setup.selection_material,
 		_set_dig_mode,
 		_set_build_mode,
 		func(node: Node) -> void: add_child(node)
@@ -1069,7 +897,7 @@ func _ready() -> void:
 		queued_trades,
 		pending_trades,
 		warehouse_positions,
-		market_menu,
+		ui_manager.market_menu,
 		func() -> Node3D: return selected_market,
 		func() -> Node3D: return entrance_stone,
 		_get_delivery_position,
@@ -1300,11 +1128,11 @@ func _process(delta: float) -> void:
 			var terrain_point: Variant = _terrain_point_at_screen_position(viewport_center)
 			if terrain_point != null:
 				_move_selection(terrain_point)
-				selection_marker.visible = true
+				world_setup.selection_marker.visible = true
 			else:
-				selection_marker.visible = false
-				preview_entrance_marker.visible = false
-				preview_back_entrance_marker.visible = false
+				world_setup.selection_marker.visible = false
+				world_setup.preview_entrance_marker.visible = false
+				world_setup.preview_back_entrance_marker.visible = false
 	else:
 		_update_camera(delta)
 	_update_construction(delta)
@@ -1340,7 +1168,7 @@ func _process(delta: float) -> void:
 		if _worker_poll_timer <= 0.0:
 			_worker_poll_timer = WORKER_POLL_INTERVAL
 			_update_workers()
-	if selected_builder != null and build_menu.visible:
+	if selected_builder != null and ui_manager.build_menu.visible:
 		_show_selected_citizen_menu()
 
 
@@ -1474,8 +1302,9 @@ func _on_employment_processing_finished(citizen: Citizen) -> void:
 
 func _update_daylight() -> void:
 	if world_setup != null:
-		var overcast := weather_state.intensity_at(clock.minutes)
-		world_setup.update_daylight(game_minutes, overcast, runtime_seconds)
+		var cloud_cover := weather_state.cloud_cover_at(clock.minutes)
+		var rain_intensity := weather_state.intensity_at(clock.minutes)
+		world_setup.update_daylight(game_minutes, cloud_cover, rain_intensity, runtime_seconds)
 
 
 func _update_clock(delta: float) -> void:
@@ -1490,8 +1319,8 @@ func _update_clock(delta: float) -> void:
 		_apply_hourly_tent_survival(clock.hour())
 		_apply_hourly_bare_hands_penalty()
 		_apply_hourly_work_fatigue()
-	if hud != null:
-		hud.update_clock("%s  %02d:%02d  x%d" % ["Night" if clock.is_night() else "Day", clock.hour(), clock.minute(), int(time_multiplier)])
+	if ui_manager.hud != null:
+		ui_manager.hud.update_clock("%s  %02d:%02d  x%d" % ["Night" if clock.is_night() else "Day", clock.hour(), clock.minute(), int(time_multiplier)])
 	_update_skip_night_button()
 	for event in events:
 		_handle_day_cycle_event(event)
@@ -2015,15 +1844,15 @@ func _update_interface(message: String) -> void:
 		lines.append("Piles: %d" % resource_piles.size())
 	lines.append("Population: %d" % citizens.size())
 	lines.append("Wellbeing: %d" % settlement.wellbeing)
-	hud.update_resources("\n".join(lines))
+	ui_manager.hud.update_resources("\n".join(lines))
 	_add_message(message)
 	if is_first_person:
 		var build_hint := S.HUD_BUILD_HINT_FP if player_citizen == hero_citizen else ""
 		if not build_mode.is_empty():
 			build_hint += S.HUD_BUILD_ROTATE_HINT
-		hud.update_camera_hint(S.HUD_FIRST_PERSON_HINT % build_hint)
+		ui_manager.hud.update_camera_hint(S.HUD_FIRST_PERSON_HINT % build_hint)
 	else:
-		hud.update_camera_hint(S.HUD_OVERVIEW_HINT)
+		ui_manager.hud.update_camera_hint(S.HUD_OVERVIEW_HINT)
 
 const ERA_CATEGORIES := ["tent", "earth", "clay", "wood", "stone", "brick"]
 
@@ -2040,9 +1869,9 @@ func _resource_display_name(resource_type: String) -> String:
 # ---------- Message log system ------------------------------------------------
 
 func _add_message(text: String) -> void:
-	if message_log_panel != null:
+	if ui_manager.message_log_panel != null:
 		var timestamp := "[Day %d, %02d:%02d]" % [current_day, clock.hour(), clock.minute()]
-		message_log_panel.add_message(text, timestamp)
+		ui_manager.message_log_panel.add_message(text, timestamp)
 
 
 # ---------- End message log system --------------------------------------------
@@ -2071,9 +1900,9 @@ func add_landscape_object(node: Node) -> void:
 
 
 func _update_trail_overlay() -> void:
-	if trail_overlay_material == null or trail_field == null:
+	if world_setup.trail_overlay_material == null or trail_field == null:
 		return
-	trail_overlay_material.set_shader_parameter("trail_map", trail_field.flush_texture(runtime_seconds))
+	world_setup.trail_overlay_material.set_shader_parameter("trail_map", trail_field.flush_texture(runtime_seconds))
 
 
 func _record_trail_movement(citizen_id: int, position_on_board: Vector3) -> void:
@@ -2300,8 +2129,8 @@ func _player_use_toilet(toilet_node: Node3D) -> void:
 	player_citizen.begin_player_toilet_use(toilet_node)
 	interaction_action = "toilet"
 	interaction_time = 0.0
-	interaction_progress.visible = true
-	interaction_hint_label.text = S.USING_TOILET
+	ui_manager.interaction_hint_panel.progress_bar.visible = true
+	ui_manager.interaction_hint_panel.hint_label.text = S.USING_TOILET
 	_update_interface(S.TOILET_IN_USE)
 
 
@@ -2546,8 +2375,8 @@ func _return_outside_workers() -> void:
 func _show_materials_factory_menu() -> void:
 	if selected_materials_factory == null:
 		return
-	materials_factory_menu.visible = true
-	materials_factory_menu_title.text = "Materials factory\nAssign workers to produce materials."
+	ui_manager.materials_factory_menu.visible = true
+	ui_manager.materials_factory_menu_title.text = "Materials factory\nAssign workers to produce materials."
 
 func _update_building_research(delta: float) -> void:
 	if settlement.active_research_tech_id == "":
@@ -2588,7 +2417,7 @@ func _update_building_research(delta: float) -> void:
 		return
 	building_research_service.advance_active(delta, speed_mult)
 
-	if research_menu != null and research_menu.visible:
+	if ui_manager.research_menu != null and ui_manager.research_menu.visible:
 		_refresh_research_menu()
 
 	if building_research_service.is_active_complete():
@@ -2607,7 +2436,7 @@ func _update_building_research(delta: float) -> void:
 
 		_refresh_campfire_menu()
 		_refresh_build_menu()
-		if research_menu != null and research_menu.visible:
+		if ui_manager.research_menu != null and ui_manager.research_menu.visible:
 			_refresh_research_menu()
 
 func _show_research_menu() -> void:
@@ -2730,7 +2559,7 @@ func _on_build_menu_gui_input(event: InputEvent) -> void:
 	elif build_menu_is_job_menu or build_menu_is_daily_order_menu:
 		_close_assignment_submenu()
 	else:
-		build_menu.visible = false
+		ui_manager.build_menu.visible = false
 		build_menu_is_global = false
 		if selected_builder != null:
 			selected_builder = null
@@ -2800,7 +2629,7 @@ func _set_selected_work_role(role: String, daily_order := false) -> void:
 	_refresh_build_menu()
 	_update_interface("%s assigned to %s." % ["Hero" if selected_builder.is_hero else "Citizen", "automatic work" if role.is_empty() else role.replace("_", " ")])
 	_refresh_campfire_occupancy_button()
-	if workforce_menu != null and workforce_menu.visible:
+	if ui_manager.workforce_menu != null and ui_manager.workforce_menu.visible:
 		_refresh_workforce_menu()
 
 func _min_era_for_role(role: String) -> SettlementState.Era:
@@ -3025,12 +2854,12 @@ func _create_dig_site(cell: Vector2i, world_position: Vector3) -> DigSiteRecordS
 	return excavation_service.create_dig_site(cell, world_position)
 
 func _set_build_placement_ui_visible(is_visible: bool) -> void:
-	if build_menu != null:
-		build_menu.visible = is_visible and (selected_builder != null or build_menu_is_global)
-	if build_toggle_btn != null:
-		build_toggle_btn.visible = is_visible and not is_first_person
-	if message_log_panel != null:
-		message_log_panel.visible = is_visible
+	if ui_manager.build_menu != null:
+		ui_manager.build_menu.visible = is_visible and (selected_builder != null or build_menu_is_global)
+	if ui_manager.build_toggle_btn != null:
+		ui_manager.build_toggle_btn.visible = is_visible and not is_first_person
+	if ui_manager.message_log_panel != null:
+		ui_manager.message_log_panel.visible = is_visible
 
 
 func _select_build_mode(next_mode: String) -> void:
@@ -3054,7 +2883,7 @@ func _select_build_mode(next_mode: String) -> void:
 			return
 	build_mode = next_mode
 	build_rotation_quarters = 0
-	selection_marker.visible = true
+	world_setup.selection_marker.visible = true
 	_move_selection(selected_world_position)
 	_set_build_placement_ui_visible(false)
 	_show_territory_overlay(true)
@@ -3066,10 +2895,10 @@ func _cancel_build_action() -> void:
 	build_mode = ""
 	build_rotation_quarters = 0
 	dig_mode = false
-	selection_marker.visible = false
-	preview_entrance_marker.visible = false
-	preview_back_entrance_marker.visible = false
-	build_menu.visible = false
+	world_setup.selection_marker.visible = false
+	world_setup.preview_entrance_marker.visible = false
+	world_setup.preview_back_entrance_marker.visible = false
+	ui_manager.build_menu.visible = false
 	build_menu_is_global = false
 	selected_builder = null
 	_show_territory_overlay(false)
@@ -3085,23 +2914,23 @@ func _on_context_menu_gui_input(event: InputEvent) -> void:
 func _is_first_person_menu_open() -> bool:
 	if not is_first_person:
 		return false
-	if pocket_menu_open or build_menu.visible:
+	if pocket_menu_open or ui_manager.build_menu.visible:
 		return true
-	if entrance_menu.visible or house_menu.visible or school_menu.visible or materials_factory_menu.visible or campfire_menu.visible or market_menu.visible or warehouse_menu.visible or building_menu.visible:
+	if ui_manager.entrance_menu.visible or ui_manager.house_menu.visible or ui_manager.school_menu.visible or ui_manager.materials_factory_menu.visible or ui_manager.campfire_menu.visible or ui_manager.market_menu.visible or ui_manager.warehouse_menu.visible or ui_manager.building_menu.visible:
 		return true
-	if entrance_order_modal != null and entrance_order_modal.visible:
+	if ui_manager.entrance_order_modal != null and ui_manager.entrance_order_modal.visible:
 		return true
-	if campfire_orders_menu != null and campfire_orders_menu.visible:
+	if ui_manager.campfire_orders_menu != null and ui_manager.campfire_orders_menu.visible:
 		return true
-	if campfire_story_menu != null and campfire_story_menu.visible:
+	if ui_manager.campfire_story_menu != null and ui_manager.campfire_story_menu.visible:
 		return true
-	if research_menu != null and research_menu.visible:
+	if ui_manager.research_menu != null and ui_manager.research_menu.visible:
 		return true
-	if workforce_menu != null and workforce_menu.visible:
+	if ui_manager.workforce_menu != null and ui_manager.workforce_menu.visible:
 		return true
-	if decision_menu != null and decision_menu.visible:
+	if ui_manager.decision_menu != null and ui_manager.decision_menu.visible:
 		return true
-	if message_log_panel != null and message_log_panel.is_modal_visible():
+	if ui_manager.message_log_panel != null and ui_manager.message_log_panel.is_modal_visible():
 		return true
 	return false
 
@@ -3110,38 +2939,38 @@ func _update_first_person_mouse_and_crosshair() -> void:
 	if not is_first_person:
 		return
 	var menu_open := _is_first_person_menu_open()
-	if crosshair != null:
-		crosshair.visible = not menu_open
+	if ui_manager.crosshair != null:
+		ui_manager.crosshair.visible = not menu_open
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE if menu_open else Input.MOUSE_MODE_CAPTURED)
 
 
 func _close_context_menus() -> void:
 	build_mode = ""
 	dig_mode = false
-	selection_marker.visible = false
+	world_setup.selection_marker.visible = false
 	_show_territory_overlay(false)
 	is_rotating_camera = false
-	entrance_menu.visible = false
-	if entrance_order_modal != null:
-		entrance_order_modal.visible = false
-	house_menu.visible = false
-	school_menu.visible = false
-	materials_factory_menu.visible = false
-	build_menu.visible = false
-	campfire_menu.visible = false
-	if campfire_orders_menu != null:
-		campfire_orders_menu.visible = false
-	market_menu.visible = false
-	warehouse_menu.visible = false
-	building_menu.visible = false
-	if research_menu != null:
-		research_menu.visible = false
-	if decision_menu != null:
-		decision_menu.visible = false
-	if campfire_story_menu != null:
-		campfire_story_menu.visible = false
-	if message_log_panel != null:
-		message_log_panel.close_modal()
+	ui_manager.entrance_menu.visible = false
+	if ui_manager.entrance_order_modal != null:
+		ui_manager.entrance_order_modal.visible = false
+	ui_manager.house_menu.visible = false
+	ui_manager.school_menu.visible = false
+	ui_manager.materials_factory_menu.visible = false
+	ui_manager.build_menu.visible = false
+	ui_manager.campfire_menu.visible = false
+	if ui_manager.campfire_orders_menu != null:
+		ui_manager.campfire_orders_menu.visible = false
+	ui_manager.market_menu.visible = false
+	ui_manager.warehouse_menu.visible = false
+	ui_manager.building_menu.visible = false
+	if ui_manager.research_menu != null:
+		ui_manager.research_menu.visible = false
+	if ui_manager.decision_menu != null:
+		ui_manager.decision_menu.visible = false
+	if ui_manager.campfire_story_menu != null:
+		ui_manager.campfire_story_menu.visible = false
+	if ui_manager.message_log_panel != null:
+		ui_manager.message_log_panel.close_modal()
 	_close_pocket_take_menu()
 	_hide_workforce_menu()
 	selected_house = null
@@ -3169,13 +2998,13 @@ func _input(event: InputEvent) -> void:
 
 
 func _handle_menu_right_click() -> bool:
-	if build_menu.visible:
+	if ui_manager.build_menu.visible:
 		if not build_category.is_empty():
 			_open_build_category("")
 		elif build_menu_is_job_menu or build_menu_is_daily_order_menu:
 			_close_assignment_submenu()
 		else:
-			build_menu.visible = false
+			ui_manager.build_menu.visible = false
 			build_menu_is_global = false
 			if selected_builder != null:
 				selected_builder = null
@@ -3186,31 +3015,31 @@ func _handle_menu_right_click() -> bool:
 	if pocket_menu_open:
 		_close_pocket_take_menu()
 		return true
-	if campfire_orders_menu != null and campfire_orders_menu.visible:
-		campfire_orders_menu.visible = false
-		campfire_menu.visible = true
+	if ui_manager.campfire_orders_menu != null and ui_manager.campfire_orders_menu.visible:
+		ui_manager.campfire_orders_menu.visible = false
+		ui_manager.campfire_menu.visible = true
 		return true
-	if campfire_story_menu != null and campfire_story_menu.visible:
-		campfire_story_menu.visible = false
-		campfire_menu.visible = true
+	if ui_manager.campfire_story_menu != null and ui_manager.campfire_story_menu.visible:
+		ui_manager.campfire_story_menu.visible = false
+		ui_manager.campfire_menu.visible = true
 		return true
-	if research_menu != null and research_menu.visible:
-		research_menu.visible = false
-		campfire_menu.visible = true
+	if ui_manager.research_menu != null and ui_manager.research_menu.visible:
+		ui_manager.research_menu.visible = false
+		ui_manager.campfire_menu.visible = true
 		return true
-	if workforce_menu != null and workforce_menu.visible:
+	if ui_manager.workforce_menu != null and ui_manager.workforce_menu.visible:
 		_hide_workforce_menu()
-		campfire_menu.visible = true
+		ui_manager.campfire_menu.visible = true
 		return true
-	if entrance_order_modal != null and entrance_order_modal.visible:
-		entrance_order_modal.visible = false
-		entrance_menu.visible = true
+	if ui_manager.entrance_order_modal != null and ui_manager.entrance_order_modal.visible:
+		ui_manager.entrance_order_modal.visible = false
+		ui_manager.entrance_menu.visible = true
 		return true
-	if message_log_panel != null and message_log_panel.is_modal_visible():
-		message_log_panel.close_modal()
+	if ui_manager.message_log_panel != null and ui_manager.message_log_panel.is_modal_visible():
+		ui_manager.message_log_panel.close_modal()
 		return true
-	var any_menu_visible := entrance_menu.visible or house_menu.visible or school_menu.visible or materials_factory_menu.visible or campfire_menu.visible or market_menu.visible or warehouse_menu.visible or building_menu.visible
-	if decision_menu != null and decision_menu.visible:
+	var any_menu_visible := ui_manager.entrance_menu.visible or ui_manager.house_menu.visible or ui_manager.school_menu.visible or ui_manager.materials_factory_menu.visible or ui_manager.campfire_menu.visible or ui_manager.market_menu.visible or ui_manager.warehouse_menu.visible or ui_manager.building_menu.visible
+	if ui_manager.decision_menu != null and ui_manager.decision_menu.visible:
 		any_menu_visible = true
 	if any_menu_visible:
 		_close_context_menus()
@@ -3255,7 +3084,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if _can_hero_build():
 			_toggle_global_build_menu()
 			if is_first_person:
-				Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE if build_menu.visible else Input.MOUSE_MODE_CAPTURED)
+				Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE if ui_manager.build_menu.visible else Input.MOUSE_MODE_CAPTURED)
 		else:
 			_update_interface(S.ONLY_HERO_CAN_APPROVE_BUILD)
 		get_viewport().set_input_as_handled()
@@ -3368,7 +3197,7 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 	_hide_all_selection_menus()
 	if not hit.collider.is_in_group("school_selector"):
 		selected_builder = null
-	build_menu.visible = false
+	ui_manager.build_menu.visible = false
 	build_menu_is_global = false
 	if hit.collider.is_in_group("entrance_selector"):
 		selected_entrance = hit.collider.get_parent() as Node3D
@@ -3398,15 +3227,15 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 		selected_house = hit.collider.get_parent() as Node3D
 		selected_building = selected_house
 		selected_builder = null
-		build_menu.visible = false
+		ui_manager.build_menu.visible = false
 		_show_house_menu()
 		_update_interface("House selected. Recruit a new resident when a bed is free.")
 		return
 	if hit.collider.is_in_group("school_selector"):
 		selected_school = hit.collider.get_parent() as Node3D
 		selected_building = selected_school
-		house_menu.visible = false
-		build_menu.visible = false
+		ui_manager.house_menu.visible = false
+		ui_manager.build_menu.visible = false
 		_show_school_menu()
 		return
 	if hit.collider.is_in_group("materials_factory_selector"):
@@ -3414,9 +3243,9 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 		selected_building = selected_materials_factory
 		selected_house = null
 		selected_school = null
-		house_menu.visible = false
-		school_menu.visible = false
-		build_menu.visible = false
+		ui_manager.house_menu.visible = false
+		ui_manager.school_menu.visible = false
+		ui_manager.build_menu.visible = false
 		_show_materials_factory_menu()
 		_update_interface("Materials factory selected. Assign workers to produce materials.")
 		return
@@ -3448,22 +3277,22 @@ func _first_person_select_at_crosshair() -> void:
 func _hide_all_selection_menus() -> void:
 	# Hides every building context menu and clears their selections, but leaves
 	# the currently selected citizen untouched (the school menu needs it).
-	house_menu.visible = false
-	entrance_menu.visible = false
-	school_menu.visible = false
-	materials_factory_menu.visible = false
-	campfire_menu.visible = false
-	if campfire_story_menu != null:
-		campfire_story_menu.visible = false
-	if campfire_orders_menu != null:
-		campfire_orders_menu.visible = false
-	market_menu.visible = false
-	warehouse_menu.visible = false
-	building_menu.visible = false
-	if research_menu != null:
-		research_menu.visible = false
-	if decision_menu != null:
-		decision_menu.visible = false
+	ui_manager.house_menu.visible = false
+	ui_manager.entrance_menu.visible = false
+	ui_manager.school_menu.visible = false
+	ui_manager.materials_factory_menu.visible = false
+	ui_manager.campfire_menu.visible = false
+	if ui_manager.campfire_story_menu != null:
+		ui_manager.campfire_story_menu.visible = false
+	if ui_manager.campfire_orders_menu != null:
+		ui_manager.campfire_orders_menu.visible = false
+	ui_manager.market_menu.visible = false
+	ui_manager.warehouse_menu.visible = false
+	ui_manager.building_menu.visible = false
+	if ui_manager.research_menu != null:
+		ui_manager.research_menu.visible = false
+	if ui_manager.decision_menu != null:
+		ui_manager.decision_menu.visible = false
 	_hide_workforce_menu()
 	build_category = ""
 	build_menu_is_job_menu = false
@@ -3554,9 +3383,9 @@ func _select_citizen(clicked_citizen: Citizen) -> void:
 	build_mode = ""
 	build_category = ""
 	build_menu_is_global = false
-	selection_marker.visible = false
+	world_setup.selection_marker.visible = false
 	_show_territory_overlay(false)
-	build_menu.visible = true
+	ui_manager.build_menu.visible = true
 	_refresh_build_menu()
 	_show_selected_citizen_menu()
 	_update_interface("Citizen selected. Choose a building in the lower-right menu.")
@@ -3579,10 +3408,10 @@ func _show_selected_citizen_menu() -> void:
 	var home_label := "No home" if not is_instance_valid(selected_builder.home) else "House"
 	var effect_label := "Meal buff" if selected_builder.buffs.has("canteen_meal") else ("Tent debuff" if selected_builder.debuffs.has("tent") else "None")
 	if build_category.is_empty():
-		build_menu.title_label.text = "%s  Sat: %d/%d%%  Food: %d%%\nHome: %s  Effect: %s\nTask: %s" % [selected_builder.role_label(), roundi(selected_builder.satisfaction), roundi(selected_builder.get_satisfaction_cap()), roundi(selected_builder.hunger), home_label, effect_label, assignment]
-		build_menu.citizen_skills_label.text = "Skills\nBuild %.0f%%  Wood %.0f%%\nFarm %.0f%%  Dig %.0f%%" % [float(selected_builder.skills.get("construction", 0.0)) * 100.0, float(selected_builder.skills.get("forestry", 0.0)) * 100.0, float(selected_builder.skills.get("farming", 0.0)) * 100.0, float(selected_builder.skills.get("excavation", 0.0)) * 100.0]
-		build_menu.citizen_skills_label.visible = true
-	build_menu.title_label.add_theme_color_override("font_color", selected_builder.specialization_color())
+		ui_manager.build_menu.title_label.text = "%s  Sat: %d/%d%%  Food: %d%%\nHome: %s  Effect: %s\nTask: %s" % [selected_builder.role_label(), roundi(selected_builder.satisfaction), roundi(selected_builder.get_satisfaction_cap()), roundi(selected_builder.hunger), home_label, effect_label, assignment]
+		ui_manager.build_menu.citizen_skills_label.text = "Skills\nBuild %.0f%%  Wood %.0f%%\nFarm %.0f%%  Dig %.0f%%" % [float(selected_builder.skills.get("construction", 0.0)) * 100.0, float(selected_builder.skills.get("forestry", 0.0)) * 100.0, float(selected_builder.skills.get("farming", 0.0)) * 100.0, float(selected_builder.skills.get("excavation", 0.0)) * 100.0]
+		ui_manager.build_menu.citizen_skills_label.visible = true
+	ui_manager.build_menu.title_label.add_theme_color_override("font_color", selected_builder.specialization_color())
 
 func _take_control_of_selected_citizen() -> void:
 	if player_controller != null:
@@ -3919,15 +3748,15 @@ func _home_occupancy_text() -> String:
 
 func _refresh_interaction_hint() -> void:
 	if not is_first_person:
-		interaction_hint_panel.visible = false
+		ui_manager.interaction_hint_panel.visible = false
 		return
 	if _is_first_person_menu_open():
-		interaction_hint_panel.visible = false
+		ui_manager.interaction_hint_panel.visible = false
 		return
-	interaction_hint_panel.visible = true
+	ui_manager.interaction_hint_panel.visible = true
 	if pocket_menu_open:
-		interaction_hint_label.text = S.CLOSE_MENU_HINT
-		interaction_progress.visible = false
+		ui_manager.interaction_hint_panel.hint_label.text = S.CLOSE_MENU_HINT
+		ui_manager.interaction_hint_panel.progress_bar.visible = false
 		return
 	if not interaction_action.is_empty():
 		return
@@ -3951,8 +3780,8 @@ func _refresh_interaction_hint() -> void:
 	var home_text := _home_occupancy_text()
 	if not home_text.is_empty():
 		lines.append(home_text)
-	interaction_hint_label.text = "\n".join(lines)
-	interaction_progress.visible = false
+	ui_manager.interaction_hint_panel.hint_label.text = "\n".join(lines)
+	ui_manager.interaction_hint_panel.progress_bar.visible = false
 
 
 func _nearest_point_to_point_array(points: Array[Vector3], target: Vector3, max_distance: float) -> Vector3:
@@ -4214,26 +4043,26 @@ func _terrain_point_at_screen_position(screen_position: Vector2) -> Variant:
 func _move_selection(world_position: Vector3) -> void:
 	selected_world_position = _snapped_build_position(world_position) if not build_mode.is_empty() else world_position
 	selected_cell = _placement_key(selected_world_position)
-	selection_marker.position = selected_world_position + Vector3(0.0, 0.04, 0.0)
+	world_setup.selection_marker.position = selected_world_position + Vector3(0.0, 0.04, 0.0)
 	if not build_mode.is_empty():
 		var local_footprint: Vector2i = BuildingBlueprints.get_blueprint(build_mode).footprint
 		var footprint := _rotated_footprint(local_footprint)
-		(selection_marker.mesh as BoxMesh).size = Vector3(footprint.x, 0.04, footprint.y)
+		(world_setup.selection_marker.mesh as BoxMesh).size = Vector3(footprint.x, 0.04, footprint.y)
 		var forward := Vector3(0.0, 0.0, -1.0).rotated(Vector3.UP, build_rotation_quarters * PI * 0.5)
-		preview_entrance_marker.position = selected_world_position + forward * (local_footprint.y * 0.5 + 0.35) + Vector3.UP * 0.08
-		preview_back_entrance_marker.position = selected_world_position - forward * (local_footprint.y * 0.5 + 0.35) + Vector3.UP * 0.08
-		preview_entrance_marker.visible = true
-		preview_back_entrance_marker.visible = true
+		world_setup.preview_entrance_marker.position = selected_world_position + forward * (local_footprint.y * 0.5 + 0.35) + Vector3.UP * 0.08
+		world_setup.preview_back_entrance_marker.position = selected_world_position - forward * (local_footprint.y * 0.5 + 0.35) + Vector3.UP * 0.08
+		world_setup.preview_entrance_marker.visible = true
+		world_setup.preview_back_entrance_marker.visible = true
 	if not build_mode.is_empty():
-		selection_material.albedo_color = Color(0.25, 0.85, 0.37, 0.55) if _can_place(selected_world_position) else Color(0.9, 0.2, 0.18, 0.6)
+		world_setup.selection_material.albedo_color = Color(0.25, 0.85, 0.37, 0.55) if _can_place(selected_world_position) else Color(0.9, 0.2, 0.18, 0.6)
 	if not build_mode.is_empty() and BuildingCatalog.max_hero_radius(build_mode) > 0.0 and is_instance_valid(hero_citizen):
-		if not is_first_person and is_instance_valid(hero_build_radius_marker):
-			hero_build_radius_marker.global_position = hero_citizen.global_position + Vector3(0.0, 0.08, 0.0)
-			hero_build_radius_marker.visible = true
-		elif is_instance_valid(hero_build_radius_marker):
-			hero_build_radius_marker.visible = false
-	elif is_instance_valid(hero_build_radius_marker):
-		hero_build_radius_marker.visible = false
+		if not is_first_person and is_instance_valid(world_setup.hero_build_radius_marker):
+			world_setup.hero_build_radius_marker.global_position = hero_citizen.global_position + Vector3(0.0, 0.08, 0.0)
+			world_setup.hero_build_radius_marker.visible = true
+		elif is_instance_valid(world_setup.hero_build_radius_marker):
+			world_setup.hero_build_radius_marker.visible = false
+	elif is_instance_valid(world_setup.hero_build_radius_marker):
+		world_setup.hero_build_radius_marker.visible = false
 
 func _rotated_footprint(footprint: Vector2i, rotation_quarters := build_rotation_quarters) -> Vector2i:
 	return building_placement_controller.rotated_footprint(footprint, rotation_quarters) if building_placement_controller != null else footprint
@@ -4288,13 +4117,13 @@ func _place_building(world_position: Vector3) -> void:
 			_bind_hero_squad_to_settlement(&"main_settlement")
 		build_mode = ""
 		build_rotation_quarters = 0
-		selection_marker.visible = false
-		preview_entrance_marker.visible = false
-		preview_back_entrance_marker.visible = false
-		if is_instance_valid(hero_build_radius_marker):
-			hero_build_radius_marker.visible = false
+		world_setup.selection_marker.visible = false
+		world_setup.preview_entrance_marker.visible = false
+		world_setup.preview_back_entrance_marker.visible = false
+		if is_instance_valid(world_setup.hero_build_radius_marker):
+			world_setup.hero_build_radius_marker.visible = false
 		_show_territory_overlay(false)
-		build_menu.visible = false
+		ui_manager.build_menu.visible = false
 		build_menu_is_global = false
 		selected_builder = null
 		_set_build_placement_ui_visible(true)
@@ -4308,13 +4137,13 @@ func _place_building(world_position: Vector3) -> void:
 	building_registry.attach_node(cell, site.node, build_mode)
 	build_mode = ""
 	build_rotation_quarters = 0
-	selection_marker.visible = false
-	preview_entrance_marker.visible = false
-	preview_back_entrance_marker.visible = false
-	if is_instance_valid(hero_build_radius_marker):
-		hero_build_radius_marker.visible = false
+	world_setup.selection_marker.visible = false
+	world_setup.preview_entrance_marker.visible = false
+	world_setup.preview_back_entrance_marker.visible = false
+	if is_instance_valid(world_setup.hero_build_radius_marker):
+		world_setup.hero_build_radius_marker.visible = false
 	_show_territory_overlay(false)
-	build_menu.visible = false
+	ui_manager.build_menu.visible = false
 	build_menu_is_global = false
 	selected_builder = null
 	_set_build_placement_ui_visible(true)
@@ -4401,8 +4230,8 @@ func _update_construction(delta: float) -> void:
 
 
 func _set_construction_status(text: String) -> void:
-	if hud != null:
-		hud.set_status(text)
+	if ui_manager.hud != null:
+		ui_manager.hud.set_status(text)
 
 
 func _update_construction_supply_label(site: ConstructionSite) -> void:
@@ -4764,11 +4593,11 @@ func _update_water_collectors(delta: float) -> void:
 
 
 func _toggle_global_build_menu() -> void:
-	var was_visible := build_menu.visible and build_menu_is_global
+	var was_visible := ui_manager.build_menu.visible and build_menu_is_global
 	_close_context_menus()
 	build_menu_is_global = not was_visible
-	build_menu.visible = build_menu_is_global
-	if build_menu.visible:
+	ui_manager.build_menu.visible = build_menu_is_global
+	if ui_manager.build_menu.visible:
 		build_category = ""
 		build_menu_is_job_menu = false
 		build_menu_is_daily_order_menu = false
@@ -4803,7 +4632,7 @@ func _show_campfire_orders_menu() -> void:
 func _close_campfire_orders_menu() -> void:
 	if campfire_menu_controller != null:
 		campfire_menu_controller.close_campfire_orders_menu()
-	campfire_menu.visible = true
+	ui_manager.campfire_menu.visible = true
 
 
 func _set_road_walking_order(enabled: bool) -> void:
@@ -4881,18 +4710,18 @@ func _toggle_double_time_order(checked: bool) -> void:
 
 func _toggle_selected_citizen_night_work(checked: bool) -> void:
 	if not is_instance_valid(selected_builder):
-		build_menu.personal_night_work_button.set_pressed_no_signal(false)
+		ui_manager.build_menu.personal_night_work_button.set_pressed_no_signal(false)
 		return
 	if checked:
 		if not selected_builder.has_daily_order() or selected_builder.is_employed() or selected_builder.has_overtime_source("personal", day_cycle.current_day):
-			build_menu.personal_night_work_button.set_pressed_no_signal(false)
+			ui_manager.build_menu.personal_night_work_button.set_pressed_no_signal(false)
 			return
 		# Evening daily orders normally wait for tomorrow. A personal night-work
 		# order explicitly starts that new task now and keeps it through tomorrow.
 		# Permanent jobs already have an active assignment, including courier jobs
 		# that do not belong to a workplace, so they only need the overtime flag.
 		if not _activate_citizen_overtime(selected_builder, "personal"):
-			build_menu.personal_night_work_button.set_pressed_no_signal(false)
+			ui_manager.build_menu.personal_night_work_button.set_pressed_no_signal(false)
 			return
 		_update_interface("%s received a personal night-work order." % selected_builder.role_label())
 		_update_skip_night_button()
@@ -5179,7 +5008,7 @@ func _dismiss_selected_workplace_worker() -> void:
 func _reopen_workplace_menu() -> void:
 	# The town hall keeps its own dedicated menu; every other workplace uses the
 	# generic building menu.
-	if is_instance_valid(selected_campfire) and selected_building == selected_campfire and campfire_menu.visible:
+	if is_instance_valid(selected_campfire) and selected_building == selected_campfire and ui_manager.campfire_menu.visible:
 		_refresh_campfire_menu()
 	else:
 		_show_building_menu()
@@ -5236,7 +5065,7 @@ func _upgrade_selected_building() -> void:
 	_refresh_navigation_grid()
 	_update_workers()
 	_update_interface("%s upgraded to %s." % [str(BuildingCatalog.definition_for(old_type).get("name", old_type)), str(BuildingCatalog.definition_for(target_type).get("name", target_type))])
-	if campfire_menu.visible and selected_building == selected_campfire:
+	if ui_manager.campfire_menu.visible and selected_building == selected_campfire:
 		_refresh_campfire_menu()
 	else:
 		_show_building_menu()
@@ -5563,17 +5392,17 @@ func _select_best_campfire() -> void:
 
 func _refresh_boundary_markers() -> void:
 	var territory: RefCounted = village_territory_service.territory()
-	if village_boundary_markers != null:
-		village_boundary_markers.refresh(territory)
-	if village_territory_overlay != null:
-		village_territory_overlay.refresh(territory)
+	if world_setup.village_boundary_markers != null:
+		world_setup.village_boundary_markers.refresh(territory)
+	if world_setup.village_territory_overlay != null:
+		world_setup.village_territory_overlay.refresh(territory)
 
 
 func _show_territory_overlay(show: bool) -> void:
-	if village_territory_overlay != null:
+	if world_setup.village_territory_overlay != null:
 		if show:
-			village_territory_overlay.refresh(village_territory_service.territory())
-		village_territory_overlay.visible = show
+			world_setup.village_territory_overlay.refresh(village_territory_service.territory())
+		world_setup.village_territory_overlay.visible = show
 
 func _create_resource_pile(position: Vector3, resources: Dictionary, is_backpack_pile := false) -> Node3D:
 	return resource_pile_service.create_resource_pile(position, resources, is_backpack_pile)
@@ -5683,7 +5512,7 @@ func _toggle_worker_overtime(checked: bool) -> void:
 	if checked:
 		var night_order_used := int(selected_building.get_meta("night_work_order_day", -1)) == day_cycle.current_day
 		if night_order_used:
-			building_overtime_button.set_pressed_no_signal(false)
+			ui_manager.building_overtime_button.set_pressed_no_signal(false)
 			return
 		var workers_found := false
 		for citizen in citizens:
@@ -5698,7 +5527,7 @@ func _toggle_worker_overtime(checked: bool) -> void:
 			if citizen_ai != null:
 				citizen_ai.request_decision_refresh()
 		else:
-			building_overtime_button.set_pressed_no_signal(false)
+			ui_manager.building_overtime_button.set_pressed_no_signal(false)
 	else:
 		for citizen in citizens:
 			if is_instance_valid(citizen) and citizen.employment_workplace == selected_building:

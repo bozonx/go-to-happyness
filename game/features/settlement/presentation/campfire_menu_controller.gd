@@ -16,11 +16,11 @@ func configure(next_simulation: Node) -> void:
 func show_campfire_menu() -> void:
 	if simulation == null:
 		return
-	simulation.build_menu.visible = false
+	simulation.ui_manager.build_menu.visible = false
 	simulation.build_menu_is_global = false
 	simulation.selection_marker.visible = false
 	simulation.build_mode = ""
-	simulation.campfire_menu.visible = true
+	simulation.ui_manager.campfire_menu.visible = true
 	refresh_campfire_menu()
 
 
@@ -36,16 +36,16 @@ func show_campfire_story_menu() -> void:
 	if not simulation.settlement.campfire_story_effect.is_empty():
 		simulation._update_interface("Tonight's story has already been chosen: %s." % simulation.settlement.campfire_story_effect.capitalize())
 		return
-	simulation.campfire_menu.visible = false
-	simulation.campfire_story_menu.visible = true
+	simulation.ui_manager.campfire_menu.visible = false
+	simulation.ui_manager.campfire_story_menu.visible = true
 
 
 func close_campfire_story_menu() -> void:
 	if simulation == null:
 		return
-	if simulation.campfire_story_menu != null:
-		simulation.campfire_story_menu.visible = false
-	simulation.campfire_menu.visible = true
+	if simulation.ui_manager.campfire_story_menu != null:
+		simulation.ui_manager.campfire_story_menu.visible = false
+	simulation.ui_manager.campfire_menu.visible = true
 
 
 func select_campfire_story(story_id: String) -> void:
@@ -55,7 +55,7 @@ func select_campfire_story(story_id: String) -> void:
 		simulation.daily_rules_service.set_campfire_story(story_id, simulation.day_cycle.current_day + 1)
 	else:
 		simulation.settlement.campfire_story_effect = story_id
-	simulation.campfire_story_menu.visible = false
+	simulation.ui_manager.campfire_story_menu.visible = false
 	var message := ""
 	match story_id:
 		"optimistic": message = "Optimistic stories chosen: wellbeing will recover faster tonight."
@@ -65,9 +65,9 @@ func select_campfire_story(story_id: String) -> void:
 
 
 func show_campfire_orders_menu() -> void:
-	if simulation == null or simulation.campfire_orders_menu == null:
+	if simulation == null or simulation.ui_manager.campfire_orders_menu == null:
 		return
-	simulation.campfire_menu.visible = false
+	simulation.ui_manager.campfire_menu.visible = false
 
 	var hour: int = simulation.clock.hour()
 	var can_cheer: bool = hour >= 6 and not simulation.settlement.cheer_up_used_today
@@ -102,16 +102,16 @@ func show_campfire_orders_menu() -> void:
 		"double_time_tooltip": "All residents walk twice as fast today. Fatigue accumulates 50%% faster and satisfaction drops." if not double_time_active else "Active. Residents are marching at double speed."
 	}
 
-	simulation.campfire_orders_menu.update_state(state)
-	simulation.campfire_orders_menu.visible = true
+	simulation.ui_manager.campfire_orders_menu.update_state(state)
+	simulation.ui_manager.campfire_orders_menu.visible = true
 
 
 func close_campfire_orders_menu() -> void:
 	if simulation == null:
 		return
-	if simulation.campfire_orders_menu != null:
-		simulation.campfire_orders_menu.visible = false
-	simulation.campfire_menu.visible = true
+	if simulation.ui_manager.campfire_orders_menu != null:
+		simulation.ui_manager.campfire_orders_menu.visible = false
+	simulation.ui_manager.campfire_menu.visible = true
 
 
 func refresh_campfire_menu() -> void:
@@ -187,7 +187,7 @@ func refresh_campfire_menu() -> void:
 	}
 	if is_center and officer != null:
 		state["close_btn_y"] = 746.0
-	simulation.campfire_menu.update_state(state)
+	simulation.ui_manager.campfire_menu.update_state(state)
 	simulation._refresh_campfire_occupancy_button()
 
 

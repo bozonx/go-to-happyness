@@ -16,16 +16,16 @@ func show_market_menu() -> void:
 	if simulation == null:
 		return
 	simulation.selected_builder = null
-	simulation.build_menu.visible = false
+	simulation.ui_manager.build_menu.visible = false
 	simulation.build_menu_is_global = false
 	simulation.selection_marker.visible = false
 	simulation.build_mode = ""
-	simulation.market_menu.visible = true
+	simulation.ui_manager.market_menu.visible = true
 	refresh_market_menu()
 
 
 func refresh_market_menu() -> void:
-	if simulation == null or simulation.selected_market == null or simulation.market_menu == null:
+	if simulation == null or simulation.selected_market == null or simulation.ui_manager.market_menu == null:
 		return
 	var market_type: String = simulation.building_registry.building_type_for_node(simulation.selected_market)
 	if market_type.is_empty():
@@ -105,4 +105,4 @@ func refresh_market_menu() -> void:
 		"unit_price": simulation.FOOD_PURCHASE_PRICE,
 	}
 
-	simulation.market_menu.update_state(state)
+	simulation.ui_manager.market_menu.update_state(state)

@@ -286,12 +286,16 @@ static func _test_weather_state() -> void:
 	clear.new_day(TentEraSurvivalRulesScript.Weather.WARMING, rng, 6 * 60)
 	assert(clear.intensity_at(6 * 60) == 0.0)
 	assert(clear.intensity_at(12 * 60) == 0.0)
+	assert(clear.cloud_phase_at(12 * 60) in [WeatherStateScript.CloudPhase.CLEAR, WeatherStateScript.CloudPhase.FAIR, WeatherStateScript.CloudPhase.PARTLY_CLOUDY])
 	assert(not clear.update(12 * 60.0))
 	assert(not clear.is_raining)
 
 	var rain: RefCounted = WeatherStateScript.new()
 	rain.new_day(TentEraSurvivalRulesScript.Weather.RAIN, rng, 6 * 60)
 	assert(rain.rain_start_minute >= 6 * 60)
+	assert(rain.cloud_cover_at(rain.rain_start_minute) >= 0.9)
+	assert(rain.cloud_phase_at(rain.rain_start_minute) == WeatherStateScript.CloudPhase.STORM)
+	assert(rain.cloud_cover_at(maxf(0.0, rain.rain_start_minute - 180.0)) < rain.cloud_cover_at(rain.rain_start_minute))
 
 
 static func _test_workforce_policy() -> void:

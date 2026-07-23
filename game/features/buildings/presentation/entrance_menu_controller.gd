@@ -14,39 +14,39 @@ func show_entrance_menu() -> void:
 	if simulation == null or not is_instance_valid(simulation.selected_entrance):
 		return
 	var resident_name: String = simulation.selected_builder.role_label() if is_instance_valid(simulation.selected_builder) else "no resident selected"
-	simulation.entrance_menu_title.text = "Entrance sign\nEmergency orders. Outside work: %s" % resident_name
-	if is_instance_valid(simulation.entrance_work_button):
-		simulation.entrance_work_button.tooltip_text = "Requires a Courier. The resident leaves for one full day and returns with %s coins." % outside_work_reward_text()
-	simulation.entrance_menu.visible = true
+	simulation.ui_manager.entrance_menu_title.text = "Entrance sign\nEmergency orders. Outside work: %s" % resident_name
+	if is_instance_valid(simulation.ui_manager.entrance_work_button):
+		simulation.ui_manager.entrance_work_button.tooltip_text = "Requires a Courier. The resident leaves for one full day and returns with %s coins." % outside_work_reward_text()
+	simulation.ui_manager.entrance_menu.visible = true
 
 
 func show_entrance_order_modal() -> void:
-	simulation.entrance_menu.visible = false
-	simulation.entrance_order_modal.visible = true
+	simulation.ui_manager.entrance_menu.visible = false
+	simulation.ui_manager.entrance_order_modal.visible = true
 	update_entrance_order_total()
 
 
 func hide_entrance_order_modal() -> void:
-	simulation.entrance_order_modal.visible = false
-	simulation.entrance_menu.visible = true
+	simulation.ui_manager.entrance_order_modal.visible = false
+	simulation.ui_manager.entrance_menu.visible = true
 
 
 func update_entrance_order_total(_value := 0.0) -> void:
 	var total: int = (
-		int(simulation.entrance_order_food_spin.value) * simulation.FOOD_PURCHASE_PRICE
-		+ int(simulation.entrance_order_water_spin.value) * simulation.ENTRANCE_WATER_PRICE
-		+ int(simulation.entrance_order_gloves_spin.value) * simulation.ENTRANCE_GLOVE_PRICE
-		+ int(simulation.entrance_order_bucket_spin.value) * simulation.ENTRANCE_BUCKET_PRICE
+		int(simulation.ui_manager.entrance_order_food_spin.value) * simulation.FOOD_PURCHASE_PRICE
+		+ int(simulation.ui_manager.entrance_order_water_spin.value) * simulation.ENTRANCE_WATER_PRICE
+		+ int(simulation.ui_manager.entrance_order_gloves_spin.value) * simulation.ENTRANCE_GLOVE_PRICE
+		+ int(simulation.ui_manager.entrance_order_bucket_spin.value) * simulation.ENTRANCE_BUCKET_PRICE
 	)
 	var available: int = simulation.trade_service.available_trade_money()
-	simulation.entrance_order_total_label.text = "Total: %d / %d coins" % [total, available]
+	simulation.ui_manager.entrance_order_total_label.text = "Total: %d / %d coins" % [total, available]
 
 
 func send_entrance_order() -> void:
-	var food := int(simulation.entrance_order_food_spin.value)
-	var water := int(simulation.entrance_order_water_spin.value)
-	var gloves := int(simulation.entrance_order_gloves_spin.value)
-	var bucket := int(simulation.entrance_order_bucket_spin.value)
+	var food := int(simulation.ui_manager.entrance_order_food_spin.value)
+	var water := int(simulation.ui_manager.entrance_order_water_spin.value)
+	var gloves := int(simulation.ui_manager.entrance_order_gloves_spin.value)
+	var bucket := int(simulation.ui_manager.entrance_order_bucket_spin.value)
 	var total: int = (
 		food * simulation.FOOD_PURCHASE_PRICE
 		+ water * simulation.ENTRANCE_WATER_PRICE

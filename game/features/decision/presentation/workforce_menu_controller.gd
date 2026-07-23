@@ -11,39 +11,39 @@ func configure(next_simulation: Node) -> void:
 
 
 func show_workforce_menu() -> void:
-	if simulation == null or simulation.workforce_menu == null:
+	if simulation == null or simulation.ui_manager.workforce_menu == null:
 		return
-	simulation.campfire_menu.visible = false
+	simulation.ui_manager.campfire_menu.visible = false
 	if not simulation.officer_exists():
 		simulation._update_interface(simulation.permanent_profession_block_message())
 		return
-	simulation.workforce_menu.visible = true
+	simulation.ui_manager.workforce_menu.visible = true
 	refresh_workforce_menu()
 
 
 func hide_workforce_menu() -> void:
 	if simulation == null:
 		return
-	if simulation.workforce_menu != null:
-		simulation.workforce_menu.visible = false
+	if simulation.ui_manager.workforce_menu != null:
+		simulation.ui_manager.workforce_menu.visible = false
 
 
 func close_workforce_menu() -> void:
 	hide_workforce_menu()
-	if simulation != null and simulation.campfire_menu != null:
-		simulation.campfire_menu.visible = true
+	if simulation != null and simulation.ui_manager.campfire_menu != null:
+		simulation.ui_manager.campfire_menu.visible = true
 
 
 func refresh_campfire_occupancy_button() -> void:
-	if simulation == null or simulation.campfire_menu == null:
+	if simulation == null or simulation.ui_manager.campfire_menu == null:
 		return
 	var total := employment_resident_count()
 	var employed := employment_state_count(Citizen.EmploymentState.EMPLOYED) + employment_state_count(Citizen.EmploymentState.REGISTERING)
 	var daily_order := employment_state_count(Citizen.EmploymentState.NO_PERMANENT_WORK)
 	if not simulation.officer_exists():
-		simulation.campfire_menu.update_occupancy_button("Workers automation: assign officer", true, simulation.permanent_profession_block_message())
+		simulation.ui_manager.campfire_menu.update_occupancy_button("Workers automation: assign officer", true, simulation.permanent_profession_block_message())
 	else:
-		simulation.campfire_menu.update_occupancy_button("Employment: %d/%d  No permanent: %d" % [employed, total, daily_order], false, "")
+		simulation.ui_manager.campfire_menu.update_occupancy_button("Employment: %d/%d  No permanent: %d" % [employed, total, daily_order], false, "")
 
 
 func workforce_roles() -> Array[String]:
@@ -124,7 +124,7 @@ func auto_or_unassigned_worker_count() -> int:
 
 
 func refresh_workforce_menu() -> void:
-	if simulation == null or simulation.workforce_menu == null:
+	if simulation == null or simulation.ui_manager.workforce_menu == null:
 		return
 	var total := employment_resident_count()
 	var employed := employment_state_count(Citizen.EmploymentState.EMPLOYED)
@@ -185,7 +185,7 @@ func refresh_workforce_menu() -> void:
 		"unregistered_header": unregistered_header,
 		"unregistered_rows": unregistered_rows,
 	}
-	simulation.workforce_menu.update_state(state)
+	simulation.ui_manager.workforce_menu.update_state(state)
 
 
 func employment_resident_count() -> int:

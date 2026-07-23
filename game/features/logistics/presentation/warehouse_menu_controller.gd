@@ -15,18 +15,18 @@ func show_warehouse_menu() -> void:
 	if simulation == null:
 		return
 	simulation.selected_builder = null
-	simulation.build_menu.visible = false
+	simulation.ui_manager.build_menu.visible = false
 	simulation.build_menu_is_global = false
 	simulation.selection_marker.visible = false
 	simulation.build_mode = ""
-	simulation.warehouse_menu.visible = true
+	simulation.ui_manager.warehouse_menu.visible = true
 	refresh_warehouse_menu()
 
 
 func refresh_warehouse_menu() -> void:
 	if simulation == null or simulation.selected_warehouse == null:
 		return
-	if simulation.warehouse_menu == null:
+	if simulation.ui_manager.warehouse_menu == null:
 		return
 	var selected_position: Vector3 = simulation.selected_warehouse.get_meta("service_position", simulation.selected_warehouse.global_position)
 	var index: int = simulation.warehouse_positions.find(selected_position)
@@ -74,7 +74,7 @@ func refresh_warehouse_menu() -> void:
 		"resource_rows": resource_rows,
 		"cover_button": {"text": cover_text, "disabled": cover_disabled},
 	}
-	simulation.warehouse_menu.update_state(state)
+	simulation.ui_manager.warehouse_menu.update_state(state)
 
 
 func toggle_warehouse_accept(accepted: bool, resource_type: String) -> void:

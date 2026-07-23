@@ -22,7 +22,7 @@ func setup(p_simulation: Node) -> void:
 # --- Event decisions ---
 
 func maybe_present_survival_decision() -> void:
-	if simulation.decision_menu == null or simulation.decision_menu.visible:
+	if simulation.ui_manager.decision_menu == null or simulation.ui_manager.decision_menu.visible:
 		return
 	if simulation.event_service == null or simulation.event_service.has_pending():
 		return
@@ -37,18 +37,18 @@ func _show_event_decision(event_def) -> void:
 	var choice_labels: Array[String] = []
 	for choice in event_def.choices:
 		choice_labels.append(choice.label)
-	simulation.decision_menu.show_event(event_def.title, event_def.description, choice_labels)
+	simulation.ui_manager.decision_menu.show_event(event_def.title, event_def.description, choice_labels)
 
 
 func resolve_event_decision(choice_index: int) -> void:
 	if simulation.event_service == null or not simulation.event_service.has_pending():
-		simulation.decision_menu.visible = false
+		simulation.ui_manager.decision_menu.visible = false
 		return
 	var ctx := _build_event_context()
 	var outcomes: Array[EventOutcome] = simulation.event_service.resolve_choice(choice_index, ctx, simulation.random)
 	for outcome in outcomes:
 		_apply_event_outcome(outcome)
-	simulation.decision_menu.visible = false
+	simulation.ui_manager.decision_menu.visible = false
 
 
 func _build_event_context() -> EventContext:
@@ -151,8 +151,8 @@ func can_skip_to_workday_start() -> bool:
 
 
 func update_skip_night_button() -> void:
-	if simulation.time_controls_panel != null:
-		simulation.time_controls_panel.update_skip_buttons(can_skip_night(), can_skip_to_workday_start(), simulation.is_first_person)
+	if simulation.ui_manager.time_controls_panel != null:
+		simulation.ui_manager.time_controls_panel.update_skip_buttons(can_skip_night(), can_skip_to_workday_start(), simulation.is_first_person)
 
 
 func _skip_night_survival_hours() -> Array[Dictionary]:

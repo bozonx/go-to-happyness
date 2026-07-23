@@ -69,16 +69,16 @@ func enter_first_person(citizen: Citizen, message: String) -> void:
 	simulation.build_mode = ""
 	simulation.selection_marker.visible = false
 	simulation._show_territory_overlay(false)
-	simulation.build_menu.visible = false
+	simulation.ui_manager.build_menu.visible = false
 	simulation.build_menu_is_global = false
 	simulation.build_menu_is_job_menu = false
 	simulation.build_menu_is_daily_order_menu = false
 	simulation._close_pocket_take_menu()
-	if simulation.time_controls_panel != null:
-		simulation.time_controls_panel.set_speed_controls_visible(false)
-		simulation.time_controls_panel.hide_skip_buttons()
-	if simulation.build_toggle_btn != null:
-		simulation.build_toggle_btn.visible = false
+	if simulation.ui_manager.time_controls_panel != null:
+		simulation.ui_manager.time_controls_panel.set_speed_controls_visible(false)
+		simulation.ui_manager.time_controls_panel.hide_skip_buttons()
+	if simulation.ui_manager.build_toggle_btn != null:
+		simulation.ui_manager.build_toggle_btn.visible = false
 	interaction_action = ""
 	interaction_resource = ""
 	interaction_start_cell = Vector2i(-9999, -9999)
@@ -86,8 +86,8 @@ func enter_first_person(citizen: Citizen, message: String) -> void:
 	player_yaw = player_citizen.rotation.y
 	player_pitch = 0.0
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-	if simulation.crosshair != null:
-		simulation.crosshair.visible = true
+	if simulation.ui_manager.crosshair != null:
+		simulation.ui_manager.crosshair.visible = true
 	Engine.time_scale = 1.0
 	simulation._update_interface(message)
 
@@ -106,20 +106,20 @@ func leave_first_person_to_hero_overview() -> void:
 	interaction_resource = ""
 	interaction_start_cell = Vector2i(-9999, -9999)
 	interaction_repeat_all = false
-	if simulation.interaction_hint_panel != null:
-		simulation.interaction_hint_panel.visible = false
-	if simulation.time_controls_panel != null:
-		simulation.time_controls_panel.set_speed_controls_visible(true)
-	if simulation.build_toggle_btn != null:
-		simulation.build_toggle_btn.visible = true
+	if simulation.ui_manager.interaction_hint_panel != null:
+		simulation.ui_manager.interaction_hint_panel.visible = false
+	if simulation.ui_manager.time_controls_panel != null:
+		simulation.ui_manager.time_controls_panel.set_speed_controls_visible(true)
+	if simulation.ui_manager.build_toggle_btn != null:
+		simulation.ui_manager.build_toggle_btn.visible = true
 	simulation._update_skip_night_button()
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
-	if simulation.crosshair != null:
-		simulation.crosshair.visible = false
+	if simulation.ui_manager.crosshair != null:
+		simulation.ui_manager.crosshair.visible = false
 	if simulation.hero_citizen != null:
 		simulation.camera_target = simulation.hero_citizen.global_position
 	simulation._update_camera_position()
-	simulation.build_menu.visible = simulation.selected_builder != null
+	simulation.ui_manager.build_menu.visible = simulation.selected_builder != null
 	simulation._update_workers()
 	Engine.time_scale = simulation.time_multiplier
 	simulation._update_interface("Overview centered on the hero.")
@@ -180,44 +180,44 @@ func update_player_control(delta: float) -> void:
 func update_interaction(delta: float) -> void:
 	if interaction_action.is_empty():
 		return
-	if simulation.interaction_hint_panel != null:
-		simulation.interaction_hint_panel.visible = true
+	if simulation.ui_manager.interaction_hint_panel != null:
+		simulation.ui_manager.interaction_hint_panel.visible = true
 	if interaction_action in ["construction", "demolition"]:
 		if not is_instance_valid(player_work_target) or player_citizen.global_position.distance_to(player_work_target.global_position) > INTERACTION_RANGE:
 			interaction_action = ""
 			player_work_target = null
-			simulation.interaction_progress.visible = false
+			simulation.ui_manager.interaction_hint_panel.progress_bar.visible = false
 			simulation._refresh_interaction_hint()
 			return
-		simulation.interaction_progress.value = 100.0
-		simulation.interaction_hint_label.text = S.WORKING_FORMAT % interaction_action
+		simulation.ui_manager.interaction_hint_panel.progress_bar.value = 100.0
+		simulation.ui_manager.interaction_hint_panel.hint_label.text = S.WORKING_FORMAT % interaction_action
 		return
 	if interaction_action == "toilet":
 		if player_citizen == null or not player_citizen.player_using_toilet:
 			interaction_action = ""
-			simulation.interaction_progress.visible = false
+			simulation.ui_manager.interaction_hint_panel.progress_bar.visible = false
 			simulation._refresh_interaction_hint()
 			return
 		var toilet_pct := int((1.0 - player_citizen.toilet_timer.remaining / Citizen.TOILET_USE_DURATION) * 100.0)
-		simulation.interaction_progress.value = clampi(toilet_pct, 0, 100)
-		simulation.interaction_hint_label.text = S.USING_TOILET_PERCENT % clampi(toilet_pct, 0, 100)
+		simulation.ui_manager.interaction_hint_panel.progress_bar.value = clampi(toilet_pct, 0, 100)
+		simulation.ui_manager.interaction_hint_panel.hint_label.text = S.USING_TOILET_PERCENT % clampi(toilet_pct, 0, 100)
 		return
 	if simulation._cell_from_position(player_citizen.global_position) != interaction_start_cell:
 		interaction_action = ""
-		simulation.interaction_progress.visible = false
+		simulation.ui_manager.interaction_hint_panel.progress_bar.visible = false
 		simulation._update_interface(S.ACTION_CANCELLED_AWAY)
 		simulation._refresh_interaction_hint()
 		return
 	if (interaction_resource in [ResourceIds.WOOD, ResourceIds.BRANCHES] and not simulation._nearby_tree()) or (interaction_resource == ResourceIds.FOOD and not simulation._nearby_farm()) or (interaction_resource == ResourceIds.WATER and not simulation._nearby_pond()) or (interaction_resource == ResourceIds.GRASS and not simulation._nearby_grass_source()):
 		interaction_action = ""
-		simulation.interaction_progress.visible = false
+		simulation.ui_manager.interaction_hint_panel.progress_bar.visible = false
 		simulation._update_interface(S.HARVEST_CANCELLED_AWAY_SOURCE)
 		return
 	interaction_time += delta
 	var progress_pct := clampi(int(interaction_time / HARVEST_DURATION * 100.0), 0, 100)
-	simulation.interaction_progress.value = progress_pct
+	simulation.ui_manager.interaction_hint_panel.progress_bar.value = progress_pct
 	var source_info: String = simulation._harvest_source_info(interaction_resource)
-	simulation.interaction_hint_label.text = "%s %d%% (%s)" % [simulation._gather_action_name(interaction_resource), progress_pct, source_info]
+	simulation.ui_manager.interaction_hint_panel.hint_label.text = "%s %d%% (%s)" % [simulation._gather_action_name(interaction_resource), progress_pct, source_info]
 	if interaction_time >= HARVEST_DURATION:
 		interaction_action = ""
 		var gathered := 0
@@ -244,7 +244,7 @@ func update_interaction(delta: float) -> void:
 			simulation._update_interface(S.GATHERED_FORMAT % [interaction_resource, simulation._format_pocket_hint()])
 		else:
 			simulation._update_interface(S.POCKET_FULL_CANNOT_GATHER % interaction_resource)
-		simulation.interaction_progress.visible = false
+		simulation.ui_manager.interaction_hint_panel.progress_bar.visible = false
 
 
 func start_interaction(all: bool) -> void:
@@ -281,16 +281,16 @@ func start_interaction(all: bool) -> void:
 				interaction_action = "construction"
 				interaction_time = 0.0
 				interaction_start_cell = simulation._cell_from_position(player_citizen.global_position)
-				simulation.interaction_progress.visible = true
-				simulation.interaction_hint_label.text = S.WORKING_CONSTRUCTION
+				simulation.ui_manager.interaction_hint_panel.progress_bar.visible = true
+				simulation.ui_manager.interaction_hint_panel.hint_label.text = S.WORKING_CONSTRUCTION
 			return
 		"demolition":
 			player_work_target = target.node
 			interaction_action = "demolition"
 			interaction_time = 0.0
 			interaction_start_cell = simulation._cell_from_position(player_citizen.global_position)
-			simulation.interaction_progress.visible = true
-			simulation.interaction_hint_label.text = S.WORKING_DEMOLITION
+			simulation.ui_manager.interaction_hint_panel.progress_bar.visible = true
+			simulation.ui_manager.interaction_hint_panel.hint_label.text = S.WORKING_DEMOLITION
 			return
 		"pile":
 			simulation._take_from_pile(target.pile, all)

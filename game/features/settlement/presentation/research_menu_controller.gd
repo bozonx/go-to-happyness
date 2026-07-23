@@ -12,19 +12,19 @@ func configure(next_simulation: Node) -> void:
 
 
 func show_research_menu() -> void:
-	if simulation == null or simulation.research_menu == null:
+	if simulation == null or simulation.ui_manager.research_menu == null:
 		return
-	simulation.campfire_menu.visible = false
-	simulation.research_menu.visible = true
+	simulation.ui_manager.campfire_menu.visible = false
+	simulation.ui_manager.research_menu.visible = true
 	refresh_research_menu()
 
 
 func hide_research_menu() -> void:
 	if simulation == null:
 		return
-	if simulation.research_menu != null:
-		simulation.research_menu.visible = false
-	simulation.campfire_menu.visible = true
+	if simulation.ui_manager.research_menu != null:
+		simulation.ui_manager.research_menu.visible = false
+	simulation.ui_manager.campfire_menu.visible = true
 
 
 func get_available_researcher(_required_skill: String) -> Citizen:
@@ -40,7 +40,7 @@ func get_available_researcher(_required_skill: String) -> Citizen:
 
 
 func refresh_research_menu() -> void:
-	if simulation == null or simulation.research_menu == null:
+	if simulation == null or simulation.ui_manager.research_menu == null:
 		return
 	var tech_rows: Array[Dictionary] = []
 	for tech_id in simulation.building_research_service.visible_tech_ids():
@@ -58,7 +58,7 @@ func refresh_research_menu() -> void:
 			"tooltip": simulation.building_research_service.message_for_reason(research_state.reason) if not bool(research_state.can_start) else "",
 			"tech_id": tech_id,
 		})
-	simulation.research_menu.update_state({"title_text": "Research (Campfire)", "tech_rows": tech_rows})
+	simulation.ui_manager.research_menu.update_state({"title_text": "Research (Campfire)", "tech_rows": tech_rows})
 
 
 func start_research(tech_id: String) -> void:

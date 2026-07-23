@@ -13,7 +13,7 @@ func configure(next_simulation: Node) -> void:
 
 
 func refresh_build_menu() -> void:
-	if simulation == null or simulation.build_menu == null:
+	if simulation == null or simulation.ui_manager.build_menu == null:
 		return
 	var selected_exists: bool = is_instance_valid(simulation.selected_builder)
 	var assignment_submenu_open: bool = simulation.build_menu_is_job_menu or simulation.build_menu_is_daily_order_menu
@@ -28,33 +28,33 @@ func refresh_build_menu() -> void:
 
 
 func _refresh_citizen_skills_section(selected_exists: bool, assignment_submenu_open: bool, citizen_actions_visible: bool) -> void:
-	if simulation.build_menu.citizen_skills_label != null:
-		simulation.build_menu.citizen_skills_label.visible = citizen_actions_visible
-	if simulation.build_menu.manage_citizen_button != null:
-		simulation.build_menu.manage_citizen_button.visible = citizen_actions_visible
-		simulation.build_menu.manage_citizen_button.text = S.MANAGE if simulation.selected_builder != simulation.hero_citizen else S.MANAGE_HERO
+	if simulation.ui_manager.build_menu.citizen_skills_label != null:
+		simulation.ui_manager.build_menu.citizen_skills_label.visible = citizen_actions_visible
+	if simulation.ui_manager.build_menu.manage_citizen_button != null:
+		simulation.ui_manager.build_menu.manage_citizen_button.visible = citizen_actions_visible
+		simulation.ui_manager.build_menu.manage_citizen_button.text = S.MANAGE if simulation.selected_builder != simulation.hero_citizen else S.MANAGE_HERO
 
-	if simulation.build_menu.daily_order_submenu_btn != null:
-		simulation.build_menu.daily_order_submenu_btn.visible = citizen_actions_visible
-		simulation.build_menu.daily_order_submenu_btn.disabled = false
-		simulation.build_menu.daily_order_submenu_btn.tooltip_text = ""
-	if simulation.build_menu.job_submenu_btn != null:
-		simulation.build_menu.job_submenu_btn.visible = citizen_actions_visible
-		simulation.build_menu.job_submenu_btn.disabled = false
-		simulation.build_menu.job_submenu_btn.tooltip_text = ""
-	if simulation.build_menu.personal_night_work_button != null:
+	if simulation.ui_manager.build_menu.daily_order_submenu_btn != null:
+		simulation.ui_manager.build_menu.daily_order_submenu_btn.visible = citizen_actions_visible
+		simulation.ui_manager.build_menu.daily_order_submenu_btn.disabled = false
+		simulation.ui_manager.build_menu.daily_order_submenu_btn.tooltip_text = ""
+	if simulation.ui_manager.build_menu.job_submenu_btn != null:
+		simulation.ui_manager.build_menu.job_submenu_btn.visible = citizen_actions_visible
+		simulation.ui_manager.build_menu.job_submenu_btn.disabled = false
+		simulation.ui_manager.build_menu.job_submenu_btn.tooltip_text = ""
+	if simulation.ui_manager.build_menu.personal_night_work_button != null:
 		var can_personal_night_work: bool = citizen_actions_visible and simulation.selected_builder != null and simulation.selected_builder.has_daily_order() and not simulation.selected_builder.is_employed()
 		var has_overtime: bool = simulation.selected_builder != null and simulation.selected_builder.has_overtime_source("personal", simulation.day_cycle.current_day)
-		simulation.build_menu.personal_night_work_button.visible = citizen_actions_visible
-		simulation.build_menu.personal_night_work_button.disabled = not can_personal_night_work
-		simulation.build_menu.personal_night_work_button.set_pressed_no_signal(has_overtime)
-		simulation.build_menu.personal_night_work_button.tooltip_text = "Assign a job or daily order first." if not can_personal_night_work else "Continue working through the night and next workday."
-	if simulation.build_menu.job_back_btn != null:
-		simulation.build_menu.job_back_btn.visible = selected_exists and assignment_submenu_open
+		simulation.ui_manager.build_menu.personal_night_work_button.visible = citizen_actions_visible
+		simulation.ui_manager.build_menu.personal_night_work_button.disabled = not can_personal_night_work
+		simulation.ui_manager.build_menu.personal_night_work_button.set_pressed_no_signal(has_overtime)
+		simulation.ui_manager.build_menu.personal_night_work_button.tooltip_text = "Assign a job or daily order first." if not can_personal_night_work else "Continue working through the night and next workday."
+	if simulation.ui_manager.build_menu.job_back_btn != null:
+		simulation.ui_manager.build_menu.job_back_btn.visible = selected_exists and assignment_submenu_open
 
 
 func _refresh_build_buttons(current_era_category: String, assignment_submenu_open: bool) -> void:
-	for button in simulation.build_menu.build_buttons:
+	for button in simulation.ui_manager.build_menu.build_buttons:
 		var category_button: String = button.get_meta("category_button", "")
 		if button.get_meta("category_back", false):
 			button.visible = not simulation.build_category.is_empty() and not assignment_submenu_open
@@ -88,7 +88,7 @@ func _refresh_build_buttons(current_era_category: String, assignment_submenu_ope
 
 
 func _refresh_role_buttons(selected_exists: bool, assignment_submenu_open: bool) -> void:
-	for button in simulation.build_menu.role_buttons:
+	for button in simulation.ui_manager.build_menu.role_buttons:
 		var role: String = button.get_meta("role", "")
 		var hero_only: bool = button.get_meta("hero_only", false)
 		var submenu: String = button.get_meta("submenu", "job")
@@ -122,7 +122,7 @@ func _refresh_role_buttons(selected_exists: bool, assignment_submenu_open: bool)
 
 func _refresh_build_item_positions() -> void:
 	var row_y := 176.0
-	for button in simulation.build_menu.build_item_buttons:
+	for button in simulation.ui_manager.build_menu.build_item_buttons:
 		if not button.visible:
 			continue
 		button.position = Vector2(16, row_y)
@@ -141,15 +141,15 @@ func _refresh_build_item_positions() -> void:
 
 
 func _refresh_build_title_label() -> void:
-	if simulation.build_menu.title_label != null:
+	if simulation.ui_manager.build_menu.title_label != null:
 		if simulation.build_menu_is_job_menu:
-			simulation.build_menu.title_label.text = "Permanent Jobs\nRequires an employment officer. [n] = assigned residents."
+			simulation.ui_manager.build_menu.title_label.text = "Permanent Jobs\nRequires an employment officer. [n] = assigned residents."
 		elif simulation.build_menu_is_daily_order_menu:
-			simulation.build_menu.title_label.text = "Daily Orders\nNo officer required. Evening orders start next workday."
+			simulation.ui_manager.build_menu.title_label.text = "Daily Orders\nNo officer required. Evening orders start next workday."
 		elif not simulation.build_category.is_empty():
-			simulation.build_menu.title_label.text = "%s buildings\nChoose a building to place." % simulation.build_category.capitalize()
+			simulation.ui_manager.build_menu.title_label.text = "%s buildings\nChoose a building to place." % simulation.build_category.capitalize()
 		elif simulation.build_menu_is_global:
-			simulation.build_menu.title_label.text = "%s Era Construction\nChoose a building to place." % simulation.era_name()
+			simulation.ui_manager.build_menu.title_label.text = "%s Era Construction\nChoose a building to place." % simulation.era_name()
 		else:
 			simulation._show_selected_citizen_menu()
 
@@ -157,9 +157,9 @@ func _refresh_build_title_label() -> void:
 func show_building_menu() -> void:
 	if simulation == null or not is_instance_valid(simulation.selected_building):
 		return
-	simulation.build_menu.visible = false
+	simulation.ui_manager.build_menu.visible = false
 	simulation.build_menu_is_global = false
-	simulation.building_menu.visible = true
+	simulation.ui_manager.building_menu.visible = true
 
 	var is_construction: bool = simulation.is_construction_site(simulation.selected_building)
 
@@ -171,105 +171,105 @@ func show_building_menu() -> void:
 		var supplied_parts: Array[String] = []
 		for resource_type in site_data.required_materials:
 			supplied_parts.append("%s %d/%d" % [resource_type, int(site_data.delivered_materials.get(resource_type, 0)), int(site_data.required_materials[resource_type])])
-		simulation.building_menu_title.text = "Under Construction: %s\nMaterials: %s\nProgress: %d%%  Builders: %d" % [type.capitalize().replace("_", " "), ", ".join(supplied_parts), roundi(progress * 100.0), builders]
+		simulation.ui_manager.building_menu_title.text = "Under Construction: %s\nMaterials: %s\nProgress: %d%%  Builders: %d" % [type.capitalize().replace("_", " "), ", ".join(supplied_parts), roundi(progress * 100.0), builders]
 
-		simulation.building_cook_button.visible = false
-		simulation.building_teacher_button.visible = false
-		simulation.building_seller_button.visible = false
-		simulation.building_accept_workers_button.visible = false
-		simulation.building_dismiss_worker_button.visible = false
-		simulation.building_upgrade_button.visible = false
-		simulation.building_relight_button.visible = false
-		simulation.building_demolish_button.visible = false
-		simulation.building_cancel_construction_button.visible = true
-		simulation.building_cancel_construction_button.position.y = 104.0
-		simulation.building_close_button.position.y = 140.0
+		simulation.ui_manager.building_cook_button.visible = false
+		simulation.ui_manager.building_teacher_button.visible = false
+		simulation.ui_manager.building_seller_button.visible = false
+		simulation.ui_manager.building_accept_workers_button.visible = false
+		simulation.ui_manager.building_dismiss_worker_button.visible = false
+		simulation.ui_manager.building_upgrade_button.visible = false
+		simulation.ui_manager.building_relight_button.visible = false
+		simulation.ui_manager.building_demolish_button.visible = false
+		simulation.ui_manager.building_cancel_construction_button.visible = true
+		simulation.ui_manager.building_cancel_construction_button.position.y = 104.0
+		simulation.ui_manager.building_close_button.position.y = 140.0
 	else:
 		var building_type: String = simulation.building_registry.building_type_for_node(simulation.selected_building)
 		var definition: Dictionary = BuildingCatalogScript.definition_for(building_type)
-		simulation.building_menu_title.text = str(definition.get("name", building_type.capitalize()))
+		simulation.ui_manager.building_menu_title.text = str(definition.get("name", building_type.capitalize()))
 		if BuildingTypes.is_cook_campfire(building_type):
 			var cook_fire_state: Variant = simulation._fire_state_for(simulation.selected_building)
 			var cook_fuel: int = cook_fire_state.total_committed_fuel()
-			simulation.building_menu_title.text += S.COOK_FIRE_BRANCHES_FORMAT % [cook_fuel, simulation.FIRE_SUPPLY_TARGET]
-		simulation.building_cook_button.visible = BuildingTypes.is_kitchen(building_type)
+			simulation.ui_manager.building_menu_title.text += S.COOK_FIRE_BRANCHES_FORMAT % [cook_fuel, simulation.FIRE_SUPPLY_TARGET]
+		simulation.ui_manager.building_cook_button.visible = BuildingTypes.is_kitchen(building_type)
 		var can_manage_professions: bool = simulation.player_can_manage_permanent_professions()
 		var profession_blocked_tooltip: String = simulation.permanent_profession_block_message()
 		var is_active_kitchen: bool = simulation.selected_building == simulation.canteen
-		simulation.building_cook_button.text = "Register selected resident as permanent cook"
-		simulation.building_cook_button.disabled = not can_manage_professions or simulation.selected_builder == null or simulation.selected_builder.is_player_controlled or not is_active_kitchen or not bool(simulation.selected_building.get_meta("accepting_workers", true))
+		simulation.ui_manager.building_cook_button.text = "Register selected resident as permanent cook"
+		simulation.ui_manager.building_cook_button.disabled = not can_manage_professions or simulation.selected_builder == null or simulation.selected_builder.is_player_controlled or not is_active_kitchen or not bool(simulation.selected_building.get_meta("accepting_workers", true))
 		if not is_active_kitchen:
-			simulation.building_cook_button.tooltip_text = "Only the active kitchen can serve meals."
-		elif simulation.building_cook_button.disabled:
-			simulation.building_cook_button.tooltip_text = simulation.permanent_profession_block_message() if not can_manage_professions else "Select a resident who is not under direct control."
+			simulation.ui_manager.building_cook_button.tooltip_text = "Only the active kitchen can serve meals."
+		elif simulation.ui_manager.building_cook_button.disabled:
+			simulation.ui_manager.building_cook_button.tooltip_text = simulation.permanent_profession_block_message() if not can_manage_professions else "Select a resident who is not under direct control."
 		else:
-			simulation.building_cook_button.tooltip_text = "Registers a permanent profession."
+			simulation.ui_manager.building_cook_button.tooltip_text = "Registers a permanent profession."
 
-		simulation.building_teacher_button.visible = building_type == "school"
-		simulation.building_teacher_button.disabled = not can_manage_professions or simulation.selected_builder == null or simulation.selected_builder.is_player_controlled or not bool(simulation.selected_building.get_meta("accepting_workers", true))
-		simulation.building_teacher_button.tooltip_text = profession_blocked_tooltip if not can_manage_professions else ""
+		simulation.ui_manager.building_teacher_button.visible = building_type == "school"
+		simulation.ui_manager.building_teacher_button.disabled = not can_manage_professions or simulation.selected_builder == null or simulation.selected_builder.is_player_controlled or not bool(simulation.selected_building.get_meta("accepting_workers", true))
+		simulation.ui_manager.building_teacher_button.tooltip_text = profession_blocked_tooltip if not can_manage_professions else ""
 
-		simulation.building_seller_button.visible = BuildingTypes.is_market(building_type)
-		simulation.building_seller_button.disabled = not can_manage_professions or simulation.selected_builder == null or simulation.selected_builder.is_player_controlled or not bool(simulation.selected_building.get_meta("accepting_workers", true))
-		simulation.building_seller_button.tooltip_text = profession_blocked_tooltip if not can_manage_professions else ""
+		simulation.ui_manager.building_seller_button.visible = BuildingTypes.is_market(building_type)
+		simulation.ui_manager.building_seller_button.disabled = not can_manage_professions or simulation.selected_builder == null or simulation.selected_builder.is_player_controlled or not bool(simulation.selected_building.get_meta("accepting_workers", true))
+		simulation.ui_manager.building_seller_button.tooltip_text = profession_blocked_tooltip if not can_manage_professions else ""
 
 		var is_workplace: bool = simulation._is_staffed_workplace(simulation.selected_building)
-		simulation.building_accept_workers_button.visible = is_workplace
-		simulation.building_dismiss_worker_button.visible = is_workplace
+		simulation.ui_manager.building_accept_workers_button.visible = is_workplace
+		simulation.ui_manager.building_dismiss_worker_button.visible = is_workplace
 		var next_upgrade: String = simulation.settlement.next_building_upgrade(building_type)
-		simulation.building_upgrade_button.visible = not next_upgrade.is_empty()
-		simulation.building_upgrade_button.text = "Upgrade to %s" % str(BuildingCatalogScript.definition_for(next_upgrade).get("name", next_upgrade))
-		simulation.building_upgrade_button.disabled = not simulation.settlement.can_upgrade_building(building_type)
-		simulation.building_upgrade_button.tooltip_text = "" if not simulation.building_upgrade_button.disabled else "Research the next level and gather its resources."
+		simulation.ui_manager.building_upgrade_button.visible = not next_upgrade.is_empty()
+		simulation.ui_manager.building_upgrade_button.text = "Upgrade to %s" % str(BuildingCatalogScript.definition_for(next_upgrade).get("name", next_upgrade))
+		simulation.ui_manager.building_upgrade_button.disabled = not simulation.settlement.can_upgrade_building(building_type)
+		simulation.ui_manager.building_upgrade_button.tooltip_text = "" if not simulation.ui_manager.building_upgrade_button.disabled else "Research the next level and gather its resources."
 		var can_command_labor: bool = simulation.player_can_command_labor()
 		var labor_blocked_tooltip: String = simulation.labor_command_block_message()
-		simulation.building_accept_workers_button.disabled = not can_command_labor
-		simulation.building_accept_workers_button.tooltip_text = labor_blocked_tooltip if not can_command_labor else ""
-		simulation.building_cancel_construction_button.visible = false
+		simulation.ui_manager.building_accept_workers_button.disabled = not can_command_labor
+		simulation.ui_manager.building_accept_workers_button.tooltip_text = labor_blocked_tooltip if not can_command_labor else ""
+		simulation.ui_manager.building_cancel_construction_button.visible = false
 		var is_demolishable: bool = BuildingCatalogScript.is_demolishable(building_type) and simulation.selected_building != simulation.entrance_stone
-		simulation.building_demolish_button.visible = is_demolishable
-		simulation.building_relight_button.visible = BuildingTypes.is_fire_source(building_type) and not simulation._is_fire_lit(simulation.selected_building)
+		simulation.ui_manager.building_demolish_button.visible = is_demolishable
+		simulation.ui_manager.building_relight_button.visible = BuildingTypes.is_fire_source(building_type) and not simulation._is_fire_lit(simulation.selected_building)
 
 		var officer: Variant = simulation._workplace_worker(simulation.selected_building)
-		simulation.building_overtime_button.visible = is_workplace and officer != null
+		simulation.ui_manager.building_overtime_button.visible = is_workplace and officer != null
 		var workplace_night_active: bool = simulation._has_overtime_source("workplace", simulation.selected_building)
-		simulation.building_overtime_button.disabled = not can_command_labor
-		simulation.building_overtime_button.set_pressed_no_signal(workplace_night_active)
-		simulation.building_overtime_button.tooltip_text = labor_blocked_tooltip if not can_command_labor else "Work through the night and the next workday."
+		simulation.ui_manager.building_overtime_button.disabled = not can_command_labor
+		simulation.ui_manager.building_overtime_button.set_pressed_no_signal(workplace_night_active)
+		simulation.ui_manager.building_overtime_button.tooltip_text = labor_blocked_tooltip if not can_command_labor else "Work through the night and the next workday."
 
 		if is_workplace:
 			var accepting: bool = bool(simulation.selected_building.get_meta("accepting_workers", true))
-			simulation.building_accept_workers_button.text = "Stop accepting workers" if accepting else "Start accepting workers"
-			simulation.building_accept_workers_button.tooltip_text = "This workplace is priority #%d among open workplaces of the same profession." % simulation._workplace_priority_position(simulation.selected_building) if accepting else "Reopen this workplace and move it to the front of the hiring queue."
-			simulation.building_dismiss_worker_button.disabled = officer == null or not can_command_labor
-			simulation.building_dismiss_worker_button.tooltip_text = labor_blocked_tooltip if not can_command_labor else ""
+			simulation.ui_manager.building_accept_workers_button.text = "Stop accepting workers" if accepting else "Start accepting workers"
+			simulation.ui_manager.building_accept_workers_button.tooltip_text = "This workplace is priority #%d among open workplaces of the same profession." % simulation._workplace_priority_position(simulation.selected_building) if accepting else "Reopen this workplace and move it to the front of the hiring queue."
+			simulation.ui_manager.building_dismiss_worker_button.disabled = officer == null or not can_command_labor
+			simulation.ui_manager.building_dismiss_worker_button.tooltip_text = labor_blocked_tooltip if not can_command_labor else ""
 
 		var next_y := 104.0
-		if simulation.building_accept_workers_button.visible:
-			simulation.building_accept_workers_button.position.y = next_y
+		if simulation.ui_manager.building_accept_workers_button.visible:
+			simulation.ui_manager.building_accept_workers_button.position.y = next_y
 			next_y += 36.0
-		if simulation.building_dismiss_worker_button.visible:
-			simulation.building_dismiss_worker_button.position.y = next_y
+		if simulation.ui_manager.building_dismiss_worker_button.visible:
+			simulation.ui_manager.building_dismiss_worker_button.position.y = next_y
 			next_y += 36.0
-		if simulation.building_overtime_button.visible:
-			simulation.building_overtime_button.position.y = next_y
+		if simulation.ui_manager.building_overtime_button.visible:
+			simulation.ui_manager.building_overtime_button.position.y = next_y
 			next_y += 36.0
-		if simulation.building_relight_button.visible:
-			simulation.building_relight_button.position.y = next_y
+		if simulation.ui_manager.building_relight_button.visible:
+			simulation.ui_manager.building_relight_button.position.y = next_y
 			next_y += 36.0
-		if simulation.building_upgrade_button.visible:
-			simulation.building_upgrade_button.position.y = next_y
+		if simulation.ui_manager.building_upgrade_button.visible:
+			simulation.ui_manager.building_upgrade_button.position.y = next_y
 			next_y += 36.0
-		if simulation.building_demolish_button.visible:
-			simulation.building_demolish_button.position.y = next_y
+		if simulation.ui_manager.building_demolish_button.visible:
+			simulation.ui_manager.building_demolish_button.position.y = next_y
 			next_y += 36.0
 
-		var special_button_visible: bool = simulation.building_cook_button.visible or simulation.building_teacher_button.visible or simulation.building_seller_button.visible
-		for button in [simulation.building_cook_button, simulation.building_teacher_button, simulation.building_seller_button]:
+		var special_button_visible: bool = simulation.ui_manager.building_cook_button.visible or simulation.ui_manager.building_teacher_button.visible or simulation.ui_manager.building_seller_button.visible
+		for button in [simulation.ui_manager.building_cook_button, simulation.ui_manager.building_teacher_button, simulation.ui_manager.building_seller_button]:
 			if button.visible:
 				button.position.y = next_y
 		if special_button_visible:
 			next_y += 44.0
 		else:
 			next_y += 8.0
-		simulation.building_close_button.position.y = next_y
+		simulation.ui_manager.building_close_button.position.y = next_y
