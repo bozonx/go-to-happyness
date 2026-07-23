@@ -3,6 +3,8 @@ extends Node3D
 
 const SUN_GLARE_OCCLUSION_DISTANCE := 96.0
 const SUN_GLARE_OCCLUSION_MASK := 1 | 8
+const SUN_GLARE_EDGE_ALLOWANCE := 0.18
+const SUN_GLARE_OCCLUSION_SAMPLE_RADIUS := 0.24
 
 var camera: Camera3D
 var sun: DirectionalLight3D
@@ -96,9 +98,10 @@ func _update_sun_glare(direct_light: float, overcast: float) -> void:
 		sun_glare_material.set_shader_parameter("u_intensity", sun_glare_visibility)
 		return
 	var screen_position := camera.unproject_position(sun_position)
-	var uv := Vector2(screen_position.x / viewport_size.x, screen_position.y / viewport_size.y)
-	var edge_distance := minf(minf(uv.x, 1.0 - uv.x), minf(uv.y, 1.0 - uv.y))
-	var edge_fade := smoothstep(-0.08, 0.12, edge_distance)
+	var raw_uv := Vector2(screen_position.x / viewport_size.x, screen_position.y / viewport_size.y)
+	var outside_distance := maxf(maxf(-raw_uv.x, raw_uv.x - 1.0), maxf(-raw_uv.y, raw_uv.y - 1.0))
+	var edge_fade := 1.0 - smoothstep(0.0, SUN_GLARE_EDGE_ALLOWANCE, outside_distance)
+	var uv := raw_uv.clamp(Vector2(-0.04, -0.04), Vector2(1.04, 1.04))
 	var target_visibility := direct_light * (1.0 - overcast * 0.9) * edge_fade * _sun_glare_occlusion(sun_direction)
 	sun_glare_visibility = lerpf(sun_glare_visibility, target_visibility, 0.14)
 	sun_glare_material.set_shader_parameter("u_sun_screen_pos", uv)
@@ -111,9 +114,16 @@ func _sun_glare_occlusion(sun_direction: Vector3) -> float:
 	var world := get_world_3d()
 	if world == null:
 		return 1.0
-	var from := camera.global_position + sun_direction * 0.75
-	var query := PhysicsRayQueryParameters3D.create(from, from + sun_direction * SUN_GLARE_OCCLUSION_DISTANCE)
-	query.collide_with_areas = false
-	query.collide_with_bodies = true
-	query.collision_mask = SUN_GLARE_OCCLUSION_MASK
-	return 0.0 if not world.direct_space_state.intersect_ray(query).is_empty() else 1.0
+	var right := camera.global_transform.basis.x.normalized() * SUN_GLARE_OCCLUSION_SAMPLE_RADIUS
+	var up := camera.global_transform.basis.y.normalized() * SUN_GLARE_OCCLUSION_SAMPLE_RADIUS
+	var sample_offsets: Array[Vector3] = [Vector3.ZERO, right, -right, up, -up]
+	var clear_samples := 0
+	for offset in sample_offsets:
+		var from := camera.global_position + sun_direction * 0.75 + offset
+		var query := PhysicsRayQueryParameters3D.create(from, from + sun_direction * SUN_GLARE_OCCLUSION_DISTANCE)
+		query.collide_with_areas = false
+		query.collide_with_bodies = true
+		query.collision_mask = SUN_GLARE_OCCLUSION_MASK
+		if world.direct_space_state.intersect_ray(query).is_empty():
+			clear_samples += 1
+	return float(clear_samples) / float(sample_offsets.size())

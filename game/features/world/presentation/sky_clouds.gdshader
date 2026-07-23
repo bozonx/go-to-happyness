@@ -148,6 +148,11 @@ void sky() {
 	vec3 cloud_shadow = mix(u_cloud_shadow_clear, u_cloud_shadow_storm, u_overcast);
 	vec3 cloud_col = mix(cloud_shadow, cloud_lit, lit);
 
+	// Clouds crossing the sun should glow from transmitted light instead of
+	// cutting a flat blue bite out of the HDR disc.
+	float sun_backlight = pow(sun_amt, 80.0) * clear_sky * u_solar_intensity;
+	cloud_col = mix(cloud_col, warm_sun * 1.15, sun_backlight * 0.72);
+
 	// Warm sun-kissed rim & edge highlight on lit borders facing sun
 	float edge_mask = smoothstep(0.01, 0.15, density) * (1.0 - smoothstep(0.35, 0.85, density));
 	float rim = pow(sun_amt, 2.5) * edge_mask * lit;
@@ -155,4 +160,7 @@ void sky() {
 
 	float alpha = density * ceil_mask;
 	COLOR = mix(sky_col, cloud_col, alpha);
+	// Restore part of the disc energy transmitted through cloud cover. This
+	// preserves a single round sun while retaining a soft, readable occlusion.
+	COLOR += warm_sun * sun_disc * u_solar_intensity * u_sun_disc_energy * alpha * 0.62;
 }

@@ -5712,10 +5712,28 @@ func restore_from_save_data(save_data: SaveDataScript) -> void:
 	var s_dict: Dictionary = save_data.settlement_state
 	settlement.money = int(s_dict.get("money", 500))
 	settlement.wellbeing = int(s_dict.get("wellbeing", 75))
-	settlement.resources = s_dict.get("resources", {}).duplicate()
-	settlement.unlocked_techs = s_dict.get("unlocked_techs", []).duplicate()
-	settlement.equipment = s_dict.get("equipment", {}).duplicate(true)
 	settlement.era = int(s_dict.get("era", 0))
+
+	var saved_res: Dictionary = s_dict.get("resources", {})
+	for res_id in ResourceIds.ALL:
+		var target_amt: int = int(saved_res.get(res_id, 0))
+		var current_amt: int = settlement.amount(res_id)
+		var diff: int = target_amt - current_amt
+		if diff != 0:
+			settlement.add(res_id, diff)
+
+	if s_dict.has("unlocked_building_levels"):
+		var u_b: Dictionary = s_dict["unlocked_building_levels"]
+		for b_type in u_b:
+			settlement.unlocked_building_levels[b_type] = u_b[b_type]
+	if s_dict.has("unlocked_systems"):
+		var u_sys: Dictionary = s_dict["unlocked_systems"]
+		for sys_id in u_sys:
+			settlement.unlocked_systems[sys_id] = u_sys[sys_id]
+
+	if s_dict.has("equipment"):
+		settlement.equipment = s_dict["equipment"].duplicate(true)
+
 
 	# 4. Restore Simulation Clock
 	if not save_data.clock_state.is_empty():

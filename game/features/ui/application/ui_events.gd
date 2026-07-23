@@ -13,7 +13,7 @@ signal personal_night_work_toggled
 signal job_submenu_requested
 signal category_opened(category_id: StringName)
 signal build_selected(build_id: StringName)
-signal role_selected(role_id: StringName)
+signal role_selected(role_id: StringName, is_daily: bool)
 
 signal send_resident_outside_requested
 signal send_entrance_order_requested

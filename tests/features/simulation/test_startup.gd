@@ -50,6 +50,11 @@ func _init() -> void:
 	assert(construction_daily_button != null)
 	assert(construction_daily_button.visible)
 	assert(not construction_daily_button.disabled)
+	construction_daily_button.emit_signal("pressed")
+	assert(simulation.hero_citizen.daily_order_role == "construction")
+	assert(not simulation.build_menu_is_daily_order_menu)
+	simulation.selected_builder = simulation.hero_citizen
+	simulation._open_daily_order_submenu()
 	var cleaning_daily_button: Button = null
 	for button in simulation.build_menu.role_buttons:
 		if str(button.get_meta("submenu", "")) == "daily" and str(button.get_meta("role", "")) == "cleaning":

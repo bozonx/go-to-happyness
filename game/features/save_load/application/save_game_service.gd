@@ -29,14 +29,23 @@ static func save_game(game: Node, path: String = QUICKSAVE_PATH) -> bool:
 	# 1. Settlement State
 	if "settlement" in game and game.settlement != null:
 		var s = game.settlement
+		var res_map: Dictionary = {}
+		var ResourceIdsScript = load("res://game/features/settlement/domain/resource_ids.gd")
+		if ResourceIdsScript != null and "ALL" in ResourceIdsScript:
+			for res_id in ResourceIdsScript.ALL:
+				var amt: int = s.amount(res_id)
+				if amt > 0:
+					res_map[res_id] = amt
 		save_data.settlement_state = {
 			"money": s.money,
 			"wellbeing": s.wellbeing,
-			"resources": s.resources.duplicate(),
-			"unlocked_techs": s.unlocked_techs.duplicate(),
+			"resources": res_map,
+			"unlocked_building_levels": s.unlocked_building_levels.duplicate() if "unlocked_building_levels" in s else {},
+			"unlocked_systems": s.unlocked_systems.duplicate() if "unlocked_systems" in s else {},
 			"equipment": s.equipment.duplicate(true),
 			"era": int(s.era)
 		}
+
 	
 	# 2. Simulation Clock
 	if "clock" in game and game.clock != null:

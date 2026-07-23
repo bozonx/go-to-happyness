@@ -228,7 +228,7 @@ func _create_build_menu() -> void:
 		build_menu.job_submenu_requested.connect(func(): events.job_submenu_requested.emit())
 		build_menu.category_opened.connect(func(cat): events.category_opened.emit(cat))
 		build_menu.build_selected.connect(func(b_id): events.build_selected.emit(b_id))
-		build_menu.role_selected.connect(func(r_id): events.role_selected.emit(r_id))
+		build_menu.role_selected.connect(func(r_id, is_daily): events.role_selected.emit(r_id, is_daily))
 		if simulation != null:
 			simulation._refresh_build_menu()
 
