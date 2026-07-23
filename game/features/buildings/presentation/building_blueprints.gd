@@ -4,9 +4,15 @@ extends RefCounted
 
 const BuildingModuleScene = preload("res://game/features/buildings/presentation/building_module.tscn")
 const BuildingEntrancePositionsScript = preload("res://game/features/buildings/domain/building_entrance_positions.gd")
+const BuildingBlueprintLibraryScript = preload("res://game/features/buildings/application/building_blueprint_library.gd")
+const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
+const BlockMeshLibraryScript = preload("res://game/features/buildings/presentation/editor/block_mesh_library.gd")
 
 const BLOCK_SIZE := 1.0
 const PANEL_THICKNESS := 0.5
+
+## Shared mesh/material cache for block-based modules (built from .gdbuilding.json).
+static var _block_meshes: BlockMeshLibraryScript = null
 
 const COLORS := {
 	"foundation": Color("776d60"),
@@ -175,6 +181,10 @@ const VISITOR_ONLY_BUILDINGS := {
 
 
 static func get_blueprint(building_type: String) -> Dictionary:
+	# Prefer the unified block blueprint when one has been authored for this
+	# type; otherwise fall back to the legacy procedural generator below.
+	if BuildingBlueprintLibraryScript.has(building_type):
+		return _blueprint_from_library(building_type)
 	match building_type:
 		"campfire", "campfire_lvl2", "campfire_lvl3": return _campfire_blueprint_for(building_type)
 		"gathering_place": return _gathering_place_blueprint()
@@ -223,6 +233,11 @@ static func get_blueprint(building_type: String) -> Dictionary:
 
 
 static func create_module(module: Dictionary) -> StaticBody3D:
+	# Block modules (from .gdbuilding.json) render via the shared block mesh
+	# library; legacy modules render as a coloured box.
+	if module.has("block_id"):
+		return _create_block_module(module)
+
 	var body: StaticBody3D = BuildingModuleScene.instantiate()
 	body.position = module.position
 	body.rotation_degrees = module.get("rotation", Vector3.ZERO)
@@ -243,6 +258,47 @@ static func create_module(module: Dictionary) -> StaticBody3D:
 	shape.size = module.size
 	collision.shape = shape
 	return body
+
+
+static func _create_block_module(module: Dictionary) -> StaticBody3D:
+	if _block_meshes == null:
+		_block_meshes = BlockMeshLibraryScript.new()
+	var block_id: StringName = module["block_id"]
+	var body: StaticBody3D = BuildingModuleScene.instantiate()
+	body.position = module.position
+	body.rotation_degrees = Vector3(0.0, 90.0 * float(int(module.get("rot", 0)) % 4), 0.0)
+	body.set_meta("building_module", true)
+	body.set_meta("module_kind", module.get("kind", "block"))
+
+	var mesh_instance := body.get_node("MeshInstance3D") as MeshInstance3D
+	mesh_instance.mesh = _block_meshes.mesh_for(block_id)
+	mesh_instance.material_override = _block_meshes.material_for(block_id)
+
+	# Collision is the block's axis-aligned bounding box.
+	var def := BuildingBlockCatalogScript.get_block(block_id)
+	var size: Vector3 = def.get("size", Vector3.ONE) if not def.is_empty() else Vector3.ONE
+	var collision := body.get_node("CollisionShape3D") as CollisionShape3D
+	var shape := BoxShape3D.new()
+	shape.size = size
+	collision.shape = shape
+	return body
+
+
+## Builds the legacy-shaped blueprint dict from a block blueprint file so the
+## existing construction pipeline consumes it unchanged.
+static func _blueprint_from_library(building_type: String) -> Dictionary:
+	var fp := BuildingBlueprintLibraryScript.footprint(building_type)
+	var bp := BuildingBlueprintLibraryScript.get_blueprint(building_type)
+	var entrance: Vector2i = bp.entrance if bp != null and bp.entrance != Vector2i.ZERO else Vector2i(0, -fp.y / 2)
+	var result := {
+		"type": building_type,
+		"footprint": fp,
+		"entrance": entrance,
+		"modules": BuildingBlueprintLibraryScript.ordered_modules(building_type),
+	}
+	if bp != null and not bp.worker_entrances.is_empty():
+		result["worker_entrances"] = bp.worker_entrances
+	return result
 
 
 static func _enclosed_blueprint(building_type: String, footprint: Vector2i, height: int, roof_style: String) -> Dictionary:

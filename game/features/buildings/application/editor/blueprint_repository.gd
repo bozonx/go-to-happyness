@@ -9,7 +9,9 @@ extends RefCounted
 
 const BuildingBlueprintScript = preload("res://game/features/buildings/domain/editor/building_blueprint.gd")
 
-const DEV_DIR := "res://data/blueprints"
+## Canonical, feature-local blueprint folder. The game's BuildingBlueprintLibrary
+## also reads from here, so dev edits are exactly what ships in-game.
+const DEV_DIR := "res://game/features/buildings/data/blueprints"
 const PLAYER_DIR := "user://custom_buildings"
 
 var dev_mode: bool = false

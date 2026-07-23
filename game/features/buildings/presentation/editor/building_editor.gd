@@ -16,6 +16,7 @@ const CameraControllerScene = preload("res://game/features/world/presentation/ca
 const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
 const BuildingBlueprintScript = preload("res://game/features/buildings/domain/editor/building_blueprint.gd")
 const BuildingGridModelScript = preload("res://game/features/buildings/domain/editor/building_grid_model.gd")
+const ActiveWorkZoneRecordScript = preload("res://game/features/buildings/domain/editor/active_work_zone_record.gd")
 const BlueprintRepositoryScript = preload("res://game/features/buildings/application/editor/blueprint_repository.gd")
 const BlockMeshLibraryScript = preload("res://game/features/buildings/presentation/editor/block_mesh_library.gd")
 const UI_THEME = preload("res://game/features/ui/presentation/theme/ui_theme.tres")
@@ -39,17 +40,29 @@ var active_layer: int = 0
 var cursor_cell: Vector3i = Vector3i.ZERO
 var cursor_valid: bool = false
 
+var current_mode: int = EditMode.FRAME
+
+## Frame-mode drag painting state.
+var _painting: bool = false
+var _last_paint_cell: Vector3i = Vector3i.ZERO
+
+## Zones-mode state.
+var _selected_zone_index: int = -1
+var _armed_marker: StringName = &"anchor"  ## &"anchor" | &"input" | &"output"
+
 var _block_nodes: Dictionary = {}  ## Vector3i -> MeshInstance3D
 var _camera_controller: Node3D
 var _blocks_root: Node3D
 var _ghost: MeshInstance3D
 var _layer_plane: MeshInstance3D
+var _zones_visual_root: Node3D
 var _panning: bool = false
 var _orbiting: bool = false
 
 # UI references populated in _build_ui().
 var _name_edit: LineEdit
 var _id_edit: LineEdit
+var _palette_panel: PanelContainer
 var _palette_container: VBoxContainer
 var _status_label: Label
 var _layer_label: Label
@@ -62,6 +75,26 @@ var _dev_panel: PanelContainer
 var _load_popup: PopupPanel
 var _load_list: ItemList
 var _palette_buttons: Dictionary = {}  ## StringName -> Button
+
+# Zones panel references.
+var _zones_panel: PanelContainer
+var _zone_option: OptionButton
+var _zone_name_edit: LineEdit
+var _zone_kind_option: OptionButton
+var _zone_profession_option: OptionButton
+var _zone_workers_spin: SpinBox
+var _zone_info_label: Label
+var _marker_buttons: Dictionary = {}  ## StringName -> Button
+
+const ZONE_PROFESSIONS: Array[StringName] = [
+	&"cook", &"teacher", &"seller", &"official", &"researcher",
+	&"craftsman", &"forager", &"trader",
+]
+
+const ZONE_COLORS: Array[Color] = [
+	Color(0.35, 0.75, 1.0), Color(1.0, 0.7, 0.3), Color(0.6, 1.0, 0.5),
+	Color(1.0, 0.5, 0.8), Color(0.8, 0.8, 0.4), Color(0.5, 0.9, 0.9),
+]
 
 
 func _ready() -> void:
@@ -119,6 +152,10 @@ func _build_world() -> void:
 	_blocks_root = Node3D.new()
 	_blocks_root.name = "BlocksRoot"
 	add_child(_blocks_root)
+
+	_zones_visual_root = Node3D.new()
+	_zones_visual_root.name = "ZonesVisual"
+	add_child(_zones_visual_root)
 
 	_ghost = MeshInstance3D.new()
 	_ghost.name = "Ghost"
@@ -186,6 +223,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			_camera_controller.call("rotate_yaw_pitch", event.relative)
 		elif _panning and _camera_controller.has_method("pan"):
 			_camera_controller.call("pan", event.relative)
+		elif _painting:
+			# Drag to build/erase a line following the mouse.
+			_update_cursor()
+			if cursor_valid:
+				_paint_line(_last_paint_cell, cursor_cell)
+				_last_paint_cell = cursor_cell
 	elif event is InputEventKey and event.pressed and not event.echo:
 		_handle_key(event)
 
@@ -204,7 +247,16 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 				_zoom(2.0)
 		MOUSE_BUTTON_LEFT:
 			if event.pressed:
-				_apply_tool_at_cursor()
+				if _pointer_over_ui():
+					return
+				if current_mode == EditMode.ZONES:
+					_place_zone_marker_at_cursor()
+				else:
+					_painting = true
+					_last_paint_cell = cursor_cell
+					_apply_tool_at_cursor()
+			else:
+				_painting = false
 
 
 func _handle_key(event: InputEventKey) -> void:
@@ -256,20 +308,49 @@ func _update_cursor() -> void:
 func _apply_tool_at_cursor() -> void:
 	if not cursor_valid:
 		return
-	# Ignore clicks that land on UI (panels consume their own input, but guard
-	# against the transparent status bar too).
-	if get_viewport().gui_get_hovered_control() != null:
-		return
+	_apply_tool_at_cell(cursor_cell)
+	_refresh_ghost()
+
+
+func _apply_tool_at_cell(cell: Vector3i) -> void:
 	match current_tool:
 		Tool.PLACE:
-			if grid_model.place(cursor_cell, current_block_id, current_rot):
-				_spawn_or_update_block_node(grid_model.get_block_at(cursor_cell))
+			if grid_model.place(cell, current_block_id, current_rot):
+				_spawn_or_update_block_node(grid_model.get_block_at(cell))
 				_update_count()
 		Tool.ERASE:
-			if grid_model.erase(cursor_cell):
-				_remove_block_node(cursor_cell)
+			if grid_model.erase(cell):
+				_remove_block_node(cell)
 				_update_count()
+
+
+## Applies the current tool to every cell on the line between two grid cells
+## (inclusive), so a mouse drag lays a continuous run of blocks.
+func _paint_line(from_cell: Vector3i, to_cell: Vector3i) -> void:
+	var dx := absi(to_cell.x - from_cell.x)
+	var dz := absi(to_cell.z - from_cell.z)
+	var sx := 1 if to_cell.x > from_cell.x else -1
+	var sz := 1 if to_cell.z > from_cell.z else -1
+	var x := from_cell.x
+	var z := from_cell.z
+	var err := dx - dz
+	var y := active_layer
+	while true:
+		_apply_tool_at_cell(Vector3i(x, y, z))
+		if x == to_cell.x and z == to_cell.z:
+			break
+		var e2 := 2 * err
+		if e2 > -dz:
+			err -= dz
+			x += sx
+		if e2 < dx:
+			err += dx
+			z += sz
 	_refresh_ghost()
+
+
+func _pointer_over_ui() -> bool:
+	return get_viewport().gui_get_hovered_control() != null
 
 
 # ---------------------------------------------------------------------------
@@ -305,7 +386,7 @@ func _rebuild_all_block_nodes() -> void:
 
 
 func _refresh_ghost() -> void:
-	if not cursor_valid:
+	if current_mode == EditMode.ZONES or not cursor_valid:
 		_ghost.visible = false
 		return
 	_ghost.visible = true
@@ -375,12 +456,26 @@ func _set_layer(layer: int) -> void:
 
 
 func _select_mode(mode: int) -> void:
-	# Only frame mode is functional; the others are reserved placeholders.
-	if mode != EditMode.FRAME:
-		_update_status("Этот режим появится в следующем обновлении.")
+	# Frame and Zones modes are functional; Decor is still a placeholder.
+	if mode == EditMode.DECOR:
+		_update_status("Режим декора появится в следующем обновлении.")
+		if _mode_buttons.has(current_mode):
+			(_mode_buttons[current_mode] as Button).button_pressed = true
 		return
+	current_mode = mode
 	for m in _mode_buttons.keys():
 		(_mode_buttons[m] as Button).button_pressed = m == mode
+	if _palette_panel != null:
+		_palette_panel.visible = mode == EditMode.FRAME
+	if _zones_panel != null:
+		_zones_panel.visible = mode == EditMode.ZONES
+	if mode == EditMode.ZONES:
+		_set_tool(Tool.PLACE)
+		_refresh_zone_visuals()
+		_update_status("Режим зон: создайте зону и расставьте якоря работы / поддоны.")
+	else:
+		_update_status("Режим каркаса.")
+	_refresh_ghost()
 
 
 # ---------------------------------------------------------------------------
@@ -406,7 +501,10 @@ func _on_save_pressed() -> void:
 func _on_new_pressed() -> void:
 	grid_model.clear()
 	blueprint = BuildingBlueprintScript.new()
+	_selected_zone_index = -1
 	_rebuild_all_block_nodes()
+	_rebuild_zone_option()
+	_refresh_zone_visuals()
 	_sync_metadata_fields()
 	_set_layer(0)
 	_update_status("Новый чертёж.")
@@ -432,10 +530,13 @@ func _on_load_item_activated(index: int) -> void:
 		return
 	blueprint = loaded
 	grid_model.load_from_blueprint(blueprint)
+	_selected_zone_index = 0 if not blueprint.work_zones.is_empty() else -1
 	_rebuild_all_block_nodes()
+	_rebuild_zone_option()
+	_refresh_zone_visuals()
 	_sync_metadata_fields()
 	_load_popup.hide()
-	_update_status("Загружено: %s (%d блоков)" % [blueprint.name, blueprint.block_count()])
+	_update_status("Загружено: %s (%d блоков, %d зон)" % [blueprint.name, blueprint.block_count(), blueprint.work_zones.size()])
 
 
 func _confirm_back_to_menu() -> void:
@@ -459,6 +560,7 @@ func _build_ui() -> void:
 
 	_build_top_bar(root)
 	_build_palette_panel(root)
+	_build_zones_panel(root)
 	_build_status_bar(root)
 	_build_load_popup(root)
 	if dev_mode:
@@ -468,6 +570,7 @@ func _build_ui() -> void:
 	_set_tool(Tool.PLACE)
 	_set_layer(0)
 	_update_count()
+	_select_mode(EditMode.FRAME)
 
 
 func _build_top_bar(root: Control) -> void:
@@ -508,7 +611,7 @@ func _build_top_bar(root: Control) -> void:
 	for mode_info in [
 		{"mode": EditMode.FRAME, "label": "1. Каркас", "enabled": true},
 		{"mode": EditMode.DECOR, "label": "2. Декор", "enabled": false},
-		{"mode": EditMode.ZONES, "label": "3. Зоны", "enabled": false},
+		{"mode": EditMode.ZONES, "label": "3. Зоны", "enabled": true},
 	]:
 		var btn := Button.new()
 		btn.toggle_mode = true
@@ -547,6 +650,7 @@ func _build_palette_panel(root: Control) -> void:
 	panel.offset_left = 8.0
 	panel.custom_minimum_size = Vector2(240, 0)
 	root.add_child(panel)
+	_palette_panel = panel
 
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -635,6 +739,322 @@ func _build_palette_panel(root: Control) -> void:
 		vbox.add_child(btn)
 
 
+# ---------------------------------------------------------------------------
+# Active work zones (Mode 3)
+# ---------------------------------------------------------------------------
+
+func _build_zones_panel(root: Control) -> void:
+	var panel := PanelContainer.new()
+	panel.set_anchors_and_offsets_preset(Control.PRESET_LEFT_WIDE)
+	panel.offset_top = 60.0
+	panel.offset_bottom = -48.0
+	panel.offset_left = 8.0
+	panel.custom_minimum_size = Vector2(260, 0)
+	panel.visible = false
+	root.add_child(panel)
+	_zones_panel = panel
+
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	panel.add_child(scroll)
+
+	var vbox := VBoxContainer.new()
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.add_theme_constant_override("separation", 6)
+	scroll.add_child(vbox)
+
+	var title := Label.new()
+	title.text = "Активные зоны"
+	title.add_theme_font_size_override("font_size", 16)
+	vbox.add_child(title)
+
+	var zone_row := HBoxContainer.new()
+	vbox.add_child(zone_row)
+	_zone_option = OptionButton.new()
+	_zone_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_zone_option.item_selected.connect(_on_zone_option_selected)
+	zone_row.add_child(_zone_option)
+	var add_btn := Button.new()
+	add_btn.text = "＋"
+	add_btn.tooltip_text = "Создать зону"
+	add_btn.pressed.connect(_add_zone)
+	zone_row.add_child(add_btn)
+	var del_btn := Button.new()
+	del_btn.text = "🗑"
+	del_btn.tooltip_text = "Удалить зону"
+	del_btn.pressed.connect(_delete_zone)
+	zone_row.add_child(del_btn)
+
+	vbox.add_child(HSeparator.new())
+
+	vbox.add_child(_labeled("Название зоны:"))
+	_zone_name_edit = LineEdit.new()
+	_zone_name_edit.text_changed.connect(_on_zone_name_changed)
+	vbox.add_child(_zone_name_edit)
+
+	vbox.add_child(_labeled("Назначение:"))
+	_zone_kind_option = OptionButton.new()
+	for kind in ActiveWorkZoneRecordScript.KINDS:
+		_zone_kind_option.add_item(ActiveWorkZoneRecordScript.kind_display_name(kind))
+		_zone_kind_option.set_item_metadata(_zone_kind_option.item_count - 1, kind)
+	_zone_kind_option.item_selected.connect(_on_zone_kind_selected)
+	vbox.add_child(_zone_kind_option)
+
+	vbox.add_child(_labeled("Профессия:"))
+	_zone_profession_option = OptionButton.new()
+	_zone_profession_option.add_item("— нет —")
+	_zone_profession_option.set_item_metadata(0, &"")
+	for prof in ZONE_PROFESSIONS:
+		_zone_profession_option.add_item(String(prof))
+		_zone_profession_option.set_item_metadata(_zone_profession_option.item_count - 1, prof)
+	_zone_profession_option.item_selected.connect(_on_zone_profession_selected)
+	vbox.add_child(_zone_profession_option)
+
+	var workers_row := HBoxContainer.new()
+	vbox.add_child(workers_row)
+	workers_row.add_child(_labeled("Макс. рабочих:"))
+	_zone_workers_spin = SpinBox.new()
+	_zone_workers_spin.min_value = 0
+	_zone_workers_spin.max_value = 12
+	_zone_workers_spin.value = 1
+	_zone_workers_spin.value_changed.connect(_on_zone_workers_changed)
+	workers_row.add_child(_zone_workers_spin)
+
+	vbox.add_child(HSeparator.new())
+
+	var place_label := Label.new()
+	place_label.text = "Что ставить (ЛКМ по сетке):"
+	place_label.add_theme_color_override("font_color", Color(0.65, 0.72, 0.8))
+	vbox.add_child(place_label)
+
+	for marker in [
+		{"id": &"anchor", "label": "📍 Якорь работы"},
+		{"id": &"input", "label": "📥 Поддон (вход)"},
+		{"id": &"output", "label": "📤 Поддон (выход)"},
+	]:
+		var btn := Button.new()
+		btn.toggle_mode = true
+		btn.text = marker["label"]
+		var marker_id: StringName = marker["id"]
+		btn.pressed.connect(func(): _arm_marker(marker_id))
+		_marker_buttons[marker_id] = btn
+		vbox.add_child(btn)
+
+	var clear_anchors := Button.new()
+	clear_anchors.text = "Очистить якоря зоны"
+	clear_anchors.pressed.connect(_clear_zone_anchors)
+	vbox.add_child(clear_anchors)
+
+	vbox.add_child(HSeparator.new())
+	_zone_info_label = Label.new()
+	_zone_info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_zone_info_label.add_theme_color_override("font_color", Color(0.6, 0.66, 0.72))
+	vbox.add_child(_zone_info_label)
+
+	_arm_marker(&"anchor")
+	_rebuild_zone_option()
+
+
+func _labeled(text: String) -> Label:
+	var label := Label.new()
+	label.text = text
+	return label
+
+
+func _current_zone() -> ActiveWorkZoneRecord:
+	if _selected_zone_index < 0 or _selected_zone_index >= blueprint.work_zones.size():
+		return null
+	return blueprint.work_zones[_selected_zone_index]
+
+
+func _add_zone() -> void:
+	var zone := ActiveWorkZoneRecordScript.new()
+	zone.zone_id = StringName("zone_%d" % (blueprint.work_zones.size() + 1))
+	zone.zone_name = "Зона %d" % (blueprint.work_zones.size() + 1)
+	blueprint.work_zones.append(zone)
+	_selected_zone_index = blueprint.work_zones.size() - 1
+	_rebuild_zone_option()
+	_refresh_zone_panel_fields()
+	_refresh_zone_visuals()
+	_update_status("Зона создана. Задайте назначение и расставьте якоря.")
+
+
+func _delete_zone() -> void:
+	var zone := _current_zone()
+	if zone == null:
+		return
+	blueprint.work_zones.remove_at(_selected_zone_index)
+	_selected_zone_index = mini(_selected_zone_index, blueprint.work_zones.size() - 1)
+	_rebuild_zone_option()
+	_refresh_zone_panel_fields()
+	_refresh_zone_visuals()
+
+
+func _rebuild_zone_option() -> void:
+	if _zone_option == null:
+		return
+	_zone_option.clear()
+	for i in blueprint.work_zones.size():
+		var zone: ActiveWorkZoneRecord = blueprint.work_zones[i]
+		_zone_option.add_item("%s" % zone.zone_name)
+	if _selected_zone_index >= 0 and _selected_zone_index < blueprint.work_zones.size():
+		_zone_option.select(_selected_zone_index)
+	_refresh_zone_panel_fields()
+
+
+func _on_zone_option_selected(index: int) -> void:
+	_selected_zone_index = index
+	_refresh_zone_panel_fields()
+	_refresh_zone_visuals()
+
+
+func _refresh_zone_panel_fields() -> void:
+	var zone := _current_zone()
+	var has_zone := zone != null
+	if _zone_name_edit != null:
+		_zone_name_edit.editable = has_zone
+	if _zone_kind_option != null:
+		_zone_kind_option.disabled = not has_zone
+	if _zone_profession_option != null:
+		_zone_profession_option.disabled = not has_zone
+	if _zone_workers_spin != null:
+		_zone_workers_spin.editable = has_zone
+	if not has_zone:
+		if _zone_name_edit != null:
+			_zone_name_edit.text = ""
+		if _zone_info_label != null:
+			_zone_info_label.text = "Нет зон. Нажмите ＋, чтобы создать."
+		return
+	if _zone_name_edit != null:
+		_zone_name_edit.text = zone.zone_name
+	if _zone_kind_option != null:
+		for i in _zone_kind_option.item_count:
+			if _zone_kind_option.get_item_metadata(i) == zone.kind:
+				_zone_kind_option.select(i)
+				break
+	if _zone_profession_option != null:
+		var found := 0
+		for i in _zone_profession_option.item_count:
+			if _zone_profession_option.get_item_metadata(i) == zone.profession:
+				found = i
+				break
+		_zone_profession_option.select(found)
+	if _zone_workers_spin != null:
+		_zone_workers_spin.value = zone.max_workers
+	_update_zone_info()
+
+
+func _update_zone_info() -> void:
+	var zone := _current_zone()
+	if zone == null or _zone_info_label == null:
+		return
+	var trays := ""
+	if zone.storage_trays.has("input"):
+		trays += " вход✓"
+	if zone.storage_trays.has("output"):
+		trays += " выход✓"
+	_zone_info_label.text = "Якорей: %d · Поддоны:%s\nID: %s" % [
+		zone.work_anchors.size(), (trays if trays != "" else " —"), zone.zone_id]
+
+
+func _on_zone_name_changed(text: String) -> void:
+	var zone := _current_zone()
+	if zone == null:
+		return
+	zone.zone_name = text
+	if _zone_option != null and _selected_zone_index >= 0:
+		_zone_option.set_item_text(_selected_zone_index, text)
+
+
+func _on_zone_kind_selected(index: int) -> void:
+	var zone := _current_zone()
+	if zone == null:
+		return
+	zone.kind = _zone_kind_option.get_item_metadata(index)
+	_update_zone_info()
+
+
+func _on_zone_profession_selected(index: int) -> void:
+	var zone := _current_zone()
+	if zone == null:
+		return
+	zone.profession = _zone_profession_option.get_item_metadata(index)
+
+
+func _on_zone_workers_changed(value: float) -> void:
+	var zone := _current_zone()
+	if zone == null:
+		return
+	zone.max_workers = int(value)
+
+
+func _arm_marker(marker: StringName) -> void:
+	_armed_marker = marker
+	for id in _marker_buttons.keys():
+		(_marker_buttons[id] as Button).button_pressed = id == marker
+
+
+func _clear_zone_anchors() -> void:
+	var zone := _current_zone()
+	if zone == null:
+		return
+	zone.work_anchors.clear()
+	zone.storage_trays.clear()
+	_refresh_zone_visuals()
+	_update_zone_info()
+
+
+func _place_zone_marker_at_cursor() -> void:
+	if not cursor_valid:
+		return
+	var zone := _current_zone()
+	if zone == null:
+		_update_status("Сначала создайте зону (＋).")
+		return
+	var pos := Vector3(cursor_cell) + Vector3(0.5, 0.0, 0.5)
+	match _armed_marker:
+		&"input":
+			zone.set_tray(&"input", pos, 50)
+		&"output":
+			zone.set_tray(&"output", pos, 50)
+		_:
+			zone.add_anchor(pos, Vector3.ZERO, "work")
+	_refresh_zone_visuals()
+	_update_zone_info()
+
+
+func _refresh_zone_visuals() -> void:
+	if _zones_visual_root == null:
+		return
+	for child in _zones_visual_root.get_children():
+		child.queue_free()
+	if current_mode != EditMode.ZONES:
+		return
+	for i in blueprint.work_zones.size():
+		var zone: ActiveWorkZoneRecord = blueprint.work_zones[i]
+		var color := ZONE_COLORS[i % ZONE_COLORS.size()]
+		for anchor in zone.work_anchors:
+			_add_zone_marker(anchor["pos"], color, Vector3(0.4, 1.2, 0.4), false)
+		if zone.storage_trays.has("input"):
+			_add_zone_marker(zone.storage_trays["input"]["pos"], Color(0.4, 0.8, 1.0), Vector3(0.7, 0.3, 0.7), true)
+		if zone.storage_trays.has("output"):
+			_add_zone_marker(zone.storage_trays["output"]["pos"], Color(1.0, 0.7, 0.3), Vector3(0.7, 0.3, 0.7), true)
+
+
+func _add_zone_marker(pos: Vector3, color: Color, size: Vector3, is_tray: bool) -> void:
+	var mi := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = size
+	mi.mesh = mesh
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(color.r, color.g, color.b, 0.7)
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mi.material_override = mat
+	mi.position = pos + Vector3(0.0, size.y * 0.5 + (0.02 if is_tray else 0.0), 0.0)
+	_zones_visual_root.add_child(mi)
+
+
 func _build_status_bar(root: Control) -> void:
 	var panel := PanelContainer.new()
 	panel.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
@@ -653,7 +1073,7 @@ func _build_status_bar(root: Control) -> void:
 	hbox.add_child(_count_label)
 
 	var help := Label.new()
-	help.text = "ЛКМ — действие · ПКМ — вращение камеры · СКМ — панорама · Колесо — зум · WASD — движение"
+	help.text = "ЛКМ (зажать) — рисовать линию · ПКМ — камера · СКМ — панорама · Колесо — зум · WASD — движение"
 	help.add_theme_color_override("font_color", Color(0.6, 0.66, 0.72))
 	hbox.add_child(help)
 
