@@ -117,6 +117,10 @@ const ResourcePileScript = preload("res://game/features/logistics/domain/resourc
 const WarehouseStateScript = preload("res://game/features/settlement/domain/warehouse_state.gd")
 const WorldResourceStateScript = preload("res://game/features/world/domain/world_resource_state.gd")
 const S = preload("res://game/features/ui/domain/game_strings.gd")
+const BuildingSpatialRegistryScript = preload("res://game/features/buildings/application/building_spatial_registry.gd")
+const SimulationEventDispatcherScript = preload("res://game/features/simulation/application/simulation_event_dispatcher.gd")
+const SettlementUIAttacherScript = preload("res://game/features/ui/presentation/settlement_ui_attacher.gd")
+
 
 
 # The playable routing and construction board must cover the terrain visible
@@ -189,14 +193,52 @@ var building_registry := BuildingRegistry.new()
 var tree_cells: Dictionary[Vector2i, bool] = {}
 var terrain_blocked_cells: Dictionary[Vector2i, bool] = {}
 var navigation_blocked_cells: Dictionary[Vector2i, bool] = {}
-var warehouse_positions: Array[Vector3] = []
-var sawmill_positions: Array[Vector3] = []
+var building_spatial_registry := BuildingSpatialRegistryScript.new()
+var simulation_event_dispatcher: SimulationEventDispatcher
+var ui_attacher := SettlementUIAttacherScript.new()
+
+var warehouse_positions: Array[Vector3]:
+	get: return building_spatial_registry.warehouse_positions
+var sawmill_positions: Array[Vector3]:
+	get: return building_spatial_registry.sawmill_positions
+var farm_positions: Array[Vector3]:
+	get: return building_spatial_registry.farm_positions
+var builders_guild_positions: Array[Vector3]:
+	get: return building_spatial_registry.builders_guild_positions
+var construction_company_positions: Array[Vector3]:
+	get: return building_spatial_registry.construction_company_positions
+var pond_positions: Array[Vector3]:
+	get: return building_spatial_registry.pond_positions
+var forager_positions: Array[Vector3]:
+	get: return building_spatial_registry.forager_positions
+var materials_yard_positions: Array[Vector3]:
+	get: return building_spatial_registry.materials_yard_positions
+var school_positions: Array[Vector3]:
+	get: return building_spatial_registry.school_positions
+var market_positions: Array[Vector3]:
+	get: return building_spatial_registry.market_positions
+var craft_tent_positions: Array[Vector3]:
+	get: return building_spatial_registry.craft_tent_positions
+var park_positions: Array[Vector3]:
+	get: return building_spatial_registry.park_positions
+var leisure_positions: Array[Vector3]:
+	get: return building_spatial_registry.leisure_positions
+var gathering_place_positions: Array[Vector3]:
+	get: return building_spatial_registry.gathering_place_positions
+var factories: Array[Node3D]:
+	get: return building_spatial_registry.factories
+
 var sawmill_stocks: Dictionary = {}
-var grass_sources: Dictionary[Vector2i, GrassSourceRecordScript] = {} # cell -> GrassSourceRecord; finite patches around trees
-var forage_sources: Dictionary[Vector2i, ForageSourceRecordScript] = {} # cell -> ForageSourceRecord; wild edible plants, one harvest each
-var rabbit_sources: Dictionary[Vector2i, RabbitSourceRecordScript] = {} # cell -> RabbitSourceRecord; simple moving meadow animals
-var forage_respawn_at: Dictionary[Vector2i, float] = {}
-var rabbit_respawn_at: Dictionary[Vector2i, float] = {}
+var grass_sources: Dictionary:
+	get: return foraging_service.grass_sources if foraging_service != null else {}
+var forage_sources: Dictionary:
+	get: return foraging_service.forage_sources if foraging_service != null else {}
+var forage_respawn_at: Dictionary:
+	get: return foraging_service.forage_respawn_at if foraging_service != null else {}
+var rabbit_sources: Dictionary:
+	get: return foraging_service.rabbit_sources if foraging_service != null else {}
+var rabbit_respawn_at: Dictionary:
+	get: return foraging_service.rabbit_respawn_at if foraging_service != null else {}
 const WILD_FOOD_RESPAWN_SECONDS := 45.0
 const RABBIT_RESPAWN_SECONDS := 60.0
 const RABBIT_MAX_COUNT := 8
@@ -205,19 +247,7 @@ var last_citizen_positions: Dictionary[int, Vector3] = {}
 var resource_piles: Array[ResourcePileScript] = []
 var backpack_node: Node3D
 var backpack_position: Vector3
-var farm_positions: Array[Vector3] = []
-var builders_guild_positions: Array[Vector3] = []
-var construction_company_positions: Array[Vector3] = []
-var pond_positions: Array[Vector3] = []
-var forager_positions: Array[Vector3] = []
-var materials_yard_positions: Array[Vector3] = []
-var school_positions: Array[Vector3] = []
-var market_positions: Array[Vector3] = []
-var craft_tent_positions: Array[Vector3] = []
-var park_positions: Array[Vector3] = []
-var leisure_positions: Array[Vector3] = []
-var gathering_place_positions: Array[Vector3] = []
-var factories: Array[Node3D] = []
+
 var tree_positions: Array[Vector3] = []
 var tree_nodes: Dictionary[Vector2i, Node3D] = {}
 var gather_progress_labels: Dictionary[Node3D, Node3D] = {} # resource Node3D -> Label3D
@@ -556,17 +586,28 @@ var storage_routing_service: StorageRoutingService
 var courier_dispatcher: CourierDispatcher
 var courier_task_publisher: CourierTaskPublisher
 var courier_task_service: CourierTaskService
-var campfire_menu_controller: CampfireMenuController
-var workforce_menu_controller: WorkforceMenuController
-var research_menu_controller: ResearchMenuController
-var school_menu_controller: SchoolMenuController
-var entrance_menu_controller: EntranceMenuController
-var house_menu_controller: HouseMenuController
-var pocket_take_menu_controller: PocketTakeMenuController
-var market_menu_controller: MarketMenuController
-var warehouse_menu_controller: WarehouseMenuController
+var campfire_menu_controller: RefCounted:
+	get: return ui_attacher.campfire_menu_controller
+var workforce_menu_controller: RefCounted:
+	get: return ui_attacher.workforce_menu_controller
+var research_menu_controller: RefCounted:
+	get: return ui_attacher.research_menu_controller
+var school_menu_controller: RefCounted:
+	get: return ui_attacher.school_menu_controller
+var entrance_menu_controller: RefCounted:
+	get: return ui_attacher.entrance_menu_controller
+var house_menu_controller: RefCounted:
+	get: return ui_attacher.house_menu_controller
+var pocket_take_menu_controller: RefCounted:
+	get: return ui_attacher.pocket_take_menu_controller
+var market_menu_controller: RefCounted:
+	get: return ui_attacher.market_menu_controller
+var warehouse_menu_controller: RefCounted:
+	get: return ui_attacher.warehouse_menu_controller
 var warehouse_fill_label_controller: WarehouseFillLabelController
-var building_menu_controller: BuildingMenuController
+var building_menu_controller: RefCounted:
+	get: return ui_attacher.building_menu_controller
+
 var building_status_indicator_controller: BuildingStatusIndicatorController
 var first_person_hud_controller: FirstPersonHUDController
 var label_distance_fade_controller: LabelDistanceFadeController
@@ -1142,30 +1183,27 @@ func _ready() -> void:
 		_fire_state_for,
 		_apply_fire_state
 	)
-	campfire_menu_controller = CampfireMenuControllerScript.new()
-	campfire_menu_controller.configure(self)
-	workforce_menu_controller = WorkforceMenuControllerScript.new()
-	workforce_menu_controller.configure(self)
-	research_menu_controller = ResearchMenuControllerScript.new()
-	research_menu_controller.configure(self)
-	school_menu_controller = SchoolMenuControllerScript.new()
-	school_menu_controller.configure(self)
-	entrance_menu_controller = EntranceMenuControllerScript.new()
-	entrance_menu_controller.configure(self)
-	house_menu_controller = HouseMenuControllerScript.new()
-	house_menu_controller.configure(self)
-
-
-	pocket_take_menu_controller = PocketTakeMenuControllerScript.new()
-	pocket_take_menu_controller.configure(self)
-	market_menu_controller = MarketMenuControllerScript.new()
-	market_menu_controller.configure(self)
-	warehouse_menu_controller = WarehouseMenuControllerScript.new()
-	warehouse_menu_controller.configure(self)
+	ui_attacher.create_all_controllers()
+	ui_attacher.configure_all(self)
+	simulation_event_dispatcher = SimulationEventDispatcherScript.new()
+	simulation_event_dispatcher.configure({
+		"start_meal": _start_meal,
+		"start_park_rest": _start_park_rest,
+		"end_ai_work_shift": _end_ai_work_shift,
+		"clear_finished_daily_orders": _clear_finished_daily_orders,
+		"refresh_living_statuses": _refresh_living_statuses,
+		"update_workers": _update_workers,
+		"apply_pending_workday_hours": _apply_pending_workday_hours,
+		"clear_expired_overtime_orders": _clear_expired_overtime_orders,
+		"reset_building_night_work_toggles": _reset_building_night_work_toggles,
+		"resume_overtime_daily_orders": _resume_overtime_daily_orders,
+		"update_interface": _update_interface,
+		"citizen_ai_refresh": func(): if citizen_ai != null: citizen_ai.request_decision_refresh(),
+		"school_day_ended": _on_school_day_ended,
+		"daily_settlement_update": _on_daily_settlement_update
+	})
 	warehouse_fill_label_controller = WarehouseFillLabelControllerScript.new()
 	warehouse_fill_label_controller.configure(self)
-	building_menu_controller = BuildingMenuControllerScript.new()
-	building_menu_controller.configure(self)
 	building_status_indicator_controller = BuildingStatusIndicatorControllerScript.new()
 	building_status_indicator_controller.configure(self)
 	first_person_hud_controller = FirstPersonHUDControllerScript.new()
@@ -1451,53 +1489,32 @@ func _update_clock(delta: float) -> void:
 		_handle_day_cycle_event(event)
 
 func _handle_day_cycle_event(event: SimulationDayEvent) -> void:
-	match event.kind:
-		SimulationDayEvent.Kind.MEAL:
-			_start_meal(event.hour)
-		SimulationDayEvent.Kind.PARK_REST:
-			_start_park_rest(event.cooks_only)
-		SimulationDayEvent.Kind.WORKDAY_ENDED:
-			_end_ai_work_shift()
-			_clear_finished_daily_orders(day_cycle.current_day)
-			_update_interface("Workday ended: residents without a night-work order are returning home.")
-		SimulationDayEvent.Kind.NIGHTFALL:
-			_refresh_living_statuses()
-			_update_workers()
-			_update_interface("Nightfall: workers are returning to their assigned homes.")
-		SimulationDayEvent.Kind.WORKDAY_STARTED:
-			_apply_pending_workday_hours()
-			_clear_expired_overtime_orders()
-			_reset_building_night_work_toggles()
-			_resume_overtime_daily_orders()
-			_refresh_living_statuses()
-			_update_workers()
-			# The previous shift cancels all brains. Rebuild the snapshot and player
-			# orders as soon as the next workday opens so queued daily orders resume.
-			if citizen_ai != null:
-				citizen_ai.request_decision_refresh()
-			_update_interface("Morning: workers left their homes for their assignments.")
-		SimulationDayEvent.Kind.SCHOOL_DAY_ENDED:
-			var teacher_ok := _is_teacher_present_at_school()
-			for citizen in citizens:
-				citizen.finish_school_day(teacher_ok)
-			_update_workers()
-		SimulationDayEvent.Kind.DAILY_SETTLEMENT_UPDATE:
-			tent_weather = TentEraSurvivalRulesScript.weather_for_day(day_cycle.current_day)
-			weather_state.new_day(tent_weather, random, int(clock.minutes))
-			_update_interface("Forecast: %s." % TentEraSurvivalRulesScript.WEATHER_NAMES[tent_weather])
-			if event_service != null:
-				event_service.log.clear_flag(&"smoky_firewood")
-				event_service.log.clear_flag(&"firewood_protected_today")
-				var delayed_outcomes: Array[EventOutcome] = event_service.advance_day(day_cycle.current_day, _build_event_context(), random)
-				for outcome in delayed_outcomes:
-					_apply_event_outcome(outcome)
-			_maybe_present_survival_decision()
-			_refresh_living_statuses()
-			settlement.cheer_up_used_today = false
-			settlement.double_time_order_day = -1
-			_remove_expired_temporary_tents()
-			_apply_daily_settlement_rules()
-			_return_outside_workers()
+	if simulation_event_dispatcher != null:
+		simulation_event_dispatcher.dispatch_event(event, day_cycle.current_day)
+
+func _on_school_day_ended() -> void:
+	var teacher_ok := _is_teacher_present_at_school()
+	for citizen in citizens:
+		citizen.finish_school_day(teacher_ok)
+
+func _on_daily_settlement_update(_event: SimulationDayEvent) -> void:
+	tent_weather = TentEraSurvivalRulesScript.weather_for_day(day_cycle.current_day)
+	weather_state.new_day(tent_weather, random, int(clock.minutes))
+	_update_interface("Forecast: %s." % TentEraSurvivalRulesScript.WEATHER_NAMES[tent_weather])
+	if event_service != null:
+		event_service.log.clear_flag(&"smoky_firewood")
+		event_service.log.clear_flag(&"firewood_protected_today")
+		var delayed_outcomes: Array[EventOutcome] = event_service.advance_day(day_cycle.current_day, _build_event_context(), random)
+		for outcome in delayed_outcomes:
+			_apply_event_outcome(outcome)
+	_maybe_present_survival_decision()
+	_refresh_living_statuses()
+	settlement.cheer_up_used_today = false
+	settlement.double_time_order_day = -1
+	_remove_expired_temporary_tents()
+	_apply_daily_settlement_rules()
+	_return_outside_workers()
+
 
 
 func _end_ai_work_shift() -> void:
