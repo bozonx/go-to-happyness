@@ -6112,49 +6112,22 @@ func restore_from_save_data(save_data: SaveDataScript) -> bool:
 
 	# 3. Restore Settlement State
 	var s_dict: Dictionary = save_data.settlement_state
-	settlement.money = int(s_dict.get("money", 500))
-	settlement.wellbeing = int(s_dict.get("wellbeing", 75))
-	settlement.era = int(s_dict.get("era", 0))
-	settlement.backpack.clear()
-	if s_dict.get("backpack", {}) is Dictionary:
-		settlement.backpack.merge((s_dict.get("backpack") as Dictionary).duplicate(true), true)
-
-	var saved_res: Dictionary = s_dict.get("resources", {})
-	for res_id in ResourceIds.ALL:
-		var target_amt: int = int(saved_res.get(res_id, 0))
-		var current_amt: int = settlement.amount(res_id)
-		var diff: int = target_amt - current_amt
-		if diff != 0:
-			settlement.add(res_id, diff)
-
-	if s_dict.has("unlocked_building_levels"):
-		var u_b: Dictionary = s_dict["unlocked_building_levels"]
-		for b_type in u_b:
-			settlement.unlocked_building_levels[b_type] = u_b[b_type]
-	if s_dict.has("unlocked_systems"):
-		var u_sys: Dictionary = s_dict["unlocked_systems"]
-		for sys_id in u_sys:
-			settlement.unlocked_systems[sys_id] = u_sys[sys_id]
-
-	if s_dict.has("equipment"):
-		settlement.equipment = s_dict["equipment"].duplicate(true)
-	_restore_work_policy(s_dict.get("work_policy", {}))
-	_restore_research(s_dict.get("research", {}))
+	SaveGameServiceScript.restore_settlement_state(settlement, s_dict)
+	SaveGameServiceScript.restore_work_policy(settlement, s_dict.get("work_policy", {}))
+	SaveGameServiceScript.restore_research(settlement, s_dict.get("research", {}))
 
 
 	# 4. Restore Simulation Clock
-	if not save_data.clock_state.is_empty():
-		clock.minutes = float(save_data.clock_state.get("minutes", 0.0))
-		day_cycle.current_day = maxi(1, int(save_data.clock_state.get("current_day", 1)))
+	SaveGameServiceScript.restore_clock(clock, day_cycle, save_data.clock_state)
 
 	# 5. Restore Camera State
-	if not save_data.camera_state.is_empty():
-		var cam_target_dict: Dictionary = save_data.camera_state.get("target", {})
-		if not cam_target_dict.is_empty():
-			camera_target = SaveDataScript.dict_to_vector3(cam_target_dict)
-		camera_distance = float(save_data.camera_state.get("distance", 30.0))
-		camera_yaw = float(save_data.camera_state.get("yaw", 42.0))
-		camera_pitch = float(save_data.camera_state.get("pitch", 52.0))
+	var cam_state := SaveGameServiceScript.restore_camera(save_data.camera_state)
+	if not cam_state.is_empty():
+		if cam_state.has("target"):
+			camera_target = cam_state["target"]
+		camera_distance = cam_state["distance"]
+		camera_yaw = cam_state["yaw"]
+		camera_pitch = cam_state["pitch"]
 
 	# 6. Restore Placed Buildings
 	for b_dict in save_data.buildings_state:
@@ -6209,7 +6182,7 @@ func restore_from_save_data(save_data: SaveDataScript) -> bool:
 		else:
 			push_warning("restore_from_save_data: skipping construction site with unknown type '" + b_type + "' at cell " + str(cell))
 
-	_restore_warehouses(s_dict.get("warehouses", []), s_dict.get("warehouse_types", []), bool(s_dict.get("warehouse_ever_built", false)))
+	SaveGameServiceScript.restore_warehouses(settlement, s_dict.get("warehouses", []), s_dict.get("warehouse_types", []), bool(s_dict.get("warehouse_ever_built", false)))
 
 	# 8. Restore Resource Piles
 	for p_dict in save_data.resource_piles_state:
@@ -6299,54 +6272,6 @@ func restore_from_save_data(save_data: SaveDataScript) -> bool:
 	if hero_citizen != null:
 		_enter_first_person(hero_citizen, "Save loaded.")
 	return true
-
-
-func _restore_work_policy(data: Variant) -> void:
-	if not (data is Dictionary):
-		return
-	var policy: Dictionary = data
-	settlement.workday_hours = clampi(int(policy.get("workday_hours", settlement.workday_hours)), 1, 24)
-	settlement.pending_workday_hours = clampi(int(policy.get("pending_workday_hours", 0)), 0, 24)
-	settlement.night_work_order_day = int(policy.get("night_work_order_day", -1))
-	settlement.double_time_order_day = int(policy.get("double_time_order_day", -1))
-	settlement.road_walking_order_enabled = bool(policy.get("road_walking_order_enabled", false))
-	settlement.cheer_up_used_today = bool(policy.get("cheer_up_used_today", false))
-
-
-func _restore_research(data: Variant) -> void:
-	if not (data is Dictionary):
-		return
-	var research: Dictionary = data
-	settlement.active_research_tech_id = str(research.get("tech_id", ""))
-	settlement.active_research_worker_id = int(research.get("worker_id", -1))
-	settlement.active_research_remaining_time = maxf(0.0, float(research.get("remaining_time", 0.0)))
-	settlement.active_research_duration = maxf(0.0, float(research.get("duration", 0.0)))
-
-
-func _restore_warehouses(data: Variant, types: Variant, ever_built: bool) -> void:
-	if not (data is Array):
-		return
-	var saved_warehouses: Array = data
-	for index in mini(saved_warehouses.size(), settlement.warehouses.size()):
-		var saved: Variant = saved_warehouses[index]
-		if not (saved is Dictionary):
-			continue
-		var warehouse: WarehouseState = settlement.warehouses[index]
-		var saved_dict: Dictionary = saved
-		warehouse.capacity = maxi(0, int(saved_dict.get("capacity", warehouse.capacity)))
-		if saved_dict.get("resources", {}) is Dictionary:
-			var saved_resources: Dictionary = saved_dict.get("resources")
-			for resource_type in ResourceIds.ALL:
-				warehouse.resources[resource_type] = maxi(0, int(saved_resources.get(resource_type, 0)))
-		if saved_dict.get("blacklisted", {}) is Dictionary:
-			var saved_blacklist: Dictionary = saved_dict.get("blacklisted")
-			for resource_type in ResourceIds.ALL:
-				warehouse.blacklisted[resource_type] = bool(saved_blacklist.get(resource_type, false))
-	if types is Array:
-		settlement.warehouse_types.clear()
-		for warehouse_type in types:
-			settlement.warehouse_types.append(str(warehouse_type))
-	settlement.warehouse_ever_built = ever_built
 
 
 ## Overlays saved per-tree state onto the freshly generated forest. The forest

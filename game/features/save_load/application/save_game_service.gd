@@ -6,6 +6,7 @@ extends RefCounted
 const QUICKSAVE_PATH := "user://saves/quicksave.json"
 const SaveDataScript = preload("res://game/features/save_load/domain/save_data.gd")
 const WarehouseStateScript = preload("res://game/features/settlement/domain/warehouse_state.gd")
+const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 
 
 static func has_quicksave() -> bool:
@@ -192,12 +193,12 @@ static func load_game(game: Node, path: String = QUICKSAVE_PATH) -> bool:
 	if game == null:
 		push_error("SaveGameService: Cannot load into null game instance")
 		return false
-		
+
 	var save_data := SaveDataScript.new()
 	if not save_data.load_from_file(path):
 		push_error("SaveGameService: Failed to read save file from " + path)
 		return false
-	
+
 	if game.has_method("restore_from_save_data"):
 		var restored: Variant = game.call("restore_from_save_data", save_data)
 		if restored is bool and not restored:
@@ -208,3 +209,108 @@ static func load_game(game: Node, path: String = QUICKSAVE_PATH) -> bool:
 	else:
 		push_error("SaveGameService: Target game node missing restore_from_save_data method")
 		return false
+
+
+## Restores core settlement domain state (money, wellbeing, era, resources,
+## backpack, unlocked levels/systems, equipment) from a saved dictionary.
+static func restore_settlement_state(settlement: RefCounted, s_dict: Dictionary) -> void:
+	settlement.money = int(s_dict.get("money", 500))
+	settlement.wellbeing = int(s_dict.get("wellbeing", 75))
+	settlement.era = int(s_dict.get("era", 0))
+	settlement.backpack.clear()
+	if s_dict.get("backpack", {}) is Dictionary:
+		settlement.backpack.merge((s_dict.get("backpack") as Dictionary).duplicate(true), true)
+
+	var saved_res: Dictionary = s_dict.get("resources", {})
+	for res_id in ResourceIds.ALL:
+		var target_amt: int = int(saved_res.get(res_id, 0))
+		var current_amt: int = settlement.amount(res_id)
+		var diff: int = target_amt - current_amt
+		if diff != 0:
+			settlement.add(res_id, diff)
+
+	if s_dict.has("unlocked_building_levels"):
+		var u_b: Dictionary = s_dict["unlocked_building_levels"]
+		for b_type in u_b:
+			settlement.unlocked_building_levels[b_type] = u_b[b_type]
+	if s_dict.has("unlocked_systems"):
+		var u_sys: Dictionary = s_dict["unlocked_systems"]
+		for sys_id in u_sys:
+			settlement.unlocked_systems[sys_id] = u_sys[sys_id]
+
+	if s_dict.has("equipment"):
+		settlement.equipment = s_dict["equipment"].duplicate(true)
+
+
+## Restores work policy fields (workday hours, night work, road walking, etc.)
+static func restore_work_policy(settlement: RefCounted, data: Variant) -> void:
+	if not (data is Dictionary):
+		return
+	var policy: Dictionary = data
+	settlement.workday_hours = clampi(int(policy.get("workday_hours", settlement.workday_hours)), 1, 24)
+	settlement.pending_workday_hours = clampi(int(policy.get("pending_workday_hours", 0)), 0, 24)
+	settlement.night_work_order_day = int(policy.get("night_work_order_day", -1))
+	settlement.double_time_order_day = int(policy.get("double_time_order_day", -1))
+	settlement.road_walking_order_enabled = bool(policy.get("road_walking_order_enabled", false))
+	settlement.cheer_up_used_today = bool(policy.get("cheer_up_used_today", false))
+
+
+## Restores active research progress fields.
+static func restore_research(settlement: RefCounted, data: Variant) -> void:
+	if not (data is Dictionary):
+		return
+	var research: Dictionary = data
+	settlement.active_research_tech_id = str(research.get("tech_id", ""))
+	settlement.active_research_worker_id = int(research.get("worker_id", -1))
+	settlement.active_research_remaining_time = maxf(0.0, float(research.get("remaining_time", 0.0)))
+	settlement.active_research_duration = maxf(0.0, float(research.get("duration", 0.0)))
+
+
+## Restores warehouse capacities, stored resources, and blacklists.
+static func restore_warehouses(settlement: RefCounted, data: Variant, types: Variant, ever_built: bool) -> void:
+	if not (data is Array):
+		return
+	var saved_warehouses: Array = data
+	for index in mini(saved_warehouses.size(), settlement.warehouses.size()):
+		var saved: Variant = saved_warehouses[index]
+		if not (saved is Dictionary):
+			continue
+		var warehouse: WarehouseState = settlement.warehouses[index]
+		var saved_dict: Dictionary = saved
+		warehouse.capacity = maxi(0, int(saved_dict.get("capacity", warehouse.capacity)))
+		if saved_dict.get("resources", {}) is Dictionary:
+			var saved_resources: Dictionary = saved_dict.get("resources")
+			for resource_type in ResourceIds.ALL:
+				warehouse.resources[resource_type] = maxi(0, int(saved_resources.get(resource_type, 0)))
+		if saved_dict.get("blacklisted", {}) is Dictionary:
+			var saved_blacklist: Dictionary = saved_dict.get("blacklisted")
+			for resource_type in ResourceIds.ALL:
+				warehouse.blacklisted[resource_type] = bool(saved_blacklist.get(resource_type, false))
+	if types is Array:
+		settlement.warehouse_types.clear()
+		for warehouse_type in types:
+			settlement.warehouse_types.append(str(warehouse_type))
+	settlement.warehouse_ever_built = ever_built
+
+
+## Restores simulation clock and day-cycle state.
+static func restore_clock(clock: RefCounted, day_cycle: RefCounted, clock_state: Dictionary) -> void:
+	if clock_state.is_empty():
+		return
+	clock.minutes = float(clock_state.get("minutes", 0.0))
+	day_cycle.current_day = maxi(1, int(clock_state.get("current_day", 1)))
+
+
+## Extracts camera state into a dictionary with Vector3 target and scalar
+## distance/yaw/pitch. Returns an empty dict if camera_state is empty.
+static func restore_camera(camera_state: Dictionary) -> Dictionary:
+	if camera_state.is_empty():
+		return {}
+	var result: Dictionary = {}
+	var cam_target_dict: Dictionary = camera_state.get("target", {})
+	if not cam_target_dict.is_empty():
+		result["target"] = SaveDataScript.dict_to_vector3(cam_target_dict)
+	result["distance"] = float(camera_state.get("distance", 30.0))
+	result["yaw"] = float(camera_state.get("yaw", 42.0))
+	result["pitch"] = float(camera_state.get("pitch", 52.0))
+	return result
