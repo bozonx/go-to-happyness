@@ -22,6 +22,15 @@ uniform float u_star_density : hint_range(0.0, 1.0) = 0.72;
 uniform float u_star_twinkle : hint_range(0.0, 1.0) = 0.16;
 uniform float u_sun_disc_energy = 6.0;  // HDR overdrive so filmic tonemap + glow bloom the disc
 uniform float u_time = 0.0;
+// Night moon: direction is placed opposite the sun's azimuth by GDScript, energy
+// rises with the night so it only lights the sky after dusk.
+uniform vec3 u_moon_dir = vec3(0.35, 0.55, -0.76);
+uniform vec3 u_moon_color : source_color = vec3(0.72, 0.80, 0.96);
+uniform float u_moon_energy : hint_range(0.0, 1.0) = 0.0;
+// Atmospheric horizon haze / morning band. Colour is driven warm at dawn/dusk,
+// pale blue-white by day; strength fades to zero at deep night.
+uniform vec3 u_haze_color : source_color = vec3(0.82, 0.88, 0.93);
+uniform float u_haze_strength : hint_range(0.0, 1.0) = 0.45;
 
 // --- static art-direction knobs --------------------------------------------
 uniform float u_cloud_scale = 1.55;     // bigger = smaller cloud cells
@@ -122,7 +131,7 @@ float cirrus_field(vec2 uv) {
 
 // A deliberately sparse, stable star field. It belongs in the sky material so
 // the weather rig can fade it with twilight and cloud cover.
-float star_layer(vec2 uv, float scale, float threshold, float time_offset) {
+vec3 star_layer(vec2 uv, float scale, float threshold, float time_offset) {
 	uv *= scale;
 	vec2 cell = floor(uv);
 	vec2 local = fract(uv) - 0.5;
@@ -131,13 +140,18 @@ float star_layer(vec2 uv, float scale, float threshold, float time_offset) {
 	float radius = mix(0.010, 0.027, step(0.987, seed));
 	float twinkle = 0.88 + sin(u_time * 0.75 + seed * 31.0 + time_offset) * u_star_twinkle;
 	float star = 1.0 - smoothstep(radius, radius * 2.5, length(local - point));
-	return star * step(threshold, seed) * twinkle;
+	float bright = star * step(threshold, seed) * twinkle;
+	// Per-star colour temperature: a few warm amber stars among cool blue-white
+	// ones keep the field from looking like uniform pixels.
+	float ctemp = hash21(cell + vec2(4.7, 12.3));
+	vec3 tint = mix(vec3(1.0, 0.82, 0.66), vec3(0.72, 0.83, 1.0), smoothstep(0.0, 0.65, ctemp));
+	return tint * bright;
 }
 
-float star_field(vec3 dir) {
+vec3 star_field(vec3 dir) {
 	vec2 uv = dir.xz / max(dir.y + 1.15, 0.18) * 85.0;
-	float bright = star_layer(uv, 1.0, mix(0.982, 0.957, u_star_density), 0.0);
-	float fine = star_layer(uv + 17.3, 1.73, mix(0.992, 0.973, u_star_density), 1.7);
+	vec3 bright = star_layer(uv, 1.0, mix(0.982, 0.957, u_star_density), 0.0);
+	vec3 fine = star_layer(uv + 17.3, 1.73, mix(0.992, 0.973, u_star_density), 1.7);
 	return bright + fine * 0.58;
 }
 
@@ -148,11 +162,26 @@ void sky() {
 	// --- base sky gradient ---
 	float grad = smoothstep(0.0, 0.48, horizon);
 	vec3 sky_col = mix(u_horizon_color, u_zenith_color, grad);
-	float stars = star_field(dir) * smoothstep(0.04, 0.32, horizon);
+
+	// --- atmospheric horizon haze (aerial perspective + dawn/dusk morning band) ---
+	// The sky pales toward the horizon and picks up the driven warm tint at
+	// twilight, reading as soft morning haze.
+	float haze_band = pow(1.0 - clamp(horizon, 0.0, 1.0), 3.0);
+	sky_col = mix(sky_col, u_haze_color, haze_band * u_haze_strength);
+
+	float star_visibility = u_star_visibility * (1.0 - u_overcast * 0.68);
+
+	// --- Milky Way: a faint textured band along a great circle, denser overhead ---
+	vec3 mw_axis = normalize(vec3(0.82, 0.24, 0.52));
+	float mw_dist = abs(dot(dir, mw_axis));
+	float mw_band = (1.0 - smoothstep(0.0, 0.34, mw_dist)) * smoothstep(0.06, 0.4, horizon);
+	float mw_tex = fbm(dir.xz / max(dir.y + 0.5, 0.2) * 5.5 + vec2(3.0, 7.0));
+	sky_col += vec3(0.40, 0.48, 0.72) * mw_band * (0.045 + mw_tex * 0.075) * star_visibility;
+
 	// Individual clouds mask stars later in the final sky blend. Keep a small
 	// global contribution at partial cover so stars remain visible through gaps.
-	float star_visibility = u_star_visibility * (1.0 - u_overcast * 0.68);
-	sky_col += vec3(0.68, 0.79, 1.0) * stars * star_visibility * 2.5;
+	vec3 stars = star_field(dir) * smoothstep(0.04, 0.32, horizon);
+	sky_col += stars * star_visibility * 2.5;
 
 	vec3 sun_dir = LIGHT0_ENABLED ? normalize(LIGHT0_DIRECTION) : vec3(0.0, 1.0, 0.0);
 
@@ -162,23 +191,39 @@ void sky() {
 	float sun_amt = max(dot(dir, sun_dir), 0.0);
 	float clear_sky = 1.0 - u_overcast;
 
-	// Redden the disc and scattering near horizon.
+	// Redden the disc and scattering near horizon. A gentle curve pushes the disc
+	// into gold sooner as the sun drops, so sunrise/sunset read warm without the
+	// noon sun turning a sickly yellow.
 	float sun_low = 1.0 - smoothstep(0.0, 0.35, sun_dir.y);
-	vec3 warm_sun = mix(u_sun_color, u_horizon_glow_color, sun_low);
+	float sun_gold = pow(sun_low, 0.7);
+	vec3 warm_sun = mix(u_sun_color, u_horizon_glow_color, sun_gold);
 
 	// HDR disc blooms through the environment's glow pass, while remaining one
 	// visual body rather than a screen-space flare laid over the sky.
 	float sun_disc = smoothstep(0.9968, 0.99965, sun_amt);
 	sky_col += warm_sun * sun_disc * u_solar_intensity * u_sun_disc_energy * u_sun_visibility;
 
-	// Mie scattering halo
-	float halo_strength = mix(0.14, 0.55, sun_low);
+	// Mie scattering halo — broader and warmer when the sun sits low.
+	float halo_strength = mix(0.15, 0.72, sun_low);
 	float halo_visibility = mix(0.25, 1.0, u_sun_visibility);
 	sky_col += warm_sun * pow(sun_amt, 6.0) * halo_strength * clear_sky * u_solar_intensity * halo_visibility;
+	// A soft wide golden bloom hugging the low sun adds the anime sunrise glow.
+	sky_col += warm_sun * pow(sun_amt, 2.2) * sun_low * 0.14 * clear_sky * u_solar_intensity * halo_visibility;
 
 	// Warm band along horizon at sunrise/sunset
 	float horizon_band = pow(1.0 - abs(dir.y), 6.0);
 	sky_col += u_horizon_glow_color * horizon_band * sun_low * 0.35 * clear_sky * u_solar_intensity;
+
+	// --- night moon ---
+	// A single soft disc opposite the sun's azimuth, with a tight inner glow and a
+	// faint wide halo. Gated by u_moon_energy so it only appears after dusk.
+	if (u_moon_energy > 0.001) {
+		vec3 moon_dir = normalize(u_moon_dir);
+		float moon_amt = max(dot(dir, moon_dir), 0.0);
+		float moon_disc = smoothstep(0.9989, 0.99972, moon_amt);
+		float moon_glow = pow(moon_amt, 120.0) * 0.30 + pow(moon_amt, 7.0) * 0.04;
+		sky_col += u_moon_color * (moon_disc * 2.6 + moon_glow) * u_moon_energy * clear_sky;
+	}
 
 	// --- sky projection ---
 	// Adding a height offset instead of clamping the denominator keeps the
@@ -274,6 +319,16 @@ void sky() {
 	float sun_facing = max(dot(cloud_normal, cloud_light_dir), 0.0);
 	float rim = edge_mask * sun_facing;
 	cloud_col += warm_sun * (mid_lit * 0.12 + rim * 0.48) * clear_sky * u_solar_intensity;
+
+	// Cool moonlight rim on the cloud tops at night gives the dark masses a
+	// silver edge and a reason to be visible against the stars.
+	if (u_moon_energy > 0.001) {
+		vec2 moon2d = length(u_moon_dir.xz) > 0.001 ? normalize(u_moon_dir.xz) : vec2(0.0, 1.0);
+		vec3 moon_light_dir = normalize(vec3(moon2d.x, max(u_moon_dir.y, 0.2), moon2d.y));
+		float moon_facing = max(dot(cloud_normal, moon_light_dir), 0.0);
+		float moon_rim = edge_mask * moon_facing;
+		cloud_col += u_moon_color * (moon_rim * 0.42 + mid_lit * 0.08) * moon_facing * u_moon_energy * clear_sky;
+	}
 
 	// Far clouds dissolve into atmospheric blue instead of becoming stretched
 	// opaque lines at the horizon.

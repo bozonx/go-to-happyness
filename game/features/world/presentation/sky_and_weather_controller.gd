@@ -83,6 +83,11 @@ func update_daylight(game_minutes: float, cloud_cover: float, rain_intensity: fl
 	# still rims the clouds warm, but by the pre-dawn deep twilight they must read
 	# as dim night masses instead of daytime white.
 	var cloud_night := 1.0 - smoothstep(-0.25, 0.05, solar_height)
+	# The moon rides opposite the sun's azimuth, high enough to sit in the sky at
+	# night. Built with the same euler convention as the sun so the shader reads
+	# its direction identically.
+	var moon_basis := Basis.from_euler(Vector3(deg_to_rad(-42.0), deg_to_rad(sun_azimuth + 180.0), 0.0))
+	var moon_direction := moon_basis.z.normalized()
 	if sky_material != null:
 		var sky_horizon := base_background.lerp(overcast_color, cloud_cover)
 		# Clear skies deepen toward a saturated anime blue at the zenith; overcast
@@ -105,6 +110,16 @@ func update_daylight(game_minutes: float, cloud_cover: float, rain_intensity: fl
 		sky_material.set_shader_parameter("u_horizon_glow_color", horizon_glow)
 		sky_material.set_shader_parameter("u_night_factor", cloud_night)
 		sky_material.set_shader_parameter("u_star_visibility", star_visibility)
+		# Atmospheric haze band: pale by day, warm at dawn/dusk, dark at night.
+		var haze_day := sky_horizon.lightened(0.28)
+		var haze_color := haze_day.lerp(Color("ff9a5c"), twilight * (1.0 - cloud_cover) * 0.65)
+		haze_color = haze_color.lerp(sky_horizon.darkened(0.22), cloud_night * 0.55)
+		var haze_strength := (0.30 + twilight * 0.35) * (1.0 - cloud_cover * 0.35)
+		sky_material.set_shader_parameter("u_haze_color", haze_color)
+		sky_material.set_shader_parameter("u_haze_strength", haze_strength)
+		# Night moon, opposite the sun and fading in with the deepening twilight.
+		sky_material.set_shader_parameter("u_moon_dir", moon_direction)
+		sky_material.set_shader_parameter("u_moon_energy", cloud_night)
 	if rain_effect != null:
 		rain_effect.set_intensity(rain_intensity)
 	_update_sun_glare(direct_light, cloud_cover)
