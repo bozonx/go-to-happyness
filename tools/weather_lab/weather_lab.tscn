@@ -1,0 +1,118 @@
+[gd_scene load_steps=10 format=3]
+
+[ext_resource type="Script" path="res://tools/weather_lab/weather_lab.gd" id="1_script"]
+
+[sub_resource type="Environment" id="Environment_lab"]
+background_mode = 1
+ambient_light_source = 3
+tonemap_mode = 2
+glow_enabled = true
+glow_intensity = 0.2
+glow_strength = 0.75
+fog_enabled = true
+fog_light_color = Color(0.62, 0.72, 0.78, 1)
+fog_density = 0.0015
+fog_sky_affect = 0.0
+
+[sub_resource type="StandardMaterial3D" id="Ground_mat"]
+albedo_color = Color(0.19, 0.31, 0.2, 1)
+roughness = 0.94
+
+[sub_resource type="PlaneMesh" id="Ground_mesh"]
+material = SubResource("Ground_mat")
+size = Vector2(48, 48)
+
+[sub_resource type="StandardMaterial3D" id="House_mat"]
+albedo_color = Color(0.48, 0.27, 0.14, 1)
+roughness = 0.82
+
+[sub_resource type="BoxMesh" id="House_mesh"]
+material = SubResource("House_mat")
+size = Vector3(3.8, 2.8, 3.2)
+
+[sub_resource type="StandardMaterial3D" id="Tower_mat"]
+albedo_color = Color(0.3, 0.36, 0.31, 1)
+roughness = 0.9
+
+[sub_resource type="CylinderMesh" id="Tower_mesh"]
+material = SubResource("Tower_mat")
+top_radius = 0.45
+bottom_radius = 0.62
+height = 7.0
+
+[sub_resource type="StandardMaterial3D" id="Water_mat"]
+albedo_color = Color(0.08, 0.26, 0.34, 1)
+metallic = 0.22
+roughness = 0.18
+
+[sub_resource type="PlaneMesh" id="Water_mesh"]
+material = SubResource("Water_mat")
+size = Vector2(12, 7)
+
+[node name="WeatherLab" type="Node3D"]
+script = ExtResource("1_script")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_lab")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+shadow_enabled = true
+shadow_blur = 1.5
+directional_shadow_max_distance = 80.0
+
+[node name="CameraRig" type="Node3D" parent="."]
+
+[node name="ContextCamera" type="Camera3D" parent="CameraRig"]
+transform = Transform3D(1, 0, 0, 0, 0.941742, 0.336336, 0, -0.336336, 0.941742, 11, 7.5, 15)
+current = true
+fov = 62.0
+
+[node name="CloudCamera" type="Camera3D" parent="CameraRig"]
+position = Vector3(0, 3, 10)
+fov = 64.0
+
+[node name="ZenithCamera" type="Camera3D" parent="CameraRig"]
+position = Vector3(0, 2, 3)
+fov = 68.0
+
+[node name="HorizonCamera" type="Camera3D" parent="CameraRig"]
+position = Vector3(10, 2.5, 14)
+fov = 62.0
+
+[node name="Ground" type="MeshInstance3D" parent="."]
+mesh = SubResource("Ground_mesh")
+
+[node name="House" type="MeshInstance3D" parent="."]
+position = Vector3(-1.8, 1.4, -2.5)
+mesh = SubResource("House_mesh")
+
+[node name="Tower" type="MeshInstance3D" parent="."]
+position = Vector3(4.4, 3.5, -4.2)
+mesh = SubResource("Tower_mesh")
+
+[node name="Water" type="MeshInstance3D" parent="."]
+position = Vector3(-5.6, 0.03, 2.0)
+mesh = SubResource("Water_mesh")
+
+[node name="WarmWindow" type="OmniLight3D" parent="House"]
+position = Vector3(0, 0.25, 1.66)
+light_color = Color(1, 0.57, 0.22, 1)
+light_energy = 2.2
+omni_range = 5.0
+
+[node name="Interface" type="CanvasLayer" parent="."]
+
+[node name="Panel" type="ColorRect" parent="Interface"]
+offset_left = 16.0
+offset_top = 16.0
+offset_right = 900.0
+offset_bottom = 72.0
+color = Color(0.02, 0.035, 0.06, 0.72)
+
+[node name="Status" type="Label" parent="Interface"]
+offset_left = 28.0
+offset_top = 24.0
+offset_right = 890.0
+offset_bottom = 68.0
+theme_override_colors/font_color = Color(0.9, 0.95, 1, 1)
+text = "Weather lab"

@@ -16,6 +16,7 @@ var _cell_weights: Dictionary = {}
 ## layer separate means demolishing a road reveals the still-existing trail
 ## rather than destroying unrelated coverage data.
 var _road_cell_weights: Dictionary = {}
+var _road_cells: Dictionary = {}
 var _profile_cell_weights: Dictionary = {}
 var _minimum_cell_weight := DEFAULT_CELL_WEIGHT
 # Set when an incremental erase may have removed the cell that held the current
@@ -72,12 +73,37 @@ func set_cell_weights(next_weights: Dictionary) -> void:
 ## terrain is the base, trails are pedestrian-only hints, and a completed road
 ## is the authoritative surface for every traveller it supports.
 func set_road_cell_weights(next_weights: Dictionary) -> void:
-	var sanitized := _sanitize_weights(next_weights)
-	if _road_cell_weights == sanitized:
+	var cells: Dictionary = {}
+	for cell: Variant in next_weights:
+		if cell is Vector2i:
+			cells[cell] = true
+	set_road_profile_weights({PEDESTRIAN_PROFILE: next_weights}, cells)
+
+
+## Roads are profile-aware surfaces. A profile may not enter a road cell unless
+## its road type explicitly supports it; this prevents a vehicle from silently
+## using pedestrian-only coverage as a fast corridor.
+func set_road_profile_weights(next_weights: Dictionary, next_cells: Dictionary) -> void:
+	var sanitized_profiles: Dictionary = {}
+	for profile: Variant in next_weights:
+		if not profile is StringName:
+			continue
+		var weights: Variant = next_weights[profile]
+		if weights is Dictionary:
+			var sanitized := _sanitize_weights(weights)
+			if not sanitized.is_empty():
+				sanitized_profiles[profile] = sanitized
+	var sanitized_cells: Dictionary = {}
+	for cell: Variant in next_cells:
+		if cell is Vector2i:
+			sanitized_cells[cell] = true
+	if _road_cell_weights == sanitized_profiles and _road_cells == sanitized_cells:
 		return
-	_road_cell_weights = sanitized
+	_road_cell_weights = sanitized_profiles
+	_road_cells = sanitized_cells
 	_recompute_minimum_cell_weight()
 	_revision += 1
+	_topology_revision += 1
 
 
 func set_profile_cell_weights(profile: StringName, next_weights: Dictionary) -> void:
@@ -129,8 +155,9 @@ func erase_profile_cell_weight(profile: StringName, cell: Vector2i) -> void:
 
 
 func get_cell_weight(cell: Vector2i, profile: StringName = PEDESTRIAN_PROFILE) -> float:
-	if _road_cell_weights.has(cell):
-		return clampf(float(_road_cell_weights[cell]), MIN_CELL_WEIGHT, MAX_CELL_WEIGHT)
+	var road_weights: Dictionary = _road_cell_weights.get(profile, {})
+	if road_weights.has(cell):
+		return clampf(float(road_weights[cell]), MIN_CELL_WEIGHT, MAX_CELL_WEIGHT)
 	var profile_weights: Dictionary = _profile_cell_weights.get(profile, {})
 	if profile_weights.has(cell):
 		return clampf(float(profile_weights[cell]), MIN_CELL_WEIGHT, MAX_CELL_WEIGHT)
@@ -173,8 +200,10 @@ func is_blocked(cell: Vector2i) -> bool:
 	return _blocked.has(cell)
 
 
-func is_walkable(cell: Vector2i) -> bool:
-	return is_board_cell(cell) and not _blocked.has(cell)
+func is_walkable(cell: Vector2i, profile: StringName = PEDESTRIAN_PROFILE) -> bool:
+	if not is_board_cell(cell) or _blocked.has(cell):
+		return false
+	return not _road_cells.has(cell) or (_road_cell_weights.get(profile, {}) as Dictionary).has(cell)
 
 
 ## Reachability queries used during AI candidate discovery do not need a route.
@@ -201,23 +230,26 @@ func refresh_connectivity() -> void:
 ## Uses Amanatides & Woo grid traversal so every cell the segment touches is
 ## tested — no corner is cut past an obstacle. This is what lets routes collapse
 ## to straight lines while still hugging around blocked footprints.
-func is_segment_clear(from: Vector3, to: Vector3) -> bool:
-	return is_finite(segment_cost(from, to))
+func is_segment_clear(from: Vector3, to: Vector3, profile: StringName = PEDESTRIAN_PROFILE) -> bool:
+	return is_finite(segment_cost(from, to, profile))
 
 
 ## Revalidates only the remaining route after a topology change. A route that ends
 ## inside an explicitly allowed blocked destination is safe when every segment up
 ## to that destination cell remains clear.
-func is_waypoint_path_clear(from: Vector3, waypoints: Array[Vector3], allow_blocked_destination := false) -> bool:
+func is_waypoint_path_clear(from: Vector3, waypoints: Array[Vector3], allow_blocked_destination := false, profile: StringName = PEDESTRIAN_PROFILE) -> bool:
 	if waypoints.is_empty():
 		return true
 	var destination_cell := cell_from_position(waypoints.back())
 	var previous := from
-	for waypoint: Vector3 in waypoints:
-		if allow_blocked_destination and is_blocked(destination_cell) and cell_from_position(waypoint) == destination_cell:
-			return true
-		if not is_segment_clear(previous, waypoint):
+	for index in range(waypoints.size()):
+		var waypoint: Vector3 = waypoints[index]
+		var is_final_allowed_destination := allow_blocked_destination and index == waypoints.size() - 1 and is_blocked(destination_cell)
+		if not is_final_allowed_destination and not is_segment_clear(previous, waypoint, profile):
 			return false
+		if is_final_allowed_destination and not _is_segment_clear_to_allowed_destination(previous, waypoint, profile):
+			return false
+		previous = waypoint
 	return true
 
 
@@ -244,7 +276,7 @@ func route_cost(from: Vector3, route: RefCounted, profile: StringName = PEDESTRI
 func segment_cost(from: Vector3, to: Vector3, profile: StringName = PEDESTRIAN_PROFILE) -> float:
 	var start_cell := cell_from_position(from)
 	var end_cell := cell_from_position(to)
-	if not is_walkable(start_cell) or not is_walkable(end_cell):
+	if not is_walkable(start_cell, profile) or not is_walkable(end_cell, profile):
 		return INF
 	var ax := from.x / cell_size
 	var az := from.z / cell_size
@@ -297,7 +329,7 @@ func segment_cost(from: Vector3, to: Vector3, profile: StringName = PEDESTRIAN_P
 			# both prevents a line from slipping through a building corner.
 			var horizontal_side := cell + Vector2i(step_x, 0)
 			var vertical_side := cell + Vector2i(0, step_z)
-			if not is_walkable(horizontal_side) or not is_walkable(vertical_side):
+			if not is_walkable(horizontal_side, profile) or not is_walkable(vertical_side, profile):
 				return INF
 			cell += Vector2i(step_x, step_z)
 			t_max_x += t_delta_x
@@ -308,17 +340,38 @@ func segment_cost(from: Vector3, to: Vector3, profile: StringName = PEDESTRIAN_P
 		else:
 			cell.y += step_z
 			t_max_z += t_delta_z
-		if not is_walkable(cell):
+		if not is_walkable(cell, profile):
 			return INF
 	return INF
+
+
+## Same Amanatides traversal as segment_cost, except the final blocked cell is
+## permitted for an explicit interaction target. Every preceding cell and both
+## sides of a crossed corner still must be traversable.
+func _is_segment_clear_to_allowed_destination(from: Vector3, to: Vector3, profile: StringName) -> bool:
+	var destination_cell := cell_from_position(to)
+	if not is_blocked(destination_cell):
+		return is_segment_clear(from, to, profile)
+	if cell_from_position(from) == destination_cell:
+		return true
+	var low := 0.0
+	var high := 1.0
+	for _step in range(24):
+		var middle := (low + high) * 0.5
+		if cell_from_position(from.lerp(to, middle)) == destination_cell:
+			high = middle
+		else:
+			low = middle
+	return is_segment_clear(from, from.lerp(to, low), profile)
 
 
 func _recompute_minimum_cell_weight() -> void:
 	_minimum_cell_weight = DEFAULT_CELL_WEIGHT
 	for weight in _cell_weights.values():
 		_minimum_cell_weight = minf(_minimum_cell_weight, float(weight))
-	for weight in _road_cell_weights.values():
-		_minimum_cell_weight = minf(_minimum_cell_weight, float(weight))
+	for road_weights in _road_cell_weights.values():
+		for weight in (road_weights as Dictionary).values():
+			_minimum_cell_weight = minf(_minimum_cell_weight, float(weight))
 	for profile_weights in _profile_cell_weights.values():
 		for weight in (profile_weights as Dictionary).values():
 			_minimum_cell_weight = minf(_minimum_cell_weight, float(weight))

@@ -85,7 +85,15 @@ func restore_completed_roads(next_roads: Dictionary) -> void:
 func _publish() -> void:
 	if _grid == null:
 		return
-	var weights: Dictionary = {}
+	var weights_by_profile: Dictionary = {}
+	var road_cells: Dictionary = {}
 	for cell: Vector2i in _roads:
-		weights[cell] = RoadTypeScript.traversal_weight(_roads[cell])
-	_grid.set_road_cell_weights(weights)
+		var road_type: StringName = _roads[cell]
+		road_cells[cell] = true
+		for profile in [RoadTypeScript.PEDESTRIAN, RoadTypeScript.CART, RoadTypeScript.BICYCLE, RoadTypeScript.MOTOR]:
+			if not RoadTypeScript.supports_profile(road_type, profile):
+				continue
+			var weights: Dictionary = weights_by_profile.get(profile, {})
+			weights[cell] = RoadTypeScript.traversal_weight(road_type)
+			weights_by_profile[profile] = weights
+	_grid.set_road_profile_weights(weights_by_profile, road_cells)

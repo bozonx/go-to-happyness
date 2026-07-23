@@ -7,4 +7,6 @@
 .agents/
 .codex/
 
+# Local visual-regression captures from the weather lab.
+artifacts/weather_lab/
 

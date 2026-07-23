@@ -52,7 +52,7 @@ func find_route_request(request: RefCounted) -> RouteResult:
 	# common cost sink when a target is walled off and its route is retried often).
 	# A start pushed into a blocked cell is left to A*, which does not require a
 	# walkable start and can still walk the citizen out.
-	if not request.allow_destination_cell and grid.is_walkable(start) and grid.is_walkable(goal) and not grid.are_cells_connected(start, goal):
+	if request.traveler_profile == NavGrid.PEDESTRIAN_PROFILE and not request.allow_destination_cell and grid.is_walkable(start, request.traveler_profile) and grid.is_walkable(goal, request.traveler_profile) and not grid.are_cells_connected(start, goal):
 		return RouteResult.unreachable(grid_revision, topology_revision, RouteResult.UnreachableReason.DISCONNECTED)
 
 	var came_from := _search(start, goal, request.traveler_profile, request.allow_destination_cell)
@@ -110,10 +110,10 @@ func _search(start: Vector2i, goal: Vector2i, traveler_profile: StringName, allo
 			var next := current + direction
 			if closed.has(next):
 				continue
-			if not grid.is_walkable(next) and not (allow_blocked_goal and next == goal):
+			if not grid.is_walkable(next, traveler_profile) and not (allow_blocked_goal and next == goal):
 				continue
 			if direction.x != 0 and direction.y != 0:
-				if not grid.is_walkable(current + Vector2i(direction.x, 0)) or not grid.is_walkable(current + Vector2i(0, direction.y)):
+				if not grid.is_walkable(current + Vector2i(direction.x, 0), traveler_profile) or not grid.is_walkable(current + Vector2i(0, direction.y), traveler_profile):
 					continue
 			var distance := DIAGONAL_DISTANCE if direction.x != 0 and direction.y != 0 else 1.0
 			var next_cost := float(costs[current]) + distance * grid.get_cell_weight(next, traveler_profile)

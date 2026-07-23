@@ -75,6 +75,7 @@ func update_daylight(game_minutes: float, overcast: float, runtime_seconds: floa
 	sun.light_energy = lerpf(0.0, 1.2, direct_light)
 	sun.shadow_enabled = direct_light > 0.05
 	sun.shadow_opacity = lerpf(1.0, 0.0, overcast)
+	var night_factor := 1.0 - smoothstep(0.0, 0.28, solar_height)
 	if sky_material != null:
 		var sky_horizon := base_background.lerp(overcast_color, overcast)
 		var sky_zenith := sky_horizon.darkened(0.18)
@@ -92,10 +93,10 @@ func update_daylight(game_minutes: float, overcast: float, runtime_seconds: floa
 		sky_material.set_shader_parameter("u_coverage_storm", CLOUD_COVERAGE_STORM)
 		var horizon_glow := Color("ff6a2a").lerp(Color("a8b8c0"), overcast)
 		sky_material.set_shader_parameter("u_horizon_glow_color", horizon_glow)
+		sky_material.set_shader_parameter("u_night_factor", night_factor)
 	if rain_effect != null:
 		rain_effect.set_intensity(overcast)
 	_update_sun_glare(direct_light, overcast)
-	var night_factor := 1.0 - smoothstep(0.0, 0.28, solar_height)
 	var firefly_factor := night_factor * (1.0 - overcast * 0.5)
 	for ff in fireflies:
 		if is_instance_valid(ff):

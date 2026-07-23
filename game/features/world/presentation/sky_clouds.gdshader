@@ -16,6 +16,7 @@ uniform vec3 u_horizon_glow_color : source_color = vec3(1.0, 0.52, 0.25); // sun
 uniform float u_overcast : hint_range(0.0, 1.0) = 0.0;
 uniform float u_solar_intensity : hint_range(0.0, 1.0) = 1.0;
 uniform float u_sun_visibility : hint_range(0.0, 1.0) = 1.0;
+uniform float u_night_factor : hint_range(0.0, 1.0) = 0.0;
 uniform float u_sun_disc_energy = 6.0;  // HDR overdrive so filmic tonemap + glow bloom the disc
 uniform float u_time = 0.0;
 
@@ -105,6 +106,19 @@ float cirrus_field(vec2 uv) {
 	return smoothstep(0.52, 0.76, n);
 }
 
+// A deliberately sparse, stable star field. It belongs in the sky material so
+// the weather rig can fade it with twilight and cloud cover.
+float star_field(vec3 dir) {
+	vec2 uv = dir.xz / max(dir.y + 1.15, 0.18) * 85.0;
+	vec2 cell = floor(uv);
+	vec2 local = fract(uv) - 0.5;
+	float seed = hash21(cell);
+	vec2 point = vec2(hash21(cell + 3.1), hash21(cell + 9.7)) - 0.5;
+	float radius = mix(0.012, 0.032, step(0.985, seed));
+	float star = 1.0 - smoothstep(radius, radius * 2.5, length(local - point));
+	return star * step(0.965, seed);
+}
+
 void sky() {
 	vec3 dir = normalize(EYEDIR);
 	float horizon = dir.y;
@@ -112,6 +126,9 @@ void sky() {
 	// --- base sky gradient ---
 	float grad = smoothstep(0.0, 0.65, horizon);
 	vec3 sky_col = mix(u_horizon_color, u_zenith_color, grad);
+	float stars = star_field(dir) * smoothstep(0.04, 0.32, horizon);
+	float star_visibility = u_night_factor * (1.0 - u_overcast) * (1.0 - u_solar_intensity);
+	sky_col += vec3(0.68, 0.79, 1.0) * stars * star_visibility * 2.2;
 
 	vec3 sun_dir = LIGHT0_ENABLED ? normalize(LIGHT0_DIRECTION) : vec3(0.0, 1.0, 0.0);
 

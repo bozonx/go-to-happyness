@@ -33,6 +33,7 @@ static func run_all() -> void:
 	_test_incremental_weight_and_deferred_minimum()
 	_test_is_segment_clear()
 	_test_waypoint_path_clear_blocked_destination()
+	_test_waypoint_path_revalidation_segments()
 	_test_waypoint_path_clear_empty()
 	_test_configure_noop()
 	_test_route_start_equals_destination()
@@ -48,6 +49,7 @@ static func run_all() -> void:
 	_test_trail_decay_without_content()
 	_test_constructed_roads_override_trails_and_restore_them()
 	_test_road_network_validates_and_batches_changes()
+	_test_road_profiles_enforce_support()
 	_test_navigation_obstacle_publisher()
 	_test_navigation_facade_metrics()
 	_test_nav_grid_and_facade_route_cost()
@@ -592,6 +594,21 @@ static func _test_waypoint_path_clear_blocked_destination() -> void:
 	assert(not grid.is_waypoint_path_clear(from, [Vector3(1.5, 0.0, 0.5), destination], true))
 
 
+static func _test_waypoint_path_revalidation_segments() -> void:
+	var grid := NavGrid.new()
+	grid.configure(1.0, 10)
+	var from := Vector3(0.5, 0.0, 0.5)
+	var bend := Vector3(0.5, 0.0, 2.5)
+	var destination := Vector3(2.5, 0.0, 2.5)
+	# This cell intersects the direct diagonal from `from` to `destination`, but
+	# not either segment of the actual L-shaped remaining route.
+	grid.set_blocked_cells({Vector2i(1, 1): true})
+	assert(grid.is_waypoint_path_clear(from, [bend, destination]))
+	# An allowed blocked destination must still validate its final approach.
+	grid.set_blocked_cells({Vector2i(1, 2): true, Vector2i(2, 2): true})
+	assert(not grid.is_waypoint_path_clear(from, [bend, destination], true))
+
+
 static func _test_waypoint_path_clear_empty() -> void:
 	var grid := NavGrid.new()
 	grid.configure(1.0, 10)
@@ -866,6 +883,23 @@ static func _test_road_network_validates_and_batches_changes() -> void:
 	reloaded.configure(grid)
 	reloaded.restore_state(roads.export_state())
 	assert(reloaded.road_type_at(Vector2i.ZERO) == RoadTypeScript.STONE)
+
+
+static func _test_road_profiles_enforce_support() -> void:
+	var grid := NavGrid.new()
+	grid.configure(1.0, 6)
+	var roads: RefCounted = RoadNetworkServiceScript.new()
+	roads.configure(grid)
+	var barrier: Array[Vector2i] = []
+	for y in range(-3, 3):
+		barrier.append(Vector2i(0, y))
+	assert(roads.complete_cells(barrier, RoadTypeScript.CLAY))
+	var router: RefCounted = GridRouteServiceScript.new()
+	router.configure(grid)
+	var start := Vector3(-2.5, 0.0, 0.5)
+	var destination := Vector3(2.5, 0.0, 0.5)
+	assert(router.find_route(start, destination).reachable)
+	assert(not router.find_route_for_profile(start, destination, RoadTypeScript.CART).reachable)
 
 
 static func _test_navigation_obstacle_publisher() -> void:

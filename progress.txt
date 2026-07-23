@@ -1,0 +1,95 @@
+# Settlement Game Decomposition — Progress
+
+## Stage 0: Baseline & Analysis (COMPLETE)
+
+### Test Baseline
+- **Domain & AI unit tests**: ALL PASS
+- **Feature scene tests**: 28 passed, 1 failed
+- **Failing test**: `test_gathering_phantom.gd` — pre-existing bug, `FakeGatheringSimulation` missing `random` property for `citizen_movement_controller._randf`
+- **Note**: The failing test is unrelated to decomposition work
+
+### Callable Dependency Map (88 methods passed as Callable to services)
+
+These are `settlement_game.gd` methods passed as callable dependencies to external services in `_ready()`. They are the **hard coupling points** — any extraction must preserve these interfaces.
+
+#### By service receiving the callables:
+
+- **building_lifecycle_service**: 25 callables (entrance_stone_getter, campfire_node_getter/setter, canteen_getter/setter, canteen_food_getter/setter, employment_office_getter/setter, employment_office_position_getter/setter, completed_house_count_getter/setter, house_light_update_minute_getter/setter, game_minutes_getter, can_hero_build, update_interface, update_workers, cancel_arrivals_for_house, add_demolition_marker, refresh_living_status, unregister_service_pockets, return_in_transit_building_supplies, cancel_canteen_delivery, unregister_navigation_footprint, refresh_boundary_markers, select_best_canteen, create_resource_pile, refresh_navigation_grid, is_construction_site, activate_employment_centre, convert_backpack_pile_to_regular, add_building_selector, add_warehouse_fill_label, sawmill_stock, create_gathering_place_visual, activate_kitchen_if_better, add_house_light, house_initial_residents, cancel_active_building_research, dismiss_official, send_to_unemployment_registration)
+- **citizen_lifecycle_service**: 18 callables
+- **courier_task_publisher**: 14 callables
+- **workplace_labor_service**: 8 callables
+- **canteen_service**: 14 callables
+- **settlement_survival_service**: 8 callables
+- **settlement_daily_rules_service**: 8 callables
+- **excavation_service**: 14 callables
+- **storage_routing_service**: 8 callables
+- **courier_dispatcher**: 7 callables
+- **courier_task_service**: 12 callables
+- **trade_service**: 10 callables
+- **storage_delivery_service**: 5 callables
+- **citizen_daily_order_service**: 6 callables
+- **citizen_registration_service**: 4 callables
+- **fire_management_service**: 5 callables
+- **building_maintenance_service**: 10 callables (via dict)
+- **simulation_event_dispatcher**: 12 callables (via dict)
+- **foraging_service**: 3 callables
+- **hero_pocket_service**: 2 callables
+- **hero_interaction_service**: 2 callables
+- **construction_runtime**: 6 callables (via properties)
+- **demolition_runtime**: 3 callables (via properties)
+- **actuator_bridge**: 8 callables
+
+### Thin Delegates (278 functions, 1-4 lines each, just call a service)
+
+These are pure delegation functions in `settlement_game.gd` that simply forward to an already-extracted service. They are candidates for removal once callers are updated to use the service directly.
+
+#### Top 20 by delegate count:
+
+| Service | Delegates |
+|---|---|
+| workplace_labor_service | 15 |
+| actuator_bridge | 15 |
+| building_lifecycle_service | 13 |
+| storage_routing_service | 12 |
+| hero_interaction_service | 12 |
+| foraging_service | 12 |
+| citizen_lifecycle_service | 12 |
+| building_placement_controller | 12 |
+| trade_service | 11 |
+| hero_pocket_service | 11 |
+| excavation_service | 10 |
+| citizen_daily_order_service | 10 |
+| survival_event_controller | 9 |
+| fire_management_service | 9 |
+| workforce_menu_controller | 8 |
+| campfire_menu_controller | 6 |
+| courier_task_service | 7 |
+| warehouse_menu_controller | 5 |
+| settlement_survival_service | 5 |
+| sawmills | 5 |
+
+#### Full list: see `/tmp/delegate_map.txt`
+
+### Key Metrics
+
+| Metric | Value |
+|---|---|
+| Total lines | 5971 |
+| Total functions | ~516 |
+| Thin delegates (1-4 lines) | 278 (54% of all functions!) |
+| Callable dependencies | 88 unique methods passed to services |
+| Preload constants | 163 |
+| State variables | 266 |
+| Proxy getter/setters to ui_manager | ~80 |
+| Proxy getter/setters to world_setup | ~20 |
+
+### Observations
+
+1. **More than half of all functions are thin delegates** — the service extraction is already well advanced, but `settlement_game.gd` retains wrapper functions for every service method
+2. **88 unique callables form the hard coupling** — these methods must stay (or be replaced by service-to-service calls) during decomposition
+3. **~100 proxy variables** just forward to `ui_manager` and `world_setup` — these are the lowest-hanging fruit
+4. **`_ready()` is 630 lines** of service configuration — can be split by domain
+5. **`_process()` is 60 lines** — already relatively clean, just needs the called methods extracted
+6. **Save/load is ~250 lines** at the bottom — self-contained, easy to extract
+
+### Next: Stage 1 — Extract UI proxy variables

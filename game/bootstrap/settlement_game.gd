@@ -730,7 +730,7 @@ func _ready() -> void:
 	navigation_facade.configure(nav_grid, route_service)
 	navigation_bridge = NavigationBridgeScript.new()
 	add_child(navigation_bridge)
-	navigation_bridge.setup(self)
+	navigation_bridge.configure(nav_grid, navigation_facade, route_service, navigation_obstacle_publisher)
 	building_queue_service = BuildingQueueServiceScript.new()
 	building_queue_service.configure(building_registry, nav_grid)
 	building_queue_service.set_citizen_alive_checker(_is_ai_citizen_id_alive)
@@ -1950,12 +1950,14 @@ func _update_camera_position() -> void:
 		camera_controller.apply_position()
 
 func _cell_center(cell: Vector2i) -> Vector3:
-	return Vector3((cell.x + 0.5) * CELL_SIZE, 0.0, (cell.y + 0.5) * CELL_SIZE)
+	return nav_grid.cell_center(cell) if nav_grid != null else Vector3((cell.x + 0.5) * CELL_SIZE, 0.0, (cell.y + 0.5) * CELL_SIZE)
 
 func _cell_from_position(position_on_board: Vector3) -> Vector2i:
-	return Vector2i(floori(position_on_board.x / CELL_SIZE), floori(position_on_board.z / CELL_SIZE))
+	return nav_grid.cell_from_position(position_on_board) if nav_grid != null else Vector2i(floori(position_on_board.x / CELL_SIZE), floori(position_on_board.z / CELL_SIZE))
 
 func _is_board_cell(cell: Vector2i) -> bool:
+	if nav_grid != null:
+		return nav_grid.is_board_cell(cell)
 	var half_cells := BOARD_CELLS / 2
 	return cell.x >= -half_cells and cell.x < half_cells and cell.y >= -half_cells and cell.y < half_cells
 
@@ -2081,7 +2083,12 @@ func _record_trail_movement(citizen_id: int, position_on_board: Vector3) -> void
 
 func _refresh_navigation_grid() -> void:
 	if navigation_bridge != null:
-		navigation_bridge.refresh_navigation_grid()
+		navigation_blocked_cells = navigation_bridge.refresh_navigation_grid(
+			terrain_blocked_cells,
+			building_registry.records(),
+			service_pockets,
+			NAVIGATION_CLEARANCE_MARGIN
+		)
 
 func _is_navigation_cell_blocked(cell: Vector2i) -> bool:
 	return navigation_blocked_cells.has(cell)

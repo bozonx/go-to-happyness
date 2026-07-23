@@ -127,3 +127,28 @@ Use a frame budget generous enough for the slowest machine running CI; 300 frame
 - Do not leave two write-owners for the same mechanic. A behavior change must replace the legacy owner in the same commit.
 - Keep citizen identity stable: use `ai_id`, not `get_instance_id()`, for saved or cross-system identifiers.
 - Tests that preload `settlement_game.gd` parse the whole bootstrap controller; any missing function referenced in it will fail at load time, even for unrelated tests.
+
+## Weather and lighting laboratory
+
+Changes to weather, time of day, sky, stars, sun/moon, atmospheric effects, or
+world lighting must start in `res://tools/weather_lab/weather_lab.tscn`, not in
+the settlement bootstrap scene. The lab is the isolated visual integration
+surface: it uses the production `SkyAndWeatherController`, cloud shader, rain,
+and firefly effects with a fixed camera and calibration geometry.
+
+- Make and inspect the relevant lab preset before wiring a visual change into
+  gameplay. Use F1–F5 for interactive presets, or run
+  `godot --path . res://tools/weather_lab/weather_lab.tscn -- --capture` to
+  write the deterministic set of PNGs to `user://weather_lab/`.
+- Agents that can inspect images must open the generated captures after visual
+  changes. Do not rely only on a successful GDScript parse for visual work.
+- Use the lab's fixed `CloudCamera` (key `2`) for cloud work, alongside the
+  `ContextCamera` (key `1`) to ensure the same change still works over the
+  settlement. `ZenithCamera` (`3`) exposes tiling/stars and `HorizonCamera`
+  (`4`) exposes atmospheric perspective. Cloud batch presets are captured with
+  `--capture` as `cloud_noon`, `cloud_sunset`, and `cloud_storm`.
+- Keep deterministic time/forecast rules in `simulation/domain`; the lab and
+  game both feed visual values into `world/presentation`. Do not make a weather
+  feature depend on `SettlementGame` to render it.
+- Add or update a named lab preset whenever a weather/lighting change needs a
+  repeatable visual case (for example a new moon, storm, or seasonal sky).
