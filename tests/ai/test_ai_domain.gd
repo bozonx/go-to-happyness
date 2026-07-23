@@ -678,11 +678,11 @@ static func _test_relieve_step_cancel_releases_reservation() -> void:
 	var step: RefCounted = RelieveStepScript.new()
 	step.run(context, 0.1)
 	# Reservation should be held by citizen 1
-	assert(snapshot.reservations.owner_of([&"needs.relief", &"bush:3:4"]) == 1)
+	assert(snapshot.reservations.owner_of([&"needs.relief", &"bush:3:4"], 0.0) == 1)
 	step.cancel(context)
 	assert(actuator.cancel_action_count == 1)
 	# Reservation should be released
-	assert(snapshot.reservations.owner_of([&"needs.relief", &"bush:3:4"]) == 0)
+	assert(snapshot.reservations.owner_of([&"needs.relief", &"bush:3:4"], 0.0) == 0)
 
 
 # ============================================================
@@ -778,20 +778,29 @@ static func _test_return_home_goal_build_task_no_position() -> void:
 # FacadeContext
 # ============================================================
 
+class MockSimSettlement extends RefCounted:
+	var tools: Dictionary = {}
+	var backpack: Dictionary = {}
+
+
 class MockSimulation extends Node:
 	var settlement: Object = null
 
 
 static func _test_facade_context_has_tool_true() -> void:
 	var sim := MockSimulation.new()
-	sim.set("settlement", {"tools": {"axe": true}})
+	var settlement := MockSimSettlement.new()
+	settlement.tools = {"axe": true}
+	sim.settlement = settlement
 	var ctx := FacadeContextScript.new(sim, null, null, 1, false, false, "")
 	assert(ctx.has_tool("axe"))
 	sim.free()
 
 static func _test_facade_context_has_tool_false() -> void:
 	var sim := MockSimulation.new()
-	sim.set("settlement", {"tools": {"axe": false}})
+	var settlement := MockSimSettlement.new()
+	settlement.tools = {"axe": false}
+	sim.settlement = settlement
 	var ctx := FacadeContextScript.new(sim, null, null, 1, false, false, "")
 	assert(not ctx.has_tool("axe"))
 	sim.free()
@@ -804,7 +813,9 @@ static func _test_facade_context_has_tool_no_settlement() -> void:
 
 static func _test_facade_context_backpack_resources() -> void:
 	var sim := MockSimulation.new()
-	sim.set("settlement", {"backpack": {"branches": 5, "food": 3}})
+	var settlement := MockSimSettlement.new()
+	settlement.backpack = {"branches": 5, "food": 3}
+	sim.settlement = settlement
 	var ctx := FacadeContextScript.new(sim, null, null, 1, false, false, "")
 	var backpack := ctx.backpack_resources()
 	assert(backpack.size() == 2)
