@@ -112,7 +112,8 @@ func _cloud_sun_visibility(sun_direction: Vector3, overcast: float, runtime_seco
 	var projection_scale := maxf(horizon + 0.28, 0.28)
 	var uv := Vector2(sun_direction.x, sun_direction.z) / projection_scale
 	uv = uv * CLOUD_SCALE + CLOUD_WIND * runtime_seconds
-	var coverage := lerpf(CLOUD_COVERAGE_CLEAR, CLOUD_COVERAGE_STORM, overcast)
+	var coverage_curve := pow(overcast, 0.55)
+	var coverage := lerpf(CLOUD_COVERAGE_CLEAR, CLOUD_COVERAGE_STORM, coverage_curve)
 	var density := smoothstep(coverage, coverage + CLOUD_EDGE_SOFTNESS, _cloud_field(uv))
 	var cloud_alpha := density * smoothstep(0.08, 0.34, horizon)
 	return lerpf(1.0, CLOUD_MINIMUM_SUN_VISIBILITY, cloud_alpha)

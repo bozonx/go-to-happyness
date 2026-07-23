@@ -30,9 +30,9 @@ uniform float u_edge_softness = 0.07;   // lower = harder, crisp anime cartoon e
 uniform float u_coverage_clear = 0.46;  // threshold when sunny (few clouds)
 uniform float u_coverage_storm = 0.18;  // threshold when overcast (full sheet)
 uniform float u_shadow_step = 0.055;    // self-shadow march distance
-uniform vec3 u_cloud_lit_clear : source_color = vec3(1.0, 0.98, 0.95);
-uniform vec3 u_cloud_mid_clear : source_color = vec3(0.78, 0.86, 0.95);
-uniform vec3 u_cloud_shadow_clear : source_color = vec3(0.48, 0.58, 0.76);
+uniform vec3 u_cloud_lit_clear : source_color = vec3(1.0, 0.965, 0.86);
+uniform vec3 u_cloud_mid_clear : source_color = vec3(0.70, 0.84, 0.95);
+uniform vec3 u_cloud_shadow_clear : source_color = vec3(0.30, 0.50, 0.72);
 uniform vec3 u_cloud_lit_storm : source_color = vec3(0.55, 0.58, 0.63);
 uniform vec3 u_cloud_mid_storm : source_color = vec3(0.40, 0.44, 0.50);
 uniform vec3 u_cloud_shadow_storm : source_color = vec3(0.26, 0.29, 0.34);
@@ -93,16 +93,24 @@ float cellular_billow(vec2 p) {
 	return 1.0 - smoothstep(0.18, 0.78, nearest);
 }
 
-// A low-frequency island mask keeps clear sky between cloud families. Cellular
-// lobes form the silhouette, while a small FBM contribution roughens the edge.
+// A low-frequency family mask keeps broad openings of blue sky, while several
+// sizes of cellular billows build an irregular cauliflower silhouette. Unlike
+// stamped primitives, every family remains organic and non-repeating.
 float cloud_field(vec2 uv) {
-	vec2 q = vec2(fbm(uv * 0.75 + vec2(0.0, 0.0)), fbm(uv * 0.75 + vec2(5.2, 1.3)));
-	float macro = fbm(uv * 0.32 + q * 0.45);
-	float lobes = cellular_billow(uv * 0.92 + q * 0.8);
-	float detail = fbm(uv * 2.15 + q * 1.25);
-	float islands = smoothstep(0.40, 0.67, macro);
-	float body = macro * 0.54 + lobes * 0.34 + detail * 0.12;
-	return body * mix(0.24, 1.0, islands);
+	vec2 q = vec2(
+		fbm(uv * 0.68 + vec2(0.0, 0.0)),
+		fbm(uv * 0.68 + vec2(5.2, 1.3))
+	);
+	float macro = fbm(uv * 0.30 + q * 0.48);
+	float large_billows = cellular_billow(uv * 0.72 + q * 0.58);
+	float medium_billows = cellular_billow(uv * 1.18 + q * 0.92 + vec2(3.7, 8.1));
+	float detail = fbm(uv * 2.45 + q * 1.28);
+	float family = smoothstep(0.40, 0.66, macro);
+	float body = macro * 0.40
+		+ large_billows * 0.34
+		+ medium_billows * 0.18
+		+ detail * 0.08;
+	return body * mix(0.26, 1.0, family);
 }
 
 // High-altitude cirrus wind streaks layer
@@ -189,33 +197,43 @@ void sky() {
 	}
 
 	// --- Main cumulus clouds layer ---
-	float n = cloud_field(uv);
-	float coverage = mix(u_coverage_clear, u_coverage_storm, u_overcast);
+	// Cumulus remains on its own higher, softer ceiling. The larger height
+	// offset removes the horizontal stretching of the old low cloud plane while
+	// remaining seamless at the horizon and zenith.
+	vec2 cumulus_projected_uv = dir.xz / max(horizon + 0.55, 0.55);
+	vec2 cumulus_uv = cumulus_projected_uv * u_cloud_scale * 2.05;
+	cumulus_uv += vec2(u_wind.x * u_time * 2.4, u_wind.y * u_time * 0.55);
+	float n = cloud_field(cumulus_uv);
+	float coverage_curve = pow(u_overcast, 0.55);
+	float coverage = mix(u_coverage_clear, u_coverage_storm, coverage_curve);
 	float density = smoothstep(coverage, coverage + u_edge_softness, n);
 	// At the end of the scale, merge the cumulus into a broad, textured ceiling
 	// rather than leaving isolated cartoon blobs over a supposedly covered sky.
 	float ceiling_amount = smoothstep(0.55, 0.90, u_overcast);
-	float ceiling_texture = 0.72 + fbm(uv * 0.38 + vec2(31.0, 9.0)) * 0.22;
+	float ceiling_texture = 0.72 + fbm(cumulus_uv * 0.38 + vec2(31.0, 9.0)) * 0.22;
 	density = max(density, ceiling_amount * ceiling_texture);
 
 	// Density gradients act as a cheap surface normal. Together with a short
 	// directional shadow march they produce lit domes and cool undersides.
 	float normal_step = 0.035;
-	float gradient_x = cloud_field(uv + vec2(normal_step, 0.0)) - cloud_field(uv - vec2(normal_step, 0.0));
-	float gradient_y = cloud_field(uv + vec2(0.0, normal_step)) - cloud_field(uv - vec2(0.0, normal_step));
-	vec3 cloud_normal = normalize(vec3(-gradient_x * 5.0, 0.72, -gradient_y * 5.0));
+	float gradient_x = cloud_field(cumulus_uv + vec2(normal_step, 0.0)) - cloud_field(cumulus_uv - vec2(normal_step, 0.0));
+	float gradient_y = cloud_field(cumulus_uv + vec2(0.0, normal_step)) - cloud_field(cumulus_uv - vec2(0.0, normal_step));
+	vec3 cloud_normal = normalize(vec3(-gradient_x * 2.1, 0.94, -gradient_y * 2.1));
 	vec2 sun2d = length(sun_dir.xz) > 0.001 ? normalize(sun_dir.xz) : vec2(0.0, 1.0);
 	vec3 cloud_light_dir = normalize(vec3(sun2d.x, max(sun_dir.y, 0.18), sun2d.y));
 	float occ = 0.0;
 	for (int i = 1; i <= 3; i++) {
-		float s = cloud_field(uv + sun2d * u_shadow_step * float(i));
+		float s = cloud_field(cumulus_uv + sun2d * u_shadow_step * float(i));
 		occ += smoothstep(coverage, coverage + u_edge_softness, s);
 	}
 	occ /= 3.0;
 	float dome_light = max(dot(cloud_normal, cloud_light_dir), 0.0);
-	float lit = clamp(dome_light * 0.68 + (1.0 - occ) * 0.32, 0.0, 1.0);
-	float painted_detail = fbm(uv * 3.6 + vec2(13.2, 2.7));
+	float lit = clamp(dome_light * 0.44 + (1.0 - occ) * 0.40 + 0.08, 0.0, 1.0);
+	float painted_detail = fbm(cumulus_uv * 3.6 + vec2(13.2, 2.7));
 	lit = clamp(lit + (painted_detail - 0.5) * 0.20 * density, 0.0, 1.0);
+	float lobe_core = smoothstep(coverage + 0.025, coverage + 0.17, n);
+	float inner_billows = cellular_billow(cumulus_uv * 1.58 + vec2(4.1, 9.3));
+	lit = clamp(lit + lobe_core * 0.20 + (inner_billows - 0.5) * 0.08 * density, 0.0, 1.0);
 	lit -= smoothstep(0.48, 0.95, horizon) * density * 0.16;
 	lit = mix(lit, lit * 0.55 + 0.25, u_overcast);
 
@@ -224,7 +242,7 @@ void sky() {
 	vec3 cloud_shadow = mix(u_cloud_shadow_clear, u_cloud_shadow_storm, u_overcast);
 	// Moonlight is cool and restrained: clouds remain readable but do not turn
 	// into bright daytime masses that erase the night sky.
-	float night_cloud_mix = smoothstep(0.38, 0.9, u_night_factor);
+	float night_cloud_mix = smoothstep(0.12, 0.82, u_star_visibility);
 	cloud_lit = mix(cloud_lit, u_cloud_lit_night, night_cloud_mix);
 	cloud_mid = mix(cloud_mid, u_cloud_mid_night, night_cloud_mix);
 	cloud_shadow = mix(cloud_shadow, u_cloud_shadow_night, night_cloud_mix);
