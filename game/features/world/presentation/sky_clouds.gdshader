@@ -17,6 +17,7 @@ uniform float u_overcast : hint_range(0.0, 1.0) = 0.0;
 uniform float u_solar_intensity : hint_range(0.0, 1.0) = 1.0;
 uniform float u_sun_visibility : hint_range(0.0, 1.0) = 1.0;
 uniform float u_night_factor : hint_range(0.0, 1.0) = 0.0;
+uniform float u_star_visibility : hint_range(0.0, 1.0) = 0.0;
 uniform float u_sun_disc_energy = 6.0;  // HDR overdrive so filmic tonemap + glow bloom the disc
 uniform float u_time = 0.0;
 
@@ -127,7 +128,7 @@ void sky() {
 	float grad = smoothstep(0.0, 0.65, horizon);
 	vec3 sky_col = mix(u_horizon_color, u_zenith_color, grad);
 	float stars = star_field(dir) * smoothstep(0.04, 0.32, horizon);
-	float star_visibility = u_night_factor * (1.0 - u_overcast) * (1.0 - u_solar_intensity);
+	float star_visibility = u_star_visibility * (1.0 - u_overcast);
 	sky_col += vec3(0.68, 0.79, 1.0) * stars * star_visibility * 2.2;
 
 	vec3 sun_dir = LIGHT0_ENABLED ? normalize(LIGHT0_DIRECTION) : vec3(0.0, 1.0, 0.0);
