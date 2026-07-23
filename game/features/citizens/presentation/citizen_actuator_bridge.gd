@@ -94,7 +94,7 @@ func execute_production_action(actor: Citizen, action: StringName, target: Node3
 			var source_position: Variant = payload.value(&"target.position", Vector3.INF) if payload != null else Vector3.INF
 			var access_position: Variant = payload.value(&"target.access_position", Vector3.INF) if payload != null else Vector3.INF
 			var gathering_warehouse_position: Variant = payload.value(&"warehouse.position", Vector3.INF) if payload != null else Vector3.INF
-			if not (resource_type is String) or resource_type.is_empty() or not (source_position is Vector3) or source_position == Vector3.INF or not (access_position is Vector3) or access_position == Vector3.INF or not (gathering_warehouse_position is Vector3) or gathering_warehouse_position == Vector3.INF:
+			if not (resource_type is String or resource_type is StringName) or str(resource_type).is_empty() or not (source_position is Vector3) or source_position == Vector3.INF or not (access_position is Vector3) or access_position == Vector3.INF or not (gathering_warehouse_position is Vector3) or gathering_warehouse_position == Vector3.INF:
 				return false
 			actor.assign_gathering(resource_type, source_position, gathering_warehouse_position, access_position)
 			return actor.state in [Citizen.State.TO_GATHER, Citizen.State.GATHERING, Citizen.State.TO_WAREHOUSE]
@@ -103,7 +103,7 @@ func execute_production_action(actor: Citizen, action: StringName, target: Node3
 			var pile_position: Variant = payload.value(&"target.position", Vector3.INF) if payload != null else Vector3.INF
 			var pile_access_position: Variant = payload.value(&"target.access_position", Vector3.INF) if payload != null else Vector3.INF
 			var cleaning_warehouse_position: Variant = payload.value(&"warehouse.position", Vector3.INF) if payload != null else Vector3.INF
-			if not (cleaning_resource_type is String) or cleaning_resource_type.is_empty() or not (pile_position is Vector3) or pile_position == Vector3.INF or not (pile_access_position is Vector3) or pile_access_position == Vector3.INF or not (cleaning_warehouse_position is Vector3) or cleaning_warehouse_position == Vector3.INF:
+			if not (cleaning_resource_type is String or cleaning_resource_type is StringName) or str(cleaning_resource_type).is_empty() or not (pile_position is Vector3) or pile_position == Vector3.INF or not (pile_access_position is Vector3) or pile_access_position == Vector3.INF or not (cleaning_warehouse_position is Vector3) or cleaning_warehouse_position == Vector3.INF:
 				return false
 			actor.assign_cleaning(cleaning_resource_type, pile_position, pile_access_position, cleaning_warehouse_position)
 			return actor.state in [Citizen.State.TO_CLEANING_PILE, Citizen.State.CLEANING_PILE, Citizen.State.TO_WAREHOUSE]

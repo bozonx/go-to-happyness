@@ -18,6 +18,7 @@ const DAILY_ORDER_ROLES := {
 	"researcher": true,
 }
 
+var settlement_id: StringName = &""
 var employment_state := EmploymentState.UNREGISTERED
 var daily_order_role := ""
 var daily_order_workday_id := 0

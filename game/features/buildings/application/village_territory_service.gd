@@ -77,9 +77,11 @@ func placement_reason(building_type: String, cell: Vector2i, footprint := Vector
 		return REASON_OK
 
 	if BuildingCatalog.is_campfire(building_type):
+		if not _territory.has_flag():
+			return REASON_NO_FLAG
 		if _territory.campfire_count() >= campfire_limit():
 			return REASON_CAMPFIRE_LIMIT
-		if _territory.has_flag() and not _territory.has_campfire():
+		if not _territory.has_campfire():
 			if not _footprint_is_inside_territory(cell, footprint):
 				return REASON_OUTSIDE_TERRITORY
 			return REASON_OK

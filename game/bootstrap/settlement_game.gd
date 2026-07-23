@@ -48,6 +48,7 @@ const ResourcePileVisualsScript = preload("res://game/features/logistics/present
 const BuildingLifecycleServiceScript = preload("res://game/features/buildings/application/building_lifecycle_service.gd")
 const ConstructionPriorityServiceScript = preload("res://game/features/buildings/application/construction_priority_service.gd")
 const BuildingRuntimeStateScript = preload("res://game/features/buildings/domain/building_runtime_state.gd")
+const BuildingEntrancePositionsScript = preload("res://game/features/buildings/domain/building_entrance_positions.gd")
 const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 const BuildingResearchServiceScript = preload("res://game/features/buildings/application/building_research_service.gd")
 const BuildingQueueServiceScript = preload("res://game/features/citizens/application/building_queue_service.gd")
@@ -64,6 +65,7 @@ const HeroInteractionServiceScript = preload("res://game/features/citizens/appli
 const WorkplaceLaborServiceScript = preload("res://game/features/settlement/application/workplace_labor_service.gd")
 const SleepGoalScript = preload("res://game/features/decision/domain/goals/sleep_goal.gd")
 const ReturnHomeWhenIdleGoalScript = preload("res://game/features/decision/domain/goals/return_home_when_idle_goal.gd")
+const FollowLeaderGoalScript = preload("res://game/features/decision/domain/goals/follow_leader_goal.gd")
 const MealGoalScript = preload("res://game/features/decision/domain/goals/meal_goal.gd")
 const ToiletGoalScript = preload("res://game/features/decision/domain/goals/toilet_goal.gd")
 const RestGoalScript = preload("res://game/features/decision/domain/goals/rest_goal.gd")
@@ -136,13 +138,6 @@ const CONSTRUCTION_DURATION := 4.0
 const DEMOLITION_DURATION := 3.0
 const INTERACTION_RANGE := 4.5
 const JOB_ENTRANCE_RANGE := 3.5
-# Layer 8 carries invisible occluders for the sun-flare raycast only (e.g. tree
-# crowns, which have no physics collider of their own), so the flare hides behind
-# foliage without the occluders affecting citizen movement or navigation.
-const FLARE_OCCLUDER_LAYER := 8
-const SUN_FLARE_OCCLUSION_MASK := 1 | FLARE_OCCLUDER_LAYER
-const SUN_FLARE_OCCLUSION_DISTANCE := 96.0
-const SUN_FLARE_OCCLUSION_SMOOTHING := 0.08
 const POCKET_CAPACITY := 8
 const POCKET_WOOD_CAPACITY := POCKET_CAPACITY
 const SAWMILL_PROCESS_DURATION := 4.0
@@ -233,10 +228,6 @@ var rain_effect: RainEffect:
 	get: return world_setup.rain_effect if world_setup != null else null
 var fireflies: Array[FirefliesEffect]:
 	get: return world_setup.fireflies if world_setup != null else []
-var lens_flare_material: ShaderMaterial:
-	get: return world_setup.lens_flare_material if world_setup != null else null
-var lens_flare_visibility := 0.0
-var lens_flare_occlusion := 1.0
 var sky_and_weather_controller: SkyAndWeatherController:
 	get: return world_setup.sky_and_weather_controller if world_setup != null else null
 var ambient_spawner: AmbientSpawner
@@ -260,6 +251,8 @@ var preview_entrance_marker: MeshInstance3D:
 	get: return world_setup.preview_entrance_marker if world_setup != null else null
 var preview_back_entrance_marker: MeshInstance3D:
 	get: return world_setup.preview_back_entrance_marker if world_setup != null else null
+var hero_build_radius_marker: MeshInstance3D:
+	get: return world_setup.hero_build_radius_marker if world_setup != null else null
 var hud: HUD:
 	get: return ui_manager.hud if ui_manager != null else null
 	set(val): if ui_manager != null: ui_manager.hud = val
@@ -826,7 +819,7 @@ func _ready() -> void:
 	_refresh_living_statuses()
 	if not citizen_ai.configure(
 		SettlementAIWorldFacade.new(self),
-		[SleepGoalScript.new(), MealGoalScript.new(), ToiletGoalScript.new(), RestGoalScript.new(), ReturnHomeWhenIdleGoalScript.new(), RegisterGoalScript.new(), ForestryGoalScript.new(), FarmingGoalScript.new(), ConstructionGoalScript.new(), GatheringGoalScript.new(), CleaningGoalScript.new(), ExcavationGoalScript.new(), ServiceWorkGoalScript.new(), FactoryWorkGoalScript.new(), CourierDeliveryGoalScript.new()],
+		[SleepGoalScript.new(), MealGoalScript.new(), ToiletGoalScript.new(), RestGoalScript.new(), ReturnHomeWhenIdleGoalScript.new(), FollowLeaderGoalScript.new(), RegisterGoalScript.new(), ForestryGoalScript.new(), FarmingGoalScript.new(), ConstructionGoalScript.new(), GatheringGoalScript.new(), CleaningGoalScript.new(), ExcavationGoalScript.new(), ServiceWorkGoalScript.new(), FactoryWorkGoalScript.new(), CourierDeliveryGoalScript.new()],
 		[WorkforceOrderProviderScript.new(), DailyPlayerOrderProviderScript.new(), ForestryOrderProviderScript.new(), FarmingOrderProviderScript.new(), ConstructionOrderProviderScript.new(), GatheringOrderProviderScript.new(), ExcavationOrderProviderScript.new(), ServiceWorkOrderProviderScript.new(), FactoryWorkOrderProviderScript.new(), CourierDeliveryOrderProviderScript.new()]
 	):
 		push_error("Native citizen AI failed to capture its initial world snapshot")
@@ -1840,6 +1833,18 @@ func _create_citizens() -> void:
 		_add_citizen(spawn_position, "unassigned")
 	if not citizens.is_empty():
 		citizens[random.randi_range(0, citizens.size() - 1)].is_jack_of_all_trades = true
+	if hero_citizen != null:
+		for citizen in citizens:
+			citizen.set_squad(&"hero_squad", hero_citizen.ai_id, true)
+
+
+func _bind_hero_squad_to_settlement(squad_settlement_id: StringName) -> void:
+	if hero_citizen == null:
+		return
+	for citizen in citizens:
+		if citizen.squad_state.is_in_squad() and citizen.squad_state.squad_leader_id == hero_citizen.ai_id:
+			citizen.settlement_id = squad_settlement_id
+
 
 func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void:
 	var citizen: Citizen = CitizenActorScene.instantiate()
@@ -2894,6 +2899,14 @@ func _select_build_mode(next_mode: String) -> void:
 	if not bool(placement_state.allowed):
 		_update_interface(str(placement_state.message))
 		return
+	if not village_territory_service.has_flag():
+		if next_mode != "settlement_flag":
+			_update_interface(village_territory_service.placement_message(village_territory_service.REASON_NO_FLAG))
+			return
+	elif not village_territory_service.has_campfire():
+		if next_mode != "campfire" and next_mode != "warehouse":
+			_update_interface(village_territory_service.placement_message(village_territory_service.REASON_NO_CAMPFIRE))
+			return
 	build_mode = next_mode
 	build_rotation_quarters = 0
 	selection_marker.visible = true
@@ -4108,6 +4121,14 @@ func _move_selection(world_position: Vector3) -> void:
 		preview_back_entrance_marker.visible = true
 	if not build_mode.is_empty():
 		selection_material.albedo_color = Color(0.25, 0.85, 0.37, 0.55) if _can_place(selected_world_position) else Color(0.9, 0.2, 0.18, 0.6)
+	if not build_mode.is_empty() and BuildingCatalog.max_hero_radius(build_mode) > 0.0 and is_instance_valid(hero_citizen):
+		if not is_first_person and is_instance_valid(hero_build_radius_marker):
+			hero_build_radius_marker.global_position = hero_citizen.global_position + Vector3(0.0, 0.08, 0.0)
+			hero_build_radius_marker.visible = true
+		elif is_instance_valid(hero_build_radius_marker):
+			hero_build_radius_marker.visible = false
+	elif is_instance_valid(hero_build_radius_marker):
+		hero_build_radius_marker.visible = false
 
 func _rotated_footprint(footprint: Vector2i) -> Vector2i:
 	return Vector2i(footprint.y, footprint.x) if build_rotation_quarters % 2 != 0 else footprint
@@ -4118,6 +4139,11 @@ func _place_building(world_position: Vector3) -> void:
 		_update_interface("Only the hero can approve construction decisions.")
 		return
 	world_position = _snapped_build_position(world_position)
+	var max_hero_radius := BuildingCatalog.max_hero_radius(build_mode)
+	if max_hero_radius > 0.0 and is_instance_valid(hero_citizen):
+		if hero_citizen.global_position.distance_to(world_position) > max_hero_radius:
+			_update_interface("Too far from Hero (max %.0f tiles)." % max_hero_radius)
+			return
 	if build_mode in ["straw_trade_tent", "tarp_trade_tent"] and is_instance_valid(entrance_stone) and world_position.distance_to(entrance_stone.global_position) > 8.0:
 		_update_interface("The tent market must be built beside the entrance sign.")
 		return
@@ -4135,6 +4161,41 @@ func _place_building(world_position: Vector3) -> void:
 		var placement_state: Dictionary = building_availability_service.placement_state_with_inventory(build_mode, pocket)
 		_update_interface(str(placement_state.message))
 		return
+
+	if BuildingCatalog.is_instant_build(build_mode):
+		building_registry.reserve(cell, world_position, occupied_footprint)
+		var site_node: Node3D = construction._get_site_scene().instantiate()
+		site_node.position = world_position
+		site_node.rotation.y = build_rotation_quarters * PI * 0.5
+		site_node.set_meta("building_type", build_mode)
+		site_node.set_meta("footprint", blueprint.footprint)
+		site_node.set_meta("occupied_footprint", occupied_footprint)
+		site_node.set_meta("service_positions", BuildingEntrancePositionsScript.positions(site_node, blueprint.footprint, 1.0))
+		add_child(site_node)
+		for module in blueprint.modules:
+			site_node.add_child(BuildingBlueprints.create_module(module))
+		for child_name in ["ConstructionTerritory", "ConstructionProgressBack", "ConstructionProgressFill", "SupplyLabel", "ConstructionSelector", "ConstructionEntrance"]:
+			var child := site_node.get_node_or_null(child_name)
+			if child != null:
+				child.queue_free()
+		_complete_building(cell, build_mode, world_position, site_node, blueprint)
+		if BuildingCatalog.is_flag(build_mode):
+			_bind_hero_squad_to_settlement(&"main_settlement")
+		build_mode = ""
+		build_rotation_quarters = 0
+		selection_marker.visible = false
+		preview_entrance_marker.visible = false
+		preview_back_entrance_marker.visible = false
+		if is_instance_valid(hero_build_radius_marker):
+			hero_build_radius_marker.visible = false
+		_show_territory_overlay(false)
+		build_menu.visible = false
+		build_menu_is_global = false
+		selected_builder = null
+		_set_build_placement_ui_visible(true)
+		_update_interface("%s placed!" % str(BuildingCatalog.definition_for(build_mode).get("name", "Building")))
+		return
+
 	building_registry.reserve(cell, world_position, occupied_footprint)
 	_refresh_navigation_grid()
 	var site := _create_construction_site(cell, build_mode, world_position, build_rotation_quarters, blueprint, occupied_footprint)
@@ -4145,6 +4206,8 @@ func _place_building(world_position: Vector3) -> void:
 	selection_marker.visible = false
 	preview_entrance_marker.visible = false
 	preview_back_entrance_marker.visible = false
+	if is_instance_valid(hero_build_radius_marker):
+		hero_build_radius_marker.visible = false
 	_show_territory_overlay(false)
 	build_menu.visible = false
 	build_menu_is_global = false

@@ -122,11 +122,13 @@ func _make_service(era: int) -> RefCounted:
 func _test_service_no_campfire() -> void:
 	var service := VillageTerritoryServiceScript.new()
 	service.configure(BuildingRegistry.new(), 0)
-	assert(service.placement_reason("campfire", Vector2i(50, 50)) == service.REASON_OK, \
-		"First campfire should be placeable anywhere")
+	assert(service.placement_reason("campfire", Vector2i(50, 50)) == service.REASON_NO_FLAG, \
+		"Campfire without flag should be REASON_NO_FLAG")
 	assert(service.placement_reason("house", Vector2i(0, 0)) == service.REASON_NO_FLAG, \
 		"House without flag should be REASON_NO_FLAG")
 	service.on_building_added(Vector2i(-99, -99), "settlement_flag")
+	assert(service.placement_reason("campfire", Vector2i(-95, -99)) == service.REASON_OK, \
+		"First campfire should be placeable inside flag territory")
 	assert(service.placement_reason("house", Vector2i(-99, -99)) == service.REASON_NO_CAMPFIRE, \
 		"House without campfire should be REASON_NO_CAMPFIRE")
 	assert(service.placement_reason("warehouse", Vector2i(-99, -99)) == service.REASON_OK, \

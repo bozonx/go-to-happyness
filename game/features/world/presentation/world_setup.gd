@@ -24,9 +24,9 @@ var selection_marker: MeshInstance3D
 var selection_material: StandardMaterial3D
 var preview_entrance_marker: MeshInstance3D
 var preview_back_entrance_marker: MeshInstance3D
+var hero_build_radius_marker: MeshInstance3D
 var village_boundary_markers: VillageBoundaryMarkers
 var village_territory_overlay: VillageTerritoryOverlay
-var lens_flare_material: ShaderMaterial
 var fireflies: Array[FirefliesEffect] = []
 
 var _camera: Camera3D
@@ -47,10 +47,6 @@ func build(parent: Node) -> void:
 	if environment_node != null:
 		world_environment = environment_node.environment
 	sun = get_node_or_null("Sun") as DirectionalLight3D
-	if DisplayServer.get_name() != "headless":
-		var flare_rect := get_node_or_null("LensFlareLayer/ColorRect") as ColorRect
-		if flare_rect != null:
-			lens_flare_material = flare_rect.material as ShaderMaterial
 	_build_sky()
 	_build_boundary(parent)
 	_build_rain_effect(parent)
@@ -100,13 +96,11 @@ func _build_sky_and_weather_controller(parent: Node) -> void:
 	sky_and_weather_controller = SkyAndWeatherControllerScene.instantiate() as SkyAndWeatherController
 	parent.add_child(sky_and_weather_controller)
 	sky_and_weather_controller.setup(
-		_camera,
 		sun,
 		world_environment,
 		sky_material,
 		rain_effect,
-		fireflies,
-		lens_flare_material
+		fireflies
 	)
 
 
@@ -144,6 +138,7 @@ func _build_selection_marker(parent: Node) -> void:
 	preview_back_entrance_marker = _create_preview_entrance_marker(Color("30343a"))
 	parent.add_child(preview_entrance_marker)
 	parent.add_child(preview_back_entrance_marker)
+	_build_hero_radius_marker(parent)
 
 
 func _create_preview_entrance_marker(color: Color) -> MeshInstance3D:
@@ -152,3 +147,19 @@ func _create_preview_entrance_marker(color: Color) -> MeshInstance3D:
 	material.albedo_color = color
 	material.emission = color
 	return marker
+
+
+func _build_hero_radius_marker(parent: Node) -> void:
+	hero_build_radius_marker = MeshInstance3D.new()
+	var torus := TorusMesh.new()
+	torus.inner_radius = 19.8
+	torus.outer_radius = 20.2
+	hero_build_radius_marker.mesh = torus
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = StandardMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = Color(0.2, 0.8, 1.0, 0.4)
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	hero_build_radius_marker.material_override = mat
+	hero_build_radius_marker.visible = false
+	parent.add_child(hero_build_radius_marker)
+

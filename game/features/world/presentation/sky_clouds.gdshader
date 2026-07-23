@@ -87,7 +87,9 @@ void sky() {
 
 	vec3 sun_dir = LIGHT0_ENABLED ? normalize(LIGHT0_DIRECTION) : vec3(0.0, 1.0, 0.0);
 
-	// Soft sun disc + halo. Fades in storms.
+// A single soft sun disc plus its atmospheric glow. The disc deliberately uses
+// one continuous profile: a separate bright core would read as a second, small
+// sun inside the larger glow.
 	float sun_amt = max(dot(dir, sun_dir), 0.0);
 	float clear_sky = 1.0 - u_overcast;
 
@@ -95,11 +97,10 @@ void sky() {
 	float sun_low = 1.0 - smoothstep(0.0, 0.35, sun_dir.y);
 	vec3 warm_sun = mix(u_sun_color, u_horizon_glow_color, sun_low);
 
-	// HDR sun disc + layered glow
-	float disc = smoothstep(0.9986, 0.99965, sun_amt);
-	float inner = pow(sun_amt, 220.0);
-	sky_col += warm_sun * disc * u_solar_intensity * u_sun_disc_energy;
-	sky_col += warm_sun * inner * 0.6 * u_solar_intensity * u_sun_disc_energy;
+	// HDR disc blooms through the environment's glow pass, while remaining one
+	// visual body rather than a screen-space flare laid over the sky.
+	float sun_disc = smoothstep(0.9968, 0.99965, sun_amt);
+	sky_col += warm_sun * sun_disc * u_solar_intensity * u_sun_disc_energy;
 
 	// Mie scattering halo
 	float halo_strength = mix(0.14, 0.55, sun_low);
@@ -155,4 +156,3 @@ void sky() {
 	float alpha = density * ceil_mask;
 	COLOR = mix(sky_col, cloud_col, alpha);
 }
-

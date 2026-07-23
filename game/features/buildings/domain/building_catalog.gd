@@ -2,7 +2,7 @@ class_name BuildingCatalog
 extends RefCounted
 
 const DEFINITIONS := {
-	"settlement_flag": {"name": "Флаг поселения", "category": "tent", "costs": {}, "landmark": true, "demolishable": false, "is_flag": true, "requires_village_area": false, "expands_village_area": true},
+	"settlement_flag": {"name": "Флаг поселения", "category": "tent", "costs": {}, "landmark": true, "demolishable": false, "is_flag": true, "instant_build": true, "max_hero_radius": 20.0, "requires_village_area": false, "expands_village_area": true},
 	"campfire": {"name": "Главный костер ур. 1", "category": "tent", "costs": {"branches": 4}, "landmark": true, "demolishable": false, "is_campfire": true, "requires_village_area": false, "expands_village_area": true},
 	"campfire_lvl2": {"name": "Главный костер ур. 2", "category": "tent", "costs": {"branches": 15, "grass": 10}, "landmark": true, "demolishable": false, "upgrade_only": true, "upgrades_from": "campfire", "is_campfire": true, "requires_village_area": false, "expands_village_area": true},
 	"campfire_lvl3": {"name": "Главный костер ур. 3", "category": "tent", "costs": {"branches": 25, "grass": 18}, "landmark": true, "demolishable": false, "upgrade_only": true, "upgrades_from": "campfire_lvl2", "is_campfire": true, "requires_village_area": false, "expands_village_area": true},
@@ -423,8 +423,15 @@ static func is_campfire(building_type: String) -> bool:
 static func is_flag(building_type: String) -> bool:
 	return bool(definition_for(building_type).get("is_flag", false))
 
+static func is_instant_build(building_type: String) -> bool:
+	return bool(definition_for(building_type).get("instant_build", false)) or is_flag(building_type)
+
+static func max_hero_radius(building_type: String) -> float:
+	return float(definition_for(building_type).get("max_hero_radius", 0.0))
+
 static func requires_village_area(building_type: String) -> bool:
 	return bool(definition_for(building_type).get("requires_village_area", true))
 
 static func expands_village_area(building_type: String) -> bool:
 	return bool(definition_for(building_type).get("expands_village_area", false))
+

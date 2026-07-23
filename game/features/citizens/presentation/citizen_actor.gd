@@ -12,6 +12,7 @@ const CitizenArrivalStateScript = preload("res://game/features/citizens/domain/c
 const CitizenTaskAssignmentStateScript = preload("res://game/features/citizens/domain/citizen_task_assignment_state.gd")
 const CitizenWorkLocationStateScript = preload("res://game/features/citizens/domain/citizen_work_location_state.gd")
 const CitizenNavigationStateScript = preload("res://game/features/citizens/domain/citizen_navigation_state.gd")
+const CitizenSquadStateScript = preload("res://game/features/citizens/domain/citizen_squad_state.gd")
 const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 
 signal resource_delivered(worker: Citizen, resource_type: String, amount: int)
@@ -214,12 +215,27 @@ var specialization: String:
 var active_role := ""
 ## Human-readable label of the native AI task, supplied through CitizenActuator.
 var ai_activity_label := ""
+var squad_state := CitizenSquadStateScript.new()
 var _employment := CitizenEmploymentStateScript.new()
+var settlement_id: StringName:
+	get:
+		return _employment.settlement_id
+	set(value):
+		_employment.settlement_id = value
 var employment_state:
 	get:
 		return _employment.employment_state
 	set(value):
 		_employment.employment_state = value
+
+func set_squad(next_squad_id: StringName, leader_ai_id: int, is_hero: bool = false) -> void:
+	squad_state.squad_id = next_squad_id
+	squad_state.squad_leader_id = leader_ai_id
+	squad_state.is_hero_squad = is_hero
+
+func is_squad_leader() -> bool:
+	return squad_state.is_leader(ai_id)
+
 var daily_order_role: String:
 	get:
 		return _employment.daily_order_role

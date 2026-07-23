@@ -11,7 +11,7 @@ func _enter(context: BehaviorContext) -> void:
 	if context.citizen == null or context.snapshot == null or context.order == null:
 		return
 	var source_id := context.order.payload.value(&"work.source_id", &"") as StringName
-	var resource_type := context.order.payload.value(&"resource.type", "") as String
+	var resource_type := str(context.order.payload.value(&"resource.type", ""))
 	var source_position: Variant = context.order.target_position
 	var access_position: Variant = context.order.payload.value(&"target.access_position", Vector3.INF)
 	var warehouse_position: Variant = context.order.payload.value(&"warehouse.position", Vector3.INF)

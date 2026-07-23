@@ -1,7 +1,6 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://game/features/world/presentation/world_setup.gd" id="1_ws"]
-[ext_resource type="Shader" path="res://game/features/world/presentation/lens_flare.gdshader" id="2_lens"]
 
 [sub_resource type="Environment" id="WorldEnv"]
 background_mode = 0
@@ -27,14 +26,6 @@ fog_density = 0.00035
 fog_sky_affect = 0.0
 volumetric_fog_sky_affect = 0.0
 
-[sub_resource type="ShaderMaterial" id="LensFlareMaterial"]
-shader = ExtResource("2_lens")
-shader_parameter/u_sun_screen_pos = Vector2(0.5, 0.5)
-shader_parameter/u_intensity = 0.0
-shader_parameter/u_aspect = 1.0
-shader_parameter/u_sun_color = Color(1, 0.949, 0.8196, 1)
-shader_parameter/u_time = 0.0
-
 [node name="WorldSetup" type="Node"]
 script = ExtResource("1_ws")
 
@@ -47,16 +38,3 @@ light_energy = 1.2
 shadow_enabled = true
 shadow_blur = 1.5
 light_volumetric_fog_energy = 1.4
-
-[node name="LensFlareLayer" type="CanvasLayer" parent="."]
-layer = 100
-
-[node name="ColorRect" type="ColorRect" parent="LensFlareLayer"]
-material = SubResource("LensFlareMaterial")
-layout_mode = 3
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2

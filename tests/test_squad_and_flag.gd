@@ -1,0 +1,40 @@
+extends SceneTree
+
+func _init() -> void:
+	var scene := load("res://game/bootstrap/settlement_game.tscn") as PackedScene
+	var simulation := scene.instantiate()
+	root.add_child(simulation)
+	await process_frame
+	await physics_frame
+	for _frame in range(10):
+		await physics_frame
+
+	# 1. Verify Hero and initial squad setup
+	assert(is_instance_valid(simulation.hero_citizen), "Hero must exist")
+	assert(simulation.citizens.size() > 1, "Initial citizens must exist")
+	var hero: Citizen = simulation.hero_citizen
+	for citizen: Citizen in simulation.citizens:
+		assert(citizen.squad_state.is_in_squad(), "Citizen must be in squad")
+		assert(citizen.squad_state.squad_leader_id == hero.ai_id, "Squad leader must be hero")
+
+	# 2. Verify instant flag placement within radius
+	simulation._select_build_mode("settlement_flag")
+	assert(not simulation.build_mode.is_empty(), "Build mode should be settlement_flag")
+	
+	# Try placing too far (> 20 meters from hero)
+	var far_pos := hero.global_position + Vector3(50.0, 0.0, 0.0)
+	simulation._place_building(far_pos)
+	assert(not simulation.village_territory_service.has_flag(), "Flag placement far away should be blocked")
+
+	# Place near hero (5 meters from hero)
+	var valid_pos := hero.global_position + Vector3(5.0, 0.0, 0.0)
+	simulation._select_build_mode("settlement_flag")
+	simulation._place_building(valid_pos)
+	assert(simulation.village_territory_service.has_flag(), "Flag should be instantly placed near hero")
+
+	# 3. Verify squad binding to settlement
+	for citizen: Citizen in simulation.citizens:
+		assert(citizen.settlement_id == &"main_settlement", "Squad citizen should be bound to main_settlement upon flag placement")
+
+	print("SUCCESS: test_squad_and_flag passed completely!")
+	quit(0)

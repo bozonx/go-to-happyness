@@ -54,6 +54,17 @@ func capture(sequence: int) -> WorldSnapshot:
 		var service_facts := _service_collector.collect(ctx)
 		var factory_facts := _factory_collector.collect(ctx)
 		var courier_facts := _courier_collector.collect(ctx, courier_tasks)
+		var squad_leader_pos := Vector3.INF
+		if actor.squad_state.is_in_squad() and not actor.is_squad_leader():
+			var leader: Citizen = _find_citizen_by_id(actor.squad_state.squad_leader_id)
+			if is_instance_valid(leader):
+				squad_leader_pos = leader.global_position
+		var squad_facts := {
+			&"squad.in_squad": actor.squad_state.is_in_squad(),
+			&"squad.is_leader": actor.is_squad_leader(),
+			&"squad.leader_position": squad_leader_pos,
+		}
+
 		var base_facts := AIFactSet.from_owned_values({
 			&"work.permanent.active": actor.is_employed(),
 			&"daily.order.active": daily_order_active,
@@ -73,7 +84,8 @@ func capture(sequence: int) -> WorldSnapshot:
 			.merged(AIFactSet.from_owned_values(excavation_facts)) \
 			.merged(AIFactSet.from_owned_values(service_facts)) \
 			.merged(AIFactSet.from_owned_values(factory_facts)) \
-			.merged(AIFactSet.from_owned_values(courier_facts))
+			.merged(AIFactSet.from_owned_values(courier_facts)) \
+			.merged(AIFactSet.from_owned_values(squad_facts))
 		citizens_by_id[citizen_id] = CitizenSnapshot.new(
 			citizen_id,
 			actor.global_position,
@@ -299,3 +311,13 @@ func _role_employers() -> Dictionary:
 			"available_slots": courier_slots,
 		}]
 	return employers
+
+
+func _find_citizen_by_id(citizen_id: int) -> Citizen:
+	if not is_instance_valid(simulation):
+		return null
+	for citizen: Citizen in simulation.citizens:
+		if is_instance_valid(citizen) and citizen.ai_id == citizen_id:
+			return citizen
+	return null
+
