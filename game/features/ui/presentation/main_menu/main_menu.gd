@@ -49,7 +49,7 @@ func _connect_signals() -> void:
 	clay_era_btn.pressed.connect(func(): _select_era(&"clay"))
 	wood_era_btn.pressed.connect(func(): _select_era(&"wood"))
 	stone_era_btn.pressed.connect(func(): _select_era(&"stone"))
-	building_editor_btn.pressed.connect(func(): _select_era(&"building_editor"))
+	building_editor_btn.pressed.connect(_on_building_editor_pressed)
 
 	landscape_option.item_selected.connect(_on_landscape_selected)
 	start_game_btn.pressed.connect(_on_start_game_pressed)
@@ -73,13 +73,13 @@ func _update_era_buttons_state() -> void:
 	clay_era_btn.text = "🏺 Глиняная эра (Скоро)"
 	wood_era_btn.text = "🪵 Деревянная эра (Скоро)"
 	stone_era_btn.text = "🪨 Каменная эра (Скоро)"
-	building_editor_btn.text = "🏗️ Редактор зданий (Скоро)"
+	building_editor_btn.text = "🏗️ Редактор зданий"
 
 	earth_era_btn.disabled = true
 	clay_era_btn.disabled = true
 	wood_era_btn.disabled = true
 	stone_era_btn.disabled = true
-	building_editor_btn.disabled = true
+	building_editor_btn.disabled = false
 
 
 func _update_config_summary() -> void:
@@ -110,6 +110,14 @@ func _on_start_game_pressed() -> void:
 		launch_mgr.call("launch_game", config)
 	else:
 		get_tree().change_scene_to_file("res://game/bootstrap/settlement_game.tscn")
+
+
+func _on_building_editor_pressed() -> void:
+	var launch_mgr: Node = get_node_or_null("/root/GameLaunchManager")
+	if launch_mgr != null and launch_mgr.has_method("launch_building_editor"):
+		launch_mgr.call("launch_building_editor", true)
+	else:
+		get_tree().change_scene_to_file("res://game/features/buildings/presentation/editor/building_editor.tscn")
 
 
 func _on_quit_pressed() -> void:
