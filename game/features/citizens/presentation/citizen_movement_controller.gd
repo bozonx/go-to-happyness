@@ -188,13 +188,17 @@ func nearby_citizen_positions(actor: Citizen, center: Vector3, radius: float) ->
 func plan_route(actor: Citizen, destination: Vector3) -> void:
 	if actor == null:
 		return
+	# Unit-level movement tests intentionally use actors outside a SceneTree.
+	# Node3D.global_position emits an engine error in that case, while local
+	# position is exactly the intended route origin.
+	var route_origin := actor.global_position if actor.is_inside_tree() else actor.position
 	var result: Variant = RouteResult.success([destination], destination)
 	if actor.pathfinder.is_valid():
-		result = actor.pathfinder.call(actor.global_position, destination, actor.path_allows_destination_house)
+		result = actor.pathfinder.call(route_origin, destination, actor.path_allows_destination_house)
 	if actor.recovery_detour_requested:
 		actor.recovery_detour_requested = false
 		if actor.recovery_pathfinder.is_valid():
-			var detour: Variant = actor.recovery_pathfinder.call(actor.global_position, destination, actor.path_allows_destination_house)
+			var detour: Variant = actor.recovery_pathfinder.call(route_origin, destination, actor.path_allows_destination_house)
 			if detour is RouteResult and (detour as RouteResult).reachable:
 				result = detour
 	if not result is RouteResult or not (result as RouteResult).reachable:

@@ -5,6 +5,9 @@ const GridRouteServiceScript = preload("res://game/features/routing/application/
 const RouteRequestScript = preload("res://game/features/routing/domain/route_request.gd")
 const BuildingQueueServiceScript = preload("res://game/features/citizens/application/building_queue_service.gd")
 const TrailFieldServiceScript = preload("res://game/features/routing/application/trail_field_service.gd")
+const RoadNetworkServiceScript = preload("res://game/features/routing/application/road_network_service.gd")
+const NavigationObstaclePublisherScript = preload("res://game/features/routing/application/navigation_obstacle_publisher.gd")
+const RoadTypeScript = preload("res://game/features/routing/domain/road_type.gd")
 
 
 static func run_all() -> void:
@@ -42,6 +45,9 @@ static func run_all() -> void:
 	_test_plan_route_recovery_detour()
 	_test_trail_cell_strength()
 	_test_trail_decay_without_content()
+	_test_constructed_roads_override_trails_and_restore_them()
+	_test_road_network_validates_and_batches_changes()
+	_test_navigation_obstacle_publisher()
 
 
 static func _route_polyline_cost(grid: NavGrid, start: Vector3, waypoints: Array[Vector3]) -> float:
@@ -813,3 +819,53 @@ static func _test_trail_decay_without_content() -> void:
 	# No content at all — apply_daily_decay must be a no-op (no crash, no error).
 	fresh.apply_daily_decay()
 	assert(fresh.total_strength() == 0)
+
+
+static func _test_constructed_roads_override_trails_and_restore_them() -> void:
+	var grid := NavGrid.new()
+	grid.configure(1.0, 12)
+	var trails: RefCounted = TrailFieldServiceScript.new()
+	trails.configure(12.0, 1.0, grid)
+	var cell := Vector2i(1, 0)
+	for _entry in range(10):
+		trails.record_walker_position(1, Vector3(0.1, 0.0, 0.1), false)
+		trails.record_walker_position(1, Vector3(1.1, 0.0, 0.1), false)
+	assert(trails.cell_state(cell) == TrailFieldService.TrailState.MATURE)
+	var roads: RefCounted = RoadNetworkServiceScript.new()
+	roads.configure(grid)
+	var road_cells: Array[Vector2i] = [cell]
+	assert(roads.complete_cells(road_cells, RoadTypeScript.STONE))
+	assert(is_equal_approx(grid.get_cell_weight(cell), RoadTypeScript.traversal_weight(RoadTypeScript.STONE)))
+	assert(roads.remove_cells(road_cells))
+	assert(is_equal_approx(grid.get_cell_weight(cell), TrailFieldService.MATURE_PATH_WEIGHT))
+
+
+static func _test_road_network_validates_and_batches_changes() -> void:
+	var grid := NavGrid.new()
+	grid.configure(1.0, 12)
+	var roads: RefCounted = RoadNetworkServiceScript.new()
+	roads.configure(grid)
+	var revision := grid.revision()
+	var one_cell: Array[Vector2i] = [Vector2i.ZERO]
+	var two_cells: Array[Vector2i] = [Vector2i.ZERO, Vector2i(1, 0)]
+	assert(not roads.complete_cells(one_cell, &"unknown"))
+	assert(grid.revision() == revision)
+	assert(roads.complete_cells(two_cells, RoadTypeScript.DIRT))
+	assert(grid.revision() == revision + 1)
+	assert(roads.road_type_at(Vector2i.ZERO) == RoadTypeScript.DIRT)
+	assert(is_equal_approx(grid.get_cell_weight(Vector2i(1, 0), &"cart"), 1.0))
+
+
+static func _test_navigation_obstacle_publisher() -> void:
+	var grid := NavGrid.new()
+	grid.configure(1.0, 12)
+	var publisher: RefCounted = NavigationObstaclePublisherScript.new()
+	publisher.configure(grid)
+	var building := Node3D.new()
+	var record := BuildingRecord.new(Vector2i.ZERO, Vector3(0.5, 0.0, 0.5), Vector2i.ONE)
+	var blocked: Dictionary = publisher.publish({Vector2i(-2, 0): true}, [record], [], 0.0)
+	assert(blocked.has(Vector2i(-2, 0)))
+	assert(grid.is_blocked(Vector2i(0, 0)))
+	var opened: Dictionary = publisher.publish({}, [record], [{"cell": Vector2i(0, 0), "node": building}], 0.0)
+	assert(not opened.has(Vector2i(0, 0)))
+	building.free()

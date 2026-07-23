@@ -97,6 +97,8 @@ const DailyPlayerOrderProviderScript = preload("res://game/features/decision/app
 const CleaningGoalScript = preload("res://game/features/decision/domain/goals/cleaning_goal.gd")
 const RouteRequestScript = preload("res://game/features/routing/domain/route_request.gd")
 const TrailFieldServiceScript = preload("res://game/features/routing/application/trail_field_service.gd")
+const RoadNetworkServiceScript = preload("res://game/features/routing/application/road_network_service.gd")
+const NavigationObstaclePublisherScript = preload("res://game/features/routing/application/navigation_obstacle_publisher.gd")
 const WeatherStateScript = preload("res://game/features/simulation/domain/weather_state.gd")
 const CameraControllerScript = preload("res://game/features/world/presentation/camera_controller.gd")
 const WorldSetupScene = preload("res://game/features/world/presentation/world_setup.tscn")
@@ -194,7 +196,9 @@ var tree_cells: Dictionary[Vector2i, bool] = {}
 var terrain_blocked_cells: Dictionary[Vector2i, bool] = {}
 var navigation_blocked_cells: Dictionary[Vector2i, bool] = {}
 var building_spatial_registry := BuildingSpatialRegistryScript.new()
-var simulation_event_dispatcher: SimulationEventDispatcher
+# Keep this preload-backed dependency explicit.  Scene-test execution does not
+# populate Godot's editor-only global class cache before parsing this script.
+var simulation_event_dispatcher: RefCounted
 var ui_attacher := SettlementUIAttacherScript.new()
 
 var warehouse_positions: Array[Vector3]:
@@ -528,6 +532,8 @@ var pending_canteen_carrier: Citizen
 var pending_canteen_delivery_amount := 0
 var tent_dismantle_progress := -1.0
 var nav_grid: NavGrid
+var road_network_service: RefCounted
+var navigation_obstacle_publisher: RefCounted
 var _route_reachability_cache: Dictionary = {}
 var _route_reachability_cache_revision := -1
 const ROUTE_REACHABILITY_CACHE_LIMIT := 1024
@@ -708,6 +714,10 @@ func _ready() -> void:
 		add_child(citizen_ai)
 	nav_grid = NavGrid.new()
 	nav_grid.configure(CELL_SIZE, BOARD_CELLS)
+	road_network_service = RoadNetworkServiceScript.new()
+	road_network_service.configure(nav_grid)
+	navigation_obstacle_publisher = NavigationObstaclePublisherScript.new()
+	navigation_obstacle_publisher.configure(nav_grid)
 	trail_field = TrailFieldServiceScript.new()
 	trail_field.configure(BOARD_CELLS * CELL_SIZE, CELL_SIZE, nav_grid)
 	route_service = GridRouteService.new()
@@ -2135,37 +2145,20 @@ func _record_trail_movement(citizen_id: int, position_on_board: Vector3) -> void
 ## publishes them to the shared NavGrid. Citizens route entirely through the grid,
 ## so this is the only navigation structure the settlement maintains.
 func _refresh_navigation_grid() -> void:
-	_rebuild_navigation_obstacles()
-	if nav_grid != null:
-		nav_grid.set_blocked_cells(navigation_blocked_cells)
-		nav_grid.refresh_connectivity()
+	if navigation_obstacle_publisher == null:
+		return
+	navigation_blocked_cells = navigation_obstacle_publisher.publish(
+		terrain_blocked_cells,
+		building_registry.records(),
+		service_pockets,
+		NAVIGATION_CLEARANCE_MARGIN
+	)
 
 func _is_navigation_cell_blocked(cell: Vector2i) -> bool:
 	return navigation_blocked_cells.has(cell)
 
 func _rebuild_navigation_obstacles() -> void:
-	var building_blocked: Dictionary = {}
-	var margin := NAVIGATION_CLEARANCE_MARGIN
-	for record in building_registry.records():
-		var center: Vector3 = record.center
-		var footprint: Vector2i = record.footprint
-		# Block every cell the physical footprint (expanded by clearance) overlaps.
-		# Deriving the range from the actual world rectangle keeps the clearance
-		# symmetric: the old cell-index rounding shifted even footprints, leaving a
-		# wall flush against a walkable cell on one side and double margin on the other.
-		var min_x := floori(center.x - footprint.x * 0.5 - margin)
-		var max_x := ceili(center.x + footprint.x * 0.5 + margin) - 1
-		var min_z := floori(center.z - footprint.y * 0.5 - margin)
-		var max_z := ceili(center.z + footprint.y * 0.5 + margin) - 1
-		for x in range(min_x, max_x + 1):
-			for z in range(min_z, max_z + 1):
-				building_blocked[Vector2i(x, z)] = true
-	for pocket in service_pockets:
-		if is_instance_valid(pocket.node):
-			building_blocked.erase(pocket.cell)
-	navigation_blocked_cells = terrain_blocked_cells.duplicate()
-	for cell in building_blocked:
-		navigation_blocked_cells[cell] = true
+	_refresh_navigation_grid()
 
 
 

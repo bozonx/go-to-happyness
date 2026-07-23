@@ -119,17 +119,19 @@ var allow_destination_cell: bool = false
 ## Владение данными
 
 `NavGrid` — единственный источник проходимости и итогового веса, который читает
-`GridRouteService`. Будущая `RoadNetworkService` (ещё не реализована) будет
-владеть семантикой дорог, строительства и трафика, но применять изменения через
-API `NavGrid`:
+`GridRouteService`. `RoadNetworkService` владеет завершёнными дорожными
+покрытиями и применяет их через API `NavGrid`:
 
 ```text
-RoadNetworkService -> NavGrid.set_cell_weights(overrides) -> GridRouteService
+RoadNetworkService -> NavGrid.set_road_cell_weights(overrides) -> GridRouteService
 ```
 
-`NavGrid` хранит только отличия от `DEFAULT_CELL_WEIGHT`. Bootstrap обновляет
-только блокировки; он не должен заново заполнять все клетки значением травы,
-иначе уничтожаются дорожные overrides и растут затраты поиска.
+`NavGrid` хранит независимые слои terrain overrides, pedestrian desire trails и
+constructed-road overrides. Приоритет чтения: completed road -> profile trail
+-> terrain -> grass. Поэтому демонтаж дороги вновь открывает ещё не заросшую
+тропинку, а не уничтожает её данные. Bootstrap публикует только world facts;
+`NavigationObstaclePublisher` превращает terrain и building footprints в
+blocked cells.
 
 Routing вынесен в отдельную feature `routing` (`game/features/routing/`), что
 соответствует `docs/architecture.md`: выбор маршрута не зависит от `Citizen`, UI

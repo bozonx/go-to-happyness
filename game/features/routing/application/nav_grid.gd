@@ -12,6 +12,10 @@ var cell_size := 1.0
 var board_half_cells := 0
 var _blocked: Dictionary = {}
 var _cell_weights: Dictionary = {}
+## Constructed coverage wins over terrain and organic trails.  Keeping this
+## layer separate means demolishing a road reveals the still-existing trail
+## rather than destroying unrelated coverage data.
+var _road_cell_weights: Dictionary = {}
 var _profile_cell_weights: Dictionary = {}
 var _minimum_cell_weight := DEFAULT_CELL_WEIGHT
 # Set when an incremental erase may have removed the cell that held the current
@@ -60,6 +64,18 @@ func set_cell_weights(next_weights: Dictionary) -> void:
 	if _cell_weights == sanitized:
 		return
 	_cell_weights = sanitized
+	_recompute_minimum_cell_weight()
+	_revision += 1
+
+
+## Replaces constructed-road coverage. Roads are deliberately a separate layer:
+## terrain is the base, trails are pedestrian-only hints, and a completed road
+## is the authoritative surface for every traveller it supports.
+func set_road_cell_weights(next_weights: Dictionary) -> void:
+	var sanitized := _sanitize_weights(next_weights)
+	if _road_cell_weights == sanitized:
+		return
+	_road_cell_weights = sanitized
 	_recompute_minimum_cell_weight()
 	_revision += 1
 
@@ -113,6 +129,8 @@ func erase_profile_cell_weight(profile: StringName, cell: Vector2i) -> void:
 
 
 func get_cell_weight(cell: Vector2i, profile: StringName = PEDESTRIAN_PROFILE) -> float:
+	if _road_cell_weights.has(cell):
+		return clampf(float(_road_cell_weights[cell]), MIN_CELL_WEIGHT, MAX_CELL_WEIGHT)
 	var profile_weights: Dictionary = _profile_cell_weights.get(profile, {})
 	if profile_weights.has(cell):
 		return clampf(float(profile_weights[cell]), MIN_CELL_WEIGHT, MAX_CELL_WEIGHT)
@@ -283,6 +301,8 @@ func segment_cost(from: Vector3, to: Vector3, profile: StringName = PEDESTRIAN_P
 func _recompute_minimum_cell_weight() -> void:
 	_minimum_cell_weight = DEFAULT_CELL_WEIGHT
 	for weight in _cell_weights.values():
+		_minimum_cell_weight = minf(_minimum_cell_weight, float(weight))
+	for weight in _road_cell_weights.values():
 		_minimum_cell_weight = minf(_minimum_cell_weight, float(weight))
 	for profile_weights in _profile_cell_weights.values():
 		for weight in (profile_weights as Dictionary).values():
