@@ -263,7 +263,8 @@ func ensure_gather_progress_label(node: Node3D) -> Label3D:
 	var existing := gather_progress_labels.get(node) as Label3D
 	if is_instance_valid(existing):
 		return existing
-	var label := _get_billboard_label_scene().instantiate() as Label3D
+	assert(billboard_label_scene != null, "ForagingService.billboard_label_scene must be set before use")
+	var label := billboard_label_scene.instantiate() as Label3D
 	label.font_size = 22
 	label.outline_size = 5
 	label.modulate = Color("ffffff")

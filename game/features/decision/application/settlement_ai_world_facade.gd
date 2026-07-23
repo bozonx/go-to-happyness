@@ -320,4 +320,3 @@ func _find_citizen_by_id(citizen_id: int) -> Citizen:
 		if is_instance_valid(citizen) and citizen.ai_id == citizen_id:
 			return citizen
 	return null
-

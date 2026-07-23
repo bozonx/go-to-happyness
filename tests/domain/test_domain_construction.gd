@@ -4,6 +4,8 @@ extends RefCounted
 const BuildingAvailabilityServiceScript = preload("res://game/features/buildings/application/building_availability_service.gd")
 const BuildingResearchServiceScript = preload("res://game/features/buildings/application/building_research_service.gd")
 const BuildingQueueServiceScript = preload("res://game/features/citizens/application/building_queue_service.gd")
+const ConstructionSiteScene = preload("res://game/features/buildings/presentation/construction_site.tscn")
+const ConstructionEntrancePostScene = preload("res://game/features/buildings/presentation/construction_entrance_post.tscn")
 
 
 static func run_all() -> void:
@@ -57,6 +59,7 @@ static func _test_construction_reservation_blocks_other_spending() -> void:
 	runtime.navigation_changed = func() -> void: pass
 	var service := ConstructionService.new()
 	service.configure(runtime)
+	service.configure_scenes(ConstructionSiteScene, ConstructionEntrancePostScene)
 
 	var site := service.start_site(Vector2i(1, 1), "campfire", Vector3(1, 0, 1))
 	assert(runtime.settlement.construction_reserved_for_site(site.site_id, "branches") == 4)
@@ -84,6 +87,7 @@ static func _test_construction_progress_limited_by_materials() -> void:
 	runtime.building_completed = func(_cell: Vector2i, _type: String, _position: Vector3, _building: Node3D, _blueprint: Dictionary) -> void: pass
 	var service := ConstructionService.new()
 	service.configure(runtime)
+	service.configure_scenes(ConstructionSiteScene, ConstructionEntrancePostScene)
 
 	var site := service.start_site(Vector2i.ZERO, "campfire", Vector3.ZERO)
 	site.progress = 0.0
@@ -111,6 +115,7 @@ static func _test_construction_service_cancellation() -> void:
 	runtime.navigation_changed = func() -> void: pass
 	var service := ConstructionService.new()
 	service.configure(runtime)
+	service.configure_scenes(ConstructionSiteScene, ConstructionEntrancePostScene)
 
 	var cell := Vector2i(2, 3)
 	runtime.building_registry.reserve(cell, Vector3(2.0, 0.0, 3.0), Vector2i(5, 5))
@@ -139,6 +144,7 @@ static func _test_completed_construction_cleans_temporary_ui() -> void:
 	runtime.building_completed = func(_cell: Vector2i, _type: String, _position: Vector3, _building: Node3D, _blueprint: Dictionary) -> void: pass
 	var service := ConstructionService.new()
 	service.configure(runtime)
+	service.configure_scenes(ConstructionSiteScene, ConstructionEntrancePostScene)
 	var site := service.start_site(Vector2i.ZERO, "warehouse", Vector3.ZERO)
 	site.delivered_materials = site.required_materials.duplicate(true)
 	service.tick(1.0)
@@ -475,6 +481,7 @@ static func _test_construction_site_uses_building_entrance() -> void:
 	runtime.navigation_changed = func() -> void: pass
 	var service := ConstructionService.new()
 	service.configure(runtime)
+	service.configure_scenes(ConstructionSiteScene, ConstructionEntrancePostScene)
 
 	var cell := Vector2i(2, 3)
 	runtime.building_registry.reserve(cell, Vector3(2.0, 0.0, 3.0), Vector2i(5, 5))
@@ -491,4 +498,3 @@ static func _test_construction_site_uses_building_entrance() -> void:
 	service.cancel_site(site.node)
 	scene_root_parent.remove_child(scene_root)
 	scene_root.free()
-

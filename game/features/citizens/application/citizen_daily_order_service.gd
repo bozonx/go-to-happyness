@@ -67,9 +67,15 @@ func activate_citizen_overtime(citizen: Citizen, source: String) -> bool:
 	if not citizen.activate_overtime(_day_cycle.current_day + 1, source, _day_cycle.current_day):
 		return false
 	if citizen.has_daily_order():
-		if citizen.daily_order_workday_id > _day_cycle.current_day:
-			citizen.daily_order_workday_id = _day_cycle.current_day
-			citizen.daily_order_expires_at = daily_order_expiration_for_workday(_day_cycle.current_day + 1)
+		# Overtime keeps today's assignment alive through the following workday.
+		# An order may have been assigned either before or during the current shift,
+		# so extending only already-future orders leaves the common active-order path
+		# expiring at today's end of shift.
+		citizen.daily_order_workday_id = _day_cycle.current_day
+		citizen.daily_order_expires_at = maxf(
+			citizen.daily_order_expires_at,
+			daily_order_expiration_for_workday(_day_cycle.current_day + 1)
+		)
 	return true
 
 

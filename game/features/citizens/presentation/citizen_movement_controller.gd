@@ -3,12 +3,12 @@ extends RefCounted
 
 
 static func _randf(actor: Citizen) -> float:
-	var rng := actor.simulation.random if actor != null and actor.simulation != null else null
+	var rng: RandomNumberGenerator = actor.simulation.random if actor != null and actor.simulation != null else null
 	return rng.randf() if rng != null else randf()
 
 
 static func _randf_range(actor: Citizen, from_val: float, to_val: float) -> float:
-	var rng := actor.simulation.random if actor != null and actor.simulation != null else null
+	var rng: RandomNumberGenerator = actor.simulation.random if actor != null and actor.simulation != null else null
 	return rng.randf_range(from_val, to_val) if rng != null else randf_range(from_val, to_val)
 
 

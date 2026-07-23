@@ -788,7 +788,7 @@ signal employment_processing_finished(citizen: Citizen)
 
 func _ready() -> void:
 
-	var rng := random if random != null else (simulation.random if simulation != null else null)
+	var rng: RandomNumberGenerator = random if random != null else (simulation.random if simulation != null else null)
 	if gender.is_empty():
 		gender = "male" if (rng.randf() if rng != null else randf()) > 0.5 else "female"
 	skills = {
@@ -941,7 +941,7 @@ func _process_to_workplace(delta: float) -> void:
 	if _move_to(workplace_position, delta):
 		if resource_type == ResourceIds.WOOD:
 			var count := 1
-			var forestry_rng := simulation.random if simulation != null else null
+			var forestry_rng: RandomNumberGenerator = simulation.random if simulation != null else null
 			if has_perk("forestry") and (forestry_rng.randf() if forestry_rng != null else randf()) < 0.10:
 				count = 2
 				if simulation != null:
@@ -1846,7 +1846,7 @@ func _refresh_warehouse_position() -> void:
 
 func begin_role_recheck_cooldown() -> void:
 	if has_no_permanent_work() and daily_order_role.is_empty():
-		var recheck_rng := simulation.random if simulation != null else null
+		var recheck_rng: RandomNumberGenerator = simulation.random if simulation != null else null
 		role_recheck_remaining = recheck_rng.randf_range(ROLE_RECHECK_MIN_DELAY, ROLE_RECHECK_MAX_DELAY) if recheck_rng != null else randf_range(ROLE_RECHECK_MIN_DELAY, ROLE_RECHECK_MAX_DELAY)
 
 
@@ -2183,7 +2183,7 @@ func _process_gathering(delta: float) -> void:
 				return
 		if resource_type == ResourceIds.LOGS:
 			tree_harvested.emit(self, gather_source_position)
-			var gather_rng := simulation.random if simulation != null else null
+			var gather_rng: RandomNumberGenerator = simulation.random if simulation != null else null
 			if has_perk("forestry") and (gather_rng.randf() if gather_rng != null else randf()) < 0.10:
 				gathered_amount *= 2
 				if simulation != null:
