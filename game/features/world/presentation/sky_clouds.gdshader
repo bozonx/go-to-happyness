@@ -191,11 +191,11 @@ void sky() {
 	// --- High-altitude cirrus streaks layer ---
 	if (u_cirrus_amount > 0.001) {
 		float cirrus_mask = cirrus_field(uv * 0.85);
-		// Cirrus dims with night alongside the cumulus so it does not glow white
-		// against a dark pre-dawn sky.
-		vec3 cirrus_base = mix(u_cloud_lit_clear, u_cloud_lit_night, u_night_factor);
-		vec3 cirrus_col = mix(cirrus_base, sky_col, 0.35);
-		float cirrus_alpha = cirrus_mask * u_cirrus_amount * ceil_mask * clear_sky * 0.28;
+		vec3 cirrus_col = mix(u_cloud_lit_clear, sky_col, 0.35);
+		// Cirrus belongs to the daytime blue sky. It fades out through dusk so it
+		// never smudges over the night star field, where it only adds noise.
+		float cirrus_day = 1.0 - u_night_factor;
+		float cirrus_alpha = cirrus_mask * u_cirrus_amount * ceil_mask * clear_sky * cirrus_day * 0.28;
 		sky_col = mix(sky_col, cirrus_col, cirrus_alpha);
 	}
 
