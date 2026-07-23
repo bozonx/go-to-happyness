@@ -106,10 +106,10 @@ float cloud_field(vec2 uv) {
 	float medium_billows = cellular_billow(uv * 1.18 + q * 0.92 + vec2(3.7, 8.1));
 	float detail = fbm(uv * 2.45 + q * 1.28);
 	float family = smoothstep(0.40, 0.66, macro);
-	float body = macro * 0.40
-		+ large_billows * 0.34
-		+ medium_billows * 0.18
-		+ detail * 0.08;
+	float body = macro * 0.34
+		+ large_billows * 0.44
+		+ medium_billows * 0.16
+		+ detail * 0.06;
 	return body * mix(0.26, 1.0, family);
 }
 
@@ -146,7 +146,7 @@ void sky() {
 	float horizon = dir.y;
 
 	// --- base sky gradient ---
-	float grad = smoothstep(0.0, 0.65, horizon);
+	float grad = smoothstep(0.0, 0.48, horizon);
 	vec3 sky_col = mix(u_horizon_color, u_zenith_color, grad);
 	float stars = star_field(dir) * smoothstep(0.04, 0.32, horizon);
 	// Individual clouds mask stars later in the final sky blend. Keep a small
@@ -184,7 +184,7 @@ void sky() {
 	// Adding a height offset instead of clamping the denominator keeps the
 	// projection continuous. This prevents long horizontal bands near the
 	// horizon while preserving the feeling of a cloud ceiling.
-	float ceil_mask = smoothstep(0.025, 0.18, horizon);
+	float ceil_mask = smoothstep(0.02, 0.10, horizon);
 	vec2 projected_uv = dir.xz / max(horizon + 0.28, 0.28);
 	vec2 uv = projected_uv * u_cloud_scale + u_wind * u_time;
 
@@ -201,12 +201,19 @@ void sky() {
 	// offset removes the horizontal stretching of the old low cloud plane while
 	// remaining seamless at the horizon and zenith.
 	vec2 cumulus_projected_uv = dir.xz / max(horizon + 0.55, 0.55);
-	vec2 cumulus_uv = cumulus_projected_uv * u_cloud_scale * 2.05;
+	vec2 cumulus_uv = cumulus_projected_uv * u_cloud_scale * 1.6;
 	cumulus_uv += vec2(u_wind.x * u_time * 2.4, u_wind.y * u_time * 0.55);
 	float n = cloud_field(cumulus_uv);
 	float coverage_curve = pow(u_overcast, 0.55);
 	float coverage = mix(u_coverage_clear, u_coverage_storm, coverage_curve);
-	float density = smoothstep(coverage, coverage + u_edge_softness, n);
+	// Clear weather piles a dense cumulus "bank" low on the sky that thins to open
+	// blue overhead; overcast keeps its uniform grey ceiling untouched. Rather
+	// than only lowering the threshold (which can't invent clouds where the noise
+	// is empty) the bank adds body near the horizon so every azimuth is filled.
+	float bank = 1.0 - smoothstep(0.04, 0.50, horizon);
+	float n_banked = n + bank * clear_sky * 0.40;
+	float clear_edge = mix(u_edge_softness, u_edge_softness * 0.6, clear_sky);
+	float density = smoothstep(coverage, coverage + clear_edge, n_banked);
 	// At the end of the scale, merge the cumulus into a broad, textured ceiling
 	// rather than leaving isolated cartoon blobs over a supposedly covered sky.
 	float ceiling_amount = smoothstep(0.55, 0.90, u_overcast);
@@ -230,10 +237,10 @@ void sky() {
 	float dome_light = max(dot(cloud_normal, cloud_light_dir), 0.0);
 	float lit = clamp(dome_light * 0.44 + (1.0 - occ) * 0.40 + 0.08, 0.0, 1.0);
 	float painted_detail = fbm(cumulus_uv * 3.6 + vec2(13.2, 2.7));
-	lit = clamp(lit + (painted_detail - 0.5) * 0.20 * density, 0.0, 1.0);
+	lit = clamp(lit + (painted_detail - 0.5) * 0.12 * density, 0.0, 1.0);
 	float lobe_core = smoothstep(coverage + 0.025, coverage + 0.17, n);
 	float inner_billows = cellular_billow(cumulus_uv * 1.58 + vec2(4.1, 9.3));
-	lit = clamp(lit + lobe_core * 0.20 + (inner_billows - 0.5) * 0.08 * density, 0.0, 1.0);
+	lit = clamp(lit + lobe_core * 0.22 + (inner_billows - 0.5) * 0.05 * density, 0.0, 1.0);
 	lit -= smoothstep(0.48, 0.95, horizon) * density * 0.16;
 	lit = mix(lit, lit * 0.55 + 0.25, u_overcast);
 
@@ -267,7 +274,7 @@ void sky() {
 
 	// Far clouds dissolve into atmospheric blue instead of becoming stretched
 	// opaque lines at the horizon.
-	float horizon_haze = 1.0 - smoothstep(0.04, 0.24, horizon);
+	float horizon_haze = 1.0 - smoothstep(0.02, 0.15, horizon);
 	cloud_col = mix(cloud_col, sky_col, horizon_haze * 0.42);
 	float alpha = density * ceil_mask * mix(0.38, 1.0, 1.0 - horizon_haze);
 	COLOR = mix(sky_col, cloud_col, alpha);

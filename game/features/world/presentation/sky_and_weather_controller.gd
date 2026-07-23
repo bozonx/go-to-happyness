@@ -81,7 +81,10 @@ func update_daylight(game_minutes: float, cloud_cover: float, rain_intensity: fl
 	var star_visibility := 1.0 - smoothstep(-0.42, -0.08, solar_height)
 	if sky_material != null:
 		var sky_horizon := base_background.lerp(overcast_color, cloud_cover)
-		var sky_zenith := sky_horizon.darkened(0.18)
+		# Clear skies deepen toward a saturated anime blue at the zenith; overcast
+		# keeps the flat grey ceiling.
+		var deep_zenith := Color("2b6fd6")
+		var sky_zenith := sky_horizon.darkened(0.22).lerp(deep_zenith, (1.0 - cloud_cover) * 0.5)
 		sky_material.set_shader_parameter("u_horizon_color", sky_horizon)
 		sky_material.set_shader_parameter("u_zenith_color", sky_zenith)
 		sky_material.set_shader_parameter("u_sun_color", sun.light_color)
