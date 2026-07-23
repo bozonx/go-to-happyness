@@ -56,12 +56,12 @@ func _classify_area_hit(collider: Area3D, simulation: Node) -> Dictionary:
 	if collider.is_in_group("entrance_selector") and is_instance_valid(area_parent):
 		return {"kind": "entrance", "node": area_parent, "position": area_parent.global_position}
 	if collider.is_in_group("resource_pile_selector"):
-		var pile: ResourcePileScript = simulation._resource_pile_for_node(area_parent)
+		var pile: ResourcePileScript = simulation.storage_routing_service.resource_pile_for_node(area_parent)
 		if pile != null:
 			return {"kind": "pile", "node": area_parent, "pile": pile, "position": area_parent.global_position}
 		return {"kind": ""}
 	if collider.is_in_group("warehouse_selector"):
-		return {"kind": "warehouse", "node": area_parent, "position": area_parent.global_position, "warehouse_index": simulation._warehouse_index_for_building(area_parent)}
+		return {"kind": "warehouse", "node": area_parent, "position": area_parent.global_position, "warehouse_index": simulation.storage_routing_service.warehouse_index_for_building(area_parent)}
 	if collider.is_in_group("citizen_selector") and area_parent is Citizen:
 		return {"kind": "citizen", "node": area_parent as Citizen, "position": area_parent.global_position}
 	if collider.is_in_group("tree_selector") and is_instance_valid(area_parent):

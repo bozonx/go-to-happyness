@@ -29,9 +29,9 @@ func building_action_hint(building: Node3D) -> String:
 		info_parts.append("Fire: %s (%d fuel%s)" % [phase_label, fire_state.fuel, delivery_hint])
 	if building_type in BuildingCatalogScript.KITCHEN_FOOD_CAPACITIES:
 		info_parts.append("Food cap: %d" % BuildingCatalogScript.kitchen_food_capacity(building_type))
-	var required: Dictionary = simulation._required_staff_for_building(building)
+	var required: Dictionary = simulation.building_status_indicator_controller.required_staff_for_building(building) if simulation.building_status_indicator_controller != null else {}
 	if not required.is_empty():
-		var assigned: int = simulation._assigned_staff_for_building(building, required)
+		var assigned: int = simulation.building_status_indicator_controller.assigned_staff_for_building(building, required) if simulation.building_status_indicator_controller != null else 0
 		info_parts.append("Staff %d/%d" % [assigned, int(required.count)])
 	if building.has_meta("housing_capacity"):
 		var capacity: int = int(building.get_meta("housing_capacity", 1))
@@ -58,8 +58,8 @@ func first_person_action_hint() -> String:
 					return S.F_MEET_ARRIVAL
 			return S.ENTRANCE_SIGN
 		"building":
-			if simulation._is_managed_fire_source(target.node):
-				var branch_count: int = simulation._pocket_amount(ResourceIds.BRANCHES)
+			if simulation.fire_management_service.is_managed_fire_source(target.node):
+				var branch_count: int = simulation.hero_pocket_service.pocket_amount(ResourceIds.BRANCHES) if simulation.hero_pocket_service != null else 0
 				return S.F_ADD_BRANCH_TO_FIRE % branch_count if branch_count > 0 else S.NEED_BRANCHES_FOR_FIRE
 			return building_action_hint(target.node)
 		"construction":
@@ -73,7 +73,7 @@ func first_person_action_hint() -> String:
 			return S.F_DEMOLISH
 		"pile":
 			var pile: ResourcePileScript = target.pile
-			var available: Array[String] = simulation._pile_available_resources(pile)
+			var available: Array[String] = simulation.storage_routing_service.pile_available_resources(pile)
 			if available.is_empty():
 				return ""
 			if not simulation._pocket_has_room():
@@ -82,7 +82,7 @@ func first_person_action_hint() -> String:
 		"warehouse":
 			var wh_index: int = int(target.get("warehouse_index", -1))
 			if wh_index < 0:
-				wh_index = simulation._warehouse_index_for_building(target.node)
+				wh_index = simulation.storage_routing_service.warehouse_index_for_building(target.node)
 			if wh_index < 0:
 				wh_index = simulation._nearby_warehouse_index()
 			if simulation._pocket_total() > 0:
@@ -101,8 +101,8 @@ func first_person_action_hint() -> String:
 		"sawmill":
 			var sawmill_pos: Vector3 = target.position
 			var sawmill_stock = simulation._sawmill_stock(sawmill_pos)
-			if simulation._pocket_amount(ResourceIds.WOOD) > 0 or simulation._pocket_amount(ResourceIds.LOGS) > 0:
-				var wood_count: int = simulation._pocket_amount(ResourceIds.WOOD) + simulation._pocket_amount(ResourceIds.LOGS)
+			if simulation.hero_pocket_service.pocket_amount(ResourceIds.WOOD) if simulation.hero_pocket_service != null else 0 > 0 or simulation._pocket_amount(ResourceIds.LOGS) > 0:
+				var wood_count: int = simulation.hero_pocket_service.pocket_amount(ResourceIds.WOOD) if simulation.hero_pocket_service != null else 0 + simulation._pocket_amount(ResourceIds.LOGS)
 				return S.F_DEPOSIT_WOOD_SAWMILL % wood_count
 			if int(sawmill_stock.boards) > 0 and simulation._pocket_has_room():
 				return S.F_TAKE_BOARD

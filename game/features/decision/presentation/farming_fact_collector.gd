@@ -20,7 +20,7 @@ func collect(ctx: FacadeContext) -> Dictionary:
 	elif farming_worker and not ctx.simulation.farm_positions.is_empty() and not ctx.simulation.warehouse_positions.is_empty():
 		farming_position = actor.employment_workplace.get_meta("service_position", actor.employment_workplace.global_position) if is_instance_valid(actor.employment_workplace) else ctx.simulation.farm_positions[0]
 		farming_warehouse_position = ctx.helpers.storage_position_for(actor.global_position, ResourceIds.FOOD)
-	var farming_can_start: bool = farming_worker and actor_work_time and ctx.simulation._has_storage_room_for_role("farming") and farming_position != Vector3.INF and farming_warehouse_position != Vector3.INF and ctx.simulation._is_route_reachable(actor.global_position, farming_position) and ctx.simulation._is_route_reachable(farming_position, farming_warehouse_position)
+	var farming_can_start: bool = farming_worker and actor_work_time and ctx.simulation.storage_routing_service.has_storage_room_for_role("farming") and farming_position != Vector3.INF and farming_warehouse_position != Vector3.INF and ctx.simulation._is_route_reachable(actor.global_position, farming_position) and ctx.simulation._is_route_reachable(farming_position, farming_warehouse_position)
 
 	return {
 		&"work.farming.worker": farming_worker,

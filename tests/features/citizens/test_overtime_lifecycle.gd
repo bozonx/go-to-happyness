@@ -13,7 +13,7 @@ func _init() -> void:
 	SimHelper.assign_daily_order(simulation, worker, "gather_branches")
 	assert(SimHelper.activate_citizen_overtime(simulation, worker, "personal"))
 	assert(worker.daily_order_workday_id == 1)
-	assert(is_equal_approx(worker.daily_order_expires_at, simulation.daily_order_expiration_for_workday(2)))
+	assert(is_equal_approx(worker.daily_order_expires_at, simulation.citizen_daily_order_service.daily_order_expiration_for_workday(2) if simulation.citizen_daily_order_service != null else 0.0))
 
 	# The first end of shift preserves both the daily assignment and overtime.
 	SimHelper.handle_day_cycle_event(simulation, SimulationDayEvent.new(SimulationDayEvent.Kind.WORKDAY_ENDED, 16))

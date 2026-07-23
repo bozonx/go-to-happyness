@@ -8,13 +8,16 @@ class FakeSettlement extends RefCounted:
 		return false
 
 
+class FakeFireManagementService extends RefCounted:
+	func fire_smoke_work_multiplier(_position_on_board: Vector3) -> float:
+		return 1.0
+
+
 class FakeGatheringSimulation extends Node:
 	var settlement := FakeSettlement.new()
 	var grass_sources: Dictionary = {}
 	var consumed_count := 0
-
-	func fire_smoke_work_multiplier(_position_on_board: Vector3) -> float:
-		return 1.0
+	var fire_management_service := FakeFireManagementService.new()
 
 	func _cell_from_position(position: Vector3) -> Vector2i:
 		return Vector2i(floori(position.x), floori(position.z))

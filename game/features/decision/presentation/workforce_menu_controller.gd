@@ -98,7 +98,7 @@ func workforce_role_count(role: String) -> int:
 			if citizen.is_courier():
 				count += 1
 		else:
-			if simulation.work_role_for(citizen) == role:
+			if simulation.workplace_labor_service.work_role_for(citizen) if simulation.workplace_labor_service != null else "" == role:
 				count += 1
 	return count
 
@@ -139,12 +139,12 @@ func refresh_workforce_menu() -> void:
 	for role in workforce_roles():
 		var employed_for_role := employment_role_count(role, Citizen.EmploymentState.EMPLOYED)
 		var pending_for_role := employment_role_count(role, Citizen.EmploymentState.REGISTERING)
-		if not simulation.is_role_available(role) and employed_for_role == 0 and pending_for_role == 0:
+		if not simulation.workplace_labor_service.is_role_available(role) and employed_for_role == 0 and pending_for_role == 0:
 			continue
 		var limit := workforce_role_limit(role)
 		var capacity := " / %d" % limit if limit >= 0 else ""
 		var dismiss_disabled: bool = employed + pending_for_role == 0 or not can_manage_professions
-		var assign_disabled: bool = (role != "official" and not can_manage_professions) or not simulation.is_role_available(role) or (limit >= 0 and employed_for_role + pending_for_role >= limit) or not has_assignable_resident()
+		var assign_disabled: bool = (role != "official" and not can_manage_professions) or not simulation.workplace_labor_service.is_role_available(role) or (limit >= 0 and employed_for_role + pending_for_role >= limit) or not has_assignable_resident()
 		job_rows.append({
 			"label": "%s\nEmployed %d%s  Hiring %d" % [workforce_role_label(role), employed_for_role, capacity, pending_for_role],
 			"role": role,
@@ -263,7 +263,7 @@ func assign_unemployed_worker(role: String) -> void:
 	if role != "official" and not simulation.player_can_manage_permanent_professions():
 		simulation.show_labor_command_blocked()
 		return
-	if not simulation.is_role_available(role):
+	if not simulation.workplace_labor_service.is_role_available(role):
 		return
 	var best: Citizen = null
 	var best_score := -INF

@@ -188,7 +188,8 @@ func refresh_campfire_menu() -> void:
 	if is_center and officer != null:
 		state["close_btn_y"] = 746.0
 	simulation.ui_manager.campfire_menu.update_state(state)
-	simulation._refresh_campfire_occupancy_button()
+	if simulation.workforce_menu_controller != null:
+		simulation.workforce_menu_controller.refresh_campfire_occupancy_button()
 
 
 func build_campfire_era_requirements(housing_slots: int) -> Array:

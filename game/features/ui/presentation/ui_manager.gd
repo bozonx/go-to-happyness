@@ -230,7 +230,8 @@ func _create_build_menu() -> void:
 		build_menu.build_selected.connect(func(b_id): events.build_selected.emit(b_id))
 		build_menu.role_selected.connect(func(r_id, is_daily): events.role_selected.emit(r_id, is_daily))
 		if simulation != null:
-			simulation._refresh_build_menu()
+			if simulation.building_menu_controller != null:
+				simulation.building_menu_controller.refresh_build_menu()
 
 
 func _create_entrance_menu() -> void:

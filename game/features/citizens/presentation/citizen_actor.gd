@@ -888,7 +888,7 @@ func _process_cleaning_pile(delta: float) -> void:
 	if simulation == null or gather_resource_type.is_empty():
 		idle()
 		return
-	var collected: int = int(simulation._take_resource_from_pile_at(gather_source_position, gather_resource_type, 3))
+	var collected: int = int(simulation.storage_routing_service.take_resource_from_pile_at(gather_source_position, gather_resource_type, 3))
 	if collected <= 0:
 		idle()
 		return
@@ -1439,7 +1439,7 @@ func has_active_daily_order() -> bool:
 		return false
 	if simulation == null:
 		return true
-	return bool(simulation.is_daily_order_active(self))
+	return bool(simulation.citizen_daily_order_service.is_daily_order_active(self) if simulation.citizen_daily_order_service != null else false)
 
 
 func activate_overtime(until_workday_id: int, source: String, issued_day := 0) -> bool:
@@ -1577,7 +1577,7 @@ func _work(delta: float) -> bool:
 			set_status_effect(CitizenStatusEffect.BARE_HANDS, "Bare hands", 1.0)
 			speed_multiplier = 0.60
 	if simulation != null:
-		var smoke_multiplier: float = simulation.fire_smoke_work_multiplier(global_position)
+		var smoke_multiplier: float = simulation.fire_management_service.fire_smoke_work_multiplier(global_position)
 		if smoke_multiplier < 1.0:
 			set_status_effect(CitizenStatusEffectScript.SMOKY_EYES, "Smoky eyes", 1.0)
 		else:
@@ -2177,7 +2177,7 @@ func _process_gathering(delta: float) -> void:
 			gathered_amount = 2
 		resource_type = gather_resource_type
 		if resource_type == ResourceIds.FOOD and simulation != null:
-			resource_type = simulation.harvest_wild_food(gather_source_position, self)
+			resource_type = simulation.foraging_service.harvest_wild_food(gather_source_position, self)
 			if resource_type.is_empty():
 				idle()
 				return
@@ -2193,7 +2193,7 @@ func _process_gathering(delta: float) -> void:
 			if resource_type == ResourceIds.GRASS:
 				consumed_amount = simulation._consume_grass_source(gather_source_position)
 			elif resource_type == ResourceIds.BRANCHES:
-				consumed_amount = simulation._consume_tree_branches(gather_source_position)
+				consumed_amount = simulation.foraging_service.consume_tree_branches(gather_source_position)
 		if consumed_amount <= 0 and resource_type in [ResourceIds.GRASS, ResourceIds.BRANCHES]:
 			idle()
 			return

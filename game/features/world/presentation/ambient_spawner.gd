@@ -28,7 +28,7 @@ func create_forest() -> void:
 		push_error("AmbientSpawner requires a BiomeLayout")
 		return
 	for cell: Vector2i in layout.get("tree_cells"):
-		var tree_position: Vector3 = simulation._cell_center(cell)
+		var tree_position: Vector3 = simulation.nav_grid.cell_center(cell) if simulation.nav_grid != null else Vector3((cell.x + 0.5) * simulation.CELL_SIZE, 0.0, (cell.y + 0.5) * simulation.CELL_SIZE)
 		simulation.tree_cells[cell] = true
 		simulation.tree_positions.append(tree_position)
 		_create_tree(tree_position, false)
@@ -43,7 +43,7 @@ func create_ponds() -> void:
 	if layout == null:
 		return
 	for cell: Vector2i in layout.get("pond_cells"):
-		var center: Vector3 = simulation._cell_center(cell)
+		var center: Vector3 = simulation.nav_grid.cell_center(cell) if simulation.nav_grid != null else Vector3((cell.x + 0.5) * simulation.CELL_SIZE, 0.0, (cell.y + 0.5) * simulation.CELL_SIZE)
 		simulation.pond_positions.append(center)
 		_create_pond_visual(center)
 	simulation._refresh_navigation_grid()
@@ -93,9 +93,9 @@ func _create_tree(position_on_board: Vector3, refresh_navigation := true) -> voi
 func _create_grass_sources_near_tree(tree_cell: Vector2i) -> void:
 	for offset in [Vector2i(2, 0), Vector2i(-2, 1), Vector2i(1, -2)]:
 		var cell: Vector2i = tree_cell + offset
-		if simulation.grass_sources.has(cell) or simulation.tree_cells.has(cell) or simulation._is_navigation_cell_blocked(cell):
+		if simulation.grass_sources.has(cell) or simulation.tree_cells.has(cell) or simulation.navigation_blocked_cells.has(cell):
 			continue
-		var position: Vector3 = simulation._cell_center(cell)
+		var position: Vector3 = simulation.nav_grid.cell_center(cell) if simulation.nav_grid != null else Vector3((cell.x + 0.5) * simulation.CELL_SIZE, 0.0, (cell.y + 0.5) * simulation.CELL_SIZE)
 		var node: MeshInstance3D = GrassSourceScene.instantiate()
 		node.position = position + Vector3.UP * 0.05
 		simulation.add_landscape_object(node)
@@ -106,10 +106,10 @@ func _create_grass_sources_near_tree(tree_cell: Vector2i) -> void:
 func _create_forage_sources_near_tree(tree_cell: Vector2i) -> void:
 	for offset in [Vector2i(3, 1), Vector2i(-3, -1)]:
 		var cell: Vector2i = tree_cell + offset
-		if simulation.forage_sources.has(cell) or simulation.tree_cells.has(cell) or simulation._is_navigation_cell_blocked(cell):
+		if simulation.forage_sources.has(cell) or simulation.tree_cells.has(cell) or simulation.navigation_blocked_cells.has(cell):
 			continue
 		var node: Node3D = ForageSourceScene.instantiate()
-		node.position = simulation._cell_center(cell) + Vector3.UP * 0.05
+		node.position = simulation.nav_grid.cell_center(cell) if simulation.nav_grid != null else Vector3((cell.x + 0.5) * simulation.CELL_SIZE, 0.0, (cell.y + 0.5) * simulation.CELL_SIZE) + Vector3.UP * 0.05
 		simulation._add_selector_to_node(node, "forage_selector", Vector3(0.5, 0.5, 0.5), Vector3.UP * 0.25)
 		simulation.add_landscape_object(node)
 		simulation.forage_sources[cell] = ForageSourceRecord.new(node)
@@ -145,7 +145,7 @@ func _create_firefly_cluster(cluster_name: String, cells: Array, amount_count: i
 func _firefly_cluster_center(cells: Array) -> Vector3:
 	var center := Vector3.ZERO
 	for cell: Vector2i in cells:
-		center += simulation._cell_center(cell)
+		center += simulation.nav_grid.cell_center(cell) if simulation.nav_grid != null else Vector3((cell.x + 0.5) * simulation.CELL_SIZE, 0.0, (cell.y + 0.5) * simulation.CELL_SIZE)
 	return center / float(cells.size()) + Vector3(0.0, 1.0, 0.0)
 
 
@@ -164,7 +164,7 @@ func spawn_trash_piles() -> void:
 		var cell: Vector2i = loot.get("cell")
 		if not simulation._is_board_cell(cell) or simulation.terrain_blocked_cells.has(cell):
 			continue
-		var pile: Node3D = simulation._create_resource_pile(simulation._cell_center(cell), _loot_resources(loot)) as Node3D
+		var pile: Node3D = simulation._create_resource_pile(simulation.nav_grid.cell_center(cell) if simulation.nav_grid != null else Vector3((cell.x + 0.5) * simulation.CELL_SIZE, 0.0, (cell.y + 0.5) * simulation.CELL_SIZE), _loot_resources(loot)) as Node3D
 		# These are authored world loot, unlike piles dropped by citizens or
 		# logistics. Keep their visuals under the territory while the logistics
 		# service continues to own their resource record.
@@ -192,10 +192,10 @@ func spawn_initial_rabbits() -> void:
 func _spawn_rabbit_near_tree(tree_cell: Vector2i) -> void:
 	for offset in [Vector2i(4, 0), Vector2i(-4, 2), Vector2i(2, -4)]:
 		var cell: Vector2i = tree_cell + offset
-		if simulation.rabbit_sources.has(cell) or simulation.tree_cells.has(cell) or simulation._is_navigation_cell_blocked(cell):
+		if simulation.rabbit_sources.has(cell) or simulation.tree_cells.has(cell) or simulation.navigation_blocked_cells.has(cell):
 			continue
 		var node: MeshInstance3D = RabbitScene.instantiate()
-		node.position = simulation._cell_center(cell) + Vector3.UP * 0.16
+		node.position = simulation.nav_grid.cell_center(cell) if simulation.nav_grid != null else Vector3((cell.x + 0.5) * simulation.CELL_SIZE, 0.0, (cell.y + 0.5) * simulation.CELL_SIZE) + Vector3.UP * 0.16
 		simulation._add_selector_to_node(node, "rabbit_selector", Vector3(0.5, 0.4, 0.5), Vector3.UP * 0.2)
 		simulation.add_landscape_object(node)
 		simulation.rabbit_sources[cell] = RabbitSourceRecord.new(node, Vector3(simulation.random.randf_range(-1.0, 1.0), 0.0, simulation.random.randf_range(-1.0, 1.0)).normalized())
@@ -211,7 +211,7 @@ func update_wild_food(delta: float) -> void:
 			direction = Vector3(simulation.random.randf_range(-1.0, 1.0), 0.0, simulation.random.randf_range(-1.0, 1.0)).normalized()
 			rabbit.direction = direction
 		var next := rabbit.node.global_position + direction * delta * 0.7
-		if simulation._is_navigation_cell_blocked(simulation._cell_from_position(next)):
+		if simulation.navigation_blocked_cells.has(simulation._cell_from_position(next)):
 			rabbit.direction = -direction
 		else:
 			rabbit.node.global_position = next
@@ -273,14 +273,14 @@ func _clear_natural_source_nodes() -> void:
 
 func _create_grass_source(cell: Vector2i, remaining: int, initial: int) -> void:
 	var node: MeshInstance3D = GrassSourceScene.instantiate()
-	node.position = simulation._cell_center(cell) + Vector3.UP * 0.05
+	node.position = simulation.nav_grid.cell_center(cell) if simulation.nav_grid != null else Vector3((cell.x + 0.5) * simulation.CELL_SIZE, 0.0, (cell.y + 0.5) * simulation.CELL_SIZE) + Vector3.UP * 0.05
 	simulation.add_landscape_object(node)
 	simulation.grass_sources[cell] = GrassSourceRecord.new(node, remaining, initial)
 
 
 func _create_forage_source(cell: Vector2i) -> void:
 	var node: Node3D = ForageSourceScene.instantiate()
-	node.position = simulation._cell_center(cell) + Vector3.UP * 0.05
+	node.position = simulation.nav_grid.cell_center(cell) if simulation.nav_grid != null else Vector3((cell.x + 0.5) * simulation.CELL_SIZE, 0.0, (cell.y + 0.5) * simulation.CELL_SIZE) + Vector3.UP * 0.05
 	simulation._add_selector_to_node(node, "forage_selector", Vector3(0.5, 0.5, 0.5), Vector3.UP * 0.25)
 	simulation.add_landscape_object(node)
 	simulation.forage_sources[cell] = ForageSourceRecord.new(node)

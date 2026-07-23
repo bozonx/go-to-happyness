@@ -88,7 +88,7 @@ func _construction_site_for(ctx: FacadeContext, actor: Citizen) -> ConstructionS
 			continue
 		if actor._reachable_construction_approach(candidate.node) == Vector3.INF:
 			continue
-		var score: float = ctx.simulation._construction_development_priority(candidate)
+		var score: float = ctx.simulation.construction_priority_service.development_priority(candidate) if ctx.simulation.construction_priority_service != null else 0.0
 		if score > best_score:
 			best = candidate
 			best_score = score

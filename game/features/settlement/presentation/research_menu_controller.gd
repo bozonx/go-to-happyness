@@ -86,7 +86,8 @@ func start_research(tech_id: String) -> void:
 
 	simulation._update_interface("Research started: %s. %s is studying at the Campfire." % [tech.name, researcher.role_label()])
 	refresh_research_menu()
-	simulation._refresh_campfire_menu()
+	if simulation.campfire_menu_controller != null:
+		simulation.campfire_menu_controller.refresh_campfire_menu()
 
 
 func cancel_research() -> void:
@@ -94,4 +95,5 @@ func cancel_research() -> void:
 		return
 	simulation._cancel_active_building_research(true, "Research cancelled. Resources refunded.")
 	refresh_research_menu()
-	simulation._refresh_campfire_menu()
+	if simulation.campfire_menu_controller != null:
+		simulation.campfire_menu_controller.refresh_campfire_menu()

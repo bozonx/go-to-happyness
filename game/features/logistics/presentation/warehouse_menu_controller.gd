@@ -80,7 +80,7 @@ func refresh_warehouse_menu() -> void:
 func toggle_warehouse_accept(accepted: bool, resource_type: String) -> void:
 	if simulation == null or simulation.selected_warehouse == null:
 		return
-	var index: int = simulation._warehouse_index_for_building(simulation.selected_warehouse)
+	var index: int = simulation.storage_routing_service.warehouse_index_for_building(simulation.selected_warehouse)
 	simulation.settlement.set_warehouse_accepted(index, resource_type, accepted)
 	refresh_warehouse_menu()
 
@@ -89,14 +89,14 @@ func dump_warehouse_resource(resource_type: String) -> void:
 	if simulation == null or simulation.selected_warehouse == null:
 		return
 	var selected_position: Vector3 = simulation.selected_warehouse.get_meta("service_position", simulation.selected_warehouse.global_position)
-	var index: int = simulation._warehouse_index_for_building(simulation.selected_warehouse)
+	var index: int = simulation.storage_routing_service.warehouse_index_for_building(simulation.selected_warehouse)
 	var count: int = simulation.settlement.warehouse_amount(resource_type, index)
 	if count <= 0:
 		return
 	var dumped: int = simulation.settlement.dump_warehouse_resource(index, resource_type, count)
 	if dumped > 0:
 		var pile: Dictionary = {resource_type: dumped}
-		simulation._drop_overflow_as_piles(pile, selected_position)
+		simulation.resource_pile_service.drop_overflow_as_piles(pile, selected_position)
 		simulation._update_interface("Dumped %d %s from the warehouse." % [dumped, resource_type])
 	refresh_warehouse_menu()
 

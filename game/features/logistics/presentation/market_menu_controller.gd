@@ -31,7 +31,7 @@ func refresh_market_menu() -> void:
 	if market_type.is_empty():
 		market_type = "straw_trade_tent"
 	var available_money: int = simulation._available_trade_money()
-	var seller_ok: bool = simulation._is_seller_present_at(simulation.selected_market)
+	var seller_ok: bool = simulation.trade_service.is_seller_present_at(simulation.selected_market) if simulation.trade_service != null else false
 
 	var title_text := "%s Menu\nCoins: %d  Available: %d\nCompleted sales: %d" % [market_type.capitalize().replace("_", " "), simulation.settlement.money, available_money, simulation.settlement.trade_sales]
 	if not seller_ok:
@@ -60,7 +60,7 @@ func refresh_market_menu() -> void:
 	for item in raw_buy_items:
 		var tool_name: String = item[0]
 		var price: int = item[1]
-		var already_ordered: bool = simulation._trade_has_tool_order(tool_name)
+		var already_ordered: bool = simulation.trade_service.trade_has_tool_order(tool_name)
 		var owned: bool = bool(simulation.settlement.tools.get(tool_name, false))
 		buy_items.append({
 			"text": "Buy %s (%d Coins)" % [tool_name.replace("_", " "), price],
@@ -95,7 +95,7 @@ func refresh_market_menu() -> void:
 			})
 		state["equipment_offers"] = equipment_offers
 
-	var room: int = maxi(0, simulation.settlement.storage_room_for(ResourceIds.FOOD) - simulation._trade_incoming_resource(ResourceIds.FOOD))
+	var room: int = maxi(0, simulation.settlement.storage_room_for(ResourceIds.FOOD) - simulation.trade_service.trade_incoming_resource(ResourceIds.FOOD))
 	var buyable: int = mini(5, mini(room, available_money / simulation.FOOD_PURCHASE_PRICE))
 	state["food_button"] = {
 		"text": "Buy %d food (%d Coins)  Room: %d" % [buyable, buyable * simulation.FOOD_PURCHASE_PRICE, room],

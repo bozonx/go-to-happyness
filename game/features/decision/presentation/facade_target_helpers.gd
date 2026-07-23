@@ -42,8 +42,8 @@ func resource_access_position(resource_position: Vector3, from: Vector3 = Vector
 	var resource_cell: Vector2i = simulation._cell_from_position(resource_position)
 	for offset in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1)]:
 		var cell: Vector2i = resource_cell + offset
-		if simulation._is_board_cell(cell) and not simulation._is_navigation_cell_blocked(cell):
-			return simulation._cell_center(cell)
+		if simulation._is_board_cell(cell) and not simulation.navigation_blocked_cells.has(cell):
+			return simulation.nav_grid.cell_center(cell) if simulation.nav_grid != null else Vector3((cell.x + 0.5) * simulation.CELL_SIZE, 0.0, (cell.y + 0.5) * simulation.CELL_SIZE)
 	return Vector3.INF
 
 
@@ -51,20 +51,20 @@ func route_cost(from: Vector3, destination: Vector3) -> float:
 	if from == Vector3.INF or destination == Vector3.INF:
 		return INF
 	var route: RouteResult = simulation._find_path_around_houses(from, destination, false)
-	return simulation._route_cost(from, route)
+	return simulation.navigation_facade.route_cost(from, route) if simulation.navigation_facade != null else INF
 
 
 func workplace_target_key(workplace: Node3D) -> StringName:
 	if not is_instance_valid(workplace):
 		return &""
-	var dig_site = simulation._dig_site_for_node(workplace)
+	var dig_site = simulation.excavation_service.dig_site_for_node(workplace)
 	if dig_site != null and dig_site.node == workplace:
 		return target_key(&"dig", workplace.global_position)
 	return target_key(&"building", workplace.global_position)
 
 
 func storage_position_for(from: Vector3, resource_type: String) -> Vector3:
-	var index: int = simulation._find_reachable_warehouse_index(from, resource_type, 1)
+	var index: int = simulation.storage_routing_service.find_reachable_warehouse_index(from, resource_type, 1)
 	return simulation.warehouse_positions[index] if index >= 0 else Vector3.INF
 
 

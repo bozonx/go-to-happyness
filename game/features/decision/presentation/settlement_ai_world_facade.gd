@@ -235,7 +235,7 @@ func _factory_for_role_internal(role: String) -> Node3D:
 					continue
 				var assigned_workers := 0
 				for citizen in simulation.citizens:
-					assigned_workers += 1 if simulation._is_factory_worker_active(citizen, factory) else 0
+					assigned_workers += 1 if simulation.workplace_labor_service.is_factory_worker_active(citizen, factory) if simulation.workplace_labor_service != null else false else 0
 				if assigned_workers < int(factory.get_meta("required_factory_workers", 1)):
 					return factory
 	for factory in simulation.factories:

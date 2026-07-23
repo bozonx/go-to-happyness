@@ -16,7 +16,7 @@ func collect(ctx: FacadeContext, courier_tasks: Array[Dictionary]) -> Dictionary
 		for task_data in courier_tasks:
 			var task_id := task_data.get(&"id", &"") as StringName
 			var task: CourierTask = ctx.simulation.courier_dispatcher.tasks.get(task_id)
-			if task != null and ctx.simulation._is_courier_task_reachable(actor, task):
+			if task != null and ctx.simulation.courier_task_service.is_courier_task_reachable(actor, task):
 				courier_task_candidates.append(task_data)
 
 

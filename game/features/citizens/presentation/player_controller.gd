@@ -73,7 +73,8 @@ func enter_first_person(citizen: Citizen, message: String) -> void:
 	simulation.build_menu_is_global = false
 	simulation.build_menu_is_job_menu = false
 	simulation.build_menu_is_daily_order_menu = false
-	simulation._close_pocket_take_menu()
+	if simulation.pocket_take_menu_controller != null:
+		simulation.pocket_take_menu_controller.close_pocket_take_menu()
 	if simulation.ui_manager.time_controls_panel != null:
 		simulation.ui_manager.time_controls_panel.set_speed_controls_visible(false)
 		simulation.ui_manager.time_controls_panel.hide_skip_buttons()
@@ -101,7 +102,8 @@ func leave_first_person_to_hero_overview() -> void:
 			simulation.citizen_ai.request_decision_refresh()
 	player_citizen = null
 	player_toilet_notified = false
-	simulation._close_pocket_take_menu()
+	if simulation.pocket_take_menu_controller != null:
+		simulation.pocket_take_menu_controller.close_pocket_take_menu()
 	interaction_action = ""
 	interaction_resource = ""
 	interaction_start_cell = Vector2i(-9999, -9999)
@@ -112,13 +114,15 @@ func leave_first_person_to_hero_overview() -> void:
 		simulation.ui_manager.time_controls_panel.set_speed_controls_visible(true)
 	if simulation.ui_manager.build_toggle_btn != null:
 		simulation.ui_manager.build_toggle_btn.visible = true
-	simulation._update_skip_night_button()
+	if simulation.survival_event_controller != null:
+		simulation.survival_event_controller.update_skip_night_button()
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	if simulation.ui_manager.crosshair != null:
 		simulation.ui_manager.crosshair.visible = false
 	if simulation.hero_citizen != null:
 		simulation.camera_target = simulation.hero_citizen.global_position
-	simulation._update_camera_position()
+	if simulation.camera_controller != null:
+		simulation.camera_controller.apply_position()
 	simulation.ui_manager.build_menu.visible = simulation.selected_builder != null
 	simulation._update_workers()
 	Engine.time_scale = simulation.time_multiplier
@@ -223,23 +227,24 @@ func update_interaction(delta: float) -> void:
 		var gathered := 0
 		match interaction_resource:
 			ResourceIds.WOOD:
-				gathered = simulation._add_to_pocket(ResourceIds.WOOD, 1)
+				gathered = simulation.hero_pocket_service.add_to_pocket(ResourceIds.WOOD, 1) if simulation.hero_pocket_service != null else 0
 				if gathered > 0:
 					simulation._fell_nearest_tree()
 			ResourceIds.BRANCHES:
 				var branch_batch := HERO_GATHER_YIELD
-				gathered = simulation._add_to_pocket(ResourceIds.BRANCHES, branch_batch)
+				gathered = simulation.hero_pocket_service.add_to_pocket(ResourceIds.BRANCHES, branch_batch) if simulation.hero_pocket_service != null else 0
 				if gathered > 0:
 					simulation._consume_tree_near_player(gathered)
 			ResourceIds.GRASS:
 				var grass_batch := HERO_GATHER_YIELD
-				gathered = simulation._add_to_pocket(ResourceIds.GRASS, grass_batch)
+				gathered = simulation.hero_pocket_service.add_to_pocket(ResourceIds.GRASS, grass_batch) if simulation.hero_pocket_service != null else 0
 				if gathered > 0:
-					simulation._consume_grass_near_player(gathered)
+					if simulation.hero_interaction_service != null:
+						simulation.hero_interaction_service.consume_grass_near_player(gathered)
 			ResourceIds.WATER:
-				gathered = simulation._add_to_pocket(ResourceIds.WATER, 1)
+				gathered = simulation.hero_pocket_service.add_to_pocket(ResourceIds.WATER, 1) if simulation.hero_pocket_service != null else 0
 			ResourceIds.FOOD:
-				gathered = simulation._add_to_pocket(ResourceIds.FOOD, 1)
+				gathered = simulation.hero_pocket_service.add_to_pocket(ResourceIds.FOOD, 1) if simulation.hero_pocket_service != null else 0
 		if gathered > 0:
 			simulation._update_interface(S.GATHERED_FORMAT % [interaction_resource, simulation._format_pocket_hint()])
 		else:
@@ -251,7 +256,8 @@ func start_interaction(all: bool) -> void:
 	if not is_first_person or player_citizen == null:
 		return
 	if simulation.pocket_menu_open:
-		simulation._close_pocket_take_menu()
+		if simulation.pocket_take_menu_controller != null:
+			simulation.pocket_take_menu_controller.close_pocket_take_menu()
 		return
 	if player_citizen.work_position_locked:
 		simulation._exit_player_work_position()
@@ -262,7 +268,7 @@ func start_interaction(all: bool) -> void:
 	if target.kind == "entrance":
 		simulation._meet_arrival_at_entrance()
 		return
-	if target.kind == "building" and simulation._is_managed_fire_source(target.node):
+	if target.kind == "building" and simulation.fire_management_service.is_managed_fire_source(target.node):
 		simulation._refuel_fire_from_pocket(target.node, all)
 		return
 	if target.kind == "toilet":

@@ -50,7 +50,7 @@ static func appoint_test_official(simulation: Node, citizen: Citizen) -> void:
 # --- Test-facing wrappers for SettlementGame private methods ---
 
 static func cell_center(simulation: Node, cell: Vector2i) -> Vector3:
-	return simulation._cell_center(cell)
+	return simulation.nav_grid.cell_center(cell) if simulation.nav_grid != null else Vector3((cell.x + 0.5) * simulation.CELL_SIZE, 0.0, (cell.y + 0.5) * simulation.CELL_SIZE)
 
 static func cell_from_position(simulation: Node, position: Vector3) -> Vector2i:
 	return simulation._cell_from_position(position)
@@ -59,7 +59,7 @@ static func is_board_cell(simulation: Node, cell: Vector2i) -> bool:
 	return simulation._is_board_cell(cell)
 
 static func is_navigation_cell_blocked(simulation: Node, cell: Vector2i) -> bool:
-	return simulation._is_navigation_cell_blocked(cell)
+	return simulation.navigation_blocked_cells.has(cell)
 
 static func find_path_around_houses(simulation: Node, from: Vector3, destination: Vector3, may_enter: bool) -> RouteResult:
 	return simulation._find_path_around_houses(from, destination, may_enter)
@@ -92,7 +92,8 @@ static func toggle_worker_overtime(simulation: Node, checked: bool) -> void:
 	simulation._toggle_worker_overtime(checked)
 
 static func skip_night(simulation: Node) -> void:
-	simulation._skip_night()
+	if simulation.survival_event_controller != null:
+		simulation.survival_event_controller.skip_night()
 
 static func guard_citizen_positions(simulation: Node) -> void:
 	simulation._guard_citizen_positions()
@@ -101,10 +102,11 @@ static func start_park_rest(simulation: Node, cooks_only: bool) -> void:
 	simulation._start_park_rest(cooks_only)
 
 static func assign_daily_order(simulation: Node, citizen: Citizen, role: String) -> void:
-	simulation._assign_daily_order(citizen, role)
+	if simulation.citizen_daily_order_service != null:
+		simulation.citizen_daily_order_service.assign_daily_order(citizen, role)
 
 static func get_available_researcher(simulation: Node, required_skill: String) -> Citizen:
-	return simulation._get_available_researcher(required_skill)
+	return simulation.research_menu_controller.get_available_researcher(required_skill) if simulation.research_menu_controller != null else null
 
 static func handle_civic_post_assignment(simulation: Node) -> void:
 	simulation._handle_civic_post_assignment()
@@ -113,7 +115,8 @@ static func set_selected_work_role(simulation: Node, role: String, daily_order :
 	simulation._set_selected_work_role(role, daily_order)
 
 static func refresh_build_menu(simulation: Node) -> void:
-	simulation._refresh_build_menu()
+	if simulation.building_menu_controller != null:
+		simulation.building_menu_controller.refresh_build_menu()
 
 static func open_job_submenu(simulation: Node) -> void:
 	simulation._open_job_submenu()
@@ -134,13 +137,15 @@ static func select_citizen(simulation: Node, citizen: Citizen) -> void:
 	simulation._select_citizen(citizen)
 
 static func take_control_of_selected_citizen(simulation: Node) -> void:
-	simulation._take_control_of_selected_citizen()
+	if simulation.player_controller != null:
+		simulation.player_controller.take_control_of_selected_citizen()
 
 static func unhandled_input(simulation: Node, event: InputEvent) -> void:
 	simulation._unhandled_input(event)
 
 static func update_couriers(simulation: Node) -> void:
-	simulation._update_couriers()
+	if simulation.courier_dispatcher != null:
+		simulation.courier_dispatcher.dispatch()
 
 static func create_construction_site(simulation: Node, cell: Vector2i, building_type: String, position: Vector3, rotation_quarters := 0, blueprint: Dictionary = {}, occupied_footprint := Vector2i.ZERO) -> ConstructionSite:
 	return simulation._create_construction_site(cell, building_type, position, rotation_quarters, blueprint, occupied_footprint)
@@ -161,13 +166,14 @@ static func employer_for_role(simulation: Node, role: String) -> Node3D:
 	return simulation._employer_for_role(role)
 
 static func required_staff_for_building(simulation: Node, building: Node3D) -> Dictionary:
-	return simulation._required_staff_for_building(building)
+	return simulation.building_status_indicator_controller.required_staff_for_building(building) if simulation.building_status_indicator_controller != null else {}
 
 static func is_staffed_workplace(simulation: Node, building: Node3D) -> bool:
 	return simulation._is_staffed_workplace(building)
 
 static func assign_unemployed_worker(simulation: Node, role: String) -> void:
-	simulation._assign_unemployed_worker(role)
+	if simulation.workforce_menu_controller != null:
+		simulation.workforce_menu_controller.assign_unemployed_worker(role)
 
 static func demolition_ready(simulation: Node, site: DemolitionSite) -> bool:
 	return simulation._demolition_ready(site)
@@ -181,7 +187,7 @@ static func reconcile_construction_reservations(simulation: Node, site: Construc
 # --- Housing ---
 
 static func requeue_interrupted_arrivals(simulation: Node) -> void:
-	simulation._requeue_interrupted_arrivals()
+	simulation.citizen_lifecycle_service.requeue_interrupted_arrivals()
 
 static func cancel_arrivals_for_house(simulation: Node, house: Node3D) -> void:
 	simulation._cancel_arrivals_for_house(house)
@@ -199,15 +205,17 @@ static func show_house_menu(simulation: Node) -> void:
 	simulation._show_house_menu()
 
 static func spawn_house_citizen(simulation: Node) -> void:
-	simulation._spawn_house_citizen()
+	simulation.citizen_lifecycle_service.spawn_house_citizen()
 
 # --- Day cycle ---
 
 static func update_skip_night_button(simulation: Node) -> void:
-	simulation._update_skip_night_button()
+	if simulation.survival_event_controller != null:
+		simulation.survival_event_controller.update_skip_night_button()
 
 static func skip_to_workday_start(simulation: Node) -> void:
-	simulation._skip_to_workday_start()
+	if simulation.survival_event_controller != null:
+		simulation.survival_event_controller.skip_to_workday_start()
 
 static func send_selected_resident_to_outside_work(simulation: Node) -> void:
 	simulation._send_selected_resident_to_outside_work()
@@ -218,10 +226,11 @@ static func return_outside_workers(simulation: Node) -> void:
 # --- Overtime & workday ---
 
 static func activate_citizen_overtime(simulation: Node, citizen: Citizen, source: String) -> bool:
-	return simulation._activate_citizen_overtime(citizen, source)
+	return simulation.citizen_daily_order_service.activate_citizen_overtime(citizen, source) if simulation.citizen_daily_order_service != null else false
 
 static func handle_day_cycle_event(simulation: Node, event: SimulationDayEvent) -> void:
-	simulation._handle_day_cycle_event(event)
+	if simulation.simulation_event_dispatcher != null:
+		simulation.simulation_event_dispatcher.dispatch_event(event, simulation.day_cycle.current_day)
 
 static func set_workday_hours(simulation: Node, hours: int) -> void:
 	simulation._set_workday_hours(hours)

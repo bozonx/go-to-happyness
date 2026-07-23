@@ -18,7 +18,7 @@ func collect(ctx: FacadeContext) -> Dictionary:
 	var gathering_worker: bool = actor.permanent_role in ["gather_branches", "gather_food"] and actor.is_employed() and not actor.is_player_controlled
 	var gathering_in_progress: bool = gathering_worker and actor.active_role.begins_with("gather_") and actor.state in [Citizen.State.TO_GATHER, Citizen.State.GATHERING, Citizen.State.TO_WAREHOUSE]
 	var gathering_candidates: Array[Dictionary] = []
-	if gathering_worker and actor_work_time and not gathering_in_progress and ctx.simulation._has_storage_room_for_role(actor.permanent_role):
+	if gathering_worker and actor_work_time and not gathering_in_progress and ctx.simulation.storage_routing_service.has_storage_room_for_role(actor.permanent_role):
 		if actor.permanent_role == "gather_food":
 			gathering_candidates = _cached_food_gathering_targets(ctx, actor)
 		elif actor.permanent_role == "gather_branches":

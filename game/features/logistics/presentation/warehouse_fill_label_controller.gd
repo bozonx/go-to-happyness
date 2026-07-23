@@ -28,7 +28,7 @@ func update_warehouse_fill_labels() -> void:
 		return
 	for i in range(simulation.warehouse_positions.size()):
 		var service_pos: Vector3 = simulation.warehouse_positions[i]
-		var building: Node3D = simulation._building_at_service_position(service_pos)
+		var building: Node3D = simulation.building_registry.building_at_service_position(service_pos)
 		if not is_instance_valid(building):
 			continue
 		var label := building.get_meta("warehouse_fill_label") as Label3D

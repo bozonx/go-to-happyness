@@ -188,7 +188,7 @@ func skip_night() -> void:
 	simulation.settlement_survival_service.is_skipping_night = true
 	simulation.settlement_survival_service.skip_zero_wellbeing_departure_applied = false
 	for survival_hour in _skip_night_survival_hours():
-		simulation._apply_hourly_tent_survival(int(survival_hour.hour), int(survival_hour.day))
+		simulation.settlement_survival_service.apply_hourly_tent_survival(int(survival_hour.hour), int(survival_hour.day))
 	simulation.settlement_survival_service.is_skipping_night = false
 	simulation.day_cycle.current_day = target_day
 	simulation.tent_weather = TentEraSurvivalRulesScript.weather_for_day(simulation.day_cycle.current_day)
@@ -197,7 +197,8 @@ func skip_night() -> void:
 	# frees storage. Skipping must apply the same rules, otherwise stores stay full,
 	# no production is assignable, and workers have nothing to wake up for.
 	simulation._refresh_living_statuses()
-	simulation._apply_daily_settlement_rules()
+	if simulation.settlement_daily_rules_service != null:
+		simulation.settlement_daily_rules_service.apply_daily_settlement_rules()
 	# A skipped night has no intervening movement frames for a departing resident.
 	# Remove dawn departures immediately so the simulated result matches elapsed time.
 	for citizen in simulation.citizens.duplicate():
@@ -215,7 +216,8 @@ func skip_night() -> void:
 		simulation.citizen_ai.request_decision_refresh()
 	update_skip_night_button()
 	simulation._update_daylight()
-	simulation._update_house_lights()
+	if simulation.building_lifecycle_service != null:
+		simulation.building_lifecycle_service.update_house_lights()
 	simulation._update_interface("Skipped the night. Morning begins at 06:00.")
 
 
@@ -224,12 +226,14 @@ func skip_to_workday_start() -> void:
 		update_skip_night_button()
 		return
 	simulation.day_cycle.set_to_workday_start()
-	simulation._handle_day_cycle_event(SimulationDayEvent.new(SimulationDayEvent.Kind.WORKDAY_STARTED, 8))
+	if simulation.simulation_event_dispatcher != null:
+		simulation.simulation_event_dispatcher.dispatch_event(SimulationDayEvent.new(SimulationDayEvent.Kind.WORKDAY_STARTED, 8), simulation.day_cycle.current_day)
 	if simulation.citizen_ai != null:
 		simulation.citizen_ai.request_decision_refresh()
 	update_skip_night_button()
 	simulation._update_daylight()
-	simulation._update_house_lights()
+	if simulation.building_lifecycle_service != null:
+		simulation.building_lifecycle_service.update_house_lights()
 	simulation._update_interface("Workday starts at 08:00.")
 
 

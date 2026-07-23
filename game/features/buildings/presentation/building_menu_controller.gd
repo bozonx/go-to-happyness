@@ -93,10 +93,10 @@ func _refresh_role_buttons(selected_exists: bool, assignment_submenu_open: bool)
 		var hero_only: bool = button.get_meta("hero_only", false)
 		var submenu: String = button.get_meta("submenu", "job")
 		var is_daily_submenu: bool = submenu == "daily"
-		var daily_role_enabled: bool = not is_daily_submenu or role.is_empty() or role in simulation.daily_order_roles()
+		var daily_role_enabled: bool = not is_daily_submenu or role.is_empty() or role in simulation.workforce_menu_controller.daily_order_roles() if simulation.workforce_menu_controller != null else []
 		var min_era: int = simulation.min_era_for_role(role)
 		var era_ok: bool = is_daily_submenu or min_era <= simulation.settlement.era
-		var role_available: bool = simulation.is_daily_order_role_available(role) if is_daily_submenu else simulation.is_role_available(role)
+		var role_available: bool = simulation.workplace_labor_service.is_daily_order_role_available(role) if is_daily_submenu else simulation.workplace_labor_service.is_role_available(role)
 		button.visible = selected_exists and ((is_daily_submenu and simulation.build_menu_is_daily_order_menu) or (not is_daily_submenu and simulation.build_menu_is_job_menu)) and daily_role_enabled and era_ok and (not hero_only or simulation.selected_builder.is_hero)
 		var blocked_by_officer: bool = not is_daily_submenu and role != "official" and not simulation.player_can_manage_permanent_professions()
 		button.disabled = button.visible and (blocked_by_officer or not role_available)
@@ -112,8 +112,8 @@ func _refresh_role_buttons(selected_exists: bool, assignment_submenu_open: bool)
 				button.text = base_title
 			else:
 				var skill_val := float(simulation.selected_builder.skills.get(role, 0.0))
-				var active_cnt: int = simulation.daily_order_role_count(role) if is_daily_submenu else simulation.workforce_role_count(role)
-				var limit: int = -1 if is_daily_submenu else simulation.workforce_role_limit(role)
+				var active_cnt: int = simulation.workforce_menu_controller.daily_order_role_count(role) if simulation.workforce_menu_controller != null else 0 if is_daily_submenu else simulation.workforce_menu_controller.workforce_role_count(role) if simulation.workforce_menu_controller != null else 0
+				var limit: int = -1 if is_daily_submenu else simulation.workforce_menu_controller.workforce_role_limit(role) if simulation.workforce_menu_controller != null else -1
 				var limit_str := ""
 				if limit >= 0:
 					limit_str = "/%d" % limit
@@ -164,7 +164,7 @@ func show_building_menu() -> void:
 	var is_construction: bool = simulation.is_construction_site(simulation.selected_building)
 
 	if is_construction:
-		var site_data: Variant = simulation.get_construction_site_data(simulation.selected_building)
+		var site_data: Variant = simulation.construction.site_for_node(simulation.selected_building)
 		var type: String = site_data.building_type
 		var progress: float = site_data.progress
 		var builders: int = simulation._builder_count(simulation.selected_building)
@@ -232,7 +232,7 @@ func show_building_menu() -> void:
 
 		var officer: Variant = simulation._workplace_worker(simulation.selected_building)
 		simulation.ui_manager.building_overtime_button.visible = is_workplace and officer != null
-		var workplace_night_active: bool = simulation._has_overtime_source("workplace", simulation.selected_building)
+		var workplace_night_active: bool = simulation.citizen_daily_order_service.has_overtime_source("simulation.selected_building", simulation.selected_building) if simulation.citizen_daily_order_service != null else false
 		simulation.ui_manager.building_overtime_button.disabled = not can_command_labor
 		simulation.ui_manager.building_overtime_button.set_pressed_no_signal(workplace_night_active)
 		simulation.ui_manager.building_overtime_button.tooltip_text = labor_blocked_tooltip if not can_command_labor else "Work through the night and the next workday."

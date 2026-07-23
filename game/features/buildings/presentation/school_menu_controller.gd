@@ -27,7 +27,8 @@ func show_school_menu() -> void:
 
 func toggle_school_development(role: String, pressed: bool) -> void:
 	if not simulation._player_can_manage_permanent_professions():
-		simulation._show_labor_command_blocked()
+		if simulation.workplace_labor_service != null:
+			simulation.workplace_labor_service.show_labor_command_blocked()
 		return
 	simulation.school_service.set_profession_developed(role, pressed)
 	if pressed:
@@ -38,7 +39,8 @@ func toggle_school_development(role: String, pressed: bool) -> void:
 
 func start_school_training(role: String) -> void:
 	if not simulation._player_can_manage_permanent_professions():
-		simulation._show_labor_command_blocked()
+		if simulation.workplace_labor_service != null:
+			simulation.workplace_labor_service.show_labor_command_blocked()
 		return
 	if simulation.selected_builder == null or simulation.selected_school == null:
 		return
