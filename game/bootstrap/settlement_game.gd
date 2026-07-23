@@ -42,6 +42,7 @@ const StorageDeliveryServiceScript = preload("res://game/features/logistics/appl
 const StorageRoutingServiceScript = preload("res://game/features/logistics/application/storage_routing_service.gd")
 const BuildingAvailabilityServiceScript = preload("res://game/features/buildings/application/building_availability_service.gd")
 const BuildingMenuControllerScript = preload("res://game/features/buildings/presentation/building_menu_controller.gd")
+const BuildingPlacementControllerScript = preload("res://game/features/buildings/presentation/building_placement_controller.gd")
 const BuildingStatusIndicatorControllerScript = preload("res://game/features/buildings/presentation/building_status_indicator_controller.gd")
 const FirstPersonHUDControllerScript = preload("res://game/features/ui/presentation/first_person_hud_controller.gd")
 const LabelDistanceFadeControllerScript = preload("res://game/features/ui/presentation/label_distance_fade_controller.gd")
@@ -614,6 +615,7 @@ var warehouse_menu_controller: RefCounted:
 var warehouse_fill_label_controller: WarehouseFillLabelController
 var building_menu_controller: RefCounted:
 	get: return ui_attacher.building_menu_controller
+var building_placement_controller: BuildingPlacementController
 
 var building_status_indicator_controller: BuildingStatusIndicatorController
 var first_person_hud_controller: FirstPersonHUDController
@@ -1240,6 +1242,9 @@ func _ready() -> void:
 	player_controller = PlayerController.new()
 	add_child(player_controller)
 	player_controller.setup(self)
+	building_placement_controller = BuildingPlacementControllerScript.new()
+	add_child(building_placement_controller)
+	building_placement_controller.setup(self)
 	survival_event_controller = SurvivalEventControllerScript.new()
 	add_child(survival_event_controller)
 	survival_event_controller.setup(self)
@@ -1931,7 +1936,7 @@ func _dig_site_for_node(site_node: Node3D) -> DigSiteRecordScript:
 	return excavation_service.dig_site_for_node(site_node)
 
 func _building_cost() -> int:
-	return BuildingCatalog.cost_for(build_mode)
+	return building_placement_controller.building_cost() if building_placement_controller != null else 0
 
 func _format_costs(building_type: String) -> String:
 	return building_availability_service.cost_text(building_type)
@@ -4241,7 +4246,7 @@ func _move_selection(world_position: Vector3) -> void:
 		hero_build_radius_marker.visible = false
 
 func _rotated_footprint(footprint: Vector2i, rotation_quarters := build_rotation_quarters) -> Vector2i:
-	return Vector2i(footprint.y, footprint.x) if rotation_quarters % 2 != 0 else footprint
+	return building_placement_controller.rotated_footprint(footprint, rotation_quarters) if building_placement_controller != null else footprint
 
 
 func _place_building(world_position: Vector3) -> void:
@@ -4334,36 +4339,26 @@ func _place_building_at_crosshair() -> void:
 	_place_building(terrain_point)
 
 func _can_hero_build() -> bool:
-	return not is_first_person or player_citizen == hero_citizen
+	return building_placement_controller.can_hero_build() if building_placement_controller != null else false
 
 func _can_place(world_position: Vector3) -> bool:
-	if build_mode.is_empty():
-		return false
-	var footprint := _rotated_footprint(BuildingBlueprints.get_blueprint(build_mode).footprint)
-	return _is_footprint_level(world_position, footprint) and _is_footprint_clear(world_position, footprint)
+	return building_placement_controller.can_place(world_position) if building_placement_controller != null else false
 
 func _can_pay_building_cost(building_type: String) -> bool:
-	return bool(building_availability_service.placement_state_with_inventory(building_type, pocket).allowed)
+	return building_placement_controller.can_pay_building_cost(building_type) if building_placement_controller != null else false
 
 func _pay_building_cost(building_type: String) -> void:
-	settlement.pay_for_building(building_type)
+	if building_placement_controller != null:
+		building_placement_controller.pay_building_cost(building_type)
 
 func _is_footprint_clear(world_position: Vector3, footprint: Vector2i) -> bool:
-	if not building_registry.is_footprint_clear(world_position, footprint, BUILDING_CLEARANCE_BLOCKS):
-		return false
-	if _footprint_overlaps_terrain_obstacle(world_position, footprint):
-		return false
-	var half := Vector2(footprint.x, footprint.y) * 0.5
-	for site in dig_sites:
-		if absf(world_position.x - site.node.global_position.x) < half.x + 1.0 and absf(world_position.z - site.node.global_position.z) < half.y + 1.0:
-			return false
-	return true
+	return building_placement_controller.is_footprint_clear(world_position, footprint) if building_placement_controller != null else false
 
 func _footprint_overlaps_terrain_obstacle(center: Vector3, footprint: Vector2i) -> bool:
-	return building_placement_service.footprint_overlaps_terrain_obstacle(center, footprint) if building_placement_service != null else false
+	return building_placement_controller.footprint_overlaps_terrain_obstacle(center, footprint) if building_placement_controller != null else false
 
 func _is_footprint_level(world_position: Vector3, footprint: Vector2i) -> bool:
-	return building_placement_service.is_footprint_level(world_position, footprint) if building_placement_service != null else false
+	return building_placement_controller.is_footprint_level(world_position, footprint) if building_placement_controller != null else false
 
 func _terrain_height_at(x: float, z: float, near_y: float) -> float:
 	if DisplayServer.get_name() == "headless":
@@ -4374,17 +4369,13 @@ func _terrain_height_at(x: float, z: float, near_y: float) -> float:
 	return NAN if hit.is_empty() else float(hit.position.y)
 
 func _snapped_build_position(world_position: Vector3) -> Vector3:
-	var snapped := Vector3(roundf(world_position.x), world_position.y, roundf(world_position.z))
-	var ground_height := _terrain_height_at(snapped.x, snapped.z, world_position.y)
-	if not is_nan(ground_height):
-		snapped.y = ground_height
-	return snapped
+	return building_placement_controller.snapped_build_position(world_position) if building_placement_controller != null else world_position
 
 func _is_clear_of_objects(world_position: Vector3, minimum_distance: float) -> bool:
-	return building_placement_service.is_clear_of_objects(world_position, minimum_distance) if building_placement_service != null else false
+	return building_placement_controller.is_clear_of_objects(world_position, minimum_distance) if building_placement_controller != null else false
 
 func _placement_key(world_position: Vector3) -> Vector2i:
-	return Vector2i(roundi(world_position.x), roundi(world_position.z))
+	return building_placement_controller.placement_key(world_position) if building_placement_controller != null else Vector2i.ZERO
 
 func _create_construction_site(cell: Vector2i, building_type: String, position_on_board: Vector3, rotation_quarters := 0, blueprint: Dictionary = {}, occupied_footprint := Vector2i.ZERO) -> ConstructionSite:
 	var site := construction.start_site(cell, building_type, position_on_board, rotation_quarters, blueprint, occupied_footprint)
