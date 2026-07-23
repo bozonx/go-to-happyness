@@ -1397,9 +1397,6 @@ func _guard_citizen_positions() -> void:
 			citizen.velocity = Vector3.ZERO
 		last_citizen_positions[citizen_id] = citizen.global_position
 
-func _work_role_for(citizen: Citizen) -> String:
-	return workplace_labor_service.work_role_for(citizen) if workplace_labor_service != null else ""
-
 func _factory_for_role(role: String) -> Node3D:
 	return _employer_for_role(role)
 
@@ -1426,24 +1423,8 @@ func _officer_holder() -> Citizen:
 	return workplace_labor_service.officer_holder() if workplace_labor_service != null else null
 
 
-func _officer_exists() -> bool:
-	return workplace_labor_service.officer_exists() if workplace_labor_service != null else false
-
-
-func _player_can_command_labor() -> bool:
-	return workplace_labor_service.player_can_command_labor() if workplace_labor_service != null else true
-
-
-func _labor_command_block_message() -> String:
-	return workplace_labor_service.labor_command_block_message() if workplace_labor_service != null else ""
-
-
 func _player_can_manage_permanent_professions() -> bool:
 	return workplace_labor_service.player_can_manage_permanent_professions() if workplace_labor_service != null else false
-
-
-func _permanent_profession_block_message() -> String:
-	return workplace_labor_service.permanent_profession_block_message() if workplace_labor_service != null else ""
 
 
 func _show_labor_command_blocked() -> void:
@@ -2812,15 +2793,6 @@ func _set_selected_work_role(role: String, daily_order := false) -> void:
 	if workforce_menu != null and workforce_menu.visible:
 		_refresh_workforce_menu()
 
-func _is_role_available(role: String) -> bool:
-	return workplace_labor_service.is_role_available(role)
-
-
-func _is_daily_order_role_available(role: String) -> bool:
-	return workplace_labor_service.is_daily_order_role_available(role)
-
-
-
 func _min_era_for_role(role: String) -> SettlementState.Era:
 	# Basic outdoor/hand-work roles exist from the tent era even without a dedicated workplace.
 	match role:
@@ -2854,11 +2826,11 @@ func available_employer_capacity(role: String) -> int:
 
 
 func officer_exists() -> bool:
-	return _officer_exists()
+	return workplace_labor_service.officer_exists() if workplace_labor_service != null else false
 
 
 func permanent_profession_block_message() -> String:
-	return _permanent_profession_block_message()
+	return workplace_labor_service.permanent_profession_block_message() if workplace_labor_service != null else ""
 
 
 func player_can_manage_permanent_professions() -> bool:
@@ -2870,11 +2842,11 @@ func show_labor_command_blocked() -> void:
 
 
 func work_role_for(citizen: Citizen) -> String:
-	return _work_role_for(citizen)
+	return workplace_labor_service.work_role_for(citizen) if workplace_labor_service != null else ""
 
 
 func is_role_available(role: String) -> bool:
-	return _is_role_available(role)
+	return workplace_labor_service.is_role_available(role)
 
 
 func employment_center_position() -> Vector3:
@@ -2882,11 +2854,15 @@ func employment_center_position() -> Vector3:
 
 
 func daily_order_roles() -> Array[String]:
-	return _daily_order_roles()
+	if workforce_menu_controller != null:
+		return workforce_menu_controller.daily_order_roles()
+	return []
 
 
 func daily_order_role_count(role: String) -> int:
-	return _daily_order_role_count(role)
+	if workforce_menu_controller != null:
+		return workforce_menu_controller.daily_order_role_count(role)
+	return 0
 
 
 func min_era_for_role(role: String) -> int:
@@ -2894,7 +2870,7 @@ func min_era_for_role(role: String) -> int:
 
 
 func is_daily_order_role_available(role: String) -> bool:
-	return _is_daily_order_role_available(role)
+	return workplace_labor_service.is_daily_order_role_available(role)
 
 
 func era_name() -> String:
@@ -2906,23 +2882,27 @@ func is_construction_site(building: Node3D) -> bool:
 
 
 func get_construction_site_data(building: Node3D) -> ConstructionSite:
-	return _get_construction_site_data(building)
+	return construction.site_for_node(building)
 
 
 func player_can_command_labor() -> bool:
-	return _player_can_command_labor()
+	return workplace_labor_service.player_can_command_labor() if workplace_labor_service != null else true
 
 
 func labor_command_block_message() -> String:
-	return _labor_command_block_message()
+	return workplace_labor_service.labor_command_block_message() if workplace_labor_service != null else ""
 
 
 func workforce_role_count(role: String) -> int:
-	return _workforce_role_count(role)
+	if workforce_menu_controller != null:
+		return workforce_menu_controller.workforce_role_count(role)
+	return 0
 
 
 func workforce_role_limit(role: String) -> int:
-	return _workforce_role_limit(role)
+	if workforce_menu_controller != null:
+		return workforce_menu_controller.workforce_role_limit(role)
+	return -1
 
 
 func _builder_job_capacity() -> int:
@@ -4943,28 +4923,10 @@ func _workforce_roles() -> Array[String]:
 	return []
 
 
-func _daily_order_roles() -> Array[String]:
-	if workforce_menu_controller != null:
-		return workforce_menu_controller.daily_order_roles()
-	return []
-
-
 func _workforce_role_label(role: String) -> String:
 	if workforce_menu_controller != null:
 		return workforce_menu_controller.workforce_role_label(role)
 	return role
-
-
-func _workforce_role_limit(role: String) -> int:
-	if workforce_menu_controller != null:
-		return workforce_menu_controller.workforce_role_limit(role)
-	return -1
-
-
-func _workforce_role_count(role: String) -> int:
-	if workforce_menu_controller != null:
-		return workforce_menu_controller.workforce_role_count(role)
-	return 0
 
 
 func _manually_assigned_count(role: String) -> int:
@@ -4993,12 +4955,6 @@ func _employment_resident_count() -> int:
 func _employment_state_count(state: int) -> int:
 	if workforce_menu_controller != null:
 		return workforce_menu_controller.employment_state_count(state)
-	return 0
-
-
-func _daily_order_role_count(role: String) -> int:
-	if workforce_menu_controller != null:
-		return workforce_menu_controller.daily_order_role_count(role)
 	return 0
 
 
@@ -5671,9 +5627,6 @@ func _route_cost(from: Vector3, route: RouteResult) -> float:
 
 func _is_construction_site(node: Node3D) -> bool:
 	return is_instance_valid(node) and construction.has_site(node)
-
-func _get_construction_site_data(node: Node3D) -> ConstructionSite:
-	return construction.site_for_node(node)
 
 func _cancel_selected_construction() -> void:
 	if not is_instance_valid(selected_building) or not _is_construction_site(selected_building):
