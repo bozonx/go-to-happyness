@@ -148,7 +148,7 @@ const DIG_RADIUS := 2.2
 const DIG_REACH := 6.0
 
 var settlement := SettlementState.new()
-var launch_config: GameLaunchConfig
+var launch_config: GameLaunchConfigScript
 var day_cycle := SimulationDayCycle.new()
 var clock: SimulationClock = day_cycle.clock
 var game_minutes: float:
@@ -593,7 +593,10 @@ var building_visuals_service: BuildingVisualsService
 
 
 func _ready() -> void:
-	var active_config: GameLaunchConfig = GameLaunchManager.active_launch_config if GameLaunchManager != null else GameLaunchConfigScript.for_tent_era()
+	var launch_mgr: Node = get_node_or_null("/root/GameLaunchManager")
+	var active_config: GameLaunchConfigScript = null
+	if launch_mgr != null:
+		active_config = launch_mgr.get("active_launch_config") as GameLaunchConfigScript
 	if active_config == null:
 		active_config = GameLaunchConfigScript.for_tent_era()
 	launch_config = active_config

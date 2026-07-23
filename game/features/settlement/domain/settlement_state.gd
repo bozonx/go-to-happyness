@@ -5,6 +5,7 @@ extends RefCounted
 ## UI and simulation code cannot accidentally create a second rule set.
 
 const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
+const GameLaunchConfigScript = preload("res://game/features/settlement/domain/game_launch_config.gd")
 
 enum Era { TENT, EARTH, CLAY, WOOD, STONE, BRICK }
 enum StorageAvailability { OK, UNKNOWN_RESOURCE, NO_WAREHOUSE, NO_ROOM }
@@ -142,9 +143,9 @@ var active_research_duration: float:
 	set(value): research.duration = value
 
 
-func apply_launch_config(config: GameLaunchConfig, reset_progress := true) -> void:
+func apply_launch_config(config: GameLaunchConfigScript, reset_progress := true) -> void:
 	if config == null:
-		config = GameLaunchConfig.for_tent_era()
+		config = GameLaunchConfigScript.for_tent_era()
 	era = config.era_type as Era
 	money = config.starting_money
 	branches = 0

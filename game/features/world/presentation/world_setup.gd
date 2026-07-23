@@ -27,6 +27,7 @@ var preview_back_entrance_marker: MeshInstance3D
 var hero_build_radius_marker: MeshInstance3D
 var village_boundary_markers: VillageBoundaryMarkers
 var village_territory_overlay: VillageTerritoryOverlay
+var sun_glare_material: ShaderMaterial
 var fireflies: Array[FirefliesEffect] = []
 
 var _camera: Camera3D
@@ -47,6 +48,10 @@ func build(parent: Node) -> void:
 	if environment_node != null:
 		world_environment = environment_node.environment
 	sun = get_node_or_null("Sun") as DirectionalLight3D
+	if DisplayServer.get_name() != "headless":
+		var glare_rect := get_node_or_null("SunGlareLayer/ColorRect") as ColorRect
+		if glare_rect != null:
+			sun_glare_material = glare_rect.material as ShaderMaterial
 	_build_sky()
 	_build_boundary(parent)
 	_build_rain_effect(parent)
@@ -96,11 +101,13 @@ func _build_sky_and_weather_controller(parent: Node) -> void:
 	sky_and_weather_controller = SkyAndWeatherControllerScene.instantiate() as SkyAndWeatherController
 	parent.add_child(sky_and_weather_controller)
 	sky_and_weather_controller.setup(
+		_camera,
 		sun,
 		world_environment,
 		sky_material,
 		rain_effect,
-		fireflies
+		fireflies,
+		sun_glare_material
 	)
 
 
@@ -162,4 +169,3 @@ func _build_hero_radius_marker(parent: Node) -> void:
 	hero_build_radius_marker.material_override = mat
 	hero_build_radius_marker.visible = false
 	parent.add_child(hero_build_radius_marker)
-

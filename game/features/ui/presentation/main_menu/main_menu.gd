@@ -4,6 +4,7 @@ extends Control
 ## Main menu controller supporting era selection, landscape selection, and game launch.
 
 const UI_THEME = preload("res://game/features/ui/presentation/theme/ui_theme.tres")
+const GameLaunchConfigScript = preload("res://game/features/settlement/domain/game_launch_config.gd")
 
 @onready var title_label: Label = $MarginContainer/VBoxContainer/Header/TitleLabel
 @onready var subtitle_label: Label = $MarginContainer/VBoxContainer/Header/SubtitleLabel
@@ -102,10 +103,11 @@ func _biome_display_name(biome: StringName) -> String:
 
 
 func _on_start_game_pressed() -> void:
-	var config := GameLaunchConfig.for_tent_era()
+	var config := GameLaunchConfigScript.for_tent_era()
 	config.biome_id = selected_biome
-	if GameLaunchManager != null:
-		GameLaunchManager.launch_game(config)
+	var launch_mgr: Node = get_node_or_null("/root/GameLaunchManager")
+	if launch_mgr != null and launch_mgr.has_method("launch_game"):
+		launch_mgr.call("launch_game", config)
 	else:
 		get_tree().change_scene_to_file("res://game/bootstrap/settlement_game.tscn")
 
