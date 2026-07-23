@@ -8,21 +8,21 @@ the source of a gameplay resource.
 | --- | --- | --- | --- |
 | Terrain surface | `Terrain3dWorld/Terrain3D` | Terrain3D data | terrain asset | 
 | Trees | `Terrain3dWorld/LandscapeObjects` | `ForagingService` + `tree_nodes` keyed by board cell | yes: wood, branches, felled and exhausted flags |
-| Grass patches | `LandscapeObjects` | `grass_sources` (`GrassSourceRecord`) | **no** |
-| Wild forage | `LandscapeObjects` | `forage_sources` + `forage_respawn_at` | **no** |
-| Rabbits | `LandscapeObjects` | `rabbit_sources` + `rabbit_respawn_at` | **no** |
+| Grass patches | `LandscapeObjects` | `grass_sources` (`GrassSourceRecord`) | yes: remaining amount |
+| Wild forage | `LandscapeObjects` | `forage_sources` + `forage_respawn_at` | yes: source and respawn state |
+| Rabbits | `LandscapeObjects` | `rabbit_sources` + `rabbit_respawn_at` | yes: position, direction and respawn state |
 | Ponds | `LandscapeObjects` | fixed cells + `pond_positions` | regenerated deterministically |
 | Starter trash piles | `LandscapeObjects` | `ResourcePileService.resource_piles` | yes, as resource piles |
 | Citizen/logistics piles | game root | `ResourcePileService.resource_piles` | yes, as resource piles |
 
 ## What happens at a new launch
 
-`SettlementGame._ready()` creates a new `AmbientSpawner`, then initializes the
-fixed forest, starter trash, initial rabbits and ponds. The locations are
-hard-coded in `AmbientSpawner`; quantities use the game RNG. The terrain scene
-previously contained no child for these objects, which is why they appeared at
-the game root. `LandscapeObjects` now owns their visuals without changing the
-resource registrations used by AI, player interaction, navigation or logistics.
+`SettlementGame._ready()` asks the active `BiomeDefinition` for its immutable
+`BiomeLayout`, then `AmbientSpawner` projects that layout into the territory.
+The Summer Valley layout lives in
+`presentation/biomes/summer/summer_valley/summer_valley_layout.tres`; it owns
+the fixed tree/pond cells and starter loot. The terrain scene itself only owns
+the `LandscapeObjects` presentation container.
 
 ## Relationship to progression and saves
 
@@ -31,17 +31,13 @@ equipment, research and policies. Natural-resource availability is **not** in
 that state. It is runtime world state spread across `SettlementGame`,
 `AmbientSpawner` and `ForagingService`.
 
-The save format currently persists only tree deltas and physical resource piles.
-Consequently a save/load reconstructs grass, forage and rabbits from a fresh
-launch; their depleted/respawn state is lost. This is the remaining correctness
-gap, not a scene-hierarchy issue.
+`WorldResourceState` serializes mutable grass, forage, rabbit and respawn data
+under `SaveData.world_state.natural_resources`. Trees and physical piles keep
+their existing serializers. A load recreates presentation nodes from this data,
+so resource availability no longer resets.
 
 ## Next refactor boundary
 
-Create a typed `WorldResourceState` in the `world` feature, keyed by stable
-board cell and containing tree, grass, forage, rabbit, pond and respawn data.
-`AmbientSpawner` should become a presentation projection of that state, while
-`ForagingService` mutates it through narrow methods. Serialize this record under
-`SaveData.world_state` (including biome ID and generation seed), then recreate
-visuals from it on load. Do not put `Node3D` references in that record; keep
-them in a presentation registry keyed by the same stable cells.
+The next cleanup is to move the remaining tree data out of node metadata and
+make `ForagingService` mutate `WorldResourceState` directly. The saved record
+must remain keyed by stable cells and contain no `Node3D` references.

@@ -9,6 +9,7 @@ extends Resource
 @export var gravity: Vector3 = Vector3(0.0, -9.8, 0.0)
 @export var base_temperature: float = 22.0
 @export var has_breathable_atmosphere: bool = true
+@export var natural_layout: Resource
 
 @export_group("Presentation")
 @export var territory_scene_path: String = ""

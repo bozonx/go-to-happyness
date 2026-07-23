@@ -23,6 +23,15 @@ func _init() -> void:
 	depleted_tree.set_meta("initial_branches", 8)
 	depleted_tree.set_meta("remaining_branches", 3)
 	depleted_tree.set_meta("hand_branches", 2)
+	var grass_cell: Vector2i = sim_a.grass_sources.keys()[0]
+	var grass_before: GrassSourceRecord = sim_a.grass_sources[grass_cell]
+	grass_before.remaining = maxi(1, grass_before.initial - 1)
+	var forage_cell: Vector2i = sim_a.forage_sources.keys()[0]
+	var rabbit_cell: Vector2i = sim_a.rabbit_sources.keys()[0]
+	var rabbit_before: RabbitSourceRecord = sim_a.rabbit_sources[rabbit_cell]
+	rabbit_before.direction = Vector3(0.4, 0.0, -0.8)
+	var rabbit_position := rabbit_before.node.global_position
+	sim_a.forage_respawn_at[Vector2i(31, 31)] = 123.0
 
 	sim_a.settlement.money = 4321
 	var citizen_count: int = sim_a.citizens.size()
@@ -48,6 +57,13 @@ func _init() -> void:
 	var restored_tree: Node3D = sim_b.tree_nodes[depleted_cell]
 	assert(int(restored_tree.get_meta("remaining_branches", -1)) == 3, "branch depletion not restored")
 	assert(int(restored_tree.get_meta("hand_branches", -1)) == 2, "hand branches not restored")
+	assert(sim_b.grass_sources.has(grass_cell), "grass source missing after restore")
+	assert(sim_b.grass_sources[grass_cell].remaining == grass_before.remaining, "grass depletion not restored")
+	assert(sim_b.forage_sources.has(forage_cell), "forage source missing after restore")
+	assert(sim_b.rabbit_sources.has(rabbit_cell), "rabbit source missing after restore")
+	assert(sim_b.rabbit_sources[rabbit_cell].node.global_position.distance_to(rabbit_position) < 0.01, "rabbit position not restored")
+	assert(sim_b.rabbit_respawn_at.is_empty(), "unexpected rabbit respawn state")
+	assert(float(sim_b.forage_respawn_at.get(Vector2i(31, 31), -1.0)) == 123.0, "forage respawn timer not restored")
 	var landscape_objects := sim_b.get_node("Terrain3dWorld/LandscapeObjects")
 	assert(sim_b.resource_piles.any(func(pile): return bool(pile.node.get_meta("landscape_owned", false)) and pile.node.get_parent() == landscape_objects), "starter world loot must return to the terrain hierarchy")
 

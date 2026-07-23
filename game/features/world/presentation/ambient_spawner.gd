@@ -12,26 +12,22 @@ const GrassSourceRecord = preload("res://game/features/production/domain/grass_s
 const ForageSourceRecord = preload("res://game/features/production/domain/forage_source_record.gd")
 const RabbitSourceRecord = preload("res://game/features/production/domain/rabbit_source_record.gd")
 const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
+const WorldResourceStateScript = preload("res://game/features/world/domain/world_resource_state.gd")
 
 var simulation: Node
+var layout: Resource
 
 
-func setup(p_simulation: Node) -> void:
+func setup(p_simulation: Node, p_layout: Resource = null) -> void:
 	simulation = p_simulation
+	layout = p_layout
 
 
 func create_forest() -> void:
-	var cells := [
-		Vector2i(-16, -15), Vector2i(-15, -18), Vector2i(-18, -12), Vector2i(-12, -19),
-		Vector2i(16, -15), Vector2i(15, -18), Vector2i(18, -12), Vector2i(12, -19),
-		Vector2i(-16, 15), Vector2i(-15, 18), Vector2i(-18, 12), Vector2i(-12, 19),
-		Vector2i(16, 15), Vector2i(15, 18), Vector2i(18, 12), Vector2i(12, 19),
-		Vector2i(-20, -5), Vector2i(-20, 5),
-		Vector2i(20, -5), Vector2i(20, 5),
-		Vector2i(-5, -20), Vector2i(5, -20),
-		Vector2i(-5, 20), Vector2i(5, 20)
-	]
-	for cell in cells:
+	if layout == null:
+		push_error("AmbientSpawner requires a BiomeLayout")
+		return
+	for cell: Vector2i in layout.get("tree_cells"):
 		var tree_position: Vector3 = simulation._cell_center(cell)
 		simulation.tree_cells[cell] = true
 		simulation.tree_positions.append(tree_position)
@@ -44,7 +40,9 @@ func create_forest() -> void:
 
 func create_ponds() -> void:
 	# Natural ponds are part of the terrain, not a building.
-	for cell in [Vector2i(-9, 8), Vector2i(10, -7)]:
+	if layout == null:
+		return
+	for cell: Vector2i in layout.get("pond_cells"):
 		var center: Vector3 = simulation._cell_center(cell)
 		simulation.pond_positions.append(center)
 		_create_pond_visual(center)
@@ -163,24 +161,28 @@ func setup_entrance_sign_node(entrance_stone: Node3D) -> void:
 
 
 func spawn_trash_piles() -> void:
-	var trash_cells := [Vector2i(-10, -3), Vector2i(7, 12), Vector2i(-14, 6), Vector2i(5, -12)]
-	var trash_contents := [
-		{ResourceIds.GRASS: simulation.random.randi_range(8, 14), ResourceIds.BRANCHES: simulation.random.randi_range(4, 8)},
-		{ResourceIds.GRASS: simulation.random.randi_range(6, 12), ResourceIds.BRANCHES: simulation.random.randi_range(3, 7)},
-		{ResourceIds.GRASS: simulation.random.randi_range(10, 16), ResourceIds.BRANCHES: simulation.random.randi_range(5, 9)},
-		{ResourceIds.GRASS: simulation.random.randi_range(4, 8), ResourceIds.BRANCHES: simulation.random.randi_range(2, 5), "gloves": 1},
-	]
-	for i in range(trash_cells.size()):
-		var cell: Vector2i = trash_cells[i]
+	if layout == null:
+		return
+	for loot: Resource in layout.get("starter_loot"):
+		var cell: Vector2i = loot.get("cell")
 		if not simulation._is_board_cell(cell) or simulation.terrain_blocked_cells.has(cell):
 			continue
-		var pile: Node3D = simulation._create_resource_pile(simulation._cell_center(cell), trash_contents[i]) as Node3D
+		var pile: Node3D = simulation._create_resource_pile(simulation._cell_center(cell), _loot_resources(loot)) as Node3D
 		# These are authored world loot, unlike piles dropped by citizens or
 		# logistics. Keep their visuals under the territory while the logistics
 		# service continues to own their resource record.
 		if pile != null:
 			pile.set_meta("landscape_owned", true)
 			simulation.add_landscape_object(pile)
+
+
+func _loot_resources(loot: Resource) -> Dictionary:
+	var resources: Dictionary = {}
+	for field in [{"name": &"grass", "resource": ResourceIds.GRASS}, {"name": &"branches", "resource": ResourceIds.BRANCHES}, {"name": &"gloves", "resource": &"gloves"}]:
+		var amount := int(loot.get(field.name))
+		if amount > 0:
+			resources[field.resource] = amount
+	return resources
 
 
 func spawn_initial_rabbits() -> void:
@@ -224,3 +226,72 @@ func update_wild_food(delta: float) -> void:
 		if simulation.runtime_seconds >= float(simulation.rabbit_respawn_at[cell]) and simulation.rabbit_sources.size() < simulation.RABBIT_MAX_COUNT:
 			_spawn_rabbit_near_tree(cell as Vector2i)
 			simulation.rabbit_respawn_at.erase(cell)
+
+
+func export_resource_state() -> Dictionary:
+	var state := WorldResourceStateScript.new()
+	state.capture(
+		simulation.grass_sources,
+		simulation.forage_sources,
+		simulation.forage_respawn_at,
+		simulation.rabbit_sources,
+		simulation.rabbit_respawn_at
+	)
+	return state.to_save_dict()
+
+
+func restore_resource_state(data: Dictionary) -> void:
+	if data.is_empty():
+		return # Older saves retain the freshly generated natural resources.
+	var state := WorldResourceStateScript.new()
+	state.load_from_save_dict(data)
+	_clear_natural_source_nodes()
+	for entry: Dictionary in state.grass_sources:
+		var cell := WorldResourceStateScript._dict_to_cell(entry.get("cell", {}))
+		_create_grass_source(cell, int(entry.get("remaining", 0)), int(entry.get("initial", 0)))
+	for cell in state.forage_cells:
+		_create_forage_source(cell)
+	for entry: Dictionary in state.forage_respawns:
+		simulation.forage_respawn_at[WorldResourceStateScript._dict_to_cell(entry.get("cell", {}))] = float(entry.get("at", 0.0))
+	for entry: Dictionary in state.rabbits:
+		var cell := WorldResourceStateScript._dict_to_cell(entry.get("cell", {}))
+		_create_rabbit_source(cell, WorldResourceStateScript._dict_to_vector(entry.get("position", {})), WorldResourceStateScript._dict_to_vector(entry.get("direction", {})))
+	for entry: Dictionary in state.rabbit_respawns:
+		simulation.rabbit_respawn_at[WorldResourceStateScript._dict_to_cell(entry.get("cell", {}))] = float(entry.get("at", 0.0))
+
+
+func _clear_natural_source_nodes() -> void:
+	for source in simulation.grass_sources.values():
+		if is_instance_valid(source.node): source.node.queue_free()
+	for source in simulation.forage_sources.values():
+		if is_instance_valid(source.node): source.node.queue_free()
+	for source in simulation.rabbit_sources.values():
+		if is_instance_valid(source.node): source.node.queue_free()
+	simulation.grass_sources.clear()
+	simulation.forage_sources.clear()
+	simulation.forage_respawn_at.clear()
+	simulation.rabbit_sources.clear()
+	simulation.rabbit_respawn_at.clear()
+
+
+func _create_grass_source(cell: Vector2i, remaining: int, initial: int) -> void:
+	var node: MeshInstance3D = GrassSourceScene.instantiate()
+	node.position = simulation._cell_center(cell) + Vector3.UP * 0.05
+	simulation.add_landscape_object(node)
+	simulation.grass_sources[cell] = GrassSourceRecord.new(node, remaining, initial)
+
+
+func _create_forage_source(cell: Vector2i) -> void:
+	var node: Node3D = ForageSourceScene.instantiate()
+	node.position = simulation._cell_center(cell) + Vector3.UP * 0.05
+	simulation._add_selector_to_node(node, "forage_selector", Vector3(0.5, 0.5, 0.5), Vector3.UP * 0.25)
+	simulation.add_landscape_object(node)
+	simulation.forage_sources[cell] = ForageSourceRecord.new(node)
+
+
+func _create_rabbit_source(cell: Vector2i, position: Vector3, direction: Vector3) -> void:
+	var node: MeshInstance3D = RabbitScene.instantiate()
+	node.position = position
+	simulation._add_selector_to_node(node, "rabbit_selector", Vector3(0.5, 0.4, 0.5), Vector3.UP * 0.2)
+	simulation.add_landscape_object(node)
+	simulation.rabbit_sources[cell] = RabbitSourceRecord.new(node, direction)

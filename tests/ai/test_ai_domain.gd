@@ -145,7 +145,7 @@ static func _test_workforce_policy_can_assign_no_role() -> void:
 	var world := {"warehouses": 1, "trees": 5}
 	assert(not WorkforcePolicyScript.can_assign(worker, world))
 
-static func _test_workforce_policy_can_assign_permanent() -> void:
+static func _test_workforce_policy_can_assign_permanent_role() -> void:
 	var worker := {"workforce_status": "employed", "permanent_role": "forestry"}
 	var world := {"warehouses": 1, "trees": 5, "assigned_roles": {}}
 	assert(WorkforcePolicyScript.can_assign(worker, world))
@@ -224,7 +224,7 @@ static func _test_follow_leader_goal_build_task() -> void:
 		&"squad.leader_position": Vector3(10.0, 0.0, 0.0),
 	}))
 	var snapshot := TestAIHelpers.snapshot(0.0, citizen)
-	var task := goal.build_task(snapshot, citizen, null, AIBlackboard.new())
+	var task: BehaviorTask = goal.build_task(snapshot, citizen, null, AIBlackboard.new())
 	assert(task != null)
 	assert(task.goal_id == &"follow_leader")
 	assert(not task.resumable)
@@ -235,7 +235,7 @@ static func _test_follow_leader_goal_build_task_no_leader() -> void:
 		&"squad.in_squad": true,
 	}))
 	var snapshot := TestAIHelpers.snapshot(0.0, citizen)
-	var task := goal.build_task(snapshot, citizen, null, AIBlackboard.new())
+	var task: BehaviorTask = goal.build_task(snapshot, citizen, null, AIBlackboard.new())
 	assert(task == null)
 
 
@@ -295,7 +295,7 @@ static func _test_register_goal_build_task() -> void:
 	var snapshot := TestAIHelpers.snapshot(0.0, citizen)
 	var order := CitizenOrder.new(1, &"register", &"workforce", 0.74)
 	order.target_position = Vector3(5.0, 0.0, 0.0)
-	var task := goal.build_task(snapshot, citizen, order, AIBlackboard.new())
+	var task: BehaviorTask = goal.build_task(snapshot, citizen, order, AIBlackboard.new())
 	assert(task != null)
 	assert(task.goal_id == &"register")
 	assert(not task.resumable)
@@ -306,7 +306,7 @@ static func _test_register_goal_build_task_no_position() -> void:
 	var snapshot := TestAIHelpers.snapshot(0.0, citizen)
 	var order := CitizenOrder.new(1, &"register", &"workforce", 0.74)
 	# target_position defaults to Vector3.INF
-	var task := goal.build_task(snapshot, citizen, order, AIBlackboard.new())
+	var task: BehaviorTask = goal.build_task(snapshot, citizen, order, AIBlackboard.new())
 	assert(task == null)
 
 

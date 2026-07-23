@@ -1150,7 +1150,8 @@ func _ready() -> void:
 	weather_state.new_day(tent_weather, random, int(clock.minutes))
 	ambient_spawner = AmbientSpawner.new()
 	add_child(ambient_spawner)
-	ambient_spawner.setup(self)
+	var active_biome: BiomeDefinition = territory_service.get_active_biome()
+	ambient_spawner.setup(self, active_biome.natural_layout if active_biome != null else null)
 	player_controller = PlayerController.new()
 	add_child(player_controller)
 	player_controller.setup(self)
@@ -6239,6 +6240,8 @@ func restore_from_save_data(save_data: SaveDataScript) -> bool:
 
 	# 8b. Restore Forest state (felled trees, branch/wood depletion)
 	_restore_forest(save_data.forest_state)
+	if ambient_spawner != null and save_data.world_state.get("natural_resources", {}) is Dictionary:
+		ambient_spawner.restore_resource_state(save_data.world_state.get("natural_resources", {}))
 
 	# 9. Restore Citizens
 	_next_ai_citizen_id = int(save_data.world_state.get("next_ai_citizen_id", 1))

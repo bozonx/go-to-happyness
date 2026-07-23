@@ -1,0 +1,35 @@
+[gd_resource type="Resource" script_class="BiomeLayout" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://game/features/world/domain/biome_layout.gd" id="1_layout"]
+[ext_resource type="Script" path="res://game/features/world/domain/starter_loot_definition.gd" id="2_loot"]
+
+[sub_resource type="Resource" id="StarterLoot1"]
+script = ExtResource("2_loot")
+cell = Vector2i(-10, -3)
+grass = 11
+branches = 6
+
+[sub_resource type="Resource" id="StarterLoot2"]
+script = ExtResource("2_loot")
+cell = Vector2i(7, 12)
+grass = 9
+branches = 5
+
+[sub_resource type="Resource" id="StarterLoot3"]
+script = ExtResource("2_loot")
+cell = Vector2i(-14, 6)
+grass = 13
+branches = 7
+
+[sub_resource type="Resource" id="StarterLoot4"]
+script = ExtResource("2_loot")
+cell = Vector2i(5, -12)
+grass = 6
+branches = 4
+gloves = 1
+
+[resource]
+script = ExtResource("1_layout")
+tree_cells = [Vector2i(-16, -15), Vector2i(-15, -18), Vector2i(-18, -12), Vector2i(-12, -19), Vector2i(16, -15), Vector2i(15, -18), Vector2i(18, -12), Vector2i(12, -19), Vector2i(-16, 15), Vector2i(-15, 18), Vector2i(-18, 12), Vector2i(-12, 19), Vector2i(16, 15), Vector2i(15, 18), Vector2i(18, 12), Vector2i(12, 19), Vector2i(-20, -5), Vector2i(-20, 5), Vector2i(20, -5), Vector2i(20, 5), Vector2i(-5, -20), Vector2i(5, -20), Vector2i(-5, 20), Vector2i(5, 20)]
+pond_cells = [Vector2i(-9, 8), Vector2i(10, -7)]
+starter_loot = [SubResource("StarterLoot1"), SubResource("StarterLoot2"), SubResource("StarterLoot3"), SubResource("StarterLoot4")]
