@@ -114,6 +114,7 @@ const SettlementDailyRulesServiceScript = preload("res://game/features/settlemen
 const TerritoryServiceScript = preload("res://game/features/world/application/territory_service.gd")
 const ResourcePileScript = preload("res://game/features/logistics/domain/resource_pile.gd")
 const WarehouseStateScript = preload("res://game/features/settlement/domain/warehouse_state.gd")
+const WorldResourceStateScript = preload("res://game/features/world/domain/world_resource_state.gd")
 const S = preload("res://game/features/ui/domain/game_strings.gd")
 
 
@@ -152,6 +153,7 @@ const DIG_RADIUS := 2.2
 const DIG_REACH := 6.0
 
 var settlement := SettlementState.new()
+var world_resource_state := WorldResourceStateScript.new()
 var launch_config: GameLaunchConfigScript
 var day_cycle := SimulationDayCycle.new()
 var clock: SimulationClock = day_cycle.clock
@@ -756,6 +758,7 @@ func _ready() -> void:
 	foraging_service.billboard_label_scene = BillboardLabelScene
 	foraging_service.setup(
 		settlement,
+		world_resource_state,
 		forager_positions,
 		forage_sources,
 		forage_respawn_at,
@@ -3884,9 +3887,9 @@ func _harvest_source_info(resource_type: String) -> String:
 		ResourceIds.BRANCHES:
 			var tree := _nearest_tree_node(player_citizen.global_position)
 			if is_instance_valid(tree):
-				var rem := int(tree.get_meta("remaining_branches", 0))
-				var init := maxi(1, int(tree.get_meta("initial_branches", rem)))
-				return S.SOURCE_INFO_BRANCHES % [rem, init]
+				var tree_state: Variant = world_resource_state.tree_at(_cell_from_position(tree.global_position))
+				if tree_state != null:
+					return S.SOURCE_INFO_BRANCHES % [tree_state.remaining_branches, maxi(1, tree_state.initial_branches)]
 			return ""
 		ResourceIds.GRASS:
 			var node := _nearest_grass_node(player_citizen.global_position)
@@ -5028,7 +5031,8 @@ func _consume_tree_near_player(amount: int) -> void:
 	for position_on_board in tree_positions:
 		if player_citizen.global_position.distance_to(position_on_board) <= INTERACTION_RANGE:
 			var tree: Node3D = tree_nodes.get(_cell_from_position(position_on_board))
-			if is_instance_valid(tree) and not bool(tree.get_meta("felled", false)):
+			var tree_state: Variant = world_resource_state.tree_at(_cell_from_position(position_on_board))
+			if is_instance_valid(tree) and tree_state != null and not tree_state.felled:
 				var consumed := 0
 				while consumed < amount:
 					var result := _consume_tree_branches(position_on_board)
@@ -5048,7 +5052,8 @@ func _fell_nearest_tree() -> void:
 	for position_on_board in tree_positions:
 		if player_citizen.global_position.distance_to(position_on_board) <= INTERACTION_RANGE:
 			var tree: Node3D = tree_nodes.get(_cell_from_position(position_on_board))
-			if is_instance_valid(tree) and not bool(tree.get_meta("felled", false)):
+			var tree_state: Variant = world_resource_state.tree_at(_cell_from_position(position_on_board))
+			if is_instance_valid(tree) and tree_state != null and not tree_state.felled:
 				_fell_tree_at(position_on_board)
 				return
 
@@ -5058,7 +5063,8 @@ func _fell_tree_at(position_on_board: Vector3) -> void:
 	var tree: Node3D = tree_nodes.get(cell)
 	if not is_instance_valid(tree):
 		return
-	if bool(tree.get_meta("felled", false)):
+	var tree_state: Variant = world_resource_state.tree_at(cell)
+	if tree_state == null or tree_state.felled:
 		return
 	_apply_tree_felled_visual(cell, tree)
 	_refresh_navigation_grid()
@@ -5069,7 +5075,10 @@ func _fell_tree_at(position_on_board: Vector3) -> void:
 ## Lays a tree down and frees the cell it occupied. Shared by live felling and
 ## save restore so both paths produce identical geometry and navigation state.
 func _apply_tree_felled_visual(cell: Vector2i, tree: Node3D) -> void:
-	tree.set_meta("felled", true)
+	var tree_state: Variant = world_resource_state.tree_at(cell)
+	if tree_state != null:
+		tree_state.felled = true
+		tree.set_meta("felled", true) # Compatibility projection; state is authoritative.
 	tree.rotation_degrees.z = 82.0
 	var collision_body := tree.get_node_or_null("TreeCollision") as CollisionObject3D
 	if collision_body != null:
@@ -5820,7 +5829,8 @@ func _consume_tree_branches(position: Vector3) -> int:
 	return foraging_service.consume_tree_branches(position)
 
 func _mark_tree_branch_exhausted(tree: Node3D) -> void:
-	foraging_service.mark_tree_branch_exhausted(tree)
+	if is_instance_valid(tree):
+		foraging_service.mark_tree_branch_exhausted(_cell_from_position(tree.global_position))
 
 func _nearest_tree_node(from: Vector3) -> Node3D:
 	return foraging_service.nearest_tree_node(from)
@@ -6363,6 +6373,7 @@ func _restore_warehouses(data: Variant, types: Variant, ever_built: bool) -> voi
 ## layout is deterministic (fixed cells), so trees are matched by cell rather
 ## than despawned and rebuilt. Older saves omit `forest` and leave it pristine.
 func _restore_forest(tree_states: Array) -> void:
+	world_resource_state.restore_tree_state(tree_states)
 	for entry in tree_states:
 		if not (entry is Dictionary):
 			continue
@@ -6370,12 +6381,15 @@ func _restore_forest(tree_states: Array) -> void:
 		var tree: Node3D = tree_nodes.get(cell)
 		if not is_instance_valid(tree):
 			continue
-		tree.set_meta("initial_wood", int(entry.get("initial_wood", tree.get_meta("initial_wood", 0))))
-		tree.set_meta("remaining_wood", maxi(0, int(entry.get("remaining_wood", tree.get_meta("remaining_wood", 0)))))
-		tree.set_meta("initial_branches", int(entry.get("initial_branches", tree.get_meta("initial_branches", 0))))
-		tree.set_meta("remaining_branches", maxi(0, int(entry.get("remaining_branches", tree.get_meta("remaining_branches", 0)))))
-		tree.set_meta("hand_branches", maxi(0, int(entry.get("hand_branches", 0))))
 		if bool(entry.get("branch_exhausted", false)):
-			foraging_service.mark_tree_branch_exhausted(tree)
-		if bool(entry.get("felled", false)) and not bool(tree.get_meta("felled", false)):
+			foraging_service.mark_tree_branch_exhausted(cell)
+		var tree_state: Variant = world_resource_state.tree_at(cell)
+		if tree_state != null:
+			tree.set_meta("initial_wood", tree_state.initial_wood)
+			tree.set_meta("remaining_wood", tree_state.remaining_wood)
+			tree.set_meta("initial_branches", tree_state.initial_branches)
+			tree.set_meta("remaining_branches", tree_state.remaining_branches)
+			tree.set_meta("hand_branches", tree_state.hand_branches)
+			tree.set_meta("branch_exhausted", tree_state.branch_exhausted)
+		if tree_state != null and tree_state.felled:
 			_apply_tree_felled_visual(cell, tree)

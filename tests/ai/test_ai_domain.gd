@@ -10,6 +10,9 @@ const SleepAtHomeStepScript = preload("res://game/features/decision/domain/behav
 const EatAtCanteenStepScript = preload("res://game/features/decision/domain/behavior/eat_at_canteen_step.gd")
 const CourierDeliveryStepScript = preload("res://game/features/decision/domain/behavior/courier_delivery_step.gd")
 const FacadeTargetHelpersScript = preload("res://game/features/decision/application/facade_target_helpers.gd")
+const FacadeContextScript = preload("res://game/features/decision/application/facade_context.gd")
+const RelieveStepScript = preload("res://game/features/decision/domain/behavior/relieve_step.gd")
+const ReturnHomeWhenIdleGoalScript = preload("res://game/features/decision/domain/goals/return_home_when_idle_goal.gd")
 
 
 static func run_all() -> void:
@@ -65,6 +68,25 @@ static func run_all() -> void:
 	_test_facade_target_helpers_home_entrance_invalid_node()
 	_test_facade_target_helpers_home_entrance_not_in_tree()
 	_test_facade_target_helpers_workplace_target_key_invalid()
+	_test_relieve_step_success()
+	_test_relieve_step_failure_when_no_candidates()
+	_test_relieve_step_failure_when_reservation_taken()
+	_test_relieve_step_success_when_toilet_done()
+	_test_relieve_step_failure_on_actuator_fail()
+	_test_relieve_step_cancel_releases_reservation()
+	_test_return_home_goal_scores_when_far()
+	_test_return_home_goal_zero_when_close()
+	_test_return_home_goal_zero_when_no_home()
+	_test_return_home_goal_zero_when_unreachable()
+	_test_return_home_goal_zero_when_no_permanent_work()
+	_test_return_home_goal_zero_when_order_active()
+	_test_return_home_goal_build_task()
+	_test_return_home_goal_build_task_no_position()
+	_test_facade_context_has_tool_true()
+	_test_facade_context_has_tool_false()
+	_test_facade_context_has_tool_no_settlement()
+	_test_facade_context_backpack_resources()
+	_test_facade_context_backpack_resources_empty()
 
 
 # ============================================================
@@ -376,15 +398,19 @@ static func _test_register_step_cancel() -> void:
 static func _test_sleep_at_home_step_success_when_sleep_done() -> void:
 	var actuator := TestAIHelpers.FakeActuator.new(1)
 	var citizen := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
-		&"needs.should_sleep": false,
+		&"needs.should_sleep": true,
 	}))
 	var context := BehaviorContext.new(actuator, AIBlackboard.new())
 	context.refresh(TestAIHelpers.snapshot(0.0, citizen), null)
 	var step: RefCounted = SleepAtHomeStepScript.new()
-	# First tick enters and starts action
+	# First tick enters and starts action, should_sleep=true -> RUNNING
 	assert(step.run(context, 0.1) == BehaviorStep.Status.RUNNING)
 	assert(actuator.action_start_count == 1)
-	# should_sleep=false -> SUCCESS
+	# Refresh with should_sleep=false -> SUCCESS
+	var awake_citizen := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
+		&"needs.should_sleep": false,
+	}))
+	context.refresh(TestAIHelpers.snapshot(0.0, awake_citizen), null)
 	assert(step.run(context, 0.1) == BehaviorStep.Status.SUCCESS)
 
 static func _test_sleep_at_home_step_failure_when_not_started() -> void:
@@ -419,7 +445,7 @@ static func _test_sleep_at_home_step_failure_on_actuator_fail() -> void:
 static func _test_eat_at_canteen_step_success_when_meal_done() -> void:
 	var actuator := TestAIHelpers.FakeActuator.new(1)
 	var citizen := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
-		&"needs.meal_requested": false,
+		&"needs.meal_requested": true,
 		&"needs.canteen_position": Vector3(3.0, 0.0, 0.0),
 	}))
 	var context := BehaviorContext.new(actuator, AIBlackboard.new())
@@ -427,7 +453,12 @@ static func _test_eat_at_canteen_step_success_when_meal_done() -> void:
 	var step: RefCounted = EatAtCanteenStepScript.new()
 	assert(step.run(context, 0.1) == BehaviorStep.Status.RUNNING)
 	assert(actuator.action_start_count == 1)
-	# meal_requested=false -> SUCCESS
+	# Refresh with meal_requested=false -> SUCCESS
+	var fed_citizen := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
+		&"needs.meal_requested": false,
+		&"needs.canteen_position": Vector3(3.0, 0.0, 0.0),
+	}))
+	context.refresh(TestAIHelpers.snapshot(0.0, fed_citizen), null)
 	assert(step.run(context, 0.1) == BehaviorStep.Status.SUCCESS)
 
 static func _test_eat_at_canteen_step_failure_when_not_started() -> void:
@@ -559,3 +590,231 @@ static func _test_facade_target_helpers_workplace_target_key_invalid() -> void:
 	# but workplace_target_key checks is_instance_valid first
 	# With null simulation, we can't call it. Instead test with invalid workplace.
 	assert(helpers.workplace_target_key(null) == &"")
+
+
+# ============================================================
+# RelieveStep
+# ============================================================
+
+static func _relief_citizen(toilet_requested: bool) -> CitizenSnapshot:
+	return CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
+		&"needs.toilet_requested": toilet_requested,
+		&"needs.relief_candidates": [{
+			&"id": &"bush:3:4",
+			&"position": Vector3(3.0, 0.0, 4.0),
+			&"kind": &"tree",
+		}],
+	}))
+
+static func _test_relieve_step_success() -> void:
+	var actuator := TestAIHelpers.FakeActuator.new(1)
+	var citizen := _relief_citizen(true)
+	var snapshot := TestAIHelpers.snapshot(0.0, citizen)
+	var context := BehaviorContext.new(actuator, AIBlackboard.new())
+	context.refresh(snapshot, null)
+	var step: RefCounted = RelieveStepScript.new()
+	assert(step.run(context, 0.1) == BehaviorStep.Status.RUNNING)
+	assert(actuator.action_start_count == 1)
+	actuator.next_action_status = CitizenActuator.ActionStatus.SUCCEEDED
+	assert(step.run(context, 0.1) == BehaviorStep.Status.SUCCESS)
+
+static func _test_relieve_step_failure_when_no_candidates() -> void:
+	var actuator := TestAIHelpers.FakeActuator.new(1)
+	var citizen := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
+		&"needs.toilet_requested": true,
+		&"needs.relief_candidates": [],
+	}))
+	var snapshot := TestAIHelpers.snapshot(0.0, citizen)
+	var context := BehaviorContext.new(actuator, AIBlackboard.new())
+	context.refresh(snapshot, null)
+	var step: RefCounted = RelieveStepScript.new()
+	assert(step.run(context, 0.1) == BehaviorStep.Status.FAILURE)
+	assert(actuator.action_start_count == 0)
+
+static func _test_relieve_step_failure_when_reservation_taken() -> void:
+	var actuator := TestAIHelpers.FakeActuator.new(1)
+	var citizen := _relief_citizen(true)
+	var snapshot := TestAIHelpers.snapshot(0.0, citizen)
+	# Pre-claim the reservation by another citizen
+	snapshot.reservations.claim([&"needs.relief", &"bush:3:4"], 2, 0.0, 30.0)
+	var context := BehaviorContext.new(actuator, AIBlackboard.new())
+	context.refresh(snapshot, null)
+	var step: RefCounted = RelieveStepScript.new()
+	assert(step.run(context, 0.1) == BehaviorStep.Status.FAILURE)
+	assert(actuator.action_start_count == 0)
+
+static func _test_relieve_step_success_when_toilet_done() -> void:
+	var actuator := TestAIHelpers.FakeActuator.new(1)
+	var citizen := _relief_citizen(true)
+	var snapshot := TestAIHelpers.snapshot(0.0, citizen)
+	var context := BehaviorContext.new(actuator, AIBlackboard.new())
+	context.refresh(snapshot, null)
+	var step: RefCounted = RelieveStepScript.new()
+	assert(step.run(context, 0.1) == BehaviorStep.Status.RUNNING)
+	# Refresh with toilet_requested=false -> SUCCESS
+	var relieved := _relief_citizen(false)
+	context.refresh(TestAIHelpers.snapshot(0.0, relieved), null)
+	assert(step.run(context, 0.1) == BehaviorStep.Status.SUCCESS)
+
+static func _test_relieve_step_failure_on_actuator_fail() -> void:
+	var actuator := TestAIHelpers.FakeActuator.new(1)
+	var citizen := _relief_citizen(true)
+	var snapshot := TestAIHelpers.snapshot(0.0, citizen)
+	var context := BehaviorContext.new(actuator, AIBlackboard.new())
+	context.refresh(snapshot, null)
+	var step: RefCounted = RelieveStepScript.new()
+	assert(step.run(context, 0.1) == BehaviorStep.Status.RUNNING)
+	actuator.next_action_status = CitizenActuator.ActionStatus.FAILED
+	actuator.next_action_failure_reason = BehaviorStep.FailureReason.UNREACHABLE
+	assert(step.run(context, 0.1) == BehaviorStep.Status.FAILURE)
+	assert(step.failure_reason == BehaviorStep.FailureReason.UNREACHABLE)
+
+static func _test_relieve_step_cancel_releases_reservation() -> void:
+	var actuator := TestAIHelpers.FakeActuator.new(1)
+	var citizen := _relief_citizen(true)
+	var snapshot := TestAIHelpers.snapshot(0.0, citizen)
+	var context := BehaviorContext.new(actuator, AIBlackboard.new())
+	context.refresh(snapshot, null)
+	var step: RefCounted = RelieveStepScript.new()
+	step.run(context, 0.1)
+	# Reservation should be held by citizen 1
+	assert(snapshot.reservations.owner_of([&"needs.relief", &"bush:3:4"]) == 1)
+	step.cancel(context)
+	assert(actuator.cancel_action_count == 1)
+	# Reservation should be released
+	assert(snapshot.reservations.owner_of([&"needs.relief", &"bush:3:4"]) == 0)
+
+
+# ============================================================
+# ReturnHomeWhenIdleGoal
+# ============================================================
+
+static func _test_return_home_goal_scores_when_far() -> void:
+	var goal: RefCounted = ReturnHomeWhenIdleGoalScript.new()
+	var citizen := CitizenSnapshot.new(1, Vector3(0.0, 0.0, 0.0), false, true, AIFactSet.new({
+		&"work.permanent.active": true,
+		&"needs.has_home": true,
+		&"needs.home_reachable": true,
+		&"needs.home_position": Vector3(10.0, 0.0, 0.0),
+	}))
+	var snapshot := TestAIHelpers.snapshot(0.0, citizen)
+	assert(is_equal_approx(goal.score(snapshot, citizen, null, AIBlackboard.new()), 0.20))
+
+static func _test_return_home_goal_zero_when_close() -> void:
+	var goal: RefCounted = ReturnHomeWhenIdleGoalScript.new()
+	var citizen := CitizenSnapshot.new(1, Vector3(10.0, 0.0, 0.0), false, true, AIFactSet.new({
+		&"work.permanent.active": true,
+		&"needs.has_home": true,
+		&"needs.home_reachable": true,
+		&"needs.home_position": Vector3(10.0, 0.0, 0.0),
+	}))
+	var snapshot := TestAIHelpers.snapshot(0.0, citizen)
+	assert(is_zero_approx(goal.score(snapshot, citizen, null, AIBlackboard.new())))
+
+static func _test_return_home_goal_zero_when_no_home() -> void:
+	var goal: RefCounted = ReturnHomeWhenIdleGoalScript.new()
+	var citizen := CitizenSnapshot.new(1, Vector3(0.0, 0.0, 0.0), false, true, AIFactSet.new({
+		&"work.permanent.active": true,
+		&"needs.has_home": false,
+		&"needs.home_position": Vector3(10.0, 0.0, 0.0),
+	}))
+	var snapshot := TestAIHelpers.snapshot(0.0, citizen)
+	assert(is_zero_approx(goal.score(snapshot, citizen, null, AIBlackboard.new())))
+
+static func _test_return_home_goal_zero_when_unreachable() -> void:
+	var goal: RefCounted = ReturnHomeWhenIdleGoalScript.new()
+	var citizen := CitizenSnapshot.new(1, Vector3(0.0, 0.0, 0.0), false, true, AIFactSet.new({
+		&"work.permanent.active": true,
+		&"needs.has_home": true,
+		&"needs.home_reachable": false,
+		&"needs.home_position": Vector3(10.0, 0.0, 0.0),
+	}))
+	var snapshot := TestAIHelpers.snapshot(0.0, citizen)
+	assert(is_zero_approx(goal.score(snapshot, citizen, null, AIBlackboard.new())))
+
+static func _test_return_home_goal_zero_when_no_permanent_work() -> void:
+	var goal: RefCounted = ReturnHomeWhenIdleGoalScript.new()
+	var citizen := CitizenSnapshot.new(1, Vector3(0.0, 0.0, 0.0), false, true, AIFactSet.new({
+		&"work.permanent.active": false,
+		&"needs.has_home": true,
+		&"needs.home_reachable": true,
+		&"needs.home_position": Vector3(10.0, 0.0, 0.0),
+	}))
+	var snapshot := TestAIHelpers.snapshot(0.0, citizen)
+	assert(is_zero_approx(goal.score(snapshot, citizen, null, AIBlackboard.new())))
+
+static func _test_return_home_goal_zero_when_order_active() -> void:
+	var goal: RefCounted = ReturnHomeWhenIdleGoalScript.new()
+	var citizen := CitizenSnapshot.new(1, Vector3(0.0, 0.0, 0.0), false, true, AIFactSet.new({
+		&"work.permanent.active": true,
+		&"needs.has_home": true,
+		&"needs.home_reachable": true,
+		&"needs.home_position": Vector3(10.0, 0.0, 0.0),
+	}))
+	var snapshot := TestAIHelpers.snapshot(0.0, citizen)
+	var order := CitizenOrder.new(1, &"construction", &"test", 0.6)
+	assert(is_zero_approx(goal.score(snapshot, citizen, order, AIBlackboard.new())))
+
+static func _test_return_home_goal_build_task() -> void:
+	var goal: RefCounted = ReturnHomeWhenIdleGoalScript.new()
+	var citizen := CitizenSnapshot.new(1, Vector3(0.0, 0.0, 0.0), false, true, AIFactSet.new({
+		&"needs.home_position": Vector3(10.0, 0.0, 0.0),
+	}))
+	var snapshot := TestAIHelpers.snapshot(0.0, citizen)
+	var task: BehaviorTask = goal.build_task(snapshot, citizen, null, AIBlackboard.new())
+	assert(task != null)
+	assert(task.goal_id == &"return_home_when_idle")
+	assert(not task.resumable)
+
+static func _test_return_home_goal_build_task_no_position() -> void:
+	var goal: RefCounted = ReturnHomeWhenIdleGoalScript.new()
+	var citizen := CitizenSnapshot.new(1, Vector3(0.0, 0.0, 0.0), false, true, AIFactSet.new())
+	var snapshot := TestAIHelpers.snapshot(0.0, citizen)
+	var task: BehaviorTask = goal.build_task(snapshot, citizen, null, AIBlackboard.new())
+	assert(task == null)
+
+
+# ============================================================
+# FacadeContext
+# ============================================================
+
+class MockSimulation extends Node:
+	var settlement: Object = null
+
+
+static func _test_facade_context_has_tool_true() -> void:
+	var sim := MockSimulation.new()
+	sim.set("settlement", {"tools": {"axe": true}})
+	var ctx := FacadeContextScript.new(sim, null, null, 1, false, false, "")
+	assert(ctx.has_tool("axe"))
+	sim.free()
+
+static func _test_facade_context_has_tool_false() -> void:
+	var sim := MockSimulation.new()
+	sim.set("settlement", {"tools": {"axe": false}})
+	var ctx := FacadeContextScript.new(sim, null, null, 1, false, false, "")
+	assert(not ctx.has_tool("axe"))
+	sim.free()
+
+static func _test_facade_context_has_tool_no_settlement() -> void:
+	var sim := MockSimulation.new()
+	var ctx := FacadeContextScript.new(sim, null, null, 1, false, false, "")
+	assert(not ctx.has_tool("axe"))
+	sim.free()
+
+static func _test_facade_context_backpack_resources() -> void:
+	var sim := MockSimulation.new()
+	sim.set("settlement", {"backpack": {"branches": 5, "food": 3}})
+	var ctx := FacadeContextScript.new(sim, null, null, 1, false, false, "")
+	var backpack := ctx.backpack_resources()
+	assert(backpack.size() == 2)
+	assert(int(backpack["branches"]) == 5)
+	assert(int(backpack["food"]) == 3)
+	sim.free()
+
+static func _test_facade_context_backpack_resources_empty() -> void:
+	var sim := MockSimulation.new()
+	var ctx := FacadeContextScript.new(sim, null, null, 1, false, false, "")
+	var backpack := ctx.backpack_resources()
+	assert(backpack.is_empty())
+	sim.free()

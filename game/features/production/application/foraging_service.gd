@@ -32,6 +32,7 @@ var tree_positions: Array[Vector3] = []
 var gather_progress_labels: Dictionary = {}
 
 var settlement: RefCounted
+var world_resource_state: RefCounted
 var runtime_seconds: float = 0.0
 
 var terrain_height_query: Callable
@@ -40,6 +41,7 @@ var first_person_target_query: Callable
 
 func setup(
 	settlement_ref: RefCounted,
+	world_state_ref: RefCounted,
 	forager_pos_ref: Array[Vector3],
 	forage_src_ref: Dictionary,
 	forage_resp_ref: Dictionary,
@@ -54,6 +56,7 @@ func setup(
 	target_fn: Callable = Callable()
 ) -> void:
 	settlement = settlement_ref
+	world_resource_state = world_state_ref
 	forager_positions = forager_pos_ref
 	forage_sources = forage_src_ref
 	forage_respawn_at = forage_resp_ref
@@ -122,27 +125,25 @@ func consume_grass_source(position: Vector3) -> int:
 
 func consume_tree_branches(position: Vector3) -> int:
 	var cell: Vector2i = cell_query.call(position) if cell_query.is_valid() else Vector2i.ZERO
-	var tree: Node3D = tree_nodes.get(cell)
-	if not is_instance_valid(tree):
+	var tree_state: Variant = world_resource_state.tree_at(cell) if world_resource_state != null else null
+	if tree_state == null:
 		return 0
-	var remaining := int(tree.get_meta("remaining_branches", 0))
+	var remaining: int = int(tree_state.remaining_branches)
 	if remaining <= 0:
 		return 0
-	var hand_taken := int(tree.get_meta("hand_branches", 0))
-	var hand_limit := ceili(float(int(tree.get_meta("initial_branches", remaining))) * 0.3)
-	if not tree.has_meta("initial_branches"):
-		tree.set_meta("initial_branches", remaining)
-		hand_limit = ceili(float(remaining) * 0.3)
+	var hand_taken: int = int(tree_state.hand_branches)
+	var hand_limit: int = ceili(float(tree_state.initial_branches) * 0.3)
 	var has_axe := false
 	if settlement != null and settlement.tools != null:
 		has_axe = bool(settlement.tools.get("axe", false))
 	if not has_axe and hand_taken >= hand_limit:
 		return 0
-	tree.set_meta("remaining_branches", maxi(0, remaining - 1))
+	tree_state.remaining_branches = maxi(0, remaining - 1)
 	if not has_axe:
-		tree.set_meta("hand_branches", hand_taken + 1)
+		tree_state.hand_branches = hand_taken + 1
 		if hand_taken + 1 >= hand_limit:
-			mark_tree_branch_exhausted(tree)
+			mark_tree_branch_exhausted(cell)
+	_sync_tree_visual_state(cell)
 	return 1
 
 ## Snapshot every living tree's mutable state for the save file. The forest
@@ -150,27 +151,18 @@ func consume_tree_branches(position: Vector3) -> int:
 ## wood/branch depletion, felled and exhausted flags — need persisting.
 func export_tree_state() -> Array:
 	var result: Array = []
-	for cell in tree_nodes:
-		var tree: Node3D = tree_nodes[cell]
-		if not is_instance_valid(tree):
-			continue
-		result.append({
-			"cell": {"x": cell.x, "y": cell.y},
-			"felled": bool(tree.get_meta("felled", false)),
-			"branch_exhausted": bool(tree.get_meta("branch_exhausted", false)),
-			"initial_wood": int(tree.get_meta("initial_wood", 0)),
-			"remaining_wood": int(tree.get_meta("remaining_wood", 0)),
-			"initial_branches": int(tree.get_meta("initial_branches", 0)),
-			"remaining_branches": int(tree.get_meta("remaining_branches", 0)),
-			"hand_branches": int(tree.get_meta("hand_branches", 0)),
-		})
-	return result
+	return world_resource_state.export_tree_state() if world_resource_state != null else []
 
 
-func mark_tree_branch_exhausted(tree: Node3D) -> void:
-	if bool(tree.get_meta("branch_exhausted", false)):
+func mark_tree_branch_exhausted(cell: Vector2i) -> void:
+	var tree_state: Variant = world_resource_state.tree_at(cell) if world_resource_state != null else null
+	if tree_state == null or tree_state.branch_exhausted:
 		return
-	tree.set_meta("branch_exhausted", true)
+	tree_state.branch_exhausted = true
+	var tree: Node3D = tree_nodes.get(cell)
+	if not is_instance_valid(tree):
+		return
+	_sync_tree_visual_state(cell)
 	for child in tree.get_children():
 		var mesh := child as MeshInstance3D
 		if mesh == null or not (mesh.mesh is SphereMesh):
@@ -178,6 +170,20 @@ func mark_tree_branch_exhausted(tree: Node3D) -> void:
 		var material := mesh.material_override as StandardMaterial3D
 		if material != null:
 			material.albedo_color = Color("6b4c2a")
+
+
+func _sync_tree_visual_state(cell: Vector2i) -> void:
+	var tree: Node3D = tree_nodes.get(cell)
+	var state: Variant = world_resource_state.tree_at(cell) if world_resource_state != null else null
+	if not is_instance_valid(tree) or state == null:
+		return
+	tree.set_meta("initial_wood", state.initial_wood)
+	tree.set_meta("remaining_wood", state.remaining_wood)
+	tree.set_meta("initial_branches", state.initial_branches)
+	tree.set_meta("remaining_branches", state.remaining_branches)
+	tree.set_meta("hand_branches", state.hand_branches)
+	tree.set_meta("branch_exhausted", state.branch_exhausted)
+	tree.set_meta("felled", state.felled)
 
 func nearest_tree_node(from: Vector3) -> Node3D:
 	var best: Node3D = null
@@ -188,7 +194,8 @@ func nearest_tree_node(from: Vector3) -> Node3D:
 			continue
 		var cell: Vector2i = cell_query.call(position) if cell_query.is_valid() else Vector2i.ZERO
 		var tree: Node3D = tree_nodes.get(cell)
-		if not is_instance_valid(tree) or bool(tree.get_meta("felled", false)):
+		var tree_state: Variant = world_resource_state.tree_at(cell) if world_resource_state != null else null
+		if not is_instance_valid(tree) or tree_state == null or tree_state.felled:
 			continue
 		if dist < best_dist:
 			best_dist = dist
@@ -229,13 +236,15 @@ func gather_node_at(position: Vector3, resource_type: String) -> Node3D:
 func gather_progress_amounts(resource_type: String, node: Node3D) -> Dictionary:
 	var current := 0
 	var max_amount := 1
-	if node.has_meta("initial_wood"):
+	var tree_cell: Vector2i = cell_query.call(node.global_position) if cell_query.is_valid() else Vector2i.ZERO
+	var tree_state: Variant = world_resource_state.tree_at(tree_cell) if world_resource_state != null else null
+	if tree_state != null and tree_nodes.get(tree_cell) == node:
 		if resource_type in [ResourceIds.WOOD, ResourceIds.LOGS]:
-			max_amount = int(node.get_meta("initial_wood", 1))
-			current = max_amount - int(node.get_meta("remaining_wood", 0))
+			max_amount = tree_state.initial_wood
+			current = max_amount - tree_state.remaining_wood
 		elif resource_type == ResourceIds.BRANCHES:
-			max_amount = int(node.get_meta("initial_branches", 1))
-			current = int(node.get_meta("hand_branches", 0))
+			max_amount = tree_state.initial_branches
+			current = tree_state.hand_branches
 	else:
 		for cell in grass_sources:
 			var source: GrassSourceRecord = grass_sources[cell]
@@ -253,7 +262,8 @@ func ensure_gather_progress_label(node: Node3D) -> Label3D:
 	label.font_size = 22
 	label.outline_size = 5
 	label.modulate = Color("ffffff")
-	label.position = Vector3(0.0, 4.8, 0.0) if node.has_meta("initial_wood") else Vector3(0.0, 0.5, 0.0)
+	var cell: Vector2i = cell_query.call(node.global_position) if cell_query.is_valid() else Vector2i.ZERO
+	label.position = Vector3(0.0, 4.8, 0.0) if tree_nodes.get(cell) == node else Vector3(0.0, 0.5, 0.0)
 	node.add_child(label)
 	gather_progress_labels[node] = label
 	return label

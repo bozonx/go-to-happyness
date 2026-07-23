@@ -1,6 +1,8 @@
 class_name WorldResourceState
 extends RefCounted
 
+const TreeResourceStateScript = preload("res://game/features/world/domain/tree_resource_state.gd")
+
 ## Serializable mutable state for natural resources. It deliberately stores
 ## stable cells and values only; Node3D references stay in presentation.
 
@@ -9,6 +11,42 @@ var forage_cells: Array[Vector2i] = []
 var forage_respawns: Array = []
 var rabbits: Array = []
 var rabbit_respawns: Array = []
+var trees: Dictionary = {}
+
+
+func create_tree(cell: Vector2i, initial_wood: int, initial_branches: int) -> Variant:
+	var tree := TreeResourceStateScript.new(initial_wood, initial_branches)
+	trees[cell] = tree
+	return tree
+
+
+func tree_at(cell: Vector2i) -> Variant:
+	return trees.get(cell)
+
+
+func export_tree_state() -> Array:
+	var result: Array = []
+	for cell: Vector2i in trees:
+		var tree: Variant = trees[cell]
+		result.append({"cell": _cell_to_dict(cell), "felled": tree.felled, "branch_exhausted": tree.branch_exhausted, "initial_wood": tree.initial_wood, "remaining_wood": tree.remaining_wood, "initial_branches": tree.initial_branches, "remaining_branches": tree.remaining_branches, "hand_branches": tree.hand_branches})
+	return result
+
+
+func restore_tree_state(entries: Array) -> void:
+	for entry in entries:
+		if not (entry is Dictionary):
+			continue
+		var cell := _dict_to_cell(entry.get("cell", {}))
+		var tree: Variant = trees.get(cell)
+		if tree == null:
+			continue
+		tree.initial_wood = int(entry.get("initial_wood", tree.initial_wood))
+		tree.remaining_wood = maxi(0, int(entry.get("remaining_wood", tree.remaining_wood)))
+		tree.initial_branches = int(entry.get("initial_branches", tree.initial_branches))
+		tree.remaining_branches = maxi(0, int(entry.get("remaining_branches", tree.remaining_branches)))
+		tree.hand_branches = maxi(0, int(entry.get("hand_branches", tree.hand_branches)))
+		tree.branch_exhausted = bool(entry.get("branch_exhausted", tree.branch_exhausted))
+		tree.felled = bool(entry.get("felled", tree.felled))
 
 
 func capture(

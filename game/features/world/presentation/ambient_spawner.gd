@@ -64,14 +64,11 @@ func _create_tree(position_on_board: Vector3, refresh_navigation := true) -> voi
 	var tree: Node3D = TreeScene.instantiate()
 	tree.position = position_on_board
 	var initial_wood: int = simulation.random.randi_range(4, 7)
-	tree.set_meta("initial_wood", initial_wood)
-	tree.set_meta("remaining_wood", initial_wood)
 	var initial_branches: int = simulation.random.randi_range(5, 9)
-	tree.set_meta("initial_branches", initial_branches)
-	tree.set_meta("remaining_branches", initial_branches)
-	tree.set_meta("hand_branches", 0)
 	
 	var cell: Vector2i = simulation._cell_from_position(position_on_board)
+	var tree_state: Variant = simulation.world_resource_state.create_tree(cell, initial_wood, initial_branches)
+	_sync_tree_visual_state(tree, tree_state)
 	simulation.tree_nodes[cell] = tree
 	simulation.add_landscape_object(tree)
 	
@@ -295,3 +292,15 @@ func _create_rabbit_source(cell: Vector2i, position: Vector3, direction: Vector3
 	simulation._add_selector_to_node(node, "rabbit_selector", Vector3(0.5, 0.4, 0.5), Vector3.UP * 0.2)
 	simulation.add_landscape_object(node)
 	simulation.rabbit_sources[cell] = RabbitSourceRecord.new(node, direction)
+
+
+func _sync_tree_visual_state(tree: Node3D, state: Variant) -> void:
+	# Compatibility projection for presentation code that has not yet moved to
+	# WorldResourceState. Gameplay writes go through the state record.
+	tree.set_meta("initial_wood", state.initial_wood)
+	tree.set_meta("remaining_wood", state.remaining_wood)
+	tree.set_meta("initial_branches", state.initial_branches)
+	tree.set_meta("remaining_branches", state.remaining_branches)
+	tree.set_meta("hand_branches", state.hand_branches)
+	tree.set_meta("branch_exhausted", state.branch_exhausted)
+	tree.set_meta("felled", state.felled)

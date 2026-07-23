@@ -16,13 +16,13 @@ func _init() -> void:
 
 	var felled_cell: Vector2i = sim_a._cell_from_position(sim_a.tree_positions[0])
 	sim_a._fell_tree_at(sim_a.tree_positions[0])
-	assert(bool(sim_a.tree_nodes[felled_cell].get_meta("felled", false)), "tree should be felled in A")
+	assert(sim_a.world_resource_state.tree_at(felled_cell).felled, "tree should be felled in A")
 
 	var depleted_cell: Vector2i = sim_a._cell_from_position(sim_a.tree_positions[1])
-	var depleted_tree: Node3D = sim_a.tree_nodes[depleted_cell]
-	depleted_tree.set_meta("initial_branches", 8)
-	depleted_tree.set_meta("remaining_branches", 3)
-	depleted_tree.set_meta("hand_branches", 2)
+	var depleted_tree: Variant = sim_a.world_resource_state.tree_at(depleted_cell)
+	depleted_tree.initial_branches = 8
+	depleted_tree.remaining_branches = 3
+	depleted_tree.hand_branches = 2
 	var grass_cell: Vector2i = sim_a.grass_sources.keys()[0]
 	var grass_before: GrassSourceRecord = sim_a.grass_sources[grass_cell]
 	grass_before.remaining = maxi(1, grass_before.initial - 1)
@@ -43,7 +43,7 @@ func _init() -> void:
 	var sim_b := await SimHelper.setup_simulation(self)
 
 	# Sanity: a pristine forest has this cell standing before we load.
-	assert(not bool(sim_b.tree_nodes[felled_cell].get_meta("felled", false)), "fresh tree must start standing")
+	assert(not sim_b.world_resource_state.tree_at(felled_cell).felled, "fresh tree must start standing")
 	assert(sim_b.settlement.money != 4321, "fresh money should differ from saved value")
 
 	assert(SaveGameServiceScript.load_game(sim_b, SAVE_PATH), "load_game should succeed")
@@ -53,10 +53,10 @@ func _init() -> void:
 	assert(sim_b.citizens.size() == citizen_count, "citizen count not restored")
 
 	# Forest overlay restored onto the regenerated forest.
-	assert(bool(sim_b.tree_nodes[felled_cell].get_meta("felled", false)), "felled tree not restored")
-	var restored_tree: Node3D = sim_b.tree_nodes[depleted_cell]
-	assert(int(restored_tree.get_meta("remaining_branches", -1)) == 3, "branch depletion not restored")
-	assert(int(restored_tree.get_meta("hand_branches", -1)) == 2, "hand branches not restored")
+	assert(sim_b.world_resource_state.tree_at(felled_cell).felled, "felled tree not restored")
+	var restored_tree: Variant = sim_b.world_resource_state.tree_at(depleted_cell)
+	assert(restored_tree.remaining_branches == 3, "branch depletion not restored")
+	assert(restored_tree.hand_branches == 2, "hand branches not restored")
 	assert(sim_b.grass_sources.has(grass_cell), "grass source missing after restore")
 	assert(sim_b.grass_sources[grass_cell].remaining == grass_before.remaining, "grass depletion not restored")
 	assert(sim_b.forage_sources.has(forage_cell), "forage source missing after restore")

@@ -7,7 +7,7 @@ the source of a gameplay resource.
 | Object | Scene ownership | Runtime source of truth | Saved today |
 | --- | --- | --- | --- |
 | Terrain surface | `Terrain3dWorld/Terrain3D` | Terrain3D data | terrain asset | 
-| Trees | `Terrain3dWorld/LandscapeObjects` | `ForagingService` + `tree_nodes` keyed by board cell | yes: wood, branches, felled and exhausted flags |
+| Trees | `Terrain3dWorld/LandscapeObjects` | `WorldResourceState.trees` keyed by board cell | yes: wood, branches, felled and exhausted flags |
 | Grass patches | `LandscapeObjects` | `grass_sources` (`GrassSourceRecord`) | yes: remaining amount |
 | Wild forage | `LandscapeObjects` | `forage_sources` + `forage_respawn_at` | yes: source and respawn state |
 | Rabbits | `LandscapeObjects` | `rabbit_sources` + `rabbit_respawn_at` | yes: position, direction and respawn state |
@@ -38,6 +38,8 @@ so resource availability no longer resets.
 
 ## Next refactor boundary
 
-The next cleanup is to move the remaining tree data out of node metadata and
-make `ForagingService` mutate `WorldResourceState` directly. The saved record
-must remain keyed by stable cells and contain no `Node3D` references.
+Tree mutations now go through `WorldResourceState`. Tree metadata is retained
+only as a compatibility projection for presentation and legacy query code; it
+is reconstructed from the state record and is not serialized. The next cleanup
+can replace those remaining metadata reads with state queries without changing
+the persistence boundary.
