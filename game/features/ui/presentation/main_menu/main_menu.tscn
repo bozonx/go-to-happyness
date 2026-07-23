@@ -1,0 +1,182 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://game/features/ui/presentation/main_menu/main_menu.gd" id="1_main_menu"]
+[ext_resource type="Theme" path="res://game/features/ui/presentation/theme/ui_theme.tres" id="2_ui_theme"]
+
+[node name="MainMenu" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("2_ui_theme")
+script = ExtResource("1_main_menu")
+
+[node name="ColorRect" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.08, 0.1, 0.14, 1)
+
+[node name="MarginContainer" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 40
+theme_override_constants/margin_top = 40
+theme_override_constants/margin_right = 40
+theme_override_constants/margin_bottom = 40
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 24
+
+[node name="Header" type="VBoxContainer" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="TitleLabel" type="Label" parent="MarginContainer/VBoxContainer/Header"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 36
+text = "GO TO HAPPYNESS"
+horizontal_alignment = 1
+
+[node name="SubtitleLabel" type="Label" parent="MarginContainer/VBoxContainer/Header"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(0.7, 0.75, 0.8, 1)
+text = "Главное меню — Выберите эру для начала игры"
+horizontal_alignment = 1
+
+[node name="ContentSplit" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 32
+
+[node name="EraPanel" type="Panel" parent="MarginContainer/VBoxContainer/ContentSplit"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 1.0
+
+[node name="VBox" type="VBoxContainer" parent="MarginContainer/VBoxContainer/ContentSplit/EraPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 16.0
+offset_right = -16.0
+offset_bottom = -16.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 12
+
+[node name="EraPanelTitle" type="Label" parent="MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Доступные Эры"
+
+[node name="TentEraButton" type="Button" parent="MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+text = "⛺ Палаточная эра"
+
+[node name="EarthEraButton" type="Button" parent="MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+disabled = true
+text = "🧱 Земляная эра (Скоро)"
+
+[node name="ClayEraButton" type="Button" parent="MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+disabled = true
+text = "🏺 Глиняная эра (Скоро)"
+
+[node name="WoodEraButton" type="Button" parent="MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+disabled = true
+text = "🪵 Деревянная эра (Скоро)"
+
+[node name="StoneEraButton" type="Button" parent="MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+disabled = true
+text = "🪨 Каменная эра (Скоро)"
+
+[node name="BuildingEditorButton" type="Button" parent="MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+disabled = true
+text = "🏗️ Редактор зданий (Скоро)"
+
+[node name="ConfigPanel" type="Panel" parent="MarginContainer/VBoxContainer/ContentSplit"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 1.2
+
+[node name="VBox" type="VBoxContainer" parent="MarginContainer/VBoxContainer/ContentSplit/ConfigPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 16.0
+offset_right = -16.0
+offset_bottom = -16.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 16
+
+[node name="ConfigTitle" type="Label" parent="MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Параметры запуска"
+
+[node name="LandscapeLabel" type="Label" parent="MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox"]
+layout_mode = 2
+text = "Выберите ландшафт / карту:"
+
+[node name="LandscapeOption" type="OptionButton" parent="MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox"]
+custom_minimum_size = Vector2(0, 36)
+layout_mode = 2
+
+[node name="HSeparator" type="HSeparator" parent="MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox"]
+layout_mode = 2
+
+[node name="DescriptionLabel" type="Label" parent="MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.85, 0.9, 0.95, 1)
+autowrap_mode = 3
+text = "Описание эры..."
+
+[node name="ParamSummaryLabel" type="Label" parent="MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7, 0.8, 0.7, 1)
+autowrap_mode = 3
+text = "Параметры..."
+
+[node name="Footer" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 24
+
+[node name="StartGameButton" type="Button" parent="MarginContainer/VBoxContainer/Footer"]
+custom_minimum_size = Vector2(220, 48)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "▶ Начать эру"
+
+[node name="QuitButton" type="Button" parent="MarginContainer/VBoxContainer/Footer"]
+custom_minimum_size = Vector2(160, 48)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "❌ Выход"

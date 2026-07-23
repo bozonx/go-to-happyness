@@ -14,6 +14,7 @@ const ConstructionEntrancePostScene = preload("res://game/features/buildings/pre
 const BillboardLabelScene = preload("res://game/features/ui/presentation/billboard_label.tscn")
 const GatheringPlaceVisualScene = preload("res://game/features/buildings/presentation/gathering_place_visual.tscn")
 const PocketTakeItemRowScene = preload("res://game/features/citizens/presentation/pocket_take_item_row.tscn")
+const GameLaunchConfigScript = preload("res://game/features/settlement/domain/game_launch_config.gd")
 const TentEraSurvivalRulesScript = preload("res://game/features/settlement/domain/tent_era_survival_rules.gd")
 const CampfireMenuControllerScript = preload("res://game/features/settlement/presentation/campfire_menu_controller.gd")
 const WorkforceMenuControllerScript = preload("res://game/features/decision/presentation/workforce_menu_controller.gd")
@@ -147,6 +148,7 @@ const DIG_RADIUS := 2.2
 const DIG_REACH := 6.0
 
 var settlement := SettlementState.new()
+var launch_config: GameLaunchConfig
 var day_cycle := SimulationDayCycle.new()
 var clock: SimulationClock = day_cycle.clock
 var game_minutes: float:
@@ -591,6 +593,11 @@ var building_visuals_service: BuildingVisualsService
 
 
 func _ready() -> void:
+	var active_config: GameLaunchConfig = GameLaunchManager.active_launch_config if GameLaunchManager != null else GameLaunchConfigScript.for_tent_era()
+	if active_config == null:
+		active_config = GameLaunchConfigScript.for_tent_era()
+	launch_config = active_config
+
 	hero_pocket_service = HeroPocketServiceScript.new()
 	hero_pocket_service.configure(func() -> Citizen: return player_citizen, _create_resource_pile, _update_interface, _refresh_interaction_hint)
 	hero_interaction_service = HeroInteractionServiceScript.new()
@@ -606,7 +613,7 @@ func _ready() -> void:
 		territory_service.register_biome(summer_valley_biome)
 	if summer_plains_biome != null:
 		territory_service.register_biome(summer_plains_biome)
-	territory_service.set_active_biome(&"summer_valley")
+	territory_service.set_active_biome(launch_config.biome_id)
 
 	if citizen_ai == null:
 		citizen_ai = CitizenAISystem.new()
@@ -792,7 +799,7 @@ func _ready() -> void:
 	first_person_hud_controller.configure(self)
 	label_distance_fade_controller = LabelDistanceFadeControllerScript.new()
 	label_distance_fade_controller.configure(self)
-	settlement.apply_tent_start()
+	settlement.apply_launch_config(launch_config)
 	var _event_registry := EventRegistryScript.new()
 	_event_registry.register_all(TentEraEventsScript.build())
 	event_service = EventServiceScript.new(_event_registry)

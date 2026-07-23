@@ -142,9 +142,11 @@ var active_research_duration: float:
 	set(value): research.duration = value
 
 
-func apply_tent_start(reset_progress := true) -> void:
-	era = Era.TENT
-	money = TENT_STARTING_MONEY
+func apply_launch_config(config: GameLaunchConfig, reset_progress := true) -> void:
+	if config == null:
+		config = GameLaunchConfig.for_tent_era()
+	era = config.era_type as Era
+	money = config.starting_money
 	branches = 0
 	grass = 0
 	water = 0
@@ -158,9 +160,11 @@ func apply_tent_start(reset_progress := true) -> void:
 	boards = 0
 	stone = 0
 	bricks = 0
-	wellbeing = TENT_STARTING_WELLBEING
+	wellbeing = config.starting_wellbeing
 	work_policy.reset()
 	equipment_state.reset()
+	if not config.starting_equipment.is_empty():
+		equipment_state.equipment = config.starting_equipment.duplicate(true)
 	trade_sales = 0
 	warehouse_tarp_covered = false
 	campfire_story_effect = ""
@@ -172,12 +176,16 @@ func apply_tent_start(reset_progress := true) -> void:
 	warehouse_types.clear()
 	warehouse_ever_built = false
 	construction_reservations.clear()
-	backpack[ResourceIds.FOOD] = TENT_STARTING_FOOD
-	backpack[ResourceIds.WATER] = TENT_STARTING_WATER
-	backpack[ResourceIds.TARP] = 1
+	for res_type in config.starting_resources:
+		backpack[str(res_type)] = int(config.starting_resources[res_type])
 	if reset_progress:
 		buildings.clear()
 		unlock_state.reset()
+
+
+func apply_tent_start(reset_progress := true) -> void:
+	apply_launch_config(GameLaunchConfig.for_tent_era(), reset_progress)
+
 
 
 func construction_gloves_available() -> bool:

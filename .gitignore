@@ -2,3 +2,9 @@
 .godot/
 /android/
 
+# IDE & AI Assistant metadata
+.claude/
+.agents/
+.codex/
+
+

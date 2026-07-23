@@ -12,12 +12,13 @@ config_version=5
 
 config/name="go-to-happyness"
 config/version="0.1.0"
-run/main_scene="res://game/bootstrap/settlement_game.tscn"
+run/main_scene="res://game/features/ui/presentation/main_menu/main_menu.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
 
 [autoload]
 
+GameLaunchManager="*res://game/features/settlement/application/game_launch_manager.gd"
 _mcp_game_helper="*res://addons/godot_ai/runtime/game_helper.gd"
 
 [display]
