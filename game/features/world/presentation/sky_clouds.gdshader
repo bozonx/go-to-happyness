@@ -16,6 +16,7 @@ uniform vec3 u_horizon_glow_color : source_color = vec3(1.0, 0.52, 0.25); // sun
 uniform float u_overcast : hint_range(0.0, 1.0) = 0.0;
 uniform float u_solar_intensity : hint_range(0.0, 1.0) = 1.0;
 uniform float u_sun_disc_energy = 6.0;  // HDR overdrive so filmic tonemap + glow bloom the disc
+uniform float u_time = 0.0;
 
 // --- static art-direction knobs --------------------------------------------
 uniform float u_cloud_scale = 1.15;     // bigger = smaller cloud cells
@@ -73,7 +74,7 @@ float cloud_field(vec2 uv) {
 // High-altitude cirrus wind streaks layer
 float cirrus_field(vec2 uv) {
 	vec2 streaked_uv = vec2(uv.x * 0.35 + uv.y * 1.6, uv.y * 3.8);
-	float n = fbm(streaked_uv + u_wind * TIME * 0.4);
+	float n = fbm(streaked_uv + u_wind * u_time * 0.4);
 	return smoothstep(0.52, 0.76, n);
 }
 
@@ -113,7 +114,7 @@ void sky() {
 	// --- sky projection ---
 	float ceil_mask = smoothstep(0.08, 0.34, horizon);
 	vec2 uv = dir.xz / max(horizon, 0.16);
-	uv = uv * u_cloud_scale + u_wind * TIME;
+	uv = uv * u_cloud_scale + u_wind * u_time;
 
 	// --- High-altitude cirrus streaks layer ---
 	if (u_cirrus_amount > 0.001) {
@@ -148,19 +149,11 @@ void sky() {
 	vec3 cloud_shadow = mix(u_cloud_shadow_clear, u_cloud_shadow_storm, u_overcast);
 	vec3 cloud_col = mix(cloud_shadow, cloud_lit, lit);
 
-	// Clouds crossing the sun should glow from transmitted light instead of
-	// cutting a flat blue bite out of the HDR disc.
-	float sun_backlight = pow(sun_amt, 80.0) * clear_sky * u_solar_intensity;
-	cloud_col = mix(cloud_col, warm_sun * 1.15, sun_backlight * 0.72);
-
 	// Warm sun-kissed rim & edge highlight on lit borders facing sun
 	float edge_mask = smoothstep(0.01, 0.15, density) * (1.0 - smoothstep(0.35, 0.85, density));
 	float rim = pow(sun_amt, 2.5) * edge_mask * lit;
-	cloud_col += warm_sun * (lit * 0.18 + rim * 0.4) * clear_sky * u_solar_intensity;
+	cloud_col += warm_sun * (lit * 0.18 + rim * 0.55) * clear_sky * u_solar_intensity;
 
 	float alpha = density * ceil_mask;
 	COLOR = mix(sky_col, cloud_col, alpha);
-	// Restore part of the disc energy transmitted through cloud cover. This
-	// preserves a single round sun while retaining a soft, readable occlusion.
-	COLOR += warm_sun * sun_disc * u_solar_intensity * u_sun_disc_energy * alpha * 0.62;
 }

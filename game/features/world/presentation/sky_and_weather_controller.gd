@@ -5,6 +5,12 @@ const SUN_GLARE_OCCLUSION_DISTANCE := 96.0
 const SUN_GLARE_OCCLUSION_MASK := 1 | 8
 const SUN_GLARE_EDGE_ALLOWANCE := 0.18
 const SUN_GLARE_OCCLUSION_SAMPLE_RADIUS := 0.24
+const CLOUD_SCALE := 1.15
+const CLOUD_WIND := Vector2(0.006, 0.002)
+const CLOUD_EDGE_SOFTNESS := 0.10
+const CLOUD_COVERAGE_CLEAR := 0.50
+const CLOUD_COVERAGE_STORM := 0.14
+const CLOUD_MINIMUM_SUN_VISIBILITY := 0.12
 
 var camera: Camera3D
 var sun: DirectionalLight3D
@@ -42,7 +48,6 @@ func update_daylight(game_minutes: float, overcast: float, runtime_seconds: floa
 	var solar_height := sin((hour - 6.0) / 12.0 * PI)
 	var solar_intensity := smoothstep(0.0, 0.28, solar_height)
 	var twilight := 1.0 - smoothstep(0.0, 0.28, absf(solar_height))
-	var direct_light := solar_intensity * (1.0 - overcast)
 	var night_color := Color("101a2b")
 	var twilight_color := Color("c66b52")
 	var night_twilight_color := Color("503149")
@@ -62,6 +67,9 @@ func update_daylight(game_minutes: float, overcast: float, runtime_seconds: floa
 	var sun_elevation := 3.0 + maxf(solar_height, 0.0) * 45.0
 	var sun_azimuth := lerpf(-75.0, 11.0, day_progress)
 	sun.rotation_degrees = Vector3(-sun_elevation, sun_azimuth, 0.0)
+	var sun_direction := sun.global_transform.basis.z.normalized()
+	var cloud_sun_visibility := _cloud_sun_visibility(sun_direction, overcast, runtime_seconds)
+	var direct_light := solar_intensity * (1.0 - overcast) * cloud_sun_visibility
 	var base_sun_color := Color("f08a5d").lerp(Color("fff2d1"), solar_intensity)
 	sun.light_color = base_sun_color.lerp(Color("a8b8c0"), overcast)
 	sun.light_energy = lerpf(0.0, 1.2, direct_light)
@@ -75,6 +83,12 @@ func update_daylight(game_minutes: float, overcast: float, runtime_seconds: floa
 		sky_material.set_shader_parameter("u_sun_color", sun.light_color)
 		sky_material.set_shader_parameter("u_overcast", overcast)
 		sky_material.set_shader_parameter("u_solar_intensity", solar_intensity)
+		sky_material.set_shader_parameter("u_time", runtime_seconds)
+		sky_material.set_shader_parameter("u_cloud_scale", CLOUD_SCALE)
+		sky_material.set_shader_parameter("u_wind", CLOUD_WIND)
+		sky_material.set_shader_parameter("u_edge_softness", CLOUD_EDGE_SOFTNESS)
+		sky_material.set_shader_parameter("u_coverage_clear", CLOUD_COVERAGE_CLEAR)
+		sky_material.set_shader_parameter("u_coverage_storm", CLOUD_COVERAGE_STORM)
 		var horizon_glow := Color("ff6a2a").lerp(Color("a8b8c0"), overcast)
 		sky_material.set_shader_parameter("u_horizon_glow_color", horizon_glow)
 	if rain_effect != null:
@@ -85,6 +99,60 @@ func update_daylight(game_minutes: float, overcast: float, runtime_seconds: floa
 	for ff in fireflies:
 		if is_instance_valid(ff):
 			ff.set_night_factor(firefly_factor)
+
+
+func _cloud_sun_visibility(sun_direction: Vector3, overcast: float, runtime_seconds: float) -> float:
+	var horizon := sun_direction.y
+	var projection_scale := maxf(horizon, 0.16)
+	var uv := Vector2(sun_direction.x, sun_direction.z) / projection_scale
+	uv = uv * CLOUD_SCALE + CLOUD_WIND * runtime_seconds
+	var coverage := lerpf(CLOUD_COVERAGE_CLEAR, CLOUD_COVERAGE_STORM, overcast)
+	var density := smoothstep(coverage, coverage + CLOUD_EDGE_SOFTNESS, _cloud_field(uv))
+	var cloud_alpha := density * smoothstep(0.08, 0.34, horizon)
+	return lerpf(1.0, CLOUD_MINIMUM_SUN_VISIBILITY, cloud_alpha)
+
+
+func _cloud_field(uv: Vector2) -> float:
+	var q := Vector2(
+		_fbm(uv * 0.75),
+		_fbm(uv * 0.75 + Vector2(5.2, 1.3))
+	)
+	var r := Vector2(
+		_fbm(uv + 1.15 * q + Vector2(1.7, 9.2)),
+		_fbm(uv + 1.15 * q + Vector2(8.3, 2.8))
+	)
+	return pow(_fbm(uv + 1.3 * r), 1.1)
+
+
+func _fbm(p: Vector2) -> float:
+	var value := 0.0
+	var amplitude := 0.5
+	for _octave in range(4):
+		value += amplitude * _value_noise(p)
+		p *= 2.02
+		amplitude *= 0.5
+	return value
+
+
+func _value_noise(p: Vector2) -> float:
+	var cell := p.floor()
+	var fraction := p - cell
+	fraction = fraction * fraction * (Vector2.ONE * 3.0 - fraction * 2.0)
+	var a := _hash21(cell)
+	var b := _hash21(cell + Vector2(1.0, 0.0))
+	var c := _hash21(cell + Vector2(0.0, 1.0))
+	var d := _hash21(cell + Vector2.ONE)
+	return lerpf(lerpf(a, b, fraction.x), lerpf(c, d, fraction.x), fraction.y)
+
+
+func _hash21(p: Vector2) -> float:
+	p = Vector2(_fract(p.x * 123.34), _fract(p.y * 345.45))
+	p += Vector2.ONE * p.dot(p + Vector2.ONE * 34.345)
+	return _fract(p.x * p.y)
+
+
+func _fract(value: float) -> float:
+	return value - floorf(value)
 
 
 func _update_sun_glare(direct_light: float, overcast: float) -> void:
