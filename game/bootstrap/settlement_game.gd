@@ -515,6 +515,124 @@ func _ready() -> void:
 	_finalize_launch(launch_mgr)
 
 
+func _next_registration_ticket() -> int:
+	return citizen_registration_service.next_registration_ticket() if citizen_registration_service != null else 0
+
+
+func _resolve_event_decision(choice_index: int) -> void:
+	if survival_event_controller != null:
+		survival_event_controller.resolve_event_decision(choice_index)
+
+
+func _toggle_school_development(role: String, pressed: bool) -> void:
+	if school_menu_controller != null:
+		school_menu_controller.toggle_school_development(role, pressed)
+
+func _start_school_training(role: String) -> void:
+	if school_menu_controller != null:
+		school_menu_controller.start_school_training(role)
+
+func _update_entrance_order_total(_value := 0.0) -> void:
+	if entrance_menu_controller != null:
+		entrance_menu_controller.update_entrance_order_total(_value)
+
+
+func _send_entrance_order() -> void:
+	if entrance_menu_controller != null:
+		entrance_menu_controller.send_entrance_order()
+
+func _hide_research_menu() -> void:
+	if research_menu_controller != null:
+		research_menu_controller.hide_research_menu()
+
+func _start_research(tech_id: String) -> void:
+	if research_menu_controller != null:
+		research_menu_controller.start_research(tech_id)
+
+func _cancel_research() -> void:
+	if research_menu_controller != null:
+		research_menu_controller.cancel_research()
+
+
+func _show_campfire_story_menu() -> void:
+	if campfire_menu_controller != null:
+		campfire_menu_controller.show_campfire_story_menu()
+
+
+func _close_campfire_story_menu() -> void:
+	if campfire_menu_controller != null:
+		campfire_menu_controller.close_campfire_story_menu()
+
+
+func _select_campfire_story(story_id: String) -> void:
+	if campfire_menu_controller != null:
+		campfire_menu_controller.select_campfire_story(story_id)
+
+
+func _close_campfire_orders_menu() -> void:
+	if campfire_menu_controller != null:
+		campfire_menu_controller.close_campfire_orders_menu()
+	ui_manager.campfire_menu.visible = true
+
+
+func _set_balanced_warehouse_mode(enabled: bool) -> void:
+	storage_routing_service.set_balanced_warehouse_mode(enabled)
+
+
+func _show_workforce_menu() -> void:
+	if workforce_menu_controller != null:
+		workforce_menu_controller.show_workforce_menu()
+
+
+func _close_workforce_menu() -> void:
+	if workforce_menu_controller != null:
+		workforce_menu_controller.close_workforce_menu()
+
+
+func _remove_worker_from_role(role: String) -> void:
+	if workforce_menu_controller != null:
+		workforce_menu_controller.remove_worker_from_role(role)
+
+
+func _enable_auto_for_citizen(citizen: Citizen) -> void:
+	if workforce_menu_controller != null:
+		workforce_menu_controller.enable_auto_for_citizen(citizen)
+
+
+func _buy_food(quantity: int, unit_price: int) -> void:
+	trade_service.buy_food(quantity, unit_price)
+
+
+func _sell_resource(resource_type: String, quantity: int, unit_price: int) -> void:
+	trade_service.sell_resource(resource_type, quantity, unit_price)
+
+
+func _buy_tool(tool_id: String, price: int) -> void:
+	trade_service.buy_tool(tool_id, price)
+
+
+func _buy_courier_equipment(courier: Citizen, equipment_id: String, price: int) -> void:
+	trade_service.buy_courier_equipment(courier, equipment_id, price)
+
+
+func _toggle_warehouse_accept(accepted: bool, resource_type: String) -> void:
+	if warehouse_menu_controller != null:
+		warehouse_menu_controller.toggle_warehouse_accept(accepted, resource_type)
+
+
+func _dump_warehouse_resource(resource_type: String) -> void:
+	if warehouse_menu_controller != null:
+		warehouse_menu_controller.dump_warehouse_resource(resource_type)
+
+
+func _cover_warehouse_with_tarp() -> void:
+	if warehouse_menu_controller != null:
+		warehouse_menu_controller.cover_warehouse_with_tarp()
+
+
+func _settle_unhoused_resident() -> void:
+	citizen_lifecycle_service.settle_unhoused_resident()
+
 func _setup_hero_services() -> void:
 	hero_pocket_service = HeroPocketServiceScript.new()
 	hero_pocket_service.configure(func() -> Citizen: return player_citizen, _create_resource_pile, _update_interface, _refresh_interaction_hint)
@@ -1166,7 +1284,8 @@ func _setup_controllers_and_world() -> void:
 	add_child(survival_event_controller)
 	survival_event_controller.setup(self)
 	_create_world()
-	_create_interface()
+	if ui_manager != null:
+		ui_manager.create_interface()
 	ambient_spawner.create_forest()
 	ambient_spawner.spawn_trash_piles()
 	ambient_spawner.spawn_initial_rabbits()
@@ -1210,7 +1329,8 @@ func _process(delta: float) -> void:
 		player_controller.update_interaction(delta)
 		_refresh_interaction_hint()
 		_update_first_person_mouse_and_crosshair()
-		_update_warehouse_fill_labels()
+		if warehouse_fill_label_controller != null:
+			warehouse_fill_label_controller.update_warehouse_fill_labels()
 		if not build_mode.is_empty():
 			var viewport_center := get_viewport().get_visible_rect().size * 0.5
 			var terrain_point: Variant = _terrain_point_at_screen_position(viewport_center)
@@ -1222,13 +1342,15 @@ func _process(delta: float) -> void:
 				world_setup.preview_entrance_marker.visible = false
 				world_setup.preview_back_entrance_marker.visible = false
 	else:
-		_update_camera(delta)
+		if camera_controller != null:
+			camera_controller.update(delta)
 	_update_construction(delta)
-	_update_demolition(delta)
-	_update_water_collectors(delta)
+	demolition.tick(delta)
+	water_collector_service.tick(delta)
 	_update_clock(delta)
 	_release_unassigned_overtime_workers()
-	_update_survival_busy_workers()
+	if survival_event_controller != null:
+		survival_event_controller.update_survival_busy_workers()
 	_return_outside_workers()
 	if ambient_spawner != null:
 		ambient_spawner.update_wild_food(delta)
@@ -1236,20 +1358,22 @@ func _process(delta: float) -> void:
 	_update_trail_overlay()
 	_update_daylight()
 	_update_house_lights()
-	_update_canteen_delivery()
-	_update_arrivals()
-	_update_fire_status()
+	canteen_service.update_canteen_delivery()
+	citizen_lifecycle_service.update_arrivals()
+	fire_management_service.update_fire_status(self, settlement.amount(ResourceIds.BRANCHES))
 	if trade_service != null:
 		trade_service.update()
 
 	# Queued trades are delivered as courier tasks; a dispatch pass picks them up.
 	_request_courier_dispatch()
-	_update_sawmills(delta)
+	sawmills.tick(delta, runtime_seconds)
 	_update_building_research(delta)
-	_update_building_status_indicators(delta)
-	_update_gathering_indicators(delta)
-	_update_label_distance_fading()
-	_sync_backpack_pile()
+	if building_status_indicator_controller != null:
+		building_status_indicator_controller.update_building_status_indicators(delta)
+	foraging_service.update_gathering_indicators(is_first_person, interaction_action, interaction_resource, interaction_time, player_citizen, citizens)
+	if label_distance_fade_controller != null:
+		label_distance_fade_controller.update_label_distance_fading()
+	backpack_node = resource_pile_service.sync_backpack_pile(backpack_node)
 	if _is_work_time() or _has_active_night_work_order():
 		_update_couriers()
 		_worker_poll_timer -= delta
@@ -1258,11 +1382,6 @@ func _process(delta: float) -> void:
 			_update_workers()
 	if selected_builder != null and ui_manager.build_menu.visible:
 		_show_selected_citizen_menu()
-
-
-func _update_label_distance_fading() -> void:
-	if label_distance_fade_controller != null:
-		label_distance_fade_controller.update_label_distance_fading()
 
 
 func _update_workers() -> void:
@@ -1276,9 +1395,6 @@ func daily_order_workday_for_new_order() -> int:
 func daily_order_expiration_for_workday(workday_id: int) -> float:
 	return citizen_daily_order_service.daily_order_expiration_for_workday(workday_id) if citizen_daily_order_service != null else 0.0
 
-
-func _workday_hours_for(workday_id: int) -> int:
-	return citizen_daily_order_service.workday_hours_for(workday_id) if citizen_daily_order_service != null else settlement.workday_hours
 
 
 func _activate_citizen_overtime(citizen: Citizen, source: String) -> bool:
@@ -1294,9 +1410,6 @@ func _assign_daily_order(citizen: Citizen, role: String) -> void:
 		citizen_daily_order_service.assign_daily_order(citizen, role)
 
 
-func _clear_daily_orders(workday_id := 0) -> void:
-	if citizen_daily_order_service != null:
-		citizen_daily_order_service.clear_daily_orders(workday_id)
 
 func _guard_citizen_positions() -> void:
 	if not is_instance_valid(entrance_stone):
@@ -1322,8 +1435,6 @@ func _factory_for_role(role: String) -> Node3D:
 func _is_factory_worker_active(citizen: Citizen, factory: Node3D) -> bool:
 	return workplace_labor_service.is_factory_worker_active(citizen, factory) if workplace_labor_service != null else false
 
-func _has_courier() -> bool:
-	return workplace_labor_service.has_courier() if workplace_labor_service != null else false
 
 func _has_cook() -> bool:
 	return workplace_labor_service.has_cook() if workplace_labor_service != null else false
@@ -1357,9 +1468,6 @@ func _registration_official() -> Citizen:
 func _is_registration_staffed() -> bool:
 	return citizen_registration_service.is_registration_staffed() if citizen_registration_service != null else false
 
-
-func _next_registration_ticket() -> int:
-	return citizen_registration_service.next_registration_ticket() if citizen_registration_service != null else 0
 
 
 func _can_start_registration(citizen: Citizen) -> bool:
@@ -1405,8 +1513,8 @@ func _update_clock(delta: float) -> void:
 			_update_interface("Rain has stopped.")
 	if clock.hour() != previous_hour:
 		_apply_hourly_tent_survival(clock.hour())
-		_apply_hourly_bare_hands_penalty()
-		_apply_hourly_work_fatigue()
+		settlement_survival_service.apply_hourly_bare_hands_penalty()
+		settlement_survival_service.apply_hourly_work_fatigue()
 	if ui_manager.hud != null:
 		ui_manager.hud.update_clock("%s  %02d:%02d  x%d" % ["Night" if clock.is_night() else "Day", clock.hour(), clock.minute(), int(time_multiplier)])
 	_update_skip_night_button()
@@ -1432,11 +1540,13 @@ func _on_daily_settlement_update(_event: SimulationDayEvent) -> void:
 		var delayed_outcomes: Array[EventOutcome] = event_service.advance_day(day_cycle.current_day, _build_event_context(), random)
 		for outcome in delayed_outcomes:
 			_apply_event_outcome(outcome)
-	_maybe_present_survival_decision()
+	if survival_event_controller != null:
+		survival_event_controller.maybe_present_survival_decision()
 	_refresh_living_statuses()
 	settlement.cheer_up_used_today = false
 	settlement.double_time_order_day = -1
-	_remove_expired_temporary_tents()
+	if building_lifecycle_service != null:
+		building_lifecycle_service.remove_expired_temporary_tents()
 	_apply_daily_settlement_rules()
 	_return_outside_workers()
 
@@ -1464,7 +1574,8 @@ func _clear_finished_daily_orders(workday_id: int) -> void:
 			citizen.clear_expired_overtime(workday_id + 1)
 	if citizen_ai != null:
 		citizen_ai.request_decision_refresh()
-	_sync_overtime_scope_indicators()
+	if citizen_daily_order_service != null:
+		citizen_daily_order_service.sync_overtime_scope_indicators()
 
 
 func _clear_expired_overtime_orders() -> void:
@@ -1477,10 +1588,6 @@ func _reset_building_night_work_toggles() -> void:
 	# Keep an active overnight scope visible through the following workday. The
 	# previous implementation cleared this at 08:00 while its workers still had
 	# overtime, turning the next click into an accidental extension.
-	_sync_overtime_scope_indicators()
-
-
-func _sync_overtime_scope_indicators() -> void:
 	if citizen_daily_order_service != null:
 		citizen_daily_order_service.sync_overtime_scope_indicators()
 
@@ -1494,20 +1601,8 @@ func _resume_overtime_daily_orders() -> void:
 		citizen_daily_order_service.resume_overtime_daily_orders()
 
 
-func _apply_hourly_work_fatigue() -> void:
-	settlement_survival_service.apply_hourly_work_fatigue()
-
-
-func _resolve_exhausted_homecomings() -> void:
-	settlement_survival_service.resolve_exhausted_homecomings()
-
-
 func _apply_hourly_tent_survival(hour: int, survival_day := 0) -> void:
 	settlement_survival_service.apply_hourly_tent_survival(hour, survival_day)
-
-
-func _apply_hourly_bare_hands_penalty() -> void:
-	settlement_survival_service.apply_hourly_bare_hands_penalty()
 
 
 func _check_daily_departures() -> void:
@@ -1522,11 +1617,6 @@ func _total_game_minutes() -> float:
 	return float(day_cycle.current_day - 1) * 24.0 * 60.0 + game_minutes
 
 
-func _remove_expired_temporary_tents() -> void:
-	if building_lifecycle_service != null:
-		building_lifecycle_service.remove_expired_temporary_tents()
-
-
 func _apply_daily_settlement_rules() -> void:
 	if settlement_daily_rules_service != null:
 		settlement_daily_rules_service.apply_daily_settlement_rules()
@@ -1537,12 +1627,6 @@ func _update_house_lights() -> void:
 		building_lifecycle_service.update_house_lights()
 
 
-func _house_has_residents(house: Node3D) -> bool:
-	return building_lifecycle_service.house_has_residents(house) if building_lifecycle_service != null else false
-
-
-func _house_has_people_at_home(house: Node3D) -> bool:
-	return building_lifecycle_service.house_has_people_at_home(house) if building_lifecycle_service != null else false
 
 
 func _is_night() -> bool:
@@ -1586,22 +1670,11 @@ func _start_park_rest(cooks_only: bool) -> void:
 		_update_interface("%02d:00 park break: %d residents are resting." % [int(game_minutes) / 60, sent])
 
 
-func _on_meal_finished(citizen: Citizen) -> void:
-	if actuator_bridge != null:
-		actuator_bridge.on_meal_finished(citizen)
-
-
-func _update_canteen_delivery() -> void:
-	canteen_service.update_canteen_delivery()
-
 
 func _cancel_canteen_delivery() -> void:
 	canteen_service.cancel_canteen_delivery()
 
 
-func _on_canteen_delivery_finished(worker: Citizen, amount: int) -> void:
-	if actuator_bridge != null:
-		actuator_bridge.on_canteen_delivery_finished(worker, amount)
 
 func _update_couriers() -> void:
 	if courier_dispatcher != null:
@@ -1688,9 +1761,6 @@ func _start_courier_task(courier: Citizen, task: RefCounted) -> bool:
 	return courier_task_service.start_courier_task(courier, task)
 
 
-func _reserve_task_warehouse_space(task: RefCounted, resource_type: String, amount: int) -> bool:
-	return courier_task_service.reserve_task_warehouse_space(task, resource_type, amount)
-
 
 func _release_task_warehouse_reservation(task: RefCounted) -> void:
 	courier_task_service.release_task_warehouse_reservation(task)
@@ -1737,13 +1807,7 @@ func _preferred_construction_site() -> ConstructionSite:
 func _construction_development_priority(site: ConstructionSite) -> float:
 	return construction_priority_service.development_priority(site) if construction_priority_service != null else 0.0
 
-func _on_construction_material_delivered(_courier: Citizen, site_node: Node3D, resource_type: String, amount: int) -> void:
-	if actuator_bridge != null:
-		actuator_bridge.on_construction_material_delivered(_courier, site_node, resource_type, amount)
 
-func _on_building_supply_delivered(_courier: Citizen, target: Node3D, supply_kind: String, resource_type: String, amount: int) -> void:
-	if actuator_bridge != null:
-		actuator_bridge.on_building_supply_delivered(_courier, target, supply_kind, resource_type, amount)
 
 func _builder_count(site_node: Node3D) -> int:
 	var count := 0
@@ -1761,22 +1825,9 @@ func _building_power(site_node: Node3D) -> float:
 		power += player_citizen.get_efficiency("construction")
 	return power
 
-func _on_resource_delivered(worker: Citizen, resource_type: String, amount: int) -> void:
-	if actuator_bridge != null:
-		actuator_bridge.on_resource_delivered(worker, resource_type, amount)
 
 
-func _on_resource_dropped(worker: Citizen, resource_type: String, amount: int) -> void:
-	if actuator_bridge != null:
-		actuator_bridge.on_resource_dropped(worker, resource_type, amount)
 
-func _on_factory_cycle(worker: Citizen, factory: Node3D) -> void:
-	if actuator_bridge != null:
-		actuator_bridge.on_factory_cycle(worker, factory)
-
-func _on_resource_ready(worker: Citizen, resource_type: String, amount: int) -> void:
-	if actuator_bridge != null:
-		actuator_bridge.on_resource_ready(worker, resource_type, amount)
 
 func _sawmill_key(position_on_board: Vector3) -> Vector2i:
 	return _cell_from_position(position_on_board)
@@ -1784,47 +1835,17 @@ func _sawmill_key(position_on_board: Vector3) -> Vector2i:
 func _sawmill_stock(position_on_board: Vector3) -> Dictionary:
 	return sawmills.stock_at(position_on_board, runtime_seconds)
 
-func _store_sawmill_stock(position_on_board: Vector3, stock: Dictionary) -> void:
-	sawmills.store(position_on_board, stock)
-
-func _on_logs_delivered(worker: Citizen, sawmill_position: Vector3, amount: int) -> void:
-	if actuator_bridge != null:
-		actuator_bridge.on_logs_delivered(worker, sawmill_position, amount)
-
-func _update_sawmills(delta: float) -> void:
-	sawmills.tick(delta, runtime_seconds)
-
-func _decide_forestry_delivery(worker: Citizen, sawmill_position: Vector3) -> void:
-	sawmills.decide_delivery(worker, sawmill_position, runtime_seconds)
-
-func _on_sawmill_boards_collected(courier: Citizen, sawmill_position: Vector3) -> void:
-	if actuator_bridge != null:
-		actuator_bridge.on_sawmill_boards_collected(courier, sawmill_position)
-
-
-func _on_dew_collected(courier: Citizen, collector_position: Vector3) -> void:
-	if actuator_bridge != null:
-		actuator_bridge.on_dew_collected(courier, collector_position)
-
-
 func _request_courier_dispatch() -> void:
 	if _is_work_time() or _has_active_night_work_order():
 		_update_couriers()
 		if citizen_ai != null:
 			citizen_ai.request_decision_refresh()
 
-func _sawmill_with_boards() -> Vector3:
-	return sawmills.position_with_boards(runtime_seconds)
 
-func _on_excavation_cycle(worker: Citizen, site_node: Node3D, efficiency: float) -> void:
-	if actuator_bridge != null:
-		actuator_bridge.on_excavation_cycle(worker, site_node, efficiency)
 
 func _can_work_at_dig_site(site: DigSiteRecordScript) -> bool:
 	return excavation_service.can_work_at_dig_site(site)
 
-func _tool_for_depth(site: DigSiteRecordScript, depth: int) -> String:
-	return excavation_service.tool_for_depth(site, depth)
 
 func _resource_for_depth(site: DigSiteRecordScript, depth: int) -> String:
 	return excavation_service.resource_for_depth(site, depth)
@@ -1835,11 +1856,7 @@ func _count_valid_dig_sites() -> int:
 func _dig_site_for_node(site_node: Node3D) -> DigSiteRecordScript:
 	return excavation_service.dig_site_for_node(site_node)
 
-func _building_cost() -> int:
-	return building_placement_controller.building_cost() if building_placement_controller != null else 0
 
-func _format_costs(building_type: String) -> String:
-	return building_availability_service.cost_text(building_type)
 
 func _stored_resources() -> int:
 	return storage_routing_service.stored_resources()
@@ -1849,18 +1866,6 @@ func _warehouse_capacity() -> int:
 
 func _total_housing_slots() -> int:
 	return building_registry.housing_capacity()
-
-func _update_camera(delta: float) -> void:
-	if camera_controller != null:
-		camera_controller.update(delta)
-
-func _pan_camera(mouse_delta: Vector2) -> void:
-	if camera_controller != null:
-		camera_controller.pan(mouse_delta)
-
-func _rotate_camera(mouse_delta: Vector2) -> void:
-	if camera_controller != null:
-		camera_controller.rotate_yaw_pitch(mouse_delta)
 
 func _update_camera_position() -> void:
 	if camera_controller != null:
@@ -2195,7 +2200,7 @@ func _ai_target_for_key(target_key: StringName) -> Node3D:
 				if is_instance_valid(site.building) and _cell_from_position(site.building.global_position) == cell:
 					return site.building
 		"dig":
-			var site := _dig_site_at(cell)
+			var site := excavation_service.dig_site_at(cell)
 			return site.node if is_instance_valid(site.node) else null
 		"factory":
 			for factory: Node3D in factories:
@@ -2203,10 +2208,6 @@ func _ai_target_for_key(target_key: StringName) -> Node3D:
 					return factory
 	return null
 
-
-func _on_relief_finished(citizen: Citizen) -> void:
-	if actuator_bridge != null:
-		actuator_bridge.on_relief_finished(citizen)
 
 
 func _player_use_toilet(toilet_node: Node3D) -> void:
@@ -2235,32 +2236,6 @@ func _check_player_toilet_request() -> void:
 		_player_toilet_notified = false
 
 
-func _on_leisure_finished(citizen: Citizen) -> void:
-	if actuator_bridge != null:
-		actuator_bridge.on_leisure_finished(citizen)
-
-
-func _create_interface() -> void:
-	if ui_manager != null:
-		ui_manager.create_interface()
-
-
-func _create_context_menu_panel(ui: CanvasLayer, anchor: int, offsets: Vector4, input_handler: Callable = _on_context_menu_gui_input) -> Panel:
-	if ui_manager != null:
-		return ui_manager.create_context_menu_panel(anchor, offsets, input_handler)
-	return null
-
-
-
-func _maybe_present_survival_decision() -> void:
-	if survival_event_controller != null:
-		survival_event_controller.maybe_present_survival_decision()
-
-
-func _resolve_event_decision(choice_index: int) -> void:
-	if survival_event_controller != null:
-		survival_event_controller.resolve_event_decision(choice_index)
-
 
 func _build_event_context() -> EventContext:
 	if survival_event_controller != null:
@@ -2271,19 +2246,6 @@ func _build_event_context() -> EventContext:
 func _apply_event_outcome(outcome: EventOutcome) -> void:
 	if survival_event_controller != null:
 		survival_event_controller.apply_event_outcome(outcome)
-
-
-func _update_survival_busy_workers() -> void:
-	if survival_event_controller != null:
-		survival_event_controller.update_survival_busy_workers()
-
-
-func _can_skip_night() -> bool:
-	return survival_event_controller.can_skip_night() if survival_event_controller != null else false
-
-
-func _can_skip_to_workday_start() -> bool:
-	return survival_event_controller.can_skip_to_workday_start() if survival_event_controller != null else false
 
 
 func _update_skip_night_button() -> void:
@@ -2337,7 +2299,8 @@ func _release_unassigned_overtime_workers() -> void:
 			citizen.deactivate_overtime()
 			changed = true
 	if changed:
-		_sync_overtime_scope_indicators()
+		if citizen_daily_order_service != null:
+			citizen_daily_order_service.sync_overtime_scope_indicators()
 		_update_skip_night_button()
 
 func _set_time_multiplier(multiplier: float) -> void:
@@ -2348,52 +2311,13 @@ func _set_time_multiplier(multiplier: float) -> void:
 		Engine.time_scale = multiplier
 	_update_interface("Simulation speed set to x%d." % int(multiplier))
 
-func _toggle_school_development(role: String, pressed: bool) -> void:
-	if school_menu_controller != null:
-		school_menu_controller.toggle_school_development(role, pressed)
 
-func _start_school_training(role: String) -> void:
-	if school_menu_controller != null:
-		school_menu_controller.start_school_training(role)
-
-func _show_school_menu() -> void:
-	if school_menu_controller != null:
-		school_menu_controller.show_school_menu()
-
-func _show_entrance_menu() -> void:
-	if entrance_menu_controller != null:
-		entrance_menu_controller.show_entrance_menu()
-
-
-func _show_entrance_order_modal() -> void:
-	if entrance_menu_controller != null:
-		entrance_menu_controller.show_entrance_order_modal()
-
-
-func _hide_entrance_order_modal() -> void:
-	if entrance_menu_controller != null:
-		entrance_menu_controller.hide_entrance_order_modal()
-
-
-func _update_entrance_order_total(_value := 0.0) -> void:
-	if entrance_menu_controller != null:
-		entrance_menu_controller.update_entrance_order_total(_value)
-
-
-func _send_entrance_order() -> void:
-	if entrance_menu_controller != null:
-		entrance_menu_controller.send_entrance_order()
 
 func _outside_work_reward() -> int:
 	if settlement != null and settlement.is_research_completed("outside_work_earnings"):
 		return OUTSIDE_WORK_UPGRADE_REWARD
 	return random.randi_range(OUTSIDE_WORK_BASE_REWARD_MIN, OUTSIDE_WORK_BASE_REWARD_MAX)
 
-
-func _outside_work_reward_text() -> String:
-	if entrance_menu_controller != null:
-		return entrance_menu_controller.outside_work_reward_text()
-	return ""
 
 
 func _send_selected_resident_to_outside_work() -> void:
@@ -2506,7 +2430,8 @@ func _update_building_research(delta: float) -> void:
 	building_research_service.advance_active(delta, speed_mult)
 
 	if ui_manager.research_menu != null and ui_manager.research_menu.visible:
-		_refresh_research_menu()
+		if research_menu_controller != null:
+			research_menu_controller.refresh_research_menu()
 
 	if building_research_service.is_active_complete():
 		var completion: Dictionary = building_research_service.complete_active()
@@ -2525,33 +2450,13 @@ func _update_building_research(delta: float) -> void:
 		_refresh_campfire_menu()
 		_refresh_build_menu()
 		if ui_manager.research_menu != null and ui_manager.research_menu.visible:
-			_refresh_research_menu()
-
-func _show_research_menu() -> void:
-	if research_menu_controller != null:
-		research_menu_controller.show_research_menu()
-
-func _hide_research_menu() -> void:
-	if research_menu_controller != null:
-		research_menu_controller.hide_research_menu()
+			if research_menu_controller != null:
+				research_menu_controller.refresh_research_menu()
 
 func _get_available_researcher(_required_skill: String) -> Citizen:
 	if research_menu_controller != null:
 		return research_menu_controller.get_available_researcher(_required_skill)
 	return null
-
-func _refresh_research_menu() -> void:
-	if research_menu_controller != null:
-		research_menu_controller.refresh_research_menu()
-
-func _start_research(tech_id: String) -> void:
-	if research_menu_controller != null:
-		research_menu_controller.start_research(tech_id)
-
-func _cancel_research() -> void:
-	if research_menu_controller != null:
-		research_menu_controller.cancel_research()
-
 
 func _cancel_active_building_research(refund: bool, message: String) -> void:
 	var worker_id := settlement.active_research_worker_id
@@ -2594,13 +2499,6 @@ func _spawn_house_citizen() -> void:
 	citizen_lifecycle_service.spawn_house_citizen()
 
 
-func _find_arrival_greeter(allow_busy := false) -> Citizen:
-	return citizen_lifecycle_service.find_arrival_greeter(allow_busy)
-
-
-func _update_arrivals() -> void:
-	citizen_lifecycle_service.update_arrivals()
-
 
 func _on_arrival_greeter_ready(greeter: Citizen) -> void:
 	citizen_lifecycle_service.on_arrival_greeter_ready(greeter)
@@ -2610,15 +2508,10 @@ func _requeue_interrupted_arrivals() -> void:
 	citizen_lifecycle_service.requeue_interrupted_arrivals()
 
 
-func _requeue_arrival_order(order: Dictionary) -> void:
-	citizen_lifecycle_service.requeue_arrival_order(order)
-
 
 func _cancel_arrivals_for_house(house: Node3D) -> void:
 	citizen_lifecycle_service.cancel_arrivals_for_house(house)
 
-func _settle_unhoused_resident() -> void:
-	citizen_lifecycle_service.settle_unhoused_resident()
 
 func _show_house_menu() -> void:
 	if house_menu_controller != null:
@@ -2690,7 +2583,7 @@ func _set_selected_work_role(role: String, daily_order := false) -> void:
 		if selected_builder.employment_state == Citizen.EmploymentState.UNREGISTERED and _employment_center_position() != Vector3.INF:
 			selected_builder.request_no_permanent_work_registration()
 	elif role == "excavation":
-		_start_dig_assignment()
+		excavation_service.start_dig_assignment()
 		build_menu_is_job_menu = false
 		build_menu_is_daily_order_menu = false
 		return
@@ -2718,7 +2611,8 @@ func _set_selected_work_role(role: String, daily_order := false) -> void:
 	_update_interface("%s assigned to %s." % ["Hero" if selected_builder.is_hero else "Citizen", "automatic work" if role.is_empty() else role.replace("_", " ")])
 	_refresh_campfire_occupancy_button()
 	if ui_manager.workforce_menu != null and ui_manager.workforce_menu.visible:
-		_refresh_workforce_menu()
+		if workforce_menu_controller != null:
+			workforce_menu_controller.refresh_workforce_menu()
 
 func _min_era_for_role(role: String) -> SettlementState.Era:
 	# Basic outdoor/hand-work roles exist from the tent era even without a dedicated workplace.
@@ -2926,21 +2820,6 @@ func _employer_capacity(role: String, building: Node3D) -> int:
 		return 4 if type == "tarp_materials_yard" else 2
 	return 1
 
-func _start_dig_assignment() -> void:
-	excavation_service.start_dig_assignment()
-
-func _place_dig_site(world_position: Vector3) -> void:
-	excavation_service.place_dig_site(world_position)
-
-func _can_excavate(world_position: Vector3) -> bool:
-	return excavation_service.can_excavate(world_position)
-
-func _dig_site_at(cell: Vector2i) -> DigSiteRecordScript:
-	return excavation_service.dig_site_at(cell)
-
-func _create_dig_site(cell: Vector2i, world_position: Vector3) -> DigSiteRecordScript:
-	return excavation_service.create_dig_site(cell, world_position)
-
 func _set_build_placement_ui_visible(is_visible: bool) -> void:
 	if ui_manager.build_menu != null:
 		ui_manager.build_menu.visible = is_visible and (selected_builder != null or build_menu_is_global)
@@ -3060,7 +2939,8 @@ func _close_context_menus() -> void:
 	if ui_manager.message_log_panel != null:
 		ui_manager.message_log_panel.close_modal()
 	_close_pocket_take_menu()
-	_hide_workforce_menu()
+	if workforce_menu_controller != null:
+		workforce_menu_controller.hide_workforce_menu()
 	selected_house = null
 	selected_entrance = null
 	selected_school = null
@@ -3116,7 +2996,8 @@ func _handle_menu_right_click() -> bool:
 		ui_manager.campfire_menu.visible = true
 		return true
 	if ui_manager.workforce_menu != null and ui_manager.workforce_menu.visible:
-		_hide_workforce_menu()
+		if workforce_menu_controller != null:
+			workforce_menu_controller.hide_workforce_menu()
 		ui_manager.campfire_menu.visible = true
 		return true
 	if ui_manager.entrance_order_modal != null and ui_manager.entrance_order_modal.visible:
@@ -3161,7 +3042,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 	if event is InputEventKey and event.keycode == KEY_DELETE and event.pressed and not event.echo:
 		if is_instance_valid(selected_building):
-			_mark_building_for_demolition(selected_building)
+			building_lifecycle_service.mark_building_for_demolition(selected_building)
 			get_viewport().set_input_as_handled()
 			return
 	if event is InputEventKey and event.keycode == KEY_R and event.pressed and not event.echo:
@@ -3190,7 +3071,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if is_first_person:
 		if event is InputEventKey and event.keycode == KEY_T and event.pressed and not event.echo:
 			if not _is_first_person_menu_open():
-				_drop_pocket_on_ground()
+				if hero_pocket_service != null:
+					hero_pocket_service.drop_pocket_on_ground()
 			get_viewport().set_input_as_handled()
 			return
 		elif event is InputEventKey and event.keycode == KEY_F and event.pressed and not event.echo:
@@ -3245,9 +3127,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		if is_rotating_camera:
 			if event.relative.length_squared() > 0.0:
 				right_mouse_dragged = true
-			_rotate_camera(event.relative)
+			if camera_controller != null:
+				camera_controller.rotate_yaw_pitch(event.relative)
 		elif is_panning_camera:
-			_pan_camera(event.relative)
+			if camera_controller != null:
+				camera_controller.pan(event.relative)
 		elif not build_mode.is_empty() or (selected_builder != null and dig_mode):
 			if get_viewport().gui_get_hovered_control() == null:
 				var terrain_point: Variant = _terrain_point_at_screen_position(event.position)
@@ -3257,7 +3141,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if selected_builder != null and dig_mode:
 			var dig_point: Variant = _terrain_point_at_screen_position(event.position)
 			if dig_point != null:
-				_place_dig_site(dig_point)
+				excavation_service.place_dig_site(dig_point)
 		elif not build_mode.is_empty():
 			var build_point: Variant = _terrain_point_at_screen_position(event.position)
 			if build_point != null:
@@ -3290,26 +3174,31 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 	if hit.collider.is_in_group("entrance_selector"):
 		selected_entrance = hit.collider.get_parent() as Node3D
 		selected_building = selected_entrance
-		_show_entrance_menu()
+		if entrance_menu_controller != null:
+			entrance_menu_controller.show_entrance_menu()
 		return
 	if hit.collider.is_in_group("campfire_selector"):
 		selected_campfire = hit.collider.get_parent() as Node3D
 		selected_building = selected_campfire
-		_show_campfire_menu()
+		if campfire_menu_controller != null:
+			campfire_menu_controller.show_campfire_menu()
 		return
 	if hit.collider.is_in_group("market_selector"):
 		selected_market = hit.collider.get_parent() as Node3D
 		selected_building = selected_market
-		_show_market_menu()
+		if market_menu_controller != null:
+			market_menu_controller.show_market_menu()
 		return
 	if hit.collider.is_in_group("warehouse_selector"):
 		selected_warehouse = hit.collider.get_parent() as Node3D
 		selected_building = selected_warehouse
-		_show_warehouse_menu()
+		if warehouse_menu_controller != null:
+			warehouse_menu_controller.show_warehouse_menu()
 		return
 	if hit.collider.is_in_group("cook_campfire_selector"):
 		selected_building = hit.collider.get_parent() as Node3D
-		_show_building_menu()
+		if building_menu_controller != null:
+			building_menu_controller.show_building_menu()
 		return
 	if hit.collider.is_in_group("house_selector"):
 		selected_house = hit.collider.get_parent() as Node3D
@@ -3324,7 +3213,8 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 		selected_building = selected_school
 		ui_manager.house_menu.visible = false
 		ui_manager.build_menu.visible = false
-		_show_school_menu()
+		if school_menu_controller != null:
+			school_menu_controller.show_school_menu()
 		return
 	if hit.collider.is_in_group("materials_factory_selector"):
 		selected_materials_factory = hit.collider.get_parent() as Node3D
@@ -3339,11 +3229,13 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 		return
 	if hit.collider.is_in_group("construction_selector"):
 		selected_building = hit.collider.get_parent() as Node3D
-		_show_building_menu()
+		if building_menu_controller != null:
+			building_menu_controller.show_building_menu()
 		return
 	if hit.collider.is_in_group("building_selector"):
 		selected_building = hit.collider.get_parent() as Node3D
-		_show_building_menu()
+		if building_menu_controller != null:
+			building_menu_controller.show_building_menu()
 		return
 	if not hit.collider.is_in_group("citizen_selector"):
 		return
@@ -3355,7 +3247,8 @@ func _first_person_select_at_crosshair() -> void:
 	if target.kind == "building" and is_instance_valid(target.node) and building_registry.building_type_for_node(target.node) in OFFICIAL_WORKPLACE_TYPES:
 		selected_campfire = target.node
 		selected_building = target.node
-		_show_campfire_menu()
+		if campfire_menu_controller != null:
+			campfire_menu_controller.show_campfire_menu()
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 		return
 	var viewport_center := get_viewport().get_visible_rect().size * 0.5
@@ -3381,7 +3274,8 @@ func _hide_all_selection_menus() -> void:
 		ui_manager.research_menu.visible = false
 	if ui_manager.decision_menu != null:
 		ui_manager.decision_menu.visible = false
-	_hide_workforce_menu()
+	if workforce_menu_controller != null:
+		workforce_menu_controller.hide_workforce_menu()
 	build_category = ""
 	build_menu_is_job_menu = false
 	build_menu_is_daily_order_menu = false
@@ -3394,20 +3288,17 @@ func _hide_all_selection_menus() -> void:
 	selected_warehouse = null
 	selected_building = null
 
-func _mark_building_for_demolition(building: Node3D) -> void:
-	building_lifecycle_service.mark_building_for_demolition(building)
-
 func _demolish_selected_house() -> void:
 	if selected_house != null:
-		_mark_building_for_demolition(selected_house)
+		building_lifecycle_service.mark_building_for_demolition(selected_house)
 
 func _demolish_selected_school() -> void:
 	if selected_school != null:
-		_mark_building_for_demolition(selected_school)
+		building_lifecycle_service.mark_building_for_demolition(selected_school)
 
 func _demolish_selected_warehouse() -> void:
 	if selected_warehouse != null:
-		_mark_building_for_demolition(selected_warehouse)
+		building_lifecycle_service.mark_building_for_demolition(selected_warehouse)
 
 
 func _add_demolition_marker(building: Node3D) -> void:
@@ -3425,11 +3316,6 @@ func _add_demolition_marker(building: Node3D) -> void:
 func _demolition_ready(site: DemolitionSite) -> bool:
 	return building_lifecycle_service.demolition_ready(site)
 
-func _find_relocation_home(excluded: Node3D) -> Node3D:
-	return building_lifecycle_service.find_relocation_home(excluded)
-
-func _update_demolition(delta: float) -> void:
-	demolition.tick(delta)
 
 func _finish_demolition(site: DemolitionSite) -> void:
 	building_lifecycle_service.finish_demolition(site)
@@ -3437,9 +3323,6 @@ func _finish_demolition(site: DemolitionSite) -> void:
 func _remove_building_services(building: Node3D, building_type: String) -> void:
 	building_lifecycle_service.remove_building_services(building, building_type)
 
-
-func _release_employment_at_building(building: Node3D) -> void:
-	building_lifecycle_service.release_employment_at_building(building)
 
 
 func _send_to_unemployment_registration(citizen: Citizen) -> void:
@@ -3520,14 +3403,14 @@ func _harvest_source_info(resource_type: String) -> String:
 		return ""
 	match resource_type:
 		ResourceIds.BRANCHES:
-			var tree := _nearest_tree_node(player_citizen.global_position)
+			var tree := foraging_service.nearest_tree_node(player_citizen.global_position)
 			if is_instance_valid(tree):
 				var tree_state: Variant = world_resource_state.tree_at(_cell_from_position(tree.global_position))
 				if tree_state != null:
 					return S.SOURCE_INFO_BRANCHES % [tree_state.remaining_branches, maxi(1, tree_state.initial_branches)]
 			return ""
 		ResourceIds.GRASS:
-			var node := _nearest_grass_node(player_citizen.global_position)
+			var node := foraging_service.nearest_grass_node(player_citizen.global_position)
 			if is_instance_valid(node):
 				for cell in grass_sources:
 					var source: GrassSourceRecordScript = grass_sources[cell]
@@ -3579,7 +3462,7 @@ func _deliver_all_pocket_to_warehouse(warehouse_index := -1) -> void:
 			settlement.add(resource_type, to_deliver)
 		var actually_delivered := to_deliver - overflow
 		if actually_delivered > 0:
-			_remove_from_pocket(resource_type, actually_delivered)
+			hero_pocket_service.remove_from_pocket(resource_type, actually_delivered) if hero_pocket_service != null else 0
 			delivered_total += actually_delivered
 			summary.append("%d %s" % [actually_delivered, resource_type])
 	if delivered_total > 0:
@@ -3617,7 +3500,7 @@ func _deliver_one_pocket_to_warehouse(warehouse_index := -1) -> void:
 	if actually_delivered <= 0:
 		_update_interface(S.WAREHOUSE_NO_ROOM_IN_THIS % resource_type)
 		return
-	_remove_from_pocket(resource_type, actually_delivered)
+	hero_pocket_service.remove_from_pocket(resource_type, actually_delivered) if hero_pocket_service != null else 0
 	_update_interface(S.DELIVERED_ONE_TO_WAREHOUSE % [actually_delivered, resource_type, _format_pocket_hint()])
 
 
@@ -3676,7 +3559,8 @@ func _occupy_workplace(workplace: Node3D) -> void:
 			_update_interface(S.HERO_BECAME_OFFICER)
 		else:
 			player_citizen.enter_work_position(service_position, "researcher", workplace, true)
-			_show_research_menu()
+			if research_menu_controller != null:
+				research_menu_controller.show_research_menu()
 			_update_interface(S.HERO_TOOK_RESEARCHER)
 	else:
 		var role := _role_for_workplace(workplace)
@@ -3713,14 +3597,8 @@ func _nearby_warehouse_index() -> int:
 	return storage_routing_service.nearby_warehouse_index()
 
 
-func _nearby_warehouse() -> bool:
-	return storage_routing_service.nearby_warehouse()
 
-func _nearby_sawmill() -> bool:
-	return hero_interaction_service.nearby_sawmill() if hero_interaction_service != null else false
 
-func _nearby_sawmill_position() -> Vector3:
-	return hero_interaction_service.nearby_sawmill_position() if hero_interaction_service != null else Vector3.INF
 
 func _nearby_farm() -> bool:
 	return hero_interaction_service.nearby_farm() if hero_interaction_service != null else false
@@ -3731,18 +3609,12 @@ func _nearby_pond() -> bool:
 func _nearby_grass_source() -> bool:
 	return hero_interaction_service.nearby_grass_source() if hero_interaction_service != null else false
 
-func _nearby_grass_source_position() -> Vector3:
-	return hero_interaction_service.nearby_grass_source_position() if hero_interaction_service != null else Vector3.INF
 
 func _consume_grass_near_player(amount: int) -> void:
 	if hero_interaction_service != null:
 		hero_interaction_service.consume_grass_near_player(amount)
 
-func _nearby_forage_source() -> bool:
-	return hero_interaction_service.nearby_forage_source() if hero_interaction_service != null else false
 
-func _nearby_rabbit_source() -> bool:
-	return hero_interaction_service.nearby_rabbit_source() if hero_interaction_service != null else false
 
 func _wild_food_requires_specialist_message() -> String:
 	return "Forest gifts and rabbits can only be gathered by a trained specialist. Build a forager/hunter tent first."
@@ -3767,10 +3639,6 @@ func _add_to_pocket(resource_type: String, amount: int) -> int:
 	return hero_pocket_service.add_to_pocket(resource_type, amount) if hero_pocket_service != null else 0
 
 
-func _remove_from_pocket(resource_type: String, amount: int) -> int:
-	return hero_pocket_service.remove_from_pocket(resource_type, amount) if hero_pocket_service != null else 0
-
-
 func _pocket_resources() -> Array:
 	return hero_pocket_service.pocket_resources() if hero_pocket_service != null else []
 
@@ -3778,9 +3646,6 @@ func _pocket_resources() -> Array:
 func _primary_pocket_resource() -> String:
 	return hero_pocket_service.primary_pocket_resource() if hero_pocket_service != null else ""
 
-
-func _pocket_summary() -> String:
-	return hero_pocket_service.pocket_summary() if hero_pocket_service != null else ""
 
 
 func _nearby_workplace_for_job() -> Node3D:
@@ -3811,17 +3676,9 @@ func _role_for_workplace(building: Node3D) -> String:
 	return ""
 
 
-func _resource_remaining_percent(resource_type: String) -> int:
-	return hero_interaction_service.resource_remaining_percent(resource_type) if hero_interaction_service != null else 0
-
 
 func _format_pocket_hint() -> String:
 	return hero_pocket_service.format_pocket_hint() if hero_pocket_service != null else ""
-
-
-func _drop_pocket_on_ground() -> void:
-	if hero_pocket_service != null:
-		hero_pocket_service.drop_pocket_on_ground()
 
 
 func _home_occupancy_text() -> String:
@@ -3859,7 +3716,7 @@ func _refresh_interaction_hint() -> void:
 				lines.append(S.F_USE_TOILET)
 		lines.append(S.OBSERVE_HINT)
 	else:
-		var action_hint := _first_person_action_hint()
+		var action_hint := first_person_hud_controller.first_person_action_hint() if first_person_hud_controller != null else ""
 		if not action_hint.is_empty():
 			lines.append(action_hint)
 	lines.append(_format_pocket_hint())
@@ -3923,17 +3780,17 @@ func _handle_sawmill_interaction(all: bool, sawmill_pos: Vector3) -> void:
 	if wood_count > 0:
 		var delivered := 0
 		if all:
-			var wood_delivered := _remove_from_pocket(ResourceIds.WOOD, wood_count)
-			var logs_delivered := _remove_from_pocket(ResourceIds.LOGS, wood_count - wood_delivered)
+			var wood_delivered := hero_pocket_service.remove_from_pocket(ResourceIds.WOOD, wood_count) if hero_pocket_service != null else 0
+			var logs_delivered := hero_pocket_service.remove_from_pocket(ResourceIds.LOGS, wood_count - wood_delivered) if hero_pocket_service != null else 0
 			delivered = wood_delivered + logs_delivered
 		else:
-			delivered = _remove_from_pocket(ResourceIds.WOOD, 1)
+			delivered = hero_pocket_service.remove_from_pocket(ResourceIds.WOOD, 1) if hero_pocket_service != null else 0
 			if delivered == 0:
-				delivered = _remove_from_pocket(ResourceIds.LOGS, 1)
+				delivered = hero_pocket_service.remove_from_pocket(ResourceIds.LOGS, 1) if hero_pocket_service != null else 0
 		if delivered > 0:
 			var stock := _sawmill_stock(sawmill_pos)
 			stock.logs = int(stock.logs) + delivered
-			_store_sawmill_stock(sawmill_pos, stock)
+			sawmills.store(sawmill_pos, stock)
 			_update_interface(S.DELIVERED_WOOD_TO_SAWMILL % delivered)
 		_refresh_interaction_hint()
 		return
@@ -3944,7 +3801,7 @@ func _handle_sawmill_interaction(all: bool, sawmill_pos: Vector3) -> void:
 		take_amount = _add_to_pocket(ResourceIds.BOARDS, take_amount)
 		if take_amount > 0:
 			sawmill_stock.boards = int(sawmill_stock.boards) - take_amount
-			_store_sawmill_stock(sawmill_pos, sawmill_stock)
+			sawmills.store(sawmill_pos, sawmill_stock)
 			_update_interface(S.TOOK_BOARDS_FROM_SAWMILL % take_amount)
 	_refresh_interaction_hint()
 
@@ -3957,7 +3814,8 @@ func _handle_warehouse_interaction(all: bool, warehouse_index := -1) -> void:
 			_deliver_one_pocket_to_warehouse(warehouse_index)
 		_refresh_interaction_hint()
 	else:
-		_show_pocket_take_menu(warehouse_index)
+		if pocket_take_menu_controller != null:
+			pocket_take_menu_controller.show_pocket_take_menu(warehouse_index)
 
 
 func _deliver_pocket_to_site(site: ConstructionSite, all: bool) -> void:
@@ -3975,7 +3833,7 @@ func _deliver_pocket_to_site(site: ConstructionSite, all: bool) -> void:
 		amount = mini(amount, in_pocket)
 		if amount <= 0:
 			continue
-		_remove_from_pocket(resource_type, amount)
+		hero_pocket_service.remove_from_pocket(resource_type, amount) if hero_pocket_service != null else 0
 		construction.accept_delivery(site.node, resource_type, amount)
 		delivered_any = true
 		if not all:
@@ -4003,7 +3861,7 @@ func _refuel_fire_from_pocket(building: Node3D, all: bool) -> void:
 	var fire_state := _fire_state_for(building)
 	var amount := available if all else 1
 	amount = mini(amount, available)
-	var delivered := _remove_from_pocket(ResourceIds.BRANCHES, amount)
+	var delivered := hero_pocket_service.remove_from_pocket(ResourceIds.BRANCHES, amount) if hero_pocket_service != null else 0
 	if delivered <= 0:
 		return
 	fire_state.add_delivered(delivered, int(game_minutes))
@@ -4069,7 +3927,7 @@ func _take_from_pile(pile: ResourcePileScript, all: bool) -> void:
 				break
 		pile_node.queue_free()
 	else:
-		_refresh_resource_pile_label(pile)
+		resource_pile_service.refresh_resource_pile_label(pile)
 	_update_interface(S.TOOK_FROM_PILE % _format_pocket_hint())
 	_refresh_interaction_hint()
 
@@ -4098,16 +3956,6 @@ func _warehouse_index_for_building(building: Node3D) -> int:
 	return storage_routing_service.warehouse_index_for_building(building)
 
 
-func _building_action_hint(building: Node3D) -> String:
-	if first_person_hud_controller != null:
-		return first_person_hud_controller.building_action_hint(building)
-	return ""
-
-
-func _first_person_action_hint() -> String:
-	if first_person_hud_controller != null:
-		return first_person_hud_controller.first_person_action_hint()
-	return ""
 
 func _targeted_grass_info(target: Dictionary) -> Dictionary:
 	var target_node := target.get("node") as Node3D
@@ -4128,8 +3976,11 @@ func _terrain_point_at_screen_position(screen_position: Vector2) -> Variant:
 		return null
 	return hit.position as Vector3
 
+func _rotated_footprint(footprint: Vector2i, rotation_quarters := build_rotation_quarters) -> Vector2i:
+	return building_placement_controller.rotated_footprint(footprint, rotation_quarters) if building_placement_controller != null else footprint
+
 func _move_selection(world_position: Vector3) -> void:
-	selected_world_position = _snapped_build_position(world_position) if not build_mode.is_empty() else world_position
+	selected_world_position = building_placement_controller.snapped_build_position(world_position) if building_placement_controller != null else world_position if not build_mode.is_empty() else world_position
 	selected_cell = _placement_key(selected_world_position)
 	world_setup.selection_marker.position = selected_world_position + Vector3(0.0, 0.04, 0.0)
 	if not build_mode.is_empty():
@@ -4142,7 +3993,7 @@ func _move_selection(world_position: Vector3) -> void:
 		world_setup.preview_entrance_marker.visible = true
 		world_setup.preview_back_entrance_marker.visible = true
 	if not build_mode.is_empty():
-		world_setup.selection_material.albedo_color = Color(0.25, 0.85, 0.37, 0.55) if _can_place(selected_world_position) else Color(0.9, 0.2, 0.18, 0.6)
+		world_setup.selection_material.albedo_color = Color(0.25, 0.85, 0.37, 0.55) if building_placement_controller.can_place(selected_world_position) if building_placement_controller != null else false else Color(0.9, 0.2, 0.18, 0.6)
 	if not build_mode.is_empty() and BuildingCatalog.max_hero_radius(build_mode) > 0.0 and is_instance_valid(hero_citizen):
 		if not is_first_person and is_instance_valid(world_setup.hero_build_radius_marker):
 			world_setup.hero_build_radius_marker.global_position = hero_citizen.global_position + Vector3(0.0, 0.08, 0.0)
@@ -4152,15 +4003,11 @@ func _move_selection(world_position: Vector3) -> void:
 	elif is_instance_valid(world_setup.hero_build_radius_marker):
 		world_setup.hero_build_radius_marker.visible = false
 
-func _rotated_footprint(footprint: Vector2i, rotation_quarters := build_rotation_quarters) -> Vector2i:
-	return building_placement_controller.rotated_footprint(footprint, rotation_quarters) if building_placement_controller != null else footprint
-
-
 func _place_building(world_position: Vector3) -> void:
 	if not _can_hero_build():
 		_update_interface("Only the hero can approve construction decisions.")
 		return
-	world_position = _snapped_build_position(world_position)
+	world_position = building_placement_controller.snapped_build_position(world_position) if building_placement_controller != null else world_position
 	var max_hero_radius := BuildingCatalog.max_hero_radius(build_mode)
 	if max_hero_radius > 0.0 and is_instance_valid(hero_citizen):
 		if hero_citizen.global_position.distance_to(world_position) > max_hero_radius:
@@ -4176,10 +4023,10 @@ func _place_building(world_position: Vector3) -> void:
 	if territory_reason != village_territory_service.REASON_OK:
 		_update_interface(village_territory_service.placement_message(territory_reason))
 		return
-	if not _can_place(world_position):
+	if not (building_placement_controller.can_place(world_position) if building_placement_controller != null else false):
 		_update_interface("Construction is not allowed at this point.")
 		return
-	if not _can_pay_building_cost(build_mode):
+	if not (building_placement_controller.can_pay_building_cost(build_mode) if building_placement_controller != null else false):
 		var placement_state: Dictionary = building_availability_service.placement_state_with_inventory(build_mode, pocket)
 		_update_interface(str(placement_state.message))
 		return
@@ -4248,25 +4095,6 @@ func _place_building_at_crosshair() -> void:
 func _can_hero_build() -> bool:
 	return building_placement_controller.can_hero_build() if building_placement_controller != null else false
 
-func _can_place(world_position: Vector3) -> bool:
-	return building_placement_controller.can_place(world_position) if building_placement_controller != null else false
-
-func _can_pay_building_cost(building_type: String) -> bool:
-	return building_placement_controller.can_pay_building_cost(building_type) if building_placement_controller != null else false
-
-func _pay_building_cost(building_type: String) -> void:
-	if building_placement_controller != null:
-		building_placement_controller.pay_building_cost(building_type)
-
-func _is_footprint_clear(world_position: Vector3, footprint: Vector2i) -> bool:
-	return building_placement_controller.is_footprint_clear(world_position, footprint) if building_placement_controller != null else false
-
-func _footprint_overlaps_terrain_obstacle(center: Vector3, footprint: Vector2i) -> bool:
-	return building_placement_controller.footprint_overlaps_terrain_obstacle(center, footprint) if building_placement_controller != null else false
-
-func _is_footprint_level(world_position: Vector3, footprint: Vector2i) -> bool:
-	return building_placement_controller.is_footprint_level(world_position, footprint) if building_placement_controller != null else false
-
 func _terrain_height_at(x: float, z: float, near_y: float) -> float:
 	if DisplayServer.get_name() == "headless":
 		return 0.0
@@ -4274,9 +4102,6 @@ func _terrain_height_at(x: float, z: float, near_y: float) -> float:
 	var query := PhysicsRayQueryParameters3D.create(from, Vector3(x, near_y - 12.0, z))
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	return NAN if hit.is_empty() else float(hit.position.y)
-
-func _snapped_build_position(world_position: Vector3) -> Vector3:
-	return building_placement_controller.snapped_build_position(world_position) if building_placement_controller != null else world_position
 
 func _is_clear_of_objects(world_position: Vector3, minimum_distance: float) -> bool:
 	return building_placement_controller.is_clear_of_objects(world_position, minimum_distance) if building_placement_controller != null else false
@@ -4357,7 +4182,7 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 	var is_home := BuildingTypes.is_housing(building_type)
 	_register_service_entrance(building, blueprint, is_home, building_type not in ["farm", "park"])
 	var service_position: Vector3 = building.get_meta("service_position")
-	_register_completed_building_type_features(building_type, building, blueprint, service_position)
+	building_lifecycle_service.register_completed_building_type_features(building_type, building, blueprint, service_position)
 
 	building_registry.attach_node(cell, building, building_type)
 	var occupied_footprint: Vector2i = building.get_meta("occupied_footprint", blueprint.footprint)
@@ -4402,11 +4227,6 @@ func _setup_entrance_sign_node(building: Node3D) -> void:
 	building.add_child(light)
 	if ambient_spawner != null:
 		ambient_spawner.setup_entrance_sign_node(building)
-
-
-func _register_completed_building_type_features(building_type: String, building: Node3D, blueprint: Dictionary, service_position: Vector3) -> void:
-	building_lifecycle_service.register_completed_building_type_features(building_type, building, blueprint, service_position)
-
 
 
 func _activate_kitchen_if_better(building: Node3D, service_position: Vector3) -> void:
@@ -4483,14 +4303,6 @@ func _add_warehouse_fill_label(building: Node3D) -> void:
 		warehouse_fill_label_controller.add_warehouse_fill_label(building)
 
 
-func _update_warehouse_fill_labels() -> void:
-	if warehouse_fill_label_controller != null:
-		warehouse_fill_label_controller.update_warehouse_fill_labels()
-
-func _update_building_status_indicators(delta: float) -> void:
-	if building_status_indicator_controller != null:
-		building_status_indicator_controller.update_building_status_indicators(delta)
-
 func _required_staff_for_building(building: Node3D) -> Dictionary:
 	if building_status_indicator_controller != null:
 		return building_status_indicator_controller.required_staff_for_building(building)
@@ -4563,7 +4375,8 @@ func _register_service_entrance(building: Node3D, blueprint: Dictionary, home_en
 				offsets = [Vector2i(0, -blueprint.footprint.y / 2)]
 			var local_positions := BuildingEntrancePositions.local_positions(blueprint.footprint, offsets, SERVICE_PAD_OFFSET)
 			for local in local_positions:
-				_add_service_entrance_marker(building, local)
+				if building_visuals_service != null:
+					building_visuals_service.add_service_entrance_marker(building, local)
 	var visitor_positions := BuildingEntrancePositions.visitor_positions(building, blueprint.footprint, SERVICE_PAD_OFFSET)
 	if visitor_positions.is_empty() and home_entrance and not service_positions.is_empty():
 		visitor_positions = service_positions
@@ -4577,15 +4390,8 @@ func _register_service_entrance(building: Node3D, blueprint: Dictionary, home_en
 		if not v_offsets.is_empty():
 			var v_local_positions := BuildingEntrancePositions.local_positions(blueprint.footprint, v_offsets, SERVICE_PAD_OFFSET)
 			for local in v_local_positions:
-				_add_visitor_entrance_marker(building, local)
-
-func _add_service_entrance_marker(building: Node3D, marker_local: Vector3) -> void:
-	if building_visuals_service != null:
-		building_visuals_service.add_service_entrance_marker(building, marker_local)
-
-func _add_visitor_entrance_marker(building: Node3D, marker_local: Vector3) -> void:
-	if building_visuals_service != null:
-		building_visuals_service.add_visitor_entrance_marker(building, marker_local)
+				if building_visuals_service != null:
+					building_visuals_service.add_visitor_entrance_marker(building, local)
 
 func _nearby_player_work_target() -> Node3D:
 	if player_citizen == null:
@@ -4676,10 +4482,6 @@ func _apply_tree_felled_visual(cell: Vector2i, tree: Node3D) -> void:
 		collision_body.queue_free()
 	terrain_blocked_cells.erase(cell)
 
-func _update_water_collectors(delta: float) -> void:
-	water_collector_service.tick(delta)
-
-
 func _toggle_global_build_menu() -> void:
 	var was_visible := ui_manager.build_menu.visible and build_menu_is_global
 	_close_context_menus()
@@ -4692,37 +4494,6 @@ func _toggle_global_build_menu() -> void:
 		_refresh_build_menu()
 
 
-func _show_campfire_menu() -> void:
-	if campfire_menu_controller != null:
-		campfire_menu_controller.show_campfire_menu()
-
-
-func _show_campfire_story_menu() -> void:
-	if campfire_menu_controller != null:
-		campfire_menu_controller.show_campfire_story_menu()
-
-
-func _close_campfire_story_menu() -> void:
-	if campfire_menu_controller != null:
-		campfire_menu_controller.close_campfire_story_menu()
-
-
-func _select_campfire_story(story_id: String) -> void:
-	if campfire_menu_controller != null:
-		campfire_menu_controller.select_campfire_story(story_id)
-
-
-func _show_campfire_orders_menu() -> void:
-	if campfire_menu_controller != null:
-		campfire_menu_controller.show_campfire_orders_menu()
-
-
-func _close_campfire_orders_menu() -> void:
-	if campfire_menu_controller != null:
-		campfire_menu_controller.close_campfire_orders_menu()
-	ui_manager.campfire_menu.visible = true
-
-
 func _set_road_walking_order(enabled: bool) -> void:
 	if settlement.era != SettlementState.Era.TENT:
 		return
@@ -4730,15 +4501,13 @@ func _set_road_walking_order(enabled: bool) -> void:
 	_update_interface("Trail-walking order %s. It does not change routes yet." % ("enabled" if enabled else "disabled"))
 
 
-func _set_balanced_warehouse_mode(enabled: bool) -> void:
-	storage_routing_service.set_balanced_warehouse_mode(enabled)
-
 
 func _cheer_up_settlement() -> void:
 	if clock.hour() < 6:
 		return
 	if settlement.apply_cheer_up():
-		_show_campfire_orders_menu()
+		if campfire_menu_controller != null:
+			campfire_menu_controller.show_campfire_orders_menu()
 		_update_interface("You cheered up the settlement. Wellbeing rose by 5%%.")
 
 
@@ -4752,7 +4521,8 @@ func _has_night_work_candidates() -> bool:
 func _toggle_settlement_night_work(checked: bool) -> void:
 	if checked:
 		if settlement.night_work_order_day == day_cycle.current_day:
-			_show_campfire_orders_menu()
+			if campfire_menu_controller != null:
+				campfire_menu_controller.show_campfire_orders_menu()
 			return
 		var affected := 0
 		for citizen in citizens:
@@ -4762,7 +4532,8 @@ func _toggle_settlement_night_work(checked: bool) -> void:
 				if _activate_citizen_overtime(citizen, "settlement"):
 					affected += 1
 		if affected <= 0:
-			_show_campfire_orders_menu()
+			if campfire_menu_controller != null:
+				campfire_menu_controller.show_campfire_orders_menu()
 			return
 		settlement.night_work_order_day = day_cycle.current_day
 		_update_interface("Night-work order issued to %d residents. They will work through the night and next day." % affected)
@@ -4775,25 +4546,29 @@ func _toggle_settlement_night_work(checked: bool) -> void:
 				continue
 			if citizen.has_overtime_source("settlement", day_cycle.current_day):
 				citizen.deactivate_overtime("settlement")
-		_sync_overtime_scope_indicators()
+		if citizen_daily_order_service != null:
+			citizen_daily_order_service.sync_overtime_scope_indicators()
 		_update_interface("Settlement night work cancelled. Workers will return home.")
 		_update_skip_night_button()
 		if citizen_ai != null:
 			citizen_ai.request_decision_refresh()
-	_show_campfire_orders_menu()
+	if campfire_menu_controller != null:
+		campfire_menu_controller.show_campfire_orders_menu()
 
 
 func _toggle_double_time_order(checked: bool) -> void:
 	if checked:
 		if settlement.double_time_order_day == day_cycle.current_day:
-			_show_campfire_orders_menu()
+			if campfire_menu_controller != null:
+				campfire_menu_controller.show_campfire_orders_menu()
 			return
 		settlement.double_time_order_day = day_cycle.current_day
 		_update_interface("Double time order issued. All residents walk twice as fast today, but fatigue accumulates faster.")
 	else:
 		settlement.double_time_order_day = -1
 		_update_interface("Double time order cancelled. Residents resume normal pace.")
-	_show_campfire_orders_menu()
+	if campfire_menu_controller != null:
+		campfire_menu_controller.show_campfire_orders_menu()
 
 
 func _toggle_selected_citizen_night_work(checked: bool) -> void:
@@ -4824,88 +4599,14 @@ func _toggle_selected_citizen_night_work(checked: bool) -> void:
 	_refresh_build_menu()
 
 
-func _show_workforce_menu() -> void:
-	if workforce_menu_controller != null:
-		workforce_menu_controller.show_workforce_menu()
-
-
-func _hide_workforce_menu() -> void:
-	if workforce_menu_controller != null:
-		workforce_menu_controller.hide_workforce_menu()
-
-
-func _close_workforce_menu() -> void:
-	if workforce_menu_controller != null:
-		workforce_menu_controller.close_workforce_menu()
-
 
 func _refresh_campfire_occupancy_button() -> void:
 	if workforce_menu_controller != null:
 		workforce_menu_controller.refresh_campfire_occupancy_button()
 
 
-func _workforce_roles() -> Array[String]:
-	if workforce_menu_controller != null:
-		return workforce_menu_controller.workforce_roles()
-	return []
 
 
-func _workforce_role_label(role: String) -> String:
-	if workforce_menu_controller != null:
-		return workforce_menu_controller.workforce_role_label(role)
-	return role
-
-
-func _manually_assigned_count(role: String) -> int:
-	if workforce_menu_controller != null:
-		return workforce_menu_controller.manually_assigned_count(role)
-	return 0
-
-
-func _auto_or_unassigned_worker_count() -> int:
-	if workforce_menu_controller != null:
-		return workforce_menu_controller.auto_or_unassigned_worker_count()
-	return 0
-
-
-func _refresh_workforce_menu() -> void:
-	if workforce_menu_controller != null:
-		workforce_menu_controller.refresh_workforce_menu()
-
-
-func _employment_resident_count() -> int:
-	if workforce_menu_controller != null:
-		return workforce_menu_controller.employment_resident_count()
-	return 0
-
-
-func _employment_state_count(state: int) -> int:
-	if workforce_menu_controller != null:
-		return workforce_menu_controller.employment_state_count(state)
-	return 0
-
-
-func _employment_role_count(role: String, state: int) -> int:
-	if workforce_menu_controller != null:
-		return workforce_menu_controller.employment_role_count(role, state)
-	return 0
-
-
-func _citizens_with_employment_states(states: Array) -> Array[Citizen]:
-	if workforce_menu_controller != null:
-		return workforce_menu_controller.citizens_with_employment_states(states)
-	return []
-
-
-func _has_assignable_resident() -> bool:
-	if workforce_menu_controller != null:
-		return workforce_menu_controller.has_assignable_resident()
-	return false
-
-
-func _remove_worker_from_role(role: String) -> void:
-	if workforce_menu_controller != null:
-		workforce_menu_controller.remove_worker_from_role(role)
 
 
 func _assign_unemployed_worker(role: String) -> void:
@@ -4913,20 +4614,11 @@ func _assign_unemployed_worker(role: String) -> void:
 		workforce_menu_controller.assign_unemployed_worker(role)
 
 
-func _enable_auto_for_citizen(citizen: Citizen) -> void:
-	if workforce_menu_controller != null:
-		workforce_menu_controller.enable_auto_for_citizen(citizen)
-
 
 func _refresh_campfire_menu() -> void:
 	if campfire_menu_controller != null:
 		campfire_menu_controller.refresh_campfire_menu()
 
-
-func _build_campfire_era_requirements(housing_slots: int) -> Array:
-	if campfire_menu_controller != null:
-		return campfire_menu_controller.build_campfire_era_requirements(housing_slots)
-	return ["", false]
 
 
 func _occupy_selected_campfire_position() -> void:
@@ -4984,42 +4676,16 @@ func _on_campfire_advance_pressed() -> void:
 		_update_interface("Failed to advance era. Double-check requirements.")
 
 
-func _show_market_menu() -> void:
-	if market_menu_controller != null:
-		market_menu_controller.show_market_menu()
-
-
 func _refresh_market_menu() -> void:
 	if market_menu_controller != null:
 		market_menu_controller.refresh_market_menu()
 
 
-func _buy_food(quantity: int, unit_price: int) -> void:
-	trade_service.buy_food(quantity, unit_price)
 
 
-func _sell_resource(resource_type: String, quantity: int, unit_price: int) -> void:
-	trade_service.sell_resource(resource_type, quantity, unit_price)
 
 
-func _buy_tool(tool_id: String, price: int) -> void:
-	trade_service.buy_tool(tool_id, price)
 
-
-func _buy_courier_equipment(courier: Citizen, equipment_id: String, price: int) -> void:
-	trade_service.buy_courier_equipment(courier, equipment_id, price)
-
-
-func _start_trade(trade: Dictionary, source: Vector3, destination: Vector3) -> void:
-	trade_service.start_trade(trade, source, destination)
-
-
-func _trade_orders() -> Array[Dictionary]:
-	return trade_service.trade_orders()
-
-
-func _trade_reserved_money() -> int:
-	return trade_service.trade_reserved_money()
 
 
 func _available_trade_money() -> int:
@@ -5034,18 +4700,10 @@ func _trade_has_tool_order(tool_id: String) -> bool:
 	return trade_service.trade_has_tool_order(tool_id)
 
 
-func _on_trade_delivery_finished(worker: Citizen) -> void:
-	if actuator_bridge != null:
-		actuator_bridge.on_trade_delivery_finished(worker)
-
-func _show_building_menu() -> void:
-	if building_menu_controller != null:
-		building_menu_controller.show_building_menu()
-
 
 func _demolish_selected_building() -> void:
 	if is_instance_valid(selected_building):
-		_mark_building_for_demolition(selected_building)
+		building_lifecycle_service.mark_building_for_demolition(selected_building)
 
 
 func _relight_selected_fire() -> void:
@@ -5099,7 +4757,8 @@ func _reopen_workplace_menu() -> void:
 	if is_instance_valid(selected_campfire) and selected_building == selected_campfire and ui_manager.campfire_menu.visible:
 		_refresh_campfire_menu()
 	else:
-		_show_building_menu()
+		if building_menu_controller != null:
+			building_menu_controller.show_building_menu()
 
 
 func _upgrade_selected_building() -> void:
@@ -5156,7 +4815,8 @@ func _upgrade_selected_building() -> void:
 	if ui_manager.campfire_menu.visible and selected_building == selected_campfire:
 		_refresh_campfire_menu()
 	else:
-		_show_building_menu()
+		if building_menu_controller != null:
+			building_menu_controller.show_building_menu()
 
 
 func _workplace_worker(building: Node3D) -> Citizen:
@@ -5187,19 +4847,9 @@ func _workplace_priority_position(building: Node3D) -> int:
 	return position
 
 
-func _show_pocket_take_menu(warehouse_index := -1) -> void:
-	if pocket_take_menu_controller != null:
-		pocket_take_menu_controller.show_pocket_take_menu(warehouse_index)
-
-
 func _close_pocket_take_menu() -> void:
 	if pocket_take_menu_controller != null:
 		pocket_take_menu_controller.close_pocket_take_menu()
-
-
-func _refresh_pocket_take_menu() -> void:
-	if pocket_take_menu_controller != null:
-		pocket_take_menu_controller.refresh_pocket_take_menu()
 
 
 func _take_resource_into_pocket(resource_type: String, amount: int) -> void:
@@ -5217,33 +4867,9 @@ func _take_resource_into_pocket(resource_type: String, amount: int) -> void:
 		else:
 			settlement.add(resource_type, -amount)
 		_update_interface(S.TOOK_FROM_WAREHOUSE % [amount, resource_type])
-	_refresh_pocket_take_menu()
+	if pocket_take_menu_controller != null:
+		pocket_take_menu_controller.refresh_pocket_take_menu()
 	_refresh_interaction_hint()
-
-
-func _show_warehouse_menu() -> void:
-	if warehouse_menu_controller != null:
-		warehouse_menu_controller.show_warehouse_menu()
-
-
-func _refresh_warehouse_menu() -> void:
-	if warehouse_menu_controller != null:
-		warehouse_menu_controller.refresh_warehouse_menu()
-
-
-func _toggle_warehouse_accept(accepted: bool, resource_type: String) -> void:
-	if warehouse_menu_controller != null:
-		warehouse_menu_controller.toggle_warehouse_accept(accepted, resource_type)
-
-
-func _dump_warehouse_resource(resource_type: String) -> void:
-	if warehouse_menu_controller != null:
-		warehouse_menu_controller.dump_warehouse_resource(resource_type)
-
-
-func _cover_warehouse_with_tarp() -> void:
-	if warehouse_menu_controller != null:
-		warehouse_menu_controller.cover_warehouse_with_tarp()
 
 
 func _assign_cook_at_campfire() -> void:
@@ -5383,8 +5009,6 @@ func _set_manual_specialist_employment(citizen: Citizen, role: String) -> bool:
 	return true
 
 
-func _find_forage_position(citizen: Citizen) -> Vector3:
-	return foraging_service.find_forage_position(citizen)
 
 func harvest_wild_food(position: Vector3, worker: Citizen) -> String:
 	return foraging_service.harvest_wild_food(position, worker)
@@ -5394,34 +5018,6 @@ func _consume_grass_source(position: Vector3) -> int:
 
 func _consume_tree_branches(position: Vector3) -> int:
 	return foraging_service.consume_tree_branches(position)
-
-func _mark_tree_branch_exhausted(tree: Node3D) -> void:
-	if is_instance_valid(tree):
-		foraging_service.mark_tree_branch_exhausted(_cell_from_position(tree.global_position))
-
-func _nearest_tree_node(from: Vector3) -> Node3D:
-	return foraging_service.nearest_tree_node(from)
-
-func _nearest_grass_node(from: Vector3) -> Node3D:
-	return foraging_service.nearest_grass_node(from)
-
-func _player_gather_target_node() -> Node3D:
-	return foraging_service.player_gather_target_node(player_citizen, interaction_resource)
-
-func _gather_node_at(position: Vector3, resource_type: String) -> Node3D:
-	return foraging_service.gather_node_at(position, resource_type)
-
-func _gather_progress_amounts(resource_type: String, node: Node3D) -> Dictionary:
-	return foraging_service.gather_progress_amounts(resource_type, node)
-
-func _ensure_gather_progress_label(node: Node3D) -> Label3D:
-	return foraging_service.ensure_gather_progress_label(node)
-
-func _update_gather_progress_label(node: Node3D, resource_type: String, partial: float) -> void:
-	foraging_service.update_gather_progress_label(node, resource_type, partial)
-
-func _update_gathering_indicators(_delta: float) -> void:
-	foraging_service.update_gathering_indicators(is_first_person, interaction_action, interaction_resource, interaction_time, player_citizen, citizens)
 
 
 func _create_gathering_place_visual(building: Node3D) -> void:
@@ -5450,20 +5046,9 @@ func fire_smoke_work_multiplier(position_on_board: Vector3) -> float:
 func campfire_story_efficiency_multiplier(role: String) -> float:
 	return fire_management_service.campfire_story_efficiency_multiplier(role)
 
-func _update_fire_status() -> void:
-	fire_management_service.update_fire_status(self, settlement.amount(ResourceIds.BRANCHES))
-
-func _update_fire_visual(building: Node3D, fire_state: RefCounted, minute: int) -> void:
-	fire_management_service.update_fire_visual(building, fire_state, minute)
-
-func _report_fire_phase_change(building: Node3D, fire_state: RefCounted, minute: int) -> void:
-	fire_management_service.report_fire_phase_change(building, fire_state, minute, campfire_node, settlement.amount(ResourceIds.BRANCHES))
-
 func _apply_building_wear_and_repairs() -> void:
 	building_maintenance_service.apply_building_wear_and_repairs(_destroy_building_to_pile)
 
-func _has_active_builder() -> bool:
-	return building_maintenance_service.has_active_builder(citizens)
 
 func _destroy_building_to_pile(building: Node3D, building_type: String) -> void:
 	building_maintenance_service.destroy_building_to_pile(building, building_type, citizens, warehouse_positions, campfire_node)
@@ -5495,20 +5080,12 @@ func _show_territory_overlay(show: bool) -> void:
 func _create_resource_pile(position: Vector3, resources: Dictionary, is_backpack_pile := false) -> Node3D:
 	return resource_pile_service.create_resource_pile(position, resources, is_backpack_pile)
 
-func _remove_backpack_pile() -> void:
-	backpack_node = resource_pile_service.remove_backpack_pile(backpack_node)
-
-func _sync_backpack_pile() -> void:
-	backpack_node = resource_pile_service.sync_backpack_pile(backpack_node)
 
 func _convert_backpack_pile_to_regular() -> void:
 	backpack_node = resource_pile_service.convert_backpack_pile_to_regular(backpack_node)
 
 func _drop_overflow_as_piles(overflow: Dictionary, base_position: Vector3) -> void:
 	resource_pile_service.drop_overflow_as_piles(overflow, base_position)
-
-func _refresh_resource_pile_label(pile: ResourcePileScript) -> void:
-	resource_pile_service.refresh_resource_pile_label(pile)
 
 func _drop_resource_pile(position: Vector3, resource_type: String, amount: int) -> void:
 	resource_pile_service.drop_resource_pile(position, resource_type, amount)
@@ -5620,7 +5197,8 @@ func _toggle_worker_overtime(checked: bool) -> void:
 		for citizen in citizens:
 			if is_instance_valid(citizen) and citizen.employment_workplace == selected_building:
 				citizen.deactivate_overtime("workplace")
-		_sync_overtime_scope_indicators()
+		if citizen_daily_order_service != null:
+			citizen_daily_order_service.sync_overtime_scope_indicators()
 		_add_message("Night work cancelled for %s." % building_registry.building_type_for_node(selected_building).replace("_", " "))
 		_update_workers()
 		_update_skip_night_button()
@@ -5725,7 +5303,7 @@ func restore_from_save_data(save_data: SaveDataScript) -> bool:
 
 		var blueprint = BuildingBlueprints.get_blueprint(b_type)
 		if not blueprint.is_empty():
-			var occupied_footprint = _rotated_footprint(blueprint.footprint, rot_quarters)
+			var occupied_footprint = building_placement_controller.rotated_footprint(blueprint.footprint, rot_quarters) if building_placement_controller != null else blueprint.footprint
 			building_registry.reserve(cell, pos, occupied_footprint)
 			var site_node: Node3D = construction._get_site_scene().instantiate()
 			site_node.position = pos
@@ -5757,7 +5335,7 @@ func restore_from_save_data(save_data: SaveDataScript) -> bool:
 
 		var blueprint = BuildingBlueprints.get_blueprint(b_type)
 		if not blueprint.is_empty():
-			var occupied_footprint = _rotated_footprint(blueprint.footprint, rot_quarters)
+			var occupied_footprint = building_placement_controller.rotated_footprint(blueprint.footprint, rot_quarters) if building_placement_controller != null else blueprint.footprint
 			building_registry.reserve(cell, pos, occupied_footprint)
 			var site = _create_construction_site(cell, b_type, pos, rot_quarters, blueprint, occupied_footprint)
 			if site != null:
