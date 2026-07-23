@@ -479,7 +479,6 @@ var factory_service: FactoryServiceScript
 var selected_house: Node3D
 var tent: Node3D
 var entrance_stone: Node3D
-var entrance_highlight: MeshInstance3D
 var selected_entrance: Node3D
 var pending_arrivals: Array[Dictionary] = []
 var arrival_greeters: Dictionary = {}
@@ -3358,8 +3357,6 @@ func _close_context_menus() -> void:
 	_show_territory_overlay(false)
 	is_rotating_camera = false
 	entrance_menu.visible = false
-	if entrance_highlight != null:
-		entrance_highlight.visible = false
 	if entrance_order_modal != null:
 		entrance_order_modal.visible = false
 	house_menu.visible = false
