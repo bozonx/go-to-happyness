@@ -99,6 +99,7 @@ const TrailFieldServiceScript = preload("res://game/features/routing/application
 const RoadNetworkServiceScript = preload("res://game/features/routing/application/road_network_service.gd")
 const NavigationObstaclePublisherScript = preload("res://game/features/routing/application/navigation_obstacle_publisher.gd")
 const NavigationFacadeScript = preload("res://game/features/routing/application/navigation_facade.gd")
+const NavigationBridgeScript = preload("res://game/features/routing/presentation/navigation_bridge.gd")
 const WeatherStateScript = preload("res://game/features/simulation/domain/weather_state.gd")
 const CameraControllerScript = preload("res://game/features/world/presentation/camera_controller.gd")
 const WorldSetupScene = preload("res://game/features/world/presentation/world_setup.tscn")
@@ -535,9 +536,6 @@ var tent_dismantle_progress := -1.0
 var nav_grid: NavGrid
 var road_network_service: RefCounted
 var navigation_obstacle_publisher: RefCounted
-var _route_reachability_cache: Dictionary = {}
-var _route_reachability_cache_revision := -1
-const ROUTE_REACHABILITY_CACHE_LIMIT := 1024
 var service_pockets: Array[Dictionary] = []
 var selected_school: Node3D
 var school_developed_professions: Dictionary:
@@ -578,6 +576,7 @@ var citizen_living_status_service: CitizenLivingStatusService
 var _next_ai_citizen_id := 1
 var route_service: GridRouteService
 var navigation_facade: RefCounted
+var navigation_bridge: NavigationBridge
 var building_queue_service: BuildingQueueService
 var citizen_lifecycle_service: CitizenLifecycleService
 var building_availability_service: BuildingAvailabilityService
@@ -727,6 +726,9 @@ func _ready() -> void:
 	route_service.configure(nav_grid)
 	navigation_facade = NavigationFacadeScript.new()
 	navigation_facade.configure(nav_grid, route_service)
+	navigation_bridge = NavigationBridgeScript.new()
+	add_child(navigation_bridge)
+	navigation_bridge.setup(self)
 	building_queue_service = BuildingQueueServiceScript.new()
 	building_queue_service.configure(building_registry, nav_grid)
 	building_queue_service.set_citizen_alive_checker(_is_ai_citizen_id_alive)
@@ -1970,46 +1972,13 @@ func _is_board_cell(cell: Vector2i) -> bool:
 	return cell.x >= -half_cells and cell.x < half_cells and cell.y >= -half_cells and cell.y < half_cells
 
 func _find_path_around_houses(from: Vector3, destination: Vector3, may_enter_destination_house: bool) -> RouteResult:
-	if navigation_facade == null:
-		return RouteResult.unreachable(-1, -1, RouteResult.UnreachableReason.NO_GRID)
-	return navigation_facade.find_route(from, destination, may_enter_destination_house)
+	if navigation_bridge != null:
+		return navigation_bridge.find_path_around_houses(from, destination, may_enter_destination_house)
+	return RouteResult.unreachable(-1, -1, RouteResult.UnreachableReason.NO_GRID)
 
 
-## A repeated physical blockage needs a different first leg; replanning the
-## identical A* request would otherwise select the same waypoint forever.
 func _find_recovery_path(from: Vector3, destination: Vector3, may_enter_destination_house: bool) -> RouteResult:
-	var fallback := _find_path_around_houses(from, destination, may_enter_destination_house)
-	if nav_grid == null or route_service == null or not fallback.reachable:
-		return fallback
-	var from_cell := nav_grid.cell_from_position(from)
-	var desired := Vector2(destination.x - from.x, destination.z - from.z)
-	if desired.length_squared() <= 0.0001:
-		return fallback
-	desired = desired.normalized()
-	var best: RouteResult = null
-	var best_cost := INF
-	for offset: Vector2i in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN, Vector2i(-1, -1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(1, 1)]:
-		var candidate_cell: Vector2i = from_cell + offset
-		if not nav_grid.is_walkable(candidate_cell):
-			continue
-		var candidate: Vector3 = nav_grid.cell_center(candidate_cell)
-		var direction := Vector2(candidate.x - from.x, candidate.z - from.z).normalized()
-		# Keep the first leg lateral or backward. A forward cell repeats the blocked
-		# physical approach that just failed.
-		if direction.dot(desired) > 0.25 or not nav_grid.is_segment_clear(from, candidate):
-			continue
-		var prefix := _find_path_around_houses(from, candidate, false)
-		var suffix := _find_path_around_houses(candidate, destination, may_enter_destination_house)
-		if not prefix.reachable or not suffix.reachable:
-			continue
-		var waypoints := prefix.waypoints.duplicate()
-		waypoints.append_array(suffix.waypoints)
-		var candidate_route := RouteResult.success(waypoints, destination, nav_grid.revision(), nav_grid.topology_revision())
-		var cost := _route_cost(from, candidate_route)
-		if cost < best_cost:
-			best = candidate_route
-			best_cost = cost
-	return best if best != null else fallback
+	return navigation_bridge.find_recovery_path(from, destination, may_enter_destination_house) if navigation_bridge != null else RouteResult.unreachable(-1, -1, RouteResult.UnreachableReason.NO_GRID)
 
 
 func _movement_speed_modifier_at(position_on_board: Vector3) -> float:
@@ -2020,33 +1989,8 @@ func _navigation_revision() -> int:
 	return navigation_facade.topology_revision() if navigation_facade != null else -1
 
 
-## Candidate discovery asks only whether a destination can be reached. Cache the
-## result per topology revision and use connected components, reserving A* for
-## blocked interaction destinations that need an approach cell.
 func _is_route_reachable(from: Vector3, destination: Vector3, may_enter_destination_house := false) -> bool:
-	if nav_grid == null:
-		return false
-	var topology_revision := nav_grid.topology_revision()
-	if _route_reachability_cache_revision != topology_revision:
-		_route_reachability_cache.clear()
-		_route_reachability_cache_revision = topology_revision
-	var key := "%d:%d>%d:%d:%d" % [
-		nav_grid.cell_from_position(from).x,
-		nav_grid.cell_from_position(from).y,
-		nav_grid.cell_from_position(destination).x,
-		nav_grid.cell_from_position(destination).y,
-		1 if may_enter_destination_house else 0,
-	]
-	if _route_reachability_cache.has(key):
-		return bool(_route_reachability_cache[key])
-	var reachable := false
-	if not may_enter_destination_house:
-		reachable = nav_grid.are_cells_connected(nav_grid.cell_from_position(from), nav_grid.cell_from_position(destination))
-	else:
-		reachable = _find_path_around_houses(from, destination, true).reachable
-	if _route_reachability_cache.size() < ROUTE_REACHABILITY_CACHE_LIMIT:
-		_route_reachability_cache[key] = reachable
-	return reachable
+	return navigation_bridge.is_route_reachable(from, destination, may_enter_destination_house) if navigation_bridge != null else false
 
 
 func _is_route_path_clear(from: Vector3, waypoints: Array[Vector3], may_enter_destination_house := false) -> bool:
@@ -2147,18 +2091,9 @@ func _record_trail_movement(citizen_id: int, position_on_board: Vector3) -> void
 		return
 	trail_field.record_walker_position(citizen_id, position_on_board, settlement.road_walking_order_enabled)
 
-## Recomputes walkable cells (terrain + building footprints with clearance) and
-## publishes them to the shared NavGrid. Citizens route entirely through the grid,
-## so this is the only navigation structure the settlement maintains.
 func _refresh_navigation_grid() -> void:
-	if navigation_obstacle_publisher == null:
-		return
-	navigation_blocked_cells = navigation_obstacle_publisher.publish(
-		terrain_blocked_cells,
-		building_registry.records(),
-		service_pockets,
-		NAVIGATION_CLEARANCE_MARGIN
-	)
+	if navigation_bridge != null:
+		navigation_bridge.refresh_navigation_grid()
 
 func _is_navigation_cell_blocked(cell: Vector2i) -> bool:
 	return navigation_blocked_cells.has(cell)
