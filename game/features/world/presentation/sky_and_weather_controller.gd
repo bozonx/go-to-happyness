@@ -83,10 +83,16 @@ func update_daylight(game_minutes: float, cloud_cover: float, rain_intensity: fl
 	# still rims the clouds warm, but by the pre-dawn deep twilight they must read
 	# as dim night masses instead of daytime white.
 	var cloud_night := 1.0 - smoothstep(-0.25, 0.05, solar_height)
-	# The moon rides opposite the sun's azimuth, high enough to sit in the sky at
-	# night. Built with the same euler convention as the sun so the shader reads
-	# its direction identically.
-	var moon_basis := Basis.from_euler(Vector3(deg_to_rad(-42.0), deg_to_rad(sun_azimuth + 180.0), 0.0))
+	# The moon runs its own arc across the night, twelve hours out of phase with
+	# the sun: it rises at dusk, peaks at midnight and sets at dawn, tracing the
+	# sky instead of hanging in one spot. Same euler convention as the sun so the
+	# shader reads its direction identically.
+	var moon_hour := fmod(hour + 12.0, 24.0)
+	var moon_height := sin((moon_hour - 6.0) / 12.0 * PI)
+	var moon_progress := clampf((moon_hour - 6.0) / 12.0, 0.0, 1.0)
+	var moon_elevation := 3.0 + maxf(moon_height, 0.0) * 52.0
+	var moon_azimuth := lerpf(-75.0, 11.0, moon_progress) + 180.0
+	var moon_basis := Basis.from_euler(Vector3(deg_to_rad(-moon_elevation), deg_to_rad(moon_azimuth), 0.0))
 	var moon_direction := moon_basis.z.normalized()
 	if sky_material != null:
 		var sky_horizon := base_background.lerp(overcast_color, cloud_cover)

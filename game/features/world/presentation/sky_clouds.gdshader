@@ -163,11 +163,14 @@ void sky() {
 	float grad = smoothstep(0.0, 0.48, horizon);
 	vec3 sky_col = mix(u_horizon_color, u_zenith_color, grad);
 
-	// --- atmospheric horizon haze (aerial perspective + dawn/dusk morning band) ---
-	// The sky pales toward the horizon and picks up the driven warm tint at
-	// twilight, reading as soft morning haze.
-	float haze_band = pow(1.0 - clamp(horizon, 0.0, 1.0), 3.0);
-	sky_col = mix(sky_col, u_haze_color, haze_band * u_haze_strength);
+	// --- atmospheric horizon haze / morning fog ---
+	// A soft band hugs the horizon; a slow drifting low-frequency noise breaks it
+	// into banks of mist rather than a flat gradient, so the dawn haze reads as
+	// ground fog. Densest right at the horizon, thinning upward.
+	float fog_profile = pow(1.0 - clamp(horizon / 0.55, 0.0, 1.0), 2.2);
+	float fog_tex = fbm(dir.xz / max(horizon + 0.32, 0.32) * 2.3 + u_wind * u_time * 4.0);
+	float fog_amount = fog_profile * u_haze_strength * (0.62 + fog_tex * 0.7);
+	sky_col = mix(sky_col, u_haze_color, clamp(fog_amount, 0.0, 1.0));
 
 	float star_visibility = u_star_visibility * (1.0 - u_overcast * 0.68);
 
