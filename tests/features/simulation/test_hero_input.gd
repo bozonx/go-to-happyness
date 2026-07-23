@@ -28,7 +28,7 @@ func _init() -> void:
 	b_event.keycode = KEY_B
 	b_event.pressed = true
 	SimHelper.unhandled_input(simulation, b_event)
-	assert(simulation.build_menu.visible)
+	assert(simulation.ui_manager.build_menu.visible)
 	assert(simulation.build_menu_is_global)
 	var b_release := InputEventKey.new()
 	b_release.keycode = KEY_B

@@ -45,10 +45,10 @@ func _init() -> void:
 	# Build menu submenus
 	simulation.selected_builder = simulation.hero_citizen
 	SimHelper.refresh_build_menu(simulation)
-	assert(simulation.build_menu.daily_order_submenu_btn.visible)
-	assert(not simulation.build_menu.daily_order_submenu_btn.disabled)
-	assert(simulation.build_menu.job_submenu_btn.visible)
-	assert(not simulation.build_menu.job_submenu_btn.disabled)
+	assert(simulation.ui_manager.build_menu.daily_order_submenu_btn.visible)
+	assert(not simulation.ui_manager.build_menu.daily_order_submenu_btn.disabled)
+	assert(simulation.ui_manager.build_menu.job_submenu_btn.visible)
+	assert(not simulation.ui_manager.build_menu.job_submenu_btn.disabled)
 	SimHelper.open_job_submenu(simulation)
 	assert(simulation.build_menu_is_job_menu)
 	SimHelper.open_daily_order_submenu(simulation)
@@ -56,7 +56,7 @@ func _init() -> void:
 
 	# Daily order role buttons visible and enabled
 	var construction_daily_button: Button = null
-	for button in simulation.build_menu.role_buttons:
+	for button in simulation.ui_manager.build_menu.role_buttons:
 		if str(button.get_meta("submenu", "")) == "daily" and str(button.get_meta("role", "")) == "construction":
 			construction_daily_button = button
 			break
@@ -69,7 +69,7 @@ func _init() -> void:
 	simulation.selected_builder = simulation.hero_citizen
 	SimHelper.open_daily_order_submenu(simulation)
 	var cleaning_daily_button: Button = null
-	for button in simulation.build_menu.role_buttons:
+	for button in simulation.ui_manager.build_menu.role_buttons:
 		if str(button.get_meta("submenu", "")) == "daily" and str(button.get_meta("role", "")) == "cleaning":
 			cleaning_daily_button = button
 			break

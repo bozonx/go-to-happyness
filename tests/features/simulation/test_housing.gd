@@ -58,15 +58,15 @@ func _init() -> void:
 	simulation.selected_house = test_tent
 	SimHelper.show_house_menu(simulation)
 	if simulation.citizens.size() >= 4:
-		assert(simulation.house_spawn_button.disabled)
-		assert(simulation.house_spawn_button.text == "No free beds")
+		assert(simulation.ui_manager.house_spawn_button.disabled)
+		assert(simulation.ui_manager.house_spawn_button.text == "No free beds")
 		# Simulate one resident leaving: free a slot and clear their home.
 		var departed: Citizen = simulation.citizens[1] as Citizen
 		departed.home = null
 		test_tent.set_meta("spawn_slots", 1)
 		# Now order button should be active.
 		SimHelper.show_house_menu(simulation)
-		assert(not simulation.house_spawn_button.disabled)
+		assert(not simulation.ui_manager.house_spawn_button.disabled)
 		# Order 1 resident — sets daily limit.
 		var slots_before_order := int(test_tent.get_meta("spawn_slots", 0))
 		SimHelper.spawn_house_citizen(simulation)
@@ -74,8 +74,8 @@ func _init() -> void:
 		assert(int(test_tent.get_meta("spawn_slots", 0)) == slots_before_order - 1)
 		# Second order same day is blocked.
 		SimHelper.show_house_menu(simulation)
-		assert(simulation.house_spawn_button.disabled)
-		assert(simulation.house_spawn_button.text == "Already ordered today")
+		assert(simulation.ui_manager.house_spawn_button.disabled)
+		assert(simulation.ui_manager.house_spawn_button.text == "Already ordered today")
 		var slots_after_order := int(test_tent.get_meta("spawn_slots", 0))
 		SimHelper.spawn_house_citizen(simulation)
 		assert(int(test_tent.get_meta("spawn_slots", 0)) == slots_after_order)
@@ -83,10 +83,10 @@ func _init() -> void:
 		simulation.day_cycle.current_day += 1
 		SimHelper.show_house_menu(simulation)
 		if slots_after_order > 0:
-			assert(not simulation.house_spawn_button.disabled)
+			assert(not simulation.ui_manager.house_spawn_button.disabled)
 
 	# Settle unhoused button should be hidden for tents.
-	var settle_btn := simulation.house_menu.get_node_or_null("SettleUnhoused") as Button
+	var settle_btn := simulation.ui_manager.house_menu.get_node_or_null("SettleUnhoused") as Button
 	assert(not settle_btn.visible)
 
 	# Cleanup

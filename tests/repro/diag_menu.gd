@@ -18,13 +18,13 @@ func _init() -> void:
 	print("daily_order_roles=", simulation.daily_order_roles())
 
 	# open daily order submenu the same way the UI does
-	simulation.build_menu.visible = true
+	simulation.ui_manager.build_menu.visible = true
 	SimHelper.open_daily_order_submenu(simulation)
 	await process_frame
 
-	print("build_menu_is_daily_order_menu=", simulation.build_menu_is_daily_order_menu, " build_menu.visible=", simulation.build_menu.visible)
+	print("build_menu_is_daily_order_menu=", simulation.build_menu_is_daily_order_menu, " build_menu.visible=", simulation.ui_manager.build_menu.visible)
 	print("--- role buttons (daily) ---")
-	for button in simulation.build_menu.role_buttons:
+	for button in simulation.ui_manager.build_menu.role_buttons:
 		var submenu: String = button.get_meta("submenu", "job")
 		if submenu != "daily":
 			continue

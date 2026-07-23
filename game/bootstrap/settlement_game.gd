@@ -479,6 +479,9 @@ var survival_event_controller: SurvivalEventController
 
 
 func _ready() -> void:
+	ui_manager = UIManagerScene.instantiate() as UIManager
+	add_child(ui_manager)
+	ui_manager.setup(self)
 	var launch_mgr: Node = get_node_or_null("/root/GameLaunchManager")
 	var active_config: GameLaunchConfigScript = null
 	if launch_mgr != null:
@@ -1078,9 +1081,6 @@ func _ready() -> void:
 	survival_event_controller = SurvivalEventControllerScript.new()
 	add_child(survival_event_controller)
 	survival_event_controller.setup(self)
-	ui_manager = UIManagerScene.instantiate() as UIManager
-	add_child(ui_manager)
-	ui_manager.setup(self)
 	_create_world()
 	_create_interface()
 	ambient_spawner.create_forest()
