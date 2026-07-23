@@ -79,6 +79,10 @@ func update_daylight(game_minutes: float, cloud_cover: float, rain_intensity: fl
 	# Twilight is still bright after the sun reaches the horizon. Keep stars out
 	# until the sun is meaningfully below it, then fade them in during dusk.
 	var star_visibility := 1.0 - smoothstep(-0.42, -0.08, solar_height)
+	# How dark the clouds paint. Asymmetric on purpose: just after sunset the sun
+	# still rims the clouds warm, but by the pre-dawn deep twilight they must read
+	# as dim night masses instead of daytime white.
+	var cloud_night := 1.0 - smoothstep(-0.25, 0.05, solar_height)
 	if sky_material != null:
 		var sky_horizon := base_background.lerp(overcast_color, cloud_cover)
 		# Clear skies deepen toward a saturated anime blue at the zenith; overcast
@@ -99,7 +103,7 @@ func update_daylight(game_minutes: float, cloud_cover: float, rain_intensity: fl
 		sky_material.set_shader_parameter("u_coverage_storm", CLOUD_COVERAGE_STORM)
 		var horizon_glow := Color("ff6a2a").lerp(Color("a8b8c0"), cloud_cover)
 		sky_material.set_shader_parameter("u_horizon_glow_color", horizon_glow)
-		sky_material.set_shader_parameter("u_night_factor", night_factor)
+		sky_material.set_shader_parameter("u_night_factor", cloud_night)
 		sky_material.set_shader_parameter("u_star_visibility", star_visibility)
 	if rain_effect != null:
 		rain_effect.set_intensity(rain_intensity)

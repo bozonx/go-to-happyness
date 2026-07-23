@@ -191,7 +191,10 @@ void sky() {
 	// --- High-altitude cirrus streaks layer ---
 	if (u_cirrus_amount > 0.001) {
 		float cirrus_mask = cirrus_field(uv * 0.85);
-		vec3 cirrus_col = mix(u_cloud_lit_clear, sky_col, 0.35);
+		// Cirrus dims with night alongside the cumulus so it does not glow white
+		// against a dark pre-dawn sky.
+		vec3 cirrus_base = mix(u_cloud_lit_clear, u_cloud_lit_night, u_night_factor);
+		vec3 cirrus_col = mix(cirrus_base, sky_col, 0.35);
 		float cirrus_alpha = cirrus_mask * u_cirrus_amount * ceil_mask * clear_sky * 0.28;
 		sky_col = mix(sky_col, cirrus_col, cirrus_alpha);
 	}
@@ -249,7 +252,7 @@ void sky() {
 	vec3 cloud_shadow = mix(u_cloud_shadow_clear, u_cloud_shadow_storm, u_overcast);
 	// Moonlight is cool and restrained: clouds remain readable but do not turn
 	// into bright daytime masses that erase the night sky.
-	float night_cloud_mix = smoothstep(0.12, 0.82, u_star_visibility);
+	float night_cloud_mix = u_night_factor;
 	cloud_lit = mix(cloud_lit, u_cloud_lit_night, night_cloud_mix);
 	cloud_mid = mix(cloud_mid, u_cloud_mid_night, night_cloud_mix);
 	cloud_shadow = mix(cloud_shadow, u_cloud_shadow_night, night_cloud_mix);
