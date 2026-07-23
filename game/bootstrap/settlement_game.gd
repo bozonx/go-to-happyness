@@ -1257,7 +1257,7 @@ func _ready() -> void:
 
 	_update_workers()
 	_update_interface("Build a simple store, then gather materials for the first campfire and tents.")
-	_enter_first_person(hero_citizen, "Hero view enabled.")
+	player_controller.enter_first_person(hero_citizen, "Hero view enabled.")
 
 	var pending_save: String = ""
 	if launch_mgr != null and "pending_save_path" in launch_mgr:
@@ -1276,8 +1276,8 @@ func _process(delta: float) -> void:
 		citizen_needs_service.tick(game_minutes)
 		_check_player_toilet_request()
 	if is_first_person:
-		_update_player_control(delta)
-		_update_interaction(delta)
+		player_controller.update_player_control(delta)
+		player_controller.update_interaction(delta)
 		_refresh_interaction_hint()
 		_update_first_person_mouse_and_crosshair()
 		_update_warehouse_fill_labels()
@@ -3484,7 +3484,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 			return
 	if event is InputEventKey and event.keycode == KEY_R and event.pressed and not event.echo:
-		_toggle_hero_view()
+		player_controller.toggle_hero_view()
 		get_viewport().set_input_as_handled()
 		return
 	if event is InputEventKey and event.keycode == KEY_B and event.pressed and not event.echo:
@@ -3513,7 +3513,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 			return
 		elif event is InputEventKey and event.keycode == KEY_F and event.pressed and not event.echo:
-			_start_interaction(event.shift_pressed)
+			player_controller.start_interaction(event.shift_pressed)
 			get_viewport().set_input_as_handled()
 			return
 		elif event is InputEventMouseMotion:
@@ -3534,7 +3534,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			elif not build_mode.is_empty():
 				_cancel_build_action()
 			else:
-				_leave_first_person_to_hero_overview()
+				player_controller.leave_first_person_to_hero_overview()
 		get_viewport().set_input_as_handled()
 		return
 	if event is InputEventMouseButton and event.pressed:
@@ -3820,33 +3820,9 @@ func _show_selected_citizen_menu() -> void:
 		build_menu.citizen_skills_label.visible = true
 	build_menu.title_label.add_theme_color_override("font_color", selected_builder.specialization_color())
 
-func _toggle_hero_view() -> void:
-	if player_controller != null:
-		player_controller.toggle_hero_view()
-
 func _take_control_of_selected_citizen() -> void:
 	if player_controller != null:
 		player_controller.take_control_of_selected_citizen()
-
-func _enter_first_person(citizen: Citizen, message: String) -> void:
-	if player_controller != null:
-		player_controller.enter_first_person(citizen, message)
-
-func _leave_first_person_to_hero_overview() -> void:
-	if player_controller != null:
-		player_controller.leave_first_person_to_hero_overview()
-
-func _update_player_control(delta: float) -> void:
-	if player_controller != null:
-		player_controller.update_player_control(delta)
-
-func _start_interaction(all: bool) -> void:
-	if player_controller != null:
-		player_controller.start_interaction(all)
-
-func _update_interaction(delta: float) -> void:
-	if player_controller != null:
-		player_controller.update_interaction(delta)
 
 func _gather_action_name(resource_type: String) -> String:
 	match resource_type:
@@ -4091,65 +4067,39 @@ func _wild_food_requires_specialist_message() -> String:
 	return "Forest gifts and rabbits can only be gathered by a trained specialist. Build a forager/hunter tent first."
 
 func _pocket_total() -> int:
-	var total := 0
-	for amount in pocket.values():
-		total += int(amount)
-	return total
+	return hero_pocket_service.pocket_total() if hero_pocket_service != null else 0
 
 
 func _pocket_space_for(resource_type: String) -> int:
-	return POCKET_CAPACITY - _pocket_total()
+	return hero_pocket_service.pocket_space_for(resource_type) if hero_pocket_service != null else 0
 
 
 func _pocket_has_room() -> bool:
-	return _pocket_total() < POCKET_CAPACITY
+	return hero_pocket_service.pocket_has_room() if hero_pocket_service != null else false
 
 
 func _pocket_amount(resource_type: String) -> int:
-	return int(pocket.get(resource_type, 0))
+	return hero_pocket_service.pocket_amount(resource_type) if hero_pocket_service != null else 0
 
 
 func _add_to_pocket(resource_type: String, amount: int) -> int:
-	if amount <= 0 or resource_type.is_empty():
-		return 0
-	var added := mini(amount, _pocket_space_for(resource_type))
-	if added > 0:
-		pocket[resource_type] = _pocket_amount(resource_type) + added
-	return added
+	return hero_pocket_service.add_to_pocket(resource_type, amount) if hero_pocket_service != null else 0
 
 
 func _remove_from_pocket(resource_type: String, amount: int) -> int:
-	if amount <= 0 or resource_type.is_empty() or not pocket.has(resource_type):
-		return 0
-	var current := _pocket_amount(resource_type)
-	var removed := mini(amount, current)
-	if removed <= 0:
-		return 0
-	if current <= removed:
-		pocket.erase(resource_type)
-	else:
-		pocket[resource_type] = current - removed
-	return removed
+	return hero_pocket_service.remove_from_pocket(resource_type, amount) if hero_pocket_service != null else 0
 
 
 func _pocket_resources() -> Array:
-	return pocket.keys().duplicate()
+	return hero_pocket_service.pocket_resources() if hero_pocket_service != null else []
 
 
 func _primary_pocket_resource() -> String:
-	for resource_type in pocket.keys():
-		if int(pocket.get(resource_type, 0)) > 0:
-			return str(resource_type)
-	return ""
+	return hero_pocket_service.primary_pocket_resource() if hero_pocket_service != null else ""
 
 
 func _pocket_summary() -> String:
-	if pocket.is_empty():
-		return ""
-	var parts: Array[String] = []
-	for resource_type in pocket:
-		parts.append("%s x%d" % [str(resource_type).capitalize(), int(pocket[resource_type])])
-	return " | ".join(parts)
+	return hero_pocket_service.pocket_summary() if hero_pocket_service != null else ""
 
 
 func _nearby_workplace_for_job() -> Node3D:
@@ -4185,16 +4135,12 @@ func _resource_remaining_percent(resource_type: String) -> int:
 
 
 func _format_pocket_hint() -> String:
-	return S.POCKET_FORMAT_INTERNAL % [_pocket_total(), POCKET_CAPACITY, (" | " + _pocket_summary()) if not pocket.is_empty() else ""]
+	return hero_pocket_service.format_pocket_hint() if hero_pocket_service != null else ""
 
 
 func _drop_pocket_on_ground() -> void:
-	if player_citizen == null or pocket.is_empty():
-		return
-	_create_resource_pile(player_citizen.global_position, pocket.duplicate())
-	pocket.clear()
-	_update_interface(S.POCKET_DROPPED_INTERNAL)
-	_refresh_interaction_hint()
+	if hero_pocket_service != null:
+		hero_pocket_service.drop_pocket_on_ground()
 
 
 func _home_occupancy_text() -> String:
@@ -6270,7 +6216,7 @@ func restore_from_save_data(save_data: SaveDataScript) -> bool:
 	_refresh_build_menu()
 
 	if hero_citizen != null:
-		_enter_first_person(hero_citizen, "Save loaded.")
+		player_controller.enter_first_person(hero_citizen, "Save loaded.")
 	return true
 
 
