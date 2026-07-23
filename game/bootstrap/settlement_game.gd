@@ -1539,32 +1539,17 @@ func _reset_building_night_work_toggles() -> void:
 
 
 func _sync_overtime_scope_indicators() -> void:
-	settlement.night_work_order_day = day_cycle.current_day if _has_overtime_source("settlement") else -1
-	for record in building_registry.records():
-		var node := record.node as Node3D
-		if is_instance_valid(node) and not _has_overtime_source("workplace", node):
-			var state: BuildingRuntimeStateScript = record.runtime_state()
-			if state.night_work_order_day != -1:
-				state.night_work_order_day = -1
-				node.set_meta("night_work_order_day", -1)
+	if citizen_daily_order_service != null:
+		citizen_daily_order_service.sync_overtime_scope_indicators()
 
 
 func _has_overtime_source(source: String, workplace: Node3D = null) -> bool:
-	for citizen in citizens:
-		if not is_instance_valid(citizen) or not citizen.has_overtime_source(source, day_cycle.current_day):
-			continue
-		if workplace == null or citizen.employment_workplace == workplace:
-			return true
-	return false
+	return citizen_daily_order_service.has_overtime_source(source, workplace) if citizen_daily_order_service != null else false
 
 
 func _resume_overtime_daily_orders() -> void:
-	for citizen in citizens:
-		if not is_instance_valid(citizen):
-			continue
-		if citizen.has_active_overtime(day_cycle.current_day) and citizen.daily_order_workday_id == day_cycle.current_day - 1:
-			citizen.daily_order_workday_id = day_cycle.current_day
-			citizen.daily_order_expires_at = maxf(citizen.daily_order_expires_at, daily_order_expiration_for_workday(day_cycle.current_day))
+	if citizen_daily_order_service != null:
+		citizen_daily_order_service.resume_overtime_daily_orders()
 
 
 func _apply_hourly_work_fatigue() -> void:
