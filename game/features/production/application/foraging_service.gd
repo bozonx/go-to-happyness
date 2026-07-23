@@ -145,6 +145,28 @@ func consume_tree_branches(position: Vector3) -> int:
 			mark_tree_branch_exhausted(tree)
 	return 1
 
+## Snapshot every living tree's mutable state for the save file. The forest
+## layout is fixed (see AmbientSpawner.create_forest), so only per-cell deltas —
+## wood/branch depletion, felled and exhausted flags — need persisting.
+func export_tree_state() -> Array:
+	var result: Array = []
+	for cell in tree_nodes:
+		var tree: Node3D = tree_nodes[cell]
+		if not is_instance_valid(tree):
+			continue
+		result.append({
+			"cell": {"x": cell.x, "y": cell.y},
+			"felled": bool(tree.get_meta("felled", false)),
+			"branch_exhausted": bool(tree.get_meta("branch_exhausted", false)),
+			"initial_wood": int(tree.get_meta("initial_wood", 0)),
+			"remaining_wood": int(tree.get_meta("remaining_wood", 0)),
+			"initial_branches": int(tree.get_meta("initial_branches", 0)),
+			"remaining_branches": int(tree.get_meta("remaining_branches", 0)),
+			"hand_branches": int(tree.get_meta("hand_branches", 0)),
+		})
+	return result
+
+
 func mark_tree_branch_exhausted(tree: Node3D) -> void:
 	if bool(tree.get_meta("branch_exhausted", false)):
 		return

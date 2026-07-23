@@ -2240,6 +2240,31 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	add_child(citizen)
 	citizen.simulation = self
 	citizen.setup_specialization(primary_specialization if not primary_specialization.is_empty() else "unassigned")
+	_wire_citizen(citizen)
+	citizens.append(citizen)
+	citizen.ai_id = _next_ai_citizen_id
+	_next_ai_citizen_id += 1
+	citizen_ai.register_citizen(citizen.ai_id, SettlementCitizenActuatorScript.new(citizen, _ai_target_for_key))
+	citizen.tree_exiting.connect(_on_ai_citizen_exiting.bind(citizen.ai_id), CONNECT_ONE_SHOT)
+	if citizens.size() > POPULATION:
+		settlement.add(ResourceIds.FOOD, random.randi_range(2, 5))
+	if hero_citizen == null:
+		hero_citizen = citizen
+		citizen.set_hero(true)
+		citizen.employment_state = Citizen.EmploymentState.NO_PERMANENT_WORK
+	else:
+		# Before the first campfire the settlement has no administration. Initial
+		# residents can receive explicit daily orders to bootstrap it.
+		citizen.employment_state = Citizen.EmploymentState.NO_PERMANENT_WORK if not is_instance_valid(campfire_node) else Citizen.EmploymentState.UNREGISTERED
+	if citizen_needs_service != null:
+		citizen_needs_service.schedule_toilet(citizen.ai_id)
+
+
+## Attaches navigation, the registration service and every gameplay signal to a
+## citizen. The caller must already have added the node to the tree, set
+## `simulation` and chosen the specialization. Shared by initial spawning and
+## save restore so a new signal only needs to be registered in one place.
+func _wire_citizen(citizen: Citizen) -> void:
 	citizen.setup_navigation(_find_path_around_houses, _get_nearest_delivery_position, _resolve_building_queue_position, _movement_speed_modifier_at, _navigation_revision, _record_trail_movement, _is_route_reachable, _complete_building_queue_arrival, _release_building_queue_entry, _find_recovery_path, _is_route_path_clear)
 	citizen.setup_registration_service(_can_start_registration, _registration_duration)
 	citizen.resource_delivered.connect(_on_resource_delivered)
@@ -2262,23 +2287,6 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 	citizen.arrival_greeter_ready.connect(_on_arrival_greeter_ready)
 	citizen.outside_work_departed.connect(_on_outside_work_departed)
 	citizen.citizen_leaving_departed.connect(_on_citizen_leaving_departed)
-	citizens.append(citizen)
-	citizen.ai_id = _next_ai_citizen_id
-	_next_ai_citizen_id += 1
-	citizen_ai.register_citizen(citizen.ai_id, SettlementCitizenActuatorScript.new(citizen, _ai_target_for_key))
-	citizen.tree_exiting.connect(_on_ai_citizen_exiting.bind(citizen.ai_id), CONNECT_ONE_SHOT)
-	if citizens.size() > POPULATION:
-		settlement.add(ResourceIds.FOOD, random.randi_range(2, 5))
-	if hero_citizen == null:
-		hero_citizen = citizen
-		citizen.set_hero(true)
-		citizen.employment_state = Citizen.EmploymentState.NO_PERMANENT_WORK
-	else:
-		# Before the first campfire the settlement has no administration. Initial
-		# residents can receive explicit daily orders to bootstrap it.
-		citizen.employment_state = Citizen.EmploymentState.NO_PERMANENT_WORK if not is_instance_valid(campfire_node) else Citizen.EmploymentState.UNREGISTERED
-	if citizen_needs_service != null:
-		citizen_needs_service.schedule_toilet(citizen.ai_id)
 
 
 func _create_starter_backpack() -> void:
@@ -5040,15 +5048,21 @@ func _fell_tree_at(position_on_board: Vector3) -> void:
 		return
 	if bool(tree.get_meta("felled", false)):
 		return
+	_apply_tree_felled_visual(cell, tree)
+	_refresh_navigation_grid()
+	settlement.add(ResourceIds.BRANCHES, 3)
+	_update_interface("A tree was felled. Its log is ready for delivery; the living tree is no longer available for gathering.")
+
+
+## Lays a tree down and frees the cell it occupied. Shared by live felling and
+## save restore so both paths produce identical geometry and navigation state.
+func _apply_tree_felled_visual(cell: Vector2i, tree: Node3D) -> void:
 	tree.set_meta("felled", true)
 	tree.rotation_degrees.z = 82.0
 	var collision_body := tree.get_node_or_null("TreeCollision") as CollisionObject3D
 	if collision_body != null:
 		collision_body.queue_free()
 	terrain_blocked_cells.erase(cell)
-	_refresh_navigation_grid()
-	settlement.add(ResourceIds.BRANCHES, 3)
-	_update_interface("A tree was felled. Its log is ready for delivery; the living tree is no longer available for gathering.")
 
 func _update_water_collectors(delta: float) -> void:
 	water_collector_service.tick(delta)
@@ -6169,6 +6183,8 @@ func restore_from_save_data(save_data: SaveDataScript) -> bool:
 				if child != null:
 					child.queue_free()
 			_complete_building(cell, b_type, pos, site_node, blueprint)
+		else:
+			push_warning("restore_from_save_data: skipping building with unknown type '" + b_type + "' at cell " + str(cell))
 
 	# 7. Restore Construction Sites
 	for c_dict in save_data.construction_sites_state:
@@ -6190,6 +6206,8 @@ func restore_from_save_data(save_data: SaveDataScript) -> bool:
 				site.delivered_materials = delivered
 				building_registry.attach_node(cell, site.node, b_type)
 				_update_construction_supply_label(site)
+		else:
+			push_warning("restore_from_save_data: skipping construction site with unknown type '" + b_type + "' at cell " + str(cell))
 
 	_restore_warehouses(s_dict.get("warehouses", []), s_dict.get("warehouse_types", []), bool(s_dict.get("warehouse_ever_built", false)))
 
@@ -6204,6 +6222,9 @@ func restore_from_save_data(save_data: SaveDataScript) -> bool:
 		var pile_node := _create_resource_pile(pos, resources, bool(p_dict.get("is_backpack", false)))
 		if bool(p_dict.get("is_backpack", false)):
 			backpack_node = pile_node
+
+	# 8b. Restore Forest state (felled trees, branch/wood depletion)
+	_restore_forest(save_data.forest_state)
 
 	# 9. Restore Citizens
 	_next_ai_citizen_id = int(save_data.world_state.get("next_ai_citizen_id", 1))
@@ -6225,29 +6246,7 @@ func restore_from_save_data(save_data: SaveDataScript) -> bool:
 		add_child(citizen)
 		citizen.simulation = self
 		citizen.setup_specialization(str(cit_dict.get("specialization", "unassigned")))
-		citizen.setup_navigation(_find_path_around_houses, _get_nearest_delivery_position, _resolve_building_queue_position, _movement_speed_modifier_at, _navigation_revision, _record_trail_movement, _is_route_reachable, _complete_building_queue_arrival, _release_building_queue_entry, _find_recovery_path, _is_route_path_clear)
-		citizen.setup_registration_service(_can_start_registration, _registration_duration)
-
-		citizen.resource_delivered.connect(_on_resource_delivered)
-		citizen.resource_dropped.connect(_on_resource_dropped)
-		citizen.construction_material_delivered.connect(_on_construction_material_delivered)
-		citizen.building_supply_delivered.connect(_on_building_supply_delivered)
-		citizen.excavation_cycle.connect(_on_excavation_cycle)
-		citizen.resource_ready.connect(_on_resource_ready)
-		citizen.tree_harvested.connect(_on_tree_harvested)
-		citizen.logs_delivered.connect(_on_logs_delivered)
-		citizen.sawmill_boards_collected.connect(_on_sawmill_boards_collected)
-		citizen.dew_collected.connect(_on_dew_collected)
-		citizen.meal_finished.connect(_on_meal_finished)
-		citizen.relief_finished.connect(_on_relief_finished)
-		citizen.leisure_finished.connect(_on_leisure_finished)
-		citizen.canteen_delivery_finished.connect(_on_canteen_delivery_finished)
-		citizen.factory_cycle.connect(_on_factory_cycle)
-		citizen.trade_delivery_finished.connect(_on_trade_delivery_finished)
-		citizen.employment_processing_finished.connect(_on_employment_processing_finished)
-		citizen.arrival_greeter_ready.connect(_on_arrival_greeter_ready)
-		citizen.outside_work_departed.connect(_on_outside_work_departed)
-		citizen.citizen_leaving_departed.connect(_on_citizen_leaving_departed)
+		_wire_citizen(citizen)
 
 		citizens.append(citizen)
 		citizen.ai_id = saved_id if saved_id > 0 else _next_ai_citizen_id
@@ -6341,3 +6340,25 @@ func _restore_warehouses(data: Variant, types: Variant, ever_built: bool) -> voi
 		for warehouse_type in types:
 			settlement.warehouse_types.append(str(warehouse_type))
 	settlement.warehouse_ever_built = ever_built
+
+
+## Overlays saved per-tree state onto the freshly generated forest. The forest
+## layout is deterministic (fixed cells), so trees are matched by cell rather
+## than despawned and rebuilt. Older saves omit `forest` and leave it pristine.
+func _restore_forest(tree_states: Array) -> void:
+	for entry in tree_states:
+		if not (entry is Dictionary):
+			continue
+		var cell := SaveDataScript.dict_to_vector2i(entry.get("cell", {}))
+		var tree: Node3D = tree_nodes.get(cell)
+		if not is_instance_valid(tree):
+			continue
+		tree.set_meta("initial_wood", int(entry.get("initial_wood", tree.get_meta("initial_wood", 0))))
+		tree.set_meta("remaining_wood", maxi(0, int(entry.get("remaining_wood", tree.get_meta("remaining_wood", 0)))))
+		tree.set_meta("initial_branches", int(entry.get("initial_branches", tree.get_meta("initial_branches", 0))))
+		tree.set_meta("remaining_branches", maxi(0, int(entry.get("remaining_branches", tree.get_meta("remaining_branches", 0)))))
+		tree.set_meta("hand_branches", maxi(0, int(entry.get("hand_branches", 0))))
+		if bool(entry.get("branch_exhausted", false)):
+			foraging_service.mark_tree_branch_exhausted(tree)
+		if bool(entry.get("felled", false)) and not bool(tree.get_meta("felled", false)):
+			_apply_tree_felled_visual(cell, tree)

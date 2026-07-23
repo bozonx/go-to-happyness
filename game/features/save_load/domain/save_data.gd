@@ -4,11 +4,17 @@ extends RefCounted
 ## Typed record and JSON helper for game state serialization and deserialization.
 
 ## Bump this only alongside an explicit migration in `from_dict`.
-const VERSION := 2
+##   v2 -> v3: added `forest` (per-tree wood/branch/felled state). Absent in
+##             older saves, which load with a pristine (regenerated) forest.
+const VERSION := 3
+
+## Read once from the project so a single edit in project.godot propagates here.
+static func _project_version() -> String:
+	return str(ProjectSettings.get_setting("application/config/version", "0.0.0"))
 
 var version: int = VERSION
 var timestamp: int = 0
-var game_version: String = "0.4.7"
+var game_version: String = _project_version()
 
 var settlement_state: Dictionary = {}
 var clock_state: Dictionary = {}
@@ -17,6 +23,7 @@ var buildings_state: Array = []
 var construction_sites_state: Array = []
 var citizens_state: Array = []
 var resource_piles_state: Array = []
+var forest_state: Array = []
 var camera_state: Dictionary = {}
 
 
@@ -55,6 +62,7 @@ func to_dict() -> Dictionary:
 		"construction_sites": construction_sites_state.duplicate(true),
 		"citizens": citizens_state.duplicate(true),
 		"resource_piles": resource_piles_state.duplicate(true),
+		"forest": forest_state.duplicate(true),
 		"camera": camera_state.duplicate(true)
 	}
 
@@ -67,7 +75,7 @@ func from_dict(data: Dictionary) -> bool:
 		push_error("SaveData: Unsupported save format version: " + str(version))
 		return false
 	timestamp = int(data.get("timestamp", 0))
-	game_version = str(data.get("game_version", "0.4.7"))
+	game_version = str(data.get("game_version", _project_version()))
 	
 	if not _is_dictionary_field(data, "settlement") or not _is_dictionary_field(data, "clock") or not _is_dictionary_field(data, "world"):
 		push_error("SaveData: Invalid save root schema")
@@ -82,6 +90,9 @@ func from_dict(data: Dictionary) -> bool:
 	construction_sites_state = (data.get("construction_sites") as Array).duplicate(true)
 	citizens_state = (data.get("citizens") as Array).duplicate(true)
 	resource_piles_state = (data.get("resource_piles") as Array).duplicate(true)
+	# Forest and camera are optional: saves predating v3 (or headless) omit them,
+	# and a missing forest simply means the regenerated one is left untouched.
+	forest_state = (data.get("forest", []) as Array).duplicate(true) if data.get("forest", []) is Array else []
 	camera_state = (data.get("camera", {}) as Dictionary).duplicate(true) if data.get("camera", {}) is Dictionary else {}
 	if version == 1:
 		_migrate_v1_to_v2()

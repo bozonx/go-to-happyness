@@ -5,11 +5,11 @@ const SUN_GLARE_OCCLUSION_DISTANCE := 96.0
 const SUN_GLARE_OCCLUSION_MASK := 1 | 8
 const SUN_GLARE_EDGE_ALLOWANCE := 0.18
 const SUN_GLARE_OCCLUSION_SAMPLE_RADIUS := 0.24
-const CLOUD_SCALE := 1.15
+const CLOUD_SCALE := 1.55
 const CLOUD_WIND := Vector2(0.006, 0.002)
-const CLOUD_EDGE_SOFTNESS := 0.10
-const CLOUD_COVERAGE_CLEAR := 0.50
-const CLOUD_COVERAGE_STORM := 0.14
+const CLOUD_EDGE_SOFTNESS := 0.07
+const CLOUD_COVERAGE_CLEAR := 0.46
+const CLOUD_COVERAGE_STORM := 0.18
 const CLOUD_MINIMUM_SUN_VISIBILITY := 0.12
 
 var camera: Camera3D
@@ -104,7 +104,7 @@ func update_daylight(game_minutes: float, overcast: float, runtime_seconds: floa
 
 func _cloud_sun_visibility(sun_direction: Vector3, overcast: float, runtime_seconds: float) -> float:
 	var horizon := sun_direction.y
-	var projection_scale := maxf(horizon, 0.16)
+	var projection_scale := maxf(horizon + 0.28, 0.28)
 	var uv := Vector2(sun_direction.x, sun_direction.z) / projection_scale
 	uv = uv * CLOUD_SCALE + CLOUD_WIND * runtime_seconds
 	var coverage := lerpf(CLOUD_COVERAGE_CLEAR, CLOUD_COVERAGE_STORM, overcast)
@@ -118,11 +118,28 @@ func _cloud_field(uv: Vector2) -> float:
 		_fbm(uv * 0.75),
 		_fbm(uv * 0.75 + Vector2(5.2, 1.3))
 	)
-	var r := Vector2(
-		_fbm(uv + 1.15 * q + Vector2(1.7, 9.2)),
-		_fbm(uv + 1.15 * q + Vector2(8.3, 2.8))
-	)
-	return pow(_fbm(uv + 1.3 * r), 1.1)
+	var macro := _fbm(uv * 0.32 + q * 0.45)
+	var lobes := _cellular_billow(uv * 0.92 + q * 0.8)
+	var detail := _fbm(uv * 2.15 + q * 1.25)
+	var islands := smoothstep(0.40, 0.67, macro)
+	var body := macro * 0.54 + lobes * 0.34 + detail * 0.12
+	return body * lerpf(0.24, 1.0, islands)
+
+
+func _cellular_billow(p: Vector2) -> float:
+	var cell := p.floor()
+	var local := p - cell
+	var nearest := 2.0
+	for y in range(-1, 2):
+		for x in range(-1, 2):
+			var neighbour := Vector2(x, y)
+			var sample_cell := cell + neighbour
+			var point := Vector2(
+				_hash21(sample_cell + Vector2(7.1, 3.7)),
+				_hash21(sample_cell + Vector2(19.3, 11.8))
+			)
+			nearest = minf(nearest, (neighbour + point - local).length())
+	return 1.0 - smoothstep(0.18, 0.78, nearest)
 
 
 func _fbm(p: Vector2) -> float:

@@ -18,6 +18,11 @@ static func setup_simulation(tree: SceneTree) -> Node:
 	await tree.physics_frame
 	for _frame in range(10):
 		await tree.physics_frame
+	if not is_instance_valid(simulation.entrance_stone):
+		var entrance := Node3D.new()
+		entrance.position = simulation._cell_center(Vector2i(-22, 1))
+		simulation.add_child(entrance)
+		simulation.entrance_stone = entrance
 	return simulation
 
 

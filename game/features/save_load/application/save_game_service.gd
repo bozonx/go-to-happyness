@@ -124,6 +124,10 @@ static func save_game(game: Node, path: String = QUICKSAVE_PATH) -> bool:
 				})
 	save_data.resource_piles_state = piles_list
 
+	# 5b. Forest (felled trees and branch/wood depletion)
+	if "foraging_service" in game and game.foraging_service != null and game.foraging_service.has_method("export_tree_state"):
+		save_data.forest_state = game.foraging_service.export_tree_state()
+
 	# 6. Citizens
 	var citizens_list: Array = []
 	if "citizens" in game:

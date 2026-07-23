@@ -97,7 +97,7 @@ func _init() -> void:
 		assert(is_finite(citizen.global_position.x) and is_finite(citizen.global_position.y) and is_finite(citizen.global_position.z))
 		assert(citizen.global_position.y > -1.0)
 		assert(citizen.get_children().any(func(child): return child is MeshInstance3D))
-		assert(citizen.global_position.distance_to(simulation.entrance_stone.global_position) < 5.0)
+		assert(citizen.global_position.distance_to(simulation._entrance_anchor_position()) < 5.0)
 		if not citizen.is_hero:
 			assert(citizen.specialization == "unassigned")
 			assert(citizen.employment_state == Citizen.EmploymentState.NO_PERMANENT_WORK)
