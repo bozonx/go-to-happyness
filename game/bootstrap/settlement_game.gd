@@ -95,10 +95,10 @@ const RegisterGoalScript = preload("res://game/features/decision/domain/goals/re
 const WorkforceOrderProviderScript = preload("res://game/features/decision/application/workforce_order_provider.gd")
 const DailyPlayerOrderProviderScript = preload("res://game/features/decision/application/daily_player_order_provider.gd")
 const CleaningGoalScript = preload("res://game/features/decision/domain/goals/cleaning_goal.gd")
-const RouteRequestScript = preload("res://game/features/routing/domain/route_request.gd")
 const TrailFieldServiceScript = preload("res://game/features/routing/application/trail_field_service.gd")
 const RoadNetworkServiceScript = preload("res://game/features/routing/application/road_network_service.gd")
 const NavigationObstaclePublisherScript = preload("res://game/features/routing/application/navigation_obstacle_publisher.gd")
+const NavigationFacadeScript = preload("res://game/features/routing/application/navigation_facade.gd")
 const WeatherStateScript = preload("res://game/features/simulation/domain/weather_state.gd")
 const CameraControllerScript = preload("res://game/features/world/presentation/camera_controller.gd")
 const WorldSetupScene = preload("res://game/features/world/presentation/world_setup.tscn")
@@ -576,6 +576,7 @@ var citizen_living_status_service: CitizenLivingStatusService
 ## once save/load is introduced so reloaded games issue non-colliding ids.
 var _next_ai_citizen_id := 1
 var route_service: GridRouteService
+var navigation_facade: RefCounted
 var building_queue_service: BuildingQueueService
 var citizen_lifecycle_service: CitizenLifecycleService
 var building_availability_service: BuildingAvailabilityService
@@ -722,6 +723,8 @@ func _ready() -> void:
 	trail_field.configure(BOARD_CELLS * CELL_SIZE, CELL_SIZE, nav_grid)
 	route_service = GridRouteService.new()
 	route_service.configure(nav_grid)
+	navigation_facade = NavigationFacadeScript.new()
+	navigation_facade.configure(nav_grid, route_service)
 	building_queue_service = BuildingQueueServiceScript.new()
 	building_queue_service.configure(building_registry, nav_grid)
 	building_queue_service.set_citizen_alive_checker(_is_ai_citizen_id_alive)
@@ -1962,11 +1965,9 @@ func _is_board_cell(cell: Vector2i) -> bool:
 	return cell.x >= -half_cells and cell.x < half_cells and cell.y >= -half_cells and cell.y < half_cells
 
 func _find_path_around_houses(from: Vector3, destination: Vector3, may_enter_destination_house: bool) -> RouteResult:
-	var request := RouteRequestScript.new()
-	request.from = from
-	request.destination = destination
-	request.allow_destination_cell = may_enter_destination_house
-	return route_service.find_route_request(request)
+	if navigation_facade == null:
+		return RouteResult.unreachable(-1, -1, RouteResult.UnreachableReason.NO_GRID)
+	return navigation_facade.find_route(from, destination, may_enter_destination_house)
 
 
 ## A repeated physical blockage needs a different first leg; replanning the
@@ -2007,11 +2008,11 @@ func _find_recovery_path(from: Vector3, destination: Vector3, may_enter_destinat
 
 
 func _movement_speed_modifier_at(position_on_board: Vector3) -> float:
-	return nav_grid.movement_speed_modifier_at(position_on_board) if nav_grid != null else 1.0
+	return navigation_facade.movement_speed_modifier_at(position_on_board) if navigation_facade != null else 1.0
 
 
 func _navigation_revision() -> int:
-	return nav_grid.topology_revision() if nav_grid != null else -1
+	return navigation_facade.topology_revision() if navigation_facade != null else -1
 
 
 ## Candidate discovery asks only whether a destination can be reached. Cache the
@@ -6229,6 +6230,8 @@ func restore_from_save_data(save_data: SaveDataScript) -> bool:
 	_restore_forest(save_data.forest_state)
 	if ambient_spawner != null and save_data.world_state.get("natural_resources", {}) is Dictionary:
 		ambient_spawner.restore_resource_state(save_data.world_state.get("natural_resources", {}))
+	if road_network_service != null and save_data.world_state.get("roads", []) is Array:
+		road_network_service.restore_state(save_data.world_state.get("roads", []))
 
 	# 9. Restore Citizens
 	_next_ai_citizen_id = int(save_data.world_state.get("next_ai_citizen_id", 1))

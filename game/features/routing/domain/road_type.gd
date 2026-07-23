@@ -11,6 +11,11 @@ const STONE: StringName = &"stone"
 const ASPHALT: StringName = &"asphalt"
 const ASPHALT_CONCRETE: StringName = &"asphalt_concrete"
 
+const PEDESTRIAN: StringName = &"pedestrian"
+const CART: StringName = &"cart"
+const BICYCLE: StringName = &"bicycle"
+const MOTOR: StringName = &"motor"
+
 static func traversal_weight(type: StringName) -> float:
 	match type:
 		DIRT:
@@ -31,3 +36,35 @@ static func traversal_weight(type: StringName) -> float:
 
 static func is_known(type: StringName) -> bool:
 	return is_finite(traversal_weight(type))
+
+
+## Era values intentionally match SettlementState.Era without coupling this
+## deterministic routing record to settlement state.
+static func minimum_era(type: StringName) -> int:
+	match type:
+		DIRT:
+			return 1 # EARTH
+		CLAY:
+			return 2
+		WOOD:
+			return 3
+		STONE:
+			return 4
+		ASPHALT, ASPHALT_CONCRETE:
+			return 5 # BRICK / industrial precursor
+		_:
+			return 999
+
+
+static func supports_profile(type: StringName, profile: StringName) -> bool:
+	match type:
+		DIRT:
+			return profile == PEDESTRIAN or profile == CART or profile == BICYCLE
+		CLAY:
+			return profile == PEDESTRIAN or profile == BICYCLE
+		WOOD:
+			return profile == PEDESTRIAN or profile == BICYCLE or profile == MOTOR
+		STONE, ASPHALT, ASPHALT_CONCRETE:
+			return profile == PEDESTRIAN or profile == CART or profile == BICYCLE or profile == MOTOR
+		_:
+			return false

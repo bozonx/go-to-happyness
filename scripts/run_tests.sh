@@ -11,7 +11,20 @@ echo "=================================================="
 
 echo ""
 echo "[1/2] Running Domain & AI Unit Tests..."
-godot --headless --path . --script res://tests/run_all.gd
+unit_log="$(mktemp)"
+if ! godot --headless --path . --script res://tests/run_all.gd > "$unit_log" 2>&1; then
+  cat "$unit_log"
+  rm -f "$unit_log"
+  exit 1
+fi
+if rg -q 'Assertion failed|Parse Error|Compile Error|SCRIPT ERROR:' "$unit_log"; then
+  echo "[FAIL] Unit test runner emitted an error."
+  cat "$unit_log"
+  rm -f "$unit_log"
+  exit 1
+fi
+cat "$unit_log"
+rm -f "$unit_log"
 
 echo ""
 echo "[2/2] Running Feature & Integration Scene Smoke Tests..."
@@ -22,7 +35,7 @@ run_test() {
   local tmpfile
   tmpfile="$(mktemp)"
   echo "-> Running $script ($frames frames)..."
-  if timeout 45 godot --headless --path . --script "$script" --quit-after "$frames" > "$tmpfile" 2>&1; then
+  if timeout 45 godot --headless --path . --script "$script" --quit-after "$frames" > "$tmpfile" 2>&1 && ! rg -q 'Assertion failed|Parse Error|Compile Error|SCRIPT ERROR:' "$tmpfile"; then
     rm -f "$tmpfile"
   else
     echo "  [FAIL] $script"

@@ -168,6 +168,7 @@ static func save_game(game: Node, path: String = QUICKSAVE_PATH) -> bool:
 		"next_ai_citizen_id": game.get("_next_ai_citizen_id"),
 		"biome_id": str(game.launch_config.biome_id) if "launch_config" in game and game.launch_config != null else "",
 		"natural_resources": game.ambient_spawner.export_resource_state() if "ambient_spawner" in game and game.ambient_spawner != null else {},
+		"roads": game.road_network_service.export_state() if "road_network_service" in game and game.road_network_service != null else [],
 	}
 
 	var success := save_data.save_to_file(path)

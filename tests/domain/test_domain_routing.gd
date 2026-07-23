@@ -8,6 +8,7 @@ const TrailFieldServiceScript = preload("res://game/features/routing/application
 const RoadNetworkServiceScript = preload("res://game/features/routing/application/road_network_service.gd")
 const NavigationObstaclePublisherScript = preload("res://game/features/routing/application/navigation_obstacle_publisher.gd")
 const RoadTypeScript = preload("res://game/features/routing/domain/road_type.gd")
+const NavigationFacadeScript = preload("res://game/features/routing/application/navigation_facade.gd")
 
 
 static func run_all() -> void:
@@ -48,6 +49,7 @@ static func run_all() -> void:
 	_test_constructed_roads_override_trails_and_restore_them()
 	_test_road_network_validates_and_batches_changes()
 	_test_navigation_obstacle_publisher()
+	_test_navigation_facade_metrics()
 
 
 static func _route_polyline_cost(grid: NavGrid, start: Vector3, waypoints: Array[Vector3]) -> float:
@@ -854,6 +856,14 @@ static func _test_road_network_validates_and_batches_changes() -> void:
 	assert(grid.revision() == revision + 1)
 	assert(roads.road_type_at(Vector2i.ZERO) == RoadTypeScript.DIRT)
 	assert(is_equal_approx(grid.get_cell_weight(Vector2i(1, 0), &"cart"), 1.0))
+	assert(not roads.complete_cells(one_cell, RoadTypeScript.STONE, 3))
+	assert(roads.complete_cells(one_cell, RoadTypeScript.STONE, 4))
+	assert(is_finite(roads.road_weight_for_profile(Vector2i.ZERO, RoadTypeScript.CART)))
+	assert(not is_finite(roads.road_weight_for_profile(Vector2i.ZERO, &"boat")))
+	var reloaded: RefCounted = RoadNetworkServiceScript.new()
+	reloaded.configure(grid)
+	reloaded.restore_state(roads.export_state())
+	assert(reloaded.road_type_at(Vector2i.ZERO) == RoadTypeScript.STONE)
 
 
 static func _test_navigation_obstacle_publisher() -> void:
@@ -869,3 +879,16 @@ static func _test_navigation_obstacle_publisher() -> void:
 	var opened: Dictionary = publisher.publish({}, [record], [{"cell": Vector2i(0, 0), "node": building}], 0.0)
 	assert(not opened.has(Vector2i(0, 0)))
 	building.free()
+
+
+static func _test_navigation_facade_metrics() -> void:
+	var grid := NavGrid.new()
+	grid.configure(1.0, 8)
+	var router: GridRouteService = GridRouteServiceScript.new()
+	router.configure(grid)
+	var navigation: RefCounted = NavigationFacadeScript.new()
+	navigation.configure(grid, router)
+	assert(navigation.find_route(Vector3(0.5, 0.0, 0.5), Vector3(2.5, 0.0, 0.5)).reachable)
+	assert(not navigation.find_route(Vector3.ZERO, Vector3(99.0, 0.0, 0.0)).reachable)
+	var metrics: Dictionary = navigation.metrics()
+	assert(metrics.requests == 2 and metrics.failures == 1 and int(metrics.expanded_nodes) > 0)

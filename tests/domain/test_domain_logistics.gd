@@ -516,6 +516,10 @@ static func _test_citizen_status_effects() -> void:
 
 static func _test_storage_delivery_service() -> void:
 	var simulation := FakeStorageSimulation.new()
+	simulation.settlement.add_warehouse("warehouse")
+	simulation.settlement.warehouse_ever_built = true
+	simulation.warehouse_positions.append(Vector3.ZERO)
+	simulation.storage_routing_service.warehouse_positions = simulation.warehouse_positions
 	var service := StorageDeliveryServiceScript.new()
 	service.configure(
 		simulation.settlement,
@@ -529,10 +533,6 @@ static func _test_storage_delivery_service() -> void:
 		simulation._send_citizen_to_leisure
 	)
 	var worker := Citizen.new()
-	simulation.settlement.add_warehouse("warehouse")
-	simulation.settlement.warehouse_ever_built = true
-	simulation.warehouse_positions = [Vector3.ZERO]
-	simulation.storage_routing_service.warehouse_positions = simulation.warehouse_positions
 	service.on_resource_delivered(worker, "grass", 1)
 	assert(simulation.settlement.grass == 1)
 	assert(not worker.blocked_by_storage)
@@ -541,6 +541,10 @@ static func _test_storage_delivery_service() -> void:
 	assert(simulation.last_interface_message == "Workers delivered 1 grass to the warehouse.")
 
 	var full_storage_simulation := FakeStorageSimulation.new()
+	full_storage_simulation.settlement.add_warehouse("warehouse")
+	full_storage_simulation.settlement.warehouse_ever_built = true
+	full_storage_simulation.warehouse_positions.append(Vector3.ZERO)
+	full_storage_simulation.storage_routing_service.warehouse_positions = full_storage_simulation.warehouse_positions
 	var full_storage_service := StorageDeliveryServiceScript.new()
 	full_storage_service.configure(
 		full_storage_simulation.settlement,
@@ -553,10 +557,6 @@ static func _test_storage_delivery_service() -> void:
 		full_storage_simulation._request_courier_dispatch,
 		full_storage_simulation._send_citizen_to_leisure
 	)
-	full_storage_simulation.settlement.add_warehouse("warehouse")
-	full_storage_simulation.settlement.warehouse_ever_built = true
-	full_storage_simulation.warehouse_positions = [Vector3.ZERO]
-	full_storage_simulation.storage_routing_service.warehouse_positions = full_storage_simulation.warehouse_positions
 	full_storage_simulation.settlement.warehouses[0].set_amount("grass", 24)
 	var full_storage_worker := Citizen.new()
 	full_storage_worker.carried_amount = 1
