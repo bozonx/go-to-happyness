@@ -17,8 +17,6 @@ func show_entrance_menu() -> void:
 	simulation.entrance_menu_title.text = "Entrance sign\nEmergency orders. Outside work: %s" % resident_name
 	if is_instance_valid(simulation.entrance_work_button):
 		simulation.entrance_work_button.tooltip_text = "Requires a Courier. The resident leaves for one full day and returns with %s coins." % outside_work_reward_text()
-	if simulation.entrance_highlight != null:
-		simulation.entrance_highlight.visible = true
 	simulation.entrance_menu.visible = true
 
 

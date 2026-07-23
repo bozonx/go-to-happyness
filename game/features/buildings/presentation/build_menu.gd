@@ -155,6 +155,7 @@ func _create_buttons() -> void:
 	add_build_button("", "toilet_tent", 788, "tent")
 	add_build_button("", "tarp_toilet", 822, "tent")
 	add_build_button("", "boundary_post", 856, "tent")
+	add_build_button("", "entrance_sign", 890, "tent")
 
 	add_build_button("", "dugout", 176, "earth")
 	add_build_button("", "earth_house", 210, "earth")

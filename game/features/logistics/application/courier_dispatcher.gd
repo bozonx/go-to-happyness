@@ -7,20 +7,45 @@ const CourierTaskScript = preload("res://game/features/logistics/domain/courier_
 ## their domain-specific reservation rules while migration to CourierTask is
 ## in progress, but only this dispatcher starts the scheduling pass.
 
-var simulation: Node
+var _citizens: Array = []
+var _warehouse_positions: Array[Vector3] = []
+var _storage_routing: StorageRoutingService
+var _runtime_seconds_getter: Callable
+var _publish_tasks: Callable
+var _is_task_valid: Callable
+var _start_task: Callable
+var _cancel_task: Callable
+var _release_reservation: Callable
+
 var tasks: Dictionary = {}
 var _tasks_by_courier_id: Dictionary = {}
 
 
-func configure(next_simulation: Node) -> void:
-	simulation = next_simulation
+func configure(
+	citizens: Array,
+	warehouse_positions: Array[Vector3],
+	storage_routing: StorageRoutingService,
+	runtime_seconds_getter: Callable,
+	publish_tasks: Callable,
+	is_task_valid: Callable,
+	start_task: Callable,
+	cancel_task: Callable,
+	release_reservation: Callable
+) -> void:
+	_citizens = citizens
+	_warehouse_positions = warehouse_positions
+	_storage_routing = storage_routing
+	_runtime_seconds_getter = runtime_seconds_getter
+	_publish_tasks = publish_tasks
+	_is_task_valid = is_task_valid
+	_start_task = start_task
+	_cancel_task = cancel_task
+	_release_reservation = release_reservation
 
 
 func dispatch() -> void:
-	if simulation == null:
-		return
 	_cleanup_invalid_tasks()
-	simulation._publish_courier_tasks(self)
+	_publish_tasks.call(self)
 	_publish_manual_worker_tasks()
 	_cleanup_invalid_tasks()
 
@@ -28,7 +53,7 @@ func dispatch() -> void:
 func available_tasks() -> Array[CourierTask]:
 	var result: Array[CourierTask] = []
 	for task: CourierTask in tasks.values():
-		if not task.is_assigned() and simulation._is_courier_task_valid(task):
+		if not task.is_assigned() and _is_task_valid.call(task):
 			result.append(task)
 	result.sort_custom(func(a: CourierTask, b: CourierTask): return a.priority > b.priority)
 	return result
@@ -50,7 +75,7 @@ func start_task(courier: Citizen, task_id: StringName) -> bool:
 		return false
 	var task: CourierTask = tasks[task_id]
 	var requested_courier_ai_id := int(task.payload.get("courier_ai_id", 0))
-	if task.is_assigned() or (requested_courier_ai_id > 0 and requested_courier_ai_id != courier.ai_id) or not simulation._is_courier_task_valid(task) or not simulation._start_courier_task(courier, task):
+	if task.is_assigned() or (requested_courier_ai_id > 0 and requested_courier_ai_id != courier.ai_id) or not _is_task_valid.call(task) or not _start_task.call(courier, task):
 		return false
 	task.assigned_courier_ai_id = courier.ai_id
 	_tasks_by_courier_id[task.assigned_courier_ai_id] = task
@@ -58,18 +83,18 @@ func start_task(courier: Citizen, task_id: StringName) -> bool:
 
 
 func is_manually_targeted(worker: Citizen) -> bool:
-	if simulation == null or not is_instance_valid(worker):
+	if not is_instance_valid(worker):
 		return false
-	for courier in simulation.citizens:
+	for courier in _citizens:
 		if is_instance_valid(courier) and courier.can_handle_entry_logistics() and courier.courier_worker == worker:
 			return true
 	return false
 
 
 func _publish_manual_worker_tasks() -> void:
-	if simulation.warehouse_positions.is_empty():
+	if _warehouse_positions.is_empty():
 		return
-	for courier in simulation.citizens:
+	for courier in _citizens:
 		if not is_instance_valid(courier) or not courier.can_handle_entry_logistics():
 			continue
 		var worker: Citizen = courier.courier_worker
@@ -81,7 +106,7 @@ func _publish_manual_worker_tasks() -> void:
 		var resource_type: String = worker.resource_type
 		var amount := worker.carried_amount
 		var worker_position: Vector3 = worker.global_position if worker.is_inside_tree() else worker.position
-		var warehouse_index: int = simulation.storage_routing_service.find_reachable_warehouse_index(worker_position, resource_type, amount)
+		var warehouse_index: int = _storage_routing.find_reachable_warehouse_index(worker_position, resource_type, amount)
 		if warehouse_index < 0:
 			continue
 		publish(
@@ -89,7 +114,7 @@ func _publish_manual_worker_tasks() -> void:
 			CourierTask.Kind.WORKER_PICKUP,
 			110,
 			worker_position,
-			simulation.warehouse_positions[warehouse_index],
+			_warehouse_positions[warehouse_index],
 			{"worker": worker, "courier_ai_id": courier.ai_id}
 		)
 
@@ -104,7 +129,7 @@ func publish(id: StringName, kind: CourierTask.Kind, priority: int, pickup: Vect
 	task.pickup = pickup
 	task.dropoff = dropoff
 	task.payload = payload
-	task.created_at = simulation.runtime_seconds
+	task.created_at = _runtime_seconds_getter.call()
 	tasks[id] = task
 
 
@@ -127,12 +152,12 @@ func cancel_for(courier: Citizen) -> void:
 	var task := task_for(courier)
 	if task == null:
 		return
-	simulation._cancel_courier_task(courier, task)
+	_cancel_task.call(courier, task)
 	_tasks_by_courier_id.erase(courier.ai_id)
 	task.assigned_courier_ai_id = 0
 	if task.has_reservation():
-		simulation._release_task_warehouse_reservation(task)
-	if not simulation._is_courier_task_valid(task):
+		_release_reservation.call(task)
+	if not _is_task_valid.call(task):
 		tasks.erase(task.id)
 
 
@@ -149,16 +174,16 @@ func _cleanup_invalid_tasks() -> void:
 				_tasks_by_courier_id.erase(task.assigned_courier_ai_id)
 				task.assigned_courier_ai_id = 0
 				if task.has_reservation():
-					simulation._release_task_warehouse_reservation(task)
-		if not simulation._is_courier_task_valid(task):
+					_release_reservation.call(task)
+		if not _is_task_valid.call(task):
 			_tasks_by_courier_id.erase(task.assigned_courier_ai_id)
 			tasks.erase(id)
 
 
 func _courier_for_ai_id(citizen_id: int) -> Citizen:
-	if simulation == null or citizen_id <= 0:
+	if citizen_id <= 0:
 		return null
-	for candidate in simulation.citizens:
+	for candidate in _citizens:
 		if is_instance_valid(candidate) and candidate.ai_id == citizen_id:
 			return candidate
 	return null

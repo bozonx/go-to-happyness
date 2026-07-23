@@ -113,6 +113,7 @@ const SettlementSurvivalServiceScript = preload("res://game/features/settlement/
 const SettlementDailyRulesServiceScript = preload("res://game/features/settlement/application/settlement_daily_rules_service.gd")
 const TerritoryServiceScript = preload("res://game/features/world/application/territory_service.gd")
 const ResourcePileScript = preload("res://game/features/logistics/domain/resource_pile.gd")
+const WarehouseStateScript = preload("res://game/features/settlement/domain/warehouse_state.gd")
 const S = preload("res://game/features/ui/domain/game_strings.gd")
 
 
@@ -607,11 +608,47 @@ func _ready() -> void:
 	hero_pocket_service = HeroPocketServiceScript.new()
 	hero_pocket_service.configure(func() -> Citizen: return player_citizen, _create_resource_pile, _update_interface, _refresh_interaction_hint)
 	hero_interaction_service = HeroInteractionServiceScript.new()
-	hero_interaction_service.configure(self)
+	hero_interaction_service.configure(
+		func() -> Citizen: return player_citizen,
+		INTERACTION_RANGE,
+		tree_positions,
+		tree_nodes,
+		sawmill_positions,
+		farm_positions,
+		pond_positions,
+		grass_sources,
+		forage_sources,
+		rabbit_sources,
+		_cell_from_position,
+		_consume_grass_source
+	)
 	workplace_labor_service = WorkplaceLaborServiceScript.new()
-	workplace_labor_service.configure(self)
+	workplace_labor_service.configure(
+		settlement,
+		citizens,
+		func() -> Node3D: return campfire_node,
+		func() -> Node3D: return canteen,
+		func() -> Vector3: return canteen_position,
+		warehouse_positions,
+		construction_sites,
+		demolition_sites,
+		tree_positions,
+		pond_positions,
+		craft_tent_positions,
+		dig_sites,
+		_is_fire_lit,
+		_update_interface,
+		_available_employer_capacity,
+		_builder_job_capacity,
+		_can_work_at_dig_site,
+		_employment_centre_building
+	)
 	building_visuals_service = BuildingVisualsServiceScript.new()
-	building_visuals_service.configure(self)
+	building_visuals_service.configure(
+		entrance_lights,
+		house_lights,
+		random
+	)
 	territory_service = TerritoryServiceScript.new()
 	var summer_valley_biome := load("res://game/features/world/presentation/biomes/summer/summer_valley/summer_valley_biome.tres") as BiomeDefinition
 	var summer_plains_biome := load("res://game/features/world/presentation/biomes/summer/summer_plains/summer_plains_biome.tres") as BiomeDefinition
@@ -635,7 +672,31 @@ func _ready() -> void:
 	building_queue_service.configure(building_registry, nav_grid)
 	building_queue_service.set_citizen_alive_checker(_is_ai_citizen_id_alive)
 	citizen_lifecycle_service = CitizenLifecycleServiceScript.new()
-	citizen_lifecycle_service.configure(self)
+	citizen_lifecycle_service.configure(
+		citizens,
+		pending_arrivals,
+		arrival_greeters,
+		arrival_waiting_greeters,
+		arrival_escort_ids,
+		func() -> Node3D: return entrance_stone,
+		_entrance_anchor_position,
+		_employment_center_position,
+		_is_work_time,
+		_update_interface,
+		_show_house_menu,
+		_add_citizen,
+		_refresh_living_status,
+		_request_courier_dispatch,
+		_citizen_for_ai_id,
+		_terrain_height_at,
+		func(ai_id: int) -> void: if citizen_ai != null: citizen_ai.unregister_citizen(ai_id),
+		func(ai_id: int) -> void: if citizen_ai != null: citizen_ai.cancel_citizen_work(ai_id),
+		func(ai_id: int) -> void: if canteen_service != null: canteen_service.remove_citizen(ai_id),
+		func(ai_id: int) -> void: if citizen_needs_service != null: citizen_needs_service.remove_citizen(ai_id),
+		func(courier: Citizen) -> void: courier_dispatcher.complete_for(courier),
+		func() -> Node3D: return selected_house,
+		func() -> int: return day_cycle.current_day
+	)
 	building_availability_service = BuildingAvailabilityServiceScript.new()
 	building_availability_service.configure(settlement)
 	building_research_service = BuildingResearchServiceScript.new()
@@ -671,7 +732,25 @@ func _ready() -> void:
 	water_collector_service = WaterCollectorService.new()
 	water_collector_service.configure(water_collectors)
 	canteen_service = CanteenService.new()
-	canteen_service.configure(self)
+	canteen_service.configure(
+		settlement,
+		citizens,
+		func() -> Node3D: return canteen,
+		func() -> int: return canteen_food,
+		_set_canteen_food,
+		func() -> Vector3: return canteen_position,
+		func() -> bool: return pending_canteen_delivery,
+		func() -> Citizen: return pending_canteen_carrier,
+		func() -> int: return pending_canteen_delivery_amount,
+		_set_canteen_delivery_state,
+		_is_canteen_delivery_in_progress,
+		_is_fire_lit,
+		_has_cook,
+		_update_interface,
+		_request_courier_dispatch,
+		_is_work_time,
+		_update_workers
+	)
 	resource_pile_service = ResourcePileService.new(self, resource_piles, settlement, weather_state)
 	resource_pile_service.set_visuals(ResourcePileVisualsScript.new())
 	foraging_service = ForagingService.new()
@@ -723,11 +802,113 @@ func _ready() -> void:
 		}
 	)
 	settlement_survival_service = SettlementSurvivalServiceScript.new()
-	settlement_survival_service.configure(self)
+	settlement_survival_service.configure(
+		settlement,
+		day_cycle,
+		clock,
+		citizens,
+		random,
+		weather_state,
+		building_registry,
+		fire_management_service,
+		func() -> int: return tent_weather,
+		func() -> Node3D: return entrance_stone,
+		func() -> Variant: return event_service,
+		_has_lit_communal_fire,
+		_add_message,
+		_is_citizen_work_time,
+		_is_work_time
+	)
 	settlement_daily_rules_service = SettlementDailyRulesServiceScript.new()
-	settlement_daily_rules_service.configure(self)
+	settlement_daily_rules_service.configure(
+		settlement,
+		day_cycle,
+		citizens,
+		trail_field,
+		func() -> Variant: return event_service,
+		citizen_needs_service,
+		func() -> Node3D: return canteen,
+		func() -> int: return tent_weather,
+		_add_message,
+		_update_interface,
+		_apply_building_wear_and_repairs,
+		_decay_resource_piles,
+		_total_housing_slots,
+		_check_daily_departures,
+		_stored_resources,
+		_warehouse_capacity
+	)
 	building_lifecycle_service = BuildingLifecycleServiceScript.new()
-	building_lifecycle_service.configure(self)
+	building_lifecycle_service.configure(
+		settlement,
+		citizens,
+		building_registry,
+		demolition,
+		village_territory_service,
+		warehouse_positions,
+		sawmill_positions,
+		farm_positions,
+		builders_guild_positions,
+		construction_company_positions,
+		forager_positions,
+		materials_yard_positions,
+		school_positions,
+		park_positions,
+		gathering_place_positions,
+		leisure_positions,
+		craft_tent_positions,
+		market_positions,
+		water_collectors,
+		factories,
+		house_lights,
+		entrance_lights,
+		HOUSE_CAPACITY,
+		FireLightScene,
+		func() -> Node3D: return entrance_stone,
+		func() -> Node3D: return campfire_node,
+		func(v: Node3D) -> void: campfire_node = v,
+		func() -> Node3D: return canteen,
+		func(v: Node3D) -> void: canteen = v,
+		func() -> int: return canteen_food,
+		func(v: int) -> void: canteen_food = v,
+		func() -> bool: return pending_canteen_delivery,
+		func() -> Node3D: return employment_office,
+		func(v: Node3D) -> void: employment_office = v,
+		func() -> Vector3: return employment_office_position,
+		func(v: Vector3) -> void: employment_office_position = v,
+		func() -> int: return completed_house_count,
+		func(v: int) -> void: completed_house_count = v,
+		func() -> int: return house_light_update_minute,
+		func(v: int) -> void: house_light_update_minute = v,
+		func() -> float: return game_minutes,
+		_can_hero_build,
+		_update_interface,
+		_update_workers,
+		_cancel_arrivals_for_house,
+		_add_demolition_marker,
+		_refresh_living_status,
+		_unregister_service_pockets,
+		_return_in_transit_building_supplies,
+		_cancel_canteen_delivery,
+		_unregister_navigation_footprint,
+		_refresh_boundary_markers,
+		_select_best_canteen,
+		_create_resource_pile,
+		_refresh_navigation_grid,
+		_is_construction_site,
+		_activate_employment_centre,
+		_convert_backpack_pile_to_regular,
+		_add_building_selector,
+		_add_warehouse_fill_label,
+		_sawmill_stock,
+		_create_gathering_place_visual,
+		_activate_kitchen_if_better,
+		_add_house_light,
+		_house_initial_residents,
+		_cancel_active_building_research,
+		_dismiss_official,
+		_send_to_unemployment_registration
+	)
 	construction_priority_service = ConstructionPriorityServiceScript.new()
 	construction_priority_service.configure(
 		construction_sites,
@@ -741,17 +922,69 @@ func _ready() -> void:
 	)
 	excavation_service = ExcavationServiceScript.new()
 	excavation_service.dig_site_scene = DigSiteScene
-	excavation_service.configure(self)
+	excavation_service.configure(
+		settlement,
+		citizens,
+		dig_sites,
+		dig_cells,
+		exhausted_dig_cells,
+		random,
+		_update_interface,
+		_update_workers,
+		_request_courier_dispatch,
+		_placement_key,
+		_is_clear_of_objects,
+		_employment_center_position,
+		_show_territory_overlay,
+		_move_selection,
+		_show_selected_citizen_menu,
+		func() -> Citizen: return selected_builder,
+		func() -> Vector3: return selected_world_position,
+		func() -> Node3D: return selection_marker,
+		func() -> StandardMaterial3D: return selection_material,
+		_set_dig_mode,
+		_set_build_mode,
+		func(node: Node) -> void: add_child(node)
+	)
 	factory_service = FactoryServiceScript.new()
 	factory_service.configure(settlement, building_registry, _add_message, random)
 	citizen_registration_service = CitizenRegistrationServiceScript.new()
-	citizen_registration_service.configure(self)
+	citizen_registration_service.configure(
+		citizens,
+		OFFICER_POST_RADIUS,
+		_employment_centre_building,
+		_employment_center_position,
+		_is_work_time,
+		_update_workers,
+		func() -> int:
+			_registration_queue_counter += 1
+			return _registration_queue_counter
+	)
 	school_service = SchoolServiceScript.new()
 	school_service.configure(school_positions, citizens)
 	building_placement_service = BuildingPlacementServiceScript.new()
-	building_placement_service.configure(self)
+	building_placement_service.configure(
+		dig_sites,
+		terrain_blocked_cells,
+		building_registry,
+		tree_positions,
+		_terrain_height_at,
+		MAX_BUILD_SLOPE
+	)
 	citizen_daily_order_service = CitizenDailyOrderServiceScript.new()
-	citizen_daily_order_service.configure(self)
+	citizen_daily_order_service.configure(
+		settlement,
+		citizens,
+		day_cycle,
+		clock,
+		building_registry,
+		func() -> float: return runtime_seconds,
+		_is_work_time,
+		_is_citizen_work_time,
+		_absolute_game_minutes,
+		GAME_MINUTES_PER_SECOND,
+		func() -> void: if citizen_ai != null: citizen_ai.request_decision_refresh()
+	)
 
 	citizen_needs_service = CitizenNeedsService.new()
 	citizen_needs_service.configure(
@@ -764,17 +997,122 @@ func _ready() -> void:
 	)
 	citizen_living_status_service = CitizenLivingStatusServiceScript.new()
 	trade_service = TradeServiceScript.new()
-	trade_service.configure(self)
+	trade_service.configure(
+		settlement,
+		citizens,
+		queued_trades,
+		pending_trades,
+		warehouse_positions,
+		market_menu,
+		func() -> Node3D: return selected_market,
+		func() -> Node3D: return entrance_stone,
+		_get_delivery_position,
+		_update_interface,
+		_refresh_market_menu,
+		_request_courier_dispatch,
+		_total_game_minutes,
+		_citizen_for_ai_id,
+		_create_resource_pile,
+		_update_workers
+	)
 	storage_delivery_service = StorageDeliveryServiceScript.new()
-	storage_delivery_service.configure(self)
+	storage_delivery_service.configure(
+		settlement,
+		warehouse_positions,
+		courier_dispatcher,
+		storage_routing_service,
+		_release_task_warehouse_reservation,
+		_drop_resource_pile,
+		_update_interface,
+		_request_courier_dispatch,
+		_send_citizen_to_leisure
+	)
 	storage_routing_service = StorageRoutingServiceScript.new()
-	storage_routing_service.configure(self)
+	storage_routing_service.configure(
+		settlement,
+		warehouse_positions,
+		resource_piles,
+		func() -> Citizen: return player_citizen,
+		INTERACTION_RANGE,
+		_is_route_reachable,
+		_find_path_around_houses,
+		nav_grid,
+		dig_sites,
+		_can_work_at_dig_site,
+		_resource_for_depth,
+		_update_interface
+	)
 	courier_dispatcher = CourierDispatcherScript.new()
-	courier_dispatcher.configure(self)
+	courier_dispatcher.configure(
+		citizens,
+		warehouse_positions,
+		storage_routing_service,
+		func() -> float: return runtime_seconds,
+		_publish_courier_tasks,
+		_is_courier_task_valid,
+		_start_courier_task,
+		_cancel_courier_task,
+		_release_task_warehouse_reservation
+	)
 	courier_task_publisher = CourierTaskPublisherScript.new()
-	courier_task_publisher.configure(self)
+	courier_task_publisher.configure(
+		settlement,
+		citizens,
+		construction_sites,
+		warehouse_positions,
+		pending_arrivals,
+		queued_trades,
+		sawmill_positions,
+		water_collectors,
+		building_registry,
+		sawmills,
+		courier_dispatcher,
+		func() -> Node3D: return entrance_stone,
+		func() -> Node3D: return canteen,
+		func() -> int: return canteen_food,
+		func() -> Vector3: return canteen_position,
+		func() -> bool: return pending_canteen_delivery,
+		func() -> float: return runtime_seconds,
+		_reconcile_construction_reservations,
+		_reconcile_repair_reservations,
+		_cell_from_position,
+		_get_nearest_delivery_position,
+		_warehouse_delivery_position,
+		_preferred_construction_site,
+		_construction_material_sources,
+		_construction_source_available,
+		_fire_state_for,
+		_firewood_task_priority
+	)
 	courier_task_service = CourierTaskServiceScript.new()
-	courier_task_service.configure(self)
+	courier_task_service.configure(
+		settlement,
+		citizens,
+		queued_trades,
+		pending_trades,
+		warehouse_positions,
+		pending_arrivals,
+		arrival_greeters,
+		outside_workers,
+		building_registry,
+		sawmills,
+		water_collector_service,
+		trade_service,
+		canteen_service,
+		func() -> Node3D: return canteen,
+		func() -> int: return canteen_food,
+		func() -> Vector3: return canteen_position,
+		func() -> bool: return pending_canteen_delivery,
+		_set_canteen_delivery_state,
+		func() -> Node3D: return entrance_stone,
+		func() -> float: return runtime_seconds,
+		_fire_state_for,
+		_apply_fire_state,
+		_is_route_reachable,
+		_preferred_construction_site,
+		_construction_source_available,
+		_citizen_for_ai_id
+	)
 	campfire_menu_controller = CampfireMenuControllerScript.new()
 	campfire_menu_controller.configure(self)
 	workforce_menu_controller = WorkforceMenuControllerScript.new()
@@ -826,7 +1164,6 @@ func _ready() -> void:
 	ambient_spawner.spawn_trash_piles()
 	ambient_spawner.spawn_initial_rabbits()
 	ambient_spawner.create_ponds()
-	ambient_spawner.create_entrance_stone()
 	_create_citizens()
 	_create_starter_backpack()
 	_refresh_living_statuses()
@@ -1409,6 +1746,28 @@ func _cancel_courier_task(courier: Citizen, task: RefCounted) -> void:
 	courier_task_service.cancel_courier_task(courier, task)
 
 
+func _set_canteen_delivery_state(active: bool, carrier: Citizen, amount: int) -> void:
+	pending_canteen_delivery = active
+	pending_canteen_carrier = carrier
+	pending_canteen_delivery_amount = amount
+
+
+func _set_canteen_food(value: int) -> void:
+	canteen_food = value
+
+
+func _is_canteen_delivery_in_progress() -> bool:
+	return is_instance_valid(pending_canteen_carrier) and pending_canteen_carrier.state in [Citizen.State.TO_FOOD_PICKUP, Citizen.State.TO_CANTEEN_DELIVERY]
+
+
+func _set_dig_mode(value: bool) -> void:
+	dig_mode = value
+
+
+func _set_build_mode(value: String) -> void:
+	build_mode = value
+
+
 func _reconcile_construction_reservations(site: ConstructionSite) -> void:
 	if courier_task_service != null:
 		courier_task_service.reconcile_construction_reservations(site)
@@ -1843,7 +2202,7 @@ func _resource_access_position(from: Vector3, resource_position: Vector3) -> Vec
 
 
 func _create_citizens() -> void:
-	var spawn_anchor: Vector3 = entrance_stone.global_position + Vector3(0.0, 0.0, 2.0)
+	var spawn_anchor: Vector3 = _entrance_anchor_position() + Vector3(0.0, 0.0, 2.0)
 	var columns := 3
 	for index in range(POPULATION):
 		var col := index % columns
@@ -1926,7 +2285,7 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 func _create_starter_backpack() -> void:
 	if settlement.warehouse_ever_built:
 		return
-	var anchor := entrance_stone.global_position + Vector3(0.0, 0.0, 2.0)
+	var anchor := _entrance_anchor_position() + Vector3(0.0, 0.0, 2.0)
 	backpack_position = anchor + Vector3(-1.5, 0.0, 0.7)
 	var terrain_height := _terrain_height_at(backpack_position.x, backpack_position.z, 0.0)
 	if not is_nan(terrain_height):
@@ -3329,8 +3688,6 @@ func _hide_all_selection_menus() -> void:
 	# the currently selected citizen untouched (the school menu needs it).
 	house_menu.visible = false
 	entrance_menu.visible = false
-	if entrance_highlight != null:
-		entrance_highlight.visible = false
 	school_menu.visible = false
 	materials_factory_menu.visible = false
 	campfire_menu.visible = false
@@ -4170,8 +4527,8 @@ func _move_selection(world_position: Vector3) -> void:
 	elif is_instance_valid(hero_build_radius_marker):
 		hero_build_radius_marker.visible = false
 
-func _rotated_footprint(footprint: Vector2i) -> Vector2i:
-	return Vector2i(footprint.y, footprint.x) if build_rotation_quarters % 2 != 0 else footprint
+func _rotated_footprint(footprint: Vector2i, rotation_quarters := build_rotation_quarters) -> Vector2i:
+	return Vector2i(footprint.y, footprint.x) if rotation_quarters % 2 != 0 else footprint
 
 
 func _place_building(world_position: Vector3) -> void:
@@ -4382,8 +4739,10 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 		workplace_priority_counter += 1
 		building.set_meta("accepting_workers", true)
 		building.set_meta("workplace_priority", workplace_priority_counter)
-	if building_type not in ["warehouse", "straw_warehouse", "tarp_warehouse", "campfire", "campfire_lvl2", "campfire_lvl3", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant", "straw_trade_tent", "tarp_trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market", "school", "materials_factory", "tent", "straw_tent", "tarp_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house", "straw_craft_tent", "tarp_craft_tent", "straw_forager_tent", "tarp_forager_tent", "boundary_post"]:
+	if building_type not in ["warehouse", "straw_warehouse", "tarp_warehouse", "campfire", "campfire_lvl2", "campfire_lvl3", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant", "straw_trade_tent", "tarp_trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market", "school", "materials_factory", "tent", "straw_tent", "tarp_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house", "straw_craft_tent", "tarp_craft_tent", "straw_forager_tent", "tarp_forager_tent", "boundary_post", "entrance_sign"]:
 		_add_building_selector(building, "building_selector", blueprint.footprint)
+	if building_type == "entrance_sign":
+		_setup_entrance_sign_node(building)
 	var is_home := BuildingTypes.is_housing(building_type)
 	_register_service_entrance(building, blueprint, is_home, building_type not in ["farm", "park"])
 	var service_position: Vector3 = building.get_meta("service_position")
@@ -4402,6 +4761,36 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 		completion_message += " It requires 3 factory workers."
 	_update_interface(completion_message)
 	_request_courier_dispatch()
+
+
+func _entrance_anchor_position() -> Vector3:
+	if is_instance_valid(entrance_stone):
+		return entrance_stone.global_position
+	return _cell_center(Vector2i(-22, 1))
+
+
+func _setup_entrance_sign_node(building: Node3D) -> void:
+	if not is_instance_valid(building):
+		return
+	entrance_stone = building
+	_add_selector_to_node(building, "entrance_selector", Vector3(2.2, 2.4, 1.0), Vector3(0.0, 1.1, 0.0))
+	var label := Label3D.new()
+	label.position = Vector3(0.0, 1.26, 0.09)
+	label.text = "Settlement"
+	label.font_size = 28
+	label.modulate = Color("f0dfb2")
+	building.add_child(label)
+	var light := OmniLight3D.new()
+	light.name = "EntranceSignLight"
+	light.position = Vector3(0.0, 2.2, 0.0)
+	light.light_color = Color(1.0, 0.8353, 0.5412, 1.0)
+	light.light_energy = 2.0
+	light.light_volumetric_fog_energy = 0.5
+	light.omni_range = 5.0
+	light.shadow_enabled = true
+	building.add_child(light)
+	if ambient_spawner != null:
+		ambient_spawner.setup_entrance_sign_node(building)
 
 
 func _register_completed_building_type_features(building_type: String, building: Node3D, blueprint: Dictionary, service_position: Vector3) -> void:
@@ -5503,8 +5892,8 @@ func _show_territory_overlay(show: bool) -> void:
 			village_territory_overlay.refresh(village_territory_service.territory())
 		village_territory_overlay.visible = show
 
-func _create_resource_pile(position: Vector3, resources: Dictionary, is_backpack_pile := false) -> void:
-	resource_pile_service.create_resource_pile(position, resources, is_backpack_pile)
+func _create_resource_pile(position: Vector3, resources: Dictionary, is_backpack_pile := false) -> Node3D:
+	return resource_pile_service.create_resource_pile(position, resources, is_backpack_pile)
 
 func _remove_backpack_pile() -> void:
 	backpack_node = resource_pile_service.remove_backpack_pile(backpack_node)
@@ -5650,9 +6039,9 @@ func _toggle_campfire_worker_overtime(checked: bool) -> void:
 	_refresh_campfire_menu()
 
 
-func restore_from_save_data(save_data: SaveDataScript) -> void:
+func restore_from_save_data(save_data: SaveDataScript) -> bool:
 	if save_data == null:
-		return
+		return false
 
 	# 1. Despawn current citizens
 	for citizen in citizens.duplicate():
@@ -5660,8 +6049,6 @@ func restore_from_save_data(save_data: SaveDataScript) -> void:
 			_on_ai_citizen_exiting(citizen.ai_id)
 			citizen.queue_free()
 	citizens.clear()
-	if citizen_ai != null:
-		citizen_ai.unregister_all_citizens()
 
 	# 2. Despawn current buildings and reset building registry
 	for record in building_registry.records():
@@ -5707,12 +6094,19 @@ func restore_from_save_data(save_data: SaveDataScript) -> void:
 	house_lights.clear()
 	entrance_lights.clear()
 	service_pockets.clear()
+	sawmill_stocks.clear()
+	completed_house_count = 0
+	canteen_food = 0
+	settlement.buildings.clear()
 
 	# 3. Restore Settlement State
 	var s_dict: Dictionary = save_data.settlement_state
 	settlement.money = int(s_dict.get("money", 500))
 	settlement.wellbeing = int(s_dict.get("wellbeing", 75))
 	settlement.era = int(s_dict.get("era", 0))
+	settlement.backpack.clear()
+	if s_dict.get("backpack", {}) is Dictionary:
+		settlement.backpack.merge((s_dict.get("backpack") as Dictionary).duplicate(true), true)
 
 	var saved_res: Dictionary = s_dict.get("resources", {})
 	for res_id in ResourceIds.ALL:
@@ -5733,11 +6127,14 @@ func restore_from_save_data(save_data: SaveDataScript) -> void:
 
 	if s_dict.has("equipment"):
 		settlement.equipment = s_dict["equipment"].duplicate(true)
+	_restore_work_policy(s_dict.get("work_policy", {}))
+	_restore_research(s_dict.get("research", {}))
 
 
 	# 4. Restore Simulation Clock
 	if not save_data.clock_state.is_empty():
 		clock.minutes = float(save_data.clock_state.get("minutes", 0.0))
+		day_cycle.current_day = maxi(1, int(save_data.clock_state.get("current_day", 1)))
 
 	# 5. Restore Camera State
 	if not save_data.camera_state.is_empty():
@@ -5758,7 +6155,7 @@ func restore_from_save_data(save_data: SaveDataScript) -> void:
 
 		var blueprint = BuildingBlueprints.get_blueprint(b_type)
 		if not blueprint.is_empty():
-			var occupied_footprint = _rotated_footprint(blueprint.footprint)
+			var occupied_footprint = _rotated_footprint(blueprint.footprint, rot_quarters)
 			building_registry.reserve(cell, pos, occupied_footprint)
 			var site_node: Node3D = construction._get_site_scene().instantiate()
 			site_node.position = pos
@@ -5788,7 +6185,7 @@ func restore_from_save_data(save_data: SaveDataScript) -> void:
 
 		var blueprint = BuildingBlueprints.get_blueprint(b_type)
 		if not blueprint.is_empty():
-			var occupied_footprint = _rotated_footprint(blueprint.footprint)
+			var occupied_footprint = _rotated_footprint(blueprint.footprint, rot_quarters)
 			building_registry.reserve(cell, pos, occupied_footprint)
 			var site = _create_construction_site(cell, b_type, pos, rot_quarters, blueprint, occupied_footprint)
 			if site != null:
@@ -5797,12 +6194,19 @@ func restore_from_save_data(save_data: SaveDataScript) -> void:
 				building_registry.attach_node(cell, site.node, b_type)
 				_update_construction_supply_label(site)
 
+	_restore_warehouses(s_dict.get("warehouses", []), s_dict.get("warehouse_types", []), bool(s_dict.get("warehouse_ever_built", false)))
+
 	# 8. Restore Resource Piles
 	for p_dict in save_data.resource_piles_state:
-		var res_id = str(p_dict.get("resource_id", ""))
-		var amount = int(p_dict.get("amount", 1))
+		if not (p_dict is Dictionary):
+			continue
+		var resources: Dictionary = p_dict.get("resources", {})
+		if resources.is_empty():
+			continue
 		var pos = SaveDataScript.dict_to_vector3(p_dict.get("position", {}))
-		_create_resource_pile(res_id, amount, pos)
+		var pile_node := _create_resource_pile(pos, resources, bool(p_dict.get("is_backpack", false)))
+		if bool(p_dict.get("is_backpack", false)):
+			backpack_node = pile_node
 
 	# 9. Restore Citizens
 	_next_ai_citizen_id = int(save_data.world_state.get("next_ai_citizen_id", 1))
@@ -5814,11 +6218,11 @@ func restore_from_save_data(save_data: SaveDataScript) -> void:
 
 		var citizen: Citizen = CitizenActorScene.instantiate()
 		citizen.position = pos
-		if cit_dict.has("first_name"):
+		if cit_dict.has("first_name") and "first_name" in citizen:
 			citizen.first_name = str(cit_dict.get("first_name", ""))
-		if cit_dict.has("last_name"):
+		if cit_dict.has("last_name") and "last_name" in citizen:
 			citizen.last_name = str(cit_dict.get("last_name", ""))
-		if cit_dict.has("age"):
+		if cit_dict.has("age") and "age" in citizen:
 			citizen.age = int(cit_dict.get("age", 25))
 
 		add_child(citizen)
@@ -5859,8 +6263,19 @@ func restore_from_save_data(save_data: SaveDataScript) -> void:
 		var needs_dict: Dictionary = cit_dict.get("needs", {})
 		citizen.hunger = float(needs_dict.get("hunger", 100.0))
 		citizen.fatigue = float(needs_dict.get("fatigue", 0.0))
-		citizen.comfort = float(needs_dict.get("comfort", 100.0))
-		citizen.health = float(needs_dict.get("health", 100.0))
+		# `comfort` was the v1 name; v2 stores the actual needs-domain field.
+		citizen.satisfaction = float(needs_dict.get("satisfaction", needs_dict.get("comfort", 72.0)))
+		citizen.continuous_work_hours = maxf(0.0, float(needs_dict.get("continuous_work_hours", 0.0)))
+		citizen.satisfaction_tick = float(needs_dict.get("satisfaction_tick", 0.0))
+		citizen.recovery_until_workday_id = maxi(0, int(needs_dict.get("recovery_until_workday_id", 0)))
+		if needs_dict.get("buffs", {}) is Dictionary:
+			citizen.buffs = (needs_dict.get("buffs") as Dictionary).duplicate(true)
+		if needs_dict.get("debuffs", {}) is Dictionary:
+			citizen.debuffs = (needs_dict.get("debuffs") as Dictionary).duplicate(true)
+		citizen.active_role = str(cit_dict.get("active_role", ""))
+		citizen.employment_state = int(cit_dict.get("employment_state", Citizen.EmploymentState.NO_PERMANENT_WORK))
+		citizen.permanent_role = str(cit_dict.get("permanent_role", ""))
+		citizen.daily_order_role = str(cit_dict.get("daily_order_role", ""))
 
 		var pockets: Array = cit_dict.get("pockets", [])
 		for p_item in pockets:
@@ -5880,3 +6295,52 @@ func restore_from_save_data(save_data: SaveDataScript) -> void:
 
 	if hero_citizen != null:
 		_enter_first_person(hero_citizen, "Save loaded.")
+	return true
+
+
+func _restore_work_policy(data: Variant) -> void:
+	if not (data is Dictionary):
+		return
+	var policy: Dictionary = data
+	settlement.workday_hours = clampi(int(policy.get("workday_hours", settlement.workday_hours)), 1, 24)
+	settlement.pending_workday_hours = clampi(int(policy.get("pending_workday_hours", 0)), 0, 24)
+	settlement.night_work_order_day = int(policy.get("night_work_order_day", -1))
+	settlement.double_time_order_day = int(policy.get("double_time_order_day", -1))
+	settlement.road_walking_order_enabled = bool(policy.get("road_walking_order_enabled", false))
+	settlement.cheer_up_used_today = bool(policy.get("cheer_up_used_today", false))
+
+
+func _restore_research(data: Variant) -> void:
+	if not (data is Dictionary):
+		return
+	var research: Dictionary = data
+	settlement.active_research_tech_id = str(research.get("tech_id", ""))
+	settlement.active_research_worker_id = int(research.get("worker_id", -1))
+	settlement.active_research_remaining_time = maxf(0.0, float(research.get("remaining_time", 0.0)))
+	settlement.active_research_duration = maxf(0.0, float(research.get("duration", 0.0)))
+
+
+func _restore_warehouses(data: Variant, types: Variant, ever_built: bool) -> void:
+	if not (data is Array):
+		return
+	var saved_warehouses: Array = data
+	for index in mini(saved_warehouses.size(), settlement.warehouses.size()):
+		var saved: Variant = saved_warehouses[index]
+		if not (saved is Dictionary):
+			continue
+		var warehouse: WarehouseState = settlement.warehouses[index]
+		var saved_dict: Dictionary = saved
+		warehouse.capacity = maxi(0, int(saved_dict.get("capacity", warehouse.capacity)))
+		if saved_dict.get("resources", {}) is Dictionary:
+			var saved_resources: Dictionary = saved_dict.get("resources")
+			for resource_type in ResourceIds.ALL:
+				warehouse.resources[resource_type] = maxi(0, int(saved_resources.get(resource_type, 0)))
+		if saved_dict.get("blacklisted", {}) is Dictionary:
+			var saved_blacklist: Dictionary = saved_dict.get("blacklisted")
+			for resource_type in ResourceIds.ALL:
+				warehouse.blacklisted[resource_type] = bool(saved_blacklist.get(resource_type, false))
+	if types is Array:
+		settlement.warehouse_types.clear()
+		for warehouse_type in types:
+			settlement.warehouse_types.append(str(warehouse_type))
+	settlement.warehouse_ever_built = ever_built

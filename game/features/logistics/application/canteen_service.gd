@@ -3,7 +3,23 @@ extends RefCounted
 
 const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 
-var simulation: Node
+var _settlement: SettlementState
+var _citizens: Array = []
+var _canteen_getter: Callable
+var _canteen_food_getter: Callable
+var _set_canteen_food: Callable
+var _canteen_position_getter: Callable
+var _pending_canteen_delivery_getter: Callable
+var _pending_canteen_carrier_getter: Callable
+var _pending_canteen_delivery_amount_getter: Callable
+var _set_canteen_delivery_state: Callable
+var _is_canteen_delivery_in_progress: Callable
+var _is_fire_lit: Callable
+var _has_cook: Callable
+var _update_interface: Callable
+var _request_courier_dispatch: Callable
+var _is_work_time: Callable
+var _update_workers: Callable
 var _meal_requests: Dictionary = {}
 
 # Whether the current meal is cooked. Set when start_meal() runs and used by
@@ -11,26 +27,61 @@ var _meal_requests: Dictionary = {}
 var _current_meal_cooked: bool = false
 
 
-func configure(next_simulation: Node) -> void:
-	simulation = next_simulation
+func configure(
+	p_settlement: SettlementState,
+	p_citizens: Array,
+	p_canteen_getter: Callable,
+	p_canteen_food_getter: Callable,
+	p_set_canteen_food: Callable,
+	p_canteen_position_getter: Callable,
+	p_pending_canteen_delivery_getter: Callable,
+	p_pending_canteen_carrier_getter: Callable,
+	p_pending_canteen_delivery_amount_getter: Callable,
+	p_set_canteen_delivery_state: Callable,
+	p_is_canteen_delivery_in_progress: Callable,
+	p_is_fire_lit: Callable,
+	p_has_cook: Callable,
+	p_update_interface: Callable,
+	p_request_courier_dispatch: Callable,
+	p_is_work_time: Callable,
+	p_update_workers: Callable
+) -> void:
+	_settlement = p_settlement
+	_citizens = p_citizens
+	_canteen_getter = p_canteen_getter
+	_canteen_food_getter = p_canteen_food_getter
+	_set_canteen_food = p_set_canteen_food
+	_canteen_position_getter = p_canteen_position_getter
+	_pending_canteen_delivery_getter = p_pending_canteen_delivery_getter
+	_pending_canteen_carrier_getter = p_pending_canteen_carrier_getter
+	_pending_canteen_delivery_amount_getter = p_pending_canteen_delivery_amount_getter
+	_set_canteen_delivery_state = p_set_canteen_delivery_state
+	_is_canteen_delivery_in_progress = p_is_canteen_delivery_in_progress
+	_is_fire_lit = p_is_fire_lit
+	_has_cook = p_has_cook
+	_update_interface = p_update_interface
+	_request_courier_dispatch = p_request_courier_dispatch
+	_is_work_time = p_is_work_time
+	_update_workers = p_update_workers
 
 
 func start_meal(hour: int) -> void:
-	var has_canteen := is_instance_valid(simulation.canteen)
+	var canteen: Node3D = _canteen_getter.call()
+	var has_canteen := is_instance_valid(canteen)
 	if not has_canteen:
 		# No kitchen/cooking campfire yet: residents eat raw rations straight from
 		# the backpack or warehouse. Food is consumed by the daily survival update.
-		for citizen in simulation.citizens:
+		for citizen in _citizens:
 			if not citizen.is_player_controlled:
 				citizen.receive_meal(true, false, true)
-		simulation._update_interface("%02d:00 meal: raw rations from stores." % hour)
+		_update_interface.call("%02d:00 meal: raw rations from stores." % hour)
 		return
 
-	var fire_lit: bool = simulation._is_fire_lit(simulation.canteen)
-	var has_cook: bool = simulation._has_cook()
+	var fire_lit: bool = _is_fire_lit.call(canteen)
+	var has_cook: bool = _has_cook.call()
 	_current_meal_cooked = fire_lit and has_cook
 
-	for citizen in simulation.citizens:
+	for citizen in _citizens:
 		# The cook keeps the canteen staffed during the lunch service and receives
 		# their park break after the rush.
 		var is_cook: bool = citizen.specialization == "cook" or (citizen.daily_order_role == "cook" and citizen.has_active_daily_order())
@@ -39,53 +90,48 @@ func start_meal(hour: int) -> void:
 		if citizen.ai_id > 0 and citizen.is_available_for_schedule():
 			_meal_requests[citizen.ai_id] = true
 	if _current_meal_cooked:
-		simulation._update_interface("%02d:00 meal service started. Residents are heading to the canteen." % hour)
+		_update_interface.call("%02d:00 meal service started. Residents are heading to the canteen." % hour)
 	else:
-		simulation._update_interface("%02d:00 meal started. No cook or fire is out; residents will eat raw rations." % hour)
+		_update_interface.call("%02d:00 meal started. No cook or fire is out; residents will eat raw rations." % hour)
 
 
 func update_canteen_delivery() -> void:
-	if simulation.pending_canteen_delivery:
-		if not is_instance_valid(simulation.pending_canteen_carrier) or simulation.pending_canteen_carrier.state not in [Citizen.State.TO_FOOD_PICKUP, Citizen.State.TO_CANTEEN_DELIVERY]:
+	if _pending_canteen_delivery_getter.call():
+		if not _is_canteen_delivery_in_progress.call():
 			cancel_canteen_delivery()
 		else:
 			return
-	# Publishing and assignment are owned by CourierDispatcher. This service only
-	# validates an in-flight delivery and applies its result.
-	simulation._request_courier_dispatch()
+	_request_courier_dispatch.call()
 
 
 func cancel_canteen_delivery() -> void:
-	simulation.settlement.add(ResourceIds.FOOD, simulation.pending_canteen_delivery_amount)
-	simulation.pending_canteen_delivery = false
-	simulation.pending_canteen_carrier = null
-	simulation.pending_canteen_delivery_amount = 0
-	simulation._update_interface("Canteen delivery was interrupted; food returned to the warehouse.")
+	_settlement.add(ResourceIds.FOOD, _pending_canteen_delivery_amount_getter.call())
+	_set_canteen_delivery_state.call(false, null, 0)
+	_update_interface.call("Canteen delivery was interrupted; food returned to the warehouse.")
 
 
 func on_canteen_delivery_finished(worker: Citizen, amount: int) -> void:
-	if not simulation.pending_canteen_delivery or worker != simulation.pending_canteen_carrier or amount != simulation.pending_canteen_delivery_amount:
+	if not _pending_canteen_delivery_getter.call() or worker != _pending_canteen_carrier_getter.call() or amount != _pending_canteen_delivery_amount_getter.call():
 		return
-	simulation.canteen_food += amount
-	simulation.pending_canteen_delivery = false
-	simulation.pending_canteen_carrier = null
-	simulation.pending_canteen_delivery_amount = 0
+	var canteen_food: int = _canteen_food_getter.call()
+	_set_canteen_food.call(canteen_food + amount)
+	_set_canteen_delivery_state.call(false, null, 0)
 	var is_cook: bool = worker.specialization == "cook" or (worker.daily_order_role == "cook" and worker.has_active_daily_order())
 	if is_cook:
-		worker.assign_canteen_work(simulation.canteen_position)
-	simulation._update_interface("Canteen received %d food. Stock: %d." % [amount, simulation.canteen_food])
+		worker.assign_canteen_work(_canteen_position_getter.call())
+	_update_interface.call("Canteen received %d food. Stock: %d." % [amount, _canteen_food_getter.call()])
 
 
 func on_meal_finished(citizen: Citizen) -> void:
-	var served: bool = is_instance_valid(simulation.canteen) and simulation.canteen_food > 0
+	var served: bool = is_instance_valid(_canteen_getter.call()) and _canteen_food_getter.call() > 0
 	if served:
-		simulation.canteen_food -= 1
+		_set_canteen_food.call(_canteen_food_getter.call() - 1)
 	citizen.receive_meal(served, _current_meal_cooked, true)
 	_meal_requests.erase(citizen.ai_id)
 	if not served:
-		simulation._update_interface("Canteen ran out of food. A worker missed their meal.")
-	if simulation._is_work_time():
-		simulation._update_workers()
+		_update_interface.call("Canteen ran out of food. A worker missed their meal.")
+	if _is_work_time.call():
+		_update_workers.call()
 
 
 func is_meal_requested(citizen_id: int) -> bool:

@@ -3,6 +3,7 @@ extends RefCounted
 
 const DEFINITIONS := {
 	"settlement_flag": {"name": "Флаг поселения", "category": "tent", "costs": {}, "landmark": true, "demolishable": false, "is_flag": true, "instant_build": true, "max_hero_radius": 20.0, "requires_village_area": false, "expands_village_area": true},
+	"entrance_sign": {"name": "Въездной знак", "category": "tent", "costs": {"branches": 3, "grass": 1}, "landmark": true, "demolishable": false, "requires_village_area": false, "expands_village_area": false},
 	"campfire": {"name": "Главный костер ур. 1", "category": "tent", "costs": {"branches": 4}, "landmark": true, "demolishable": false, "is_campfire": true, "requires_village_area": false, "expands_village_area": true},
 	"campfire_lvl2": {"name": "Главный костер ур. 2", "category": "tent", "costs": {"branches": 15, "grass": 10}, "landmark": true, "demolishable": false, "upgrade_only": true, "upgrades_from": "campfire", "is_campfire": true, "requires_village_area": false, "expands_village_area": true},
 	"campfire_lvl3": {"name": "Главный костер ур. 3", "category": "tent", "costs": {"branches": 25, "grass": 18}, "landmark": true, "demolishable": false, "upgrade_only": true, "upgrades_from": "campfire_lvl2", "is_campfire": true, "requires_village_area": false, "expands_village_area": true},

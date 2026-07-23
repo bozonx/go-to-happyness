@@ -154,19 +154,12 @@ func _firefly_cluster_center(cells: Array) -> Vector3:
 	return center / float(cells.size()) + Vector3(0.0, 1.0, 0.0)
 
 
-func create_entrance_stone() -> void:
-	var entrance_stone: Node3D = EntranceSignScene.instantiate()
-	entrance_stone.position = simulation._cell_center(Vector2i(-22, 1))
-	entrance_stone.name = "EntranceSign"
-	entrance_stone.rotation.y = PI * 0.5
-	
-	var entrance_highlight := entrance_stone.get_node("EntranceHighlight") as MeshInstance3D
-	var entrance_sign_light := entrance_stone.get_node("EntranceSignLight") as OmniLight3D
-	
-	simulation.entrance_lights.append(entrance_sign_light)
-	simulation.add_child(entrance_stone)
-	simulation.entrance_stone = entrance_stone
-	simulation.entrance_highlight = entrance_highlight
+func setup_entrance_sign_node(entrance_stone: Node3D) -> void:
+	if not is_instance_valid(entrance_stone):
+		return
+	var entrance_sign_light := entrance_stone.get_node_or_null("EntranceSignLight") as OmniLight3D
+	if entrance_sign_light != null and not simulation.entrance_lights.has(entrance_sign_light):
+		simulation.entrance_lights.append(entrance_sign_light)
 
 
 func spawn_trash_piles() -> void:

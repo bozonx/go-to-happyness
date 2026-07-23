@@ -83,6 +83,7 @@ func update_daylight(game_minutes: float, overcast: float, runtime_seconds: floa
 		sky_material.set_shader_parameter("u_sun_color", sun.light_color)
 		sky_material.set_shader_parameter("u_overcast", overcast)
 		sky_material.set_shader_parameter("u_solar_intensity", solar_intensity)
+		sky_material.set_shader_parameter("u_sun_visibility", cloud_sun_visibility)
 		sky_material.set_shader_parameter("u_time", runtime_seconds)
 		sky_material.set_shader_parameter("u_cloud_scale", CLOUD_SCALE)
 		sky_material.set_shader_parameter("u_wind", CLOUD_WIND)

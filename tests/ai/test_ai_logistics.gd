@@ -197,7 +197,7 @@ static func _test_courier_provider_two_couriers_same_task_not_duplicated() -> vo
 static func _test_courier_dispatcher_start_task_prevents_double_assignment() -> void:
 	var sim := TestAIHelpers.FakeCourierSimulation.new()
 	var dispatcher := CourierDispatcher.new()
-	dispatcher.configure(sim)
+	sim.configure_dispatcher(dispatcher)
 	dispatcher.publish(&"task_1", CourierTask.Kind.SAWMILL_PICKUP, 50, Vector3(1.0, 0.0, 0.0), Vector3(0.0, 0.0, 0.0), {})
 	var courier_a := Citizen.new()
 	courier_a.ai_id = 1
@@ -215,7 +215,7 @@ static func _test_courier_dispatcher_start_task_prevents_double_assignment() -> 
 static func _test_courier_dispatcher_rejects_wrong_requested_courier() -> void:
 	var sim := TestAIHelpers.FakeCourierSimulation.new()
 	var dispatcher := CourierDispatcher.new()
-	dispatcher.configure(sim)
+	sim.configure_dispatcher(dispatcher)
 	dispatcher.publish(&"manual_task", CourierTask.Kind.SAWMILL_PICKUP, 50, Vector3(1.0, 0.0, 0.0), Vector3.ZERO, {"courier_ai_id": 2})
 	var wrong := Citizen.new()
 	wrong.ai_id = 1
@@ -231,7 +231,7 @@ static func _test_courier_dispatcher_rejects_wrong_requested_courier() -> void:
 static func _test_courier_dispatcher_complete_for_clears_task() -> void:
 	var sim := TestAIHelpers.FakeCourierSimulation.new()
 	var dispatcher := CourierDispatcher.new()
-	dispatcher.configure(sim)
+	sim.configure_dispatcher(dispatcher)
 	dispatcher.publish(&"task_1", CourierTask.Kind.SAWMILL_PICKUP, 50, Vector3(1.0, 0.0, 0.0), Vector3(0.0, 0.0, 0.0), {})
 	var courier := Citizen.new()
 	courier.ai_id = 1
@@ -246,7 +246,7 @@ static func _test_courier_dispatcher_complete_for_clears_task() -> void:
 static func _test_courier_dispatcher_cancel_for_requeues_task() -> void:
 	var sim := TestAIHelpers.FakeCourierSimulation.new()
 	var dispatcher := CourierDispatcher.new()
-	dispatcher.configure(sim)
+	sim.configure_dispatcher(dispatcher)
 	sim.courier_dispatcher = dispatcher
 	dispatcher.publish(&"task_1", CourierTask.Kind.SAWMILL_PICKUP, 50, Vector3(1.0, 0.0, 0.0), Vector3.ZERO, {})
 	var courier := Citizen.new()
@@ -274,7 +274,7 @@ static func _test_courier_dispatcher_cleanup_removes_invalid_tasks() -> void:
 	var sim := TestAIHelpers.FakeCourierSimulation.new()
 	sim.valid_result = false
 	var dispatcher := CourierDispatcher.new()
-	dispatcher.configure(sim)
+	sim.configure_dispatcher(dispatcher)
 	dispatcher.publish(&"task_invalid", CourierTask.Kind.SAWMILL_PICKUP, 50, Vector3(1.0, 0.0, 0.0), Vector3(0.0, 0.0, 0.0), {})
 	assert(dispatcher.tasks.has(&"task_invalid"))
 	dispatcher.dispatch()
@@ -285,7 +285,7 @@ static func _test_courier_dispatcher_cleanup_removes_invalid_tasks() -> void:
 static func _test_courier_dispatcher_cleanup_unassigns_dead_courier() -> void:
 	var sim := TestAIHelpers.FakeCourierSimulation.new()
 	var dispatcher := CourierDispatcher.new()
-	dispatcher.configure(sim)
+	sim.configure_dispatcher(dispatcher)
 	dispatcher.publish(&"task_1", CourierTask.Kind.SAWMILL_PICKUP, 50, Vector3(1.0, 0.0, 0.0), Vector3(0.0, 0.0, 0.0), {})
 	var courier := Citizen.new()
 	courier.ai_id = 1
@@ -302,7 +302,7 @@ static func _test_courier_dispatcher_cleanup_unassigns_dead_courier() -> void:
 static func _test_courier_dispatcher_publish_does_not_duplicate() -> void:
 	var sim := TestAIHelpers.FakeCourierSimulation.new()
 	var dispatcher := CourierDispatcher.new()
-	dispatcher.configure(sim)
+	sim.configure_dispatcher(dispatcher)
 	dispatcher.publish(&"task_1", CourierTask.Kind.SAWMILL_PICKUP, 50, Vector3(1.0, 0.0, 0.0), Vector3(0.0, 0.0, 0.0), {})
 	dispatcher.publish(&"task_1", CourierTask.Kind.SAWMILL_PICKUP, 99, Vector3(2.0, 0.0, 0.0), Vector3(0.0, 0.0, 0.0), {})
 	assert(dispatcher.tasks.size() == 1)
@@ -315,7 +315,7 @@ static func _test_courier_dispatcher_publishes_outside_regular_work_hours() -> v
 	var sim := TestAIHelpers.FakeCourierSimulation.new()
 	sim.work_time = false
 	var dispatcher := CourierDispatcher.new()
-	dispatcher.configure(sim)
+	sim.configure_dispatcher(dispatcher)
 	dispatcher.dispatch()
 	assert(sim.publish_count == 1)
 	sim.free()

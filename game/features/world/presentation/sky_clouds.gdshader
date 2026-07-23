@@ -15,6 +15,7 @@ uniform vec3 u_sun_color : source_color = vec3(1.0, 0.95, 0.82);
 uniform vec3 u_horizon_glow_color : source_color = vec3(1.0, 0.52, 0.25); // sunset scatter tint
 uniform float u_overcast : hint_range(0.0, 1.0) = 0.0;
 uniform float u_solar_intensity : hint_range(0.0, 1.0) = 1.0;
+uniform float u_sun_visibility : hint_range(0.0, 1.0) = 1.0;
 uniform float u_sun_disc_energy = 6.0;  // HDR overdrive so filmic tonemap + glow bloom the disc
 uniform float u_time = 0.0;
 
@@ -101,11 +102,12 @@ void sky() {
 	// HDR disc blooms through the environment's glow pass, while remaining one
 	// visual body rather than a screen-space flare laid over the sky.
 	float sun_disc = smoothstep(0.9968, 0.99965, sun_amt);
-	sky_col += warm_sun * sun_disc * u_solar_intensity * u_sun_disc_energy;
+	sky_col += warm_sun * sun_disc * u_solar_intensity * u_sun_disc_energy * u_sun_visibility;
 
 	// Mie scattering halo
 	float halo_strength = mix(0.14, 0.55, sun_low);
-	sky_col += warm_sun * pow(sun_amt, 6.0) * halo_strength * clear_sky * u_solar_intensity;
+	float halo_visibility = mix(0.25, 1.0, u_sun_visibility);
+	sky_col += warm_sun * pow(sun_amt, 6.0) * halo_strength * clear_sky * u_solar_intensity * halo_visibility;
 
 	// Warm band along horizon at sunrise/sunset
 	float horizon_band = pow(1.0 - abs(dir.y), 6.0);

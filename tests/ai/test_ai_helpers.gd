@@ -277,6 +277,21 @@ class FakeCourierSimulation extends Node:
 	func _cancel_courier_task(_courier: Citizen, _task: RefCounted) -> void:
 		pass
 
+	func configure_dispatcher(dispatcher: CourierDispatcher) -> void:
+		var routing := StorageRoutingService.new()
+		dispatcher.configure(
+			citizens,
+			warehouse_positions,
+			routing,
+			func() -> float: return runtime_seconds,
+			func(d): _publish_courier_tasks(d),
+			func(t) -> bool: return _is_courier_task_valid(t),
+			func(c, t) -> bool: return _start_courier_task(c, t),
+			func(c, t): _cancel_courier_task(c, t),
+			func(t): _release_task_warehouse_reservation(t)
+		)
+
+
 
 static func context(order: CitizenOrder = null) -> BehaviorContext:
 	var actuator := FakeActuator.new(1)

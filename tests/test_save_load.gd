@@ -41,5 +41,20 @@ static func run_all() -> void:
 	assert(read_data.settlement_state.get("money") == 1250, "Settlement money mismatch")
 	assert(read_data.citizens_state.size() == 1, "Citizens count mismatch")
 	assert(read_data.citizens_state[0].get("first_name") == "Test", "Citizen name mismatch")
+	assert(read_data.version == SaveDataScript.VERSION, "Current format version was not written")
+
+	# v1 saves used one-resource pile entries. They must remain loadable after
+	# the v2 pile schema switched to a resource map.
+	var legacy := SaveDataScript.new()
+	assert(legacy.from_dict({
+		"version": 1,
+		"settlement": {}, "clock": {}, "world": {}, "buildings": [],
+		"construction_sites": [], "citizens": [],
+		"resource_piles": [{"resource_id": "wood", "amount": 3, "position": {}}]
+	}), "Legacy v1 save should migrate")
+	assert(legacy.resource_piles_state[0].get("resources", {}).get("wood") == 3, "Legacy pile migration mismatch")
+
+	var unsupported := SaveDataScript.new()
+	assert(not unsupported.from_dict({"version": 999}), "Unsupported save version must be rejected")
 	
 	print("  => Save/Load Unit Tests PASSED!")

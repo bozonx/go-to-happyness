@@ -21,6 +21,10 @@ class FakeCanteenSimulation extends Node:
 	var workers_updated := false
 	var fire_lit := true
 	var has_cook := true
+	var pending_canteen_delivery := false
+	var pending_canteen_carrier: Citizen
+	var pending_canteen_delivery_amount := 0
+	var canteen_position := Vector3.ZERO
 
 	func _is_fire_lit(_canteen: Node3D) -> bool:
 		return fire_lit
@@ -36,6 +40,20 @@ class FakeCanteenSimulation extends Node:
 
 	func _update_workers() -> void:
 		workers_updated = true
+
+	func _set_canteen_food(value: int) -> void:
+		canteen_food = value
+
+	func _set_canteen_delivery_state(active: bool, carrier: Citizen, amount: int) -> void:
+		pending_canteen_delivery = active
+		pending_canteen_carrier = carrier
+		pending_canteen_delivery_amount = amount
+
+	func _is_canteen_delivery_in_progress() -> bool:
+		return false
+
+	func _request_courier_dispatch() -> void:
+		pass
 
 
 class FakeCourierDispatcher extends RefCounted:
@@ -82,18 +100,49 @@ class FakeStorageSimulation extends Node:
 	func _drop_resource_pile(position: Vector3, resource_type: String, amount: int) -> void:
 		dropped_piles.append({"position": position, "resource_type": resource_type, "amount": amount})
 
+	func _release_reservation(_index: int, _resource_type: String, _amount: int) -> void:
+		pass
+
 
 class FakeTradeSimulation extends Node:
+	var settlement := SettlementState.new()
+	var citizens: Array = []
 	var queued_trades: Array = []
 	var pending_trades: Dictionary = {}
+	var warehouse_positions: Array[Vector3] = []
 	var total_minutes := 0.0
 	var last_interface_message := ""
+	var market_menu: Variant = null
+	var selected_market: Node3D
+	var entrance_stone: Node3D
+	var workers_updated := false
 
 	func _total_game_minutes() -> float:
 		return total_minutes
 
 	func _update_interface(message: String) -> void:
 		last_interface_message = message
+
+	func _refresh_market_menu() -> void:
+		pass
+
+	func _request_courier_dispatch() -> void:
+		pass
+
+	func _citizen_for_ai_id(ai_id: int) -> Citizen:
+		for c in citizens:
+			if c.ai_id == ai_id:
+				return c
+		return null
+
+	func _create_resource_pile(_pos: Vector3, _resources: Dictionary) -> void:
+		pass
+
+	func _update_workers() -> void:
+		workers_updated = true
+
+	func _get_delivery_position() -> Vector3:
+		return Vector3.ZERO
 
 
 class FakeWaterCollectorSimulation extends Node:
@@ -189,7 +238,25 @@ static func _test_canteen_meal_requests() -> void:
 	citizen.ai_id = 42
 	simulation.citizens.append(citizen)
 	var service := CanteenServiceScript.new()
-	service.configure(simulation)
+	service.configure(
+		SettlementState.new(),
+		simulation.citizens,
+		func() -> Node3D: return simulation.canteen,
+		func() -> int: return simulation.canteen_food,
+		simulation._set_canteen_food,
+		func() -> Vector3: return simulation.canteen_position,
+		func() -> bool: return simulation.pending_canteen_delivery,
+		func() -> Citizen: return simulation.pending_canteen_carrier,
+		func() -> int: return simulation.pending_canteen_delivery_amount,
+		simulation._set_canteen_delivery_state,
+		simulation._is_canteen_delivery_in_progress,
+		simulation._is_fire_lit,
+		simulation._has_cook,
+		simulation._update_interface,
+		simulation._request_courier_dispatch,
+		simulation._is_work_time,
+		simulation._update_workers
+	)
 
 	service.start_meal(13)
 	assert(service.is_meal_requested(citizen.ai_id))
@@ -218,7 +285,25 @@ static func _test_canteen_raw_rations() -> void:
 	citizen.hunger = 50.0
 	simulation.citizens.append(citizen)
 	var service := CanteenServiceScript.new()
-	service.configure(simulation)
+	service.configure(
+		SettlementState.new(),
+		simulation.citizens,
+		func() -> Node3D: return simulation.canteen,
+		func() -> int: return simulation.canteen_food,
+		simulation._set_canteen_food,
+		func() -> Vector3: return simulation.canteen_position,
+		func() -> bool: return simulation.pending_canteen_delivery,
+		func() -> Citizen: return simulation.pending_canteen_carrier,
+		func() -> int: return simulation.pending_canteen_delivery_amount,
+		simulation._set_canteen_delivery_state,
+		simulation._is_canteen_delivery_in_progress,
+		simulation._is_fire_lit,
+		simulation._has_cook,
+		simulation._update_interface,
+		simulation._request_courier_dispatch,
+		simulation._is_work_time,
+		simulation._update_workers
+	)
 
 	service.start_meal(13)
 	assert(service.is_meal_requested(citizen.ai_id))
@@ -239,7 +324,25 @@ static func _test_no_canteen_raw_rations() -> void:
 	citizen.hunger = 50.0
 	simulation.citizens.append(citizen)
 	var service := CanteenServiceScript.new()
-	service.configure(simulation)
+	service.configure(
+		SettlementState.new(),
+		simulation.citizens,
+		func() -> Node3D: return simulation.canteen,
+		func() -> int: return simulation.canteen_food,
+		simulation._set_canteen_food,
+		func() -> Vector3: return simulation.canteen_position,
+		func() -> bool: return simulation.pending_canteen_delivery,
+		func() -> Citizen: return simulation.pending_canteen_carrier,
+		func() -> int: return simulation.pending_canteen_delivery_amount,
+		simulation._set_canteen_delivery_state,
+		simulation._is_canteen_delivery_in_progress,
+		simulation._is_fire_lit,
+		simulation._has_cook,
+		simulation._update_interface,
+		simulation._request_courier_dispatch,
+		simulation._is_work_time,
+		simulation._update_workers
+	)
 
 	service.start_meal(13)
 	assert(not service.is_meal_requested(citizen.ai_id))
@@ -328,7 +431,24 @@ static func _test_trade_order_model() -> void:
 static func _test_trade_service_entrance_expedition_walks_to_sign_before_departure() -> void:
 	var simulation := FakeTradeSimulation.new()
 	var service := TradeServiceScript.new()
-	service.configure(simulation)
+	service.configure(
+		simulation.settlement,
+		simulation.citizens,
+		simulation.queued_trades,
+		simulation.pending_trades,
+		simulation.warehouse_positions,
+		simulation.market_menu,
+		func() -> Node3D: return simulation.selected_market,
+		func() -> Node3D: return simulation.entrance_stone,
+		simulation._get_delivery_position,
+		simulation._update_interface,
+		simulation._refresh_market_menu,
+		simulation._request_courier_dispatch,
+		simulation._total_game_minutes,
+		simulation._citizen_for_ai_id,
+		simulation._create_resource_pile,
+		simulation._update_workers
+	)
 	var worker := Citizen.new()
 	worker.position = Vector3(12.0, 0.0, 0.0)
 	var entrance := Vector3(-22.5, 0.0, 1.5)
@@ -397,7 +517,17 @@ static func _test_citizen_status_effects() -> void:
 static func _test_storage_delivery_service() -> void:
 	var simulation := FakeStorageSimulation.new()
 	var service := StorageDeliveryServiceScript.new()
-	service.configure(simulation)
+	service.configure(
+		simulation.settlement,
+		simulation.warehouse_positions,
+		simulation.courier_dispatcher,
+		simulation.storage_routing_service,
+		simulation._release_reservation,
+		simulation._drop_resource_pile,
+		simulation._update_interface,
+		simulation._request_courier_dispatch,
+		simulation._send_citizen_to_leisure
+	)
 	var worker := Citizen.new()
 	simulation.settlement.add_warehouse("warehouse")
 	simulation.settlement.warehouse_ever_built = true
@@ -412,7 +542,17 @@ static func _test_storage_delivery_service() -> void:
 
 	var full_storage_simulation := FakeStorageSimulation.new()
 	var full_storage_service := StorageDeliveryServiceScript.new()
-	full_storage_service.configure(full_storage_simulation)
+	full_storage_service.configure(
+		full_storage_simulation.settlement,
+		full_storage_simulation.warehouse_positions,
+		full_storage_simulation.courier_dispatcher,
+		full_storage_simulation.storage_routing_service,
+		full_storage_simulation._release_reservation,
+		full_storage_simulation._drop_resource_pile,
+		full_storage_simulation._update_interface,
+		full_storage_simulation._request_courier_dispatch,
+		full_storage_simulation._send_citizen_to_leisure
+	)
 	full_storage_simulation.settlement.add_warehouse("warehouse")
 	full_storage_simulation.settlement.warehouse_ever_built = true
 	full_storage_simulation.warehouse_positions = [Vector3.ZERO]
@@ -428,7 +568,17 @@ static func _test_storage_delivery_service() -> void:
 
 	var no_storage_simulation := FakeStorageSimulation.new()
 	var no_storage_service := StorageDeliveryServiceScript.new()
-	no_storage_service.configure(no_storage_simulation)
+	no_storage_service.configure(
+		no_storage_simulation.settlement,
+		no_storage_simulation.warehouse_positions,
+		no_storage_simulation.courier_dispatcher,
+		no_storage_simulation.storage_routing_service,
+		no_storage_simulation._release_reservation,
+		no_storage_simulation._drop_resource_pile,
+		no_storage_simulation._update_interface,
+		no_storage_simulation._request_courier_dispatch,
+		no_storage_simulation._send_citizen_to_leisure
+	)
 	var blocked_worker := Citizen.new()
 	blocked_worker.carried_amount = 1
 	no_storage_service.on_resource_delivered(blocked_worker, "grass", 1)

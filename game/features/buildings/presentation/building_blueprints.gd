@@ -112,6 +112,7 @@ const COLORS := {
 	"toilet_brick_lvl3": Color("a2482c"),
 	"boundary_post": Color("8a7b4f"),
 	"settlement_flag": Color("d45448"),
+	"entrance_sign": Color("8a6549"),
 }
 
 
@@ -217,6 +218,7 @@ static func get_blueprint(building_type: String) -> Dictionary:
 		"toilet_brick", "toilet_brick_lvl2", "toilet_brick_lvl3": return _enclosed_blueprint(building_type, Vector2i(3, 3), 2, "shed")
 		"boundary_post": return _boundary_post_blueprint()
 		"settlement_flag": return _settlement_flag_blueprint()
+		"entrance_sign": return _entrance_sign_blueprint()
 		_: return _enclosed_blueprint(building_type, Vector2i(5, 5), 3, "gable")
 
 
@@ -541,6 +543,23 @@ static func _settlement_flag_blueprint() -> Dictionary:
 		"type": "settlement_flag",
 		"footprint": Vector2i(1, 1),
 		"height": 1,
+		"modules": modules,
+		"entrance": Vector2i(0, 0),
+	}
+
+
+static func _entrance_sign_blueprint() -> Dictionary:
+	var color := COLORS["entrance_sign"]
+	var post_color := Color("5c4033")
+	var modules: Array[Dictionary] = [
+		_module(Vector3(-0.62, 0.78, 0.0), Vector3(0.16, 1.55, 0.16), "post", post_color),
+		_module(Vector3(0.62, 0.78, 0.0), Vector3(0.16, 1.55, 0.16), "post", post_color),
+		_module(Vector3(0.0, 1.25, 0.0), Vector3(1.8, 0.65, 0.14), "board", color),
+	]
+	return {
+		"type": "entrance_sign",
+		"footprint": Vector2i(2, 1),
+		"height": 2,
 		"modules": modules,
 		"entrance": Vector2i(0, 0),
 	}

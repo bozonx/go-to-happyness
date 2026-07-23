@@ -72,6 +72,8 @@ func _tent_start_unlock_for(building_type: String) -> bool:
 func is_building_unlocked(building_type: String, era: int) -> bool:
 	if building_type == "settlement_flag":
 		return true
+	if building_type == "entrance_sign":
+		return true
 	if building_type == "warehouse":
 		return true
 	if building_type == "campfire":

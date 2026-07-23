@@ -8,11 +8,19 @@ const EntranceMarkerScene = preload("res://game/features/buildings/presentation/
 const HouseLightScene = preload("res://game/features/buildings/presentation/house_light.tscn")
 const HouseLightRecord = preload("res://game/features/buildings/domain/house_light_record.gd")
 
-var simulation: Node
+var _entrance_lights: Array = []
+var _house_lights: Array = []
+var _random: RandomNumberGenerator
 
 
-func configure(p_simulation: Node) -> void:
-	simulation = p_simulation
+func configure(
+	p_entrance_lights: Array,
+	p_house_lights: Array,
+	p_random: RandomNumberGenerator
+) -> void:
+	_entrance_lights = p_entrance_lights
+	_house_lights = p_house_lights
+	_random = p_random
 
 
 func add_service_entrance_marker(building: Node3D, marker_local: Vector3) -> void:
@@ -28,7 +36,7 @@ func add_service_entrance_marker(building: Node3D, marker_local: Vector3) -> voi
 	sign.modulate = Color("e5c86b")
 	var light := marker_node.get_node("Light") as OmniLight3D
 	building.add_child(marker_node)
-	simulation.entrance_lights.append(light)
+	_entrance_lights.append(light)
 
 
 func add_visitor_entrance_marker(building: Node3D, marker_local: Vector3) -> void:
@@ -45,7 +53,7 @@ func add_visitor_entrance_marker(building: Node3D, marker_local: Vector3) -> voi
 	var light := marker_node.get_node("Light") as OmniLight3D
 	light.light_color = Color("a8e6c0")
 	building.add_child(marker_node)
-	simulation.entrance_lights.append(light)
+	_entrance_lights.append(light)
 
 
 func add_house_light(house: Node3D) -> void:
@@ -57,5 +65,5 @@ func add_house_light(house: Node3D) -> void:
 			entrance_local = house.to_local(positions[0]) + Vector3.UP * 2.0
 	light.position = entrance_local
 	house.add_child(light)
-	var off_minute: int = simulation.random.randi_range(22 * 60, 26 * 60) % (24 * 60)
-	simulation.house_lights.append(HouseLightRecord.new(light, house, off_minute))
+	var off_minute: int = _random.randi_range(22 * 60, 26 * 60) % (24 * 60)
+	_house_lights.append(HouseLightRecord.new(light, house, off_minute))
