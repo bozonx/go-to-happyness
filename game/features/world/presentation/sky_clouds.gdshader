@@ -218,14 +218,30 @@ void sky() {
 	sky_col += u_horizon_glow_color * horizon_band * sun_low * 0.35 * clear_sky * u_solar_intensity;
 
 	// --- night moon ---
-	// A single soft disc opposite the sun's azimuth, with a tight inner glow and a
-	// faint wide halo. Gated by u_moon_energy so it only appears after dusk.
+	// A soft disc opposite the sun, with a tight inner glow and a faint wide halo.
+	// The surface is procedural: no texture sampler, just FBM "maria" and a gentle
+	// spherical shade. Gated by u_moon_energy so it only appears after dusk.
 	if (u_moon_energy > 0.001) {
 		vec3 moon_dir = normalize(u_moon_dir);
 		float moon_amt = max(dot(dir, moon_dir), 0.0);
-		float moon_disc = smoothstep(0.9989, 0.99972, moon_amt);
+		float moon_disc = smoothstep(0.99719, 0.99928, moon_amt);
+		// Disc-local coordinates via a tangent frame around the moon direction.
+		// dot(dir, tangent) ~= the small angular offset, so muv spans [-1,1] across
+		// the disc once divided by its angular radius.
+		vec3 moon_t = normalize(cross(moon_dir, vec3(0.0, 1.0, 0.0)));
+		vec3 moon_b = cross(moon_dir, moon_t);
+		vec2 muv = vec2(dot(dir, moon_t), dot(dir, moon_b)) / 0.075;
+		float mr = length(muv);
+		float sphere = sqrt(max(1.0 - mr * mr, 0.0)); // limb darkening for volume
+		// Dark maria patches plus a whisper of finer relief.
+		float maria = fbm(muv * 1.5 + vec2(4.0, 2.0));
+		float relief = fbm(muv * 5.5 + vec2(11.0, 7.0));
+		float surface = 1.0 - smoothstep(0.52, 0.74, maria) * 0.45;
+		surface -= (relief - 0.5) * 0.14;
+		surface = clamp(surface, 0.42, 1.0);
+		vec3 moon_face = u_moon_color * surface * mix(0.80, 1.06, sphere);
 		float moon_glow = pow(moon_amt, 120.0) * 0.30 + pow(moon_amt, 7.0) * 0.04;
-		sky_col += u_moon_color * (moon_disc * 2.6 + moon_glow) * u_moon_energy * clear_sky;
+		sky_col += (moon_face * moon_disc * 2.6 + u_moon_color * moon_glow) * u_moon_energy * clear_sky;
 	}
 
 	// --- sky projection ---
