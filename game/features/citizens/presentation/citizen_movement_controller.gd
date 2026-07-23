@@ -2,6 +2,16 @@ class_name CitizenMovementController
 extends RefCounted
 
 
+static func _randf(actor: Citizen) -> float:
+	var rng := actor.simulation.random if actor != null and actor.simulation != null else null
+	return rng.randf() if rng != null else randf()
+
+
+static func _randf_range(actor: Citizen, from_val: float, to_val: float) -> float:
+	var rng := actor.simulation.random if actor != null and actor.simulation != null else null
+	return rng.randf_range(from_val, to_val) if rng != null else randf_range(from_val, to_val)
+
+
 func move_to(actor: Citizen, destination: Vector3, delta: float, may_enter_destination_house := false, use_building_queue := true, record_trail := true, arrival_radius := 0.08) -> bool:
 	if actor == null:
 		return false
@@ -125,18 +135,18 @@ func process_idle_wander(actor: Citizen, delta: float) -> void:
 		return
 	if actor.idle_wander_anchor == Vector3.INF:
 		actor.idle_wander_anchor = actor.global_position
-		actor.idle_wander_pause = randf_range(Citizen.IDLE_WANDER_MIN_PAUSE, Citizen.IDLE_WANDER_MAX_PAUSE)
+		actor.idle_wander_pause = _randf_range(actor, Citizen.IDLE_WANDER_MIN_PAUSE, Citizen.IDLE_WANDER_MAX_PAUSE)
 	if actor.idle_wander_target != Vector3.INF:
 		if actor.navigation_failed:
 			actor.idle_wander_target = Vector3.INF
 			actor.navigation_failed = false
 			actor.ai_move_failure_reason = BehaviorStep.FailureReason.NONE
-			actor.idle_wander_pause = randf_range(Citizen.IDLE_WANDER_MIN_PAUSE, Citizen.IDLE_WANDER_MAX_PAUSE)
+			actor.idle_wander_pause = _randf_range(actor, Citizen.IDLE_WANDER_MIN_PAUSE, Citizen.IDLE_WANDER_MAX_PAUSE)
 			stop_horizontal_movement(actor)
 			return
 		if move_to(actor, actor.idle_wander_target, delta, false, false, false):
 			actor.idle_wander_target = Vector3.INF
-			actor.idle_wander_pause = randf_range(Citizen.IDLE_WANDER_MIN_PAUSE, Citizen.IDLE_WANDER_MAX_PAUSE)
+			actor.idle_wander_pause = _randf_range(actor, Citizen.IDLE_WANDER_MIN_PAUSE, Citizen.IDLE_WANDER_MAX_PAUSE)
 		return
 	actor.idle_wander_pause -= delta
 	actor.velocity.x = 0.0
@@ -155,8 +165,8 @@ func choose_idle_wander_target(actor: Citizen) -> Vector3:
 	var best := Vector3.INF
 	var best_score := -INF
 	for ignored in range(Citizen.IDLE_WANDER_CANDIDATES):
-		var angle := randf() * TAU
-		var radius := randf_range(Citizen.IDLE_PERSONAL_SPACE, Citizen.IDLE_WANDER_RADIUS)
+		var angle := _randf(actor) * TAU
+		var radius := _randf_range(actor, Citizen.IDLE_PERSONAL_SPACE, Citizen.IDLE_WANDER_RADIUS)
 		var candidate := actor.idle_wander_anchor + Vector3(cos(angle) * radius, 0.0, sin(angle) * radius)
 		var reachable := bool(actor.route_reachability_query.call(actor.global_position, candidate, false)) if actor.route_reachability_query.is_valid() else true
 		if not reachable:
@@ -255,7 +265,7 @@ func invalidate_route_for_navigation_change(actor: Citizen) -> void:
 		return
 	actor.active_route = null
 	actor.movement_path.clear()
-	actor.route_retry_timer = randf_range(0.0, Citizen.STALE_NAVIGATION_REPLAN_JITTER)
+	actor.route_retry_timer = _randf_range(actor, 0.0, Citizen.STALE_NAVIGATION_REPLAN_JITTER)
 	actor.route_retry_delay = Citizen.ROUTE_RETRY_INTERVAL
 	actor.route_unreachable_time = 0.0
 	actor.route_unreachable_reason = RouteResult.UnreachableReason.NONE

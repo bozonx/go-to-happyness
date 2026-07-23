@@ -21,14 +21,12 @@ func configure_scenes(next_site_scene: PackedScene, next_entrance_post_scene: Pa
 
 
 func _get_site_scene() -> PackedScene:
-	if site_scene == null:
-		site_scene = load("res://game/features/buildings/presentation/construction_site.tscn") as PackedScene
+	assert(site_scene != null, "ConstructionService.site_scene must be set before use")
 	return site_scene
 
 
 func _get_entrance_post_scene() -> PackedScene:
-	if entrance_post_scene == null:
-		entrance_post_scene = load("res://game/features/buildings/presentation/construction_entrance_post.tscn") as PackedScene
+	assert(entrance_post_scene != null, "ConstructionService.entrance_post_scene must be set before use")
 	return entrance_post_scene
 
 

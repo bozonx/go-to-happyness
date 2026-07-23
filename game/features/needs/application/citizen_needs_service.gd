@@ -24,6 +24,11 @@ var _toilet_due_minutes: Dictionary = {}
 var _toilet_requests: Dictionary = {}
 var _rest_requests: Dictionary = {}
 var _relief_candidates_by_citizen: Dictionary = {}
+var _random: RandomNumberGenerator
+
+
+func set_random(rng: RandomNumberGenerator) -> void:
+	_random = rng
 
 
 func configure(
@@ -45,7 +50,7 @@ func configure(
 func schedule_toilet(citizen_id: int) -> void:
 	if citizen_id <= 0:
 		return
-	_toilet_due_minutes[citizen_id] = randf_range(TOILET_START_MINUTE, TOILET_END_MINUTE)
+	_toilet_due_minutes[citizen_id] = _random.randf_range(TOILET_START_MINUTE, TOILET_END_MINUTE) if _random != null else randf_range(TOILET_START_MINUTE, TOILET_END_MINUTE)
 	_toilet_requests.erase(citizen_id)
 	_relief_candidates_by_citizen.erase(citizen_id)
 
@@ -86,7 +91,7 @@ func request_leisure(citizen_id: int, rest_positions: Array[Vector3], minimum_ho
 	if citizen_id <= 0 or rest_positions.is_empty():
 		return false
 	_rest_requests[citizen_id] = {
-		&"position": rest_positions[randi() % rest_positions.size()],
+		&"position": rest_positions[(_random.randi() if _random != null else randi()) % rest_positions.size()],
 		&"duration": maxf(4.0, float(minimum_hours) * 12.5) if minimum_hours > 0 else 4.0,
 	}
 	return true

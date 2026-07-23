@@ -1,5 +1,8 @@
 extends SceneTree
 
+const SimHelper = preload("res://tests/helpers/simulation_test_helper.gd")
+
+
 func _init() -> void:
 	var scene := load("res://game/bootstrap/settlement_game.tscn") as PackedScene
 	var simulation := scene.instantiate() as Node
@@ -16,7 +19,7 @@ func _init() -> void:
 	print("chosen citizen ai_id=", c.ai_id, " player=", c.is_player_controlled, " state=", c.state)
 	c.global_position = Vector3(10.0, 0.0, 10.0)
 	c.idle()
-	simulation._assign_daily_order(c, "gather_food")
+	SimHelper.assign_daily_order(simulation, c, "gather_food")
 	print("after assign: has_daily=", c.has_daily_order(), " daily_role=", c.daily_order_role if c.has_daily_order() else "-")
 
 	for step in range(8):

@@ -8,13 +8,13 @@ func _init() -> void:
 
 	simulation.selected_builder = simulation.hero_citizen
 	SimHelper.appoint_test_official(simulation, simulation.hero_citizen)
-	assert(simulation._player_can_command_labor())
+	assert(SimHelper.player_can_command_labor(simulation))
 
 	var position := Vector3(12.0, 0.0, 12.0)
 	var blueprint := BuildingBlueprints.get_blueprint("campfire")
-	var cell := simulation._placement_key(position) as Vector2i
+	var cell := SimHelper.placement_key(simulation, position) as Vector2i
 	simulation.building_registry.reserve(cell, position, blueprint.footprint)
-	var site: ConstructionSite = simulation._create_construction_site(cell, "campfire", position, 0, blueprint, blueprint.footprint)
+	var site: ConstructionSite = SimHelper.create_construction_site(simulation, cell, "campfire", position, 0, blueprint, blueprint.footprint)
 	var construction_resource := str(site.required_materials.keys()[0])
 	var required_amount: int = int(site.required_materials.get(construction_resource, 0))
 	if required_amount > 0:
@@ -25,7 +25,7 @@ func _init() -> void:
 	var builder: Citizen = simulation.citizens[2]
 	builder.global_position = Vector3(11.6, 0.0, 8.4)
 	builder.idle()
-	simulation._assign_daily_order(builder, "construction")
+	SimHelper.assign_daily_order(simulation, builder, "construction")
 
 	builder.pathfinder = func(_from: Vector3, target: Vector3, _allow: bool) -> RouteResult:
 		return RouteResult.success([target], target)

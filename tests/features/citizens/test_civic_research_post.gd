@@ -15,7 +15,7 @@ func _init() -> void:
 	simulation.selected_campfire = civic_post
 	simulation.selected_builder = researcher
 
-	simulation._assign_daily_order(researcher, "researcher")
+	SimHelper.assign_daily_order(simulation, researcher, "researcher")
 	assert(researcher.daily_order_role == "researcher")
 	assert(researcher.permanent_role.is_empty())
 
@@ -25,7 +25,7 @@ func _init() -> void:
 	simulation.canteen = kitchen
 	simulation.selected_building = kitchen
 	simulation.selected_builder = simulation.citizens[2]
-	simulation._assign_daily_order(simulation.citizens[2], "cook")
+	SimHelper.assign_daily_order(simulation, simulation.citizens[2], "cook")
 	assert(simulation.citizens[2].daily_order_role == "cook")
 	assert(simulation.citizens[2].permanent_role.is_empty())
 	simulation.citizens[2].clear_daily_order()
@@ -33,19 +33,19 @@ func _init() -> void:
 
 	# The native service order owns the movement. Simulate its completed arrival
 	# here and verify that only a resident physically at the post can be promoted.
-	researcher.global_position = simulation._employment_center_position()
+	researcher.global_position = SimHelper.employment_center_position(simulation)
 	researcher.assign_research_work(researcher.global_position)
-	assert(simulation._get_available_researcher("construction") == researcher)
+	assert(SimHelper.get_available_researcher(simulation, "construction") == researcher)
 
 	simulation.settlement.complete_research("official")
-	simulation._handle_civic_post_assignment()
+	SimHelper.handle_civic_post_assignment(simulation)
 	assert(researcher.permanent_role == "official")
 	assert(researcher.employment_workplace == civic_post)
 	assert(researcher.daily_order_role.is_empty())
 
 	var replacement: Citizen = simulation.citizens[2]
 	simulation.selected_builder = replacement
-	simulation._set_selected_work_role("official")
+	SimHelper.set_selected_work_role(simulation, "official")
 	assert(replacement.permanent_role == "official")
 	assert(replacement.employment_workplace == civic_post)
 

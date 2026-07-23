@@ -87,8 +87,7 @@ func set_dig_site_scene(scene: PackedScene) -> void:
 
 
 func _get_dig_site_scene() -> PackedScene:
-	if dig_site_scene == null:
-		dig_site_scene = load("res://game/features/world/presentation/dig_site.tscn") as PackedScene
+	assert(dig_site_scene != null, "ExcavationService.dig_site_scene must be set before use")
 	return dig_site_scene
 
 
@@ -116,8 +115,8 @@ func on_excavation_cycle(worker: Citizen, site_node: Node3D, efficiency: float) 
 			_update_interface.call("Digger is carrying grass to the warehouse.")
 		elif site.depth <= site.soil_limit:
 			var res: String = ResourceIds.SOIL
-			if worker.skills.get("excavation", 0.0) >= 1.0 and randf() < 0.10:
-				res = ResourceIds.CLAY if randf() < 0.5 else ResourceIds.STONE
+			if worker.skills.get("excavation", 0.0) >= 1.0 and _random.randf() < 0.10:
+				res = ResourceIds.CLAY if _random.randf() < 0.5 else ResourceIds.STONE
 				_update_interface.call("Deep Digger: Digger found rare %s in soil!" % res.capitalize())
 			worker.register_pending_resource(res, 1)
 			var pit_material := StandardMaterial3D.new()

@@ -18,15 +18,15 @@ func _init() -> void:
 	var yard := Node3D.new()
 	yard.position = position
 	simulation.add_child(yard)
-	simulation._complete_building(cell, "straw_materials_yard", position, yard, blueprint)
+	SimHelper.complete_building(simulation, cell, "straw_materials_yard", position, yard, blueprint)
 
 	# It registers a service position and advertises two branch-gathering jobs.
 	assert(simulation.materials_yard_positions.size() == 1)
-	assert(simulation._available_employer_capacity("gather_branches") == 2)
-	assert(simulation._employer_for_role("gather_branches") == yard)
-	var vacancy: Dictionary = simulation._required_staff_for_building(yard)
+	assert(SimHelper.available_employer_capacity(simulation, "gather_branches") == 2)
+	assert(SimHelper.employer_for_role(simulation, "gather_branches") == yard)
+	var vacancy: Dictionary = SimHelper.required_staff_for_building(simulation, yard)
 	assert(vacancy.get("role", "") == "gather_branches" and int(vacancy.get("count", 0)) == 2)
-	assert(simulation._is_staffed_workplace(yard))
+	assert(SimHelper.is_staffed_workplace(simulation, yard))
 
 	# Stand up an employment centre so registration can start (mirrors test_startup).
 	var civic_centre := Node3D.new()
@@ -39,7 +39,7 @@ func _init() -> void:
 
 	# The workforce menu's Assign action must create a permanent yard contract;
 	# this is the same handler connected to the visible UI button.
-	simulation._assign_unemployed_worker("gather_branches")
+	SimHelper.assign_unemployed_worker(simulation, "gather_branches")
 	var pending_yard_worker: Citizen = null
 	for citizen in simulation.citizens:
 		if citizen.pending_employment_role == "gather_branches":

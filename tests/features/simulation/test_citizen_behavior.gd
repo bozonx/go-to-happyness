@@ -33,17 +33,17 @@ func _init() -> void:
 	var entrance: Vector3 = simulation.entrance_stone.global_position
 	resident.global_position = entrance + Vector3(2.4, 0.0, 0.0)
 	simulation.last_citizen_positions[resident.get_stable_id()] = entrance + Vector3(2.6, 0.0, 0.0)
-	simulation._guard_citizen_positions()
+	SimHelper.guard_citizen_positions(simulation)
 	assert(resident.global_position.distance_to(entrance) < 2.5)
 	resident.global_position = entrance
 	simulation.last_citizen_positions[resident.get_stable_id()] = entrance + Vector3(10.0, 0.0, 0.0)
-	simulation._guard_citizen_positions()
+	SimHelper.guard_citizen_positions(simulation)
 	assert(resident.global_position.distance_to(entrance) > 5.0)
 	resident.global_position = original_resident_position
 	simulation.last_citizen_positions[resident.get_stable_id()] = original_resident_position
 
 	# Toilet needs: the service schedules relief; the actor preserves work state.
-	var work_target: Vector3 = simulation._resource_access_position(resident.global_position, simulation.tree_positions[0])
+	var work_target: Vector3 = SimHelper.resource_access_position(simulation, resident.global_position, simulation.tree_positions[0])
 	assert(work_target != Vector3.INF)
 	resident.gender = "male"
 	resident.state = Citizen.State.TO_TREE
@@ -73,7 +73,7 @@ func _init() -> void:
 	resident.source_access_position = work_target
 	simulation.park_positions.clear()
 	simulation.park_positions.append(resident.global_position + Vector3(1.0, 0.0, 0.0))
-	simulation._start_park_rest(true)
+	SimHelper.start_park_rest(simulation, true)
 	assert(resident.state == Citizen.State.TO_TREE)
 	assert(resident.source_access_position == work_target)
 

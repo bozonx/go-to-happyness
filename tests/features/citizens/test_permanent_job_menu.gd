@@ -7,9 +7,9 @@ func _init() -> void:
 
 	simulation.selected_builder = simulation.hero_citizen
 	SimHelper.appoint_test_official(simulation, simulation.hero_citizen)
-	simulation._refresh_build_menu()
+	SimHelper.refresh_build_menu(simulation)
 
-	simulation._open_job_submenu()
+	SimHelper.open_job_submenu(simulation)
 	assert(simulation.build_menu_is_job_menu)
 
 	# In the tent era, permanent jobs tied to later-era buildings are hidden.
@@ -24,7 +24,7 @@ func _init() -> void:
 	# Advance to the wood era: wood-era jobs become visible but disabled
 	# because no sawmill or farm has been built yet.
 	simulation.settlement.era = SettlementState.Era.WOOD
-	simulation._refresh_build_menu()
+	SimHelper.refresh_build_menu(simulation)
 
 	for button in simulation.build_menu.role_buttons:
 		if str(button.get_meta("submenu", "")) != "job":
@@ -35,7 +35,7 @@ func _init() -> void:
 			assert(button.disabled, "Role %s should be disabled without a workplace" % role)
 
 	# Daily orders remain visible alongside the job menu.
-	simulation._open_daily_order_submenu()
+	SimHelper.open_daily_order_submenu(simulation)
 	assert(simulation.build_menu_is_daily_order_menu)
 	var construction_daily_button: Button = null
 	for button in simulation.build_menu.role_buttons:

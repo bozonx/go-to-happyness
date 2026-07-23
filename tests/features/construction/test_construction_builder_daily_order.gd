@@ -9,7 +9,7 @@ func _init() -> void:
 	var site_position := Vector3(12.0, 0.0, 12.0)
 	var blueprint := BuildingBlueprints.get_blueprint("warehouse")
 	simulation.building_registry.reserve(cell, site_position, blueprint.footprint)
-	simulation._create_construction_site(cell, "warehouse", site_position, 0, blueprint, blueprint.footprint)
+	SimHelper.create_construction_site(simulation, cell, "warehouse", site_position, 0, blueprint, blueprint.footprint)
 
 	var site = simulation.construction_sites[0]
 	for resource_type in site.required_materials:
@@ -20,7 +20,7 @@ func _init() -> void:
 	var builder: Citizen = simulation.citizens[2]
 	builder.global_position = Vector3(10.0, 0.0, 10.0)
 	builder.idle()
-	simulation._assign_daily_order(builder, "construction")
+	SimHelper.assign_daily_order(simulation, builder, "construction")
 
 	var frames := 0
 	var max_frames := 1200

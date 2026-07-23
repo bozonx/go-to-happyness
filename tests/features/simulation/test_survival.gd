@@ -12,7 +12,7 @@ func _init() -> void:
 	simulation.settlement_survival_service.last_survival_hour = -1
 	simulation.clock.set_time(21 * 60)
 	var citizen_count_before_zero_wellbeing_skip: int = simulation.citizens.size()
-	simulation._skip_night()
+	SimHelper.skip_night(simulation)
 	assert(simulation.citizens.size() == citizen_count_before_zero_wellbeing_skip - 1)
 	for citizen in simulation.citizens:
 		assert(is_instance_valid(citizen))

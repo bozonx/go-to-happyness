@@ -14,7 +14,7 @@ func _init() -> void:
 		"gather_branches": "branches",
 	}
 	for role in resources_by_role:
-		simulation._assign_daily_order(citizen, role)
+		SimHelper.assign_daily_order(simulation, citizen, role)
 		var snapshot := SettlementAIWorldFacade.new(simulation).capture(1)
 		var orders := DailyPlayerOrderProvider.new().collect_orders(snapshot)
 		var citizen_orders := orders.filter(func(order: CitizenOrder): return order.citizen_id == citizen.ai_id)

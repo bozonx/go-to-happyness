@@ -14,15 +14,15 @@ func _init() -> void:
 	var site_position := Vector3(8.0, 0.0, 0.0)
 	var blueprint := BuildingBlueprints.get_blueprint("campfire")
 	simulation.building_registry.reserve(site_cell, site_position, blueprint.footprint)
-	simulation._create_construction_site(site_cell, "campfire", site_position, 0, blueprint, blueprint.footprint)
-	simulation._refresh_navigation_grid()
+	SimHelper.create_construction_site(simulation, site_cell, "campfire", site_position, 0, blueprint, blueprint.footprint)
+	SimHelper.refresh_navigation_grid(simulation)
 
 	assert(simulation.construction_sites.size() == 1, "Expected one construction site")
 	var site: ConstructionSite = simulation.construction_sites[0]
 
 	simulation.settlement.add("branches", 5)
 
-	simulation._add_citizen(warehouse_position, "courier")
+	SimHelper.add_citizen(simulation, warehouse_position, "courier")
 	var courier: Citizen = simulation.citizens[-1]
 	await process_frame
 	await physics_frame

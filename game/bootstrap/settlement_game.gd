@@ -818,6 +818,7 @@ func _ready() -> void:
 	resource_pile_service.set_visuals(ResourcePileVisualsScript.new())
 	foraging_service = ForagingService.new()
 	foraging_service.billboard_label_scene = BillboardLabelScene
+	foraging_service.set_random(random)
 	foraging_service.setup(
 		settlement,
 		world_resource_state,
@@ -1051,6 +1052,7 @@ func _ready() -> void:
 	)
 
 	citizen_needs_service = CitizenNeedsService.new()
+	citizen_needs_service.set_random(random)
 	citizen_needs_service.configure(
 		nav_grid,
 		get_toilets,
@@ -2169,6 +2171,7 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 		citizen.hair_color = Color("3b2219")
 		citizen.shirt_color = Color("1e3d59")
 		citizen.pants_color = Color("ff6e40")
+	citizen.random = random
 	add_child(citizen)
 	citizen.simulation = self
 	citizen.setup_specialization(primary_specialization if not primary_specialization.is_empty() else "unassigned")
@@ -5882,6 +5885,7 @@ func restore_from_save_data(save_data: SaveDataScript) -> bool:
 		if cit_dict.has("age") and "age" in citizen:
 			citizen.age = int(cit_dict.get("age", 25))
 
+		citizen.random = random
 		add_child(citizen)
 		citizen.simulation = self
 		citizen.setup_specialization(str(cit_dict.get("specialization", "unassigned")))

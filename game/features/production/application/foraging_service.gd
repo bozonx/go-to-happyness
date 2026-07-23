@@ -11,15 +11,14 @@ const ForageSourceRecord = preload("res://game/features/production/domain/forage
 const RabbitSourceRecord = preload("res://game/features/production/domain/rabbit_source_record.gd")
 const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 var billboard_label_scene: PackedScene = null
+var _random: RandomNumberGenerator
 
 func set_billboard_label_scene(scene: PackedScene) -> void:
 	billboard_label_scene = scene
 
 
-func _get_billboard_label_scene() -> PackedScene:
-	if billboard_label_scene == null:
-		billboard_label_scene = load("res://game/features/ui/presentation/billboard_label.tscn") as PackedScene
-	return billboard_label_scene
+func set_random(rng: RandomNumberGenerator) -> void:
+	_random = rng
 
 var forager_positions: Array[Vector3] = []
 var forage_sources: Dictionary = {}
@@ -34,6 +33,9 @@ var gather_progress_labels: Dictionary = {}
 var settlement: RefCounted
 var world_resource_state: RefCounted
 var runtime_seconds: float = 0.0
+
+func _rng() -> RandomNumberGenerator:
+	return _random if _random != null else null
 
 var terrain_height_query: Callable
 var cell_query: Callable
@@ -80,8 +82,9 @@ func find_forage_position(citizen: Node3D) -> Vector3:
 		if dist < closest_dist:
 			closest_dist = dist
 			hut = pos
-	var angle := randf_range(0.0, 2.0 * PI)
-	var radius := randf_range(2.5, 6.0)
+	var rng := _rng()
+	var angle := rng.randf_range(0.0, 2.0 * PI) if rng != null else randf_range(0.0, 2.0 * PI)
+	var radius := rng.randf_range(2.5, 6.0) if rng != null else randf_range(2.5, 6.0)
 	var spot := hut + Vector3(cos(angle) * radius, 0.0, sin(angle) * radius)
 	if terrain_height_query.is_valid():
 		var height: float = float(terrain_height_query.call(spot.x, spot.z, 0.0))
@@ -106,7 +109,9 @@ func harvest_wild_food(position: Vector3, worker: Node3D) -> String:
 			source.node.queue_free()
 			rabbit_sources.erase(cell)
 			rabbit_respawn_at[cell] = runtime_seconds + RABBIT_RESPAWN_SECONDS
-			return ResourceIds.HIDES if randf() < 0.35 else ResourceIds.FOOD
+			var rng2 := _rng()
+			var hide_roll := rng2.randf() if rng2 != null else randf()
+			return ResourceIds.HIDES if hide_roll < 0.35 else ResourceIds.FOOD
 	return ""
 
 func consume_grass_source(position: Vector3) -> int:

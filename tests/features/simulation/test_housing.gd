@@ -25,14 +25,14 @@ func _init() -> void:
 	simulation.pending_arrivals.append(interrupted_order)
 	simulation.arrival_greeters[resident.get_instance_id()] = interrupted_order
 	resident.idle()
-	simulation._requeue_interrupted_arrivals()
+	SimHelper.requeue_interrupted_arrivals(simulation)
 	assert(not bool(simulation.pending_arrivals[0].get("dispatched", false)))
-	simulation._cancel_arrivals_for_house(arrival_home)
+	SimHelper.cancel_arrivals_for_house(simulation, arrival_home)
 	assert(simulation.pending_arrivals.is_empty())
 
 	# No housing at start
 	assert(simulation.tent == null)
-	assert(simulation._total_housing_slots() == 0)
+	assert(SimHelper.total_housing_slots(simulation) == 0)
 
 	# Tent auto-assign: when a tent is completed, unhoused citizens are
 	# automatically assigned up to the tent's capacity.
@@ -44,9 +44,9 @@ func _init() -> void:
 	test_tent.set_meta("building_type", "tent")
 	test_tent.set_meta("housing_capacity", 4)
 	test_tent.set_meta("spawn_slots", 4)
-	var unhoused_before_tent: int = simulation._unhoused_citizen_count()
+	var unhoused_before_tent: int = SimHelper.unhoused_citizen_count(simulation)
 	assert(unhoused_before_tent == simulation.citizens.size())
-	simulation._house_initial_residents(test_tent)
+	SimHelper.house_initial_residents(simulation, test_tent)
 	var assigned := 0
 	for citizen in simulation.citizens:
 		if citizen.home == test_tent:
@@ -56,7 +56,7 @@ func _init() -> void:
 
 	# With 4 citizens and capacity 4, all slots are filled — order button disabled.
 	simulation.selected_house = test_tent
-	simulation._show_house_menu()
+	SimHelper.show_house_menu(simulation)
 	if simulation.citizens.size() >= 4:
 		assert(simulation.house_spawn_button.disabled)
 		assert(simulation.house_spawn_button.text == "No free beds")
@@ -65,23 +65,23 @@ func _init() -> void:
 		departed.home = null
 		test_tent.set_meta("spawn_slots", 1)
 		# Now order button should be active.
-		simulation._show_house_menu()
+		SimHelper.show_house_menu(simulation)
 		assert(not simulation.house_spawn_button.disabled)
 		# Order 1 resident — sets daily limit.
 		var slots_before_order := int(test_tent.get_meta("spawn_slots", 0))
-		simulation._spawn_house_citizen()
+		SimHelper.spawn_house_citizen(simulation)
 		assert(int(test_tent.get_meta("tent_order_day", -1)) == simulation.day_cycle.current_day)
 		assert(int(test_tent.get_meta("spawn_slots", 0)) == slots_before_order - 1)
 		# Second order same day is blocked.
-		simulation._show_house_menu()
+		SimHelper.show_house_menu(simulation)
 		assert(simulation.house_spawn_button.disabled)
 		assert(simulation.house_spawn_button.text == "Already ordered today")
 		var slots_after_order := int(test_tent.get_meta("spawn_slots", 0))
-		simulation._spawn_house_citizen()
+		SimHelper.spawn_house_citizen(simulation)
 		assert(int(test_tent.get_meta("spawn_slots", 0)) == slots_after_order)
 		# Next day: order allowed again (if slots remain).
 		simulation.day_cycle.current_day += 1
-		simulation._show_house_menu()
+		SimHelper.show_house_menu(simulation)
 		if slots_after_order > 0:
 			assert(not simulation.house_spawn_button.disabled)
 
@@ -90,7 +90,7 @@ func _init() -> void:
 	assert(not settle_btn.visible)
 
 	# Cleanup
-	simulation._cancel_arrivals_for_house(test_tent)
+	SimHelper.cancel_arrivals_for_house(simulation, test_tent)
 	for citizen in simulation.citizens:
 		if citizen.home == test_tent:
 			citizen.home = null

@@ -14,18 +14,18 @@ func _init() -> void:
 		assert(citizen.squad_state.squad_leader_id == hero.ai_id, "Squad leader must be hero")
 
 	# 2. Verify instant flag placement within radius
-	simulation._select_build_mode("settlement_flag")
+	SimHelper.select_build_mode(simulation, "settlement_flag")
 	assert(not simulation.build_mode.is_empty(), "Build mode should be settlement_flag")
 	
 	# Try placing too far (> 20 meters from hero)
 	var far_pos := hero.global_position + Vector3(50.0, 0.0, 0.0)
-	simulation._place_building(far_pos)
+	SimHelper.place_building(simulation, far_pos)
 	assert(not simulation.village_territory_service.has_flag(), "Flag placement far away should be blocked")
 
 	# Place near hero (5 meters from hero)
 	var valid_pos := hero.global_position + Vector3(5.0, 0.0, 0.0)
-	simulation._select_build_mode("settlement_flag")
-	simulation._place_building(valid_pos)
+	SimHelper.select_build_mode(simulation, "settlement_flag")
+	SimHelper.place_building(simulation, valid_pos)
 	assert(simulation.village_territory_service.has_flag(), "Flag should be instantly placed near hero")
 
 	# 3. Verify squad binding to settlement

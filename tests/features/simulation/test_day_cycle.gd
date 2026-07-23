@@ -16,17 +16,17 @@ func _init() -> void:
 	simulation.last_citizen_positions[staying_worker.get_instance_id()] = staying_position
 
 	# Skip-night buttons are only visible in overview mode, not first person.
-	simulation._toggle_hero_view()
+	SimHelper.toggle_hero_view(simulation)
 	assert(not simulation.is_first_person)
-	simulation._update_skip_night_button()
+	SimHelper.update_skip_night_button(simulation)
 	assert(simulation.skip_night_button.visible)
 	var citizen_count_before_midnight_skip: int = simulation.citizens.size()
-	simulation._skip_night()
+	SimHelper.skip_night(simulation)
 	assert(simulation.day_cycle.current_day == 2)
 	assert(simulation.clock.hour() == 6 and simulation.clock.minute() == 0)
 	assert(not simulation.skip_night_button.visible)
 	assert(simulation.start_workday_button.visible)
-	simulation._skip_to_workday_start()
+	SimHelper.skip_to_workday_start(simulation)
 	assert(simulation.clock.hour() == 8 and simulation.clock.minute() == 0)
 	assert(not simulation.start_workday_button.visible)
 	assert(simulation.citizens.size() == citizen_count_before_midnight_skip)
@@ -41,12 +41,12 @@ func _init() -> void:
 	staying_position = simulation.entrance_stone.global_position + Vector3(12.0, 0.0, 2.0)
 	staying_worker.global_position = staying_position
 	simulation.last_citizen_positions[staying_worker.get_instance_id()] = staying_position
-	simulation._update_skip_night_button()
+	SimHelper.update_skip_night_button(simulation)
 	assert(simulation.skip_night_button.visible)
 	outside_worker.global_position = simulation.entrance_stone.global_position + Vector3(10.0, 0.0, 0.0)
 	simulation.last_citizen_positions[outside_worker.get_instance_id()] = outside_worker.global_position
 	simulation.selected_builder = outside_worker
-	simulation._assign_daily_order(outside_worker, "courier")
+	SimHelper.assign_daily_order(simulation, outside_worker, "courier")
 	outside_worker.daily_order_workday_id = simulation.day_cycle.current_day
 	outside_worker.activate_overtime(simulation.day_cycle.current_day, "test")
 	simulation.courier_dispatcher.tasks.clear()
@@ -55,7 +55,7 @@ func _init() -> void:
 	assert(not outside_worker.is_player_controlled)
 	var money_before_outside_work: int = simulation.settlement.money
 	simulation.clock.set_time(9 * 60)
-	simulation._send_selected_resident_to_outside_work()
+	SimHelper.send_selected_resident_to_outside_work(simulation)
 	var outside_task: CourierTask = null
 	for task: CourierTask in simulation.courier_dispatcher.available_tasks():
 		if task.kind == CourierTask.Kind.OUTSIDE_WORK:
@@ -75,7 +75,7 @@ func _init() -> void:
 	outside_worker.overtime_until_workday_id = 0
 	outside_worker.daily_order_workday_id = simulation.day_cycle.current_day + 1
 	simulation.clock.set_time(21 * 60)
-	simulation._skip_night()
+	SimHelper.skip_night(simulation)
 	assert(simulation.clock.hour() == 6 and simulation.clock.minute() == 0)
 	assert(not simulation.skip_night_button.visible)
 	assert(staying_worker.global_position == staying_position)
@@ -87,12 +87,12 @@ func _init() -> void:
 
 	# Return outside workers and collect reward.
 	simulation.clock.set_time(9 * 60)
-	simulation._return_outside_workers()
+	SimHelper.return_outside_workers(simulation)
 	assert(not simulation.outside_workers.has(outside_worker.get_stable_id()))
 	assert(outside_worker.visible)
 	assert(simulation.settlement.money == money_before_outside_work + outside_reward)
 	var outside_return_position := outside_worker.global_position
-	simulation._guard_citizen_positions()
+	SimHelper.guard_citizen_positions(simulation)
 	assert(outside_worker.global_position == outside_return_position)
 
 	SimHelper.cleanup_simulation(self, simulation)

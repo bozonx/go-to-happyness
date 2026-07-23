@@ -40,18 +40,18 @@ func _init() -> void:
 	assert(simulation.hero_citizen.employment_state == Citizen.EmploymentState.NO_PERMANENT_WORK)
 	assert(simulation.is_first_person)
 	assert(simulation.player_citizen == simulation.hero_citizen)
-	assert(simulation._player_can_command_labor())
+	assert(SimHelper.player_can_command_labor(simulation))
 
 	# Build menu submenus
 	simulation.selected_builder = simulation.hero_citizen
-	simulation._refresh_build_menu()
+	SimHelper.refresh_build_menu(simulation)
 	assert(simulation.build_menu.daily_order_submenu_btn.visible)
 	assert(not simulation.build_menu.daily_order_submenu_btn.disabled)
 	assert(simulation.build_menu.job_submenu_btn.visible)
 	assert(not simulation.build_menu.job_submenu_btn.disabled)
-	simulation._open_job_submenu()
+	SimHelper.open_job_submenu(simulation)
 	assert(simulation.build_menu_is_job_menu)
-	simulation._open_daily_order_submenu()
+	SimHelper.open_daily_order_submenu(simulation)
 	assert(simulation.build_menu_is_daily_order_menu)
 
 	# Daily order role buttons visible and enabled
@@ -67,7 +67,7 @@ func _init() -> void:
 	assert(simulation.hero_citizen.daily_order_role == "construction")
 	assert(not simulation.build_menu_is_daily_order_menu)
 	simulation.selected_builder = simulation.hero_citizen
-	simulation._open_daily_order_submenu()
+	SimHelper.open_daily_order_submenu(simulation)
 	var cleaning_daily_button: Button = null
 	for button in simulation.build_menu.role_buttons:
 		if str(button.get_meta("submenu", "")) == "daily" and str(button.get_meta("role", "")) == "cleaning":
@@ -76,20 +76,20 @@ func _init() -> void:
 	assert(cleaning_daily_button != null)
 	assert(cleaning_daily_button.visible)
 	assert(not cleaning_daily_button.disabled)
-	simulation._close_assignment_submenu()
+	SimHelper.close_assignment_submenu(simulation)
 
 	# Officer appointment and delegation
 	SimHelper.appoint_test_official(simulation, simulation.hero_citizen)
 	var delegated_officer: Citizen = simulation.citizens[1]
 	SimHelper.appoint_test_official(simulation, delegated_officer)
-	assert(simulation._player_can_command_labor())
+	assert(SimHelper.player_can_command_labor(simulation))
 	SimHelper.appoint_test_official(simulation, simulation.hero_citizen)
-	assert(simulation._player_can_command_labor())
+	assert(SimHelper.player_can_command_labor(simulation))
 
 	# A daily order releases first-person control but does not break the permanent job.
 	simulation.selected_builder = simulation.hero_citizen
 	simulation.hero_citizen.set_player_controlled(true)
-	simulation._set_selected_work_role("gather_grass", true)
+	SimHelper.set_selected_work_role(simulation, "gather_grass", true)
 	assert(not simulation.hero_citizen.is_player_controlled)
 	assert(simulation.hero_citizen.employment_state == Citizen.EmploymentState.EMPLOYED)
 	assert(simulation.hero_citizen.permanent_role == "official")
@@ -110,7 +110,7 @@ func _init() -> void:
 		assert(is_finite(citizen.global_position.x) and is_finite(citizen.global_position.y) and is_finite(citizen.global_position.z))
 		assert(citizen.global_position.y > -1.0)
 		assert(citizen.get_children().any(func(child): return child is MeshInstance3D))
-		assert(citizen.global_position.distance_to(simulation._entrance_anchor_position()) < 5.0)
+		assert(citizen.global_position.distance_to(SimHelper.entrance_anchor_position(simulation)) < 5.0)
 		if not citizen.is_hero:
 			assert(citizen.specialization == "unassigned")
 			assert(citizen.employment_state == Citizen.EmploymentState.NO_PERMANENT_WORK)

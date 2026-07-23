@@ -1,5 +1,8 @@
 extends SceneTree
 
+const SimHelper = preload("res://tests/helpers/simulation_test_helper.gd")
+
+
 func _init() -> void:
 	var scene := load("res://game/bootstrap/settlement_game.tscn") as PackedScene
 	var simulation := scene.instantiate() as Node
@@ -16,7 +19,7 @@ func _init() -> void:
 
 	# open daily order submenu the same way the UI does
 	simulation.build_menu.visible = true
-	simulation._open_daily_order_submenu()
+	SimHelper.open_daily_order_submenu(simulation)
 	await process_frame
 
 	print("build_menu_is_daily_order_menu=", simulation.build_menu_is_daily_order_menu, " build_menu.visible=", simulation.build_menu.visible)

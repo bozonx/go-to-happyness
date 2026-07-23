@@ -10,13 +10,13 @@ func _init() -> void:
 	var campfire_position := Vector3(12.0, 0.0, 12.0)
 	var campfire_blueprint := BuildingBlueprints.get_blueprint("campfire")
 	simulation.building_registry.reserve(campfire_cell, campfire_position, campfire_blueprint.footprint)
-	simulation._create_construction_site(campfire_cell, "campfire", campfire_position, 0, campfire_blueprint, campfire_blueprint.footprint)
+	SimHelper.create_construction_site(simulation, campfire_cell, "campfire", campfire_position, 0, campfire_blueprint, campfire_blueprint.footprint)
 
 	var tent_cell := Vector2i(14, 14)
 	var tent_position := Vector3(14.0, 0.0, 14.0)
 	var tent_blueprint := BuildingBlueprints.get_blueprint("tent")
 	simulation.building_registry.reserve(tent_cell, tent_position, tent_blueprint.footprint)
-	simulation._create_construction_site(tent_cell, "tent", tent_position, 0, tent_blueprint, tent_blueprint.footprint)
+	SimHelper.create_construction_site(simulation, tent_cell, "tent", tent_position, 0, tent_blueprint, tent_blueprint.footprint)
 
 	assert(simulation.construction_sites.size() == 2)
 
@@ -33,7 +33,7 @@ func _init() -> void:
 	simulation.settlement.add("branches", 20)
 	simulation.settlement.add("grass", 20)
 
-	simulation._update_couriers()
+	SimHelper.update_couriers(simulation)
 	var construction_tasks: Array[CourierTask] = simulation.courier_dispatcher.available_tasks().filter(
 		func(task: CourierTask) -> bool: return task.kind == CourierTask.Kind.CONSTRUCTION
 	)
@@ -53,7 +53,7 @@ func _init() -> void:
 		var stored: int = simulation.settlement.warehouse_amount(resource_type, 0)
 		simulation.settlement.warehouses[0].set_amount(resource_type, 0)
 		simulation.settlement.warehouses[1].set_amount(resource_type, stored)
-	simulation._update_couriers()
+	SimHelper.update_couriers(simulation)
 	construction_tasks = simulation.courier_dispatcher.available_tasks().filter(
 		func(task: CourierTask) -> bool: return task.kind == CourierTask.Kind.CONSTRUCTION
 	)
@@ -65,7 +65,7 @@ func _init() -> void:
 	simulation.warehouse_positions.remove_at(0)
 	simulation.settlement.warehouses.remove_at(0)
 	simulation.settlement.warehouse_types.remove_at(0)
-	simulation._update_couriers()
+	SimHelper.update_couriers(simulation)
 	construction_tasks = simulation.courier_dispatcher.available_tasks().filter(
 		func(task: CourierTask) -> bool: return task.kind == CourierTask.Kind.CONSTRUCTION
 	)
@@ -80,7 +80,7 @@ func _init() -> void:
 	courier.global_position = fallback_warehouse
 	courier.idle()
 	courier.set_courier_equipment("reinforced_backpack")
-	simulation._assign_daily_order(courier, "courier")
+	SimHelper.assign_daily_order(simulation, courier, "courier")
 	var branch_delivery_completed := false
 	for _frame in range(1200):
 		await physics_frame
