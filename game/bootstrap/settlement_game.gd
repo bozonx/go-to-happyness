@@ -108,6 +108,7 @@ const EventLogScript = preload("res://game/features/events/domain/event_log.gd")
 const EventContextScript = preload("res://game/features/events/domain/event_context.gd")
 const EventOutcomeScript = preload("res://game/features/events/domain/event_outcome.gd")
 const TentEraEventsScript = preload("res://game/features/events/application/tent_era_events.gd")
+const SurvivalEventControllerScript = preload("res://game/features/events/presentation/survival_event_controller.gd")
 const VillageTerritoryServiceScript = preload("res://game/features/buildings/application/village_territory_service.gd")
 const DigSiteScene = preload("res://game/features/world/presentation/dig_site.tscn")
 const ExcavationServiceScript = preload("res://game/features/production/application/excavation_service.gd")
@@ -645,6 +646,7 @@ var hero_interaction_service: HeroInteractionService
 var workplace_labor_service: WorkplaceLaborService
 var building_visuals_service: BuildingVisualsService
 var actuator_bridge: RefCounted
+var survival_event_controller: SurvivalEventController
 
 
 func _ready() -> void:
@@ -1236,6 +1238,9 @@ func _ready() -> void:
 	player_controller = PlayerController.new()
 	add_child(player_controller)
 	player_controller.setup(self)
+	survival_event_controller = SurvivalEventControllerScript.new()
+	add_child(survival_event_controller)
+	survival_event_controller.setup(self)
 	ui_manager = UIManagerScene.instantiate() as UIManager
 	add_child(ui_manager)
 	ui_manager.setup(self)
@@ -2400,223 +2405,52 @@ func _create_context_menu_panel(ui: CanvasLayer, anchor: int, offsets: Vector4, 
 
 
 func _maybe_present_survival_decision() -> void:
-	if decision_menu == null or decision_menu.visible:
-		return
-	if event_service == null or event_service.has_pending():
-		return
-	var ctx := _build_event_context()
-	var event_def := event_service.roll_daily_event(ctx, random)
-	if event_def == null:
-		return
-	_show_event_decision(event_def)
-
-
-func _show_event_decision(event_def: GameEventDef) -> void:
-	var choice_labels: Array[String] = []
-	for choice in event_def.choices:
-		choice_labels.append(choice.label)
-	decision_menu.show_event(event_def.title, event_def.description, choice_labels)
+	if survival_event_controller != null:
+		survival_event_controller.maybe_present_survival_decision()
 
 
 func _resolve_event_decision(choice_index: int) -> void:
-	if event_service == null or not event_service.has_pending():
-		decision_menu.visible = false
-		return
-	var ctx := _build_event_context()
-	var outcomes: Array[EventOutcome] = event_service.resolve_choice(choice_index, ctx, random)
-	for outcome in outcomes:
-		_apply_event_outcome(outcome)
-	decision_menu.visible = false
+	if survival_event_controller != null:
+		survival_event_controller.resolve_event_decision(choice_index)
 
 
 func _build_event_context() -> EventContext:
-	var res := {
-		"food": settlement.amount(ResourceIds.FOOD),
-		"water": settlement.amount(ResourceIds.WATER),
-		"branches": settlement.amount(ResourceIds.BRANCHES),
-		"grass": settlement.amount(ResourceIds.GRASS),
-		"wood": settlement.amount(ResourceIds.WOOD),
-		"stone": settlement.amount(ResourceIds.STONE),
-		"hides": settlement.amount(ResourceIds.HIDES),
-		"goods": settlement.goods,
-		"tarp": settlement.tarp,
-		"logs": settlement.logs,
-	}
-	var flags: Dictionary = {}
-	if event_service != null and event_service.log != null:
-		flags = event_service.log.flags.duplicate()
-	return EventContextScript.create(
-		settlement.era,
-		day_cycle.current_day,
-		tent_weather,
-		res,
-		settlement.wellbeing,
-		citizens.size(),
-		flags,
-	)
+	if survival_event_controller != null:
+		return survival_event_controller.build_event_context()
+	return EventContextScript.create(0, 1, 0, {}, 0, 0, {})
 
 
 func _apply_event_outcome(outcome: EventOutcome) -> void:
-	match outcome.kind:
-		EventOutcome.Kind.MESSAGE:
-			if not outcome.text.is_empty():
-				_add_message(outcome.text)
-		EventOutcome.Kind.RESOURCE_CHANGE:
-			settlement.add(outcome.resource, outcome.amount)
-		EventOutcome.Kind.WELLBEING_CHANGE:
-			settlement.wellbeing = clampi(settlement.wellbeing + outcome.wellbeing_delta, 0, 100)
-		EventOutcome.Kind.WORKER_BUSY:
-			_assign_survival_busy_worker(outcome.worker_busy_hours, outcome.worker_busy_label)
-		EventOutcome.Kind.SET_FLAG:
-			pass
-		EventOutcome.Kind.DELAYED:
-			pass
-
-
-func _assign_survival_busy_worker(hours: float, status_label: String) -> void:
-	var candidates: Array[Citizen] = []
-	for citizen in citizens:
-		if is_instance_valid(citizen) and not citizen.is_hero and not citizen.is_player_controlled:
-			candidates.append(citizen)
-	if candidates.is_empty():
-		return
-	var worker: Citizen = candidates[random.randi_range(0, candidates.size() - 1)]
-	if citizen_ai != null:
-		citizen_ai.cancel_citizen_work(worker.ai_id)
-	worker.cancel_current_action()
-	worker.set_player_controlled(true)
-	worker.set_status_effect(&"survival_assignment", status_label, 1.0, hours)
-	survival_busy_until[worker.ai_id] = _total_game_minutes() + hours * 60.0
+	if survival_event_controller != null:
+		survival_event_controller.apply_event_outcome(outcome)
 
 
 func _update_survival_busy_workers() -> void:
-	for worker_id in survival_busy_until.keys().duplicate():
-		if _total_game_minutes() < float(survival_busy_until[worker_id]):
-			continue
-		var worker := _citizen_for_ai_id(int(worker_id))
-		if is_instance_valid(worker):
-			worker.set_player_controlled(false)
-			worker.clear_status_effect(&"survival_assignment")
-			worker.idle()
-		survival_busy_until.erase(worker_id)
-		_update_workers()
+	if survival_event_controller != null:
+		survival_event_controller.update_survival_busy_workers()
+
 
 func _can_skip_night() -> bool:
-	if _has_active_night_work_order():
-		return false
-	var hour := clock.hour()
-	return hour >= 8 + settlement.workday_hours or hour < 6
+	return survival_event_controller.can_skip_night() if survival_event_controller != null else false
 
 
 func _can_skip_to_workday_start() -> bool:
-	if _has_active_night_work_order():
-		return false
-	var hour := clock.hour()
-	return hour >= 6 and hour < 8
+	return survival_event_controller.can_skip_to_workday_start() if survival_event_controller != null else false
 
 
 func _update_skip_night_button() -> void:
-	if time_controls_panel != null:
-		time_controls_panel.update_skip_buttons(_can_skip_night(), _can_skip_to_workday_start(), is_first_person)
-
-
-func _skip_night_survival_hours() -> Array[Dictionary]:
-	var result: Array[Dictionary] = []
-	var current_hour := clock.hour()
-	var first_hour := current_hour if clock.minute() == 0 else posmod(current_hour + 1, 24)
-	if current_hour >= 6 and current_hour < 22:
-		first_hour = 22
-	var offset := 0
-	while offset < 24:
-		var hour := posmod(first_hour + offset, 24)
-		if hour == 6:
-			break
-		var survival_day := day_cycle.current_day
-		if current_hour >= 6 and hour < current_hour:
-			survival_day += 1
-		result.append({"day": survival_day, "hour": hour})
-		offset += 1
-	return result
+	if survival_event_controller != null:
+		survival_event_controller.update_skip_night_button()
 
 
 func _skip_night() -> void:
-	if not _can_skip_night():
-		_update_skip_night_button()
-		return
-	# Skipping time must not teleport workers to the entrance. Their current
-	# locations are valid even when the morning scheduler assigns fresh work.
-	var positions: Dictionary = {}
-	for citizen in citizens:
-		if is_instance_valid(citizen) and not outside_workers.has(citizen.get_stable_id()):
-			positions[citizen.get_stable_id()] = citizen.global_position
-	var target_day := day_cycle.current_day + (1 if clock.hour() >= 6 else 0)
-	settlement_survival_service.is_skipping_night = true
-	settlement_survival_service.skip_zero_wellbeing_departure_applied = false
-	for survival_hour in _skip_night_survival_hours():
-		_apply_hourly_tent_survival(int(survival_hour.hour), int(survival_hour.day))
-	settlement_survival_service.is_skipping_night = false
-	day_cycle.current_day = target_day
-	tent_weather = TentEraSurvivalRulesScript.weather_for_day(day_cycle.current_day)
-	clock.set_time(6 * 60)
-	# Living through the night crosses 06:00, when the daily water/food sink runs and
-	# frees storage. Skipping must apply the same rules, otherwise stores stay full,
-	# no production is assignable, and workers have nothing to wake up for.
-	_refresh_living_statuses()
-	_apply_daily_settlement_rules()
-	# A skipped night has no intervening movement frames for a departing resident.
-	# Remove dawn departures immediately so the simulated result matches elapsed time.
-	for citizen in citizens.duplicate():
-		if is_instance_valid(citizen) and citizen.state == Citizen.State.LEAVING:
-			_on_citizen_leaving_departed(citizen)
-	_return_outside_workers()
-	_apply_skip_night_incident()
-	_update_workers()
-	for citizen in citizens:
-		if is_instance_valid(citizen) and positions.has(citizen.get_stable_id()):
-			citizen.global_position = positions[citizen.get_stable_id()]
-			citizen.velocity = Vector3.ZERO
-			last_citizen_positions[citizen.get_stable_id()] = citizen.global_position
-	if citizen_ai != null:
-		citizen_ai.request_decision_refresh()
-	_update_skip_night_button()
-	_update_daylight()
-	_update_house_lights()
-	_update_interface("Skipped the night. Morning begins at 06:00.")
+	if survival_event_controller != null:
+		survival_event_controller.skip_night()
 
 
 func _skip_to_workday_start() -> void:
-	if not _can_skip_to_workday_start():
-		_update_skip_night_button()
-		return
-	day_cycle.set_to_workday_start()
-	_handle_day_cycle_event(SimulationDayEvent.new(SimulationDayEvent.Kind.WORKDAY_STARTED, 8))
-	if citizen_ai != null:
-		citizen_ai.request_decision_refresh()
-	_update_skip_night_button()
-	_update_daylight()
-	_update_house_lights()
-	_update_interface("Workday starts at 08:00.")
-
-
-func _apply_skip_night_incident() -> void:
-	var incidents := [
-		{"resource": ResourceIds.FOOD, "min": 3, "max": 5, "message": "Night scavengers took %d food."},
-		{"resource": ResourceIds.GRASS, "min": 10, "max": 15, "message": "A stray animal ate %d grass."},
-		{"resource": ResourceIds.BRANCHES, "min": 5, "max": 8, "message": "Wind scattered %d branches."},
-		{"resource": "gloves", "min": 20, "max": 20, "message": "Night scavengers damaged a glove set by %d%%."},
-	]
-	var incident: Dictionary = incidents[random.randi_range(0, incidents.size() - 1)]
-	if str(incident.resource) == "gloves":
-		var gloves: Dictionary = settlement.equipment.get(ResourceIds.CONSTRUCTION_GLOVES, {})
-		if int(gloves.get("sets", 0)) > 0:
-			gloves["active_durability"] = maxf(0.0, float(gloves.get("active_durability", 100.0)) - float(incident.max))
-			settlement.equipment[ResourceIds.CONSTRUCTION_GLOVES] = gloves
-			_add_message(str(incident.message) % int(incident.max))
-		return
-	var amount := mini(settlement.amount(str(incident.resource)), random.randi_range(int(incident.min), int(incident.max)))
-	if amount > 0:
-		settlement.add(str(incident.resource), -amount)
-		_add_message(str(incident.message) % amount)
+	if survival_event_controller != null:
+		survival_event_controller.skip_to_workday_start()
 
 
 func _set_workday_hours(hours: int) -> void:
