@@ -20,6 +20,19 @@ func _init() -> void:
 	assert(simulation.citizen_needs_service != null)
 	assert(simulation.citizen_ai.director.provider_count() == 10)
 
+	# Natural objects are owned by the terrain scene but retain their registered
+	# source records, so moving presentation ownership cannot make them inert.
+	var landscape_objects := simulation.get_node("Terrain3dWorld/LandscapeObjects") as Node3D
+	assert(not simulation.tree_nodes.is_empty())
+	assert(not simulation.grass_sources.is_empty())
+	assert(not simulation.forage_sources.is_empty())
+	assert(not simulation.rabbit_sources.is_empty())
+	assert(simulation.tree_nodes.values()[0].get_parent() == landscape_objects)
+	assert((simulation.grass_sources.values()[0] as GrassSourceRecord).node.get_parent() == landscape_objects)
+	assert((simulation.forage_sources.values()[0] as ForageSourceRecord).node.get_parent() == landscape_objects)
+	assert((simulation.rabbit_sources.values()[0] as RabbitSourceRecord).node.get_parent() == landscape_objects)
+	assert(simulation.resource_piles.any(func(pile): return pile.node.get_parent() == landscape_objects))
+
 	# Hero citizen
 	assert(is_instance_valid(simulation.hero_citizen))
 	assert(simulation.hero_citizen.is_hero)

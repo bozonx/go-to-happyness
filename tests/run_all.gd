@@ -11,6 +11,7 @@ const TestAIFrameworkScript = preload("res://tests/ai/test_ai_framework.gd")
 const TestAINeedsScript = preload("res://tests/ai/test_ai_needs.gd")
 const TestAIWorkProvidersScript = preload("res://tests/ai/test_ai_work_providers.gd")
 const TestAILogisticsScript = preload("res://tests/ai/test_ai_logistics.gd")
+const TestAIDomainScript = preload("res://tests/ai/test_ai_domain.gd")
 
 
 const TestSaveLoadScript = preload("res://tests/test_save_load.gd")
@@ -40,6 +41,7 @@ func _init() -> void:
 	TestAINeedsScript.run_all()
 	TestAIWorkProvidersScript.run_all()
 	TestAILogisticsScript.run_all()
+	TestAIDomainScript.run_all()
 	print("  => AI Unit Tests PASSED.")
 
 	print("\n==================================================")

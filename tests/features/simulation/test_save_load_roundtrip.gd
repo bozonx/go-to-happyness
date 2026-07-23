@@ -48,6 +48,8 @@ func _init() -> void:
 	var restored_tree: Node3D = sim_b.tree_nodes[depleted_cell]
 	assert(int(restored_tree.get_meta("remaining_branches", -1)) == 3, "branch depletion not restored")
 	assert(int(restored_tree.get_meta("hand_branches", -1)) == 2, "hand branches not restored")
+	var landscape_objects := sim_b.get_node("Terrain3dWorld/LandscapeObjects")
+	assert(sim_b.resource_piles.any(func(pile): return bool(pile.node.get_meta("landscape_owned", false)) and pile.node.get_parent() == landscape_objects), "starter world loot must return to the terrain hierarchy")
 
 	SimHelper.cleanup_simulation(self, sim_b)
 	print("  => Save/Load Round-Trip Test PASSED!")

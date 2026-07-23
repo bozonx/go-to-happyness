@@ -55,3 +55,5 @@ collision_mode = 3
 mesh_size = 64
 top_level = true
 metadata/_edit_lock_ = true
+
+[node name="LandscapeObjects" type="Node3D" parent="."]

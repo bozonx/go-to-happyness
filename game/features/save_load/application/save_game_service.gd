@@ -121,6 +121,7 @@ static func save_game(game: Node, path: String = QUICKSAVE_PATH) -> bool:
 					"resources": pile.resources.duplicate(true),
 					"position": SaveDataScript.vector3_to_dict(pile.node.global_position),
 					"is_backpack": pile.is_backpack,
+					"landscape_owned": bool(pile.node.get_meta("landscape_owned", false)),
 				})
 	save_data.resource_piles_state = piles_list
 

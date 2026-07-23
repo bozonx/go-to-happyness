@@ -2108,6 +2108,17 @@ func _create_world() -> void:
 	_move_selection(Vector3.ZERO)
 
 
+## Presentation ownership boundary for naturally occurring world objects.
+## Their mutable gameplay records remain registered with the relevant feature
+## services; reparenting them here must not change routing or resource logic.
+func add_landscape_object(node: Node) -> void:
+	var territory := get_node_or_null("Terrain3dWorld") as TerritoryBase
+	if territory != null:
+		territory.add_landscape_object(node)
+	else:
+		add_child(node)
+
+
 func _update_trail_overlay() -> void:
 	if trail_overlay_material == null or trail_field == null:
 		return
@@ -6220,6 +6231,9 @@ func restore_from_save_data(save_data: SaveDataScript) -> bool:
 			continue
 		var pos = SaveDataScript.dict_to_vector3(p_dict.get("position", {}))
 		var pile_node := _create_resource_pile(pos, resources, bool(p_dict.get("is_backpack", false)))
+		if pile_node != null and bool(p_dict.get("landscape_owned", false)):
+			pile_node.set_meta("landscape_owned", true)
+			add_landscape_object(pile_node)
 		if bool(p_dict.get("is_backpack", false)):
 			backpack_node = pile_node
 

@@ -566,5 +566,3 @@ func register_completed_building_type_features(building_type: String, building: 
 				_add_building_selector.call(building, "materials_factory_selector", blueprint.footprint)
 		"boundary_post":
 			_add_building_selector.call(building, "building_selector", blueprint.footprint)
-
-

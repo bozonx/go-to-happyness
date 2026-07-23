@@ -54,7 +54,7 @@ func create_ponds() -> void:
 func _create_pond_visual(center: Vector3) -> void:
 	var pond: Node3D = PondScene.instantiate()
 	pond.position = center
-	simulation.add_child(pond)
+	simulation.add_landscape_object(pond)
 	
 	# Ponds and excavated terrain are part of the same routing obstacle map.
 	for x in range(-2, 3):
@@ -75,7 +75,7 @@ func _create_tree(position_on_board: Vector3, refresh_navigation := true) -> voi
 	
 	var cell: Vector2i = simulation._cell_from_position(position_on_board)
 	simulation.tree_nodes[cell] = tree
-	simulation.add_child(tree)
+	simulation.add_landscape_object(tree)
 	
 	# Add the tree interaction selector group so first-person raycast can find it.
 	var interaction_selector := tree.get_node_or_null("TreeInteractionSelector") as Area3D
@@ -103,7 +103,7 @@ func _create_grass_sources_near_tree(tree_cell: Vector2i) -> void:
 		var position: Vector3 = simulation._cell_center(cell)
 		var node: MeshInstance3D = GrassSourceScene.instantiate()
 		node.position = position + Vector3.UP * 0.05
-		simulation.add_child(node)
+		simulation.add_landscape_object(node)
 		var initial_remaining: int = simulation.random.randi_range(2, 5)
 		simulation.grass_sources[cell] = GrassSourceRecord.new(node, initial_remaining, initial_remaining)
 
@@ -116,7 +116,7 @@ func _create_forage_sources_near_tree(tree_cell: Vector2i) -> void:
 		var node: Node3D = ForageSourceScene.instantiate()
 		node.position = simulation._cell_center(cell) + Vector3.UP * 0.05
 		simulation._add_selector_to_node(node, "forage_selector", Vector3(0.5, 0.5, 0.5), Vector3.UP * 0.25)
-		simulation.add_child(node)
+		simulation.add_landscape_object(node)
 		simulation.forage_sources[cell] = ForageSourceRecord.new(node)
 
 
@@ -143,7 +143,7 @@ func _create_firefly_cluster(cluster_name: String, cells: Array, amount_count: i
 	fireflies_node.swarm_radius = radius
 	fireflies_node.swarm_height = height
 	fireflies_node.minimum_height = 0.45
-	simulation.add_child(fireflies_node)
+	simulation.add_landscape_object(fireflies_node)
 	simulation.fireflies.append(fireflies_node)
 
 
@@ -174,7 +174,13 @@ func spawn_trash_piles() -> void:
 		var cell: Vector2i = trash_cells[i]
 		if not simulation._is_board_cell(cell) or simulation.terrain_blocked_cells.has(cell):
 			continue
-		simulation._create_resource_pile(simulation._cell_center(cell), trash_contents[i])
+		var pile: Node3D = simulation._create_resource_pile(simulation._cell_center(cell), trash_contents[i]) as Node3D
+		# These are authored world loot, unlike piles dropped by citizens or
+		# logistics. Keep their visuals under the territory while the logistics
+		# service continues to own their resource record.
+		if pile != null:
+			pile.set_meta("landscape_owned", true)
+			simulation.add_landscape_object(pile)
 
 
 func spawn_initial_rabbits() -> void:
@@ -192,7 +198,7 @@ func _spawn_rabbit_near_tree(tree_cell: Vector2i) -> void:
 		var node: MeshInstance3D = RabbitScene.instantiate()
 		node.position = simulation._cell_center(cell) + Vector3.UP * 0.16
 		simulation._add_selector_to_node(node, "rabbit_selector", Vector3(0.5, 0.4, 0.5), Vector3.UP * 0.2)
-		simulation.add_child(node)
+		simulation.add_landscape_object(node)
 		simulation.rabbit_sources[cell] = RabbitSourceRecord.new(node, Vector3(simulation.random.randf_range(-1.0, 1.0), 0.0, simulation.random.randf_range(-1.0, 1.0)).normalized())
 
 
