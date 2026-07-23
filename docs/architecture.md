@@ -180,10 +180,10 @@ headless entries remain `tests/test_domain.gd`, `tests/test_ai.gd`,
 `tests/test_materials_yard.gd` and `tests/test_startup.gd` until they are moved
 alongside their new test categories.
 
-Run the domain checks with:
+Run the domain and master unit checks with:
 
 ```sh
-godot --headless --path . --script res://tests/test_domain.gd
+godot --headless --path . --script res://tests/run_all.gd
 ```
 
 Run AI and materials-yard checks when changing citizens, orders, workforce,
@@ -191,5 +191,5 @@ logistics or early gathering:
 
 ```sh
 godot --headless --path . --script res://tests/test_ai.gd
-godot --headless --path . --script res://tests/test_materials_yard.gd
+godot --headless --path . --script res://tests/features/construction/test_materials_yard.gd --quit-after 300
 ```

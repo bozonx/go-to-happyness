@@ -75,35 +75,92 @@ func get_test_results(params: Dictionary) -> Dictionary:
 	return {"data": _runner.get_results(verbose)}
 
 
+class McpScriptWrapperSuite extends McpTestSuite:
+	var _name: String = ""
+	var _script: Script = null
+
+	func _init(p_name: String, p_script: Script) -> void:
+		_name = p_name
+		_script = p_script
+
+	func suite_name() -> String:
+		return _name
+
+	func test_execute() -> void:
+		assert_true(_script != null, "Script must not be null")
+		if _script.has_script_method("run_all"):
+			_script.call("run_all")
+		elif _script.can_instantiate():
+			var inst = _script.new()
+			if inst != null and not (inst is RefCounted):
+				if inst is Node:
+					inst.free()
+				elif inst is SceneTree:
+					# Tree script executed _init
+					pass
+				else:
+					inst.free()
+
+
 func _discover_suites() -> Dictionary:
 	## Returns {"suites": Array, "errors": Array[String]}.
 	## Resilient: a broken script doesn't kill discovery of the rest.
 	var suites := []
 	var errors: Array[String] = []
-	var dir := DirAccess.open("res://tests")
-	if dir == null:
-		return {"suites": suites, "errors": ["DirAccess.open('res://tests') returned null — directory may not exist"]}
+	var test_files: Array[String] = []
+	_collect_test_files("res://tests", test_files)
 
-	dir.list_dir_begin()
-	var file_name := dir.get_next()
-	while not file_name.is_empty():
-		if file_name.begins_with("test_") and file_name.ends_with(".gd"):
-			var path := "res://tests/" + file_name
-			var script = ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE)
-			if script == null:
-				errors.append("%s (load failed — check for parse errors or duplicate methods)" % file_name)
-			elif script.can_instantiate():
-				var instance = script.new()
-				if instance is McpTestSuite:
-					suites.append(instance)
-				else:
-					errors.append("%s (not a McpTestSuite subclass)" % file_name)
+	if test_files.is_empty():
+		return {"suites": suites, "errors": ["No test files found in res://tests"]}
+
+	for path in test_files:
+		var rel_path := path.trim_prefix("res://tests/")
+		if rel_path.ends_with("test_ai_helpers.gd") or rel_path.ends_with("run_all.gd"):
+			continue
+		var script = ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE)
+		if script == null:
+			errors.append("%s (load failed — check for parse errors or duplicate methods)" % rel_path)
+			continue
+
+		var suite_name := rel_path.get_basename()
+		if script.can_instantiate():
+			var instance = script.new()
+			if instance is McpTestSuite:
+				suites.append(instance)
 			else:
-				errors.append("%s (cannot instantiate — abstract or broken)" % file_name)
-		file_name = dir.get_next()
+				if instance != null and not (instance is RefCounted):
+					if instance is Node:
+						instance.free()
+					elif instance is SceneTree:
+						pass
+					else:
+						instance.free()
+				suites.append(McpScriptWrapperSuite.new(suite_name, script))
+		elif script.has_script_method("run_all"):
+			suites.append(McpScriptWrapperSuite.new(suite_name, script))
+		else:
+			errors.append("%s (cannot instantiate — abstract or broken)" % rel_path)
 
 	## Sort by suite name for deterministic order.
 	suites.sort_custom(func(a, b) -> bool:
 		return a.suite_name() < b.suite_name()
 	)
 	return {"suites": suites, "errors": errors}
+
+
+func _collect_test_files(dir_path: String, out_paths: Array[String]) -> void:
+	var dir := DirAccess.open(dir_path)
+	if dir == null:
+		return
+	dir.list_dir_begin()
+	var file_name := dir.get_next()
+	while not file_name.is_empty():
+		if file_name == "." or file_name == "..":
+			file_name = dir.get_next()
+			continue
+		var full_path := dir_path.path_join(file_name)
+		if dir.current_is_dir():
+			_collect_test_files(full_path, out_paths)
+		elif file_name.begins_with("test_") and file_name.ends_with(".gd"):
+			out_paths.append(full_path)
+		file_name = dir.get_next()

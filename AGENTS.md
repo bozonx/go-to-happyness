@@ -63,32 +63,32 @@ See `docs/architecture.md` and `design_docs/citizen_ai.md` before modifying AI b
 
 ## Running tests and headless Godot
 
-### Deterministic domain tests
+### Master & Domain Unit Tests
 
 ```sh
+godot --headless --path . --script res://tests/run_all.gd
 godot --headless --path . --script res://tests/test_domain.gd
 godot --headless --path . --script res://tests/test_ai.gd
-godot --headless --path . --script res://tests/test_navigation_performance.gd
 ```
 
-These tests extend `SceneTree`, run in `_init()`, call `quit(0)`, and do not `await` frame events.
+These tests run deterministically in `_init()`, call `quit(0)`, and do not `await` frame events.
 
-### Scene smoke tests (require frame processing)
+### Feature Scene Smoke Tests (require frame processing)
 
 ```sh
-godot --headless --path . --script res://tests/test_startup.gd --quit-after 300
-godot --headless --path . --script res://tests/test_materials_yard.gd --quit-after 300
+godot --headless --path . --script res://tests/features/simulation/test_startup.gd --quit-after 300
+godot --headless --path . --script res://tests/features/construction/test_materials_yard.gd --quit-after 300
 ```
 
-### Why scene tests need `--quit-after`
+### Recommended Test Runner
 
-Tests that instantiate the main scene use `await process_frame` / `await physics_frame` to let the scene settle. In headless mode with `--script`, Godot only advances the main loop when the engine knows when to stop. Without `--quit-after`, the process suspends on the first awaited frame and never resumes, appearing to hang.
+Use the consolidated test runner script:
 
-Adding `--quit-after <frames>` tells the engine to run the loop for a bounded number of frames, so awaited frame signals resolve and the script reaches `quit(0)`.
+```sh
+./scripts/run_tests.sh
+```
 
-### Recommended test runner
-
-Wrap tests in `timeout` to avoid runaway hangs during experimentation:
+Or run individual tests with `timeout`:
 
 ```sh
 run_test() {
@@ -102,11 +102,9 @@ run_test() {
   fi
 }
 
-run_test res://tests/test_domain.gd
-run_test res://tests/test_ai.gd
-run_test res://tests/test_navigation_performance.gd
-run_test res://tests/test_startup.gd 300
-run_test res://tests/test_materials_yard.gd 300
+run_test res://tests/run_all.gd
+run_test res://tests/features/simulation/test_startup.gd 300
+run_test res://tests/features/construction/test_materials_yard.gd 300
 ```
 
 Use a frame budget generous enough for the slowest machine running CI; 300 frames is enough for the current smoke tests.

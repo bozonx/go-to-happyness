@@ -3,6 +3,7 @@ extends RefCounted
 
 const BuildingAvailabilityServiceScript = preload("res://game/features/buildings/application/building_availability_service.gd")
 const BuildingResearchServiceScript = preload("res://game/features/buildings/application/building_research_service.gd")
+const BuildingQueueServiceScript = preload("res://game/features/citizens/application/building_queue_service.gd")
 
 
 static func run_all() -> void:
@@ -20,6 +21,10 @@ static func run_all() -> void:
 	_test_building_research_service()
 	_test_research_mechanics()
 	_test_flag_and_campfire_progression_flow()
+	_test_building_queue_multiple_entrances()
+	_test_building_queue_keeps_assigned_entrance()
+	_test_building_queue_keeps_ai_citizens()
+	_test_construction_site_uses_building_entrance()
 
 
 static func _test_sawmill_rules() -> void:
@@ -351,4 +356,139 @@ static func _test_flag_and_campfire_progression_flow() -> void:
 
 	# Inside campfire/village territory: tent is now allowed!
 	assert(territory_service.placement_reason("tent", Vector2i(1, 1)) == VillageTerritoryService.REASON_OK)
+
+
+static func _test_building_queue_multiple_entrances() -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	var scene_root: Node = tree.root if tree else Node3D.new()
+	var registry := BuildingRegistry.new()
+	var building := Node3D.new()
+	building.position = Vector3(1.5, 0.0, 1.5)
+	scene_root.add_child(building)
+	var first_entrance := Vector3(2.5, 0.0, 1.5)
+	var second_entrance := Vector3(0.5, 0.0, 1.5)
+	building.set_meta("service_positions", [first_entrance, second_entrance])
+	building.set_meta("service_position", first_entrance)
+	registry.reserve(Vector2i(1, 1), building.position, Vector2i.ONE)
+	registry.attach_node(Vector2i(1, 1), building)
+	var grid := NavGrid.new()
+	grid.configure(1.0, 12)
+	var queues = BuildingQueueServiceScript.new()
+	queues.configure(registry, grid)
+
+	var alpha := Node3D.new()
+	var beta := Node3D.new()
+	scene_root.add_child(alpha)
+	scene_root.add_child(beta)
+	var alpha_result := queues.resolve(alpha, first_entrance)
+	var beta_result := queues.resolve(beta, first_entrance)
+	assert(alpha_result.is_head)
+	assert(beta_result.position.is_equal_approx(second_entrance), "Second citizen should queue at the less loaded entrance")
+	assert(beta_result.is_head, "The first arrival at an empty entrance should be its head")
+
+	queues.release(alpha)
+	queues.release(beta)
+	alpha.free()
+	beta.free()
+	scene_root.remove_child(building)
+	building.free()
+
+
+static func _test_building_queue_keeps_assigned_entrance() -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	var scene_root: Node = tree.root if tree else Node3D.new()
+	var registry := BuildingRegistry.new()
+	var building := Node3D.new()
+	building.position = Vector3(1.5, 0.0, 1.5)
+	scene_root.add_child(building)
+	var first_entrance := Vector3(2.5, 0.0, 1.5)
+	var second_entrance := Vector3(0.5, 0.0, 1.5)
+	building.set_meta("service_positions", [first_entrance, second_entrance])
+	building.set_meta("service_position", first_entrance)
+	registry.reserve(Vector2i(1, 1), building.position, Vector2i.ONE)
+	registry.attach_node(Vector2i(1, 1), building)
+	var grid := NavGrid.new()
+	grid.configure(1.0, 12)
+	var queues = BuildingQueueServiceScript.new()
+	queues.configure(registry, grid)
+
+	var alpha := Node3D.new()
+	var beta := Node3D.new()
+	scene_root.add_child(alpha)
+	scene_root.add_child(beta)
+	queues.resolve(alpha, first_entrance)
+	queues.resolve(beta, second_entrance)
+	var alpha_result := queues.resolve(alpha, first_entrance)
+	var beta_result := queues.resolve(beta, second_entrance)
+	assert(alpha_result.position.is_equal_approx(first_entrance))
+	assert(beta_result.position.is_equal_approx(second_entrance))
+
+	queues.release(alpha)
+	queues.release(beta)
+	alpha.free()
+	beta.free()
+	scene_root.remove_child(building)
+	building.free()
+
+
+static func _test_building_queue_keeps_ai_citizens() -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	var scene_root: Node = tree.root if tree else Node3D.new()
+	var registry := BuildingRegistry.new()
+	var building := Node3D.new()
+	building.position = Vector3(1.5, 0.0, 1.5)
+	scene_root.add_child(building)
+	var entrance := Vector3(2.5, 0.0, 1.5)
+	building.set_meta("service_position", entrance)
+	registry.reserve(Vector2i(1, 1), building.position, Vector2i.ONE)
+	registry.attach_node(Vector2i(1, 1), building)
+	var grid := NavGrid.new()
+	grid.configure(1.0, 12)
+	var queues = BuildingQueueServiceScript.new()
+	queues.configure(registry, grid)
+
+	var alive_ids: Array[int] = [1]
+	queues.set_citizen_alive_checker(func(citizen_id: int) -> bool: return citizen_id in alive_ids)
+
+	var citizen := Node3D.new()
+	citizen.set_meta("ai_id", 1)
+	scene_root.add_child(citizen)
+	var result: Dictionary = queues.resolve(citizen, entrance)
+	assert(result.is_head, "AI citizen with small ai_id should be treated as a valid queue member")
+	queues.release(citizen)
+	citizen.free()
+	scene_root.remove_child(building)
+	building.free()
+
+
+static func _test_construction_site_uses_building_entrance() -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	var scene_root_parent: Node = tree.root if tree else Node3D.new()
+	var scene_root := Node3D.new()
+	scene_root_parent.add_child(scene_root)
+	var runtime := ConstructionRuntime.new()
+	runtime.scene_root = scene_root
+	runtime.settlement = SettlementState.new()
+	runtime.building_registry = BuildingRegistry.new()
+	runtime.citizens = []
+	runtime.workers_changed = func() -> void: pass
+	runtime.navigation_changed = func() -> void: pass
+	var service := ConstructionService.new()
+	service.configure(runtime)
+
+	var cell := Vector2i(2, 3)
+	runtime.building_registry.reserve(cell, Vector3(2.0, 0.0, 3.0), Vector2i(5, 5))
+	var site := service.start_site(cell, "campfire", Vector3(2.0, 0.0, 3.0))
+	var expected_offsets := BuildingBlueprints.worker_entrance_offsets("campfire")
+	assert(not expected_offsets.is_empty())
+	var positions: Array = site.node.get_meta("service_positions")
+	assert(positions.size() == expected_offsets.size(), "Construction site should expose the future building's worker entrances")
+	for position in positions:
+		assert(position is Vector3)
+		var cell_position := Vector2i(floori(position.x), floori(position.z))
+		assert(cell_position != cell, "Service position must be outside the building footprint")
+
+	service.cancel_site(site.node)
+	scene_root_parent.remove_child(scene_root)
+	scene_root.free()
 

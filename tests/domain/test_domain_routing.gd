@@ -20,6 +20,22 @@ static func run_all() -> void:
 	_test_citizen_keeps_unaffected_route_on_navigation_revision()
 	_test_citizen_route_failure_marks_action_failed()
 	_test_building_queue_routing()
+	_test_route_for_traveler_profile()
+	_test_segment_cost_with_profile()
+	_test_trail_degrading_state()
+	_test_trail_forget_walker()
+	_test_refresh_connectivity()
+	_test_route_result_is_topologically_stale()
+	_test_incremental_weight_and_deferred_minimum()
+	_test_is_segment_clear()
+	_test_waypoint_path_clear_blocked_destination()
+	_test_waypoint_path_clear_empty()
+	_test_configure_noop()
+	_test_route_start_equals_destination()
+	_test_cell_center_round_trip()
+	_test_diagonal_corner_cutting_prevented()
+	_test_segment_cost_zero_length()
+	_test_smooth_empty_fallback()
 
 
 static func _route_polyline_cost(grid: NavGrid, start: Vector3, waypoints: Array[Vector3]) -> float:
@@ -373,3 +389,288 @@ static func _test_building_queue_routing() -> void:
 	second.free()
 	third.free()
 	building.free()
+
+
+static func _test_route_for_traveler_profile() -> void:
+	var grid := NavGrid.new()
+	grid.configure(1.0, 10)
+	var router: RefCounted = GridRouteServiceScript.new()
+	router.configure(grid)
+	var start := Vector3(-2.5, 0.0, 0.5)
+	var destination := Vector3(2.5, 0.0, 0.5)
+	# Baseline: pedestrian sees no cheap corridor, takes the direct route.
+	var pedestrian_route: RouteResult = router.find_route(start, destination)
+	assert(pedestrian_route.reachable)
+	# Give the cart profile a cheap corridor along y=1 so the cart route
+	# diverges from the straight pedestrian line.
+	var cart_weights: Dictionary = {}
+	for x in range(-2, 3):
+		cart_weights[Vector2i(x, 1)] = 0.1
+	grid.set_profile_cell_weights(&"cart", cart_weights)
+	var cart_route: RouteResult = router.find_route_for_profile(start, destination, &"cart")
+	assert(cart_route.reachable)
+	# The cart route must use the cheap corridor (some waypoint has z > 1.0).
+	var cart_uses_corridor := false
+	for waypoint in cart_route.waypoints:
+		cart_uses_corridor = cart_uses_corridor or waypoint.z > 1.0
+	assert(cart_uses_corridor)
+	# The pedestrian route must NOT use the corridor — profile weights are isolated.
+	var ped_uses_corridor := false
+	for waypoint in pedestrian_route.waypoints:
+		ped_uses_corridor = ped_uses_corridor or waypoint.z > 1.0
+	assert(not ped_uses_corridor)
+
+
+static func _test_segment_cost_with_profile() -> void:
+	var grid := NavGrid.new()
+	grid.configure(1.0, 10)
+	var from := Vector3(0.5, 0.0, 0.5)
+	var to := Vector3(2.5, 0.0, 0.5)
+	var pedestrian_cost := grid.segment_cost(from, to)
+	assert(is_finite(pedestrian_cost))
+	# Make the cart profile cheaper on the middle cell.
+	grid.set_profile_cell_weights(&"cart", {Vector2i(1, 0): 0.1})
+	var cart_cost := grid.segment_cost(from, to, &"cart")
+	assert(is_finite(cart_cost))
+	assert(cart_cost < pedestrian_cost)
+	# Pedestrian cost must be unchanged after setting a cart-only weight.
+	assert(is_equal_approx(grid.segment_cost(from, to), pedestrian_cost))
+	# segment_cost on a blocked cell returns INF for any profile.
+	grid.set_blocked_cells({Vector2i(1, 0): true})
+	assert(not is_finite(grid.segment_cost(from, to)))
+	assert(not is_finite(grid.segment_cost(from, to, &"cart")))
+
+
+static func _test_trail_degrading_state() -> void:
+	var grid := NavGrid.new()
+	grid.configure(1.0, 12)
+	var trails: RefCounted = TrailFieldServiceScript.new()
+	trails.configure(12.0, 1.0, grid)
+	var path_cell := Vector2i(1, 0)
+	# Build up to MATURE.
+	for _entry in range(10):
+		trails.record_walker_position(1, Vector3(0.1, 0.0, 0.1), false)
+		trails.record_walker_position(1, Vector3(1.1, 0.0, 0.1), false)
+	assert(trails.cell_state(path_cell) == TrailFieldService.TrailState.MATURE)
+	# One day of decay drops strength but not below PATH_DEGRADE_THRESHOLD yet —
+	# the cell must still be MATURE or YOUNG, not NONE.
+	trails.apply_daily_decay()
+	assert(trails.cell_state(path_cell) != TrailFieldService.TrailState.NONE)
+	# Continue decaying until strength falls below PATH_DEGRADE_THRESHOLD.
+	# The cell should enter DEGRADING (low_days < PATH_DEGRADE_DAYS) before NONE.
+	var saw_degrading := false
+	for _day in range(20):
+		trails.apply_daily_decay()
+		var state: int = trails.cell_state(path_cell)
+		if state == TrailFieldService.TrailState.DEGRADING:
+			saw_degrading = true
+		elif state == TrailFieldService.TrailState.NONE:
+			break
+	assert(saw_degrading)
+	# After enough decay days the cell returns to NONE.
+	for _day in range(10):
+		trails.apply_daily_decay()
+	assert(trails.cell_state(path_cell) == TrailFieldService.TrailState.NONE)
+
+
+static func _test_trail_forget_walker() -> void:
+	var trails: RefCounted = TrailFieldServiceScript.new()
+	trails.configure(12.0)
+	# Record a first position, then forget the walker.
+	trails.record_walker_position(1, Vector3.ZERO, false)
+	trails.forget_walker(1)
+	# After forgetting, the next call must register as a first position (no stamp).
+	trails.record_walker_position(1, Vector3(0.6, 0.0, 0.0), false)
+	assert(trails.total_strength() == 0)
+	# A subsequent move beyond SAMPLE_DISTANCE stamps normally.
+	trails.record_walker_position(1, Vector3(1.2, 0.0, 0.0), false)
+	assert(trails.total_strength() > 0)
+
+
+static func _test_refresh_connectivity() -> void:
+	var grid := NavGrid.new()
+	grid.configure(1.0, 6)
+	# Before any topology change, refresh_connectivity builds the component cache.
+	grid.refresh_connectivity()
+	assert(grid.are_cells_connected(Vector2i(-2, 0), Vector2i(2, 0)))
+	# Split the board with a wall.
+	var barrier: Dictionary = {}
+	for y in range(-3, 3):
+		barrier[Vector2i(0, y)] = true
+	grid.set_blocked_cells(barrier)
+	# After a topology change, the old component cache is stale.
+	# refresh_connectivity rebuilds it so are_cells_connected reflects the split.
+	grid.refresh_connectivity()
+	assert(not grid.are_cells_connected(Vector2i(-2, 0), Vector2i(2, 0)))
+	# Open a gap in the wall.
+	barrier.erase(Vector2i(0, 0))
+	grid.set_blocked_cells(barrier)
+	grid.refresh_connectivity()
+	assert(grid.are_cells_connected(Vector2i(-2, 0), Vector2i(2, 0)))
+
+
+static func _test_route_result_is_topologically_stale() -> void:
+	var result := RouteResult.success([Vector3(1.0, 0.0, 0.0)], Vector3(1.0, 0.0, 0.0), 5, 5)
+	# Same topology revision → not stale.
+	assert(not result.is_topologically_stale(5))
+	# Different topology revision → stale.
+	assert(result.is_topologically_stale(6))
+	# An unreachable result with no topology revision is never stale.
+	var unreachable := RouteResult.unreachable(-1, -1, RouteResult.UnreachableReason.NO_GRID)
+	assert(not unreachable.is_topologically_stale(10))
+
+
+static func _test_incremental_weight_and_deferred_minimum() -> void:
+	var grid := NavGrid.new()
+	grid.configure(1.0, 10)
+	# Set a low wholesale weight so the minimum is 0.1.
+	grid.set_cell_weights({Vector2i(0, 0): 0.1})
+	assert(is_equal_approx(grid.minimum_cell_weight(), 0.1))
+	# Incremental single-cell update with an even lower weight.
+	grid.set_profile_cell_weight(&"cart", Vector2i(1, 0), 0.08)
+	assert(is_equal_approx(grid.minimum_cell_weight(), 0.08))
+	# Erase the cell that held the minimum — the recompute is deferred.
+	grid.erase_profile_cell_weight(&"cart", Vector2i(1, 0))
+	# The minimum must be recomputed on the next query, restoring 0.1.
+	assert(is_equal_approx(grid.minimum_cell_weight(), 0.1))
+	# Erasing a non-existent profile weight is a no-op (no revision bump).
+	var revision_before := grid.revision()
+	grid.erase_profile_cell_weight(&"cart", Vector2i(99, 99))
+	assert(grid.revision() == revision_before)
+	# set_profile_cell_weight with invalid weight erases the cell instead.
+	grid.set_profile_cell_weight(&"cart", Vector2i(2, 2), 0.05)
+	assert(is_equal_approx(grid.get_cell_weight(Vector2i(2, 2), &"cart"), NavGrid.MIN_CELL_WEIGHT))
+	grid.set_profile_cell_weight(&"cart", Vector2i(2, 2), -1.0)
+	assert(is_equal_approx(grid.get_cell_weight(Vector2i(2, 2), &"cart"), NavGrid.DEFAULT_CELL_WEIGHT))
+
+
+static func _test_is_segment_clear() -> void:
+	var grid := NavGrid.new()
+	grid.configure(1.0, 10)
+	# Clear segment on an open board.
+	assert(grid.is_segment_clear(Vector3(0.5, 0.0, 0.5), Vector3(2.5, 0.0, 0.5)))
+	# Segment crossing a blocked cell is not clear.
+	grid.set_blocked_cells({Vector2i(1, 0): true})
+	assert(not grid.is_segment_clear(Vector3(0.5, 0.0, 0.5), Vector3(2.5, 0.0, 0.5)))
+	# Segment that only touches the corner of a blocked cell is not clear.
+	grid.set_blocked_cells({Vector2i(1, 1): true})
+	assert(not grid.is_segment_clear(Vector3(0.5, 0.0, 0.5), Vector3(2.5, 0.0, 2.5)))
+	# Segment parallel to a blocked cell but not touching it is clear.
+	grid.set_blocked_cells({Vector2i(2, 2): true})
+	assert(grid.is_segment_clear(Vector3(0.5, 0.0, 0.5), Vector3(4.5, 0.0, 0.5)))
+
+
+static func _test_waypoint_path_clear_blocked_destination() -> void:
+	var grid := NavGrid.new()
+	grid.configure(1.0, 10)
+	var from := Vector3(0.5, 0.0, 0.5)
+	var destination := Vector3(2.5, 0.0, 0.5)
+	grid.set_blocked_cells({Vector2i(2, 0): true})
+	# Without allow_blocked_destination, the path to a blocked destination is not clear.
+	assert(not grid.is_waypoint_path_clear(from, [destination], false))
+	# With allow_blocked_destination and a blocked destination cell, the path is clear
+	# because the final waypoint is the destination cell itself.
+	assert(grid.is_waypoint_path_clear(from, [destination], true))
+	# Intermediate blocked cell still makes the path not clear even with allow.
+	grid.set_blocked_cells({Vector2i(1, 0): true, Vector2i(2, 0): true})
+	assert(not grid.is_waypoint_path_clear(from, [Vector3(1.5, 0.0, 0.5), destination], true))
+
+
+static func _test_waypoint_path_clear_empty() -> void:
+	var grid := NavGrid.new()
+	grid.configure(1.0, 10)
+	assert(grid.is_waypoint_path_clear(Vector3(0.5, 0.0, 0.5), []))
+	assert(grid.is_waypoint_path_clear(Vector3(0.5, 0.0, 0.5), [], true))
+
+
+static func _test_configure_noop() -> void:
+	var grid := NavGrid.new()
+	grid.configure(1.0, 10)
+	var revision := grid.revision()
+	var topology_revision := grid.topology_revision()
+	# Calling configure with the same parameters must not bump revisions.
+	grid.configure(1.0, 10)
+	assert(grid.revision() == revision)
+	assert(grid.topology_revision() == topology_revision)
+	# Different cell size bumps both revisions.
+	grid.configure(2.0, 10)
+	assert(grid.revision() == revision + 1)
+	assert(grid.topology_revision() == topology_revision + 1)
+
+
+static func _test_route_start_equals_destination() -> void:
+	var grid := NavGrid.new()
+	grid.configure(1.0, 10)
+	var router: RefCounted = GridRouteServiceScript.new()
+	router.configure(grid)
+	var pos := Vector3(0.5, 0.0, 0.5)
+	var route: RouteResult = router.find_route(pos, pos)
+	assert(route.reachable)
+	assert(route.arrival_position == pos)
+	# A route from a point to itself should have at least one waypoint.
+	assert(not route.waypoints.is_empty())
+
+
+static func _test_cell_center_round_trip() -> void:
+	var grid := NavGrid.new()
+	grid.configure(1.0, 10)
+	for cell in [Vector2i(0, 0), Vector2i(-3, 2), Vector2i(4, -1), Vector2i(-5, 5)]:
+		var center := grid.cell_center(cell)
+		var round_trip := grid.cell_from_position(center)
+		assert(round_trip == cell)
+	# cell_center places the point at the middle of the cell.
+	assert(grid.cell_center(Vector2i(0, 0)) == Vector3(0.5, 0.0, 0.5))
+	assert(grid.cell_center(Vector2i(-1, -1)) == Vector3(-0.5, 0.0, -0.5))
+
+
+static func _test_diagonal_corner_cutting_prevented() -> void:
+	var grid := NavGrid.new()
+	grid.configure(1.0, 10)
+	var router: RefCounted = GridRouteServiceScript.new()
+	router.configure(grid)
+	# Block the two orthogonal neighbors of a diagonal step so the diagonal
+	# corner-cutting guard in _search rejects the move.
+	# To go from (0,0) to (1,1) diagonally, both (1,0) and (0,1) must be walkable.
+	grid.set_blocked_cells({Vector2i(1, 0): true, Vector2i(0, 1): true})
+	var start := Vector3(0.5, 0.0, 0.5)
+	var destination := Vector3(1.5, 0.0, 1.5)
+	var route: RouteResult = router.find_route(start, destination)
+	# The direct diagonal is blocked, but a path around should still exist.
+	assert(route.reachable)
+	# No waypoint may sit on a blocked cell.
+	for waypoint in route.waypoints:
+		assert(not grid.is_blocked(grid.cell_from_position(waypoint)))
+	# Now wall off the destination completely so no path exists.
+	grid.set_blocked_cells({
+		Vector2i(1, 0): true, Vector2i(0, 1): true,
+		Vector2i(2, 0): true, Vector2i(1, 2): true, Vector2i(0, 2): true,
+		Vector2i(2, 1): true,
+	})
+	var walled: RouteResult = router.find_route(start, destination)
+	assert(not walled.reachable)
+
+
+static func _test_segment_cost_zero_length() -> void:
+	var grid := NavGrid.new()
+	grid.configure(1.0, 10)
+	var pos := Vector3(0.5, 0.0, 0.5)
+	assert(is_zero_approx(grid.segment_cost(pos, pos)))
+	# Zero-length on a blocked cell still returns INF (start/end not walkable).
+	grid.set_blocked_cells({Vector2i(0, 0): true})
+	assert(not is_finite(grid.segment_cost(pos, pos)))
+
+
+static func _test_smooth_empty_fallback() -> void:
+	var grid := NavGrid.new()
+	grid.configure(1.0, 10)
+	var router: RefCounted = GridRouteServiceScript.new()
+	router.configure(grid)
+	# A route where start and destination are in the same cell produces a
+	# single-point path. _smooth returns empty for single-point input, so the
+	# fallback at line 77-78 must supply [destination].
+	var pos := Vector3(0.5, 0.0, 0.5)
+	var nearby := Vector3(0.6, 0.0, 0.6)
+	var route: RouteResult = router.find_route(pos, nearby)
+	assert(route.reachable)
+	assert(not route.waypoints.is_empty())
+	assert(route.waypoints[0] == nearby)

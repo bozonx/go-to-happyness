@@ -27,19 +27,19 @@ before changing AI or navigation behavior.
 Run the deterministic domain checks with:
 
 ```sh
-# Deterministic domain tests
-godot --headless --path . --script res://tests/test_domain.gd
-godot --headless --path . --script res://tests/test_ai.gd
-godot --headless --path . --script res://tests/test_navigation_performance.gd
-godot --headless --path . --script res://tests/test_events.gd
+# Master unit test runner (Domain + AI)
+godot --headless --path . --script res://tests/run_all.gd
 
-# Scene smoke tests (need a frame budget so awaited frames resolve in headless mode)
-godot --headless --path . --script res://tests/test_startup.gd --quit-after 300
-godot --headless --path . --script res://tests/test_materials_yard.gd --quit-after 300
-godot --headless --path . --script res://tests/test_toilet_needs.gd --quit-after 300
+# Run complete test suite (Unit + Feature Scene Tests)
+./scripts/run_tests.sh
+
+# Individual feature tests (need a frame budget so awaited frames resolve in headless mode)
+godot --headless --path . --script res://tests/features/simulation/test_startup.gd --quit-after 300
+godot --headless --path . --script res://tests/features/construction/test_materials_yard.gd --quit-after 300
+godot --headless --path . --script res://tests/features/citizens/test_toilet_needs.gd --quit-after 300
 ```
 
-`test_ai.gd` covers the native AI runtime without a gameplay scene. `test_startup.gd`
+`run_all.gd` covers domain and native AI rules without a gameplay scene. `test_startup.gd`
 and `test_materials_yard.gd` are integration smoke tests and may print known
 dummy-renderer diagnostics in headless mode; their exit status remains authoritative.
 Without `--quit-after`, scene tests that `await process_frame` / `await physics_frame`
