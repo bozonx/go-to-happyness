@@ -490,6 +490,32 @@ func _ready() -> void:
 		active_config = GameLaunchConfigScript.for_tent_era()
 	launch_config = active_config
 
+	_setup_hero_services()
+	_setup_workplace_and_visuals()
+	_setup_territory()
+	_setup_ai_and_navigation()
+	_setup_citizen_lifecycle()
+	_setup_building_services()
+	_setup_construction_and_demolition()
+	_setup_canteen_and_resources()
+	_setup_foraging_and_fire()
+	_setup_building_maintenance()
+	_setup_settlement_survival_and_daily_rules()
+	_setup_building_lifecycle()
+	_setup_excavation_and_factory()
+	_setup_citizen_registration_and_school()
+	_setup_citizen_needs_and_orders()
+	_setup_trade_and_logistics()
+	_setup_courier_system()
+	_setup_actuator_and_events()
+	_setup_ui_controllers()
+	_setup_world_and_events()
+	_setup_controllers_and_world()
+	_setup_citizens_and_ai()
+	_finalize_launch(launch_mgr)
+
+
+func _setup_hero_services() -> void:
 	hero_pocket_service = HeroPocketServiceScript.new()
 	hero_pocket_service.configure(func() -> Citizen: return player_citizen, _create_resource_pile, _update_interface, _refresh_interaction_hint)
 	hero_interaction_service = HeroInteractionServiceScript.new()
@@ -507,6 +533,9 @@ func _ready() -> void:
 		_cell_from_position,
 		_consume_grass_source
 	)
+
+
+func _setup_workplace_and_visuals() -> void:
 	workplace_labor_service = WorkplaceLaborServiceScript.new()
 	workplace_labor_service.configure(
 		settlement,
@@ -534,6 +563,9 @@ func _ready() -> void:
 		house_lights,
 		random
 	)
+
+
+func _setup_territory() -> void:
 	territory_service = TerritoryServiceScript.new()
 	var summer_valley_biome := load("res://game/features/world/presentation/biomes/summer/summer_valley/summer_valley_biome.tres") as BiomeDefinition
 	var summer_plains_biome := load("res://game/features/world/presentation/biomes/summer/summer_plains/summer_plains_biome.tres") as BiomeDefinition
@@ -543,6 +575,8 @@ func _ready() -> void:
 		territory_service.register_biome(summer_plains_biome)
 	territory_service.set_active_biome(launch_config.biome_id)
 
+
+func _setup_ai_and_navigation() -> void:
 	if citizen_ai == null:
 		citizen_ai = CitizenAISystem.new()
 		citizen_ai.name = "CitizenAI"
@@ -565,6 +599,9 @@ func _ready() -> void:
 	building_queue_service = BuildingQueueServiceScript.new()
 	building_queue_service.configure(building_registry, nav_grid)
 	building_queue_service.set_citizen_alive_checker(_is_ai_citizen_id_alive)
+
+
+func _setup_citizen_lifecycle() -> void:
 	citizen_lifecycle_service = CitizenLifecycleServiceScript.new()
 	citizen_lifecycle_service.configure(
 		citizens,
@@ -591,6 +628,9 @@ func _ready() -> void:
 		func() -> Node3D: return selected_house,
 		func() -> int: return day_cycle.current_day
 	)
+
+
+func _setup_building_services() -> void:
 	building_availability_service = BuildingAvailabilityServiceScript.new()
 	building_availability_service.configure(settlement)
 	building_research_service = BuildingResearchServiceScript.new()
@@ -599,6 +639,9 @@ func _ready() -> void:
 	village_territory_service.configure(building_registry, int(settlement.era))
 	sawmills = SawmillService.new()
 	sawmills.configure(sawmill_stocks, sawmill_positions, SAWMILL_PROCESS_DURATION, _cell_from_position)
+
+
+func _setup_construction_and_demolition() -> void:
 	var construction_runtime := ConstructionRuntime.new()
 	construction_runtime.scene_root = self
 	construction_runtime.settlement = settlement
@@ -625,6 +668,9 @@ func _ready() -> void:
 	demolition.configure(demolition_runtime)
 	water_collector_service = WaterCollectorService.new()
 	water_collector_service.configure(water_collectors)
+
+
+func _setup_canteen_and_resources() -> void:
 	canteen_service = CanteenService.new()
 	canteen_service.configure(
 		settlement,
@@ -647,6 +693,9 @@ func _ready() -> void:
 	)
 	resource_pile_service = ResourcePileService.new(self, resource_piles, settlement, weather_state)
 	resource_pile_service.set_visuals(ResourcePileVisualsScript.new())
+
+
+func _setup_foraging_and_fire() -> void:
 	foraging_service = ForagingService.new()
 	foraging_service.billboard_label_scene = BillboardLabelScene
 	foraging_service.set_random(random)
@@ -678,6 +727,9 @@ func _ready() -> void:
 		_refresh_living_statuses,
 		func() -> void: settlement.wellbeing = maxi(0, settlement.wellbeing - 1)
 	)
+
+
+func _setup_building_maintenance() -> void:
 	building_maintenance_service = BuildingMaintenanceService.new()
 	building_maintenance_service.setup(
 		building_registry,
@@ -697,6 +749,9 @@ func _ready() -> void:
 			"refresh_living_status": _refresh_living_status
 		}
 	)
+
+
+func _setup_settlement_survival_and_daily_rules() -> void:
 	settlement_survival_service = SettlementSurvivalServiceScript.new()
 	settlement_survival_service.configure(
 		settlement,
@@ -734,6 +789,9 @@ func _ready() -> void:
 		_stored_resources,
 		_warehouse_capacity
 	)
+
+
+func _setup_building_lifecycle() -> void:
 	building_lifecycle_service = BuildingLifecycleServiceScript.new()
 	building_lifecycle_service.configure(
 		settlement,
@@ -816,6 +874,9 @@ func _ready() -> void:
 		_total_housing_slots,
 		func() -> int: return settlement.amount(ResourceIds.FOOD)
 	)
+
+
+func _setup_excavation_and_factory() -> void:
 	excavation_service = ExcavationServiceScript.new()
 	excavation_service.dig_site_scene = DigSiteScene
 	excavation_service.configure(
@@ -844,6 +905,9 @@ func _ready() -> void:
 	)
 	factory_service = FactoryServiceScript.new()
 	factory_service.configure(settlement, building_registry, _add_message, random)
+
+
+func _setup_citizen_registration_and_school() -> void:
 	citizen_registration_service = CitizenRegistrationServiceScript.new()
 	citizen_registration_service.configure(
 		citizens,
@@ -867,6 +931,9 @@ func _ready() -> void:
 		_terrain_height_at,
 		MAX_BUILD_SLOPE
 	)
+
+
+func _setup_citizen_needs_and_orders() -> void:
 	citizen_daily_order_service = CitizenDailyOrderServiceScript.new()
 	citizen_daily_order_service.configure(
 		settlement,
@@ -881,7 +948,6 @@ func _ready() -> void:
 		GAME_MINUTES_PER_SECOND,
 		func() -> void: if citizen_ai != null: citizen_ai.request_decision_refresh()
 	)
-
 	citizen_needs_service = CitizenNeedsService.new()
 	citizen_needs_service.set_random(random)
 	citizen_needs_service.configure(
@@ -893,6 +959,9 @@ func _ready() -> void:
 		grass_sources,
 	)
 	citizen_living_status_service = CitizenLivingStatusServiceScript.new()
+
+
+func _setup_trade_and_logistics() -> void:
 	trade_service = TradeServiceScript.new()
 	trade_service.configure(
 		settlement,
@@ -939,6 +1008,9 @@ func _ready() -> void:
 		_resource_for_depth,
 		_update_interface
 	)
+
+
+func _setup_courier_system() -> void:
 	courier_dispatcher = CourierDispatcherScript.new()
 	courier_dispatcher.configure(
 		citizens,
@@ -1010,6 +1082,9 @@ func _ready() -> void:
 		_construction_source_available,
 		_citizen_for_ai_id
 	)
+
+
+func _setup_actuator_and_events() -> void:
 	actuator_bridge = SettlementActuatorBridgeScript.new()
 	actuator_bridge.configure(
 		canteen_service,
@@ -1035,8 +1110,6 @@ func _ready() -> void:
 		_fire_state_for,
 		_apply_fire_state
 	)
-	ui_attacher.create_all_controllers()
-	ui_attacher.configure_all(self)
 	simulation_event_dispatcher = SimulationEventDispatcherScript.new()
 	simulation_event_dispatcher.configure({
 		"start_meal": _start_meal,
@@ -1054,6 +1127,11 @@ func _ready() -> void:
 		"school_day_ended": _on_school_day_ended,
 		"daily_settlement_update": _on_daily_settlement_update
 	})
+
+
+func _setup_ui_controllers() -> void:
+	ui_attacher.create_all_controllers()
+	ui_attacher.configure_all(self)
 	warehouse_fill_label_controller = WarehouseFillLabelControllerScript.new()
 	warehouse_fill_label_controller.configure(self)
 	building_status_indicator_controller = BuildingStatusIndicatorControllerScript.new()
@@ -1062,12 +1140,18 @@ func _ready() -> void:
 	first_person_hud_controller.configure(self)
 	label_distance_fade_controller = LabelDistanceFadeControllerScript.new()
 	label_distance_fade_controller.configure(self)
+
+
+func _setup_world_and_events() -> void:
 	settlement.apply_launch_config(launch_config)
 	var _event_registry := EventRegistryScript.new()
 	_event_registry.register_all(TentEraEventsScript.build())
 	event_service = EventServiceScript.new(_event_registry)
 	tent_weather = TentEraSurvivalRulesScript.weather_for_day(day_cycle.current_day)
 	weather_state.new_day(tent_weather, random, int(clock.minutes))
+
+
+func _setup_controllers_and_world() -> void:
 	ambient_spawner = AmbientSpawner.new()
 	add_child(ambient_spawner)
 	var active_biome: BiomeDefinition = territory_service.get_active_biome()
@@ -1087,6 +1171,9 @@ func _ready() -> void:
 	ambient_spawner.spawn_trash_piles()
 	ambient_spawner.spawn_initial_rabbits()
 	ambient_spawner.create_ponds()
+
+
+func _setup_citizens_and_ai() -> void:
 	_create_citizens()
 	_create_starter_backpack()
 	_refresh_living_statuses()
@@ -1096,11 +1183,12 @@ func _ready() -> void:
 		[WorkforceOrderProviderScript.new(), DailyPlayerOrderProviderScript.new(), ForestryOrderProviderScript.new(), FarmingOrderProviderScript.new(), ConstructionOrderProviderScript.new(), GatheringOrderProviderScript.new(), ExcavationOrderProviderScript.new(), ServiceWorkOrderProviderScript.new(), FactoryWorkOrderProviderScript.new(), CourierDeliveryOrderProviderScript.new()]
 	):
 		push_error("Native citizen AI failed to capture its initial world snapshot")
-
 	_update_workers()
 	_update_interface("Build a simple store, then gather materials for the first campfire and tents.")
 	player_controller.enter_first_person(hero_citizen, "Hero view enabled.")
 
+
+func _finalize_launch(launch_mgr: Node) -> void:
 	var pending_save: String = ""
 	if launch_mgr != null and "pending_save_path" in launch_mgr:
 		pending_save = str(launch_mgr.get("pending_save_path"))
