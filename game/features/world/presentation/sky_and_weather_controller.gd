@@ -8,8 +8,8 @@ const SUN_GLARE_OCCLUSION_SAMPLE_RADIUS := 0.24
 const CLOUD_SCALE := 1.55
 const CLOUD_WIND := Vector2(0.006, 0.002)
 const CLOUD_EDGE_SOFTNESS := 0.07
-const CLOUD_COVERAGE_CLEAR := 0.46
-const CLOUD_COVERAGE_STORM := 0.18
+const CLOUD_COVERAGE_CLEAR := 0.56
+const CLOUD_COVERAGE_STORM := 0.14
 const CLOUD_MINIMUM_SUN_VISIBILITY := 0.12
 
 var camera: Camera3D
@@ -39,7 +39,7 @@ func setup(
 	sun_glare_material = p_sun_glare_material
 
 
-func update_daylight(game_minutes: float, overcast: float, runtime_seconds: float) -> void:
+func update_daylight(game_minutes: float, cloud_cover: float, rain_intensity: float, runtime_seconds: float) -> void:
 	if DisplayServer.get_name() == "headless":
 		return
 	if sun == null or world_environment == null:
@@ -58,34 +58,34 @@ func update_daylight(game_minutes: float, overcast: float, runtime_seconds: floa
 		base_background = night_color.lerp(night_twilight_color, twilight * 0.55)
 	else:
 		base_background = twilight_color.lerp(day_color, smoothstep(0.0, 0.42, solar_height))
-	world_environment.background_color = base_background.lerp(overcast_color, overcast)
+	world_environment.background_color = base_background.lerp(overcast_color, cloud_cover)
 	var base_ambient_color := Color("4b5872").lerp(Color("d7ebef"), maxf(solar_intensity, twilight * 0.35))
 	var base_ambient_energy := lerpf(0.18, 0.65, maxf(solar_intensity, twilight * 0.3))
-	world_environment.ambient_light_color = base_ambient_color.lerp(Color("8a9aa3"), overcast)
-	world_environment.ambient_light_energy = lerpf(base_ambient_energy, 0.78, overcast)
+	world_environment.ambient_light_color = base_ambient_color.lerp(Color("8a9aa3"), cloud_cover)
+	world_environment.ambient_light_energy = lerpf(base_ambient_energy, 0.78, cloud_cover)
 	var day_progress := clampf((hour - 6.0) / 12.0, 0.0, 1.0)
 	var sun_elevation := 3.0 + maxf(solar_height, 0.0) * 45.0
 	var sun_azimuth := lerpf(-75.0, 11.0, day_progress)
 	sun.rotation_degrees = Vector3(-sun_elevation, sun_azimuth, 0.0)
 	var sun_direction := sun.global_transform.basis.z.normalized()
-	var cloud_sun_visibility := _cloud_sun_visibility(sun_direction, overcast, runtime_seconds)
-	var direct_light := solar_intensity * (1.0 - overcast) * cloud_sun_visibility
+	var cloud_sun_visibility := _cloud_sun_visibility(sun_direction, cloud_cover, runtime_seconds)
+	var direct_light := solar_intensity * (1.0 - cloud_cover) * cloud_sun_visibility
 	var base_sun_color := Color("f08a5d").lerp(Color("fff2d1"), solar_intensity)
-	sun.light_color = base_sun_color.lerp(Color("a8b8c0"), overcast)
+	sun.light_color = base_sun_color.lerp(Color("a8b8c0"), cloud_cover)
 	sun.light_energy = lerpf(0.0, 1.2, direct_light)
 	sun.shadow_enabled = direct_light > 0.05
-	sun.shadow_opacity = lerpf(1.0, 0.0, overcast)
+	sun.shadow_opacity = lerpf(1.0, 0.0, cloud_cover)
 	var night_factor := 1.0 - smoothstep(0.0, 0.28, solar_height)
 	# Twilight is still bright after the sun reaches the horizon. Keep stars out
 	# until the sun is meaningfully below it, then fade them in during dusk.
 	var star_visibility := 1.0 - smoothstep(-0.42, -0.08, solar_height)
 	if sky_material != null:
-		var sky_horizon := base_background.lerp(overcast_color, overcast)
+		var sky_horizon := base_background.lerp(overcast_color, cloud_cover)
 		var sky_zenith := sky_horizon.darkened(0.18)
 		sky_material.set_shader_parameter("u_horizon_color", sky_horizon)
 		sky_material.set_shader_parameter("u_zenith_color", sky_zenith)
 		sky_material.set_shader_parameter("u_sun_color", sun.light_color)
-		sky_material.set_shader_parameter("u_overcast", overcast)
+		sky_material.set_shader_parameter("u_overcast", cloud_cover)
 		sky_material.set_shader_parameter("u_solar_intensity", solar_intensity)
 		sky_material.set_shader_parameter("u_sun_visibility", cloud_sun_visibility)
 		sky_material.set_shader_parameter("u_time", runtime_seconds)
@@ -94,14 +94,14 @@ func update_daylight(game_minutes: float, overcast: float, runtime_seconds: floa
 		sky_material.set_shader_parameter("u_edge_softness", CLOUD_EDGE_SOFTNESS)
 		sky_material.set_shader_parameter("u_coverage_clear", CLOUD_COVERAGE_CLEAR)
 		sky_material.set_shader_parameter("u_coverage_storm", CLOUD_COVERAGE_STORM)
-		var horizon_glow := Color("ff6a2a").lerp(Color("a8b8c0"), overcast)
+		var horizon_glow := Color("ff6a2a").lerp(Color("a8b8c0"), cloud_cover)
 		sky_material.set_shader_parameter("u_horizon_glow_color", horizon_glow)
 		sky_material.set_shader_parameter("u_night_factor", night_factor)
 		sky_material.set_shader_parameter("u_star_visibility", star_visibility)
 	if rain_effect != null:
-		rain_effect.set_intensity(overcast)
-	_update_sun_glare(direct_light, overcast)
-	var firefly_factor := night_factor * (1.0 - overcast * 0.5)
+		rain_effect.set_intensity(rain_intensity)
+	_update_sun_glare(direct_light, cloud_cover)
+	var firefly_factor := night_factor * (1.0 - cloud_cover * 0.5)
 	for ff in fireflies:
 		if is_instance_valid(ff):
 			ff.set_night_factor(firefly_factor)

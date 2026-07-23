@@ -2,7 +2,7 @@ extends Node3D
 
 ## Isolated visual lab for weather, sky, daylight, and atmospheric effects.
 ##
-## Interactive: F1-F5 choose a scenario; 1-4 choose a camera; Left/Right move
+## Interactive: F1-F11 choose a scenario; 1-4 choose a camera; Left/Right move
 ## time; Up/Down change cloud cover; R changes rain. Batch: godot --path .
 ## res://tools/weather_lab/weather_lab.tscn -- --capture. Captures go to user://weather_lab.
 
@@ -14,12 +14,15 @@ const SkyShader := preload("res://game/features/world/presentation/sky_clouds.gd
 const SCENARIOS := [
 	{"name": "dawn_clear", "minutes": 360.0, "overcast": 0.0, "rain": 0.0},
 	{"name": "noon_clear", "minutes": 720.0, "overcast": 0.0, "rain": 0.0},
-	{"name": "sunset_cloudy", "minutes": 1080.0, "overcast": 0.68, "rain": 0.0},
+	{"name": "noon_fair", "minutes": 720.0, "overcast": 0.14, "rain": 0.0, "camera": &"CloudCamera"},
+	{"name": "noon_partly_cloudy", "minutes": 720.0, "overcast": 0.32, "rain": 0.0, "camera": &"CloudCamera"},
+	{"name": "sunset_cloudy", "minutes": 1080.0, "overcast": 0.58, "rain": 0.0, "camera": &"CloudCamera"},
+	{"name": "noon_overcast", "minutes": 720.0, "overcast": 0.82, "rain": 0.0, "camera": &"CloudCamera"},
+	{"name": "cloud_storm", "minutes": 840.0, "overcast": 0.96, "rain": 0.8, "camera": &"CloudCamera"},
 	{"name": "night_stars", "minutes": 60.0, "overcast": 0.0, "rain": 0.0},
-	{"name": "night_rain", "minutes": 1320.0, "overcast": 0.92, "rain": 1.0},
-	{"name": "cloud_noon", "minutes": 720.0, "overcast": 0.25, "rain": 0.0, "camera": &"CloudCamera"},
-	{"name": "cloud_sunset", "minutes": 1080.0, "overcast": 0.45, "rain": 0.0, "camera": &"CloudCamera"},
-	{"name": "cloud_storm", "minutes": 840.0, "overcast": 0.92, "rain": 0.8, "camera": &"CloudCamera"},
+	{"name": "night_partly_cloudy", "minutes": 60.0, "overcast": 0.36, "rain": 0.0, "camera": &"ZenithCamera"},
+	{"name": "night_overcast", "minutes": 60.0, "overcast": 0.84, "rain": 0.0, "camera": &"ZenithCamera"},
+	{"name": "night_rain", "minutes": 1320.0, "overcast": 0.96, "rain": 1.0},
 ]
 
 @onready var context_camera: Camera3D = $CameraRig/ContextCamera
@@ -29,6 +32,7 @@ const SCENARIOS := [
 @onready var sun: DirectionalLight3D = $Sun
 @onready var environment: Environment = $WorldEnvironment.environment
 @onready var status: Label = $Interface/Status
+@onready var interface: CanvasLayer = $Interface
 
 var controller: SkyAndWeatherController
 var sky_material: ShaderMaterial
@@ -49,12 +53,16 @@ func _ready() -> void:
 	_select_camera(&"ContextCamera")
 	_build_weather_rig()
 	_capture_mode = OS.get_cmdline_user_args().has("--capture")
+	if _capture_mode and DisplayServer.get_name() == "headless":
+		push_error("Weather lab captures require a rendering driver. Run the documented non-headless capture command.")
+		get_tree().quit()
+		return
 	if _capture_mode:
 		_apply_scenario(0)
 	_apply_state()
 	_update_status()
 	if _capture_mode:
-		status.visible = false
+		interface.visible = false
 
 
 func _build_weather_rig() -> void:
@@ -111,7 +119,7 @@ func _process(delta: float) -> void:
 func _unhandled_key_input(event: InputEvent) -> void:
 	if not event.pressed or event.echo:
 		return
-	if event.keycode >= KEY_F1 and event.keycode <= KEY_F5:
+	if event.keycode >= KEY_F1 and event.keycode < KEY_F1 + SCENARIOS.size():
 		_apply_scenario(event.keycode - KEY_F1)
 	if event.keycode >= KEY_1 and event.keycode <= KEY_4:
 		_select_camera([&"ContextCamera", &"CloudCamera", &"ZenithCamera", &"HorizonCamera"][event.keycode - KEY_1])
@@ -158,9 +166,7 @@ func _apply_scenario(index: int) -> void:
 
 
 func _apply_state() -> void:
-	controller.update_daylight(game_minutes, overcast, runtime_seconds)
-	if rain != null:
-		rain.set_intensity(rain_intensity)
+	controller.update_daylight(game_minutes, overcast, rain_intensity, runtime_seconds)
 
 
 func _process_capture() -> void:
@@ -180,6 +186,9 @@ func _process_capture() -> void:
 
 func _save_capture(name: String) -> void:
 	var image := get_viewport().get_texture().get_image()
+	if image == null:
+		push_error("Weather lab capture needs a rendering driver; the active headless dummy renderer has no viewport texture.")
+		return
 	var path := "user://weather_lab/%s.png" % name
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("user://weather_lab"))
 	var result := image.save_png(path)
@@ -192,4 +201,4 @@ func _save_capture(name: String) -> void:
 func _update_status() -> void:
 	var hour := int(game_minutes) / 60
 	var minute := int(game_minutes) % 60
-	status.text = "Weather lab · %s | %02d:%02d  clouds %.0f%%  rain %.0f%%\nF1–F5 presets • 1 context · 2 clouds · 3 zenith · 4 horizon • ←/→ time • ↑/↓ clouds • R rain • C screenshot" % [camera.name, hour, minute, overcast * 100.0, rain_intensity * 100.0]
+	status.text = "Weather lab · %s | %02d:%02d  clouds %.0f%%  rain %.0f%%\nF1–F11 presets • 1 context · 2 clouds · 3 zenith · 4 horizon • ←/→ time • ↑/↓ clouds • R rain • C screenshot" % [camera.name, hour, minute, overcast * 100.0, rain_intensity * 100.0]

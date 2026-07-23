@@ -18,6 +18,8 @@ uniform float u_solar_intensity : hint_range(0.0, 1.0) = 1.0;
 uniform float u_sun_visibility : hint_range(0.0, 1.0) = 1.0;
 uniform float u_night_factor : hint_range(0.0, 1.0) = 0.0;
 uniform float u_star_visibility : hint_range(0.0, 1.0) = 0.0;
+uniform float u_star_density : hint_range(0.0, 1.0) = 0.72;
+uniform float u_star_twinkle : hint_range(0.0, 1.0) = 0.16;
 uniform float u_sun_disc_energy = 6.0;  // HDR overdrive so filmic tonemap + glow bloom the disc
 uniform float u_time = 0.0;
 
@@ -34,6 +36,9 @@ uniform vec3 u_cloud_shadow_clear : source_color = vec3(0.48, 0.58, 0.76);
 uniform vec3 u_cloud_lit_storm : source_color = vec3(0.55, 0.58, 0.63);
 uniform vec3 u_cloud_mid_storm : source_color = vec3(0.40, 0.44, 0.50);
 uniform vec3 u_cloud_shadow_storm : source_color = vec3(0.26, 0.29, 0.34);
+uniform vec3 u_cloud_lit_night : source_color = vec3(0.20, 0.25, 0.36);
+uniform vec3 u_cloud_mid_night : source_color = vec3(0.12, 0.16, 0.25);
+uniform vec3 u_cloud_shadow_night : source_color = vec3(0.055, 0.075, 0.13);
 
 // --- anime-specific controls -----------------------------------------------
 uniform float u_cirrus_amount : hint_range(0.0, 1.0) = 0.16; // high streaky wind clouds
@@ -109,15 +114,23 @@ float cirrus_field(vec2 uv) {
 
 // A deliberately sparse, stable star field. It belongs in the sky material so
 // the weather rig can fade it with twilight and cloud cover.
-float star_field(vec3 dir) {
-	vec2 uv = dir.xz / max(dir.y + 1.15, 0.18) * 85.0;
+float star_layer(vec2 uv, float scale, float threshold, float time_offset) {
+	uv *= scale;
 	vec2 cell = floor(uv);
 	vec2 local = fract(uv) - 0.5;
 	float seed = hash21(cell);
 	vec2 point = vec2(hash21(cell + 3.1), hash21(cell + 9.7)) - 0.5;
-	float radius = mix(0.012, 0.032, step(0.985, seed));
+	float radius = mix(0.010, 0.027, step(0.987, seed));
+	float twinkle = 0.88 + sin(u_time * 0.75 + seed * 31.0 + time_offset) * u_star_twinkle;
 	float star = 1.0 - smoothstep(radius, radius * 2.5, length(local - point));
-	return star * step(0.965, seed);
+	return star * step(threshold, seed) * twinkle;
+}
+
+float star_field(vec3 dir) {
+	vec2 uv = dir.xz / max(dir.y + 1.15, 0.18) * 85.0;
+	float bright = star_layer(uv, 1.0, mix(0.982, 0.957, u_star_density), 0.0);
+	float fine = star_layer(uv + 17.3, 1.73, mix(0.992, 0.973, u_star_density), 1.7);
+	return bright + fine * 0.58;
 }
 
 void sky() {
@@ -128,8 +141,10 @@ void sky() {
 	float grad = smoothstep(0.0, 0.65, horizon);
 	vec3 sky_col = mix(u_horizon_color, u_zenith_color, grad);
 	float stars = star_field(dir) * smoothstep(0.04, 0.32, horizon);
-	float star_visibility = u_star_visibility * (1.0 - u_overcast);
-	sky_col += vec3(0.68, 0.79, 1.0) * stars * star_visibility * 2.2;
+	// Individual clouds mask stars later in the final sky blend. Keep a small
+	// global contribution at partial cover so stars remain visible through gaps.
+	float star_visibility = u_star_visibility * (1.0 - u_overcast * 0.68);
+	sky_col += vec3(0.68, 0.79, 1.0) * stars * star_visibility * 2.5;
 
 	vec3 sun_dir = LIGHT0_ENABLED ? normalize(LIGHT0_DIRECTION) : vec3(0.0, 1.0, 0.0);
 
@@ -177,6 +192,11 @@ void sky() {
 	float n = cloud_field(uv);
 	float coverage = mix(u_coverage_clear, u_coverage_storm, u_overcast);
 	float density = smoothstep(coverage, coverage + u_edge_softness, n);
+	// At the end of the scale, merge the cumulus into a broad, textured ceiling
+	// rather than leaving isolated cartoon blobs over a supposedly covered sky.
+	float ceiling_amount = smoothstep(0.55, 0.90, u_overcast);
+	float ceiling_texture = 0.72 + fbm(uv * 0.38 + vec2(31.0, 9.0)) * 0.22;
+	density = max(density, ceiling_amount * ceiling_texture);
 
 	// Density gradients act as a cheap surface normal. Together with a short
 	// directional shadow march they produce lit domes and cool undersides.
@@ -202,6 +222,12 @@ void sky() {
 	vec3 cloud_lit = mix(u_cloud_lit_clear, u_cloud_lit_storm, u_overcast);
 	vec3 cloud_mid = mix(u_cloud_mid_clear, u_cloud_mid_storm, u_overcast);
 	vec3 cloud_shadow = mix(u_cloud_shadow_clear, u_cloud_shadow_storm, u_overcast);
+	// Moonlight is cool and restrained: clouds remain readable but do not turn
+	// into bright daytime masses that erase the night sky.
+	float night_cloud_mix = smoothstep(0.38, 0.9, u_night_factor);
+	cloud_lit = mix(cloud_lit, u_cloud_lit_night, night_cloud_mix);
+	cloud_mid = mix(cloud_mid, u_cloud_mid_night, night_cloud_mix);
+	cloud_shadow = mix(cloud_shadow, u_cloud_shadow_night, night_cloud_mix);
 
 	// Three controllable paint bands: cool shadow, blue midtone, warm white.
 	float shadow_mid_soft = smoothstep(0.12, 0.62, lit);

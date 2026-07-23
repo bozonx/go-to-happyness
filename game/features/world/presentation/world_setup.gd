@@ -61,9 +61,9 @@ func build(parent: Node) -> void:
 	_build_selection_marker(parent)
 
 
-func update_daylight(game_minutes: float, overcast: float, runtime_seconds: float) -> void:
+func update_daylight(game_minutes: float, cloud_cover: float, rain_intensity: float, runtime_seconds: float) -> void:
 	if sky_and_weather_controller != null:
-		sky_and_weather_controller.update_daylight(game_minutes, overcast, runtime_seconds)
+		sky_and_weather_controller.update_daylight(game_minutes, cloud_cover, rain_intensity, runtime_seconds)
 
 
 func _build_boundary(parent: Node) -> void:
