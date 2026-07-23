@@ -90,6 +90,7 @@ const FactoryWorkOrderProviderScript = preload("res://game/features/decision/app
 const CourierDeliveryGoalScript = preload("res://game/features/decision/domain/goals/courier_delivery_goal.gd")
 const CourierDeliveryOrderProviderScript = preload("res://game/features/decision/application/courier_delivery_order_provider.gd")
 const SettlementCitizenActuatorScript = preload("res://game/features/decision/application/settlement_citizen_actuator.gd")
+const SettlementActuatorBridgeScript = preload("res://game/features/decision/application/settlement_actuator_bridge.gd")
 const RegisterGoalScript = preload("res://game/features/decision/domain/goals/register_goal.gd")
 const WorkforceOrderProviderScript = preload("res://game/features/decision/application/workforce_order_provider.gd")
 const DailyPlayerOrderProviderScript = preload("res://game/features/decision/application/daily_player_order_provider.gd")
@@ -595,6 +596,7 @@ var hero_pocket_service: HeroPocketService
 var hero_interaction_service: HeroInteractionService
 var workplace_labor_service: WorkplaceLaborService
 var building_visuals_service: BuildingVisualsService
+var actuator_bridge: RefCounted
 
 
 func _ready() -> void:
@@ -1115,6 +1117,31 @@ func _ready() -> void:
 		_construction_source_available,
 		_citizen_for_ai_id
 	)
+	actuator_bridge = SettlementActuatorBridgeScript.new()
+	actuator_bridge.configure(
+		canteen_service,
+		courier_dispatcher,
+		construction,
+		settlement,
+		building_registry,
+		storage_delivery_service,
+		factory_service,
+		sawmills,
+		water_collector_service,
+		excavation_service,
+		citizen_needs_service,
+		trade_service,
+		resource_piles,
+		func() -> float: return game_minutes,
+		func() -> float: return runtime_seconds,
+		_update_interface,
+		_request_courier_dispatch,
+		func() -> void: if citizen_ai != null: citizen_ai.request_decision_refresh(),
+		_refresh_living_statuses,
+		_drop_resource_pile,
+		_fire_state_for,
+		_apply_fire_state
+	)
 	campfire_menu_controller = CampfireMenuControllerScript.new()
 	campfire_menu_controller.configure(self)
 	workforce_menu_controller = WorkforceMenuControllerScript.new()
@@ -1633,7 +1660,8 @@ func _start_park_rest(cooks_only: bool) -> void:
 
 
 func _on_meal_finished(citizen: Citizen) -> void:
-	canteen_service.on_meal_finished(citizen)
+	if actuator_bridge != null:
+		actuator_bridge.on_meal_finished(citizen)
 
 
 func _update_canteen_delivery() -> void:
@@ -1645,8 +1673,8 @@ func _cancel_canteen_delivery() -> void:
 
 
 func _on_canteen_delivery_finished(worker: Citizen, amount: int) -> void:
-	courier_dispatcher.complete_for(worker)
-	canteen_service.on_canteen_delivery_finished(worker, amount)
+	if actuator_bridge != null:
+		actuator_bridge.on_canteen_delivery_finished(worker, amount)
 
 func _update_couriers() -> void:
 	if courier_dispatcher != null:
@@ -1783,46 +1811,12 @@ func _construction_development_priority(site: ConstructionSite) -> float:
 	return construction_priority_service.development_priority(site) if construction_priority_service != null else 0.0
 
 func _on_construction_material_delivered(_courier: Citizen, site_node: Node3D, resource_type: String, amount: int) -> void:
-	if not construction.accept_delivery(site_node, resource_type, amount):
-		# The cargo was reserved at pickup, but another courier may have completed
-		# the requirement first. Return it instead of silently overfilling the site.
-		settlement.add(resource_type, amount)
-		var site := construction.site_for_node(site_node)
-		if site != null:
-			site.reserved_materials[resource_type] = maxi(0, int(site.reserved_materials.get(resource_type, 0)) - amount)
-			settlement.release_for_construction(site.site_id, resource_type, amount)
-		_update_interface("Construction site is full; courier returned %d %s to storage." % [amount, resource_type])
-	courier_dispatcher.complete_for(_courier)
-	_request_courier_dispatch()
-	# The delivery may have made a waiting construction site buildable. Refresh
-	# the snapshot immediately so its builders receive the updated order.
-	if citizen_ai != null:
-		citizen_ai.request_decision_refresh()
+	if actuator_bridge != null:
+		actuator_bridge.on_construction_material_delivered(_courier, site_node, resource_type, amount)
 
 func _on_building_supply_delivered(_courier: Citizen, target: Node3D, supply_kind: String, resource_type: String, amount: int) -> void:
-	courier_dispatcher.complete_for(_courier)
-	if not is_instance_valid(target):
-		settlement.add(resource_type, amount)
-		return
-	match supply_kind:
-		"firewood":
-			var fire_state := _fire_state_for(target)
-			fire_state.add_delivered(amount, int(game_minutes))
-			_apply_fire_state(target, fire_state)
-			_refresh_living_statuses()
-		"repair":
-			var repair_record := building_registry.record_for_node(target)
-			var repair_state: BuildingRuntimeStateScript = repair_record.runtime_state() if repair_record != null else BuildingRuntimeStateScript.from_node(target)
-			repair_state.repair_reserved = false
-			repair_state.condition = minf(100.0, repair_state.condition + 18.0)
-			repair_state.repair_needed = repair_state.condition < 82.0
-			repair_state.apply_to_node(target)
-		"pile":
-			settlement.add(resource_type, amount)
-			for index in resource_piles.size():
-				if resource_piles[index].node == target:
-					resource_piles[index].reserved[resource_type] = maxi(0, int(resource_piles[index].reserved.get(resource_type, 0)) - amount)
-					break
+	if actuator_bridge != null:
+		actuator_bridge.on_building_supply_delivered(_courier, target, supply_kind, resource_type, amount)
 
 func _builder_count(site_node: Node3D) -> int:
 	var count := 0
@@ -1841,20 +1835,21 @@ func _building_power(site_node: Node3D) -> float:
 	return power
 
 func _on_resource_delivered(worker: Citizen, resource_type: String, amount: int) -> void:
-	storage_delivery_service.on_resource_delivered(worker, resource_type, amount)
+	if actuator_bridge != null:
+		actuator_bridge.on_resource_delivered(worker, resource_type, amount)
 
 
 func _on_resource_dropped(worker: Citizen, resource_type: String, amount: int) -> void:
-	_drop_resource_pile(worker.global_position, resource_type, amount)
-	_update_interface("Worker dropped %d %s in a ground pile after the order was interrupted." % [amount, resource_type])
+	if actuator_bridge != null:
+		actuator_bridge.on_resource_dropped(worker, resource_type, amount)
 
 func _on_factory_cycle(worker: Citizen, factory: Node3D) -> void:
-	if factory_service != null:
-		factory_service.on_factory_cycle(worker, factory)
+	if actuator_bridge != null:
+		actuator_bridge.on_factory_cycle(worker, factory)
 
 func _on_resource_ready(worker: Citizen, resource_type: String, amount: int) -> void:
-	worker.register_pending_resource(resource_type, amount)
-	_request_courier_dispatch()
+	if actuator_bridge != null:
+		actuator_bridge.on_resource_ready(worker, resource_type, amount)
 
 func _sawmill_key(position_on_board: Vector3) -> Vector2i:
 	return _cell_from_position(position_on_board)
@@ -1866,8 +1861,8 @@ func _store_sawmill_stock(position_on_board: Vector3, stock: Dictionary) -> void
 	sawmills.store(position_on_board, stock)
 
 func _on_logs_delivered(worker: Citizen, sawmill_position: Vector3, amount: int) -> void:
-	sawmills.accept_logs(worker, sawmill_position, amount, runtime_seconds)
-	_request_courier_dispatch()
+	if actuator_bridge != null:
+		actuator_bridge.on_logs_delivered(worker, sawmill_position, amount)
 
 func _update_sawmills(delta: float) -> void:
 	sawmills.tick(delta, runtime_seconds)
@@ -1876,14 +1871,13 @@ func _decide_forestry_delivery(worker: Citizen, sawmill_position: Vector3) -> vo
 	sawmills.decide_delivery(worker, sawmill_position, runtime_seconds)
 
 func _on_sawmill_boards_collected(courier: Citizen, sawmill_position: Vector3) -> void:
-	sawmills.collect_boards(courier, sawmill_position, runtime_seconds)
-	_request_courier_dispatch()
+	if actuator_bridge != null:
+		actuator_bridge.on_sawmill_boards_collected(courier, sawmill_position)
 
 
 func _on_dew_collected(courier: Citizen, collector_position: Vector3) -> void:
-	var amount := water_collector_service.collect_water(collector_position, courier.courier_capacity())
-	courier.collect_dew(amount)
-	_request_courier_dispatch()
+	if actuator_bridge != null:
+		actuator_bridge.on_dew_collected(courier, collector_position)
 
 
 func _request_courier_dispatch() -> void:
@@ -1896,7 +1890,8 @@ func _sawmill_with_boards() -> Vector3:
 	return sawmills.position_with_boards(runtime_seconds)
 
 func _on_excavation_cycle(worker: Citizen, site_node: Node3D, efficiency: float) -> void:
-	excavation_service.on_excavation_cycle(worker, site_node, efficiency)
+	if actuator_bridge != null:
+		actuator_bridge.on_excavation_cycle(worker, site_node, efficiency)
 
 func _can_work_at_dig_site(site: DigSiteRecordScript) -> bool:
 	return excavation_service.can_work_at_dig_site(site)
@@ -2282,22 +2277,9 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 func _wire_citizen(citizen: Citizen) -> void:
 	citizen.setup_navigation(_find_path_around_houses, _get_nearest_delivery_position, _resolve_building_queue_position, _movement_speed_modifier_at, _navigation_revision, _record_trail_movement, _is_route_reachable, _complete_building_queue_arrival, _release_building_queue_entry, _find_recovery_path, _is_route_path_clear)
 	citizen.setup_registration_service(_can_start_registration, _registration_duration)
-	citizen.resource_delivered.connect(_on_resource_delivered)
-	citizen.resource_dropped.connect(_on_resource_dropped)
-	citizen.construction_material_delivered.connect(_on_construction_material_delivered)
-	citizen.building_supply_delivered.connect(_on_building_supply_delivered)
-	citizen.excavation_cycle.connect(_on_excavation_cycle)
-	citizen.resource_ready.connect(_on_resource_ready)
+	if actuator_bridge != null:
+		actuator_bridge.wire_citizen(citizen)
 	citizen.tree_harvested.connect(_on_tree_harvested)
-	citizen.logs_delivered.connect(_on_logs_delivered)
-	citizen.sawmill_boards_collected.connect(_on_sawmill_boards_collected)
-	citizen.dew_collected.connect(_on_dew_collected)
-	citizen.meal_finished.connect(_on_meal_finished)
-	citizen.relief_finished.connect(_on_relief_finished)
-	citizen.leisure_finished.connect(_on_leisure_finished)
-	citizen.canteen_delivery_finished.connect(_on_canteen_delivery_finished)
-	citizen.factory_cycle.connect(_on_factory_cycle)
-	citizen.trade_delivery_finished.connect(_on_trade_delivery_finished)
 	citizen.employment_processing_finished.connect(_on_employment_processing_finished)
 	citizen.arrival_greeter_ready.connect(_on_arrival_greeter_ready)
 	citizen.outside_work_departed.connect(_on_outside_work_departed)
@@ -2374,8 +2356,8 @@ func _ai_target_for_key(target_key: StringName) -> Node3D:
 
 
 func _on_relief_finished(citizen: Citizen) -> void:
-	if citizen_needs_service != null:
-		citizen_needs_service.fulfill_toilet(citizen.ai_id)
+	if actuator_bridge != null:
+		actuator_bridge.on_relief_finished(citizen)
 
 
 func _player_use_toilet(toilet_node: Node3D) -> void:
@@ -2405,8 +2387,8 @@ func _check_player_toilet_request() -> void:
 
 
 func _on_leisure_finished(citizen: Citizen) -> void:
-	if citizen_needs_service != null:
-		citizen_needs_service.fulfill_rest(citizen.ai_id)
+	if actuator_bridge != null:
+		actuator_bridge.on_leisure_finished(citizen)
 
 
 func _create_interface() -> void:
@@ -5468,8 +5450,8 @@ func _trade_has_tool_order(tool_id: String) -> bool:
 
 
 func _on_trade_delivery_finished(worker: Citizen) -> void:
-	trade_service.on_trade_delivery_finished(worker)
-	courier_dispatcher.complete_for(worker)
+	if actuator_bridge != null:
+		actuator_bridge.on_trade_delivery_finished(worker)
 
 func _show_building_menu() -> void:
 	if building_menu_controller != null:
