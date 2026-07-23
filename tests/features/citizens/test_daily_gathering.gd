@@ -1,14 +1,10 @@
 extends SceneTree
 
+const SimHelper = preload("res://tests/helpers/simulation_test_helper.gd")
+
 
 func _init() -> void:
-	var scene := load("res://game/bootstrap/settlement_game.tscn") as PackedScene
-	var simulation := scene.instantiate()
-	root.add_child(simulation)
-	await process_frame
-	await physics_frame
-	for _frame in range(10):
-		await physics_frame
+	var simulation := await SimHelper.setup_simulation(self)
 
 	assert(simulation.warehouse_positions.is_empty())
 	var citizen: Citizen = simulation.hero_citizen
@@ -28,7 +24,5 @@ func _init() -> void:
 		assert(order.payload.value(&"resource.type") == resources_by_role[role])
 		assert(order.payload.value(&"warehouse.position") == order.payload.value(&"target.access_position"))
 
-	root.remove_child(simulation)
-	simulation.free()
-	scene = null
+	SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

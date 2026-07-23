@@ -1,13 +1,9 @@
 extends SceneTree
 
+const SimHelper = preload("res://tests/helpers/simulation_test_helper.gd")
+
 func _init() -> void:
-	var scene := load("res://game/bootstrap/settlement_game.tscn") as PackedScene
-	var simulation := scene.instantiate()
-	root.add_child(simulation)
-	await process_frame
-	await physics_frame
-	for _frame in range(10):
-		await physics_frame
+	var simulation := await SimHelper.setup_simulation(self)
 
 	# 1. Verify Hero and initial squad setup
 	assert(is_instance_valid(simulation.hero_citizen), "Hero must exist")
@@ -37,4 +33,5 @@ func _init() -> void:
 		assert(citizen.settlement_id == &"main_settlement", "Squad citizen should be bound to main_settlement upon flag placement")
 
 	print("SUCCESS: test_squad_and_flag passed completely!")
+	SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

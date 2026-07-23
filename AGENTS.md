@@ -67,8 +67,6 @@ See `docs/architecture.md` and `design_docs/citizen_ai.md` before modifying AI b
 
 ```sh
 godot --headless --path . --script res://tests/run_all.gd
-godot --headless --path . --script res://tests/test_domain.gd
-godot --headless --path . --script res://tests/test_ai.gd
 ```
 
 These tests run deterministically in `_init()`, call `quit(0)`, and do not `await` frame events.
@@ -108,6 +106,12 @@ run_test res://tests/features/construction/test_materials_yard.gd 300
 ```
 
 Use a frame budget generous enough for the slowest machine running CI; 300 frames is enough for the current smoke tests.
+
+### Feature test conventions
+
+- Use `SimulationTestHelper` (`res://tests/helpers/simulation_test_helper.gd`) for scene-based tests: `setup_simulation(self)` handles instantiation + frame warmup, `cleanup_simulation(self, sim)` handles teardown, and `appoint_test_official(sim, citizen)` replaces the duplicated helper.
+- Diagnostic scripts (print-only, no assertions) go in `tests/repro/` with a `diag_` prefix so they are excluded from the test runner's `test_*.gd` pattern.
+- Each feature test should focus on one area (startup, housing, construction, etc.) rather than testing everything in a single `_init()`.
 
 ### General headless notes
 

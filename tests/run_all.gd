@@ -5,11 +5,15 @@ const TestDomainRoutingScript = preload("res://tests/domain/test_domain_routing.
 const TestDomainConstructionScript = preload("res://tests/domain/test_domain_construction.gd")
 const TestDomainLogisticsScript = preload("res://tests/domain/test_domain_logistics.gd")
 const TestDomainLaunchScript = preload("res://tests/domain/test_domain_launch.gd")
+const TestDomainNavigationScript = preload("res://tests/domain/test_domain_navigation.gd")
 
 const TestAIFrameworkScript = preload("res://tests/ai/test_ai_framework.gd")
 const TestAINeedsScript = preload("res://tests/ai/test_ai_needs.gd")
 const TestAIWorkProvidersScript = preload("res://tests/ai/test_ai_work_providers.gd")
 const TestAILogisticsScript = preload("res://tests/ai/test_ai_logistics.gd")
+
+
+const TestSaveLoadScript = preload("res://tests/test_save_load.gd")
 
 
 func _init() -> void:
@@ -24,7 +28,11 @@ func _init() -> void:
 	TestDomainConstructionScript.run_all()
 	TestDomainLogisticsScript.run_all()
 	TestDomainLaunchScript.run_all()
+	TestDomainNavigationScript.run_all()
+	TestSaveLoadScript.run_all()
 	print("  => Domain Unit Tests PASSED.")
+
+
 
 	# 2. Run AI Unit Tests
 	print("\n[2/2] Running AI Unit Tests...")

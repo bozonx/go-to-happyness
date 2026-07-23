@@ -19,8 +19,19 @@ echo "[2/2] Running Feature & Integration Scene Smoke Tests..."
 run_test() {
   local script=$1
   local frames=${2:-300}
+  local tmpfile
+  tmpfile="$(mktemp)"
   echo "-> Running $script ($frames frames)..."
-  timeout 45 godot --headless --path . --script "$script" --quit-after "$frames" > /dev/null
+  if timeout 45 godot --headless --path . --script "$script" --quit-after "$frames" > "$tmpfile" 2>&1; then
+    rm -f "$tmpfile"
+  else
+    echo "  [FAIL] $script"
+    echo "  --- output ---"
+    cat "$tmpfile"
+    echo "  --- end output ---"
+    rm -f "$tmpfile"
+    return 1
+  fi
 }
 
 PASSED=0
@@ -30,7 +41,6 @@ for test_file in $(find tests/features tests/repro -name "test_*.gd" | sort); do
   if run_test "res://$test_file" 300; then
     PASSED=$((PASSED + 1))
   else
-    echo "  [FAIL] res://$test_file"
     FAILED=$((FAILED + 1))
   fi
 done

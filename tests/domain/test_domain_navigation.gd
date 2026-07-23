@@ -1,13 +1,14 @@
-extends SceneTree
+class_name TestDomainNavigation
+extends RefCounted
 
 
-func _init() -> void:
+static func run_all() -> void:
 	_test_connected_component_invalidation()
 	_test_route_search_budget()
-	quit(0)
+	print("    [PASS] Navigation Performance Tests")
 
 
-func _test_connected_component_invalidation() -> void:
+static func _test_connected_component_invalidation() -> void:
 	var grid := NavGrid.new()
 	grid.configure(1.0, 6)
 	assert(grid.are_positions_connected(Vector3(-2.5, 0.0, 0.5), Vector3(2.5, 0.0, 0.5)))
@@ -27,7 +28,7 @@ func _test_connected_component_invalidation() -> void:
 	assert(grid.are_cells_connected(Vector2i(-2, 0), Vector2i(2, 0)))
 
 
-func _test_route_search_budget() -> void:
+static func _test_route_search_budget() -> void:
 	var grid := NavGrid.new()
 	grid.configure(1.0, 48)
 	var router := GridRouteService.new()

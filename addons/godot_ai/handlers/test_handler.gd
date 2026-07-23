@@ -122,23 +122,30 @@ func _discover_suites() -> Dictionary:
 			errors.append("%s (load failed — check for parse errors or duplicate methods)" % rel_path)
 			continue
 
-		var suite_name := rel_path.get_basename()
+		# SceneTree-based scripts are standalone headless runners that call
+		# quit(0) in _init and would exit the editor if executed. Skip them.
+		# McpTestSuite instances are already added above; the flag prevents
+		# double-wrapping them in McpScriptWrapperSuite.
+		var already_handled := false
 		if script.can_instantiate():
 			var instance = script.new()
 			if instance is McpTestSuite:
 				suites.append(instance)
+				already_handled = true
+			elif instance is SceneTree:
+				already_handled = true
 			else:
 				if instance != null and not (instance is RefCounted):
 					if instance is Node:
 						instance.free()
-					elif instance is SceneTree:
-						pass
 					else:
 						instance.free()
-				suites.append(McpScriptWrapperSuite.new(suite_name, script))
-		elif script.has_script_method("run_all"):
+		if already_handled:
+			continue
+		var suite_name := rel_path.get_basename()
+		if script.has_script_method("run_all"):
 			suites.append(McpScriptWrapperSuite.new(suite_name, script))
-		else:
+		elif not script.can_instantiate():
 			errors.append("%s (cannot instantiate — abstract or broken)" % rel_path)
 
 	## Sort by suite name for deterministic order.

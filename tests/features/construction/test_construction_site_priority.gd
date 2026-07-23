@@ -1,12 +1,10 @@
 extends SceneTree
 
+const SimHelper = preload("res://tests/helpers/simulation_test_helper.gd")
+
 
 func _init() -> void:
-	var scene := load("res://game/bootstrap/settlement_game.tscn") as PackedScene
-	var simulation := scene.instantiate()
-	root.add_child(simulation)
-	await process_frame
-	await physics_frame
+	var simulation := await SimHelper.setup_simulation(self)
 
 	var warehouse_position := Vector3(12.0, 0.0, 12.0)
 	var warehouse_blueprint := BuildingBlueprints.get_blueprint("straw_warehouse")
@@ -26,6 +24,5 @@ func _init() -> void:
 	assert(supplied_site.material_progress() > supplied_site.progress)
 	assert(simulation._preferred_construction_site() == supplied_site, "Builders must not wait at an unsupplied higher-priority project while another site can advance")
 
-	root.remove_child(simulation)
-	simulation.free()
+	SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

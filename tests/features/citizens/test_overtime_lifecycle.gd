@@ -1,12 +1,10 @@
 extends SceneTree
 
+const SimHelper = preload("res://tests/helpers/simulation_test_helper.gd")
+
 
 func _init() -> void:
-	var scene := load("res://game/bootstrap/settlement_game.tscn") as PackedScene
-	var simulation := scene.instantiate()
-	root.add_child(simulation)
-	await process_frame
-	await physics_frame
+	var simulation := await SimHelper.setup_simulation(self)
 
 	var worker: Citizen = simulation.citizens[2]
 	worker.set_player_controlled(false)
@@ -46,6 +44,5 @@ func _init() -> void:
 	assert(simulation.settlement.workday_hours == 6)
 	assert(simulation.settlement.pending_workday_hours == 0)
 
-	root.remove_child(simulation)
-	simulation.free()
+	SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

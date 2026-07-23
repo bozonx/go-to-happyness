@@ -1,12 +1,10 @@
 extends SceneTree
 
+const SimHelper = preload("res://tests/helpers/simulation_test_helper.gd")
+
 
 func _init() -> void:
-	var scene := load("res://game/bootstrap/settlement_game.tscn") as PackedScene
-	var simulation := scene.instantiate()
-	root.add_child(simulation)
-	await process_frame
-	await physics_frame
+	var simulation := await SimHelper.setup_simulation(self)
 
 	var researcher: Citizen = simulation.citizens[1]
 	var civic_post := Node3D.new()
@@ -52,4 +50,5 @@ func _init() -> void:
 	assert(replacement.employment_workplace == civic_post)
 
 	print("Civic research post tests passed.")
+	SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

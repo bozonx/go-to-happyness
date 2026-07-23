@@ -1,27 +1,13 @@
 extends SceneTree
 
-func _appoint_test_official(simulation: Node, citizen: Citizen) -> void:
-	simulation.settlement.complete_research("official")
-	if not is_instance_valid(simulation.campfire_node):
-		var centre := Node3D.new()
-		centre.set_meta("service_position", citizen.global_position)
-		simulation.add_child(centre)
-		simulation.campfire_node = centre
-	citizen.global_position = simulation._employment_center_position()
-	simulation._appoint_official(citizen, simulation.campfire_node)
+const SimHelper = preload("res://tests/helpers/simulation_test_helper.gd")
 
 
 func _init() -> void:
-	var scene := load("res://game/bootstrap/settlement_game.tscn") as PackedScene
-	var simulation := scene.instantiate()
-	root.add_child(simulation)
-	await process_frame
-	await physics_frame
-	for _frame in range(10):
-		await physics_frame
+	var simulation := await SimHelper.setup_simulation(self)
 
 	simulation.selected_builder = simulation.hero_citizen
-	_appoint_test_official(simulation, simulation.hero_citizen)
+	SimHelper.appoint_test_official(simulation, simulation.hero_citizen)
 	assert(simulation._player_can_command_labor())
 
 	var position := Vector3(12.0, 0.0, 12.0)
@@ -61,4 +47,5 @@ func _init() -> void:
 	assert(builder.state == Citizen.State.CONSTRUCTING, "builder should be in CONSTRUCTING state")
 	assert(builder.construction_site == site.node, "builder should be assigned to site")
 	assert(builder.global_position.distance_to(builder.construction_position) <= 1.0, "builder should reach construction position")
+	SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

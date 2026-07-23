@@ -174,11 +174,10 @@ API.
 
 ## Tests
 
-Put pure rule tests in `tests/unit/domain`, application/system tests in
-`tests/unit/application`, and scene startup checks in `tests/smoke`. The existing
-headless entries remain `tests/test_domain.gd`, `tests/test_ai.gd`,
-`tests/test_materials_yard.gd` and `tests/test_startup.gd` until they are moved
-alongside their new test categories.
+Put pure rule tests in `tests/domain/`, application/system tests in
+`tests/ai/`, and scene smoke tests in `tests/features/`. Diagnostic scripts
+that only print output (no assertions) live in `tests/repro/` with a `diag_`
+prefix so they are excluded from the test runner.
 
 Run the domain and master unit checks with:
 
@@ -190,6 +189,6 @@ Run AI and materials-yard checks when changing citizens, orders, workforce,
 logistics or early gathering:
 
 ```sh
-godot --headless --path . --script res://tests/test_ai.gd
+godot --headless --path . --script res://tests/run_all.gd
 godot --headless --path . --script res://tests/features/construction/test_materials_yard.gd --quit-after 300
 ```

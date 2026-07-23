@@ -1,0 +1,31 @@
+extends SceneTree
+
+func _init() -> void:
+	var scene := load("res://game/bootstrap/settlement_game.tscn") as PackedScene
+	var simulation := scene.instantiate() as Node
+	root.add_child(simulation)
+	await process_frame
+	await physics_frame
+	for _f in range(20):
+		await physics_frame
+
+	var c: Citizen = simulation.citizens[2]
+	simulation.selected_builder = c
+	print("selected=", simulation.selected_builder, " can_manage_perm=", simulation.player_can_manage_permanent_professions())
+	print("daily_order_roles=", simulation.daily_order_roles())
+
+	# open daily order submenu the same way the UI does
+	simulation.build_menu.visible = true
+	simulation._open_daily_order_submenu()
+	await process_frame
+
+	print("build_menu_is_daily_order_menu=", simulation.build_menu_is_daily_order_menu, " build_menu.visible=", simulation.build_menu.visible)
+	print("--- role buttons (daily) ---")
+	for button in simulation.build_menu.role_buttons:
+		var submenu: String = button.get_meta("submenu", "job")
+		if submenu != "daily":
+			continue
+		var role: String = button.get_meta("role", "")
+		print("role='", role, "' visible=", button.visible, " disabled=", button.disabled, " connected=", button.pressed.get_connections().size(), " tooltip='", button.tooltip_text, "'")
+
+	quit(0)

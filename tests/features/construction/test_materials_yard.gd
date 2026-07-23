@@ -1,27 +1,13 @@
 extends SceneTree
 
-func _appoint_test_official(simulation: Node, citizen: Citizen) -> void:
-	simulation.settlement.complete_research("official")
-	if not is_instance_valid(simulation.campfire_node):
-		var centre := Node3D.new()
-		centre.set_meta("service_position", citizen.global_position)
-		simulation.add_child(centre)
-		simulation.campfire_node = centre
-	citizen.global_position = simulation._employment_center_position()
-	simulation._appoint_official(citizen, simulation.campfire_node)
+const SimHelper = preload("res://tests/helpers/simulation_test_helper.gd")
 
 ## Scene-level smoke test for the materials yard: builds one and verifies it
 ## registers as a branch-gathering workplace that a resident can be employed at.
 
 
 func _init() -> void:
-	var scene := load("res://game/bootstrap/settlement_game.tscn") as PackedScene
-	var simulation := scene.instantiate()
-	root.add_child(simulation)
-	await process_frame
-	await physics_frame
-	for _frame in range(10):
-		await physics_frame
+	var simulation := await SimHelper.setup_simulation(self)
 
 	# Complete a materials yard through the normal building-completion path.
 	var cell := Vector2i(14, 14)
@@ -49,7 +35,7 @@ func _init() -> void:
 	civic_centre.set_meta("accepting_workers", true)
 	simulation.add_child(civic_centre)
 	simulation.campfire_node = civic_centre
-	_appoint_test_official(simulation, simulation.citizens[1])
+	SimHelper.appoint_test_official(simulation, simulation.citizens[1])
 
 	# The workforce menu's Assign action must create a permanent yard contract;
 	# this is the same handler connected to the visible UI button.
@@ -62,7 +48,5 @@ func _init() -> void:
 	assert(pending_yard_worker != null)
 	assert(pending_yard_worker.pending_employment_workplace == yard)
 
-	root.remove_child(simulation)
-	simulation.free()
-	scene = null
+	SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

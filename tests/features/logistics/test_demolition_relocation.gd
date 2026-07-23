@@ -1,12 +1,10 @@
 extends SceneTree
 
+const SimHelper = preload("res://tests/helpers/simulation_test_helper.gd")
+
 
 func _init() -> void:
-	var scene := load("res://game/bootstrap/settlement_game.tscn") as PackedScene
-	var simulation := scene.instantiate()
-	root.add_child(simulation)
-	await process_frame
-	await physics_frame
+	var simulation := await SimHelper.setup_simulation(self)
 
 	var home := Node3D.new()
 	home.position = Vector3(12.0, 0.0, 12.0)
@@ -31,6 +29,5 @@ func _init() -> void:
 	assert(resident.home == replacement)
 	assert(int(replacement.get_meta("spawn_slots")) == 0)
 
-	root.remove_child(simulation)
-	simulation.free()
+	SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

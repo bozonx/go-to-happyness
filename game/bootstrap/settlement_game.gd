@@ -58,6 +58,9 @@ const CitizenLivingStatusServiceScript = preload("res://game/features/citizens/a
 const CitizenStatusEffectScript = preload("res://game/features/citizens/domain/citizen_status_effect.gd")
 const CitizenRegistrationServiceScript = preload("res://game/features/citizens/application/citizen_registration_service.gd")
 const SchoolServiceScript = preload("res://game/features/buildings/application/school_service.gd")
+const SaveDataScript = preload("res://game/features/save_load/domain/save_data.gd")
+const SaveGameServiceScript = preload("res://game/features/save_load/application/save_game_service.gd")
+
 const BuildingPlacementServiceScript = preload("res://game/features/buildings/application/building_placement_service.gd")
 const BuildingVisualsServiceScript = preload("res://game/features/buildings/presentation/building_visuals_service.gd")
 const CitizenDailyOrderServiceScript = preload("res://game/features/citizens/application/citizen_daily_order_service.gd")
@@ -837,6 +840,15 @@ func _ready() -> void:
 	_update_workers()
 	_update_interface("Build a simple store, then gather materials for the first campfire and tents.")
 	_enter_first_person(hero_citizen, "Hero view enabled.")
+
+	var pending_save: String = ""
+	if launch_mgr != null and "pending_save_path" in launch_mgr:
+		pending_save = str(launch_mgr.get("pending_save_path"))
+		if not pending_save.is_empty():
+			launch_mgr.set("pending_save_path", "")
+	if not pending_save.is_empty():
+		SaveGameServiceScript.load_game(self, pending_save)
+
 
 func _process(delta: float) -> void:
 	runtime_seconds += delta
@@ -3086,7 +3098,25 @@ func _handle_menu_right_click() -> bool:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.keycode == KEY_5 and event.pressed and not event.echo:
+		if SaveGameServiceScript.save_quicksave(self):
+			_update_interface("Игра сохранена (клавиша 5)")
+		else:
+			_update_interface("Ошибка сохранения игры")
+		get_viewport().set_input_as_handled()
+		return
+	if event is InputEventKey and event.keycode == KEY_6 and event.pressed and not event.echo:
+		if SaveGameServiceScript.has_quicksave():
+			if SaveGameServiceScript.load_quicksave(self):
+				_update_interface("Игра загружена (клавиша 6)")
+			else:
+				_update_interface("Ошибка загрузки игры")
+		else:
+			_update_interface("Сохранение не найдено")
+		get_viewport().set_input_as_handled()
+		return
 	if event is InputEventKey and event.keycode == KEY_F and event.ctrl_pressed and event.pressed and not event.echo:
+
 		if OS.is_debug_build():
 			_grant_debug_resources()
 			get_viewport().set_input_as_handled()
@@ -5618,3 +5648,217 @@ func _toggle_campfire_worker_overtime(checked: bool) -> void:
 	selected_building = selected_campfire
 	_toggle_worker_overtime(checked)
 	_refresh_campfire_menu()
+
+
+func restore_from_save_data(save_data: SaveDataScript) -> void:
+	if save_data == null:
+		return
+
+	# 1. Despawn current citizens
+	for citizen in citizens.duplicate():
+		if is_instance_valid(citizen):
+			_on_ai_citizen_exiting(citizen.ai_id)
+			citizen.queue_free()
+	citizens.clear()
+	if citizen_ai != null:
+		citizen_ai.unregister_all_citizens()
+
+	# 2. Despawn current buildings and reset building registry
+	for record in building_registry.records():
+		if is_instance_valid(record.node):
+			record.node.queue_free()
+	building_registry = BuildingRegistry.new()
+	if building_queue_service != null:
+		building_queue_service.configure(building_registry, nav_grid)
+	if village_territory_service != null:
+		village_territory_service.configure(building_registry, int(settlement.era))
+	if construction != null and construction.runtime != null:
+		construction.runtime.building_registry = building_registry
+
+	# Despawn current construction sites
+	for site in construction_sites.duplicate():
+		if is_instance_valid(site.node):
+			site.node.queue_free()
+	construction_sites.clear()
+
+	# Despawn current resource piles
+	for pile in resource_piles.duplicate():
+		if pile != null and is_instance_valid(pile.node):
+			pile.node.queue_free()
+	resource_piles.clear()
+
+	# Reset tracking arrays
+	warehouse_positions.clear()
+	sawmill_positions.clear()
+	farm_positions.clear()
+	builders_guild_positions.clear()
+	construction_company_positions.clear()
+	pond_positions.clear()
+	forager_positions.clear()
+	materials_yard_positions.clear()
+	school_positions.clear()
+	market_positions.clear()
+	craft_tent_positions.clear()
+	park_positions.clear()
+	leisure_positions.clear()
+	gathering_place_positions.clear()
+	factories.clear()
+	water_collectors.clear()
+	house_lights.clear()
+	entrance_lights.clear()
+	service_pockets.clear()
+
+	# 3. Restore Settlement State
+	var s_dict: Dictionary = save_data.settlement_state
+	settlement.money = int(s_dict.get("money", 500))
+	settlement.wellbeing = int(s_dict.get("wellbeing", 75))
+	settlement.resources = s_dict.get("resources", {}).duplicate()
+	settlement.unlocked_techs = s_dict.get("unlocked_techs", []).duplicate()
+	settlement.equipment = s_dict.get("equipment", {}).duplicate(true)
+	settlement.era = int(s_dict.get("era", 0))
+
+	# 4. Restore Simulation Clock
+	if not save_data.clock_state.is_empty():
+		clock.minutes = float(save_data.clock_state.get("minutes", 0.0))
+
+	# 5. Restore Camera State
+	if not save_data.camera_state.is_empty():
+		var cam_target_dict: Dictionary = save_data.camera_state.get("target", {})
+		if not cam_target_dict.is_empty():
+			camera_target = SaveDataScript.dict_to_vector3(cam_target_dict)
+		camera_distance = float(save_data.camera_state.get("distance", 30.0))
+		camera_yaw = float(save_data.camera_state.get("yaw", 42.0))
+		camera_pitch = float(save_data.camera_state.get("pitch", 52.0))
+
+	# 6. Restore Placed Buildings
+	for b_dict in save_data.buildings_state:
+		var cell = SaveDataScript.dict_to_vector2i(b_dict.get("cell", {}))
+		var b_type = str(b_dict.get("building_type", ""))
+		var pos = SaveDataScript.dict_to_vector3(b_dict.get("position", {}))
+		var rot_y = float(b_dict.get("rotation_y", 0.0))
+		var rot_quarters = posmod(roundi(rot_y / 90.0), 4)
+
+		var blueprint = BuildingBlueprints.get_blueprint(b_type)
+		if not blueprint.is_empty():
+			var occupied_footprint = _rotated_footprint(blueprint.footprint)
+			building_registry.reserve(cell, pos, occupied_footprint)
+			var site_node: Node3D = construction._get_site_scene().instantiate()
+			site_node.position = pos
+			site_node.rotation.y = rot_quarters * PI * 0.5
+			site_node.set_meta("building_type", b_type)
+			site_node.set_meta("footprint", blueprint.footprint)
+			site_node.set_meta("occupied_footprint", occupied_footprint)
+			site_node.set_meta("service_positions", BuildingEntrancePositionsScript.positions(site_node, blueprint.footprint, 1.0))
+			add_child(site_node)
+			for module in blueprint.modules:
+				site_node.add_child(BuildingBlueprints.create_module(module))
+			for child_name in ["ConstructionTerritory", "ConstructionProgressBack", "ConstructionProgressFill", "SupplyLabel", "ConstructionSelector", "ConstructionEntrance"]:
+				var child := site_node.get_node_or_null(child_name)
+				if child != null:
+					child.queue_free()
+			_complete_building(cell, b_type, pos, site_node, blueprint)
+
+	# 7. Restore Construction Sites
+	for c_dict in save_data.construction_sites_state:
+		var cell = SaveDataScript.dict_to_vector2i(c_dict.get("cell", {}))
+		var b_type = str(c_dict.get("building_type", ""))
+		var pos = SaveDataScript.dict_to_vector3(c_dict.get("position", {}))
+		var rot_y = float(c_dict.get("rotation_y", 0.0))
+		var rot_quarters = posmod(roundi(rot_y / 90.0), 4)
+		var progress = float(c_dict.get("progress", 0.0))
+		var delivered = c_dict.get("delivered_materials", {}).duplicate()
+
+		var blueprint = BuildingBlueprints.get_blueprint(b_type)
+		if not blueprint.is_empty():
+			var occupied_footprint = _rotated_footprint(blueprint.footprint)
+			building_registry.reserve(cell, pos, occupied_footprint)
+			var site = _create_construction_site(cell, b_type, pos, rot_quarters, blueprint, occupied_footprint)
+			if site != null:
+				site.progress = progress
+				site.delivered_materials = delivered
+				building_registry.attach_node(cell, site.node, b_type)
+				_update_construction_supply_label(site)
+
+	# 8. Restore Resource Piles
+	for p_dict in save_data.resource_piles_state:
+		var res_id = str(p_dict.get("resource_id", ""))
+		var amount = int(p_dict.get("amount", 1))
+		var pos = SaveDataScript.dict_to_vector3(p_dict.get("position", {}))
+		_create_resource_pile(res_id, amount, pos)
+
+	# 9. Restore Citizens
+	_next_ai_citizen_id = int(save_data.world_state.get("next_ai_citizen_id", 1))
+	hero_citizen = null
+	for cit_dict in save_data.citizens_state:
+		var pos = SaveDataScript.dict_to_vector3(cit_dict.get("position", {}))
+		var is_hero = bool(cit_dict.get("is_hero", false))
+		var saved_id = int(cit_dict.get("ai_id", 0))
+
+		var citizen: Citizen = CitizenActorScene.instantiate()
+		citizen.position = pos
+		if cit_dict.has("first_name"):
+			citizen.first_name = str(cit_dict.get("first_name", ""))
+		if cit_dict.has("last_name"):
+			citizen.last_name = str(cit_dict.get("last_name", ""))
+		if cit_dict.has("age"):
+			citizen.age = int(cit_dict.get("age", 25))
+
+		add_child(citizen)
+		citizen.simulation = self
+		citizen.setup_specialization(str(cit_dict.get("specialization", "unassigned")))
+		citizen.setup_navigation(_find_path_around_houses, _get_nearest_delivery_position, _resolve_building_queue_position, _movement_speed_modifier_at, _navigation_revision, _record_trail_movement, _is_route_reachable, _complete_building_queue_arrival, _release_building_queue_entry, _find_recovery_path, _is_route_path_clear)
+		citizen.setup_registration_service(_can_start_registration, _registration_duration)
+
+		citizen.resource_delivered.connect(_on_resource_delivered)
+		citizen.resource_dropped.connect(_on_resource_dropped)
+		citizen.construction_material_delivered.connect(_on_construction_material_delivered)
+		citizen.building_supply_delivered.connect(_on_building_supply_delivered)
+		citizen.excavation_cycle.connect(_on_excavation_cycle)
+		citizen.resource_ready.connect(_on_resource_ready)
+		citizen.tree_harvested.connect(_on_tree_harvested)
+		citizen.logs_delivered.connect(_on_logs_delivered)
+		citizen.sawmill_boards_collected.connect(_on_sawmill_boards_collected)
+		citizen.dew_collected.connect(_on_dew_collected)
+		citizen.meal_finished.connect(_on_meal_finished)
+		citizen.relief_finished.connect(_on_relief_finished)
+		citizen.leisure_finished.connect(_on_leisure_finished)
+		citizen.canteen_delivery_finished.connect(_on_canteen_delivery_finished)
+		citizen.factory_cycle.connect(_on_factory_cycle)
+		citizen.trade_delivery_finished.connect(_on_trade_delivery_finished)
+		citizen.employment_processing_finished.connect(_on_employment_processing_finished)
+		citizen.arrival_greeter_ready.connect(_on_arrival_greeter_ready)
+		citizen.outside_work_departed.connect(_on_outside_work_departed)
+		citizen.citizen_leaving_departed.connect(_on_citizen_leaving_departed)
+
+		citizens.append(citizen)
+		citizen.ai_id = saved_id if saved_id > 0 else _next_ai_citizen_id
+		if citizen.ai_id >= _next_ai_citizen_id:
+			_next_ai_citizen_id = citizen.ai_id + 1
+
+		citizen_ai.register_citizen(citizen.ai_id, SettlementCitizenActuatorScript.new(citizen, _ai_target_for_key))
+		citizen.tree_exiting.connect(_on_ai_citizen_exiting.bind(citizen.ai_id), CONNECT_ONE_SHOT)
+
+		var needs_dict: Dictionary = cit_dict.get("needs", {})
+		citizen.hunger = float(needs_dict.get("hunger", 100.0))
+		citizen.fatigue = float(needs_dict.get("fatigue", 0.0))
+		citizen.comfort = float(needs_dict.get("comfort", 100.0))
+		citizen.health = float(needs_dict.get("health", 100.0))
+
+		var pockets: Array = cit_dict.get("pockets", [])
+		for p_item in pockets:
+			if p_item is Dictionary and p_item.has("resource_id"):
+				citizen.pockets_add(str(p_item["resource_id"]), int(p_item.get("amount", 1)))
+
+		if is_hero:
+			hero_citizen = citizen
+			citizen.set_hero(true)
+			citizen.employment_state = Citizen.EmploymentState.NO_PERMANENT_WORK
+
+	# 10. Re-initialize AI and Interfaces
+	_refresh_living_statuses()
+	_refresh_navigation_grid()
+	_update_workers()
+	_refresh_build_menu()
+
+	if hero_citizen != null:
+		_enter_first_person(hero_citizen, "Save loaded.")

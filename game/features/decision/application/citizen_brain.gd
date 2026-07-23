@@ -11,6 +11,13 @@ const PERSONAL_NEED_GOALS: Array[StringName] = [
 	&"rest",
 ]
 
+## Non-survival needs that yield to a freshly assigned work order: the citizen
+## completes the first assigned work task before the need is chosen. Survival
+## needs (sleep/meal) keep their own critical overrides and are never deferred.
+const DEFERRABLE_NEED_GOALS: Array[StringName] = [
+	&"toilet",
+]
+
 const ACTIVE_GOAL_BLACKBOARD_KEY := &"brain.active_goal_id"
 
 var citizen_id: int
@@ -20,6 +27,10 @@ var runner := BehaviorRunner.new()
 var context: BehaviorContext
 var _completed_order: CitizenOrder
 var _completed_order_goal_id: StringName
+## True once the citizen has finished at least one work task for the currently
+## available assignment. Reset when no work order is live. While false, deferrable
+## personal needs wait so the assigned work runs first.
+var _assigned_work_completed := false
 
 
 func _init(
@@ -54,6 +65,23 @@ func think(snapshot: WorldSnapshot, order: CitizenOrder) -> void:
 	elif order != _completed_order:
 		_completed_order = null
 		_completed_order_goal_id = &""
+	# A player-assigned task/job runs before a deferrable need: the need waits
+	# until the first assigned work task completes, then regains priority between
+	# work cycles. Needs still never interrupt work in progress (needs.can_start_*
+	# is only true while idle), so this only affects the idle planning point. The
+	# assignment is read from the citizen's own facts rather than the published
+	# order so the need is held even in the gap before the director publishes the
+	# first order for a freshly assigned citizen.
+	var has_assignment := context.citizen != null and (
+		bool(context.citizen.facts.value(&"daily.order.active", false))
+		or bool(context.citizen.facts.value(&"work.permanent.active", false))
+	)
+	if not has_assignment:
+		_assigned_work_completed = false
+	elif not _assigned_work_completed:
+		for need_id in DEFERRABLE_NEED_GOALS:
+			if need_id != active_goal_id and not need_id in excluded:
+				excluded.append(need_id)
 	var result := arbiter.choose(
 		snapshot,
 		context.citizen,
@@ -150,6 +178,8 @@ func _on_task_finished(task: BehaviorTask, status: BehaviorStep.Status) -> void:
 	if status == BehaviorStep.Status.SUCCESS and task.order != null and task.order_id != 0:
 		_completed_order = task.order
 		_completed_order_goal_id = task.goal_id
+		# The first assigned work task is done; deferrable needs may now be chosen.
+		_assigned_work_completed = true
 		return
 	if status != BehaviorStep.Status.FAILURE or task.goal_id == &"":
 		return

@@ -1,14 +1,10 @@
 extends SceneTree
 
+const SimHelper = preload("res://tests/helpers/simulation_test_helper.gd")
+
 
 func _init() -> void:
-	var scene := load("res://game/bootstrap/settlement_game.tscn") as PackedScene
-	var simulation := scene.instantiate()
-	root.add_child(simulation)
-	await process_frame
-	await physics_frame
-	for _frame in range(10):
-		await physics_frame
+	var simulation := await SimHelper.setup_simulation(self)
 
 	var warehouse_position := Vector3.ZERO
 	simulation.warehouse_positions.append(warehouse_position)
@@ -50,6 +46,5 @@ func _init() -> void:
 	assert(delivered, "Courier should deliver branches to the construction site")
 	assert(delivered_resource == "branches", "Expected branches delivery")
 
-	root.remove_child(simulation)
-	simulation.free()
+	SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

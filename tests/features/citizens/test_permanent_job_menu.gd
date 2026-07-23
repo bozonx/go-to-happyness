@@ -1,25 +1,12 @@
 extends SceneTree
 
-func _appoint_test_official(simulation: Node, citizen: Citizen) -> void:
-	simulation.settlement.complete_research("official")
-	if not is_instance_valid(simulation.campfire_node):
-		var centre := Node3D.new()
-		centre.set_meta("service_position", citizen.global_position)
-		simulation.add_child(centre)
-		simulation.campfire_node = centre
-	citizen.global_position = simulation._employment_center_position()
-	simulation._appoint_official(citizen, simulation.campfire_node)
-
+const SimHelper = preload("res://tests/helpers/simulation_test_helper.gd")
 
 func _init() -> void:
-	var scene := load("res://game/bootstrap/settlement_game.tscn") as PackedScene
-	var simulation := scene.instantiate()
-	root.add_child(simulation)
-	await process_frame
-	await physics_frame
+	var simulation := await SimHelper.setup_simulation(self)
 
 	simulation.selected_builder = simulation.hero_citizen
-	_appoint_test_official(simulation, simulation.hero_citizen)
+	SimHelper.appoint_test_official(simulation, simulation.hero_citizen)
 	simulation._refresh_build_menu()
 
 	simulation._open_job_submenu()
@@ -60,4 +47,5 @@ func _init() -> void:
 	assert(not construction_daily_button.disabled)
 
 	print("Permanent job menu tests passed.")
+	SimHelper.cleanup_simulation(self, simulation)
 	quit(0)
