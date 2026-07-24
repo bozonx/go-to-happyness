@@ -10,8 +10,11 @@ const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain
 
 const MATERIAL_COLORS := {
 	&"branches": Color(0.43, 0.28, 0.15),
+	&"thatch": Color(0.72, 0.60, 0.28),
+	&"tarp": Color(0.35, 0.40, 0.42),
 	&"earth": Color(0.43, 0.31, 0.20),
 	&"clay": Color(0.58, 0.32, 0.22),
+	&"logs": Color(0.48, 0.34, 0.19),
 	&"wood": Color(0.55, 0.38, 0.20),
 	&"stone": Color(0.47, 0.49, 0.50),
 	&"brick": Color(0.58, 0.22, 0.16),

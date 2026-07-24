@@ -10,7 +10,8 @@ extends RefCounted
 ## while `mesh_shape` tells presentation which procedural mesh to build.
 
 enum Category {
-	STRUCTURE,  ## cube, slab — massive foundation / floors
+	STRUCTURE,  ## cube, slab — massive body / floors
+	FOUNDATION, ## foundation blocks that auto-extend down to the ground
 	WALL,       ## wall panel, double span, corner
 	ROOF,       ## roof pitch
 	CIRCULATION,## stairs
@@ -40,6 +41,17 @@ const BLOCKS: Array = [
 		"size": Vector3(1.0, 0.5, 1.0),
 		"mesh_shape": SHAPE_BOX,
 		"rotatable": false,
+	},
+	{
+		"id": &"foundation",
+		"name": "Фундамент",
+		"category": Category.FOUNDATION,
+		"size": Vector3(1.0, 1.0, 1.0),
+		"mesh_shape": SHAPE_BOX,
+		"rotatable": false,
+		# Presentation extends this block downward until it meets the terrain, so
+		# a building on an uneven slope never leaves a gap beneath it.
+		"extends_down": true,
 	},
 	{
 		"id": &"wall_panel",
@@ -121,9 +133,15 @@ static func default_block_id() -> StringName:
 	return BLOCKS[0]["id"]
 
 
+## True for blocks that presentation should extend down to meet the terrain.
+static func extends_down(block_id: StringName) -> bool:
+	return bool(get_block(block_id).get("extends_down", false))
+
+
 static func category_name(category: int) -> String:
 	match category:
 		Category.STRUCTURE: return "Конструкция"
+		Category.FOUNDATION: return "Фундамент"
 		Category.WALL: return "Стены"
 		Category.ROOF: return "Крыша"
 		Category.CIRCULATION: return "Проходы"

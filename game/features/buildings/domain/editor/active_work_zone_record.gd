@@ -12,18 +12,35 @@ extends RefCounted
 ## later consume the zone.
 const KIND_WORKPLACE := &"workplace"  ## staffed by a profession (cook, seller, ...)
 const KIND_CIVIC := &"civic"          ## campfire / town hall — official / researcher
-const KIND_TRADE := &"trade"          ## entrance sign / market — trading, outside work
+const KIND_TRADE := &"trade"          ## market — trading, outside work
 const KIND_STORAGE := &"storage"      ## warehouse bay — input/output trays only
 const KIND_HOUSING := &"housing"      ## residence — sleeping capacity
-const KIND_LEISURE := &"leisure"      ## recreation — visitors, no worker
+const KIND_LEISURE := &"leisure"      ## recreation — visitors relax, see LEISURE_SUBTYPES
+const KIND_SPECIAL := &"special"      ## non-work marker zone, see SPECIAL_SUBTYPES
 
 const KINDS: Array[StringName] = [
-	KIND_WORKPLACE, KIND_CIVIC, KIND_TRADE, KIND_STORAGE, KIND_HOUSING, KIND_LEISURE,
+	KIND_WORKPLACE, KIND_CIVIC, KIND_TRADE, KIND_STORAGE, KIND_HOUSING,
+	KIND_LEISURE, KIND_SPECIAL,
+]
+
+## Recreation flavours for KIND_LEISURE. The subtype drives the kind of leisure
+## need a visit satisfies and the ambience the building projects.
+const LEISURE_SUBTYPES: Array[StringName] = [
+	&"park", &"plaza", &"playground", &"sports_field", &"gym", &"cinema", &"theater",
+]
+
+## Marker roles for KIND_SPECIAL. `entrance_sign` designates a settlement gate
+## landmark (a plain post or a triumphal arch — the geometry is up to the author).
+const SPECIAL_SUBTYPES: Array[StringName] = [
+	&"entrance_sign", &"monument", &"notice_board", &"flagpole",
 ]
 
 var zone_id: StringName = &"zone_1"
 var zone_name: String = "Зона"
 var kind: StringName = KIND_WORKPLACE
+## Optional flavour within a kind (LEISURE_SUBTYPES / SPECIAL_SUBTYPES). Empty
+## for kinds that need no sub-classification.
+var subtype: StringName = &""
 var profession: StringName = &""
 var max_workers: int = 1
 ## Cells occupied by the zone on the 1m authoring grid. This is intentionally
@@ -74,6 +91,7 @@ func to_dict() -> Dictionary:
 		"id": String(zone_id),
 		"name": zone_name,
 		"kind": String(kind),
+		"subtype": String(subtype),
 		"profession_type": String(profession),
 		"max_workers": max_workers,
 		"cells": cells.map(func(cell: Vector3i): return [cell.x, cell.y, cell.z]),
@@ -87,6 +105,7 @@ static func from_dict(data: Dictionary) -> ActiveWorkZoneRecord:
 	zone.zone_id = StringName(data.get("id", "zone_1"))
 	zone.zone_name = String(data.get("name", "Зона"))
 	zone.kind = StringName(data.get("kind", KIND_WORKPLACE))
+	zone.subtype = StringName(data.get("subtype", ""))
 	zone.profession = StringName(data.get("profession_type", ""))
 	zone.max_workers = int(data.get("max_workers", 1))
 	for raw_cell in data.get("cells", []):
@@ -120,11 +139,36 @@ static func kind_display_name(zone_kind: StringName) -> String:
 	match zone_kind:
 		KIND_WORKPLACE: return "Место работы"
 		KIND_CIVIC: return "Гражданская (костёр/ратуша)"
-		KIND_TRADE: return "Торговля / въездной знак"
+		KIND_TRADE: return "Торговля / рынок"
 		KIND_STORAGE: return "Склад"
 		KIND_HOUSING: return "Жильё"
-		KIND_LEISURE: return "Отдых"
+		KIND_LEISURE: return "Отдых / рекреация"
+		KIND_SPECIAL: return "Особая зона"
 		_: return String(zone_kind)
+
+
+## Subtypes that apply to a kind, or an empty array when the kind is flat.
+static func subtypes_for_kind(zone_kind: StringName) -> Array[StringName]:
+	match zone_kind:
+		KIND_LEISURE: return LEISURE_SUBTYPES
+		KIND_SPECIAL: return SPECIAL_SUBTYPES
+		_: return []
+
+
+static func subtype_display_name(zone_subtype: StringName) -> String:
+	match zone_subtype:
+		&"park": return "Парк"
+		&"plaza": return "Площадь"
+		&"playground": return "Детская площадка"
+		&"sports_field": return "Спортплощадка"
+		&"gym": return "Спортзал"
+		&"cinema": return "Кинотеатр"
+		&"theater": return "Театр"
+		&"entrance_sign": return "Въездной знак"
+		&"monument": return "Монумент"
+		&"notice_board": return "Доска объявлений"
+		&"flagpole": return "Флагшток"
+		_: return String(zone_subtype)
 
 
 static func _vec3_to_arr(v: Vector3) -> Array:

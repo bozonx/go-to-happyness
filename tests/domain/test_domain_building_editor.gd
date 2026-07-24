@@ -16,6 +16,9 @@ const BuildingZoneServiceScript = preload("res://game/features/buildings/applica
 static func run_all() -> void:
 	_test_catalog()
 	_test_material_catalog_and_costs()
+	_test_material_era_filtering()
+	_test_underground_requires_earth_era()
+	_test_zone_subtype_round_trip()
 	_test_grid_place_erase()
 	_test_grid_rotation_rules()
 	_test_grid_bounds()
@@ -27,16 +30,20 @@ static func run_all() -> void:
 
 
 static func _test_catalog() -> void:
-	assert(BuildingBlockCatalogScript.all().size() == 8)
+	assert(BuildingBlockCatalogScript.all().size() == 9)
 	assert(BuildingBlockCatalogScript.has_block(&"cube"))
+	assert(BuildingBlockCatalogScript.has_block(&"foundation"))
 	assert(not BuildingBlockCatalogScript.has_block(&"nonexistent"))
 	assert(BuildingBlockCatalogScript.default_block_id() == &"cube")
 	var cube := BuildingBlockCatalogScript.get_block(&"cube")
 	assert(cube["size"] == Vector3(1.0, 1.0, 1.0))
+	# The foundation block is flagged so presentation extends it down to terrain.
+	assert(BuildingBlockCatalogScript.extends_down(&"foundation"))
+	assert(not BuildingBlockCatalogScript.extends_down(&"cube"))
 
 
 static func _test_material_catalog_and_costs() -> void:
-	assert(BuildingMaterialCatalogScript.all().size() == 6)
+	assert(BuildingMaterialCatalogScript.all().size() == 9)
 	assert(BuildingMaterialCatalogScript.resource_id(&"earth") == &"soil")
 	assert(BuildingMaterialCatalogScript.resource_id(&"wood") == &"boards")
 	var bp := BuildingBlueprintScript.new()
@@ -52,6 +59,55 @@ static func _test_material_catalog_and_costs() -> void:
 	assert(restored != null)
 	assert(restored.blocks[0].material_id == &"earth")
 	assert(restored.blocks[1].material_id == &"stone")
+
+
+static func _test_material_era_filtering() -> void:
+	# Materials are cumulative: an era offers its own plus every earlier era's.
+	var tent := BuildingMaterialCatalogScript.materials_for_era("tent")
+	var tent_ids := tent.map(func(m): return m["id"])
+	assert(&"branches" in tent_ids and &"thatch" in tent_ids)
+	assert(&"earth" not in tent_ids and &"stone" not in tent_ids)
+	# Earth era adds soil but still allows the tent materials.
+	assert(BuildingMaterialCatalogScript.is_available_in_era(&"branches", "earth"))
+	assert(BuildingMaterialCatalogScript.is_available_in_era(&"earth", "earth"))
+	assert(not BuildingMaterialCatalogScript.is_available_in_era(&"stone", "earth"))
+	# Each era resolves to a defining default material.
+	assert(BuildingMaterialCatalogScript.default_material_for_era("earth") == &"earth")
+	assert(BuildingMaterialCatalogScript.default_material_for_era("brick") == &"brick")
+
+
+static func _test_underground_requires_earth_era() -> void:
+	var tent_underground := BuildingBlueprintScript.new()
+	tent_underground.id = &"tent_bunker"
+	tent_underground.category = "tent"
+	tent_underground.construction_style = &"underground"
+	assert(not tent_underground.validation_errors().is_empty())
+	# The same building becomes valid once it is an earth-era structure.
+	tent_underground.category = "earth"
+	assert(tent_underground.validation_errors().is_empty())
+
+
+static func _test_zone_subtype_round_trip() -> void:
+	var bp := BuildingBlueprintScript.new()
+	bp.id = &"town_park"
+	var leisure := ActiveWorkZoneRecordScript.new()
+	leisure.zone_id = &"z_park"
+	leisure.kind = ActiveWorkZoneRecordScript.KIND_LEISURE
+	leisure.subtype = &"cinema"
+	bp.work_zones.append(leisure)
+	var gate := ActiveWorkZoneRecordScript.new()
+	gate.zone_id = &"z_gate"
+	gate.kind = ActiveWorkZoneRecordScript.KIND_SPECIAL
+	gate.subtype = &"entrance_sign"
+	bp.work_zones.append(gate)
+	var restored := BuildingBlueprintScript.from_json(bp.to_json())
+	assert(restored != null)
+	assert(restored.work_zones[0].kind == ActiveWorkZoneRecordScript.KIND_LEISURE)
+	assert(restored.work_zones[0].subtype == &"cinema")
+	assert(restored.work_zones[1].kind == ActiveWorkZoneRecordScript.KIND_SPECIAL)
+	assert(restored.work_zones[1].subtype == &"entrance_sign")
+	assert(&"cinema" in ActiveWorkZoneRecordScript.subtypes_for_kind(ActiveWorkZoneRecordScript.KIND_LEISURE))
+	assert(&"entrance_sign" in ActiveWorkZoneRecordScript.subtypes_for_kind(ActiveWorkZoneRecordScript.KIND_SPECIAL))
 
 
 static func _test_grid_place_erase() -> void:

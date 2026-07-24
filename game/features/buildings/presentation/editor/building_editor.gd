@@ -23,6 +23,7 @@ const BlockMeshLibraryScript = preload("res://game/features/buildings/presentati
 const UI_THEME = preload("res://game/features/ui/presentation/theme/ui_theme.tres")
 
 enum Tool { PLACE, ERASE }
+enum Brush { LINE, RECT }
 enum EditMode { FRAME, FINISHES, DECOR, ZONES }
 
 ## Forces developer mode when the scene is opened/run directly. The main menu
@@ -38,6 +39,7 @@ var current_block_id: StringName = BuildingBlockCatalogScript.default_block_id()
 var current_material_id: StringName = BuildingMaterialCatalogScript.DEFAULT_ID
 var current_rot: int = 0
 var current_tool: int = Tool.PLACE
+var current_brush: int = Brush.LINE
 var active_layer: int = 0
 var cursor_cell: Vector3i = Vector3i.ZERO
 var cursor_valid: bool = false
@@ -47,6 +49,8 @@ var current_mode: int = EditMode.FRAME
 ## Frame-mode drag painting state.
 var _painting: bool = false
 var _last_paint_cell: Vector3i = Vector3i.ZERO
+## Fixed corner of the current rectangle brush drag (the cell first pressed).
+var _paint_anchor: Vector3i = Vector3i.ZERO
 
 ## Zones-mode state.
 var _selected_zone_index: int = -1
@@ -65,6 +69,10 @@ var _orbiting: bool = false
 var _name_edit: LineEdit
 var _id_edit: LineEdit
 var _category_option: OptionButton
+var _style_option: OptionButton
+var _material_option: OptionButton
+var _brush_line_btn: Button
+var _brush_rect_btn: Button
 var _fallback_edit: LineEdit
 var _footprint_x_spin: SpinBox
 var _footprint_z_spin: SpinBox
@@ -88,6 +96,8 @@ var _zone_option: OptionButton
 var _zone_id_edit: LineEdit
 var _zone_name_edit: LineEdit
 var _zone_kind_option: OptionButton
+var _zone_subtype_row: VBoxContainer
+var _zone_subtype_option: OptionButton
 var _zone_profession_option: OptionButton
 var _zone_workers_spin: SpinBox
 var _zone_info_label: Label
@@ -234,11 +244,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif _panning and _camera_controller.has_method("pan"):
 			_camera_controller.call("pan", event.relative)
 		elif _painting:
-			# Drag to build/erase a line following the mouse.
+			# Drag to build/erase following the mouse: a line, or — with the
+			# rectangle brush — a filled floor/ceiling slab from the anchor.
 			_update_cursor()
 			if cursor_valid:
 				if current_mode == EditMode.ZONES and _armed_marker == &"area":
 					_paint_zone_line(_last_paint_cell, cursor_cell)
+				elif current_mode == EditMode.FRAME and current_brush == Brush.RECT:
+					_paint_rect(_paint_anchor, cursor_cell)
 				else:
 					_paint_line(_last_paint_cell, cursor_cell)
 				_last_paint_cell = cursor_cell
@@ -269,7 +282,11 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 				else:
 					_painting = true
 					_last_paint_cell = cursor_cell
-					_apply_tool_at_cursor()
+					_paint_anchor = cursor_cell
+					if current_brush == Brush.RECT:
+						_paint_rect(_paint_anchor, cursor_cell)
+					else:
+						_apply_tool_at_cursor()
 			else:
 				_painting = false
 
@@ -361,6 +378,20 @@ func _paint_line(from_cell: Vector3i, to_cell: Vector3i) -> void:
 		if e2 < dx:
 			err += dx
 			z += sz
+	_refresh_ghost()
+
+
+## Fills the axis-aligned rectangle spanned by two grid cells at the active
+## layer. Used to lay whole floors and ceilings in one drag.
+func _paint_rect(from_cell: Vector3i, to_cell: Vector3i) -> void:
+	var x0 := mini(from_cell.x, to_cell.x)
+	var x1 := maxi(from_cell.x, to_cell.x)
+	var z0 := mini(from_cell.z, to_cell.z)
+	var z1 := maxi(from_cell.z, to_cell.z)
+	var y := active_layer
+	for x in range(x0, x1 + 1):
+		for z in range(z0, z1 + 1):
+			_apply_tool_at_cell(Vector3i(x, y, z))
 	_refresh_ghost()
 
 
@@ -457,6 +488,81 @@ func _set_tool(tool_id: int) -> void:
 	if _tool_erase_btn != null:
 		_tool_erase_btn.button_pressed = tool_id == Tool.ERASE
 	_refresh_ghost()
+
+
+## Repopulates the frame material list from the currently chosen era. Materials
+## from the era and every earlier era are offered (cumulative), so each era has
+## several materials; the block material is thus driven by the era, not picked
+## from the full catalog.
+func _rebuild_material_options() -> void:
+	if _material_option == null:
+		return
+	_material_option.clear()
+	var current_ok := false
+	for material in BuildingMaterialCatalogScript.materials_for_era(blueprint.category):
+		_material_option.add_item("%s → %s" % [material["name"], material["resource_id"]])
+		_material_option.set_item_metadata(_material_option.item_count - 1, material["id"])
+		if material["id"] == current_material_id:
+			current_ok = true
+	if not current_ok:
+		current_material_id = BuildingMaterialCatalogScript.default_material_for_era(blueprint.category)
+	for i in _material_option.item_count:
+		if _material_option.get_item_metadata(i) == current_material_id:
+			_material_option.select(i)
+			break
+	_refresh_ghost()
+
+
+func _on_era_changed(index: int) -> void:
+	blueprint.category = str(_category_option.get_item_metadata(index))
+	_rebuild_material_options()
+	_refresh_underground_availability()
+	var offenders := _count_blocks_off_era()
+	if offenders > 0:
+		_update_status("Эра: %s. Внимание: %d блок(ов) используют более поздний материал." % [blueprint.category, offenders])
+	else:
+		_update_status("Эра: %s." % blueprint.category)
+
+
+## Number of placed blocks whose material is not available in the chosen era.
+func _count_blocks_off_era() -> int:
+	var count := 0
+	for block in grid_model.all_blocks():
+		if not BuildingMaterialCatalogScript.is_available_in_era(block.material_id, blueprint.category):
+			count += 1
+	return count
+
+
+## Underground digging is unlocked only from the earth era; keep the style option
+## honest about that and never leave an illegal underground selection standing.
+func _refresh_underground_availability() -> void:
+	if _style_option == null:
+		return
+	var earth_rank := BuildingMaterialCatalogScript.era_rank("earth")
+	var allowed := BuildingMaterialCatalogScript.era_rank(blueprint.category) >= earth_rank
+	for i in _style_option.item_count:
+		if _style_option.get_item_metadata(i) == &"underground":
+			_style_option.set_item_disabled(i, not allowed)
+	if not allowed and blueprint.construction_style == &"underground":
+		blueprint.construction_style = &"surface"
+		_select_style_in_option(&"surface")
+
+
+func _select_style_in_option(style: StringName) -> void:
+	if _style_option == null:
+		return
+	for i in _style_option.item_count:
+		if _style_option.get_item_metadata(i) == style:
+			_style_option.select(i)
+			break
+
+
+func _set_brush(brush_id: int) -> void:
+	current_brush = brush_id
+	if _brush_line_btn != null:
+		_brush_line_btn.button_pressed = brush_id == Brush.LINE
+	if _brush_rect_btn != null:
+		_brush_rect_btn.button_pressed = brush_id == Brush.RECT
 
 
 func _select_block(block_id: StringName) -> void:
@@ -607,6 +713,7 @@ func _build_ui() -> void:
 
 	_select_block(current_block_id)
 	_set_tool(Tool.PLACE)
+	_set_brush(Brush.LINE)
 	_set_layer(0)
 	_update_count()
 	_select_mode(EditMode.FRAME)
@@ -734,6 +841,24 @@ func _build_palette_panel(root: Control) -> void:
 	_tool_erase_btn.pressed.connect(func(): _set_tool(Tool.ERASE))
 	tools_row.add_child(_tool_erase_btn)
 
+	# Brush shape: single line vs. filled rectangle (floors and ceilings).
+	var brush_row := HBoxContainer.new()
+	vbox.add_child(brush_row)
+	_brush_line_btn = Button.new()
+	_brush_line_btn.text = "／ Линия"
+	_brush_line_btn.toggle_mode = true
+	_brush_line_btn.tooltip_text = "Кисть: линия по перетаскиванию"
+	_brush_line_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_brush_line_btn.pressed.connect(func(): _set_brush(Brush.LINE))
+	brush_row.add_child(_brush_line_btn)
+	_brush_rect_btn = Button.new()
+	_brush_rect_btn.text = "▭ Прямоуг."
+	_brush_rect_btn.toggle_mode = true
+	_brush_rect_btn.tooltip_text = "Кисть: прямоугольник — залить пол или потолок"
+	_brush_rect_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_brush_rect_btn.pressed.connect(func(): _set_brush(Brush.RECT))
+	brush_row.add_child(_brush_rect_btn)
+
 	# Rotation + layer controls.
 	var rot_row := HBoxContainer.new()
 	vbox.add_child(rot_row)
@@ -765,18 +890,16 @@ func _build_palette_panel(root: Control) -> void:
 	vbox.add_child(HSeparator.new())
 
 	var materials_label := Label.new()
-	materials_label.text = "Материал каркаса"
+	materials_label.text = "Материал каркаса (по эре)"
 	materials_label.add_theme_font_size_override("font_size", 16)
 	vbox.add_child(materials_label)
-	var material_option := OptionButton.new()
-	for material in BuildingMaterialCatalogScript.all():
-		material_option.add_item("%s → %s" % [material["name"], material["resource_id"]])
-		material_option.set_item_metadata(material_option.item_count - 1, material["id"])
-	material_option.item_selected.connect(func(index: int):
-		current_material_id = material_option.get_item_metadata(index)
+	_material_option = OptionButton.new()
+	_material_option.item_selected.connect(func(index: int):
+		current_material_id = _material_option.get_item_metadata(index)
 		_refresh_ghost()
 	)
-	vbox.add_child(material_option)
+	vbox.add_child(_material_option)
+	_rebuild_material_options()
 
 	var blocks_label := Label.new()
 	blocks_label.text = "Блоки"
@@ -867,6 +990,14 @@ func _build_zones_panel(root: Control) -> void:
 		_zone_kind_option.set_item_metadata(_zone_kind_option.item_count - 1, kind)
 	_zone_kind_option.item_selected.connect(_on_zone_kind_selected)
 	vbox.add_child(_zone_kind_option)
+
+	# Subtype (recreation flavour / special marker). Hidden for flat kinds.
+	_zone_subtype_row = VBoxContainer.new()
+	_zone_subtype_row.add_child(_labeled("Тип:"))
+	_zone_subtype_option = OptionButton.new()
+	_zone_subtype_option.item_selected.connect(_on_zone_subtype_selected)
+	_zone_subtype_row.add_child(_zone_subtype_option)
+	vbox.add_child(_zone_subtype_row)
 
 	vbox.add_child(_labeled("Профессия:"))
 	_zone_profession_option = OptionButton.new()
@@ -1021,6 +1152,7 @@ func _refresh_zone_panel_fields() -> void:
 			_zone_id_edit.text = ""
 		if _zone_info_label != null:
 			_zone_info_label.text = "Нет зон. Нажмите ＋, чтобы создать."
+		_rebuild_zone_subtype_options()
 		return
 	if _zone_name_edit != null:
 		_zone_name_edit.text = zone.zone_name
@@ -1031,6 +1163,7 @@ func _refresh_zone_panel_fields() -> void:
 			if _zone_kind_option.get_item_metadata(i) == zone.kind:
 				_zone_kind_option.select(i)
 				break
+	_rebuild_zone_subtype_options()
 	if _zone_profession_option != null:
 		var found := 0
 		for i in _zone_profession_option.item_count:
@@ -1052,8 +1185,11 @@ func _update_zone_info() -> void:
 		trays += " вход✓"
 	if zone.storage_trays.has("output"):
 		trays += " выход✓"
-	_zone_info_label.text = "Ячеек: %d · Якорей: %d · Поддоны:%s\nID: %s" % [
-		zone.cells.size(), zone.work_anchors.size(), (trays if trays != "" else " —"), zone.zone_id]
+	var subtype_line := ""
+	if zone.subtype != &"":
+		subtype_line = "\nТип: %s" % ActiveWorkZoneRecordScript.subtype_display_name(zone.subtype)
+	_zone_info_label.text = "Ячеек: %d · Якорей: %d · Поддоны:%s\nID: %s%s" % [
+		zone.cells.size(), zone.work_anchors.size(), (trays if trays != "" else " —"), zone.zone_id, subtype_line]
 
 
 func _on_zone_name_changed(text: String) -> void:
@@ -1076,7 +1212,38 @@ func _on_zone_kind_selected(index: int) -> void:
 	if zone == null:
 		return
 	zone.kind = _zone_kind_option.get_item_metadata(index)
+	# Reset the subtype to the first legal value for the new kind (or none).
+	var subtypes := ActiveWorkZoneRecordScript.subtypes_for_kind(zone.kind)
+	zone.subtype = subtypes[0] if not subtypes.is_empty() else &""
+	_rebuild_zone_subtype_options()
 	_update_zone_info()
+
+
+func _on_zone_subtype_selected(index: int) -> void:
+	var zone := _current_zone()
+	if zone == null:
+		return
+	zone.subtype = _zone_subtype_option.get_item_metadata(index)
+
+
+## Fills the subtype list from the zone's kind and hides the row for flat kinds.
+func _rebuild_zone_subtype_options() -> void:
+	if _zone_subtype_option == null:
+		return
+	var zone := _current_zone()
+	var subtypes: Array[StringName] = []
+	if zone != null:
+		subtypes = ActiveWorkZoneRecordScript.subtypes_for_kind(zone.kind)
+	_zone_subtype_row.visible = not subtypes.is_empty()
+	_zone_subtype_option.clear()
+	for st in subtypes:
+		_zone_subtype_option.add_item(ActiveWorkZoneRecordScript.subtype_display_name(st))
+		_zone_subtype_option.set_item_metadata(_zone_subtype_option.item_count - 1, st)
+	if zone != null:
+		for i in _zone_subtype_option.item_count:
+			if _zone_subtype_option.get_item_metadata(i) == zone.subtype:
+				_zone_subtype_option.select(i)
+				break
 
 
 func _on_zone_profession_selected(index: int) -> void:
@@ -1187,7 +1354,7 @@ func _build_status_bar(root: Control) -> void:
 	hbox.add_child(_count_label)
 
 	var help := Label.new()
-	help.text = "ЛКМ (зажать) — рисовать линию · ПКМ — камера · СКМ — панорама · Колесо — зум · WASD — движение"
+	help.text = "ЛКМ (зажать) — линия/прямоугольник · ПКМ — камера · СКМ — панорама · Колесо — зум · WASD — движение"
 	help.add_theme_color_override("font_color", Color(0.6, 0.66, 0.72))
 	hbox.add_child(help)
 
@@ -1209,12 +1376,26 @@ func _build_dev_panel(root: Control) -> void:
 	title.add_theme_font_size_override("font_size", 16)
 	vbox.add_child(title)
 
-	vbox.add_child(_labeled("Эра:"))
+	vbox.add_child(_labeled("Эра (задаёт материалы):"))
 	_category_option = OptionButton.new()
-	for category_id in ["tent", "earth", "clay", "wood", "stone", "brick"]:
+	for category_id in BuildingMaterialCatalogScript.ERA_ORDER:
 		_category_option.add_item(category_id.capitalize())
 		_category_option.set_item_metadata(_category_option.item_count - 1, category_id)
+	_category_option.item_selected.connect(_on_era_changed)
 	vbox.add_child(_category_option)
+
+	vbox.add_child(_labeled("Стиль постройки:"))
+	_style_option = OptionButton.new()
+	for style_info in [
+		{"id": &"surface", "label": "Наземная"},
+		{"id": &"underground", "label": "Подземная (с земляной эры)"},
+	]:
+		_style_option.add_item(style_info["label"])
+		_style_option.set_item_metadata(_style_option.item_count - 1, style_info["id"])
+	_style_option.item_selected.connect(func(index: int):
+		blueprint.construction_style = _style_option.get_item_metadata(index)
+	)
+	vbox.add_child(_style_option)
 
 	vbox.add_child(_labeled("Fallback стандартного здания:"))
 	_fallback_edit = LineEdit.new()
@@ -1296,6 +1477,9 @@ func _sync_metadata_fields() -> void:
 			if str(_category_option.get_item_metadata(i)) == blueprint.category:
 				_category_option.select(i)
 				break
+	_select_style_in_option(blueprint.construction_style)
+	_rebuild_material_options()
+	_refresh_underground_availability()
 
 
 func _update_rotation_label() -> void:

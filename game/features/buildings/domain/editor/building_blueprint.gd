@@ -163,20 +163,22 @@ func validation_errors() -> Array[String]:
 		errors.append("Blueprint name is empty")
 	if construction_style not in [&"surface", &"underground"]:
 		errors.append("Unknown construction_style: %s" % construction_style)
-	if category not in ["tent", "earth", "clay", "wood", "stone", "brick"]:
+	if category not in BuildingMaterialCatalogScript.ERA_ORDER:
 		errors.append("Unknown era category: %s" % category)
+	# Underground structures can only be dug from the earth era onward.
+	elif construction_style == &"underground" and BuildingMaterialCatalogScript.era_rank(category) < BuildingMaterialCatalogScript.era_rank("earth"):
+		errors.append("Underground construction requires the earth era or later")
 	if grid_bounds.x <= 0 or grid_bounds.y <= 0 or grid_bounds.z <= 0:
 		errors.append("grid_bounds must be positive")
 	if footprint.x <= 0 or footprint.y <= 0:
 		errors.append("footprint must be positive")
 	var occupied: Dictionary = {}
-	var era_order := ["tent", "earth", "clay", "wood", "stone", "brick"]
 	for block in blocks:
 		if not BuildingBlockCatalogScript.has_block(block.block_id):
 			errors.append("Unknown block id: %s" % block.block_id)
 		if not BuildingMaterialCatalogScript.has_material(block.material_id):
 			errors.append("Unknown material id: %s" % block.material_id)
-		elif era_order.find(BuildingMaterialCatalogScript.category(block.material_id)) > era_order.find(category):
+		elif not BuildingMaterialCatalogScript.is_available_in_era(block.material_id, category):
 			errors.append("Material %s requires a later era than %s" % [block.material_id, category])
 		if occupied.has(block.pos):
 			errors.append("Duplicate block position: %s" % block.pos)
