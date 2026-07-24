@@ -137,6 +137,10 @@ const SettlementSimulationHandlersScript = preload("res://game/bootstrap/settlem
 const SettlementServicePocketManagerScript = preload("res://game/bootstrap/settlement_service_pocket_manager.gd")
 const SettlementOutsideWorkControllerScript = preload("res://game/bootstrap/settlement_outside_work_controller.gd")
 const SettlementBuildingManagementScript = preload("res://game/bootstrap/settlement_building_management.gd")
+const SettlementBuildStateScript = preload("res://game/bootstrap/settlement_build_state.gd")
+const SettlementHeroStateScript = preload("res://game/bootstrap/settlement_hero_state.gd")
+const SettlementCameraStateScript = preload("res://game/bootstrap/settlement_camera_state.gd")
+const SettlementWorldStateScript = preload("res://game/bootstrap/settlement_world_state.gd")
 
 
 
@@ -202,14 +206,29 @@ var _registration_queue_counter := 0
 var _last_unstaffed_warning_time := -1000.0
 var runtime_seconds := 0.0
 var random := RandomNumberGenerator.new()
-var selected_cell := Vector2i(0, 0)
-var selected_world_position := Vector3.ZERO
-var build_mode := ""
-var build_rotation_quarters := 0
+var build_state := SettlementBuildStateScript.new()
+var selected_cell: Vector2i:
+	get: return build_state.selected_cell
+	set(v): build_state.selected_cell = v
+var selected_world_position: Vector3:
+	get: return build_state.selected_world_position
+	set(v): build_state.selected_world_position = v
+var build_mode: String:
+	get: return build_state.build_mode
+	set(v): build_state.build_mode = v
+var build_rotation_quarters: int:
+	get: return build_state.build_rotation_quarters
+	set(v): build_state.build_rotation_quarters = v
 var building_registry := BuildingRegistry.new()
-var tree_cells: Dictionary[Vector2i, bool] = {}
-var terrain_blocked_cells: Dictionary[Vector2i, bool] = {}
-var navigation_blocked_cells: Dictionary[Vector2i, bool] = {}
+var world_state := SettlementWorldStateScript.new()
+var tree_cells: Dictionary[Vector2i, bool]:
+	get: return world_state.tree_cells
+var terrain_blocked_cells: Dictionary[Vector2i, bool]:
+	get: return world_state.terrain_blocked_cells
+	set(v): world_state.terrain_blocked_cells = v
+var navigation_blocked_cells: Dictionary[Vector2i, bool]:
+	get: return world_state.navigation_blocked_cells
+	set(v): world_state.navigation_blocked_cells = v
 var building_spatial_registry := BuildingSpatialRegistryScript.new()
 # Keep this preload-backed dependency explicit.  Scene-test execution does not
 # populate Godot's editor-only global class cache before parsing this script.
@@ -261,15 +280,25 @@ var rabbit_respawn_at: Dictionary:
 const WILD_FOOD_RESPAWN_SECONDS := 45.0
 const RABBIT_RESPAWN_SECONDS := 60.0
 const RABBIT_MAX_COUNT := 8
-var outside_workers: Dictionary[int, Dictionary] = {} # citizen stable id -> {citizen, return_at_minute}
-var last_citizen_positions: Dictionary[int, Vector3] = {}
-var resource_piles: Array[ResourcePileScript] = []
-var backpack_node: Node3D
-var backpack_position: Vector3
+var outside_workers: Dictionary:
+	get: return world_state.outside_workers
+var last_citizen_positions: Dictionary:
+	get: return world_state.last_citizen_positions
+var resource_piles: Array:
+	get: return world_state.resource_piles
+var backpack_node: Node3D:
+	get: return world_state.backpack_node
+	set(v): world_state.backpack_node = v
+var backpack_position: Vector3:
+	get: return world_state.backpack_position
+	set(v): world_state.backpack_position = v
 
-var tree_positions: Array[Vector3] = []
-var tree_nodes: Dictionary[Vector2i, Node3D] = {}
-var gather_progress_labels: Dictionary[Node3D, Node3D] = {} # resource Node3D -> Label3D
+var tree_positions: Array[Vector3]:
+	get: return world_state.tree_positions
+var tree_nodes: Dictionary[Vector2i, Node3D]:
+	get: return world_state.tree_nodes
+var gather_progress_labels: Dictionary:
+	get: return world_state.gather_progress_labels
 var citizens: Array[Citizen] = []
 var camera: Camera3D:
 	get: return camera_controller.camera if camera_controller != null else null
@@ -296,18 +325,32 @@ var camera_pitch: float:
 var current_day: int:
 	get: return day_cycle.current_day
 var tent_weather: int = TentEraSurvivalRulesScript.Weather.WARMING
-var selected_builder: Citizen
-var selected_building: Node3D
-var is_panning_camera := false
-var is_rotating_camera := false
-var right_mouse_dragged := false
+var selected_builder: Citizen:
+	get: return build_state.selected_builder
+	set(v): build_state.selected_builder = v
+var selected_building: Node3D:
+	get: return build_state.selected_building
+	set(v): build_state.selected_building = v
+var camera_state := SettlementCameraStateScript.new()
+var is_panning_camera: bool:
+	get: return camera_state.is_panning_camera
+	set(v): camera_state.is_panning_camera = v
+var is_rotating_camera: bool:
+	get: return camera_state.is_rotating_camera
+	set(v): camera_state.is_rotating_camera = v
+var right_mouse_dragged: bool:
+	get: return camera_state.right_mouse_dragged
+	set(v): camera_state.right_mouse_dragged = v
 var construction_sites: Array[ConstructionSite]:
 	get: return construction.sites if construction != null else []
 var demolition_sites: Array[DemolitionSite]:
 	get: return demolition.sites if demolition != null else []
 var completed_house_count := 0
 var player_controller: PlayerController
-var hero_citizen: Citizen
+var hero_state := SettlementHeroStateScript.new()
+var hero_citizen: Citizen:
+	get: return hero_state.hero_citizen
+	set(v): hero_state.hero_citizen = v
 
 var is_first_person: bool:
 	get: return player_controller.is_first_person if player_controller != null else false
@@ -358,12 +401,21 @@ var pocket: Dictionary:
 	set(val): if hero_pocket_service != null: hero_pocket_service.pocket = val
 var ui_manager: UIManager
 
-var pocket_menu_open := false
-var pocket_take_warehouse_index: int = -1
-var dig_sites: Array[DigSiteRecordScript] = []
-var dig_cells: Dictionary = {}
-var exhausted_dig_cells: Dictionary = {}
-var dig_mode := false
+var pocket_menu_open: bool:
+	get: return hero_state.pocket_menu_open
+	set(v): hero_state.pocket_menu_open = v
+var pocket_take_warehouse_index: int:
+	get: return hero_state.pocket_take_warehouse_index
+	set(v): hero_state.pocket_take_warehouse_index = v
+var dig_sites: Array:
+	get: return world_state.dig_sites
+var dig_cells: Dictionary:
+	get: return world_state.dig_cells
+var exhausted_dig_cells: Dictionary:
+	get: return world_state.exhausted_dig_cells
+var dig_mode: bool:
+	get: return build_state.dig_mode
+	set(v): build_state.dig_mode = v
 var excavation_service: ExcavationServiceScript
 var factory_service: FactoryServiceScript
 var selected_house: Node3D
@@ -403,10 +455,18 @@ var survival_busy_until: Dictionary = {}
 var house_lights: Array[HouseLightRecordScript] = []
 var house_light_update_minute := -1
 var entrance_lights: Array[OmniLight3D] = []
-var build_category := ""
-var build_menu_is_job_menu := false
-var build_menu_is_daily_order_menu := false
-var build_menu_is_global := false
+var build_category: String:
+	get: return build_state.build_category
+	set(v): build_state.build_category = v
+var build_menu_is_job_menu: bool:
+	get: return build_state.build_menu_is_job_menu
+	set(v): build_state.build_menu_is_job_menu = v
+var build_menu_is_daily_order_menu: bool:
+	get: return build_state.build_menu_is_daily_order_menu
+	set(v): build_state.build_menu_is_daily_order_menu = v
+var build_menu_is_global: bool:
+	get: return build_state.build_menu_is_global
+	set(v): build_state.build_menu_is_global = v
 var skip_night_button: Button:
 	get: return ui_manager.time_controls_panel.skip_night_button if ui_manager.time_controls_panel != null else null
 var start_workday_button: Button:
