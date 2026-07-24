@@ -117,7 +117,22 @@ func harvest_wild_food(position: Vector3, worker: Node3D) -> String:
 func consume_grass_source(position: Vector3) -> int:
 	var cell: Vector2i = cell_query.call(position) if cell_query.is_valid() else Vector2i.ZERO
 	if not grass_sources.has(cell):
-		return 0
+		var best_cell: Vector2i = Vector2i(-99999, -99999)
+		var best_dist: float = 2.0
+		var pos_xz := Vector2(position.x, position.z)
+		for c in grass_sources:
+			var src: GrassSourceRecord = grass_sources[c]
+			if src == null or src.remaining <= 0:
+				continue
+			var src_pos: Vector3 = src.node.global_position if is_instance_valid(src.node) else Vector3((c.x + 0.5) * 2.0, 0.0, (c.y + 0.5) * 2.0)
+			var d := pos_xz.distance_to(Vector2(src_pos.x, src_pos.z))
+			if d <= best_dist:
+				best_dist = d
+				best_cell = c
+		if grass_sources.has(best_cell):
+			cell = best_cell
+		else:
+			return 0
 	var source: GrassSourceRecord = grass_sources[cell]
 	if source.remaining <= 0:
 		return 0
@@ -127,6 +142,7 @@ func consume_grass_source(position: Vector3) -> int:
 			source.node.queue_free()
 		grass_sources.erase(cell)
 	return 1
+
 
 func consume_tree_branches(position: Vector3) -> int:
 	var cell: Vector2i = cell_query.call(position) if cell_query.is_valid() else Vector2i.ZERO

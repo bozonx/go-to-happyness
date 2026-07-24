@@ -53,8 +53,10 @@ func nearby_tree() -> bool:
 	var player: Citizen = _player_citizen_getter.call()
 	if player == null:
 		return false
+	var player_xz := Vector2(player.global_position.x, player.global_position.z)
+	var max_dist := _interaction_range + 1.5
 	for tree_position in _tree_positions:
-		if player.global_position.distance_to(tree_position) <= _interaction_range:
+		if player_xz.distance_to(Vector2(tree_position.x, tree_position.z)) <= max_dist:
 			var tree: Node3D = _tree_nodes.get(_cell_from_position.call(tree_position))
 			if is_instance_valid(tree) and not bool(tree.get_meta("felled", false)):
 				return true
@@ -65,8 +67,10 @@ func nearby_tree_with_branches() -> bool:
 	var player: Citizen = _player_citizen_getter.call()
 	if player == null:
 		return false
+	var player_xz := Vector2(player.global_position.x, player.global_position.z)
+	var max_dist := _interaction_range + 1.5
 	for tree_position in _tree_positions:
-		if player.global_position.distance_to(tree_position) <= _interaction_range:
+		if player_xz.distance_to(Vector2(tree_position.x, tree_position.z)) <= max_dist:
 			var tree: Node3D = _tree_nodes.get(_cell_from_position.call(tree_position))
 			if is_instance_valid(tree) and not bool(tree.get_meta("felled", false)):
 				if int(tree.get_meta("remaining_branches", 0)) > 0:
@@ -82,8 +86,10 @@ func nearby_sawmill_position() -> Vector3:
 	var player: Citizen = _player_citizen_getter.call()
 	if player == null:
 		return Vector3.INF
+	var player_xz := Vector2(player.global_position.x, player.global_position.z)
+	var max_dist := _interaction_range + 1.5
 	for sawmill_position in _sawmill_positions:
-		if player.global_position.distance_to(sawmill_position) <= _interaction_range:
+		if player_xz.distance_to(Vector2(sawmill_position.x, sawmill_position.z)) <= max_dist:
 			return sawmill_position
 	return Vector3.INF
 
@@ -92,8 +98,10 @@ func nearby_farm() -> bool:
 	var player: Citizen = _player_citizen_getter.call()
 	if player == null:
 		return false
+	var player_xz := Vector2(player.global_position.x, player.global_position.z)
+	var max_dist := _interaction_range + 1.5
 	for farm_position in _farm_positions:
-		if player.global_position.distance_to(farm_position) <= _interaction_range:
+		if player_xz.distance_to(Vector2(farm_position.x, farm_position.z)) <= max_dist:
 			return true
 	return false
 
@@ -102,8 +110,10 @@ func nearby_pond() -> bool:
 	var player: Citizen = _player_citizen_getter.call()
 	if player == null:
 		return false
+	var player_xz := Vector2(player.global_position.x, player.global_position.z)
+	var max_dist := _interaction_range + 1.5
 	for pond_position in _pond_positions:
-		if player.global_position.distance_to(pond_position) <= _interaction_range:
+		if player_xz.distance_to(Vector2(pond_position.x, pond_position.z)) <= max_dist:
 			return true
 	return false
 
@@ -117,17 +127,25 @@ func nearby_grass_source_position() -> Vector3:
 	if player == null:
 		return Vector3.INF
 	var best: Vector3 = Vector3.INF
-	var best_dist: float = _interaction_range
+	var max_dist: float = _interaction_range + 1.5
+	var best_dist: float = max_dist
+	var player_xz := Vector2(player.global_position.x, player.global_position.z)
 	for cell in _grass_sources:
 		var source: GrassSourceRecord = _grass_sources[cell]
-		if source.remaining <= 0 or not is_instance_valid(source.node):
+		if source == null or source.remaining <= 0:
 			continue
-		var node_pos: Vector3 = source.node.global_position
-		var dist: float = player.global_position.distance_to(node_pos)
+		var node_pos: Vector3 = Vector3.INF
+		if is_instance_valid(source.node):
+			node_pos = source.node.global_position
+		else:
+			var c: Vector2i = cell as Vector2i
+			node_pos = Vector3((c.x + 0.5) * 2.0, 0.0, (c.y + 0.5) * 2.0)
+		var dist: float = player_xz.distance_to(Vector2(node_pos.x, node_pos.z))
 		if dist <= best_dist:
 			best_dist = dist
 			best = node_pos
 	return best
+
 
 
 func consume_grass_near_player(amount: int) -> void:
