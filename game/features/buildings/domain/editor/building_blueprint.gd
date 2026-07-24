@@ -116,27 +116,38 @@ static func from_dict(data: Dictionary) -> BuildingBlueprint:
 	bp.pivot_offset = _vec3i_from(data.get("pivot_offset", {}), Vector3i.ZERO)
 	bp.footprint = _vec2i_from(data.get("footprint", []), Vector2i.ZERO)
 	bp.entrance = _vec2i_from(data.get("entrance", []), Vector2i.ZERO)
-	for raw_we in data.get("worker_entrances", []):
-		var we := _vec2i_from(raw_we, Vector2i.ZERO)
-		bp.worker_entrances.append(we)
+	var raw_worker_entrances: Variant = data.get("worker_entrances", [])
+	if raw_worker_entrances is Array:
+		for raw_we in raw_worker_entrances:
+			var we := _vec2i_from(raw_we, Vector2i.ZERO)
+			bp.worker_entrances.append(we)
 
-	var raw_blocks: Array = data.get("blocks", [])
-	for entry in raw_blocks:
-		if entry is Dictionary:
-			bp.blocks.append(BlueprintBlockScript.from_dict(entry))
+	var raw_blocks: Variant = data.get("blocks", [])
+	if raw_blocks is Array:
+		for entry in raw_blocks:
+			if entry is Dictionary:
+				bp.blocks.append(BlueprintBlockScript.from_dict(entry))
 
-	for raw_zone in data.get("place_zones", []):
-		if raw_zone is Dictionary:
-			bp.place_zones.append(PlaceZoneRecordScript.from_dict(raw_zone))
-	for raw_anchor in data.get("zone_anchors", []):
-		if raw_anchor is Dictionary:
-			bp.zone_anchors.append(ZoneAnchorRecordScript.from_dict(raw_anchor))
+	var raw_place_zones: Variant = data.get("place_zones", [])
+	if raw_place_zones is Array:
+		for raw_zone in raw_place_zones:
+			if raw_zone is Dictionary:
+				bp.place_zones.append(PlaceZoneRecordScript.from_dict(raw_zone))
+
+	var raw_zone_anchors: Variant = data.get("zone_anchors", [])
+	if raw_zone_anchors is Array:
+		for raw_anchor in raw_zone_anchors:
+			if raw_anchor is Dictionary:
+				bp.zone_anchors.append(ZoneAnchorRecordScript.from_dict(raw_anchor))
+
 	# Legacy files stored a single `work_zones[]` bundling identity + anchors.
 	# Split each into a place zone plus its slots/trays on load (design §7).
 	if bp.place_zones.is_empty() and bp.zone_anchors.is_empty():
-		for raw_zone in data.get("work_zones", []):
-			if raw_zone is Dictionary:
-				bp._migrate_legacy_zone(raw_zone)
+		var raw_work_zones: Variant = data.get("work_zones", [])
+		if raw_work_zones is Array:
+			for raw_zone in raw_work_zones:
+				if raw_zone is Dictionary:
+					bp._migrate_legacy_zone(raw_zone)
 
 	bp.surface_finishes = data.get("surface_finishes", [])
 	bp.decor_trims = data.get("decor_trims", [])

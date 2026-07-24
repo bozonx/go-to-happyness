@@ -41,5 +41,5 @@ static func from_dict(data: Dictionary) -> BlueprintBlock:
 	var pos := Vector3i(int(raw_pos[0]), int(raw_pos[1]), int(raw_pos[2]))
 	var block_id := StringName(data.get("block_id", ""))
 	var material_id := StringName(data.get("material_id", "branches"))
-	var rot := int(data.get("rot", 0)) % 4
+	var rot := ((int(data.get("rot", 0)) % 4) + 4) % 4
 	return BlueprintBlock.new(pos, block_id, rot, material_id)

@@ -429,7 +429,7 @@ func _pointer_over_ui() -> bool:
 # Block visuals
 # ---------------------------------------------------------------------------
 
-func _spawn_or_update_block_node(block) -> void:
+func _spawn_or_update_block_node(block: BlueprintBlock) -> void:
 	var node: MeshInstance3D = _block_nodes.get(block.pos, null)
 	if node == null:
 		node = MeshInstance3D.new()

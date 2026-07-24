@@ -25,7 +25,7 @@ func has_block_at(cell: Vector3i) -> bool:
 	return _cells.has(cell)
 
 
-func get_block_at(cell: Vector3i) -> BlueprintBlockScript:
+func get_block_at(cell: Vector3i) -> BlueprintBlock:
 	return _cells.get(cell, null)
 
 
@@ -57,7 +57,7 @@ func erase(cell: Vector3i) -> bool:
 
 
 func rotate_at(cell: Vector3i, steps: int = 1) -> bool:
-	var block: BlueprintBlockScript = _cells.get(cell, null)
+	var block: BlueprintBlock = _cells.get(cell, null)
 	if block == null:
 		return false
 	block.rot = _normalize_rot(block.block_id, block.rot + steps)
@@ -91,7 +91,7 @@ func write_to_blueprint(blueprint: BuildingBlueprintScript) -> void:
 	var keys: Array = _cells.keys()
 	keys.sort_custom(_compare_cells)
 	for cell in keys:
-		var block: BlueprintBlockScript = _cells[cell]
+		var block: BlueprintBlock = _cells[cell]
 		blueprint.blocks.append(BlueprintBlockScript.new(block.pos, block.block_id, block.rot, block.material_id))
 	var b := bounds()
 	blueprint.grid_bounds = Vector3i(int(b.size.x), int(b.size.y), int(b.size.z))
