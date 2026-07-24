@@ -9,7 +9,8 @@ extends RefCounted
 ## format stays forward-compatible with later editor modes.
 
 const BlueprintBlockScript = preload("res://game/features/buildings/domain/editor/blueprint_block.gd")
-const ActiveWorkZoneRecordScript = preload("res://game/features/buildings/domain/editor/active_work_zone_record.gd")
+const PlaceZoneRecordScript = preload("res://game/features/buildings/domain/editor/place_zone_record.gd")
+const ZoneAnchorRecordScript = preload("res://game/features/buildings/domain/editor/zone_anchor_record.gd")
 const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
 const BuildingMaterialCatalogScript = preload("res://game/features/buildings/domain/editor/building_material_catalog.gd")
 
@@ -40,8 +41,11 @@ var worker_entrances: Array[Vector2i] = []
 
 var blocks: Array[BlueprintBlock] = []
 
-## Active work zones (authored in editor Mode 3). Typed records.
-var work_zones: Array[ActiveWorkZoneRecord] = []
+## Active zones (authored in editor Mode 3), split into two tiers (see design_docs
+## §3.4). `place_zones` are tier-1 identities; `zone_anchors` are the shared tier-2
+## (slots) and tier-3 (routing) anchors that reference a place by `owner`.
+var place_zones: Array[PlaceZoneRecord] = []
+var zone_anchors: Array[ZoneAnchorRecord] = []
 
 ## Later-mode sections are kept as opaque data until their editor modes exist.
 var surface_finishes: Array = []
@@ -62,9 +66,12 @@ func to_dict() -> Dictionary:
 	var block_dicts: Array = []
 	for block in blocks:
 		block_dicts.append(block.to_dict())
-	var zone_dicts: Array = []
-	for zone in work_zones:
-		zone_dicts.append(zone.to_dict())
+	var place_dicts: Array = []
+	for zone in place_zones:
+		place_dicts.append(zone.to_dict())
+	var anchor_dicts: Array = []
+	for anchor in zone_anchors:
+		anchor_dicts.append(anchor.to_dict())
 	var worker_entrance_dicts: Array = []
 	for we in worker_entrances:
 		worker_entrance_dicts.append([we.x, we.y])
@@ -83,7 +90,8 @@ func to_dict() -> Dictionary:
 		"blocks": block_dicts,
 		"surface_finishes": surface_finishes,
 		"decor_trims": decor_trims,
-		"work_zones": zone_dicts,
+		"place_zones": place_dicts,
+		"zone_anchors": anchor_dicts,
 		"objects": objects,
 		"construction_cost": construction_cost,
 	}
@@ -116,9 +124,18 @@ static func from_dict(data: Dictionary) -> BuildingBlueprint:
 		if entry is Dictionary:
 			bp.blocks.append(BlueprintBlockScript.from_dict(entry))
 
-	for raw_zone in data.get("work_zones", []):
+	for raw_zone in data.get("place_zones", []):
 		if raw_zone is Dictionary:
-			bp.work_zones.append(ActiveWorkZoneRecordScript.from_dict(raw_zone))
+			bp.place_zones.append(PlaceZoneRecordScript.from_dict(raw_zone))
+	for raw_anchor in data.get("zone_anchors", []):
+		if raw_anchor is Dictionary:
+			bp.zone_anchors.append(ZoneAnchorRecordScript.from_dict(raw_anchor))
+	# Legacy files stored a single `work_zones[]` bundling identity + anchors.
+	# Split each into a place zone plus its slots/trays on load (design §7).
+	if bp.place_zones.is_empty() and bp.zone_anchors.is_empty():
+		for raw_zone in data.get("work_zones", []):
+			if raw_zone is Dictionary:
+				bp._migrate_legacy_zone(raw_zone)
 
 	bp.surface_finishes = data.get("surface_finishes", [])
 	bp.decor_trims = data.get("decor_trims", [])
@@ -184,17 +201,96 @@ func validation_errors() -> Array[String]:
 			errors.append("Duplicate block position: %s" % block.pos)
 		occupied[block.pos] = true
 	var zone_ids: Dictionary = {}
-	for zone in work_zones:
+	for zone in place_zones:
 		if not _valid_id(String(zone.zone_id)):
-			errors.append("Invalid zone id: %s" % zone.zone_id)
+			errors.append("Invalid place zone id: %s" % zone.zone_id)
 		if zone_ids.has(zone.zone_id):
-			errors.append("Duplicate zone id: %s" % zone.zone_id)
+			errors.append("Duplicate place zone id: %s" % zone.zone_id)
 		zone_ids[zone.zone_id] = true
-		if zone.kind not in ActiveWorkZoneRecordScript.KINDS:
+		if zone.kind not in PlaceZoneRecordScript.KINDS:
 			errors.append("Unknown zone kind: %s" % zone.kind)
 		if zone.max_workers < 0:
 			errors.append("Zone %s has negative max_workers" % zone.zone_id)
+	var known_roles: Array[StringName] = ZoneAnchorRecordScript.SLOT_ROLES + ZoneAnchorRecordScript.ROUTING_ROLES
+	for anchor in zone_anchors:
+		if anchor.role not in known_roles:
+			errors.append("Unknown anchor role: %s" % anchor.role)
+		if anchor.owner_zone_id != &"" and not zone_ids.has(anchor.owner_zone_id):
+			errors.append("Anchor %s references unknown place zone: %s" % [anchor.anchor_id, anchor.owner_zone_id])
 	return errors
+
+
+## Splits a legacy `work_zones[]` entry into a place zone plus its slots/trays.
+func _migrate_legacy_zone(raw: Dictionary) -> void:
+	var place := PlaceZoneRecordScript.from_dict(raw)
+	place_zones.append(place)
+	for raw_anchor in raw.get("work_anchors", []):
+		if not (raw_anchor is Dictionary):
+			continue
+		var anchor := ZoneAnchorRecordScript.new()
+		anchor.anchor_id = StringName(raw_anchor.get("id", "anchor_1"))
+		anchor.owner_zone_id = place.zone_id
+		var action := StringName(raw_anchor.get("action", "work"))
+		anchor.role = action if action in ZoneAnchorRecordScript.SLOT_ROLES else ZoneAnchorRecordScript.ROLE_WORK
+		anchor.pos = ZoneAnchorRecordScript._arr_to_vec3(raw_anchor.get("pos", []))
+		anchor.rot = ZoneAnchorRecordScript._arr_to_vec3(raw_anchor.get("rot", []))
+		zone_anchors.append(anchor)
+	var raw_trays: Variant = raw.get("storage_trays", {})
+	if raw_trays is Dictionary:
+		for slot in raw_trays.keys():
+			var tray: Variant = raw_trays[slot]
+			if not (tray is Dictionary):
+				continue
+			var anchor := ZoneAnchorRecordScript.new()
+			anchor.anchor_id = StringName("%s_%s" % [place.zone_id, slot])
+			anchor.owner_zone_id = place.zone_id
+			anchor.role = ZoneAnchorRecordScript.ROLE_INPUT_TRAY if String(slot) == "input" else ZoneAnchorRecordScript.ROLE_OUTPUT_TRAY
+			anchor.pos = ZoneAnchorRecordScript._arr_to_vec3(tray.get("pos", []))
+			anchor.capacity = int(tray.get("capacity", 0))
+			zone_anchors.append(anchor)
+
+
+## Denormalizes place zones + anchors back into one runtime dict per place zone —
+## the shape BuildingRuntimeState/ActiveWorkZoneState consume unchanged. Slots
+## become `work_anchors`, trays become `storage_trays`; routing anchors are
+## excluded (see routing_anchor_definitions).
+func runtime_zone_definitions() -> Array:
+	var buckets: Dictionary = {}
+	for anchor in zone_anchors:
+		if anchor.is_routing():
+			continue
+		var bucket: Dictionary = buckets.get(anchor.owner_zone_id, {})
+		if bucket.is_empty():
+			bucket = {"work_anchors": [], "storage_trays": {}}
+			buckets[anchor.owner_zone_id] = bucket
+		if anchor.is_tray():
+			var slot := "input" if anchor.role == ZoneAnchorRecordScript.ROLE_INPUT_TRAY else "output"
+			bucket["storage_trays"][slot] = {"pos": [anchor.pos.x, anchor.pos.y, anchor.pos.z], "capacity": anchor.capacity}
+		else:
+			bucket["work_anchors"].append({
+				"id": String(anchor.anchor_id),
+				"pos": [anchor.pos.x, anchor.pos.y, anchor.pos.z],
+				"rot": [anchor.rot.x, anchor.rot.y, anchor.rot.z],
+				"action": String(anchor.role),
+			})
+	var defs: Array = []
+	for zone in place_zones:
+		var d := zone.to_dict()
+		var bucket: Dictionary = buckets.get(zone.zone_id, {})
+		d["work_anchors"] = bucket.get("work_anchors", [])
+		d["storage_trays"] = bucket.get("storage_trays", {})
+		defs.append(d)
+	return defs
+
+
+## Routing anchors (doors, transit stops) as flat dicts, for navigation. World-
+## level anchors (empty owner) are included alongside building-owned ones.
+func routing_anchor_definitions() -> Array:
+	var defs: Array = []
+	for anchor in zone_anchors:
+		if anchor.is_routing():
+			defs.append(anchor.to_dict())
+	return defs
 
 
 static func _valid_id(value: String) -> bool:

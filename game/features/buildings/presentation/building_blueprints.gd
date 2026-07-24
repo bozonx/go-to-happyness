@@ -312,7 +312,8 @@ static func _blueprint_from_library(building_type: String) -> Dictionary:
 		"entrance": entrance,
 		"modules": BuildingBlueprintLibraryScript.ordered_modules(building_type),
 		"blueprint_ref": BuildingBlueprintLibraryScript.blueprint_ref(building_type),
-		"work_zones": bp.work_zones.map(func(zone): return zone.to_dict()) if bp != null else [],
+		"work_zones": bp.runtime_zone_definitions() if bp != null else [],
+		"routing_anchors": bp.routing_anchor_definitions() if bp != null else [],
 		"construction_cost": bp.construction_cost.duplicate(true) if bp != null else {},
 	}
 	if bp != null and not bp.worker_entrances.is_empty():

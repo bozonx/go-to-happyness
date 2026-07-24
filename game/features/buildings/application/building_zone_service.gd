@@ -108,6 +108,10 @@ func work_position(building: Node3D, role: StringName, citizen_id: int) -> Vecto
 	var raw_pos: Variant = anchor.get("pos", [])
 	if raw_pos is Array and raw_pos.size() >= 3:
 		return _to_world(building, Vector3(float(raw_pos[0]), float(raw_pos[1]), float(raw_pos[2])))
+	# No authored slot — fall back to the centre of the zone's cells.
+	var fallback: Vector3 = zone.fallback_position()
+	if fallback != Vector3.INF:
+		return _to_world(building, fallback)
 	return building.global_position
 
 

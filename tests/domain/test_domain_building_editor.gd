@@ -9,7 +9,8 @@ const BuildingMaterialCatalogScript = preload("res://game/features/buildings/dom
 const BlueprintBlockScript = preload("res://game/features/buildings/domain/editor/blueprint_block.gd")
 const BuildingBlueprintScript = preload("res://game/features/buildings/domain/editor/building_blueprint.gd")
 const BuildingGridModelScript = preload("res://game/features/buildings/domain/editor/building_grid_model.gd")
-const ActiveWorkZoneRecordScript = preload("res://game/features/buildings/domain/editor/active_work_zone_record.gd")
+const PlaceZoneRecordScript = preload("res://game/features/buildings/domain/editor/place_zone_record.gd")
+const ZoneAnchorRecordScript = preload("res://game/features/buildings/domain/editor/zone_anchor_record.gd")
 const BuildingZoneServiceScript = preload("res://game/features/buildings/application/building_zone_service.gd")
 
 
@@ -91,24 +92,24 @@ static func _test_underground_requires_earth_era() -> void:
 static func _test_zone_subtype_round_trip() -> void:
 	var bp := BuildingBlueprintScript.new()
 	bp.id = &"town_park"
-	var leisure := ActiveWorkZoneRecordScript.new()
+	var leisure := PlaceZoneRecordScript.new()
 	leisure.zone_id = &"z_park"
-	leisure.kind = ActiveWorkZoneRecordScript.KIND_LEISURE
+	leisure.kind = PlaceZoneRecordScript.KIND_LEISURE
 	leisure.subtype = &"cinema"
-	bp.work_zones.append(leisure)
-	var gate := ActiveWorkZoneRecordScript.new()
+	bp.place_zones.append(leisure)
+	var gate := PlaceZoneRecordScript.new()
 	gate.zone_id = &"z_gate"
-	gate.kind = ActiveWorkZoneRecordScript.KIND_SPECIAL
+	gate.kind = PlaceZoneRecordScript.KIND_SPECIAL
 	gate.subtype = &"entrance_sign"
-	bp.work_zones.append(gate)
+	bp.place_zones.append(gate)
 	var restored := BuildingBlueprintScript.from_json(bp.to_json())
 	assert(restored != null)
-	assert(restored.work_zones[0].kind == ActiveWorkZoneRecordScript.KIND_LEISURE)
-	assert(restored.work_zones[0].subtype == &"cinema")
-	assert(restored.work_zones[1].kind == ActiveWorkZoneRecordScript.KIND_SPECIAL)
-	assert(restored.work_zones[1].subtype == &"entrance_sign")
-	assert(&"cinema" in ActiveWorkZoneRecordScript.subtypes_for_kind(ActiveWorkZoneRecordScript.KIND_LEISURE))
-	assert(&"entrance_sign" in ActiveWorkZoneRecordScript.subtypes_for_kind(ActiveWorkZoneRecordScript.KIND_SPECIAL))
+	assert(restored.place_zones[0].kind == PlaceZoneRecordScript.KIND_LEISURE)
+	assert(restored.place_zones[0].subtype == &"cinema")
+	assert(restored.place_zones[1].kind == PlaceZoneRecordScript.KIND_SPECIAL)
+	assert(restored.place_zones[1].subtype == &"entrance_sign")
+	assert(&"cinema" in PlaceZoneRecordScript.subtypes_for_kind(PlaceZoneRecordScript.KIND_LEISURE))
+	assert(&"entrance_sign" in PlaceZoneRecordScript.subtypes_for_kind(PlaceZoneRecordScript.KIND_SPECIAL))
 
 
 static func _test_grid_place_erase() -> void:
@@ -181,34 +182,75 @@ static func _test_zones_and_metadata_round_trip() -> void:
 	bp.entrance = Vector2i(0, -2)
 	bp.worker_entrances = [Vector2i(0, -2), Vector2i(0, 2)]
 
-	var zone := ActiveWorkZoneRecordScript.new()
-	zone.zone_id = &"z_trade"
-	zone.zone_name = "Торговый пост"
-	zone.kind = ActiveWorkZoneRecordScript.KIND_TRADE
-	zone.profession = &"seller"
-	zone.max_workers = 2
-	zone.cells = [Vector3i(1, 0, 1), Vector3i(2, 0, 1)]
-	zone.add_anchor(Vector3(1.5, 0.0, 1.5), Vector3.ZERO, "trade")
-	zone.set_tray(&"output", Vector3(3.5, 0.0, 1.5), 80)
-	bp.work_zones.append(zone)
+	var place := PlaceZoneRecordScript.new()
+	place.zone_id = &"z_trade"
+	place.zone_name = "Торговый пост"
+	place.kind = PlaceZoneRecordScript.KIND_TRADE
+	place.profession = &"seller"
+	place.max_workers = 2
+	place.cells = [Vector3i(1, 0, 1), Vector3i(2, 0, 1)]
+	bp.place_zones.append(place)
+	# Tier-2 slot (counter) and tier-2 tray, plus a tier-3 routing door.
+	var counter := ZoneAnchorRecordScript.new()
+	counter.anchor_id = &"counter"
+	counter.owner_zone_id = &"z_trade"
+	counter.role = ZoneAnchorRecordScript.ROLE_COUNTER
+	counter.pos = Vector3(1.5, 0.0, 1.5)
+	bp.zone_anchors.append(counter)
+	var tray := ZoneAnchorRecordScript.new()
+	tray.anchor_id = &"out"
+	tray.owner_zone_id = &"z_trade"
+	tray.role = ZoneAnchorRecordScript.ROLE_OUTPUT_TRAY
+	tray.pos = Vector3(3.5, 0.0, 1.5)
+	tray.capacity = 80
+	bp.zone_anchors.append(tray)
+	var door := ZoneAnchorRecordScript.new()
+	door.anchor_id = &"vdoor"
+	door.owner_zone_id = &"z_trade"
+	door.role = ZoneAnchorRecordScript.ROLE_VISITOR_DOOR
+	door.pos = Vector3(1.5, 0.0, 0.0)
+	bp.zone_anchors.append(door)
 
 	var restored := BuildingBlueprintScript.from_json(bp.to_json())
 	assert(restored.footprint == Vector2i(4, 4))
 	assert(restored.entrance == Vector2i(0, -2))
 	assert(restored.worker_entrances.size() == 2 and restored.worker_entrances[1] == Vector2i(0, 2))
-	assert(restored.work_zones.size() == 1)
-	var rz: ActiveWorkZoneRecord = restored.work_zones[0]
-	assert(rz.zone_id == &"z_trade")
-	assert(rz.kind == ActiveWorkZoneRecordScript.KIND_TRADE)
-	assert(rz.profession == &"seller")
-	assert(rz.max_workers == 2)
-	assert(rz.cells == [Vector3i(1, 0, 1), Vector3i(2, 0, 1)])
-	assert(rz.work_anchors.size() == 1)
-	assert(rz.work_anchors[0]["pos"] == Vector3(1.5, 0.0, 1.5))
-	assert(rz.work_anchors[0]["action"] == "trade")
-	assert(rz.storage_trays.has("output"))
-	assert(rz.storage_trays["output"]["capacity"] == 80)
-	assert(rz.storage_trays["output"]["pos"] == Vector3(3.5, 0.0, 1.5))
+	assert(restored.place_zones.size() == 1)
+	assert(restored.zone_anchors.size() == 3)
+	var rp: PlaceZoneRecord = restored.place_zones[0]
+	assert(rp.zone_id == &"z_trade")
+	assert(rp.kind == PlaceZoneRecordScript.KIND_TRADE)
+	assert(rp.profession == &"seller")
+	assert(rp.max_workers == 2)
+	assert(rp.cells == [Vector3i(1, 0, 1), Vector3i(2, 0, 1)])
+
+	# Denormalization groups the anchors back under the place; the routing door
+	# is excluded from work zones and surfaces via routing_anchor_definitions.
+	var runtime_defs := restored.runtime_zone_definitions()
+	assert(runtime_defs.size() == 1)
+	var def: Dictionary = runtime_defs[0]
+	assert(def["work_anchors"].size() == 1)
+	assert(def["work_anchors"][0]["action"] == "counter")
+	assert(def["storage_trays"].has("output"))
+	assert(def["storage_trays"]["output"]["capacity"] == 80)
+	assert(restored.routing_anchor_definitions().size() == 1)
+	assert(restored.routing_anchor_definitions()[0]["role"] == "visitor_door")
+
+	# Legacy `work_zones[]` files still load via built-in migration.
+	var legacy := {
+		"version": 1, "id": "legacy_post", "name": "Legacy", "category": "tent",
+		"footprint": [4, 4], "blocks": [],
+		"work_zones": [{
+			"id": "z_old", "kind": "workplace", "profession_type": "cook", "max_workers": 1,
+			"cells": [[0, 0, 0]],
+			"work_anchors": [{"id": "oven", "pos": [0.5, 0.0, 0.5], "rot": [0, 0, 0], "action": "work"}],
+			"storage_trays": {"input": {"pos": [1.5, 0.0, 0.5], "capacity": 40}},
+		}],
+	}
+	var migrated := BuildingBlueprintScript.from_dict(legacy)
+	assert(migrated.place_zones.size() == 1 and migrated.place_zones[0].zone_id == &"z_old")
+	assert(migrated.zone_anchors.size() == 2)
+	assert(migrated.runtime_zone_definitions()[0]["storage_trays"]["input"]["capacity"] == 40)
 
 
 static func _test_grid_blueprint_sync() -> void:

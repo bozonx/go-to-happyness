@@ -188,8 +188,9 @@
   ],
   "surface_finishes": [],
   "decor_trims": [],
+  "place_zones": [],
+  "zone_anchors": [],
   "objects": [],
-  "work_zones": [],
   "construction_cost": {
     "grass": 16
   }

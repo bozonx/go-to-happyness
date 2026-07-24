@@ -5,7 +5,8 @@ extends SceneTree
 
 const BlueprintScript = preload("res://game/features/buildings/domain/editor/building_blueprint.gd")
 const BlueprintBlockScript = preload("res://game/features/buildings/domain/editor/blueprint_block.gd")
-const ZoneScript = preload("res://game/features/buildings/domain/editor/active_work_zone_record.gd")
+const PlaceZoneScript = preload("res://game/features/buildings/domain/editor/place_zone_record.gd")
+const ZoneAnchorScript = preload("res://game/features/buildings/domain/editor/zone_anchor_record.gd")
 const RepositoryScript = preload("res://game/features/buildings/presentation/editor/blueprint_repository.gd")
 const LibraryScript = preload("res://game/features/buildings/presentation/building_blueprint_library.gd")
 const BuildingBlueprintsScript = preload("res://game/features/buildings/presentation/building_blueprints.gd")
@@ -26,14 +27,19 @@ func _init() -> void:
 		BlueprintBlockScript.new(Vector3i(0, 0, 0), &"cube", 0, &"earth"),
 		BlueprintBlockScript.new(Vector3i(1, 0, 0), &"wall_panel", 1, &"branches"),
 	]
-	var zone := ZoneScript.new()
-	zone.zone_id = &"craft_1"
-	zone.zone_name = "Craft bench"
-	zone.profession = &"craftsman"
-	zone.max_workers = 1
-	zone.cells = [Vector3i.ZERO]
-	zone.add_anchor(Vector3(0.5, 0.0, 0.5))
-	blueprint.work_zones.append(zone)
+	var place := PlaceZoneScript.new()
+	place.zone_id = &"craft_1"
+	place.zone_name = "Craft bench"
+	place.profession = &"craftsman"
+	place.max_workers = 1
+	place.cells = [Vector3i.ZERO]
+	blueprint.place_zones.append(place)
+	var anchor := ZoneAnchorScript.new()
+	anchor.anchor_id = &"bench"
+	anchor.owner_zone_id = &"craft_1"
+	anchor.role = ZoneAnchorScript.ROLE_WORK
+	anchor.pos = Vector3(0.5, 0.0, 0.5)
+	blueprint.zone_anchors.append(anchor)
 
 	var repository := RepositoryScript.new(false)
 	var save_result: Dictionary = repository.save(blueprint)

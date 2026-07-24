@@ -72,6 +72,17 @@ func anchor_for(citizen_id: int) -> Dictionary:
 	return work_anchors[index % work_anchors.size()]
 
 
+## Local occupancy point when the zone has no authored work slots: the centroid
+## of its cells (design §3.4 — "citizens occupy places randomly within cells").
+func fallback_position() -> Vector3:
+	if cells.is_empty():
+		return Vector3.INF
+	var sum := Vector3.ZERO
+	for cell in cells:
+		sum += Vector3(cell) + Vector3(0.5, 0.0, 0.5)
+	return sum / cells.size()
+
+
 func to_dict() -> Dictionary:
 	return {
 		"id": String(zone_id),

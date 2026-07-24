@@ -41,6 +41,8 @@ func start_site(cell: Vector2i, building_type: String, position: Vector3, rotati
 		site_node.set_meta("blueprint_ref", blueprint["blueprint_ref"])
 	if blueprint.has("work_zones"):
 		site_node.set_meta("active_work_zones", blueprint["work_zones"])
+	if blueprint.has("routing_anchors"):
+		site_node.set_meta("routing_anchors", blueprint["routing_anchors"])
 	site_node.set_meta("footprint", blueprint.footprint)
 	site_node.set_meta("occupied_footprint", occupied_footprint if occupied_footprint != Vector2i.ZERO else blueprint.footprint)
 	site_node.set_meta("service_positions", BuildingEntrancePositionsScript.positions(site_node, blueprint.footprint, SERVICE_PAD_OFFSET))

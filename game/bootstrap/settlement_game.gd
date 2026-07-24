@@ -3301,6 +3301,8 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 		building.set_meta("blueprint_ref", blueprint["blueprint_ref"])
 	if building_zone_service != null:
 		building_zone_service.configure_building(building, blueprint.get("work_zones", []), blueprint.get("saved_zone_state", []))
+	if blueprint.has("routing_anchors"):
+		building.set_meta("routing_anchors", blueprint["routing_anchors"])
 	_unregister_service_pockets(building)
 	if BuildingTypes.is_fire_source(building_type):
 		building.set_meta("fire_fuel", 4)

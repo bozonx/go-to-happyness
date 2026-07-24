@@ -17,7 +17,8 @@ const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain
 const BuildingMaterialCatalogScript = preload("res://game/features/buildings/domain/editor/building_material_catalog.gd")
 const BuildingBlueprintScript = preload("res://game/features/buildings/domain/editor/building_blueprint.gd")
 const BuildingGridModelScript = preload("res://game/features/buildings/domain/editor/building_grid_model.gd")
-const ActiveWorkZoneRecordScript = preload("res://game/features/buildings/domain/editor/active_work_zone_record.gd")
+const PlaceZoneRecordScript = preload("res://game/features/buildings/domain/editor/place_zone_record.gd")
+const ZoneAnchorRecordScript = preload("res://game/features/buildings/domain/editor/zone_anchor_record.gd")
 const BlueprintRepositoryScript = preload("res://game/features/buildings/presentation/editor/blueprint_repository.gd")
 const BlockMeshLibraryScript = preload("res://game/features/buildings/presentation/editor/block_mesh_library.gd")
 const UI_THEME = preload("res://game/features/ui/presentation/theme/ui_theme.tres")
@@ -52,9 +53,13 @@ var _last_paint_cell: Vector3i = Vector3i.ZERO
 ## Fixed corner of the current rectangle brush drag (the cell first pressed).
 var _paint_anchor: Vector3i = Vector3i.ZERO
 
-## Zones-mode state.
-var _selected_zone_index: int = -1
-var _armed_marker: StringName = &"anchor"  ## &"anchor" | &"input" | &"output"
+## Zones-mode state. `_armed_tool` is what a grid click does: paint place cells,
+## or drop an anchor of the currently selected role. `_anchor_tier` switches the
+## role dropdown between slot roles and routing roles.
+var _selected_place_index: int = -1
+var _armed_tool: StringName = &"cell"  ## &"cell" | &"anchor"
+var _anchor_tier: StringName = ZoneAnchorRecordScript.TIER_SLOT
+var _anchor_role: StringName = ZoneAnchorRecordScript.ROLE_WORK
 
 var _block_nodes: Dictionary = {}  ## Vector3i -> MeshInstance3D
 var _camera_controller: Node3D
@@ -103,10 +108,12 @@ var _zone_subtype_option: OptionButton
 var _zone_profession_option: OptionButton
 var _zone_workers_spin: SpinBox
 var _zone_info_label: Label
-var _zone_action_edit: LineEdit
+var _anchor_tier_option: OptionButton
+var _anchor_role_option: OptionButton
+var _anchor_world_check: CheckBox
 var _zone_marker_yaw_spin: SpinBox
-var _zone_tray_capacity_spin: SpinBox
-var _marker_buttons: Dictionary = {}  ## StringName -> Button
+var _zone_capacity_spin: SpinBox
+var _tool_buttons: Dictionary = {}  ## StringName -> Button
 
 const ZONE_PROFESSIONS: Array[StringName] = [
 	&"cook", &"teacher", &"seller", &"official", &"researcher",
@@ -250,7 +257,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			# rectangle brush — a filled floor/ceiling slab from the anchor.
 			_update_cursor()
 			if cursor_valid:
-				if current_mode == EditMode.ZONES and _armed_marker == &"area":
+				if current_mode == EditMode.ZONES and _armed_tool == &"cell":
 					_paint_zone_line(_last_paint_cell, cursor_cell)
 				elif current_mode == EditMode.FRAME and current_brush == Brush.RECT:
 					_paint_rect(_paint_anchor, cursor_cell)
@@ -279,7 +286,7 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 					return
 				if current_mode == EditMode.ZONES:
 					_place_zone_marker_at_cursor()
-					_painting = _armed_marker == &"area"
+					_painting = _armed_tool == &"cell"
 					_last_paint_cell = cursor_cell
 				else:
 					_painting = true
@@ -398,7 +405,7 @@ func _paint_rect(from_cell: Vector3i, to_cell: Vector3i) -> void:
 
 
 func _paint_zone_line(from_cell: Vector3i, to_cell: Vector3i) -> void:
-	var zone := _current_zone()
+	var zone := _current_place()
 	if zone == null:
 		return
 	var steps := maxi(absi(to_cell.x - from_cell.x), absi(to_cell.z - from_cell.z))
@@ -650,9 +657,9 @@ func _on_save_pressed() -> void:
 func _on_new_pressed() -> void:
 	grid_model.clear()
 	blueprint = BuildingBlueprintScript.new()
-	_selected_zone_index = -1
+	_selected_place_index = -1
 	_rebuild_all_block_nodes()
-	_rebuild_zone_option()
+	_rebuild_place_option()
 	_refresh_zone_visuals()
 	_sync_metadata_fields()
 	_set_layer(0)
@@ -679,13 +686,13 @@ func _on_load_item_activated(index: int) -> void:
 		return
 	blueprint = loaded
 	grid_model.load_from_blueprint(blueprint)
-	_selected_zone_index = 0 if not blueprint.work_zones.is_empty() else -1
+	_selected_place_index = 0 if not blueprint.place_zones.is_empty() else -1
 	_rebuild_all_block_nodes()
-	_rebuild_zone_option()
+	_rebuild_place_option()
 	_refresh_zone_visuals()
 	_sync_metadata_fields()
 	_load_popup.hide()
-	_update_status("Загружено: %s (%d блоков, %d зон)" % [blueprint.name, blueprint.block_count(), blueprint.work_zones.size()])
+	_update_status("Загружено: %s (%d блоков, %d зон)" % [blueprint.name, blueprint.block_count(), blueprint.place_zones.size()])
 
 
 func _confirm_back_to_menu() -> void:
@@ -939,7 +946,7 @@ func _build_zones_panel(root: Control) -> void:
 	panel.offset_top = 60.0
 	panel.offset_bottom = -48.0
 	panel.offset_left = 8.0
-	panel.custom_minimum_size = Vector2(260, 0)
+	panel.custom_minimum_size = Vector2(270, 0)
 	panel.visible = false
 	root.add_child(panel)
 	_zones_panel = panel
@@ -958,48 +965,52 @@ func _build_zones_panel(root: Control) -> void:
 	title.add_theme_font_size_override("font_size", 16)
 	vbox.add_child(title)
 
+	# --- Tier 1: place zone (identity, what the player clicks) ---
+	var place_hint := Label.new()
+	place_hint.text = "Зона места (что это за место)"
+	place_hint.add_theme_color_override("font_color", Color(0.65, 0.72, 0.8))
+	vbox.add_child(place_hint)
+
 	var zone_row := HBoxContainer.new()
 	vbox.add_child(zone_row)
 	_zone_option = OptionButton.new()
 	_zone_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_zone_option.item_selected.connect(_on_zone_option_selected)
+	_zone_option.item_selected.connect(_on_place_option_selected)
 	zone_row.add_child(_zone_option)
 	var add_btn := Button.new()
 	add_btn.text = "＋"
-	add_btn.tooltip_text = "Создать зону"
-	add_btn.pressed.connect(_add_zone)
+	add_btn.tooltip_text = "Создать зону места"
+	add_btn.pressed.connect(_add_place)
 	zone_row.add_child(add_btn)
 	var del_btn := Button.new()
 	del_btn.text = "🗑"
-	del_btn.tooltip_text = "Удалить зону"
-	del_btn.pressed.connect(_delete_zone)
+	del_btn.tooltip_text = "Удалить зону места"
+	del_btn.pressed.connect(_delete_place)
 	zone_row.add_child(del_btn)
-
-	vbox.add_child(HSeparator.new())
 
 	vbox.add_child(_labeled("ID зоны:"))
 	_zone_id_edit = LineEdit.new()
-	_zone_id_edit.text_changed.connect(_on_zone_id_changed)
+	_zone_id_edit.text_changed.connect(_on_place_id_changed)
 	vbox.add_child(_zone_id_edit)
 
 	vbox.add_child(_labeled("Название зоны:"))
 	_zone_name_edit = LineEdit.new()
-	_zone_name_edit.text_changed.connect(_on_zone_name_changed)
+	_zone_name_edit.text_changed.connect(_on_place_name_changed)
 	vbox.add_child(_zone_name_edit)
 
 	vbox.add_child(_labeled("Назначение:"))
 	_zone_kind_option = OptionButton.new()
-	for kind in ActiveWorkZoneRecordScript.KINDS:
-		_zone_kind_option.add_item(ActiveWorkZoneRecordScript.kind_display_name(kind))
+	for kind in PlaceZoneRecordScript.KINDS:
+		_zone_kind_option.add_item(PlaceZoneRecordScript.kind_display_name(kind))
 		_zone_kind_option.set_item_metadata(_zone_kind_option.item_count - 1, kind)
-	_zone_kind_option.item_selected.connect(_on_zone_kind_selected)
+	_zone_kind_option.item_selected.connect(_on_place_kind_selected)
 	vbox.add_child(_zone_kind_option)
 
 	# Subtype (recreation flavour / special marker). Hidden for flat kinds.
 	_zone_subtype_row = VBoxContainer.new()
 	_zone_subtype_row.add_child(_labeled("Тип:"))
 	_zone_subtype_option = OptionButton.new()
-	_zone_subtype_option.item_selected.connect(_on_zone_subtype_selected)
+	_zone_subtype_option.item_selected.connect(_on_place_subtype_selected)
 	_zone_subtype_row.add_child(_zone_subtype_option)
 	vbox.add_child(_zone_subtype_row)
 
@@ -1010,7 +1021,7 @@ func _build_zones_panel(root: Control) -> void:
 	for prof in ZONE_PROFESSIONS:
 		_zone_profession_option.add_item(String(prof))
 		_zone_profession_option.set_item_metadata(_zone_profession_option.item_count - 1, prof)
-	_zone_profession_option.item_selected.connect(_on_zone_profession_selected)
+	_zone_profession_option.item_selected.connect(_on_place_profession_selected)
 	vbox.add_child(_zone_profession_option)
 
 	var workers_row := HBoxContainer.new()
@@ -1020,15 +1031,37 @@ func _build_zones_panel(root: Control) -> void:
 	_zone_workers_spin.min_value = 0
 	_zone_workers_spin.max_value = 12
 	_zone_workers_spin.value = 1
-	_zone_workers_spin.value_changed.connect(_on_zone_workers_changed)
+	_zone_workers_spin.value_changed.connect(_on_place_workers_changed)
 	workers_row.add_child(_zone_workers_spin)
 
 	vbox.add_child(HSeparator.new())
 
-	vbox.add_child(_labeled("Действие якоря:"))
-	_zone_action_edit = LineEdit.new()
-	_zone_action_edit.text = "work"
-	vbox.add_child(_zone_action_edit)
+	# --- Tiers 2 & 3: anchors (slots + routing), shared structure by role ---
+	var anchor_hint := Label.new()
+	anchor_hint.text = "Якоря: слоты и маршрутизация"
+	anchor_hint.add_theme_color_override("font_color", Color(0.65, 0.72, 0.8))
+	vbox.add_child(anchor_hint)
+
+	vbox.add_child(_labeled("Уровень якоря:"))
+	_anchor_tier_option = OptionButton.new()
+	for tier_info in [
+		{"id": ZoneAnchorRecordScript.TIER_SLOT, "label": "Слот (занять место)"},
+		{"id": ZoneAnchorRecordScript.TIER_ROUTING, "label": "Маршрутизация"},
+	]:
+		_anchor_tier_option.add_item(tier_info["label"])
+		_anchor_tier_option.set_item_metadata(_anchor_tier_option.item_count - 1, tier_info["id"])
+	_anchor_tier_option.item_selected.connect(_on_anchor_tier_selected)
+	vbox.add_child(_anchor_tier_option)
+
+	vbox.add_child(_labeled("Роль якоря:"))
+	_anchor_role_option = OptionButton.new()
+	_anchor_role_option.item_selected.connect(_on_anchor_role_selected)
+	vbox.add_child(_anchor_role_option)
+
+	_anchor_world_check = CheckBox.new()
+	_anchor_world_check.text = "Мировой якорь (без здания)"
+	_anchor_world_check.tooltip_text = "Для остановок и т.п. вне зданий; доступно только для маршрутизации"
+	vbox.add_child(_anchor_world_check)
 
 	var marker_settings := HBoxContainer.new()
 	marker_settings.add_child(_labeled("Поворот:"))
@@ -1038,11 +1071,11 @@ func _build_zones_panel(root: Control) -> void:
 	_zone_marker_yaw_spin.step = 90
 	marker_settings.add_child(_zone_marker_yaw_spin)
 	marker_settings.add_child(_labeled("Ёмкость:"))
-	_zone_tray_capacity_spin = SpinBox.new()
-	_zone_tray_capacity_spin.min_value = 1
-	_zone_tray_capacity_spin.max_value = 10000
-	_zone_tray_capacity_spin.value = 50
-	marker_settings.add_child(_zone_tray_capacity_spin)
+	_zone_capacity_spin = SpinBox.new()
+	_zone_capacity_spin.min_value = 1
+	_zone_capacity_spin.max_value = 10000
+	_zone_capacity_spin.value = 1
+	marker_settings.add_child(_zone_capacity_spin)
 	vbox.add_child(marker_settings)
 
 	var place_label := Label.new()
@@ -1050,23 +1083,26 @@ func _build_zones_panel(root: Control) -> void:
 	place_label.add_theme_color_override("font_color", Color(0.65, 0.72, 0.8))
 	vbox.add_child(place_label)
 
-	for marker in [
-		{"id": &"area", "label": "▦ Ячейка зоны"},
-		{"id": &"anchor", "label": "📍 Якорь работы"},
-		{"id": &"input", "label": "📥 Поддон (вход)"},
-		{"id": &"output", "label": "📤 Поддон (выход)"},
+	for tool in [
+		{"id": &"cell", "label": "▦ Ячейка места"},
+		{"id": &"anchor", "label": "📍 Якорь (по роли)"},
 	]:
 		var btn := Button.new()
 		btn.toggle_mode = true
-		btn.text = marker["label"]
-		var marker_id: StringName = marker["id"]
-		btn.pressed.connect(func(): _arm_marker(marker_id))
-		_marker_buttons[marker_id] = btn
+		btn.text = tool["label"]
+		var tool_id: StringName = tool["id"]
+		btn.pressed.connect(func(): _arm_tool(tool_id))
+		_tool_buttons[tool_id] = btn
 		vbox.add_child(btn)
 
+	var clear_cells := Button.new()
+	clear_cells.text = "Очистить ячейки места"
+	clear_cells.pressed.connect(_clear_place_cells)
+	vbox.add_child(clear_cells)
+
 	var clear_anchors := Button.new()
-	clear_anchors.text = "Очистить область и маркеры"
-	clear_anchors.pressed.connect(_clear_zone_anchors)
+	clear_anchors.text = "Очистить якоря места"
+	clear_anchors.pressed.connect(_clear_place_anchors)
 	vbox.add_child(clear_anchors)
 
 	vbox.add_child(HSeparator.new())
@@ -1075,8 +1111,10 @@ func _build_zones_panel(root: Control) -> void:
 	_zone_info_label.add_theme_color_override("font_color", Color(0.6, 0.66, 0.72))
 	vbox.add_child(_zone_info_label)
 
-	_arm_marker(&"anchor")
-	_rebuild_zone_option()
+	_anchor_tier_option.select(0)
+	_on_anchor_tier_selected(0)
+	_arm_tool(&"cell")
+	_rebuild_place_option()
 
 
 func _labeled(text: String) -> Label:
@@ -1085,223 +1123,298 @@ func _labeled(text: String) -> Label:
 	return label
 
 
-func _current_zone() -> ActiveWorkZoneRecord:
-	if _selected_zone_index < 0 or _selected_zone_index >= blueprint.work_zones.size():
+func _current_place() -> PlaceZoneRecord:
+	if _selected_place_index < 0 or _selected_place_index >= blueprint.place_zones.size():
 		return null
-	return blueprint.work_zones[_selected_zone_index]
+	return blueprint.place_zones[_selected_place_index]
 
 
-func _add_zone() -> void:
-	var zone := ActiveWorkZoneRecordScript.new()
+func _add_place() -> void:
+	var place := PlaceZoneRecordScript.new()
 	var next_index := 1
-	var existing_ids: Array = blueprint.work_zones.map(func(existing): return existing.zone_id)
-	while StringName("zone_%d" % next_index) in existing_ids:
+	var existing_ids: Array = blueprint.place_zones.map(func(existing): return existing.zone_id)
+	while StringName("place_%d" % next_index) in existing_ids:
 		next_index += 1
-	zone.zone_id = StringName("zone_%d" % next_index)
-	zone.zone_name = "Зона %d" % (blueprint.work_zones.size() + 1)
-	blueprint.work_zones.append(zone)
-	_selected_zone_index = blueprint.work_zones.size() - 1
-	_rebuild_zone_option()
-	_refresh_zone_panel_fields()
+	place.zone_id = StringName("place_%d" % next_index)
+	place.zone_name = "Место %d" % (blueprint.place_zones.size() + 1)
+	blueprint.place_zones.append(place)
+	_selected_place_index = blueprint.place_zones.size() - 1
+	_rebuild_place_option()
+	_refresh_place_panel_fields()
 	_refresh_zone_visuals()
-	_update_status("Зона создана. Задайте назначение и расставьте якоря.")
+	_update_status("Зона места создана. Задайте назначение и обведите ячейки.")
 
 
-func _delete_zone() -> void:
-	var zone := _current_zone()
-	if zone == null:
+func _delete_place() -> void:
+	var place := _current_place()
+	if place == null:
 		return
-	blueprint.work_zones.remove_at(_selected_zone_index)
-	_selected_zone_index = mini(_selected_zone_index, blueprint.work_zones.size() - 1)
-	_rebuild_zone_option()
-	_refresh_zone_panel_fields()
+	# Drop anchors that belonged to the removed place; world anchors survive.
+	var kept: Array[ZoneAnchorRecord] = []
+	for anchor in blueprint.zone_anchors:
+		if anchor.owner_zone_id != place.zone_id:
+			kept.append(anchor)
+	blueprint.zone_anchors = kept
+	blueprint.place_zones.remove_at(_selected_place_index)
+	_selected_place_index = mini(_selected_place_index, blueprint.place_zones.size() - 1)
+	_rebuild_place_option()
+	_refresh_place_panel_fields()
 	_refresh_zone_visuals()
 
 
-func _rebuild_zone_option() -> void:
+func _rebuild_place_option() -> void:
 	if _zone_option == null:
 		return
 	_zone_option.clear()
-	for i in blueprint.work_zones.size():
-		var zone: ActiveWorkZoneRecord = blueprint.work_zones[i]
-		_zone_option.add_item("%s" % zone.zone_name)
-	if _selected_zone_index >= 0 and _selected_zone_index < blueprint.work_zones.size():
-		_zone_option.select(_selected_zone_index)
-	_refresh_zone_panel_fields()
+	for i in blueprint.place_zones.size():
+		var place: PlaceZoneRecord = blueprint.place_zones[i]
+		_zone_option.add_item("%s" % place.zone_name)
+	if _selected_place_index >= 0 and _selected_place_index < blueprint.place_zones.size():
+		_zone_option.select(_selected_place_index)
+	_refresh_place_panel_fields()
 
 
-func _on_zone_option_selected(index: int) -> void:
-	_selected_zone_index = index
-	_refresh_zone_panel_fields()
+func _on_place_option_selected(index: int) -> void:
+	_selected_place_index = index
+	_refresh_place_panel_fields()
 	_refresh_zone_visuals()
 
 
-func _refresh_zone_panel_fields() -> void:
-	var zone := _current_zone()
-	var has_zone := zone != null
+func _refresh_place_panel_fields() -> void:
+	var place := _current_place()
+	var has_place := place != null
 	if _zone_name_edit != null:
-		_zone_name_edit.editable = has_zone
+		_zone_name_edit.editable = has_place
 	if _zone_id_edit != null:
-		_zone_id_edit.editable = has_zone
+		_zone_id_edit.editable = has_place
 	if _zone_kind_option != null:
-		_zone_kind_option.disabled = not has_zone
+		_zone_kind_option.disabled = not has_place
 	if _zone_profession_option != null:
-		_zone_profession_option.disabled = not has_zone
+		_zone_profession_option.disabled = not has_place
 	if _zone_workers_spin != null:
-		_zone_workers_spin.editable = has_zone
-	if not has_zone:
+		_zone_workers_spin.editable = has_place
+	if not has_place:
 		if _zone_name_edit != null:
 			_zone_name_edit.text = ""
 		if _zone_id_edit != null:
 			_zone_id_edit.text = ""
 		if _zone_info_label != null:
-			_zone_info_label.text = "Нет зон. Нажмите ＋, чтобы создать."
-		_rebuild_zone_subtype_options()
+			_zone_info_label.text = "Нет зон места. Нажмите ＋, чтобы создать."
+		_rebuild_subtype_options()
 		return
 	if _zone_name_edit != null:
-		_zone_name_edit.text = zone.zone_name
+		_zone_name_edit.text = place.zone_name
 	if _zone_id_edit != null:
-		_zone_id_edit.text = String(zone.zone_id)
+		_zone_id_edit.text = String(place.zone_id)
 	if _zone_kind_option != null:
 		for i in _zone_kind_option.item_count:
-			if _zone_kind_option.get_item_metadata(i) == zone.kind:
+			if _zone_kind_option.get_item_metadata(i) == place.kind:
 				_zone_kind_option.select(i)
 				break
-	_rebuild_zone_subtype_options()
+	_rebuild_subtype_options()
 	if _zone_profession_option != null:
 		var found := 0
 		for i in _zone_profession_option.item_count:
-			if _zone_profession_option.get_item_metadata(i) == zone.profession:
+			if _zone_profession_option.get_item_metadata(i) == place.profession:
 				found = i
 				break
 		_zone_profession_option.select(found)
 	if _zone_workers_spin != null:
-		_zone_workers_spin.value = zone.max_workers
+		_zone_workers_spin.value = place.max_workers
 	_update_zone_info()
 
 
 func _update_zone_info() -> void:
-	var zone := _current_zone()
-	if zone == null or _zone_info_label == null:
+	if _zone_info_label == null:
 		return
-	var trays := ""
-	if zone.storage_trays.has("input"):
-		trays += " вход✓"
-	if zone.storage_trays.has("output"):
-		trays += " выход✓"
+	var place := _current_place()
+	if place == null:
+		return
+	var owned := 0
+	var trays := 0
+	var routing := 0
+	for anchor in blueprint.zone_anchors:
+		if anchor.owner_zone_id != place.zone_id:
+			continue
+		if anchor.is_routing():
+			routing += 1
+		elif anchor.is_tray():
+			trays += 1
+		else:
+			owned += 1
+	var world := 0
+	for anchor in blueprint.zone_anchors:
+		if anchor.owner_zone_id == &"":
+			world += 1
 	var subtype_line := ""
-	if zone.subtype != &"":
-		subtype_line = "\nТип: %s" % ActiveWorkZoneRecordScript.subtype_display_name(zone.subtype)
-	_zone_info_label.text = "Ячеек: %d · Якорей: %d · Поддоны:%s\nID: %s%s" % [
-		zone.cells.size(), zone.work_anchors.size(), (trays if trays != "" else " —"), zone.zone_id, subtype_line]
+	if place.subtype != &"":
+		subtype_line = "\nТип: %s" % PlaceZoneRecordScript.subtype_display_name(place.subtype)
+	_zone_info_label.text = "Ячеек: %d · Слотов: %d · Поддонов: %d · Маршрут: %d\nМировых якорей: %d · ID: %s%s" % [
+		place.cells.size(), owned, trays, routing, world, place.zone_id, subtype_line]
 
 
-func _on_zone_name_changed(text: String) -> void:
-	var zone := _current_zone()
-	if zone == null:
+func _on_place_name_changed(text: String) -> void:
+	var place := _current_place()
+	if place == null:
 		return
-	zone.zone_name = text
-	if _zone_option != null and _selected_zone_index >= 0:
-		_zone_option.set_item_text(_selected_zone_index, text)
+	place.zone_name = text
+	if _zone_option != null and _selected_place_index >= 0:
+		_zone_option.set_item_text(_selected_place_index, text)
 
 
-func _on_zone_id_changed(text: String) -> void:
-	var zone := _current_zone()
-	if zone != null:
-		zone.zone_id = StringName(text.strip_edges().to_lower())
+func _on_place_id_changed(text: String) -> void:
+	var place := _current_place()
+	if place != null:
+		place.zone_id = StringName(text.strip_edges().to_lower())
 
 
-func _on_zone_kind_selected(index: int) -> void:
-	var zone := _current_zone()
-	if zone == null:
+func _on_place_kind_selected(index: int) -> void:
+	var place := _current_place()
+	if place == null:
 		return
-	zone.kind = _zone_kind_option.get_item_metadata(index)
+	place.kind = _zone_kind_option.get_item_metadata(index)
 	# Reset the subtype to the first legal value for the new kind (or none).
-	var subtypes := ActiveWorkZoneRecordScript.subtypes_for_kind(zone.kind)
-	zone.subtype = subtypes[0] if not subtypes.is_empty() else &""
-	_rebuild_zone_subtype_options()
+	var subtypes := PlaceZoneRecordScript.subtypes_for_kind(place.kind)
+	place.subtype = subtypes[0] if not subtypes.is_empty() else &""
+	_rebuild_subtype_options()
 	_update_zone_info()
 
 
-func _on_zone_subtype_selected(index: int) -> void:
-	var zone := _current_zone()
-	if zone == null:
+func _on_place_subtype_selected(index: int) -> void:
+	var place := _current_place()
+	if place == null:
 		return
-	zone.subtype = _zone_subtype_option.get_item_metadata(index)
+	place.subtype = _zone_subtype_option.get_item_metadata(index)
 
 
-## Fills the subtype list from the zone's kind and hides the row for flat kinds.
-func _rebuild_zone_subtype_options() -> void:
+## Fills the subtype list from the place's kind and hides the row for flat kinds.
+func _rebuild_subtype_options() -> void:
 	if _zone_subtype_option == null:
 		return
-	var zone := _current_zone()
+	var place := _current_place()
 	var subtypes: Array[StringName] = []
-	if zone != null:
-		subtypes = ActiveWorkZoneRecordScript.subtypes_for_kind(zone.kind)
+	if place != null:
+		subtypes = PlaceZoneRecordScript.subtypes_for_kind(place.kind)
 	_zone_subtype_row.visible = not subtypes.is_empty()
 	_zone_subtype_option.clear()
 	for st in subtypes:
-		_zone_subtype_option.add_item(ActiveWorkZoneRecordScript.subtype_display_name(st))
+		_zone_subtype_option.add_item(PlaceZoneRecordScript.subtype_display_name(st))
 		_zone_subtype_option.set_item_metadata(_zone_subtype_option.item_count - 1, st)
-	if zone != null:
+	if place != null:
 		for i in _zone_subtype_option.item_count:
-			if _zone_subtype_option.get_item_metadata(i) == zone.subtype:
+			if _zone_subtype_option.get_item_metadata(i) == place.subtype:
 				_zone_subtype_option.select(i)
 				break
 
 
-func _on_zone_profession_selected(index: int) -> void:
-	var zone := _current_zone()
-	if zone == null:
+func _on_place_profession_selected(index: int) -> void:
+	var place := _current_place()
+	if place == null:
 		return
-	zone.profession = _zone_profession_option.get_item_metadata(index)
+	place.profession = _zone_profession_option.get_item_metadata(index)
 
 
-func _on_zone_workers_changed(value: float) -> void:
-	var zone := _current_zone()
-	if zone == null:
+func _on_place_workers_changed(value: float) -> void:
+	var place := _current_place()
+	if place == null:
 		return
-	zone.max_workers = int(value)
+	place.max_workers = int(value)
 
 
-func _arm_marker(marker: StringName) -> void:
-	_armed_marker = marker
-	for id in _marker_buttons.keys():
-		(_marker_buttons[id] as Button).button_pressed = id == marker
+func _on_anchor_tier_selected(index: int) -> void:
+	_anchor_tier = _anchor_tier_option.get_item_metadata(index)
+	# World-level anchors only make sense for routing (a bus stop on a street).
+	var routing := _anchor_tier == ZoneAnchorRecordScript.TIER_ROUTING
+	if _anchor_world_check != null:
+		_anchor_world_check.disabled = not routing
+		if not routing:
+			_anchor_world_check.button_pressed = false
+	_rebuild_anchor_role_options()
 
 
-func _clear_zone_anchors() -> void:
-	var zone := _current_zone()
-	if zone == null:
+func _rebuild_anchor_role_options() -> void:
+	if _anchor_role_option == null:
 		return
-	zone.work_anchors.clear()
-	zone.storage_trays.clear()
-	zone.cells.clear()
+	_anchor_role_option.clear()
+	var roles := ZoneAnchorRecordScript.roles_for_tier(_anchor_tier)
+	for role in roles:
+		_anchor_role_option.add_item(ZoneAnchorRecordScript.role_display_name(role))
+		_anchor_role_option.set_item_metadata(_anchor_role_option.item_count - 1, role)
+	if not roles.is_empty():
+		_anchor_role = roles[0]
+		_anchor_role_option.select(0)
+
+
+func _on_anchor_role_selected(index: int) -> void:
+	_anchor_role = _anchor_role_option.get_item_metadata(index)
+
+
+func _arm_tool(tool: StringName) -> void:
+	_armed_tool = tool
+	for id in _tool_buttons.keys():
+		(_tool_buttons[id] as Button).button_pressed = id == tool
+
+
+func _clear_place_cells() -> void:
+	var place := _current_place()
+	if place == null:
+		return
+	place.cells.clear()
 	_refresh_zone_visuals()
 	_update_zone_info()
+
+
+func _clear_place_anchors() -> void:
+	var place := _current_place()
+	if place == null:
+		return
+	var kept: Array[ZoneAnchorRecord] = []
+	for anchor in blueprint.zone_anchors:
+		if anchor.owner_zone_id != place.zone_id:
+			kept.append(anchor)
+	blueprint.zone_anchors = kept
+	_refresh_zone_visuals()
+	_update_zone_info()
+
+
+func _next_anchor_id() -> StringName:
+	var next_index := 1
+	var existing: Array = blueprint.zone_anchors.map(func(a): return a.anchor_id)
+	while StringName("anchor_%d" % next_index) in existing:
+		next_index += 1
+	return StringName("anchor_%d" % next_index)
 
 
 func _place_zone_marker_at_cursor() -> void:
 	if not cursor_valid:
 		return
-	var zone := _current_zone()
-	if zone == null:
-		_update_status("Сначала создайте зону (＋).")
+	if _armed_tool == &"cell":
+		var place := _current_place()
+		if place == null:
+			_update_status("Сначала создайте зону места (＋).")
+			return
+		if cursor_cell not in place.cells:
+			place.cells.append(cursor_cell)
+		_refresh_zone_visuals()
+		_update_zone_info()
 		return
-	var pos := Vector3(cursor_cell) + Vector3(0.5, 0.0, 0.5)
-	match _armed_marker:
-		&"area":
-			if cursor_cell not in zone.cells:
-				zone.cells.append(cursor_cell)
-		&"input":
-			zone.set_tray(&"input", pos, int(_zone_tray_capacity_spin.value))
-		&"output":
-			zone.set_tray(&"output", pos, int(_zone_tray_capacity_spin.value))
-		_:
-			zone.add_anchor(
-				pos,
-				Vector3(0.0, _zone_marker_yaw_spin.value, 0.0),
-				_zone_action_edit.text.strip_edges() if not _zone_action_edit.text.strip_edges().is_empty() else "work")
+	# Anchor tool: drop a slot or routing anchor of the selected role.
+	var owner_id: StringName = &""
+	var world := _anchor_world_check != null and _anchor_world_check.button_pressed
+	if not world:
+		var place := _current_place()
+		if place == null:
+			_update_status("Создайте зону места или включите «мировой якорь».")
+			return
+		owner_id = place.zone_id
+	var anchor := ZoneAnchorRecordScript.new()
+	anchor.anchor_id = _next_anchor_id()
+	anchor.owner_zone_id = owner_id
+	anchor.role = _anchor_role
+	anchor.pos = Vector3(cursor_cell) + Vector3(0.5, 0.0, 0.5)
+	anchor.rot = Vector3(0.0, _zone_marker_yaw_spin.value, 0.0)
+	anchor.capacity = int(_zone_capacity_spin.value)
+	blueprint.zone_anchors.append(anchor)
 	_refresh_zone_visuals()
 	_update_zone_info()
 
@@ -1313,17 +1426,21 @@ func _refresh_zone_visuals() -> void:
 		child.queue_free()
 	if current_mode != EditMode.ZONES:
 		return
-	for i in blueprint.work_zones.size():
-		var zone: ActiveWorkZoneRecord = blueprint.work_zones[i]
+	for i in blueprint.place_zones.size():
+		var place: PlaceZoneRecord = blueprint.place_zones[i]
 		var color := ZONE_COLORS[i % ZONE_COLORS.size()]
-		for cell in zone.cells:
+		for cell in place.cells:
 			_add_zone_marker(Vector3(cell) + Vector3(0.5, 0.0, 0.5), color, Vector3(0.9, 0.04, 0.9), true)
-		for anchor in zone.work_anchors:
-			_add_zone_marker(anchor["pos"], color, Vector3(0.4, 1.2, 0.4), false)
-		if zone.storage_trays.has("input"):
-			_add_zone_marker(zone.storage_trays["input"]["pos"], Color(0.4, 0.8, 1.0), Vector3(0.7, 0.3, 0.7), true)
-		if zone.storage_trays.has("output"):
-			_add_zone_marker(zone.storage_trays["output"]["pos"], Color(1.0, 0.7, 0.3), Vector3(0.7, 0.3, 0.7), true)
+	for anchor in blueprint.zone_anchors:
+		var col := Color(0.4, 1.0, 0.4)  # work slot
+		var size := Vector3(0.4, 1.2, 0.4)
+		if anchor.is_routing():
+			col = Color(1.0, 0.55, 0.2)  # door / stop
+			size = Vector3(0.5, 1.6, 0.5)
+		elif anchor.is_tray():
+			col = Color(0.4, 0.8, 1.0)   # storage tray
+			size = Vector3(0.7, 0.3, 0.7)
+		_add_zone_marker(anchor.pos, col, size, anchor.is_tray())
 
 
 func _add_zone_marker(pos: Vector3, color: Color, size: Vector3, is_tray: bool) -> void:
