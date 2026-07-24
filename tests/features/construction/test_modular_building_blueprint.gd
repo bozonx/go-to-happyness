@@ -60,7 +60,7 @@ func _init() -> void:
 	assert(game_blueprint.get("modules", []).size() == 2)
 	assert(game_blueprint.get("work_zones", []).size() == 1)
 	assert(game_blueprint.get("blueprint_ref", {}).get("source") == "player")
-	assert(game_blueprint.get("blueprint_ref", {}).get("fallback_building_id") == "earth_house")
+	assert(game_blueprint.get("blueprint_ref", {}).get("fallback_building_id") == "smithy")
 
 	var remove_error := DirAccess.remove_absolute(repository.file_path_for(TEST_ID))
 	assert(remove_error == OK)

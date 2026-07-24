@@ -535,6 +535,7 @@ func _on_era_changed(index: int) -> void:
 		blueprint.recalculate_construction_cost()
 
 	blueprint.category = target_era
+	_update_fallback_display()
 	_mark_dirty()
 	_rebuild_material_options()
 	_refresh_underground_availability()
@@ -671,8 +672,7 @@ func _on_save_pressed() -> void:
 			blueprint.id = StringName(raw_id)
 	if _category_option != null:
 		blueprint.category = StringName(_category_option.get_item_metadata(_category_option.selected))
-	if _fallback_edit != null and not _fallback_edit.text.strip_edges().is_empty():
-		blueprint.fallback_building_id = StringName(_fallback_edit.text.strip_edges())
+	_update_fallback_display()
 	if _footprint_x_spin != null and _footprint_z_spin != null:
 		blueprint.footprint = Vector2i(int(_footprint_x_spin.value), int(_footprint_z_spin.value))
 	if _entrance_x_spin != null and _entrance_z_spin != null:
@@ -940,6 +940,7 @@ func _add_place() -> void:
 	blueprint.place_zones.append(place)
 	_selected_place_index = blueprint.place_zones.size() - 1
 	_mark_dirty()
+	_update_fallback_display()
 	_rebuild_place_option()
 	_refresh_place_panel_fields()
 	_refresh_zone_visuals()
@@ -958,6 +959,7 @@ func _delete_place() -> void:
 	blueprint.place_zones.remove_at(_selected_place_index)
 	_selected_place_index = mini(_selected_place_index, blueprint.place_zones.size() - 1)
 	_mark_dirty()
+	_update_fallback_display()
 	_rebuild_place_option()
 	_refresh_place_panel_fields()
 	_refresh_zone_visuals()
@@ -1087,6 +1089,7 @@ func _on_place_kind_selected(index: int) -> void:
 	_mark_dirty()
 	_rebuild_subtype_options()
 	_update_zone_info()
+	_update_fallback_display()
 
 
 func _on_place_subtype_selected(index: int) -> void:
@@ -1122,6 +1125,7 @@ func _on_place_profession_selected(index: int) -> void:
 		return
 	place.profession = _zone_profession_option.get_item_metadata(index)
 	_mark_dirty()
+	_update_fallback_display()
 
 
 func _on_place_workers_changed(value: float) -> void:
@@ -1287,13 +1291,19 @@ func _add_zone_marker(pos: Vector3, color: Color, size: Vector3, is_tray: bool) 
 # UI sync helpers
 # ---------------------------------------------------------------------------
 
+func _update_fallback_display() -> void:
+	if blueprint != null:
+		blueprint.fallback_building_id = blueprint.infer_fallback_building_id()
+		if _fallback_edit != null:
+			_fallback_edit.text = String(blueprint.fallback_building_id)
+
+
 func _sync_metadata_fields() -> void:
 	if _name_edit != null:
 		_name_edit.text = blueprint.name
 	if _id_edit != null:
 		_id_edit.text = String(blueprint.id)
-	if _fallback_edit != null:
-		_fallback_edit.text = String(blueprint.fallback_building_id)
+	_update_fallback_display()
 	if _footprint_x_spin != null:
 		_footprint_x_spin.value = blueprint.footprint.x
 	if _footprint_z_spin != null:

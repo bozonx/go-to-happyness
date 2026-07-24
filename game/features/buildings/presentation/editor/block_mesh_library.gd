@@ -13,11 +13,15 @@ const MATERIAL_COLORS := {
 	&"thatch": Color(0.72, 0.60, 0.28),
 	&"tarp": Color(0.35, 0.40, 0.42),
 	&"earth": Color(0.43, 0.31, 0.20),
+	&"earth_stone": Color(0.45, 0.38, 0.30),
 	&"clay": Color(0.58, 0.32, 0.22),
+	&"adobe": Color(0.60, 0.45, 0.28),
 	&"logs": Color(0.48, 0.34, 0.19),
 	&"wood": Color(0.55, 0.38, 0.20),
 	&"stone": Color(0.47, 0.49, 0.50),
+	&"stone_mortar": Color(0.50, 0.52, 0.48),
 	&"brick": Color(0.58, 0.22, 0.16),
+	&"brick_mortar": Color(0.60, 0.28, 0.22),
 }
 
 var _mesh_cache: Dictionary = {}

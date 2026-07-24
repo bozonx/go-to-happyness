@@ -53,6 +53,10 @@ var surface_finishes: Array = []
 var decor_trims: Array = []
 var objects: Array = []
 var construction_cost: Dictionary = {}
+var cost_mode: StringName = &"auto"
+var extra_costs: Dictionary = {}
+var custom_material_costs: Dictionary = {}
+var manual_costs: Dictionary = {}
 
 
 func clear_blocks() -> void:
@@ -63,7 +67,77 @@ func block_count() -> int:
 	return blocks.size()
 
 
+func infer_fallback_building_id() -> StringName:
+	var cat := String(category)
+	for place in place_zones:
+		match place.kind:
+			PlaceZoneRecordScript.KIND_HOUSING:
+				match cat:
+					"tent": return &"tent"
+					"earth": return &"earth_house"
+					"clay": return &"clay_house"
+					"stone": return &"stone_house"
+					_: return &"house"
+			PlaceZoneRecordScript.KIND_CIVIC:
+				match cat:
+					"tent": return &"campfire"
+					"earth": return &"earth_assembly"
+					"clay": return &"clay_lodge"
+					"stone": return &"stone_prefecture"
+					_: return &"wood_town_hall"
+			PlaceZoneRecordScript.KIND_STORAGE:
+				match cat:
+					"tent": return &"straw_warehouse"
+					_: return &"warehouse"
+			PlaceZoneRecordScript.KIND_TRADE:
+				match cat:
+					"tent": return &"straw_trade_tent"
+					"earth": return &"earth_market"
+					"clay": return &"clay_market"
+					"stone": return &"stone_market"
+					_: return &"straw_trade_tent"
+			PlaceZoneRecordScript.KIND_WORKPLACE:
+				match place.profession:
+					&"cook":
+						match cat:
+							"clay": return &"clay_bakery"
+							"earth": return &"dugout_kitchen"
+							"wood": return &"canteen"
+							_: return &"cook_campfire"
+					&"forager":
+						return &"straw_forager_tent"
+					&"craftsman":
+						match cat:
+							"stone": return &"masonry_workshop"
+							"clay": return &"clay_workshop"
+							"earth": return &"smithy"
+							_: return &"straw_craft_tent"
+					&"teacher":
+						return &"school"
+					&"official":
+						match cat:
+							"stone": return &"stone_prefecture"
+							_: return &"wood_town_hall"
+					_:
+						match cat:
+							"wood": return &"sawmill"
+							"tent": return &"straw_craft_tent"
+							_: return &"house"
+			PlaceZoneRecordScript.KIND_LEISURE:
+				match cat:
+					"stone": return &"stone_tavern"
+					_: return &"gathering_place"
+
+	match cat:
+		"tent": return &"tent"
+		"earth": return &"earth_house"
+		"clay": return &"clay_house"
+		"stone": return &"stone_house"
+		_: return &"house"
+
+
 func to_dict() -> Dictionary:
+	fallback_building_id = infer_fallback_building_id()
 	var block_dicts: Array = []
 	for block in blocks:
 		block_dicts.append(block.to_dict())
@@ -93,6 +167,10 @@ func to_dict() -> Dictionary:
 		"place_zones": place_dicts,
 		"zone_anchors": anchor_dicts,
 		"objects": objects,
+		"cost_mode": String(cost_mode),
+		"extra_costs": extra_costs,
+		"custom_material_costs": custom_material_costs,
+		"manual_costs": manual_costs,
 		"construction_cost": construction_cost,
 	}
 
@@ -150,9 +228,12 @@ static func from_dict(data: Dictionary) -> BuildingBlueprint:
 	bp.surface_finishes = data.get("surface_finishes", [])
 	bp.decor_trims = data.get("decor_trims", [])
 	bp.objects = data.get("objects", [])
+	bp.cost_mode = StringName(data.get("cost_mode", "auto"))
+	bp.extra_costs = data.get("extra_costs", {})
+	bp.custom_material_costs = data.get("custom_material_costs", {})
+	bp.manual_costs = data.get("manual_costs", {})
 	bp.construction_cost = data.get("construction_cost", {})
-	if not bp.blocks.is_empty():
-		bp.recalculate_construction_cost()
+	bp.recalculate_construction_cost()
 	return bp
 
 
@@ -165,14 +246,36 @@ static func from_json(text: String) -> BuildingBlueprint:
 
 
 func recalculate_construction_cost() -> void:
-	var calculated: Dictionary = {}
+	if cost_mode == &"manual":
+		construction_cost = manual_costs.duplicate()
+		return
+
+	var raw_totals: Dictionary = {}
 	for block in blocks:
-		var resource_id := BuildingMaterialCatalogScript.resource_id(block.material_id)
-		if resource_id == &"":
-			continue
-		var units := BuildingMaterialCatalogScript.cost_units(block.material_id)
-		calculated[String(resource_id)] = int(calculated.get(String(resource_id), 0)) + units
-	construction_cost = calculated
+		var comp: Dictionary = {}
+		if custom_material_costs.has(block.material_id) and custom_material_costs[block.material_id] is Dictionary:
+			comp = custom_material_costs[block.material_id]
+		else:
+			comp = BuildingMaterialCatalogScript.resource_composition(block.material_id)
+		
+		for res in comp.keys():
+			var res_name := str(res)
+			var amount := float(comp[res])
+			raw_totals[res_name] = float(raw_totals.get(res_name, 0.0)) + amount
+
+	var rounded_costs: Dictionary = {}
+	for res in raw_totals.keys():
+		var int_val := ceili(raw_totals[res])
+		if int_val > 0:
+			rounded_costs[res] = int_val
+
+	for res in extra_costs.keys():
+		var res_name := str(res)
+		var extra_val := int(extra_costs[res])
+		if extra_val > 0:
+			rounded_costs[res_name] = int(rounded_costs.get(res_name, 0)) + extra_val
+
+	construction_cost = rounded_costs
 
 
 func content_revision() -> String:

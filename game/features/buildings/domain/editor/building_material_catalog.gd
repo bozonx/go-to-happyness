@@ -16,15 +16,19 @@ const DEFAULT_ID := &"branches"
 const ERA_ORDER: Array[StringName] = [&"tent", &"earth", &"clay", &"wood", &"stone", &"brick"]
 
 const MATERIALS: Array[Dictionary] = [
-	{"id": &"branches", "name": "Палки", "resource_id": &"branches", "units": 1, "category": "tent"},
-	{"id": &"thatch", "name": "Солома", "resource_id": &"grass", "units": 1, "category": "tent"},
-	{"id": &"tarp", "name": "Брезент", "resource_id": &"tarp", "units": 1, "category": "tent"},
-	{"id": &"earth", "name": "Земляные блоки", "resource_id": &"soil", "units": 1, "category": "earth"},
-	{"id": &"clay", "name": "Глиняные блоки", "resource_id": &"clay", "units": 1, "category": "clay"},
-	{"id": &"logs", "name": "Брёвна", "resource_id": &"logs", "units": 1, "category": "wood"},
-	{"id": &"wood", "name": "Деревянные блоки", "resource_id": &"boards", "units": 1, "category": "wood"},
-	{"id": &"stone", "name": "Каменные блоки", "resource_id": &"stone", "units": 1, "category": "stone"},
-	{"id": &"brick", "name": "Кирпичные блоки", "resource_id": &"bricks", "units": 1, "category": "brick"},
+	{"id": &"branches", "name": "Палки", "resource_id": &"branches", "units": 1, "category": "tent", "composition": {"branches": 1.0}},
+	{"id": &"thatch", "name": "Солома", "resource_id": &"grass", "units": 1, "category": "tent", "composition": {"grass": 1.0}},
+	{"id": &"tarp", "name": "Брезент", "resource_id": &"tarp", "units": 1, "category": "tent", "composition": {"tarp": 1.0}},
+	{"id": &"earth", "name": "Земляные блоки", "resource_id": &"soil", "units": 1, "category": "earth", "composition": {"soil": 1.0}},
+	{"id": &"earth_stone", "name": "Земля и камень", "resource_id": &"soil", "units": 1, "category": "earth", "composition": {"soil": 0.5, "stone": 0.5}},
+	{"id": &"clay", "name": "Глиняные блоки", "resource_id": &"clay", "units": 1, "category": "clay", "composition": {"clay": 1.0}},
+	{"id": &"adobe", "name": "Саманные блоки", "resource_id": &"clay", "units": 1, "category": "clay", "composition": {"clay": 0.5, "grass": 0.5}},
+	{"id": &"logs", "name": "Брёвна", "resource_id": &"logs", "units": 1, "category": "wood", "composition": {"logs": 1.0}},
+	{"id": &"wood", "name": "Деревянные блоки", "resource_id": &"boards", "units": 1, "category": "wood", "composition": {"boards": 1.0}},
+	{"id": &"stone", "name": "Каменные блоки", "resource_id": &"stone", "units": 1, "category": "stone", "composition": {"stone": 1.0}},
+	{"id": &"stone_mortar", "name": "Камень и раствор", "resource_id": &"stone", "units": 1, "category": "stone", "composition": {"stone": 0.8, "clay": 0.2}},
+	{"id": &"brick", "name": "Кирпичные блоки", "resource_id": &"bricks", "units": 1, "category": "brick", "composition": {"bricks": 1.0}},
+	{"id": &"brick_mortar", "name": "Кирпич и раствор", "resource_id": &"bricks", "units": 1, "category": "brick", "composition": {"bricks": 0.8, "clay": 0.2}},
 ]
 
 
@@ -49,6 +53,16 @@ static func resource_id(material_id: StringName) -> StringName:
 
 static func cost_units(material_id: StringName) -> int:
 	return maxi(0, int(get_material(material_id).get("units", 0)))
+
+
+static func resource_composition(material_id: StringName) -> Dictionary:
+	var mat := get_material(material_id)
+	if mat.has("composition") and mat["composition"] is Dictionary:
+		return (mat["composition"] as Dictionary).duplicate()
+	var res_id := resource_id(material_id)
+	if res_id != &"":
+		return {String(res_id): float(cost_units(material_id))}
+	return {}
 
 
 static func category(material_id: StringName) -> String:

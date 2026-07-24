@@ -539,6 +539,8 @@ text = "Fallback стандартного здания:"
 [node name="FallbackEdit" type="LineEdit" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
 unique_name_in_owner = true
 layout_mode = 2
+tooltip_text = "Автоматически определяется по зонам и категории здания"
+editable = false
 
 [node name="FootprintLbl" type="Label" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
 layout_mode = 2
