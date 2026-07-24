@@ -130,6 +130,7 @@ const SettlementUIAttacherScript = preload("res://game/features/ui/presentation/
 const SettlementBootstrapperScript = preload("res://game/bootstrap/settlement_bootstrapper.gd")
 const SettlementSaveLoaderScript = preload("res://game/bootstrap/settlement_save_loader.gd")
 const SettlementUICallbacksScript = preload("res://game/bootstrap/settlement_ui_callbacks.gd")
+const SettlementResearchControllerScript = preload("res://game/bootstrap/settlement_research_controller.gd")
 
 
 
@@ -482,6 +483,7 @@ var workplace_labor_service: WorkplaceLaborService
 var building_visuals_service: BuildingVisualsService
 var actuator_bridge: RefCounted
 var survival_event_controller: SurvivalEventController
+var _research_controller: RefCounted
 
 
 func _ready() -> void:
@@ -496,6 +498,7 @@ func _ready() -> void:
 		active_config = GameLaunchConfigScript.for_tent_era()
 	launch_config = active_config
 
+	_research_controller = SettlementResearchControllerScript.new(self)
 	ui_manager.bind_delegate_events(SettlementUICallbacksScript.new(self))
 	SettlementBootstrapperScript.new().run(self)
 
@@ -1474,107 +1477,18 @@ func _show_materials_factory_menu() -> void:
 	ui_manager.materials_factory_menu_title.text = "Materials factory\nAssign workers to produce materials."
 
 func _update_building_research(delta: float) -> void:
-	if settlement.active_research_tech_id == "":
-		return
-
-	var tech_id := settlement.active_research_tech_id
-	if not BuildingCatalog.RESEARCH_TECHS.has(tech_id):
-		_cancel_active_building_research(true, "Research cancelled: invalid technology.")
-		return
-	var tech: Dictionary = BuildingCatalog.RESEARCH_TECHS[tech_id]
-	if not is_instance_valid(campfire_node) or not _is_fire_lit(campfire_node):
-		_cancel_active_building_research(true, "Research cancelled: the Campfire is unavailable. Resources refunded.")
-		return
-	var worker: Citizen = null
-
-	for citizen in citizens:
-		if citizen.ai_id == settlement.active_research_worker_id:
-			worker = citizen
-			break
-
-	if worker == null:
-		_cancel_active_building_research(true, "Research cancelled: researcher citizen is no longer available. Resources refunded.")
-		return
-
-	# The researcher must be physically at the campfire work position
-	# (FPP researcher/official) or actively performing a daily research order.
-	var is_at_research_position := worker.work_position_locked and worker.work_position_role in ["researcher", "official"] and worker.work_position_node == campfire_node
-	if not is_at_research_position and worker.state != Citizen.State.RESEARCHING:
-		_cancel_active_building_research(true, "Research cancelled: researcher stopped working. Resources refunded.")
-		return
-
-	var skill_name: String = tech.required_skill
-	var skill_val := float(worker.skills.get(skill_name, 0.0))
-	var speed_mult := 1.0 + skill_val
-
-	var research_pos: Vector3 = campfire_node.get_meta("service_position", campfire_node.global_position)
-	if worker.global_position.distance_to(research_pos) > 0.5:
-		return
-	building_research_service.advance_active(delta, speed_mult)
-
-	if ui_manager.research_menu != null and ui_manager.research_menu.visible:
-		if research_menu_controller != null:
-			research_menu_controller.refresh_research_menu()
-
-	if building_research_service.is_active_complete():
-		var completion: Dictionary = building_research_service.complete_active()
-		var skill_to_upgrade: String = str(completion.get("reward_skill", "construction"))
-		worker.skills[skill_to_upgrade] = minf(1.0, float(worker.skills.get(skill_to_upgrade, 0.0)) + 0.20)
-
-		# Do not disrupt a player-controlled citizen who is still at the post.
-		if not worker.is_player_controlled:
-			if worker.permanent_role == "official" and is_instance_valid(campfire_node):
-				worker.assign_official_work(campfire_node.get_meta("service_position", campfire_node.global_position))
-			else:
-				worker.idle()
-		var b_name := str(completion.get("display_name", tech_id))
-		_update_interface("Research completed: %s unlocked! %s skill improved by 20%%." % [b_name, skill_to_upgrade.capitalize()])
-
-		if campfire_menu_controller != null:
-			campfire_menu_controller.refresh_campfire_menu()
-		if building_menu_controller != null:
-			building_menu_controller.refresh_build_menu()
-		if ui_manager.research_menu != null and ui_manager.research_menu.visible:
-			if research_menu_controller != null:
-				research_menu_controller.refresh_research_menu()
+	_research_controller.update_building_research(delta)
 
 func _cancel_active_building_research(refund: bool, message: String) -> void:
-	var worker_id := settlement.active_research_worker_id
-	var worker: Citizen = null
-	for citizen in citizens:
-		if citizen.ai_id == worker_id:
-			worker = citizen
-			break
-	if worker != null:
-		if worker.permanent_role == "official" and is_instance_valid(campfire_node):
-			worker.assign_official_work(campfire_node.get_meta("service_position", campfire_node.global_position))
-		else:
-			worker.idle()
-	building_research_service.cancel_active(refund)
-	_update_interface(message)
-	if campfire_menu_controller != null:
-		campfire_menu_controller.refresh_campfire_menu()
+	_research_controller.cancel_active_building_research(refund, message)
 
 
 func _handle_civic_post_assignment() -> void:
-	var centre := selected_campfire if is_instance_valid(selected_campfire) else _employment_centre_building()
-	if not is_instance_valid(centre) or not settlement.is_research_completed("official"):
-		return
-	var researcher := _daily_researcher_at(centre)
-	if researcher == null:
-		_update_interface("Assign a daily researcher and wait until they reach the civic post.")
-		return
-	_appoint_official(researcher, centre)
+	_research_controller.handle_civic_post_assignment()
 
 
 func _daily_researcher_at(centre: Node3D) -> Citizen:
-	if not is_instance_valid(centre):
-		return null
-	var position: Vector3 = centre.get_meta("service_position", centre.global_position)
-	for citizen in citizens:
-		if is_instance_valid(citizen) and citizen.daily_order_role == "researcher" and citizen.global_position.distance_to(position) <= OFFICER_POST_RADIUS:
-			return citizen
-	return null
+	return _research_controller.daily_researcher_at(centre)
 
 func _on_arrival_greeter_ready(greeter: Citizen) -> void:
 	citizen_lifecycle_service.on_arrival_greeter_ready(greeter)
@@ -3925,88 +3839,19 @@ func _assign_seller_at_market() -> void:
 
 
 func _appoint_official(citizen: Citizen, workplace: Node3D = null, require_at_post := true) -> bool:
-	# Promotion requires both the researched technology and physical occupation
-	# of the civic post. The unit-menu appointment is the explicit exception:
-	# it is unlocked by the research and sends the new officer to the post by AI.
-	if citizen == null or not settlement.is_research_completed("official"):
-		return false
-	var centre := workplace if is_instance_valid(workplace) else _employment_centre_building()
-	if not is_instance_valid(centre) or (require_at_post and citizen.global_position.distance_to(_employment_center_position()) > OFFICER_POST_RADIUS):
-		return false
-	for other in citizens:
-		if not is_instance_valid(other) or other == citizen or other.permanent_role != "official":
-			continue
-		_dismiss_official(other)
-	citizen.setup_specialization("official")
-	citizen.clear_daily_order()
-	citizen.assigned_dig_site = null
-	citizen.pending_employment_role = ""
-	citizen.pending_employment_workplace = null
-	citizen.permanent_role = "official"
-	citizen.employment_workplace = centre
-	citizen.employment_state = Citizen.EmploymentState.EMPLOYED
-	if not is_instance_valid(citizen.employment_workplace):
-		citizen.active_role = ""
-		return false
-	if citizen_ai != null:
-		citizen_ai.request_decision_refresh()
-	return true
+	return _research_controller.appoint_official(citizen, workplace, require_at_post)
 
 
 func _dismiss_official(citizen: Citizen) -> void:
-	if citizen == null or citizen.permanent_role != "official":
-		return
-	if settlement.active_research_tech_id != "" and settlement.active_research_worker_id == citizen.ai_id:
-		_cancel_active_building_research(true, "Research cancelled: the official left the post. Resources refunded.")
-	citizen.idle()
-	citizen.setup_specialization("unassigned")
-	citizen.clear_daily_order()
-	citizen.assigned_dig_site = null
-	citizen.pending_employment_role = ""
-	citizen.pending_employment_workplace = null
-	citizen.permanent_role = ""
-	citizen.employment_workplace = null
-	citizen.employment_state = Citizen.EmploymentState.NO_PERMANENT_WORK
-	citizen.active_role = ""
-	_update_interface(S.CITIZEN_LEFT_OFFICER_POST % citizen.role_label())
-	_update_workers()
-	if building_menu_controller != null:
-		building_menu_controller.refresh_build_menu()
+	_research_controller.dismiss_official(citizen)
 
 
 func _activate_employment_centre(centre: Node3D) -> void:
-	if not is_instance_valid(centre):
-		return
-	var service_position: Vector3 = centre.get_meta("service_position", centre.global_position)
-	for citizen in citizens:
-		if not is_instance_valid(citizen) or citizen.permanent_role != "official":
-			continue
-		citizen.employment_workplace = centre
-		citizen.pending_employment_workplace = null
-		citizen.employment_state = Citizen.EmploymentState.EMPLOYED
-		if citizen.is_player_controlled:
-			# A player-controlled official is already physically at a work position;
-			# do not cancel their current FPP state.
-			continue
-		# Start the post in the same hand-off so another scheduler tick cannot
-		# replace the job before the route starts.
-		if _is_work_time():
-			citizen.assign_official_work(service_position)
-		else:
-			citizen.idle()
-	_update_workers()
+	_research_controller.activate_employment_centre(centre)
 
 
 func _set_manual_specialist_employment(citizen: Citizen, role: String) -> bool:
-	if not _player_can_manage_permanent_professions():
-		if workplace_labor_service != null:
-			workplace_labor_service.show_labor_command_blocked()
-		return false
-	if citizen.employment_state != Citizen.EmploymentState.NO_PERMANENT_WORK:
-		return false
-	citizen.idle()
-	citizen.begin_employment_processing(_employment_center_position(), role, _employer_for_role(role))
-	return true
+	return _research_controller.set_manual_specialist_employment(citizen, role)
 
 
 
