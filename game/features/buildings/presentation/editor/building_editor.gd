@@ -190,9 +190,6 @@ func _init_world() -> void:
 	_camera_controller.camera_distance = 18.0
 	_camera_controller.apply_position()
 
-	var ground := $Ground as MeshInstance3D
-	ground.material_override = _ground_material()
-
 	var grid_lines := %GridLines as MeshInstance3D
 	grid_lines.mesh = _build_grid_mesh(32, Color(0.30, 0.34, 0.40, 0.6))
 
@@ -202,12 +199,6 @@ func _init_world() -> void:
 	_blocks_root = %BlocksRoot as Node3D
 	_zones_visual_root = %ZonesVisual as Node3D
 	_ghost = %Ghost as MeshInstance3D
-
-
-func _ground_material() -> StandardMaterial3D:
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.16, 0.18, 0.20)
-	return mat
 
 
 func _build_grid_mesh(half_extent: int, color: Color) -> ArrayMesh:
@@ -420,6 +411,7 @@ func _paint_zone_line(from_cell: Vector3i, to_cell: Vector3i) -> void:
 			zone.cells.append(cell)
 			changed = true
 	if changed:
+		_mark_dirty()
 		_refresh_zone_visuals()
 		_update_zone_info()
 
@@ -527,6 +519,7 @@ func _rebuild_material_options() -> void:
 
 func _on_era_changed(index: int) -> void:
 	blueprint.category = _category_option.get_item_metadata(index)
+	_mark_dirty()
 	_rebuild_material_options()
 	_refresh_underground_availability()
 	var offenders := _count_blocks_off_era()
@@ -711,35 +704,55 @@ func _fallback_back_to_menu() -> void:
 	get_tree().change_scene_to_file("res://game/features/ui/presentation/main_menu/main_menu.tscn")
 
 
+func _on_mode_frame_pressed() -> void:
+	_select_mode(EditMode.FRAME)
+
+
+func _on_mode_finishes_pressed() -> void:
+	_select_mode(EditMode.FINISHES)
+
+
+func _on_mode_decor_pressed() -> void:
+	_select_mode(EditMode.DECOR)
+
+
+func _on_mode_zones_pressed() -> void:
+	_select_mode(EditMode.ZONES)
+
+
+func _on_tool_place_pressed() -> void:
+	_set_tool(Tool.PLACE)
+
+
+func _on_tool_erase_pressed() -> void:
+	_set_tool(Tool.ERASE)
+
+
+func _on_brush_line_pressed() -> void:
+	_set_brush(Brush.LINE)
+
+
+func _on_brush_rect_pressed() -> void:
+	_set_brush(Brush.RECT)
+
+
+func _on_layer_down_pressed() -> void:
+	_set_layer(active_layer - 1)
+
+
+func _on_layer_up_pressed() -> void:
+	_set_layer(active_layer + 1)
+
+
 # ---------------------------------------------------------------------------
 # UI setup & signal wiring (binds to static nodes in building_editor.tscn)
 # ---------------------------------------------------------------------------
 
 func _setup_ui() -> void:
-	_back_btn.pressed.connect(_confirm_back_to_menu)
-	_new_btn.pressed.connect(_on_new_pressed)
-	_load_btn.pressed.connect(_on_load_pressed)
-	_save_btn.pressed.connect(_on_save_pressed)
-
 	_mode_buttons[EditMode.FRAME] = _mode_frame_btn
 	_mode_buttons[EditMode.FINISHES] = _mode_finishes_btn
 	_mode_buttons[EditMode.DECOR] = _mode_decor_btn
 	_mode_buttons[EditMode.ZONES] = _mode_zones_btn
-
-	_mode_frame_btn.pressed.connect(func(): _select_mode(EditMode.FRAME))
-	_mode_finishes_btn.pressed.connect(func(): _select_mode(EditMode.FINISHES))
-	_mode_decor_btn.pressed.connect(func(): _select_mode(EditMode.DECOR))
-	_mode_zones_btn.pressed.connect(func(): _select_mode(EditMode.ZONES))
-
-	_tool_place_btn.pressed.connect(func(): _set_tool(Tool.PLACE))
-	_tool_erase_btn.pressed.connect(func(): _set_tool(Tool.ERASE))
-
-	_brush_line_btn.pressed.connect(func(): _set_brush(Brush.LINE))
-	_brush_rect_btn.pressed.connect(func(): _set_brush(Brush.RECT))
-
-	_rot_btn.pressed.connect(_cycle_rotation)
-	_layer_down_btn.pressed.connect(func(): _set_layer(active_layer - 1))
-	_layer_up_btn.pressed.connect(func(): _set_layer(active_layer + 1))
 
 	_material_option.item_selected.connect(func(index: int):
 		current_material_id = _material_option.get_item_metadata(index)
@@ -813,6 +826,7 @@ func _setup_ui() -> void:
 		_style_option.set_item_metadata(_style_option.item_count - 1, style_info["id"])
 	_style_option.item_selected.connect(func(index: int):
 		blueprint.construction_style = _style_option.get_item_metadata(index)
+		_mark_dirty()
 	)
 
 	_path_hint_label.text = "Сохранение → %s" % repository.base_dir()
@@ -1005,8 +1019,15 @@ func _on_place_name_changed(text: String) -> void:
 func _on_place_id_changed(text: String) -> void:
 	var place := _current_place()
 	if place != null:
-		place.zone_id = StringName(text.strip_edges().to_lower())
+		var cleaned := text.strip_edges().to_lower()
+		place.zone_id = StringName(cleaned)
 		_mark_dirty()
+		if _zone_id_edit != null:
+			var valid := not cleaned.is_empty() and BuildingBlueprintScript._valid_id(cleaned)
+			if valid:
+				_zone_id_edit.remove_theme_color_override("font_color")
+			else:
+				_zone_id_edit.add_theme_color_override("font_color", Color(1.0, 0.3, 0.3))
 
 
 func _on_place_kind_selected(index: int) -> void:

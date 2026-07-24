@@ -1,7 +1,8 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://game/features/buildings/presentation/editor/building_editor.gd" id="1_editor"]
 [ext_resource type="Theme" path="res://game/features/ui/presentation/theme/ui_theme.tres" id="2_theme"]
+[ext_resource type="StandardMaterial3D" path="res://game/features/buildings/presentation/editor/materials/ground_material.tres" id="1_ground_mat"]
 [sub_resource type="Environment" id="env_editor"]
 background_mode = 1
 background_color = Color(0.1, 0.12, 0.16, 1)
@@ -22,12 +23,10 @@ shadow_enabled = true
 
 [node name="Ground" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.01, 0)
+material_override = ExtResource("1_ground_mat")
 
 [node name="GroundMesh" type="PlaneMesh" parent="Ground"]
 size = Vector2(64, 64)
-
-[node name="GroundMat" type="StandardMaterial3D" parent="Ground"]
-albedo_color = Color(0.16, 0.18, 0.2, 1)
 
 [node name="GridLines" type="MeshInstance3D" parent="."]
 unique_name_in_owner = true
@@ -600,3 +599,19 @@ text = "Загрузить чертёж"
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
+
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/BackBtn" to="." method="_confirm_back_to_menu"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/ModeFrameBtn" to="." method="_on_mode_frame_pressed"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/ModeFinishesBtn" to="." method="_on_mode_finishes_pressed"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/ModeDecorBtn" to="." method="_on_mode_decor_pressed"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/ModeZonesBtn" to="." method="_on_mode_zones_pressed"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/NewBtn" to="." method="_on_new_pressed"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/LoadBtn" to="." method="_on_load_pressed"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/SaveBtn" to="." method="_on_save_pressed"]
+[connection signal="pressed" from="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/ToolsRow/ToolPlaceBtn" to="." method="_on_tool_place_pressed"]
+[connection signal="pressed" from="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/ToolsRow/ToolEraseBtn" to="." method="_on_tool_erase_pressed"]
+[connection signal="pressed" from="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/BrushRow/BrushLineBtn" to="." method="_on_brush_line_pressed"]
+[connection signal="pressed" from="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/BrushRow/BrushRectBtn" to="." method="_on_brush_rect_pressed"]
+[connection signal="pressed" from="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/RotRow/RotBtn" to="." method="_cycle_rotation"]
+[connection signal="pressed" from="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/LayerRow/LayerDownBtn" to="." method="_on_layer_down_pressed"]
+[connection signal="pressed" from="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/LayerRow/LayerUpBtn" to="." method="_on_layer_up_pressed"]
