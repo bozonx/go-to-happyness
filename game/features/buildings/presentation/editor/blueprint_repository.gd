@@ -2,8 +2,8 @@ extends RefCounted
 
 ## Persists `BuildingBlueprint` records as `.gdbuilding.json` files.
 ##
-## Dev mode writes canonical blueprints under `res://data/blueprints/`; player
-## mode writes user creations under `user://custom_buildings/`. Save/load is the
+## Dev mode writes canonical blueprints under `res://game/features/buildings/data/blueprints/`;
+## player mode writes user creations under `user://custom_buildings/`. Save/load is the
 ## only place the editor touches the filesystem.
 
 const BuildingBlueprintScript = preload("res://game/features/buildings/domain/editor/building_blueprint.gd")

@@ -248,7 +248,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		_handle_mouse_button(event)
 	elif event is InputEventMouseMotion:
-		if _orbiting and _camera_controller.has_method("rotate_yaw_pitch"):
+		if _camera_controller == null:
+			pass
+		elif _orbiting and _camera_controller.has_method("rotate_yaw_pitch"):
 			_camera_controller.call("rotate_yaw_pitch", event.relative)
 		elif _panning and _camera_controller.has_method("pan"):
 			_camera_controller.call("pan", event.relative)
@@ -317,6 +319,8 @@ func _handle_key(event: InputEventKey) -> void:
 
 
 func _zoom(amount: float) -> void:
+	if _camera_controller == null:
+		return
 	var dist := float(_camera_controller.get("camera_distance"))
 	_camera_controller.set("camera_distance", clampf(dist + amount, 4.0, 60.0))
 	if _camera_controller.has_method("apply_position"):
@@ -324,6 +328,10 @@ func _zoom(amount: float) -> void:
 
 
 func _update_cursor() -> void:
+	if _camera_controller == null:
+		cursor_valid = false
+		_refresh_ghost()
+		return
 	var camera := _camera_controller.get("camera") as Camera3D
 	if camera == null:
 		return
@@ -605,7 +613,7 @@ func _set_layer(layer: int) -> void:
 func _select_mode(mode: int) -> void:
 	# Frame and Zones modes are functional. Finishes and furnishings have
 	# separate data sections and UI slots, but their authoring slices are next.
-	if mode in [EditMode.FINISHES, EditMode.DECOR]:
+	if mode == EditMode.FINISHES or mode == EditMode.DECOR:
 		_update_status("Этот режим подготовлен в формате и будет реализован следующим срезом.")
 		if _mode_buttons.has(current_mode):
 			(_mode_buttons[current_mode] as Button).button_pressed = true
@@ -1412,8 +1420,10 @@ func _place_zone_marker_at_cursor() -> void:
 	anchor.owner_zone_id = owner_id
 	anchor.role = _anchor_role
 	anchor.pos = Vector3(cursor_cell) + Vector3(0.5, 0.0, 0.5)
-	anchor.rot = Vector3(0.0, _zone_marker_yaw_spin.value, 0.0)
-	anchor.capacity = int(_zone_capacity_spin.value)
+	if _zone_marker_yaw_spin != null:
+		anchor.rot = Vector3(0.0, _zone_marker_yaw_spin.value, 0.0)
+	if _zone_capacity_spin != null:
+		anchor.capacity = int(_zone_capacity_spin.value)
 	blueprint.zone_anchors.append(anchor)
 	_refresh_zone_visuals()
 	_update_zone_info()

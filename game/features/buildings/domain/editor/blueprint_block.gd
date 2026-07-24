@@ -37,7 +37,8 @@ func to_dict() -> Dictionary:
 
 
 static func from_dict(data: Dictionary) -> BlueprintBlock:
-	var raw_pos: Array = data.get("pos", [0, 0, 0]) if data.get("pos", []) is Array and data.get("pos", []).size() >= 3 else [0, 0, 0]
+	var raw_pos_data: Variant = data.get("pos", [0, 0, 0])
+	var raw_pos: Array = raw_pos_data if raw_pos_data is Array and raw_pos_data.size() >= 3 else [0, 0, 0]
 	var pos := Vector3i(int(raw_pos[0]), int(raw_pos[1]), int(raw_pos[2]))
 	var block_id := StringName(data.get("block_id", ""))
 	var material_id := StringName(data.get("material_id", "branches"))
