@@ -23,6 +23,7 @@ signal personal_night_work_toggled(pressed: bool)
 var build_buttons: Array[Button] = []
 var build_item_buttons: Array[Button] = []
 var role_buttons: Array[Button] = []
+var custom_build_buttons: Array[Button] = []
 
 
 func _ready() -> void:
@@ -128,6 +129,7 @@ func _create_buttons() -> void:
 	add_build_category_button("Wood era", "wood", 238)
 	add_build_category_button("Stone era", "stone", 272)
 	add_build_category_button("Brick era", "brick", 306)
+	add_build_category_button("Custom buildings", "custom", 340)
 	add_build_category_back_button()
 
 	add_build_button("", "settlement_flag", 142, "tent")
@@ -211,3 +213,21 @@ func _create_buttons() -> void:
 	add_build_button("", "toilet_brick", 414, "brick")
 	add_build_button("", "toilet_brick_lvl2", 448, "brick")
 	add_build_button("", "toilet_brick_lvl3", 482, "brick")
+
+
+func sync_custom_build_buttons(entries: Array[Dictionary]) -> void:
+	for button in custom_build_buttons:
+		build_buttons.erase(button)
+		build_item_buttons.erase(button)
+		if is_instance_valid(button):
+			button.queue_free()
+	custom_build_buttons.clear()
+	var y := 176.0
+	for entry in entries:
+		var building_type := str(entry.get("building_type", ""))
+		if building_type.is_empty():
+			continue
+		add_build_button(str(entry.get("name", building_type)), building_type, y, "custom")
+		var button: Button = build_item_buttons.back()
+		custom_build_buttons.append(button)
+		y += 50.0

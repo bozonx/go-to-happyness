@@ -92,6 +92,8 @@ static func save_game(game: Node, path: String = QUICKSAVE_PATH) -> bool:
 				var center_dict = SaveDataScript.vector3_to_dict(record.center)
 				var rot_y = record.node.rotation_degrees.y
 				var b_type = record.building_type
+				var blueprint_ref: Dictionary = record.node.get_meta("blueprint_ref", {})
+				var zone_state: Array = game.building_zone_service.zone_snapshot(record.node) if "building_zone_service" in game and game.building_zone_service != null else []
 				if game.has_method("_is_construction_site") and game.call("_is_construction_site", record.node):
 					var site = game.call("_get_construction_site_data", record.node)
 					if site != null:
@@ -101,14 +103,18 @@ static func save_game(game: Node, path: String = QUICKSAVE_PATH) -> bool:
 							"position": center_dict,
 							"rotation_y": rot_y,
 							"progress": site.progress,
-							"delivered_materials": site.delivered_materials.duplicate()
+							"delivered_materials": site.delivered_materials.duplicate(),
+							"blueprint_ref": blueprint_ref.duplicate(true),
+							"zone_state": zone_state.duplicate(true),
 						})
 				else:
 					buildings_list.append({
 						"cell": cell_dict,
 						"building_type": b_type,
 						"position": center_dict,
-						"rotation_y": rot_y
+						"rotation_y": rot_y,
+						"blueprint_ref": blueprint_ref.duplicate(true),
+						"zone_state": zone_state.duplicate(true),
 					})
 	save_data.buildings_state = buildings_list
 	save_data.construction_sites_state = construction_sites_list
@@ -157,6 +163,13 @@ static func save_game(game: Node, path: String = QUICKSAVE_PATH) -> bool:
 					"daily_order_role": citizen.daily_order_role,
 					"pockets": pockets_content
 				}
+				if is_instance_valid(citizen.employment_workplace) and "building_registry" in game:
+					var employment_record = game.building_registry.record_for_node(citizen.employment_workplace)
+					if employment_record != null:
+						citizen_data["employment_building_cell"] = SaveDataScript.vector2i_to_dict(employment_record.cell)
+						if "building_zone_service" in game and game.building_zone_service != null:
+							citizen_data["employment_zone_id"] = String(game.building_zone_service.zone_id_for(
+								citizen.employment_workplace, StringName(citizen.permanent_role), citizen.ai_id))
 				if "first_name" in citizen:
 					citizen_data["first_name"] = citizen.get("first_name")
 				if "last_name" in citizen:

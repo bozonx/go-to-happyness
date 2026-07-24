@@ -7,6 +7,7 @@ extends RefCounted
 
 const BlueprintBlockScript = preload("res://game/features/buildings/domain/editor/blueprint_block.gd")
 const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
+const BuildingMaterialCatalogScript = preload("res://game/features/buildings/domain/editor/building_material_catalog.gd")
 const BuildingBlueprintScript = preload("res://game/features/buildings/domain/editor/building_blueprint.gd")
 
 var _cells: Dictionary = {}  ## Vector3i -> BlueprintBlock
@@ -35,10 +36,15 @@ func all_blocks() -> Array:
 ## Places (or replaces) a block. Returns false when the id is unknown or the
 ## cell is below ground (negative Y is reserved for underground bunkers, which
 ## the frame level does not yet support).
-func place(cell: Vector3i, block_id: StringName, rot: int = 0) -> bool:
-	if not BuildingBlockCatalogScript.has_block(block_id):
+func place(
+	cell: Vector3i,
+	block_id: StringName,
+	rot: int = 0,
+	material_id: StringName = BuildingMaterialCatalogScript.DEFAULT_ID
+) -> bool:
+	if not BuildingBlockCatalogScript.has_block(block_id) or not BuildingMaterialCatalogScript.has_material(material_id):
 		return false
-	var block := BlueprintBlockScript.new(cell, block_id, _normalize_rot(block_id, rot))
+	var block := BlueprintBlockScript.new(cell, block_id, _normalize_rot(block_id, rot), material_id)
 	_cells[cell] = block
 	return true
 
@@ -86,7 +92,7 @@ func write_to_blueprint(blueprint: BuildingBlueprintScript) -> void:
 	keys.sort_custom(_compare_cells)
 	for cell in keys:
 		var block: BlueprintBlockScript = _cells[cell]
-		blueprint.blocks.append(BlueprintBlockScript.new(block.pos, block.block_id, block.rot))
+		blueprint.blocks.append(BlueprintBlockScript.new(block.pos, block.block_id, block.rot, block.material_id))
 	var b := bounds()
 	blueprint.grid_bounds = Vector3i(int(b.size.x), int(b.size.y), int(b.size.z))
 
@@ -94,8 +100,8 @@ func write_to_blueprint(blueprint: BuildingBlueprintScript) -> void:
 func load_from_blueprint(blueprint: BuildingBlueprintScript) -> void:
 	_cells.clear()
 	for block in blueprint.blocks:
-		if BuildingBlockCatalogScript.has_block(block.block_id):
-			_cells[block.pos] = BlueprintBlockScript.new(block.pos, block.block_id, block.rot)
+		if BuildingBlockCatalogScript.has_block(block.block_id) and BuildingMaterialCatalogScript.has_material(block.material_id):
+			_cells[block.pos] = BlueprintBlockScript.new(block.pos, block.block_id, block.rot, block.material_id)
 
 
 func _normalize_rot(block_id: StringName, rot: int) -> int:

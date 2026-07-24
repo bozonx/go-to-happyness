@@ -7,13 +7,20 @@ extends RefCounted
 
 var pos: Vector3i = Vector3i.ZERO
 var block_id: StringName = &""
+var material_id: StringName = &"branches"
 var rot: int = 0
 
 
-func _init(p_pos: Vector3i = Vector3i.ZERO, p_block_id: StringName = &"", p_rot: int = 0) -> void:
+func _init(
+	p_pos: Vector3i = Vector3i.ZERO,
+	p_block_id: StringName = &"",
+	p_rot: int = 0,
+	p_material_id: StringName = &"branches"
+) -> void:
 	pos = p_pos
 	block_id = p_block_id
 	rot = p_rot
+	material_id = p_material_id
 
 
 func rotation_radians() -> float:
@@ -24,13 +31,15 @@ func to_dict() -> Dictionary:
 	return {
 		"pos": [pos.x, pos.y, pos.z],
 		"block_id": String(block_id),
+		"material_id": String(material_id),
 		"rot": rot,
 	}
 
 
 static func from_dict(data: Dictionary) -> BlueprintBlock:
-	var raw_pos: Array = data.get("pos", [0, 0, 0])
+	var raw_pos: Array = data.get("pos", [0, 0, 0]) if data.get("pos", []) is Array and data.get("pos", []).size() >= 3 else [0, 0, 0]
 	var pos := Vector3i(int(raw_pos[0]), int(raw_pos[1]), int(raw_pos[2]))
 	var block_id := StringName(data.get("block_id", ""))
+	var material_id := StringName(data.get("material_id", "branches"))
 	var rot := int(data.get("rot", 0)) % 4
-	return BlueprintBlock.new(pos, block_id, rot)
+	return BlueprintBlock.new(pos, block_id, rot, material_id)

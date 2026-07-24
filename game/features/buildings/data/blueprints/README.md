@@ -1,7 +1,7 @@
 # Building blueprints (.gdbuilding.json)
 
 Canonical block-based building definitions authored in the modular building
-editor (dev mode). At runtime `BuildingBlueprintLibrary` resolves an in-game
+editor (dev mode). At runtime the presentation-side `BuildingBlueprintLibrary` resolves an in-game
 `building_type` to the file here whose `id` matches, and the game renders the
 building from its blocks instead of the legacy procedural generator.
 

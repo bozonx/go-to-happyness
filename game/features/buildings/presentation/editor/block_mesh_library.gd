@@ -8,6 +8,15 @@ extends RefCounted
 
 const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
 
+const MATERIAL_COLORS := {
+	&"branches": Color(0.43, 0.28, 0.15),
+	&"earth": Color(0.43, 0.31, 0.20),
+	&"clay": Color(0.58, 0.32, 0.22),
+	&"wood": Color(0.55, 0.38, 0.20),
+	&"stone": Color(0.47, 0.49, 0.50),
+	&"brick": Color(0.58, 0.22, 0.16),
+}
+
 var _mesh_cache: Dictionary = {}
 var _material_cache: Dictionary = {}
 
@@ -43,14 +52,13 @@ func mesh_for(block_id: StringName) -> Mesh:
 	return mesh
 
 
-func material_for(block_id: StringName) -> StandardMaterial3D:
-	if _material_cache.has(block_id):
-		return _material_cache[block_id]
-	var def := BuildingBlockCatalogScript.get_block(block_id)
+func material_for(material_id: StringName) -> StandardMaterial3D:
+	if _material_cache.has(material_id):
+		return _material_cache[material_id]
 	var mat := StandardMaterial3D.new()
-	mat.albedo_color = def.get("color", Color(0.7, 0.7, 0.7)) if not def.is_empty() else Color(0.7, 0.7, 0.7)
+	mat.albedo_color = MATERIAL_COLORS.get(material_id, Color(0.7, 0.7, 0.7))
 	mat.roughness = 0.85
-	_material_cache[block_id] = mat
+	_material_cache[material_id] = mat
 	return mat
 
 

@@ -1,28 +1,29 @@
 class_name BuildingEditor
 extends Node3D
 
-## Modular building editor — frame-construction level (Режим 1: Каркас).
+## Modular building editor for frame construction and active work zones.
 ##
 ## Runs in two modes (see design_docs/content/modular_building_editor.md §5):
 ##   * Dev mode  — launched by opening this scene directly in Godot; saves to
 ##     res://data/blueprints and exposes the developer panel.
 ##   * Player mode — launched from the main menu; saves to user://custom_buildings.
 ##
-## Only the frame mode is functional; the decor and active-zone modes are
-## present in the UI as disabled placeholders so the later slices drop in
-## without reshaping the interface.
+## Frame and active-zone modes are functional. Surface finishing and
+## furniture/decor are separate disabled stages whose serialized sections are
+## already preserved by BuildingBlueprint.
 
 const CameraControllerScene = preload("res://game/features/world/presentation/camera_controller.tscn")
 const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
+const BuildingMaterialCatalogScript = preload("res://game/features/buildings/domain/editor/building_material_catalog.gd")
 const BuildingBlueprintScript = preload("res://game/features/buildings/domain/editor/building_blueprint.gd")
 const BuildingGridModelScript = preload("res://game/features/buildings/domain/editor/building_grid_model.gd")
 const ActiveWorkZoneRecordScript = preload("res://game/features/buildings/domain/editor/active_work_zone_record.gd")
-const BlueprintRepositoryScript = preload("res://game/features/buildings/application/editor/blueprint_repository.gd")
+const BlueprintRepositoryScript = preload("res://game/features/buildings/presentation/editor/blueprint_repository.gd")
 const BlockMeshLibraryScript = preload("res://game/features/buildings/presentation/editor/block_mesh_library.gd")
 const UI_THEME = preload("res://game/features/ui/presentation/theme/ui_theme.tres")
 
 enum Tool { PLACE, ERASE }
-enum EditMode { FRAME, DECOR, ZONES }
+enum EditMode { FRAME, FINISHES, DECOR, ZONES }
 
 ## Forces developer mode when the scene is opened/run directly. The main menu
 ## clears this via GameLaunchManager before switching in player mode.
@@ -34,6 +35,7 @@ var repository: BlueprintRepositoryScript
 var mesh_library: BlockMeshLibraryScript
 
 var current_block_id: StringName = BuildingBlockCatalogScript.default_block_id()
+var current_material_id: StringName = BuildingMaterialCatalogScript.DEFAULT_ID
 var current_rot: int = 0
 var current_tool: int = Tool.PLACE
 var active_layer: int = 0
@@ -62,6 +64,10 @@ var _orbiting: bool = false
 # UI references populated in _build_ui().
 var _name_edit: LineEdit
 var _id_edit: LineEdit
+var _category_option: OptionButton
+var _fallback_edit: LineEdit
+var _footprint_x_spin: SpinBox
+var _footprint_z_spin: SpinBox
 var _palette_panel: PanelContainer
 var _palette_container: VBoxContainer
 var _status_label: Label
@@ -79,11 +85,15 @@ var _palette_buttons: Dictionary = {}  ## StringName -> Button
 # Zones panel references.
 var _zones_panel: PanelContainer
 var _zone_option: OptionButton
+var _zone_id_edit: LineEdit
 var _zone_name_edit: LineEdit
 var _zone_kind_option: OptionButton
 var _zone_profession_option: OptionButton
 var _zone_workers_spin: SpinBox
 var _zone_info_label: Label
+var _zone_action_edit: LineEdit
+var _zone_marker_yaw_spin: SpinBox
+var _zone_tray_capacity_spin: SpinBox
 var _marker_buttons: Dictionary = {}  ## StringName -> Button
 
 const ZONE_PROFESSIONS: Array[StringName] = [
@@ -227,7 +237,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			# Drag to build/erase a line following the mouse.
 			_update_cursor()
 			if cursor_valid:
-				_paint_line(_last_paint_cell, cursor_cell)
+				if current_mode == EditMode.ZONES and _armed_marker == &"area":
+					_paint_zone_line(_last_paint_cell, cursor_cell)
+				else:
+					_paint_line(_last_paint_cell, cursor_cell)
 				_last_paint_cell = cursor_cell
 	elif event is InputEventKey and event.pressed and not event.echo:
 		_handle_key(event)
@@ -251,6 +264,8 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 					return
 				if current_mode == EditMode.ZONES:
 					_place_zone_marker_at_cursor()
+					_painting = _armed_marker == &"area"
+					_last_paint_cell = cursor_cell
 				else:
 					_painting = true
 					_last_paint_cell = cursor_cell
@@ -315,7 +330,7 @@ func _apply_tool_at_cursor() -> void:
 func _apply_tool_at_cell(cell: Vector3i) -> void:
 	match current_tool:
 		Tool.PLACE:
-			if grid_model.place(cell, current_block_id, current_rot):
+			if grid_model.place(cell, current_block_id, current_rot, current_material_id):
 				_spawn_or_update_block_node(grid_model.get_block_at(cell))
 				_update_count()
 		Tool.ERASE:
@@ -349,6 +364,23 @@ func _paint_line(from_cell: Vector3i, to_cell: Vector3i) -> void:
 	_refresh_ghost()
 
 
+func _paint_zone_line(from_cell: Vector3i, to_cell: Vector3i) -> void:
+	var zone := _current_zone()
+	if zone == null:
+		return
+	var steps := maxi(absi(to_cell.x - from_cell.x), absi(to_cell.z - from_cell.z))
+	for step in range(steps + 1):
+		var t := float(step) / float(maxi(1, steps))
+		var cell := Vector3i(
+			roundi(lerpf(from_cell.x, to_cell.x, t)),
+			active_layer,
+			roundi(lerpf(from_cell.z, to_cell.z, t)))
+		if cell not in zone.cells:
+			zone.cells.append(cell)
+	_refresh_zone_visuals()
+	_update_zone_info()
+
+
 func _pointer_over_ui() -> bool:
 	return get_viewport().gui_get_hovered_control() != null
 
@@ -364,7 +396,7 @@ func _spawn_or_update_block_node(block) -> void:
 		_blocks_root.add_child(node)
 		_block_nodes[block.pos] = node
 	node.mesh = mesh_library.mesh_for(block.block_id)
-	node.material_override = mesh_library.material_for(block.block_id)
+	node.material_override = mesh_library.material_for(block.material_id)
 	node.position = Vector3(block.pos) + BlockMeshLibraryScript.local_offset(block.block_id)
 	node.rotation = Vector3(0.0, block.rotation_radians(), 0.0)
 
@@ -456,9 +488,10 @@ func _set_layer(layer: int) -> void:
 
 
 func _select_mode(mode: int) -> void:
-	# Frame and Zones modes are functional; Decor is still a placeholder.
-	if mode == EditMode.DECOR:
-		_update_status("Режим декора появится в следующем обновлении.")
+	# Frame and Zones modes are functional. Finishes and furnishings have
+	# separate data sections and UI slots, but their authoring slices are next.
+	if mode in [EditMode.FINISHES, EditMode.DECOR]:
+		_update_status("Этот режим подготовлен в формате и будет реализован следующим срезом.")
 		if _mode_buttons.has(current_mode):
 			(_mode_buttons[current_mode] as Button).button_pressed = true
 		return
@@ -486,10 +519,16 @@ func _on_save_pressed() -> void:
 	blueprint.name = _name_edit.text.strip_edges()
 	if blueprint.name.is_empty():
 		blueprint.name = "Новое здание"
-	if dev_mode and _id_edit != null:
+	if _id_edit != null:
 		var raw_id := _id_edit.text.strip_edges()
 		if not raw_id.is_empty():
 			blueprint.id = StringName(raw_id)
+	if _category_option != null:
+		blueprint.category = str(_category_option.get_item_metadata(_category_option.selected))
+	if _fallback_edit != null and not _fallback_edit.text.strip_edges().is_empty():
+		blueprint.fallback_building_id = StringName(_fallback_edit.text.strip_edges())
+	if _footprint_x_spin != null and _footprint_z_spin != null:
+		blueprint.footprint = Vector2i(int(_footprint_x_spin.value), int(_footprint_z_spin.value))
 	grid_model.write_to_blueprint(blueprint)
 	var result := repository.save(blueprint)
 	if result["ok"]:
@@ -563,8 +602,8 @@ func _build_ui() -> void:
 	_build_zones_panel(root)
 	_build_status_bar(root)
 	_build_load_popup(root)
-	if dev_mode:
-		_build_dev_panel(root)
+	_build_dev_panel(root)
+	_sync_metadata_fields()
 
 	_select_block(current_block_id)
 	_set_tool(Tool.PLACE)
@@ -605,13 +644,23 @@ func _build_top_bar(root: Control) -> void:
 	_name_edit.text = blueprint.name
 	hbox.add_child(_name_edit)
 
+	var id_label := Label.new()
+	id_label.text = "ID:"
+	hbox.add_child(id_label)
+	_id_edit = LineEdit.new()
+	_id_edit.custom_minimum_size = Vector2(140, 0)
+	_id_edit.text = String(blueprint.id)
+	hbox.add_child(_id_edit)
+
 	hbox.add_child(_make_separator_v())
 
-	# Mode tabs (only frame is enabled).
+	# Editing stages are deliberately separate: surface finishes do not share
+	# authoring state with furniture/decor placement.
 	for mode_info in [
 		{"mode": EditMode.FRAME, "label": "1. Каркас", "enabled": true},
-		{"mode": EditMode.DECOR, "label": "2. Декор", "enabled": false},
-		{"mode": EditMode.ZONES, "label": "3. Зоны", "enabled": true},
+		{"mode": EditMode.FINISHES, "label": "2. Отделка", "enabled": false},
+		{"mode": EditMode.DECOR, "label": "3. Декор", "enabled": false},
+		{"mode": EditMode.ZONES, "label": "4. Зоны", "enabled": true},
 	]:
 		var btn := Button.new()
 		btn.toggle_mode = true
@@ -715,6 +764,20 @@ func _build_palette_panel(root: Control) -> void:
 
 	vbox.add_child(HSeparator.new())
 
+	var materials_label := Label.new()
+	materials_label.text = "Материал каркаса"
+	materials_label.add_theme_font_size_override("font_size", 16)
+	vbox.add_child(materials_label)
+	var material_option := OptionButton.new()
+	for material in BuildingMaterialCatalogScript.all():
+		material_option.add_item("%s → %s" % [material["name"], material["resource_id"]])
+		material_option.set_item_metadata(material_option.item_count - 1, material["id"])
+	material_option.item_selected.connect(func(index: int):
+		current_material_id = material_option.get_item_metadata(index)
+		_refresh_ghost()
+	)
+	vbox.add_child(material_option)
+
 	var blocks_label := Label.new()
 	blocks_label.text = "Блоки"
 	blocks_label.add_theme_font_size_override("font_size", 16)
@@ -787,6 +850,11 @@ func _build_zones_panel(root: Control) -> void:
 
 	vbox.add_child(HSeparator.new())
 
+	vbox.add_child(_labeled("ID зоны:"))
+	_zone_id_edit = LineEdit.new()
+	_zone_id_edit.text_changed.connect(_on_zone_id_changed)
+	vbox.add_child(_zone_id_edit)
+
 	vbox.add_child(_labeled("Название зоны:"))
 	_zone_name_edit = LineEdit.new()
 	_zone_name_edit.text_changed.connect(_on_zone_name_changed)
@@ -822,12 +890,33 @@ func _build_zones_panel(root: Control) -> void:
 
 	vbox.add_child(HSeparator.new())
 
+	vbox.add_child(_labeled("Действие якоря:"))
+	_zone_action_edit = LineEdit.new()
+	_zone_action_edit.text = "work"
+	vbox.add_child(_zone_action_edit)
+
+	var marker_settings := HBoxContainer.new()
+	marker_settings.add_child(_labeled("Поворот:"))
+	_zone_marker_yaw_spin = SpinBox.new()
+	_zone_marker_yaw_spin.min_value = 0
+	_zone_marker_yaw_spin.max_value = 270
+	_zone_marker_yaw_spin.step = 90
+	marker_settings.add_child(_zone_marker_yaw_spin)
+	marker_settings.add_child(_labeled("Ёмкость:"))
+	_zone_tray_capacity_spin = SpinBox.new()
+	_zone_tray_capacity_spin.min_value = 1
+	_zone_tray_capacity_spin.max_value = 10000
+	_zone_tray_capacity_spin.value = 50
+	marker_settings.add_child(_zone_tray_capacity_spin)
+	vbox.add_child(marker_settings)
+
 	var place_label := Label.new()
 	place_label.text = "Что ставить (ЛКМ по сетке):"
 	place_label.add_theme_color_override("font_color", Color(0.65, 0.72, 0.8))
 	vbox.add_child(place_label)
 
 	for marker in [
+		{"id": &"area", "label": "▦ Ячейка зоны"},
 		{"id": &"anchor", "label": "📍 Якорь работы"},
 		{"id": &"input", "label": "📥 Поддон (вход)"},
 		{"id": &"output", "label": "📤 Поддон (выход)"},
@@ -841,7 +930,7 @@ func _build_zones_panel(root: Control) -> void:
 		vbox.add_child(btn)
 
 	var clear_anchors := Button.new()
-	clear_anchors.text = "Очистить якоря зоны"
+	clear_anchors.text = "Очистить область и маркеры"
 	clear_anchors.pressed.connect(_clear_zone_anchors)
 	vbox.add_child(clear_anchors)
 
@@ -869,7 +958,11 @@ func _current_zone() -> ActiveWorkZoneRecord:
 
 func _add_zone() -> void:
 	var zone := ActiveWorkZoneRecordScript.new()
-	zone.zone_id = StringName("zone_%d" % (blueprint.work_zones.size() + 1))
+	var next_index := 1
+	var existing_ids: Array = blueprint.work_zones.map(func(existing): return existing.zone_id)
+	while StringName("zone_%d" % next_index) in existing_ids:
+		next_index += 1
+	zone.zone_id = StringName("zone_%d" % next_index)
 	zone.zone_name = "Зона %d" % (blueprint.work_zones.size() + 1)
 	blueprint.work_zones.append(zone)
 	_selected_zone_index = blueprint.work_zones.size() - 1
@@ -913,6 +1006,8 @@ func _refresh_zone_panel_fields() -> void:
 	var has_zone := zone != null
 	if _zone_name_edit != null:
 		_zone_name_edit.editable = has_zone
+	if _zone_id_edit != null:
+		_zone_id_edit.editable = has_zone
 	if _zone_kind_option != null:
 		_zone_kind_option.disabled = not has_zone
 	if _zone_profession_option != null:
@@ -922,11 +1017,15 @@ func _refresh_zone_panel_fields() -> void:
 	if not has_zone:
 		if _zone_name_edit != null:
 			_zone_name_edit.text = ""
+		if _zone_id_edit != null:
+			_zone_id_edit.text = ""
 		if _zone_info_label != null:
 			_zone_info_label.text = "Нет зон. Нажмите ＋, чтобы создать."
 		return
 	if _zone_name_edit != null:
 		_zone_name_edit.text = zone.zone_name
+	if _zone_id_edit != null:
+		_zone_id_edit.text = String(zone.zone_id)
 	if _zone_kind_option != null:
 		for i in _zone_kind_option.item_count:
 			if _zone_kind_option.get_item_metadata(i) == zone.kind:
@@ -953,8 +1052,8 @@ func _update_zone_info() -> void:
 		trays += " вход✓"
 	if zone.storage_trays.has("output"):
 		trays += " выход✓"
-	_zone_info_label.text = "Якорей: %d · Поддоны:%s\nID: %s" % [
-		zone.work_anchors.size(), (trays if trays != "" else " —"), zone.zone_id]
+	_zone_info_label.text = "Ячеек: %d · Якорей: %d · Поддоны:%s\nID: %s" % [
+		zone.cells.size(), zone.work_anchors.size(), (trays if trays != "" else " —"), zone.zone_id]
 
 
 func _on_zone_name_changed(text: String) -> void:
@@ -964,6 +1063,12 @@ func _on_zone_name_changed(text: String) -> void:
 	zone.zone_name = text
 	if _zone_option != null and _selected_zone_index >= 0:
 		_zone_option.set_item_text(_selected_zone_index, text)
+
+
+func _on_zone_id_changed(text: String) -> void:
+	var zone := _current_zone()
+	if zone != null:
+		zone.zone_id = StringName(text.strip_edges().to_lower())
 
 
 func _on_zone_kind_selected(index: int) -> void:
@@ -1000,6 +1105,7 @@ func _clear_zone_anchors() -> void:
 		return
 	zone.work_anchors.clear()
 	zone.storage_trays.clear()
+	zone.cells.clear()
 	_refresh_zone_visuals()
 	_update_zone_info()
 
@@ -1013,12 +1119,18 @@ func _place_zone_marker_at_cursor() -> void:
 		return
 	var pos := Vector3(cursor_cell) + Vector3(0.5, 0.0, 0.5)
 	match _armed_marker:
+		&"area":
+			if cursor_cell not in zone.cells:
+				zone.cells.append(cursor_cell)
 		&"input":
-			zone.set_tray(&"input", pos, 50)
+			zone.set_tray(&"input", pos, int(_zone_tray_capacity_spin.value))
 		&"output":
-			zone.set_tray(&"output", pos, 50)
+			zone.set_tray(&"output", pos, int(_zone_tray_capacity_spin.value))
 		_:
-			zone.add_anchor(pos, Vector3.ZERO, "work")
+			zone.add_anchor(
+				pos,
+				Vector3(0.0, _zone_marker_yaw_spin.value, 0.0),
+				_zone_action_edit.text.strip_edges() if not _zone_action_edit.text.strip_edges().is_empty() else "work")
 	_refresh_zone_visuals()
 	_update_zone_info()
 
@@ -1033,6 +1145,8 @@ func _refresh_zone_visuals() -> void:
 	for i in blueprint.work_zones.size():
 		var zone: ActiveWorkZoneRecord = blueprint.work_zones[i]
 		var color := ZONE_COLORS[i % ZONE_COLORS.size()]
+		for cell in zone.cells:
+			_add_zone_marker(Vector3(cell) + Vector3(0.5, 0.0, 0.5), color, Vector3(0.9, 0.04, 0.9), true)
 		for anchor in zone.work_anchors:
 			_add_zone_marker(anchor["pos"], color, Vector3(0.4, 1.2, 0.4), false)
 		if zone.storage_trays.has("input"):
@@ -1091,16 +1205,35 @@ func _build_dev_panel(root: Control) -> void:
 	_dev_panel.add_child(vbox)
 
 	var title := Label.new()
-	title.text = "🛠 Панель разработчика"
+	title.text = "Параметры здания"
 	title.add_theme_font_size_override("font_size", 16)
 	vbox.add_child(title)
 
-	var id_label := Label.new()
-	id_label.text = "ID чертежа:"
-	vbox.add_child(id_label)
-	_id_edit = LineEdit.new()
-	_id_edit.text = String(blueprint.id)
-	vbox.add_child(_id_edit)
+	vbox.add_child(_labeled("Эра:"))
+	_category_option = OptionButton.new()
+	for category_id in ["tent", "earth", "clay", "wood", "stone", "brick"]:
+		_category_option.add_item(category_id.capitalize())
+		_category_option.set_item_metadata(_category_option.item_count - 1, category_id)
+	vbox.add_child(_category_option)
+
+	vbox.add_child(_labeled("Fallback стандартного здания:"))
+	_fallback_edit = LineEdit.new()
+	_fallback_edit.text = String(blueprint.fallback_building_id)
+	vbox.add_child(_fallback_edit)
+
+	vbox.add_child(_labeled("Пятно размещения X × Z:"))
+	var footprint_row := HBoxContainer.new()
+	_footprint_x_spin = SpinBox.new()
+	_footprint_x_spin.min_value = 1
+	_footprint_x_spin.max_value = 64
+	_footprint_x_spin.value = blueprint.footprint.x
+	footprint_row.add_child(_footprint_x_spin)
+	_footprint_z_spin = SpinBox.new()
+	_footprint_z_spin.min_value = 1
+	_footprint_z_spin.max_value = 64
+	_footprint_z_spin.value = blueprint.footprint.y
+	footprint_row.add_child(_footprint_z_spin)
+	vbox.add_child(footprint_row)
 
 	var path_hint := Label.new()
 	path_hint.text = "Сохранение → %s" % repository.base_dir()
@@ -1108,14 +1241,13 @@ func _build_dev_panel(root: Control) -> void:
 	path_hint.add_theme_color_override("font_color", Color(0.6, 0.66, 0.72))
 	vbox.add_child(path_hint)
 
-	vbox.add_child(HSeparator.new())
-
-	# Placeholders for later slices (recipes, mesh export, navmesh preview).
-	for label_text in ["Редактор рецептов (скоро)", "Экспорт меша .tres/.gltf (скоро)", "Просмотр NavMesh (скоро)"]:
-		var btn := Button.new()
-		btn.text = label_text
-		btn.disabled = true
-		vbox.add_child(btn)
+	if dev_mode:
+		vbox.add_child(HSeparator.new())
+		for label_text in ["Экспорт меша .tres/.gltf (скоро)", "Просмотр NavMesh (скоро)"]:
+			var btn := Button.new()
+			btn.text = label_text
+			btn.disabled = true
+			vbox.add_child(btn)
 
 
 func _build_load_popup(root: Control) -> void:
@@ -1153,6 +1285,17 @@ func _sync_metadata_fields() -> void:
 		_name_edit.text = blueprint.name
 	if _id_edit != null:
 		_id_edit.text = String(blueprint.id)
+	if _fallback_edit != null:
+		_fallback_edit.text = String(blueprint.fallback_building_id)
+	if _footprint_x_spin != null:
+		_footprint_x_spin.value = blueprint.footprint.x
+	if _footprint_z_spin != null:
+		_footprint_z_spin.value = blueprint.footprint.y
+	if _category_option != null:
+		for i in _category_option.item_count:
+			if str(_category_option.get_item_metadata(i)) == blueprint.category:
+				_category_option.select(i)
+				break
 
 
 func _update_rotation_label() -> void:

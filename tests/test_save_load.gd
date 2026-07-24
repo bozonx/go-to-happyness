@@ -36,6 +36,23 @@ static func run_all() -> void:
 	save_data.forest_state = [
 		{"cell": {"x": -16, "y": -15}, "felled": true, "remaining_branches": 2, "initial_branches": 7}
 	]
+	save_data.buildings_state = [{
+		"cell": {"x": 4, "y": 7},
+		"building_type": "user:test_house",
+		"position": {"x": 4.0, "y": 0.0, "z": 7.0},
+		"rotation_y": 90.0,
+		"blueprint_ref": {
+			"source": "player",
+			"id": "test_house",
+			"revision": "abcd1234",
+			"fallback_building_id": "house",
+		},
+		"zone_state": [{
+			"id": "zone_1",
+			"profession_type": "craftsman",
+			"assigned_citizen_ids": [1],
+		}],
+	}]
 
 	var test_path := "user://saves/test_quicksave.json"
 	assert(save_data.save_to_file(test_path) == true, "Failed to save test_quicksave.json")
@@ -49,6 +66,8 @@ static func run_all() -> void:
 	assert(read_data.forest_state.size() == 1, "Forest state count mismatch")
 	assert(read_data.forest_state[0].get("felled") == true, "Forest felled flag mismatch")
 	assert(read_data.forest_state[0].get("remaining_branches") == 2, "Forest branch count mismatch")
+	assert(read_data.buildings_state[0].get("blueprint_ref", {}).get("id") == "test_house")
+	assert(int(read_data.buildings_state[0].get("zone_state", [])[0].get("assigned_citizen_ids", [0])[0]) == 1)
 
 	# A v2 save predates the forest field; it must still load, with an empty forest.
 	var v2_compat := SaveDataScript.new()

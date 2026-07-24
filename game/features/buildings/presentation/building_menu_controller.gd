@@ -3,6 +3,7 @@ extends RefCounted
 
 const BuildingCatalogScript = preload("res://game/features/buildings/domain/building_catalog.gd")
 const BuildingBlueprintsScript = preload("res://game/features/buildings/presentation/building_blueprints.gd")
+const BuildingBlueprintLibraryScript = preload("res://game/features/buildings/presentation/building_blueprint_library.gd")
 const S = preload("res://game/features/ui/domain/game_strings.gd")
 
 var simulation: Node
@@ -15,6 +16,8 @@ func configure(next_simulation: Node) -> void:
 func refresh_build_menu() -> void:
 	if simulation == null or simulation.ui_manager.build_menu == null:
 		return
+	BuildingBlueprintLibraryScript.refresh()
+	simulation.ui_manager.build_menu.sync_custom_build_buttons(BuildingBlueprintLibraryScript.player_entries())
 	var selected_exists: bool = is_instance_valid(simulation.selected_builder)
 	var assignment_submenu_open: bool = simulation.build_menu_is_job_menu or simulation.build_menu_is_daily_order_menu
 	var citizen_actions_visible: bool = selected_exists and not assignment_submenu_open and simulation.build_category.is_empty() and not simulation.build_menu_is_global

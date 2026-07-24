@@ -1,4 +1,3 @@
-class_name BlueprintRepository
 extends RefCounted
 
 ## Persists `BuildingBlueprint` records as `.gdbuilding.json` files.
@@ -37,13 +36,22 @@ func file_path_for(blueprint_id: StringName) -> String:
 
 ## Returns { ok: bool, path: String, error: String }.
 func save(blueprint: BuildingBlueprintScript) -> Dictionary:
+	blueprint.recalculate_construction_cost()
+	var validation_errors := blueprint.validation_errors()
+	if not validation_errors.is_empty():
+		return {"ok": false, "path": "", "error": "\n".join(validation_errors)}
 	ensure_dir()
 	var path := file_path_for(blueprint.id)
-	var file := FileAccess.open(path, FileAccess.WRITE)
+	var temporary_path := path + ".tmp"
+	var file := FileAccess.open(temporary_path, FileAccess.WRITE)
 	if file == null:
-		return {"ok": false, "path": path, "error": "Не удалось открыть файл: %s" % error_string(FileAccess.get_open_error())}
+		return {"ok": false, "path": path, "error": "Не удалось открыть временный файл: %s" % error_string(FileAccess.get_open_error())}
 	file.store_string(blueprint.to_json())
+	file.flush()
 	file.close()
+	var rename_error := DirAccess.rename_absolute(temporary_path, path)
+	if rename_error != OK:
+		return {"ok": false, "path": path, "error": "Не удалось завершить сохранение: %s" % error_string(rename_error)}
 	return {"ok": true, "path": path, "error": ""}
 
 

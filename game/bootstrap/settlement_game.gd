@@ -48,9 +48,11 @@ const FirstPersonHUDControllerScript = preload("res://game/features/ui/presentat
 const LabelDistanceFadeControllerScript = preload("res://game/features/ui/presentation/label_distance_fade_controller.gd")
 const ResourcePileVisualsScript = preload("res://game/features/logistics/presentation/resource_pile_visuals.gd")
 const BuildingLifecycleServiceScript = preload("res://game/features/buildings/application/building_lifecycle_service.gd")
+const BuildingZoneServiceScript = preload("res://game/features/buildings/application/building_zone_service.gd")
 const ConstructionPriorityServiceScript = preload("res://game/features/buildings/application/construction_priority_service.gd")
-const BuildingRuntimeStateScript = preload("res://game/features/buildings/domain/building_runtime_state.gd")
+const BuildingRuntimeStateScript = preload("res://game/features/buildings/application/building_runtime_state.gd")
 const BuildingEntrancePositionsScript = preload("res://game/features/buildings/domain/building_entrance_positions.gd")
+const BuildingBlueprintLibraryScript = preload("res://game/features/buildings/presentation/building_blueprint_library.gd")
 const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 const BuildingResearchServiceScript = preload("res://game/features/buildings/application/building_research_service.gd")
 const BuildingQueueServiceScript = preload("res://game/features/citizens/application/building_queue_service.gd")
@@ -463,6 +465,7 @@ var foraging_service: ForagingService
 var fire_management_service: FireManagementService
 var building_maintenance_service: BuildingMaintenanceService
 var building_lifecycle_service: BuildingLifecycleService
+var building_zone_service: RefCounted
 var construction_priority_service: ConstructionPriorityServiceScript
 var settlement_survival_service: SettlementSurvivalService
 var settlement_daily_rules_service: SettlementDailyRulesService
@@ -683,6 +686,8 @@ func _process(delta: float) -> void:
 
 
 func _update_workers() -> void:
+	if building_zone_service != null:
+		building_zone_service.reconcile_assignments(citizens, building_registry.records())
 	_check_unstaffed_employment_center()
 
 
@@ -1877,15 +1882,14 @@ func _employer_for_role(role: String) -> Node3D:
 				if _can_work_at_dig_site(site):
 					return site.node
 			return null
-	var types := _employer_types_for_role(role)
-	if types.is_empty():
+	if role not in ["construction", "forestry", "farming", "gather_food", "gather_branches", "gather_grass", "cook", "teacher", "seller", "factory_worker", "engineer", "craftsman", "official"]:
 		return null
 	var best: Node3D
 	var best_load := 100000
 	var best_priority := -1
 	for record in building_registry.records():
 		var building := record.node
-		if not is_instance_valid(building) or record.building_type not in types:
+		if not is_instance_valid(building) or not _building_supports_role(building, role):
 			continue
 		if not bool(building.get_meta("accepting_workers", true)):
 			continue
@@ -1926,7 +1930,7 @@ func _available_employer_capacity(role: String) -> int:
 	var capacity := 0
 	for record in building_registry.records():
 		var building := record.node
-		if not is_instance_valid(building) or record.building_type not in _employer_types_for_role(role):
+		if not is_instance_valid(building) or not _building_supports_role(building, role):
 			continue
 		if bool(building.get_meta("accepting_workers", true)):
 			capacity += _employer_capacity(role, building)
@@ -1938,12 +1942,23 @@ func _is_staffed_workplace(building: Node3D) -> bool:
 		return false
 	var building_type := building_registry.building_type_for_node(building)
 	for role in ["construction", "forestry", "farming", "gather_food", "gather_branches", "gather_grass", "cook", "teacher", "seller", "factory_worker", "engineer", "craftsman", "official"]:
-		if building_type in _employer_types_for_role(role):
+		if building_type in _employer_types_for_role(role) or (building_zone_service != null and building_zone_service.supports_role(building, StringName(role))):
 			return true
 	return false
 
 
+func _building_supports_role(building: Node3D, role: String) -> bool:
+	if not is_instance_valid(building):
+		return false
+	var building_type := building_registry.building_type_for_node(building)
+	return building_type in _employer_types_for_role(role) or (building_zone_service != null and building_zone_service.supports_role(building, StringName(role)))
+
+
 func _employer_capacity(role: String, building: Node3D) -> int:
+	if building_zone_service != null:
+		var zone_capacity: int = int(building_zone_service.role_capacity(building, StringName(role)))
+		if zone_capacity > 0:
+			return zone_capacity
 	if role == "construction":
 		return 3 if building_registry.building_type_for_node(building) == "construction_company" else 1
 	if role == "factory_worker":
@@ -3282,6 +3297,10 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 	settlement.buildings[building_type] = int(settlement.buildings.get(building_type, 0)) + 1
 	building.set_meta("building_type", building_type)
 	building.set_meta("condition", 100.0)
+	if blueprint.has("blueprint_ref"):
+		building.set_meta("blueprint_ref", blueprint["blueprint_ref"])
+	if building_zone_service != null:
+		building_zone_service.configure_building(building, blueprint.get("work_zones", []), blueprint.get("saved_zone_state", []))
 	_unregister_service_pockets(building)
 	if BuildingTypes.is_fire_source(building_type):
 		building.set_meta("fire_fuel", 4)
@@ -3918,7 +3937,7 @@ func _workplace_worker(building: Node3D) -> Citizen:
 func _workplace_priority_position(building: Node3D) -> int:
 	var role := ""
 	for candidate_role in ["construction", "forestry", "farming", "gather_food", "cook", "teacher", "seller", "official", "factory_worker", "engineer"]:
-		if building_registry.building_type_for_node(building) in _employer_types_for_role(candidate_role):
+		if _building_supports_role(building, candidate_role):
 			role = candidate_role
 			break
 	if role.is_empty():
@@ -3929,7 +3948,7 @@ func _workplace_priority_position(building: Node3D) -> int:
 		var candidate := record.node
 		if not is_instance_valid(candidate) or candidate == building or not bool(candidate.get_meta("accepting_workers", true)):
 			continue
-		if record.building_type in _employer_types_for_role(role) and int(candidate.get_meta("workplace_priority", 0)) > priority:
+		if _building_supports_role(candidate, role) and int(candidate.get_meta("workplace_priority", 0)) > priority:
 			position += 1
 	return position
 
@@ -4361,7 +4380,9 @@ func restore_from_save_data(save_data: SaveDataScript) -> bool:
 		var rot_y = float(b_dict.get("rotation_y", 0.0))
 		var rot_quarters = posmod(roundi(rot_y / 90.0), 4)
 
-		var blueprint = BuildingBlueprints.get_blueprint(b_type)
+		var resolved := _resolve_saved_building_blueprint(b_type, b_dict)
+		b_type = resolved.type
+		var blueprint: Dictionary = resolved.blueprint
 		if not blueprint.is_empty():
 			var occupied_footprint = building_placement_controller.rotated_footprint(blueprint.footprint, rot_quarters) if building_placement_controller != null else blueprint.footprint
 			building_registry.reserve(cell, pos, occupied_footprint)
@@ -4393,7 +4414,9 @@ func restore_from_save_data(save_data: SaveDataScript) -> bool:
 		var progress = float(c_dict.get("progress", 0.0))
 		var delivered = c_dict.get("delivered_materials", {}).duplicate()
 
-		var blueprint = BuildingBlueprints.get_blueprint(b_type)
+		var resolved := _resolve_saved_building_blueprint(b_type, c_dict)
+		b_type = resolved.type
+		var blueprint: Dictionary = resolved.blueprint
 		if not blueprint.is_empty():
 			var occupied_footprint = building_placement_controller.rotated_footprint(blueprint.footprint, rot_quarters) if building_placement_controller != null else blueprint.footprint
 			building_registry.reserve(cell, pos, occupied_footprint)
@@ -4477,6 +4500,19 @@ func restore_from_save_data(save_data: SaveDataScript) -> bool:
 		citizen.employment_state = int(cit_dict.get("employment_state", Citizen.EmploymentState.NO_PERMANENT_WORK))
 		citizen.permanent_role = str(cit_dict.get("permanent_role", ""))
 		citizen.daily_order_role = str(cit_dict.get("daily_order_role", ""))
+		if cit_dict.get("employment_building_cell", {}) is Dictionary:
+			var employment_cell := SaveDataScript.dict_to_vector2i(cit_dict.get("employment_building_cell", {}))
+			var employment_record = building_registry.record_at_cell(employment_cell)
+			if employment_record != null and is_instance_valid(employment_record.node):
+				citizen.employment_workplace = employment_record.node
+				var saved_zone_id := StringName(str(cit_dict.get("employment_zone_id", "")))
+				if saved_zone_id != &"" and building_zone_service != null:
+					building_zone_service.assign_to_zone(
+						employment_record.node,
+						saved_zone_id,
+						StringName(citizen.permanent_role),
+						citizen.ai_id
+					)
 
 		var pockets: Array = cit_dict.get("pockets", [])
 		for p_item in pockets:
@@ -4498,6 +4534,38 @@ func restore_from_save_data(save_data: SaveDataScript) -> bool:
 	if hero_citizen != null:
 		player_controller.enter_first_person(hero_citizen, "Save loaded.")
 	return true
+
+
+func _resolve_saved_building_blueprint(saved_type: String, data: Dictionary) -> Dictionary:
+	var resolved_type := saved_type
+	var reference: Dictionary = data.get("blueprint_ref", {})
+	if not reference.is_empty():
+		var referenced_type := BuildingBlueprintLibraryScript.resolve_reference(reference)
+		if not referenced_type.is_empty():
+			resolved_type = referenced_type
+			var referenced_blueprint: Variant = BuildingBlueprintLibraryScript.get_blueprint(referenced_type)
+			var saved_revision: String = str(reference.get("revision", ""))
+			if referenced_blueprint != null and not saved_revision.is_empty() and referenced_blueprint.content_revision() != saved_revision:
+				push_warning("Blueprint '%s:%s' changed since this save; current file geometry will be used." % [
+					reference.get("source", "builtin"), reference.get("id", "")])
+		else:
+			var fallback := str(reference.get("fallback_building_id", "house"))
+			if BuildingCatalog.has_definition(fallback):
+				resolved_type = fallback
+				push_warning("Missing blueprint '%s:%s'; restored as fallback '%s'." % [
+					reference.get("source", "builtin"), reference.get("id", ""), fallback])
+			else:
+				push_warning("Missing blueprint and invalid fallback for '%s:%s'." % [
+					reference.get("source", "builtin"), reference.get("id", "")])
+				return {"type": saved_type, "blueprint": {}}
+	var blueprint: Dictionary = BuildingBlueprints.get_blueprint(resolved_type)
+	var saved_zones: Variant = data.get("zone_state", [])
+	if saved_zones is Array and not saved_zones.is_empty() and not blueprint.is_empty():
+		blueprint = blueprint.duplicate(true)
+		blueprint["saved_zone_state"] = saved_zones.duplicate(true)
+		blueprint["work_zones"] = saved_zones.duplicate(true)
+		blueprint["blueprint_ref"] = reference.duplicate(true)
+	return {"type": resolved_type, "blueprint": blueprint}
 
 
 ## Overlays saved per-tree state onto the freshly generated forest. The forest

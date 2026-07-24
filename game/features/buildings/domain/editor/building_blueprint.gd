@@ -10,6 +10,8 @@ extends RefCounted
 
 const BlueprintBlockScript = preload("res://game/features/buildings/domain/editor/blueprint_block.gd")
 const ActiveWorkZoneRecordScript = preload("res://game/features/buildings/domain/editor/active_work_zone_record.gd")
+const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
+const BuildingMaterialCatalogScript = preload("res://game/features/buildings/domain/editor/building_material_catalog.gd")
 
 const FORMAT_VERSION := 1
 const FILE_EXTENSION := "gdbuilding.json"
@@ -19,13 +21,20 @@ var version: int = FORMAT_VERSION
 ## maps a gameplay building_type to the blueprint file whose id matches.
 var id: StringName = &"new_building"
 var name: String = "Новое здание"
-var building_type: String = "surface"  ## "surface" | "underground" (construction style)
+var construction_style: StringName = &"surface"  ## &"surface" | &"underground"
+## Source compatibility for the first editor prototype. It is not serialized.
+var building_type: String:
+	get: return String(construction_style)
+	set(value): construction_style = StringName(value)
+var category: String = "tent"
+## Standard building used when a referenced player file is unavailable.
+var fallback_building_id: StringName = &"house"
 var grid_bounds: Vector3i = Vector3i(8, 4, 8)
 var pivot_offset: Vector3i = Vector3i.ZERO
 
 ## Gameplay placement metadata (footprint on the settlement board, entrance
 ## offsets). Kept here so a blueprint fully describes how it drops into the game.
-var footprint: Vector2i = Vector2i.ZERO
+var footprint: Vector2i = Vector2i(8, 8)
 var entrance: Vector2i = Vector2i.ZERO
 var worker_entrances: Array[Vector2i] = []
 
@@ -63,7 +72,9 @@ func to_dict() -> Dictionary:
 		"version": version,
 		"id": String(id),
 		"name": name,
-		"building_type": building_type,
+		"construction_style": String(construction_style),
+		"category": category,
+		"fallback_building_id": String(fallback_building_id),
 		"grid_bounds": {"x": grid_bounds.x, "y": grid_bounds.y, "z": grid_bounds.z},
 		"pivot_offset": {"x": pivot_offset.x, "y": pivot_offset.y, "z": pivot_offset.z},
 		"footprint": [footprint.x, footprint.y],
@@ -87,7 +98,11 @@ static func from_dict(data: Dictionary) -> BuildingBlueprint:
 	bp.version = int(data.get("version", FORMAT_VERSION))
 	bp.id = StringName(data.get("id", "new_building"))
 	bp.name = String(data.get("name", "Новое здание"))
-	bp.building_type = String(data.get("building_type", "surface"))
+	# `building_type` was used by the initial prototype for surface/underground.
+	# It remains a read alias inside v1, but new files use the unambiguous name.
+	bp.construction_style = StringName(data.get("construction_style", data.get("building_type", "surface")))
+	bp.category = String(data.get("category", "tent"))
+	bp.fallback_building_id = StringName(data.get("fallback_building_id", "house"))
 	bp.grid_bounds = _vec3i_from(data.get("grid_bounds", {}), Vector3i(8, 4, 8))
 	bp.pivot_offset = _vec3i_from(data.get("pivot_offset", {}), Vector3i.ZERO)
 	bp.footprint = _vec2i_from(data.get("footprint", []), Vector2i.ZERO)
@@ -109,14 +124,85 @@ static func from_dict(data: Dictionary) -> BuildingBlueprint:
 	bp.decor_trims = data.get("decor_trims", [])
 	bp.objects = data.get("objects", [])
 	bp.construction_cost = data.get("construction_cost", {})
+	if not bp.blocks.is_empty():
+		bp.recalculate_construction_cost()
 	return bp
 
 
 static func from_json(text: String) -> BuildingBlueprint:
-	var parsed: Variant = JSON.parse_string(text)
-	if parsed is Dictionary:
-		return from_dict(parsed)
-	return BuildingBlueprint.new()
+	var json := JSON.new()
+	if json.parse(text) != OK or not (json.data is Dictionary):
+		return null
+	var bp := from_dict(json.data as Dictionary)
+	return bp if bp.validation_errors().is_empty() else null
+
+
+func recalculate_construction_cost() -> void:
+	var calculated: Dictionary = {}
+	for block in blocks:
+		var resource_id := BuildingMaterialCatalogScript.resource_id(block.material_id)
+		if resource_id == &"":
+			continue
+		var units := BuildingMaterialCatalogScript.cost_units(block.material_id)
+		calculated[String(resource_id)] = int(calculated.get(String(resource_id), 0)) + units
+	construction_cost = calculated
+
+
+func content_revision() -> String:
+	var data := to_dict()
+	return "%08x" % (JSON.stringify(data).hash() & 0xffffffff)
+
+
+func validation_errors() -> Array[String]:
+	var errors: Array[String] = []
+	if version != FORMAT_VERSION:
+		errors.append("Unsupported blueprint format version: %d" % version)
+	if not _valid_id(String(id)):
+		errors.append("Blueprint id must contain only lowercase latin letters, digits, '_' or '-'")
+	if name.strip_edges().is_empty():
+		errors.append("Blueprint name is empty")
+	if construction_style not in [&"surface", &"underground"]:
+		errors.append("Unknown construction_style: %s" % construction_style)
+	if category not in ["tent", "earth", "clay", "wood", "stone", "brick"]:
+		errors.append("Unknown era category: %s" % category)
+	if grid_bounds.x <= 0 or grid_bounds.y <= 0 or grid_bounds.z <= 0:
+		errors.append("grid_bounds must be positive")
+	if footprint.x <= 0 or footprint.y <= 0:
+		errors.append("footprint must be positive")
+	var occupied: Dictionary = {}
+	var era_order := ["tent", "earth", "clay", "wood", "stone", "brick"]
+	for block in blocks:
+		if not BuildingBlockCatalogScript.has_block(block.block_id):
+			errors.append("Unknown block id: %s" % block.block_id)
+		if not BuildingMaterialCatalogScript.has_material(block.material_id):
+			errors.append("Unknown material id: %s" % block.material_id)
+		elif era_order.find(BuildingMaterialCatalogScript.category(block.material_id)) > era_order.find(category):
+			errors.append("Material %s requires a later era than %s" % [block.material_id, category])
+		if occupied.has(block.pos):
+			errors.append("Duplicate block position: %s" % block.pos)
+		occupied[block.pos] = true
+	var zone_ids: Dictionary = {}
+	for zone in work_zones:
+		if not _valid_id(String(zone.zone_id)):
+			errors.append("Invalid zone id: %s" % zone.zone_id)
+		if zone_ids.has(zone.zone_id):
+			errors.append("Duplicate zone id: %s" % zone.zone_id)
+		zone_ids[zone.zone_id] = true
+		if zone.kind not in ActiveWorkZoneRecordScript.KINDS:
+			errors.append("Unknown zone kind: %s" % zone.kind)
+		if zone.max_workers < 0:
+			errors.append("Zone %s has negative max_workers" % zone.zone_id)
+	return errors
+
+
+static func _valid_id(value: String) -> bool:
+	if value.is_empty():
+		return false
+	for i in value.length():
+		var c := value[i]
+		if not ((c >= "a" and c <= "z") or (c >= "0" and c <= "9") or c == "_" or c == "-"):
+			return false
+	return true
 
 
 static func _vec3i_from(data: Variant, fallback: Vector3i) -> Vector3i:

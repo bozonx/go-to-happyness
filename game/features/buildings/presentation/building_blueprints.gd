@@ -4,7 +4,7 @@ extends RefCounted
 
 const BuildingModuleScene = preload("res://game/features/buildings/presentation/building_module.tscn")
 const BuildingEntrancePositionsScript = preload("res://game/features/buildings/domain/building_entrance_positions.gd")
-const BuildingBlueprintLibraryScript = preload("res://game/features/buildings/application/building_blueprint_library.gd")
+const BuildingBlueprintLibraryScript = preload("res://game/features/buildings/presentation/building_blueprint_library.gd")
 const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
 const BlockMeshLibraryScript = preload("res://game/features/buildings/presentation/editor/block_mesh_library.gd")
 
@@ -264,6 +264,7 @@ static func _create_block_module(module: Dictionary) -> StaticBody3D:
 	if _block_meshes == null:
 		_block_meshes = BlockMeshLibraryScript.new()
 	var block_id: StringName = module["block_id"]
+	var material_id: StringName = module.get("material_id", &"branches")
 	var body: StaticBody3D = BuildingModuleScene.instantiate()
 	body.position = module.position
 	body.rotation_degrees = Vector3(0.0, 90.0 * float(int(module.get("rot", 0)) % 4), 0.0)
@@ -272,7 +273,7 @@ static func _create_block_module(module: Dictionary) -> StaticBody3D:
 
 	var mesh_instance := body.get_node("MeshInstance3D") as MeshInstance3D
 	mesh_instance.mesh = _block_meshes.mesh_for(block_id)
-	mesh_instance.material_override = _block_meshes.material_for(block_id)
+	mesh_instance.material_override = _block_meshes.material_for(material_id)
 
 	# Collision is the block's axis-aligned bounding box.
 	var def := BuildingBlockCatalogScript.get_block(block_id)
@@ -295,6 +296,9 @@ static func _blueprint_from_library(building_type: String) -> Dictionary:
 		"footprint": fp,
 		"entrance": entrance,
 		"modules": BuildingBlueprintLibraryScript.ordered_modules(building_type),
+		"blueprint_ref": BuildingBlueprintLibraryScript.blueprint_ref(building_type),
+		"work_zones": bp.work_zones.map(func(zone): return zone.to_dict()) if bp != null else [],
+		"construction_cost": bp.construction_cost.duplicate(true) if bp != null else {},
 	}
 	if bp != null and not bp.worker_entrances.is_empty():
 		result["worker_entrances"] = bp.worker_entrances

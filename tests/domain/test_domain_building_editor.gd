@@ -5,19 +5,25 @@ extends RefCounted
 ## block catalog, grid placement rules, and blueprint JSON round-trip.
 
 const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
+const BuildingMaterialCatalogScript = preload("res://game/features/buildings/domain/editor/building_material_catalog.gd")
+const BlueprintBlockScript = preload("res://game/features/buildings/domain/editor/blueprint_block.gd")
 const BuildingBlueprintScript = preload("res://game/features/buildings/domain/editor/building_blueprint.gd")
 const BuildingGridModelScript = preload("res://game/features/buildings/domain/editor/building_grid_model.gd")
 const ActiveWorkZoneRecordScript = preload("res://game/features/buildings/domain/editor/active_work_zone_record.gd")
+const BuildingZoneServiceScript = preload("res://game/features/buildings/application/building_zone_service.gd")
 
 
 static func run_all() -> void:
 	_test_catalog()
+	_test_material_catalog_and_costs()
 	_test_grid_place_erase()
 	_test_grid_rotation_rules()
 	_test_grid_bounds()
 	_test_blueprint_round_trip()
 	_test_grid_blueprint_sync()
 	_test_zones_and_metadata_round_trip()
+	_test_runtime_zone_assignment()
+	_test_invalid_blueprints_are_rejected()
 
 
 static func _test_catalog() -> void:
@@ -27,6 +33,25 @@ static func _test_catalog() -> void:
 	assert(BuildingBlockCatalogScript.default_block_id() == &"cube")
 	var cube := BuildingBlockCatalogScript.get_block(&"cube")
 	assert(cube["size"] == Vector3(1.0, 1.0, 1.0))
+
+
+static func _test_material_catalog_and_costs() -> void:
+	assert(BuildingMaterialCatalogScript.all().size() == 6)
+	assert(BuildingMaterialCatalogScript.resource_id(&"earth") == &"soil")
+	assert(BuildingMaterialCatalogScript.resource_id(&"wood") == &"boards")
+	var bp := BuildingBlueprintScript.new()
+	bp.id = &"mixed_frame"
+	bp.category = "stone"
+	var grid := BuildingGridModelScript.new()
+	assert(grid.place(Vector3i.ZERO, &"cube", 0, &"earth"))
+	assert(grid.place(Vector3i(1, 0, 0), &"wall_panel", 1, &"stone"))
+	grid.write_to_blueprint(bp)
+	bp.recalculate_construction_cost()
+	assert(bp.construction_cost == {"soil": 1, "stone": 1})
+	var restored := BuildingBlueprintScript.from_json(bp.to_json())
+	assert(restored != null)
+	assert(restored.blocks[0].material_id == &"earth")
+	assert(restored.blocks[1].material_id == &"stone")
 
 
 static func _test_grid_place_erase() -> void:
@@ -105,6 +130,7 @@ static func _test_zones_and_metadata_round_trip() -> void:
 	zone.kind = ActiveWorkZoneRecordScript.KIND_TRADE
 	zone.profession = &"seller"
 	zone.max_workers = 2
+	zone.cells = [Vector3i(1, 0, 1), Vector3i(2, 0, 1)]
 	zone.add_anchor(Vector3(1.5, 0.0, 1.5), Vector3.ZERO, "trade")
 	zone.set_tray(&"output", Vector3(3.5, 0.0, 1.5), 80)
 	bp.work_zones.append(zone)
@@ -119,6 +145,7 @@ static func _test_zones_and_metadata_round_trip() -> void:
 	assert(rz.kind == ActiveWorkZoneRecordScript.KIND_TRADE)
 	assert(rz.profession == &"seller")
 	assert(rz.max_workers == 2)
+	assert(rz.cells == [Vector3i(1, 0, 1), Vector3i(2, 0, 1)])
 	assert(rz.work_anchors.size() == 1)
 	assert(rz.work_anchors[0]["pos"] == Vector3(1.5, 0.0, 1.5))
 	assert(rz.work_anchors[0]["action"] == "trade")
@@ -138,3 +165,32 @@ static func _test_grid_blueprint_sync() -> void:
 	# Blocks are written in a deterministic (y, x, z) order.
 	assert(bp.blocks[0].pos == Vector3i(0, 0, 0))
 	assert(bp.blocks[1].pos == Vector3i(0, 1, 0))
+
+
+static func _test_runtime_zone_assignment() -> void:
+	var building := Node3D.new()
+	var zone_service := BuildingZoneServiceScript.new()
+	zone_service.configure_building(building, [{
+		"id": "cook_1",
+		"name": "Kitchen",
+		"kind": "workplace",
+		"profession_type": "cook",
+		"max_workers": 2,
+		"cells": [[0, 0, 0]],
+		"work_anchors": [{"id": "oven", "pos": [1.0, 0.0, 2.0], "rot": [0, 0, 0], "action": "work"}],
+		"storage_trays": {},
+	}])
+	assert(zone_service.supports_role(building, &"cook"))
+	assert(zone_service.role_capacity(building, &"cook") == 2)
+	assert(zone_service.work_position(building, &"cook", 10) == Vector3(1.0, 0.0, 2.0))
+	building.free()
+
+
+static func _test_invalid_blueprints_are_rejected() -> void:
+	var unsupported := BuildingBlueprintScript.new()
+	unsupported.version = 999
+	assert(BuildingBlueprintScript.from_json(unsupported.to_json()) == null)
+	var invalid_material := BuildingBlueprintScript.new()
+	invalid_material.id = &"invalid_material"
+	invalid_material.blocks.append(BlueprintBlockScript.new(Vector3i.ZERO, &"cube", 0, &"unobtainium"))
+	assert(BuildingBlueprintScript.from_json(invalid_material.to_json()) == null)

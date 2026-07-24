@@ -4,7 +4,7 @@ extends RefCounted
 ## Runtime placement data shared by construction, navigation and building services.
 ## A record exists while a site is reserved, before its visual Node3D is completed.
 
-const BuildingRuntimeStateScript = preload("res://game/features/buildings/domain/building_runtime_state.gd")
+const BuildingRuntimeStateScript = preload("res://game/features/buildings/application/building_runtime_state.gd")
 
 var cell: Vector2i
 var center: Vector3
@@ -23,4 +23,3 @@ func runtime_state() -> RefCounted:
 	if not is_instance_valid(node):
 		return BuildingRuntimeStateScript.new()
 	return BuildingRuntimeStateScript.from_node(node)
-

@@ -5,7 +5,7 @@ extends RefCounted
 ## It deliberately stores runtime nodes here because it is an application registry;
 ## immutable building definitions remain in the buildings domain.
 
-const BuildingRuntimeStateScript = preload("res://game/features/buildings/domain/building_runtime_state.gd")
+const BuildingRuntimeStateScript = preload("res://game/features/buildings/application/building_runtime_state.gd")
 
 var _records: Array[BuildingRecord] = []
 var _records_by_cell: Dictionary = {}

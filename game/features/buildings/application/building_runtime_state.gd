@@ -1,5 +1,7 @@
 extends RefCounted
 
+const ActiveWorkZoneStateScript = preload("res://game/features/buildings/domain/active_work_zone_state.gd")
+
 ## Typed runtime state for a building node, replacing untyped get_meta/set_meta calls.
 ## Migrated gradually: fields here cover the most common meta keys used across the codebase.
 
@@ -26,6 +28,7 @@ var required_factory_workers: int = 1
 
 ## Housing capacity (number of residents this building can house).
 var housing_capacity: int = 0
+var work_zones: Array = []
 
 
 static func from_node(node: Node3D) -> RefCounted:
@@ -39,6 +42,11 @@ static func from_node(node: Node3D) -> RefCounted:
 	state.night_work_order_day = int(node.get_meta("night_work_order_day", -1))
 	state.required_factory_workers = int(node.get_meta("required_factory_workers", 1))
 	state.housing_capacity = int(node.get_meta("housing_capacity", 0))
+	var raw_zones: Variant = node.get_meta("active_work_zones", [])
+	if raw_zones is Array:
+		for raw_zone in raw_zones:
+			if raw_zone is Dictionary:
+				state.work_zones.append(ActiveWorkZoneStateScript.from_definition(raw_zone))
 	return state
 
 
@@ -52,3 +60,26 @@ func apply_to_node(node: Node3D) -> void:
 	node.set_meta("night_work_order_day", night_work_order_day)
 	node.set_meta("required_factory_workers", required_factory_workers)
 	node.set_meta("housing_capacity", housing_capacity)
+	node.set_meta("active_work_zones", zones_to_dict())
+
+
+func zones_to_dict() -> Array:
+	var result: Array = []
+	for zone in work_zones:
+		result.append(zone.to_dict())
+	return result
+
+
+func role_capacity(role: StringName) -> int:
+	var capacity := 0
+	for zone in work_zones:
+		if zone.supports_role(role):
+			capacity += zone.max_workers
+	return capacity
+
+
+func zone_for_citizen(citizen_id: int, role: StringName) -> Variant:
+	for zone in work_zones:
+		if zone.supports_role(role) and citizen_id in zone.assigned_citizen_ids:
+			return zone
+	return null

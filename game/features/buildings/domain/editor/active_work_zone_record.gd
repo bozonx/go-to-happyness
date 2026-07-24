@@ -26,6 +26,9 @@ var zone_name: String = "Зона"
 var kind: StringName = KIND_WORKPLACE
 var profession: StringName = &""
 var max_workers: int = 1
+## Cells occupied by the zone on the 1m authoring grid. This is intentionally
+## independent from any future furniture snapping increment.
+var cells: Array[Vector3i] = []
 
 ## Each anchor: { id: String, pos: Vector3, rot: Vector3 (deg), action: String }.
 var work_anchors: Array[Dictionary] = []
@@ -73,6 +76,7 @@ func to_dict() -> Dictionary:
 		"kind": String(kind),
 		"profession_type": String(profession),
 		"max_workers": max_workers,
+		"cells": cells.map(func(cell: Vector3i): return [cell.x, cell.y, cell.z]),
 		"work_anchors": anchors,
 		"storage_trays": trays,
 	}
@@ -85,6 +89,9 @@ static func from_dict(data: Dictionary) -> ActiveWorkZoneRecord:
 	zone.kind = StringName(data.get("kind", KIND_WORKPLACE))
 	zone.profession = StringName(data.get("profession_type", ""))
 	zone.max_workers = int(data.get("max_workers", 1))
+	for raw_cell in data.get("cells", []):
+		if raw_cell is Array and raw_cell.size() >= 3:
+			zone.cells.append(Vector3i(int(raw_cell[0]), int(raw_cell[1]), int(raw_cell[2])))
 	for raw in data.get("work_anchors", []):
 		if raw is Dictionary:
 			zone.work_anchors.append({
@@ -103,6 +110,10 @@ static func from_dict(data: Dictionary) -> ActiveWorkZoneRecord:
 					"capacity": int(tray.get("capacity", 0)),
 				}
 	return zone
+
+
+func supports_role(role: StringName) -> bool:
+	return profession == role and max_workers > 0 and kind in [KIND_WORKPLACE, KIND_CIVIC, KIND_TRADE]
 
 
 static func kind_display_name(zone_kind: StringName) -> String:

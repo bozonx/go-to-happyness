@@ -31,7 +31,6 @@ const BLOCKS: Array = [
 		"category": Category.STRUCTURE,
 		"size": Vector3(1.0, 1.0, 1.0),
 		"mesh_shape": SHAPE_BOX,
-		"color": Color(0.62, 0.60, 0.56),
 		"rotatable": false,
 	},
 	{
@@ -40,7 +39,6 @@ const BLOCKS: Array = [
 		"category": Category.STRUCTURE,
 		"size": Vector3(1.0, 0.5, 1.0),
 		"mesh_shape": SHAPE_BOX,
-		"color": Color(0.70, 0.68, 0.63),
 		"rotatable": false,
 	},
 	{
@@ -49,7 +47,6 @@ const BLOCKS: Array = [
 		"category": Category.WALL,
 		"size": Vector3(1.0, 1.0, 0.15),
 		"mesh_shape": SHAPE_BOX,
-		"color": Color(0.78, 0.74, 0.66),
 		"rotatable": true,
 	},
 	{
@@ -58,7 +55,6 @@ const BLOCKS: Array = [
 		"category": Category.WALL,
 		"size": Vector3(1.0, 2.0, 0.15),
 		"mesh_shape": SHAPE_BOX,
-		"color": Color(0.74, 0.70, 0.60),
 		"rotatable": true,
 	},
 	{
@@ -67,7 +63,6 @@ const BLOCKS: Array = [
 		"category": Category.WALL,
 		"size": Vector3(0.15, 1.0, 0.15),
 		"mesh_shape": SHAPE_BOX,
-		"color": Color(0.70, 0.66, 0.58),
 		"rotatable": true,
 	},
 	{
@@ -76,7 +71,6 @@ const BLOCKS: Array = [
 		"category": Category.ROOF,
 		"size": Vector3(1.0, 1.0, 1.0),
 		"mesh_shape": SHAPE_WEDGE,
-		"color": Color(0.55, 0.32, 0.26),
 		"rotatable": true,
 	},
 	{
@@ -85,7 +79,6 @@ const BLOCKS: Array = [
 		"category": Category.CIRCULATION,
 		"size": Vector3(1.0, 1.0, 1.0),
 		"mesh_shape": SHAPE_STAIRS,
-		"color": Color(0.60, 0.58, 0.55),
 		"rotatable": true,
 	},
 	{
@@ -94,7 +87,6 @@ const BLOCKS: Array = [
 		"category": Category.RAILING,
 		"size": Vector3(1.0, 0.5, 0.1),
 		"mesh_shape": SHAPE_BOX,
-		"color": Color(0.66, 0.50, 0.34),
 		"rotatable": true,
 	},
 ]

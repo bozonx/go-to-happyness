@@ -35,7 +35,11 @@ func collect(ctx: FacadeContext) -> Dictionary:
 			"craftsman": service_position = actor.craft_position
 			"researcher": service_position = actor.research_position
 	elif not service_role.is_empty() and actor_work_time:
-		if service_role == "cook":
+		if is_instance_valid(actor.employment_workplace) and ctx.simulation.building_zone_service != null:
+			service_position = ctx.simulation.building_zone_service.work_position(actor.employment_workplace, StringName(service_role), actor.ai_id)
+		if service_position != Vector3.INF:
+			pass
+		elif service_role == "cook":
 			service_position = ctx.simulation.canteen_position if is_instance_valid(ctx.simulation.canteen) else Vector3.INF
 		elif service_role == "official":
 			service_position = ctx.simulation._employment_center_position()

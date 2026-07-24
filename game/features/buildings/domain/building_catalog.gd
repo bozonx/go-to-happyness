@@ -1,6 +1,8 @@
 class_name BuildingCatalog
 extends RefCounted
 
+static var _runtime_definitions: Dictionary = {}
+
 const DEFINITIONS := {
 	"settlement_flag": {"name": "Флаг поселения", "category": "tent", "costs": {}, "landmark": true, "demolishable": false, "is_flag": true, "instant_build": true, "max_hero_radius": 20.0, "requires_village_area": false, "expands_village_area": true},
 	"entrance_sign": {"name": "Въездной знак", "category": "tent", "costs": {"branches": 3, "grass": 1}, "landmark": true, "demolishable": false, "requires_village_area": false, "expands_village_area": false},
@@ -368,7 +370,24 @@ const RESEARCH_TECHS := {
 	}
 }
 
-static func definition_for(building_type: String) -> Dictionary: return DEFINITIONS.get(building_type, DEFINITIONS.house).duplicate(true)
+static func register_runtime_definition(building_type: String, definition: Dictionary) -> void:
+	if building_type.is_empty() or definition.is_empty():
+		return
+	_runtime_definitions[building_type] = definition.duplicate(true)
+
+
+static func clear_runtime_definitions() -> void:
+	_runtime_definitions.clear()
+
+
+static func has_definition(building_type: String) -> bool:
+	return DEFINITIONS.has(building_type) or _runtime_definitions.has(building_type)
+
+
+static func definition_for(building_type: String) -> Dictionary:
+	if _runtime_definitions.has(building_type):
+		return (_runtime_definitions[building_type] as Dictionary).duplicate(true)
+	return DEFINITIONS.get(building_type, DEFINITIONS.house).duplicate(true)
 static func cost_resources(building_type: String) -> Array[String]:
 	var result: Array[String] = []
 	for resource_type in definition_for(building_type).get("costs", {}): result.append(resource_type)
@@ -435,4 +454,3 @@ static func requires_village_area(building_type: String) -> bool:
 
 static func expands_village_area(building_type: String) -> bool:
 	return bool(definition_for(building_type).get("expands_village_area", false))
-

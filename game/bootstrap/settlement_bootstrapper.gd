@@ -150,6 +150,7 @@ func _setup_citizen_lifecycle() -> void:
 
 
 func _setup_building_services() -> void:
+	game.building_zone_service = SettlementGame.BuildingZoneServiceScript.new()
 	game.building_availability_service = SettlementGame.BuildingAvailabilityServiceScript.new()
 	game.building_availability_service.configure(game.settlement)
 	game.building_research_service = SettlementGame.BuildingResearchServiceScript.new()
