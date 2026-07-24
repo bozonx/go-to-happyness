@@ -133,6 +133,8 @@ const SettlementUICallbacksScript = preload("res://game/bootstrap/settlement_ui_
 const SettlementResearchControllerScript = preload("res://game/bootstrap/settlement_research_controller.gd")
 const SettlementCitizenFactoryScript = preload("res://game/bootstrap/settlement_citizen_factory.gd")
 const SettlementBuildingVisualsScript = preload("res://game/bootstrap/settlement_building_visuals.gd")
+const SettlementSimulationHandlersScript = preload("res://game/bootstrap/settlement_simulation_handlers.gd")
+const SettlementServicePocketManagerScript = preload("res://game/bootstrap/settlement_service_pocket_manager.gd")
 
 
 
@@ -488,6 +490,8 @@ var survival_event_controller: SurvivalEventController
 var _research_controller: RefCounted
 var _citizen_factory: RefCounted
 var _building_visuals: RefCounted
+var _simulation_handlers: RefCounted
+var _service_pocket_manager: RefCounted
 
 
 func _ready() -> void:
@@ -505,6 +509,8 @@ func _ready() -> void:
 	_research_controller = SettlementResearchControllerScript.new(self)
 	_citizen_factory = SettlementCitizenFactoryScript.new(self)
 	_building_visuals = SettlementBuildingVisualsScript.new(self)
+	_simulation_handlers = SettlementSimulationHandlersScript.new(self)
+	_service_pocket_manager = SettlementServicePocketManagerScript.new(self)
 	ui_manager.bind_delegate_events(SettlementUICallbacksScript.new(self))
 	SettlementBootstrapperScript.new().run(self)
 
@@ -696,77 +702,31 @@ func _update_clock(delta: float) -> void:
 			simulation_event_dispatcher.dispatch_event(event, day_cycle.current_day)
 
 func _on_school_day_ended() -> void:
-	var teacher_ok := _is_teacher_present_at_school()
-	for citizen in citizens:
-		citizen.finish_school_day(teacher_ok)
+	_simulation_handlers.on_school_day_ended()
 
-func _on_daily_settlement_update(_event: SimulationDayEvent) -> void:
-	tent_weather = TentEraSurvivalRulesScript.weather_for_day(day_cycle.current_day)
-	weather_state.new_day(tent_weather, random, int(clock.minutes))
-	_update_interface("Forecast: %s." % TentEraSurvivalRulesScript.WEATHER_NAMES[tent_weather])
-	if event_service != null:
-		event_service.log.clear_flag(&"smoky_firewood")
-		event_service.log.clear_flag(&"firewood_protected_today")
-		var delayed_outcomes: Array[EventOutcome] = event_service.advance_day(day_cycle.current_day, survival_event_controller.build_event_context() if survival_event_controller != null else EventContextScript.create(0, 1, 0, {}, 0, 0, {}), random)
-		for outcome in delayed_outcomes:
-			if survival_event_controller != null:
-				survival_event_controller.apply_event_outcome(outcome)
-	if survival_event_controller != null:
-		survival_event_controller.maybe_present_survival_decision()
-	_refresh_living_statuses()
-	settlement.cheer_up_used_today = false
-	settlement.double_time_order_day = -1
-	if building_lifecycle_service != null:
-		building_lifecycle_service.remove_expired_temporary_tents()
-	if settlement_daily_rules_service != null:
-		settlement_daily_rules_service.apply_daily_settlement_rules()
-	_return_outside_workers()
+func _on_daily_settlement_update(event: SimulationDayEvent) -> void:
+	_simulation_handlers.on_daily_settlement_update(event)
 
 
 
 func _end_ai_work_shift() -> void:
-	for citizen: Citizen in citizens:
-		if not is_instance_valid(citizen) or citizen.is_player_controlled:
-			continue
-		if citizen.has_active_overtime(day_cycle.current_day) and citizen.overtime_until_workday_id > day_cycle.current_day:
-			continue
-		if citizen_ai != null:
-			citizen_ai.cancel_citizen_work(citizen.ai_id)
-		citizen.end_work_shift()
+	_simulation_handlers.end_ai_work_shift()
 
 
 func _clear_finished_daily_orders(workday_id: int) -> void:
-	for citizen in citizens:
-		if not is_instance_valid(citizen):
-			continue
-		if citizen.has_active_overtime(workday_id) and citizen.overtime_until_workday_id > workday_id:
-			continue
-		citizen.clear_daily_order(workday_id)
-		if citizen.overtime_until_workday_id == workday_id:
-			citizen.clear_expired_overtime(workday_id + 1)
-	if citizen_ai != null:
-		citizen_ai.request_decision_refresh()
-	if citizen_daily_order_service != null:
-		citizen_daily_order_service.sync_overtime_scope_indicators()
+	_simulation_handlers.clear_finished_daily_orders(workday_id)
 
 
 func _clear_expired_overtime_orders() -> void:
-	for citizen in citizens:
-		if is_instance_valid(citizen):
-			citizen.clear_expired_overtime(day_cycle.current_day)
+	_simulation_handlers.clear_expired_overtime_orders()
 
 
 func _reset_building_night_work_toggles() -> void:
-	# Keep an active overnight scope visible through the following workday. The
-	# previous implementation cleared this at 08:00 while its workers still had
-	# overtime, turning the next click into an accidental extension.
-	if citizen_daily_order_service != null:
-		citizen_daily_order_service.sync_overtime_scope_indicators()
+	_simulation_handlers.reset_building_night_work_toggles()
 
 
 func _resume_overtime_daily_orders() -> void:
-	if citizen_daily_order_service != null:
-		citizen_daily_order_service.resume_overtime_daily_orders()
+	_simulation_handlers.resume_overtime_daily_orders()
 
 
 func _check_daily_departures() -> void:
