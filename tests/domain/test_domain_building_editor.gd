@@ -29,6 +29,7 @@ static func run_all() -> void:
 	_test_runtime_zone_assignment()
 	_test_runtime_zone_subtype_survives()
 	_test_invalid_blueprints_are_rejected()
+	_test_era_material_replacement()
 
 
 static func _test_catalog() -> void:
@@ -312,3 +313,36 @@ static func _test_invalid_blueprints_are_rejected() -> void:
 	invalid_material.id = &"invalid_material"
 	invalid_material.blocks.append(BlueprintBlockScript.new(Vector3i.ZERO, &"cube", 0, &"unobtainium"))
 	assert(BuildingBlueprintScript.from_json(invalid_material.to_json()) == null)
+
+
+static func _test_era_material_replacement() -> void:
+	var bp := BuildingBlueprintScript.new()
+	bp.id = &"stone_house"
+	bp.category = &"stone"
+
+	var grid := BuildingGridModelScript.new()
+	assert(grid.place(Vector3i.ZERO, &"cube", 0, &"branches"))
+	assert(grid.place(Vector3i(1, 0, 0), &"wall_panel", 0, &"stone"))
+	assert(grid.place(Vector3i(2, 0, 0), &"cube", 0, &"wood"))
+
+	var target_era: StringName = &"tent"
+	var offending_blocks: Array[BlueprintBlockScript] = []
+	for block in grid.all_blocks():
+		if not BuildingMaterialCatalogScript.is_available_in_era(block.material_id, target_era):
+			offending_blocks.append(block)
+
+	assert(offending_blocks.size() == 2, "Stone and wood blocks are unavailable in tent era")
+	var default_mat := BuildingMaterialCatalogScript.default_material_for_era(target_era)
+	assert(BuildingMaterialCatalogScript.is_available_in_era(default_mat, target_era))
+
+	for block in offending_blocks:
+		block.material_id = default_mat
+
+	grid.write_to_blueprint(bp)
+	bp.category = target_era
+	bp.recalculate_construction_cost()
+
+	for block in bp.blocks:
+		assert(BuildingMaterialCatalogScript.is_available_in_era(block.material_id, bp.category))
+	assert(not bp.construction_cost.is_empty())
+

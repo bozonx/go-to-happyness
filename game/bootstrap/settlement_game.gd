@@ -750,13 +750,22 @@ func _update_daylight() -> void:
 		var cloud_cover := weather_state.cloud_cover_at(clock.minutes)
 		var rain_intensity := weather_state.intensity_at(clock.minutes)
 		var storm_influence := weather_state.storm_influence_at(clock.minutes)
+		# Continuous game-time so cloud drift/morph advances (and fast-forwards) with
+		# the clock; wind comes from the shared weather model so it matches whatever
+		# waves/flags/sails read from it.
+		var weather_minutes := _total_game_minutes()
+		var wind := weather_state.wind_vector_at(clock.minutes)
+		var precipitation := weather_state.precipitation_type_at(clock.minutes)
 		world_setup.update_daylight(
 			game_minutes,
 			cloud_cover,
 			rain_intensity,
 			runtime_seconds,
 			storm_influence,
-			weather_state.cloud_seed
+			weather_state.cloud_seed,
+			wind,
+			weather_minutes,
+			precipitation
 		)
 
 

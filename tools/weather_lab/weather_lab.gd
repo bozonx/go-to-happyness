@@ -12,26 +12,28 @@ const FirefliesEffectScene := preload("res://game/features/world/presentation/fi
 const SkyAndWeatherControllerScene := preload("res://game/features/world/presentation/sky_and_weather_controller.tscn")
 const SkyShader := preload("res://game/features/world/presentation/sky_clouds.gdshader")
 
+# Two authored regulators: "overcast" is fair-weather cloudiness (more/bigger white
+# cumulus, sky stays blue) and "storm" is the storm front (grey murk + sealed ceiling
+# + rain). Grey and haze come ONLY from storm, never from cloudiness.
 const SCENARIOS := [
 	{"name": "dawn_clear", "minutes": 360.0, "overcast": 0.0, "rain": 0.0},
 	{"name": "noon_clear", "minutes": 720.0, "overcast": 0.0, "rain": 0.0},
-	{"name": "noon_fair", "minutes": 720.0, "overcast": 0.14, "rain": 0.0, "camera": &"CloudCamera"},
-	{"name": "noon_partly_cloudy", "minutes": 720.0, "overcast": 0.32, "rain": 0.0, "camera": &"CloudCamera"},
-	{"name": "clear_cirrus", "minutes": 780.0, "overcast": 0.08, "rain": 0.0, "camera": &"CloudCamera"},
-	{"name": "thin_elongated", "minutes": 630.0, "overcast": 0.32, "rain": 0.0, "camera": &"CloudCamera"},
-	{"name": "layer_dissolve", "minutes": 585.0, "overcast": 0.32, "rain": 0.0, "camera": &"CloudCamera"},
-	{"name": "cloud_context", "minutes": 720.0, "overcast": 0.32, "rain": 0.0, "camera": &"ContextCamera"},
-	{"name": "cloud_zenith", "minutes": 720.0, "overcast": 0.32, "rain": 0.0, "camera": &"ZenithCamera"},
-	{"name": "sunset_cloudy", "minutes": 1080.0, "overcast": 0.58, "rain": 0.0, "camera": &"CloudCamera"},
-	{"name": "noon_overcast", "minutes": 720.0, "overcast": 0.82, "rain": 0.0, "camera": &"CloudCamera"},
-	{"name": "pre_storm", "minutes": 780.0, "overcast": 0.72, "storm": 0.55, "rain": 0.0, "camera": &"CloudCamera"},
-	{"name": "cloud_storm", "minutes": 840.0, "overcast": 0.96, "storm": 1.0, "rain": 0.8, "camera": &"CloudCamera"},
-	{"name": "storm_breakup", "minutes": 990.0, "overcast": 0.58, "storm": 0.35, "rain": 0.0, "camera": &"CloudCamera"},
+	{"name": "noon_fair", "minutes": 720.0, "overcast": 0.2, "rain": 0.0, "camera": &"CloudCamera"},
+	{"name": "noon_partly_cloudy", "minutes": 720.0, "overcast": 0.42, "rain": 0.0, "camera": &"CloudCamera"},
+	{"name": "noon_cumulus_max", "minutes": 720.0, "overcast": 0.9, "rain": 0.0, "camera": &"CloudCamera"},
+	{"name": "clear_cirrus", "minutes": 780.0, "overcast": 0.14, "rain": 0.0, "camera": &"CloudCamera"},
+	{"name": "thin_elongated", "minutes": 630.0, "overcast": 0.4, "rain": 0.0, "camera": &"CloudCamera"},
+	{"name": "cloud_context", "minutes": 720.0, "overcast": 0.45, "rain": 0.0, "camera": &"ContextCamera"},
+	{"name": "cloud_zenith", "minutes": 720.0, "overcast": 0.5, "rain": 0.0, "camera": &"ZenithCamera"},
+	{"name": "sunset_cloudy", "minutes": 1080.0, "overcast": 0.5, "rain": 0.0, "camera": &"CloudCamera"},
+	{"name": "pre_storm", "minutes": 780.0, "overcast": 0.55, "storm": 0.55, "rain": 0.0, "camera": &"CloudCamera"},
+	{"name": "cloud_storm", "minutes": 840.0, "overcast": 0.6, "storm": 1.0, "rain": 0.8, "camera": &"CloudCamera"},
+	{"name": "storm_breakup", "minutes": 990.0, "overcast": 0.45, "storm": 0.32, "rain": 0.0, "camera": &"CloudCamera"},
 	{"name": "night_stars", "minutes": 60.0, "overcast": 0.0, "rain": 0.0},
-	{"name": "night_cloud_close", "minutes": 169.0, "overcast": 0.13, "rain": 0.0, "camera": &"CloudCamera"},
-	{"name": "night_partly_cloudy", "minutes": 60.0, "overcast": 0.36, "rain": 0.0, "camera": &"ZenithCamera"},
-	{"name": "night_overcast", "minutes": 60.0, "overcast": 0.84, "rain": 0.0, "camera": &"ZenithCamera"},
-	{"name": "night_rain", "minutes": 1320.0, "overcast": 0.96, "rain": 1.0},
+	{"name": "night_cloud_close", "minutes": 169.0, "overcast": 0.3, "rain": 0.0, "camera": &"CloudCamera"},
+	{"name": "night_cumulus", "minutes": 60.0, "overcast": 0.55, "rain": 0.0, "camera": &"ZenithCamera"},
+	{"name": "night_storm", "minutes": 60.0, "overcast": 0.6, "storm": 0.85, "rain": 0.4, "camera": &"ZenithCamera"},
+	{"name": "night_rain", "minutes": 1320.0, "overcast": 0.6, "storm": 1.0, "rain": 1.0},
 ]
 
 @onready var context_camera: Camera3D = $CameraRig/ContextCamera
@@ -54,6 +56,11 @@ var storm_influence := 0.0
 var rain_intensity := 0.0
 var cloud_pattern_seed := 2.4
 var runtime_seconds := 0.0
+# Continuous game-time clock (never wraps) that drives cloud drift/morph, so scrubbing
+# time scrolls the clouds. It also creeps forward on its own for a live preview.
+var weather_minutes := 720.0
+# Passive game-minutes per real second so the preview clouds always drift a little.
+const WEATHER_PASSIVE_RATE := 24.0
 var _capture_mode := false
 var _capture_index := 0
 var _frames_after_apply := 0
@@ -120,6 +127,8 @@ func _select_camera(camera_name: StringName) -> void:
 
 func _process(delta: float) -> void:
 	runtime_seconds += delta
+	# Clouds always creep forward for a live preview; scrubbing time adds to this.
+	weather_minutes += delta * WEATHER_PASSIVE_RATE
 	if _capture_mode:
 		_process_capture()
 		return
@@ -146,9 +155,11 @@ func _handle_input(delta: float) -> void:
 	var changed := false
 	if Input.is_key_pressed(KEY_LEFT):
 		game_minutes -= delta * 180.0
+		weather_minutes -= delta * 180.0
 		changed = true
 	if Input.is_key_pressed(KEY_RIGHT):
 		game_minutes += delta * 180.0
+		weather_minutes += delta * 180.0
 		changed = true
 	if Input.is_key_pressed(KEY_UP):
 		overcast += delta * 0.5
@@ -174,6 +185,7 @@ func _apply_scenario(index: int) -> void:
 		return
 	var scenario: Dictionary = SCENARIOS[index]
 	game_minutes = scenario["minutes"]
+	weather_minutes = scenario["minutes"]
 	overcast = scenario["overcast"]
 	storm_influence = scenario.get("storm", 0.0)
 	rain_intensity = scenario["rain"]
@@ -185,14 +197,32 @@ func _apply_scenario(index: int) -> void:
 
 
 func _apply_state() -> void:
+	var precipitation := (
+		WeatherState.Precipitation.RAIN if rain_intensity > 0.0
+		else WeatherState.Precipitation.NONE
+	)
 	controller.update_daylight(
 		game_minutes,
 		overcast,
 		rain_intensity,
 		runtime_seconds,
 		storm_influence,
-		cloud_pattern_seed
+		cloud_pattern_seed,
+		_lab_wind(),
+		weather_minutes,
+		precipitation
 	)
+
+
+func _lab_wind() -> Vector2:
+	# Mirrors WeatherState wind: a slowly rotating bearing whose strength gusts and
+	# rises toward a gale under a storm. Lets the lab exercise the same wind the game
+	# feeds the sky (and, later, waves/flags/sails).
+	var angle := cloud_pattern_seed + weather_minutes / 1440.0 * 0.7
+	var gust := 0.5 + 0.5 * sin(weather_minutes * 0.02 + cloud_pattern_seed)
+	var strength := lerpf(0.3, 0.9, gust)
+	strength = lerpf(strength, 1.0, storm_influence * 0.85)
+	return Vector2(cos(angle), sin(angle)) * strength
 
 
 func _process_capture() -> void:

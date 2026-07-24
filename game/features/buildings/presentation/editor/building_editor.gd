@@ -512,23 +512,69 @@ func _rebuild_material_options() -> void:
 
 
 func _on_era_changed(index: int) -> void:
-	blueprint.category = _category_option.get_item_metadata(index)
+	var target_era: StringName = StringName(_category_option.get_item_metadata(index))
+	if target_era == blueprint.category:
+		return
+
+	var offenders := _get_offending_blocks(target_era)
+	if not offenders.is_empty():
+		var default_mat := BuildingMaterialCatalogScript.default_material_for_era(target_era)
+		var mat_info := BuildingMaterialCatalogScript.get_material(default_mat)
+		var default_mat_name: String = String(mat_info.get("name", str(default_mat)))
+
+		var user_confirmed := await _confirm_era_material_replacement(target_era, offenders.size(), default_mat_name)
+		if not user_confirmed:
+			_select_category_in_option(blueprint.category)
+			_update_status("Смена эры отменена.")
+			return
+
+		for block in offenders:
+			block.material_id = default_mat
+		_rebuild_all_block_nodes()
+		grid_model.write_to_blueprint(blueprint)
+		blueprint.recalculate_construction_cost()
+
+	blueprint.category = target_era
 	_mark_dirty()
 	_rebuild_material_options()
 	_refresh_underground_availability()
-	var offenders := _count_blocks_off_era()
-	if offenders > 0:
-		_update_status("Эра: %s. Внимание: %d блок(ов) используют более поздний материал." % [blueprint.category, offenders])
+	if not offenders.is_empty():
+		_update_status("Эра изменена на %s (%d блоков заменено)." % [blueprint.category, offenders.size()])
 	else:
 		_update_status("Эра: %s." % blueprint.category)
 
 
-func _count_blocks_off_era() -> int:
-	var count := 0
+func _get_offending_blocks(target_era: StringName) -> Array[BlueprintBlock]:
+	var offenders: Array[BlueprintBlock] = []
 	for block in grid_model.all_blocks():
-		if not BuildingMaterialCatalogScript.is_available_in_era(block.material_id, blueprint.category):
-			count += 1
-	return count
+		if not BuildingMaterialCatalogScript.is_available_in_era(block.material_id, target_era):
+			offenders.append(block)
+	return offenders
+
+
+func _confirm_era_material_replacement(target_era: StringName, count: int, default_mat_name: String) -> bool:
+	var dialog := ConfirmationDialog.new()
+	dialog.title = "Автозамена материалов блоков"
+	dialog.dialog_text = "В здании %d блок(ов) используют материалы, недоступные в эре «%s».\nЗаменить их автоматически на «%s»?" % [count, target_era, default_mat_name]
+	dialog.ok_button_text = "Заменить"
+	dialog.cancel_button_text = "Отмена"
+	add_child(dialog)
+	dialog.popup_centered(Vector2i(420, 140))
+	var user_confirmed := false
+	dialog.confirmed.connect(func(): user_confirmed = true)
+	await dialog.visibility_changed
+	if dialog.visible:
+		await dialog.hidden
+	dialog.queue_free()
+	return user_confirmed
+
+
+func _select_category_in_option(category: StringName) -> void:
+	if _category_option != null:
+		for i in _category_option.item_count:
+			if _category_option.get_item_metadata(i) == category:
+				_category_option.select(i)
+				break
 
 
 func _refresh_underground_availability() -> void:

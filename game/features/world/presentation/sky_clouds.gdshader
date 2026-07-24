@@ -360,7 +360,9 @@ void sky() {
 	cumulus_uv += vec2(u_wind.x * u_time * 1.0, u_wind.y * u_time * 1.0);
 	float projected_n = layered_cloud_field(cumulus_uv);
 	vec3 tower_dir = normalize(dir + vec3(u_wind.x * u_time * 0.12, 0.0, u_wind.y * u_time * 0.12));
-	float tower_weather = 1.0 - smoothstep(0.74, 0.96, u_overcast);
+	// Towering fair-weather cumulus persist at any coverage; only a storm ceiling
+	// dissolves them into the flat sheet.
+	float tower_weather = 1.0 - smoothstep(0.55, 0.92, u_storm_amount);
 	float tower_n = tower_cloud_field(tower_dir) * tower_weather;
 	float n = max(projected_n, tower_n);
 	float coverage_curve = pow(u_overcast, 0.55);
@@ -382,12 +384,9 @@ void sky() {
 	float shape_coverage = coverage + cumulus_dissolve * 0.22;
 	float density = smoothstep(shape_coverage, shape_coverage + clear_edge, n_banked);
 	density *= smoothstep(0.0, 0.14, u_cumulus_amount);
-	// At the end of the scale, merge the cumulus into a broad, textured ceiling
-	// rather than leaving isolated cartoon blobs over a supposedly covered sky.
-	float ceiling_amount = max(
-		smoothstep(0.66, 0.90, u_overcast),
-		smoothstep(0.08, 0.96, u_storm_amount) * 0.92
-	);
+	// The solid, sealed ceiling belongs to the storm front alone. Fair-weather cover,
+	// however high, stays a field of separate cumulus with blue gaps between them.
+	float ceiling_amount = smoothstep(0.08, 0.96, u_storm_amount) * 0.94;
 	float ceiling_texture = 0.72 + fbm(cumulus_uv * 0.38 + vec2(31.0, 9.0)) * 0.22;
 	density = max(density, ceiling_amount * ceiling_texture);
 

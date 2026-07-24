@@ -6,10 +6,20 @@ const SUN_GLARE_OCCLUSION_MASK := 1 | 8
 const SUN_GLARE_EDGE_ALLOWANCE := 0.18
 const SUN_GLARE_OCCLUSION_SAMPLE_RADIUS := 0.24
 const CLOUD_SCALE := 1.55
-const CLOUD_WIND := Vector2(0.006, 0.002)
+# Wind vector arrives as a 0..1 bearing*strength from the weather model; this scales
+# it into cloud-UV drift per game-minute. The shader then applies per-altitude speed
+# multipliers on top (fast cirrus, slow cumulus).
+const CLOUD_WIND_UV_SCALE := 0.0045
+# Fallback wind used only when a caller passes no wind (calm-ish default drift).
+const CLOUD_WIND_FALLBACK := Vector2(0.006, 0.002)
+# Shape-morph rate per game-minute; clouds swell and dissolve on this clock.
+const CLOUD_EVOLVE_SCALE := 0.0016
 const CLOUD_EDGE_SOFTNESS := 0.048
-const CLOUD_COVERAGE_CLEAR := 0.58
-const CLOUD_COVERAGE_STORM := 0.14
+# Fair-weather coverage stays in a gapped range no matter how high cloud_cover goes,
+# so raising cover only makes more/bigger cumulus — never a sealed grey sheet. The
+# storm front owns the full ceiling separately (u_storm_amount in the shader).
+const CLOUD_COVERAGE_MIN_CLOUDS := 0.60
+const CLOUD_COVERAGE_MAX_CLOUDS := 0.24
 const CLOUD_MINIMUM_SUN_VISIBILITY := 0.12
 
 class CloudLayerMix:
@@ -52,7 +62,10 @@ func update_daylight(
 	rain_intensity: float,
 	runtime_seconds: float,
 	storm_influence: float = 0.0,
-	cloud_pattern_seed: float = 0.0
+	cloud_pattern_seed: float = 0.0,
+	wind_vector: Vector2 = Vector2.ZERO,
+	weather_minutes: float = -1.0,
+	precipitation_type: int = WeatherState.Precipitation.RAIN
 ) -> void:
 	if DisplayServer.get_name() == "headless":
 		return
@@ -66,27 +79,29 @@ func update_daylight(
 	# Two independent weather regulators drive everything else:
 	#   cloud_cover      -> fair-weather cloudiness (keeps a blue, saturated sky)
 	#   storm_influence  -> storm front (grey murk, darkening, rain)
-	# "Murk" is the grey, flat, desaturating atmosphere. It belongs to the storm
-	# front, not to cloud coverage, so broken cumulus never greys out the sky. A
-	# nearly sealed ceiling (>0.9 cover) is allowed to add a touch of its own murk.
+	# "Murk" is the grey, flat, desaturating atmosphere. It belongs solely to the
+	# storm front: no amount of fair-weather cloud coverage ever greys the sky.
 	var storm := clampf(storm_influence, 0.0, 1.0)
-	var murk := clampf(maxf(storm, smoothstep(0.9, 1.0, cloud_cover) * 0.55), 0.0, 1.0)
-	# Wind drifts slowly: its bearing swings (roughly once across a long cycle) and
-	# its strength gusts up and down, so cloud drift direction and speed vary with
-	# time instead of scrolling on a fixed rail. Per-layer altitude speeds are
-	# applied inside the shader (fast cirrus, slow cumulus).
-	var wind_angle := _drift(runtime_seconds * 0.004, cloud_pattern_seed + 5.0, 1.0) * TAU
-	var wind_gust := lerpf(0.6, 1.5, _drift(runtime_seconds * 0.02, cloud_pattern_seed + 71.0, 1.0))
-	var wind_speed := CLOUD_WIND.length() * wind_gust
-	var wind := Vector2(cos(wind_angle), sin(wind_angle)) * wind_speed
+	var murk := storm
+	# Cloud motion runs on the continuous game clock, so drifting/scrubbing the time
+	# of day scrolls and morphs the clouds with it. Falls back to real seconds when a
+	# caller supplies no game clock (e.g. an isolated preview).
+	var motion_clock := weather_minutes if weather_minutes >= 0.0 else runtime_seconds
+	# Wind is authored by the shared weather model (bearing*strength, 0..1). Anything
+	# else that reacts to wind reads the same source, so clouds agree with it.
+	var wind := wind_vector
+	if wind == Vector2.ZERO:
+		wind = CLOUD_WIND_FALLBACK
+	else:
+		wind = wind * CLOUD_WIND_UV_SCALE
 	# Slow shape-morph clock: cumulus swell and dissolve rather than only scrolling.
-	var cloud_evolve := runtime_seconds * 0.012
+	var cloud_evolve := motion_clock * CLOUD_EVOLVE_SCALE
 	var cloud_layers := _cloud_layer_mix(
 		cloud_cover,
 		storm_influence,
 		cloud_pattern_seed,
 		cloud_night,
-		runtime_seconds
+		motion_clock
 	)
 	var night_color := Color("101a2b")
 	var twilight_color := Color("c66b52")
@@ -113,15 +128,17 @@ func update_daylight(
 	var cloud_sun_visibility := _cloud_sun_visibility(
 		sun_direction,
 		cloud_cover,
-		runtime_seconds,
+		motion_clock,
+		wind,
 		cloud_layers
 	)
-	var direct_light := solar_intensity * (1.0 - cloud_cover) * cloud_sun_visibility
+	# Fair clouds only dapple the sun; a storm front is what actually smothers it.
+	var direct_light := solar_intensity * (1.0 - cloud_cover * 0.6) * (1.0 - murk) * cloud_sun_visibility
 	var base_sun_color := Color("f08a5d").lerp(Color("fff2d1"), solar_intensity)
-	sun.light_color = base_sun_color.lerp(Color("a8b8c0"), cloud_cover)
+	sun.light_color = base_sun_color.lerp(Color("a8b8c0"), murk)
 	sun.light_energy = lerpf(0.0, 1.2, direct_light)
 	sun.shadow_enabled = direct_light > 0.05
-	sun.shadow_opacity = lerpf(1.0, 0.0, cloud_cover)
+	sun.shadow_opacity = lerpf(1.0, 0.0, murk)
 	var night_factor := 1.0 - smoothstep(0.0, 0.28, solar_height)
 	# Twilight is still bright after the sun reaches the horizon. Keep stars out
 	# until the sun is meaningfully below it, then fade them in during dusk.
@@ -153,13 +170,13 @@ func update_daylight(
 		sky_material.set_shader_parameter("u_murk", murk)
 		sky_material.set_shader_parameter("u_solar_intensity", solar_intensity)
 		sky_material.set_shader_parameter("u_sun_visibility", cloud_sun_visibility)
-		sky_material.set_shader_parameter("u_time", runtime_seconds)
+		sky_material.set_shader_parameter("u_time", motion_clock)
 		sky_material.set_shader_parameter("u_cloud_evolve", cloud_evolve)
 		sky_material.set_shader_parameter("u_cloud_scale", CLOUD_SCALE)
 		sky_material.set_shader_parameter("u_wind", wind)
 		sky_material.set_shader_parameter("u_edge_softness", CLOUD_EDGE_SOFTNESS)
-		sky_material.set_shader_parameter("u_coverage_clear", CLOUD_COVERAGE_CLEAR)
-		sky_material.set_shader_parameter("u_coverage_storm", CLOUD_COVERAGE_STORM)
+		sky_material.set_shader_parameter("u_coverage_clear", CLOUD_COVERAGE_MIN_CLOUDS)
+		sky_material.set_shader_parameter("u_coverage_storm", CLOUD_COVERAGE_MAX_CLOUDS)
 		sky_material.set_shader_parameter("u_cumulus_amount", cloud_layers.cumulus)
 		sky_material.set_shader_parameter("u_cirrus_amount", cloud_layers.cirrus)
 		sky_material.set_shader_parameter("u_elongated_amount", cloud_layers.elongated)
@@ -250,34 +267,33 @@ func _drift(t: float, seed: float, freq: float) -> float:
 
 func _cloud_sun_visibility(
 	sun_direction: Vector3,
-	overcast: float,
-	runtime_seconds: float,
+	cover: float,
+	motion_clock: float,
+	wind: Vector2,
 	cloud_layers: CloudLayerMix
 ) -> float:
 	var horizon := sun_direction.y
 	var projection_scale := maxf(horizon + 0.55, 0.55)
 	var uv := Vector2(sun_direction.x, sun_direction.z) / projection_scale
 	uv *= CLOUD_SCALE * 1.6
-	uv += Vector2(CLOUD_WIND.x * runtime_seconds * 2.4, CLOUD_WIND.y * runtime_seconds * 0.55)
+	# Match the shader's slow cumulus drift (wind * time * 1.0).
+	uv += wind * motion_clock
 	var tower_direction := (
 		sun_direction
-		+ Vector3(CLOUD_WIND.x * runtime_seconds * 0.12, 0.0, CLOUD_WIND.y * runtime_seconds * 0.12)
+		+ Vector3(wind.x * motion_clock * 0.12, 0.0, wind.y * motion_clock * 0.12)
 	).normalized()
-	var tower_weather := 1.0 - smoothstep(0.74, 0.96, overcast)
 	var cloud_field := maxf(
-		_layered_cloud_field(uv, overcast),
-		_tower_cloud_field(tower_direction) * tower_weather
+		_layered_cloud_field(uv, cover),
+		_tower_cloud_field(tower_direction)
 	)
-	var coverage_curve := pow(overcast, 0.55)
-	var coverage := lerpf(CLOUD_COVERAGE_CLEAR, CLOUD_COVERAGE_STORM, coverage_curve)
+	var coverage_curve := pow(cover, 0.55)
+	var coverage := lerpf(CLOUD_COVERAGE_MIN_CLOUDS, CLOUD_COVERAGE_MAX_CLOUDS, coverage_curve)
 	var cumulus_dissolve := pow(1.0 - cloud_layers.cumulus, 1.4)
 	var shape_coverage := coverage + cumulus_dissolve * 0.22
 	var density := smoothstep(shape_coverage, shape_coverage + CLOUD_EDGE_SOFTNESS, cloud_field)
 	density *= smoothstep(0.0, 0.14, cloud_layers.cumulus)
-	var ceiling_amount := maxf(
-		smoothstep(0.66, 0.90, overcast),
-		smoothstep(0.08, 0.96, cloud_layers.storm) * 0.92
-	)
+	# Only a storm seals the sun away; fair coverage just dapples it.
+	var ceiling_amount := smoothstep(0.08, 0.96, cloud_layers.storm) * 0.92
 	var cloud_alpha := maxf(density, ceiling_amount) * smoothstep(0.08, 0.34, horizon)
 	return lerpf(1.0, CLOUD_MINIMUM_SUN_VISIBILITY, cloud_alpha)
 
