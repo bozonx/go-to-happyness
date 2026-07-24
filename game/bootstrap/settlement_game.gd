@@ -755,6 +755,7 @@ func _update_daylight() -> void:
 		# waves/flags/sails read from it.
 		var weather_minutes := _total_game_minutes()
 		var wind := weather_state.wind_vector_at(clock.minutes)
+		var wind_displacement := weather_state.wind_displacement_at(clock.minutes)
 		var precipitation := weather_state.precipitation_type_at(clock.minutes)
 		world_setup.update_daylight(
 			game_minutes,
@@ -765,7 +766,8 @@ func _update_daylight() -> void:
 			weather_state.cloud_seed,
 			wind,
 			weather_minutes,
-			precipitation
+			precipitation,
+			wind_displacement
 		)
 
 

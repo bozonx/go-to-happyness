@@ -34,7 +34,11 @@ uniform float u_haze_strength : hint_range(0.0, 1.0) = 0.45;
 
 // --- static art-direction knobs --------------------------------------------
 uniform float u_cloud_scale = 1.55;     // bigger = smaller cloud cells
-uniform vec2 u_wind = vec2(0.006, 0.002);
+// Integrated wind displacement supplied by the deterministic weather clock.
+// Keeping displacement separate from the current wind vector prevents cloud jumps
+// when a new daily bearing or a new wind strength blends in.
+uniform vec2 u_wind_offset = vec2(0.0);
+uniform vec2 u_wind_direction = vec2(1.0, 0.0);
 uniform float u_edge_softness = 0.07;   // lower = harder, crisp anime cartoon edges
 uniform float u_coverage_clear = 0.46;  // threshold when sunny (few clouds)
 uniform float u_coverage_storm = 0.18;  // threshold when overcast (full sheet)
@@ -170,9 +174,12 @@ float tower_cloud_field(vec3 direction) {
 
 // High-altitude cirrus wind streaks layer
 float cirrus_field(vec2 uv, float amount) {
-	vec2 streaked_uv = vec2(uv.x * 0.35 + uv.y * 1.6, uv.y * 3.8);
+	vec2 wind_axis = normalize(u_wind_direction);
+	vec2 cross_axis = vec2(-wind_axis.y, wind_axis.x);
+	vec2 wind_uv = vec2(dot(uv, wind_axis), dot(uv, cross_axis));
+	vec2 streaked_uv = vec2(wind_uv.x * 0.35 + wind_uv.y * 0.22, wind_uv.y * 3.8);
 	// High cirrus rides the fastest wind and reshapes on the evolve clock.
-	float n = fbm(streaked_uv + u_wind * u_time * 2.6 + vec2(u_cloud_evolve * 0.8, 0.0));
+	float n = fbm(streaked_uv + vec2(u_cloud_evolve * 0.8, 0.0));
 	float dissolve_threshold = mix(0.70, 0.52, smoothstep(0.06, 1.0, amount));
 	return smoothstep(dissolve_threshold, dissolve_threshold + 0.24, n);
 }
@@ -181,7 +188,10 @@ float cirrus_field(vec2 uv, float amount) {
 // but their stretched coordinate frame prevents them from reading as another
 // family of round cumulus puffs.
 float elongated_cloud_field(vec2 uv, float amount) {
-	vec2 stretched = vec2(uv.x * 0.26 + uv.y * 0.38, uv.y * 1.85);
+	vec2 wind_axis = normalize(u_wind_direction);
+	vec2 cross_axis = vec2(-wind_axis.y, wind_axis.x);
+	vec2 wind_uv = vec2(dot(uv, wind_axis), dot(uv, cross_axis));
+	vec2 stretched = vec2(wind_uv.x * 0.26 + wind_uv.y * 0.16, wind_uv.y * 1.85);
 	vec2 ev = vec2(u_cloud_evolve * 0.5, u_cloud_evolve * 0.3);
 	float family = fbm(uv * 0.20 + vec2(8.0, 17.0) + ev);
 	float family_mask = smoothstep(0.48, 0.68, family);
@@ -232,7 +242,7 @@ void sky() {
 	// into banks of mist rather than a flat gradient, so the dawn haze reads as
 	// ground fog. Densest right at the horizon, thinning upward.
 	float fog_profile = pow(1.0 - clamp(horizon / 0.55, 0.0, 1.0), 2.2);
-	float fog_tex = fbm(dir.xz / max(horizon + 0.32, 0.32) * 2.3 + u_wind * u_time * 4.0);
+	float fog_tex = fbm(dir.xz / max(horizon + 0.32, 0.32) * 2.3 + u_wind_offset * 4.0);
 	float fog_amount = fog_profile * u_haze_strength * (0.62 + fog_tex * 0.7);
 	sky_col = mix(sky_col, u_haze_color, clamp(fog_amount, 0.0, 1.0));
 
@@ -316,7 +326,7 @@ void sky() {
 	// horizon while preserving the feeling of a cloud ceiling.
 	float ceil_mask = smoothstep(0.02, 0.10, horizon);
 	vec2 projected_uv = dir.xz / max(horizon + 0.28, 0.28);
-	vec2 uv = projected_uv * u_cloud_scale + u_wind * u_time;
+	vec2 uv = projected_uv * u_cloud_scale + u_wind_offset;
 
 	// --- High-altitude cirrus streaks layer ---
 	if (u_cirrus_amount > 0.001) {
@@ -335,7 +345,7 @@ void sky() {
 		vec2 elongated_uv = dir.xz / max(horizon + 0.40, 0.40);
 		elongated_uv *= u_cloud_scale * 1.18;
 		// Mid-altitude ribbons: medium wind, between the fast cirrus and slow cumulus.
-		elongated_uv += vec2(u_wind.x * u_time * 1.7, u_wind.y * u_time * 1.7);
+		elongated_uv += u_wind_offset * 1.7;
 		float elongated_mask = elongated_cloud_field(elongated_uv, u_elongated_amount);
 		vec3 elongated_day = mix(u_cloud_mid_clear, u_cloud_lit_clear, 0.72);
 		vec3 elongated_storm = mix(u_cloud_mid_storm, u_cloud_lit_storm, 0.30);
@@ -357,9 +367,9 @@ void sky() {
 	vec2 cumulus_projected_uv = dir.xz / max(horizon + 0.55, 0.55);
 	vec2 cumulus_uv = cumulus_projected_uv * u_cloud_scale * 1.6;
 	// Low, heavy cumulus drifts slowest; its body morphs mainly through u_cloud_evolve.
-	cumulus_uv += vec2(u_wind.x * u_time * 1.0, u_wind.y * u_time * 1.0);
+	cumulus_uv += u_wind_offset;
 	float projected_n = layered_cloud_field(cumulus_uv);
-	vec3 tower_dir = normalize(dir + vec3(u_wind.x * u_time * 0.12, 0.0, u_wind.y * u_time * 0.12));
+	vec3 tower_dir = normalize(dir + vec3(u_wind_offset.x * 0.12, 0.0, u_wind_offset.y * 0.12));
 	// Towering fair-weather cumulus persist at any coverage; only a storm ceiling
 	// dissolves them into the flat sheet.
 	float tower_weather = 1.0 - smoothstep(0.55, 0.92, u_storm_amount);

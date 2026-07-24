@@ -12,8 +12,9 @@ const CLOUD_SCALE := 1.55
 const CLOUD_WIND_UV_SCALE := 0.0045
 # Fallback wind used only when a caller passes no wind (calm-ish default drift).
 const CLOUD_WIND_FALLBACK := Vector2(0.006, 0.002)
-# Shape-morph rate per game-minute; clouds swell and dissolve on this clock.
-const CLOUD_EVOLVE_SCALE := 0.0016
+# Shape-morph rate per game-minute; a full day now produces one slow evolution
+# cycle rather than several restless reshapes.
+const CLOUD_EVOLVE_SCALE := 0.0007
 const CLOUD_EDGE_SOFTNESS := 0.048
 # Fair-weather coverage stays in a gapped range no matter how high cloud_cover goes,
 # so raising cover only makes more/bigger cumulus — never a sealed grey sheet. The
@@ -65,7 +66,8 @@ func update_daylight(
 	cloud_pattern_seed: float = 0.0,
 	wind_vector: Vector2 = Vector2.ZERO,
 	weather_minutes: float = -1.0,
-	precipitation_type: int = WeatherState.Precipitation.RAIN
+	precipitation_type: int = WeatherState.Precipitation.RAIN,
+	wind_displacement: Vector2 = Vector2.ZERO
 ) -> void:
 	if DisplayServer.get_name() == "headless":
 		return
@@ -90,10 +92,16 @@ func update_daylight(
 	# Wind is authored by the shared weather model (bearing*strength, 0..1). Anything
 	# else that reacts to wind reads the same source, so clouds agree with it.
 	var wind := wind_vector
-	if wind == Vector2.ZERO:
+	var wind_offset: Vector2
+	if wind_displacement != Vector2.ZERO:
+		wind_offset = wind_displacement * CLOUD_WIND_UV_SCALE
+	elif wind == Vector2.ZERO:
 		wind = CLOUD_WIND_FALLBACK
+		wind_offset = wind * motion_clock
 	else:
 		wind = wind * CLOUD_WIND_UV_SCALE
+		wind_offset = wind * motion_clock
+	var wind_direction := wind.normalized()
 	# Slow shape-morph clock: cumulus swell and dissolve rather than only scrolling.
 	var cloud_evolve := motion_clock * CLOUD_EVOLVE_SCALE
 	var cloud_layers := _cloud_layer_mix(
@@ -128,8 +136,7 @@ func update_daylight(
 	var cloud_sun_visibility := _cloud_sun_visibility(
 		sun_direction,
 		cloud_cover,
-		motion_clock,
-		wind,
+		wind_offset,
 		cloud_layers
 	)
 	# Fair clouds only dapple the sun; a storm front is what actually smothers it.
@@ -173,7 +180,8 @@ func update_daylight(
 		sky_material.set_shader_parameter("u_time", motion_clock)
 		sky_material.set_shader_parameter("u_cloud_evolve", cloud_evolve)
 		sky_material.set_shader_parameter("u_cloud_scale", CLOUD_SCALE)
-		sky_material.set_shader_parameter("u_wind", wind)
+		sky_material.set_shader_parameter("u_wind_offset", wind_offset)
+		sky_material.set_shader_parameter("u_wind_direction", wind_direction)
 		sky_material.set_shader_parameter("u_edge_softness", CLOUD_EDGE_SOFTNESS)
 		sky_material.set_shader_parameter("u_coverage_clear", CLOUD_COVERAGE_MIN_CLOUDS)
 		sky_material.set_shader_parameter("u_coverage_storm", CLOUD_COVERAGE_MAX_CLOUDS)
@@ -227,7 +235,7 @@ func _cloud_layer_mix(
 	# noise over elapsed time), so the sky is a shifting blend of different layers in
 	# different proportions rather than one looping pulse. Thin high layers appear at
 	# a lower coverage than the heavy cumulus, so partly-cloudy skies read as a mix.
-	var t := clock * 0.03
+	var t := clock * 0.004
 	var cumulus_drift := _drift(t, cloud_pattern_seed + 3.0, 1.0)
 	var cirrus_drift := _drift(t, cloud_pattern_seed + 21.0, 0.62)
 	var elongated_drift := _drift(t, cloud_pattern_seed + 47.0, 0.83)
@@ -268,19 +276,18 @@ func _drift(t: float, seed: float, freq: float) -> float:
 func _cloud_sun_visibility(
 	sun_direction: Vector3,
 	cover: float,
-	motion_clock: float,
-	wind: Vector2,
+	wind_offset: Vector2,
 	cloud_layers: CloudLayerMix
 ) -> float:
 	var horizon := sun_direction.y
 	var projection_scale := maxf(horizon + 0.55, 0.55)
 	var uv := Vector2(sun_direction.x, sun_direction.z) / projection_scale
 	uv *= CLOUD_SCALE * 1.6
-	# Match the shader's slow cumulus drift (wind * time * 1.0).
-	uv += wind * motion_clock
+	# Match the shader's slow cumulus drift using integrated wind displacement.
+	uv += wind_offset
 	var tower_direction := (
 		sun_direction
-		+ Vector3(wind.x * motion_clock * 0.12, 0.0, wind.y * motion_clock * 0.12)
+		+ Vector3(wind_offset.x * 0.12, 0.0, wind_offset.y * 0.12)
 	).normalized()
 	var cloud_field := maxf(
 		_layered_cloud_field(uv, cover),

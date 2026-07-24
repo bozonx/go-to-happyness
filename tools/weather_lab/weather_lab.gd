@@ -34,6 +34,7 @@ const SCENARIOS := [
 	{"name": "night_cumulus", "minutes": 60.0, "overcast": 0.55, "rain": 0.0, "camera": &"ZenithCamera"},
 	{"name": "night_storm", "minutes": 60.0, "overcast": 0.6, "storm": 0.85, "rain": 0.4, "camera": &"ZenithCamera"},
 	{"name": "night_rain", "minutes": 1320.0, "overcast": 0.6, "storm": 1.0, "rain": 1.0},
+	{"name": "wind_aligned_layers", "minutes": 690.0, "overcast": 0.32, "rain": 0.0, "camera": &"ZenithCamera"},
 ]
 
 @onready var context_camera: Camera3D = $CameraRig/ContextCamera
@@ -56,11 +57,13 @@ var storm_influence := 0.0
 var rain_intensity := 0.0
 var cloud_pattern_seed := 2.4
 var runtime_seconds := 0.0
+var lab_weather := WeatherState.new()
 # Continuous game-time clock (never wraps) that drives cloud drift/morph, so scrubbing
 # time scrolls the clouds. It also creeps forward on its own for a live preview.
 var weather_minutes := 720.0
 # Passive game-minutes per real second so the preview clouds always drift a little.
 const WEATHER_PASSIVE_RATE := 24.0
+var weather_time_scale := 1.0
 var _capture_mode := false
 var _capture_index := 0
 var _frames_after_apply := 0
@@ -70,6 +73,12 @@ func _ready() -> void:
 	_configure_cameras()
 	_select_camera(&"ContextCamera")
 	_build_weather_rig()
+	lab_weather.cloud_seed = cloud_pattern_seed
+	lab_weather.wind_previous_direction = cloud_pattern_seed
+	lab_weather.wind_direction = cloud_pattern_seed
+	lab_weather.wind_base_strength = 0.42
+	lab_weather.wind_gust_amount = 0.18
+	lab_weather._rebuild_wind_displacement_samples()
 	_capture_mode = OS.get_cmdline_user_args().has("--capture")
 	if _capture_mode and DisplayServer.get_name() == "headless":
 		push_error("Weather lab captures require a rendering driver. Run the documented non-headless capture command.")
@@ -127,11 +136,13 @@ func _select_camera(camera_name: StringName) -> void:
 
 func _process(delta: float) -> void:
 	runtime_seconds += delta
-	# Clouds always creep forward for a live preview; scrubbing time adds to this.
-	weather_minutes += delta * WEATHER_PASSIVE_RATE
 	if _capture_mode:
 		_process_capture()
 		return
+	# One lab clock drives daylight, stars, cloud evolution and wind. Space proves
+	# that every sky animation freezes when game time does.
+	weather_minutes += delta * WEATHER_PASSIVE_RATE * weather_time_scale
+	game_minutes = fposmod(weather_minutes, 1440.0)
 	_handle_input(delta)
 	_apply_state()
 
@@ -147,6 +158,15 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if event.keycode == KEY_R:
 		rain_intensity = 1.0 - rain_intensity
 		_update_status()
+	if event.keycode == KEY_SPACE:
+		weather_time_scale = 0.0 if weather_time_scale > 0.0 else 1.0
+		_update_status()
+	if event.keycode == KEY_EQUAL:
+		weather_time_scale = minf(weather_time_scale * 2.0, 8.0) if weather_time_scale > 0.0 else 1.0
+		_update_status()
+	if event.keycode == KEY_MINUS:
+		weather_time_scale = maxf(weather_time_scale * 0.5, 0.25)
+		_update_status()
 	if event.keycode == KEY_C:
 		_save_capture("manual")
 
@@ -154,11 +174,9 @@ func _unhandled_key_input(event: InputEvent) -> void:
 func _handle_input(delta: float) -> void:
 	var changed := false
 	if Input.is_key_pressed(KEY_LEFT):
-		game_minutes -= delta * 180.0
 		weather_minutes -= delta * 180.0
 		changed = true
 	if Input.is_key_pressed(KEY_RIGHT):
-		game_minutes += delta * 180.0
 		weather_minutes += delta * 180.0
 		changed = true
 	if Input.is_key_pressed(KEY_UP):
@@ -173,7 +191,7 @@ func _handle_input(delta: float) -> void:
 	if Input.is_key_pressed(KEY_PAGEDOWN):
 		storm_influence -= delta * 0.5
 		changed = true
-	game_minutes = fposmod(game_minutes, 1440.0)
+	game_minutes = fposmod(weather_minutes, 1440.0)
 	overcast = clampf(overcast, 0.0, 1.0)
 	storm_influence = clampf(storm_influence, 0.0, 1.0)
 	if changed:
@@ -210,17 +228,15 @@ func _apply_state() -> void:
 		cloud_pattern_seed,
 		_lab_wind(),
 		weather_minutes,
-		precipitation
+		precipitation,
+		lab_weather.wind_displacement_at(weather_minutes)
 	)
 
 
 func _lab_wind() -> Vector2:
-	# Mirrors WeatherState wind: a slowly rotating bearing whose strength gusts and
-	# rises toward a gale under a storm. Lets the lab exercise the same wind the game
-	# feeds the sky (and, later, waves/flags/sails).
-	var angle := cloud_pattern_seed + weather_minutes / 1440.0 * 0.7
-	var gust := 0.5 + 0.5 * sin(weather_minutes * 0.02 + cloud_pattern_seed)
-	var strength := lerpf(0.3, 0.9, gust)
+	# Exercise the same stable daily bearing and broad strength changes as gameplay.
+	var angle := lab_weather.wind_direction_at(weather_minutes)
+	var strength := lab_weather.wind_strength_at(weather_minutes)
 	strength = lerpf(strength, 1.0, storm_influence * 0.85)
 	return Vector2(cos(angle), sin(angle)) * strength
 
@@ -257,4 +273,4 @@ func _save_capture(name: String) -> void:
 func _update_status() -> void:
 	var hour := int(game_minutes) / 60
 	var minute := int(game_minutes) % 60
-	status.text = "Weather lab · %s | %02d:%02d  clouds %.0f%%  front %.0f%%  rain %.0f%%\nF1–F19 presets • 1 context · 2 clouds · 3 zenith · 4 horizon • ←/→ time • ↑/↓ clouds • PgUp/PgDn front • R rain • C screenshot" % [camera.name, hour, minute, overcast * 100.0, storm_influence * 100.0, rain_intensity * 100.0]
+	status.text = "Weather lab · %s | %02d:%02d  sky x%.2f  clouds %.0f%%  front %.0f%%  rain %.0f%%\nF1–F19 presets • 1–4 cameras • Space pause • -/= speed • ←/→ time • ↑/↓ clouds • PgUp/PgDn front • R rain • C screenshot" % [camera.name, hour, minute, weather_time_scale, overcast * 100.0, storm_influence * 100.0, rain_intensity * 100.0]

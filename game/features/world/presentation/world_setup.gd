@@ -70,7 +70,8 @@ func update_daylight(
 	cloud_pattern_seed: float = 0.0,
 	wind: Vector2 = Vector2.ZERO,
 	weather_minutes: float = -1.0,
-	precipitation_type: int = WeatherState.Precipitation.RAIN
+	precipitation_type: int = WeatherState.Precipitation.RAIN,
+	wind_displacement: Vector2 = Vector2.ZERO
 ) -> void:
 	if sky_and_weather_controller != null:
 		sky_and_weather_controller.update_daylight(
@@ -82,7 +83,8 @@ func update_daylight(
 			cloud_pattern_seed,
 			wind,
 			weather_minutes,
-			precipitation_type
+			precipitation_type,
+			wind_displacement
 		)
 
 

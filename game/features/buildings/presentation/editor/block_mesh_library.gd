@@ -203,7 +203,7 @@ func _build_cylinder(size: Vector3, segments: int = 16) -> ArrayMesh:
 		var p2_b := Vector3(cos(a2) * rx, -hy, sin(a2) * rz)
 		var p1_t := Vector3(cos(a1) * rx, hy, sin(a1) * rz)
 		var p2_t := Vector3(cos(a2) * rx, hy, sin(a2) * rz)
-		_add_quad(st, p1_b, p2_b, p2_t, p1_t) # Side
+		_add_quad(st, p1_b, p1_t, p2_t, p2_b) # Side (wound so the normal faces outward)
 		_add_tri(st, Vector3(0, hy, 0), p2_t, p1_t) # Top cap
 		_add_tri(st, Vector3(0, -hy, 0), p1_b, p2_b) # Bottom cap
 	return st.commit()
@@ -227,7 +227,7 @@ func _build_half_cylinder(size: Vector3, segments: int = 12) -> ArrayMesh:
 		var p2_b := Vector3(sin(a2) * rx, -hy, cos(a2) * rz)
 		var p1_t := Vector3(sin(a1) * rx, hy, cos(a1) * rz)
 		var p2_t := Vector3(sin(a2) * rx, hy, cos(a2) * rz)
-		_add_quad(st, p1_b, p2_b, p2_t, p1_t) # Curved front
+		_add_quad(st, p1_b, p1_t, p2_t, p2_b) # Curved front (wound so the normal faces outward)
 		_add_tri(st, Vector3(0, hy, 0), p2_t, p1_t) # Top cap
 		_add_tri(st, Vector3(0, -hy, 0), p1_b, p2_b) # Bottom cap
 	return st.commit()
@@ -330,19 +330,24 @@ func _add_box(st: SurfaceTool, min_p: Vector3, max_p: Vector3) -> void:
 
 
 func _add_quad(st: SurfaceTool, p0: Vector3, p1: Vector3, p2: Vector3, p3: Vector3) -> void:
+	# Vertices are authored counter-clockwise as seen from outside, so the
+	# cross product yields the outward normal. Godot's default CULL_BACK treats
+	# clockwise winding as front-facing, so the triangles are emitted in
+	# reversed order to face outward while the outward normal drives lighting.
 	var n_vec := (p1 - p0).cross(p2 - p0)
 	var normal := n_vec.normalized() if not n_vec.is_zero_approx() else Vector3.UP
 	st.set_normal(normal); st.add_vertex(p0)
+	st.set_normal(normal); st.add_vertex(p2)
 	st.set_normal(normal); st.add_vertex(p1)
-	st.set_normal(normal); st.add_vertex(p2)
 	st.set_normal(normal); st.add_vertex(p0)
-	st.set_normal(normal); st.add_vertex(p2)
 	st.set_normal(normal); st.add_vertex(p3)
+	st.set_normal(normal); st.add_vertex(p2)
 
 
 func _add_tri(st: SurfaceTool, p0: Vector3, p1: Vector3, p2: Vector3) -> void:
+	# See _add_quad: reversed winding for CULL_BACK, outward normal for lighting.
 	var n_vec := (p1 - p0).cross(p2 - p0)
 	var normal := n_vec.normalized() if not n_vec.is_zero_approx() else Vector3.UP
 	st.set_normal(normal); st.add_vertex(p0)
-	st.set_normal(normal); st.add_vertex(p1)
 	st.set_normal(normal); st.add_vertex(p2)
+	st.set_normal(normal); st.add_vertex(p1)

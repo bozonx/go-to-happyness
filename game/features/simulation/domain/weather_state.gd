@@ -13,6 +13,8 @@ const DEFAULT_TRANSITION_MINUTES := 30.0
 const MIN_DURATION_MINUTES := 180
 const CLOUD_BUILDUP_MINUTES := 150.0
 const CLOUD_CLEARING_MINUTES := 105.0
+const WIND_DIRECTION_TRANSITION_MINUTES := 240.0
+const WIND_INTEGRATION_STEP_MINUTES := 10.0
 
 enum Phase { CLEAR, FADE_IN, FULL_RAIN, FADE_OUT }
 enum CloudPhase { CLEAR, FAIR, PARTLY_CLOUDY, CLOUDY, OVERCAST, STORM }
@@ -34,15 +36,20 @@ var cloud_seed := 0.0
 # The sky consumes it to drift the cloud layers, but it is deliberately a general
 # weather parameter: waves, sailboats and waving flags should read wind_vector_at /
 # wind_direction_at / wind_strength_at so every wind-driven system stays in sync.
-# Direction is chosen fresh each day (wind shifts once per day) and drifts a little
-# across the day; strength gusts, and a storm front drives it toward a gale.
+# Direction is chosen once per day and eased into during the first hours; strength
+# breathes a few times per day, and a storm front drives it toward a gale.
+var wind_previous_direction := 0.0
 var wind_direction := 0.0
 var wind_base_strength := 0.35
-var wind_gust_amount := 0.28
+var wind_gust_amount := 0.22
+var _wind_displacement_origin := Vector2.ZERO
+var _wind_displacement_samples := PackedVector2Array()
 var _previous_minute: float = -1.0
 
 
 func new_day(weather: int, rng: RandomNumberGenerator, announcement_minute: int = 6 * 60) -> void:
+	if forecast_weather >= 0 and not _wind_displacement_samples.is_empty():
+		_wind_displacement_origin += _wind_displacement_samples[-1]
 	forecast_weather = weather
 	is_raining = false
 	is_cold = weather == TentEraSurvivalRules.Weather.COOLING
@@ -50,19 +57,25 @@ func new_day(weather: int, rng: RandomNumberGenerator, announcement_minute: int 
 	rain_end_minute = -1.0
 	_previous_minute = -1.0
 	_match_cloud_profile(weather, rng)
-	# Wind shifts to a new prevailing bearing each day.
-	wind_direction = rng.randf_range(0.0, TAU)
+	# A new prevailing bearing is selected exactly once per day. Limit the turn so
+	# consecutive days flow into one another instead of making implausible reversals.
+	if _wind_displacement_samples.is_empty():
+		wind_direction = rng.randf_range(0.0, TAU)
+		wind_previous_direction = wind_direction
+	else:
+		wind_previous_direction = wind_direction
+		var daily_turn := rng.randf_range(-PI * 0.42, PI * 0.42)
+		wind_direction = wrapf(wind_previous_direction + daily_turn, 0.0, TAU)
 
-	if weather != TentEraSurvivalRules.Weather.RAIN:
-		return
-
-	var latest_start := MINUTES_PER_DAY - MIN_DURATION_MINUTES
-	if announcement_minute >= latest_start:
-		announcement_minute = maxi(0, latest_start - 1)
-	var start_minute := rng.randi_range(announcement_minute, latest_start)
-	var end_minute := rng.randi_range(start_minute + MIN_DURATION_MINUTES, MINUTES_PER_DAY)
-	rain_start_minute = float(start_minute)
-	rain_end_minute = float(end_minute)
+	if weather == TentEraSurvivalRules.Weather.RAIN:
+		var latest_start := MINUTES_PER_DAY - MIN_DURATION_MINUTES
+		if announcement_minute >= latest_start:
+			announcement_minute = maxi(0, latest_start - 1)
+		var start_minute := rng.randi_range(announcement_minute, latest_start)
+		var end_minute := rng.randi_range(start_minute + MIN_DURATION_MINUTES, MINUTES_PER_DAY)
+		rain_start_minute = float(start_minute)
+		rain_end_minute = float(end_minute)
+	_rebuild_wind_displacement_samples()
 
 
 func update(current_minute: float) -> bool:
@@ -109,15 +122,19 @@ func cloud_cover_at(current_minute: float) -> float:
 
 
 func wind_direction_at(current_minute: float) -> float:
-	# The day's prevailing bearing with a slow intra-day swing.
-	var day_phase := fposmod(current_minute, float(MINUTES_PER_DAY)) / float(MINUTES_PER_DAY) * TAU
-	return wind_direction + sin(day_phase + cloud_seed) * 0.4
+	# The bearing changes only after the daily forecast is rolled, then eases toward
+	# that day's target during the early hours and remains stable until tomorrow.
+	var minutes := fposmod(current_minute, float(MINUTES_PER_DAY))
+	var blend := smoothstep(0.0, WIND_DIRECTION_TRANSITION_MINUTES, minutes)
+	return lerp_angle(wind_previous_direction, wind_direction, blend)
 
 
 func wind_strength_at(current_minute: float) -> float:
-	# Gusts up and down through the day, then rises toward a gale under a storm front.
+	# Two broad waves create a few gentle changes per day. The smaller secondary
+	# harmonic prevents a mechanical loop without producing rapid gust flicker.
 	var day_phase := fposmod(current_minute, float(MINUTES_PER_DAY)) / float(MINUTES_PER_DAY) * TAU
-	var gust := sin(day_phase * 7.0 + cloud_seed * 1.3) * 0.5 + sin(day_phase * 3.0 + 1.1) * 0.5
+	var gust := sin(day_phase * 2.0 + cloud_seed * 1.3) * 0.72
+	gust += sin(day_phase * 4.0 + cloud_seed * 0.47 + 1.1) * 0.28
 	var strength := wind_base_strength + gust * wind_gust_amount
 	strength = lerpf(strength, 1.0, storm_influence_at(current_minute) * 0.85)
 	return clampf(strength, 0.0, 1.0)
@@ -127,6 +144,22 @@ func wind_vector_at(current_minute: float) -> Vector2:
 	# Normalised bearing scaled by strength; the canonical wind other systems read.
 	var angle := wind_direction_at(current_minute)
 	return Vector2(cos(angle), sin(angle)) * wind_strength_at(current_minute)
+
+
+func wind_displacement_at(current_minute: float) -> Vector2:
+	# Integrated wind is the stable animation coordinate for clouds and any future
+	# flags/waves. Multiplying today's vector by total elapsed time would teleport
+	# them whenever wind speed or bearing changes.
+	if _wind_displacement_samples.is_empty():
+		return _wind_displacement_origin
+	var minutes := fposmod(current_minute, float(MINUTES_PER_DAY))
+	var sample_position := minutes / WIND_INTEGRATION_STEP_MINUTES
+	var sample_index := mini(int(floor(sample_position)), _wind_displacement_samples.size() - 2)
+	var fraction := sample_position - float(sample_index)
+	return _wind_displacement_origin + _wind_displacement_samples[sample_index].lerp(
+		_wind_displacement_samples[sample_index + 1],
+		fraction
+	)
 
 
 func precipitation_type_at(current_minute: float) -> int:
@@ -185,11 +218,24 @@ func _match_cloud_profile(weather: int, rng: RandomNumberGenerator) -> void:
 
 func _living_cloud_cover_at(minutes: float) -> float:
 	var day_phase := minutes / float(MINUTES_PER_DAY) * TAU
-	# Several slow harmonics create changing clear, fair, and partly-cloudy
-	# intervals without per-frame randomness. Integer frequencies keep the
-	# signal continuous across midnight; cloud_seed makes every day distinct.
-	var broad := sin(day_phase * 3.0 + cloud_seed)
-	var medium := sin(day_phase * 5.0 + cloud_seed * 1.71 + 1.9)
-	var detail := sin(day_phase * 9.0 + cloud_seed * 0.63 + 4.2)
-	var living_signal := broad * 0.52 + medium * 0.31 + detail * 0.17
+	# Broad harmonics let cloud cover breathe over hours, not flicker between
+	# states. Integer frequencies keep the signal continuous across midnight.
+	var broad := sin(day_phase + cloud_seed)
+	var medium := sin(day_phase * 2.0 + cloud_seed * 1.71 + 1.9)
+	var detail := sin(day_phase * 3.0 + cloud_seed * 0.63 + 4.2)
+	var living_signal := broad * 0.58 + medium * 0.29 + detail * 0.13
 	return clampf(cloud_base_cover + living_signal * cloud_variation, 0.0, 1.0)
+
+
+func _rebuild_wind_displacement_samples() -> void:
+	_wind_displacement_samples = PackedVector2Array()
+	_wind_displacement_samples.append(Vector2.ZERO)
+	var displacement := Vector2.ZERO
+	var previous_wind := wind_vector_at(0.0)
+	var minute := WIND_INTEGRATION_STEP_MINUTES
+	while minute <= float(MINUTES_PER_DAY):
+		var current_wind := wind_vector_at(minute)
+		displacement += (previous_wind + current_wind) * 0.5 * WIND_INTEGRATION_STEP_MINUTES
+		_wind_displacement_samples.append(displacement)
+		previous_wind = current_wind
+		minute += WIND_INTEGRATION_STEP_MINUTES

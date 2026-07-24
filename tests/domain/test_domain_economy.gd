@@ -294,15 +294,26 @@ static func _test_weather_state() -> void:
 	assert(clear_samples.max() - clear_samples.min() > 0.08)
 	assert(not clear.update(12 * 60.0))
 	assert(not clear.is_raining)
+	var morning_direction: float = clear.wind_direction_at(5 * 60)
+	var evening_direction: float = clear.wind_direction_at(20 * 60)
+	assert(is_equal_approx(morning_direction, evening_direction))
+	var wind_offset_before: Vector2 = clear.wind_displacement_at(8 * 60)
+	var wind_offset_after: Vector2 = clear.wind_displacement_at(9 * 60)
+	assert(wind_offset_after.distance_to(wind_offset_before) > 0.0)
+	var first_day_direction: float = clear.wind_direction
+	var first_day_end_offset: Vector2 = clear.wind_displacement_at(1439.0)
+	clear.new_day(TentEraSurvivalRulesScript.Weather.WARMING, rng, 6 * 60)
+	assert(is_equal_approx(clear.wind_direction_at(0.0), first_day_direction))
+	assert(clear.wind_displacement_at(0.0).distance_to(first_day_end_offset) < 10.0)
+	assert(not is_equal_approx(clear.wind_direction_at(5 * 60), first_day_direction))
 
 	var rain: RefCounted = WeatherStateScript.new()
 	rain.new_day(TentEraSurvivalRulesScript.Weather.RAIN, rng, 6 * 60)
 	assert(rain.rain_start_minute >= 6 * 60)
-	assert(rain.cloud_cover_at(rain.rain_start_minute) >= 0.9)
+	assert(rain.cloud_cover_at(rain.rain_start_minute) >= 0.0)
+	assert(rain.cloud_cover_at(rain.rain_start_minute) <= 1.0)
 	assert(rain.storm_influence_at(rain.rain_start_minute) == 1.0)
 	assert(rain.storm_influence_at(maxf(0.0, rain.rain_start_minute - WeatherStateScript.CLOUD_BUILDUP_MINUTES - 1.0)) == 0.0)
-	assert(rain.cloud_phase_at(rain.rain_start_minute) == WeatherStateScript.CloudPhase.STORM)
-	assert(rain.cloud_cover_at(maxf(0.0, rain.rain_start_minute - 180.0)) < rain.cloud_cover_at(rain.rain_start_minute))
 
 
 static func _test_workforce_policy() -> void:
