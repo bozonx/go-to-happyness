@@ -14,11 +14,18 @@ var _material_cache: Dictionary = {}
 
 
 ## World offset from the cell's minimum corner to the mesh origin so the block
-## rests on the cell floor (plus optional vertical offset parameter). The variant
-## selects the prepared size for blocks that expose one.
-static func local_offset(block_id: StringName, variant: StringName = &"", vertical_offset: float = 0.0) -> Vector3:
+## rests on the cell floor (plus optional vertical offset). The variant selects
+## the prepared size; the anchor snaps a sub-cell block toward a cell side.
+static func local_offset(
+	block_id: StringName,
+	variant: StringName = &"",
+	rot: int = 0,
+	anchor: Vector2i = Vector2i.ZERO,
+	vertical_offset: float = 0.0
+) -> Vector3:
 	var size := BuildingBlockCatalogScript.size_of(block_id, variant)
-	return Vector3(0.5, size.y * 0.5 + vertical_offset, 0.5)
+	var xz := BuildingBlockCatalogScript.cell_offset(block_id, variant, anchor, rot)
+	return Vector3(xz.x, size.y * 0.5 + vertical_offset, xz.y)
 
 
 func mesh_for(block_id: StringName, variant: StringName = &"") -> Mesh:

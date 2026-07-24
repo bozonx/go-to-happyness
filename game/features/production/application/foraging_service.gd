@@ -276,7 +276,8 @@ func gather_progress_amounts(resource_type: String, node: Node3D) -> Dictionary:
 	return {"current": current, "max": max_amount}
 
 func ensure_gather_progress_label(node: Node3D) -> Label3D:
-	var existing := gather_progress_labels.get(node) as Label3D
+	var node_id: int = node.get_instance_id()
+	var existing := gather_progress_labels.get(node_id) as Label3D
 	if is_instance_valid(existing):
 		return existing
 	assert(billboard_label_scene != null, "ForagingService.billboard_label_scene must be set before use")
@@ -287,7 +288,7 @@ func ensure_gather_progress_label(node: Node3D) -> Label3D:
 	var cell: Vector2i = cell_query.call(node.global_position) if cell_query.is_valid() else Vector2i.ZERO
 	label.position = Vector3(0.0, 4.8, 0.0) if tree_nodes.get(cell) == node else Vector3(0.0, 0.5, 0.0)
 	node.add_child(label)
-	gather_progress_labels[node] = label
+	gather_progress_labels[node_id] = label
 	return label
 
 func update_gather_progress_label(node: Node3D, resource_type: String, partial: float) -> void:
@@ -355,11 +356,11 @@ func update_gathering_indicators(
 
 	var nodes_to_remove: Array = gather_progress_labels.keys().duplicate()
 	for node in active_targets:
-		nodes_to_remove.erase(node)
+		nodes_to_remove.erase((node as Node3D).get_instance_id())
 		var data: Dictionary = active_targets[node]
 		update_gather_progress_label(node, data.resource_type, data.partial)
-	for node in nodes_to_remove:
-		var label: Label3D = gather_progress_labels.get(node)
-		if is_instance_valid(label):
-			label.queue_free()
-		gather_progress_labels.erase(node)
+	for node_id in nodes_to_remove:
+		var label_value: Variant = gather_progress_labels.get(node_id)
+		if is_instance_valid(label_value):
+			(label_value as Label3D).queue_free()
+		gather_progress_labels.erase(node_id)

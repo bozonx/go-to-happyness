@@ -344,6 +344,44 @@ static func mesh_shape_of(block_id: StringName, variant_id: StringName = &"") ->
 	return def.get("mesh_shape", SHAPE_BOX)
 
 
+# ---------------------------------------------------------------------------
+# In-cell anchoring
+# ---------------------------------------------------------------------------
+#
+# A sub-cell block (thinner than 1m on an axis) can be snapped to a side of its
+# 1×1 cell instead of always centring. The anchor is a cell-frame 3×3 selector:
+# `Vector2i(ax, az)` with each component in {-1, 0, +1} (−1 = min side, 0 =
+# centre, +1 = max side). The anchor lives in the cell frame and is independent
+# of the block's own rotation — it always means "push toward this side of the
+# cell". Full-cell axes ignore the anchor automatically.
+
+## Footprint of a block on the cell's X/Z axes after a quarter-turn rotation.
+## A 90°/270° turn swaps the block's own X and Z extents.
+static func rotated_footprint(size: Vector3, rot: int) -> Vector2:
+	if posmod(rot, 2) == 1:
+		return Vector2(size.z, size.x)
+	return Vector2(size.x, size.z)
+
+
+## Horizontal position (X, Z in [0,1]) of the block's mesh origin inside its
+## cell, given the chosen variant, rotation and anchor. Centre is (0.5, 0.5); a
+## side anchor makes that face flush with the cell edge.
+static func cell_offset(block_id: StringName, variant_id: StringName, anchor: Vector2i, rot: int) -> Vector2:
+	var eff := rotated_footprint(size_of(block_id, variant_id), rot)
+	var free_x := maxf(0.0, 0.5 - eff.x * 0.5)
+	var free_z := maxf(0.0, 0.5 - eff.y * 0.5)
+	return Vector2(
+		0.5 + float(clampi(anchor.x, -1, 1)) * free_x,
+		0.5 + float(clampi(anchor.y, -1, 1)) * free_z)
+
+
+## Whether a block has any slack to be anchored on the X / Z axis for a variant
+## and rotation (i.e. its footprint is thinner than the cell on that axis).
+static func anchorable_axes(block_id: StringName, variant_id: StringName, rot: int) -> Vector2i:
+	var eff := rotated_footprint(size_of(block_id, variant_id), rot)
+	return Vector2i(1 if eff.x < 0.999 else 0, 1 if eff.y < 0.999 else 0)
+
+
 static func _resolve_variant(def: Dictionary, block_id: StringName, variant_id: StringName) -> Dictionary:
 	var vs: Array = def.get("variants", [])
 	if vs.is_empty():

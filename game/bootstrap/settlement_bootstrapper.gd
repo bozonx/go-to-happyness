@@ -38,20 +38,6 @@ func _setup_hero_services() -> void:
 	game.hero_pocket_service = SettlementGame.HeroPocketServiceScript.new()
 	game.hero_pocket_service.configure(func() -> Citizen: return game.player_citizen, game._create_resource_pile, game._update_interface, game._refresh_interaction_hint)
 	game.hero_interaction_service = SettlementGame.HeroInteractionServiceScript.new()
-	game.hero_interaction_service.configure(
-		func() -> Citizen: return game.player_citizen,
-		SettlementGame.INTERACTION_RANGE,
-		game.tree_positions,
-		game.tree_nodes,
-		game.sawmill_positions,
-		game.farm_positions,
-		game.pond_positions,
-		game.grass_sources,
-		game.forage_sources,
-		game.rabbit_sources,
-		game._cell_from_position,
-		game._consume_grass_source
-	)
 
 
 func _setup_workplace_and_visuals() -> void:
@@ -235,6 +221,23 @@ func _setup_foraging_and_fire() -> void:
 		game._terrain_height_at,
 		game._cell_from_position,
 		game._first_person_target
+	)
+	# Natural-resource dictionaries are owned by ForagingService. Configure hero
+	# proximity queries only after that service exists, otherwise the bootstrap
+	# getters return temporary empty dictionaries that never receive grass data.
+	game.hero_interaction_service.configure(
+		func() -> Citizen: return game.player_citizen,
+		SettlementGame.INTERACTION_RANGE,
+		game.tree_positions,
+		game.tree_nodes,
+		game.sawmill_positions,
+		game.farm_positions,
+		game.pond_positions,
+		game.grass_sources,
+		game.forage_sources,
+		game.rabbit_sources,
+		game._cell_from_position,
+		game._consume_grass_source
 	)
 	game.fire_management_service = FireManagementService.new()
 	game.fire_management_service.setup(

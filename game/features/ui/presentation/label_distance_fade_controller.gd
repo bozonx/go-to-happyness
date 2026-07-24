@@ -36,14 +36,14 @@ func update_label_distance_fading() -> void:
 			label.visible = true
 			label.modulate.a = alpha
 	# Gather progress labels
-	for node in simulation.gather_progress_labels:
-		var gp_label := simulation.gather_progress_labels[node] as Label3D
-		if not is_instance_valid(gp_label):
+	for label_value in simulation.gather_progress_labels.values():
+		if not is_instance_valid(label_value):
 			continue
+		var gp_label := label_value as Label3D
 		if not simulation.is_first_person:
 			gp_label.modulate.a = 1.0
 			continue
-		var node3d := node as Node3D
+		var node3d := gp_label.get_parent() as Node3D
 		if not is_instance_valid(node3d):
 			continue
 		var dist2: float = cam_pos.distance_to(node3d.global_position)

@@ -165,7 +165,7 @@ static func ordered_modules(building_type: String) -> Array:
 	var center := _footprint_center(bp)
 	var entries: Array = []
 	for block in bp.blocks:
-		var local := Vector3(block.pos) + _block_offset(block.block_id, block.variant) - center
+		var local := Vector3(block.pos) + _block_offset(block.block_id, block.variant, block.rot, block.anchor) - center
 		entries.append({
 			"position": local,
 			"block_id": block.block_id,
@@ -181,9 +181,10 @@ static func ordered_modules(building_type: String) -> Array:
 ## Offset from a cell's minimum corner to the block mesh origin (floor-aligned,
 ## horizontally centred). Mirrors BlockMeshLibrary.local_offset but stays in the
 ## application/domain layer (catalog math only, no presentation dependency).
-static func _block_offset(block_id: StringName, variant: StringName = &"") -> Vector3:
+static func _block_offset(block_id: StringName, variant: StringName = &"", rot: int = 0, anchor: Vector2i = Vector2i.ZERO) -> Vector3:
 	var size := BuildingBlockCatalogScript.size_of(block_id, variant)
-	return Vector3(0.5, size.y * 0.5, 0.5)
+	var xz := BuildingBlockCatalogScript.cell_offset(block_id, variant, anchor, rot)
+	return Vector3(xz.x, size.y * 0.5, xz.y)
 
 
 static func _footprint_center(bp: BuildingBlueprintScript) -> Vector3:

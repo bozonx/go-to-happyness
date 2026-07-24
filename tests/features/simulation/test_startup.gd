@@ -41,6 +41,13 @@ func _init() -> void:
 	assert(simulation.is_first_person)
 	assert(simulation.player_citizen == simulation.hero_citizen)
 	assert(SimHelper.player_can_command_labor(simulation))
+	# Hero proximity checks must share the live natural-resource registries.
+	# A stale empty registry makes first-person grass gathering cancel at once.
+	var hero_start_position: Vector3 = simulation.hero_citizen.global_position
+	var grass_source: GrassSourceRecord = simulation.grass_sources.values()[0]
+	simulation.hero_citizen.global_position = grass_source.node.global_position
+	assert(simulation.hero_interaction_service.nearby_grass_source())
+	simulation.hero_citizen.global_position = hero_start_position
 
 	# Build menu submenus
 	simulation.selected_builder = simulation.hero_citizen
@@ -114,6 +121,19 @@ func _init() -> void:
 		if not citizen.is_hero:
 			assert(citizen.specialization == "unassigned")
 			assert(citizen.employment_state == Citizen.EmploymentState.NO_PERMANENT_WORK)
+
+	# Gather labels are keyed by stable IDs so deleting their source cannot leave
+	# a freed Godot object as a Dictionary key during the next fade update.
+	var temporary_gather_source := Node3D.new()
+	simulation.add_child(temporary_gather_source)
+	var temporary_source_id: int = temporary_gather_source.get_instance_id()
+	simulation.foraging_service.ensure_gather_progress_label(temporary_gather_source)
+	assert(simulation.gather_progress_labels.has(temporary_source_id))
+	temporary_gather_source.queue_free()
+	await process_frame
+	simulation.label_distance_fade_controller.update_label_distance_fading()
+	simulation.foraging_service.update_gathering_indicators(false, "", "", 0.0, null, [])
+	assert(not simulation.gather_progress_labels.has(temporary_source_id))
 
 	SimHelper.cleanup_simulation(self, simulation)
 	quit(0)

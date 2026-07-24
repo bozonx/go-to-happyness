@@ -12,7 +12,7 @@ var terrain_blocked_cells: Dictionary[Vector2i, bool] = {}
 var navigation_blocked_cells: Dictionary[Vector2i, bool] = {}
 var tree_positions: Array[Vector3] = []
 var tree_nodes: Dictionary[Vector2i, Node3D] = {}
-var gather_progress_labels: Dictionary[Node3D, Node3D] = {}
+var gather_progress_labels: Dictionary[int, Node3D] = {}
 
 var dig_sites: Array = []
 var dig_cells: Dictionary = {}

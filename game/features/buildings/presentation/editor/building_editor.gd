@@ -36,6 +36,7 @@ var mesh_library: BlockMeshLibraryScript
 
 var current_block_id: StringName = BuildingBlockCatalogScript.default_block_id()
 var current_variant: StringName = BuildingBlockCatalogScript.default_variant(BuildingBlockCatalogScript.default_block_id())
+var current_anchor: Vector2i = Vector2i.ZERO
 var current_material_id: StringName = BuildingMaterialCatalogScript.DEFAULT_ID
 var current_rot: int = 0
 var current_tool: int = Tool.PLACE
@@ -152,6 +153,7 @@ var _ghost_valid: bool = false
 
 var _mode_buttons: Dictionary = {}
 var _palette_buttons: Dictionary = {}  ## StringName -> Button
+var _brush_inspector: Control = null  ## contextual variant strip + anchor pad
 var _tool_buttons: Dictionary = {}     ## StringName -> Button
 
 const ZONE_COLORS: Array[Color] = [
@@ -354,7 +356,7 @@ func _apply_tool_at_cursor() -> void:
 func _apply_tool_at_cell(cell: Vector3i) -> void:
 	match current_tool:
 		Tool.PLACE:
-			if grid_model.place(cell, current_block_id, current_rot, current_material_id, current_variant):
+			if grid_model.place(cell, current_block_id, current_rot, current_material_id, current_variant, current_anchor):
 				_spawn_or_update_block_node(grid_model.get_block_at(cell))
 				_update_count()
 				_mark_dirty()
@@ -437,7 +439,7 @@ func _spawn_or_update_block_node(block: BlueprintBlock) -> void:
 		_block_nodes[block.pos] = node
 	node.mesh = mesh_library.mesh_for(block.block_id, block.variant)
 	node.material_override = mesh_library.material_for(block.material_id)
-	node.position = Vector3(block.pos) + BlockMeshLibraryScript.local_offset(block.block_id, block.variant)
+	node.position = Vector3(block.pos) + BlockMeshLibraryScript.local_offset(block.block_id, block.variant, block.rot, block.anchor)
 	node.rotation = Vector3(0.0, block.rotation_radians(), 0.0)
 
 
@@ -471,17 +473,17 @@ func _refresh_ghost() -> void:
 		if target == null:
 			_ghost.mesh = mesh_library.mesh_for(current_block_id, current_variant)
 			_ghost.rotation = Vector3(0.0, deg_to_rad(90.0 * current_rot), 0.0)
-			_ghost.position = Vector3(cursor_cell) + BlockMeshLibraryScript.local_offset(current_block_id, current_variant)
+			_ghost.position = Vector3(cursor_cell) + BlockMeshLibraryScript.local_offset(current_block_id, current_variant, current_rot, current_anchor)
 			_ghost.material_override = mesh_library.ghost_material(false)
 		else:
 			_ghost.mesh = mesh_library.mesh_for(target.block_id, target.variant)
 			_ghost.rotation = Vector3(0.0, target.rotation_radians(), 0.0)
-			_ghost.position = Vector3(target.pos) + BlockMeshLibraryScript.local_offset(target.block_id, target.variant)
+			_ghost.position = Vector3(target.pos) + BlockMeshLibraryScript.local_offset(target.block_id, target.variant, target.rot, target.anchor)
 			_ghost.material_override = mesh_library.ghost_material(false)
 	else:
 		_ghost.mesh = mesh_library.mesh_for(current_block_id, current_variant)
 		_ghost.rotation = Vector3(0.0, deg_to_rad(90.0 * current_rot), 0.0)
-		_ghost.position = Vector3(cursor_cell) + BlockMeshLibraryScript.local_offset(current_block_id, current_variant)
+		_ghost.position = Vector3(cursor_cell) + BlockMeshLibraryScript.local_offset(current_block_id, current_variant, current_rot, current_anchor)
 		_ghost.material_override = mesh_library.ghost_material(true)
 
 
@@ -619,26 +621,24 @@ func _set_brush(brush_id: int) -> void:
 		_brush_rect_btn.button_pressed = brush_id == Brush.RECT
 
 
+## Selects the brush block. `variant` empty means "pick this block's default (or
+## keep the current one if it's the same block)"; a concrete id comes from the
+## variant strip. The palette lists one button per block; size/profile and the
+## in-cell anchor are chosen in the contextual brush inspector below it.
 func _select_block(block_id: StringName, variant: StringName = &"") -> void:
+	if variant == &"":
+		variant = current_variant if block_id == current_block_id else BuildingBlockCatalogScript.default_variant(block_id)
 	current_block_id = block_id
 	current_variant = BuildingBlockCatalogScript.normalize_variant(block_id, variant)
 	var def := BuildingBlockCatalogScript.get_block(block_id)
 	if def.is_empty() or not def.get("rotatable", true):
 		current_rot = 0
 	_set_tool(Tool.PLACE)
-	var active_key := _palette_key(current_block_id, current_variant)
 	for key in _palette_buttons.keys():
-		(_palette_buttons[key] as Button).button_pressed = key == active_key
+		(_palette_buttons[key] as Button).button_pressed = key == current_block_id
+	_rebuild_brush_inspector()
 	_update_rotation_label()
 	_refresh_ghost()
-
-
-## Palette button key: a variant-carrying block keys per variant so each prepared
-## size is its own toggle; single-size blocks key by their id.
-func _palette_key(block_id: StringName, variant: StringName) -> StringName:
-	if variant == &"":
-		return block_id
-	return StringName("%s|%s" % [block_id, variant])
 
 
 func _cycle_rotation() -> void:
@@ -646,6 +646,7 @@ func _cycle_rotation() -> void:
 	if def.is_empty() or not def.get("rotatable", true):
 		return
 	current_rot = (current_rot + 1) % 4
+	_rebuild_brush_inspector()
 	_update_rotation_label()
 	_refresh_ghost()
 
@@ -940,24 +941,94 @@ func _build_palette_blocks() -> void:
 			cat_label.add_theme_color_override("font_color", Color(0.65, 0.72, 0.8))
 			_palette_container.add_child(cat_label)
 		var block_id: StringName = def["id"]
-		var variants: Array = def.get("variants", [])
-		if variants.is_empty():
-			_add_palette_button(block_id, &"", def["name"], def["size"])
+		var btn := Button.new()
+		btn.toggle_mode = true
+		btn.text = def["name"]
+		if BuildingBlockCatalogScript.has_variants(block_id):
+			btn.tooltip_text = "Размер/профиль выбирается ниже"
 		else:
-			for v in variants:
-				var v_id: StringName = v["id"]
-				var v_size: Vector3 = v.get("size", def["size"])
-				_add_palette_button(block_id, v_id, "%s · %s" % [def["name"], v["name"]], v_size)
+			var s: Vector3 = def["size"]
+			btn.tooltip_text = "Размер: %.2f×%.2f×%.2f м" % [s.x, s.y, s.z]
+		btn.pressed.connect(func(): _select_block(block_id))
+		_palette_buttons[block_id] = btn
+		_palette_container.add_child(btn)
 
 
-func _add_palette_button(block_id: StringName, variant: StringName, label: String, size: Vector3) -> void:
-	var btn := Button.new()
-	btn.toggle_mode = true
-	btn.text = label
-	btn.tooltip_text = "Размер: %.2f×%.2f×%.2f м" % [size.x, size.y, size.z]
-	btn.pressed.connect(func(): _select_block(block_id, variant))
-	_palette_buttons[_palette_key(block_id, variant)] = btn
-	_palette_container.add_child(btn)
+# ---------------------------------------------------------------------------
+# Brush inspector: size/profile variant strip + in-cell anchor pad for the
+# currently selected block. Rebuilt on selection and rotation.
+# ---------------------------------------------------------------------------
+
+func _ensure_brush_inspector() -> Control:
+	if _brush_inspector != null and is_instance_valid(_brush_inspector):
+		return _brush_inspector
+	_brush_inspector = VBoxContainer.new()
+	_brush_inspector.name = "BrushInspector"
+	var parent := _palette_container.get_parent()
+	parent.add_child(_brush_inspector)
+	parent.move_child(_brush_inspector, _palette_container.get_index() + 1)
+	return _brush_inspector
+
+
+func _rebuild_brush_inspector() -> void:
+	var host := _ensure_brush_inspector()
+	for child in host.get_children():
+		child.queue_free()
+
+	var variants: Array = BuildingBlockCatalogScript.variants(current_block_id)
+	if not variants.is_empty():
+		var vlabel := Label.new()
+		vlabel.text = "Размер / профиль"
+		vlabel.add_theme_color_override("font_color", Color(0.65, 0.72, 0.8))
+		host.add_child(vlabel)
+		var strip := GridContainer.new()
+		strip.columns = 2
+		host.add_child(strip)
+		for v in variants:
+			var v_id: StringName = v["id"]
+			var vbtn := Button.new()
+			vbtn.toggle_mode = true
+			vbtn.text = v["name"]
+			vbtn.button_pressed = v_id == current_variant
+			var v_size: Vector3 = v.get("size", Vector3.ONE)
+			vbtn.tooltip_text = "Размер: %.2f×%.2f×%.2f м" % [v_size.x, v_size.y, v_size.z]
+			vbtn.pressed.connect(func(): _select_block(current_block_id, v_id))
+			strip.add_child(vbtn)
+
+	# Anchor pad only matters when the block is thinner than the cell on an axis.
+	var axes := BuildingBlockCatalogScript.anchorable_axes(current_block_id, current_variant, current_rot)
+	if axes == Vector2i.ZERO:
+		current_anchor = Vector2i.ZERO
+		return
+
+	var alabel := Label.new()
+	alabel.text = "Привязка в ячейке"
+	alabel.add_theme_color_override("font_color", Color(0.65, 0.72, 0.8))
+	host.add_child(alabel)
+	# Clamp the current anchor to the axes that actually have slack.
+	current_anchor = Vector2i(current_anchor.x * axes.x, current_anchor.y * axes.y)
+	var pad := GridContainer.new()
+	pad.columns = 3
+	host.add_child(pad)
+	# Rows top→bottom = az −1..+1, columns left→right = ax −1..+1.
+	for az in [-1, 0, 1]:
+		for ax in [-1, 0, 1]:
+			var cell := Vector2i(ax, az)
+			var pbtn := Button.new()
+			pbtn.toggle_mode = true
+			pbtn.custom_minimum_size = Vector2(34, 28)
+			pbtn.text = "•" if cell == Vector2i.ZERO else "○"
+			var enabled: bool = (ax == 0 or axes.x == 1) and (az == 0 or axes.y == 1)
+			pbtn.disabled = not enabled
+			pbtn.button_pressed = enabled and cell == current_anchor
+			pbtn.pressed.connect(func(): _select_anchor(cell))
+			pad.add_child(pbtn)
+
+
+func _select_anchor(anchor: Vector2i) -> void:
+	current_anchor = anchor
+	_rebuild_brush_inspector()
+	_refresh_ghost()
 
 
 # ---------------------------------------------------------------------------
