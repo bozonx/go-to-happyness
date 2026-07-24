@@ -7,6 +7,9 @@ extends RefCounted
 var zone_id: StringName = &""
 var zone_name: String = ""
 var kind: StringName = &"workplace"
+## Recreation flavour / special marker (LEISURE_SUBTYPES / SPECIAL_SUBTYPES), or
+## empty for flat kinds. Preserved so leisure zones know which need they satisfy.
+var subtype: StringName = &""
 var profession: StringName = &""
 var max_workers: int = 0
 var cells: Array[Vector3i] = []
@@ -20,6 +23,7 @@ static func from_definition(data: Dictionary) -> RefCounted:
 	state.zone_id = StringName(data.get("id", ""))
 	state.zone_name = str(data.get("name", ""))
 	state.kind = StringName(data.get("kind", "workplace"))
+	state.subtype = StringName(data.get("subtype", ""))
 	state.profession = StringName(data.get("profession_type", ""))
 	state.max_workers = maxi(0, int(data.get("max_workers", 0)))
 	for raw_cell in data.get("cells", []):
@@ -73,6 +77,7 @@ func to_dict() -> Dictionary:
 		"id": String(zone_id),
 		"name": zone_name,
 		"kind": String(kind),
+		"subtype": String(subtype),
 		"profession_type": String(profession),
 		"max_workers": max_workers,
 		"cells": cells.map(func(cell: Vector3i): return [cell.x, cell.y, cell.z]),

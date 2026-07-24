@@ -11,6 +11,11 @@ const BlockMeshLibraryScript = preload("res://game/features/buildings/presentati
 const BLOCK_SIZE := 1.0
 const PANEL_THICKNESS := 0.5
 
+## How far a foundation block is stretched below its cell so a building on
+## uneven ground never leaves a visible gap underneath (design doc §3.1). This
+## is a fixed skirt; the future mesh compiler will trim it to the real terrain.
+const FOUNDATION_SKIRT := 3.0
+
 ## Shared mesh/material cache for block-based modules (built from .gdbuilding.json).
 static var _block_meshes: BlockMeshLibraryScript = null
 
@@ -272,15 +277,25 @@ static func _create_block_module(module: Dictionary) -> StaticBody3D:
 	body.set_meta("module_kind", module.get("kind", "block"))
 
 	var mesh_instance := body.get_node("MeshInstance3D") as MeshInstance3D
-	mesh_instance.mesh = _block_meshes.mesh_for(block_id)
-	mesh_instance.material_override = _block_meshes.material_for(material_id)
-
-	# Collision is the block's axis-aligned bounding box.
 	var def := BuildingBlockCatalogScript.get_block(block_id)
 	var size: Vector3 = def.get("size", Vector3.ONE) if not def.is_empty() else Vector3.ONE
 	var collision := body.get_node("CollisionShape3D") as CollisionShape3D
 	var shape := BoxShape3D.new()
-	shape.size = size
+
+	if BuildingBlockCatalogScript.extends_down(block_id):
+		# Grow a downward skirt: keep the top face where the block's own mesh has
+		# it, extend the bottom below ground so no gap shows on a slope.
+		var skirted := Vector3(size.x, size.y + FOUNDATION_SKIRT, size.z)
+		var box := BoxMesh.new()
+		box.size = skirted
+		mesh_instance.mesh = box
+		mesh_instance.position.y = -FOUNDATION_SKIRT * 0.5
+		shape.size = skirted
+		collision.position.y = -FOUNDATION_SKIRT * 0.5
+	else:
+		mesh_instance.mesh = _block_meshes.mesh_for(block_id)
+		shape.size = size
+	mesh_instance.material_override = _block_meshes.material_for(material_id)
 	collision.shape = shape
 	return body
 

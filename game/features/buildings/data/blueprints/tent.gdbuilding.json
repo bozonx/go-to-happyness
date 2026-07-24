@@ -1,0 +1,196 @@
+{
+  "version": 1,
+  "id": "tent",
+  "name": "Временная палатка на 4 жителя",
+  "construction_style": "surface",
+  "category": "tent",
+  "fallback_building_id": "tent",
+  "grid_bounds": {
+    "x": 4,
+    "y": 2,
+    "z": 4
+  },
+  "pivot_offset": {
+    "x": 0,
+    "y": 0,
+    "z": 0
+  },
+  "footprint": [
+    4,
+    4
+  ],
+  "entrance": [
+    0,
+    -2
+  ],
+  "worker_entrances": [],
+  "blocks": [
+    {
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "block_id": "roof_pitch",
+      "material_id": "thatch",
+      "rot": 3
+    },
+    {
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "block_id": "roof_pitch",
+      "material_id": "thatch",
+      "rot": 3
+    },
+    {
+      "pos": [
+        2,
+        1,
+        0
+      ],
+      "block_id": "roof_pitch",
+      "material_id": "thatch",
+      "rot": 1
+    },
+    {
+      "pos": [
+        3,
+        0,
+        0
+      ],
+      "block_id": "roof_pitch",
+      "material_id": "thatch",
+      "rot": 1
+    },
+    {
+      "pos": [
+        0,
+        0,
+        1
+      ],
+      "block_id": "roof_pitch",
+      "material_id": "thatch",
+      "rot": 3
+    },
+    {
+      "pos": [
+        1,
+        1,
+        1
+      ],
+      "block_id": "roof_pitch",
+      "material_id": "thatch",
+      "rot": 3
+    },
+    {
+      "pos": [
+        2,
+        1,
+        1
+      ],
+      "block_id": "roof_pitch",
+      "material_id": "thatch",
+      "rot": 1
+    },
+    {
+      "pos": [
+        3,
+        0,
+        1
+      ],
+      "block_id": "roof_pitch",
+      "material_id": "thatch",
+      "rot": 1
+    },
+    {
+      "pos": [
+        0,
+        0,
+        2
+      ],
+      "block_id": "roof_pitch",
+      "material_id": "thatch",
+      "rot": 3
+    },
+    {
+      "pos": [
+        1,
+        1,
+        2
+      ],
+      "block_id": "roof_pitch",
+      "material_id": "thatch",
+      "rot": 3
+    },
+    {
+      "pos": [
+        2,
+        1,
+        2
+      ],
+      "block_id": "roof_pitch",
+      "material_id": "thatch",
+      "rot": 1
+    },
+    {
+      "pos": [
+        3,
+        0,
+        2
+      ],
+      "block_id": "roof_pitch",
+      "material_id": "thatch",
+      "rot": 1
+    },
+    {
+      "pos": [
+        0,
+        0,
+        3
+      ],
+      "block_id": "roof_pitch",
+      "material_id": "thatch",
+      "rot": 3
+    },
+    {
+      "pos": [
+        1,
+        1,
+        3
+      ],
+      "block_id": "roof_pitch",
+      "material_id": "thatch",
+      "rot": 3
+    },
+    {
+      "pos": [
+        2,
+        1,
+        3
+      ],
+      "block_id": "roof_pitch",
+      "material_id": "thatch",
+      "rot": 1
+    },
+    {
+      "pos": [
+        3,
+        0,
+        3
+      ],
+      "block_id": "roof_pitch",
+      "material_id": "thatch",
+      "rot": 1
+    }
+  ],
+  "surface_finishes": [],
+  "decor_trims": [],
+  "objects": [],
+  "work_zones": [],
+  "construction_cost": {
+    "grass": 16
+  }
+}

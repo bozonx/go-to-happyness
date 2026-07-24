@@ -60,4 +60,24 @@ func _init() -> void:
 	assert(remove_error == OK)
 	LibraryScript.refresh()
 	assert(not LibraryScript.has(runtime_key))
+
+	_test_builtin_tent()
 	quit(0)
+
+
+## The shipped tent blueprint must render from blocks yet keep the tent's static
+## gameplay definition (costs, housing) — a builtin blueprint supplies visuals,
+## never overrides functionality keyed by building_type.
+func _test_builtin_tent() -> void:
+	LibraryScript.refresh()
+	assert(LibraryScript.has("tent"), "tent.gdbuilding.json must be indexed")
+	var tent = LibraryScript.get_blueprint("tent")
+	assert(tent != null)
+	assert(tent.category == "tent")
+	assert(tent.footprint == Vector2i(4, 4))
+	var game_blueprint: Dictionary = BuildingBlueprintsScript.get_blueprint("tent")
+	assert(game_blueprint.get("modules", []).size() == 16, "tent should render 16 block modules")
+	# Static catalog definition stays authoritative: cost is not recomputed from
+	# the 16 thatch blocks, and the tent stays a housing type.
+	var costs: Dictionary = BuildingCatalogScript.definition_for("tent").get("costs", {})
+	assert(costs == {"branches": 4, "grass": 4}, "tent cost must stay the static one, got %s" % costs)

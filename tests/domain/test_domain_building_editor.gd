@@ -26,6 +26,7 @@ static func run_all() -> void:
 	_test_grid_blueprint_sync()
 	_test_zones_and_metadata_round_trip()
 	_test_runtime_zone_assignment()
+	_test_runtime_zone_subtype_survives()
 	_test_invalid_blueprints_are_rejected()
 
 
@@ -239,6 +240,25 @@ static func _test_runtime_zone_assignment() -> void:
 	assert(zone_service.supports_role(building, &"cook"))
 	assert(zone_service.role_capacity(building, &"cook") == 2)
 	assert(zone_service.work_position(building, &"cook", 10) == Vector3(1.0, 0.0, 2.0))
+	building.free()
+
+
+## A leisure zone's subtype must survive the definition -> runtime-state ->
+## meta -> definition round trip so the game knows which need it satisfies.
+static func _test_runtime_zone_subtype_survives() -> void:
+	var building := Node3D.new()
+	var zone_service := BuildingZoneServiceScript.new()
+	zone_service.configure_building(building, [{
+		"id": "cinema_1",
+		"name": "Cinema",
+		"kind": "leisure",
+		"subtype": "cinema",
+		"max_workers": 0,
+		"cells": [[0, 0, 0]],
+	}])
+	var snapshot := zone_service.zone_snapshot(building)
+	assert(snapshot.size() == 1)
+	assert(snapshot[0].get("subtype", "") == "cinema", "subtype must be preserved at runtime")
 	building.free()
 
 

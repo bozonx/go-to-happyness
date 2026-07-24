@@ -76,6 +76,8 @@ var _brush_rect_btn: Button
 var _fallback_edit: LineEdit
 var _footprint_x_spin: SpinBox
 var _footprint_z_spin: SpinBox
+var _entrance_x_spin: SpinBox
+var _entrance_z_spin: SpinBox
 var _palette_panel: PanelContainer
 var _palette_container: VBoxContainer
 var _status_label: Label
@@ -635,6 +637,8 @@ func _on_save_pressed() -> void:
 		blueprint.fallback_building_id = StringName(_fallback_edit.text.strip_edges())
 	if _footprint_x_spin != null and _footprint_z_spin != null:
 		blueprint.footprint = Vector2i(int(_footprint_x_spin.value), int(_footprint_z_spin.value))
+	if _entrance_x_spin != null and _entrance_z_spin != null:
+		blueprint.entrance = Vector2i(int(_entrance_x_spin.value), int(_entrance_z_spin.value))
 	grid_model.write_to_blueprint(blueprint)
 	var result := repository.save(blueprint)
 	if result["ok"]:
@@ -1416,6 +1420,22 @@ func _build_dev_panel(root: Control) -> void:
 	footprint_row.add_child(_footprint_z_spin)
 	vbox.add_child(footprint_row)
 
+	# Entrance offset from the footprint centre (grid cells). Citizens path to the
+	# building through this side; 0,0 lets the game pick a default edge.
+	vbox.add_child(_labeled("Вход (смещение X × Z от центра):"))
+	var entrance_row := HBoxContainer.new()
+	_entrance_x_spin = SpinBox.new()
+	_entrance_x_spin.min_value = -32
+	_entrance_x_spin.max_value = 32
+	_entrance_x_spin.value = blueprint.entrance.x
+	entrance_row.add_child(_entrance_x_spin)
+	_entrance_z_spin = SpinBox.new()
+	_entrance_z_spin.min_value = -32
+	_entrance_z_spin.max_value = 32
+	_entrance_z_spin.value = blueprint.entrance.y
+	entrance_row.add_child(_entrance_z_spin)
+	vbox.add_child(entrance_row)
+
 	var path_hint := Label.new()
 	path_hint.text = "Сохранение → %s" % repository.base_dir()
 	path_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -1472,6 +1492,10 @@ func _sync_metadata_fields() -> void:
 		_footprint_x_spin.value = blueprint.footprint.x
 	if _footprint_z_spin != null:
 		_footprint_z_spin.value = blueprint.footprint.y
+	if _entrance_x_spin != null:
+		_entrance_x_spin.value = blueprint.entrance.x
+	if _entrance_z_spin != null:
+		_entrance_z_spin.value = blueprint.entrance.y
 	if _category_option != null:
 		for i in _category_option.item_count:
 			if str(_category_option.get_item_metadata(i)) == blueprint.category:

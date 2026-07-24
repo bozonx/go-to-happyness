@@ -126,6 +126,13 @@ static func player_entries() -> Array[Dictionary]:
 
 
 static func _register_definition(key: String, blueprint: BuildingBlueprintScript) -> void:
+	# A builtin blueprint that matches an existing catalog building_type only
+	# supplies visuals + zones: the static definition stays authoritative so its
+	# costs, housing/civic flags and upgrade chains are never silently lost
+	# (functionality is keyed by building_type, not by the blueprint — see the
+	# design doc §1). Only genuinely new types (player customs) get a runtime def.
+	if BuildingCatalogScript.DEFINITIONS.has(key):
+		return
 	BuildingCatalogScript.register_runtime_definition(key, {
 		"name": blueprint.name,
 		"category": blueprint.category,

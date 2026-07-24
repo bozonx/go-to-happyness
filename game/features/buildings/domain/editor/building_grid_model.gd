@@ -33,9 +33,9 @@ func all_blocks() -> Array:
 	return _cells.values()
 
 
-## Places (or replaces) a block. Returns false when the id is unknown or the
-## cell is below ground (negative Y is reserved for underground bunkers, which
-## the frame level does not yet support).
+## Places (or replaces) a block at any layer (negative Y included, for
+## underground structures). Returns false only when the block id or material id
+## is unknown.
 func place(
 	cell: Vector3i,
 	block_id: StringName,
