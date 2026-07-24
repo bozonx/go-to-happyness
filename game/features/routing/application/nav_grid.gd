@@ -26,7 +26,7 @@ var _minimum_dirty := false
 var _revision := 0
 var _topology_revision := 0
 var _component_topology_revision := -1
-var _walkable_components: Dictionary = {}
+var _walkable_components_by_profile: Dictionary = {}
 
 const DEFAULT_CELL_WEIGHT := 2.0
 const MIN_CELL_WEIGHT := 0.05
@@ -200,30 +200,33 @@ func is_blocked(cell: Vector2i) -> bool:
 	return _blocked.has(cell)
 
 
-func is_walkable(cell: Vector2i, profile: StringName = PEDESTRIAN_PROFILE) -> bool:
+func is_walkable(cell: Vector2i, profile: StringName = PEDESTRIAN_PROFILE, profile_override: TravelerProfile = null) -> bool:
 	if not is_board_cell(cell) or _blocked.has(cell):
 		return false
-	return not _road_cells.has(cell) or (_road_cell_weights.get(profile, {}) as Dictionary).has(cell)
+	if _road_cells.has(cell):
+		return (_road_cell_weights.get(profile, {}) as Dictionary).has(cell)
+	var resolved := profile_override if profile_override != null else TravelerProfile.get_profile(profile)
+	return (resolved.layer_mask & TravelerProfile.LAYER_TERRAIN) != 0 and resolved.allows_offroad
 
 
 ## Reachability queries used during AI candidate discovery do not need a route.
 ## Connected components reduce those queries to O(1) after one topology-sized
 ## flood fill, leaving weighted A* for the actor that actually accepts the task.
-func are_positions_connected(from: Vector3, to: Vector3) -> bool:
-	return are_cells_connected(cell_from_position(from), cell_from_position(to))
+func are_positions_connected(from: Vector3, to: Vector3, profile: StringName = PEDESTRIAN_PROFILE) -> bool:
+	return are_cells_connected(cell_from_position(from), cell_from_position(to), profile)
 
 
-func are_cells_connected(from: Vector2i, to: Vector2i) -> bool:
-	if not is_walkable(from) or not is_walkable(to):
+func are_cells_connected(from: Vector2i, to: Vector2i, profile: StringName = PEDESTRIAN_PROFILE, profile_override: TravelerProfile = null) -> bool:
+	if not is_walkable(from, profile, profile_override) or not is_walkable(to, profile, profile_override):
 		return false
-	_ensure_walkable_components()
-	return _walkable_components.get(from, -1) == _walkable_components.get(to, -2)
+	var components := _ensure_walkable_components(profile, profile_override)
+	return components.get(from, -1) == components.get(to, -2)
 
 
 ## Builds the component cache at a controlled caller-owned time instead of on
 ## the first AI candidate query after a topology update.
-func refresh_connectivity() -> void:
-	_ensure_walkable_components()
+func refresh_connectivity(profile: StringName = PEDESTRIAN_PROFILE) -> void:
+	_ensure_walkable_components(profile)
 
 
 ## True when a straight line between two world points crosses only walkable cells.
@@ -273,10 +276,10 @@ func route_cost(from: Vector3, route: RefCounted, profile: StringName = PEDESTRI
 ## weighted length. INF means the segment crosses a blocked cell or cuts an
 ## obstacle corner. This is deliberately shared by visibility and smoothing so
 ## both use the same conservative geometry rules.
-func segment_cost(from: Vector3, to: Vector3, profile: StringName = PEDESTRIAN_PROFILE) -> float:
+func segment_cost(from: Vector3, to: Vector3, profile: StringName = PEDESTRIAN_PROFILE, profile_override: TravelerProfile = null) -> float:
 	var start_cell := cell_from_position(from)
 	var end_cell := cell_from_position(to)
-	if not is_walkable(start_cell, profile) or not is_walkable(end_cell, profile):
+	if not is_walkable(start_cell, profile, profile_override) or not is_walkable(end_cell, profile, profile_override):
 		return INF
 	var ax := from.x / cell_size
 	var az := from.z / cell_size
@@ -329,7 +332,7 @@ func segment_cost(from: Vector3, to: Vector3, profile: StringName = PEDESTRIAN_P
 			# both prevents a line from slipping through a building corner.
 			var horizontal_side := cell + Vector2i(step_x, 0)
 			var vertical_side := cell + Vector2i(0, step_z)
-			if not is_walkable(horizontal_side, profile) or not is_walkable(vertical_side, profile):
+			if not is_walkable(horizontal_side, profile, profile_override) or not is_walkable(vertical_side, profile, profile_override):
 				return INF
 			cell += Vector2i(step_x, step_z)
 			t_max_x += t_delta_x
@@ -340,7 +343,7 @@ func segment_cost(from: Vector3, to: Vector3, profile: StringName = PEDESTRIAN_P
 		else:
 			cell.y += step_z
 			t_max_z += t_delta_z
-		if not is_walkable(cell, profile):
+		if not is_walkable(cell, profile, profile_override):
 			return INF
 	return INF
 
@@ -394,30 +397,41 @@ func _sanitize_weights(next_weights: Dictionary) -> Dictionary:
 	return sanitized
 
 
-func _ensure_walkable_components() -> void:
-	if _component_topology_revision == _topology_revision:
-		return
-	_walkable_components.clear()
+func _ensure_walkable_components(profile: StringName, profile_override: TravelerProfile = null) -> Dictionary:
+	if _component_topology_revision != _topology_revision:
+		_walkable_components_by_profile.clear()
+		_component_topology_revision = _topology_revision
+	var cache_key := _profile_cache_key(profile, profile_override)
+	if _walkable_components_by_profile.has(cache_key):
+		return _walkable_components_by_profile[cache_key]
+	var components: Dictionary = {}
 	var next_component := 0
 	for y in range(-board_half_cells, board_half_cells):
 		for x in range(-board_half_cells, board_half_cells):
 			var start := Vector2i(x, y)
-			if not is_walkable(start) or _walkable_components.has(start):
+			if not is_walkable(start, profile, profile_override) or components.has(start):
 				continue
 			var frontier: Array[Vector2i] = [start]
 			var cursor := 0
-			_walkable_components[start] = next_component
+			components[start] = next_component
 			while cursor < frontier.size():
 				var current := frontier[cursor]
 				cursor += 1
 				for direction in CONNECTED_DIRECTIONS:
 					var neighbor := current + direction
-					if not is_walkable(neighbor) or _walkable_components.has(neighbor):
+					if not is_walkable(neighbor, profile, profile_override) or components.has(neighbor):
 						continue
 					if direction.x != 0 and direction.y != 0:
-						if not is_walkable(current + Vector2i(direction.x, 0)) or not is_walkable(current + Vector2i(0, direction.y)):
+						if not is_walkable(current + Vector2i(direction.x, 0), profile, profile_override) or not is_walkable(current + Vector2i(0, direction.y), profile, profile_override):
 							continue
-					_walkable_components[neighbor] = next_component
+					components[neighbor] = next_component
 					frontier.append(neighbor)
 			next_component += 1
-	_component_topology_revision = _topology_revision
+	_walkable_components_by_profile[cache_key] = components
+	return components
+
+
+func _profile_cache_key(profile: StringName, profile_override: TravelerProfile) -> String:
+	if profile_override == null:
+		return String(profile)
+	return "%s:%d:%d" % [profile, profile_override.layer_mask, 1 if profile_override.allows_offroad else 0]

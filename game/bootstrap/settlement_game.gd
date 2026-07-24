@@ -99,6 +99,7 @@ const WorkforceOrderProviderScript = preload("res://game/features/decision/appli
 const DailyPlayerOrderProviderScript = preload("res://game/features/decision/application/daily_player_order_provider.gd")
 const CleaningGoalScript = preload("res://game/features/decision/domain/goals/cleaning_goal.gd")
 const TrailFieldServiceScript = preload("res://game/features/routing/application/trail_field_service.gd")
+const TrailTextureRendererScript = preload("res://game/features/routing/presentation/trail_texture_renderer.gd")
 const RoadNetworkServiceScript = preload("res://game/features/routing/application/road_network_service.gd")
 const NavigationObstaclePublisherScript = preload("res://game/features/routing/application/navigation_obstacle_publisher.gd")
 const NavigationFacadeScript = preload("res://game/features/routing/application/navigation_facade.gd")
@@ -530,6 +531,7 @@ var building_status_indicator_controller: BuildingStatusIndicatorController
 var first_person_hud_controller: FirstPersonHUDController
 var label_distance_fade_controller: LabelDistanceFadeController
 var trail_field: TrailFieldService
+var trail_texture_renderer: TrailTextureRenderer
 var resource_pile_service: ResourcePileService
 var foraging_service: ForagingService
 var fire_management_service: FireManagementService
@@ -1151,7 +1153,8 @@ func add_landscape_object(node: Node) -> void:
 func _update_trail_overlay() -> void:
 	if world_setup.trail_overlay_material == null or trail_field == null:
 		return
-	world_setup.trail_overlay_material.set_shader_parameter("trail_map", trail_field.flush_texture(runtime_seconds))
+	if trail_texture_renderer != null:
+		world_setup.trail_overlay_material.set_shader_parameter("trail_map", trail_texture_renderer.flush(trail_field, runtime_seconds))
 
 
 func _record_trail_movement(citizen_id: int, position_on_board: Vector3) -> void:

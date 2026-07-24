@@ -15,6 +15,7 @@ static func run_all() -> void:
 	_test_grid_routing()
 	_test_weighted_grid_routing()
 	_test_route_result_unreachable_reasons()
+	_test_route_result_rejects_empty_success()
 	_test_navigation_grid_revision()
 	_test_navigation_weight_validation()
 	_test_weight_change_stales_active_route()
@@ -33,6 +34,7 @@ static func run_all() -> void:
 	_test_incremental_weight_and_deferred_minimum()
 	_test_is_segment_clear()
 	_test_waypoint_path_clear_blocked_destination()
+	_test_allowed_blocked_route_has_only_final_blocked_waypoint()
 	_test_waypoint_path_revalidation_segments()
 	_test_waypoint_path_clear_empty()
 	_test_configure_noop()
@@ -55,7 +57,8 @@ static func run_all() -> void:
 	_test_navigation_facade_metrics()
 	_test_nav_grid_and_facade_route_cost()
 	_test_navigation_bridge_direct_configuration()
-	_test_multi_axis_architecture()
+	_test_traveler_profile_definitions()
+	_test_canonical_vehicle_profiles()
 	_test_profile_contract_and_solver_facade()
 
 
@@ -161,6 +164,12 @@ static func _test_route_result_unreachable_reasons() -> void:
 	var disconnected: RouteResult = router.find_route(Vector3(-2.5, 0.0, 0.5), destination)
 	assert(not disconnected.reachable)
 	assert(disconnected.unreachable_reason == RouteResult.UnreachableReason.DISCONNECTED)
+
+
+static func _test_route_result_rejects_empty_success() -> void:
+	var invalid := RouteResult.success([], Vector3.ZERO)
+	assert(not invalid.reachable)
+	assert(invalid.waypoints.is_empty())
 
 
 static func _test_navigation_grid_revision() -> void:
@@ -598,6 +607,26 @@ static func _test_waypoint_path_clear_blocked_destination() -> void:
 	assert(not grid.is_waypoint_path_clear(from, [Vector3(1.5, 0.0, 0.5), destination], true))
 
 
+static func _test_allowed_blocked_route_has_only_final_blocked_waypoint() -> void:
+	var grid := NavGrid.new()
+	grid.configure(1.0, 10)
+	var router: GridRouteService = GridRouteServiceScript.new()
+	router.configure(grid)
+	var from := Vector3(0.5, 0.0, 0.5)
+	var destination := Vector3(2.5, 0.0, 0.5)
+	grid.set_blocked_cells({Vector2i(2, 0): true})
+	var request := RouteRequest.new()
+	request.from = from
+	request.destination = destination
+	request.allow_destination_cell = true
+	var route := router.find_route_request(request)
+	assert(route.reachable)
+	assert(route.waypoints.back() == destination)
+	for index in range(route.waypoints.size() - 1):
+		assert(not grid.is_blocked(grid.cell_from_position(route.waypoints[index])))
+	assert(grid.is_waypoint_path_clear(from, route.waypoints, true))
+
+
 static func _test_waypoint_path_revalidation_segments() -> void:
 	var grid := NavGrid.new()
 	grid.configure(1.0, 10)
@@ -943,6 +972,12 @@ static func _test_navigation_obstacle_publisher() -> void:
 	assert(grid.is_blocked(Vector2i(0, 0)))
 	var opened: Dictionary = publisher.publish({}, [record], [{"cell": Vector2i(0, 0), "node": building}], 0.0)
 	assert(not opened.has(Vector2i(0, 0)))
+	var large_grid := NavGrid.new()
+	large_grid.configure(2.0, 12)
+	publisher.configure(large_grid)
+	var large_record := BuildingRecord.new(Vector2i(1, 0), Vector3(3.0, 0.0, 1.0), Vector2i.ONE)
+	var large_blocked: Dictionary = publisher.publish({}, [large_record], [], 0.0)
+	assert(large_blocked.keys() == [Vector2i(1, 0)])
 	building.free()
 
 
@@ -1008,8 +1043,7 @@ static func _test_navigation_bridge_direct_configuration() -> void:
 	bridge.free()
 
 
-static func _test_multi_axis_architecture() -> void:
-	# 1. TravelerProfile domain test
+static func _test_traveler_profile_definitions() -> void:
 	var ped_profile := TravelerProfile.pedestrian()
 	assert(ped_profile.profile_id == &"pedestrian" and ped_profile.allows_stairs and ped_profile.allows_offroad)
 
@@ -1019,41 +1053,33 @@ static func _test_multi_axis_architecture() -> void:
 	var custom_profile := TravelerProfile.get_profile(&"custom_drone")
 	assert(custom_profile != null and custom_profile.profile_id == &"custom_drone")
 
-	# 2. Solver Architecture test
+
+static func _test_canonical_vehicle_profiles() -> void:
 	var grid := NavGrid.new()
 	grid.configure(1.0, 10)
-	var grid_solver: RouteSolver = load("res://game/features/routing/application/solvers/grid_route_solver.gd").new(grid)
-	var req := RouteRequest.new()
-	req.from = Vector3(0.5, 0.0, 0.5)
-	req.destination = Vector3(2.5, 0.0, 0.5)
-	assert(grid_solver.can_solve(req))
-
-	var route: RouteResult = grid_solver.find_route(req)
-	assert(route.reachable)
-
-	var composite: RefCounted = load("res://game/features/routing/application/solvers/composite_route_solver.gd").new()
-	composite.register_solver(grid_solver)
-	assert(composite.can_solve(req))
-	var composite_route: RouteResult = composite.find_route(req)
-	assert(composite_route.reachable)
-
-
-	# 3. Steering Controllers test
-	var patrol: RefCounted = load("res://game/features/routing/application/steering/patrol_controller.gd").new()
-	patrol.configure_patrol([Vector3(0, 0, 0), Vector3(10, 0, 0)], true)
-	assert(patrol.current_target == Vector3(0, 0, 0))
-	assert(patrol.advance_waypoint() == Vector3(10, 0, 0))
-
-	var squad: RefCounted = load("res://game/features/routing/application/steering/squad_controller.gd").new()
-	squad.register_member(&"m1", Vector3(2.0, 0.0, -1.0))
-	var follower_target: Vector3 = squad.get_member_target(&"m1", Vector3(5.0, 0.0, 0.0), Vector3(0.0, 0.0, 1.0))
-	assert(is_equal_approx(follower_target.x, 3.0) and is_equal_approx(follower_target.z, -1.0))
-
-	var convoy: RefCounted = load("res://game/features/routing/application/steering/convoy_controller.gd").new()
-	var stopped_speed: float = convoy.compute_follower_speed(Vector3(0, 0, 0), Vector3(2, 0, 0), 5.0)
-	assert(stopped_speed == 0.0)
-	var cruise_speed: float = convoy.compute_follower_speed(Vector3(0, 0, 0), Vector3(12, 0, 0), 5.0)
-	assert(cruise_speed == convoy.max_speed)
+	var roads: RefCounted = RoadNetworkServiceScript.new()
+	roads.configure(grid)
+	var road_cells: Array[Vector2i] = []
+	for x in range(-4, 5):
+		road_cells.append(Vector2i(x, 0))
+	assert(roads.complete_cells(road_cells, RoadTypeScript.STONE))
+	var router: GridRouteService = GridRouteServiceScript.new()
+	router.configure(grid)
+	var start := Vector3(-3.5, 0.0, 0.5)
+	var destination := Vector3(3.5, 0.0, 0.5)
+	assert(router.find_route_for_profile(start, destination, TravelerProfile.WHEELED_ROBOT).reachable)
+	assert(router.find_route_for_profile(start, destination, TravelerProfile.LIGHT_VEHICLE).reachable)
+	assert(router.find_route_for_profile(start, destination, TravelerProfile.HEAVY_VEHICLE).reachable)
+	var offroad_start := Vector3(-3.5, 0.0, 1.5)
+	var offroad_destination := Vector3(3.5, 0.0, 1.5)
+	assert(not router.find_route_for_profile(offroad_start, offroad_destination, TravelerProfile.LIGHT_VEHICLE).reachable)
+	var facade := NavigationFacadeScript.new()
+	facade.configure(grid, router)
+	var navigation := NavigationService.new()
+	navigation.configure(grid, facade)
+	assert(navigation.is_route_reachable(offroad_start, offroad_destination, false, TravelerProfile.PEDESTRIAN))
+	assert(not navigation.is_route_reachable(offroad_start, offroad_destination, false, TravelerProfile.LIGHT_VEHICLE))
+	assert(navigation.is_route_reachable(start, destination, false, TravelerProfile.LIGHT_VEHICLE))
 
 
 static func _test_profile_contract_and_solver_facade() -> void:

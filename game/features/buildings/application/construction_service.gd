@@ -72,7 +72,7 @@ func start_site(cell: Vector2i, building_type: String, position: Vector3, rotati
 
 	var required: Dictionary = BuildingCatalog.definition_for(building_type).get("costs", {}).duplicate(true)
 	var site := ConstructionSite.new(cell, building_type, position, site_node, blueprint, required)
-	site.site_id = cell.x * 100000 + cell.y
+	site.site_id = hash(Vector2i(cell.x, cell.y))
 	sites.append(site)
 	# Commit any resources that are already in storage to this site so they cannot
 	# be accidentally spent on research, trade, or another building.
@@ -105,7 +105,7 @@ func tick(delta: float) -> void:
 		var builder_power: float = runtime.builder_power.call(site.node)
 		var progress := ConstructionProgress.advance(site.progress, delta, runtime.duration, builder_power)
 		progress = minf(progress, material_progress)
-		if index == 0:
+		if index == sites.size() - 1:
 			runtime.set_status.call("Building %s: %d builder(s), %.1fx speed." % [site.building_type, runtime.builder_count.call(site.node), builder_power])
 		site.progress = progress
 		var modules: Array = site.blueprint.modules

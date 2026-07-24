@@ -59,12 +59,16 @@ static func minimum_era(type: StringName) -> int:
 static func supports_profile(type: StringName, profile: StringName) -> bool:
 	match type:
 		DIRT:
-			return profile == PEDESTRIAN or profile == CART or profile == BICYCLE
+			return profile in [PEDESTRIAN, TravelerProfile.BIPEDAL_ROBOT, CART, BICYCLE, TravelerProfile.WHEELED_ROBOT]
 		CLAY:
-			return profile == PEDESTRIAN or profile == BICYCLE
+			return profile in [PEDESTRIAN, TravelerProfile.BIPEDAL_ROBOT, BICYCLE, TravelerProfile.WHEELED_ROBOT]
 		WOOD:
-			return profile == PEDESTRIAN or profile == BICYCLE or profile == MOTOR
+			return profile in [PEDESTRIAN, TravelerProfile.BIPEDAL_ROBOT, BICYCLE, MOTOR, TravelerProfile.WHEELED_ROBOT]
 		STONE, ASPHALT, ASPHALT_CONCRETE:
-			return profile == PEDESTRIAN or profile == CART or profile == BICYCLE or profile == MOTOR
+			return profile in [
+				PEDESTRIAN, TravelerProfile.BIPEDAL_ROBOT,
+				CART, BICYCLE, MOTOR,
+				TravelerProfile.WHEELED_ROBOT, TravelerProfile.LIGHT_VEHICLE, TravelerProfile.HEAVY_VEHICLE,
+			]
 		_:
 			return false

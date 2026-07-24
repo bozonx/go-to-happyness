@@ -35,7 +35,7 @@ func find_route_for_profile(from: Vector3, destination: Vector3, traveler_profil
 	return find_route_request(request)
 
 
-func find_route_request(request: RefCounted) -> RouteResult:
+func find_route_request(request: RouteRequest) -> RouteResult:
 	if solver == null and grid != null:
 		solver = GridRouteSolverScript.new(grid)
 	if solver == null:
@@ -44,7 +44,7 @@ func find_route_request(request: RefCounted) -> RouteResult:
 
 
 
-func _make_request(from: Vector3, destination: Vector3, allow_destination := false) -> RefCounted:
+func _make_request(from: Vector3, destination: Vector3, allow_destination := false) -> RouteRequest:
 	var request := RouteRequestScript.new()
 	request.from = from
 	request.destination = destination

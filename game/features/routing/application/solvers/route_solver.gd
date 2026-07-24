@@ -2,7 +2,7 @@ class_name RouteSolver
 extends RefCounted
 
 ## Abstract base class for navigation solvers in the routing system.
-## Specific solvers (Grid, RoadGraph, Indoor, Composite) implement find_route.
+## Add a concrete solver only when a real topology and its portal contract exist.
 
 var solver_id: StringName = &"base_solver"
 

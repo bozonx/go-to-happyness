@@ -108,6 +108,15 @@ static func is_registered(profile_id_to_check: StringName) -> bool:
 	return _registry.has(profile_id_to_check)
 
 
+static func registered_profiles() -> Array[TravelerProfile]:
+	if _registry.is_empty():
+		_init_defaults()
+	var profiles: Array[TravelerProfile] = []
+	for profile: TravelerProfile in _registry.values():
+		profiles.append(profile)
+	return profiles
+
+
 static func _init_defaults() -> void:
 	register_profile(pedestrian())
 	register_profile(bipedal_robot())

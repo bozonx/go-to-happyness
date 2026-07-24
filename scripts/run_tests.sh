@@ -4,6 +4,9 @@ set -eo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_DIR"
+TEST_USER_DATA="$(mktemp -d)"
+ENGINE_LOG="$(mktemp)"
+trap 'rm -rf "$TEST_USER_DATA"; rm -f "$ENGINE_LOG"' EXIT
 
 echo "=================================================="
 echo "          GO TO HAPPYNESS TEST SUITE              "
@@ -12,7 +15,7 @@ echo "=================================================="
 echo ""
 echo "[1/2] Running Domain & AI Unit Tests..."
 unit_log="$(mktemp)"
-if ! godot --headless --path . --script res://tests/run_all.gd > "$unit_log" 2>&1; then
+if ! env XDG_DATA_HOME="$TEST_USER_DATA" godot --headless --log-file "$ENGINE_LOG" --path . --script res://tests/run_all.gd > "$unit_log" 2>&1; then
   cat "$unit_log"
   rm -f "$unit_log"
   exit 1
@@ -35,7 +38,7 @@ run_test() {
   local tmpfile
   tmpfile="$(mktemp)"
   echo "-> Running $script ($frames frames)..."
-  if timeout 45 godot --headless --path . --script "$script" --quit-after "$frames" > "$tmpfile" 2>&1 && ! rg -q 'Assertion failed|Parse Error|Compile Error|SCRIPT ERROR:' "$tmpfile"; then
+  if timeout 45 env XDG_DATA_HOME="$TEST_USER_DATA" godot --headless --log-file "$ENGINE_LOG" --path . --script "$script" --quit-after "$frames" > "$tmpfile" 2>&1 && ! rg -q 'Assertion failed|Parse Error|Compile Error|SCRIPT ERROR:' "$tmpfile"; then
     rm -f "$tmpfile"
   else
     echo "  [FAIL] $script"

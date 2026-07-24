@@ -20,6 +20,8 @@ func is_topologically_stale(current_topology_revision: int) -> bool:
 
 
 static func success(next_waypoints: Array[Vector3], next_arrival_position: Vector3, next_grid_revision := -1, next_topology_revision := -1) -> RouteResult:
+	if next_waypoints.is_empty():
+		return unreachable(next_grid_revision, next_topology_revision, UnreachableReason.UNKNOWN)
 	var result := RouteResult.new()
 	result.reachable = true
 	result.waypoints = next_waypoints

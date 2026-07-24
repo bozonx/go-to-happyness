@@ -28,7 +28,7 @@ func can_solve(request: RouteRequest) -> bool:
 	if request == null or grid == null:
 		return false
 	var profile := request.get_profile()
-	return (profile.layer_mask & TravelerProfile.LAYER_TERRAIN) != 0
+	return (profile.layer_mask & (TravelerProfile.LAYER_TERRAIN | TravelerProfile.LAYER_ROAD)) != 0
 
 
 func find_route(request: RouteRequest) -> RouteResult:
@@ -45,11 +45,14 @@ func find_route(request: RouteRequest) -> RouteResult:
 	if grid.is_blocked(goal) and not request.allow_destination_cell:
 		return RouteResult.unreachable(grid_revision, topology_revision, RouteResult.UnreachableReason.GOAL_BLOCKED)
 
-	var profile_id := request.get_profile().profile_id
-	if profile_id == NavGrid.PEDESTRIAN_PROFILE and not request.allow_destination_cell and grid.is_walkable(start, profile_id) and grid.is_walkable(goal, profile_id) and not grid.are_cells_connected(start, goal):
+	var profile := request.get_profile()
+	var profile_id := profile.profile_id
+	if not grid.is_walkable(start, profile_id, profile) and not profile.allows_offroad:
+		return RouteResult.unreachable(grid_revision, topology_revision, RouteResult.UnreachableReason.DISCONNECTED)
+	if not request.allow_destination_cell and grid.is_walkable(start, profile_id, profile) and grid.is_walkable(goal, profile_id, profile) and not grid.are_cells_connected(start, goal, profile_id, profile):
 		return RouteResult.unreachable(grid_revision, topology_revision, RouteResult.UnreachableReason.DISCONNECTED)
 
-	var came_from := _search(start, goal, profile_id, request.allow_destination_cell)
+	var came_from := _search(start, goal, profile, request.allow_destination_cell)
 	if not came_from.has(goal):
 		return RouteResult.unreachable(grid_revision, topology_revision, RouteResult.UnreachableReason.DISCONNECTED)
 
@@ -61,17 +64,19 @@ func find_route(request: RouteRequest) -> RouteResult:
 		step = came_from[step]
 	for index in range(reverse_chain.size() - 1, -1, -1):
 		var cell := reverse_chain[index]
+		if request.allow_destination_cell and cell == goal and grid.is_blocked(goal):
+			continue
 		points.append(grid.cell_center(cell))
 	if points.back().distance_squared_to(request.destination) > 0.0001:
 		points.append(request.destination)
 
-	var waypoints := _smooth(points, profile_id, request.allow_destination_cell)
+	var waypoints := _smooth(points, profile, request.allow_destination_cell)
 	if waypoints.is_empty():
 		waypoints = [request.destination]
 	return RouteResult.success(waypoints, request.destination, grid_revision, topology_revision)
 
 
-func _search(start: Vector2i, goal: Vector2i, traveler_profile: StringName, allow_blocked_goal: bool) -> Dictionary:
+func _search(start: Vector2i, goal: Vector2i, traveler_profile: TravelerProfile, allow_blocked_goal: bool) -> Dictionary:
 	var frontier_cells: Array[Vector2i] = []
 	var frontier_priorities := PackedFloat32Array()
 	var came_from: Dictionary = {start: start}
@@ -94,13 +99,13 @@ func _search(start: Vector2i, goal: Vector2i, traveler_profile: StringName, allo
 			var next := current + direction
 			if closed.has(next):
 				continue
-			if not grid.is_walkable(next, traveler_profile) and not (allow_blocked_goal and next == goal):
+			if not grid.is_walkable(next, traveler_profile.profile_id, traveler_profile) and not (allow_blocked_goal and next == goal):
 				continue
 			if direction.x != 0 and direction.y != 0:
-				if not grid.is_walkable(current + Vector2i(direction.x, 0), traveler_profile) or not grid.is_walkable(current + Vector2i(0, direction.y), traveler_profile):
+				if not grid.is_walkable(current + Vector2i(direction.x, 0), traveler_profile.profile_id, traveler_profile) or not grid.is_walkable(current + Vector2i(0, direction.y), traveler_profile.profile_id, traveler_profile):
 					continue
 			var distance := DIAGONAL_DISTANCE if direction.x != 0 and direction.y != 0 else 1.0
-			var next_cost := float(costs[current]) + distance * grid.get_cell_weight(next, traveler_profile)
+			var next_cost := float(costs[current]) + distance * grid.get_cell_weight(next, traveler_profile.profile_id)
 			if next_cost >= float(costs.get(next, INF)):
 				continue
 			came_from[next] = current
@@ -157,7 +162,7 @@ func _octile_distance(from: Vector2i, to: Vector2i) -> float:
 	return maxf(dx, dy) + (DIAGONAL_DISTANCE - 1.0) * minf(dx, dy)
 
 
-func _smooth(points: Array[Vector3], traveler_profile: StringName, allow_blocked_destination := false) -> Array[Vector3]:
+func _smooth(points: Array[Vector3], traveler_profile: TravelerProfile, allow_blocked_destination := false) -> Array[Vector3]:
 	if points.size() <= 1:
 		return []
 	var waypoints: Array[Vector3] = []
@@ -169,11 +174,11 @@ func _smooth(points: Array[Vector3], traveler_profile: StringName, allow_blocked
 		for candidate_index in range(anchor_index + 1, last_candidate + 1):
 			if allow_blocked_destination and candidate_index == points.size() - 1:
 				break
-			var leg_cost := grid.segment_cost(points[candidate_index - 1], points[candidate_index], traveler_profile)
+			var leg_cost := grid.segment_cost(points[candidate_index - 1], points[candidate_index], traveler_profile.profile_id, traveler_profile)
 			if not is_finite(leg_cost):
 				break
 			original_cost += leg_cost
-			var direct_cost := grid.segment_cost(points[anchor_index], points[candidate_index], traveler_profile)
+			var direct_cost := grid.segment_cost(points[anchor_index], points[candidate_index], traveler_profile.profile_id, traveler_profile)
 			if is_finite(direct_cost) and direct_cost <= original_cost * 1.08:
 				best_index = candidate_index
 			else:

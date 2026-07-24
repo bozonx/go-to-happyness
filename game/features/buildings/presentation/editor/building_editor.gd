@@ -498,7 +498,7 @@ func _rebuild_material_options() -> void:
 	_material_option.clear()
 	var current_ok := false
 	for material in BuildingMaterialCatalogScript.materials_for_era(blueprint.category):
-		_material_option.add_item("%s → %s" % [material["name"], material["resource_id"]])
+		_material_option.add_item(material["name"])
 		_material_option.set_item_metadata(_material_option.item_count - 1, material["id"])
 		if material["id"] == current_material_id:
 			current_ok = true
@@ -653,6 +653,14 @@ func _on_new_pressed() -> void:
 	_sync_metadata_fields()
 	_set_layer(0)
 	_update_status("Новый чертёж.")
+
+
+func _on_export_mesh_pressed() -> void:
+	_update_status("Экспорт меша: функция в разработке.")
+
+
+func _on_navmesh_preview_pressed() -> void:
+	_update_status("Предпросмотр навмеша: функция в разработке.")
 
 
 func _on_load_pressed() -> void:
@@ -828,6 +836,8 @@ func _setup_ui() -> void:
 	if dev_mode:
 		_export_mesh_btn.visible = true
 		_navmesh_preview_btn.visible = true
+		_export_mesh_btn.pressed.connect(_on_export_mesh_pressed)
+		_navmesh_preview_btn.pressed.connect(_on_navmesh_preview_pressed)
 
 	_load_list.item_activated.connect(_on_load_item_activated)
 
@@ -1149,9 +1159,12 @@ func _place_zone_marker_at_cursor() -> void:
 		if place == null:
 			_update_status("Сначала создайте зону места (＋).")
 			return
-		if cursor_cell not in place.cells:
+		var idx := place.cells.find(cursor_cell)
+		if idx >= 0:
+			place.cells.remove_at(idx)
+		else:
 			place.cells.append(cursor_cell)
-			_mark_dirty()
+		_mark_dirty()
 		_refresh_zone_visuals()
 		_update_zone_info()
 		return

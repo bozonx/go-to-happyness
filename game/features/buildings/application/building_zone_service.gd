@@ -7,7 +7,8 @@ extends RefCounted
 
 const BuildingRuntimeStateScript = preload("res://game/features/buildings/application/building_runtime_state.gd")
 const ActiveWorkZoneStateScript = preload("res://game/features/buildings/domain/active_work_zone_state.gd")
-const SUPPORTED_AI_ROLES: Array[StringName] = [&"cook", &"teacher", &"seller", &"craftsman"]
+const PlaceZoneRecordScript = preload("res://game/features/buildings/domain/editor/place_zone_record.gd")
+const SUPPORTED_AI_ROLES: Array[StringName] = PlaceZoneRecordScript.PROFESSIONS
 
 
 func configure_building(building: Node3D, zone_definitions: Array, saved_zones: Array = []) -> void:

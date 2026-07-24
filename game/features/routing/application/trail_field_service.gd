@@ -32,8 +32,6 @@ var _world_size := 0.0
 var _cell_size := 1.0
 var _resolution := 0
 var _pixels := PackedByteArray()
-var _texture: ImageTexture
-var _image: Image
 var _last_positions: Dictionary = {}
 var _last_cells: Dictionary = {}
 var _cell_strengths: Dictionary = {}
@@ -41,9 +39,8 @@ var _cell_states: Dictionary = {}
 var _cell_low_days: Dictionary = {}
 var _trail_weight_overrides: Dictionary = {}
 var _nav_grid: NavGrid
-var _dirty := false
+var _visual_revision := 0
 var _has_content := false
-var _last_upload_time := -INF
 
 
 func configure(world_size: float, cell_size := 1.0, nav_grid: NavGrid = null) -> void:
@@ -59,7 +56,7 @@ func configure(world_size: float, cell_size := 1.0, nav_grid: NavGrid = null) ->
 	_cell_states.clear()
 	_cell_low_days.clear()
 	_trail_weight_overrides.clear()
-	_dirty = true
+	_visual_revision += 1
 	_has_content = false
 	_sync_nav_grid_weights()
 
@@ -94,6 +91,18 @@ func total_strength() -> int:
 	return total
 
 
+func visual_resolution() -> int:
+	return _resolution
+
+
+func visual_pixels() -> PackedByteArray:
+	return _pixels
+
+
+func visual_revision() -> int:
+	return _visual_revision
+
+
 func cell_strength(cell: Vector2i) -> float:
 	return float(_cell_strengths.get(cell, 0.0))
 
@@ -116,23 +125,8 @@ func apply_daily_decay() -> void:
 		_pixels[index] = next_value
 		has_visible_trail = has_visible_trail or next_value > 0
 	_has_content = has_visible_trail
-	_dirty = true
+	_visual_revision += 1
 	_decay_nav_cells()
-
-
-func flush_texture(now_seconds: float) -> Texture2D:
-	if _resolution <= 0:
-		return null
-	if _texture != null and (not _dirty or now_seconds - _last_upload_time < 0.25):
-		return _texture
-	_image = Image.create_from_data(_resolution, _resolution, false, Image.FORMAT_R8, _pixels)
-	if _texture == null:
-		_texture = ImageTexture.create_from_image(_image)
-	else:
-		_texture.update(_image)
-	_dirty = false
-	_last_upload_time = now_seconds
-	return _texture
 
 
 func _stamp_segment(from: Vector3, to: Vector3, strength: int) -> void:
@@ -142,7 +136,7 @@ func _stamp_segment(from: Vector3, to: Vector3, strength: int) -> void:
 	for step in range(steps + 1):
 		var t := float(step) / float(steps)
 		_stamp(Vector2(lerpf(from.x, to.x, t), lerpf(from.z, to.z, t)), strength)
-	_dirty = true
+	_visual_revision += 1
 
 
 func _register_segment_cell_entries(walker_id: int, from: Vector3, to: Vector3, traffic_strength: float) -> void:

@@ -108,6 +108,7 @@ func _setup_ai_and_navigation() -> void:
 	game.navigation_obstacle_publisher.configure(game.nav_grid)
 	game.trail_field = SettlementGame.TrailFieldServiceScript.new()
 	game.trail_field.configure(SettlementGame.BOARD_CELLS * SettlementGame.CELL_SIZE, SettlementGame.CELL_SIZE, game.nav_grid)
+	game.trail_texture_renderer = SettlementGame.TrailTextureRendererScript.new()
 	game.route_service = GridRouteService.new()
 	game.route_service.configure(game.nav_grid)
 	game.navigation_facade = SettlementGame.NavigationFacadeScript.new()

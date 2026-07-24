@@ -32,7 +32,6 @@ var category: StringName = &"tent"
 ## Standard building used when a referenced player file is unavailable.
 var fallback_building_id: StringName = &"house"
 var grid_bounds: Vector3i = Vector3i(8, 4, 8)
-var pivot_offset: Vector3i = Vector3i.ZERO
 
 ## Gameplay placement metadata (footprint on the settlement board, entrance
 ## offsets). Kept here so a blueprint fully describes how it drops into the game.
@@ -85,7 +84,6 @@ func to_dict() -> Dictionary:
 		"category": String(category),
 		"fallback_building_id": String(fallback_building_id),
 		"grid_bounds": {"x": grid_bounds.x, "y": grid_bounds.y, "z": grid_bounds.z},
-		"pivot_offset": {"x": pivot_offset.x, "y": pivot_offset.y, "z": pivot_offset.z},
 		"footprint": [footprint.x, footprint.y],
 		"entrance": [entrance.x, entrance.y],
 		"worker_entrances": worker_entrance_dicts,
@@ -114,7 +112,6 @@ static func from_dict(data: Dictionary) -> BuildingBlueprint:
 	bp.category = StringName(data.get("category", "tent"))
 	bp.fallback_building_id = StringName(data.get("fallback_building_id", "house"))
 	bp.grid_bounds = _vec3i_from(data.get("grid_bounds", {}), Vector3i(8, 4, 8))
-	bp.pivot_offset = _vec3i_from(data.get("pivot_offset", {}), Vector3i.ZERO)
 	bp.footprint = _vec2i_from(data.get("footprint", []), Vector2i.ZERO)
 	bp.entrance = _vec2i_from(data.get("entrance", []), Vector2i.ZERO)
 	var raw_worker_entrances: Variant = data.get("worker_entrances", [])
@@ -180,7 +177,7 @@ func recalculate_construction_cost() -> void:
 
 func content_revision() -> String:
 	var data := to_dict()
-	return "%08x" % (JSON.stringify(data).hash() & 0xffffffff)
+	return "%08x" % JSON.stringify(data).hash()
 
 
 func validation_errors() -> Array[String]:

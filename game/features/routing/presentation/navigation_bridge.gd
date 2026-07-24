@@ -17,8 +17,8 @@ func find_recovery_path(from: Vector3, destination: Vector3, may_enter_destinati
 	return _service.find_recovery_path(from, destination, may_enter_destination_house) if _service != null else RouteResult.unreachable(-1, -1, RouteResult.UnreachableReason.NO_GRID)
 
 
-func is_route_reachable(from: Vector3, destination: Vector3, may_enter_destination_house := false) -> bool:
-	return _service.is_route_reachable(from, destination, may_enter_destination_house) if _service != null else false
+func is_route_reachable(from: Vector3, destination: Vector3, may_enter_destination_house := false, traveler_profile: StringName = NavGrid.PEDESTRIAN_PROFILE) -> bool:
+	return _service.is_route_reachable(from, destination, may_enter_destination_house, traveler_profile) if _service != null else false
 
 
 func find_path_around_houses(from: Vector3, destination: Vector3, may_enter_destination_house: bool) -> RouteResult:

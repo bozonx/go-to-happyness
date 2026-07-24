@@ -16,10 +16,11 @@ func publish(terrain_blocked: Dictionary, building_records: Array, service_pocke
 	for record in building_records:
 		var center: Vector3 = record.center
 		var footprint: Vector2i = record.footprint
-		var min_x := floori(center.x - footprint.x * 0.5 - clearance_margin)
-		var max_x := ceili(center.x + footprint.x * 0.5 + clearance_margin) - 1
-		var min_z := floori(center.z - footprint.y * 0.5 - clearance_margin)
-		var max_z := ceili(center.z + footprint.y * 0.5 + clearance_margin) - 1
+		var cell_size := _grid.cell_size if _grid != null else 1.0
+		var min_x := floori((center.x - footprint.x * cell_size * 0.5 - clearance_margin) / cell_size)
+		var max_x := ceili((center.x + footprint.x * cell_size * 0.5 + clearance_margin) / cell_size) - 1
+		var min_z := floori((center.z - footprint.y * cell_size * 0.5 - clearance_margin) / cell_size)
+		var max_z := ceili((center.z + footprint.y * cell_size * 0.5 + clearance_margin) / cell_size) - 1
 		for x in range(min_x, max_x + 1):
 			for z in range(min_z, max_z + 1):
 				blocked[Vector2i(x, z)] = true

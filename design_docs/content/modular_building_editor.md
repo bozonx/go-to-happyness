@@ -314,7 +314,6 @@ Dev mode — это авторский инструмент для **станд�
   "category": "earth",
   "fallback_building_id": "earth_house",
   "grid_bounds": {"x": 6, "y": 3, "z": 5},
-  "pivot_offset": {"x": 3, "y": 0, "z": 2},
   "footprint": [6, 5],
   "entrance": [0, -2],
   "worker_entrances": [[0, -2]],

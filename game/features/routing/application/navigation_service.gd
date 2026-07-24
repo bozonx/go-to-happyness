@@ -63,7 +63,7 @@ func find_recovery_path(from: Vector3, destination: Vector3, allow_destination_c
 	return best if best != null else fallback
 
 
-func is_route_reachable(from: Vector3, destination: Vector3, allow_destination_cell := false) -> bool:
+func is_route_reachable(from: Vector3, destination: Vector3, allow_destination_cell := false, traveler_profile: StringName = NavGrid.PEDESTRIAN_PROFILE) -> bool:
 	if _grid == null:
 		return false
 	var topology_revision := _grid.topology_revision()
@@ -72,10 +72,10 @@ func is_route_reachable(from: Vector3, destination: Vector3, allow_destination_c
 		_reachability_cache_revision = topology_revision
 	var from_cell := _grid.cell_from_position(from)
 	var destination_cell := _grid.cell_from_position(destination)
-	var key := "%d:%d>%d:%d:%d" % [from_cell.x, from_cell.y, destination_cell.x, destination_cell.y, 1 if allow_destination_cell else 0]
+	var key := "%d:%d>%d:%d:%d:%s" % [from_cell.x, from_cell.y, destination_cell.x, destination_cell.y, 1 if allow_destination_cell else 0, traveler_profile]
 	if _reachability_cache.has(key):
 		return bool(_reachability_cache[key])
-	var reachable := find_route(from, destination, true).reachable if allow_destination_cell else _grid.are_cells_connected(from_cell, destination_cell)
+	var reachable := find_route(from, destination, true, traveler_profile).reachable if allow_destination_cell else _grid.are_cells_connected(from_cell, destination_cell, traveler_profile)
 	if _reachability_cache.size() < ROUTE_REACHABILITY_CACHE_LIMIT:
 		_reachability_cache[key] = reachable
 	return reachable

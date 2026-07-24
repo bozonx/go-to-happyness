@@ -90,10 +90,10 @@ func _publish() -> void:
 	for cell: Vector2i in _roads:
 		var road_type: StringName = _roads[cell]
 		road_cells[cell] = true
-		for profile in [RoadTypeScript.PEDESTRIAN, RoadTypeScript.CART, RoadTypeScript.BICYCLE, RoadTypeScript.MOTOR]:
-			if not RoadTypeScript.supports_profile(road_type, profile):
+		for profile: TravelerProfile in TravelerProfile.registered_profiles():
+			if not RoadTypeScript.supports_profile(road_type, profile.profile_id):
 				continue
-			var weights: Dictionary = weights_by_profile.get(profile, {})
+			var weights: Dictionary = weights_by_profile.get(profile.profile_id, {})
 			weights[cell] = RoadTypeScript.traversal_weight(road_type)
-			weights_by_profile[profile] = weights
+			weights_by_profile[profile.profile_id] = weights
 	_grid.set_road_profile_weights(weights_by_profile, road_cells)
