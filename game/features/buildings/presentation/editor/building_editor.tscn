@@ -1,6 +1,564 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3 uid="uid://building_editor"]
 
 [ext_resource type="Script" path="res://game/features/buildings/presentation/editor/building_editor.gd" id="1_editor"]
+[ext_resource type="Theme" path="res://game/features/ui/presentation/theme/ui_theme.tres" id="2_theme"]
 
 [node name="BuildingEditor" type="Node3D"]
 script = ExtResource("1_editor")
+
+[node name="EditorUI" type="CanvasLayer" parent="."]
+
+[node name="Root" type="Control" parent="EditorUI"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme = ExtResource("2_theme")
+
+[node name="TopBar" type="PanelContainer" parent="EditorUI/Root"]
+custom_minimum_size = Vector2(0, 52)
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 52.0
+grow_horizontal = 2
+
+[node name="Margin" type="MarginContainer" parent="EditorUI/Root/TopBar"]
+layout_mode = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="HBox" type="HBoxContainer" parent="EditorUI/Root/TopBar/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="BackBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "← В меню"
+
+[node name="VSep1" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox"]
+layout_mode = 2
+
+[node name="NameLabel" type="Label" parent="EditorUI/Root/TopBar/Margin/HBox"]
+layout_mode = 2
+text = "Название:"
+
+[node name="NameEdit" type="LineEdit" parent="EditorUI/Root/TopBar/Margin/HBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+
+[node name="IdLabel" type="Label" parent="EditorUI/Root/TopBar/Margin/HBox"]
+layout_mode = 2
+text = "ID:"
+
+[node name="IdEdit" type="LineEdit" parent="EditorUI/Root/TopBar/Margin/HBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(140, 0)
+layout_mode = 2
+
+[node name="VSep2" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox"]
+layout_mode = 2
+
+[node name="ModeFrameBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+toggle_mode = true
+text = "1. Каркас"
+
+[node name="ModeFinishesBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+toggle_mode = true
+disabled = true
+text = "2. Отделка"
+
+[node name="ModeDecorBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+toggle_mode = true
+disabled = true
+text = "3. Декор"
+
+[node name="ModeZonesBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+toggle_mode = true
+text = "4. Зоны"
+
+[node name="Spacer" type="Control" parent="EditorUI/Root/TopBar/Margin/HBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="NewBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Новый"
+
+[node name="LoadBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Загрузить"
+
+[node name="SaveBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "💾 Сохранить"
+
+[node name="PalettePanel" type="PanelContainer" parent="EditorUI/Root"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(240, 0)
+layout_mode = 1
+anchors_preset = 9
+anchor_bottom = 1.0
+offset_left = 8.0
+offset_top = 60.0
+offset_right = 248.0
+offset_bottom = -48.0
+grow_vertical = 2
+
+[node name="Scroll" type="ScrollContainer" parent="EditorUI/Root/PalettePanel"]
+layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="PaletteVBox" type="VBoxContainer" parent="EditorUI/Root/PalettePanel/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="ToolsLabel" type="Label" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "Инструменты"
+
+[node name="ToolsRow" type="HBoxContainer" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox"]
+layout_mode = 2
+
+[node name="ToolPlaceBtn" type="Button" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/ToolsRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+text = "Строить (B)"
+
+[node name="ToolEraseBtn" type="Button" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/ToolsRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+text = "Стереть (E)"
+
+[node name="BrushRow" type="HBoxContainer" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox"]
+layout_mode = 2
+
+[node name="BrushLineBtn" type="Button" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/BrushRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+text = "／ Линия"
+
+[node name="BrushRectBtn" type="Button" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/BrushRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+text = "▭ Прямоуг."
+
+[node name="RotRow" type="HBoxContainer" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox"]
+layout_mode = 2
+
+[node name="RotBtn" type="Button" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/RotRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "⟳ Поворот (R)"
+
+[node name="RotLabel" type="Label" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/RotRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(48, 0)
+layout_mode = 2
+
+[node name="LayerRow" type="HBoxContainer" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox"]
+layout_mode = 2
+
+[node name="LayerDownBtn" type="Button" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/LayerRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Слой −"
+
+[node name="LayerUpBtn" type="Button" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/LayerRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Слой +"
+
+[node name="LayerLabel" type="Label" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/LayerRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(70, 0)
+layout_mode = 2
+
+[node name="HSep1" type="HSeparator" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox"]
+layout_mode = 2
+
+[node name="MaterialsLabel" type="Label" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "Материал каркаса (по эре)"
+
+[node name="MaterialOption" type="OptionButton" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="BlocksLabel" type="Label" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "Блоки"
+
+[node name="PaletteContainer" type="VBoxContainer" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 4
+
+[node name="ZonesPanel" type="PanelContainer" parent="EditorUI/Root"]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(270, 0)
+layout_mode = 1
+anchors_preset = 9
+anchor_bottom = 1.0
+offset_left = 8.0
+offset_top = 60.0
+offset_right = 278.0
+offset_bottom = -48.0
+grow_vertical = 2
+
+[node name="Scroll" type="ScrollContainer" parent="EditorUI/Root/ZonesPanel"]
+layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="ZonesVBox" type="VBoxContainer" parent="EditorUI/Root/ZonesPanel/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="Title" type="Label" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "Активные зоны"
+
+[node name="PlaceHint" type="Label" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.65, 0.72, 0.8, 1)
+text = "Зона места (что это за место)"
+
+[node name="ZoneRow" type="HBoxContainer" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+layout_mode = 2
+
+[node name="ZoneOption" type="OptionButton" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox/ZoneRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="AddPlaceBtn" type="Button" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox/ZoneRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "＋"
+
+[node name="DelPlaceBtn" type="Button" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox/ZoneRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "🗑"
+
+[node name="ZoneIdLbl" type="Label" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+layout_mode = 2
+text = "ID зоны:"
+
+[node name="ZoneIdEdit" type="LineEdit" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="ZoneNameLbl" type="Label" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+layout_mode = 2
+text = "Название зоны:"
+
+[node name="ZoneNameEdit" type="LineEdit" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="ZoneKindLbl" type="Label" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+layout_mode = 2
+text = "Назначение:"
+
+[node name="ZoneKindOption" type="OptionButton" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="ZoneSubtypeRow" type="VBoxContainer" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="SubtypeLbl" type="Label" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox/ZoneSubtypeRow"]
+layout_mode = 2
+text = "Тип:"
+
+[node name="ZoneSubtypeOption" type="OptionButton" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox/ZoneSubtypeRow"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="ZoneProfLbl" type="Label" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+layout_mode = 2
+text = "Профессия:"
+
+[node name="ZoneProfessionOption" type="OptionButton" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="WorkersRow" type="HBoxContainer" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+layout_mode = 2
+
+[node name="WorkersLbl" type="Label" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox/WorkersRow"]
+layout_mode = 2
+text = "Макс. рабочих:"
+
+[node name="ZoneWorkersSpin" type="SpinBox" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox/WorkersRow"]
+unique_name_in_owner = true
+layout_mode = 2
+max_value = 12.0
+value = 1.0
+
+[node name="HSep1" type="HSeparator" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+layout_mode = 2
+
+[node name="AnchorHint" type="Label" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.65, 0.72, 0.8, 1)
+text = "Точки (якоря): занятие и маршрутизация"
+
+[node name="AnchorFamilyLbl" type="Label" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+layout_mode = 2
+text = "Семейство роли:"
+
+[node name="AnchorFamilyOption" type="OptionButton" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="AnchorRoleLbl" type="Label" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+layout_mode = 2
+text = "Роль якоря:"
+
+[node name="AnchorRoleOption" type="OptionButton" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="AnchorWorldCheck" type="CheckBox" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Мировой якорь (без здания)"
+
+[node name="MarkerSettings" type="HBoxContainer" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+layout_mode = 2
+
+[node name="YawLbl" type="Label" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox/MarkerSettings"]
+layout_mode = 2
+text = "Поворот:"
+
+[node name="ZoneMarkerYawSpin" type="SpinBox" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox/MarkerSettings"]
+unique_name_in_owner = true
+layout_mode = 2
+max_value = 270.0
+step = 90.0
+
+[node name="CapLbl" type="Label" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox/MarkerSettings"]
+layout_mode = 2
+text = "Ёмкость:"
+
+[node name="ZoneCapacitySpin" type="SpinBox" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox/MarkerSettings"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 1.0
+max_value = 10000.0
+value = 1.0
+
+[node name="PlaceToolLbl" type="Label" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.65, 0.72, 0.8, 1)
+text = "Что ставить (ЛКМ по сетке):"
+
+[node name="ToolCellBtn" type="Button" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+toggle_mode = true
+text = "▦ Ячейка места"
+
+[node name="ToolAnchorBtn" type="Button" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+toggle_mode = true
+text = "📍 Якорь (по роли)"
+
+[node name="ClearCellsBtn" type="Button" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Очистить ячейки места"
+
+[node name="ClearAnchorsBtn" type="Button" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Очистить якоря места"
+
+[node name="HSep2" type="HSeparator" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+layout_mode = 2
+
+[node name="ZoneInfoLabel" type="Label" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
+autowrap_mode = 2
+
+[node name="StatusBar" type="PanelContainer" parent="EditorUI/Root"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -40.0
+grow_horizontal = 2
+grow_vertical = 0
+
+[node name="HBox" type="HBoxContainer" parent="EditorUI/Root/StatusBar"]
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="StatusLabel" type="Label" parent="EditorUI/Root/StatusBar/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="CountLabel" type="Label" parent="EditorUI/Root/StatusBar/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="HelpLabel" type="Label" parent="EditorUI/Root/StatusBar/HBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
+text = "ЛКМ (зажать) — линия/прямоугольник · ПКМ — камера · СКМ — панорама · Колесо — зум · WASD — движение"
+
+[node name="DevPanel" type="PanelContainer" parent="EditorUI/Root"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -280.0
+offset_top = 60.0
+offset_right = -8.0
+offset_bottom = 350.0
+grow_horizontal = 0
+
+[node name="DevVBox" type="VBoxContainer" parent="EditorUI/Root/DevPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Title" type="Label" parent="EditorUI/Root/DevPanel/DevVBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "Параметры здания"
+
+[node name="EraLbl" type="Label" parent="EditorUI/Root/DevPanel/DevVBox"]
+layout_mode = 2
+text = "Эра (задаёт материалы):"
+
+[node name="CategoryOption" type="OptionButton" parent="EditorUI/Root/DevPanel/DevVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="StyleLbl" type="Label" parent="EditorUI/Root/DevPanel/DevVBox"]
+layout_mode = 2
+text = "Стиль постройки:"
+
+[node name="StyleOption" type="OptionButton" parent="EditorUI/Root/DevPanel/DevVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="FallbackLbl" type="Label" parent="EditorUI/Root/DevPanel/DevVBox"]
+layout_mode = 2
+text = "Fallback стандартного здания:"
+
+[node name="FallbackEdit" type="LineEdit" parent="EditorUI/Root/DevPanel/DevVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="FootprintLbl" type="Label" parent="EditorUI/Root/DevPanel/DevVBox"]
+layout_mode = 2
+text = "Пятно размещения X × Z:"
+
+[node name="FootprintRow" type="HBoxContainer" parent="EditorUI/Root/DevPanel/DevVBox"]
+layout_mode = 2
+
+[node name="FootprintXSpin" type="SpinBox" parent="EditorUI/Root/DevPanel/DevVBox/FootprintRow"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 1.0
+max_value = 64.0
+value = 8.0
+
+[node name="FootprintZSpin" type="SpinBox" parent="EditorUI/Root/DevPanel/DevVBox/FootprintRow"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 1.0
+max_value = 64.0
+value = 8.0
+
+[node name="EntranceLbl" type="Label" parent="EditorUI/Root/DevPanel/DevVBox"]
+layout_mode = 2
+text = "Вход (смещение X × Z от центра):"
+
+[node name="EntranceRow" type="HBoxContainer" parent="EditorUI/Root/DevPanel/DevVBox"]
+layout_mode = 2
+
+[node name="EntranceXSpin" type="SpinBox" parent="EditorUI/Root/DevPanel/DevVBox/EntranceRow"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = -32.0
+max_value = 32.0
+
+[node name="EntranceZSpin" type="SpinBox" parent="EditorUI/Root/DevPanel/DevVBox/EntranceRow"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = -32.0
+max_value = 32.0
+
+[node name="PathHintLabel" type="Label" parent="EditorUI/Root/DevPanel/DevVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
+autowrap_mode = 2
+
+[node name="LoadPopup" type="PopupPanel" parent="EditorUI/Root"]
+unique_name_in_owner = true
+size = Vector2i(420, 360)
+
+[node name="LoadVBox" type="VBoxContainer" parent="EditorUI/Root/LoadPopup"]
+custom_minimum_size = Vector2(400, 340)
+layout_mode = 2
+
+[node name="Title" type="Label" parent="EditorUI/Root/LoadPopup/LoadVBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Загрузить чертёж"
+
+[node name="LoadList" type="ItemList" parent="EditorUI/Root/LoadPopup/LoadVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3

@@ -7,11 +7,8 @@ extends Node3D
 ##   * Dev mode  — launched by opening this scene directly in Godot; saves to
 ##     res://data/blueprints and exposes the developer panel.
 ##   * Player mode — launched from the main menu; saves to user://custom_buildings.
-##
-## Frame and active-zone modes are functional. Surface finishing and
-## furniture/decor are separate disabled stages whose serialized sections are
-## already preserved by BuildingBlueprint.
 
+const CameraControllerScript = preload("res://game/features/world/presentation/camera_controller.gd")
 const CameraControllerScene = preload("res://game/features/world/presentation/camera_controller.tscn")
 const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
 const BuildingMaterialCatalogScript = preload("res://game/features/buildings/domain/editor/building_material_catalog.gd")
@@ -21,7 +18,6 @@ const PlaceZoneRecordScript = preload("res://game/features/buildings/domain/edit
 const ZoneAnchorRecordScript = preload("res://game/features/buildings/domain/editor/zone_anchor_record.gd")
 const BlueprintRepositoryScript = preload("res://game/features/buildings/presentation/editor/blueprint_repository.gd")
 const BlockMeshLibraryScript = preload("res://game/features/buildings/presentation/editor/block_mesh_library.gd")
-const UI_THEME = preload("res://game/features/ui/presentation/theme/ui_theme.tres")
 
 enum Tool { PLACE, ERASE }
 enum Brush { LINE, RECT }
@@ -54,66 +50,86 @@ var _last_paint_cell: Vector3i = Vector3i.ZERO
 var _paint_anchor: Vector3i = Vector3i.ZERO
 
 ## Zones-mode state. `_armed_tool` is what a grid click does: paint place cells,
-## or drop an anchor of the currently selected role. `_anchor_family` filters the
-## role dropdown between the occupancy and routing role families.
+## or drop an anchor of the currently selected role.
 var _selected_place_index: int = -1
 var _armed_tool: StringName = &"cell"  ## &"cell" | &"anchor"
 var _anchor_family: StringName = ZoneAnchorRecordScript.FAMILY_OCCUPANCY
 var _anchor_role: StringName = ZoneAnchorRecordScript.ROLE_WORK
 
 var _block_nodes: Dictionary = {}  ## Vector3i -> MeshInstance3D
-var _camera_controller: Node3D
+var _camera_controller: CameraController
 var _blocks_root: Node3D
 var _ghost: MeshInstance3D
 var _layer_plane: MeshInstance3D
 var _zones_visual_root: Node3D
 var _panning: bool = false
 var _orbiting: bool = false
+var _zone_material_cache: Dictionary = {}
 
-# UI references populated in _build_ui().
-var _name_edit: LineEdit
-var _id_edit: LineEdit
-var _category_option: OptionButton
-var _style_option: OptionButton
-var _material_option: OptionButton
-var _brush_line_btn: Button
-var _brush_rect_btn: Button
-var _fallback_edit: LineEdit
-var _footprint_x_spin: SpinBox
-var _footprint_z_spin: SpinBox
-var _entrance_x_spin: SpinBox
-var _entrance_z_spin: SpinBox
-var _palette_panel: PanelContainer
-var _palette_container: VBoxContainer
-var _status_label: Label
-var _layer_label: Label
-var _rot_label: Label
-var _count_label: Label
-var _tool_place_btn: Button
-var _tool_erase_btn: Button
+# UI bindings (linked to scene unique nodes in building_editor.tscn).
+@onready var _name_edit: LineEdit = %NameEdit
+@onready var _id_edit: LineEdit = %IdEdit
+@onready var _category_option: OptionButton = %CategoryOption
+@onready var _style_option: OptionButton = %StyleOption
+@onready var _material_option: OptionButton = %MaterialOption
+@onready var _brush_line_btn: Button = %BrushLineBtn
+@onready var _brush_rect_btn: Button = %BrushRectBtn
+@onready var _fallback_edit: LineEdit = %FallbackEdit
+@onready var _footprint_x_spin: SpinBox = %FootprintXSpin
+@onready var _footprint_z_spin: SpinBox = %FootprintZSpin
+@onready var _entrance_x_spin: SpinBox = %EntranceXSpin
+@onready var _entrance_z_spin: SpinBox = %EntranceZSpin
+@onready var _palette_panel: PanelContainer = %PalettePanel
+@onready var _palette_container: VBoxContainer = %PaletteContainer
+@onready var _status_label: Label = %StatusLabel
+@onready var _layer_label: Label = %LayerLabel
+@onready var _rot_label: Label = %RotLabel
+@onready var _count_label: Label = %CountLabel
+@onready var _tool_place_btn: Button = %ToolPlaceBtn
+@onready var _tool_erase_btn: Button = %ToolEraseBtn
+@onready var _dev_panel: PanelContainer = %DevPanel
+@onready var _load_popup: PopupPanel = %LoadPopup
+@onready var _load_list: ItemList = %LoadList
+
+@onready var _mode_frame_btn: Button = %ModeFrameBtn
+@onready var _mode_finishes_btn: Button = %ModeFinishesBtn
+@onready var _mode_decor_btn: Button = %ModeDecorBtn
+@onready var _mode_zones_btn: Button = %ModeZonesBtn
+
+@onready var _zones_panel: PanelContainer = %ZonesPanel
+@onready var _zone_option: OptionButton = %ZoneOption
+@onready var _add_place_btn: Button = %AddPlaceBtn
+@onready var _del_place_btn: Button = %DelPlaceBtn
+@onready var _zone_id_edit: LineEdit = %ZoneIdEdit
+@onready var _zone_name_edit: LineEdit = %ZoneNameEdit
+@onready var _zone_kind_option: OptionButton = %ZoneKindOption
+@onready var _zone_subtype_row: VBoxContainer = %ZoneSubtypeRow
+@onready var _zone_subtype_option: OptionButton = %ZoneSubtypeOption
+@onready var _zone_profession_option: OptionButton = %ZoneProfessionOption
+@onready var _zone_workers_spin: SpinBox = %ZoneWorkersSpin
+@onready var _zone_info_label: Label = %ZoneInfoLabel
+@onready var _anchor_family_option: OptionButton = %AnchorFamilyOption
+@onready var _anchor_role_option: OptionButton = %AnchorRoleOption
+@onready var _anchor_world_check: CheckBox = %AnchorWorldCheck
+@onready var _zone_marker_yaw_spin: SpinBox = %ZoneMarkerYawSpin
+@onready var _zone_capacity_spin: SpinBox = %ZoneCapacitySpin
+@onready var _tool_cell_btn: Button = %ToolCellBtn
+@onready var _tool_anchor_btn: Button = %ToolAnchorBtn
+@onready var _clear_cells_btn: Button = %ClearCellsBtn
+@onready var _clear_anchors_btn: Button = %ClearAnchorsBtn
+@onready var _back_btn: Button = %BackBtn
+@onready var _new_btn: Button = %NewBtn
+@onready var _load_btn: Button = %LoadBtn
+@onready var _save_btn: Button = %SaveBtn
+@onready var _rot_btn: Button = %RotBtn
+@onready var _layer_down_btn: Button = %LayerDownBtn
+@onready var _layer_up_btn: Button = %LayerUpBtn
+@onready var _dev_vbox: VBoxContainer = %DevVBox
+@onready var _path_hint_label: Label = %PathHintLabel
+
 var _mode_buttons: Dictionary = {}
-var _dev_panel: PanelContainer
-var _load_popup: PopupPanel
-var _load_list: ItemList
 var _palette_buttons: Dictionary = {}  ## StringName -> Button
-
-# Zones panel references.
-var _zones_panel: PanelContainer
-var _zone_option: OptionButton
-var _zone_id_edit: LineEdit
-var _zone_name_edit: LineEdit
-var _zone_kind_option: OptionButton
-var _zone_subtype_row: VBoxContainer
-var _zone_subtype_option: OptionButton
-var _zone_profession_option: OptionButton
-var _zone_workers_spin: SpinBox
-var _zone_info_label: Label
-var _anchor_family_option: OptionButton
-var _anchor_role_option: OptionButton
-var _anchor_world_check: CheckBox
-var _zone_marker_yaw_spin: SpinBox
-var _zone_capacity_spin: SpinBox
-var _tool_buttons: Dictionary = {}  ## StringName -> Button
+var _tool_buttons: Dictionary = {}     ## StringName -> Button
 
 const ZONE_PROFESSIONS: Array[StringName] = [
 	&"cook", &"teacher", &"seller", &"official", &"researcher",
@@ -134,14 +150,13 @@ func _ready() -> void:
 	mesh_library = BlockMeshLibraryScript.new()
 
 	_build_world()
-	_build_ui()
+	_setup_ui()
 	_refresh_layer_plane()
 	_refresh_ghost()
 	_update_status("Готово. Режим: %s" % ("Разработчик" if dev_mode else "Игрок"))
 
 
 func _resolve_launch_mode() -> void:
-	# Player mode is signalled by the launcher; a directly-run scene stays dev.
 	var launch_mgr := get_node_or_null("/root/GameLaunchManager")
 	if launch_mgr != null and "editor_player_mode" in launch_mgr:
 		if bool(launch_mgr.get("editor_player_mode")):
@@ -169,12 +184,11 @@ func _build_world() -> void:
 	sun.shadow_enabled = true
 	add_child(sun)
 
-	_camera_controller = CameraControllerScene.instantiate()
+	_camera_controller = CameraControllerScene.instantiate() as CameraController
 	add_child(_camera_controller)
-	_camera_controller.set("camera_target", Vector3(4.0, 0.0, 4.0))
-	_camera_controller.set("camera_distance", 18.0)
-	if _camera_controller.has_method("apply_position"):
-		_camera_controller.call("apply_position")
+	_camera_controller.camera_target = Vector3(4.0, 0.0, 4.0)
+	_camera_controller.camera_distance = 18.0
+	_camera_controller.apply_position()
 
 	_build_ground()
 
@@ -203,13 +217,11 @@ func _build_ground() -> void:
 	ground.material_override = ground_mat
 	add_child(ground)
 
-	# Static grid lines at ground level for reference.
 	var grid := MeshInstance3D.new()
 	grid.name = "GridLines"
 	grid.mesh = _build_grid_mesh(32, Color(0.30, 0.34, 0.40, 0.6))
 	add_child(grid)
 
-	# Movable highlight plane showing the active build layer.
 	_layer_plane = MeshInstance3D.new()
 	_layer_plane.name = "LayerPlane"
 	_layer_plane.mesh = _build_grid_mesh(24, Color(0.35, 0.7, 1.0, 0.5))
@@ -239,8 +251,8 @@ func _build_grid_mesh(half_extent: int, color: Color) -> ArrayMesh:
 # ---------------------------------------------------------------------------
 
 func _process(delta: float) -> void:
-	if _camera_controller != null and _camera_controller.has_method("update"):
-		_camera_controller.call("update", delta)
+	if _camera_controller != null:
+		_camera_controller.update(delta)
 	_update_cursor()
 
 
@@ -250,13 +262,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventMouseMotion:
 		if _camera_controller == null:
 			pass
-		elif _orbiting and _camera_controller.has_method("rotate_yaw_pitch"):
-			_camera_controller.call("rotate_yaw_pitch", event.relative)
-		elif _panning and _camera_controller.has_method("pan"):
-			_camera_controller.call("pan", event.relative)
+		elif _orbiting:
+			_camera_controller.rotate_yaw_pitch(event.relative)
+		elif _panning:
+			_camera_controller.pan(event.relative)
 		elif _painting:
-			# Drag to build/erase following the mouse: a line, or — with the
-			# rectangle brush — a filled floor/ceiling slab from the anchor.
 			_update_cursor()
 			if cursor_valid:
 				if current_mode == EditMode.ZONES and _armed_tool == &"cell":
@@ -321,10 +331,9 @@ func _handle_key(event: InputEventKey) -> void:
 func _zoom(amount: float) -> void:
 	if _camera_controller == null:
 		return
-	var dist := float(_camera_controller.get("camera_distance"))
-	_camera_controller.set("camera_distance", clampf(dist + amount, 4.0, 60.0))
-	if _camera_controller.has_method("apply_position"):
-		_camera_controller.call("apply_position")
+	var dist := _camera_controller.camera_distance
+	_camera_controller.camera_distance = clampf(dist + amount, 4.0, 60.0)
+	_camera_controller.apply_position()
 
 
 func _update_cursor() -> void:
@@ -332,7 +341,7 @@ func _update_cursor() -> void:
 		cursor_valid = false
 		_refresh_ghost()
 		return
-	var camera := _camera_controller.get("camera") as Camera3D
+	var camera := _camera_controller.camera
 	if camera == null:
 		return
 	var mouse_pos := get_viewport().get_mouse_position()
@@ -373,8 +382,6 @@ func _apply_tool_at_cell(cell: Vector3i) -> void:
 				_update_count()
 
 
-## Applies the current tool to every cell on the line between two grid cells
-## (inclusive), so a mouse drag lays a continuous run of blocks.
 func _paint_line(from_cell: Vector3i, to_cell: Vector3i) -> void:
 	var dx := absi(to_cell.x - from_cell.x)
 	var dz := absi(to_cell.z - from_cell.z)
@@ -398,8 +405,6 @@ func _paint_line(from_cell: Vector3i, to_cell: Vector3i) -> void:
 	_refresh_ghost()
 
 
-## Fills the axis-aligned rectangle spanned by two grid cells at the active
-## layer. Used to lay whole floors and ceilings in one drag.
 func _paint_rect(from_cell: Vector3i, to_cell: Vector3i) -> void:
 	var x0 := mini(from_cell.x, to_cell.x)
 	var x1 := maxi(from_cell.x, to_cell.x)
@@ -417,6 +422,7 @@ func _paint_zone_line(from_cell: Vector3i, to_cell: Vector3i) -> void:
 	if zone == null:
 		return
 	var steps := maxi(absi(to_cell.x - from_cell.x), absi(to_cell.z - from_cell.z))
+	var changed := false
 	for step in range(steps + 1):
 		var t := float(step) / float(maxi(1, steps))
 		var cell := Vector3i(
@@ -425,8 +431,10 @@ func _paint_zone_line(from_cell: Vector3i, to_cell: Vector3i) -> void:
 			roundi(lerpf(from_cell.z, to_cell.z, t)))
 		if cell not in zone.cells:
 			zone.cells.append(cell)
-	_refresh_zone_visuals()
-	_update_zone_info()
+			changed = true
+	if changed:
+		_refresh_zone_visuals()
+		_update_zone_info()
 
 
 func _pointer_over_ui() -> bool:
@@ -507,10 +515,6 @@ func _set_tool(tool_id: int) -> void:
 	_refresh_ghost()
 
 
-## Repopulates the frame material list from the currently chosen era. Materials
-## from the era and every earlier era are offered (cumulative), so each era has
-## several materials; the block material is thus driven by the era, not picked
-## from the full catalog.
 func _rebuild_material_options() -> void:
 	if _material_option == null:
 		return
@@ -541,7 +545,6 @@ func _on_era_changed(index: int) -> void:
 		_update_status("Эра: %s." % blueprint.category)
 
 
-## Number of placed blocks whose material is not available in the chosen era.
 func _count_blocks_off_era() -> int:
 	var count := 0
 	for block in grid_model.all_blocks():
@@ -550,8 +553,6 @@ func _count_blocks_off_era() -> int:
 	return count
 
 
-## Underground digging is unlocked only from the earth era; keep the style option
-## honest about that and never leave an illegal underground selection standing.
 func _refresh_underground_availability() -> void:
 	if _style_option == null:
 		return
@@ -611,8 +612,6 @@ func _set_layer(layer: int) -> void:
 
 
 func _select_mode(mode: int) -> void:
-	# Frame and Zones modes are functional. Finishes and furnishings have
-	# separate data sections and UI slots, but their authoring slices are next.
 	if mode == EditMode.FINISHES or mode == EditMode.DECOR:
 		_update_status("Этот режим подготовлен в формате и будет реализован следующим срезом.")
 		if _mode_buttons.has(current_mode):
@@ -708,28 +707,121 @@ func _confirm_back_to_menu() -> void:
 
 
 # ---------------------------------------------------------------------------
-# UI construction (data-driven; built procedurally on top of the .tscn world)
+# UI setup & signal wiring (binds to static nodes in building_editor.tscn)
 # ---------------------------------------------------------------------------
 
-func _build_ui() -> void:
-	var layer := CanvasLayer.new()
-	layer.name = "EditorUI"
-	add_child(layer)
+func _setup_ui() -> void:
+	_back_btn.pressed.connect(_confirm_back_to_menu)
+	_new_btn.pressed.connect(_on_new_pressed)
+	_load_btn.pressed.connect(_on_load_pressed)
+	_save_btn.pressed.connect(_on_save_pressed)
 
-	var root := Control.new()
-	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.theme = UI_THEME
-	layer.add_child(root)
+	_mode_buttons[EditMode.FRAME] = _mode_frame_btn
+	_mode_buttons[EditMode.FINISHES] = _mode_finishes_btn
+	_mode_buttons[EditMode.DECOR] = _mode_decor_btn
+	_mode_buttons[EditMode.ZONES] = _mode_zones_btn
 
-	_build_top_bar(root)
-	_build_palette_panel(root)
-	_build_zones_panel(root)
-	_build_status_bar(root)
-	_build_load_popup(root)
-	_build_dev_panel(root)
+	_mode_frame_btn.pressed.connect(func(): _select_mode(EditMode.FRAME))
+	_mode_finishes_btn.pressed.connect(func(): _select_mode(EditMode.FINISHES))
+	_mode_decor_btn.pressed.connect(func(): _select_mode(EditMode.DECOR))
+	_mode_zones_btn.pressed.connect(func(): _select_mode(EditMode.ZONES))
+
+	_tool_place_btn.pressed.connect(func(): _set_tool(Tool.PLACE))
+	_tool_erase_btn.pressed.connect(func(): _set_tool(Tool.ERASE))
+
+	_brush_line_btn.pressed.connect(func(): _set_brush(Brush.LINE))
+	_brush_rect_btn.pressed.connect(func(): _set_brush(Brush.RECT))
+
+	_rot_btn.pressed.connect(_cycle_rotation)
+	_layer_down_btn.pressed.connect(func(): _set_layer(active_layer - 1))
+	_layer_up_btn.pressed.connect(func(): _set_layer(active_layer + 1))
+
+	_material_option.item_selected.connect(func(index: int):
+		current_material_id = _material_option.get_item_metadata(index)
+		_refresh_ghost()
+	)
+
+	_build_palette_blocks()
+
+	# Zones panel wiring
+	_zone_option.item_selected.connect(_on_place_option_selected)
+	_add_place_btn.pressed.connect(_add_place)
+	_del_place_btn.pressed.connect(_delete_place)
+	_zone_id_edit.text_changed.connect(_on_place_id_changed)
+	_zone_name_edit.text_changed.connect(_on_place_name_changed)
+
+	_zone_kind_option.clear()
+	for kind in PlaceZoneRecordScript.KINDS:
+		_zone_kind_option.add_item(PlaceZoneRecordScript.kind_display_name(kind))
+		_zone_kind_option.set_item_metadata(_zone_kind_option.item_count - 1, kind)
+	_zone_kind_option.item_selected.connect(_on_place_kind_selected)
+
+	_zone_subtype_option.item_selected.connect(_on_place_subtype_selected)
+
+	_zone_profession_option.clear()
+	_zone_profession_option.add_item("— нет —")
+	_zone_profession_option.set_item_metadata(0, &"")
+	for prof in ZONE_PROFESSIONS:
+		_zone_profession_option.add_item(String(prof))
+		_zone_profession_option.set_item_metadata(_zone_profession_option.item_count - 1, prof)
+	_zone_profession_option.item_selected.connect(_on_place_profession_selected)
+
+	_zone_workers_spin.value_changed.connect(_on_place_workers_changed)
+
+	_anchor_family_option.clear()
+	for family_info in [
+		{"id": ZoneAnchorRecordScript.FAMILY_OCCUPANCY, "label": "Занятие (слот)"},
+		{"id": ZoneAnchorRecordScript.FAMILY_ROUTING, "label": "Маршрутизация"},
+	]:
+		_anchor_family_option.add_item(family_info["label"])
+		_anchor_family_option.set_item_metadata(_anchor_family_option.item_count - 1, family_info["id"])
+	_anchor_family_option.item_selected.connect(_on_anchor_family_selected)
+
+	_anchor_role_option.item_selected.connect(_on_anchor_role_selected)
+
+	_tool_buttons[&"cell"] = _tool_cell_btn
+	_tool_buttons[&"anchor"] = _tool_anchor_btn
+	_tool_cell_btn.pressed.connect(func(): _arm_tool(&"cell"))
+	_tool_anchor_btn.pressed.connect(func(): _arm_tool(&"anchor"))
+
+	_clear_cells_btn.pressed.connect(_clear_place_cells)
+	_clear_anchors_btn.pressed.connect(_clear_place_anchors)
+
+	_anchor_family_option.select(0)
+	_on_anchor_family_selected(0)
+	_arm_tool(&"cell")
+	_rebuild_place_option()
+
+	# Dev panel wiring
+	_category_option.clear()
+	for category_id in BuildingMaterialCatalogScript.ERA_ORDER:
+		_category_option.add_item(category_id.capitalize())
+		_category_option.set_item_metadata(_category_option.item_count - 1, category_id)
+	_category_option.item_selected.connect(_on_era_changed)
+
+	_style_option.clear()
+	for style_info in [
+		{"id": &"surface", "label": "Наземная"},
+		{"id": &"underground", "label": "Подземная (с земляной эры)"},
+	]:
+		_style_option.add_item(style_info["label"])
+		_style_option.set_item_metadata(_style_option.item_count - 1, style_info["id"])
+	_style_option.item_selected.connect(func(index: int):
+		blueprint.construction_style = _style_option.get_item_metadata(index)
+	)
+
+	_path_hint_label.text = "Сохранение → %s" % repository.base_dir()
+
+	if dev_mode:
+		for label_text in ["Экспорт меша .tres/.gltf (скоро)", "Просмотр NavMesh (скоро)"]:
+			var btn := Button.new()
+			btn.text = label_text
+			btn.disabled = true
+			_dev_vbox.add_child(btn)
+
+	_load_list.item_activated.connect(_on_load_item_activated)
+
 	_sync_metadata_fields()
-
 	_select_block(current_block_id)
 	_set_tool(Tool.PLACE)
 	_set_brush(Brush.LINE)
@@ -738,194 +830,11 @@ func _build_ui() -> void:
 	_select_mode(EditMode.FRAME)
 
 
-func _build_top_bar(root: Control) -> void:
-	var panel := PanelContainer.new()
-	panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	panel.custom_minimum_size = Vector2(0, 52)
-	root.add_child(panel)
+func _build_palette_blocks() -> void:
+	for child in _palette_container.get_children():
+		child.queue_free()
+	_palette_buttons.clear()
 
-	var margin := MarginContainer.new()
-	for side in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 8)
-	panel.add_child(margin)
-
-	var hbox := HBoxContainer.new()
-	hbox.add_theme_constant_override("separation", 10)
-	hbox.alignment = BoxContainer.ALIGNMENT_BEGIN
-	margin.add_child(hbox)
-
-	var back_btn := Button.new()
-	back_btn.text = "← В меню"
-	back_btn.pressed.connect(_confirm_back_to_menu)
-	hbox.add_child(back_btn)
-
-	hbox.add_child(_make_separator_v())
-
-	var name_label := Label.new()
-	name_label.text = "Название:"
-	hbox.add_child(name_label)
-
-	_name_edit = LineEdit.new()
-	_name_edit.custom_minimum_size = Vector2(200, 0)
-	_name_edit.text = blueprint.name
-	hbox.add_child(_name_edit)
-
-	var id_label := Label.new()
-	id_label.text = "ID:"
-	hbox.add_child(id_label)
-	_id_edit = LineEdit.new()
-	_id_edit.custom_minimum_size = Vector2(140, 0)
-	_id_edit.text = String(blueprint.id)
-	hbox.add_child(_id_edit)
-
-	hbox.add_child(_make_separator_v())
-
-	# Editing stages are deliberately separate: surface finishes do not share
-	# authoring state with furniture/decor placement.
-	for mode_info in [
-		{"mode": EditMode.FRAME, "label": "1. Каркас", "enabled": true},
-		{"mode": EditMode.FINISHES, "label": "2. Отделка", "enabled": false},
-		{"mode": EditMode.DECOR, "label": "3. Декор", "enabled": false},
-		{"mode": EditMode.ZONES, "label": "4. Зоны", "enabled": true},
-	]:
-		var btn := Button.new()
-		btn.toggle_mode = true
-		btn.text = mode_info["label"]
-		btn.disabled = not mode_info["enabled"]
-		if not mode_info["enabled"]:
-			btn.tooltip_text = "Появится в следующем обновлении"
-		var mode: int = mode_info["mode"]
-		btn.pressed.connect(func(): _select_mode(mode))
-		_mode_buttons[mode] = btn
-		hbox.add_child(btn)
-
-	hbox.add_child(_make_spacer())
-
-	var new_btn := Button.new()
-	new_btn.text = "Новый"
-	new_btn.pressed.connect(_on_new_pressed)
-	hbox.add_child(new_btn)
-
-	var load_btn := Button.new()
-	load_btn.text = "Загрузить"
-	load_btn.pressed.connect(_on_load_pressed)
-	hbox.add_child(load_btn)
-
-	var save_btn := Button.new()
-	save_btn.text = "💾 Сохранить"
-	save_btn.pressed.connect(_on_save_pressed)
-	hbox.add_child(save_btn)
-
-
-func _build_palette_panel(root: Control) -> void:
-	var panel := PanelContainer.new()
-	panel.set_anchors_and_offsets_preset(Control.PRESET_LEFT_WIDE)
-	panel.offset_top = 60.0
-	panel.offset_bottom = -48.0
-	panel.offset_left = 8.0
-	panel.custom_minimum_size = Vector2(240, 0)
-	root.add_child(panel)
-	_palette_panel = panel
-
-	var scroll := ScrollContainer.new()
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	panel.add_child(scroll)
-
-	var vbox := VBoxContainer.new()
-	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vbox.add_theme_constant_override("separation", 6)
-	scroll.add_child(vbox)
-	_palette_container = vbox
-
-	# Tools row.
-	var tools_label := Label.new()
-	tools_label.text = "Инструменты"
-	tools_label.add_theme_font_size_override("font_size", 16)
-	vbox.add_child(tools_label)
-
-	var tools_row := HBoxContainer.new()
-	vbox.add_child(tools_row)
-
-	_tool_place_btn = Button.new()
-	_tool_place_btn.text = "Строить (B)"
-	_tool_place_btn.toggle_mode = true
-	_tool_place_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_tool_place_btn.pressed.connect(func(): _set_tool(Tool.PLACE))
-	tools_row.add_child(_tool_place_btn)
-
-	_tool_erase_btn = Button.new()
-	_tool_erase_btn.text = "Стереть (E)"
-	_tool_erase_btn.toggle_mode = true
-	_tool_erase_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_tool_erase_btn.pressed.connect(func(): _set_tool(Tool.ERASE))
-	tools_row.add_child(_tool_erase_btn)
-
-	# Brush shape: single line vs. filled rectangle (floors and ceilings).
-	var brush_row := HBoxContainer.new()
-	vbox.add_child(brush_row)
-	_brush_line_btn = Button.new()
-	_brush_line_btn.text = "／ Линия"
-	_brush_line_btn.toggle_mode = true
-	_brush_line_btn.tooltip_text = "Кисть: линия по перетаскиванию"
-	_brush_line_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_brush_line_btn.pressed.connect(func(): _set_brush(Brush.LINE))
-	brush_row.add_child(_brush_line_btn)
-	_brush_rect_btn = Button.new()
-	_brush_rect_btn.text = "▭ Прямоуг."
-	_brush_rect_btn.toggle_mode = true
-	_brush_rect_btn.tooltip_text = "Кисть: прямоугольник — залить пол или потолок"
-	_brush_rect_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_brush_rect_btn.pressed.connect(func(): _set_brush(Brush.RECT))
-	brush_row.add_child(_brush_rect_btn)
-
-	# Rotation + layer controls.
-	var rot_row := HBoxContainer.new()
-	vbox.add_child(rot_row)
-	var rot_btn := Button.new()
-	rot_btn.text = "⟳ Поворот (R)"
-	rot_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	rot_btn.pressed.connect(_cycle_rotation)
-	rot_row.add_child(rot_btn)
-	_rot_label = Label.new()
-	_rot_label.custom_minimum_size = Vector2(48, 0)
-	rot_row.add_child(_rot_label)
-
-	var layer_row := HBoxContainer.new()
-	vbox.add_child(layer_row)
-	var layer_down := Button.new()
-	layer_down.text = "Слой −"
-	layer_down.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	layer_down.pressed.connect(func(): _set_layer(active_layer - 1))
-	layer_row.add_child(layer_down)
-	var layer_up := Button.new()
-	layer_up.text = "Слой +"
-	layer_up.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	layer_up.pressed.connect(func(): _set_layer(active_layer + 1))
-	layer_row.add_child(layer_up)
-	_layer_label = Label.new()
-	_layer_label.custom_minimum_size = Vector2(70, 0)
-	layer_row.add_child(_layer_label)
-
-	vbox.add_child(HSeparator.new())
-
-	var materials_label := Label.new()
-	materials_label.text = "Материал каркаса (по эре)"
-	materials_label.add_theme_font_size_override("font_size", 16)
-	vbox.add_child(materials_label)
-	_material_option = OptionButton.new()
-	_material_option.item_selected.connect(func(index: int):
-		current_material_id = _material_option.get_item_metadata(index)
-		_refresh_ghost()
-	)
-	vbox.add_child(_material_option)
-	_rebuild_material_options()
-
-	var blocks_label := Label.new()
-	blocks_label.text = "Блоки"
-	blocks_label.add_theme_font_size_override("font_size", 16)
-	vbox.add_child(blocks_label)
-
-	# Data-driven palette grouped by category.
 	var current_category := -1
 	for def in BuildingBlockCatalogScript.all():
 		if def["category"] != current_category:
@@ -933,7 +842,7 @@ func _build_palette_panel(root: Control) -> void:
 			var cat_label := Label.new()
 			cat_label.text = BuildingBlockCatalogScript.category_name(current_category)
 			cat_label.add_theme_color_override("font_color", Color(0.65, 0.72, 0.8))
-			vbox.add_child(cat_label)
+			_palette_container.add_child(cat_label)
 		var btn := Button.new()
 		btn.toggle_mode = true
 		btn.text = def["name"]
@@ -941,195 +850,12 @@ func _build_palette_panel(root: Control) -> void:
 		var block_id: StringName = def["id"]
 		btn.pressed.connect(func(): _select_block(block_id))
 		_palette_buttons[block_id] = btn
-		vbox.add_child(btn)
+		_palette_container.add_child(btn)
 
 
 # ---------------------------------------------------------------------------
-# Active work zones (Mode 3)
+# Active work zones (Mode 3 logic)
 # ---------------------------------------------------------------------------
-
-func _build_zones_panel(root: Control) -> void:
-	var panel := PanelContainer.new()
-	panel.set_anchors_and_offsets_preset(Control.PRESET_LEFT_WIDE)
-	panel.offset_top = 60.0
-	panel.offset_bottom = -48.0
-	panel.offset_left = 8.0
-	panel.custom_minimum_size = Vector2(270, 0)
-	panel.visible = false
-	root.add_child(panel)
-	_zones_panel = panel
-
-	var scroll := ScrollContainer.new()
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	panel.add_child(scroll)
-
-	var vbox := VBoxContainer.new()
-	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vbox.add_theme_constant_override("separation", 6)
-	scroll.add_child(vbox)
-
-	var title := Label.new()
-	title.text = "Активные зоны"
-	title.add_theme_font_size_override("font_size", 16)
-	vbox.add_child(title)
-
-	# --- Tier 1: place zone (identity, what the player clicks) ---
-	var place_hint := Label.new()
-	place_hint.text = "Зона места (что это за место)"
-	place_hint.add_theme_color_override("font_color", Color(0.65, 0.72, 0.8))
-	vbox.add_child(place_hint)
-
-	var zone_row := HBoxContainer.new()
-	vbox.add_child(zone_row)
-	_zone_option = OptionButton.new()
-	_zone_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_zone_option.item_selected.connect(_on_place_option_selected)
-	zone_row.add_child(_zone_option)
-	var add_btn := Button.new()
-	add_btn.text = "＋"
-	add_btn.tooltip_text = "Создать зону места"
-	add_btn.pressed.connect(_add_place)
-	zone_row.add_child(add_btn)
-	var del_btn := Button.new()
-	del_btn.text = "🗑"
-	del_btn.tooltip_text = "Удалить зону места"
-	del_btn.pressed.connect(_delete_place)
-	zone_row.add_child(del_btn)
-
-	vbox.add_child(_labeled("ID зоны:"))
-	_zone_id_edit = LineEdit.new()
-	_zone_id_edit.text_changed.connect(_on_place_id_changed)
-	vbox.add_child(_zone_id_edit)
-
-	vbox.add_child(_labeled("Название зоны:"))
-	_zone_name_edit = LineEdit.new()
-	_zone_name_edit.text_changed.connect(_on_place_name_changed)
-	vbox.add_child(_zone_name_edit)
-
-	vbox.add_child(_labeled("Назначение:"))
-	_zone_kind_option = OptionButton.new()
-	for kind in PlaceZoneRecordScript.KINDS:
-		_zone_kind_option.add_item(PlaceZoneRecordScript.kind_display_name(kind))
-		_zone_kind_option.set_item_metadata(_zone_kind_option.item_count - 1, kind)
-	_zone_kind_option.item_selected.connect(_on_place_kind_selected)
-	vbox.add_child(_zone_kind_option)
-
-	# Subtype (recreation flavour / special marker). Hidden for flat kinds.
-	_zone_subtype_row = VBoxContainer.new()
-	_zone_subtype_row.add_child(_labeled("Тип:"))
-	_zone_subtype_option = OptionButton.new()
-	_zone_subtype_option.item_selected.connect(_on_place_subtype_selected)
-	_zone_subtype_row.add_child(_zone_subtype_option)
-	vbox.add_child(_zone_subtype_row)
-
-	vbox.add_child(_labeled("Профессия:"))
-	_zone_profession_option = OptionButton.new()
-	_zone_profession_option.add_item("— нет —")
-	_zone_profession_option.set_item_metadata(0, &"")
-	for prof in ZONE_PROFESSIONS:
-		_zone_profession_option.add_item(String(prof))
-		_zone_profession_option.set_item_metadata(_zone_profession_option.item_count - 1, prof)
-	_zone_profession_option.item_selected.connect(_on_place_profession_selected)
-	vbox.add_child(_zone_profession_option)
-
-	var workers_row := HBoxContainer.new()
-	vbox.add_child(workers_row)
-	workers_row.add_child(_labeled("Макс. рабочих:"))
-	_zone_workers_spin = SpinBox.new()
-	_zone_workers_spin.min_value = 0
-	_zone_workers_spin.max_value = 12
-	_zone_workers_spin.value = 1
-	_zone_workers_spin.value_changed.connect(_on_place_workers_changed)
-	workers_row.add_child(_zone_workers_spin)
-
-	vbox.add_child(HSeparator.new())
-
-	# --- Points: one anchor category, two role families (occupancy + routing) ---
-	var anchor_hint := Label.new()
-	anchor_hint.text = "Точки (якоря): занятие и маршрутизация"
-	anchor_hint.add_theme_color_override("font_color", Color(0.65, 0.72, 0.8))
-	vbox.add_child(anchor_hint)
-
-	vbox.add_child(_labeled("Семейство роли:"))
-	_anchor_family_option = OptionButton.new()
-	for family_info in [
-		{"id": ZoneAnchorRecordScript.FAMILY_OCCUPANCY, "label": "Занятие (слот)"},
-		{"id": ZoneAnchorRecordScript.FAMILY_ROUTING, "label": "Маршрутизация"},
-	]:
-		_anchor_family_option.add_item(family_info["label"])
-		_anchor_family_option.set_item_metadata(_anchor_family_option.item_count - 1, family_info["id"])
-	_anchor_family_option.item_selected.connect(_on_anchor_family_selected)
-	vbox.add_child(_anchor_family_option)
-
-	vbox.add_child(_labeled("Роль якоря:"))
-	_anchor_role_option = OptionButton.new()
-	_anchor_role_option.item_selected.connect(_on_anchor_role_selected)
-	vbox.add_child(_anchor_role_option)
-
-	_anchor_world_check = CheckBox.new()
-	_anchor_world_check.text = "Мировой якорь (без здания)"
-	_anchor_world_check.tooltip_text = "Для остановок и т.п. вне зданий; доступно только для маршрутизации"
-	vbox.add_child(_anchor_world_check)
-
-	var marker_settings := HBoxContainer.new()
-	marker_settings.add_child(_labeled("Поворот:"))
-	_zone_marker_yaw_spin = SpinBox.new()
-	_zone_marker_yaw_spin.min_value = 0
-	_zone_marker_yaw_spin.max_value = 270
-	_zone_marker_yaw_spin.step = 90
-	marker_settings.add_child(_zone_marker_yaw_spin)
-	marker_settings.add_child(_labeled("Ёмкость:"))
-	_zone_capacity_spin = SpinBox.new()
-	_zone_capacity_spin.min_value = 1
-	_zone_capacity_spin.max_value = 10000
-	_zone_capacity_spin.value = 1
-	marker_settings.add_child(_zone_capacity_spin)
-	vbox.add_child(marker_settings)
-
-	var place_label := Label.new()
-	place_label.text = "Что ставить (ЛКМ по сетке):"
-	place_label.add_theme_color_override("font_color", Color(0.65, 0.72, 0.8))
-	vbox.add_child(place_label)
-
-	for tool in [
-		{"id": &"cell", "label": "▦ Ячейка места"},
-		{"id": &"anchor", "label": "📍 Якорь (по роли)"},
-	]:
-		var btn := Button.new()
-		btn.toggle_mode = true
-		btn.text = tool["label"]
-		var tool_id: StringName = tool["id"]
-		btn.pressed.connect(func(): _arm_tool(tool_id))
-		_tool_buttons[tool_id] = btn
-		vbox.add_child(btn)
-
-	var clear_cells := Button.new()
-	clear_cells.text = "Очистить ячейки места"
-	clear_cells.pressed.connect(_clear_place_cells)
-	vbox.add_child(clear_cells)
-
-	var clear_anchors := Button.new()
-	clear_anchors.text = "Очистить якоря места"
-	clear_anchors.pressed.connect(_clear_place_anchors)
-	vbox.add_child(clear_anchors)
-
-	vbox.add_child(HSeparator.new())
-	_zone_info_label = Label.new()
-	_zone_info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_zone_info_label.add_theme_color_override("font_color", Color(0.6, 0.66, 0.72))
-	vbox.add_child(_zone_info_label)
-
-	_anchor_family_option.select(0)
-	_on_anchor_family_selected(0)
-	_arm_tool(&"cell")
-	_rebuild_place_option()
-
-
-func _labeled(text: String) -> Label:
-	var label := Label.new()
-	label.text = text
-	return label
-
 
 func _current_place() -> PlaceZoneRecord:
 	if _selected_place_index < 0 or _selected_place_index >= blueprint.place_zones.size():
@@ -1157,7 +883,6 @@ func _delete_place() -> void:
 	var place := _current_place()
 	if place == null:
 		return
-	# Drop anchors that belonged to the removed place; world anchors survive.
 	var kept: Array[ZoneAnchorRecord] = []
 	for anchor in blueprint.zone_anchors:
 		if anchor.owner_zone_id != place.zone_id:
@@ -1281,7 +1006,6 @@ func _on_place_kind_selected(index: int) -> void:
 	if place == null:
 		return
 	place.kind = _zone_kind_option.get_item_metadata(index)
-	# Reset the subtype to the first legal value for the new kind (or none).
 	var subtypes := PlaceZoneRecordScript.subtypes_for_kind(place.kind)
 	place.subtype = subtypes[0] if not subtypes.is_empty() else &""
 	_rebuild_subtype_options()
@@ -1295,7 +1019,6 @@ func _on_place_subtype_selected(index: int) -> void:
 	place.subtype = _zone_subtype_option.get_item_metadata(index)
 
 
-## Fills the subtype list from the place's kind and hides the row for flat kinds.
 func _rebuild_subtype_options() -> void:
 	if _zone_subtype_option == null:
 		return
@@ -1331,7 +1054,6 @@ func _on_place_workers_changed(value: float) -> void:
 
 func _on_anchor_family_selected(index: int) -> void:
 	_anchor_family = _anchor_family_option.get_item_metadata(index)
-	# World-level anchors only make sense for routing (a bus stop on a street).
 	var routing := _anchor_family == ZoneAnchorRecordScript.FAMILY_ROUTING
 	if _anchor_world_check != null:
 		_anchor_world_check.disabled = not routing
@@ -1406,7 +1128,6 @@ func _place_zone_marker_at_cursor() -> void:
 		_refresh_zone_visuals()
 		_update_zone_info()
 		return
-	# Anchor tool: drop a slot or routing anchor of the selected role.
 	var owner_id: StringName = &""
 	var world := _anchor_world_check != null and _anchor_world_check.button_pressed
 	if not world:
@@ -1442,15 +1163,27 @@ func _refresh_zone_visuals() -> void:
 		for cell in place.cells:
 			_add_zone_marker(Vector3(cell) + Vector3(0.5, 0.0, 0.5), color, Vector3(0.9, 0.04, 0.9), true)
 	for anchor in blueprint.zone_anchors:
-		var col := Color(0.4, 1.0, 0.4)  # work slot
+		var col := Color(0.4, 1.0, 0.4)
 		var size := Vector3(0.4, 1.2, 0.4)
 		if anchor.is_routing():
-			col = Color(1.0, 0.55, 0.2)  # door / stop
+			col = Color(1.0, 0.55, 0.2)
 			size = Vector3(0.5, 1.6, 0.5)
 		elif anchor.is_tray():
-			col = Color(0.4, 0.8, 1.0)   # storage tray
+			col = Color(0.4, 0.8, 1.0)
 			size = Vector3(0.7, 0.3, 0.7)
 		_add_zone_marker(anchor.pos, col, size, anchor.is_tray())
+
+
+func _get_zone_material(color: Color) -> StandardMaterial3D:
+	var key := color.to_html(true)
+	if _zone_material_cache.has(key):
+		return _zone_material_cache[key]
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(color.r, color.g, color.b, 0.7)
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_zone_material_cache[key] = mat
+	return mat
 
 
 func _add_zone_marker(pos: Vector3, color: Color, size: Vector3, is_tray: bool) -> void:
@@ -1458,150 +1191,9 @@ func _add_zone_marker(pos: Vector3, color: Color, size: Vector3, is_tray: bool) 
 	var mesh := BoxMesh.new()
 	mesh.size = size
 	mi.mesh = mesh
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(color.r, color.g, color.b, 0.7)
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mi.material_override = mat
+	mi.material_override = _get_zone_material(color)
 	mi.position = pos + Vector3(0.0, size.y * 0.5 + (0.02 if is_tray else 0.0), 0.0)
 	_zones_visual_root.add_child(mi)
-
-
-func _build_status_bar(root: Control) -> void:
-	var panel := PanelContainer.new()
-	panel.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
-	panel.custom_minimum_size = Vector2(0, 40)
-	root.add_child(panel)
-
-	var hbox := HBoxContainer.new()
-	hbox.add_theme_constant_override("separation", 20)
-	panel.add_child(hbox)
-
-	_status_label = Label.new()
-	_status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hbox.add_child(_status_label)
-
-	_count_label = Label.new()
-	hbox.add_child(_count_label)
-
-	var help := Label.new()
-	help.text = "ЛКМ (зажать) — линия/прямоугольник · ПКМ — камера · СКМ — панорама · Колесо — зум · WASD — движение"
-	help.add_theme_color_override("font_color", Color(0.6, 0.66, 0.72))
-	hbox.add_child(help)
-
-
-func _build_dev_panel(root: Control) -> void:
-	_dev_panel = PanelContainer.new()
-	_dev_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-	_dev_panel.offset_top = 60.0
-	_dev_panel.offset_left = -280.0
-	_dev_panel.offset_right = -8.0
-	root.add_child(_dev_panel)
-
-	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 6)
-	_dev_panel.add_child(vbox)
-
-	var title := Label.new()
-	title.text = "Параметры здания"
-	title.add_theme_font_size_override("font_size", 16)
-	vbox.add_child(title)
-
-	vbox.add_child(_labeled("Эра (задаёт материалы):"))
-	_category_option = OptionButton.new()
-	for category_id in BuildingMaterialCatalogScript.ERA_ORDER:
-		_category_option.add_item(category_id.capitalize())
-		_category_option.set_item_metadata(_category_option.item_count - 1, category_id)
-	_category_option.item_selected.connect(_on_era_changed)
-	vbox.add_child(_category_option)
-
-	vbox.add_child(_labeled("Стиль постройки:"))
-	_style_option = OptionButton.new()
-	for style_info in [
-		{"id": &"surface", "label": "Наземная"},
-		{"id": &"underground", "label": "Подземная (с земляной эры)"},
-	]:
-		_style_option.add_item(style_info["label"])
-		_style_option.set_item_metadata(_style_option.item_count - 1, style_info["id"])
-	_style_option.item_selected.connect(func(index: int):
-		blueprint.construction_style = _style_option.get_item_metadata(index)
-	)
-	vbox.add_child(_style_option)
-
-	vbox.add_child(_labeled("Fallback стандартного здания:"))
-	_fallback_edit = LineEdit.new()
-	_fallback_edit.text = String(blueprint.fallback_building_id)
-	vbox.add_child(_fallback_edit)
-
-	vbox.add_child(_labeled("Пятно размещения X × Z:"))
-	var footprint_row := HBoxContainer.new()
-	_footprint_x_spin = SpinBox.new()
-	_footprint_x_spin.min_value = 1
-	_footprint_x_spin.max_value = 64
-	_footprint_x_spin.value = blueprint.footprint.x
-	footprint_row.add_child(_footprint_x_spin)
-	_footprint_z_spin = SpinBox.new()
-	_footprint_z_spin.min_value = 1
-	_footprint_z_spin.max_value = 64
-	_footprint_z_spin.value = blueprint.footprint.y
-	footprint_row.add_child(_footprint_z_spin)
-	vbox.add_child(footprint_row)
-
-	# Entrance offset from the footprint centre (grid cells). Citizens path to the
-	# building through this side; 0,0 lets the game pick a default edge.
-	vbox.add_child(_labeled("Вход (смещение X × Z от центра):"))
-	var entrance_row := HBoxContainer.new()
-	_entrance_x_spin = SpinBox.new()
-	_entrance_x_spin.min_value = -32
-	_entrance_x_spin.max_value = 32
-	_entrance_x_spin.value = blueprint.entrance.x
-	entrance_row.add_child(_entrance_x_spin)
-	_entrance_z_spin = SpinBox.new()
-	_entrance_z_spin.min_value = -32
-	_entrance_z_spin.max_value = 32
-	_entrance_z_spin.value = blueprint.entrance.y
-	entrance_row.add_child(_entrance_z_spin)
-	vbox.add_child(entrance_row)
-
-	var path_hint := Label.new()
-	path_hint.text = "Сохранение → %s" % repository.base_dir()
-	path_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	path_hint.add_theme_color_override("font_color", Color(0.6, 0.66, 0.72))
-	vbox.add_child(path_hint)
-
-	if dev_mode:
-		vbox.add_child(HSeparator.new())
-		for label_text in ["Экспорт меша .tres/.gltf (скоро)", "Просмотр NavMesh (скоро)"]:
-			var btn := Button.new()
-			btn.text = label_text
-			btn.disabled = true
-			vbox.add_child(btn)
-
-
-func _build_load_popup(root: Control) -> void:
-	_load_popup = PopupPanel.new()
-	root.add_child(_load_popup)
-	var vbox := VBoxContainer.new()
-	vbox.custom_minimum_size = Vector2(400, 340)
-	_load_popup.add_child(vbox)
-	var title := Label.new()
-	title.text = "Загрузить чертёж"
-	title.add_theme_font_size_override("font_size", 18)
-	vbox.add_child(title)
-	_load_list = ItemList.new()
-	_load_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_load_list.item_activated.connect(_on_load_item_activated)
-	vbox.add_child(_load_list)
-
-
-func _make_separator_v() -> VSeparator:
-	return VSeparator.new()
-
-
-func _make_spacer() -> Control:
-	var spacer := Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	return spacer
 
 
 # ---------------------------------------------------------------------------
