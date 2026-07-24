@@ -50,7 +50,7 @@ static func _test_material_catalog_and_costs() -> void:
 	assert(BuildingMaterialCatalogScript.resource_id(&"wood") == &"boards")
 	var bp := BuildingBlueprintScript.new()
 	bp.id = &"mixed_frame"
-	bp.category = "stone"
+	bp.category = &"stone"
 	var grid := BuildingGridModelScript.new()
 	assert(grid.place(Vector3i.ZERO, &"cube", 0, &"earth"))
 	assert(grid.place(Vector3i(1, 0, 0), &"wall_panel", 1, &"stone"))
@@ -65,27 +65,27 @@ static func _test_material_catalog_and_costs() -> void:
 
 static func _test_material_era_filtering() -> void:
 	# Materials are cumulative: an era offers its own plus every earlier era's.
-	var tent := BuildingMaterialCatalogScript.materials_for_era("tent")
+	var tent := BuildingMaterialCatalogScript.materials_for_era(&"tent")
 	var tent_ids := tent.map(func(m): return m["id"])
 	assert(&"branches" in tent_ids and &"thatch" in tent_ids)
 	assert(&"earth" not in tent_ids and &"stone" not in tent_ids)
 	# Earth era adds soil but still allows the tent materials.
-	assert(BuildingMaterialCatalogScript.is_available_in_era(&"branches", "earth"))
-	assert(BuildingMaterialCatalogScript.is_available_in_era(&"earth", "earth"))
-	assert(not BuildingMaterialCatalogScript.is_available_in_era(&"stone", "earth"))
+	assert(BuildingMaterialCatalogScript.is_available_in_era(&"branches", &"earth"))
+	assert(BuildingMaterialCatalogScript.is_available_in_era(&"earth", &"earth"))
+	assert(not BuildingMaterialCatalogScript.is_available_in_era(&"stone", &"earth"))
 	# Each era resolves to a defining default material.
-	assert(BuildingMaterialCatalogScript.default_material_for_era("earth") == &"earth")
-	assert(BuildingMaterialCatalogScript.default_material_for_era("brick") == &"brick")
+	assert(BuildingMaterialCatalogScript.default_material_for_era(&"earth") == &"earth")
+	assert(BuildingMaterialCatalogScript.default_material_for_era(&"brick") == &"brick")
 
 
 static func _test_underground_requires_earth_era() -> void:
 	var tent_underground := BuildingBlueprintScript.new()
 	tent_underground.id = &"tent_bunker"
-	tent_underground.category = "tent"
+	tent_underground.category = &"tent"
 	tent_underground.construction_style = &"underground"
 	assert(not tent_underground.validation_errors().is_empty())
 	# The same building becomes valid once it is an earth-era structure.
-	tent_underground.category = "earth"
+	tent_underground.category = &"earth"
 	assert(tent_underground.validation_errors().is_empty())
 
 

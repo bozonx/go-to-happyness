@@ -27,6 +27,13 @@ const KINDS: Array[StringName] = [
 ## Kinds that staff a profession and can be assigned workers.
 const STAFFED_KINDS: Array[StringName] = [KIND_WORKPLACE, KIND_CIVIC, KIND_TRADE]
 
+## All recognised profession IDs. Single source of truth for the editor and
+## runtime — presentation must not hardcode a separate copy.
+const PROFESSIONS: Array[StringName] = [
+	&"cook", &"teacher", &"seller", &"official", &"researcher",
+	&"craftsman", &"forager", &"trader",
+]
+
 ## Recreation flavours for KIND_LEISURE. The subtype drives which leisure need a
 ## visit satisfies and the ambience the place projects.
 const LEISURE_SUBTYPES: Array[StringName] = [

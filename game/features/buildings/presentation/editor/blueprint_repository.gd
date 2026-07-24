@@ -1,3 +1,4 @@
+class_name BlueprintRepository
 extends RefCounted
 
 ## Persists `BuildingBlueprint` records as `.gdbuilding.json` files.

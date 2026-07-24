@@ -54,6 +54,8 @@ static func run_all() -> void:
 	_test_navigation_facade_metrics()
 	_test_nav_grid_and_facade_route_cost()
 	_test_navigation_bridge_direct_configuration()
+	_test_multi_axis_architecture()
+
 
 
 static func _route_polyline_cost(grid: NavGrid, start: Vector3, waypoints: Array[Vector3]) -> float:
@@ -977,3 +979,53 @@ static func _test_navigation_bridge_direct_configuration() -> void:
 	assert(recovery.reachable)
 
 	bridge.free()
+
+
+static func _test_multi_axis_architecture() -> void:
+	# 1. TravelerProfile domain test
+	var ped_profile := TravelerProfile.pedestrian()
+	assert(ped_profile.profile_id == &"pedestrian" and ped_profile.allows_stairs and ped_profile.allows_offroad)
+
+	var robot_profile := TravelerProfile.wheeled_robot()
+	assert(robot_profile.profile_id == &"wheeled_robot" and not robot_profile.allows_stairs)
+
+	var custom_profile := TravelerProfile.get_profile(&"custom_drone")
+	assert(custom_profile != null and custom_profile.profile_id == &"custom_drone")
+
+	# 2. Solver Architecture test
+	var grid := NavGrid.new()
+	grid.configure(1.0, 10)
+	var grid_solver: RouteSolver = load("res://game/features/routing/application/solvers/grid_route_solver.gd").new(grid)
+	var req := RouteRequest.new()
+	req.from = Vector3(0.5, 0.0, 0.5)
+	req.destination = Vector3(2.5, 0.0, 0.5)
+	assert(grid_solver.can_solve(req))
+
+	var route: RouteResult = grid_solver.find_route(req)
+	assert(route.reachable)
+
+	var composite: RefCounted = load("res://game/features/routing/application/solvers/composite_route_solver.gd").new()
+	composite.register_solver(grid_solver)
+	assert(composite.can_solve(req))
+	var composite_route: RouteResult = composite.find_route(req)
+	assert(composite_route.reachable)
+
+
+	# 3. Steering Controllers test
+	var patrol: RefCounted = load("res://game/features/routing/application/steering/patrol_controller.gd").new()
+	patrol.configure_patrol([Vector3(0, 0, 0), Vector3(10, 0, 0)], true)
+	assert(patrol.current_target == Vector3(0, 0, 0))
+	assert(patrol.advance_waypoint() == Vector3(10, 0, 0))
+
+	var squad: RefCounted = load("res://game/features/routing/application/steering/squad_controller.gd").new()
+	squad.register_member(&"m1", Vector3(2.0, 0.0, -1.0))
+	var follower_target: Vector3 = squad.get_member_target(&"m1", Vector3(5.0, 0.0, 0.0), Vector3(0.0, 0.0, 1.0))
+	assert(is_equal_approx(follower_target.x, 3.0) and is_equal_approx(follower_target.z, -1.0))
+
+	var convoy: RefCounted = load("res://game/features/routing/application/steering/convoy_controller.gd").new()
+	var stopped_speed: float = convoy.compute_follower_speed(Vector3(0, 0, 0), Vector3(2, 0, 0), 5.0)
+	assert(stopped_speed == 0.0)
+	var cruise_speed: float = convoy.compute_follower_speed(Vector3(0, 0, 0), Vector3(12, 0, 0), 5.0)
+	assert(cruise_speed == convoy.max_speed)
+
+

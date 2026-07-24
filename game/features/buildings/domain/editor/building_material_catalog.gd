@@ -13,7 +13,7 @@ const DEFAULT_ID := &"branches"
 
 ## Era identifiers, ordered from earliest to latest. Index doubles as the era
 ## rank used for "material available in era" checks. Matches SettlementState.Era.
-const ERA_ORDER: Array[String] = ["tent", "earth", "clay", "wood", "stone", "brick"]
+const ERA_ORDER: Array[StringName] = [&"tent", &"earth", &"clay", &"wood", &"stone", &"brick"]
 
 const MATERIALS: Array[Dictionary] = [
 	{"id": &"branches", "name": "Палки", "resource_id": &"branches", "units": 1, "category": "tent"},
@@ -56,39 +56,39 @@ static func category(material_id: StringName) -> String:
 
 
 ## Rank of an era name (0 = tent … 5 = brick). Unknown eras rank as tent.
-static func era_rank(era_name: String) -> int:
+static func era_rank(era_name: StringName) -> int:
 	var rank := ERA_ORDER.find(era_name)
 	return rank if rank >= 0 else 0
 
 
 static func material_era_rank(material_id: StringName) -> int:
-	return era_rank(category(material_id))
+	return era_rank(StringName(category(material_id)))
 
 
 ## True when a material may be used in a blueprint of the given era: its own era
 ## is at or before that era (cumulative availability).
-static func is_available_in_era(material_id: StringName, era_name: String) -> bool:
+static func is_available_in_era(material_id: StringName, era_name: StringName) -> bool:
 	return material_era_rank(material_id) <= era_rank(era_name)
 
 
 ## Materials usable by a blueprint of `era_name`, ordered as declared. This is
 ## what the editor's material list shows once the era is chosen.
-static func materials_for_era(era_name: String) -> Array[Dictionary]:
+static func materials_for_era(era_name: StringName) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	var limit := era_rank(era_name)
 	for material in MATERIALS:
-		if era_rank(str(material["category"])) <= limit:
+		if era_rank(StringName(str(material["category"]))) <= limit:
 			out.append(material)
 	return out
 
 
 ## Default (most era-defining) material for an era: the last-declared material
 ## whose era equals `era_name`, falling back to the era's newest available one.
-static func default_material_for_era(era_name: String) -> StringName:
+static func default_material_for_era(era_name: StringName) -> StringName:
 	var era_match := &""
 	var fallback := DEFAULT_ID
 	for material in materials_for_era(era_name):
 		fallback = material["id"]
-		if str(material["category"]) == era_name:
+		if StringName(str(material["category"])) == era_name:
 			era_match = material["id"]
 	return era_match if era_match != &"" else fallback

@@ -1,10 +1,48 @@
-[gd_scene load_steps=3 format=3 uid="uid://building_editor"]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://game/features/buildings/presentation/editor/building_editor.gd" id="1_editor"]
 [ext_resource type="Theme" path="res://game/features/ui/presentation/theme/ui_theme.tres" id="2_theme"]
+[sub_resource type="Environment" id="env_editor"]
+background_mode = 1
+background_color = Color(0.1, 0.12, 0.16, 1)
+ambient_light_source = 1
+ambient_light_color = Color(0.55, 0.58, 0.62, 1)
+ambient_light_energy = 0.5
 
 [node name="BuildingEditor" type="Node3D"]
 script = ExtResource("1_editor")
+
+[node name="WorldEnv" type="WorldEnvironment" parent="."]
+environment = SubResource("env_editor")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+rotation_degrees = Vector3(-52, -46, 0)
+light_energy = 1.1
+shadow_enabled = true
+
+[node name="Ground" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.01, 0)
+
+[node name="GroundMesh" type="PlaneMesh" parent="Ground"]
+size = Vector2(64, 64)
+
+[node name="GroundMat" type="StandardMaterial3D" parent="Ground"]
+albedo_color = Color(0.16, 0.18, 0.2, 1)
+
+[node name="GridLines" type="MeshInstance3D" parent="."]
+unique_name_in_owner = true
+
+[node name="LayerPlane" type="MeshInstance3D" parent="."]
+unique_name_in_owner = true
+
+[node name="BlocksRoot" type="Node3D" parent="."]
+unique_name_in_owner = true
+
+[node name="ZonesVisual" type="Node3D" parent="."]
+unique_name_in_owner = true
+
+[node name="Ghost" type="MeshInstance3D" parent="."]
+unique_name_in_owner = true
 
 [node name="EditorUI" type="CanvasLayer" parent="."]
 
@@ -453,7 +491,7 @@ layout_mode = 2
 theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
 text = "ЛКМ (зажать) — линия/прямоугольник · ПКМ — камера · СКМ — панорама · Колесо — зум · WASD — движение"
 
-[node name="DevPanel" type="PanelContainer" parent="EditorUI/Root"]
+[node name="MetadataPanel" type="PanelContainer" parent="EditorUI/Root"]
 unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 1
@@ -465,81 +503,81 @@ offset_right = -8.0
 offset_bottom = 350.0
 grow_horizontal = 0
 
-[node name="DevVBox" type="VBoxContainer" parent="EditorUI/Root/DevPanel"]
+[node name="MetadataVBox" type="VBoxContainer" parent="EditorUI/Root/MetadataPanel"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 6
 
-[node name="Title" type="Label" parent="EditorUI/Root/DevPanel/DevVBox"]
+[node name="Title" type="Label" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
 text = "Параметры здания"
 
-[node name="EraLbl" type="Label" parent="EditorUI/Root/DevPanel/DevVBox"]
+[node name="EraLbl" type="Label" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
 layout_mode = 2
 text = "Эра (задаёт материалы):"
 
-[node name="CategoryOption" type="OptionButton" parent="EditorUI/Root/DevPanel/DevVBox"]
+[node name="CategoryOption" type="OptionButton" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="StyleLbl" type="Label" parent="EditorUI/Root/DevPanel/DevVBox"]
+[node name="StyleLbl" type="Label" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
 layout_mode = 2
 text = "Стиль постройки:"
 
-[node name="StyleOption" type="OptionButton" parent="EditorUI/Root/DevPanel/DevVBox"]
+[node name="StyleOption" type="OptionButton" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="FallbackLbl" type="Label" parent="EditorUI/Root/DevPanel/DevVBox"]
+[node name="FallbackLbl" type="Label" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
 layout_mode = 2
 text = "Fallback стандартного здания:"
 
-[node name="FallbackEdit" type="LineEdit" parent="EditorUI/Root/DevPanel/DevVBox"]
+[node name="FallbackEdit" type="LineEdit" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="FootprintLbl" type="Label" parent="EditorUI/Root/DevPanel/DevVBox"]
+[node name="FootprintLbl" type="Label" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
 layout_mode = 2
 text = "Пятно размещения X × Z:"
 
-[node name="FootprintRow" type="HBoxContainer" parent="EditorUI/Root/DevPanel/DevVBox"]
+[node name="FootprintRow" type="HBoxContainer" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
 layout_mode = 2
 
-[node name="FootprintXSpin" type="SpinBox" parent="EditorUI/Root/DevPanel/DevVBox/FootprintRow"]
+[node name="FootprintXSpin" type="SpinBox" parent="EditorUI/Root/MetadataPanel/MetadataVBox/FootprintRow"]
 unique_name_in_owner = true
 layout_mode = 2
 min_value = 1.0
 max_value = 64.0
 value = 8.0
 
-[node name="FootprintZSpin" type="SpinBox" parent="EditorUI/Root/DevPanel/DevVBox/FootprintRow"]
+[node name="FootprintZSpin" type="SpinBox" parent="EditorUI/Root/MetadataPanel/MetadataVBox/FootprintRow"]
 unique_name_in_owner = true
 layout_mode = 2
 min_value = 1.0
 max_value = 64.0
 value = 8.0
 
-[node name="EntranceLbl" type="Label" parent="EditorUI/Root/DevPanel/DevVBox"]
+[node name="EntranceLbl" type="Label" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
 layout_mode = 2
 text = "Вход (смещение X × Z от центра):"
 
-[node name="EntranceRow" type="HBoxContainer" parent="EditorUI/Root/DevPanel/DevVBox"]
+[node name="EntranceRow" type="HBoxContainer" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
 layout_mode = 2
 
-[node name="EntranceXSpin" type="SpinBox" parent="EditorUI/Root/DevPanel/DevVBox/EntranceRow"]
+[node name="EntranceXSpin" type="SpinBox" parent="EditorUI/Root/MetadataPanel/MetadataVBox/EntranceRow"]
 unique_name_in_owner = true
 layout_mode = 2
 min_value = -32.0
 max_value = 32.0
 
-[node name="EntranceZSpin" type="SpinBox" parent="EditorUI/Root/DevPanel/DevVBox/EntranceRow"]
+[node name="EntranceZSpin" type="SpinBox" parent="EditorUI/Root/MetadataPanel/MetadataVBox/EntranceRow"]
 unique_name_in_owner = true
 layout_mode = 2
 min_value = -32.0
 max_value = 32.0
 
-[node name="PathHintLabel" type="Label" parent="EditorUI/Root/DevPanel/DevVBox"]
+[node name="PathHintLabel" type="Label" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)

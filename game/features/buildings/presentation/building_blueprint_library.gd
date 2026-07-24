@@ -119,7 +119,7 @@ static func player_entries() -> Array[Dictionary]:
 				"id": blueprint.id,
 				"name": blueprint.name,
 				"category": "custom",
-				"era_category": blueprint.category,
+				"era_category": String(blueprint.category),
 			})
 	result.sort_custom(func(a: Dictionary, b: Dictionary): return str(a["name"]) < str(b["name"]))
 	return result
@@ -135,7 +135,7 @@ static func _register_definition(key: String, blueprint: BuildingBlueprintScript
 		return
 	BuildingCatalogScript.register_runtime_definition(key, {
 		"name": blueprint.name,
-		"category": blueprint.category,
+		"category": String(blueprint.category),
 		"costs": blueprint.construction_cost.duplicate(true),
 		"requires_village_area": true,
 		"expands_village_area": false,

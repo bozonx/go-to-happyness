@@ -23,11 +23,12 @@ var version: int = FORMAT_VERSION
 var id: StringName = &"new_building"
 var name: String = "Новое здание"
 var construction_style: StringName = &"surface"  ## &"surface" | &"underground"
-## Source compatibility for the first editor prototype. It is not serialized.
+## @deprecated. Source compatibility for the first editor prototype. It is not
+## serialized. Use `construction_style` directly in new code.
 var building_type: String:
 	get: return String(construction_style)
 	set(value): construction_style = StringName(value)
-var category: String = "tent"
+var category: StringName = &"tent"
 ## Standard building used when a referenced player file is unavailable.
 var fallback_building_id: StringName = &"house"
 var grid_bounds: Vector3i = Vector3i(8, 4, 8)
@@ -81,7 +82,7 @@ func to_dict() -> Dictionary:
 		"id": String(id),
 		"name": name,
 		"construction_style": String(construction_style),
-		"category": category,
+		"category": String(category),
 		"fallback_building_id": String(fallback_building_id),
 		"grid_bounds": {"x": grid_bounds.x, "y": grid_bounds.y, "z": grid_bounds.z},
 		"pivot_offset": {"x": pivot_offset.x, "y": pivot_offset.y, "z": pivot_offset.z},
@@ -110,7 +111,7 @@ static func from_dict(data: Dictionary) -> BuildingBlueprint:
 	# `building_type` was used by the initial prototype for surface/underground.
 	# It remains a read alias inside v1, but new files use the unambiguous name.
 	bp.construction_style = StringName(data.get("construction_style", data.get("building_type", "surface")))
-	bp.category = String(data.get("category", "tent"))
+	bp.category = StringName(data.get("category", "tent"))
 	bp.fallback_building_id = StringName(data.get("fallback_building_id", "house"))
 	bp.grid_bounds = _vec3i_from(data.get("grid_bounds", {}), Vector3i(8, 4, 8))
 	bp.pivot_offset = _vec3i_from(data.get("pivot_offset", {}), Vector3i.ZERO)
@@ -195,7 +196,7 @@ func validation_errors() -> Array[String]:
 	if category not in BuildingMaterialCatalogScript.ERA_ORDER:
 		errors.append("Unknown era category: %s" % category)
 	# Underground structures can only be dug from the earth era onward.
-	elif construction_style == &"underground" and BuildingMaterialCatalogScript.era_rank(category) < BuildingMaterialCatalogScript.era_rank("earth"):
+	elif construction_style == &"underground" and BuildingMaterialCatalogScript.era_rank(category) < BuildingMaterialCatalogScript.era_rank(&"earth"):
 		errors.append("Underground construction requires the earth era or later")
 	if grid_bounds.x <= 0 or grid_bounds.y <= 0 or grid_bounds.z <= 0:
 		errors.append("grid_bounds must be positive")

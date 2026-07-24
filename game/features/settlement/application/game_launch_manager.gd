@@ -31,6 +31,10 @@ func launch_building_editor(player_mode: bool = true) -> void:
 	get_tree().change_scene_to_file(BUILDING_EDITOR_SCENE)
 
 
+func return_to_main_menu() -> void:
+	get_tree().change_scene_to_file("res://game/features/ui/presentation/main_menu/main_menu.tscn")
+
+
 func reset_to_default() -> void:
 	pending_save_path = ""
 	active_launch_config = GameLaunchConfigScript.for_tent_era()

@@ -8,6 +8,8 @@ extends Node3D
 ##     res://data/blueprints and exposes the developer panel.
 ##   * Player mode — launched from the main menu; saves to user://custom_buildings.
 
+signal back_requested
+
 const CameraControllerScript = preload("res://game/features/world/presentation/camera_controller.gd")
 const CameraControllerScene = preload("res://game/features/world/presentation/camera_controller.tscn")
 const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
@@ -23,6 +25,7 @@ enum Tool { PLACE, ERASE }
 enum Brush { LINE, RECT }
 enum EditMode { FRAME, FINISHES, DECOR, ZONES }
 
+@export_group("Editor")
 ## Forces developer mode when the scene is opened/run directly. The main menu
 ## clears this via GameLaunchManager before switching in player mode.
 @export var dev_mode: bool = true
@@ -42,6 +45,9 @@ var cursor_cell: Vector3i = Vector3i.ZERO
 var cursor_valid: bool = false
 
 var current_mode: int = EditMode.FRAME
+
+## True when there are unsaved changes. Checked before scene transitions.
+var _dirty: bool = false
 
 ## Frame-mode drag painting state.
 var _painting: bool = false
@@ -66,6 +72,12 @@ var _panning: bool = false
 var _orbiting: bool = false
 var _zone_material_cache: Dictionary = {}
 
+## Cached state to skip redundant ghost updates in _process.
+var _ghost_cell: Vector3i = Vector3i.ZERO
+var _ghost_tool: int = -1
+var _ghost_rot: int = -1
+var _ghost_valid: bool = false
+
 # UI bindings (linked to scene unique nodes in building_editor.tscn).
 @onready var _name_edit: LineEdit = %NameEdit
 @onready var _id_edit: LineEdit = %IdEdit
@@ -87,7 +99,7 @@ var _zone_material_cache: Dictionary = {}
 @onready var _count_label: Label = %CountLabel
 @onready var _tool_place_btn: Button = %ToolPlaceBtn
 @onready var _tool_erase_btn: Button = %ToolEraseBtn
-@onready var _dev_panel: PanelContainer = %DevPanel
+@onready var _metadata_panel: PanelContainer = %MetadataPanel
 @onready var _load_popup: PopupPanel = %LoadPopup
 @onready var _load_list: ItemList = %LoadList
 
@@ -124,17 +136,12 @@ var _zone_material_cache: Dictionary = {}
 @onready var _rot_btn: Button = %RotBtn
 @onready var _layer_down_btn: Button = %LayerDownBtn
 @onready var _layer_up_btn: Button = %LayerUpBtn
-@onready var _dev_vbox: VBoxContainer = %DevVBox
+@onready var _metadata_vbox: VBoxContainer = %MetadataVBox
 @onready var _path_hint_label: Label = %PathHintLabel
 
 var _mode_buttons: Dictionary = {}
 var _palette_buttons: Dictionary = {}  ## StringName -> Button
 var _tool_buttons: Dictionary = {}     ## StringName -> Button
-
-const ZONE_PROFESSIONS: Array[StringName] = [
-	&"cook", &"teacher", &"seller", &"official", &"researcher",
-	&"craftsman", &"forager", &"trader",
-]
 
 const ZONE_COLORS: Array[Color] = [
 	Color(0.35, 0.75, 1.0), Color(1.0, 0.7, 0.3), Color(0.6, 1.0, 0.5),
@@ -149,10 +156,11 @@ func _ready() -> void:
 	repository = BlueprintRepositoryScript.new(dev_mode)
 	mesh_library = BlockMeshLibraryScript.new()
 
-	_build_world()
+	_init_world()
 	_setup_ui()
 	_refresh_layer_plane()
 	_refresh_ghost()
+	_connect_back_navigation()
 	_update_status("Готово. Режим: %s" % ("Разработчик" if dev_mode else "Игрок"))
 
 
@@ -163,69 +171,43 @@ func _resolve_launch_mode() -> void:
 			dev_mode = false
 
 
+func _connect_back_navigation() -> void:
+	var launch_mgr := get_node_or_null("/root/GameLaunchManager")
+	if launch_mgr != null and launch_mgr.has_method("return_to_main_menu"):
+		back_requested.connect(launch_mgr.return_to_main_menu)
+	else:
+		back_requested.connect(_fallback_back_to_menu)
+
+
 # ---------------------------------------------------------------------------
-# World setup
+# World setup — static nodes come from the scene; only dynamic init here.
 # ---------------------------------------------------------------------------
 
-func _build_world() -> void:
-	var env := WorldEnvironment.new()
-	var environment := Environment.new()
-	environment.background_mode = Environment.BG_COLOR
-	environment.background_color = Color(0.10, 0.12, 0.16)
-	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.ambient_light_color = Color(0.55, 0.58, 0.62)
-	environment.ambient_light_energy = 0.5
-	env.environment = environment
-	add_child(env)
-
-	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-52.0, -46.0, 0.0)
-	sun.light_energy = 1.1
-	sun.shadow_enabled = true
-	add_child(sun)
-
+func _init_world() -> void:
 	_camera_controller = CameraControllerScene.instantiate() as CameraController
 	add_child(_camera_controller)
 	_camera_controller.camera_target = Vector3(4.0, 0.0, 4.0)
 	_camera_controller.camera_distance = 18.0
 	_camera_controller.apply_position()
 
-	_build_ground()
+	var ground := $Ground as MeshInstance3D
+	ground.material_override = _ground_material()
 
-	_blocks_root = Node3D.new()
-	_blocks_root.name = "BlocksRoot"
-	add_child(_blocks_root)
+	var grid_lines := %GridLines as MeshInstance3D
+	grid_lines.mesh = _build_grid_mesh(32, Color(0.30, 0.34, 0.40, 0.6))
 
-	_zones_visual_root = Node3D.new()
-	_zones_visual_root.name = "ZonesVisual"
-	add_child(_zones_visual_root)
-
-	_ghost = MeshInstance3D.new()
-	_ghost.name = "Ghost"
-	add_child(_ghost)
-
-
-func _build_ground() -> void:
-	var ground := MeshInstance3D.new()
-	ground.name = "Ground"
-	var plane := PlaneMesh.new()
-	plane.size = Vector2(64.0, 64.0)
-	ground.mesh = plane
-	ground.position = Vector3(0.0, -0.01, 0.0)
-	var ground_mat := StandardMaterial3D.new()
-	ground_mat.albedo_color = Color(0.16, 0.18, 0.20)
-	ground.material_override = ground_mat
-	add_child(ground)
-
-	var grid := MeshInstance3D.new()
-	grid.name = "GridLines"
-	grid.mesh = _build_grid_mesh(32, Color(0.30, 0.34, 0.40, 0.6))
-	add_child(grid)
-
-	_layer_plane = MeshInstance3D.new()
-	_layer_plane.name = "LayerPlane"
+	_layer_plane = %LayerPlane as MeshInstance3D
 	_layer_plane.mesh = _build_grid_mesh(24, Color(0.35, 0.7, 1.0, 0.5))
-	add_child(_layer_plane)
+
+	_blocks_root = %BlocksRoot as Node3D
+	_zones_visual_root = %ZonesVisual as Node3D
+	_ghost = %Ghost as MeshInstance3D
+
+
+func _ground_material() -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.16, 0.18, 0.20)
+	return mat
 
 
 func _build_grid_mesh(half_extent: int, color: Color) -> ArrayMesh:
@@ -254,6 +236,9 @@ func _process(delta: float) -> void:
 	if _camera_controller != null:
 		_camera_controller.update(delta)
 	_update_cursor()
+	# Ghost refresh is cheap but redundant when nothing changed; skip via cache.
+	if cursor_valid and (cursor_cell != _ghost_cell or current_tool != _ghost_tool or current_rot != _ghost_rot or cursor_valid != _ghost_valid):
+		_refresh_ghost()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -376,10 +361,12 @@ func _apply_tool_at_cell(cell: Vector3i) -> void:
 			if grid_model.place(cell, current_block_id, current_rot, current_material_id):
 				_spawn_or_update_block_node(grid_model.get_block_at(cell))
 				_update_count()
+				_mark_dirty()
 		Tool.ERASE:
 			if grid_model.erase(cell):
 				_remove_block_node(cell)
 				_update_count()
+				_mark_dirty()
 
 
 func _paint_line(from_cell: Vector3i, to_cell: Vector3i) -> void:
@@ -474,6 +461,10 @@ func _rebuild_all_block_nodes() -> void:
 
 
 func _refresh_ghost() -> void:
+	_ghost_cell = cursor_cell
+	_ghost_tool = current_tool
+	_ghost_rot = current_rot
+	_ghost_valid = cursor_valid
 	if current_mode == EditMode.ZONES or not cursor_valid:
 		_ghost.visible = false
 		return
@@ -535,7 +526,7 @@ func _rebuild_material_options() -> void:
 
 
 func _on_era_changed(index: int) -> void:
-	blueprint.category = str(_category_option.get_item_metadata(index))
+	blueprint.category = _category_option.get_item_metadata(index)
 	_rebuild_material_options()
 	_refresh_underground_availability()
 	var offenders := _count_blocks_off_era()
@@ -556,7 +547,7 @@ func _count_blocks_off_era() -> int:
 func _refresh_underground_availability() -> void:
 	if _style_option == null:
 		return
-	var earth_rank := BuildingMaterialCatalogScript.era_rank("earth")
+	var earth_rank := BuildingMaterialCatalogScript.era_rank(&"earth")
 	var allowed := BuildingMaterialCatalogScript.era_rank(blueprint.category) >= earth_rank
 	for i in _style_option.item_count:
 		if _style_option.get_item_metadata(i) == &"underground":
@@ -646,7 +637,7 @@ func _on_save_pressed() -> void:
 		if not raw_id.is_empty():
 			blueprint.id = StringName(raw_id)
 	if _category_option != null:
-		blueprint.category = str(_category_option.get_item_metadata(_category_option.selected))
+		blueprint.category = StringName(_category_option.get_item_metadata(_category_option.selected))
 	if _fallback_edit != null and not _fallback_edit.text.strip_edges().is_empty():
 		blueprint.fallback_building_id = StringName(_fallback_edit.text.strip_edges())
 	if _footprint_x_spin != null and _footprint_z_spin != null:
@@ -656,15 +647,19 @@ func _on_save_pressed() -> void:
 	grid_model.write_to_blueprint(blueprint)
 	var result := repository.save(blueprint)
 	if result["ok"]:
+		_dirty = false
 		_update_status("Сохранено: %s (%d блоков)" % [result["path"], blueprint.block_count()])
 	else:
 		_update_status("Ошибка сохранения: %s" % result["error"])
 
 
 func _on_new_pressed() -> void:
+	if not await _confirm_discard_changes():
+		return
 	grid_model.clear()
 	blueprint = BuildingBlueprintScript.new()
 	_selected_place_index = -1
+	_dirty = false
 	_rebuild_all_block_nodes()
 	_rebuild_place_option()
 	_refresh_zone_visuals()
@@ -686,6 +681,9 @@ func _on_load_pressed() -> void:
 
 
 func _on_load_item_activated(index: int) -> void:
+	if not await _confirm_discard_changes():
+		_load_popup.hide()
+		return
 	var path := String(_load_list.get_item_metadata(index))
 	var loaded := repository.load_blueprint(path)
 	if loaded == null:
@@ -694,6 +692,7 @@ func _on_load_item_activated(index: int) -> void:
 	blueprint = loaded
 	grid_model.load_from_blueprint(blueprint)
 	_selected_place_index = 0 if not blueprint.place_zones.is_empty() else -1
+	_dirty = false
 	_rebuild_all_block_nodes()
 	_rebuild_place_option()
 	_refresh_zone_visuals()
@@ -703,6 +702,12 @@ func _on_load_item_activated(index: int) -> void:
 
 
 func _confirm_back_to_menu() -> void:
+	if not await _confirm_discard_changes():
+		return
+	back_requested.emit()
+
+
+func _fallback_back_to_menu() -> void:
 	get_tree().change_scene_to_file("res://game/features/ui/presentation/main_menu/main_menu.tscn")
 
 
@@ -761,7 +766,7 @@ func _setup_ui() -> void:
 	_zone_profession_option.clear()
 	_zone_profession_option.add_item("— нет —")
 	_zone_profession_option.set_item_metadata(0, &"")
-	for prof in ZONE_PROFESSIONS:
+	for prof in PlaceZoneRecordScript.PROFESSIONS:
 		_zone_profession_option.add_item(String(prof))
 		_zone_profession_option.set_item_metadata(_zone_profession_option.item_count - 1, prof)
 	_zone_profession_option.item_selected.connect(_on_place_profession_selected)
@@ -792,7 +797,7 @@ func _setup_ui() -> void:
 	_arm_tool(&"cell")
 	_rebuild_place_option()
 
-	# Dev panel wiring
+	# Metadata panel wiring
 	_category_option.clear()
 	for category_id in BuildingMaterialCatalogScript.ERA_ORDER:
 		_category_option.add_item(category_id.capitalize())
@@ -817,7 +822,7 @@ func _setup_ui() -> void:
 			var btn := Button.new()
 			btn.text = label_text
 			btn.disabled = true
-			_dev_vbox.add_child(btn)
+			_metadata_vbox.add_child(btn)
 
 	_load_list.item_activated.connect(_on_load_item_activated)
 
@@ -873,6 +878,7 @@ func _add_place() -> void:
 	place.zone_name = "Место %d" % (blueprint.place_zones.size() + 1)
 	blueprint.place_zones.append(place)
 	_selected_place_index = blueprint.place_zones.size() - 1
+	_mark_dirty()
 	_rebuild_place_option()
 	_refresh_place_panel_fields()
 	_refresh_zone_visuals()
@@ -890,6 +896,7 @@ func _delete_place() -> void:
 	blueprint.zone_anchors = kept
 	blueprint.place_zones.remove_at(_selected_place_index)
 	_selected_place_index = mini(_selected_place_index, blueprint.place_zones.size() - 1)
+	_mark_dirty()
 	_rebuild_place_option()
 	_refresh_place_panel_fields()
 	_refresh_zone_visuals()
@@ -966,7 +973,10 @@ func _update_zone_info() -> void:
 	var owned := 0
 	var trays := 0
 	var routing := 0
+	var world := 0
 	for anchor in blueprint.zone_anchors:
+		if anchor.owner_zone_id == &"":
+			world += 1
 		if anchor.owner_zone_id != place.zone_id:
 			continue
 		if anchor.is_routing():
@@ -975,10 +985,6 @@ func _update_zone_info() -> void:
 			trays += 1
 		else:
 			owned += 1
-	var world := 0
-	for anchor in blueprint.zone_anchors:
-		if anchor.owner_zone_id == &"":
-			world += 1
 	var subtype_line := ""
 	if place.subtype != &"":
 		subtype_line = "\nТип: %s" % PlaceZoneRecordScript.subtype_display_name(place.subtype)
@@ -991,6 +997,7 @@ func _on_place_name_changed(text: String) -> void:
 	if place == null:
 		return
 	place.zone_name = text
+	_mark_dirty()
 	if _zone_option != null and _selected_place_index >= 0:
 		_zone_option.set_item_text(_selected_place_index, text)
 
@@ -999,6 +1006,7 @@ func _on_place_id_changed(text: String) -> void:
 	var place := _current_place()
 	if place != null:
 		place.zone_id = StringName(text.strip_edges().to_lower())
+		_mark_dirty()
 
 
 func _on_place_kind_selected(index: int) -> void:
@@ -1008,6 +1016,7 @@ func _on_place_kind_selected(index: int) -> void:
 	place.kind = _zone_kind_option.get_item_metadata(index)
 	var subtypes := PlaceZoneRecordScript.subtypes_for_kind(place.kind)
 	place.subtype = subtypes[0] if not subtypes.is_empty() else &""
+	_mark_dirty()
 	_rebuild_subtype_options()
 	_update_zone_info()
 
@@ -1017,6 +1026,7 @@ func _on_place_subtype_selected(index: int) -> void:
 	if place == null:
 		return
 	place.subtype = _zone_subtype_option.get_item_metadata(index)
+	_mark_dirty()
 
 
 func _rebuild_subtype_options() -> void:
@@ -1043,6 +1053,7 @@ func _on_place_profession_selected(index: int) -> void:
 	if place == null:
 		return
 	place.profession = _zone_profession_option.get_item_metadata(index)
+	_mark_dirty()
 
 
 func _on_place_workers_changed(value: float) -> void:
@@ -1050,6 +1061,7 @@ func _on_place_workers_changed(value: float) -> void:
 	if place == null:
 		return
 	place.max_workers = int(value)
+	_mark_dirty()
 
 
 func _on_anchor_family_selected(index: int) -> void:
@@ -1090,6 +1102,7 @@ func _clear_place_cells() -> void:
 	if place == null:
 		return
 	place.cells.clear()
+	_mark_dirty()
 	_refresh_zone_visuals()
 	_update_zone_info()
 
@@ -1103,6 +1116,7 @@ func _clear_place_anchors() -> void:
 		if anchor.owner_zone_id != place.zone_id:
 			kept.append(anchor)
 	blueprint.zone_anchors = kept
+	_mark_dirty()
 	_refresh_zone_visuals()
 	_update_zone_info()
 
@@ -1125,6 +1139,7 @@ func _place_zone_marker_at_cursor() -> void:
 			return
 		if cursor_cell not in place.cells:
 			place.cells.append(cursor_cell)
+			_mark_dirty()
 		_refresh_zone_visuals()
 		_update_zone_info()
 		return
@@ -1146,6 +1161,7 @@ func _place_zone_marker_at_cursor() -> void:
 	if _zone_capacity_spin != null:
 		anchor.capacity = int(_zone_capacity_spin.value)
 	blueprint.zone_anchors.append(anchor)
+	_mark_dirty()
 	_refresh_zone_visuals()
 	_update_zone_info()
 
@@ -1154,7 +1170,7 @@ func _refresh_zone_visuals() -> void:
 	if _zones_visual_root == null:
 		return
 	for child in _zones_visual_root.get_children():
-		child.queue_free()
+		child.free()
 	if current_mode != EditMode.ZONES:
 		return
 	for i in blueprint.place_zones.size():
@@ -1217,7 +1233,7 @@ func _sync_metadata_fields() -> void:
 		_entrance_z_spin.value = blueprint.entrance.y
 	if _category_option != null:
 		for i in _category_option.item_count:
-			if str(_category_option.get_item_metadata(i)) == blueprint.category:
+			if _category_option.get_item_metadata(i) == blueprint.category:
 				_category_option.select(i)
 				break
 	_select_style_in_option(blueprint.construction_style)
@@ -1238,3 +1254,22 @@ func _update_count() -> void:
 func _update_status(message: String) -> void:
 	if _status_label != null:
 		_status_label.text = message
+
+
+func _mark_dirty() -> void:
+	_dirty = true
+
+
+func _confirm_discard_changes() -> bool:
+	if not _dirty:
+		return true
+	var dialog := ConfirmationDialog.new()
+	dialog.title = "Несохранённые изменения"
+	dialog.dialog_text = "Есть несохранённые изменения. Продолжить?"
+	dialog.ok_button_text = "Да"
+	dialog.cancel_button_text = "Отмена"
+	add_child(dialog)
+	dialog.popup_centered(Vector2i(360, 120))
+	var confirmed := await dialog.confirmed
+	dialog.queue_free()
+	return confirmed

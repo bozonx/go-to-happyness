@@ -287,6 +287,11 @@ static func _test_weather_state() -> void:
 	assert(clear.intensity_at(6 * 60) == 0.0)
 	assert(clear.intensity_at(12 * 60) == 0.0)
 	assert(clear.cloud_phase_at(12 * 60) in [WeatherStateScript.CloudPhase.CLEAR, WeatherStateScript.CloudPhase.FAIR, WeatherStateScript.CloudPhase.PARTLY_CLOUDY])
+	assert(clear.storm_influence_at(12 * 60) == 0.0)
+	var clear_samples: Array[float] = []
+	for sample_minute in range(0, 24 * 60, 60):
+		clear_samples.append(clear.cloud_cover_at(sample_minute))
+	assert(clear_samples.max() - clear_samples.min() > 0.08)
 	assert(not clear.update(12 * 60.0))
 	assert(not clear.is_raining)
 
@@ -294,6 +299,8 @@ static func _test_weather_state() -> void:
 	rain.new_day(TentEraSurvivalRulesScript.Weather.RAIN, rng, 6 * 60)
 	assert(rain.rain_start_minute >= 6 * 60)
 	assert(rain.cloud_cover_at(rain.rain_start_minute) >= 0.9)
+	assert(rain.storm_influence_at(rain.rain_start_minute) == 1.0)
+	assert(rain.storm_influence_at(maxf(0.0, rain.rain_start_minute - WeatherStateScript.CLOUD_BUILDUP_MINUTES - 1.0)) == 0.0)
 	assert(rain.cloud_phase_at(rain.rain_start_minute) == WeatherStateScript.CloudPhase.STORM)
 	assert(rain.cloud_cover_at(maxf(0.0, rain.rain_start_minute - 180.0)) < rain.cloud_cover_at(rain.rain_start_minute))
 
