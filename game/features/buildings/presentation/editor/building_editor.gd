@@ -1282,6 +1282,11 @@ func _confirm_discard_changes() -> bool:
 	dialog.cancel_button_text = "Отмена"
 	add_child(dialog)
 	dialog.popup_centered(Vector2i(360, 120))
-	var confirmed := await dialog.confirmed
+	var user_confirmed := false
+	dialog.confirmed.connect(func(): user_confirmed = true)
+	await dialog.visibility_changed
+	if dialog.visible:
+		await dialog.hidden
 	dialog.queue_free()
-	return confirmed
+	return user_confirmed
+
