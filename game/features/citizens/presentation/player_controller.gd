@@ -223,7 +223,6 @@ func update_interaction(delta: float) -> void:
 	var source_info: String = simulation._harvest_source_info(interaction_resource)
 	simulation.ui_manager.interaction_hint_panel.hint_label.text = "%s %d%% (%s)" % [simulation._gather_action_name(interaction_resource), progress_pct, source_info]
 	if interaction_time >= HARVEST_DURATION:
-		interaction_action = ""
 		var gathered := 0
 		match interaction_resource:
 			ResourceIds.WOOD:
@@ -247,9 +246,28 @@ func update_interaction(delta: float) -> void:
 				gathered = simulation.hero_pocket_service.add_to_pocket(ResourceIds.FOOD, 1) if simulation.hero_pocket_service != null else 0
 		if gathered > 0:
 			simulation._update_interface(S.GATHERED_FORMAT % [interaction_resource, simulation._format_pocket_hint()])
+			if interaction_repeat_all and simulation._pocket_has_room() and _is_harvest_source_available(interaction_resource):
+				interaction_time = 0.0
+				return
 		else:
 			simulation._update_interface(S.POCKET_FULL_CANNOT_GATHER % interaction_resource)
+		interaction_action = ""
+		interaction_repeat_all = false
 		simulation.ui_manager.interaction_hint_panel.progress_bar.visible = false
+
+
+func _is_harvest_source_available(resource: String) -> bool:
+	match resource:
+		ResourceIds.WOOD, ResourceIds.BRANCHES:
+			return simulation._nearby_tree()
+		ResourceIds.FOOD:
+			return simulation._nearby_farm()
+		ResourceIds.WATER:
+			return simulation._nearby_pond()
+		ResourceIds.GRASS:
+			return simulation._nearby_grass_source()
+		_:
+			return false
 
 
 func start_interaction(all: bool) -> void:

@@ -63,6 +63,8 @@ const F_COLLECT_WATER := "F: набрать воды | Shift+F: набирать
 const NEED_BUCKET_FOR_WATER := "Нужно ведро, чтобы черпать воду. Купите его на рынке."
 
 # --- First Person HUD: forage ---
+const F_GATHER_FORAGE := "F: собрать дары природы"
+const F_CATCH_RABBIT := "F: поймать зайца"
 const FORAGE_SPECIALIST_ONLY := "Лесные дары и зайца может собирать только специалист. Постройте палатку охотников-собирателей."
 
 # --- First Person HUD: toilet ---

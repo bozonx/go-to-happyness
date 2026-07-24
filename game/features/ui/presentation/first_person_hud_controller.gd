@@ -146,8 +146,10 @@ func first_person_action_hint() -> String:
 			if bool(simulation.settlement.tools.get("bucket", false)):
 				return S.F_COLLECT_WATER
 			return S.NEED_BUCKET_FOR_WATER
-		"forage", "rabbit":
-			return S.FORAGE_SPECIALIST_ONLY
+		"forage":
+			return S.F_GATHER_FORAGE
+		"rabbit":
+			return S.F_CATCH_RABBIT
 		"toilet":
 			var needs_toilet: bool = simulation.citizen_needs_service != null and simulation.citizen_needs_service.has_toilet_request(simulation.player_citizen.ai_id)
 			if needs_toilet:

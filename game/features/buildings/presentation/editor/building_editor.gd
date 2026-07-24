@@ -251,7 +251,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			if cursor_valid:
 				if current_mode == EditMode.ZONES and _armed_tool == &"cell":
 					_paint_zone_line(_last_paint_cell, cursor_cell)
-				elif current_mode == EditMode.FRAME and current_brush == Brush.RECT:
+				elif current_mode == EditMode.FRAME and (current_brush == Brush.RECT or event.shift_pressed or Input.is_key_pressed(KEY_SHIFT)):
 					_paint_rect(_paint_anchor, cursor_cell)
 				else:
 					_paint_line(_last_paint_cell, cursor_cell)
@@ -261,6 +261,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _handle_mouse_button(event: InputEventMouseButton) -> void:
+	if event.pressed and _pointer_over_ui():
+		return
 	match event.button_index:
 		MOUSE_BUTTON_RIGHT:
 			_orbiting = event.pressed
@@ -274,8 +276,6 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 				_zoom(2.0)
 		MOUSE_BUTTON_LEFT:
 			if event.pressed:
-				if _pointer_over_ui():
-					return
 				if current_mode == EditMode.ZONES:
 					_place_zone_marker_at_cursor()
 					_painting = _armed_tool == &"cell"
@@ -284,12 +284,13 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 					_painting = true
 					_last_paint_cell = cursor_cell
 					_paint_anchor = cursor_cell
-					if current_brush == Brush.RECT:
+					if current_brush == Brush.RECT or event.shift_pressed or Input.is_key_pressed(KEY_SHIFT):
 						_paint_rect(_paint_anchor, cursor_cell)
 					else:
 						_apply_tool_at_cursor()
 			else:
 				_painting = false
+
 
 
 func _handle_key(event: InputEventKey) -> void:

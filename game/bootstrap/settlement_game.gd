@@ -2318,16 +2318,18 @@ func _nearest_point_to_point_array(points: Array[Vector3], target: Vector3, max_
 func _nearest_grass_source_to_point(point: Vector3, max_distance: float) -> Vector3:
 	var best := Vector3.INF
 	var best_dist := max_distance
+	var point_xz := Vector2(point.x, point.z)
 	for cell in grass_sources:
 		var source: GrassSourceRecordScript = grass_sources[cell]
 		if source.remaining <= 0 or not is_instance_valid(source.node):
 			continue
 		var node_pos: Vector3 = source.node.global_position
-		var dist := point.distance_to(node_pos)
+		var dist := point_xz.distance_to(Vector2(node_pos.x, node_pos.z))
 		if dist <= best_dist:
 			best_dist = dist
 			best = node_pos
 	return best
+
 
 
 func _first_person_target() -> Dictionary:

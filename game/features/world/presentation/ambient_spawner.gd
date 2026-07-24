@@ -98,6 +98,7 @@ func _create_grass_sources_near_tree(tree_cell: Vector2i) -> void:
 		var position: Vector3 = simulation.nav_grid.cell_center(cell) if simulation.nav_grid != null else Vector3((cell.x + 0.5) * simulation.CELL_SIZE, 0.0, (cell.y + 0.5) * simulation.CELL_SIZE)
 		var node: MeshInstance3D = GrassSourceScene.instantiate()
 		node.position = position + Vector3.UP * 0.05
+		simulation._add_selector_to_node(node, "grass_selector", Vector3(1.2, 0.6, 1.2), Vector3.UP * 0.3)
 		simulation.add_landscape_object(node)
 		var initial_remaining: int = simulation.random.randi_range(2, 5)
 		simulation.grass_sources[cell] = GrassSourceRecord.new(node, initial_remaining, initial_remaining)
@@ -274,6 +275,7 @@ func _clear_natural_source_nodes() -> void:
 func _create_grass_source(cell: Vector2i, remaining: int, initial: int) -> void:
 	var node: MeshInstance3D = GrassSourceScene.instantiate()
 	node.position = simulation.nav_grid.cell_center(cell) if simulation.nav_grid != null else Vector3((cell.x + 0.5) * simulation.CELL_SIZE, 0.0, (cell.y + 0.5) * simulation.CELL_SIZE) + Vector3.UP * 0.05
+	simulation._add_selector_to_node(node, "grass_selector", Vector3(1.2, 0.6, 1.2), Vector3.UP * 0.3)
 	simulation.add_landscape_object(node)
 	simulation.grass_sources[cell] = GrassSourceRecord.new(node, remaining, initial)
 

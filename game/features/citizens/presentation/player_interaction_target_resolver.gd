@@ -68,6 +68,8 @@ func _classify_area_hit(collider: Area3D, simulation: Node) -> Dictionary:
 		if not bool(area_parent.get_meta("felled", false)):
 			return {"kind": "tree", "node": area_parent, "position": area_parent.global_position}
 		return {"kind": ""}
+	if collider.is_in_group("grass_selector") and is_instance_valid(area_parent):
+		return {"kind": "grass", "node": area_parent, "position": area_parent.global_position}
 	if collider.is_in_group("forage_selector") and is_instance_valid(area_parent):
 		return {"kind": "forage", "node": area_parent, "position": area_parent.global_position}
 	if collider.is_in_group("rabbit_selector") and is_instance_valid(area_parent):
@@ -94,7 +96,8 @@ func _classify_building_hit(area_parent: Node3D, simulation: Node) -> Dictionary
 
 
 func _classify_proximity(hit_position: Vector3, player_pos: Vector3, simulation: Node) -> Dictionary:
-	var grass_pos: Vector3 = simulation._nearest_grass_source_to_point(hit_position, 1.0)
+	var grass_pos: Vector3 = simulation._nearest_grass_source_to_point(hit_position, 2.5)
+
 	if grass_pos != Vector3.INF and player_pos.distance_to(grass_pos) <= INTERACTION_RANGE:
 		var grass_cell: Vector2i = simulation._cell_from_position(grass_pos)
 		if simulation.grass_sources.has(grass_cell):
