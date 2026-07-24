@@ -5,6 +5,8 @@ extends RefCounted
 ## backpack, outside workers, and citizen position tracking.
 ## Extracted from SettlementGame to reduce its field count.
 
+const ResourcePileScript = preload("res://game/features/logistics/domain/resource_pile.gd")
+
 var tree_cells: Dictionary[Vector2i, bool] = {}
 var terrain_blocked_cells: Dictionary[Vector2i, bool] = {}
 var navigation_blocked_cells: Dictionary[Vector2i, bool] = {}
@@ -21,4 +23,4 @@ var backpack_position: Vector3
 
 var outside_workers: Dictionary = {}
 var last_citizen_positions: Dictionary = {}
-var resource_piles: Array = []
+var resource_piles: Array[ResourcePileScript] = []

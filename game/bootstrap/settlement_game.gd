@@ -141,6 +141,7 @@ const SettlementBuildStateScript = preload("res://game/bootstrap/settlement_buil
 const SettlementHeroStateScript = preload("res://game/bootstrap/settlement_hero_state.gd")
 const SettlementCameraStateScript = preload("res://game/bootstrap/settlement_camera_state.gd")
 const SettlementWorldStateScript = preload("res://game/bootstrap/settlement_world_state.gd")
+const SettlementInputControllerScript = preload("res://game/bootstrap/settlement_input_controller.gd")
 
 
 
@@ -284,7 +285,7 @@ var outside_workers: Dictionary:
 	get: return world_state.outside_workers
 var last_citizen_positions: Dictionary:
 	get: return world_state.last_citizen_positions
-var resource_piles: Array:
+var resource_piles: Array[ResourcePileScript]:
 	get: return world_state.resource_piles
 var backpack_node: Node3D:
 	get: return world_state.backpack_node
@@ -556,6 +557,7 @@ var _simulation_handlers: RefCounted
 var _service_pocket_manager: RefCounted
 var _outside_work_controller: RefCounted
 var _building_management: RefCounted
+var _input_controller: RefCounted
 
 
 func _ready() -> void:
@@ -577,6 +579,7 @@ func _ready() -> void:
 	_service_pocket_manager = SettlementServicePocketManagerScript.new(self)
 	_outside_work_controller = SettlementOutsideWorkControllerScript.new(self)
 	_building_management = SettlementBuildingManagementScript.new(self)
+	_input_controller = SettlementInputControllerScript.new(self)
 	ui_manager.bind_delegate_events(SettlementUICallbacksScript.new(self))
 	SettlementBootstrapperScript.new().run(self)
 
@@ -1707,289 +1710,27 @@ func _cancel_build_action() -> void:
 	_update_interface("Construction mode cancelled.")
 
 func _on_context_menu_gui_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
-		_close_context_menus()
-		get_viewport().set_input_as_handled()
+	_input_controller.on_context_menu_gui_input(event)
 
 
 func _is_first_person_menu_open() -> bool:
-	if not is_first_person:
-		return false
-	if pocket_menu_open or ui_manager.build_menu.visible:
-		return true
-	if ui_manager.entrance_menu.visible or ui_manager.house_menu.visible or ui_manager.school_menu.visible or ui_manager.materials_factory_menu.visible or ui_manager.campfire_menu.visible or ui_manager.market_menu.visible or ui_manager.warehouse_menu.visible or ui_manager.building_menu.visible:
-		return true
-	if ui_manager.entrance_order_modal != null and ui_manager.entrance_order_modal.visible:
-		return true
-	if ui_manager.campfire_orders_menu != null and ui_manager.campfire_orders_menu.visible:
-		return true
-	if ui_manager.campfire_story_menu != null and ui_manager.campfire_story_menu.visible:
-		return true
-	if ui_manager.research_menu != null and ui_manager.research_menu.visible:
-		return true
-	if ui_manager.workforce_menu != null and ui_manager.workforce_menu.visible:
-		return true
-	if ui_manager.decision_menu != null and ui_manager.decision_menu.visible:
-		return true
-	if ui_manager.message_log_panel != null and ui_manager.message_log_panel.is_modal_visible():
-		return true
-	return false
+	return _input_controller.is_first_person_menu_open()
 
 
 func _update_first_person_mouse_and_crosshair() -> void:
-	if not is_first_person:
-		return
-	var menu_open := _is_first_person_menu_open()
-	if ui_manager.crosshair != null:
-		ui_manager.crosshair.visible = not menu_open
-	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE if menu_open else Input.MOUSE_MODE_CAPTURED)
+	_input_controller.update_first_person_mouse_and_crosshair()
 
 
 func _close_context_menus() -> void:
-	build_mode = ""
-	dig_mode = false
-	world_setup.selection_marker.visible = false
-	_show_territory_overlay(false)
-	is_rotating_camera = false
-	ui_manager.entrance_menu.visible = false
-	if ui_manager.entrance_order_modal != null:
-		ui_manager.entrance_order_modal.visible = false
-	ui_manager.house_menu.visible = false
-	ui_manager.school_menu.visible = false
-	ui_manager.materials_factory_menu.visible = false
-	ui_manager.build_menu.visible = false
-	ui_manager.campfire_menu.visible = false
-	if ui_manager.campfire_orders_menu != null:
-		ui_manager.campfire_orders_menu.visible = false
-	ui_manager.market_menu.visible = false
-	ui_manager.warehouse_menu.visible = false
-	ui_manager.building_menu.visible = false
-	if ui_manager.research_menu != null:
-		ui_manager.research_menu.visible = false
-	if ui_manager.decision_menu != null:
-		ui_manager.decision_menu.visible = false
-	if ui_manager.campfire_story_menu != null:
-		ui_manager.campfire_story_menu.visible = false
-	if ui_manager.message_log_panel != null:
-		ui_manager.message_log_panel.close_modal()
-	if pocket_take_menu_controller != null:
-		pocket_take_menu_controller.close_pocket_take_menu()
-	if workforce_menu_controller != null:
-		workforce_menu_controller.hide_workforce_menu()
-	selected_house = null
-	selected_entrance = null
-	selected_school = null
-	selected_materials_factory = null
-	selected_campfire = null
-	selected_market = null
-	selected_warehouse = null
-	selected_building = null
-	selected_builder = null
-	build_category = ""
-	build_menu_is_job_menu = false
-	build_menu_is_daily_order_menu = false
-	build_menu_is_global = false
-	if building_menu_controller != null:
-		building_menu_controller.refresh_build_menu()
-	if is_first_person and not _is_first_person_menu_open():
-		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+	_input_controller.close_context_menus()
 
 
 func _input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
-		if _handle_menu_right_click():
-			get_viewport().set_input_as_handled()
-
-
-func _handle_menu_right_click() -> bool:
-	if ui_manager.build_menu.visible:
-		if not build_category.is_empty():
-			_open_build_category("")
-		elif build_menu_is_job_menu or build_menu_is_daily_order_menu:
-			_close_assignment_submenu()
-		else:
-			ui_manager.build_menu.visible = false
-			build_menu_is_global = false
-			if selected_builder != null:
-				selected_builder = null
-			if building_menu_controller != null:
-				building_menu_controller.refresh_build_menu()
-		if is_first_person and not _is_first_person_menu_open():
-			Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-		return true
-	if pocket_menu_open:
-		if pocket_take_menu_controller != null:
-			pocket_take_menu_controller.close_pocket_take_menu()
-		return true
-	if ui_manager.campfire_orders_menu != null and ui_manager.campfire_orders_menu.visible:
-		ui_manager.campfire_orders_menu.visible = false
-		ui_manager.campfire_menu.visible = true
-		return true
-	if ui_manager.campfire_story_menu != null and ui_manager.campfire_story_menu.visible:
-		ui_manager.campfire_story_menu.visible = false
-		ui_manager.campfire_menu.visible = true
-		return true
-	if ui_manager.research_menu != null and ui_manager.research_menu.visible:
-		ui_manager.research_menu.visible = false
-		ui_manager.campfire_menu.visible = true
-		return true
-	if ui_manager.workforce_menu != null and ui_manager.workforce_menu.visible:
-		if workforce_menu_controller != null:
-			workforce_menu_controller.hide_workforce_menu()
-		ui_manager.campfire_menu.visible = true
-		return true
-	if ui_manager.entrance_order_modal != null and ui_manager.entrance_order_modal.visible:
-		ui_manager.entrance_order_modal.visible = false
-		ui_manager.entrance_menu.visible = true
-		return true
-	if ui_manager.message_log_panel != null and ui_manager.message_log_panel.is_modal_visible():
-		ui_manager.message_log_panel.close_modal()
-		return true
-	var any_menu_visible := ui_manager.entrance_menu.visible or ui_manager.house_menu.visible or ui_manager.school_menu.visible or ui_manager.materials_factory_menu.visible or ui_manager.campfire_menu.visible or ui_manager.market_menu.visible or ui_manager.warehouse_menu.visible or ui_manager.building_menu.visible
-	if ui_manager.decision_menu != null and ui_manager.decision_menu.visible:
-		any_menu_visible = true
-	if any_menu_visible:
-		_close_context_menus()
-		return true
-	return false
+	_input_controller.handle_input(event)
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.keycode == KEY_5 and event.pressed and not event.echo:
-		if SaveGameServiceScript.save_quicksave(self):
-			_update_interface("Игра сохранена (клавиша 5)")
-		else:
-			_update_interface("Ошибка сохранения игры")
-		get_viewport().set_input_as_handled()
-		return
-	if event is InputEventKey and event.keycode == KEY_6 and event.pressed and not event.echo:
-		if SaveGameServiceScript.has_quicksave():
-			if SaveGameServiceScript.load_quicksave(self):
-				_update_interface("Игра загружена (клавиша 6)")
-			else:
-				_update_interface("Ошибка загрузки игры")
-		else:
-			_update_interface("Сохранение не найдено")
-		get_viewport().set_input_as_handled()
-		return
-	if event is InputEventKey and event.keycode == KEY_F and event.ctrl_pressed and event.pressed and not event.echo:
-
-		if OS.is_debug_build():
-			_grant_debug_resources()
-			get_viewport().set_input_as_handled()
-			return
-	if event is InputEventKey and event.keycode == KEY_DELETE and event.pressed and not event.echo:
-		if is_instance_valid(selected_building):
-			building_lifecycle_service.mark_building_for_demolition(selected_building)
-			get_viewport().set_input_as_handled()
-			return
-	if event is InputEventKey and event.keycode == KEY_R and event.pressed and not event.echo:
-		player_controller.toggle_hero_view()
-		get_viewport().set_input_as_handled()
-		return
-	if event is InputEventKey and event.keycode == KEY_B and event.pressed and not event.echo:
-		if _can_hero_build():
-			_toggle_global_build_menu()
-			if is_first_person:
-				Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE if ui_manager.build_menu.visible else Input.MOUSE_MODE_CAPTURED)
-		else:
-			_update_interface(S.ONLY_HERO_CAN_APPROVE_BUILD)
-		get_viewport().set_input_as_handled()
-		return
-	if not build_mode.is_empty() and event is InputEventKey and event.pressed and not event.echo and event.keycode in [KEY_Q, KEY_E]:
-		build_rotation_quarters = posmod(build_rotation_quarters + (-1 if event.keycode == KEY_Q else 1), 4)
-		_move_selection(selected_world_position)
-		get_viewport().set_input_as_handled()
-		return
-	if event is InputEventKey and event.keycode == KEY_ESCAPE and event.pressed and not event.echo:
-		if pocket_menu_open:
-			if pocket_take_menu_controller != null:
-				pocket_take_menu_controller.close_pocket_take_menu()
-			get_viewport().set_input_as_handled()
-			return
-	if is_first_person:
-		if event is InputEventKey and event.keycode == KEY_T and event.pressed and not event.echo:
-			if not _is_first_person_menu_open():
-				if hero_pocket_service != null:
-					hero_pocket_service.drop_pocket_on_ground()
-			get_viewport().set_input_as_handled()
-			return
-		elif event is InputEventKey and event.keycode == KEY_F and event.pressed and not event.echo:
-			player_controller.start_interaction(event.shift_pressed)
-			get_viewport().set_input_as_handled()
-			return
-		elif event is InputEventMouseMotion:
-			if not _is_first_person_menu_open():
-				player_yaw -= event.relative.x * 0.0035
-				player_pitch = clampf(player_pitch - event.relative.y * 0.003, deg_to_rad(-70.0), deg_to_rad(65.0))
-		elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-			if not build_mode.is_empty() and not _is_first_person_menu_open():
-				var viewport_center := get_viewport().get_visible_rect().size * 0.5
-				var build_point: Variant = _terrain_point_at_screen_position(viewport_center)
-				if build_point != null:
-					_place_building(build_point)
-			elif not _is_first_person_menu_open():
-				_first_person_select_at_crosshair()
-		elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
-			if pocket_menu_open:
-				if pocket_take_menu_controller != null:
-					pocket_take_menu_controller.close_pocket_take_menu()
-			elif not build_mode.is_empty():
-				_cancel_build_action()
-			else:
-				player_controller.leave_first_person_to_hero_overview()
-		get_viewport().set_input_as_handled()
-		return
-	if event is InputEventMouseButton and event.pressed:
-		if get_viewport().gui_get_hovered_control() != null:
-			return
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
-		camera_distance = maxf(3.0, camera_distance - 2.0)
-		if camera_controller != null:
-			camera_controller.apply_position()
-	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_WHEEL_DOWN and event.pressed:
-		camera_distance = minf(80.0, camera_distance + 2.0)
-		if camera_controller != null:
-			camera_controller.apply_position()
-	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_MIDDLE:
-		is_panning_camera = event.pressed
-	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
-		if event.pressed and (not build_mode.is_empty() or (selected_builder != null and dig_mode)):
-			_cancel_build_action()
-			get_viewport().set_input_as_handled()
-			return
-		if event.pressed:
-			is_rotating_camera = true
-			right_mouse_dragged = false
-		else:
-			is_rotating_camera = false
-			if not right_mouse_dragged:
-				_close_context_menus()
-	elif event is InputEventMouseMotion:
-		if is_rotating_camera:
-			if event.relative.length_squared() > 0.0:
-				right_mouse_dragged = true
-			if camera_controller != null:
-				camera_controller.rotate_yaw_pitch(event.relative)
-		elif is_panning_camera:
-			if camera_controller != null:
-				camera_controller.pan(event.relative)
-		elif not build_mode.is_empty() or (selected_builder != null and dig_mode):
-			if get_viewport().gui_get_hovered_control() == null:
-				var terrain_point: Variant = _terrain_point_at_screen_position(event.position)
-				if terrain_point != null:
-					_move_selection(terrain_point)
-	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-		if selected_builder != null and dig_mode:
-			var dig_point: Variant = _terrain_point_at_screen_position(event.position)
-			if dig_point != null:
-				excavation_service.place_dig_site(dig_point)
-		elif not build_mode.is_empty():
-			var build_point: Variant = _terrain_point_at_screen_position(event.position)
-			if build_point != null:
-				_place_building(build_point)
-		else:
-			_select_citizen_at(event.position)
+	_input_controller.handle_unhandled_input(event)
 
 func _select_citizen_at(screen_position: Vector2) -> void:
 	var visible_citizen := _citizen_at_screen_position(screen_position)
