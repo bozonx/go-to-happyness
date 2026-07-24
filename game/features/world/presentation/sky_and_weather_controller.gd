@@ -12,6 +12,13 @@ const CLOUD_COVERAGE_CLEAR := 0.58
 const CLOUD_COVERAGE_STORM := 0.14
 const CLOUD_MINIMUM_SUN_VISIBILITY := 0.12
 
+class CloudLayerMix:
+	var cumulus := 0.0
+	var cirrus := 0.0
+	var elongated := 0.0
+	var storm := 0.0
+
+
 var camera: Camera3D
 var sun: DirectionalLight3D
 var world_environment: Environment
@@ -39,7 +46,14 @@ func setup(
 	sun_glare_material = p_sun_glare_material
 
 
-func update_daylight(game_minutes: float, cloud_cover: float, rain_intensity: float, runtime_seconds: float) -> void:
+func update_daylight(
+	game_minutes: float,
+	cloud_cover: float,
+	rain_intensity: float,
+	runtime_seconds: float,
+	storm_influence: float = 0.0,
+	cloud_pattern_seed: float = 0.0
+) -> void:
 	if DisplayServer.get_name() == "headless":
 		return
 	if sun == null or world_environment == null:
@@ -83,6 +97,13 @@ func update_daylight(game_minutes: float, cloud_cover: float, rain_intensity: fl
 	# still rims the clouds warm, but by the pre-dawn deep twilight they must read
 	# as dim night masses instead of daytime white.
 	var cloud_night := 1.0 - smoothstep(-0.25, 0.05, solar_height)
+	var cloud_layers := _cloud_layer_mix(
+		game_minutes,
+		cloud_cover,
+		storm_influence,
+		cloud_pattern_seed,
+		cloud_night
+	)
 	# The moon runs its own arc across the night, twelve hours out of phase with
 	# the sun: it rises at dusk, peaks at midnight and sets at dawn, tracing the
 	# sky instead of hanging in one spot. Same euler convention as the sun so the
@@ -112,6 +133,10 @@ func update_daylight(game_minutes: float, cloud_cover: float, rain_intensity: fl
 		sky_material.set_shader_parameter("u_edge_softness", CLOUD_EDGE_SOFTNESS)
 		sky_material.set_shader_parameter("u_coverage_clear", CLOUD_COVERAGE_CLEAR)
 		sky_material.set_shader_parameter("u_coverage_storm", CLOUD_COVERAGE_STORM)
+		sky_material.set_shader_parameter("u_cumulus_amount", cloud_layers.cumulus)
+		sky_material.set_shader_parameter("u_cirrus_amount", cloud_layers.cirrus)
+		sky_material.set_shader_parameter("u_elongated_amount", cloud_layers.elongated)
+		sky_material.set_shader_parameter("u_storm_amount", cloud_layers.storm)
 		# Cloud cover desaturates the sunset much more slowly than the rest of the
 		# sky: broken clouds should catch peach light instead of turning uniformly
 		# grey as soon as the forecast passes fifty percent.
@@ -136,6 +161,46 @@ func update_daylight(game_minutes: float, cloud_cover: float, rain_intensity: fl
 	for ff in fireflies:
 		if is_instance_valid(ff):
 			ff.set_night_factor(firefly_factor)
+
+
+func _cloud_layer_mix(
+	game_minutes: float,
+	cloud_cover: float,
+	storm_influence: float,
+	cloud_pattern_seed: float,
+	night_factor: float
+) -> CloudLayerMix:
+	var result := CloudLayerMix.new()
+	var phase := fposmod(game_minutes, 1440.0) / 1440.0 * TAU
+	var cumulus_pulse := 0.5 + sin(phase * 5.0 + cloud_pattern_seed * 1.31 + 0.4) * 0.5
+	var cirrus_pulse := 0.5 + sin(phase * 3.0 + cloud_pattern_seed * 0.73 + 2.1) * 0.5
+	var elongated_pulse := 0.5 + sin(phase * 4.0 + cloud_pattern_seed * 1.87 + 4.5) * 0.5
+	var ordinary_weather := 1.0 - clampf(storm_influence, 0.0, 1.0)
+	var cloud_presence := smoothstep(0.075, 0.30, cloud_cover)
+	var thin_presence := smoothstep(0.015, 0.18, cloud_cover)
+
+	result.cumulus = cloud_presence * cumulus_pulse
+	result.cumulus *= lerpf(1.0, 0.22, storm_influence)
+	result.cumulus = maxf(result.cumulus, smoothstep(0.48, 0.82, cloud_cover) * 0.68)
+	result.cirrus = thin_presence * lerpf(0.10, 0.46, cirrus_pulse)
+	result.cirrus *= (1.0 - smoothstep(0.20, 0.48, cloud_cover)) * ordinary_weather
+	result.elongated = smoothstep(0.16, 0.58, cloud_cover)
+	result.elongated *= lerpf(0.12, 0.68, elongated_pulse) * lerpf(1.0, 0.28, storm_influence)
+	result.elongated += (
+		(1.0 - cumulus_pulse)
+		* smoothstep(0.18, 0.50, cloud_cover)
+		* ordinary_weather
+		* 0.42
+	)
+	result.elongated = clampf(result.elongated, 0.0, 1.0)
+	result.storm = clampf(storm_influence, 0.0, 1.0)
+
+	# At night the large readable masses remain, while high-frequency thin
+	# layers fade so they do not turn the star field into procedural dirt.
+	result.cumulus *= lerpf(1.0, 0.82, night_factor)
+	result.cirrus *= lerpf(1.0, 0.10, night_factor)
+	result.elongated *= lerpf(1.0, 0.18, night_factor)
+	return result
 
 
 func _cloud_sun_visibility(sun_direction: Vector3, overcast: float, runtime_seconds: float) -> float:

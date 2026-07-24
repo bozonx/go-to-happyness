@@ -747,7 +747,15 @@ func _update_daylight() -> void:
 	if world_setup != null:
 		var cloud_cover := weather_state.cloud_cover_at(clock.minutes)
 		var rain_intensity := weather_state.intensity_at(clock.minutes)
-		world_setup.update_daylight(game_minutes, cloud_cover, rain_intensity, runtime_seconds)
+		var storm_influence := weather_state.storm_influence_at(clock.minutes)
+		world_setup.update_daylight(
+			game_minutes,
+			cloud_cover,
+			rain_intensity,
+			runtime_seconds,
+			storm_influence,
+			weather_state.cloud_seed
+		)
 
 
 func _update_clock(delta: float) -> void:

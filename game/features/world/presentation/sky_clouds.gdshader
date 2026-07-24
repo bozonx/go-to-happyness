@@ -38,6 +38,9 @@ uniform vec2 u_wind = vec2(0.006, 0.002);
 uniform float u_edge_softness = 0.07;   // lower = harder, crisp anime cartoon edges
 uniform float u_coverage_clear = 0.46;  // threshold when sunny (few clouds)
 uniform float u_coverage_storm = 0.18;  // threshold when overcast (full sheet)
+uniform float u_cumulus_amount : hint_range(0.0, 1.0) = 1.0;
+uniform float u_elongated_amount : hint_range(0.0, 1.0) = 0.0;
+uniform float u_storm_amount : hint_range(0.0, 1.0) = 0.0;
 uniform float u_shadow_step = 0.055;    // self-shadow march distance
 uniform vec3 u_cloud_lit_clear : source_color = vec3(1.0, 0.985, 0.95);
 uniform vec3 u_cloud_mid_clear : source_color = vec3(0.70, 0.84, 0.95);
@@ -162,6 +165,19 @@ float cirrus_field(vec2 uv) {
 	return smoothstep(0.52, 0.76, n);
 }
 
+// Thin, elongated mid-altitude islands. Unlike cirrus they retain a soft body,
+// but their stretched coordinate frame prevents them from reading as another
+// family of round cumulus puffs.
+float elongated_cloud_field(vec2 uv) {
+	vec2 stretched = vec2(uv.x * 0.26 + uv.y * 0.38, uv.y * 1.85);
+	float family = fbm(uv * 0.20 + vec2(8.0, 17.0));
+	float family_mask = smoothstep(0.48, 0.68, family);
+	float broad = fbm(stretched * 0.72 + vec2(14.0, 3.0));
+	float breakup = fbm(stretched * 1.48 + vec2(2.0, 11.0));
+	float ribbons = broad * 0.82 + breakup * 0.18;
+	return smoothstep(0.32, 0.54, ribbons) * mix(0.55, 1.0, family_mask);
+}
+
 // A deliberately sparse, stable star field. It belongs in the sky material so
 // the weather rig can fade it with twilight and cloud cover.
 vec3 star_layer(vec2 uv, float scale, float threshold, float time_offset) {
@@ -205,7 +221,7 @@ void sky() {
 	float fog_amount = fog_profile * u_haze_strength * (0.62 + fog_tex * 0.7);
 	sky_col = mix(sky_col, u_haze_color, clamp(fog_amount, 0.0, 1.0));
 
-	float star_visibility = u_star_visibility * (1.0 - u_overcast * 0.68);
+	float star_visibility = u_star_visibility * (1.0 - smoothstep(0.30, 0.86, u_overcast) * 0.94);
 
 	// --- Milky Way: a faint textured band along a great circle, denser overhead ---
 	vec3 mw_axis = normalize(vec3(0.82, 0.24, 0.52));
@@ -296,6 +312,23 @@ void sky() {
 		sky_col = mix(sky_col, cirrus_col, cirrus_alpha);
 	}
 
+	// --- Mid-altitude elongated fair-weather layer ---
+	if (u_elongated_amount > 0.001) {
+		vec2 elongated_uv = dir.xz / max(horizon + 0.40, 0.40);
+		elongated_uv *= u_cloud_scale * 1.18;
+		elongated_uv += vec2(u_wind.x * u_time * 1.35, -u_wind.y * u_time * 0.48);
+		float elongated_mask = elongated_cloud_field(elongated_uv);
+		vec3 elongated_day = mix(u_cloud_mid_clear, u_cloud_lit_clear, 0.72);
+		vec3 elongated_storm = mix(u_cloud_mid_storm, u_cloud_lit_storm, 0.30);
+		vec3 elongated_col = mix(elongated_day, elongated_storm, u_overcast);
+		elongated_col = mix(elongated_col, u_cloud_mid_night, u_night_factor);
+		float elongated_sunset = sun_low * (1.0 - u_night_factor) * (1.0 - u_overcast * 0.55);
+		elongated_col = mix(elongated_col, warm_sun, elongated_sunset * 0.28);
+		float elongated_alpha = elongated_mask * u_elongated_amount * ceil_mask;
+		elongated_alpha *= mix(0.72, 0.11, u_night_factor) * (1.0 - u_storm_amount * 0.72);
+		sky_col = mix(sky_col, elongated_col, elongated_alpha);
+	}
+
 	// --- Main cumulus clouds layer ---
 	// Cumulus remains on its own higher, softer ceiling. The larger height
 	// offset removes the horizontal stretching of the old low cloud plane while
@@ -321,9 +354,13 @@ void sky() {
 	float clear_edge = mix(u_edge_softness, u_edge_softness * 0.6, clear_sky);
 	clear_edge *= mix(1.0, 1.35, u_night_factor);
 	float density = smoothstep(coverage, coverage + clear_edge, n_banked);
+	density *= u_cumulus_amount;
 	// At the end of the scale, merge the cumulus into a broad, textured ceiling
 	// rather than leaving isolated cartoon blobs over a supposedly covered sky.
-	float ceiling_amount = smoothstep(0.72, 0.94, u_overcast);
+	float ceiling_amount = max(
+		smoothstep(0.66, 0.90, u_overcast),
+		smoothstep(0.08, 0.96, u_storm_amount) * 0.92
+	);
 	float ceiling_texture = 0.72 + fbm(cumulus_uv * 0.38 + vec2(31.0, 9.0)) * 0.22;
 	density = max(density, ceiling_amount * ceiling_texture);
 
@@ -371,9 +408,10 @@ void sky() {
 	lit -= smoothstep(0.48, 0.95, horizon) * density * mix(0.08, 0.025, u_night_factor);
 	lit = mix(lit, lit * 0.55 + 0.25, u_overcast);
 
-	vec3 cloud_lit = mix(u_cloud_lit_clear, u_cloud_lit_storm, u_overcast);
-	vec3 cloud_mid = mix(u_cloud_mid_clear, u_cloud_mid_storm, u_overcast);
-	vec3 cloud_shadow = mix(u_cloud_shadow_clear, u_cloud_shadow_storm, u_overcast);
+	float weather_darkness = max(u_overcast, u_storm_amount);
+	vec3 cloud_lit = mix(u_cloud_lit_clear, u_cloud_lit_storm, weather_darkness);
+	vec3 cloud_mid = mix(u_cloud_mid_clear, u_cloud_mid_storm, weather_darkness);
+	vec3 cloud_shadow = mix(u_cloud_shadow_clear, u_cloud_shadow_storm, weather_darkness);
 	// Moonlight is cool and restrained: clouds remain readable but do not turn
 	// into bright daytime masses that erase the night sky.
 	float night_cloud_mix = u_night_factor;

@@ -85,12 +85,18 @@ func phase_at(current_minute: float) -> int:
 
 func cloud_cover_at(current_minute: float) -> float:
 	var minutes := fposmod(current_minute, float(MINUTES_PER_DAY))
-	var cover := cloud_base_cover + sin(minutes / MINUTES_PER_DAY * TAU + cloud_seed) * cloud_variation
-	if forecast_weather == TentEraSurvivalRules.Weather.RAIN and rain_start_minute >= 0.0:
-		var storm_arrival := smoothstep(rain_start_minute - CLOUD_BUILDUP_MINUTES, rain_start_minute + transition_minutes, minutes)
-		var storm_departure := 1.0 - smoothstep(rain_end_minute - transition_minutes, rain_end_minute + CLOUD_CLEARING_MINUTES, minutes)
-		cover = lerpf(cover, 0.96, storm_arrival * storm_departure)
+	var cover := _living_cloud_cover_at(minutes)
+	cover = lerpf(cover, 0.96, storm_influence_at(minutes))
 	return clampf(cover, 0.0, 1.0)
+
+
+func storm_influence_at(current_minute: float) -> float:
+	if forecast_weather != TentEraSurvivalRules.Weather.RAIN or rain_start_minute < 0.0:
+		return 0.0
+	var minutes := fposmod(current_minute, float(MINUTES_PER_DAY))
+	var storm_arrival := smoothstep(rain_start_minute - CLOUD_BUILDUP_MINUTES, rain_start_minute, minutes)
+	var storm_departure := 1.0 - smoothstep(rain_end_minute, rain_end_minute + CLOUD_CLEARING_MINUTES, minutes)
+	return clampf(storm_arrival * storm_departure, 0.0, 1.0)
 
 
 func cloud_phase_at(current_minute: float) -> int:
@@ -112,14 +118,26 @@ func _match_cloud_profile(weather: int, rng: RandomNumberGenerator) -> void:
 	cloud_seed = rng.randf_range(0.0, TAU)
 	match weather:
 		TentEraSurvivalRules.Weather.WARMING:
-			cloud_base_cover = 0.10
-			cloud_variation = 0.07
+			cloud_base_cover = 0.13
+			cloud_variation = 0.11
 		TentEraSurvivalRules.Weather.COOLING:
-			cloud_base_cover = 0.52
-			cloud_variation = 0.14
+			cloud_base_cover = 0.50
+			cloud_variation = 0.18
 		TentEraSurvivalRules.Weather.RAIN:
-			cloud_base_cover = 0.34
-			cloud_variation = 0.10
+			cloud_base_cover = 0.28
+			cloud_variation = 0.18
 		_:
-			cloud_base_cover = 0.18
-			cloud_variation = 0.08
+			cloud_base_cover = 0.24
+			cloud_variation = 0.20
+
+
+func _living_cloud_cover_at(minutes: float) -> float:
+	var day_phase := minutes / float(MINUTES_PER_DAY) * TAU
+	# Several slow harmonics create changing clear, fair, and partly-cloudy
+	# intervals without per-frame randomness. Integer frequencies keep the
+	# signal continuous across midnight; cloud_seed makes every day distinct.
+	var broad := sin(day_phase * 3.0 + cloud_seed)
+	var medium := sin(day_phase * 5.0 + cloud_seed * 1.71 + 1.9)
+	var detail := sin(day_phase * 9.0 + cloud_seed * 0.63 + 4.2)
+	var living_signal := broad * 0.52 + medium * 0.31 + detail * 0.17
+	return clampf(cloud_base_cover + living_signal * cloud_variation, 0.0, 1.0)
