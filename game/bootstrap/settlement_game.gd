@@ -132,6 +132,7 @@ const SettlementSaveLoaderScript = preload("res://game/bootstrap/settlement_save
 const SettlementUICallbacksScript = preload("res://game/bootstrap/settlement_ui_callbacks.gd")
 const SettlementResearchControllerScript = preload("res://game/bootstrap/settlement_research_controller.gd")
 const SettlementCitizenFactoryScript = preload("res://game/bootstrap/settlement_citizen_factory.gd")
+const SettlementBuildingVisualsScript = preload("res://game/bootstrap/settlement_building_visuals.gd")
 
 
 
@@ -486,6 +487,7 @@ var actuator_bridge: RefCounted
 var survival_event_controller: SurvivalEventController
 var _research_controller: RefCounted
 var _citizen_factory: RefCounted
+var _building_visuals: RefCounted
 
 
 func _ready() -> void:
@@ -502,6 +504,7 @@ func _ready() -> void:
 
 	_research_controller = SettlementResearchControllerScript.new(self)
 	_citizen_factory = SettlementCitizenFactoryScript.new(self)
+	_building_visuals = SettlementBuildingVisualsScript.new(self)
 	ui_manager.bind_delegate_events(SettlementUICallbacksScript.new(self))
 	SettlementBootstrapperScript.new().run(self)
 
@@ -2167,16 +2170,7 @@ func _demolish_selected_warehouse() -> void:
 
 
 func _add_demolition_marker(building: Node3D) -> void:
-	if building.has_meta("demolition_marker"):
-		return
-	var marker: Label3D = BillboardLabelScene.instantiate() as Label3D
-	marker.text = "DEMOLISH"
-	marker.position = Vector3(0.0, 5.2, 0.0)
-	marker.font_size = 32
-	marker.outline_size = 6
-	marker.modulate = Color("ef4f45")
-	building.add_child(marker)
-	building.set_meta("demolition_marker", marker)
+	_building_visuals.add_demolition_marker(building)
 
 func _demolition_ready(site: DemolitionSite) -> bool:
 	return building_lifecycle_service.demolition_ready(site)
@@ -3101,48 +3095,23 @@ func _select_best_canteen() -> void:
 			canteen_position = best_kitchen.get_meta("service_position", best_kitchen.global_position)
 
 func _add_building_selector(building: Node3D, group_name: String, footprint: Vector2i) -> void:
-	var selector := BuildingSelectorScene.instantiate() as Area3D
-	selector.add_to_group(group_name)
-	var collision := selector.get_node("CollisionShape3D") as CollisionShape3D
-	var shape := collision.shape as BoxShape3D
-	shape.size = Vector3(footprint.x + 0.25, 4.5, footprint.y + 0.25)
-	collision.position.y = 2.0
-	building.add_child(selector)
+	_building_visuals.add_building_selector(building, group_name, footprint)
 
 
 func _add_selector_to_node(node: Node3D, group_name: String, shape_size: Vector3, offset := Vector3.ZERO) -> void:
-	var selector := BuildingSelectorScene.instantiate() as Area3D
-	selector.add_to_group(group_name)
-	var collision := selector.get_node("CollisionShape3D") as CollisionShape3D
-	var shape := collision.shape as BoxShape3D
-	shape.size = shape_size
-	collision.position = offset
-	node.add_child(selector)
+	_building_visuals.add_selector_to_node(node, group_name, shape_size, offset)
 
 
 func _add_fire_light(building: Node3D, energy := 2.5, light_range := 8.0) -> void:
-	var fire_light := FireLightScene.instantiate() as OmniLight3D
-	fire_light.light_energy = energy
-	fire_light.omni_range = light_range
-	building.add_child(fire_light)
+	_building_visuals.add_fire_light(building, energy, light_range)
 
 
 func _add_building_status_indicator(building: Node3D) -> void:
-	if not is_instance_valid(building) or building.has_meta("status_indicator"):
-		return
-	var indicator := BillboardLabelScene.instantiate() as Label3D
-	indicator.position = Vector3(0.0, 4.2, 0.0)
-	indicator.font_size = 28
-	indicator.outline_size = 5
-	indicator.visible = false
-	building.add_child(indicator)
-	building.set_meta("status_indicator", indicator)
-	building_status_indicators.append(indicator)
+	_building_visuals.add_building_status_indicator(building)
 
 
 func _add_warehouse_fill_label(building: Node3D) -> void:
-	if warehouse_fill_label_controller != null:
-		warehouse_fill_label_controller.add_warehouse_fill_label(building)
+	_building_visuals.add_warehouse_fill_label(building)
 
 
 func _send_citizen_to_leisure(citizen: Citizen, minimum_hours := 0) -> bool:
@@ -3245,8 +3214,7 @@ func _unregister_navigation_footprint(center: Vector3, footprint: Vector2i) -> v
 			service_pockets.remove_at(index)
 
 func _add_house_light(house: Node3D) -> void:
-	if building_visuals_service != null:
-		building_visuals_service.add_house_light(house)
+	_building_visuals.add_house_light(house)
 
 func _on_tree_harvested(worker: Citizen, position_on_board: Vector3) -> void:
 	_fell_tree_at(position_on_board)
@@ -3756,8 +3724,7 @@ func _consume_grass_source(position: Vector3) -> int:
 	return foraging_service.consume_grass_source(position)
 
 func _create_gathering_place_visual(building: Node3D) -> void:
-	var visual := GatheringPlaceVisualScene.instantiate() as Node3D
-	building.add_child(visual)
+	_building_visuals.create_gathering_place_visual(building)
 
 func _fire_state_for(building: Node3D) -> RefCounted:
 	return fire_management_service.fire_state_for(building)
