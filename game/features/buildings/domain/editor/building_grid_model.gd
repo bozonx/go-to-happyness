@@ -40,11 +40,17 @@ func place(
 	cell: Vector3i,
 	block_id: StringName,
 	rot: int = 0,
-	material_id: StringName = BuildingMaterialCatalogScript.DEFAULT_ID
+	material_id: StringName = BuildingMaterialCatalogScript.DEFAULT_ID,
+	variant: StringName = &""
 ) -> bool:
 	if not BuildingBlockCatalogScript.has_block(block_id) or not BuildingMaterialCatalogScript.has_material(material_id):
 		return false
-	var block := BlueprintBlockScript.new(cell, block_id, _normalize_rot(block_id, rot), material_id)
+	var block := BlueprintBlockScript.new(
+		cell,
+		block_id,
+		_normalize_rot(block_id, rot),
+		material_id,
+		BuildingBlockCatalogScript.normalize_variant(block_id, variant))
 	_cells[cell] = block
 	return true
 
@@ -92,7 +98,7 @@ func write_to_blueprint(blueprint: BuildingBlueprintScript) -> void:
 	keys.sort_custom(_compare_cells)
 	for cell in keys:
 		var block: BlueprintBlock = _cells[cell]
-		blueprint.blocks.append(BlueprintBlockScript.new(block.pos, block.block_id, block.rot, block.material_id))
+		blueprint.blocks.append(BlueprintBlockScript.new(block.pos, block.block_id, block.rot, block.material_id, block.variant))
 	var b := bounds()
 	blueprint.grid_bounds = Vector3i(int(b.size.x), int(b.size.y), int(b.size.z))
 
@@ -101,7 +107,8 @@ func load_from_blueprint(blueprint: BuildingBlueprintScript) -> void:
 	_cells.clear()
 	for block in blueprint.blocks:
 		if BuildingBlockCatalogScript.has_block(block.block_id) and BuildingMaterialCatalogScript.has_material(block.material_id):
-			_cells[block.pos] = BlueprintBlockScript.new(block.pos, block.block_id, block.rot, block.material_id)
+			var variant := BuildingBlockCatalogScript.normalize_variant(block.block_id, block.variant)
+			_cells[block.pos] = BlueprintBlockScript.new(block.pos, block.block_id, block.rot, block.material_id, variant)
 
 
 func _normalize_rot(block_id: StringName, rot: int) -> int:

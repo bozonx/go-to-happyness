@@ -7,8 +7,29 @@ func _init() -> void:
 	print("--- Running test_block_mesh_library.gd ---")
 	_test_wedge_mesh_normals()
 	_test_stairs_mesh_normals()
+	_test_arch_and_railing_meshes()
 	print("--- test_block_mesh_library.gd PASSED ALL TESTS ---")
 	quit(0)
+
+
+## Guards against a degenerate arch (a prior version emitted a zero-height box for
+## the right pillar) and confirms the railing builds real, bounded geometry that
+## respects the variant height.
+func _test_arch_and_railing_meshes() -> void:
+	print("Testing arch + railing meshes...")
+	var lib := BlockMeshLibraryScript.new()
+
+	var arch := lib.mesh_for(&"arch") as ArrayMesh
+	assert(arch != null, "arch mesh must exist")
+	var arch_verts: PackedVector3Array = arch.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	assert(arch_verts.size() >= 72, "arch must build jambs + arch ring, got %d verts" % arch_verts.size())
+	var arch_aabb := arch.get_aabb()
+	assert(arch_aabb.size.y > 0.5 and arch_aabb.size.x > 0.5, "arch must span the block")
+
+	# Full- and half-height railing variants must differ in height.
+	var full := (lib.mesh_for(&"railing", &"full") as ArrayMesh).get_aabb()
+	var half := (lib.mesh_for(&"railing", &"half") as ArrayMesh).get_aabb()
+	assert(full.size.y > half.size.y + 0.2, "full railing must be taller than half")
 
 
 func _test_wedge_mesh_normals() -> void:

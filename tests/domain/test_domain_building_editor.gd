@@ -37,17 +37,27 @@ static func run_all() -> void:
 
 
 static func _test_catalog() -> void:
-	assert(BuildingBlockCatalogScript.all().size() == 30)
+	assert(BuildingBlockCatalogScript.all().size() == 24)
 	assert(BuildingBlockCatalogScript.has_block(&"cube"))
 	assert(BuildingBlockCatalogScript.has_block(&"stairs_corner_45"))
 	assert(BuildingBlockCatalogScript.has_block(&"foundation"))
 	assert(not BuildingBlockCatalogScript.has_block(&"nonexistent"))
+	# quarter_block was removed: it duplicated the medium square column variant.
+	assert(not BuildingBlockCatalogScript.has_block(&"quarter_block"))
 	assert(BuildingBlockCatalogScript.default_block_id() == &"cube")
 	var cube := BuildingBlockCatalogScript.get_block(&"cube")
 	assert(cube["size"] == Vector3(1.0, 1.0, 1.0))
 	# The foundation block is flagged so presentation extends it down to terrain.
 	assert(BuildingBlockCatalogScript.extends_down(&"foundation"))
 	assert(not BuildingBlockCatalogScript.extends_down(&"cube"))
+	# Parametric blocks expose prepared size/profile variants; the first is the
+	# default and an unknown request normalizes back to it.
+	assert(BuildingBlockCatalogScript.has_variants(&"column"))
+	assert(not BuildingBlockCatalogScript.has_variants(&"cube"))
+	assert(BuildingBlockCatalogScript.default_variant(&"column") == &"square_thick")
+	assert(BuildingBlockCatalogScript.normalize_variant(&"column", &"bogus") == &"square_thick")
+	assert(BuildingBlockCatalogScript.size_of(&"column", &"round_med") == Vector3(0.5, 1.0, 0.5))
+	assert(BuildingBlockCatalogScript.mesh_shape_of(&"column", &"round_med") == BuildingBlockCatalogScript.SHAPE_CYLINDER)
 
 
 static func _test_mesh_library() -> void:
@@ -55,8 +65,11 @@ static func _test_mesh_library() -> void:
 	for block_id in BuildingBlockCatalogScript.ids():
 		var mesh := lib.mesh_for(block_id)
 		assert(mesh != null, "Mesh generation failed for block: " + String(block_id))
-		var offset := BlockMeshLibraryScript.local_offset(block_id, 0.5)
+		var offset := BlockMeshLibraryScript.local_offset(block_id, &"", 0.5)
 		assert(offset.y > 0.0)
+		# Every declared variant must also build a mesh.
+		for v in BuildingBlockCatalogScript.variants(block_id):
+			assert(lib.mesh_for(block_id, v["id"]) != null, "Variant mesh failed: %s/%s" % [block_id, v["id"]])
 	var wood_mat := lib.material_for(&"wood")
 	assert(wood_mat != null)
 	assert(wood_mat.uv1_triplanar == true)
@@ -72,13 +85,20 @@ static func _test_material_catalog_and_costs() -> void:
 	var grid := BuildingGridModelScript.new()
 	assert(grid.place(Vector3i.ZERO, &"cube", 0, &"earth"))
 	assert(grid.place(Vector3i(1, 0, 0), &"wall_panel", 1, &"stone"))
+	# A parametric block records its chosen variant.
+	assert(grid.place(Vector3i(2, 0, 0), &"column", 0, &"stone", &"round_med"))
+	assert(grid.get_block_at(Vector3i(2, 0, 0)).variant == &"round_med")
 	grid.write_to_blueprint(bp)
 	bp.recalculate_construction_cost()
-	assert(bp.construction_cost == {"soil": 1, "stone": 1})
+	assert(bp.construction_cost == {"soil": 1, "stone": 2})
 	var restored := BuildingBlueprintScript.from_json(bp.to_json())
 	assert(restored != null)
 	assert(restored.blocks[0].material_id == &"earth")
 	assert(restored.blocks[1].material_id == &"stone")
+	# Variant survives the JSON round-trip; single-size blocks stay variant-less.
+	assert(restored.blocks[0].variant == &"")
+	var col := restored.blocks[2] if restored.blocks[2].block_id == &"column" else restored.blocks[1]
+	assert(col.variant == &"round_med")
 
 
 static func _test_material_era_filtering() -> void:

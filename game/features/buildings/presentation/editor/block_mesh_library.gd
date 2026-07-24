@@ -7,46 +7,30 @@ extends RefCounted
 ## sits at the designated elevation of its anchor cell.
 
 const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
-
-const MATERIAL_COLORS := {
-	&"branches": Color(0.43, 0.28, 0.15),
-	&"thatch": Color(0.72, 0.60, 0.28),
-	&"tarp": Color(0.35, 0.40, 0.42),
-	&"earth": Color(0.43, 0.31, 0.20),
-	&"earth_stone": Color(0.45, 0.38, 0.30),
-	&"clay": Color(0.58, 0.32, 0.22),
-	&"adobe": Color(0.60, 0.45, 0.28),
-	&"logs": Color(0.48, 0.34, 0.19),
-	&"wood": Color(0.55, 0.38, 0.20),
-	&"stone": Color(0.47, 0.49, 0.50),
-	&"stone_mortar": Color(0.50, 0.52, 0.48),
-	&"brick": Color(0.58, 0.22, 0.16),
-	&"brick_mortar": Color(0.60, 0.28, 0.22),
-}
+const BuildingMaterialCatalogScript = preload("res://game/features/buildings/domain/editor/building_material_catalog.gd")
 
 var _mesh_cache: Dictionary = {}
 var _material_cache: Dictionary = {}
 
 
 ## World offset from the cell's minimum corner to the mesh origin so the block
-## rests on the cell floor (plus optional vertical offset parameter).
-static func local_offset(block_id: StringName, vertical_offset: float = 0.0) -> Vector3:
-	var def := BuildingBlockCatalogScript.get_block(block_id)
-	if def.is_empty():
-		return Vector3(0.5, 0.5 + vertical_offset, 0.5)
-	var size: Vector3 = def["size"]
+## rests on the cell floor (plus optional vertical offset parameter). The variant
+## selects the prepared size for blocks that expose one.
+static func local_offset(block_id: StringName, variant: StringName = &"", vertical_offset: float = 0.0) -> Vector3:
+	var size := BuildingBlockCatalogScript.size_of(block_id, variant)
 	return Vector3(0.5, size.y * 0.5 + vertical_offset, 0.5)
 
 
-func mesh_for(block_id: StringName) -> Mesh:
-	if _mesh_cache.has(block_id):
-		return _mesh_cache[block_id]
+func mesh_for(block_id: StringName, variant: StringName = &"") -> Mesh:
+	var cache_key := "%s|%s" % [block_id, variant]
+	if _mesh_cache.has(cache_key):
+		return _mesh_cache[cache_key]
 	var def := BuildingBlockCatalogScript.get_block(block_id)
 	if def.is_empty():
 		return null
-	var size: Vector3 = def["size"]
+	var size := BuildingBlockCatalogScript.size_of(block_id, variant)
 	var mesh: Mesh
-	match def["mesh_shape"]:
+	match BuildingBlockCatalogScript.mesh_shape_of(block_id, variant):
 		BuildingBlockCatalogScript.SHAPE_WEDGE:
 			mesh = _build_wedge(size)
 		BuildingBlockCatalogScript.SHAPE_WEDGE_LOW:
@@ -75,11 +59,13 @@ func mesh_for(block_id: StringName) -> Mesh:
 			mesh = _build_door_wall(size)
 		BuildingBlockCatalogScript.SHAPE_ARCH:
 			mesh = _build_arch(size)
+		BuildingBlockCatalogScript.SHAPE_RAILING:
+			mesh = _build_railing(size)
 		_:
 			var box := BoxMesh.new()
 			box.size = size
 			mesh = box
-	_mesh_cache[block_id] = mesh
+	_mesh_cache[cache_key] = mesh
 	return mesh
 
 
@@ -87,7 +73,7 @@ func material_for(material_id: StringName) -> StandardMaterial3D:
 	if _material_cache.has(material_id):
 		return _material_cache[material_id]
 	var mat := StandardMaterial3D.new()
-	mat.albedo_color = MATERIAL_COLORS.get(material_id, Color(0.7, 0.7, 0.7))
+	mat.albedo_color = BuildingMaterialCatalogScript.color(material_id)
 	mat.roughness = 0.85
 	mat.uv1_triplanar = true
 	mat.uv1_world_triplanar = true
@@ -297,18 +283,54 @@ func _build_door_wall(size: Vector3) -> ArrayMesh:
 	return st.commit()
 
 
-func _build_arch(size: Vector3, segments: int = 8) -> ArrayMesh:
+## Wall-thickness panel with a real arched opening: two side jambs plus a
+## semicircular arch ring / spandrel above the void. `segments` controls how
+## finely the curve is stepped.
+func _build_arch(size: Vector3, segments: int = 12) -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var hx := size.x * 0.5
 	var hy := size.y * 0.5
 	var hz := size.z * 0.5
-	# Top solid arch block
-	_add_box(st, Vector3(-hx, 0.0, -hz), Vector3(hx, hy, hz))
-	# Left pillar
-	_add_box(st, Vector3(-hx, -hy, -hz), Vector3(-hx * 0.5, 0.0, hz))
-	# Right pillar
-	_add_box(st, Vector3(hx * 0.5, -hy, -hz), Vector3(hx, -hy, hz))
+	var opening_half := size.x * 0.32       # half-width of the doorway void
+	var straight := size.y * 0.35           # vertical jamb before the arch springs
+	var spring_y := -hy + straight          # where the semicircle starts
+	# Side jambs (full height, flanking the opening).
+	_add_box(st, Vector3(-hx, -hy, -hz), Vector3(-opening_half, hy, hz))
+	_add_box(st, Vector3(opening_half, -hy, -hz), Vector3(hx, hy, hz))
+	# Arch ring + spandrel: stepped columns filling from the curve up to the top.
+	var step := (2.0 * opening_half) / float(segments)
+	for i in segments:
+		var xa := -opening_half + step * float(i)
+		var xb := xa + step
+		var xc := (xa + xb) * 0.5
+		var arch_top := spring_y + sqrt(maxf(0.0, opening_half * opening_half - xc * xc))
+		if arch_top < hy - 0.0001:
+			_add_box(st, Vector3(xa, arch_top, -hz), Vector3(xb, hy, hz))
+	return st.commit()
+
+
+## A railing: top rail, bottom rail and evenly spaced vertical balusters spanning
+## the block height (`size.y`, so full- and half-height variants both work).
+func _build_railing(size: Vector3, balusters: int = 5) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var hx := size.x * 0.5
+	var hy := size.y * 0.5
+	var t := minf(size.z * 0.5, 0.06)       # half-thickness of the members
+	var rail_h := minf(size.y * 0.12, 0.1)  # rail bar height
+	# Top and bottom rails span the full width.
+	_add_box(st, Vector3(-hx, hy - rail_h, -t), Vector3(hx, hy, t))
+	_add_box(st, Vector3(-hx, -hy, -t), Vector3(hx, -hy + rail_h * 0.7, t))
+	# Vertical balusters between the rails.
+	var bw := 0.045                          # half-width of a baluster
+	var bt := t * 0.7
+	for i in balusters + 1:
+		var cx := -hx + (2.0 * hx) * float(i) / float(balusters)
+		var x0 := clampf(cx - bw, -hx, hx)
+		var x1 := clampf(cx + bw, -hx, hx)
+		if x1 > x0 + 0.0001:
+			_add_box(st, Vector3(x0, -hy + rail_h * 0.5, -bt), Vector3(x1, hy - rail_h * 0.5, bt))
 	return st.commit()
 
 

@@ -270,6 +270,7 @@ static func _create_block_module(module: Dictionary) -> StaticBody3D:
 		_block_meshes = BlockMeshLibraryScript.new()
 	var block_id: StringName = module["block_id"]
 	var material_id: StringName = module.get("material_id", &"branches")
+	var variant: StringName = StringName(module.get("variant", ""))
 	var body: StaticBody3D = BuildingModuleScene.instantiate()
 	body.position = module.position
 	body.rotation_degrees = Vector3(0.0, 90.0 * float(int(module.get("rot", 0)) % 4), 0.0)
@@ -277,8 +278,7 @@ static func _create_block_module(module: Dictionary) -> StaticBody3D:
 	body.set_meta("module_kind", module.get("kind", "block"))
 
 	var mesh_instance := body.get_node("MeshInstance3D") as MeshInstance3D
-	var def := BuildingBlockCatalogScript.get_block(block_id)
-	var size: Vector3 = def.get("size", Vector3.ONE) if not def.is_empty() else Vector3.ONE
+	var size := BuildingBlockCatalogScript.size_of(block_id, variant)
 	var collision := body.get_node("CollisionShape3D") as CollisionShape3D
 	var shape := BoxShape3D.new()
 
@@ -293,7 +293,7 @@ static func _create_block_module(module: Dictionary) -> StaticBody3D:
 		shape.size = skirted
 		collision.position.y = -FOUNDATION_SKIRT * 0.5
 	else:
-		mesh_instance.mesh = _block_meshes.mesh_for(block_id)
+		mesh_instance.mesh = _block_meshes.mesh_for(block_id, variant)
 		shape.size = size
 	mesh_instance.material_override = _block_meshes.material_for(material_id)
 	collision.shape = shape

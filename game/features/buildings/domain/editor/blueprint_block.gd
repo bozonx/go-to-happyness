@@ -3,24 +3,28 @@ extends RefCounted
 
 ## A single placed construction block in a building blueprint.
 ## `pos` is the anchor voxel on the 1m grid, `rot` is a quarter-turn index
-## (0 = 0°, 1 = 90°, 2 = 180°, 3 = 270°) around the Y axis.
+## (0 = 0°, 1 = 90°, 2 = 180°, 3 = 270°) around the Y axis. `variant` selects a
+## prepared size/profile option for blocks that expose one (empty = default).
 
 var pos: Vector3i = Vector3i.ZERO
 var block_id: StringName = &""
 var material_id: StringName = &"branches"
 var rot: int = 0
+var variant: StringName = &""
 
 
 func _init(
 	p_pos: Vector3i = Vector3i.ZERO,
 	p_block_id: StringName = &"",
 	p_rot: int = 0,
-	p_material_id: StringName = &"branches"
+	p_material_id: StringName = &"branches",
+	p_variant: StringName = &""
 ) -> void:
 	pos = p_pos
 	block_id = p_block_id
 	rot = p_rot
 	material_id = p_material_id
+	variant = p_variant
 
 
 func rotation_radians() -> float:
@@ -28,12 +32,17 @@ func rotation_radians() -> float:
 
 
 func to_dict() -> Dictionary:
-	return {
+	var out := {
 		"pos": [pos.x, pos.y, pos.z],
 		"block_id": String(block_id),
 		"material_id": String(material_id),
 		"rot": rot,
 	}
+	# Only emitted for blocks that carry a chosen variant, keeping single-size
+	# block entries unchanged in the saved JSON.
+	if variant != &"":
+		out["variant"] = String(variant)
+	return out
 
 
 static func from_dict(data: Dictionary) -> BlueprintBlock:
@@ -43,4 +52,5 @@ static func from_dict(data: Dictionary) -> BlueprintBlock:
 	var block_id := StringName(data.get("block_id", ""))
 	var material_id := StringName(data.get("material_id", "branches"))
 	var rot := ((int(data.get("rot", 0)) % 4) + 4) % 4
-	return BlueprintBlock.new(pos, block_id, rot, material_id)
+	var variant := StringName(data.get("variant", ""))
+	return BlueprintBlock.new(pos, block_id, rot, material_id, variant)
