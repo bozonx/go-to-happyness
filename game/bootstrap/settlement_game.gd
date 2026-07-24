@@ -136,6 +136,7 @@ const SettlementBuildingVisualsScript = preload("res://game/bootstrap/settlement
 const SettlementSimulationHandlersScript = preload("res://game/bootstrap/settlement_simulation_handlers.gd")
 const SettlementServicePocketManagerScript = preload("res://game/bootstrap/settlement_service_pocket_manager.gd")
 const SettlementOutsideWorkControllerScript = preload("res://game/bootstrap/settlement_outside_work_controller.gd")
+const SettlementBuildingManagementScript = preload("res://game/bootstrap/settlement_building_management.gd")
 
 
 
@@ -494,6 +495,7 @@ var _building_visuals: RefCounted
 var _simulation_handlers: RefCounted
 var _service_pocket_manager: RefCounted
 var _outside_work_controller: RefCounted
+var _building_management: RefCounted
 
 
 func _ready() -> void:
@@ -514,6 +516,7 @@ func _ready() -> void:
 	_simulation_handlers = SettlementSimulationHandlersScript.new(self)
 	_service_pocket_manager = SettlementServicePocketManagerScript.new(self)
 	_outside_work_controller = SettlementOutsideWorkControllerScript.new(self)
+	_building_management = SettlementBuildingManagementScript.new(self)
 	ui_manager.bind_delegate_events(SettlementUICallbacksScript.new(self))
 	SettlementBootstrapperScript.new().run(self)
 
@@ -2940,63 +2943,19 @@ func _complete_building(cell: Vector2i, building_type: String, position_on_board
 
 
 func _entrance_anchor_position() -> Vector3:
-	if is_instance_valid(entrance_stone):
-		return entrance_stone.global_position
-	return nav_grid.cell_center(Vector2i(-22, 1)) if nav_grid != null else Vector3((Vector2i(-22, 1).x + 0.5) * CELL_SIZE, 0.0, (Vector2i(-22, 1).y + 0.5) * CELL_SIZE)
+	return _building_management.entrance_anchor_position()
 
 
 func _setup_entrance_sign_node(building: Node3D) -> void:
-	if not is_instance_valid(building):
-		return
-	entrance_stone = building
-	_add_selector_to_node(building, "entrance_selector", Vector3(2.2, 2.4, 1.0), Vector3(0.0, 1.1, 0.0))
-	var label := Label3D.new()
-	label.position = Vector3(0.0, 1.26, 0.09)
-	label.text = "Settlement"
-	label.font_size = 28
-	label.modulate = Color("f0dfb2")
-	building.add_child(label)
-	var light := OmniLight3D.new()
-	light.name = "EntranceSignLight"
-	light.position = Vector3(0.0, 2.2, 0.0)
-	light.light_color = Color(1.0, 0.8353, 0.5412, 1.0)
-	light.light_energy = 2.0
-	light.light_volumetric_fog_energy = 0.5
-	light.omni_range = 5.0
-	light.shadow_enabled = true
-	building.add_child(light)
-	if ambient_spawner != null:
-		ambient_spawner.setup_entrance_sign_node(building)
+	_building_management.setup_entrance_sign_node(building)
 
 
 func _activate_kitchen_if_better(building: Node3D, service_position: Vector3) -> void:
-	var capacity := BuildingCatalog.kitchen_food_capacity(building_registry.building_type_for_node(building))
-	var active_capacity := BuildingCatalog.kitchen_food_capacity(building_registry.building_type_for_node(canteen)) if is_instance_valid(canteen) else 0
-	if capacity >= active_capacity:
-		canteen = building
-		if building.has_meta("entrance_position"):
-			canteen_position = building.get_meta("entrance_position")
-		else:
-			canteen_position = building.get_meta("service_position", building.global_position)
+	_building_management.activate_kitchen_if_better(building, service_position)
 
 
 func _select_best_canteen() -> void:
-	var best_kitchen: Node3D = null
-	var best_capacity := 0
-	for record in building_registry.records():
-		var candidate: Node3D = record.node
-		if not is_instance_valid(candidate):
-			continue
-		var capacity := BuildingCatalog.kitchen_food_capacity(record.building_type)
-		if capacity > best_capacity:
-			best_kitchen = candidate
-			best_capacity = capacity
-	canteen = best_kitchen
-	if best_kitchen != null:
-		if best_kitchen.has_meta("entrance_position"):
-			canteen_position = best_kitchen.get_meta("entrance_position")
-		else:
-			canteen_position = best_kitchen.get_meta("service_position", best_kitchen.global_position)
+	_building_management.select_best_canteen()
 
 func _add_building_selector(building: Node3D, group_name: String, footprint: Vector2i) -> void:
 	_building_visuals.add_building_selector(building, group_name, footprint)
