@@ -1,20 +1,22 @@
 class_name ZoneAnchorRecord
 extends RefCounted
 
-## A single authored anchor inside a building blueprint. Anchors are the shared
-## structure behind two authoring tiers (design_docs/content/
-## modular_building_editor.md §3.4):
-##   • tier 2 — slots: where a citizen stands to work/rest (counter, bed, desk,
-##     fishing spot, storage tray). Positional; `capacity` is occupants (1) or,
-##     for trays, storage units.
-##   • tier 3 — routing zones: doors and transit stops used for pathing, not
-##     occupation (visitor/service door, taxi/bus stop). May be world-level.
+## A single authored anchor (a *point*) inside a building blueprint. Active zones
+## are organized by geometry (design_docs/content/modular_building_editor.md §3.4):
+## regions (PlaceZoneRecord), points (this), and — later — lines (routes). One
+## anchor struct covers all point-shaped zones; the `role` field selects one of
+## two role families:
+##   • occupancy: a citizen stands at the point to act (counter, bed, desk,
+##     fishing spot, storage tray). `capacity` = occupants (1) or, for trays, units.
+##   • routing: a point citizens traverse or wait at, not occupy (visitor/service
+##     door, taxi/bus stop, patrol/route waypoint). May be world-level.
 ##
-## The `role` field discriminates the two tiers. `owner_zone_id` links the anchor
-## to its PlaceZoneRecord; it is empty for world-level routing points such as a
-## bus stop on a street.
+## `owner_zone_id` links the anchor to its PlaceZoneRecord; it is empty for
+## world-level routing points such as a bus stop on a street. Routes (bus lines,
+## patrols) are a future *line* geometry: an ordered list over routing anchors,
+## not a new anchor kind.
 
-# Slot roles (tier 2). A citizen occupies the anchor and performs the action.
+# Occupancy roles. A citizen occupies the anchor and performs the action.
 const ROLE_WORK := &"work"
 const ROLE_COUNTER := &"counter"
 const ROLE_RECEPTION := &"reception"
@@ -25,23 +27,26 @@ const ROLE_FISHING := &"fishing"
 const ROLE_INPUT_TRAY := &"input_tray"
 const ROLE_OUTPUT_TRAY := &"output_tray"
 
-const SLOT_ROLES: Array[StringName] = [
+const OCCUPANCY_ROLES: Array[StringName] = [
 	ROLE_WORK, ROLE_COUNTER, ROLE_RECEPTION, ROLE_DESK, ROLE_BED, ROLE_REST,
 	ROLE_FISHING, ROLE_INPUT_TRAY, ROLE_OUTPUT_TRAY,
 ]
 
-# Routing roles (tier 3). Citizens traverse or wait at the anchor; nobody works it.
+# Routing roles. Citizens traverse or wait at the anchor; nobody works it.
+# `waypoint` is a routing point a future route/patrol line strings together.
 const ROLE_VISITOR_DOOR := &"visitor_door"
 const ROLE_SERVICE_DOOR := &"service_door"
 const ROLE_TAXI_STOP := &"taxi_stop"
 const ROLE_BUS_STOP := &"bus_stop"
+const ROLE_WAYPOINT := &"waypoint"
 
 const ROUTING_ROLES: Array[StringName] = [
-	ROLE_VISITOR_DOOR, ROLE_SERVICE_DOOR, ROLE_TAXI_STOP, ROLE_BUS_STOP,
+	ROLE_VISITOR_DOOR, ROLE_SERVICE_DOOR, ROLE_TAXI_STOP, ROLE_BUS_STOP, ROLE_WAYPOINT,
 ]
 
-const TIER_SLOT := &"slot"
-const TIER_ROUTING := &"routing"
+# Role families — how a point behaves, and which system consumes it.
+const FAMILY_OCCUPANCY := &"occupancy"
+const FAMILY_ROUTING := &"routing"
 
 var anchor_id: StringName = &"anchor_1"
 ## Place zone this anchor belongs to; empty means a world-level routing point.
@@ -53,8 +58,8 @@ var rot: Vector3 = Vector3.ZERO  ## degrees
 var capacity: int = 1
 
 
-func tier() -> StringName:
-	return TIER_ROUTING if role in ROUTING_ROLES else TIER_SLOT
+func family() -> StringName:
+	return FAMILY_ROUTING if role in ROUTING_ROLES else FAMILY_OCCUPANCY
 
 
 func is_routing() -> bool:
@@ -92,8 +97,8 @@ static func from_dict(data: Dictionary) -> ZoneAnchorRecord:
 	return anchor
 
 
-static func roles_for_tier(tier_id: StringName) -> Array[StringName]:
-	return ROUTING_ROLES if tier_id == TIER_ROUTING else SLOT_ROLES
+static func roles_for_family(family_id: StringName) -> Array[StringName]:
+	return ROUTING_ROLES if family_id == FAMILY_ROUTING else OCCUPANCY_ROLES
 
 
 static func role_display_name(anchor_role: StringName) -> String:
@@ -111,6 +116,7 @@ static func role_display_name(anchor_role: StringName) -> String:
 		ROLE_SERVICE_DOOR: return "Служебная дверь"
 		ROLE_TAXI_STOP: return "Остановка такси"
 		ROLE_BUS_STOP: return "Автобусная остановка"
+		ROLE_WAYPOINT: return "Путевая точка"
 		_: return String(anchor_role)
 
 

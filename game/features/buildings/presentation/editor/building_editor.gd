@@ -54,11 +54,11 @@ var _last_paint_cell: Vector3i = Vector3i.ZERO
 var _paint_anchor: Vector3i = Vector3i.ZERO
 
 ## Zones-mode state. `_armed_tool` is what a grid click does: paint place cells,
-## or drop an anchor of the currently selected role. `_anchor_tier` switches the
-## role dropdown between slot roles and routing roles.
+## or drop an anchor of the currently selected role. `_anchor_family` filters the
+## role dropdown between the occupancy and routing role families.
 var _selected_place_index: int = -1
 var _armed_tool: StringName = &"cell"  ## &"cell" | &"anchor"
-var _anchor_tier: StringName = ZoneAnchorRecordScript.TIER_SLOT
+var _anchor_family: StringName = ZoneAnchorRecordScript.FAMILY_OCCUPANCY
 var _anchor_role: StringName = ZoneAnchorRecordScript.ROLE_WORK
 
 var _block_nodes: Dictionary = {}  ## Vector3i -> MeshInstance3D
@@ -108,7 +108,7 @@ var _zone_subtype_option: OptionButton
 var _zone_profession_option: OptionButton
 var _zone_workers_spin: SpinBox
 var _zone_info_label: Label
-var _anchor_tier_option: OptionButton
+var _anchor_family_option: OptionButton
 var _anchor_role_option: OptionButton
 var _anchor_world_check: CheckBox
 var _zone_marker_yaw_spin: SpinBox
@@ -1036,22 +1036,22 @@ func _build_zones_panel(root: Control) -> void:
 
 	vbox.add_child(HSeparator.new())
 
-	# --- Tiers 2 & 3: anchors (slots + routing), shared structure by role ---
+	# --- Points: one anchor category, two role families (occupancy + routing) ---
 	var anchor_hint := Label.new()
-	anchor_hint.text = "Якоря: слоты и маршрутизация"
+	anchor_hint.text = "Точки (якоря): занятие и маршрутизация"
 	anchor_hint.add_theme_color_override("font_color", Color(0.65, 0.72, 0.8))
 	vbox.add_child(anchor_hint)
 
-	vbox.add_child(_labeled("Уровень якоря:"))
-	_anchor_tier_option = OptionButton.new()
-	for tier_info in [
-		{"id": ZoneAnchorRecordScript.TIER_SLOT, "label": "Слот (занять место)"},
-		{"id": ZoneAnchorRecordScript.TIER_ROUTING, "label": "Маршрутизация"},
+	vbox.add_child(_labeled("Семейство роли:"))
+	_anchor_family_option = OptionButton.new()
+	for family_info in [
+		{"id": ZoneAnchorRecordScript.FAMILY_OCCUPANCY, "label": "Занятие (слот)"},
+		{"id": ZoneAnchorRecordScript.FAMILY_ROUTING, "label": "Маршрутизация"},
 	]:
-		_anchor_tier_option.add_item(tier_info["label"])
-		_anchor_tier_option.set_item_metadata(_anchor_tier_option.item_count - 1, tier_info["id"])
-	_anchor_tier_option.item_selected.connect(_on_anchor_tier_selected)
-	vbox.add_child(_anchor_tier_option)
+		_anchor_family_option.add_item(family_info["label"])
+		_anchor_family_option.set_item_metadata(_anchor_family_option.item_count - 1, family_info["id"])
+	_anchor_family_option.item_selected.connect(_on_anchor_family_selected)
+	vbox.add_child(_anchor_family_option)
 
 	vbox.add_child(_labeled("Роль якоря:"))
 	_anchor_role_option = OptionButton.new()
@@ -1111,8 +1111,8 @@ func _build_zones_panel(root: Control) -> void:
 	_zone_info_label.add_theme_color_override("font_color", Color(0.6, 0.66, 0.72))
 	vbox.add_child(_zone_info_label)
 
-	_anchor_tier_option.select(0)
-	_on_anchor_tier_selected(0)
+	_anchor_family_option.select(0)
+	_on_anchor_family_selected(0)
 	_arm_tool(&"cell")
 	_rebuild_place_option()
 
@@ -1321,10 +1321,10 @@ func _on_place_workers_changed(value: float) -> void:
 	place.max_workers = int(value)
 
 
-func _on_anchor_tier_selected(index: int) -> void:
-	_anchor_tier = _anchor_tier_option.get_item_metadata(index)
+func _on_anchor_family_selected(index: int) -> void:
+	_anchor_family = _anchor_family_option.get_item_metadata(index)
 	# World-level anchors only make sense for routing (a bus stop on a street).
-	var routing := _anchor_tier == ZoneAnchorRecordScript.TIER_ROUTING
+	var routing := _anchor_family == ZoneAnchorRecordScript.FAMILY_ROUTING
 	if _anchor_world_check != null:
 		_anchor_world_check.disabled = not routing
 		if not routing:
@@ -1336,7 +1336,7 @@ func _rebuild_anchor_role_options() -> void:
 	if _anchor_role_option == null:
 		return
 	_anchor_role_option.clear()
-	var roles := ZoneAnchorRecordScript.roles_for_tier(_anchor_tier)
+	var roles := ZoneAnchorRecordScript.roles_for_family(_anchor_family)
 	for role in roles:
 		_anchor_role_option.add_item(ZoneAnchorRecordScript.role_display_name(role))
 		_anchor_role_option.set_item_metadata(_anchor_role_option.item_count - 1, role)

@@ -41,9 +41,10 @@ var worker_entrances: Array[Vector2i] = []
 
 var blocks: Array[BlueprintBlock] = []
 
-## Active zones (authored in editor Mode 3), split into two tiers (see design_docs
-## §3.4). `place_zones` are tier-1 identities; `zone_anchors` are the shared tier-2
-## (slots) and tier-3 (routing) anchors that reference a place by `owner`.
+## Active zones (authored in editor Mode 3), organized by geometry (design_docs
+## §3.4): `place_zones` are regions (identity); `zone_anchors` are points, one
+## struct for both role families (occupancy + routing), referencing a place by
+## `owner`. Routes (lines) will be a third geometry layered over routing anchors.
 var place_zones: Array[PlaceZoneRecord] = []
 var zone_anchors: Array[ZoneAnchorRecord] = []
 
@@ -211,7 +212,7 @@ func validation_errors() -> Array[String]:
 			errors.append("Unknown zone kind: %s" % zone.kind)
 		if zone.max_workers < 0:
 			errors.append("Zone %s has negative max_workers" % zone.zone_id)
-	var known_roles: Array[StringName] = ZoneAnchorRecordScript.SLOT_ROLES + ZoneAnchorRecordScript.ROUTING_ROLES
+	var known_roles: Array[StringName] = ZoneAnchorRecordScript.OCCUPANCY_ROLES + ZoneAnchorRecordScript.ROUTING_ROLES
 	for anchor in zone_anchors:
 		if anchor.role not in known_roles:
 			errors.append("Unknown anchor role: %s" % anchor.role)
@@ -231,7 +232,7 @@ func _migrate_legacy_zone(raw: Dictionary) -> void:
 		anchor.anchor_id = StringName(raw_anchor.get("id", "anchor_1"))
 		anchor.owner_zone_id = place.zone_id
 		var action := StringName(raw_anchor.get("action", "work"))
-		anchor.role = action if action in ZoneAnchorRecordScript.SLOT_ROLES else ZoneAnchorRecordScript.ROLE_WORK
+		anchor.role = action if action in ZoneAnchorRecordScript.OCCUPANCY_ROLES else ZoneAnchorRecordScript.ROLE_WORK
 		anchor.pos = ZoneAnchorRecordScript._arr_to_vec3(raw_anchor.get("pos", []))
 		anchor.rot = ZoneAnchorRecordScript._arr_to_vec3(raw_anchor.get("rot", []))
 		zone_anchors.append(anchor)
