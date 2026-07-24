@@ -129,6 +129,7 @@ const SimulationEventDispatcherScript = preload("res://game/features/simulation/
 const SettlementUIAttacherScript = preload("res://game/features/ui/presentation/settlement_ui_attacher.gd")
 const SettlementBootstrapperScript = preload("res://game/bootstrap/settlement_bootstrapper.gd")
 const SettlementSaveLoaderScript = preload("res://game/bootstrap/settlement_save_loader.gd")
+const SettlementUICallbacksScript = preload("res://game/bootstrap/settlement_ui_callbacks.gd")
 
 
 
@@ -495,122 +496,12 @@ func _ready() -> void:
 		active_config = GameLaunchConfigScript.for_tent_era()
 	launch_config = active_config
 
+	ui_manager.bind_delegate_events(SettlementUICallbacksScript.new(self))
 	SettlementBootstrapperScript.new().run(self)
 
 
 func _next_registration_ticket() -> int:
 	return citizen_registration_service.next_registration_ticket() if citizen_registration_service != null else 0
-
-
-func _resolve_event_decision(choice_index: int) -> void:
-	if survival_event_controller != null:
-		survival_event_controller.resolve_event_decision(choice_index)
-
-
-func _toggle_school_development(role: String, pressed: bool) -> void:
-	if school_menu_controller != null:
-		school_menu_controller.toggle_school_development(role, pressed)
-
-func _start_school_training(role: String) -> void:
-	if school_menu_controller != null:
-		school_menu_controller.start_school_training(role)
-
-func _update_entrance_order_total(_value := 0.0) -> void:
-	if entrance_menu_controller != null:
-		entrance_menu_controller.update_entrance_order_total(_value)
-
-
-func _send_entrance_order() -> void:
-	if entrance_menu_controller != null:
-		entrance_menu_controller.send_entrance_order()
-
-func _hide_research_menu() -> void:
-	if research_menu_controller != null:
-		research_menu_controller.hide_research_menu()
-
-func _start_research(tech_id: String) -> void:
-	if research_menu_controller != null:
-		research_menu_controller.start_research(tech_id)
-
-func _cancel_research() -> void:
-	if research_menu_controller != null:
-		research_menu_controller.cancel_research()
-
-
-func _show_campfire_story_menu() -> void:
-	if campfire_menu_controller != null:
-		campfire_menu_controller.show_campfire_story_menu()
-
-
-func _close_campfire_story_menu() -> void:
-	if campfire_menu_controller != null:
-		campfire_menu_controller.close_campfire_story_menu()
-
-
-func _select_campfire_story(story_id: String) -> void:
-	if campfire_menu_controller != null:
-		campfire_menu_controller.select_campfire_story(story_id)
-
-
-func _close_campfire_orders_menu() -> void:
-	if campfire_menu_controller != null:
-		campfire_menu_controller.close_campfire_orders_menu()
-	ui_manager.campfire_menu.visible = true
-
-
-func _set_balanced_warehouse_mode(enabled: bool) -> void:
-	storage_routing_service.set_balanced_warehouse_mode(enabled)
-
-
-func _show_workforce_menu() -> void:
-	if workforce_menu_controller != null:
-		workforce_menu_controller.show_workforce_menu()
-
-
-func _close_workforce_menu() -> void:
-	if workforce_menu_controller != null:
-		workforce_menu_controller.close_workforce_menu()
-
-
-func _remove_worker_from_role(role: String) -> void:
-	if workforce_menu_controller != null:
-		workforce_menu_controller.remove_worker_from_role(role)
-
-
-func _enable_auto_for_citizen(citizen: Citizen) -> void:
-	if workforce_menu_controller != null:
-		workforce_menu_controller.enable_auto_for_citizen(citizen)
-
-
-func _buy_food(quantity: int, unit_price: int) -> void:
-	trade_service.buy_food(quantity, unit_price)
-
-
-func _sell_resource(resource_type: String, quantity: int, unit_price: int) -> void:
-	trade_service.sell_resource(resource_type, quantity, unit_price)
-
-
-func _buy_tool(tool_id: String, price: int) -> void:
-	trade_service.buy_tool(tool_id, price)
-
-
-func _buy_courier_equipment(courier: Citizen, equipment_id: String, price: int) -> void:
-	trade_service.buy_courier_equipment(courier, equipment_id, price)
-
-
-func _toggle_warehouse_accept(accepted: bool, resource_type: String) -> void:
-	if warehouse_menu_controller != null:
-		warehouse_menu_controller.toggle_warehouse_accept(accepted, resource_type)
-
-
-func _dump_warehouse_resource(resource_type: String) -> void:
-	if warehouse_menu_controller != null:
-		warehouse_menu_controller.dump_warehouse_resource(resource_type)
-
-
-func _cover_warehouse_with_tarp() -> void:
-	if warehouse_menu_controller != null:
-		warehouse_menu_controller.cover_warehouse_with_tarp()
 
 
 func _settle_unhoused_resident() -> void:

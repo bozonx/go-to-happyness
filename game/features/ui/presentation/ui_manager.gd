@@ -73,7 +73,7 @@ func setup(p_simulation: Node) -> void:
 		bind_events(simulation)
 
 
-func bind_events(target: Node) -> void:
+func bind_events(target: Object) -> void:
 	_connect_event(events.global_build_menu_toggled, target, "_toggle_global_build_menu")
 	_connect_event(events.skip_night_requested, target, "_skip_night")
 	_connect_event(events.skip_to_workday_start_requested, target, "_skip_to_workday_start")
@@ -89,40 +89,24 @@ func bind_events(target: Node) -> void:
 	_connect_event(events.role_selected, target, "_set_selected_work_role")
 
 	_connect_event(events.send_resident_outside_requested, target, "_send_selected_resident_to_outside_work")
-	_connect_event(events.send_entrance_order_requested, target, "_send_entrance_order")
 	_connect_event(events.context_menus_close_requested, target, "_close_context_menus")
-	_connect_event(events.entrance_order_total_update_requested, target, "_update_entrance_order_total")
 
 	_connect_event(events.spawn_house_citizen_requested, target, "_spawn_house_citizen")
 	_connect_event(events.house_demolish_requested, target, "_demolish_selected_house")
 
-	_connect_event(events.school_train_requested, target, "_start_school_training")
-	_connect_event(events.school_dev_toggled, target, "_toggle_school_development")
 	_connect_event(events.school_demolish_requested, target, "_demolish_selected_school")
 
 	_connect_event(events.workday_hours_changed, target, "_set_workday_hours")
 	_connect_event(events.campfire_advance_pressed, target, "_on_campfire_advance_pressed")
 	_connect_event(events.campfire_orders_menu_show_requested, target, "_show_campfire_orders_menu")
 	_connect_event(events.campfire_primary_action_requested, target, "_handle_campfire_primary_action")
-	_connect_event(events.workforce_menu_show_requested, target, "_show_workforce_menu")
 	_connect_event(events.research_menu_show_requested, target, "_show_research_menu")
 	_connect_event(events.civic_post_assignment_requested, target, "_handle_civic_post_assignment")
 	_connect_event(events.occupy_campfire_position_requested, target, "_occupy_selected_campfire_position")
 	_connect_event(events.campfire_acceptance_toggled, target, "_toggle_campfire_acceptance")
 	_connect_event(events.dismiss_campfire_worker_requested, target, "_dismiss_campfire_worker")
 	_connect_event(events.campfire_worker_overtime_toggled, target, "_toggle_campfire_worker_overtime")
-	_connect_event(events.campfire_story_menu_show_requested, target, "_show_campfire_story_menu")
-	_connect_event(events.campfire_story_selected, target, "_select_campfire_story")
-	_connect_event(events.campfire_story_menu_close_requested, target, "_close_campfire_story_menu")
 
-	_connect_event(events.sell_resource_requested, target, "_sell_resource")
-	_connect_event(events.buy_tool_requested, target, "_buy_tool")
-	_connect_event(events.buy_equipment_requested, target, "_buy_courier_equipment")
-	_connect_event(events.buy_food_requested, target, "_buy_food")
-
-	_connect_event(events.warehouse_accept_toggled, target, "_toggle_warehouse_accept")
-	_connect_event(events.dump_warehouse_resource_requested, target, "_dump_warehouse_resource")
-	_connect_event(events.cover_warehouse_requested, target, "_cover_warehouse_with_tarp")
 	_connect_event(events.warehouse_demolish_requested, target, "_demolish_selected_warehouse")
 
 	_connect_event(events.pocket_take_menu_close_requested, target, "_close_pocket_take_menu")
@@ -138,26 +122,50 @@ func bind_events(target: Node) -> void:
 	_connect_event(events.demolish_building_requested, target, "_demolish_selected_building")
 	_connect_event(events.cancel_construction_requested, target, "_cancel_selected_construction")
 
-	_connect_event(events.workforce_menu_close_requested, target, "_close_workforce_menu")
-	_connect_event(events.remove_worker_role_requested, target, "_remove_worker_from_role")
 	_connect_event(events.assign_unemployed_worker_requested, target, "_assign_unemployed_worker")
-	_connect_event(events.enable_auto_citizen_requested, target, "_enable_auto_for_citizen")
-
-	_connect_event(events.research_menu_hide_requested, target, "_hide_research_menu")
-	_connect_event(events.start_research_requested, target, "_start_research")
-	_connect_event(events.cancel_research_requested, target, "_cancel_research")
 
 	_connect_event(events.road_walking_order_set, target, "_set_road_walking_order")
-	_connect_event(events.balanced_warehouse_mode_set, target, "_set_balanced_warehouse_mode")
 	_connect_event(events.settlement_night_work_toggled, target, "_toggle_settlement_night_work")
 	_connect_event(events.double_time_order_toggled, target, "_toggle_double_time_order")
 	_connect_event(events.cheer_up_settlement_requested, target, "_cheer_up_settlement")
-	_connect_event(events.campfire_orders_menu_close_requested, target, "_close_campfire_orders_menu")
-
-	_connect_event(events.event_decision_choice_selected, target, "_resolve_event_decision")
 
 
-func _connect_event(sig: Signal, target: Node, method_name: String) -> void:
+func bind_delegate_events(callbacks: Object) -> void:
+	_connect_event(events.send_entrance_order_requested, callbacks, "send_entrance_order")
+	_connect_event(events.entrance_order_total_update_requested, callbacks, "update_entrance_order_total")
+
+	_connect_event(events.school_train_requested, callbacks, "start_school_training")
+	_connect_event(events.school_dev_toggled, callbacks, "toggle_school_development")
+
+	_connect_event(events.workforce_menu_show_requested, callbacks, "show_workforce_menu")
+	_connect_event(events.workforce_menu_close_requested, callbacks, "close_workforce_menu")
+	_connect_event(events.remove_worker_role_requested, callbacks, "remove_worker_from_role")
+	_connect_event(events.enable_auto_citizen_requested, callbacks, "enable_auto_for_citizen")
+
+	_connect_event(events.campfire_story_menu_show_requested, callbacks, "show_campfire_story_menu")
+	_connect_event(events.campfire_story_selected, callbacks, "select_campfire_story")
+	_connect_event(events.campfire_story_menu_close_requested, callbacks, "close_campfire_story_menu")
+	_connect_event(events.campfire_orders_menu_close_requested, callbacks, "close_campfire_orders_menu")
+
+	_connect_event(events.sell_resource_requested, callbacks, "sell_resource")
+	_connect_event(events.buy_tool_requested, callbacks, "buy_tool")
+	_connect_event(events.buy_equipment_requested, callbacks, "buy_courier_equipment")
+	_connect_event(events.buy_food_requested, callbacks, "buy_food")
+
+	_connect_event(events.warehouse_accept_toggled, callbacks, "toggle_warehouse_accept")
+	_connect_event(events.dump_warehouse_resource_requested, callbacks, "dump_warehouse_resource")
+	_connect_event(events.cover_warehouse_requested, callbacks, "cover_warehouse_with_tarp")
+
+	_connect_event(events.research_menu_hide_requested, callbacks, "hide_research_menu")
+	_connect_event(events.start_research_requested, callbacks, "start_research")
+	_connect_event(events.cancel_research_requested, callbacks, "cancel_research")
+
+	_connect_event(events.balanced_warehouse_mode_set, callbacks, "set_balanced_warehouse_mode")
+
+	_connect_event(events.event_decision_choice_selected, callbacks, "resolve_event_decision")
+
+
+func _connect_event(sig: Signal, target: Object, method_name: String) -> void:
 	if target != null and target.has_method(method_name):
 		var callable := Callable(target, method_name)
 		if not sig.is_connected(callable):
