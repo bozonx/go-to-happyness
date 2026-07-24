@@ -131,6 +131,7 @@ const SettlementBootstrapperScript = preload("res://game/bootstrap/settlement_bo
 const SettlementSaveLoaderScript = preload("res://game/bootstrap/settlement_save_loader.gd")
 const SettlementUICallbacksScript = preload("res://game/bootstrap/settlement_ui_callbacks.gd")
 const SettlementResearchControllerScript = preload("res://game/bootstrap/settlement_research_controller.gd")
+const SettlementCitizenFactoryScript = preload("res://game/bootstrap/settlement_citizen_factory.gd")
 
 
 
@@ -484,6 +485,7 @@ var building_visuals_service: BuildingVisualsService
 var actuator_bridge: RefCounted
 var survival_event_controller: SurvivalEventController
 var _research_controller: RefCounted
+var _citizen_factory: RefCounted
 
 
 func _ready() -> void:
@@ -499,6 +501,7 @@ func _ready() -> void:
 	launch_config = active_config
 
 	_research_controller = SettlementResearchControllerScript.new(self)
+	_citizen_factory = SettlementCitizenFactoryScript.new(self)
 	ui_manager.bind_delegate_events(SettlementUICallbacksScript.new(self))
 	SettlementBootstrapperScript.new().run(self)
 
@@ -1174,64 +1177,15 @@ func _resource_access_position(from: Vector3, resource_position: Vector3) -> Vec
 
 
 func _create_citizens() -> void:
-	var spawn_anchor: Vector3 = _entrance_anchor_position() + Vector3(0.0, 0.0, 2.0)
-	var columns := 3
-	for index in range(POPULATION):
-		var col := index % columns
-		var row := index / columns
-		var spawn_position := spawn_anchor + Vector3((col - 1) * 1.5, 0.0, row * 1.4)
-		var terrain_height := _terrain_height_at(spawn_position.x, spawn_position.z, 0.0)
-		if not is_nan(terrain_height):
-			spawn_position.y = terrain_height + 0.08
-		_add_citizen(spawn_position, "unassigned")
-	if not citizens.is_empty():
-		citizens[random.randi_range(0, citizens.size() - 1)].is_jack_of_all_trades = true
-	if hero_citizen != null:
-		for citizen in citizens:
-			citizen.set_squad(&"hero_squad", hero_citizen.ai_id, true)
+	_citizen_factory.create_citizens()
 
 
 func _bind_hero_squad_to_settlement(squad_settlement_id: StringName) -> void:
-	if hero_citizen == null:
-		return
-	for citizen in citizens:
-		if citizen.squad_state.is_in_squad() and citizen.squad_state.squad_leader_id == hero_citizen.ai_id:
-			citizen.settlement_id = squad_settlement_id
+	_citizen_factory.bind_hero_squad_to_settlement(squad_settlement_id)
 
 
 func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void:
-	var citizen: Citizen = CitizenActorScene.instantiate()
-	citizen.position = spawn_position
-	if citizens.size() < POPULATION:
-		citizen.gender = "male" if citizens.size() % 2 == 0 else "female"
-	if hero_citizen == null:
-		citizen.gender = "male"
-		citizen.skin_color = Color("f1c09a")
-		citizen.hair_color = Color("3b2219")
-		citizen.shirt_color = Color("1e3d59")
-		citizen.pants_color = Color("ff6e40")
-	citizen.random = random
-	add_child(citizen)
-	citizen.simulation = self
-	citizen.setup_specialization(primary_specialization if not primary_specialization.is_empty() else "unassigned")
-	_wire_citizen(citizen)
-	citizens.append(citizen)
-	citizen.ai_id = _next_ai_citizen_id
-	_next_ai_citizen_id += 1
-	citizen_ai.register_citizen(citizen.ai_id, SettlementCitizenActuatorScript.new(citizen, _ai_target_for_key))
-	citizen.tree_exiting.connect(_on_ai_citizen_exiting.bind(citizen.ai_id), CONNECT_ONE_SHOT)
-	if citizens.size() > POPULATION:
-		settlement.add(ResourceIds.FOOD, random.randi_range(2, 5))
-	if hero_citizen == null:
-		hero_citizen = citizen
-		citizen.set_hero(true)
-		citizen.employment_state = Citizen.EmploymentState.NO_PERMANENT_WORK
-	else:
-		# Before the first campfire the settlement has no administration. Initial
-		# residents can receive explicit daily orders to bootstrap it.
-		citizen.employment_state = Citizen.EmploymentState.NO_PERMANENT_WORK if not is_instance_valid(campfire_node) else Citizen.EmploymentState.UNREGISTERED
-	if citizen_needs_service != null:
-		citizen_needs_service.schedule_toilet(citizen.ai_id)
+	_citizen_factory.add_citizen(spawn_position, primary_specialization)
 
 
 ## Attaches navigation, the registration service and every gameplay signal to a
@@ -1239,84 +1193,27 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 ## `simulation` and chosen the specialization. Shared by initial spawning and
 ## save restore so a new signal only needs to be registered in one place.
 func _wire_citizen(citizen: Citizen) -> void:
-	citizen.setup_navigation(_find_path_around_houses, _get_nearest_delivery_position, _resolve_building_queue_position, _movement_speed_modifier_at, _navigation_revision, _record_trail_movement, _is_route_reachable, _complete_building_queue_arrival, _release_building_queue_entry, _find_recovery_path, _is_route_path_clear)
-	citizen.setup_registration_service(_can_start_registration, _registration_duration)
-	if actuator_bridge != null:
-		actuator_bridge.wire_citizen(citizen)
-	citizen.tree_harvested.connect(_on_tree_harvested)
-	citizen.employment_processing_finished.connect(_on_employment_processing_finished)
-	citizen.arrival_greeter_ready.connect(_on_arrival_greeter_ready)
-	citizen.outside_work_departed.connect(_on_outside_work_departed)
-	citizen.citizen_leaving_departed.connect(_on_citizen_leaving_departed)
+	_citizen_factory.wire_citizen(citizen)
 
 
 func _create_starter_backpack() -> void:
-	if settlement.warehouse_ever_built:
-		return
-	var anchor := _entrance_anchor_position() + Vector3(0.0, 0.0, 2.0)
-	backpack_position = anchor + Vector3(-1.5, 0.0, 0.7)
-	var terrain_height := _terrain_height_at(backpack_position.x, backpack_position.z, 0.0)
-	if not is_nan(terrain_height):
-		backpack_position.y = terrain_height + 0.08
-	_create_resource_pile(backpack_position, settlement.backpack, true)
-	if not resource_piles.is_empty():
-		backpack_node = resource_piles[resource_piles.size() - 1].node
+	_citizen_factory.create_starter_backpack()
 
 
 func _on_ai_citizen_exiting(citizen_id: int) -> void:
-	if trail_field != null:
-		trail_field.forget_walker(citizen_id)
-	if is_instance_valid(citizen_ai):
-		citizen_ai.unregister_citizen(citizen_id)
-	if canteen_service != null:
-		canteen_service.remove_citizen(citizen_id)
-	if citizen_needs_service != null:
-		citizen_needs_service.remove_citizen(citizen_id)
+	_citizen_factory.on_ai_citizen_exiting(citizen_id)
 
 
 func _is_ai_citizen_id_alive(citizen_id: int) -> bool:
-	for citizen in citizens:
-		if is_instance_valid(citizen) and citizen.ai_id == citizen_id:
-			return true
-	return false
+	return _citizen_factory.is_ai_citizen_id_alive(citizen_id)
 
 
 func _citizen_for_ai_id(citizen_id: int) -> Citizen:
-	if citizen_id <= 0:
-		return null
-	for citizen in citizens:
-		if is_instance_valid(citizen) and citizen.ai_id == citizen_id:
-			return citizen
-	return null
+	return _citizen_factory.citizen_for_ai_id(citizen_id)
 
 
 func _ai_target_for_key(target_key: StringName) -> Node3D:
-	var parts := String(target_key).split(":")
-	if parts.size() != 3:
-		return null
-	var cell := Vector2i(int(parts[1]), int(parts[2]))
-	match parts[0]:
-		"building":
-			for record in building_registry.records():
-				var building := record.node as Node3D
-				if is_instance_valid(building) and _cell_from_position(building.global_position) == cell:
-					return building
-		"construction":
-			for site: ConstructionSite in construction_sites:
-				if site.cell == cell and is_instance_valid(site.node):
-					return site.node
-		"demolition":
-			for site: DemolitionSite in demolition_sites:
-				if is_instance_valid(site.building) and _cell_from_position(site.building.global_position) == cell:
-					return site.building
-		"dig":
-			var site := excavation_service.dig_site_at(cell)
-			return site.node if is_instance_valid(site.node) else null
-		"factory":
-			for factory: Node3D in factories:
-				if is_instance_valid(factory) and _cell_from_position(factory.global_position) == cell:
-					return factory
-	return null
+	return _citizen_factory.ai_target_for_key(target_key)
 
 
 
