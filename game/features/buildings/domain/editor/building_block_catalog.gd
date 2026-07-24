@@ -10,18 +10,33 @@ extends RefCounted
 ## while `mesh_shape` tells presentation which procedural mesh to build.
 
 enum Category {
-	STRUCTURE,  ## cube, slab — massive body / floors
-	FOUNDATION, ## foundation blocks that auto-extend down to the ground
-	WALL,       ## wall panel, double span, corner
-	ROOF,       ## roof pitch
-	CIRCULATION,## stairs
-	RAILING,    ## balustrade / fence
+	STRUCTURE,   ## cube, slab, quarter slab — massive body / floors
+	FOUNDATION,  ## foundation blocks that auto-extend down to the ground
+	WALL,        ## wall panel, double span, corner, half-wall
+	COLUMNS,     ## square, round, half-round columns
+	ROOF,        ## roof pitch, low slope, roof corners, gable
+	CIRCULATION, ## stairs, half stairs, quarter stairs, 45° corner stairs
+	OPENINGS,    ## window wall, door wall
+	RAILING,     ## balustrade / fence
+	SPECIAL,     ## arch, custom modules
 }
 
 ## Procedural mesh archetypes handled by the presentation mesh library.
 const SHAPE_BOX := &"box"
 const SHAPE_WEDGE := &"wedge"
+const SHAPE_WEDGE_LOW := &"wedge_low"
+const SHAPE_SLOPE_CORNER_IN := &"slope_corner_in"
+const SHAPE_SLOPE_CORNER_OUT := &"slope_corner_out"
+const SHAPE_GABLE := &"gable"
+const SHAPE_CYLINDER := &"cylinder"
+const SHAPE_HALF_CYLINDER := &"half_cylinder"
 const SHAPE_STAIRS := &"stairs"
+const SHAPE_STAIRS_HALF := &"stairs_half"
+const SHAPE_STAIRS_QUARTER := &"stairs_quarter"
+const SHAPE_STAIRS_CORNER_45 := &"stairs_corner_45"
+const SHAPE_WINDOW_WALL := &"window_wall"
+const SHAPE_DOOR_WALL := &"door_wall"
+const SHAPE_ARCH := &"arch"
 
 ## Ordered list of block definitions. Kept as a plain array of dictionaries so
 ## the catalog stays free of engine node/resource types (domain rule).
@@ -36,9 +51,25 @@ const BLOCKS: Array = [
 	},
 	{
 		"id": &"slab",
-		"name": "Плита (пол/перекрытие)",
+		"name": "Плита 0.5м (пол/перекрытие)",
 		"category": Category.STRUCTURE,
 		"size": Vector3(1.0, 0.5, 1.0),
+		"mesh_shape": SHAPE_BOX,
+		"rotatable": false,
+	},
+	{
+		"id": &"thin_slab",
+		"name": "Плита 0.25м (тонкая)",
+		"category": Category.STRUCTURE,
+		"size": Vector3(1.0, 0.25, 1.0),
+		"mesh_shape": SHAPE_BOX,
+		"rotatable": false,
+	},
+	{
+		"id": &"quarter_block",
+		"name": "Четверть куба",
+		"category": Category.STRUCTURE,
+		"size": Vector3(0.5, 1.0, 0.5),
 		"mesh_shape": SHAPE_BOX,
 		"rotatable": false,
 	},
@@ -49,8 +80,6 @@ const BLOCKS: Array = [
 		"size": Vector3(1.0, 1.0, 1.0),
 		"mesh_shape": SHAPE_BOX,
 		"rotatable": false,
-		# Presentation extends this block downward until it meets the terrain, so
-		# a building on an uneven slope never leaves a gap beneath it.
 		"extends_down": true,
 	},
 	{
@@ -58,6 +87,22 @@ const BLOCKS: Array = [
 		"name": "Стеновая панель",
 		"category": Category.WALL,
 		"size": Vector3(1.0, 1.0, 0.15),
+		"mesh_shape": SHAPE_BOX,
+		"rotatable": true,
+	},
+	{
+		"id": &"half_wall",
+		"name": "Полустена 0.5м",
+		"category": Category.WALL,
+		"size": Vector3(1.0, 0.5, 0.15),
+		"mesh_shape": SHAPE_BOX,
+		"rotatable": true,
+	},
+	{
+		"id": &"quarter_wall",
+		"name": "Узкая стенка 0.5м",
+		"category": Category.WALL,
+		"size": Vector3(0.5, 1.0, 0.15),
 		"mesh_shape": SHAPE_BOX,
 		"rotatable": true,
 	},
@@ -78,19 +123,155 @@ const BLOCKS: Array = [
 		"rotatable": true,
 	},
 	{
+		"id": &"column_square_thick",
+		"name": "Колонна квадратная (0.8м)",
+		"category": Category.COLUMNS,
+		"size": Vector3(0.8, 1.0, 0.8),
+		"mesh_shape": SHAPE_BOX,
+		"rotatable": true,
+	},
+	{
+		"id": &"column_square_med",
+		"name": "Колонна квадратная (0.5м)",
+		"category": Category.COLUMNS,
+		"size": Vector3(0.5, 1.0, 0.5),
+		"mesh_shape": SHAPE_BOX,
+		"rotatable": true,
+	},
+	{
+		"id": &"column_square_thin",
+		"name": "Колонна квадратная (0.25м)",
+		"category": Category.COLUMNS,
+		"size": Vector3(0.25, 1.0, 0.25),
+		"mesh_shape": SHAPE_BOX,
+		"rotatable": true,
+	},
+	{
+		"id": &"column_round_thick",
+		"name": "Колонна круглая (0.8м)",
+		"category": Category.COLUMNS,
+		"size": Vector3(0.8, 1.0, 0.8),
+		"mesh_shape": SHAPE_CYLINDER,
+		"rotatable": true,
+	},
+	{
+		"id": &"column_round_med",
+		"name": "Колонна круглая (0.5м)",
+		"category": Category.COLUMNS,
+		"size": Vector3(0.5, 1.0, 0.5),
+		"mesh_shape": SHAPE_CYLINDER,
+		"rotatable": true,
+	},
+	{
+		"id": &"column_round_thin",
+		"name": "Колонна круглая (0.25м)",
+		"category": Category.COLUMNS,
+		"size": Vector3(0.25, 1.0, 0.25),
+		"mesh_shape": SHAPE_CYLINDER,
+		"rotatable": true,
+	},
+	{
+		"id": &"column_half_round",
+		"name": "Полуколонна круглая (0.5м)",
+		"category": Category.COLUMNS,
+		"size": Vector3(0.5, 1.0, 0.25),
+		"mesh_shape": SHAPE_HALF_CYLINDER,
+		"rotatable": true,
+	},
+	{
 		"id": &"roof_pitch",
-		"name": "Крышный скат",
+		"name": "Крышный скат (45°)",
 		"category": Category.ROOF,
 		"size": Vector3(1.0, 1.0, 1.0),
 		"mesh_shape": SHAPE_WEDGE,
 		"rotatable": true,
 	},
 	{
+		"id": &"roof_pitch_low",
+		"name": "Низкий скат (22.5°)",
+		"category": Category.ROOF,
+		"size": Vector3(1.0, 0.5, 1.0),
+		"mesh_shape": SHAPE_WEDGE_LOW,
+		"rotatable": true,
+	},
+	{
+		"id": &"roof_corner_in",
+		"name": "Внутренний угол крыши",
+		"category": Category.ROOF,
+		"size": Vector3(1.0, 1.0, 1.0),
+		"mesh_shape": SHAPE_SLOPE_CORNER_IN,
+		"rotatable": true,
+	},
+	{
+		"id": &"roof_corner_out",
+		"name": "Внешний угол крыши",
+		"category": Category.ROOF,
+		"size": Vector3(1.0, 1.0, 1.0),
+		"mesh_shape": SHAPE_SLOPE_CORNER_OUT,
+		"rotatable": true,
+	},
+	{
+		"id": &"gable_end",
+		"name": "Фронтон (треугольная стена)",
+		"category": Category.ROOF,
+		"size": Vector3(1.0, 1.0, 0.15),
+		"mesh_shape": SHAPE_GABLE,
+		"rotatable": true,
+	},
+	{
 		"id": &"stairs",
-		"name": "Лестница",
+		"name": "Лестница (8 ступеней)",
 		"category": Category.CIRCULATION,
 		"size": Vector3(1.0, 1.0, 1.0),
 		"mesh_shape": SHAPE_STAIRS,
+		"rotatable": true,
+	},
+	{
+		"id": &"stairs_half",
+		"name": "Лестница (4 ступени)",
+		"category": Category.CIRCULATION,
+		"size": Vector3(1.0, 0.5, 1.0),
+		"mesh_shape": SHAPE_STAIRS_HALF,
+		"rotatable": true,
+	},
+	{
+		"id": &"stairs_quarter",
+		"name": "Лестница (2 ступени)",
+		"category": Category.CIRCULATION,
+		"size": Vector3(1.0, 0.25, 1.0),
+		"mesh_shape": SHAPE_STAIRS_QUARTER,
+		"rotatable": true,
+	},
+	{
+		"id": &"stairs_corner_45",
+		"name": "Угловая лестница (45° крыльцо)",
+		"category": Category.CIRCULATION,
+		"size": Vector3(1.0, 1.0, 1.0),
+		"mesh_shape": SHAPE_STAIRS_CORNER_45,
+		"rotatable": true,
+	},
+	{
+		"id": &"window_wall",
+		"name": "Стена с окном",
+		"category": Category.OPENINGS,
+		"size": Vector3(1.0, 1.0, 0.15),
+		"mesh_shape": SHAPE_WINDOW_WALL,
+		"rotatable": true,
+	},
+	{
+		"id": &"door_wall",
+		"name": "Стена с дверным проёмом",
+		"category": Category.OPENINGS,
+		"size": Vector3(1.0, 1.0, 0.15),
+		"mesh_shape": SHAPE_DOOR_WALL,
+		"rotatable": true,
+	},
+	{
+		"id": &"arch",
+		"name": "Арка",
+		"category": Category.SPECIAL,
+		"size": Vector3(1.0, 1.0, 0.5),
+		"mesh_shape": SHAPE_ARCH,
 		"rotatable": true,
 	},
 	{
@@ -143,7 +324,10 @@ static func category_name(category: int) -> String:
 		Category.STRUCTURE: return "Конструкция"
 		Category.FOUNDATION: return "Фундамент"
 		Category.WALL: return "Стены"
+		Category.COLUMNS: return "Колонны"
 		Category.ROOF: return "Крыша"
 		Category.CIRCULATION: return "Проходы"
+		Category.OPENINGS: return "Проёмы"
 		Category.RAILING: return "Ограждения"
+		Category.SPECIAL: return "Спецблоки"
 		_: return "Прочее"

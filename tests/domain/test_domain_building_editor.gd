@@ -14,8 +14,12 @@ const ZoneAnchorRecordScript = preload("res://game/features/buildings/domain/edi
 const BuildingZoneServiceScript = preload("res://game/features/buildings/application/building_zone_service.gd")
 
 
+const BlockMeshLibraryScript = preload("res://game/features/buildings/presentation/editor/block_mesh_library.gd")
+
+
 static func run_all() -> void:
 	_test_catalog()
+	_test_mesh_library()
 	_test_material_catalog_and_costs()
 	_test_material_era_filtering()
 	_test_underground_requires_earth_era()
@@ -33,8 +37,9 @@ static func run_all() -> void:
 
 
 static func _test_catalog() -> void:
-	assert(BuildingBlockCatalogScript.all().size() == 9)
+	assert(BuildingBlockCatalogScript.all().size() == 30)
 	assert(BuildingBlockCatalogScript.has_block(&"cube"))
+	assert(BuildingBlockCatalogScript.has_block(&"stairs_corner_45"))
 	assert(BuildingBlockCatalogScript.has_block(&"foundation"))
 	assert(not BuildingBlockCatalogScript.has_block(&"nonexistent"))
 	assert(BuildingBlockCatalogScript.default_block_id() == &"cube")
@@ -45,8 +50,20 @@ static func _test_catalog() -> void:
 	assert(not BuildingBlockCatalogScript.extends_down(&"cube"))
 
 
+static func _test_mesh_library() -> void:
+	var lib := BlockMeshLibraryScript.new()
+	for block_id in BuildingBlockCatalogScript.ids():
+		var mesh := lib.mesh_for(block_id)
+		assert(mesh != null, "Mesh generation failed for block: " + String(block_id))
+		var offset := BlockMeshLibraryScript.local_offset(block_id, 0.5)
+		assert(offset.y > 0.0)
+	var wood_mat := lib.material_for(&"wood")
+	assert(wood_mat != null)
+	assert(wood_mat.uv1_triplanar == true)
+
+
 static func _test_material_catalog_and_costs() -> void:
-	assert(BuildingMaterialCatalogScript.all().size() == 9)
+	assert(BuildingMaterialCatalogScript.all().size() == 13)
 	assert(BuildingMaterialCatalogScript.resource_id(&"earth") == &"soil")
 	assert(BuildingMaterialCatalogScript.resource_id(&"wood") == &"boards")
 	var bp := BuildingBlueprintScript.new()

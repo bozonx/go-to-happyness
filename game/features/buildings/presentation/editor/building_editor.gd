@@ -104,6 +104,15 @@ var _ghost_valid: bool = false
 @onready var _load_popup: PopupPanel = %LoadPopup
 @onready var _load_list: ItemList = %LoadList
 
+@onready var _cost_header_btn: Button = %CostHeaderBtn
+@onready var _cost_container: VBoxContainer = %CostContainer
+@onready var _cost_mode_option: OptionButton = %CostModeOption
+@onready var _cost_block_summary_label: Label = %CostBlockSummaryLabel
+@onready var _cost_breakdown_vbox: VBoxContainer = %CostBreakdownVBox
+@onready var _extra_costs_vbox: VBoxContainer = %ExtraCostsVBox
+@onready var _add_extra_cost_btn: Button = %AddExtraCostBtn
+@onready var _total_cost_label: Label = %TotalCostLabel
+
 @onready var _mode_frame_btn: Button = %ModeFrameBtn
 @onready var _mode_finishes_btn: Button = %ModeFinishesBtn
 @onready var _mode_decor_btn: Button = %ModeDecorBtn
@@ -887,6 +896,15 @@ func _setup_ui() -> void:
 
 	_load_list.item_activated.connect(_on_load_item_activated)
 
+	_cost_mode_option.clear()
+	_cost_mode_option.add_item("Авто-расчёт (по блокам)")
+	_cost_mode_option.set_item_metadata(0, &"auto")
+	_cost_mode_option.add_item("Ручной ввод сметы")
+	_cost_mode_option.set_item_metadata(1, &"manual")
+
+	_cost_container.visible = false
+	_cost_header_btn.text = "► Стоимость здания"
+
 	_sync_metadata_fields()
 	_select_block(current_block_id)
 	_set_tool(Tool.PLACE)
@@ -1330,6 +1348,169 @@ func _update_rotation_label() -> void:
 func _update_count() -> void:
 	if _count_label != null:
 		_count_label.text = "Блоков: %d" % grid_model.count()
+	if blueprint != null:
+		grid_model.write_to_blueprint(blueprint)
+		blueprint.recalculate_construction_cost()
+		_refresh_cost_ui()
+
+
+func _on_cost_header_pressed() -> void:
+	_cost_container.visible = not _cost_container.visible
+	var arrow := "▼" if _cost_container.visible else "►"
+	_cost_header_btn.text = "%s Стоимость здания" % arrow
+	if _cost_container.visible:
+		_refresh_cost_ui()
+
+
+func _on_cost_mode_selected(index: int) -> void:
+	var mode: StringName = _cost_mode_option.get_item_metadata(index)
+	blueprint.cost_mode = mode
+	blueprint.recalculate_construction_cost()
+	_mark_dirty()
+	_refresh_cost_ui()
+
+
+func _on_add_extra_cost_pressed() -> void:
+	var default_res := "coins"
+	var current_qty := int(blueprint.extra_costs.get(default_res, 0))
+	blueprint.extra_costs[default_res] = current_qty + 1
+	blueprint.recalculate_construction_cost()
+	_mark_dirty()
+	_refresh_cost_ui()
+
+
+func _refresh_cost_ui() -> void:
+	if _cost_container == null or not _cost_container.visible:
+		return
+
+	_cost_block_summary_label.text = "Всего блоков: %d" % blueprint.block_count()
+
+	if blueprint.cost_mode == &"manual":
+		_cost_mode_option.select(1)
+	else:
+		_cost_mode_option.select(0)
+
+	for child in _cost_breakdown_vbox.get_children():
+		child.queue_free()
+
+	if blueprint.cost_mode == &"auto":
+		var mat_counts: Dictionary = {}
+		for block in blueprint.blocks:
+			mat_counts[block.material_id] = int(mat_counts.get(block.material_id, 0)) + 1
+
+		for mat_id in mat_counts.keys():
+			var count: int = mat_counts[mat_id]
+			var mat_def := BuildingMaterialCatalogScript.get_material(mat_id)
+			var mat_name: String = mat_def.get("name", str(mat_id))
+			var comp: Dictionary = BuildingMaterialCatalogScript.resource_composition(mat_id)
+			if blueprint.custom_material_costs.has(mat_id) and blueprint.custom_material_costs[mat_id] is Dictionary:
+				comp = blueprint.custom_material_costs[mat_id]
+
+			var row := HBoxContainer.new()
+			var lbl := Label.new()
+			var comp_texts: Array[String] = []
+			for r in comp.keys():
+				comp_texts.append("%.2f %s" % [float(comp[r]), str(r)])
+			lbl.text = "%s (%d бл.) — %s/бл." % [mat_name, count, ", ".join(comp_texts)]
+			lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			row.add_child(lbl)
+			_cost_breakdown_vbox.add_child(row)
+
+	for child in _extra_costs_vbox.get_children():
+		child.queue_free()
+
+	if blueprint.cost_mode == &"manual":
+		var manual_title := Label.new()
+		manual_title.text = "Ручная смета (все ресурсы):"
+		manual_title.add_theme_font_size_override("font_size", 13)
+		_extra_costs_vbox.add_child(manual_title)
+
+		for res in blueprint.manual_costs.keys():
+			var row := HBoxContainer.new()
+			var name_edit := LineEdit.new()
+			name_edit.text = str(res)
+			name_edit.custom_minimum_size = Vector2(80, 0)
+			var spin := SpinBox.new()
+			spin.min_value = 1
+			spin.max_value = 9999
+			spin.value = int(blueprint.manual_costs[res])
+			var del_btn := Button.new()
+			del_btn.text = "X"
+
+			var old_key := str(res)
+			name_edit.text_submitted.connect(func(new_text: String):
+				var val: int = blueprint.manual_costs.get(old_key, 1)
+				blueprint.manual_costs.erase(old_key)
+				if not new_text.strip_edges().is_empty():
+					blueprint.manual_costs[new_text.strip_edges()] = val
+				blueprint.recalculate_construction_cost()
+				_mark_dirty()
+				_refresh_cost_ui()
+			)
+			spin.value_changed.connect(func(new_val: float):
+				blueprint.manual_costs[old_key] = int(new_val)
+				blueprint.recalculate_construction_cost()
+				_mark_dirty()
+				_refresh_cost_ui()
+			)
+			del_btn.pressed.connect(func():
+				blueprint.manual_costs.erase(old_key)
+				blueprint.recalculate_construction_cost()
+				_mark_dirty()
+				_refresh_cost_ui()
+			)
+			row.add_child(name_edit)
+			row.add_child(spin)
+			row.add_child(del_btn)
+			_extra_costs_vbox.add_child(row)
+	else:
+		for res in blueprint.extra_costs.keys():
+			var row := HBoxContainer.new()
+			var name_edit := LineEdit.new()
+			name_edit.text = str(res)
+			name_edit.custom_minimum_size = Vector2(80, 0)
+			var spin := SpinBox.new()
+			spin.min_value = 1
+			spin.max_value = 9999
+			spin.value = int(blueprint.extra_costs[res])
+			var del_btn := Button.new()
+			del_btn.text = "X"
+
+			var old_res_key := str(res)
+			name_edit.text_submitted.connect(func(new_text: String):
+				var val: int = blueprint.extra_costs.get(old_res_key, 1)
+				blueprint.extra_costs.erase(old_res_key)
+				if not new_text.strip_edges().is_empty():
+					blueprint.extra_costs[new_text.strip_edges()] = val
+				blueprint.recalculate_construction_cost()
+				_mark_dirty()
+				_refresh_cost_ui()
+			)
+			spin.value_changed.connect(func(new_val: float):
+				blueprint.extra_costs[old_res_key] = int(new_val)
+				blueprint.recalculate_construction_cost()
+				_mark_dirty()
+				_refresh_cost_ui()
+			)
+			del_btn.pressed.connect(func():
+				blueprint.extra_costs.erase(old_res_key)
+				blueprint.recalculate_construction_cost()
+				_mark_dirty()
+				_refresh_cost_ui()
+			)
+
+			row.add_child(name_edit)
+			row.add_child(spin)
+			row.add_child(del_btn)
+			_extra_costs_vbox.add_child(row)
+
+	var costs_array: Array[String] = []
+	for res in blueprint.construction_cost.keys():
+		costs_array.append("%d %s" % [int(blueprint.construction_cost[res]), str(res)])
+	if costs_array.is_empty():
+		_total_cost_label.text = "Итоговая смета: Бесплатно"
+	else:
+		_total_cost_label.text = "Итоговая смета: %s" % ", ".join(costs_array)
 
 
 func _update_status(message: String) -> void:

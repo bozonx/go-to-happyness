@@ -3,8 +3,8 @@ extends RefCounted
 
 ## Builds and caches procedural meshes + materials for each construction block.
 ## Meshes are centred on their own origin at natural size; the editor places
-## them at `Vector3(cell) + local_offset(block_id)` so every block sits on the
-## floor of its anchor cell.
+## them at `Vector3(cell) + local_offset(block_id, vertical_offset)` so every block
+## sits at the designated elevation of its anchor cell.
 
 const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
 
@@ -29,13 +29,13 @@ var _material_cache: Dictionary = {}
 
 
 ## World offset from the cell's minimum corner to the mesh origin so the block
-## rests on the cell floor and is centred horizontally.
-static func local_offset(block_id: StringName) -> Vector3:
+## rests on the cell floor (plus optional vertical offset parameter).
+static func local_offset(block_id: StringName, vertical_offset: float = 0.0) -> Vector3:
 	var def := BuildingBlockCatalogScript.get_block(block_id)
 	if def.is_empty():
-		return Vector3(0.5, 0.5, 0.5)
+		return Vector3(0.5, 0.5 + vertical_offset, 0.5)
 	var size: Vector3 = def["size"]
-	return Vector3(0.5, size.y * 0.5, 0.5)
+	return Vector3(0.5, size.y * 0.5 + vertical_offset, 0.5)
 
 
 func mesh_for(block_id: StringName) -> Mesh:
@@ -49,8 +49,32 @@ func mesh_for(block_id: StringName) -> Mesh:
 	match def["mesh_shape"]:
 		BuildingBlockCatalogScript.SHAPE_WEDGE:
 			mesh = _build_wedge(size)
+		BuildingBlockCatalogScript.SHAPE_WEDGE_LOW:
+			mesh = _build_wedge(size)
+		BuildingBlockCatalogScript.SHAPE_SLOPE_CORNER_IN:
+			mesh = _build_slope_corner_in(size)
+		BuildingBlockCatalogScript.SHAPE_SLOPE_CORNER_OUT:
+			mesh = _build_slope_corner_out(size)
+		BuildingBlockCatalogScript.SHAPE_GABLE:
+			mesh = _build_gable(size)
+		BuildingBlockCatalogScript.SHAPE_CYLINDER:
+			mesh = _build_cylinder(size)
+		BuildingBlockCatalogScript.SHAPE_HALF_CYLINDER:
+			mesh = _build_half_cylinder(size)
 		BuildingBlockCatalogScript.SHAPE_STAIRS:
-			mesh = _build_stairs(size)
+			mesh = _build_stairs(size, 8)
+		BuildingBlockCatalogScript.SHAPE_STAIRS_HALF:
+			mesh = _build_stairs(size, 4)
+		BuildingBlockCatalogScript.SHAPE_STAIRS_QUARTER:
+			mesh = _build_stairs(size, 2)
+		BuildingBlockCatalogScript.SHAPE_STAIRS_CORNER_45:
+			mesh = _build_stairs_corner_45(size, 8)
+		BuildingBlockCatalogScript.SHAPE_WINDOW_WALL:
+			mesh = _build_window_wall(size)
+		BuildingBlockCatalogScript.SHAPE_DOOR_WALL:
+			mesh = _build_door_wall(size)
+		BuildingBlockCatalogScript.SHAPE_ARCH:
+			mesh = _build_arch(size)
 		_:
 			var box := BoxMesh.new()
 			box.size = size
@@ -65,6 +89,8 @@ func material_for(material_id: StringName) -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = MATERIAL_COLORS.get(material_id, Color(0.7, 0.7, 0.7))
 	mat.roughness = 0.85
+	mat.uv1_triplanar = true
+	mat.uv1_world_triplanar = true
 	_material_cache[material_id] = mat
 	return mat
 
@@ -83,46 +109,206 @@ func ghost_material(valid: bool) -> StandardMaterial3D:
 
 
 func _build_wedge(size: Vector3) -> ArrayMesh:
-	# Right-triangle prism: full height at -Z, tapering to zero at +Z.
 	var hx := size.x * 0.5
 	var hy := size.y * 0.5
 	var hz := size.z * 0.5
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	# Vertices: back-bottom-left/right, back-top-left/right, front-bottom-left/right
 	var bbl := Vector3(-hx, -hy, -hz)
 	var bbr := Vector3(hx, -hy, -hz)
 	var btl := Vector3(-hx, hy, -hz)
 	var btr := Vector3(hx, hy, -hz)
 	var fbl := Vector3(-hx, -hy, hz)
 	var fbr := Vector3(hx, -hy, hz)
-	# Sloped top face
-	_add_quad(st, btl, btr, fbr, fbl)
-	# Back vertical face
+	_add_quad(st, btl, fbl, fbr, btr)
 	_add_quad(st, bbr, bbl, btl, btr)
-	# Bottom face
-	_add_quad(st, fbl, fbr, bbr, bbl)
-	# Left triangle
+	_add_quad(st, bbl, bbr, fbr, fbl)
 	_add_tri(st, bbl, fbl, btl)
-	# Right triangle
 	_add_tri(st, fbr, bbr, btr)
-	st.generate_normals()
 	return st.commit()
 
 
-func _build_stairs(size: Vector3, steps: int = 4) -> ArrayMesh:
+func _build_slope_corner_in(size: Vector3) -> ArrayMesh:
+	var hx := size.x * 0.5
+	var hy := size.y * 0.5
+	var hz := size.z * 0.5
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var bbl := Vector3(-hx, -hy, -hz)
+	var bbr := Vector3(hx, -hy, -hz)
+	var btl := Vector3(-hx, hy, -hz)
+	var btr := Vector3(hx, hy, -hz)
+	var fbl := Vector3(-hx, -hy, hz)
+	var fbr := Vector3(hx, -hy, hz)
+	var ftl := Vector3(-hx, hy, hz)
+	_add_quad(st, bbr, bbl, btl, btr) # Back (-Z)
+	_add_quad(st, bbl, fbl, ftl, btl) # Left (-X)
+	_add_quad(st, bbl, bbr, fbr, fbl) # Bottom (-Y)
+	_add_tri(st, btl, ftl, btr)      # Top corner slope 1
+	_add_tri(st, ftl, fbr, btr)      # Top corner slope 2
+	_add_tri(st, ftl, fbl, fbr)      # Front sloped face
+	_add_tri(st, btr, fbr, bbr)      # Right sloped face
+	return st.commit()
+
+
+func _build_slope_corner_out(size: Vector3) -> ArrayMesh:
+	var hx := size.x * 0.5
+	var hy := size.y * 0.5
+	var hz := size.z * 0.5
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var bbl := Vector3(-hx, -hy, -hz)
+	var bbr := Vector3(hx, -hy, -hz)
+	var btl := Vector3(-hx, hy, -hz)
+	var fbl := Vector3(-hx, -hy, hz)
+	var fbr := Vector3(hx, -hy, hz)
+	_add_quad(st, bbl, bbr, fbr, fbl) # Bottom (-Y)
+	_add_tri(st, bbl, fbl, btl)       # Left triangle (-X)
+	_add_tri(st, bbr, bbl, btl)       # Back triangle (-Z)
+	_add_tri(st, btl, fbl, fbr)       # Sloped face 1
+	_add_tri(st, btl, fbr, bbr)       # Sloped face 2
+	return st.commit()
+
+
+func _build_gable(size: Vector3) -> ArrayMesh:
+	var hx := size.x * 0.5
+	var hy := size.y * 0.5
+	var hz := size.z * 0.5
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var bbl := Vector3(-hx, -hy, -hz)
+	var bbr := Vector3(hx, -hy, -hz)
+	var btc := Vector3(0.0, hy, -hz)
+	var fbl := Vector3(-hx, -hy, hz)
+	var fbr := Vector3(hx, -hy, hz)
+	var ftc := Vector3(0.0, hy, hz)
+	_add_tri(st, bbr, bbl, btc)       # Back triangle (-Z)
+	_add_tri(st, fbl, fbr, ftc)       # Front triangle (+Z)
+	_add_quad(st, bbl, bbr, fbr, fbl) # Bottom (-Y)
+	_add_quad(st, bbl, fbl, ftc, btc) # Left slope
+	_add_quad(st, btc, ftc, fbr, bbr) # Right slope
+	return st.commit()
+
+
+func _build_cylinder(size: Vector3, segments: int = 16) -> ArrayMesh:
+	var rx := size.x * 0.5
+	var rz := size.z * 0.5
+	var hy := size.y * 0.5
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for i in segments:
+		var a1 := float(i) / float(segments) * TAU
+		var a2 := float(i + 1) / float(segments) * TAU
+		var p1_b := Vector3(cos(a1) * rx, -hy, sin(a1) * rz)
+		var p2_b := Vector3(cos(a2) * rx, -hy, sin(a2) * rz)
+		var p1_t := Vector3(cos(a1) * rx, hy, sin(a1) * rz)
+		var p2_t := Vector3(cos(a2) * rx, hy, sin(a2) * rz)
+		_add_quad(st, p1_b, p2_b, p2_t, p1_t) # Side
+		_add_tri(st, Vector3(0, hy, 0), p2_t, p1_t) # Top cap
+		_add_tri(st, Vector3(0, -hy, 0), p1_b, p2_b) # Bottom cap
+	return st.commit()
+
+
+func _build_half_cylinder(size: Vector3, segments: int = 12) -> ArrayMesh:
+	var rx := size.x * 0.5
+	var rz := size.z
+	var hy := size.y * 0.5
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var bbl := Vector3(-rx, -hy, 0.0)
+	var bbr := Vector3(rx, -hy, 0.0)
+	var btl := Vector3(-rx, hy, 0.0)
+	var btr := Vector3(rx, hy, 0.0)
+	_add_quad(st, bbr, bbl, btl, btr) # Flat back (-Z)
+	for i in segments:
+		var a1 := -PI * 0.5 + float(i) / float(segments) * PI
+		var a2 := -PI * 0.5 + float(i + 1) / float(segments) * PI
+		var p1_b := Vector3(sin(a1) * rx, -hy, cos(a1) * rz)
+		var p2_b := Vector3(sin(a2) * rx, -hy, cos(a2) * rz)
+		var p1_t := Vector3(sin(a1) * rx, hy, cos(a1) * rz)
+		var p2_t := Vector3(sin(a2) * rx, hy, cos(a2) * rz)
+		_add_quad(st, p1_b, p2_b, p2_t, p1_t) # Curved front
+		_add_tri(st, Vector3(0, hy, 0), p2_t, p1_t) # Top cap
+		_add_tri(st, Vector3(0, -hy, 0), p1_b, p2_b) # Bottom cap
+	return st.commit()
+
+
+func _build_stairs(size: Vector3, steps: int = 8) -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var step_h := size.y / float(steps)
 	var step_d := size.z / float(steps)
 	for i in steps:
-		# Each step rises with i and recedes toward +Z.
 		var min_y := -size.y * 0.5 + float(i) * step_h
 		var max_y := min_y + step_h
 		var min_z := -size.z * 0.5 + float(i) * step_d
 		var max_z := size.z * 0.5
 		_add_box(st, Vector3(-size.x * 0.5, min_y, min_z), Vector3(size.x * 0.5, max_y, max_z))
-	st.generate_normals()
+	return st.commit()
+
+
+func _build_stairs_corner_45(size: Vector3, steps: int = 8) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var step_h := size.y / float(steps)
+	var step_d := size.x / float(steps)
+	for i in steps:
+		var min_y := -size.y * 0.5 + float(i) * step_h
+		var max_y := min_y + step_h
+		var inset := float(i) * step_d * 0.5
+		var min_x := -size.x * 0.5 + inset
+		var max_x := size.x * 0.5 - inset
+		var min_z := -size.z * 0.5 + inset
+		var max_z := size.z * 0.5 - inset
+		if max_x > min_x and max_z > min_z:
+			_add_box(st, Vector3(min_x, min_y, min_z), Vector3(max_x, max_y, max_z))
+	return st.commit()
+
+
+func _build_window_wall(size: Vector3) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var hx := size.x * 0.5
+	var hy := size.y * 0.5
+	var hz := size.z * 0.5
+	# Bottom wall section (under window)
+	_add_box(st, Vector3(-hx, -hy, -hz), Vector3(hx, -hy * 0.3, hz))
+	# Top wall section (above window)
+	_add_box(st, Vector3(-hx, hy * 0.5, -hz), Vector3(hx, hy, hz))
+	# Left wall post
+	_add_box(st, Vector3(-hx, -hy * 0.3, -hz), Vector3(-hx * 0.4, hy * 0.5, hz))
+	# Right wall post
+	_add_box(st, Vector3(hx * 0.4, -hy * 0.3, -hz), Vector3(hx, hy * 0.5, hz))
+	return st.commit()
+
+
+func _build_door_wall(size: Vector3) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var hx := size.x * 0.5
+	var hy := size.y * 0.5
+	var hz := size.z * 0.5
+	# Top lintel section above door
+	_add_box(st, Vector3(-hx, hy * 0.5, -hz), Vector3(hx, hy, hz))
+	# Left door post
+	_add_box(st, Vector3(-hx, -hy, -hz), Vector3(-hx * 0.4, hy * 0.5, hz))
+	# Right door post
+	_add_box(st, Vector3(hx * 0.4, -hy, -hz), Vector3(hx, hy * 0.5, hz))
+	return st.commit()
+
+
+func _build_arch(size: Vector3, segments: int = 8) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var hx := size.x * 0.5
+	var hy := size.y * 0.5
+	var hz := size.z * 0.5
+	# Top solid arch block
+	_add_box(st, Vector3(-hx, 0.0, -hz), Vector3(hx, hy, hz))
+	# Left pillar
+	_add_box(st, Vector3(-hx, -hy, -hz), Vector3(-hx * 0.5, 0.0, hz))
+	# Right pillar
+	_add_box(st, Vector3(hx * 0.5, -hy, -hz), Vector3(hx, -hy, hz))
 	return st.commit()
 
 
@@ -135,8 +321,8 @@ func _add_box(st: SurfaceTool, min_p: Vector3, max_p: Vector3) -> void:
 	var f := Vector3(max_p.x, max_p.y, min_p.z)
 	var g := Vector3(max_p.x, max_p.y, max_p.z)
 	var h := Vector3(min_p.x, max_p.y, max_p.z)
-	_add_quad(st, h, g, f, e)  # top
-	_add_quad(st, a, b, c, d)  # bottom
+	_add_quad(st, h, g, f, e)  # top (+Y)
+	_add_quad(st, a, b, c, d)  # bottom (-Y)
 	_add_quad(st, e, f, b, a)  # -Z
 	_add_quad(st, g, h, d, c)  # +Z
 	_add_quad(st, h, e, a, d)  # -X
@@ -144,9 +330,19 @@ func _add_box(st: SurfaceTool, min_p: Vector3, max_p: Vector3) -> void:
 
 
 func _add_quad(st: SurfaceTool, p0: Vector3, p1: Vector3, p2: Vector3, p3: Vector3) -> void:
-	st.add_vertex(p0); st.add_vertex(p1); st.add_vertex(p2)
-	st.add_vertex(p0); st.add_vertex(p2); st.add_vertex(p3)
+	var n_vec := (p1 - p0).cross(p2 - p0)
+	var normal := n_vec.normalized() if not n_vec.is_zero_approx() else Vector3.UP
+	st.set_normal(normal); st.add_vertex(p0)
+	st.set_normal(normal); st.add_vertex(p1)
+	st.set_normal(normal); st.add_vertex(p2)
+	st.set_normal(normal); st.add_vertex(p0)
+	st.set_normal(normal); st.add_vertex(p2)
+	st.set_normal(normal); st.add_vertex(p3)
 
 
 func _add_tri(st: SurfaceTool, p0: Vector3, p1: Vector3, p2: Vector3) -> void:
-	st.add_vertex(p0); st.add_vertex(p1); st.add_vertex(p2)
+	var n_vec := (p1 - p0).cross(p2 - p0)
+	var normal := n_vec.normalized() if not n_vec.is_zero_approx() else Vector3.UP
+	st.set_normal(normal); st.add_vertex(p0)
+	st.set_normal(normal); st.add_vertex(p1)
+	st.set_normal(normal); st.add_vertex(p2)
