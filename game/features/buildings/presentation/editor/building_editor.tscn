@@ -1,8 +1,9 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://game/features/buildings/presentation/editor/building_editor.gd" id="1_editor"]
 [ext_resource type="Theme" path="res://game/features/ui/presentation/theme/ui_theme.tres" id="2_theme"]
 [ext_resource type="StandardMaterial3D" path="res://game/features/buildings/presentation/editor/materials/ground_material.tres" id="1_ground_mat"]
+[ext_resource type="PackedScene" path="res://game/features/world/presentation/camera_controller.tscn" id="3_camera"]
 [sub_resource type="Environment" id="env_editor"]
 background_mode = 1
 background_color = Color(0.1, 0.12, 0.16, 1)
@@ -41,6 +42,9 @@ unique_name_in_owner = true
 unique_name_in_owner = true
 
 [node name="Ghost" type="MeshInstance3D" parent="."]
+unique_name_in_owner = true
+
+[node name="CameraController" parent="." instance=ExtResource("3_camera")]
 unique_name_in_owner = true
 
 [node name="EditorUI" type="CanvasLayer" parent="."]
@@ -581,6 +585,20 @@ unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
 autowrap_mode = 2
+
+[node name="ExportMeshBtn" type="Button" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+disabled = true
+text = "Экспорт меша .tres/.gltf (скоро)"
+
+[node name="NavMeshPreviewBtn" type="Button" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+disabled = true
+text = "Просмотр NavMesh (скоро)"
 
 [node name="LoadPopup" type="PopupPanel" parent="EditorUI/Root"]
 unique_name_in_owner = true

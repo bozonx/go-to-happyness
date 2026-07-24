@@ -11,7 +11,6 @@ extends Node3D
 signal back_requested
 
 const CameraControllerScript = preload("res://game/features/world/presentation/camera_controller.gd")
-const CameraControllerScene = preload("res://game/features/world/presentation/camera_controller.tscn")
 const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
 const BuildingMaterialCatalogScript = preload("res://game/features/buildings/domain/editor/building_material_catalog.gd")
 const BuildingBlueprintScript = preload("res://game/features/buildings/domain/editor/building_blueprint.gd")
@@ -63,11 +62,13 @@ var _anchor_family: StringName = ZoneAnchorRecordScript.FAMILY_OCCUPANCY
 var _anchor_role: StringName = ZoneAnchorRecordScript.ROLE_WORK
 
 var _block_nodes: Dictionary = {}  ## Vector3i -> MeshInstance3D
-var _camera_controller: CameraController
-var _blocks_root: Node3D
-var _ghost: MeshInstance3D
-var _layer_plane: MeshInstance3D
-var _zones_visual_root: Node3D
+@onready var _camera_controller: CameraController = %CameraController
+@onready var _blocks_root: Node3D = %BlocksRoot
+@onready var _ghost: MeshInstance3D = %Ghost
+@onready var _layer_plane: MeshInstance3D = %LayerPlane
+@onready var _zones_visual_root: Node3D = %ZonesVisual
+@onready var _export_mesh_btn: Button = %ExportMeshBtn
+@onready var _navmesh_preview_btn: Button = %NavMeshPreviewBtn
 var _panning: bool = false
 var _orbiting: bool = false
 var _zone_material_cache: Dictionary = {}
@@ -184,8 +185,6 @@ func _connect_back_navigation() -> void:
 # ---------------------------------------------------------------------------
 
 func _init_world() -> void:
-	_camera_controller = CameraControllerScene.instantiate() as CameraController
-	add_child(_camera_controller)
 	_camera_controller.camera_target = Vector3(4.0, 0.0, 4.0)
 	_camera_controller.camera_distance = 18.0
 	_camera_controller.apply_position()
@@ -193,12 +192,7 @@ func _init_world() -> void:
 	var grid_lines := %GridLines as MeshInstance3D
 	grid_lines.mesh = _build_grid_mesh(32, Color(0.30, 0.34, 0.40, 0.6))
 
-	_layer_plane = %LayerPlane as MeshInstance3D
 	_layer_plane.mesh = _build_grid_mesh(24, Color(0.35, 0.7, 1.0, 0.5))
-
-	_blocks_root = %BlocksRoot as Node3D
-	_zones_visual_root = %ZonesVisual as Node3D
-	_ghost = %Ghost as MeshInstance3D
 
 
 func _build_grid_mesh(half_extent: int, color: Color) -> ArrayMesh:
@@ -832,11 +826,8 @@ func _setup_ui() -> void:
 	_path_hint_label.text = "Сохранение → %s" % repository.base_dir()
 
 	if dev_mode:
-		for label_text in ["Экспорт меша .tres/.gltf (скоро)", "Просмотр NavMesh (скоро)"]:
-			var btn := Button.new()
-			btn.text = label_text
-			btn.disabled = true
-			_metadata_vbox.add_child(btn)
+		_export_mesh_btn.visible = true
+		_navmesh_preview_btn.visible = true
 
 	_load_list.item_activated.connect(_on_load_item_activated)
 
