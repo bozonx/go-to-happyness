@@ -7,8 +7,8 @@ const SUN_GLARE_EDGE_ALLOWANCE := 0.18
 const SUN_GLARE_OCCLUSION_SAMPLE_RADIUS := 0.24
 const CLOUD_SCALE := 1.55
 const CLOUD_WIND := Vector2(0.006, 0.002)
-const CLOUD_EDGE_SOFTNESS := 0.07
-const CLOUD_COVERAGE_CLEAR := 0.56
+const CLOUD_EDGE_SOFTNESS := 0.048
+const CLOUD_COVERAGE_CLEAR := 0.58
 const CLOUD_COVERAGE_STORM := 0.14
 const CLOUD_MINIMUM_SUN_VISIBILITY := 0.12
 
@@ -112,7 +112,10 @@ func update_daylight(game_minutes: float, cloud_cover: float, rain_intensity: fl
 		sky_material.set_shader_parameter("u_edge_softness", CLOUD_EDGE_SOFTNESS)
 		sky_material.set_shader_parameter("u_coverage_clear", CLOUD_COVERAGE_CLEAR)
 		sky_material.set_shader_parameter("u_coverage_storm", CLOUD_COVERAGE_STORM)
-		var horizon_glow := Color("ff6a2a").lerp(Color("a8b8c0"), cloud_cover)
+		# Cloud cover desaturates the sunset much more slowly than the rest of the
+		# sky: broken clouds should catch peach light instead of turning uniformly
+		# grey as soon as the forecast passes fifty percent.
+		var horizon_glow := Color("ff6a2a").lerp(Color("a8b8c0"), cloud_cover * 0.45)
 		sky_material.set_shader_parameter("u_horizon_glow_color", horizon_glow)
 		sky_material.set_shader_parameter("u_night_factor", cloud_night)
 		sky_material.set_shader_parameter("u_star_visibility", star_visibility)
@@ -137,12 +140,22 @@ func update_daylight(game_minutes: float, cloud_cover: float, rain_intensity: fl
 
 func _cloud_sun_visibility(sun_direction: Vector3, overcast: float, runtime_seconds: float) -> float:
 	var horizon := sun_direction.y
-	var projection_scale := maxf(horizon + 0.28, 0.28)
+	var projection_scale := maxf(horizon + 0.55, 0.55)
 	var uv := Vector2(sun_direction.x, sun_direction.z) / projection_scale
-	uv = uv * CLOUD_SCALE + CLOUD_WIND * runtime_seconds
+	uv *= CLOUD_SCALE * 1.6
+	uv += Vector2(CLOUD_WIND.x * runtime_seconds * 2.4, CLOUD_WIND.y * runtime_seconds * 0.55)
+	var tower_direction := (
+		sun_direction
+		+ Vector3(CLOUD_WIND.x * runtime_seconds * 0.12, 0.0, CLOUD_WIND.y * runtime_seconds * 0.12)
+	).normalized()
+	var tower_weather := 1.0 - smoothstep(0.74, 0.96, overcast)
+	var cloud_field := maxf(
+		_layered_cloud_field(uv, overcast),
+		_tower_cloud_field(tower_direction) * tower_weather
+	)
 	var coverage_curve := pow(overcast, 0.55)
 	var coverage := lerpf(CLOUD_COVERAGE_CLEAR, CLOUD_COVERAGE_STORM, coverage_curve)
-	var density := smoothstep(coverage, coverage + CLOUD_EDGE_SOFTNESS, _cloud_field(uv))
+	var density := smoothstep(coverage, coverage + CLOUD_EDGE_SOFTNESS, cloud_field)
 	var cloud_alpha := density * smoothstep(0.08, 0.34, horizon)
 	return lerpf(1.0, CLOUD_MINIMUM_SUN_VISIBILITY, cloud_alpha)
 
@@ -158,6 +171,31 @@ func _cloud_field(uv: Vector2) -> float:
 	var islands := smoothstep(0.40, 0.67, macro)
 	var body := macro * 0.54 + lobes * 0.34 + detail * 0.12
 	return body * lerpf(0.24, 1.0, islands)
+
+
+func _layered_cloud_field(uv: Vector2, overcast: float) -> float:
+	var primary := _cloud_field(uv)
+	var satellites := _cloud_field(uv * 1.62 + Vector2(7.4, -3.1))
+	var satellite_cut := lerpf(0.20, 0.36, smoothstep(0.42, 0.88, overcast))
+	return maxf(primary, satellites - satellite_cut)
+
+
+func _tower_cloud_field(direction: Vector3) -> float:
+	var height := maxf(direction.y, 0.0)
+	var bearing := Vector2(direction.x, direction.z)
+	bearing /= maxf(bearing.length(), 0.001)
+	var family_seed := _fbm(bearing * 1.35 + Vector2(0.0, 4.0))
+	var family := smoothstep(0.48, 0.67, family_seed)
+	var crown_seed := _fbm(bearing * 2.1 + Vector2(5.0, 2.0))
+	var crown_height := lerpf(0.20, 0.64, pow(crown_seed, 1.65))
+	var base := smoothstep(0.015, 0.075, height)
+	var crown := 1.0 - smoothstep(crown_height - 0.055, crown_height + 0.035, height)
+	var along := bearing.dot(Vector2(0.82, 0.57).normalized())
+	var across := bearing.dot(Vector2(-0.57, 0.82).normalized())
+	var billows := _cellular_billow(Vector2(along * 3.15 + across * 0.72, height * 7.2) + Vector2(1.7, 9.4))
+	var erosion := _fbm(Vector2(across * 5.4 + along, height * 9.0) + Vector2(12.0, 3.0))
+	var body := 0.50 + billows * 0.31 + erosion * 0.12
+	return family * base * crown * body
 
 
 func _cellular_billow(p: Vector2) -> float:

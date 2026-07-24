@@ -39,7 +39,7 @@ uniform float u_edge_softness = 0.07;   // lower = harder, crisp anime cartoon e
 uniform float u_coverage_clear = 0.46;  // threshold when sunny (few clouds)
 uniform float u_coverage_storm = 0.18;  // threshold when overcast (full sheet)
 uniform float u_shadow_step = 0.055;    // self-shadow march distance
-uniform vec3 u_cloud_lit_clear : source_color = vec3(1.0, 0.965, 0.86);
+uniform vec3 u_cloud_lit_clear : source_color = vec3(1.0, 0.985, 0.95);
 uniform vec3 u_cloud_mid_clear : source_color = vec3(0.70, 0.84, 0.95);
 uniform vec3 u_cloud_shadow_clear : source_color = vec3(0.38, 0.56, 0.73);
 uniform vec3 u_cloud_lit_storm : source_color = vec3(0.55, 0.58, 0.63);
@@ -120,6 +120,39 @@ float cloud_field(vec2 uv) {
 		+ medium_billows * 0.16
 		+ detail * 0.06;
 	return body * mix(0.26, 1.0, family);
+}
+
+// A second, finer family breaks the primary cloud bank into a readable
+// hierarchy: broad hero masses, medium cauliflower lobes, and a few detached
+// satellites. It fades out toward overcast weather, where a continuous ceiling
+// is more believable than a collection of small fair-weather puffs.
+float layered_cloud_field(vec2 uv) {
+	float primary = cloud_field(uv);
+	float satellites = cloud_field(uv * 1.62 + vec2(7.4, -3.1));
+	float satellite_cut = mix(0.20, 0.36, smoothstep(0.42, 0.88, u_overcast));
+	return max(primary, satellites - satellite_cut);
+}
+
+// Projected cloud ceilings naturally prefer long horizontal banks. A sparse
+// azimuth/elevation field supplies the vertical hero silhouettes seen in
+// summer cumulus: broad grounded bases, irregular cauliflower crowns, and open
+// sky between families. It is spherical, so the shape remains stable when the
+// camera looks toward the horizon instead of stretching with the ceiling map.
+float tower_cloud_field(vec3 direction) {
+	float height = max(direction.y, 0.0);
+	vec2 bearing = direction.xz / max(length(direction.xz), 0.001);
+	float family_seed = fbm(bearing * 1.35 + vec2(0.0, 4.0));
+	float family = smoothstep(0.48, 0.67, family_seed);
+	float crown_seed = fbm(bearing * 2.10 + vec2(5.0, 2.0));
+	float crown_height = mix(0.20, 0.64, pow(crown_seed, 1.65));
+	float base = smoothstep(0.015, 0.075, height);
+	float crown = 1.0 - smoothstep(crown_height - 0.055, crown_height + 0.035, height);
+	float along = dot(bearing, normalize(vec2(0.82, 0.57)));
+	float across = dot(bearing, normalize(vec2(-0.57, 0.82)));
+	float billows = cellular_billow(vec2(along * 3.15 + across * 0.72, height * 7.2) + vec2(1.7, 9.4));
+	float erosion = fbm(vec2(across * 5.4 + along, height * 9.0) + vec2(12.0, 3.0));
+	float body = 0.50 + billows * 0.31 + erosion * 0.12;
+	return family * base * crown * body;
 }
 
 // High-altitude cirrus wind streaks layer
@@ -270,30 +303,43 @@ void sky() {
 	vec2 cumulus_projected_uv = dir.xz / max(horizon + 0.55, 0.55);
 	vec2 cumulus_uv = cumulus_projected_uv * u_cloud_scale * 1.6;
 	cumulus_uv += vec2(u_wind.x * u_time * 2.4, u_wind.y * u_time * 0.55);
-	float n = cloud_field(cumulus_uv);
+	float projected_n = layered_cloud_field(cumulus_uv);
+	vec3 tower_dir = normalize(dir + vec3(u_wind.x * u_time * 0.12, 0.0, u_wind.y * u_time * 0.12));
+	float tower_weather = 1.0 - smoothstep(0.74, 0.96, u_overcast);
+	float tower_n = tower_cloud_field(tower_dir) * tower_weather;
+	float n = max(projected_n, tower_n);
 	float coverage_curve = pow(u_overcast, 0.55);
 	float coverage = mix(u_coverage_clear, u_coverage_storm, coverage_curve);
-	// Clear weather piles a dense cumulus "bank" low on the sky that thins to open
-	// blue overhead; overcast keeps its uniform grey ceiling untouched. Rather
-	// than only lowering the threshold (which can't invent clouds where the noise
-	// is empty) the bank adds body near the horizon so every azimuth is filled.
+	// A restrained distant bank anchors clouds at the horizon without filling
+	// every azimuth. Fair-weather presets keep generous blue openings; the bank
+	// only grows as the forecast approaches genuinely cloudy conditions.
 	float bank = 1.0 - smoothstep(0.04, 0.50, horizon);
-	float bank_strength = mix(0.30, 0.08, u_night_factor);
-	float n_banked = n + bank * clear_sky * bank_strength;
+	float bank_weather = smoothstep(0.24, 0.68, u_overcast);
+	float bank_variation = smoothstep(0.38, 0.72, fbm(cumulus_uv * 0.24 + vec2(19.0, 4.0)));
+	float bank_strength = mix(0.13, 0.07, u_night_factor) * bank_weather * bank_variation;
+	float n_banked = n + bank * bank_strength;
 	float clear_edge = mix(u_edge_softness, u_edge_softness * 0.6, clear_sky);
 	clear_edge *= mix(1.0, 1.35, u_night_factor);
 	float density = smoothstep(coverage, coverage + clear_edge, n_banked);
 	// At the end of the scale, merge the cumulus into a broad, textured ceiling
 	// rather than leaving isolated cartoon blobs over a supposedly covered sky.
-	float ceiling_amount = smoothstep(0.55, 0.90, u_overcast);
+	float ceiling_amount = smoothstep(0.72, 0.94, u_overcast);
 	float ceiling_texture = 0.72 + fbm(cumulus_uv * 0.38 + vec2(31.0, 9.0)) * 0.22;
 	density = max(density, ceiling_amount * ceiling_texture);
 
 	// Density gradients act as a cheap surface normal. Together with a short
 	// directional shadow march they produce lit domes and cool undersides.
 	float normal_step = 0.035;
-	float gradient_x = cloud_field(cumulus_uv + vec2(normal_step, 0.0)) - cloud_field(cumulus_uv - vec2(normal_step, 0.0));
-	float gradient_y = cloud_field(cumulus_uv + vec2(0.0, normal_step)) - cloud_field(cumulus_uv - vec2(0.0, normal_step));
+	float projected_gradient_x = layered_cloud_field(cumulus_uv + vec2(normal_step, 0.0)) - layered_cloud_field(cumulus_uv - vec2(normal_step, 0.0));
+	float projected_gradient_y = layered_cloud_field(cumulus_uv + vec2(0.0, normal_step)) - layered_cloud_field(cumulus_uv - vec2(0.0, normal_step));
+	float tower_step = 0.012;
+	float tower_gradient_x = tower_cloud_field(normalize(tower_dir + vec3(tower_step, 0.0, 0.0))) * tower_weather
+		- tower_n;
+	float tower_gradient_y = tower_cloud_field(normalize(tower_dir + vec3(0.0, tower_step, 0.0))) * tower_weather
+		- tower_n;
+	float tower_dominance = smoothstep(projected_n - 0.02, projected_n + 0.08, tower_n);
+	float gradient_x = mix(projected_gradient_x, tower_gradient_x * 2.2, tower_dominance);
+	float gradient_y = mix(projected_gradient_y, tower_gradient_y * 2.2, tower_dominance);
 	vec3 cloud_normal = normalize(vec3(-gradient_x * 1.35, 0.94, -gradient_y * 1.35));
 	vec2 sun2d = length(sun_dir.xz) > 0.001 ? normalize(sun_dir.xz) : vec2(0.0, 1.0);
 	vec3 sun_cloud_light_dir = normalize(vec3(sun2d.x, max(sun_dir.y, 0.18), sun2d.y));
@@ -306,7 +352,7 @@ void sky() {
 	vec2 cloud_light_2d = length(cloud_light_dir.xz) > 0.001 ? normalize(cloud_light_dir.xz) : vec2(0.0, 1.0);
 	float occ = 0.0;
 	for (int i = 1; i <= 3; i++) {
-		float s = cloud_field(cumulus_uv + cloud_light_2d * u_shadow_step * float(i));
+		float s = layered_cloud_field(cumulus_uv + cloud_light_2d * u_shadow_step * float(i));
 		occ += smoothstep(coverage, coverage + u_edge_softness, s);
 	}
 	occ /= 3.0;
@@ -346,12 +392,27 @@ void sky() {
 	vec3 cloud_col = mix(cloud_shadow, cloud_mid, shadow_mid);
 	cloud_col = mix(cloud_col, cloud_lit, mid_lit);
 
-	// Warm sun-kissed rim & edge highlight on lit borders facing sun
+	// Warm sun-kissed rim & edge highlight on lit borders facing sun. Twilight
+	// retains cloud illumination after the direct-light curve reaches zero at
+	// the horizon, then fades it before deep night.
 	float edge_mask = smoothstep(coverage - 0.04, coverage + 0.05, n)
 		* (1.0 - smoothstep(coverage + 0.08, coverage + 0.22, n));
 	float sun_facing = max(dot(cloud_normal, cloud_light_dir), 0.0);
-	float rim = edge_mask * sun_facing;
-	cloud_col += warm_sun * (mid_lit * 0.12 + rim * 0.48) * clear_sky * u_solar_intensity;
+	float rim = edge_mask * mix(0.24, 1.0, sun_facing);
+	float twilight_cloud_light = sun_low * (1.0 - u_night_factor) * 0.9;
+	float cloud_sun_energy = max(u_solar_intensity, twilight_cloud_light);
+	float warm_rim_strength = mix(0.30, 0.78, sun_low);
+	float sunset_face = sun_low * (1.0 - u_night_factor)
+		* (0.28 + (1.0 - occ) * 0.42 + sun_facing * 0.30);
+	vec3 sunset_cloud = cloud_col * vec3(0.84, 0.68, 0.74) + warm_sun * 0.58;
+	cloud_col = mix(
+		cloud_col,
+		sunset_cloud,
+		sunset_face * mix(0.66, 0.46, u_overcast)
+	);
+	float warm_midtone_strength = mix(0.055, 0.12, sun_low);
+	cloud_col += warm_sun * (mid_lit * warm_midtone_strength + rim * warm_rim_strength)
+		* mix(1.0, 0.58, u_overcast) * cloud_sun_energy;
 
 	// Cool moonlight rim on the cloud tops at night gives the dark masses a
 	// silver edge. Keep it restrained because moonlight already drives the main
