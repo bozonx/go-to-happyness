@@ -85,7 +85,7 @@ func show_campfire_orders_menu() -> void:
 	var state := {
 		"road_walking_enabled": simulation.settlement.road_walking_order_enabled,
 		"road_walking_disabled": road_walking_disabled,
-		"road_walking_tooltip": "Available in the Tent Era." if road_walking_disabled else "Residents trample trails faster. Route selection is unchanged.",
+		"road_walking_tooltip": "Available in the Tent Era." if road_walking_disabled else "Residents reinforce shared routes faster. Existing trails and roads are preferred automatically.",
 
 		"balanced_warehouse_enabled": simulation.settlement.balanced_warehouse_mode,
 		"balanced_warehouse_disabled": balanced_warehouse_disabled,

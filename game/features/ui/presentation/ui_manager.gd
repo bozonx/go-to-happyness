@@ -390,10 +390,10 @@ func _create_research_menu() -> void:
 
 func _create_campfire_orders_menu() -> void:
 	if campfire_orders_menu != null:
-		campfire_orders_menu.road_walking_toggled.connect(func(): events.road_walking_order_set.emit())
-		campfire_orders_menu.balanced_warehouse_toggled.connect(func(): events.balanced_warehouse_mode_set.emit())
-		campfire_orders_menu.night_work_toggled.connect(func(): events.settlement_night_work_toggled.emit())
-		campfire_orders_menu.double_time_toggled.connect(func(): events.double_time_order_toggled.emit())
+		campfire_orders_menu.road_walking_toggled.connect(func(enabled: bool): events.road_walking_order_set.emit(enabled))
+		campfire_orders_menu.balanced_warehouse_toggled.connect(func(enabled: bool): events.balanced_warehouse_mode_set.emit(enabled))
+		campfire_orders_menu.night_work_toggled.connect(func(enabled: bool): events.settlement_night_work_toggled.emit(enabled))
+		campfire_orders_menu.double_time_toggled.connect(func(enabled: bool): events.double_time_order_toggled.emit(enabled))
 		campfire_orders_menu.cheer_pressed.connect(func(): events.cheer_up_settlement_requested.emit())
 		campfire_orders_menu.close_requested.connect(func(): events.campfire_orders_menu_close_requested.emit())
 

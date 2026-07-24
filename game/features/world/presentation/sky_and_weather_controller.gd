@@ -63,12 +63,30 @@ func update_daylight(
 	var solar_intensity := smoothstep(0.0, 0.28, solar_height)
 	var twilight := 1.0 - smoothstep(0.0, 0.28, absf(solar_height))
 	var cloud_night := 1.0 - smoothstep(-0.25, 0.05, solar_height)
+	# Two independent weather regulators drive everything else:
+	#   cloud_cover      -> fair-weather cloudiness (keeps a blue, saturated sky)
+	#   storm_influence  -> storm front (grey murk, darkening, rain)
+	# "Murk" is the grey, flat, desaturating atmosphere. It belongs to the storm
+	# front, not to cloud coverage, so broken cumulus never greys out the sky. A
+	# nearly sealed ceiling (>0.9 cover) is allowed to add a touch of its own murk.
+	var storm := clampf(storm_influence, 0.0, 1.0)
+	var murk := clampf(maxf(storm, smoothstep(0.9, 1.0, cloud_cover) * 0.55), 0.0, 1.0)
+	# Wind drifts slowly: its bearing swings (roughly once across a long cycle) and
+	# its strength gusts up and down, so cloud drift direction and speed vary with
+	# time instead of scrolling on a fixed rail. Per-layer altitude speeds are
+	# applied inside the shader (fast cirrus, slow cumulus).
+	var wind_angle := _drift(runtime_seconds * 0.004, cloud_pattern_seed + 5.0, 1.0) * TAU
+	var wind_gust := lerpf(0.6, 1.5, _drift(runtime_seconds * 0.02, cloud_pattern_seed + 71.0, 1.0))
+	var wind_speed := CLOUD_WIND.length() * wind_gust
+	var wind := Vector2(cos(wind_angle), sin(wind_angle)) * wind_speed
+	# Slow shape-morph clock: cumulus swell and dissolve rather than only scrolling.
+	var cloud_evolve := runtime_seconds * 0.012
 	var cloud_layers := _cloud_layer_mix(
-		game_minutes,
 		cloud_cover,
 		storm_influence,
 		cloud_pattern_seed,
-		cloud_night
+		cloud_night,
+		runtime_seconds
 	)
 	var night_color := Color("101a2b")
 	var twilight_color := Color("c66b52")
@@ -80,11 +98,13 @@ func update_daylight(
 		base_background = night_color.lerp(night_twilight_color, twilight * 0.55)
 	else:
 		base_background = twilight_color.lerp(day_color, smoothstep(0.0, 0.42, solar_height))
-	world_environment.background_color = base_background.lerp(overcast_color, cloud_cover)
+	world_environment.background_color = base_background.lerp(overcast_color, murk)
 	var base_ambient_color := Color("4b5872").lerp(Color("d7ebef"), maxf(solar_intensity, twilight * 0.35))
 	var base_ambient_energy := lerpf(0.18, 0.65, maxf(solar_intensity, twilight * 0.3))
-	world_environment.ambient_light_color = base_ambient_color.lerp(Color("8a9aa3"), cloud_cover)
-	world_environment.ambient_light_energy = lerpf(base_ambient_energy, 0.78, cloud_cover)
+	# Ground light desaturates toward grey only under murk; a full white cloud sheet
+	# still lifts overall ambient energy.
+	world_environment.ambient_light_color = base_ambient_color.lerp(Color("8a9aa3"), murk)
+	world_environment.ambient_light_energy = lerpf(base_ambient_energy, 0.78, cloud_cover * 0.6 + murk * 0.4)
 	var day_progress := clampf((hour - 6.0) / 12.0, 0.0, 1.0)
 	var sun_elevation := 3.0 + maxf(solar_height, 0.0) * 45.0
 	var sun_azimuth := lerpf(-75.0, 11.0, day_progress)
@@ -121,20 +141,22 @@ func update_daylight(
 	var moon_basis := Basis.from_euler(Vector3(deg_to_rad(-moon_elevation), deg_to_rad(moon_azimuth), 0.0))
 	var moon_direction := moon_basis.z.normalized()
 	if sky_material != null:
-		var sky_horizon := base_background.lerp(overcast_color, cloud_cover)
-		# Clear skies deepen toward a saturated anime blue at the zenith; overcast
-		# keeps the flat grey ceiling.
+		var sky_horizon := base_background.lerp(overcast_color, murk)
+		# Clear (non-murky) skies deepen toward a saturated anime blue at the zenith,
+		# even when busy with fair-weather clouds; only murk flattens it to grey.
 		var deep_zenith := Color("2b6fd6")
-		var sky_zenith := sky_horizon.darkened(0.22).lerp(deep_zenith, (1.0 - cloud_cover) * 0.5)
+		var sky_zenith := sky_horizon.darkened(0.22).lerp(deep_zenith, (1.0 - murk) * 0.6)
 		sky_material.set_shader_parameter("u_horizon_color", sky_horizon)
 		sky_material.set_shader_parameter("u_zenith_color", sky_zenith)
 		sky_material.set_shader_parameter("u_sun_color", sun.light_color)
 		sky_material.set_shader_parameter("u_overcast", cloud_cover)
+		sky_material.set_shader_parameter("u_murk", murk)
 		sky_material.set_shader_parameter("u_solar_intensity", solar_intensity)
 		sky_material.set_shader_parameter("u_sun_visibility", cloud_sun_visibility)
 		sky_material.set_shader_parameter("u_time", runtime_seconds)
+		sky_material.set_shader_parameter("u_cloud_evolve", cloud_evolve)
 		sky_material.set_shader_parameter("u_cloud_scale", CLOUD_SCALE)
-		sky_material.set_shader_parameter("u_wind", CLOUD_WIND)
+		sky_material.set_shader_parameter("u_wind", wind)
 		sky_material.set_shader_parameter("u_edge_softness", CLOUD_EDGE_SOFTNESS)
 		sky_material.set_shader_parameter("u_coverage_clear", CLOUD_COVERAGE_CLEAR)
 		sky_material.set_shader_parameter("u_coverage_storm", CLOUD_COVERAGE_STORM)
@@ -145,15 +167,22 @@ func update_daylight(
 		# Cloud cover desaturates the sunset much more slowly than the rest of the
 		# sky: broken clouds should catch peach light instead of turning uniformly
 		# grey as soon as the forecast passes fifty percent.
-		var horizon_glow := Color("ff6a2a").lerp(Color("a8b8c0"), cloud_cover * 0.45)
+		var horizon_glow := Color("ff6a2a").lerp(Color("a8b8c0"), murk * 0.45)
 		sky_material.set_shader_parameter("u_horizon_glow_color", horizon_glow)
 		sky_material.set_shader_parameter("u_night_factor", cloud_night)
 		sky_material.set_shader_parameter("u_star_visibility", star_visibility)
-		# Atmospheric haze band: pale by day, warm at dawn/dusk, dark at night.
-		var haze_day := sky_horizon.lightened(0.28)
-		var haze_color := haze_day.lerp(Color("ff9a5c"), twilight * (1.0 - cloud_cover) * 0.65)
-		haze_color = haze_color.lerp(sky_horizon.darkened(0.22), cloud_night * 0.55)
-		var haze_strength := (0.30 + twilight * 0.35) * (1.0 - cloud_cover * 0.35)
+		# Atmospheric horizon band. Two separate contributions:
+		#   * clear-weather glow: a soft light band by day, warm at dawn/dusk, and
+		#     fully absent at clear night (day_light -> 0) so the stars sit on clean
+		#     deep blue with no grey dome.
+		#   * storm murk: a grey haze that hangs any time of day, including night.
+		var day_light := maxf(solar_intensity, twilight)
+		var haze_day := sky_horizon.lightened(0.30)
+		var haze_color := haze_day.lerp(Color("ff9a5c"), twilight * (1.0 - murk) * 0.7)
+		haze_color = haze_color.lerp(overcast_color.darkened(0.1), murk * 0.8)
+		var clear_haze := (0.14 + twilight * 0.40) * day_light * (1.0 - murk * 0.6)
+		var storm_haze := murk * 0.5
+		var haze_strength := clampf(clear_haze + storm_haze, 0.0, 0.85)
 		sky_material.set_shader_parameter("u_haze_color", haze_color)
 		sky_material.set_shader_parameter("u_haze_strength", haze_strength)
 		# Night moon, opposite the sun and fading in with the deepening twilight.
@@ -169,43 +198,54 @@ func update_daylight(
 
 
 func _cloud_layer_mix(
-	game_minutes: float,
 	cloud_cover: float,
 	storm_influence: float,
 	cloud_pattern_seed: float,
-	night_factor: float
+	night_factor: float,
+	clock: float
 ) -> CloudLayerMix:
 	var result := CloudLayerMix.new()
-	var phase := fposmod(game_minutes, 1440.0) / 1440.0 * TAU
-	var cumulus_pulse := 0.5 + sin(phase * 5.0 + cloud_pattern_seed * 1.31 + 0.4) * 0.5
-	var cirrus_pulse := 0.5 + sin(phase * 3.0 + cloud_pattern_seed * 0.73 + 2.1) * 0.5
-	var elongated_pulse := 0.5 + sin(phase * 4.0 + cloud_pattern_seed * 1.87 + 4.5) * 0.5
 	var ordinary_weather := 1.0 - clampf(storm_influence, 0.0, 1.0)
-	var cloud_presence := smoothstep(0.075, 0.30, cloud_cover)
-	var thin_presence := smoothstep(0.015, 0.18, cloud_cover)
+	# Each layer waxes and wanes on its own slow, non-periodic clock (layered value
+	# noise over elapsed time), so the sky is a shifting blend of different layers in
+	# different proportions rather than one looping pulse. Thin high layers appear at
+	# a lower coverage than the heavy cumulus, so partly-cloudy skies read as a mix.
+	var t := clock * 0.03
+	var cumulus_drift := _drift(t, cloud_pattern_seed + 3.0, 1.0)
+	var cirrus_drift := _drift(t, cloud_pattern_seed + 21.0, 0.62)
+	var elongated_drift := _drift(t, cloud_pattern_seed + 47.0, 0.83)
+	var cumulus_presence := smoothstep(0.06, 0.34, cloud_cover)
+	var thin_presence := smoothstep(0.0, 0.22, cloud_cover)
 
-	result.cumulus = cloud_presence * cumulus_pulse
+	result.cumulus = cumulus_presence * lerpf(0.32, 1.0, cumulus_drift)
 	result.cumulus *= lerpf(1.0, 0.22, storm_influence)
-	result.cumulus = maxf(result.cumulus, smoothstep(0.48, 0.82, cloud_cover) * 0.68)
-	result.cirrus = thin_presence * lerpf(0.10, 0.46, cirrus_pulse)
-	result.cirrus *= (1.0 - smoothstep(0.20, 0.48, cloud_cover)) * ordinary_weather
-	result.elongated = smoothstep(0.16, 0.58, cloud_cover)
-	result.elongated *= lerpf(0.12, 0.68, elongated_pulse) * lerpf(1.0, 0.28, storm_influence)
-	result.elongated += (
-		(1.0 - cumulus_pulse)
-		* smoothstep(0.18, 0.50, cloud_cover)
-		* ordinary_weather
-		* 0.42
-	)
+	result.cumulus = maxf(result.cumulus, smoothstep(0.5, 0.85, cloud_cover) * 0.7)
+
+	# Cirrus streaks coexist with cumulus (like the reference sky) instead of
+	# vanishing as cover rises. A storm front scrubs them out.
+	result.cirrus = lerpf(0.2, 0.62, cirrus_drift) * thin_presence * ordinary_weather
+
+	# Elongated mid-altitude ribbons carry most of the "partly cloudy" texture.
+	result.elongated = (0.25 + smoothstep(0.05, 0.55, cloud_cover) * 0.75)
+	result.elongated *= lerpf(0.3, 1.0, elongated_drift)
+	result.elongated *= smoothstep(0.03, 0.4, cloud_cover) * lerpf(1.0, 0.3, storm_influence)
 	result.elongated = clampf(result.elongated, 0.0, 1.0)
+
 	result.storm = clampf(storm_influence, 0.0, 1.0)
 
-	# At night the large readable masses remain, while high-frequency thin
-	# layers fade so they do not turn the star field into procedural dirt.
-	result.cumulus *= lerpf(1.0, 0.82, night_factor)
-	result.cirrus *= lerpf(1.0, 0.10, night_factor)
-	result.elongated *= lerpf(1.0, 0.18, night_factor)
+	# Night simplifies to the big readable cumulus masses; the high-frequency thin
+	# layers fade to almost nothing so they do not smear the star field.
+	result.cumulus *= lerpf(1.0, 0.85, night_factor)
+	result.cirrus *= lerpf(1.0, 0.06, night_factor)
+	result.elongated *= lerpf(1.0, 0.1, night_factor)
 	return result
+
+
+func _drift(t: float, seed: float, freq: float) -> float:
+	# Smooth, non-periodic 0..1 wander from layered value noise sampled along the
+	# weather clock. Remapped so it uses most of the 0..1 range.
+	var raw := _fbm(Vector2(t * freq + seed, seed * 1.7 + 4.0))
+	return clampf((raw - 0.28) / 0.44, 0.0, 1.0)
 
 
 func _cloud_sun_visibility(

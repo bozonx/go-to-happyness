@@ -2936,7 +2936,13 @@ func _set_road_walking_order(enabled: bool) -> void:
 	if settlement.era != SettlementState.Era.TENT:
 		return
 	settlement.road_walking_order_enabled = enabled
-	_update_interface("Trail-walking order %s. It does not change routes yet." % ("enabled" if enabled else "disabled"))
+	_update_interface(
+		"Trail-walking order %s. Residents prefer existing paths automatically and %s shared routes."
+		% [
+			"enabled" if enabled else "disabled",
+			"reinforce" if enabled else "normally wear in",
+		]
+	)
 
 
 

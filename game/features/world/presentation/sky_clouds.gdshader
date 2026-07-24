@@ -41,6 +41,13 @@ uniform float u_coverage_storm = 0.18;  // threshold when overcast (full sheet)
 uniform float u_cumulus_amount : hint_range(0.0, 1.0) = 1.0;
 uniform float u_elongated_amount : hint_range(0.0, 1.0) = 0.0;
 uniform float u_storm_amount : hint_range(0.0, 1.0) = 0.0;
+// Grey, flat "murk" atmosphere. Decoupled from cloud coverage: broken fair-weather
+// clouds keep a saturated blue sky, and the grey haze/darkening only arrives with a
+// storm front (or an almost fully sealed ceiling). Drives all desaturation.
+uniform float u_murk : hint_range(0.0, 1.0) = 0.0;
+// Slow morph clock so cloud silhouettes form and dissolve over time instead of only
+// scrolling rigidly with the wind.
+uniform float u_cloud_evolve = 0.0;
 uniform float u_shadow_step = 0.055;    // self-shadow march distance
 uniform vec3 u_cloud_lit_clear : source_color = vec3(1.0, 0.985, 0.95);
 uniform vec3 u_cloud_mid_clear : source_color = vec3(0.70, 0.84, 0.95);
@@ -109,9 +116,12 @@ float cellular_billow(vec2 p) {
 // sizes of cellular billows build an irregular cauliflower silhouette. Unlike
 // stamped primitives, every family remains organic and non-repeating.
 float cloud_field(vec2 uv) {
+	// A slowly wandering warp makes the cauliflower masses swell and erode over time
+	// instead of sliding past as a rigid printed sheet.
+	vec2 evolve = vec2(u_cloud_evolve, u_cloud_evolve * 0.63);
 	vec2 q = vec2(
-		fbm(uv * 0.68 + vec2(0.0, 0.0)),
-		fbm(uv * 0.68 + vec2(5.2, 1.3))
+		fbm(uv * 0.68 + evolve),
+		fbm(uv * 0.68 + vec2(5.2, 1.3) - evolve * 0.5)
 	);
 	float macro = fbm(uv * 0.30 + q * 0.48);
 	float large_billows = cellular_billow(uv * 0.72 + q * 0.58);
@@ -161,7 +171,8 @@ float tower_cloud_field(vec3 direction) {
 // High-altitude cirrus wind streaks layer
 float cirrus_field(vec2 uv, float amount) {
 	vec2 streaked_uv = vec2(uv.x * 0.35 + uv.y * 1.6, uv.y * 3.8);
-	float n = fbm(streaked_uv + u_wind * u_time * 0.4);
+	// High cirrus rides the fastest wind and reshapes on the evolve clock.
+	float n = fbm(streaked_uv + u_wind * u_time * 2.6 + vec2(u_cloud_evolve * 0.8, 0.0));
 	float dissolve_threshold = mix(0.70, 0.52, smoothstep(0.06, 1.0, amount));
 	return smoothstep(dissolve_threshold, dissolve_threshold + 0.24, n);
 }
@@ -171,10 +182,11 @@ float cirrus_field(vec2 uv, float amount) {
 // family of round cumulus puffs.
 float elongated_cloud_field(vec2 uv, float amount) {
 	vec2 stretched = vec2(uv.x * 0.26 + uv.y * 0.38, uv.y * 1.85);
-	float family = fbm(uv * 0.20 + vec2(8.0, 17.0));
+	vec2 ev = vec2(u_cloud_evolve * 0.5, u_cloud_evolve * 0.3);
+	float family = fbm(uv * 0.20 + vec2(8.0, 17.0) + ev);
 	float family_mask = smoothstep(0.48, 0.68, family);
-	float broad = fbm(stretched * 0.72 + vec2(14.0, 3.0));
-	float breakup = fbm(stretched * 1.48 + vec2(2.0, 11.0));
+	float broad = fbm(stretched * 0.72 + vec2(14.0, 3.0) + ev);
+	float breakup = fbm(stretched * 1.48 + vec2(2.0, 11.0) - ev);
 	float ribbons = broad * 0.82 + breakup * 0.18;
 	float dissolve_threshold = mix(0.54, 0.32, smoothstep(0.06, 1.0, amount));
 	return smoothstep(dissolve_threshold, dissolve_threshold + 0.22, ribbons)
@@ -244,7 +256,9 @@ void sky() {
 // one continuous profile: a separate bright core would read as a second, small
 // sun inside the larger glow.
 	float sun_amt = max(dot(dir, sun_dir), 0.0);
-	float clear_sky = 1.0 - u_overcast;
+	// "Clear" for warm light / halos / toon crispness is about murk, not cloud count:
+	// a sky full of fair-weather cumulus still catches golden sunset light.
+	float clear_sky = 1.0 - u_murk;
 
 	// Redden the disc and scattering near horizon. A gentle curve pushes the disc
 	// into gold sooner as the sun drops, so sunrise/sunset read warm without the
@@ -312,7 +326,7 @@ void sky() {
 		// never smudges over the night star field, where it only adds noise.
 		float cirrus_day = 1.0 - u_night_factor;
 		float cirrus_tail_fade = smoothstep(0.0, 0.14, u_cirrus_amount);
-		float cirrus_alpha = cirrus_mask * cirrus_tail_fade * ceil_mask * clear_sky * cirrus_day * 0.28;
+		float cirrus_alpha = cirrus_mask * cirrus_tail_fade * ceil_mask * clear_sky * cirrus_day * 0.42;
 		sky_col = mix(sky_col, cirrus_col, cirrus_alpha);
 	}
 
@@ -320,17 +334,19 @@ void sky() {
 	if (u_elongated_amount > 0.001) {
 		vec2 elongated_uv = dir.xz / max(horizon + 0.40, 0.40);
 		elongated_uv *= u_cloud_scale * 1.18;
-		elongated_uv += vec2(u_wind.x * u_time * 1.35, -u_wind.y * u_time * 0.48);
+		// Mid-altitude ribbons: medium wind, between the fast cirrus and slow cumulus.
+		elongated_uv += vec2(u_wind.x * u_time * 1.7, u_wind.y * u_time * 1.7);
 		float elongated_mask = elongated_cloud_field(elongated_uv, u_elongated_amount);
 		vec3 elongated_day = mix(u_cloud_mid_clear, u_cloud_lit_clear, 0.72);
 		vec3 elongated_storm = mix(u_cloud_mid_storm, u_cloud_lit_storm, 0.30);
-		vec3 elongated_col = mix(elongated_day, elongated_storm, u_overcast);
+		vec3 elongated_col = mix(elongated_day, elongated_storm, u_murk);
 		elongated_col = mix(elongated_col, u_cloud_mid_night, u_night_factor);
 		float elongated_sunset = sun_low * (1.0 - u_night_factor) * (1.0 - u_overcast * 0.55);
 		elongated_col = mix(elongated_col, warm_sun, elongated_sunset * 0.28);
 		float elongated_tail_fade = smoothstep(0.0, 0.14, u_elongated_amount);
 		float elongated_alpha = elongated_mask * elongated_tail_fade * ceil_mask;
-		elongated_alpha *= mix(0.72, 0.11, u_night_factor) * (1.0 - u_storm_amount * 0.72);
+		// Night keeps only the big cumulus masses readable; thin ribbons all but vanish.
+		elongated_alpha *= mix(0.78, 0.05, u_night_factor) * (1.0 - u_storm_amount * 0.72);
 		sky_col = mix(sky_col, elongated_col, elongated_alpha);
 	}
 
@@ -340,7 +356,8 @@ void sky() {
 	// remaining seamless at the horizon and zenith.
 	vec2 cumulus_projected_uv = dir.xz / max(horizon + 0.55, 0.55);
 	vec2 cumulus_uv = cumulus_projected_uv * u_cloud_scale * 1.6;
-	cumulus_uv += vec2(u_wind.x * u_time * 2.4, u_wind.y * u_time * 0.55);
+	// Low, heavy cumulus drifts slowest; its body morphs mainly through u_cloud_evolve.
+	cumulus_uv += vec2(u_wind.x * u_time * 1.0, u_wind.y * u_time * 1.0);
 	float projected_n = layered_cloud_field(cumulus_uv);
 	vec3 tower_dir = normalize(dir + vec3(u_wind.x * u_time * 0.12, 0.0, u_wind.y * u_time * 0.12));
 	float tower_weather = 1.0 - smoothstep(0.74, 0.96, u_overcast);
@@ -416,9 +433,10 @@ void sky() {
 	float lobe_light = mix(0.16, 0.055, u_night_factor);
 	lit = clamp(lit + lobe_core * lobe_light + (inner_billows - 0.5) * 0.035 * density, 0.0, 1.0);
 	lit -= smoothstep(0.48, 0.95, horizon) * density * mix(0.08, 0.025, u_night_factor);
-	lit = mix(lit, lit * 0.55 + 0.25, u_overcast);
+	// Only genuine murk flattens the dome shading into a dull ceiling.
+	lit = mix(lit, lit * 0.55 + 0.25, u_murk);
 
-	float weather_darkness = max(u_overcast, u_storm_amount);
+	float weather_darkness = max(u_murk, u_storm_amount);
 	vec3 cloud_lit = mix(u_cloud_lit_clear, u_cloud_lit_storm, weather_darkness);
 	vec3 cloud_mid = mix(u_cloud_mid_clear, u_cloud_mid_storm, weather_darkness);
 	vec3 cloud_shadow = mix(u_cloud_shadow_clear, u_cloud_shadow_storm, weather_darkness);
@@ -456,11 +474,11 @@ void sky() {
 	cloud_col = mix(
 		cloud_col,
 		sunset_cloud,
-		sunset_face * mix(0.66, 0.46, u_overcast)
+		sunset_face * mix(0.66, 0.46, u_murk)
 	);
 	float warm_midtone_strength = mix(0.055, 0.12, sun_low);
 	cloud_col += warm_sun * (mid_lit * warm_midtone_strength + rim * warm_rim_strength)
-		* mix(1.0, 0.58, u_overcast) * cloud_sun_energy;
+		* mix(1.0, 0.58, u_murk) * cloud_sun_energy;
 
 	// Cool moonlight rim on the cloud tops at night gives the dark masses a
 	// silver edge. Keep it restrained because moonlight already drives the main

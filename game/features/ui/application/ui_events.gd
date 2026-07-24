@@ -74,10 +74,10 @@ signal research_menu_hide_requested
 signal start_research_requested
 signal cancel_research_requested
 
-signal road_walking_order_set
-signal balanced_warehouse_mode_set
-signal settlement_night_work_toggled
-signal double_time_order_toggled
+signal road_walking_order_set(enabled: bool)
+signal balanced_warehouse_mode_set(enabled: bool)
+signal settlement_night_work_toggled(enabled: bool)
+signal double_time_order_toggled(enabled: bool)
 signal cheer_up_settlement_requested
 signal campfire_orders_menu_close_requested
 

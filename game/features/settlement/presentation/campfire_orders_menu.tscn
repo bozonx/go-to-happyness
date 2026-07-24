@@ -45,7 +45,7 @@ offset_left = 18.0
 offset_top = 58.0
 offset_right = 402.0
 offset_bottom = 90.0
-tooltip_text = "Residents trample trails faster. Route selection is unchanged."
+tooltip_text = "Residents reinforce shared routes faster. Existing trails and roads are preferred automatically."
 text = "Walk as if on roads"
 
 [node name="BalancedWarehouseToggle" type="CheckButton" parent="."]

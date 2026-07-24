@@ -48,6 +48,7 @@ static func run_all() -> void:
 	_test_trail_cell_strength()
 	_test_trail_decay_without_content()
 	_test_constructed_roads_override_trails_and_restore_them()
+	_test_pedestrian_route_uses_road_then_continues_offroad()
 	_test_road_network_validates_and_batches_changes()
 	_test_road_profiles_enforce_support()
 	_test_navigation_obstacle_publisher()
@@ -864,6 +865,31 @@ static func _test_constructed_roads_override_trails_and_restore_them() -> void:
 	assert(is_equal_approx(grid.get_cell_weight(cell), TrailFieldService.MATURE_PATH_WEIGHT))
 
 
+static func _test_pedestrian_route_uses_road_then_continues_offroad() -> void:
+	var grid := NavGrid.new()
+	grid.configure(1.0, 12)
+	var router: RefCounted = GridRouteServiceScript.new()
+	router.configure(grid)
+	var roads: RefCounted = RoadNetworkServiceScript.new()
+	roads.configure(grid)
+
+	var road_cells: Array[Vector2i] = []
+	for x in range(-2, 3):
+		road_cells.append(Vector2i(x, 1))
+	assert(roads.complete_cells(road_cells, RoadTypeScript.DIRT, 1))
+
+	# Both endpoints are grass. The shared weighted route should join the cheap
+	# road, use it for the useful middle section, then leave it for the resource.
+	var start := Vector3(-3.5, 0.0, 0.5)
+	var resource_destination := Vector3(3.5, 0.0, 0.5)
+	var route: RouteResult = router.find_route(start, resource_destination)
+	assert(route.reachable)
+	assert(not road_cells.has(grid.cell_from_position(start)))
+	assert(not road_cells.has(grid.cell_from_position(route.arrival_position)))
+	assert(route.waypoints.any(func(point: Vector3): return grid.cell_from_position(point) in road_cells))
+	assert(grid.route_cost(start, route) < grid.segment_cost(start, resource_destination))
+
+
 static func _test_road_network_validates_and_batches_changes() -> void:
 	var grid := NavGrid.new()
 	grid.configure(1.0, 12)
@@ -1052,4 +1078,3 @@ static func _test_profile_contract_and_solver_facade() -> void:
 	var unsupported: RouteResult = facade.find_route_request(unknown_request)
 	assert(not unsupported.reachable)
 	assert(unsupported.unreachable_reason == RouteResult.UnreachableReason.PROFILE_UNSUPPORTED)
-

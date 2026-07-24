@@ -1289,4 +1289,3 @@ func _confirm_discard_changes() -> bool:
 		await dialog.hidden
 	dialog.queue_free()
 	return user_confirmed
-
