@@ -7,6 +7,7 @@ extends RefCounted
 
 var _grid: NavGrid
 var _routes: GridRouteService
+var _solver: RouteSolver
 var route_requests := 0
 var route_failures := 0
 var expanded_nodes := 0
@@ -15,19 +16,33 @@ var expanded_nodes := 0
 func configure(next_grid: NavGrid, next_routes: GridRouteService) -> void:
 	_grid = next_grid
 	_routes = next_routes
+	_solver = null
+
+
+## Future graph adapters (indoor, lane, air, composite) use this seam instead
+## of making route consumers depend on a concrete GridRouteService.
+func configure_solver(next_grid: NavGrid, next_solver: RouteSolver) -> void:
+	_grid = next_grid
+	_routes = null
+	_solver = next_solver
 
 
 func find_route(from: Vector3, destination: Vector3, allow_destination_cell := false, traveler_profile: StringName = NavGrid.PEDESTRIAN_PROFILE) -> RouteResult:
-	if _routes == null:
-		return RouteResult.unreachable(-1, -1, RouteResult.UnreachableReason.NO_GRID)
 	var request := RouteRequest.new()
 	request.from = from
 	request.destination = destination
 	request.allow_destination_cell = allow_destination_cell
 	request.traveler_profile = traveler_profile
+	return find_route_request(request)
+
+
+func find_route_request(request: RouteRequest) -> RouteResult:
+	if _solver == null and _routes == null:
+		return RouteResult.unreachable(-1, -1, RouteResult.UnreachableReason.NO_GRID)
 	route_requests += 1
-	var result := _routes.find_route_request(request)
-	expanded_nodes += _routes.last_search_expanded_nodes
+	var result := _solver.find_route(request) if _solver != null else _routes.find_route_request(request)
+	if _routes != null:
+		expanded_nodes += _routes.last_search_expanded_nodes
 	if not result.reachable:
 		route_failures += 1
 	return result

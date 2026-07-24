@@ -116,9 +116,15 @@ Personal needs are state, not task selection. `needs/application` owns hunger,
 rest, toilet and future need parameters; decision goals read immutable facts and
 apply effects only through actuator commands and feature services.
 
-Routing lives in `routing/application` as `NavGrid`, `GridRouteService` and
-`RouteResult`. Route selection rules must not depend on `Citizen` nodes or UI
-nodes; world code only publishes obstacles and coverage data to the grid.
+Routing lives in `routing/application` as `NavGrid`, `GridRouteService`,
+`NavigationFacade` and `RouteResult`. Route selection rules must not depend on
+`Citizen` nodes or UI nodes; world code only publishes obstacles and coverage
+data to the grid. New graph implementations are introduced only for a genuinely
+different topology (indoor rooms/doors, road lanes, or 3D air), behind
+`RouteSolver` and explicit portals. New vehicles and robots normally add a
+`TravelerProfile` with physical constraints rather than a new router. Patrols,
+bus lines, formations and convoys consume route results from their owning
+feature; they are not routing graph layers.
 
 Logistics owns delivery tasks. Producers publish or request deliveries; they do
 not directly pick walkers or mutate courier state except through the logistics

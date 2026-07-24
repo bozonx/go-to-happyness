@@ -28,7 +28,7 @@ func can_solve(request: RouteRequest) -> bool:
 	if request == null or grid == null:
 		return false
 	var profile := request.get_profile()
-	return (profile.layer_mask & TravelerProfile.LAYER_TERRAIN) != 0 or profile.allows_offroad
+	return (profile.layer_mask & TravelerProfile.LAYER_TERRAIN) != 0
 
 
 func find_route(request: RouteRequest) -> RouteResult:
@@ -36,6 +36,8 @@ func find_route(request: RouteRequest) -> RouteResult:
 		return RouteResult.unreachable(-1, -1, RouteResult.UnreachableReason.NO_GRID)
 	var grid_revision := grid.revision()
 	var topology_revision := grid.topology_revision()
+	if request == null or not can_solve(request):
+		return RouteResult.unreachable(grid_revision, topology_revision, RouteResult.UnreachableReason.PROFILE_UNSUPPORTED)
 	var start: Vector2i = grid.cell_from_position(request.from)
 	var goal: Vector2i = grid.cell_from_position(request.destination)
 	if not grid.is_board_cell(start) or not grid.is_board_cell(goal):
@@ -43,8 +45,8 @@ func find_route(request: RouteRequest) -> RouteResult:
 	if grid.is_blocked(goal) and not request.allow_destination_cell:
 		return RouteResult.unreachable(grid_revision, topology_revision, RouteResult.UnreachableReason.GOAL_BLOCKED)
 
-	var profile_id := request.traveler_profile
-	if request.traveler_profile == NavGrid.PEDESTRIAN_PROFILE and not request.allow_destination_cell and grid.is_walkable(start, profile_id) and grid.is_walkable(goal, profile_id) and not grid.are_cells_connected(start, goal):
+	var profile_id := request.get_profile().profile_id
+	if profile_id == NavGrid.PEDESTRIAN_PROFILE and not request.allow_destination_cell and grid.is_walkable(start, profile_id) and grid.is_walkable(goal, profile_id) and not grid.are_cells_connected(start, goal):
 		return RouteResult.unreachable(grid_revision, topology_revision, RouteResult.UnreachableReason.DISCONNECTED)
 
 	var came_from := _search(start, goal, profile_id, request.allow_destination_cell)

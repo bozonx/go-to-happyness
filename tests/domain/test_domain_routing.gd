@@ -55,6 +55,7 @@ static func run_all() -> void:
 	_test_nav_grid_and_facade_route_cost()
 	_test_navigation_bridge_direct_configuration()
 	_test_multi_axis_architecture()
+	_test_profile_contract_and_solver_facade()
 
 
 
@@ -1028,4 +1029,27 @@ static func _test_multi_axis_architecture() -> void:
 	var cruise_speed: float = convoy.compute_follower_speed(Vector3(0, 0, 0), Vector3(12, 0, 0), 5.0)
 	assert(cruise_speed == convoy.max_speed)
 
+
+static func _test_profile_contract_and_solver_facade() -> void:
+	var grid := NavGrid.new()
+	grid.configure(1.0, 10)
+	var grid_solver: RouteSolver = load("res://game/features/routing/application/solvers/grid_route_solver.gd").new(grid)
+	var facade := NavigationFacadeScript.new()
+	facade.configure_solver(grid, grid_solver)
+
+	var pedestrian_request := RouteRequest.new()
+	pedestrian_request.from = Vector3(0.5, 0.0, 0.5)
+	pedestrian_request.destination = Vector3(2.5, 0.0, 0.5)
+	pedestrian_request.profile_override = TravelerProfile.pedestrian()
+	assert(facade.find_route_request(pedestrian_request).reachable)
+
+	# An unregistered mobility ID must never silently obtain pedestrian terrain
+	# access. A future feature has to register a concrete capability profile.
+	var unknown_request := RouteRequest.new()
+	unknown_request.from = pedestrian_request.from
+	unknown_request.destination = pedestrian_request.destination
+	unknown_request.traveler_profile = &"unregistered_test_vehicle"
+	var unsupported: RouteResult = facade.find_route_request(unknown_request)
+	assert(not unsupported.reachable)
+	assert(unsupported.unreachable_reason == RouteResult.UnreachableReason.PROFILE_UNSUPPORTED)
 

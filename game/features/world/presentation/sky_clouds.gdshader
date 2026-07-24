@@ -159,23 +159,26 @@ float tower_cloud_field(vec3 direction) {
 }
 
 // High-altitude cirrus wind streaks layer
-float cirrus_field(vec2 uv) {
+float cirrus_field(vec2 uv, float amount) {
 	vec2 streaked_uv = vec2(uv.x * 0.35 + uv.y * 1.6, uv.y * 3.8);
 	float n = fbm(streaked_uv + u_wind * u_time * 0.4);
-	return smoothstep(0.52, 0.76, n);
+	float dissolve_threshold = mix(0.70, 0.52, smoothstep(0.06, 1.0, amount));
+	return smoothstep(dissolve_threshold, dissolve_threshold + 0.24, n);
 }
 
 // Thin, elongated mid-altitude islands. Unlike cirrus they retain a soft body,
 // but their stretched coordinate frame prevents them from reading as another
 // family of round cumulus puffs.
-float elongated_cloud_field(vec2 uv) {
+float elongated_cloud_field(vec2 uv, float amount) {
 	vec2 stretched = vec2(uv.x * 0.26 + uv.y * 0.38, uv.y * 1.85);
 	float family = fbm(uv * 0.20 + vec2(8.0, 17.0));
 	float family_mask = smoothstep(0.48, 0.68, family);
 	float broad = fbm(stretched * 0.72 + vec2(14.0, 3.0));
 	float breakup = fbm(stretched * 1.48 + vec2(2.0, 11.0));
 	float ribbons = broad * 0.82 + breakup * 0.18;
-	return smoothstep(0.32, 0.54, ribbons) * mix(0.55, 1.0, family_mask);
+	float dissolve_threshold = mix(0.54, 0.32, smoothstep(0.06, 1.0, amount));
+	return smoothstep(dissolve_threshold, dissolve_threshold + 0.22, ribbons)
+		* mix(0.55, 1.0, family_mask);
 }
 
 // A deliberately sparse, stable star field. It belongs in the sky material so
@@ -303,12 +306,13 @@ void sky() {
 
 	// --- High-altitude cirrus streaks layer ---
 	if (u_cirrus_amount > 0.001) {
-		float cirrus_mask = cirrus_field(uv * 0.85);
+		float cirrus_mask = cirrus_field(uv * 0.85, u_cirrus_amount);
 		vec3 cirrus_col = mix(u_cloud_lit_clear, sky_col, 0.35);
 		// Cirrus belongs to the daytime blue sky. It fades out through dusk so it
 		// never smudges over the night star field, where it only adds noise.
 		float cirrus_day = 1.0 - u_night_factor;
-		float cirrus_alpha = cirrus_mask * u_cirrus_amount * ceil_mask * clear_sky * cirrus_day * 0.28;
+		float cirrus_tail_fade = smoothstep(0.0, 0.14, u_cirrus_amount);
+		float cirrus_alpha = cirrus_mask * cirrus_tail_fade * ceil_mask * clear_sky * cirrus_day * 0.28;
 		sky_col = mix(sky_col, cirrus_col, cirrus_alpha);
 	}
 
@@ -317,14 +321,15 @@ void sky() {
 		vec2 elongated_uv = dir.xz / max(horizon + 0.40, 0.40);
 		elongated_uv *= u_cloud_scale * 1.18;
 		elongated_uv += vec2(u_wind.x * u_time * 1.35, -u_wind.y * u_time * 0.48);
-		float elongated_mask = elongated_cloud_field(elongated_uv);
+		float elongated_mask = elongated_cloud_field(elongated_uv, u_elongated_amount);
 		vec3 elongated_day = mix(u_cloud_mid_clear, u_cloud_lit_clear, 0.72);
 		vec3 elongated_storm = mix(u_cloud_mid_storm, u_cloud_lit_storm, 0.30);
 		vec3 elongated_col = mix(elongated_day, elongated_storm, u_overcast);
 		elongated_col = mix(elongated_col, u_cloud_mid_night, u_night_factor);
 		float elongated_sunset = sun_low * (1.0 - u_night_factor) * (1.0 - u_overcast * 0.55);
 		elongated_col = mix(elongated_col, warm_sun, elongated_sunset * 0.28);
-		float elongated_alpha = elongated_mask * u_elongated_amount * ceil_mask;
+		float elongated_tail_fade = smoothstep(0.0, 0.14, u_elongated_amount);
+		float elongated_alpha = elongated_mask * elongated_tail_fade * ceil_mask;
 		elongated_alpha *= mix(0.72, 0.11, u_night_factor) * (1.0 - u_storm_amount * 0.72);
 		sky_col = mix(sky_col, elongated_col, elongated_alpha);
 	}
@@ -353,8 +358,13 @@ void sky() {
 	float n_banked = n + bank * bank_strength;
 	float clear_edge = mix(u_edge_softness, u_edge_softness * 0.6, clear_sky);
 	clear_edge *= mix(1.0, 1.35, u_night_factor);
-	float density = smoothstep(coverage, coverage + clear_edge, n_banked);
-	density *= u_cumulus_amount;
+	// Layer amount changes the density threshold first, eroding silhouettes from
+	// their edges and breaking them into islands. Alpha only fades during the
+	// final tail so disappearing clouds retain body instead of becoming ghosts.
+	float cumulus_dissolve = pow(1.0 - u_cumulus_amount, 1.4);
+	float shape_coverage = coverage + cumulus_dissolve * 0.22;
+	float density = smoothstep(shape_coverage, shape_coverage + clear_edge, n_banked);
+	density *= smoothstep(0.0, 0.14, u_cumulus_amount);
 	// At the end of the scale, merge the cumulus into a broad, textured ceiling
 	// rather than leaving isolated cartoon blobs over a supposedly covered sky.
 	float ceiling_amount = max(
@@ -390,7 +400,7 @@ void sky() {
 	float occ = 0.0;
 	for (int i = 1; i <= 3; i++) {
 		float s = layered_cloud_field(cumulus_uv + cloud_light_2d * u_shadow_step * float(i));
-		occ += smoothstep(coverage, coverage + u_edge_softness, s);
+		occ += smoothstep(shape_coverage, shape_coverage + u_edge_softness, s);
 	}
 	occ /= 3.0;
 	float dome_light = max(dot(cloud_normal, cloud_light_dir), 0.0);
@@ -401,7 +411,7 @@ void sky() {
 	float painted_detail = fbm(cumulus_uv * 3.6 + vec2(13.2, 2.7));
 	float detail_strength = mix(0.09, 0.025, u_night_factor);
 	lit = clamp(lit + (painted_detail - 0.5) * detail_strength * density, 0.0, 1.0);
-	float lobe_core = smoothstep(coverage + 0.025, coverage + 0.17, n);
+	float lobe_core = smoothstep(shape_coverage + 0.025, shape_coverage + 0.17, n);
 	float inner_billows = cellular_billow(cumulus_uv * 1.58 + vec2(4.1, 9.3));
 	float lobe_light = mix(0.16, 0.055, u_night_factor);
 	lit = clamp(lit + lobe_core * lobe_light + (inner_billows - 0.5) * 0.035 * density, 0.0, 1.0);
@@ -433,8 +443,8 @@ void sky() {
 	// Warm sun-kissed rim & edge highlight on lit borders facing sun. Twilight
 	// retains cloud illumination after the direct-light curve reaches zero at
 	// the horizon, then fades it before deep night.
-	float edge_mask = smoothstep(coverage - 0.04, coverage + 0.05, n)
-		* (1.0 - smoothstep(coverage + 0.08, coverage + 0.22, n));
+	float edge_mask = smoothstep(shape_coverage - 0.04, shape_coverage + 0.05, n)
+		* (1.0 - smoothstep(shape_coverage + 0.08, shape_coverage + 0.22, n));
 	float sun_facing = max(dot(cloud_normal, cloud_light_dir), 0.0);
 	float rim = edge_mask * mix(0.24, 1.0, sun_facing);
 	float twilight_cloud_light = sun_low * (1.0 - u_night_factor) * 0.9;

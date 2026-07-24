@@ -62,6 +62,14 @@ func update_daylight(
 	var solar_height := sin((hour - 6.0) / 12.0 * PI)
 	var solar_intensity := smoothstep(0.0, 0.28, solar_height)
 	var twilight := 1.0 - smoothstep(0.0, 0.28, absf(solar_height))
+	var cloud_night := 1.0 - smoothstep(-0.25, 0.05, solar_height)
+	var cloud_layers := _cloud_layer_mix(
+		game_minutes,
+		cloud_cover,
+		storm_influence,
+		cloud_pattern_seed,
+		cloud_night
+	)
 	var night_color := Color("101a2b")
 	var twilight_color := Color("c66b52")
 	var night_twilight_color := Color("503149")
@@ -82,7 +90,12 @@ func update_daylight(
 	var sun_azimuth := lerpf(-75.0, 11.0, day_progress)
 	sun.rotation_degrees = Vector3(-sun_elevation, sun_azimuth, 0.0)
 	var sun_direction := sun.global_transform.basis.z.normalized()
-	var cloud_sun_visibility := _cloud_sun_visibility(sun_direction, cloud_cover, runtime_seconds)
+	var cloud_sun_visibility := _cloud_sun_visibility(
+		sun_direction,
+		cloud_cover,
+		runtime_seconds,
+		cloud_layers
+	)
 	var direct_light := solar_intensity * (1.0 - cloud_cover) * cloud_sun_visibility
 	var base_sun_color := Color("f08a5d").lerp(Color("fff2d1"), solar_intensity)
 	sun.light_color = base_sun_color.lerp(Color("a8b8c0"), cloud_cover)
@@ -96,14 +109,6 @@ func update_daylight(
 	# How dark the clouds paint. Asymmetric on purpose: just after sunset the sun
 	# still rims the clouds warm, but by the pre-dawn deep twilight they must read
 	# as dim night masses instead of daytime white.
-	var cloud_night := 1.0 - smoothstep(-0.25, 0.05, solar_height)
-	var cloud_layers := _cloud_layer_mix(
-		game_minutes,
-		cloud_cover,
-		storm_influence,
-		cloud_pattern_seed,
-		cloud_night
-	)
 	# The moon runs its own arc across the night, twelve hours out of phase with
 	# the sun: it rises at dusk, peaks at midnight and sets at dawn, tracing the
 	# sky instead of hanging in one spot. Same euler convention as the sun so the
@@ -203,7 +208,12 @@ func _cloud_layer_mix(
 	return result
 
 
-func _cloud_sun_visibility(sun_direction: Vector3, overcast: float, runtime_seconds: float) -> float:
+func _cloud_sun_visibility(
+	sun_direction: Vector3,
+	overcast: float,
+	runtime_seconds: float,
+	cloud_layers: CloudLayerMix
+) -> float:
 	var horizon := sun_direction.y
 	var projection_scale := maxf(horizon + 0.55, 0.55)
 	var uv := Vector2(sun_direction.x, sun_direction.z) / projection_scale
@@ -220,8 +230,15 @@ func _cloud_sun_visibility(sun_direction: Vector3, overcast: float, runtime_seco
 	)
 	var coverage_curve := pow(overcast, 0.55)
 	var coverage := lerpf(CLOUD_COVERAGE_CLEAR, CLOUD_COVERAGE_STORM, coverage_curve)
-	var density := smoothstep(coverage, coverage + CLOUD_EDGE_SOFTNESS, cloud_field)
-	var cloud_alpha := density * smoothstep(0.08, 0.34, horizon)
+	var cumulus_dissolve := pow(1.0 - cloud_layers.cumulus, 1.4)
+	var shape_coverage := coverage + cumulus_dissolve * 0.22
+	var density := smoothstep(shape_coverage, shape_coverage + CLOUD_EDGE_SOFTNESS, cloud_field)
+	density *= smoothstep(0.0, 0.14, cloud_layers.cumulus)
+	var ceiling_amount := maxf(
+		smoothstep(0.66, 0.90, overcast),
+		smoothstep(0.08, 0.96, cloud_layers.storm) * 0.92
+	)
+	var cloud_alpha := maxf(density, ceiling_amount) * smoothstep(0.08, 0.34, horizon)
 	return lerpf(1.0, CLOUD_MINIMUM_SUN_VISIBILITY, cloud_alpha)
 
 

@@ -1,7 +1,7 @@
 class_name RouteResult
 extends RefCounted
 
-enum UnreachableReason { NONE, UNKNOWN, NO_GRID, OUTSIDE_BOARD, GOAL_BLOCKED, DISCONNECTED }
+enum UnreachableReason { NONE, UNKNOWN, NO_GRID, OUTSIDE_BOARD, GOAL_BLOCKED, DISCONNECTED, PROFILE_UNSUPPORTED }
 
 ## Result of a route request. An empty waypoint list is never used as success.
 

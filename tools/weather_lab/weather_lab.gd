@@ -2,7 +2,7 @@ extends Node3D
 
 ## Isolated visual lab for weather, sky, daylight, and atmospheric effects.
 ##
-## Interactive: F1-F18 choose a scenario; 1-4 choose a camera; Left/Right move
+## Interactive: F1-F19 choose a scenario; 1-4 choose a camera; Left/Right move
 ## time; Up/Down change cloud cover; PageUp/PageDown change the storm front;
 ## R changes rain. Batch: godot --path .
 ## res://tools/weather_lab/weather_lab.tscn -- --capture. Captures go to user://weather_lab.
@@ -19,6 +19,7 @@ const SCENARIOS := [
 	{"name": "noon_partly_cloudy", "minutes": 720.0, "overcast": 0.32, "rain": 0.0, "camera": &"CloudCamera"},
 	{"name": "clear_cirrus", "minutes": 780.0, "overcast": 0.08, "rain": 0.0, "camera": &"CloudCamera"},
 	{"name": "thin_elongated", "minutes": 630.0, "overcast": 0.32, "rain": 0.0, "camera": &"CloudCamera"},
+	{"name": "layer_dissolve", "minutes": 585.0, "overcast": 0.32, "rain": 0.0, "camera": &"CloudCamera"},
 	{"name": "cloud_context", "minutes": 720.0, "overcast": 0.32, "rain": 0.0, "camera": &"ContextCamera"},
 	{"name": "cloud_zenith", "minutes": 720.0, "overcast": 0.32, "rain": 0.0, "camera": &"ZenithCamera"},
 	{"name": "sunset_cloudy", "minutes": 1080.0, "overcast": 0.58, "rain": 0.0, "camera": &"CloudCamera"},
@@ -226,4 +227,4 @@ func _save_capture(name: String) -> void:
 func _update_status() -> void:
 	var hour := int(game_minutes) / 60
 	var minute := int(game_minutes) % 60
-	status.text = "Weather lab · %s | %02d:%02d  clouds %.0f%%  front %.0f%%  rain %.0f%%\nF1–F18 presets • 1 context · 2 clouds · 3 zenith · 4 horizon • ←/→ time • ↑/↓ clouds • PgUp/PgDn front • R rain • C screenshot" % [camera.name, hour, minute, overcast * 100.0, storm_influence * 100.0, rain_intensity * 100.0]
+	status.text = "Weather lab · %s | %02d:%02d  clouds %.0f%%  front %.0f%%  rain %.0f%%\nF1–F19 presets • 1 context · 2 clouds · 3 zenith · 4 horizon • ←/→ time • ↑/↓ clouds • PgUp/PgDn front • R rain • C screenshot" % [camera.name, hour, minute, overcast * 100.0, storm_influence * 100.0, rain_intensity * 100.0]
