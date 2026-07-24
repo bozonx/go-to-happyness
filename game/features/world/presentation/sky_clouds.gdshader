@@ -41,17 +41,17 @@ uniform float u_coverage_storm = 0.18;  // threshold when overcast (full sheet)
 uniform float u_shadow_step = 0.055;    // self-shadow march distance
 uniform vec3 u_cloud_lit_clear : source_color = vec3(1.0, 0.965, 0.86);
 uniform vec3 u_cloud_mid_clear : source_color = vec3(0.70, 0.84, 0.95);
-uniform vec3 u_cloud_shadow_clear : source_color = vec3(0.30, 0.50, 0.72);
+uniform vec3 u_cloud_shadow_clear : source_color = vec3(0.38, 0.56, 0.73);
 uniform vec3 u_cloud_lit_storm : source_color = vec3(0.55, 0.58, 0.63);
 uniform vec3 u_cloud_mid_storm : source_color = vec3(0.40, 0.44, 0.50);
 uniform vec3 u_cloud_shadow_storm : source_color = vec3(0.26, 0.29, 0.34);
-uniform vec3 u_cloud_lit_night : source_color = vec3(0.20, 0.25, 0.36);
-uniform vec3 u_cloud_mid_night : source_color = vec3(0.12, 0.16, 0.25);
-uniform vec3 u_cloud_shadow_night : source_color = vec3(0.055, 0.075, 0.13);
+uniform vec3 u_cloud_lit_night : source_color = vec3(0.18, 0.22, 0.31);
+uniform vec3 u_cloud_mid_night : source_color = vec3(0.135, 0.17, 0.245);
+uniform vec3 u_cloud_shadow_night : source_color = vec3(0.095, 0.125, 0.19);
 
 // --- anime-specific controls -----------------------------------------------
 uniform float u_cirrus_amount : hint_range(0.0, 1.0) = 0.16; // high streaky wind clouds
-uniform float u_toon_banding : hint_range(0.0, 1.0) = 0.88; // 0 = linear lerp, 1 = sharp anime steps
+uniform float u_toon_banding : hint_range(0.0, 1.0) = 0.58; // night fades this toward soft moonlit gradients
 
 // ---------------------------------------------------------------------------
 float hash21(vec2 p) {
@@ -278,8 +278,10 @@ void sky() {
 	// than only lowering the threshold (which can't invent clouds where the noise
 	// is empty) the bank adds body near the horizon so every azimuth is filled.
 	float bank = 1.0 - smoothstep(0.04, 0.50, horizon);
-	float n_banked = n + bank * clear_sky * 0.40;
+	float bank_strength = mix(0.30, 0.08, u_night_factor);
+	float n_banked = n + bank * clear_sky * bank_strength;
 	float clear_edge = mix(u_edge_softness, u_edge_softness * 0.6, clear_sky);
+	clear_edge *= mix(1.0, 1.35, u_night_factor);
 	float density = smoothstep(coverage, coverage + clear_edge, n_banked);
 	// At the end of the scale, merge the cumulus into a broad, textured ceiling
 	// rather than leaving isolated cartoon blobs over a supposedly covered sky.
@@ -292,23 +294,35 @@ void sky() {
 	float normal_step = 0.035;
 	float gradient_x = cloud_field(cumulus_uv + vec2(normal_step, 0.0)) - cloud_field(cumulus_uv - vec2(normal_step, 0.0));
 	float gradient_y = cloud_field(cumulus_uv + vec2(0.0, normal_step)) - cloud_field(cumulus_uv - vec2(0.0, normal_step));
-	vec3 cloud_normal = normalize(vec3(-gradient_x * 2.1, 0.94, -gradient_y * 2.1));
+	vec3 cloud_normal = normalize(vec3(-gradient_x * 1.35, 0.94, -gradient_y * 1.35));
 	vec2 sun2d = length(sun_dir.xz) > 0.001 ? normalize(sun_dir.xz) : vec2(0.0, 1.0);
-	vec3 cloud_light_dir = normalize(vec3(sun2d.x, max(sun_dir.y, 0.18), sun2d.y));
+	vec3 sun_cloud_light_dir = normalize(vec3(sun2d.x, max(sun_dir.y, 0.18), sun2d.y));
+	vec2 moon2d = length(u_moon_dir.xz) > 0.001 ? normalize(u_moon_dir.xz) : vec2(0.0, 1.0);
+	vec3 moon_cloud_light_dir = normalize(vec3(moon2d.x, max(u_moon_dir.y, 0.20), moon2d.y));
+	// The moon becomes the primary light at night. Previously the hidden sun
+	// continued to carve the cloud interiors while moonlight only drew a rim,
+	// producing dark rings with bright outlines.
+	vec3 cloud_light_dir = normalize(mix(sun_cloud_light_dir, moon_cloud_light_dir, u_night_factor));
+	vec2 cloud_light_2d = length(cloud_light_dir.xz) > 0.001 ? normalize(cloud_light_dir.xz) : vec2(0.0, 1.0);
 	float occ = 0.0;
 	for (int i = 1; i <= 3; i++) {
-		float s = cloud_field(cumulus_uv + sun2d * u_shadow_step * float(i));
+		float s = cloud_field(cumulus_uv + cloud_light_2d * u_shadow_step * float(i));
 		occ += smoothstep(coverage, coverage + u_edge_softness, s);
 	}
 	occ /= 3.0;
 	float dome_light = max(dot(cloud_normal, cloud_light_dir), 0.0);
-	float lit = clamp(dome_light * 0.44 + (1.0 - occ) * 0.40 + 0.08, 0.0, 1.0);
+	float dome_strength = mix(0.34, 0.24, u_night_factor);
+	float shadow_relief = mix(0.26, 0.10, u_night_factor);
+	float ambient_fill = mix(0.18, 0.28, u_night_factor);
+	float lit = clamp(dome_light * dome_strength + (1.0 - occ) * shadow_relief + ambient_fill, 0.0, 1.0);
 	float painted_detail = fbm(cumulus_uv * 3.6 + vec2(13.2, 2.7));
-	lit = clamp(lit + (painted_detail - 0.5) * 0.12 * density, 0.0, 1.0);
+	float detail_strength = mix(0.09, 0.025, u_night_factor);
+	lit = clamp(lit + (painted_detail - 0.5) * detail_strength * density, 0.0, 1.0);
 	float lobe_core = smoothstep(coverage + 0.025, coverage + 0.17, n);
 	float inner_billows = cellular_billow(cumulus_uv * 1.58 + vec2(4.1, 9.3));
-	lit = clamp(lit + lobe_core * 0.22 + (inner_billows - 0.5) * 0.05 * density, 0.0, 1.0);
-	lit -= smoothstep(0.48, 0.95, horizon) * density * 0.16;
+	float lobe_light = mix(0.16, 0.055, u_night_factor);
+	lit = clamp(lit + lobe_core * lobe_light + (inner_billows - 0.5) * 0.035 * density, 0.0, 1.0);
+	lit -= smoothstep(0.48, 0.95, horizon) * density * mix(0.08, 0.025, u_night_factor);
 	lit = mix(lit, lit * 0.55 + 0.25, u_overcast);
 
 	vec3 cloud_lit = mix(u_cloud_lit_clear, u_cloud_lit_storm, u_overcast);
@@ -326,7 +340,7 @@ void sky() {
 	float mid_lit_soft = smoothstep(0.42, 0.92, lit);
 	float shadow_mid_toon = smoothstep(0.31, 0.39, lit);
 	float mid_lit_toon = smoothstep(0.67, 0.75, lit);
-	float band_strength = u_toon_banding * clear_sky;
+	float band_strength = u_toon_banding * clear_sky * mix(1.0, 0.18, u_night_factor);
 	float shadow_mid = mix(shadow_mid_soft, shadow_mid_toon, band_strength);
 	float mid_lit = mix(mid_lit_soft, mid_lit_toon, band_strength);
 	vec3 cloud_col = mix(cloud_shadow, cloud_mid, shadow_mid);
@@ -340,13 +354,12 @@ void sky() {
 	cloud_col += warm_sun * (mid_lit * 0.12 + rim * 0.48) * clear_sky * u_solar_intensity;
 
 	// Cool moonlight rim on the cloud tops at night gives the dark masses a
-	// silver edge and a reason to be visible against the stars.
+	// silver edge. Keep it restrained because moonlight already drives the main
+	// cloud shading above.
 	if (u_moon_energy > 0.001) {
-		vec2 moon2d = length(u_moon_dir.xz) > 0.001 ? normalize(u_moon_dir.xz) : vec2(0.0, 1.0);
-		vec3 moon_light_dir = normalize(vec3(moon2d.x, max(u_moon_dir.y, 0.2), moon2d.y));
-		float moon_facing = max(dot(cloud_normal, moon_light_dir), 0.0);
+		float moon_facing = max(dot(cloud_normal, moon_cloud_light_dir), 0.0);
 		float moon_rim = edge_mask * moon_facing;
-		cloud_col += u_moon_color * (moon_rim * 0.42 + mid_lit * 0.08) * moon_facing * u_moon_energy * clear_sky;
+		cloud_col += u_moon_color * (moon_rim * 0.16 + mid_lit * 0.035) * moon_facing * u_moon_energy * clear_sky;
 	}
 
 	// Far clouds dissolve into atmospheric blue instead of becoming stretched
@@ -354,5 +367,6 @@ void sky() {
 	float horizon_haze = 1.0 - smoothstep(0.02, 0.15, horizon);
 	cloud_col = mix(cloud_col, sky_col, horizon_haze * 0.42);
 	float alpha = density * ceil_mask * mix(0.38, 1.0, 1.0 - horizon_haze);
+	alpha *= mix(1.0, 0.84, u_night_factor);
 	COLOR = mix(sky_col, cloud_col, alpha);
 }

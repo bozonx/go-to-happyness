@@ -2,7 +2,7 @@ extends Node3D
 
 ## Isolated visual lab for weather, sky, daylight, and atmospheric effects.
 ##
-## Interactive: F1-F11 choose a scenario; 1-4 choose a camera; Left/Right move
+## Interactive: F1-F12 choose a scenario; 1-4 choose a camera; Left/Right move
 ## time; Up/Down change cloud cover; R changes rain. Batch: godot --path .
 ## res://tools/weather_lab/weather_lab.tscn -- --capture. Captures go to user://weather_lab.
 
@@ -20,6 +20,7 @@ const SCENARIOS := [
 	{"name": "noon_overcast", "minutes": 720.0, "overcast": 0.82, "rain": 0.0, "camera": &"CloudCamera"},
 	{"name": "cloud_storm", "minutes": 840.0, "overcast": 0.96, "rain": 0.8, "camera": &"CloudCamera"},
 	{"name": "night_stars", "minutes": 60.0, "overcast": 0.0, "rain": 0.0},
+	{"name": "night_cloud_close", "minutes": 169.0, "overcast": 0.13, "rain": 0.0, "camera": &"CloudCamera"},
 	{"name": "night_partly_cloudy", "minutes": 60.0, "overcast": 0.36, "rain": 0.0, "camera": &"ZenithCamera"},
 	{"name": "night_overcast", "minutes": 60.0, "overcast": 0.84, "rain": 0.0, "camera": &"ZenithCamera"},
 	{"name": "night_rain", "minutes": 1320.0, "overcast": 0.96, "rain": 1.0},
@@ -201,4 +202,4 @@ func _save_capture(name: String) -> void:
 func _update_status() -> void:
 	var hour := int(game_minutes) / 60
 	var minute := int(game_minutes) % 60
-	status.text = "Weather lab · %s | %02d:%02d  clouds %.0f%%  rain %.0f%%\nF1–F11 presets • 1 context · 2 clouds · 3 zenith · 4 horizon • ←/→ time • ↑/↓ clouds • R rain • C screenshot" % [camera.name, hour, minute, overcast * 100.0, rain_intensity * 100.0]
+	status.text = "Weather lab · %s | %02d:%02d  clouds %.0f%%  rain %.0f%%\nF1–F12 presets • 1 context · 2 clouds · 3 zenith · 4 horizon • ←/→ time • ↑/↓ clouds • R rain • C screenshot" % [camera.name, hour, minute, overcast * 100.0, rain_intensity * 100.0]
