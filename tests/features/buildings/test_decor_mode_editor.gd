@@ -9,6 +9,7 @@ extends SceneTree
 ## single object while every catalog assertion still passed.
 
 const EditorScene = preload("res://game/features/buildings/presentation/editor/building_editor.tscn")
+const PlaceZoneRecordScript = preload("res://game/features/buildings/domain/editor/place_zone_record.gd")
 
 
 func _initialize() -> void:
@@ -101,6 +102,33 @@ func _run() -> void:
 	decor._on_collision_overlay_toggled(false)
 	assert(decor._collision_overlays.is_empty(), "collision overlays cleared on toggle off")
 	print("  collision overlay ok")
+
+	# Zone filter: create a zone, assign an object, filter by it, then delete zone.
+	# Re-select first object since undo/redo may have cleared the selection.
+	decor.select_object(editor.blueprint.objects[0].id)
+	assert(decor.find_record(decor.selected_object_id) != null, "object re-selected before zone test")
+	var zone := PlaceZoneRecordScript.new()
+	zone.zone_id = &"test_zone_1"
+	zone.zone_name = "Тестовая зона"
+	zone.cells = [Vector3i(2, 0, 2)]
+	editor.blueprint.place_zones.append(zone)
+	decor._refresh_zone_filter_options()
+	# Assign selected object to the zone.
+	decor.find_record(decor.selected_object_id).owner_zone_id = &"test_zone_1"
+	decor._refresh_inspector()
+	assert(decor.find_record(decor.selected_object_id).owner_zone_id == &"test_zone_1", "object assigned to zone")
+	# Filter object list by zone — should show only 1 object.
+	decor._zone_filter_option.select(1)
+	decor._on_zone_filter_selected(1)
+	assert(decor._object_list.item_count == 1, "zone filter shows only objects in zone")
+	# Reset filter.
+	decor._zone_filter_option.select(0)
+	decor._on_zone_filter_selected(0)
+	assert(decor._object_list.item_count == 2, "all zones filter shows all objects")
+	# Delete the zone — on_zone_deleted should clear owner_zone_id.
+	decor.on_zone_deleted(&"test_zone_1")
+	assert(decor.find_record(decor.selected_object_id).owner_zone_id == &"", "zone deletion clears owner_zone_id")
+	print("  zone filter + deletion ok")
 
 	# The whole thing must serialize.
 	var json: String = editor.blueprint.to_json()

@@ -1187,9 +1187,10 @@ func _delete_place() -> void:
 	var place := _current_place()
 	if place == null:
 		return
+	var deleted_zone_id := place.zone_id
 	var kept: Array[ZoneAnchorRecord] = []
 	for anchor in blueprint.zone_anchors:
-		if anchor.owner_zone_id != place.zone_id:
+		if anchor.owner_zone_id != deleted_zone_id:
 			kept.append(anchor)
 	blueprint.zone_anchors = kept
 	blueprint.place_zones.remove_at(_selected_place_index)
@@ -1199,6 +1200,8 @@ func _delete_place() -> void:
 	_rebuild_place_option()
 	_refresh_place_panel_fields()
 	_refresh_zone_visuals()
+	if decor_mode != null and decor_mode.is_active():
+		decor_mode.on_zone_deleted(deleted_zone_id)
 
 
 func _rebuild_place_option() -> void:

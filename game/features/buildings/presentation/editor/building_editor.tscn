@@ -902,6 +902,14 @@ layout_mode = 2
 text = "Связи"
 theme_override_colors/font_color = Color(0.8, 0.75, 0.5, 1)
 
+[node name="DecorZoneWarningLabel" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_colors/font_color = Color(1.0, 0.7, 0.2, 1)
+theme_override_font_sizes/font_size = 12
+autowrap_mode = 2
+
 [node name="DecorPhase2Label" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
 unique_name_in_owner = true
 layout_mode = 2

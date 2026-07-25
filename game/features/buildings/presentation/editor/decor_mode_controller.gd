@@ -128,6 +128,7 @@ func setup(editor: Node) -> void:
 	_asset_label = editor.get_node("%DecorAssetLabel")
 	_zone_option = editor.get_node("%DecorZoneOption")
 	_badges_label = editor.get_node("%DecorBadgesLabel")
+	_zone_out_of_bounds_label = editor.get_node("%DecorZoneWarningLabel")
 	_object_search_edit = editor.get_node("%DecorObjectSearchEdit")
 	_zone_filter_option = editor.get_node("%DecorZoneFilterOption")
 	_object_list = editor.get_node("%DecorObjectList")
@@ -226,6 +227,7 @@ func activate() -> void:
 	_panel.visible = true
 	_toolbar.visible = true
 	rebuild_nodes()
+	_refresh_zone_filter_options()
 	_refresh_object_list()
 	_refresh_inspector()
 	_update_layer_label()
@@ -1102,12 +1104,15 @@ func _refresh_object_list() -> void:
 	_syncing_ui = true
 	_object_list.clear()
 	var search_text := _object_search_edit.text.strip_edges().to_lower() if _object_search_edit != null else ""
+	var zone_filter := _get_zone_filter_selection()
 	for record: DecorObjectRecordScript in _editor.blueprint.objects:
 		var asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
 		var label := asset.name if asset != null else "%s (нет ассета)" % record.asset_id
 		if not search_text.is_empty():
 			if not String(label).to_lower().contains(search_text) and not record.id.to_lower().contains(search_text):
 				continue
+		if zone_filter != &"" and record.owner_zone_id != zone_filter:
+			continue
 		var index := _object_list.add_item("%s  ·  %.1f, %.1f, %.1f" % [label, record.pos.x, record.pos.y, record.pos.z])
 		_object_list.set_item_metadata(index, record.id)
 	_syncing_ui = false
@@ -1128,6 +1133,97 @@ func _on_object_search_changed(_new_text: String) -> void:
 	_refresh_object_list()
 
 
+## Returns the currently selected zone filter value (&"" = all zones).
+func _get_zone_filter_selection() -> StringName:
+	if _zone_filter_option == null or _zone_filter_option.item_count == 0:
+		return &""
+	var idx := _zone_filter_option.selected
+	if idx < 0:
+		return &""
+	return _zone_filter_option.get_item_metadata(idx)
+
+
+## Rebuild the zone filter dropdown from the blueprint's place_zones.
+func _refresh_zone_filter_options() -> void:
+	if _zone_filter_option == null:
+		return
+	_syncing_ui = true
+	var prev_selection := _get_zone_filter_selection()
+	_zone_filter_option.clear()
+	_zone_filter_option.add_item("(все зоны)")
+	_zone_filter_option.set_item_metadata(0, &"")
+	var selected_idx := 0
+	if _editor != null and _editor.blueprint != null:
+		for i in _editor.blueprint.place_zones.size():
+			var zone = _editor.blueprint.place_zones[i]
+			_zone_filter_option.add_item(String(zone.zone_name))
+			_zone_filter_option.set_item_metadata(_zone_filter_option.item_count - 1, zone.zone_id)
+			if zone.zone_id == prev_selection:
+				selected_idx = _zone_filter_option.item_count - 1
+	_zone_filter_option.select(selected_idx)
+	_syncing_ui = false
+
+
+func _on_zone_filter_selected(_index: int) -> void:
+	if _syncing_ui:
+		return
+	_refresh_object_list()
+
+
+## Updates the zone highlight overlay and out-of-zone warning for the selected object.
+func _update_zone_highlight() -> void:
+	if _zone_out_of_bounds_label != null:
+		_zone_out_of_bounds_label.visible = false
+	var record := find_record(selected_object_id)
+	if record == null or record.owner_zone_id == &"":
+		return
+	if _editor == null or _editor.blueprint == null:
+		return
+	# Find the zone's cells to check bounds.
+	var zone_cells: Array[Vector3i] = []
+	for zone in _editor.blueprint.place_zones:
+		if zone.zone_id == record.owner_zone_id:
+			zone_cells = zone.cells
+			break
+	if zone_cells.is_empty():
+		return
+	# Check if the object position is within the zone's cell bounds.
+	var obj_cell := Vector3i(int(round(record.pos.x)), int(round(record.pos.y)), int(round(record.pos.z)))
+	var in_zone := false
+	for cell in zone_cells:
+		if cell == obj_cell:
+			in_zone = true
+			break
+	if not in_zone and _zone_out_of_bounds_label != null:
+		_zone_out_of_bounds_label.text = "⚠ Предмет вне зоны «%s»" % _zone_name_for_id(record.owner_zone_id)
+		_zone_out_of_bounds_label.visible = true
+
+
+func _zone_name_for_id(zone_id: StringName) -> String:
+	if _editor == null or _editor.blueprint == null:
+		return String(zone_id)
+	for zone in _editor.blueprint.place_zones:
+		if zone.zone_id == zone_id:
+			return String(zone.zone_name)
+	return String(zone_id)
+
+
+## Called by BuildingEditor when a place zone is deleted.
+## Clears owner_zone_id on all decor objects that referenced it.
+func on_zone_deleted(zone_id: StringName) -> void:
+	var affected := 0
+	for record: DecorObjectRecordScript in _editor.blueprint.objects:
+		if record.owner_zone_id == zone_id:
+			record.owner_zone_id = &""
+			affected += 1
+	if affected > 0:
+		_editor.mark_dirty()
+		_editor.set_status("Зона «%s» удалена. Связь снята с %d предметов." % [String(zone_id), affected])
+	_refresh_zone_filter_options()
+	_refresh_object_list()
+	_refresh_inspector()
+
+
 func _refresh_inspector() -> void:
 	for child in _controls_vbox.get_children():
 		child.queue_free()
@@ -1140,6 +1236,7 @@ func _refresh_inspector() -> void:
 		_asset_label.text = "Ассет: —"
 		_badges_label.text = ""
 		_refresh_zone_options(&"", record)
+		_update_zone_highlight()
 		return
 
 	var asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
@@ -1150,6 +1247,7 @@ func _refresh_inspector() -> void:
 	_sync_transform_fields(record)
 	_refresh_zone_options(record.owner_zone_id, record)
 	_update_badges(record, asset)
+	_update_zone_highlight()
 	if asset == null:
 		return
 
