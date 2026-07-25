@@ -99,13 +99,19 @@ func _search(start: Vector2i, goal: Vector2i, traveler_profile: TravelerProfile,
 			var next := current + direction
 			if closed.has(next):
 				continue
-			if not grid.is_walkable(next, traveler_profile.profile_id, traveler_profile) and not (allow_blocked_goal and next == goal):
+			var is_allowed_blocked_goal := allow_blocked_goal and next == goal
+			if not grid.is_walkable(next, traveler_profile.profile_id, traveler_profile) and not is_allowed_blocked_goal:
 				continue
 			if direction.x != 0 and direction.y != 0:
 				if not grid.is_walkable(current + Vector2i(direction.x, 0), traveler_profile.profile_id, traveler_profile) or not grid.is_walkable(current + Vector2i(0, direction.y), traveler_profile.profile_id, traveler_profile):
 					continue
+			# The step itself has to exist: a terrace beside a terrace is a face,
+			# not a neighbour (§10.1). An explicitly allowed goal cell is an
+			# interaction target, so only the ground it is entered from matters.
+			if not is_allowed_blocked_goal and not grid.is_step_passable(current, next, traveler_profile.profile_id, traveler_profile):
+				continue
 			var distance := DIAGONAL_DISTANCE if direction.x != 0 and direction.y != 0 else 1.0
-			var next_cost := float(costs[current]) + distance * grid.get_cell_weight(next, traveler_profile.profile_id)
+			var next_cost := float(costs[current]) + distance * grid.get_cell_weight(next, traveler_profile.profile_id, traveler_profile)
 			if next_cost >= float(costs.get(next, INF)):
 				continue
 			came_from[next] = current

@@ -296,7 +296,9 @@ func is_edge_passable(from: Vector2i, to: Vector2i, profile: StringName = PEDEST
 
 ## A diagonal step also crosses both orthogonal shoulders, so both of them must
 ## be standable AND reachable — otherwise a citizen cuts the corner of a cliff.
-func _is_step_passable(from: Vector2i, to: Vector2i, profile: StringName, profile_override: TravelerProfile) -> bool:
+func is_step_passable(from: Vector2i, to: Vector2i, profile: StringName = PEDESTRIAN_PROFILE, profile_override: TravelerProfile = null) -> bool:
+	if _terrain == null:
+		return true
 	if not is_edge_passable(from, to, profile, profile_override):
 		return false
 	var delta := to - from
@@ -447,6 +449,10 @@ func segment_cost(from: Vector3, to: Vector3, profile: StringName = PEDESTRIAN_P
 			t_max_z += t_delta_z
 		if not is_walkable(cell, profile, profile_override):
 			return INF
+		# A straight line may not climb a face the traveller cannot climb, even
+		# when both cells it joins are perfectly standable.
+		if not is_step_passable(previous_cell, cell, profile, profile_override):
+			return INF
 	return INF
 
 
@@ -523,7 +529,7 @@ func _ensure_walkable_components(profile: StringName, profile_override: Traveler
 					var neighbor := current + direction
 					if not is_walkable(neighbor, profile, profile_override) or components.has(NavCell.ground(neighbor)):
 						continue
-					if not _is_step_passable(current, neighbor, profile, profile_override):
+					if not is_step_passable(current, neighbor, profile, profile_override):
 						continue
 					if direction.x != 0 and direction.y != 0:
 						if not is_walkable(current + Vector2i(direction.x, 0), profile, profile_override) or not is_walkable(current + Vector2i(0, direction.y), profile, profile_override):

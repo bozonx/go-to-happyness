@@ -20,6 +20,7 @@ func create_world() -> void:
 	game.add_child(game.world_setup)
 	game.world_setup.build(game)
 	game._update_daylight()
+	publish_terrain_navigation()
 	refresh_navigation_grid()
 	game._move_selection(Vector3.ZERO)
 
@@ -43,6 +44,15 @@ func record_trail_movement(citizen_id: int, position_on_board: Vector3) -> void:
 	if game.settlement.era != SettlementState.Era.TENT or game.trail_field == null:
 		return
 	game.trail_field.record_walker_position(citizen_id, position_on_board, game.settlement.road_walking_order_enabled)
+
+
+## Hands the shape of the ground to routing (grid_terrain_system.md §10). Must run
+## before the first obstacle publication: the connectivity flood fill built there
+## is only correct once the grid knows which edges are cliffs.
+func publish_terrain_navigation() -> void:
+	if game.nav_grid == null or game.world_setup == null:
+		return
+	TerrainNavigationPublisher.publish(game.world_setup.terrain_grid, game.nav_grid)
 
 
 func refresh_navigation_grid() -> void:
