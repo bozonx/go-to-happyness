@@ -3,7 +3,17 @@ extends Node3D
 
 const SUN_GLARE_OCCLUSION_DISTANCE := 96.0
 const SUN_GLARE_OCCLUSION_MASK := 1 | 8
+# How far past the frame edge the placed artifacts survive. They need the sun to be
+# roughly on screen, so this stays tight.
 const SUN_GLARE_EDGE_ALLOWANCE := 0.18
+# The veil reaches much further. The gameplay camera looks down about fifty degrees,
+# which puts the top of the frame below the horizon: the sun is off screen in the
+# ordinary view, and a tight allowance meant the flare was simply never seen.
+const SUN_GLARE_VEIL_ALLOWANCE := 0.95
+# The artifacts bloom as the sun approaches the middle of the frame — looking at the
+# sun should be what makes the flare open up.
+const SUN_GLARE_AIM_RANGE := 0.70
+const SUN_GLARE_AIM_FLOOR := 0.35
 const SUN_GLARE_OCCLUSION_SAMPLE_RADIUS := 0.24
 const CLOUD_SCALE := 1.55
 # Wind vector arrives as a 0..1 bearing*strength from the weather model; this scales
@@ -67,6 +77,10 @@ var rain_effect: Node3D # RainEffect
 var fireflies: Array = [] # Array of FirefliesEffect
 var sun_glare_material: ShaderMaterial
 var sun_glare_visibility := 0.0
+var sun_glare_veil_visibility := 0.0
+# Drives the slow rotation of the starburst arms. Read from the caller's clock so it
+# freezes whenever game time does, like every other sky animation.
+var _glare_clock := 0.0
 var moon_light: DirectionalLight3D
 # Last computed directions toward each body. Published so tools (and anything that
 # wants to frame or point at the sky) read the same arc the sky itself is drawn from.
@@ -324,6 +338,7 @@ func update_daylight(
 		sky_material.set_shader_parameter("u_moon_phase_axis", moon_phase_axis)
 	if rain_effect != null:
 		rain_effect.set_intensity(rain_intensity)
+	_glare_clock = motion_clock
 	_update_sun_glare(direct_light, cloud_cover, sun_radius)
 	var firefly_factor := night_factor * (1.0 - cloud_cover * 0.5)
 	for ff in fireflies:
@@ -564,17 +579,32 @@ func _update_sun_glare(direct_light: float, overcast: float, sun_angular_radius:
 	var viewport_size := get_viewport().get_visible_rect().size
 	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0 or camera.is_position_behind(sun_position):
 		sun_glare_visibility = lerpf(sun_glare_visibility, 0.0, 0.22)
+		sun_glare_veil_visibility = lerpf(sun_glare_veil_visibility, 0.0, 0.22)
 		sun_glare_material.set_shader_parameter("u_intensity", sun_glare_visibility)
+		sun_glare_material.set_shader_parameter("u_veil_intensity", sun_glare_veil_visibility)
 		return
 	var screen_position := camera.unproject_position(sun_position)
 	var raw_uv := Vector2(screen_position.x / viewport_size.x, screen_position.y / viewport_size.y)
 	var outside_distance := maxf(maxf(-raw_uv.x, raw_uv.x - 1.0), maxf(-raw_uv.y, raw_uv.y - 1.0))
 	var edge_fade := 1.0 - smoothstep(0.0, SUN_GLARE_EDGE_ALLOWANCE, outside_distance)
-	var uv := raw_uv.clamp(Vector2(-0.04, -0.04), Vector2(1.04, 1.04))
-	var target_visibility := direct_light * (1.0 - overcast * 0.9) * edge_fade * _sun_glare_occlusion(sun_direction)
+	var veil_fade := 1.0 - smoothstep(0.0, SUN_GLARE_VEIL_ALLOWANCE, outside_distance)
+	var aspect := viewport_size.x / viewport_size.y
+	# The veil needs the sun's true off-screen position, otherwise its gradient would
+	# pour in from the nearest corner instead of from the direction the sun is in.
+	# The clamp only protects against absurd values far outside the frame.
+	var uv := raw_uv.clamp(Vector2(-3.0, -3.0), Vector2(4.0, 4.0))
+	# How centred the sun is, in the same aspect-corrected units the shader uses.
+	var aim_offset := (raw_uv - Vector2(0.5, 0.5)) * Vector2(aspect, 1.0)
+	var aim := 1.0 - smoothstep(0.0, SUN_GLARE_AIM_RANGE, aim_offset.length())
+	aim = lerpf(SUN_GLARE_AIM_FLOOR, 1.0, aim)
+	var occlusion := _sun_glare_occlusion(sun_direction)
+	var weather_visibility := direct_light * (1.0 - overcast * 0.9) * occlusion
+	var target_visibility := weather_visibility * edge_fade * aim
+	var target_veil := weather_visibility * veil_fade
 	sun_glare_visibility = lerpf(sun_glare_visibility, target_visibility, 0.14)
+	sun_glare_veil_visibility = lerpf(sun_glare_veil_visibility, target_veil, 0.14)
 	sun_glare_material.set_shader_parameter("u_sun_screen_pos", uv)
-	sun_glare_material.set_shader_parameter("u_aspect", viewport_size.x / viewport_size.y)
+	sun_glare_material.set_shader_parameter("u_aspect", aspect)
 	# Project the disc's angular radius into the same aspect-corrected screen units the
 	# glare works in (1.0 == viewport height), so the cut-out follows the sun as it
 	# swells at the horizon and as the camera changes its field of view.
@@ -583,6 +613,8 @@ func _update_sun_glare(direct_light: float, overcast: float, sun_angular_radius:
 	sun_glare_material.set_shader_parameter("u_disc_radius", clampf(disc_radius, 0.002, 0.5))
 	sun_glare_material.set_shader_parameter("u_sun_color", sun.light_color)
 	sun_glare_material.set_shader_parameter("u_intensity", sun_glare_visibility)
+	sun_glare_material.set_shader_parameter("u_veil_intensity", sun_glare_veil_visibility)
+	sun_glare_material.set_shader_parameter("u_time", _glare_clock)
 
 
 func _sun_glare_occlusion(sun_direction: Vector3) -> float:

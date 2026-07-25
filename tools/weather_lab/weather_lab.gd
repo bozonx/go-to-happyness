@@ -2,9 +2,11 @@ extends Node3D
 
 ## Isolated visual lab for weather, sky, daylight, and atmospheric effects.
 ##
-## Interactive: F1-F19 choose a scenario; 1-4 choose a camera; Left/Right move
+## Interactive: F-keys choose a scenario; 1-7 choose a camera; Left/Right move
 ## time; Up/Down change cloud cover; PageUp/PageDown change the storm front;
-## R changes rain. Batch: godot --path .
+## R changes rain. GameplayCamera and GameplayLowCamera reproduce the in-game rig,
+## which is the only way to judge effects that depend on where the player is looking.
+## Batch: godot --path .
 ## res://tools/weather_lab/weather_lab.tscn -- --capture. Captures go to user://weather_lab.
 
 const RainEffectScene := preload("res://game/features/world/presentation/rain_effect.tscn")
@@ -57,11 +59,33 @@ const SCENARIOS := [
 	{"name": "moon_phase_gibbous", "minutes": 1320.0, "overcast": 0.1, "rain": 0.0, "camera": &"TrackingCamera", "track": "moon", "day": 11},
 	{"name": "moon_phase_half", "minutes": 60.0, "overcast": 0.1, "rain": 0.0, "camera": &"TrackingCamera", "track": "moon", "day": 15},
 	{"name": "moonlit_ground", "minutes": 90.0, "overcast": 0.25, "rain": 0.0, "camera": &"ContextCamera", "day": 0},
+	# The flare as the player actually meets it. At the default gameplay pitch the sun
+	# is off screen entirely, so only the veil can reach the frame; tilting down to the
+	# horizon is what brings the disc and its full flare into view.
+	{"name": "flare_gameplay_default", "minutes": 1020.0, "overcast": 0.1, "rain": 0.0, "camera": &"GameplayCamera", "track": "sun"},
+	{"name": "flare_gameplay_low", "minutes": 1020.0, "overcast": 0.1, "rain": 0.0, "camera": &"GameplayLowCamera", "track": "sun"},
+	{"name": "flare_gameplay_morning", "minutes": 430.0, "overcast": 0.1, "rain": 0.0, "camera": &"GameplayLowCamera", "track": "sun"},
+	{"name": "flare_gameplay_edge", "minutes": 1020.0, "overcast": 0.1, "rain": 0.0, "camera": &"GameplayLowCamera", "track": "sun", "pitch": 30.0},
+	{"name": "flare_centred", "minutes": 1020.0, "overcast": 0.1, "rain": 0.0, "camera": &"TrackingCamera", "track": "sun"},
 ]
 
 const CAMERA_KEYS := [
 	&"ContextCamera", &"CloudCamera", &"ZenithCamera", &"HorizonCamera", &"TrackingCamera",
+	&"GameplayCamera", &"GameplayLowCamera",
 ]
+# Mirrors the defaults in game/features/world/presentation/camera_controller.gd.
+const GAMEPLAY_YAW := 42.0
+const GAMEPLAY_PITCH := 52.0
+const GAMEPLAY_DISTANCE := 30.0
+const GAMEPLAY_TARGET := Vector3(0.0, 0.6, 0.0)
+# The lowest pitch the player can tilt to, where the horizon and the sun come into
+# view. clampf in rotate_yaw_pitch() stops at eight degrees.
+const GAMEPLAY_LOW_PITCH := 10.0
+# Roughly where the sun crosses the top edge of the frame: with a 75 degree vertical
+# field of view the disc enters the picture once pitch + solar elevation drops under
+# about 37 degrees. Just past that the disc is gone but its wash still reaches in,
+# which is the case worth having a capture of.
+const GAMEPLAY_EDGE_PITCH := 30.0
 # Where the tracking camera parks the body it follows: a little above centre, the
 # way a landscape painter frames a sky.
 const TRACK_FRAMING_HEIGHT := 0.18
@@ -71,6 +95,8 @@ const TRACK_FRAMING_HEIGHT := 0.18
 @onready var zenith_camera: Camera3D = $CameraRig/ZenithCamera
 @onready var horizon_camera: Camera3D = $CameraRig/HorizonCamera
 @onready var tracking_camera: Camera3D = $CameraRig/TrackingCamera
+@onready var gameplay_camera: Camera3D = $CameraRig/GameplayCamera
+@onready var gameplay_low_camera: Camera3D = $CameraRig/GameplayLowCamera
 @onready var glare_rect: ColorRect = $SunGlareLayer/ColorRect
 @onready var sun: DirectionalLight3D = $Sun
 @onready var environment: Environment = $WorldEnvironment.environment
@@ -101,6 +127,9 @@ var _frames_after_apply := 0
 var glare_material: ShaderMaterial
 # Which body the tracking camera frames: "" (free), "sun" or "moon".
 var track_body := ""
+# Pitch the gameplay-low rig uses for this scenario, so one camera can cover the whole
+# range from "sun well in frame" to "sun just past the edge".
+var track_pitch := GAMEPLAY_LOW_PITCH
 
 
 func _ready() -> void:
@@ -155,6 +184,23 @@ func _build_weather_rig() -> void:
 func _configure_cameras() -> void:
 	context_camera.look_at(Vector3(0.0, 1.4, -1.5))
 	tracking_camera.look_at(Vector3(0.0, 8.0, -9.0))
+	# Reproduce CameraController's rig exactly. The gameplay pitch is what decides
+	# whether the sun is on screen at all, so a lab that only ever uses hand-placed
+	# viewpoints cannot tell you what the player actually sees.
+	_place_gameplay_camera(gameplay_camera, GAMEPLAY_PITCH)
+	_place_gameplay_camera(gameplay_low_camera, GAMEPLAY_LOW_PITCH)
+
+
+func _place_gameplay_camera(target: Camera3D, pitch_degrees: float, yaw_degrees := GAMEPLAY_YAW) -> void:
+	var yaw := deg_to_rad(yaw_degrees)
+	var pitch := deg_to_rad(pitch_degrees)
+	var offset := Vector3(
+		sin(yaw) * cos(pitch),
+		sin(pitch),
+		cos(yaw) * cos(pitch)
+	) * GAMEPLAY_DISTANCE
+	target.position = GAMEPLAY_TARGET + offset
+	target.look_at(GAMEPLAY_TARGET)
 	cloud_camera.look_at(Vector3(0.0, 8.0, -9.0))
 	zenith_camera.look_at(Vector3(0.0, 18.0, 0.0))
 	horizon_camera.look_at(Vector3(0.0, 1.5, -22.0))
@@ -250,6 +296,7 @@ func _apply_scenario(index: int) -> void:
 	storm_influence = scenario.get("storm", 0.0)
 	rain_intensity = scenario["rain"]
 	track_body = str(scenario.get("track", ""))
+	track_pitch = float(scenario.get("pitch", GAMEPLAY_LOW_PITCH))
 	if scenario.has("camera"):
 		_select_camera(scenario["camera"])
 	else:
@@ -260,13 +307,23 @@ func _apply_scenario(index: int) -> void:
 func _aim_tracking_camera() -> void:
 	# Frames whichever body the scenario studies, using the very directions the sky
 	# was drawn from, so a "sun in frame" preset holds at every hour.
-	if track_body == "" or camera != tracking_camera or controller == null:
+	if track_body == "" or controller == null:
 		return
 	var direction := (
 		controller.current_moon_direction if track_body == "moon"
 		else controller.current_sun_direction
 	)
 	if direction.length_squared() < 0.001:
+		return
+	if camera == gameplay_camera or camera == gameplay_low_camera:
+		# The gameplay rig keeps its pitch — that is the whole point of these presets —
+		# and only turns to face the body. Without this the default yaw of 42 degrees
+		# points away from the sun, and "no flare" would only mean "wrong direction".
+		var yaw := rad_to_deg(atan2(-direction.x, -direction.z))
+		var pitch := GAMEPLAY_PITCH if camera == gameplay_camera else track_pitch
+		_place_gameplay_camera(camera, pitch, yaw)
+		return
+	if camera != tracking_camera:
 		return
 	var target := tracking_camera.global_position + direction * 200.0
 	# Drop the aim point slightly so the body sits above centre rather than dead on it.
