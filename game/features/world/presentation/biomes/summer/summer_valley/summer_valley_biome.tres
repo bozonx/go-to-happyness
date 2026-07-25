@@ -13,4 +13,3 @@ base_temperature = 22.0
 has_breathable_atmosphere = true
 natural_layout = ExtResource("2_layout")
 territory_scene_path = "res://game/features/world/presentation/biomes/summer/summer_valley/summer_valley_territory.tscn"
-terrain_data_directory = "res://game/features/world/data/terrain3d"

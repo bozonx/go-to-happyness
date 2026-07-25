@@ -17,7 +17,6 @@ var rain_effect: RainEffect
 var sky_and_weather_controller: SkyAndWeatherController
 var ground_body: StaticBody3D
 var ground_mesh: MeshInstance3D
-var terrain: Terrain3D
 var trail_overlay: MeshInstance3D
 var trail_overlay_material: ShaderMaterial
 var selection_marker: MeshInstance3D
@@ -56,7 +55,6 @@ func build(parent: Node) -> void:
 	_build_boundary(parent)
 	_build_rain_effect(parent)
 	_build_sky_and_weather_controller(parent)
-	_build_terrain(parent)
 	_build_trail_overlay(parent)
 	_build_selection_marker(parent)
 
@@ -132,16 +130,6 @@ func _build_sky_and_weather_controller(parent: Node) -> void:
 		sun_glare_material
 	)
 
-
-func _build_terrain(parent: Node) -> void:
-	terrain = parent.get_node_or_null("Terrain3dWorld/Terrain3D") as Terrain3D
-	if terrain == null:
-		terrain = parent.find_child("Terrain3D", true, false) as Terrain3D
-	if terrain == null:
-		push_error("Settlement scene is missing Terrain3D node.")
-		return
-	# Dynamic collision follows the active camera by default, keeping raycasts and
-	# physics accurate without generating collision for the whole data set.
 
 
 func _build_trail_overlay(parent: Node) -> void:

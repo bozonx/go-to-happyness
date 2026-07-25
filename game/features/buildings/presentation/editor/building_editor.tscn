@@ -207,6 +207,81 @@ layout_mode = 2
 text = "➕ (PgUp)"
 tooltip_text = "Слой выше (PageUp)"
 
+[node name="DecorToolbar" type="HBoxContainer" parent="EditorUI/Root/TopBar/Margin/HBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="DecorToolPlaceBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+toggle_mode = true
+text = "🪑 (B)"
+tooltip_text = "Поставить декор (B)"
+
+[node name="DecorToolSelectBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+toggle_mode = true
+text = "👆 (V)"
+tooltip_text = "Выбрать / переместить объект (V)"
+
+[node name="DecorToolEraseBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+toggle_mode = true
+text = "🧹 (E)"
+tooltip_text = "Удалить объект (E)"
+
+[node name="VSepDecorTools" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
+layout_mode = 2
+
+[node name="DecorRotLeftBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "↺"
+tooltip_text = "Повернуть против часовой (Shift+C)"
+
+[node name="DecorRotLabel" type="Label" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(52, 0)
+layout_mode = 2
+horizontal_alignment = 1
+text = "0°"
+
+[node name="DecorRotRightBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "↻"
+tooltip_text = "Повернуть по часовой (C)"
+
+[node name="DecorRotResetBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "⟲0"
+tooltip_text = "Сбросить поворот"
+
+[node name="VSepDecorLayer" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
+layout_mode = 2
+
+[node name="DecorLayerLabel" type="Label" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Слой 0"
+
+[node name="DecorLayerDownBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "➖ (PgDn)"
+tooltip_text = "Слой ниже (PageDown)"
+
+[node name="DecorLayerUpBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "➕ (PgUp)"
+tooltip_text = "Слой выше (PageUp)"
+
 [node name="Spacer" type="Control" parent="EditorUI/Root/TopBar/Margin/HBox"]
 layout_mode = 2
 size_flags_horizontal = 3

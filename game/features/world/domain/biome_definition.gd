@@ -13,4 +13,3 @@ extends Resource
 
 @export_group("Presentation")
 @export var territory_scene_path: String = ""
-@export var terrain_data_directory: String = "res://game/features/world/data/terrain3d"

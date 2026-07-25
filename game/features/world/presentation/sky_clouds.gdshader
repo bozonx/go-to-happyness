@@ -263,15 +263,18 @@ float elongated_cloud_field(vec2 uv, float amount) {
 	vec2 wind_axis = normalize(u_wind_direction);
 	vec2 cross_axis = vec2(-wind_axis.y, wind_axis.x);
 	vec2 wind_uv = vec2(dot(uv, wind_axis), dot(uv, cross_axis));
-	vec2 stretched = vec2(wind_uv.x * 0.26 + wind_uv.y * 0.16, wind_uv.y * 1.85);
+	// Thinner across the wind and broken up harder than before: at a low cross-wind
+	// frequency with a wide density window these came out as flat round blobs, which
+	// the near-white cloud palette then turned into paper cut-outs.
+	vec2 stretched = vec2(wind_uv.x * 0.26 + wind_uv.y * 0.16, wind_uv.y * 2.60);
 	vec2 ev = vec2(u_cloud_evolve * 0.5, u_cloud_evolve * 0.3);
 	float family = fbm(uv * 0.20 + vec2(8.0, 17.0) + ev);
 	float family_mask = smoothstep(0.48, 0.68, family);
 	float broad = fbm(stretched * 0.72 + vec2(14.0, 3.0) + ev);
 	float breakup = fbm(stretched * 1.48 + vec2(2.0, 11.0) - ev);
-	float ribbons = broad * 0.82 + breakup * 0.18;
+	float ribbons = broad * 0.70 + breakup * 0.30;
 	float dissolve_threshold = mix(0.54, 0.32, smoothstep(0.06, 1.0, amount));
-	return smoothstep(dissolve_threshold, dissolve_threshold + 0.22, ribbons)
+	return smoothstep(dissolve_threshold, dissolve_threshold + 0.14, ribbons)
 		* mix(0.55, 1.0, family_mask);
 }
 
@@ -584,12 +587,20 @@ void sky() {
 
 	// --- Mid-altitude elongated fair-weather layer ---
 	if (u_elongated_amount > 0.001) {
-		vec2 elongated_uv = dir.xz / max(horizon + 0.40, 0.40);
-		elongated_uv *= u_cloud_scale * 1.18;
+		// Flatter than the cumulus ceiling but not as flat as the cirrus sheet, which
+		// keeps the ribbons from fanning radially out of the projection centre.
+		vec2 elongated_uv = dir.xz / max(horizon + 0.58, 0.58);
+		elongated_uv *= u_cloud_scale * 1.45;
 		// Mid-altitude ribbons: medium wind, between the fast cirrus and slow cumulus.
 		elongated_uv += u_wind_offset * 1.7;
 		float elongated_mask = elongated_cloud_field(elongated_uv, u_elongated_amount);
-		vec3 elongated_day = mix(u_cloud_mid_clear, u_cloud_lit_clear, 0.72);
+		// The ribbon interior is lit and its thinning edges keep the cool midtone, so
+		// the layer has depth of its own instead of one flat value across every shape.
+		float elongated_core = smoothstep(0.18, 0.88, elongated_mask);
+		vec3 elongated_day = mix(u_cloud_mid_clear, u_cloud_lit_clear, 0.28 + elongated_core * 0.62);
+		// A whisper of grain, for the same reason the cumulus carry painted detail.
+		float elongated_grain = fbm(elongated_uv * 3.4 + vec2(7.0, 13.0));
+		elongated_day *= 0.95 + elongated_grain * 0.10;
 		vec3 elongated_storm = mix(u_cloud_mid_storm, u_cloud_lit_storm, 0.30);
 		vec3 elongated_col = mix(elongated_day, elongated_storm, u_murk);
 		elongated_col = mix(elongated_col, u_cloud_mid_night, u_night_factor);
