@@ -76,6 +76,7 @@ func state_of(cell: Vector2i) -> PackedInt32Array:
 		slope_index_of(cell),
 		grid.material_index_at(cell),
 		grid.flags_of(cell),
+		grid.detail_at(cell),
 	)
 
 

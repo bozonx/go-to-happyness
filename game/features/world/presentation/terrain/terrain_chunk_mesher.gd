@@ -17,8 +17,12 @@ extends RefCounted
 ##   16×16 chunk is two triangles rather than 512;
 ## * the mesh is indexed, so a quad costs four vertices instead of six.
 ##
-## Colour comes from per-vertex colour for now; the splatmap / triplanar shader of
-## §7 replaces it later without changing this geometry.
+## The mesh has exactly TWO surfaces and never more (`terrain_materials.md` §7.2):
+## the tops, sampled by the ground shader through the index map, and the vertical
+## faces, sampled triplanar by the cliff shader. A surface per material would be
+## hundreds of draw calls on an empty map, which is why the surface material is
+## NOT geometry input here: tops carry no material attribute at all, and only the
+## faces carry one number — the auto-rock layer of the column above them (§3).
 
 ## Depth of the wall drawn where the ground ends: board border and hole edges.
 const SKIRT_STEPS := 4.0
@@ -30,16 +34,10 @@ enum Lod {
 	TOP_ONLY,
 }
 
-const MATERIAL_COLORS: Dictionary = {
-	TerrainMaterialCatalog.GRASS: Color(0.32, 0.49, 0.24),
-	TerrainMaterialCatalog.DIRT: Color(0.42, 0.31, 0.20),
-	TerrainMaterialCatalog.STONE: Color(0.45, 0.45, 0.47),
-	TerrainMaterialCatalog.SAND: Color(0.76, 0.68, 0.45),
-	TerrainMaterialCatalog.SNOW: Color(0.86, 0.89, 0.93),
-}
-## Vertical faces are auto-rock regardless of the column's surface material (§7.2).
-const CLIFF_COLOR := Color(0.38, 0.36, 0.33)
-const CLIFF_SHADE_STEEP := 0.82
+## Surface indices of the built mesh. `build_chunk` reports which of them exist,
+## because a chunk with no walls (flat ground, or the top-only LOD) has one.
+const SURFACE_TOP := &"top_surface"
+const SURFACE_CLIFF := &"cliff_surface"
 
 ## Cached cells: the chunk plus a one-cell border, so a wall can read its
 ## neighbour's corners without asking the grid again.
@@ -71,10 +69,15 @@ const EDGE_RUNS: Dictionary = {
 	SlopeCatalog.DIR_W: {"step": Vector2i(0, 1), "near_first": false},
 }
 
-var _vertices := PackedVector3Array()
-var _normals := PackedVector3Array()
-var _colors := PackedColorArray()
-var _indices := PackedInt32Array()
+var _top_vertices := PackedVector3Array()
+var _top_normals := PackedVector3Array()
+var _top_indices := PackedInt32Array()
+var _wall_vertices := PackedVector3Array()
+var _wall_normals := PackedVector3Array()
+## COLOR.r of a wall vertex is its auto-rock texture layer / 255 (§3). Faces are
+## the only place a material reaches the vertex data at all.
+var _wall_colors := PackedColorArray()
+var _wall_indices := PackedInt32Array()
 
 var _grid: TerrainGrid = null
 var _origin := Vector2i.ZERO
@@ -88,9 +91,10 @@ var _flat := PackedByteArray()
 var _merged := PackedByteArray()
 
 
-## Builds one chunk. Returns `{ "mesh": ArrayMesh, "faces": PackedVector3Array }`;
-## `mesh` is null for a chunk that produced no geometry (fully carved out, or
-## entirely outside the board).
+## Builds one chunk. Returns `{ "mesh": ArrayMesh, "faces": PackedVector3Array,
+## "top_surface": int, "cliff_surface": int }`; `mesh` is null for a chunk that
+## produced no geometry (fully carved out, or entirely outside the board), and a
+## surface index is -1 when that surface is empty.
 static func build_chunk(grid: TerrainGrid, chunk: Vector2i, lod: int = Lod.FULL) -> Dictionary:
 	var mesher := TerrainChunkMesher.new()
 	return mesher._build(grid, chunk, lod)
@@ -99,28 +103,46 @@ static func build_chunk(grid: TerrainGrid, chunk: Vector2i, lod: int = Lod.FULL)
 func _build(grid: TerrainGrid, chunk: Vector2i, lod: int) -> Dictionary:
 	_grid = grid
 	_origin = grid.chunk_origin_cell(chunk)
-	_vertices = PackedVector3Array()
-	_normals = PackedVector3Array()
-	_colors = PackedColorArray()
-	_indices = PackedInt32Array()
+	_top_vertices = PackedVector3Array()
+	_top_normals = PackedVector3Array()
+	_top_indices = PackedInt32Array()
+	_wall_vertices = PackedVector3Array()
+	_wall_normals = PackedVector3Array()
+	_wall_colors = PackedColorArray()
+	_wall_indices = PackedInt32Array()
 	_cache_region()
 
 	_add_tops()
 	if lod == Lod.FULL:
 		_add_walls()
 
-	if _indices.is_empty():
-		return {"mesh": null, "faces": PackedVector3Array()}
+	if _top_indices.is_empty() and _wall_indices.is_empty():
+		return {"mesh": null, "faces": PackedVector3Array(), SURFACE_TOP: -1, SURFACE_CLIFF: -1}
 
-	var arrays: Array = []
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = _vertices
-	arrays[Mesh.ARRAY_NORMAL] = _normals
-	arrays[Mesh.ARRAY_COLOR] = _colors
-	arrays[Mesh.ARRAY_INDEX] = _indices
 	var mesh := ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	return {"mesh": mesh, "faces": _collision_faces()}
+	var top_surface := -1
+	var cliff_surface := -1
+	if not _top_indices.is_empty():
+		var top_arrays: Array = []
+		top_arrays.resize(Mesh.ARRAY_MAX)
+		top_arrays[Mesh.ARRAY_VERTEX] = _top_vertices
+		top_arrays[Mesh.ARRAY_NORMAL] = _top_normals
+		top_arrays[Mesh.ARRAY_INDEX] = _top_indices
+		top_surface = mesh.get_surface_count()
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, top_arrays)
+	if not _wall_indices.is_empty():
+		var wall_arrays: Array = []
+		wall_arrays.resize(Mesh.ARRAY_MAX)
+		wall_arrays[Mesh.ARRAY_VERTEX] = _wall_vertices
+		wall_arrays[Mesh.ARRAY_NORMAL] = _wall_normals
+		wall_arrays[Mesh.ARRAY_COLOR] = _wall_colors
+		wall_arrays[Mesh.ARRAY_INDEX] = _wall_indices
+		cliff_surface = mesh.get_surface_count()
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, wall_arrays)
+	return {
+		"mesh": mesh, "faces": _collision_faces(),
+		SURFACE_TOP: top_surface, SURFACE_CLIFF: cliff_surface,
+	}
 
 
 # --- Region cache -----------------------------------------------------------
@@ -176,8 +198,11 @@ func _corner_of(index: int, corner: int) -> float:
 
 # --- Tops -------------------------------------------------------------------
 
-## Greedy merge over flat columns of equal height and material; ramps keep their
-## own quad because their four corners differ.
+## Greedy merge over flat columns of equal HEIGHT; ramps keep their own quad
+## because their four corners differ. Material is deliberately not a criterion any
+## more: it reaches the GPU through the index map (§7.3), so a boundary between
+## two materials no longer splits a quad and a repainted plain stays two
+## triangles.
 func _add_tops() -> void:
 	for local_z in TerrainGrid.CHUNK_CELLS:
 		for local_x in TerrainGrid.CHUNK_CELLS:
@@ -216,7 +241,6 @@ func _matches(candidate: int, reference: int) -> bool:
 	return (
 		_solid[candidate] == 1 and _merged[candidate] == 0 and _flat[candidate] == 1
 		and is_equal_approx(_levels[candidate], _levels[reference])
-		and _materials[candidate] == _materials[reference]
 	)
 
 
@@ -227,11 +251,10 @@ func _add_flat_top(local_x: int, local_z: int, width: int, depth: int, index: in
 	var east := west + float(width) * cell_size
 	var south := north + float(depth) * cell_size
 	var height := _levels[index] * TerrainGrid.HEIGHT_STEP
-	var color: Color = MATERIAL_COLORS.get(TerrainMaterialCatalog.id_of_index(_materials[index]), Color.MAGENTA)
-	_add_quad(
+	_add_top_quad(
 		Vector3(west, height, north), Vector3(east, height, north),
 		Vector3(east, height, south), Vector3(west, height, south),
-		Vector3.UP, color,
+		Vector3.UP,
 	)
 
 
@@ -245,8 +268,7 @@ func _add_shaped_top(local_x: int, local_z: int, index: int) -> void:
 	var normal := (ne - nw).cross(sw - nw).normalized()
 	if normal.y < 0.0:
 		normal = -normal
-	var color: Color = MATERIAL_COLORS.get(TerrainMaterialCatalog.id_of_index(_materials[index]), Color.MAGENTA)
-	_add_quad(nw, ne, se, sw, normal, color)
+	_add_top_quad(nw, ne, se, sw, normal)
 
 
 # --- Walls ------------------------------------------------------------------
@@ -332,9 +354,11 @@ func _emit_wall(first_x: int, first_z: int, last_x: int, last_z: int, index: int
 	var far_bottom_position := Vector3(far_top_position.x, wall[3] * TerrainGrid.HEIGHT_STEP, far_top_position.z)
 	var offset := SlopeCatalog.direction_offset(direction)
 	var normal := Vector3(float(offset.x), 0.0, float(offset.y))
-	var color := CLIFF_COLOR * CLIFF_SHADE_STEEP
-	color.a = 1.0
-	_add_quad(far_top_position, near_top_position, near_bottom_position, far_bottom_position, normal, color)
+	# The face belongs to the column above it, and its look comes from that
+	# column's `cliff_material` — never from the material on top of it (§3).
+	var layer := TerrainMaterialVariants.cliff_layer_of_material(_materials[index])
+	var color := Color(float(layer) / 255.0, 0.0, 0.0, 1.0)
+	_add_wall_quad(far_top_position, near_top_position, near_bottom_position, far_bottom_position, normal, color)
 
 
 # --- Emission ---------------------------------------------------------------
@@ -355,27 +379,48 @@ func _corner_position(cell: Vector2i, corner: int, index: int) -> Vector3:
 
 
 ## One quad as two triangles sharing an edge: a, b, c and a, c, d.
-func _add_quad(a: Vector3, b: Vector3, c: Vector3, d: Vector3, normal: Vector3, color: Color) -> void:
-	var base := _vertices.size()
-	_vertices.append(a)
-	_vertices.append(b)
-	_vertices.append(c)
-	_vertices.append(d)
+func _add_top_quad(a: Vector3, b: Vector3, c: Vector3, d: Vector3, normal: Vector3) -> void:
+	var base := _top_vertices.size()
+	_top_vertices.append(a)
+	_top_vertices.append(b)
+	_top_vertices.append(c)
+	_top_vertices.append(d)
 	for _index in 4:
-		_normals.append(normal)
-		_colors.append(color)
-	_indices.append(base)
-	_indices.append(base + 1)
-	_indices.append(base + 2)
-	_indices.append(base)
-	_indices.append(base + 2)
-	_indices.append(base + 3)
+		_top_normals.append(normal)
+	_append_quad_indices(_top_indices, base)
 
 
-## Collision wants the flat triangle soup, not the indexed mesh.
+func _add_wall_quad(a: Vector3, b: Vector3, c: Vector3, d: Vector3, normal: Vector3, color: Color) -> void:
+	var base := _wall_vertices.size()
+	_wall_vertices.append(a)
+	_wall_vertices.append(b)
+	_wall_vertices.append(c)
+	_wall_vertices.append(d)
+	for _index in 4:
+		_wall_normals.append(normal)
+		_wall_colors.append(color)
+	_append_quad_indices(_wall_indices, base)
+
+
+static func _append_quad_indices(indices: PackedInt32Array, base: int) -> void:
+	indices.append(base)
+	indices.append(base + 1)
+	indices.append(base + 2)
+	indices.append(base)
+	indices.append(base + 2)
+	indices.append(base + 3)
+
+
+## Collision wants the flat triangle soup of BOTH surfaces, not the indexed mesh:
+## a body walks on the tops and bumps into the faces, and both have to be there.
 func _collision_faces() -> PackedVector3Array:
 	var faces := PackedVector3Array()
-	faces.resize(_indices.size())
-	for position in _indices.size():
-		faces[position] = _vertices[_indices[position]]
+	faces.resize(_top_indices.size() + _wall_indices.size())
+	var position := 0
+	for index in _top_indices.size():
+		faces[position] = _top_vertices[_top_indices[index]]
+		position += 1
+	for index in _wall_indices.size():
+		faces[position] = _wall_vertices[_wall_indices[index]]
+		position += 1
 	return faces

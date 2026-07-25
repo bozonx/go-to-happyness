@@ -15,6 +15,8 @@ extends Node3D
 const FurnishingAssetCatalogScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_catalog.gd")
 const FurnishingAssetDefScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_def.gd")
 const DecorObjectRecordScript = preload("res://game/features/buildings/domain/editor/decor_object_record.gd")
+const FixtureDefinitionScript = preload("res://game/features/buildings/domain/editor/fixture_definition.gd")
+const FireSourceDefaultsScript = preload("res://game/features/buildings/domain/editor/fire_source_defaults.gd")
 
 enum Tool { PLACE, SELECT, ERASE }
 
@@ -103,6 +105,19 @@ var _tool_buttons: Dictionary = {}
 var _asset_buttons: Dictionary = {}
 var _recent_buttons: Dictionary = {}
 
+# Fixture editor UI
+var _fixture_list: ItemList = null
+var _fixture_id_label: Label = null
+var _fixture_cap_option: OptionButton = null
+var _fixture_visual_option: OptionButton = null
+var _fixture_zone_option: OptionButton = null
+var _fixture_fire_defaults_lbl: Label = null
+var _fixture_fire_grid: GridContainer = null
+var _fixture_lit_check: CheckBox = null
+var _fixture_fuel_spin: SpinBox = null
+var _fixture_cap_fuel_spin: SpinBox = null
+var _selected_fixture_index: int = -1
+
 
 # ---------------------------------------------------------------------------
 # Setup
@@ -145,6 +160,30 @@ func setup(editor: Node) -> void:
 	_redo_btn = editor.get_node("%DecorRedoBtn")
 	_rot_label = editor.get_node("%DecorRotLabel")
 	_layer_label = editor.get_node("%DecorLayerLabel")
+
+	# Fixture editor UI
+	_fixture_list = editor.get_node("%FixtureList")
+	_fixture_id_label = editor.get_node("%FixtureIdLbl")
+	_fixture_cap_option = editor.get_node("%FixtureCapabilityOption")
+	_fixture_visual_option = editor.get_node("%FixtureVisualOption")
+	_fixture_zone_option = editor.get_node("%FixtureZoneOption")
+	_fixture_fire_defaults_lbl = editor.get_node("%FixtureFireDefaultsLbl")
+	_fixture_fire_grid = editor.get_node("%FixtureFireGrid")
+	_fixture_lit_check = editor.get_node("%FixtureLitCheck")
+	_fixture_fuel_spin = editor.get_node("%FixtureFuelSpin")
+	_fixture_cap_fuel_spin = editor.get_node("%FixtureCapFuelSpin")
+
+	editor.get_node("%FixtureAddBtn").pressed.connect(_add_fixture)
+	editor.get_node("%FixtureDeleteBtn").pressed.connect(_delete_fixture)
+	_fixture_list.item_selected.connect(_on_fixture_list_selected)
+	_fixture_cap_option.item_selected.connect(_on_fixture_capability_selected)
+	_fixture_visual_option.item_selected.connect(_on_fixture_visual_selected)
+	_fixture_zone_option.item_selected.connect(_on_fixture_zone_selected)
+	_fixture_lit_check.toggled.connect(_on_fixture_fire_param_changed)
+	_fixture_fuel_spin.value_changed.connect(_on_fixture_fire_param_changed)
+	_fixture_cap_fuel_spin.value_changed.connect(_on_fixture_fire_param_changed)
+
+	_build_fixture_capability_options()
 
 	_tool_buttons[Tool.PLACE] = editor.get_node("%DecorToolPlaceBtn")
 	_tool_buttons[Tool.SELECT] = editor.get_node("%DecorToolSelectBtn")
@@ -230,6 +269,7 @@ func activate() -> void:
 	_refresh_zone_filter_options()
 	_refresh_object_list()
 	_refresh_inspector()
+	refresh_fixture_ui()
 	_update_layer_label()
 	_update_undo_redo_buttons()
 
@@ -1505,3 +1545,164 @@ func _update_layer_label() -> void:
 func on_layer_changed() -> void:
 	_update_layer_label()
 	refresh_ghost()
+
+
+# ---------------------------------------------------------------------------
+# Fixtures (Phase 2A — fire_source vertical slice)
+# ---------------------------------------------------------------------------
+
+func _build_fixture_capability_options() -> void:
+	_fixture_cap_option.clear()
+	for cap in FixtureDefinitionScript.KNOWN_CAPABILITIES:
+		_fixture_cap_option.add_item(String(cap))
+		_fixture_cap_option.set_item_metadata(_fixture_cap_option.item_count - 1, cap)
+
+
+func _refresh_fixture_list() -> void:
+	_syncing_ui = true
+	_fixture_list.clear()
+	var fixtures: Array = _editor.blueprint.fixtures
+	for i in fixtures.size():
+		var fixture: FixtureDefinitionScript = fixtures[i]
+		var cap_text := "—"
+		if not fixture.capabilities.is_empty():
+			cap_text = String(fixture.capabilities[0])
+		_fixture_list.add_item("%s (%s)" % [String(fixture.id), cap_text])
+	if _selected_fixture_index >= 0 and _selected_fixture_index < fixtures.size():
+		_fixture_list.select(_selected_fixture_index)
+	else:
+		_selected_fixture_index = -1
+	_syncing_ui = false
+	_refresh_fixture_inspector()
+
+
+func _refresh_fixture_inspector() -> void:
+	var fixtures: Array = _editor.blueprint.fixtures
+	var has_selection := _selected_fixture_index >= 0 and _selected_fixture_index < fixtures.size()
+	_fixture_id_label.visible = has_selection
+	_fixture_cap_option.disabled = not has_selection
+	_fixture_visual_option.disabled = not has_selection
+	_fixture_zone_option.disabled = not has_selection
+	_fixture_fire_defaults_lbl.visible = false
+	_fixture_fire_grid.visible = false
+	if not has_selection:
+		_fixture_id_label.text = "ID: —"
+		return
+	var fixture: FixtureDefinitionScript = fixtures[_selected_fixture_index]
+	_fixture_id_label.text = "ID: %s" % String(fixture.id)
+	# Capability dropdown — select first capability.
+	_syncing_ui = true
+	for i in _fixture_cap_option.item_count:
+		if _fixture_cap_option.get_item_metadata(i) == fixture.capabilities[0] if not fixture.capabilities.is_empty() else null:
+			_fixture_cap_option.select(i)
+			break
+	# Visual object dropdown — populate from blueprint objects.
+	_fixture_visual_option.clear()
+	_fixture_visual_option.add_item("— нет —")
+	_fixture_visual_option.set_item_metadata(0, "")
+	for obj in _editor.blueprint.objects:
+		_fixture_visual_option.add_item(obj.id)
+		_fixture_visual_option.set_item_metadata(_fixture_visual_option.item_count - 1, obj.id)
+	for i in _fixture_visual_option.item_count:
+		if String(_fixture_visual_option.get_item_metadata(i)) == fixture.visual_object_id:
+			_fixture_visual_option.select(i)
+			break
+	# Zone dropdown — populate from blueprint place_zones.
+	_fixture_zone_option.clear()
+	_fixture_zone_option.add_item("— здание —")
+	_fixture_zone_option.set_item_metadata(0, &"")
+	for zone in _editor.blueprint.place_zones:
+		_fixture_zone_option.add_item(zone.zone_name)
+		_fixture_zone_option.set_item_metadata(_fixture_zone_option.item_count - 1, zone.zone_id)
+	for i in _fixture_zone_option.item_count:
+		if _fixture_zone_option.get_item_metadata(i) == fixture.owner_zone_id:
+			_fixture_zone_option.select(i)
+			break
+	# Fire source defaults.
+	var is_fire := fixture.has_capability(FixtureDefinitionScript.CAP_FIRE_SOURCE)
+	_fixture_fire_defaults_lbl.visible = is_fire
+	_fixture_fire_grid.visible = is_fire
+	if is_fire:
+		var defaults := FireSourceDefaultsScript.from_dict(fixture.runtime_defaults)
+		_fixture_lit_check.button_pressed = defaults.lit
+		_fixture_fuel_spin.value = defaults.fuel
+		_fixture_cap_fuel_spin.value = defaults.fuel_capacity
+	_syncing_ui = false
+
+
+func _add_fixture() -> void:
+	var fixture := FixtureDefinitionScript.new()
+	var next_index := 1
+	var existing_ids: Array = _editor.blueprint.fixtures.map(func(f): return String(f.id))
+	while "fixture_%d" % next_index in existing_ids:
+		next_index += 1
+	fixture.id = StringName("fixture_%d" % next_index)
+	fixture.capabilities = [FixtureDefinitionScript.CAP_FIRE_SOURCE]
+	fixture.runtime_defaults = {"lit": true, "fuel": 4, "fuel_capacity": 10}
+	_editor.blueprint.fixtures.append(fixture)
+	_selected_fixture_index = _editor.blueprint.fixtures.size() - 1
+	_editor.mark_dirty()
+	_refresh_fixture_list()
+	_editor.set_status("Fixture создан: %s" % String(fixture.id))
+
+
+func _delete_fixture() -> void:
+	if _selected_fixture_index < 0 or _selected_fixture_index >= _editor.blueprint.fixtures.size():
+		return
+	_editor.blueprint.fixtures.remove_at(_selected_fixture_index)
+	_selected_fixture_index = mini(_selected_fixture_index, _editor.blueprint.fixtures.size() - 1)
+	_editor.mark_dirty()
+	_refresh_fixture_list()
+	_editor.set_status("Fixture удалён.")
+
+
+func _on_fixture_list_selected(index: int) -> void:
+	if _syncing_ui:
+		return
+	_selected_fixture_index = index
+	_refresh_fixture_inspector()
+
+
+func _on_fixture_capability_selected(index: int) -> void:
+	if _syncing_ui or _selected_fixture_index < 0:
+		return
+	var fixture: FixtureDefinitionScript = _editor.blueprint.fixtures[_selected_fixture_index]
+	var cap: StringName = _fixture_cap_option.get_item_metadata(index)
+	# Replace capabilities with the single selected one (phase 2A: one cap per fixture).
+	fixture.capabilities = [cap]
+	_editor.mark_dirty()
+	_refresh_fixture_inspector()
+
+
+func _on_fixture_visual_selected(index: int) -> void:
+	if _syncing_ui or _selected_fixture_index < 0:
+		return
+	var fixture: FixtureDefinitionScript = _editor.blueprint.fixtures[_selected_fixture_index]
+	fixture.visual_object_id = String(_fixture_visual_option.get_item_metadata(index))
+	_editor.mark_dirty()
+
+
+func _on_fixture_zone_selected(index: int) -> void:
+	if _syncing_ui or _selected_fixture_index < 0:
+		return
+	var fixture: FixtureDefinitionScript = _editor.blueprint.fixtures[_selected_fixture_index]
+	fixture.owner_zone_id = _fixture_zone_option.get_item_metadata(index)
+	_editor.mark_dirty()
+
+
+func _on_fixture_fire_param_changed(_value: Variant) -> void:
+	if _syncing_ui or _selected_fixture_index < 0:
+		return
+	var fixture: FixtureDefinitionScript = _editor.blueprint.fixtures[_selected_fixture_index]
+	if not fixture.has_capability(FixtureDefinitionScript.CAP_FIRE_SOURCE):
+		return
+	fixture.runtime_defaults = {
+		"lit": _fixture_lit_check.button_pressed,
+		"fuel": int(_fixture_fuel_spin.value),
+		"fuel_capacity": int(_fixture_cap_fuel_spin.value),
+	}
+	_editor.mark_dirty()
+
+
+func refresh_fixture_ui() -> void:
+	_refresh_fixture_list()

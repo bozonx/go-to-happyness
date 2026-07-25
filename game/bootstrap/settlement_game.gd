@@ -542,6 +542,7 @@ var trail_texture_renderer: TrailTextureRenderer
 var resource_pile_service: ResourcePileService
 var foraging_service: ForagingService
 var fire_management_service: FireManagementService
+var fixture_service: FixtureService
 var building_maintenance_service: BuildingMaintenanceService
 var building_lifecycle_service: BuildingLifecycleService
 var building_zone_service: RefCounted
@@ -1654,7 +1655,10 @@ func _demolition_ready(site: DemolitionSite) -> bool:
 
 
 func _finish_demolition(site: DemolitionSite) -> void:
+	var building_id := String(site.building.get_meta("building_instance_id", "")) if is_instance_valid(site.building) else ""
 	building_lifecycle_service.finish_demolition(site)
+	if fixture_service != null and not building_id.is_empty():
+		fixture_service.remove_building(building_id)
 
 func _remove_building_services(building: Node3D, building_type: String) -> void:
 	building_lifecycle_service.remove_building_services(building, building_type)
@@ -2283,7 +2287,10 @@ func _apply_building_wear_and_repairs() -> void:
 
 
 func _destroy_building_to_pile(building: Node3D, building_type: String) -> void:
+	var building_id := String(building.get_meta("building_instance_id", "")) if is_instance_valid(building) else ""
 	building_maintenance_service.destroy_building_to_pile(building, building_type, citizens, warehouse_positions, campfire_node)
+	if fixture_service != null and not building_id.is_empty():
+		fixture_service.remove_building(building_id)
 
 
 

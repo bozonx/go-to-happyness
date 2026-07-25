@@ -8,6 +8,7 @@ const BuildingBlueprintLibraryScript = preload("res://game/features/buildings/pr
 const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
 const BlockMeshLibraryScript = preload("res://game/features/buildings/presentation/editor/block_mesh_library.gd")
 const FurnishingAssetCatalogScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_catalog.gd")
+const FixtureDefinitionScript = preload("res://game/features/buildings/domain/editor/fixture_definition.gd")
 
 const BLOCK_SIZE := 1.0
 const PANEL_THICKNESS := 0.5
@@ -365,6 +366,7 @@ static func _blueprint_from_library(building_type: String) -> Dictionary:
 		"work_zones": bp.runtime_zone_definitions() if bp != null else [],
 		"routing_anchors": bp.routing_anchor_definitions() if bp != null else [],
 		"construction_cost": bp.construction_cost.duplicate(true) if bp != null else {},
+		"fixtures": bp.fixtures.map(func(f: FixtureDefinitionScript) -> Dictionary: return f.to_dict()) if bp != null else [],
 	}
 	if bp != null and not bp.worker_entrances.is_empty():
 		result["worker_entrances"] = bp.worker_entrances

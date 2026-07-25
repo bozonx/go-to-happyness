@@ -85,6 +85,7 @@ func place_ramp(start_cell: Vector2i, slope_id: StringName, direction: int) -> b
 		delta.record(cell, old_state, TerrainDelta.make_state(
 			base_height, slope_class, direction, step,
 			old_state[TerrainDelta.STATE_MATERIAL], old_state[TerrainDelta.STATE_FLAGS],
+			old_state[TerrainDelta.STATE_DETAIL],
 		))
 	_commit(delta)
 	return true
@@ -106,8 +107,14 @@ func dissolve_ramp(cell: Vector2i) -> bool:
 
 
 ## Repaints the surface material of a brush. Material is not decoration — it sets
-## the angle of repose (§4.2) — so it is a transaction like any height edit.
-func paint_material(cells: Array[Vector2i], material_id: StringName) -> bool:
+## the angle of repose (§4.2), the traversal weight and the soil digging yields —
+## so it is a transaction like any height edit. It is NOT a mesh operation,
+## though: the index reaches the GPU through the index map, so the stroke writes
+## one texel per cell and rebuilds nothing (`terrain_materials.md` §7.3, §7.5).
+##
+## `variant` picks the look inside the material; -1 keeps whatever variant the
+## column already had.
+func paint_material(cells: Array[Vector2i], material_id: StringName, variant: int = -1) -> bool:
 	if grid == null:
 		return _reject(CascadeSolver.REASON_NOTHING_TO_DO)
 	var material_index := TerrainMaterialCatalog.index_of(material_id)
@@ -115,11 +122,62 @@ func paint_material(cells: Array[Vector2i], material_id: StringName) -> bool:
 		return _reject(CascadeSolver.REASON_NOTHING_TO_DO)
 	var delta := TerrainDelta.new()
 	for cell: Vector2i in _sorted_unique(cells):
-		if not grid.is_inside(cell) or grid.material_index_at(cell) == material_index:
+		if not grid.is_inside(cell):
 			continue
 		var old_state := TerrainDelta.state_of(grid, cell)
 		var new_state := old_state.duplicate()
 		new_state[TerrainDelta.STATE_MATERIAL] = material_index
+		if variant >= 0:
+			new_state[TerrainDelta.STATE_DETAIL] = TerrainDetailCodec.with_variant(
+				old_state[TerrainDelta.STATE_DETAIL],
+				TerrainMaterialVariants.clamp_variant(material_index, variant),
+			)
+		if new_state == old_state:
+			continue
+		delta.record(cell, old_state, new_state)
+	if delta.is_empty():
+		return _reject(CascadeSolver.REASON_NOTHING_TO_DO)
+	_commit(delta)
+	return true
+
+
+## The detail brush (§4): a different look, identical mechanics. Kept a
+## transaction anyway — an edit undo cannot see is worse than no undo (§4.4).
+func paint_variant(cells: Array[Vector2i], variant: int) -> bool:
+	return _paint_detail(cells, func(detail: int, cell: Vector2i) -> int:
+		return TerrainDetailCodec.with_variant(
+			detail, TerrainMaterialVariants.clamp_variant(grid.material_index_at(cell), variant)
+		))
+
+
+## Sets wear directly. `SurfaceWearService` owns the gradual version (§6.1); this
+## is the authoring path, for tools that paint a trodden field by hand.
+func set_wear(cells: Array[Vector2i], wear: int) -> bool:
+	return _paint_detail(cells, func(detail: int, _cell: Vector2i) -> int:
+		return TerrainDetailCodec.with_wear(detail, wear))
+
+
+## Snow depth as an authored value. Accumulation and melt (§6.2) belong to the
+## weather-driven service; the data path is the same one, and it is here so the
+## lab can pose the state before that service exists.
+func set_snow_depth(cells: Array[Vector2i], snow_depth: int) -> bool:
+	return _paint_detail(cells, func(detail: int, _cell: Vector2i) -> int:
+		return TerrainDetailCodec.with_snow_depth(detail, snow_depth))
+
+
+func _paint_detail(cells: Array[Vector2i], mutate: Callable) -> bool:
+	if grid == null:
+		return _reject(CascadeSolver.REASON_NOTHING_TO_DO)
+	var delta := TerrainDelta.new()
+	for cell: Vector2i in _sorted_unique(cells):
+		if not grid.is_inside(cell):
+			continue
+		var old_state := TerrainDelta.state_of(grid, cell)
+		var next_detail := int(mutate.call(old_state[TerrainDelta.STATE_DETAIL], cell))
+		if next_detail == old_state[TerrainDelta.STATE_DETAIL]:
+			continue
+		var new_state := old_state.duplicate()
+		new_state[TerrainDelta.STATE_DETAIL] = next_detail
 		delta.record(cell, old_state, new_state)
 	if delta.is_empty():
 		return _reject(CascadeSolver.REASON_NOTHING_TO_DO)

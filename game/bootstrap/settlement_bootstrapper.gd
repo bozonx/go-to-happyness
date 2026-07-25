@@ -251,6 +251,8 @@ func _setup_foraging_and_fire() -> void:
 		game._refresh_living_statuses,
 		func() -> void: game.settlement.wellbeing = maxi(0, game.settlement.wellbeing - 1)
 	)
+	game.fixture_service = FixtureService.new()
+	game.fire_management_service.set_fixture_service(game.fixture_service)
 
 
 func _setup_building_maintenance() -> void:

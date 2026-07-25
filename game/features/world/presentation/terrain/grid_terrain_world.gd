@@ -8,11 +8,21 @@ extends Node3D
 ## budget so a brush drag never stalls the frame. It reads the grid and never
 ## writes to it: editing goes through tools, which own the transaction.
 ##
+## It also owns the two things the surface needs on the GPU: the material texture
+## array (`TerrainMaterialLibrary`) and the index/detail maps
+## (`TerrainSurfaceMaps`). Painting a material, a variant, wear or snow updates a
+## texel of those maps and rebuilds NOTHING (`terrain_materials.md` §7.5) — the
+## dirty-surface set of the grid is drained here, separately from the dirty
+## chunks, and only the latter ever produce geometry.
+##
 ## Chunks further than `lod_distance` from the camera are rebuilt without their
 ## side faces (§11). The isometric camera cannot see those faces at that range,
 ## and dropping them is most of the geometry of a hilly chunk. Collision follows
 ## the mesh as always, and that stays safe: the top surface every body stands on
 ## is still there, only the vertical faces between columns are gone.
+
+const GROUND_SHADER_PATH := "res://game/features/world/presentation/terrain/terrain_ground.gdshader"
+const CLIFF_SHADER_PATH := "res://game/features/world/presentation/terrain/terrain_cliff.gdshader"
 
 const REBUILD_BUDGET_PER_FRAME := 2
 const COLLISION_LAYER := 1
@@ -34,7 +44,10 @@ var _chunk_bodies: Dictionary = {}
 var _chunk_lods: Dictionary = {}
 var _pending_chunks: Array[Vector2i] = []
 var _queued_lookup: Dictionary = {}
-var _surface_material: StandardMaterial3D = null
+var _library := TerrainMaterialLibrary.new()
+var _surface_maps := TerrainSurfaceMaps.new()
+var _ground_material: ShaderMaterial = null
+var _cliff_material: ShaderMaterial = null
 
 
 func _ready() -> void:
@@ -52,6 +65,11 @@ func configure(next_grid: TerrainGrid, next_camera: Camera3D = null) -> void:
 	_queued_lookup.clear()
 	if grid == null:
 		return
+	_surface_maps.configure(grid.board_cells)
+	_surface_maps.rebuild(grid)
+	grid.take_dirty_surface_cells()
+	_ground_material = null
+	_cliff_material = null
 	grid.mark_all_chunks_dirty()
 	_collect_dirty()
 
@@ -59,6 +77,10 @@ func configure(next_grid: TerrainGrid, next_camera: Camera3D = null) -> void:
 func _process(_delta: float) -> void:
 	if grid == null:
 		return
+	# Surface texels first and unconditionally: they are cheap, they are not
+	# subject to the chunk budget, and a painted material has to show up on the
+	# frame it was painted even while a cascade is still remeshing behind it.
+	_surface_maps.sync(grid)
 	_collect_dirty()
 	_collect_lod_changes()
 	if _pending_chunks.is_empty():
@@ -77,6 +99,7 @@ func _process(_delta: float) -> void:
 func rebuild_pending_now() -> void:
 	if grid == null:
 		return
+	_surface_maps.sync(grid)
 	_collect_dirty()
 	_collect_lod_changes()
 	while not _pending_chunks.is_empty():
@@ -147,7 +170,7 @@ func _rebuild_chunk(chunk: Vector2i) -> void:
 	var collision: CollisionShape3D = body.get_node(^"Collision")
 	mesh_instance.mesh = mesh
 	if mesh != null:
-		mesh_instance.material_override = _material()
+		_assign_surface_materials(mesh_instance, result)
 		var shape := ConcavePolygonShape3D.new()
 		shape.set_faces(result["faces"])
 		collision.shape = shape
@@ -180,11 +203,36 @@ func _chunk_body(chunk: Vector2i, create_if_missing: bool) -> StaticBody3D:
 	return body
 
 
-func _material() -> StandardMaterial3D:
-	if _surface_material != null:
-		return _surface_material
-	_surface_material = StandardMaterial3D.new()
-	_surface_material.vertex_color_use_as_albedo = true
-	_surface_material.roughness = 0.95
-	_surface_material.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
-	return _surface_material
+## Two surfaces, two shaders (§7.2): tops read the index map, faces are triplanar
+## auto-rock. Both sample the SAME texture array, so the whole world still costs
+## one texture binding.
+func _assign_surface_materials(mesh_instance: MeshInstance3D, result: Dictionary) -> void:
+	var top_surface := int(result.get(TerrainChunkMesher.SURFACE_TOP, -1))
+	var cliff_surface := int(result.get(TerrainChunkMesher.SURFACE_CLIFF, -1))
+	if top_surface >= 0:
+		mesh_instance.set_surface_override_material(top_surface, _ground_shader_material())
+	if cliff_surface >= 0:
+		mesh_instance.set_surface_override_material(cliff_surface, _cliff_shader_material())
+
+
+func _ground_shader_material() -> ShaderMaterial:
+	if _ground_material != null:
+		return _ground_material
+	_ground_material = ShaderMaterial.new()
+	_ground_material.shader = load(GROUND_SHADER_PATH)
+	_ground_material.set_shader_parameter(&"surface_textures", _library.texture_array())
+	_ground_material.set_shader_parameter(&"index_map", _surface_maps.index_texture())
+	_ground_material.set_shader_parameter(&"detail_map", _surface_maps.detail_texture())
+	_ground_material.set_shader_parameter(&"board_cells", float(grid.board_cells))
+	_ground_material.set_shader_parameter(&"cell_size", grid.cell_size)
+	_ground_material.set_shader_parameter(&"max_variants", float(TerrainMaterialVariants.MAX_VARIANTS))
+	return _ground_material
+
+
+func _cliff_shader_material() -> ShaderMaterial:
+	if _cliff_material != null:
+		return _cliff_material
+	_cliff_material = ShaderMaterial.new()
+	_cliff_material.shader = load(CLIFF_SHADER_PATH)
+	_cliff_material.set_shader_parameter(&"surface_textures", _library.texture_array())
+	return _cliff_material

@@ -8,6 +8,8 @@ const TestDomainLaunchScript = preload("res://tests/domain/test_domain_launch.gd
 const TestDomainNavigationScript = preload("res://tests/domain/test_domain_navigation.gd")
 const TestDomainBuildingEditorScript = preload("res://tests/domain/test_domain_building_editor.gd")
 const TestDomainTerrainScript = preload("res://tests/domain/test_domain_terrain.gd")
+const TestDomainTerrainMaterialsScript = preload("res://tests/domain/test_domain_terrain_materials.gd")
+const TestSurfaceStateScript = preload("res://tests/features/world/test_surface_state.gd")
 const TestTerrainMeshingScript = preload("res://tests/features/world/test_terrain_meshing.gd")
 const TestDomainTerrainNavigationScript = preload("res://tests/domain/test_domain_terrain_navigation.gd")
 
@@ -36,6 +38,8 @@ func _init() -> void:
 	TestDomainNavigationScript.run_all()
 	TestDomainBuildingEditorScript.run_all()
 	TestDomainTerrainScript.run_all()
+	TestDomainTerrainMaterialsScript.run_all()
+	TestSurfaceStateScript.run_all()
 	TestTerrainMeshingScript.run_all()
 	TestDomainTerrainNavigationScript.run_all()
 	TestSaveLoadScript.run_all()

@@ -15,6 +15,13 @@ const FLAG_HOLE := 1 << 1
 
 var height: int = 0
 var material_id: StringName = TerrainMaterialCatalog.DEFAULT_MATERIAL
+## Visual variant of the material, 0..15 (terrain_materials.md §4). Never affects
+## gameplay: same repose, same weight, same soil, same cliff face.
+var variant: int = 0
+## Surface wear from being walked on, 0..2 (§6.1).
+var wear: int = 0
+## Snow lying on the column, 0..3 (§6.2). A state, not a material.
+var snow_depth: int = 0
 var slope_id: StringName = SlopeCatalog.FLAT
 ## Direction the slope rises towards, 0..7 (see SlopeCatalog).
 var slope_dir: int = SlopeCatalog.DIR_N
@@ -39,6 +46,9 @@ func duplicate_cell() -> TerrainCell:
 	var copy := TerrainCell.new()
 	copy.height = height
 	copy.material_id = material_id
+	copy.variant = variant
+	copy.wear = wear
+	copy.snow_depth = snow_depth
 	copy.slope_id = slope_id
 	copy.slope_dir = slope_dir
 	copy.slope_index = slope_index

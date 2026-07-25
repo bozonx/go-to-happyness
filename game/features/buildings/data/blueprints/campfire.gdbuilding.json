@@ -35,7 +35,19 @@
       "appearance": {}
     }
   ],
-  "fixtures": [],
+  "fixtures": [
+    {
+      "id": "fire_source_1",
+      "capabilities": ["fire_source"],
+      "owner_zone": "",
+      "visual_object": "decor_campfire_1",
+      "runtime_defaults": {
+        "lit": true,
+        "fuel": 4,
+        "fuel_capacity": 10
+      }
+    }
+  ],
   "construction_cost": {
     "branches": 4
   }

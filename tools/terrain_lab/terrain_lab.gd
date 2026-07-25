@@ -13,9 +13,17 @@ extends Node3D
 ## makes and cannot see. The lab runs the real `NavGrid` over the real published
 ## field and draws the answer (key M).
 ##
+## Materials are here in full (`terrain_materials.md`): the thirteen-entry catalog,
+## the variant budget, the detail byte (variant | wear | snow) and the two shaders
+## that read the index and detail maps. Painting any of them rebuilds no geometry
+## at all — the pending-chunk counter in the HUD stays at zero while a material
+## brush is dragged, which is the §7.5 promise made visible.
+##
 ## Mouse: hover picks a column, LMB raises, RMB lowers, MMB drag orbits, wheel zooms.
-## Keys:  F level brush to the hovered height, P paint material, 1-5 pick material,
-##        H toggle hole, R place ramp, X dissolve ramp, C cycle ramp class,
+## Keys:  F level brush to the hovered height, P paint material, 1-9/0 pick material,
+##        ; / \' cycle the material page, B cycle variant, U wear, J snow,
+##        K walk the brush (wear from traffic), H toggle hole, R place ramp,
+##        X dissolve ramp, C cycle ramp class,
 ##        V cycle ramp direction, [ / ] brush size, Tab cycle cascade mode,
 ##        M toggle the navigation overlay, T cycle the traveller profile,
 ##        Z undo, Y redo, G regenerate demo, N clear to flat, WASD pan, Q/E orbit.
@@ -41,6 +49,7 @@ const CAMERA_MOUSE_ORBIT := 0.35
 
 var grid := TerrainGrid.new()
 var service := TerrainService.new()
+var wear_service := SurfaceWearService.new()
 var nav_grid := NavGrid.new()
 var nav_publisher := TerrainNavigationPublisher.new()
 
@@ -60,6 +69,10 @@ var _hovered_cell := Vector2i.ZERO
 var _has_hover := false
 var _brush_size := 1
 var _material_index := 0
+var _variant := 0
+## The catalog no longer fits on the number row, so it is paged ten at a time.
+var _material_page := 0
+var _wear_day := 0
 var _ramp_class := SlopeCatalog.CLASS_GENTLE
 var _ramp_direction := SlopeCatalog.DIR_E
 var _edit_mode := TerrainEditOperation.Mode.SCULPT
@@ -79,6 +92,11 @@ const CAPTURE_VIEWS: Array = [
 	{"name": "nav_pedestrian", "setup": &"demo", "nav": &"pedestrian", "target": Vector3(2.0, 0.5, 0.0), "yaw": 42.0, "pitch": 34.0, "distance": 40.0},
 	{"name": "nav_cart", "nav": &"cart", "target": Vector3(2.0, 0.5, 0.0), "yaw": 42.0, "pitch": 34.0, "distance": 40.0},
 	{"name": "nav_ramps_closeup", "nav": &"pedestrian", "target": Vector3(0.0, 0.5, 0.0), "yaw": 250.0, "pitch": 30.0, "distance": 18.0},
+	# Materials get their own two views: the whole catalog with its variants, and
+	# a close-up of the boundary where height-based blending either interlocks or
+	# turns to mush (§7.3).
+	{"name": "materials_catalog", "setup": &"demo", "nav": &"", "target": Vector3(-11.0, 0.0, 17.0), "yaw": 0.0, "pitch": 65.0, "distance": 30.0},
+	{"name": "materials_blend_closeup", "target": Vector3(-17.0, 0.0, 14.0), "yaw": 25.0, "pitch": 30.0, "distance": 11.0},
 ]
 
 var _capture_queue: Array = []
@@ -88,6 +106,7 @@ var _capture_delay := 0
 func _ready() -> void:
 	grid.configure(CELL_SIZE, BOARD_CELLS)
 	service.configure(grid)
+	wear_service.configure(service)
 	terrain.configure(grid, camera)
 	# Binds the two grids and keeps the field current: every committed edit
 	# republishes exactly the columns it touched.
@@ -157,10 +176,61 @@ func _apply_material() -> void:
 	if not _has_hover:
 		return
 	var material_id := TerrainMaterialCatalog.ids()[_material_index]
-	if service.paint_material(_brush_cells(_hovered_cell), material_id):
-		_last_message = "painted %s" % material_id
+	if service.paint_material(_brush_cells(_hovered_cell), material_id, _variant):
+		# The count is the point: a material stroke commits a transaction, moves a
+		# navigation weight and rebuilds zero chunks (§7.5).
+		_last_message = "painted %s/%s — %d chunks queued" % [
+			material_id, TerrainMaterialVariants.variant_name(_material_index, _variant),
+			terrain.pending_chunk_count(),
+		]
 		return
 	_last_message = "paint %s changed nothing" % material_id
+
+
+func _apply_variant() -> void:
+	if not _has_hover:
+		return
+	_variant = (_variant + 1) % TerrainMaterialVariants.variant_count(_material_index)
+	if service.paint_variant(_brush_cells(_hovered_cell), _variant):
+		_last_message = "variant %s" % TerrainMaterialVariants.variant_name(_material_index, _variant)
+		return
+	_last_message = "variant %d unchanged" % _variant
+
+
+func _cycle_wear() -> void:
+	if not _has_hover:
+		return
+	var next := (grid.wear_at(_hovered_cell) + 1) % (TerrainDetailCodec.MAX_WEAR + 1)
+	if service.set_wear(_brush_cells(_hovered_cell), next):
+		_last_message = "wear %d" % next
+		return
+	_last_message = "wear unchanged"
+
+
+func _cycle_snow() -> void:
+	if not _has_hover:
+		return
+	var next := (grid.snow_depth_at(_hovered_cell) + 1) % (TerrainDetailCodec.MAX_SNOW_DEPTH + 1)
+	if service.set_snow_depth(_brush_cells(_hovered_cell), next):
+		_last_message = "snow depth %d" % next
+		return
+	_last_message = "snow unchanged"
+
+
+## Fakes a day of traffic over the brush: enough crossings to move the wear level,
+## fed through the real `SurfaceWearService` so the throttle, the transaction and
+## the navigation weight are the real ones (§6.1).
+func _walk_the_brush() -> void:
+	if not _has_hover:
+		return
+	var cells := _brush_cells(_hovered_cell)
+	for _pass in SurfaceWearService.CROSSINGS_PER_WEAR_LEVEL:
+		wear_service.begin_tick()
+		for cell: Vector2i in cells:
+			wear_service.record_crossing(cell)
+	_wear_day += 1
+	var raised := wear_service.flush(_wear_day)
+	_last_message = "walked %d cells — %d wore down" % [cells.size(), raised.size()]
 
 
 func _toggle_hole() -> void:
@@ -237,6 +307,20 @@ func _handle_key(event: InputEventKey) -> void:
 			_apply_flatten()
 		KEY_P:
 			_apply_material()
+		KEY_B:
+			_apply_variant()
+		KEY_U:
+			_cycle_wear()
+		KEY_J:
+			_cycle_snow()
+		KEY_K:
+			_walk_the_brush()
+		KEY_SEMICOLON:
+			_material_page = maxi(0, _material_page - 1)
+			_last_message = "material page %d" % (_material_page + 1)
+		KEY_APOSTROPHE:
+			_material_page = mini((TerrainMaterialCatalog.count() - 1) / 10, _material_page + 1)
+			_last_message = "material page %d" % (_material_page + 1)
 		KEY_H:
 			_toggle_hole()
 		KEY_R:
@@ -277,10 +361,12 @@ func _handle_key(event: InputEventKey) -> void:
 			service.clear_history()
 			_republish_navigation()
 			_last_message = "cleared to flat"
-		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5:
-			var picked := event.keycode - KEY_1
-			if picked < TerrainMaterialCatalog.ids().size():
+		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9, KEY_0:
+			var slot := 9 if event.keycode == KEY_0 else event.keycode - KEY_1
+			var picked := _material_page * 10 + slot
+			if picked < TerrainMaterialCatalog.count():
 				_material_index = picked
+				_variant = TerrainMaterialVariants.clamp_variant(_material_index, _variant)
 				_last_message = "material %s" % TerrainMaterialCatalog.ids()[_material_index]
 		KEY_ESCAPE:
 			get_tree().quit()
@@ -403,13 +489,29 @@ func _update_hud() -> void:
 			cell.material_id, cell.slope_id, _direction_name(cell.slope_dir), cell.slope_index,
 			"  HOLE" if cell.is_hole() else "",
 		])
+		# The surface line: what the column is made of, how worn and snowed it is,
+		# and what that costs to walk on. Weight is the only one of the four that
+		# the simulation actually feels.
+		var material_index := grid.material_index_at(_hovered_cell)
+		lines.append("surface variant=%s wear=%d snow=%d  weight ×%.2f  repose %s  soil %s  face %s  wear→%d" % [
+			TerrainMaterialVariants.variant_name(material_index, cell.variant), cell.wear, cell.snow_depth,
+			grid.surface_weight_at(_hovered_cell),
+			SlopeCatalog.id_of_class(TerrainMaterialCatalog.repose_class_of_index(material_index)),
+			TerrainMaterialCatalog.soil_of_index(material_index),
+			TerrainMaterialCatalog.cliff_material_of_index(material_index),
+			wear_service.progress_at(_hovered_cell),
+		])
 	else:
 		lines.append("cell —")
-	lines.append("mode %s  brush %d  paint %s  ramp %s → %s" % [
+		lines.append("surface —")
+	lines.append("mode %s  brush %d  paint %s/%s (page %d)  ramp %s → %s" % [
 		TerrainEditOperation.mode_name(_edit_mode).to_upper(), _brush_size,
 		TerrainMaterialCatalog.ids()[_material_index],
+		TerrainMaterialVariants.variant_name(_material_index, _variant),
+		_material_page + 1,
 		SlopeCatalog.id_of_class(_ramp_class), _direction_name(_ramp_direction),
 	])
+	lines.append(_palette_line())
 	lines.append("undo %d  redo %d  |  pending chunks: %d" % [
 		service.undo_depth(), service.redo_depth(), terrain.pending_chunk_count(),
 	])
@@ -418,9 +520,25 @@ func _update_hud() -> void:
 	lines.append("")
 	lines.append("LMB raise · RMB lower · MMB orbit · wheel zoom · WASD pan · Q/E turn")
 	lines.append("Tab mode (sculpt/terrace/level) · Z undo · Y redo · F level · P paint · 1-5 material")
+	lines.append("B variant · U wear · J snow · K walk brush · ; \' material page")
 	lines.append("H hole · R ramp · X unramp · C class · V dir · [ ] brush · G demo · N clear · Esc quit")
 	lines.append("M nav overlay · T traveller profile")
 	hud.text = "\n".join(lines)
+
+
+## The ten materials the number row currently selects, with the picked one marked.
+## Thirteen entries no longer fit on one row, and a picker that silently addresses
+## only the first five would hide most of the catalog.
+func _palette_line() -> String:
+	var parts: Array[String] = []
+	for slot in 10:
+		var index := _material_page * 10 + slot
+		if index >= TerrainMaterialCatalog.count():
+			break
+		var key := "0" if slot == 9 else str(slot + 1)
+		var name := String(TerrainMaterialCatalog.ids()[index])
+		parts.append("[%s]%s" % [key, name.to_upper() if index == _material_index else name])
+	return "  ".join(parts)
 
 
 ## Batch capture: one frame to move the camera, a couple to let the renderer
@@ -475,10 +593,12 @@ func _setup_cascade_scene() -> void:
 			grid.set_material(Vector2i(x, z), TerrainMaterialCatalog.SAND)
 		for x in range(8, 17):
 			grid.set_material(Vector2i(x, z), TerrainMaterialCatalog.STONE)
-	for center: Vector2i in [Vector2i(-10, 0), Vector2i(0, 0), Vector2i(12, 0)]:
+		for x in range(-16, -7):
+			grid.set_material(Vector2i(x, z), TerrainMaterialCatalog.MUD)
+	for center: Vector2i in [Vector2i(-12, 0), Vector2i(0, 0), Vector2i(12, 0)]:
 		service.apply_operation(TerrainEditOperation.offset([center] as Array[Vector2i], 5))
 	terrain.rebuild_pending_now()
-	_last_message = "cascade: grass / sand / rock, +5 steps each"
+	_last_message = "cascade: mud / sand / rock, +5 steps each"
 
 
 func _direction_name(direction: int) -> String:
@@ -528,7 +648,10 @@ func _generate_demo() -> void:
 		for x in range(-20, -17):
 			grid.set_height(Vector2i(x, z), -2)
 
-	# Stone tower with a snow cap — the vertical-face case at full height.
+	# Stone tower with a glacier cap — the vertical-face case at full height, and
+	# the two face kinds that differ most: layered rock under stone, an ice wall
+	# under `ice` (§3). Snow is NOT what caps it: snow is a state, and a state
+	# cannot be a plateau (§6.2).
 	for z in range(8, 13):
 		for x in range(8, 13):
 			grid.set_height(Vector2i(x, z), 8)
@@ -536,7 +659,14 @@ func _generate_demo() -> void:
 	for z in range(9, 12):
 		for x in range(9, 12):
 			grid.set_height(Vector2i(x, z), 10)
-			grid.set_material(Vector2i(x, z), TerrainMaterialCatalog.SNOW)
+			grid.set_material(Vector2i(x, z), TerrainMaterialCatalog.ICE)
+	# ...and the state that is not a material, lying on the rock shelf around it.
+	for z in range(8, 13):
+		for x in range(8, 13):
+			if grid.material_index_at(Vector2i(x, z)) == TerrainMaterialCatalog.index_of(TerrainMaterialCatalog.STONE):
+				grid.set_snow_depth(Vector2i(x, z), 2)
+
+	_generate_material_showcase()
 
 	# Carved tunnel mouth in the plateau: no polygons, therefore no collision (§6).
 	for z in range(-2, 2):
@@ -549,6 +679,43 @@ func _generate_demo() -> void:
 		grid.set_anchor(Vector2i(x, 6), true)
 
 	_republish_navigation()
+	_last_message = "demo: terraces, ramps, tower, and the material catalog to the south-west"
+
+
+## Every material of the catalog as a strip, each cell carrying a different
+## variant, plus a wear gradient across `grass_tall` and a snow gradient across
+## `dirt`. This is the reference view for §2, §4, §6.1 and §6.2 at once: what the
+## thirteen materials look like, that variants change only the picture, and that
+## wear and snow are states painted over whatever is under them.
+func _generate_material_showcase() -> void:
+	# Two rows in the free south-west corner of the demo board, three cells per
+	# material so a boundary has room to blend.
+	var per_row := 7
+	for material_index in TerrainMaterialCatalog.count():
+		var row := material_index / per_row
+		var column := material_index % per_row
+		var west := -22 + column * 3
+		var north := 12 + row * 4
+		for z in range(north, north + 3):
+			for offset in 3:
+				var cell := Vector2i(west + offset, z)
+				grid.set_material_index(cell, material_index)
+				grid.set_variant(cell, TerrainMaterialVariants.procedural_variant(material_index, cell))
+	# Wear 0 → 2 over tall grass: the one material whose weight follows it (§6.1).
+	for wear in 3:
+		for offset in 3:
+			for z in range(20, 23):
+				var cell := Vector2i(-22 + wear * 3 + offset, z)
+				grid.set_material(cell, TerrainMaterialCatalog.GRASS_TALL)
+				grid.set_wear(cell, wear)
+	# Snow 0 → 3 over dirt: a state on top of the surface, with no repose of its
+	# own — which is why it is painted here and not sculpted.
+	for depth in 4:
+		for offset in 3:
+			for z in range(20, 23):
+				var cell := Vector2i(-12 + depth * 3 + offset, z)
+				grid.set_material(cell, TerrainMaterialCatalog.DIRT)
+				grid.set_snow_depth(cell, depth)
 
 
 ## The demo writes the grid directly rather than through the service, so nothing

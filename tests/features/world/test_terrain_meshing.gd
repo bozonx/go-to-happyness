@@ -17,7 +17,7 @@ const INNER_CHUNK := Vector2i(0, 0)
 
 static func run_all() -> void:
 	_test_flat_chunk_merges_into_one_quad()
-	_test_merge_splits_on_material_and_height()
+	_test_material_no_longer_splits_the_merge()
 	_test_step_builds_one_wall_without_cracks()
 	_test_hole_removes_mesh_and_collision()
 	_test_ramp_meets_its_column_without_a_wall()
@@ -39,9 +39,17 @@ static func _build(grid: TerrainGrid, chunk: Vector2i = INNER_CHUNK, lod: int = 
 	return TerrainChunkMesher.build_chunk(grid, chunk, lod)
 
 
+## Vertices of the whole chunk, across both surfaces: tops and faces are split by
+## shader (`terrain_materials.md` §7.2), and the geometry budget is about the mesh
+## as a whole, not about one of its halves.
 static func _vertex_count(result: Dictionary) -> int:
 	var mesh: ArrayMesh = result["mesh"]
-	return 0 if mesh == null else (mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+	if mesh == null:
+		return 0
+	var total := 0
+	for surface in mesh.get_surface_count():
+		total += (mesh.surface_get_arrays(surface)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+	return total
 
 
 static func _triangle_count(result: Dictionary) -> int:
@@ -87,16 +95,23 @@ static func _test_flat_chunk_merges_into_one_quad() -> void:
 	assert(_triangle_count(result) == 2)
 
 
-static func _test_merge_splits_on_material_and_height() -> void:
+static func _test_material_no_longer_splits_the_merge() -> void:
 	var grid := _make_grid()
-	# A different material cannot share a quad even at the same height: the
-	# splatmap (§7) and the repose angle (§4.2) are per column.
+	# Material reaches the GPU through the index map, not through the vertices
+	# (`terrain_materials.md` §7.3, §7.4), so half a chunk repainted is still one
+	# merged quad — and the paint itself dirties no chunk at all.
 	for z in 16:
 		for x in range(8, 16):
 			grid.set_material(Vector2i(x, z), TerrainMaterialCatalog.SAND)
-	var split := _build(grid)
-	assert(_vertex_count(split) == 8)
-	assert(_triangle_count(split) == 4)
+	grid.take_dirty_chunks()
+	for z in 16:
+		for x in range(8, 16):
+			grid.set_material(Vector2i(x, z), TerrainMaterialCatalog.MUD)
+	assert(not grid.has_dirty_chunks())
+	assert(grid.has_dirty_surface_cells())
+	var painted := _build(grid)
+	assert(_vertex_count(painted) == 4)
+	assert(_triangle_count(painted) == 2)
 
 	var stepped := _make_grid()
 	for z in 16:
@@ -281,18 +296,26 @@ static func _test_collision_faces_match_the_mesh() -> void:
 	var result := _build(grid)
 	var faces: PackedVector3Array = result["faces"]
 	var mesh: ArrayMesh = result["mesh"]
-	var arrays := mesh.surface_get_arrays(0)
-	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-	var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
 
-	# The collision soup is the indexed mesh expanded — one is not allowed to
-	# drift from the other (§6, §11).
+	# The collision soup is BOTH surfaces of the indexed mesh expanded — tops to
+	# stand on and faces to bump into — and neither is allowed to drift from the
+	# other (§6, §11, `terrain_materials.md` §7.2).
+	assert(mesh.get_surface_count() == 2)
+	var expected := PackedVector3Array()
+	var total_vertices := 0
+	for surface in mesh.get_surface_count():
+		var arrays := mesh.surface_get_arrays(surface)
+		var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+		total_vertices += vertices.size()
+		for position in indices.size():
+			expected.append(vertices[indices[position]])
 	assert(faces.size() % 3 == 0)
-	assert(faces.size() == indices.size())
-	for position in indices.size():
-		assert(faces[position] == vertices[indices[position]])
+	assert(faces.size() == expected.size())
+	for position in faces.size():
+		assert(faces[position] == expected[position])
 	# Indexing is what makes a quad cost four vertices instead of six.
-	assert(vertices.size() < indices.size())
+	assert(total_vertices < faces.size())
 	# And the shape Godot builds from it is valid.
 	var shape := ConcavePolygonShape3D.new()
 	shape.set_faces(faces)

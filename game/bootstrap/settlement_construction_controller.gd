@@ -1,6 +1,11 @@
 class_name SettlementConstructionController
 extends RefCounted
 
+const FixtureDefinitionScript = preload("res://game/features/buildings/domain/editor/fixture_definition.gd")
+const FixtureRuntimeStateScript = preload("res://game/features/buildings/domain/editor/fixture_runtime_state.gd")
+const FireSourceDefaultsScript = preload("res://game/features/buildings/domain/editor/fire_source_defaults.gd")
+const BuildingBlueprintScript = preload("res://game/features/buildings/domain/editor/building_blueprint.gd")
+
 ## Manages construction lifecycle: site creation, ticking, supply labels,
 ## building completion, and cancellation.
 ## Extracted from SettlementGame to reduce its method count.
@@ -62,7 +67,29 @@ func complete_building(cell: Vector2i, building_type: String, position_on_board:
 	if blueprint.has("routing_anchors"):
 		building.set_meta("routing_anchors", blueprint["routing_anchors"])
 	game._unregister_service_pockets(building)
-	if BuildingTypes.is_fire_source(building_type):
+	# Initialize fixtures from the blueprint. The building_instance_id is the
+	# cell key, stored on the node so FireManagementService can look it up.
+	var building_instance_id := "%d,%d" % [cell.x, cell.y]
+	building.set_meta("building_instance_id", building_instance_id)
+	var raw_fixtures: Array = blueprint.get("fixtures", [])
+	if not raw_fixtures.is_empty() and game.fixture_service != null:
+		var bp_for_fixtures := BuildingBlueprintScript.new()
+		bp_for_fixtures.id = StringName(building_type)
+		for fd_data in raw_fixtures:
+			if fd_data is Dictionary:
+				bp_for_fixtures.fixtures.append(FixtureDefinitionScript.from_dict(fd_data))
+		var current_minute := int(game.game_minutes) if "game_minutes" in game else 0
+		game.fixture_service.initialize_for_building(building_instance_id, bp_for_fixtures, current_minute)
+		# For fire_source fixtures, sync initial fire state to node meta so the
+		# existing visual system continues to work without changes.
+		var fire_states: Array = game.fixture_service.fixtures_with_capability(building_instance_id, FixtureDefinitionScript.CAP_FIRE_SOURCE)
+		if not fire_states.is_empty():
+			var first_fire := fire_states[0]
+			building.set_meta("fire_fuel", first_fire.fire_state.fuel)
+			building.set_meta("fire_lit", first_fire.fire_state.lit)
+			building.set_meta("fire_embers_until", first_fire.fire_state.embers_until_minute)
+			building.set_meta("fire_phase", "burning")
+	elif BuildingTypes.is_fire_source(building_type):
 		building.set_meta("fire_fuel", 4)
 		building.set_meta("fire_lit", true)
 		building.set_meta("fire_embers_until", -1)

@@ -37,6 +37,13 @@ var _minimum_cell_weight := DEFAULT_CELL_WEIGHT
 var _minimum_dirty := false
 var _revision := 0
 var _topology_revision := 0
+## Bumped by anything that changes travel COST without changing where a body can
+## go: material paint, wear, snow (`terrain_materials.md` §7.5). Kept apart from
+## `_topology_revision` on purpose — a route over a cell that got more expensive
+## is merely no longer optimal, while one over ground that vanished is invalid,
+## and folding the two together would have every blizzard invalidate every route
+## in the world.
+var _weights_revision := 0
 var _component_topology_revision := -1
 var _walkable_components_by_profile: Dictionary = {}
 
@@ -58,6 +65,7 @@ func configure(next_cell_size: float, next_board_cells: int) -> void:
 	board_half_cells = next_half_cells
 	_revision += 1
 	_topology_revision += 1
+	_weights_revision += 1
 
 
 ## Publishes the shape of the ground (§10). Passing null returns the grid to a
@@ -69,6 +77,7 @@ func set_terrain_field(field: NavTerrainField) -> void:
 	_terrain = field
 	_revision += 1
 	_topology_revision += 1
+	_weights_revision += 1
 
 
 ## The publisher edits the field in place when only a patch of it changed, and
@@ -80,6 +89,18 @@ func notify_terrain_changed() -> void:
 		return
 	_revision += 1
 	_topology_revision += 1
+	_weights_revision += 1
+
+
+## The same in-place notification for an edit that changed only surface weights —
+## a repaint, a trodden path, snowfall. Topology is deliberately left alone: those
+## edits cannot make a cell unreachable, and routes planned across them stay valid
+## (`terrain_materials.md` §7.5).
+func notify_terrain_weights_changed() -> void:
+	if _terrain == null:
+		return
+	_revision += 1
+	_weights_revision += 1
 
 
 func terrain_field() -> NavTerrainField:
@@ -117,6 +138,7 @@ func set_cell_weights(next_weights: Dictionary) -> void:
 	_cell_weights = sanitized
 	_recompute_minimum_cell_weight()
 	_revision += 1
+	_weights_revision += 1
 
 
 ## Replaces constructed-road coverage. Roads are deliberately a separate layer:
@@ -151,6 +173,7 @@ func set_road_profile_weights(next_weights: Dictionary, next_cells: Dictionary) 
 	_recompute_minimum_cell_weight()
 	_revision += 1
 	_topology_revision += 1
+	_weights_revision += 1
 
 
 func set_profile_cell_weights(profile: StringName, next_weights: Dictionary) -> void:
@@ -164,6 +187,7 @@ func set_profile_cell_weights(profile: StringName, next_weights: Dictionary) -> 
 		_profile_cell_weights[profile] = sanitized
 	_recompute_minimum_cell_weight()
 	_revision += 1
+	_weights_revision += 1
 
 
 ## Incremental single-cell update of a profile weight. The trail field pushes one
@@ -183,6 +207,7 @@ func set_profile_cell_weight(profile: StringName, cell: Vector2i, weight: float)
 	if clamped < _minimum_cell_weight:
 		_minimum_cell_weight = clamped
 	_revision += 1
+	_weights_revision += 1
 
 
 func erase_profile_cell_weight(profile: StringName, cell: Vector2i) -> void:
@@ -199,6 +224,7 @@ func erase_profile_cell_weight(profile: StringName, cell: Vector2i) -> void:
 	if removed <= _minimum_cell_weight + 0.0001:
 		_minimum_dirty = true
 	_revision += 1
+	_weights_revision += 1
 
 
 ## Cost of one cell of travel. Surface coverage decides the base — a road wins
@@ -208,6 +234,10 @@ func get_cell_weight(cell: Vector2i, profile: StringName = PEDESTRIAN_PROFILE, p
 	return _surface_weight(cell, profile) * _slope_cost_factor(cell, profile, profile_override)
 
 
+## The terrain material multiplier applies to bare ground only. A built road and
+## an organic trail are surfaces in their own right and already priced as such
+## (`terrain_materials.md` §1: player-built coverage is never a terrain material),
+## so charging mud under a paved road would price the same ground twice.
 func _surface_weight(cell: Vector2i, profile: StringName) -> float:
 	var road_weights: Dictionary = _road_cell_weights.get(profile, {})
 	if road_weights.has(cell):
@@ -215,7 +245,10 @@ func _surface_weight(cell: Vector2i, profile: StringName) -> float:
 	var profile_weights: Dictionary = _profile_cell_weights.get(profile, {})
 	if profile_weights.has(cell):
 		return clampf(float(profile_weights[cell]), MIN_CELL_WEIGHT, MAX_CELL_WEIGHT)
-	return clampf(float(_cell_weights.get(cell, DEFAULT_CELL_WEIGHT)), MIN_CELL_WEIGHT, MAX_CELL_WEIGHT)
+	var base := float(_cell_weights.get(cell, DEFAULT_CELL_WEIGHT))
+	if _terrain != null:
+		base *= _terrain.surface_weight_at(cell)
+	return clampf(base, MIN_CELL_WEIGHT, MAX_CELL_WEIGHT)
 
 
 ## Always >= 1.0, so it can never drag a cell below `minimum_cell_weight()` and
@@ -253,6 +286,13 @@ func revision() -> int:
 ## collision safety can ignore terrain-cost-only updates through this value.
 func topology_revision() -> int:
 	return _topology_revision
+
+
+## Changes whenever travel cost changes, passability or not. Consumers that only
+## care about "is my route still the cheapest" watch this instead of forcing a
+## replan off `topology_revision`.
+func weights_revision() -> int:
+	return _weights_revision
 
 
 func cell_from_position(position_on_board: Vector3) -> Vector2i:

@@ -15,6 +15,7 @@ const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain
 const BuildingMaterialCatalogScript = preload("res://game/features/buildings/domain/editor/building_material_catalog.gd")
 const DecorObjectRecordScript = preload("res://game/features/buildings/domain/editor/decor_object_record.gd")
 const FurnishingAssetCatalogScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_catalog.gd")
+const FixtureDefinitionScript = preload("res://game/features/buildings/domain/editor/fixture_definition.gd")
 
 const FORMAT_VERSION := 2
 const MIN_LOAD_VERSION := 1
@@ -54,10 +55,9 @@ var zone_anchors: Array[ZoneAnchorRecord] = []
 ## Placed decor and furnishing (authored in editor Mode 3, design §3.3).
 var objects: Array[DecorObjectRecord] = []
 
-## Reserved placeholder for functional fixtures (design_docs/content/
-## building_furnishing_phase_1_plan.md §3.3). Phase 1 allows only an empty
-## array; the validator rejects non-empty entries.
-var fixtures: Array = []
+## Functional fixtures (design_docs/content/building_furnishing.md §3.2).
+## Each entry is a FixtureDefinition describing a game-interactable element.
+var fixtures: Array[FixtureDefinition] = []
 
 ## Later-mode sections are kept as opaque data until their editor modes exist.
 var surface_finishes: Array = []
@@ -180,7 +180,7 @@ func to_dict() -> Dictionary:
 		"place_zones": place_dicts,
 		"zone_anchors": anchor_dicts,
 		"objects": object_dicts,
-		"fixtures": fixtures,
+		"fixtures": fixtures.map(func(f: FixtureDefinition) -> Dictionary: return f.to_dict()),
 		"cost_mode": String(cost_mode),
 		"extra_costs": extra_costs,
 		"custom_material_costs": custom_material_costs,
@@ -253,7 +253,11 @@ static func from_dict(data: Dictionary) -> BuildingBlueprint:
 	bp.manual_costs = data.get("manual_costs", {})
 	bp.construction_cost = data.get("construction_cost", {})
 	var raw_fixtures: Variant = data.get("fixtures", [])
-	bp.fixtures = raw_fixtures if raw_fixtures is Array else []
+	bp.fixtures.clear()
+	if raw_fixtures is Array:
+		for fd_data in raw_fixtures:
+			if fd_data is Dictionary:
+				bp.fixtures.append(FixtureDefinitionScript.from_dict(fd_data))
 	# Upgrade in-memory version so a save writes v2, even if the file was v1.
 	# Out-of-range versions are left as-is so validation_errors can reject them.
 	if bp.version >= MIN_LOAD_VERSION and bp.version <= FORMAT_VERSION:
@@ -366,8 +370,20 @@ func validation_errors() -> Array[String]:
 		object_ids[decor_object.id] = true
 		if decor_object.owner_zone_id != &"" and not zone_ids.has(decor_object.owner_zone_id):
 			errors.append("Decor object %s references unknown place zone: %s" % [decor_object.id, decor_object.owner_zone_id])
-	if not fixtures.is_empty():
-		errors.append("Functional fixtures will be available in phase 2")
+	# Validate fixtures: unique ids, valid capabilities, valid references.
+	var fixture_ids: Dictionary = {}
+	for fixture in fixtures:
+		if fixture_ids.has(fixture.id):
+			errors.append("Duplicate fixture id: %s" % fixture.id)
+		fixture_ids[fixture.id] = true
+		errors.append_array(fixture.validation_errors(object_ids, zone_ids))
+	# No two fixtures may reference the same visual object.
+	var visual_refs: Dictionary = {}
+	for fixture in fixtures:
+		if fixture.visual_object_id != "":
+			if visual_refs.has(fixture.visual_object_id):
+				errors.append("Two fixtures reference the same visual object: %s" % fixture.visual_object_id)
+			visual_refs[fixture.visual_object_id] = true
 	return errors
 
 

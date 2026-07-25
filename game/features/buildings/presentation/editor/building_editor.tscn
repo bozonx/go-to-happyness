@@ -910,13 +910,107 @@ theme_override_colors/font_color = Color(1.0, 0.7, 0.2, 1)
 theme_override_font_sizes/font_size = 12
 autowrap_mode = 2
 
-[node name="DecorPhase2Label" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+[node name="FixturesSectionLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Fixtures"
+theme_override_colors/font_color = Color(0.8, 0.75, 0.5, 1)
+
+[node name="FixtureActionsRow" type="HBoxContainer" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+layout_mode = 2
+
+[node name="FixtureAddBtn" type="Button" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/FixtureActionsRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "＋ Fixture"
+
+[node name="FixtureDeleteBtn" type="Button" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/FixtureActionsRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Удалить"
+
+[node name="FixtureList" type="ItemList" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 80)
+layout_mode = 2
+
+[node name="FixtureIdLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
 theme_override_font_sizes/font_size = 12
-text = "Функциональные связи и fixtures будут доступны в этапе 2."
-autowrap_mode = 2
+text = "ID: —"
+
+[node name="FixtureCapLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+layout_mode = 2
+text = "Функция:"
+
+[node name="FixtureCapabilityOption" type="OptionButton" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="FixtureVisualLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+layout_mode = 2
+text = "Визуальный объект:"
+
+[node name="FixtureVisualOption" type="OptionButton" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="FixtureZoneLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+layout_mode = 2
+text = "Зона:"
+
+[node name="FixtureZoneOption" type="OptionButton" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="FixtureFireDefaultsLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Параметры огня"
+theme_override_colors/font_color = Color(0.8, 0.75, 0.5, 1)
+visible = false
+
+[node name="FixtureFireGrid" type="GridContainer" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+columns = 2
+visible = false
+
+[node name="FixtureLitLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/FixtureFireGrid"]
+layout_mode = 2
+text = "Горит"
+
+[node name="FixtureLitCheck" type="CheckBox" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/FixtureFireGrid"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="FixtureFuelLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/FixtureFireGrid"]
+layout_mode = 2
+text = "Топливо"
+
+[node name="FixtureFuelSpin" type="SpinBox" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/FixtureFireGrid"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 0.0
+max_value = 100.0
+step = 1.0
+value = 4.0
+
+[node name="FixtureCapFuelLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/FixtureFireGrid"]
+layout_mode = 2
+text = "Вместимость"
+
+[node name="FixtureCapFuelSpin" type="SpinBox" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/FixtureFireGrid"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 1.0
+max_value = 100.0
+step = 1.0
+value = 10.0
 
 [node name="StatusBar" type="PanelContainer" parent="EditorUI/Root"]
 custom_minimum_size = Vector2(0, 40)

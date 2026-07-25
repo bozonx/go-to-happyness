@@ -59,6 +59,11 @@ var _edge_classes := PackedByteArray()
 ## Four entries per cell (NW, NE, SE, SW) in metres. Standing height is
 ## interpolated from these, so it is the same surface the mesher emits.
 var _corner_heights := PackedFloat32Array()
+## Traversal cost multiplier of the surface: material, wear and snow folded
+## together by the publisher (`terrain_materials.md` §2, §6.1, §6.2). It is a
+## WEIGHT and never a passability — that separation is what lets a blizzard or a
+## trodden field update costs without invalidating a single planned route (§7.5).
+var _surface_weights := PackedFloat32Array()
 
 
 func configure(next_cell_size: float, next_board_cells: int) -> void:
@@ -75,6 +80,9 @@ func configure(next_cell_size: float, next_board_cells: int) -> void:
 	_edge_classes.resize(count * DIRECTION_COUNT)
 	_corner_heights = PackedFloat32Array()
 	_corner_heights.resize(count * 4)
+	_surface_weights = PackedFloat32Array()
+	_surface_weights.resize(count)
+	_surface_weights.fill(1.0)
 
 
 func is_configured() -> bool:
@@ -100,6 +108,15 @@ func set_cell(cell: Vector2i, has_ground: bool, slope_class: int, corner_heights
 	var base := index * 4
 	for corner in 4:
 		_corner_heights[base + corner] = corner_heights_metres[corner]
+
+
+## Surface cost multiplier of a cell, always >= 1.0: a natural surface must never
+## undercut a built road, or A* would route the whole settlement across it and
+## the road layer would stop meaning anything (`terrain_materials.md` §6.5).
+func set_surface_weight(cell: Vector2i, multiplier: float) -> void:
+	if not is_inside(cell):
+		return
+	_surface_weights[_index_of(cell)] = maxf(multiplier, 1.0)
 
 
 func set_edge_class(cell: Vector2i, direction: int, edge_class: int) -> void:
@@ -139,6 +156,12 @@ func centre_height(cell: Vector2i) -> float:
 	var base := _index_of(cell) * 4
 	# u = v = 0.5 sits exactly on the NW–SE split, where both triangles agree.
 	return (_corner_heights[base + CORNER_NW] + _corner_heights[base + CORNER_SE]) * 0.5
+
+
+func surface_weight_at(cell: Vector2i) -> float:
+	if not is_inside(cell):
+		return 1.0
+	return _surface_weights[_index_of(cell)]
 
 
 func slope_class_at(cell: Vector2i) -> int:

@@ -18,7 +18,12 @@ const STATE_SLOPE_DIR := 2
 const STATE_SLOPE_INDEX := 3
 const STATE_MATERIAL := 4
 const STATE_FLAGS := 5
-const STATE_SIZE := 6
+## variant | wear | snow_depth, packed (`terrain_materials.md` §5). Part of the
+## column state for the same reason the material is: a levelling brush may reset
+## a variant and a wear pass may raise a trodden path, and undo has to carry both
+## back.
+const STATE_DETAIL := 6
+const STATE_SIZE := 7
 
 var cells: Array[Vector2i] = []
 
@@ -34,11 +39,12 @@ static func state_of(grid: TerrainGrid, cell: Vector2i) -> PackedInt32Array:
 		grid.slope_index_of(cell),
 		grid.material_index_at(cell),
 		grid.flags_of(cell),
+		grid.detail_at(cell),
 	])
 
 
-static func make_state(height: int, slope_class: int, slope_dir: int, slope_index: int, material_index: int, flags: int) -> PackedInt32Array:
-	return PackedInt32Array([height, slope_class, slope_dir, slope_index, material_index, flags])
+static func make_state(height: int, slope_class: int, slope_dir: int, slope_index: int, material_index: int, flags: int, detail: int = TerrainDetailCodec.DEFAULT_DETAIL) -> PackedInt32Array:
+	return PackedInt32Array([height, slope_class, slope_dir, slope_index, material_index, flags, detail])
 
 
 ## The same column, flattened: height kept, slope descriptor dropped. What a
@@ -51,11 +57,25 @@ static func flattened(state: PackedInt32Array, height: int) -> PackedInt32Array:
 		0,
 		state[STATE_MATERIAL],
 		state[STATE_FLAGS],
+		state[STATE_DETAIL],
 	])
 
 
 func is_empty() -> bool:
 	return cells.is_empty()
+
+
+## True when the operation moved ground: height, slope descriptor or flags. False
+## for a pure surface edit — material, variant, wear, snow — which touches neither
+## the mesh nor passability (`terrain_materials.md` §7.5) and so must not make
+## anyone rebuild a chunk or replan a route.
+func changes_geometry() -> bool:
+	for index in cells.size():
+		var offset := index * STATE_SIZE
+		for field: int in [STATE_HEIGHT, STATE_SLOPE_CLASS, STATE_SLOPE_DIR, STATE_SLOPE_INDEX, STATE_FLAGS]:
+			if _old_states[offset + field] != _new_states[offset + field]:
+				return true
+	return false
 
 
 func size() -> int:
@@ -95,4 +115,5 @@ func _write(grid: TerrainGrid, cell: Vector2i, states: PackedInt32Array, offset:
 		states[offset + STATE_SLOPE_INDEX],
 		states[offset + STATE_MATERIAL],
 		states[offset + STATE_FLAGS],
+		states[offset + STATE_DETAIL],
 	)

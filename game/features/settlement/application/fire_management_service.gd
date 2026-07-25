@@ -3,11 +3,16 @@ extends RefCounted
 
 const FireSourceStateScript = preload("res://game/features/settlement/domain/fire_source_state.gd")
 const S = preload("res://game/features/ui/domain/game_strings.gd")
+const FixtureDefinitionScript = preload("res://game/features/buildings/domain/editor/fixture_definition.gd")
+const FixturePresentationAdapterScript = preload("res://game/features/buildings/presentation/fixture_presentation_adapter.gd")
+
+var _presentation_adapter: FixturePresentationAdapter = null
 
 var building_registry: RefCounted
 var event_service: RefCounted
 var settlement: RefCounted
 var day_cycle: RefCounted
+var fixture_service: RefCounted
 
 var game_minutes_query: Callable
 var campfire_node_query: Callable
@@ -36,9 +41,33 @@ func setup(
 	refresh_living_statuses_callback = refresh_living_fn
 	wellbeing_decay_callback = wellbeing_decay_fn
 
+func set_fixture_service(service: RefCounted) -> void:
+	fixture_service = service
+
+## Returns the building_instance_id stored on the node, or empty string.
+func _building_instance_id(building: Node3D) -> String:
+	return String(building.get_meta("building_instance_id", ""))
+
+## Returns the first fire_source FixtureRuntimeState for this building, or null.
+func _fixture_fire_state(building: Node3D) -> RefCounted:
+	if fixture_service == null or not is_instance_valid(building):
+		return null
+	var building_id := _building_instance_id(building)
+	if building_id.is_empty():
+		return null
+	var fire_states: Array = fixture_service.fixtures_with_capability(building_id, FixtureDefinitionScript.CAP_FIRE_SOURCE)
+	if fire_states.is_empty():
+		return null
+	return fire_states[0].fire_state
+
 func fire_state_for(building: Node3D) -> RefCounted:
 	if not is_instance_valid(building):
 		return FireSourceStateScript.new()
+	# Prefer fixture-backed state when available.
+	var fixture_fs := _fixture_fire_state(building)
+	if fixture_fs != null:
+		return fixture_fs
+	# Legacy fallback: read from node meta.
 	return FireSourceStateScript.from_values(
 		int(building.get_meta("fire_fuel", 0)),
 		int(building.get_meta("fire_reserved", 0)),
@@ -55,10 +84,14 @@ func apply_fire_state(building: Node3D, fire_state: RefCounted) -> void:
 	if not is_instance_valid(building) or fire_state == null:
 		return
 	var minutes: int = int(game_minutes_query.call()) if game_minutes_query.is_valid() else 0
+	# Always sync node meta so the existing visual system continues to work.
 	building.set_meta("fire_fuel", fire_state.fuel)
 	building.set_meta("fire_reserved", fire_state.reserved_fuel)
 	building.set_meta("fire_lit", fire_state.is_burning_at(minutes))
 	building.set_meta("fire_embers_until", fire_state.embers_until_minute)
+	# Fixture runtime state is the same object reference, so it's already updated.
+	# No separate write needed — fire_state_for returns the FixtureRuntimeState.fire_state
+	# directly when fixtures exist.
 
 func is_fire_lit(building: Node3D) -> bool:
 	if not is_instance_valid(building):
@@ -117,11 +150,9 @@ func wellbeing_decay_fn_valid() -> bool:
 	return wellbeing_decay_callback != null and wellbeing_decay_callback.is_valid()
 
 func update_fire_visual(building: Node3D, fire_state: RefCounted, minute: int) -> void:
-	var phase: int = fire_state.phase_at(minute)
-	for child in building.get_children():
-		if child is OmniLight3D:
-			child.visible = phase != FireSourceStateScript.Phase.OUT
-			child.light_energy = 0.22 if phase == FireSourceStateScript.Phase.EMBERS else 1.0
+	if _presentation_adapter == null:
+		_presentation_adapter = FixturePresentationAdapterScript.new()
+	_presentation_adapter.apply_fire_visual(building, fire_state, minute)
 
 func report_fire_phase_change(building: Node3D, fire_state: RefCounted, minute: int, campfire_node: Node3D, branches_count: int) -> void:
 	var phase: int = fire_state.phase_at(minute)

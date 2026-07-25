@@ -4,6 +4,7 @@ const FurnishingAssetCatalogScript = preload("res://game/features/buildings/doma
 const FurnishingAssetDefScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_def.gd")
 const DecorObjectRecordScript = preload("res://game/features/buildings/domain/editor/decor_object_record.gd")
 const BuildingBlueprintScript = preload("res://game/features/buildings/domain/editor/building_blueprint.gd")
+const FixtureDefinitionScript = preload("res://game/features/buildings/domain/editor/fixture_definition.gd")
 
 
 func _init() -> void:
@@ -235,18 +236,32 @@ func _test_v2_round_trip() -> void:
 	print("  v2 round-trip ok")
 
 
-## Non-empty fixtures array must be rejected by the validator in phase 1.
+## Fixtures are now validated per FixtureDefinition schema (phase 2A).
 func _test_non_empty_fixtures_rejected() -> void:
 	var bp := BuildingBlueprintScript.new()
-	bp.id = &"test_fixtures_rejected"
-	bp.fixtures = [{"id": "fire_source_1"}]
+	bp.id = &"test_fixtures_validation"
+	# A fixture with missing capabilities must fail.
+	var bad_fixture := FixtureDefinitionScript.new()
+	bad_fixture.id = &"bad_fixture_1"
+	bad_fixture.capabilities = []
+	bp.fixtures.append(bad_fixture)
 	var errors := bp.validation_errors()
-	assert(errors.any(func(e: String): return e.contains("fixtures") and e.contains("phase 2")),
-		"Non-empty fixtures must be rejected with a phase 2 message")
+	assert(errors.any(func(e: String): return e.contains("no capabilities")),
+		"Fixture without capabilities must be rejected")
+	# A fire_source fixture with bad runtime_defaults must fail.
+	var bad_fire := FixtureDefinitionScript.new()
+	bad_fire.id = &"bad_fire_1"
+	bad_fire.capabilities = [&"fire_source"]
+	bad_fire.runtime_defaults = {"unknown_key": 42}
+	bp.fixtures.clear()
+	bp.fixtures.append(bad_fire)
+	errors = bp.validation_errors()
+	assert(errors.any(func(e: String): return e.contains("unknown key")),
+		"Fixture with unknown runtime_defaults key must be rejected")
 	# Empty fixtures must pass.
 	bp.fixtures = []
 	errors = bp.validation_errors()
-	assert(not errors.any(func(e: String): return e.contains("fixtures")),
+	assert(not errors.any(func(e: String): return e.contains("fixture")),
 		"Empty fixtures must not produce a validation error")
 	print("  fixtures validation ok")
 

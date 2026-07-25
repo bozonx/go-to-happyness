@@ -85,8 +85,26 @@ func refresh_cells(cells: Array[Vector2i]) -> void:
 		nav_grid.notify_terrain_changed()
 
 
+## Republishes only the traversal weight of a patch — the whole answer for a
+## material, variant, wear or snow edit (`terrain_materials.md` §7.5). No rings
+## are needed: unlike a corner height, a surface weight belongs to its own column
+## and to nothing around it. Topology is left untouched, so live routes stay
+## valid and only their cost changes.
+func refresh_weights(cells: Array[Vector2i]) -> void:
+	if terrain == null or field == null or cells.is_empty():
+		return
+	for cell: Vector2i in cells:
+		if terrain.is_inside(cell):
+			field.set_surface_weight(cell, terrain.surface_weight_at(cell))
+	if nav_grid != null:
+		nav_grid.notify_terrain_weights_changed()
+
+
 func _on_edit_committed(delta: TerrainDelta) -> void:
-	refresh_cells(delta.cells)
+	if delta.changes_geometry():
+		refresh_cells(delta.cells)
+		return
+	refresh_weights(delta.cells)
 
 
 # --- Construction ------------------------------------------------------------
@@ -126,6 +144,9 @@ static func _write_surface(target: NavTerrainField, source: TerrainGrid, cell: V
 	for corner in 4:
 		metres[corner] = corners[corner] * TerrainGrid.HEIGHT_STEP
 	target.set_cell(cell, not source.is_hole(cell), surface_class_of(corners), metres)
+	# Material, wear and snow folded into one multiplier (§2, §6.1, §6.2). It is a
+	# cost and never a passability: the ground under a snowdrift is still ground.
+	target.set_surface_weight(cell, source.surface_weight_at(cell))
 
 
 ## Edges are read back out of the field, not recomputed off the terrain. Every

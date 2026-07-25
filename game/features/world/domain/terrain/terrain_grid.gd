@@ -23,6 +23,12 @@ extends RefCounted
 ## tools and tests, `*_class_at` / `*_index_at` returns the stored integer for the
 ## mesher and the cascade, which run over every cell of a chunk and must not pay
 ## for a catalog lookup per query.
+##
+## Surface appearance — material index and the detail byte holding variant, wear
+## and snow depth (`terrain_materials.md` §5) — is stored here but is NOT mesh
+## input: it reaches the GPU through the index and detail maps (§7.3). So painting
+## it dirties the *surface* set, never a chunk, and that is what makes a material
+## brush cost one texel instead of a remesh (§7.5).
 
 ## Vertical step in metres. All stored heights are integer multiples of it.
 const HEIGHT_STEP := 0.5
@@ -69,6 +75,8 @@ var board_half_cells := 0
 
 var _heights := PackedInt32Array()
 var _materials := PackedByteArray()
+## variant | wear | snow_depth, packed by `TerrainDetailCodec` (§5).
+var _details := PackedByteArray()
 var _slope_classes := PackedByteArray()
 var _slope_dirs := PackedByteArray()
 var _slope_indices := PackedByteArray()
@@ -76,6 +84,11 @@ var _flags := PackedByteArray()
 
 var _revision := 0
 var _dirty_chunks: Dictionary = {}
+## Columns whose surface texels are out of date. Separate from the dirty chunks
+## on purpose: a material or detail edit changes no geometry at all (§7.5), and
+## folding the two sets together would put the remesh cost back on every brush
+## stroke that does not need it.
+var _dirty_surface_cells: Dictionary = {}
 
 
 func configure(next_cell_size: float, next_board_cells: int, fill_height: int = 0, fill_material: StringName = TerrainMaterialCatalog.DEFAULT_MATERIAL) -> void:
@@ -87,6 +100,8 @@ func configure(next_cell_size: float, next_board_cells: int, fill_height: int = 
 	_heights.resize(count)
 	_materials = PackedByteArray()
 	_materials.resize(count)
+	_details = PackedByteArray()
+	_details.resize(count)
 	_slope_classes = PackedByteArray()
 	_slope_classes.resize(count)
 	_slope_dirs = PackedByteArray()
@@ -97,12 +112,14 @@ func configure(next_cell_size: float, next_board_cells: int, fill_height: int = 
 	_flags.resize(count)
 	_heights.fill(clampi(fill_height, MIN_HEIGHT, MAX_HEIGHT))
 	_materials.fill(maxi(TerrainMaterialCatalog.index_of(fill_material), 0))
+	_details.fill(TerrainDetailCodec.DEFAULT_DETAIL)
 	_slope_classes.fill(0)
 	_slope_dirs.fill(0)
 	_slope_indices.fill(0)
 	_flags.fill(0)
 	_revision += 1
 	mark_all_chunks_dirty()
+	mark_all_surface_dirty()
 
 
 func revision() -> int:
@@ -143,6 +160,38 @@ func material_index_at(cell: Vector2i) -> int:
 
 func material_of(cell: Vector2i) -> StringName:
 	return TerrainMaterialCatalog.id_of_index(material_index_at(cell))
+
+
+## The packed variant | wear | snow byte (§5). Presentation writes it into the
+## detail map wholesale; the accessors below are for everyone else.
+func detail_at(cell: Vector2i) -> int:
+	if not is_inside(cell):
+		return TerrainDetailCodec.DEFAULT_DETAIL
+	return int(_details[_index_of(cell)])
+
+
+func variant_at(cell: Vector2i) -> int:
+	return TerrainDetailCodec.variant_of(detail_at(cell))
+
+
+func wear_at(cell: Vector2i) -> int:
+	return TerrainDetailCodec.wear_of(detail_at(cell))
+
+
+func snow_depth_at(cell: Vector2i) -> int:
+	return TerrainDetailCodec.snow_depth_of(detail_at(cell))
+
+
+## Traversal cost multiplier of this column's surface: material, wear and snow
+## folded together (`terrain_materials.md` §2, §6.1, §6.2). This is a weight and
+## never a passability — snow and wear must not move `topology_revision` (§7.5).
+func surface_weight_at(cell: Vector2i) -> float:
+	var detail := detail_at(cell)
+	return TerrainMaterialCatalog.surface_weight(
+		material_index_at(cell),
+		TerrainDetailCodec.wear_of(detail),
+		TerrainDetailCodec.snow_depth_of(detail),
+	)
 
 
 func slope_class_at(cell: Vector2i) -> int:
@@ -189,6 +238,10 @@ func cell_at(cell: Vector2i) -> TerrainCell:
 	var record := TerrainCell.new()
 	record.height = height_of(cell)
 	record.material_id = material_of(cell)
+	var detail := detail_at(cell)
+	record.variant = TerrainDetailCodec.variant_of(detail)
+	record.wear = TerrainDetailCodec.wear_of(detail)
+	record.snow_depth = TerrainDetailCodec.snow_depth_of(detail)
 	record.slope_id = slope_of(cell)
 	record.slope_dir = slope_direction_of(cell)
 	record.slope_index = slope_index_of(cell)
@@ -217,11 +270,17 @@ func set_height(cell: Vector2i, height: int) -> bool:
 	return true
 
 
-## Writes a whole column state at once: height, slope descriptor, material and
-## flags. This is the commit path for `TerrainDelta` — it does NOT dissolve ramps
-## or run any cascade, because the delta already describes the final state of
-## every cell it touches. Tools use `set_height` / `place_ramp` instead.
-func set_cell_state(cell: Vector2i, height: int, slope_class: int, slope_dir: int, slope_index: int, material_index: int, flags: int) -> bool:
+## Writes a whole column state at once: height, slope descriptor, material, detail
+## byte and flags. This is the commit path for `TerrainDelta` — it does NOT
+## dissolve ramps or run any cascade, because the delta already describes the
+## final state of every cell it touches. Tools use `set_height` / `place_ramp`
+## instead.
+##
+## Geometry and surface are dirtied separately, by comparing against what is
+## already stored: a delta that only repainted a column (or the undo of one) must
+## not cost a remesh (§7.5), and the undo path is exactly where that guarantee is
+## easiest to lose.
+func set_cell_state(cell: Vector2i, height: int, slope_class: int, slope_dir: int, slope_index: int, material_index: int, flags: int, detail: int = TerrainDetailCodec.DEFAULT_DETAIL) -> bool:
 	if not is_inside(cell):
 		return false
 	if height < MIN_HEIGHT or height > MAX_HEIGHT:
@@ -231,13 +290,29 @@ func set_cell_state(cell: Vector2i, height: int, slope_class: int, slope_dir: in
 	if not TerrainMaterialCatalog.is_valid_index(material_index):
 		return false
 	var index := _index_of(cell)
+	var next_dir := clampi(slope_dir, 0, 7)
+	var next_index := clampi(slope_index, 0, 255)
+	var next_flags := flags & 0xFF
+	var next_detail := detail & 0xFF
+	var geometry_changed := (
+		_heights[index] != height
+		or _slope_classes[index] != slope_class
+		or _slope_dirs[index] != next_dir
+		or _slope_indices[index] != next_index
+		or _flags[index] != next_flags
+	)
+	var surface_changed := _materials[index] != material_index or _details[index] != next_detail
 	_heights[index] = height
 	_slope_classes[index] = slope_class
-	_slope_dirs[index] = clampi(slope_dir, 0, 7)
-	_slope_indices[index] = clampi(slope_index, 0, 255)
+	_slope_dirs[index] = next_dir
+	_slope_indices[index] = next_index
 	_materials[index] = material_index
-	_flags[index] = flags & 0xFF
-	_touch(cell)
+	_details[index] = next_detail
+	_flags[index] = next_flags
+	if geometry_changed:
+		_touch(cell)
+	if geometry_changed or surface_changed:
+		_touch_surface(cell)
 	return true
 
 
@@ -249,6 +324,10 @@ func set_material(cell: Vector2i, material_id: StringName) -> bool:
 	return set_material_index(cell, TerrainMaterialCatalog.index_of(material_id))
 
 
+## Painting a material touches no geometry at all: the index reaches the GPU
+## through the index map (§7.3), so the mesh, its collision and the chunk queue
+## are all left alone. The only consequences are the texel and the traversal
+## weight.
 func set_material_index(cell: Vector2i, material_index: int) -> bool:
 	if not is_inside(cell) or not TerrainMaterialCatalog.is_valid_index(material_index):
 		return false
@@ -256,8 +335,32 @@ func set_material_index(cell: Vector2i, material_index: int) -> bool:
 	if _materials[index] == material_index:
 		return true
 	_materials[index] = material_index
-	_touch(cell)
+	_touch_surface(cell)
 	return true
+
+
+func set_detail(cell: Vector2i, detail: int) -> bool:
+	if not is_inside(cell):
+		return false
+	var index := _index_of(cell)
+	var next_detail := detail & 0xFF
+	if _details[index] == next_detail:
+		return true
+	_details[index] = next_detail
+	_touch_surface(cell)
+	return true
+
+
+func set_variant(cell: Vector2i, variant: int) -> bool:
+	return set_detail(cell, TerrainDetailCodec.with_variant(detail_at(cell), variant))
+
+
+func set_wear(cell: Vector2i, wear: int) -> bool:
+	return set_detail(cell, TerrainDetailCodec.with_wear(detail_at(cell), wear))
+
+
+func set_snow_depth(cell: Vector2i, snow_depth: int) -> bool:
+	return set_detail(cell, TerrainDetailCodec.with_snow_depth(detail_at(cell), snow_depth))
 
 
 func set_flag(cell: Vector2i, flag: int, enabled: bool) -> bool:
@@ -609,6 +712,7 @@ func snapshot() -> Dictionary:
 	return {
 		"heights": _heights.duplicate(),
 		"materials": _materials.duplicate(),
+		"details": _details.duplicate(),
 		"slope_classes": _slope_classes.duplicate(),
 		"slope_dirs": _slope_dirs.duplicate(),
 		"slope_indices": _slope_indices.duplicate(),
@@ -661,6 +765,34 @@ func take_dirty_chunks() -> Array[Vector2i]:
 	return chunks
 
 
+# --- Surface texels ---------------------------------------------------------
+
+func mark_all_surface_dirty() -> void:
+	if board_cells <= 0:
+		return
+	var minimum := min_cell()
+	var maximum := max_cell()
+	for z in range(minimum.y, maximum.y + 1):
+		for x in range(minimum.x, maximum.x + 1):
+			_dirty_surface_cells[Vector2i(x, z)] = true
+
+
+func has_dirty_surface_cells() -> bool:
+	return not _dirty_surface_cells.is_empty()
+
+
+## Hands over the columns whose index/detail texels are stale and clears the set.
+## Sorted for the same reason the dirty chunks are (§4.4 determinism).
+func take_dirty_surface_cells() -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	for cell: Vector2i in _dirty_surface_cells:
+		cells.append(cell)
+	cells.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+		return a.y < b.y if a.y != b.y else a.x < b.x)
+	_dirty_surface_cells.clear()
+	return cells
+
+
 # --- Internals --------------------------------------------------------------
 
 func _index_of(cell: Vector2i) -> int:
@@ -693,3 +825,11 @@ func _touch(cell: Vector2i) -> void:
 		_dirty_chunks[chunk + Vector2i(0, step_z)] = true
 	if step_x != 0 and step_z != 0:
 		_dirty_chunks[chunk + Vector2i(step_x, step_z)] = true
+
+
+## A surface edit is one texel and nothing else — no neighbours, no chunk, no
+## collision. The index map is per column, so unlike geometry it has no ring of
+## influence around the cell that changed.
+func _touch_surface(cell: Vector2i) -> void:
+	_revision += 1
+	_dirty_surface_cells[cell] = true
