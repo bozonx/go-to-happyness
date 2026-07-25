@@ -44,6 +44,7 @@ static func run_all() -> void:
 	_test_auto_slope_refuses_occupied_ground()
 	_test_auto_slope_never_moves_an_anchor()
 	_test_grass_hillside_closes_every_corner()
+	_test_hillsides_grow_no_wedges()
 	_test_terrace_mode_assigns_no_slopes()
 	print("    [PASS] Terrain Auto-Slope Tests")
 	_test_delta_apply_and_revert_restore_grid()
@@ -666,6 +667,68 @@ static func _count_open_corners(grid: TerrainGrid, radius: int) -> int:
 				if absf(float(seam[0]) - float(seam[1])) > 0.001:
 					open += 1
 	return open
+
+
+## Wedges: seams that match at one end and not at the other. A seam that differs
+## at both ends is an honest wall between two terraces; a seam that differs at one
+## end is the triangular fin §3.4 exists to remove.
+static func _count_wedges(grid: TerrainGrid, radius: int) -> int:
+	var wedges := 0
+	for z in range(-radius, radius + 1):
+		for x in range(-radius, radius + 1):
+			var cell := Vector2i(x, z)
+			var mine := grid.corner_heights(cell)
+			var east := grid.corner_heights(cell + Vector2i(1, 0))
+			var south := grid.corner_heights(cell + Vector2i(0, 1))
+			var east_open := [
+				absf(mine[TerrainGrid.CORNER_NE] - east[TerrainGrid.CORNER_NW]) > 0.001,
+				absf(mine[TerrainGrid.CORNER_SE] - east[TerrainGrid.CORNER_SW]) > 0.001,
+			]
+			var south_open := [
+				absf(mine[TerrainGrid.CORNER_SW] - south[TerrainGrid.CORNER_NW]) > 0.001,
+				absf(mine[TerrainGrid.CORNER_SE] - south[TerrainGrid.CORNER_NE]) > 0.001,
+			]
+			if bool(east_open[0]) != bool(east_open[1]):
+				wedges += 1
+			if bool(south_open[0]) != bool(south_open[1]):
+				wedges += 1
+	return wedges
+
+
+static func _test_hillsides_grow_no_wedges() -> void:
+	# The shapes a player actually makes with a brush, each of which used to end up
+	# speckled with triangular fins where two slopes met at a right angle.
+	var sand := _make_grid()
+	_fill_material(sand, TerrainMaterialCatalog.SAND)
+	assert(_sculpt(sand, Vector2i(0, 0), 4) != null)
+	assert(_count_wedges(sand, 12) == 0)
+
+	# A patch of one material inside another: the two halves of the hill terrace at
+	# different rates and still have to meet.
+	var mixed := _make_grid()
+	for z in range(-3, 4):
+		for x in range(-3, 4):
+			mixed.set_material(Vector2i(x, z), TerrainMaterialCatalog.SAND)
+	assert(_sculpt(mixed, Vector2i(0, 0), 4) != null)
+	assert(_count_wedges(mixed, 10) == 0)
+
+	# Two strokes that run into each other.
+	var twice := _make_grid()
+	assert(_sculpt(twice, Vector2i(0, 0), 4) != null)
+	assert(_sculpt(twice, Vector2i(2, 2), 4) != null)
+	assert(_count_wedges(twice, 10) == 0)
+
+	# A wide brush, and a plateau levelled out of one.
+	var wide := _make_grid()
+	var brush: Array[Vector2i] = []
+	for z in range(-2, 3):
+		for x in range(-2, 3):
+			brush.append(Vector2i(x, z))
+	var solver := CascadeSolver.new()
+	var delta := solver.solve(wide, TerrainEditOperation.level(brush, 3))
+	assert(delta != null)
+	delta.apply(wide)
+	assert(_count_wedges(wide, 10) == 0)
 
 
 static func _test_grass_hillside_closes_every_corner() -> void:

@@ -513,10 +513,12 @@ func corner_heights_into(cell: Vector2i, result: PackedFloat32Array) -> void:
 	# there would tear the inside of every pit open instead.
 
 
-## A neighbour whose corners pull ours up: a single-cell slope of one step, the
-## `steep` class the auto-slope pass (§3.2) builds hillsides out of.
+## A neighbour whose corners pull ours up: any slope at all. A slope is ground
+## that has already been shaped, so the corner it raises is raised for everyone
+## standing on that point; a flat column is not, which is what keeps a terrace
+## beside a terrace sheer (§4.1).
 func _lifts_corners(cell: Vector2i) -> bool:
-	return slope_class_at(cell) == SlopeCatalog.CLASS_STEEP
+	return SlopeCatalog.is_ramp_class(slope_class_at(cell))
 
 
 ## Takes a neighbour's corner whole or not at all — never clamped, because a
