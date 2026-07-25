@@ -1,6 +1,14 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene load_steps=13 format=3]
 
 [ext_resource type="Script" path="res://tools/weather_lab/weather_lab.gd" id="1_script"]
+[ext_resource type="Shader" path="res://game/features/world/presentation/sun_glare.gdshader" id="2_glare"]
+
+[sub_resource type="ShaderMaterial" id="SunGlareMaterial"]
+shader = ExtResource("2_glare")
+
+[sub_resource type="CylinderShape3D" id="TowerOccluderShape"]
+height = 7.0
+radius = 0.62
 
 [sub_resource type="Environment" id="Environment_lab"]
 background_mode = 1
@@ -79,6 +87,10 @@ fov = 68.0
 position = Vector3(10, 2.5, 14)
 fov = 62.0
 
+[node name="TrackingCamera" type="Camera3D" parent="CameraRig"]
+position = Vector3(0, 2.2, 6)
+fov = 58.0
+
 [node name="Ground" type="MeshInstance3D" parent="."]
 mesh = SubResource("Ground_mesh")
 
@@ -90,6 +102,11 @@ mesh = SubResource("House_mesh")
 position = Vector3(4.4, 3.5, -4.2)
 mesh = SubResource("Tower_mesh")
 
+[node name="TowerOccluder" type="StaticBody3D" parent="Tower"]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Tower/TowerOccluder"]
+shape = SubResource("TowerOccluderShape")
+
 [node name="Water" type="MeshInstance3D" parent="."]
 position = Vector3(-5.6, 0.03, 2.0)
 mesh = SubResource("Water_mesh")
@@ -99,6 +116,19 @@ position = Vector3(0, 0.25, 1.66)
 light_color = Color(1, 0.57, 0.22, 1)
 light_energy = 2.2
 omni_range = 5.0
+
+[node name="SunGlareLayer" type="CanvasLayer" parent="."]
+layer = 0
+
+[node name="ColorRect" type="ColorRect" parent="SunGlareLayer"]
+material = SubResource("SunGlareMaterial")
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
 
 [node name="Interface" type="CanvasLayer" parent="."]
 

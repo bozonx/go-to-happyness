@@ -20,8 +20,35 @@ uniform float u_night_factor : hint_range(0.0, 1.0) = 0.0;
 uniform float u_star_visibility : hint_range(0.0, 1.0) = 0.0;
 uniform float u_star_density : hint_range(0.0, 1.0) = 0.72;
 uniform float u_star_twinkle : hint_range(0.0, 1.0) = 0.16;
-uniform float u_sun_disc_energy = 6.0;  // HDR overdrive so filmic tonemap + glow bloom the disc
+// HDR overdrive so the filmic tonemap and glow bloom the disc. Restrained on
+// purpose: pushed higher, the bloom swallows the disc's edge and the sun becomes a
+// featureless white smear several times its own size.
+uniform float u_sun_disc_energy = 2.4;
 uniform float u_time = 0.0;
+// Direction toward the sun, supplied by GDScript so the disc, the moon phase and the
+// screen-space glare all agree on one vector even after the light's energy reaches
+// zero at night (where LIGHT0 can no longer be relied upon).
+uniform vec3 u_sun_dir = vec3(0.0, 1.0, 0.0);
+// Angular radii in radians, driven from GDScript. Both swell noticeably near the
+// horizon: the stylised "moon illusion" that makes sunrise and moonrise read as
+// events rather than as a dot crossing the sky.
+uniform float u_sun_angular_radius = 0.046;
+uniform float u_moon_angular_radius = 0.060;
+// Disc presence is separate from illumination energy. The old shader multiplied the
+// disc by u_solar_intensity, which fades to zero exactly at the horizon and erased
+// the sun during the golden hour.
+uniform float u_sun_disc_visibility : hint_range(0.0, 1.0) = 1.0;
+// Scattering energy that survives twilight, so halos and the horizon band stay lit
+// while the sun sits on the horizon.
+uniform float u_sky_light_energy : hint_range(0.0, 1.0) = 1.0;
+// Brightness the unlit side of the moon keeps. Deliberately high: the phase is a
+// painterly cue here, never a real eclipse of half the disc.
+uniform float u_moon_earthshine : hint_range(0.0, 1.0) = 0.38;
+// How much of the disc the sun lights, as the cosine-like axis of the phase:
+// +1 full, 0 half, -1 new. Authored from the synodic cycle rather than measured
+// from the arcs, because both bodies here travel a narrow band of azimuths where
+// the true elongation never leaves "almost full".
+uniform float u_moon_phase_axis : hint_range(-1.0, 1.0) = 1.0;
 // Night moon: direction is placed opposite the sun's azimuth by GDScript, energy
 // rises with the night so it only lights the sky after dusk.
 uniform vec3 u_moon_dir = vec3(0.35, 0.55, -0.76);
@@ -260,12 +287,17 @@ void sky() {
 	vec3 stars = star_field(dir) * smoothstep(0.04, 0.32, horizon);
 	sky_col += stars * star_visibility * 2.5;
 
-	vec3 sun_dir = LIGHT0_ENABLED ? normalize(LIGHT0_DIRECTION) : vec3(0.0, 1.0, 0.0);
+	vec3 sun_dir = normalize(u_sun_dir);
+	if (dot(u_sun_dir, u_sun_dir) < 0.001) {
+		sun_dir = LIGHT0_ENABLED ? normalize(LIGHT0_DIRECTION) : vec3(0.0, 1.0, 0.0);
+	}
 
-// A single soft sun disc plus its atmospheric glow. The disc deliberately uses
-// one continuous profile: a separate bright core would read as a second, small
-// sun inside the larger glow.
+// A crisp painted disc plus its atmospheric glow. The disc edge is built in angle
+// space rather than in cosine space, so it stays equally sharp at any radius; the
+// previous cosine threshold spread the edge over three degrees and turned the sun
+// into a soft white blot.
 	float sun_amt = max(dot(dir, sun_dir), 0.0);
+	float sun_angle = acos(clamp(dot(dir, sun_dir), -1.0, 1.0));
 	// "Clear" for warm light / halos / toon crispness is about murk, not cloud count:
 	// a sky full of fair-weather cumulus still catches golden sunset light.
 	float clear_sky = 1.0 - u_murk;
@@ -277,21 +309,31 @@ void sky() {
 	float sun_gold = pow(sun_low, 0.7);
 	vec3 warm_sun = mix(u_sun_color, u_horizon_glow_color, sun_gold);
 
-	// HDR disc blooms through the environment's glow pass, while remaining one
-	// visual body rather than a screen-space flare laid over the sky.
-	float sun_disc = smoothstep(0.9968, 0.99965, sun_amt);
-	sky_col += warm_sun * sun_disc * u_solar_intensity * u_sun_disc_energy * u_sun_visibility;
+	// The disc keeps one flat body so it never becomes a white smear: noon burns
+	// close to white, and the low sun holds a saturated gold. HDR energy is what
+	// blooms it through the environment's glow pass.
+	float sun_edge = u_sun_angular_radius * 0.06;
+	float sun_disc = 1.0 - smoothstep(u_sun_angular_radius - sun_edge, u_sun_angular_radius + sun_edge, sun_angle);
+	vec3 disc_color = mix(warm_sun, vec3(1.0, 0.985, 0.94), 0.45 * (1.0 - sun_gold));
+	sky_col += disc_color * sun_disc * u_sun_disc_visibility * u_sun_disc_energy * u_sun_visibility;
+	// A tight corona hugging the rim keeps the hard edge from looking cut out,
+	// without inflating the disc itself.
+	float corona = exp(-max(sun_angle - u_sun_angular_radius, 0.0) / (u_sun_angular_radius * 0.28));
+	corona *= 1.0 - sun_disc;
+	sky_col += warm_sun * corona * 0.45 * u_sun_disc_visibility * u_sun_visibility * clear_sky;
 
-	// Mie scattering halo — broader and warmer when the sun sits low.
+	// Mie scattering halo — broader and warmer when the sun sits low. Driven by the
+	// twilight-aware energy so the golden hour keeps its glow after the direct light
+	// curve has already reached zero.
 	float halo_strength = mix(0.15, 0.72, sun_low);
 	float halo_visibility = mix(0.25, 1.0, u_sun_visibility);
-	sky_col += warm_sun * pow(sun_amt, 6.0) * halo_strength * clear_sky * u_solar_intensity * halo_visibility;
+	sky_col += warm_sun * pow(sun_amt, 6.0) * halo_strength * clear_sky * u_sky_light_energy * halo_visibility;
 	// A soft wide golden bloom hugging the low sun adds the anime sunrise glow.
-	sky_col += warm_sun * pow(sun_amt, 2.2) * sun_low * 0.14 * clear_sky * u_solar_intensity * halo_visibility;
+	sky_col += warm_sun * pow(sun_amt, 2.2) * sun_low * 0.14 * clear_sky * u_sky_light_energy * halo_visibility;
 
 	// Warm band along horizon at sunrise/sunset
 	float horizon_band = pow(1.0 - abs(dir.y), 6.0);
-	sky_col += u_horizon_glow_color * horizon_band * sun_low * 0.35 * clear_sky * u_solar_intensity;
+	sky_col += u_horizon_glow_color * horizon_band * sun_low * 0.35 * clear_sky * u_sky_light_energy;
 
 	// --- night moon ---
 	// A soft disc opposite the sun, with a tight inner glow and a faint wide halo.
@@ -299,25 +341,49 @@ void sky() {
 	// spherical shade. Gated by u_moon_energy so it only appears after dusk.
 	if (u_moon_energy > 0.001) {
 		vec3 moon_dir = normalize(u_moon_dir);
-		float moon_amt = max(dot(dir, moon_dir), 0.0);
-		float moon_disc = smoothstep(0.99719, 0.99928, moon_amt);
+		float moon_angle = acos(clamp(dot(dir, moon_dir), -1.0, 1.0));
+		float moon_edge = u_moon_angular_radius * 0.05;
+		float moon_disc = 1.0 - smoothstep(u_moon_angular_radius - moon_edge, u_moon_angular_radius + moon_edge, moon_angle);
 		// Disc-local coordinates via a tangent frame around the moon direction.
 		// dot(dir, tangent) ~= the small angular offset, so muv spans [-1,1] across
 		// the disc once divided by its angular radius.
 		vec3 moon_t = normalize(cross(moon_dir, vec3(0.0, 1.0, 0.0)));
 		vec3 moon_b = cross(moon_dir, moon_t);
-		vec2 muv = vec2(dot(dir, moon_t), dot(dir, moon_b)) / 0.075;
-		float mr = length(muv);
-		float sphere = sqrt(max(1.0 - mr * mr, 0.0)); // limb darkening for volume
-		// Dark maria patches plus a whisper of finer relief.
+		vec2 muv = vec2(dot(dir, moon_t), dot(dir, moon_b)) / u_moon_angular_radius;
+		float mr = min(length(muv), 1.0);
+		// Dark maria patches plus a whisper of finer relief. The face is painted
+		// flat: brightening the centre for "volume" is what made the moon read as a
+		// glowing ball instead of the flat disc a painted sky wants.
 		float maria = fbm(muv * 1.5 + vec2(4.0, 2.0));
 		float relief = fbm(muv * 5.5 + vec2(11.0, 7.0));
 		float surface = 1.0 - smoothstep(0.52, 0.74, maria) * 0.45;
 		surface -= (relief - 0.5) * 0.14;
 		surface = clamp(surface, 0.42, 1.0);
-		vec3 moon_face = u_moon_color * surface * mix(0.80, 1.06, sphere);
-		float moon_glow = pow(moon_amt, 120.0) * 0.30 + pow(moon_amt, 7.0) * 0.04;
-		sky_col += (moon_face * moon_disc * 2.6 + u_moon_color * moon_glow) * u_moon_energy * clear_sky;
+		// Phase. Which way the terminator faces is taken from where the sun actually
+		// is, so the crescent can never point away from it; how much of the disc is
+		// lit comes from the synodic cycle.
+		float sphere_z = sqrt(max(1.0 - mr * mr, 0.0));
+		vec2 sun_in_plane = vec2(dot(sun_dir, moon_t), dot(sun_dir, moon_b));
+		float in_plane_length = length(sun_in_plane);
+		vec2 lit_axis = in_plane_length > 0.001 ? sun_in_plane / in_plane_length : vec2(1.0, 0.0);
+		float phase_axis = clamp(u_moon_phase_axis, -1.0, 1.0);
+		float lit_dot = dot(muv, lit_axis) * sqrt(max(1.0 - phase_axis * phase_axis, 0.0))
+			+ sphere_z * phase_axis;
+		// A soft terminator keeps the shading painterly, and the earthshine floor
+		// means the unlit limb stays clearly visible at every phase.
+		float phase_lit = smoothstep(-0.13, 0.19, lit_dot);
+		float face_light = mix(u_moon_earthshine, 1.0, phase_lit);
+		// The shadowed limb also cools rather than only darkening, which is what makes
+		// the phase read at this low a contrast.
+		vec3 shaded_tint = mix(vec3(0.72, 0.80, 1.06), vec3(1.0), phase_lit);
+		vec3 moon_face = u_moon_color * surface * face_light * shaded_tint;
+		// Two tight glow terms. The old broad pow(moon_amt, 7.0) term only fell to
+		// half its value twenty-five degrees out, wrapping the moon in a haze the
+		// size of a quarter of the sky.
+		float moon_glow = exp(-max(moon_angle - u_moon_angular_radius, 0.0) / (u_moon_angular_radius * 0.5)) * 0.22;
+		moon_glow += exp(-moon_angle / (u_moon_angular_radius * 3.4)) * 0.05;
+		moon_glow *= 1.0 - moon_disc;
+		sky_col += (moon_face * moon_disc * 2.4 + u_moon_color * moon_glow) * u_moon_energy * clear_sky;
 	}
 
 	// --- sky projection ---

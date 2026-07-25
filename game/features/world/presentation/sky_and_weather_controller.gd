@@ -22,6 +22,35 @@ const CLOUD_EDGE_SOFTNESS := 0.048
 const CLOUD_COVERAGE_MIN_CLOUDS := 0.60
 const CLOUD_COVERAGE_MAX_CLOUDS := 0.24
 const CLOUD_MINIMUM_SUN_VISIBILITY := 0.12
+# Angular radii of the celestial discs, in radians. Both are far larger than the
+# real half-degree: the style is painted anime realism, where the sun and the moon
+# are compositional subjects rather than accurate points of light.
+const SUN_ANGULAR_RADIUS := 0.046      # ~2.6 degrees
+const MOON_ANGULAR_RADIUS := 0.062     # ~3.6 degrees, deliberately the larger body
+# Both discs swell as they approach the horizon. This is the stylised "moon
+# illusion": rises and sets become events instead of a dot crossing the sky.
+const SUN_HORIZON_SWELL := 1.55
+const MOON_HORIZON_SWELL := 1.85
+# How high the body must climb before it settles at its base size.
+const DISC_SWELL_ALTITUDE := 0.34
+# The moon drifts along its own arc across a synodic month, so its rise time varies
+# from night to night. The offset is clamped well inside a half-night: pushed to the
+# physical extreme it would leave whole nights with no moon at all.
+const MOON_SYNODIC_DAYS := 29.53
+const MOON_MAX_OFFSET_HOURS := 3.0
+# Phase axis range across the month: +1 is full, 0 half. It never reaches a new moon
+# — the dark limb is a painterly cue here, so even the thinnest phase keeps most of
+# the disc readable.
+const MOON_PHASE_AXIS_MIN := -0.30
+const MOON_PHASE_AXIS_MAX := 1.0
+const MINUTES_PER_DAY := 1440.0
+# Cool blue night key light. Low enough to stay a mood, high enough to cast the
+# soft shadows that a moonlit night reads by.
+const MOON_LIGHT_ENERGY := 0.17
+const MOON_LIGHT_COLOR := Color("8fa8d8")
+# How quickly the sun's cloud occlusion is allowed to move the world lighting. A
+# cloud crossing the sun should dim the meadow over a beat, not snap it.
+const SUN_VISIBILITY_SMOOTHING := 0.09
 
 class CloudLayerMix:
 	var cumulus := 0.0
@@ -38,6 +67,18 @@ var rain_effect: Node3D # RainEffect
 var fireflies: Array = [] # Array of FirefliesEffect
 var sun_glare_material: ShaderMaterial
 var sun_glare_visibility := 0.0
+var moon_light: DirectionalLight3D
+# Last computed directions toward each body. Published so tools (and anything that
+# wants to frame or point at the sky) read the same arc the sky itself is drawn from.
+var current_sun_direction := Vector3.UP
+var current_moon_direction := Vector3.UP
+# How much of the sun the clouds leave, after smoothing. Published so tools can
+# report it: "the light changes when the sun goes behind a cloud" is otherwise only
+# checkable by eye.
+var current_sun_visibility := 1.0
+# Temporally smoothed cloud occlusion of the sun, so world lighting eases across a
+# passing cumulus instead of flickering with the noise field.
+var _sun_visibility_smoothed := 1.0
 
 func setup(
 	p_camera: Camera3D,
@@ -122,12 +163,6 @@ func update_daylight(
 	else:
 		base_background = twilight_color.lerp(day_color, smoothstep(0.0, 0.42, solar_height))
 	world_environment.background_color = base_background.lerp(overcast_color, murk)
-	var base_ambient_color := Color("4b5872").lerp(Color("d7ebef"), maxf(solar_intensity, twilight * 0.35))
-	var base_ambient_energy := lerpf(0.18, 0.65, maxf(solar_intensity, twilight * 0.3))
-	# Ground light desaturates toward grey only under murk; a full white cloud sheet
-	# still lifts overall ambient energy.
-	world_environment.ambient_light_color = base_ambient_color.lerp(Color("8a9aa3"), murk)
-	world_environment.ambient_light_energy = lerpf(base_ambient_energy, 0.78, cloud_cover * 0.6 + murk * 0.4)
 	var day_progress := clampf((hour - 6.0) / 12.0, 0.0, 1.0)
 	var sun_elevation := 3.0 + maxf(solar_height, 0.0) * 45.0
 	var sun_azimuth := lerpf(-75.0, 11.0, day_progress)
@@ -137,15 +172,48 @@ func update_daylight(
 		sun_direction,
 		cloud_cover,
 		wind_offset,
-		cloud_layers
+		cloud_layers,
+		cloud_evolve
 	)
+	# The world lighting reads the smoothed occlusion so a cumulus crossing the sun
+	# dims the meadow over a beat; the sky shader keeps the instantaneous value,
+	# where the disc must be hidden exactly when the cloud covers it.
+	_sun_visibility_smoothed = lerpf(
+		_sun_visibility_smoothed,
+		cloud_sun_visibility,
+		SUN_VISIBILITY_SMOOTHING
+	)
+	var sun_occlusion := 1.0 - _sun_visibility_smoothed
+	current_sun_visibility = _sun_visibility_smoothed
+	# Warm key light survives past the moment the sun touches the horizon, which is
+	# what makes dawn and dusk read as golden rather than simply switching off.
+	var twilight_key := twilight * smoothstep(-0.16, 0.02, solar_height)
+	var key_energy := maxf(solar_intensity, twilight_key * 0.6)
 	# Fair clouds only dapple the sun; a storm front is what actually smothers it.
-	var direct_light := solar_intensity * (1.0 - cloud_cover * 0.6) * (1.0 - murk) * cloud_sun_visibility
+	var direct_light := key_energy * (1.0 - cloud_cover * 0.45) * (1.0 - murk) * _sun_visibility_smoothed
+	# Golden hour drives the key deep amber; a cloud passing over the sun cools what
+	# is left, because the ground is then lit by sky scatter rather than by the disc.
 	var base_sun_color := Color("f08a5d").lerp(Color("fff2d1"), solar_intensity)
+	base_sun_color = base_sun_color.lerp(Color("ff9448"), twilight_key * 0.55)
+	base_sun_color = base_sun_color.lerp(Color("b9c8dd"), sun_occlusion * 0.45)
 	sun.light_color = base_sun_color.lerp(Color("a8b8c0"), murk)
 	sun.light_energy = lerpf(0.0, 1.2, direct_light)
 	sun.shadow_enabled = direct_light > 0.05
-	sun.shadow_opacity = lerpf(1.0, 0.0, murk)
+	# Shadows soften as the sun goes behind a cloud instead of staying razor sharp
+	# under a light that is no longer really there.
+	sun.shadow_opacity = lerpf(1.0, 0.0, maxf(murk, sun_occlusion * 0.7))
+	# Ambient answers the same occlusion from the other side: light the disc loses is
+	# not gone, it is scattered. Overcast moments therefore go flatter and cooler,
+	# not simply darker.
+	var base_ambient_color := Color("4b5872").lerp(Color("d7ebef"), maxf(solar_intensity, twilight * 0.35))
+	base_ambient_color = base_ambient_color.lerp(Color("ffb27a"), twilight * 0.42 * (1.0 - murk))
+	base_ambient_color = base_ambient_color.lerp(Color("aebfd4"), sun_occlusion * solar_intensity * 0.5)
+	var base_ambient_energy := lerpf(0.18, 0.65, maxf(solar_intensity, twilight * 0.3))
+	base_ambient_energy += sun_occlusion * solar_intensity * 0.14
+	# Ground light desaturates toward grey only under murk; a full white cloud sheet
+	# still lifts overall ambient energy.
+	world_environment.ambient_light_color = base_ambient_color.lerp(Color("8a9aa3"), murk)
+	world_environment.ambient_light_energy = lerpf(base_ambient_energy, 0.78, cloud_cover * 0.6 + murk * 0.4)
 	var night_factor := 1.0 - smoothstep(0.0, 0.28, solar_height)
 	# Twilight is still bright after the sun reaches the horizon. Keep stars out
 	# until the sun is meaningfully below it, then fade them in during dusk.
@@ -157,13 +225,37 @@ func update_daylight(
 	# the sun: it rises at dusk, peaks at midnight and sets at dawn, tracing the
 	# sky instead of hanging in one spot. Same euler convention as the sun so the
 	# shader reads its direction identically.
-	var moon_hour := fmod(hour + 12.0, 24.0)
+	# Both the rise time and the lit fraction come from one synodic cycle read off the
+	# continuous game clock, so nothing about the moon needs storing or saving: the
+	# same day always shows the same moon.
+	var moon_cycle := motion_clock / (MINUTES_PER_DAY * MOON_SYNODIC_DAYS)
+	var moon_phase_axis := lerpf(
+		MOON_PHASE_AXIS_MIN,
+		MOON_PHASE_AXIS_MAX,
+		cos(moon_cycle * TAU) * 0.5 + 0.5
+	)
+	var moon_offset := _moon_orbit_offset_hours(motion_clock)
+	var moon_hour := fposmod(hour + 12.0 + moon_offset, 24.0)
 	var moon_height := sin((moon_hour - 6.0) / 12.0 * PI)
 	var moon_progress := clampf((moon_hour - 6.0) / 12.0, 0.0, 1.0)
 	var moon_elevation := 3.0 + maxf(moon_height, 0.0) * 52.0
 	var moon_azimuth := lerpf(-75.0, 11.0, moon_progress) + 180.0
 	var moon_basis := Basis.from_euler(Vector3(deg_to_rad(-moon_elevation), deg_to_rad(moon_azimuth), 0.0))
 	var moon_direction := moon_basis.z.normalized()
+	# Discs swell toward the horizon. The same radii feed the sky shader and the
+	# screen-space glare cut-out, so the two can never disagree.
+	var sun_radius := SUN_ANGULAR_RADIUS * _horizon_swell(sun_direction.y, SUN_HORIZON_SWELL)
+	var moon_radius := MOON_ANGULAR_RADIUS * _horizon_swell(moon_direction.y, MOON_HORIZON_SWELL)
+	current_sun_direction = sun_direction
+	current_moon_direction = moon_direction
+	_update_moon_light(
+		moon_elevation,
+		moon_azimuth,
+		moon_height,
+		cloud_night,
+		murk,
+		moon_phase_axis
+	)
 	if sky_material != null:
 		var sky_horizon := base_background.lerp(overcast_color, murk)
 		# Clear (non-murky) skies deepen toward a saturated anime blue at the zenith,
@@ -177,6 +269,22 @@ func update_daylight(
 		sky_material.set_shader_parameter("u_murk", murk)
 		sky_material.set_shader_parameter("u_solar_intensity", solar_intensity)
 		sky_material.set_shader_parameter("u_sun_visibility", cloud_sun_visibility)
+		sky_material.set_shader_parameter("u_sun_dir", sun_direction)
+		sky_material.set_shader_parameter("u_sun_angular_radius", sun_radius)
+		sky_material.set_shader_parameter("u_moon_angular_radius", moon_radius)
+		# The disc is present whenever the sun is above the horizon, independent of how
+		# much light it delivers. Tying it to solar_intensity, as before, erased the sun
+		# during exactly the golden hour it should dominate.
+		sky_material.set_shader_parameter(
+			"u_sun_disc_visibility",
+			smoothstep(-0.05, 0.03, solar_height)
+		)
+		# Scattering energy that outlives the direct-light curve, so halo and horizon
+		# band stay alight while the sun rests on the horizon.
+		sky_material.set_shader_parameter(
+			"u_sky_light_energy",
+			clampf(maxf(solar_intensity, twilight_key * 0.9), 0.0, 1.0)
+		)
 		sky_material.set_shader_parameter("u_time", motion_clock)
 		sky_material.set_shader_parameter("u_cloud_evolve", cloud_evolve)
 		sky_material.set_shader_parameter("u_cloud_scale", CLOUD_SCALE)
@@ -213,9 +321,10 @@ func update_daylight(
 		# Night moon, opposite the sun and fading in with the deepening twilight.
 		sky_material.set_shader_parameter("u_moon_dir", moon_direction)
 		sky_material.set_shader_parameter("u_moon_energy", cloud_night)
+		sky_material.set_shader_parameter("u_moon_phase_axis", moon_phase_axis)
 	if rain_effect != null:
 		rain_effect.set_intensity(rain_intensity)
-	_update_sun_glare(direct_light, cloud_cover)
+	_update_sun_glare(direct_light, cloud_cover, sun_radius)
 	var firefly_factor := night_factor * (1.0 - cloud_cover * 0.5)
 	for ff in fireflies:
 		if is_instance_valid(ff):
@@ -277,7 +386,8 @@ func _cloud_sun_visibility(
 	sun_direction: Vector3,
 	cover: float,
 	wind_offset: Vector2,
-	cloud_layers: CloudLayerMix
+	cloud_layers: CloudLayerMix,
+	cloud_evolve: float
 ) -> float:
 	var horizon := sun_direction.y
 	var projection_scale := maxf(horizon + 0.55, 0.55)
@@ -290,7 +400,7 @@ func _cloud_sun_visibility(
 		+ Vector3(wind_offset.x * 0.12, 0.0, wind_offset.y * 0.12)
 	).normalized()
 	var cloud_field := maxf(
-		_layered_cloud_field(uv, cover),
+		_layered_cloud_field(uv, cover, cloud_evolve),
 		_tower_cloud_field(tower_direction)
 	)
 	var coverage_curve := pow(cover, 0.55)
@@ -305,22 +415,32 @@ func _cloud_sun_visibility(
 	return lerpf(1.0, CLOUD_MINIMUM_SUN_VISIBILITY, cloud_alpha)
 
 
-func _cloud_field(uv: Vector2) -> float:
+# A line-for-line mirror of cloud_field() in sky_clouds.gdshader. It has to stay a
+# mirror: this is what decides whether a cloud is standing in front of the sun, and
+# a copy that has drifted from the shader silently answers for a sky nobody sees.
+func _cloud_field(uv: Vector2, cloud_evolve: float) -> float:
+	var evolve := Vector2(cloud_evolve, cloud_evolve * 0.63)
 	var q := Vector2(
-		_fbm(uv * 0.75),
-		_fbm(uv * 0.75 + Vector2(5.2, 1.3))
+		_fbm(uv * 0.68 + evolve),
+		_fbm(uv * 0.68 + Vector2(5.2, 1.3) - evolve * 0.5)
 	)
-	var macro := _fbm(uv * 0.32 + q * 0.45)
-	var lobes := _cellular_billow(uv * 0.92 + q * 0.8)
-	var detail := _fbm(uv * 2.15 + q * 1.25)
-	var islands := smoothstep(0.40, 0.67, macro)
-	var body := macro * 0.54 + lobes * 0.34 + detail * 0.12
-	return body * lerpf(0.24, 1.0, islands)
+	var macro := _fbm(uv * 0.30 + q * 0.48)
+	var large_billows := _cellular_billow(uv * 0.72 + q * 0.58)
+	var medium_billows := _cellular_billow(uv * 1.18 + q * 0.92 + Vector2(3.7, 8.1))
+	var detail := _fbm(uv * 2.45 + q * 1.28)
+	var family := smoothstep(0.40, 0.66, macro)
+	var body := (
+		macro * 0.34
+		+ large_billows * 0.44
+		+ medium_billows * 0.16
+		+ detail * 0.06
+	)
+	return body * lerpf(0.26, 1.0, family)
 
 
-func _layered_cloud_field(uv: Vector2, overcast: float) -> float:
-	var primary := _cloud_field(uv)
-	var satellites := _cloud_field(uv * 1.62 + Vector2(7.4, -3.1))
+func _layered_cloud_field(uv: Vector2, overcast: float, cloud_evolve: float) -> float:
+	var primary := _cloud_field(uv, cloud_evolve)
+	var satellites := _cloud_field(uv * 1.62 + Vector2(7.4, -3.1), cloud_evolve)
 	var satellite_cut := lerpf(0.20, 0.36, smoothstep(0.42, 0.88, overcast))
 	return maxf(primary, satellites - satellite_cut)
 
@@ -390,7 +510,53 @@ func _fract(value: float) -> float:
 	return value - floorf(value)
 
 
-func _update_sun_glare(direct_light: float, overcast: float) -> void:
+func _horizon_swell(height: float, swell: float) -> float:
+	# Height is the body's y component, so it already is the sine of its altitude.
+	# The curve is biased low: the growth should be obvious only in the last stretch
+	# above the horizon, not across half the sky.
+	var low := 1.0 - smoothstep(0.0, DISC_SWELL_ALTITUDE, maxf(height, 0.0))
+	return lerpf(1.0, swell, pow(low, 1.6))
+
+
+func _moon_orbit_offset_hours(clock_minutes: float) -> float:
+	# A smooth month-long wander of the moon's rise time. Kept inside a fraction of
+	# the night so the moon is always up after dusk: a physically honest new moon
+	# would leave the night sky empty, which a cosy game has nothing to gain from.
+	var cycle := clock_minutes / (MINUTES_PER_DAY * MOON_SYNODIC_DAYS)
+	return sin(cycle * TAU) * MOON_MAX_OFFSET_HOURS
+
+
+func _update_moon_light(
+	elevation_degrees: float,
+	azimuth_degrees: float,
+	moon_height: float,
+	night: float,
+	murk: float,
+	phase_axis: float
+) -> void:
+	if moon_light == null or not is_instance_valid(moon_light):
+		moon_light = DirectionalLight3D.new()
+		moon_light.name = "MoonLight"
+		# Owned by the controller rather than by the scene, so both the game world and
+		# the weather lab get moonlight from the one place that computes the arc.
+		add_child(moon_light)
+	moon_light.rotation_degrees = Vector3(-elevation_degrees, azimuth_degrees, 0.0)
+	moon_light.light_color = MOON_LIGHT_COLOR
+	# Deliberately blind to individual clouds. A night is dim enough already; dimming
+	# it further every time a cumulus drifts past the moon reads as a bug, not weather.
+	# The storm front still matters, because that is a sealed ceiling.
+	var moon_up := smoothstep(-0.02, 0.16, moon_height)
+	# A thinner moon lights the ground less, but never to nothing: the floor keeps
+	# every night navigable.
+	var phase_light := lerpf(0.6, 1.0, clampf(phase_axis * 0.5 + 0.5, 0.0, 1.0))
+	var energy := MOON_LIGHT_ENERGY * night * moon_up * phase_light * lerpf(1.0, 0.35, murk)
+	moon_light.light_energy = energy
+	moon_light.shadow_enabled = energy > 0.035
+	# Soft, partial shadows: moonlight is a wide, low-contrast source.
+	moon_light.shadow_opacity = 0.55
+
+
+func _update_sun_glare(direct_light: float, overcast: float, sun_angular_radius: float) -> void:
 	if sun_glare_material == null or camera == null or sun == null:
 		return
 	var sun_direction := sun.global_transform.basis.z.normalized()
@@ -409,6 +575,12 @@ func _update_sun_glare(direct_light: float, overcast: float) -> void:
 	sun_glare_visibility = lerpf(sun_glare_visibility, target_visibility, 0.14)
 	sun_glare_material.set_shader_parameter("u_sun_screen_pos", uv)
 	sun_glare_material.set_shader_parameter("u_aspect", viewport_size.x / viewport_size.y)
+	# Project the disc's angular radius into the same aspect-corrected screen units the
+	# glare works in (1.0 == viewport height), so the cut-out follows the sun as it
+	# swells at the horizon and as the camera changes its field of view.
+	var half_fov := deg_to_rad(camera.fov) * 0.5
+	var disc_radius := tan(sun_angular_radius) / maxf(2.0 * tan(half_fov), 0.0001)
+	sun_glare_material.set_shader_parameter("u_disc_radius", clampf(disc_radius, 0.002, 0.5))
 	sun_glare_material.set_shader_parameter("u_sun_color", sun.light_color)
 	sun_glare_material.set_shader_parameter("u_intensity", sun_glare_visibility)
 

@@ -35,12 +35,43 @@ const SCENARIOS := [
 	{"name": "night_storm", "minutes": 60.0, "overcast": 0.6, "storm": 0.85, "rain": 0.4, "camera": &"ZenithCamera"},
 	{"name": "night_rain", "minutes": 1320.0, "overcast": 0.6, "storm": 1.0, "rain": 1.0},
 	{"name": "wind_aligned_layers", "minutes": 690.0, "overcast": 0.32, "rain": 0.0, "camera": &"ZenithCamera"},
+	# Sun and moon as subjects. TrackingCamera aims itself at the body being studied,
+	# so "the disc is in frame" holds at any time of day instead of depending on a
+	# hand-placed viewpoint that only happens to catch it.
+	{"name": "sun_noon", "minutes": 720.0, "overcast": 0.0, "rain": 0.0, "camera": &"TrackingCamera", "track": "sun"},
+	# 17:30, not 18:30: solar_height reaches zero at hour 18, so a "golden hour" past
+	# that point is simply after sunset with the disc already gone.
+	{"name": "sun_golden_hour", "minutes": 1050.0, "overcast": 0.08, "rain": 0.0, "camera": &"TrackingCamera", "track": "sun"},
+	# A moment the sun is genuinely covered. Occlusion depends on where the drifting
+	# cloud field happens to sit, so the day and minute here are not decorative: at a
+	# fixed noon the sun sits in the same gap of the noise field every time.
+	{"name": "sun_behind_cloud", "minutes": 485.0, "overcast": 0.62, "rain": 0.0, "camera": &"TrackingCamera", "track": "sun", "day": 2},
+	{"name": "sun_edge_of_cloud", "minutes": 500.0, "overcast": 0.62, "rain": 0.0, "camera": &"TrackingCamera", "track": "sun", "day": 2},
+	{"name": "sunrise_low", "minutes": 400.0, "overcast": 0.18, "rain": 0.0, "camera": &"TrackingCamera", "track": "sun"},
+	{"name": "moon_high", "minutes": 60.0, "overcast": 0.12, "rain": 0.0, "camera": &"TrackingCamera", "track": "moon"},
+	{"name": "moon_rising", "minutes": 1290.0, "overcast": 0.15, "rain": 0.0, "camera": &"TrackingCamera", "track": "moon"},
+	# Three nights spread across the synodic month, each at an hour when that night's
+	# moon is actually above the horizon, so the captures compare phases rather than
+	# an empty sky.
+	{"name": "moon_phase_full", "minutes": 60.0, "overcast": 0.1, "rain": 0.0, "camera": &"TrackingCamera", "track": "moon", "day": 0},
+	{"name": "moon_phase_gibbous", "minutes": 1320.0, "overcast": 0.1, "rain": 0.0, "camera": &"TrackingCamera", "track": "moon", "day": 11},
+	{"name": "moon_phase_half", "minutes": 60.0, "overcast": 0.1, "rain": 0.0, "camera": &"TrackingCamera", "track": "moon", "day": 15},
+	{"name": "moonlit_ground", "minutes": 90.0, "overcast": 0.25, "rain": 0.0, "camera": &"ContextCamera", "day": 0},
 ]
+
+const CAMERA_KEYS := [
+	&"ContextCamera", &"CloudCamera", &"ZenithCamera", &"HorizonCamera", &"TrackingCamera",
+]
+# Where the tracking camera parks the body it follows: a little above centre, the
+# way a landscape painter frames a sky.
+const TRACK_FRAMING_HEIGHT := 0.18
 
 @onready var context_camera: Camera3D = $CameraRig/ContextCamera
 @onready var cloud_camera: Camera3D = $CameraRig/CloudCamera
 @onready var zenith_camera: Camera3D = $CameraRig/ZenithCamera
 @onready var horizon_camera: Camera3D = $CameraRig/HorizonCamera
+@onready var tracking_camera: Camera3D = $CameraRig/TrackingCamera
+@onready var glare_rect: ColorRect = $SunGlareLayer/ColorRect
 @onready var sun: DirectionalLight3D = $Sun
 @onready var environment: Environment = $WorldEnvironment.environment
 @onready var status: Label = $Interface/Status
@@ -67,6 +98,9 @@ var weather_time_scale := 1.0
 var _capture_mode := false
 var _capture_index := 0
 var _frames_after_apply := 0
+var glare_material: ShaderMaterial
+# Which body the tracking camera frames: "" (free), "sun" or "moon".
+var track_body := ""
 
 
 func _ready() -> void:
@@ -109,13 +143,18 @@ func _build_weather_rig() -> void:
 	add_child(swarm)
 	fireflies.append(swarm)
 
+	# The production glare material, not null: passing null made the lab silently skip
+	# the entire screen-space glare path it is supposed to be validating.
+	glare_material = glare_rect.material as ShaderMaterial
+
 	controller = SkyAndWeatherControllerScene.instantiate() as SkyAndWeatherController
 	add_child(controller)
-	controller.setup(camera, sun, environment, sky_material, rain, fireflies, null)
+	controller.setup(camera, sun, environment, sky_material, rain, fireflies, glare_material)
 
 
 func _configure_cameras() -> void:
 	context_camera.look_at(Vector3(0.0, 1.4, -1.5))
+	tracking_camera.look_at(Vector3(0.0, 8.0, -9.0))
 	cloud_camera.look_at(Vector3(0.0, 8.0, -9.0))
 	zenith_camera.look_at(Vector3(0.0, 18.0, 0.0))
 	horizon_camera.look_at(Vector3(0.0, 1.5, -22.0))
@@ -131,7 +170,7 @@ func _select_camera(camera_name: StringName) -> void:
 	if rain != null:
 		rain.set_camera(camera)
 	if controller != null:
-		controller.setup(camera, sun, environment, sky_material, rain, fireflies, null)
+		controller.setup(camera, sun, environment, sky_material, rain, fireflies, glare_material)
 
 
 func _process(delta: float) -> void:
@@ -145,6 +184,7 @@ func _process(delta: float) -> void:
 	game_minutes = fposmod(weather_minutes, 1440.0)
 	_handle_input(delta)
 	_apply_state()
+	_aim_tracking_camera()
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
@@ -152,8 +192,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		return
 	if event.keycode >= KEY_F1 and event.keycode < KEY_F1 + SCENARIOS.size():
 		_apply_scenario(event.keycode - KEY_F1)
-	if event.keycode >= KEY_1 and event.keycode <= KEY_4:
-		_select_camera([&"ContextCamera", &"CloudCamera", &"ZenithCamera", &"HorizonCamera"][event.keycode - KEY_1])
+	if event.keycode >= KEY_1 and event.keycode < KEY_1 + CAMERA_KEYS.size():
+		_select_camera(CAMERA_KEYS[event.keycode - KEY_1])
 		_update_status()
 	if event.keycode == KEY_R:
 		rain_intensity = 1.0 - rain_intensity
@@ -203,15 +243,35 @@ func _apply_scenario(index: int) -> void:
 		return
 	var scenario: Dictionary = SCENARIOS[index]
 	game_minutes = scenario["minutes"]
-	weather_minutes = scenario["minutes"]
+	# The day index moves the moon along its synodic cycle, which is the only way to
+	# capture different phases: the phase is emergent geometry, not a parameter.
+	weather_minutes = float(scenario.get("day", 0)) * 1440.0 + scenario["minutes"]
 	overcast = scenario["overcast"]
 	storm_influence = scenario.get("storm", 0.0)
 	rain_intensity = scenario["rain"]
+	track_body = str(scenario.get("track", ""))
 	if scenario.has("camera"):
 		_select_camera(scenario["camera"])
 	else:
 		_select_camera(&"ContextCamera")
 	_update_status()
+
+
+func _aim_tracking_camera() -> void:
+	# Frames whichever body the scenario studies, using the very directions the sky
+	# was drawn from, so a "sun in frame" preset holds at every hour.
+	if track_body == "" or camera != tracking_camera or controller == null:
+		return
+	var direction := (
+		controller.current_moon_direction if track_body == "moon"
+		else controller.current_sun_direction
+	)
+	if direction.length_squared() < 0.001:
+		return
+	var target := tracking_camera.global_position + direction * 200.0
+	# Drop the aim point slightly so the body sits above centre rather than dead on it.
+	target.y -= 200.0 * TRACK_FRAMING_HEIGHT
+	tracking_camera.look_at(target, Vector3.UP)
 
 
 func _apply_state() -> void:
@@ -244,6 +304,7 @@ func _lab_wind() -> Vector2:
 func _process_capture() -> void:
 	_frames_after_apply += 1
 	_apply_state()
+	_aim_tracking_camera()
 	# Let the sky and GPU particles settle before every deterministic capture.
 	if _frames_after_apply < 24:
 		return
@@ -267,10 +328,30 @@ func _save_capture(name: String) -> void:
 	if result != OK:
 		push_error("Weather lab could not save %s (error %s)" % [path, result])
 		return
-	print("WEATHER_LAB_CAPTURE ", ProjectSettings.globalize_path(path))
+	# Sun visibility and key energy are printed alongside every capture: how the world
+	# lighting answers a cloud crossing the sun is a number, not something to squint at.
+	print("WEATHER_LAB_CAPTURE %s sun_visibility=%.2f key_energy=%.2f moon_light=%.3f" % [
+		ProjectSettings.globalize_path(path),
+		controller.current_sun_visibility,
+		sun.light_energy,
+		0.0 if controller.moon_light == null else controller.moon_light.light_energy,
+	])
 
 
 func _update_status() -> void:
 	var hour := int(game_minutes) / 60
 	var minute := int(game_minutes) % 60
-	status.text = "Weather lab · %s | %02d:%02d  sky x%.2f  clouds %.0f%%  front %.0f%%  rain %.0f%%\nF1–F19 presets • 1–4 cameras • Space pause • -/= speed • ←/→ time • ↑/↓ clouds • PgUp/PgDn front • R rain • C screenshot" % [camera.name, hour, minute, weather_time_scale, overcast * 100.0, storm_influence * 100.0, rain_intensity * 100.0]
+	var lunar_day := weather_minutes / 1440.0
+	status.text = "Weather lab · %s%s | day %.1f %02d:%02d  sky x%.2f  clouds %.0f%%  front %.0f%%  rain %.0f%%\nF1–F%d presets • 1–%d cameras • Space pause • -/= speed • ←/→ time • ↑/↓ clouds • PgUp/PgDn front • R rain • C screenshot" % [
+		camera.name,
+		"" if track_body == "" else " →" + track_body,
+		lunar_day,
+		hour,
+		minute,
+		weather_time_scale,
+		overcast * 100.0,
+		storm_influence * 100.0,
+		rain_intensity * 100.0,
+		SCENARIOS.size(),
+		CAMERA_KEYS.size(),
+	]
