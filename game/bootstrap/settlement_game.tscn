@@ -6,4 +6,4 @@
 [node name="SettlementPrototype" type="Node3D"]
 script = ExtResource("1_main")
 
-[node name="Terrain3dWorld" parent="." instance=ExtResource("2_terrain")]
+[node name="WorldTerritory" parent="." instance=ExtResource("2_terrain")]

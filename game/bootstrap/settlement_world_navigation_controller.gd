@@ -25,7 +25,7 @@ func create_world() -> void:
 
 
 func add_landscape_object(node: Node) -> void:
-	var territory := game.get_node_or_null("Terrain3dWorld") as TerritoryBase
+	var territory := game.get_node_or_null("WorldTerritory") as TerritoryBase
 	if territory != null:
 		territory.add_landscape_object(node)
 	else:
