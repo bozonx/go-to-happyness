@@ -23,14 +23,26 @@ const UNDO_LIMIT := 40
 ## Minimum click radius, so thin objects (a flag pole) stay pickable.
 const MIN_PICK_RADIUS := 0.35
 
+## Ghost feedback colours (design §6.2).
+const GHOST_COLOR_VALID := Color(0.45, 0.85, 1.0, 0.4)
+const GHOST_COLOR_INTERSECTION := Color(1.0, 0.3, 0.2, 0.5)
+const GHOST_COLOR_OUT_OF_BOUNDS := Color(1.0, 0.85, 0.2, 0.5)
+
+enum GhostState { VALID, INTERSECTION, OUT_OF_BOUNDS }
+
 var current_group: StringName = &""  ## empty = all groups
 var current_category: StringName = &"camping"
 var current_asset_id: StringName = &""
 var current_snap_step: float = 0.5
-var current_anchor: Vector2i = Vector2i.ZERO
 var current_tool: int = Tool.PLACE
 var current_yaw_deg: float = 0.0
 var selected_object_id: String = ""
+
+## Cycle-selection state: when the cursor is over overlapping objects,
+## repeated clicks cycle through them instead of always picking the nearest.
+var _last_pick_pos: Vector3 = Vector3(INF, INF, INF)
+var _pick_cycle_index: int = 0
+var _last_picked_ids: Array[String] = []
 
 var _editor: Node = null
 var _nodes: Dictionary = {}  ## object id (String) -> Node3D
@@ -54,7 +66,6 @@ var _category_option: OptionButton = null
 var _asset_container: VBoxContainer = null
 var _asset_hint: Label = null
 var _snap_option: OptionButton = null
-var _anchor_pad: GridContainer = null
 var _inspector_title: Label = null
 var _object_list: ItemList = null
 var _controls_vbox: VBoxContainer = null
@@ -69,7 +80,6 @@ var _rot_label: Label = null
 var _layer_label: Label = null
 var _tool_buttons: Dictionary = {}
 var _asset_buttons: Dictionary = {}
-var _anchor_buttons: Dictionary = {}
 
 
 # ---------------------------------------------------------------------------
@@ -88,7 +98,6 @@ func setup(editor: Node) -> void:
 	_asset_container = editor.get_node("%DecorAssetContainer")
 	_asset_hint = editor.get_node("%DecorAssetHint")
 	_snap_option = editor.get_node("%DecorSnapOption")
-	_anchor_pad = editor.get_node("%DecorAnchorPad")
 	_inspector_title = editor.get_node("%DecorInspectorTitle")
 	_object_list = editor.get_node("%DecorObjectList")
 	_controls_vbox = editor.get_node("%DecorControlsVBox")
@@ -117,7 +126,6 @@ func setup(editor: Node) -> void:
 
 	_build_group_options()
 	_build_snap_options()
-	_build_anchor_pad()
 
 	_category_option.item_selected.connect(_on_category_selected)
 	_group_option.item_selected.connect(_on_group_selected)
@@ -154,43 +162,11 @@ func _build_snap_options() -> void:
 		{"label": "1.0 м — центр блока", "step": 1.0},
 		{"label": "0.5 м — полублок", "step": 0.5},
 		{"label": "0.25 м — четверть", "step": 0.25},
-		{"label": "Свободно", "step": 0.0},
 	]:
 		_snap_option.add_item(String(entry["label"]))
 		_snap_option.set_item_metadata(_snap_option.item_count - 1, float(entry["step"]))
 	_snap_option.select(1)
 	current_snap_step = 0.5
-
-
-## 3×3 in-cell anchor selector, matching the frame-mode anchor semantics: each
-## component is −1 / 0 / +1 in the cell's own coordinate frame (design §3.3).
-func _build_anchor_pad() -> void:
-	for child in _anchor_pad.get_children():
-		child.queue_free()
-	_anchor_buttons.clear()
-	for az in [-1, 0, 1]:
-		for ax in [-1, 0, 1]:
-			var anchor := Vector2i(ax, az)
-			var button := Button.new()
-			button.toggle_mode = true
-			button.custom_minimum_size = Vector2(28, 28)
-			button.text = "•" if anchor == Vector2i.ZERO else "◻"
-			button.tooltip_text = _anchor_tooltip(anchor)
-			button.button_pressed = anchor == current_anchor
-			button.pressed.connect(_select_anchor.bind(anchor))
-			_anchor_pad.add_child(button)
-			_anchor_buttons[anchor] = button
-
-
-func _anchor_tooltip(anchor: Vector2i) -> String:
-	if anchor == Vector2i.ZERO:
-		return "По центру ячейки"
-	var parts: Array[String] = []
-	if anchor.x != 0:
-		parts.append("к грани %sX" % ("+" if anchor.x > 0 else "−"))
-	if anchor.y != 0:
-		parts.append("к грани %sZ" % ("+" if anchor.y > 0 else "−"))
-	return "Прижать " + " и ".join(parts)
 
 
 # ---------------------------------------------------------------------------
@@ -320,40 +296,105 @@ func _set_tool(tool_id: int) -> void:
 
 ## Snap grid points are the *centres* of `step`-sized cells, so an object always
 ## lands centred in its snap cell (1.0 → block centres, 0.5 → half-block centres).
-## A non-zero in-cell anchor overrides the free grid and pins the object against
-## the chosen side of the containing 1×1 cell (design §3.3).
+## Free placement (step 0) is only allowed when the asset's snap_steps includes 0.
 func snapped_position(raw_hit: Vector3) -> Vector3:
 	var y := float(_editor.active_layer)
-	if current_anchor != Vector2i.ZERO:
-		var asset := FurnishingAssetCatalogScript.get_asset(current_asset_id)
-		var size := asset.footprint_m() if asset != null else Vector3.ONE
-		var cell_x := floorf(raw_hit.x) + 0.5
-		var cell_z := floorf(raw_hit.z) + 0.5
-		var inset_x := maxf(0.0, 0.5 - size.x * 0.5)
-		var inset_z := maxf(0.0, 0.5 - size.z * 0.5)
-		return Vector3(cell_x + float(current_anchor.x) * inset_x, y, cell_z + float(current_anchor.y) * inset_z)
-	if current_snap_step <= 0.001:
+	var asset := FurnishingAssetCatalogScript.get_asset(current_asset_id)
+	var step := current_snap_step
+	# If the asset restricts snap steps, clamp to the closest allowed one.
+	if asset != null and not asset.snap_steps.is_empty():
+		var best_step := asset.snap_steps[0]
+		var best_diff := absf(step - best_step)
+		for allowed in asset.snap_steps:
+			var diff := absf(step - allowed)
+			if diff < best_diff:
+				best_step = allowed
+				best_diff = diff
+		step = best_step
+	if step <= 0.001:
 		return Vector3(raw_hit.x, y, raw_hit.z)
-	var half := current_snap_step * 0.5
+	var half := step * 0.5
 	return Vector3(
-		snappedf(raw_hit.x - half, current_snap_step) + half,
+		snappedf(raw_hit.x - half, step) + half,
 		y,
-		snappedf(raw_hit.z - half, current_snap_step) + half)
+		snappedf(raw_hit.z - half, step) + half)
 
 
-## Object whose footprint contains `world_pos`, nearest first. Empty when none.
-func pick_object_at(world_pos: Vector3) -> String:
-	var best_id := ""
-	var best_distance := INF
+## Returns true when the position is inside the building footprint.
+func _is_in_bounds(pos: Vector3) -> bool:
+	if _editor == null or _editor.blueprint == null:
+		return true
+	var footprint: Vector2i = _editor.blueprint.footprint
+	return pos.x >= 0.0 and pos.x <= float(footprint.x) and pos.z >= 0.0 and pos.z <= float(footprint.y)
+
+
+## Returns true when the position overlaps an existing decor object.
+func _is_intersecting(pos: Vector3, exclude_id: String = "") -> bool:
+	var asset := FurnishingAssetCatalogScript.get_asset(current_asset_id)
+	var my_size := asset.footprint_m() if asset != null else Vector3.ONE
+	var my_radius := maxf(my_size.x, my_size.z) * 0.5
+	for record: DecorObjectRecordScript in _editor.blueprint.objects:
+		if record.id == exclude_id:
+			continue
+		var other_asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
+		var other_size := other_asset.footprint_m() if other_asset != null else Vector3.ONE
+		var other_radius := maxf(other_size.x, other_size.z) * 0.5 * maxf(record.scale.x, record.scale.z)
+		var dist := Vector2(pos.x - record.pos.x, pos.z - record.pos.z).length()
+		if dist < my_radius + other_radius:
+			return true
+	return false
+
+
+## Computes the current ghost state for placement feedback.
+func _compute_ghost_state(pos: Vector3) -> int:
+	if not _is_in_bounds(pos):
+		return GhostState.OUT_OF_BOUNDS
+	if _is_intersecting(pos):
+		return GhostState.INTERSECTION
+	return GhostState.VALID
+
+
+## Objects whose footprint contains `world_pos`, sorted nearest first.
+## Returns all candidates so the caller can cycle through overlapping ones.
+func _pick_objects_at(world_pos: Vector3) -> Array[String]:
+	var candidates: Array[Dictionary] = []
 	for record: DecorObjectRecordScript in _editor.blueprint.objects:
 		var asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
 		var size := asset.footprint_m() if asset != null else Vector3.ONE
 		var radius := maxf(MIN_PICK_RADIUS, maxf(size.x, size.z) * 0.5 * maxf(record.scale.x, record.scale.z))
 		var distance := Vector2(record.pos.x - world_pos.x, record.pos.z - world_pos.z).length()
-		if distance <= radius and distance < best_distance:
-			best_distance = distance
-			best_id = record.id
-	return best_id
+		if distance <= radius:
+			candidates.append({"id": record.id, "dist": distance})
+	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return float(a["dist"]) < float(b["dist"]))
+	var result: Array[String] = []
+	for c in candidates:
+		result.append(String(c["id"]))
+	return result
+
+
+## Picks one object at `world_pos`. On repeated clicks at the same position,
+## cycles through overlapping candidates instead of always returning the nearest.
+func pick_object_at(world_pos: Vector3) -> String:
+	var ids := _pick_objects_at(world_pos)
+	if ids.is_empty():
+		_last_pick_pos = Vector3(INF, INF, INF)
+		_pick_cycle_index = 0
+		_last_picked_ids = []
+		return ""
+	# If the cursor moved significantly, reset cycle state.
+	if world_pos.distance_to(_last_pick_pos) > MIN_PICK_RADIUS:
+		_last_pick_pos = world_pos
+		_pick_cycle_index = 0
+		_last_picked_ids = ids
+	elif ids != _last_picked_ids:
+		# Object list changed (e.g. after placement); reset.
+		_last_pick_pos = world_pos
+		_pick_cycle_index = 0
+		_last_picked_ids = ids
+	var idx := _pick_cycle_index % ids.size()
+	_pick_cycle_index += 1
+	return ids[idx]
 
 
 func find_record(object_id: String) -> DecorObjectRecordScript:
@@ -417,6 +458,17 @@ func duplicate_selection() -> void:
 	# the original.
 	var offset := maxf(current_snap_step, 0.5)
 	copy.pos += Vector3(offset, 0.0, offset)
+	# Clamp to building bounds.
+	if not _is_in_bounds(copy.pos):
+		# Try offsetting in other directions.
+		copy.pos = record.pos + Vector3(-offset, 0.0, offset)
+		if not _is_in_bounds(copy.pos):
+			copy.pos = record.pos + Vector3(offset, 0.0, -offset)
+			if not _is_in_bounds(copy.pos):
+				copy.pos = record.pos + Vector3(-offset, 0.0, -offset)
+				if not _is_in_bounds(copy.pos):
+					_editor.set_status("Невозможно дублировать: нет места в границах здания.")
+					return
 	_editor.blueprint.objects.append(copy)
 	_spawn_node(copy)
 	_editor.mark_dirty()
@@ -426,6 +478,12 @@ func duplicate_selection() -> void:
 
 
 func rotate_selection(delta_deg: float) -> void:
+	# Use the asset's quick_rotation_step if available.
+	var asset := FurnishingAssetCatalogScript.get_asset(current_asset_id)
+	var step := asset.quick_rotation_step if asset != null else ROTATION_STEP_DEG
+	if step <= 0.0:
+		step = ROTATION_STEP_DEG
+	# Only Y-axis rotation is supported in phase 1.
 	current_yaw_deg = fposmod(current_yaw_deg + delta_deg, 360.0)
 	_update_rotation_label()
 	var record := find_record(selected_object_id)
@@ -573,13 +631,28 @@ func refresh_ghost() -> void:
 		add_child(_ghost)
 		_apply_preview_look(_ghost)
 	_ghost.visible = true
-	_ghost.position = snapped_position(_editor.cursor_hit_pos)
+	var ghost_pos := snapped_position(_editor.cursor_hit_pos)
+	_ghost.position = ghost_pos
 	_ghost.rotation_degrees = Vector3(0.0, current_yaw_deg, 0.0)
+	# Update ghost colour based on placement state.
+	var state := _compute_ghost_state(ghost_pos)
+	_update_ghost_color(state)
 
 
 func _hide_ghost() -> void:
 	if _ghost != null:
 		_ghost.visible = false
+
+
+## Updates the ghost material colour based on placement state (design §6.2).
+func _update_ghost_color(state: int) -> void:
+	var color: Color = GHOST_COLOR_VALID
+	match state:
+		GhostState.INTERSECTION:
+			color = GHOST_COLOR_INTERSECTION
+		GhostState.OUT_OF_BOUNDS:
+			color = GHOST_COLOR_OUT_OF_BOUNDS
+	_get_ghost_material().albedo_color = color
 
 
 ## Makes an instance read as a preview rather than a placed object: translucent
@@ -750,13 +823,6 @@ func _on_snap_selected(index: int) -> void:
 	refresh_ghost()
 
 
-func _select_anchor(anchor: Vector2i) -> void:
-	current_anchor = anchor
-	for key in _anchor_buttons.keys():
-		(_anchor_buttons[key] as Button).button_pressed = key == anchor
-	refresh_ghost()
-
-
 # ---------------------------------------------------------------------------
 # Inspector
 # ---------------------------------------------------------------------------
@@ -899,7 +965,33 @@ func _on_transform_spin_changed(_value: float) -> void:
 		return
 	record.pos = Vector3(_pos_x_spin.value, _pos_y_spin.value, _pos_z_spin.value)
 	record.rot.y = _yaw_spin.value
-	record.scale = Vector3.ONE * _scale_spin.value
+	# Clamp scale by asset policy.
+	var asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
+	var scale_val := _scale_spin.value
+	if asset != null:
+		if not asset.is_scale_allowed(scale_val):
+			# Snap to the closest allowed value.
+			match asset.scale_mode:
+				FurnishingAssetDefScript.SCALE_LOCKED:
+					scale_val = 1.0
+				FurnishingAssetDefScript.SCALE_UNIFORM_STEPS:
+					var best := asset.allowed_scales[0] if not asset.allowed_scales.is_empty() else 1.0
+					var best_diff := absf(scale_val - best)
+					for allowed in asset.allowed_scales:
+						var diff := absf(scale_val - allowed)
+						if diff < best_diff:
+							best = allowed
+							best_diff = diff
+					scale_val = best
+				FurnishingAssetDefScript.SCALE_FREE_UNIFORM:
+					if asset.allowed_scales.size() >= 2:
+						scale_val = clampf(scale_val, asset.allowed_scales[0], asset.allowed_scales[-1])
+					else:
+						scale_val = maxf(0.001, scale_val)
+			_syncing_ui = true
+			_scale_spin.value = scale_val
+			_syncing_ui = false
+	record.scale = Vector3.ONE * scale_val
 	_apply_transform_to_node(record)
 	_update_selection_marker()
 	_editor.mark_dirty()

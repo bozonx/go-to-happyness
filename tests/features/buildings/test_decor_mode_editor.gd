@@ -35,18 +35,11 @@ func _run() -> void:
 
 	# Snapping: 0.5 step lands on half-block centres, not on the origin.
 	decor.current_snap_step = 0.5
-	decor.current_anchor = Vector2i.ZERO
 	var snapped: Vector3 = decor.snapped_position(Vector3(3.13, 0.0, -1.4))
 	assert(snapped.is_equal_approx(Vector3(3.25, 0.0, -1.25)), "snap 0.5 -> %s" % snapped)
 	decor.current_snap_step = 1.0
 	snapped = decor.snapped_position(Vector3(3.13, 0.0, -1.4))
 	assert(snapped.is_equal_approx(Vector3(3.5, 0.0, -1.5)), "snap 1.0 -> %s" % snapped)
-	# Anchor pins to the containing cell's edge.
-	decor.current_anchor = Vector2i(1, 0)
-	decor.current_asset_id = &"flag"
-	snapped = decor.snapped_position(Vector3(3.13, 0.0, -1.4))
-	assert(is_equal_approx(snapped.x, 3.55), "anchor +X -> %s" % snapped)
-	decor.current_anchor = Vector2i.ZERO
 	print("  snapping ok")
 
 	# Place two objects through the real click path.
