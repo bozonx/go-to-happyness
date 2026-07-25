@@ -9,14 +9,26 @@ extends RefCounted
 ## sees — which is what makes a hole (§6) disappear from collision automatically
 ## instead of leaving an invisible wall in a tunnel mouth.
 ##
-## Each column is drawn as its own flat-topped quad plus vertical faces down to
-## the lower neighbour. Cracks are impossible because a shared edge is described
-## by the same two corner heights from both sides. Colour comes from per-vertex
-## colour for now; the splatmap / triplanar shader of §7 replaces it later without
-## changing this geometry.
+## Three things keep the cost down, in the order §11 asks for them:
+##
+## * every corner height in the chunk and its one-cell border is computed once
+##   into a local cache, instead of once per cell and again per neighbouring wall;
+## * flat tops of equal height and material are merged greedily, so a flat
+##   16×16 chunk is two triangles rather than 512;
+## * the mesh is indexed, so a quad costs four vertices instead of six.
+##
+## Colour comes from per-vertex colour for now; the splatmap / triplanar shader of
+## §7 replaces it later without changing this geometry.
 
 ## Depth of the wall drawn where the ground ends: board border and hole edges.
 const SKIRT_STEPS := 4.0
+
+## Detail levels (§11). Distant chunks drop their side faces: the camera is
+## isometric and the faces are not visible from there anyway.
+enum Lod {
+	FULL,
+	TOP_ONLY,
+}
 
 const MATERIAL_COLORS: Dictionary = {
 	TerrainMaterialCatalog.GRASS: Color(0.32, 0.49, 0.24),
@@ -28,6 +40,10 @@ const MATERIAL_COLORS: Dictionary = {
 ## Vertical faces are auto-rock regardless of the column's surface material (§7.2).
 const CLIFF_COLOR := Color(0.38, 0.36, 0.33)
 const CLIFF_SHADE_STEEP := 0.82
+
+## Cached cells: the chunk plus a one-cell border, so a wall can read its
+## neighbour's corners without asking the grid again.
+const PADDED_CELLS := TerrainGrid.CHUNK_CELLS + 2
 
 ## Edges walked clockwise around a cell, so wall winding is uniform. Each entry is
 ## the rising direction plus the two cell corners forming that edge, in clockwise
@@ -49,30 +65,42 @@ const NEIGHBOUR_EDGE_CORNERS: Dictionary = {
 var _vertices := PackedVector3Array()
 var _normals := PackedVector3Array()
 var _colors := PackedColorArray()
+var _indices := PackedInt32Array()
+
 var _grid: TerrainGrid = null
+var _origin := Vector2i.ZERO
+## Padded caches, indexed by `_padded_index`.
+var _corners := PackedFloat32Array()
+var _heights := PackedInt32Array()
+var _materials := PackedInt32Array()
+var _solid := PackedByteArray()
+var _flat := PackedByteArray()
+## Cells already merged into an emitted top quad.
+var _merged := PackedByteArray()
 
 
 ## Builds one chunk. Returns `{ "mesh": ArrayMesh, "faces": PackedVector3Array }`;
 ## `mesh` is null for a chunk that produced no geometry (fully carved out, or
 ## entirely outside the board).
-static func build_chunk(grid: TerrainGrid, chunk: Vector2i) -> Dictionary:
+static func build_chunk(grid: TerrainGrid, chunk: Vector2i, lod: int = Lod.FULL) -> Dictionary:
 	var mesher := TerrainChunkMesher.new()
-	return mesher._build(grid, chunk)
+	return mesher._build(grid, chunk, lod)
 
 
-func _build(grid: TerrainGrid, chunk: Vector2i) -> Dictionary:
+func _build(grid: TerrainGrid, chunk: Vector2i, lod: int) -> Dictionary:
 	_grid = grid
+	_origin = grid.chunk_origin_cell(chunk)
 	_vertices = PackedVector3Array()
 	_normals = PackedVector3Array()
 	_colors = PackedColorArray()
-	var origin := grid.chunk_origin_cell(chunk)
-	for offset_z in TerrainGrid.CHUNK_CELLS:
-		for offset_x in TerrainGrid.CHUNK_CELLS:
-			var cell := origin + Vector2i(offset_x, offset_z)
-			if not grid.is_inside(cell) or grid.is_hole(cell):
-				continue
-			_add_cell(cell)
-	if _vertices.is_empty():
+	_indices = PackedInt32Array()
+	_cache_region()
+
+	_add_tops()
+	if lod == Lod.FULL:
+		_add_walls()
+
+	if _indices.is_empty():
 		return {"mesh": null, "faces": PackedVector3Array()}
 
 	var arrays: Array = []
@@ -80,62 +108,172 @@ func _build(grid: TerrainGrid, chunk: Vector2i) -> Dictionary:
 	arrays[Mesh.ARRAY_VERTEX] = _vertices
 	arrays[Mesh.ARRAY_NORMAL] = _normals
 	arrays[Mesh.ARRAY_COLOR] = _colors
+	arrays[Mesh.ARRAY_INDEX] = _indices
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	return {"mesh": mesh, "faces": _vertices}
+	return {"mesh": mesh, "faces": _collision_faces()}
 
 
-func _add_cell(cell: Vector2i) -> void:
-	var corners := _grid.corner_heights(cell)
-	var color: Color = MATERIAL_COLORS.get(_grid.material_of(cell), Color.MAGENTA)
-	_add_top(cell, corners, color)
-	for edge: Dictionary in EDGES:
-		_add_wall(cell, corners, int(edge["dir"]), int(edge["near"]), int(edge["far"]))
+# --- Region cache -----------------------------------------------------------
+
+func _cache_region() -> void:
+	var count := PADDED_CELLS * PADDED_CELLS
+	_corners = PackedFloat32Array()
+	_corners.resize(count * 4)
+	_heights = PackedInt32Array()
+	_heights.resize(count)
+	_materials = PackedInt32Array()
+	_materials.resize(count)
+	_solid = PackedByteArray()
+	_solid.resize(count)
+	_flat = PackedByteArray()
+	_flat.resize(count)
+	_merged = PackedByteArray()
+	_merged.resize(count)
+
+	var scratch := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
+	for padded_z in PADDED_CELLS:
+		for padded_x in PADDED_CELLS:
+			var cell := _origin + Vector2i(padded_x - 1, padded_z - 1)
+			var index := padded_z * PADDED_CELLS + padded_x
+			var solid := _grid.is_inside(cell) and not _grid.is_hole(cell)
+			_solid[index] = 1 if solid else 0
+			if not solid:
+				continue
+			_grid.corner_heights_into(cell, scratch)
+			var corner_base := index * 4
+			for corner in 4:
+				_corners[corner_base + corner] = scratch[corner]
+			_heights[index] = _grid.height_of(cell)
+			_materials[index] = _grid.material_index_at(cell)
+			_flat[index] = 1 if _grid.slope_class_at(cell) == SlopeCatalog.CLASS_FLAT else 0
 
 
-func _add_top(cell: Vector2i, corners: PackedFloat32Array, color: Color) -> void:
-	var nw := _corner_position(cell, TerrainGrid.CORNER_NW, corners)
-	var ne := _corner_position(cell, TerrainGrid.CORNER_NE, corners)
-	var se := _corner_position(cell, TerrainGrid.CORNER_SE, corners)
-	var sw := _corner_position(cell, TerrainGrid.CORNER_SW, corners)
+func _padded_index(local_x: int, local_z: int) -> int:
+	return (local_z + 1) * PADDED_CELLS + (local_x + 1)
+
+
+func _corner_of(index: int, corner: int) -> float:
+	return _corners[index * 4 + corner]
+
+
+# --- Tops -------------------------------------------------------------------
+
+## Greedy merge over flat columns of equal height and material; ramps keep their
+## own quad because their four corners differ.
+func _add_tops() -> void:
+	for local_z in TerrainGrid.CHUNK_CELLS:
+		for local_x in TerrainGrid.CHUNK_CELLS:
+			var index := _padded_index(local_x, local_z)
+			if _solid[index] == 0 or _merged[index] == 1:
+				continue
+			if _flat[index] == 0:
+				_add_ramp_top(local_x, local_z, index)
+				continue
+			var width := _greedy_width(local_x, local_z, index)
+			var depth := _greedy_depth(local_x, local_z, index, width)
+			for offset_z in depth:
+				for offset_x in width:
+					_merged[_padded_index(local_x + offset_x, local_z + offset_z)] = 1
+			_add_flat_top(local_x, local_z, width, depth, index)
+
+
+func _greedy_width(local_x: int, local_z: int, index: int) -> int:
+	var width := 1
+	while local_x + width < TerrainGrid.CHUNK_CELLS and _matches(_padded_index(local_x + width, local_z), index):
+		width += 1
+	return width
+
+
+func _greedy_depth(local_x: int, local_z: int, index: int, width: int) -> int:
+	var depth := 1
+	while local_z + depth < TerrainGrid.CHUNK_CELLS:
+		for offset_x in width:
+			if not _matches(_padded_index(local_x + offset_x, local_z + depth), index):
+				return depth
+		depth += 1
+	return depth
+
+
+func _matches(candidate: int, reference: int) -> bool:
+	return (
+		_solid[candidate] == 1 and _merged[candidate] == 0 and _flat[candidate] == 1
+		and _heights[candidate] == _heights[reference] and _materials[candidate] == _materials[reference]
+	)
+
+
+func _add_flat_top(local_x: int, local_z: int, width: int, depth: int, index: int) -> void:
+	var cell_size := _grid.cell_size
+	var west := float(_origin.x + local_x) * cell_size
+	var north := float(_origin.y + local_z) * cell_size
+	var east := west + float(width) * cell_size
+	var south := north + float(depth) * cell_size
+	var height := float(_heights[index]) * TerrainGrid.HEIGHT_STEP
+	var color: Color = MATERIAL_COLORS.get(TerrainMaterialCatalog.id_of_index(_materials[index]), Color.MAGENTA)
+	_add_quad(
+		Vector3(west, height, north), Vector3(east, height, north),
+		Vector3(east, height, south), Vector3(west, height, south),
+		Vector3.UP, color,
+	)
+
+
+func _add_ramp_top(local_x: int, local_z: int, index: int) -> void:
+	var cell := _origin + Vector2i(local_x, local_z)
+	var nw := _corner_position(cell, TerrainGrid.CORNER_NW, index)
+	var ne := _corner_position(cell, TerrainGrid.CORNER_NE, index)
+	var se := _corner_position(cell, TerrainGrid.CORNER_SE, index)
+	var sw := _corner_position(cell, TerrainGrid.CORNER_SW, index)
 	# A ramp quad is planar, so one normal per cell describes it exactly.
 	var normal := (ne - nw).cross(sw - nw).normalized()
 	if normal.y < 0.0:
 		normal = -normal
-	_add_triangle(nw, ne, se, normal, color)
-	_add_triangle(nw, se, sw, normal, color)
+	var color: Color = MATERIAL_COLORS.get(TerrainMaterialCatalog.id_of_index(_materials[index]), Color.MAGENTA)
+	_add_quad(nw, ne, se, sw, normal, color)
+
+
+# --- Walls ------------------------------------------------------------------
+
+func _add_walls() -> void:
+	for local_z in TerrainGrid.CHUNK_CELLS:
+		for local_x in TerrainGrid.CHUNK_CELLS:
+			var index := _padded_index(local_x, local_z)
+			if _solid[index] == 0:
+				continue
+			for edge: Dictionary in EDGES:
+				_add_wall(local_x, local_z, index, int(edge["dir"]), int(edge["near"]), int(edge["far"]))
 
 
 ## Vertical face between this cell's edge and the lower ground beyond it. Missing
 ## ground — board border or a carved hole — falls away by a fixed skirt instead of
 ## leaving an open silhouette.
-func _add_wall(cell: Vector2i, corners: PackedFloat32Array, direction: int, near_corner: int, far_corner: int) -> void:
-	var neighbour := cell + SlopeCatalog.direction_offset(direction)
-	var near_top := corners[near_corner]
-	var far_top := corners[far_corner]
+func _add_wall(local_x: int, local_z: int, index: int, direction: int, near_corner: int, far_corner: int) -> void:
+	var offset := SlopeCatalog.direction_offset(direction)
+	var neighbour_index := _padded_index(local_x + offset.x, local_z + offset.y)
+	var near_top := _corner_of(index, near_corner)
+	var far_top := _corner_of(index, far_corner)
 	var near_bottom := near_top - SKIRT_STEPS
 	var far_bottom := far_top - SKIRT_STEPS
-	if _grid.is_inside(neighbour) and not _grid.is_hole(neighbour):
-		var neighbour_corners := _grid.corner_heights(neighbour)
+	if _solid[neighbour_index] == 1:
 		var mapping: Array = NEIGHBOUR_EDGE_CORNERS[direction]
-		near_bottom = minf(near_top, neighbour_corners[int(mapping[0])])
-		far_bottom = minf(far_top, neighbour_corners[int(mapping[1])])
+		near_bottom = minf(near_top, _corner_of(neighbour_index, int(mapping[0])))
+		far_bottom = minf(far_top, _corner_of(neighbour_index, int(mapping[1])))
 	if is_equal_approx(near_top, near_bottom) and is_equal_approx(far_top, far_bottom):
 		return
 
-	var near_top_position := _corner_position(cell, near_corner, corners)
-	var far_top_position := _corner_position(cell, far_corner, corners)
+	var cell := _origin + Vector2i(local_x, local_z)
+	var near_top_position := _corner_position(cell, near_corner, index)
+	var far_top_position := _corner_position(cell, far_corner, index)
 	var near_bottom_position := Vector3(near_top_position.x, near_bottom * TerrainGrid.HEIGHT_STEP, near_top_position.z)
 	var far_bottom_position := Vector3(far_top_position.x, far_bottom * TerrainGrid.HEIGHT_STEP, far_top_position.z)
-	var offset := SlopeCatalog.direction_offset(direction)
 	var normal := Vector3(float(offset.x), 0.0, float(offset.y))
 	var color := CLIFF_COLOR * CLIFF_SHADE_STEEP
 	color.a = 1.0
-	_add_triangle(far_top_position, near_top_position, near_bottom_position, normal, color)
-	_add_triangle(far_top_position, near_bottom_position, far_bottom_position, normal, color)
+	_add_quad(far_top_position, near_top_position, near_bottom_position, far_bottom_position, normal, color)
 
 
-func _corner_position(cell: Vector2i, corner: int, corners: PackedFloat32Array) -> Vector3:
+# --- Emission ---------------------------------------------------------------
+
+func _corner_position(cell: Vector2i, corner: int, index: int) -> Vector3:
 	var cell_size := _grid.cell_size
 	var x := float(cell.x) * cell_size
 	var z := float(cell.y) * cell_size
@@ -147,13 +285,31 @@ func _corner_position(cell: Vector2i, corner: int, corners: PackedFloat32Array) 
 			z += cell_size
 		TerrainGrid.CORNER_SW:
 			z += cell_size
-	return Vector3(x, corners[corner] * TerrainGrid.HEIGHT_STEP, z)
+	return Vector3(x, _corner_of(index, corner) * TerrainGrid.HEIGHT_STEP, z)
 
 
-func _add_triangle(a: Vector3, b: Vector3, c: Vector3, normal: Vector3, color: Color) -> void:
+## One quad as two triangles sharing an edge: a, b, c and a, c, d.
+func _add_quad(a: Vector3, b: Vector3, c: Vector3, d: Vector3, normal: Vector3, color: Color) -> void:
+	var base := _vertices.size()
 	_vertices.append(a)
 	_vertices.append(b)
 	_vertices.append(c)
-	for _index in 3:
+	_vertices.append(d)
+	for _index in 4:
 		_normals.append(normal)
 		_colors.append(color)
+	_indices.append(base)
+	_indices.append(base + 1)
+	_indices.append(base + 2)
+	_indices.append(base)
+	_indices.append(base + 2)
+	_indices.append(base + 3)
+
+
+## Collision wants the flat triangle soup, not the indexed mesh.
+func _collision_faces() -> PackedVector3Array:
+	var faces := PackedVector3Array()
+	faces.resize(_indices.size())
+	for position in _indices.size():
+		faces[position] = _vertices[_indices[position]]
+	return faces

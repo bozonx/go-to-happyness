@@ -4,10 +4,11 @@ extends RefCounted
 ## The settlement's discrete elevation grid (design_docs/core/grid_terrain_system.md §2).
 ##
 ## Stores exactly four things per column: integer height in Δh steps, surface
-## material, slope descriptor (catalog id + direction + index inside a multi-cell
-## ramp) and flags. Everything fractional — corner heights, standing height,
-## slope classes of faces — is DERIVED here and lives only in the generated mesh.
-## That invariant is what keeps mesh, navigation and saves from drifting apart.
+## material, slope descriptor (catalog class + direction + index inside a
+## multi-cell ramp) and flags. Everything fractional — corner heights, standing
+## height, slope classes of faces — is DERIVED here and lives only in the
+## generated mesh. That invariant is what keeps mesh, navigation and saves from
+## drifting apart.
 ##
 ## Cell coordinates are centred on the world origin like `NavGrid`: for a board of
 ## N cells they run from -N/2 to N/2-1, and cell (x, z) covers world
@@ -17,6 +18,11 @@ extends RefCounted
 ## still first-class (see `chunk_of` / `take_dirty_chunks`) because meshing and
 ## the save format (§12) are chunked; splitting the backing storage per chunk is a
 ## save-format optimisation and can be done without touching this API.
+##
+## The read API comes in two flavours: `*_of` returns catalog `StringName`s for
+## tools and tests, `*_class_at` / `*_index_at` returns the stored integer for the
+## mesher and the cascade, which run over every cell of a chunk and must not pay
+## for a catalog lookup per query.
 
 ## Vertical step in metres. All stored heights are integer multiples of it.
 const HEIGHT_STEP := 0.5
@@ -104,16 +110,24 @@ func height_of(cell: Vector2i) -> int:
 	return _heights[_index_of(cell)]
 
 
-func material_of(cell: Vector2i) -> StringName:
+func material_index_at(cell: Vector2i) -> int:
 	if not is_inside(cell):
-		return TerrainMaterialCatalog.DEFAULT_MATERIAL
-	return TerrainMaterialCatalog.id_of_index(_materials[_index_of(cell)])
+		return TerrainMaterialCatalog.DEFAULT_INDEX
+	return int(_materials[_index_of(cell)])
+
+
+func material_of(cell: Vector2i) -> StringName:
+	return TerrainMaterialCatalog.id_of_index(material_index_at(cell))
+
+
+func slope_class_at(cell: Vector2i) -> int:
+	if not is_inside(cell):
+		return SlopeCatalog.CLASS_FLAT
+	return int(_slope_classes[_index_of(cell)])
 
 
 func slope_of(cell: Vector2i) -> StringName:
-	if not is_inside(cell):
-		return SlopeCatalog.FLAT
-	return SlopeCatalog.id_of_class(_slope_classes[_index_of(cell)])
+	return SlopeCatalog.id_of_class(slope_class_at(cell))
 
 
 func slope_direction_of(cell: Vector2i) -> int:
@@ -143,7 +157,7 @@ func is_anchor(cell: Vector2i) -> bool:
 
 
 func is_ramp_cell(cell: Vector2i) -> bool:
-	return SlopeCatalog.is_ramp(slope_of(cell))
+	return SlopeCatalog.is_ramp_class(slope_class_at(cell))
 
 
 func cell_at(cell: Vector2i) -> TerrainCell:
@@ -161,39 +175,43 @@ func cell_at(cell: Vector2i) -> TerrainCell:
 
 ## Sets a column height. Returns false (and changes nothing) when the target is
 ## outside the board or outside the legal height range — §2.2 forbids silent
-## clamping. Any ramp the cell belonged to is dissolved first: a ramp is a single
-## object, so it cannot survive one of its cells moving.
+## clamping. Ramps invalidated by the move are dissolved first: a ramp is a single
+## object spanning its run AND the column it climbs to, so it cannot survive any
+## of those columns moving.
 func set_height(cell: Vector2i, height: int) -> bool:
 	if not is_inside(cell):
 		return false
 	if height < MIN_HEIGHT or height > MAX_HEIGHT:
 		return false
-	dissolve_ramp_at(cell)
 	var index := _index_of(cell)
-	if _heights[index] == height:
+	if _heights[index] == height and not is_ramp_cell(cell):
 		return true
+	dissolve_ramps_touching(cell)
 	_heights[index] = height
 	_touch(cell)
 	return true
 
 
-## Writes a whole column state at once, including its slope descriptor. This is
-## the commit path for `TerrainDelta`: it does NOT dissolve ramps or run any
-## cascade, because the delta already describes the final state of every cell it
-## touches. Tools should use `set_height` / `place_ramp` instead.
-func set_cell_state(cell: Vector2i, height: int, slope_id: StringName, slope_dir: int, slope_index: int) -> bool:
+## Writes a whole column state at once: height, slope descriptor, material and
+## flags. This is the commit path for `TerrainDelta` — it does NOT dissolve ramps
+## or run any cascade, because the delta already describes the final state of
+## every cell it touches. Tools use `set_height` / `place_ramp` instead.
+func set_cell_state(cell: Vector2i, height: int, slope_class: int, slope_dir: int, slope_index: int, material_index: int, flags: int) -> bool:
 	if not is_inside(cell):
 		return false
 	if height < MIN_HEIGHT or height > MAX_HEIGHT:
 		return false
-	var slope_class := SlopeCatalog.slope_class_of(slope_id)
-	if slope_class < 0:
+	if not SlopeCatalog.is_valid_class(slope_class):
+		return false
+	if not TerrainMaterialCatalog.is_valid_index(material_index):
 		return false
 	var index := _index_of(cell)
 	_heights[index] = height
 	_slope_classes[index] = slope_class
 	_slope_dirs[index] = clampi(slope_dir, 0, 7)
-	_slope_indices[index] = maxi(slope_index, 0)
+	_slope_indices[index] = clampi(slope_index, 0, 255)
+	_materials[index] = material_index
+	_flags[index] = flags & 0xFF
 	_touch(cell)
 	return true
 
@@ -203,10 +221,11 @@ func offset_height(cell: Vector2i, delta: int) -> bool:
 
 
 func set_material(cell: Vector2i, material_id: StringName) -> bool:
-	if not is_inside(cell):
-		return false
-	var material_index := TerrainMaterialCatalog.index_of(material_id)
-	if material_index < 0:
+	return set_material_index(cell, TerrainMaterialCatalog.index_of(material_id))
+
+
+func set_material_index(cell: Vector2i, material_index: int) -> bool:
+	if not is_inside(cell) or not TerrainMaterialCatalog.is_valid_index(material_index):
 		return false
 	var index := _index_of(cell)
 	if _materials[index] == material_index:
@@ -228,9 +247,11 @@ func set_flag(cell: Vector2i, flag: int, enabled: bool) -> bool:
 	return true
 
 
+## Cutting a hole removes ground, so every ramp that leaned on this column — its
+## own and the ones climbing to it — goes with it.
 func set_hole(cell: Vector2i, enabled: bool) -> bool:
-	if enabled:
-		dissolve_ramp_at(cell)
+	if enabled and is_inside(cell):
+		dissolve_ramps_touching(cell)
 	return set_flag(cell, TerrainCell.FLAG_HOLE, enabled)
 
 
@@ -244,14 +265,26 @@ func set_anchor(cell: Vector2i, enabled: bool) -> bool:
 ## high end. Empty when the cell carries no ramp.
 func ramp_cells_at(cell: Vector2i) -> Array[Vector2i]:
 	var result: Array[Vector2i] = []
-	var slope_id := slope_of(cell)
-	if not SlopeCatalog.is_ramp(slope_id):
+	var slope_class := slope_class_at(cell)
+	if not SlopeCatalog.is_ramp_class(slope_class):
 		return result
 	var offset := SlopeCatalog.direction_offset(slope_direction_of(cell))
 	var start := cell - offset * slope_index_of(cell)
-	for step in SlopeCatalog.run_of(slope_id):
+	for step in SlopeCatalog.run_of_class(slope_class):
 		result.append(start + offset * step)
 	return result
+
+
+## The column a ramp climbs to. It is not part of the ramp's run, but the ramp is
+## only meaningful while that column sits exactly `rise` steps above the run — so
+## it is part of the ramp's identity for invalidation purposes.
+func ramp_top_anchor_at(cell: Vector2i) -> Vector2i:
+	var slope_class := slope_class_at(cell)
+	if not SlopeCatalog.is_ramp_class(slope_class):
+		return cell
+	var offset := SlopeCatalog.direction_offset(slope_direction_of(cell))
+	var start := cell - offset * slope_index_of(cell)
+	return start + offset * SlopeCatalog.run_of_class(slope_class)
 
 
 ## Places one whole ramp starting at `start_cell` and rising towards `direction`.
@@ -261,14 +294,15 @@ func ramp_cells_at(cell: Vector2i) -> Array[Vector2i]:
 ## `rise` steps higher. A partial ramp cannot exist in the data (§3.1), so this is
 ## all-or-nothing.
 func place_ramp(start_cell: Vector2i, slope_id: StringName, direction: int) -> bool:
-	if not SlopeCatalog.is_ramp(slope_id) or not SlopeCatalog.is_orthogonal(direction):
-		return false
-	if not can_place_ramp(start_cell, slope_id, direction):
+	return place_ramp_class(start_cell, SlopeCatalog.slope_class_of(slope_id), direction)
+
+
+func place_ramp_class(start_cell: Vector2i, slope_class: int, direction: int) -> bool:
+	if not can_place_ramp_class(start_cell, slope_class, direction):
 		return false
 	var offset := SlopeCatalog.direction_offset(direction)
-	var slope_class := SlopeCatalog.slope_class_of(slope_id)
 	var base_height := height_of(start_cell)
-	for step in SlopeCatalog.run_of(slope_id):
+	for step in SlopeCatalog.run_of_class(slope_class):
 		var cell := start_cell + offset * step
 		var index := _index_of(cell)
 		_heights[index] = base_height
@@ -280,13 +314,17 @@ func place_ramp(start_cell: Vector2i, slope_id: StringName, direction: int) -> b
 
 
 func can_place_ramp(start_cell: Vector2i, slope_id: StringName, direction: int) -> bool:
-	if not SlopeCatalog.is_ramp(slope_id) or not SlopeCatalog.is_orthogonal(direction):
+	return can_place_ramp_class(start_cell, SlopeCatalog.slope_class_of(slope_id), direction)
+
+
+func can_place_ramp_class(start_cell: Vector2i, slope_class: int, direction: int) -> bool:
+	if not SlopeCatalog.is_ramp_class(slope_class) or not SlopeCatalog.is_orthogonal(direction):
+		return false
+	if not is_inside(start_cell) or is_hole(start_cell):
 		return false
 	var offset := SlopeCatalog.direction_offset(direction)
-	var run := SlopeCatalog.run_of(slope_id)
-	var rise := SlopeCatalog.rise_of(slope_id)
-	if not is_inside(start_cell):
-		return false
+	var run := SlopeCatalog.run_of_class(slope_class)
+	var rise := SlopeCatalog.rise_of_class(slope_class)
 	var base_height := height_of(start_cell)
 	for step in run:
 		var cell := start_cell + offset * step
@@ -310,11 +348,61 @@ func dissolve_ramp_at(cell: Vector2i) -> bool:
 		return false
 	for ramp_cell: Vector2i in cells:
 		var index := _index_of(ramp_cell)
-		_slope_classes[index] = 0
+		_slope_classes[index] = SlopeCatalog.CLASS_FLAT
 		_slope_dirs[index] = 0
 		_slope_indices[index] = 0
 		_touch(ramp_cell)
 	return true
+
+
+## Every ramp that editing `cell` would break: the one it belongs to, plus the
+## ones that climb to it. A ramp whose top column moves would otherwise survive as
+## a slope leading into a wall — the invariant §3.1 has to hold after every write,
+## not only at placement time.
+func ramps_touching(cell: Vector2i) -> Array[Vector2i]:
+	var starts: Array[Vector2i] = []
+	if is_ramp_cell(cell):
+		starts.append(cell)
+	for direction: int in SlopeCatalog.ORTHOGONAL_DIRECTIONS:
+		var neighbour := cell + SlopeCatalog.direction_offset(direction)
+		if not is_ramp_cell(neighbour):
+			continue
+		if ramp_top_anchor_at(neighbour) == cell:
+			starts.append(neighbour)
+	return starts
+
+
+func dissolve_ramps_touching(cell: Vector2i) -> bool:
+	var dissolved := false
+	for ramp_cell: Vector2i in ramps_touching(cell):
+		dissolved = dissolve_ramp_at(ramp_cell) or dissolved
+	return dissolved
+
+
+## True when the ramp under `cell` still satisfies everything §3.1 demands of it.
+## Used by tests and by tools that want to assert the invariant rather than rely
+## on every write path remembering it.
+func is_ramp_valid_at(cell: Vector2i) -> bool:
+	var slope_class := slope_class_at(cell)
+	if not SlopeCatalog.is_ramp_class(slope_class):
+		return false
+	var cells := ramp_cells_at(cell)
+	var direction := slope_direction_of(cell)
+	if not SlopeCatalog.is_orthogonal(direction):
+		return false
+	var base_height := height_of(cells[0])
+	for step in cells.size():
+		var ramp_cell: Vector2i = cells[step]
+		if not is_inside(ramp_cell) or is_hole(ramp_cell):
+			return false
+		if slope_class_at(ramp_cell) != slope_class or slope_direction_of(ramp_cell) != direction:
+			return false
+		if slope_index_of(ramp_cell) != step or height_of(ramp_cell) != base_height:
+			return false
+	var top_cell := ramp_top_anchor_at(cell)
+	if not is_inside(top_cell) or is_hole(top_cell) or is_ramp_cell(top_cell):
+		return false
+	return height_of(top_cell) == base_height + SlopeCatalog.rise_of_class(slope_class)
 
 
 # --- Derived geometry -------------------------------------------------------
@@ -324,20 +412,43 @@ func dissolve_ramp_at(cell: Vector2i) -> bool:
 ## produced purely by unrolling the stored slope descriptor (§2.1, §3.3).
 func corner_heights(cell: Vector2i) -> PackedFloat32Array:
 	var result := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
+	corner_heights_into(cell, result)
+	return result
+
+
+## Same, writing into a caller-owned buffer of 4 floats. The mesher walks every
+## cell of a chunk and every one of their neighbours, so the allocation matters.
+func corner_heights_into(cell: Vector2i, result: PackedFloat32Array) -> void:
 	var base := float(height_of(cell))
-	var slope_id := slope_of(cell)
-	if not SlopeCatalog.is_ramp(slope_id):
-		result.fill(base)
-		return result
-	var run := SlopeCatalog.run_of(slope_id)
-	var rise := float(SlopeCatalog.rise_of(slope_id))
+	var slope_class := slope_class_at(cell)
+	if not SlopeCatalog.is_ramp_class(slope_class):
+		result[0] = base
+		result[1] = base
+		result[2] = base
+		result[3] = base
+		return
+	var run := SlopeCatalog.run_of_class(slope_class)
+	var rise := float(SlopeCatalog.rise_of_class(slope_class))
 	var step_index := float(slope_index_of(cell))
 	var low := base + rise * step_index / float(run)
 	var high := base + rise * (step_index + 1.0) / float(run)
-	result.fill(low)
-	for corner in _corners_towards(slope_direction_of(cell)):
-		result[corner] = high
-	return result
+	result[0] = low
+	result[1] = low
+	result[2] = low
+	result[3] = low
+	match slope_direction_of(cell):
+		SlopeCatalog.DIR_N:
+			result[CORNER_NW] = high
+			result[CORNER_NE] = high
+		SlopeCatalog.DIR_E:
+			result[CORNER_NE] = high
+			result[CORNER_SE] = high
+		SlopeCatalog.DIR_S:
+			result[CORNER_SE] = high
+			result[CORNER_SW] = high
+		SlopeCatalog.DIR_W:
+			result[CORNER_SW] = high
+			result[CORNER_NW] = high
 
 
 ## Height in steps a body standing anywhere inside the cell would have, sampled
@@ -407,6 +518,10 @@ func mark_all_chunks_dirty() -> void:
 		_dirty_chunks[chunk] = true
 
 
+func mark_chunk_dirty(chunk: Vector2i) -> void:
+	_dirty_chunks[chunk] = true
+
+
 func has_dirty_chunks() -> bool:
 	return not _dirty_chunks.is_empty()
 
@@ -429,23 +544,29 @@ func _index_of(cell: Vector2i) -> int:
 	return (cell.y + board_half_cells) * board_cells + (cell.x + board_half_cells)
 
 
-## A cell's geometry is shared with its neighbours' side faces, so an edit dirties
-## the neighbouring chunks too.
+## A cell's geometry is shared with its neighbours' side faces, so an edit on a
+## chunk border dirties the neighbouring chunks too — but only there. A cascade
+## touches thousands of cells and almost none of them sit on a border, so the
+## border test is much cheaper than unconditionally marking nine chunks.
 func _touch(cell: Vector2i) -> void:
 	_revision += 1
-	for offset_z in [-1, 0, 1]:
-		for offset_x in [-1, 0, 1]:
-			_dirty_chunks[chunk_of(cell + Vector2i(offset_x, offset_z))] = true
-
-
-func _corners_towards(direction: int) -> Array[int]:
-	match direction:
-		SlopeCatalog.DIR_N:
-			return [CORNER_NW, CORNER_NE]
-		SlopeCatalog.DIR_E:
-			return [CORNER_NE, CORNER_SE]
-		SlopeCatalog.DIR_S:
-			return [CORNER_SE, CORNER_SW]
-		SlopeCatalog.DIR_W:
-			return [CORNER_SW, CORNER_NW]
-	return []
+	var chunk := chunk_of(cell)
+	_dirty_chunks[chunk] = true
+	var local_x := cell.x - chunk.x * CHUNK_CELLS
+	var local_z := cell.y - chunk.y * CHUNK_CELLS
+	var step_x := 0
+	var step_z := 0
+	if local_x == 0:
+		step_x = -1
+	elif local_x == CHUNK_CELLS - 1:
+		step_x = 1
+	if local_z == 0:
+		step_z = -1
+	elif local_z == CHUNK_CELLS - 1:
+		step_z = 1
+	if step_x != 0:
+		_dirty_chunks[chunk + Vector2i(step_x, 0)] = true
+	if step_z != 0:
+		_dirty_chunks[chunk + Vector2i(0, step_z)] = true
+	if step_x != 0 and step_z != 0:
+		_dirty_chunks[chunk + Vector2i(step_x, step_z)] = true

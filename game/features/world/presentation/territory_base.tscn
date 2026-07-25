@@ -1,28 +1,24 @@
 [gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://game/features/world/presentation/territory_base.gd" id="1_base"]
+[ext_resource type="Script" path="res://game/features/world/presentation/terrain/grid_terrain_world.gd" id="2_terrain"]
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ground"]
-albedo_color = Color(0.282353, 0.45098, 0.219608, 1)
-roughness = 0.9
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_backdrop"]
+albedo_color = Color(0.223529, 0.360784, 0.180392, 1)
+roughness = 1.0
 
-[sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
-material = SubResource("StandardMaterial3D_ground")
+[sub_resource type="PlaneMesh" id="PlaneMesh_backdrop"]
+material = SubResource("StandardMaterial3D_backdrop")
 size = Vector2(1000, 1000)
-
-[sub_resource type="BoxShape3D" id="BoxShape3D_ground"]
-size = Vector3(1000, 1, 1000)
 
 [node name="TerritoryBase" type="Node3D"]
 script = ExtResource("1_base")
 
-[node name="GroundMesh" type="MeshInstance3D" parent="."]
-mesh = SubResource("PlaneMesh_ground")
+[node name="Terrain" type="Node3D" parent="."]
+script = ExtResource("2_terrain")
 
-[node name="GroundBody" type="StaticBody3D" parent="."]
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="GroundBody"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
-shape = SubResource("BoxShape3D_ground")
+[node name="BackdropMesh" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.05, 0)
+mesh = SubResource("PlaneMesh_backdrop")
 
 [node name="LandscapeObjects" type="Node3D" parent="."]

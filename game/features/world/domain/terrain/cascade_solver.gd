@@ -4,9 +4,9 @@ extends RefCounted
 ## Angle-of-repose cascade (design_docs/core/grid_terrain_system.md §4).
 ##
 ## Pure algorithm: reads a `TerrainGrid`, writes nothing, returns a `TerrainDelta`
-## to commit or `null` to refuse. Everything happens on a working copy of the
-## touched region, so a refusal leaves the grid untouched and a success is a
-## single atomic commit with a free undo record.
+## to commit or `null` to refuse. Everything happens on a `TerrainWorkingRegion`,
+## so a refusal leaves the grid untouched and a success is a single atomic commit
+## with a free undo record.
 ##
 ## The wave is a rational cone, not a per-cell step limit. Each material states
 ## how much height it holds per cell (§4.2): rock 4 steps, earth and grass 1,
@@ -14,6 +14,10 @@ extends RefCounted
 ## per-neighbour rule — it means a step every two cells. So the wave carries a
 ## fractional limit outward and stores the rounded height, which turns sand into
 ## wide terraces and grass into a clean pyramid, with the data staying integer.
+##
+## Once the columns have settled, `SlopeAssigner` (§3.2, §4.5) decorates the
+## boundaries the operation disturbed. That step is part of the same transaction:
+## the slope descriptors it writes are in the same delta as the heights.
 ##
 ## Rejection is a normal answer, not an error: anchors (ground under a building or
 ## a road) are never moved, and an operation whose wave reaches one is refused as a
@@ -34,11 +38,12 @@ const EPSILON := 0.0001
 var rejection_reason: StringName = REASON_NONE
 
 var _grid: TerrainGrid = null
-## Working copy of the region: cell -> height. Absent means "unchanged, read the grid".
-var _working: Dictionary = {}
+var _region: TerrainWorkingRegion = null
 ## Fractional height limit the wave carries, per cell.
 var _limits: Dictionary = {}
 var _pending: Dictionary = {}
+## Every column whose height this operation moved — the seeds of the slope pass.
+var _moved: Dictionary = {}
 var _processed := 0
 
 
@@ -52,13 +57,14 @@ static func solve_operation(grid: TerrainGrid, operation: TerrainEditOperation) 
 func solve(grid: TerrainGrid, operation: TerrainEditOperation) -> TerrainDelta:
 	rejection_reason = REASON_NONE
 	_grid = grid
-	_working = {}
 	_limits = {}
 	_pending = {}
+	_moved = {}
 	_processed = 0
 	if grid == null or operation == null or operation.cells.is_empty():
 		rejection_reason = REASON_NOTHING_TO_DO
 		return null
+	_region = TerrainWorkingRegion.new(grid)
 
 	var raised: Array[Vector2i] = []
 	var lowered: Array[Vector2i] = []
@@ -70,6 +76,10 @@ func solve(grid: TerrainGrid, operation: TerrainEditOperation) -> TerrainDelta:
 			return null
 		if not _cascade(lowered, -1):
 			return null
+		# Terrace mode wants the bare vertical face and says so (§4.1); every
+		# other mode gets the gentlest slope that fits (§3.2), which for Level is
+		# exactly the auto-skirt of §4.5.
+		SlopeAssigner.assign_slopes(_region, _moved_cells())
 
 	return _build_delta()
 
@@ -78,33 +88,46 @@ func solve(grid: TerrainGrid, operation: TerrainEditOperation) -> TerrainDelta:
 
 func _apply_brush(operation: TerrainEditOperation, raised: Array[Vector2i], lowered: Array[Vector2i]) -> bool:
 	for cell: Vector2i in operation.cells:
-		if not _grid.is_inside(cell):
+		if not _region.is_inside(cell):
 			rejection_reason = REASON_OUT_OF_BOUNDS
 			return false
-		if _grid.is_anchor(cell):
+		if _region.is_anchor(cell):
 			rejection_reason = REASON_ANCHOR
 			return false
-		if _grid.is_hole(cell):
+		if _region.is_hole(cell):
 			rejection_reason = REASON_HOLE
 			return false
-		var current := _height_of(cell)
+		var current := _region.height_of(cell)
 		var target := current + operation.height_delta
 		if operation.mode == TerrainEditOperation.Mode.LEVEL:
 			target = operation.target_height
 		if target == current:
+			# A ramp cell levelled to the height it already has still loses its
+			# slope: the brush asked for flat ground.
+			if _region.is_ramp_cell(cell):
+				_move_column(cell, target)
 			continue
 		if target < TerrainGrid.MIN_HEIGHT or target > TerrainGrid.MAX_HEIGHT:
 			rejection_reason = REASON_HEIGHT_LIMIT
 			return false
-		_working[cell] = target
+		_move_column(cell, target)
 		if target > current:
 			raised.append(cell)
 		else:
 			lowered.append(cell)
-	if raised.is_empty() and lowered.is_empty():
+	if raised.is_empty() and lowered.is_empty() and _moved.is_empty():
 		rejection_reason = REASON_NOTHING_TO_DO
 		return false
 	return true
+
+
+## Moves one column in the working copy, dissolving every ramp that move
+## invalidates (§3.1): the one the column belongs to and the ones climbing to it.
+func _move_column(cell: Vector2i, height: int) -> void:
+	_region.dissolve_ramps_touching(cell)
+	_region.clear_slope(cell)
+	_region.set_height(cell, height)
+	_moved[cell] = true
 
 
 # --- Cascade ----------------------------------------------------------------
@@ -118,13 +141,13 @@ func _cascade(seeds: Array[Vector2i], direction: int) -> bool:
 	_limits = {}
 	_pending = {}
 	for cell: Vector2i in seeds:
-		_limits[cell] = float(_height_of(cell))
+		_limits[cell] = float(_region.height_of(cell))
 		_pending[cell] = true
 
 	while not _pending.is_empty():
 		# Sorted rounds, not dictionary insertion order: the same edit must give
 		# the same terrain on every machine (§4.4).
-		var wave := _sorted_pending()
+		var wave := _sorted_cells(_pending)
 		_pending = {}
 		for cell: Vector2i in wave:
 			_processed += 1
@@ -140,13 +163,13 @@ func _relax_neighbours(cell: Vector2i, direction: int) -> bool:
 	var limit: float = _limits[cell]
 	for neighbour_direction: int in SlopeCatalog.ORTHOGONAL_DIRECTIONS:
 		var neighbour := cell + SlopeCatalog.direction_offset(neighbour_direction)
-		if not _grid.is_inside(neighbour) or _grid.is_hole(neighbour):
+		if not _region.is_inside(neighbour) or _region.is_hole(neighbour):
 			continue
-		var repose := TerrainMaterialCatalog.repose_steps_per_cell_of(_grid.material_of(neighbour))
+		var repose := TerrainMaterialCatalog.repose_steps_per_cell_of_index(_region.material_index_at(neighbour))
 		if is_inf(repose):
 			continue
 		var allowed := limit - repose * float(direction)
-		var current := _height_of(neighbour)
+		var current := _region.height_of(neighbour)
 		var required := 0
 		if direction > 0:
 			required = ceili(allowed - EPSILON)
@@ -156,7 +179,7 @@ func _relax_neighbours(cell: Vector2i, direction: int) -> bool:
 			required = floori(allowed + EPSILON)
 			if current <= required:
 				continue
-		if _grid.is_anchor(neighbour):
+		if _region.is_anchor(neighbour):
 			# The ground under a building may not sag silently: the whole
 			# operation is refused instead (§4.4).
 			rejection_reason = REASON_ANCHOR
@@ -164,7 +187,7 @@ func _relax_neighbours(cell: Vector2i, direction: int) -> bool:
 		if required < TerrainGrid.MIN_HEIGHT or required > TerrainGrid.MAX_HEIGHT:
 			rejection_reason = REASON_HEIGHT_LIMIT
 			return false
-		_working[neighbour] = required
+		_move_column(neighbour, required)
 		# The limit keeps the fraction the height had to drop; that is what makes
 		# a half-step-per-cell material terrace instead of stair-stepping.
 		_limits[neighbour] = allowed
@@ -172,41 +195,28 @@ func _relax_neighbours(cell: Vector2i, direction: int) -> bool:
 	return true
 
 
-func _sorted_pending() -> Array[Vector2i]:
-	var wave: Array[Vector2i] = []
-	for cell: Vector2i in _pending:
-		wave.append(cell)
-	wave.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+func _sorted_cells(source: Dictionary) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	for cell: Vector2i in source:
+		cells.append(cell)
+	cells.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
 		return a.y < b.y if a.y != b.y else a.x < b.x)
-	return wave
+	return cells
+
+
+func _moved_cells() -> Array[Vector2i]:
+	return _sorted_cells(_moved)
 
 
 # --- Result -----------------------------------------------------------------
 
-## Expands the changed set with the ramps it broke, then snapshots before/after.
-## A ramp is one object spanning several cells (§3.1), so moving any of its cells
-## dissolves all of them; recording the whole group is what lets undo restore it.
+## Snapshots the whole state of every column the working copy touched, and drops
+## the ones that ended up identical to what the grid already holds.
 func _build_delta() -> TerrainDelta:
-	var changed: Dictionary = {}
-	for cell: Vector2i in _working:
-		if _working[cell] == _grid.height_of(cell) and not _grid.is_ramp_cell(cell):
-			continue
-		changed[cell] = true
-	for cell: Vector2i in changed.keys():
-		for ramp_cell: Vector2i in _grid.ramp_cells_at(cell):
-			changed[ramp_cell] = true
-
 	var delta := TerrainDelta.new()
-	var cells: Array[Vector2i] = []
-	for cell: Vector2i in changed:
-		cells.append(cell)
-	cells.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
-		return a.y < b.y if a.y != b.y else a.x < b.x)
-	for cell: Vector2i in cells:
+	for cell: Vector2i in _region.touched_cells():
 		var old_state := TerrainDelta.state_of(_grid, cell)
-		# Cells only pulled in by a dissolved ramp keep their height and lose the
-		# slope descriptor; flat is class 0 with no direction and no index.
-		var new_state := Vector4i(_height_of(cell), 0, 0, 0)
+		var new_state := _region.state_of(cell)
 		if old_state == new_state:
 			continue
 		delta.record(cell, old_state, new_state)
@@ -214,7 +224,3 @@ func _build_delta() -> TerrainDelta:
 		rejection_reason = REASON_NOTHING_TO_DO
 		return null
 	return delta
-
-
-func _height_of(cell: Vector2i) -> int:
-	return _working.get(cell, _grid.height_of(cell))

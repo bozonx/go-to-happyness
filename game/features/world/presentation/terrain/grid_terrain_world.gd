@@ -7,17 +7,31 @@ extends Node3D
 ## the same polygons, and rebuilds chunks the grid reported dirty under a per-frame
 ## budget so a brush drag never stalls the frame. It reads the grid and never
 ## writes to it: editing goes through tools, which own the transaction.
+##
+## Chunks further than `lod_distance` from the camera are rebuilt without their
+## side faces (§11). The isometric camera cannot see those faces at that range,
+## and dropping them is most of the geometry of a hilly chunk. Collision follows
+## the mesh as always, and that stays safe: the top surface every body stands on
+## is still there, only the vertical faces between columns are gone.
 
 const REBUILD_BUDGET_PER_FRAME := 2
 const COLLISION_LAYER := 1
+## Hysteresis on the LOD switch, so a camera parked on the boundary does not
+## rebuild the same chunk every frame.
+const LOD_HYSTERESIS := 0.9
 
 signal chunk_rebuilt(chunk: Vector2i)
 ## Emitted when the queue drains, i.e. the visible terrain matches the data again.
 signal rebuild_finished()
 
+@export var lod_distance := 64.0
+
 var grid: TerrainGrid = null
+## Optional: without it every chunk is built at full detail.
+var camera: Camera3D = null
 
 var _chunk_bodies: Dictionary = {}
+var _chunk_lods: Dictionary = {}
 var _pending_chunks: Array[Vector2i] = []
 var _queued_lookup: Dictionary = {}
 var _surface_material: StandardMaterial3D = null
@@ -27,11 +41,13 @@ func _ready() -> void:
 	set_process(true)
 
 
-func configure(next_grid: TerrainGrid) -> void:
+func configure(next_grid: TerrainGrid, next_camera: Camera3D = null) -> void:
 	grid = next_grid
+	camera = next_camera
 	for child: Node in _chunk_bodies.values():
 		child.queue_free()
 	_chunk_bodies.clear()
+	_chunk_lods.clear()
 	_pending_chunks.clear()
 	_queued_lookup.clear()
 	if grid == null:
@@ -44,6 +60,7 @@ func _process(_delta: float) -> void:
 	if grid == null:
 		return
 	_collect_dirty()
+	_collect_lod_changes()
 	if _pending_chunks.is_empty():
 		return
 	var budget := mini(REBUILD_BUDGET_PER_FRAME, _pending_chunks.size())
@@ -61,6 +78,7 @@ func rebuild_pending_now() -> void:
 	if grid == null:
 		return
 	_collect_dirty()
+	_collect_lod_changes()
 	while not _pending_chunks.is_empty():
 		var chunk: Vector2i = _pending_chunks.pop_front()
 		_queued_lookup.erase(chunk)
@@ -72,18 +90,55 @@ func pending_chunk_count() -> int:
 	return _pending_chunks.size()
 
 
+func lod_of_chunk(chunk: Vector2i) -> int:
+	return int(_chunk_lods.get(chunk, TerrainChunkMesher.Lod.FULL))
+
+
 func _collect_dirty() -> void:
 	if not grid.has_dirty_chunks():
 		return
 	for chunk: Vector2i in grid.take_dirty_chunks():
-		if _queued_lookup.has(chunk):
-			continue
-		_queued_lookup[chunk] = true
-		_pending_chunks.append(chunk)
+		_queue(chunk)
+
+
+## Re-queues chunks whose distance to the camera crossed the LOD boundary.
+func _collect_lod_changes() -> void:
+	if camera == null:
+		return
+	for chunk: Vector2i in _chunk_bodies.keys():
+		if _target_lod(chunk) != lod_of_chunk(chunk):
+			_queue(chunk)
+
+
+func _queue(chunk: Vector2i) -> void:
+	if _queued_lookup.has(chunk):
+		return
+	_queued_lookup[chunk] = true
+	_pending_chunks.append(chunk)
+
+
+func _target_lod(chunk: Vector2i) -> int:
+	if camera == null:
+		return TerrainChunkMesher.Lod.FULL
+	var centre := _chunk_centre(chunk)
+	var camera_position := camera.global_position
+	var distance := Vector2(centre.x - camera_position.x, centre.z - camera_position.z).length()
+	var current := lod_of_chunk(chunk)
+	if current == TerrainChunkMesher.Lod.TOP_ONLY:
+		return TerrainChunkMesher.Lod.FULL if distance < lod_distance * LOD_HYSTERESIS else TerrainChunkMesher.Lod.TOP_ONLY
+	return TerrainChunkMesher.Lod.TOP_ONLY if distance > lod_distance else TerrainChunkMesher.Lod.FULL
+
+
+func _chunk_centre(chunk: Vector2i) -> Vector3:
+	var origin := grid.chunk_origin_cell(chunk)
+	var half := float(TerrainGrid.CHUNK_CELLS) * 0.5 * grid.cell_size
+	return Vector3(float(origin.x) * grid.cell_size + half, 0.0, float(origin.y) * grid.cell_size + half)
 
 
 func _rebuild_chunk(chunk: Vector2i) -> void:
-	var result := TerrainChunkMesher.build_chunk(grid, chunk)
+	var lod := _target_lod(chunk)
+	var result := TerrainChunkMesher.build_chunk(grid, chunk, lod)
+	_chunk_lods[chunk] = lod
 	var mesh: ArrayMesh = result["mesh"]
 	var body := _chunk_body(chunk, mesh != null)
 	if body == null:

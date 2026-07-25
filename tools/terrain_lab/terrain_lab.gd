@@ -44,7 +44,7 @@ var _hovered_cell := Vector2i.ZERO
 var _has_hover := false
 var _brush_size := 1
 var _material_index := 0
-var _ramp_class := 1
+var _ramp_class := SlopeCatalog.CLASS_GENTLE
 var _ramp_direction := SlopeCatalog.DIR_E
 var _edit_mode := TerrainEditOperation.Mode.SCULPT
 var _painting := 0
@@ -66,7 +66,7 @@ var _capture_delay := 0
 func _ready() -> void:
 	grid.configure(CELL_SIZE, BOARD_CELLS)
 	service.configure(grid)
-	terrain.configure(grid)
+	terrain.configure(grid, camera)
 	_generate_demo()
 	terrain.rebuild_pending_now()
 	_update_camera()
@@ -129,18 +129,20 @@ func _apply_material() -> void:
 	if not _has_hover:
 		return
 	var material_id := TerrainMaterialCatalog.ids()[_material_index]
-	for cell: Vector2i in _brush_cells(_hovered_cell):
-		grid.set_material(cell, material_id)
-	_last_message = "painted %s" % material_id
+	if service.paint_material(_brush_cells(_hovered_cell), material_id):
+		_last_message = "painted %s" % material_id
+		return
+	_last_message = "paint %s changed nothing" % material_id
 
 
 func _toggle_hole() -> void:
 	if not _has_hover:
 		return
 	var enabled := not grid.is_hole(_hovered_cell)
-	for cell: Vector2i in _brush_cells(_hovered_cell):
-		grid.set_hole(cell, enabled)
-	_last_message = "hole %s" % ("cut" if enabled else "filled")
+	if service.set_hole(_brush_cells(_hovered_cell), enabled):
+		_last_message = "hole %s" % ("cut" if enabled else "filled")
+		return
+	_last_message = "hole unchanged"
 
 
 func _place_ramp() -> void:

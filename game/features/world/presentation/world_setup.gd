@@ -15,8 +15,10 @@ var sky_material: ShaderMaterial
 var sun: DirectionalLight3D
 var rain_effect: RainEffect
 var sky_and_weather_controller: SkyAndWeatherController
-var ground_body: StaticBody3D
-var ground_mesh: MeshInstance3D
+## The board's ground (grid_terrain_system.md §13). Owned by the territory scene,
+## published here because it is the one place that answers "how high is the
+## ground at X" for everything else.
+var terrain_grid: TerrainGrid
 var trail_overlay: MeshInstance3D
 var trail_overlay_material: ShaderMaterial
 var selection_marker: MeshInstance3D
@@ -52,6 +54,7 @@ func build(parent: Node) -> void:
 		if glare_rect != null:
 			sun_glare_material = glare_rect.material as ShaderMaterial
 	_build_sky()
+	_build_terrain(parent)
 	_build_boundary(parent)
 	_build_rain_effect(parent)
 	_build_sky_and_weather_controller(parent)
@@ -84,6 +87,17 @@ func update_daylight(
 			precipitation_type,
 			wind_displacement
 		)
+
+
+## Phase 0 of the terrain migration: the board gets a real `TerrainGrid`, flat at
+## world zero, meshed and collided by `GridTerrainWorld`. It replaces the plane
+## the removed Terrain3D addon used to hide behind, so height has exactly one
+## owner from here on.
+func _build_terrain(parent: Node) -> void:
+	var territory := parent.get_node_or_null("WorldTerritory") as TerritoryBase
+	if territory == null:
+		return
+	terrain_grid = territory.configure_terrain(_cell_size, _board_cells, _camera)
 
 
 func _build_boundary(parent: Node) -> void:
