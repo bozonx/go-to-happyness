@@ -20,6 +20,8 @@ enum Tool { PLACE, SELECT, ERASE }
 
 const ROTATION_STEP_DEG := 15.0
 const UNDO_LIMIT := 40
+const REDO_LIMIT := 40
+const RECENT_ASSET_LIMIT := 6
 ## Minimum click radius, so thin objects (a flag pole) stay pickable.
 const MIN_PICK_RADIUS := 0.35
 
@@ -51,6 +53,19 @@ var _ghost_asset_id: StringName = &""
 var _ghost_material: StandardMaterial3D = null
 var _selection_marker: MeshInstance3D = null
 var _undo_stack: Array = []
+var _redo_stack: Array = []
+var _recent_assets: Array[StringName] = []
+var _search_edit: LineEdit = null
+var _recent_container: HBoxContainer = null
+var _recent_label: Label = null
+var _object_search_edit: LineEdit = null
+var _id_label: Label = null
+var _asset_label: Label = null
+var _badges_label: Label = null
+var _zone_option: OptionButton = null
+var _replace_btn: Button = null
+var _undo_btn: Button = null
+var _redo_btn: Button = null
 var _dragging: bool = false
 ## Grab offset so dragging moves the object relative to where it was picked up.
 var _drag_offset: Vector3 = Vector3.ZERO
@@ -80,6 +95,7 @@ var _rot_label: Label = null
 var _layer_label: Label = null
 var _tool_buttons: Dictionary = {}
 var _asset_buttons: Dictionary = {}
+var _recent_buttons: Dictionary = {}
 
 
 # ---------------------------------------------------------------------------
@@ -95,10 +111,18 @@ func setup(editor: Node) -> void:
 	_toolbar = editor.get_node("%DecorToolbar")
 	_group_option = editor.get_node("%DecorGroupOption")
 	_category_option = editor.get_node("%DecorCategoryOption")
+	_search_edit = editor.get_node("%DecorSearchEdit")
+	_recent_label = editor.get_node("%DecorRecentLbl")
+	_recent_container = editor.get_node("%DecorRecentContainer")
 	_asset_container = editor.get_node("%DecorAssetContainer")
 	_asset_hint = editor.get_node("%DecorAssetHint")
 	_snap_option = editor.get_node("%DecorSnapOption")
 	_inspector_title = editor.get_node("%DecorInspectorTitle")
+	_id_label = editor.get_node("%DecorIdLabel")
+	_asset_label = editor.get_node("%DecorAssetLabel")
+	_zone_option = editor.get_node("%DecorZoneOption")
+	_badges_label = editor.get_node("%DecorBadgesLabel")
+	_object_search_edit = editor.get_node("%DecorObjectSearchEdit")
 	_object_list = editor.get_node("%DecorObjectList")
 	_controls_vbox = editor.get_node("%DecorControlsVBox")
 	_pos_x_spin = editor.get_node("%DecorPosXSpin")
@@ -106,8 +130,11 @@ func setup(editor: Node) -> void:
 	_pos_z_spin = editor.get_node("%DecorPosZSpin")
 	_yaw_spin = editor.get_node("%DecorYawSpin")
 	_scale_spin = editor.get_node("%DecorScaleSpin")
+	_replace_btn = editor.get_node("%DecorReplaceBtn")
 	_duplicate_btn = editor.get_node("%DecorDuplicateBtn")
 	_delete_btn = editor.get_node("%DecorDeleteBtn")
+	_undo_btn = editor.get_node("%DecorUndoBtn")
+	_redo_btn = editor.get_node("%DecorRedoBtn")
 	_rot_label = editor.get_node("%DecorRotLabel")
 	_layer_label = editor.get_node("%DecorLayerLabel")
 
@@ -130,9 +157,15 @@ func setup(editor: Node) -> void:
 	_category_option.item_selected.connect(_on_category_selected)
 	_group_option.item_selected.connect(_on_group_selected)
 	_snap_option.item_selected.connect(_on_snap_selected)
+	_search_edit.text_changed.connect(_on_search_changed)
+	_object_search_edit.text_changed.connect(_on_object_search_changed)
 	_object_list.item_selected.connect(_on_object_list_selected)
+	_zone_option.item_selected.connect(_on_zone_selected)
 	_duplicate_btn.pressed.connect(duplicate_selection)
 	_delete_btn.pressed.connect(delete_selection)
+	_replace_btn.pressed.connect(_replace_selected_object)
+	_undo_btn.pressed.connect(undo)
+	_redo_btn.pressed.connect(redo)
 	_pos_x_spin.value_changed.connect(_on_transform_spin_changed)
 	_pos_y_spin.value_changed.connect(_on_transform_spin_changed)
 	_pos_z_spin.value_changed.connect(_on_transform_spin_changed)
@@ -179,12 +212,14 @@ func activate() -> void:
 	current_category = FurnishingAssetCatalogScript.first_populated_category(current_category)
 	_rebuild_category_options()
 	_rebuild_asset_buttons()
+	_rebuild_recent_assets()
 	_panel.visible = true
 	_toolbar.visible = true
 	rebuild_nodes()
 	_refresh_object_list()
 	_refresh_inspector()
 	_update_layer_label()
+	_update_undo_redo_buttons()
 
 
 func deactivate() -> void:
@@ -257,7 +292,14 @@ func handle_key(event: InputEventKey) -> bool:
 	if event.ctrl_pressed:
 		match event.keycode:
 			KEY_Z:
-				return undo()
+				if event.shift_pressed:
+					redo()
+				else:
+					undo()
+				return true
+			KEY_Y:
+				redo()
+				return true
 			KEY_D:
 				duplicate_selection()
 				return true
@@ -421,6 +463,7 @@ func _place_at(position: Vector3) -> void:
 	record.appearance = asset.default_appearance()
 	_editor.blueprint.objects.append(record)
 	_spawn_node(record)
+	_add_recent_asset(asset.id)
 	_editor.mark_dirty()
 	_refresh_object_list()
 	select_object(record.id)
@@ -523,7 +566,7 @@ func _next_object_suffix() -> int:
 
 
 # ---------------------------------------------------------------------------
-# Undo (decor-scoped snapshots)
+# Undo / Redo (decor-scoped snapshots)
 # ---------------------------------------------------------------------------
 
 func _push_undo() -> void:
@@ -533,12 +576,22 @@ func _push_undo() -> void:
 	_undo_stack.append(snapshot)
 	if _undo_stack.size() > UNDO_LIMIT:
 		_undo_stack.pop_front()
+	# Clear redo stack on new action.
+	_redo_stack.clear()
+	_update_undo_redo_buttons()
 
 
 func undo() -> bool:
 	if _undo_stack.is_empty():
 		_editor.set_status("Отменять нечего.")
 		return true
+	# Push current state to redo stack.
+	var current: Array = []
+	for record: DecorObjectRecordScript in _editor.blueprint.objects:
+		current.append(record.to_dict())
+	_redo_stack.append(current)
+	if _redo_stack.size() > REDO_LIMIT:
+		_redo_stack.pop_front()
 	var snapshot: Array = _undo_stack.pop_back()
 	_editor.blueprint.objects.clear()
 	for data in snapshot:
@@ -551,11 +604,48 @@ func undo() -> bool:
 	else:
 		select_object(selected_object_id)
 	_editor.set_status("Отменено. Шагов в истории: %d" % _undo_stack.size())
+	_update_undo_redo_buttons()
 	return true
+
+
+func redo() -> bool:
+	if _redo_stack.is_empty():
+		_editor.set_status("Повторять нечего.")
+		return true
+	# Push current state to undo stack.
+	var current: Array = []
+	for record: DecorObjectRecordScript in _editor.blueprint.objects:
+		current.append(record.to_dict())
+	_undo_stack.append(current)
+	if _undo_stack.size() > UNDO_LIMIT:
+		_undo_stack.pop_front()
+	var snapshot: Array = _redo_stack.pop_back()
+	_editor.blueprint.objects.clear()
+	for data in snapshot:
+		_editor.blueprint.objects.append(DecorObjectRecordScript.from_dict(data))
+	_editor.mark_dirty()
+	rebuild_nodes()
+	_refresh_object_list()
+	if find_record(selected_object_id) == null:
+		select_object("")
+	else:
+		select_object(selected_object_id)
+	_editor.set_status("Повторено. Шагов в истории: %d" % _redo_stack.size())
+	_update_undo_redo_buttons()
+	return true
+
+
+func _update_undo_redo_buttons() -> void:
+	if _undo_btn != null:
+		_undo_btn.disabled = _undo_stack.is_empty()
+	if _redo_btn != null:
+		_redo_btn.disabled = _redo_stack.is_empty()
 
 
 func clear_undo_history() -> void:
 	_undo_stack.clear()
+	_redo_stack.clear()
+	_update_undo_redo_buttons()
 
 
 # ---------------------------------------------------------------------------
@@ -751,20 +841,33 @@ func _on_category_selected(index: int) -> void:
 
 ## One toggle button per asset, mirroring the frame palette, instead of a second
 ## dropdown: the author sees every option at once.
+## When the search field is non-empty, assets are filtered by name/description.
 func _rebuild_asset_buttons() -> void:
 	for child in _asset_container.get_children():
 		child.queue_free()
 	_asset_buttons.clear()
 
 	var assets := FurnishingAssetCatalogScript.get_assets_by_category(current_category)
+	var search_text := _search_edit.text.strip_edges().to_lower() if _search_edit != null else ""
+	if not search_text.is_empty():
+		var filtered: Array = []
+		for asset in assets:
+			if String(asset.name).to_lower().contains(search_text) or String(asset.description).to_lower().contains(search_text):
+				filtered.append(asset)
+		assets = filtered
+
 	if assets.is_empty():
 		var empty_label := Label.new()
-		empty_label.text = "В этой категории пока нет ассетов."
+		if not search_text.is_empty():
+			empty_label.text = "Ничего не найдено."
+		else:
+			empty_label.text = "В этой категории пока нет ассетов."
 		empty_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		empty_label.add_theme_color_override("font_color", Color(0.75, 0.6, 0.4))
 		_asset_container.add_child(empty_label)
-		current_asset_id = &""
-		_asset_hint.text = ""
+		if search_text.is_empty():
+			current_asset_id = &""
+			_asset_hint.text = ""
 		refresh_ghost()
 		return
 
@@ -797,8 +900,46 @@ func _select_asset(asset_id: StringName) -> void:
 	var asset := FurnishingAssetCatalogScript.get_asset(asset_id)
 	if asset != null:
 		_select_snap_step(asset.default_snap_step)
+	_add_recent_asset(asset_id)
 	_update_asset_hint()
 	refresh_ghost()
+
+
+func _on_search_changed(_new_text: String) -> void:
+	_rebuild_asset_buttons()
+
+
+## Track recently used assets for quick access.
+func _add_recent_asset(asset_id: StringName) -> void:
+	_recent_assets.erase(asset_id)
+	_recent_assets.push_front(asset_id)
+	if _recent_assets.size() > RECENT_ASSET_LIMIT:
+		_recent_assets.resize(RECENT_ASSET_LIMIT)
+	_rebuild_recent_assets()
+
+
+## Rebuild the recently-used asset buttons row.
+func _rebuild_recent_assets() -> void:
+	for child in _recent_container.get_children():
+		child.queue_free()
+	_recent_buttons.clear()
+	if _recent_assets.is_empty():
+		_recent_label.visible = false
+		return
+	_recent_label.visible = true
+	for asset_id in _recent_assets:
+		var asset := FurnishingAssetCatalogScript.get_asset(asset_id)
+		if asset == null:
+			continue
+		var button := Button.new()
+		button.text = asset.name
+		button.tooltip_text = asset.description
+		button.custom_minimum_size = Vector2(80, 0)
+		button.toggle_mode = true
+		button.button_pressed = asset_id == current_asset_id
+		button.pressed.connect(_select_asset.bind(asset_id))
+		_recent_container.add_child(button)
+		_recent_buttons[asset_id] = button
 
 
 func _update_asset_hint() -> void:
@@ -844,9 +985,13 @@ func _on_object_list_selected(index: int) -> void:
 func _refresh_object_list() -> void:
 	_syncing_ui = true
 	_object_list.clear()
+	var search_text := _object_search_edit.text.strip_edges().to_lower() if _object_search_edit != null else ""
 	for record: DecorObjectRecordScript in _editor.blueprint.objects:
 		var asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
 		var label := asset.name if asset != null else "%s (нет ассета)" % record.asset_id
+		if not search_text.is_empty():
+			if not String(label).to_lower().contains(search_text) and not record.id.to_lower().contains(search_text):
+				continue
 		var index := _object_list.add_item("%s  ·  %.1f, %.1f, %.1f" % [label, record.pos.x, record.pos.y, record.pos.z])
 		_object_list.set_item_metadata(index, record.id)
 	_syncing_ui = false
@@ -863,6 +1008,10 @@ func _sync_object_list_selection() -> void:
 	_syncing_ui = false
 
 
+func _on_object_search_changed(_new_text: String) -> void:
+	_refresh_object_list()
+
+
 func _refresh_inspector() -> void:
 	for child in _controls_vbox.get_children():
 		child.queue_free()
@@ -871,12 +1020,20 @@ func _refresh_inspector() -> void:
 	if record == null:
 		_inspector_title.text = "Объект не выбран"
 		_set_transform_fields_enabled(false)
+		_id_label.text = "ID: —"
+		_asset_label.text = "Ассет: —"
+		_badges_label.text = ""
+		_refresh_zone_options(&"", record)
 		return
 
 	var asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
 	_inspector_title.text = "Свойства: %s" % (asset.name if asset != null else String(record.asset_id))
+	_id_label.text = "ID: %s" % record.id
+	_asset_label.text = "Ассет: %s" % (asset.name if asset != null else String(record.asset_id))
 	_set_transform_fields_enabled(true)
 	_sync_transform_fields(record)
+	_refresh_zone_options(record.owner_zone_id, record)
+	_update_badges(record, asset)
 	if asset == null:
 		return
 
@@ -945,6 +1102,102 @@ func _set_transform_fields_enabled(enabled: bool) -> void:
 		spin.editable = enabled
 	_duplicate_btn.disabled = not enabled
 	_delete_btn.disabled = not enabled
+	_replace_btn.disabled = not enabled
+
+
+## Refresh the owner-zone dropdown from the blueprint's place_zones.
+func _refresh_zone_options(current_zone: StringName, _record: DecorObjectRecordScript) -> void:
+	_syncing_ui = true
+	_zone_option.clear()
+	_zone_option.add_item("(без зоны)")
+	_zone_option.set_item_metadata(0, &"")
+	var selected_idx := 0
+	if _editor != null and _editor.blueprint != null:
+		for i in _editor.blueprint.place_zones.size():
+			var zone = _editor.blueprint.place_zones[i]
+			_zone_option.add_item(String(zone.zone_name))
+			_zone_option.set_item_metadata(_zone_option.item_count - 1, zone.zone_id)
+			if zone.zone_id == current_zone:
+				selected_idx = _zone_option.item_count - 1
+	_zone_option.select(selected_idx)
+	_syncing_ui = false
+
+
+func _on_zone_selected(index: int) -> void:
+	if _syncing_ui:
+		return
+	var record := find_record(selected_object_id)
+	if record == null:
+		return
+	_push_undo()
+	record.owner_zone_id = _zone_option.get_item_metadata(index)
+	_editor.mark_dirty()
+
+
+## Show diagnostic badges for the selected object.
+func _update_badges(record: DecorObjectRecordScript, asset: Variant) -> void:
+	var badges: Array[String] = []
+	if asset != null and asset.placement_surface != FurnishingAssetDefScript.SURFACE_ANY:
+		badges.append("Поверхность: %s" % String(asset.placement_surface))
+	if asset != null and asset.scale_mode != FurnishingAssetDefScript.SCALE_LOCKED:
+		badges.append("Масштаб: %s" % String(asset.scale_mode))
+	if asset != null and asset.blocking_navigation:
+		badges.append("Блокирует навигацию")
+	if record.owner_zone_id != &"":
+		badges.append("Зона: %s" % String(record.owner_zone_id))
+	_badges_label.text = "  ·  ".join(badges) if not badges.is_empty() else ""
+
+
+## Replace the selected object's asset with the current catalog selection.
+## Appearance properties that don't exist on the new asset are lost.
+func _replace_selected_object() -> void:
+	var record := find_record(selected_object_id)
+	if record == null:
+		_editor.set_status("Выберите объект для замены.")
+		return
+	if current_asset_id == &"":
+		_editor.set_status("Выберите ассет в каталоге для замены.")
+		return
+	if current_asset_id == record.asset_id:
+		_editor.set_status("Объект уже использует этот ассет.")
+		return
+	var old_asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
+	var new_asset := FurnishingAssetCatalogScript.get_asset(current_asset_id)
+	if new_asset == null:
+		return
+	# Count how many appearance properties will be lost.
+	var lost_count := 0
+	if old_asset != null:
+		for key in record.appearance.keys():
+			var found := false
+			for control in new_asset.appearance_controls:
+				if String(control.get("name", "")) == String(key):
+					found = true
+					break
+			if not found:
+					lost_count += 1
+	_push_undo()
+	record.asset_id = new_asset.id
+	record.appearance = new_asset.default_appearance()
+	# Try to carry over compatible properties.
+	if old_asset != null:
+		for key in record.appearance.keys():
+			# Properties already set by default_appearance; nothing to carry.
+			pass
+	_spawn_node_for_existing(record)
+	_editor.mark_dirty()
+	_refresh_object_list()
+	_refresh_inspector()
+	if lost_count > 0:
+		_editor.set_status("Заменён на «%s». Потеряно свойств: %d." % [new_asset.name, lost_count])
+	else:
+		_editor.set_status("Заменён на «%s»." % new_asset.name)
+
+
+## Re-spawn the visual node for an existing record (used by replace).
+func _spawn_node_for_existing(record: DecorObjectRecordScript) -> void:
+	_remove_node(record.id)
+	_spawn_node(record)
 
 
 func _sync_transform_fields(record: DecorObjectRecordScript) -> void:

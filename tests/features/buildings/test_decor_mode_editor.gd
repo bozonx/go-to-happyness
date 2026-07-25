@@ -80,16 +80,20 @@ func _run() -> void:
 	assert(node.get_node("Light").light_color.is_equal_approx(Color("44aaff")), "colour binding applied")
 	print("  property bindings ok")
 
-	# Duplicate, delete, undo.
+	# Duplicate, delete, undo, redo.
 	decor.duplicate_selection()
 	assert(editor.blueprint.objects.size() == 3, "duplicated")
 	decor.delete_selection()
 	assert(editor.blueprint.objects.size() == 2, "deleted")
 	decor.undo()
 	assert(editor.blueprint.objects.size() == 3, "undo restored the delete")
+	decor.redo()
+	assert(editor.blueprint.objects.size() == 2, "redo re-applied the delete")
+	decor.undo()
+	assert(editor.blueprint.objects.size() == 3, "undo restored the delete again")
 	decor.undo()
 	assert(editor.blueprint.objects.size() == 2, "undo restored the duplicate")
-	print("  undo ok")
+	print("  undo/redo ok")
 
 	# The whole thing must serialize.
 	var json: String = editor.blueprint.to_json()
