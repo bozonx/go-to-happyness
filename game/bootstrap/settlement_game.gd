@@ -145,6 +145,7 @@ const SettlementWorldStateScript = preload("res://game/bootstrap/settlement_worl
 const SettlementInputControllerScript = preload("res://game/bootstrap/settlement_input_controller.gd")
 const SettlementBuildControllerScript = preload("res://game/bootstrap/settlement_build_controller.gd")
 const SettlementHeroInteractionControllerScript = preload("res://game/bootstrap/settlement_hero_interaction_controller.gd")
+const SettlementConstructionControllerScript = preload("res://game/bootstrap/settlement_construction_controller.gd")
 
 
 
@@ -564,6 +565,7 @@ var _building_management: RefCounted
 var _input_controller: RefCounted
 var _build_controller: RefCounted
 var _hero_interaction_controller: RefCounted
+var _construction_controller: RefCounted
 
 
 func _ready() -> void:
@@ -588,6 +590,7 @@ func _ready() -> void:
 	_input_controller = SettlementInputControllerScript.new(self)
 	_build_controller = SettlementBuildControllerScript.new(self)
 	_hero_interaction_controller = SettlementHeroInteractionControllerScript.new(self)
+	_construction_controller = SettlementConstructionControllerScript.new(self)
 	ui_manager.bind_delegate_events(SettlementUICallbacksScript.new(self))
 	SettlementBootstrapperScript.new().run(self)
 
@@ -988,32 +991,21 @@ func _set_build_mode(value: String) -> void:
 
 
 func _reconcile_construction_reservations(site: ConstructionSite) -> void:
-	if courier_task_service != null:
-		courier_task_service.reconcile_construction_reservations(site)
+	_construction_controller.reconcile_construction_reservations(site)
 
 func _preferred_construction_site() -> ConstructionSite:
-	return construction_priority_service.preferred_construction_site() if construction_priority_service != null else null
+	return _construction_controller.preferred_construction_site()
 
 
 func _construction_development_priority(site: ConstructionSite) -> float:
-	return construction_priority_service.development_priority(site) if construction_priority_service != null and site != null else 0.0
+	return _construction_controller.construction_development_priority(site)
 
 
 func _builder_count(site_node: Node3D) -> int:
-	var count := 0
-	for citizen in citizens:
-		if citizen.is_building_site(site_node):
-			count += 1
-	return count
+	return _construction_controller.builder_count(site_node)
 
 func _building_power(site_node: Node3D) -> float:
-	var power := 0.0
-	for citizen in citizens:
-		if citizen.is_building_site(site_node):
-			power += citizen.get_efficiency("construction")
-	if is_instance_valid(player_work_target) and player_work_target == site_node and player_citizen != null:
-		power += player_citizen.get_efficiency("construction")
-	return power
+	return _construction_controller.building_power(site_node)
 
 
 
@@ -2224,13 +2216,7 @@ func _placement_key(world_position: Vector3) -> Vector2i:
 	return building_placement_controller.placement_key(world_position) if building_placement_controller != null else Vector2i.ZERO
 
 func _create_construction_site(cell: Vector2i, building_type: String, position_on_board: Vector3, rotation_quarters := 0, blueprint: Dictionary = {}, occupied_footprint := Vector2i.ZERO) -> ConstructionSite:
-	var site := construction.start_site(cell, building_type, position_on_board, rotation_quarters, blueprint, occupied_footprint)
-	_register_service_pockets(site.node)
-	# The reservation refresh runs before the site exists. Publish its entrance
-	# pockets immediately so couriers and builders can route to the new site.
-	_refresh_navigation_grid()
-	_request_courier_dispatch()
-	return site
+	return _construction_controller.create_construction_site(cell, building_type, position_on_board, rotation_quarters, blueprint, occupied_footprint)
 
 
 func _register_service_pockets(node: Node3D) -> void:
@@ -2241,76 +2227,18 @@ func _unregister_service_pockets(node: Node3D) -> void:
 	_service_pocket_manager.unregister_service_pockets(node)
 
 func _update_construction(delta: float) -> void:
-	# Reconcile reservations outside work time as well, so interrupted night
-	# deliveries do not strand reserved materials forever.
-	for site: ConstructionSite in construction_sites:
-		if is_instance_valid(site.node):
-			_reconcile_construction_reservations(site)
-	construction.tick(delta)
+	_construction_controller.update_construction(delta)
 
 
 func _set_construction_status(text: String) -> void:
-	if ui_manager.hud != null:
-		ui_manager.hud.set_status(text)
+	_construction_controller.set_construction_status(text)
 
 
 func _update_construction_supply_label(site: ConstructionSite) -> void:
-	if not is_instance_valid(site.node) or site.node.is_queued_for_deletion():
-		return
-	var label := site.node.get_node_or_null("SupplyLabel") as Label3D
-	if label == null:
-		return
-	var delivered := 0
-	var required := 0
-	for resource_type in site.required_materials:
-		delivered += int(site.delivered_materials.get(resource_type, 0))
-		required += int(site.required_materials[resource_type])
-	label.text = "MATERIALS %d/%d" % [delivered, required]
-	label.modulate = Color("f0c45d") if delivered < required else Color("56bd58")
+	_construction_controller.update_construction_supply_label(site)
 
 func _complete_building(cell: Vector2i, building_type: String, position_on_board: Vector3, building: Node3D, blueprint: Dictionary) -> void:
-	settlement.buildings[building_type] = int(settlement.buildings.get(building_type, 0)) + 1
-	building.set_meta("building_type", building_type)
-	building.set_meta("condition", 100.0)
-	if blueprint.has("blueprint_ref"):
-		building.set_meta("blueprint_ref", blueprint["blueprint_ref"])
-	if building_zone_service != null:
-		building_zone_service.configure_building(building, blueprint.get("work_zones", []), blueprint.get("saved_zone_state", []))
-	if blueprint.has("routing_anchors"):
-		building.set_meta("routing_anchors", blueprint["routing_anchors"])
-	_unregister_service_pockets(building)
-	if BuildingTypes.is_fire_source(building_type):
-		building.set_meta("fire_fuel", 4)
-		building.set_meta("fire_lit", true)
-		building.set_meta("fire_embers_until", -1)
-		building.set_meta("fire_phase", "burning")
-	if _is_staffed_workplace(building):
-		workplace_priority_counter += 1
-		building.set_meta("accepting_workers", true)
-		building.set_meta("workplace_priority", workplace_priority_counter)
-	if building_type not in ["warehouse", "straw_warehouse", "tarp_warehouse", "campfire", "campfire_lvl2", "campfire_lvl3", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant", "straw_trade_tent", "tarp_trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market", "school", "materials_factory", "tent", "straw_tent", "tarp_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house", "straw_craft_tent", "tarp_craft_tent", "straw_forager_tent", "tarp_forager_tent", "boundary_post", "entrance_sign"]:
-		_add_building_selector(building, "building_selector", blueprint.footprint)
-	if building_type == "entrance_sign":
-		_setup_entrance_sign_node(building)
-	var is_home := BuildingTypes.is_housing(building_type)
-	_register_service_entrance(building, blueprint, is_home, building_type not in ["farm", "park"])
-	var service_position: Vector3 = building.get_meta("service_position")
-	building_lifecycle_service.register_completed_building_type_features(building_type, building, blueprint, service_position)
-
-	building_registry.attach_node(cell, building, building_type)
-	var occupied_footprint: Vector2i = building.get_meta("occupied_footprint", blueprint.footprint)
-	village_territory_service.on_building_added(cell, building_type)
-	_refresh_boundary_markers()
-	_add_building_status_indicator(building)
-	_refresh_navigation_grid()
-	_update_workers()
-	if building_menu_controller != null:
-		building_menu_controller.refresh_build_menu()
-	var completion_message := "%s construction completed." % building_type.capitalize()
-	if building_type in ["recycling_factory", "metal_factory"]:
-		completion_message += " It requires 3 factory workers."
-	_update_interface(completion_message)
-	_request_courier_dispatch()
+	_construction_controller.complete_building(cell, building_type, position_on_board, building, blueprint)
 
 
 func _entrance_anchor_position() -> Vector3:
@@ -2926,15 +2854,10 @@ func _warehouse_delivery_position(from: Vector3, resource_type: String, amount: 
 
 
 func _is_construction_site(node: Node3D) -> bool:
-	return is_instance_valid(node) and construction.has_site(node)
+	return _construction_controller.is_construction_site(node)
 
 func _cancel_selected_construction() -> void:
-	if not is_instance_valid(selected_building) or not _is_construction_site(selected_building):
-		return
-	_unregister_service_pockets(selected_building)
-	construction.cancel_site(selected_building)
-	_close_context_menus()
-	_update_interface("Construction cancelled. Refunded 50% of costs.")
+	_construction_controller.cancel_selected_construction()
 
 
 func get_toilets() -> Array[Node3D]:
