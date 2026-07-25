@@ -32,6 +32,10 @@ uniform float u_star_twinkle : hint_range(0.0, 1.0) = 0.16;
 // star field and the Milky Way are sampled in this rotated frame, so the night sky
 // turns slowly around a tilted pole instead of hanging fixed above the settlement.
 uniform float u_star_rotation = 0.0;
+// Real elapsed seconds, kept separate from u_time. u_time counts game minutes, which
+// run tens of times faster than the wall clock: driving the twinkle from it made the
+// whole field strobe several times a second instead of breathing.
+uniform float u_star_time = 0.0;
 // HDR overdrive so the filmic tonemap and glow bloom the disc. Restrained on
 // purpose: pushed higher, the bloom swallows the disc's edge and the sun becomes a
 // featureless white smear several times its own size.
@@ -215,16 +219,41 @@ float tower_cloud_field(vec3 direction) {
 	return family * base * crown * body;
 }
 
-// High-altitude cirrus wind streaks layer
+// High-altitude cirrus. Painted as fibres rather than as a smear: a sparse family
+// mask puts them in a few bands of the sky instead of everywhere, a cross-wind warp
+// bends each band into the hooked "mare's tail" that makes cirrus recognisable, and a
+// narrow density window keeps the individual strands crisp. The previous version was
+// one wide-windowed noise stretched along the wind, which read as blur, not as cloud.
 float cirrus_field(vec2 uv, float amount) {
 	vec2 wind_axis = normalize(u_wind_direction);
 	vec2 cross_axis = vec2(-wind_axis.y, wind_axis.x);
 	vec2 wind_uv = vec2(dot(uv, wind_axis), dot(uv, cross_axis));
-	vec2 streaked_uv = vec2(wind_uv.x * 0.35 + wind_uv.y * 0.22, wind_uv.y * 3.8);
-	// High cirrus rides the fastest wind and reshapes on the evolve clock.
-	float n = fbm(streaked_uv + vec2(u_cloud_evolve * 0.8, 0.0));
-	float dissolve_threshold = mix(0.70, 0.52, smoothstep(0.06, 1.0, amount));
-	return smoothstep(dissolve_threshold, dissolve_threshold + 0.24, n);
+	float evolve = u_cloud_evolve * 0.8;
+	// Which parts of the sky carry cirrus at all. Long along the wind, narrow across
+	// it, so the answer is bands rather than blobs.
+	float family_seed = fbm(vec2(wind_uv.x * 0.16, wind_uv.y * 0.62) + vec2(31.0, 7.0) + evolve * 0.5);
+	float family = smoothstep(0.44, 0.70, family_seed);
+	if (family <= 0.001) {
+		return 0.0;
+	}
+	// The warp is sampled at a lower frequency than the fibres it displaces, which is
+	// what curves whole groups of strands together instead of jittering each one.
+	float warp = fbm(vec2(wind_uv.x * 0.30, wind_uv.y * 0.85) + vec2(5.0, 2.0) + evolve);
+	vec2 fibre_uv = vec2(
+		wind_uv.x * 0.30 + (warp - 0.5) * 1.5,
+		wind_uv.y * 6.2 + (warp - 0.5) * 2.6
+	);
+	float strands = fbm(fibre_uv);
+	float fine = fbm(fibre_uv * vec2(1.35, 2.15) + vec2(17.0, 3.0));
+	float body = strands * 0.70 + fine * 0.30;
+	// Denser weather thickens the strands by lowering the threshold; the window itself
+	// stays narrow so they never turn back into a wash.
+	float dissolve_threshold = mix(0.60, 0.45, smoothstep(0.06, 1.0, amount));
+	float mask = smoothstep(dissolve_threshold, dissolve_threshold + 0.11, body);
+	// Feathered along the wind: cirrus fades out at the trailing end of a band rather
+	// than stopping at an edge.
+	float feather = smoothstep(0.0, 0.35, family);
+	return mask * feather;
 }
 
 // Thin, elongated mid-altitude islands. Unlike cirrus they retain a soft body,
@@ -251,7 +280,10 @@ float elongated_cloud_field(vec2 uv, float amount) {
 // across the night rather than as a pinwheel overhead.
 // All three are authored unit length, so the rotation and the dot products below need
 // no normalisation at runtime.
-const vec3 CELESTIAL_POLE = vec3(0.26, 0.82, 0.51);
+// The pole sits low, about twenty-five degrees up. With it overhead the sky turned
+// like a pinwheel — stars near the zenith crawling, stars at the horizon racing — and
+// read as every star drifting on its own. Low, the whole visible dome slides one way.
+const vec3 CELESTIAL_POLE = vec3(0.556, 0.424, 0.715);
 // Great circle of the Milky Way, and the direction of its bright core.
 const vec3 MILKY_WAY_AXIS = vec3(0.82, 0.24, 0.52);
 const vec3 MILKY_WAY_CORE = vec3(-0.46, 0.34, 0.82);
@@ -286,6 +318,11 @@ vec3 star_field(vec3 rotated_dir) {
 	vec3 face = cube_face_coords(rotated_dir);
 	// Offsetting per face decorrelates the six grids, so the seams carry no pattern.
 	vec2 uv = face.xy * STAR_GRID + vec2(face.z * 37.3, face.z * 17.9);
+	// Size of one pixel in grid units. A star drawn smaller than a pixel cannot be
+	// resolved: it flickers on and off as the sky rotates it across the sampling grid.
+	// Measured on the face coordinates, which are continuous inside a face; the clamp
+	// discards the spikes at the face seams and behind the camera.
+	float pixel = clamp(length(fwidth(face.xy)) * STAR_GRID, 0.0, 0.5);
 	vec2 cell = floor(uv);
 	vec2 local = fract(uv) - 0.5;
 	float seed = hash21(cell);
@@ -298,19 +335,26 @@ vec3 star_field(vec3 rotated_dir) {
 	float mag = pow(hash21(cell + vec2(5.3, 1.9)), 5.0);
 	float radius = mix(0.009, 0.030, mag);
 	float brightness = mix(0.14, 1.0, mag);
-	// Only the bright stars are allowed to breathe; a whole field of twinkling
-	// pinpricks reads as noise rather than as a sky.
-	float twinkle = 1.0 + sin(u_time * 0.75 + seed * 31.0) * u_star_twinkle * mag * mag;
+	// Only the bright stars are allowed to breathe, and slowly: a whole field of
+	// twinkling pinpricks reads as noise rather than as a sky.
+	float twinkle = 1.0 + sin(u_star_time * 0.6 + seed * 31.0) * u_star_twinkle * mag * mag;
 	vec2 offset = local - point;
 	float distance_to_star = length(offset);
-	float star = 1.0 - smoothstep(radius, radius * 2.6, distance_to_star);
+	// Never drawn thinner than a pixel; a star that has to be widened is dimmed by the
+	// same factor, so the total light it contributes stays put as the sky turns. This
+	// is what stops the field from scintillating.
+	float draw_radius = max(radius, pixel * 0.8);
+	float star = 1.0 - smoothstep(draw_radius * 0.45, draw_radius * 2.6, distance_to_star);
+	star *= radius / draw_radius;
 	// A faint diffraction cross on the few brightest stars. It is what makes an
 	// anchor star read as a star rather than as a dot, and it costs two smoothsteps.
 	float cross_amount = smoothstep(0.62, 1.0, mag);
 	if (cross_amount > 0.001) {
-		float arm = radius * 7.0;
-		float horizontal = (1.0 - smoothstep(0.0, arm, abs(offset.x))) * (1.0 - smoothstep(0.0, radius * 0.9, abs(offset.y)));
-		float vertical = (1.0 - smoothstep(0.0, arm, abs(offset.y))) * (1.0 - smoothstep(0.0, radius * 0.9, abs(offset.x)));
+		// The arms are kept a pixel thick for the same reason as the disc.
+		float arm = draw_radius * 7.0;
+		float arm_width = draw_radius * 0.9;
+		float horizontal = (1.0 - smoothstep(0.0, arm, abs(offset.x))) * (1.0 - smoothstep(0.0, arm_width, abs(offset.y)));
+		float vertical = (1.0 - smoothstep(0.0, arm, abs(offset.y))) * (1.0 - smoothstep(0.0, arm_width, abs(offset.x)));
 		star += (horizontal + vertical) * cross_amount * 0.32;
 	}
 	// Per-star colour temperature: a few warm amber stars among cool blue-white
@@ -522,13 +566,19 @@ void sky() {
 
 	// --- High-altitude cirrus streaks layer ---
 	if (u_cirrus_amount > 0.001) {
-		float cirrus_mask = cirrus_field(uv * 0.85, u_cirrus_amount);
-		vec3 cirrus_col = mix(u_cloud_lit_clear, sky_col, 0.35);
+		// Its own, much flatter projection. Sharing the low ceiling map dragged the
+		// streaks radially outward from the projection centre, which is what turned
+		// them into the fan of smears spreading from the zenith.
+		vec2 cirrus_uv = dir.xz / max(horizon + 0.85, 0.85) * u_cloud_scale * 2.6;
+		// The highest layer rides the fastest wind.
+		cirrus_uv += u_wind_offset * 2.4;
+		float cirrus_mask = cirrus_field(cirrus_uv, u_cirrus_amount);
+		vec3 cirrus_col = mix(u_cloud_lit_clear, sky_col, 0.28);
 		// Cirrus belongs to the daytime blue sky. It fades out through dusk so it
 		// never smudges over the night star field, where it only adds noise.
 		float cirrus_day = 1.0 - u_night_factor;
 		float cirrus_tail_fade = smoothstep(0.0, 0.14, u_cirrus_amount);
-		float cirrus_alpha = cirrus_mask * cirrus_tail_fade * ceil_mask * clear_sky * cirrus_day * 0.42;
+		float cirrus_alpha = cirrus_mask * cirrus_tail_fade * ceil_mask * clear_sky * cirrus_day * 0.55;
 		sky_col = mix(sky_col, cirrus_col, cirrus_alpha);
 	}
 
@@ -626,13 +676,26 @@ void sky() {
 	float shadow_relief = mix(0.26, 0.10, u_night_factor);
 	float ambient_fill = mix(0.18, 0.28, u_night_factor);
 	float lit = clamp(dome_light * dome_strength + (1.0 - occ) * shadow_relief + ambient_fill, 0.0, 1.0);
-	float painted_detail = fbm(cumulus_uv * 3.6 + vec2(13.2, 2.7));
-	float detail_strength = mix(0.09, 0.025, u_night_factor);
+	// Two octaves of painted grain. Perturbing lit just before the toon bands is what
+	// makes the band boundaries ragged and hand-drawn instead of geometrically clean.
+	float painted_detail = fbm(cumulus_uv * 3.6 + vec2(13.2, 2.7)) * 0.62
+		+ fbm(cumulus_uv * 7.8 + vec2(2.4, 19.6)) * 0.38;
+	float detail_strength = mix(0.15, 0.04, u_night_factor);
 	lit = clamp(lit + (painted_detail - 0.5) * detail_strength * density, 0.0, 1.0);
 	float lobe_core = smoothstep(shape_coverage + 0.025, shape_coverage + 0.17, n);
 	float inner_billows = cellular_billow(cumulus_uv * 1.58 + vec2(4.1, 9.3));
+	// A finer billow family carves sub-lobes inside the big cauliflower masses, so a
+	// cloud reads as a cluster of rounded bulges rather than as one smooth dome.
+	float fine_billows = cellular_billow(cumulus_uv * 2.95 + vec2(21.0, 5.4));
 	float lobe_light = mix(0.16, 0.055, u_night_factor);
-	lit = clamp(lit + lobe_core * lobe_light + (inner_billows - 0.5) * 0.035 * density, 0.0, 1.0);
+	float fine_lobe_strength = mix(0.085, 0.03, u_night_factor);
+	lit = clamp(
+		lit + lobe_core * lobe_light
+			+ (inner_billows - 0.5) * 0.055 * density
+			+ (fine_billows - 0.5) * fine_lobe_strength * density,
+		0.0,
+		1.0
+	);
 	lit -= smoothstep(0.48, 0.95, horizon) * density * mix(0.08, 0.025, u_night_factor);
 	// Only genuine murk flattens the dome shading into a dull ceiling.
 	lit = mix(lit, lit * 0.55 + 0.25, u_murk);
@@ -652,10 +715,10 @@ void sky() {
 	// The bands are pushed down so the near-white midtone owns most of the cloud body
 	// and the saturated shadow keeps to a small area under the lobes. A large shadow
 	// at this chroma would tint the whole cloud blue again.
-	float shadow_mid_soft = smoothstep(0.06, 0.46, lit);
-	float mid_lit_soft = smoothstep(0.30, 0.78, lit);
-	float shadow_mid_toon = smoothstep(0.22, 0.30, lit);
-	float mid_lit_toon = smoothstep(0.52, 0.60, lit);
+	float shadow_mid_soft = smoothstep(0.18, 0.56, lit);
+	float mid_lit_soft = smoothstep(0.36, 0.82, lit);
+	float shadow_mid_toon = smoothstep(0.28, 0.36, lit);
+	float mid_lit_toon = smoothstep(0.56, 0.64, lit);
 	float band_strength = u_toon_banding * clear_sky * mix(1.0, 0.18, u_night_factor);
 	float shadow_mid = mix(shadow_mid_soft, shadow_mid_toon, band_strength);
 	float mid_lit = mix(mid_lit_soft, mid_lit_toon, band_strength);

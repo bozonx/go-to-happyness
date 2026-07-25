@@ -149,6 +149,7 @@ const SettlementConstructionControllerScript = preload("res://game/bootstrap/set
 const SettlementWorkplaceControllerScript = preload("res://game/bootstrap/settlement_workplace_controller.gd")
 const SettlementSimulationTickControllerScript = preload("res://game/bootstrap/settlement_simulation_tick_controller.gd")
 const SettlementLogisticsControllerScript = preload("res://game/bootstrap/settlement_logistics_controller.gd")
+const SettlementWorldNavigationControllerScript = preload("res://game/bootstrap/settlement_world_navigation_controller.gd")
 
 
 
@@ -572,6 +573,7 @@ var _construction_controller: RefCounted
 var _workplace_controller: RefCounted
 var _simulation_tick_controller: RefCounted
 var _logistics_controller: RefCounted
+var _world_navigation_controller: RefCounted
 
 
 func _ready() -> void:
@@ -600,6 +602,7 @@ func _ready() -> void:
 	_workplace_controller = SettlementWorkplaceControllerScript.new(self)
 	_simulation_tick_controller = SettlementSimulationTickControllerScript.new(self)
 	_logistics_controller = SettlementLogisticsControllerScript.new(self)
+	_world_navigation_controller = SettlementWorldNavigationControllerScript.new(self)
 	ui_manager.bind_delegate_events(SettlementUICallbacksScript.new(self))
 	SettlementBootstrapperScript.new().run(self)
 
@@ -1038,94 +1041,37 @@ func _add_message(text: String) -> void:
 # ---------- End message log system --------------------------------------------
 
 func _create_world() -> void:
-	camera_controller = CameraControllerScene.instantiate() as CameraController
-	add_child(camera_controller)
-	world_setup = WorldSetupScene.instantiate() as WorldSetup
-	world_setup.setup(camera, CELL_SIZE, BOARD_CELLS, trail_field)
-	add_child(world_setup)
-	world_setup.build(self)
-	_update_daylight()
-	_refresh_navigation_grid()
-	_move_selection(Vector3.ZERO)
+	_world_navigation_controller.create_world()
 
 
 ## Presentation ownership boundary for naturally occurring world objects.
 ## Their mutable gameplay records remain registered with the relevant feature
 ## services; reparenting them here must not change routing or resource logic.
 func add_landscape_object(node: Node) -> void:
-	var territory := get_node_or_null("Terrain3dWorld") as TerritoryBase
-	if territory != null:
-		territory.add_landscape_object(node)
-	else:
-		add_child(node)
+	_world_navigation_controller.add_landscape_object(node)
 
 
 func _update_trail_overlay() -> void:
-	if world_setup.trail_overlay_material == null or trail_field == null:
-		return
-	if trail_texture_renderer != null:
-		world_setup.trail_overlay_material.set_shader_parameter("trail_map", trail_texture_renderer.flush(trail_field, runtime_seconds))
+	_world_navigation_controller.update_trail_overlay()
 
 
 func _record_trail_movement(citizen_id: int, position_on_board: Vector3) -> void:
-	if settlement.era != SettlementState.Era.TENT or trail_field == null:
-		return
-	trail_field.record_walker_position(citizen_id, position_on_board, settlement.road_walking_order_enabled)
+	_world_navigation_controller.record_trail_movement(citizen_id, position_on_board)
 
 func _refresh_navigation_grid() -> void:
-	if navigation_bridge != null:
-		navigation_blocked_cells = navigation_bridge.refresh_navigation_grid(
-			terrain_blocked_cells,
-			building_registry.records(),
-			service_pockets,
-			NAVIGATION_CLEARANCE_MARGIN
-		)
+	_world_navigation_controller.refresh_navigation_grid()
 
 func _rebuild_navigation_obstacles() -> void:
-	_refresh_navigation_grid()
+	_world_navigation_controller.rebuild_navigation_obstacles()
 
 
 
 func _pond_access_position(from: Vector3, pond_center: Vector3) -> Vector3:
-	var candidates := [
-		pond_center + Vector3(3.0, 0.0, 0.0),
-		pond_center + Vector3(-3.0, 0.0, 0.0),
-		pond_center + Vector3(0.0, 0.0, 3.0),
-		pond_center + Vector3(0.0, 0.0, -3.0)
-	]
-	var best := Vector3.INF
-	var best_distance := INF
-	for candidate in candidates:
-		if navigation_blocked_cells.has(_cell_from_position(candidate)):
-			continue
-		var distance := from.distance_squared_to(candidate)
-		if distance < best_distance:
-			best = candidate
-			best_distance = distance
-	if best == Vector3.INF:
-		return Vector3.INF
-	var terrain_height := _terrain_height_at(best.x, best.z, pond_center.y)
-	if not is_nan(terrain_height):
-		best.y = terrain_height
-	return best
+	return _world_navigation_controller.pond_access_position(from, pond_center)
 
 
 func _resource_access_position(from: Vector3, resource_position: Vector3) -> Vector3:
-	var resource_cell := _cell_from_position(resource_position)
-	var best := Vector3.INF
-	var best_distance := INF
-	for offset in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1)]:
-		var cell: Vector2i = resource_cell + offset
-		if not _is_board_cell(cell) or navigation_blocked_cells.has(cell):
-			continue
-		var candidate: Vector3 = nav_grid.cell_center(cell) if nav_grid != null else Vector3((cell.x + 0.5) * CELL_SIZE, 0.0, (cell.y + 0.5) * CELL_SIZE)
-		if not _is_route_reachable(from, candidate):
-			continue
-		var distance := from.distance_squared_to(candidate)
-		if distance < best_distance:
-			best = candidate
-			best_distance = distance
-	return best
+	return _world_navigation_controller.resource_access_position(from, resource_position)
 
 
 
@@ -2174,31 +2120,13 @@ func _fell_nearest_tree() -> void:
 
 
 func _fell_tree_at(position_on_board: Vector3) -> void:
-	var cell := _cell_from_position(position_on_board)
-	var tree: Node3D = tree_nodes.get(cell)
-	if not is_instance_valid(tree):
-		return
-	var tree_state: Variant = world_resource_state.tree_at(cell)
-	if tree_state == null or tree_state.felled:
-		return
-	_apply_tree_felled_visual(cell, tree)
-	_refresh_navigation_grid()
-	settlement.add(ResourceIds.BRANCHES, 3)
-	_update_interface("A tree was felled. Its log is ready for delivery; the living tree is no longer available for gathering.")
+	_world_navigation_controller.fell_tree_at(position_on_board)
 
 
 ## Lays a tree down and frees the cell it occupied. Shared by live felling and
 ## save restore so both paths produce identical geometry and navigation state.
 func _apply_tree_felled_visual(cell: Vector2i, tree: Node3D) -> void:
-	var tree_state: Variant = world_resource_state.tree_at(cell)
-	if tree_state != null:
-		tree_state.felled = true
-		tree.set_meta("felled", true) # Compatibility projection; state is authoritative.
-	tree.rotation_degrees.z = 82.0
-	var collision_body := tree.get_node_or_null("TreeCollision") as CollisionObject3D
-	if collision_body != null:
-		collision_body.queue_free()
-	terrain_blocked_cells.erase(cell)
+	_world_navigation_controller.apply_tree_felled_visual(cell, tree)
 
 func _toggle_global_build_menu() -> void:
 	_build_controller.toggle_global_build_menu()
@@ -2363,11 +2291,7 @@ func _select_best_campfire() -> void:
 
 
 func _refresh_boundary_markers() -> void:
-	var territory: RefCounted = village_territory_service.territory()
-	if world_setup.village_boundary_markers != null:
-		world_setup.village_boundary_markers.refresh(territory)
-	if world_setup.village_territory_overlay != null:
-		world_setup.village_territory_overlay.refresh(territory)
+	_world_navigation_controller.refresh_boundary_markers()
 
 
 func _show_territory_overlay(show: bool) -> void:

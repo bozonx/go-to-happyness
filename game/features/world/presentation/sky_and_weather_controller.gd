@@ -357,6 +357,10 @@ func update_daylight(
 			"u_star_rotation",
 			motion_clock / MINUTES_PER_DAY * STAR_ROTATION_PER_DAY
 		)
+		# Twinkle runs on real elapsed seconds, not on the game clock. Game minutes pass
+		# tens of times faster than wall time, and driving the twinkle from them strobed
+		# the whole star field several times a second.
+		sky_material.set_shader_parameter("u_star_time", runtime_seconds)
 		# Atmospheric horizon band. Two separate contributions:
 		#   * clear-weather glow: a soft light band by day, warm at dawn/dusk, and
 		#     fully absent at clear night (day_light -> 0) so the stars sit on clean

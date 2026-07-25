@@ -121,8 +121,8 @@ text = "2. Отделка"
 unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
-disabled = true
 text = "3. Декор"
+
 
 [node name="ModeZonesBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
 unique_name_in_owner = true

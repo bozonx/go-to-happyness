@@ -922,6 +922,10 @@ func _setup_ui() -> void:
 	_mode_buttons[EditMode.DECOR] = _mode_decor_btn
 	_mode_buttons[EditMode.ZONES] = _mode_zones_btn
 
+	if _mode_decor_btn != null:
+		_mode_decor_btn.disabled = false
+
+
 	_material_option.item_selected.connect(func(index: int):
 		current_material_id = _material_option.get_item_metadata(index)
 		_refresh_ghost()
