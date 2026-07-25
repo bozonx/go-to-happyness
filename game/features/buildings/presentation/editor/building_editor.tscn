@@ -154,17 +154,29 @@ tooltip_text = "Прямоугольник (M / Shift)"
 [node name="VSepBrush" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
 layout_mode = 2
 
+[node name="RotXBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "🔄X"
+tooltip_text = "Поворот вокруг оси X"
+
 [node name="RotBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "🔄 (R)"
-tooltip_text = "Поворот (R)"
+text = "🔄Y (R)"
+tooltip_text = "Поворот вокруг оси Y (R)"
+
+[node name="RotZBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "🔄Z"
+tooltip_text = "Поворот вокруг оси Z"
 
 [node name="RotLabel" type="Label" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(36, 0)
+custom_minimum_size = Vector2(96, 0)
 layout_mode = 2
-text = "0°"
+text = "Y 0°"
 
 [node name="VSepRot" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
 layout_mode = 2
@@ -688,7 +700,9 @@ size_flags_vertical = 3
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/ToolEraseBtn" to="." method="_on_tool_erase_pressed"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/BrushLineBtn" to="." method="_on_brush_line_pressed"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/BrushRectBtn" to="." method="_on_brush_rect_pressed"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/RotXBtn" to="." method="_cycle_rotation_x"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/RotBtn" to="." method="_cycle_rotation"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/RotZBtn" to="." method="_cycle_rotation_z"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/LayerDownBtn" to="." method="_on_layer_down_pressed"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/LayerUpBtn" to="." method="_on_layer_up_pressed"]
 [connection signal="pressed" from="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/CostHeaderBtn" to="." method="_on_cost_header_pressed"]

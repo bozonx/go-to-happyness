@@ -12,7 +12,7 @@ func collect(ctx: FacadeContext) -> Dictionary:
 	var daily_order_role := ctx.daily_order_role
 
 	var construction_worker := actor.permanent_role == "construction" and actor.is_employed() and not actor.is_player_controlled
-	var construction_in_progress := construction_worker and actor.active_role in ["construction", "demolition"] and actor.state == Citizen.State.CONSTRUCTING and is_instance_valid(actor.construction_site)
+	var construction_in_progress := construction_worker and _active_construction_can_continue(ctx, actor)
 	var construction_can_start := false
 	var construction_mode: StringName = &""
 	var construction_target_key: StringName = &""
@@ -36,7 +36,7 @@ func collect(ctx: FacadeContext) -> Dictionary:
 				construction_position = actor._reachable_construction_approach(construction_site.node)
 		construction_can_start = construction_target_key != &"" and construction_position != Vector3.INF
 
-	var daily_construction_in_progress := daily_order_active and daily_order_role == "construction" and actor.active_role in ["construction", "demolition"] and actor.state == Citizen.State.CONSTRUCTING and is_instance_valid(actor.construction_site)
+	var daily_construction_in_progress := daily_order_active and daily_order_role == "construction" and _active_construction_can_continue(ctx, actor)
 	var daily_construction_can_start := false
 	var daily_construction_mode: StringName = &""
 	var daily_construction_target_key: StringName = &""
@@ -86,6 +86,8 @@ func _construction_site_for(ctx: FacadeContext, actor: Citizen) -> ConstructionS
 	for candidate: ConstructionSite in ctx.simulation.construction_sites:
 		if candidate == null or not is_instance_valid(candidate.node) or candidate.node.is_queued_for_deletion():
 			continue
+		if candidate.material_progress() <= candidate.progress + 0.0001:
+			continue
 		if actor._reachable_construction_approach(candidate.node) == Vector3.INF:
 			continue
 		var score: float = ctx.simulation.construction_priority_service.development_priority(candidate) if ctx.simulation.construction_priority_service != null else 0.0
@@ -93,3 +95,14 @@ func _construction_site_for(ctx: FacadeContext, actor: Citizen) -> ConstructionS
 			best = candidate
 			best_score = score
 	return best
+
+
+func _active_construction_can_continue(ctx: FacadeContext, actor: Citizen) -> bool:
+	if not is_instance_valid(actor) or actor.state != Citizen.State.CONSTRUCTING or not is_instance_valid(actor.construction_site):
+		return false
+	if actor.active_role == "demolition":
+		return true
+	if actor.active_role != "construction" or ctx.simulation.construction == null:
+		return false
+	var site: ConstructionSite = ctx.simulation.construction.site_for_node(actor.construction_site)
+	return site != null and site.material_progress() > site.progress + 0.0001

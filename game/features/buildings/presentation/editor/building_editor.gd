@@ -39,6 +39,8 @@ var current_variant: StringName = BuildingBlockCatalogScript.default_variant(Bui
 var current_anchor: int = BuildingBlockCatalogScript.ANCHOR_CENTER
 var current_material_id: StringName = BuildingMaterialCatalogScript.DEFAULT_ID
 var current_rot: int = 0
+var current_rot_x: int = 0
+var current_rot_z: int = 0
 var current_tool: int = Tool.PLACE
 var current_brush: int = Brush.LINE
 var active_layer: int = 0
@@ -361,13 +363,19 @@ func _apply_tool_at_cursor() -> void:
 func _apply_tool_at_cell(cell: Vector3i) -> void:
 	match current_tool:
 		Tool.PLACE:
-			if grid_model.place(cell, current_block_id, current_rot, current_material_id, current_variant, current_anchor):
+			# A multi-cell block can evict several existing blocks; drop their
+			# anchor nodes before spawning the new one.
+			var evicted := grid_model.overlapping_anchors(cell, current_block_id, current_variant, current_rot)
+			if grid_model.place(cell, current_block_id, current_rot, current_material_id, current_variant, current_anchor, current_rot_x, current_rot_z):
+				for anchor in evicted:
+					_remove_block_node(anchor)
 				_spawn_or_update_block_node(grid_model.get_block_at(cell))
 				_update_count()
 				_mark_dirty()
 		Tool.ERASE:
+			var anchor := grid_model.anchor_at(cell)
 			if grid_model.erase(cell):
-				_remove_block_node(cell)
+				_remove_block_node(anchor)
 				_update_count()
 				_mark_dirty()
 
@@ -445,7 +453,7 @@ func _spawn_or_update_block_node(block: BlueprintBlock) -> void:
 	node.mesh = mesh_library.mesh_for(block.block_id, block.variant)
 	node.material_override = mesh_library.material_for(block.material_id)
 	node.position = Vector3(block.pos) + BlockMeshLibraryScript.local_offset(block.block_id, block.variant, block.rot, block.anchor)
-	node.rotation = Vector3(0.0, block.rotation_radians(), 0.0)
+	node.rotation = block.rotation_euler()
 
 
 func _remove_block_node(cell: Vector3i) -> void:
@@ -477,19 +485,27 @@ func _refresh_ghost() -> void:
 		var target := grid_model.get_block_at(cursor_cell)
 		if target == null:
 			_ghost.mesh = mesh_library.mesh_for(current_block_id, current_variant)
-			_ghost.rotation = Vector3(0.0, deg_to_rad(90.0 * current_rot), 0.0)
+			_ghost.rotation = _current_ghost_euler()
 			_ghost.position = Vector3(cursor_cell) + BlockMeshLibraryScript.local_offset(current_block_id, current_variant, current_rot, current_anchor)
 			_ghost.material_override = mesh_library.ghost_material(false)
 		else:
 			_ghost.mesh = mesh_library.mesh_for(target.block_id, target.variant)
-			_ghost.rotation = Vector3(0.0, target.rotation_radians(), 0.0)
+			_ghost.rotation = target.rotation_euler()
 			_ghost.position = Vector3(target.pos) + BlockMeshLibraryScript.local_offset(target.block_id, target.variant, target.rot, target.anchor)
 			_ghost.material_override = mesh_library.ghost_material(false)
 	else:
 		_ghost.mesh = mesh_library.mesh_for(current_block_id, current_variant)
-		_ghost.rotation = Vector3(0.0, deg_to_rad(90.0 * current_rot), 0.0)
+		_ghost.rotation = _current_ghost_euler()
 		_ghost.position = Vector3(cursor_cell) + BlockMeshLibraryScript.local_offset(current_block_id, current_variant, current_rot, current_anchor)
 		_ghost.material_override = mesh_library.ghost_material(true)
+
+
+## Euler rotation of the placement ghost, combining all three quarter-turn axes.
+func _current_ghost_euler() -> Vector3:
+	return Vector3(
+		deg_to_rad(90.0 * float(current_rot_x)),
+		deg_to_rad(90.0 * float(current_rot)),
+		deg_to_rad(90.0 * float(current_rot_z)))
 
 
 func _refresh_layer_plane() -> void:
@@ -638,6 +654,8 @@ func _select_block(block_id: StringName, variant: StringName = &"") -> void:
 	var def := BuildingBlockCatalogScript.get_block(block_id)
 	if def.is_empty() or not def.get("rotatable", true):
 		current_rot = 0
+		current_rot_x = 0
+		current_rot_z = 0
 	_set_tool(Tool.PLACE)
 	for key in _palette_buttons.keys():
 		(_palette_buttons[key] as Button).button_pressed = key == current_block_id
@@ -652,6 +670,24 @@ func _cycle_rotation() -> void:
 		return
 	current_rot = (current_rot + 1) % 4
 	_rebuild_brush_inspector()
+	_update_rotation_label()
+	_refresh_ghost()
+
+
+func _cycle_rotation_x() -> void:
+	var def := BuildingBlockCatalogScript.get_block(current_block_id)
+	if def.is_empty() or not def.get("rotatable", true):
+		return
+	current_rot_x = (current_rot_x + 1) % 4
+	_update_rotation_label()
+	_refresh_ghost()
+
+
+func _cycle_rotation_z() -> void:
+	var def := BuildingBlockCatalogScript.get_block(current_block_id)
+	if def.is_empty() or not def.get("rotatable", true):
+		return
+	current_rot_z = (current_rot_z + 1) % 4
 	_update_rotation_label()
 	_refresh_ghost()
 
@@ -969,18 +1005,36 @@ func _build_palette_blocks() -> void:
 func _ensure_brush_inspector() -> Control:
 	if _brush_inspector != null and is_instance_valid(_brush_inspector):
 		return _brush_inspector
+	# Lives inside the palette list itself so it can slot directly beneath the
+	# selected block button (moved there in _rebuild_brush_inspector).
 	_brush_inspector = VBoxContainer.new()
 	_brush_inspector.name = "BrushInspector"
-	var parent := _palette_container.get_parent()
-	parent.add_child(_brush_inspector)
-	parent.move_child(_brush_inspector, _palette_container.get_index() + 1)
+	_palette_container.add_child(_brush_inspector)
 	return _brush_inspector
+
+
+## Places the inspector right after the currently selected block's button so the
+## variant/size strip and anchor pad appear under that block, not at the list's
+## end.
+func _move_brush_inspector_under_selection() -> void:
+	if _brush_inspector == null or not is_instance_valid(_brush_inspector):
+		return
+	var btn: Button = _palette_buttons.get(current_block_id, null)
+	if btn == null:
+		return
+	# move_child takes a final index; a forward move shifts everything down by one
+	# once the inspector is lifted out, so compensate to land just after the button.
+	var target := btn.get_index() + 1
+	if _brush_inspector.get_index() < target:
+		target -= 1
+	_palette_container.move_child(_brush_inspector, target)
 
 
 func _rebuild_brush_inspector() -> void:
 	var host := _ensure_brush_inspector()
 	for child in host.get_children():
 		child.queue_free()
+	_move_brush_inspector_under_selection()
 
 	var variants: Array = BuildingBlockCatalogScript.variants(current_block_id)
 	if not variants.is_empty():
@@ -1444,7 +1498,10 @@ func _sync_metadata_fields() -> void:
 
 func _update_rotation_label() -> void:
 	if _rot_label != null:
-		_rot_label.text = "%d°" % (current_rot * 90)
+		if current_rot_x == 0 and current_rot_z == 0:
+			_rot_label.text = "Y %d°" % (current_rot * 90)
+		else:
+			_rot_label.text = "X %d° Y %d° Z %d°" % [current_rot_x * 90, current_rot * 90, current_rot_z * 90]
 
 
 func _update_count() -> void:

@@ -25,7 +25,7 @@ func _init() -> void:
 	blueprint.grid_bounds = Vector3i(2, 1, 1)
 	blueprint.blocks = [
 		BlueprintBlockScript.new(Vector3i(0, 0, 0), &"cube", 0, &"earth"),
-		BlueprintBlockScript.new(Vector3i(1, 0, 0), &"wall_panel", 1, &"branches"),
+		BlueprintBlockScript.new(Vector3i(1, 0, 0), &"half_slab", 1, &"branches"),
 	]
 	var place := PlaceZoneScript.new()
 	place.zone_id = &"craft_1"

@@ -2,14 +2,18 @@ class_name BlueprintBlock
 extends RefCounted
 
 ## A single placed construction block in a building blueprint.
-## `pos` is the anchor voxel on the 1m grid, `rot` is a quarter-turn index
-## (0 = 0°, 1 = 90°, 2 = 180°, 3 = 270°) around the Y axis. `variant` selects a
-## prepared size/profile option for blocks that expose one (empty = default).
+## `pos` is the anchor voxel on the 1m grid. Rotation is stored as three
+## independent quarter-turn indices (0 = 0°, 1 = 90°, 2 = 180°, 3 = 270°) about
+## the X, Y and Z axes; `rot` is the Y turn (kept named for compatibility).
+## `variant` selects a prepared size/profile option for blocks that expose one
+## (empty = default).
 
 var pos: Vector3i = Vector3i.ZERO
 var block_id: StringName = &""
 var material_id: StringName = &"branches"
-var rot: int = 0
+var rot: int = 0        ## Y-axis quarter-turns.
+var rot_x: int = 0      ## X-axis quarter-turns.
+var rot_z: int = 0      ## Z-axis quarter-turns.
 var variant: StringName = &""
 ## In-cell snap kind for sub-cell blocks: 0 = centre, 1 = edge, 2 = corner (see
 ## BuildingBlockCatalog.ANCHOR_*). The concrete side/corner follows from `rot`.
@@ -22,7 +26,9 @@ func _init(
 	p_rot: int = 0,
 	p_material_id: StringName = &"branches",
 	p_variant: StringName = &"",
-	p_anchor: int = 0
+	p_anchor: int = 0,
+	p_rot_x: int = 0,
+	p_rot_z: int = 0
 ) -> void:
 	pos = p_pos
 	block_id = p_block_id
@@ -30,10 +36,20 @@ func _init(
 	material_id = p_material_id
 	variant = p_variant
 	anchor = p_anchor
+	rot_x = p_rot_x
+	rot_z = p_rot_z
 
 
 func rotation_radians() -> float:
 	return deg_to_rad(90.0 * float(rot % 4))
+
+
+## Full Euler rotation (radians) combining all three quarter-turn axes.
+func rotation_euler() -> Vector3:
+	return Vector3(
+		deg_to_rad(90.0 * float(rot_x % 4)),
+		deg_to_rad(90.0 * float(rot % 4)),
+		deg_to_rad(90.0 * float(rot_z % 4)))
 
 
 func to_dict() -> Dictionary:
@@ -50,6 +66,11 @@ func to_dict() -> Dictionary:
 	# Only emitted when snapped off-centre.
 	if anchor != 0:
 		out["anchor"] = anchor
+	# Only emitted when tilted off the Y axis, keeping flat entries unchanged.
+	if rot_x != 0:
+		out["rot_x"] = rot_x
+	if rot_z != 0:
+		out["rot_z"] = rot_z
 	return out
 
 
@@ -62,4 +83,6 @@ static func from_dict(data: Dictionary) -> BlueprintBlock:
 	var rot := ((int(data.get("rot", 0)) % 4) + 4) % 4
 	var variant := StringName(data.get("variant", ""))
 	var anchor := clampi(int(data.get("anchor", 0)), 0, 2)
-	return BlueprintBlock.new(pos, block_id, rot, material_id, variant, anchor)
+	var rot_x := ((int(data.get("rot_x", 0)) % 4) + 4) % 4
+	var rot_z := ((int(data.get("rot_z", 0)) % 4) + 4) % 4
+	return BlueprintBlock.new(pos, block_id, rot, material_id, variant, anchor, rot_x, rot_z)

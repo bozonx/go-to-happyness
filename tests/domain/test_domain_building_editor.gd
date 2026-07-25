@@ -37,13 +37,18 @@ static func run_all() -> void:
 
 
 static func _test_catalog() -> void:
-	assert(BuildingBlockCatalogScript.all().size() == 24)
+	assert(BuildingBlockCatalogScript.all().size() == 25)
 	assert(BuildingBlockCatalogScript.has_block(&"cube"))
 	assert(BuildingBlockCatalogScript.has_block(&"stairs_corner_45"))
 	assert(BuildingBlockCatalogScript.has_block(&"foundation"))
 	assert(not BuildingBlockCatalogScript.has_block(&"nonexistent"))
-	# quarter_block was removed: it duplicated the medium square column variant.
-	assert(not BuildingBlockCatalogScript.has_block(&"quarter_block"))
+	# The WALL category was removed; its panels duplicated other blocks.
+	assert(not BuildingBlockCatalogScript.has_block(&"wall_panel"))
+	assert(not BuildingBlockCatalogScript.has_block(&"parapet"))
+	# Columns are now three distinct blocks (square / round / half).
+	assert(BuildingBlockCatalogScript.has_block(&"column_square"))
+	assert(BuildingBlockCatalogScript.has_block(&"column_round"))
+	assert(BuildingBlockCatalogScript.has_block(&"column_half"))
 	assert(BuildingBlockCatalogScript.default_block_id() == &"cube")
 	var cube := BuildingBlockCatalogScript.get_block(&"cube")
 	assert(cube["size"] == Vector3(1.0, 1.0, 1.0))
@@ -52,33 +57,39 @@ static func _test_catalog() -> void:
 	assert(not BuildingBlockCatalogScript.extends_down(&"cube"))
 	# Parametric blocks expose prepared size/profile variants; the first is the
 	# default and an unknown request normalizes back to it.
-	assert(BuildingBlockCatalogScript.has_variants(&"column"))
+	assert(BuildingBlockCatalogScript.has_variants(&"column_square"))
 	assert(not BuildingBlockCatalogScript.has_variants(&"cube"))
-	assert(BuildingBlockCatalogScript.default_variant(&"column") == &"square_thick")
-	assert(BuildingBlockCatalogScript.normalize_variant(&"column", &"bogus") == &"square_thick")
-	assert(BuildingBlockCatalogScript.size_of(&"column", &"round_med") == Vector3(0.5, 1.0, 0.5))
-	assert(BuildingBlockCatalogScript.mesh_shape_of(&"column", &"round_med") == BuildingBlockCatalogScript.SHAPE_CYLINDER)
+	assert(BuildingBlockCatalogScript.default_variant(&"column_square") == &"thick")
+	assert(BuildingBlockCatalogScript.normalize_variant(&"column_square", &"bogus") == &"thick")
+	assert(BuildingBlockCatalogScript.size_of(&"column_round", &"med") == Vector3(0.5, 1.0, 0.5))
+	assert(BuildingBlockCatalogScript.mesh_shape_of(&"column_round", &"med") == BuildingBlockCatalogScript.SHAPE_CYLINDER)
+	# Openings occupy a 3×3 face; single-cell blocks report a unit footprint.
+	assert(BuildingBlockCatalogScript.footprint_of(&"door_wall") == Vector3i(3, 3, 1))
+	assert(BuildingBlockCatalogScript.is_multicell(&"door_wall"))
+	assert(not BuildingBlockCatalogScript.is_multicell(&"cube"))
 	_test_anchoring()
 
 
 static func _test_anchoring() -> void:
 	var C := BuildingBlockCatalogScript
 	# A 0.5m column is thin on both axes: centre + edge + corner. A full cube has
-	# only centre. A railing/wall panel is thin on one axis: centre + edge, no corner.
-	assert(C.available_anchors(&"column", &"square_med") == [C.ANCHOR_CENTER, C.ANCHOR_EDGE, C.ANCHOR_CORNER])
+	# only centre. A railing/half-slab is thin on one axis: centre + edge, no corner.
+	assert(C.available_anchors(&"column_square", &"med") == [C.ANCHOR_CENTER, C.ANCHOR_EDGE, C.ANCHOR_CORNER])
 	assert(C.available_anchors(&"cube", &"") == [C.ANCHOR_CENTER])
 	assert(C.available_anchors(&"railing", &"full") == [C.ANCHOR_CENTER, C.ANCHOR_EDGE])
-	assert(C.available_anchors(&"wall_panel", &"") == [C.ANCHOR_CENTER, C.ANCHOR_EDGE])
+	assert(C.available_anchors(&"half_slab", &"") == [C.ANCHOR_CENTER, C.ANCHOR_EDGE])
+	# A multi-cell opening anchors only at its centre.
+	assert(C.available_anchors(&"door_wall", &"") == [C.ANCHOR_CENTER])
 	# Centre stays centred; corner snaps the 0.5m block flush to a corner and
 	# rotation pivots it around the cell centre to the opposite corner.
-	assert(C.cell_offset(&"column", &"square_med", C.ANCHOR_CENTER, 0) == Vector2(0.5, 0.5))
-	assert(_approx(C.cell_offset(&"column", &"square_med", C.ANCHOR_CORNER, 0), Vector2(0.25, 0.25)))
-	assert(_approx(C.cell_offset(&"column", &"square_med", C.ANCHOR_CORNER, 2), Vector2(0.75, 0.75)))
-	# A wall panel edge-anchors flush to its thin (-Z) side; a 90° turn moves that
+	assert(C.cell_offset(&"column_square", &"med", C.ANCHOR_CENTER, 0) == Vector2(0.5, 0.5))
+	assert(_approx(C.cell_offset(&"column_square", &"med", C.ANCHOR_CORNER, 0), Vector2(0.25, 0.25)))
+	assert(_approx(C.cell_offset(&"column_square", &"med", C.ANCHOR_CORNER, 2), Vector2(0.75, 0.75)))
+	# A half-slab edge-anchors flush to its thin (-Z) side; a 90° turn moves that
 	# flush face onto the X axis (Z re-centres) — the other edges via rotation.
-	var wall0 := C.cell_offset(&"wall_panel", &"", C.ANCHOR_EDGE, 0)
+	var wall0 := C.cell_offset(&"half_slab", &"", C.ANCHOR_EDGE, 0)
 	assert(is_equal_approx(wall0.x, 0.5) and wall0.y < 0.2)
-	var wall1 := C.cell_offset(&"wall_panel", &"", C.ANCHOR_EDGE, 1)
+	var wall1 := C.cell_offset(&"half_slab", &"", C.ANCHOR_EDGE, 1)
 	assert(wall1.x < 0.2 and is_equal_approx(wall1.y, 0.5))
 
 
@@ -110,10 +121,10 @@ static func _test_material_catalog_and_costs() -> void:
 	bp.category = &"stone"
 	var grid := BuildingGridModelScript.new()
 	assert(grid.place(Vector3i.ZERO, &"cube", 0, &"earth"))
-	assert(grid.place(Vector3i(1, 0, 0), &"wall_panel", 1, &"stone"))
+	assert(grid.place(Vector3i(1, 0, 0), &"half_slab", 1, &"stone"))
 	# A parametric block records its chosen variant and in-cell anchor kind.
-	assert(grid.place(Vector3i(2, 0, 0), &"column", 0, &"stone", &"round_med", BuildingBlockCatalogScript.ANCHOR_CORNER))
-	assert(grid.get_block_at(Vector3i(2, 0, 0)).variant == &"round_med")
+	assert(grid.place(Vector3i(2, 0, 0), &"column_round", 0, &"stone", &"med", BuildingBlockCatalogScript.ANCHOR_CORNER))
+	assert(grid.get_block_at(Vector3i(2, 0, 0)).variant == &"med")
 	assert(grid.get_block_at(Vector3i(2, 0, 0)).anchor == BuildingBlockCatalogScript.ANCHOR_CORNER)
 	grid.write_to_blueprint(bp)
 	bp.recalculate_construction_cost()
@@ -126,8 +137,8 @@ static func _test_material_catalog_and_costs() -> void:
 	# variant-less and centred.
 	assert(restored.blocks[0].variant == &"")
 	assert(restored.blocks[0].anchor == BuildingBlockCatalogScript.ANCHOR_CENTER)
-	var col := restored.blocks[2] if restored.blocks[2].block_id == &"column" else restored.blocks[1]
-	assert(col.variant == &"round_med")
+	var col := restored.blocks[2] if restored.blocks[2].block_id == &"column_round" else restored.blocks[1]
+	assert(col.variant == &"med")
 	assert(col.anchor == BuildingBlockCatalogScript.ANCHOR_CORNER)
 
 
@@ -197,6 +208,31 @@ static func _test_grid_place_erase() -> void:
 	assert(grid.erase(Vector3i(0, 0, 0)))
 	assert(grid.is_empty())
 	assert(not grid.erase(Vector3i(0, 0, 0)))
+	_test_grid_multicell()
+
+
+static func _test_grid_multicell() -> void:
+	var grid := BuildingGridModelScript.new()
+	# A 3×3 opening occupies nine cells: the anchor plus a ring around/above it.
+	assert(grid.place(Vector3i(5, 0, 5), &"door_wall"))
+	assert(grid.count() == 1)
+	assert(grid.has_block_at(Vector3i(5, 0, 5)))    # anchor
+	assert(grid.has_block_at(Vector3i(4, 0, 5)))    # left of anchor
+	assert(grid.has_block_at(Vector3i(6, 2, 5)))    # top-right of the face
+	# Any covered cell resolves back to the single anchor block.
+	assert(grid.anchor_at(Vector3i(6, 2, 5)) == Vector3i(5, 0, 5))
+	assert(grid.get_block_at(Vector3i(4, 0, 5)).block_id == &"door_wall")
+	# Erasing from a non-anchor cell removes the whole block.
+	assert(grid.erase(Vector3i(6, 2, 5)))
+	assert(grid.is_empty())
+	assert(not grid.has_block_at(Vector3i(5, 0, 5)))
+	# A new block placed overlapping an opening evicts it.
+	assert(grid.place(Vector3i(0, 0, 0), &"window_wall"))
+	assert(grid.count() == 1)
+	assert(grid.place(Vector3i(0, 0, 0), &"cube"))   # overlaps the window's centre
+	assert(grid.count() == 1)
+	assert(grid.get_block_at(Vector3i(0, 0, 0)).block_id == &"cube")
+	assert(not grid.has_block_at(Vector3i(1, 0, 0)))  # window's ring is gone
 
 
 static func _test_grid_rotation_rules() -> void:
@@ -205,7 +241,7 @@ static func _test_grid_rotation_rules() -> void:
 	grid.place(Vector3i(0, 0, 0), &"cube", 3)
 	assert(grid.get_block_at(Vector3i(0, 0, 0)).rot == 0)
 	# Rotatable block keeps and wraps rotation.
-	grid.place(Vector3i(1, 0, 0), &"wall_panel", 2)
+	grid.place(Vector3i(1, 0, 0), &"half_slab", 2)
 	assert(grid.get_block_at(Vector3i(1, 0, 0)).rot == 2)
 	grid.rotate_at(Vector3i(1, 0, 0), 3)
 	assert(grid.get_block_at(Vector3i(1, 0, 0)).rot == 1)  # (2 + 3) % 4
@@ -227,7 +263,7 @@ static func _test_blueprint_round_trip() -> void:
 	bp.building_type = "surface"
 	var grid := BuildingGridModelScript.new()
 	grid.place(Vector3i(0, 0, 0), &"cube")
-	grid.place(Vector3i(1, 0, 0), &"wall_panel", 1)
+	grid.place(Vector3i(1, 0, 0), &"half_slab", 1)
 	grid.write_to_blueprint(bp)
 
 	var json := bp.to_json()
@@ -239,7 +275,7 @@ static func _test_blueprint_round_trip() -> void:
 	var restored_grid := BuildingGridModelScript.new()
 	restored_grid.load_from_blueprint(restored)
 	assert(restored_grid.count() == 2)
-	assert(restored_grid.get_block_at(Vector3i(1, 0, 0)).block_id == &"wall_panel")
+	assert(restored_grid.get_block_at(Vector3i(1, 0, 0)).block_id == &"half_slab")
 	assert(restored_grid.get_block_at(Vector3i(1, 0, 0)).rot == 1)
 
 
@@ -389,7 +425,7 @@ static func _test_era_material_replacement() -> void:
 
 	var grid := BuildingGridModelScript.new()
 	assert(grid.place(Vector3i.ZERO, &"cube", 0, &"branches"))
-	assert(grid.place(Vector3i(1, 0, 0), &"wall_panel", 0, &"stone"))
+	assert(grid.place(Vector3i(1, 0, 0), &"half_slab", 0, &"stone"))
 	assert(grid.place(Vector3i(2, 0, 0), &"cube", 0, &"wood"))
 
 	var target_era: StringName = &"tent"

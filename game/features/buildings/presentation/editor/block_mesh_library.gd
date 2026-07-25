@@ -46,8 +46,6 @@ func mesh_for(block_id: StringName, variant: StringName = &"") -> Mesh:
 			mesh = _build_slope_corner_in(size)
 		BuildingBlockCatalogScript.SHAPE_SLOPE_CORNER_OUT:
 			mesh = _build_slope_corner_out(size)
-		BuildingBlockCatalogScript.SHAPE_GABLE:
-			mesh = _build_gable(size)
 		BuildingBlockCatalogScript.SHAPE_CYLINDER:
 			mesh = _build_cylinder(size)
 		BuildingBlockCatalogScript.SHAPE_HALF_CYLINDER:
@@ -68,6 +66,8 @@ func mesh_for(block_id: StringName, variant: StringName = &"") -> Mesh:
 			mesh = _build_arch(size)
 		BuildingBlockCatalogScript.SHAPE_RAILING:
 			mesh = _build_railing(size)
+		BuildingBlockCatalogScript.SHAPE_BALUSTRADE:
+			mesh = _build_balustrade(size)
 		_:
 			var box := BoxMesh.new()
 			box.size = size
@@ -163,26 +163,6 @@ func _build_slope_corner_out(size: Vector3) -> ArrayMesh:
 	return st.commit()
 
 
-func _build_gable(size: Vector3) -> ArrayMesh:
-	var hx := size.x * 0.5
-	var hy := size.y * 0.5
-	var hz := size.z * 0.5
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var bbl := Vector3(-hx, -hy, -hz)
-	var bbr := Vector3(hx, -hy, -hz)
-	var btc := Vector3(0.0, hy, -hz)
-	var fbl := Vector3(-hx, -hy, hz)
-	var fbr := Vector3(hx, -hy, hz)
-	var ftc := Vector3(0.0, hy, hz)
-	_add_tri(st, bbr, bbl, btc)       # Back triangle (-Z)
-	_add_tri(st, fbl, fbr, ftc)       # Front triangle (+Z)
-	_add_quad(st, bbl, bbr, fbr, fbl) # Bottom (-Y)
-	_add_quad(st, bbl, fbl, ftc, btc) # Left slope
-	_add_quad(st, btc, ftc, fbr, bbr) # Right slope
-	return st.commit()
-
-
 func _build_cylinder(size: Vector3, segments: int = 16) -> ArrayMesh:
 	var rx := size.x * 0.5
 	var rz := size.z * 0.5
@@ -240,21 +220,28 @@ func _build_stairs(size: Vector3, steps: int = 8) -> ArrayMesh:
 	return st.commit()
 
 
+## Corner porch stair: nested L-steps growing outward from the +X/+Z inner
+## corner. Each step is a solid box (floor → its own top) inset from the two
+## outer faces (-X, -Z); the +X and +Z faces stay flush so the piece mates with
+## a straight stair block placed against either of those two sides. The lowest,
+## widest step is outermost — the run "starts at the corner" and climbs inward.
 func _build_stairs_corner_45(size: Vector3, steps: int = 8) -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var step_h := size.y / float(steps)
-	var step_d := size.x / float(steps)
+	var step_dx := size.x / float(steps)
+	var step_dz := size.z / float(steps)
+	var hx := size.x * 0.5
+	var hy := size.y * 0.5
+	var hz := size.z * 0.5
 	for i in steps:
-		var min_y := -size.y * 0.5 + float(i) * step_h
-		var max_y := min_y + step_h
-		var inset := float(i) * step_d * 0.5
-		var min_x := -size.x * 0.5 + inset
-		var max_x := size.x * 0.5 - inset
-		var min_z := -size.z * 0.5 + inset
-		var max_z := size.z * 0.5 - inset
-		if max_x > min_x and max_z > min_z:
-			_add_box(st, Vector3(min_x, min_y, min_z), Vector3(max_x, max_y, max_z))
+		# Step i is solid from the floor up to its own tread height, so lower
+		# steps read as full risers rather than floating slabs.
+		var top_y := -hy + float(i + 1) * step_h
+		var min_x := -hx + float(i) * step_dx
+		var min_z := -hz + float(i) * step_dz
+		if hx > min_x and hz > min_z:
+			_add_box(st, Vector3(min_x, -hy, min_z), Vector3(hx, top_y, hz))
 	return st.commit()
 
 
@@ -338,6 +325,34 @@ func _build_railing(size: Vector3, balusters: int = 5) -> ArrayMesh:
 		var x1 := clampf(cx + bw, -hx, hx)
 		if x1 > x0 + 0.0001:
 			_add_box(st, Vector3(x0, -hy + rail_h * 0.5, -bt), Vector3(x1, hy - rail_h * 0.5, bt))
+	return st.commit()
+
+
+## A balustrade: a bottom plinth, a heavy top rail (coping) and a row of closely
+## spaced turned balusters between them. Fills `size.y` so the half-block-tall
+## variant reads as a solid parapet-height railing.
+func _build_balustrade(size: Vector3, balusters: int = 7) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var hx := size.x * 0.5
+	var hy := size.y * 0.5
+	var t := minf(size.z * 0.5, 0.09)        # half-thickness of the members
+	var plinth_h := size.y * 0.16            # bottom kerb height
+	var coping_h := size.y * 0.2             # top rail height
+	# Bottom plinth and top coping span the full width.
+	_add_box(st, Vector3(-hx, -hy, -t), Vector3(hx, -hy + plinth_h, t))
+	_add_box(st, Vector3(-hx, hy - coping_h, -t), Vector3(hx, hy, t))
+	# Vertical balusters between plinth and coping.
+	var bw := 0.05                           # half-width of a baluster
+	var bt := t * 0.8
+	var y0 := -hy + plinth_h
+	var y1 := hy - coping_h
+	for i in balusters:
+		var cx := -hx + (2.0 * hx) * (float(i) + 0.5) / float(balusters)
+		var x0 := clampf(cx - bw, -hx, hx)
+		var x1 := clampf(cx + bw, -hx, hx)
+		if x1 > x0 + 0.0001 and y1 > y0:
+			_add_box(st, Vector3(x0, y0, -bt), Vector3(x1, y1, bt))
 	return st.commit()
 
 

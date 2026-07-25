@@ -5,26 +5,28 @@ extends RefCounted
 ## building editor (frame-construction level). Data only: dimensions, category,
 ## and mesh archetype. Mesh generation lives in presentation.
 ##
-## Each block occupies a single 1m x 1m x 1m grid cell (`Vector3i`). The `size`
-## field describes the mesh footprint in metres inside/around the anchor cell,
-## while `mesh_shape` tells presentation which procedural mesh to build.
+## Most blocks occupy a single 1m x 1m x 1m grid cell (`Vector3i`). A block may
+## declare a `footprint` (in cells) larger than one — e.g. a door / window
+## opening spans a 3×3 face — in which case it occupies several cells around its
+## anchor cell (see `footprint_of` / grid-model occupancy). The `size` field
+## describes the mesh footprint in metres, while `mesh_shape` tells presentation
+## which procedural mesh to build.
 ##
 ## Some blocks expose a `variants` list: prepared size/profile options for the
-## same conceptual block (e.g. a column that can be square/round at several
-## thicknesses). A variant may override `size` and/or `mesh_shape`; a placed
-## block stores the chosen variant id (empty = the first/default variant). This
-## keeps the palette compact and the save format explicit without a free-form
-## parametric size that would break grid snapping and cost accounting.
+## same conceptual block (e.g. a column that can be several thicknesses). A
+## variant may override `size` and/or `mesh_shape`; a placed block stores the
+## chosen variant id (empty = the first/default variant). This keeps the palette
+## compact and the save format explicit without a free-form parametric size that
+## would break grid snapping and cost accounting.
 
 enum Category {
-	STRUCTURE,   ## cube, slab, thin slab — massive body / floors
+	STRUCTURE,   ## cubes, small cubes, rectangles, slabs, half-slab
 	FOUNDATION,  ## foundation blocks that auto-extend down to the ground
-	WALL,        ## wall panel, double span, corner, half-wall
-	COLUMNS,     ## square / round / half-round columns (sizes as variants)
-	ROOF,        ## roof pitch, low slope, roof corners, gable
-	CIRCULATION, ## stairs, half stairs, quarter stairs, 45° corner stairs
-	OPENINGS,    ## window wall, door wall, arch
-	RAILING,     ## railings with balusters, solid parapet
+	COLUMNS,     ## square / round / half columns (thickness as variants)
+	ROOF,        ## roof pitches and corners at 45° and 22.5°
+	CIRCULATION, ## stairs, half stairs, quarter stairs, corner stairs
+	OPENINGS,    ## door / window openings (3×3), arch
+	RAILING,     ## railings with balusters, balustrade
 }
 
 ## Procedural mesh archetypes handled by the presentation mesh library.
@@ -33,7 +35,6 @@ const SHAPE_WEDGE := &"wedge"
 const SHAPE_WEDGE_LOW := &"wedge_low"
 const SHAPE_SLOPE_CORNER_IN := &"slope_corner_in"
 const SHAPE_SLOPE_CORNER_OUT := &"slope_corner_out"
-const SHAPE_GABLE := &"gable"
 const SHAPE_CYLINDER := &"cylinder"
 const SHAPE_HALF_CYLINDER := &"half_cylinder"
 const SHAPE_STAIRS := &"stairs"
@@ -44,21 +45,39 @@ const SHAPE_WINDOW_WALL := &"window_wall"
 const SHAPE_DOOR_WALL := &"door_wall"
 const SHAPE_ARCH := &"arch"
 const SHAPE_RAILING := &"railing"
+const SHAPE_BALUSTRADE := &"balustrade"
 
 ## Ordered list of block definitions. Kept as a plain array of dictionaries so
 ## the catalog stays free of engine node/resource types (domain rule).
 const BLOCKS: Array = [
+	# --- Конструкция -------------------------------------------------------
 	{
 		"id": &"cube",
-		"name": "Полный куб",
+		"name": "Куб",
 		"category": Category.STRUCTURE,
 		"size": Vector3(1.0, 1.0, 1.0),
 		"mesh_shape": SHAPE_BOX,
 		"rotatable": false,
 	},
 	{
+		"id": &"small_cube",
+		"name": "Малый куб",
+		"category": Category.STRUCTURE,
+		"size": Vector3(0.5, 0.5, 0.5),
+		"mesh_shape": SHAPE_BOX,
+		"rotatable": true,
+	},
+	{
+		"id": &"rectangle",
+		"name": "Прямоугольник",
+		"category": Category.STRUCTURE,
+		"size": Vector3(1.0, 0.5, 0.5),
+		"mesh_shape": SHAPE_BOX,
+		"rotatable": true,
+	},
+	{
 		"id": &"slab",
-		"name": "Плита 0.5м (пол/перекрытие)",
+		"name": "Плита 0.5",
 		"category": Category.STRUCTURE,
 		"size": Vector3(1.0, 0.5, 1.0),
 		"mesh_shape": SHAPE_BOX,
@@ -66,12 +85,21 @@ const BLOCKS: Array = [
 	},
 	{
 		"id": &"thin_slab",
-		"name": "Плита 0.25м (тонкая)",
+		"name": "Плита 0.25",
 		"category": Category.STRUCTURE,
 		"size": Vector3(1.0, 0.25, 1.0),
 		"mesh_shape": SHAPE_BOX,
 		"rotatable": false,
 	},
+	{
+		"id": &"half_slab",
+		"name": "Полуплита",
+		"category": Category.STRUCTURE,
+		"size": Vector3(1.0, 0.5, 0.15),
+		"mesh_shape": SHAPE_BOX,
+		"rotatable": true,
+	},
+	# --- Фундамент ---------------------------------------------------------
 	{
 		"id": &"foundation",
 		"name": "Фундамент",
@@ -81,82 +109,57 @@ const BLOCKS: Array = [
 		"rotatable": false,
 		"extends_down": true,
 	},
+	# --- Колонны -----------------------------------------------------------
 	{
-		"id": &"wall_panel",
-		"name": "Стеновая панель",
-		"category": Category.WALL,
-		"size": Vector3(1.0, 1.0, 0.15),
-		"mesh_shape": SHAPE_BOX,
-		"rotatable": true,
-	},
-	{
-		"id": &"half_wall",
-		"name": "Полустена 0.5м",
-		"category": Category.WALL,
-		"size": Vector3(1.0, 0.5, 0.15),
-		"mesh_shape": SHAPE_BOX,
-		"rotatable": true,
-	},
-	{
-		"id": &"quarter_wall",
-		"name": "Узкая стенка 0.5м",
-		"category": Category.WALL,
-		"size": Vector3(0.5, 1.0, 0.15),
-		"mesh_shape": SHAPE_BOX,
-		"rotatable": true,
-	},
-	{
-		"id": &"double_span",
-		"name": "Сдвоенный проём",
-		"category": Category.WALL,
-		"size": Vector3(1.0, 2.0, 0.15),
-		"mesh_shape": SHAPE_BOX,
-		"rotatable": true,
-	},
-	{
-		"id": &"corner_panel",
-		"name": "Уголок стены",
-		"category": Category.WALL,
-		"size": Vector3(0.15, 1.0, 0.15),
-		"mesh_shape": SHAPE_BOX,
-		"rotatable": true,
-	},
-	{
-		"id": &"column",
-		"name": "Колонна",
+		"id": &"column_square",
+		"name": "Квадратная колонна",
 		"category": Category.COLUMNS,
-		"size": Vector3(0.8, 1.0, 0.8),
+		"size": Vector3(0.5, 1.0, 0.5),
 		"mesh_shape": SHAPE_BOX,
 		"rotatable": true,
 		"variants": [
-			{"id": &"square_thick", "name": "Квадрат 0.8м", "size": Vector3(0.8, 1.0, 0.8), "mesh_shape": SHAPE_BOX},
-			{"id": &"square_med", "name": "Квадрат 0.5м", "size": Vector3(0.5, 1.0, 0.5), "mesh_shape": SHAPE_BOX},
-			{"id": &"square_thin", "name": "Квадрат 0.25м", "size": Vector3(0.25, 1.0, 0.25), "mesh_shape": SHAPE_BOX},
-			{"id": &"round_thick", "name": "Круг 0.8м", "size": Vector3(0.8, 1.0, 0.8), "mesh_shape": SHAPE_CYLINDER},
-			{"id": &"round_med", "name": "Круг 0.5м", "size": Vector3(0.5, 1.0, 0.5), "mesh_shape": SHAPE_CYLINDER},
-			{"id": &"round_thin", "name": "Круг 0.25м", "size": Vector3(0.25, 1.0, 0.25), "mesh_shape": SHAPE_CYLINDER},
-			{"id": &"half_round", "name": "Полукруг 0.5м", "size": Vector3(0.5, 1.0, 0.25), "mesh_shape": SHAPE_HALF_CYLINDER},
+			{"id": &"thick", "name": "0.8м", "size": Vector3(0.8, 1.0, 0.8)},
+			{"id": &"med", "name": "0.5м", "size": Vector3(0.5, 1.0, 0.5)},
+			{"id": &"thin", "name": "0.25м", "size": Vector3(0.25, 1.0, 0.25)},
 		],
 	},
 	{
+		"id": &"column_round",
+		"name": "Круглая колонна",
+		"category": Category.COLUMNS,
+		"size": Vector3(0.5, 1.0, 0.5),
+		"mesh_shape": SHAPE_CYLINDER,
+		"rotatable": true,
+		"variants": [
+			{"id": &"thick", "name": "0.8м", "size": Vector3(0.8, 1.0, 0.8)},
+			{"id": &"med", "name": "0.5м", "size": Vector3(0.5, 1.0, 0.5)},
+			{"id": &"thin", "name": "0.25м", "size": Vector3(0.25, 1.0, 0.25)},
+		],
+	},
+	{
+		"id": &"column_half",
+		"name": "Полуколонна",
+		"category": Category.COLUMNS,
+		"size": Vector3(0.5, 1.0, 0.25),
+		"mesh_shape": SHAPE_HALF_CYLINDER,
+		"rotatable": true,
+		"variants": [
+			{"id": &"med", "name": "0.5м", "size": Vector3(0.5, 1.0, 0.25)},
+			{"id": &"thin", "name": "0.25м", "size": Vector3(0.25, 1.0, 0.15)},
+		],
+	},
+	# --- Крыша -------------------------------------------------------------
+	{
 		"id": &"roof_pitch",
-		"name": "Крышный скат (45°)",
+		"name": "Скат 45°",
 		"category": Category.ROOF,
 		"size": Vector3(1.0, 1.0, 1.0),
 		"mesh_shape": SHAPE_WEDGE,
 		"rotatable": true,
 	},
 	{
-		"id": &"roof_pitch_low",
-		"name": "Низкий скат (22.5°)",
-		"category": Category.ROOF,
-		"size": Vector3(1.0, 0.5, 1.0),
-		"mesh_shape": SHAPE_WEDGE_LOW,
-		"rotatable": true,
-	},
-	{
 		"id": &"roof_corner_in",
-		"name": "Внутренний угол крыши",
+		"name": "Внутренний угол 45°",
 		"category": Category.ROOF,
 		"size": Vector3(1.0, 1.0, 1.0),
 		"mesh_shape": SHAPE_SLOPE_CORNER_IN,
@@ -164,20 +167,37 @@ const BLOCKS: Array = [
 	},
 	{
 		"id": &"roof_corner_out",
-		"name": "Внешний угол крыши",
+		"name": "Внешний угол 45°",
 		"category": Category.ROOF,
 		"size": Vector3(1.0, 1.0, 1.0),
 		"mesh_shape": SHAPE_SLOPE_CORNER_OUT,
 		"rotatable": true,
 	},
 	{
-		"id": &"gable_end",
-		"name": "Фронтон (треугольная стена)",
+		"id": &"roof_pitch_low",
+		"name": "Скат 22.5°",
 		"category": Category.ROOF,
-		"size": Vector3(1.0, 1.0, 0.15),
-		"mesh_shape": SHAPE_GABLE,
+		"size": Vector3(1.0, 0.5, 1.0),
+		"mesh_shape": SHAPE_WEDGE_LOW,
 		"rotatable": true,
 	},
+	{
+		"id": &"roof_corner_in_low",
+		"name": "Внутренний угол 22.5°",
+		"category": Category.ROOF,
+		"size": Vector3(1.0, 0.5, 1.0),
+		"mesh_shape": SHAPE_SLOPE_CORNER_IN,
+		"rotatable": true,
+	},
+	{
+		"id": &"roof_corner_out_low",
+		"name": "Внешний угол 22.5°",
+		"category": Category.ROOF,
+		"size": Vector3(1.0, 0.5, 1.0),
+		"mesh_shape": SHAPE_SLOPE_CORNER_OUT,
+		"rotatable": true,
+	},
+	# --- Проходы -----------------------------------------------------------
 	{
 		"id": &"stairs",
 		"name": "Лестница (8 ступеней)",
@@ -204,26 +224,29 @@ const BLOCKS: Array = [
 	},
 	{
 		"id": &"stairs_corner_45",
-		"name": "Угловая лестница (45° крыльцо)",
+		"name": "Угловая лестница",
 		"category": Category.CIRCULATION,
 		"size": Vector3(1.0, 1.0, 1.0),
 		"mesh_shape": SHAPE_STAIRS_CORNER_45,
 		"rotatable": true,
 	},
+	# --- Проёмы ------------------------------------------------------------
 	{
-		"id": &"window_wall",
-		"name": "Стена с окном",
+		"id": &"door_wall",
+		"name": "Дверной проём (3×3)",
 		"category": Category.OPENINGS,
-		"size": Vector3(1.0, 1.0, 0.15),
-		"mesh_shape": SHAPE_WINDOW_WALL,
+		"size": Vector3(3.0, 3.0, 0.15),
+		"footprint": Vector3i(3, 3, 1),
+		"mesh_shape": SHAPE_DOOR_WALL,
 		"rotatable": true,
 	},
 	{
-		"id": &"door_wall",
-		"name": "Стена с дверным проёмом",
+		"id": &"window_wall",
+		"name": "Оконный проём (3×3)",
 		"category": Category.OPENINGS,
-		"size": Vector3(1.0, 1.0, 0.15),
-		"mesh_shape": SHAPE_DOOR_WALL,
+		"size": Vector3(3.0, 3.0, 0.15),
+		"footprint": Vector3i(3, 3, 1),
+		"mesh_shape": SHAPE_WINDOW_WALL,
 		"rotatable": true,
 	},
 	{
@@ -234,6 +257,7 @@ const BLOCKS: Array = [
 		"mesh_shape": SHAPE_ARCH,
 		"rotatable": true,
 	},
+	# --- Ограждения --------------------------------------------------------
 	{
 		"id": &"railing",
 		"name": "Перила с балясинами",
@@ -247,11 +271,11 @@ const BLOCKS: Array = [
 		],
 	},
 	{
-		"id": &"parapet",
-		"name": "Парапет 0.25м (панель)",
+		"id": &"balustrade",
+		"name": "Балюстрада 0.5м",
 		"category": Category.RAILING,
-		"size": Vector3(1.0, 0.5, 0.25),
-		"mesh_shape": SHAPE_BOX,
+		"size": Vector3(1.0, 0.5, 0.2),
+		"mesh_shape": SHAPE_BALUSTRADE,
 		"rotatable": true,
 	},
 ]
@@ -289,6 +313,23 @@ static func default_block_id() -> StringName:
 ## True for blocks that presentation should extend down to meet the terrain.
 static func extends_down(block_id: StringName) -> bool:
 	return bool(get_block(block_id).get("extends_down", false))
+
+
+# ---------------------------------------------------------------------------
+# Footprint (multi-cell blocks)
+# ---------------------------------------------------------------------------
+
+## Cell footprint of a block (in whole grid cells), before rotation. Single-cell
+## blocks return Vector3i.ONE; a 3×3 opening returns Vector3i(3, 3, 1).
+static func footprint_of(block_id: StringName, _variant_id: StringName = &"") -> Vector3i:
+	var def := get_block(block_id)
+	if def.is_empty():
+		return Vector3i.ONE
+	return def.get("footprint", Vector3i.ONE)
+
+
+static func is_multicell(block_id: StringName, variant_id: StringName = &"") -> bool:
+	return footprint_of(block_id, variant_id) != Vector3i.ONE
 
 
 # ---------------------------------------------------------------------------
@@ -373,7 +414,10 @@ static func _free_extents(block_id: StringName, variant_id: StringName) -> Vecto
 
 
 ## Anchor kinds that make sense for this block/variant (always contains CENTER).
+## Multi-cell blocks anchor only at their centre (their span fills whole cells).
 static func available_anchors(block_id: StringName, variant_id: StringName) -> Array:
+	if is_multicell(block_id, variant_id):
+		return [ANCHOR_CENTER]
 	var f := _free_extents(block_id, variant_id)
 	var out: Array = [ANCHOR_CENTER]
 	if f.x > 0.001 or f.y > 0.001:
@@ -424,7 +468,6 @@ static func category_name(category: int) -> String:
 	match category:
 		Category.STRUCTURE: return "Конструкция"
 		Category.FOUNDATION: return "Фундамент"
-		Category.WALL: return "Стены"
 		Category.COLUMNS: return "Колонны"
 		Category.ROOF: return "Крыша"
 		Category.CIRCULATION: return "Проходы"

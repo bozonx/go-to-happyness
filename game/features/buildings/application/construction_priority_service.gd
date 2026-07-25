@@ -55,24 +55,21 @@ func configure(
 func preferred_construction_site() -> ConstructionSite:
 	var chosen: ConstructionSite = null
 	var best_score := -INF
-	var waiting_chosen: ConstructionSite = null
-	var waiting_score := -INF
 	for site in _construction_sites:
 		if site == null or not is_instance_valid(site.node) or site.node.is_queued_for_deletion():
 			continue
 		var score := development_priority(site)
-		if score > waiting_score:
-			waiting_chosen = site
-			waiting_score = score
 		# A builder can only advance up to the fraction of materials already on
 		# site. Prefer any project with work available over a higher-priority site
-		# where everyone would only wait for a courier.
+		# where everyone would only wait for a courier. If no site can advance,
+		# publish no builder target at all; standing at a blocked site used to keep
+		# a stale construction order alive indefinitely.
 		if site.material_progress() <= site.progress + 0.0001:
 			continue
 		if score > best_score:
 			chosen = site
 			best_score = score
-	return chosen if chosen != null else waiting_chosen
+	return chosen
 
 
 func development_priority(site: ConstructionSite) -> float:
