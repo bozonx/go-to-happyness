@@ -29,7 +29,7 @@ var _reconcile_repair_reservations: Callable
 var _cell_from_position: Callable
 var _get_nearest_delivery_position: Callable
 var _warehouse_delivery_position: Callable
-var _preferred_construction_site: Callable
+var _construction_priority: Callable
 var _construction_material_sources: Callable
 var _construction_source_available: Callable
 var _fire_state_for: Callable
@@ -59,7 +59,7 @@ func configure(
 	p_cell_from_position: Callable,
 	p_get_nearest_delivery_position: Callable,
 	p_warehouse_delivery_position: Callable,
-	p_preferred_construction_site: Callable,
+	p_construction_priority: Callable,
 	p_construction_material_sources: Callable,
 	p_construction_source_available: Callable,
 	p_fire_state_for: Callable,
@@ -87,7 +87,7 @@ func configure(
 	_cell_from_position = p_cell_from_position
 	_get_nearest_delivery_position = p_get_nearest_delivery_position
 	_warehouse_delivery_position = p_warehouse_delivery_position
-	_preferred_construction_site = p_preferred_construction_site
+	_construction_priority = p_construction_priority
 	_construction_material_sources = p_construction_material_sources
 	_construction_source_available = p_construction_source_available
 	_fire_state_for = p_fire_state_for
@@ -146,8 +146,18 @@ func publish_courier_tasks(dispatcher: RefCounted) -> void:
 				var worker_dropoff: Vector3 = _warehouse_delivery_position.call(worker_position, worker.resource_type, worker.carried_amount)
 				dispatcher.publish(StringName("worker_%d" % worker.ai_id), CourierTaskScript.Kind.WORKER_PICKUP, 45, worker_position, worker_dropoff, {"worker": worker})
 
-	var site = _preferred_construction_site.call()
-	if site != null and is_instance_valid(site.node) and not site.node.is_queued_for_deletion():
+	var supply_sites: Array = _construction_sites.duplicate()
+	supply_sites.sort_custom(func(left: ConstructionSite, right: ConstructionSite) -> bool:
+		var left_score := float(_construction_priority.call(left)) if _construction_priority.is_valid() else 0.0
+		var right_score := float(_construction_priority.call(right)) if _construction_priority.is_valid() else 0.0
+		if not is_equal_approx(left_score, right_score):
+			return left_score > right_score
+		return left.site_id < right.site_id
+	)
+	for site_index in supply_sites.size():
+		var site: ConstructionSite = supply_sites[site_index]
+		if site == null or not is_instance_valid(site.node) or site.node.is_queued_for_deletion():
+			continue
 		var site_position: Vector3 = site.node.global_position
 		for resource_type in site.required_materials:
 			var required: int = int(site.required_materials[resource_type])
@@ -182,7 +192,7 @@ func publish_courier_tasks(dispatcher: RefCounted) -> void:
 						dispatcher.publish(
 							StringName("construction_%s_%s_%s_%d" % [site.cell, resource_type, source_id, slot]),
 							CourierTaskScript.Kind.CONSTRUCTION,
-							70,
+							maxi(70, 79 - site_index),
 							source.position,
 							site.node.global_position,
 							{"site": site, "resource": resource_type, "source": source}

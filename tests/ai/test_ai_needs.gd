@@ -17,6 +17,7 @@ static func run_all() -> void:
 	_test_native_toilet_goal()
 	_test_toilet_goal_blocked_while_working()
 	_test_toilet_goal_blocked_for_player_controlled()
+	_test_toilet_starts_after_fresh_assignment_begins()
 	_test_personal_need_preempts_work_trip()
 	_test_personal_need_ignores_changed_work_order()
 	_test_changed_work_order_cancels_captured_trip()
@@ -264,6 +265,31 @@ static func _test_toilet_goal_blocked_for_player_controlled() -> void:
 	}))
 	var snapshot := TestAIHelpers.snapshot(0.0, citizen)
 	assert(is_zero_approx(goal.score(snapshot, citizen, null, AIBlackboard.new())))
+
+
+static func _test_toilet_starts_after_fresh_assignment_begins() -> void:
+	var work := TestAIHelpers.ScriptedGoal.new(&"work", 0.82, [BehaviorStep.Status.RUNNING])
+	work.resumable = false
+	var toilet: RefCounted = TestAIHelpers.ToiletGoalScript.new()
+	var actuator := TestAIHelpers.FakeActuator.new(1)
+	var brain := CitizenBrain.new(1, actuator, [work, toilet])
+	var citizen := CitizenSnapshot.new(1, Vector3.ZERO, false, true, AIFactSet.new({
+		&"daily.order.active": true,
+		&"daily.order.role": "construction",
+		&"daily.order.workday_id": 3,
+		&"needs.toilet_requested": true,
+		&"needs.can_start_toilet": true,
+		&"needs.relief_candidates": [{&"id": &"tree:0:0:0", &"position": Vector3.ZERO, &"kind": &"tree"}],
+	}))
+	var snapshot := TestAIHelpers.snapshot(0.0, citizen)
+	var order := CitizenOrder.new(1, &"construction", &"player", 0.82)
+	order.id = 301
+	brain.think(snapshot, order)
+	assert(brain.runner.active_goal_id() == &"work", "Fresh assignment must start once before a deferrable need")
+	brain.tick(snapshot, order, 0.1)
+	brain.think(snapshot, order)
+	assert(brain.runner.active_goal_id() == &"toilet", "Due toilet need must cross work hysteresis after the assignment starts")
+	assert(work.last_step.cancels == 1)
 
 
 static func _test_personal_need_preempts_work_trip() -> void:

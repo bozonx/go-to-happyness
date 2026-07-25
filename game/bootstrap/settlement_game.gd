@@ -989,6 +989,10 @@ func _preferred_construction_site() -> ConstructionSite:
 	return construction_priority_service.preferred_construction_site() if construction_priority_service != null else null
 
 
+func _construction_development_priority(site: ConstructionSite) -> float:
+	return construction_priority_service.development_priority(site) if construction_priority_service != null and site != null else 0.0
+
+
 func _builder_count(site_node: Node3D) -> int:
 	var count := 0
 	for citizen in citizens:

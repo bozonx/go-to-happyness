@@ -571,7 +571,7 @@ func _setup_courier_system() -> void:
 		game._cell_from_position,
 		game._get_nearest_delivery_position,
 		game._warehouse_delivery_position,
-		game._preferred_construction_site,
+		game._construction_development_priority,
 		game._construction_material_sources,
 		game._construction_source_available,
 		game._fire_state_for,
@@ -602,7 +602,6 @@ func _setup_courier_system() -> void:
 		game._fire_state_for,
 		game._apply_fire_state,
 		game._is_route_reachable,
-		game._preferred_construction_site,
 		game._construction_source_available,
 		game._citizen_for_ai_id
 	)

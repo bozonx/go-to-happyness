@@ -34,7 +34,6 @@ var _runtime_seconds_getter: Callable
 var _fire_state_for: Callable
 var _apply_fire_state: Callable
 var _is_route_reachable: Callable
-var _preferred_construction_site: Callable
 var _construction_source_available: Callable
 var _citizen_for_ai_id: Callable
 
@@ -63,7 +62,6 @@ func configure(
 	p_fire_state_for: Callable,
 	p_apply_fire_state: Callable,
 	p_is_route_reachable: Callable,
-	p_preferred_construction_site: Callable,
 	p_construction_source_available: Callable,
 	p_citizen_for_ai_id: Callable
 ) -> void:
@@ -90,7 +88,6 @@ func configure(
 	_fire_state_for = p_fire_state_for
 	_apply_fire_state = p_apply_fire_state
 	_is_route_reachable = p_is_route_reachable
-	_preferred_construction_site = p_preferred_construction_site
 	_construction_source_available = p_construction_source_available
 	_citizen_for_ai_id = p_citizen_for_ai_id
 
@@ -364,8 +361,6 @@ func is_courier_task_valid(task: RefCounted) -> bool:
 		CourierTask.Kind.CONSTRUCTION:
 			var site: ConstructionSite = task.payload.site
 			if site == null or not is_instance_valid(site.node):
-				return false
-			if site != _preferred_construction_site.call():
 				return false
 			var resource_type := str(task.payload.resource)
 			var source: Dictionary = task.payload.get("source", {})

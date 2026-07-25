@@ -38,11 +38,15 @@ func _init() -> void:
 		func(task: CourierTask) -> bool: return task.kind == CourierTask.Kind.CONSTRUCTION
 	)
 	assert(not construction_tasks.is_empty(), "Expected a construction task for the focused site")
+	var focused_tasks := construction_tasks.filter(
+		func(task: CourierTask) -> bool: return (task.payload.get("site") as ConstructionSite) == simulation.construction_sites[0]
+	)
+	assert(not focused_tasks.is_empty(), "Expected construction deliveries for the highest-priority campfire")
 	for task in construction_tasks:
 		var task_site: ConstructionSite = task.payload.get("site") as ConstructionSite
-		assert(task_site != null and task_site.node == simulation.construction_sites[0].node, "Construction deliveries must stay focused on the builder's current project")
+		assert(task_site != null, "Construction delivery must retain its typed site")
 		assert(task.pickup == nearest_warehouse, "Construction task should use the nearest warehouse")
-	var branch_tasks := construction_tasks.filter(
+	var branch_tasks := focused_tasks.filter(
 		func(task: CourierTask) -> bool: return str(task.payload.get("resource", "")) == "branches"
 	)
 	assert(branch_tasks.size() >= 2, "A construction load larger than one courier capacity must publish parallel delivery tasks")

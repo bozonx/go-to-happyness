@@ -10,6 +10,7 @@ func collect(ctx: FacadeContext, canteen_service: CanteenService) -> Dictionary:
 	var actor_work_time := ctx.actor_work_time
 
 	var can_start_personal_need := not actor.is_player_controlled and actor.state in [Citizen.State.IDLE, Citizen.State.WAITING]
+	var can_start_toilet := _can_start_toilet(actor, can_start_personal_need)
 	var critically_hungry := actor.hunger <= 15.0
 	var dangerously_tired := actor.is_dangerously_tired()
 	var needs_service: CitizenNeedsService = ctx.simulation.citizen_needs_service
@@ -41,10 +42,41 @@ func collect(ctx: FacadeContext, canteen_service: CanteenService) -> Dictionary:
 		&"needs.can_start_meal": canteen_service != null and (can_start_personal_need or critically_hungry) and can_reach_canteen,
 		&"needs.canteen_position": ctx.simulation.canteen_position,
 		&"needs.toilet_requested": needs_service != null and needs_service.has_toilet_request(citizen_id),
-		&"needs.can_start_toilet": can_start_personal_need,
+		&"needs.can_start_toilet": can_start_toilet,
 		&"needs.relief_candidates": relief_candidates,
 		&"needs.rest_requested": needs_service != null and needs_service.has_rest_request(citizen_id),
 		&"needs.can_start_rest": can_start_personal_need and can_reach_rest,
 		&"needs.rest_position": rest_position,
 		&"needs.rest_duration": rest_request.get(&"duration", 4.0),
 	}
+
+
+func _can_start_toilet(actor: Citizen, can_start_personal_need: bool) -> bool:
+	if can_start_personal_need:
+		return true
+	if not is_instance_valid(actor) or actor.is_player_controlled or actor.has_active_delivery():
+		return false
+	# Scheduled relief is allowed to interrupt ordinary, cancellable work. Cargo
+	# deliveries and other personal/survival actions remain atomic so resources
+	# cannot disappear and needs do not interrupt one another.
+	return actor.state not in [
+		Citizen.State.TO_HOME,
+		Citizen.State.RESTING,
+		Citizen.State.TO_CANTEEN,
+		Citizen.State.EATING,
+		Citizen.State.TO_PARK,
+		Citizen.State.RELAXING,
+		Citizen.State.TO_TOILET,
+		Citizen.State.USING_TOILET,
+		Citizen.State.WAITING_FOR_TOILET,
+		Citizen.State.TO_BUSH,
+		Citizen.State.USING_BUSH,
+		Citizen.State.TO_EMPLOYMENT_CENTER,
+		Citizen.State.EMPLOYMENT_PROCESSING,
+		Citizen.State.TO_ARRIVAL_ENTRANCE,
+		Citizen.State.ARRIVAL_MEETING,
+		Citizen.State.ARRIVAL_WAITING,
+		Citizen.State.TO_ARRIVAL_CENTER,
+		Citizen.State.TO_OUTSIDE_WORK,
+		Citizen.State.LEAVING,
+	]
