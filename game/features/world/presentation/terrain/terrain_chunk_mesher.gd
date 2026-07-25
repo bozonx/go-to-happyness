@@ -80,7 +80,7 @@ var _grid: TerrainGrid = null
 var _origin := Vector2i.ZERO
 ## Padded caches, indexed by `_padded_index`.
 var _corners := PackedFloat32Array()
-var _heights := PackedInt32Array()
+var _levels := PackedFloat32Array()
 var _materials := PackedInt32Array()
 var _solid := PackedByteArray()
 var _flat := PackedByteArray()
@@ -129,8 +129,8 @@ func _cache_region() -> void:
 	var count := PADDED_CELLS * PADDED_CELLS
 	_corners = PackedFloat32Array()
 	_corners.resize(count * 4)
-	_heights = PackedInt32Array()
-	_heights.resize(count)
+	_levels = PackedFloat32Array()
+	_levels.resize(count)
 	_materials = PackedInt32Array()
 	_materials.resize(count)
 	_solid = PackedByteArray()
@@ -153,17 +153,17 @@ func _cache_region() -> void:
 			var corner_base := index * 4
 			for corner in 4:
 				_corners[corner_base + corner] = scratch[corner]
-			_heights[index] = _grid.height_of(cell)
 			_materials[index] = _grid.material_index_at(cell)
-			# "Flat" is a property of the corners, not of the descriptor: a column
-			# with no slope of its own still gets a corner lifted where it meets
-			# one (§3.4), and such a cell may not be merged into a flat quad.
-			var level := (
+			# Level ground is a property of the CORNERS, never of the stored
+			# height: §3.4 can lift a whole column's surface a step above the
+			# height it stores, and a quad drawn at the stored height would then
+			# sit below the walls around it and leave a hole in the ground.
+			_levels[index] = scratch[0]
+			_flat[index] = 1 if (
 				is_equal_approx(scratch[0], scratch[1])
 				and is_equal_approx(scratch[1], scratch[2])
 				and is_equal_approx(scratch[2], scratch[3])
-			)
-			_flat[index] = 1 if level else 0
+			) else 0
 
 
 func _padded_index(local_x: int, local_z: int) -> int:
@@ -215,7 +215,8 @@ func _greedy_depth(local_x: int, local_z: int, index: int, width: int) -> int:
 func _matches(candidate: int, reference: int) -> bool:
 	return (
 		_solid[candidate] == 1 and _merged[candidate] == 0 and _flat[candidate] == 1
-		and _heights[candidate] == _heights[reference] and _materials[candidate] == _materials[reference]
+		and is_equal_approx(_levels[candidate], _levels[reference])
+		and _materials[candidate] == _materials[reference]
 	)
 
 
@@ -225,7 +226,7 @@ func _add_flat_top(local_x: int, local_z: int, width: int, depth: int, index: in
 	var north := float(_origin.y + local_z) * cell_size
 	var east := west + float(width) * cell_size
 	var south := north + float(depth) * cell_size
-	var height := float(_heights[index]) * TerrainGrid.HEIGHT_STEP
+	var height := _levels[index] * TerrainGrid.HEIGHT_STEP
 	var color: Color = MATERIAL_COLORS.get(TerrainMaterialCatalog.id_of_index(_materials[index]), Color.MAGENTA)
 	_add_quad(
 		Vector3(west, height, north), Vector3(east, height, north),

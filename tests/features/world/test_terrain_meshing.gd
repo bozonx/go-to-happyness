@@ -21,6 +21,7 @@ static func run_all() -> void:
 	_test_step_builds_one_wall_without_cracks()
 	_test_hole_removes_mesh_and_collision()
 	_test_ramp_meets_its_column_without_a_wall()
+	_test_hillside_has_ground_everywhere()
 	_test_border_chunk_gets_a_skirt()
 	_test_collision_faces_match_the_mesh()
 	_test_top_only_lod_drops_the_walls()
@@ -161,6 +162,57 @@ static func _test_ramp_meets_its_column_without_a_wall() -> void:
 			assert(is_equal_approx(fposmod(vertex.y, quarter_step), 0.0))
 			fractional += 1
 	assert(fractional > 0)
+
+
+## The surface height the mesh actually has over a point, or INF when the mesh
+## has nothing there at all — a hole you can see the sky through.
+static func _surface_over(result: Dictionary, point: Vector2) -> float:
+	var faces: PackedVector3Array = result["faces"]
+	var found := INF
+	for triangle in faces.size() / 3:
+		var a := faces[triangle * 3]
+		var b := faces[triangle * 3 + 1]
+		var c := faces[triangle * 3 + 2]
+		if not _covers(Vector2(a.x, a.z), Vector2(b.x, b.z), Vector2(c.x, c.z), point):
+			continue
+		var height := _interpolate(a, b, c, point)
+		found = height if is_inf(found) else maxf(found, height)
+	return found
+
+
+static func _interpolate(a: Vector3, b: Vector3, c: Vector3, point: Vector2) -> float:
+	var flat_a := Vector2(a.x, a.z)
+	var flat_b := Vector2(b.x, b.z)
+	var flat_c := Vector2(c.x, c.z)
+	var area := (flat_b - flat_a).cross(flat_c - flat_a)
+	var first := (flat_b - point).cross(flat_c - point) / area
+	var second := (flat_c - point).cross(flat_a - point) / area
+	return a.y * first + b.y * second + c.y * (1.0 - first - second)
+
+
+static func _test_hillside_has_ground_everywhere() -> void:
+	# The one failure mode a picture shows and a triangle count does not: a hole
+	# straight through the ground. It appeared once because merged flat quads were
+	# emitted at the column's STORED height while the walls around them were built
+	# from corners §3.4 had lifted a step higher — the quad sat below its own
+	# walls and left a gap.
+	var grid := _make_grid()
+	var solver := CascadeSolver.new()
+	var delta := solver.solve(grid, TerrainEditOperation.offset([Vector2i(8, 8)] as Array[Vector2i], 5))
+	assert(delta != null)
+	delta.apply(grid)
+	var result := _build(grid)
+
+	for local_z in 16:
+		for local_x in 16:
+			var cell := Vector2i(local_x, local_z)
+			var centre := Vector2(float(cell.x) + 0.5, float(cell.y) + 0.5)
+			var surface := _surface_over(result, centre)
+			# There is ground over every column of the chunk...
+			assert(not is_inf(surface))
+			# ...and it is exactly where the data says it is, so the mesh, the
+			# collision and `height_at` cannot disagree about where a body stands.
+			assert(absf(surface - grid.height_at(Vector3(centre.x, 0.0, centre.y))) < 0.001)
 
 
 static func _test_border_chunk_gets_a_skirt() -> void:

@@ -563,14 +563,23 @@ static func _raise_edge(result: PackedFloat32Array, direction: int, height: floa
 			result[CORNER_NW] = height
 
 
-## Height in steps a body standing anywhere inside the cell would have, sampled
-## by bilinear interpolation of the corner heights. `u` runs west→east and `v`
-## north→south, both in [0, 1].
+## Height in steps a body standing anywhere inside the cell would have. `u` runs
+## west→east and `v` north→south, both in [0, 1].
+##
+## The cell is read as the same two triangles the mesher emits, split NW–SE, not
+## as a bilinear patch. Once a corner can be lifted on its own (§3.4) the quad is
+## no longer planar, and the two readings differ by up to half a step in the
+## middle of it — which would put a citizen's feet through the ground they are
+## standing on. Mesh, collision and standing height have to be one surface.
 func height_steps_in_cell(cell: Vector2i, u: float, v: float) -> float:
 	var corners := corner_heights(cell)
-	var north := lerpf(corners[CORNER_NW], corners[CORNER_NE], clampf(u, 0.0, 1.0))
-	var south := lerpf(corners[CORNER_SW], corners[CORNER_SE], clampf(u, 0.0, 1.0))
-	return lerpf(north, south, clampf(v, 0.0, 1.0))
+	var east := clampf(u, 0.0, 1.0)
+	var south := clampf(v, 0.0, 1.0)
+	if east >= south:
+		# North-east triangle: NW → NE → SE.
+		return corners[CORNER_NW] + (corners[CORNER_NE] - corners[CORNER_NW]) * east + (corners[CORNER_SE] - corners[CORNER_NE]) * south
+	# South-west triangle: NW → SE → SW.
+	return corners[CORNER_NW] + (corners[CORNER_SW] - corners[CORNER_NW]) * south + (corners[CORNER_SE] - corners[CORNER_SW]) * east
 
 
 ## World-space ground height in metres under a position — the query navigation,
