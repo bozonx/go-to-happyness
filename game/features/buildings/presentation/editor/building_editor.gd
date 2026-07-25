@@ -119,6 +119,7 @@ var _ghost_valid: bool = false
 @onready var _mode_finishes_btn: Button = %ModeFinishesBtn
 @onready var _mode_decor_btn: Button = %ModeDecorBtn
 @onready var _mode_zones_btn: Button = %ModeZonesBtn
+@onready var _frame_toolbar: HBoxContainer = %FrameToolbar
 
 @onready var _zones_panel: PanelContainer = %ZonesPanel
 @onready var _zone_option: OptionButton = %ZoneOption
@@ -303,6 +304,10 @@ func _handle_key(event: InputEventKey) -> void:
 			_set_tool(Tool.ERASE)
 		KEY_B:
 			_set_tool(Tool.PLACE)
+		KEY_L:
+			_on_brush_line_pressed()
+		KEY_M:
+			_on_brush_rect_pressed()
 		KEY_PAGEUP:
 			_set_layer(active_layer + 1)
 		KEY_PAGEDOWN:
@@ -655,7 +660,7 @@ func _set_layer(layer: int) -> void:
 	active_layer = maxi(0, layer)
 	_refresh_layer_plane()
 	if _layer_label != null:
-		_layer_label.text = "Слой Y: %d" % active_layer
+		_layer_label.text = "Слой %d" % active_layer
 
 
 func _select_mode(mode: int) -> void:
@@ -669,6 +674,8 @@ func _select_mode(mode: int) -> void:
 		(_mode_buttons[m] as Button).button_pressed = m == mode
 	if _palette_panel != null:
 		_palette_panel.visible = mode == EditMode.FRAME
+	if _frame_toolbar != null:
+		_frame_toolbar.visible = mode == EditMode.FRAME
 	if _zones_panel != null:
 		_zones_panel.visible = mode == EditMode.ZONES
 	if mode == EditMode.ZONES:

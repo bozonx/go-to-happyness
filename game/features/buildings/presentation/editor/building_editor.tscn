@@ -86,27 +86,6 @@ text = "← В меню"
 [node name="VSep1" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox"]
 layout_mode = 2
 
-[node name="NameLabel" type="Label" parent="EditorUI/Root/TopBar/Margin/HBox"]
-layout_mode = 2
-text = "Название:"
-
-[node name="NameEdit" type="LineEdit" parent="EditorUI/Root/TopBar/Margin/HBox"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(200, 0)
-layout_mode = 2
-
-[node name="IdLabel" type="Label" parent="EditorUI/Root/TopBar/Margin/HBox"]
-layout_mode = 2
-text = "ID:"
-
-[node name="IdEdit" type="LineEdit" parent="EditorUI/Root/TopBar/Margin/HBox"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(140, 0)
-layout_mode = 2
-
-[node name="VSep2" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox"]
-layout_mode = 2
-
 [node name="ModeFrameBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -132,6 +111,80 @@ unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
 text = "4. Зоны"
+
+[node name="VSep2" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox"]
+layout_mode = 2
+
+[node name="FrameToolbar" type="HBoxContainer" parent="EditorUI/Root/TopBar/Margin/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="ToolPlaceBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+toggle_mode = true
+text = "🔨 (B)"
+tooltip_text = "Строить (B)"
+
+[node name="ToolEraseBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+toggle_mode = true
+text = "🧹 (E)"
+tooltip_text = "Стереть (E)"
+
+[node name="VSepTools" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
+layout_mode = 2
+
+[node name="BrushLineBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+toggle_mode = true
+text = "📏 (L)"
+tooltip_text = "Линия (L)"
+
+[node name="BrushRectBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+toggle_mode = true
+text = "🔲 (M)"
+tooltip_text = "Прямоугольник (M / Shift)"
+
+[node name="VSepBrush" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
+layout_mode = 2
+
+[node name="RotBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "🔄 (R)"
+tooltip_text = "Поворот (R)"
+
+[node name="RotLabel" type="Label" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(36, 0)
+layout_mode = 2
+text = "0°"
+
+[node name="VSepRot" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
+layout_mode = 2
+
+[node name="LayerLabel" type="Label" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Слой 0"
+
+[node name="LayerDownBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "➖ (PgDn)"
+tooltip_text = "Слой ниже (PageDown)"
+
+[node name="LayerUpBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "➕ (PgUp)"
+tooltip_text = "Слой выше (PageUp)"
 
 [node name="Spacer" type="Control" parent="EditorUI/Root/TopBar/Margin/HBox"]
 layout_mode = 2
@@ -173,81 +226,7 @@ layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 6
 
-[node name="ToolsLabel" type="Label" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 16
-text = "Инструменты"
 
-[node name="ToolsRow" type="HBoxContainer" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox"]
-layout_mode = 2
-
-[node name="ToolPlaceBtn" type="Button" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/ToolsRow"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-toggle_mode = true
-text = "Строить (B)"
-
-[node name="ToolEraseBtn" type="Button" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/ToolsRow"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-toggle_mode = true
-text = "Стереть (E)"
-
-[node name="BrushRow" type="HBoxContainer" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox"]
-layout_mode = 2
-
-[node name="BrushLineBtn" type="Button" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/BrushRow"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-toggle_mode = true
-text = "／ Линия"
-
-[node name="BrushRectBtn" type="Button" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/BrushRow"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-toggle_mode = true
-text = "▭ Прямоуг."
-
-[node name="RotRow" type="HBoxContainer" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox"]
-layout_mode = 2
-
-[node name="RotBtn" type="Button" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/RotRow"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-text = "⟳ Поворот (R)"
-
-[node name="RotLabel" type="Label" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/RotRow"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(48, 0)
-layout_mode = 2
-
-[node name="LayerRow" type="HBoxContainer" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox"]
-layout_mode = 2
-
-[node name="LayerDownBtn" type="Button" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/LayerRow"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-text = "Слой −"
-
-[node name="LayerUpBtn" type="Button" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/LayerRow"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-text = "Слой +"
-
-[node name="LayerLabel" type="Label" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/LayerRow"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(70, 0)
-layout_mode = 2
-
-[node name="HSep1" type="HSeparator" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox"]
-layout_mode = 2
 
 [node name="MaterialsLabel" type="Label" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox"]
 layout_mode = 2
@@ -559,7 +538,7 @@ anchor_right = 1.0
 offset_left = -280.0
 offset_top = 60.0
 offset_right = -8.0
-offset_bottom = 350.0
+offset_bottom = 480.0
 grow_horizontal = 0
 
 [node name="MetadataVBox" type="VBoxContainer" parent="EditorUI/Root/MetadataPanel"]
@@ -571,6 +550,27 @@ theme_override_constants/separation = 6
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
 text = "Параметры здания"
+
+[node name="NameLbl" type="Label" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
+layout_mode = 2
+text = "Название здания:"
+
+[node name="NameEdit" type="LineEdit" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "Название здания"
+
+[node name="IdLbl" type="Label" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
+layout_mode = 2
+text = "ID здания:"
+
+[node name="IdEdit" type="LineEdit" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "my_building_id"
+
+[node name="HSepNameId" type="HSeparator" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
+layout_mode = 2
 
 [node name="EraLbl" type="Label" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
 layout_mode = 2
@@ -684,13 +684,13 @@ size_flags_vertical = 3
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/NewBtn" to="." method="_on_new_pressed"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/LoadBtn" to="." method="_on_load_pressed"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/SaveBtn" to="." method="_on_save_pressed"]
-[connection signal="pressed" from="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/ToolsRow/ToolPlaceBtn" to="." method="_on_tool_place_pressed"]
-[connection signal="pressed" from="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/ToolsRow/ToolEraseBtn" to="." method="_on_tool_erase_pressed"]
-[connection signal="pressed" from="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/BrushRow/BrushLineBtn" to="." method="_on_brush_line_pressed"]
-[connection signal="pressed" from="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/BrushRow/BrushRectBtn" to="." method="_on_brush_rect_pressed"]
-[connection signal="pressed" from="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/RotRow/RotBtn" to="." method="_cycle_rotation"]
-[connection signal="pressed" from="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/LayerRow/LayerDownBtn" to="." method="_on_layer_down_pressed"]
-[connection signal="pressed" from="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/LayerRow/LayerUpBtn" to="." method="_on_layer_up_pressed"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/ToolPlaceBtn" to="." method="_on_tool_place_pressed"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/ToolEraseBtn" to="." method="_on_tool_erase_pressed"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/BrushLineBtn" to="." method="_on_brush_line_pressed"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/BrushRectBtn" to="." method="_on_brush_rect_pressed"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/RotBtn" to="." method="_cycle_rotation"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/LayerDownBtn" to="." method="_on_layer_down_pressed"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/LayerUpBtn" to="." method="_on_layer_up_pressed"]
 [connection signal="pressed" from="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/CostHeaderBtn" to="." method="_on_cost_header_pressed"]
 [connection signal="item_selected" from="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/CostContainer/CostModeRow/CostModeOption" to="." method="_on_cost_mode_selected"]
 [connection signal="pressed" from="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/CostContainer/AddExtraCostBtn" to="." method="_on_add_extra_cost_pressed"]
