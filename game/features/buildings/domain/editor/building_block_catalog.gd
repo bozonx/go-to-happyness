@@ -431,6 +431,12 @@ static func normalize_anchor(block_id: StringName, variant_id: StringName, ancho
 	return anchor_kind if anchor_kind in available_anchors(block_id, variant_id) else ANCHOR_CENTER
 
 
+## Public accessor for the rot=0 in-cell anchor offset (see `_anchor_base_offset`),
+## used by presentation to build the full 3D placement offset.
+static func anchor_base_offset(block_id: StringName, variant_id: StringName, anchor_kind: int) -> Vector2:
+	return _anchor_base_offset(block_id, variant_id, anchor_kind)
+
+
 ## Offset from the cell centre (rot=0 frame) that realises an anchor kind. Edge
 ## pushes toward the block's thinner axis so it actually reaches a side.
 static func _anchor_base_offset(block_id: StringName, variant_id: StringName, anchor_kind: int) -> Vector2:

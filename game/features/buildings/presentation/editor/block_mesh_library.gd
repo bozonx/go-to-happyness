@@ -13,15 +13,13 @@ var _mesh_cache: Dictionary = {}
 var _material_cache: Dictionary = {}
 
 
-## World offset from the cell's minimum corner to the mesh origin so the block
-## rests on the cell floor (plus optional vertical offset). The variant selects
-## the prepared size; the anchor snaps a sub-cell block toward a cell side.
+## World offset from the cell's minimum corner to the mesh origin.
 ##
-## When the block is tilted off the Y axis (rot_x / rot_z), the mesh rotates
-## about its own origin, so a naive `size.y * 0.5` lift would sink the block
-## below the floor and slide it out of its cell. In that case the offset is
-## derived from the *rotated* bounding box: lift by the rotated half-height and
-## re-centre horizontally in the cell (in-cell anchoring is Y-only).
+## The cell is a fixed 1×1×1 slot; rotation turns the *detail* inside it (7 Days
+## to Die style). At rot=0 the mesh rests on the cell floor at its in-cell anchor,
+## giving a default offset of its centre from the cell centre; the full rotation
+## then spins that offset about the cell centre, so a sub-cell part can be turned
+## into the top / sides / corners of its cell instead of always hugging the floor.
 static func local_offset(
 	block_id: StringName,
 	variant: StringName = &"",
@@ -32,25 +30,15 @@ static func local_offset(
 	rot_z: int = 0
 ) -> Vector3:
 	var size := BuildingBlockCatalogScript.size_of(block_id, variant)
-	if rot_x == 0 and rot_z == 0:
-		var xz := BuildingBlockCatalogScript.cell_offset(block_id, variant, anchor, rot)
-		return Vector3(xz.x, size.y * 0.5 + vertical_offset, xz.y)
-	var ext := _rotated_half_extents(size, rot, rot_x, rot_z)
-	return Vector3(0.5, ext.y + vertical_offset, 0.5)
-
-
-## Half-extents of the block's axis-aligned bounding box after the three
-## quarter-turn rotations, matching the node's YXZ Euler order.
-static func _rotated_half_extents(size: Vector3, rot: int, rot_x: int, rot_z: int) -> Vector3:
-	var h := size * 0.5
-	var b := Basis.from_euler(Vector3(
+	var base := BuildingBlockCatalogScript.anchor_base_offset(block_id, variant, anchor)
+	# Default centre-to-centre offset: horizontal anchor + resting on the floor.
+	var d0 := Vector3(base.x, size.y * 0.5 - 0.5, base.y)
+	var r := Basis.from_euler(Vector3(
 		deg_to_rad(90.0 * float(rot_x)),
 		deg_to_rad(90.0 * float(rot)),
 		deg_to_rad(90.0 * float(rot_z))))
-	return Vector3(
-		absf(b.x.x) * h.x + absf(b.y.x) * h.y + absf(b.z.x) * h.z,
-		absf(b.x.y) * h.x + absf(b.y.y) * h.y + absf(b.z.y) * h.z,
-		absf(b.x.z) * h.x + absf(b.y.z) * h.y + absf(b.z.z) * h.z)
+	var c := r * d0
+	return Vector3(0.5 + c.x, 0.5 + c.y + vertical_offset, 0.5 + c.z)
 
 
 func mesh_for(block_id: StringName, variant: StringName = &"") -> Mesh:

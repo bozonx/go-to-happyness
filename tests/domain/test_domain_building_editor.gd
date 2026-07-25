@@ -110,6 +110,19 @@ static func _test_mesh_library() -> void:
 	var wood_mat := lib.material_for(&"wood")
 	assert(wood_mat != null)
 	assert(wood_mat.uv1_triplanar == true)
+	_test_tilt_rotates_detail_about_cell_centre()
+
+
+## A sub-cell detail must orbit the fixed 1×1×1 slot with the mesh, rather
+## than being re-grounded after each tilt. A 180° X or Z turn therefore moves
+## the half-height rectangle from the bottom to the top half of its slot.
+static func _test_tilt_rotates_detail_about_cell_centre() -> void:
+	var bottom := BlockMeshLibraryScript.local_offset(&"rectangle")
+	assert(is_equal_approx(bottom.y, 0.25))
+	var top_x := BlockMeshLibraryScript.local_offset(&"rectangle", &"", 0, 0, 0.0, 2, 0)
+	var top_z := BlockMeshLibraryScript.local_offset(&"rectangle", &"", 0, 0, 0.0, 0, 2)
+	assert(is_equal_approx(top_x.y, 0.75), "X tilt must move the detail into the slot's upper half")
+	assert(is_equal_approx(top_z.y, 0.75), "Z tilt must move the detail into the slot's upper half")
 
 
 static func _test_material_catalog_and_costs() -> void:
@@ -448,4 +461,3 @@ static func _test_era_material_replacement() -> void:
 	for block in bp.blocks:
 		assert(BuildingMaterialCatalogScript.is_available_in_era(block.material_id, bp.category))
 	assert(not bp.construction_cost.is_empty())
-
