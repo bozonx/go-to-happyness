@@ -2002,6 +2002,11 @@ func _can_hero_build() -> bool:
 	return building_placement_controller.can_hero_build() if building_placement_controller != null else false
 
 func _terrain_height_at(x: float, z: float, near_y: float) -> float:
+	# The grid terrain is the owner of height (grid_terrain_system.md §10.4), so
+	# ask it rather than the physics world: it answers identically headless, before
+	# a chunk has been meshed, and without a frame of collision lag after an edit.
+	if nav_grid != null and nav_grid.has_terrain_field():
+		return nav_grid.height_at(Vector3(x, near_y, z))
 	if DisplayServer.get_name() == "headless":
 		return 0.0
 	var from := Vector3(x, near_y + 12.0, z)

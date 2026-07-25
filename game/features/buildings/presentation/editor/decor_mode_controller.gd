@@ -12,8 +12,8 @@ extends Node3D
 ## SELECT picks and drags an existing object, ERASE removes the one under the
 ## cursor.
 
-const DecorAssetCatalogScript = preload("res://game/features/buildings/domain/editor/decor_asset_catalog.gd")
-const DecorAssetDefScript = preload("res://game/features/buildings/domain/editor/decor_asset_def.gd")
+const FurnishingAssetCatalogScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_catalog.gd")
+const FurnishingAssetDefScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_def.gd")
 const DecorObjectRecordScript = preload("res://game/features/buildings/domain/editor/decor_object_record.gd")
 
 enum Tool { PLACE, SELECT, ERASE }
@@ -131,7 +131,7 @@ func setup(editor: Node) -> void:
 	_yaw_spin.value_changed.connect(_on_transform_spin_changed)
 	_scale_spin.value_changed.connect(_on_transform_spin_changed)
 
-	current_category = DecorAssetCatalogScript.first_populated_category(current_category)
+	current_category = FurnishingAssetCatalogScript.first_populated_category(current_category)
 	_rebuild_category_options()
 	_rebuild_asset_buttons()
 	_set_tool(Tool.PLACE)
@@ -142,8 +142,8 @@ func _build_group_options() -> void:
 	_group_option.clear()
 	_group_option.add_item("Все группы")
 	_group_option.set_item_metadata(0, &"")
-	for group_id in DecorAssetCatalogScript.GROUPS.keys():
-		_group_option.add_item(String(DecorAssetCatalogScript.GROUPS[group_id]))
+	for group_id in FurnishingAssetCatalogScript.GROUPS.keys():
+		_group_option.add_item(String(FurnishingAssetCatalogScript.GROUPS[group_id]))
 		_group_option.set_item_metadata(_group_option.item_count - 1, group_id)
 	_group_option.select(0)
 
@@ -199,8 +199,8 @@ func _anchor_tooltip(anchor: Vector2i) -> String:
 
 func activate() -> void:
 	# Picks up `.tres` assets authored since the editor opened.
-	DecorAssetCatalogScript.refresh()
-	current_category = DecorAssetCatalogScript.first_populated_category(current_category)
+	FurnishingAssetCatalogScript.refresh()
+	current_category = FurnishingAssetCatalogScript.first_populated_category(current_category)
 	_rebuild_category_options()
 	_rebuild_asset_buttons()
 	_panel.visible = true
@@ -325,7 +325,7 @@ func _set_tool(tool_id: int) -> void:
 func snapped_position(raw_hit: Vector3) -> Vector3:
 	var y := float(_editor.active_layer)
 	if current_anchor != Vector2i.ZERO:
-		var asset := DecorAssetCatalogScript.get_asset(current_asset_id)
+		var asset := FurnishingAssetCatalogScript.get_asset(current_asset_id)
 		var size := asset.footprint_m() if asset != null else Vector3.ONE
 		var cell_x := floorf(raw_hit.x) + 0.5
 		var cell_z := floorf(raw_hit.z) + 0.5
@@ -346,7 +346,7 @@ func pick_object_at(world_pos: Vector3) -> String:
 	var best_id := ""
 	var best_distance := INF
 	for record: DecorObjectRecordScript in _editor.blueprint.objects:
-		var asset := DecorAssetCatalogScript.get_asset(record.asset_id)
+		var asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
 		var size := asset.footprint_m() if asset != null else Vector3.ONE
 		var radius := maxf(MIN_PICK_RADIUS, maxf(size.x, size.z) * 0.5 * maxf(record.scale.x, record.scale.z))
 		var distance := Vector2(record.pos.x - world_pos.x, record.pos.z - world_pos.z).length()
@@ -370,7 +370,7 @@ func find_record(object_id: String) -> DecorObjectRecordScript:
 # ---------------------------------------------------------------------------
 
 func _place_at(position: Vector3) -> void:
-	var asset := DecorAssetCatalogScript.get_asset(current_asset_id)
+	var asset := FurnishingAssetCatalogScript.get_asset(current_asset_id)
 	if asset == null:
 		_editor.set_status("Выберите ассет в каталоге декора.")
 		return
@@ -514,7 +514,7 @@ func rebuild_nodes() -> void:
 
 
 func _spawn_node(record: DecorObjectRecordScript) -> void:
-	var asset := DecorAssetCatalogScript.get_asset(record.asset_id)
+	var asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
 	if asset == null:
 		push_warning("DecorModeController: unknown asset %s, object %s not shown" % [record.asset_id, record.id])
 		return
@@ -555,7 +555,7 @@ func refresh_ghost() -> void:
 	if not is_active() or current_tool != Tool.PLACE or not _editor.cursor_valid:
 		_hide_ghost()
 		return
-	var asset := DecorAssetCatalogScript.get_asset(current_asset_id)
+	var asset := FurnishingAssetCatalogScript.get_asset(current_asset_id)
 	if asset == null:
 		_hide_ghost()
 		return
@@ -629,7 +629,7 @@ func _update_selection_marker() -> void:
 		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		_selection_marker.material_override = material
 		add_child(_selection_marker)
-	var asset := DecorAssetCatalogScript.get_asset(record.asset_id)
+	var asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
 	var size := asset.footprint_m() if asset != null else Vector3.ONE
 	var radius := maxf(MIN_PICK_RADIUS, maxf(size.x, size.z) * 0.5 * maxf(record.scale.x, record.scale.z))
 	_selection_marker.visible = true
@@ -648,12 +648,12 @@ func _on_group_selected(index: int) -> void:
 
 
 func _rebuild_category_options() -> void:
-	var counts := DecorAssetCatalogScript.category_counts()
+	var counts := FurnishingAssetCatalogScript.category_counts()
 	_category_option.clear()
 	var selected_index := -1
-	for category_id in DecorAssetCatalogScript.categories_in_group(current_group):
+	for category_id in FurnishingAssetCatalogScript.categories_in_group(current_group):
 		var count := int(counts.get(category_id, 0))
-		_category_option.add_item("%s (%d)" % [DecorAssetCatalogScript.category_display_name(category_id), count])
+		_category_option.add_item("%s (%d)" % [FurnishingAssetCatalogScript.category_display_name(category_id), count])
 		var item_index := _category_option.item_count - 1
 		_category_option.set_item_metadata(item_index, category_id)
 		# Empty categories stay listed (they document what is planned) but cannot
@@ -662,7 +662,7 @@ func _rebuild_category_options() -> void:
 		if category_id == current_category:
 			selected_index = item_index
 	if selected_index < 0:
-		current_category = DecorAssetCatalogScript.first_populated_category(current_category)
+		current_category = FurnishingAssetCatalogScript.first_populated_category(current_category)
 		for i in _category_option.item_count:
 			if _category_option.get_item_metadata(i) == current_category:
 				selected_index = i
@@ -683,7 +683,7 @@ func _rebuild_asset_buttons() -> void:
 		child.queue_free()
 	_asset_buttons.clear()
 
-	var assets := DecorAssetCatalogScript.get_assets_by_category(current_category)
+	var assets := FurnishingAssetCatalogScript.get_assets_by_category(current_category)
 	if assets.is_empty():
 		var empty_label := Label.new()
 		empty_label.text = "В этой категории пока нет ассетов."
@@ -721,7 +721,7 @@ func _select_asset(asset_id: StringName) -> void:
 		(_asset_buttons[id] as Button).button_pressed = id == asset_id
 	# Choosing from the catalog means "I want to place this".
 	_set_tool(Tool.PLACE)
-	var asset := DecorAssetCatalogScript.get_asset(asset_id)
+	var asset := FurnishingAssetCatalogScript.get_asset(asset_id)
 	if asset != null:
 		_select_snap_step(asset.default_snap_step)
 	_update_asset_hint()
@@ -729,7 +729,7 @@ func _select_asset(asset_id: StringName) -> void:
 
 
 func _update_asset_hint() -> void:
-	var asset := DecorAssetCatalogScript.get_asset(current_asset_id)
+	var asset := FurnishingAssetCatalogScript.get_asset(current_asset_id)
 	if asset == null:
 		_asset_hint.text = ""
 		return
@@ -779,7 +779,7 @@ func _refresh_object_list() -> void:
 	_syncing_ui = true
 	_object_list.clear()
 	for record: DecorObjectRecordScript in _editor.blueprint.objects:
-		var asset := DecorAssetCatalogScript.get_asset(record.asset_id)
+		var asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
 		var label := asset.name if asset != null else "%s (нет ассета)" % record.asset_id
 		var index := _object_list.add_item("%s  ·  %.1f, %.1f, %.1f" % [label, record.pos.x, record.pos.y, record.pos.z])
 		_object_list.set_item_metadata(index, record.id)
@@ -807,14 +807,14 @@ func _refresh_inspector() -> void:
 		_set_transform_fields_enabled(false)
 		return
 
-	var asset := DecorAssetCatalogScript.get_asset(record.asset_id)
+	var asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
 	_inspector_title.text = "Свойства: %s" % (asset.name if asset != null else String(record.asset_id))
 	_set_transform_fields_enabled(true)
 	_sync_transform_fields(record)
 	if asset == null:
 		return
 
-	for control in asset.controls:
+	for control in asset.appearance_controls:
 		var row := _build_control_row(record, control)
 		if row != null:
 			_controls_vbox.add_child(row)
@@ -831,13 +831,13 @@ func _build_control_row(record: DecorObjectRecordScript, control: Dictionary) ->
 	row.add_child(label)
 
 	var stored: Variant = record.appearance.get(property_name, control.get("default", null))
-	match String(control.get("type", DecorAssetDefScript.TYPE_STRING)):
-		DecorAssetDefScript.TYPE_BOOL:
+	match String(control.get("type", FurnishingAssetDefScript.TYPE_STRING)):
+		FurnishingAssetDefScript.TYPE_BOOL:
 			var check := CheckBox.new()
 			check.button_pressed = bool(stored)
 			check.toggled.connect(func(pressed: bool): _set_property(property_name, pressed))
 			row.add_child(check)
-		DecorAssetDefScript.TYPE_FLOAT:
+		FurnishingAssetDefScript.TYPE_FLOAT:
 			var spin := SpinBox.new()
 			spin.min_value = float(control.get("min", 0.0))
 			spin.max_value = float(control.get("max", 10.0))
@@ -846,7 +846,7 @@ func _build_control_row(record: DecorObjectRecordScript, control: Dictionary) ->
 			spin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			spin.value_changed.connect(func(value: float): _set_property(property_name, value))
 			row.add_child(spin)
-		DecorAssetDefScript.TYPE_COLOR:
+		FurnishingAssetDefScript.TYPE_COLOR:
 			var picker := ColorPickerButton.new()
 			picker.color = DecorObjectController._to_color(stored)
 			picker.custom_minimum_size = Vector2(48, 24)

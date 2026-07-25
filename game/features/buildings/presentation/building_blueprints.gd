@@ -7,7 +7,7 @@ const BuildingEntrancePositionsScript = preload("res://game/features/buildings/d
 const BuildingBlueprintLibraryScript = preload("res://game/features/buildings/presentation/building_blueprint_library.gd")
 const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
 const BlockMeshLibraryScript = preload("res://game/features/buildings/presentation/editor/block_mesh_library.gd")
-const DecorAssetCatalogScript = preload("res://game/features/buildings/domain/editor/decor_asset_catalog.gd")
+const FurnishingAssetCatalogScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_catalog.gd")
 
 const BLOCK_SIZE := 1.0
 const PANEL_THICKNESS := 0.5
@@ -277,7 +277,7 @@ static func create_module(module: Dictionary) -> StaticBody3D:
 
 static func _create_decor_module(module: Dictionary) -> StaticBody3D:
 	var asset_id: StringName = StringName(module.get("asset_id", ""))
-	var asset := DecorAssetCatalogScript.get_asset(asset_id)
+	var asset := FurnishingAssetCatalogScript.get_asset(asset_id)
 	if asset == null:
 		push_warning("BuildingBlueprints: unknown decor asset %s" % asset_id)
 		return null
