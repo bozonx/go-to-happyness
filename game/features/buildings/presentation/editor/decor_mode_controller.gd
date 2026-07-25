@@ -299,7 +299,7 @@ func on_left_pressed() -> void:
 	var hit: Vector3 = _editor.cursor_hit_pos
 	match current_tool:
 		Tool.PLACE:
-			_place_at(snapped_position(hit))
+			_place_or_select_at(hit)
 		Tool.SELECT:
 			var picked := pick_object_at(hit)
 			select_object(picked)
@@ -508,10 +508,39 @@ func find_record(object_id: String) -> DecorObjectRecordScript:
 # Mutations
 # ---------------------------------------------------------------------------
 
+## In placement mode an existing object takes precedence over the catalog
+## selection. This makes a click on decor behave like selection instead of
+## silently stacking another instance inside it.
+func _place_or_select_at(hit: Vector3) -> void:
+	var target := pick_object_at(hit)
+	if not target.is_empty():
+		select_object(target)
+		_editor.set_status("Выбран объект под курсором.")
+		return
+	var position := snapped_position(hit)
+	if _compute_ghost_state(position) != GhostState.VALID:
+		# The hit can be near the edge of an object's footprint rather than inside
+		# its pick radius. Select that conflicting object where possible, so the
+		# click still has a useful result.
+		var conflict := pick_object_at(position)
+		if not conflict.is_empty():
+			select_object(conflict)
+			_editor.set_status("Выбран объект, занимающий это место.")
+		else:
+			_editor.set_status("Здесь нельзя разместить декор: место занято или вне границ здания.")
+		return
+	_place_at(position)
+
+
 func _place_at(position: Vector3) -> void:
 	var asset := FurnishingAssetCatalogScript.get_asset(current_asset_id)
 	if asset == null:
 		_editor.set_status("Выберите ассет в каталоге декора.")
+		return
+	# Keep the invariant at the mutation boundary too: UI input is not the only
+	# caller of this method, and a red preview must never still create an overlap.
+	if _compute_ghost_state(position) != GhostState.VALID:
+		_editor.set_status("Нельзя разместить декор поверх другого объекта.")
 		return
 	_push_undo()
 	var record := DecorObjectRecordScript.make(asset.id, position, _next_object_suffix())

@@ -12,17 +12,15 @@ extends RefCounted
 ## describes the mesh footprint in metres, while `mesh_shape` tells presentation
 ## which procedural mesh to build.
 ##
-## Some blocks expose a `variants` list: prepared size/profile options for the
-## same conceptual block (e.g. a column that can be several thicknesses). A
-## variant may override `size` and/or `mesh_shape`; a placed block stores the
-## chosen variant id (empty = the first/default variant). This keeps the palette
-## compact and the save format explicit without a free-form parametric size that
-## would break grid snapping and cost accounting.
+## Some blocks expose a `variants` list: fixed size options for one conceptual
+## block. A placed block stores the chosen size id (empty = the first/default
+## size). This keeps the palette compact and the save format explicit without a
+## free-form parametric size that would break grid snapping and cost accounting.
 
 enum Category {
-	STRUCTURE,   ## cubes, small cubes, rectangles, slabs, half-slab
+	STRUCTURE,   ## cube and slab (size is selected separately)
 	FOUNDATION,  ## foundation blocks that auto-extend down to the ground
-	COLUMNS,     ## square / round / half columns (thickness as variants)
+	COLUMNS,     ## square / round / half columns (size selected separately)
 	ROOF,        ## roof pitches and corners at 45° and 22.5°
 	CIRCULATION, ## stairs, half stairs, quarter stairs, corner stairs
 	OPENINGS,    ## door / window openings (3×3), arch
@@ -37,11 +35,6 @@ const SHAPE_SLOPE_CORNER_IN := &"slope_corner_in"
 const SHAPE_SLOPE_CORNER_OUT := &"slope_corner_out"
 const SHAPE_CYLINDER := &"cylinder"
 const SHAPE_HALF_CYLINDER := &"half_cylinder"
-const SHAPE_COLUMN_SQUARE_CROSS_2 := &"column_square_cross_2"
-const SHAPE_COLUMN_SQUARE_CROSS_3 := &"column_square_cross_3"
-const SHAPE_COLUMN_ROUND_CROSS_2 := &"column_round_cross_2"
-const SHAPE_COLUMN_ROUND_CROSS_3 := &"column_round_cross_3"
-const SHAPE_COLUMN_HALF_CROSS_2 := &"column_half_cross_2"
 const SHAPE_STAIRS := &"stairs"
 const SHAPE_STAIRS_HALF := &"stairs_half"
 const SHAPE_STAIRS_QUARTER := &"stairs_quarter"
@@ -65,46 +58,23 @@ const BLOCKS: Array = [
 		"size": Vector3(1.0, 1.0, 1.0),
 		"mesh_shape": SHAPE_BOX,
 		"rotatable": true,
-	},
-	{
-		"id": &"small_cube",
-		"name": "Малый куб",
-		"category": Category.STRUCTURE,
-		"size": Vector3(0.5, 0.5, 0.5),
-		"mesh_shape": SHAPE_BOX,
-		"rotatable": true,
-	},
-	{
-		"id": &"rectangle",
-		"name": "Прямоугольник",
-		"category": Category.STRUCTURE,
-		"size": Vector3(1.0, 0.5, 0.5),
-		"mesh_shape": SHAPE_BOX,
-		"rotatable": true,
+		"variants": [
+			{"id": &"1", "name": "1 м", "size": Vector3(1.0, 1.0, 1.0)},
+			{"id": &"0.5", "name": "0.5 м", "size": Vector3(0.5, 0.5, 0.5)},
+			{"id": &"0.25", "name": "0.25 м", "size": Vector3(0.25, 0.25, 0.25)},
+		],
 	},
 	{
 		"id": &"slab",
-		"name": "Плита 0.5",
+		"name": "Плита",
 		"category": Category.STRUCTURE,
 		"size": Vector3(1.0, 0.5, 1.0),
 		"mesh_shape": SHAPE_BOX,
 		"rotatable": true,
-	},
-	{
-		"id": &"thin_slab",
-		"name": "Плита 0.25",
-		"category": Category.STRUCTURE,
-		"size": Vector3(1.0, 0.25, 1.0),
-		"mesh_shape": SHAPE_BOX,
-		"rotatable": true,
-	},
-	{
-		"id": &"half_slab",
-		"name": "Полуплита",
-		"category": Category.STRUCTURE,
-		"size": Vector3(1.0, 0.5, 0.15),
-		"mesh_shape": SHAPE_BOX,
-		"rotatable": true,
+		"variants": [
+			{"id": &"0.5", "name": "0.5 м", "size": Vector3(1.0, 0.5, 1.0)},
+			{"id": &"0.25", "name": "0.25 м", "size": Vector3(1.0, 0.25, 1.0)},
+		],
 	},
 	# --- Фундамент ---------------------------------------------------------
 	{
@@ -124,36 +94,10 @@ const BLOCKS: Array = [
 		"size": Vector3(0.5, 1.0, 0.5),
 		"mesh_shape": SHAPE_BOX,
 		"rotatable": true,
+		"overlap_policy": &"structural_joint",
 		"variants": [
-			{"id": &"thick", "name": "0.8м", "size": Vector3(0.8, 1.0, 0.8)},
-			{"id": &"med", "name": "0.5м", "size": Vector3(0.5, 1.0, 0.5)},
-			{"id": &"thin", "name": "0.25м", "size": Vector3(0.25, 1.0, 0.25)},
-		],
-	},
-	{
-		"id": &"column_square_cross_2",
-		"name": "Квадратная крестовина (2)",
-		"category": Category.COLUMNS,
-		"size": Vector3(0.5, 1.0, 0.5),
-		"mesh_shape": SHAPE_COLUMN_SQUARE_CROSS_2,
-		"rotatable": true,
-		"variants": [
-			{"id": &"thick", "name": "0.8м", "size": Vector3(0.8, 1.0, 0.8)},
-			{"id": &"med", "name": "0.5м", "size": Vector3(0.5, 1.0, 0.5)},
-			{"id": &"thin", "name": "0.25м", "size": Vector3(0.25, 1.0, 0.25)},
-		],
-	},
-	{
-		"id": &"column_square_cross_3",
-		"name": "Квадратная крестовина (3)",
-		"category": Category.COLUMNS,
-		"size": Vector3(0.5, 1.0, 0.5),
-		"mesh_shape": SHAPE_COLUMN_SQUARE_CROSS_3,
-		"rotatable": true,
-		"variants": [
-			{"id": &"thick", "name": "0.8м", "size": Vector3(0.8, 1.0, 0.8)},
-			{"id": &"med", "name": "0.5м", "size": Vector3(0.5, 1.0, 0.5)},
-			{"id": &"thin", "name": "0.25м", "size": Vector3(0.25, 1.0, 0.25)},
+			{"id": &"0.5", "name": "0.5 м", "size": Vector3(0.5, 1.0, 0.5)},
+			{"id": &"0.25", "name": "0.25 м", "size": Vector3(0.25, 1.0, 0.25)},
 		],
 	},
 	{
@@ -163,36 +107,11 @@ const BLOCKS: Array = [
 		"size": Vector3(0.5, 1.0, 0.5),
 		"mesh_shape": SHAPE_CYLINDER,
 		"rotatable": true,
+		"overlap_policy": &"structural_joint",
 		"variants": [
-			{"id": &"thick", "name": "0.8м", "size": Vector3(0.8, 1.0, 0.8)},
-			{"id": &"med", "name": "0.5м", "size": Vector3(0.5, 1.0, 0.5)},
-			{"id": &"thin", "name": "0.25м", "size": Vector3(0.25, 1.0, 0.25)},
-		],
-	},
-	{
-		"id": &"column_round_cross_2",
-		"name": "Круглая крестовина (2)",
-		"category": Category.COLUMNS,
-		"size": Vector3(0.5, 1.0, 0.5),
-		"mesh_shape": SHAPE_COLUMN_ROUND_CROSS_2,
-		"rotatable": true,
-		"variants": [
-			{"id": &"thick", "name": "0.8м", "size": Vector3(0.8, 1.0, 0.8)},
-			{"id": &"med", "name": "0.5м", "size": Vector3(0.5, 1.0, 0.5)},
-			{"id": &"thin", "name": "0.25м", "size": Vector3(0.25, 1.0, 0.25)},
-		],
-	},
-	{
-		"id": &"column_round_cross_3",
-		"name": "Круглая крестовина (3)",
-		"category": Category.COLUMNS,
-		"size": Vector3(0.5, 1.0, 0.5),
-		"mesh_shape": SHAPE_COLUMN_ROUND_CROSS_3,
-		"rotatable": true,
-		"variants": [
-			{"id": &"thick", "name": "0.8м", "size": Vector3(0.8, 1.0, 0.8)},
-			{"id": &"med", "name": "0.5м", "size": Vector3(0.5, 1.0, 0.5)},
-			{"id": &"thin", "name": "0.25м", "size": Vector3(0.25, 1.0, 0.25)},
+			{"id": &"1", "name": "1 м", "size": Vector3(1.0, 1.0, 1.0)},
+			{"id": &"0.5", "name": "0.5 м", "size": Vector3(0.5, 1.0, 0.5)},
+			{"id": &"0.25", "name": "0.25 м", "size": Vector3(0.25, 1.0, 0.25)},
 		],
 	},
 	{
@@ -202,21 +121,11 @@ const BLOCKS: Array = [
 		"size": Vector3(0.5, 1.0, 0.25),
 		"mesh_shape": SHAPE_HALF_CYLINDER,
 		"rotatable": true,
+		"overlap_policy": &"structural_joint",
 		"variants": [
-			{"id": &"med", "name": "0.5м", "size": Vector3(0.5, 1.0, 0.25)},
-			{"id": &"thin", "name": "0.25м", "size": Vector3(0.25, 1.0, 0.15)},
-		],
-	},
-	{
-		"id": &"column_half_cross_2",
-		"name": "Крестовина полуколонн (2)",
-		"category": Category.COLUMNS,
-		"size": Vector3(0.5, 1.0, 0.25),
-		"mesh_shape": SHAPE_COLUMN_HALF_CROSS_2,
-		"rotatable": true,
-		"variants": [
-			{"id": &"med", "name": "0.5м", "size": Vector3(0.5, 1.0, 0.25)},
-			{"id": &"thin", "name": "0.25м", "size": Vector3(0.25, 1.0, 0.15)},
+			{"id": &"1", "name": "1 м", "size": Vector3(1.0, 1.0, 0.5)},
+			{"id": &"0.5", "name": "0.5 м", "size": Vector3(0.5, 1.0, 0.25)},
+			{"id": &"0.25", "name": "0.25 м", "size": Vector3(0.25, 1.0, 0.125)},
 		],
 	},
 	# --- Крыша -------------------------------------------------------------
@@ -456,6 +365,41 @@ static func mesh_shape_of(block_id: StringName, variant_id: StringName = &"") ->
 	if not v.is_empty() and v.has("mesh_shape"):
 		return v["mesh_shape"]
 	return def.get("mesh_shape", SHAPE_BOX)
+
+
+## Explicit opt-in for compatible construction joints. It is deliberately a
+## block-definition rule: material or a merely different size must never make
+## two solids overlap by accident.
+static func allows_structural_joint(block_id: StringName) -> bool:
+	return get_block(block_id).get("overlap_policy", &"") == &"structural_joint"
+
+
+## Conservative world-space AABB occupied by a block in its anchor cell. The
+## frame editor only permits quarter turns, so this is an exact box for boxes
+## and a safe broad-phase volume for curved procedural meshes.
+static func occupied_aabb(
+	cell: Vector3i,
+	block_id: StringName,
+	variant_id: StringName,
+	rot: int,
+	anchor_kind: int,
+	rot_x: int = 0,
+	rot_z: int = 0
+) -> AABB:
+	var size := size_of(block_id, variant_id)
+	var base := anchor_base_offset(block_id, variant_id, anchor_kind)
+	var basis := Basis.from_euler(Vector3(
+		deg_to_rad(90.0 * float(rot_x)),
+		deg_to_rad(90.0 * float(rot)),
+		deg_to_rad(90.0 * float(rot_z))))
+	var local_center := basis * Vector3(base.x, size.y * 0.5 - 0.5, base.y)
+	var center := Vector3(cell) + Vector3(0.5, 0.5, 0.5) + local_center
+	var half := size * 0.5
+	var extent := Vector3(
+		absf(basis.x.x) * half.x + absf(basis.y.x) * half.y + absf(basis.z.x) * half.z,
+		absf(basis.x.y) * half.x + absf(basis.y.y) * half.y + absf(basis.z.y) * half.z,
+		absf(basis.x.z) * half.x + absf(basis.y.z) * half.y + absf(basis.z.z) * half.z)
+	return AABB(center - extent, extent * 2.0)
 
 
 # ---------------------------------------------------------------------------

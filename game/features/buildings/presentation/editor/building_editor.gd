@@ -72,7 +72,7 @@ var _armed_tool: StringName = &"cell"  ## &"cell" | &"anchor"
 var _anchor_family: StringName = ZoneAnchorRecordScript.FAMILY_OCCUPANCY
 var _anchor_role: StringName = ZoneAnchorRecordScript.ROLE_WORK
 
-var _block_nodes: Dictionary = {}  ## Vector3i -> MeshInstance3D
+var _block_nodes: Dictionary = {}  ## BuildingGridModel placement key -> MeshInstance3D
 @onready var _camera_controller: CameraController = %CameraController
 @onready var _blocks_root: Node3D = %BlocksRoot
 @onready var _ghost: MeshInstance3D = %Ghost
@@ -394,19 +394,15 @@ func _apply_tool_at_cursor() -> void:
 func _apply_tool_at_cell(cell: Vector3i) -> void:
 	match current_tool:
 		Tool.PLACE:
-			# A multi-cell block can evict several existing blocks; drop their
-			# anchor nodes before spawning the new one.
-			var evicted := grid_model.overlapping_anchors(cell, current_block_id, current_variant, current_rot)
 			if grid_model.place(cell, current_block_id, current_rot, current_material_id, current_variant, current_anchor, current_rot_x, current_rot_z):
-				for anchor in evicted:
-					_remove_block_node(anchor)
 				_spawn_or_update_block_node(grid_model.get_block_at(cell))
 				_update_count()
 				_mark_dirty()
 		Tool.ERASE:
-			var anchor := grid_model.anchor_at(cell)
+			var target := grid_model.get_block_at(cell)
 			if grid_model.erase(cell):
-				_remove_block_node(anchor)
+				if target != null:
+					_remove_block_node(target)
 				_update_count()
 				_mark_dirty()
 
@@ -476,22 +472,24 @@ func _pointer_over_ui() -> bool:
 # ---------------------------------------------------------------------------
 
 func _spawn_or_update_block_node(block: BlueprintBlock) -> void:
-	var node: MeshInstance3D = _block_nodes.get(block.pos, null)
+	var key := grid_model.placement_key_for(block)
+	var node: MeshInstance3D = _block_nodes.get(key, null)
 	if node == null:
 		node = MeshInstance3D.new()
 		_blocks_root.add_child(node)
-		_block_nodes[block.pos] = node
+		_block_nodes[key] = node
 	node.mesh = mesh_library.mesh_for(block.block_id, block.variant)
 	node.material_override = mesh_library.material_for(block.material_id)
 	node.position = Vector3(block.pos) + BlockMeshLibraryScript.local_offset(block.block_id, block.variant, block.rot, block.anchor, 0.0, block.rot_x, block.rot_z)
 	node.rotation = block.rotation_euler()
 
 
-func _remove_block_node(cell: Vector3i) -> void:
-	var node: MeshInstance3D = _block_nodes.get(cell, null)
+func _remove_block_node(block: BlueprintBlock) -> void:
+	var key := grid_model.placement_key_for(block)
+	var node: MeshInstance3D = _block_nodes.get(key, null)
 	if node != null:
 		node.queue_free()
-		_block_nodes.erase(cell)
+		_block_nodes.erase(key)
 
 
 func _rebuild_all_block_nodes() -> void:
@@ -533,7 +531,9 @@ func _refresh_ghost() -> void:
 		_ghost.mesh = mesh_library.mesh_for(current_block_id, current_variant)
 		_ghost.rotation = _current_ghost_euler()
 		_ghost.position = Vector3(cursor_cell) + BlockMeshLibraryScript.local_offset(current_block_id, current_variant, current_rot, current_anchor, 0.0, current_rot_x, current_rot_z)
-		_ghost.material_override = mesh_library.ghost_material(true)
+		_ghost.material_override = mesh_library.ghost_material(grid_model.can_place(
+			cursor_cell, current_block_id, current_rot, current_material_id, current_variant,
+			current_anchor, current_rot_x, current_rot_z))
 
 
 ## Euler rotation of the placement ghost, combining all three quarter-turn axes.

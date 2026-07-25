@@ -1,60 +1,86 @@
 class_name BuildingGridModel
 extends RefCounted
 
-## Deterministic voxel-grid state for the building editor frame mode.
-## The primary map keys the anchor `Vector3i` cell of each placed block; an
-## occupancy map tracks every cell a (possibly multi-cell) block covers so
-## overlap resolution and erase can work from any covered cell. Owns place /
-## erase / query and conversion to and from a `BuildingBlueprint`. No engine
-## node types.
+## Deterministic frame state for the building editor. Several blocks may use the
+## same anchor cell; spatial compatibility is decided by their occupied volumes,
+## never by the cell address alone. `_occupied` is therefore only a broad-phase
+## index, while `_blocks` remains the authoritative set of placed records.
 
 const BlueprintBlockScript = preload("res://game/features/buildings/domain/editor/blueprint_block.gd")
 const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
 const BuildingMaterialCatalogScript = preload("res://game/features/buildings/domain/editor/building_material_catalog.gd")
 const BuildingBlueprintScript = preload("res://game/features/buildings/domain/editor/building_blueprint.gd")
 
-var _cells: Dictionary = {}      ## Vector3i anchor -> BlueprintBlock
-var _occupied: Dictionary = {}   ## Vector3i covered cell -> Vector3i anchor
+const INTERSECTION_EPSILON := 0.0001
+
+var _blocks: Dictionary = {}    ## String placement key -> BlueprintBlock
+var _occupied: Dictionary = {}  ## Vector3i broad-phase cell -> Array[String] placement keys
 
 
 func is_empty() -> bool:
-	return _cells.is_empty()
+	return _blocks.is_empty()
 
 
 func count() -> int:
-	return _cells.size()
+	return _blocks.size()
 
 
-## True when any block (single- or multi-cell) covers this cell.
 func has_block_at(cell: Vector3i) -> bool:
-	return _occupied.has(cell)
+	return _occupied.has(cell) and not (_occupied[cell] as Array).is_empty()
 
 
-## The block covering this cell, or null. Works from any covered cell, not just
-## the anchor.
+## The most recently placed block covering `cell`, or null. The editor can use
+## this deterministic top-most choice for erase; the model never treats it as
+## the only block in the cell.
 func get_block_at(cell: Vector3i) -> BlueprintBlock:
-	var anchor: Variant = _occupied.get(cell, null)
-	if anchor == null:
-		return null
-	return _cells.get(anchor, null)
+	var keys: Array = _occupied.get(cell, [])
+	for index in range(keys.size() - 1, -1, -1):
+		var block: BlueprintBlock = _blocks.get(keys[index], null)
+		if block != null:
+			return block
+	return null
 
 
-## Anchor cell of the block covering `cell`, or `cell` itself when none.
+func block_key_at(cell: Vector3i) -> String:
+	var block := get_block_at(cell)
+	return placement_key_for(block) if block != null else ""
+
+
 func anchor_at(cell: Vector3i) -> Vector3i:
-	return _occupied.get(cell, cell)
+	var block := get_block_at(cell)
+	return block.pos if block != null else cell
 
 
 func all_blocks() -> Array:
-	return _cells.values()
+	return _blocks.values()
 
 
-## Cells a block would cover if anchored at `cell`, honouring its footprint and
-## Y rotation. Single-cell blocks return just `[cell]`.
+func placement_key_for(block: BlueprintBlock) -> String:
+	return placement_key(block.pos, block.block_id, block.variant, block.anchor, block.rot, block.rot_x, block.rot_z)
+
+
+static func placement_key(
+	cell: Vector3i,
+	block_id: StringName,
+	variant: StringName,
+	anchor: int,
+	rot: int,
+	rot_x: int,
+	rot_z: int
+) -> String:
+	# Material is intentionally absent: differently painted duplicate solids are
+	# still one invalid placement, not two compatible construction elements.
+	return "%d:%d:%d|%s|%s|%d|%d|%d|%d" % [
+		cell.x, cell.y, cell.z, block_id, variant, anchor, rot, rot_x, rot_z]
+
+
+## Cells used for broad-phase lookup. They do not define the final collision
+## decision; `occupied_aabb` below does.
 static func occupied_cells(cell: Vector3i, block_id: StringName, variant: StringName, rot: int) -> Array:
 	var fp := BuildingBlockCatalogScript.footprint_of(block_id, variant)
 	if fp == Vector3i.ONE:
 		return [cell]
-	var ox := (fp.x - 1) / 2  # centre width/depth around the anchor cell
+	var ox := (fp.x - 1) / 2
 	var oz := (fp.z - 1) / 2
 	var out: Array = []
 	for dx in fp.x:
@@ -65,21 +91,7 @@ static func occupied_cells(cell: Vector3i, block_id: StringName, variant: String
 	return out
 
 
-## Anchors of blocks that a new placement at `cell` would overlap and replace.
-func overlapping_anchors(cell: Vector3i, block_id: StringName, variant: StringName, rot: int) -> Array:
-	var norm_variant := BuildingBlockCatalogScript.normalize_variant(block_id, variant)
-	var seen: Dictionary = {}
-	for c in occupied_cells(cell, block_id, norm_variant, _normalize_rot(block_id, rot)):
-		if _occupied.has(c):
-			seen[_occupied[c]] = true
-	return seen.keys()
-
-
-## Places (or replaces) a block at any layer (negative Y included, for
-## underground structures). Existing blocks whose cells intersect the new block's
-## footprint are removed first. Returns false only when the block id or material
-## id is unknown.
-func place(
+func can_place(
 	cell: Vector3i,
 	block_id: StringName,
 	rot: int = 0,
@@ -93,62 +105,102 @@ func place(
 		return false
 	var norm_variant := BuildingBlockCatalogScript.normalize_variant(block_id, variant)
 	var norm_rot := _normalize_rot(block_id, rot)
-	var cells := occupied_cells(cell, block_id, norm_variant, norm_rot)
-	# Clear whatever the footprint would overlap (including a block already at the
-	# anchor) so occupancy never double-books a cell.
-	for c in cells:
-		if _occupied.has(c):
-			_erase_block(_occupied[c])
-	var block := BlueprintBlockScript.new(
-		cell,
-		block_id,
-		norm_rot,
-		material_id,
-		norm_variant,
-		BuildingBlockCatalogScript.normalize_anchor(block_id, norm_variant, anchor),
-		((rot_x % 4) + 4) % 4,
-		((rot_z % 4) + 4) % 4)
-	_cells[cell] = block
-	for c in cells:
-		_occupied[c] = cell
-	return true
-
-
-## Erases the block covering `cell` (from any covered cell). Returns true when a
-## block was removed.
-func erase(cell: Vector3i) -> bool:
-	if not _occupied.has(cell):
+	var norm_anchor := BuildingBlockCatalogScript.normalize_anchor(block_id, norm_variant, anchor)
+	var key := placement_key(cell, block_id, norm_variant, norm_anchor, norm_rot, rot_x, rot_z)
+	if _blocks.has(key):
 		return false
-	_erase_block(_occupied[cell])
+	var candidate := BuildingBlockCatalogScript.occupied_aabb(cell, block_id, norm_variant, norm_rot, norm_anchor, rot_x, rot_z)
+	for existing_key in _candidate_keys(cell, block_id, norm_variant, norm_rot):
+		var existing: BlueprintBlock = _blocks.get(existing_key, null)
+		if existing == null:
+			continue
+		var occupied := BuildingBlockCatalogScript.occupied_aabb(existing.pos, existing.block_id,
+			existing.variant, existing.rot, existing.anchor, existing.rot_x, existing.rot_z)
+		if _interiors_intersect(candidate, occupied) and not _allows_joint(block_id, existing.block_id):
+			return false
 	return true
 
 
-func _erase_block(anchor: Vector3i) -> void:
-	var block: BlueprintBlock = _cells.get(anchor, null)
+## Kept for the editor call-site; compatible placements no longer evict blocks.
+func overlapping_anchors(_cell: Vector3i, _block_id: StringName, _variant: StringName, _rot: int) -> Array:
+	return []
+
+
+func place(
+	cell: Vector3i,
+	block_id: StringName,
+	rot: int = 0,
+	material_id: StringName = BuildingMaterialCatalogScript.DEFAULT_ID,
+	variant: StringName = &"",
+	anchor: int = 0,
+	rot_x: int = 0,
+	rot_z: int = 0
+) -> bool:
+	if not can_place(cell, block_id, rot, material_id, variant, anchor, rot_x, rot_z):
+		return false
+	var norm_variant := BuildingBlockCatalogScript.normalize_variant(block_id, variant)
+	var norm_rot := _normalize_rot(block_id, rot)
+	var block := BlueprintBlockScript.new(cell, block_id, norm_rot, material_id, norm_variant,
+		BuildingBlockCatalogScript.normalize_anchor(block_id, norm_variant, anchor),
+		((rot_x % 4) + 4) % 4, ((rot_z % 4) + 4) % 4)
+	var key := placement_key_for(block)
+	_blocks[key] = block
+	for covered_cell in occupied_cells(cell, block_id, norm_variant, norm_rot):
+		var keys: Array = _occupied.get(covered_cell, [])
+		keys.append(key)
+		_occupied[covered_cell] = keys
+	return true
+
+
+func erase(cell: Vector3i) -> bool:
+	var key := block_key_at(cell)
+	if key.is_empty():
+		return false
+	_erase_key(key)
+	return true
+
+
+func erase_block(block: BlueprintBlock) -> bool:
+	var key := placement_key_for(block)
+	if not _blocks.has(key):
+		return false
+	_erase_key(key)
+	return true
+
+
+func _erase_key(key: String) -> void:
+	var block: BlueprintBlock = _blocks.get(key, null)
 	if block == null:
 		return
-	for c in occupied_cells(anchor, block.block_id, block.variant, block.rot):
-		if _occupied.get(c, null) == anchor:
-			_occupied.erase(c)
-	_cells.erase(anchor)
+	for covered_cell in occupied_cells(block.pos, block.block_id, block.variant, block.rot):
+		var keys: Array = _occupied.get(covered_cell, [])
+		keys.erase(key)
+		if keys.is_empty():
+			_occupied.erase(covered_cell)
+		else:
+			_occupied[covered_cell] = keys
+	_blocks.erase(key)
 
 
 func rotate_at(cell: Vector3i, steps: int = 1) -> bool:
-	var anchor := anchor_at(cell)
-	var block: BlueprintBlock = _cells.get(anchor, null)
+	var block := get_block_at(cell)
 	if block == null:
 		return false
-	# Re-place so multi-cell occupancy follows the new rotation.
-	return place(anchor, block.block_id, block.rot + steps, block.material_id,
+	_erase_key(placement_key_for(block))
+	if place(block.pos, block.block_id, block.rot + steps, block.material_id,
+		block.variant, block.anchor, block.rot_x, block.rot_z):
+		return true
+	# Rotation cannot silently destroy a valid placed element; restore it.
+	place(block.pos, block.block_id, block.rot, block.material_id,
 		block.variant, block.anchor, block.rot_x, block.rot_z)
+	return false
 
 
 func clear() -> void:
-	_cells.clear()
+	_blocks.clear()
 	_occupied.clear()
 
 
-## Axis-aligned bounds covering all occupied cells, or a zero-size box when empty.
 func bounds() -> AABB:
 	if _occupied.is_empty():
 		return AABB()
@@ -161,28 +213,19 @@ func bounds() -> AABB:
 		max_c.x = maxi(max_c.x, cell.x)
 		max_c.y = maxi(max_c.y, cell.y)
 		max_c.z = maxi(max_c.z, cell.z)
-	var size := Vector3(max_c - min_c) + Vector3.ONE
-	return AABB(Vector3(min_c), size)
+	return AABB(Vector3(min_c), Vector3(max_c - min_c) + Vector3.ONE)
 
 
 func write_to_blueprint(blueprint: BuildingBlueprintScript) -> void:
 	blueprint.clear_blocks()
-	# Stable ordering keeps saved JSON diffs deterministic.
-	var keys: Array = _cells.keys()
-	keys.sort_custom(_compare_cells)
-	for cell in keys:
-		var block: BlueprintBlock = _cells[cell]
-		blueprint.blocks.append(BlueprintBlockScript.new(
-			block.pos, block.block_id, block.rot, block.material_id,
-			block.variant, block.anchor, block.rot_x, block.rot_z))
+	var keys: Array = _blocks.keys()
+	keys.sort()
+	for key in keys:
+		var block: BlueprintBlock = _blocks[key]
+		blueprint.blocks.append(BlueprintBlockScript.new(block.pos, block.block_id, block.rot,
+			block.material_id, block.variant, block.anchor, block.rot_x, block.rot_z))
 	var b := bounds()
-	# An empty frame yields a zero-size AABB, which `validation_errors()` rejects
-	# as non-positive bounds — that made a decor-only (or brand new) blueprint
-	# impossible to save. Keep at least one cell in every axis.
-	blueprint.grid_bounds = Vector3i(
-		maxi(1, int(b.size.x)),
-		maxi(1, int(b.size.y)),
-		maxi(1, int(b.size.z)))
+	blueprint.grid_bounds = Vector3i(maxi(1, int(b.size.x)), maxi(1, int(b.size.y)), maxi(1, int(b.size.z)))
 
 
 func load_from_blueprint(blueprint: BuildingBlueprintScript) -> void:
@@ -191,6 +234,25 @@ func load_from_blueprint(blueprint: BuildingBlueprintScript) -> void:
 		if BuildingBlockCatalogScript.has_block(block.block_id) and BuildingMaterialCatalogScript.has_material(block.material_id):
 			place(block.pos, block.block_id, block.rot, block.material_id,
 				block.variant, block.anchor, block.rot_x, block.rot_z)
+
+
+func _candidate_keys(cell: Vector3i, block_id: StringName, variant: StringName, rot: int) -> Array:
+	var seen: Dictionary = {}
+	for covered_cell in occupied_cells(cell, block_id, variant, rot):
+		for key in _occupied.get(covered_cell, []):
+			seen[key] = true
+	return seen.keys()
+
+
+static func _interiors_intersect(a: AABB, b: AABB) -> bool:
+	return a.position.x < b.end.x - INTERSECTION_EPSILON and b.position.x < a.end.x - INTERSECTION_EPSILON \
+		and a.position.y < b.end.y - INTERSECTION_EPSILON and b.position.y < a.end.y - INTERSECTION_EPSILON \
+		and a.position.z < b.end.z - INTERSECTION_EPSILON and b.position.z < a.end.z - INTERSECTION_EPSILON
+
+
+static func _allows_joint(new_block_id: StringName, existing_block_id: StringName) -> bool:
+	return BuildingBlockCatalogScript.allows_structural_joint(new_block_id) \
+		and BuildingBlockCatalogScript.allows_structural_joint(existing_block_id)
 
 
 func _normalize_rot(block_id: StringName, rot: int) -> int:
@@ -206,11 +268,3 @@ static func _rotate_xz(off: Vector2i, rot: int) -> Vector2i:
 		2: return Vector2i(-off.x, -off.y)
 		3: return Vector2i(off.y, -off.x)
 		_: return off
-
-
-func _compare_cells(a: Vector3i, b: Vector3i) -> bool:
-	if a.y != b.y:
-		return a.y < b.y
-	if a.x != b.x:
-		return a.x < b.x
-	return a.z < b.z

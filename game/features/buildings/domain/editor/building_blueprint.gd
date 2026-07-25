@@ -332,7 +332,7 @@ func validation_errors() -> Array[String]:
 		errors.append("grid_bounds must be positive")
 	if footprint.x <= 0 or footprint.y <= 0:
 		errors.append("footprint must be positive")
-	var occupied: Dictionary = {}
+	var placement_keys: Dictionary = {}
 	for block in blocks:
 		if not BuildingBlockCatalogScript.has_block(block.block_id):
 			errors.append("Unknown block id: %s" % block.block_id)
@@ -340,9 +340,30 @@ func validation_errors() -> Array[String]:
 			errors.append("Unknown material id: %s" % block.material_id)
 		elif not BuildingMaterialCatalogScript.is_available_in_era(block.material_id, category):
 			errors.append("Material %s requires a later era than %s" % [block.material_id, category])
-		if occupied.has(block.pos):
-			errors.append("Duplicate block position: %s" % block.pos)
-		occupied[block.pos] = true
+		var normalized_variant := BuildingBlockCatalogScript.normalize_variant(block.block_id, block.variant)
+		if block.variant != &"" and normalized_variant != block.variant:
+			errors.append("Unknown size %s for block %s" % [block.variant, block.block_id])
+		var placement_key := "%s|%s|%s|%d|%d|%d|%d" % [
+			block.pos, block.block_id, normalized_variant, block.anchor, block.rot, block.rot_x, block.rot_z]
+		if placement_keys.has(placement_key):
+			errors.append("Duplicate block placement: %s" % placement_key)
+		placement_keys[placement_key] = true
+	for i in range(blocks.size()):
+		var left: BlueprintBlock = blocks[i]
+		if not BuildingBlockCatalogScript.has_block(left.block_id):
+			continue
+		var left_aabb := BuildingBlockCatalogScript.occupied_aabb(left.pos, left.block_id,
+			BuildingBlockCatalogScript.normalize_variant(left.block_id, left.variant), left.rot,
+			left.anchor, left.rot_x, left.rot_z)
+		for j in range(i + 1, blocks.size()):
+			var right: BlueprintBlock = blocks[j]
+			if not BuildingBlockCatalogScript.has_block(right.block_id):
+				continue
+			var right_aabb := BuildingBlockCatalogScript.occupied_aabb(right.pos, right.block_id,
+				BuildingBlockCatalogScript.normalize_variant(right.block_id, right.variant), right.rot,
+				right.anchor, right.rot_x, right.rot_z)
+			if _interiors_intersect(left_aabb, right_aabb) and not _allows_structural_joint(left, right):
+				errors.append("Overlapping block volumes: %s and %s" % [left.pos, right.pos])
 	var zone_ids: Dictionary = {}
 	for zone in place_zones:
 		if not _valid_id(String(zone.zone_id)):
@@ -405,6 +426,18 @@ func validation_errors() -> Array[String]:
 			if not (cap in zone_caps):
 				errors.append("Zone %s requires capability %s but no fixture provides it" % [zone.zone_id, cap])
 	return errors
+
+
+static func _interiors_intersect(a: AABB, b: AABB) -> bool:
+	const EPSILON := 0.0001
+	return a.position.x < b.end.x - EPSILON and b.position.x < a.end.x - EPSILON \
+		and a.position.y < b.end.y - EPSILON and b.position.y < a.end.y - EPSILON \
+		and a.position.z < b.end.z - EPSILON and b.position.z < a.end.z - EPSILON
+
+
+static func _allows_structural_joint(left: BlueprintBlock, right: BlueprintBlock) -> bool:
+	return BuildingBlockCatalogScript.allows_structural_joint(left.block_id) \
+		and BuildingBlockCatalogScript.allows_structural_joint(right.block_id)
 
 
 ## Returns a structured checklist of zone requirements for the editor UI.

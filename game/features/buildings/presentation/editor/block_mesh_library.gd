@@ -63,16 +63,6 @@ func mesh_for(block_id: StringName, variant: StringName = &"") -> Mesh:
 			mesh = _build_cylinder(size)
 		BuildingBlockCatalogScript.SHAPE_HALF_CYLINDER:
 			mesh = _build_half_cylinder(size)
-		BuildingBlockCatalogScript.SHAPE_COLUMN_SQUARE_CROSS_2:
-			mesh = _build_square_cross(size, 2)
-		BuildingBlockCatalogScript.SHAPE_COLUMN_SQUARE_CROSS_3:
-			mesh = _build_square_cross(size, 3)
-		BuildingBlockCatalogScript.SHAPE_COLUMN_ROUND_CROSS_2:
-			mesh = _build_round_cross(size, 2)
-		BuildingBlockCatalogScript.SHAPE_COLUMN_ROUND_CROSS_3:
-			mesh = _build_round_cross(size, 3)
-		BuildingBlockCatalogScript.SHAPE_COLUMN_HALF_CROSS_2:
-			mesh = _build_half_cross(size, 2)
 		BuildingBlockCatalogScript.SHAPE_STAIRS:
 			mesh = _build_stairs(size, 8)
 		BuildingBlockCatalogScript.SHAPE_STAIRS_HALF:
@@ -507,4 +497,3 @@ func _build_half_cross(size: Vector3, arms_count: int, segments: int = 10) -> Ar
 		_add_tri(st, Vector3(0, hy, 0), p1_t, p2_t)
 		_add_tri(st, Vector3(0, -hy, 0), p2_b, p1_b)
 	return st.commit()
-

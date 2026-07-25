@@ -58,6 +58,16 @@ func _run() -> void:
 	assert(decor._nodes.size() == 2, "two instances spawned")
 	print("  placement ok, ids=", editor.blueprint.objects.map(func(r): return r.id))
 
+	# PLACE is context-sensitive: clicking existing decor selects it instead of
+	# inserting another object at the same spot. Small decor may still share a
+	# grid cell when their footprints do not intersect.
+	editor.cursor_hit_pos = Vector3(2.2, 0.0, 2.2)
+	decor.on_left_pressed()
+	assert(editor.blueprint.objects.size() == 2, "placement mode must not stack decor under the cursor")
+	assert(decor.selected_object_id == editor.blueprint.objects[0].id,
+		"placement mode selects the object under the cursor")
+	print("  occupied placement selects instead of stacking")
+
 	# Selection by clicking an existing object.
 	decor._set_tool(decor.Tool.SELECT)
 	editor.cursor_hit_pos = Vector3(2.3, 0.0, 2.3)
