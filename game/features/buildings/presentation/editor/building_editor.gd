@@ -1042,13 +1042,21 @@ func _rebuild_brush_inspector() -> void:
 	_move_brush_inspector_under_selection()
 
 	var variants: Array = BuildingBlockCatalogScript.variants(current_block_id)
+	var kinds: Array = BuildingBlockCatalogScript.available_anchors(current_block_id, current_variant)
+	if kinds.size() <= 1:
+		current_anchor = BuildingBlockCatalogScript.ANCHOR_CENTER
+	else:
+		current_anchor = BuildingBlockCatalogScript.normalize_anchor(current_block_id, current_variant, current_anchor)
+
+	if variants.is_empty() and kinds.size() <= 1:
+		return
+
+	var toolbar := HBoxContainer.new()
+	toolbar.name = "BrushToolbar"
+	host.add_child(toolbar)
+
+	# Left side: Size / profile variant buttons
 	if not variants.is_empty():
-		var vlabel := Label.new()
-		vlabel.text = "Размер / профиль"
-		vlabel.add_theme_color_override("font_color", Color(0.65, 0.72, 0.8))
-		host.add_child(vlabel)
-		var strip := HBoxContainer.new()
-		host.add_child(strip)
 		for v in variants:
 			var v_id: StringName = v["id"]
 			var vbtn := Button.new()
@@ -1058,30 +1066,22 @@ func _rebuild_brush_inspector() -> void:
 			var v_size: Vector3 = v.get("size", Vector3.ONE)
 			vbtn.tooltip_text = "Размер: %.2f×%.2f×%.2f м" % [v_size.x, v_size.y, v_size.z]
 			vbtn.pressed.connect(func(): _select_block(current_block_id, v_id))
-			strip.add_child(vbtn)
+			toolbar.add_child(vbtn)
 
-	# Anchor picker only matters when the block has slack inside its cell. Under
-	# rotation symmetry there are at most three kinds; a full-width block (e.g. a
-	# railing panel) offers only centre + edge. Rotation picks the actual side.
-	var kinds: Array = BuildingBlockCatalogScript.available_anchors(current_block_id, current_variant)
-	if kinds.size() <= 1:
-		current_anchor = BuildingBlockCatalogScript.ANCHOR_CENTER
-		return
-	current_anchor = BuildingBlockCatalogScript.normalize_anchor(current_block_id, current_variant, current_anchor)
+	# Spacer pushing anchor buttons to the right
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	toolbar.add_child(spacer)
 
-	var alabel := Label.new()
-	alabel.text = "Привязка в ячейке (сторону задаёт поворот)"
-	alabel.add_theme_color_override("font_color", Color(0.65, 0.72, 0.8))
-	host.add_child(alabel)
-	var row := HBoxContainer.new()
-	host.add_child(row)
-	for kind in kinds:
-		var abtn := Button.new()
-		abtn.toggle_mode = true
-		abtn.text = _anchor_label(kind)
-		abtn.button_pressed = kind == current_anchor
-		abtn.pressed.connect(func(): _select_anchor(kind))
-		row.add_child(abtn)
+	# Right side: Anchor buttons
+	if kinds.size() > 1:
+		for kind in kinds:
+			var abtn := Button.new()
+			abtn.toggle_mode = true
+			abtn.text = _anchor_label(kind)
+			abtn.button_pressed = kind == current_anchor
+			abtn.pressed.connect(func(): _select_anchor(kind))
+			toolbar.add_child(abtn)
 
 
 func _anchor_label(kind: int) -> String:
