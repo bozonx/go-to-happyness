@@ -53,7 +53,11 @@ run_test() {
 PASSED=0
 FAILED=0
 
-for test_file in $(find tests/features tests/repro -name "test_*.gd" | sort); do
+# Only scene tests are launched here. A suite under tests/features that is a
+# plain RefCounted with run_all() belongs to the master runner (tests/run_all.gd);
+# launching it as a scene fails on "doesn't inherit from SceneTree" and reports a
+# failure that hides the real ones.
+for test_file in $(grep -rlE "^extends (SceneTree|MainLoop)" --include="test_*.gd" tests/features tests/repro | sort); do
   if run_test "res://$test_file" 300; then
     PASSED=$((PASSED + 1))
   else

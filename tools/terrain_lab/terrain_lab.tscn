@@ -1,7 +1,8 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://tools/terrain_lab/terrain_lab.gd" id="1_lab"]
 [ext_resource type="Script" path="res://game/features/world/presentation/terrain/grid_terrain_world.gd" id="2_terrain"]
+[ext_resource type="Script" path="res://game/features/routing/presentation/nav_terrain_overlay.gd" id="3_nav_overlay"]
 
 [sub_resource type="Environment" id="Environment_lab"]
 background_mode = 1
@@ -33,6 +34,11 @@ shadow_enabled = true
 
 [node name="Terrain" type="Node3D" parent="."]
 script = ExtResource("2_terrain")
+
+[node name="NavOverlay" type="MeshInstance3D" parent="."]
+script = ExtResource("3_nav_overlay")
+cast_shadow = 0
+visible = false
 
 [node name="HoverMarker" type="MeshInstance3D" parent="."]
 mesh = SubResource("HoverMesh")

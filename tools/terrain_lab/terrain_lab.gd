@@ -4,13 +4,20 @@ extends Node3D
 ##
 ## Runs the real domain grid, the real chunk mesher and the real chunk budget with
 ## nothing from the game around them, so terrain work can be developed and judged
-## on its own. No settlement, no navigation, no editor integration — those come
-## when the ground itself is proven here.
+## on its own. No settlement and no editor integration — those come when the
+## ground itself is proven here.
+##
+## Navigation IS here, though, and deliberately so: passability is invisible in a
+## rendered mesh. Two terraces and a slope look identical from this camera, and
+## the difference — a wall nobody can climb — is exactly the mistake an author
+## makes and cannot see. The lab runs the real `NavGrid` over the real published
+## field and draws the answer (key M).
 ##
 ## Mouse: hover picks a column, LMB raises, RMB lowers, MMB drag orbits, wheel zooms.
 ## Keys:  F level brush to the hovered height, P paint material, 1-5 pick material,
 ##        H toggle hole, R place ramp, X dissolve ramp, C cycle ramp class,
 ##        V cycle ramp direction, [ / ] brush size, Tab cycle cascade mode,
+##        M toggle the navigation overlay, T cycle the traveller profile,
 ##        Z undo, Y redo, G regenerate demo, N clear to flat, WASD pan, Q/E orbit.
 ##        The legend is on screen as well.
 ##
@@ -30,9 +37,18 @@ const CAMERA_MOUSE_ORBIT := 0.35
 @onready var camera: Camera3D = $Camera3D
 @onready var hover_marker: MeshInstance3D = $HoverMarker
 @onready var hud: Label = $UI/Hud
+@onready var nav_overlay: NavTerrainOverlay = $NavOverlay
 
 var grid := TerrainGrid.new()
 var service := TerrainService.new()
+var nav_grid := NavGrid.new()
+var nav_publisher := TerrainNavigationPublisher.new()
+
+## Profiles worth checking a map against: what a citizen can climb, and what a
+## loaded cart can. A ramp that only a walker can use is a supply route that
+## silently is not one.
+const NAV_PROFILES: Array[StringName] = [&"pedestrian", &"cart"]
+var _nav_profile_index := 0
 
 var _camera_target := Vector3(0.0, 0.0, 0.0)
 var _camera_yaw := 42.0
@@ -57,6 +73,12 @@ const CAPTURE_VIEWS: Array = [
 	{"name": "tower_and_hole", "target": Vector3(12.0, 2.0, 4.0), "yaw": 300.0, "pitch": 28.0, "distance": 26.0},
 	{"name": "cascade_repose", "setup": &"cascade", "target": Vector3(0.0, 1.0, 0.0), "yaw": 20.0, "pitch": 30.0, "distance": 40.0},
 	{"name": "cascade_closeup", "target": Vector3(-4.0, 1.0, 0.0), "yaw": 35.0, "pitch": 18.0, "distance": 16.0},
+	# Passability is invisible in the mesh, so it gets its own reference views:
+	# what a walker can cross, and what a cart can. The difference between the two
+	# is the whole point of `max_slope_class`.
+	{"name": "nav_pedestrian", "setup": &"demo", "nav": &"pedestrian", "target": Vector3(2.0, 0.5, 0.0), "yaw": 42.0, "pitch": 34.0, "distance": 40.0},
+	{"name": "nav_cart", "nav": &"cart", "target": Vector3(2.0, 0.5, 0.0), "yaw": 42.0, "pitch": 34.0, "distance": 40.0},
+	{"name": "nav_ramps_closeup", "nav": &"pedestrian", "target": Vector3(0.0, 0.5, 0.0), "yaw": 250.0, "pitch": 30.0, "distance": 18.0},
 ]
 
 var _capture_queue: Array = []
@@ -67,6 +89,12 @@ func _ready() -> void:
 	grid.configure(CELL_SIZE, BOARD_CELLS)
 	service.configure(grid)
 	terrain.configure(grid, camera)
+	# Binds the two grids and keeps the field current: every committed edit
+	# republishes exactly the columns it touched.
+	nav_publisher.configure(grid, nav_grid, service)
+	service.edit_committed.connect(_on_terrain_edited)
+	nav_overlay.configure(nav_grid, NAV_PROFILES[_nav_profile_index])
+	nav_overlay.visible = false
 	_generate_demo()
 	terrain.rebuild_pending_now()
 	_update_camera()
@@ -226,6 +254,14 @@ func _handle_key(event: InputEventKey) -> void:
 			_brush_size = maxi(1, _brush_size - 1)
 		KEY_BRACKETRIGHT:
 			_brush_size = mini(8, _brush_size + 1)
+		KEY_M:
+			nav_overlay.visible = not nav_overlay.visible
+			nav_overlay.rebuild()
+			_last_message = "nav overlay %s" % ("on" if nav_overlay.visible else "off")
+		KEY_T:
+			_nav_profile_index = (_nav_profile_index + 1) % NAV_PROFILES.size()
+			nav_overlay.configure(nav_grid, NAV_PROFILES[_nav_profile_index])
+			_last_message = "nav profile %s" % NAV_PROFILES[_nav_profile_index]
 		KEY_TAB:
 			_edit_mode = (_edit_mode + 1) % 3
 			_last_message = "mode %s" % TerrainEditOperation.mode_name(_edit_mode)
@@ -239,6 +275,7 @@ func _handle_key(event: InputEventKey) -> void:
 		KEY_N:
 			grid.configure(CELL_SIZE, BOARD_CELLS)
 			service.clear_history()
+			_republish_navigation()
 			_last_message = "cleared to flat"
 		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5:
 			var picked := event.keycode - KEY_1
@@ -247,6 +284,35 @@ func _handle_key(event: InputEventKey) -> void:
 				_last_message = "material %s" % TerrainMaterialCatalog.ids()[_material_index]
 		KEY_ESCAPE:
 			get_tree().quit()
+
+
+## What navigation makes of the hovered column, next to what the terrain stores.
+## This is the line that catches the two disagreeing: a cell reading `flat` in
+## the terrain and `steep` here is a cell tilted by its neighbours (§3.4).
+func _nav_line() -> String:
+	var profile: StringName = NAV_PROFILES[_nav_profile_index]
+	var state := "on" if nav_overlay.visible else "off"
+	if not _has_hover or not nav_grid.has_terrain_field():
+		return "nav [%s] %s" % [profile, state]
+	var field := nav_grid.terrain_field()
+	var walkable := nav_grid.is_walkable(_hovered_cell, profile)
+	var open_edges := 0
+	for direction in NavTerrainField.DIRECTION_COUNT:
+		var neighbour: Vector2i = _hovered_cell + NavTerrainField.DIRECTION_OFFSETS[direction]
+		if nav_grid.is_edge_passable(_hovered_cell, neighbour, profile):
+			open_edges += 1
+	return "nav [%s] %s  surface class %d  %s  exits %d/8  cost ×%.2f" % [
+		profile, state, field.slope_class_at(_hovered_cell),
+		"walkable" if walkable else "BLOCKED", open_edges,
+		nav_grid.get_cell_weight(_hovered_cell, profile) / NavGrid.DEFAULT_CELL_WEIGHT,
+	]
+
+
+## The publisher already refreshed the field; the overlay is presentation and
+## rebuilds only when it is actually being looked at.
+func _on_terrain_edited(_delta: TerrainDelta) -> void:
+	if nav_overlay.visible:
+		nav_overlay.rebuild()
 
 
 func _next_ramp_class(current: int) -> int:
@@ -347,11 +413,13 @@ func _update_hud() -> void:
 	lines.append("undo %d  redo %d  |  pending chunks: %d" % [
 		service.undo_depth(), service.redo_depth(), terrain.pending_chunk_count(),
 	])
+	lines.append(_nav_line())
 	lines.append("> %s" % _last_message)
 	lines.append("")
 	lines.append("LMB raise · RMB lower · MMB orbit · wheel zoom · WASD pan · Q/E turn")
 	lines.append("Tab mode (sculpt/terrace/level) · Z undo · Y redo · F level · P paint · 1-5 material")
 	lines.append("H hole · R ramp · X unramp · C class · V dir · [ ] brush · G demo · N clear · Esc quit")
+	lines.append("M nav overlay · T traveller profile")
 	hud.text = "\n".join(lines)
 
 
@@ -360,8 +428,21 @@ func _update_hud() -> void:
 ## meshing changes without a human at the mouse.
 func _process_capture() -> void:
 	var view: Dictionary = _capture_queue[0]
-	if _capture_delay == 3 and view.get("setup", &"") == &"cascade":
-		_setup_cascade_scene()
+	if _capture_delay == 3:
+		match view.get("setup", &""):
+			&"cascade":
+				_setup_cascade_scene()
+			&"demo":
+				_generate_demo()
+		# A capture has three frames to settle, and the chunk budget rebuilds two
+		# per frame — a fresh board would be photographed half-meshed.
+		terrain.rebuild_pending_now()
+		var nav_profile: StringName = view.get("nav", &"")
+		nav_overlay.visible = not nav_profile.is_empty()
+		if nav_overlay.visible:
+			# Through the index, so the HUD names the profile the overlay is drawing.
+			_nav_profile_index = maxi(NAV_PROFILES.find(nav_profile), 0)
+			nav_overlay.configure(nav_grid, NAV_PROFILES[_nav_profile_index])
 	if _capture_delay > 0:
 		_camera_target = view["target"]
 		_camera_yaw = float(view["yaw"])
@@ -466,3 +547,13 @@ func _generate_demo() -> void:
 	# whose wave reaches it, which is the §4.4 rule made visible in the lab.
 	for x in range(-14, -6):
 		grid.set_anchor(Vector2i(x, 6), true)
+
+	_republish_navigation()
+
+
+## The demo writes the grid directly rather than through the service, so nothing
+## emitted `edit_committed` and the field is still describing the old board.
+func _republish_navigation() -> void:
+	nav_publisher.publish_all()
+	if nav_overlay != null and nav_overlay.visible:
+		nav_overlay.rebuild()

@@ -93,6 +93,12 @@ var _duplicate_btn: Button = null
 var _delete_btn: Button = null
 var _rot_label: Label = null
 var _layer_label: Label = null
+var _collision_overlay_btn: Button = null
+var _show_collision_overlay: bool = false
+var _collision_overlays: Dictionary = {}  ## object id (String) -> Array[MeshInstance3D]
+var _zone_filter_option: OptionButton = null
+var _zone_highlight: MeshInstance3D = null
+var _zone_out_of_bounds_label: Label = null
 var _tool_buttons: Dictionary = {}
 var _asset_buttons: Dictionary = {}
 var _recent_buttons: Dictionary = {}
@@ -123,6 +129,7 @@ func setup(editor: Node) -> void:
 	_zone_option = editor.get_node("%DecorZoneOption")
 	_badges_label = editor.get_node("%DecorBadgesLabel")
 	_object_search_edit = editor.get_node("%DecorObjectSearchEdit")
+	_zone_filter_option = editor.get_node("%DecorZoneFilterOption")
 	_object_list = editor.get_node("%DecorObjectList")
 	_controls_vbox = editor.get_node("%DecorControlsVBox")
 	_pos_x_spin = editor.get_node("%DecorPosXSpin")
@@ -150,6 +157,8 @@ func setup(editor: Node) -> void:
 	editor.get_node("%DecorRotResetBtn").pressed.connect(_reset_rotation)
 	editor.get_node("%DecorLayerDownBtn").pressed.connect(func(): _editor.set_layer(_editor.active_layer - 1))
 	editor.get_node("%DecorLayerUpBtn").pressed.connect(func(): _editor.set_layer(_editor.active_layer + 1))
+	_collision_overlay_btn = editor.get_node("%DecorCollisionOverlayBtn")
+	_collision_overlay_btn.toggled.connect(_on_collision_overlay_toggled)
 
 	_build_group_options()
 	_build_snap_options()
@@ -161,6 +170,7 @@ func setup(editor: Node) -> void:
 	_object_search_edit.text_changed.connect(_on_object_search_changed)
 	_object_list.item_selected.connect(_on_object_list_selected)
 	_zone_option.item_selected.connect(_on_zone_selected)
+	_zone_filter_option.item_selected.connect(_on_zone_filter_selected)
 	_duplicate_btn.pressed.connect(duplicate_selection)
 	_delete_btn.pressed.connect(delete_selection)
 	_replace_btn.pressed.connect(_replace_selected_object)
@@ -229,6 +239,7 @@ func deactivate() -> void:
 	_dragging = false
 	_hide_ghost()
 	_update_selection_marker()
+	_clear_collision_overlays()
 
 
 func is_active() -> bool:
@@ -391,6 +402,8 @@ func _is_intersecting(pos: Vector3, exclude_id: String = "") -> bool:
 func _compute_ghost_state(pos: Vector3) -> int:
 	if not _is_in_bounds(pos):
 		return GhostState.OUT_OF_BOUNDS
+	if _is_collision_conflict(pos):
+		return GhostState.INTERSECTION
 	if _is_intersecting(pos):
 		return GhostState.INTERSECTION
 	return GhostState.VALID
@@ -659,6 +672,8 @@ func rebuild_nodes() -> void:
 	for record: DecorObjectRecordScript in _editor.blueprint.objects:
 		_spawn_node(record)
 	_update_selection_marker()
+	if _show_collision_overlay:
+		_rebuild_collision_overlays()
 
 
 func _spawn_node(record: DecorObjectRecordScript) -> void:
@@ -798,6 +813,107 @@ func _update_selection_marker() -> void:
 	_selection_marker.visible = true
 	_selection_marker.scale = Vector3.ONE * (radius / 0.5)
 	_selection_marker.position = record.pos + Vector3(0.0, 0.03, 0.0)
+
+
+# ---------------------------------------------------------------------------
+# Collision overlay (design §4.2 — authoring preview, not runtime)
+# ---------------------------------------------------------------------------
+
+## Toggle collision overlay on/off. When on, wireframe boxes are drawn for
+## each object whose collision_policy is not "none", and blocking-navigation
+## objects get an additional coloured marker.
+func _on_collision_overlay_toggled(pressed: bool) -> void:
+	_show_collision_overlay = pressed
+	if not pressed:
+		_clear_collision_overlays()
+	else:
+		_rebuild_collision_overlays()
+
+
+func _clear_collision_overlays() -> void:
+	for overlays in _collision_overlays.values():
+		for mesh: MeshInstance3D in overlays:
+			mesh.queue_free()
+	_collision_overlays.clear()
+
+
+func _rebuild_collision_overlays() -> void:
+	_clear_collision_overlays()
+	if not _show_collision_overlay:
+		return
+	for record: DecorObjectRecordScript in _editor.blueprint.objects:
+		_build_collision_overlay_for(record)
+
+
+## Creates wireframe overlay meshes for a single decor object.
+func _build_collision_overlay_for(record: DecorObjectRecordScript) -> void:
+	var asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
+	if asset == null:
+		return
+	var policy := asset.collision_policy
+	if policy == FurnishingAssetDefScript.COLLISION_NONE and not asset.blocking_navigation:
+		return
+	var overlays: Array[MeshInstance3D] = []
+	var size := asset.footprint_m()
+	# Scale the collision box by the object's uniform scale.
+	var scaled_size := size * record.scale.x
+	# Collision box (box or footprint policy).
+	if policy == FurnishingAssetDefScript.COLLISION_BOX or policy == FurnishingAssetDefScript.COLLISION_FOOTPRINT:
+		var box := MeshInstance3D.new()
+		var mesh := BoxMesh.new()
+		mesh.size = scaled_size
+		box.mesh = mesh
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = Color(1.0, 0.4, 0.2, 0.3)
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		box.material_override = mat
+		box.position = record.pos
+		box.rotation_degrees = record.rot
+		add_child(box)
+		overlays.append(box)
+	# Blocking-navigation marker: a small red sphere on top.
+	if asset.blocking_navigation:
+		var marker := MeshInstance3D.new()
+		var sphere := SphereMesh.new()
+		sphere.radius = 0.12
+		sphere.height = 0.24
+		marker.mesh = sphere
+		var mat2 := StandardMaterial3D.new()
+		mat2.albedo_color = Color(1.0, 0.1, 0.1, 0.8)
+		mat2.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mat2.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		marker.material_override = mat2
+		marker.position = record.pos + Vector3(0.0, scaled_size.y * 0.5 + 0.15, 0.0)
+		add_child(marker)
+		overlays.append(marker)
+	_collision_overlays[record.id] = overlays
+
+
+## Checks if the given position intersects any blocking object (collision_policy
+## != none or blocking_navigation == true). Used for ghost feedback.
+func _is_collision_conflict(pos: Vector3, exclude_id: String = "") -> bool:
+	var asset := FurnishingAssetCatalogScript.get_asset(current_asset_id)
+	if asset == null:
+		return false
+	var my_size := asset.footprint_m()
+	var my_radius := maxf(my_size.x, my_size.z) * 0.5
+	for record: DecorObjectRecordScript in _editor.blueprint.objects:
+		if record.id == exclude_id:
+			continue
+		var other_asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
+		if other_asset == null:
+			continue
+		# Only check against objects that have collision or block navigation.
+		if other_asset.collision_policy == FurnishingAssetDefScript.COLLISION_NONE and not other_asset.blocking_navigation:
+			continue
+		var other_size := other_asset.footprint_m()
+		var other_radius := maxf(other_size.x, other_size.z) * 0.5 * maxf(record.scale.x, record.scale.z)
+		var dist := Vector2(pos.x - record.pos.x, pos.z - record.pos.z).length()
+		if dist < my_radius + other_radius:
+			return true
+	return false
 
 
 # ---------------------------------------------------------------------------

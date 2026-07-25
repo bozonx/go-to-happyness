@@ -128,6 +128,30 @@ Use a frame budget generous enough for the slowest machine running CI; 300 frame
 - Keep citizen identity stable: use `ai_id`, not `get_instance_id()`, for saved or cross-system identifiers.
 - Tests that preload `settlement_game.gd` parse the whole bootstrap controller; any missing function referenced in it will fail at load time, even for unrelated tests.
 
+## Terrain laboratory
+
+Changes to the grid terrain — heights, slopes, the cascade, meshing, or how
+navigation reads the ground — must start in `res://tools/terrain_lab/terrain_lab.tscn`,
+not in the settlement bootstrap scene. It runs the production `TerrainGrid`,
+`TerrainService`, chunk mesher and `NavGrid` with nothing from the game around them.
+
+- Passability is invisible in a rendered mesh: two terraces and a slope look
+  identical. Press `M` for the navigation overlay and `T` to switch traveller
+  profile before judging a terrain change. A green board with no red walls is not
+  proof of anything until the overlay is on.
+- Capture reference views with
+  `godot --path . res://tools/terrain_lab/terrain_lab.tscn -- --capture`; they land
+  in `user://terrain_lab/`. Agents that can inspect images must open them after a
+  visual change. `nav_pedestrian` / `nav_cart` / `nav_ramps_closeup` are the
+  passability set.
+- Terrain edits must go through `TerrainService`, never straight into the grid:
+  that signal is what keeps undo, the chunk mesher and the published navigation
+  field in step. A tool that writes the grid directly has to republish by hand
+  (`TerrainNavigationPublisher.publish_all`), which is a bug waiting to happen.
+- `tests/repro/diag_terrain_nav_publish_cost.gd` measures publication cost. Re-run
+  it after touching the publisher or `NavGrid`'s hot paths; the budgets it guards
+  are in `design_docs/core/grid_terrain_system.md` §10.5.
+
 ## Weather and lighting laboratory
 
 Changes to weather, time of day, sky, stars, sun/moon, atmospheric effects, or

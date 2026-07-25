@@ -71,6 +71,17 @@ func set_terrain_field(field: NavTerrainField) -> void:
 	_topology_revision += 1
 
 
+## The publisher edits the field in place when only a patch of it changed, and
+## the grid cannot see that happen. Connectivity components and every consumer
+## caching on a revision have to be told, or a brush stroke leaves routes planned
+## through ground that no longer exists.
+func notify_terrain_changed() -> void:
+	if _terrain == null:
+		return
+	_revision += 1
+	_topology_revision += 1
+
+
 func terrain_field() -> NavTerrainField:
 	return _terrain
 
@@ -304,12 +315,21 @@ func is_step_passable(from: Vector2i, to: Vector2i, profile: StringName = PEDEST
 	var delta := to - from
 	if delta.x == 0 or delta.y == 0:
 		return true
-	for shoulder: Vector2i in [from + Vector2i(delta.x, 0), from + Vector2i(0, delta.y)]:
-		if not is_walkable(shoulder, profile, profile_override):
-			return false
-		if not is_edge_passable(from, shoulder, profile, profile_override) or not is_edge_passable(shoulder, to, profile, profile_override):
-			return false
-	return true
+	# Written out rather than looped over an array: the connectivity fill runs this
+	# for all eight neighbours of every cell on the board, and a two-element array
+	# per call is an allocation in that loop.
+	return (
+		_is_shoulder_clear(from, from + Vector2i(delta.x, 0), to, profile, profile_override)
+		and _is_shoulder_clear(from, from + Vector2i(0, delta.y), to, profile, profile_override)
+	)
+
+
+func _is_shoulder_clear(from: Vector2i, shoulder: Vector2i, to: Vector2i, profile: StringName, profile_override: TravelerProfile) -> bool:
+	return (
+		is_walkable(shoulder, profile, profile_override)
+		and is_edge_passable(from, shoulder, profile, profile_override)
+		and is_edge_passable(shoulder, to, profile, profile_override)
+	)
 
 
 ## Reachability queries used during AI candidate discovery do not need a route.
@@ -514,10 +534,14 @@ func _ensure_walkable_components(profile: StringName, profile_override: Traveler
 		return _walkable_components_by_profile[cache_key]
 	var components: Dictionary = {}
 	var next_component := 0
+	# Resolve the profile once. The fill asks `is_walkable` and `is_step_passable`
+	# about every cell and all eight of its neighbours, and each of those would
+	# otherwise hit the profile registry — nine lookups per cell of the board.
+	var resolved := profile_override if profile_override != null else TravelerProfile.get_profile(profile)
 	for y in range(-board_half_cells, board_half_cells):
 		for x in range(-board_half_cells, board_half_cells):
 			var start := Vector2i(x, y)
-			if not is_walkable(start, profile, profile_override) or components.has(NavCell.ground(start)):
+			if not is_walkable(start, profile, resolved) or components.has(NavCell.ground(start)):
 				continue
 			var frontier: Array[Vector2i] = [start]
 			var cursor := 0
@@ -527,12 +551,12 @@ func _ensure_walkable_components(profile: StringName, profile_override: Traveler
 				cursor += 1
 				for direction in CONNECTED_DIRECTIONS:
 					var neighbor := current + direction
-					if not is_walkable(neighbor, profile, profile_override) or components.has(NavCell.ground(neighbor)):
+					if not is_walkable(neighbor, profile, resolved) or components.has(NavCell.ground(neighbor)):
 						continue
-					if not is_step_passable(current, neighbor, profile, profile_override):
+					if not is_step_passable(current, neighbor, profile, resolved):
 						continue
 					if direction.x != 0 and direction.y != 0:
-						if not is_walkable(current + Vector2i(direction.x, 0), profile, profile_override) or not is_walkable(current + Vector2i(0, direction.y), profile, profile_override):
+						if not is_walkable(current + Vector2i(direction.x, 0), profile, resolved) or not is_walkable(current + Vector2i(0, direction.y), profile, resolved):
 							continue
 					components[NavCell.ground(neighbor)] = next_component
 					frontier.append(neighbor)

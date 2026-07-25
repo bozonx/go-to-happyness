@@ -777,6 +777,16 @@ unique_name_in_owner = true
 layout_mode = 2
 placeholder_text = "Поиск объектов..."
 
+[node name="ZoneFilterLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+layout_mode = 2
+text = "Фильтр по зоне:"
+theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
+theme_override_font_sizes/font_size = 12
+
+[node name="DecorZoneFilterOption" type="OptionButton" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
 [node name="DecorObjectList" type="ItemList" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 130)

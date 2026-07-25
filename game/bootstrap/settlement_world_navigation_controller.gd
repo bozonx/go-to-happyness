@@ -7,6 +7,10 @@ extends RefCounted
 
 var game: SettlementGame
 
+## Kept alive for the session: it owns the published terrain field and, once the
+## game gains terrain editing, the subscription that keeps it current.
+var terrain_navigation_publisher := TerrainNavigationPublisher.new()
+
 
 func _init(p_game: SettlementGame) -> void:
 	game = p_game
@@ -52,7 +56,9 @@ func record_trail_movement(citizen_id: int, position_on_board: Vector3) -> void:
 func publish_terrain_navigation() -> void:
 	if game.nav_grid == null or game.world_setup == null:
 		return
-	TerrainNavigationPublisher.publish(game.world_setup.terrain_grid, game.nav_grid)
+	# `configure` sizes the nav grid off the terrain, so the two cannot disagree
+	# about cell size or board extent — a mismatch neither side could detect.
+	terrain_navigation_publisher.configure(game.world_setup.terrain_grid, game.nav_grid)
 
 
 func refresh_navigation_grid() -> void:

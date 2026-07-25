@@ -116,6 +116,31 @@ func has_ground(cell: Vector2i) -> bool:
 	return _ground[_index_of(cell)] != 0
 
 
+## Corner heights in metres (NW, NE, SE, SW) into a caller-owned buffer. The
+## publisher classifies edges from these rather than recomputing them off the
+## terrain: an edge is shared by two cells and read eight times per cell, and
+## `TerrainGrid.corner_heights_into` costs a pass over nine columns each time.
+func corner_heights_into(cell: Vector2i, result: PackedFloat32Array) -> void:
+	if not is_inside(cell):
+		result[0] = 0.0
+		result[1] = 0.0
+		result[2] = 0.0
+		result[3] = 0.0
+		return
+	var base := _index_of(cell) * 4
+	for corner in 4:
+		result[corner] = _corner_heights[base + corner]
+
+
+## Height in metres a body standing in the middle of the cell would have.
+func centre_height(cell: Vector2i) -> float:
+	if not is_inside(cell):
+		return 0.0
+	var base := _index_of(cell) * 4
+	# u = v = 0.5 sits exactly on the NW–SE split, where both triangles agree.
+	return (_corner_heights[base + CORNER_NW] + _corner_heights[base + CORNER_SE]) * 0.5
+
+
 func slope_class_at(cell: Vector2i) -> int:
 	if not is_inside(cell):
 		return CLASS_CLIFF

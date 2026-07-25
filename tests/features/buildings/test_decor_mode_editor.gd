@@ -95,6 +95,13 @@ func _run() -> void:
 	assert(editor.blueprint.objects.size() == 2, "undo restored the duplicate")
 	print("  undo/redo ok")
 
+	# Collision overlay: toggling on builds overlays, toggling off clears them.
+	decor._on_collision_overlay_toggled(true)
+	assert(decor._collision_overlays.size() > 0, "collision overlays built for blocking objects")
+	decor._on_collision_overlay_toggled(false)
+	assert(decor._collision_overlays.is_empty(), "collision overlays cleared on toggle off")
+	print("  collision overlay ok")
+
 	# The whole thing must serialize.
 	var json: String = editor.blueprint.to_json()
 	assert(not json.is_empty(), "blueprint serializes")

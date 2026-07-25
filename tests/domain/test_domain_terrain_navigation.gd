@@ -25,6 +25,10 @@ static func run_all() -> void:
 	_test_slope_costs_speed()
 	_test_holes_are_not_walkable()
 	_test_height_at_agrees_with_terrain()
+	_test_surface_class_follows_geometry_not_descriptor()
+	_test_incremental_refresh_matches_full_publish()
+	_test_committed_edits_republish_themselves()
+	_test_publisher_owns_grid_geometry()
 	print("    [PASS] Terrain Navigation Tests")
 
 
@@ -209,6 +213,109 @@ static func _test_height_at_agrees_with_terrain() -> void:
 	assert(is_equal_approx(grid.height_at(_centre(Vector2i(6, 0))), 2.0 * TerrainGrid.HEIGHT_STEP))
 	# Waypoints are produced on that surface rather than on the y = 0 plane.
 	assert(is_equal_approx(grid.cell_center(Vector2i(6, 0)).y, 2.0 * TerrainGrid.HEIGHT_STEP))
+
+
+static func _test_surface_class_follows_geometry_not_descriptor() -> void:
+	var terrain := _terrain()
+	_raise_plateau(terrain)
+	assert(terrain.place_ramp(Vector2i(3, 0), SlopeCatalog.VERY_STEEP, SlopeCatalog.DIR_E))
+	var grid := _nav_over(terrain)
+	var field := grid.terrain_field()
+
+	# The ramp's own class comes back unchanged — reading the geometry reproduces
+	# the catalog rather than replacing it.
+	assert(terrain.slope_class_at(Vector2i(3, 0)) == SlopeCatalog.CLASS_VERY_STEEP)
+	assert(field.slope_class_at(Vector2i(3, 0)) == SlopeCatalog.CLASS_VERY_STEEP)
+
+	# The cell beside the ramp stores `flat` and is nonetheless tilted by the
+	# corner lift (§3.4). Trusting the descriptor would let a citizen run up it at
+	# full speed; the geometry is what actually holds their feet.
+	var beside := Vector2i(3, 1)
+	assert(terrain.slope_class_at(beside) == SlopeCatalog.CLASS_FLAT)
+	assert(field.slope_class_at(beside) > SlopeCatalog.CLASS_FLAT)
+	assert(grid.get_cell_weight(beside) > NavGrid.DEFAULT_CELL_WEIGHT)
+
+	# Untouched ground well away from the ramp is still flat and still free.
+	assert(field.slope_class_at(Vector2i(-5, -5)) == SlopeCatalog.CLASS_FLAT)
+
+
+static func _test_incremental_refresh_matches_full_publish() -> void:
+	# The incremental path exists for the brush; if it disagrees with a full
+	# rebuild anywhere, the map an author sees is not the map that ships.
+	var terrain := _terrain()
+	_raise_plateau(terrain)
+	var publisher := TerrainNavigationPublisher.new()
+	var grid := NavGrid.new()
+	publisher.configure(terrain, grid)
+
+	var edited: Array[Vector2i] = []
+	for z in range(-2, 3):
+		for x in range(1, 4):
+			var cell := Vector2i(x, z)
+			assert(terrain.set_height(cell, 1))
+			edited.append(cell)
+	publisher.refresh_cells(edited)
+	_assert_same_field(grid.terrain_field(), TerrainNavigationPublisher.build_field(terrain))
+
+	# A ramp reaches beyond the cells it occupies, which is exactly the case a
+	# one-ring patch would get wrong.
+	assert(terrain.place_ramp(Vector2i(3, 0), SlopeCatalog.STEEP, SlopeCatalog.DIR_E))
+	publisher.refresh_cells(terrain.ramp_cells_at(Vector2i(3, 0)))
+	_assert_same_field(grid.terrain_field(), TerrainNavigationPublisher.build_field(terrain))
+
+
+static func _test_committed_edits_republish_themselves() -> void:
+	var terrain := _terrain()
+	_raise_plateau(terrain)
+	var service := TerrainService.new()
+	service.configure(terrain)
+	var publisher := TerrainNavigationPublisher.new()
+	var grid := NavGrid.new()
+	publisher.configure(terrain, grid, service)
+	assert(not grid.is_edge_passable(Vector2i(3, 0), Vector2i(4, 0)))
+
+	var before_revision := grid.topology_revision()
+	assert(service.place_ramp(Vector2i(3, 0), SlopeCatalog.VERY_STEEP, SlopeCatalog.DIR_E))
+	assert(grid.is_edge_passable(Vector2i(3, 0), Vector2i(4, 0)))
+	# Editing the field in place is invisible to the grid unless it is told, and
+	# every route cached against the old topology has to be invalidated.
+	assert(grid.topology_revision() > before_revision)
+
+	# Undo goes through the same signal, so navigation follows it back.
+	assert(service.undo())
+	assert(not grid.is_edge_passable(Vector2i(3, 0), Vector2i(4, 0)))
+	_assert_same_field(grid.terrain_field(), TerrainNavigationPublisher.build_field(terrain))
+
+
+static func _test_publisher_owns_grid_geometry() -> void:
+	# Two grids disagreeing by a cell is not an error either of them can detect —
+	# it just indexes the wrong column. So only one caller sets it.
+	var terrain := TerrainGrid.new()
+	terrain.configure(2.5, 16)
+	var grid := NavGrid.new()
+	grid.configure(1.0, 96)
+	TerrainNavigationPublisher.new().configure(terrain, grid)
+	assert(is_equal_approx(grid.cell_size, 2.5))
+	assert(grid.board_half_cells == 8)
+	assert(grid.is_board_cell(Vector2i(7, 7)) and not grid.is_board_cell(Vector2i(8, 8)))
+
+
+static func _assert_same_field(actual: NavTerrainField, expected: NavTerrainField) -> void:
+	assert(actual.board_cells == expected.board_cells)
+	var half := expected.board_half_cells
+	var actual_corners := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
+	var expected_corners := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
+	for z in range(-half, half):
+		for x in range(-half, half):
+			var cell := Vector2i(x, z)
+			assert(actual.has_ground(cell) == expected.has_ground(cell))
+			assert(actual.slope_class_at(cell) == expected.slope_class_at(cell))
+			actual.corner_heights_into(cell, actual_corners)
+			expected.corner_heights_into(cell, expected_corners)
+			assert(actual_corners == expected_corners)
+			for direction in NavTerrainField.DIRECTION_COUNT:
+				var neighbour: Vector2i = cell + NavTerrainField.DIRECTION_OFFSETS[direction]
+				assert(actual.edge_class(cell, neighbour) == expected.edge_class(cell, neighbour))
 
 
 static func _crosses_cell(route: RouteResult, cell: Vector2i) -> bool:
