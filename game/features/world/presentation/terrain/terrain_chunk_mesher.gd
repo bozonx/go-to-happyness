@@ -155,7 +155,15 @@ func _cache_region() -> void:
 				_corners[corner_base + corner] = scratch[corner]
 			_heights[index] = _grid.height_of(cell)
 			_materials[index] = _grid.material_index_at(cell)
-			_flat[index] = 1 if _grid.slope_class_at(cell) == SlopeCatalog.CLASS_FLAT else 0
+			# "Flat" is a property of the corners, not of the descriptor: a column
+			# with no slope of its own still gets a corner lifted where it meets
+			# one (§3.4), and such a cell may not be merged into a flat quad.
+			var level := (
+				is_equal_approx(scratch[0], scratch[1])
+				and is_equal_approx(scratch[1], scratch[2])
+				and is_equal_approx(scratch[2], scratch[3])
+			)
+			_flat[index] = 1 if level else 0
 
 
 func _padded_index(local_x: int, local_z: int) -> int:
@@ -177,7 +185,7 @@ func _add_tops() -> void:
 			if _solid[index] == 0 or _merged[index] == 1:
 				continue
 			if _flat[index] == 0:
-				_add_ramp_top(local_x, local_z, index)
+				_add_shaped_top(local_x, local_z, index)
 				continue
 			var width := _greedy_width(local_x, local_z, index)
 			var depth := _greedy_depth(local_x, local_z, index, width)
@@ -226,7 +234,7 @@ func _add_flat_top(local_x: int, local_z: int, width: int, depth: int, index: in
 	)
 
 
-func _add_ramp_top(local_x: int, local_z: int, index: int) -> void:
+func _add_shaped_top(local_x: int, local_z: int, index: int) -> void:
 	var cell := _origin + Vector2i(local_x, local_z)
 	var nw := _corner_position(cell, TerrainGrid.CORNER_NW, index)
 	var ne := _corner_position(cell, TerrainGrid.CORNER_NE, index)

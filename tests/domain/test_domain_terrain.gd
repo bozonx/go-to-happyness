@@ -43,6 +43,7 @@ static func run_all() -> void:
 	_test_auto_skirt_descends_from_a_levelled_plateau()
 	_test_auto_slope_refuses_occupied_ground()
 	_test_auto_slope_never_moves_an_anchor()
+	_test_grass_hillside_closes_every_corner()
 	_test_terrace_mode_assigns_no_slopes()
 	print("    [PASS] Terrain Auto-Slope Tests")
 	_test_delta_apply_and_revert_restore_grid()
@@ -643,6 +644,53 @@ static func _test_auto_slope_never_moves_an_anchor() -> void:
 	assert(grid.height_of(Vector2i(2, 0)) == 0)
 	assert(grid.slope_of(Vector2i(2, 0)) == SlopeCatalog.FLAT)
 	assert(not grid.is_anchor(Vector2i(1, 0)))
+
+
+## Every corner of a sculpted grass hill, seen from both cells that share it.
+## Returns how many disagree — a disagreement is a vertical wedge in the mesh.
+static func _count_open_corners(grid: TerrainGrid, radius: int) -> int:
+	var open := 0
+	for z in range(-radius, radius + 1):
+		for x in range(-radius, radius + 1):
+			var cell := Vector2i(x, z)
+			var mine := grid.corner_heights(cell)
+			var east := grid.corner_heights(cell + Vector2i(1, 0))
+			var south := grid.corner_heights(cell + Vector2i(0, 1))
+			var seams: Array = [
+				[mine[TerrainGrid.CORNER_NE], east[TerrainGrid.CORNER_NW]],
+				[mine[TerrainGrid.CORNER_SE], east[TerrainGrid.CORNER_SW]],
+				[mine[TerrainGrid.CORNER_SW], south[TerrainGrid.CORNER_NW]],
+				[mine[TerrainGrid.CORNER_SE], south[TerrainGrid.CORNER_NE]],
+			]
+			for seam: Array in seams:
+				if absf(float(seam[0]) - float(seam[1])) > 0.001:
+					open += 1
+	return open
+
+
+static func _test_grass_hillside_closes_every_corner() -> void:
+	# §3.4 in one number. A hill of 45° cells is four ramps meeting at every
+	# diagonal; each raises different corners of the same point, so without the
+	# neighbour rule the mesh grows a vertical wedge on every diagonal — the whole
+	# hillside is speckled with them. With it, every shared corner agrees exactly.
+	for delta in [2, 3, 5]:
+		var grid := _make_grid()
+		assert(_sculpt(grid, Vector2i(0, 0), delta) != null)
+		assert(_count_open_corners(grid, delta + 3) == 0)
+	# Digging is the same surface mirrored; the inside of a pit is a harder shape
+	# (a column can be lower than three of its neighbours at once) and keeps a
+	# seam or two, but nothing like the speckle a hillside had.
+	var pit := _make_grid()
+	assert(_sculpt(pit, Vector2i(0, 0), -3) != null)
+	assert(_count_open_corners(pit, 6) <= 4)
+
+	# A terrace is the opposite promise: it must keep its face. Flat ground never
+	# follows flat ground, however close the step.
+	var terrace := _make_grid()
+	assert(_sculpt(terrace, Vector2i(0, 0), 2, TerrainEditOperation.Mode.TERRACE) != null)
+	assert(_count_open_corners(terrace, 3) > 0)
+	for corner: float in terrace.corner_heights(Vector2i(1, 0)):
+		assert(is_equal_approx(corner, 0.0))
 
 
 static func _test_terrace_mode_assigns_no_slopes() -> void:

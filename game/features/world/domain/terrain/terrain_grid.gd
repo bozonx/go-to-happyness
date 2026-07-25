@@ -47,6 +47,21 @@ const SHARED_CORNERS: Dictionary = {
 	SlopeCatalog.DIR_S: [CORNER_SE, CORNER_NE, CORNER_SW, CORNER_NW],
 	SlopeCatalog.DIR_W: [CORNER_SW, CORNER_SE, CORNER_NW, CORNER_NE],
 }
+## A diagonal neighbour shares exactly one corner with us (§3.4), as
+## `[mine, theirs]`.
+const SHARED_DIAGONAL_CORNERS: Dictionary = {
+	SlopeCatalog.DIR_NE: [CORNER_NE, CORNER_SW],
+	SlopeCatalog.DIR_SE: [CORNER_SE, CORNER_NW],
+	SlopeCatalog.DIR_SW: [CORNER_SW, CORNER_NE],
+	SlopeCatalog.DIR_NW: [CORNER_NW, CORNER_SE],
+}
+## How far above its own column a corner may be pulled by a neighbouring slope,
+## in steps. Two is the diagonal of a 45° hillside; see `corner_heights_into`.
+const MAX_CORNER_LIFT_STEPS := 2
+
+const DIAGONAL_DIRECTIONS: Array[int] = [
+	SlopeCatalog.DIR_NE, SlopeCatalog.DIR_SE, SlopeCatalog.DIR_SW, SlopeCatalog.DIR_NW,
+]
 
 var cell_size := 1.0
 var board_cells := 0
@@ -431,40 +446,84 @@ func corner_heights(cell: Vector2i) -> PackedFloat32Array:
 
 ## Same, writing into a caller-owned buffer of 4 floats. The mesher walks every
 ## cell of a chunk and every one of their neighbours, so the allocation matters.
-## §3.4: a slope's corners follow its own descriptor AND the four orthogonal
-## neighbours. Without the second half a hillside is a set of axis-aligned ramps
-## with a vertical wedge across every diagonal; with it, the corner two slopes
-## share simply rises to meet them both, and the pyramid corners of §3.4 come out
-## on their own. The lift is bounded by one `rise` of the cell's own class, so a
-## genuine cliff to a taller terrace stays a cliff.
+## §3.4: corner heights follow the cell's own descriptor AND the neighbours that
+## share those corners — the four orthogonal ones over an edge, the four diagonal
+## ones over a single point.
+##
+## Only neighbours that carry a slope lift anything. That is the whole rule: a
+## slope is terrain that has already been shaped, so the corner it raises is
+## raised for everybody standing on it, while a flat column beside a flat column
+## is a terrace and has to stay sheer (§4.1). Without the neighbour half, a
+## hillside is a set of axis-aligned ramps with a vertical wedge across every
+## diagonal, and every convex corner of the hill keeps a triangular face.
+##
+## The lift never carries a corner higher than one `rise` above the column it
+## belongs to (one whole step for a flat column), so a real cliff to a taller
+## terrace stays a cliff.
 func corner_heights_into(cell: Vector2i, result: PackedFloat32Array) -> void:
 	var slope_class := slope_class_at(cell)
 	_descriptor_corners_into(cell, slope_class, result)
-	if not SlopeCatalog.is_ramp_class(slope_class):
+	if is_hole(cell) or not is_inside(cell):
 		return
-	var run := SlopeCatalog.run_of_class(slope_class)
 	var rise_steps := SlopeCatalog.rise_of_class(slope_class)
-	var high := float(height_of(cell)) + float(rise_steps) * (float(slope_index_of(cell)) + 1.0) / float(run)
+	# Lifts come only from one-cell 45° slopes — the class hillsides are made of —
+	# and only by a whole number of steps, at most two. Whole steps keep the rule
+	# single-valued: every column sharing the corner tests the same integer, so
+	# the ones that accept it land on exactly the same height and the surface
+	# closes instead of tearing somewhere else. Two steps is what a diagonal of a
+	# 45° hillside actually drops (one step each way), which is why the corner
+	# between four such cells needs it; the result is a `very_steep` corner, still
+	# straight out of the catalog. Gentler multi-cell ramps are authored roads and
+	# do not drag the ground beside them.
+	var own_height := height_of(cell)
+	var lift_ceiling := float(own_height + MAX_CORNER_LIFT_STEPS)
 	var neighbour_corners := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
+
 	for direction: int in SlopeCatalog.ORTHOGONAL_DIRECTIONS:
 		var neighbour := cell + SlopeCatalog.direction_offset(direction)
 		if not is_inside(neighbour) or is_hole(neighbour):
 			continue
-		var neighbour_class := slope_class_at(neighbour)
-		if not SlopeCatalog.is_ramp_class(neighbour_class):
+		if not _lifts_corners(neighbour):
 			# A flat column exactly one step above a single-cell slope is the
 			# other half of that slope's corner; anything else is a face.
-			if run == 1 and height_of(neighbour) == height_of(cell) + rise_steps:
-				_raise_edge(result, direction, high)
+			if (
+				SlopeCatalog.is_ramp_class(slope_class)
+				and SlopeCatalog.run_of_class(slope_class) == 1
+				and height_of(neighbour) == height_of(cell) + rise_steps
+			):
+				_raise_edge(result, direction, float(own_height + rise_steps))
 			continue
-		_descriptor_corners_into(neighbour, neighbour_class, neighbour_corners)
+		_descriptor_corners_into(neighbour, slope_class_at(neighbour), neighbour_corners)
 		var mapping: Array = SHARED_CORNERS[direction]
 		for pair in 2:
-			var mine: int = mapping[pair * 2]
-			var theirs: int = mapping[pair * 2 + 1]
-			var lift: float = neighbour_corners[theirs]
-			if lift > result[mine] and lift - result[mine] <= float(rise_steps) + 0.0001:
-				result[mine] = lift
+			_lift_corner(result, int(mapping[pair * 2]), neighbour_corners[int(mapping[pair * 2 + 1])], lift_ceiling)
+
+	for direction: int in DIAGONAL_DIRECTIONS:
+		var neighbour := cell + SlopeCatalog.direction_offset(direction)
+		if not is_inside(neighbour) or is_hole(neighbour) or not _lifts_corners(neighbour):
+			continue
+		_descriptor_corners_into(neighbour, slope_class_at(neighbour), neighbour_corners)
+		var mapping: Array = SHARED_DIAGONAL_CORNERS[direction]
+		_lift_corner(result, int(mapping[0]), neighbour_corners[int(mapping[1])], lift_ceiling)
+
+	# A column surrounded on three sides — the inside of a pit — can end up with
+	# every corner pulled up, and then its surface sits a whole step above its
+	# stored height. That is allowed: mesh, collision and `height_at` all read the
+	# same corners, so they still agree with each other, and refusing the lift
+	# there would tear the inside of every pit open instead.
+
+
+## A neighbour whose corners pull ours up: a single-cell slope of one step, the
+## `steep` class the auto-slope pass (§3.2) builds hillsides out of.
+func _lifts_corners(cell: Vector2i) -> bool:
+	return slope_class_at(cell) == SlopeCatalog.CLASS_STEEP
+
+
+## Takes a neighbour's corner whole or not at all — never clamped, because a
+## clamped corner stops at a height nobody else agrees on.
+static func _lift_corner(result: PackedFloat32Array, corner: int, target: float, ceiling: float) -> void:
+	if target > result[corner] and target <= ceiling + 0.0001:
+		result[corner] = target
 
 
 ## Corner heights from the stored descriptor alone, before the neighbour pass.
