@@ -16,7 +16,7 @@ const DecorAssetDefScript = preload("res://game/features/buildings/domain/editor
 ## controller finds its own control/binding declarations.
 @export var asset_id: StringName = &""
 
-var _properties: Dictionary = {}
+var _appearance: Dictionary = {}
 
 
 func _ready() -> void:
@@ -24,7 +24,7 @@ func _ready() -> void:
 	# needs to look like its documented default state.
 	var asset := _asset()
 	if asset != null:
-		apply_decor_properties(asset.default_properties())
+		apply_decor_properties(asset.default_appearance())
 
 
 func apply_decor_properties(props: Dictionary) -> void:
@@ -34,23 +34,23 @@ func apply_decor_properties(props: Dictionary) -> void:
 	var bindings := asset.bindings()
 	# Start from the defaults so a partial dictionary (an older save, a control
 	# added later) resets untouched knobs instead of leaving stale scene state.
-	_properties = asset.default_properties()
+	_appearance = asset.default_appearance()
 	for key in props.keys():
-		_properties[str(key)] = props[key]
-	for property_name in _properties.keys():
-		_apply_bindings(bindings.get(property_name, []), _properties[property_name])
+		_appearance[str(key)] = props[key]
+	for property_name in _appearance.keys():
+		_apply_bindings(bindings.get(property_name, []), _appearance[property_name])
 
 
 func set_decor_property(property_name: String, value: Variant) -> void:
 	var asset := _asset()
 	if asset == null:
 		return
-	_properties[property_name] = value
+	_appearance[property_name] = value
 	_apply_bindings(asset.bindings().get(property_name, []), value)
 
 
 func get_decor_properties() -> Dictionary:
-	return _properties.duplicate(true)
+	return _appearance.duplicate(true)
 
 
 func _asset() -> DecorAssetDefScript:

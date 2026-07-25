@@ -180,7 +180,7 @@ static func ordered_modules(building_type: String) -> Array:
 			"rotation": decor.rot,
 			"scale": decor.scale,
 			"asset_id": decor.asset_id,
-			"properties": decor.properties,
+			"appearance": decor.appearance,
 			"kind": "decor",
 		})
 	entries.sort_custom(_compare_module_height)

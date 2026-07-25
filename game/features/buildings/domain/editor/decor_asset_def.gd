@@ -72,7 +72,7 @@ func footprint_m() -> Vector3:
 
 ## Control defaults, already JSON-safe (Color → html string), ready to be stored
 ## in a DecorObjectRecord.
-func default_properties() -> Dictionary:
+func default_appearance() -> Dictionary:
 	var props: Dictionary = {}
 	for control in controls:
 		var control_name := String(control.get("name", ""))

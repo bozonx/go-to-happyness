@@ -377,8 +377,7 @@ func _place_at(position: Vector3) -> void:
 	_push_undo()
 	var record := DecorObjectRecordScript.make(asset.id, position, _next_object_suffix())
 	record.rot = Vector3(0.0, current_yaw_deg, 0.0)
-	record.anchor = current_anchor
-	record.properties = asset.default_properties()
+	record.appearance = asset.default_appearance()
 	_editor.blueprint.objects.append(record)
 	_spawn_node(record)
 	_editor.mark_dirty()
@@ -529,7 +528,7 @@ func _spawn_node(record: DecorObjectRecordScript) -> void:
 	_nodes[record.id] = instance
 	_apply_transform_to_node(record)
 	if instance.has_method("apply_decor_properties"):
-		instance.call("apply_decor_properties", record.properties)
+		instance.call("apply_decor_properties", record.appearance)
 
 
 func _apply_transform_to_node(record: DecorObjectRecordScript) -> void:
@@ -831,7 +830,7 @@ func _build_control_row(record: DecorObjectRecordScript, control: Dictionary) ->
 	label.custom_minimum_size.x = 130
 	row.add_child(label)
 
-	var stored: Variant = record.properties.get(property_name, control.get("default", null))
+	var stored: Variant = record.appearance.get(property_name, control.get("default", null))
 	match String(control.get("type", DecorAssetDefScript.TYPE_STRING)):
 		DecorAssetDefScript.TYPE_BOOL:
 			var check := CheckBox.new()
@@ -868,7 +867,7 @@ func _set_property(property_name: String, value: Variant) -> void:
 	var record := find_record(selected_object_id)
 	if record == null:
 		return
-	record.properties[property_name] = value
+	record.appearance[property_name] = value
 	var node: Node3D = _nodes.get(record.id, null)
 	if node != null and node.has_method("set_decor_property"):
 		node.call("set_decor_property", property_name, value)

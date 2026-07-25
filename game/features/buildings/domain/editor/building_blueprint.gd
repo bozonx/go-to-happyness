@@ -15,7 +15,8 @@ const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain
 const BuildingMaterialCatalogScript = preload("res://game/features/buildings/domain/editor/building_material_catalog.gd")
 const DecorObjectRecordScript = preload("res://game/features/buildings/domain/editor/decor_object_record.gd")
 
-const FORMAT_VERSION := 1
+const FORMAT_VERSION := 2
+const MIN_LOAD_VERSION := 1
 const FILE_EXTENSION := "gdbuilding.json"
 
 var version: int = FORMAT_VERSION
@@ -51,6 +52,11 @@ var zone_anchors: Array[ZoneAnchorRecord] = []
 
 ## Placed decor and furnishing (authored in editor Mode 3, design §3.3).
 var objects: Array[DecorObjectRecord] = []
+
+## Reserved placeholder for functional fixtures (design_docs/content/
+## building_furnishing_phase_1_plan.md §3.3). Phase 1 allows only an empty
+## array; the validator rejects non-empty entries.
+var fixtures: Array = []
 
 ## Later-mode sections are kept as opaque data until their editor modes exist.
 var surface_finishes: Array = []
@@ -157,7 +163,7 @@ func to_dict() -> Dictionary:
 	for we in worker_entrances:
 		worker_entrance_dicts.append([we.x, we.y])
 	return {
-		"version": version,
+		"version": FORMAT_VERSION,
 		"id": String(id),
 		"name": name,
 		"construction_style": String(construction_style),
@@ -173,6 +179,7 @@ func to_dict() -> Dictionary:
 		"place_zones": place_dicts,
 		"zone_anchors": anchor_dicts,
 		"objects": object_dicts,
+		"fixtures": fixtures,
 		"cost_mode": String(cost_mode),
 		"extra_costs": extra_costs,
 		"custom_material_costs": custom_material_costs,
@@ -244,6 +251,12 @@ static func from_dict(data: Dictionary) -> BuildingBlueprint:
 	bp.custom_material_costs = data.get("custom_material_costs", {})
 	bp.manual_costs = data.get("manual_costs", {})
 	bp.construction_cost = data.get("construction_cost", {})
+	var raw_fixtures: Variant = data.get("fixtures", [])
+	bp.fixtures = raw_fixtures if raw_fixtures is Array else []
+	# Upgrade in-memory version so a save writes v2, even if the file was v1.
+	# Out-of-range versions are left as-is so validation_errors can reject them.
+	if bp.version >= MIN_LOAD_VERSION and bp.version <= FORMAT_VERSION:
+		bp.version = FORMAT_VERSION
 	bp.recalculate_construction_cost()
 	return bp
 
@@ -296,7 +309,7 @@ func content_revision() -> String:
 
 func validation_errors() -> Array[String]:
 	var errors: Array[String] = []
-	if version != FORMAT_VERSION:
+	if version < MIN_LOAD_VERSION or version > FORMAT_VERSION:
 		errors.append("Unsupported blueprint format version: %d" % version)
 	if not _valid_id(String(id)):
 		errors.append("Blueprint id must contain only lowercase latin letters, digits, '_' or '-'")
@@ -349,6 +362,10 @@ func validation_errors() -> Array[String]:
 		if object_ids.has(decor_object.id):
 			errors.append("Duplicate decor object id: %s" % decor_object.id)
 		object_ids[decor_object.id] = true
+		if decor_object.owner_zone_id != &"" and not zone_ids.has(decor_object.owner_zone_id):
+			errors.append("Decor object %s references unknown place zone: %s" % [decor_object.id, decor_object.owner_zone_id])
+	if not fixtures.is_empty():
+		errors.append("Functional fixtures will be available in phase 2")
 	return errors
 
 

@@ -408,9 +408,11 @@ static func _test_runtime_zone_subtype_survives() -> void:
 
 
 static func _test_invalid_blueprints_are_rejected() -> void:
-	var unsupported := BuildingBlueprintScript.new()
-	unsupported.version = 999
-	assert(BuildingBlueprintScript.from_json(unsupported.to_json()) == null)
+	# to_dict() always writes FORMAT_VERSION, so test unsupported version via a raw dict.
+	var unsupported_dict := {"version": 999, "id": "unsupported", "name": "Unsupported", "category": "tent", "footprint": [4, 4], "blocks": []}
+	assert(BuildingBlueprintScript.from_dict(unsupported_dict).validation_errors().any(
+		func(e: String): return e.contains("Unsupported blueprint format version")),
+		"Version 999 must be rejected")
 	var invalid_material := BuildingBlueprintScript.new()
 	invalid_material.id = &"invalid_material"
 	invalid_material.blocks.append(BlueprintBlockScript.new(Vector3i.ZERO, &"cube", 0, &"unobtainium"))

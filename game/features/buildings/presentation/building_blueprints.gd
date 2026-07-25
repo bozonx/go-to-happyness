@@ -310,7 +310,7 @@ static func _create_decor_module(module: Dictionary) -> StaticBody3D:
 	body.add_child(instance)
 
 	if instance.has_method("apply_decor_properties"):
-		instance.call("apply_decor_properties", module.get("properties", {}))
+		instance.call("apply_decor_properties", module.get("appearance", module.get("properties", {})))
 
 	return body
 

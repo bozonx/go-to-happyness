@@ -106,7 +106,7 @@ func _run() -> void:
 		"a decor-only blueprint must validate: %s" % [editor.blueprint.validation_errors()])
 	assert(reloaded != null, "serialized blueprint is valid")
 	assert(reloaded.objects.size() == 2, "objects survive save/load")
-	assert(reloaded.objects[0].properties["is_lit"] == false, "authored property survives")
+	assert(reloaded.objects[0].appearance["is_lit"] == false, "authored property survives")
 	print("  save/load ok")
 
 	# Leaving decor mode cleans up.

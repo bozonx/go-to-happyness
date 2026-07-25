@@ -7,9 +7,21 @@ extends RefCounted
 ## Every routing consumer reads the grid through this object, so there is exactly
 ## one definition of "can a citizen stand/pass here" instead of duplicated cell
 ## math scattered behind Callables.
+##
+## Terrain shape enters through an optional `NavTerrainField` (§10). Without one
+## the board is flat and every edge is passable, which is what tests and the
+## early bootstrap see; with one, the ground decides where a body can stand, how
+## fast it moves and — crucially — which neighbours it can reach at all.
+##
+## Callers speak `Vector2i` map coordinates. Topology is keyed by `NavCell`
+## instead, so tunnels and floors can add a level without rewriting them (§10.3).
+## Traversal costs stay keyed by map coordinate: a weight is a property of the
+## surface, and the layers that push them (trails, roads) are ground-only until
+## `IndoorGraph` exists.
 
 var cell_size := 1.0
 var board_half_cells := 0
+var _terrain: NavTerrainField = null
 var _blocked: Dictionary = {}
 var _cell_weights: Dictionary = {}
 ## Constructed coverage wins over terrain and organic trails.  Keeping this
@@ -48,12 +60,39 @@ func configure(next_cell_size: float, next_board_cells: int) -> void:
 	_topology_revision += 1
 
 
+## Publishes the shape of the ground (§10). Passing null returns the grid to a
+## flat board with no slope rules, which is how every routing test that does not
+## care about terrain runs.
+func set_terrain_field(field: NavTerrainField) -> void:
+	if _terrain == field:
+		return
+	_terrain = field
+	_revision += 1
+	_topology_revision += 1
+
+
+func terrain_field() -> NavTerrainField:
+	return _terrain
+
+
+func has_terrain_field() -> bool:
+	return _terrain != null and _terrain.is_configured()
+
+
+## Ground height in metres under a world position (§10.4). Citizens and route
+## waypoints are placed on this rather than on a physics ray, so the same answer
+## comes back headless, mid-frame and before the mesh has been rebuilt.
+func height_at(position_on_board: Vector3) -> float:
+	return 0.0 if _terrain == null else _terrain.height_at(position_on_board)
+
+
 ## Replaces the blocked set wholesale. Callers rebuild the dictionary (terrain +
 ## building footprints) and hand it over; the grid never mutates it in place.
 func set_blocked_cells(next_blocked: Dictionary) -> void:
-	if _blocked == next_blocked:
+	var keys := NavCell.ground_keys(next_blocked)
+	if _blocked == keys:
 		return
-	_blocked = next_blocked.duplicate()
+	_blocked = keys
 	_revision += 1
 	_topology_revision += 1
 
@@ -93,10 +132,7 @@ func set_road_profile_weights(next_weights: Dictionary, next_cells: Dictionary) 
 			var sanitized := _sanitize_weights(weights)
 			if not sanitized.is_empty():
 				sanitized_profiles[profile] = sanitized
-	var sanitized_cells: Dictionary = {}
-	for cell: Variant in next_cells:
-		if cell is Vector2i:
-			sanitized_cells[cell] = true
+	var sanitized_cells := NavCell.ground_keys(next_cells)
 	if _road_cell_weights == sanitized_profiles and _road_cells == sanitized_cells:
 		return
 	_road_cell_weights = sanitized_profiles
@@ -154,7 +190,14 @@ func erase_profile_cell_weight(profile: StringName, cell: Vector2i) -> void:
 	_revision += 1
 
 
-func get_cell_weight(cell: Vector2i, profile: StringName = PEDESTRIAN_PROFILE) -> float:
+## Cost of one cell of travel. Surface coverage decides the base — a road wins
+## over a trail, a trail over bare terrain — and the slope of the ground then
+## multiplies it (§10.2): a road laid up a hillside is still a hillside.
+func get_cell_weight(cell: Vector2i, profile: StringName = PEDESTRIAN_PROFILE, profile_override: TravelerProfile = null) -> float:
+	return _surface_weight(cell, profile) * _slope_cost_factor(cell, profile, profile_override)
+
+
+func _surface_weight(cell: Vector2i, profile: StringName) -> float:
 	var road_weights: Dictionary = _road_cell_weights.get(profile, {})
 	if road_weights.has(cell):
 		return clampf(float(road_weights[cell]), MIN_CELL_WEIGHT, MAX_CELL_WEIGHT)
@@ -162,6 +205,23 @@ func get_cell_weight(cell: Vector2i, profile: StringName = PEDESTRIAN_PROFILE) -
 	if profile_weights.has(cell):
 		return clampf(float(profile_weights[cell]), MIN_CELL_WEIGHT, MAX_CELL_WEIGHT)
 	return clampf(float(_cell_weights.get(cell, DEFAULT_CELL_WEIGHT)), MIN_CELL_WEIGHT, MAX_CELL_WEIGHT)
+
+
+## Always >= 1.0, so it can never drag a cell below `minimum_cell_weight()` and
+## make the A* heuristic inadmissible.
+func _slope_cost_factor(cell: Vector2i, profile: StringName, profile_override: TravelerProfile) -> float:
+	if _terrain == null:
+		return 1.0
+	var slope_class := _terrain.slope_class_at(cell)
+	if slope_class == 0:
+		return 1.0
+	var resolved := profile_override if profile_override != null else TravelerProfile.get_profile(profile)
+	var speed := NavTerrainField.speed_multiplier(slope_class, resolved.mobility_category == TravelerProfile.CATEGORY_PEDESTRIAN)
+	if speed <= 0.0:
+		# Unwalkable for this profile; `is_walkable` already refuses the cell, and
+		# the ceiling keeps any cost query that slips through finite.
+		return MAX_CELL_WEIGHT
+	return 1.0 / speed
 
 
 func movement_speed_modifier_at(position_on_board: Vector3, profile: StringName = PEDESTRIAN_PROFILE) -> float:
@@ -188,8 +248,12 @@ func cell_from_position(position_on_board: Vector3) -> Vector2i:
 	return Vector2i(floori(position_on_board.x / cell_size), floori(position_on_board.z / cell_size))
 
 
+## Waypoints sit on the ground rather than on the y = 0 plane (§10.4), so a route
+## over a hillside is a path along it instead of a line through it.
 func cell_center(cell: Vector2i) -> Vector3:
-	return Vector3((cell.x + 0.5) * cell_size, 0.0, (cell.y + 0.5) * cell_size)
+	var centre := Vector3((cell.x + 0.5) * cell_size, 0.0, (cell.y + 0.5) * cell_size)
+	centre.y = height_at(centre)
+	return centre
 
 
 func is_board_cell(cell: Vector2i) -> bool:
@@ -197,16 +261,53 @@ func is_board_cell(cell: Vector2i) -> bool:
 
 
 func is_blocked(cell: Vector2i) -> bool:
-	return _blocked.has(cell)
+	return _blocked.has(NavCell.ground(cell))
 
 
 func is_walkable(cell: Vector2i, profile: StringName = PEDESTRIAN_PROFILE, profile_override: TravelerProfile = null) -> bool:
-	if not is_board_cell(cell) or _blocked.has(cell):
+	if not is_board_cell(cell) or _blocked.has(NavCell.ground(cell)):
 		return false
-	if _road_cells.has(cell):
-		return (_road_cell_weights.get(profile, {}) as Dictionary).has(cell)
 	var resolved := profile_override if profile_override != null else TravelerProfile.get_profile(profile)
+	if _terrain != null:
+		# A hole has no floor to stand on, and a surface steeper than the profile
+		# tolerates cannot be stood on either — a road built over it changes
+		# neither fact, so this comes before the coverage question.
+		if not _terrain.has_ground(cell):
+			return false
+		if _terrain.slope_class_at(cell) > resolved.max_slope_class:
+			return false
+	if _road_cells.has(NavCell.ground(cell)):
+		return (_road_cell_weights.get(profile, {}) as Dictionary).has(cell)
 	return (resolved.layer_mask & TravelerProfile.LAYER_TERRAIN) != 0 and resolved.allows_offroad
+
+
+## Whether a body can actually get from one cell to an adjacent one (§10.1).
+##
+## Two walkable cells are not enough: the step between two terraces is a sheer
+## face, and only the edge carries that. Without a terrain field every edge
+## between board cells is a plain step, which is the flat world routing had
+## before terrain existed.
+func is_edge_passable(from: Vector2i, to: Vector2i, profile: StringName = PEDESTRIAN_PROFILE, profile_override: TravelerProfile = null) -> bool:
+	if _terrain == null or from == to:
+		return true
+	var resolved := profile_override if profile_override != null else TravelerProfile.get_profile(profile)
+	return _terrain.edge_class(from, to) <= resolved.max_slope_class
+
+
+## A diagonal step also crosses both orthogonal shoulders, so both of them must
+## be standable AND reachable — otherwise a citizen cuts the corner of a cliff.
+func _is_step_passable(from: Vector2i, to: Vector2i, profile: StringName, profile_override: TravelerProfile) -> bool:
+	if not is_edge_passable(from, to, profile, profile_override):
+		return false
+	var delta := to - from
+	if delta.x == 0 or delta.y == 0:
+		return true
+	for shoulder: Vector2i in [from + Vector2i(delta.x, 0), from + Vector2i(0, delta.y)]:
+		if not is_walkable(shoulder, profile, profile_override):
+			return false
+		if not is_edge_passable(from, shoulder, profile, profile_override) or not is_edge_passable(shoulder, to, profile, profile_override):
+			return false
+	return true
 
 
 ## Reachability queries used during AI candidate discovery do not need a route.
@@ -220,7 +321,7 @@ func are_cells_connected(from: Vector2i, to: Vector2i, profile: StringName = PED
 	if not is_walkable(from, profile, profile_override) or not is_walkable(to, profile, profile_override):
 		return false
 	var components := _ensure_walkable_components(profile, profile_override)
-	return components.get(from, -1) == components.get(to, -2)
+	return components.get(NavCell.ground(from), -1) == components.get(NavCell.ground(to), -2)
 
 
 ## Builds the component cache at a controlled caller-owned time instead of on
@@ -323,10 +424,11 @@ func segment_cost(from: Vector3, to: Vector3, profile: StringName = PEDESTRIAN_P
 	while guard > 0:
 		guard -= 1
 		if cell == end_cell:
-			return traversed_cost + (1.0 - previous_t) * segment_length * get_cell_weight(cell, profile)
+			return traversed_cost + (1.0 - previous_t) * segment_length * get_cell_weight(cell, profile, profile_override)
 		var next_t := minf(t_max_x, t_max_z)
-		traversed_cost += (next_t - previous_t) * segment_length * get_cell_weight(cell, profile)
+		traversed_cost += (next_t - previous_t) * segment_length * get_cell_weight(cell, profile, profile_override)
 		previous_t = next_t
+		var previous_cell := cell
 		if is_equal_approx(t_max_x, t_max_z):
 			# Crossing exactly through a grid corner touches both side cells. Requiring
 			# both prevents a line from slipping through a building corner.
@@ -409,22 +511,24 @@ func _ensure_walkable_components(profile: StringName, profile_override: Traveler
 	for y in range(-board_half_cells, board_half_cells):
 		for x in range(-board_half_cells, board_half_cells):
 			var start := Vector2i(x, y)
-			if not is_walkable(start, profile, profile_override) or components.has(start):
+			if not is_walkable(start, profile, profile_override) or components.has(NavCell.ground(start)):
 				continue
 			var frontier: Array[Vector2i] = [start]
 			var cursor := 0
-			components[start] = next_component
+			components[NavCell.ground(start)] = next_component
 			while cursor < frontier.size():
 				var current := frontier[cursor]
 				cursor += 1
 				for direction in CONNECTED_DIRECTIONS:
 					var neighbor := current + direction
-					if not is_walkable(neighbor, profile, profile_override) or components.has(neighbor):
+					if not is_walkable(neighbor, profile, profile_override) or components.has(NavCell.ground(neighbor)):
+						continue
+					if not _is_step_passable(current, neighbor, profile, profile_override):
 						continue
 					if direction.x != 0 and direction.y != 0:
 						if not is_walkable(current + Vector2i(direction.x, 0), profile, profile_override) or not is_walkable(current + Vector2i(0, direction.y), profile, profile_override):
 							continue
-					components[neighbor] = next_component
+					components[NavCell.ground(neighbor)] = next_component
 					frontier.append(neighbor)
 			next_component += 1
 	_walkable_components_by_profile[cache_key] = components

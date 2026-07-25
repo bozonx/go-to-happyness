@@ -27,9 +27,18 @@ const LIGHT_VEHICLE: StringName = &"light_vehicle"
 const HEAVY_VEHICLE: StringName = &"heavy_vehicle"
 const AIR_DRONE: StringName = &"air_drone"
 
+## Slope classes a traveller may still cross, as catalog class indices
+## (grid_terrain_system.md §10.1): 5 for a pedestrian, 3 for a cart, 2 for heavy
+## freight. This is the passability limit, not the comfort one — `NavTerrainField`
+## charges speed for everything from class 3 upwards long before it refuses.
+const MAX_SLOPE_CLASS_PEDESTRIAN := 5
+const MAX_SLOPE_CLASS_CART := 3
+const MAX_SLOPE_CLASS_HEAVY := 2
+
 var profile_id: StringName = &"pedestrian"
 var mobility_category: StringName = CATEGORY_PEDESTRIAN
 var max_slope: float = 45.0
+var max_slope_class: int = MAX_SLOPE_CLASS_PEDESTRIAN
 var width_clearance: float = 0.6
 var height_clearance: float = 2.0
 var allows_stairs: bool = true
@@ -49,11 +58,13 @@ func _init(
 	p_offroad: bool = true,
 	p_turn_radius: float = 0.0,
 	p_layers: int = LAYER_TERRAIN | LAYER_ROAD | LAYER_INDOOR,
-	p_category: StringName = CATEGORY_PEDESTRIAN
+	p_category: StringName = CATEGORY_PEDESTRIAN,
+	p_max_slope_class: int = MAX_SLOPE_CLASS_PEDESTRIAN
 ) -> void:
 	profile_id = p_id
 	mobility_category = p_category
 	max_slope = p_slope
+	max_slope_class = p_max_slope_class
 	width_clearance = p_width
 	height_clearance = p_height
 	allows_stairs = p_stairs
@@ -63,27 +74,27 @@ func _init(
 
 
 static func pedestrian() -> TravelerProfile:
-	return TravelerProfile.new(PEDESTRIAN, 45.0, 0.6, 2.0, true, true, 0.0, LAYER_TERRAIN | LAYER_ROAD | LAYER_INDOOR, CATEGORY_PEDESTRIAN)
+	return TravelerProfile.new(PEDESTRIAN, 45.0, 0.6, 2.0, true, true, 0.0, LAYER_TERRAIN | LAYER_ROAD | LAYER_INDOOR, CATEGORY_PEDESTRIAN, MAX_SLOPE_CLASS_PEDESTRIAN)
 
 
 static func bipedal_robot() -> TravelerProfile:
-	return TravelerProfile.new(BIPEDAL_ROBOT, 40.0, 0.7, 2.0, true, true, 0.0, LAYER_TERRAIN | LAYER_ROAD | LAYER_INDOOR, CATEGORY_PEDESTRIAN)
+	return TravelerProfile.new(BIPEDAL_ROBOT, 40.0, 0.7, 2.0, true, true, 0.0, LAYER_TERRAIN | LAYER_ROAD | LAYER_INDOOR, CATEGORY_PEDESTRIAN, MAX_SLOPE_CLASS_PEDESTRIAN)
 
 
 static func wheeled_robot() -> TravelerProfile:
-	return TravelerProfile.new(WHEELED_ROBOT, 15.0, 0.8, 1.2, false, false, 0.5, LAYER_ROAD | LAYER_INDOOR, CATEGORY_SMALL_WHEELED)
+	return TravelerProfile.new(WHEELED_ROBOT, 15.0, 0.8, 1.2, false, false, 0.5, LAYER_ROAD | LAYER_INDOOR, CATEGORY_SMALL_WHEELED, MAX_SLOPE_CLASS_CART)
 
 
 static func light_vehicle() -> TravelerProfile:
-	return TravelerProfile.new(LIGHT_VEHICLE, 20.0, 1.2, 1.8, false, false, 2.0, LAYER_ROAD, CATEGORY_ROAD_VEHICLE)
+	return TravelerProfile.new(LIGHT_VEHICLE, 20.0, 1.2, 1.8, false, false, 2.0, LAYER_ROAD, CATEGORY_ROAD_VEHICLE, MAX_SLOPE_CLASS_HEAVY)
 
 
 static func heavy_vehicle() -> TravelerProfile:
-	return TravelerProfile.new(HEAVY_VEHICLE, 25.0, 2.5, 3.0, false, false, 5.0, LAYER_ROAD | LAYER_TERRAIN, CATEGORY_HEAVY_OFFROAD)
+	return TravelerProfile.new(HEAVY_VEHICLE, 25.0, 2.5, 3.0, false, false, 5.0, LAYER_ROAD | LAYER_TERRAIN, CATEGORY_HEAVY_OFFROAD, MAX_SLOPE_CLASS_HEAVY)
 
 
 static func air_drone() -> TravelerProfile:
-	return TravelerProfile.new(AIR_DRONE, 90.0, 0.5, 0.5, false, true, 0.0, LAYER_AIR, CATEGORY_AIR)
+	return TravelerProfile.new(AIR_DRONE, 90.0, 0.5, 0.5, false, true, 0.0, LAYER_AIR, CATEGORY_AIR, NavTerrainField.CLASS_CLIFF)
 
 
 static func get_profile(p_id: StringName) -> TravelerProfile:
@@ -94,7 +105,7 @@ static func get_profile(p_id: StringName) -> TravelerProfile:
 	# Unknown profiles fail closed: content must register its capabilities before
 	# it can receive a route.  Treating an unknown vehicle as a pedestrian would
 	# make future mobility restrictions silently unsafe.
-	return TravelerProfile.new(p_id, 0.0, 0.0, 0.0, false, false, 0.0, 0, StringName())
+	return TravelerProfile.new(p_id, 0.0, 0.0, 0.0, false, false, 0.0, 0, StringName(), 0)
 
 
 static func register_profile(profile: TravelerProfile) -> void:
@@ -126,6 +137,6 @@ static func _init_defaults() -> void:
 	register_profile(air_drone())
 	# Existing saves and current grid callers still use these IDs. They remain
 	# concrete compatibility profiles until coverage moves to capability tags.
-	register_profile(TravelerProfile.new(&"cart", 12.0, 0.9, 1.2, false, true, 0.4, LAYER_TERRAIN | LAYER_ROAD, CATEGORY_SMALL_WHEELED))
-	register_profile(TravelerProfile.new(&"bicycle", 18.0, 0.7, 1.5, false, true, 0.8, LAYER_TERRAIN | LAYER_ROAD, CATEGORY_SMALL_WHEELED))
-	register_profile(TravelerProfile.new(&"motor", 20.0, 1.0, 1.7, false, true, 1.5, LAYER_TERRAIN | LAYER_ROAD, CATEGORY_ROAD_VEHICLE))
+	register_profile(TravelerProfile.new(&"cart", 12.0, 0.9, 1.2, false, true, 0.4, LAYER_TERRAIN | LAYER_ROAD, CATEGORY_SMALL_WHEELED, MAX_SLOPE_CLASS_CART))
+	register_profile(TravelerProfile.new(&"bicycle", 18.0, 0.7, 1.5, false, true, 0.8, LAYER_TERRAIN | LAYER_ROAD, CATEGORY_SMALL_WHEELED, MAX_SLOPE_CLASS_CART))
+	register_profile(TravelerProfile.new(&"motor", 20.0, 1.0, 1.7, false, true, 1.5, LAYER_TERRAIN | LAYER_ROAD, CATEGORY_ROAD_VEHICLE, MAX_SLOPE_CLASS_CART))
