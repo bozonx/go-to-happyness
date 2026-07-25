@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "id": "entrance_sign",
   "name": "Въездной знак",
   "construction_style": "surface",
@@ -28,13 +28,14 @@
     {
       "id": "decor_entrance_sign_1",
       "asset_id": "entrance_sign",
+      "owner_zone": "",
       "pos": [0, 0, 0],
       "rot": [0, 0, 0],
       "scale": [1, 1, 1],
-      "anchor": [0, 0],
-      "properties": {}
+      "appearance": {}
     }
   ],
+  "fixtures": [],
   "construction_cost": {
     "branches": 3,
     "grass": 1

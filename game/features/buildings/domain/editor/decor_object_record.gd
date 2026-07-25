@@ -1,6 +1,8 @@
 class_name DecorObjectRecord
 extends RefCounted
 
+const FurnishingAssetDefScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_def.gd")
+
 ## A single placed visual object inside a building blueprint — the `objects[]`
 ## entries of `.gdbuilding.json` (design_docs/content/modular_building_editor.md
 ## §3.3). Typed counterpart of BlueprintBlock / ZoneAnchorRecord: the editor and
@@ -94,6 +96,11 @@ static func from_dict(data: Dictionary) -> DecorObjectRecord:
 		# v1 migration: properties → appearance
 		raw_appearance = data.get("properties", {})
 	record.appearance = (raw_appearance as Dictionary).duplicate() if raw_appearance is Dictionary else {}
+	# v2 migration: is_lit → visual_flame_visible to avoid semantic clash with
+	# future runtime fire.lit (design_docs/content/building_furnishing_phase_1_plan.md).
+	if record.appearance.has("is_lit"):
+		record.appearance["visual_flame_visible"] = record.appearance["is_lit"]
+		record.appearance.erase("is_lit")
 	return record
 
 
@@ -109,6 +116,37 @@ func validation_errors() -> Array[String]:
 			break
 	if scale.x <= 0.0 or scale.y <= 0.0 or scale.z <= 0.0:
 		errors.append("Decor object %s has a non-positive scale" % id)
+	return errors
+
+
+## Validates this record against a known asset definition. When `asset` is null
+## (the asset is not installed), only a soft warning is returned — the file must
+## still load. Scale, rotation, surface and collision policy are checked against
+## the asset's declared constraints.
+func validation_errors_with_asset(asset: Variant) -> Array[String]:
+	var errors := validation_errors()
+	if asset == null:
+		return errors
+	# Scale: must be uniform and allowed by the asset's scale policy.
+	var scale_val := scale.x
+	if not is_equal_approx(scale.x, scale.y) or not is_equal_approx(scale.x, scale.z):
+		errors.append("Decor object %s has non-uniform scale (%.3f, %.3f, %.3f)" % [id, scale.x, scale.y, scale.z])
+	elif not asset.is_scale_allowed(scale_val):
+		errors.append("Decor object %s has scale %.3f which is not allowed by asset %s" % [id, scale_val, asset.id])
+	# Rotation: only allowed axes may have non-zero rotation.
+	if not is_equal_approx(rot.x, 0.0) and not asset.is_rotation_axis_allowed("x"):
+		errors.append("Decor object %s rotates on X axis but asset %s does not allow it" % [id, asset.id])
+	if not is_equal_approx(rot.z, 0.0) and not asset.is_rotation_axis_allowed("z"):
+		errors.append("Decor object %s rotates on Z axis but asset %s does not allow it" % [id, asset.id])
+	# Collision policy: must be a known value.
+	var valid_policies := [
+		FurnishingAssetDefScript.COLLISION_NONE,
+		FurnishingAssetDefScript.COLLISION_BOX,
+		FurnishingAssetDefScript.COLLISION_SCENE,
+		FurnishingAssetDefScript.COLLISION_FOOTPRINT,
+	]
+	if not (asset.collision_policy in valid_policies):
+		errors.append("Decor object %s: asset %s has unknown collision policy %s" % [id, asset.id, asset.collision_policy])
 	return errors
 
 

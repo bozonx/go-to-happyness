@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "id": "campfire",
   "name": "Главный костер ур. 1",
   "construction_style": "surface",
@@ -28,13 +28,14 @@
     {
       "id": "decor_campfire_1",
       "asset_id": "campfire",
+      "owner_zone": "",
       "pos": [0, 0, 0],
       "rot": [0, 0, 0],
       "scale": [1, 1, 1],
-      "anchor": [0, 0],
-      "properties": {}
+      "appearance": {}
     }
   ],
+  "fixtures": [],
   "construction_cost": {
     "branches": 4
   }

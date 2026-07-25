@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "id": "settlement_flag",
   "name": "Флаг поселения",
   "construction_style": "surface",
@@ -28,12 +28,13 @@
     {
       "id": "decor_flag_1",
       "asset_id": "flag",
+      "owner_zone": "",
       "pos": [0, 0, 0],
       "rot": [0, 0, 0],
       "scale": [1, 1, 1],
-      "anchor": [0, 0],
-      "properties": {}
+      "appearance": {}
     }
   ],
+  "fixtures": [],
   "construction_cost": {}
 }

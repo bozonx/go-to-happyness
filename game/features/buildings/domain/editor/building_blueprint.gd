@@ -14,6 +14,7 @@ const ZoneAnchorRecordScript = preload("res://game/features/buildings/domain/edi
 const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
 const BuildingMaterialCatalogScript = preload("res://game/features/buildings/domain/editor/building_material_catalog.gd")
 const DecorObjectRecordScript = preload("res://game/features/buildings/domain/editor/decor_object_record.gd")
+const FurnishingAssetCatalogScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_catalog.gd")
 
 const FORMAT_VERSION := 2
 const MIN_LOAD_VERSION := 1
@@ -358,7 +359,8 @@ func validation_errors() -> Array[String]:
 	# custom asset that is simply not installed here, and it must still load.
 	var object_ids: Dictionary = {}
 	for decor_object in objects:
-		errors.append_array(decor_object.validation_errors())
+		var asset := FurnishingAssetCatalogScript.get_asset(decor_object.asset_id)
+		errors.append_array(decor_object.validation_errors_with_asset(asset))
 		if object_ids.has(decor_object.id):
 			errors.append("Duplicate decor object id: %s" % decor_object.id)
 		object_ids[decor_object.id] = true

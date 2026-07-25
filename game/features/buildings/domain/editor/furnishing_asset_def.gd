@@ -6,7 +6,7 @@ extends Resource
 ##
 ## `appearance_controls` are the authored visual knobs (design §3.3). Each entry is:
 ##   {
-##     "name": "is_lit", "label": "Горит", "type": "bool"|"float"|"string"|"color",
+##     "name": "visual_flame_visible", "label": "Горит", "type": "bool"|"float"|"string"|"color",
 ##     "default": <value>,
 ##     "min"/"max"/"step": <float>,          # float only
 ##     "bind": [{"node": "Fire", "prop": "visible"}, ...]

@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "id": "warehouse",
   "name": "Склад под открытым небом",
   "construction_style": "surface",
@@ -51,5 +51,6 @@
   "place_zones": [],
   "zone_anchors": [],
   "objects": [],
+  "fixtures": [],
   "construction_cost": {}
 }

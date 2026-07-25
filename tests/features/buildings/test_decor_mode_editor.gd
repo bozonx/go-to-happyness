@@ -10,6 +10,7 @@ extends SceneTree
 
 const EditorScene = preload("res://game/features/buildings/presentation/editor/building_editor.tscn")
 const PlaceZoneRecordScript = preload("res://game/features/buildings/domain/editor/place_zone_record.gd")
+const DecorObjectRecordScript = preload("res://game/features/buildings/domain/editor/decor_object_record.gd")
 
 
 func _initialize() -> void:
@@ -74,9 +75,9 @@ func _run() -> void:
 	print("  drag ok ", before, " -> ", editor.blueprint.objects[0].pos)
 
 	# Properties reach the instance.
-	decor._set_property("is_lit", false)
+	decor._set_property("visual_flame_visible", false)
 	var node = decor._nodes[decor.selected_object_id]
-	assert(node.get_node("Fire").visible == false, "is_lit=false hides the flame")
+	assert(node.get_node("Fire").visible == false, "visual_flame_visible=false hides the flame")
 	decor._set_property("light_color", "44aaff")
 	assert(node.get_node("Light").light_color.is_equal_approx(Color("44aaff")), "colour binding applied")
 	print("  property bindings ok")
@@ -130,6 +131,45 @@ func _run() -> void:
 	assert(decor.find_record(decor.selected_object_id).owner_zone_id == &"", "zone deletion clears owner_zone_id")
 	print("  zone filter + deletion ok")
 
+	# Replace object: compatible appearance properties must be preserved.
+	# campfire and cooking_campfire both share visual_flame_visible (bool) and
+	# light_energy (float). Setting non-default values on the campfire, then
+	# replacing with cooking_campfire, must carry them over.
+	decor.select_object(editor.blueprint.objects[0].id)
+	decor._set_property("visual_flame_visible", false)
+	decor._set_property("light_energy", 3.5)
+	decor.current_asset_id = &"cooking_campfire"
+	decor._replace_selected_object()
+	assert(editor.blueprint.objects[0].asset_id == &"cooking_campfire",
+		"object replaced with cooking_campfire")
+	assert(editor.blueprint.objects[0].appearance.get("visual_flame_visible", null) == false,
+		"visual_flame_visible must be carried over during replace")
+	assert(editor.blueprint.objects[0].appearance.get("light_energy", null) == 3.5,
+		"light_energy must be carried over during replace")
+	print("  replace preserves appearance ok")
+
+	# Zone bounds: an object at cell centre (x=1.5) must map to cell 1 via floor,
+	# not cell 2 via round. Create a zone at cell (1,0,1) and assign the object.
+	var zone2 := PlaceZoneRecordScript.new()
+	zone2.zone_id = &"test_zone_bounds"
+	zone2.zone_name = "Зона проверки границ"
+	zone2.cells = [Vector3i(1, 0, 1)]
+	editor.blueprint.place_zones.append(zone2)
+	var bounds_obj: DecorObjectRecordScript = editor.blueprint.objects[0]
+	bounds_obj.pos = Vector3(1.5, 0.0, 1.5)
+	bounds_obj.owner_zone_id = &"test_zone_bounds"
+	decor.select_object(bounds_obj.id)
+	decor._refresh_inspector()
+	# _update_zone_highlight is called during _refresh_inspector.
+	# With floor, position 1.5 -> cell 1, which is in the zone — no warning.
+	assert(not decor._zone_out_of_bounds_label.visible,
+		"Object at cell-centre 1.5 must not trigger false out-of-zone warning (floor, not round)")
+	print("  zone bounds floor ok")
+
+	# Clean up: remove the zone and revert the object.
+	decor.on_zone_deleted(&"test_zone_bounds")
+	editor.blueprint.place_zones.erase(zone2)
+
 	# The whole thing must serialize.
 	var json: String = editor.blueprint.to_json()
 	assert(not json.is_empty(), "blueprint serializes")
@@ -138,7 +178,7 @@ func _run() -> void:
 		"a decor-only blueprint must validate: %s" % [editor.blueprint.validation_errors()])
 	assert(reloaded != null, "serialized blueprint is valid")
 	assert(reloaded.objects.size() == 2, "objects survive save/load")
-	assert(reloaded.objects[0].appearance["is_lit"] == false, "authored property survives")
+	assert(reloaded.objects[0].appearance["visual_flame_visible"] == false, "authored property survives")
 	print("  save/load ok")
 
 	# Leaving decor mode cleans up.

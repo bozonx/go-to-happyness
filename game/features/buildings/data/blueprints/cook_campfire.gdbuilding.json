@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "id": "cook_campfire",
   "name": "Костер для готовки ур. 1",
   "construction_style": "surface",
@@ -28,13 +28,14 @@
     {
       "id": "decor_cooking_campfire_1",
       "asset_id": "cooking_campfire",
+      "owner_zone": "",
       "pos": [0, 0, 0],
       "rot": [0, 0, 0],
       "scale": [1, 1, 1],
-      "anchor": [0, 0],
-      "properties": {}
+      "appearance": {}
     }
   ],
+  "fixtures": [],
   "construction_cost": {
     "branches": 8,
     "grass": 6

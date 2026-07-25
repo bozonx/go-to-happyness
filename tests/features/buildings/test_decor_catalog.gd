@@ -20,6 +20,11 @@ func _init() -> void:
 	_test_non_empty_fixtures_rejected()
 	_test_owner_zone_validation()
 	_test_catalog_filtering()
+	_test_builtin_blueprints_are_v2()
+	_test_asset_validation_with_known_asset()
+	_test_is_lit_migration_to_visual_flame_visible()
+	_test_era_cumulative_progression()
+	_test_category_migration()
 	print("--- test_decor_catalog.gd PASSED ---")
 	quit(0)
 
@@ -109,7 +114,7 @@ func _test_blueprint_decor_objects() -> void:
 	var record := DecorObjectRecordScript.make(&"campfire", Vector3(1.5, 0.0, 1.5), 1)
 	record.rot = Vector3(0.0, 90.0, 0.0)
 	record.scale = Vector3(1.5, 1.5, 1.5)
-	record.appearance = {"is_lit": true, "light_energy": 2.0}
+	record.appearance = {"visual_flame_visible": true, "light_energy": 2.0}
 	bp.objects.append(record)
 
 	var dict := bp.to_dict()
@@ -186,7 +191,7 @@ func _test_v1_to_v2_migration() -> void:
 			"rot": [0, 45, 0],
 			"scale": [1, 1, 1],
 			"anchor": [1, 0],
-			"properties": {"is_lit": true, "light_color": "ffaa44"},
+			"properties": {"visual_flame_visible": true, "light_color": "ffaa44"},
 		}],
 	}
 	var bp := BuildingBlueprintScript.from_dict(v1_dict)
@@ -195,7 +200,7 @@ func _test_v1_to_v2_migration() -> void:
 	assert(bp.objects.size() == 1, "v1 migration must preserve objects")
 	var obj: DecorObjectRecordScript = bp.objects[0]
 	assert(obj.pos.is_equal_approx(Vector3(2.5, 0.0, 3.5)), "v1 pos must not shift")
-	assert(obj.appearance["is_lit"] == true, "v1 properties must migrate to appearance")
+	assert(obj.appearance["visual_flame_visible"] == true, "v1 properties must migrate to appearance")
 	assert(obj.appearance["light_color"] == "ffaa44", "v1 colour must migrate to appearance")
 	assert(obj.owner_zone_id == &"", "v1 migration must add empty owner_zone")
 	# Saving as v2 and reloading must preserve all data.
@@ -203,7 +208,7 @@ func _test_v1_to_v2_migration() -> void:
 	var reloaded := BuildingBlueprintScript.from_json(v2_json)
 	assert(reloaded != null, "v2 reloaded blueprint must be valid")
 	assert(reloaded.objects.size() == 1, "v2 round-trip must preserve objects")
-	assert(reloaded.objects[0].appearance["is_lit"] == true, "v2 appearance must survive round-trip")
+	assert(reloaded.objects[0].appearance["visual_flame_visible"] == true, "v2 appearance must survive round-trip")
 	assert(reloaded.objects[0].pos.is_equal_approx(Vector3(2.5, 0.0, 3.5)), "v2 pos must survive round-trip")
 	print("  v1→v2 migration ok")
 
@@ -214,9 +219,9 @@ func _test_v2_round_trip() -> void:
 	bp.id = &"test_v2_roundtrip"
 	var record := DecorObjectRecordScript.make(&"campfire", Vector3(1.0, 0.0, 2.0), 1)
 	record.rot = Vector3(0.0, 180.0, 0.0)
-	record.scale = Vector3(2.0, 2.0, 2.0)
+	record.scale = Vector3(1.0, 1.0, 1.0)
 	record.owner_zone_id = &""
-	record.appearance = {"is_lit": false, "light_color": "aabbcc"}
+	record.appearance = {"visual_flame_visible": false, "light_color": "aabbcc"}
 	bp.objects.append(record)
 	var json := bp.to_json()
 	assert(json.contains("\"version\": 2"), "v2 json must contain version 2")
@@ -226,7 +231,7 @@ func _test_v2_round_trip() -> void:
 	var reloaded := BuildingBlueprintScript.from_json(json)
 	assert(reloaded != null, "v2 round-trip must produce a valid blueprint")
 	assert(reloaded.objects[0].appearance["light_color"] == "aabbcc", "v2 appearance must survive JSON round-trip")
-	assert(reloaded.objects[0].scale.is_equal_approx(Vector3(2.0, 2.0, 2.0)), "v2 scale must survive JSON round-trip")
+	assert(reloaded.objects[0].scale.is_equal_approx(Vector3(1.0, 1.0, 1.0)), "v2 scale must survive JSON round-trip")
 	print("  v2 round-trip ok")
 
 
@@ -276,12 +281,10 @@ func _test_catalog_filtering() -> void:
 	var tent_assets := FurnishingAssetCatalogScript.get_assets_by_era(&"tent")
 	assert(tent_assets.size() >= 4, "Era 'tent' must return at least 4 assets")
 
-	# Filter by era with no matches: assets with a different era.
+	# Filter by era with cumulative progression: tent-era assets are available
+	# in later eras (wood, stone) because rank(tent) <= rank(stone).
 	var stone_assets := FurnishingAssetCatalogScript.get_assets_by_era(&"stone")
-	# All current assets have available_from_era == "tent", so they don't match "stone".
-	# But assets with empty era pass through (available for all eras).
-	# Our built-in assets all have era "tent", so stone should return 0.
-	assert(stone_assets.size() == 0, "Era 'stone' must return 0 assets (all are tent-era)")
+	assert(stone_assets.size() >= 4, "Era 'stone' must return tent-era assets (cumulative progression)")
 
 	# Filter by surface: "floor" should return all current assets.
 	var floor_assets := FurnishingAssetCatalogScript.get_assets_by_surface(FurnishingAssetDefScript.SURFACE_FLOOR)
@@ -330,3 +333,128 @@ func _test_catalog_filtering() -> void:
 	assert(not campfire.is_rotation_axis_allowed("x"), "Campfire must reject X rotation")
 
 	print("  catalog filtering ok")
+
+
+## Every built-in .gdbuilding.json must be v2 — no v1 data should remain in
+## the repository after the format migration.
+func _test_builtin_blueprints_are_v2() -> void:
+	var dir_path := "res://game/features/buildings/data/blueprints"
+	var dir := DirAccess.open(dir_path)
+	assert(dir != null, "Blueprints directory must exist")
+	var found_count := 0
+	dir.list_dir_begin()
+	var file_name := dir.get_next()
+	while file_name != "":
+		if file_name.ends_with(".gdbuilding.json"):
+			found_count += 1
+			var full_path := dir_path.path_join(file_name)
+			var text := FileAccess.get_file_as_string(full_path)
+			assert(not text.is_empty(), "Blueprint file %s must be readable" % file_name)
+			var json := JSON.new()
+			assert(json.parse(text) == OK, "Blueprint %s must be valid JSON" % file_name)
+			var data: Dictionary = json.data
+			assert(int(data.get("version", 0)) == 2,
+				"Built-in blueprint %s must be v2, got version %d" % [file_name, int(data.get("version", 0))])
+			# v2 objects must use appearance, not properties.
+			var objects: Array = data.get("objects", [])
+			for obj in objects:
+				assert(not obj.has("properties"),
+					"v2 blueprint %s object %s must not have legacy 'properties' key" % [file_name, obj.get("id", "")])
+				assert(not obj.has("anchor"),
+					"v2 blueprint %s object %s must not have legacy 'anchor' key" % [file_name, obj.get("id", "")])
+				assert(obj.has("appearance"),
+					"v2 blueprint %s object %s must have 'appearance' key" % [file_name, obj.get("id", "")])
+			assert(data.has("fixtures"), "v2 blueprint %s must have 'fixtures' key" % file_name)
+		file_name = dir.get_next()
+	dir.list_dir_end()
+	assert(found_count >= 6, "Expected at least 6 built-in blueprints, found %d" % found_count)
+	print("  builtin blueprints v2 ok (%d files)" % found_count)
+
+
+## A decor object with a known asset must be validated against the asset's
+## scale, rotation and collision policy constraints.
+func _test_asset_validation_with_known_asset() -> void:
+	var campfire := FurnishingAssetCatalogScript.get_asset(&"campfire")
+	assert(campfire != null, "Campfire asset must exist")
+
+	# Locked scale: scale 2.0 must be rejected.
+	var bad_scale := DecorObjectRecordScript.make(&"campfire", Vector3.ZERO, 1)
+	bad_scale.scale = Vector3(2.0, 2.0, 2.0)
+	var errors := bad_scale.validation_errors_with_asset(campfire)
+	assert(errors.any(func(e: String): return e.contains("scale") and e.contains("not allowed")),
+		"Scale 2.0 on locked campfire must be rejected")
+
+	# Non-uniform scale must be rejected.
+	var bad_nonuniform := DecorObjectRecordScript.make(&"campfire", Vector3.ZERO, 2)
+	bad_nonuniform.scale = Vector3(1.0, 2.0, 1.0)
+	errors = bad_nonuniform.validation_errors_with_asset(campfire)
+	assert(errors.any(func(e: String): return e.contains("non-uniform scale")),
+		"Non-uniform scale must be rejected")
+
+	# X-axis rotation on a Y-only asset must be rejected.
+	var bad_rot := DecorObjectRecordScript.make(&"campfire", Vector3.ZERO, 3)
+	bad_rot.rot = Vector3(45.0, 0.0, 0.0)
+	errors = bad_rot.validation_errors_with_asset(campfire)
+	assert(errors.any(func(e: String): return e.contains("X axis") and e.contains("not allow")),
+		"X-axis rotation on Y-only asset must be rejected")
+
+	# Valid object: scale 1.0, Y-only rotation.
+	var good := DecorObjectRecordScript.make(&"campfire", Vector3.ZERO, 4)
+	good.scale = Vector3.ONE
+	good.rot = Vector3(0.0, 90.0, 0.0)
+	errors = good.validation_errors_with_asset(campfire)
+	assert(errors.is_empty(), "Valid campfire object must have no errors, got: " + str(errors))
+
+	# Unknown asset: must not produce asset-specific errors.
+	var unknown := DecorObjectRecordScript.make(&"not_installed", Vector3.ZERO, 5)
+	errors = unknown.validation_errors_with_asset(null)
+	assert(errors.is_empty(), "Unknown asset must not produce asset-specific errors")
+	print("  asset validation ok")
+
+
+## Legacy is_lit appearance key must migrate to visual_flame_visible on load.
+func _test_is_lit_migration_to_visual_flame_visible() -> void:
+	var data := {
+		"id": "decor_test_lit_migration",
+		"asset_id": "campfire",
+		"owner_zone": "",
+		"pos": [0.0, 0.0, 0.0],
+		"rot": [0.0, 0.0, 0.0],
+		"scale": [1.0, 1.0, 1.0],
+		"appearance": {"is_lit": false, "light_color": "ffaa44"},
+	}
+	var record := DecorObjectRecordScript.from_dict(data)
+	assert(not record.appearance.has("is_lit"), "is_lit must be migrated away")
+	assert(record.appearance.has("visual_flame_visible"), "visual_flame_visible must be present")
+	assert(record.appearance["visual_flame_visible"] == false, "is_lit value must be preserved")
+	assert(record.appearance["light_color"] == "ffaa44", "other appearance keys must be preserved")
+	print("  is_lit migration ok")
+
+
+## Era filter must use cumulative progression: a tent-era asset must appear in
+## wood and stone era filters, not only in tent.
+func _test_era_cumulative_progression() -> void:
+	var tent_assets := FurnishingAssetCatalogScript.get_assets_by_era(&"tent")
+	var wood_assets := FurnishingAssetCatalogScript.get_assets_by_era(&"wood")
+	var stone_assets := FurnishingAssetCatalogScript.get_assets_by_era(&"stone")
+	assert(tent_assets.size() >= 4, "Tent era must have at least 4 assets")
+	assert(wood_assets.size() >= tent_assets.size(),
+		"Wood era must include all tent-era assets (cumulative), got %d vs %d" % [wood_assets.size(), tent_assets.size()])
+	assert(stone_assets.size() >= tent_assets.size(),
+		"Stone era must include all tent-era assets (cumulative), got %d vs %d" % [stone_assets.size(), tent_assets.size()])
+	# filter_assets must also use cumulative progression.
+	var stone_filtered := FurnishingAssetCatalogScript.filter_assets(&"", &"", &"stone", "")
+	assert(stone_filtered.size() >= tent_assets.size(),
+		"filter_assets with stone era must include tent-era assets")
+	print("  era cumulative progression ok")
+
+
+## Legacy category names must be migrated by migrate_category.
+func _test_category_migration() -> void:
+	assert(FurnishingAssetCatalogScript.migrate_category(&"furniture") == &"tables_seating",
+		"Legacy 'furniture' must migrate to 'tables_seating'")
+	assert(FurnishingAssetCatalogScript.migrate_category(&"lighting") == &"lighting",
+		"'lighting' maps to itself")
+	assert(FurnishingAssetCatalogScript.migrate_category(&"camping") == &"camping",
+		"Unknown legacy category returns itself")
+	print("  category migration ok")

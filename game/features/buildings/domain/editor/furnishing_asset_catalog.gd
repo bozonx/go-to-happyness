@@ -10,6 +10,7 @@ extends RefCounted
 ##   3. player-authored resources under `user://custom_decor`.
 
 const FurnishingAssetDefScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_def.gd")
+const BuildingMaterialCatalogScript = preload("res://game/features/buildings/domain/editor/building_material_catalog.gd")
 
 const BUILTIN_ASSET_DIR := "res://game/features/buildings/data/decor"
 const CUSTOM_ASSET_DIR := "user://custom_decor"
@@ -90,6 +91,12 @@ static func has_asset(id: StringName) -> bool:
 	return _assets.has(id)
 
 
+## Returns the migrated category for a legacy category id, or the original
+## category if no migration is needed.
+static func migrate_category(category_id: StringName) -> StringName:
+	return MIGRATED_CATEGORIES.get(category_id, category_id)
+
+
 ## How many assets each category holds — the editor greys out empty categories
 ## instead of dropping the author into a blank list.
 static func category_counts() -> Dictionary:
@@ -144,13 +151,18 @@ static func get_assets_by_tag(tag: StringName) -> Array[FurnishingAssetDefScript
 
 
 ## Filter assets by era (design §5.2). Returns all assets if era is empty.
+## An asset is available when its `available_from_era` rank is at or below the
+## selected era's rank — cumulative progression, not exact equality.
 static func get_assets_by_era(era: StringName) -> Array[FurnishingAssetDefScript]:
 	_ensure_catalog()
 	if era == &"":
 		return get_all_assets()
+	var era_rank := BuildingMaterialCatalogScript.era_rank(era)
 	var list: Array[FurnishingAssetDefScript] = []
 	for asset: FurnishingAssetDefScript in _assets.values():
-		if asset.available_from_era == &"" or asset.available_from_era == era:
+		if asset.available_from_era == &"":
+			list.append(asset)
+		elif BuildingMaterialCatalogScript.era_rank(asset.available_from_era) <= era_rank:
 			list.append(asset)
 	return list
 
@@ -183,8 +195,9 @@ static func filter_assets(
 			continue
 		if p_tag != &"" and not (p_tag in asset.tags):
 			continue
-		if p_era != &"" and asset.available_from_era != &"" and asset.available_from_era != p_era:
-			continue
+		if p_era != &"" and asset.available_from_era != &"":
+			if BuildingMaterialCatalogScript.era_rank(asset.available_from_era) > BuildingMaterialCatalogScript.era_rank(p_era):
+				continue
 		if not p_surface.is_empty() and p_surface != FurnishingAssetDefScript.SURFACE_ANY:
 			if not asset.can_place_on(p_surface):
 				continue
@@ -224,6 +237,9 @@ static func _scan_directory(dir_path: String) -> void:
 		if asset == null or asset.id == &"":
 			push_warning("FurnishingAssetCatalog: skipped invalid asset %s" % clean_name)
 			continue
+		# Migrate legacy category names so old custom assets still load.
+		if MIGRATED_CATEGORIES.has(asset.category):
+			asset.category = MIGRATED_CATEGORIES[asset.category]
 		if not CATEGORIES.has(asset.category):
 			push_warning("FurnishingAssetCatalog: asset %s has unknown category %s" % [asset.id, asset.category])
 			continue
@@ -245,7 +261,7 @@ static func _register_builtin_assets() -> void:
 		0.5,
 		[
 			{
-				"name": "is_lit", "label": "Горит", "type": "bool", "default": true,
+				"name": "visual_flame_visible", "label": "Горит", "type": "bool", "default": true,
 				"bind": [
 					{"node": "Fire", "prop": "visible"},
 					{"node": "Embers", "prop": "emitting"},
@@ -294,7 +310,7 @@ static func _register_builtin_assets() -> void:
 		0.5,
 		[
 			{
-				"name": "is_lit", "label": "Горит", "type": "bool", "default": true,
+				"name": "visual_flame_visible", "label": "Горит", "type": "bool", "default": true,
 				"bind": [
 					{"node": "Fire", "prop": "visible"},
 					{"node": "Embers", "prop": "emitting"},

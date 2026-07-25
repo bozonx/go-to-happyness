@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "id": "tent",
   "name": "Временная палатка на 4 жителя",
   "construction_style": "surface",
@@ -186,6 +186,7 @@
   "place_zones": [],
   "zone_anchors": [],
   "objects": [],
+  "fixtures": [],
   "construction_cost": {
     "grass": 16
   }

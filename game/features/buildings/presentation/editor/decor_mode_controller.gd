@@ -1188,7 +1188,9 @@ func _update_zone_highlight() -> void:
 	if zone_cells.is_empty():
 		return
 	# Check if the object position is within the zone's cell bounds.
-	var obj_cell := Vector3i(int(round(record.pos.x)), int(round(record.pos.y)), int(round(record.pos.z)))
+	# floor maps cell-centre positions (e.g. 1.5) to the correct cell (1),
+	# while round would snap 1.5 to 2 — a false out-of-zone warning.
+	var obj_cell := Vector3i(int(floor(record.pos.x)), int(floor(record.pos.y)), int(floor(record.pos.z)))
 	var in_zone := false
 	for cell in zone_cells:
 		if cell == obj_cell:
@@ -1391,13 +1393,35 @@ func _replace_selected_object() -> void:
 			if not found:
 					lost_count += 1
 	_push_undo()
+	var old_appearance := record.appearance.duplicate(true)
 	record.asset_id = new_asset.id
 	record.appearance = new_asset.default_appearance()
-	# Try to carry over compatible properties.
+	# Carry over compatible properties: keys that exist in the new asset's
+	# appearance_controls with a matching type, preserving the old value.
 	if old_asset != null:
-		for key in record.appearance.keys():
-			# Properties already set by default_appearance; nothing to carry.
-			pass
+		var new_controls_by_name: Dictionary = {}
+		for control in new_asset.appearance_controls:
+			new_controls_by_name[String(control.get("name", ""))] = control
+		for key in old_appearance.keys():
+			var key_str := String(key)
+			if not new_controls_by_name.has(key_str):
+				continue
+			var new_control: Dictionary = new_controls_by_name[key_str]
+			var new_type := String(new_control.get("type", "string"))
+			var old_value: Variant = old_appearance[key]
+			# Type compatibility check: bool, float, string, color (stored as html string).
+			var compatible := false
+			match new_type:
+				FurnishingAssetDefScript.TYPE_BOOL:
+					compatible = old_value is bool
+				FurnishingAssetDefScript.TYPE_FLOAT:
+					compatible = old_value is float or old_value is int
+				FurnishingAssetDefScript.TYPE_COLOR:
+					compatible = old_value is String or old_value is Color
+				_:
+					compatible = old_value is String
+			if compatible:
+				record.appearance[key_str] = old_value
 	_spawn_node_for_existing(record)
 	_editor.mark_dirty()
 	_refresh_object_list()
