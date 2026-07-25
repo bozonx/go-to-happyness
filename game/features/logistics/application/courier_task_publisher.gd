@@ -34,6 +34,7 @@ var _construction_material_sources: Callable
 var _construction_source_available: Callable
 var _fire_state_for: Callable
 var _firewood_task_priority: Callable
+var _is_managed_fire_source: Callable
 
 
 func configure(
@@ -63,7 +64,8 @@ func configure(
 	p_construction_material_sources: Callable,
 	p_construction_source_available: Callable,
 	p_fire_state_for: Callable,
-	p_firewood_task_priority: Callable
+	p_firewood_task_priority: Callable,
+	p_is_managed_fire_source: Callable
 ) -> void:
 	_settlement = p_settlement
 	_citizens = p_citizens
@@ -92,6 +94,7 @@ func configure(
 	_construction_source_available = p_construction_source_available
 	_fire_state_for = p_fire_state_for
 	_firewood_task_priority = p_firewood_task_priority
+	_is_managed_fire_source = p_is_managed_fire_source
 
 
 func publish_courier_tasks(dispatcher: RefCounted) -> void:
@@ -218,9 +221,13 @@ func publish_courier_tasks(dispatcher: RefCounted) -> void:
 			var fire_building: Node3D = record.node as Node3D
 			if not is_instance_valid(fire_building):
 				continue
-			var building_type: String = record.building_type
-			if not BuildingTypes.is_fire_source(building_type):
-				continue
+			if _is_managed_fire_source.is_valid():
+				if not _is_managed_fire_source.call(fire_building):
+					continue
+			else:
+				var building_type: String = record.building_type
+				if not BuildingTypes.is_fire_source(building_type):
+					continue
 			var fire_state = _fire_state_for.call(fire_building)
 			if not fire_state.needs_supply(4) or _settlement.amount(ResourceIds.BRANCHES) <= 0:
 				continue

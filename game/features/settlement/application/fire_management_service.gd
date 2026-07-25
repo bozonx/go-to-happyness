@@ -78,6 +78,15 @@ func fire_state_for(building: Node3D) -> RefCounted:
 func is_managed_fire_source(building: Node3D) -> bool:
 	if not is_instance_valid(building):
 		return false
+	# A building is a managed fire source when it has at least one fire_source
+	# fixture in the fixture service. This replaces the legacy building-type
+	# check (BuildingTypes.is_fire_source) with explicit fixture ownership.
+	if fixture_service != null:
+		var building_id := _building_instance_id(building)
+		if not building_id.is_empty():
+			return not fixture_service.fixtures_with_capability(building_id, FixtureDefinitionScript.CAP_FIRE_SOURCE).is_empty()
+	# Legacy fallback: buildings without a building_instance_id (should not
+	# happen for constructed buildings, but kept for safety).
 	return BuildingTypes.is_fire_source(building_registry.building_type_for_node(building))
 
 func apply_fire_state(building: Node3D, fire_state: RefCounted) -> void:
@@ -130,7 +139,7 @@ func update_fire_status(host_node: Node, branches_count: int) -> void:
 	if building_registry != null:
 		for record in building_registry.records():
 			var building: Node3D = record.node
-			if not is_instance_valid(building) or not BuildingTypes.is_fire_source(record.building_type):
+			if not is_instance_valid(building) or not is_managed_fire_source(building):
 				continue
 			var fire_state := fire_state_for(building)
 			if consume_tick and fire_state.is_burning_at(minute):

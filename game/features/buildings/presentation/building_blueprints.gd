@@ -538,7 +538,13 @@ static func _campfire_blueprint_for(building_type: String) -> Dictionary:
 		_add_civic_fire_modules(modules)
 	else:
 		_add_pioneer_fire_modules(modules)
-	return {"type": building_type, "footprint": footprint, "entrance": Vector2i(0, -3), "modules": modules}
+	return {
+		"type": building_type,
+		"footprint": footprint,
+		"entrance": Vector2i(0, -3),
+		"modules": modules,
+		"fixtures": [_fire_source_fixture_dict()],
+	}
 
 
 
@@ -603,7 +609,23 @@ static func _cook_campfire_blueprint(building_type: String) -> Dictionary:
 	for leg_angle in [0.0, 2.1, 4.2]:
 		modules.append(_module(Vector3(cos(leg_angle) * 0.5, 0.75, sin(leg_angle) * 0.5), Vector3(0.08, 1.5, 0.08), "tripod", Color("3a3a3a"), Vector3(0.0, 0.0, 18.0)))
 	modules.append(_module(Vector3(0.0, 0.85, 0.0), Vector3(0.7, 0.55, 0.7), "pot", Color("2c2c2c")))
-	return {"type": building_type, "footprint": footprint, "entrance": Vector2i(0, -1), "modules": modules}
+	return {
+		"type": building_type,
+		"footprint": footprint,
+		"entrance": Vector2i(0, -1),
+		"modules": modules,
+		"fixtures": [_fire_source_fixture_dict()],
+	}
+
+
+static func _fire_source_fixture_dict() -> Dictionary:
+	return {
+		"id": "fire_source",
+		"capabilities": ["fire_source"],
+		"owner_zone": "",
+		"visual_object": "",
+		"runtime_defaults": {"lit": true, "fuel": 4, "fuel_capacity": 8},
+	}
 
 
 static func worker_entrance_offsets(building_type: String) -> Array[Vector2i]:

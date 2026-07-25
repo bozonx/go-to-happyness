@@ -607,6 +607,26 @@ layout_mode = 2
 theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
 autowrap_mode = 2
 
+[node name="ZoneReqSep" type="HSeparator" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+layout_mode = 2
+
+[node name="ZoneReqTitle" type="Label" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+layout_mode = 2
+text = "Требования зон"
+theme_override_colors/font_color = Color(0.8, 0.75, 0.5, 1)
+
+[node name="ZoneReqChecklist" type="VBoxContainer" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="ZoneReqEmptyLabel" type="Label" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox/ZoneReqChecklist"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
+theme_override_font_sizes/font_size = 12
+text = "Нет требований для текущих зон."
+
 [node name="DecorPanel" type="PanelContainer" parent="EditorUI/Root"]
 unique_name_in_owner = true
 visible = false

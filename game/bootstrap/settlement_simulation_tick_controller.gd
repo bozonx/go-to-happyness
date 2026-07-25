@@ -36,7 +36,7 @@ func is_citizen_work_time(citizen: Citizen) -> bool:
 func has_lit_communal_fire() -> bool:
 	for record in game.building_registry.records():
 		var building: Node3D = record.node
-		if is_instance_valid(building) and BuildingTypes.is_fire_source(record.building_type) and game._is_fire_lit(building):
+		if is_instance_valid(building) and game.fire_management_service.is_managed_fire_source(building) and game._is_fire_lit(building):
 			return true
 	return false
 

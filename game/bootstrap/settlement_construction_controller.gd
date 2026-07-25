@@ -89,11 +89,6 @@ func complete_building(cell: Vector2i, building_type: String, position_on_board:
 			building.set_meta("fire_lit", first_fire.fire_state.lit)
 			building.set_meta("fire_embers_until", first_fire.fire_state.embers_until_minute)
 			building.set_meta("fire_phase", "burning")
-	elif BuildingTypes.is_fire_source(building_type):
-		building.set_meta("fire_fuel", 4)
-		building.set_meta("fire_lit", true)
-		building.set_meta("fire_embers_until", -1)
-		building.set_meta("fire_phase", "burning")
 	if game._is_staffed_workplace(building):
 		game.workplace_priority_counter += 1
 		building.set_meta("accepting_workers", true)

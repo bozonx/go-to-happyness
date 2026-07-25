@@ -16,6 +16,7 @@ const BuildingMaterialCatalogScript = preload("res://game/features/buildings/dom
 const DecorObjectRecordScript = preload("res://game/features/buildings/domain/editor/decor_object_record.gd")
 const FurnishingAssetCatalogScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_catalog.gd")
 const FixtureDefinitionScript = preload("res://game/features/buildings/domain/editor/fixture_definition.gd")
+const ZoneRequirementsScript = preload("res://game/features/buildings/domain/editor/zone_requirements.gd")
 
 const FORMAT_VERSION := 2
 const MIN_LOAD_VERSION := 1
@@ -384,7 +385,55 @@ func validation_errors() -> Array[String]:
 			if visual_refs.has(fixture.visual_object_id):
 				errors.append("Two fixtures reference the same visual object: %s" % fixture.visual_object_id)
 			visual_refs[fixture.visual_object_id] = true
+	# Zone requirements: each zone kind may require specific capabilities.
+	# A requirement is satisfied when at least one fixture assigned to that
+	# zone (or building-wide when owner_zone_id is empty) provides the capability.
+	var building_wide_caps: Array[StringName] = []
+	for fixture in fixtures:
+		if fixture.owner_zone_id == &"":
+			building_wide_caps.append_array(fixture.capabilities)
+	for zone in place_zones:
+		var required := ZoneRequirementsScript.required_capabilities_for_zone(zone)
+		if required.is_empty():
+			continue
+		var zone_caps: Array[StringName] = []
+		zone_caps.append_array(building_wide_caps)
+		for fixture in fixtures:
+			if fixture.owner_zone_id == zone.zone_id:
+				zone_caps.append_array(fixture.capabilities)
+		for cap in required:
+			if not (cap in zone_caps):
+				errors.append("Zone %s requires capability %s but no fixture provides it" % [zone.zone_id, cap])
 	return errors
+
+
+## Returns a structured checklist of zone requirements for the editor UI.
+## Each entry: {zone_id, zone_name, capability, label, satisfied, is_runtime}
+func zone_requirements_checklist() -> Array[Dictionary]:
+	var checklist: Array[Dictionary] = []
+	var building_wide_caps: Array[StringName] = []
+	for fixture in fixtures:
+		if fixture.owner_zone_id == &"":
+			building_wide_caps.append_array(fixture.capabilities)
+	for zone in place_zones:
+		var required := ZoneRequirementsScript.required_capabilities_for_zone(zone)
+		if required.is_empty():
+			continue
+		var zone_caps: Array[StringName] = []
+		zone_caps.append_array(building_wide_caps)
+		for fixture in fixtures:
+			if fixture.owner_zone_id == zone.zone_id:
+				zone_caps.append_array(fixture.capabilities)
+		for cap in required:
+			checklist.append({
+				"zone_id": String(zone.zone_id),
+				"zone_name": zone.zone_name,
+				"capability": cap,
+				"label": ZoneRequirementsScript.capability_label(cap),
+				"satisfied": cap in zone_caps,
+				"is_runtime": ZoneRequirementsScript.is_runtime_capability(cap),
+			})
+	return checklist
 
 
 ## Splits a legacy `work_zones[]` entry into a place zone plus its slots/trays.

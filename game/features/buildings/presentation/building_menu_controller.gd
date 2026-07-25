@@ -231,7 +231,7 @@ func show_building_menu() -> void:
 		simulation.ui_manager.building_cancel_construction_button.visible = false
 		var is_demolishable: bool = BuildingCatalogScript.is_demolishable(building_type) and simulation.selected_building != simulation.entrance_stone
 		simulation.ui_manager.building_demolish_button.visible = is_demolishable
-		simulation.ui_manager.building_relight_button.visible = BuildingTypes.is_fire_source(building_type) and not simulation._is_fire_lit(simulation.selected_building)
+		simulation.ui_manager.building_relight_button.visible = simulation.fire_management_service != null and simulation.fire_management_service.is_managed_fire_source(simulation.selected_building) and not simulation._is_fire_lit(simulation.selected_building)
 
 		var officer: Variant = simulation._workplace_worker(simulation.selected_building)
 		simulation.ui_manager.building_overtime_button.visible = is_workplace and officer != null

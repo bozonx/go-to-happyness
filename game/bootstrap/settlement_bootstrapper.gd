@@ -577,7 +577,8 @@ func _setup_courier_system() -> void:
 		game._construction_material_sources,
 		game._construction_source_available,
 		game._fire_state_for,
-		game._firewood_task_priority
+		game._firewood_task_priority,
+		func(building: Node3D) -> bool: return game.fire_management_service.is_managed_fire_source(building)
 	)
 	game.courier_task_service = SettlementGame.CourierTaskServiceScript.new()
 	game.courier_task_service.configure(

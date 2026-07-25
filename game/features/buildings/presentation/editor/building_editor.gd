@@ -20,6 +20,8 @@ const ZoneAnchorRecordScript = preload("res://game/features/buildings/domain/edi
 const BlueprintRepositoryScript = preload("res://game/features/buildings/presentation/editor/blueprint_repository.gd")
 const BlockMeshLibraryScript = preload("res://game/features/buildings/presentation/editor/block_mesh_library.gd")
 const DecorModeControllerScript = preload("res://game/features/buildings/presentation/editor/decor_mode_controller.gd")
+const FixtureDefinitionScript = preload("res://game/features/buildings/domain/editor/fixture_definition.gd")
+const ZoneRequirementsScript = preload("res://game/features/buildings/domain/editor/zone_requirements.gd")
 
 enum Tool { PLACE, ERASE }
 enum Brush { LINE, RECT }
@@ -139,6 +141,8 @@ var _ghost_valid: bool = false
 @onready var _zone_profession_option: OptionButton = %ZoneProfessionOption
 @onready var _zone_workers_spin: SpinBox = %ZoneWorkersSpin
 @onready var _zone_info_label: Label = %ZoneInfoLabel
+@onready var _zone_req_checklist: VBoxContainer = %ZoneReqChecklist
+@onready var _zone_req_empty_label: Label = %ZoneReqEmptyLabel
 @onready var _anchor_family_option: OptionButton = %AnchorFamilyOption
 @onready var _anchor_role_option: OptionButton = %AnchorRoleOption
 @onready var _anchor_world_check: CheckBox = %AnchorWorldCheck
@@ -774,6 +778,7 @@ func _select_mode(mode: int) -> void:
 		if mode == EditMode.ZONES:
 			_set_tool(Tool.PLACE)
 			_refresh_zone_visuals()
+			_refresh_zone_requirements_checklist()
 			_update_status("Режим зон: создайте зону и расставьте якоря работы / поддоны.")
 		else:
 			_update_status("Режим каркаса.")
@@ -1292,6 +1297,67 @@ func _update_zone_info() -> void:
 		subtype_line = "\nТип: %s" % PlaceZoneRecordScript.subtype_display_name(place.subtype)
 	_zone_info_label.text = "Ячеек: %d · Слотов: %d · Поддонов: %d · Маршрут: %d\nМировых якорей: %d · ID: %s%s" % [
 		place.cells.size(), owned, trays, routing, world, place.zone_id, subtype_line]
+	_refresh_zone_requirements_checklist()
+
+
+## Auto-creates required runtime fixtures for a zone when its kind/profession
+## changes. Only creates fixtures for capabilities backed by a runtime schema
+## (is_runtime_capability). Non-runtime caps (bed, storage_*) are shown in the
+## checklist but not auto-created. Does not duplicate existing fixtures that
+## already satisfy the requirement.
+func _ensure_zone_fixtures(zone: PlaceZoneRecordScript) -> void:
+	if blueprint == null or zone == null:
+		return
+	var required := ZoneRequirementsScript.required_capabilities_for_zone(zone)
+	if required.is_empty():
+		return
+	# Collect capabilities already provided by fixtures assigned to this zone
+	# or building-wide.
+	var existing_caps: Array[StringName] = []
+	for fixture in blueprint.fixtures:
+		if fixture.owner_zone_id == zone.zone_id or fixture.owner_zone_id == &"":
+			existing_caps.append_array(fixture.capabilities)
+	for cap in required:
+		if cap in existing_caps:
+			continue
+		if not ZoneRequirementsScript.is_runtime_capability(cap):
+			continue
+		# Only fire_source has a runtime schema in Phase 2B.
+		if cap == FixtureDefinitionScript.CAP_FIRE_SOURCE:
+			var fixture := FixtureDefinitionScript.new()
+			fixture.id = StringName("%s_%s" % [String(zone.zone_id), String(cap)])
+			fixture.capabilities = [cap]
+			fixture.owner_zone_id = zone.zone_id
+			fixture.runtime_defaults = {"lit": true, "fuel": 4, "fuel_capacity": 8}
+			blueprint.fixtures.append(fixture)
+			_mark_dirty()
+
+
+func _refresh_zone_requirements_checklist() -> void:
+	if _zone_req_checklist == null:
+		return
+	for child in _zone_req_checklist.get_children():
+		child.queue_free()
+	if blueprint == null:
+		return
+	var checklist: Array[Dictionary] = blueprint.zone_requirements_checklist()
+	if checklist.is_empty():
+		if _zone_req_empty_label != null:
+			_zone_req_empty_label.visible = true
+		return
+	if _zone_req_empty_label != null:
+		_zone_req_empty_label.visible = false
+	for entry in checklist:
+		var label := Label.new()
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		var mark := "✓" if entry.satisfied else "✗"
+		var color := Color(0.4, 0.8, 0.4) if entry.satisfied else Color(0.9, 0.5, 0.4)
+		if not entry.is_runtime and not entry.satisfied:
+			color = Color(0.7, 0.65, 0.4)
+		label.text = "%s %s — %s" % [mark, entry.zone_name, entry.label]
+		label.add_theme_color_override("font_color", color)
+		label.add_theme_font_size_override("font_size", 12)
+		_zone_req_checklist.add_child(label)
 
 
 func _on_place_name_changed(text: String) -> void:
@@ -1327,6 +1393,7 @@ func _on_place_kind_selected(index: int) -> void:
 	place.subtype = subtypes[0] if not subtypes.is_empty() else &""
 	_mark_dirty()
 	_rebuild_subtype_options()
+	_ensure_zone_fixtures(place)
 	_update_zone_info()
 	_update_fallback_display()
 
@@ -1364,6 +1431,8 @@ func _on_place_profession_selected(index: int) -> void:
 		return
 	place.profession = _zone_profession_option.get_item_metadata(index)
 	_mark_dirty()
+	_ensure_zone_fixtures(place)
+	_update_zone_info()
 	_update_fallback_display()
 
 

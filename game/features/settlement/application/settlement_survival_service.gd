@@ -145,7 +145,7 @@ func apply_rain_damage() -> void:
 		_settlement.add(resource_type, -int(losses[resource_type]))
 	for record in _building_registry.records():
 		var building: Node3D = record.node
-		if is_instance_valid(building) and BuildingTypes.is_fire_source(record.building_type):
+		if is_instance_valid(building) and _fire_management_service.is_managed_fire_source(building):
 			var fire_state: RefCounted = _fire_management_service.fire_state_for(building)
 			fire_state.lit = false
 			_fire_management_service.apply_fire_state(building, fire_state)

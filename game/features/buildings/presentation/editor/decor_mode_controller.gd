@@ -17,6 +17,7 @@ const FurnishingAssetDefScript = preload("res://game/features/buildings/domain/e
 const DecorObjectRecordScript = preload("res://game/features/buildings/domain/editor/decor_object_record.gd")
 const FixtureDefinitionScript = preload("res://game/features/buildings/domain/editor/fixture_definition.gd")
 const FireSourceDefaultsScript = preload("res://game/features/buildings/domain/editor/fire_source_defaults.gd")
+const ZoneRequirementsScript = preload("res://game/features/buildings/domain/editor/zone_requirements.gd")
 
 enum Tool { PLACE, SELECT, ERASE }
 
@@ -535,6 +536,11 @@ func _erase_object(object_id: String) -> void:
 	_refresh_object_list()
 	if selected_object_id == object_id:
 		select_object("")
+	# Warn if a fixture referenced this visual object.
+	for f in _editor.blueprint.fixtures:
+		if f.visual_object_id == object_id:
+			_editor.set_status("ВНИМАНИЕ: объект «%s» использовался fixture «%s»." % [object_id, String(f.id)])
+			break
 
 
 func delete_selection() -> void:
@@ -1649,11 +1655,59 @@ func _add_fixture() -> void:
 func _delete_fixture() -> void:
 	if _selected_fixture_index < 0 or _selected_fixture_index >= _editor.blueprint.fixtures.size():
 		return
+	var fixture: FixtureDefinitionScript = _editor.blueprint.fixtures[_selected_fixture_index]
+	# Check if deleting this fixture would violate zone requirements.
+	var warning := _fixture_deletion_warning(fixture)
+	if not warning.is_empty():
+		_editor.set_status("ВНИМАНИЕ: %s" % warning)
 	_editor.blueprint.fixtures.remove_at(_selected_fixture_index)
 	_selected_fixture_index = mini(_selected_fixture_index, _editor.blueprint.fixtures.size() - 1)
 	_editor.mark_dirty()
 	_refresh_fixture_list()
-	_editor.set_status("Fixture удалён.")
+	if warning.is_empty():
+		_editor.set_status("Fixture удалён.")
+	else:
+		_editor.set_status("Fixture удалён. ВНИМАНИЕ: %s" % warning)
+
+
+## Returns a warning message if removing the fixture would leave a zone
+## without a required capability. Empty string if no violation.
+func _fixture_deletion_warning(fixture: FixtureDefinitionScript) -> String:
+	if fixture.owner_zone_id == &"":
+		# Building-wide fixture: check all zones that have requirements.
+		for zone in _editor.blueprint.place_zones:
+			var required := ZoneRequirementsScript.required_capabilities_for_zone(zone)
+			for cap in required:
+				if not cap in fixture.capabilities:
+					continue
+				# Check if any other fixture still provides this cap for this zone.
+				if not _zone_has_capability(zone.zone_id, cap, fixture):
+					return "Зона «%s» останется без %s" % [zone.zone_name, ZoneRequirementsScript.capability_label(cap)]
+		return ""
+	# Zone-specific fixture: find the zone.
+	for zone in _editor.blueprint.place_zones:
+		if zone.zone_id != fixture.owner_zone_id:
+			continue
+		var required := ZoneRequirementsScript.required_capabilities_for_zone(zone)
+		for cap in required:
+			if not cap in fixture.capabilities:
+				continue
+			if not _zone_has_capability(zone.zone_id, cap, fixture):
+				return "Зона «%s» останется без %s" % [zone.zone_name, ZoneRequirementsScript.capability_label(cap)]
+		return ""
+	return ""
+
+
+## Returns true if any fixture (other than `exclude`) provides `cap` to the
+## given zone (either zone-specific or building-wide).
+func _zone_has_capability(zone_id: StringName, cap: StringName, exclude: FixtureDefinitionScript) -> bool:
+	for f in _editor.blueprint.fixtures:
+		if f == exclude:
+			continue
+		if f.owner_zone_id == zone_id or f.owner_zone_id == &"":
+			if cap in f.capabilities:
+				return true
+	return false
 
 
 func _on_fixture_list_selected(index: int) -> void:

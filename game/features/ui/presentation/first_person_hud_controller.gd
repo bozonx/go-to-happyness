@@ -21,7 +21,7 @@ func building_action_hint(building: Node3D) -> String:
 	var building_type: String = simulation.building_registry.building_type_for_node(building)
 	var name: String = str(BuildingCatalogScript.definition_for(building_type).get("name", building_type)).capitalize()
 	var info_parts: Array[String] = []
-	if BuildingTypes.is_fire_source(building_type):
+	if simulation.fire_management_service != null and simulation.fire_management_service.is_managed_fire_source(building):
 		var fire_state = simulation._fire_state_for(building)
 		var phase: int = fire_state.phase_at(int(simulation.game_minutes))
 		var phase_label: String = ["burning", "dying", "embers", "out"][phase]
