@@ -341,11 +341,15 @@ const BLOCKS: Array = [
 	},
 	{
 		"id": &"balustrade",
-		"name": "Балюстрада 0.5м",
+		"name": "Балюстрада",
 		"category": Category.RAILING,
 		"size": Vector3(1.0, 0.5, 0.2),
 		"mesh_shape": SHAPE_BALUSTRADE,
 		"rotatable": true,
+		"variants": [
+			{"id": &"full", "name": "В полный блок", "size": Vector3(1.0, 1.0, 0.2)},
+			{"id": &"half", "name": "В полблока", "size": Vector3(1.0, 0.5, 0.2)},
+		],
 	},
 ]
 

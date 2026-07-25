@@ -364,8 +364,8 @@ func _build_balustrade(size: Vector3, balusters: int = 7) -> ArrayMesh:
 	var hx := size.x * 0.5
 	var hy := size.y * 0.5
 	var t := minf(size.z * 0.5, 0.09)        # half-thickness of the members
-	var plinth_h := size.y * 0.16            # bottom kerb height
-	var coping_h := size.y * 0.2             # top rail height
+	var plinth_h := 0.16                     # bottom kerb height (same as full balustrade)
+	var coping_h := 0.20                     # top rail height (same as full balustrade)
 	# Bottom plinth and top coping span the full width.
 	_add_box(st, Vector3(-hx, -hy, -t), Vector3(hx, -hy + plinth_h, t))
 	_add_box(st, Vector3(-hx, hy - coping_h, -t), Vector3(hx, hy, t))
