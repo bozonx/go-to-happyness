@@ -948,7 +948,7 @@ func _setup_ui() -> void:
 	)
 
 	_path_hint_label.text = "Сохранение → %s" % repository.base_dir()
-
+	_back_btn.visible = not dev_mode
 	if dev_mode:
 		_export_mesh_btn.visible = true
 		_navmesh_preview_btn.visible = true

@@ -83,6 +83,24 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "← В меню"
 
+[node name="NewBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "📄"
+tooltip_text = "Создать новый чертёж"
+
+[node name="LoadBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "📂"
+tooltip_text = "Открыть существующий чертёж"
+
+[node name="SaveBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "💾"
+tooltip_text = "Сохранить текущий чертёж"
+
 [node name="VSep1" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox"]
 layout_mode = 2
 
@@ -192,24 +210,6 @@ tooltip_text = "Слой выше (PageUp)"
 [node name="Spacer" type="Control" parent="EditorUI/Root/TopBar/Margin/HBox"]
 layout_mode = 2
 size_flags_horizontal = 3
-
-[node name="NewBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "📄"
-tooltip_text = "Создать новый чертёж"
-
-[node name="LoadBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "📂"
-tooltip_text = "Открыть существующий чертёж"
-
-[node name="SaveBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "💾"
-tooltip_text = "Сохранить текущий чертёж"
 
 [node name="PalettePanel" type="PanelContainer" parent="EditorUI/Root"]
 unique_name_in_owner = true
