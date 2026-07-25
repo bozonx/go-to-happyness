@@ -43,9 +43,10 @@ func _ready() -> void:
 
 func _apply(s: Dictionary) -> void:
 	sun.rotation_degrees = s["sun_deg"]
-	var horizon := Color("6fa9d6")
-	sky_material.set_shader_parameter("u_horizon_color", horizon)
-	sky_material.set_shader_parameter("u_zenith_color", horizon.darkened(0.18))
+	# Mirrors the three-point daytime palette the weather controller drives.
+	sky_material.set_shader_parameter("u_horizon_color", SkyAndWeatherController.SKY_DAY_HORIZON)
+	sky_material.set_shader_parameter("u_mid_color", SkyAndWeatherController.SKY_DAY_MID)
+	sky_material.set_shader_parameter("u_zenith_color", SkyAndWeatherController.SKY_DAY_ZENITH)
 	sky_material.set_shader_parameter("u_sun_color", Color("fff2d1"))
 	sky_material.set_shader_parameter("u_overcast", s["overcast"])
 	sky_material.set_shader_parameter("u_solar_intensity", 1.0)

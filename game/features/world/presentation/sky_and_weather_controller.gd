@@ -54,6 +54,27 @@ const MOON_MAX_OFFSET_HOURS := 3.0
 const MOON_PHASE_AXIS_MIN := -0.30
 const MOON_PHASE_AXIS_MAX := 1.0
 const MINUTES_PER_DAY := 1440.0
+# Three-point sky palette. The gameplay camera looks down about fifty degrees, so the
+# first twenty degrees above the horizon are what the player actually sees: the
+# horizon and middle colours carry the frame, and the zenith caps the dome.
+const SKY_DAY_HORIZON := Color("74cdee")
+const SKY_DAY_MID := Color("3f9fe4")
+const SKY_DAY_ZENITH := Color("1f63cf")
+# Night deepens upward. The previous code blended the zenith toward the bright day
+# blue at every hour, which left the night sky brighter overhead than at the horizon
+# and drowned the stars in it.
+const SKY_NIGHT_HORIZON := Color("1b2740")
+const SKY_NIGHT_MID := Color("101a2b")
+const SKY_NIGHT_ZENITH := Color("070c18")
+# Twilight lilac, mixed into the middle band and barely into the zenith. The warm half
+# of a dusk is painted around the sun by the shader; the rest of the dome stays cool,
+# which is what gives the sky a direction at sunset.
+const SKY_TWILIGHT_MID := Color("6d6ab0")
+# Milky turquoise horizon haze. Mixing toward a lightened grey, as before, desaturated
+# the one band of sky that is always on screen and is what made clear days read flat.
+const HAZE_CLEAR_COLOR := Color("bfeef7")
+# One turn of the celestial sphere per day, so the stars trace an arc across a night.
+const STAR_ROTATION_PER_DAY := TAU
 # Cool blue night key light. Low enough to stay a mood, high enough to cast the
 # soft shadows that a moonlit night reads by.
 const MOON_LIGHT_ENERGY := 0.17
@@ -271,12 +292,21 @@ func update_daylight(
 		moon_phase_axis
 	)
 	if sky_material != null:
-		var sky_horizon := base_background.lerp(overcast_color, murk)
-		# Clear (non-murky) skies deepen toward a saturated anime blue at the zenith,
-		# even when busy with fair-weather clouds; only murk flattens it to grey.
-		var deep_zenith := Color("2b6fd6")
-		var sky_zenith := sky_horizon.darkened(0.22).lerp(deep_zenith, (1.0 - murk) * 0.6)
+		# How far the palette has crossed from night to day. The range straddles the
+		# horizon so the sky is still half-lit at the moment the sun touches it.
+		var sky_day := smoothstep(-0.20, 0.16, solar_height)
+		var sky_horizon := SKY_NIGHT_HORIZON.lerp(SKY_DAY_HORIZON, sky_day)
+		var sky_mid := SKY_NIGHT_MID.lerp(SKY_DAY_MID, sky_day)
+		var sky_zenith := SKY_NIGHT_ZENITH.lerp(SKY_DAY_ZENITH, sky_day)
+		sky_mid = sky_mid.lerp(SKY_TWILIGHT_MID, twilight * 0.30)
+		sky_zenith = sky_zenith.lerp(SKY_TWILIGHT_MID, twilight * 0.12)
+		# Only murk flattens the dome to grey; fair-weather cloud, however busy, leaves
+		# the blue saturated.
+		sky_horizon = sky_horizon.lerp(overcast_color, murk)
+		sky_mid = sky_mid.lerp(overcast_color, murk)
+		sky_zenith = sky_zenith.lerp(overcast_color.darkened(0.12), murk)
 		sky_material.set_shader_parameter("u_horizon_color", sky_horizon)
+		sky_material.set_shader_parameter("u_mid_color", sky_mid)
 		sky_material.set_shader_parameter("u_zenith_color", sky_zenith)
 		sky_material.set_shader_parameter("u_sun_color", sun.light_color)
 		sky_material.set_shader_parameter("u_overcast", cloud_cover)
@@ -317,17 +347,31 @@ func update_daylight(
 		var horizon_glow := Color("ff6a2a").lerp(Color("a8b8c0"), murk * 0.45)
 		sky_material.set_shader_parameter("u_horizon_glow_color", horizon_glow)
 		sky_material.set_shader_parameter("u_night_factor", cloud_night)
+		# Anti-solar dusk bands (Earth's shadow, Belt of Venus). Present only while the
+		# sun sits on the horizon, and scrubbed out by a storm front.
+		sky_material.set_shader_parameter("u_twilight", twilight * (1.0 - murk))
 		sky_material.set_shader_parameter("u_star_visibility", star_visibility)
+		# The celestial sphere turns on the same continuous clock as everything else, so
+		# scrubbing the time of day rotates the stars with it.
+		sky_material.set_shader_parameter(
+			"u_star_rotation",
+			motion_clock / MINUTES_PER_DAY * STAR_ROTATION_PER_DAY
+		)
 		# Atmospheric horizon band. Two separate contributions:
 		#   * clear-weather glow: a soft light band by day, warm at dawn/dusk, and
 		#     fully absent at clear night (day_light -> 0) so the stars sit on clean
 		#     deep blue with no grey dome.
 		#   * storm murk: a grey haze that hangs any time of day, including night.
 		var day_light := maxf(solar_intensity, twilight)
-		var haze_day := sky_horizon.lightened(0.30)
+		# Chroma-preserving: the band lightens toward a milky turquoise rather than
+		# toward grey, so the horizon reads as atmosphere instead of as a wash.
+		var haze_day := sky_horizon.lerp(HAZE_CLEAR_COLOR, 0.72 * day_light)
 		var haze_color := haze_day.lerp(Color("ff9a5c"), twilight * (1.0 - murk) * 0.7)
 		haze_color = haze_color.lerp(overcast_color.darkened(0.1), murk * 0.8)
-		var clear_haze := (0.14 + twilight * 0.40) * day_light * (1.0 - murk * 0.6)
+		# Half the previous clear-weather density: a hint of distance, not a veil. The
+		# dawn/dusk term is cut too — at full strength it whitened the whole lower half
+		# of a sunrise and buried the colour the sunrise is for.
+		var clear_haze := (0.07 + twilight * 0.26) * day_light * (1.0 - murk * 0.6)
 		var storm_haze := murk * 0.5
 		var haze_strength := clampf(clear_haze + storm_haze, 0.0, 0.85)
 		sky_material.set_shader_parameter("u_haze_color", haze_color)

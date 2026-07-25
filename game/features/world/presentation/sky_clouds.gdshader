@@ -9,17 +9,29 @@ render_mode use_debanding;
 // 4. Directional self-shadowing & warm sun rim highlights on cloud edges.
 
 // --- driven from GDScript ---------------------------------------------------
-uniform vec3 u_horizon_color : source_color = vec3(0.48, 0.75, 0.88);
-uniform vec3 u_zenith_color : source_color = vec3(0.20, 0.48, 0.78);
+uniform vec3 u_horizon_color : source_color = vec3(0.56, 0.84, 0.95);
+// Middle band of a three-point gradient. The gameplay camera looks down about fifty
+// degrees, so the visible sky is roughly dir.y in [0, 0.35]: a two-point gradient
+// spends its whole range above the frame and leaves the played band flat. This colour
+// is what the player actually sees most of the time.
+uniform vec3 u_mid_color : source_color = vec3(0.25, 0.62, 0.89);
+uniform vec3 u_zenith_color : source_color = vec3(0.12, 0.39, 0.81);
 uniform vec3 u_sun_color : source_color = vec3(1.0, 0.95, 0.82);
 uniform vec3 u_horizon_glow_color : source_color = vec3(1.0, 0.52, 0.25); // sunset scatter tint
 uniform float u_overcast : hint_range(0.0, 1.0) = 0.0;
 uniform float u_solar_intensity : hint_range(0.0, 1.0) = 1.0;
 uniform float u_sun_visibility : hint_range(0.0, 1.0) = 1.0;
 uniform float u_night_factor : hint_range(0.0, 1.0) = 0.0;
+// How close the sun is to the horizon on either side, 1.0 at dawn/dusk. Drives the
+// anti-solar twilight bands, which exist only while the sun is just below the horizon.
+uniform float u_twilight : hint_range(0.0, 1.0) = 0.0;
 uniform float u_star_visibility : hint_range(0.0, 1.0) = 0.0;
 uniform float u_star_density : hint_range(0.0, 1.0) = 0.72;
 uniform float u_star_twinkle : hint_range(0.0, 1.0) = 0.16;
+// Rotation of the whole celestial sphere, in radians, driven by the game clock. The
+// star field and the Milky Way are sampled in this rotated frame, so the night sky
+// turns slowly around a tilted pole instead of hanging fixed above the settlement.
+uniform float u_star_rotation = 0.0;
 // HDR overdrive so the filmic tonemap and glow bloom the disc. Restrained on
 // purpose: pushed higher, the bloom swallows the disc's edge and the sun becomes a
 // featureless white smear several times its own size.
@@ -80,9 +92,13 @@ uniform float u_murk : hint_range(0.0, 1.0) = 0.0;
 // scrolling rigidly with the wind.
 uniform float u_cloud_evolve = 0.0;
 uniform float u_shadow_step = 0.055;    // self-shadow march distance
+// Anime contrast comes from the sky being saturated while the cloud body is almost
+// colourless: the midtone is nearly white, and all of the cloud's chroma is spent in
+// a small, deeply cool shadow. Painting the midtone blue, as before, put the cloud in
+// the same pastel family as the sky and flattened the whole frame.
 uniform vec3 u_cloud_lit_clear : source_color = vec3(1.0, 0.985, 0.95);
-uniform vec3 u_cloud_mid_clear : source_color = vec3(0.70, 0.84, 0.95);
-uniform vec3 u_cloud_shadow_clear : source_color = vec3(0.38, 0.56, 0.73);
+uniform vec3 u_cloud_mid_clear : source_color = vec3(0.90, 0.93, 0.975);
+uniform vec3 u_cloud_shadow_clear : source_color = vec3(0.50, 0.58, 0.84);
 uniform vec3 u_cloud_lit_storm : source_color = vec3(0.55, 0.58, 0.63);
 uniform vec3 u_cloud_mid_storm : source_color = vec3(0.40, 0.44, 0.50);
 uniform vec3 u_cloud_shadow_storm : source_color = vec3(0.26, 0.29, 0.34);
@@ -230,30 +246,104 @@ float elongated_cloud_field(vec2 uv, float amount) {
 		* mix(0.55, 1.0, family_mask);
 }
 
-// A deliberately sparse, stable star field. It belongs in the sky material so
-// the weather rig can fade it with twilight and cloud cover.
-vec3 star_layer(vec2 uv, float scale, float threshold, float time_offset) {
-	uv *= scale;
+// --- night sky ---------------------------------------------------------------
+// The celestial pole the sky turns around. Tilted, so the rotation reads as an arc
+// across the night rather than as a pinwheel overhead.
+// All three are authored unit length, so the rotation and the dot products below need
+// no normalisation at runtime.
+const vec3 CELESTIAL_POLE = vec3(0.26, 0.82, 0.51);
+// Great circle of the Milky Way, and the direction of its bright core.
+const vec3 MILKY_WAY_AXIS = vec3(0.82, 0.24, 0.52);
+const vec3 MILKY_WAY_CORE = vec3(-0.46, 0.34, 0.82);
+const float STAR_GRID = 40.0;
+
+vec3 rotate_about(vec3 v, vec3 axis, float angle) {
+	float c = cos(angle);
+	float s = sin(angle);
+	return v * c + cross(axis, v) * s + axis * dot(axis, v) * (1.0 - c);
+}
+
+// Cube-face parameterisation of a direction. The old star field projected dir.xz by
+// dir.y, which sheared every star toward the horizon and pinned the field to the
+// world. A cube map has no pole singularity, so stars stay round wherever they are
+// and the whole sphere can be rotated as one.
+vec3 cube_face_coords(vec3 d) {
+	vec3 a = abs(d);
+	if (a.x >= a.y && a.x >= a.z) {
+		return vec3(vec2(d.z, d.y) / a.x, d.x > 0.0 ? 0.0 : 1.0);
+	}
+	if (a.y >= a.z) {
+		return vec3(vec2(d.x, d.z) / a.y, d.y > 0.0 ? 2.0 : 3.0);
+	}
+	return vec3(vec2(d.x, d.y) / a.z, d.z > 0.0 ? 4.0 : 5.0);
+}
+
+// One grid, but every star draws a magnitude from a steep power curve. That single
+// curve produces the hierarchy a hand-painted sky has — a wash of faint pinpricks, a
+// scattering of medium ones, a handful of bright anchors — and radius, twinkle and
+// diffraction all follow from it, instead of being tuned per layer.
+vec3 star_field(vec3 rotated_dir) {
+	vec3 face = cube_face_coords(rotated_dir);
+	// Offsetting per face decorrelates the six grids, so the seams carry no pattern.
+	vec2 uv = face.xy * STAR_GRID + vec2(face.z * 37.3, face.z * 17.9);
 	vec2 cell = floor(uv);
 	vec2 local = fract(uv) - 0.5;
 	float seed = hash21(cell);
-	vec2 point = vec2(hash21(cell + 3.1), hash21(cell + 9.7)) - 0.5;
-	float radius = mix(0.010, 0.027, step(0.987, seed));
-	float twinkle = 0.88 + sin(u_time * 0.75 + seed * 31.0 + time_offset) * u_star_twinkle;
-	float star = 1.0 - smoothstep(radius, radius * 2.5, length(local - point));
-	float bright = star * step(threshold, seed) * twinkle;
+	float threshold = mix(0.955, 0.865, u_star_density);
+	if (seed < threshold) {
+		return vec3(0.0);
+	}
+	// Kept inside the cell so a star near an edge is never clipped in half.
+	vec2 point = (vec2(hash21(cell + 3.1), hash21(cell + 9.7)) - 0.5) * 0.84;
+	float mag = pow(hash21(cell + vec2(5.3, 1.9)), 5.0);
+	float radius = mix(0.009, 0.030, mag);
+	float brightness = mix(0.14, 1.0, mag);
+	// Only the bright stars are allowed to breathe; a whole field of twinkling
+	// pinpricks reads as noise rather than as a sky.
+	float twinkle = 1.0 + sin(u_time * 0.75 + seed * 31.0) * u_star_twinkle * mag * mag;
+	vec2 offset = local - point;
+	float distance_to_star = length(offset);
+	float star = 1.0 - smoothstep(radius, radius * 2.6, distance_to_star);
+	// A faint diffraction cross on the few brightest stars. It is what makes an
+	// anchor star read as a star rather than as a dot, and it costs two smoothsteps.
+	float cross_amount = smoothstep(0.62, 1.0, mag);
+	if (cross_amount > 0.001) {
+		float arm = radius * 7.0;
+		float horizontal = (1.0 - smoothstep(0.0, arm, abs(offset.x))) * (1.0 - smoothstep(0.0, radius * 0.9, abs(offset.y)));
+		float vertical = (1.0 - smoothstep(0.0, arm, abs(offset.y))) * (1.0 - smoothstep(0.0, radius * 0.9, abs(offset.x)));
+		star += (horizontal + vertical) * cross_amount * 0.32;
+	}
 	// Per-star colour temperature: a few warm amber stars among cool blue-white
 	// ones keep the field from looking like uniform pixels.
 	float ctemp = hash21(cell + vec2(4.7, 12.3));
 	vec3 tint = mix(vec3(1.0, 0.82, 0.66), vec3(0.72, 0.83, 1.0), smoothstep(0.0, 0.65, ctemp));
-	return tint * bright;
+	return tint * star * brightness * twinkle;
 }
 
-vec3 star_field(vec3 dir) {
-	vec2 uv = dir.xz / max(dir.y + 1.15, 0.18) * 85.0;
-	vec3 bright = star_layer(uv, 1.0, mix(0.982, 0.957, u_star_density), 0.0);
-	vec3 fine = star_layer(uv + 17.3, 1.73, mix(0.992, 0.973, u_star_density), 1.7);
-	return bright + fine * 0.58;
+// Seam-free noise over a direction: two planar projections averaged. A single
+// projection (or an atan-based one) leaves a visible meridian through the band.
+float sphere_noise(vec3 d, float scale, vec2 offset) {
+	return (fbm(d.xy * scale + offset) + fbm(d.zy * scale + offset.yx + vec2(11.0, 2.0))) * 0.5;
+}
+
+// A mottled band rather than a smooth smear: bright clumps of unresolved stars, and
+// dark dust rifts multiplied through them. The rifts are what make it read as the
+// Milky Way instead of as a soft glow across the sky.
+vec3 milky_way(vec3 rotated_dir) {
+	float band = 1.0 - smoothstep(0.0, 0.32, abs(dot(rotated_dir, MILKY_WAY_AXIS)));
+	if (band <= 0.001) {
+		return vec3(0.0);
+	}
+	band = pow(band, 1.7);
+	float coarse = sphere_noise(rotated_dir, 4.6, vec2(3.0, 7.0));
+	float fine = sphere_noise(rotated_dir, 10.4, vec2(21.0, 5.0));
+	float clumps = smoothstep(0.34, 0.76, coarse * 0.68 + fine * 0.32);
+	float rifts = smoothstep(0.28, 0.58, sphere_noise(rotated_dir, 2.4, vec2(9.0, 15.0)));
+	float density = band * (0.22 + clumps * 0.95) * mix(0.18, 1.0, rifts);
+	// The core is denser and warmer, which gives the band a direction to read along.
+	float core = smoothstep(0.45, 0.98, dot(rotated_dir, MILKY_WAY_CORE));
+	vec3 tint = mix(vec3(0.40, 0.48, 0.74), vec3(0.74, 0.63, 0.55), core * 0.75);
+	return tint * density * (1.0 + core * 0.85);
 }
 
 void sky() {
@@ -261,8 +351,14 @@ void sky() {
 	float horizon = dir.y;
 
 	// --- base sky gradient ---
-	float grad = smoothstep(0.0, 0.48, horizon);
-	vec3 sky_col = mix(u_horizon_color, u_zenith_color, grad);
+	// Three points, with the first transition deliberately low: the pale horizon
+	// colour is spent within the first ten degrees, so the band the gameplay camera
+	// actually frames is the saturated middle blue, and the deep zenith is reserved
+	// for the top of the sky where it belongs.
+	float low_grad = smoothstep(0.0, 0.22, horizon);
+	float high_grad = smoothstep(0.18, 0.70, horizon);
+	vec3 sky_col = mix(u_horizon_color, u_mid_color, low_grad);
+	sky_col = mix(sky_col, u_zenith_color, high_grad);
 
 	// --- atmospheric horizon haze / morning fog ---
 	// A soft band hugs the horizon; a slow drifting low-frequency noise breaks it
@@ -275,16 +371,15 @@ void sky() {
 
 	float star_visibility = u_star_visibility * (1.0 - smoothstep(0.30, 0.86, u_overcast) * 0.94);
 
-	// --- Milky Way: a faint textured band along a great circle, denser overhead ---
-	vec3 mw_axis = normalize(vec3(0.82, 0.24, 0.52));
-	float mw_dist = abs(dot(dir, mw_axis));
-	float mw_band = (1.0 - smoothstep(0.0, 0.34, mw_dist)) * smoothstep(0.06, 0.4, horizon);
-	float mw_tex = fbm(dir.xz / max(dir.y + 0.5, 0.2) * 5.5 + vec2(3.0, 7.0));
-	sky_col += vec3(0.40, 0.48, 0.72) * mw_band * (0.045 + mw_tex * 0.075) * star_visibility;
+	// Stars and the Milky Way share one slowly turning celestial frame, so they hold
+	// their positions relative to each other while the sky rotates through the night.
+	vec3 star_dir = rotate_about(dir, CELESTIAL_POLE, u_star_rotation);
+
+	sky_col += milky_way(star_dir) * smoothstep(0.05, 0.36, horizon) * star_visibility * 0.14;
 
 	// Individual clouds mask stars later in the final sky blend. Keep a small
 	// global contribution at partial cover so stars remain visible through gaps.
-	vec3 stars = star_field(dir) * smoothstep(0.04, 0.32, horizon);
+	vec3 stars = star_field(star_dir) * smoothstep(0.04, 0.32, horizon);
 	sky_col += stars * star_visibility * 2.5;
 
 	vec3 sun_dir = normalize(u_sun_dir);
@@ -305,7 +400,9 @@ void sky() {
 	// Redden the disc and scattering near horizon. A gentle curve pushes the disc
 	// into gold sooner as the sun drops, so sunrise/sunset read warm without the
 	// noon sun turning a sickly yellow.
-	float sun_low = 1.0 - smoothstep(0.0, 0.35, sun_dir.y);
+	// The gold arrives well before the sun reaches the horizon. A tighter window made
+	// the golden hour read as a white blowout with a thin warm line under it.
+	float sun_low = 1.0 - smoothstep(0.0, 0.50, sun_dir.y);
 	float sun_gold = pow(sun_low, 0.7);
 	vec3 warm_sun = mix(u_sun_color, u_horizon_glow_color, sun_gold);
 
@@ -315,7 +412,10 @@ void sky() {
 	float sun_edge = u_sun_angular_radius * 0.06;
 	float sun_disc = 1.0 - smoothstep(u_sun_angular_radius - sun_edge, u_sun_angular_radius + sun_edge, sun_angle);
 	vec3 disc_color = mix(warm_sun, vec3(1.0, 0.985, 0.94), 0.45 * (1.0 - sun_gold));
-	sky_col += disc_color * sun_disc * u_sun_disc_visibility * u_sun_disc_energy * u_sun_visibility;
+	// The low sun is also a dimmer sun. At full noon energy every channel of a gold
+	// disc clears the tonemap's shoulder and the sunset hands back a white dot.
+	float disc_energy = u_sun_disc_energy * mix(1.0, 0.52, sun_gold);
+	sky_col += disc_color * sun_disc * u_sun_disc_visibility * disc_energy * u_sun_visibility;
 	// A tight corona hugging the rim keeps the hard edge from looking cut out,
 	// without inflating the disc itself.
 	float corona = exp(-max(sun_angle - u_sun_angular_radius, 0.0) / (u_sun_angular_radius * 0.28));
@@ -328,12 +428,38 @@ void sky() {
 	float halo_strength = mix(0.15, 0.72, sun_low);
 	float halo_visibility = mix(0.25, 1.0, u_sun_visibility);
 	sky_col += warm_sun * pow(sun_amt, 6.0) * halo_strength * clear_sky * u_sky_light_energy * halo_visibility;
-	// A soft wide golden bloom hugging the low sun adds the anime sunrise glow.
-	sky_col += warm_sun * pow(sun_amt, 2.2) * sun_low * 0.14 * clear_sky * u_sky_light_energy * halo_visibility;
+	// A soft wide golden bloom hugging the low sun adds the anime sunrise glow. Kept
+	// modest: as an additive term it raises luminance faster than chroma, and pushed
+	// harder it turns the whole golden hour into a white blowout under the tonemap.
+	sky_col += warm_sun * pow(sun_amt, 2.2) * sun_low * 0.08 * clear_sky * u_sky_light_energy * halo_visibility;
 
-	// Warm band along horizon at sunrise/sunset
-	float horizon_band = pow(1.0 - abs(dir.y), 6.0);
-	sky_col += u_horizon_glow_color * horizon_band * sun_low * 0.35 * clear_sky * u_sky_light_energy;
+	// Warm band along horizon at sunrise/sunset. Weighted by azimuth: the warm zone
+	// belongs around the sun, and the far side of the sky must stay blue or lilac.
+	// An unweighted band, as before, wrapped the whole horizon in sunset at once and
+	// left the dusk with no direction in it.
+	vec2 view_bearing = length(dir.xz) > 0.001 ? normalize(dir.xz) : vec2(1.0, 0.0);
+	vec2 sun_bearing = length(sun_dir.xz) > 0.001 ? normalize(sun_dir.xz) : vec2(1.0, 0.0);
+	float toward_sun = dot(view_bearing, sun_bearing);
+	float solar_side = smoothstep(-0.35, 0.85, toward_sun);
+	// Mixed in rather than added: the warm zone has to become orange, not merely
+	// brighter. Adding it lifted the luminance into the tonemap's shoulder, where the
+	// sunset lost its colour exactly where it was strongest.
+	float horizon_band = pow(1.0 - abs(dir.y), 4.5);
+	float warm_band = horizon_band * sun_low * solar_side * clear_sky * u_sky_light_energy;
+	sky_col = mix(sky_col, u_horizon_glow_color, clamp(warm_band * 1.35, 0.0, 1.0));
+
+	// --- anti-solar twilight: the Earth's shadow and the Belt of Venus ---
+	// Opposite a setting sun the planet's own shadow rises as a dusty blue-grey wedge,
+	// with a band of pink scatter riding on top of it. It is the single most
+	// recognisable thing about dusk and costs only two height windows.
+	float anti_solar = smoothstep(0.15, -0.65, toward_sun);
+	float twilight_band = u_twilight * anti_solar * clear_sky;
+	if (twilight_band > 0.001) {
+		float earth_shadow = 1.0 - smoothstep(0.0, 0.095, horizon);
+		float venus_belt = smoothstep(0.03, 0.115, horizon) * (1.0 - smoothstep(0.115, 0.30, horizon));
+		sky_col = mix(sky_col, vec3(0.17, 0.21, 0.36), earth_shadow * twilight_band * 0.60);
+		sky_col += vec3(1.0, 0.60, 0.64) * venus_belt * twilight_band * 0.26;
+	}
 
 	// --- night moon ---
 	// A soft disc opposite the sun, with a tight inner glow and a faint wide halo.
@@ -523,10 +649,13 @@ void sky() {
 	cloud_shadow = mix(cloud_shadow, u_cloud_shadow_night, night_cloud_mix);
 
 	// Three controllable paint bands: cool shadow, blue midtone, warm white.
-	float shadow_mid_soft = smoothstep(0.12, 0.62, lit);
-	float mid_lit_soft = smoothstep(0.42, 0.92, lit);
-	float shadow_mid_toon = smoothstep(0.31, 0.39, lit);
-	float mid_lit_toon = smoothstep(0.67, 0.75, lit);
+	// The bands are pushed down so the near-white midtone owns most of the cloud body
+	// and the saturated shadow keeps to a small area under the lobes. A large shadow
+	// at this chroma would tint the whole cloud blue again.
+	float shadow_mid_soft = smoothstep(0.06, 0.46, lit);
+	float mid_lit_soft = smoothstep(0.30, 0.78, lit);
+	float shadow_mid_toon = smoothstep(0.22, 0.30, lit);
+	float mid_lit_toon = smoothstep(0.52, 0.60, lit);
 	float band_strength = u_toon_banding * clear_sky * mix(1.0, 0.18, u_night_factor);
 	float shadow_mid = mix(shadow_mid_soft, shadow_mid_toon, band_strength);
 	float mid_lit = mix(mid_lit_soft, mid_lit_toon, band_strength);
@@ -551,7 +680,9 @@ void sky() {
 		sunset_cloud,
 		sunset_face * mix(0.66, 0.46, u_murk)
 	);
-	float warm_midtone_strength = mix(0.055, 0.12, sun_low);
+	// Restrained by day: the daytime cloud body should stay neutral white, with warmth
+	// arriving only as the sun drops.
+	float warm_midtone_strength = mix(0.03, 0.12, sun_low);
 	cloud_col += warm_sun * (mid_lit * warm_midtone_strength + rim * warm_rim_strength)
 		* mix(1.0, 0.58, u_murk) * cloud_sun_energy;
 

@@ -158,28 +158,19 @@ layout_mode = 2
 unique_name_in_owner = true
 layout_mode = 2
 text = "🔄X"
-tooltip_text = "Поворот вокруг оси X"
+tooltip_text = "Поворот вокруг оси X (X)"
 
 [node name="RotBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "🔄Y (R)"
-tooltip_text = "Поворот вокруг оси Y (R)"
+text = "🔄Y"
+tooltip_text = "Поворот вокруг оси Y (C)"
 
 [node name="RotZBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "🔄Z"
-tooltip_text = "Поворот вокруг оси Z"
-
-[node name="RotLabel" type="Label" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(96, 0)
-layout_mode = 2
-text = "Y 0°"
-
-[node name="VSepRot" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
-layout_mode = 2
+tooltip_text = "Поворот вокруг оси Z (Z)"
 
 [node name="LayerLabel" type="Label" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
 unique_name_in_owner = true
@@ -205,17 +196,20 @@ size_flags_horizontal = 3
 [node name="NewBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Новый"
+text = "📄 Новый"
+tooltip_text = "Создать новый чертёж"
 
 [node name="LoadBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Загрузить"
+text = "📂 Открыть"
+tooltip_text = "Открыть существующий чертёж"
 
 [node name="SaveBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "💾 Сохранить"
+tooltip_text = "Сохранить текущий чертёж"
 
 [node name="PalettePanel" type="PanelContainer" parent="EditorUI/Root"]
 unique_name_in_owner = true

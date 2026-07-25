@@ -100,7 +100,6 @@ var _ghost_valid: bool = false
 @onready var _palette_container: VBoxContainer = %PaletteContainer
 @onready var _status_label: Label = %StatusLabel
 @onready var _layer_label: Label = %LayerLabel
-@onready var _rot_label: Label = %RotLabel
 @onready var _count_label: Label = %CountLabel
 @onready var _tool_place_btn: Button = %ToolPlaceBtn
 @onready var _tool_erase_btn: Button = %ToolEraseBtn
@@ -148,7 +147,9 @@ var _ghost_valid: bool = false
 @onready var _new_btn: Button = %NewBtn
 @onready var _load_btn: Button = %LoadBtn
 @onready var _save_btn: Button = %SaveBtn
+@onready var _rot_x_btn: Button = %RotXBtn
 @onready var _rot_btn: Button = %RotBtn
+@onready var _rot_z_btn: Button = %RotZBtn
 @onready var _layer_down_btn: Button = %LayerDownBtn
 @onready var _layer_up_btn: Button = %LayerUpBtn
 @onready var _metadata_vbox: VBoxContainer = %MetadataVBox
@@ -300,7 +301,11 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 
 func _handle_key(event: InputEventKey) -> void:
 	match event.keycode:
-		KEY_R:
+		KEY_Z:
+			_cycle_rotation_z()
+		KEY_X:
+			_cycle_rotation_x()
+		KEY_C, KEY_R:
 			_cycle_rotation()
 		KEY_E:
 			_set_tool(Tool.ERASE)
@@ -452,7 +457,7 @@ func _spawn_or_update_block_node(block: BlueprintBlock) -> void:
 		_block_nodes[block.pos] = node
 	node.mesh = mesh_library.mesh_for(block.block_id, block.variant)
 	node.material_override = mesh_library.material_for(block.material_id)
-	node.position = Vector3(block.pos) + BlockMeshLibraryScript.local_offset(block.block_id, block.variant, block.rot, block.anchor)
+	node.position = Vector3(block.pos) + BlockMeshLibraryScript.local_offset(block.block_id, block.variant, block.rot, block.anchor, 0.0, block.rot_x, block.rot_z)
 	node.rotation = block.rotation_euler()
 
 
@@ -486,17 +491,17 @@ func _refresh_ghost() -> void:
 		if target == null:
 			_ghost.mesh = mesh_library.mesh_for(current_block_id, current_variant)
 			_ghost.rotation = _current_ghost_euler()
-			_ghost.position = Vector3(cursor_cell) + BlockMeshLibraryScript.local_offset(current_block_id, current_variant, current_rot, current_anchor)
+			_ghost.position = Vector3(cursor_cell) + BlockMeshLibraryScript.local_offset(current_block_id, current_variant, current_rot, current_anchor, 0.0, current_rot_x, current_rot_z)
 			_ghost.material_override = mesh_library.ghost_material(false)
 		else:
 			_ghost.mesh = mesh_library.mesh_for(target.block_id, target.variant)
 			_ghost.rotation = target.rotation_euler()
-			_ghost.position = Vector3(target.pos) + BlockMeshLibraryScript.local_offset(target.block_id, target.variant, target.rot, target.anchor)
+			_ghost.position = Vector3(target.pos) + BlockMeshLibraryScript.local_offset(target.block_id, target.variant, target.rot, target.anchor, 0.0, target.rot_x, target.rot_z)
 			_ghost.material_override = mesh_library.ghost_material(false)
 	else:
 		_ghost.mesh = mesh_library.mesh_for(current_block_id, current_variant)
 		_ghost.rotation = _current_ghost_euler()
-		_ghost.position = Vector3(cursor_cell) + BlockMeshLibraryScript.local_offset(current_block_id, current_variant, current_rot, current_anchor)
+		_ghost.position = Vector3(cursor_cell) + BlockMeshLibraryScript.local_offset(current_block_id, current_variant, current_rot, current_anchor, 0.0, current_rot_x, current_rot_z)
 		_ghost.material_override = mesh_library.ghost_material(true)
 
 
@@ -1497,11 +1502,15 @@ func _sync_metadata_fields() -> void:
 
 
 func _update_rotation_label() -> void:
-	if _rot_label != null:
-		if current_rot_x == 0 and current_rot_z == 0:
-			_rot_label.text = "Y %d°" % (current_rot * 90)
-		else:
-			_rot_label.text = "X %d° Y %d° Z %d°" % [current_rot_x * 90, current_rot * 90, current_rot_z * 90]
+	if _rot_x_btn != null:
+		var deg_x := current_rot_x * 90
+		_rot_x_btn.text = "🔄X %d°" % deg_x if deg_x != 0 else "🔄X"
+	if _rot_btn != null:
+		var deg_y := current_rot * 90
+		_rot_btn.text = "🔄Y %d°" % deg_y if deg_y != 0 else "🔄Y"
+	if _rot_z_btn != null:
+		var deg_z := current_rot_z * 90
+		_rot_z_btn.text = "🔄Z %d°" % deg_z if deg_z != 0 else "🔄Z"
 
 
 func _update_count() -> void:
