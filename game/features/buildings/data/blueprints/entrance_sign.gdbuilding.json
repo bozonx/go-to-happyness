@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "id": "entrance_sign",
+  "name": "Въездной знак",
+  "construction_style": "surface",
+  "category": "tent",
+  "fallback_building_id": "entrance_sign",
+  "grid_bounds": {
+    "x": 2,
+    "y": 3,
+    "z": 1
+  },
+  "footprint": [
+    2,
+    1
+  ],
+  "entrance": [
+    0,
+    0
+  ],
+  "worker_entrances": [],
+  "blocks": [],
+  "surface_finishes": [],
+  "decor_trims": [],
+  "place_zones": [],
+  "zone_anchors": [],
+  "objects": [
+    {
+      "id": "decor_entrance_sign_1",
+      "asset_id": "entrance_sign",
+      "pos": [0, 0, 0],
+      "rot": [0, 0, 0],
+      "scale": [1, 1, 1],
+      "anchor": [0, 0],
+      "properties": {}
+    }
+  ],
+  "construction_cost": {
+    "branches": 3,
+    "grass": 1
+  }
+}

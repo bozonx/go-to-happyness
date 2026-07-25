@@ -174,6 +174,15 @@ static func ordered_modules(building_type: String) -> Array:
 			"rot": block.rot,
 			"kind": "block",
 		})
+	for decor in bp.objects:
+		entries.append({
+			"position": decor.pos - center,
+			"rotation": decor.rot,
+			"scale": decor.scale,
+			"asset_id": decor.asset_id,
+			"properties": decor.properties,
+			"kind": "decor",
+		})
 	entries.sort_custom(_compare_module_height)
 	return entries
 

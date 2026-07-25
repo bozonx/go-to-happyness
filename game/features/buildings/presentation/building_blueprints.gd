@@ -7,6 +7,7 @@ const BuildingEntrancePositionsScript = preload("res://game/features/buildings/d
 const BuildingBlueprintLibraryScript = preload("res://game/features/buildings/presentation/building_blueprint_library.gd")
 const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
 const BlockMeshLibraryScript = preload("res://game/features/buildings/presentation/editor/block_mesh_library.gd")
+const DecorAssetCatalogScript = preload("res://game/features/buildings/domain/editor/decor_asset_catalog.gd")
 
 const BLOCK_SIZE := 1.0
 const PANEL_THICKNESS := 0.5
@@ -239,9 +240,19 @@ static func get_blueprint(building_type: String) -> Dictionary:
 
 static func create_module(module: Dictionary) -> StaticBody3D:
 	# Block modules (from .gdbuilding.json) render via the shared block mesh
-	# library; legacy modules render as a coloured box.
+	# library; decor modules render via the decor asset catalog; legacy modules render as a coloured box.
 	if module.has("block_id"):
 		return _create_block_module(module)
+	if module.has("asset_id") or module.get("kind") == "decor":
+		var decor := _create_decor_module(module)
+		if decor != null:
+			return decor
+		# Fall through to a minimal placeholder so callers never get null.
+		var fallback: StaticBody3D = BuildingModuleScene.instantiate()
+		fallback.position = module.get("position", Vector3.ZERO)
+		fallback.set_meta("building_module", true)
+		fallback.set_meta("module_kind", "decor")
+		return fallback
 
 	var body: StaticBody3D = BuildingModuleScene.instantiate()
 	body.position = module.position
@@ -262,6 +273,46 @@ static func create_module(module: Dictionary) -> StaticBody3D:
 	var shape := BoxShape3D.new()
 	shape.size = module.size
 	collision.shape = shape
+	return body
+
+
+static func _create_decor_module(module: Dictionary) -> StaticBody3D:
+	var asset_id: StringName = StringName(module.get("asset_id", ""))
+	var asset := DecorAssetCatalogScript.get_asset(asset_id)
+	if asset == null:
+		push_warning("BuildingBlueprints: unknown decor asset %s" % asset_id)
+		return null
+	var scene := load(asset.scene_path) as PackedScene
+	if scene == null:
+		return null
+	var instance := scene.instantiate() as Node3D
+	if instance == null:
+		return null
+
+	var body: StaticBody3D = BuildingModuleScene.instantiate()
+	body.position = module.get("position", Vector3.ZERO)
+	body.rotation_degrees = module.get("rotation", module.get("rot", Vector3.ZERO))
+	body.scale = module.get("scale", Vector3.ONE)
+	body.set_meta("building_module", true)
+	body.set_meta("module_kind", "decor")
+
+	var mesh_instance := body.get_node("MeshInstance3D") as MeshInstance3D
+	if mesh_instance != null:
+		mesh_instance.mesh = null
+
+	var collision := body.get_node("CollisionShape3D") as CollisionShape3D
+	if collision != null:
+		var shape := BoxShape3D.new()
+		var extent := asset.footprint_m()
+		shape.size = extent
+		collision.shape = shape
+		collision.position.y = extent.y * 0.5
+
+	body.add_child(instance)
+
+	if instance.has_method("apply_decor_properties"):
+		instance.call("apply_decor_properties", module.get("properties", {}))
+
 	return body
 
 
