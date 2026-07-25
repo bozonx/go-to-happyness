@@ -10,8 +10,9 @@ extends Node3D
 ## Mouse: hover picks a column, LMB raises, RMB lowers, MMB drag orbits, wheel zooms.
 ## Keys:  F level brush to the hovered height, P paint material, 1-5 pick material,
 ##        H toggle hole, R place ramp, X dissolve ramp, C cycle ramp class,
-##        V cycle ramp direction, [ / ] brush size, G regenerate demo, N clear to
-##        flat, WASD pan, Q/E orbit. The legend is on screen as well.
+##        V cycle ramp direction, [ / ] brush size, Tab cycle cascade mode,
+##        Z undo, Y redo, G regenerate demo, N clear to flat, WASD pan, Q/E orbit.
+##        The legend is on screen as well.
 ##
 ## Batch: `godot --path . tools/terrain_lab/terrain_lab.tscn -- --capture` writes
 ## reference views of the demo terrain to user://terrain_lab and exits.
@@ -31,6 +32,7 @@ const CAMERA_MOUSE_ORBIT := 0.35
 @onready var hud: Label = $UI/Hud
 
 var grid := TerrainGrid.new()
+var service := TerrainService.new()
 
 var _camera_target := Vector3(0.0, 0.0, 0.0)
 var _camera_yaw := 42.0
@@ -44,6 +46,7 @@ var _brush_size := 1
 var _material_index := 0
 var _ramp_class := 1
 var _ramp_direction := SlopeCatalog.DIR_E
+var _edit_mode := TerrainEditOperation.Mode.SCULPT
 var _painting := 0
 var _last_message := "ready"
 
@@ -52,6 +55,8 @@ const CAPTURE_VIEWS: Array = [
 	{"name": "overview", "target": Vector3(0.0, 0.0, 0.0), "yaw": 42.0, "pitch": 52.0, "distance": 48.0},
 	{"name": "ramps", "target": Vector3(0.0, 0.5, 0.0), "yaw": 250.0, "pitch": 22.0, "distance": 18.0},
 	{"name": "tower_and_hole", "target": Vector3(12.0, 2.0, 4.0), "yaw": 300.0, "pitch": 28.0, "distance": 26.0},
+	{"name": "cascade_repose", "setup": &"cascade", "target": Vector3(0.0, 1.0, 0.0), "yaw": 20.0, "pitch": 30.0, "distance": 40.0},
+	{"name": "cascade_closeup", "target": Vector3(-4.0, 1.0, 0.0), "yaw": 35.0, "pitch": 18.0, "distance": 16.0},
 ]
 
 var _capture_queue: Array = []
@@ -60,6 +65,7 @@ var _capture_delay := 0
 
 func _ready() -> void:
 	grid.configure(CELL_SIZE, BOARD_CELLS)
+	service.configure(grid)
 	terrain.configure(grid)
 	_generate_demo()
 	terrain.rebuild_pending_now()
@@ -94,22 +100,29 @@ func _brush_cells(center: Vector2i) -> Array[Vector2i]:
 func _apply_height_brush(delta: int) -> void:
 	if not _has_hover:
 		return
-	var rejected := 0
-	for cell: Vector2i in _brush_cells(_hovered_cell):
-		if not grid.offset_height(cell, delta):
-			rejected += 1
-	_last_message = "height %+d" % delta
-	if rejected > 0:
-		_last_message += " (%d cells refused: height limit)" % rejected
+	var operation := TerrainEditOperation.offset(_brush_cells(_hovered_cell), delta, _edit_mode)
+	if _edit_mode == TerrainEditOperation.Mode.LEVEL:
+		# The level tool has no direction of its own: the wheel of the height
+		# brush chooses which way the plateau moves from the hovered column.
+		operation = TerrainEditOperation.level(_brush_cells(_hovered_cell), grid.height_of(_hovered_cell) + delta)
+	if service.apply_operation(operation):
+		_last_message = "%s %+d — %d cells changed" % [
+			TerrainEditOperation.mode_name(_edit_mode), delta, service.last_delta_size(),
+		]
+		return
+	_last_message = "%s %+d REFUSED (%s)" % [
+		TerrainEditOperation.mode_name(_edit_mode), delta, service.last_rejection(),
+	]
 
 
 func _apply_flatten() -> void:
 	if not _has_hover:
 		return
 	var target := grid.height_of(_hovered_cell)
-	for cell: Vector2i in _brush_cells(_hovered_cell):
-		grid.set_height(cell, target)
-	_last_message = "levelled to %d" % target
+	if service.apply_operation(TerrainEditOperation.level(_brush_cells(_hovered_cell), target)):
+		_last_message = "levelled to %d" % target
+		return
+	_last_message = "level REFUSED (%s)" % service.last_rejection()
 
 
 func _apply_material() -> void:
@@ -134,7 +147,7 @@ func _place_ramp() -> void:
 	if not _has_hover:
 		return
 	var slope_id := SlopeCatalog.id_of_class(_ramp_class)
-	if grid.place_ramp(_hovered_cell, slope_id, _ramp_direction):
+	if service.place_ramp(_hovered_cell, slope_id, _ramp_direction):
 		_last_message = "ramp %s placed" % slope_id
 		return
 	# Refusal is a normal answer (§3.1): the run must be flat, free, and end at a
@@ -147,7 +160,7 @@ func _place_ramp() -> void:
 func _dissolve_ramp() -> void:
 	if not _has_hover:
 		return
-	_last_message = "ramp dissolved" if grid.dissolve_ramp_at(_hovered_cell) else "no ramp here"
+	_last_message = "ramp dissolved" if service.dissolve_ramp(_hovered_cell) else "no ramp here"
 
 
 # --- Input ------------------------------------------------------------------
@@ -211,11 +224,19 @@ func _handle_key(event: InputEventKey) -> void:
 			_brush_size = maxi(1, _brush_size - 1)
 		KEY_BRACKETRIGHT:
 			_brush_size = mini(8, _brush_size + 1)
+		KEY_TAB:
+			_edit_mode = (_edit_mode + 1) % 3
+			_last_message = "mode %s" % TerrainEditOperation.mode_name(_edit_mode)
+		KEY_Z:
+			_last_message = "undo" if service.undo() else "nothing to undo"
+		KEY_Y:
+			_last_message = "redo" if service.redo() else "nothing to redo"
 		KEY_G:
 			_generate_demo()
 			_last_message = "demo terrain regenerated"
 		KEY_N:
 			grid.configure(CELL_SIZE, BOARD_CELLS)
+			service.clear_history()
 			_last_message = "cleared to flat"
 		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5:
 			var picked := event.keycode - KEY_1
@@ -316,16 +337,19 @@ func _update_hud() -> void:
 		])
 	else:
 		lines.append("cell —")
-	lines.append("brush %d  paint %s  ramp %s → %s  |  pending chunks: %d" % [
-		_brush_size, TerrainMaterialCatalog.ids()[_material_index],
+	lines.append("mode %s  brush %d  paint %s  ramp %s → %s" % [
+		TerrainEditOperation.mode_name(_edit_mode).to_upper(), _brush_size,
+		TerrainMaterialCatalog.ids()[_material_index],
 		SlopeCatalog.id_of_class(_ramp_class), _direction_name(_ramp_direction),
-		terrain.pending_chunk_count(),
+	])
+	lines.append("undo %d  redo %d  |  pending chunks: %d" % [
+		service.undo_depth(), service.redo_depth(), terrain.pending_chunk_count(),
 	])
 	lines.append("> %s" % _last_message)
 	lines.append("")
 	lines.append("LMB raise · RMB lower · MMB orbit · wheel zoom · WASD pan · Q/E turn")
-	lines.append("F level · P paint · 1-5 material · H hole · R ramp · X unramp · C class · V dir")
-	lines.append("[ ] brush · G demo · N clear · Esc quit")
+	lines.append("Tab mode (sculpt/terrace/level) · Z undo · Y redo · F level · P paint · 1-5 material")
+	lines.append("H hole · R ramp · X unramp · C class · V dir · [ ] brush · G demo · N clear · Esc quit")
 	hud.text = "\n".join(lines)
 
 
@@ -334,6 +358,8 @@ func _update_hud() -> void:
 ## meshing changes without a human at the mouse.
 func _process_capture() -> void:
 	var view: Dictionary = _capture_queue[0]
+	if _capture_delay == 3 and view.get("setup", &"") == &"cascade":
+		_setup_cascade_scene()
 	if _capture_delay > 0:
 		_camera_target = view["target"]
 		_camera_yaw = float(view["yaw"])
@@ -356,6 +382,22 @@ func _process_capture() -> void:
 		get_tree().quit()
 
 
+## Three identical +5 sculpt edits on three materials, side by side: grass makes a
+## pyramid, sand a wide terraced mound, rock a sheer column (§4.2).
+func _setup_cascade_scene() -> void:
+	grid.configure(CELL_SIZE, BOARD_CELLS)
+	service.clear_history()
+	for z in range(-8, 9):
+		for x in range(-4, 5):
+			grid.set_material(Vector2i(x, z), TerrainMaterialCatalog.SAND)
+		for x in range(8, 17):
+			grid.set_material(Vector2i(x, z), TerrainMaterialCatalog.STONE)
+	for center: Vector2i in [Vector2i(-10, 0), Vector2i(0, 0), Vector2i(12, 0)]:
+		service.apply_operation(TerrainEditOperation.offset([center] as Array[Vector2i], 5))
+	terrain.rebuild_pending_now()
+	_last_message = "cascade: grass / sand / rock, +5 steps each"
+
+
 func _direction_name(direction: int) -> String:
 	match direction:
 		SlopeCatalog.DIR_N: return "N"
@@ -372,6 +414,9 @@ func _direction_name(direction: int) -> String:
 ## carved hole, a stone tower and material patches.
 func _generate_demo() -> void:
 	grid.configure(CELL_SIZE, BOARD_CELLS)
+	# The demo is scenery, not a player edit: it writes the grid directly and
+	# starts the history empty.
+	service.clear_history()
 
 	# Stepped plateau to the east: 0 → 1 → 2, all cliffs except where ramps go.
 	for z in range(-20, 20):
@@ -414,3 +459,8 @@ func _generate_demo() -> void:
 	for z in range(-2, 2):
 		for x in range(14, 17):
 			grid.set_hole(Vector2i(x, z), true)
+
+	# Anchored strip: pretend a road runs here. The cascade refuses any operation
+	# whose wave reaches it, which is the §4.4 rule made visible in the lab.
+	for x in range(-14, -6):
+		grid.set_anchor(Vector2i(x, 6), true)

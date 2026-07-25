@@ -176,7 +176,13 @@ func write_to_blueprint(blueprint: BuildingBlueprintScript) -> void:
 			block.pos, block.block_id, block.rot, block.material_id,
 			block.variant, block.anchor, block.rot_x, block.rot_z))
 	var b := bounds()
-	blueprint.grid_bounds = Vector3i(int(b.size.x), int(b.size.y), int(b.size.z))
+	# An empty frame yields a zero-size AABB, which `validation_errors()` rejects
+	# as non-positive bounds — that made a decor-only (or brand new) blueprint
+	# impossible to save. Keep at least one cell in every axis.
+	blueprint.grid_bounds = Vector3i(
+		maxi(1, int(b.size.x)),
+		maxi(1, int(b.size.y)),
+		maxi(1, int(b.size.z)))
 
 
 func load_from_blueprint(blueprint: BuildingBlueprintScript) -> void:

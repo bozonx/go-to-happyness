@@ -1,14 +1,23 @@
 extends SceneTree
 
+## End-to-end test of the editor's decor mode against the real scene: mode
+## switching, snapping, the click path, selection, dragging, property bindings,
+## undo and save/load.
+##
+## It drives BuildingEditor + DecorModeController the way the UI does, which is
+## what the previous unit-only coverage missed — decor mode could not place a
+## single object while every catalog assertion still passed.
+
 const EditorScene = preload("res://game/features/buildings/presentation/editor/building_editor.tscn")
 
 
 func _initialize() -> void:
+	# The scene tree is not up during `_init`, so defer until it is.
 	call_deferred("_run")
 
 
 func _run() -> void:
-	print("--- decor mode smoke ---")
+	print("--- Running test_decor_mode_editor.gd ---")
 	var editor := EditorScene.instantiate()
 	root.add_child(editor)
 	await process_frame
@@ -93,6 +102,8 @@ func _run() -> void:
 	var json: String = editor.blueprint.to_json()
 	assert(not json.is_empty(), "blueprint serializes")
 	var reloaded = load("res://game/features/buildings/domain/editor/building_blueprint.gd").from_json(json)
+	assert(editor.blueprint.validation_errors().is_empty(),
+		"a decor-only blueprint must validate: %s" % [editor.blueprint.validation_errors()])
 	assert(reloaded != null, "serialized blueprint is valid")
 	assert(reloaded.objects.size() == 2, "objects survive save/load")
 	assert(reloaded.objects[0].properties["is_lit"] == false, "authored property survives")
@@ -102,5 +113,5 @@ func _run() -> void:
 	editor._select_mode(editor.EditMode.FRAME)
 	assert(not decor.is_active(), "decor deactivated")
 	assert(editor._metadata_panel.visible, "metadata panel back")
-	print("--- decor mode smoke PASSED ---")
+	print("--- test_decor_mode_editor.gd PASSED ---")
 	quit(0)

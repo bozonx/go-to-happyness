@@ -177,6 +177,27 @@ func set_height(cell: Vector2i, height: int) -> bool:
 	return true
 
 
+## Writes a whole column state at once, including its slope descriptor. This is
+## the commit path for `TerrainDelta`: it does NOT dissolve ramps or run any
+## cascade, because the delta already describes the final state of every cell it
+## touches. Tools should use `set_height` / `place_ramp` instead.
+func set_cell_state(cell: Vector2i, height: int, slope_id: StringName, slope_dir: int, slope_index: int) -> bool:
+	if not is_inside(cell):
+		return false
+	if height < MIN_HEIGHT or height > MAX_HEIGHT:
+		return false
+	var slope_class := SlopeCatalog.slope_class_of(slope_id)
+	if slope_class < 0:
+		return false
+	var index := _index_of(cell)
+	_heights[index] = height
+	_slope_classes[index] = slope_class
+	_slope_dirs[index] = clampi(slope_dir, 0, 7)
+	_slope_indices[index] = maxi(slope_index, 0)
+	_touch(cell)
+	return true
+
+
 func offset_height(cell: Vector2i, delta: int) -> bool:
 	return set_height(cell, height_of(cell) + delta)
 
@@ -345,6 +366,20 @@ func cell_from_position(world_position: Vector3) -> Vector2i:
 func cell_center(cell: Vector2i) -> Vector3:
 	var height := height_steps_in_cell(cell, 0.5, 0.5) * HEIGHT_STEP
 	return Vector3((float(cell.x) + 0.5) * cell_size, height, (float(cell.y) + 0.5) * cell_size)
+
+
+## Byte-exact copy of everything stored. Used by tests to prove that applying a
+## delta and reverting it restores the grid exactly, and it is the shape the save
+## format (§12) writes per chunk.
+func snapshot() -> Dictionary:
+	return {
+		"heights": _heights.duplicate(),
+		"materials": _materials.duplicate(),
+		"slope_classes": _slope_classes.duplicate(),
+		"slope_dirs": _slope_dirs.duplicate(),
+		"slope_indices": _slope_indices.duplicate(),
+		"flags": _flags.duplicate(),
+	}
 
 
 # --- Chunks -----------------------------------------------------------------

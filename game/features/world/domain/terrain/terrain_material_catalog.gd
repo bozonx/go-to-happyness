@@ -55,6 +55,13 @@ static func repose_class_of(material_id: StringName) -> int:
 	return 3
 
 
+## Steepest height gain per cell this material holds, as a fraction of a step.
+## Sand slumps into terraces two cells wide (0.5), grass holds a full step per
+## cell, rock holds four.
+static func repose_steps_per_cell_of(material_id: StringName) -> float:
+	return SlopeCatalog.steps_per_cell_of(SlopeCatalog.id_of_class(repose_class_of(material_id)))
+
+
 static func ids() -> Array[StringName]:
 	var result: Array[StringName] = []
 	for entry: Dictionary in MATERIALS:

@@ -102,6 +102,15 @@ static func direction_offset(direction: int) -> Vector2i:
 	return DIRECTION_OFFSETS[direction]
 
 
+## Height gained per cell as a fraction, i.e. rise/run. `cliff` has no run, so it
+## gains any height in no distance at all: INF.
+static func steps_per_cell_of(slope_id: StringName) -> float:
+	var run := run_of(slope_id)
+	if run <= 0:
+		return INF
+	return float(rise_of(slope_id)) / float(run)
+
+
 static func ramp_ids() -> Array[StringName]:
 	var ids: Array[StringName] = []
 	for slope: Dictionary in SLOPES:
