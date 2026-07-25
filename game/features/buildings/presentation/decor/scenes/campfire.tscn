@@ -1,0 +1,34 @@
+[gd_scene load_steps=5 format=3 uid="uid://cfdecorcampfire101"]
+
+[ext_resource type="Script" uid="uid://cdecorobjctrl001" path="res://game/features/buildings/presentation/decor/decor_object_controller.gd" id="1_script"]
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_logs"]
+top_radius = 0.4
+bottom_radius = 0.5
+height = 0.2
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_fire"]
+shading_mode = 0
+albedo_color = Color(1, 0.35, 0, 1)
+
+[sub_resource type="SphereMesh" id="SphereMesh_fire"]
+material = SubResource("StandardMaterial3D_fire")
+radius = 0.25
+height = 0.5
+
+[node name="Campfire" type="Node3D"]
+script = ExtResource("1_script")
+
+[node name="LogMesh" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 0)
+mesh = SubResource("CylinderMesh_logs")
+
+[node name="FireMesh" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.35, 0)
+mesh = SubResource("SphereMesh_fire")
+
+[node name="Light" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+light_color = Color(1, 0.666667, 0.266667, 1)
+light_energy = 1.5
+omni_range = 8.0

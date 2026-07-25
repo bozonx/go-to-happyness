@@ -147,6 +147,7 @@ const SettlementBuildControllerScript = preload("res://game/bootstrap/settlement
 const SettlementHeroInteractionControllerScript = preload("res://game/bootstrap/settlement_hero_interaction_controller.gd")
 const SettlementConstructionControllerScript = preload("res://game/bootstrap/settlement_construction_controller.gd")
 const SettlementWorkplaceControllerScript = preload("res://game/bootstrap/settlement_workplace_controller.gd")
+const SettlementSimulationTickControllerScript = preload("res://game/bootstrap/settlement_simulation_tick_controller.gd")
 
 
 
@@ -568,6 +569,7 @@ var _build_controller: RefCounted
 var _hero_interaction_controller: RefCounted
 var _construction_controller: RefCounted
 var _workplace_controller: RefCounted
+var _simulation_tick_controller: RefCounted
 
 
 func _ready() -> void:
@@ -594,6 +596,7 @@ func _ready() -> void:
 	_hero_interaction_controller = SettlementHeroInteractionControllerScript.new(self)
 	_construction_controller = SettlementConstructionControllerScript.new(self)
 	_workplace_controller = SettlementWorkplaceControllerScript.new(self)
+	_simulation_tick_controller = SettlementSimulationTickControllerScript.new(self)
 	ui_manager.bind_delegate_events(SettlementUICallbacksScript.new(self))
 	SettlementBootstrapperScript.new().run(self)
 
@@ -686,21 +689,7 @@ func daily_order_workday_for_new_order() -> int:
 
 
 func _guard_citizen_positions() -> void:
-	if not is_instance_valid(entrance_stone):
-		return
-	for citizen in citizens:
-		if not is_instance_valid(citizen) or outside_workers.has(citizen.get_stable_id()):
-			continue
-		var citizen_id := citizen.get_stable_id()
-		var previous: Vector3 = last_citizen_positions.get(citizen_id, citizen.global_position)
-		var intentionally_at_entrance := citizen.state in [Citizen.State.TO_ARRIVAL_ENTRANCE, Citizen.State.ARRIVAL_MEETING, Citizen.State.ARRIVAL_WAITING, Citizen.State.TO_ARRIVAL_CENTER, Citizen.State.TO_TRADE_PICKUP, Citizen.State.TO_TRADE_DESTINATION]
-		# No normal work transition moves an established resident from across the
-		# map to the entrance. Keep the last known world location if that reset is
-		# observed, while preserving genuine arrival and trade routes.
-		if not intentionally_at_entrance and previous.distance_to(citizen.global_position) > 5.0 and previous.distance_to(entrance_stone.global_position) > 5.0 and citizen.global_position.distance_to(entrance_stone.global_position) < 2.5:
-			citizen.global_position = previous
-			citizen.velocity = Vector3.ZERO
-		last_citizen_positions[citizen_id] = citizen.global_position
+	_simulation_tick_controller.guard_citizen_positions()
 
 func _factory_for_role(role: String) -> Node3D:
 	return _employer_for_role(role)
@@ -758,50 +747,11 @@ func _on_employment_processing_finished(citizen: Citizen) -> void:
 		_update_workers()
 
 func _update_daylight() -> void:
-	if world_setup != null:
-		var cloud_cover := weather_state.cloud_cover_at(clock.minutes)
-		var rain_intensity := weather_state.intensity_at(clock.minutes)
-		var storm_influence := weather_state.storm_influence_at(clock.minutes)
-		# Continuous game-time so cloud drift/morph advances (and fast-forwards) with
-		# the clock; wind comes from the shared weather model so it matches whatever
-		# waves/flags/sails read from it.
-		var weather_minutes := _total_game_minutes()
-		var wind := weather_state.wind_vector_at(clock.minutes)
-		var wind_displacement := weather_state.wind_displacement_at(clock.minutes)
-		var precipitation := weather_state.precipitation_type_at(clock.minutes)
-		world_setup.update_daylight(
-			game_minutes,
-			cloud_cover,
-			rain_intensity,
-			runtime_seconds,
-			storm_influence,
-			weather_state.cloud_seed,
-			wind,
-			weather_minutes,
-			precipitation,
-			wind_displacement
-		)
+	_simulation_tick_controller.update_daylight()
 
 
 func _update_clock(delta: float) -> void:
-	var previous_hour := clock.hour()
-	var events := day_cycle.advance(delta, GAME_MINUTES_PER_SECOND, settlement.workday_hours)
-	if weather_state.update(clock.minutes):
-		if weather_state.is_raining:
-			_update_interface("Rain has started.")
-		else:
-			_update_interface("Rain has stopped.")
-	if clock.hour() != previous_hour:
-		settlement_survival_service.apply_hourly_tent_survival(clock.hour())
-		settlement_survival_service.apply_hourly_bare_hands_penalty()
-		settlement_survival_service.apply_hourly_work_fatigue()
-	if ui_manager.hud != null:
-		ui_manager.hud.update_clock("%s  %02d:%02d  x%d" % ["Night" if clock.is_night() else "Day", clock.hour(), clock.minute(), int(time_multiplier)])
-	if survival_event_controller != null:
-		survival_event_controller.update_skip_night_button()
-	for event in events:
-		if simulation_event_dispatcher != null:
-			simulation_event_dispatcher.dispatch_event(event, day_cycle.current_day)
+	_simulation_tick_controller.update_clock(delta)
 
 func _on_school_day_ended() -> void:
 	_simulation_handlers.on_school_day_ended()
@@ -840,48 +790,34 @@ func _on_citizen_leaving_departed(citizen: Citizen) -> void:
 
 
 func _total_game_minutes() -> float:
-	return float(day_cycle.current_day - 1) * 24.0 * 60.0 + game_minutes
+	return _simulation_tick_controller.total_game_minutes()
 
 
 func _is_night() -> bool:
-	return clock.is_night()
+	return _simulation_tick_controller.is_night()
 
 func _has_lit_communal_fire() -> bool:
-	for record in building_registry.records():
-		var building: Node3D = record.node
-		if is_instance_valid(building) and BuildingTypes.is_fire_source(record.building_type) and _is_fire_lit(building):
-			return true
-	return false
+	return _simulation_tick_controller.has_lit_communal_fire()
 
 func _refresh_living_statuses() -> void:
-	if citizen_living_status_service == null:
-		return
-	citizen_living_status_service.refresh_all(citizens, _has_lit_communal_fire(), _is_night())
+	_simulation_tick_controller.refresh_living_statuses()
 
 func _refresh_living_status(citizen: Citizen) -> void:
-	if citizen_living_status_service == null:
-		return
-	citizen_living_status_service.refresh_citizen(citizen, _has_lit_communal_fire(), _is_night())
+	_simulation_tick_controller.refresh_living_status(citizen)
 
 func _is_work_time() -> bool:
-	return day_cycle.is_work_time(settlement.workday_hours)
+	return _simulation_tick_controller.is_work_time()
 
 
 func _is_citizen_work_time(citizen: Citizen) -> bool:
-	if not is_instance_valid(citizen) or citizen.is_recovering(day_cycle.current_day):
-		return false
-	return _is_work_time() or citizen.has_active_overtime(day_cycle.current_day)
+	return _simulation_tick_controller.is_citizen_work_time(citizen)
 
 func _start_meal(hour: int) -> void:
 	canteen_service.start_meal(hour)
 
 
 func _start_park_rest(cooks_only: bool) -> void:
-	if citizen_needs_service == null:
-		return
-	var sent := citizen_needs_service.request_scheduled_rest(cooks_only, citizens, park_positions)
-	if sent > 0:
-		_update_interface("%02d:00 park break: %d residents are resting." % [int(game_minutes) / 60, sent])
+	_simulation_tick_controller.start_park_rest(cooks_only)
 
 
 
@@ -2237,33 +2173,7 @@ func _add_warehouse_fill_label(building: Node3D) -> void:
 
 
 func _send_citizen_to_leisure(citizen: Citizen, minimum_hours := 0) -> bool:
-	# Returns whether the citizen was actually placed somewhere to rest so the
-	# waiting window knows if it needs to keep looking for work.
-	if citizen.is_player_controlled or citizen.state not in [Citizen.State.IDLE, Citizen.State.RESTING, Citizen.State.WAITING]:
-		return false
-	# Dedicated recreation first (parks, leisure centers), picked at random.
-	var recreation: Array[Vector3] = park_positions + leisure_positions
-	for position in gathering_place_positions:
-		var place := building_registry.building_at_service_position(position)
-		if is_instance_valid(place):
-			recreation.append(position)
-	if not recreation.is_empty():
-		return citizen_needs_service != null and citizen_needs_service.request_leisure(citizen.ai_id, recreation, minimum_hours)
-	# No parks yet (early eras): gather at the main campfire or a natural pond.
-	var gathering_spots: Array[Vector3] = []
-	if is_instance_valid(campfire_node) and _is_fire_lit(campfire_node):
-		gathering_spots.append(campfire_node.global_position)
-	for pond in pond_positions:
-		# Do not stand in water: choose a stable point at its rim.
-		gathering_spots.append(pond + Vector3(2.8, 0.0, 0.0))
-	if not gathering_spots.is_empty():
-		return citizen_needs_service != null and citizen_needs_service.request_leisure(citizen.ai_id, gathering_spots, minimum_hours)
-	# Nothing communal exists at all. During the working day we must NOT send them
-	# home to sleep — a RESTING citizen stops re-probing for work and would sleep
-	# through the day (the "skip night with full storage" freeze). Return false so
-	# the waiting window drops them to IDLE (with its indicator) and the poll keeps
-	# checking. Night-time sleep is handled separately by the native sleep goal.
-	return false
+	return _simulation_tick_controller.send_citizen_to_leisure(citizen, minimum_hours)
 
 func _grant_debug_resources() -> void:
 	if not settlement.warehouse_ever_built:
@@ -2565,23 +2475,7 @@ func get_toilets() -> Array[Node3D]:
 
 
 func _check_unstaffed_employment_center() -> void:
-	if not _is_work_time():
-		return
-	
-	var has_waiting_citizen := false
-	var center := _employment_center_position()
-	if center != Vector3.INF:
-		for citizen in citizens:
-			if is_instance_valid(citizen) and citizen.state in [Citizen.State.TO_EMPLOYMENT_CENTER, Citizen.State.EMPLOYMENT_PROCESSING]:
-				if citizen.global_position.distance_to(center) <= 3.5:
-					has_waiting_citizen = true
-					break
-	
-	if has_waiting_citizen and not _is_registration_staffed():
-		var current_time := runtime_seconds
-		if current_time - _last_unstaffed_warning_time > 60.0:
-			_last_unstaffed_warning_time = current_time
-			_add_message(S.WARNING_NO_OFFICER)
+	_simulation_tick_controller.check_unstaffed_employment_center()
 
 
 func _toggle_worker_overtime(checked: bool) -> void:
