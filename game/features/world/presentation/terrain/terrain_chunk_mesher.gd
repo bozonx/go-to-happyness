@@ -61,6 +61,15 @@ const NEIGHBOUR_EDGE_CORNERS: Dictionary = {
 	SlopeCatalog.DIR_S: [TerrainGrid.CORNER_NE, TerrainGrid.CORNER_NW],
 	SlopeCatalog.DIR_W: [TerrainGrid.CORNER_SE, TerrainGrid.CORNER_NE],
 }
+## Which axis a wall of this direction runs along, and whether its `near` corner
+## is the one with the smaller coordinate on that axis. Walls are merged along it
+## exactly like flat tops, so a long cliff is one quad instead of sixteen.
+const EDGE_RUNS: Dictionary = {
+	SlopeCatalog.DIR_N: {"step": Vector2i(1, 0), "near_first": true},
+	SlopeCatalog.DIR_E: {"step": Vector2i(0, 1), "near_first": true},
+	SlopeCatalog.DIR_S: {"step": Vector2i(1, 0), "near_first": false},
+	SlopeCatalog.DIR_W: {"step": Vector2i(0, 1), "near_first": false},
+}
 
 var _vertices := PackedVector3Array()
 var _normals := PackedVector3Array()
@@ -234,19 +243,54 @@ func _add_ramp_top(local_x: int, local_z: int, index: int) -> void:
 # --- Walls ------------------------------------------------------------------
 
 func _add_walls() -> void:
+	for edge: Dictionary in EDGES:
+		_add_walls_for_direction(int(edge["dir"]), int(edge["near"]), int(edge["far"]))
+
+
+## All walls facing one direction, merged along the axis they run on. Only
+## uniform walls merge — a wall under a ramp has two different corner heights and
+## keeps its own quad.
+func _add_walls_for_direction(direction: int, near_corner: int, far_corner: int) -> void:
+	var run: Dictionary = EDGE_RUNS[direction]
+	var step: Vector2i = run["step"]
+	var visited := PackedByteArray()
+	visited.resize(PADDED_CELLS * PADDED_CELLS)
 	for local_z in TerrainGrid.CHUNK_CELLS:
 		for local_x in TerrainGrid.CHUNK_CELLS:
 			var index := _padded_index(local_x, local_z)
-			if _solid[index] == 0:
+			if visited[index] == 1:
 				continue
-			for edge: Dictionary in EDGES:
-				_add_wall(local_x, local_z, index, int(edge["dir"]), int(edge["near"]), int(edge["far"]))
+			visited[index] = 1
+			var wall := _wall_of(local_x, local_z, index, direction, near_corner, far_corner)
+			if wall.is_empty():
+				continue
+			var last_x := local_x
+			var last_z := local_z
+			if _is_uniform(wall):
+				var next_x := local_x + step.x
+				var next_z := local_z + step.y
+				while next_x < TerrainGrid.CHUNK_CELLS and next_z < TerrainGrid.CHUNK_CELLS:
+					var next_index := _padded_index(next_x, next_z)
+					if visited[next_index] == 1:
+						break
+					var next_wall := _wall_of(next_x, next_z, next_index, direction, near_corner, far_corner)
+					if next_wall != wall:
+						break
+					visited[next_index] = 1
+					last_x = next_x
+					last_z = next_z
+					next_x += step.x
+					next_z += step.y
+			_emit_wall(local_x, local_z, last_x, last_z, index, direction, near_corner, far_corner, wall, bool(run["near_first"]))
 
 
-## Vertical face between this cell's edge and the lower ground beyond it. Missing
+## The wall profile of one cell's edge as `[near_top, far_top, near_bottom,
+## far_bottom]`, empty when the ground beyond that edge is level with it. Missing
 ## ground — board border or a carved hole — falls away by a fixed skirt instead of
 ## leaving an open silhouette.
-func _add_wall(local_x: int, local_z: int, index: int, direction: int, near_corner: int, far_corner: int) -> void:
+func _wall_of(local_x: int, local_z: int, index: int, direction: int, near_corner: int, far_corner: int) -> PackedFloat32Array:
+	if _solid[index] == 0:
+		return PackedFloat32Array()
 	var offset := SlopeCatalog.direction_offset(direction)
 	var neighbour_index := _padded_index(local_x + offset.x, local_z + offset.y)
 	var near_top := _corner_of(index, near_corner)
@@ -258,13 +302,26 @@ func _add_wall(local_x: int, local_z: int, index: int, direction: int, near_corn
 		near_bottom = minf(near_top, _corner_of(neighbour_index, int(mapping[0])))
 		far_bottom = minf(far_top, _corner_of(neighbour_index, int(mapping[1])))
 	if is_equal_approx(near_top, near_bottom) and is_equal_approx(far_top, far_bottom):
-		return
+		return PackedFloat32Array()
+	return PackedFloat32Array([near_top, far_top, near_bottom, far_bottom])
 
-	var cell := _origin + Vector2i(local_x, local_z)
-	var near_top_position := _corner_position(cell, near_corner, index)
-	var far_top_position := _corner_position(cell, far_corner, index)
-	var near_bottom_position := Vector3(near_top_position.x, near_bottom * TerrainGrid.HEIGHT_STEP, near_top_position.z)
-	var far_bottom_position := Vector3(far_top_position.x, far_bottom * TerrainGrid.HEIGHT_STEP, far_top_position.z)
+
+static func _is_uniform(wall: PackedFloat32Array) -> bool:
+	return is_equal_approx(wall[0], wall[1]) and is_equal_approx(wall[2], wall[3])
+
+
+func _emit_wall(first_x: int, first_z: int, last_x: int, last_z: int, index: int, direction: int, near_corner: int, far_corner: int, wall: PackedFloat32Array, near_first: bool) -> void:
+	# `near` is the end of the run the edge starts at, walking clockwise around
+	# the cell; for the south and west edges that is the far end of the merge.
+	var near_cell := _origin + Vector2i(first_x if near_first else last_x, first_z if near_first else last_z)
+	var far_cell := _origin + Vector2i(last_x if near_first else first_x, last_z if near_first else first_z)
+	var near_top_position := _corner_position(near_cell, near_corner, index)
+	var far_top_position := _corner_position(far_cell, far_corner, index)
+	near_top_position.y = wall[0] * TerrainGrid.HEIGHT_STEP
+	far_top_position.y = wall[1] * TerrainGrid.HEIGHT_STEP
+	var near_bottom_position := Vector3(near_top_position.x, wall[2] * TerrainGrid.HEIGHT_STEP, near_top_position.z)
+	var far_bottom_position := Vector3(far_top_position.x, wall[3] * TerrainGrid.HEIGHT_STEP, far_top_position.z)
+	var offset := SlopeCatalog.direction_offset(direction)
 	var normal := Vector3(float(offset.x), 0.0, float(offset.y))
 	var color := CLIFF_COLOR * CLIFF_SHADE_STEEP
 	color.a = 1.0

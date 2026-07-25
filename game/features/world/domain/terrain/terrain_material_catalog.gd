@@ -34,13 +34,13 @@ const DEFAULT_INDEX := 0
 
 const IDS: Array[StringName] = [GRASS, DIRT, STONE, SAND, SNOW]
 const INDEX_BY_ID := {GRASS: 0, DIRT: 1, STONE: 2, SAND: 3, SNOW: 4}
-const REPOSE_CLASS_BY_INDEX := PackedInt32Array([
+const REPOSE_CLASS_BY_INDEX: Array[int] = [
 	SlopeCatalog.CLASS_STEEP,
 	SlopeCatalog.CLASS_STEEP,
 	SlopeCatalog.CLASS_PRE_CLIFF,
 	SlopeCatalog.CLASS_MODERATE,
 	SlopeCatalog.CLASS_MODERATE,
-])
+]
 
 
 static func has_material(material_id: StringName) -> bool:

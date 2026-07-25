@@ -48,9 +48,9 @@ const CLASS_PRE_CLIFF := 6
 const CLASS_CLIFF := 7
 
 ## Parallel lookups by class, so the mesher and the cascade never scan `SLOPES`.
-const RISE_BY_CLASS := PackedInt32Array([0, 1, 1, 1, 1, 2, 4, 0])
-const RUN_BY_CLASS := PackedInt32Array([1, 8, 4, 2, 1, 1, 1, 0])
-const ANGLE_BY_CLASS := PackedFloat32Array([0.0, 5.625, 11.25, 22.5, 45.0, 63.4, 76.0, 90.0])
+const RISE_BY_CLASS: Array[int] = [0, 1, 1, 1, 1, 2, 4, 0]
+const RUN_BY_CLASS: Array[int] = [1, 8, 4, 2, 1, 1, 1, 0]
+const ANGLE_BY_CLASS: Array[float] = [0.0, 5.625, 11.25, 22.5, 45.0, 63.4, 76.0, 90.0]
 const CLASS_BY_ID := {
 	FLAT: CLASS_FLAT,
 	SHALLOW: CLASS_SHALLOW,
@@ -64,9 +64,9 @@ const CLASS_BY_ID := {
 
 ## Ramp classes ordered gentlest first — the exact order §3.2 walks when it picks
 ## the flattest slope that fits a boundary.
-const RAMP_CLASSES := PackedInt32Array([
+const RAMP_CLASSES: Array[int] = [
 	CLASS_SHALLOW, CLASS_GENTLE, CLASS_MODERATE, CLASS_STEEP, CLASS_VERY_STEEP, CLASS_PRE_CLIFF,
-])
+]
 
 ## Compass directions, clockwise from north. Ramps use the four orthogonal ones;
 ## the diagonal slots exist so stored data does not have to be remapped when
@@ -88,7 +88,7 @@ const DIRECTION_OFFSETS: Array[Vector2i] = [
 const ORTHOGONAL_DIRECTIONS: Array[int] = [DIR_N, DIR_E, DIR_S, DIR_W]
 
 ## The direction a ramp pointing `direction` would be reversed to.
-const OPPOSITE_DIRECTIONS := PackedInt32Array([DIR_S, DIR_SW, DIR_W, DIR_NW, DIR_N, DIR_NE, DIR_E, DIR_SE])
+const OPPOSITE_DIRECTIONS: Array[int] = [DIR_S, DIR_SW, DIR_W, DIR_NW, DIR_N, DIR_NE, DIR_E, DIR_SE]
 
 
 static func slope_class_of(slope_id: StringName) -> int:

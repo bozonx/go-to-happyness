@@ -38,6 +38,16 @@ const CORNER_NE := 1
 const CORNER_SE := 2
 const CORNER_SW := 3
 
+## Per orthogonal direction: the two corners this cell shares with that
+## neighbour, as `[mine, theirs, mine, theirs]` — the same point in the world
+## seen from both sides.
+const SHARED_CORNERS: Dictionary = {
+	SlopeCatalog.DIR_N: [CORNER_NW, CORNER_SW, CORNER_NE, CORNER_SE],
+	SlopeCatalog.DIR_E: [CORNER_NE, CORNER_NW, CORNER_SE, CORNER_SW],
+	SlopeCatalog.DIR_S: [CORNER_SE, CORNER_NE, CORNER_SW, CORNER_NW],
+	SlopeCatalog.DIR_W: [CORNER_SW, CORNER_SE, CORNER_NW, CORNER_NE],
+}
+
 var cell_size := 1.0
 var board_cells := 0
 var board_half_cells := 0
@@ -399,8 +409,11 @@ func is_ramp_valid_at(cell: Vector2i) -> bool:
 			return false
 		if slope_index_of(ramp_cell) != step or height_of(ramp_cell) != base_height:
 			return false
+	# The column it climbs to may itself be a ramp — a hillside is a chain of them,
+	# and the corner heights still line up because a ramp cell stores its base.
+	# `can_place_ramp` is stricter on purpose: that is a tool rule, not a data one.
 	var top_cell := ramp_top_anchor_at(cell)
-	if not is_inside(top_cell) or is_hole(top_cell) or is_ramp_cell(top_cell):
+	if not is_inside(top_cell) or is_hole(top_cell):
 		return false
 	return height_of(top_cell) == base_height + SlopeCatalog.rise_of_class(slope_class)
 
@@ -418,9 +431,45 @@ func corner_heights(cell: Vector2i) -> PackedFloat32Array:
 
 ## Same, writing into a caller-owned buffer of 4 floats. The mesher walks every
 ## cell of a chunk and every one of their neighbours, so the allocation matters.
+## §3.4: a slope's corners follow its own descriptor AND the four orthogonal
+## neighbours. Without the second half a hillside is a set of axis-aligned ramps
+## with a vertical wedge across every diagonal; with it, the corner two slopes
+## share simply rises to meet them both, and the pyramid corners of §3.4 come out
+## on their own. The lift is bounded by one `rise` of the cell's own class, so a
+## genuine cliff to a taller terrace stays a cliff.
 func corner_heights_into(cell: Vector2i, result: PackedFloat32Array) -> void:
-	var base := float(height_of(cell))
 	var slope_class := slope_class_at(cell)
+	_descriptor_corners_into(cell, slope_class, result)
+	if not SlopeCatalog.is_ramp_class(slope_class):
+		return
+	var run := SlopeCatalog.run_of_class(slope_class)
+	var rise_steps := SlopeCatalog.rise_of_class(slope_class)
+	var high := float(height_of(cell)) + float(rise_steps) * (float(slope_index_of(cell)) + 1.0) / float(run)
+	var neighbour_corners := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
+	for direction: int in SlopeCatalog.ORTHOGONAL_DIRECTIONS:
+		var neighbour := cell + SlopeCatalog.direction_offset(direction)
+		if not is_inside(neighbour) or is_hole(neighbour):
+			continue
+		var neighbour_class := slope_class_at(neighbour)
+		if not SlopeCatalog.is_ramp_class(neighbour_class):
+			# A flat column exactly one step above a single-cell slope is the
+			# other half of that slope's corner; anything else is a face.
+			if run == 1 and height_of(neighbour) == height_of(cell) + rise_steps:
+				_raise_edge(result, direction, high)
+			continue
+		_descriptor_corners_into(neighbour, neighbour_class, neighbour_corners)
+		var mapping: Array = SHARED_CORNERS[direction]
+		for pair in 2:
+			var mine: int = mapping[pair * 2]
+			var theirs: int = mapping[pair * 2 + 1]
+			var lift: float = neighbour_corners[theirs]
+			if lift > result[mine] and lift - result[mine] <= float(rise_steps) + 0.0001:
+				result[mine] = lift
+
+
+## Corner heights from the stored descriptor alone, before the neighbour pass.
+func _descriptor_corners_into(cell: Vector2i, slope_class: int, result: PackedFloat32Array) -> void:
+	var base := float(height_of(cell))
 	if not SlopeCatalog.is_ramp_class(slope_class):
 		result[0] = base
 		result[1] = base
@@ -436,19 +485,23 @@ func corner_heights_into(cell: Vector2i, result: PackedFloat32Array) -> void:
 	result[1] = low
 	result[2] = low
 	result[3] = low
-	match slope_direction_of(cell):
+	_raise_edge(result, slope_direction_of(cell), high)
+
+
+static func _raise_edge(result: PackedFloat32Array, direction: int, height: float) -> void:
+	match direction:
 		SlopeCatalog.DIR_N:
-			result[CORNER_NW] = high
-			result[CORNER_NE] = high
+			result[CORNER_NW] = height
+			result[CORNER_NE] = height
 		SlopeCatalog.DIR_E:
-			result[CORNER_NE] = high
-			result[CORNER_SE] = high
+			result[CORNER_NE] = height
+			result[CORNER_SE] = height
 		SlopeCatalog.DIR_S:
-			result[CORNER_SE] = high
-			result[CORNER_SW] = high
+			result[CORNER_SE] = height
+			result[CORNER_SW] = height
 		SlopeCatalog.DIR_W:
-			result[CORNER_SW] = high
-			result[CORNER_NW] = high
+			result[CORNER_SW] = height
+			result[CORNER_NW] = height
 
 
 ## Height in steps a body standing anywhere inside the cell would have, sampled

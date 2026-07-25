@@ -88,9 +88,10 @@ func _try_boundary(low_cell: Vector2i, direction: int) -> bool:
 	var high_cell := low_cell + SlopeCatalog.direction_offset(direction)
 	if not _region.is_inside(high_cell) or _region.is_hole(high_cell):
 		return false
-	# A ramp already meets the ground here; nothing to decorate.
-	if _region.is_ramp_cell(high_cell):
-		return false
+	# The high column may already be a slope — a hillside is a chain of them, and
+	# the inside corner of a hill is two slopes meeting at right angles. Both work
+	# out: the drop is measured between stored bases, and §3.4 lifts the corner
+	# the two slopes share so no wedge is left across the diagonal.
 	var low_height := _region.height_of(low_cell)
 	var drop := _region.height_of(high_cell) - low_height
 	if drop <= 0:
@@ -105,7 +106,7 @@ func _try_boundary(low_cell: Vector2i, direction: int) -> bool:
 		var total_cells := segments * SlopeCatalog.run_of_class(slope_class)
 		if total_cells > budget:
 			continue
-		var chain := _chain_cells(high_cell, direction, slope_class, segments, low_height)
+		var chain := _chain_cells(high_cell, direction, slope_class, segments, low_height, _region.height_of(high_cell))
 		if chain.is_empty():
 			continue
 		_write_chain(chain, _region.height_of(high_cell), direction, slope_class)
@@ -124,13 +125,21 @@ func _budget_for(low_cell: Vector2i, drop: int) -> int:
 
 ## The cells a chain of `segments` ramps would occupy, ordered from the one
 ## nearest the high column outwards. Empty when the ground does not allow it.
-func _chain_cells(high_cell: Vector2i, direction: int, slope_class: int, segments: int, low_height: int) -> Array[Vector2i]:
+func _chain_cells(high_cell: Vector2i, direction: int, slope_class: int, segments: int, low_height: int, high_height: int) -> Array[Vector2i]:
 	var offset := SlopeCatalog.direction_offset(direction)
 	var run := SlopeCatalog.run_of_class(slope_class)
+	var rise := SlopeCatalog.rise_of_class(slope_class)
 	var cells: Array[Vector2i] = []
 	for step in segments * run:
 		var cell := high_cell - offset * (step + 1)
 		if not _is_free_ground(cell) or _region.height_of(cell) != low_height:
+			return [] as Array[Vector2i]
+		# Only the segments nearest the high column are lifted; the far one lands
+		# on the ground as it already is. Lifting a column breaks any ramp that
+		# climbs to it, and a decorative pass has no business dissolving authored
+		# geometry — it gives up on the boundary instead.
+		var base := high_height - (step / run + 1) * rise
+		if base != low_height and _region.has_ramp_climbing_to(cell):
 			return [] as Array[Vector2i]
 		cells.append(cell)
 	return cells
@@ -141,11 +150,7 @@ func _chain_cells(high_cell: Vector2i, direction: int, slope_class: int, segment
 func _is_free_ground(cell: Vector2i) -> bool:
 	if not _region.is_inside(cell) or _region.is_hole(cell) or _region.is_anchor(cell):
 		return false
-	if _region.is_ramp_cell(cell) or _claimed.has(cell):
-		return false
-	# Raising this column would break somebody else's ramp. A decorative pass has
-	# no business dissolving authored geometry, so it leaves the boundary alone.
-	return not _region.has_ramp_climbing_to(cell)
+	return not (_region.is_ramp_cell(cell) or _claimed.has(cell))
 
 
 ## Writes the chain. `chain` runs outwards from the high column, so the segment a

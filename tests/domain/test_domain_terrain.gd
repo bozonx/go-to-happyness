@@ -3,25 +3,53 @@ extends RefCounted
 
 ## Covers the invariant the whole terrain system rests on: only integers are
 ## stored, everything fractional is derived (design_docs/core/grid_terrain_system.md §2.1).
+##
+## The edge cases are the point here. A cascade that is right in the middle of a
+## plain and wrong at the board edge, at an anchor, at a hole or on a ramp it
+## broke is not right at all — those are exactly the states the player reaches by
+## dragging a brush around.
 
 
 static func run_all() -> void:
 	_test_catalog_is_closed()
+	_test_catalog_lookups_agree()
+	_test_material_repose_matches_design()
 	_test_height_limits_are_rejected_not_clamped()
 	_test_flat_cell_corners()
+	_test_height_at_samples_across_cells()
 	_test_ramp_placement_rules()
 	_test_ramp_unrolls_into_fractional_corners_only()
+	_test_corners_follow_orthogonal_neighbours()
+	_test_shallow_ramp_spans_eight_cells()
 	_test_ramp_dissolves_on_height_edit()
+	_test_ramp_dissolves_when_its_top_column_moves()
+	_test_ramp_dissolves_when_ground_is_carved_away()
 	_test_dirty_chunks_cover_neighbours()
 	print("    [PASS] Terrain Grid Tests")
 	_test_cascade_builds_symmetric_pyramid()
 	_test_cascade_respects_material_repose()
 	_test_terrace_mode_keeps_vertical_face()
 	_test_cascade_digs_a_funnel()
+	_test_cascade_stops_at_the_board_edge()
+	_test_cascade_flows_around_a_hole()
+	_test_cascade_is_deterministic()
 	_test_anchor_rejects_whole_operation()
-	_test_delta_apply_and_revert_restore_grid()
-	_test_service_undo_redo()
+	_test_cascade_rejects_beyond_height_range()
+	_test_cascade_rejects_nothing_to_do()
 	print("    [PASS] Terrain Cascade Tests")
+	_test_auto_slope_decorates_a_grass_boundary()
+	_test_auto_slope_terraces_sand_over_two_cells()
+	_test_auto_slope_falls_back_to_cliff_on_rock()
+	_test_auto_skirt_descends_from_a_levelled_plateau()
+	_test_auto_slope_refuses_occupied_ground()
+	_test_auto_slope_never_moves_an_anchor()
+	_test_terrace_mode_assigns_no_slopes()
+	print("    [PASS] Terrain Auto-Slope Tests")
+	_test_delta_apply_and_revert_restore_grid()
+	_test_delta_carries_material_and_flags()
+	_test_service_undo_redo()
+	_test_service_paint_and_hole_are_undoable()
+	print("    [PASS] Terrain Transaction Tests")
 
 
 static func _make_grid(fill_height: int = 0) -> TerrainGrid:
@@ -30,18 +58,71 @@ static func _make_grid(fill_height: int = 0) -> TerrainGrid:
 	return grid
 
 
+# --- Catalogs ---------------------------------------------------------------
+
 static func _test_catalog_is_closed() -> void:
-	assert(SlopeCatalog.slope_class_of(SlopeCatalog.GENTLE) == 1)
+	assert(SlopeCatalog.SLOPES.size() == 8)
+	assert(SlopeCatalog.slope_class_of(SlopeCatalog.SHALLOW) == 1)
+	assert(SlopeCatalog.slope_class_of(SlopeCatalog.GENTLE) == 2)
+	assert(SlopeCatalog.slope_class_of(SlopeCatalog.CLIFF) == 7)
+	assert(SlopeCatalog.run_of(SlopeCatalog.SHALLOW) == 8)
 	assert(SlopeCatalog.run_of(SlopeCatalog.GENTLE) == 4)
 	assert(SlopeCatalog.rise_of(SlopeCatalog.GENTLE) == 1)
 	assert(SlopeCatalog.run_of(SlopeCatalog.CLIFF) == 0)
 	assert(not SlopeCatalog.is_ramp(SlopeCatalog.CLIFF))
 	assert(not SlopeCatalog.is_ramp(SlopeCatalog.FLAT))
-	assert(SlopeCatalog.ramp_ids().size() == 5)
-	# Nothing outside the table exists.
+	assert(SlopeCatalog.ramp_ids().size() == 6)
+	# Nothing outside the table exists, and asking about it is not an error.
 	assert(not SlopeCatalog.has_slope(&"custom_30_degrees"))
 	assert(SlopeCatalog.slope_class_of(&"custom_30_degrees") == -1)
+	assert(SlopeCatalog.id_of_class(-1) == SlopeCatalog.FLAT)
+	assert(SlopeCatalog.id_of_class(99) == SlopeCatalog.FLAT)
+	assert(is_inf(SlopeCatalog.steps_per_cell_of(SlopeCatalog.CLIFF)))
 
+
+static func _test_catalog_lookups_agree() -> void:
+	# The fast per-class arrays the mesher and the cascade use must not be able to
+	# drift away from the table §3 is written against.
+	for slope_class in SlopeCatalog.SLOPES.size():
+		var entry: Dictionary = SlopeCatalog.SLOPES[slope_class]
+		assert(SlopeCatalog.id_of_class(slope_class) == entry["id"])
+		assert(SlopeCatalog.slope_class_of(entry["id"]) == slope_class)
+		assert(SlopeCatalog.rise_of_class(slope_class) == int(entry["rise"]))
+		assert(SlopeCatalog.run_of_class(slope_class) == int(entry["run"]))
+		assert(is_equal_approx(SlopeCatalog.angle_degrees_of(entry["id"]), float(entry["angle"])))
+	# Steepness grows monotonically with the class — §3.2 walks the table in this
+	# order and relies on it.
+	var previous := -1.0
+	for slope_class in SlopeCatalog.SLOPES.size():
+		var steepness := SlopeCatalog.steps_per_cell_of_class(slope_class)
+		assert(steepness > previous)
+		previous = steepness
+	for direction: int in SlopeCatalog.ORTHOGONAL_DIRECTIONS:
+		assert(SlopeCatalog.is_orthogonal(direction))
+		assert(SlopeCatalog.direction_offset(SlopeCatalog.opposite_direction(direction)) == -SlopeCatalog.direction_offset(direction))
+	assert(not SlopeCatalog.is_orthogonal(SlopeCatalog.DIR_NE))
+	assert(SlopeCatalog.direction_offset(-1) == Vector2i.ZERO)
+
+
+static func _test_material_repose_matches_design() -> void:
+	# §4.2, verbatim: sand 22.5°, earth and grass 45°, rock 76°.
+	assert(SlopeCatalog.angle_degrees_of(SlopeCatalog.id_of_class(TerrainMaterialCatalog.repose_class_of(TerrainMaterialCatalog.SAND))) == 22.5)
+	assert(SlopeCatalog.angle_degrees_of(SlopeCatalog.id_of_class(TerrainMaterialCatalog.repose_class_of(TerrainMaterialCatalog.DIRT))) == 45.0)
+	assert(SlopeCatalog.angle_degrees_of(SlopeCatalog.id_of_class(TerrainMaterialCatalog.repose_class_of(TerrainMaterialCatalog.GRASS))) == 45.0)
+	assert(SlopeCatalog.angle_degrees_of(SlopeCatalog.id_of_class(TerrainMaterialCatalog.repose_class_of(TerrainMaterialCatalog.STONE))) == 76.0)
+	assert(is_equal_approx(TerrainMaterialCatalog.repose_steps_per_cell_of(TerrainMaterialCatalog.SAND), 0.5))
+	assert(is_equal_approx(TerrainMaterialCatalog.repose_steps_per_cell_of(TerrainMaterialCatalog.GRASS), 1.0))
+	assert(is_equal_approx(TerrainMaterialCatalog.repose_steps_per_cell_of(TerrainMaterialCatalog.STONE), 4.0))
+	# Unknown ids fall back to the default rather than crashing a cascade midway.
+	assert(not TerrainMaterialCatalog.has_material(&"lava"))
+	assert(TerrainMaterialCatalog.index_of(&"lava") == -1)
+	assert(TerrainMaterialCatalog.id_of_index(-1) == TerrainMaterialCatalog.DEFAULT_MATERIAL)
+	assert(TerrainMaterialCatalog.id_of_index(99) == TerrainMaterialCatalog.DEFAULT_MATERIAL)
+	for material_id: StringName in TerrainMaterialCatalog.ids():
+		assert(TerrainMaterialCatalog.id_of_index(TerrainMaterialCatalog.index_of(material_id)) == material_id)
+
+
+# --- Grid -------------------------------------------------------------------
 
 static func _test_height_limits_are_rejected_not_clamped() -> void:
 	var grid := _make_grid()
@@ -50,40 +131,78 @@ static func _test_height_limits_are_rejected_not_clamped() -> void:
 	assert(grid.height_of(Vector2i(0, 0)) == TerrainGrid.MAX_HEIGHT)
 	assert(not grid.set_height(Vector2i(0, 0), TerrainGrid.MIN_HEIGHT - 1))
 	assert(grid.height_of(Vector2i(0, 0)) == TerrainGrid.MAX_HEIGHT)
-	# Outside the board is a refusal, not a crash.
+	assert(grid.set_height(Vector2i(0, 0), TerrainGrid.MIN_HEIGHT))
+	# Outside the board every write is refused and every read is well defined.
 	assert(not grid.set_height(Vector2i(4096, 0), 1))
+	assert(not grid.set_material(Vector2i(4096, 0), TerrainMaterialCatalog.SAND))
+	assert(not grid.set_material(Vector2i(0, 0), &"lava"))
+	assert(grid.height_of(Vector2i(4096, 0)) == 0)
+	assert(grid.material_of(Vector2i(4096, 0)) == TerrainMaterialCatalog.DEFAULT_MATERIAL)
+	assert(grid.slope_of(Vector2i(4096, 0)) == SlopeCatalog.FLAT)
+	assert(grid.flags_of(Vector2i(4096, 0)) == 0)
+	assert(not grid.is_inside(grid.min_cell() - Vector2i.ONE))
+	assert(grid.is_inside(grid.min_cell()) and grid.is_inside(grid.max_cell()))
 
 
 static func _test_flat_cell_corners() -> void:
 	var grid := _make_grid()
 	grid.set_height(Vector2i(2, 3), 6)
-	var corners := grid.corner_heights(Vector2i(2, 3))
-	for corner: float in corners:
+	for corner: float in grid.corner_heights(Vector2i(2, 3)):
 		assert(is_equal_approx(corner, 6.0))
 	assert(is_equal_approx(grid.height_at(Vector3(2.5, 0.0, 3.5)), 6.0 * TerrainGrid.HEIGHT_STEP))
 
 
+static func _test_height_at_samples_across_cells() -> void:
+	var grid := _make_grid()
+	grid.set_height(Vector2i(1, 0), 1)
+	assert(grid.place_ramp(Vector2i(-1, 0), SlopeCatalog.MODERATE, SlopeCatalog.DIR_E))
+	# Along a moderate ramp the standing height climbs linearly, and the samples
+	# on the shared edge agree from both sides — that is the seam citizens walk.
+	assert(is_equal_approx(grid.height_at(Vector3(-1.0, 0.0, 0.5)), 0.0))
+	assert(is_equal_approx(grid.height_at(Vector3(0.0, 0.0, 0.5)), 0.25))
+	assert(absf(grid.height_at(Vector3(0.999, 0.0, 0.5)) - grid.height_at(Vector3(1.0, 0.0, 0.5))) < 0.001)
+	# Negative coordinates floor towards the lower cell, not towards zero.
+	grid.set_height(Vector2i(-3, -3), 4)
+	assert(grid.cell_from_position(Vector3(-2.5, 0.0, -2.5)) == Vector2i(-3, -3))
+	assert(is_equal_approx(grid.height_at(Vector3(-2.5, 0.0, -2.5)), 2.0))
+	assert(is_equal_approx(grid.cell_center(Vector2i(-3, -3)).y, 2.0))
+
+
 static func _test_ramp_placement_rules() -> void:
 	var grid := _make_grid()
-	# A gentle ramp needs 4 free flat cells and a column exactly +1 step at the top.
+	# Needs a column exactly `rise` higher beyond the run.
 	assert(not grid.can_place_ramp(Vector2i(0, 0), SlopeCatalog.GENTLE, SlopeCatalog.DIR_E))
 	grid.set_height(Vector2i(4, 0), 1)
 	assert(grid.can_place_ramp(Vector2i(0, 0), SlopeCatalog.GENTLE, SlopeCatalog.DIR_E))
-	# Wrong drop at the top end: two steps is not a gentle ramp.
 	grid.set_height(Vector2i(4, 0), 2)
 	assert(not grid.can_place_ramp(Vector2i(0, 0), SlopeCatalog.GENTLE, SlopeCatalog.DIR_E))
 	grid.set_height(Vector2i(4, 0), 1)
-	# An uneven run cannot carry one ramp object.
+
+	# An uneven run is not a ramp site.
 	grid.set_height(Vector2i(2, 0), 1)
 	assert(not grid.place_ramp(Vector2i(0, 0), SlopeCatalog.GENTLE, SlopeCatalog.DIR_E))
 	grid.set_height(Vector2i(2, 0), 0)
-	# A hole in the run blocks it too.
-	grid.set_hole(Vector2i(1, 0), true)
+	# Neither is a run crossing a hole or an anchor.
+	grid.set_hole(Vector2i(2, 0), true)
 	assert(not grid.place_ramp(Vector2i(0, 0), SlopeCatalog.GENTLE, SlopeCatalog.DIR_E))
-	grid.set_hole(Vector2i(1, 0), false)
+	grid.set_hole(Vector2i(2, 0), false)
+	grid.set_anchor(Vector2i(2, 0), true)
+	assert(not grid.place_ramp(Vector2i(0, 0), SlopeCatalog.GENTLE, SlopeCatalog.DIR_E))
+	grid.set_anchor(Vector2i(2, 0), false)
+	# A hole as the top column has nothing to climb to.
+	grid.set_hole(Vector2i(4, 0), true)
+	assert(not grid.place_ramp(Vector2i(0, 0), SlopeCatalog.GENTLE, SlopeCatalog.DIR_E))
+	grid.set_hole(Vector2i(4, 0), false)
+
 	assert(grid.place_ramp(Vector2i(0, 0), SlopeCatalog.GENTLE, SlopeCatalog.DIR_E))
-	# Diagonal ramps do not exist.
+	assert(grid.is_ramp_valid_at(Vector2i(1, 0)))
+	# Diagonals and non-ramp classes are refused outright (§3, §3.3).
 	assert(not grid.place_ramp(Vector2i(0, 8), SlopeCatalog.GENTLE, SlopeCatalog.DIR_NE))
+	assert(not grid.place_ramp(Vector2i(0, 8), SlopeCatalog.CLIFF, SlopeCatalog.DIR_E))
+	assert(not grid.place_ramp(Vector2i(0, 8), SlopeCatalog.FLAT, SlopeCatalog.DIR_E))
+	assert(not grid.place_ramp(Vector2i(0, 8), &"custom_30_degrees", SlopeCatalog.DIR_E))
+	# A run leaving the board cannot fit either.
+	assert(not grid.place_ramp(grid.max_cell() - Vector2i(1, 0), SlopeCatalog.GENTLE, SlopeCatalog.DIR_E))
 
 
 static func _test_ramp_unrolls_into_fractional_corners_only() -> void:
@@ -94,10 +213,11 @@ static func _test_ramp_unrolls_into_fractional_corners_only() -> void:
 	var ramp := grid.ramp_cells_at(Vector2i(2, 0))
 	assert(ramp.size() == 4)
 	assert(ramp[0] == Vector2i(0, 0) and ramp[3] == Vector2i(3, 0))
+	assert(grid.ramp_top_anchor_at(Vector2i(2, 0)) == Vector2i(4, 0))
 
 	for step in 4:
 		var cell := Vector2i(step, 0)
-		# Stored data stays integer: same base height, same slope, only the index moves.
+		# Stored data stays integer: one height, one class, one index.
 		assert(grid.height_of(cell) == 0)
 		assert(grid.slope_of(cell) == SlopeCatalog.GENTLE)
 		assert(grid.slope_index_of(cell) == step)
@@ -107,22 +227,68 @@ static func _test_ramp_unrolls_into_fractional_corners_only() -> void:
 		assert(is_equal_approx(corners[TerrainGrid.CORNER_NE], float(step + 1) * 0.25))
 		assert(is_equal_approx(corners[TerrainGrid.CORNER_SE], float(step + 1) * 0.25))
 
-	# The ramp meets the top column exactly — no crack, no fractional column.
+	# The ramp meets the column it climbs to without a seam.
 	assert(is_equal_approx(grid.corner_heights(Vector2i(3, 0))[TerrainGrid.CORNER_NE], 1.0))
 	assert(is_equal_approx(grid.corner_heights(Vector2i(4, 0))[TerrainGrid.CORNER_NW], 1.0))
-	# Standing height rises monotonically along the run.
+
 	var previous := -1.0
-	for step in 4:
-		var height := grid.height_steps_in_cell(Vector2i(step, 0), 0.5, 0.5)
+	for sample in 9:
+		var height := grid.height_at(Vector3(float(sample) * 0.5, 0.0, 0.5))
 		assert(height > previous)
 		previous = height
+
+
+static func _test_corners_follow_orthogonal_neighbours() -> void:
+	var grid := _make_grid()
+	grid.set_height(Vector2i(0, -1), 1)
+	grid.set_height(Vector2i(1, 0), 1)
+	assert(grid.place_ramp(Vector2i(0, 0), SlopeCatalog.STEEP, SlopeCatalog.DIR_N))
+
+	# §3.4: the slope rises north, and its east neighbour stands exactly one step
+	# up as well — so the corner they share rises too, and the inside corner of the
+	# hill comes out without a vertical wedge across the diagonal.
+	var corners := grid.corner_heights(Vector2i(0, 0))
+	assert(is_equal_approx(corners[TerrainGrid.CORNER_NW], 1.0))
+	assert(is_equal_approx(corners[TerrainGrid.CORNER_NE], 1.0))
+	assert(is_equal_approx(corners[TerrainGrid.CORNER_SE], 1.0))
+	assert(is_equal_approx(corners[TerrainGrid.CORNER_SW], 0.0))
+	# Stored data did not change: the column is still one integer height.
+	assert(grid.height_of(Vector2i(0, 0)) == 0)
+
+	# A neighbour further up than one step is a cliff and stays one.
+	grid.set_height(Vector2i(1, 0), 3)
+	var cliffed := grid.corner_heights(Vector2i(0, 0))
+	assert(is_equal_approx(cliffed[TerrainGrid.CORNER_SE], 0.0))
+	assert(is_equal_approx(cliffed[TerrainGrid.CORNER_NW], 1.0))
+
+	# A flat column takes no part in the rule at all — that is what keeps a
+	# terrace sheer (§4.1).
+	var terrace := _make_grid()
+	terrace.set_height(Vector2i(0, 0), 2)
+	for corner: float in terrace.corner_heights(Vector2i(1, 0)):
+		assert(is_equal_approx(corner, 0.0))
+
+
+static func _test_shallow_ramp_spans_eight_cells() -> void:
+	var grid := _make_grid()
+	grid.set_height(Vector2i(8, 0), 1)
+	assert(grid.can_place_ramp(Vector2i(0, 0), SlopeCatalog.SHALLOW, SlopeCatalog.DIR_E))
+	assert(grid.place_ramp(Vector2i(0, 0), SlopeCatalog.SHALLOW, SlopeCatalog.DIR_E))
+	assert(grid.ramp_cells_at(Vector2i(5, 0)).size() == 8)
+	# Δh / 8 per cell, and never anything but that in the data.
+	for step in 8:
+		var corners := grid.corner_heights(Vector2i(step, 0))
+		assert(grid.height_of(Vector2i(step, 0)) == 0)
+		assert(is_equal_approx(corners[TerrainGrid.CORNER_NE], float(step + 1) / 8.0))
+	assert(grid.is_ramp_valid_at(Vector2i(0, 0)))
 
 
 static func _test_ramp_dissolves_on_height_edit() -> void:
 	var grid := _make_grid()
 	grid.set_height(Vector2i(2, 0), 1)
 	assert(grid.place_ramp(Vector2i(0, 0), SlopeCatalog.MODERATE, SlopeCatalog.DIR_E))
-	# Editing one cell of a ramp removes the whole object; half a ramp cannot exist.
+	# Moving one cell of a ramp dissolves the whole object: it is one thing, and a
+	# partial ramp cannot exist in the data (§3.1).
 	assert(grid.set_height(Vector2i(1, 0), 3))
 	assert(grid.slope_of(Vector2i(0, 0)) == SlopeCatalog.FLAT)
 	assert(grid.slope_of(Vector2i(1, 0)) == SlopeCatalog.FLAT)
@@ -130,22 +296,70 @@ static func _test_ramp_dissolves_on_height_edit() -> void:
 	assert(grid.height_of(Vector2i(1, 0)) == 3)
 
 
+static func _test_ramp_dissolves_when_its_top_column_moves() -> void:
+	var grid := _make_grid()
+	grid.set_height(Vector2i(4, 0), 1)
+	assert(grid.place_ramp(Vector2i(0, 0), SlopeCatalog.GENTLE, SlopeCatalog.DIR_E))
+	# The column a ramp climbs to is part of the ramp's identity. Raising it must
+	# not leave a slope that climbs into a wall.
+	assert(grid.set_height(Vector2i(4, 0), 6))
+	assert(grid.slope_of(Vector2i(3, 0)) == SlopeCatalog.FLAT)
+	assert(grid.slope_of(Vector2i(0, 0)) == SlopeCatalog.FLAT)
+	assert(not grid.is_ramp_valid_at(Vector2i(2, 0)))
+
+	# A column beside the ramp is not part of it and leaves it alone.
+	grid.set_height(Vector2i(4, 0), 1)
+	assert(grid.place_ramp(Vector2i(0, 0), SlopeCatalog.GENTLE, SlopeCatalog.DIR_E))
+	assert(grid.set_height(Vector2i(2, 1), 5))
+	assert(grid.slope_of(Vector2i(2, 0)) == SlopeCatalog.GENTLE)
+	assert(grid.is_ramp_valid_at(Vector2i(2, 0)))
+
+
+static func _test_ramp_dissolves_when_ground_is_carved_away() -> void:
+	var grid := _make_grid()
+	grid.set_height(Vector2i(4, 0), 1)
+	assert(grid.place_ramp(Vector2i(0, 0), SlopeCatalog.GENTLE, SlopeCatalog.DIR_E))
+	# Carving the column the ramp climbs to takes the ramp with it (§6).
+	grid.set_hole(Vector2i(4, 0), true)
+	assert(grid.slope_of(Vector2i(1, 0)) == SlopeCatalog.FLAT)
+
+	grid.set_hole(Vector2i(4, 0), false)
+	assert(grid.place_ramp(Vector2i(0, 0), SlopeCatalog.GENTLE, SlopeCatalog.DIR_E))
+	# So does carving one of its own cells.
+	grid.set_hole(Vector2i(2, 0), true)
+	assert(grid.slope_of(Vector2i(0, 0)) == SlopeCatalog.FLAT)
+
+
 static func _test_dirty_chunks_cover_neighbours() -> void:
 	var grid := _make_grid()
 	grid.take_dirty_chunks()
 	assert(not grid.has_dirty_chunks())
-	# A cell on a chunk seam changes the neighbouring chunk's wall too.
-	grid.set_height(Vector2i(0, 0), 3)
+
+	# A cell in the middle of a chunk only dirties its own chunk.
+	grid.set_height(Vector2i(8, 8), 1)
+	assert(grid.take_dirty_chunks() == ([Vector2i(0, 0)] as Array[Vector2i]))
+
+	# A cell on a chunk corner shares its geometry with three more.
+	grid.set_height(Vector2i(0, 0), 1)
 	var chunks := grid.take_dirty_chunks()
 	assert(chunks.has(Vector2i(0, 0)))
 	assert(chunks.has(Vector2i(-1, -1)))
+	assert(chunks.has(Vector2i(-1, 0)))
+	assert(chunks.has(Vector2i(0, -1)))
 	assert(chunks.size() == 4)
-	# Deterministic order, independent of insertion.
-	var sorted := chunks.duplicate()
+
+	# And the queue is sorted, so a rebuild budget spends itself in the same order
+	# on every machine (§4.4).
+	grid.mark_all_chunks_dirty()
+	var all_chunks := grid.take_dirty_chunks()
+	var sorted := all_chunks.duplicate()
 	sorted.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
 		return a.y < b.y if a.y != b.y else a.x < b.x)
-	assert(chunks == sorted)
+	assert(all_chunks == sorted)
+	assert(all_chunks.size() == 4)
 
+
+# --- Cascade ----------------------------------------------------------------
 
 static func _assert_same_grid(before: Dictionary, after: Dictionary) -> void:
 	for key: String in before:
@@ -215,6 +429,57 @@ static func _test_cascade_digs_a_funnel() -> void:
 			assert(grid.height_of(Vector2i(x, z)) == expected)
 
 
+static func _test_cascade_stops_at_the_board_edge() -> void:
+	var grid := _make_grid()
+	var corner := grid.min_cell()
+	# A wave that runs off the board simply stops there; the operation is not
+	# refused, because the missing ground is not an obstacle, it is the end.
+	assert(_sculpt(grid, corner, 3) != null)
+	assert(grid.height_of(corner) == 3)
+	assert(grid.height_of(corner + Vector2i(1, 0)) == 2)
+	assert(grid.height_of(corner + Vector2i(3, 0)) == 0)
+	# A brush aimed off the board is refused outright.
+	var solver := CascadeSolver.new()
+	assert(solver.solve(grid, TerrainEditOperation.offset([corner - Vector2i(1, 0)] as Array[Vector2i], 1)) == null)
+	assert(solver.rejection_reason == CascadeSolver.REASON_OUT_OF_BOUNDS)
+
+
+static func _test_cascade_flows_around_a_hole() -> void:
+	var grid := _make_grid()
+	grid.set_hole(Vector2i(1, 0), true)
+	assert(_sculpt(grid, Vector2i(0, 0), 3) != null)
+	# The carved column keeps its data untouched and does not conduct the wave...
+	assert(grid.height_of(Vector2i(1, 0)) == 0)
+	assert(grid.height_of(Vector2i(2, 0)) == 0)
+	# ...while the wave still travels the ways that remain open.
+	assert(grid.height_of(Vector2i(0, 1)) == 2)
+	assert(grid.height_of(Vector2i(1, 1)) == 1)
+
+	# Painting height onto a hole is refused: there is no ground to move.
+	var solver := CascadeSolver.new()
+	assert(solver.solve(grid, TerrainEditOperation.offset([Vector2i(1, 0)] as Array[Vector2i], 1)) == null)
+	assert(solver.rejection_reason == CascadeSolver.REASON_HOLE)
+
+
+static func _test_cascade_is_deterministic() -> void:
+	var first := _make_grid()
+	var second := _make_grid()
+	for grid: TerrainGrid in [first, second]:
+		_fill_material(grid, TerrainMaterialCatalog.SAND)
+		grid.set_material(Vector2i(3, 3), TerrainMaterialCatalog.STONE)
+		grid.set_material(Vector2i(-2, 4), TerrainMaterialCatalog.GRASS)
+	var brush: Array[Vector2i] = [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-3, 2)]
+	var first_delta := CascadeSolver.solve_operation(first, TerrainEditOperation.offset(brush, 4))
+	# The same edit described in a different order must still give the same terrain.
+	var shuffled: Array[Vector2i] = [Vector2i(-3, 2), Vector2i(0, 1), Vector2i(1, 0), Vector2i(0, 0)]
+	var second_delta := CascadeSolver.solve_operation(second, TerrainEditOperation.offset(shuffled, 4))
+	assert(first_delta != null and second_delta != null)
+	first_delta.apply(first)
+	second_delta.apply(second)
+	_assert_same_grid(first.snapshot(), second.snapshot())
+	assert(first_delta.cells == second_delta.cells)
+
+
 static func _test_anchor_rejects_whole_operation() -> void:
 	var grid := _make_grid()
 	grid.set_anchor(Vector2i(2, 0), true)
@@ -234,6 +499,163 @@ static func _test_anchor_rejects_whole_operation() -> void:
 	assert(direct.rejection_reason == CascadeSolver.REASON_ANCHOR)
 	_assert_same_grid(before, grid.snapshot())
 
+	# A wave that stops one cell short of the anchor is fine.
+	var short := CascadeSolver.new()
+	var short_delta := short.solve(grid, TerrainEditOperation.offset([Vector2i(0, 0)] as Array[Vector2i], 2))
+	assert(short_delta != null)
+
+
+static func _test_cascade_rejects_beyond_height_range() -> void:
+	var grid := _make_grid(TerrainGrid.MAX_HEIGHT - 1)
+	var before := grid.snapshot()
+	var solver := CascadeSolver.new()
+	assert(solver.solve(grid, TerrainEditOperation.offset([Vector2i(0, 0)] as Array[Vector2i], 5)) == null)
+	assert(solver.rejection_reason == CascadeSolver.REASON_HEIGHT_LIMIT)
+	_assert_same_grid(before, grid.snapshot())
+	# Levelling to an impossible height is the same answer.
+	var level := CascadeSolver.new()
+	assert(level.solve(grid, TerrainEditOperation.level([Vector2i(0, 0)] as Array[Vector2i], TerrainGrid.MIN_HEIGHT - 1)) == null)
+	assert(level.rejection_reason == CascadeSolver.REASON_HEIGHT_LIMIT)
+
+
+static func _test_cascade_rejects_nothing_to_do() -> void:
+	var grid := _make_grid()
+	var solver := CascadeSolver.new()
+	assert(solver.solve(grid, TerrainEditOperation.offset([] as Array[Vector2i], 1)) == null)
+	assert(solver.rejection_reason == CascadeSolver.REASON_NOTHING_TO_DO)
+	# Levelling flat ground to the height it already has changes nothing, and
+	# saying so is better than committing an empty delta onto the undo stack.
+	var idle := CascadeSolver.new()
+	assert(idle.solve(grid, TerrainEditOperation.level([Vector2i(0, 0)] as Array[Vector2i], 0)) == null)
+	assert(idle.rejection_reason == CascadeSolver.REASON_NOTHING_TO_DO)
+	assert(CascadeSolver.new().solve(null, TerrainEditOperation.offset([Vector2i(0, 0)] as Array[Vector2i], 1)) == null)
+	assert(CascadeSolver.new().solve(grid, null) == null)
+
+
+# --- Auto-slope (§3.2, §4.5) ------------------------------------------------
+
+static func _test_auto_slope_decorates_a_grass_boundary() -> void:
+	var grid := _make_grid()
+	assert(_sculpt(grid, Vector2i(0, 0), 2) != null)
+	# Grass holds a full step per cell, so the gentlest slope that fits the
+	# cascade's own footprint is `steep`: one cell, one step, no ground moved.
+	assert(grid.slope_of(Vector2i(1, 0)) == SlopeCatalog.STEEP)
+	assert(grid.slope_direction_of(Vector2i(1, 0)) == SlopeCatalog.DIR_W)
+	assert(grid.slope_index_of(Vector2i(1, 0)) == 0)
+	assert(grid.height_of(Vector2i(1, 0)) == 1)
+	assert(grid.is_ramp_valid_at(Vector2i(1, 0)))
+	# The slope reaches exactly the top of the column beside it — no seam, and no
+	# fractional data anywhere.
+	assert(is_equal_approx(grid.corner_heights(Vector2i(1, 0))[TerrainGrid.CORNER_NW], 2.0))
+	assert(is_equal_approx(grid.corner_heights(Vector2i(0, 0))[TerrainGrid.CORNER_NE], 2.0))
+
+
+static func _test_auto_slope_terraces_sand_over_two_cells() -> void:
+	var grid := _make_grid()
+	_fill_material(grid, TerrainMaterialCatalog.SAND)
+	assert(_sculpt(grid, Vector2i(0, 0), 2) != null)
+	# Sand terraces every second cell, so the first boundary is between (1,0) and
+	# (2,0) — and the gentlest class that fits its two-cell footprint is
+	# `moderate`, laid across the very cells the cascade terraced.
+	assert(grid.height_of(Vector2i(1, 0)) == 2 and grid.height_of(Vector2i(2, 0)) == 1)
+	assert(grid.slope_of(Vector2i(2, 0)) == SlopeCatalog.MODERATE)
+	assert(grid.slope_of(Vector2i(3, 0)) == SlopeCatalog.MODERATE)
+	assert(grid.slope_direction_of(Vector2i(2, 0)) == SlopeCatalog.DIR_W)
+	assert(grid.slope_index_of(Vector2i(2, 0)) == 1)
+	assert(grid.slope_index_of(Vector2i(3, 0)) == 0)
+	# The descent decorates the ground the cascade already shaped; it moves none.
+	assert(grid.height_of(Vector2i(3, 0)) == 1)
+	assert(grid.is_ramp_valid_at(Vector2i(3, 0)))
+	assert(is_equal_approx(grid.corner_heights(Vector2i(2, 0))[TerrainGrid.CORNER_NW], 2.0))
+
+
+static func _test_auto_slope_falls_back_to_cliff_on_rock() -> void:
+	var grid := _make_grid()
+	_fill_material(grid, TerrainMaterialCatalog.STONE)
+	assert(_sculpt(grid, Vector2i(0, 0), 3) != null)
+	# Rock spends no ground on a three-step drop, and no catalog class rises 3 in
+	# one cell — so the boundary stays a bare face. That is a normal outcome (§3.2
+	# step 4), not a refusal: the column still moved.
+	assert(grid.height_of(Vector2i(0, 0)) == 3)
+	assert(grid.slope_of(Vector2i(1, 0)) == SlopeCatalog.FLAT)
+	assert(grid.slope_of(Vector2i(0, 0)) == SlopeCatalog.FLAT)
+
+	# A four-step drop on rock does have a class: `pre_cliff`, one cell.
+	var four := _make_grid()
+	_fill_material(four, TerrainMaterialCatalog.STONE)
+	assert(_sculpt(four, Vector2i(0, 0), 4) != null)
+	assert(four.slope_of(Vector2i(1, 0)) == SlopeCatalog.PRE_CLIFF)
+	assert(four.height_of(Vector2i(1, 0)) == 0)
+
+
+static func _test_auto_skirt_descends_from_a_levelled_plateau() -> void:
+	var grid := _make_grid()
+	var plateau: Array[Vector2i] = []
+	for z in range(-1, 2):
+		for x in range(-1, 2):
+			plateau.append(Vector2i(x, z))
+	var solver := CascadeSolver.new()
+	var delta := solver.solve(grid, TerrainEditOperation.level(plateau, 3))
+	assert(delta != null)
+	delta.apply(grid)
+
+	# The plateau itself is flat at the requested height.
+	for cell: Vector2i in plateau:
+		assert(grid.height_of(cell) == 3)
+		assert(grid.slope_of(cell) == SlopeCatalog.FLAT)
+	# Outside it the cascade terraced the ground, and the skirt turned those
+	# terraces into a walkable 45° descent instead of three bare faces (§4.5).
+	assert(grid.height_of(Vector2i(2, 0)) == 2)
+	assert(grid.height_of(Vector2i(3, 0)) == 1)
+	assert(grid.height_of(Vector2i(4, 0)) == 0)
+	for x in range(2, 5):
+		assert(grid.slope_of(Vector2i(x, 0)) == SlopeCatalog.STEEP)
+		assert(grid.slope_direction_of(Vector2i(x, 0)) == SlopeCatalog.DIR_W)
+		assert(grid.is_ramp_valid_at(Vector2i(x, 0)))
+	# Every column is still an integer number of steps; only the mesh is fractional.
+	assert(is_equal_approx(grid.corner_heights(Vector2i(2, 0))[TerrainGrid.CORNER_NW], 3.0))
+
+
+static func _test_auto_slope_refuses_occupied_ground() -> void:
+	var grid := _make_grid()
+	# An authored ramp already owns the ground west of the column, so the skirt
+	# has nowhere to go and leaves that boundary a cliff rather than dissolving
+	# somebody else's geometry.
+	grid.set_height(Vector2i(0, 0), 1)
+	assert(grid.place_ramp(Vector2i(-4, 0), SlopeCatalog.GENTLE, SlopeCatalog.DIR_E))
+	var before_slope := grid.slope_of(Vector2i(-1, 0))
+	assert(before_slope == SlopeCatalog.GENTLE)
+
+	assert(_sculpt(grid, Vector2i(0, 4), 1) != null)
+	assert(grid.slope_of(Vector2i(-1, 0)) == SlopeCatalog.GENTLE)
+	assert(grid.is_ramp_valid_at(Vector2i(-1, 0)))
+
+
+static func _test_auto_slope_never_moves_an_anchor() -> void:
+	var grid := _make_grid()
+	grid.set_anchor(Vector2i(2, 0), true)
+	# Two steps up beside an anchored column: the cascade stays clear of it, and
+	# the skirt may not raise it to build a descent either.
+	var solver := CascadeSolver.new()
+	var delta := solver.solve(grid, TerrainEditOperation.level([Vector2i(0, 0)] as Array[Vector2i], 2))
+	assert(delta != null)
+	delta.apply(grid)
+	assert(grid.height_of(Vector2i(2, 0)) == 0)
+	assert(grid.slope_of(Vector2i(2, 0)) == SlopeCatalog.FLAT)
+	assert(not grid.is_anchor(Vector2i(1, 0)))
+
+
+static func _test_terrace_mode_assigns_no_slopes() -> void:
+	var grid := _make_grid()
+	assert(_sculpt(grid, Vector2i(0, 0), 2, TerrainEditOperation.Mode.TERRACE) != null)
+	# Terrace asked for a sheer edge and gets one — no cascade, no decoration.
+	for direction: int in SlopeCatalog.ORTHOGONAL_DIRECTIONS:
+		var neighbour := Vector2i(0, 0) + SlopeCatalog.direction_offset(direction)
+		assert(grid.height_of(neighbour) == 0)
+		assert(grid.slope_of(neighbour) == SlopeCatalog.FLAT)
+
+
+# --- Transactions -----------------------------------------------------------
 
 static func _test_delta_apply_and_revert_restore_grid() -> void:
 	var grid := _make_grid()
@@ -245,14 +667,37 @@ static func _test_delta_apply_and_revert_restore_grid() -> void:
 	var delta := solver.solve(grid, TerrainEditOperation.offset([Vector2i(2, 0)] as Array[Vector2i], 2))
 	assert(delta != null)
 	delta.apply(grid)
-	# Moving one cell of a ramp dissolves the whole object.
-	assert(grid.slope_of(Vector2i(0, 0)) == SlopeCatalog.FLAT)
-	assert(grid.slope_of(Vector2i(3, 0)) == SlopeCatalog.FLAT)
+	# Moving one cell of a ramp dissolves the whole object; what the auto-slope
+	# pass then writes over the result is a new decision, not the old ramp.
+	assert(not grid.is_ramp_valid_at(Vector2i(0, 0)) or grid.slope_of(Vector2i(0, 0)) != SlopeCatalog.GENTLE)
+	assert(grid.slope_index_of(Vector2i(3, 0)) != 3 or grid.slope_of(Vector2i(3, 0)) != SlopeCatalog.GENTLE)
 
 	delta.revert(grid)
 	_assert_same_grid(before, grid.snapshot())
 	assert(grid.slope_of(Vector2i(1, 0)) == SlopeCatalog.GENTLE)
 	assert(grid.slope_index_of(Vector2i(1, 0)) == 1)
+	assert(grid.is_ramp_valid_at(Vector2i(1, 0)))
+
+
+static func _test_delta_carries_material_and_flags() -> void:
+	var grid := _make_grid()
+	var state := TerrainDelta.state_of(grid, Vector2i(0, 0))
+	assert(state.size() == TerrainDelta.STATE_SIZE)
+	# A delta describes the whole column. Anything it cannot express is something
+	# undo would silently lose.
+	var delta := TerrainDelta.new()
+	delta.record(Vector2i(0, 0), state, TerrainDelta.make_state(
+		4, SlopeCatalog.CLASS_STEEP, SlopeCatalog.DIR_E, 0,
+		TerrainMaterialCatalog.index_of(TerrainMaterialCatalog.SAND), TerrainCell.FLAG_ANCHOR,
+	))
+	var before := grid.snapshot()
+	delta.apply(grid)
+	assert(grid.height_of(Vector2i(0, 0)) == 4)
+	assert(grid.material_of(Vector2i(0, 0)) == TerrainMaterialCatalog.SAND)
+	assert(grid.is_anchor(Vector2i(0, 0)))
+	assert(grid.slope_of(Vector2i(0, 0)) == SlopeCatalog.STEEP)
+	delta.revert(grid)
+	_assert_same_grid(before, grid.snapshot())
 
 
 static func _test_service_undo_redo() -> void:
@@ -277,9 +722,54 @@ static func _test_service_undo_redo() -> void:
 	assert(service.apply_operation(TerrainEditOperation.offset([Vector2i(8, 8)] as Array[Vector2i], 1)))
 	assert(not service.can_redo())
 
+	# A refused operation leaves the history alone and says why.
+	var depth := service.undo_depth()
+	grid.set_anchor(Vector2i(-8, -8), true)
+	assert(not service.apply_operation(TerrainEditOperation.offset([Vector2i(-8, -8)] as Array[Vector2i], 1)))
+	assert(service.last_rejection() == CascadeSolver.REASON_ANCHOR)
+	assert(service.undo_depth() == depth)
+
 	# Ramps are transactions too.
 	assert(grid.set_height(Vector2i(-4, 8), 1))
 	assert(service.place_ramp(Vector2i(-8, 8), SlopeCatalog.GENTLE, SlopeCatalog.DIR_E))
 	assert(grid.slope_of(Vector2i(-6, 8)) == SlopeCatalog.GENTLE)
 	assert(service.undo())
 	assert(grid.slope_of(Vector2i(-6, 8)) == SlopeCatalog.FLAT)
+	# As is dissolving one.
+	assert(service.redo())
+	assert(service.dissolve_ramp(Vector2i(-6, 8)))
+	assert(grid.slope_of(Vector2i(-6, 8)) == SlopeCatalog.FLAT)
+	assert(service.undo())
+	assert(grid.slope_of(Vector2i(-6, 8)) == SlopeCatalog.GENTLE)
+	assert(not service.place_ramp(Vector2i(-8, 8), SlopeCatalog.GENTLE, SlopeCatalog.DIR_E))
+
+
+static func _test_service_paint_and_hole_are_undoable() -> void:
+	var grid := _make_grid()
+	var service := TerrainService.new()
+	service.configure(grid)
+	var before := grid.snapshot()
+
+	# Material is not decoration — it sets the angle of repose — so painting is a
+	# transaction like any other edit.
+	var brush: Array[Vector2i] = [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 0)]
+	assert(service.paint_material(brush, TerrainMaterialCatalog.SAND))
+	assert(grid.material_of(Vector2i(0, 0)) == TerrainMaterialCatalog.SAND)
+	assert(service.last_delta_size() == 2)
+	# Repainting the same material is not an edit.
+	assert(not service.paint_material(brush, TerrainMaterialCatalog.SAND))
+	assert(not service.paint_material(brush, &"lava"))
+	assert(service.undo())
+	_assert_same_grid(before, grid.snapshot())
+
+	# Cutting a hole takes the ramps leaning on it along, in the same transaction.
+	grid.set_height(Vector2i(4, 0), 1)
+	assert(grid.place_ramp(Vector2i(0, 0), SlopeCatalog.GENTLE, SlopeCatalog.DIR_E))
+	var with_ramp := grid.snapshot()
+	assert(service.set_hole([Vector2i(4, 0)] as Array[Vector2i], true))
+	assert(grid.is_hole(Vector2i(4, 0)))
+	assert(grid.slope_of(Vector2i(1, 0)) == SlopeCatalog.FLAT)
+	assert(not service.set_hole([Vector2i(4, 0)] as Array[Vector2i], true))
+	assert(service.undo())
+	_assert_same_grid(with_ramp, grid.snapshot())
+	assert(grid.slope_of(Vector2i(1, 0)) == SlopeCatalog.GENTLE)
