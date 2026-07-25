@@ -144,6 +144,12 @@ not in the settlement bootstrap scene. It runs the production `TerrainGrid`,
   in `user://terrain_lab/`. Agents that can inspect images must open them after a
   visual change. `nav_pedestrian` / `nav_cart` / `nav_ramps_closeup` are the
   passability set.
+- The brush is not in the lab. Raise, level, paint, wear, snow, hole and ramp live
+  in `TerrainBrushController`
+  (`game/features/world/presentation/editor/terrain_brush_controller.gd`), shared
+  by the lab, the map editor and the `Terrain Base` layer of the building editor.
+  A host binds keys, draws the hover marker and reads `last_message`; it does not
+  reimplement a tool.
 - Terrain edits must go through `TerrainService`, never straight into the grid:
   that signal is what keeps undo, the chunk mesher and the published navigation
   field in step. A tool that writes the grid directly has to republish by hand

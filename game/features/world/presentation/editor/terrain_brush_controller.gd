@@ -1,0 +1,272 @@
+class_name TerrainBrushController
+extends RefCounted
+
+## The terrain brush itself, with no host around it (map_editor.md §3.1, §3.6).
+##
+## Everything an author does to the ground — raise, level, paint, wear, snow,
+## hole, ramp — lives here once, so the terrain laboratory, the map editor and
+## the `Terrain Base` layer of the building editor drive the same tool instead of
+## growing three implementations that drift apart.
+##
+## The controller owns brush state (size, edit mode, picked material and variant,
+## ramp class and direction), the hovered column, and the outcome message of the
+## last operation. It owns no nodes: the host draws the hover marker, prints the
+## message and binds the keys. Edits always go through `TerrainService`, never
+## into the grid directly, which is what keeps undo, the chunk mesher and the
+## published navigation field in step.
+
+const HOVER_RAY_LENGTH := 500.0
+const MAX_BRUSH_SIZE := 8
+
+var brush_size := 1
+var edit_mode := TerrainEditOperation.Mode.SCULPT
+var material_index := 0
+var variant := 0
+var ramp_class := SlopeCatalog.CLASS_GENTLE
+var ramp_direction := SlopeCatalog.DIR_E
+
+var hovered_cell := Vector2i.ZERO
+var has_hover := false
+var last_message := "ready"
+
+var _grid: TerrainGrid
+var _service: TerrainService
+var _wear_service: SurfaceWearService
+## Non-zero while a drag paints: +1 raises, -1 lowers, applied again whenever the
+## cursor crosses into a new column.
+var _paint_direction := 0
+var _wear_day := 0
+
+
+func configure(grid: TerrainGrid, service: TerrainService, wear_service: SurfaceWearService = null) -> void:
+	_grid = grid
+	_service = service
+	_wear_service = wear_service
+
+
+# --- Hover ------------------------------------------------------------------
+
+## Picks the column under the cursor and, while a drag is painting, applies the
+## brush to every new column it crosses. Returns whether a column is hovered.
+func update_hover(camera: Camera3D, space: PhysicsDirectSpaceState3D, mouse: Vector2) -> bool:
+	var origin := camera.project_ray_origin(mouse)
+	var query := PhysicsRayQueryParameters3D.create(
+		origin, origin + camera.project_ray_normal(mouse) * HOVER_RAY_LENGTH,
+	)
+	query.collide_with_areas = false
+	var hit := space.intersect_ray(query)
+	var previous := hovered_cell
+	var had_hover := has_hover
+	has_hover = not hit.is_empty()
+	if has_hover:
+		# Nudge into the surface so a hit exactly on a shared edge resolves to the
+		# column the cursor is visually over.
+		var point: Vector3 = hit["position"] - (hit["normal"] as Vector3) * 0.01
+		hovered_cell = _grid.cell_from_position(point)
+		has_hover = _grid.is_inside(hovered_cell)
+	if has_hover and _paint_direction != 0 and (not had_hover or previous != hovered_cell):
+		apply_height_brush(_paint_direction)
+	return has_hover
+
+
+func clear_hover() -> void:
+	has_hover = false
+
+
+## Starts or stops a painting drag. Non-zero also applies the brush at once, so a
+## click that never moves still edits the column under it.
+func set_paint_direction(direction: int) -> void:
+	_paint_direction = direction
+	if direction != 0:
+		apply_height_brush(direction)
+
+
+func is_painting() -> bool:
+	return _paint_direction != 0
+
+
+## The square of in-bounds cells the brush covers, centred on `center`.
+func brush_cells(center: Vector2i) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	var radius := brush_size - 1
+	for offset_z in range(-radius, radius + 1):
+		for offset_x in range(-radius, radius + 1):
+			var cell := center + Vector2i(offset_x, offset_z)
+			if _grid.is_inside(cell):
+				cells.append(cell)
+	return cells
+
+
+# --- Height -----------------------------------------------------------------
+
+func apply_height_brush(delta: int) -> void:
+	if not has_hover:
+		return
+	var operation := TerrainEditOperation.offset(brush_cells(hovered_cell), delta, edit_mode)
+	if edit_mode == TerrainEditOperation.Mode.LEVEL:
+		# The level tool has no direction of its own: the wheel of the height
+		# brush chooses which way the plateau moves from the hovered column.
+		operation = TerrainEditOperation.level(brush_cells(hovered_cell), _grid.height_of(hovered_cell) + delta)
+	if _service.apply_operation(operation):
+		last_message = "%s %+d — %d cells changed" % [
+			TerrainEditOperation.mode_name(edit_mode), delta, _service.last_delta_size(),
+		]
+		return
+	last_message = "%s %+d REFUSED (%s)" % [
+		TerrainEditOperation.mode_name(edit_mode), delta, _service.last_rejection(),
+	]
+
+
+func apply_flatten() -> void:
+	if not has_hover:
+		return
+	var target := _grid.height_of(hovered_cell)
+	if _service.apply_operation(TerrainEditOperation.level(brush_cells(hovered_cell), target)):
+		last_message = "levelled to %d" % target
+		return
+	last_message = "level REFUSED (%s)" % _service.last_rejection()
+
+
+func cycle_edit_mode() -> void:
+	edit_mode = (edit_mode + 1) % 3
+	last_message = "mode %s" % TerrainEditOperation.mode_name(edit_mode)
+
+
+func adjust_brush_size(delta: int) -> void:
+	brush_size = clampi(brush_size + delta, 1, MAX_BRUSH_SIZE)
+
+
+# --- Surface ----------------------------------------------------------------
+
+func set_material_index(index: int) -> void:
+	if index < 0 or index >= TerrainMaterialCatalog.count():
+		return
+	material_index = index
+	variant = TerrainMaterialVariants.clamp_variant(material_index, variant)
+	last_message = "material %s" % TerrainMaterialCatalog.ids()[material_index]
+
+
+func material_id() -> StringName:
+	return TerrainMaterialCatalog.ids()[material_index]
+
+
+func apply_material() -> void:
+	if not has_hover:
+		return
+	var id := material_id()
+	if _service.paint_material(brush_cells(hovered_cell), id, variant):
+		last_message = "painted %s/%s" % [id, TerrainMaterialVariants.variant_name(material_index, variant)]
+		return
+	last_message = "paint %s changed nothing" % id
+
+
+func cycle_variant() -> void:
+	if not has_hover:
+		return
+	variant = (variant + 1) % TerrainMaterialVariants.variant_count(material_index)
+	if _service.paint_variant(brush_cells(hovered_cell), variant):
+		last_message = "variant %s" % TerrainMaterialVariants.variant_name(material_index, variant)
+		return
+	last_message = "variant %d unchanged" % variant
+
+
+func cycle_wear() -> void:
+	if not has_hover:
+		return
+	var next := (_grid.wear_at(hovered_cell) + 1) % (TerrainDetailCodec.MAX_WEAR + 1)
+	if _service.set_wear(brush_cells(hovered_cell), next):
+		last_message = "wear %d" % next
+		return
+	last_message = "wear unchanged"
+
+
+func cycle_snow() -> void:
+	if not has_hover:
+		return
+	var next := (_grid.snow_depth_at(hovered_cell) + 1) % (TerrainDetailCodec.MAX_SNOW_DEPTH + 1)
+	if _service.set_snow_depth(brush_cells(hovered_cell), next):
+		last_message = "snow depth %d" % next
+		return
+	last_message = "snow unchanged"
+
+
+## Fakes a day of traffic over the brush: enough crossings to move the wear level,
+## fed through the real `SurfaceWearService` so the throttle, the transaction and
+## the navigation weight are the real ones (terrain_materials.md §6.1).
+func walk_the_brush() -> void:
+	if not has_hover or _wear_service == null:
+		return
+	var cells := brush_cells(hovered_cell)
+	for _pass in SurfaceWearService.CROSSINGS_PER_WEAR_LEVEL:
+		_wear_service.begin_tick()
+		for cell: Vector2i in cells:
+			_wear_service.record_crossing(cell)
+	_wear_day += 1
+	var raised := _wear_service.flush(_wear_day)
+	last_message = "walked %d cells — %d wore down" % [cells.size(), raised.size()]
+
+
+func toggle_hole() -> void:
+	if not has_hover:
+		return
+	var enabled := not _grid.is_hole(hovered_cell)
+	if _service.set_hole(brush_cells(hovered_cell), enabled):
+		last_message = "hole %s" % ("cut" if enabled else "filled")
+		return
+	last_message = "hole unchanged"
+
+
+# --- Ramps ------------------------------------------------------------------
+
+func place_ramp() -> void:
+	if not has_hover:
+		return
+	var slope_id := SlopeCatalog.id_of_class(ramp_class)
+	if _service.place_ramp(hovered_cell, slope_id, ramp_direction):
+		last_message = "ramp %s placed" % slope_id
+		return
+	# Refusal is a normal answer (grid_terrain_system.md §3.1): the run must be
+	# flat, free, and end at a column exactly `rise` steps higher.
+	last_message = "ramp %s REFUSED (needs %d free flat cells and a +%d step at the top)" % [
+		slope_id, SlopeCatalog.run_of(slope_id), SlopeCatalog.rise_of(slope_id),
+	]
+
+
+func dissolve_ramp() -> void:
+	if not has_hover:
+		return
+	last_message = "ramp dissolved" if _service.dissolve_ramp(hovered_cell) else "no ramp here"
+
+
+func cycle_ramp_class() -> void:
+	var classes: Array[int] = []
+	for slope_id: StringName in SlopeCatalog.ramp_ids():
+		classes.append(SlopeCatalog.slope_class_of(slope_id))
+	var position := classes.find(ramp_class)
+	ramp_class = classes[(position + 1) % classes.size()] if position >= 0 else classes[0]
+	last_message = "ramp class %d (%s)" % [ramp_class, SlopeCatalog.id_of_class(ramp_class)]
+
+
+func cycle_ramp_direction() -> void:
+	var order := SlopeCatalog.ORTHOGONAL_DIRECTIONS
+	ramp_direction = order[(order.find(ramp_direction) + 1) % order.size()]
+	last_message = "ramp direction %s" % direction_name(ramp_direction)
+
+
+static func direction_name(direction: int) -> String:
+	match direction:
+		SlopeCatalog.DIR_N: return "N"
+		SlopeCatalog.DIR_E: return "E"
+		SlopeCatalog.DIR_S: return "S"
+		SlopeCatalog.DIR_W: return "W"
+	return str(direction)
+
+
+# --- History ----------------------------------------------------------------
+
+func undo() -> void:
+	last_message = "undo" if _service.undo() else "nothing to undo"
+
+
+func redo() -> void:
+	last_message = "redo" if _service.redo() else "nothing to redo"

@@ -11,6 +11,7 @@ const TestDomainTerrainScript = preload("res://tests/domain/test_domain_terrain.
 const TestDomainTerrainMaterialsScript = preload("res://tests/domain/test_domain_terrain_materials.gd")
 const TestSurfaceStateScript = preload("res://tests/features/world/test_surface_state.gd")
 const TestTerrainMeshingScript = preload("res://tests/features/world/test_terrain_meshing.gd")
+const TestTerrainBrushScript = preload("res://tests/features/world/test_terrain_brush.gd")
 const TestDomainTerrainNavigationScript = preload("res://tests/domain/test_domain_terrain_navigation.gd")
 
 const TestAIFrameworkScript = preload("res://tests/ai/test_ai_framework.gd")
@@ -41,6 +42,7 @@ func _init() -> void:
 	TestDomainTerrainMaterialsScript.run_all()
 	TestSurfaceStateScript.run_all()
 	TestTerrainMeshingScript.run_all()
+	TestTerrainBrushScript.run_all()
 	TestDomainTerrainNavigationScript.run_all()
 	TestSaveLoadScript.run_all()
 	print("  => Domain Unit Tests PASSED.")
