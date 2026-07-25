@@ -84,7 +84,7 @@ func complete_building(cell: Vector2i, building_type: String, position_on_board:
 		# existing visual system continues to work without changes.
 		var fire_states: Array = game.fixture_service.fixtures_with_capability(building_instance_id, FixtureDefinitionScript.CAP_FIRE_SOURCE)
 		if not fire_states.is_empty():
-			var first_fire := fire_states[0]
+			var first_fire: Variant = fire_states[0]
 			building.set_meta("fire_fuel", first_fire.fire_state.fuel)
 			building.set_meta("fire_lit", first_fire.fire_state.lit)
 			building.set_meta("fire_embers_until", first_fire.fire_state.embers_until_minute)

@@ -1,47 +1,27 @@
 class_name SettlementGame
 extends Node3D
 
-const SETTLEMENT_RULES = preload("res://game/features/settlement/domain/settlement_rules.gd")
 const CitizenActorScene = preload("res://game/features/citizens/presentation/citizen_actor.tscn")
 const UIManagerScene = preload("res://game/features/ui/presentation/ui_manager.tscn")
 const CameraControllerScene = preload("res://game/features/world/presentation/camera_controller.tscn")
 const FireLightScene = preload("res://game/features/buildings/presentation/fire_light.tscn")
-const HouseLightScene = preload("res://game/features/buildings/presentation/house_light.tscn")
-const BuildingSelectorScene = preload("res://game/features/buildings/presentation/building_selector.tscn")
-const EntranceMarkerScene = preload("res://game/features/buildings/presentation/entrance_marker.tscn")
 const ConstructionSiteScene = preload("res://game/features/buildings/presentation/construction_site.tscn")
 const ConstructionEntrancePostScene = preload("res://game/features/buildings/presentation/construction_entrance_post.tscn")
 const BillboardLabelScene = preload("res://game/features/ui/presentation/billboard_label.tscn")
-const GatheringPlaceVisualScene = preload("res://game/features/buildings/presentation/gathering_place_visual.tscn")
-const PocketTakeItemRowScene = preload("res://game/features/citizens/presentation/pocket_take_item_row.tscn")
 const GameLaunchConfigScript = preload("res://game/features/settlement/domain/game_launch_config.gd")
 const TentEraSurvivalRulesScript = preload("res://game/features/settlement/domain/tent_era_survival_rules.gd")
-const CampfireMenuControllerScript = preload("res://game/features/settlement/presentation/campfire_menu_controller.gd")
-const WorkforceMenuControllerScript = preload("res://game/features/decision/presentation/workforce_menu_controller.gd")
-const ResearchMenuControllerScript = preload("res://game/features/settlement/presentation/research_menu_controller.gd")
-const SchoolMenuControllerScript = preload("res://game/features/buildings/presentation/school_menu_controller.gd")
-const EntranceMenuControllerScript = preload("res://game/features/buildings/presentation/entrance_menu_controller.gd")
-const HouseMenuControllerScript = preload("res://game/features/buildings/presentation/house_menu_controller.gd")
-const PocketTakeMenuControllerScript = preload("res://game/features/citizens/presentation/pocket_take_menu_controller.gd")
-const FireSourceStateScript = preload("res://game/features/settlement/domain/fire_source_state.gd")
 const CourierDispatcherScript = preload("res://game/features/logistics/application/courier_dispatcher.gd")
 const CourierTaskServiceScript = preload("res://game/features/logistics/application/courier_task_service.gd")
 const CourierTaskPublisherScript = preload("res://game/features/logistics/application/courier_task_publisher.gd")
-const CourierTaskScript = preload("res://game/features/logistics/domain/courier_task.gd")
 const WaterCollectorRecordScript = preload("res://game/features/logistics/domain/water_collector_record.gd")
 const DigSiteRecordScript = preload("res://game/features/production/domain/dig_site_record.gd")
 const GrassSourceRecordScript = preload("res://game/features/production/domain/grass_source_record.gd")
-const ForageSourceRecordScript = preload("res://game/features/production/domain/forage_source_record.gd")
-const RabbitSourceRecordScript = preload("res://game/features/production/domain/rabbit_source_record.gd")
 const HouseLightRecordScript = preload("res://game/features/buildings/domain/house_light_record.gd")
 const TradeServiceScript = preload("res://game/features/logistics/application/trade_service.gd")
-const MarketMenuControllerScript = preload("res://game/features/logistics/presentation/market_menu_controller.gd")
-const WarehouseMenuControllerScript = preload("res://game/features/logistics/presentation/warehouse_menu_controller.gd")
 const WarehouseFillLabelControllerScript = preload("res://game/features/logistics/presentation/warehouse_fill_label_controller.gd")
 const StorageDeliveryServiceScript = preload("res://game/features/logistics/application/storage_delivery_service.gd")
 const StorageRoutingServiceScript = preload("res://game/features/logistics/application/storage_routing_service.gd")
 const BuildingAvailabilityServiceScript = preload("res://game/features/buildings/application/building_availability_service.gd")
-const BuildingMenuControllerScript = preload("res://game/features/buildings/presentation/building_menu_controller.gd")
 const BuildingPlacementControllerScript = preload("res://game/features/buildings/presentation/building_placement_controller.gd")
 const BuildingStatusIndicatorControllerScript = preload("res://game/features/buildings/presentation/building_status_indicator_controller.gd")
 const FirstPersonHUDControllerScript = preload("res://game/features/ui/presentation/first_person_hud_controller.gd")
@@ -50,7 +30,6 @@ const ResourcePileVisualsScript = preload("res://game/features/logistics/present
 const BuildingLifecycleServiceScript = preload("res://game/features/buildings/application/building_lifecycle_service.gd")
 const BuildingZoneServiceScript = preload("res://game/features/buildings/application/building_zone_service.gd")
 const ConstructionPriorityServiceScript = preload("res://game/features/buildings/application/construction_priority_service.gd")
-const BuildingRuntimeStateScript = preload("res://game/features/buildings/application/building_runtime_state.gd")
 const BuildingEntrancePositionsScript = preload("res://game/features/buildings/domain/building_entrance_positions.gd")
 const BuildingBlueprintLibraryScript = preload("res://game/features/buildings/presentation/building_blueprint_library.gd")
 const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
@@ -58,7 +37,6 @@ const BuildingResearchServiceScript = preload("res://game/features/buildings/app
 const BuildingQueueServiceScript = preload("res://game/features/citizens/application/building_queue_service.gd")
 const CitizenLifecycleServiceScript = preload("res://game/features/citizens/application/citizen_lifecycle_service.gd")
 const CitizenLivingStatusServiceScript = preload("res://game/features/citizens/application/citizen_living_status_service.gd")
-const CitizenStatusEffectScript = preload("res://game/features/citizens/domain/citizen_status_effect.gd")
 const CitizenRegistrationServiceScript = preload("res://game/features/citizens/application/citizen_registration_service.gd")
 const SchoolServiceScript = preload("res://game/features/buildings/application/school_service.gd")
 const SaveDataScript = preload("res://game/features/save_load/domain/save_data.gd")
@@ -105,13 +83,9 @@ const NavigationObstaclePublisherScript = preload("res://game/features/routing/a
 const NavigationFacadeScript = preload("res://game/features/routing/application/navigation_facade.gd")
 const NavigationBridgeScript = preload("res://game/features/routing/presentation/navigation_bridge.gd")
 const WeatherStateScript = preload("res://game/features/simulation/domain/weather_state.gd")
-const CameraControllerScript = preload("res://game/features/world/presentation/camera_controller.gd")
 const WorldSetupScene = preload("res://game/features/world/presentation/world_setup.tscn")
 const EventServiceScript = preload("res://game/features/events/application/event_service.gd")
 const EventRegistryScript = preload("res://game/features/events/domain/event_registry.gd")
-const EventLogScript = preload("res://game/features/events/domain/event_log.gd")
-const EventContextScript = preload("res://game/features/events/domain/event_context.gd")
-const EventOutcomeScript = preload("res://game/features/events/domain/event_outcome.gd")
 const TentEraEventsScript = preload("res://game/features/events/application/tent_era_events.gd")
 const SurvivalEventControllerScript = preload("res://game/features/events/presentation/survival_event_controller.gd")
 const VillageTerritoryServiceScript = preload("res://game/features/buildings/application/village_territory_service.gd")
@@ -122,7 +96,6 @@ const SettlementSurvivalServiceScript = preload("res://game/features/settlement/
 const SettlementDailyRulesServiceScript = preload("res://game/features/settlement/application/settlement_daily_rules_service.gd")
 const TerritoryServiceScript = preload("res://game/features/world/application/territory_service.gd")
 const ResourcePileScript = preload("res://game/features/logistics/domain/resource_pile.gd")
-const WarehouseStateScript = preload("res://game/features/settlement/domain/warehouse_state.gd")
 const WorldResourceStateScript = preload("res://game/features/world/domain/world_resource_state.gd")
 const S = preload("res://game/features/ui/domain/game_strings.gd")
 const BuildingSpatialRegistryScript = preload("res://game/features/buildings/application/building_spatial_registry.gd")
@@ -152,40 +125,29 @@ const SettlementLogisticsControllerScript = preload("res://game/bootstrap/settle
 const SettlementWorldNavigationControllerScript = preload("res://game/bootstrap/settlement_world_navigation_controller.gd")
 
 
-
 # The playable routing and construction board must cover the terrain visible
 # beyond the starter forest. The former 48-cell board ended just behind the
 # trees, while the rendered ground continued much farther out.
 const BOARD_CELLS := 96
 const CELL_SIZE := BuildingBlueprints.BLOCK_SIZE
 const BUILDING_CLEARANCE_BLOCKS := 3.0
-const TREE_BUILD_CLEARANCE_BLOCKS := 1.0
 const NAVIGATION_CLEARANCE_MARGIN := 1.0
-const SERVICE_PAD_OFFSET := 1.0
 const MAX_BUILD_SLOPE := 0.35
 const POPULATION := 4
-const WAREHOUSE_CAPACITY := 50
 const FOOD_PURCHASE_PRICE := 2
 const ENTRANCE_GLOVE_PRICE := 20
 const ENTRANCE_BUCKET_PRICE := 15
 const ENTRANCE_WATER_PRICE := 2
-const OUTSIDE_WORK_DURATION_MINUTES := SimulationClock.MINUTES_PER_DAY
 const OUTSIDE_WORK_BASE_REWARD_MIN := 4
 const OUTSIDE_WORK_BASE_REWARD_MAX := 12
 const OUTSIDE_WORK_UPGRADE_REWARD := 16
 const HOUSE_CAPACITY := 4
-const TENT_CAPACITY := 4
 const CONSTRUCTION_DURATION := 4.0
 const DEMOLITION_DURATION := 3.0
 const INTERACTION_RANGE := 4.5
 const JOB_ENTRANCE_RANGE := 3.5
 const POCKET_CAPACITY := 8
-const POCKET_WOOD_CAPACITY := POCKET_CAPACITY
 const SAWMILL_PROCESS_DURATION := 4.0
-const SAWMILL_WORKER_DELIVERY_THRESHOLD := 4
-const COURIER_LATE_SECONDS := 12.0
-const DIG_RADIUS := 2.2
-const DIG_REACH := 6.0
 
 var settlement := SettlementState.new()
 var world_resource_state := WorldResourceStateScript.new()
@@ -286,8 +248,6 @@ var rabbit_sources: Dictionary:
 	get: return foraging_service.rabbit_sources if foraging_service != null else {}
 var rabbit_respawn_at: Dictionary:
 	get: return foraging_service.rabbit_respawn_at if foraging_service != null else {}
-const WILD_FOOD_RESPAWN_SECONDS := 45.0
-const RABBIT_RESPAWN_SECONDS := 60.0
 const RABBIT_MAX_COUNT := 8
 var outside_workers: Dictionary:
 	get: return world_state.outside_workers
@@ -435,7 +395,6 @@ var pending_arrivals: Array[Dictionary] = []
 var arrival_greeters: Dictionary = {}
 var arrival_waiting_greeters: Dictionary = {}
 var arrival_escort_ids: Dictionary = {}
-var tent_cell := Vector2i(0, 0)
 var canteen: Node3D
 var canteen_position := Vector3.ZERO
 var employment_office: Node3D
@@ -444,7 +403,6 @@ var canteen_food := 0
 var pending_canteen_delivery := false
 var pending_canteen_carrier: Citizen
 var pending_canteen_delivery_amount := 0
-var tent_dismantle_progress := -1.0
 var nav_grid: NavGrid
 var road_network_service: RefCounted
 var navigation_obstacle_publisher: RefCounted
@@ -698,10 +656,6 @@ func daily_order_workday_for_new_order() -> int:
 func _guard_citizen_positions() -> void:
 	_simulation_tick_controller.guard_citizen_positions()
 
-func _factory_for_role(role: String) -> Node3D:
-	return _employer_for_role(role)
-
-
 func _has_cook() -> bool:
 	return workplace_labor_service.has_cook() if workplace_labor_service != null else false
 
@@ -722,13 +676,8 @@ func _player_can_manage_permanent_professions() -> bool:
 	return workplace_labor_service.player_can_manage_permanent_professions() if workplace_labor_service != null else false
 
 
-func _registration_official() -> Citizen:
-	return citizen_registration_service.registration_official() if citizen_registration_service != null else null
-
-
 func _is_registration_staffed() -> bool:
 	return citizen_registration_service.is_registration_staffed() if citizen_registration_service != null else false
-
 
 
 func _can_start_registration(citizen: Citizen) -> bool:
@@ -767,7 +716,6 @@ func _on_daily_settlement_update(event: SimulationDayEvent) -> void:
 	_simulation_handlers.on_daily_settlement_update(event)
 
 
-
 func _end_ai_work_shift() -> void:
 	_simulation_handlers.end_ai_work_shift()
 
@@ -800,9 +748,6 @@ func _total_game_minutes() -> float:
 	return _simulation_tick_controller.total_game_minutes()
 
 
-func _is_night() -> bool:
-	return _simulation_tick_controller.is_night()
-
 func _has_lit_communal_fire() -> bool:
 	return _simulation_tick_controller.has_lit_communal_fire()
 
@@ -827,10 +772,8 @@ func _start_park_rest(cooks_only: bool) -> void:
 	_simulation_tick_controller.start_park_rest(cooks_only)
 
 
-
 func _cancel_canteen_delivery() -> void:
 	canteen_service.cancel_canteen_delivery()
-
 
 
 func _publish_courier_tasks(dispatcher: RefCounted) -> void:
@@ -860,7 +803,6 @@ func _is_courier_task_valid(task: RefCounted) -> bool:
 
 func _start_courier_task(courier: Citizen, task: RefCounted) -> bool:
 	return courier_task_service.start_courier_task(courier, task)
-
 
 
 func _release_task_warehouse_reservation(task: RefCounted) -> void:
@@ -909,12 +851,6 @@ func _building_power(site_node: Node3D) -> float:
 	return _construction_controller.building_power(site_node)
 
 
-
-
-
-func _sawmill_key(position_on_board: Vector3) -> Vector2i:
-	return _cell_from_position(position_on_board)
-
 func _sawmill_stock(position_on_board: Vector3) -> Dictionary:
 	return sawmills.stock_at(position_on_board, runtime_seconds)
 
@@ -924,7 +860,6 @@ func _request_courier_dispatch() -> void:
 			courier_dispatcher.dispatch()
 		if citizen_ai != null:
 			citizen_ai.request_decision_refresh()
-
 
 
 func _can_work_at_dig_site(site: DigSiteRecordScript) -> bool:
@@ -1062,18 +997,12 @@ func _record_trail_movement(citizen_id: int, position_on_board: Vector3) -> void
 func _refresh_navigation_grid() -> void:
 	_world_navigation_controller.refresh_navigation_grid()
 
-func _rebuild_navigation_obstacles() -> void:
-	_world_navigation_controller.rebuild_navigation_obstacles()
-
-
-
 func _pond_access_position(from: Vector3, pond_center: Vector3) -> Vector3:
 	return _world_navigation_controller.pond_access_position(from, pond_center)
 
 
 func _resource_access_position(from: Vector3, resource_position: Vector3) -> Vector3:
 	return _world_navigation_controller.resource_access_position(from, resource_position)
-
 
 
 func _create_citizens() -> void:
@@ -1116,7 +1045,6 @@ func _ai_target_for_key(target_key: StringName) -> Node3D:
 	return _citizen_factory.ai_target_for_key(target_key)
 
 
-
 func _player_use_toilet(toilet_node: Node3D) -> void:
 	if not is_first_person or player_citizen == null or not is_instance_valid(toilet_node):
 		return
@@ -1132,7 +1060,6 @@ func _player_use_toilet(toilet_node: Node3D) -> void:
 
 func _check_player_toilet_request() -> void:
 	_hero_interaction_controller.check_player_toilet_request()
-
 
 
 func _set_workday_hours(hours: int) -> void:
@@ -1184,12 +1111,6 @@ func _set_time_multiplier(multiplier: float) -> void:
 	else:
 		Engine.time_scale = multiplier
 	_update_interface("Simulation speed set to x%d." % int(multiplier))
-
-
-
-func _outside_work_reward() -> int:
-	return _outside_work_controller.outside_work_reward()
-
 
 
 func _send_selected_resident_to_outside_work() -> void:
@@ -1349,14 +1270,6 @@ func _min_era_for_role(role: String) -> SettlementState.Era:
 	return min_era
 
 
-func _assigned_count_for_role(role: String) -> int:
-	var count := 0
-	for citizen in citizens:
-		if citizen.daily_order_role == role or (role.is_empty() and citizen.daily_order_role.is_empty()):
-			count += 1
-	return count
-
-
 func builder_job_capacity() -> int:
 	return _available_employer_capacity("construction")
 
@@ -1471,19 +1384,11 @@ func _building_supports_role(building: Node3D, role: String) -> bool:
 func _employer_capacity(role: String, building: Node3D) -> int:
 	return _workplace_controller.employer_capacity(role, building)
 
-func _set_build_placement_ui_visible(is_visible: bool) -> void:
-	_build_controller.set_build_placement_ui_visible(is_visible)
-
-
 func _select_build_mode(next_mode: String) -> void:
 	_build_controller.select_build_mode(next_mode)
 
 func _cancel_build_action() -> void:
 	_build_controller.cancel_build_action()
-
-func _on_context_menu_gui_input(event: InputEvent) -> void:
-	_input_controller.on_context_menu_gui_input(event)
-
 
 func _is_first_person_menu_open() -> bool:
 	return _input_controller.is_first_person_menu_open()
@@ -1664,7 +1569,6 @@ func _remove_building_services(building: Node3D, building_type: String) -> void:
 	building_lifecycle_service.remove_building_services(building, building_type)
 
 
-
 func _send_to_unemployment_registration(citizen: Citizen) -> void:
 	citizen_lifecycle_service.send_to_unemployment_registration(citizen)
 
@@ -1765,16 +1669,6 @@ func _harvest_source_info(resource_type: String) -> String:
 	return ""
 
 
-func _can_continue_harvesting(resource_type: String) -> bool:
-	match resource_type:
-		ResourceIds.WOOD: return _nearby_tree()
-		ResourceIds.BRANCHES: return _nearby_tree_with_branches()
-		ResourceIds.FOOD: return _nearby_farm()
-		ResourceIds.WATER: return _nearby_pond()
-		ResourceIds.GRASS: return _nearby_grass_source()
-	return false
-
-
 func _deliver_all_pocket_to_warehouse(warehouse_index := -1) -> void:
 	_hero_interaction_controller._deliver_all_pocket_to_warehouse(warehouse_index)
 
@@ -1791,26 +1685,6 @@ func _exit_player_work_position() -> void:
 	_hero_interaction_controller.exit_player_work_position()
 
 
-func _occupy_workplace(workplace: Node3D) -> void:
-	_hero_interaction_controller.occupy_workplace(workplace)
-
-
-func _reserve_player_gather_storage(resource_type: String, requested: int) -> int:
-	if settlement.uses_virtual_storage():
-		return requested
-	if player_citizen == null or warehouse_positions.is_empty():
-		return 0
-	var origin := player_citizen.global_position
-	var index := settlement.find_warehouse_index(origin, resource_type, requested, warehouse_positions)
-	if index >= 0 and settlement.reserve_warehouse_room(index, resource_type, requested):
-		return requested
-	for amount in range(requested - 1, 0, -1):
-		index = settlement.find_warehouse_index(origin, resource_type, amount, warehouse_positions)
-		if index >= 0 and settlement.reserve_warehouse_room(index, resource_type, amount):
-			return amount
-	return 0
-
-
 func _nearby_tree() -> bool:
 	return hero_interaction_service.nearby_tree() if hero_interaction_service != null else false
 
@@ -1819,9 +1693,6 @@ func _nearby_tree_with_branches() -> bool:
 
 func _nearby_warehouse_index() -> int:
 	return storage_routing_service.nearby_warehouse_index()
-
-
-
 
 
 func _nearby_farm() -> bool:
@@ -1833,9 +1704,6 @@ func _nearby_pond() -> bool:
 func _nearby_grass_source() -> bool:
 	return hero_interaction_service.nearby_grass_source() if hero_interaction_service != null else false
 
-
-func _wild_food_requires_specialist_message() -> String:
-	return "Forest gifts and rabbits can only be gathered by a trained specialist. Build a forager/hunter tent first."
 
 func _pocket_total() -> int:
 	return hero_pocket_service.pocket_total() if hero_pocket_service != null else 0
@@ -1853,30 +1721,8 @@ func _primary_pocket_resource() -> String:
 	return hero_pocket_service.primary_pocket_resource() if hero_pocket_service != null else ""
 
 
-
-func _nearby_workplace_for_job() -> Node3D:
-	if player_citizen == null:
-		return null
-	var best: Node3D
-	var best_dist := JOB_ENTRANCE_RANGE
-	for record in building_registry.records():
-		var building := record.node as Node3D
-		if not is_instance_valid(building):
-			continue
-		var role := _role_for_workplace(building)
-		if role.is_empty():
-			continue
-		var service_pos: Vector3 = building.get_meta("service_position", building.global_position)
-		var dist := player_citizen.global_position.distance_to(service_pos)
-		if dist <= best_dist:
-			best = building
-			best_dist = dist
-	return best
-
-
 func _role_for_workplace(building: Node3D) -> String:
 	return _workplace_controller.role_for_workplace(building)
-
 
 
 func _format_pocket_hint() -> String:
@@ -1916,7 +1762,6 @@ func _nearest_grass_source_to_point(point: Vector3, max_distance: float) -> Vect
 			best_dist = dist
 			best = node_pos
 	return best
-
 
 
 func _first_person_target() -> Dictionary:
@@ -1998,9 +1843,6 @@ func _move_selection(world_position: Vector3) -> void:
 
 func _place_building(world_position: Vector3) -> void:
 	_build_controller.place_building(world_position)
-
-func _place_building_at_crosshair() -> void:
-	_build_controller.place_building_at_crosshair()
 
 func _can_hero_build() -> bool:
 	return building_placement_controller.can_hero_build() if building_placement_controller != null else false
@@ -2107,10 +1949,6 @@ func _grant_debug_resources() -> void:
 func _register_service_entrance(building: Node3D, blueprint: Dictionary, home_entrance := false, show_marker := true) -> void:
 	_service_pocket_manager.register_service_entrance(building, blueprint, home_entrance, show_marker)
 
-func _nearby_player_work_target() -> Node3D:
-	return _hero_interaction_controller.nearby_player_work_target()
-
-
 func _unregister_navigation_footprint(center: Vector3, footprint: Vector2i) -> void:
 	_service_pocket_manager.unregister_navigation_footprint(center, footprint)
 
@@ -2145,7 +1983,6 @@ func _set_road_walking_order(enabled: bool) -> void:
 	_workplace_controller.set_road_walking_order(enabled)
 
 
-
 func _cheer_up_settlement() -> void:
 	_workplace_controller.cheer_up_settlement()
 
@@ -2164,7 +2001,6 @@ func _toggle_double_time_order(checked: bool) -> void:
 
 func _toggle_selected_citizen_night_work(checked: bool) -> void:
 	_workplace_controller.toggle_selected_citizen_night_work(checked)
-
 
 
 func _occupy_selected_campfire_position() -> void:
@@ -2189,13 +2025,6 @@ func _on_campfire_advance_pressed() -> void:
 
 func _refresh_market_menu() -> void:
 	_workplace_controller.refresh_market_menu()
-
-
-
-
-
-
-
 
 
 func _available_trade_money() -> int:
@@ -2266,7 +2095,6 @@ func _set_manual_specialist_employment(citizen: Citizen, role: String) -> bool:
 	return _research_controller.set_manual_specialist_employment(citizen, role)
 
 
-
 func _consume_grass_source(position: Vector3) -> int:
 	return foraging_service.consume_grass_source(position)
 
@@ -2291,7 +2119,6 @@ func _destroy_building_to_pile(building: Node3D, building_type: String) -> void:
 	building_maintenance_service.destroy_building_to_pile(building, building_type, citizens, warehouse_positions, campfire_node)
 	if fixture_service != null and not building_id.is_empty():
 		fixture_service.remove_building(building_id)
-
 
 
 func _move_stored_resources_to_pile(resources: Dictionary, warehouse_index := -1) -> void:
