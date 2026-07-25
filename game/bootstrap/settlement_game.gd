@@ -148,6 +148,7 @@ const SettlementHeroInteractionControllerScript = preload("res://game/bootstrap/
 const SettlementConstructionControllerScript = preload("res://game/bootstrap/settlement_construction_controller.gd")
 const SettlementWorkplaceControllerScript = preload("res://game/bootstrap/settlement_workplace_controller.gd")
 const SettlementSimulationTickControllerScript = preload("res://game/bootstrap/settlement_simulation_tick_controller.gd")
+const SettlementLogisticsControllerScript = preload("res://game/bootstrap/settlement_logistics_controller.gd")
 
 
 
@@ -570,6 +571,7 @@ var _hero_interaction_controller: RefCounted
 var _construction_controller: RefCounted
 var _workplace_controller: RefCounted
 var _simulation_tick_controller: RefCounted
+var _logistics_controller: RefCounted
 
 
 func _ready() -> void:
@@ -597,6 +599,7 @@ func _ready() -> void:
 	_construction_controller = SettlementConstructionControllerScript.new(self)
 	_workplace_controller = SettlementWorkplaceControllerScript.new(self)
 	_simulation_tick_controller = SettlementSimulationTickControllerScript.new(self)
+	_logistics_controller = SettlementLogisticsControllerScript.new(self)
 	ui_manager.bind_delegate_events(SettlementUICallbacksScript.new(self))
 	SettlementBootstrapperScript.new().run(self)
 
@@ -832,62 +835,19 @@ func _publish_courier_tasks(dispatcher: RefCounted) -> void:
 
 
 func _firewood_task_priority(building: Node3D, fire_state: RefCounted) -> int:
-	var phase: int = fire_state.phase_at(int(game_minutes))
-	var is_main := building == campfire_node
-	if phase == FireSourceStateScript.Phase.EMBERS or fire_state.fuel <= 1:
-		return 120 if is_main else 115
-	if phase == FireSourceStateScript.Phase.DYING:
-		return 112 if is_main else 110
-	return 108 if is_main else 105
+	return _logistics_controller.firewood_task_priority(building, fire_state)
 
 
 func _reconcile_repair_reservations() -> void:
-	# A repair delivery can be interrupted by the end-of-day scheduler or a route reset.
-	# Return its reservation when no courier still owns it, otherwise the building
-	# can remain permanently reserved without ever being repaired.
-	for record in building_registry.records():
-		var building := record.node
-		if not is_instance_valid(building):
-			continue
-		var state: BuildingRuntimeStateScript = record.runtime_state()
-		if not state.repair_reserved:
-			continue
-		var has_carrier := false
-		for citizen in citizens:
-			if citizen != null and citizen.state in [Citizen.State.TO_CONSTRUCTION_PICKUP, Citizen.State.TO_CONSTRUCTION_SITE] and citizen.building_supply_kind == "repair" and citizen.construction_site == building:
-				has_carrier = true
-				break
-		if not has_carrier:
-			building.set_meta("repair_reserved", false)
+	_logistics_controller.reconcile_repair_reservations()
 
 
 func _construction_material_sources(resource_type: String, from_position: Vector3 = Vector3.ZERO) -> Array[Dictionary]:
-	var sources: Array[Dictionary] = []
-	if settlement.amount(resource_type) > 0:
-		if not warehouse_positions.is_empty():
-			for index in range(mini(warehouse_positions.size(), settlement.warehouses.size())):
-				if settlement.warehouse_amount(resource_type, index) <= 0:
-					continue
-				var position := warehouse_positions[index]
-				# The position keeps task identity stable enough to invalidate a task when
-				# warehouses are demolished; the index makes pickup remove the same stock.
-				sources.append({"kind": "storage", "id": "storage_%s" % _cell_from_position(position), "position": position, "warehouse_index": index})
-			sources.sort_custom(func(left: Dictionary, right: Dictionary) -> bool:
-				return from_position.distance_squared_to(left.position) < from_position.distance_squared_to(right.position)
-			)
-			return sources
-		# Before the first warehouse is built, all resources live in the virtual
-		# stockpile. Couriers pull from that unlimited reserve at the camp entrance
-		# so the bootstrap warehouse and main campfire can still be supplied.
-		sources.append({"kind": "open_storage", "id": "open_storage", "position": _get_nearest_delivery_position(from_position)})
-	# Ground piles belong exclusively to cleaners. Construction starts only after
-	# their contents have been delivered to the settlement stock.
-	return sources
+	return _logistics_controller.construction_material_sources(resource_type, from_position)
 
 
 func _construction_source_available(resource_type: String, source: Dictionary) -> int:
-	var warehouse_index := int(source.get("warehouse_index", -1))
-	return settlement.warehouse_amount(resource_type, warehouse_index) if warehouse_index >= 0 else settlement.amount(resource_type)
+	return _logistics_controller.construction_source_available(resource_type, source)
 
 
 func _is_courier_task_valid(task: RefCounted) -> bool:
@@ -908,17 +868,15 @@ func _cancel_courier_task(courier: Citizen, task: RefCounted) -> void:
 
 
 func _set_canteen_delivery_state(active: bool, carrier: Citizen, amount: int) -> void:
-	pending_canteen_delivery = active
-	pending_canteen_carrier = carrier
-	pending_canteen_delivery_amount = amount
+	_logistics_controller.set_canteen_delivery_state(active, carrier, amount)
 
 
 func _set_canteen_food(value: int) -> void:
-	canteen_food = value
+	_logistics_controller.set_canteen_food(value)
 
 
 func _is_canteen_delivery_in_progress() -> bool:
-	return is_instance_valid(pending_canteen_carrier) and pending_canteen_carrier.state in [Citizen.State.TO_FOOD_PICKUP, Citizen.State.TO_CANTEEN_DELIVERY]
+	return _logistics_controller.is_canteen_delivery_in_progress()
 
 
 func _set_dig_mode(value: bool) -> void:
@@ -2430,27 +2388,13 @@ func _decay_resource_piles() -> void:
 
 
 func _return_in_transit_building_supplies(building: Node3D) -> void:
-	for citizen in citizens:
-		if citizen.construction_site != building or citizen.state not in [Citizen.State.TO_CONSTRUCTION_PICKUP, Citizen.State.TO_CONSTRUCTION_SITE]:
-			continue
-		if citizen.carried_amount > 0 and not citizen.construction_delivery_resource.is_empty():
-			settlement.add(citizen.construction_delivery_resource, citizen.carried_amount)
-		citizen.carried_amount = 0
-		citizen.construction_site = null
-		citizen.idle()
+	_logistics_controller.return_in_transit_building_supplies(building)
 
 func _get_delivery_position() -> Vector3:
-	return _get_nearest_delivery_position(Vector3.ZERO)
+	return _logistics_controller.get_delivery_position()
 
 func _get_nearest_delivery_position(from: Vector3) -> Vector3:
-	var warehouse_index := storage_routing_service.find_reachable_warehouse_index(from, "", 1, false)
-	if warehouse_index >= 0:
-		return warehouse_positions[warehouse_index]
-	if is_instance_valid(campfire_node) and _is_route_reachable(from, campfire_node.global_position, false):
-		return campfire_node.global_position
-	if is_instance_valid(entrance_stone):
-		return entrance_stone.global_position
-	return Vector3.ZERO
+	return _logistics_controller.get_nearest_delivery_position(from)
 
 
 func _warehouse_delivery_position(from: Vector3, resource_type: String, amount: int) -> Vector3:
