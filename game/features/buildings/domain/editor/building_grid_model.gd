@@ -42,17 +42,18 @@ func place(
 	rot: int = 0,
 	material_id: StringName = BuildingMaterialCatalogScript.DEFAULT_ID,
 	variant: StringName = &"",
-	anchor: Vector2i = Vector2i.ZERO
+	anchor: int = 0
 ) -> bool:
 	if not BuildingBlockCatalogScript.has_block(block_id) or not BuildingMaterialCatalogScript.has_material(material_id):
 		return false
+	var norm_variant := BuildingBlockCatalogScript.normalize_variant(block_id, variant)
 	var block := BlueprintBlockScript.new(
 		cell,
 		block_id,
 		_normalize_rot(block_id, rot),
 		material_id,
-		BuildingBlockCatalogScript.normalize_variant(block_id, variant),
-		anchor)
+		norm_variant,
+		BuildingBlockCatalogScript.normalize_anchor(block_id, norm_variant, anchor))
 	_cells[cell] = block
 	return true
 

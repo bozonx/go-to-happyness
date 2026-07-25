@@ -181,7 +181,7 @@ static func ordered_modules(building_type: String) -> Array:
 ## Offset from a cell's minimum corner to the block mesh origin (floor-aligned,
 ## horizontally centred). Mirrors BlockMeshLibrary.local_offset but stays in the
 ## application/domain layer (catalog math only, no presentation dependency).
-static func _block_offset(block_id: StringName, variant: StringName = &"", rot: int = 0, anchor: Vector2i = Vector2i.ZERO) -> Vector3:
+static func _block_offset(block_id: StringName, variant: StringName = &"", rot: int = 0, anchor: int = 0) -> Vector3:
 	var size := BuildingBlockCatalogScript.size_of(block_id, variant)
 	var xz := BuildingBlockCatalogScript.cell_offset(block_id, variant, anchor, rot)
 	return Vector3(xz.x, size.y * 0.5, xz.y)

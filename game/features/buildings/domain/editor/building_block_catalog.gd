@@ -348,38 +348,66 @@ static func mesh_shape_of(block_id: StringName, variant_id: StringName = &"") ->
 # In-cell anchoring
 # ---------------------------------------------------------------------------
 #
-# A sub-cell block (thinner than 1m on an axis) can be snapped to a side of its
-# 1×1 cell instead of always centring. The anchor is a cell-frame 3×3 selector:
-# `Vector2i(ax, az)` with each component in {-1, 0, +1} (−1 = min side, 0 =
-# centre, +1 = max side). The anchor lives in the cell frame and is independent
-# of the block's own rotation — it always means "push toward this side of the
-# cell". Full-cell axes ignore the anchor automatically.
+# A sub-cell block (thinner than 1m on an axis) can be snapped inside its 1×1
+# cell instead of always centring. Under 90° rotation symmetry the nine grid
+# points collapse to just three distinct kinds — the other corners/edges are
+# reached by rotating the block, which pivots it around the cell centre:
+#   ANCHOR_CENTER — middle of the cell;
+#   ANCHOR_EDGE   — flush against one cell side (its thinner axis);
+#   ANCHOR_CORNER — tucked into one cell corner (needs slack on both axes).
+# The stored `anchor` is one of these kinds; the concrete side/corner is picked
+# by the block's rotation. A block with slack on only one axis (e.g. a railing
+# panel, full-width and thin) offers only CENTER + EDGE — a corner degenerates
+# into the same edge.
 
-## Footprint of a block on the cell's X/Z axes after a quarter-turn rotation.
-## A 90°/270° turn swaps the block's own X and Z extents.
-static func rotated_footprint(size: Vector3, rot: int) -> Vector2:
-	if posmod(rot, 2) == 1:
-		return Vector2(size.z, size.x)
-	return Vector2(size.x, size.z)
+const ANCHOR_CENTER := 0
+const ANCHOR_EDGE := 1
+const ANCHOR_CORNER := 2
+
+
+## Free space (in cell units) between the block face and the cell side on each
+## axis, at rot=0. Zero means the block spans the whole cell on that axis.
+static func _free_extents(block_id: StringName, variant_id: StringName) -> Vector2:
+	var size := size_of(block_id, variant_id)
+	return Vector2(maxf(0.0, 0.5 - size.x * 0.5), maxf(0.0, 0.5 - size.z * 0.5))
+
+
+## Anchor kinds that make sense for this block/variant (always contains CENTER).
+static func available_anchors(block_id: StringName, variant_id: StringName) -> Array:
+	var f := _free_extents(block_id, variant_id)
+	var out: Array = [ANCHOR_CENTER]
+	if f.x > 0.001 or f.y > 0.001:
+		out.append(ANCHOR_EDGE)
+	if f.x > 0.001 and f.y > 0.001:
+		out.append(ANCHOR_CORNER)
+	return out
+
+
+static func normalize_anchor(block_id: StringName, variant_id: StringName, anchor_kind: int) -> int:
+	return anchor_kind if anchor_kind in available_anchors(block_id, variant_id) else ANCHOR_CENTER
+
+
+## Offset from the cell centre (rot=0 frame) that realises an anchor kind. Edge
+## pushes toward the block's thinner axis so it actually reaches a side.
+static func _anchor_base_offset(block_id: StringName, variant_id: StringName, anchor_kind: int) -> Vector2:
+	var f := _free_extents(block_id, variant_id)
+	match anchor_kind:
+		ANCHOR_EDGE:
+			return Vector2(0.0, -f.y) if f.y >= f.x else Vector2(-f.x, 0.0)
+		ANCHOR_CORNER:
+			return Vector2(-f.x, -f.y)
+		_:
+			return Vector2.ZERO
 
 
 ## Horizontal position (X, Z in [0,1]) of the block's mesh origin inside its
-## cell, given the chosen variant, rotation and anchor. Centre is (0.5, 0.5); a
-## side anchor makes that face flush with the cell edge.
-static func cell_offset(block_id: StringName, variant_id: StringName, anchor: Vector2i, rot: int) -> Vector2:
-	var eff := rotated_footprint(size_of(block_id, variant_id), rot)
-	var free_x := maxf(0.0, 0.5 - eff.x * 0.5)
-	var free_z := maxf(0.0, 0.5 - eff.y * 0.5)
-	return Vector2(
-		0.5 + float(clampi(anchor.x, -1, 1)) * free_x,
-		0.5 + float(clampi(anchor.y, -1, 1)) * free_z)
-
-
-## Whether a block has any slack to be anchored on the X / Z axis for a variant
-## and rotation (i.e. its footprint is thinner than the cell on that axis).
-static func anchorable_axes(block_id: StringName, variant_id: StringName, rot: int) -> Vector2i:
-	var eff := rotated_footprint(size_of(block_id, variant_id), rot)
-	return Vector2i(1 if eff.x < 0.999 else 0, 1 if eff.y < 0.999 else 0)
+## cell for the given variant, anchor kind and rotation. Rotation pivots the
+## anchored offset around the cell centre (same turn the mesh gets), so a corner
+## anchor cycles through all four corners as the block is rotated.
+static func cell_offset(block_id: StringName, variant_id: StringName, anchor_kind: int, rot: int) -> Vector2:
+	var base := _anchor_base_offset(block_id, variant_id, anchor_kind)
+	var rotated := Basis(Vector3.UP, deg_to_rad(90.0 * float(rot))) * Vector3(base.x, 0.0, base.y)
+	return Vector2(0.5 + rotated.x, 0.5 + rotated.z)
 
 
 static func _resolve_variant(def: Dictionary, block_id: StringName, variant_id: StringName) -> Dictionary:

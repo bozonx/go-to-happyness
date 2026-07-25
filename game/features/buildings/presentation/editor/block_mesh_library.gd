@@ -20,7 +20,7 @@ static func local_offset(
 	block_id: StringName,
 	variant: StringName = &"",
 	rot: int = 0,
-	anchor: Vector2i = Vector2i.ZERO,
+	anchor: int = 0,
 	vertical_offset: float = 0.0
 ) -> Vector3:
 	var size := BuildingBlockCatalogScript.size_of(block_id, variant)

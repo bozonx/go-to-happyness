@@ -11,9 +11,9 @@ var block_id: StringName = &""
 var material_id: StringName = &"branches"
 var rot: int = 0
 var variant: StringName = &""
-## In-cell snap for sub-cell blocks: Vector2i(ax, az), each in {-1,0,1}
-## (−1 = min side, 0 = centre, +1 = max side of the cell). See BuildingBlockCatalog.
-var anchor: Vector2i = Vector2i.ZERO
+## In-cell snap kind for sub-cell blocks: 0 = centre, 1 = edge, 2 = corner (see
+## BuildingBlockCatalog.ANCHOR_*). The concrete side/corner follows from `rot`.
+var anchor: int = 0
 
 
 func _init(
@@ -22,7 +22,7 @@ func _init(
 	p_rot: int = 0,
 	p_material_id: StringName = &"branches",
 	p_variant: StringName = &"",
-	p_anchor: Vector2i = Vector2i.ZERO
+	p_anchor: int = 0
 ) -> void:
 	pos = p_pos
 	block_id = p_block_id
@@ -48,8 +48,8 @@ func to_dict() -> Dictionary:
 	if variant != &"":
 		out["variant"] = String(variant)
 	# Only emitted when snapped off-centre.
-	if anchor != Vector2i.ZERO:
-		out["anchor"] = [anchor.x, anchor.y]
+	if anchor != 0:
+		out["anchor"] = anchor
 	return out
 
 
@@ -61,8 +61,5 @@ static func from_dict(data: Dictionary) -> BlueprintBlock:
 	var material_id := StringName(data.get("material_id", "branches"))
 	var rot := ((int(data.get("rot", 0)) % 4) + 4) % 4
 	var variant := StringName(data.get("variant", ""))
-	var raw_anchor: Variant = data.get("anchor", [0, 0])
-	var anchor := Vector2i.ZERO
-	if raw_anchor is Array and raw_anchor.size() >= 2:
-		anchor = Vector2i(clampi(int(raw_anchor[0]), -1, 1), clampi(int(raw_anchor[1]), -1, 1))
+	var anchor := clampi(int(data.get("anchor", 0)), 0, 2)
 	return BlueprintBlock.new(pos, block_id, rot, material_id, variant, anchor)

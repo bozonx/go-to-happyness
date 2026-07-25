@@ -36,7 +36,7 @@ var mesh_library: BlockMeshLibraryScript
 
 var current_block_id: StringName = BuildingBlockCatalogScript.default_block_id()
 var current_variant: StringName = BuildingBlockCatalogScript.default_variant(BuildingBlockCatalogScript.default_block_id())
-var current_anchor: Vector2i = Vector2i.ZERO
+var current_anchor: int = BuildingBlockCatalogScript.ANCHOR_CENTER
 var current_material_id: StringName = BuildingMaterialCatalogScript.DEFAULT_ID
 var current_rot: int = 0
 var current_tool: int = Tool.PLACE
@@ -995,37 +995,38 @@ func _rebuild_brush_inspector() -> void:
 			vbtn.pressed.connect(func(): _select_block(current_block_id, v_id))
 			strip.add_child(vbtn)
 
-	# Anchor pad only matters when the block is thinner than the cell on an axis.
-	var axes := BuildingBlockCatalogScript.anchorable_axes(current_block_id, current_variant, current_rot)
-	if axes == Vector2i.ZERO:
-		current_anchor = Vector2i.ZERO
+	# Anchor picker only matters when the block has slack inside its cell. Under
+	# rotation symmetry there are at most three kinds; a full-width block (e.g. a
+	# railing panel) offers only centre + edge. Rotation picks the actual side.
+	var kinds: Array = BuildingBlockCatalogScript.available_anchors(current_block_id, current_variant)
+	if kinds.size() <= 1:
+		current_anchor = BuildingBlockCatalogScript.ANCHOR_CENTER
 		return
+	current_anchor = BuildingBlockCatalogScript.normalize_anchor(current_block_id, current_variant, current_anchor)
 
 	var alabel := Label.new()
-	alabel.text = "Привязка в ячейке"
+	alabel.text = "Привязка в ячейке (сторону задаёт поворот)"
 	alabel.add_theme_color_override("font_color", Color(0.65, 0.72, 0.8))
 	host.add_child(alabel)
-	# Clamp the current anchor to the axes that actually have slack.
-	current_anchor = Vector2i(current_anchor.x * axes.x, current_anchor.y * axes.y)
-	var pad := GridContainer.new()
-	pad.columns = 3
-	host.add_child(pad)
-	# Rows top→bottom = az −1..+1, columns left→right = ax −1..+1.
-	for az in [-1, 0, 1]:
-		for ax in [-1, 0, 1]:
-			var cell := Vector2i(ax, az)
-			var pbtn := Button.new()
-			pbtn.toggle_mode = true
-			pbtn.custom_minimum_size = Vector2(34, 28)
-			pbtn.text = "•" if cell == Vector2i.ZERO else "○"
-			var enabled: bool = (ax == 0 or axes.x == 1) and (az == 0 or axes.y == 1)
-			pbtn.disabled = not enabled
-			pbtn.button_pressed = enabled and cell == current_anchor
-			pbtn.pressed.connect(func(): _select_anchor(cell))
-			pad.add_child(pbtn)
+	var row := HBoxContainer.new()
+	host.add_child(row)
+	for kind in kinds:
+		var abtn := Button.new()
+		abtn.toggle_mode = true
+		abtn.text = _anchor_label(kind)
+		abtn.button_pressed = kind == current_anchor
+		abtn.pressed.connect(func(): _select_anchor(kind))
+		row.add_child(abtn)
 
 
-func _select_anchor(anchor: Vector2i) -> void:
+func _anchor_label(kind: int) -> String:
+	match kind:
+		BuildingBlockCatalogScript.ANCHOR_EDGE: return "К грани"
+		BuildingBlockCatalogScript.ANCHOR_CORNER: return "В угол"
+		_: return "Центр"
+
+
+func _select_anchor(anchor: int) -> void:
 	current_anchor = anchor
 	_rebuild_brush_inspector()
 	_refresh_ghost()

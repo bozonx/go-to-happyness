@@ -62,22 +62,28 @@ static func _test_catalog() -> void:
 
 
 static func _test_anchoring() -> void:
-	# A 0.5m column can be snapped to a cell side; a full cube cannot.
-	assert(BuildingBlockCatalogScript.anchorable_axes(&"column", &"square_med", 0) == Vector2i(1, 1))
-	assert(BuildingBlockCatalogScript.anchorable_axes(&"cube", &"", 0) == Vector2i.ZERO)
-	# Centre stays centred; corner snaps the 0.5m block flush to the min corner.
-	assert(BuildingBlockCatalogScript.cell_offset(&"column", &"square_med", Vector2i.ZERO, 0) == Vector2(0.5, 0.5))
-	assert(BuildingBlockCatalogScript.cell_offset(&"column", &"square_med", Vector2i(-1, -1), 0) == Vector2(0.25, 0.25))
-	assert(BuildingBlockCatalogScript.cell_offset(&"column", &"square_med", Vector2i(1, 1), 0) == Vector2(0.75, 0.75))
-	# A wall panel (1.0 × 0.15) only has slack across its thin axis; the anchor on
-	# the full axis is ignored (offset stays 0.5).
-	var wall_off := BuildingBlockCatalogScript.cell_offset(&"wall_panel", &"", Vector2i(-1, -1), 0)
-	assert(is_equal_approx(wall_off.x, 0.5))
-	assert(wall_off.y < 0.2)
-	# Rotating the wall 90° swaps which axis is thin, so the anchor now bites on X.
-	var wall_rot := BuildingBlockCatalogScript.cell_offset(&"wall_panel", &"", Vector2i(-1, -1), 1)
-	assert(wall_rot.x < 0.2)
-	assert(is_equal_approx(wall_rot.y, 0.5))
+	var C := BuildingBlockCatalogScript
+	# A 0.5m column is thin on both axes: centre + edge + corner. A full cube has
+	# only centre. A railing/wall panel is thin on one axis: centre + edge, no corner.
+	assert(C.available_anchors(&"column", &"square_med") == [C.ANCHOR_CENTER, C.ANCHOR_EDGE, C.ANCHOR_CORNER])
+	assert(C.available_anchors(&"cube", &"") == [C.ANCHOR_CENTER])
+	assert(C.available_anchors(&"railing", &"full") == [C.ANCHOR_CENTER, C.ANCHOR_EDGE])
+	assert(C.available_anchors(&"wall_panel", &"") == [C.ANCHOR_CENTER, C.ANCHOR_EDGE])
+	# Centre stays centred; corner snaps the 0.5m block flush to a corner and
+	# rotation pivots it around the cell centre to the opposite corner.
+	assert(C.cell_offset(&"column", &"square_med", C.ANCHOR_CENTER, 0) == Vector2(0.5, 0.5))
+	assert(_approx(C.cell_offset(&"column", &"square_med", C.ANCHOR_CORNER, 0), Vector2(0.25, 0.25)))
+	assert(_approx(C.cell_offset(&"column", &"square_med", C.ANCHOR_CORNER, 2), Vector2(0.75, 0.75)))
+	# A wall panel edge-anchors flush to its thin (-Z) side; a 90° turn moves that
+	# flush face onto the X axis (Z re-centres) — the other edges via rotation.
+	var wall0 := C.cell_offset(&"wall_panel", &"", C.ANCHOR_EDGE, 0)
+	assert(is_equal_approx(wall0.x, 0.5) and wall0.y < 0.2)
+	var wall1 := C.cell_offset(&"wall_panel", &"", C.ANCHOR_EDGE, 1)
+	assert(wall1.x < 0.2 and is_equal_approx(wall1.y, 0.5))
+
+
+static func _approx(a: Vector2, b: Vector2) -> bool:
+	return is_equal_approx(a.x, b.x) and is_equal_approx(a.y, b.y)
 
 
 static func _test_mesh_library() -> void:
@@ -85,7 +91,7 @@ static func _test_mesh_library() -> void:
 	for block_id in BuildingBlockCatalogScript.ids():
 		var mesh := lib.mesh_for(block_id)
 		assert(mesh != null, "Mesh generation failed for block: " + String(block_id))
-		var offset := BlockMeshLibraryScript.local_offset(block_id, &"", 0, Vector2i.ZERO, 0.5)
+		var offset := BlockMeshLibraryScript.local_offset(block_id, &"", 0, 0, 0.5)
 		assert(offset.y > 0.0)
 		# Every declared variant must also build a mesh.
 		for v in BuildingBlockCatalogScript.variants(block_id):
@@ -105,10 +111,10 @@ static func _test_material_catalog_and_costs() -> void:
 	var grid := BuildingGridModelScript.new()
 	assert(grid.place(Vector3i.ZERO, &"cube", 0, &"earth"))
 	assert(grid.place(Vector3i(1, 0, 0), &"wall_panel", 1, &"stone"))
-	# A parametric block records its chosen variant and in-cell anchor.
-	assert(grid.place(Vector3i(2, 0, 0), &"column", 0, &"stone", &"round_med", Vector2i(-1, 1)))
+	# A parametric block records its chosen variant and in-cell anchor kind.
+	assert(grid.place(Vector3i(2, 0, 0), &"column", 0, &"stone", &"round_med", BuildingBlockCatalogScript.ANCHOR_CORNER))
 	assert(grid.get_block_at(Vector3i(2, 0, 0)).variant == &"round_med")
-	assert(grid.get_block_at(Vector3i(2, 0, 0)).anchor == Vector2i(-1, 1))
+	assert(grid.get_block_at(Vector3i(2, 0, 0)).anchor == BuildingBlockCatalogScript.ANCHOR_CORNER)
 	grid.write_to_blueprint(bp)
 	bp.recalculate_construction_cost()
 	assert(bp.construction_cost == {"soil": 1, "stone": 2})
@@ -119,10 +125,10 @@ static func _test_material_catalog_and_costs() -> void:
 	# Variant + anchor survive the JSON round-trip; single-size blocks stay
 	# variant-less and centred.
 	assert(restored.blocks[0].variant == &"")
-	assert(restored.blocks[0].anchor == Vector2i.ZERO)
+	assert(restored.blocks[0].anchor == BuildingBlockCatalogScript.ANCHOR_CENTER)
 	var col := restored.blocks[2] if restored.blocks[2].block_id == &"column" else restored.blocks[1]
 	assert(col.variant == &"round_med")
-	assert(col.anchor == Vector2i(-1, 1))
+	assert(col.anchor == BuildingBlockCatalogScript.ANCHOR_CORNER)
 
 
 static func _test_material_era_filtering() -> void:
