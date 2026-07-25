@@ -63,6 +63,16 @@ func mesh_for(block_id: StringName, variant: StringName = &"") -> Mesh:
 			mesh = _build_cylinder(size)
 		BuildingBlockCatalogScript.SHAPE_HALF_CYLINDER:
 			mesh = _build_half_cylinder(size)
+		BuildingBlockCatalogScript.SHAPE_COLUMN_SQUARE_CROSS_2:
+			mesh = _build_square_cross(size, 2)
+		BuildingBlockCatalogScript.SHAPE_COLUMN_SQUARE_CROSS_3:
+			mesh = _build_square_cross(size, 3)
+		BuildingBlockCatalogScript.SHAPE_COLUMN_ROUND_CROSS_2:
+			mesh = _build_round_cross(size, 2)
+		BuildingBlockCatalogScript.SHAPE_COLUMN_ROUND_CROSS_3:
+			mesh = _build_round_cross(size, 3)
+		BuildingBlockCatalogScript.SHAPE_COLUMN_HALF_CROSS_2:
+			mesh = _build_half_cross(size, 2)
 		BuildingBlockCatalogScript.SHAPE_STAIRS:
 			mesh = _build_stairs(size, 8)
 		BuildingBlockCatalogScript.SHAPE_STAIRS_HALF:
@@ -71,6 +81,10 @@ func mesh_for(block_id: StringName, variant: StringName = &"") -> Mesh:
 			mesh = _build_stairs(size, 2)
 		BuildingBlockCatalogScript.SHAPE_STAIRS_CORNER_45:
 			mesh = _build_stairs_corner_45(size, 8)
+		BuildingBlockCatalogScript.SHAPE_STAIRS_CORNER_HALF:
+			mesh = _build_stairs_corner_45(size, 4)
+		BuildingBlockCatalogScript.SHAPE_STAIRS_CORNER_QUARTER:
+			mesh = _build_stairs_corner_45(size, 2)
 		BuildingBlockCatalogScript.SHAPE_WINDOW_WALL:
 			mesh = _build_window_wall(size)
 		BuildingBlockCatalogScript.SHAPE_DOOR_WALL:
@@ -408,3 +422,89 @@ func _add_tri(st: SurfaceTool, p0: Vector3, p1: Vector3, p2: Vector3) -> void:
 	st.set_normal(normal); st.add_vertex(p0)
 	st.set_normal(normal); st.add_vertex(p2)
 	st.set_normal(normal); st.add_vertex(p1)
+
+
+func _build_square_cross(size: Vector3, arms_count: int) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var w := size.x
+	var h := size.y
+	var hw := w * 0.5
+	var hh := h * 0.5
+	# Central pillar
+	_add_box(st, Vector3(-hw, -hh, -hw), Vector3(hw, hh, hw))
+	# Arm 1 (+Z)
+	_add_box(st, Vector3(-hw, -hh, hw), Vector3(hw, hh, hw + w * 0.5))
+	# Arm 2 (+X)
+	_add_box(st, Vector3(hw, -hh, -hw), Vector3(hw + w * 0.5, hh, hw))
+	# Arm 3 (-X) if 3 columns
+	if arms_count >= 3:
+		_add_box(st, Vector3(-hw - w * 0.5, -hh, -hw), Vector3(-hw, hh, hw))
+	return st.commit()
+
+
+func _build_round_cross(size: Vector3, arms_count: int, segments: int = 12) -> ArrayMesh:
+	var rx := size.x * 0.5
+	var rz := size.z * 0.5
+	var hy := size.y * 0.5
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var centers: Array[Vector3] = [
+		Vector3(0, 0, 0),
+		Vector3(0, 0, rz * 1.5),
+		Vector3(rx * 1.5, 0, 0),
+	]
+	if arms_count >= 3:
+		centers.append(Vector3(-rx * 1.5, 0, 0))
+	for center in centers:
+		for i in segments:
+			var a1 := float(i) / float(segments) * TAU
+			var a2 := float(i + 1) / float(segments) * TAU
+			var p1_b := center + Vector3(cos(a1) * rx, -hy, sin(a1) * rz)
+			var p2_b := center + Vector3(cos(a2) * rx, -hy, sin(a2) * rz)
+			var p1_t := center + Vector3(cos(a1) * rx, hy, sin(a1) * rz)
+			var p2_t := center + Vector3(cos(a2) * rx, hy, sin(a2) * rz)
+			_add_quad(st, p1_b, p1_t, p2_t, p2_b)
+			_add_tri(st, center + Vector3(0, hy, 0), p2_t, p1_t)
+			_add_tri(st, center + Vector3(0, -hy, 0), p1_b, p2_b)
+	return st.commit()
+
+
+func _build_half_cross(size: Vector3, arms_count: int, segments: int = 10) -> ArrayMesh:
+	var rx := size.x * 0.5
+	var rz := size.z
+	var hy := size.y * 0.5
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var bbl1 := Vector3(-rx, -hy, 0.0)
+	var bbr1 := Vector3(rx, -hy, 0.0)
+	var btl1 := Vector3(-rx, hy, 0.0)
+	var btr1 := Vector3(rx, hy, 0.0)
+	_add_quad(st, bbr1, bbl1, btl1, btr1)
+	for i in segments:
+		var a1 := -PI * 0.5 + float(i) / float(segments) * PI
+		var a2 := -PI * 0.5 + float(i + 1) / float(segments) * PI
+		var p1_b := Vector3(sin(a1) * rx, -hy, cos(a1) * rz)
+		var p2_b := Vector3(sin(a2) * rx, -hy, cos(a2) * rz)
+		var p1_t := Vector3(sin(a1) * rx, hy, cos(a1) * rz)
+		var p2_t := Vector3(sin(a2) * rx, hy, cos(a2) * rz)
+		_add_quad(st, p1_b, p1_t, p2_t, p2_b)
+		_add_tri(st, Vector3(0, hy, 0), p2_t, p1_t)
+		_add_tri(st, Vector3(0, -hy, 0), p1_b, p2_b)
+	var bbl2 := Vector3(0.0, -hy, -rx)
+	var bbr2 := Vector3(0.0, -hy, rx)
+	var btl2 := Vector3(0.0, hy, -rx)
+	var btr2 := Vector3(0.0, hy, rx)
+	_add_quad(st, bbl2, bbr2, btr2, btl2)
+	for i in segments:
+		var a1 := -PI * 0.5 + float(i) / float(segments) * PI
+		var a2 := -PI * 0.5 + float(i + 1) / float(segments) * PI
+		var p1_b := Vector3(cos(a1) * rz, -hy, sin(a1) * rx)
+		var p2_b := Vector3(cos(a2) * rz, -hy, sin(a2) * rx)
+		var p1_t := Vector3(cos(a1) * rz, hy, sin(a1) * rx)
+		var p2_t := Vector3(cos(a2) * rz, hy, sin(a2) * rx)
+		_add_quad(st, p1_b, p1_t, p2_t, p2_b)
+		_add_tri(st, Vector3(0, hy, 0), p1_t, p2_t)
+		_add_tri(st, Vector3(0, -hy, 0), p2_b, p1_b)
+	return st.commit()
+

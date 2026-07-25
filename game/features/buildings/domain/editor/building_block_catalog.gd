@@ -37,10 +37,17 @@ const SHAPE_SLOPE_CORNER_IN := &"slope_corner_in"
 const SHAPE_SLOPE_CORNER_OUT := &"slope_corner_out"
 const SHAPE_CYLINDER := &"cylinder"
 const SHAPE_HALF_CYLINDER := &"half_cylinder"
+const SHAPE_COLUMN_SQUARE_CROSS_2 := &"column_square_cross_2"
+const SHAPE_COLUMN_SQUARE_CROSS_3 := &"column_square_cross_3"
+const SHAPE_COLUMN_ROUND_CROSS_2 := &"column_round_cross_2"
+const SHAPE_COLUMN_ROUND_CROSS_3 := &"column_round_cross_3"
+const SHAPE_COLUMN_HALF_CROSS_2 := &"column_half_cross_2"
 const SHAPE_STAIRS := &"stairs"
 const SHAPE_STAIRS_HALF := &"stairs_half"
 const SHAPE_STAIRS_QUARTER := &"stairs_quarter"
 const SHAPE_STAIRS_CORNER_45 := &"stairs_corner_45"
+const SHAPE_STAIRS_CORNER_HALF := &"stairs_corner_half"
+const SHAPE_STAIRS_CORNER_QUARTER := &"stairs_corner_quarter"
 const SHAPE_WINDOW_WALL := &"window_wall"
 const SHAPE_DOOR_WALL := &"door_wall"
 const SHAPE_ARCH := &"arch"
@@ -57,7 +64,7 @@ const BLOCKS: Array = [
 		"category": Category.STRUCTURE,
 		"size": Vector3(1.0, 1.0, 1.0),
 		"mesh_shape": SHAPE_BOX,
-		"rotatable": false,
+		"rotatable": true,
 	},
 	{
 		"id": &"small_cube",
@@ -81,7 +88,7 @@ const BLOCKS: Array = [
 		"category": Category.STRUCTURE,
 		"size": Vector3(1.0, 0.5, 1.0),
 		"mesh_shape": SHAPE_BOX,
-		"rotatable": false,
+		"rotatable": true,
 	},
 	{
 		"id": &"thin_slab",
@@ -89,7 +96,7 @@ const BLOCKS: Array = [
 		"category": Category.STRUCTURE,
 		"size": Vector3(1.0, 0.25, 1.0),
 		"mesh_shape": SHAPE_BOX,
-		"rotatable": false,
+		"rotatable": true,
 	},
 	{
 		"id": &"half_slab",
@@ -106,7 +113,7 @@ const BLOCKS: Array = [
 		"category": Category.FOUNDATION,
 		"size": Vector3(1.0, 1.0, 1.0),
 		"mesh_shape": SHAPE_BOX,
-		"rotatable": false,
+		"rotatable": true,
 		"extends_down": true,
 	},
 	# --- Колонны -----------------------------------------------------------
@@ -116,6 +123,32 @@ const BLOCKS: Array = [
 		"category": Category.COLUMNS,
 		"size": Vector3(0.5, 1.0, 0.5),
 		"mesh_shape": SHAPE_BOX,
+		"rotatable": true,
+		"variants": [
+			{"id": &"thick", "name": "0.8м", "size": Vector3(0.8, 1.0, 0.8)},
+			{"id": &"med", "name": "0.5м", "size": Vector3(0.5, 1.0, 0.5)},
+			{"id": &"thin", "name": "0.25м", "size": Vector3(0.25, 1.0, 0.25)},
+		],
+	},
+	{
+		"id": &"column_square_cross_2",
+		"name": "Квадратная крестовина (2)",
+		"category": Category.COLUMNS,
+		"size": Vector3(0.5, 1.0, 0.5),
+		"mesh_shape": SHAPE_COLUMN_SQUARE_CROSS_2,
+		"rotatable": true,
+		"variants": [
+			{"id": &"thick", "name": "0.8м", "size": Vector3(0.8, 1.0, 0.8)},
+			{"id": &"med", "name": "0.5м", "size": Vector3(0.5, 1.0, 0.5)},
+			{"id": &"thin", "name": "0.25м", "size": Vector3(0.25, 1.0, 0.25)},
+		],
+	},
+	{
+		"id": &"column_square_cross_3",
+		"name": "Квадратная крестовина (3)",
+		"category": Category.COLUMNS,
+		"size": Vector3(0.5, 1.0, 0.5),
+		"mesh_shape": SHAPE_COLUMN_SQUARE_CROSS_3,
 		"rotatable": true,
 		"variants": [
 			{"id": &"thick", "name": "0.8м", "size": Vector3(0.8, 1.0, 0.8)},
@@ -137,11 +170,49 @@ const BLOCKS: Array = [
 		],
 	},
 	{
+		"id": &"column_round_cross_2",
+		"name": "Круглая крестовина (2)",
+		"category": Category.COLUMNS,
+		"size": Vector3(0.5, 1.0, 0.5),
+		"mesh_shape": SHAPE_COLUMN_ROUND_CROSS_2,
+		"rotatable": true,
+		"variants": [
+			{"id": &"thick", "name": "0.8м", "size": Vector3(0.8, 1.0, 0.8)},
+			{"id": &"med", "name": "0.5м", "size": Vector3(0.5, 1.0, 0.5)},
+			{"id": &"thin", "name": "0.25м", "size": Vector3(0.25, 1.0, 0.25)},
+		],
+	},
+	{
+		"id": &"column_round_cross_3",
+		"name": "Круглая крестовина (3)",
+		"category": Category.COLUMNS,
+		"size": Vector3(0.5, 1.0, 0.5),
+		"mesh_shape": SHAPE_COLUMN_ROUND_CROSS_3,
+		"rotatable": true,
+		"variants": [
+			{"id": &"thick", "name": "0.8м", "size": Vector3(0.8, 1.0, 0.8)},
+			{"id": &"med", "name": "0.5м", "size": Vector3(0.5, 1.0, 0.5)},
+			{"id": &"thin", "name": "0.25м", "size": Vector3(0.25, 1.0, 0.25)},
+		],
+	},
+	{
 		"id": &"column_half",
 		"name": "Полуколонна",
 		"category": Category.COLUMNS,
 		"size": Vector3(0.5, 1.0, 0.25),
 		"mesh_shape": SHAPE_HALF_CYLINDER,
+		"rotatable": true,
+		"variants": [
+			{"id": &"med", "name": "0.5м", "size": Vector3(0.5, 1.0, 0.25)},
+			{"id": &"thin", "name": "0.25м", "size": Vector3(0.25, 1.0, 0.15)},
+		],
+	},
+	{
+		"id": &"column_half_cross_2",
+		"name": "Крестовина полуколонн (2)",
+		"category": Category.COLUMNS,
+		"size": Vector3(0.5, 1.0, 0.25),
+		"mesh_shape": SHAPE_COLUMN_HALF_CROSS_2,
 		"rotatable": true,
 		"variants": [
 			{"id": &"med", "name": "0.5м", "size": Vector3(0.5, 1.0, 0.25)},
@@ -224,31 +295,29 @@ const BLOCKS: Array = [
 	},
 	{
 		"id": &"stairs_corner_45",
-		"name": "Угловая лестница",
+		"name": "Угловая лестница (8 ступеней)",
 		"category": Category.CIRCULATION,
 		"size": Vector3(1.0, 1.0, 1.0),
 		"mesh_shape": SHAPE_STAIRS_CORNER_45,
 		"rotatable": true,
 	},
+	{
+		"id": &"stairs_corner_half",
+		"name": "Угловая лестница (4 ступени)",
+		"category": Category.CIRCULATION,
+		"size": Vector3(1.0, 0.5, 1.0),
+		"mesh_shape": SHAPE_STAIRS_CORNER_HALF,
+		"rotatable": true,
+	},
+	{
+		"id": &"stairs_corner_quarter",
+		"name": "Угловая лестница (2 ступени)",
+		"category": Category.CIRCULATION,
+		"size": Vector3(1.0, 0.25, 1.0),
+		"mesh_shape": SHAPE_STAIRS_CORNER_QUARTER,
+		"rotatable": true,
+	},
 	# --- Проёмы ------------------------------------------------------------
-	{
-		"id": &"door_wall",
-		"name": "Дверной проём (3×3)",
-		"category": Category.OPENINGS,
-		"size": Vector3(3.0, 3.0, 0.15),
-		"footprint": Vector3i(3, 3, 1),
-		"mesh_shape": SHAPE_DOOR_WALL,
-		"rotatable": true,
-	},
-	{
-		"id": &"window_wall",
-		"name": "Оконный проём (3×3)",
-		"category": Category.OPENINGS,
-		"size": Vector3(3.0, 3.0, 0.15),
-		"footprint": Vector3i(3, 3, 1),
-		"mesh_shape": SHAPE_WINDOW_WALL,
-		"rotatable": true,
-	},
 	{
 		"id": &"arch",
 		"name": "Арка (проём)",

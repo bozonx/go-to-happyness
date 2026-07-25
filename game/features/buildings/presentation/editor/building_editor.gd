@@ -1047,8 +1047,7 @@ func _rebuild_brush_inspector() -> void:
 		vlabel.text = "Размер / профиль"
 		vlabel.add_theme_color_override("font_color", Color(0.65, 0.72, 0.8))
 		host.add_child(vlabel)
-		var strip := GridContainer.new()
-		strip.columns = 2
+		var strip := HBoxContainer.new()
 		host.add_child(strip)
 		for v in variants:
 			var v_id: StringName = v["id"]

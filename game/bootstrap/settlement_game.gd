@@ -143,6 +143,8 @@ const SettlementHeroStateScript = preload("res://game/bootstrap/settlement_hero_
 const SettlementCameraStateScript = preload("res://game/bootstrap/settlement_camera_state.gd")
 const SettlementWorldStateScript = preload("res://game/bootstrap/settlement_world_state.gd")
 const SettlementInputControllerScript = preload("res://game/bootstrap/settlement_input_controller.gd")
+const SettlementBuildControllerScript = preload("res://game/bootstrap/settlement_build_controller.gd")
+const SettlementHeroInteractionControllerScript = preload("res://game/bootstrap/settlement_hero_interaction_controller.gd")
 
 
 
@@ -560,6 +562,8 @@ var _service_pocket_manager: RefCounted
 var _outside_work_controller: RefCounted
 var _building_management: RefCounted
 var _input_controller: RefCounted
+var _build_controller: RefCounted
+var _hero_interaction_controller: RefCounted
 
 
 func _ready() -> void:
@@ -582,6 +586,8 @@ func _ready() -> void:
 	_outside_work_controller = SettlementOutsideWorkControllerScript.new(self)
 	_building_management = SettlementBuildingManagementScript.new(self)
 	_input_controller = SettlementInputControllerScript.new(self)
+	_build_controller = SettlementBuildControllerScript.new(self)
+	_hero_interaction_controller = SettlementHeroInteractionControllerScript.new(self)
 	ui_manager.bind_delegate_events(SettlementUICallbacksScript.new(self))
 	SettlementBootstrapperScript.new().run(self)
 
@@ -1289,16 +1295,7 @@ func _player_use_toilet(toilet_node: Node3D) -> void:
 
 
 func _check_player_toilet_request() -> void:
-	if not is_first_person or player_citizen == null:
-		_player_toilet_notified = false
-		return
-	var has_request := citizen_needs_service.has_toilet_request(player_citizen.ai_id)
-	if has_request and not _player_toilet_notified:
-		_player_toilet_notified = true
-		var name := player_citizen.role_label() if player_citizen != hero_citizen else S.HERO_NAME
-		_update_interface(S.TOILET_NEED_HINT % name)
-	elif not has_request:
-		_player_toilet_notified = false
+	_hero_interaction_controller.check_player_toilet_request()
 
 
 
@@ -1412,13 +1409,7 @@ func _house_initial_residents(house: Node3D) -> void:
 	citizen_lifecycle_service.house_initial_residents(house)
 
 func _open_build_category(category: String) -> void:
-	build_category = category
-	build_menu_is_job_menu = false
-	build_menu_is_daily_order_menu = false
-	if building_menu_controller != null:
-		building_menu_controller.refresh_build_menu()
-	if build_category.is_empty() and not build_menu_is_global:
-		_show_selected_citizen_menu()
+	_build_controller.open_build_category(category)
 
 
 func _on_build_menu_gui_input(event: InputEvent) -> void:
@@ -1684,56 +1675,14 @@ func _employer_capacity(role: String, building: Node3D) -> int:
 	return 1
 
 func _set_build_placement_ui_visible(is_visible: bool) -> void:
-	if ui_manager.build_menu != null:
-		ui_manager.build_menu.visible = is_visible and (selected_builder != null or build_menu_is_global)
-	if ui_manager.build_toggle_btn != null:
-		ui_manager.build_toggle_btn.visible = is_visible and not is_first_person
-	if ui_manager.message_log_panel != null:
-		ui_manager.message_log_panel.visible = is_visible
+	_build_controller.set_build_placement_ui_visible(is_visible)
 
 
 func _select_build_mode(next_mode: String) -> void:
-	if not _can_hero_build():
-		_update_interface("Only the hero can approve construction decisions.")
-		return
-	if next_mode == "tent" and clock.hour() >= 22:
-		_update_interface("The temporary tent must be marked before 22:00.")
-		return
-	var placement_state: Dictionary = building_availability_service.placement_state_with_inventory(next_mode, pocket)
-	if not bool(placement_state.allowed):
-		_update_interface(str(placement_state.message))
-		return
-	if not village_territory_service.has_flag():
-		if next_mode != "settlement_flag":
-			_update_interface(village_territory_service.placement_message(village_territory_service.REASON_NO_FLAG))
-			return
-	elif not village_territory_service.has_campfire():
-		if next_mode != "campfire" and next_mode != "warehouse":
-			_update_interface(village_territory_service.placement_message(village_territory_service.REASON_NO_CAMPFIRE))
-			return
-	build_mode = next_mode
-	build_rotation_quarters = 0
-	world_setup.selection_marker.visible = true
-	_move_selection(selected_world_position)
-	_set_build_placement_ui_visible(false)
-	_show_territory_overlay(true)
-	if is_first_person:
-		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-	_update_interface("%s selected. Choose a clear point; Q/E rotates the building." % build_mode.capitalize())
+	_build_controller.select_build_mode(next_mode)
 
 func _cancel_build_action() -> void:
-	build_mode = ""
-	build_rotation_quarters = 0
-	dig_mode = false
-	world_setup.selection_marker.visible = false
-	world_setup.preview_entrance_marker.visible = false
-	world_setup.preview_back_entrance_marker.visible = false
-	ui_manager.build_menu.visible = false
-	build_menu_is_global = false
-	selected_builder = null
-	_show_territory_overlay(false)
-	_set_build_placement_ui_visible(true)
-	_update_interface("Construction mode cancelled.")
+	_build_controller.cancel_build_action()
 
 func _on_context_menu_gui_input(event: InputEvent) -> void:
 	_input_controller.on_context_menu_gui_input(event)
@@ -1852,16 +1801,7 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 
 
 func _first_person_select_at_crosshair() -> void:
-	var target := _first_person_target()
-	if target.kind == "building" and is_instance_valid(target.node) and building_registry.building_type_for_node(target.node) in OFFICIAL_WORKPLACE_TYPES:
-		selected_campfire = target.node
-		selected_building = target.node
-		if campfire_menu_controller != null:
-			campfire_menu_controller.show_campfire_menu()
-		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
-		return
-	var viewport_center := get_viewport().get_visible_rect().size * 0.5
-	_select_citizen_at(viewport_center)
+	_hero_interaction_controller.first_person_select_at_crosshair()
 
 
 func _hide_all_selection_menus() -> void:
@@ -2036,136 +1976,23 @@ func _can_continue_harvesting(resource_type: String) -> bool:
 
 
 func _deliver_all_pocket_to_warehouse(warehouse_index := -1) -> void:
-	if warehouse_index < 0:
-		warehouse_index = _nearby_warehouse_index()
-	var delivered_total := 0
-	var summary: Array[String] = []
-	for resource_type in _pocket_resources():
-		var amount := hero_pocket_service.pocket_amount(resource_type) if hero_pocket_service != null else 0
-		if amount <= 0:
-			continue
-		if warehouse_index >= 0 and not settlement.uses_virtual_storage() and not settlement.warehouse_accepts(warehouse_index, resource_type):
-			_update_interface(S.WAREHOUSE_REJECTS_FORMAT % resource_type)
-			continue
-		var to_deliver := amount
-		if not settlement.uses_virtual_storage():
-			to_deliver = mini(amount, settlement.storage_room_for(resource_type))
-		if to_deliver <= 0:
-			continue
-		var overflow := 0
-		if warehouse_index >= 0 and not settlement.uses_virtual_storage():
-			overflow = settlement.add_to_warehouse(resource_type, to_deliver, warehouse_index)
-		else:
-			settlement.add(resource_type, to_deliver)
-		var actually_delivered := to_deliver - overflow
-		if actually_delivered > 0:
-			hero_pocket_service.remove_from_pocket(resource_type, actually_delivered) if hero_pocket_service != null else 0
-			delivered_total += actually_delivered
-			summary.append("%d %s" % [actually_delivered, resource_type])
-	if delivered_total > 0:
-		_update_interface(S.DELIVERED_TO_WAREHOUSE_SUMMARY % ", ".join(summary))
-	elif _pocket_resources().is_empty():
-		_update_interface(S.POCKET_EMPTY)
-	else:
-		_update_interface(S.WAREHOUSE_NO_ROOM)
+	_hero_interaction_controller._deliver_all_pocket_to_warehouse(warehouse_index)
 
 
 func _deliver_one_pocket_to_warehouse(warehouse_index := -1) -> void:
-	if warehouse_index < 0:
-		warehouse_index = _nearby_warehouse_index()
-	var resource_type := _primary_pocket_resource()
-	if resource_type.is_empty():
-		return
-	var amount := hero_pocket_service.pocket_amount(resource_type) if hero_pocket_service != null else 0
-	if amount <= 0:
-		return
-	if warehouse_index >= 0 and not settlement.uses_virtual_storage() and not settlement.warehouse_accepts(warehouse_index, resource_type):
-		_update_interface(S.WAREHOUSE_REJECTS_FORMAT % resource_type)
-		return
-	var to_deliver := 1
-	if not settlement.uses_virtual_storage():
-		to_deliver = mini(1, settlement.storage_room_for(resource_type))
-	if to_deliver <= 0:
-		_update_interface(S.WAREHOUSE_NO_ROOM_FOR_RESOURCE % resource_type)
-		return
-	var overflow := 0
-	if warehouse_index >= 0 and not settlement.uses_virtual_storage():
-		overflow = settlement.add_to_warehouse(resource_type, to_deliver, warehouse_index)
-	else:
-		settlement.add(resource_type, to_deliver)
-	var actually_delivered := to_deliver - overflow
-	if actually_delivered <= 0:
-		_update_interface(S.WAREHOUSE_NO_ROOM_IN_THIS % resource_type)
-		return
-	hero_pocket_service.remove_from_pocket(resource_type, actually_delivered) if hero_pocket_service != null else 0
-	_update_interface(S.DELIVERED_ONE_TO_WAREHOUSE % [actually_delivered, resource_type, _format_pocket_hint()])
+	_hero_interaction_controller._deliver_one_pocket_to_warehouse(warehouse_index)
 
 
 func _nearest_service_position(building: Node3D, from: Vector3) -> Vector3:
-	if not is_instance_valid(building):
-		return Vector3.INF
-	if building.has_meta("service_positions"):
-		var positions: Array = building.get_meta("service_positions")
-		var best := Vector3.INF
-		var best_distance := INF
-		for value in positions:
-			if value is Vector3:
-				var position: Vector3 = value
-				var distance := from.distance_squared_to(position)
-				if distance < best_distance:
-					best = position
-					best_distance = distance
-		if best != Vector3.INF:
-			return best
-	return building.get_meta("service_position", building.global_position)
+	return _hero_interaction_controller._nearest_service_position(building, from)
 
 
 func _exit_player_work_position() -> void:
-	if player_citizen == null or not player_citizen.work_position_locked:
-		return
-	var was_official_appointment := player_citizen.work_position_role == "official" and not player_citizen.work_position_temporary
-	player_citizen.exit_work_position()
-	if was_official_appointment:
-		_dismiss_official(player_citizen)
-		_update_interface(S.LEFT_OFFICER_POST_FORMAT % player_citizen.role_label())
-	else:
-		_update_interface(S.LEFT_WORKPLACE_FORMAT % player_citizen.role_label())
-	_refresh_interaction_hint()
+	_hero_interaction_controller.exit_player_work_position()
 
 
 func _occupy_workplace(workplace: Node3D) -> void:
-	if not is_instance_valid(workplace) or player_citizen == null:
-		return
-	var building_type := building_registry.building_type_for_node(workplace)
-	var is_official_building := building_type in OFFICIAL_WORKPLACE_TYPES
-	var service_position := _nearest_service_position(workplace, player_citizen.global_position)
-	# Move the citizen onto the nearest service position. Smooth walking can be
-	# added later; the design requires automatic positioning at the workplace.
-	player_citizen.global_position = service_position
-	if is_official_building:
-		if settlement.is_research_completed("official"):
-			var current_officer := _officer_holder()
-			if current_officer != null and current_officer != player_citizen:
-				_update_interface(S.OFFICER_POSITION_TAKEN)
-				return
-			player_citizen.enter_work_position(service_position, "official", workplace, false)
-			_appoint_official(player_citizen, workplace)
-			if player_citizen.permanent_role != "official":
-				player_citizen.exit_work_position()
-				return
-			_update_interface(S.HERO_BECAME_OFFICER)
-		else:
-			player_citizen.enter_work_position(service_position, "researcher", workplace, true)
-			if research_menu_controller != null:
-				research_menu_controller.show_research_menu()
-			_update_interface(S.HERO_TOOK_RESEARCHER)
-	else:
-		var role := _role_for_workplace(workplace)
-		if role.is_empty():
-			return
-		player_citizen.enter_work_position(service_position, role, workplace, true)
-		_update_interface(S.TOOK_TEMP_ROLE_FORMAT % [player_citizen.role_label(), role.replace("_", " ")])
-	_refresh_interaction_hint()
+	_hero_interaction_controller.occupy_workplace(workplace)
 
 
 func _reserve_player_gather_storage(resource_type: String, requested: int) -> int:
@@ -2261,51 +2088,11 @@ func _format_pocket_hint() -> String:
 
 
 func _home_occupancy_text() -> String:
-	if player_citizen == null or player_citizen.home == null or not is_instance_valid(player_citizen.home):
-		return ""
-	var home := player_citizen.home
-	var capacity := int(home.get_meta("housing_capacity", 1))
-	var free_slots := int(home.get_meta("spawn_slots", capacity))
-	var occupied := clampi(capacity - free_slots, 0, capacity)
-	return S.HOME_OCCUPANCY_FORMAT % [occupied, capacity]
+	return _hero_interaction_controller._home_occupancy_text()
 
 
 func _refresh_interaction_hint() -> void:
-	if not is_first_person:
-		ui_manager.interaction_hint_panel.visible = false
-		return
-	if _is_first_person_menu_open():
-		ui_manager.interaction_hint_panel.visible = false
-		return
-	ui_manager.interaction_hint_panel.visible = true
-	if pocket_menu_open:
-		ui_manager.interaction_hint_panel.hint_label.text = S.CLOSE_MENU_HINT
-		ui_manager.interaction_hint_panel.progress_bar.visible = false
-		return
-	if not interaction_action.is_empty():
-		return
-	var lines: Array[String] = []
-	if player_citizen != null and not player_citizen.is_hero:
-		var target := _first_person_target()
-		if target.kind == "toilet":
-			var needs_toilet := citizen_needs_service != null and citizen_needs_service.has_toilet_request(player_citizen.ai_id)
-			if needs_toilet:
-				lines.append(S.F_USE_TOILET_NEED)
-			else:
-				lines.append(S.F_USE_TOILET)
-		lines.append(S.OBSERVE_HINT)
-	else:
-		var action_hint := first_person_hud_controller.first_person_action_hint() if first_person_hud_controller != null else ""
-		if not action_hint.is_empty():
-			lines.append(action_hint)
-	lines.append(_format_pocket_hint())
-	if not pocket.is_empty():
-		lines.append(S.DROP_POCKET_HINT)
-	var home_text := _home_occupancy_text()
-	if not home_text.is_empty():
-		lines.append(home_text)
-	ui_manager.interaction_hint_panel.hint_label.text = "\n".join(lines)
-	ui_manager.interaction_hint_panel.progress_bar.visible = false
+	_hero_interaction_controller.refresh_interaction_hint()
 
 
 func _nearest_point_to_point_array(points: Array[Vector3], target: Vector3, max_distance: float) -> Vector3:
@@ -2337,176 +2124,35 @@ func _nearest_grass_source_to_point(point: Vector3, max_distance: float) -> Vect
 
 
 func _first_person_target() -> Dictionary:
-	if player_controller != null:
-		return player_controller.first_person_target()
-	return {"kind": ""}
+	return _hero_interaction_controller.first_person_target()
 
 
 func _missing_site_materials_text(site: ConstructionSite) -> String:
-	var parts: Array[String] = []
-	for resource_type in site.required_materials:
-		var required := int(site.required_materials.get(resource_type, 0))
-		var delivered := int(site.delivered_materials.get(resource_type, 0))
-		if delivered < required:
-			parts.append("%s %d/%d" % [resource_type.capitalize(), delivered, required])
-	return ", ".join(parts)
+	return _hero_interaction_controller._missing_site_materials_text(site)
 
 
 func _handle_sawmill_interaction(all: bool, sawmill_pos: Vector3) -> void:
-	var wood_count := (hero_pocket_service.pocket_amount(ResourceIds.WOOD) if hero_pocket_service != null else 0) + (hero_pocket_service.pocket_amount(ResourceIds.LOGS) if hero_pocket_service != null else 0)
-	if wood_count > 0:
-		var delivered := 0
-		if all:
-			var wood_delivered := hero_pocket_service.remove_from_pocket(ResourceIds.WOOD, wood_count) if hero_pocket_service != null else 0
-			var logs_delivered := hero_pocket_service.remove_from_pocket(ResourceIds.LOGS, wood_count - wood_delivered) if hero_pocket_service != null else 0
-			delivered = wood_delivered + logs_delivered
-		else:
-			delivered = hero_pocket_service.remove_from_pocket(ResourceIds.WOOD, 1) if hero_pocket_service != null else 0
-			if delivered == 0:
-				delivered = hero_pocket_service.remove_from_pocket(ResourceIds.LOGS, 1) if hero_pocket_service != null else 0
-		if delivered > 0:
-			var stock := _sawmill_stock(sawmill_pos)
-			stock.logs = int(stock.logs) + delivered
-			sawmills.store(sawmill_pos, stock)
-			_update_interface(S.DELIVERED_WOOD_TO_SAWMILL % delivered)
-		_refresh_interaction_hint()
-		return
-	var sawmill_stock := _sawmill_stock(sawmill_pos)
-	var available_boards := int(sawmill_stock.boards)
-	if available_boards > 0 and _pocket_has_room():
-		var take_amount := mini(available_boards, hero_pocket_service.pocket_space_for(ResourceIds.BOARDS) if hero_pocket_service != null else 0) if all else 1
-		take_amount = hero_pocket_service.add_to_pocket(ResourceIds.BOARDS, take_amount) if hero_pocket_service != null else 0
-		if take_amount > 0:
-			sawmill_stock.boards = int(sawmill_stock.boards) - take_amount
-			sawmills.store(sawmill_pos, sawmill_stock)
-			_update_interface(S.TOOK_BOARDS_FROM_SAWMILL % take_amount)
-	_refresh_interaction_hint()
+	_hero_interaction_controller.handle_sawmill_interaction(all, sawmill_pos)
 
 
 func _handle_warehouse_interaction(all: bool, warehouse_index := -1) -> void:
-	if _pocket_total() > 0:
-		if all:
-			_deliver_all_pocket_to_warehouse(warehouse_index)
-		else:
-			_deliver_one_pocket_to_warehouse(warehouse_index)
-		_refresh_interaction_hint()
-	else:
-		if pocket_take_menu_controller != null:
-			pocket_take_menu_controller.show_pocket_take_menu(warehouse_index)
+	_hero_interaction_controller.handle_warehouse_interaction(all, warehouse_index)
 
 
 func _deliver_pocket_to_site(site: ConstructionSite, all: bool) -> void:
-	var delivered_any := false
-	for resource_type in site.required_materials:
-		var required := int(site.required_materials.get(resource_type, 0))
-		var delivered := int(site.delivered_materials.get(resource_type, 0))
-		var needed := required - delivered
-		if needed <= 0:
-			continue
-		var in_pocket := hero_pocket_service.pocket_amount(resource_type) if hero_pocket_service != null else 0
-		if in_pocket <= 0:
-			continue
-		var amount := mini(in_pocket, needed) if all else mini(1, needed)
-		amount = mini(amount, in_pocket)
-		if amount <= 0:
-			continue
-		hero_pocket_service.remove_from_pocket(resource_type, amount) if hero_pocket_service != null else 0
-		construction.accept_delivery(site.node, resource_type, amount)
-		delivered_any = true
-		if not all:
-			break
-	if delivered_any:
-		_update_interface(S.MATERIALS_DELIVERED_TO_SITE)
-		_refresh_interaction_hint()
-	else:
-		var missing := _missing_site_materials_text(site)
-		if missing.is_empty():
-			_update_interface(S.SITE_FULLY_SUPPLIED)
-		else:
-			_update_interface(S.POCKET_MISSING_MATERIALS % missing)
-		_refresh_interaction_hint()
+	_hero_interaction_controller.deliver_pocket_to_site(site, all)
 
 
 func _refuel_fire_from_pocket(building: Node3D, all: bool) -> void:
-	if not is_instance_valid(building):
-		return
-	var available := hero_pocket_service.pocket_amount(ResourceIds.BRANCHES) if hero_pocket_service != null else 0
-	if available <= 0:
-		_update_interface(S.NO_BRANCHES_FOR_FIRE)
-		_refresh_interaction_hint()
-		return
-	var fire_state := _fire_state_for(building)
-	var amount := available if all else 1
-	amount = mini(amount, available)
-	var delivered := hero_pocket_service.remove_from_pocket(ResourceIds.BRANCHES, amount) if hero_pocket_service != null else 0
-	if delivered <= 0:
-		return
-	fire_state.add_delivered(delivered, int(game_minutes))
-	_apply_fire_state(building, fire_state)
-	_refresh_living_statuses()
-	_update_interface(S.BRANCHES_ADDED_TO_FIRE % delivered)
-	_refresh_interaction_hint()
+	_hero_interaction_controller.refuel_fire_from_pocket(building, all)
 
 
 func _meet_arrival_at_entrance() -> void:
-	for index in pending_arrivals.size():
-		var order: Dictionary = pending_arrivals[index]
-		if bool(order.get("dispatched", false)):
-			continue
-		order.dispatched = true
-		order.greeter_id = player_citizen.ai_id
-		pending_arrivals[index] = order
-		arrival_greeters[player_citizen.ai_id] = order
-		_on_arrival_greeter_ready(player_citizen)
-		_refresh_interaction_hint()
-		return
-	_update_interface(S.NO_ONE_TO_MEET)
-	_refresh_interaction_hint()
+	_hero_interaction_controller.meet_arrival_at_entrance()
 
 
 func _take_from_pile(pile: ResourcePileScript, all: bool) -> void:
-	if pile == null:
-		return
-	var pile_node := pile.node
-	if not is_instance_valid(pile_node):
-		return
-	var resources: Dictionary = pile.resources
-	var taken_any := false
-	for resource_type in resources.keys():
-		var available := int(resources.get(resource_type, 0))
-		if available <= 0:
-			continue
-		if not _pocket_has_room():
-			break
-		var amount := mini(available, hero_pocket_service.pocket_space_for(resource_type) if hero_pocket_service != null else 0) if all else 1
-		amount = mini(amount, available)
-		var taken := hero_pocket_service.add_to_pocket(resource_type, amount) if hero_pocket_service != null else 0
-		if taken <= 0:
-			continue
-		taken_any = true
-		resources[resource_type] = available - taken
-		if resources[resource_type] <= 0:
-			resources.erase(resource_type)
-		if not all:
-			break
-	if not taken_any:
-		if not _pocket_has_room():
-			_update_interface(S.POCKET_FULL_SHORT)
-		else:
-			_update_interface(S.PILE_EMPTY_NO_RESOURCES)
-		_refresh_interaction_hint()
-		return
-	pile.resources = resources
-	if resources.is_empty():
-		for index in range(resource_piles.size()):
-			if resource_piles[index].node == pile_node:
-				resource_piles.remove_at(index)
-				break
-		pile_node.queue_free()
-	else:
-		resource_pile_service.refresh_resource_pile_label(pile)
-	_update_interface(S.TOOK_FROM_PILE % _format_pocket_hint())
-	_refresh_interaction_hint()
+	_hero_interaction_controller.take_from_pile(pile, all)
 
 
 func _citizen_state_name(state: int) -> String:
@@ -2552,117 +2198,13 @@ func _rotated_footprint(footprint: Vector2i, rotation_quarters := build_rotation
 	return building_placement_controller.rotated_footprint(footprint, rotation_quarters) if building_placement_controller != null else footprint
 
 func _move_selection(world_position: Vector3) -> void:
-	selected_world_position = building_placement_controller.snapped_build_position(world_position) if building_placement_controller != null else world_position if not build_mode.is_empty() else world_position
-	selected_cell = _placement_key(selected_world_position)
-	world_setup.selection_marker.position = selected_world_position + Vector3(0.0, 0.04, 0.0)
-	if not build_mode.is_empty():
-		var local_footprint: Vector2i = BuildingBlueprints.get_blueprint(build_mode).footprint
-		var footprint := _rotated_footprint(local_footprint)
-		(world_setup.selection_marker.mesh as BoxMesh).size = Vector3(footprint.x, 0.04, footprint.y)
-		var forward := Vector3(0.0, 0.0, -1.0).rotated(Vector3.UP, build_rotation_quarters * PI * 0.5)
-		world_setup.preview_entrance_marker.position = selected_world_position + forward * (local_footprint.y * 0.5 + 0.35) + Vector3.UP * 0.08
-		world_setup.preview_back_entrance_marker.position = selected_world_position - forward * (local_footprint.y * 0.5 + 0.35) + Vector3.UP * 0.08
-		world_setup.preview_entrance_marker.visible = true
-		world_setup.preview_back_entrance_marker.visible = true
-	if not build_mode.is_empty():
-		world_setup.selection_material.albedo_color = Color(0.25, 0.85, 0.37, 0.55) if building_placement_controller.can_place(selected_world_position) if building_placement_controller != null else false else Color(0.9, 0.2, 0.18, 0.6)
-	if not build_mode.is_empty() and BuildingCatalog.max_hero_radius(build_mode) > 0.0 and is_instance_valid(hero_citizen):
-		if not is_first_person and is_instance_valid(world_setup.hero_build_radius_marker):
-			world_setup.hero_build_radius_marker.global_position = hero_citizen.global_position + Vector3(0.0, 0.08, 0.0)
-			world_setup.hero_build_radius_marker.visible = true
-		elif is_instance_valid(world_setup.hero_build_radius_marker):
-			world_setup.hero_build_radius_marker.visible = false
-	elif is_instance_valid(world_setup.hero_build_radius_marker):
-		world_setup.hero_build_radius_marker.visible = false
+	_build_controller.move_selection(world_position)
 
 func _place_building(world_position: Vector3) -> void:
-	if not _can_hero_build():
-		_update_interface("Only the hero can approve construction decisions.")
-		return
-	world_position = building_placement_controller.snapped_build_position(world_position) if building_placement_controller != null else world_position
-	var max_hero_radius := BuildingCatalog.max_hero_radius(build_mode)
-	if max_hero_radius > 0.0 and is_instance_valid(hero_citizen):
-		if hero_citizen.global_position.distance_to(world_position) > max_hero_radius:
-			_update_interface("Too far from Hero (max %.0f tiles)." % max_hero_radius)
-			return
-	if build_mode in ["straw_trade_tent", "tarp_trade_tent"] and is_instance_valid(entrance_stone) and world_position.distance_to(entrance_stone.global_position) > 8.0:
-		_update_interface("The tent market must be built beside the entrance sign.")
-		return
-	var cell := _placement_key(world_position)
-	var blueprint := BuildingBlueprints.get_blueprint(build_mode)
-	var occupied_footprint := _rotated_footprint(blueprint.footprint)
-	var territory_reason: StringName = village_territory_service.placement_reason(build_mode, cell, occupied_footprint)
-	if territory_reason != village_territory_service.REASON_OK:
-		_update_interface(village_territory_service.placement_message(territory_reason))
-		return
-	if not (building_placement_controller.can_place(world_position) if building_placement_controller != null else false):
-		_update_interface("Construction is not allowed at this point.")
-		return
-	if not (building_placement_controller.can_pay_building_cost(build_mode) if building_placement_controller != null else false):
-		var placement_state: Dictionary = building_availability_service.placement_state_with_inventory(build_mode, pocket)
-		_update_interface(str(placement_state.message))
-		return
-
-	if BuildingCatalog.is_instant_build(build_mode):
-		building_registry.reserve(cell, world_position, occupied_footprint)
-		var site_node: Node3D = construction._get_site_scene().instantiate()
-		site_node.position = world_position
-		site_node.rotation.y = build_rotation_quarters * PI * 0.5
-		site_node.set_meta("building_type", build_mode)
-		site_node.set_meta("footprint", blueprint.footprint)
-		site_node.set_meta("occupied_footprint", occupied_footprint)
-		site_node.set_meta("service_positions", BuildingEntrancePositionsScript.positions(site_node, blueprint.footprint, 1.0))
-		add_child(site_node)
-		for module in blueprint.modules:
-			site_node.add_child(BuildingBlueprints.create_module(module))
-		for child_name in ["ConstructionTerritory", "ConstructionProgressBack", "ConstructionProgressFill", "SupplyLabel", "ConstructionSelector", "ConstructionEntrance"]:
-			var child := site_node.get_node_or_null(child_name)
-			if child != null:
-				child.queue_free()
-		_complete_building(cell, build_mode, world_position, site_node, blueprint)
-		if BuildingCatalog.is_flag(build_mode):
-			_bind_hero_squad_to_settlement(&"main_settlement")
-		build_mode = ""
-		build_rotation_quarters = 0
-		world_setup.selection_marker.visible = false
-		world_setup.preview_entrance_marker.visible = false
-		world_setup.preview_back_entrance_marker.visible = false
-		if is_instance_valid(world_setup.hero_build_radius_marker):
-			world_setup.hero_build_radius_marker.visible = false
-		_show_territory_overlay(false)
-		ui_manager.build_menu.visible = false
-		build_menu_is_global = false
-		selected_builder = null
-		_set_build_placement_ui_visible(true)
-		_update_interface("%s placed!" % str(BuildingCatalog.definition_for(build_mode).get("name", "Building")))
-		return
-
-	building_registry.reserve(cell, world_position, occupied_footprint)
-	_refresh_navigation_grid()
-	var site := _create_construction_site(cell, build_mode, world_position, build_rotation_quarters, blueprint, occupied_footprint)
-	_deliver_pocket_to_site(site, true)
-	building_registry.attach_node(cell, site.node, build_mode)
-	build_mode = ""
-	build_rotation_quarters = 0
-	world_setup.selection_marker.visible = false
-	world_setup.preview_entrance_marker.visible = false
-	world_setup.preview_back_entrance_marker.visible = false
-	if is_instance_valid(world_setup.hero_build_radius_marker):
-		world_setup.hero_build_radius_marker.visible = false
-	_show_territory_overlay(false)
-	ui_manager.build_menu.visible = false
-	build_menu_is_global = false
-	selected_builder = null
-	_set_build_placement_ui_visible(true)
-	_update_interface("Construction marked. Couriers must deliver the required materials before builders can start.")
+	_build_controller.place_building(world_position)
 
 func _place_building_at_crosshair() -> void:
-	var viewport_center := get_viewport().get_visible_rect().size * 0.5
-	var terrain_point: Variant = _terrain_point_at_screen_position(viewport_center)
-	if terrain_point == null:
-		_update_interface("Aim at clear terrain to place the building.")
-		return
-	_place_building(terrain_point)
+	_build_controller.place_building_at_crosshair()
 
 func _can_hero_build() -> bool:
 	return building_placement_controller.can_hero_build() if building_placement_controller != null else false
@@ -2855,19 +2397,7 @@ func _register_service_entrance(building: Node3D, blueprint: Dictionary, home_en
 	_service_pocket_manager.register_service_entrance(building, blueprint, home_entrance, show_marker)
 
 func _nearby_player_work_target() -> Node3D:
-	if player_citizen == null:
-		return null
-	for site in construction_sites:
-		if not is_instance_valid(site.node):
-			continue
-		if player_citizen.global_position.distance_to(site.node.global_position) <= INTERACTION_RANGE:
-			return site.node
-	for site in demolition_sites:
-		if not is_instance_valid(site.building):
-			continue
-		if player_citizen.global_position.distance_to(site.building.global_position) <= INTERACTION_RANGE:
-			return site.building
-	return null
+	return _hero_interaction_controller.nearby_player_work_target()
 
 
 func _unregister_navigation_footprint(center: Vector3, footprint: Vector2i) -> void:
@@ -2880,36 +2410,11 @@ func _on_tree_harvested(worker: Citizen, position_on_board: Vector3) -> void:
 	_fell_tree_at(position_on_board)
 
 func _consume_tree_near_player(amount: int) -> void:
-	if player_citizen == null:
-		return
-	for position_on_board in tree_positions:
-		if player_citizen.global_position.distance_to(position_on_board) <= INTERACTION_RANGE:
-			var tree: Node3D = tree_nodes.get(_cell_from_position(position_on_board))
-			var tree_state: Variant = world_resource_state.tree_at(_cell_from_position(position_on_board))
-			if is_instance_valid(tree) and tree_state != null and not tree_state.felled:
-				var consumed := 0
-				while consumed < amount:
-					var result := foraging_service.consume_tree_branches(position_on_board)
-					if result <= 0:
-						break
-					consumed += result
-				if consumed > 0:
-					_update_interface(S.BRANCHES_GATHERED_TREE_STANDING % consumed)
-				else:
-					_update_interface(S.TREE_NO_BRANCHES_LEFT)
-				return
+	_hero_interaction_controller.consume_tree_near_player(amount)
 
 
 func _fell_nearest_tree() -> void:
-	if player_citizen == null:
-		return
-	for position_on_board in tree_positions:
-		if player_citizen.global_position.distance_to(position_on_board) <= INTERACTION_RANGE:
-			var tree: Node3D = tree_nodes.get(_cell_from_position(position_on_board))
-			var tree_state: Variant = world_resource_state.tree_at(_cell_from_position(position_on_board))
-			if is_instance_valid(tree) and tree_state != null and not tree_state.felled:
-				_fell_tree_at(position_on_board)
-				return
+	_hero_interaction_controller.fell_nearest_tree()
 
 
 func _fell_tree_at(position_on_board: Vector3) -> void:
@@ -2940,16 +2445,7 @@ func _apply_tree_felled_visual(cell: Vector2i, tree: Node3D) -> void:
 	terrain_blocked_cells.erase(cell)
 
 func _toggle_global_build_menu() -> void:
-	var was_visible := ui_manager.build_menu.visible and build_menu_is_global
-	_close_context_menus()
-	build_menu_is_global = not was_visible
-	ui_manager.build_menu.visible = build_menu_is_global
-	if ui_manager.build_menu.visible:
-		build_category = ""
-		build_menu_is_job_menu = false
-		build_menu_is_daily_order_menu = false
-		if building_menu_controller != null:
-			building_menu_controller.refresh_build_menu()
+	_build_controller.toggle_global_build_menu()
 
 
 func _set_road_walking_order(enabled: bool) -> void:
@@ -3070,25 +2566,11 @@ func _toggle_selected_citizen_night_work(checked: bool) -> void:
 
 
 func _occupy_selected_campfire_position() -> void:
-	if not is_instance_valid(selected_campfire) or not is_instance_valid(player_citizen):
-		return
-	if player_citizen.global_position.distance_to(_nearest_service_position(selected_campfire, player_citizen.global_position)) > OFFICER_POST_RADIUS:
-		return
-	_occupy_workplace(selected_campfire)
-	if campfire_menu_controller != null:
-		campfire_menu_controller.refresh_campfire_menu()
+	_hero_interaction_controller.occupy_selected_campfire_position()
 
 
 func _handle_campfire_primary_action() -> void:
-	if not is_instance_valid(selected_campfire):
-		return
-	selected_building = selected_campfire
-	if not _is_fire_lit(selected_campfire):
-		_relight_selected_fire()
-		if campfire_menu_controller != null:
-			campfire_menu_controller.refresh_campfire_menu()
-		return
-	_upgrade_selected_building()
+	_hero_interaction_controller.handle_campfire_primary_action()
 
 
 func _toggle_campfire_acceptance() -> void:
@@ -3150,19 +2632,7 @@ func _demolish_selected_building() -> void:
 
 
 func _relight_selected_fire() -> void:
-	if not is_instance_valid(selected_building):
-		return
-	var fire_state := _fire_state_for(selected_building)
-	if fire_state.lit:
-		return
-	if fire_state.fuel <= 0:
-		_update_interface("A fire needs branches before it can be relit.")
-		return
-	fire_state.lit = true
-	_apply_fire_state(selected_building, fire_state)
-	_refresh_living_statuses()
-	_reopen_workplace_menu()
-	_update_interface("The fire was relit with flint and steel.")
+	_hero_interaction_controller.relight_selected_fire()
 
 
 func _toggle_selected_workplace_acceptance() -> void:
@@ -3293,23 +2763,7 @@ func _workplace_priority_position(building: Node3D) -> int:
 
 
 func _take_resource_into_pocket(resource_type: String, amount: int) -> void:
-	if amount <= 0:
-		return
-	var warehouse_index := _nearby_warehouse_index()
-	if warehouse_index >= 0:
-		amount = mini(amount, settlement.warehouses[warehouse_index].amount(resource_type))
-	else:
-		amount = mini(amount, settlement.amount(resource_type))
-	amount = hero_pocket_service.add_to_pocket(resource_type, amount) if hero_pocket_service != null else 0
-	if amount > 0:
-		if warehouse_index >= 0:
-			settlement.add_to_warehouse(resource_type, -amount, warehouse_index)
-		else:
-			settlement.add(resource_type, -amount)
-		_update_interface(S.TOOK_FROM_WAREHOUSE % [amount, resource_type])
-	if pocket_take_menu_controller != null:
-		pocket_take_menu_controller.refresh_pocket_take_menu()
-	_refresh_interaction_hint()
+	_hero_interaction_controller.take_resource_into_pocket(resource_type, amount)
 
 
 func _assign_cook_at_campfire() -> void:
@@ -3427,10 +2881,7 @@ func _refresh_boundary_markers() -> void:
 
 
 func _show_territory_overlay(show: bool) -> void:
-	if world_setup.village_territory_overlay != null:
-		if show:
-			world_setup.village_territory_overlay.refresh(village_territory_service.territory())
-		world_setup.village_territory_overlay.visible = show
+	_build_controller.show_territory_overlay(show)
 
 func _create_resource_pile(position: Vector3, resources: Dictionary, is_backpack_pile := false) -> Node3D:
 	return resource_pile_service.create_resource_pile(position, resources, is_backpack_pile)

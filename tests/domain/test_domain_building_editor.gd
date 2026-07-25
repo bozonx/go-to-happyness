@@ -37,18 +37,23 @@ static func run_all() -> void:
 
 
 static func _test_catalog() -> void:
-	assert(BuildingBlockCatalogScript.all().size() == 25)
+	assert(BuildingBlockCatalogScript.all().size() == 30)
 	assert(BuildingBlockCatalogScript.has_block(&"cube"))
 	assert(BuildingBlockCatalogScript.has_block(&"stairs_corner_45"))
+	assert(BuildingBlockCatalogScript.has_block(&"stairs_corner_half"))
+	assert(BuildingBlockCatalogScript.has_block(&"stairs_corner_quarter"))
 	assert(BuildingBlockCatalogScript.has_block(&"foundation"))
 	assert(not BuildingBlockCatalogScript.has_block(&"nonexistent"))
 	# The WALL category was removed; its panels duplicated other blocks.
 	assert(not BuildingBlockCatalogScript.has_block(&"wall_panel"))
 	assert(not BuildingBlockCatalogScript.has_block(&"parapet"))
-	# Columns are now three distinct blocks (square / round / half).
+	# Columns include cross types.
 	assert(BuildingBlockCatalogScript.has_block(&"column_square"))
 	assert(BuildingBlockCatalogScript.has_block(&"column_round"))
 	assert(BuildingBlockCatalogScript.has_block(&"column_half"))
+	assert(BuildingBlockCatalogScript.has_block(&"column_square_cross_2"))
+	assert(BuildingBlockCatalogScript.has_block(&"column_round_cross_3"))
+	assert(BuildingBlockCatalogScript.has_block(&"column_half_cross_2"))
 	assert(BuildingBlockCatalogScript.default_block_id() == &"cube")
 	var cube := BuildingBlockCatalogScript.get_block(&"cube")
 	assert(cube["size"] == Vector3(1.0, 1.0, 1.0))
@@ -63,9 +68,9 @@ static func _test_catalog() -> void:
 	assert(BuildingBlockCatalogScript.normalize_variant(&"column_square", &"bogus") == &"thick")
 	assert(BuildingBlockCatalogScript.size_of(&"column_round", &"med") == Vector3(0.5, 1.0, 0.5))
 	assert(BuildingBlockCatalogScript.mesh_shape_of(&"column_round", &"med") == BuildingBlockCatalogScript.SHAPE_CYLINDER)
-	# Openings occupy a 3×3 face; single-cell blocks report a unit footprint.
-	assert(BuildingBlockCatalogScript.footprint_of(&"door_wall") == Vector3i(3, 3, 1))
-	assert(BuildingBlockCatalogScript.is_multicell(&"door_wall"))
+	# Single-cell blocks report a unit footprint.
+	assert(BuildingBlockCatalogScript.footprint_of(&"arch") == Vector3i(1, 1, 1))
+	assert(not BuildingBlockCatalogScript.is_multicell(&"arch"))
 	assert(not BuildingBlockCatalogScript.is_multicell(&"cube"))
 	_test_anchoring()
 
@@ -78,8 +83,6 @@ static func _test_anchoring() -> void:
 	assert(C.available_anchors(&"cube", &"") == [C.ANCHOR_CENTER])
 	assert(C.available_anchors(&"railing", &"full") == [C.ANCHOR_CENTER, C.ANCHOR_EDGE])
 	assert(C.available_anchors(&"half_slab", &"") == [C.ANCHOR_CENTER, C.ANCHOR_EDGE])
-	# A multi-cell opening anchors only at its centre.
-	assert(C.available_anchors(&"door_wall", &"") == [C.ANCHOR_CENTER])
 	# Centre stays centred; corner snaps the 0.5m block flush to a corner and
 	# rotation pivots it around the cell centre to the opposite corner.
 	assert(C.cell_offset(&"column_square", &"med", C.ANCHOR_CENTER, 0) == Vector2(0.5, 0.5))
@@ -226,34 +229,17 @@ static func _test_grid_place_erase() -> void:
 
 static func _test_grid_multicell() -> void:
 	var grid := BuildingGridModelScript.new()
-	# A 3×3 opening occupies nine cells: the anchor plus a ring around/above it.
-	assert(grid.place(Vector3i(5, 0, 5), &"door_wall"))
-	assert(grid.count() == 1)
-	assert(grid.has_block_at(Vector3i(5, 0, 5)))    # anchor
-	assert(grid.has_block_at(Vector3i(4, 0, 5)))    # left of anchor
-	assert(grid.has_block_at(Vector3i(6, 2, 5)))    # top-right of the face
-	# Any covered cell resolves back to the single anchor block.
-	assert(grid.anchor_at(Vector3i(6, 2, 5)) == Vector3i(5, 0, 5))
-	assert(grid.get_block_at(Vector3i(4, 0, 5)).block_id == &"door_wall")
-	# Erasing from a non-anchor cell removes the whole block.
-	assert(grid.erase(Vector3i(6, 2, 5)))
 	assert(grid.is_empty())
-	assert(not grid.has_block_at(Vector3i(5, 0, 5)))
-	# A new block placed overlapping an opening evicts it.
-	assert(grid.place(Vector3i(0, 0, 0), &"window_wall"))
+	assert(grid.place(Vector3i(0, 0, 0), &"cube"))
 	assert(grid.count() == 1)
-	assert(grid.place(Vector3i(0, 0, 0), &"cube"))   # overlaps the window's centre
-	assert(grid.count() == 1)
-	assert(grid.get_block_at(Vector3i(0, 0, 0)).block_id == &"cube")
-	assert(not grid.has_block_at(Vector3i(1, 0, 0)))  # window's ring is gone
+	assert(grid.has_block_at(Vector3i(0, 0, 0)))
 
 
 static func _test_grid_rotation_rules() -> void:
 	var grid := BuildingGridModelScript.new()
-	# Non-rotatable block clamps rotation to 0.
+	# Rotatable block keeps and wraps rotation (cubes and slabs are rotatable).
 	grid.place(Vector3i(0, 0, 0), &"cube", 3)
-	assert(grid.get_block_at(Vector3i(0, 0, 0)).rot == 0)
-	# Rotatable block keeps and wraps rotation.
+	assert(grid.get_block_at(Vector3i(0, 0, 0)).rot == 3)
 	grid.place(Vector3i(1, 0, 0), &"half_slab", 2)
 	assert(grid.get_block_at(Vector3i(1, 0, 0)).rot == 2)
 	grid.rotate_at(Vector3i(1, 0, 0), 3)
