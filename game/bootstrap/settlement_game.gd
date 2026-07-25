@@ -146,6 +146,7 @@ const SettlementInputControllerScript = preload("res://game/bootstrap/settlement
 const SettlementBuildControllerScript = preload("res://game/bootstrap/settlement_build_controller.gd")
 const SettlementHeroInteractionControllerScript = preload("res://game/bootstrap/settlement_hero_interaction_controller.gd")
 const SettlementConstructionControllerScript = preload("res://game/bootstrap/settlement_construction_controller.gd")
+const SettlementWorkplaceControllerScript = preload("res://game/bootstrap/settlement_workplace_controller.gd")
 
 
 
@@ -566,6 +567,7 @@ var _input_controller: RefCounted
 var _build_controller: RefCounted
 var _hero_interaction_controller: RefCounted
 var _construction_controller: RefCounted
+var _workplace_controller: RefCounted
 
 
 func _ready() -> void:
@@ -591,6 +593,7 @@ func _ready() -> void:
 	_build_controller = SettlementBuildControllerScript.new(self)
 	_hero_interaction_controller = SettlementHeroInteractionControllerScript.new(self)
 	_construction_controller = SettlementConstructionControllerScript.new(self)
+	_workplace_controller = SettlementWorkplaceControllerScript.new(self)
 	ui_manager.bind_delegate_events(SettlementUICallbacksScript.new(self))
 	SettlementBootstrapperScript.new().run(self)
 
@@ -1121,7 +1124,7 @@ func _update_interface(message: String) -> void:
 const ERA_CATEGORIES := ["tent", "earth", "clay", "wood", "stone", "brick"]
 
 func _era_name() -> String:
-	return ["Tent", "Earth", "Clay", "Wood", "Stone", "Brick"][settlement.era]
+	return _workplace_controller.era_name()
 
 
 func _resource_display_name(resource_type: String) -> String:
@@ -1599,20 +1602,7 @@ func _employer_for_role(role: String) -> Node3D:
 
 
 func _employer_types_for_role(role: String) -> Array[String]:
-	match role:
-		"construction": return ["builders_guild", "construction_company"]
-		"forestry": return ["sawmill"]
-		"farming": return ["farm"]
-		"gather_food": return ["straw_forager_tent", "tarp_forager_tent"]
-		"gather_branches", "gather_grass": return ["straw_materials_yard", "tarp_materials_yard"]
-		"cook": return BuildingTypes.KITCHEN_TYPES
-		"teacher": return ["school"]
-		"seller": return BuildingTypes.MARKET_TYPES
-		"factory_worker": return BuildingTypes.FACTORY_TYPES
-		"engineer": return ["materials_factory"]
-		"craftsman": return ["straw_craft_tent", "tarp_craft_tent"]
-		"official": return OFFICIAL_WORKPLACE_TYPES
-	return []
+	return _workplace_controller.employer_types_for_role(role)
 
 
 func _available_employer_capacity(role: String) -> int:
@@ -1630,41 +1620,15 @@ func _available_employer_capacity(role: String) -> int:
 
 
 func _is_staffed_workplace(building: Node3D) -> bool:
-	if not is_instance_valid(building):
-		return false
-	var building_type := building_registry.building_type_for_node(building)
-	for role in ["construction", "forestry", "farming", "gather_food", "gather_branches", "gather_grass", "cook", "teacher", "seller", "factory_worker", "engineer", "craftsman", "official"]:
-		if building_type in _employer_types_for_role(role) or (building_zone_service != null and building_zone_service.supports_role(building, StringName(role))):
-			return true
-	return false
+	return _workplace_controller.is_staffed_workplace(building)
 
 
 func _building_supports_role(building: Node3D, role: String) -> bool:
-	if not is_instance_valid(building):
-		return false
-	var building_type := building_registry.building_type_for_node(building)
-	return building_type in _employer_types_for_role(role) or (building_zone_service != null and building_zone_service.supports_role(building, StringName(role)))
+	return _workplace_controller.building_supports_role(building, role)
 
 
 func _employer_capacity(role: String, building: Node3D) -> int:
-	if building_zone_service != null:
-		var zone_capacity: int = int(building_zone_service.role_capacity(building, StringName(role)))
-		if zone_capacity > 0:
-			return zone_capacity
-	if role == "construction":
-		return 3 if building_registry.building_type_for_node(building) == "construction_company" else 1
-	if role == "factory_worker":
-		return int(building.get_meta("required_factory_workers", 1))
-	if role == "craftsman":
-		var type := building_registry.building_type_for_node(building)
-		return 2 if type == "tarp_craft_tent" else 1
-	if role == "gather_food":
-		var type := building_registry.building_type_for_node(building)
-		return 4 if type == "tarp_forager_tent" else 2
-	if role in ["gather_branches", "gather_grass"]:
-		var type := building_registry.building_type_for_node(building)
-		return 4 if type == "tarp_materials_yard" else 2
-	return 1
+	return _workplace_controller.employer_capacity(role, building)
 
 func _set_build_placement_ui_visible(is_visible: bool) -> void:
 	_build_controller.set_build_placement_ui_visible(is_visible)
@@ -2067,11 +2031,7 @@ func _nearby_workplace_for_job() -> Node3D:
 
 
 func _role_for_workplace(building: Node3D) -> String:
-	var building_type := building_registry.building_type_for_node(building)
-	for candidate in ["forestry", "farming", "gather_food", "gather_branches", "cook", "teacher", "seller", "factory_worker", "engineer", "official"]:
-		if building_type in _employer_types_for_role(candidate):
-			return candidate
-	return ""
+	return _workplace_controller.role_for_workplace(building)
 
 
 
@@ -2377,119 +2337,28 @@ func _toggle_global_build_menu() -> void:
 
 
 func _set_road_walking_order(enabled: bool) -> void:
-	if settlement.era != SettlementState.Era.TENT:
-		return
-	settlement.road_walking_order_enabled = enabled
-	_update_interface(
-		"Trail-walking order %s. Residents prefer existing paths automatically and %s shared routes."
-		% [
-			"enabled" if enabled else "disabled",
-			"reinforce" if enabled else "normally wear in",
-		]
-	)
+	_workplace_controller.set_road_walking_order(enabled)
 
 
 
 func _cheer_up_settlement() -> void:
-	if clock.hour() < 6:
-		return
-	if settlement.apply_cheer_up():
-		if campfire_menu_controller != null:
-			campfire_menu_controller.show_campfire_orders_menu()
-		_update_interface("You cheered up the settlement. Wellbeing rose by 5%%.")
+	_workplace_controller.cheer_up_settlement()
 
 
 func _has_night_work_candidates() -> bool:
-	for citizen in citizens:
-		if is_instance_valid(citizen) and not citizen.is_player_controlled and not citizen.is_recovering(day_cycle.current_day) and (citizen.has_active_daily_order() or citizen.is_employed()):
-			return true
-	return false
+	return _workplace_controller.has_night_work_candidates()
 
 
 func _toggle_settlement_night_work(checked: bool) -> void:
-	if checked:
-		if settlement.night_work_order_day == day_cycle.current_day:
-			if campfire_menu_controller != null:
-				campfire_menu_controller.show_campfire_orders_menu()
-			return
-		var affected := 0
-		for citizen in citizens:
-			if not is_instance_valid(citizen) or citizen.is_player_controlled or citizen.is_recovering(day_cycle.current_day):
-				continue
-			if citizen.has_active_daily_order() or citizen.is_employed():
-				if citizen_daily_order_service.activate_citizen_overtime(citizen, "settlement") if citizen_daily_order_service != null else false:
-					affected += 1
-		if affected <= 0:
-			if campfire_menu_controller != null:
-				campfire_menu_controller.show_campfire_orders_menu()
-			return
-		settlement.night_work_order_day = day_cycle.current_day
-		_update_interface("Night-work order issued to %d residents. They will work through the night and next day." % affected)
-		if survival_event_controller != null:
-			survival_event_controller.update_skip_night_button()
-		if citizen_ai != null:
-			citizen_ai.request_decision_refresh()
-	else:
-		for citizen in citizens:
-			if not is_instance_valid(citizen) or citizen.is_player_controlled:
-				continue
-			if citizen.has_overtime_source("settlement", day_cycle.current_day):
-				citizen.deactivate_overtime("settlement")
-		if citizen_daily_order_service != null:
-			citizen_daily_order_service.sync_overtime_scope_indicators()
-		_update_interface("Settlement night work cancelled. Workers will return home.")
-		if survival_event_controller != null:
-			survival_event_controller.update_skip_night_button()
-		if citizen_ai != null:
-			citizen_ai.request_decision_refresh()
-	if campfire_menu_controller != null:
-		campfire_menu_controller.show_campfire_orders_menu()
+	_workplace_controller.toggle_settlement_night_work(checked)
 
 
 func _toggle_double_time_order(checked: bool) -> void:
-	if checked:
-		if settlement.double_time_order_day == day_cycle.current_day:
-			if campfire_menu_controller != null:
-				campfire_menu_controller.show_campfire_orders_menu()
-			return
-		settlement.double_time_order_day = day_cycle.current_day
-		_update_interface("Double time order issued. All residents walk twice as fast today, but fatigue accumulates faster.")
-	else:
-		settlement.double_time_order_day = -1
-		_update_interface("Double time order cancelled. Residents resume normal pace.")
-	if campfire_menu_controller != null:
-		campfire_menu_controller.show_campfire_orders_menu()
+	_workplace_controller.toggle_double_time_order(checked)
 
 
 func _toggle_selected_citizen_night_work(checked: bool) -> void:
-	if not is_instance_valid(selected_builder):
-		ui_manager.build_menu.personal_night_work_button.set_pressed_no_signal(false)
-		return
-	if checked:
-		if not selected_builder.has_daily_order() or selected_builder.is_employed() or selected_builder.has_overtime_source("personal", day_cycle.current_day):
-			ui_manager.build_menu.personal_night_work_button.set_pressed_no_signal(false)
-			return
-		# Evening daily orders normally wait for tomorrow. A personal night-work
-		# order explicitly starts that new task now and keeps it through tomorrow.
-		# Permanent jobs already have an active assignment, including courier jobs
-		# that do not belong to a workplace, so they only need the overtime flag.
-		if not citizen_daily_order_service.activate_citizen_overtime(selected_builder, "personal") if citizen_daily_order_service != null else false:
-			ui_manager.build_menu.personal_night_work_button.set_pressed_no_signal(false)
-			return
-		_update_interface("%s received a personal night-work order." % selected_builder.role_label())
-		if survival_event_controller != null:
-			survival_event_controller.update_skip_night_button()
-		if citizen_ai != null:
-			citizen_ai.request_decision_refresh()
-	else:
-		selected_builder.deactivate_overtime("personal")
-		_update_interface("Night work cancelled for %s." % selected_builder.role_label())
-		if survival_event_controller != null:
-			survival_event_controller.update_skip_night_button()
-		if citizen_ai != null:
-			citizen_ai.request_decision_refresh()
-	if building_menu_controller != null:
-		building_menu_controller.refresh_build_menu()
+	_workplace_controller.toggle_selected_citizen_night_work(checked)
 
 
 
@@ -2502,45 +2371,19 @@ func _handle_campfire_primary_action() -> void:
 
 
 func _toggle_campfire_acceptance() -> void:
-	if not is_instance_valid(selected_campfire):
-		return
-	selected_building = selected_campfire
-	_toggle_selected_workplace_acceptance()
+	_workplace_controller.toggle_campfire_acceptance()
 
 
 func _dismiss_campfire_worker() -> void:
-	if not is_instance_valid(selected_campfire):
-		return
-	selected_building = selected_campfire
-	_dismiss_selected_workplace_worker()
+	_workplace_controller.dismiss_campfire_worker()
 
 
 func _on_campfire_advance_pressed() -> void:
-	if selected_campfire == null:
-		return
-	var housing_slots := _total_housing_slots()
-	var next_era := SettlementState.Era.TENT
-	match settlement.era:
-		SettlementState.Era.TENT: next_era = SettlementState.Era.EARTH
-		SettlementState.Era.EARTH: next_era = SettlementState.Era.CLAY
-		SettlementState.Era.CLAY: next_era = SettlementState.Era.WOOD
-		SettlementState.Era.WOOD: next_era = SettlementState.Era.STONE
-		SettlementState.Era.STONE: next_era = SettlementState.Era.BRICK
-	
-	if settlement.advance_era(next_era, citizens.size(), housing_slots):
-		village_territory_service.set_era(int(settlement.era))
-		_update_interface("Advanced to the %s Era! New buildings unlocked." % _era_name())
-		if campfire_menu_controller != null:
-			campfire_menu_controller.refresh_campfire_menu()
-		if building_menu_controller != null:
-			building_menu_controller.refresh_build_menu()
-	else:
-		_update_interface("Failed to advance era. Double-check requirements.")
+	_workplace_controller.on_campfire_advance_pressed()
 
 
 func _refresh_market_menu() -> void:
-	if market_menu_controller != null:
-		market_menu_controller.refresh_market_menu()
+	_workplace_controller.refresh_market_menu()
 
 
 
@@ -2551,12 +2394,11 @@ func _refresh_market_menu() -> void:
 
 
 func _available_trade_money() -> int:
-	return trade_service.available_trade_money()
+	return _workplace_controller.available_trade_money()
 
 
 func _demolish_selected_building() -> void:
-	if is_instance_valid(selected_building):
-		building_lifecycle_service.mark_building_for_demolition(selected_building)
+	_workplace_controller.demolish_selected_building()
 
 
 func _relight_selected_fire() -> void:
@@ -2564,130 +2406,27 @@ func _relight_selected_fire() -> void:
 
 
 func _toggle_selected_workplace_acceptance() -> void:
-	if not is_instance_valid(selected_building) or not _is_staffed_workplace(selected_building):
-		return
-	var accepting := bool(selected_building.get_meta("accepting_workers", true))
-	if accepting:
-		selected_building.set_meta("accepting_workers", false)
-		_update_interface("This workplace stopped accepting new workers.")
-	else:
-		workplace_priority_counter += 1
-		selected_building.set_meta("accepting_workers", true)
-		selected_building.set_meta("workplace_priority", workplace_priority_counter)
-		_update_interface("This workplace is accepting workers at the front of its queue.")
-	_update_workers()
-	_reopen_workplace_menu()
+	_workplace_controller.toggle_selected_workplace_acceptance()
 
 
 func _dismiss_selected_workplace_worker() -> void:
-	var worker := _workplace_worker(selected_building)
-	if worker == null:
-		return
-	selected_building.set_meta("accepting_workers", false)
-	if worker.permanent_role == "official":
-		_dismiss_official(worker)
-	else:
-		_send_to_unemployment_registration(worker)
-	_update_workers()
-	_reopen_workplace_menu()
+	_workplace_controller.dismiss_selected_workplace_worker()
 
 
 func _reopen_workplace_menu() -> void:
-	# The town hall keeps its own dedicated menu; every other workplace uses the
-	# generic building menu.
-	if is_instance_valid(selected_campfire) and selected_building == selected_campfire and ui_manager.campfire_menu.visible:
-		if campfire_menu_controller != null:
-			campfire_menu_controller.refresh_campfire_menu()
-	else:
-		if building_menu_controller != null:
-			building_menu_controller.show_building_menu()
+	_workplace_controller.reopen_workplace_menu()
 
 
 func _upgrade_selected_building() -> void:
-	if not is_instance_valid(selected_building):
-		return
-	var old_type := building_registry.building_type_for_node(selected_building)
-	var target_type := settlement.next_building_upgrade(old_type)
-	if target_type.is_empty():
-		return
-	var old_footprint: Vector2i = selected_building.get_meta("footprint", BuildingBlueprints.get_blueprint(old_type).footprint)
-	var blueprint := BuildingBlueprints.get_blueprint(target_type)
-	if blueprint.footprint != old_footprint:
-		_update_interface("This upgrade needs rebuilding because its footprint changes.")
-		return
-	if not settlement.can_upgrade_building(old_type):
-		_update_interface("Upgrade needs research and resources.")
-		return
-	var service_position: Vector3 = selected_building.get_meta("service_position", selected_building.global_position)
-	var warehouse_index := warehouse_positions.find(service_position)
-	if settlement.pay_for_building_upgrade(old_type, warehouse_index).is_empty():
-		return
-	for child in selected_building.get_children():
-		selected_building.remove_child(child)
-		child.queue_free()
-	if selected_building.has_meta("status_indicator"):
-		selected_building.remove_meta("status_indicator")
-	if selected_building.has_meta("warehouse_fill_label"):
-		selected_building.remove_meta("warehouse_fill_label")
-	selected_building.set_meta("building_type", target_type)
-	selected_building.set_meta("footprint", blueprint.footprint)
-	selected_building.set_meta("occupied_footprint", blueprint.footprint)
-	for module in blueprint.modules:
-		selected_building.add_child(BuildingBlueprints.create_module(module))
-	_unregister_navigation_footprint(selected_building.global_position, old_footprint)
-	var is_home := target_type in ["tent", "straw_tent", "tarp_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house"]
-	_register_service_entrance(selected_building, blueprint, is_home, target_type not in ["farm", "park"])
-	if target_type in ["campfire", "campfire_lvl2", "campfire_lvl3", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall"]:
-		campfire_node = selected_building
-		_activate_employment_centre(selected_building)
-		_add_building_selector(selected_building, "campfire_selector", blueprint.footprint)
-		_add_fire_light(selected_building)
-	elif BuildingTypes.is_kitchen(target_type):
-		_activate_kitchen_if_better(selected_building, service_position)
-		_add_building_selector(selected_building, "cook_campfire_selector", blueprint.footprint)
-		_add_fire_light(selected_building)
-	_add_building_status_indicator(selected_building)
-	if BuildingTypes.is_warehouse(target_type):
-		_add_warehouse_fill_label(selected_building)
-	village_territory_service.recalculate()
-	_refresh_boundary_markers()
-	_refresh_navigation_grid()
-	_update_workers()
-	_update_interface("%s upgraded to %s." % [str(BuildingCatalog.definition_for(old_type).get("name", old_type)), str(BuildingCatalog.definition_for(target_type).get("name", target_type))])
-	if ui_manager.campfire_menu.visible and selected_building == selected_campfire:
-		if campfire_menu_controller != null:
-			campfire_menu_controller.refresh_campfire_menu()
-	else:
-		if building_menu_controller != null:
-			building_menu_controller.show_building_menu()
+	_workplace_controller.upgrade_selected_building()
 
 
 func _workplace_worker(building: Node3D) -> Citizen:
-	if not is_instance_valid(building):
-		return null
-	for citizen in citizens:
-		if citizen.employment_workplace == building or citizen.pending_employment_workplace == building:
-			return citizen
-	return null
+	return _workplace_controller.workplace_worker(building)
 
 
 func _workplace_priority_position(building: Node3D) -> int:
-	var role := ""
-	for candidate_role in ["construction", "forestry", "farming", "gather_food", "cook", "teacher", "seller", "official", "factory_worker", "engineer"]:
-		if _building_supports_role(building, candidate_role):
-			role = candidate_role
-			break
-	if role.is_empty():
-		return 0
-	var position := 1
-	var priority := int(building.get_meta("workplace_priority", 0))
-	for record in building_registry.records():
-		var candidate := record.node
-		if not is_instance_valid(candidate) or candidate == building or not bool(candidate.get_meta("accepting_workers", true)):
-			continue
-		if _building_supports_role(candidate, role) and int(candidate.get_meta("workplace_priority", 0)) > priority:
-			position += 1
-	return position
+	return _workplace_controller.workplace_priority_position(building)
 
 
 func _take_resource_into_pocket(resource_type: String, amount: int) -> void:
@@ -2695,60 +2434,15 @@ func _take_resource_into_pocket(resource_type: String, amount: int) -> void:
 
 
 func _assign_cook_at_campfire() -> void:
-	if selected_builder == null:
-		_update_interface("Select a resident first, then choose a cooking shift.")
-		return
-	if selected_builder.is_player_controlled:
-		_update_interface("Pick a settler, not the character you are controlling.")
-		return
-	if selected_building != canteen:
-		_update_interface("Choose the active kitchen to assign a cook.")
-		return
-	if not _player_can_manage_permanent_professions():
-		if workplace_labor_service != null:
-			workplace_labor_service.show_labor_command_blocked()
-		return
-	if not _set_manual_specialist_employment(selected_builder, "cook"):
-		return
-	selected_builder.setup_specialization("cook")
-	_update_interface("%s is registering as a cook." % selected_builder.role_label())
-	_update_workers()
+	_workplace_controller.assign_cook_at_campfire()
 
 
 func _assign_teacher_at_school() -> void:
-	if not _player_can_manage_permanent_professions():
-		if workplace_labor_service != null:
-			workplace_labor_service.show_labor_command_blocked()
-		return
-	if selected_builder == null:
-		_update_interface("Select a resident first, then click the school to make them the teacher.")
-		return
-	if selected_builder.is_player_controlled:
-		_update_interface("Pick a settler, not the character you are controlling.")
-		return
-	if not _set_manual_specialist_employment(selected_builder, "teacher"):
-		return
-	selected_builder.setup_specialization("teacher")
-	_update_interface("%s is registering as a teacher." % selected_builder.role_label())
-	_update_workers()
+	_workplace_controller.assign_teacher_at_school()
 
 
 func _assign_seller_at_market() -> void:
-	if not _player_can_manage_permanent_professions():
-		if workplace_labor_service != null:
-			workplace_labor_service.show_labor_command_blocked()
-		return
-	if selected_builder == null:
-		_update_interface("Select a resident first, then click the market to make them the seller.")
-		return
-	if selected_builder.is_player_controlled:
-		_update_interface("Pick a settler, not the character you are controlling.")
-		return
-	if not _set_manual_specialist_employment(selected_builder, "seller"):
-		return
-	selected_builder.setup_specialization("seller")
-	_update_interface("%s is registering as a seller." % selected_builder.role_label())
-	_update_workers()
+	_workplace_controller.assign_seller_at_market()
 
 
 func _appoint_official(citizen: Citizen, workplace: Node3D = null, require_at_post := true) -> bool:
@@ -2891,49 +2585,11 @@ func _check_unstaffed_employment_center() -> void:
 
 
 func _toggle_worker_overtime(checked: bool) -> void:
-	if not is_instance_valid(selected_building):
-		return
-	if checked:
-		var night_order_used := int(selected_building.get_meta("night_work_order_day", -1)) == day_cycle.current_day
-		if night_order_used:
-			ui_manager.building_overtime_button.set_pressed_no_signal(false)
-			return
-		var workers_found := false
-		for citizen in citizens:
-			if is_instance_valid(citizen) and citizen.is_employed() and citizen.employment_workplace == selected_building:
-				if citizen_daily_order_service.activate_citizen_overtime(citizen, "workplace") if citizen_daily_order_service != null else false:
-					workers_found = true
-		if workers_found:
-			selected_building.set_meta("night_work_order_day", day_cycle.current_day)
-			_add_message("Night-work order issued for %s." % building_registry.building_type_for_node(selected_building).replace("_", " "))
-			_update_workers()
-			if survival_event_controller != null:
-				survival_event_controller.update_skip_night_button()
-			if citizen_ai != null:
-				citizen_ai.request_decision_refresh()
-		else:
-			ui_manager.building_overtime_button.set_pressed_no_signal(false)
-	else:
-		for citizen in citizens:
-			if is_instance_valid(citizen) and citizen.employment_workplace == selected_building:
-				citizen.deactivate_overtime("workplace")
-		if citizen_daily_order_service != null:
-			citizen_daily_order_service.sync_overtime_scope_indicators()
-		_add_message("Night work cancelled for %s." % building_registry.building_type_for_node(selected_building).replace("_", " "))
-		_update_workers()
-		if survival_event_controller != null:
-			survival_event_controller.update_skip_night_button()
-		if citizen_ai != null:
-			citizen_ai.request_decision_refresh()
+	_workplace_controller.toggle_worker_overtime(checked)
 
 
 func _toggle_campfire_worker_overtime(checked: bool) -> void:
-	if not is_instance_valid(selected_campfire):
-		return
-	selected_building = selected_campfire
-	_toggle_worker_overtime(checked)
-	if campfire_menu_controller != null:
-		campfire_menu_controller.refresh_campfire_menu()
+	_workplace_controller.toggle_campfire_worker_overtime(checked)
 
 
 func restore_from_save_data(save_data: SaveDataScript) -> bool:
