@@ -1,47 +1,247 @@
-[gd_scene load_steps=7 format=3 uid="uid://cfdecorcookfire102"]
+[gd_scene load_steps=18 format=3 uid="uid://cfdecorcookfire102"]
 
-[ext_resource type="Script" uid="uid://cdecorobjctrl001" path="res://game/features/buildings/presentation/decor/decor_object_controller.gd" id="1_script"]
+[ext_resource type="Script" uid="uid://dx010itafevat" path="res://game/features/buildings/presentation/decor/decor_object_controller.gd" id="1_script"]
 
-[sub_resource type="CylinderMesh" id="CylinderMesh_logs"]
-top_radius = 0.4
-bottom_radius = 0.5
-height = 0.2
+[sub_resource type="StandardMaterial3D" id="Mat_stone"]
+albedo_color = Color(0.435, 0.455, 0.478, 1)
+roughness = 0.95
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_fire"]
+[sub_resource type="BoxMesh" id="Mesh_stone"]
+material = SubResource("Mat_stone")
+size = Vector3(0.3, 0.24, 0.26)
+
+[sub_resource type="StandardMaterial3D" id="Mat_ash"]
+albedo_color = Color(0.18, 0.161, 0.149, 1)
+roughness = 1.0
+
+[sub_resource type="CylinderMesh" id="Mesh_ash"]
+material = SubResource("Mat_ash")
+top_radius = 0.5
+bottom_radius = 0.58
+height = 0.06
+radial_segments = 10
+rings = 1
+
+[sub_resource type="StandardMaterial3D" id="Mat_wood"]
+albedo_color = Color(0.36, 0.251, 0.2, 1)
+roughness = 0.95
+
+[sub_resource type="CylinderMesh" id="Mesh_log"]
+material = SubResource("Mat_wood")
+top_radius = 0.055
+bottom_radius = 0.06
+height = 0.85
+radial_segments = 8
+rings = 1
+
+[sub_resource type="StandardMaterial3D" id="Mat_flame_core"]
+transparency = 1
 shading_mode = 0
-albedo_color = Color(1, 0.35, 0, 1)
+albedo_color = Color(1, 0.667, 0.267, 1)
+emission_enabled = true
+emission = Color(1, 0.667, 0.267, 1)
+emission_energy_multiplier = 2.5
 
-[sub_resource type="SphereMesh" id="SphereMesh_fire"]
-material = SubResource("StandardMaterial3D_fire")
-radius = 0.25
-height = 0.5
+[sub_resource type="CylinderMesh" id="Mesh_flame_core"]
+material = SubResource("Mat_flame_core")
+top_radius = 0.0
+bottom_radius = 0.16
+height = 0.42
+radial_segments = 8
+rings = 1
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_pot"]
-albedo_color = Color(0.2, 0.2, 0.2, 1)
+[sub_resource type="StandardMaterial3D" id="Mat_flame_outer"]
+transparency = 1
+shading_mode = 0
+albedo_color = Color(1, 0.353, 0.09, 0.45)
+emission_enabled = true
+emission = Color(1, 0.353, 0.09, 1)
+emission_energy_multiplier = 1.4
 
-[sub_resource type="CylinderMesh" id="CylinderMesh_pot"]
-material = SubResource("StandardMaterial3D_pot")
-top_radius = 0.3
+[sub_resource type="CylinderMesh" id="Mesh_flame_outer"]
+material = SubResource("Mat_flame_outer")
+top_radius = 0.0
 bottom_radius = 0.25
-height = 0.35
+height = 0.64
+radial_segments = 8
+rings = 1
+
+[sub_resource type="StandardMaterial3D" id="Mat_iron"]
+albedo_color = Color(0.145, 0.149, 0.157, 1)
+metallic = 0.6
+roughness = 0.55
+
+[sub_resource type="CylinderMesh" id="Mesh_tripod_leg"]
+material = SubResource("Mat_iron")
+top_radius = 0.025
+bottom_radius = 0.03
+height = 1.5
+radial_segments = 6
+rings = 1
+
+[sub_resource type="CylinderMesh" id="Mesh_pot"]
+material = SubResource("Mat_iron")
+top_radius = 0.28
+bottom_radius = 0.22
+height = 0.34
+radial_segments = 12
+
+[sub_resource type="TorusMesh" id="Mesh_pot_handle"]
+material = SubResource("Mat_iron")
+inner_radius = 0.24
+outer_radius = 0.28
+rings = 12
+ring_segments = 6
+
+[sub_resource type="StandardMaterial3D" id="Mat_canopy"]
+albedo_color = Color(0.541, 0.396, 0.286, 1)
+roughness = 0.9
+
+[sub_resource type="BoxMesh" id="Mesh_canopy_roof"]
+material = SubResource("Mat_canopy")
+size = Vector3(2.6, 0.12, 2.6)
+
+[sub_resource type="BoxMesh" id="Mesh_canopy_post"]
+material = SubResource("Mat_wood")
+size = Vector3(0.12, 2.1, 0.12)
+
+[sub_resource type="StandardMaterial3D" id="Mat_ember"]
+transparency = 1
+blend_mode = 1
+shading_mode = 0
+vertex_color_use_as_albedo = true
+albedo_color = Color(1, 0.706, 0.353, 1)
+billboard_mode = 3
+
+[sub_resource type="QuadMesh" id="Mesh_ember"]
+material = SubResource("Mat_ember")
+size = Vector2(0.05, 0.05)
+
+[sub_resource type="ParticleProcessMaterial" id="Process_ember"]
+lifetime_randomness = 0.4
+emission_shape = 1
+emission_sphere_radius = 0.15
+spread = 16.0
+initial_velocity_min = 0.4
+initial_velocity_max = 0.9
+gravity = Vector3(0, 0.3, 0)
+damping_min = 0.4
+damping_max = 0.9
+scale_min = 0.4
+scale_max = 0.9
+color = Color(1, 0.6, 0.235, 1)
 
 [node name="CookingCampfire" type="Node3D"]
 script = ExtResource("1_script")
+asset_id = &"cooking_campfire"
 
-[node name="LogMesh" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 0)
-mesh = SubResource("CylinderMesh_logs")
+[node name="AshBed" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.03, 0)
+mesh = SubResource("Mesh_ash")
 
-[node name="FireMesh" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.35, 0)
-mesh = SubResource("SphereMesh_fire")
+[node name="StoneRing" type="Node3D" parent="."]
 
-[node name="CookingPot" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, 0)
-mesh = SubResource("CylinderMesh_pot")
+[node name="Stone1" type="MeshInstance3D" parent="StoneRing"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.66, 0.09, 0)
+mesh = SubResource("Mesh_stone")
+
+[node name="Stone2" type="MeshInstance3D" parent="StoneRing"]
+transform = Transform3D(0.5, 0, 0.866, 0, 1, 0, -0.866, 0, 0.5, 0.33, 0.08, 0.571)
+mesh = SubResource("Mesh_stone")
+
+[node name="Stone3" type="MeshInstance3D" parent="StoneRing"]
+transform = Transform3D(-0.5, 0, 0.866, 0, 1, 0, -0.866, 0, -0.5, -0.33, 0.1, 0.571)
+mesh = SubResource("Mesh_stone")
+
+[node name="Stone4" type="MeshInstance3D" parent="StoneRing"]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -0.66, 0.085, 0)
+mesh = SubResource("Mesh_stone")
+
+[node name="Stone5" type="MeshInstance3D" parent="StoneRing"]
+transform = Transform3D(-0.5, 0, -0.866, 0, 1, 0, 0.866, 0, -0.5, -0.33, 0.095, -0.571)
+mesh = SubResource("Mesh_stone")
+
+[node name="Stone6" type="MeshInstance3D" parent="StoneRing"]
+transform = Transform3D(0.5, 0, -0.866, 0, 1, 0, 0.866, 0, 0.5, 0.33, 0.08, -0.571)
+mesh = SubResource("Mesh_stone")
+
+[node name="Logs" type="Node3D" parent="."]
+
+[node name="LogA" type="MeshInstance3D" parent="Logs"]
+transform = Transform3D(0, 1, 0, -0.7071, 0, 0.7071, 0.7071, 0, 0.7071, 0, 0.09, 0)
+mesh = SubResource("Mesh_log")
+
+[node name="LogB" type="MeshInstance3D" parent="Logs"]
+transform = Transform3D(0, 1, 0, -0.7071, 0, -0.7071, -0.7071, 0, 0.7071, 0, 0.15, 0)
+mesh = SubResource("Mesh_log")
+
+[node name="Fire" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.18, 0)
+
+[node name="FlameOuter" type="MeshInstance3D" parent="Fire"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.32, 0)
+mesh = SubResource("Mesh_flame_outer")
+
+[node name="FlameCore" type="MeshInstance3D" parent="Fire"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.21, 0)
+mesh = SubResource("Mesh_flame_core")
+
+[node name="Embers" type="GPUParticles3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.32, 0)
+amount = 14
+lifetime = 1.5
+randomness = 0.5
+process_material = SubResource("Process_ember")
+draw_pass_1 = SubResource("Mesh_ember")
+
+[node name="Tripod" type="Node3D" parent="."]
+
+[node name="LegA" type="MeshInstance3D" parent="Tripod"]
+transform = Transform3D(0.951, 0.309, 0, -0.309, 0.951, 0, 0, 0, 1, 0.45, 0.7, 0)
+mesh = SubResource("Mesh_tripod_leg")
+
+[node name="LegB" type="MeshInstance3D" parent="Tripod"]
+transform = Transform3D(-0.476, 0.309, -0.823, 0.155, 0.951, 0.268, 0.866, 0, -0.5, -0.225, 0.7, -0.39)
+mesh = SubResource("Mesh_tripod_leg")
+
+[node name="LegC" type="MeshInstance3D" parent="Tripod"]
+transform = Transform3D(-0.476, 0.309, 0.823, 0.155, 0.951, -0.268, -0.866, 0, -0.5, -0.225, 0.7, 0.39)
+mesh = SubResource("Mesh_tripod_leg")
+
+[node name="Pot" type="MeshInstance3D" parent="Tripod"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.82, 0)
+mesh = SubResource("Mesh_pot")
+
+[node name="PotHandle" type="MeshInstance3D" parent="Tripod"]
+transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 1.06, 0)
+mesh = SubResource("Mesh_pot_handle")
+
+[node name="Canopy" type="Node3D" parent="."]
+visible = false
+
+[node name="Roof" type="MeshInstance3D" parent="Canopy"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.15, 0)
+mesh = SubResource("Mesh_canopy_roof")
+
+[node name="PostA" type="MeshInstance3D" parent="Canopy"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.15, 1.05, 1.15)
+mesh = SubResource("Mesh_canopy_post")
+
+[node name="PostB" type="MeshInstance3D" parent="Canopy"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.15, 1.05, 1.15)
+mesh = SubResource("Mesh_canopy_post")
+
+[node name="PostC" type="MeshInstance3D" parent="Canopy"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.15, 1.05, -1.15)
+mesh = SubResource("Mesh_canopy_post")
+
+[node name="PostD" type="MeshInstance3D" parent="Canopy"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.15, 1.05, -1.15)
+mesh = SubResource("Mesh_canopy_post")
 
 [node name="Light" type="OmniLight3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
-light_color = Color(1, 0.666667, 0.266667, 1)
-light_energy = 1.5
+light_color = Color(1, 0.667, 0.267, 1)
+light_energy = 1.8
+light_volumetric_fog_energy = 0.4
 omni_range = 8.0

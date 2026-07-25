@@ -13,6 +13,7 @@ const PlaceZoneRecordScript = preload("res://game/features/buildings/domain/edit
 const ZoneAnchorRecordScript = preload("res://game/features/buildings/domain/editor/zone_anchor_record.gd")
 const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
 const BuildingMaterialCatalogScript = preload("res://game/features/buildings/domain/editor/building_material_catalog.gd")
+const DecorObjectRecordScript = preload("res://game/features/buildings/domain/editor/decor_object_record.gd")
 
 const FORMAT_VERSION := 1
 const FILE_EXTENSION := "gdbuilding.json"
@@ -48,10 +49,12 @@ var blocks: Array[BlueprintBlock] = []
 var place_zones: Array[PlaceZoneRecord] = []
 var zone_anchors: Array[ZoneAnchorRecord] = []
 
+## Placed decor and furnishing (authored in editor Mode 3, design §3.3).
+var objects: Array[DecorObjectRecord] = []
+
 ## Later-mode sections are kept as opaque data until their editor modes exist.
 var surface_finishes: Array = []
 var decor_trims: Array = []
-var objects: Array = []
 var construction_cost: Dictionary = {}
 var cost_mode: StringName = &"auto"
 var extra_costs: Dictionary = {}
@@ -147,6 +150,9 @@ func to_dict() -> Dictionary:
 	var anchor_dicts: Array = []
 	for anchor in zone_anchors:
 		anchor_dicts.append(anchor.to_dict())
+	var object_dicts: Array = []
+	for decor_object in objects:
+		object_dicts.append(decor_object.to_dict())
 	var worker_entrance_dicts: Array = []
 	for we in worker_entrances:
 		worker_entrance_dicts.append([we.x, we.y])
@@ -166,7 +172,7 @@ func to_dict() -> Dictionary:
 		"decor_trims": decor_trims,
 		"place_zones": place_dicts,
 		"zone_anchors": anchor_dicts,
-		"objects": objects,
+		"objects": object_dicts,
 		"cost_mode": String(cost_mode),
 		"extra_costs": extra_costs,
 		"custom_material_costs": custom_material_costs,
@@ -225,9 +231,14 @@ static func from_dict(data: Dictionary) -> BuildingBlueprint:
 				if raw_zone is Dictionary:
 					bp._migrate_legacy_zone(raw_zone)
 
+	var raw_objects: Variant = data.get("objects", [])
+	if raw_objects is Array:
+		for raw_object in raw_objects:
+			if raw_object is Dictionary:
+				bp.objects.append(DecorObjectRecordScript.from_dict(raw_object))
+
 	bp.surface_finishes = data.get("surface_finishes", [])
 	bp.decor_trims = data.get("decor_trims", [])
-	bp.objects = data.get("objects", [])
 	bp.cost_mode = StringName(data.get("cost_mode", "auto"))
 	bp.extra_costs = data.get("extra_costs", {})
 	bp.custom_material_costs = data.get("custom_material_costs", {})
@@ -330,6 +341,14 @@ func validation_errors() -> Array[String]:
 			errors.append("Unknown anchor role: %s" % anchor.role)
 		if anchor.owner_zone_id != &"" and not zone_ids.has(anchor.owner_zone_id):
 			errors.append("Anchor %s references unknown place zone: %s" % [anchor.anchor_id, anchor.owner_zone_id])
+	# An unknown asset_id is deliberately *not* an error: a file may reference a
+	# custom asset that is simply not installed here, and it must still load.
+	var object_ids: Dictionary = {}
+	for decor_object in objects:
+		errors.append_array(decor_object.validation_errors())
+		if object_ids.has(decor_object.id):
+			errors.append("Duplicate decor object id: %s" % decor_object.id)
+		object_ids[decor_object.id] = true
 	return errors
 
 

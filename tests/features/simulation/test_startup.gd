@@ -22,7 +22,7 @@ func _init() -> void:
 
 	# Natural objects are owned by the terrain scene but retain their registered
 	# source records, so moving presentation ownership cannot make them inert.
-	var landscape_objects := simulation.get_node("Terrain3dWorld/LandscapeObjects") as Node3D
+	var landscape_objects := simulation.get_node("WorldTerritory/LandscapeObjects") as Node3D
 	assert(not simulation.tree_nodes.is_empty())
 	assert(not simulation.grass_sources.is_empty())
 	assert(not simulation.forage_sources.is_empty())

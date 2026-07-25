@@ -1,101 +1,115 @@
 class_name DecorObjectController
 extends Node3D
 
-## Base controller script attached to decor object scenes.
-## Receives runtime/editor properties and updates node visuals (lights, particles, text).
+## Applies authored decor properties to a decor scene.
+##
+## The controller is deliberately generic: it owns no per-asset `@export`s and
+## does no `find_child` guessing. Each asset declares, in its `DecorAssetDef`,
+## which node property every control drives (`"bind"`, see decor_asset_def.gd),
+## and this script just walks those bindings. Adding an asset therefore means
+## adding a scene plus a catalog entry — never editing this file.
 
-@export var is_lit: bool = true:
-	set(val):
-		is_lit = val
-		_update_state()
+const DecorAssetCatalogScript = preload("res://game/features/buildings/domain/editor/decor_asset_catalog.gd")
+const DecorAssetDefScript = preload("res://game/features/buildings/domain/editor/decor_asset_def.gd")
 
-@export var light_energy: float = 1.5:
-	set(val):
-		light_energy = val
-		_update_state()
-
-@export var light_color: Color = Color("ffaa44"):
-	set(val):
-		light_color = val
-		_update_state()
-
-@export var sign_text: String = "Happyness":
-	set(val):
-		sign_text = val
-		_update_state()
-
-@export var has_pot: bool = true:
-	set(val):
-		has_pot = val
-		_update_state()
-
-@export var has_lantern: bool = true:
-	set(val):
-		has_lantern = val
-		_update_state()
+## Catalog id of the asset this scene implements. Set per scene; it is how the
+## controller finds its own control/binding declarations.
+@export var asset_id: StringName = &""
 
 var _properties: Dictionary = {}
 
 
 func _ready() -> void:
-	_update_state()
+	# A scene opened on its own (or dropped in without authored values) still
+	# needs to look like its documented default state.
+	var asset := _asset()
+	if asset != null:
+		apply_decor_properties(asset.default_properties())
 
 
 func apply_decor_properties(props: Dictionary) -> void:
-	_properties = props.duplicate()
-	if props.has("is_lit"):
-		is_lit = bool(props["is_lit"])
-	if props.has("light_energy"):
-		light_energy = float(props["light_energy"])
-	if props.has("light_color"):
-		var c = props["light_color"]
-		if c is Color:
-			light_color = c
-		elif c is String:
-			light_color = Color(c)
-	if props.has("sign_text"):
-		sign_text = String(props["sign_text"])
-	if props.has("has_pot"):
-		has_pot = bool(props["has_pot"])
-	if props.has("has_lantern"):
-		has_lantern = bool(props["has_lantern"])
-	_update_state()
+	var asset := _asset()
+	if asset == null:
+		return
+	var bindings := asset.bindings()
+	# Start from the defaults so a partial dictionary (an older save, a control
+	# added later) resets untouched knobs instead of leaving stale scene state.
+	_properties = asset.default_properties()
+	for key in props.keys():
+		_properties[str(key)] = props[key]
+	for property_name in _properties.keys():
+		_apply_bindings(bindings.get(property_name, []), _properties[property_name])
+
+
+func set_decor_property(property_name: String, value: Variant) -> void:
+	var asset := _asset()
+	if asset == null:
+		return
+	_properties[property_name] = value
+	_apply_bindings(asset.bindings().get(property_name, []), value)
 
 
 func get_decor_properties() -> Dictionary:
-	return {
-		"is_lit": is_lit,
-		"light_energy": light_energy,
-		"light_color": light_color.to_html(false),
-		"sign_text": sign_text,
-		"has_pot": has_pot,
-		"has_lantern": has_lantern
-	}
+	return _properties.duplicate(true)
 
 
-func _update_state() -> void:
-	var light_node := find_child("Light", true, false) as Light3D
-	if light_node != null:
-		light_node.visible = is_lit
-		light_node.light_energy = light_energy
-		light_node.light_color = light_color
+func _asset() -> DecorAssetDefScript:
+	return DecorAssetCatalogScript.get_asset(asset_id) if asset_id != &"" else null
 
-	var fire_particles := find_child("FireParticles", true, false)
-	if fire_particles != null:
-		fire_particles.visible = is_lit
 
-	var fire_mesh := find_child("FireMesh", true, false)
-	if fire_mesh != null:
-		fire_mesh.visible = is_lit
+func _apply_bindings(binds: Variant, value: Variant) -> void:
+	if not (binds is Array):
+		return
+	for bind in binds:
+		if not (bind is Dictionary):
+			continue
+		var node_path := String(bind.get("node", ""))
+		var property_name := String(bind.get("prop", ""))
+		if node_path.is_empty() or property_name.is_empty():
+			continue
+		var node := get_node_or_null(NodePath(node_path))
+		if node == null:
+			push_warning("DecorObjectController(%s): binding target '%s' not found" % [asset_id, node_path])
+			continue
+		_apply_to_node(node, property_name, value)
 
-	var pot_node := find_child("CookingPot", true, false)
-	if pot_node != null:
-		pot_node.visible = has_pot
 
-	var lantern_node := find_child("Lantern", true, false)
-	if lantern_node != null:
-		lantern_node.visible = has_lantern
+func _apply_to_node(node: Node, property_name: String, value: Variant) -> void:
+	match property_name:
+		DecorAssetDefScript.PROP_ALBEDO:
+			_set_albedo(node, _to_color(value))
+		DecorAssetDefScript.PROP_SCALE_Y:
+			if node is Node3D:
+				(node as Node3D).scale.y = maxf(0.001, float(value))
+		"light_color":
+			node.set(property_name, _to_color(value))
+		_:
+			node.set(property_name, value)
 
-	var label_node := find_child("SignLabel", true, false) as Label3D
-	if label_node != null:
-		label_node.text = sign_text
+
+## Tints a mesh without touching the scene's shared sub-resource — every instance
+## gets its own material_override, otherwise recolouring one campfire recolours
+## every campfire in the settlement.
+func _set_albedo(node: Node, color: Color) -> void:
+	var mesh_instance := node as MeshInstance3D
+	if mesh_instance == null:
+		return
+	var override := mesh_instance.material_override as StandardMaterial3D
+	if override == null or not override.has_meta("decor_instance_material"):
+		var source: Material = mesh_instance.material_override
+		if source == null and mesh_instance.mesh != null:
+			source = mesh_instance.mesh.surface_get_material(0)
+		override = source.duplicate() as StandardMaterial3D if source is StandardMaterial3D else StandardMaterial3D.new()
+		override.set_meta("decor_instance_material", true)
+		mesh_instance.material_override = override
+	override.albedo_color = color
+	# Unshaded flame meshes read better when the tint drives emission too.
+	if override.emission_enabled:
+		override.emission = color
+
+
+static func _to_color(value: Variant) -> Color:
+	if value is Color:
+		return value
+	var text := String(value)
+	return Color.from_string(text, Color.WHITE) if not text.is_empty() else Color.WHITE

@@ -1,43 +1,126 @@
-[gd_scene load_steps=5 format=3 uid="uid://cfdecorantsign103"]
+[gd_scene load_steps=12 format=3 uid="uid://cfdecorantsign103"]
 
-[ext_resource type="Script" uid="uid://cdecorobjctrl001" path="res://game/features/buildings/presentation/decor/decor_object_controller.gd" id="1_script"]
+[ext_resource type="Script" uid="uid://dx010itafevat" path="res://game/features/buildings/presentation/decor/decor_object_controller.gd" id="1_script"]
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_wood"]
-albedo_color = Color(0.36, 0.25, 0.2, 1)
+[sub_resource type="StandardMaterial3D" id="Mat_post"]
+albedo_color = Color(0.36, 0.251, 0.2, 1)
+roughness = 0.95
 
-[sub_resource type="BoxMesh" id="BoxMesh_post"]
-material = SubResource("StandardMaterial3D_wood")
-size = Vector3(0.15, 1.8, 0.15)
+[sub_resource type="BoxMesh" id="Mesh_post"]
+material = SubResource("Mat_post")
+size = Vector3(0.16, 1.55, 0.16)
 
-[sub_resource type="BoxMesh" id="BoxMesh_board"]
-material = SubResource("StandardMaterial3D_wood")
-size = Vector3(1.2, 0.4, 0.08)
+[sub_resource type="BoxMesh" id="Mesh_crossbeam"]
+material = SubResource("Mat_post")
+size = Vector3(1.6, 0.1, 0.1)
+
+[sub_resource type="BoxMesh" id="Mesh_bracket"]
+material = SubResource("Mat_post")
+size = Vector3(0.36, 0.08, 0.08)
+
+[sub_resource type="StandardMaterial3D" id="Mat_board"]
+albedo_color = Color(0.541, 0.396, 0.286, 1)
+roughness = 0.9
+
+[sub_resource type="BoxMesh" id="Mesh_board"]
+material = SubResource("Mat_board")
+size = Vector3(1.8, 0.65, 0.14)
+
+[sub_resource type="StandardMaterial3D" id="Mat_iron"]
+albedo_color = Color(0.145, 0.149, 0.157, 1)
+metallic = 0.6
+roughness = 0.5
+
+[sub_resource type="CylinderMesh" id="Mesh_lantern_hook"]
+material = SubResource("Mat_iron")
+top_radius = 0.02
+bottom_radius = 0.02
+height = 0.26
+radial_segments = 6
+rings = 1
+
+[sub_resource type="StandardMaterial3D" id="Mat_lantern_glass"]
+transparency = 1
+shading_mode = 0
+albedo_color = Color(1, 0.835, 0.541, 0.75)
+emission_enabled = true
+emission = Color(1, 0.835, 0.541, 1)
+emission_energy_multiplier = 2.0
+
+[sub_resource type="BoxMesh" id="Mesh_lantern_glass"]
+material = SubResource("Mat_lantern_glass")
+size = Vector3(0.16, 0.2, 0.16)
+
+[sub_resource type="BoxMesh" id="Mesh_lantern_cap"]
+material = SubResource("Mat_iron")
+size = Vector3(0.22, 0.05, 0.22)
 
 [node name="EntranceSign" type="Node3D"]
 script = ExtResource("1_script")
+asset_id = &"entrance_sign"
 
 [node name="PostLeft" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.5, 0.9, 0)
-mesh = SubResource("BoxMesh_post")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.62, 0.78, 0)
+mesh = SubResource("Mesh_post")
 
 [node name="PostRight" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 0.9, 0)
-mesh = SubResource("BoxMesh_post")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.62, 0.78, 0)
+mesh = SubResource("Mesh_post")
 
-[node name="SignBoard" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.3, 0)
-mesh = SubResource("BoxMesh_board")
+[node name="Crossbeam" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.68, 0)
+mesh = SubResource("Mesh_crossbeam")
 
-[node name="SignLabel" type="Label3D" parent="SignBoard"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.05)
+[node name="BracketLeft" type="MeshInstance3D" parent="."]
+transform = Transform3D(0.7071, 0.7071, 0, -0.7071, 0.7071, 0, 0, 0, 1, -0.45, 1.5, 0)
+mesh = SubResource("Mesh_bracket")
+
+[node name="BracketRight" type="MeshInstance3D" parent="."]
+transform = Transform3D(0.7071, -0.7071, 0, 0.7071, 0.7071, 0, 0, 0, 1, 0.45, 1.5, 0)
+mesh = SubResource("Mesh_bracket")
+
+[node name="Board" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.25, 0)
+
+[node name="BoardMesh" type="MeshInstance3D" parent="Board"]
+mesh = SubResource("Mesh_board")
+
+[node name="SignLabel" type="Label3D" parent="Board"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.08)
+pixel_size = 0.006
 text = "Happyness"
-font_size = 36
-outline_size = 8
+font_size = 48
+outline_size = 10
+modulate = Color(0.941, 0.875, 0.698, 1)
+outline_modulate = Color(0.114, 0.09, 0.071, 1)
+
+[node name="SignLabelBack" type="Label3D" parent="Board"]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, -0.08)
+pixel_size = 0.006
+text = "Happyness"
+font_size = 48
+outline_size = 10
+modulate = Color(0.941, 0.875, 0.698, 1)
+outline_modulate = Color(0.114, 0.09, 0.071, 1)
 
 [node name="Lantern" type="Node3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.7, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.68, 0)
+
+[node name="Hook" type="MeshInstance3D" parent="Lantern"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.15, 0)
+mesh = SubResource("Mesh_lantern_hook")
+
+[node name="Cap" type="MeshInstance3D" parent="Lantern"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, 0)
+mesh = SubResource("Mesh_lantern_cap")
+
+[node name="Glass" type="MeshInstance3D" parent="Lantern"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.27, 0)
+mesh = SubResource("Mesh_lantern_glass")
 
 [node name="Light" type="OmniLight3D" parent="Lantern"]
-light_color = Color(1, 0.8, 0.4, 1)
-light_energy = 1.2
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.27, 0)
+light_color = Color(1, 0.835, 0.541, 1)
+light_energy = 1.4
+light_volumetric_fog_energy = 0.4
 omni_range = 6.0

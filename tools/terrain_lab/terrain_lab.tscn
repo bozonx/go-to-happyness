@@ -1,0 +1,55 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://tools/terrain_lab/terrain_lab.gd" id="1_lab"]
+[ext_resource type="Script" path="res://game/features/world/presentation/terrain/grid_terrain_world.gd" id="2_terrain"]
+
+[sub_resource type="Environment" id="Environment_lab"]
+background_mode = 1
+background_color = Color(0.42, 0.55, 0.66, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.62, 0.69, 0.78, 1)
+ambient_light_energy = 0.55
+tonemap_mode = 2
+
+[sub_resource type="StandardMaterial3D" id="HoverMaterial"]
+transparency = 1
+shading_mode = 0
+albedo_color = Color(1, 0.87, 0.25, 0.45)
+
+[sub_resource type="BoxMesh" id="HoverMesh"]
+material = SubResource("HoverMaterial")
+size = Vector3(1, 0.06, 1)
+
+[node name="TerrainLab" type="Node3D"]
+script = ExtResource("1_lab")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_lab")
+
+[node name="SunLight" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.766, -0.443, 0.466, 0, 0.725, 0.689, -0.643, -0.528, 0.555, 0, 24, 0)
+light_energy = 1.15
+shadow_enabled = true
+
+[node name="Terrain" type="Node3D" parent="."]
+script = ExtResource("2_terrain")
+
+[node name="HoverMarker" type="MeshInstance3D" parent="."]
+mesh = SubResource("HoverMesh")
+cast_shadow = 0
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 26, 26)
+far = 600.0
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="Hud" type="Label" parent="UI"]
+offset_left = 24.0
+offset_top = 22.0
+offset_right = 900.0
+offset_bottom = 220.0
+theme_override_colors/font_color = Color(0.94, 0.96, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.75)
+theme_override_constants/outline_size = 4
+text = "terrain lab"

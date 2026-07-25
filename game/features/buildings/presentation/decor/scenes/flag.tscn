@@ -1,0 +1,116 @@
+[gd_scene format=3 uid="uid://dr1n2qu13tbed"]
+
+[ext_resource type="Script" uid="uid://dx010itafevat" path="res://game/features/buildings/presentation/decor/decor_object_controller.gd" id="1_script"]
+
+[sub_resource type="StandardMaterial3D" id="Mat_stone"]
+albedo_color = Color(0.435, 0.455, 0.478, 1)
+roughness = 0.95
+
+[sub_resource type="CylinderMesh" id="Mesh_base"]
+material = SubResource("Mat_stone")
+top_radius = 0.24
+bottom_radius = 0.32
+height = 0.14
+radial_segments = 10
+rings = 1
+
+[sub_resource type="StandardMaterial3D" id="Mat_pole"]
+albedo_color = Color(0.431, 0.29, 0.169, 1)
+roughness = 0.9
+
+[sub_resource type="CylinderMesh" id="Mesh_pole"]
+material = SubResource("Mat_pole")
+top_radius = 0.04
+bottom_radius = 0.05
+height = 2.4
+radial_segments = 8
+rings = 1
+
+[sub_resource type="StandardMaterial3D" id="Mat_finial"]
+albedo_color = Color(0.847, 0.706, 0.353, 1)
+metallic = 0.7
+roughness = 0.35
+
+[sub_resource type="SphereMesh" id="Mesh_finial_ball"]
+material = SubResource("Mat_finial")
+radius = 0.07
+height = 0.14
+radial_segments = 10
+rings = 6
+
+[sub_resource type="CylinderMesh" id="Mesh_finial_spike"]
+material = SubResource("Mat_finial")
+top_radius = 0.0
+bottom_radius = 0.045
+height = 0.2
+radial_segments = 8
+rings = 1
+
+[sub_resource type="StandardMaterial3D" id="Mat_banner"]
+albedo_color = Color(0.831, 0.329, 0.282, 1)
+roughness = 0.85
+cull_mode = 2
+
+[sub_resource type="BoxMesh" id="Mesh_banner"]
+material = SubResource("Mat_banner")
+size = Vector3(0.66, 0.44, 0.02)
+
+[sub_resource type="BoxMesh" id="Mesh_banner_tail"]
+material = SubResource("Mat_banner")
+size = Vector3(0.32, 0.4, 0.02)
+
+[sub_resource type="CylinderMesh" id="Mesh_halyard"]
+material = SubResource("Mat_finial")
+top_radius = 0.012
+bottom_radius = 0.012
+height = 0.5
+radial_segments = 6
+rings = 1
+
+[node name="Flag" type="Node3D"]
+script = ExtResource("1_script")
+asset_id = &"flag"
+
+[node name="Base" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.07, 0)
+mesh = SubResource("Mesh_base")
+
+[node name="Mast" type="Node3D" parent="."]
+
+[node name="Pole" type="MeshInstance3D" parent="Mast"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.24, 0)
+mesh = SubResource("Mesh_pole")
+
+[node name="Halyard" type="MeshInstance3D" parent="Mast"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.06, 1.72, 0)
+mesh = SubResource("Mesh_halyard")
+
+[node name="Finial" type="Node3D" parent="Mast"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.44, 0)
+
+[node name="Ball" type="MeshInstance3D" parent="Mast/Finial"]
+mesh = SubResource("Mesh_finial_ball")
+
+[node name="Spike" type="MeshInstance3D" parent="Mast/Finial"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.16, 0)
+mesh = SubResource("Mesh_finial_spike")
+
+[node name="Banner" type="Node3D" parent="Mast"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.98, 0)
+
+[node name="BannerMesh" type="MeshInstance3D" parent="Mast/Banner"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.36, 0, 0)
+mesh = SubResource("Mesh_banner")
+
+[node name="BannerTail" type="MeshInstance3D" parent="Mast/Banner"]
+transform = Transform3D(0.906, 0, -0.423, 0, 1, 0, 0.423, 0, 0.906, 0.83, -0.02, 0.07)
+mesh = SubResource("Mesh_banner_tail")
+
+[node name="BannerLabel" type="Label3D" parent="Mast/Banner"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.36, 0, 0.02)
+pixel_size = 0.004
+text = ""
+font_size = 48
+outline_size = 8
+modulate = Color(0.98, 0.949, 0.878, 1)
+outline_modulate = Color(0.157, 0.09, 0.09, 1)

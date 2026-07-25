@@ -19,9 +19,7 @@ const PlaceZoneRecordScript = preload("res://game/features/buildings/domain/edit
 const ZoneAnchorRecordScript = preload("res://game/features/buildings/domain/editor/zone_anchor_record.gd")
 const BlueprintRepositoryScript = preload("res://game/features/buildings/presentation/editor/blueprint_repository.gd")
 const BlockMeshLibraryScript = preload("res://game/features/buildings/presentation/editor/block_mesh_library.gd")
-const DecorAssetDefScript = preload("res://game/features/buildings/domain/editor/decor_asset_def.gd")
-const DecorAssetCatalogScript = preload("res://game/features/buildings/domain/editor/decor_asset_catalog.gd")
-const DecorObjectControllerScript = preload("res://game/features/buildings/presentation/decor/decor_object_controller.gd")
+const DecorModeControllerScript = preload("res://game/features/buildings/presentation/editor/decor_mode_controller.gd")
 
 enum Tool { PLACE, ERASE }
 enum Brush { LINE, RECT }
@@ -53,27 +51,8 @@ var cursor_hit_pos: Vector3 = Vector3.ZERO
 
 var current_mode: int = EditMode.FRAME
 
-# Decor Mode state variables
-var current_decor_category: StringName = &"camping"
-var current_decor_asset_id: StringName = &"campfire"
-var current_decor_snap_step: float = 0.5
-var current_decor_anchor_vec: Vector2i = Vector2i.ZERO
-var selected_decor_object_id: String = ""
-
-var _decor_nodes: Dictionary = {}  ## object_id (String) -> Node3D
-var _decor_root: Node3D = null
-var _decor_ghost: Node3D = null
-
-# Decor UI elements
-var _decor_panel: PanelContainer = null
-var _decor_category_option: OptionButton = null
-var _decor_asset_option: OptionButton = null
-var _decor_snap_option: OptionButton = null
-var _decor_anchor_option: OptionButton = null
-var _decor_inspector_panel: PanelContainer = null
-var _decor_inspector_title: Label = null
-var _decor_controls_vbox: VBoxContainer = null
-
+## Decor mode (design §3.3) lives in its own controller; see decor_mode_controller.gd.
+var decor_mode: DecorModeControllerScript = null
 
 ## True when there are unsaved changes. Checked before scene transitions.
 var _dirty: bool = false
@@ -236,9 +215,8 @@ func _init_world() -> void:
 
 	_layer_plane.mesh = _build_grid_mesh(24, Color(0.35, 0.7, 1.0, 0.5))
 
-	_decor_root = Node3D.new()
-	_decor_root.name = "DecorRoot"
-	add_child(_decor_root)
+	decor_mode = DecorModeControllerScript.new()
+	add_child(decor_mode)
 
 
 func _build_grid_mesh(half_extent: int, color: Color) -> ArrayMesh:
@@ -285,7 +263,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif _painting:
 			_update_cursor()
 			if cursor_valid:
-				if current_mode == EditMode.ZONES and _armed_tool == &"cell":
+				if current_mode == EditMode.DECOR:
+					decor_mode.on_drag()
+				elif current_mode == EditMode.ZONES and _armed_tool == &"cell":
 					_paint_zone_line(_last_paint_cell, cursor_cell)
 				elif current_mode == EditMode.FRAME and (current_brush == Brush.RECT or event.shift_pressed or Input.is_key_pressed(KEY_SHIFT)):
 					_paint_rect(_paint_anchor, cursor_cell)
@@ -316,6 +296,9 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 					_place_zone_marker_at_cursor()
 					_painting = _armed_tool == &"cell"
 					_last_paint_cell = cursor_cell
+				elif current_mode == EditMode.DECOR:
+					decor_mode.on_left_pressed()
+					_painting = true
 				else:
 					_painting = true
 					_last_paint_cell = cursor_cell
@@ -326,10 +309,16 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 						_apply_tool_at_cursor()
 			else:
 				_painting = false
+				if current_mode == EditMode.DECOR:
+					decor_mode.on_left_released()
 
 
 
 func _handle_key(event: InputEventKey) -> void:
+	# Decor mode rebinds the shared shortcuts (its own tools, its own rotation),
+	# so give it first refusal before the frame bindings run.
+	if current_mode == EditMode.DECOR and decor_mode.handle_key(event):
+		return
 	match event.keycode:
 		KEY_Z:
 			_cycle_rotation_z()
@@ -383,6 +372,9 @@ func _update_cursor() -> void:
 		_refresh_ghost()
 		return
 	var hit := from + dir * t
+	# Decor placement is sub-cell, so it needs the raw intersection, not just the
+	# cell the frame tools work in.
+	cursor_hit_pos = hit
 	cursor_cell = Vector3i(int(floor(hit.x)), active_layer, int(floor(hit.z)))
 	cursor_valid = true
 	_refresh_ghost()
@@ -512,18 +504,14 @@ func _refresh_ghost() -> void:
 	_ghost_tool = current_tool
 	_ghost_rot = current_rot
 	_ghost_valid = cursor_valid
-	if current_mode == EditMode.ZONES or not cursor_valid:
-		_ghost.visible = false
-		if _decor_ghost != null:
-			_decor_ghost.visible = false
-		return
 	if current_mode == EditMode.DECOR:
 		_ghost.visible = false
-		_refresh_decor_ghost()
+		decor_mode.refresh_ghost()
+		return
+	if current_mode == EditMode.ZONES or not cursor_valid:
+		_ghost.visible = false
 		return
 
-	if _decor_ghost != null:
-		_decor_ghost.visible = false
 	_ghost.visible = true
 	if current_tool == Tool.ERASE:
 		var target := grid_model.get_block_at(cursor_cell)
@@ -741,6 +729,21 @@ func _set_layer(layer: int) -> void:
 	_refresh_layer_plane()
 	if _layer_label != null:
 		_layer_label.text = "Слой %d" % active_layer
+	if decor_mode != null:
+		decor_mode.on_layer_changed()
+
+
+## Public entry points used by the mode controllers.
+func set_layer(layer: int) -> void:
+	_set_layer(layer)
+
+
+func mark_dirty() -> void:
+	_mark_dirty()
+
+
+func set_status(message: String) -> void:
+	_update_status(message)
 
 
 func _select_mode(mode: int) -> void:
@@ -758,22 +761,22 @@ func _select_mode(mode: int) -> void:
 		_frame_toolbar.visible = mode == EditMode.FRAME
 	if _zones_panel != null:
 		_zones_panel.visible = mode == EditMode.ZONES
-	if _decor_panel != null:
-		_decor_panel.visible = mode == EditMode.DECOR
-	if _decor_inspector_panel != null:
-		_decor_inspector_panel.visible = (mode == EditMode.DECOR and not selected_decor_object_id.is_empty())
+	# The decor inspector occupies the same right-hand strip as the metadata
+	# panel, so the two never share the screen.
+	if _metadata_panel != null:
+		_metadata_panel.visible = mode != EditMode.DECOR
 
-	if mode == EditMode.ZONES:
-		_set_tool(Tool.PLACE)
-		_refresh_zone_visuals()
-		_update_status("Режим зон: создайте зону и расставьте якоря работы / поддоны.")
-	elif mode == EditMode.DECOR:
-		_set_tool(Tool.PLACE)
-		_refresh_decor_panel()
-		_rebuild_all_decor_nodes()
-		_update_status("Режим декора: выберите ассет и установите его на место.")
+	if mode == EditMode.DECOR:
+		decor_mode.activate()
+		_update_status("Режим декора: B — поставить, V — выбрать, E — удалить.")
 	else:
-		_update_status("Режим каркаса.")
+		decor_mode.deactivate()
+		if mode == EditMode.ZONES:
+			_set_tool(Tool.PLACE)
+			_refresh_zone_visuals()
+			_update_status("Режим зон: создайте зону и расставьте якоря работы / поддоны.")
+		else:
+			_update_status("Режим каркаса.")
 	_refresh_ghost()
 
 
@@ -816,6 +819,7 @@ func _on_new_pressed() -> void:
 	_rebuild_all_block_nodes()
 	_rebuild_place_option()
 	_refresh_zone_visuals()
+	_reset_decor_for_new_blueprint()
 	_sync_metadata_fields()
 	_set_layer(0)
 	_update_status("Новый чертёж.")
@@ -857,9 +861,11 @@ func _on_load_item_activated(index: int) -> void:
 	_rebuild_all_block_nodes()
 	_rebuild_place_option()
 	_refresh_zone_visuals()
+	_reset_decor_for_new_blueprint()
 	_sync_metadata_fields()
 	_load_popup.hide()
-	_update_status("Загружено: %s (%d блоков, %d зон)" % [blueprint.name, blueprint.block_count(), blueprint.place_zones.size()])
+	_update_status("Загружено: %s (%d блоков, %d зон, %d объектов)" % [
+		blueprint.name, blueprint.block_count(), blueprint.place_zones.size(), blueprint.objects.size()])
 
 
 func _confirm_back_to_menu() -> void:
@@ -922,10 +928,6 @@ func _setup_ui() -> void:
 	_mode_buttons[EditMode.DECOR] = _mode_decor_btn
 	_mode_buttons[EditMode.ZONES] = _mode_zones_btn
 
-	if _mode_decor_btn != null:
-		_mode_decor_btn.disabled = false
-
-
 	_material_option.item_selected.connect(func(index: int):
 		current_material_id = _material_option.get_item_metadata(index)
 		_refresh_ghost()
@@ -981,7 +983,7 @@ func _setup_ui() -> void:
 	_on_anchor_family_selected(0)
 	_arm_tool(&"cell")
 	_rebuild_place_option()
-	_setup_decor_ui()
+	decor_mode.setup(self)
 
 
 	# Metadata panel wiring
@@ -1764,396 +1766,19 @@ func _confirm_discard_changes() -> bool:
 	return user_confirmed
 
 
+
 # ---------------------------------------------------------------------------
-# Decor Mode logic & UI
+# Decor mode bridge — the logic lives in DecorModeController.
 # ---------------------------------------------------------------------------
 
-func _calc_decor_snapped_pos(raw_hit: Vector3) -> Vector3:
-	var step := current_decor_snap_step
-	var y := float(active_layer)
-	if step <= 0.001:
-		return Vector3(raw_hit.x, y, raw_hit.z)
-	var sx := snappedf(raw_hit.x, step)
-	var sz := snappedf(raw_hit.z, step)
-	sx += float(current_decor_anchor_vec.x) * (0.25 * step)
-	sz += float(current_decor_anchor_vec.y) * (0.25 * step)
-	return Vector3(sx, y, sz)
-
-
-
-func _refresh_decor_ghost() -> void:
-	if not cursor_valid or current_mode != EditMode.DECOR or current_tool != Tool.PLACE:
-		if _decor_ghost != null:
-			_decor_ghost.visible = false
+## Drops every spawned decor instance and its undo history after the blueprint
+## behind them has been replaced (New / Load). Without this the previous
+## building's decor stayed in the scene.
+func _reset_decor_for_new_blueprint() -> void:
+	if decor_mode == null:
 		return
-
-	var asset_def := DecorAssetCatalogScript.get_asset(current_decor_asset_id)
-	if asset_def == null or asset_def.scene_path.is_empty():
-		if _decor_ghost != null:
-			_decor_ghost.visible = false
-		return
-
-	if _decor_ghost == null or _decor_ghost.get_meta("asset_id", &"") != current_decor_asset_id:
-		if _decor_ghost != null:
-			_decor_ghost.queue_free()
-			_decor_ghost = null
-		var scene := load(asset_def.scene_path) as PackedScene
-		if scene != null:
-			_decor_ghost = scene.instantiate() as Node3D
-			if _decor_ghost != null:
-				_decor_ghost.set_meta("asset_id", current_decor_asset_id)
-				add_child(_decor_ghost)
-
-	if _decor_ghost != null:
-		_decor_ghost.visible = true
-		_decor_ghost.position = _calc_decor_snapped_pos(cursor_hit_pos)
-		_decor_ghost.rotation = _current_ghost_euler()
-
-
-func _apply_decor_tool_at_cursor() -> void:
-	var snapped_pos := _calc_decor_snapped_pos(cursor_hit_pos)
-	match current_tool:
-		Tool.PLACE:
-			var asset_def := DecorAssetCatalogScript.get_asset(current_decor_asset_id)
-			if asset_def == null:
-				return
-			var obj_id := "decor_%s_%d" % [String(current_decor_asset_id), Time.get_ticks_msec()]
-			var props: Dictionary = {}
-			for ctrl in asset_def.controls:
-				props[ctrl["name"]] = ctrl.get("default", null)
-
-			var obj_dict: Dictionary = {
-				"id": obj_id,
-				"asset_id": String(current_decor_asset_id),
-				"pos": [snapped_pos.x, snapped_pos.y, snapped_pos.z],
-				"rot": [current_rot_x * 90, current_rot * 90, current_rot_z * 90],
-				"scale": [1.0, 1.0, 1.0],
-				"anchor": [current_decor_anchor_vec.x, current_decor_anchor_vec.y],
-				"properties": props
-			}
-			blueprint.objects.append(obj_dict)
-			_spawn_decor_node(obj_dict)
-			_select_decor_object(obj_id)
-			_mark_dirty()
-
-		Tool.ERASE:
-			var closest_id := ""
-			var closest_dist := 1.0
-			for obj in blueprint.objects:
-				if obj is Dictionary:
-					var pos_arr: Array = obj.get("pos", [0, 0, 0])
-					var obj_pos := Vector3(float(pos_arr[0]), float(pos_arr[1]), float(pos_arr[2]))
-					var d := obj_pos.distance_to(snapped_pos)
-					if d < closest_dist:
-						closest_dist = d
-						closest_id = String(obj.get("id", ""))
-
-			if not closest_id.is_empty():
-				_erase_decor_object(closest_id)
-
-
-func _erase_decor_object(obj_id: String) -> void:
-	for i in range(blueprint.objects.size() - 1, -1, -1):
-		var obj = blueprint.objects[i]
-		if obj is Dictionary and String(obj.get("id", "")) == obj_id:
-			blueprint.objects.remove_at(i)
-			break
-	_remove_decor_node(obj_id)
-	if selected_decor_object_id == obj_id:
-		_select_decor_object("")
-	_mark_dirty()
-
-
-func _rebuild_all_decor_nodes() -> void:
-	if _decor_root == null:
-		return
-	for node in _decor_nodes.values():
-		node.queue_free()
-	_decor_nodes.clear()
-
-	for obj in blueprint.objects:
-		if obj is Dictionary:
-			_spawn_decor_node(obj)
-
-
-func _spawn_decor_node(obj: Dictionary) -> void:
-	var obj_id: String = String(obj.get("id", ""))
-	var asset_id: StringName = StringName(obj.get("asset_id", ""))
-	var asset_def := DecorAssetCatalogScript.get_asset(asset_id)
-	if asset_def == null or asset_def.scene_path.is_empty():
-		return
-	var scene := load(asset_def.scene_path) as PackedScene
-	if scene == null:
-		return
-	var inst := scene.instantiate() as Node3D
-	if inst == null:
-		return
-
-	var pos_arr: Array = obj.get("pos", [0, 0, 0])
-	var rot_arr: Array = obj.get("rot", [0, 0, 0])
-	inst.position = Vector3(float(pos_arr[0]), float(pos_arr[1]), float(pos_arr[2]))
-	inst.rotation_degrees = Vector3(float(rot_arr[0]), float(rot_arr[1]), float(rot_arr[2]))
-
-	if inst.has_method("apply_decor_properties"):
-		inst.call("apply_decor_properties", obj.get("properties", {}))
-
-	_decor_root.add_child(inst)
-	_decor_nodes[obj_id] = inst
-
-
-func _remove_decor_node(obj_id: String) -> void:
-	if _decor_nodes.has(obj_id):
-		var node: Node3D = _decor_nodes[obj_id]
-		_decor_nodes.erase(obj_id)
-		if node != null:
-			node.queue_free()
-
-
-func _find_decor_object(obj_id: String) -> Dictionary:
-	for obj in blueprint.objects:
-		if obj is Dictionary and String(obj.get("id", "")) == obj_id:
-			return obj
-	return {}
-
-
-func _select_decor_object(obj_id: String) -> void:
-	selected_decor_object_id = obj_id
-	if _decor_inspector_panel != null:
-		_decor_inspector_panel.visible = (current_mode == EditMode.DECOR and not selected_decor_object_id.is_empty())
-	_refresh_decor_inspector()
-
-
-func _setup_decor_ui() -> void:
-	var root_ui := find_child("Root", true, false)
-	if root_ui == null:
-		return
-
-	# Decor Catalog Panel (left side overlay)
-	_decor_panel = PanelContainer.new()
-	_decor_panel.name = "DecorPanel"
-	_decor_panel.visible = false
-	_decor_panel.anchor_left = 0.0
-	_decor_panel.anchor_top = 0.1
-	_decor_panel.anchor_right = 0.22
-	_decor_panel.anchor_bottom = 0.85
-	_decor_panel.offset_left = 10
-	_decor_panel.offset_top = 10
-	root_ui.add_child(_decor_panel)
-
-	var decor_vbox := VBoxContainer.new()
-	_decor_panel.add_child(decor_vbox)
-
-	var title := Label.new()
-	title.text = "Каталог Декора"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	decor_vbox.add_child(title)
-
-	var cat_lbl := Label.new()
-	cat_lbl.text = "Категория:"
-	decor_vbox.add_child(cat_lbl)
-
-	_decor_category_option = OptionButton.new()
-	decor_vbox.add_child(_decor_category_option)
-
-	for cat_id in DecorAssetCatalogScript.CATEGORIES.keys():
-		var cat_info: Dictionary = DecorAssetCatalogScript.CATEGORIES[cat_id]
-		_decor_category_option.add_item("%s (%s)" % [cat_info["name"], DecorAssetCatalogScript.GROUPS.get(cat_info["group"], "")])
-		_decor_category_option.set_item_metadata(_decor_category_option.item_count - 1, cat_id)
-
-	_decor_category_option.item_selected.connect(func(idx: int):
-		current_decor_category = _decor_category_option.get_item_metadata(idx)
-		_rebuild_decor_asset_list()
-	)
-
-	var asset_lbl := Label.new()
-	asset_lbl.text = "Ассет:"
-	decor_vbox.add_child(asset_lbl)
-
-	_decor_asset_option = OptionButton.new()
-	decor_vbox.add_child(_decor_asset_option)
-	_decor_asset_option.item_selected.connect(func(idx: int):
-		current_decor_asset_id = _decor_asset_option.get_item_metadata(idx)
-		_refresh_ghost()
-	)
-
-	var snap_lbl := Label.new()
-	snap_lbl.text = "Привязка к сетке (Snap):"
-	decor_vbox.add_child(snap_lbl)
-
-	_decor_snap_option = OptionButton.new()
-	_decor_snap_option.add_item("1.0 м (Блок)")
-	_decor_snap_option.set_item_metadata(0, 1.0)
-	_decor_snap_option.add_item("0.5 м (Полублок)")
-	_decor_snap_option.set_item_metadata(1, 0.5)
-	_decor_snap_option.add_item("0.25 м (Четверть)")
-	_decor_snap_option.set_item_metadata(2, 0.25)
-	_decor_snap_option.add_item("Свободно")
-	_decor_snap_option.set_item_metadata(3, 0.0)
-	_decor_snap_option.select(1)
-	decor_vbox.add_child(_decor_snap_option)
-
-	_decor_snap_option.item_selected.connect(func(idx: int):
-		current_decor_snap_step = float(_decor_snap_option.get_item_metadata(idx))
-		_refresh_ghost()
-	)
-
-	var anchor_lbl := Label.new()
-	anchor_lbl.text = "Привязка в ячейке (Anchor):"
-	decor_vbox.add_child(anchor_lbl)
-
-	_decor_anchor_option = OptionButton.new()
-	_decor_anchor_option.add_item("По центру")
-	_decor_anchor_option.set_item_metadata(0, Vector2i(0, 0))
-	_decor_anchor_option.add_item("К грани (+X)")
-	_decor_anchor_option.set_item_metadata(1, Vector2i(1, 0))
-	_decor_anchor_option.add_item("К грани (-X)")
-	_decor_anchor_option.set_item_metadata(2, Vector2i(-1, 0))
-	_decor_anchor_option.add_item("В угол (+X, +Z)")
-	_decor_anchor_option.set_item_metadata(3, Vector2i(1, 1))
-	_decor_anchor_option.add_item("В угол (-X, -Z)")
-	_decor_anchor_option.set_item_metadata(4, Vector2i(-1, -1))
-	decor_vbox.add_child(_decor_anchor_option)
-
-	_decor_anchor_option.item_selected.connect(func(idx: int):
-		current_decor_anchor_vec = _decor_anchor_option.get_item_metadata(idx)
-		_refresh_ghost()
-	)
-
-	# Decor Inspector Panel (right side overlay)
-	_decor_inspector_panel = PanelContainer.new()
-	_decor_inspector_panel.name = "DecorInspectorPanel"
-	_decor_inspector_panel.visible = false
-	_decor_inspector_panel.anchor_left = 0.78
-	_decor_inspector_panel.anchor_top = 0.1
-	_decor_inspector_panel.anchor_right = 0.98
-	_decor_inspector_panel.anchor_bottom = 0.75
-	_decor_inspector_panel.offset_right = -10
-	_decor_inspector_panel.offset_top = 10
-	root_ui.add_child(_decor_inspector_panel)
-
-	var insp_vbox := VBoxContainer.new()
-	_decor_inspector_panel.add_child(insp_vbox)
-
-	_decor_inspector_title = Label.new()
-	_decor_inspector_title.text = "Свойства ассета"
-	_decor_inspector_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	insp_vbox.add_child(_decor_inspector_title)
-
-	_decor_controls_vbox = VBoxContainer.new()
-	insp_vbox.add_child(_decor_controls_vbox)
-
-	var del_btn := Button.new()
-	del_btn.text = "Удалить объект"
-	del_btn.pressed.connect(func():
-		if not selected_decor_object_id.is_empty():
-			_erase_decor_object(selected_decor_object_id)
-	)
-	insp_vbox.add_child(del_btn)
-
-	_rebuild_decor_asset_list()
-
-
-func _refresh_decor_panel() -> void:
-	_rebuild_decor_asset_list()
-
-
-func _rebuild_decor_asset_list() -> void:
-	if _decor_asset_option == null:
-		return
-	_decor_asset_option.clear()
-	var assets := DecorAssetCatalogScript.get_assets_by_category(current_decor_category)
-	for asset in assets:
-		_decor_asset_option.add_item(asset.name)
-		_decor_asset_option.set_item_metadata(_decor_asset_option.item_count - 1, asset.id)
-
-	if _decor_asset_option.item_count > 0:
-		_decor_asset_option.select(0)
-		current_decor_asset_id = _decor_asset_option.get_item_metadata(0)
-	else:
-		current_decor_asset_id = &""
-
-
-func _refresh_decor_inspector() -> void:
-	if _decor_controls_vbox == null:
-		return
-	for child in _decor_controls_vbox.get_children():
-		child.queue_free()
-
-	var obj_dict := _find_decor_object(selected_decor_object_id)
-	if obj_dict.is_empty():
-		if _decor_inspector_title != null:
-			_decor_inspector_title.text = "Объект не выбран"
-		return
-
-	var asset_id: StringName = StringName(obj_dict.get("asset_id", ""))
-	var asset_def := DecorAssetCatalogScript.get_asset(asset_id)
-	if asset_def == null:
-		return
-
-	if _decor_inspector_title != null:
-		_decor_inspector_title.text = "Свойства: %s" % asset_def.name
-
-	var props: Dictionary = obj_dict.get("properties", {})
-
-	for ctrl in asset_def.controls:
-		var prop_name: String = ctrl.get("name", "")
-		var label_text: String = ctrl.get("label", prop_name)
-		var type_name: String = ctrl.get("type", "string")
-
-		var row := HBoxContainer.new()
-		var lbl := Label.new()
-		lbl.text = label_text + ":"
-		lbl.custom_minimum_size.x = 100
-		row.add_child(lbl)
-
-		match type_name:
-			"bool":
-				var chk := CheckBox.new()
-				chk.button_pressed = bool(props.get(prop_name, ctrl.get("default", false)))
-				chk.toggled.connect(func(pressed: bool):
-					props[prop_name] = pressed
-					_update_selected_decor_properties(props)
-				)
-				row.add_child(chk)
-			"float":
-				var spin := SpinBox.new()
-				spin.min_value = float(ctrl.get("min", 0.0))
-				spin.max_value = float(ctrl.get("max", 10.0))
-				spin.step = float(ctrl.get("step", 0.1))
-				spin.value = float(props.get(prop_name, ctrl.get("default", 1.0)))
-				spin.value_changed.connect(func(val: float):
-					props[prop_name] = val
-					_update_selected_decor_properties(props)
-				)
-				row.add_child(spin)
-			"string":
-				var edit := LineEdit.new()
-				edit.text = String(props.get(prop_name, ctrl.get("default", "")))
-				edit.custom_minimum_size.x = 110
-				edit.text_changed.connect(func(text: String):
-					props[prop_name] = text
-					_update_selected_decor_properties(props)
-				)
-				row.add_child(edit)
-			"color":
-				var picker := ColorPickerButton.new()
-				var c_val = props.get(prop_name, ctrl.get("default", Color.WHITE))
-				picker.color = c_val if c_val is Color else Color(String(c_val))
-				picker.custom_minimum_size = Vector2(36, 24)
-				picker.color_changed.connect(func(col: Color):
-					props[prop_name] = col.to_html(false)
-					_update_selected_decor_properties(props)
-				)
-				row.add_child(picker)
-
-		_decor_controls_vbox.add_child(row)
-
-
-func _update_selected_decor_properties(props: Dictionary) -> void:
-	var obj_dict := _find_decor_object(selected_decor_object_id)
-	if not obj_dict.is_empty():
-		obj_dict["properties"] = props
-		var node: Node3D = _decor_nodes.get(selected_decor_object_id, null)
-		if node != null and node.has_method("apply_decor_properties"):
-			node.call("apply_decor_properties", props)
-		_mark_dirty()
+	decor_mode.clear_undo_history()
+	decor_mode.select_object("")
+	decor_mode.rebuild_nodes()
+	if current_mode == EditMode.DECOR:
+		decor_mode.activate()

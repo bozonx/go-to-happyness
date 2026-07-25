@@ -64,7 +64,7 @@ func _init() -> void:
 	assert(sim_b.rabbit_sources[rabbit_cell].node.global_position.distance_to(rabbit_position) < 0.01, "rabbit position not restored")
 	assert(sim_b.rabbit_respawn_at.is_empty(), "unexpected rabbit respawn state")
 	assert(float(sim_b.forage_respawn_at.get(Vector2i(31, 31), -1.0)) == 123.0, "forage respawn timer not restored")
-	var landscape_objects := sim_b.get_node("Terrain3dWorld/LandscapeObjects")
+	var landscape_objects := sim_b.get_node("WorldTerritory/LandscapeObjects")
 	assert(sim_b.resource_piles.any(func(pile): return bool(pile.node.get_meta("landscape_owned", false)) and pile.node.get_parent() == landscape_objects), "starter world loot must return to the terrain hierarchy")
 
 	SimHelper.cleanup_simulation(self, sim_b)

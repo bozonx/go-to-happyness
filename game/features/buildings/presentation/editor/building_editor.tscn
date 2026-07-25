@@ -1,9 +1,12 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://game/features/buildings/presentation/editor/building_editor.gd" id="1_editor"]
 [ext_resource type="Theme" path="res://game/features/ui/presentation/theme/ui_theme.tres" id="2_theme"]
 [ext_resource type="StandardMaterial3D" path="res://game/features/buildings/presentation/editor/materials/ground_material.tres" id="1_ground_mat"]
 [ext_resource type="PackedScene" path="res://game/features/world/presentation/camera_controller.tscn" id="3_camera"]
+[sub_resource type="PlaneMesh" id="mesh_ground"]
+size = Vector2(64, 64)
+
 [sub_resource type="Environment" id="env_editor"]
 background_mode = 1
 background_color = Color(0.1, 0.12, 0.16, 1)
@@ -24,10 +27,8 @@ shadow_enabled = true
 
 [node name="Ground" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.01, 0)
+mesh = SubResource("mesh_ground")
 material_override = ExtResource("1_ground_mat")
-
-[node name="GroundMesh" type="PlaneMesh" parent="Ground"]
-size = Vector2(64, 64)
 
 [node name="GridLines" type="MeshInstance3D" parent="."]
 unique_name_in_owner = true
@@ -580,6 +581,219 @@ unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
 autowrap_mode = 2
+
+[node name="DecorPanel" type="PanelContainer" parent="EditorUI/Root"]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(268, 0)
+layout_mode = 1
+anchors_preset = 9
+anchor_bottom = 1.0
+offset_left = 8.0
+offset_top = 60.0
+offset_right = 276.0
+offset_bottom = -48.0
+grow_vertical = 2
+
+[node name="Scroll" type="ScrollContainer" parent="EditorUI/Root/DecorPanel"]
+layout_mode = 2
+
+[node name="DecorVBox" type="VBoxContainer" parent="EditorUI/Root/DecorPanel/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="Title" type="Label" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
+layout_mode = 2
+text = "Каталог декора"
+horizontal_alignment = 1
+
+[node name="GroupLbl" type="Label" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
+layout_mode = 2
+text = "Группа:"
+
+[node name="DecorGroupOption" type="OptionButton" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="CategoryLbl" type="Label" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
+layout_mode = 2
+text = "Категория:"
+
+[node name="DecorCategoryOption" type="OptionButton" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="DecorAssetContainer" type="VBoxContainer" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 3
+
+[node name="DecorAssetHint" type="Label" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
+theme_override_font_sizes/font_size = 12
+autowrap_mode = 2
+
+[node name="HSepSnap" type="HSeparator" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
+layout_mode = 2
+
+[node name="SnapLbl" type="Label" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
+layout_mode = 2
+text = "Привязка к сетке:"
+
+[node name="DecorSnapOption" type="OptionButton" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="AnchorLbl" type="Label" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
+layout_mode = 2
+text = "Привязка в ячейке:"
+
+[node name="DecorAnchorPad" type="GridContainer" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+columns = 3
+
+[node name="HSepHelp" type="HSeparator" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
+layout_mode = 2
+
+[node name="DecorHelpLabel" type="Label" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
+theme_override_font_sizes/font_size = 12
+text = "B — поставить, V — выбрать, E — удалить.
+C / Shift+C — поворот, Ctrl+D — дублировать.
+Delete — удалить выбранное, Ctrl+Z — отменить."
+autowrap_mode = 2
+
+[node name="DecorInspectorPanel" type="PanelContainer" parent="EditorUI/Root"]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -308.0
+offset_top = 60.0
+offset_right = -8.0
+offset_bottom = -48.0
+grow_horizontal = 0
+grow_vertical = 2
+
+[node name="Scroll" type="ScrollContainer" parent="EditorUI/Root/DecorInspectorPanel"]
+layout_mode = 2
+
+[node name="InspectorVBox" type="VBoxContainer" parent="EditorUI/Root/DecorInspectorPanel/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="DecorInspectorTitle" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Объект не выбран"
+horizontal_alignment = 1
+
+[node name="ObjectsLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+layout_mode = 2
+text = "Объекты в чертеже:"
+
+[node name="DecorObjectList" type="ItemList" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 130)
+layout_mode = 2
+
+[node name="HSepTransform" type="HSeparator" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+layout_mode = 2
+
+[node name="TransformGrid" type="GridContainer" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+layout_mode = 2
+columns = 2
+
+[node name="PosXLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+layout_mode = 2
+text = "Позиция X"
+
+[node name="DecorPosXSpin" type="SpinBox" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = -128.0
+max_value = 128.0
+step = 0.05
+
+[node name="PosYLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+layout_mode = 2
+text = "Позиция Y"
+
+[node name="DecorPosYSpin" type="SpinBox" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = -16.0
+max_value = 64.0
+step = 0.05
+
+[node name="PosZLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+layout_mode = 2
+text = "Позиция Z"
+
+[node name="DecorPosZSpin" type="SpinBox" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = -128.0
+max_value = 128.0
+step = 0.05
+
+[node name="YawLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+layout_mode = 2
+text = "Поворот Y°"
+
+[node name="DecorYawSpin" type="SpinBox" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = -360.0
+max_value = 360.0
+step = 1.0
+
+[node name="ScaleLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+layout_mode = 2
+text = "Масштаб"
+
+[node name="DecorScaleSpin" type="SpinBox" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 0.2
+max_value = 5.0
+step = 0.05
+value = 1.0
+
+[node name="HSepControls" type="HSeparator" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+layout_mode = 2
+
+[node name="DecorControlsVBox" type="VBoxContainer" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="ActionsRow" type="HBoxContainer" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox"]
+layout_mode = 2
+
+[node name="DecorDuplicateBtn" type="Button" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/ActionsRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Дублировать"
+tooltip_text = "Ctrl+D"
+
+[node name="DecorDeleteBtn" type="Button" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/ActionsRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Удалить"
+tooltip_text = "Delete"
 
 [node name="StatusBar" type="PanelContainer" parent="EditorUI/Root"]
 custom_minimum_size = Vector2(0, 40)

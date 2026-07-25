@@ -101,7 +101,10 @@ uniform float u_shadow_step = 0.055;    // self-shadow march distance
 // a small, deeply cool shadow. Painting the midtone blue, as before, put the cloud in
 // the same pastel family as the sky and flattened the whole frame.
 uniform vec3 u_cloud_lit_clear : source_color = vec3(1.0, 0.985, 0.95);
-uniform vec3 u_cloud_mid_clear : source_color = vec3(0.90, 0.93, 0.975);
+// Far enough below the lit band to be a distinct step — at 0.90 it was so close to
+// white that the three paint bands collapsed into two and cloud interiors went flat —
+// but still nearly neutral, so the body does not drift back toward sky blue.
+uniform vec3 u_cloud_mid_clear : source_color = vec3(0.815, 0.862, 0.94);
 uniform vec3 u_cloud_shadow_clear : source_color = vec3(0.50, 0.58, 0.84);
 uniform vec3 u_cloud_lit_storm : source_color = vec3(0.55, 0.58, 0.63);
 uniform vec3 u_cloud_mid_storm : source_color = vec3(0.40, 0.44, 0.50);
@@ -336,19 +339,21 @@ vec3 star_field(vec3 rotated_dir) {
 	// Kept inside the cell so a star near an edge is never clipped in half.
 	vec2 point = (vec2(hash21(cell + 3.1), hash21(cell + 9.7)) - 0.5) * 0.84;
 	float mag = pow(hash21(cell + vec2(5.3, 1.9)), 5.0);
-	float radius = mix(0.009, 0.030, mag);
+	float radius = mix(0.011, 0.034, mag);
 	float brightness = mix(0.14, 1.0, mag);
 	// Only the bright stars are allowed to breathe, and slowly: a whole field of
 	// twinkling pinpricks reads as noise rather than as a sky.
 	float twinkle = 1.0 + sin(u_star_time * 0.6 + seed * 31.0) * u_star_twinkle * mag * mag;
 	vec2 offset = local - point;
 	float distance_to_star = length(offset);
-	// Never drawn thinner than a pixel; a star that has to be widened is dimmed by the
-	// same factor, so the total light it contributes stays put as the sky turns. This
-	// is what stops the field from scintillating.
+	// Never drawn thinner than a pixel, and dimmed by the *area* it had to be spread
+	// over, so the light it contributes stays put as the sky turns. This is what stops
+	// the field from scintillating. Conserving it linearly instead inflated every
+	// sub-pixel star into a visible blob and turned the sky back into uniform noise.
 	float draw_radius = max(radius, pixel * 0.8);
+	float spread = radius / draw_radius;
+	float energy = spread * spread;
 	float star = 1.0 - smoothstep(draw_radius * 0.45, draw_radius * 2.6, distance_to_star);
-	star *= radius / draw_radius;
 	// A faint diffraction cross on the few brightest stars. It is what makes an
 	// anchor star read as a star rather than as a dot, and it costs two smoothsteps.
 	float cross_amount = smoothstep(0.62, 1.0, mag);
@@ -364,7 +369,7 @@ vec3 star_field(vec3 rotated_dir) {
 	// ones keep the field from looking like uniform pixels.
 	float ctemp = hash21(cell + vec2(4.7, 12.3));
 	vec3 tint = mix(vec3(1.0, 0.82, 0.66), vec3(0.72, 0.83, 1.0), smoothstep(0.0, 0.65, ctemp));
-	return tint * star * brightness * twinkle;
+	return tint * star * energy * brightness * twinkle;
 }
 
 // Seam-free noise over a direction: two planar projections averaged. A single
@@ -666,7 +671,9 @@ void sky() {
 	float tower_dominance = smoothstep(projected_n - 0.02, projected_n + 0.08, tower_n);
 	float gradient_x = mix(projected_gradient_x, tower_gradient_x * 2.2, tower_dominance);
 	float gradient_y = mix(projected_gradient_y, tower_gradient_y * 2.2, tower_dominance);
-	vec3 cloud_normal = normalize(vec3(-gradient_x * 1.35, 0.94, -gradient_y * 1.35));
+	// Steeper than before: the gradient of the density field is the only relief these
+	// clouds have, and a shallow normal wastes it.
+	vec3 cloud_normal = normalize(vec3(-gradient_x * 1.85, 0.94, -gradient_y * 1.85));
 	vec2 sun2d = length(sun_dir.xz) > 0.001 ? normalize(sun_dir.xz) : vec2(0.0, 1.0);
 	vec3 sun_cloud_light_dir = normalize(vec3(sun2d.x, max(sun_dir.y, 0.18), sun2d.y));
 	vec2 moon2d = length(u_moon_dir.xz) > 0.001 ? normalize(u_moon_dir.xz) : vec2(0.0, 1.0);
@@ -683,9 +690,13 @@ void sky() {
 	}
 	occ /= 3.0;
 	float dome_light = max(dot(cloud_normal, cloud_light_dir), 0.0);
-	float dome_strength = mix(0.34, 0.24, u_night_factor);
-	float shadow_relief = mix(0.26, 0.10, u_night_factor);
-	float ambient_fill = mix(0.18, 0.28, u_night_factor);
+	// Weighted toward the surface normal and away from the constant fill. A small
+	// isolated cumulus casts almost nothing onto itself, so when the shading leaned on
+	// the self-shadow march its whole body landed above the shadow band and it read as
+	// a flat white cut-out. The normal is the one cue every cloud has.
+	float dome_strength = mix(0.46, 0.30, u_night_factor);
+	float shadow_relief = mix(0.22, 0.10, u_night_factor);
+	float ambient_fill = mix(0.10, 0.24, u_night_factor);
 	float lit = clamp(dome_light * dome_strength + (1.0 - occ) * shadow_relief + ambient_fill, 0.0, 1.0);
 	// Two octaves of painted grain. Perturbing lit just before the toon bands is what
 	// makes the band boundaries ragged and hand-drawn instead of geometrically clean.
