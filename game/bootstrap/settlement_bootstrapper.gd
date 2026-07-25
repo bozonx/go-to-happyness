@@ -505,18 +505,6 @@ func _setup_trade_and_logistics() -> void:
 		game._create_resource_pile,
 		game._update_workers
 	)
-	game.storage_delivery_service = SettlementGame.StorageDeliveryServiceScript.new()
-	game.storage_delivery_service.configure(
-		game.settlement,
-		game.warehouse_positions,
-		game.courier_dispatcher,
-		game.storage_routing_service,
-		game._release_task_warehouse_reservation,
-		game._drop_resource_pile,
-		game._update_interface,
-		game._request_courier_dispatch,
-		game._send_citizen_to_leisure
-	)
 	game.storage_routing_service = SettlementGame.StorageRoutingServiceScript.new()
 	game.storage_routing_service.configure(
 		game.settlement,
@@ -546,6 +534,18 @@ func _setup_courier_system() -> void:
 		game._start_courier_task,
 		game._cancel_courier_task,
 		game._release_task_warehouse_reservation
+	)
+	game.storage_delivery_service = SettlementGame.StorageDeliveryServiceScript.new()
+	game.storage_delivery_service.configure(
+		game.settlement,
+		game.warehouse_positions,
+		game.courier_dispatcher,
+		game.storage_routing_service,
+		game._release_task_warehouse_reservation,
+		game._drop_resource_pile,
+		game._update_interface,
+		game._request_courier_dispatch,
+		game._send_citizen_to_leisure
 	)
 	game.courier_task_publisher = SettlementGame.CourierTaskPublisherScript.new()
 	game.courier_task_publisher.configure(
