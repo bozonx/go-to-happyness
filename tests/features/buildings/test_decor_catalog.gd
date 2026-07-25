@@ -1,7 +1,7 @@
 extends SceneTree
 
-const DecorAssetCatalogScript = preload("res://game/features/buildings/domain/editor/decor_asset_catalog.gd")
-const DecorAssetDefScript = preload("res://game/features/buildings/domain/editor/decor_asset_def.gd")
+const FurnishingAssetCatalogScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_catalog.gd")
+const FurnishingAssetDefScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_def.gd")
 const DecorObjectRecordScript = preload("res://game/features/buildings/domain/editor/decor_object_record.gd")
 const BuildingBlueprintScript = preload("res://game/features/buildings/domain/editor/building_blueprint.gd")
 
@@ -19,47 +19,70 @@ func _init() -> void:
 	_test_v2_round_trip()
 	_test_non_empty_fixtures_rejected()
 	_test_owner_zone_validation()
+	_test_catalog_filtering()
 	print("--- test_decor_catalog.gd PASSED ---")
 	quit(0)
 
 
 func _test_catalog_assets() -> void:
-	var assets := DecorAssetCatalogScript.get_all_assets()
+	var assets := FurnishingAssetCatalogScript.get_all_assets()
 	assert(assets.size() >= 4, "Catalog should contain at least 4 assets")
 
-	var campfire := DecorAssetCatalogScript.get_asset(&"campfire")
+	var campfire := FurnishingAssetCatalogScript.get_asset(&"campfire")
 	assert(campfire != null, "Campfire asset should exist")
 	assert(campfire.name == "Костёр", "Campfire name check")
-	assert(campfire.category == &"camping", "Campfire category check")
-	assert(campfire.controls.size() >= 2, "Campfire should have controllable properties")
+	assert(campfire.category == &"fires_stoves", "Campfire category check")
+	assert(campfire.appearance_controls.size() >= 2, "Campfire should have controllable appearance controls")
 
-	assert(DecorAssetCatalogScript.get_asset(&"cooking_campfire") != null, "Cooking campfire asset should exist")
-	assert(DecorAssetCatalogScript.get_asset(&"entrance_sign") != null, "Entrance sign asset should exist")
+	assert(FurnishingAssetCatalogScript.get_asset(&"cooking_campfire") != null, "Cooking campfire asset should exist")
+	assert(FurnishingAssetCatalogScript.get_asset(&"entrance_sign") != null, "Entrance sign asset should exist")
 
-	var flag := DecorAssetCatalogScript.get_asset(&"flag")
+	var flag := FurnishingAssetCatalogScript.get_asset(&"flag")
 	assert(flag != null, "Flag asset should exist")
 	assert(flag.category == &"town", "Flag belongs to the town category")
 	assert(flag.get_control("banner_color").has("bind"), "Flag banner colour must be bound to a node")
+	# New metadata fields
+	assert(flag.tags.has(&"town"), "Flag must have town tag")
+	assert(flag.available_from_era == &"tent", "Flag must be available from tent era")
+	assert(flag.placement_surface == FurnishingAssetDefScript.SURFACE_FLOOR, "Flag must be floor-placed")
+	assert(flag.scale_mode == FurnishingAssetDefScript.SCALE_UNIFORM_STEPS, "Flag must use uniform_steps scale mode")
+	assert(flag.collision_policy == FurnishingAssetDefScript.COLLISION_BOX, "Flag must use box collision")
+	assert(flag.blocking_navigation == true, "Flag must block navigation")
+	# Campfire capabilities stub
+	assert(campfire.supported_capabilities.has(&"fire_source"), "Campfire must support fire_source capability")
 
 
 func _test_catalog_taxonomy() -> void:
-	var counts := DecorAssetCatalogScript.category_counts()
-	assert(counts.size() == DecorAssetCatalogScript.CATEGORIES.size(), "Every category must be counted")
-	assert(int(counts[&"camping"]) >= 2, "Camping holds the two campfires")
+	var counts := FurnishingAssetCatalogScript.category_counts()
+	assert(counts.size() == FurnishingAssetCatalogScript.CATEGORIES.size(), "Every category must be counted")
+	assert(int(counts[&"fires_stoves"]) >= 2, "Fires & stoves holds the two campfires")
 	assert(int(counts[&"town"]) >= 2, "Town holds the sign and the flag")
-	assert(int(counts[&"furniture"]) == 0, "Furniture is still empty and must report zero")
+	# Equipment categories exist but are empty in phase 1.
+	assert(int(counts[&"workbenches"]) == 0, "Workbenches is still empty")
+	assert(int(counts[&"industrial"]) == 0, "Industrial is still empty")
 
 	# The editor opens on a populated category so it never shows a blank list.
-	assert(int(counts[DecorAssetCatalogScript.first_populated_category(&"furniture")]) > 0,
+	assert(int(counts[FurnishingAssetCatalogScript.first_populated_category(&"workbenches")]) > 0,
 		"first_populated_category must skip empty categories")
 
-	for category_id in DecorAssetCatalogScript.categories_in_group(&"outdoor"):
-		assert(DecorAssetCatalogScript.group_of_category(category_id) == &"outdoor",
+	for category_id in FurnishingAssetCatalogScript.categories_in_group(&"outdoor"):
+		assert(FurnishingAssetCatalogScript.group_of_category(category_id) == &"outdoor",
 			"categories_in_group must only return that group's categories")
+
+	# Equipment group has the expected categories.
+	var equip_cats := FurnishingAssetCatalogScript.categories_in_group(&"equipment")
+	assert(equip_cats.size() == 7, "Equipment group must have 7 categories")
+	assert(equip_cats.has(&"industrial"), "Equipment must include industrial")
+	assert(equip_cats.has(&"workbenches"), "Equipment must include workbenches")
+	assert(equip_cats.has(&"kitchen_equipment"), "Equipment must include kitchen_equipment")
+	assert(equip_cats.has(&"storage_logistics"), "Equipment must include storage_logistics")
+	assert(equip_cats.has(&"trade_service"), "Equipment must include trade_service")
+	assert(equip_cats.has(&"utility_sanitary"), "Equipment must include utility_sanitary")
+	assert(equip_cats.has(&"tools"), "Equipment must include tools")
 
 
 func _test_asset_scenes_exist() -> void:
-	for asset in DecorAssetCatalogScript.get_all_assets():
+	for asset in FurnishingAssetCatalogScript.get_all_assets():
 		assert(ResourceLoader.exists(asset.scene_path), "Missing decor scene: %s" % asset.scene_path)
 		assert(load(asset.scene_path) is PackedScene, "Decor scene failed to load: %s" % asset.scene_path)
 
@@ -67,7 +90,7 @@ func _test_asset_scenes_exist() -> void:
 ## Every declared binding must point at a node that actually exists, otherwise
 ## the control silently does nothing in the editor.
 func _test_bindings_resolve_in_scenes() -> void:
-	for asset in DecorAssetCatalogScript.get_all_assets():
+	for asset in FurnishingAssetCatalogScript.get_all_assets():
 		var instance := (load(asset.scene_path) as PackedScene).instantiate()
 		assert(instance.get("asset_id") == asset.id,
 			"Scene %s must declare asset_id %s" % [asset.scene_path, asset.id])
@@ -108,7 +131,7 @@ func _test_blueprint_decor_objects() -> void:
 ## Control defaults hand out `Color`, which `JSON.stringify` cannot encode —
 ## storing them raw broke both saving and `content_revision()`.
 func _test_colors_survive_json_round_trip() -> void:
-	var campfire := DecorAssetCatalogScript.get_asset(&"campfire")
+	var campfire := FurnishingAssetCatalogScript.get_asset(&"campfire")
 	var defaults := campfire.default_appearance()
 	assert(defaults["light_color"] is String, "Colour defaults must be stored as html strings")
 
@@ -239,3 +262,71 @@ func _test_owner_zone_validation() -> void:
 	assert(not errors.any(func(e: String): return e.contains("unknown place zone")),
 		"Decor object with empty owner_zone must not flag a zone error")
 	print("  owner_zone validation ok")
+
+
+## Catalog must support filtering by tag, era, surface and combined criteria.
+func _test_catalog_filtering() -> void:
+	# Filter by tag: "fire" should return campfire and cooking_campfire.
+	var fire_assets := FurnishingAssetCatalogScript.get_assets_by_tag(&"fire")
+	assert(fire_assets.size() >= 2, "Tag 'fire' must return at least 2 assets")
+	for asset in fire_assets:
+		assert(asset.tags.has(&"fire"), "Filtered assets must have the fire tag")
+
+	# Filter by era: "tent" should return all current assets.
+	var tent_assets := FurnishingAssetCatalogScript.get_assets_by_era(&"tent")
+	assert(tent_assets.size() >= 4, "Era 'tent' must return at least 4 assets")
+
+	# Filter by era with no matches: assets with a different era.
+	var stone_assets := FurnishingAssetCatalogScript.get_assets_by_era(&"stone")
+	# All current assets have available_from_era == "tent", so they don't match "stone".
+	# But assets with empty era pass through (available for all eras).
+	# Our built-in assets all have era "tent", so stone should return 0.
+	assert(stone_assets.size() == 0, "Era 'stone' must return 0 assets (all are tent-era)")
+
+	# Filter by surface: "floor" should return all current assets.
+	var floor_assets := FurnishingAssetCatalogScript.get_assets_by_surface(FurnishingAssetDefScript.SURFACE_FLOOR)
+	assert(floor_assets.size() >= 4, "Surface 'floor' must return at least 4 assets")
+
+	# Filter by surface: "wall" should return 0 (none are wall-only).
+	var wall_assets := FurnishingAssetCatalogScript.get_assets_by_surface(FurnishingAssetDefScript.SURFACE_WALL)
+	assert(wall_assets.size() == 0, "Surface 'wall' must return 0 assets")
+
+	# Combined filter: category + tag.
+	var combined := FurnishingAssetCatalogScript.filter_assets(
+		&"fires_stoves", &"fire", &"tent", FurnishingAssetDefScript.SURFACE_FLOOR)
+	assert(combined.size() >= 2, "Combined filter must return at least 2 assets")
+	for asset in combined:
+		assert(asset.category == &"fires_stoves", "Combined filter must respect category")
+		assert(asset.tags.has(&"fire"), "Combined filter must respect tag")
+
+	# Combined filter with mismatched tag returns empty.
+	var mismatched := FurnishingAssetCatalogScript.filter_assets(
+		&"town", &"fire", &"", "")
+	assert(mismatched.size() == 0, "Mismatched tag filter must return 0 assets")
+
+	# Empty filters return all assets.
+	var all := FurnishingAssetCatalogScript.filter_assets()
+	assert(all.size() >= 4, "Empty filter must return all assets")
+
+	# Scale policy validation.
+	var campfire := FurnishingAssetCatalogScript.get_asset(&"campfire")
+	assert(campfire.scale_mode == FurnishingAssetDefScript.SCALE_LOCKED, "Campfire must have locked scale")
+	assert(not campfire.is_scale_allowed(2.0), "Locked scale must reject 2.0")
+	assert(campfire.is_scale_allowed(1.0), "Locked scale must allow 1.0")
+
+	var flag := FurnishingAssetCatalogScript.get_asset(&"flag")
+	assert(flag.scale_mode == FurnishingAssetDefScript.SCALE_UNIFORM_STEPS, "Flag must have uniform_steps scale")
+	assert(flag.is_scale_allowed(1.0), "Flag must allow scale 1.0")
+	assert(flag.is_scale_allowed(0.5), "Flag must allow scale 0.5")
+	assert(not flag.is_scale_allowed(1.5), "Flag must reject scale 1.5 (not in allowed_scales)")
+
+	# Placement surface validation.
+	assert(campfire.can_place_on(FurnishingAssetDefScript.SURFACE_FLOOR), "Campfire can place on floor")
+	assert(not campfire.can_place_on(FurnishingAssetDefScript.SURFACE_WALL), "Campfire cannot place on wall")
+	assert(campfire.can_place_on(FurnishingAssetDefScript.SURFACE_ANY), "Campfire can place on any (surface is floor, any matches)")
+
+	# Rotation axis validation.
+	assert(campfire.is_rotation_axis_allowed("y"), "Campfire must allow Y rotation")
+	assert(not campfire.is_rotation_axis_allowed("x"), "Campfire must reject X rotation")
+
+	print("  catalog filtering ok")
