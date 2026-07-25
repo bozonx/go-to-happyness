@@ -192,9 +192,9 @@ static func get_blueprint(building_type: String) -> Dictionary:
 	if BuildingBlueprintLibraryScript.has(building_type):
 		return _blueprint_from_library(building_type)
 	match building_type:
-		"campfire", "campfire_lvl2", "campfire_lvl3": return _campfire_blueprint_for(building_type)
+		"campfire_lvl2", "campfire_lvl3": return _campfire_blueprint_for(building_type)
 		"gathering_place": return _gathering_place_blueprint()
-		"cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3": return _cook_campfire_blueprint(building_type)
+		"cook_campfire_lvl2", "cook_campfire_lvl3": return _cook_campfire_blueprint(building_type)
 		"dew_collector": return _water_collector_blueprint("dew_collector", Vector2i(2, 2))
 		"advanced_dew_collector": return _water_collector_blueprint("advanced_dew_collector", Vector2i(3, 3))
 		"pond": return _pond_blueprint()
@@ -211,7 +211,7 @@ static func get_blueprint(building_type: String) -> Dictionary:
 		"brick_house": return _enclosed_blueprint("brick_house", Vector2i(5, 5), 3, "gable")
 		"construction_company": return _enclosed_blueprint("construction_company", Vector2i(7, 6), 3, "shed")
 		"employment_office": return _enclosed_blueprint("employment_office", Vector2i(5, 5), 3, "hip")
-		"warehouse": return _heap_blueprint("warehouse", Vector2i(5, 5))
+
 		"straw_warehouse": return _enclosed_blueprint("straw_warehouse", Vector2i(5, 5), 3, "shed")
 		"tarp_warehouse": return _enclosed_blueprint("tarp_warehouse", Vector2i(5, 5), 3, "shed")
 		"sawmill": return _sawmill_blueprint()
@@ -233,8 +233,7 @@ static func get_blueprint(building_type: String) -> Dictionary:
 		"toilet_stone", "toilet_stone_lvl2", "toilet_stone_lvl3": return _enclosed_blueprint(building_type, Vector2i(3, 3), 2, "hip")
 		"toilet_brick", "toilet_brick_lvl2", "toilet_brick_lvl3": return _enclosed_blueprint(building_type, Vector2i(3, 3), 2, "shed")
 		"boundary_post": return _boundary_post_blueprint()
-		"settlement_flag": return _settlement_flag_blueprint()
-		"entrance_sign": return _entrance_sign_blueprint()
+
 		_: return _enclosed_blueprint(building_type, Vector2i(5, 5), 3, "gable")
 
 
@@ -535,17 +534,10 @@ static func _campfire_blueprint_for(building_type: String) -> Dictionary:
 	modules.append(_module(Vector3(0.0, 0.05, 0.0), Vector3(4.6, 0.1, 4.6), "floor", Color("4f4438")))
 	if building_type == "campfire_lvl2":
 		_add_civic_fire_modules(modules)
-	elif building_type == "campfire_lvl3":
-		_add_pioneer_fire_modules(modules)
 	else:
-		_add_small_fire_modules(modules)
+		_add_pioneer_fire_modules(modules)
 	return {"type": building_type, "footprint": footprint, "entrance": Vector2i(0, -3), "modules": modules}
 
-
-static func _add_small_fire_modules(modules: Array[Dictionary]) -> void:
-	modules.append(_module(Vector3(0.0, 0.2, 0.0), Vector3(1.0, 0.25, 0.25), "wood", Color("5c4033"), Vector3(0.0, 45.0, 0.0)))
-	modules.append(_module(Vector3(0.0, 0.2, 0.0), Vector3(1.0, 0.25, 0.25), "wood", Color("5c4033"), Vector3(0.0, -45.0, 0.0)))
-	modules.append(_module(Vector3(0.0, 0.42, 0.0), Vector3(0.45, 0.44, 0.45), "fire", Color("ff5a00")))
 
 
 static func _add_civic_fire_modules(modules: Array[Dictionary]) -> void:
@@ -570,15 +562,6 @@ static func _add_pioneer_fire_modules(modules: Array[Dictionary]) -> void:
 		var angle := angle_index * TAU / 6.0
 		modules.append(_module(Vector3(cos(angle) * 2.05, 0.2, sin(angle) * 2.05), Vector3(1.3, 0.28, 0.32), "bench_log", Color("5c4033"), Vector3(0.0, -rad_to_deg(angle), 0.0)))
 
-static func _heap_blueprint(building_type: String, footprint: Vector2i) -> Dictionary:
-	var modules: Array[Dictionary] = []
-	_add_floor(modules, footprint, building_type)
-	modules.append(_module(Vector3(0.0, 0.4, 0.0), Vector3(2.5, 0.7, 2.5), "soil_heap", Color("8a6549")))
-	modules.append(_module(Vector3(-0.6, 0.4, 0.6), Vector3(1.6, 0.3, 0.3), "wood_log", Color("5c4033"), Vector3(0.0, 30.0, 0.0)))
-	modules.append(_module(Vector3(-0.4, 0.6, 0.5), Vector3(1.6, 0.3, 0.3), "wood_log", Color("5c4033"), Vector3(0.0, 15.0, 0.0)))
-	modules.append(_module(Vector3(0.6, 0.4, -0.6), Vector3(1.2, 0.4, 1.2), "grass_pile", Color("739350"), Vector3(0.0, -25.0, 0.0)))
-	modules.append(_module(Vector3(0.8, 0.3, 0.8), Vector3(0.5, 0.4, 0.5), "stone", Color("6f747a"), Vector3(15.0, 45.0, 0.0)))
-	return {"type": building_type, "footprint": footprint, "entrance": Vector2i(0, -footprint.y / 2), "modules": modules}
 
 static func _gathering_place_blueprint() -> Dictionary:
 	var modules: Array[Dictionary] = []
@@ -659,34 +642,4 @@ static func _boundary_post_blueprint() -> Dictionary:
 	}
 
 
-static func _settlement_flag_blueprint() -> Dictionary:
-	var color := COLORS["settlement_flag"]
-	var pole_color := Color("6e4a2b")
-	var modules: Array[Dictionary] = [
-		_module(Vector3(0.0, 0.75, 0.0), Vector3(0.1, 1.5, 0.1), "pole", pole_color),
-		_module(Vector3(0.2, 1.25, 0.0), Vector3(0.35, 0.3, 0.05), "flag", color),
-	]
-	return {
-		"type": "settlement_flag",
-		"footprint": Vector2i(1, 1),
-		"height": 1,
-		"modules": modules,
-		"entrance": Vector2i(0, 0),
-	}
 
-
-static func _entrance_sign_blueprint() -> Dictionary:
-	var color := COLORS["entrance_sign"]
-	var post_color := Color("5c4033")
-	var modules: Array[Dictionary] = [
-		_module(Vector3(-0.62, 0.78, 0.0), Vector3(0.16, 1.55, 0.16), "post", post_color),
-		_module(Vector3(0.62, 0.78, 0.0), Vector3(0.16, 1.55, 0.16), "post", post_color),
-		_module(Vector3(0.0, 1.25, 0.0), Vector3(1.8, 0.65, 0.14), "board", color),
-	]
-	return {
-		"type": "entrance_sign",
-		"footprint": Vector2i(2, 1),
-		"height": 2,
-		"modules": modules,
-		"entrance": Vector2i(0, 0),
-	}
