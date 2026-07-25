@@ -298,6 +298,16 @@ layout_mode = 2
 text = "➕ (PgUp)"
 tooltip_text = "Слой выше (PageUp)"
 
+[node name="VSepDecorOverlay" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
+layout_mode = 2
+
+[node name="DecorCollisionOverlayBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+toggle_mode = true
+text = "🔲 Коллизии"
+tooltip_text = "Показать коллизии и blocking navigation"
+
 [node name="Spacer" type="Control" parent="EditorUI/Root/TopBar/Margin/HBox"]
 layout_mode = 2
 size_flags_horizontal = 3
