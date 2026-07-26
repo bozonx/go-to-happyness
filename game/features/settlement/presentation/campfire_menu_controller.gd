@@ -127,7 +127,7 @@ func refresh_campfire_menu() -> void:
 	var req_text: String = era_info[0]
 	var can_advance: bool = era_info[1]
 
-	var unhoused: int = simulation._unhoused_citizen_count()
+	var unhoused: int = simulation.citizen_lifecycle_service.unhoused_citizen_count()
 	if unhoused > 0:
 		req_text += "\nProblems:\n- Unhoused residents: %d. Settle them in a home before inviting anyone new.\n" % unhoused
 	if not simulation._officer_exists():

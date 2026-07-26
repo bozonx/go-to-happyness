@@ -21,7 +21,7 @@ func show_house_menu() -> void:
 		building_type = "house"
 	var is_tent: bool = simulation.selected_house.has_meta("is_tent")
 	var home_name := S.HOUSE_NAME_STRAW_TENT if building_type == "straw_tent" else (S.HOUSE_NAME_TARP_TENT if building_type == "tarp_tent" else (S.HOUSE_NAME_TENT if building_type == "tent" else S.HOUSE_NAME_HOUSE))
-	var unhoused: int = simulation._unhoused_citizen_count()
+	var unhoused: int = simulation.citizen_lifecycle_service.unhoused_citizen_count()
 	var residents: int = capacity - slots
 	if is_tent:
 		simulation.ui_manager.house_menu_title.text = "%s\nResidents: %d/%d" % [home_name, residents, capacity]

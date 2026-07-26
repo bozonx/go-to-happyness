@@ -212,7 +212,7 @@ func update_interaction(delta: float) -> void:
 		simulation._update_interface(S.ACTION_CANCELLED_AWAY)
 		simulation._refresh_interaction_hint()
 		return
-	if (interaction_resource in [ResourceIds.WOOD, ResourceIds.BRANCHES] and not simulation._nearby_tree()) or (interaction_resource == ResourceIds.FOOD and not simulation._nearby_farm()) or (interaction_resource == ResourceIds.WATER and not simulation._nearby_pond()) or (interaction_resource == ResourceIds.GRASS and not simulation._nearby_grass_source()):
+	if (interaction_resource in [ResourceIds.WOOD, ResourceIds.BRANCHES] and not simulation.hero_interaction_service.nearby_tree()) or (interaction_resource == ResourceIds.FOOD and not simulation.hero_interaction_service.nearby_farm()) or (interaction_resource == ResourceIds.WATER and not simulation.hero_interaction_service.nearby_pond()) or (interaction_resource == ResourceIds.GRASS and not simulation.hero_interaction_service.nearby_grass_source()):
 		interaction_action = ""
 		simulation.ui_manager.interaction_hint_panel.progress_bar.visible = false
 		simulation._update_interface(S.HARVEST_CANCELLED_AWAY_SOURCE)
@@ -245,8 +245,8 @@ func update_interaction(delta: float) -> void:
 			ResourceIds.FOOD:
 				gathered = simulation.hero_pocket_service.add_to_pocket(ResourceIds.FOOD, 1) if simulation.hero_pocket_service != null else 0
 		if gathered > 0:
-			simulation._update_interface(S.GATHERED_FORMAT % [interaction_resource, simulation._format_pocket_hint()])
-			if interaction_repeat_all and simulation._pocket_has_room() and _is_harvest_source_available(interaction_resource):
+			simulation._update_interface(S.GATHERED_FORMAT % [interaction_resource, simulation.hero_pocket_service.format_pocket_hint()])
+			if interaction_repeat_all and simulation.hero_pocket_service.pocket_has_room() and _is_harvest_source_available(interaction_resource):
 				interaction_time = 0.0
 				return
 		else:
@@ -259,13 +259,13 @@ func update_interaction(delta: float) -> void:
 func _is_harvest_source_available(resource: String) -> bool:
 	match resource:
 		ResourceIds.WOOD, ResourceIds.BRANCHES:
-			return simulation._nearby_tree()
+			return simulation.hero_interaction_service.nearby_tree()
 		ResourceIds.FOOD:
-			return simulation._nearby_farm()
+			return simulation.hero_interaction_service.nearby_farm()
 		ResourceIds.WATER:
-			return simulation._nearby_pond()
+			return simulation.hero_interaction_service.nearby_pond()
 		ResourceIds.GRASS:
-			return simulation._nearby_grass_source()
+			return simulation.hero_interaction_service.nearby_grass_source()
 		_:
 			return false
 
@@ -332,7 +332,7 @@ func start_interaction(all: bool) -> void:
 			return
 		"tree":
 			var gathering_branches: bool = int(simulation.settlement.era) < int(SettlementState.Era.WOOD)
-			if not simulation._pocket_has_room():
+			if not simulation.hero_pocket_service.pocket_has_room():
 				simulation._update_interface(S.POCKET_FULL_TREE_HINT)
 				return
 			interaction_action = "harvesting"
@@ -342,7 +342,7 @@ func start_interaction(all: bool) -> void:
 			interaction_repeat_all = all
 			return
 		"farm":
-			if not simulation._pocket_has_room():
+			if not simulation.hero_pocket_service.pocket_has_room():
 				simulation._update_interface(S.POCKET_FULL_SHORT)
 				return
 			interaction_action = "harvesting"
@@ -352,7 +352,7 @@ func start_interaction(all: bool) -> void:
 			interaction_repeat_all = all
 			return
 		"pond":
-			if not simulation._pocket_has_room():
+			if not simulation.hero_pocket_service.pocket_has_room():
 				simulation._update_interface(S.POCKET_FULL_SHORT)
 				return
 			interaction_action = "harvesting"
@@ -362,7 +362,7 @@ func start_interaction(all: bool) -> void:
 			interaction_repeat_all = all
 			return
 		"grass":
-			if not simulation._pocket_has_room():
+			if not simulation.hero_pocket_service.pocket_has_room():
 				simulation._update_interface(S.POCKET_FULL_SHORT)
 				return
 			interaction_action = "harvesting"

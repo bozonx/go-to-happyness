@@ -17,7 +17,7 @@ func show_school_menu() -> void:
 	simulation.ui_manager.building_menu.visible = false
 
 	var student_label: String = simulation.selected_builder.role_label() if simulation.selected_builder != null else ""
-	var can_manage: bool = simulation._player_can_manage_permanent_professions()
+	var can_manage: bool = simulation.workplace_labor_service.player_can_manage_permanent_professions()
 	var block_tooltip: String = simulation._permanent_profession_block_message()
 
 	simulation.ui_manager.school_menu.update_state(student_label, can_manage, block_tooltip, simulation.school_developed_professions)
@@ -26,7 +26,7 @@ func show_school_menu() -> void:
 
 
 func toggle_school_development(role: String, pressed: bool) -> void:
-	if not simulation._player_can_manage_permanent_professions():
+	if not simulation.workplace_labor_service.player_can_manage_permanent_professions():
 		if simulation.workplace_labor_service != null:
 			simulation.workplace_labor_service.show_labor_command_blocked()
 		return
@@ -38,7 +38,7 @@ func toggle_school_development(role: String, pressed: bool) -> void:
 
 
 func start_school_training(role: String) -> void:
-	if not simulation._player_can_manage_permanent_professions():
+	if not simulation.workplace_labor_service.player_can_manage_permanent_professions():
 		if simulation.workplace_labor_service != null:
 			simulation.workplace_labor_service.show_labor_command_blocked()
 		return

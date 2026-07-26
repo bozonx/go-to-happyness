@@ -110,7 +110,7 @@ func _refresh_role_buttons(selected_exists: bool, assignment_submenu_open: bool)
 		if button.disabled and not role_available:
 			button.tooltip_text = S.NO_WORKPLACE_FOR_ROLE
 		elif button.disabled and blocked_by_officer:
-			button.tooltip_text = simulation.permanent_profession_block_message()
+			button.tooltip_text = simulation.workplace_labor_service.permanent_profession_block_message()
 		else:
 			button.tooltip_text = ""
 		if button.visible:
@@ -201,14 +201,14 @@ func show_building_menu() -> void:
 			simulation.ui_manager.building_menu_title.text += S.COOK_FIRE_BRANCHES_FORMAT % [cook_fuel, simulation.FIRE_SUPPLY_TARGET]
 		simulation.ui_manager.building_cook_button.visible = BuildingTypes.is_kitchen(building_type)
 		var can_manage_professions: bool = simulation.player_can_manage_permanent_professions()
-		var profession_blocked_tooltip: String = simulation.permanent_profession_block_message()
+		var profession_blocked_tooltip: String = simulation.workplace_labor_service.permanent_profession_block_message()
 		var is_active_kitchen: bool = simulation.selected_building == simulation.canteen
 		simulation.ui_manager.building_cook_button.text = "Register selected resident as permanent cook"
 		simulation.ui_manager.building_cook_button.disabled = not can_manage_professions or simulation.selected_builder == null or simulation.selected_builder.is_player_controlled or not is_active_kitchen or not bool(simulation.selected_building.get_meta("accepting_workers", true))
 		if not is_active_kitchen:
 			simulation.ui_manager.building_cook_button.tooltip_text = "Only the active kitchen can serve meals."
 		elif simulation.ui_manager.building_cook_button.disabled:
-			simulation.ui_manager.building_cook_button.tooltip_text = simulation.permanent_profession_block_message() if not can_manage_professions else "Select a resident who is not under direct control."
+			simulation.ui_manager.building_cook_button.tooltip_text = simulation.workplace_labor_service.permanent_profession_block_message() if not can_manage_professions else "Select a resident who is not under direct control."
 		else:
 			simulation.ui_manager.building_cook_button.tooltip_text = "Registers a permanent profession."
 
@@ -228,8 +228,8 @@ func show_building_menu() -> void:
 		simulation.ui_manager.building_upgrade_button.text = "Upgrade to %s" % str(BuildingCatalogScript.definition_for(next_upgrade).get("name", next_upgrade))
 		simulation.ui_manager.building_upgrade_button.disabled = not simulation.settlement.can_upgrade_building(building_type)
 		simulation.ui_manager.building_upgrade_button.tooltip_text = "" if not simulation.ui_manager.building_upgrade_button.disabled else "Research the next level and gather its resources."
-		var can_command_labor: bool = simulation.player_can_command_labor()
-		var labor_blocked_tooltip: String = simulation.labor_command_block_message()
+		var can_command_labor: bool = simulation.workplace_labor_service.player_can_command_labor()
+		var labor_blocked_tooltip: String = simulation.workplace_labor_service.labor_command_block_message()
 		simulation.ui_manager.building_accept_workers_button.disabled = not can_command_labor
 		simulation.ui_manager.building_accept_workers_button.tooltip_text = labor_blocked_tooltip if not can_command_labor else ""
 		simulation.ui_manager.building_cancel_construction_button.visible = false

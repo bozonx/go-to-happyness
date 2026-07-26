@@ -16,7 +16,7 @@ func _init(p_game: SettlementGame) -> void:
 
 
 func on_school_day_ended() -> void:
-	var teacher_ok := game._is_teacher_present_at_school()
+	var teacher_ok := game.school_service.is_teacher_present()
 	for citizen in game.citizens:
 		citizen.finish_school_day(teacher_ok)
 

@@ -128,7 +128,7 @@ static func close_assignment_submenu(simulation: Node) -> void:
 	simulation._close_assignment_submenu()
 
 static func player_can_command_labor(simulation: Node) -> bool:
-	return simulation.player_can_command_labor()
+	return simulation.workplace_labor_service.player_can_command_labor()
 
 static func toggle_hero_view(simulation: Node) -> void:
 	simulation.player_controller.toggle_hero_view()

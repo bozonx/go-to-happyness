@@ -269,7 +269,7 @@ func assign_cook_at_campfire() -> void:
 	if game.selected_building != game.canteen:
 		game._update_interface("Choose the active kitchen to assign a cook.")
 		return
-	if not game._player_can_manage_permanent_professions():
+	if not game.workplace_labor_service.player_can_manage_permanent_professions():
 		if game.workplace_labor_service != null:
 			game.workplace_labor_service.show_labor_command_blocked()
 		return
@@ -281,7 +281,7 @@ func assign_cook_at_campfire() -> void:
 
 
 func assign_teacher_at_school() -> void:
-	if not game._player_can_manage_permanent_professions():
+	if not game.workplace_labor_service.player_can_manage_permanent_professions():
 		if game.workplace_labor_service != null:
 			game.workplace_labor_service.show_labor_command_blocked()
 		return
@@ -299,7 +299,7 @@ func assign_teacher_at_school() -> void:
 
 
 func assign_seller_at_market() -> void:
-	if not game._player_can_manage_permanent_professions():
+	if not game.workplace_labor_service.player_can_manage_permanent_professions():
 		if game.workplace_labor_service != null:
 			game.workplace_labor_service.show_labor_command_blocked()
 		return

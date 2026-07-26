@@ -53,4 +53,4 @@ func refresh_pocket_take_menu() -> void:
 			simulation._take_resource_into_pocket(resource_type, simulation.hero_pocket_service.pocket_space_for(resource_type) if simulation.hero_pocket_service != null else 0)
 		)
 		simulation.ui_manager.pocket_take_menu.item_list.add_child(row)
-	simulation.ui_manager.pocket_take_menu_title.text = S.TAKE_FROM_WAREHOUSE_FORMAT % [simulation._pocket_total(), simulation.POCKET_CAPACITY]
+	simulation.ui_manager.pocket_take_menu_title.text = S.TAKE_FROM_WAREHOUSE_FORMAT % [simulation.hero_pocket_service.pocket_total(), simulation.POCKET_CAPACITY]

@@ -139,7 +139,7 @@ func check_unstaffed_employment_center() -> void:
 					has_waiting_citizen = true
 					break
 
-	if has_waiting_citizen and not game._is_registration_staffed():
+	if has_waiting_citizen and not game.citizen_registration_service.is_registration_staffed():
 		var current_time := game.runtime_seconds
 		if current_time - game._last_unstaffed_warning_time > 60.0:
 			game._last_unstaffed_warning_time = current_time

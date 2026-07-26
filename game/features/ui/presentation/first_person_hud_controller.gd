@@ -76,7 +76,7 @@ func first_person_action_hint() -> String:
 			var available: Array[String] = simulation.storage_routing_service.pile_available_resources(pile)
 			if available.is_empty():
 				return ""
-			if not simulation._pocket_has_room():
+			if not simulation.hero_pocket_service.pocket_has_room():
 				return S.POCKET_FULL
 			return S.F_TAKE_FROM_PILE % simulation._resource_display_name(available[0]).to_lower()
 		"warehouse":
@@ -85,8 +85,8 @@ func first_person_action_hint() -> String:
 				wh_index = simulation.storage_routing_service.warehouse_index_for_building(target.node)
 			if wh_index < 0:
 				wh_index = simulation._nearby_warehouse_index()
-			if simulation._pocket_total() > 0:
-				var primary_res: String = simulation._primary_pocket_resource()
+			if simulation.hero_pocket_service.pocket_total() > 0:
+				var primary_res: String = simulation.hero_pocket_service.primary_pocket_resource()
 				if wh_index >= 0 and not simulation.settlement.warehouse_accepts(wh_index, primary_res):
 					return S.WAREHOUSE_REJECTS % primary_res.capitalize()
 				var wh_room: int = simulation.settlement.warehouse_room_for(wh_index, primary_res) if wh_index >= 0 else simulation.settlement.storage_room_for(primary_res)
@@ -104,7 +104,7 @@ func first_person_action_hint() -> String:
 			if simulation.hero_pocket_service.pocket_amount(ResourceIds.WOOD) if simulation.hero_pocket_service != null else 0 > 0 or simulation._pocket_amount(ResourceIds.LOGS) > 0:
 				var wood_count: int = simulation.hero_pocket_service.pocket_amount(ResourceIds.WOOD) if simulation.hero_pocket_service != null else 0 + simulation._pocket_amount(ResourceIds.LOGS)
 				return S.F_DEPOSIT_WOOD_SAWMILL % wood_count
-			if int(sawmill_stock.boards) > 0 and simulation._pocket_has_room():
+			if int(sawmill_stock.boards) > 0 and simulation.hero_pocket_service.pocket_has_room():
 				return S.F_TAKE_BOARD
 			return ""
 		"workplace":

@@ -171,7 +171,7 @@ func _world_data() -> Dictionary:
 		"trees": simulation.tree_positions.size(),
 		"farms": simulation.farm_positions.size(),
 		"forager_tents": simulation.forager_positions.size(),
-		"dig_sites": simulation._count_valid_dig_sites(),
+		"dig_sites": simulation.excavation_service.count_valid_dig_sites(),
 		"has_factory_job": _factory_for_role_internal("factory_worker") != null,
 		"has_engineer_job": _factory_for_role_internal("engineer") != null,
 		"food": simulation.settlement.amount(ResourceIds.FOOD),

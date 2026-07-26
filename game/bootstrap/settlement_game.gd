@@ -492,12 +492,12 @@ func _ready() -> void:
 	SettlementBootstrapperScript.new().run(self)
 
 
-func _next_registration_ticket() -> int:
-	return citizen_registration_service.next_registration_ticket() if citizen_registration_service != null else 0
-
-
 func _settle_unhoused_resident() -> void:
 	citizen_lifecycle_service.settle_unhoused_resident()
+
+
+func _next_registration_ticket() -> int:
+	return citizen_registration_service.next_registration_ticket() if citizen_registration_service != null else 0
 
 
 func _process(delta: float) -> void:
@@ -575,10 +575,6 @@ func _update_workers() -> void:
 	_check_unstaffed_employment_center()
 
 
-func daily_order_workday_for_new_order() -> int:
-	return citizen_daily_order_service.daily_order_workday_for_new_order() if citizen_daily_order_service != null else day_cycle.current_day
-
-
 func _guard_citizen_positions() -> void:
 	_simulation_tick_controller.guard_citizen_positions()
 
@@ -594,28 +590,12 @@ func _employment_centre_building() -> Node3D:
 	return workplace_labor_service.employment_centre_building() if workplace_labor_service != null else null
 
 
-func _officer_holder() -> Citizen:
-	return workplace_labor_service.officer_holder() if workplace_labor_service != null else null
-
-
-func _player_can_manage_permanent_professions() -> bool:
-	return workplace_labor_service.player_can_manage_permanent_professions() if workplace_labor_service != null else false
-
-
-func _is_registration_staffed() -> bool:
-	return citizen_registration_service.is_registration_staffed() if citizen_registration_service != null else false
-
-
 func _can_start_registration(citizen: Citizen) -> bool:
 	return citizen_registration_service.can_start_registration(citizen) if citizen_registration_service != null else false
 
 
 func _registration_duration() -> float:
 	return citizen_registration_service.registration_duration() if citizen_registration_service != null else Citizen.EMPLOYMENT_PROCESS_DURATION
-
-
-func _is_teacher_present_at_school() -> bool:
-	return school_service.is_teacher_present() if school_service != null else false
 
 
 func _on_employment_processing_finished(citizen: Citizen) -> void:
@@ -794,9 +774,6 @@ func _can_work_at_dig_site(site: DigSiteRecordScript) -> bool:
 
 func _resource_for_depth(site: DigSiteRecordScript, depth: int) -> String:
 	return excavation_service.resource_for_depth(site, depth)
-
-func _count_valid_dig_sites() -> int:
-	return excavation_service.count_valid_dig_sites()
 
 func _stored_resources() -> int:
 	return storage_routing_service.stored_resources()
@@ -1085,9 +1062,6 @@ func _show_house_menu() -> void:
 	if house_menu_controller != null:
 		house_menu_controller.show_house_menu()
 
-func _unhoused_citizen_count() -> int:
-	return citizen_lifecycle_service.unhoused_citizen_count()
-
 func _house_initial_residents(house: Node3D) -> void:
 	citizen_lifecycle_service.house_initial_residents(house)
 
@@ -1154,9 +1128,9 @@ func _set_selected_work_role(role: String, daily_order := false) -> void:
 		if not _appoint_official(selected_builder, _employment_centre_building(), false):
 			return
 	else:
-		if role != "official" and not _player_can_manage_permanent_professions():
+		if role != "official" and not workplace_labor_service.player_can_manage_permanent_professions():
 			if workplace_labor_service != null:
-				workplace_labor_service.show_labor_command_blocked()
+				workplace_labor_service.workplace_labor_service.show_labor_command_blocked()
 			return
 		if selected_builder.has_no_permanent_work() or selected_builder.is_unregistered():
 			if _employment_center_position() == Vector3.INF:
@@ -1204,21 +1178,8 @@ func available_employer_capacity(role: String) -> int:
 	return _available_employer_capacity(role)
 
 
-func officer_exists() -> bool:
-	return workplace_labor_service.officer_exists() if workplace_labor_service != null else false
-
-
-func permanent_profession_block_message() -> String:
-	return workplace_labor_service.permanent_profession_block_message() if workplace_labor_service != null else ""
-
-
 func player_can_manage_permanent_professions() -> bool:
-	return _player_can_manage_permanent_professions()
-
-
-func show_labor_command_blocked() -> void:
-	if workplace_labor_service != null:
-		workplace_labor_service.show_labor_command_blocked()
+	return workplace_labor_service.player_can_manage_permanent_professions()
 
 
 func employment_center_position() -> Vector3:
@@ -1235,14 +1196,6 @@ func era_name() -> String:
 
 func is_construction_site(building: Node3D) -> bool:
 	return _is_construction_site(building)
-
-
-func player_can_command_labor() -> bool:
-	return workplace_labor_service.player_can_command_labor() if workplace_labor_service != null else true
-
-
-func labor_command_block_message() -> String:
-	return workplace_labor_service.labor_command_block_message() if workplace_labor_service != null else ""
 
 
 func _builder_job_capacity() -> int:
@@ -1465,19 +1418,6 @@ func _hide_all_selection_menus() -> void:
 	selected_warehouse = null
 	selected_building = null
 
-func _demolish_selected_house() -> void:
-	if selected_house != null:
-		building_lifecycle_service.mark_building_for_demolition(selected_house)
-
-func _demolish_selected_school() -> void:
-	if selected_school != null:
-		building_lifecycle_service.mark_building_for_demolition(selected_school)
-
-func _demolish_selected_warehouse() -> void:
-	if selected_warehouse != null:
-		building_lifecycle_service.mark_building_for_demolition(selected_warehouse)
-
-
 func _add_demolition_marker(building: Node3D) -> void:
 	_building_visuals.add_demolition_marker(building)
 
@@ -1611,48 +1551,12 @@ func _exit_player_work_position() -> void:
 	_hero_interaction_controller.exit_player_work_position()
 
 
-func _nearby_tree() -> bool:
-	return hero_interaction_service.nearby_tree() if hero_interaction_service != null else false
-
-func _nearby_tree_with_branches() -> bool:
-	return hero_interaction_service.nearby_tree_with_branches() if hero_interaction_service != null else false
-
 func _nearby_warehouse_index() -> int:
 	return storage_routing_service.nearby_warehouse_index()
 
 
-func _nearby_farm() -> bool:
-	return hero_interaction_service.nearby_farm() if hero_interaction_service != null else false
-
-func _nearby_pond() -> bool:
-	return hero_interaction_service.nearby_pond() if hero_interaction_service != null else false
-
-func _nearby_grass_source() -> bool:
-	return hero_interaction_service.nearby_grass_source() if hero_interaction_service != null else false
-
-
-func _pocket_total() -> int:
-	return hero_pocket_service.pocket_total() if hero_pocket_service != null else 0
-
-
-func _pocket_has_room() -> bool:
-	return hero_pocket_service.pocket_has_room() if hero_pocket_service != null else false
-
-
-func _pocket_resources() -> Array:
-	return hero_pocket_service.pocket_resources() if hero_pocket_service != null else []
-
-
-func _primary_pocket_resource() -> String:
-	return hero_pocket_service.primary_pocket_resource() if hero_pocket_service != null else ""
-
-
 func _role_for_workplace(building: Node3D) -> String:
 	return _workplace_controller.role_for_workplace(building)
-
-
-func _format_pocket_hint() -> String:
-	return hero_pocket_service.format_pocket_hint() if hero_pocket_service != null else ""
 
 
 func _home_occupancy_text() -> String:

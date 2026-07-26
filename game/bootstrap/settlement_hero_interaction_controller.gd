@@ -74,7 +74,7 @@ func refresh_interaction_hint() -> void:
 		var action_hint := game.first_person_hud_controller.first_person_action_hint() if game.first_person_hud_controller != null else ""
 		if not action_hint.is_empty():
 			lines.append(action_hint)
-	lines.append(game._format_pocket_hint())
+	lines.append(game.hero_pocket_service.format_pocket_hint())
 	if not game.pocket.is_empty():
 		lines.append(S.DROP_POCKET_HINT)
 	var home_text := _home_occupancy_text()
@@ -147,7 +147,7 @@ func occupy_workplace(workplace: Node3D) -> void:
 	game.player_citizen.global_position = service_position
 	if is_official_building:
 		if game.settlement.is_research_completed("official"):
-			var current_officer := game._officer_holder()
+			var current_officer := game.workplace_labor_service.officer_holder()
 			if current_officer != null and current_officer != game.player_citizen:
 				game._update_interface(S.OFFICER_POSITION_TAKEN)
 				return
@@ -221,7 +221,7 @@ func take_from_pile(pile: ResourcePile, all: bool) -> void:
 		var available := int(resources.get(resource_type, 0))
 		if available <= 0:
 			continue
-		if not game._pocket_has_room():
+		if not game.hero_pocket_service.pocket_has_room():
 			break
 		var amount := mini(available, game.hero_pocket_service.pocket_space_for(resource_type) if game.hero_pocket_service != null else 0) if all else 1
 		amount = mini(amount, available)
@@ -235,7 +235,7 @@ func take_from_pile(pile: ResourcePile, all: bool) -> void:
 		if not all:
 			break
 	if not taken_any:
-		if not game._pocket_has_room():
+		if not game.hero_pocket_service.pocket_has_room():
 			game._update_interface(S.POCKET_FULL_SHORT)
 		else:
 			game._update_interface(S.PILE_EMPTY_NO_RESOURCES)
@@ -250,7 +250,7 @@ func take_from_pile(pile: ResourcePile, all: bool) -> void:
 		pile_node.queue_free()
 	else:
 		game.resource_pile_service.refresh_resource_pile_label(pile)
-	game._update_interface(S.TOOK_FROM_PILE % game._format_pocket_hint())
+	game._update_interface(S.TOOK_FROM_PILE % game.hero_pocket_service.format_pocket_hint())
 	refresh_interaction_hint()
 
 
@@ -328,7 +328,7 @@ func handle_sawmill_interaction(all: bool, sawmill_pos: Vector3) -> void:
 		return
 	var sawmill_stock := game._sawmill_stock(sawmill_pos)
 	var available_boards := int(sawmill_stock.boards)
-	if available_boards > 0 and game._pocket_has_room():
+	if available_boards > 0 and game.hero_pocket_service.pocket_has_room():
 		var take_amount := mini(available_boards, game.hero_pocket_service.pocket_space_for(ResourceIds.BOARDS) if game.hero_pocket_service != null else 0) if all else 1
 		take_amount = game.hero_pocket_service.add_to_pocket(ResourceIds.BOARDS, take_amount) if game.hero_pocket_service != null else 0
 		if take_amount > 0:
@@ -339,7 +339,7 @@ func handle_sawmill_interaction(all: bool, sawmill_pos: Vector3) -> void:
 
 
 func handle_warehouse_interaction(all: bool, warehouse_index := -1) -> void:
-	if game._pocket_total() > 0:
+	if game.hero_pocket_service.pocket_total() > 0:
 		if all:
 			_deliver_all_pocket_to_warehouse(warehouse_index)
 		else:
@@ -355,7 +355,7 @@ func _deliver_all_pocket_to_warehouse(warehouse_index := -1) -> void:
 		warehouse_index = game._nearby_warehouse_index()
 	var delivered_total := 0
 	var summary: Array[String] = []
-	for resource_type in game._pocket_resources():
+	for resource_type in game.hero_pocket_service.pocket_resources():
 		var amount := game.hero_pocket_service.pocket_amount(resource_type) if game.hero_pocket_service != null else 0
 		if amount <= 0:
 			continue
@@ -379,7 +379,7 @@ func _deliver_all_pocket_to_warehouse(warehouse_index := -1) -> void:
 			summary.append("%d %s" % [actually_delivered, resource_type])
 	if delivered_total > 0:
 		game._update_interface(S.DELIVERED_TO_WAREHOUSE_SUMMARY % ", ".join(summary))
-	elif game._pocket_resources().is_empty():
+	elif game.hero_pocket_service.pocket_resources().is_empty():
 		game._update_interface(S.POCKET_EMPTY)
 	else:
 		game._update_interface(S.WAREHOUSE_NO_ROOM)
@@ -388,7 +388,7 @@ func _deliver_all_pocket_to_warehouse(warehouse_index := -1) -> void:
 func _deliver_one_pocket_to_warehouse(warehouse_index := -1) -> void:
 	if warehouse_index < 0:
 		warehouse_index = game._nearby_warehouse_index()
-	var resource_type := game._primary_pocket_resource()
+	var resource_type := game.hero_pocket_service.primary_pocket_resource()
 	if resource_type.is_empty():
 		return
 	var amount := game.hero_pocket_service.pocket_amount(resource_type) if game.hero_pocket_service != null else 0
@@ -413,7 +413,7 @@ func _deliver_one_pocket_to_warehouse(warehouse_index := -1) -> void:
 		game._update_interface(S.WAREHOUSE_NO_ROOM_IN_THIS % resource_type)
 		return
 	game.hero_pocket_service.remove_from_pocket(resource_type, actually_delivered) if game.hero_pocket_service != null else 0
-	game._update_interface(S.DELIVERED_ONE_TO_WAREHOUSE % [actually_delivered, resource_type, game._format_pocket_hint()])
+	game._update_interface(S.DELIVERED_ONE_TO_WAREHOUSE % [actually_delivered, resource_type, game.hero_pocket_service.format_pocket_hint()])
 
 
 func deliver_pocket_to_site(site: ConstructionSite, all: bool) -> void:
