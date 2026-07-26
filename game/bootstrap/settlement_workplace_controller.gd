@@ -73,6 +73,72 @@ func employer_capacity(role: String, building: Node3D) -> int:
 	return 1
 
 
+func available_employer_capacity(role: String) -> int:
+	if role == "official":
+		var centre: Node3D = game.workplace_labor_service.employment_centre_building() if game.workplace_labor_service != null else null
+		return 1 if is_instance_valid(centre) and bool(centre.get_meta("accepting_workers", true)) else 0
+	var capacity := 0
+	for record in game.building_registry.records():
+		var building := record.node
+		if not is_instance_valid(building) or not building_supports_role(building, role):
+			continue
+		if bool(building.get_meta("accepting_workers", true)):
+			capacity += employer_capacity(role, building)
+	return capacity
+
+
+func builder_job_capacity() -> int:
+	return available_employer_capacity("construction")
+
+
+func employer_for_role(role: String) -> Node3D:
+	if role == "official":
+		return game.workplace_labor_service.employment_centre_building() if game.workplace_labor_service != null else null
+	if role == "excavation":
+		for site in game.dig_sites:
+			if game.excavation_service.can_work_at_dig_site(site):
+				return site.node
+		return null
+	if role not in ["construction", "forestry", "farming", "gather_food", "gather_branches", "gather_grass", "cook", "teacher", "seller", "factory_worker", "engineer", "craftsman", "official"]:
+		return null
+	var best: Node3D
+	var best_load := 100000
+	var best_priority := -1
+	for record in game.building_registry.records():
+		var building := record.node
+		if not is_instance_valid(building) or not building_supports_role(building, role):
+			continue
+		if not bool(building.get_meta("accepting_workers", true)):
+			continue
+		var capacity: int = employer_capacity(role, building)
+		var load := 0
+		for citizen in game.citizens:
+			if citizen.employment_workplace == building or citizen.pending_employment_workplace == building:
+				load += 1
+		var priority := int(building.get_meta("workplace_priority", 0))
+		if load < capacity and (priority > best_priority or (priority == best_priority and load < best_load)):
+			best = building
+			best_load = load
+			best_priority = priority
+	return best
+
+
+func min_era_for_role(role: String) -> SettlementState.Era:
+	# Basic outdoor/hand-work roles exist from the tent era even without a dedicated workplace.
+	match role:
+		"construction", "excavation", "gather_branches", "gather_food", "courier", "craftsman", "official", "":
+			return SettlementState.Era.TENT
+	var types: Array = employer_types_for_role(role)
+	if types.is_empty():
+		return SettlementState.Era.TENT
+	var min_era := SettlementState.Era.BRICK
+	for type in types:
+		var era: SettlementState.Era = BuildingCatalog.era_for(type)
+		if era < min_era:
+			min_era = era
+	return min_era
+
+
 func role_for_workplace(building: Node3D) -> String:
 	var building_type := game.building_registry.building_type_for_node(building)
 	for candidate in ["forestry", "farming", "gather_food", "gather_branches", "cook", "teacher", "seller", "factory_worker", "engineer", "official"]:

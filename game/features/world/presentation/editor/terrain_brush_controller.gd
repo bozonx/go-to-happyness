@@ -66,24 +66,48 @@ func is_painting() -> bool:
 	return _paint_direction != 0
 
 
+## The direction of the current drag: +1 raises, -1 lowers, 0 means no drag.
+## A host needs this to avoid stopping a stroke started by one button when a
+## different button is released.
+func paint_direction() -> int:
+	return _paint_direction
+
+
 # --- Height -----------------------------------------------------------------
 
 func apply_height_brush(delta: int) -> void:
 	if not has_hover:
 		return
-	var operation := TerrainEditOperation.offset(brush_cells(hovered_cell), delta, edit_mode)
+	var cells := brush_cells(hovered_cell)
+	var operation: TerrainEditOperation
 	if edit_mode == TerrainEditOperation.Mode.LEVEL:
 		if not _has_level_target:
 			_capture_level_target()
-		operation = TerrainEditOperation.level(brush_cells(hovered_cell), _level_target_height)
+		operation = TerrainEditOperation.level(cells, _level_target_height)
+	else:
+		operation = TerrainEditOperation.offset(cells, delta, edit_mode)
 	if _service.apply_operation(operation):
-		last_message = "%s %+d — %d cells changed" % [
-			TerrainEditOperation.mode_name(edit_mode), delta, _service.last_delta_size(),
-		]
+		if edit_mode == TerrainEditOperation.Mode.LEVEL:
+			last_message = "%s → %d — %d cells changed" % [
+				TerrainEditOperation.mode_name(edit_mode), _level_target_height,
+				_service.last_delta_size(),
+			]
+		else:
+			last_message = "%s %+d — %d cells changed" % [
+				TerrainEditOperation.mode_name(edit_mode), delta,
+				_service.last_delta_size(),
+			]
 		return
-	last_message = "%s %+d REFUSED (%s)" % [
-		TerrainEditOperation.mode_name(edit_mode), delta, _service.last_rejection(),
-	]
+	if edit_mode == TerrainEditOperation.Mode.LEVEL:
+		last_message = "%s → %d REFUSED (%s)" % [
+			TerrainEditOperation.mode_name(edit_mode), _level_target_height,
+			_service.last_rejection(),
+		]
+	else:
+		last_message = "%s %+d REFUSED (%s)" % [
+			TerrainEditOperation.mode_name(edit_mode), delta,
+			_service.last_rejection(),
+		]
 
 
 ## Changes the captured plateau height without using the current column as a

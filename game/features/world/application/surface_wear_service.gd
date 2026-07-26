@@ -47,7 +47,7 @@ var _tick := 0
 
 func configure(next_service: TerrainService) -> void:
 	service = next_service
-	grid = null if next_service == null else next_service.grid
+	grid = null if next_service == null else next_service.get_grid()
 	_pending.clear()
 	_last_tick.clear()
 	_progress.clear()

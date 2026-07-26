@@ -146,6 +146,49 @@ func check_unstaffed_employment_center() -> void:
 			game._add_message(S.WARNING_NO_OFFICER)
 
 
+## Per-frame simulation orchestration. Called from SettlementGame._process after
+## the first-person/input and camera updates. All service tick calls live here
+## so _process stays a thin dispatch.
+func tick(delta: float) -> void:
+	game.construction_controller.update_construction(delta)
+	game.demolition.tick(delta)
+	game.water_collector_service.tick(delta)
+	update_clock(delta)
+	game._release_unassigned_overtime_workers()
+	if game.survival_event_controller != null:
+		game.survival_event_controller.update_survival_busy_workers()
+	game.outside_work_controller.return_outside_workers()
+	if game.ambient_spawner != null:
+		game.ambient_spawner.update_wild_food(delta)
+	guard_citizen_positions()
+	game.world_navigation_controller.update_trail_overlay()
+	update_daylight()
+	if game.building_lifecycle_service != null:
+		game.building_lifecycle_service.update_house_lights()
+	game.canteen_service.update_canteen_delivery()
+	game.citizen_lifecycle_service.update_arrivals()
+	game.fire_management_service.update_fire_status(game, game.settlement.amount(ResourceIds.BRANCHES))
+	if game.trade_service != null:
+		game.trade_service.update()
+	# Queued trades are delivered as courier tasks; a dispatch pass picks them up.
+	game._request_courier_dispatch()
+	game.sawmills.tick(delta, game.runtime_seconds)
+	game.research_controller.update_building_research(delta)
+	if game.building_status_indicator_controller != null:
+		game.building_status_indicator_controller.update_building_status_indicators(delta)
+	game.foraging_service.update_gathering_indicators(game.is_first_person, game.interaction_action, game.interaction_resource, game.interaction_time, game.player_citizen, game.citizens)
+	if game.label_distance_fade_controller != null:
+		game.label_distance_fade_controller.update_label_distance_fading()
+	game.backpack_node = game.resource_pile_service.sync_backpack_pile(game.backpack_node)
+	if is_work_time() or game._has_active_night_work_order():
+		game._worker_poll_timer -= delta
+		if game._worker_poll_timer <= 0.0:
+			game._worker_poll_timer = game.WORKER_POLL_INTERVAL
+			game._update_workers()
+	if game.selected_builder != null and game.ui_manager.build_menu.visible:
+		game._show_selected_citizen_menu()
+
+
 func send_citizen_to_leisure(citizen: Citizen, minimum_hours := 0) -> bool:
 	# Returns whether the citizen was actually placed somewhere to rest so the
 	# waiting window knows if it needs to keep looking for work.

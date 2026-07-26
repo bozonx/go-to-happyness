@@ -288,7 +288,7 @@ func _role_employers() -> Dictionary:
 					"route_cost": _helpers.route_cost(employment_center, service_position),
 				})
 		if candidates.is_empty():
-			var fallback: Node3D = simulation._employer_for_role(role)
+			var fallback: Node3D = simulation.employer_for_role(role)
 			if is_instance_valid(fallback):
 				candidates.append({
 					"position": fallback.global_position,

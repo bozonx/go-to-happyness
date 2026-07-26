@@ -517,44 +517,7 @@ func _process(delta: float) -> void:
 	else:
 		if camera_controller != null:
 			camera_controller.update(delta)
-	construction_controller.update_construction(delta)
-	demolition.tick(delta)
-	water_collector_service.tick(delta)
-	simulation_tick_controller.update_clock(delta)
-	_release_unassigned_overtime_workers()
-	if survival_event_controller != null:
-		survival_event_controller.update_survival_busy_workers()
-	outside_work_controller.return_outside_workers()
-	if ambient_spawner != null:
-		ambient_spawner.update_wild_food(delta)
-	simulation_tick_controller.guard_citizen_positions()
-	world_navigation_controller.update_trail_overlay()
-	simulation_tick_controller.update_daylight()
-	if building_lifecycle_service != null:
-		building_lifecycle_service.update_house_lights()
-	canteen_service.update_canteen_delivery()
-	citizen_lifecycle_service.update_arrivals()
-	fire_management_service.update_fire_status(self, settlement.amount(ResourceIds.BRANCHES))
-	if trade_service != null:
-		trade_service.update()
-
-	# Queued trades are delivered as courier tasks; a dispatch pass picks them up.
-	_request_courier_dispatch()
-	sawmills.tick(delta, runtime_seconds)
-	research_controller.update_building_research(delta)
-	if building_status_indicator_controller != null:
-		building_status_indicator_controller.update_building_status_indicators(delta)
-	foraging_service.update_gathering_indicators(is_first_person, interaction_action, interaction_resource, interaction_time, player_citizen, citizens)
-	if label_distance_fade_controller != null:
-		label_distance_fade_controller.update_label_distance_fading()
-	backpack_node = resource_pile_service.sync_backpack_pile(backpack_node)
-	if simulation_tick_controller.is_work_time() or _has_active_night_work_order():
-		_worker_poll_timer -= delta
-		if _worker_poll_timer <= 0.0:
-			_worker_poll_timer = WORKER_POLL_INTERVAL
-			_update_workers()
-	if selected_builder != null and ui_manager.build_menu.visible:
-		_show_selected_citizen_menu()
+	simulation_tick_controller.tick(delta)
 
 
 func _update_workers() -> void:
@@ -860,7 +823,7 @@ func _set_selected_work_role(role: String, daily_order := false) -> void:
 				_update_interface("Build the main campfire before assigning permanent jobs.")
 				return
 			selected_builder.clear_daily_order()
-			selected_builder.begin_employment_processing(employment_center_position(), role, _employer_for_role(role))
+			selected_builder.begin_employment_processing(employment_center_position(), role, employer_for_role(role))
 	selected_builder.assigned_dig_site = null
 	if citizen_ai != null:
 		citizen_ai.request_decision_refresh()
@@ -877,74 +840,24 @@ func _set_selected_work_role(role: String, daily_order := false) -> void:
 		if workforce_menu_controller != null:
 			workforce_menu_controller.refresh_workforce_menu()
 
-func min_era_for_role(role: String) -> SettlementState.Era:
-	# Basic outdoor/hand-work roles exist from the tent era even without a dedicated workplace.
-	match role:
-		"construction", "excavation", "gather_branches", "gather_food", "courier", "craftsman", "official", "":
-			return SettlementState.Era.TENT
-	var types: Array = workplace_controller.employer_types_for_role(role)
-	if types.is_empty():
-		return SettlementState.Era.TENT
-	var min_era := SettlementState.Era.BRICK
-	for type in types:
-		var era: SettlementState.Era = BuildingCatalog.era_for(type)
-		if era < min_era:
-			min_era = era
-	return min_era
+func min_era_for_role(role: String) -> int:
+	return workplace_controller.min_era_for_role(role)
 
 
 func builder_job_capacity() -> int:
-	return available_employer_capacity("construction")
+	return workplace_controller.builder_job_capacity()
 
 
 func available_employer_capacity(role: String) -> int:
-	if role == "official":
-		var centre := _employment_centre_building()
-		return 1 if is_instance_valid(centre) and bool(centre.get_meta("accepting_workers", true)) else 0
-	var capacity := 0
-	for record in building_registry.records():
-		var building := record.node
-		if not is_instance_valid(building) or not workplace_controller.building_supports_role(building, role):
-			continue
-		if bool(building.get_meta("accepting_workers", true)):
-			capacity += workplace_controller.employer_capacity(role, building)
-	return capacity
+	return workplace_controller.available_employer_capacity(role)
 
 
 func is_construction_site(building: Node3D) -> bool:
 	return construction_controller.is_construction_site(building)
 
 
-func _employer_for_role(role: String) -> Node3D:
-	if role == "official":
-		return _employment_centre_building()
-	if role == "excavation":
-			for site in dig_sites:
-				if excavation_service.can_work_at_dig_site(site):
-					return site.node
-			return null
-	if role not in ["construction", "forestry", "farming", "gather_food", "gather_branches", "gather_grass", "cook", "teacher", "seller", "factory_worker", "engineer", "craftsman", "official"]:
-		return null
-	var best: Node3D
-	var best_load := 100000
-	var best_priority := -1
-	for record in building_registry.records():
-		var building := record.node
-		if not is_instance_valid(building) or not workplace_controller.building_supports_role(building, role):
-			continue
-		if not bool(building.get_meta("accepting_workers", true)):
-			continue
-		var capacity: int = workplace_controller.employer_capacity(role, building)
-		var load := 0
-		for citizen in citizens:
-			if citizen.employment_workplace == building or citizen.pending_employment_workplace == building:
-				load += 1
-		var priority := int(building.get_meta("workplace_priority", 0))
-		if load < capacity and (priority > best_priority or (priority == best_priority and load < best_load)):
-			best = building
-			best_load = load
-			best_priority = priority
-	return best
+func employer_for_role(role: String) -> Node3D:
+	return workplace_controller.employer_for_role(role)
 
 
 func _select_citizen_at(screen_position: Vector2) -> void:

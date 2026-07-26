@@ -102,6 +102,17 @@ static func _test_height_brush_edits_through_the_service() -> void:
 	brush.set_paint_direction(0)
 	assert(not brush.is_painting())
 
+	# paint_direction() reports which button started the drag: +1 for LMB,
+	# -1 for Shift+RMB. A host uses this to avoid stopping an LMB stroke when
+	# RMB is released without Shift.
+	brush.set_paint_direction(1)
+	assert(brush.paint_direction() == 1)
+	brush.set_paint_direction(0)
+	assert(brush.paint_direction() == 0)
+	brush.set_paint_direction(-1)
+	assert(brush.paint_direction() == -1)
+	brush.set_paint_direction(0)
+
 
 static func _test_level_mode_latches_a_plateau_height_for_the_stroke() -> void:
 	var world := _make()

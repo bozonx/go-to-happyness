@@ -84,7 +84,10 @@ func _rebuild_asset_buttons() -> void:
 		for category_id in FurnishingAssetCatalogScript.categories_in_group(group_id):
 			var assets := FurnishingAssetCatalogScript.get_assets_by_category(category_id)
 			if not search_text.is_empty():
-				assets = assets.filter(func(asset): return asset in all_assets)
+				var all_set: Dictionary = {}
+				for a in all_assets:
+					all_set[a] = true
+				assets = assets.filter(func(asset): return all_set.has(asset))
 			var header := Button.new()
 			header.flat = true
 			header.alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -137,7 +140,7 @@ func _select_asset(asset_id: StringName) -> void:
 	var asset := FurnishingAssetCatalogScript.get_asset(asset_id)
 	if asset != null:
 		_select_snap_step(asset.default_snap_step)
-	_add_recent_asset(asset_id)
+		add_recent_asset(asset_id)
 	_controller.refresh_ghost()
 
 
@@ -146,7 +149,7 @@ func _on_search_changed(_new_text: String) -> void:
 
 
 ## Track recently used assets for quick access.
-func _add_recent_asset(asset_id: StringName) -> void:
+func add_recent_asset(asset_id: StringName) -> void:
 	_recent_assets.erase(asset_id)
 	_recent_assets.push_front(asset_id)
 	if _recent_assets.size() > RECENT_ASSET_LIMIT:

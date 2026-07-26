@@ -67,6 +67,8 @@ var water_brush := WaterBrushController.new()
 ## Profiles worth checking a map against: what a citizen can climb, and what a
 ## loaded cart can. A ramp that only a walker can use is a supply route that
 ## silently is not one.
+# Keep in sync with terrain_mode_controller.gd — GDScript const cannot reference
+# another class's const array.
 const NAV_PROFILES: Array[StringName] = [&"pedestrian", &"cart"]
 var _nav_profile_index := 0
 
@@ -106,6 +108,10 @@ const CAPTURE_VIEWS: Array = [
 	{"name": "materials_blend_closeup", "target": Vector3(-17.0, 0.0, 14.0), "yaw": 25.0, "pitch": 30.0, "distance": 11.0},
 ]
 
+## Frames to let the renderer settle before a capture: the chunk budget rebuilds
+## two per frame, so a fresh board would be photographed half-meshed.
+const CAPTURE_SETTLE_FRAMES := 3
+
 var _capture_queue: Array = []
 var _capture_delay := 0
 
@@ -132,7 +138,7 @@ func _ready() -> void:
 	_update_camera()
 	if OS.get_cmdline_user_args().has("--capture"):
 		_capture_queue = CAPTURE_VIEWS.duplicate()
-		_capture_delay = 3
+		_capture_delay = CAPTURE_SETTLE_FRAMES
 
 
 func _process(delta: float) -> void:
@@ -389,7 +395,7 @@ func _update_hud() -> void:
 	lines.append("> %s" % brush.last_message)
 	lines.append("")
 	lines.append("LMB raise · RMB lower · MMB orbit · wheel zoom · WASD pan · Q/E turn")
-	lines.append("Tab mode (sculpt/terrace/level) · Z undo · Y redo · F level · P paint · 1-5 material")
+	lines.append("Tab mode (sculpt/terrace/level) · Z undo · Y redo · F level · P paint · 1-9/0 material")
 	lines.append("B variant · U wear · J snow · K walk brush · ; \' material page")
 	lines.append("H hole · R ramp · X unramp · C class · V dir · [ ] brush · G demo · N clear · Esc quit")
 	lines.append("L water tool · . cycle tool · , level from ground · PgUp/PgDn level · O body · / freeze body")
@@ -417,7 +423,7 @@ func _palette_line() -> String:
 ## meshing changes without a human at the mouse.
 func _process_capture() -> void:
 	var view: Dictionary = _capture_queue[0]
-	if _capture_delay == 3:
+	if _capture_delay == CAPTURE_SETTLE_FRAMES:
 		match view.get("setup", &""):
 			&"cascade":
 				_setup_cascade_scene()
@@ -449,7 +455,7 @@ func _process_capture() -> void:
 	image.save_png(path)
 	print("[terrain_lab] captured ", ProjectSettings.globalize_path(path))
 	_capture_queue.pop_front()
-	_capture_delay = 3
+	_capture_delay = CAPTURE_SETTLE_FRAMES
 	if _capture_queue.is_empty():
 		get_tree().quit()
 

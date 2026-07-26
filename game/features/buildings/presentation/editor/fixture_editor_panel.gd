@@ -99,8 +99,9 @@ func _refresh_fixture_inspector() -> void:
 	_fixture_id_label.text = "ID: %s" % String(fixture.id)
 	# Capability dropdown — select first capability.
 	_syncing_ui = true
+	var first_cap: Variant = fixture.capabilities[0] if not fixture.capabilities.is_empty() else ""
 	for i in _fixture_cap_option.item_count:
-		if _fixture_cap_option.get_item_metadata(i) == fixture.capabilities[0] if not fixture.capabilities.is_empty() else null:
+		if _fixture_cap_option.get_item_metadata(i) == first_cap:
 			_fixture_cap_option.select(i)
 			break
 	# Visual object dropdown — populate from blueprint objects.
@@ -176,28 +177,19 @@ func delete_fixture() -> void:
 ## Returns a warning message if removing the fixture would leave a zone
 ## without a required capability. Empty string if no violation.
 func _fixture_deletion_warning(fixture: FixtureDefinitionScript) -> String:
-	if fixture.owner_zone_id == &"":
-		# Building-wide fixture: check all zones that have requirements.
-		for zone in _editor.blueprint.place_zones:
-			var required := ZoneRequirementsScript.required_capabilities_for_zone(zone)
-			for cap in required:
-				if not cap in fixture.capabilities:
-					continue
-				# Check if any other fixture still provides this cap for this zone.
-				if not _zone_has_capability(zone.zone_id, cap, fixture):
-					return "Зона «%s» останется без %s" % [zone.zone_name, ZoneRequirementsScript.capability_label(cap)]
-		return ""
-	# Zone-specific fixture: find the zone.
-	for zone in _editor.blueprint.place_zones:
-		if zone.zone_id != fixture.owner_zone_id:
-			continue
+	# Check only zones the fixture is relevant to: building-wide fixtures
+	# affect all zones, zone-specific ones only their own.
+	var zones_to_check: Array = _editor.blueprint.place_zones
+	if fixture.owner_zone_id != &"":
+		zones_to_check = zones_to_check.filter(
+			func(z): return z.zone_id == fixture.owner_zone_id)
+	for zone in zones_to_check:
 		var required := ZoneRequirementsScript.required_capabilities_for_zone(zone)
 		for cap in required:
 			if not cap in fixture.capabilities:
 				continue
 			if not _zone_has_capability(zone.zone_id, cap, fixture):
 				return "Зона «%s» останется без %s" % [zone.zone_name, ZoneRequirementsScript.capability_label(cap)]
-		return ""
 	return ""
 
 

@@ -243,24 +243,6 @@ func _init_world() -> void:
 	add_child(decor_mode)
 
 
-func _build_grid_mesh(half_extent: int, color: Color) -> ArrayMesh:
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_LINES)
-	st.set_color(color)
-	for i in range(-half_extent, half_extent + 1):
-		st.add_vertex(Vector3(i, 0.0, -half_extent))
-		st.add_vertex(Vector3(i, 0.0, half_extent))
-		st.add_vertex(Vector3(-half_extent, 0.0, i))
-		st.add_vertex(Vector3(half_extent, 0.0, i))
-	var mesh := st.commit()
-	var mat := StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.vertex_color_use_as_albedo = true
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mesh.surface_set_material(0, mat)
-	return mesh
-
-
 ## The authored footprint is the only editable board. Its centre axes are
 ## yellow so even-sized grids still have an obvious visual centre.
 func _refresh_building_grid_visuals() -> void:
@@ -415,9 +397,8 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 			if current_mode == EditMode.FRAME and event.pressed and event.shift_pressed:
 				_shift_erasing = true
 				_orbiting = false
-				if event.pressed:
-					_last_paint_cell = cursor_cell
-					_erase_hovered_block_or_cell()
+				_last_paint_cell = cursor_cell
+				_erase_hovered_block_or_cell()
 				return
 			if current_mode == EditMode.DECOR and event.pressed and event.shift_pressed:
 				_orbiting = false
@@ -599,28 +580,19 @@ func _apply_erase_at_cell(cell: Vector3i) -> void:
 
 
 func _erase_line(from_cell: Vector3i, to_cell: Vector3i) -> void:
-	var dx := absi(to_cell.x - from_cell.x)
-	var dz := absi(to_cell.z - from_cell.z)
-	var sx := 1 if to_cell.x > from_cell.x else -1
-	var sz := 1 if to_cell.z > from_cell.z else -1
-	var x := from_cell.x
-	var z := from_cell.z
-	var err := dx - dz
-	while true:
-		_apply_erase_at_cell(Vector3i(x, active_layer, z))
-		if x == to_cell.x and z == to_cell.z:
-			break
-		var e2 := 2 * err
-		if e2 > -dz:
-			err -= dz
-			x += sx
-		if e2 < dx:
-			err += dx
-			z += sz
+	for cell in _bresenham_cells(from_cell, to_cell):
+		_apply_erase_at_cell(cell)
 	_refresh_ghost()
 
 
 func _paint_line(from_cell: Vector3i, to_cell: Vector3i) -> void:
+	for cell in _bresenham_cells(from_cell, to_cell):
+		_apply_tool_at_cell(cell)
+	_refresh_ghost()
+
+
+## Bresenham line algorithm on the XZ plane. Y is always active_layer.
+func _bresenham_cells(from_cell: Vector3i, to_cell: Vector3i) -> Array[Vector3i]:
 	var dx := absi(to_cell.x - from_cell.x)
 	var dz := absi(to_cell.z - from_cell.z)
 	var sx := 1 if to_cell.x > from_cell.x else -1
@@ -628,9 +600,9 @@ func _paint_line(from_cell: Vector3i, to_cell: Vector3i) -> void:
 	var x := from_cell.x
 	var z := from_cell.z
 	var err := dx - dz
-	var y := active_layer
+	var cells: Array[Vector3i] = []
 	while true:
-		_apply_tool_at_cell(Vector3i(x, y, z))
+		cells.append(Vector3i(x, active_layer, z))
 		if x == to_cell.x and z == to_cell.z:
 			break
 		var e2 := 2 * err
@@ -640,7 +612,7 @@ func _paint_line(from_cell: Vector3i, to_cell: Vector3i) -> void:
 		if e2 < dx:
 			err += dx
 			z += sz
-	_refresh_ghost()
+	return cells
 
 
 func _paint_rect(from_cell: Vector3i, to_cell: Vector3i) -> void:
@@ -1913,7 +1885,7 @@ func _refresh_zone_visuals() -> void:
 	if _zones_visual_root == null:
 		return
 	for child in _zones_visual_root.get_children():
-		child.free()
+		child.queue_free()
 	if current_mode != EditMode.ZONES:
 		return
 	for i in blueprint.place_zones.size():
@@ -2016,11 +1988,6 @@ func _update_count() -> void:
 		_refresh_cost_ui()
 
 
-func _on_cost_header_pressed() -> void:
-	# Compatibility target for the former accordion header.
-	_refresh_cost_ui()
-
-
 func _on_cost_mode_selected(index: int) -> void:
 	var mode: StringName = _cost_mode_option.get_item_metadata(index)
 	blueprint.cost_mode = mode
@@ -2085,83 +2052,14 @@ func _refresh_cost_ui() -> void:
 		_extra_costs_vbox.add_child(manual_title)
 
 		for res in blueprint.manual_costs.keys():
-			var row := HBoxContainer.new()
-			var name_edit := LineEdit.new()
-			name_edit.text = str(res)
-			name_edit.custom_minimum_size = Vector2(80, 0)
-			var spin := SpinBox.new()
-			spin.min_value = 1
-			spin.max_value = 9999
-			spin.value = int(blueprint.manual_costs[res])
-			var del_btn := Button.new()
-			del_btn.text = "X"
-
-			var old_key := str(res)
-			name_edit.text_submitted.connect(func(new_text: String):
-				var val: int = blueprint.manual_costs.get(old_key, 1)
-				blueprint.manual_costs.erase(old_key)
-				if not new_text.strip_edges().is_empty():
-					blueprint.manual_costs[new_text.strip_edges()] = val
-				blueprint.recalculate_construction_cost()
-				_mark_dirty()
-				_refresh_cost_ui()
-			)
-			spin.value_changed.connect(func(new_val: float):
-				blueprint.manual_costs[old_key] = int(new_val)
-				blueprint.recalculate_construction_cost()
-				_mark_dirty()
-				_refresh_cost_ui()
-			)
-			del_btn.pressed.connect(func():
-				blueprint.manual_costs.erase(old_key)
-				blueprint.recalculate_construction_cost()
-				_mark_dirty()
-				_refresh_cost_ui()
-			)
-			row.add_child(name_edit)
-			row.add_child(spin)
-			row.add_child(del_btn)
-			_extra_costs_vbox.add_child(row)
+			_extra_costs_vbox.add_child(_build_cost_row(
+				blueprint.manual_costs, str(res),
+				blueprint.manual_costs[res]))
 	else:
 		for res in blueprint.extra_costs.keys():
-			var row := HBoxContainer.new()
-			var name_edit := LineEdit.new()
-			name_edit.text = str(res)
-			name_edit.custom_minimum_size = Vector2(80, 0)
-			var spin := SpinBox.new()
-			spin.min_value = 1
-			spin.max_value = 9999
-			spin.value = int(blueprint.extra_costs[res])
-			var del_btn := Button.new()
-			del_btn.text = "X"
-
-			var old_res_key := str(res)
-			name_edit.text_submitted.connect(func(new_text: String):
-				var val: int = blueprint.extra_costs.get(old_res_key, 1)
-				blueprint.extra_costs.erase(old_res_key)
-				if not new_text.strip_edges().is_empty():
-					blueprint.extra_costs[new_text.strip_edges()] = val
-				blueprint.recalculate_construction_cost()
-				_mark_dirty()
-				_refresh_cost_ui()
-			)
-			spin.value_changed.connect(func(new_val: float):
-				blueprint.extra_costs[old_res_key] = int(new_val)
-				blueprint.recalculate_construction_cost()
-				_mark_dirty()
-				_refresh_cost_ui()
-			)
-			del_btn.pressed.connect(func():
-				blueprint.extra_costs.erase(old_res_key)
-				blueprint.recalculate_construction_cost()
-				_mark_dirty()
-				_refresh_cost_ui()
-			)
-
-			row.add_child(name_edit)
-			row.add_child(spin)
-			row.add_child(del_btn)
-			_extra_costs_vbox.add_child(row)
+			_extra_costs_vbox.add_child(_build_cost_row(
+				blueprint.extra_costs, str(res),
+				blueprint.extra_costs[res]))
 
 	var costs_array: Array[String] = []
 	for res in blueprint.construction_cost.keys():
@@ -2170,6 +2068,48 @@ func _refresh_cost_ui() -> void:
 		_total_cost_label.text = "Итоговая смета: Бесплатно"
 	else:
 		_total_cost_label.text = "Итоговая смета: %s" % ", ".join(costs_array)
+
+
+## Builds a reusable cost entry row: name edit + spin box + delete button.
+## Works for both manual_costs and extra_costs dictionaries.
+func _build_cost_row(costs: Dictionary, key: String, value: int) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	var name_edit := LineEdit.new()
+	name_edit.text = key
+	name_edit.custom_minimum_size = Vector2(80, 0)
+	var spin := SpinBox.new()
+	spin.min_value = 1
+	spin.max_value = 9999
+	spin.value = value
+	var del_btn := Button.new()
+	del_btn.text = "X"
+
+	var old_key := key
+	name_edit.text_submitted.connect(func(new_text: String):
+		var val: int = costs.get(old_key, 1)
+		costs.erase(old_key)
+		if not new_text.strip_edges().is_empty():
+			costs[new_text.strip_edges()] = val
+		blueprint.recalculate_construction_cost()
+		_mark_dirty()
+		_refresh_cost_ui()
+	)
+	spin.value_changed.connect(func(new_val: float):
+		costs[old_key] = int(new_val)
+		blueprint.recalculate_construction_cost()
+		_mark_dirty()
+		_refresh_cost_ui()
+	)
+	del_btn.pressed.connect(func():
+		costs.erase(old_key)
+		blueprint.recalculate_construction_cost()
+		_mark_dirty()
+		_refresh_cost_ui()
+	)
+	row.add_child(name_edit)
+	row.add_child(spin)
+	row.add_child(del_btn)
+	return row
 
 
 func _update_status(message: String) -> void:
@@ -2215,6 +2155,16 @@ func _on_footprint_changed(_value: float) -> void:
 	if blueprint == null or _syncing_metadata_fields:
 		return
 	blueprint.footprint = Vector2i(int(_footprint_x_spin.value), int(_footprint_z_spin.value))
+	# Remove blocks that fall outside the new (possibly smaller) footprint.
+	var removed := 0
+	for block in grid_model.all_blocks():
+		if not _is_block_in_bounds(block.pos, block.block_id, block.variant, block.rot):
+			grid_model.erase_block(block)
+			_remove_block_node(block)
+			removed += 1
+	if removed > 0:
+		_update_count()
+		_update_status("Размер изменён. Удалено блоков вне границ: %d" % removed)
 	_refresh_building_grid_visuals()
 	_focus_footprint_center()
 	_refresh_ghost()

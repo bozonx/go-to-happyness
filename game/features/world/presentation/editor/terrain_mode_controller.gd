@@ -24,6 +24,8 @@ const OPTION_NAV_CART := &"nav_cart"
 ## What a map has to be checked against: what a citizen can climb, and what a
 ## loaded cart can. A ramp only a walker can use is a supply route that silently
 ## is not one.
+# Keep in sync with terrain_lab.gd — GDScript const cannot reference another
+# class's const array.
 const NAV_PROFILES: Array[StringName] = [&"pedestrian", &"cart"]
 
 ## Sub-tools of the mode, cycled with `Tab`.
@@ -108,7 +110,7 @@ func _handle_mouse(event: InputEventMouseButton) -> bool:
 				if not event.shift_pressed:
 					return false
 				direction = -1
-			elif _tool == TOOL_SCULPT and context.brush.is_painting():
+			elif _tool == TOOL_SCULPT and context.brush.paint_direction() < 0:
 				context.brush.set_paint_direction(0)
 				_redraw_overlay()
 				return true

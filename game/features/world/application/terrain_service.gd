@@ -17,7 +17,13 @@ const MAX_UNDO_STEPS := 128
 signal edit_committed(delta: TerrainDelta)
 signal edit_rejected(reason: StringName)
 
-var grid: TerrainGrid = null
+var _grid: TerrainGrid = null
+
+
+## Read-only access to the grid for services that need it.  Write access goes
+## through `apply_operation` and the other editing verbs — never through this.
+func get_grid() -> TerrainGrid:
+	return _grid
 
 var _undo_stack: Array[TerrainDelta] = []
 var _redo_stack: Array[TerrainDelta] = []
@@ -26,7 +32,7 @@ var _last_delta: TerrainDelta = null
 
 
 func configure(next_grid: TerrainGrid) -> void:
-	grid = next_grid
+	_grid = next_grid
 	clear_history()
 
 
@@ -58,10 +64,10 @@ func redo_depth() -> int:
 ## Runs one height operation. Returns false when the solver refused it; the grid
 ## is then guaranteed untouched and `last_rejection()` explains why.
 func apply_operation(operation: TerrainEditOperation) -> bool:
-	if grid == null:
+	if _grid == null:
 		return _reject(CascadeSolver.REASON_NOTHING_TO_DO)
 	var solver := CascadeSolver.new()
-	var delta := solver.solve(grid, operation)
+	var delta := solver.solve(_grid, operation)
 	if delta == null:
 		return _reject(solver.rejection_reason)
 	_commit(delta)
@@ -71,17 +77,17 @@ func apply_operation(operation: TerrainEditOperation) -> bool:
 ## Places one ramp object as a transaction. The grid validates the run itself
 ## (§3.1); this only records the before/after state so the placement can be undone.
 func place_ramp(start_cell: Vector2i, slope_id: StringName, direction: int) -> bool:
-	if grid == null:
+	if _grid == null:
 		return _reject(CascadeSolver.REASON_NOTHING_TO_DO)
 	var slope_class := SlopeCatalog.slope_class_of(slope_id)
-	if not grid.can_place_ramp_class(start_cell, slope_class, direction):
+	if not _grid.can_place_ramp_class(start_cell, slope_class, direction):
 		return _reject(CascadeSolver.REASON_NOTHING_TO_DO)
 	var offset := SlopeCatalog.direction_offset(direction)
-	var base_height := grid.height_of(start_cell)
+	var base_height := _grid.height_of(start_cell)
 	var delta := TerrainDelta.new()
-	for step in SlopeCatalog.run_of_class(slope_class):
+	for step: int in SlopeCatalog.run_of_class(slope_class):
 		var cell := start_cell + offset * step
-		var old_state := TerrainDelta.state_of(grid, cell)
+		var old_state := TerrainDelta.state_of(_grid, cell)
 		delta.record(cell, old_state, TerrainDelta.make_state(
 			base_height, slope_class, direction, step,
 			old_state[TerrainDelta.STATE_MATERIAL], old_state[TerrainDelta.STATE_FLAGS],
@@ -93,15 +99,15 @@ func place_ramp(start_cell: Vector2i, slope_id: StringName, direction: int) -> b
 
 ## Dissolves the ramp under `cell` back into flat columns, as one undoable step.
 func dissolve_ramp(cell: Vector2i) -> bool:
-	if grid == null:
+	if _grid == null:
 		return _reject(CascadeSolver.REASON_NOTHING_TO_DO)
-	var ramp_cells := grid.ramp_cells_at(cell)
+	var ramp_cells := _grid.ramp_cells_at(cell)
 	if ramp_cells.is_empty():
 		return _reject(CascadeSolver.REASON_NOTHING_TO_DO)
 	var delta := TerrainDelta.new()
 	for ramp_cell: Vector2i in ramp_cells:
-		var old_state := TerrainDelta.state_of(grid, ramp_cell)
-		delta.record(ramp_cell, old_state, TerrainDelta.flattened(old_state, grid.height_of(ramp_cell)))
+		var old_state := TerrainDelta.state_of(_grid, ramp_cell)
+		delta.record(ramp_cell, old_state, TerrainDelta.flattened(old_state, _grid.height_of(ramp_cell)))
 	_commit(delta)
 	return true
 
@@ -115,16 +121,16 @@ func dissolve_ramp(cell: Vector2i) -> bool:
 ## `variant` picks the look inside the material; -1 keeps whatever variant the
 ## column already had.
 func paint_material(cells: Array[Vector2i], material_id: StringName, variant: int = -1) -> bool:
-	if grid == null:
+	if _grid == null:
 		return _reject(CascadeSolver.REASON_NOTHING_TO_DO)
 	var material_index := TerrainMaterialCatalog.index_of(material_id)
 	if material_index < 0:
 		return _reject(CascadeSolver.REASON_NOTHING_TO_DO)
 	var delta := TerrainDelta.new()
 	for cell: Vector2i in CellUtils.sorted_unique(cells):
-		if not grid.is_inside(cell):
+		if not _grid.is_inside(cell):
 			continue
-		var old_state := TerrainDelta.state_of(grid, cell)
+		var old_state := TerrainDelta.state_of(_grid, cell)
 		var new_state := old_state.duplicate()
 		new_state[TerrainDelta.STATE_MATERIAL] = material_index
 		if variant >= 0:
@@ -146,7 +152,7 @@ func paint_material(cells: Array[Vector2i], material_id: StringName, variant: in
 func paint_variant(cells: Array[Vector2i], variant: int) -> bool:
 	return _paint_detail(cells, func(detail: int, cell: Vector2i) -> int:
 		return TerrainDetailCodec.with_variant(
-			detail, TerrainMaterialVariants.clamp_variant(grid.material_index_at(cell), variant)
+			detail, TerrainMaterialVariants.clamp_variant(_grid.material_index_at(cell), variant)
 		))
 
 
@@ -166,13 +172,13 @@ func set_snow_depth(cells: Array[Vector2i], snow_depth: int) -> bool:
 
 
 func _paint_detail(cells: Array[Vector2i], mutate: Callable) -> bool:
-	if grid == null:
+	if _grid == null:
 		return _reject(CascadeSolver.REASON_NOTHING_TO_DO)
 	var delta := TerrainDelta.new()
 	for cell: Vector2i in CellUtils.sorted_unique(cells):
-		if not grid.is_inside(cell):
+		if not _grid.is_inside(cell):
 			continue
-		var old_state := TerrainDelta.state_of(grid, cell)
+		var old_state := TerrainDelta.state_of(_grid, cell)
 		var next_detail := int(mutate.call(old_state[TerrainDelta.STATE_DETAIL], cell))
 		if next_detail == old_state[TerrainDelta.STATE_DETAIL]:
 			continue
@@ -189,12 +195,12 @@ func _paint_detail(cells: Array[Vector2i], mutate: Callable) -> bool:
 ## ground a ramp leans on, so the ramps that touch the cut go with it, inside the
 ## same transaction.
 func set_hole(cells: Array[Vector2i], enabled: bool) -> bool:
-	if grid == null:
+	if _grid == null:
 		return _reject(CascadeSolver.REASON_NOTHING_TO_DO)
 	var states: Dictionary = {}
 	var order: Array[Vector2i] = []
 	for cell: Vector2i in CellUtils.sorted_unique(cells):
-		if not grid.is_inside(cell) or grid.is_hole(cell) == enabled:
+		if not _grid.is_inside(cell) or _grid.is_hole(cell) == enabled:
 			continue
 		_stage(states, order, cell)
 		var state: PackedInt32Array = states[cell]
@@ -202,8 +208,8 @@ func set_hole(cells: Array[Vector2i], enabled: bool) -> bool:
 		states[cell] = state
 		if not enabled:
 			continue
-		for ramp_start: Vector2i in grid.ramps_touching(cell):
-			for ramp_cell: Vector2i in grid.ramp_cells_at(ramp_start):
+		for ramp_start: Vector2i in _grid.ramps_touching(cell):
+			for ramp_cell: Vector2i in _grid.ramp_cells_at(ramp_start):
 				_stage(states, order, ramp_cell)
 				var ramp_state: PackedInt32Array = states[ramp_cell]
 				ramp_state[TerrainDelta.STATE_SLOPE_CLASS] = SlopeCatalog.CLASS_FLAT
@@ -212,7 +218,7 @@ func set_hole(cells: Array[Vector2i], enabled: bool) -> bool:
 				states[ramp_cell] = ramp_state
 	var delta := TerrainDelta.new()
 	for cell: Vector2i in order:
-		var old_state := TerrainDelta.state_of(grid, cell)
+		var old_state := TerrainDelta.state_of(_grid, cell)
 		if old_state == states[cell]:
 			continue
 		delta.record(cell, old_state, states[cell])
@@ -231,10 +237,10 @@ func can_redo() -> bool:
 
 
 func undo() -> bool:
-	if grid == null or _undo_stack.is_empty():
+	if _grid == null or _undo_stack.is_empty():
 		return false
 	var delta: TerrainDelta = _undo_stack.pop_back()
-	delta.revert(grid)
+	delta.revert(_grid)
 	_redo_stack.push_back(delta)
 	_last_delta = delta
 	edit_committed.emit(delta)
@@ -242,10 +248,10 @@ func undo() -> bool:
 
 
 func redo() -> bool:
-	if grid == null or _redo_stack.is_empty():
+	if _grid == null or _redo_stack.is_empty():
 		return false
 	var delta: TerrainDelta = _redo_stack.pop_back()
-	delta.apply(grid)
+	delta.apply(_grid)
 	_undo_stack.push_back(delta)
 	_last_delta = delta
 	edit_committed.emit(delta)
@@ -253,7 +259,7 @@ func redo() -> bool:
 
 
 func _commit(delta: TerrainDelta) -> void:
-	delta.apply(grid)
+	delta.apply(_grid)
 	_last_delta = delta
 	_undo_stack.push_back(delta)
 	if _undo_stack.size() > MAX_UNDO_STEPS:
@@ -276,7 +282,7 @@ func _reject(reason: StringName) -> bool:
 func _stage(states: Dictionary, order: Array[Vector2i], cell: Vector2i) -> void:
 	if states.has(cell):
 		return
-	states[cell] = TerrainDelta.state_of(grid, cell)
+	states[cell] = TerrainDelta.state_of(_grid, cell)
 	order.append(cell)
 
 

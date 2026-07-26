@@ -163,7 +163,7 @@ static func available_employer_capacity(simulation: Node, role: String) -> int:
 	return simulation.available_employer_capacity(role)
 
 static func employer_for_role(simulation: Node, role: String) -> Node3D:
-	return simulation._employer_for_role(role)
+	return simulation.employer_for_role(role)
 
 static func required_staff_for_building(simulation: Node, building: Node3D) -> Dictionary:
 	return simulation.building_status_indicator_controller.required_staff_for_building(building) if simulation.building_status_indicator_controller != null else {}

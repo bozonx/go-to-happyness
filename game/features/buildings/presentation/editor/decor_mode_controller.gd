@@ -23,16 +23,10 @@ const DecorCatalogPanelScript = preload("res://game/features/buildings/presentat
 const ROTATION_STEP_DEG := 15.0
 const UNDO_LIMIT := 40
 const REDO_LIMIT := 40
-const RECENT_ASSET_LIMIT := 6
-## Minimum click radius, so thin objects (a flag pole) stay pickable.
-const MIN_PICK_RADIUS := 0.35
-
 ## Ghost feedback colours (design §6.2).
 const GHOST_COLOR_VALID := Color(0.45, 0.85, 1.0, 0.4)
 const GHOST_COLOR_INTERSECTION := Color(1.0, 0.3, 0.2, 0.5)
 const GHOST_COLOR_OUT_OF_BOUNDS := Color(1.0, 0.85, 0.2, 0.5)
-
-enum GhostState { VALID, INTERSECTION, OUT_OF_BOUNDS }
 
 var current_group: StringName = &""  ## empty = all groups
 var current_category: StringName = &"camping"
@@ -172,7 +166,6 @@ func setup(editor: Node) -> void:
 
 	current_category = FurnishingAssetCatalogScript.first_populated_category(current_category)
 	_catalog_panel.activate()
-	_update_rotation_label()
 
 
 # ---------------------------------------------------------------------------
@@ -377,7 +370,7 @@ func _place_at(position: Vector3) -> void:
 		return
 	# Keep the invariant at the mutation boundary too: UI input is not the only
 	# caller of this method, and a red preview must never still create an overlap.
-	if _compute_ghost_state(position) != GhostState.VALID:
+	if _compute_ghost_state(position) != DecorPlacementValidatorScript.GhostState.VALID:
 		_editor.set_status("Нельзя разместить декор поверх другого объекта.")
 		return
 	_push_undo()
@@ -386,7 +379,7 @@ func _place_at(position: Vector3) -> void:
 	record.appearance = asset.default_appearance()
 	_editor.blueprint.objects.append(record)
 	_spawn_node(record)
-	_catalog_panel._add_recent_asset(asset.id)
+	_catalog_panel.add_recent_asset(asset.id)
 	_editor.mark_dirty()
 	_refresh_object_list()
 	select_object(record.id)
@@ -469,7 +462,6 @@ func rotate_selection(axis: String, direction: int) -> void:
 	else:
 		push_warning("DecorModeController: invalid rotation axis '%s'" % axis)
 		return
-	_update_rotation_label()
 	if record != null:
 		var candidate := Vector3(current_pitch_deg, current_yaw_deg, current_roll_deg)
 		if not _is_valid_transform(record.pos, candidate, record.scale, record.asset_id, record.id):
@@ -486,7 +478,6 @@ func _reset_rotation() -> void:
 	current_pitch_deg = 0.0
 	current_yaw_deg = 0.0
 	current_roll_deg = 0.0
-	_update_rotation_label()
 	var record := find_record(selected_object_id)
 	if record != null:
 		_push_undo()
@@ -702,7 +693,7 @@ func _update_hover_marker() -> void:
 		_hover_marker = _create_torus_marker(Color(1.0, 0.8, 0.2, 0.9))
 	var asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
 	var size := asset.footprint_m() if asset != null else Vector3.ONE
-	var radius := maxf(MIN_PICK_RADIUS, maxf(size.x, size.z) * 0.5 * maxf(record.scale.x, record.scale.z))
+	var radius := maxf(DecorPlacementValidatorScript.MIN_PICK_RADIUS, maxf(size.x, size.z) * 0.5 * maxf(record.scale.x, record.scale.z))
 	_hover_marker.visible = true
 	_hover_marker.scale = Vector3.ONE * (radius / 0.5)
 	_hover_marker.position = record.pos + Vector3(0.0, 0.05, 0.0)
@@ -717,9 +708,9 @@ func _hide_ghost() -> void:
 func _update_ghost_color(state: int) -> void:
 	var color: Color = GHOST_COLOR_VALID
 	match state:
-		GhostState.INTERSECTION:
+		DecorPlacementValidatorScript.GhostState.INTERSECTION:
 			color = GHOST_COLOR_INTERSECTION
-		GhostState.OUT_OF_BOUNDS:
+		DecorPlacementValidatorScript.GhostState.OUT_OF_BOUNDS:
 			color = GHOST_COLOR_OUT_OF_BOUNDS
 	_get_ghost_material().albedo_color = color
 
@@ -778,7 +769,7 @@ func _update_selection_marker() -> void:
 		_selection_marker = _create_torus_marker(Color(0.35, 0.95, 1.0, 0.85))
 	var asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
 	var size := asset.footprint_m() if asset != null else Vector3.ONE
-	var radius := maxf(MIN_PICK_RADIUS, maxf(size.x, size.z) * 0.5 * maxf(record.scale.x, record.scale.z))
+	var radius := maxf(DecorPlacementValidatorScript.MIN_PICK_RADIUS, maxf(size.x, size.z) * 0.5 * maxf(record.scale.x, record.scale.z))
 	_selection_marker.visible = true
 	_selection_marker.scale = Vector3.ONE * (radius / 0.5)
 	_selection_marker.position = record.pos + Vector3(0.0, 0.03, 0.0)
@@ -1222,10 +1213,6 @@ func _on_transform_spin_changed(_value: float) -> void:
 # ---------------------------------------------------------------------------
 # Small UI sync helpers
 # ---------------------------------------------------------------------------
-
-func _update_rotation_label() -> void:
-	pass
-
 
 func _update_layer_label() -> void:
 	if _layer_label != null and _editor != null:
