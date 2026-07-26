@@ -71,7 +71,7 @@ static func resource_access_position(simulation: Node, from: Vector3, resource_p
 	return simulation.world_navigation_controller.resource_access_position(from, resource_position)
 
 static func employment_center_position(simulation: Node) -> Vector3:
-	return simulation._employment_center_position()
+	return simulation.employment_center_position()
 
 static func entrance_anchor_position(simulation: Node) -> Vector3:
 	return simulation.building_management.entrance_anchor_position()
@@ -151,7 +151,7 @@ static func create_construction_site(simulation: Node, cell: Vector2i, building_
 	return simulation.construction_controller.create_construction_site(cell, building_type, position, rotation_quarters, blueprint, occupied_footprint)
 
 static func is_construction_site(simulation: Node, node: Node3D) -> bool:
-	return simulation._is_construction_site(node)
+	return simulation.is_construction_site(node)
 
 static func create_resource_pile(simulation: Node, position: Vector3, resources: Dictionary, is_backpack_pile := false) -> Node3D:
 	return simulation.resource_pile_service.create_resource_pile(position, resources, is_backpack_pile)
@@ -160,7 +160,7 @@ static func complete_building(simulation: Node, cell: Vector2i, building_type: S
 	simulation.construction_controller.complete_building(cell, building_type, position, building, blueprint)
 
 static func available_employer_capacity(simulation: Node, role: String) -> int:
-	return simulation._available_employer_capacity(role)
+	return simulation.available_employer_capacity(role)
 
 static func employer_for_role(simulation: Node, role: String) -> Node3D:
 	return simulation._employer_for_role(role)

@@ -101,7 +101,7 @@ func capture(sequence: int) -> WorldSnapshot:
 		&"settlement.backpack": simulation.settlement.backpack.duplicate(true) if simulation.settlement != null else {},
 		&"warehouse_positions_count": simulation.warehouse_positions.size() if simulation != null else 0,
 		&"workforce.world_data": workforce_world,
-		&"workforce.employment_center_position": simulation._employment_center_position(),
+		&"workforce.employment_center_position": simulation.employment_center_position(),
 		&"workforce.role_employers": _role_employers(),
 		&"work.courier.tasks": courier_tasks,
 	})
@@ -150,21 +150,21 @@ func _world_data() -> Dictionary:
 		"era": simulation.settlement.era,
 		"hour": current_hour,
 		"has_canteen": is_instance_valid(simulation.canteen),
-		"cooking_jobs": simulation._available_employer_capacity("cook"),
+		"cooking_jobs": simulation.available_employer_capacity("cook"),
 		"schools": simulation.school_positions.size(),
 		"markets": simulation.market_positions.size(),
-		"builder_jobs": simulation._available_employer_capacity("construction"),
-		"forestry_jobs": simulation._available_employer_capacity("forestry"),
-		"farming_jobs": simulation._available_employer_capacity("farming"),
-		"forager_jobs": simulation._available_employer_capacity("gather_food"),
-		"materials_yard_jobs": simulation._available_employer_capacity("gather_branches"),
-		"teacher_jobs": simulation._available_employer_capacity("teacher"),
-		"seller_jobs": simulation._available_employer_capacity("seller"),
-		"official_jobs": simulation._available_employer_capacity("official"),
-		"factory_jobs": simulation._available_employer_capacity("factory_worker"),
-		"engineer_jobs": simulation._available_employer_capacity("engineer"),
-		"craftsman_jobs": simulation._available_employer_capacity("craftsman"),
-		"courier_jobs": simulation._available_employer_capacity("courier"),
+		"builder_jobs": simulation.available_employer_capacity("construction"),
+		"forestry_jobs": simulation.available_employer_capacity("forestry"),
+		"farming_jobs": simulation.available_employer_capacity("farming"),
+		"forager_jobs": simulation.available_employer_capacity("gather_food"),
+		"materials_yard_jobs": simulation.available_employer_capacity("gather_branches"),
+		"teacher_jobs": simulation.available_employer_capacity("teacher"),
+		"seller_jobs": simulation.available_employer_capacity("seller"),
+		"official_jobs": simulation.available_employer_capacity("official"),
+		"factory_jobs": simulation.available_employer_capacity("factory_worker"),
+		"engineer_jobs": simulation.available_employer_capacity("engineer"),
+		"craftsman_jobs": simulation.available_employer_capacity("craftsman"),
+		"courier_jobs": simulation.available_employer_capacity("courier"),
 		"construction_sites": simulation.construction_sites.size() + simulation.demolition_sites.size(),
 		"warehouses": simulation.warehouse_positions.size(),
 		"sawmills": simulation.sawmill_positions.size(),
@@ -251,7 +251,7 @@ func _factory_for_role_internal(role: String) -> Node3D:
 
 func _role_employers() -> Dictionary:
 	var employers := {}
-	var employment_center: Vector3 = simulation._employment_center_position()
+	var employment_center: Vector3 = simulation.employment_center_position()
 	var occupancy: Dictionary = {}
 	for citizen in simulation.citizens:
 		if not is_instance_valid(citizen):
@@ -302,8 +302,8 @@ func _role_employers() -> Dictionary:
 			employers[role] = candidates
 	# Couriers are formally employed in the tent era but do not yet own a
 	# workplace node. The employment centre is only the registration destination.
-	var courier_slots: int = simulation._available_employer_capacity("courier") - int(_assigned_role_counts_internal().get("courier", 0))
-	var centre_position: Vector3 = simulation._employment_center_position()
+	var courier_slots: int = simulation.available_employer_capacity("courier") - int(_assigned_role_counts_internal().get("courier", 0))
+	var centre_position: Vector3 = simulation.employment_center_position()
 	if courier_slots > 0 and centre_position != Vector3.INF:
 		employers["courier"] = [{
 			"position": centre_position,

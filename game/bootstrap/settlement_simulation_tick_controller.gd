@@ -131,7 +131,7 @@ func check_unstaffed_employment_center() -> void:
 		return
 
 	var has_waiting_citizen := false
-	var center := game._employment_center_position()
+	var center := game.employment_center_position()
 	if center != Vector3.INF:
 		for citizen in game.citizens:
 			if is_instance_valid(citizen) and citizen.state in [Citizen.State.TO_EMPLOYMENT_CENTER, Citizen.State.EMPLOYMENT_PROCESSING]:

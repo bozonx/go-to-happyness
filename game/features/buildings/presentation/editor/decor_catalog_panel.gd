@@ -69,29 +69,8 @@ func _rebuild_asset_buttons() -> void:
 			if String(asset.name).to_lower().contains(search_text) or String(asset.description).to_lower().contains(search_text):
 				filtered.append(asset)
 		all_assets = filtered
-	if all_assets.is_empty():
-		var empty_label := Label.new()
-		if not search_text.is_empty():
-			empty_label.text = "Ничего не найдено."
-		else:
-			empty_label.text = "В этой категории пока нет ассетов."
-		empty_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		empty_label.add_theme_color_override("font_color", Color(0.75, 0.6, 0.4))
-		_asset_container.add_child(empty_label)
-		if search_text.is_empty():
-			_controller.current_asset_id = &""
-		_controller.refresh_ghost()
-		return
-
 	for group_id in FurnishingAssetCatalogScript.GROUPS.keys():
 		var group_box := VBoxContainer.new()
-		var group_assets: Array = []
-		for category_id in FurnishingAssetCatalogScript.categories_in_group(group_id):
-			for asset in FurnishingAssetCatalogScript.get_assets_by_category(category_id):
-				if asset in all_assets:
-					group_assets.append(asset)
-		if group_assets.is_empty():
-			continue
 		var group_header := Button.new()
 		group_header.flat = true
 		group_header.alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -109,9 +88,9 @@ func _rebuild_asset_buttons() -> void:
 			var header := Button.new()
 			header.flat = true
 			header.alignment = HORIZONTAL_ALIGNMENT_LEFT
-			var expanded := bool(_expanded_categories.get(category_id, category_id == _controller.current_category or not search_text.is_empty()))
+			var expanded := bool(_expanded_categories.get(category_id, category_id == _controller.current_category))
 			header.text = ("▾ " if expanded else "▸ ") + "%s (%d)" % [FurnishingAssetCatalogScript.category_display_name(category_id), assets.size()]
-			header.disabled = assets.is_empty() and search_text.is_empty()
+			header.disabled = assets.is_empty()
 			header.pressed.connect(_toggle_catalog_category.bind(category_id))
 			group_box.add_child(header)
 			if expanded:
@@ -127,6 +106,14 @@ func _rebuild_asset_buttons() -> void:
 					group_box.add_child(button)
 					_asset_buttons[asset.id] = button
 		_asset_container.add_child(group_box)
+	if all_assets.is_empty():
+		var empty_label := Label.new()
+		empty_label.text = "Ничего не найдено." if not search_text.is_empty() else "В каталоге пока нет ассетов."
+		empty_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		empty_label.add_theme_color_override("font_color", Color(0.75, 0.6, 0.4))
+		_asset_container.add_child(empty_label)
+		if search_text.is_empty():
+			_controller.current_asset_id = &""
 	_controller.refresh_ghost()
 
 

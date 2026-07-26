@@ -126,7 +126,7 @@ func appoint_official(citizen: Citizen, workplace: Node3D = null, require_at_pos
 	if citizen == null or not game.settlement.is_research_completed("official"):
 		return false
 	var centre := workplace if is_instance_valid(workplace) else game._employment_centre_building()
-	if not is_instance_valid(centre) or (require_at_post and citizen.global_position.distance_to(game._employment_center_position()) > game.OFFICER_POST_RADIUS):
+	if not is_instance_valid(centre) or (require_at_post and citizen.global_position.distance_to(game.employment_center_position()) > game.OFFICER_POST_RADIUS):
 		return false
 	for other in game.citizens:
 		if not is_instance_valid(other) or other == citizen or other.permanent_role != "official":
@@ -200,5 +200,5 @@ func set_manual_specialist_employment(citizen: Citizen, role: String) -> bool:
 	if citizen.employment_state != Citizen.EmploymentState.NO_PERMANENT_WORK:
 		return false
 	citizen.idle()
-	citizen.begin_employment_processing(game._employment_center_position(), role, game._employer_for_role(role))
+	citizen.begin_employment_processing(game.employment_center_position(), role, game._employer_for_role(role))
 	return true

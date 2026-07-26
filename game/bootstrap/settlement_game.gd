@@ -549,8 +549,6 @@ func _process(delta: float) -> void:
 		label_distance_fade_controller.update_label_distance_fading()
 	backpack_node = resource_pile_service.sync_backpack_pile(backpack_node)
 	if simulation_tick_controller.is_work_time() or _has_active_night_work_order():
-		if courier_dispatcher != null:
-			courier_dispatcher.dispatch()
 		_worker_poll_timer -= delta
 		if _worker_poll_timer <= 0.0:
 			_worker_poll_timer = WORKER_POLL_INTERVAL
@@ -569,7 +567,7 @@ func _has_cook() -> bool:
 	return workplace_labor_service.has_cook() if workplace_labor_service != null else false
 
 
-func _employment_center_position() -> Vector3:
+func employment_center_position() -> Vector3:
 	return workplace_labor_service.employment_center_position() if workplace_labor_service != null else Vector3.INF
 
 
@@ -842,7 +840,7 @@ func _set_selected_work_role(role: String, daily_order := false) -> void:
 		else:
 			if citizen_daily_order_service != null:
 				citizen_daily_order_service.assign_daily_order(selected_builder, role)
-		if selected_builder.employment_state == Citizen.EmploymentState.UNREGISTERED and _employment_center_position() != Vector3.INF:
+		if selected_builder.employment_state == Citizen.EmploymentState.UNREGISTERED and employment_center_position() != Vector3.INF:
 			selected_builder.request_no_permanent_work_registration()
 	elif role == "excavation":
 		excavation_service.start_dig_assignment()
@@ -858,11 +856,11 @@ func _set_selected_work_role(role: String, daily_order := false) -> void:
 				workplace_labor_service.show_labor_command_blocked()
 			return
 		if selected_builder.has_no_permanent_work() or selected_builder.is_unregistered():
-			if _employment_center_position() == Vector3.INF:
+			if employment_center_position() == Vector3.INF:
 				_update_interface("Build the main campfire before assigning permanent jobs.")
 				return
 			selected_builder.clear_daily_order()
-			selected_builder.begin_employment_processing(_employment_center_position(), role, _employer_for_role(role))
+			selected_builder.begin_employment_processing(employment_center_position(), role, _employer_for_role(role))
 	selected_builder.assigned_dig_site = null
 	if citizen_ai != null:
 		citizen_ai.request_decision_refresh()
@@ -879,7 +877,7 @@ func _set_selected_work_role(role: String, daily_order := false) -> void:
 		if workforce_menu_controller != null:
 			workforce_menu_controller.refresh_workforce_menu()
 
-func _min_era_for_role(role: String) -> SettlementState.Era:
+func min_era_for_role(role: String) -> SettlementState.Era:
 	# Basic outdoor/hand-work roles exist from the tent era even without a dedicated workplace.
 	match role:
 		"construction", "excavation", "gather_branches", "gather_food", "courier", "craftsman", "official", "":
@@ -896,27 +894,25 @@ func _min_era_for_role(role: String) -> SettlementState.Era:
 
 
 func builder_job_capacity() -> int:
-	return _available_employer_capacity("construction")
+	return available_employer_capacity("construction")
 
 
 func available_employer_capacity(role: String) -> int:
-	return _available_employer_capacity(role)
-
-
-func employment_center_position() -> Vector3:
-	return _employment_center_position()
-
-
-func min_era_for_role(role: String) -> int:
-	return _min_era_for_role(role)
+	if role == "official":
+		var centre := _employment_centre_building()
+		return 1 if is_instance_valid(centre) and bool(centre.get_meta("accepting_workers", true)) else 0
+	var capacity := 0
+	for record in building_registry.records():
+		var building := record.node
+		if not is_instance_valid(building) or not workplace_controller.building_supports_role(building, role):
+			continue
+		if bool(building.get_meta("accepting_workers", true)):
+			capacity += workplace_controller.employer_capacity(role, building)
+	return capacity
 
 
 func is_construction_site(building: Node3D) -> bool:
-	return _is_construction_site(building)
-
-
-func _builder_job_capacity() -> int:
-	return builder_job_capacity()
+	return construction_controller.is_construction_site(building)
 
 
 func _employer_for_role(role: String) -> Node3D:
@@ -951,20 +947,6 @@ func _employer_for_role(role: String) -> Node3D:
 	return best
 
 
-func _available_employer_capacity(role: String) -> int:
-	if role == "official":
-		var centre := _employment_centre_building()
-		return 1 if is_instance_valid(centre) and bool(centre.get_meta("accepting_workers", true)) else 0
-	var capacity := 0
-	for record in building_registry.records():
-		var building := record.node
-		if not is_instance_valid(building) or not workplace_controller.building_supports_role(building, role):
-			continue
-		if bool(building.get_meta("accepting_workers", true)):
-			capacity += workplace_controller.employer_capacity(role, building)
-	return capacity
-
-
 func _select_citizen_at(screen_position: Vector2) -> void:
 	var visible_citizen := _citizen_at_screen_position(screen_position)
 	if visible_citizen != null:
@@ -983,58 +965,54 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 	# Switching to a different building always dismisses the previously open
 	# menu first, so only one context menu is ever visible at a time.
 	_hide_all_selection_menus()
+	var parent := hit.collider.get_parent() as Node3D
 	if not hit.collider.is_in_group("school_selector"):
 		selected_builder = null
 	ui_manager.build_menu.visible = false
 	build_menu_is_global = false
-	if hit.collider.is_in_group("entrance_selector"):
-		selected_entrance = hit.collider.get_parent() as Node3D
-		selected_building = selected_entrance
-		if entrance_menu_controller != null:
-			entrance_menu_controller.show_entrance_menu()
-		return
-	if hit.collider.is_in_group("campfire_selector"):
-		selected_campfire = hit.collider.get_parent() as Node3D
-		selected_building = selected_campfire
-		if campfire_menu_controller != null:
-			campfire_menu_controller.show_campfire_menu()
-		return
-	if hit.collider.is_in_group("market_selector"):
-		selected_market = hit.collider.get_parent() as Node3D
-		selected_building = selected_market
-		if market_menu_controller != null:
-			market_menu_controller.show_market_menu()
-		return
-	if hit.collider.is_in_group("warehouse_selector"):
-		selected_warehouse = hit.collider.get_parent() as Node3D
-		selected_building = selected_warehouse
-		if warehouse_menu_controller != null:
-			warehouse_menu_controller.show_warehouse_menu()
-		return
-	if hit.collider.is_in_group("cook_campfire_selector"):
-		selected_building = hit.collider.get_parent() as Node3D
+	# Generic building selectors share the same menu.
+	if hit.collider.is_in_group("cook_campfire_selector") or hit.collider.is_in_group("construction_selector") or hit.collider.is_in_group("building_selector"):
+		selected_building = parent
 		if building_menu_controller != null:
 			building_menu_controller.show_building_menu()
 		return
+	# Dedicated menu selectors: each sets its own selection and opens its menu.
+	if hit.collider.is_in_group("entrance_selector"):
+		selected_entrance = parent
+		_open_dedicated_menu(parent, entrance_menu_controller, &"show_entrance_menu")
+		return
+	if hit.collider.is_in_group("campfire_selector"):
+		selected_campfire = parent
+		_open_dedicated_menu(parent, campfire_menu_controller, &"show_campfire_menu")
+		return
+	if hit.collider.is_in_group("market_selector"):
+		selected_market = parent
+		_open_dedicated_menu(parent, market_menu_controller, &"show_market_menu")
+		return
+	if hit.collider.is_in_group("warehouse_selector"):
+		selected_warehouse = parent
+		_open_dedicated_menu(parent, warehouse_menu_controller, &"show_warehouse_menu")
+		return
+	# Custom handlers with extra UI logic.
 	if hit.collider.is_in_group("house_selector"):
-		selected_house = hit.collider.get_parent() as Node3D
-		selected_building = selected_house
+		selected_house = parent
+		selected_building = parent
 		selected_builder = null
 		ui_manager.build_menu.visible = false
 		_show_house_menu()
 		_update_interface("House selected. Recruit a new resident when a bed is free.")
 		return
 	if hit.collider.is_in_group("school_selector"):
-		selected_school = hit.collider.get_parent() as Node3D
-		selected_building = selected_school
+		selected_school = parent
+		selected_building = parent
 		ui_manager.house_menu.visible = false
 		ui_manager.build_menu.visible = false
 		if school_menu_controller != null:
 			school_menu_controller.show_school_menu()
 		return
 	if hit.collider.is_in_group("materials_factory_selector"):
-		selected_materials_factory = hit.collider.get_parent() as Node3D
-		selected_building = selected_materials_factory
+		selected_materials_factory = parent
+		selected_building = parent
 		selected_house = null
 		selected_school = null
 		ui_manager.house_menu.visible = false
@@ -1043,19 +1021,15 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 		_show_materials_factory_menu()
 		_update_interface("Materials factory selected. Assign workers to produce materials.")
 		return
-	if hit.collider.is_in_group("construction_selector"):
-		selected_building = hit.collider.get_parent() as Node3D
-		if building_menu_controller != null:
-			building_menu_controller.show_building_menu()
-		return
-	if hit.collider.is_in_group("building_selector"):
-		selected_building = hit.collider.get_parent() as Node3D
-		if building_menu_controller != null:
-			building_menu_controller.show_building_menu()
-		return
 	if not hit.collider.is_in_group("citizen_selector"):
 		return
 	_select_citizen(hit.collider.get_parent() as Citizen)
+
+
+func _open_dedicated_menu(building: Node3D, menu_controller: RefCounted, show_method: StringName) -> void:
+	selected_building = building
+	if menu_controller != null:
+		menu_controller.call(show_method)
 
 
 func _hide_all_selection_menus() -> void:
@@ -1330,9 +1304,6 @@ func _convert_backpack_pile_to_regular() -> void:
 func _warehouse_delivery_position(from: Vector3, resource_type: String, amount: int) -> Vector3:
 	return storage_routing_service.warehouse_delivery_position(from, resource_type, amount)
 
-
-func _is_construction_site(node: Node3D) -> bool:
-	return construction_controller.is_construction_site(node)
 
 func get_toilets() -> Array[Node3D]:
 	var toilets: Array[Node3D] = []

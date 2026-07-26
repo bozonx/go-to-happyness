@@ -1392,26 +1392,36 @@ func _build_palette_blocks() -> void:
 		child.queue_free()
 	_palette_buttons.clear()
 
-	var current_category := -1
+	# A category may own entries that are declared in separate catalog sections
+	# (columns now belong to "Конструкции"). Group before rendering so its header
+	# is emitted once, regardless of declaration order.
+	var blocks_by_category: Dictionary = {}
+	var category_order: Array[int] = []
 	for def in BuildingBlockCatalogScript.all():
-		if def["category"] != current_category:
-			current_category = def["category"]
-			var cat_label := Label.new()
-			cat_label.text = BuildingBlockCatalogScript.category_name(current_category)
-			cat_label.add_theme_color_override("font_color", Color(0.65, 0.72, 0.8))
-			_palette_container.add_child(cat_label)
-		var block_id: StringName = def["id"]
-		var btn := Button.new()
-		btn.toggle_mode = true
-		btn.text = def["name"]
-		if BuildingBlockCatalogScript.has_variants(block_id):
-			btn.tooltip_text = "Размер/профиль выбирается ниже"
-		else:
-			var s: Vector3 = def["size"]
-			btn.tooltip_text = "Размер: %.2f×%.2f×%.2f м" % [s.x, s.y, s.z]
-		btn.pressed.connect(_select_block.bind(block_id))
-		_palette_buttons[block_id] = btn
-		_palette_container.add_child(btn)
+		var category: int = def["category"]
+		if not blocks_by_category.has(category):
+			blocks_by_category[category] = []
+			category_order.append(category)
+		(blocks_by_category[category] as Array).append(def)
+
+	for category in category_order:
+		var cat_label := Label.new()
+		cat_label.text = BuildingBlockCatalogScript.category_name(category)
+		cat_label.add_theme_color_override("font_color", Color(0.65, 0.72, 0.8))
+		_palette_container.add_child(cat_label)
+		for def in blocks_by_category[category]:
+			var block_id: StringName = def["id"]
+			var btn := Button.new()
+			btn.toggle_mode = true
+			btn.text = def["name"]
+			if BuildingBlockCatalogScript.has_variants(block_id):
+				btn.tooltip_text = "Размер/профиль выбирается ниже"
+			else:
+				var s: Vector3 = def["size"]
+				btn.tooltip_text = "Размер: %.2f×%.2f×%.2f м" % [s.x, s.y, s.z]
+			btn.pressed.connect(_select_block.bind(block_id))
+			_palette_buttons[block_id] = btn
+			_palette_container.add_child(btn)
 
 
 # ---------------------------------------------------------------------------

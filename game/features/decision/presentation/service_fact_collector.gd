@@ -42,9 +42,9 @@ func collect(ctx: FacadeContext) -> Dictionary:
 		elif service_role == "cook":
 			service_position = ctx.simulation.canteen_position if is_instance_valid(ctx.simulation.canteen) else Vector3.INF
 		elif service_role == "official":
-			service_position = ctx.simulation._employment_center_position()
+			service_position = ctx.simulation.employment_center_position()
 		elif service_role == "researcher":
-			service_position = ctx.simulation._employment_center_position()
+			service_position = ctx.simulation.employment_center_position()
 		else:
 			service_position = actor.employment_workplace.get_meta("service_position", actor.employment_workplace.global_position) if is_instance_valid(actor.employment_workplace) else Vector3.INF
 	var service_can_start: bool = not service_role.is_empty() and service_position != Vector3.INF and ctx.simulation._is_route_reachable(actor.global_position, service_position)
