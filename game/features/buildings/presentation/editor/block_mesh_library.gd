@@ -201,6 +201,11 @@ func _build_cylinder(size: Vector3, segments: int = 16) -> ArrayMesh:
 	return st.commit()
 
 
+## Vertical half-cylinder: flat back on the cell-local `z = 0` plane, the round
+## side bulging toward +Z. The sweep reuses the full cylinder's parametrisation
+## (`x = cos`, `z = sin`) so the side quads and the caps keep the same outward
+## winding; mirroring it into `x = sin` turned every face inside out and the
+## round side rendered see-through.
 func _build_half_cylinder(size: Vector3, segments: int = 12) -> ArrayMesh:
 	var rx := size.x * 0.5
 	var rz := size.z
@@ -213,22 +218,13 @@ func _build_half_cylinder(size: Vector3, segments: int = 12) -> ArrayMesh:
 	var btr := Vector3(rx, hy, 0.0)
 	_add_quad(st, bbr, bbl, btl, btr) # Flat back (-Z)
 	for i in segments:
-		var a1 := -PI * 0.5 + float(i) / float(segments) * PI
-		var a2 := -PI * 0.5 + float(i + 1) / float(segments) * PI
-		var p1_b := Vector3(sin(a1) * rx, -hy, cos(a1) * rz)
-		var p2_b := Vector3(sin(a2) * rx, -hy, cos(a2) * rz)
-		var p1_t := Vector3(sin(a1) * rx, hy, cos(a1) * rz)
-		var p2_t := Vector3(sin(a2) * rx, hy, cos(a2) * rz)
-		# Emit the curved face explicitly: the generic quad helper targets the
-		# block faces' historic winding, while this arc needs radial normals.
-		var mid := (a1 + a2) * 0.5
-		var normal := Vector3(sin(mid) / maxf(rx, 0.001), 0.0, cos(mid) / maxf(rz, 0.001)).normalized()
-		st.set_normal(normal); st.add_vertex(p1_b)
-		st.set_normal(normal); st.add_vertex(p2_t)
-		st.set_normal(normal); st.add_vertex(p1_t)
-		st.set_normal(normal); st.add_vertex(p1_b)
-		st.set_normal(normal); st.add_vertex(p2_b)
-		st.set_normal(normal); st.add_vertex(p2_t)
+		var a1 := float(i) / float(segments) * PI
+		var a2 := float(i + 1) / float(segments) * PI
+		var p1_b := Vector3(cos(a1) * rx, -hy, sin(a1) * rz)
+		var p2_b := Vector3(cos(a2) * rx, -hy, sin(a2) * rz)
+		var p1_t := Vector3(cos(a1) * rx, hy, sin(a1) * rz)
+		var p2_t := Vector3(cos(a2) * rx, hy, sin(a2) * rz)
+		_add_quad(st, p1_b, p1_t, p2_t, p2_b) # Curved side
 		_add_tri(st, Vector3(0, hy, 0), p2_t, p1_t) # Top cap
 		_add_tri(st, Vector3(0, -hy, 0), p1_b, p2_b) # Bottom cap
 	return st.commit()
@@ -305,50 +301,78 @@ func _build_door_wall(size: Vector3) -> ArrayMesh:
 	return st.commit()
 
 
-## Wall-thickness panel with a real arched opening: two side jambs plus a
-## semicircular arch ring / spandrel above the void. `segments` controls how
-## finely the curve is stepped.
-func _build_arch(size: Vector3, segments: int = 12) -> ArrayMesh:
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+## Full-thickness slab with a half-column carved out of it: the panel keeps its
+## whole footprint and a semicircle of radius `size.x * 0.5`, springing from the
+## bottom edge, is removed. Two spandrels stay in the upper corners, so a row of
+## arches over columns reads as an arcade.
+func _build_arch(size: Vector3, segments: int = 16) -> ArrayMesh:
 	var hx := size.x * 0.5
 	var hy := size.y * 0.5
-	var hz := size.z * 0.5
-	var opening_half := size.x * 0.32       # half-width of the doorway void
-	var straight := size.y * 0.35           # vertical jamb before the arch springs
-	var spring_y := -hy + straight          # where the semicircle starts
-	# Side jambs (full height, flanking the opening).
-	_add_box(st, Vector3(-hx, -hy, -hz), Vector3(-opening_half, hy, hz))
-	_add_box(st, Vector3(opening_half, -hy, -hz), Vector3(hx, hy, hz))
-	# Arch ring + spandrel: stepped columns filling from the curve up to the top.
-	var step := (2.0 * opening_half) / float(segments)
-	for i in segments:
-		var xa := -opening_half + step * float(i)
-		var xb := xa + step
-		var xc := (xa + xb) * 0.5
-		var arch_top := spring_y + sqrt(maxf(0.0, opening_half * opening_half - xc * xc))
-		if arch_top < hy - 0.0001:
-			_add_box(st, Vector3(xa, arch_top, -hz), Vector3(xb, hy, hz))
-	return st.commit()
+	var radius := minf(hx, size.y)
+	var profile := PackedVector2Array()
+	# Cut-out first: the semicircle is traced left → right along the bottom edge,
+	# which keeps the whole outline counter-clockwise.
+	for i in range(segments + 1):
+		var a := PI - float(i) / float(segments) * PI
+		profile.append(Vector2(cos(a) * radius, -hy + sin(a) * radius))
+	profile.append(Vector2(hx, hy))
+	profile.append(Vector2(-hx, hy))
+	return _build_extrusion(profile, size.z)
 
 
-## Cube panel with one quarter-cylinder removed from its lower-left corner.
-## Quarter-turn rotation moves the cut-out to the other corners.
-func _build_half_arch(size: Vector3, segments: int = 12) -> ArrayMesh:
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+## Cube with a full quarter-circle sector removed from its lower-left corner.
+## The sector's radius spans the whole block, so two mirrored half-arches meet
+## in a single opening. Quarter-turn rotation moves the cut-out to other corners.
+func _build_half_arch(size: Vector3, segments: int = 16) -> ArrayMesh:
 	var hx := size.x * 0.5
 	var hy := size.y * 0.5
-	var hz := size.z * 0.5
-	var radius := minf(size.x, size.y) * 0.5
-	var step := radius / float(segments)
-	for i in segments:
-		var x0 := -hx + step * float(i)
-		var x1 := minf(x0 + step, -hx + radius)
-		var distance_x := (x0 + x1) * 0.5 + hx
-		var cut_y := -hy + sqrt(maxf(0.0, radius * radius - distance_x * distance_x))
-		_add_box(st, Vector3(x0, cut_y, -hz), Vector3(x1, hy, hz))
-	_add_box(st, Vector3(-hx + radius, -hy, -hz), Vector3(hx, hy, hz))
+	var radius := minf(size.x, size.y)
+	var profile := PackedVector2Array()
+	profile.append(Vector2(hx, hy))
+	profile.append(Vector2(-hx, hy))
+	# Sector boundary, centred on the lower-left corner, traced from the top-left
+	# corner back down to the bottom-right one.
+	for i in range(segments + 1):
+		var a := PI * 0.5 - float(i) / float(segments) * PI * 0.5
+		profile.append(Vector2(-hx + cos(a) * radius, -hy + sin(a) * radius))
+	return _build_extrusion(profile, size.z)
+
+
+## Extrudes a closed, counter-clockwise XY profile along Z into a centred solid:
+## two triangulated caps plus a quad per profile edge. Used by the arch blocks so
+## their curved cut-outs come out smooth instead of stepped.
+func _build_extrusion(source_profile: PackedVector2Array, depth: float) -> ArrayMesh:
+	# A curve that ends exactly on a corner the caller also listed would leave a
+	# repeated vertex, and `triangulate_polygon` bails out on those.
+	var profile := PackedVector2Array()
+	for point in source_profile:
+		if not profile.is_empty() and profile[profile.size() - 1].is_equal_approx(point):
+			continue
+		profile.append(point)
+	if profile.size() > 1 and profile[0].is_equal_approx(profile[profile.size() - 1]):
+		profile.remove_at(profile.size() - 1)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var hz := depth * 0.5
+	var indices := Geometry2D.triangulate_polygon(profile)
+	for i in range(0, indices.size(), 3):
+		var a := profile[indices[i]]
+		var b := profile[indices[i + 1]]
+		var c := profile[indices[i + 2]]
+		# `triangulate_polygon` does not promise a winding, so orient each
+		# triangle by its own signed area before extruding it into both caps.
+		if (b - a).cross(c - a) < 0.0:
+			var swap := b
+			b = c
+			c = swap
+		_add_tri(st, Vector3(a.x, a.y, hz), Vector3(b.x, b.y, hz), Vector3(c.x, c.y, hz))
+		_add_tri(st, Vector3(a.x, a.y, -hz), Vector3(c.x, c.y, -hz), Vector3(b.x, b.y, -hz))
+	for i in profile.size():
+		var p := profile[i]
+		var q := profile[(i + 1) % profile.size()]
+		_add_quad(st,
+			Vector3(p.x, p.y, -hz), Vector3(q.x, q.y, -hz),
+			Vector3(q.x, q.y, hz), Vector3(p.x, p.y, hz))
 	return st.commit()
 
 

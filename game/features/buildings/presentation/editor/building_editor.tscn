@@ -636,18 +636,19 @@ text = "Нет требований для текущих зон."
 [node name="DecorPanel" type="PanelContainer" parent="EditorUI/Root"]
 unique_name_in_owner = true
 visible = false
-custom_minimum_size = Vector2(268, 0)
+custom_minimum_size = Vector2(220, 0)
 layout_mode = 1
 anchors_preset = 9
 anchor_bottom = 1.0
 offset_left = 8.0
 offset_top = 60.0
-offset_right = 276.0
+offset_right = 228.0
 offset_bottom = -48.0
 grow_vertical = 2
 
 [node name="Scroll" type="ScrollContainer" parent="EditorUI/Root/DecorPanel"]
 layout_mode = 2
+horizontal_scroll_mode = 0
 
 [node name="DecorVBox" type="VBoxContainer" parent="EditorUI/Root/DecorPanel/Scroll"]
 layout_mode = 2
@@ -666,6 +667,8 @@ text = "Группа:"
 [node name="DecorGroupOption" type="OptionButton" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
 unique_name_in_owner = true
 layout_mode = 2
+clip_text = true
+fit_to_longest_item = false
 
 [node name="CategoryLbl" type="Label" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
 layout_mode = 2
@@ -674,6 +677,8 @@ text = "Категория:"
 [node name="DecorCategoryOption" type="OptionButton" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
 unique_name_in_owner = true
 layout_mode = 2
+clip_text = true
+fit_to_longest_item = false
 
 [node name="DecorRecentLbl" type="Label" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
 unique_name_in_owner = true
@@ -682,10 +687,11 @@ text = "Недавно использованные:"
 theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
 theme_override_font_sizes/font_size = 12
 
-[node name="DecorRecentContainer" type="HBoxContainer" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
+[node name="DecorRecentContainer" type="HFlowContainer" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_constants/separation = 3
+theme_override_constants/h_separation = 3
+theme_override_constants/v_separation = 3
 
 [node name="DecorAssetContainer" type="VBoxContainer" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
 unique_name_in_owner = true
@@ -708,6 +714,7 @@ text = "Привязка к сетке:"
 
 [node name="DecorSnapButtons" type="HBoxContainer" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
 layout_mode = 2
+alignment = 1
 
 [node name="DecorSnap1Btn" type="Button" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox/DecorSnapButtons"]
 unique_name_in_owner = true

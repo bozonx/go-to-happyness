@@ -683,16 +683,7 @@ func _confirm_era_material_replacement(target_era: StringName, count: int, defau
 	dialog.dialog_text = "В здании %d блок(ов) используют материалы, недоступные в эре «%s».\nЗаменить их автоматически на «%s»?" % [count, target_era, default_mat_name]
 	dialog.ok_button_text = "Заменить"
 	dialog.cancel_button_text = "Отмена"
-	add_child(dialog)
-	dialog.popup_centered(Vector2i(420, 140))
-	var user_confirmed := false
-	dialog.confirmed.connect(func(): user_confirmed = true)
-	await dialog.visibility_changed
-	if dialog.visible:
-		await dialog.hidden
-	dialog.queue_free()
-	print("DBG confirm returns ", user_confirmed)
-	return user_confirmed
+	return await _run_confirmation_dialog(dialog, Vector2i(420, 140))
 
 
 func _select_category_in_option(category: StringName) -> void:
@@ -910,9 +901,7 @@ func _on_load_item_activated(index: int) -> void:
 		_load_popup.hide()
 		return
 	var path := String(_load_list.get_item_metadata(index))
-	print("DBG resumed, path=", path)
 	var loaded := repository.load_blueprint(path)
-	print("DBG loaded=", loaded)
 	if loaded == null:
 		_update_status("Не удалось загрузить: %s" % path)
 		return
@@ -1886,18 +1875,26 @@ func _confirm_discard_changes() -> bool:
 	dialog.dialog_text = "Есть несохранённые изменения. Продолжить?"
 	dialog.ok_button_text = "Да"
 	dialog.cancel_button_text = "Отмена"
+	return await _run_confirmation_dialog(dialog, Vector2i(360, 120))
+
+
+## Shows `dialog` modally and resolves to `true` only when the user pressed OK.
+##
+## The confirmation flag lives in an Array because GDScript lambdas capture
+## locals by value: writing to a plain `var` from inside the `confirmed`
+## handler would leave the outer variable untouched and every dialog would
+## read as "cancelled".
+func _run_confirmation_dialog(dialog: ConfirmationDialog, size: Vector2i) -> bool:
+	var confirmed_flag := [false]
+	dialog.confirmed.connect(func(): confirmed_flag[0] = true)
 	add_child(dialog)
-	var user_confirmed := false
-	dialog.confirmed.connect(func(): user_confirmed = true)
-	dialog.popup_centered(Vector2i(360, 120))
-	print("DBG dialog shown visible=", dialog.visible)
+	dialog.popup_centered(size)
 	# `popup_centered` makes the dialog visible synchronously, so the loop
 	# body only runs while the user hasn't confirmed or cancelled yet.
 	while dialog.visible:
 		await get_tree().process_frame
 	dialog.queue_free()
-	print("DBG confirm returns ", user_confirmed)
-	return user_confirmed
+	return confirmed_flag[0]
 
 
 func _on_footprint_changed(_value: float) -> void:

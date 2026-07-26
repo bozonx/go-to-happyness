@@ -15,14 +15,18 @@ extends PanelContainer
 ## The list is the only way to find an entity a building is standing on top of.
 ## It stays in the layout from phase 1 with an explanation of what will fill it,
 ## rather than appearing later and moving everything else on screen.
+##
+## Everything sits in a scroll because the inspector's length is the mode's
+## choice, not the panel's: a mode with four lines more of settings must not be
+## able to make the editor taller than the window it is running in.
 
 signal entry_activated(index: int)
 
-@onready var _map_info: Label = $Margin/Rows/MapInfo
-@onready var _inspector_title: Label = $Margin/Rows/InspectorTitle
-@onready var _inspector: Label = $Margin/Rows/Inspector
-@onready var _list_title: Label = $Margin/Rows/ListTitle
-@onready var _list: ItemList = $Margin/Rows/List
+@onready var _map_info: Label = $Margin/Scroll/Rows/MapInfo
+@onready var _inspector_title: Label = $Margin/Scroll/Rows/InspectorTitle
+@onready var _inspector: Label = $Margin/Scroll/Rows/Inspector
+@onready var _list_title: Label = $Margin/Scroll/Rows/ListTitle
+@onready var _list: ItemList = $Margin/Scroll/Rows/List
 
 
 func _ready() -> void:

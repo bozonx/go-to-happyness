@@ -47,7 +47,7 @@ const COLLISION_FOOTPRINT := "footprint"
 @export var size_in_blocks: Vector3i = Vector3i(1, 1, 1)
 ## Real footprint in metres, used for in-cell anchoring. Falls back to the block size.
 @export var size_m: Vector3 = Vector3.ZERO
-@export var default_snap_step: float = 0.5
+@export var default_snap_step: float = 1.0
 ## Allowed snap steps for this asset (design §4.1). Empty means use editor defaults.
 @export var snap_steps: Array[float] = []
 ## Authoring appearance knobs (renamed from `controls`).
@@ -84,7 +84,7 @@ func _init(
 	p_group: StringName = &"outdoor",
 	p_scene_path: String = "",
 	p_size: Vector3i = Vector3i(1, 1, 1),
-	p_snap_step: float = 0.5,
+	p_snap_step: float = 1.0,
 	p_appearance_controls: Array[Dictionary] = [],
 	p_size_m: Vector3 = Vector3.ZERO,
 	p_description: String = ""

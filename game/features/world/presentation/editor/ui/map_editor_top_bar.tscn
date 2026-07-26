@@ -4,6 +4,7 @@
 
 [node name="TopBar" type="PanelContainer"]
 custom_minimum_size = Vector2(0, 52)
+clip_contents = true
 
 [node name="Margin" type="MarginContainer" parent="."]
 theme_override_constants/margin_left = 8
@@ -11,54 +12,64 @@ theme_override_constants/margin_top = 8
 theme_override_constants/margin_right = 8
 theme_override_constants/margin_bottom = 8
 
-[node name="Row" type="HBoxContainer" parent="Margin"]
+[node name="Scroll" type="ScrollContainer" parent="Margin"]
+vertical_scroll_mode = 0
+horizontal_scroll_mode = 1
+
+[node name="Row" type="HBoxContainer" parent="Margin/Scroll"]
+size_flags_horizontal = 3
 theme_override_constants/separation = 10
 
-[node name="BackButton" type="Button" parent="Margin/Row"]
-text = "← В меню"
+[node name="BackButton" type="Button" parent="Margin/Scroll/Row"]
+custom_minimum_size = Vector2(38, 0)
+text = "←"
+tooltip_text = "Вернуться в меню (Esc)"
 
-[node name="NewButton" type="Button" parent="Margin/Row"]
+[node name="NewButton" type="Button" parent="Margin/Scroll/Row"]
 custom_minimum_size = Vector2(38, 0)
 text = "📄"
 tooltip_text = "Создать новую карту"
 
-[node name="LoadButton" type="Button" parent="Margin/Row"]
+[node name="LoadButton" type="Button" parent="Margin/Scroll/Row"]
 custom_minimum_size = Vector2(38, 0)
 disabled = true
 text = "📂"
 tooltip_text = "Выбор карты появляется в фазе 6"
 
-[node name="SaveButton" type="Button" parent="Margin/Row"]
+[node name="SaveButton" type="Button" parent="Margin/Scroll/Row"]
 custom_minimum_size = Vector2(38, 0)
 text = "💾"
 tooltip_text = "Сохранить карту (Ctrl+S)"
 
-[node name="VSep1" type="VSeparator" parent="Margin/Row"]
+[node name="VSep1" type="VSeparator" parent="Margin/Scroll/Row"]
 
-[node name="UndoButton" type="Button" parent="Margin/Row"]
+[node name="UndoButton" type="Button" parent="Margin/Scroll/Row"]
 custom_minimum_size = Vector2(38, 0)
 text = "↩"
 tooltip_text = "Отменить (Ctrl+Z)"
 
-[node name="RedoButton" type="Button" parent="Margin/Row"]
+[node name="RedoButton" type="Button" parent="Margin/Scroll/Row"]
 custom_minimum_size = Vector2(38, 0)
 text = "↪"
 tooltip_text = "Повторить (Ctrl+Shift+Z)"
 
-[node name="VSep2" type="VSeparator" parent="Margin/Row"]
+[node name="VSep2" type="VSeparator" parent="Margin/Scroll/Row"]
 
-[node name="ModeBar" parent="Margin/Row" instance=ExtResource("1_mode_bar")]
+[node name="ModeBar" parent="Margin/Scroll/Row" instance=ExtResource("1_mode_bar")]
 
-[node name="Spacer" type="Control" parent="Margin/Row"]
+[node name="Spacer" type="Control" parent="Margin/Scroll/Row"]
 size_flags_horizontal = 3
+size_flags_stretch_ratio = 1.0
 mouse_filter = 2
 
-[node name="ValidateButton" type="Button" parent="Margin/Row"]
-text = "✔ Проверить"
+[node name="ValidateButton" type="Button" parent="Margin/Scroll/Row"]
+custom_minimum_size = Vector2(38, 0)
+text = "✔"
 disabled = true
-tooltip_text = "Валидатор появляется в фазе 6"
+tooltip_text = "Проверить карту — валидатор появляется в фазе 6"
 
-[node name="TestButton" type="Button" parent="Margin/Row"]
-text = "▶ Тест (F5)"
+[node name="TestButton" type="Button" parent="Margin/Scroll/Row"]
+custom_minimum_size = Vector2(38, 0)
+text = "▶"
 disabled = true
-tooltip_text = "Тест-запуск появляется в фазе 6"
+tooltip_text = "Тест-запуск (F5) появляется в фазе 6"

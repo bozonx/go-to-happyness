@@ -34,17 +34,17 @@ const PLANNED_MODES: Array = [
 @onready var camera: MapEditorCamera = $Camera3D
 
 @onready var _top_bar: Control = $UI/Screen/TopBar
-@onready var _mode_bar: MapEditorModeBar = $UI/Screen/TopBar/Margin/Row/ModeBar
+@onready var _mode_bar: MapEditorModeBar = $UI/Screen/TopBar/Margin/Scroll/Row/ModeBar
 @onready var _viewport_area: Control = $UI/Screen/Middle/Viewport3D
 @onready var _side_panel: MapEditorSidePanel = $UI/Screen/Middle/SidePanel
 @onready var _palette: MapEditorPalette = $UI/Screen/Middle/Palette
 @onready var _status_cell: Label = $UI/Screen/StatusBar/Margin/Row/CellLabel
 @onready var _status_message: Label = $UI/Screen/StatusBar/Margin/Row/MessageLabel
-@onready var _back_button: Button = $UI/Screen/TopBar/Margin/Row/BackButton
-@onready var _new_button: Button = $UI/Screen/TopBar/Margin/Row/NewButton
-@onready var _save_button: Button = $UI/Screen/TopBar/Margin/Row/SaveButton
-@onready var _undo_button: Button = $UI/Screen/TopBar/Margin/Row/UndoButton
-@onready var _redo_button: Button = $UI/Screen/TopBar/Margin/Row/RedoButton
+@onready var _back_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/BackButton
+@onready var _new_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/NewButton
+@onready var _save_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/SaveButton
+@onready var _undo_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/UndoButton
+@onready var _redo_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/RedoButton
 
 var document: MapDocument
 var history := MapEditorHistory.new()

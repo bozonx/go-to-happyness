@@ -12,34 +12,36 @@ theme_override_constants/margin_top = 8
 theme_override_constants/margin_right = 10
 theme_override_constants/margin_bottom = 8
 
-[node name="Rows" type="VBoxContainer" parent="Margin"]
+[node name="Scroll" type="ScrollContainer" parent="Margin"]
+horizontal_scroll_mode = 0
+
+[node name="Rows" type="VBoxContainer" parent="Margin/Scroll"]
+size_flags_horizontal = 3
 theme_override_constants/separation = 6
 
-[node name="MapTitle" type="Label" parent="Margin/Rows"]
+[node name="MapTitle" type="Label" parent="Margin/Scroll/Rows"]
 text = "Карта"
 theme_override_font_sizes/font_size = 14
 
-[node name="MapInfo" type="Label" parent="Margin/Rows"]
+[node name="MapInfo" type="Label" parent="Margin/Scroll/Rows"]
 autowrap_mode = 2
 theme_override_font_sizes/font_size = 12
 
-[node name="MapSeparator" type="HSeparator" parent="Margin/Rows"]
+[node name="MapSeparator" type="HSeparator" parent="Margin/Scroll/Rows"]
 
-[node name="InspectorTitle" type="Label" parent="Margin/Rows"]
+[node name="InspectorTitle" type="Label" parent="Margin/Scroll/Rows"]
 text = "Инспектор"
 theme_override_font_sizes/font_size = 14
 
-[node name="Inspector" type="Label" parent="Margin/Rows"]
-size_flags_vertical = 3
+[node name="Inspector" type="Label" parent="Margin/Scroll/Rows"]
 autowrap_mode = 2
 theme_override_font_sizes/font_size = 12
 
-[node name="Separator" type="HSeparator" parent="Margin/Rows"]
+[node name="Separator" type="HSeparator" parent="Margin/Scroll/Rows"]
 
-[node name="ListTitle" type="Label" parent="Margin/Rows"]
+[node name="ListTitle" type="Label" parent="Margin/Scroll/Rows"]
 text = "Объекты"
 theme_override_font_sizes/font_size = 14
 
-[node name="List" type="ItemList" parent="Margin/Rows"]
+[node name="List" type="ItemList" parent="Margin/Scroll/Rows"]
 custom_minimum_size = Vector2(0, 190)
-size_flags_vertical = 3

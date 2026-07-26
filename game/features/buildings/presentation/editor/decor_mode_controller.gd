@@ -38,7 +38,7 @@ enum GhostState { VALID, INTERSECTION, OUT_OF_BOUNDS }
 var current_group: StringName = &""  ## empty = all groups
 var current_category: StringName = &"camping"
 var current_asset_id: StringName = &""
-var current_snap_step: float = 0.5
+var current_snap_step: float = 1.0
 var current_tool: int = Tool.PLACE
 var current_yaw_deg: float = 0.0
 var selected_object_id: String = ""
@@ -59,7 +59,7 @@ var _undo_stack: Array = []
 var _redo_stack: Array = []
 var _recent_assets: Array[StringName] = []
 var _search_edit: LineEdit = null
-var _recent_container: HBoxContainer = null
+var _recent_container: HFlowContainer = null
 var _recent_label: Label = null
 var _object_search_edit: LineEdit = null
 var _id_label: Label = null
@@ -242,8 +242,8 @@ func _build_snap_options() -> void:
 	_snap_buttons = {1.0: _editor.get_node("%DecorSnap1Btn"), 0.5: _editor.get_node("%DecorSnapHalfBtn"), 0.25: _editor.get_node("%DecorSnapQuarterBtn")}
 	for step in _snap_buttons.keys():
 		(_snap_buttons[step] as Button).pressed.connect(_select_snap_step.bind(float(step)))
-	_select_snap_step(0.5)
-	current_snap_step = 0.5
+	_select_snap_step(1.0)
+	current_snap_step = 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -1078,6 +1078,9 @@ func _rebuild_asset_buttons() -> void:
 		button.toggle_mode = true
 		button.text = asset.name
 		button.tooltip_text = asset.description
+		# Long asset names must not widen the catalog panel; they ellipsize.
+		button.clip_text = true
+		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		button.button_pressed = asset.id == current_asset_id
 		button.pressed.connect(_select_asset.bind(asset.id))
 		_asset_container.add_child(button)
@@ -1130,6 +1133,7 @@ func _rebuild_recent_assets() -> void:
 		button.text = asset.name
 		button.tooltip_text = asset.description
 		button.custom_minimum_size = Vector2(80, 0)
+		button.clip_text = true
 		button.toggle_mode = true
 		button.button_pressed = asset_id == current_asset_id
 		button.pressed.connect(_select_asset.bind(asset_id))
