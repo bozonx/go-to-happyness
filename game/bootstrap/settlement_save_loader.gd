@@ -1,6 +1,12 @@
 class_name SettlementSaveLoader
 extends RefCounted
 
+
+const BuildingBlueprintLibraryScript = preload("res://game/features/buildings/presentation/building_blueprint_library.gd")
+const BuildingEntrancePositionsScript = preload("res://game/features/buildings/domain/building_entrance_positions.gd")
+const CitizenActorScene = preload("res://game/features/citizens/presentation/citizen_actor.tscn")
+const SettlementCitizenActuatorScript = preload("res://game/features/decision/presentation/settlement_citizen_actuator.gd")
+
 ## Handles restoration of saved game state onto a running SettlementGame instance.
 
 var game: SettlementGame
@@ -105,7 +111,7 @@ func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
 			site_node.set_meta("building_type", b_type)
 			site_node.set_meta("footprint", blueprint.footprint)
 			site_node.set_meta("occupied_footprint", occupied_footprint)
-			site_node.set_meta("service_positions", SettlementGame.BuildingEntrancePositionsScript.positions(site_node, blueprint.footprint, 1.0))
+			site_node.set_meta("service_positions", BuildingEntrancePositionsScript.positions(site_node, blueprint.footprint, 1.0))
 			game.add_child(site_node)
 			for module in blueprint.modules:
 				site_node.add_child(BuildingBlueprints.create_module(module))
@@ -174,7 +180,7 @@ func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
 		var is_hero = bool(cit_dict.get("is_hero", false))
 		var saved_id = int(cit_dict.get("ai_id", 0))
 
-		var citizen: Citizen = SettlementGame.CitizenActorScene.instantiate()
+		var citizen: Citizen = CitizenActorScene.instantiate()
 		citizen.position = pos
 		if cit_dict.has("first_name") and "first_name" in citizen:
 			citizen.first_name = str(cit_dict.get("first_name", ""))
@@ -194,7 +200,7 @@ func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
 		if citizen.ai_id >= game._next_ai_citizen_id:
 			game._next_ai_citizen_id = citizen.ai_id + 1
 
-		game.citizen_ai.register_citizen(citizen.ai_id, SettlementGame.SettlementCitizenActuatorScript.new(citizen, game._ai_target_for_key))
+		game.citizen_ai.register_citizen(citizen.ai_id, SettlementCitizenActuatorScript.new(citizen, game._ai_target_for_key))
 		citizen.tree_exiting.connect(game._on_ai_citizen_exiting.bind(citizen.ai_id), CONNECT_ONE_SHOT)
 
 		var needs_dict: Dictionary = cit_dict.get("needs", {})
@@ -253,17 +259,17 @@ func _resolve_saved_building_blueprint(saved_type: String, data: Dictionary) -> 
 	var resolved_type := saved_type
 	var reference: Dictionary = data.get("blueprint_ref", {})
 	if not reference.is_empty():
-		var referenced_type := SettlementGame.BuildingBlueprintLibraryScript.resolve_reference(reference)
+		var referenced_type := BuildingBlueprintLibraryScript.resolve_reference(reference)
 		if not referenced_type.is_empty():
 			resolved_type = referenced_type
-			var referenced_blueprint: Variant = SettlementGame.BuildingBlueprintLibraryScript.get_blueprint(referenced_type)
+			var referenced_blueprint: Variant = BuildingBlueprintLibraryScript.get_blueprint(referenced_type)
 			var saved_revision: String = str(reference.get("revision", ""))
 			if referenced_blueprint != null and not saved_revision.is_empty() and referenced_blueprint.revision_id() != saved_revision:
 				push_warning("Blueprint '%s:%s' changed since this save; current file geometry will be used." % [
 					reference.get("source", "builtin"), reference.get("id", "")])
 		else:
 			var role := StringName(reference.get("role", ""))
-			var role_variant := SettlementGame.BuildingBlueprintLibraryScript.resolve_role(role) if not String(role).is_empty() else ""
+			var role_variant := BuildingBlueprintLibraryScript.resolve_role(role) if not String(role).is_empty() else ""
 			if not role_variant.is_empty():
 				resolved_type = String(role)
 				push_warning("Missing blueprint '%s:%s'; restored using current variant for role '%s'." % [

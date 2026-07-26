@@ -1,6 +1,82 @@
 class_name SettlementBootstrapper
 extends RefCounted
 
+
+const BillboardLabelScene = preload("res://game/features/ui/presentation/billboard_label.tscn")
+const BuildingAvailabilityServiceScript = preload("res://game/features/buildings/application/building_availability_service.gd")
+const BuildingLifecycleServiceScript = preload("res://game/features/buildings/application/building_lifecycle_service.gd")
+const BuildingPlacementControllerScript = preload("res://game/features/buildings/presentation/building_placement_controller.gd")
+const BuildingPlacementServiceScript = preload("res://game/features/buildings/application/building_placement_service.gd")
+const BuildingQueueServiceScript = preload("res://game/features/citizens/application/building_queue_service.gd")
+const BuildingResearchServiceScript = preload("res://game/features/buildings/application/building_research_service.gd")
+const BuildingStatusIndicatorControllerScript = preload("res://game/features/buildings/presentation/building_status_indicator_controller.gd")
+const BuildingVisualsServiceScript = preload("res://game/features/buildings/presentation/building_visuals_service.gd")
+const BuildingZoneServiceScript = preload("res://game/features/buildings/application/building_zone_service.gd")
+const CitizenDailyOrderServiceScript = preload("res://game/features/citizens/application/citizen_daily_order_service.gd")
+const CitizenLifecycleServiceScript = preload("res://game/features/citizens/application/citizen_lifecycle_service.gd")
+const CitizenLivingStatusServiceScript = preload("res://game/features/citizens/application/citizen_living_status_service.gd")
+const CitizenRegistrationServiceScript = preload("res://game/features/citizens/application/citizen_registration_service.gd")
+const CleaningGoalScript = preload("res://game/features/decision/domain/goals/cleaning_goal.gd")
+const ConstructionEntrancePostScene = preload("res://game/features/buildings/presentation/construction_entrance_post.tscn")
+const ConstructionGoalScript = preload("res://game/features/decision/domain/goals/construction_goal.gd")
+const ConstructionOrderProviderScript = preload("res://game/features/decision/application/construction_order_provider.gd")
+const ConstructionSiteScene = preload("res://game/features/buildings/presentation/construction_site.tscn")
+const CourierDeliveryGoalScript = preload("res://game/features/decision/domain/goals/courier_delivery_goal.gd")
+const CourierDeliveryOrderProviderScript = preload("res://game/features/decision/application/courier_delivery_order_provider.gd")
+const CourierDispatcherScript = preload("res://game/features/logistics/application/courier_dispatcher.gd")
+const CourierTaskPublisherScript = preload("res://game/features/logistics/application/courier_task_publisher.gd")
+const CourierTaskServiceScript = preload("res://game/features/logistics/application/courier_task_service.gd")
+const DailyPlayerOrderProviderScript = preload("res://game/features/decision/application/daily_player_order_provider.gd")
+const DigSiteScene = preload("res://game/features/world/presentation/dig_site.tscn")
+const EventRegistryScript = preload("res://game/features/events/domain/event_registry.gd")
+const EventServiceScript = preload("res://game/features/events/application/event_service.gd")
+const ExcavationGoalScript = preload("res://game/features/decision/domain/goals/excavation_goal.gd")
+const ExcavationOrderProviderScript = preload("res://game/features/decision/application/excavation_order_provider.gd")
+const FactoryWorkGoalScript = preload("res://game/features/decision/domain/goals/factory_work_goal.gd")
+const FactoryWorkOrderProviderScript = preload("res://game/features/decision/application/factory_work_order_provider.gd")
+const FarmingGoalScript = preload("res://game/features/decision/domain/goals/farming_goal.gd")
+const FarmingOrderProviderScript = preload("res://game/features/decision/application/farming_order_provider.gd")
+const FireLightScene = preload("res://game/features/buildings/presentation/fire_light.tscn")
+const FirstPersonHUDControllerScript = preload("res://game/features/ui/presentation/first_person_hud_controller.gd")
+const FollowLeaderGoalScript = preload("res://game/features/decision/domain/goals/follow_leader_goal.gd")
+const ForestryGoalScript = preload("res://game/features/decision/domain/goals/forestry_goal.gd")
+const ForestryOrderProviderScript = preload("res://game/features/decision/application/forestry_order_provider.gd")
+const GatheringGoalScript = preload("res://game/features/decision/domain/goals/gathering_goal.gd")
+const GatheringOrderProviderScript = preload("res://game/features/decision/application/gathering_order_provider.gd")
+const HeroInteractionServiceScript = preload("res://game/features/citizens/application/hero_interaction_service.gd")
+const HeroPocketServiceScript = preload("res://game/features/citizens/application/hero_pocket_service.gd")
+const LabelDistanceFadeControllerScript = preload("res://game/features/ui/presentation/label_distance_fade_controller.gd")
+const MealGoalScript = preload("res://game/features/decision/domain/goals/meal_goal.gd")
+const NavigationBridgeScript = preload("res://game/features/routing/presentation/navigation_bridge.gd")
+const NavigationFacadeScript = preload("res://game/features/routing/application/navigation_facade.gd")
+const NavigationObstaclePublisherScript = preload("res://game/features/routing/application/navigation_obstacle_publisher.gd")
+const RegisterGoalScript = preload("res://game/features/decision/domain/goals/register_goal.gd")
+const ResourcePileVisualsScript = preload("res://game/features/logistics/presentation/resource_pile_visuals.gd")
+const RestGoalScript = preload("res://game/features/decision/domain/goals/rest_goal.gd")
+const ReturnHomeWhenIdleGoalScript = preload("res://game/features/decision/domain/goals/return_home_when_idle_goal.gd")
+const RoadNetworkServiceScript = preload("res://game/features/routing/application/road_network_service.gd")
+const SchoolServiceScript = preload("res://game/features/buildings/application/school_service.gd")
+const ServiceWorkGoalScript = preload("res://game/features/decision/domain/goals/service_work_goal.gd")
+const ServiceWorkOrderProviderScript = preload("res://game/features/decision/application/service_work_order_provider.gd")
+const SettlementActuatorBridgeScript = preload("res://game/features/decision/presentation/settlement_actuator_bridge.gd")
+const SettlementDailyRulesServiceScript = preload("res://game/features/settlement/application/settlement_daily_rules_service.gd")
+const SettlementSurvivalServiceScript = preload("res://game/features/settlement/application/settlement_survival_service.gd")
+const SimulationEventDispatcherScript = preload("res://game/features/simulation/application/simulation_event_dispatcher.gd")
+const SleepGoalScript = preload("res://game/features/decision/domain/goals/sleep_goal.gd")
+const StorageDeliveryServiceScript = preload("res://game/features/logistics/application/storage_delivery_service.gd")
+const StorageRoutingServiceScript = preload("res://game/features/logistics/application/storage_routing_service.gd")
+const SurvivalEventControllerScript = preload("res://game/features/events/presentation/survival_event_controller.gd")
+const TentEraEventsScript = preload("res://game/features/events/application/tent_era_events.gd")
+const TerritoryServiceScript = preload("res://game/features/world/application/territory_service.gd")
+const ToiletGoalScript = preload("res://game/features/decision/domain/goals/toilet_goal.gd")
+const TradeServiceScript = preload("res://game/features/logistics/application/trade_service.gd")
+const TrailFieldServiceScript = preload("res://game/features/routing/application/trail_field_service.gd")
+const TrailTextureRendererScript = preload("res://game/features/routing/presentation/trail_texture_renderer.gd")
+const VillageTerritoryServiceScript = preload("res://game/features/buildings/application/village_territory_service.gd")
+const WarehouseFillLabelControllerScript = preload("res://game/features/logistics/presentation/warehouse_fill_label_controller.gd")
+const WorkforceOrderProviderScript = preload("res://game/features/decision/application/workforce_order_provider.gd")
+const WorkplaceLaborServiceScript = preload("res://game/features/settlement/application/workplace_labor_service.gd")
+
 ## Handles all service initialization for SettlementGame.
 ## Called from SettlementGame._ready() to keep the Node script focused on runtime.
 
@@ -35,13 +111,13 @@ func run(p_game: SettlementGame) -> void:
 
 
 func _setup_hero_services() -> void:
-	game.hero_pocket_service = SettlementGame.HeroPocketServiceScript.new()
+	game.hero_pocket_service = HeroPocketServiceScript.new()
 	game.hero_pocket_service.configure(func() -> Citizen: return game.player_citizen, game._create_resource_pile, game._update_interface, game._refresh_interaction_hint)
-	game.hero_interaction_service = SettlementGame.HeroInteractionServiceScript.new()
+	game.hero_interaction_service = HeroInteractionServiceScript.new()
 
 
 func _setup_workplace_and_visuals() -> void:
-	game.workplace_labor_service = SettlementGame.WorkplaceLaborServiceScript.new()
+	game.workplace_labor_service = WorkplaceLaborServiceScript.new()
 	game.workplace_labor_service.configure(
 		game.settlement,
 		game.citizens,
@@ -62,7 +138,7 @@ func _setup_workplace_and_visuals() -> void:
 		game._can_work_at_dig_site,
 		game._employment_centre_building
 	)
-	game.building_visuals_service = SettlementGame.BuildingVisualsServiceScript.new()
+	game.building_visuals_service = BuildingVisualsServiceScript.new()
 	game.building_visuals_service.configure(
 		game.entrance_lights,
 		game.house_lights,
@@ -71,7 +147,7 @@ func _setup_workplace_and_visuals() -> void:
 
 
 func _setup_territory() -> void:
-	game.territory_service = SettlementGame.TerritoryServiceScript.new()
+	game.territory_service = TerritoryServiceScript.new()
 	var summer_valley_biome := load("res://game/features/world/presentation/biomes/summer/summer_valley/summer_valley_biome.tres") as BiomeDefinition
 	var summer_plains_biome := load("res://game/features/world/presentation/biomes/summer/summer_plains/summer_plains_biome.tres") as BiomeDefinition
 	if summer_valley_biome != null:
@@ -88,27 +164,27 @@ func _setup_ai_and_navigation() -> void:
 		game.add_child(game.citizen_ai)
 	game.nav_grid = NavGrid.new()
 	game.nav_grid.configure(SettlementGame.CELL_SIZE, game.board_cells)
-	game.road_network_service = SettlementGame.RoadNetworkServiceScript.new()
+	game.road_network_service = RoadNetworkServiceScript.new()
 	game.road_network_service.configure(game.nav_grid)
-	game.navigation_obstacle_publisher = SettlementGame.NavigationObstaclePublisherScript.new()
+	game.navigation_obstacle_publisher = NavigationObstaclePublisherScript.new()
 	game.navigation_obstacle_publisher.configure(game.nav_grid)
-	game.trail_field = SettlementGame.TrailFieldServiceScript.new()
+	game.trail_field = TrailFieldServiceScript.new()
 	game.trail_field.configure(game.board_cells * SettlementGame.CELL_SIZE, SettlementGame.CELL_SIZE, game.nav_grid)
-	game.trail_texture_renderer = SettlementGame.TrailTextureRendererScript.new()
+	game.trail_texture_renderer = TrailTextureRendererScript.new()
 	game.route_service = GridRouteService.new()
 	game.route_service.configure(game.nav_grid)
-	game.navigation_facade = SettlementGame.NavigationFacadeScript.new()
+	game.navigation_facade = NavigationFacadeScript.new()
 	game.navigation_facade.configure(game.nav_grid, game.route_service)
-	game.navigation_bridge = SettlementGame.NavigationBridgeScript.new()
+	game.navigation_bridge = NavigationBridgeScript.new()
 	game.add_child(game.navigation_bridge)
 	game.navigation_bridge.configure(game.nav_grid, game.navigation_facade, game.route_service, game.navigation_obstacle_publisher)
-	game.building_queue_service = SettlementGame.BuildingQueueServiceScript.new()
+	game.building_queue_service = BuildingQueueServiceScript.new()
 	game.building_queue_service.configure(game.building_registry, game.nav_grid)
 	game.building_queue_service.set_citizen_alive_checker(game._is_ai_citizen_id_alive)
 
 
 func _setup_citizen_lifecycle() -> void:
-	game.citizen_lifecycle_service = SettlementGame.CitizenLifecycleServiceScript.new()
+	game.citizen_lifecycle_service = CitizenLifecycleServiceScript.new()
 	game.citizen_lifecycle_service.configure(
 		game.citizens,
 		game.pending_arrivals,
@@ -137,12 +213,12 @@ func _setup_citizen_lifecycle() -> void:
 
 
 func _setup_building_services() -> void:
-	game.building_zone_service = SettlementGame.BuildingZoneServiceScript.new()
-	game.building_availability_service = SettlementGame.BuildingAvailabilityServiceScript.new()
+	game.building_zone_service = BuildingZoneServiceScript.new()
+	game.building_availability_service = BuildingAvailabilityServiceScript.new()
 	game.building_availability_service.configure(game.settlement)
-	game.building_research_service = SettlementGame.BuildingResearchServiceScript.new()
+	game.building_research_service = BuildingResearchServiceScript.new()
 	game.building_research_service.configure(game.settlement)
-	game.village_territory_service = SettlementGame.VillageTerritoryServiceScript.new()
+	game.village_territory_service = VillageTerritoryServiceScript.new()
 	game.village_territory_service.configure(game.building_registry, int(game.settlement.era))
 	game.sawmills = SawmillService.new()
 	game.sawmills.configure(game.sawmill_stocks, game.sawmill_positions, SettlementGame.SAWMILL_PROCESS_DURATION, game._cell_from_position)
@@ -163,8 +239,8 @@ func _setup_construction_and_demolition() -> void:
 	construction_runtime.navigation_changed = game._refresh_navigation_grid
 	construction_runtime.update_supply_label = game._update_construction_supply_label
 	game.construction = ConstructionService.new()
-	game.construction.site_scene = SettlementGame.ConstructionSiteScene
-	game.construction.entrance_post_scene = SettlementGame.ConstructionEntrancePostScene
+	game.construction.site_scene = ConstructionSiteScene
+	game.construction.entrance_post_scene = ConstructionEntrancePostScene
 	game.construction.configure(construction_runtime)
 	var demolition_runtime := DemolitionRuntime.new()
 	demolition_runtime.duration = SettlementGame.DEMOLITION_DURATION
@@ -199,12 +275,12 @@ func _setup_canteen_and_resources() -> void:
 		game._update_workers
 	)
 	game.resource_pile_service = ResourcePileService.new(game, game.resource_piles, game.settlement, game.weather_state)
-	game.resource_pile_service.set_visuals(SettlementGame.ResourcePileVisualsScript.new())
+	game.resource_pile_service.set_visuals(ResourcePileVisualsScript.new())
 
 
 func _setup_foraging_and_fire() -> void:
 	game.foraging_service = ForagingService.new()
-	game.foraging_service.billboard_label_scene = SettlementGame.BillboardLabelScene
+	game.foraging_service.billboard_label_scene = BillboardLabelScene
 	game.foraging_service.set_random(game.random)
 	game.foraging_service.setup(
 		game.settlement,
@@ -278,7 +354,7 @@ func _setup_building_maintenance() -> void:
 
 
 func _setup_settlement_survival_and_daily_rules() -> void:
-	game.settlement_survival_service = SettlementGame.SettlementSurvivalServiceScript.new()
+	game.settlement_survival_service = SettlementSurvivalServiceScript.new()
 	game.settlement_survival_service.configure(
 		game.settlement,
 		game.day_cycle,
@@ -296,7 +372,7 @@ func _setup_settlement_survival_and_daily_rules() -> void:
 		game._is_citizen_work_time,
 		game._is_work_time
 	)
-	game.settlement_daily_rules_service = SettlementGame.SettlementDailyRulesServiceScript.new()
+	game.settlement_daily_rules_service = SettlementDailyRulesServiceScript.new()
 	game.settlement_daily_rules_service.configure(
 		game.settlement,
 		game.day_cycle,
@@ -318,7 +394,7 @@ func _setup_settlement_survival_and_daily_rules() -> void:
 
 
 func _setup_building_lifecycle() -> void:
-	game.building_lifecycle_service = SettlementGame.BuildingLifecycleServiceScript.new()
+	game.building_lifecycle_service = BuildingLifecycleServiceScript.new()
 	game.building_lifecycle_service.configure(
 		game.settlement,
 		game.citizens,
@@ -343,7 +419,7 @@ func _setup_building_lifecycle() -> void:
 		game.house_lights,
 		game.entrance_lights,
 		SettlementGame.HOUSE_CAPACITY,
-		SettlementGame.FireLightScene,
+		FireLightScene,
 		func() -> Node3D: return game.entrance_stone,
 		func() -> Node3D: return game.campfire_node,
 		func(v: Node3D) -> void: game.campfire_node = v,
@@ -404,7 +480,7 @@ func _setup_building_lifecycle() -> void:
 
 func _setup_excavation_and_factory() -> void:
 	game.excavation_service = SettlementGame.ExcavationServiceScript.new()
-	game.excavation_service.dig_site_scene = SettlementGame.DigSiteScene
+	game.excavation_service.dig_site_scene = DigSiteScene
 	game.excavation_service.configure(
 		game.settlement,
 		game.citizens,
@@ -434,7 +510,7 @@ func _setup_excavation_and_factory() -> void:
 
 
 func _setup_citizen_registration_and_school() -> void:
-	game.citizen_registration_service = SettlementGame.CitizenRegistrationServiceScript.new()
+	game.citizen_registration_service = CitizenRegistrationServiceScript.new()
 	game.citizen_registration_service.configure(
 		game.citizens,
 		SettlementGame.OFFICER_POST_RADIUS,
@@ -446,9 +522,9 @@ func _setup_citizen_registration_and_school() -> void:
 			game._registration_queue_counter += 1
 			return game._registration_queue_counter
 	)
-	game.school_service = SettlementGame.SchoolServiceScript.new()
+	game.school_service = SchoolServiceScript.new()
 	game.school_service.configure(game.school_positions, game.citizens)
-	game.building_placement_service = SettlementGame.BuildingPlacementServiceScript.new()
+	game.building_placement_service = BuildingPlacementServiceScript.new()
 	game.building_placement_service.configure(
 		game.dig_sites,
 		game.terrain_blocked_cells,
@@ -460,7 +536,7 @@ func _setup_citizen_registration_and_school() -> void:
 
 
 func _setup_citizen_needs_and_orders() -> void:
-	game.citizen_daily_order_service = SettlementGame.CitizenDailyOrderServiceScript.new()
+	game.citizen_daily_order_service = CitizenDailyOrderServiceScript.new()
 	game.citizen_daily_order_service.configure(
 		game.settlement,
 		game.citizens,
@@ -484,11 +560,11 @@ func _setup_citizen_needs_and_orders() -> void:
 		game.tree_positions,
 		game.grass_sources,
 	)
-	game.citizen_living_status_service = SettlementGame.CitizenLivingStatusServiceScript.new()
+	game.citizen_living_status_service = CitizenLivingStatusServiceScript.new()
 
 
 func _setup_trade_and_logistics() -> void:
-	game.trade_service = SettlementGame.TradeServiceScript.new()
+	game.trade_service = TradeServiceScript.new()
 	game.trade_service.configure(
 		game.settlement,
 		game.citizens,
@@ -507,7 +583,7 @@ func _setup_trade_and_logistics() -> void:
 		game._create_resource_pile,
 		game._update_workers
 	)
-	game.storage_routing_service = SettlementGame.StorageRoutingServiceScript.new()
+	game.storage_routing_service = StorageRoutingServiceScript.new()
 	game.storage_routing_service.configure(
 		game.settlement,
 		game.warehouse_positions,
@@ -525,7 +601,7 @@ func _setup_trade_and_logistics() -> void:
 
 
 func _setup_courier_system() -> void:
-	game.courier_dispatcher = SettlementGame.CourierDispatcherScript.new()
+	game.courier_dispatcher = CourierDispatcherScript.new()
 	game.courier_dispatcher.configure(
 		game.citizens,
 		game.warehouse_positions,
@@ -537,7 +613,7 @@ func _setup_courier_system() -> void:
 		game._cancel_courier_task,
 		game._release_task_warehouse_reservation
 	)
-	game.storage_delivery_service = SettlementGame.StorageDeliveryServiceScript.new()
+	game.storage_delivery_service = StorageDeliveryServiceScript.new()
 	game.storage_delivery_service.configure(
 		game.settlement,
 		game.warehouse_positions,
@@ -549,7 +625,7 @@ func _setup_courier_system() -> void:
 		game._request_courier_dispatch,
 		game._send_citizen_to_leisure
 	)
-	game.courier_task_publisher = SettlementGame.CourierTaskPublisherScript.new()
+	game.courier_task_publisher = CourierTaskPublisherScript.new()
 	game.courier_task_publisher.configure(
 		game.settlement,
 		game.citizens,
@@ -580,7 +656,7 @@ func _setup_courier_system() -> void:
 		game._firewood_task_priority,
 		func(building: Node3D) -> bool: return game.fire_management_service.is_managed_fire_source(building)
 	)
-	game.courier_task_service = SettlementGame.CourierTaskServiceScript.new()
+	game.courier_task_service = CourierTaskServiceScript.new()
 	game.courier_task_service.configure(
 		game.settlement,
 		game.citizens,
@@ -611,7 +687,7 @@ func _setup_courier_system() -> void:
 
 
 func _setup_actuator_and_events() -> void:
-	game.actuator_bridge = SettlementGame.SettlementActuatorBridgeScript.new()
+	game.actuator_bridge = SettlementActuatorBridgeScript.new()
 	game.actuator_bridge.configure(
 		game.canteen_service,
 		game.courier_dispatcher,
@@ -636,7 +712,7 @@ func _setup_actuator_and_events() -> void:
 		game._fire_state_for,
 		game._apply_fire_state
 	)
-	game.simulation_event_dispatcher = SettlementGame.SimulationEventDispatcherScript.new()
+	game.simulation_event_dispatcher = SimulationEventDispatcherScript.new()
 	game.simulation_event_dispatcher.configure({
 		"start_meal": game._start_meal,
 		"start_park_rest": game._start_park_rest,
@@ -658,21 +734,21 @@ func _setup_actuator_and_events() -> void:
 func _setup_ui_controllers() -> void:
 	game.ui_attacher.create_all_controllers()
 	game.ui_attacher.configure_all(game)
-	game.warehouse_fill_label_controller = SettlementGame.WarehouseFillLabelControllerScript.new()
+	game.warehouse_fill_label_controller = WarehouseFillLabelControllerScript.new()
 	game.warehouse_fill_label_controller.configure(game)
-	game.building_status_indicator_controller = SettlementGame.BuildingStatusIndicatorControllerScript.new()
+	game.building_status_indicator_controller = BuildingStatusIndicatorControllerScript.new()
 	game.building_status_indicator_controller.configure(game)
-	game.first_person_hud_controller = SettlementGame.FirstPersonHUDControllerScript.new()
+	game.first_person_hud_controller = FirstPersonHUDControllerScript.new()
 	game.first_person_hud_controller.configure(game)
-	game.label_distance_fade_controller = SettlementGame.LabelDistanceFadeControllerScript.new()
+	game.label_distance_fade_controller = LabelDistanceFadeControllerScript.new()
 	game.label_distance_fade_controller.configure(game)
 
 
 func _setup_world_and_events() -> void:
 	game.settlement.apply_launch_config(game.launch_config)
-	var _event_registry := SettlementGame.EventRegistryScript.new()
-	_event_registry.register_all(SettlementGame.TentEraEventsScript.build())
-	game.event_service = SettlementGame.EventServiceScript.new(_event_registry)
+	var _event_registry := EventRegistryScript.new()
+	_event_registry.register_all(TentEraEventsScript.build())
+	game.event_service = EventServiceScript.new(_event_registry)
 	game.tent_weather = SettlementGame.TentEraSurvivalRulesScript.weather_for_day(game.day_cycle.current_day)
 	game.weather_state.new_day(game.tent_weather, game.random, int(game.clock.minutes))
 
@@ -685,10 +761,10 @@ func _setup_controllers_and_world() -> void:
 	game.player_controller = PlayerController.new()
 	game.add_child(game.player_controller)
 	game.player_controller.setup(game)
-	game.building_placement_controller = SettlementGame.BuildingPlacementControllerScript.new()
+	game.building_placement_controller = BuildingPlacementControllerScript.new()
 	game.add_child(game.building_placement_controller)
 	game.building_placement_controller.setup(game)
-	game.survival_event_controller = SettlementGame.SurvivalEventControllerScript.new()
+	game.survival_event_controller = SurvivalEventControllerScript.new()
 	game.add_child(game.survival_event_controller)
 	game.survival_event_controller.setup(game)
 	game._create_world()
@@ -706,8 +782,8 @@ func _setup_citizens_and_ai() -> void:
 	game._refresh_living_statuses()
 	if not game.citizen_ai.configure(
 		SettlementAIWorldFacade.new(game),
-		[SettlementGame.SleepGoalScript.new(), SettlementGame.MealGoalScript.new(), SettlementGame.ToiletGoalScript.new(), SettlementGame.RestGoalScript.new(), SettlementGame.ReturnHomeWhenIdleGoalScript.new(), SettlementGame.FollowLeaderGoalScript.new(), SettlementGame.RegisterGoalScript.new(), SettlementGame.ForestryGoalScript.new(), SettlementGame.FarmingGoalScript.new(), SettlementGame.ConstructionGoalScript.new(), SettlementGame.GatheringGoalScript.new(), SettlementGame.CleaningGoalScript.new(), SettlementGame.ExcavationGoalScript.new(), SettlementGame.ServiceWorkGoalScript.new(), SettlementGame.FactoryWorkGoalScript.new(), SettlementGame.CourierDeliveryGoalScript.new()],
-		[SettlementGame.WorkforceOrderProviderScript.new(), SettlementGame.DailyPlayerOrderProviderScript.new(), SettlementGame.ForestryOrderProviderScript.new(), SettlementGame.FarmingOrderProviderScript.new(), SettlementGame.ConstructionOrderProviderScript.new(), SettlementGame.GatheringOrderProviderScript.new(), SettlementGame.ExcavationOrderProviderScript.new(), SettlementGame.ServiceWorkOrderProviderScript.new(), SettlementGame.FactoryWorkOrderProviderScript.new(), SettlementGame.CourierDeliveryOrderProviderScript.new()]
+		[SleepGoalScript.new(), MealGoalScript.new(), ToiletGoalScript.new(), RestGoalScript.new(), ReturnHomeWhenIdleGoalScript.new(), FollowLeaderGoalScript.new(), RegisterGoalScript.new(), ForestryGoalScript.new(), FarmingGoalScript.new(), ConstructionGoalScript.new(), GatheringGoalScript.new(), CleaningGoalScript.new(), ExcavationGoalScript.new(), ServiceWorkGoalScript.new(), FactoryWorkGoalScript.new(), CourierDeliveryGoalScript.new()],
+		[WorkforceOrderProviderScript.new(), DailyPlayerOrderProviderScript.new(), ForestryOrderProviderScript.new(), FarmingOrderProviderScript.new(), ConstructionOrderProviderScript.new(), GatheringOrderProviderScript.new(), ExcavationOrderProviderScript.new(), ServiceWorkOrderProviderScript.new(), FactoryWorkOrderProviderScript.new(), CourierDeliveryOrderProviderScript.new()]
 	):
 		push_error("Native citizen AI failed to capture its initial world snapshot")
 	game._update_workers()
