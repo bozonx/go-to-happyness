@@ -25,6 +25,7 @@ Layers:
 
 Feature ownership:
 
+- `content`: content packs, content ids, style resolution, shared save stamp.
 - `settlement`: economy, stored resources, eras, wellbeing, progression.
 - `buildings`: definitions, placement, construction, demolition, visuals.
 - `citizens`: citizen profiles, task state, actor movement, task execution.

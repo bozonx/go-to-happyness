@@ -53,6 +53,9 @@ create generic `utils`, `helpers`, `managers` or catch-all `services` directorie
 
 ## Feature ownership
 
+- `content`: authored content packaging — packs, content ids, style resolution and
+  the save stamp shared by blueprints and maps. See
+  `design_docs/core/content_packaging.md`.
 - `settlement`: economy, stored resources, eras, wellbeing and global progression.
 - `buildings`: definitions, placement, construction, demolition and building visuals.
 - `citizens`: citizen profiles, task state, actor movement and task execution.
