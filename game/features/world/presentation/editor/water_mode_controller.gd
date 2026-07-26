@@ -50,15 +50,25 @@ func deactivate() -> void:
 		context.water_brush.clear_hover()
 
 
+func clear_hover() -> void:
+	if context != null and context.water_brush != null:
+		context.water_brush.clear_hover()
+
+
+func hover_brush() -> BaseBrushController:
+	return context.water_brush if context != null else null
+
+
+func adjust_brush_size(delta: int) -> void:
+	if context != null and context.water_brush != null:
+		context.water_brush.adjust_brush_size(delta)
+
+
 func process(_delta: float) -> void:
 	var brush := context.water_brush
 	var was := brush.hovered_cell
 	var had := brush.has_hover
 	brush.update_hover(context.camera, context.space_state(), context.mouse_position())
-	# The terrain brush owns the shared hover marker, so it is kept on the same
-	# column: otherwise the marker would sit wherever the author last left the
-	# height tool while they paint water somewhere else.
-	context.brush.update_hover(context.camera, context.space_state(), context.mouse_position())
 	if _painting and brush.has_hover and (not had or was != brush.hovered_cell):
 		_stroke()
 
@@ -66,6 +76,8 @@ func process(_delta: float) -> void:
 func handle_input(event: InputEvent) -> bool:
 	if event is InputEventMouseButton:
 		var button := event as InputEventMouseButton
+		if _handle_common_mouse(button):
+			return true
 		if button.button_index == MOUSE_BUTTON_RIGHT:
 			if button.pressed:
 				context.set_edit_label("вода")
@@ -115,15 +127,19 @@ func _handle_key(event: InputEventKey) -> bool:
 
 
 ## One stroke: the brush edit, and — on a river with a current dialled in — the
-## flow written into the body for the cells it just filled. Flow belongs to the
-## body (§9.2), so it is not part of the cell transaction and not on the undo
-## stack; it is authored data about a channel, like its name.
+## flow written through `WaterService` so it is undoable and republishes
+## navigation like every other water edit.
 func _stroke() -> void:
 	context.set_edit_label(_edit_label())
 	var brush := context.water_brush
 	brush.apply()
 	if brush.tool == WaterBrushController.TOOL_PAINT and _flow_strength > 0:
-		_write_flow(brush.brush_cells(brush.hovered_cell))
+		context.water_service.set_flow(
+			brush.brush_cells(brush.hovered_cell),
+			brush.body_id,
+			_flow_direction,
+			_flow_strength,
+		)
 
 
 func _edit_label() -> String:
@@ -132,19 +148,6 @@ func _edit_label() -> String:
 		WaterBrushController.TOOL_FLOOD: return "залив низины"
 		WaterBrushController.TOOL_FREEZE: return "лёд"
 	return "вода"
-
-
-func _write_flow(cells: Array[Vector2i]) -> void:
-	var body := context.water.body(context.water_brush.body_id)
-	if body == null or body.type != WaterBody.Type.RIVER:
-		return
-	for cell: Vector2i in cells:
-		if context.water.body_id_at(cell) == body.id:
-			body.set_flow(cell, _flow_direction, _flow_strength)
-	# A current that stops a ford is a passability change (§9.7), so the field has
-	# to hear about it even though no cell record moved.
-	if context.nav_publisher != null:
-		context.nav_publisher.refresh_cells(cells)
 
 
 func _cycle_flow_direction() -> void:

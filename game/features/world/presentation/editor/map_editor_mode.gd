@@ -73,8 +73,43 @@ func process(_delta: float) -> void:
 	pass
 
 
+## Clears the hover state of whatever brush this mode uses. The editor calls this
+## when the pointer leaves the 3D viewport, so a brush does not keep painting
+## under a panel.
+func clear_hover() -> void:
+	pass
+
+
+## The brush the hover marker should follow, or null when the mode has no brush.
+## The editor reads this to position and scale the hover marker without knowing
+## which brush the active mode uses.
+func hover_brush() -> BaseBrushController:
+	return null
+
+
+## Adjusts the active brush's size. The editor delegates Shift+wheel here instead
+## of reaching into a specific brush.
+func adjust_brush_size(_delta: int) -> void:
+	pass
+
+
 ## Input the camera did not claim. Return true to consume it.
 func handle_input(_event: InputEvent) -> bool:
+	return false
+
+
+## Handles common mouse shortcuts shared across modes: Shift+wheel adjusts the
+## brush size. Modes can call this from their own `handle_input` before
+## mode-specific logic.
+func _handle_common_mouse(event: InputEventMouseButton) -> bool:
+	if event.shift_pressed and event.pressed:
+		match event.button_index:
+			MOUSE_BUTTON_WHEEL_UP:
+				adjust_brush_size(1)
+				return true
+			MOUSE_BUTTON_WHEEL_DOWN:
+				adjust_brush_size(-1)
+				return true
 	return false
 
 

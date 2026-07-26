@@ -49,13 +49,29 @@ func activate() -> void:
 
 
 func deactivate() -> void:
-	context.brush.set_paint_direction(0)
-	if context.nav_overlay != null:
+	if context != null and context.brush != null:
+		context.brush.set_paint_direction(0)
+	if context != null and context.nav_overlay != null:
 		context.nav_overlay.visible = false
 
 
+func clear_hover() -> void:
+	if context != null and context.brush != null:
+		context.brush.clear_hover()
+
+
+func hover_brush() -> BaseBrushController:
+	return context.brush if context != null else null
+
+
+func adjust_brush_size(delta: int) -> void:
+	if context != null and context.brush != null:
+		context.brush.adjust_brush_size(delta)
+
+
 func process(_delta: float) -> void:
-	context.brush.update_hover(context.camera, context.space_state(), context.mouse_position())
+	if context.brush != null:
+		context.brush.update_hover(context.camera, context.space_state(), context.mouse_position())
 
 
 func handle_input(event: InputEvent) -> bool:
@@ -67,6 +83,8 @@ func handle_input(event: InputEvent) -> bool:
 
 
 func _handle_mouse(event: InputEventMouseButton) -> bool:
+	if _handle_common_mouse(event):
+		return true
 	if event.ctrl_pressed and event.pressed:
 		match event.button_index:
 			MOUSE_BUTTON_WHEEL_UP:

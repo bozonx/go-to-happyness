@@ -261,18 +261,19 @@ func _process(delta: float) -> void:
 	if _is_pointer_over_view():
 		_active.process(delta)
 	else:
-		_brush.clear_hover()
+		_active.clear_hover()
 	_update_hover_marker()
 	_status_cell.text = _active.status_text()
 
 
 func _update_hover_marker() -> void:
-	hover_marker.visible = _brush.has_hover
-	if not _brush.has_hover:
+	var brush := _active.hover_brush() if _active != null else null
+	hover_marker.visible = brush != null and brush.has_hover
+	if brush == null or not brush.has_hover:
 		return
-	var centre := document.terrain.cell_center(_brush.hovered_cell)
+	var centre := document.terrain.cell_center(brush.hovered_cell)
 	hover_marker.position = Vector3(centre.x, centre.y + 0.03, centre.z)
-	var span := float(_brush.brush_size * 2 - 1)
+	var span := float(brush.brush_size * 2 - 1)
 	hover_marker.scale = Vector3(span, 1.0, span)
 
 
@@ -300,16 +301,6 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		if not _is_pointer_over_view():
 			return
-		if button.pressed and button.shift_pressed:
-			match button.button_index:
-				MOUSE_BUTTON_WHEEL_UP:
-					_brush.adjust_brush_size(1)
-					_refresh_panels()
-					return
-				MOUSE_BUTTON_WHEEL_DOWN:
-					_brush.adjust_brush_size(-1)
-					_refresh_panels()
-					return
 		if _active != null and _active.handle_input(event):
 			_refresh_panels()
 		return
@@ -378,18 +369,27 @@ func _on_water_committed(_delta: WaterDelta) -> void:
 
 
 func _undo() -> void:
-	_message = "отменено: %s" % history.undo_label() if history.can_undo() else "нечего отменять"
+	if not history.can_undo():
+		_message = "нечего отменять"
+		_refresh_panels()
+		return
+	var label := history.undo_label()
 	_replaying = true
-	history.undo()
+	var ok := history.undo()
 	_replaying = false
+	_message = "отменено: %s" % label if ok else "отмена не удалась"
 	_after_history_change()
 
 
 func _redo() -> void:
-	_message = "повторено" if history.can_redo() else "нечего повторять"
+	if not history.can_redo():
+		_message = "нечего повторять"
+		_refresh_panels()
+		return
 	_replaying = true
-	history.redo()
+	var ok := history.redo()
 	_replaying = false
+	_message = "повторено" if ok else "повтор не удался"
 	_after_history_change()
 
 

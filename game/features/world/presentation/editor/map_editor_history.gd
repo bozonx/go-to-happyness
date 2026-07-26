@@ -44,6 +44,7 @@ func undo() -> bool:
 		# It refused, so it is still in effect: put it back rather than leave the
 		# stack claiming a state the world is not in.
 		_undo_stack.append(command)
+		changed.emit()
 		return false
 	_redo_stack.append(command)
 	changed.emit()

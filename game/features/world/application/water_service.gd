@@ -116,7 +116,7 @@ func paint(cells: Array[Vector2i], body_id: int, level: int) -> bool:
 	if level < WaterGrid.MIN_HEIGHT or level > WaterGrid.MAX_HEIGHT:
 		return _reject(REASON_NOTHING_TO_DO)
 	var delta := WaterDelta.new()
-	for cell: Vector2i in _sorted_unique(cells):
+	for cell: Vector2i in CellUtils.sorted_unique(cells):
 		if not grid.is_inside(cell) or _is_dry_ground(cell, level):
 			continue
 		var old_state := WaterDelta.state_of(grid, cell)
@@ -147,7 +147,7 @@ func erase(cells: Array[Vector2i]) -> bool:
 	if grid == null:
 		return _reject(REASON_NO_GRID)
 	var delta := WaterDelta.new()
-	for cell: Vector2i in _sorted_unique(cells):
+	for cell: Vector2i in CellUtils.sorted_unique(cells):
 		if not grid.is_inside(cell) or not grid.has_water(cell):
 			continue
 		delta.record(cell, WaterDelta.state_of(grid, cell), WaterDelta.dry_state())
@@ -163,7 +163,7 @@ func set_level(cells: Array[Vector2i], level: int) -> bool:
 	if level < WaterGrid.MIN_HEIGHT or level > WaterGrid.MAX_HEIGHT:
 		return _reject(REASON_NOTHING_TO_DO)
 	var delta := WaterDelta.new()
-	for cell: Vector2i in _sorted_unique(cells):
+	for cell: Vector2i in CellUtils.sorted_unique(cells):
 		if not grid.is_inside(cell) or not grid.has_water(cell):
 			continue
 		var old_state := WaterDelta.state_of(grid, cell)
@@ -187,7 +187,7 @@ func set_frozen(cells: Array[Vector2i], frozen: bool, thickness: int = WaterGrid
 		return _reject(REASON_NO_GRID)
 	var delta := WaterDelta.new()
 	var refused_any := false
-	for cell: Vector2i in _sorted_unique(cells):
+	for cell: Vector2i in CellUtils.sorted_unique(cells):
 		if not grid.is_inside(cell) or not grid.has_water(cell):
 			continue
 		var body := grid.body_at(cell)
@@ -218,6 +218,44 @@ func set_body_frozen(body_id: int, frozen: bool, thickness: int = WaterGrid.MAX_
 	if not grid.has_body(body_id):
 		return _reject(REASON_NO_BODY)
 	return set_frozen(cells_of_body(body_id), frozen, thickness)
+
+
+## Sets flow direction and strength on cells of a body, as one undoable
+## transaction. Flow lives on the `WaterBody`, not on the grid cells, so this
+## produces a `WaterFlowEdit` rather than a `WaterDelta` — but it rides the same
+## undo stack and emits the same `edit_committed` signal, which is what keeps
+## the editor's shared undo and the navigation publisher in step.
+func set_flow(cells: Array[Vector2i], body_id: int, direction: int, strength: int) -> bool:
+	if grid == null:
+		return _reject(REASON_NO_GRID)
+	if not grid.has_body(body_id):
+		return _reject(REASON_NO_BODY)
+	var body := grid.body(body_id)
+	var clamped_strength := clampi(strength, 0, WaterBody.MAX_FLOW_STRENGTH)
+	var new_flow_value := (direction & WaterBody.FLOW_DIR_MASK) | (clamped_strength << WaterBody.FLOW_STRENGTH_SHIFT)
+	var edit_cells: Array[Vector2i] = []
+	var old_flows := PackedInt32Array()
+	var new_flows := PackedInt32Array()
+	for cell: Vector2i in CellUtils.sorted_unique(cells):
+		if not grid.is_inside(cell) or grid.body_id_at(cell) != body_id:
+			continue
+		var old_value := int(body.flow.get(cell, 0))
+		if old_value == new_flow_value:
+			continue
+		edit_cells.append(cell)
+		old_flows.append(old_value)
+		new_flows.append(new_flow_value)
+	if edit_cells.is_empty():
+		return _reject(REASON_NOTHING_TO_DO)
+	var edit := WaterFlowEdit.create(body_id, edit_cells, old_flows, new_flows)
+	edit.apply(grid)
+	_undo_stack.push_back(edit)
+	if _undo_stack.size() > MAX_UNDO_STEPS:
+		_undo_stack.pop_front()
+	_redo_stack.clear()
+	_last_rejection = REASON_NONE
+	edit_committed.emit(edit)
+	return true
 
 
 func cells_of_body(body_id: int) -> Array[Vector2i]:
@@ -300,15 +338,3 @@ func _kept_flags(old_state: PackedInt32Array, body_id: int, level: int) -> int:
 	if old_state[WaterDelta.STATE_BODY] == body_id and old_state[WaterDelta.STATE_HEIGHT] == level:
 		return old_state[WaterDelta.STATE_FLAGS]
 	return 0
-
-
-static func _sorted_unique(cells: Array[Vector2i]) -> Array[Vector2i]:
-	var seen: Dictionary = {}
-	for cell: Vector2i in cells:
-		seen[cell] = true
-	var result: Array[Vector2i] = []
-	for cell: Vector2i in seen:
-		result.append(cell)
-	result.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
-		return a.y < b.y if a.y != b.y else a.x < b.x)
-	return result

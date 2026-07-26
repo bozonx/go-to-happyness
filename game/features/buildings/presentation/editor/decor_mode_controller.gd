@@ -105,7 +105,6 @@ var _collision_overlay_btn: Button = null
 var _show_collision_overlay: bool = false
 var _collision_overlays: Dictionary = {}  ## object id (String) -> Array[MeshInstance3D]
 var _zone_filter_option: OptionButton = null
-var _zone_highlight: MeshInstance3D = null
 var _zone_out_of_bounds_label: Label = null
 var _asset_buttons: Dictionary = {}
 var _recent_buttons: Dictionary = {}
@@ -607,7 +606,8 @@ func _erase_object(object_id: String) -> void:
 	_refresh_object_list()
 	if selected_object_id == object_id:
 		select_object("")
-	refresh_fixture_ui()
+	if not _editor.blueprint.fixtures.is_empty():
+		refresh_fixture_ui()
 
 
 func delete_selection() -> void:
@@ -627,18 +627,21 @@ func duplicate_selection() -> void:
 	# Offset by one snap step so the copy is visible rather than hidden inside
 	# the original.
 	var offset := maxf(current_snap_step, 0.5)
-	copy.pos += Vector3(offset, 0.0, offset)
-	# Clamp to building bounds.
-	if not _is_valid_transform(copy.pos, copy.rot, copy.scale, copy.asset_id, record.id):
-		# Try offsetting in other directions.
-		copy.pos = record.pos + Vector3(-offset, 0.0, offset)
-		if not _is_valid_transform(copy.pos, copy.rot, copy.scale, copy.asset_id, record.id):
-			copy.pos = record.pos + Vector3(offset, 0.0, -offset)
-			if not _is_valid_transform(copy.pos, copy.rot, copy.scale, copy.asset_id, record.id):
-				copy.pos = record.pos + Vector3(-offset, 0.0, -offset)
-				if not _is_valid_transform(copy.pos, copy.rot, copy.scale, copy.asset_id, record.id):
-					_editor.set_status("Невозможно дублировать: нет места в границах здания.")
-					return
+	var offset_candidates := [
+		Vector3(offset, 0.0, offset),
+		Vector3(-offset, 0.0, offset),
+		Vector3(offset, 0.0, -offset),
+		Vector3(-offset, 0.0, -offset),
+	]
+	var placed := false
+	for off in offset_candidates:
+		copy.pos = record.pos + off
+		if _is_valid_transform(copy.pos, copy.rot, copy.scale, copy.asset_id, record.id):
+			placed = true
+			break
+	if not placed:
+		_editor.set_status("Невозможно дублировать: нет места в границах здания.")
+		return
 	_push_undo()
 	_editor.blueprint.objects.append(copy)
 	_spawn_node(copy)
@@ -659,10 +662,13 @@ func rotate_selection(axis: String, direction: int) -> void:
 	var delta := step * direction
 	if axis == "x":
 		current_pitch_deg = fposmod(current_pitch_deg + delta, 360.0)
+	elif axis == "y":
+		current_yaw_deg = fposmod(current_yaw_deg + delta, 360.0)
 	elif axis == "z":
 		current_roll_deg = fposmod(current_roll_deg + delta, 360.0)
 	else:
-		current_yaw_deg = fposmod(current_yaw_deg + delta, 360.0)
+		push_warning("DecorModeController: invalid rotation axis '%s'" % axis)
+		return
 	_update_rotation_label()
 	if record != null:
 		var candidate := Vector3(current_pitch_deg, current_yaw_deg, current_roll_deg)
@@ -717,14 +723,7 @@ func _next_object_suffix() -> int:
 # ---------------------------------------------------------------------------
 
 func _push_undo() -> void:
-	var objects: Array = []
-	for record: DecorObjectRecordScript in _editor.blueprint.objects:
-		objects.append(record.to_dict())
-	var fixtures: Array = []
-	for fixture: FixtureDefinitionScript in _editor.blueprint.fixtures:
-		fixtures.append(fixture.to_dict())
-	var snapshot := {"objects": objects, "fixtures": fixtures}
-	_undo_stack.append(snapshot)
+	_undo_stack.append(_snapshot_state())
 	if _undo_stack.size() > UNDO_LIMIT:
 		_undo_stack.pop_front()
 	# Clear redo stack on new action.
@@ -736,32 +735,10 @@ func undo() -> bool:
 	if _undo_stack.is_empty():
 		_editor.set_status("Отменять нечего.")
 		return true
-	# Push current state to redo stack.
-	var current_objects: Array = []
-	for record: DecorObjectRecordScript in _editor.blueprint.objects:
-		current_objects.append(record.to_dict())
-	var current_fixtures: Array = []
-	for fixture: FixtureDefinitionScript in _editor.blueprint.fixtures:
-		current_fixtures.append(fixture.to_dict())
-	var current := {"objects": current_objects, "fixtures": current_fixtures}
-	_redo_stack.append(current)
+	_redo_stack.append(_snapshot_state())
 	if _redo_stack.size() > REDO_LIMIT:
 		_redo_stack.pop_front()
-	var snapshot: Dictionary = _undo_stack.pop_back()
-	_editor.blueprint.objects.clear()
-	for data in snapshot.get("objects", []):
-		_editor.blueprint.objects.append(DecorObjectRecordScript.from_dict(data))
-	_editor.blueprint.fixtures.clear()
-	for data in snapshot.get("fixtures", []):
-		_editor.blueprint.fixtures.append(FixtureDefinitionScript.from_dict(data))
-	_editor.mark_dirty()
-	rebuild_nodes()
-	_refresh_object_list()
-	refresh_fixture_ui()
-	if find_record(selected_object_id) == null:
-		select_object("")
-	else:
-		select_object(selected_object_id)
+	_restore_snapshot(_undo_stack.pop_back())
 	_editor.set_status("Отменено. Шагов в истории: %d" % _undo_stack.size())
 	_update_undo_redo_buttons()
 	return true
@@ -771,32 +748,10 @@ func redo() -> bool:
 	if _redo_stack.is_empty():
 		_editor.set_status("Повторять нечего.")
 		return true
-	# Push current state to undo stack.
-	var current_objects: Array = []
-	for record: DecorObjectRecordScript in _editor.blueprint.objects:
-		current_objects.append(record.to_dict())
-	var current_fixtures: Array = []
-	for fixture: FixtureDefinitionScript in _editor.blueprint.fixtures:
-		current_fixtures.append(fixture.to_dict())
-	var current := {"objects": current_objects, "fixtures": current_fixtures}
-	_undo_stack.append(current)
+	_undo_stack.append(_snapshot_state())
 	if _undo_stack.size() > UNDO_LIMIT:
 		_undo_stack.pop_front()
-	var snapshot: Dictionary = _redo_stack.pop_back()
-	_editor.blueprint.objects.clear()
-	for data in snapshot.get("objects", []):
-		_editor.blueprint.objects.append(DecorObjectRecordScript.from_dict(data))
-	_editor.blueprint.fixtures.clear()
-	for data in snapshot.get("fixtures", []):
-		_editor.blueprint.fixtures.append(FixtureDefinitionScript.from_dict(data))
-	_editor.mark_dirty()
-	rebuild_nodes()
-	_refresh_object_list()
-	refresh_fixture_ui()
-	if find_record(selected_object_id) == null:
-		select_object("")
-	else:
-		select_object(selected_object_id)
+	_restore_snapshot(_redo_stack.pop_back())
 	_editor.set_status("Повторено. Шагов в истории: %d" % _redo_stack.size())
 	_update_undo_redo_buttons()
 	return true
@@ -813,6 +768,33 @@ func clear_undo_history() -> void:
 	_undo_stack.clear()
 	_redo_stack.clear()
 	_update_undo_redo_buttons()
+
+
+func _snapshot_state() -> Dictionary:
+	var objects: Array = []
+	for record: DecorObjectRecordScript in _editor.blueprint.objects:
+		objects.append(record.to_dict())
+	var fixtures: Array = []
+	for fixture: FixtureDefinitionScript in _editor.blueprint.fixtures:
+		fixtures.append(fixture.to_dict())
+	return {"objects": objects, "fixtures": fixtures}
+
+
+func _restore_snapshot(snapshot: Dictionary) -> void:
+	_editor.blueprint.objects.clear()
+	for data in snapshot.get("objects", []):
+		_editor.blueprint.objects.append(DecorObjectRecordScript.from_dict(data))
+	_editor.blueprint.fixtures.clear()
+	for data in snapshot.get("fixtures", []):
+		_editor.blueprint.fixtures.append(FixtureDefinitionScript.from_dict(data))
+	_editor.mark_dirty()
+	rebuild_nodes()
+	_refresh_object_list()
+	refresh_fixture_ui()
+	if find_record(selected_object_id) == null:
+		select_object("")
+	else:
+		select_object(selected_object_id)
 
 
 # ---------------------------------------------------------------------------
@@ -893,7 +875,7 @@ func refresh_ghost() -> void:
 	_ghost.visible = true
 	var ghost_pos := snapped_position(_editor.cursor_hit_pos)
 	_ghost.position = ghost_pos
-	_ghost.rotation_degrees = Vector3(0.0, current_yaw_deg, 0.0)
+	_ghost.rotation_degrees = Vector3(current_pitch_deg, current_yaw_deg, current_roll_deg)
 	# Update ghost colour based on placement state.
 	var state := _compute_ghost_state(ghost_pos)
 	_update_ghost_color(state)
@@ -917,17 +899,7 @@ func _update_hover_marker() -> void:
 			_hover_marker.visible = false
 		return
 	if _hover_marker == null:
-		_hover_marker = MeshInstance3D.new()
-		var torus := TorusMesh.new()
-		torus.inner_radius = 0.42
-		torus.outer_radius = 0.5
-		_hover_marker.mesh = torus
-		var material := StandardMaterial3D.new()
-		material.albedo_color = Color(1.0, 0.8, 0.2, 0.9)
-		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		_hover_marker.material_override = material
-		add_child(_hover_marker)
+		_hover_marker = _create_torus_marker(Color(1.0, 0.8, 0.2, 0.9))
 	var asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
 	var size := asset.footprint_m() if asset != null else Vector3.ONE
 	var radius := maxf(MIN_PICK_RADIUS, maxf(size.x, size.z) * 0.5 * maxf(record.scale.x, record.scale.z))
@@ -981,6 +953,21 @@ func _get_ghost_material() -> StandardMaterial3D:
 	return _ghost_material
 
 
+func _create_torus_marker(color: Color) -> MeshInstance3D:
+	var marker := MeshInstance3D.new()
+	var torus := TorusMesh.new()
+	torus.inner_radius = 0.42
+	torus.outer_radius = 0.5
+	marker.mesh = torus
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	marker.material_override = material
+	add_child(marker)
+	return marker
+
+
 func _update_selection_marker() -> void:
 	var record := find_record(selected_object_id)
 	if record == null or not is_active():
@@ -988,17 +975,7 @@ func _update_selection_marker() -> void:
 			_selection_marker.visible = false
 		return
 	if _selection_marker == null:
-		_selection_marker = MeshInstance3D.new()
-		var torus := TorusMesh.new()
-		torus.inner_radius = 0.42
-		torus.outer_radius = 0.5
-		_selection_marker.mesh = torus
-		var material := StandardMaterial3D.new()
-		material.albedo_color = Color(0.35, 0.95, 1.0, 0.85)
-		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		_selection_marker.material_override = material
-		add_child(_selection_marker)
+		_selection_marker = _create_torus_marker(Color(0.35, 0.95, 1.0, 0.85))
 	var asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
 	var size := asset.footprint_m() if asset != null else Vector3.ONE
 	var radius := maxf(MIN_PICK_RADIUS, maxf(size.x, size.z) * 0.5 * maxf(record.scale.x, record.scale.z))
@@ -1579,7 +1556,7 @@ func _replace_selected_object() -> void:
 					found = true
 					break
 			if not found:
-					lost_count += 1
+				lost_count += 1
 	_push_undo()
 	var old_appearance := record.appearance.duplicate(true)
 	record.asset_id = new_asset.id

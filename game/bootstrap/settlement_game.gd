@@ -2,7 +2,6 @@ class_name SettlementGame
 extends Node3D
 
 const UIManagerScene = preload("res://game/features/ui/presentation/ui_manager.tscn")
-const CameraControllerScene = preload("res://game/features/world/presentation/camera_controller.tscn")
 const GameLaunchConfigScript = preload("res://game/features/settlement/domain/game_launch_config.gd")
 const TentEraSurvivalRulesScript = preload("res://game/features/settlement/domain/tent_era_survival_rules.gd")
 const WaterCollectorRecordScript = preload("res://game/features/logistics/domain/water_collector_record.gd")
@@ -15,7 +14,6 @@ const SaveDataScript = preload("res://game/features/save_load/domain/save_data.g
 const SaveGameServiceScript = preload("res://game/features/save_load/application/save_game_service.gd")
 
 const WeatherStateScript = preload("res://game/features/simulation/domain/weather_state.gd")
-const WorldSetupScene = preload("res://game/features/world/presentation/world_setup.tscn")
 const ExcavationServiceScript = preload("res://game/features/production/application/excavation_service.gd")
 const FactoryServiceScript = preload("res://game/features/production/application/factory_service.gd")
 const ResourcePileScript = preload("res://game/features/logistics/domain/resource_pile.gd")
@@ -67,7 +65,6 @@ const HOUSE_CAPACITY := 4
 const CONSTRUCTION_DURATION := 4.0
 const DEMOLITION_DURATION := 3.0
 const INTERACTION_RANGE := 4.5
-const JOB_ENTRANCE_RANGE := 3.5
 const POCKET_CAPACITY := 8
 const SAWMILL_PROCESS_DURATION := 4.0
 
@@ -1130,7 +1127,7 @@ func _set_selected_work_role(role: String, daily_order := false) -> void:
 	else:
 		if role != "official" and not workplace_labor_service.player_can_manage_permanent_professions():
 			if workplace_labor_service != null:
-				workplace_labor_service.workplace_labor_service.show_labor_command_blocked()
+				workplace_labor_service.show_labor_command_blocked()
 			return
 		if selected_builder.has_no_permanent_work() or selected_builder.is_unregistered():
 			if _employment_center_position() == Vector3.INF:
@@ -1176,10 +1173,6 @@ func builder_job_capacity() -> int:
 
 func available_employer_capacity(role: String) -> int:
 	return _available_employer_capacity(role)
-
-
-func player_can_manage_permanent_professions() -> bool:
-	return workplace_labor_service.player_can_manage_permanent_professions()
 
 
 func employment_center_position() -> Vector3:

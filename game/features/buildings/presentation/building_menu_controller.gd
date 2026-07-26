@@ -105,7 +105,7 @@ func _refresh_role_buttons(selected_exists: bool, assignment_submenu_open: bool)
 		var era_ok: bool = is_daily_submenu or min_era <= simulation.settlement.era
 		var role_available: bool = simulation.workplace_labor_service.is_daily_order_role_available(role) if is_daily_submenu else simulation.workplace_labor_service.is_role_available(role)
 		button.visible = selected_exists and ((is_daily_submenu and simulation.build_menu_is_daily_order_menu) or (not is_daily_submenu and simulation.build_menu_is_job_menu)) and daily_role_enabled and era_ok and (not hero_only or simulation.selected_builder.is_hero)
-		var blocked_by_officer: bool = not is_daily_submenu and role != "official" and not simulation.player_can_manage_permanent_professions()
+		var blocked_by_officer: bool = not is_daily_submenu and role != "official" and not simulation.workplace_labor_service.player_can_manage_permanent_professions()
 		button.disabled = button.visible and (blocked_by_officer or not role_available)
 		if button.disabled and not role_available:
 			button.tooltip_text = S.NO_WORKPLACE_FOR_ROLE
@@ -200,7 +200,7 @@ func show_building_menu() -> void:
 			var cook_fuel: int = cook_fire_state.total_committed_fuel()
 			simulation.ui_manager.building_menu_title.text += S.COOK_FIRE_BRANCHES_FORMAT % [cook_fuel, simulation.FIRE_SUPPLY_TARGET]
 		simulation.ui_manager.building_cook_button.visible = BuildingTypes.is_kitchen(building_type)
-		var can_manage_professions: bool = simulation.player_can_manage_permanent_professions()
+		var can_manage_professions: bool = simulation.workplace_labor_service.player_can_manage_permanent_professions()
 		var profession_blocked_tooltip: String = simulation.workplace_labor_service.permanent_profession_block_message()
 		var is_active_kitchen: bool = simulation.selected_building == simulation.canteen
 		simulation.ui_manager.building_cook_button.text = "Register selected resident as permanent cook"

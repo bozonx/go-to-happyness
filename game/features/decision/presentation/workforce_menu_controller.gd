@@ -131,7 +131,7 @@ func refresh_workforce_menu() -> void:
 	var hiring := employment_state_count(Citizen.EmploymentState.REGISTERING)
 	var no_permanent_work := employment_state_count(Citizen.EmploymentState.NO_PERMANENT_WORK)
 	var unregistered := employment_state_count(Citizen.EmploymentState.UNREGISTERED)
-	var can_manage_professions: bool = simulation.player_can_manage_permanent_professions()
+	var can_manage_professions: bool = simulation.workplace_labor_service.player_can_manage_permanent_professions()
 	var blocked_tooltip: String = simulation.workplace_labor_service.permanent_profession_block_message()
 
 	var job_rows: Array[Dictionary] = []
@@ -240,7 +240,7 @@ func has_assignable_resident() -> bool:
 
 
 func remove_worker_from_role(role: String) -> void:
-	if not simulation.player_can_manage_permanent_professions():
+	if not simulation.workplace_labor_service.player_can_manage_permanent_professions():
 		simulation.workplace_labor_service.show_labor_command_blocked()
 		return
 	for citizen in simulation.citizens:
@@ -260,7 +260,7 @@ func remove_worker_from_role(role: String) -> void:
 
 
 func assign_unemployed_worker(role: String) -> void:
-	if role != "official" and not simulation.player_can_manage_permanent_professions():
+	if role != "official" and not simulation.workplace_labor_service.player_can_manage_permanent_professions():
 		simulation.workplace_labor_service.show_labor_command_blocked()
 		return
 	if not simulation.workplace_labor_service.is_role_available(role):
@@ -288,7 +288,7 @@ func assign_unemployed_worker(role: String) -> void:
 
 
 func enable_auto_for_citizen(citizen: Citizen) -> void:
-	if not simulation.player_can_manage_permanent_professions():
+	if not simulation.workplace_labor_service.player_can_manage_permanent_professions():
 		simulation.workplace_labor_service.show_labor_command_blocked()
 		return
 	if not is_instance_valid(citizen) or citizen.is_player_controlled:

@@ -14,7 +14,7 @@ func _init() -> void:
 
 	var c: Citizen = simulation.citizens[2]
 	simulation.selected_builder = c
-	print("selected=", simulation.selected_builder, " can_manage_perm=", simulation.player_can_manage_permanent_professions())
+	print("selected=", simulation.selected_builder, " can_manage_perm=", simulation.workplace_labor_service.player_can_manage_permanent_professions())
 	print("daily_order_roles=", simulation.workforce_menu_controller.daily_order_roles() if simulation.workforce_menu_controller != null else [])
 
 	# open daily order submenu the same way the UI does

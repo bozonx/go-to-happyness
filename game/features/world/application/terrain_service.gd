@@ -121,7 +121,7 @@ func paint_material(cells: Array[Vector2i], material_id: StringName, variant: in
 	if material_index < 0:
 		return _reject(CascadeSolver.REASON_NOTHING_TO_DO)
 	var delta := TerrainDelta.new()
-	for cell: Vector2i in _sorted_unique(cells):
+	for cell: Vector2i in CellUtils.sorted_unique(cells):
 		if not grid.is_inside(cell):
 			continue
 		var old_state := TerrainDelta.state_of(grid, cell)
@@ -169,7 +169,7 @@ func _paint_detail(cells: Array[Vector2i], mutate: Callable) -> bool:
 	if grid == null:
 		return _reject(CascadeSolver.REASON_NOTHING_TO_DO)
 	var delta := TerrainDelta.new()
-	for cell: Vector2i in _sorted_unique(cells):
+	for cell: Vector2i in CellUtils.sorted_unique(cells):
 		if not grid.is_inside(cell):
 			continue
 		var old_state := TerrainDelta.state_of(grid, cell)
@@ -193,7 +193,7 @@ func set_hole(cells: Array[Vector2i], enabled: bool) -> bool:
 		return _reject(CascadeSolver.REASON_NOTHING_TO_DO)
 	var states: Dictionary = {}
 	var order: Array[Vector2i] = []
-	for cell: Vector2i in _sorted_unique(cells):
+	for cell: Vector2i in CellUtils.sorted_unique(cells):
 		if not grid.is_inside(cell) or grid.is_hole(cell) == enabled:
 			continue
 		_stage(states, order, cell)
@@ -282,15 +282,3 @@ func _stage(states: Dictionary, order: Array[Vector2i], cell: Vector2i) -> void:
 
 static func _with_flag(flags: int, flag: int, enabled: bool) -> int:
 	return (flags | flag) if enabled else (flags & ~flag)
-
-
-static func _sorted_unique(cells: Array[Vector2i]) -> Array[Vector2i]:
-	var seen: Dictionary = {}
-	for cell: Vector2i in cells:
-		seen[cell] = true
-	var result: Array[Vector2i] = []
-	for cell: Vector2i in seen:
-		result.append(cell)
-	result.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
-		return a.y < b.y if a.y != b.y else a.x < b.x)
-	return result

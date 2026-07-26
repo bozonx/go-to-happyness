@@ -1,5 +1,5 @@
 class_name TerrainBrushController
-extends RefCounted
+extends BaseBrushController
 
 ## The terrain brush itself, with no host around it (map_editor.md §3.1, §3.6).
 ##
@@ -15,19 +15,11 @@ extends RefCounted
 ## into the grid directly, which is what keeps undo, the chunk mesher and the
 ## published navigation field in step.
 
-const HOVER_RAY_LENGTH := 500.0
-const MAX_BRUSH_SIZE := 8
-
-var brush_size := 1
 var edit_mode := TerrainEditOperation.Mode.SCULPT
 var material_index := 0
 var variant := 0
 var ramp_class := SlopeCatalog.CLASS_GENTLE
 var ramp_direction := SlopeCatalog.DIR_E
-
-var hovered_cell := Vector2i.ZERO
-var has_hover := false
-var last_message := "ready"
 
 var _grid: TerrainGrid
 var _service: TerrainService
@@ -44,37 +36,18 @@ var _wear_day := 0
 
 func configure(grid: TerrainGrid, service: TerrainService, wear_service: SurfaceWearService = null) -> void:
 	_grid = grid
+	_pick_grid = grid
 	_service = service
 	_wear_service = wear_service
 
 
 # --- Hover ------------------------------------------------------------------
 
-## Picks the column under the cursor and, while a drag is painting, applies the
-## brush to every new column it crosses. Returns whether a column is hovered.
-func update_hover(camera: Camera3D, space: PhysicsDirectSpaceState3D, mouse: Vector2) -> bool:
-	var origin := camera.project_ray_origin(mouse)
-	var query := PhysicsRayQueryParameters3D.create(
-		origin, origin + camera.project_ray_normal(mouse) * HOVER_RAY_LENGTH,
-	)
-	query.collide_with_areas = false
-	var hit := space.intersect_ray(query)
-	var previous := hovered_cell
-	var had_hover := has_hover
-	has_hover = not hit.is_empty()
-	if has_hover:
-		# Nudge into the surface so a hit exactly on a shared edge resolves to the
-		# column the cursor is visually over.
-		var point: Vector3 = hit["position"] - (hit["normal"] as Vector3) * 0.01
-		hovered_cell = _grid.cell_from_position(point)
-		has_hover = _grid.is_inside(hovered_cell)
-	if has_hover and _paint_direction != 0 and (not had_hover or previous != hovered_cell):
+## Applies the height brush while a drag is painting and the cursor crosses into
+## a new column.
+func _on_hover_changed(previous_cell: Vector2i, had_hover: bool) -> void:
+	if has_hover and _paint_direction != 0 and (not had_hover or previous_cell != hovered_cell):
 		apply_height_brush(_paint_direction)
-	return has_hover
-
-
-func clear_hover() -> void:
-	has_hover = false
 
 
 ## Starts or stops a painting drag. Non-zero also applies the brush at once, so a
@@ -91,18 +64,6 @@ func set_paint_direction(direction: int) -> void:
 
 func is_painting() -> bool:
 	return _paint_direction != 0
-
-
-## The square of in-bounds cells the brush covers, centred on `center`.
-func brush_cells(center: Vector2i) -> Array[Vector2i]:
-	var cells: Array[Vector2i] = []
-	var radius := brush_size - 1
-	for offset_z in range(-radius, radius + 1):
-		for offset_x in range(-radius, radius + 1):
-			var cell := center + Vector2i(offset_x, offset_z)
-			if _grid.is_inside(cell):
-				cells.append(cell)
-	return cells
 
 
 # --- Height -----------------------------------------------------------------
@@ -158,12 +119,8 @@ func apply_flatten() -> void:
 
 
 func cycle_edit_mode() -> void:
-	edit_mode = (edit_mode + 1) % 3
+	edit_mode = (edit_mode + 1) % TerrainEditOperation.Mode.size()
 	last_message = "mode %s" % TerrainEditOperation.mode_name(edit_mode)
-
-
-func adjust_brush_size(delta: int) -> void:
-	brush_size = clampi(brush_size + delta, 1, MAX_BRUSH_SIZE)
 
 
 # --- Surface ----------------------------------------------------------------

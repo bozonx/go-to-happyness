@@ -45,6 +45,20 @@ func deactivate() -> void:
 	_painting = false
 
 
+func clear_hover() -> void:
+	if context != null and context.brush != null:
+		context.brush.clear_hover()
+
+
+func hover_brush() -> BaseBrushController:
+	return context.brush if context != null else null
+
+
+func adjust_brush_size(delta: int) -> void:
+	if context != null and context.brush != null:
+		context.brush.adjust_brush_size(delta)
+
+
 func process(_delta: float) -> void:
 	var was := context.brush.hovered_cell
 	var had := context.brush.has_hover
@@ -58,6 +72,8 @@ func process(_delta: float) -> void:
 func handle_input(event: InputEvent) -> bool:
 	if event is InputEventMouseButton:
 		var button := event as InputEventMouseButton
+		if _handle_common_mouse(button):
+			return true
 		if button.button_index != MOUSE_BUTTON_LEFT:
 			return false
 		_painting = button.pressed
@@ -236,4 +252,6 @@ func _swatch_of(index: int) -> Color:
 		TerrainMaterialCatalog.LUNAR_ROCK: return Color("6e6e6c")
 		TerrainMaterialCatalog.MARS_REGOLITH: return Color("b5714a")
 		TerrainMaterialCatalog.MARS_ROCK: return Color("8a4a30")
-	return Color("808080")
+		_:
+			assert(false, "Unknown material index %d — add a swatch" % index)
+			return Color("808080")

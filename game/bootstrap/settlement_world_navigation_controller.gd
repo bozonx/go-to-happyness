@@ -1,6 +1,9 @@
 class_name SettlementWorldNavigationController
 extends RefCounted
 
+const CameraControllerScene = preload("res://game/features/world/presentation/camera_controller.tscn")
+const WorldSetupScene = preload("res://game/features/world/presentation/world_setup.tscn")
+
 ## Manages world setup, navigation grid refresh, terrain access positions,
 ## tree felling, trail overlay, and boundary markers.
 ## Extracted from SettlementGame to reduce its method count.
@@ -17,9 +20,9 @@ func _init(p_game: SettlementGame) -> void:
 
 
 func create_world() -> void:
-	game.camera_controller = game.CameraControllerScene.instantiate() as CameraController
+	game.camera_controller = CameraControllerScene.instantiate() as CameraController
 	game.add_child(game.camera_controller)
-	game.world_setup = game.WorldSetupScene.instantiate() as WorldSetup
+	game.world_setup = WorldSetupScene.instantiate() as WorldSetup
 	game.world_setup.setup(game.camera, game.CELL_SIZE, game.board_cells, game.trail_field, game.launch_config.map_document)
 	game.add_child(game.world_setup)
 	game.world_setup.build(game)
