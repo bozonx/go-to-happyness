@@ -15,6 +15,8 @@ extends RefCounted
 ## then swapped in. A crash mid-save leaves the previous map intact rather than a
 ## folder with a new `map.json` and last week's terrain.
 
+const ContentRevisionScript = preload("res://game/features/content/domain/content_revision.gd")
+
 const SOURCE_BUILTIN := &"builtin"
 const SOURCE_PLAYER := &"player"
 
@@ -174,7 +176,7 @@ func save_map_to(document: MapDocument, final_path: String, preview: Image = nul
 		return ""
 
 	var staging_path := final_path + ".tmp"
-	document.meta.revision = _new_revision()
+	document.meta.revision = ContentRevisionScript.new_stamp()
 
 	if DirAccess.dir_exists_absolute(staging_path):
 		_remove_directory(staging_path)
@@ -214,13 +216,6 @@ func save_map_to(document: MapDocument, final_path: String, preview: Image = nul
 	_remove_directory(backup_path)
 	document.dirty = false
 	return final_path
-
-
-## Short, sortable and unique enough to tell two saves apart. Not a hash of the
-## content: a revision answers "is this the same file I loaded", and recomputing
-## it over a quarter of a megabyte on every save would answer that no faster.
-static func _new_revision() -> String:
-	return "%x%04x" % [Time.get_unix_time_from_system(), randi() % 0x10000]
 
 
 # --- Filesystem ---------------------------------------------------------------

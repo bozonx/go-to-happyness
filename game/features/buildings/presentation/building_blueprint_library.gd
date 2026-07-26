@@ -92,7 +92,7 @@ static func blueprint_ref(building_type: String) -> Dictionary:
 	return {
 		"source": String(entry["source"]),
 		"id": String(entry["id"]),
-		"revision": blueprint.content_revision(),
+		"revision": blueprint.revision_id(),
 		"fallback_building_id": String(blueprint.fallback_building_id),
 	}
 

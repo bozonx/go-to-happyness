@@ -8,6 +8,7 @@ extends RefCounted
 ## only place the editor touches the filesystem.
 
 const BuildingBlueprintScript = preload("res://game/features/buildings/domain/editor/building_blueprint.gd")
+const ContentRevisionScript = preload("res://game/features/content/domain/content_revision.gd")
 
 ## Canonical, feature-local blueprint folder. The game's BuildingBlueprintLibrary
 ## also reads from here, so dev edits are exactly what ships in-game.
@@ -41,6 +42,9 @@ func save(blueprint: BuildingBlueprintScript) -> Dictionary:
 	var validation_errors := blueprint.validation_errors()
 	if not validation_errors.is_empty():
 		return {"ok": false, "path": "", "error": "\n".join(validation_errors)}
+	# Stamped here rather than in `to_dict()`: the revision must change when the
+	# file on disk changes, not when the editor happens to serialize a preview.
+	blueprint.revision = ContentRevisionScript.new_stamp()
 	ensure_dir()
 	var path := file_path_for(blueprint.id)
 	var temporary_path := path + ".tmp"

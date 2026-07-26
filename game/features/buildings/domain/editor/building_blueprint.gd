@@ -18,7 +18,10 @@ const FurnishingAssetCatalogScript = preload("res://game/features/buildings/doma
 const FixtureDefinitionScript = preload("res://game/features/buildings/domain/editor/fixture_definition.gd")
 const ZoneRequirementsScript = preload("res://game/features/buildings/domain/editor/zone_requirements.gd")
 
-const FORMAT_VERSION := 2
+## v3: `objects[].pos` is relative to the footprint centre (see `pivot_offset`).
+## No migration branch for v2: every v2 file in the project places decor at the
+## origin, which the centre reading interprets correctly.
+const FORMAT_VERSION := 3
 const MIN_LOAD_VERSION := 1
 const FILE_EXTENSION := "gdbuilding.json"
 
@@ -27,6 +30,10 @@ var version: int = FORMAT_VERSION
 ## maps a gameplay building_type to the blueprint file whose id matches.
 var id: StringName = &"new_building"
 var name: String = "Новое здание"
+## Stamp rewritten on every save, exactly like a map package's (design_docs/core/
+## content_packaging.md §7). A game save keeps it next to `blueprint_ref` so a
+## session can tell the player the file was edited since — it never blocks loading.
+var revision: String = ""
 var construction_style: StringName = &"surface"  ## &"surface" | &"underground"
 ## @deprecated. Source compatibility for the first editor prototype. It is not
 ## serialized. Use `construction_style` directly in new code.
@@ -68,6 +75,22 @@ var cost_mode: StringName = &"auto"
 var extra_costs: Dictionary = {}
 var custom_material_costs: Dictionary = {}
 var manual_costs: Dictionary = {}
+
+
+## Distance from the board's `(0,0)` corner to the footprint centre.
+##
+## Two coordinate spaces meet in a blueprint, and the split is deliberate:
+## integer grid cells (`blocks[].pos`) are array indices and stay non-negative
+## `0…N-1`, while continuous placements are signed offsets from the footprint
+## centre — which is the pivot the game rotates and positions a building around
+## (see `BuildingEntrancePositions`, and `entrance`, which was always stored that
+## way). `objects[]` is serialized in that centre space and converted back to
+## corner space on load, so every editor tool keeps working in board-local
+## coordinates and only the file format is centre-relative.
+##
+## Y is a layer height, not an offset, and is never shifted.
+func pivot_offset() -> Vector3:
+	return Vector3(float(footprint.x), 0.0, float(footprint.y)) * 0.5
 
 
 func clear_blocks() -> void:
@@ -159,8 +182,11 @@ func to_dict() -> Dictionary:
 	for anchor in zone_anchors:
 		anchor_dicts.append(anchor.to_dict())
 	var object_dicts: Array = []
+	var pivot := pivot_offset()
 	for decor_object in objects:
-		object_dicts.append(decor_object.to_dict())
+		var object_dict := decor_object.to_dict()
+		object_dict["pos"] = [decor_object.pos.x - pivot.x, decor_object.pos.y, decor_object.pos.z - pivot.z]
+		object_dicts.append(object_dict)
 	var worker_entrance_dicts: Array = []
 	for we in worker_entrances:
 		worker_entrance_dicts.append([we.x, we.y])
@@ -168,6 +194,7 @@ func to_dict() -> Dictionary:
 		"version": FORMAT_VERSION,
 		"id": String(id),
 		"name": name,
+		"revision": revision,
 		"construction_style": String(construction_style),
 		"category": String(category),
 		"fallback_building_id": String(fallback_building_id),
@@ -199,6 +226,7 @@ static func from_dict(data: Dictionary) -> BuildingBlueprint:
 	bp.version = int(data.get("version", FORMAT_VERSION))
 	bp.id = StringName(data.get("id", "new_building"))
 	bp.name = String(data.get("name", "Новое здание"))
+	bp.revision = String(data.get("revision", ""))
 	# `building_type` was used by the initial prototype for surface/underground.
 	# It remains a read alias inside v1, but new files use the unambiguous name.
 	bp.construction_style = StringName(data.get("construction_style", data.get("building_type", "surface")))
@@ -242,9 +270,12 @@ static func from_dict(data: Dictionary) -> BuildingBlueprint:
 
 	var raw_objects: Variant = data.get("objects", [])
 	if raw_objects is Array:
+		var pivot := bp.pivot_offset()  # `footprint` is already parsed above.
 		for raw_object in raw_objects:
 			if raw_object is Dictionary:
-				bp.objects.append(DecorObjectRecordScript.from_dict(raw_object))
+				var record: DecorObjectRecord = DecorObjectRecordScript.from_dict(raw_object)
+				record.pos += Vector3(pivot.x, 0.0, pivot.z)
+				bp.objects.append(record)
 
 	bp.surface_finishes = data.get("surface_finishes", [])
 	bp.decor_trims = data.get("decor_trims", [])
@@ -308,8 +339,16 @@ func recalculate_construction_cost() -> void:
 	construction_cost = rounded_costs
 
 
+## Identity of this exact file version. Maps answer the same question with a
+## stored save stamp, so blueprints do too; the content hash stays only as the
+## answer for files written before `revision` existed (v2 and earlier).
+func revision_id() -> String:
+	return revision if not revision.is_empty() else content_revision()
+
+
 func content_revision() -> String:
 	var data := to_dict()
+	data.erase("revision")
 	return "%08x" % JSON.stringify(data).hash()
 
 

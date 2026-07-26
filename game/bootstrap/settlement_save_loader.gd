@@ -258,7 +258,7 @@ func _resolve_saved_building_blueprint(saved_type: String, data: Dictionary) -> 
 			resolved_type = referenced_type
 			var referenced_blueprint: Variant = SettlementGame.BuildingBlueprintLibraryScript.get_blueprint(referenced_type)
 			var saved_revision: String = str(reference.get("revision", ""))
-			if referenced_blueprint != null and not saved_revision.is_empty() and referenced_blueprint.content_revision() != saved_revision:
+			if referenced_blueprint != null and not saved_revision.is_empty() and referenced_blueprint.revision_id() != saved_revision:
 				push_warning("Blueprint '%s:%s' changed since this save; current file geometry will be used." % [
 					reference.get("source", "builtin"), reference.get("id", "")])
 		else:
