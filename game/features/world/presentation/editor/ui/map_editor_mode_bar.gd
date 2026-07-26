@@ -1,16 +1,18 @@
 class_name MapEditorModeBar
-extends PanelContainer
+extends HBoxContainer
 
-## The mode strip down the left edge (map_editor.md §3.2).
+## The mode strip across the top bar (map_editor.md §3.2).
 ##
 ## Its children are the one part of the editor chrome that cannot be authored in
 ## the scene: the list of modes is what the editor decides it has, and phases 2–5
 ## add to it. The container, its styling and its place in the layout are in the
 ## `.tscn`; only the buttons are built here.
+##
+## It sits next to the file and undo buttons, the arrangement the building editor
+## arrived at: what you are editing along the top, what you edit it with down the
+## left.
 
 signal mode_selected(mode_id: StringName)
-
-@onready var _buttons: VBoxContainer = $Margin/Buttons
 
 var _by_id: Dictionary = {}
 
@@ -18,20 +20,19 @@ var _by_id: Dictionary = {}
 ## `modes` is an array of `MapEditorMode`. The number key shown on each button is
 ## its position, which is what §3.3 binds `1`–`7` to.
 func build(modes: Array) -> void:
-	for child in _buttons.get_children():
+	for child in get_children():
+		remove_child(child)
 		child.queue_free()
 	_by_id.clear()
 	var slot := 1
 	for mode: MapEditorMode in modes:
 		var button := Button.new()
-		button.text = "%d  %s" % [slot, mode.title]
+		button.text = "%d. %s" % [slot, mode.title]
 		button.toggle_mode = true
 		button.focus_mode = Control.FOCUS_NONE
-		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		button.custom_minimum_size = Vector2(150, 34)
 		var mode_id: StringName = mode.id
 		button.pressed.connect(func() -> void: mode_selected.emit(mode_id))
-		_buttons.add_child(button)
+		add_child(button)
 		_by_id[mode_id] = button
 		slot += 1
 

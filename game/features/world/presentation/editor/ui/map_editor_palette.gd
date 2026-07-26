@@ -1,12 +1,15 @@
 class_name MapEditorPalette
 extends PanelContainer
 
-## The palette of the active mode, along the bottom (map_editor.md §3.2).
+## The palette of the active mode, down the left edge (map_editor.md §3.2).
 ##
 ## Materials, tools, later blueprints and point roles. It holds the mode's
 ## contextual brush inspector directly under the picked entry rather than in a
 ## far corner of the screen — the arrangement the building editor arrived at,
 ## where the settings of a thing sit next to the thing.
+##
+## The entry list scrolls and the brush settings do not: a catalog grows with the
+## game, the handful of settings under it must not be pushed off the screen by it.
 ##
 ## The panel knows nothing about what it shows. A mode hands it entries and
 ## options; clicking one calls back into that mode.
@@ -15,8 +18,8 @@ signal entry_selected(entry_id: StringName)
 signal option_activated(option_id: StringName)
 
 @onready var _title: Label = $Margin/Rows/Title
-@onready var _entries: HFlowContainer = $Margin/Rows/Entries
-@onready var _options: HBoxContainer = $Margin/Rows/Options
+@onready var _entries: VBoxContainer = $Margin/Rows/Scroll/Entries
+@onready var _options: VBoxContainer = $Margin/Rows/Options
 
 var _entry_buttons: Dictionary = {}
 
@@ -35,6 +38,8 @@ func set_entries(entries: Array, selected: StringName) -> void:
 		button.text = entry.label
 		button.toggle_mode = true
 		button.focus_mode = Control.FOCUS_NONE
+		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.button_pressed = entry.id == selected
 		if entry.color.a > 0.0:
 			# The swatch is the label's colour rather than a separate square: it
@@ -80,6 +85,8 @@ func set_options(options: Array) -> void:
 		var button := Button.new()
 		button.text = option.label
 		button.focus_mode = Control.FOCUS_NONE
+		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var option_id: StringName = option.id
 		button.pressed.connect(func() -> void: option_activated.emit(option_id))
 		_options.add_child(button)

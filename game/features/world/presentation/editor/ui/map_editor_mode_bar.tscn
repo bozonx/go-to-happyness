@@ -2,15 +2,6 @@
 
 [ext_resource type="Script" path="res://game/features/world/presentation/editor/ui/map_editor_mode_bar.gd" id="1_mode_bar"]
 
-[node name="ModeBar" type="PanelContainer"]
-custom_minimum_size = Vector2(170, 0)
-script = ExtResource("1_mode_bar")
-
-[node name="Margin" type="MarginContainer" parent="."]
-theme_override_constants/margin_left = 8
-theme_override_constants/margin_top = 8
-theme_override_constants/margin_right = 8
-theme_override_constants/margin_bottom = 8
-
-[node name="Buttons" type="VBoxContainer" parent="Margin"]
+[node name="ModeBar" type="HBoxContainer"]
 theme_override_constants/separation = 4
+script = ExtResource("1_mode_bar")

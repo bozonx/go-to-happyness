@@ -22,3 +22,9 @@ text = "клетка —"
 vertical_alignment = 1
 theme_override_font_sizes/font_size = 12
 text = "готово"
+
+[node name="HelpLabel" type="Label" parent="Margin/Row"]
+vertical_alignment = 1
+theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
+text = "ЛКМ — применить · ПКМ — обратно · СКМ — камера · Колесо — зум · [ ] — кисть · Tab — подынструмент"

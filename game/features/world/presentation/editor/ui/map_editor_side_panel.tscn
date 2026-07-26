@@ -6,24 +6,40 @@
 custom_minimum_size = Vector2(280, 0)
 script = ExtResource("1_side_panel")
 
-[node name="Rows" type="VBoxContainer" parent="."]
+[node name="Margin" type="MarginContainer" parent="."]
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 8
+
+[node name="Rows" type="VBoxContainer" parent="Margin"]
 theme_override_constants/separation = 6
 
-[node name="InspectorTitle" type="Label" parent="Rows"]
+[node name="MapTitle" type="Label" parent="Margin/Rows"]
+text = "Карта"
+theme_override_font_sizes/font_size = 14
+
+[node name="MapInfo" type="Label" parent="Margin/Rows"]
+autowrap_mode = 2
+theme_override_font_sizes/font_size = 12
+
+[node name="MapSeparator" type="HSeparator" parent="Margin/Rows"]
+
+[node name="InspectorTitle" type="Label" parent="Margin/Rows"]
 text = "Инспектор"
 theme_override_font_sizes/font_size = 14
 
-[node name="Inspector" type="Label" parent="Rows"]
+[node name="Inspector" type="Label" parent="Margin/Rows"]
 size_flags_vertical = 3
 autowrap_mode = 2
 theme_override_font_sizes/font_size = 12
 
-[node name="Separator" type="HSeparator" parent="Rows"]
+[node name="Separator" type="HSeparator" parent="Margin/Rows"]
 
-[node name="ListTitle" type="Label" parent="Rows"]
+[node name="ListTitle" type="Label" parent="Margin/Rows"]
 text = "Объекты"
 theme_override_font_sizes/font_size = 14
 
-[node name="List" type="ItemList" parent="Rows"]
+[node name="List" type="ItemList" parent="Margin/Rows"]
 custom_minimum_size = Vector2(0, 190)
 size_flags_vertical = 3

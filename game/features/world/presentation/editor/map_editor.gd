@@ -34,16 +34,17 @@ const PLANNED_MODES: Array = [
 @onready var camera: MapEditorCamera = $Camera3D
 
 @onready var _top_bar: Control = $UI/Screen/TopBar
-@onready var _mode_bar: MapEditorModeBar = $UI/Screen/Middle/ModeBar
+@onready var _mode_bar: MapEditorModeBar = $UI/Screen/TopBar/Margin/Row/ModeBar
 @onready var _viewport_area: Control = $UI/Screen/Middle/Viewport3D
 @onready var _side_panel: MapEditorSidePanel = $UI/Screen/Middle/SidePanel
-@onready var _palette: MapEditorPalette = $UI/Screen/Palette
+@onready var _palette: MapEditorPalette = $UI/Screen/Middle/Palette
 @onready var _status_cell: Label = $UI/Screen/StatusBar/Margin/Row/CellLabel
 @onready var _status_message: Label = $UI/Screen/StatusBar/Margin/Row/MessageLabel
-@onready var _map_name_label: Label = $UI/Screen/TopBar/Margin/Row/MapNameLabel
-@onready var _file_button: MenuButton = $UI/Screen/TopBar/Margin/Row/FileButton
-@onready var _edit_button: MenuButton = $UI/Screen/TopBar/Margin/Row/EditButton
-@onready var _exit_button: Button = $UI/Screen/TopBar/Margin/Row/ExitButton
+@onready var _back_button: Button = $UI/Screen/TopBar/Margin/Row/BackButton
+@onready var _new_button: Button = $UI/Screen/TopBar/Margin/Row/NewButton
+@onready var _save_button: Button = $UI/Screen/TopBar/Margin/Row/SaveButton
+@onready var _undo_button: Button = $UI/Screen/TopBar/Margin/Row/UndoButton
+@onready var _redo_button: Button = $UI/Screen/TopBar/Margin/Row/RedoButton
 
 var document: MapDocument
 var history := MapEditorHistory.new()
@@ -63,18 +64,11 @@ var _message := "готово"
 ## are not recorded as new commands.
 var _replaying := false
 
-const FILE_NEW := 0
-const FILE_OPEN := 1
-const FILE_SAVE := 2
-const EDIT_UNDO := 0
-const EDIT_REDO := 1
-
 
 func _ready() -> void:
 	_open_requested_map()
 	_build_services()
 	_build_modes()
-	_build_menus()
 	_connect_ui()
 	history.changed.connect(_refresh_panels)
 	get_viewport().size_changed.connect(_refresh_camera_framing)
@@ -200,43 +194,20 @@ func _select_mode(mode_id: StringName) -> void:
 
 # --- UI wiring ----------------------------------------------------------------
 
-func _build_menus() -> void:
-	var file_menu := _file_button.get_popup()
-	file_menu.add_item("Новая карта", FILE_NEW)
-	file_menu.add_item("Открыть…", FILE_OPEN)
-	file_menu.add_item("Сохранить  Ctrl+S", FILE_SAVE)
-	file_menu.set_item_disabled(file_menu.get_item_index(FILE_OPEN), true)
-	file_menu.id_pressed.connect(_on_file_menu)
-
-	var edit_menu := _edit_button.get_popup()
-	edit_menu.add_item("Отменить  Ctrl+Z", EDIT_UNDO)
-	edit_menu.add_item("Повторить  Ctrl+Shift+Z", EDIT_REDO)
-	edit_menu.id_pressed.connect(_on_edit_menu)
-
-
+## Every top-bar action is a button rather than a menu item, and each has the
+## shortcut §3.3 gives it in its tooltip: the actions an author uses every minute
+## should not be two clicks deep.
 func _connect_ui() -> void:
 	_mode_bar.mode_selected.connect(_select_mode)
 	_palette.entry_selected.connect(func(entry_id: StringName) -> void:
 		_active.select_palette_entry(entry_id))
 	_palette.option_activated.connect(func(option_id: StringName) -> void:
 		_active.activate_option(option_id))
-	_exit_button.pressed.connect(_return_to_menu)
-
-
-func _on_file_menu(id: int) -> void:
-	match id:
-		FILE_NEW:
-			_new_map()
-		FILE_SAVE:
-			_save()
-
-
-func _on_edit_menu(id: int) -> void:
-	match id:
-		EDIT_UNDO:
-			_undo()
-		EDIT_REDO:
-			_redo()
+	_back_button.pressed.connect(_return_to_menu)
+	_new_button.pressed.connect(_new_map)
+	_save_button.pressed.connect(_save)
+	_undo_button.pressed.connect(_undo)
+	_redo_button.pressed.connect(_redo)
 
 
 func _rebuild_palette() -> void:
@@ -249,15 +220,21 @@ func _refresh_panels() -> void:
 		return
 	_palette.set_selected(_active.selected_palette_entry())
 	_palette.set_options(_active.tool_options())
+	_side_panel.set_map_info([
+		"%s%s" % [document.meta.name, "*" if document.dirty else ""],
+		"id: %s" % document.meta.id,
+		"доска %d×%d" % [document.meta.board_cells, document.meta.board_cells],
+		"отмен в стеке: %d" % history.undo_depth(),
+	])
 	_side_panel.set_inspector("Инспектор — %s" % _active.title, _active.inspector_lines())
 	_side_panel.set_entries(
 		"Объекты", _active.list_entries(),
 		"Зоны, точки и маршруты появятся в фазе 4",
 	)
-	_map_name_label.text = "Карта: %s%s   ·   доска %d×%d   ·   отмен %d" % [
-		document.meta.name, "*" if document.dirty else "",
-		document.meta.board_cells, document.meta.board_cells, history.undo_depth(),
-	]
+	# A stack you cannot pop says so by being grey, the way the building editor's
+	# decor buttons do.
+	_undo_button.disabled = not history.can_undo()
+	_redo_button.disabled = not history.can_redo()
 	_status_message.text = _message
 
 

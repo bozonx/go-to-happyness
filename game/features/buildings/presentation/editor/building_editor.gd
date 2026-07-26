@@ -691,6 +691,7 @@ func _confirm_era_material_replacement(target_era: StringName, count: int, defau
 	if dialog.visible:
 		await dialog.hidden
 	dialog.queue_free()
+	print("DBG confirm returns ", user_confirmed)
 	return user_confirmed
 
 
@@ -909,7 +910,9 @@ func _on_load_item_activated(index: int) -> void:
 		_load_popup.hide()
 		return
 	var path := String(_load_list.get_item_metadata(index))
+	print("DBG resumed, path=", path)
 	var loaded := repository.load_blueprint(path)
+	print("DBG loaded=", loaded)
 	if loaded == null:
 		_update_status("Не удалось загрузить: %s" % path)
 		return
@@ -1887,11 +1890,13 @@ func _confirm_discard_changes() -> bool:
 	var user_confirmed := false
 	dialog.confirmed.connect(func(): user_confirmed = true)
 	dialog.popup_centered(Vector2i(360, 120))
+	print("DBG dialog shown visible=", dialog.visible)
 	# `popup_centered` makes the dialog visible synchronously, so the loop
 	# body only runs while the user hasn't confirmed or cancelled yet.
 	while dialog.visible:
 		await get_tree().process_frame
 	dialog.queue_free()
+	print("DBG confirm returns ", user_confirmed)
 	return user_confirmed
 
 

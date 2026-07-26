@@ -1,7 +1,12 @@
 class_name MapEditorSidePanel
 extends PanelContainer
 
-## Inspector above, entity list below, down the right edge (map_editor.md §3.2).
+## Map card, inspector and entity list, down the right edge (map_editor.md §3.2).
+##
+## The card at the top is what the document is — name, board, unsaved state,
+## how deep the undo stack goes. It sits here rather than in the top bar for the
+## reason the building editor puts its blueprint's name and id on the right: the
+## top bar is where you act, the right panel is where you read.
 ##
 ## The inspector shows the selected object's properties or, with nothing
 ## selected, the current tool's settings — which is why in phases 1 it is never
@@ -13,14 +18,19 @@ extends PanelContainer
 
 signal entry_activated(index: int)
 
-@onready var _inspector_title: Label = $Rows/InspectorTitle
-@onready var _inspector: Label = $Rows/Inspector
-@onready var _list_title: Label = $Rows/ListTitle
-@onready var _list: ItemList = $Rows/List
+@onready var _map_info: Label = $Margin/Rows/MapInfo
+@onready var _inspector_title: Label = $Margin/Rows/InspectorTitle
+@onready var _inspector: Label = $Margin/Rows/Inspector
+@onready var _list_title: Label = $Margin/Rows/ListTitle
+@onready var _list: ItemList = $Margin/Rows/List
 
 
 func _ready() -> void:
 	_list.item_activated.connect(func(index: int) -> void: entry_activated.emit(index))
+
+
+func set_map_info(lines: Array[String]) -> void:
+	_map_info.text = "\n".join(lines)
 
 
 func set_inspector(title: String, lines: Array[String]) -> void:
