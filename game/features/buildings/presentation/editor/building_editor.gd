@@ -23,6 +23,11 @@ const DecorModeControllerScript = preload("res://game/features/buildings/present
 const FixtureDefinitionScript = preload("res://game/features/buildings/domain/editor/fixture_definition.gd")
 const ZoneRequirementsScript = preload("res://game/features/buildings/domain/editor/zone_requirements.gd")
 
+## Footprint centre marks. The band is faint on purpose: it must not compete
+## with block colours, only hint where the building's origin will sit in game.
+const CENTRE_LINE_COLOR := Color(1.0, 0.82, 0.18, 1.0)
+const CENTRE_BAND_COLOR := Color(1.0, 0.82, 0.18, 0.12)
+
 enum Tool { PLACE, ERASE }
 enum Brush { LINE, RECT }
 enum EditMode { FRAME, FINISHES, DECOR, ZONES }
@@ -269,16 +274,59 @@ func _refresh_building_grid_visuals() -> void:
 	for z in range(depth + 1):
 		st.set_color(Color(0.30, 0.34, 0.40, 0.8))
 		st.add_vertex(Vector3(0.0, 0.0, z)); st.add_vertex(Vector3(width, 0.0, z))
-	st.set_color(Color(1.0, 0.82, 0.18, 1.0))
-	st.add_vertex(Vector3(width * 0.5, 0.012, 0.0)); st.add_vertex(Vector3(width * 0.5, 0.012, depth))
-	st.add_vertex(Vector3(0.0, 0.012, depth * 0.5)); st.add_vertex(Vector3(width, 0.012, depth * 0.5))
+	# An even dimension has its centre on a grid line, so a line marks it exactly.
+	# An odd one has its centre inside a cell strip, where a line would cut cells
+	# in half — that strip gets tinted instead (see `_append_centre_bands`).
+	st.set_color(CENTRE_LINE_COLOR)
+	if width % 2 == 0:
+		st.add_vertex(Vector3(width * 0.5, 0.012, 0.0)); st.add_vertex(Vector3(width * 0.5, 0.012, depth))
+	if depth % 2 == 0:
+		st.add_vertex(Vector3(0.0, 0.012, depth * 0.5)); st.add_vertex(Vector3(width, 0.012, depth * 0.5))
 	var mesh := st.commit()
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.vertex_color_use_as_albedo = true
 	mesh.surface_set_material(0, mat)
+	_append_centre_bands(mesh, width, depth)
 	%GridLines.mesh = mesh
 	_layer_plane.mesh = mesh
+
+
+## Tinted quad over the middle cell strip of an odd-sized dimension. Needs its
+## own surface: the grid surface is a line primitive and cannot carry triangles.
+## When both dimensions are odd the two bands overlap on the exact centre cell,
+## which reads as a slightly brighter square — that is the intent.
+func _append_centre_bands(mesh: ArrayMesh, width: int, depth: int) -> void:
+	if width % 2 == 0 and depth % 2 == 0:
+		return
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_color(CENTRE_BAND_COLOR)
+	if width % 2 == 1:
+		var x := float((width - 1) / 2)
+		_add_band_quad(st, Vector2(x, 0.0), Vector2(x + 1.0, float(depth)))
+	if depth % 2 == 1:
+		var z := float((depth - 1) / 2)
+		_add_band_quad(st, Vector2(0.0, z), Vector2(float(width), z + 1.0))
+	st.commit(mesh)
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.vertex_color_use_as_albedo = true
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mesh.surface_set_material(mesh.get_surface_count() - 1, mat)
+
+
+## Horizontal quad spanning `from`…`to` on the XZ plane, just under the centre
+## lines so the two never z-fight.
+func _add_band_quad(st: SurfaceTool, from: Vector2, to: Vector2) -> void:
+	const Y := 0.011
+	var a := Vector3(from.x, Y, from.y)
+	var b := Vector3(to.x, Y, from.y)
+	var c := Vector3(to.x, Y, to.y)
+	var d := Vector3(from.x, Y, to.y)
+	st.add_vertex(a); st.add_vertex(b); st.add_vertex(c)
+	st.add_vertex(a); st.add_vertex(c); st.add_vertex(d)
 
 
 ## Grid coordinates stay stable (0…width, 0…depth) for saved blueprints;
