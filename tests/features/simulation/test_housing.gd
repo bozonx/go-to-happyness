@@ -22,13 +22,13 @@ func _init() -> void:
 
 	# Interrupted arrivals are re-queued
 	var interrupted_order := {"house": arrival_home, "dispatched": true, "greeter_id": resident.get_instance_id()}
-	simulation.pending_arrivals.append(interrupted_order)
-	simulation.arrival_greeters[resident.get_instance_id()] = interrupted_order
+	simulation.logistics_runtime.pending_arrivals.append(interrupted_order)
+	simulation.logistics_runtime.arrival_greeters[resident.get_instance_id()] = interrupted_order
 	resident.idle()
 	SimHelper.requeue_interrupted_arrivals(simulation)
-	assert(not bool(simulation.pending_arrivals[0].get("dispatched", false)))
+	assert(not bool(simulation.logistics_runtime.pending_arrivals[0].get("dispatched", false)))
 	SimHelper.cancel_arrivals_for_house(simulation, arrival_home)
-	assert(simulation.pending_arrivals.is_empty())
+	assert(simulation.logistics_runtime.pending_arrivals.is_empty())
 
 	# No housing at start
 	assert(simulation.tent == null)

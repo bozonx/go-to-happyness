@@ -53,7 +53,7 @@ func first_person_action_hint() -> String:
 	var target: Dictionary = simulation.hero_interaction_controller.first_person_target()
 	match target.get("kind", ""):
 		"entrance":
-			for order: Dictionary in simulation.pending_arrivals:
+			for order: Dictionary in simulation.logistics_runtime.pending_arrivals:
 				if not bool(order.get("dispatched", false)):
 					return S.F_MEET_ARRIVAL
 			return S.ENTRANCE_SIGN

@@ -470,14 +470,14 @@ func refuel_fire_from_pocket(building: Node3D, all: bool) -> void:
 
 
 func meet_arrival_at_entrance() -> void:
-	for index in game.pending_arrivals.size():
-		var order: Dictionary = game.pending_arrivals[index]
+	for index in game.logistics_runtime.pending_arrivals.size():
+		var order: Dictionary = game.logistics_runtime.pending_arrivals[index]
 		if bool(order.get("dispatched", false)):
 			continue
 		order.dispatched = true
 		order.greeter_id = game.player_citizen.ai_id
-		game.pending_arrivals[index] = order
-		game.arrival_greeters[game.player_citizen.ai_id] = order
+		game.logistics_runtime.pending_arrivals[index] = order
+		game.logistics_runtime.arrival_greeters[game.player_citizen.ai_id] = order
 		game.citizen_lifecycle_service.on_arrival_greeter_ready(game.player_citizen)
 		refresh_interaction_hint()
 		return

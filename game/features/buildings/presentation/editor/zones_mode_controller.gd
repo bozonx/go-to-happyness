@@ -172,7 +172,7 @@ func handle_mouse_button(event: InputEventMouseButton) -> bool:
 	if event.button_index != MOUSE_BUTTON_LEFT:
 		return false
 	if event.pressed:
-		if _editor._pointer_over_ui():
+		if _editor.is_pointer_over_ui():
 			return false
 		_place_zone_marker_at_cursor()
 		_painting = _armed_tool == &"cell"
@@ -185,7 +185,7 @@ func handle_mouse_button(event: InputEventMouseButton) -> bool:
 func on_mouse_motion(_event: InputEventMouseMotion) -> void:
 	if not _painting:
 		return
-	_editor._update_cursor()
+	_editor.update_cursor()
 	if _editor.cursor_valid and _armed_tool == &"cell":
 		_paint_zone_line(_last_paint_cell, _editor.cursor_cell)
 		_last_paint_cell = _editor.cursor_cell
@@ -246,7 +246,7 @@ func _add_place() -> void:
 	_editor.blueprint.place_zones.append(place)
 	_selected_place_index = _editor.blueprint.place_zones.size() - 1
 	_editor.mark_dirty()
-	_editor._update_fallback_display()
+	_editor.update_fallback_display()
 	_rebuild_place_option()
 	_refresh_place_panel_fields()
 	_refresh_zone_visuals()
@@ -266,7 +266,7 @@ func _delete_place() -> void:
 	_editor.blueprint.place_zones.remove_at(_selected_place_index)
 	_selected_place_index = mini(_selected_place_index, _editor.blueprint.place_zones.size() - 1)
 	_editor.mark_dirty()
-	_editor._update_fallback_display()
+	_editor.update_fallback_display()
 	_rebuild_place_option()
 	_refresh_place_panel_fields()
 	_refresh_zone_visuals()
@@ -462,7 +462,7 @@ func _on_place_kind_selected(index: int) -> void:
 	_rebuild_subtype_options()
 	_ensure_zone_fixtures(place)
 	_update_zone_info()
-	_editor._update_fallback_display()
+	_editor.update_fallback_display()
 
 
 func _on_place_subtype_selected(index: int) -> void:
@@ -500,7 +500,7 @@ func _on_place_profession_selected(index: int) -> void:
 	_editor.mark_dirty()
 	_ensure_zone_fixtures(place)
 	_update_zone_info()
-	_editor._update_fallback_display()
+	_editor.update_fallback_display()
 
 
 func _on_place_workers_changed(value: float) -> void:
@@ -577,7 +577,7 @@ func _next_anchor_id() -> StringName:
 
 
 func _place_zone_marker_at_cursor() -> void:
-	if not _editor.cursor_valid or not _editor._is_cell_in_bounds(_editor.cursor_cell):
+	if not _editor.cursor_valid or not _editor.is_cell_in_bounds(_editor.cursor_cell):
 		return
 	if _armed_tool == &"cell":
 		var place := current_place()
@@ -628,7 +628,7 @@ func _paint_zone_line(from_cell: Vector3i, to_cell: Vector3i) -> void:
 			roundi(lerpf(from_cell.x, to_cell.x, t)),
 			_editor.active_layer,
 			roundi(lerpf(from_cell.z, to_cell.z, t)))
-		if not _editor._is_cell_in_bounds(cell):
+		if not _editor.is_cell_in_bounds(cell):
 			continue
 		if cell not in zone.cells:
 			zone.cells.append(cell)

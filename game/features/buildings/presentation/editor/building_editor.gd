@@ -20,8 +20,7 @@ const ZoneAnchorRecordScript = preload("res://game/features/buildings/domain/edi
 const BlueprintRepositoryScript = preload("res://game/features/buildings/presentation/editor/blueprint_repository.gd")
 const BlockMeshLibraryScript = preload("res://game/features/buildings/presentation/editor/block_mesh_library.gd")
 const DecorModeControllerScript = preload("res://game/features/buildings/presentation/editor/decor_mode_controller.gd")
-const FixtureDefinitionScript = preload("res://game/features/buildings/domain/editor/fixture_definition.gd")
-const ZoneRequirementsScript = preload("res://game/features/buildings/domain/editor/zone_requirements.gd")
+const ZonesModeControllerScript = preload("res://game/features/buildings/presentation/editor/zones_mode_controller.gd")
 
 ## Footprint centre marks. The band is faint on purpose: it must not compete
 ## with block colours, only hint where the building's origin will sit in game.
@@ -60,6 +59,8 @@ var current_mode: int = EditMode.FRAME
 
 ## Decor mode (design §3.3) lives in its own controller; see decor_mode_controller.gd.
 var decor_mode: DecorModeControllerScript = null
+## Zones mode lives in its own controller; see zones_mode_controller.gd.
+var zones_mode: ZonesModeControllerScript = null
 
 ## True when there are unsaved changes. Checked before scene transitions.
 var _dirty: bool = false
@@ -76,13 +77,6 @@ var _shift_erasing: bool = false
 var _stamp_brush: Array[BlueprintBlock] = []
 var _shift_hover_block: BlueprintBlock = null
 
-## Zones-mode state. `_armed_tool` is what a grid click does: paint place cells,
-## or drop an anchor of the currently selected role.
-var _selected_place_index: int = -1
-var _armed_tool: StringName = &"cell"  ## &"cell" | &"anchor"
-var _anchor_family: StringName = ZoneAnchorRecordScript.FAMILY_OCCUPANCY
-var _anchor_role: StringName = ZoneAnchorRecordScript.ROLE_WORK
-
 var _block_nodes: Dictionary = {}  ## BuildingGridModel placement key -> MeshInstance3D
 @onready var _camera_controller: CameraController = %CameraController
 @onready var _blocks_root: Node3D = %BlocksRoot
@@ -94,7 +88,6 @@ var _block_nodes: Dictionary = {}  ## BuildingGridModel placement key -> MeshIns
 @onready var _navmesh_preview_btn: Button = %NavMeshPreviewBtn
 var _panning: bool = false
 var _orbiting: bool = false
-var _zone_material_cache: Dictionary = {}
 var _shift_hover_visual: MeshInstance3D = null
 
 ## Cached state to skip redundant ghost updates in _process.
@@ -142,29 +135,6 @@ var _ghost_valid: bool = false
 @onready var _mode_zones_btn: Button = %ModeZonesBtn
 @onready var _frame_toolbar: HBoxContainer = %FrameToolbar
 
-@onready var _zones_panel: PanelContainer = %ZonesPanel
-@onready var _zone_option: OptionButton = %ZoneOption
-@onready var _add_place_btn: Button = %AddPlaceBtn
-@onready var _del_place_btn: Button = %DelPlaceBtn
-@onready var _zone_id_edit: LineEdit = %ZoneIdEdit
-@onready var _zone_name_edit: LineEdit = %ZoneNameEdit
-@onready var _zone_kind_option: OptionButton = %ZoneKindOption
-@onready var _zone_subtype_row: VBoxContainer = %ZoneSubtypeRow
-@onready var _zone_subtype_option: OptionButton = %ZoneSubtypeOption
-@onready var _zone_profession_option: OptionButton = %ZoneProfessionOption
-@onready var _zone_workers_spin: SpinBox = %ZoneWorkersSpin
-@onready var _zone_info_label: Label = %ZoneInfoLabel
-@onready var _zone_req_checklist: VBoxContainer = %ZoneReqChecklist
-@onready var _zone_req_empty_label: Label = %ZoneReqEmptyLabel
-@onready var _anchor_family_option: OptionButton = %AnchorFamilyOption
-@onready var _anchor_role_option: OptionButton = %AnchorRoleOption
-@onready var _anchor_world_check: CheckBox = %AnchorWorldCheck
-@onready var _zone_marker_yaw_spin: SpinBox = %ZoneMarkerYawSpin
-@onready var _zone_capacity_spin: SpinBox = %ZoneCapacitySpin
-@onready var _tool_cell_btn: Button = %ToolCellBtn
-@onready var _tool_anchor_btn: Button = %ToolAnchorBtn
-@onready var _clear_cells_btn: Button = %ClearCellsBtn
-@onready var _clear_anchors_btn: Button = %ClearAnchorsBtn
 @onready var _back_btn: Button = %BackBtn
 @onready var _new_btn: Button = %NewBtn
 @onready var _load_btn: Button = %LoadBtn
@@ -180,16 +150,10 @@ var _ghost_valid: bool = false
 var _mode_buttons: Dictionary = {}
 var _palette_buttons: Dictionary = {}  ## StringName -> Button
 var _brush_inspector: Control = null  ## contextual variant strip + anchor pad
-var _tool_buttons: Dictionary = {}     ## StringName -> Button
 ## Prevent value_changed callbacks from overwriting one footprint dimension
 ## with the stale value of the other while a loaded blueprint updates both UI
 ## fields.
 var _syncing_metadata_fields := false
-
-const ZONE_COLORS: Array[Color] = [
-	Color(0.35, 0.75, 1.0), Color(1.0, 0.7, 0.3), Color(0.6, 1.0, 0.5),
-	Color(1.0, 0.5, 0.8), Color(0.8, 0.8, 0.4), Color(0.5, 0.9, 0.9),
-]
 
 
 func _ready() -> void:
@@ -241,6 +205,8 @@ func _init_world() -> void:
 
 	decor_mode = DecorModeControllerScript.new()
 	add_child(decor_mode)
+	zones_mode = ZonesModeControllerScript.new()
+	add_child(zones_mode)
 
 
 ## The authored footprint is the only editable board. Its centre axes are
@@ -346,6 +312,8 @@ func _process(delta: float) -> void:
 	if current_mode == EditMode.DECOR:
 		decor_mode.refresh_ghost()
 		return
+	if current_mode == EditMode.ZONES:
+		return
 	# Ghost refresh is cheap but redundant when nothing changed; skip via cache.
 	if cursor_valid and (cursor_cell != _ghost_cell or current_tool != _ghost_tool or current_rot != _ghost_rot or cursor_valid != _ghost_valid):
 		_refresh_ghost()
@@ -366,8 +334,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			if cursor_valid:
 				if current_mode == EditMode.DECOR:
 					decor_mode.on_drag()
-				elif current_mode == EditMode.ZONES and _armed_tool == &"cell":
-					_paint_zone_line(_last_paint_cell, cursor_cell)
+				elif current_mode == EditMode.ZONES:
+					zones_mode.on_mouse_motion(event)
 				elif current_mode == EditMode.FRAME and current_brush == Brush.RECT:
 					_paint_rect(_paint_anchor, cursor_cell)
 				else:
@@ -422,9 +390,10 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 					_pick_single_block()
 					return
 				if current_mode == EditMode.ZONES:
-					_place_zone_marker_at_cursor()
-					_painting = _armed_tool == &"cell"
-					_last_paint_cell = cursor_cell
+					if zones_mode.handle_mouse_button(event):
+						_painting = zones_mode.is_painting()
+						_last_paint_cell = cursor_cell
+					return
 				elif current_mode == EditMode.DECOR:
 					decor_mode.on_left_pressed()
 					_painting = true
@@ -440,6 +409,8 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 				_painting = false
 				if current_mode == EditMode.DECOR:
 					decor_mode.on_left_released()
+				elif current_mode == EditMode.ZONES:
+					zones_mode.handle_mouse_button(event)
 
 
 
@@ -625,29 +596,6 @@ func _paint_rect(from_cell: Vector3i, to_cell: Vector3i) -> void:
 		for z in range(z0, z1 + 1):
 			_apply_tool_at_cell(Vector3i(x, y, z))
 	_refresh_ghost()
-
-
-func _paint_zone_line(from_cell: Vector3i, to_cell: Vector3i) -> void:
-	var zone := _current_place()
-	if zone == null:
-		return
-	var steps := maxi(absi(to_cell.x - from_cell.x), absi(to_cell.z - from_cell.z))
-	var changed := false
-	for step in range(steps + 1):
-		var t := float(step) / float(maxi(1, steps))
-		var cell := Vector3i(
-			roundi(lerpf(from_cell.x, to_cell.x, t)),
-			active_layer,
-			roundi(lerpf(from_cell.z, to_cell.z, t)))
-		if not _is_cell_in_bounds(cell):
-			continue
-		if cell not in zone.cells:
-			zone.cells.append(cell)
-			changed = true
-	if changed:
-		_mark_dirty()
-		_refresh_zone_visuals()
-		_update_zone_info()
 
 
 ## Shift is a direct manipulation modifier in frame mode.  Unlike the old
@@ -1080,8 +1028,6 @@ func _select_mode(mode: int) -> void:
 		_palette_panel.visible = mode == EditMode.FRAME
 	if _frame_toolbar != null:
 		_frame_toolbar.visible = mode == EditMode.FRAME
-	if _zones_panel != null:
-		_zones_panel.visible = mode == EditMode.ZONES
 	# The decor inspector occupies the same right-hand strip as the metadata
 	# panel, so the two never share the screen.
 	if _metadata_panel != null:
@@ -1094,10 +1040,9 @@ func _select_mode(mode: int) -> void:
 		decor_mode.deactivate()
 		if mode == EditMode.ZONES:
 			_set_tool(Tool.PLACE)
-			_refresh_zone_visuals()
-			_refresh_zone_requirements_checklist()
-			_update_status("Режим зон: создайте зону и расставьте якоря работы / поддоны.")
+			zones_mode.activate()
 		else:
+			zones_mode.deactivate()
 			_update_status("Режим каркаса.")
 	_refresh_ghost()
 
@@ -1136,10 +1081,8 @@ func _on_new_pressed() -> void:
 		return
 	grid_model.clear()
 	blueprint = BuildingBlueprintScript.new()
-	_selected_place_index = -1
 	_rebuild_all_block_nodes()
-	_rebuild_place_option()
-	_refresh_zone_visuals()
+	zones_mode.on_blueprint_changed()
 	_reset_decor_for_new_blueprint()
 	_sync_metadata_fields()
 	_dirty = false
@@ -1180,10 +1123,8 @@ func _on_load_item_activated(index: int) -> void:
 		return
 	blueprint = loaded
 	grid_model.load_from_blueprint(blueprint)
-	_selected_place_index = 0 if not blueprint.place_zones.is_empty() else -1
 	_rebuild_all_block_nodes()
-	_rebuild_place_option()
-	_refresh_zone_visuals()
+	zones_mode.on_blueprint_loaded()
 	_reset_decor_for_new_blueprint()
 	_sync_metadata_fields()
 	_dirty = false
@@ -1259,54 +1200,7 @@ func _setup_ui() -> void:
 
 	_build_palette_blocks()
 
-	# Zones panel wiring
-	_zone_option.item_selected.connect(_on_place_option_selected)
-	_add_place_btn.pressed.connect(_add_place)
-	_del_place_btn.pressed.connect(_delete_place)
-	_zone_id_edit.text_changed.connect(_on_place_id_changed)
-	_zone_name_edit.text_changed.connect(_on_place_name_changed)
-
-	_zone_kind_option.clear()
-	for kind in PlaceZoneRecordScript.KINDS:
-		_zone_kind_option.add_item(PlaceZoneRecordScript.kind_display_name(kind))
-		_zone_kind_option.set_item_metadata(_zone_kind_option.item_count - 1, kind)
-	_zone_kind_option.item_selected.connect(_on_place_kind_selected)
-
-	_zone_subtype_option.item_selected.connect(_on_place_subtype_selected)
-
-	_zone_profession_option.clear()
-	_zone_profession_option.add_item("— нет —")
-	_zone_profession_option.set_item_metadata(0, &"")
-	for prof in PlaceZoneRecordScript.PROFESSIONS:
-		_zone_profession_option.add_item(String(prof))
-		_zone_profession_option.set_item_metadata(_zone_profession_option.item_count - 1, prof)
-	_zone_profession_option.item_selected.connect(_on_place_profession_selected)
-
-	_zone_workers_spin.value_changed.connect(_on_place_workers_changed)
-
-	_anchor_family_option.clear()
-	for family_info in [
-		{"id": ZoneAnchorRecordScript.FAMILY_OCCUPANCY, "label": "Занятие (слот)"},
-		{"id": ZoneAnchorRecordScript.FAMILY_ROUTING, "label": "Маршрутизация"},
-	]:
-		_anchor_family_option.add_item(family_info["label"])
-		_anchor_family_option.set_item_metadata(_anchor_family_option.item_count - 1, family_info["id"])
-	_anchor_family_option.item_selected.connect(_on_anchor_family_selected)
-
-	_anchor_role_option.item_selected.connect(_on_anchor_role_selected)
-
-	_tool_buttons[&"cell"] = _tool_cell_btn
-	_tool_buttons[&"anchor"] = _tool_anchor_btn
-	_tool_cell_btn.pressed.connect(func(): _arm_tool(&"cell"))
-	_tool_anchor_btn.pressed.connect(func(): _arm_tool(&"anchor"))
-
-	_clear_cells_btn.pressed.connect(_clear_place_cells)
-	_clear_anchors_btn.pressed.connect(_clear_place_anchors)
-
-	_anchor_family_option.select(0)
-	_on_anchor_family_selected(0)
-	_arm_tool(&"cell")
-	_rebuild_place_option()
+	zones_mode.setup(self)
 	decor_mode.setup(self)
 
 
@@ -1490,441 +1384,6 @@ func _select_anchor(anchor: int) -> void:
 	current_anchor = anchor
 	_rebuild_brush_inspector()
 	_refresh_ghost()
-
-
-# ---------------------------------------------------------------------------
-# Active work zones (Mode 3 logic)
-# ---------------------------------------------------------------------------
-
-func _current_place() -> PlaceZoneRecord:
-	if _selected_place_index < 0 or _selected_place_index >= blueprint.place_zones.size():
-		return null
-	return blueprint.place_zones[_selected_place_index]
-
-
-func _add_place() -> void:
-	var place := PlaceZoneRecordScript.new()
-	var next_index := 1
-	var existing_ids: Array = blueprint.place_zones.map(func(existing): return existing.zone_id)
-	while StringName("place_%d" % next_index) in existing_ids:
-		next_index += 1
-	place.zone_id = StringName("place_%d" % next_index)
-	place.zone_name = "Место %d" % (blueprint.place_zones.size() + 1)
-	blueprint.place_zones.append(place)
-	_selected_place_index = blueprint.place_zones.size() - 1
-	_mark_dirty()
-	_update_fallback_display()
-	_rebuild_place_option()
-	_refresh_place_panel_fields()
-	_refresh_zone_visuals()
-	_update_status("Зона места создана. Задайте назначение и обведите ячейки.")
-
-
-func _delete_place() -> void:
-	var place := _current_place()
-	if place == null:
-		return
-	var deleted_zone_id := place.zone_id
-	var kept: Array[ZoneAnchorRecord] = []
-	for anchor in blueprint.zone_anchors:
-		if anchor.owner_zone_id != deleted_zone_id:
-			kept.append(anchor)
-	blueprint.zone_anchors = kept
-	blueprint.place_zones.remove_at(_selected_place_index)
-	_selected_place_index = mini(_selected_place_index, blueprint.place_zones.size() - 1)
-	_mark_dirty()
-	_update_fallback_display()
-	_rebuild_place_option()
-	_refresh_place_panel_fields()
-	_refresh_zone_visuals()
-	if decor_mode != null and decor_mode.is_active():
-		decor_mode.on_zone_deleted(deleted_zone_id)
-
-
-func _rebuild_place_option() -> void:
-	if _zone_option == null:
-		return
-	_zone_option.clear()
-	for i in blueprint.place_zones.size():
-		var place: PlaceZoneRecord = blueprint.place_zones[i]
-		_zone_option.add_item("%s" % place.zone_name)
-	if _selected_place_index >= 0 and _selected_place_index < blueprint.place_zones.size():
-		_zone_option.select(_selected_place_index)
-	_refresh_place_panel_fields()
-
-
-func _on_place_option_selected(index: int) -> void:
-	_selected_place_index = index
-	_refresh_place_panel_fields()
-	_refresh_zone_visuals()
-
-
-func _refresh_place_panel_fields() -> void:
-	var place := _current_place()
-	var has_place := place != null
-	if _zone_name_edit != null:
-		_zone_name_edit.editable = has_place
-	if _zone_id_edit != null:
-		_zone_id_edit.editable = has_place
-	if _zone_kind_option != null:
-		_zone_kind_option.disabled = not has_place
-	if _zone_profession_option != null:
-		_zone_profession_option.disabled = not has_place
-	if _zone_workers_spin != null:
-		_zone_workers_spin.editable = has_place
-	if not has_place:
-		if _zone_name_edit != null:
-			_zone_name_edit.text = ""
-		if _zone_id_edit != null:
-			_zone_id_edit.text = ""
-		if _zone_info_label != null:
-			_zone_info_label.text = "Нет зон места. Нажмите ＋, чтобы создать."
-		_rebuild_subtype_options()
-		return
-	if _zone_name_edit != null:
-		_zone_name_edit.text = place.zone_name
-	if _zone_id_edit != null:
-		_zone_id_edit.text = String(place.zone_id)
-	if _zone_kind_option != null:
-		for i in _zone_kind_option.item_count:
-			if _zone_kind_option.get_item_metadata(i) == place.kind:
-				_zone_kind_option.select(i)
-				break
-	_rebuild_subtype_options()
-	if _zone_profession_option != null:
-		var found := 0
-		for i in _zone_profession_option.item_count:
-			if _zone_profession_option.get_item_metadata(i) == place.profession:
-				found = i
-				break
-		_zone_profession_option.select(found)
-	if _zone_workers_spin != null:
-		_zone_workers_spin.value = place.max_workers
-	_update_zone_info()
-
-
-func _update_zone_info() -> void:
-	if _zone_info_label == null:
-		return
-	var place := _current_place()
-	if place == null:
-		return
-	var owned := 0
-	var trays := 0
-	var routing := 0
-	var world := 0
-	for anchor in blueprint.zone_anchors:
-		if anchor.owner_zone_id == &"":
-			world += 1
-		if anchor.owner_zone_id != place.zone_id:
-			continue
-		if anchor.is_routing():
-			routing += 1
-		elif anchor.is_tray():
-			trays += 1
-		else:
-			owned += 1
-	var subtype_line := ""
-	if place.subtype != &"":
-		subtype_line = "\nТип: %s" % PlaceZoneRecordScript.subtype_display_name(place.subtype)
-	_zone_info_label.text = "Ячеек: %d · Слотов: %d · Поддонов: %d · Маршрут: %d\nМировых якорей: %d · ID: %s%s" % [
-		place.cells.size(), owned, trays, routing, world, place.zone_id, subtype_line]
-	_refresh_zone_requirements_checklist()
-
-
-## Auto-creates required runtime fixtures for a zone when its kind/profession
-## changes. Only creates fixtures for capabilities backed by a runtime schema
-## (is_runtime_capability). Non-runtime caps (bed, storage_*) are shown in the
-## checklist but not auto-created. Does not duplicate existing fixtures that
-## already satisfy the requirement.
-func _ensure_zone_fixtures(zone: PlaceZoneRecordScript) -> void:
-	if blueprint == null or zone == null:
-		return
-	var required := ZoneRequirementsScript.required_capabilities_for_zone(zone)
-	if required.is_empty():
-		return
-	# Collect capabilities already provided by fixtures assigned to this zone
-	# or building-wide.
-	var existing_caps: Array[StringName] = []
-	for fixture in blueprint.fixtures:
-		if fixture.owner_zone_id == zone.zone_id or fixture.owner_zone_id == &"":
-			existing_caps.append_array(fixture.capabilities)
-	for cap in required:
-		if cap in existing_caps:
-			continue
-		if not ZoneRequirementsScript.is_runtime_capability(cap):
-			continue
-		# Only fire_source has a runtime schema in Phase 2B.
-		if cap == FixtureDefinitionScript.CAP_FIRE_SOURCE:
-			var fixture := FixtureDefinitionScript.new()
-			fixture.id = StringName("%s_%s" % [String(zone.zone_id), String(cap)])
-			fixture.capabilities = [cap]
-			fixture.owner_zone_id = zone.zone_id
-			fixture.runtime_defaults = {"lit": true, "fuel": 4, "fuel_capacity": 8}
-			blueprint.fixtures.append(fixture)
-			_mark_dirty()
-
-
-func _refresh_zone_requirements_checklist() -> void:
-	if _zone_req_checklist == null:
-		return
-	for child in _zone_req_checklist.get_children():
-		child.queue_free()
-	if blueprint == null:
-		return
-	var checklist: Array[Dictionary] = blueprint.zone_requirements_checklist()
-	if checklist.is_empty():
-		if _zone_req_empty_label != null:
-			_zone_req_empty_label.visible = true
-		return
-	if _zone_req_empty_label != null:
-		_zone_req_empty_label.visible = false
-	for entry in checklist:
-		var label := Label.new()
-		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		var mark := "✓" if entry.satisfied else "✗"
-		var color := Color(0.4, 0.8, 0.4) if entry.satisfied else Color(0.9, 0.5, 0.4)
-		if not entry.is_runtime and not entry.satisfied:
-			color = Color(0.7, 0.65, 0.4)
-		label.text = "%s %s — %s" % [mark, entry.zone_name, entry.label]
-		label.add_theme_color_override("font_color", color)
-		label.add_theme_font_size_override("font_size", 12)
-		_zone_req_checklist.add_child(label)
-
-
-func _on_place_name_changed(text: String) -> void:
-	var place := _current_place()
-	if place == null:
-		return
-	place.zone_name = text
-	_mark_dirty()
-	if _zone_option != null and _selected_place_index >= 0:
-		_zone_option.set_item_text(_selected_place_index, text)
-
-
-func _on_place_id_changed(text: String) -> void:
-	var place := _current_place()
-	if place != null:
-		var cleaned := text.strip_edges().to_lower()
-		place.zone_id = StringName(cleaned)
-		_mark_dirty()
-		if _zone_id_edit != null:
-			var valid := not cleaned.is_empty() and BuildingBlueprintScript._valid_id(cleaned)
-			if valid:
-				_zone_id_edit.remove_theme_color_override("font_color")
-			else:
-				_zone_id_edit.add_theme_color_override("font_color", Color(1.0, 0.3, 0.3))
-
-
-func _on_place_kind_selected(index: int) -> void:
-	var place := _current_place()
-	if place == null:
-		return
-	place.kind = _zone_kind_option.get_item_metadata(index)
-	var subtypes := PlaceZoneRecordScript.subtypes_for_kind(place.kind)
-	place.subtype = subtypes[0] if not subtypes.is_empty() else &""
-	_mark_dirty()
-	_rebuild_subtype_options()
-	_ensure_zone_fixtures(place)
-	_update_zone_info()
-	_update_fallback_display()
-
-
-func _on_place_subtype_selected(index: int) -> void:
-	var place := _current_place()
-	if place == null:
-		return
-	place.subtype = _zone_subtype_option.get_item_metadata(index)
-	_mark_dirty()
-
-
-func _rebuild_subtype_options() -> void:
-	if _zone_subtype_option == null:
-		return
-	var place := _current_place()
-	var subtypes: Array[StringName] = []
-	if place != null:
-		subtypes = PlaceZoneRecordScript.subtypes_for_kind(place.kind)
-	_zone_subtype_row.visible = not subtypes.is_empty()
-	_zone_subtype_option.clear()
-	for st in subtypes:
-		_zone_subtype_option.add_item(PlaceZoneRecordScript.subtype_display_name(st))
-		_zone_subtype_option.set_item_metadata(_zone_subtype_option.item_count - 1, st)
-	if place != null:
-		for i in _zone_subtype_option.item_count:
-			if _zone_subtype_option.get_item_metadata(i) == place.subtype:
-				_zone_subtype_option.select(i)
-				break
-
-
-func _on_place_profession_selected(index: int) -> void:
-	var place := _current_place()
-	if place == null:
-		return
-	place.profession = _zone_profession_option.get_item_metadata(index)
-	_mark_dirty()
-	_ensure_zone_fixtures(place)
-	_update_zone_info()
-	_update_fallback_display()
-
-
-func _on_place_workers_changed(value: float) -> void:
-	var place := _current_place()
-	if place == null:
-		return
-	place.max_workers = int(value)
-	_mark_dirty()
-
-
-func _on_anchor_family_selected(index: int) -> void:
-	_anchor_family = _anchor_family_option.get_item_metadata(index)
-	var routing := _anchor_family == ZoneAnchorRecordScript.FAMILY_ROUTING
-	if _anchor_world_check != null:
-		_anchor_world_check.disabled = not routing
-		if not routing:
-			_anchor_world_check.button_pressed = false
-	_rebuild_anchor_role_options()
-
-
-func _rebuild_anchor_role_options() -> void:
-	if _anchor_role_option == null:
-		return
-	_anchor_role_option.clear()
-	var roles := ZoneAnchorRecordScript.roles_for_family(_anchor_family)
-	for role in roles:
-		_anchor_role_option.add_item(ZoneAnchorRecordScript.role_display_name(role))
-		_anchor_role_option.set_item_metadata(_anchor_role_option.item_count - 1, role)
-	if not roles.is_empty():
-		_anchor_role = roles[0]
-		_anchor_role_option.select(0)
-
-
-func _on_anchor_role_selected(index: int) -> void:
-	_anchor_role = _anchor_role_option.get_item_metadata(index)
-
-
-func _arm_tool(tool: StringName) -> void:
-	_armed_tool = tool
-	for id in _tool_buttons.keys():
-		(_tool_buttons[id] as Button).button_pressed = id == tool
-
-
-func _clear_place_cells() -> void:
-	var place := _current_place()
-	if place == null:
-		return
-	place.cells.clear()
-	_mark_dirty()
-	_refresh_zone_visuals()
-	_update_zone_info()
-
-
-func _clear_place_anchors() -> void:
-	var place := _current_place()
-	if place == null:
-		return
-	var kept: Array[ZoneAnchorRecord] = []
-	for anchor in blueprint.zone_anchors:
-		if anchor.owner_zone_id != place.zone_id:
-			kept.append(anchor)
-	blueprint.zone_anchors = kept
-	_mark_dirty()
-	_refresh_zone_visuals()
-	_update_zone_info()
-
-
-func _next_anchor_id() -> StringName:
-	var next_index := 1
-	var existing: Array = blueprint.zone_anchors.map(func(a): return a.anchor_id)
-	while StringName("anchor_%d" % next_index) in existing:
-		next_index += 1
-	return StringName("anchor_%d" % next_index)
-
-
-func _place_zone_marker_at_cursor() -> void:
-	if not cursor_valid or not _is_cell_in_bounds(cursor_cell):
-		return
-	if _armed_tool == &"cell":
-		var place := _current_place()
-		if place == null:
-			_update_status("Сначала создайте зону места (＋).")
-			return
-		var idx := place.cells.find(cursor_cell)
-		if idx >= 0:
-			place.cells.remove_at(idx)
-		else:
-			place.cells.append(cursor_cell)
-		_mark_dirty()
-		_refresh_zone_visuals()
-		_update_zone_info()
-		return
-	var owner_id: StringName = &""
-	var world := _anchor_world_check != null and _anchor_world_check.button_pressed
-	if not world:
-		var place := _current_place()
-		if place == null:
-			_update_status("Создайте зону места или включите «мировой якорь».")
-			return
-		owner_id = place.zone_id
-	var anchor := ZoneAnchorRecordScript.new()
-	anchor.anchor_id = _next_anchor_id()
-	anchor.owner_zone_id = owner_id
-	anchor.role = _anchor_role
-	anchor.pos = Vector3(cursor_cell) + Vector3(0.5, 0.0, 0.5)
-	if _zone_marker_yaw_spin != null:
-		anchor.rot = Vector3(0.0, _zone_marker_yaw_spin.value, 0.0)
-	if _zone_capacity_spin != null:
-		anchor.capacity = int(_zone_capacity_spin.value)
-	blueprint.zone_anchors.append(anchor)
-	_mark_dirty()
-	_refresh_zone_visuals()
-	_update_zone_info()
-
-
-func _refresh_zone_visuals() -> void:
-	if _zones_visual_root == null:
-		return
-	for child in _zones_visual_root.get_children():
-		child.queue_free()
-	if current_mode != EditMode.ZONES:
-		return
-	for i in blueprint.place_zones.size():
-		var place: PlaceZoneRecord = blueprint.place_zones[i]
-		var color := ZONE_COLORS[i % ZONE_COLORS.size()]
-		for cell in place.cells:
-			_add_zone_marker(Vector3(cell) + Vector3(0.5, 0.0, 0.5), color, Vector3(0.9, 0.04, 0.9), true)
-	for anchor in blueprint.zone_anchors:
-		var col := Color(0.4, 1.0, 0.4)
-		var size := Vector3(0.4, 1.2, 0.4)
-		if anchor.is_routing():
-			col = Color(1.0, 0.55, 0.2)
-			size = Vector3(0.5, 1.6, 0.5)
-		elif anchor.is_tray():
-			col = Color(0.4, 0.8, 1.0)
-			size = Vector3(0.7, 0.3, 0.7)
-		_add_zone_marker(anchor.pos, col, size, anchor.is_tray())
-
-
-func _get_zone_material(color: Color) -> StandardMaterial3D:
-	var key := color.to_html(true)
-	if _zone_material_cache.has(key):
-		return _zone_material_cache[key]
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(color.r, color.g, color.b, 0.7)
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_zone_material_cache[key] = mat
-	return mat
-
-
-func _add_zone_marker(pos: Vector3, color: Color, size: Vector3, is_tray: bool) -> void:
-	var mi := MeshInstance3D.new()
-	var mesh := BoxMesh.new()
-	mesh.size = size
-	mi.mesh = mesh
-	mi.material_override = _get_zone_material(color)
-	mi.position = pos + Vector3(0.0, size.y * 0.5 + (0.02 if is_tray else 0.0), 0.0)
-	_zones_visual_root.add_child(mi)
 
 
 # ---------------------------------------------------------------------------

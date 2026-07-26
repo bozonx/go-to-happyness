@@ -196,7 +196,7 @@ static func total_housing_slots(simulation: Node) -> int:
 	return simulation.building_registry.housing_capacity()
 
 static func unhoused_citizen_count(simulation: Node) -> int:
-	return simulation._unhoused_citizen_count()
+	return simulation.citizen_lifecycle_service.unhoused_citizen_count()
 
 static func house_initial_residents(simulation: Node, tent: Node3D) -> void:
 	simulation.citizen_lifecycle_service.house_initial_residents(tent)

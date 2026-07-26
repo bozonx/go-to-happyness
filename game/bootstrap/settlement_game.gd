@@ -276,10 +276,7 @@ var selected_house: Node3D
 var tent: Node3D
 var entrance_stone: Node3D
 var selected_entrance: Node3D
-var pending_arrivals: Array[Dictionary] = []
-var arrival_greeters: Dictionary = {}
-var arrival_waiting_greeters: Dictionary = {}
-var arrival_escort_ids: Dictionary = {}
+var logistics_runtime := SettlementLogisticsRuntimeState.new()
 var canteen: Node3D
 var canteen_position := Vector3.ZERO
 var employment_office: Node3D
@@ -322,8 +319,6 @@ var skip_night_button: Button:
 var start_workday_button: Button:
 	get: return ui_manager.time_controls_panel.start_workday_button
 var water_collectors: Array[WaterCollectorRecord] = []
-var pending_trades: Dictionary = {} # worker ai_id -> TradeOrder
-var queued_trades: Array = []
 var building_status_indicators: Array[Label3D] = []
 var building_status_update_time := 0.0
 var workplace_priority_counter := 0
@@ -432,7 +427,20 @@ func _ready() -> void:
 	citizen_factory = SettlementCitizenFactory.new(self)
 	building_visuals = SettlementBuildingVisuals.new(self)
 	simulation_handlers = SettlementSimulationHandlers.new(self)
-	service_pocket_manager = SettlementServicePocketManager.new(self)
+	var add_service_marker := func(building: Node3D, local: Vector3) -> void:
+		if building_visuals_service != null:
+			building_visuals_service.add_service_entrance_marker(building, local)
+	var add_visitor_marker := func(building: Node3D, local: Vector3) -> void:
+		if building_visuals_service != null:
+			building_visuals_service.add_visitor_entrance_marker(building, local)
+	service_pocket_manager = SettlementServicePocketManager.new(
+		BuildingServicePocketPort.new(
+			service_pockets,
+			cell_from_position,
+			add_service_marker,
+			add_visitor_marker
+		)
+	)
 	outside_work_controller = SettlementOutsideWorkController.new(self)
 	building_management = SettlementBuildingManagement.new(self)
 	input_controller = SettlementInputController.new(self)
