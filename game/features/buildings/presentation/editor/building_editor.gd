@@ -215,9 +215,7 @@ func _init_world() -> void:
 	_camera_controller.apply_position()
 
 	var grid_lines := %GridLines as MeshInstance3D
-	grid_lines.mesh = _build_grid_mesh(32, Color(0.30, 0.34, 0.40, 0.6))
-
-	_layer_plane.mesh = _build_grid_mesh(24, Color(0.35, 0.7, 1.0, 0.5))
+	_refresh_building_grid_visuals()
 
 	decor_mode = DecorModeControllerScript.new()
 	add_child(decor_mode)
@@ -239,6 +237,33 @@ func _build_grid_mesh(half_extent: int, color: Color) -> ArrayMesh:
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mesh.surface_set_material(0, mat)
 	return mesh
+
+
+## The authored footprint is the only editable board. Its centre axes are
+## yellow so even-sized grids still have an obvious visual centre.
+func _refresh_building_grid_visuals() -> void:
+	if blueprint == null:
+		return
+	var width := blueprint.footprint.x
+	var depth := blueprint.footprint.y
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_LINES)
+	for x in range(width + 1):
+		st.set_color(Color(0.30, 0.34, 0.40, 0.8))
+		st.add_vertex(Vector3(x, 0.0, 0.0)); st.add_vertex(Vector3(x, 0.0, depth))
+	for z in range(depth + 1):
+		st.set_color(Color(0.30, 0.34, 0.40, 0.8))
+		st.add_vertex(Vector3(0.0, 0.0, z)); st.add_vertex(Vector3(width, 0.0, z))
+	st.set_color(Color(1.0, 0.82, 0.18, 1.0))
+	st.add_vertex(Vector3(width * 0.5, 0.012, 0.0)); st.add_vertex(Vector3(width * 0.5, 0.012, depth))
+	st.add_vertex(Vector3(0.0, 0.012, depth * 0.5)); st.add_vertex(Vector3(width, 0.012, depth * 0.5))
+	var mesh := st.commit()
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.vertex_color_use_as_albedo = true
+	mesh.surface_set_material(0, mat)
+	%GridLines.mesh = mesh
+	_layer_plane.mesh = mesh
 
 
 # ---------------------------------------------------------------------------
@@ -325,11 +350,11 @@ func _handle_key(event: InputEventKey) -> void:
 		return
 	match event.keycode:
 		KEY_Z:
-			_cycle_rotation_z()
+			_cycle_rotation_z(-1 if event.shift_pressed else 1)
 		KEY_X:
-			_cycle_rotation_x()
+			_cycle_rotation_x(-1 if event.shift_pressed else 1)
 		KEY_C, KEY_R:
-			_cycle_rotation()
+			_cycle_rotation(-1 if event.shift_pressed else 1)
 		KEY_E:
 			_set_tool(Tool.ERASE)
 		KEY_B:
@@ -394,7 +419,7 @@ func _apply_tool_at_cursor() -> void:
 func _apply_tool_at_cell(cell: Vector3i) -> void:
 	match current_tool:
 		Tool.PLACE:
-			if grid_model.place(cell, current_block_id, current_rot, current_material_id, current_variant, current_anchor, current_rot_x, current_rot_z):
+			if _is_block_in_bounds(cell, current_block_id, current_variant, current_rot) and grid_model.place(cell, current_block_id, current_rot, current_material_id, current_variant, current_anchor, current_rot_x, current_rot_z):
 				_spawn_or_update_block_node(grid_model.get_block_at(cell))
 				_update_count()
 				_mark_dirty()
@@ -454,6 +479,8 @@ func _paint_zone_line(from_cell: Vector3i, to_cell: Vector3i) -> void:
 			roundi(lerpf(from_cell.x, to_cell.x, t)),
 			active_layer,
 			roundi(lerpf(from_cell.z, to_cell.z, t)))
+		if not _is_cell_in_bounds(cell):
+			continue
 		if cell not in zone.cells:
 			zone.cells.append(cell)
 			changed = true
@@ -531,9 +558,20 @@ func _refresh_ghost() -> void:
 		_ghost.mesh = mesh_library.mesh_for(current_block_id, current_variant)
 		_ghost.rotation = _current_ghost_euler()
 		_ghost.position = Vector3(cursor_cell) + BlockMeshLibraryScript.local_offset(current_block_id, current_variant, current_rot, current_anchor, 0.0, current_rot_x, current_rot_z)
-		_ghost.material_override = mesh_library.ghost_material(grid_model.can_place(
+		_ghost.material_override = mesh_library.ghost_material(_is_block_in_bounds(cursor_cell, current_block_id, current_variant, current_rot) and grid_model.can_place(
 			cursor_cell, current_block_id, current_rot, current_material_id, current_variant,
 			current_anchor, current_rot_x, current_rot_z))
+
+
+func _is_block_in_bounds(cell: Vector3i, block_id: StringName, variant: StringName, rot: int) -> bool:
+	for covered: Vector3i in BuildingGridModelScript.occupied_cells(cell, block_id, variant, rot):
+		if not _is_cell_in_bounds(covered):
+			return false
+	return true
+
+
+func _is_cell_in_bounds(cell: Vector3i) -> bool:
+	return cell.x >= 0 and cell.z >= 0 and cell.x < blueprint.footprint.x and cell.z < blueprint.footprint.y
 
 
 ## Euler rotation of the placement ghost, combining all three quarter-turn axes.
@@ -700,30 +738,30 @@ func _select_block(block_id: StringName, variant: StringName = &"") -> void:
 	_refresh_ghost()
 
 
-func _cycle_rotation() -> void:
+func _cycle_rotation(direction: int = 1) -> void:
 	var def := BuildingBlockCatalogScript.get_block(current_block_id)
 	if def.is_empty() or not def.get("rotatable", true):
 		return
-	current_rot = (current_rot + 1) % 4
+	current_rot = (current_rot + direction + 4) % 4
 	_rebuild_brush_inspector()
 	_update_rotation_label()
 	_refresh_ghost()
 
 
-func _cycle_rotation_x() -> void:
+func _cycle_rotation_x(direction: int = 1) -> void:
 	var def := BuildingBlockCatalogScript.get_block(current_block_id)
 	if def.is_empty() or not def.get("rotatable", true):
 		return
-	current_rot_x = (current_rot_x + 1) % 4
+	current_rot_x = (current_rot_x + direction + 4) % 4
 	_update_rotation_label()
 	_refresh_ghost()
 
 
-func _cycle_rotation_z() -> void:
+func _cycle_rotation_z(direction: int = 1) -> void:
 	var def := BuildingBlockCatalogScript.get_block(current_block_id)
 	if def.is_empty() or not def.get("rotatable", true):
 		return
-	current_rot_z = (current_rot_z + 1) % 4
+	current_rot_z = (current_rot_z + direction + 4) % 4
 	_update_rotation_label()
 	_refresh_ghost()
 
@@ -820,12 +858,12 @@ func _on_new_pressed() -> void:
 	grid_model.clear()
 	blueprint = BuildingBlueprintScript.new()
 	_selected_place_index = -1
-	_dirty = false
 	_rebuild_all_block_nodes()
 	_rebuild_place_option()
 	_refresh_zone_visuals()
 	_reset_decor_for_new_blueprint()
 	_sync_metadata_fields()
+	_dirty = false
 	_set_layer(0)
 	_update_status("Новый чертёж.")
 
@@ -862,12 +900,12 @@ func _on_load_item_activated(index: int) -> void:
 	blueprint = loaded
 	grid_model.load_from_blueprint(blueprint)
 	_selected_place_index = 0 if not blueprint.place_zones.is_empty() else -1
-	_dirty = false
 	_rebuild_all_block_nodes()
 	_rebuild_place_option()
 	_refresh_zone_visuals()
 	_reset_decor_for_new_blueprint()
 	_sync_metadata_fields()
+	_dirty = false
 	_load_popup.hide()
 	_update_status("Загружено: %s (%d блоков, %d зон, %d объектов)" % [
 		blueprint.name, blueprint.block_count(), blueprint.place_zones.size(), blueprint.objects.size()])
@@ -997,6 +1035,8 @@ func _setup_ui() -> void:
 		_category_option.add_item(category_id.capitalize())
 		_category_option.set_item_metadata(_category_option.item_count - 1, category_id)
 	_category_option.item_selected.connect(_on_era_changed)
+	_footprint_x_spin.value_changed.connect(_on_footprint_changed)
+	_footprint_z_spin.value_changed.connect(_on_footprint_changed)
 
 	_style_option.clear()
 	for style_info in [
@@ -1510,7 +1550,7 @@ func _next_anchor_id() -> StringName:
 
 
 func _place_zone_marker_at_cursor() -> void:
-	if not cursor_valid:
+	if not cursor_valid or not _is_cell_in_bounds(cursor_cell):
 		return
 	if _armed_tool == &"cell":
 		var place := _current_place()
@@ -1828,14 +1868,23 @@ func _confirm_discard_changes() -> bool:
 	dialog.ok_button_text = "Да"
 	dialog.cancel_button_text = "Отмена"
 	add_child(dialog)
-	dialog.popup_centered(Vector2i(360, 120))
 	var user_confirmed := false
 	dialog.confirmed.connect(func(): user_confirmed = true)
-	await dialog.visibility_changed
-	if dialog.visible:
-		await dialog.hidden
+	dialog.popup_centered(Vector2i(360, 120))
+	# `hidden` fires for both confirmation and cancellation, unlike the initial
+	# visibility change which could race the await and leave Load suspended.
+	await dialog.hidden
 	dialog.queue_free()
 	return user_confirmed
+
+
+func _on_footprint_changed(_value: float) -> void:
+	if blueprint == null:
+		return
+	blueprint.footprint = Vector2i(int(_footprint_x_spin.value), int(_footprint_z_spin.value))
+	_refresh_building_grid_visuals()
+	_refresh_ghost()
+	_mark_dirty()
 
 
 

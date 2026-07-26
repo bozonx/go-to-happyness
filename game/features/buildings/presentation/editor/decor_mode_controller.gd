@@ -83,7 +83,7 @@ var _group_option: OptionButton = null
 var _category_option: OptionButton = null
 var _asset_container: VBoxContainer = null
 var _asset_hint: Label = null
-var _snap_option: OptionButton = null
+var _snap_buttons: Dictionary = {} ## float snap step -> Button
 var _inspector_title: Label = null
 var _object_list: ItemList = null
 var _controls_vbox: VBoxContainer = null
@@ -138,7 +138,6 @@ func setup(editor: Node) -> void:
 	_recent_container = editor.get_node("%DecorRecentContainer")
 	_asset_container = editor.get_node("%DecorAssetContainer")
 	_asset_hint = editor.get_node("%DecorAssetHint")
-	_snap_option = editor.get_node("%DecorSnapOption")
 	_inspector_title = editor.get_node("%DecorInspectorTitle")
 	_id_label = editor.get_node("%DecorIdLabel")
 	_asset_label = editor.get_node("%DecorAssetLabel")
@@ -206,7 +205,6 @@ func setup(editor: Node) -> void:
 
 	_category_option.item_selected.connect(_on_category_selected)
 	_group_option.item_selected.connect(_on_group_selected)
-	_snap_option.item_selected.connect(_on_snap_selected)
 	_search_edit.text_changed.connect(_on_search_changed)
 	_object_search_edit.text_changed.connect(_on_object_search_changed)
 	_object_list.item_selected.connect(_on_object_list_selected)
@@ -241,15 +239,10 @@ func _build_group_options() -> void:
 
 
 func _build_snap_options() -> void:
-	_snap_option.clear()
-	for entry in [
-		{"label": "1.0 м — центр блока", "step": 1.0},
-		{"label": "0.5 м — полублок", "step": 0.5},
-		{"label": "0.25 м — четверть", "step": 0.25},
-	]:
-		_snap_option.add_item(String(entry["label"]))
-		_snap_option.set_item_metadata(_snap_option.item_count - 1, float(entry["step"]))
-	_snap_option.select(1)
+	_snap_buttons = {1.0: _editor.get_node("%DecorSnap1Btn"), 0.5: _editor.get_node("%DecorSnapHalfBtn"), 0.25: _editor.get_node("%DecorSnapQuarterBtn")}
+	for step in _snap_buttons.keys():
+		(_snap_buttons[step] as Button).pressed.connect(_select_snap_step.bind(float(step)))
+	_select_snap_step(0.5)
 	current_snap_step = 0.5
 
 
@@ -334,7 +327,10 @@ func on_drag() -> void:
 		_push_undo()
 		_drag_started = true
 	var hit: Vector3 = _editor.cursor_hit_pos
-	record.pos = snapped_position(hit + _drag_offset)
+	var candidate := snapped_position(hit + _drag_offset)
+	if not _is_in_bounds(candidate, record.asset_id, record.scale):
+		return
+	record.pos = candidate
 	_apply_transform_to_node(record)
 	_editor.mark_dirty()
 	_sync_transform_fields(record)
@@ -417,11 +413,15 @@ func snapped_position(raw_hit: Vector3) -> Vector3:
 
 
 ## Returns true when the position is inside the building footprint.
-func _is_in_bounds(pos: Vector3) -> bool:
+func _is_in_bounds(pos: Vector3, asset_id: StringName = current_asset_id, scale: Vector3 = Vector3.ONE) -> bool:
 	if _editor == null or _editor.blueprint == null:
 		return true
 	var footprint: Vector2i = _editor.blueprint.footprint
-	return pos.x >= 0.0 and pos.x <= float(footprint.x) and pos.z >= 0.0 and pos.z <= float(footprint.y)
+	var asset := FurnishingAssetCatalogScript.get_asset(asset_id)
+	var size := asset.footprint_m() if asset != null else Vector3.ONE
+	var half_x := size.x * scale.x * 0.5
+	var half_z := size.z * scale.z * 0.5
+	return pos.x - half_x >= 0.0 and pos.x + half_x <= float(footprint.x) and pos.z - half_z >= 0.0 and pos.z + half_z <= float(footprint.y)
 
 
 ## Returns true when the position overlaps an existing decor object.
@@ -1043,6 +1043,8 @@ func _rebuild_asset_buttons() -> void:
 	var assets := FurnishingAssetCatalogScript.get_assets_by_category(current_category)
 	var search_text := _search_edit.text.strip_edges().to_lower() if _search_edit != null else ""
 	if not search_text.is_empty():
+		# The top-bar search deliberately crosses category boundaries.
+		assets = FurnishingAssetCatalogScript.get_all_assets()
 		var filtered: Array = []
 		for asset in assets:
 			if String(asset.name).to_lower().contains(search_text) or String(asset.description).to_lower().contains(search_text):
@@ -1145,15 +1147,11 @@ func _update_asset_hint() -> void:
 
 
 func _select_snap_step(step: float) -> void:
-	for i in _snap_option.item_count:
-		if is_equal_approx(float(_snap_option.get_item_metadata(i)), step):
-			_snap_option.select(i)
-			current_snap_step = step
-			return
-
-
-func _on_snap_selected(index: int) -> void:
-	current_snap_step = float(_snap_option.get_item_metadata(index))
+	if not _snap_buttons.has(step):
+		return
+	current_snap_step = step
+	for snap_step in _snap_buttons.keys():
+		(_snap_buttons[snap_step] as Button).button_pressed = is_equal_approx(float(snap_step), step)
 	refresh_ghost()
 
 

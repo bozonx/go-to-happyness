@@ -38,7 +38,7 @@ static func local_offset(
 		deg_to_rad(90.0 * float(rot)),
 		deg_to_rad(90.0 * float(rot_z))))
 	var c := r * d0
-	return Vector3(0.5 + c.x, 0.5 + c.y + vertical_offset, 0.5 + c.z)
+	return Vector3(0.5 + c.x, 0.5 + c.y + vertical_offset + BuildingBlockCatalogScript.vertical_offset_of(block_id, variant), 0.5 + c.z)
 
 
 func mesh_for(block_id: StringName, variant: StringName = &"") -> Mesh:
@@ -81,10 +81,12 @@ func mesh_for(block_id: StringName, variant: StringName = &"") -> Mesh:
 			mesh = _build_door_wall(size)
 		BuildingBlockCatalogScript.SHAPE_ARCH:
 			mesh = _build_arch(size)
+		BuildingBlockCatalogScript.SHAPE_HALF_ARCH:
+			mesh = _build_half_arch(size)
 		BuildingBlockCatalogScript.SHAPE_RAILING:
 			mesh = _build_railing(size)
-		BuildingBlockCatalogScript.SHAPE_BALUSTRADE:
-			mesh = _build_balustrade(size)
+		BuildingBlockCatalogScript.SHAPE_FENCE:
+			mesh = _build_fence(size)
 		_:
 			var box := BoxMesh.new()
 			box.size = size
@@ -217,7 +219,16 @@ func _build_half_cylinder(size: Vector3, segments: int = 12) -> ArrayMesh:
 		var p2_b := Vector3(sin(a2) * rx, -hy, cos(a2) * rz)
 		var p1_t := Vector3(sin(a1) * rx, hy, cos(a1) * rz)
 		var p2_t := Vector3(sin(a2) * rx, hy, cos(a2) * rz)
-		_add_quad(st, p1_b, p1_t, p2_t, p2_b) # Curved front (wound so the normal faces outward)
+		# Emit the curved face explicitly: the generic quad helper targets the
+		# block faces' historic winding, while this arc needs radial normals.
+		var mid := (a1 + a2) * 0.5
+		var normal := Vector3(sin(mid) / maxf(rx, 0.001), 0.0, cos(mid) / maxf(rz, 0.001)).normalized()
+		st.set_normal(normal); st.add_vertex(p1_b)
+		st.set_normal(normal); st.add_vertex(p2_t)
+		st.set_normal(normal); st.add_vertex(p1_t)
+		st.set_normal(normal); st.add_vertex(p1_b)
+		st.set_normal(normal); st.add_vertex(p2_b)
+		st.set_normal(normal); st.add_vertex(p2_t)
 		_add_tri(st, Vector3(0, hy, 0), p2_t, p1_t) # Top cap
 		_add_tri(st, Vector3(0, -hy, 0), p1_b, p2_b) # Bottom cap
 	return st.commit()
@@ -321,8 +332,26 @@ func _build_arch(size: Vector3, segments: int = 12) -> ArrayMesh:
 	return st.commit()
 
 
-## A railing: top rail, bottom rail and evenly spaced vertical balusters spanning
-## the block height (`size.y`, so full- and half-height variants both work).
+## Cube panel with one quarter-cylinder removed from its lower-left corner.
+## Quarter-turn rotation moves the cut-out to the other corners.
+func _build_half_arch(size: Vector3, segments: int = 12) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var hx := size.x * 0.5
+	var hy := size.y * 0.5
+	var hz := size.z * 0.5
+	var radius := minf(size.x, size.y) * 0.5
+	var step := radius / float(segments)
+	for i in segments:
+		var x0 := -hx + step * float(i)
+		var x1 := minf(x0 + step, -hx + radius)
+		var distance_x := (x0 + x1) * 0.5 + hx
+		var cut_y := -hy + sqrt(maxf(0.0, radius * radius - distance_x * distance_x))
+		_add_box(st, Vector3(x0, cut_y, -hz), Vector3(x1, hy, hz))
+	_add_box(st, Vector3(-hx + radius, -hy, -hz), Vector3(hx, hy, hz))
+	return st.commit()
+
+
 func _build_railing(size: Vector3, balusters: int = 5) -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -330,11 +359,9 @@ func _build_railing(size: Vector3, balusters: int = 5) -> ArrayMesh:
 	var hy := size.y * 0.5
 	var t := minf(size.z * 0.5, 0.06)       # half-thickness of the members
 	var rail_h := minf(size.y * 0.12, 0.1)  # rail bar height
-	# Top and bottom rails span the full width.
 	_add_box(st, Vector3(-hx, hy - rail_h, -t), Vector3(hx, hy, t))
 	_add_box(st, Vector3(-hx, -hy, -t), Vector3(hx, -hy + rail_h * 0.7, t))
-	# Vertical balusters between the rails.
-	var bw := 0.045                          # half-width of a baluster
+	var bw := 0.045
 	var bt := t * 0.7
 	for i in balusters + 1:
 		var cx := -hx + (2.0 * hx) * float(i) / float(balusters)
@@ -342,6 +369,22 @@ func _build_railing(size: Vector3, balusters: int = 5) -> ArrayMesh:
 		var x1 := clampf(cx + bw, -hx, hx)
 		if x1 > x0 + 0.0001:
 			_add_box(st, Vector3(x0, -hy + rail_h * 0.5, -bt), Vector3(x1, hy - rail_h * 0.5, bt))
+	return st.commit()
+
+
+## A cattle fence: two horizontal rails held by end posts.
+func _build_fence(size: Vector3) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var hx := size.x * 0.5
+	var hy := size.y * 0.5
+	var t := minf(size.z * 0.5, 0.06)
+	var rail_h := minf(size.y * 0.12, 0.1)
+	var post_w := minf(0.07, size.x * 0.12)
+	_add_box(st, Vector3(-hx, -hy, -t), Vector3(-hx + post_w, hy, t))
+	_add_box(st, Vector3(hx - post_w, -hy, -t), Vector3(hx, hy, t))
+	_add_box(st, Vector3(-hx, -hy * 0.35 - rail_h, -t), Vector3(hx, -hy * 0.35 + rail_h, t))
+	_add_box(st, Vector3(-hx, hy * 0.35 - rail_h, -t), Vector3(hx, hy * 0.35 + rail_h, t))
 	return st.commit()
 
 

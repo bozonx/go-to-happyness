@@ -214,6 +214,12 @@ visible = false
 layout_mode = 2
 theme_override_constants/separation = 6
 
+[node name="DecorSearchEdit" type="LineEdit" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(190, 0)
+layout_mode = 2
+placeholder_text = "Поиск ассета во всех категориях..."
+
 [node name="DecorToolPlaceBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -269,13 +275,13 @@ layout_mode = 2
 [node name="DecorUndoBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "↶ Отменить"
+text = "↶"
 tooltip_text = "Ctrl+Z"
 
 [node name="DecorRedoBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "↷ Повторить"
+text = "↷"
 tooltip_text = "Ctrl+Y"
 
 [node name="VSepDecorLayer" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
@@ -669,11 +675,6 @@ text = "Категория:"
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="DecorSearchEdit" type="LineEdit" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
-unique_name_in_owner = true
-layout_mode = 2
-placeholder_text = "Поиск ассета..."
-
 [node name="DecorRecentLbl" type="Label" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -705,21 +706,26 @@ layout_mode = 2
 layout_mode = 2
 text = "Привязка к сетке:"
 
-[node name="DecorSnapOption" type="OptionButton" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
+[node name="DecorSnapButtons" type="HBoxContainer" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
+layout_mode = 2
+
+[node name="DecorSnap1Btn" type="Button" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox/DecorSnapButtons"]
 unique_name_in_owner = true
 layout_mode = 2
+toggle_mode = true
+text = "1"
 
-[node name="HSepHelp" type="HSeparator" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
+[node name="DecorSnapHalfBtn" type="Button" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox/DecorSnapButtons"]
+unique_name_in_owner = true
 layout_mode = 2
+toggle_mode = true
+text = "0.5"
 
-[node name="DecorHelpLabel" type="Label" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
+[node name="DecorSnapQuarterBtn" type="Button" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox/DecorSnapButtons"]
+unique_name_in_owner = true
 layout_mode = 2
-theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
-theme_override_font_sizes/font_size = 12
-text = "B — поставить, V — выбрать, E — удалить.
-C / Shift+C — поворот, Ctrl+D — дублировать.
-Delete — удалить, Ctrl+Z — отменить, Ctrl+Y — повторить."
-autowrap_mode = 2
+toggle_mode = true
+text = "0.25"
 
 [node name="DecorInspectorPanel" type="PanelContainer" parent="EditorUI/Root"]
 unique_name_in_owner = true

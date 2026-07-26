@@ -23,8 +23,7 @@ enum Category {
 	COLUMNS,     ## square / round / half columns (size selected separately)
 	ROOF,        ## roof pitches and corners at 45° and 22.5°
 	CIRCULATION, ## stairs, half stairs, quarter stairs, corner stairs
-	OPENINGS,    ## door / window openings (3×3), arch
-	RAILING,     ## railings with balusters, balustrade
+	RAILING,     ## fences and railings
 }
 
 ## Procedural mesh archetypes handled by the presentation mesh library.
@@ -44,8 +43,9 @@ const SHAPE_STAIRS_CORNER_QUARTER := &"stairs_corner_quarter"
 const SHAPE_WINDOW_WALL := &"window_wall"
 const SHAPE_DOOR_WALL := &"door_wall"
 const SHAPE_ARCH := &"arch"
+const SHAPE_HALF_ARCH := &"half_arch"
 const SHAPE_RAILING := &"railing"
-const SHAPE_BALUSTRADE := &"balustrade"
+const SHAPE_FENCE := &"fence"
 
 ## Ordered list of block definitions. Kept as a plain array of dictionaries so
 ## the catalog stays free of engine node/resource types (domain rule).
@@ -76,6 +76,15 @@ const BLOCKS: Array = [
 			{"id": &"0.25", "name": "0.25 м", "size": Vector3(1.0, 0.25, 1.0)},
 		],
 	},
+	{
+		"id": &"arch",
+		"name": "Арка",
+		"category": Category.STRUCTURE,
+		"size": Vector3(1.0, 1.0, 0.5),
+		"mesh_shape": SHAPE_ARCH,
+		"rotatable": true,
+	},
+	{"id": &"half_arch", "name": "Полуарка", "category": Category.STRUCTURE, "size": Vector3(1.0, 1.0, 1.0), "mesh_shape": SHAPE_HALF_ARCH, "rotatable": true},
 	# --- Фундамент ---------------------------------------------------------
 	{
 		"id": &"foundation",
@@ -160,6 +169,7 @@ const BLOCKS: Array = [
 		"size": Vector3(1.0, 0.5, 1.0),
 		"mesh_shape": SHAPE_WEDGE_LOW,
 		"rotatable": true,
+		"variants": [{"id": &"lower", "name": "Нижний", "size": Vector3(1.0, 0.5, 1.0)}, {"id": &"upper", "name": "Верхний", "size": Vector3(1.0, 0.5, 1.0), "vertical_offset": 0.5}],
 	},
 	{
 		"id": &"roof_corner_in_low",
@@ -168,6 +178,7 @@ const BLOCKS: Array = [
 		"size": Vector3(1.0, 0.5, 1.0),
 		"mesh_shape": SHAPE_SLOPE_CORNER_IN,
 		"rotatable": true,
+		"variants": [{"id": &"lower", "name": "Нижний", "size": Vector3(1.0, 0.5, 1.0)}, {"id": &"upper", "name": "Верхний", "size": Vector3(1.0, 0.5, 1.0), "vertical_offset": 0.5}],
 	},
 	{
 		"id": &"roof_corner_out_low",
@@ -176,6 +187,7 @@ const BLOCKS: Array = [
 		"size": Vector3(1.0, 0.5, 1.0),
 		"mesh_shape": SHAPE_SLOPE_CORNER_OUT,
 		"rotatable": true,
+		"variants": [{"id": &"lower", "name": "Нижний", "size": Vector3(1.0, 0.5, 1.0)}, {"id": &"upper", "name": "Верхний", "size": Vector3(1.0, 0.5, 1.0), "vertical_offset": 0.5}],
 	},
 	# --- Проходы -----------------------------------------------------------
 	{
@@ -226,15 +238,6 @@ const BLOCKS: Array = [
 		"mesh_shape": SHAPE_STAIRS_CORNER_QUARTER,
 		"rotatable": true,
 	},
-	# --- Проёмы ------------------------------------------------------------
-	{
-		"id": &"arch",
-		"name": "Арка (проём)",
-		"category": Category.OPENINGS,
-		"size": Vector3(1.0, 1.0, 0.15),
-		"mesh_shape": SHAPE_ARCH,
-		"rotatable": true,
-	},
 	# --- Ограждения --------------------------------------------------------
 	{
 		"id": &"railing",
@@ -243,22 +246,15 @@ const BLOCKS: Array = [
 		"size": Vector3(1.0, 1.0, 0.12),
 		"mesh_shape": SHAPE_RAILING,
 		"rotatable": true,
-		"variants": [
-			{"id": &"full", "name": "В полный блок", "size": Vector3(1.0, 1.0, 0.12)},
-			{"id": &"half", "name": "В полблока", "size": Vector3(1.0, 0.5, 0.12)},
-		],
+		"variants": [{"id": &"full", "name": "В полный блок", "size": Vector3(1.0, 1.0, 0.12)}, {"id": &"half", "name": "В полблока", "size": Vector3(1.0, 0.5, 0.12)}],
 	},
 	{
-		"id": &"balustrade",
-		"name": "Балюстрада",
+		"id": &"fence",
+		"name": "Забор",
 		"category": Category.RAILING,
-		"size": Vector3(1.0, 0.5, 0.2),
-		"mesh_shape": SHAPE_BALUSTRADE,
+		"size": Vector3(1.0, 0.5, 0.12),
+		"mesh_shape": SHAPE_FENCE,
 		"rotatable": true,
-		"variants": [
-			{"id": &"full", "name": "В полный блок", "size": Vector3(1.0, 1.0, 0.2)},
-			{"id": &"half", "name": "В полблока", "size": Vector3(1.0, 0.5, 0.2)},
-		],
 	},
 ]
 
@@ -367,6 +363,12 @@ static func mesh_shape_of(block_id: StringName, variant_id: StringName = &"") ->
 	return def.get("mesh_shape", SHAPE_BOX)
 
 
+static func vertical_offset_of(block_id: StringName, variant_id: StringName = &"") -> float:
+	var def := get_block(block_id)
+	var v := _resolve_variant(def, block_id, variant_id)
+	return float(v.get("vertical_offset", def.get("vertical_offset", 0.0)))
+
+
 ## Explicit opt-in for compatible construction joints. It is deliberately a
 ## block-definition rule: material or a merely different size must never make
 ## two solids overlap by accident.
@@ -393,7 +395,7 @@ static func occupied_aabb(
 		deg_to_rad(90.0 * float(rot)),
 		deg_to_rad(90.0 * float(rot_z))))
 	var local_center := basis * Vector3(base.x, size.y * 0.5 - 0.5, base.y)
-	var center := Vector3(cell) + Vector3(0.5, 0.5, 0.5) + local_center
+	var center := Vector3(cell) + Vector3(0.5, 0.5, 0.5) + local_center + Vector3.UP * vertical_offset_of(block_id, variant_id)
 	var half := size * 0.5
 	var extent := Vector3(
 		absf(basis.x.x) * half.x + absf(basis.y.x) * half.y + absf(basis.z.x) * half.z,
@@ -492,8 +494,7 @@ static func category_name(category: int) -> String:
 		Category.STRUCTURE: return "Конструкция"
 		Category.FOUNDATION: return "Фундамент"
 		Category.COLUMNS: return "Колонны"
-		Category.ROOF: return "Крыша"
+		Category.ROOF: return "Скат"
 		Category.CIRCULATION: return "Проходы"
-		Category.OPENINGS: return "Проёмы"
 		Category.RAILING: return "Ограждения"
 		_: return "Прочее"
