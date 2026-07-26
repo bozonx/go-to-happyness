@@ -38,10 +38,13 @@ func set_entries(entries: Array, selected: StringName) -> void:
 		button.button_pressed = entry.id == selected
 		if entry.color.a > 0.0:
 			# The swatch is the label's colour rather than a separate square: it
-			# survives every theme and costs no layout.
-			button.add_theme_color_override("font_color", entry.color)
-			button.add_theme_color_override("font_pressed_color", entry.color)
-			button.add_theme_color_override("font_hover_color", entry.color.lightened(0.25))
+			# survives every theme and costs no layout. Raised to a readable
+			# lightness first — `scorched` is nearly black, and its own colour on a
+			# dark panel is an entry the author cannot read.
+			var readable := _readable(entry.color)
+			button.add_theme_color_override("font_color", readable)
+			button.add_theme_color_override("font_pressed_color", readable)
+			button.add_theme_color_override("font_hover_color", readable.lightened(0.25))
 		var entry_id: StringName = entry.id
 		button.pressed.connect(func() -> void: entry_selected.emit(entry_id))
 		_entries.add_child(button)
@@ -53,6 +56,19 @@ func set_entries(entries: Array, selected: StringName) -> void:
 func set_selected(selected: StringName) -> void:
 	for id: StringName in _entry_buttons:
 		(_entry_buttons[id] as Button).button_pressed = id == selected
+
+
+## Keeps the hue and pushes the lightness up until the label reads against a dark
+## panel. A swatch has to say which material this is; it does not have to be the
+## material's exact colour.
+const MIN_SWATCH_LUMINANCE := 0.45
+
+
+static func _readable(swatch: Color) -> Color:
+	var luminance := swatch.get_luminance()
+	if luminance >= MIN_SWATCH_LUMINANCE:
+		return swatch
+	return swatch.lightened(MIN_SWATCH_LUMINANCE - luminance)
 
 
 ## `options` is an array of `MapEditorMode.ToolOption`. Their labels carry live

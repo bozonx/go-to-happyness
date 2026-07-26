@@ -75,6 +75,7 @@ var _anchor_role: StringName = ZoneAnchorRecordScript.ROLE_WORK
 var _block_nodes: Dictionary = {}  ## BuildingGridModel placement key -> MeshInstance3D
 @onready var _camera_controller: CameraController = %CameraController
 @onready var _blocks_root: Node3D = %BlocksRoot
+@onready var _ground: MeshInstance3D = get_node("Ground") as MeshInstance3D
 @onready var _ghost: MeshInstance3D = %Ghost
 @onready var _layer_plane: MeshInstance3D = %LayerPlane
 @onready var _zones_visual_root: Node3D = %ZonesVisual
@@ -270,7 +271,14 @@ func _refresh_building_grid_visuals() -> void:
 func _focus_footprint_center() -> void:
 	if _camera_controller == null or blueprint == null:
 		return
-	_camera_controller.camera_target = Vector3(blueprint.footprint.x * 0.5, 0.0, blueprint.footprint.y * 0.5)
+	var centre := Vector3(blueprint.footprint.x * 0.5, 0.0, blueprint.footprint.y * 0.5)
+	_camera_controller.camera_target = centre
+	if _ground != null:
+		_ground.position = centre + Vector3(0.0, -0.01, 0.0)
+		var ground_mesh := _ground.mesh as PlaneMesh
+		if ground_mesh != null:
+			var margin := 16.0
+			ground_mesh.size = Vector2(maxf(64.0, float(blueprint.footprint.x) + margin), maxf(64.0, float(blueprint.footprint.y) + margin))
 	_camera_controller.apply_position()
 
 

@@ -170,24 +170,44 @@ func cycle_variant() -> void:
 	last_message = "variant %d unchanged" % variant
 
 
+## Paints a wear level over the brush. Absolute and therefore idempotent, which
+## is what a DRAG needs: a stroke passes over the same column several times as
+## the brush square overlaps its own path, and an operation defined as "one more
+## than what is there" would leave a stripe of every value instead of a band of
+## one.
+func paint_wear(level: int) -> void:
+	if not has_hover:
+		return
+	var clamped := clampi(level, 0, TerrainDetailCodec.MAX_WEAR)
+	if _service.set_wear(brush_cells(hovered_cell), clamped):
+		last_message = "wear %d" % clamped
+		return
+	last_message = "wear unchanged"
+
+
+func paint_snow(level: int) -> void:
+	if not has_hover:
+		return
+	var clamped := clampi(level, 0, TerrainDetailCodec.MAX_SNOW_DEPTH)
+	if _service.set_snow_depth(brush_cells(hovered_cell), clamped):
+		last_message = "snow depth %d" % clamped
+		return
+	last_message = "snow unchanged"
+
+
+## Steps the value under the cursor by one. This is a keyboard affordance — one
+## press, one step — and NOT a brush: see `paint_wear` for why the difference
+## matters. The laboratory binds it to `U` and `J`.
 func cycle_wear() -> void:
 	if not has_hover:
 		return
-	var next := (_grid.wear_at(hovered_cell) + 1) % (TerrainDetailCodec.MAX_WEAR + 1)
-	if _service.set_wear(brush_cells(hovered_cell), next):
-		last_message = "wear %d" % next
-		return
-	last_message = "wear unchanged"
+	paint_wear((_grid.wear_at(hovered_cell) + 1) % (TerrainDetailCodec.MAX_WEAR + 1))
 
 
 func cycle_snow() -> void:
 	if not has_hover:
 		return
-	var next := (_grid.snow_depth_at(hovered_cell) + 1) % (TerrainDetailCodec.MAX_SNOW_DEPTH + 1)
-	if _service.set_snow_depth(brush_cells(hovered_cell), next):
-		last_message = "snow depth %d" % next
-		return
-	last_message = "snow unchanged"
+	paint_snow((_grid.snow_depth_at(hovered_cell) + 1) % (TerrainDetailCodec.MAX_SNOW_DEPTH + 1))
 
 
 ## Fakes a day of traffic over the brush: enough crossings to move the wear level,

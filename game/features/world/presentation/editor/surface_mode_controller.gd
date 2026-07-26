@@ -28,6 +28,12 @@ const TOOLS: Array[StringName] = [TOOL_MATERIAL, TOOL_WEAR, TOOL_SNOW]
 
 var _tool: StringName = TOOL_MATERIAL
 var _painting := false
+## The levels the wear and snow brushes PAINT. They are chosen once and then
+## stamped, rather than stepped per stroke: a drag overlaps its own path, so a
+## brush defined as "one more than what is here" paints a stripe of every value
+## instead of a band of one.
+var _wear_level := TerrainDetailCodec.MAX_WEAR
+var _snow_level := TerrainDetailCodec.MAX_SNOW_DEPTH
 
 
 func _init() -> void:
@@ -71,6 +77,12 @@ func _handle_key(event: InputEventKey) -> bool:
 		KEY_B:
 			context.set_edit_label("вариант")
 			context.brush.cycle_variant()
+		KEY_U:
+			_wear_level = (_wear_level + 1) % (TerrainDetailCodec.MAX_WEAR + 1)
+			_tool = TOOL_WEAR
+		KEY_J:
+			_snow_level = (_snow_level + 1) % (TerrainDetailCodec.MAX_SNOW_DEPTH + 1)
+			_tool = TOOL_SNOW
 		KEY_BRACKETLEFT:
 			context.brush.adjust_brush_size(-1)
 		KEY_BRACKETRIGHT:
@@ -88,10 +100,10 @@ func _paint() -> void:
 			context.brush.apply_material()
 		TOOL_WEAR:
 			context.set_edit_label("износ")
-			context.brush.cycle_wear()
+			context.brush.paint_wear(_wear_level)
 		TOOL_SNOW:
 			context.set_edit_label("снег")
-			context.brush.cycle_snow()
+			context.brush.paint_snow(_snow_level)
 
 
 # --- Panels -------------------------------------------------------------------
@@ -124,8 +136,9 @@ func tool_options() -> Array:
 	options.append(ToolOption.of(OPTION_VARIANT, "Вариант: %s" % TerrainMaterialVariants.variant_name(
 		context.brush.material_index, context.brush.variant,
 	)))
-	options.append(ToolOption.of(OPTION_WEAR, "Кисть износа"))
-	options.append(ToolOption.of(OPTION_SNOW, "Кисть снега"))
+	# The level is part of the brush, so it is shown on the button that selects it.
+	options.append(ToolOption.of(OPTION_WEAR, "Износ: %d" % _wear_level))
+	options.append(ToolOption.of(OPTION_SNOW, "Снег: %d" % _snow_level))
 	return options
 
 
@@ -139,8 +152,14 @@ func activate_option(option_id: StringName) -> void:
 			context.set_edit_label("вариант")
 			context.brush.cycle_variant()
 		OPTION_WEAR:
+			# Pressing it again steps the level, so one button both picks the
+			# tool and sets what it paints.
+			if _tool == TOOL_WEAR:
+				_wear_level = (_wear_level + 1) % (TerrainDetailCodec.MAX_WEAR + 1)
 			_tool = TOOL_WEAR
 		OPTION_SNOW:
+			if _tool == TOOL_SNOW:
+				_snow_level = (_snow_level + 1) % (TerrainDetailCodec.MAX_SNOW_DEPTH + 1)
 			_tool = TOOL_SNOW
 	notify_ui_changed()
 
@@ -159,8 +178,11 @@ func inspector_lines() -> Array[String]:
 	lines.append("Обрыв: %s" % TerrainMaterialCatalog.cliff_material_of_index(index))
 	lines.append("Вес прохода: ×%.2f" % TerrainMaterialCatalog.nav_weight_of_index(index))
 	lines.append("")
+	lines.append("Кисть износа: %d, кисть снега: %d" % [_wear_level, _snow_level])
+	lines.append("")
 	lines.append("ЛКМ — красить, Tab — материал / износ / снег")
-	lines.append("B — следующий вариант, [ ] — размер кисти")
+	lines.append("B — вариант, U — уровень износа, J — уровень снега")
+	lines.append("[ ] — размер кисти")
 	return lines
 
 

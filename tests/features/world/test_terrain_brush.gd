@@ -24,6 +24,7 @@ static func run_all() -> void:
 	print("    [PASS] Terrain Brush Tests")
 	_test_material_pick_clamps_the_variant()
 	_test_paint_and_detail_reach_the_grid()
+	_test_detail_brushes_are_idempotent_under_a_drag()
 	print("    [PASS] Terrain Brush Surface Tests")
 	_test_ramp_cycles_stay_inside_the_catalog()
 	_test_undo_reports_through_the_message()
@@ -192,6 +193,49 @@ static func _test_paint_and_detail_reach_the_grid() -> void:
 	assert(grid.is_hole(Vector2i(2, 2)))
 	brush.toggle_hole()
 	assert(not grid.is_hole(Vector2i(2, 2)))
+
+
+## A brush is dragged, and a drag overlaps its own path: with a 5×5 brush moving
+## one cell at a time, a column is covered five times over. So every brush
+## operation has to be idempotent, or a single stroke leaves a stripe of every
+## value instead of a band of one.
+##
+## This is a real defect that shipped and was seen on screen: wear and snow were
+## wired to the laboratory's `cycle` affordance — "one more than what is here" —
+## which is correct for one keypress and wrong for every drag. The regression it
+## guards is the pattern `0123012301230…` across a stroke.
+static func _test_detail_brushes_are_idempotent_under_a_drag() -> void:
+	var world := _make()
+	var brush: TerrainBrushController = world["brush"]
+	var grid: TerrainGrid = world["grid"]
+	brush.has_hover = true
+	brush.adjust_brush_size(2) # 5×5
+
+	for x in range(-6, 7):
+		brush.hovered_cell = Vector2i(x, 0)
+		brush.paint_snow(TerrainDetailCodec.MAX_SNOW_DEPTH)
+		brush.paint_wear(TerrainDetailCodec.MAX_WEAR)
+
+	# Everything the stroke covered carries the level that was painted, once.
+	for x in range(-8, 9):
+		for z in range(-2, 3):
+			var depth := grid.snow_depth_at(Vector2i(x, z))
+			assert(depth == TerrainDetailCodec.MAX_SNOW_DEPTH, "snow at %d,%d is %d" % [x, z, depth])
+			assert(grid.wear_at(Vector2i(x, z)) == TerrainDetailCodec.MAX_WEAR)
+	# ...and nothing outside it does.
+	assert(grid.snow_depth_at(Vector2i(9, 0)) == 0)
+
+	# Repainting the same level is not an edit at all, so a held brush that never
+	# moves does not fill the undo stack with nothing.
+	var depth_before: int = world["service"].undo_depth()
+	brush.paint_snow(TerrainDetailCodec.MAX_SNOW_DEPTH)
+	assert(world["service"].undo_depth() == depth_before, "repainting the same level changed nothing")
+
+	# Cycling remains available for the keyboard, and still steps by one.
+	brush.hovered_cell = Vector2i(0, 0)
+	brush.paint_snow(0)
+	brush.cycle_snow()
+	assert(grid.snow_depth_at(Vector2i(0, 0)) == 1)
 
 
 # --- Ramps and history --------------------------------------------------------
