@@ -25,11 +25,6 @@ const TYPE_FLOAT := "float"
 const TYPE_STRING := "string"
 const TYPE_COLOR := "color"
 
-const SURFACE_FLOOR := "floor"
-const SURFACE_WALL := "wall"
-const SURFACE_CEILING := "ceiling"
-const SURFACE_ANY := "any"
-
 const SCALE_LOCKED := "locked"
 const SCALE_UNIFORM_STEPS := "uniform_steps"
 const SCALE_FREE_UNIFORM := "free_uniform"
@@ -59,10 +54,8 @@ const COLLISION_FOOTPRINT := "footprint"
 @export var tags: Array[StringName] = []
 ## Era when this asset becomes available (design §4).
 @export var available_from_era: StringName = &""
-## Placement surface restriction (design §4.1).
-@export var placement_surface: String = SURFACE_ANY
-## Allowed rotation axes, e.g. ["y"]. Empty means Y-only.
-@export var rotation_axes: Array[String] = ["y"]
+## Allowed rotation axes, e.g. ["x", "y", "z"]. Empty means all axes.
+@export var rotation_axes: Array[String] = []
 ## Quick rotation step in degrees (design §4.1).
 @export var quick_rotation_step: float = 15.0
 ## Scale policy (design §4.1): locked, uniform_steps, free_uniform.
@@ -140,15 +133,6 @@ func get_control(control_name: String) -> Dictionary:
 	return {}
 
 
-## Whether this asset can be placed on the given surface type.
-## If the asset's placement_surface is SURFACE_ANY, it accepts any surface.
-## If the queried surface is SURFACE_ANY, it means 'any surface is fine'.
-func can_place_on(surface: String) -> bool:
-	if placement_surface == SURFACE_ANY or surface == SURFACE_ANY:
-		return true
-	return placement_surface == surface
-
-
 ## Whether the given scale value is allowed by this asset's scale policy.
 func is_scale_allowed(scale_value: float) -> bool:
 	match scale_mode:
@@ -167,8 +151,8 @@ func is_scale_allowed(scale_value: float) -> bool:
 			return is_equal_approx(scale_value, 1.0)
 
 
-## Whether the given rotation axis is allowed by this asset.
+## Empty deliberately means all authoring axes are permitted.
 func is_rotation_axis_allowed(axis: String) -> bool:
 	if rotation_axes.is_empty():
-		return axis == "y"
+		return axis in ["x", "y", "z"]
 	return axis in rotation_axes

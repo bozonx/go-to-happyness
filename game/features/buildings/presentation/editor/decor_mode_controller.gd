@@ -15,6 +15,7 @@ extends Node3D
 const FurnishingAssetCatalogScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_catalog.gd")
 const FurnishingAssetDefScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_def.gd")
 const DecorObjectRecordScript = preload("res://game/features/buildings/domain/editor/decor_object_record.gd")
+const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
 const FixtureDefinitionScript = preload("res://game/features/buildings/domain/editor/fixture_definition.gd")
 const FireSourceDefaultsScript = preload("res://game/features/buildings/domain/editor/fire_source_defaults.gd")
 const ZoneRequirementsScript = preload("res://game/features/buildings/domain/editor/zone_requirements.gd")
@@ -37,10 +38,13 @@ enum GhostState { VALID, INTERSECTION, OUT_OF_BOUNDS }
 
 var current_group: StringName = &""  ## empty = all groups
 var current_category: StringName = &"camping"
+var _expanded_categories: Dictionary = {}
 var current_asset_id: StringName = &""
 var current_snap_step: float = 1.0
 var current_tool: int = Tool.PLACE
 var current_yaw_deg: float = 0.0
+var current_pitch_deg: float = 0.0
+var current_roll_deg: float = 0.0
 var selected_object_id: String = ""
 
 ## Cycle-selection state: when the cursor is over overlapping objects,
@@ -91,6 +95,8 @@ var _pos_x_spin: SpinBox = null
 var _pos_y_spin: SpinBox = null
 var _pos_z_spin: SpinBox = null
 var _yaw_spin: SpinBox = null
+var _pitch_spin: SpinBox = null
+var _roll_spin: SpinBox = null
 var _scale_spin: SpinBox = null
 var _duplicate_btn: Button = null
 var _delete_btn: Button = null
@@ -152,6 +158,8 @@ func setup(editor: Node) -> void:
 	_pos_y_spin = editor.get_node("%DecorPosYSpin")
 	_pos_z_spin = editor.get_node("%DecorPosZSpin")
 	_yaw_spin = editor.get_node("%DecorYawSpin")
+	_pitch_spin = editor.get_node("%DecorPitchSpin")
+	_roll_spin = editor.get_node("%DecorRollSpin")
 	_scale_spin = editor.get_node("%DecorScaleSpin")
 	_replace_btn = editor.get_node("%DecorReplaceBtn")
 	_duplicate_btn = editor.get_node("%DecorDuplicateBtn")
@@ -192,8 +200,8 @@ func setup(editor: Node) -> void:
 		var button: Button = _tool_buttons[tool_id]
 		button.pressed.connect(_set_tool.bind(tool_id))
 
-	editor.get_node("%DecorRotLeftBtn").pressed.connect(rotate_selection.bind(-ROTATION_STEP_DEG))
-	editor.get_node("%DecorRotRightBtn").pressed.connect(rotate_selection.bind(ROTATION_STEP_DEG))
+	editor.get_node("%DecorRotLeftBtn").pressed.connect(rotate_selection.bind("y", -1))
+	editor.get_node("%DecorRotRightBtn").pressed.connect(rotate_selection.bind("y", 1))
 	editor.get_node("%DecorRotResetBtn").pressed.connect(_reset_rotation)
 	editor.get_node("%DecorLayerDownBtn").pressed.connect(func(): _editor.set_layer(_editor.active_layer - 1))
 	editor.get_node("%DecorLayerUpBtn").pressed.connect(func(): _editor.set_layer(_editor.active_layer + 1))
@@ -219,9 +227,13 @@ func setup(editor: Node) -> void:
 	_pos_y_spin.value_changed.connect(_on_transform_spin_changed)
 	_pos_z_spin.value_changed.connect(_on_transform_spin_changed)
 	_yaw_spin.value_changed.connect(_on_transform_spin_changed)
+	_pitch_spin.value_changed.connect(_on_transform_spin_changed)
+	_roll_spin.value_changed.connect(_on_transform_spin_changed)
 	_scale_spin.value_changed.connect(_on_transform_spin_changed)
 
 	current_category = FurnishingAssetCatalogScript.first_populated_category(current_category)
+	_group_option.visible = false
+	_category_option.visible = false
 	_rebuild_category_options()
 	_rebuild_asset_buttons()
 	_set_tool(Tool.PLACE)
@@ -328,7 +340,7 @@ func on_drag() -> void:
 		_drag_started = true
 	var hit: Vector3 = _editor.cursor_hit_pos
 	var candidate := snapped_position(hit + _drag_offset)
-	if not _is_in_bounds(candidate, record.asset_id, record.scale):
+	if not _is_valid_transform(candidate, record.rot, record.scale, record.asset_id, record.id):
 		return
 	record.pos = candidate
 	_apply_transform_to_node(record)
@@ -365,7 +377,16 @@ func handle_key(event: InputEventKey) -> bool:
 			_set_tool(Tool.ERASE)
 			return true
 		KEY_C, KEY_R:
-			rotate_selection(-ROTATION_STEP_DEG if event.shift_pressed else ROTATION_STEP_DEG)
+			rotate_selection("y", -1 if event.shift_pressed else 1)
+			return true
+		KEY_X:
+			rotate_selection("x", -1 if event.shift_pressed else 1)
+			return true
+		KEY_Z:
+			rotate_selection("z", -1 if event.shift_pressed else 1)
+			return true
+		KEY_ESCAPE:
+			cancel_current_action()
 			return true
 		KEY_DELETE:
 			delete_selection()
@@ -425,20 +446,58 @@ func _is_in_bounds(pos: Vector3, asset_id: StringName = current_asset_id, scale:
 
 
 ## Returns true when the position overlaps an existing decor object.
-func _is_intersecting(pos: Vector3, exclude_id: String = "") -> bool:
-	var asset := FurnishingAssetCatalogScript.get_asset(current_asset_id)
-	var my_size := asset.footprint_m() if asset != null else Vector3.ONE
-	var my_radius := maxf(my_size.x, my_size.z) * 0.5
+func _decor_aabb(pos: Vector3, asset_id: StringName, scale: Vector3) -> AABB:
+	var asset := FurnishingAssetCatalogScript.get_asset(asset_id)
+	var size := (asset.footprint_m() if asset != null else Vector3.ONE) * scale
+	return AABB(pos - Vector3(size.x * 0.5, 0.0, size.z * 0.5), size)
+
+
+func _aabbs_intersect(a: AABB, b: AABB) -> bool:
+	const EPSILON := 0.0001
+	return a.position.x < b.end.x - EPSILON and b.position.x < a.end.x - EPSILON \
+		and a.position.y < b.end.y - EPSILON and b.position.y < a.end.y - EPSILON \
+		and a.position.z < b.end.z - EPSILON and b.position.z < a.end.z - EPSILON
+
+
+## Returns true only for conflicts that affect physical collision/navigation.
+## Decorative objects with `none` policy may intentionally overlap.
+func _is_collision_conflict(pos: Vector3, asset_id: StringName = current_asset_id, scale: Vector3 = Vector3.ONE, exclude_id: String = "") -> bool:
+	var asset := FurnishingAssetCatalogScript.get_asset(asset_id)
+	if asset == null:
+		return false
+	var candidate := _decor_aabb(pos, asset_id, scale)
+	var candidate_blocks := asset.collision_policy != FurnishingAssetDefScript.COLLISION_NONE or asset.blocking_navigation
+	# Frame volumes and circulation are authoring obstacles. This deliberately
+	# uses the same occupied volumes as the frame editor, not a second grid.
+	for block in _editor.blueprint.blocks:
+		var block_aabb := BuildingBlockCatalogScript.occupied_aabb(block.pos, block.block_id, block.variant, block.rot, block.anchor, block.rot_x, block.rot_z)
+		if _aabbs_intersect(candidate, block_aabb):
+			return true
+	if not candidate_blocks:
+		return false
 	for record: DecorObjectRecordScript in _editor.blueprint.objects:
 		if record.id == exclude_id:
 			continue
 		var other_asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
-		var other_size := other_asset.footprint_m() if other_asset != null else Vector3.ONE
-		var other_radius := maxf(other_size.x, other_size.z) * 0.5 * maxf(record.scale.x, record.scale.z)
-		var dist := Vector2(pos.x - record.pos.x, pos.z - record.pos.z).length()
-		if dist < my_radius + other_radius:
+		if other_asset == null:
+			continue
+		if other_asset.collision_policy == FurnishingAssetDefScript.COLLISION_NONE and not other_asset.blocking_navigation:
+			continue
+		if _aabbs_intersect(candidate, _decor_aabb(record.pos, record.asset_id, record.scale)):
 			return true
 	return false
+
+
+func _is_valid_transform(pos: Vector3, rot: Vector3, scale: Vector3, asset_id: StringName, exclude_id: String = "") -> bool:
+	var asset := FurnishingAssetCatalogScript.get_asset(asset_id)
+	if asset != null:
+		if not asset.is_scale_allowed(scale.x) or not is_equal_approx(scale.x, scale.y) or not is_equal_approx(scale.x, scale.z):
+			return false
+		for axis in ["x", "y", "z"]:
+			var value := rot.x if axis == "x" else (rot.y if axis == "y" else rot.z)
+			if not is_zero_approx(value) and not asset.is_rotation_axis_allowed(axis):
+				return false
+	return _is_in_bounds(pos, asset_id, scale) and not _is_collision_conflict(pos, asset_id, scale, exclude_id)
 
 
 ## Computes the current ghost state for placement feedback.
@@ -446,8 +505,6 @@ func _compute_ghost_state(pos: Vector3) -> int:
 	if not _is_in_bounds(pos):
 		return GhostState.OUT_OF_BOUNDS
 	if _is_collision_conflict(pos):
-		return GhostState.INTERSECTION
-	if _is_intersecting(pos):
 		return GhostState.INTERSECTION
 	return GhostState.VALID
 
@@ -518,7 +575,11 @@ func _place_or_select_at(hit: Vector3) -> void:
 		_editor.set_status("Выбран объект под курсором.")
 		return
 	var position := snapped_position(hit)
-	if _compute_ghost_state(position) != GhostState.VALID:
+	var asset := FurnishingAssetCatalogScript.get_asset(current_asset_id)
+	if asset == null:
+		_editor.set_status("Выберите ассет в каталоге декора.")
+		return
+	if not _is_valid_transform(position, Vector3(current_pitch_deg, current_yaw_deg, current_roll_deg), Vector3.ONE, asset.id):
 		# The hit can be near the edge of an object's footprint rather than inside
 		# its pick radius. Select that conflicting object where possible, so the
 		# click still has a useful result.
@@ -556,6 +617,11 @@ func _place_at(position: Vector3) -> void:
 
 
 func _erase_object(object_id: String) -> void:
+	# A fixture without a visual is valid 2A data. Clear the explicit reference
+	# rather than leaving the blueprint unsaveable.
+	for fixture: FixtureDefinitionScript in _editor.blueprint.fixtures:
+		if fixture.visual_object_id == object_id:
+			fixture.visual_object_id = ""
 	for i in range(_editor.blueprint.objects.size() - 1, -1, -1):
 		if _editor.blueprint.objects[i].id == object_id:
 			_editor.blueprint.objects.remove_at(i)
@@ -565,11 +631,7 @@ func _erase_object(object_id: String) -> void:
 	_refresh_object_list()
 	if selected_object_id == object_id:
 		select_object("")
-	# Warn if a fixture referenced this visual object.
-	for f in _editor.blueprint.fixtures:
-		if f.visual_object_id == object_id:
-			_editor.set_status("ВНИМАНИЕ: объект «%s» использовался fixture «%s»." % [object_id, String(f.id)])
-			break
+	refresh_fixture_ui()
 
 
 func delete_selection() -> void:
@@ -585,23 +647,23 @@ func duplicate_selection() -> void:
 	if record == null:
 		_editor.set_status("Нечего дублировать: объект не выбран.")
 		return
-	_push_undo()
 	var copy := record.duplicate_record(_next_object_suffix())
 	# Offset by one snap step so the copy is visible rather than hidden inside
 	# the original.
 	var offset := maxf(current_snap_step, 0.5)
 	copy.pos += Vector3(offset, 0.0, offset)
 	# Clamp to building bounds.
-	if not _is_in_bounds(copy.pos):
+	if not _is_valid_transform(copy.pos, copy.rot, copy.scale, copy.asset_id, record.id):
 		# Try offsetting in other directions.
 		copy.pos = record.pos + Vector3(-offset, 0.0, offset)
-		if not _is_in_bounds(copy.pos):
+		if not _is_valid_transform(copy.pos, copy.rot, copy.scale, copy.asset_id, record.id):
 			copy.pos = record.pos + Vector3(offset, 0.0, -offset)
-			if not _is_in_bounds(copy.pos):
+			if not _is_valid_transform(copy.pos, copy.rot, copy.scale, copy.asset_id, record.id):
 				copy.pos = record.pos + Vector3(-offset, 0.0, -offset)
-				if not _is_in_bounds(copy.pos):
+				if not _is_valid_transform(copy.pos, copy.rot, copy.scale, copy.asset_id, record.id):
 					_editor.set_status("Невозможно дублировать: нет места в границах здания.")
 					return
+	_push_undo()
 	_editor.blueprint.objects.append(copy)
 	_spawn_node(copy)
 	_editor.mark_dirty()
@@ -610,19 +672,28 @@ func duplicate_selection() -> void:
 	_editor.set_status("Объект продублирован.")
 
 
-func rotate_selection(delta_deg: float) -> void:
-	# Use the asset's quick_rotation_step if available.
-	var asset := FurnishingAssetCatalogScript.get_asset(current_asset_id)
-	var step := asset.quick_rotation_step if asset != null else ROTATION_STEP_DEG
-	if step <= 0.0:
-		step = ROTATION_STEP_DEG
-	# Only Y-axis rotation is supported in phase 1.
-	current_yaw_deg = fposmod(current_yaw_deg + delta_deg, 360.0)
-	_update_rotation_label()
+func rotate_selection(axis: String, direction: int) -> void:
 	var record := find_record(selected_object_id)
+	var asset := FurnishingAssetCatalogScript.get_asset(record.asset_id if record != null else current_asset_id)
+	if asset != null and not asset.is_rotation_axis_allowed(axis):
+		_editor.set_status("Этот ассет нельзя вращать вокруг оси %s." % axis.to_upper())
+		return
+	var step := asset.quick_rotation_step if asset != null else ROTATION_STEP_DEG
+	step = step if step > 0.0 else ROTATION_STEP_DEG
+	var delta := step * direction
+	if axis == "x":
+		current_pitch_deg = fposmod(current_pitch_deg + delta, 360.0)
+	elif axis == "z":
+		current_roll_deg = fposmod(current_roll_deg + delta, 360.0)
+	else:
+		current_yaw_deg = fposmod(current_yaw_deg + delta, 360.0)
+	_update_rotation_label()
 	if record != null:
+		var candidate := Vector3(current_pitch_deg, current_yaw_deg, current_roll_deg)
+		if not _is_valid_transform(record.pos, candidate, record.scale, record.asset_id, record.id):
+			return
 		_push_undo()
-		record.rot.y = current_yaw_deg
+		record.rot = candidate
 		_apply_transform_to_node(record)
 		_editor.mark_dirty()
 		_sync_transform_fields(record)
@@ -630,16 +701,29 @@ func rotate_selection(delta_deg: float) -> void:
 
 
 func _reset_rotation() -> void:
+	current_pitch_deg = 0.0
 	current_yaw_deg = 0.0
+	current_roll_deg = 0.0
 	_update_rotation_label()
 	var record := find_record(selected_object_id)
 	if record != null:
 		_push_undo()
-		record.rot.y = 0.0
+		record.rot = Vector3.ZERO
 		_apply_transform_to_node(record)
 		_editor.mark_dirty()
 		_sync_transform_fields(record)
 	refresh_ghost()
+
+
+func cancel_current_action() -> void:
+	_dragging = false
+	_drag_started = false
+	if not selected_object_id.is_empty():
+		select_object("")
+		_editor.set_status("Выделение снято.")
+	elif current_tool == Tool.PLACE:
+		_hide_ghost()
+		_editor.set_status("Размещение отменено.")
 
 
 ## Monotonic-enough suffix for generated ids. `Time.get_ticks_msec()` alone
@@ -660,9 +744,13 @@ func _next_object_suffix() -> int:
 # ---------------------------------------------------------------------------
 
 func _push_undo() -> void:
-	var snapshot: Array = []
+	var objects: Array = []
 	for record: DecorObjectRecordScript in _editor.blueprint.objects:
-		snapshot.append(record.to_dict())
+		objects.append(record.to_dict())
+	var fixtures: Array = []
+	for fixture: FixtureDefinitionScript in _editor.blueprint.fixtures:
+		fixtures.append(fixture.to_dict())
+	var snapshot := {"objects": objects, "fixtures": fixtures}
 	_undo_stack.append(snapshot)
 	if _undo_stack.size() > UNDO_LIMIT:
 		_undo_stack.pop_front()
@@ -676,19 +764,27 @@ func undo() -> bool:
 		_editor.set_status("Отменять нечего.")
 		return true
 	# Push current state to redo stack.
-	var current: Array = []
+	var current_objects: Array = []
 	for record: DecorObjectRecordScript in _editor.blueprint.objects:
-		current.append(record.to_dict())
+		current_objects.append(record.to_dict())
+	var current_fixtures: Array = []
+	for fixture: FixtureDefinitionScript in _editor.blueprint.fixtures:
+		current_fixtures.append(fixture.to_dict())
+	var current := {"objects": current_objects, "fixtures": current_fixtures}
 	_redo_stack.append(current)
 	if _redo_stack.size() > REDO_LIMIT:
 		_redo_stack.pop_front()
-	var snapshot: Array = _undo_stack.pop_back()
+	var snapshot: Dictionary = _undo_stack.pop_back()
 	_editor.blueprint.objects.clear()
-	for data in snapshot:
+	for data in snapshot.get("objects", []):
 		_editor.blueprint.objects.append(DecorObjectRecordScript.from_dict(data))
+	_editor.blueprint.fixtures.clear()
+	for data in snapshot.get("fixtures", []):
+		_editor.blueprint.fixtures.append(FixtureDefinitionScript.from_dict(data))
 	_editor.mark_dirty()
 	rebuild_nodes()
 	_refresh_object_list()
+	refresh_fixture_ui()
 	if find_record(selected_object_id) == null:
 		select_object("")
 	else:
@@ -703,19 +799,27 @@ func redo() -> bool:
 		_editor.set_status("Повторять нечего.")
 		return true
 	# Push current state to undo stack.
-	var current: Array = []
+	var current_objects: Array = []
 	for record: DecorObjectRecordScript in _editor.blueprint.objects:
-		current.append(record.to_dict())
+		current_objects.append(record.to_dict())
+	var current_fixtures: Array = []
+	for fixture: FixtureDefinitionScript in _editor.blueprint.fixtures:
+		current_fixtures.append(fixture.to_dict())
+	var current := {"objects": current_objects, "fixtures": current_fixtures}
 	_undo_stack.append(current)
 	if _undo_stack.size() > UNDO_LIMIT:
 		_undo_stack.pop_front()
-	var snapshot: Array = _redo_stack.pop_back()
+	var snapshot: Dictionary = _redo_stack.pop_back()
 	_editor.blueprint.objects.clear()
-	for data in snapshot:
+	for data in snapshot.get("objects", []):
 		_editor.blueprint.objects.append(DecorObjectRecordScript.from_dict(data))
+	_editor.blueprint.fixtures.clear()
+	for data in snapshot.get("fixtures", []):
+		_editor.blueprint.fixtures.append(FixtureDefinitionScript.from_dict(data))
 	_editor.mark_dirty()
 	rebuild_nodes()
 	_refresh_object_list()
+	refresh_fixture_ui()
 	if find_record(selected_object_id) == null:
 		select_object("")
 	else:
@@ -968,31 +1072,6 @@ func _build_collision_overlay_for(record: DecorObjectRecordScript) -> void:
 	_collision_overlays[record.id] = overlays
 
 
-## Checks if the given position intersects any blocking object (collision_policy
-## != none or blocking_navigation == true). Used for ghost feedback.
-func _is_collision_conflict(pos: Vector3, exclude_id: String = "") -> bool:
-	var asset := FurnishingAssetCatalogScript.get_asset(current_asset_id)
-	if asset == null:
-		return false
-	var my_size := asset.footprint_m()
-	var my_radius := maxf(my_size.x, my_size.z) * 0.5
-	for record: DecorObjectRecordScript in _editor.blueprint.objects:
-		if record.id == exclude_id:
-			continue
-		var other_asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
-		if other_asset == null:
-			continue
-		# Only check against objects that have collision or block navigation.
-		if other_asset.collision_policy == FurnishingAssetDefScript.COLLISION_NONE and not other_asset.blocking_navigation:
-			continue
-		var other_size := other_asset.footprint_m()
-		var other_radius := maxf(other_size.x, other_size.z) * 0.5 * maxf(record.scale.x, record.scale.z)
-		var dist := Vector2(pos.x - record.pos.x, pos.z - record.pos.z).length()
-		if dist < my_radius + other_radius:
-			return true
-	return false
-
-
 # ---------------------------------------------------------------------------
 # Catalog UI
 # ---------------------------------------------------------------------------
@@ -1040,18 +1119,15 @@ func _rebuild_asset_buttons() -> void:
 		child.queue_free()
 	_asset_buttons.clear()
 
-	var assets := FurnishingAssetCatalogScript.get_assets_by_category(current_category)
 	var search_text := _search_edit.text.strip_edges().to_lower() if _search_edit != null else ""
+	var all_assets := FurnishingAssetCatalogScript.get_all_assets()
 	if not search_text.is_empty():
-		# The search field deliberately crosses category boundaries.
-		assets = FurnishingAssetCatalogScript.get_all_assets()
 		var filtered: Array = []
-		for asset in assets:
+		for asset in all_assets:
 			if String(asset.name).to_lower().contains(search_text) or String(asset.description).to_lower().contains(search_text):
 				filtered.append(asset)
-		assets = filtered
-
-	if assets.is_empty():
+		all_assets = filtered
+	if all_assets.is_empty():
 		var empty_label := Label.new()
 		if not search_text.is_empty():
 			empty_label.text = "Ничего не найдено."
@@ -1067,26 +1143,50 @@ func _rebuild_asset_buttons() -> void:
 		return
 
 	var keep_selection := false
-	for asset in assets:
+	for asset in all_assets:
 		if asset.id == current_asset_id:
 			keep_selection = true
 	if not keep_selection:
-		current_asset_id = assets[0].id
-
-	for asset in assets:
-		var button := Button.new()
-		button.toggle_mode = true
-		button.text = asset.name
-		button.tooltip_text = asset.description
-		# Long asset names must not widen the catalog panel; they ellipsize.
-		button.clip_text = true
-		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		button.button_pressed = asset.id == current_asset_id
-		button.pressed.connect(_select_asset.bind(asset.id))
-		_asset_container.add_child(button)
-		_asset_buttons[asset.id] = button
+		current_asset_id = all_assets[0].id
+	for group_id in FurnishingAssetCatalogScript.GROUPS.keys():
+		var group_box := VBoxContainer.new()
+		var group_title := Label.new()
+		group_title.text = String(FurnishingAssetCatalogScript.GROUPS[group_id])
+		group_title.add_theme_font_size_override("font_size", 15)
+		group_box.add_child(group_title)
+		for category_id in FurnishingAssetCatalogScript.categories_in_group(group_id):
+			var assets := FurnishingAssetCatalogScript.get_assets_by_category(category_id)
+			if not search_text.is_empty():
+				assets = assets.filter(func(asset): return asset in all_assets)
+			var header := Button.new()
+			header.flat = true
+			header.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			var expanded := bool(_expanded_categories.get(category_id, category_id == current_category or not search_text.is_empty()))
+			header.text = ("▾ " if expanded else "▸ ") + "%s (%d)" % [FurnishingAssetCatalogScript.category_display_name(category_id), assets.size()]
+			header.disabled = assets.is_empty() and search_text.is_empty()
+			header.pressed.connect(_toggle_catalog_category.bind(category_id))
+			group_box.add_child(header)
+			if expanded:
+				for asset in assets:
+					var button := Button.new()
+					button.toggle_mode = true
+					button.text = "    " + asset.name
+					button.tooltip_text = asset.description
+					button.clip_text = true
+					button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+					button.button_pressed = asset.id == current_asset_id
+					button.pressed.connect(_select_asset.bind(asset.id))
+					group_box.add_child(button)
+					_asset_buttons[asset.id] = button
+		_asset_container.add_child(group_box)
 	_update_asset_hint()
 	refresh_ghost()
+
+
+func _toggle_catalog_category(category_id: StringName) -> void:
+	_expanded_categories[category_id] = not bool(_expanded_categories.get(category_id, category_id == current_category))
+	current_category = category_id
+	_rebuild_asset_buttons()
 
 
 func _select_asset(asset_id: StringName) -> void:
@@ -1383,6 +1483,9 @@ func _set_property(property_name: String, value: Variant) -> void:
 	var record := find_record(selected_object_id)
 	if record == null:
 		return
+	if record.appearance.get(property_name, null) == value:
+		return
+	_push_undo()
 	record.appearance[property_name] = value
 	var node: Node3D = _nodes.get(record.id, null)
 	if node != null and node.has_method("set_decor_property"):
@@ -1391,7 +1494,7 @@ func _set_property(property_name: String, value: Variant) -> void:
 
 
 func _set_transform_fields_enabled(enabled: bool) -> void:
-	for spin in [_pos_x_spin, _pos_y_spin, _pos_z_spin, _yaw_spin, _scale_spin]:
+	for spin in [_pos_x_spin, _pos_y_spin, _pos_z_spin, _pitch_spin, _yaw_spin, _roll_spin, _scale_spin]:
 		spin.editable = enabled
 	_duplicate_btn.disabled = not enabled
 	_delete_btn.disabled = not enabled
@@ -1430,8 +1533,6 @@ func _on_zone_selected(index: int) -> void:
 ## Show diagnostic badges for the selected object.
 func _update_badges(record: DecorObjectRecordScript, asset: Variant) -> void:
 	var badges: Array[String] = []
-	if asset != null and asset.placement_surface != FurnishingAssetDefScript.SURFACE_ANY:
-		badges.append("Поверхность: %s" % String(asset.placement_surface))
 	if asset != null and asset.scale_mode != FurnishingAssetDefScript.SCALE_LOCKED:
 		badges.append("Масштаб: %s" % String(asset.scale_mode))
 	if asset != null and asset.blocking_navigation:
@@ -1520,7 +1621,9 @@ func _sync_transform_fields(record: DecorObjectRecordScript) -> void:
 	_pos_x_spin.value = record.pos.x
 	_pos_y_spin.value = record.pos.y
 	_pos_z_spin.value = record.pos.z
+	_pitch_spin.value = record.rot.x
 	_yaw_spin.value = record.rot.y
+	_roll_spin.value = record.rot.z
 	_scale_spin.value = record.scale.x
 	_syncing_ui = false
 
@@ -1531,8 +1634,11 @@ func _on_transform_spin_changed(_value: float) -> void:
 	var record := find_record(selected_object_id)
 	if record == null:
 		return
-	record.pos = Vector3(_pos_x_spin.value, _pos_y_spin.value, _pos_z_spin.value)
-	record.rot.y = _yaw_spin.value
+	var old_pos := record.pos
+	var old_rot := record.rot
+	var old_scale := record.scale
+	var candidate_pos := Vector3(_pos_x_spin.value, _pos_y_spin.value, _pos_z_spin.value)
+	var candidate_rot := Vector3(_pitch_spin.value, _yaw_spin.value, _roll_spin.value)
 	# Clamp scale by asset policy.
 	var asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
 	var scale_val := _scale_spin.value
@@ -1559,7 +1665,16 @@ func _on_transform_spin_changed(_value: float) -> void:
 			_syncing_ui = true
 			_scale_spin.value = scale_val
 			_syncing_ui = false
-	record.scale = Vector3.ONE * scale_val
+	var candidate_scale := Vector3.ONE * scale_val
+	if not _is_valid_transform(candidate_pos, candidate_rot, candidate_scale, record.asset_id, record.id):
+		_sync_transform_fields(record)
+		_editor.set_status("Этот трансформ пересекает каркас, проход или препятствие.")
+		return
+	if not old_pos.is_equal_approx(candidate_pos) or not old_rot.is_equal_approx(candidate_rot) or not old_scale.is_equal_approx(candidate_scale):
+		_push_undo()
+	record.pos = candidate_pos
+	record.rot = candidate_rot
+	record.scale = candidate_scale
 	_apply_transform_to_node(record)
 	_update_selection_marker()
 	_editor.mark_dirty()
@@ -1668,6 +1783,7 @@ func _refresh_fixture_inspector() -> void:
 
 
 func _add_fixture() -> void:
+	_push_undo()
 	var fixture := FixtureDefinitionScript.new()
 	var next_index := 1
 	var existing_ids: Array = _editor.blueprint.fixtures.map(func(f): return String(f.id))
@@ -1691,6 +1807,7 @@ func _delete_fixture() -> void:
 	var warning := _fixture_deletion_warning(fixture)
 	if not warning.is_empty():
 		_editor.set_status("ВНИМАНИЕ: %s" % warning)
+	_push_undo()
 	_editor.blueprint.fixtures.remove_at(_selected_fixture_index)
 	_selected_fixture_index = mini(_selected_fixture_index, _editor.blueprint.fixtures.size() - 1)
 	_editor.mark_dirty()
@@ -1754,6 +1871,9 @@ func _on_fixture_capability_selected(index: int) -> void:
 	var fixture: FixtureDefinitionScript = _editor.blueprint.fixtures[_selected_fixture_index]
 	var cap: StringName = _fixture_cap_option.get_item_metadata(index)
 	# Replace capabilities with the single selected one (phase 2A: one cap per fixture).
+	if fixture.capabilities == [cap]:
+		return
+	_push_undo()
 	fixture.capabilities = [cap]
 	_editor.mark_dirty()
 	_refresh_fixture_inspector()
@@ -1763,7 +1883,17 @@ func _on_fixture_visual_selected(index: int) -> void:
 	if _syncing_ui or _selected_fixture_index < 0:
 		return
 	var fixture: FixtureDefinitionScript = _editor.blueprint.fixtures[_selected_fixture_index]
-	fixture.visual_object_id = String(_fixture_visual_option.get_item_metadata(index))
+	var visual_id := String(_fixture_visual_option.get_item_metadata(index))
+	if fixture.visual_object_id == visual_id:
+		return
+	# A visual has one primary fixture. Reject ambiguity before saving.
+	for other: FixtureDefinitionScript in _editor.blueprint.fixtures:
+		if other != fixture and other.visual_object_id == visual_id and not visual_id.is_empty():
+			_editor.set_status("Этот визуальный объект уже связан с fixture «%s»." % String(other.id))
+			_refresh_fixture_inspector()
+			return
+	_push_undo()
+	fixture.visual_object_id = visual_id
 	_editor.mark_dirty()
 
 
@@ -1771,7 +1901,11 @@ func _on_fixture_zone_selected(index: int) -> void:
 	if _syncing_ui or _selected_fixture_index < 0:
 		return
 	var fixture: FixtureDefinitionScript = _editor.blueprint.fixtures[_selected_fixture_index]
-	fixture.owner_zone_id = _fixture_zone_option.get_item_metadata(index)
+	var zone_id: StringName = _fixture_zone_option.get_item_metadata(index)
+	if fixture.owner_zone_id == zone_id:
+		return
+	_push_undo()
+	fixture.owner_zone_id = zone_id
 	_editor.mark_dirty()
 
 
@@ -1781,11 +1915,15 @@ func _on_fixture_fire_param_changed(_value: Variant) -> void:
 	var fixture: FixtureDefinitionScript = _editor.blueprint.fixtures[_selected_fixture_index]
 	if not fixture.has_capability(FixtureDefinitionScript.CAP_FIRE_SOURCE):
 		return
-	fixture.runtime_defaults = {
+	var defaults := {
 		"lit": _fixture_lit_check.button_pressed,
 		"fuel": int(_fixture_fuel_spin.value),
 		"fuel_capacity": int(_fixture_cap_fuel_spin.value),
 	}
+	if fixture.runtime_defaults == defaults:
+		return
+	_push_undo()
+	fixture.runtime_defaults = defaults
 	_editor.mark_dirty()
 
 

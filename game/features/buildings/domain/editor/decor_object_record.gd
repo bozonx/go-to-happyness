@@ -121,7 +121,7 @@ func validation_errors() -> Array[String]:
 
 ## Validates this record against a known asset definition. When `asset` is null
 ## (the asset is not installed), only a soft warning is returned — the file must
-## still load. Scale, rotation, surface and collision policy are checked against
+## still load. Scale, rotation and collision policy are checked against
 ## the asset's declared constraints.
 func validation_errors_with_asset(asset: Variant) -> Array[String]:
 	var errors := validation_errors()
@@ -154,5 +154,4 @@ static func _arr_to_vec3(value: Variant, fallback: Vector3) -> Vector3:
 	if value is Array and value.size() >= 3:
 		return Vector3(float(value[0]), float(value[1]), float(value[2]))
 	return fallback
-
 

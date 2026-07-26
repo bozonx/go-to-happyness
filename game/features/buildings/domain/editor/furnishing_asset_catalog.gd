@@ -167,26 +167,12 @@ static func get_assets_by_era(era: StringName) -> Array[FurnishingAssetDefScript
 	return list
 
 
-## Filter assets by placement surface (design §5.2).
-## Returns all assets if surface is empty or "any".
-static func get_assets_by_surface(surface: String) -> Array[FurnishingAssetDefScript]:
-	_ensure_catalog()
-	if surface.is_empty() or surface == FurnishingAssetDefScript.SURFACE_ANY:
-		return get_all_assets()
-	var list: Array[FurnishingAssetDefScript] = []
-	for asset: FurnishingAssetDefScript in _assets.values():
-		if asset.can_place_on(surface):
-			list.append(asset)
-	return list
-
-
 ## Combined filter for catalog UI (design §5.2).
 ## Empty / null filters are ignored.
 static func filter_assets(
 	p_category: StringName = &"",
 	p_tag: StringName = &"",
-	p_era: StringName = &"",
-	p_surface: String = ""
+	p_era: StringName = &""
 ) -> Array[FurnishingAssetDefScript]:
 	_ensure_catalog()
 	var list: Array[FurnishingAssetDefScript] = []
@@ -197,9 +183,6 @@ static func filter_assets(
 			continue
 		if p_era != &"" and asset.available_from_era != &"":
 			if BuildingMaterialCatalogScript.era_rank(asset.available_from_era) > BuildingMaterialCatalogScript.era_rank(p_era):
-				continue
-		if not p_surface.is_empty() and p_surface != FurnishingAssetDefScript.SURFACE_ANY:
-			if not asset.can_place_on(p_surface):
 				continue
 		list.append(asset)
 	list.sort_custom(func(a: FurnishingAssetDefScript, b: FurnishingAssetDefScript) -> bool:
@@ -294,7 +277,6 @@ static func _register_builtin_assets() -> void:
 	var campfire := _assets[&"campfire"] as FurnishingAssetDefScript
 	campfire.tags = [&"fire", &"light", &"cooking", &"outdoor"]
 	campfire.available_from_era = &"tent"
-	campfire.placement_surface = FurnishingAssetDefScript.SURFACE_FLOOR
 	campfire.scale_mode = FurnishingAssetDefScript.SCALE_LOCKED
 	campfire.collision_policy = FurnishingAssetDefScript.COLLISION_FOOTPRINT
 	campfire.blocking_navigation = true
@@ -337,7 +319,6 @@ static func _register_builtin_assets() -> void:
 	var cooking := _assets[&"cooking_campfire"] as FurnishingAssetDefScript
 	cooking.tags = [&"fire", &"light", &"cooking", &"outdoor"]
 	cooking.available_from_era = &"tent"
-	cooking.placement_surface = FurnishingAssetDefScript.SURFACE_FLOOR
 	cooking.scale_mode = FurnishingAssetDefScript.SCALE_LOCKED
 	cooking.collision_policy = FurnishingAssetDefScript.COLLISION_FOOTPRINT
 	cooking.blocking_navigation = true
@@ -378,7 +359,6 @@ static func _register_builtin_assets() -> void:
 	var sign := _assets[&"entrance_sign"] as FurnishingAssetDefScript
 	sign.tags = [&"sign", &"town", &"light"]
 	sign.available_from_era = &"tent"
-	sign.placement_surface = FurnishingAssetDefScript.SURFACE_FLOOR
 	sign.scale_mode = FurnishingAssetDefScript.SCALE_LOCKED
 	sign.collision_policy = FurnishingAssetDefScript.COLLISION_BOX
 	sign.blocking_navigation = true
@@ -425,7 +405,6 @@ static func _register_builtin_assets() -> void:
 	var flag := _assets[&"flag"] as FurnishingAssetDefScript
 	flag.tags = [&"town", &"sign"]
 	flag.available_from_era = &"tent"
-	flag.placement_surface = FurnishingAssetDefScript.SURFACE_FLOOR
 	flag.scale_mode = FurnishingAssetDefScript.SCALE_UNIFORM_STEPS
 	flag.allowed_scales = [0.5, 1.0, 2.0]
 	flag.collision_policy = FurnishingAssetDefScript.COLLISION_BOX

@@ -11,6 +11,7 @@ extends SceneTree
 const EditorScene = preload("res://game/features/buildings/presentation/editor/building_editor.tscn")
 const PlaceZoneRecordScript = preload("res://game/features/buildings/domain/editor/place_zone_record.gd")
 const DecorObjectRecordScript = preload("res://game/features/buildings/domain/editor/decor_object_record.gd")
+const BlueprintBlockScript = preload("res://game/features/buildings/domain/editor/blueprint_block.gd")
 
 
 func _initialize() -> void:
@@ -157,6 +158,55 @@ func _run() -> void:
 	assert(editor.blueprint.objects[0].appearance.get("light_energy", null) == 3.5,
 		"light_energy must be carried over during replace")
 	print("  replace preserves appearance ok")
+
+	# All rotation axes are authorable and Esc cancels selection without leaving a
+	# pending drag/placement operation behind.
+	decor.rotate_selection("x", 1)
+	decor.rotate_selection("z", 1)
+	assert(not is_zero_approx(editor.blueprint.objects[0].rot.x), "X rotation applied")
+	assert(not is_zero_approx(editor.blueprint.objects[0].rot.z), "Z rotation applied")
+	decor.cancel_current_action()
+	assert(decor.selected_object_id.is_empty(), "Esc clears decor selection")
+	decor.select_object(editor.blueprint.objects[0].id)
+	print("  multi-axis rotation + Esc ok")
+
+	# The same validation boundary protects placement and inspector fields from
+	# frame/circulation volumes.
+	editor.blueprint.blocks.append(BlueprintBlockScript.new(Vector3i(7, 0, 7), &"cube"))
+	decor.current_asset_id = &"campfire"
+	var blocked_before: int = editor.blueprint.objects.size()
+	editor.cursor_hit_pos = Vector3(7.5, 0.0, 7.5)
+	decor._set_tool(decor.Tool.PLACE)
+	decor.on_left_pressed()
+	assert(editor.blueprint.objects.size() == blocked_before, "frame volume blocks decor placement")
+	decor.select_object(editor.blueprint.objects[0].id)
+	var original_pos: Vector3 = editor.blueprint.objects[0].pos
+	decor._syncing_ui = true
+	decor._pos_x_spin.value = 7.5
+	decor._pos_z_spin.value = 7.5
+	decor._syncing_ui = false
+	decor._on_transform_spin_changed(7.5)
+	assert(editor.blueprint.objects[0].pos.is_equal_approx(original_pos), "inspector rejects frame overlap")
+	editor.blueprint.blocks.clear()
+	print("  frame collision validation ok")
+
+	# Fixture edits share the decor history and deleting a visual leaves an
+	# explicit, valid invisible fixture rather than a dangling reference.
+	decor._add_fixture()
+	assert(editor.blueprint.fixtures.size() == 1, "fixture added")
+	decor._on_fixture_visual_selected(1)
+	var fixture_id: String = editor.blueprint.fixtures[0].visual_object_id
+	assert(not fixture_id.is_empty(), "fixture visual linked")
+	decor.select_object(fixture_id)
+	decor.delete_selection()
+	assert(editor.blueprint.fixtures[0].visual_object_id.is_empty(), "visual delete unlinks fixture")
+	decor.undo()
+	assert(editor.blueprint.fixtures[0].visual_object_id == fixture_id, "undo restores fixture link")
+	decor.undo()
+	assert(editor.blueprint.fixtures.size() == 1, "undo restores visual deletion only")
+	decor.undo()
+	assert(editor.blueprint.fixtures.is_empty(), "undo restores fixture addition")
+	print("  fixture links + history ok")
 
 	# Zone bounds: an object at cell centre (x=1.5) must map to cell 1 via floor,
 	# not cell 2 via round. Create a zone at cell (1,0,1) and assign the object.

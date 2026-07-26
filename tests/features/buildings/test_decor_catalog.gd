@@ -50,7 +50,6 @@ func _test_catalog_assets() -> void:
 	# New metadata fields
 	assert(flag.tags.has(&"town"), "Flag must have town tag")
 	assert(flag.available_from_era == &"tent", "Flag must be available from tent era")
-	assert(flag.placement_surface == FurnishingAssetDefScript.SURFACE_FLOOR, "Flag must be floor-placed")
 	assert(flag.scale_mode == FurnishingAssetDefScript.SCALE_UNIFORM_STEPS, "Flag must use uniform_steps scale mode")
 	assert(flag.collision_policy == FurnishingAssetDefScript.COLLISION_BOX, "Flag must use box collision")
 	assert(flag.blocking_navigation == true, "Flag must block navigation")
@@ -197,10 +196,10 @@ func _test_v1_to_v2_migration() -> void:
 	}
 	var bp := BuildingBlueprintScript.from_dict(v1_dict)
 	assert(bp != null, "v1 blueprint must load")
-	assert(bp.version == BuildingBlueprintScript.FORMAT_VERSION, "Loaded bp must be upgraded to v2")
+	assert(bp.version == BuildingBlueprintScript.FORMAT_VERSION, "Loaded blueprint must be upgraded to the current format")
 	assert(bp.objects.size() == 1, "v1 migration must preserve objects")
 	var obj: DecorObjectRecordScript = bp.objects[0]
-	assert(obj.pos.is_equal_approx(Vector3(2.5, 0.0, 3.5)), "v1 pos must not shift")
+	assert(obj.pos.is_equal_approx(Vector3(4.5, 0.0, 5.5)), "v1 local pos must be converted to the blueprint pivot space")
 	assert(obj.appearance["visual_flame_visible"] == true, "v1 properties must migrate to appearance")
 	assert(obj.appearance["light_color"] == "ffaa44", "v1 colour must migrate to appearance")
 	assert(obj.owner_zone_id == &"", "v1 migration must add empty owner_zone")
@@ -210,7 +209,7 @@ func _test_v1_to_v2_migration() -> void:
 	assert(reloaded != null, "v2 reloaded blueprint must be valid")
 	assert(reloaded.objects.size() == 1, "v2 round-trip must preserve objects")
 	assert(reloaded.objects[0].appearance["visual_flame_visible"] == true, "v2 appearance must survive round-trip")
-	assert(reloaded.objects[0].pos.is_equal_approx(Vector3(2.5, 0.0, 3.5)), "v2 pos must survive round-trip")
+	assert(reloaded.objects[0].pos.is_equal_approx(Vector3(4.5, 0.0, 5.5)), "migrated position must survive round-trip")
 	print("  v1→v2 migration ok")
 
 
@@ -225,7 +224,7 @@ func _test_v2_round_trip() -> void:
 	record.appearance = {"visual_flame_visible": false, "light_color": "aabbcc"}
 	bp.objects.append(record)
 	var json := bp.to_json()
-	assert(json.contains("\"version\": 2"), "v2 json must contain version 2")
+	assert(json.contains("\"version\": %d" % BuildingBlueprintScript.FORMAT_VERSION), "JSON must contain the current format version")
 	assert(json.contains("\"appearance\""), "v2 json must use appearance key")
 	assert(not json.contains("\"properties\""), "v2 json must not contain old properties key")
 	assert(not json.contains("\"anchor\""), "v2 json must not contain old anchor key in objects")
@@ -284,7 +283,7 @@ func _test_owner_zone_validation() -> void:
 	print("  owner_zone validation ok")
 
 
-## Catalog must support filtering by tag, era, surface and combined criteria.
+## Catalog must support filtering by tag, era and combined criteria.
 func _test_catalog_filtering() -> void:
 	# Filter by tag: "fire" should return campfire and cooking_campfire.
 	var fire_assets := FurnishingAssetCatalogScript.get_assets_by_tag(&"fire")
@@ -301,17 +300,9 @@ func _test_catalog_filtering() -> void:
 	var stone_assets := FurnishingAssetCatalogScript.get_assets_by_era(&"stone")
 	assert(stone_assets.size() >= 4, "Era 'stone' must return tent-era assets (cumulative progression)")
 
-	# Filter by surface: "floor" should return all current assets.
-	var floor_assets := FurnishingAssetCatalogScript.get_assets_by_surface(FurnishingAssetDefScript.SURFACE_FLOOR)
-	assert(floor_assets.size() >= 4, "Surface 'floor' must return at least 4 assets")
-
-	# Filter by surface: "wall" should return 0 (none are wall-only).
-	var wall_assets := FurnishingAssetCatalogScript.get_assets_by_surface(FurnishingAssetDefScript.SURFACE_WALL)
-	assert(wall_assets.size() == 0, "Surface 'wall' must return 0 assets")
-
 	# Combined filter: category + tag.
 	var combined := FurnishingAssetCatalogScript.filter_assets(
-		&"fires_stoves", &"fire", &"tent", FurnishingAssetDefScript.SURFACE_FLOOR)
+		&"fires_stoves", &"fire", &"tent")
 	assert(combined.size() >= 2, "Combined filter must return at least 2 assets")
 	for asset in combined:
 		assert(asset.category == &"fires_stoves", "Combined filter must respect category")
@@ -319,7 +310,7 @@ func _test_catalog_filtering() -> void:
 
 	# Combined filter with mismatched tag returns empty.
 	var mismatched := FurnishingAssetCatalogScript.filter_assets(
-		&"town", &"fire", &"", "")
+		&"town", &"fire", &"")
 	assert(mismatched.size() == 0, "Mismatched tag filter must return 0 assets")
 
 	# Empty filters return all assets.
@@ -338,14 +329,10 @@ func _test_catalog_filtering() -> void:
 	assert(flag.is_scale_allowed(0.5), "Flag must allow scale 0.5")
 	assert(not flag.is_scale_allowed(1.5), "Flag must reject scale 1.5 (not in allowed_scales)")
 
-	# Placement surface validation.
-	assert(campfire.can_place_on(FurnishingAssetDefScript.SURFACE_FLOOR), "Campfire can place on floor")
-	assert(not campfire.can_place_on(FurnishingAssetDefScript.SURFACE_WALL), "Campfire cannot place on wall")
-	assert(campfire.can_place_on(FurnishingAssetDefScript.SURFACE_ANY), "Campfire can place on any (surface is floor, any matches)")
-
 	# Rotation axis validation.
 	assert(campfire.is_rotation_axis_allowed("y"), "Campfire must allow Y rotation")
-	assert(not campfire.is_rotation_axis_allowed("x"), "Campfire must reject X rotation")
+	assert(campfire.is_rotation_axis_allowed("x"), "Campfire must allow X rotation")
+	assert(campfire.is_rotation_axis_allowed("z"), "Campfire must allow Z rotation")
 
 	print("  catalog filtering ok")
 
@@ -406,14 +393,13 @@ func _test_asset_validation_with_known_asset() -> void:
 	assert(errors.any(func(e: String): return e.contains("non-uniform scale")),
 		"Non-uniform scale must be rejected")
 
-	# X-axis rotation on a Y-only asset must be rejected.
+	# All axes are authorable for furnishing unless an asset explicitly restricts one.
 	var bad_rot := DecorObjectRecordScript.make(&"campfire", Vector3.ZERO, 3)
 	bad_rot.rot = Vector3(45.0, 0.0, 0.0)
 	errors = bad_rot.validation_errors_with_asset(campfire)
-	assert(errors.any(func(e: String): return e.contains("X axis") and e.contains("not allow")),
-		"X-axis rotation on Y-only asset must be rejected")
+	assert(errors.is_empty(), "X-axis rotation must be allowed by the default furnishing policy")
 
-	# Valid object: scale 1.0, Y-only rotation.
+	# Valid object: scale 1.0, arbitrary rotation.
 	var good := DecorObjectRecordScript.make(&"campfire", Vector3.ZERO, 4)
 	good.scale = Vector3.ONE
 	good.rot = Vector3(0.0, 90.0, 0.0)
@@ -458,7 +444,7 @@ func _test_era_cumulative_progression() -> void:
 	assert(stone_assets.size() >= tent_assets.size(),
 		"Stone era must include all tent-era assets (cumulative), got %d vs %d" % [stone_assets.size(), tent_assets.size()])
 	# filter_assets must also use cumulative progression.
-	var stone_filtered := FurnishingAssetCatalogScript.filter_assets(&"", &"", &"stone", "")
+	var stone_filtered := FurnishingAssetCatalogScript.filter_assets(&"", &"", &"stone")
 	assert(stone_filtered.size() >= tent_assets.size(),
 		"filter_assets with stone era must include tent-era assets")
 	print("  era cumulative progression ok")

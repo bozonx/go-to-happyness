@@ -869,7 +869,29 @@ step = 0.05
 layout_mode = 2
 text = "Поворот Y°"
 
+[node name="PitchLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+layout_mode = 2
+text = "Поворот X°"
+
+[node name="DecorPitchSpin" type="SpinBox" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = -360.0
+max_value = 360.0
+step = 1.0
+
 [node name="DecorYawSpin" type="SpinBox" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = -360.0
+max_value = 360.0
+step = 1.0
+
+[node name="RollLbl" type="Label" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
+layout_mode = 2
+text = "Поворот Z°"
+
+[node name="DecorRollSpin" type="SpinBox" parent="EditorUI/Root/DecorInspectorPanel/Scroll/InspectorVBox/TransformGrid"]
 unique_name_in_owner = true
 layout_mode = 2
 min_value = -360.0
