@@ -58,7 +58,6 @@ var _bodies: Dictionary = {}
 var _body_cells: Dictionary = {}
 
 var _revision := 0
-var _dirty_chunks: Dictionary = {}
 
 
 func configure(next_cell_size: float, next_board_cells: int) -> void:
@@ -75,7 +74,6 @@ func configure(next_cell_size: float, next_board_cells: int) -> void:
 	_bodies.clear()
 	_body_cells.clear()
 	_revision += 1
-	mark_all_chunks_dirty()
 
 
 func revision() -> int:
@@ -380,42 +378,6 @@ const ORTHOGONAL_OFFSETS: Array[Vector2i] = [
 ]
 
 
-# --- Chunks -------------------------------------------------------------------
-
-func chunk_of(cell: Vector2i) -> Vector2i:
-	return Vector2i(floori(float(cell.x) / TerrainGrid.CHUNK_CELLS), floori(float(cell.y) / TerrainGrid.CHUNK_CELLS))
-
-
-func mark_all_chunks_dirty() -> void:
-	if board_cells <= 0:
-		return
-	var first := chunk_of(min_cell())
-	var last := chunk_of(max_cell())
-	for z in range(first.y, last.y + 1):
-		for x in range(first.x, last.x + 1):
-			_dirty_chunks[Vector2i(x, z)] = true
-
-
-func mark_chunk_dirty(chunk: Vector2i) -> void:
-	_dirty_chunks[chunk] = true
-
-
-func has_dirty_chunks() -> bool:
-	return not _dirty_chunks.is_empty()
-
-
-## Hands the dirty set over and clears it, sorted so a rebuild consumes chunks in
-## the same order on every machine.
-func take_dirty_chunks() -> Array[Vector2i]:
-	var chunks: Array[Vector2i] = []
-	for chunk: Vector2i in _dirty_chunks:
-		chunks.append(chunk)
-	chunks.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
-		return a.y < b.y if a.y != b.y else a.x < b.x)
-	_dirty_chunks.clear()
-	return chunks
-
-
 # --- Whole-layer helpers ------------------------------------------------------
 
 ## True when nothing has been authored. The package skips `water.bin` entirely for
@@ -450,11 +412,9 @@ func _index_of(cell: Vector2i) -> int:
 
 
 ## Unlike the terrain, a water cell's geometry is its own: the surface is a flat
-## quad at one level, so a change never moves a neighbour's vertex and only the
-## owning chunk is dirtied.
+## quad at one level, so a change never moves a neighbour's vertex.
 func _touch(cell: Vector2i) -> void:
 	_revision += 1
-	_dirty_chunks[chunk_of(cell)] = true
 
 
 func _touch_index(index: int) -> void:

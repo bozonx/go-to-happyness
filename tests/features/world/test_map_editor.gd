@@ -207,6 +207,14 @@ func _test_water_mode(editor: Node) -> void:
 	assert(editor._nav_grid.is_walkable(cell), "and gave routing the ground back")
 	editor._redo()
 	assert(water.is_wet(terrain, cell), "redo filled it again")
+
+	# The inverse of Flood is intentionally whole-body drainage, never a patch
+	# erase. It is one shared-history command and returns navigation immediately.
+	editor._active.handle_input(_click(MOUSE_BUTTON_RIGHT, true))
+	assert(not water.has_body(body_id), "reverse flood removed the whole body")
+	assert(editor._nav_grid.is_walkable(cell), "draining republished navigation")
+	editor._undo()
+	assert(water.has_body(body_id) and water.is_wet(terrain, cell), "undo restored the flooded body")
 	print("  water fill + shared undo + republished navigation ok")
 
 

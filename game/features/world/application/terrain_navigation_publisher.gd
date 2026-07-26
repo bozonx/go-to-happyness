@@ -66,6 +66,8 @@ func configure(
 		service.edit_committed.connect(_on_edit_committed)
 	if water_service != null and not water_service.edit_committed.is_connected(_on_water_committed):
 		water_service.edit_committed.connect(_on_water_committed)
+	if water_service != null and not water_service.registry_changed.is_connected(_on_water_registry_changed):
+		water_service.registry_changed.connect(_on_water_registry_changed)
 
 
 ## Rebuilds the whole field. Cheap enough to run on load and on a board resize;
@@ -125,6 +127,12 @@ func _on_edit_committed(delta: TerrainDelta) -> void:
 ## cost-only water edit to optimise for.
 func _on_water_committed(delta: WaterDelta) -> void:
 	refresh_cells(delta.cells)
+
+
+## Retyping a body changes lava/passability without necessarily changing a cell.
+## A registry operation therefore rebuilds the authoritative field as well.
+func _on_water_registry_changed() -> void:
+	publish_all()
 
 
 # --- Construction ------------------------------------------------------------

@@ -31,6 +31,8 @@ static func run_all() -> void:
 	_test_ice_carries_a_walker_before_a_cart()
 	_test_lava_is_impassable_at_any_depth()
 	_test_committed_water_edits_republish_themselves()
+	_test_registry_removal_republishes_and_is_undoable()
+	_test_flow_requires_a_river()
 	print("    [PASS] Water Layer Tests")
 
 
@@ -341,3 +343,36 @@ static func _test_committed_water_edits_republish_themselves() -> void:
 	assert(not nav.is_walkable(deep))
 	assert(service.undo())
 	assert(nav.is_walkable(deep))
+
+
+static func _test_registry_removal_republishes_and_is_undoable() -> void:
+	var terrain := _terrain()
+	_dig_basin(terrain)
+	var water := _water_over(terrain)
+	var service := WaterService.new()
+	service.configure(water, terrain)
+	var nav := NavGrid.new()
+	var publisher := TerrainNavigationPublisher.new()
+	publisher.configure(terrain, nav, null, water, service)
+	var lake := service.create_body(WaterBody.Type.LAKE, 0)
+	assert(service.flood(Vector2i.ZERO, lake.id, 0))
+	assert(not nav.is_walkable(Vector2i.ZERO))
+
+	assert(service.remove_body(lake.id))
+	assert(nav.is_walkable(Vector2i.ZERO))
+	assert(not water.has_body(lake.id))
+	assert(service.undo())
+	assert(water.has_body(lake.id))
+	assert(not nav.is_walkable(Vector2i.ZERO))
+
+
+static func _test_flow_requires_a_river() -> void:
+	var terrain := _terrain()
+	var water := _water_over(terrain)
+	var service := WaterService.new()
+	service.configure(water, terrain)
+	assert(terrain.set_height(Vector2i.ZERO, -1))
+	var lake := service.create_body(WaterBody.Type.LAKE, 0)
+	assert(service.flood(Vector2i.ZERO, lake.id, 0))
+	assert(not service.set_flow([Vector2i.ZERO], lake.id, SlopeCatalog.DIR_E, 1))
+	assert(service.last_rejection() == WaterService.REASON_FLOW_REQUIRES_RIVER)

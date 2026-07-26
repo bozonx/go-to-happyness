@@ -68,7 +68,7 @@ func start_research(tech_id: String) -> void:
 	if simulation.settlement.active_research_tech_id != "":
 		simulation._update_interface("Already researching another technology.")
 		return
-	if not is_instance_valid(simulation.campfire_node) or not simulation._is_fire_lit(simulation.campfire_node):
+	if not is_instance_valid(simulation.campfire_node) or not simulation.fire_management_service.is_fire_lit(simulation.campfire_node):
 		simulation._update_interface("Research requires an active Campfire.")
 		return
 

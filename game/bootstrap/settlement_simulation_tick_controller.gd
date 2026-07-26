@@ -36,7 +36,7 @@ func is_citizen_work_time(citizen: Citizen) -> bool:
 func has_lit_communal_fire() -> bool:
 	for record in game.building_registry.records():
 		var building: Node3D = record.node
-		if is_instance_valid(building) and game.fire_management_service.is_managed_fire_source(building) and game._is_fire_lit(building):
+		if is_instance_valid(building) and game.fire_management_service.is_managed_fire_source(building) and game.fire_management_service.is_fire_lit(building):
 			return true
 	return false
 
@@ -161,7 +161,7 @@ func send_citizen_to_leisure(citizen: Citizen, minimum_hours := 0) -> bool:
 		return game.citizen_needs_service != null and game.citizen_needs_service.request_leisure(citizen.ai_id, recreation, minimum_hours)
 	# No parks yet (early eras): gather at the main campfire or a natural pond.
 	var gathering_spots: Array[Vector3] = []
-	if is_instance_valid(game.campfire_node) and game._is_fire_lit(game.campfire_node):
+	if is_instance_valid(game.campfire_node) and game.fire_management_service.is_fire_lit(game.campfire_node):
 		gathering_spots.append(game.campfire_node.global_position)
 	for pond in game.pond_positions:
 		# Do not stand in water: choose a stable point at its rim.

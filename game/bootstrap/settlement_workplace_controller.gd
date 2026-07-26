@@ -126,7 +126,7 @@ func dismiss_campfire_worker() -> void:
 func on_campfire_advance_pressed() -> void:
 	if game.selected_campfire == null:
 		return
-	var housing_slots := game._total_housing_slots()
+	var housing_slots := game.building_registry.housing_capacity()
 	var next_era := SettlementState.Era.TENT
 	match game.settlement.era:
 		SettlementState.Era.TENT: next_era = SettlementState.Era.EARTH
@@ -184,7 +184,7 @@ func dismiss_selected_workplace_worker() -> void:
 	if worker.permanent_role == "official":
 		game._dismiss_official(worker)
 	else:
-		game._send_to_unemployment_registration(worker)
+		game.citizen_lifecycle_service.send_to_unemployment_registration(worker)
 	game._update_workers()
 	reopen_workplace_menu()
 

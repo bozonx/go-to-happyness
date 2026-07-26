@@ -118,11 +118,11 @@ func refresh_campfire_menu() -> void:
 	if simulation == null or simulation.selected_campfire == null:
 		return
 	var era_str: String = simulation.workplace_controller.era_name()
-	var fire_state: Variant = simulation._fire_state_for(simulation.selected_campfire)
+	var fire_state: Variant = simulation.fire_management_service.fire_state_for(simulation.selected_campfire)
 	var fuel_current: int = fire_state.total_committed_fuel()
 	var title_text := S.CAMPFIRE_ERA_FORMAT % [era_str, fuel_current, simulation.FIRE_SUPPLY_TARGET]
 
-	var housing_slots: int = simulation._total_housing_slots()
+	var housing_slots: int = simulation.building_registry.housing_capacity()
 	var era_info: Array = build_campfire_era_requirements(housing_slots)
 	var req_text: String = era_info[0]
 	var can_advance: bool = era_info[1]
@@ -136,8 +136,8 @@ func refresh_campfire_menu() -> void:
 	var upgrade_state := {"visible": false, "text": "", "disabled": false, "tooltip": ""}
 	var selected_type: String = simulation.building_registry.building_type_for_node(simulation.selected_campfire) if is_instance_valid(simulation.selected_campfire) else ""
 	var next_upgrade: String = simulation.settlement.next_building_upgrade(selected_type)
-	if is_instance_valid(simulation.selected_campfire) and not simulation._is_fire_lit(simulation.selected_campfire):
-		var relight_state: Variant = simulation._fire_state_for(simulation.selected_campfire)
+	if is_instance_valid(simulation.selected_campfire) and not simulation.fire_management_service.is_fire_lit(simulation.selected_campfire):
+		var relight_state: Variant = simulation.fire_management_service.fire_state_for(simulation.selected_campfire)
 		upgrade_state["visible"] = true
 		upgrade_state["text"] = "Relight with flint and steel"
 		upgrade_state["disabled"] = relight_state.fuel <= 0

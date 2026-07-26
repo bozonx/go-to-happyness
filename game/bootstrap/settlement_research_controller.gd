@@ -23,7 +23,7 @@ func update_building_research(delta: float) -> void:
 		cancel_active_building_research(true, "Research cancelled: invalid technology.")
 		return
 	var tech: Dictionary = BuildingCatalog.RESEARCH_TECHS[tech_id]
-	if not is_instance_valid(game.campfire_node) or not game._is_fire_lit(game.campfire_node):
+	if not is_instance_valid(game.campfire_node) or not game.fire_management_service.is_fire_lit(game.campfire_node):
 		cancel_active_building_research(true, "Research cancelled: the Campfire is unavailable. Resources refunded.")
 		return
 	var worker: Citizen = null

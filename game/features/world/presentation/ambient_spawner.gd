@@ -165,7 +165,7 @@ func spawn_trash_piles() -> void:
 		var cell: Vector2i = loot.get("cell")
 		if not simulation._is_board_cell(cell) or simulation.terrain_blocked_cells.has(cell):
 			continue
-		var pile: Node3D = simulation._create_resource_pile(simulation.nav_grid.cell_center(cell) if simulation.nav_grid != null else Vector3((cell.x + 0.5) * simulation.CELL_SIZE, 0.0, (cell.y + 0.5) * simulation.CELL_SIZE), _loot_resources(loot)) as Node3D
+		var pile: Node3D = simulation.resource_pile_service.create_resource_pile(simulation.nav_grid.cell_center(cell) if simulation.nav_grid != null else Vector3((cell.x + 0.5) * simulation.CELL_SIZE, 0.0, (cell.y + 0.5) * simulation.CELL_SIZE), _loot_resources(loot)) as Node3D
 		# These are authored world loot, unlike piles dropped by citizens or
 		# logistics. Keep their visuals under the territory while the logistics
 		# service continues to own their resource record.

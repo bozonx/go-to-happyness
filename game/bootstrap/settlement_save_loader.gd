@@ -158,7 +158,7 @@ func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
 		if resources.is_empty():
 			continue
 		var pos = SettlementGame.SaveDataScript.dict_to_vector3(p_dict.get("position", {}))
-		var pile_node := game._create_resource_pile(pos, resources, bool(p_dict.get("is_backpack", false)))
+		var pile_node := game.resource_pile_service.create_resource_pile(pos, resources, bool(p_dict.get("is_backpack", false)))
 		if pile_node != null and bool(p_dict.get("landscape_owned", false)):
 			pile_node.set_meta("landscape_owned", true)
 			game.world_navigation_controller.add_landscape_object(pile_node)

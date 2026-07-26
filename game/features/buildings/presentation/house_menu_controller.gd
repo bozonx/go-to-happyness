@@ -42,7 +42,7 @@ func show_house_menu() -> void:
 		settle_button.name = "SettleUnhoused"
 		settle_button.position = Vector2(16, 102)
 		settle_button.size = Vector2(272, 30)
-		settle_button.pressed.connect(simulation._settle_unhoused_resident)
+		settle_button.pressed.connect(simulation.citizen_lifecycle_service.settle_unhoused_resident)
 		simulation.ui_manager.house_menu.add_child(settle_button)
 	if is_tent:
 		settle_button.visible = false

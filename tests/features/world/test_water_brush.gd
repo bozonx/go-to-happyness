@@ -12,16 +12,15 @@ const BOARD_CELLS := 32
 
 static func run_all() -> void:
 	_test_brush_covers_a_square_and_clips_at_the_edge()
-	_test_paint_writes_through_the_service()
-	_test_erase_dries_cells()
+	_test_flood_writes_through_the_service()
+	_test_reverse_flood_drains_whole_body()
 	_test_no_hover_means_no_edit()
 	_test_no_body_means_refusal()
-	_test_cycle_tool_rotates_through_four()
+	_test_cycle_tool_rotates_flood_and_ice()
 	_test_adjust_level_clamps()
 	_test_pick_level_from_ground()
-	_test_create_and_remove_body()
+	_test_create_body_is_undoable()
 	_test_undo_and_redo()
-	_test_secondary_erases_when_painting()
 	_test_freeze_and_thaw()
 	print("    [PASS] Water Brush Tests")
 
@@ -46,7 +45,7 @@ static func _hover(brush: WaterBrushController, cell: Vector2i) -> void:
 	brush.has_hover = true
 
 
-## Creates a body and selects it, so paint strokes have somewhere to go.
+## Creates a body and selects it, so Flood has a type and owner to use.
 static func _make_body(world: Dictionary, type: WaterBody.Type = WaterBody.Type.LAKE) -> WaterBody:
 	var brush: WaterBrushController = world["brush"]
 	return brush.create_body(type)
@@ -75,15 +74,15 @@ static func _test_brush_covers_a_square_and_clips_at_the_edge() -> void:
 	assert(brush.brush_size == WaterBrushController.MAX_BRUSH_SIZE)
 
 
-# --- Paint --------------------------------------------------------------------
+# --- Flood --------------------------------------------------------------------
 
-static func _test_paint_writes_through_the_service() -> void:
+static func _test_flood_writes_through_the_service() -> void:
 	var world := _make()
 	var terrain: TerrainGrid = world["terrain"]
 	var water: WaterGrid = world["water"]
 	var brush: WaterBrushController = world["brush"]
 
-	# Dig a shallow basin so the paint has somewhere to put water.
+	# Dig a basin so Flood has somewhere to put water.
 	var centre := Vector2i(0, 0)
 	terrain.set_height(centre, -2)
 	_make_body(world)
@@ -96,7 +95,7 @@ static func _test_paint_writes_through_the_service() -> void:
 	assert(water.height_of(centre) == 0)
 
 
-static func _test_erase_dries_cells() -> void:
+static func _test_reverse_flood_drains_whole_body() -> void:
 	var world := _make()
 	var terrain: TerrainGrid = world["terrain"]
 	var water: WaterGrid = world["water"]
@@ -110,9 +109,10 @@ static func _test_erase_dries_cells() -> void:
 	brush.apply()
 	assert(water.has_water(centre))
 
-	brush.tool = WaterBrushController.TOOL_ERASE
-	brush.apply()
+	# Right click Flood drains the complete body, not a painted patch.
+	brush.apply_secondary()
 	assert(not water.has_water(centre))
+	assert(not water.has_body(brush.body_id))
 
 
 # --- Guards -------------------------------------------------------------------
@@ -143,19 +143,15 @@ static func _test_no_body_means_refusal() -> void:
 
 # --- Tool cycling -------------------------------------------------------------
 
-static func _test_cycle_tool_rotates_through_four() -> void:
+static func _test_cycle_tool_rotates_flood_and_ice() -> void:
 	var world := _make()
 	var brush: WaterBrushController = world["brush"]
 
-	assert(brush.tool == WaterBrushController.TOOL_PAINT)
-	brush.cycle_tool()
-	assert(brush.tool == WaterBrushController.TOOL_ERASE)
-	brush.cycle_tool()
 	assert(brush.tool == WaterBrushController.TOOL_FLOOD)
 	brush.cycle_tool()
 	assert(brush.tool == WaterBrushController.TOOL_FREEZE)
 	brush.cycle_tool()
-	assert(brush.tool == WaterBrushController.TOOL_PAINT)
+	assert(brush.tool == WaterBrushController.TOOL_FLOOD)
 
 
 # --- Level --------------------------------------------------------------------
@@ -184,7 +180,7 @@ static func _test_pick_level_from_ground() -> void:
 
 # --- Body management ----------------------------------------------------------
 
-static func _test_create_and_remove_body() -> void:
+static func _test_create_body_is_undoable() -> void:
 	var world := _make()
 	var brush: WaterBrushController = world["brush"]
 	var water: WaterGrid = world["water"]
@@ -194,9 +190,10 @@ static func _test_create_and_remove_body() -> void:
 	assert(brush.body_id == body.id)
 	assert(water.has_body(body.id))
 
-	assert(brush.remove_selected_body())
-	assert(brush.body_id == WaterBody.NO_BODY)
+	assert(world["service"].undo())
 	assert(not water.has_body(body.id))
+	assert(world["service"].redo())
+	assert(water.has_body(body.id))
 
 
 # --- History ------------------------------------------------------------------
@@ -220,27 +217,6 @@ static func _test_undo_and_redo() -> void:
 
 	brush.redo()
 	assert(water.has_water(centre))
-
-
-# --- Secondary stroke ---------------------------------------------------------
-
-static func _test_secondary_erases_when_painting() -> void:
-	var world := _make()
-	var terrain: TerrainGrid = world["terrain"]
-	var water: WaterGrid = world["water"]
-	var brush: WaterBrushController = world["brush"]
-
-	var centre := Vector2i(0, 0)
-	terrain.set_height(centre, -2)
-	_make_body(world)
-	brush.level = 0
-	_hover(brush, centre)
-	brush.apply()
-	assert(water.has_water(centre))
-
-	# Right button while painting = erase.
-	brush.apply_secondary()
-	assert(not water.has_water(centre))
 
 
 # --- Freeze -------------------------------------------------------------------

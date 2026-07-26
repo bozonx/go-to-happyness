@@ -185,7 +185,7 @@ func handle_campfire_primary_action() -> void:
 	if not is_instance_valid(game.selected_campfire):
 		return
 	game.selected_building = game.selected_campfire
-	if not game._is_fire_lit(game.selected_campfire):
+	if not game.fire_management_service.is_fire_lit(game.selected_campfire):
 		relight_selected_fire()
 		if game.campfire_menu_controller != null:
 			game.campfire_menu_controller.refresh_campfire_menu()
@@ -196,14 +196,14 @@ func handle_campfire_primary_action() -> void:
 func relight_selected_fire() -> void:
 	if not is_instance_valid(game.selected_building):
 		return
-	var fire_state := game._fire_state_for(game.selected_building)
+	var fire_state := game.fire_management_service.fire_state_for(game.selected_building)
 	if fire_state.lit:
 		return
 	if fire_state.fuel <= 0:
 		game._update_interface("A fire needs branches before it can be relit.")
 		return
 	fire_state.lit = true
-	game._apply_fire_state(game.selected_building, fire_state)
+	game.fire_management_service.apply_fire_state(game.selected_building, fire_state)
 	game._refresh_living_statuses()
 	game.workplace_controller.reopen_workplace_menu()
 	game._update_interface("The fire was relit with flint and steel.")
@@ -456,14 +456,14 @@ func refuel_fire_from_pocket(building: Node3D, all: bool) -> void:
 		game._update_interface(S.NO_BRANCHES_FOR_FIRE)
 		refresh_interaction_hint()
 		return
-	var fire_state := game._fire_state_for(building)
+	var fire_state := game.fire_management_service.fire_state_for(building)
 	var amount := available if all else 1
 	amount = mini(amount, available)
 	var delivered := game.hero_pocket_service.remove_from_pocket(ResourceIds.BRANCHES, amount) if game.hero_pocket_service != null else 0
 	if delivered <= 0:
 		return
 	fire_state.add_delivered(delivered, int(game.game_minutes))
-	game._apply_fire_state(building, fire_state)
+	game.fire_management_service.apply_fire_state(building, fire_state)
 	game._refresh_living_statuses()
 	game._update_interface(S.BRANCHES_ADDED_TO_FIRE % delivered)
 	refresh_interaction_hint()
@@ -478,7 +478,7 @@ func meet_arrival_at_entrance() -> void:
 		order.greeter_id = game.player_citizen.ai_id
 		game.pending_arrivals[index] = order
 		game.arrival_greeters[game.player_citizen.ai_id] = order
-		game._on_arrival_greeter_ready(game.player_citizen)
+		game.citizen_lifecycle_service.on_arrival_greeter_ready(game.player_citizen)
 		refresh_interaction_hint()
 		return
 	game._update_interface(S.NO_ONE_TO_MEET)

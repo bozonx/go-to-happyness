@@ -453,7 +453,7 @@ var hero_interaction_controller: RefCounted
 var construction_controller: RefCounted
 var workplace_controller: RefCounted
 var simulation_tick_controller: RefCounted
-var _logistics_controller: RefCounted
+var logistics_controller: RefCounted
 var world_navigation_controller: RefCounted
 
 
@@ -483,14 +483,10 @@ func _ready() -> void:
 	construction_controller = SettlementConstructionControllerScript.new(self)
 	workplace_controller = SettlementWorkplaceControllerScript.new(self)
 	simulation_tick_controller = SettlementSimulationTickControllerScript.new(self)
-	_logistics_controller = SettlementLogisticsControllerScript.new(self)
+	logistics_controller = SettlementLogisticsControllerScript.new(self)
 	world_navigation_controller = SettlementWorldNavigationControllerScript.new(self)
 	ui_manager.bind_delegate_events(SettlementUICallbacksScript.new(self))
 	SettlementBootstrapperScript.new().run(self)
-
-
-func _settle_unhoused_resident() -> void:
-	citizen_lifecycle_service.settle_unhoused_resident()
 
 
 func _next_registration_ticket() -> int:
@@ -602,41 +598,6 @@ func _on_employment_processing_finished(citizen: Citizen) -> void:
 		citizen.finish_employment_processing()
 		_update_workers()
 
-func _on_school_day_ended() -> void:
-	_simulation_handlers.on_school_day_ended()
-
-func _on_daily_settlement_update(event: SimulationDayEvent) -> void:
-	_simulation_handlers.on_daily_settlement_update(event)
-
-
-func _end_ai_work_shift() -> void:
-	_simulation_handlers.end_ai_work_shift()
-
-
-func _clear_finished_daily_orders(workday_id: int) -> void:
-	_simulation_handlers.clear_finished_daily_orders(workday_id)
-
-
-func _clear_expired_overtime_orders() -> void:
-	_simulation_handlers.clear_expired_overtime_orders()
-
-
-func _reset_building_night_work_toggles() -> void:
-	_simulation_handlers.reset_building_night_work_toggles()
-
-
-func _resume_overtime_daily_orders() -> void:
-	_simulation_handlers.resume_overtime_daily_orders()
-
-
-func _check_daily_departures() -> void:
-	settlement_survival_service.check_daily_departures()
-
-
-func _on_citizen_leaving_departed(citizen: Citizen) -> void:
-	citizen_lifecycle_service.on_citizen_leaving_departed(citizen)
-
-
 func _total_game_minutes() -> float:
 	return simulation_tick_controller.total_game_minutes()
 
@@ -657,65 +618,13 @@ func _is_work_time() -> bool:
 func _is_citizen_work_time(citizen: Citizen) -> bool:
 	return simulation_tick_controller.is_citizen_work_time(citizen)
 
-func _start_meal(hour: int) -> void:
-	canteen_service.start_meal(hour)
-
-
 func _start_park_rest(cooks_only: bool) -> void:
 	simulation_tick_controller.start_park_rest(cooks_only)
-
-
-func _cancel_canteen_delivery() -> void:
-	canteen_service.cancel_canteen_delivery()
 
 
 func _publish_courier_tasks(dispatcher: RefCounted) -> void:
 	if courier_task_publisher != null:
 		courier_task_publisher.publish_courier_tasks(dispatcher)
-
-
-func _firewood_task_priority(building: Node3D, fire_state: RefCounted) -> int:
-	return _logistics_controller.firewood_task_priority(building, fire_state)
-
-
-func _reconcile_repair_reservations() -> void:
-	_logistics_controller.reconcile_repair_reservations()
-
-
-func _construction_material_sources(resource_type: String, from_position: Vector3 = Vector3.ZERO) -> Array[Dictionary]:
-	return _logistics_controller.construction_material_sources(resource_type, from_position)
-
-
-func _construction_source_available(resource_type: String, source: Dictionary) -> int:
-	return _logistics_controller.construction_source_available(resource_type, source)
-
-
-func _is_courier_task_valid(task: RefCounted) -> bool:
-	return courier_task_service.is_courier_task_valid(task)
-
-
-func _start_courier_task(courier: Citizen, task: RefCounted) -> bool:
-	return courier_task_service.start_courier_task(courier, task)
-
-
-func _release_task_warehouse_reservation(task: RefCounted) -> void:
-	courier_task_service.release_task_warehouse_reservation(task)
-
-
-func _cancel_courier_task(courier: Citizen, task: RefCounted) -> void:
-	courier_task_service.cancel_courier_task(courier, task)
-
-
-func _set_canteen_delivery_state(active: bool, carrier: Citizen, amount: int) -> void:
-	_logistics_controller.set_canteen_delivery_state(active, carrier, amount)
-
-
-func _set_canteen_food(value: int) -> void:
-	_logistics_controller.set_canteen_food(value)
-
-
-func _is_canteen_delivery_in_progress() -> bool:
-	return _logistics_controller.is_canteen_delivery_in_progress()
 
 
 func _set_dig_mode(value: bool) -> void:
@@ -751,21 +660,11 @@ func _request_courier_dispatch() -> void:
 			citizen_ai.request_decision_refresh()
 
 
-func _can_work_at_dig_site(site: DigSiteRecordScript) -> bool:
-	return excavation_service.can_work_at_dig_site(site)
-
-
-func _resource_for_depth(site: DigSiteRecordScript, depth: int) -> String:
-	return excavation_service.resource_for_depth(site, depth)
-
 func _stored_resources() -> int:
 	return storage_routing_service.stored_resources()
 
 func _warehouse_capacity() -> int:
 	return storage_routing_service.warehouse_capacity()
-
-func _total_housing_slots() -> int:
-	return building_registry.housing_capacity()
 
 func _cell_from_position(position_on_board: Vector3) -> Vector2i:
 	return nav_grid.cell_from_position(position_on_board) if nav_grid != null else Vector2i(floori(position_on_board.x / CELL_SIZE), floori(position_on_board.z / CELL_SIZE))
@@ -800,17 +699,6 @@ func _is_route_reachable(from: Vector3, destination: Vector3, may_enter_destinat
 
 func _is_route_path_clear(from: Vector3, waypoints: Array[Vector3], may_enter_destination_house := false) -> bool:
 	return nav_grid != null and nav_grid.is_waypoint_path_clear(from, waypoints, may_enter_destination_house)
-
-func _resolve_building_queue_position(citizen: Citizen, destination: Vector3) -> Dictionary:
-	return building_queue_service.resolve(citizen, destination)
-
-
-func _complete_building_queue_arrival(citizen: Citizen, destination: Vector3) -> void:
-	building_queue_service.complete_arrival(citizen, destination)
-
-
-func _release_building_queue_entry(citizen: Citizen) -> void:
-	building_queue_service.release(citizen)
 
 func _update_interface(message: String) -> void:
 	var lines: Array[String] = []
@@ -983,20 +871,9 @@ func _handle_civic_post_assignment() -> void:
 	research_controller.handle_civic_post_assignment()
 
 
-func _on_arrival_greeter_ready(greeter: Citizen) -> void:
-	citizen_lifecycle_service.on_arrival_greeter_ready(greeter)
-
-
-func _cancel_arrivals_for_house(house: Node3D) -> void:
-	citizen_lifecycle_service.cancel_arrivals_for_house(house)
-
-
 func _show_house_menu() -> void:
 	if house_menu_controller != null:
 		house_menu_controller.show_house_menu()
-
-func _house_initial_residents(house: Node3D) -> void:
-	citizen_lifecycle_service.house_initial_residents(house)
 
 func _open_build_category(category: String) -> void:
 	build_controller.open_build_category(category)
@@ -1136,7 +1013,7 @@ func _employer_for_role(role: String) -> Node3D:
 		return _employment_centre_building()
 	if role == "excavation":
 			for site in dig_sites:
-				if _can_work_at_dig_site(site):
+				if excavation_service.can_work_at_dig_site(site):
 					return site.node
 			return null
 	if role not in ["construction", "forestry", "farming", "gather_food", "gather_branches", "gather_grass", "cook", "teacher", "seller", "factory_worker", "engineer", "craftsman", "official"]:
@@ -1313,23 +1190,11 @@ func _hide_all_selection_menus() -> void:
 func _add_demolition_marker(building: Node3D) -> void:
 	building_visuals.add_demolition_marker(building)
 
-func _demolition_ready(site: DemolitionSite) -> bool:
-	return building_lifecycle_service.demolition_ready(site)
-
-
 func _finish_demolition(site: DemolitionSite) -> void:
 	var building_id := String(site.building.get_meta("building_instance_id", "")) if is_instance_valid(site.building) else ""
 	building_lifecycle_service.finish_demolition(site)
 	if fixture_service != null and not building_id.is_empty():
 		fixture_service.remove_building(building_id)
-
-func _remove_building_services(building: Node3D, building_type: String) -> void:
-	building_lifecycle_service.remove_building_services(building, building_type)
-
-
-func _send_to_unemployment_registration(citizen: Citizen) -> void:
-	citizen_lifecycle_service.send_to_unemployment_registration(citizen)
-
 
 func _citizen_at_screen_position(screen_position: Vector2) -> Citizen:
 	var closest: Citizen
@@ -1696,20 +1561,8 @@ func _activate_employment_centre(centre: Node3D) -> void:
 	research_controller.activate_employment_centre(centre)
 
 
-func _consume_grass_source(position: Vector3) -> int:
-	return foraging_service.consume_grass_source(position)
-
 func _create_gathering_place_visual(building: Node3D) -> void:
 	building_visuals.create_gathering_place_visual(building)
-
-func _fire_state_for(building: Node3D) -> RefCounted:
-	return fire_management_service.fire_state_for(building)
-
-func _apply_fire_state(building: Node3D, fire_state: RefCounted) -> void:
-	fire_management_service.apply_fire_state(building, fire_state)
-
-func _is_fire_lit(building: Node3D) -> bool:
-	return fire_management_service.is_fire_lit(building)
 
 func _apply_building_wear_and_repairs() -> void:
 	building_maintenance_service.apply_building_wear_and_repairs(_destroy_building_to_pile)
@@ -1722,14 +1575,6 @@ func _destroy_building_to_pile(building: Node3D, building_type: String) -> void:
 		fixture_service.remove_building(building_id)
 
 
-func _move_stored_resources_to_pile(resources: Dictionary, warehouse_index := -1) -> void:
-	building_lifecycle_service.move_stored_resources_to_pile(resources, warehouse_index)
-
-
-func _select_best_campfire() -> void:
-	building_lifecycle_service.select_best_campfire()
-
-
 func _refresh_boundary_markers() -> void:
 	world_navigation_controller.refresh_boundary_markers()
 
@@ -1737,29 +1582,8 @@ func _refresh_boundary_markers() -> void:
 func _show_territory_overlay(show: bool) -> void:
 	build_controller.show_territory_overlay(show)
 
-func _create_resource_pile(position: Vector3, resources: Dictionary, is_backpack_pile := false) -> Node3D:
-	return resource_pile_service.create_resource_pile(position, resources, is_backpack_pile)
-
-
 func _convert_backpack_pile_to_regular() -> void:
 	backpack_node = resource_pile_service.convert_backpack_pile_to_regular(backpack_node)
-
-func _drop_resource_pile(position: Vector3, resource_type: String, amount: int) -> void:
-	resource_pile_service.drop_resource_pile(position, resource_type, amount)
-
-func _decay_resource_piles() -> void:
-	resource_pile_service.decay_resource_piles()
-
-
-func _return_in_transit_building_supplies(building: Node3D) -> void:
-	_logistics_controller.return_in_transit_building_supplies(building)
-
-func _get_delivery_position() -> Vector3:
-	return _logistics_controller.get_delivery_position()
-
-func _get_nearest_delivery_position(from: Vector3) -> Vector3:
-	return _logistics_controller.get_nearest_delivery_position(from)
-
 
 func _warehouse_delivery_position(from: Vector3, resource_type: String, amount: int) -> Vector3:
 	return storage_routing_service.warehouse_delivery_position(from, resource_type, amount)

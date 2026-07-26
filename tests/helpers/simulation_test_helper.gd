@@ -154,7 +154,7 @@ static func is_construction_site(simulation: Node, node: Node3D) -> bool:
 	return simulation._is_construction_site(node)
 
 static func create_resource_pile(simulation: Node, position: Vector3, resources: Dictionary, is_backpack_pile := false) -> Node3D:
-	return simulation._create_resource_pile(position, resources, is_backpack_pile)
+	return simulation.resource_pile_service.create_resource_pile(position, resources, is_backpack_pile)
 
 static func complete_building(simulation: Node, cell: Vector2i, building_type: String, position: Vector3, building: Node3D, blueprint: Dictionary) -> void:
 	simulation._complete_building(cell, building_type, position, building, blueprint)
@@ -176,7 +176,7 @@ static func assign_unemployed_worker(simulation: Node, role: String) -> void:
 		simulation.workforce_menu_controller.assign_unemployed_worker(role)
 
 static func demolition_ready(simulation: Node, site: DemolitionSite) -> bool:
-	return simulation._demolition_ready(site)
+	return simulation.building_lifecycle_service.demolition_ready(site)
 
 static func reserve_player_gather_storage(simulation: Node, resource_type: String, requested: int) -> int:
 	return simulation._reserve_player_gather_storage(resource_type, requested)
@@ -190,16 +190,16 @@ static func requeue_interrupted_arrivals(simulation: Node) -> void:
 	simulation.citizen_lifecycle_service.requeue_interrupted_arrivals()
 
 static func cancel_arrivals_for_house(simulation: Node, house: Node3D) -> void:
-	simulation._cancel_arrivals_for_house(house)
+	simulation.citizen_lifecycle_service.cancel_arrivals_for_house(house)
 
 static func total_housing_slots(simulation: Node) -> int:
-	return simulation._total_housing_slots()
+	return simulation.building_registry.housing_capacity()
 
 static func unhoused_citizen_count(simulation: Node) -> int:
 	return simulation._unhoused_citizen_count()
 
 static func house_initial_residents(simulation: Node, tent: Node3D) -> void:
-	simulation._house_initial_residents(tent)
+	simulation.citizen_lifecycle_service.house_initial_residents(tent)
 
 static func show_house_menu(simulation: Node) -> void:
 	simulation._show_house_menu()

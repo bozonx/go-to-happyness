@@ -16,13 +16,11 @@ extends BaseBrushController
 ## author paint the bottom of a lake they can see through.
 
 ## What the left button does.
-const TOOL_PAINT := &"paint"
-const TOOL_ERASE := &"erase"
 const TOOL_FLOOD := &"flood"
 const TOOL_FREEZE := &"freeze"
-const TOOLS: Array[StringName] = [TOOL_PAINT, TOOL_ERASE, TOOL_FLOOD, TOOL_FREEZE]
+const TOOLS: Array[StringName] = [TOOL_FLOOD, TOOL_FREEZE]
 
-var tool: StringName = TOOL_PAINT
+var tool: StringName = TOOL_FLOOD
 ## The body strokes go into. Zero until the author makes one — a stroke with no
 ## body is refused rather than quietly inventing a lake.
 var body_id := WaterBody.NO_BODY
@@ -73,9 +71,8 @@ func select_body(next_body_id: int) -> void:
 		last_message = "body: %s" % body.name
 
 
-## Creates a body of a type and starts painting with it. The level the author has
-## dialled in becomes the body's own, so a new lake remembers where its surface is
-## and the palette can put the author back on it later.
+## Creates a registry entry and selects it. It has no visible water until Flood
+## fills a basin; creation is never a painted brush stroke.
 func create_body(body_type: WaterBody.Type) -> WaterBody:
 	if _service == null:
 		return null
@@ -88,19 +85,6 @@ func create_body(body_type: WaterBody.Type) -> WaterBody:
 	return body
 
 
-func remove_selected_body() -> bool:
-	if _service == null or body_id == WaterBody.NO_BODY:
-		return false
-	var removed := _service.remove_body(body_id)
-	if removed:
-		last_message = "body removed"
-		body_id = WaterBody.NO_BODY
-		var remaining := _water.bodies()
-		if not remaining.is_empty():
-			select_body(remaining[0].id)
-	return removed
-
-
 # --- Strokes ------------------------------------------------------------------
 
 ## What the left button does, dispatched by tool. Called on press and again on
@@ -109,34 +93,10 @@ func apply() -> void:
 	if not has_hover or _service == null:
 		return
 	match tool:
-		TOOL_PAINT:
-			_paint()
-		TOOL_ERASE:
-			_erase()
 		TOOL_FLOOD:
 			_flood()
 		TOOL_FREEZE:
 			_freeze(true)
-
-
-func _paint() -> void:
-	if body_id == WaterBody.NO_BODY:
-		last_message = "create a body first"
-		return
-	if _service.paint(brush_cells(hovered_cell), body_id, level):
-		last_message = "painted %d cells" % _service.last_delta_size()
-		return
-	# Refusal is a normal answer here: a stroke entirely on ground above the
-	# surface has nothing to fill, and saying so is more useful than a silent
-	# no-op the author reads as a broken tool.
-	last_message = "nothing to paint (%s)" % _service.last_rejection()
-
-
-func _erase() -> void:
-	if _service.erase(brush_cells(hovered_cell)):
-		last_message = "dried %d cells" % _service.last_delta_size()
-		return
-	last_message = "no water here"
 
 
 func _flood() -> void:
@@ -156,15 +116,27 @@ func _freeze(frozen: bool) -> void:
 	last_message = "ice did not set (%s)" % _service.last_rejection()
 
 
-## Right button: the opposite of the current tool. Painting erases, freezing
-## thaws — one modifier instead of four extra tools.
+## Right button is the inverse operation: thaw ice, or drain the entire body
+## under the cursor. There is deliberately no per-cell erase for authored water.
 func apply_secondary() -> void:
 	if not has_hover or _service == null:
 		return
 	if tool == TOOL_FREEZE:
 		_freeze(false)
 		return
-	_erase()
+	_drain_body_at_hover()
+
+
+func _drain_body_at_hover() -> void:
+	var target_body := _water.body_id_at(hovered_cell) if _water != null else WaterBody.NO_BODY
+	if target_body == WaterBody.NO_BODY:
+		last_message = "no water body here"
+		return
+	if _service.remove_body(target_body):
+		body_id = WaterBody.NO_BODY if body_id == target_body else body_id
+		last_message = "drained whole body"
+		return
+	last_message = "could not drain (%s)" % _service.last_rejection()
 
 
 ## Freezes or thaws the whole selected body in one transaction — the seasonal

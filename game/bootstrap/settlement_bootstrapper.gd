@@ -112,7 +112,7 @@ func run(p_game: SettlementGame) -> void:
 
 func _setup_hero_services() -> void:
 	game.hero_pocket_service = HeroPocketServiceScript.new()
-	game.hero_pocket_service.configure(func() -> Citizen: return game.player_citizen, game._create_resource_pile, game._update_interface, game._refresh_interaction_hint)
+	game.hero_pocket_service.configure(func() -> Citizen: return game.player_citizen, func(position, resources, is_backpack_pile): return game.resource_pile_service.create_resource_pile(position, resources, is_backpack_pile), game._update_interface, game._refresh_interaction_hint)
 	game.hero_interaction_service = HeroInteractionServiceScript.new()
 
 
@@ -131,11 +131,11 @@ func _setup_workplace_and_visuals() -> void:
 		game.pond_positions,
 		game.craft_tent_positions,
 		game.dig_sites,
-		game._is_fire_lit,
+		func(building): return game.fire_management_service.is_fire_lit(building),
 		game._update_interface,
 		game._available_employer_capacity,
 		game._builder_job_capacity,
-		game._can_work_at_dig_site,
+		func(site): return game.excavation_service.can_work_at_dig_site(site),
 		game._employment_centre_building
 	)
 	game.building_visuals_service = BuildingVisualsServiceScript.new()
@@ -245,7 +245,7 @@ func _setup_construction_and_demolition() -> void:
 	var demolition_runtime := DemolitionRuntime.new()
 	demolition_runtime.duration = SettlementGame.DEMOLITION_DURATION
 	demolition_runtime.building_power = game._building_power
-	demolition_runtime.is_ready = game._demolition_ready
+	demolition_runtime.is_ready = func(site): return game.building_lifecycle_service.demolition_ready(site)
 	demolition_runtime.completed = game._finish_demolition
 	game.demolition = DemolitionService.new()
 	game.demolition.configure(demolition_runtime)
@@ -260,14 +260,14 @@ func _setup_canteen_and_resources() -> void:
 		game.citizens,
 		func() -> Node3D: return game.canteen,
 		func() -> int: return game.canteen_food,
-		game._set_canteen_food,
+		func(value): game.logistics_controller.set_canteen_food(value),
 		func() -> Vector3: return game.canteen_position,
 		func() -> bool: return game.pending_canteen_delivery,
 		func() -> Citizen: return game.pending_canteen_carrier,
 		func() -> int: return game.pending_canteen_delivery_amount,
-		game._set_canteen_delivery_state,
-		game._is_canteen_delivery_in_progress,
-		game._is_fire_lit,
+		func(active, carrier, amount): game.logistics_controller.set_canteen_delivery_state(active, carrier, amount),
+		func(): return game.logistics_controller.is_canteen_delivery_in_progress(),
+		func(building): return game.fire_management_service.is_fire_lit(building),
 		game._has_cook,
 		game._update_interface,
 		game._request_courier_dispatch,
@@ -313,7 +313,7 @@ func _setup_foraging_and_fire() -> void:
 		game.forage_sources,
 		game.rabbit_sources,
 		game._cell_from_position,
-		game._consume_grass_source
+		func(position): return game.foraging_service.consume_grass_source(position)
 	)
 	game.fire_management_service = FireManagementService.new()
 	game.fire_management_service.setup(
@@ -340,12 +340,12 @@ func _setup_building_maintenance() -> void:
 		game.resource_pile_service,
 		{
 			"unregister_pockets": game._unregister_service_pockets,
-			"move_stored_resources": game._move_stored_resources_to_pile,
-			"return_supplies": game._return_in_transit_building_supplies,
-			"remove_services": game._remove_building_services,
+			"move_stored_resources": func(resources, warehouse_index): game.building_lifecycle_service.move_stored_resources_to_pile(resources, warehouse_index),
+			"return_supplies": func(building): game.logistics_controller.return_in_transit_building_supplies(building),
+			"remove_services": func(building, building_type): game.building_lifecycle_service.remove_building_services(building, building_type),
 			"unregister_nav_footprint": game._unregister_navigation_footprint,
 			"refresh_boundary": game._refresh_boundary_markers,
-			"select_best_campfire": game._select_best_campfire,
+			"select_best_campfire": func(): game.building_lifecycle_service.select_best_campfire(),
 			"refresh_nav_grid": game._refresh_navigation_grid,
 			"update_workers": game._update_workers,
 			"refresh_living_status": game._refresh_living_status
@@ -385,9 +385,9 @@ func _setup_settlement_survival_and_daily_rules() -> void:
 		game._add_message,
 		game._update_interface,
 		game._apply_building_wear_and_repairs,
-		game._decay_resource_piles,
-		game._total_housing_slots,
-		game._check_daily_departures,
+		func(): game.resource_pile_service.decay_resource_piles(),
+		func(): return game.building_registry.housing_capacity(),
+		func(): game.settlement_survival_service.check_daily_departures(),
 		game._stored_resources,
 		game._warehouse_capacity
 	)
@@ -440,16 +440,16 @@ func _setup_building_lifecycle() -> void:
 		game._can_hero_build,
 		game._update_interface,
 		game._update_workers,
-		game._cancel_arrivals_for_house,
+		func(house): game.citizen_lifecycle_service.cancel_arrivals_for_house(house),
 		game._add_demolition_marker,
 		game._refresh_living_status,
 		game._unregister_service_pockets,
-		game._return_in_transit_building_supplies,
-		game._cancel_canteen_delivery,
+		func(building): game.logistics_controller.return_in_transit_building_supplies(building),
+		func(): game.canteen_service.cancel_canteen_delivery(),
 		game._unregister_navigation_footprint,
 		game._refresh_boundary_markers,
 		game._select_best_canteen,
-		game._create_resource_pile,
+		func(position, resources, is_backpack_pile): return game.resource_pile_service.create_resource_pile(position, resources, is_backpack_pile),
 		game._refresh_navigation_grid,
 		game._is_construction_site,
 		game._activate_employment_centre,
@@ -460,10 +460,10 @@ func _setup_building_lifecycle() -> void:
 		game._create_gathering_place_visual,
 		game._activate_kitchen_if_better,
 		game._add_house_light,
-		game._house_initial_residents,
+		func(house): game.citizen_lifecycle_service.house_initial_residents(house),
 		game._cancel_active_building_research,
 		game._dismiss_official,
-		game._send_to_unemployment_registration
+		func(citizen): game.citizen_lifecycle_service.send_to_unemployment_registration(citizen)
 	)
 	game.construction_priority_service = SettlementGame.ConstructionPriorityServiceScript.new()
 	game.construction_priority_service.configure(
@@ -473,7 +473,7 @@ func _setup_building_lifecycle() -> void:
 		game.campfire_node,
 		game.canteen,
 		func() -> int: return game.citizens.size(),
-		game._total_housing_slots,
+		func(): return game.building_registry.housing_capacity(),
 		func() -> int: return game.settlement.amount(SettlementGame.ResourceIds.FOOD)
 	)
 
@@ -574,13 +574,13 @@ func _setup_trade_and_logistics() -> void:
 		game.ui_manager.market_menu,
 		func() -> Node3D: return game.selected_market,
 		func() -> Node3D: return game.entrance_stone,
-		game._get_delivery_position,
+		func(): return game.logistics_controller.get_delivery_position(),
 		game._update_interface,
 		game._refresh_market_menu,
 		game._request_courier_dispatch,
 		game._total_game_minutes,
 		game._citizen_for_ai_id,
-		game._create_resource_pile,
+		func(position, resources, is_backpack_pile): return game.resource_pile_service.create_resource_pile(position, resources, is_backpack_pile),
 		game._update_workers
 	)
 	game.storage_routing_service = StorageRoutingServiceScript.new()
@@ -594,8 +594,8 @@ func _setup_trade_and_logistics() -> void:
 		game._find_path_around_houses,
 		game.nav_grid,
 		game.dig_sites,
-		game._can_work_at_dig_site,
-		game._resource_for_depth,
+		func(site): return game.excavation_service.can_work_at_dig_site(site),
+		func(site, depth): return game.excavation_service.resource_for_depth(site, depth),
 		game._update_interface
 	)
 
@@ -608,10 +608,10 @@ func _setup_courier_system() -> void:
 		game.storage_routing_service,
 		func() -> float: return game.runtime_seconds,
 		game._publish_courier_tasks,
-		game._is_courier_task_valid,
-		game._start_courier_task,
-		game._cancel_courier_task,
-		game._release_task_warehouse_reservation
+		func(task): return game.courier_task_service.is_courier_task_valid(task),
+		func(courier, task): return game.courier_task_service.start_courier_task(courier, task),
+		func(courier, task): game.courier_task_service.cancel_courier_task(courier, task),
+		func(task): game.courier_task_service.release_task_warehouse_reservation(task)
 	)
 	game.storage_delivery_service = StorageDeliveryServiceScript.new()
 	game.storage_delivery_service.configure(
@@ -619,8 +619,8 @@ func _setup_courier_system() -> void:
 		game.warehouse_positions,
 		game.courier_dispatcher,
 		game.storage_routing_service,
-		game._release_task_warehouse_reservation,
-		game._drop_resource_pile,
+		func(task): game.courier_task_service.release_task_warehouse_reservation(task),
+		func(position, resource_type, amount): game.resource_pile_service.drop_resource_pile(position, resource_type, amount),
 		game._update_interface,
 		game._request_courier_dispatch,
 		game._send_citizen_to_leisure
@@ -645,15 +645,15 @@ func _setup_courier_system() -> void:
 		func() -> bool: return game.pending_canteen_delivery,
 		func() -> float: return game.runtime_seconds,
 		game._reconcile_construction_reservations,
-		game._reconcile_repair_reservations,
+		func(): game.logistics_controller.reconcile_repair_reservations(),
 		game._cell_from_position,
-		game._get_nearest_delivery_position,
+		func(from): return game.logistics_controller.get_nearest_delivery_position(from),
 		game._warehouse_delivery_position,
 		game._construction_development_priority,
-		game._construction_material_sources,
-		game._construction_source_available,
-		game._fire_state_for,
-		game._firewood_task_priority,
+		func(resource_type, from_position): return game.logistics_controller.construction_material_sources(resource_type, from_position),
+		func(resource_type, source): return game.logistics_controller.construction_source_available(resource_type, source),
+		func(building): return game.fire_management_service.fire_state_for(building),
+		func(building, fire_state): return game.logistics_controller.firewood_task_priority(building, fire_state),
 		func(building: Node3D) -> bool: return game.fire_management_service.is_managed_fire_source(building)
 	)
 	game.courier_task_service = CourierTaskServiceScript.new()
@@ -675,13 +675,13 @@ func _setup_courier_system() -> void:
 		func() -> int: return game.canteen_food,
 		func() -> Vector3: return game.canteen_position,
 		func() -> bool: return game.pending_canteen_delivery,
-		game._set_canteen_delivery_state,
+		func(active, carrier, amount): game.logistics_controller.set_canteen_delivery_state(active, carrier, amount),
 		func() -> Node3D: return game.entrance_stone,
 		func() -> float: return game.runtime_seconds,
-		game._fire_state_for,
-		game._apply_fire_state,
+		func(building): return game.fire_management_service.fire_state_for(building),
+		func(building, fire_state): game.fire_management_service.apply_fire_state(building, fire_state),
 		game._is_route_reachable,
-		game._construction_source_available,
+		func(resource_type, source): return game.logistics_controller.construction_source_available(resource_type, source),
 		game._citizen_for_ai_id
 	)
 
@@ -708,26 +708,26 @@ func _setup_actuator_and_events() -> void:
 		game._request_courier_dispatch,
 		func() -> void: if game.citizen_ai != null: game.citizen_ai.request_decision_refresh(),
 		game._refresh_living_statuses,
-		game._drop_resource_pile,
-		game._fire_state_for,
-		game._apply_fire_state
+		func(position, resource_type, amount): game.resource_pile_service.drop_resource_pile(position, resource_type, amount),
+		func(building): return game.fire_management_service.fire_state_for(building),
+		func(building, fire_state): game.fire_management_service.apply_fire_state(building, fire_state)
 	)
 	game.simulation_event_dispatcher = SimulationEventDispatcherScript.new()
 	game.simulation_event_dispatcher.configure({
-		"start_meal": game._start_meal,
+		"start_meal": func(hour): game.canteen_service.start_meal(hour),
 		"start_park_rest": game._start_park_rest,
-		"end_ai_work_shift": game._end_ai_work_shift,
-		"clear_finished_daily_orders": game._clear_finished_daily_orders,
+		"end_ai_work_shift": func(): game.simulation_handlers.end_ai_work_shift(),
+		"clear_finished_daily_orders": func(workday_id): game.simulation_handlers.clear_finished_daily_orders(workday_id),
 		"refresh_living_statuses": game._refresh_living_statuses,
 		"update_workers": game._update_workers,
 		"apply_pending_workday_hours": game._apply_pending_workday_hours,
-		"clear_expired_overtime_orders": game._clear_expired_overtime_orders,
-		"reset_building_night_work_toggles": game._reset_building_night_work_toggles,
-		"resume_overtime_daily_orders": game._resume_overtime_daily_orders,
+		"clear_expired_overtime_orders": func(): game.simulation_handlers.clear_expired_overtime_orders(),
+		"reset_building_night_work_toggles": func(): game.simulation_handlers.reset_building_night_work_toggles(),
+		"resume_overtime_daily_orders": func(): game.simulation_handlers.resume_overtime_daily_orders(),
 		"update_interface": game._update_interface,
 		"citizen_ai_refresh": func(): if game.citizen_ai != null: game.citizen_ai.request_decision_refresh(),
-		"school_day_ended": game._on_school_day_ended,
-		"daily_settlement_update": game._on_daily_settlement_update
+		"school_day_ended": func(): game.simulation_handlers.on_school_day_ended(),
+		"daily_settlement_update": func(event): game.simulation_handlers.on_daily_settlement_update(event)
 	})
 
 

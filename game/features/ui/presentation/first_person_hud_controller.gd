@@ -22,7 +22,7 @@ func building_action_hint(building: Node3D) -> String:
 	var name: String = str(BuildingCatalogScript.definition_for(building_type).get("name", building_type)).capitalize()
 	var info_parts: Array[String] = []
 	if simulation.fire_management_service != null and simulation.fire_management_service.is_managed_fire_source(building):
-		var fire_state = simulation._fire_state_for(building)
+		var fire_state = simulation.fire_management_service.fire_state_for(building)
 		var phase: int = fire_state.phase_at(int(simulation.game_minutes))
 		var phase_label: String = ["burning", "dying", "embers", "out"][phase]
 		var delivery_hint := ", %d in transit" % fire_state.reserved_fuel if fire_state.reserved_fuel > 0 else ""

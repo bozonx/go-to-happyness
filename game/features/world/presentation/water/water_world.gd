@@ -68,18 +68,18 @@ func configure(next_water: WaterGrid, next_terrain: TerrainGrid, water_service: 
 	if water_service != null:
 		if not water_service.registry_changed.is_connected(_on_registry_changed):
 			water_service.registry_changed.connect(_on_registry_changed)
+		if not water_service.edit_committed.is_connected(_on_water_committed):
+			water_service.edit_committed.connect(_on_water_committed)
 	# Depth is water level minus ground, so raising the bottom of a lake changes
 	# this surface without the water layer being touched at all.
 	if terrain_service != null and not terrain_service.edit_committed.is_connected(_on_terrain_committed):
 		terrain_service.edit_committed.connect(_on_terrain_committed)
-	water.mark_all_chunks_dirty()
-	_collect_dirty()
+	_mark_all_chunks_dirty()
 
 
 func _process(_delta: float) -> void:
 	if water == null:
 		return
-	_collect_dirty()
 	if _pending_chunks.is_empty():
 		return
 	var budget := mini(REBUILD_BUDGET_PER_FRAME, _pending_chunks.size())
@@ -94,7 +94,6 @@ func _process(_delta: float) -> void:
 func rebuild_pending_now() -> void:
 	if water == null:
 		return
-	_collect_dirty()
 	while not _pending_chunks.is_empty():
 		var chunk: Vector2i = _pending_chunks.pop_front()
 		_queued_lookup.erase(chunk)
@@ -120,24 +119,52 @@ func set_wind(direction: Vector2, strength: float) -> void:
 func _on_registry_changed() -> void:
 	_materials.clear()
 	if water != null:
-		water.mark_all_chunks_dirty()
+		_mark_all_chunks_dirty()
+
+
+func _on_water_committed(delta: WaterDelta) -> void:
+	if water == null:
+		return
+	for cell: Vector2i in delta.cells:
+		_queue_chunk(_chunk_of(cell))
 
 
 func _on_terrain_committed(delta: TerrainDelta) -> void:
 	if water == null or not delta.changes_geometry():
 		return
+	# Wetness and the shore band are derived from terrain height as well as water.
+	# A raised lake bed can drain a cell without changing WaterGrid.revision().
+	_shore_revision = -1
 	for cell: Vector2i in delta.cells:
-		water.mark_chunk_dirty(water.chunk_of(cell))
+		for z in range(cell.y - SHORE_RANGE_CELLS, cell.y + SHORE_RANGE_CELLS + 1):
+			for x in range(cell.x - SHORE_RANGE_CELLS, cell.x + SHORE_RANGE_CELLS + 1):
+				var affected := Vector2i(x, z)
+				if water.is_inside(affected):
+					_queue_chunk(_chunk_of(affected))
 
 
-func _collect_dirty() -> void:
-	if not water.has_dirty_chunks():
+func _mark_all_chunks_dirty() -> void:
+	if water == null or water.board_cells <= 0:
 		return
-	for chunk: Vector2i in water.take_dirty_chunks():
-		if _queued_lookup.has(chunk):
-			continue
-		_queued_lookup[chunk] = true
-		_pending_chunks.append(chunk)
+	var first := _chunk_of(water.min_cell())
+	var last := _chunk_of(water.max_cell())
+	for z in range(first.y, last.y + 1):
+		for x in range(first.x, last.x + 1):
+			_queue_chunk(Vector2i(x, z))
+
+
+func _queue_chunk(chunk: Vector2i) -> void:
+	if _queued_lookup.has(chunk):
+		return
+	_queued_lookup[chunk] = true
+	_pending_chunks.append(chunk)
+
+
+func _chunk_of(cell: Vector2i) -> Vector2i:
+	return Vector2i(
+		floori(float(cell.x) / TerrainGrid.CHUNK_CELLS),
+		floori(float(cell.y) / TerrainGrid.CHUNK_CELLS),
+	)
 
 
 # --- Meshing ------------------------------------------------------------------

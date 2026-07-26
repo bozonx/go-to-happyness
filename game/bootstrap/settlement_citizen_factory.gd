@@ -82,15 +82,15 @@ func add_citizen(spawn_position: Vector3, primary_specialization := "") -> void:
 ## `simulation` and chosen the specialization. Shared by initial spawning and
 ## save restore so a new signal only needs to be registered in one place.
 func wire_citizen(citizen: Citizen) -> void:
-	citizen.setup_navigation(game._find_path_around_houses, game._get_nearest_delivery_position, game._resolve_building_queue_position, game._movement_speed_modifier_at, game._navigation_revision, game._record_trail_movement, game._is_route_reachable, game._complete_building_queue_arrival, game._release_building_queue_entry, game._find_recovery_path, game._is_route_path_clear)
+	citizen.setup_navigation(game._find_path_around_houses, func(from): return game.logistics_controller.get_nearest_delivery_position(from), func(citizen, destination): return game.building_queue_service.resolve(citizen, destination), game._movement_speed_modifier_at, game._navigation_revision, game._record_trail_movement, game._is_route_reachable, func(citizen, destination): game.building_queue_service.complete_arrival(citizen, destination), func(citizen): game.building_queue_service.release(citizen), game._find_recovery_path, game._is_route_path_clear)
 	citizen.setup_registration_service(game._can_start_registration, game._registration_duration)
 	if game.actuator_bridge != null:
 		game.actuator_bridge.wire_citizen(citizen)
 	citizen.tree_harvested.connect(game._on_tree_harvested)
 	citizen.employment_processing_finished.connect(game._on_employment_processing_finished)
-	citizen.arrival_greeter_ready.connect(game._on_arrival_greeter_ready)
+	citizen.arrival_greeter_ready.connect(func(greeter): game.citizen_lifecycle_service.on_arrival_greeter_ready(greeter))
 	citizen.outside_work_departed.connect(game._on_outside_work_departed)
-	citizen.citizen_leaving_departed.connect(game._on_citizen_leaving_departed)
+	citizen.citizen_leaving_departed.connect(func(citizen): game.citizen_lifecycle_service.on_citizen_leaving_departed(citizen))
 
 
 func create_starter_backpack() -> void:
@@ -101,7 +101,7 @@ func create_starter_backpack() -> void:
 	var terrain_height := game._terrain_height_at(game.backpack_position.x, game.backpack_position.z, 0.0)
 	if not is_nan(terrain_height):
 		game.backpack_position.y = terrain_height + 0.08
-	game._create_resource_pile(game.backpack_position, game.settlement.backpack, true)
+	game.resource_pile_service.create_resource_pile(game.backpack_position, game.settlement.backpack, true)
 	if not game.resource_piles.is_empty():
 		game.backpack_node = game.resource_piles[game.resource_piles.size() - 1].node
 

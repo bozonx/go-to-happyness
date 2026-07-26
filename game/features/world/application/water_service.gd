@@ -9,12 +9,8 @@ extends RefCounted
 ## undo at all — and here it is worse still, because water changes passability and
 ## a stale navigation field is a citizen walking into a lake.
 ##
-## Registry edits (adding, removing, retyping a body) are deliberately NOT on the
-## undo stack. A body is an authored object with a name, a colour and a fish
-## stock, edited in a side panel like a building blueprint; the stack is for
-## strokes over the board. Removing a body does dry its cells, and that is why
-## `remove_body` clears the history rather than leaving entries that would restore
-## cells pointing at a body which no longer exists.
+## Registry edits are transactions too. Removing a body drains all of its cells,
+## so excluding it from the editor's one undo stack would make Ctrl+Z lie.
 
 const MAX_UNDO_STEPS := 128
 
@@ -23,6 +19,7 @@ const REASON_NO_GRID: StringName = &"no_grid"
 const REASON_NO_BODY: StringName = &"no_body"
 const REASON_NOTHING_TO_DO: StringName = &"nothing_to_do"
 const REASON_NOT_FREEZABLE: StringName = &"not_freezable"
+const REASON_FLOW_REQUIRES_RIVER: StringName = &"flow_requires_river"
 
 signal edit_committed(delta: WaterDelta)
 signal edit_rejected(reason: StringName)
@@ -77,23 +74,24 @@ func create_body(body_type: WaterBody.Type, surface_height := 0) -> WaterBody:
 	if grid == null:
 		_reject(REASON_NO_GRID)
 		return null
-	var body := grid.create_body(body_type, surface_height)
-	if body != null:
-		registry_changed.emit()
-	return body
+	var next_id := grid.next_free_body_id()
+	if next_id == WaterBody.NO_BODY:
+		_reject(REASON_NOTHING_TO_DO)
+		return null
+	var body := WaterBody.of_type(next_id, body_type)
+	body.surface_height = surface_height
+	_commit_registry_edit(WaterBodyEdit.creation(body))
+	return grid.body(body.id)
 
 
-## Drops a body and every cell of it. The undo stack goes with it: entries below
-## may reference the body, and restoring a cell into a body that is gone is the
-## one state the layer must never reach.
+## Drops a body and every cell of it as one undoable operation.
 func remove_body(body_id: int) -> bool:
 	if grid == null:
 		return _reject(REASON_NO_GRID)
-	if not grid.remove_body(body_id):
+	var body := grid.body(body_id)
+	if body == null:
 		return _reject(REASON_NO_BODY)
-	clear_history()
-	registry_changed.emit()
-	return true
+	return _commit_registry_edit(WaterBodyEdit.removal(grid, body))
 
 
 func notify_body_edited() -> void:
@@ -231,6 +229,8 @@ func set_flow(cells: Array[Vector2i], body_id: int, direction: int, strength: in
 	if not grid.has_body(body_id):
 		return _reject(REASON_NO_BODY)
 	var body := grid.body(body_id)
+	if body == null or body.type != WaterBody.Type.RIVER:
+		return _reject(REASON_FLOW_REQUIRES_RIVER)
 	var clamped_strength := clampi(strength, 0, WaterBody.MAX_FLOW_STRENGTH)
 	var new_flow_value := (direction & WaterBody.FLOW_DIR_MASK) | (clamped_strength << WaterBody.FLOW_STRENGTH_SHIFT)
 	var edit_cells: Array[Vector2i] = []
@@ -281,6 +281,8 @@ func undo() -> bool:
 	delta.revert(grid)
 	_redo_stack.push_back(delta)
 	_last_delta = delta
+	if delta is WaterBodyEdit:
+		registry_changed.emit()
 	edit_committed.emit(delta)
 	return true
 
@@ -292,6 +294,8 @@ func redo() -> bool:
 	delta.apply(grid)
 	_undo_stack.push_back(delta)
 	_last_delta = delta
+	if delta is WaterBodyEdit:
+		registry_changed.emit()
 	edit_committed.emit(delta)
 	return true
 
@@ -309,6 +313,21 @@ func _commit_or_reject(delta: WaterDelta) -> bool:
 	_redo_stack.clear()
 	_last_rejection = REASON_NONE
 	edit_committed.emit(delta)
+	return true
+
+
+func _commit_registry_edit(edit: WaterBodyEdit) -> bool:
+	if edit == null:
+		return _reject(REASON_NOTHING_TO_DO)
+	edit.apply(grid)
+	_last_delta = edit
+	_undo_stack.push_back(edit)
+	if _undo_stack.size() > MAX_UNDO_STEPS:
+		_undo_stack.pop_front()
+	_redo_stack.clear()
+	_last_rejection = REASON_NONE
+	registry_changed.emit()
+	edit_committed.emit(edit)
 	return true
 
 

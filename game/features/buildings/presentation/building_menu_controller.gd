@@ -196,7 +196,7 @@ func show_building_menu() -> void:
 		var definition: Dictionary = BuildingCatalogScript.definition_for(building_type)
 		simulation.ui_manager.building_menu_title.text = str(definition.get("name", building_type.capitalize()))
 		if BuildingTypes.is_cook_campfire(building_type):
-			var cook_fire_state: Variant = simulation._fire_state_for(simulation.selected_building)
+			var cook_fire_state: Variant = simulation.fire_management_service.fire_state_for(simulation.selected_building)
 			var cook_fuel: int = cook_fire_state.total_committed_fuel()
 			simulation.ui_manager.building_menu_title.text += S.COOK_FIRE_BRANCHES_FORMAT % [cook_fuel, simulation.FIRE_SUPPLY_TARGET]
 		simulation.ui_manager.building_cook_button.visible = BuildingTypes.is_kitchen(building_type)
@@ -235,7 +235,7 @@ func show_building_menu() -> void:
 		simulation.ui_manager.building_cancel_construction_button.visible = false
 		var is_demolishable: bool = BuildingCatalogScript.is_demolishable(building_type) and simulation.selected_building != simulation.entrance_stone
 		simulation.ui_manager.building_demolish_button.visible = is_demolishable
-		simulation.ui_manager.building_relight_button.visible = simulation.fire_management_service != null and simulation.fire_management_service.is_managed_fire_source(simulation.selected_building) and not simulation._is_fire_lit(simulation.selected_building)
+		simulation.ui_manager.building_relight_button.visible = simulation.fire_management_service != null and simulation.fire_management_service.is_managed_fire_source(simulation.selected_building) and not simulation.fire_management_service.is_fire_lit(simulation.selected_building)
 
 		var officer: Variant = simulation.workplace_controller.workplace_worker(simulation.selected_building)
 		simulation.ui_manager.building_overtime_button.visible = is_workplace and officer != null

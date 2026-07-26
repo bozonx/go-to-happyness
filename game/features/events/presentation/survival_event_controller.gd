@@ -203,7 +203,7 @@ func skip_night() -> void:
 	# Remove dawn departures immediately so the simulated result matches elapsed time.
 	for citizen in simulation.citizens.duplicate():
 		if is_instance_valid(citizen) and citizen.state == Citizen.State.LEAVING:
-			simulation._on_citizen_leaving_departed(citizen)
+			simulation.citizen_lifecycle_service.on_citizen_leaving_departed(citizen)
 	simulation.outside_work_controller.return_outside_workers()
 	_apply_skip_night_incident()
 	simulation._update_workers()
