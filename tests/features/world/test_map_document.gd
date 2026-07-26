@@ -36,8 +36,11 @@ static func run_all() -> void:
 static func _test_meta_round_trips_through_json() -> void:
 	var document := MapDocument.create(&"green_valley", "Зелёная долина", BOARD_CELLS)
 	document.meta.author = "ivan"
+	document.meta.biomes = [&"forest", &"mountain"]
+	document.meta.tags = [&"survival"]
 	document.meta.border_level = -2.5
 	document.meta.start.era = &"tent"
+	document.meta.start.style = &"roman"
 	document.meta.start.day_of_year = 200
 	document.meta.start.latitude = 60.0
 	document.meta.start.time_of_day = 540
@@ -50,9 +53,12 @@ static func _test_meta_round_trips_through_json() -> void:
 	assert(restored.meta.id == &"green_valley")
 	assert(restored.meta.name == "Зелёная долина")
 	assert(restored.meta.author == "ivan")
+	assert(restored.meta.biomes == [&"forest", &"mountain"])
+	assert(restored.meta.tags == [&"survival"])
 	assert(restored.meta.board_cells == BOARD_CELLS)
 	assert(is_equal_approx(restored.meta.border_level, -2.5))
 	assert(restored.meta.start.day_of_year == 200)
+	assert(restored.meta.start.style == &"roman")
 	assert(is_equal_approx(restored.meta.start.latitude, 60.0))
 	assert(restored.meta.start.time_of_day == 540)
 	assert(restored.meta.start.mode_id == MapStart.MODE_HERO)

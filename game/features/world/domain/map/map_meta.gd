@@ -35,6 +35,8 @@ var kind: StringName = KIND_MAP
 var id: StringName = &""
 var name := ""
 var author := ""
+var biomes: Array[StringName] = []
+var tags: Array[StringName] = []
 ## Changes on every save. A game save stores it alongside `map_ref` so a session
 ## can tell the player its map was edited since (§14.2) — it never blocks loading.
 var revision := ""
@@ -58,6 +60,10 @@ static func from_dict(source: Dictionary) -> MapMeta:
 	meta.id = StringName(source.get("id", meta.id))
 	meta.name = String(source.get("name", meta.name))
 	meta.author = String(source.get("author", meta.author))
+	for biome: Variant in source.get("biomes", []):
+		meta.biomes.append(StringName(biome))
+	for tag: Variant in source.get("tags", []):
+		meta.tags.append(StringName(tag))
 	meta.revision = String(source.get("revision", meta.revision))
 
 	var board: Dictionary = source.get("board", {})
@@ -81,6 +87,8 @@ func to_dict() -> Dictionary:
 		"id": String(id),
 		"name": name,
 		"author": author,
+		"biomes": biomes.map(func(value: StringName) -> String: return String(value)),
+		"tags": tags.map(func(value: StringName) -> String: return String(value)),
 		"revision": revision,
 		"required_content": required_content.duplicate(true),
 	}

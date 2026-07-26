@@ -12,6 +12,9 @@ const BuildingGridModelScript = preload("res://game/features/buildings/domain/ed
 const PlaceZoneRecordScript = preload("res://game/features/buildings/domain/editor/place_zone_record.gd")
 const ZoneAnchorRecordScript = preload("res://game/features/buildings/domain/editor/zone_anchor_record.gd")
 const BuildingZoneServiceScript = preload("res://game/features/buildings/application/building_zone_service.gd")
+const ContentIndexScript = preload("res://game/features/content/application/content_index.gd")
+const ContentEntryScript = preload("res://game/features/content/domain/content_entry.gd")
+const StyleResolverScript = preload("res://game/features/content/application/style_resolver.gd")
 
 
 const BlockMeshLibraryScript = preload("res://game/features/buildings/presentation/editor/block_mesh_library.gd")
@@ -35,6 +38,7 @@ static func run_all() -> void:
 	_test_runtime_zone_subtype_survives()
 	_test_invalid_blueprints_are_rejected()
 	_test_era_material_replacement()
+	_test_style_resolver_fallback_chain()
 
 
 static func _test_catalog() -> void:
@@ -92,6 +96,30 @@ static func _test_anchoring() -> void:
 
 static func _approx(a: Vector2, b: Vector2) -> bool:
 	return is_equal_approx(a.x, b.x) and is_equal_approx(a.y, b.y)
+
+
+static func _test_style_resolver_fallback_chain() -> void:
+	var index := ContentIndexScript.new()
+	for data in [
+		[&"brick", &"roman"], [ &"brick", &"generic"],
+		[&"clay", &"roman"], [ &"tent", &"generic"],
+	]:
+		var entry := ContentEntryScript.new(&"builtin", StringName("bakery_%s_%s" % data), &"blueprint", "")
+		entry.runtime_key = entry.id
+		entry.kind = &"building"
+		entry.role = &"bakery"
+		entry.era = data[0]
+		entry.style = data[1]
+		index.entries[entry.runtime_key] = entry
+	var resolver := StyleResolverScript.new(index)
+	assert(resolver.resolve(&"bakery", &"brick", &"roman").style == &"roman")
+	index.entries.erase(&"bakery_brick_roman")
+	assert(resolver.resolve(&"bakery", &"brick", &"roman").style == &"generic")
+	index.entries.erase(&"bakery_brick_generic")
+	assert(resolver.resolve(&"bakery", &"brick", &"roman").era == &"clay")
+	index.entries.erase(&"bakery_clay_roman")
+	assert(resolver.resolve(&"bakery", &"brick", &"roman").era == &"tent")
+	assert(resolver.resolve(&"missing", &"brick", &"roman") == null)
 
 
 static func _test_mesh_library() -> void:

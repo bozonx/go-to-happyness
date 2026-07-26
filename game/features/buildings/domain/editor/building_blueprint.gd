@@ -21,7 +21,7 @@ const ZoneRequirementsScript = preload("res://game/features/buildings/domain/edi
 ## v3: `objects[].pos` is relative to the footprint centre (see `pivot_offset`).
 ## No migration branch for v2: every v2 file in the project places decor at the
 ## origin, which the centre reading interprets correctly.
-const FORMAT_VERSION := 3
+const FORMAT_VERSION := 4
 const MIN_LOAD_VERSION := 1
 const FILE_EXTENSION := "gdbuilding.json"
 
@@ -29,6 +29,12 @@ var version: int = FORMAT_VERSION
 ## `id` doubles as the in-game building_type key (e.g. "campfire"); the resolver
 ## maps a gameplay building_type to the blueprint file whose id matches.
 var id: StringName = &"new_building"
+## Gameplay identity, availability era and visual variant are deliberately
+## independent from the file id (content_packaging.md §3).
+var role: StringName = &"new_building"
+var era: StringName = &"tent"
+var style: StringName = &"generic"
+var kind: StringName = &"building"
 var name: String = "Новое здание"
 ## Stamp rewritten on every save, exactly like a map package's (design_docs/core/
 ## content_packaging.md §7). A game save keeps it next to `blueprint_ref` so a
@@ -40,7 +46,11 @@ var construction_style: StringName = &"surface"  ## &"surface" | &"underground"
 var building_type: String:
 	get: return String(construction_style)
 	set(value): construction_style = StringName(value)
-var category: StringName = &"tent"
+## Compatibility alias for the pre-v4 editor and construction code. New content
+## is serialized as `era`; callers can migrate at their own pace.
+var category: StringName:
+	get: return era
+	set(value): era = value
 ## Standard building used when a referenced player file is unavailable.
 var fallback_building_id: StringName = &"house"
 var grid_bounds: Vector3i = Vector3i(8, 4, 8)
@@ -193,10 +203,13 @@ func to_dict() -> Dictionary:
 	return {
 		"version": FORMAT_VERSION,
 		"id": String(id),
+		"role": String(role),
+		"era": String(era),
+		"style": String(style),
+		"kind": String(kind),
 		"name": name,
 		"revision": revision,
 		"construction_style": String(construction_style),
-		"category": String(category),
 		"fallback_building_id": String(fallback_building_id),
 		"grid_bounds": {"x": grid_bounds.x, "y": grid_bounds.y, "z": grid_bounds.z},
 		"footprint": [footprint.x, footprint.y],
@@ -225,12 +238,17 @@ static func from_dict(data: Dictionary) -> BuildingBlueprint:
 	var bp := BuildingBlueprint.new()
 	bp.version = int(data.get("version", FORMAT_VERSION))
 	bp.id = StringName(data.get("id", "new_building"))
+	# v3 -> v4: category became era and the missing axes receive their safe
+	# defaults. Keep `category` populated for existing gameplay consumers.
+	bp.role = StringName(data.get("role", bp.id))
+	bp.era = StringName(data.get("era", data.get("category", "tent")))
+	bp.style = StringName(data.get("style", "generic"))
+	bp.kind = StringName(data.get("kind", "building"))
 	bp.name = String(data.get("name", "Новое здание"))
 	bp.revision = String(data.get("revision", ""))
 	# `building_type` was used by the initial prototype for surface/underground.
 	# It remains a read alias inside v1, but new files use the unambiguous name.
 	bp.construction_style = StringName(data.get("construction_style", data.get("building_type", "surface")))
-	bp.category = StringName(data.get("category", "tent"))
 	bp.fallback_building_id = StringName(data.get("fallback_building_id", "house"))
 	bp.grid_bounds = _vec3i_from(data.get("grid_bounds", {}), Vector3i(8, 4, 8))
 	bp.footprint = _vec2i_from(data.get("footprint", []), Vector2i.ZERO)
@@ -362,10 +380,16 @@ func validation_errors() -> Array[String]:
 		errors.append("Blueprint name is empty")
 	if construction_style not in [&"surface", &"underground"]:
 		errors.append("Unknown construction_style: %s" % construction_style)
-	if category not in BuildingMaterialCatalogScript.ERA_ORDER:
-		errors.append("Unknown era category: %s" % category)
+	if not _valid_id(String(role)):
+		errors.append("Invalid blueprint role: %s" % role)
+	if era not in BuildingMaterialCatalogScript.ERA_ORDER:
+		errors.append("Unknown era: %s" % era)
+	if not _valid_id(String(style)):
+		errors.append("Invalid blueprint style: %s" % style)
+	if kind not in [&"building", &"scenery"]:
+		errors.append("Unknown blueprint kind: %s" % kind)
 	# Underground structures can only be dug from the earth era onward.
-	elif construction_style == &"underground" and BuildingMaterialCatalogScript.era_rank(category) < BuildingMaterialCatalogScript.era_rank(&"earth"):
+	elif construction_style == &"underground" and BuildingMaterialCatalogScript.era_rank(era) < BuildingMaterialCatalogScript.era_rank(&"earth"):
 		errors.append("Underground construction requires the earth era or later")
 	if grid_bounds.x <= 0 or grid_bounds.y <= 0 or grid_bounds.z <= 0:
 		errors.append("grid_bounds must be positive")
@@ -377,8 +401,8 @@ func validation_errors() -> Array[String]:
 			errors.append("Unknown block id: %s" % block.block_id)
 		if not BuildingMaterialCatalogScript.has_material(block.material_id):
 			errors.append("Unknown material id: %s" % block.material_id)
-		elif not BuildingMaterialCatalogScript.is_available_in_era(block.material_id, category):
-			errors.append("Material %s requires a later era than %s" % [block.material_id, category])
+		elif not BuildingMaterialCatalogScript.is_available_in_era(block.material_id, era):
+			errors.append("Material %s requires a later era than %s" % [block.material_id, era])
 		var normalized_variant := BuildingBlockCatalogScript.normalize_variant(block.block_id, block.variant)
 		if block.variant != &"" and normalized_variant != block.variant:
 			errors.append("Unknown size %s for block %s" % [block.variant, block.block_id])

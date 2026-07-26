@@ -16,6 +16,7 @@ const TEST_ID := &"_test_modular_pipeline"
 
 
 func _init() -> void:
+	_test_v3_migrates_to_content_axes()
 	var blueprint := BlueprintScript.new()
 	blueprint.id = TEST_ID
 	blueprint.name = "Test modular workshop"
@@ -69,6 +70,21 @@ func _init() -> void:
 
 	_test_builtin_tent()
 	quit(0)
+
+
+func _test_v3_migrates_to_content_axes() -> void:
+	var legacy := BlueprintScript.from_dict({
+		"version": 3, "id": "legacy_bakery", "name": "Legacy bakery",
+		"category": "clay", "construction_style": "surface",
+		"grid_bounds": {"x": 1, "y": 1, "z": 1}, "footprint": [1, 1],
+	})
+	assert(legacy.version == 4)
+	assert(legacy.role == &"legacy_bakery")
+	assert(legacy.era == &"clay")
+	assert(legacy.style == &"generic")
+	assert(legacy.kind == &"building")
+	var serialized := legacy.to_dict()
+	assert(serialized.has("era") and not serialized.has("category"))
 
 
 ## The shipped tent blueprint must render from blocks yet keep the tent's static

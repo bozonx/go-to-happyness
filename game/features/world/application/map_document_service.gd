@@ -16,6 +16,8 @@ extends RefCounted
 ## folder with a new `map.json` and last week's terrain.
 
 const ContentRevisionScript = preload("res://game/features/content/domain/content_revision.gd")
+const ContentIndexScript = preload("res://game/features/content/application/content_index.gd")
+const ContentIdScript = preload("res://game/features/content/domain/content_id.gd")
 
 const SOURCE_BUILTIN := &"builtin"
 const SOURCE_PLAYER := &"player"
@@ -34,6 +36,7 @@ const KNOWN_FILES: Array[String] = [MAP_JSON, TERRAIN_BIN, "water.bin", "surface
 const USER_NAMESPACE := "user:"
 
 var last_error := ""
+var _content_index: ContentIndex
 
 
 # --- Addressing ---------------------------------------------------------------
@@ -41,17 +44,12 @@ var last_error := ""
 ## The key a save file and a launch config store. Built-in maps keep their bare
 ## id so shipped content is addressed the same way it always was.
 static func runtime_key(source: StringName, id: StringName) -> StringName:
-	if source == SOURCE_PLAYER:
-		return StringName(USER_NAMESPACE + String(id))
-	return id
+	return ContentIdScript.runtime_key(source, id)
 
 
 ## Splits a runtime key back into source and id.
 static func split_key(key: StringName) -> Dictionary:
-	var text := String(key)
-	if text.begins_with(USER_NAMESPACE):
-		return {"source": SOURCE_PLAYER, "id": StringName(text.substr(USER_NAMESPACE.length()))}
-	return {"source": SOURCE_BUILTIN, "id": key}
+	return ContentIdScript.split_runtime_key(key)
 
 
 static func root_of(source: StringName) -> String:
@@ -69,12 +67,23 @@ static func package_path(source: StringName, id: StringName) -> String:
 ## name, board size and whether a preview exists.
 func list_maps() -> Array[Dictionary]:
 	var found: Array[Dictionary] = []
-	for source: StringName in [SOURCE_BUILTIN, SOURCE_PLAYER]:
-		for id: StringName in _ids_in(root_of(source)):
-			var entry := read_header(source, id)
-			if not entry.is_empty():
-				found.append(entry)
+	_ensure_content_index()
+	for indexed_entry in _content_index.map_entries():
+		var parsed: Dictionary = indexed_entry.metadata
+		var meta := MapMeta.from_dict(parsed)
+		found.append({"source": indexed_entry.source, "id": indexed_entry.id,
+			"key": indexed_entry.runtime_key, "name": meta.name if not meta.name.is_empty() else String(indexed_entry.id),
+			"kind": meta.kind, "board_cells": meta.board_cells, "revision": meta.revision,
+			"author": meta.author, "path": indexed_entry.path,
+			"has_preview": FileAccess.file_exists(indexed_entry.path.path_join(PREVIEW_PNG))})
 	return found
+
+
+func _ensure_content_index() -> void:
+	# Rebuild each query: player authors can save content without notifying this
+	# service, and phase 1 deliberately has no persistent cache yet.
+	_content_index = ContentIndexScript.new()
+	_content_index.rebuild()
 
 
 ## Header only — `map.json` without the binary layers. This is what a map list
@@ -114,8 +123,12 @@ func _ids_in(root: String) -> Array[StringName]:
 # --- Loading ------------------------------------------------------------------
 
 func load_map(key: StringName) -> MapDocument:
-	var address := split_key(key)
-	return load_package(package_path(address["source"], address["id"]))
+	_ensure_content_index()
+	var entry = _content_index.get_entry(key)
+	if entry == null or entry.content_type != &"map":
+		last_error = "карта не найдена: %s" % key
+		return null
+	return load_package(entry.path)
 
 
 ## Opens a package folder. Returns null and sets `last_error` on a map that is not
@@ -176,6 +189,7 @@ func save_map_to(document: MapDocument, final_path: String, preview: Image = nul
 		return ""
 
 	var staging_path := final_path + ".tmp"
+	_populate_required_content(document)
 	document.meta.revision = ContentRevisionScript.new_stamp()
 
 	if DirAccess.dir_exists_absolute(staging_path):
@@ -228,6 +242,33 @@ static func _read_json(path: String) -> Dictionary:
 		return {}
 	var parsed: Variant = JSON.parse_string(text)
 	return parsed if parsed is Dictionary else {}
+
+
+## A map must carry authored blueprint references it embeds. Walk raw sections
+## so future placement formats participate without coupling this service to them.
+static func _populate_required_content(document: MapDocument) -> void:
+	var found: Dictionary = {}
+	_collect_content_references(document.sections, found)
+	var refs: Array[Dictionary] = []
+	for key in found:
+		refs.append(found[key])
+	refs.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return JSON.stringify(a) < JSON.stringify(b))
+	document.meta.required_content = refs
+
+
+static func _collect_content_references(value: Variant, found: Dictionary) -> void:
+	if value is Array:
+		for child in value:
+			_collect_content_references(child, found)
+	elif value is Dictionary:
+		var data := value as Dictionary
+		var reference: Variant = data.get("blueprint_ref", null)
+		if reference is Dictionary:
+			var ref := (reference as Dictionary).duplicate(true)
+			if not String(ref.get("id", "")).is_empty():
+				found[JSON.stringify(ref)] = ref
+		for child in data.values():
+			_collect_content_references(child, found)
 
 
 func _write_text(path: String, text: String) -> bool:

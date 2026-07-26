@@ -48,7 +48,7 @@ func launch_from_save(save_path: String) -> void:
 
 func launch_building_editor(player_mode: bool = true) -> void:
 	pending_save_path = ""
-	editor_player_mode = player_mode
+	editor_player_mode = player_mode or not OS.has_feature("editor")
 	get_tree().change_scene_to_file(BUILDING_EDITOR_SCENE)
 
 
@@ -65,4 +65,3 @@ func return_to_main_menu() -> void:
 func reset_to_default() -> void:
 	pending_save_path = ""
 	active_launch_config = GameLaunchConfigScript.for_tent_era()
-

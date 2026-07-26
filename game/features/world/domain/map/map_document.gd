@@ -106,7 +106,7 @@ func set_section(key: String, value: Array) -> void:
 
 static func _is_meta_key(key: String) -> bool:
 	return key in [
-		"format_version", "kind", "id", "name", "author", "revision",
+		"format_version", "kind", "id", "name", "author", "biomes", "tags", "revision",
 		"board", "border", "start", "required_content",
 	]
 

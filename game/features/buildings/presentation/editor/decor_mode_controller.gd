@@ -8,9 +8,8 @@ extends Node3D
 ## spawned instances, the placement ghost, the selection marker and its own undo
 ## stack — so the editor script only routes input and mode switching here.
 ##
-## Three tools share the left mouse button: PLACE drops the catalog selection,
-## SELECT picks and drags an existing object, ERASE removes the one under the
-## cursor.
+## One contextual tool shares the left mouse button: it drops the catalog
+## selection on empty ground, or selects and drags an existing object.
 
 const FurnishingAssetCatalogScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_catalog.gd")
 const FurnishingAssetDefScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_def.gd")
@@ -19,8 +18,6 @@ const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain
 const FixtureDefinitionScript = preload("res://game/features/buildings/domain/editor/fixture_definition.gd")
 const FireSourceDefaultsScript = preload("res://game/features/buildings/domain/editor/fire_source_defaults.gd")
 const ZoneRequirementsScript = preload("res://game/features/buildings/domain/editor/zone_requirements.gd")
-
-enum Tool { PLACE, SELECT, ERASE }
 
 const ROTATION_STEP_DEG := 15.0
 const UNDO_LIMIT := 40
@@ -41,7 +38,6 @@ var current_category: StringName = &"camping"
 var _expanded_categories: Dictionary = {}
 var current_asset_id: StringName = &""
 var current_snap_step: float = 1.0
-var current_tool: int = Tool.PLACE
 var current_yaw_deg: float = 0.0
 var current_pitch_deg: float = 0.0
 var current_roll_deg: float = 0.0
@@ -59,6 +55,8 @@ var _ghost: Node3D = null
 var _ghost_asset_id: StringName = &""
 var _ghost_material: StandardMaterial3D = null
 var _selection_marker: MeshInstance3D = null
+var _hover_marker: MeshInstance3D = null
+var _hovered_object_id: String = ""
 var _undo_stack: Array = []
 var _redo_stack: Array = []
 var _recent_assets: Array[StringName] = []
@@ -100,6 +98,7 @@ var _roll_spin: SpinBox = null
 var _scale_spin: SpinBox = null
 var _duplicate_btn: Button = null
 var _delete_btn: Button = null
+var _toolbar_delete_btn: Button = null
 var _rot_label: Label = null
 var _layer_label: Label = null
 var _collision_overlay_btn: Button = null
@@ -108,7 +107,6 @@ var _collision_overlays: Dictionary = {}  ## object id (String) -> Array[MeshIns
 var _zone_filter_option: OptionButton = null
 var _zone_highlight: MeshInstance3D = null
 var _zone_out_of_bounds_label: Label = null
-var _tool_buttons: Dictionary = {}
 var _asset_buttons: Dictionary = {}
 var _recent_buttons: Dictionary = {}
 
@@ -164,6 +162,7 @@ func setup(editor: Node) -> void:
 	_replace_btn = editor.get_node("%DecorReplaceBtn")
 	_duplicate_btn = editor.get_node("%DecorDuplicateBtn")
 	_delete_btn = editor.get_node("%DecorDeleteBtn")
+	_toolbar_delete_btn = editor.get_node("%DecorDeleteSelectionBtn")
 	_undo_btn = editor.get_node("%DecorUndoBtn")
 	_redo_btn = editor.get_node("%DecorRedoBtn")
 	_rot_label = editor.get_node("%DecorRotLabel")
@@ -193,13 +192,6 @@ func setup(editor: Node) -> void:
 
 	_build_fixture_capability_options()
 
-	_tool_buttons[Tool.PLACE] = editor.get_node("%DecorToolPlaceBtn")
-	_tool_buttons[Tool.SELECT] = editor.get_node("%DecorToolSelectBtn")
-	_tool_buttons[Tool.ERASE] = editor.get_node("%DecorToolEraseBtn")
-	for tool_id in _tool_buttons.keys():
-		var button: Button = _tool_buttons[tool_id]
-		button.pressed.connect(_set_tool.bind(tool_id))
-
 	editor.get_node("%DecorRotLeftBtn").pressed.connect(rotate_selection.bind("y", -1))
 	editor.get_node("%DecorRotRightBtn").pressed.connect(rotate_selection.bind("y", 1))
 	editor.get_node("%DecorRotResetBtn").pressed.connect(_reset_rotation)
@@ -220,6 +212,7 @@ func setup(editor: Node) -> void:
 	_zone_filter_option.item_selected.connect(_on_zone_filter_selected)
 	_duplicate_btn.pressed.connect(duplicate_selection)
 	_delete_btn.pressed.connect(delete_selection)
+	_toolbar_delete_btn.pressed.connect(delete_selection)
 	_replace_btn.pressed.connect(_replace_selected_object)
 	_undo_btn.pressed.connect(undo)
 	_redo_btn.pressed.connect(redo)
@@ -236,7 +229,6 @@ func setup(editor: Node) -> void:
 	_category_option.visible = false
 	_rebuild_category_options()
 	_rebuild_asset_buttons()
-	_set_tool(Tool.PLACE)
 	_update_rotation_label()
 
 
@@ -302,30 +294,34 @@ func on_left_pressed() -> void:
 	if not _editor.cursor_valid:
 		return
 	var hit: Vector3 = _editor.cursor_hit_pos
-	match current_tool:
-		Tool.PLACE:
-			_place_or_select_at(hit)
-		Tool.SELECT:
-			var picked := pick_object_at(hit)
-			select_object(picked)
-			if not picked.is_empty():
-				var record := find_record(picked)
-				_drag_offset = record.pos - Vector3(hit.x, record.pos.y, hit.z)
-				_dragging = true
-				_drag_started = false
-		Tool.ERASE:
-			var target := pick_object_at(hit)
-			if target.is_empty():
-				_editor.set_status("Под курсором нет объекта декора.")
-			else:
-				_push_undo()
-				_erase_object(target)
-				_editor.set_status("Объект удалён.")
+	var picked := pick_object_at(hit)
+	if not picked.is_empty():
+		select_object(picked)
+		var record := find_record(picked)
+		_drag_offset = record.pos - Vector3(hit.x, record.pos.y, hit.z)
+		_dragging = true
+		_drag_started = false
+		return
+	_place_or_select_at(hit)
 
 
 func on_left_released() -> void:
 	_dragging = false
 	_drag_started = false
+	refresh_hover()
+
+
+func erase_at_cursor() -> void:
+	if not _editor.cursor_valid:
+		return
+	var target := pick_object_at(_editor.cursor_hit_pos)
+	if target.is_empty():
+		_editor.set_status("Под курсором нет объекта декора.")
+		return
+	_push_undo()
+	_erase_object(target)
+	_editor.set_status("Объект удалён.")
+	refresh_hover()
 
 
 func on_drag() -> void:
@@ -367,15 +363,6 @@ func handle_key(event: InputEventKey) -> bool:
 				return true
 		return false
 	match event.keycode:
-		KEY_B:
-			_set_tool(Tool.PLACE)
-			return true
-		KEY_V:
-			_set_tool(Tool.SELECT)
-			return true
-		KEY_E:
-			_set_tool(Tool.ERASE)
-			return true
 		KEY_C, KEY_R:
 			rotate_selection("y", -1 if event.shift_pressed else 1)
 			return true
@@ -392,16 +379,6 @@ func handle_key(event: InputEventKey) -> bool:
 			delete_selection()
 			return true
 	return false
-
-
-func _set_tool(tool_id: int) -> void:
-	current_tool = tool_id
-	for id in _tool_buttons.keys():
-		(_tool_buttons[id] as Button).button_pressed = id == tool_id
-	if tool_id != Tool.PLACE:
-		_hide_ghost()
-	refresh_ghost()
-
 
 # ---------------------------------------------------------------------------
 # Placement maths
@@ -565,9 +542,8 @@ func find_record(object_id: String) -> DecorObjectRecordScript:
 # Mutations
 # ---------------------------------------------------------------------------
 
-## In placement mode an existing object takes precedence over the catalog
-## selection. This makes a click on decor behave like selection instead of
-## silently stacking another instance inside it.
+## A placement click that lands on occupied geometry selects the conflicting
+## object where possible instead of silently stacking another instance inside it.
 func _place_or_select_at(hit: Vector3) -> void:
 	var target := pick_object_at(hit)
 	if not target.is_empty():
@@ -721,9 +697,6 @@ func cancel_current_action() -> void:
 	if not selected_object_id.is_empty():
 		select_object("")
 		_editor.set_status("Выделение снято.")
-	elif current_tool == Tool.PLACE:
-		_hide_ghost()
-		_editor.set_status("Размещение отменено.")
 
 
 ## Monotonic-enough suffix for generated ids. `Time.get_ticks_msec()` alone
@@ -896,7 +869,8 @@ func _remove_node(object_id: String) -> void:
 # ---------------------------------------------------------------------------
 
 func refresh_ghost() -> void:
-	if not is_active() or current_tool != Tool.PLACE or not _editor.cursor_valid:
+	refresh_hover()
+	if not is_active() or not _editor.cursor_valid or not _hovered_object_id.is_empty():
 		_hide_ghost()
 		return
 	var asset := FurnishingAssetCatalogScript.get_asset(current_asset_id)
@@ -923,6 +897,43 @@ func refresh_ghost() -> void:
 	# Update ghost colour based on placement state.
 	var state := _compute_ghost_state(ghost_pos)
 	_update_ghost_color(state)
+
+
+## Updates cursor feedback without changing cycle-selection state.  Hovering an
+## object hides the placement ghost and shows what a left click will select.
+func refresh_hover() -> void:
+	_hovered_object_id = ""
+	if is_active() and _editor.cursor_valid:
+		var candidates := _pick_objects_at(_editor.cursor_hit_pos)
+		if not candidates.is_empty():
+			_hovered_object_id = candidates[0]
+	_update_hover_marker()
+
+
+func _update_hover_marker() -> void:
+	var record := find_record(_hovered_object_id)
+	if record == null or not is_active():
+		if _hover_marker != null:
+			_hover_marker.visible = false
+		return
+	if _hover_marker == null:
+		_hover_marker = MeshInstance3D.new()
+		var torus := TorusMesh.new()
+		torus.inner_radius = 0.42
+		torus.outer_radius = 0.5
+		_hover_marker.mesh = torus
+		var material := StandardMaterial3D.new()
+		material.albedo_color = Color(1.0, 0.8, 0.2, 0.9)
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_hover_marker.material_override = material
+		add_child(_hover_marker)
+	var asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
+	var size := asset.footprint_m() if asset != null else Vector3.ONE
+	var radius := maxf(MIN_PICK_RADIUS, maxf(size.x, size.z) * 0.5 * maxf(record.scale.x, record.scale.z))
+	_hover_marker.visible = true
+	_hover_marker.scale = Vector3.ONE * (radius / 0.5)
+	_hover_marker.position = record.pos + Vector3(0.0, 0.05, 0.0)
 
 
 func _hide_ghost() -> void:
@@ -1193,8 +1204,6 @@ func _select_asset(asset_id: StringName) -> void:
 	current_asset_id = asset_id
 	for id in _asset_buttons.keys():
 		(_asset_buttons[id] as Button).button_pressed = id == asset_id
-	# Choosing from the catalog means "I want to place this".
-	_set_tool(Tool.PLACE)
 	var asset := FurnishingAssetCatalogScript.get_asset(asset_id)
 	if asset != null:
 		_select_snap_step(asset.default_snap_step)
@@ -1266,6 +1275,7 @@ func _select_snap_step(step: float) -> void:
 func select_object(object_id: String) -> void:
 	selected_object_id = object_id if find_record(object_id) != null else ""
 	_inspector_panel.visible = is_active() and not selected_object_id.is_empty()
+	_toolbar_delete_btn.disabled = selected_object_id.is_empty()
 	_sync_object_list_selection()
 	_refresh_inspector()
 	_update_selection_marker()

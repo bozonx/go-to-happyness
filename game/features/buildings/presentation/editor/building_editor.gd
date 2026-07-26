@@ -208,6 +208,8 @@ func _ready() -> void:
 
 
 func _resolve_launch_mode() -> void:
+	if not OS.has_feature("editor"):
+		dev_mode = false
 	var launch_mgr := get_node_or_null("/root/GameLaunchManager")
 	if launch_mgr != null and "editor_player_mode" in launch_mgr:
 		if bool(launch_mgr.get("editor_player_mode")):
@@ -359,6 +361,9 @@ func _process(delta: float) -> void:
 		_orbiting = false
 	_update_cursor()
 	_refresh_shift_hover()
+	if current_mode == EditMode.DECOR:
+		decor_mode.refresh_ghost()
+		return
 	# Ghost refresh is cheap but redundant when nothing changed; skip via cache.
 	if cursor_valid and (cursor_cell != _ghost_cell or current_tool != _ghost_tool or current_rot != _ghost_rot or cursor_valid != _ghost_valid):
 		_refresh_ghost()
@@ -414,6 +419,10 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 					_last_paint_cell = cursor_cell
 					_erase_hovered_block_or_cell()
 				return
+			if current_mode == EditMode.DECOR and event.pressed and event.shift_pressed:
+				_orbiting = false
+				decor_mode.erase_at_cursor()
+				return
 			_orbiting = event.pressed
 		MOUSE_BUTTON_MIDDLE:
 			if event.pressed and current_mode == EditMode.FRAME and event.shift_pressed:
@@ -454,9 +463,10 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 
 
 func _handle_key(event: InputEventKey) -> void:
-	# Decor mode rebinds the shared shortcuts (its own tools, its own rotation),
-	# so give it first refusal before the frame bindings run.
-	if current_mode == EditMode.DECOR and decor_mode.handle_key(event):
+	# Decor owns its shortcuts. Do not let frame-only bindings (B/E, etc.) change
+	# hidden frame state while the contextual decor mode is active.
+	if current_mode == EditMode.DECOR:
+		decor_mode.handle_key(event)
 		return
 	match event.keycode:
 		KEY_Z:
@@ -1161,6 +1171,8 @@ func _on_navmesh_preview_pressed() -> void:
 func _on_load_pressed() -> void:
 	_load_list.clear()
 	var entries := repository.list_blueprints()
+	if not repository.last_errors.is_empty():
+		_update_status("Ошибка контента: " + "\n".join(repository.last_errors))
 	if entries.is_empty():
 		_update_status("Нет сохранённых чертежей в %s" % repository.base_dir())
 		return

@@ -214,28 +214,14 @@ visible = false
 layout_mode = 2
 theme_override_constants/separation = 6
 
-[node name="DecorToolPlaceBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
+[node name="DecorDeleteSelectionBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
-toggle_mode = true
-text = "🪑 (B)"
-tooltip_text = "Поставить декор (B)"
+disabled = true
+text = "Удалить"
+tooltip_text = "Удалить выбранный объект (Delete)"
 
-[node name="DecorToolSelectBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
-unique_name_in_owner = true
-layout_mode = 2
-toggle_mode = true
-text = "👆 (V)"
-tooltip_text = "Выбрать / переместить объект (V)"
-
-[node name="DecorToolEraseBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
-unique_name_in_owner = true
-layout_mode = 2
-toggle_mode = true
-text = "🧹 (E)"
-tooltip_text = "Удалить объект (E)"
-
-[node name="VSepDecorTools" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
+[node name="VSepDecorActions" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
 layout_mode = 2
 
 [node name="DecorRotLeftBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]

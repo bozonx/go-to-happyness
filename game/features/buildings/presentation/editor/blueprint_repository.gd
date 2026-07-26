@@ -16,10 +16,13 @@ const DEV_DIR := "res://game/features/buildings/data/blueprints"
 const PLAYER_DIR := "user://custom_buildings"
 
 var dev_mode: bool = false
+## Read by the editor after listing, so duplicate ids are actionable instead of
+## silently selecting whichever recursive traversal happened to win.
+var last_errors: Array[String] = []
 
 
 func _init(p_dev_mode: bool = false) -> void:
-	dev_mode = p_dev_mode
+	dev_mode = p_dev_mode and OS.has_feature("editor")
 
 
 func base_dir() -> String:
@@ -38,6 +41,9 @@ func file_path_for(blueprint_id: StringName) -> String:
 
 ## Returns { ok: bool, path: String, error: String }.
 func save(blueprint: BuildingBlueprintScript) -> Dictionary:
+	if blueprint.role == &"new_building":
+		blueprint.role = blueprint.id
+	blueprint.era = blueprint.category
 	blueprint.recalculate_construction_cost()
 	var validation_errors := blueprint.validation_errors()
 	if not validation_errors.is_empty():
@@ -72,18 +78,34 @@ func load_blueprint(path: String) -> BuildingBlueprintScript:
 ## Lists available blueprint files as { id, name, path } dictionaries.
 func list_blueprints() -> Array:
 	var out: Array = []
+	last_errors.clear()
+	var seen_ids: Dictionary = {}
 	var dir := base_dir()
 	if not DirAccess.dir_exists_absolute(dir):
 		return out
 	var suffix := "." + BuildingBlueprintScript.FILE_EXTENSION
-	for file_name in DirAccess.get_files_at(dir):
-		if not file_name.ends_with(suffix):
-			continue
-		var path := "%s/%s" % [dir, file_name]
+	for path in _files_recursively(dir, suffix):
 		var bp := load_blueprint(path)
 		if bp != null:
+			if seen_ids.has(bp.id):
+				last_errors.append("Дубликат id '%s': %s и %s" % [bp.id, seen_ids[bp.id], path])
+				continue
+			seen_ids[bp.id] = path
 			out.append({"id": bp.id, "name": bp.name, "path": path})
 	return out
+
+
+static func _files_recursively(root: String, suffix: String) -> Array[String]:
+	var result: Array[String] = []
+	if not DirAccess.dir_exists_absolute(root):
+		return result
+	for file_name in DirAccess.get_files_at(root):
+		if file_name.ends_with(suffix):
+			result.append(root.path_join(file_name))
+	for directory in DirAccess.get_directories_at(root):
+		result.append_array(_files_recursively(root.path_join(directory), suffix))
+	result.sort()
+	return result
 
 
 func _sanitize_id(blueprint_id: StringName) -> String:

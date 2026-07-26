@@ -12,6 +12,8 @@ extends RefCounted
 const BuildingBlueprintScript = preload("res://game/features/buildings/domain/editor/building_blueprint.gd")
 const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
 const BuildingCatalogScript = preload("res://game/features/buildings/domain/building_catalog.gd")
+const ContentIndexScript = preload("res://game/features/content/application/content_index.gd")
+const ContentIdScript = preload("res://game/features/content/domain/content_id.gd")
 
 const BUILTIN_DIR := "res://game/features/buildings/data/blueprints"
 const PLAYER_DIR := "user://custom_buildings"
@@ -21,6 +23,7 @@ const SOURCE_PLAYER := &"player"
 static var _index: Dictionary = {}          ## runtime key -> {path, source, id}
 static var _cache: Dictionary = {}          ## building_type(String) -> BuildingBlueprint
 static var _index_built: bool = false
+static var _content_index: ContentIndex
 
 
 static func refresh() -> void:
@@ -28,28 +31,17 @@ static func refresh() -> void:
 	_cache.clear()
 	_index_built = true
 	BuildingCatalogScript.clear_runtime_definitions()
-	_index_directory(BUILTIN_DIR, SOURCE_BUILTIN)
-	_index_directory(PLAYER_DIR, SOURCE_PLAYER)
-
-
-static func _index_directory(directory: String, source: StringName) -> void:
-	if not DirAccess.dir_exists_absolute(directory):
-		return
-	var suffix := "." + BuildingBlueprintScript.FILE_EXTENSION
-	for file_name in DirAccess.get_files_at(directory):
-		if not file_name.ends_with(suffix):
-			continue
-		var path := "%s/%s" % [directory, file_name]
-		var text := FileAccess.get_file_as_string(path)
-		var blueprint := BuildingBlueprintScript.from_json(text)
+	_content_index = ContentIndexScript.new()
+	_content_index.rebuild()
+	for indexed_entry in _content_index.blueprint_entries():
+		var path: String = indexed_entry.path
+		var blueprint := BuildingBlueprintScript.from_json(FileAccess.get_file_as_string(path))
 		if blueprint == null:
-			push_warning("BuildingBlueprintLibrary: skipped invalid blueprint " + path)
 			continue
-		var key := runtime_key(source, blueprint.id)
+		var key := String(indexed_entry.runtime_key)
 		if _index.has(key):
-			push_warning("BuildingBlueprintLibrary: duplicate blueprint key " + key)
 			continue
-		_index[key] = {"path": path, "source": source, "id": blueprint.id}
+		_index[key] = {"path": path, "source": indexed_entry.source, "id": blueprint.id}
 		_cache[key] = blueprint
 		_register_definition(key, blueprint)
 
@@ -80,7 +72,7 @@ static func get_blueprint(building_type: String) -> BuildingBlueprintScript:
 
 
 static func runtime_key(source: StringName, blueprint_id: StringName) -> String:
-	return "user:%s" % blueprint_id if source == SOURCE_PLAYER else String(blueprint_id)
+	return String(ContentIdScript.runtime_key(source, blueprint_id))
 
 
 static func blueprint_ref(building_type: String) -> Dictionary:

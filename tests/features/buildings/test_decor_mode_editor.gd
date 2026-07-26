@@ -48,7 +48,6 @@ func _run() -> void:
 	# Place two objects through the real click path.
 	editor.cursor_valid = true
 	decor.current_asset_id = &"campfire"
-	decor._set_tool(decor.Tool.PLACE)
 	editor.cursor_hit_pos = Vector3(2.2, 0.0, 2.2)
 	decor.on_left_pressed()
 	editor.cursor_hit_pos = Vector3(5.4, 0.0, 5.4)
@@ -67,10 +66,13 @@ func _run() -> void:
 	assert(editor.blueprint.objects.size() == 2, "placement mode must not stack decor under the cursor")
 	assert(decor.selected_object_id == editor.blueprint.objects[0].id,
 		"placement mode selects the object under the cursor")
+	decor.refresh_ghost()
+	assert(decor._ghost == null or not decor._ghost.visible, "ghost hides while the cursor is over decor")
+	assert(decor._hover_marker.visible, "hover marker identifies the object a click will select")
+	assert(not editor.get_node("%DecorDeleteSelectionBtn").disabled, "toolbar delete enables for selection")
 	print("  occupied placement selects instead of stacking")
 
-	# Selection by clicking an existing object.
-	decor._set_tool(decor.Tool.SELECT)
+	# Selection and dragging use the same contextual left-click gesture.
 	editor.cursor_hit_pos = Vector3(2.3, 0.0, 2.3)
 	decor.on_left_pressed()
 	assert(decor.selected_object_id == editor.blueprint.objects[0].id, "picked the campfire")
@@ -176,7 +178,6 @@ func _run() -> void:
 	decor.current_asset_id = &"campfire"
 	var blocked_before: int = editor.blueprint.objects.size()
 	editor.cursor_hit_pos = Vector3(7.5, 0.0, 7.5)
-	decor._set_tool(decor.Tool.PLACE)
 	decor.on_left_pressed()
 	assert(editor.blueprint.objects.size() == blocked_before, "frame volume blocks decor placement")
 	decor.select_object(editor.blueprint.objects[0].id)
