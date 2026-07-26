@@ -21,7 +21,6 @@ const MapEditorModeBarScript = preload("res://game/features/world/presentation/e
 ## Phases that own the modes not yet built. They are listed so the author can see
 ## what the editor is going to be, and disabled so they cannot pretend to work.
 const PLANNED_MODES: Array = [
-	{"id": &"water", "title": "Вода", "reason": "Вода приходит с фазой 4b террейна"},
 	{"id": &"roads", "title": "Покрытия", "reason": "Слой покрытий — фаза 3"},
 	{"id": &"fill", "title": "Наполнение", "reason": "Здания, декор и природа — фаза 2"},
 	{"id": &"entities", "title": "Зоны и точки", "reason": "Зоны, точки и маршруты — фаза 4"},
@@ -29,6 +28,7 @@ const PLANNED_MODES: Array = [
 ]
 
 @onready var terrain_world: GridTerrainWorld = $Terrain
+@onready var water_world: WaterWorld = $Water
 @onready var nav_overlay: NavTerrainOverlay = $NavOverlay
 @onready var hover_marker: MeshInstance3D = $HoverMarker
 @onready var camera: MapEditorCamera = $Camera3D
@@ -55,6 +55,8 @@ var _wear_service := SurfaceWearService.new()
 var _nav_grid := NavGrid.new()
 var _nav_publisher := TerrainNavigationPublisher.new()
 var _brush := TerrainBrushController.new()
+var _water_service := WaterService.new()
+var _water_brush := WaterBrushController.new()
 
 var _context := MapEditorContext.new()
 var _modes: Array[MapEditorMode] = []
@@ -96,16 +98,22 @@ func _open_requested_map() -> void:
 func _build_services() -> void:
 	_terrain_service.configure(document.terrain)
 	_wear_service.configure(_terrain_service)
+	_water_service.configure(document.water, document.terrain)
 	terrain_world.configure(document.terrain, camera)
-	# Binds navigation to the ground and keeps it current: every committed edit
-	# republishes exactly the columns it touched.
-	_nav_publisher.configure(document.terrain, _nav_grid, _terrain_service)
+	water_world.configure(document.water, document.terrain, _water_service, _terrain_service)
+	# Binds navigation to the ground and the water, and keeps it current: every
+	# committed edit republishes exactly the columns it touched.
+	_nav_publisher.configure(document.terrain, _nav_grid, _terrain_service, document.water, _water_service)
 	if not _terrain_service.edit_committed.is_connected(_on_terrain_committed):
 		_terrain_service.edit_committed.connect(_on_terrain_committed)
+	if not _water_service.edit_committed.is_connected(_on_water_committed):
+		_water_service.edit_committed.connect(_on_water_committed)
 	_brush.configure(document.terrain, _terrain_service, _wear_service)
+	_water_brush.configure(document.terrain, document.water, _water_service)
 	nav_overlay.configure(_nav_grid)
 	nav_overlay.visible = false
 	terrain_world.rebuild_pending_now()
+	water_world.rebuild_pending_now()
 	_build_hover_marker()
 	_refresh_camera_framing()
 
@@ -114,11 +122,15 @@ func _build_services() -> void:
 	_context.terrain_service = _terrain_service
 	_context.wear_service = _wear_service
 	_context.brush = _brush
+	_context.water = document.water
+	_context.water_service = _water_service
+	_context.water_brush = _water_brush
 	_context.nav_grid = _nav_grid
 	_context.nav_publisher = _nav_publisher
 	_context.history = history
 	_context.camera = camera
 	_context.terrain_world = terrain_world
+	_context.water_world = water_world
 	_context.nav_overlay = nav_overlay
 	_context.hover_marker = hover_marker
 	_context.world_3d = get_world_3d()
@@ -149,6 +161,7 @@ func _new_map() -> void:
 	document = MapDocument.create(&"new_map", "Новая карта", MapMeta.DEFAULT_BOARD_CELLS)
 	history.clear()
 	_terrain_service.clear_history()
+	_water_service.clear_history()
 	_build_services()
 	for mode: MapEditorMode in _modes:
 		mode.configure(_context)
@@ -159,7 +172,7 @@ func _new_map() -> void:
 # --- Modes --------------------------------------------------------------------
 
 func _build_modes() -> void:
-	_modes = [TerrainModeController.new(), SurfaceModeController.new()]
+	_modes = [TerrainModeController.new(), SurfaceModeController.new(), WaterModeController.new()]
 	for mode: MapEditorMode in _modes:
 		mode.configure(_context)
 		mode.ui_changed.connect(_refresh_panels)
@@ -349,6 +362,18 @@ func _on_terrain_committed(_delta: TerrainDelta) -> void:
 	if _replaying:
 		return
 	history.push(TerrainServiceCommand.of(_terrain_service, _context.pending_edit_label))
+	document.mark_dirty()
+
+
+## The same arrangement for the water layer, and for the same reason: one command
+## per committed delta, recorded here rather than by the mode that caused it. The
+## two services push onto the SAME stack, which is what makes Ctrl+Z walk back
+## through an author's actual sequence of strokes instead of through one layer at
+## a time.
+func _on_water_committed(_delta: WaterDelta) -> void:
+	if _replaying:
+		return
+	history.push(WaterServiceCommand.of(_water_service, _context.pending_edit_label))
 	document.mark_dirty()
 
 

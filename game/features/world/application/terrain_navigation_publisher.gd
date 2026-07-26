@@ -40,20 +40,32 @@ const EDGE_RING := 2
 var terrain: TerrainGrid = null
 var nav_grid: NavGrid = null
 var field: NavTerrainField = null
+## The water layer over the same board, when the map has one (§9). Optional: a
+## board with no water publishes exactly what it published before water existed.
+var water: WaterGrid = null
 
 
-## Binds the two grids together and publishes the whole board once. Pass the
-## editing service to keep the field current: every committed edit — brush,
-## ramp, hole, undo — republishes exactly the columns it touched.
-func configure(next_terrain: TerrainGrid, next_nav_grid: NavGrid, service: TerrainService = null) -> void:
+## Binds the grids together and publishes the whole board once. Pass the editing
+## services to keep the field current: every committed edit — brush, ramp, hole,
+## water stroke, freeze, undo — republishes exactly the columns it touched.
+func configure(
+	next_terrain: TerrainGrid,
+	next_nav_grid: NavGrid,
+	service: TerrainService = null,
+	next_water: WaterGrid = null,
+	water_service: WaterService = null,
+) -> void:
 	terrain = next_terrain
 	nav_grid = next_nav_grid
+	water = next_water
 	if terrain == null or nav_grid == null:
 		return
 	nav_grid.configure(terrain.cell_size, terrain.board_cells)
 	publish_all()
 	if service != null and not service.edit_committed.is_connected(_on_edit_committed):
 		service.edit_committed.connect(_on_edit_committed)
+	if water_service != null and not water_service.edit_committed.is_connected(_on_water_committed):
+		water_service.edit_committed.connect(_on_water_committed)
 
 
 ## Rebuilds the whole field. Cheap enough to run on load and on a board resize;
@@ -61,7 +73,7 @@ func configure(next_terrain: TerrainGrid, next_nav_grid: NavGrid, service: Terra
 func publish_all() -> NavTerrainField:
 	if terrain == null:
 		return null
-	field = build_field(terrain)
+	field = build_field(terrain, water)
 	if nav_grid != null:
 		nav_grid.set_terrain_field(field)
 	return field
@@ -78,7 +90,7 @@ func refresh_cells(cells: Array[Vector2i]) -> void:
 	var corners := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
 	var neighbour_corners := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
 	for cell: Vector2i in _dilate(cells, SURFACE_RING):
-		_write_surface(field, terrain, cell, corners)
+		_write_surface(field, terrain, water, cell, corners)
 	for cell: Vector2i in _dilate(cells, EDGE_RING):
 		_write_edges(field, terrain, cell, corners, neighbour_corners)
 	if nav_grid != null:
@@ -95,7 +107,7 @@ func refresh_weights(cells: Array[Vector2i]) -> void:
 		return
 	for cell: Vector2i in cells:
 		if terrain.is_inside(cell):
-			field.set_surface_weight(cell, terrain.surface_weight_at(cell))
+			field.set_surface_weight(cell, surface_weight_of(terrain, water, cell))
 	if nav_grid != null:
 		nav_grid.notify_terrain_weights_changed()
 
@@ -107,9 +119,17 @@ func _on_edit_committed(delta: TerrainDelta) -> void:
 	refresh_weights(delta.cells)
 
 
+## A water edit always goes through the full path. Every field of a water cell is
+## navigational: the level moves the depth, the body decides whether it is lava,
+## and freezing turns "no floor" into a floor at the surface (§9.6). There is no
+## cost-only water edit to optimise for.
+func _on_water_committed(delta: WaterDelta) -> void:
+	refresh_cells(delta.cells)
+
+
 # --- Construction ------------------------------------------------------------
 
-static func build_field(source: TerrainGrid) -> NavTerrainField:
+static func build_field(source: TerrainGrid, water_source: WaterGrid = null) -> NavTerrainField:
 	var built := NavTerrainField.new()
 	if source == null or source.board_cells <= 0:
 		return built
@@ -120,7 +140,7 @@ static func build_field(source: TerrainGrid) -> NavTerrainField:
 	var neighbour_corners := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
 	for z in range(minimum.y, maximum.y + 1):
 		for x in range(minimum.x, maximum.x + 1):
-			_write_surface(built, source, Vector2i(x, z), corners)
+			_write_surface(built, source, water_source, Vector2i(x, z), corners)
 	for z in range(minimum.y, maximum.y + 1):
 		for x in range(minimum.x, maximum.x + 1):
 			_write_edges(built, source, Vector2i(x, z), corners, neighbour_corners)
@@ -128,10 +148,10 @@ static func build_field(source: TerrainGrid) -> NavTerrainField:
 
 
 ## One-call helper for callers that only ever publish once.
-static func publish(source: TerrainGrid, target: NavGrid) -> NavTerrainField:
+static func publish(source: TerrainGrid, target: NavGrid, water_source: WaterGrid = null) -> NavTerrainField:
 	if source == null or target == null:
 		return null
-	var built := build_field(source)
+	var built := build_field(source, water_source)
 	target.set_terrain_field(built)
 	return built
 
@@ -142,17 +162,64 @@ static func publish(source: TerrainGrid, target: NavGrid) -> NavTerrainField:
 static var _metres_scratch := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
 
 
-static func _write_surface(target: NavTerrainField, source: TerrainGrid, cell: Vector2i, corners: PackedFloat32Array) -> void:
+static func _write_surface(target: NavTerrainField, source: TerrainGrid, water_source: WaterGrid, cell: Vector2i, corners: PackedFloat32Array) -> void:
 	if not source.is_inside(cell):
 		return
 	source.corner_heights_into(cell, corners)
+	var frozen := water_source != null and water_source.is_frozen(cell) and water_source.is_wet(source, cell)
+	if frozen:
+		# A frozen cell is walked ON THE ICE, not on the bottom (§9.6). The surface
+		# is the water level and it is flat, so the standing height, the slope class
+		# and the edges to the bank all have to be read from there — otherwise a
+		# citizen crossing a frozen lake walks along the lake bed and the bank is a
+		# cliff instead of a step up out of the water.
+		var ice_steps := float(water_source.height_of(cell))
+		corners[0] = ice_steps
+		corners[1] = ice_steps
+		corners[2] = ice_steps
+		corners[3] = ice_steps
 	var metres := _metres_scratch
 	for corner in 4:
 		metres[corner] = corners[corner] * TerrainGrid.HEIGHT_STEP
 	target.set_cell(cell, not source.is_hole(cell), surface_class_of(corners), metres)
-	# Material, wear and snow folded into one multiplier (§2, §6.1, §6.2). It is a
-	# cost and never a passability: the ground under a snowdrift is still ground.
-	target.set_surface_weight(cell, source.surface_weight_at(cell))
+	# Material, wear and snow folded into one multiplier (§2, §6.1, §6.2), times
+	# what wading costs where the water is shallow enough to wade. It is a cost and
+	# never a passability: the ground under a snowdrift is still ground, and the
+	# ford under a walker is still a crossing.
+	target.set_surface_weight(cell, surface_weight_of(source, water_source, cell))
+	_write_water(target, source, water_source, cell)
+
+
+## What the water layer means to routing, as the four bits and the thickness of
+## §9.7. Depth stays behind: routing needs to know that a step is refused, not by
+## how many centimetres.
+static func _write_water(target: NavTerrainField, source: TerrainGrid, water_source: WaterGrid, cell: Vector2i) -> void:
+	if water_source == null or not water_source.is_wet(source, cell):
+		target.set_water(cell, false, false, false, 0, false)
+		return
+	var body := water_source.body_at(cell)
+	var lava := body != null and body.is_lava()
+	target.set_water(
+		cell,
+		true,
+		lava or not water_source.is_ford(source, cell),
+		water_source.is_frozen(cell),
+		water_source.ice_thickness_at(cell),
+		lava,
+	)
+
+
+## Surface cost of a column: the material multiplier, and the ford penalty where
+## there is water shallow enough to wade through (§9.7). Deep water and lava carry
+## no weight at all — they are refused by passability, and pricing a step nobody
+## may take only makes the number harder to read.
+static func surface_weight_of(source: TerrainGrid, water_source: WaterGrid, cell: Vector2i) -> float:
+	var weight := source.surface_weight_at(cell)
+	if water_source == null or water_source.is_frozen(cell):
+		return weight
+	if water_source.is_ford(source, cell):
+		weight *= WaterGrid.FORD_WEIGHT_MULTIPLIER
+	return weight
 
 
 ## Edges are read back out of the field, not recomputed off the terrain. Every

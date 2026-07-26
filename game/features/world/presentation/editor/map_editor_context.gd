@@ -17,12 +17,16 @@ var terrain: TerrainGrid = null
 var terrain_service: TerrainService = null
 var wear_service: SurfaceWearService = null
 var brush: TerrainBrushController = null
+var water: WaterGrid = null
+var water_service: WaterService = null
+var water_brush: WaterBrushController = null
 var nav_grid: NavGrid = null
 var nav_publisher: TerrainNavigationPublisher = null
 
 var history: MapEditorHistory = null
 var camera: MapEditorCamera = null
 var terrain_world: GridTerrainWorld = null
+var water_world: WaterWorld = null
 var nav_overlay: NavTerrainOverlay = null
 var hover_marker: Node3D = null
 

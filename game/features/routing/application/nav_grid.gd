@@ -327,6 +327,11 @@ func is_walkable(cell: Vector2i, profile: StringName = PEDESTRIAN_PROFILE, profi
 			return false
 		if _terrain.slope_class_at(cell) > resolved.max_slope_class:
 			return false
+		# Water over a ford's depth, lava, and ice too thin for this traveller are
+		# all "there is no floor here for you" (§9.6, §9.7) — the same kind of fact
+		# as a hole, and equally unaffected by anything built on top.
+		if not _terrain.water_allows_at(cell, resolved.min_ice_thickness):
+			return false
 	if _road_cells.has(NavCell.ground(cell)):
 		return (_road_cell_weights.get(profile, {}) as Dictionary).has(cell)
 	return (resolved.layer_mask & TravelerProfile.LAYER_TERRAIN) != 0 and resolved.allows_offroad

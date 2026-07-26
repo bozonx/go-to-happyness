@@ -40,6 +40,23 @@ const DIRECTION_OFFSETS: Array[Vector2i] = [
 ]
 const DIRECTION_COUNT := 8
 
+## Per-cell water state (grid_terrain_system.md §9.7). Water reaches routing as
+## three derived bits and a thickness, never as a depth in metres: what a solver
+## needs to know is whether a step is possible and what it costs, and the depth
+## that decided it belongs to the layer that owns the water.
+##
+## `WATER_BLOCKS` is set for anything a traveller cannot enter on foot — water
+## over one step deep, lava at any depth, a ford swept by a strong current — and
+## `WATER_FROZEN` overrides it, because a sheet of ice is a floor over exactly
+## that water (§9.6). Which travellers the ice actually carries is the thickness
+## against `TravelerProfile.min_ice_thickness`.
+const WATER_PRESENT := 1 << 0
+const WATER_BLOCKS := 1 << 1
+const WATER_FROZEN := 1 << 2
+const WATER_LAVA := 1 << 3
+const WATER_ICE_SHIFT := 4
+const WATER_ICE_MASK := 0x03
+
 ## Corner order, clockwise from north-west — `TerrainGrid`'s order.
 const CORNER_NW := 0
 const CORNER_NE := 1
@@ -64,6 +81,10 @@ var _corner_heights := PackedFloat32Array()
 ## WEIGHT and never a passability — that separation is what lets a blizzard or a
 ## trodden field update costs without invalidating a single planned route (§7.5).
 var _surface_weights := PackedFloat32Array()
+## One packed byte per cell: presence, blocking, ice and lava (§9.7). Dry board
+## cells hold zero, which is why a field published before water existed still
+## reads correctly.
+var _water := PackedByteArray()
 
 
 func configure(next_cell_size: float, next_board_cells: int) -> void:
@@ -83,6 +104,8 @@ func configure(next_cell_size: float, next_board_cells: int) -> void:
 	_surface_weights = PackedFloat32Array()
 	_surface_weights.resize(count)
 	_surface_weights.fill(1.0)
+	_water = PackedByteArray()
+	_water.resize(count)
 
 
 func is_configured() -> bool:
@@ -117,6 +140,25 @@ func set_surface_weight(cell: Vector2i, multiplier: float) -> void:
 	if not is_inside(cell):
 		return
 	_surface_weights[_index_of(cell)] = maxf(multiplier, 1.0)
+
+
+## The publisher's whole water statement about a cell, packed into one byte.
+## Passing `false` for `present` clears everything, which is what a drained or
+## erased cell has to leave behind.
+func set_water(cell: Vector2i, present: bool, blocks: bool, frozen: bool, ice_thickness: int, lava: bool) -> void:
+	if not is_inside(cell):
+		return
+	var packed := 0
+	if present:
+		packed |= WATER_PRESENT
+		if blocks:
+			packed |= WATER_BLOCKS
+		if lava:
+			packed |= WATER_LAVA
+		if frozen:
+			packed |= WATER_FROZEN
+			packed |= (clampi(ice_thickness, 0, WATER_ICE_MASK) & WATER_ICE_MASK) << WATER_ICE_SHIFT
+	_water[_index_of(cell)] = packed
 
 
 func set_edge_class(cell: Vector2i, direction: int, edge_class: int) -> void:
@@ -162,6 +204,52 @@ func surface_weight_at(cell: Vector2i) -> float:
 	if not is_inside(cell):
 		return 1.0
 	return _surface_weights[_index_of(cell)]
+
+
+func water_flags_at(cell: Vector2i) -> int:
+	if not is_inside(cell):
+		return 0
+	return int(_water[_index_of(cell)])
+
+
+func is_water(cell: Vector2i) -> bool:
+	return (water_flags_at(cell) & WATER_PRESENT) != 0
+
+
+func is_frozen(cell: Vector2i) -> bool:
+	return (water_flags_at(cell) & WATER_FROZEN) != 0
+
+
+func is_lava(cell: Vector2i) -> bool:
+	return (water_flags_at(cell) & WATER_LAVA) != 0
+
+
+func ice_thickness_at(cell: Vector2i) -> int:
+	var flags := water_flags_at(cell)
+	if (flags & WATER_FROZEN) == 0:
+		return 0
+	return (flags >> WATER_ICE_SHIFT) & WATER_ICE_MASK
+
+
+## Whether water lets this traveller stand here (§9.6, §9.7).
+##
+## Ice is asked before depth on purpose: a frozen cell is a floor at the surface,
+## and how deep the water under it is stops mattering — what matters is whether
+## the sheet carries this traveller's weight. Lava is asked before everything,
+## because nothing crosses it and no thickness or shallowness changes that.
+static func water_allows(water_flags: int, min_ice_thickness: int) -> bool:
+	if (water_flags & WATER_PRESENT) == 0:
+		return true
+	if (water_flags & WATER_LAVA) != 0:
+		return false
+	if (water_flags & WATER_FROZEN) != 0:
+		var thickness := (water_flags >> WATER_ICE_SHIFT) & WATER_ICE_MASK
+		return min_ice_thickness > 0 and thickness >= min_ice_thickness
+	return (water_flags & WATER_BLOCKS) == 0
+
+
+func water_allows_at(cell: Vector2i, min_ice_thickness: int) -> bool:
+	return water_allows(water_flags_at(cell), min_ice_thickness)
 
 
 func slope_class_at(cell: Vector2i) -> int:

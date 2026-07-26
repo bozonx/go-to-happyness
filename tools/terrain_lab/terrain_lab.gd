@@ -52,13 +52,17 @@ const CAMERA_MOUSE_ORBIT := 0.35
 @onready var hover_marker: MeshInstance3D = $HoverMarker
 @onready var hud: Label = $UI/Hud
 @onready var nav_overlay: NavTerrainOverlay = $NavOverlay
+@onready var water_world: WaterWorld = $Water
 
 var grid := TerrainGrid.new()
+var water := WaterGrid.new()
 var service := TerrainService.new()
+var water_service := WaterService.new()
 var wear_service := SurfaceWearService.new()
 var nav_grid := NavGrid.new()
 var nav_publisher := TerrainNavigationPublisher.new()
 var brush := TerrainBrushController.new()
+var water_brush := WaterBrushController.new()
 
 ## Profiles worth checking a map against: what a citizen can climb, and what a
 ## loaded cart can. A ramp that only a walker can use is a supply route that
@@ -92,6 +96,12 @@ const CAPTURE_VIEWS: Array = [
 	# Materials get their own two views: the whole catalog with its variants, and
 	# a close-up of the boundary where height-based blending either interlocks or
 	# turns to mush (§7.3).
+	# Water gets the same treatment as passability, because it IS passability: the
+	# lake, the river and the lava pool look like three coloured patches until the
+	# overlay says which of them anyone can cross (§9.7).
+	{"name": "water_overview", "setup": &"demo", "nav": &"", "target": Vector3(-14.0, 0.0, -2.0), "yaw": 42.0, "pitch": 38.0, "distance": 30.0},
+	{"name": "water_nav_pedestrian", "nav": &"pedestrian", "target": Vector3(-14.0, 0.0, -2.0), "yaw": 42.0, "pitch": 38.0, "distance": 30.0},
+	{"name": "water_lava_closeup", "nav": &"", "target": Vector3(17.5, 1.0, 8.0), "yaw": 130.0, "pitch": 26.0, "distance": 15.0},
 	{"name": "materials_catalog", "setup": &"demo", "nav": &"", "target": Vector3(-11.0, 0.0, 17.0), "yaw": 0.0, "pitch": 65.0, "distance": 30.0},
 	{"name": "materials_blend_closeup", "target": Vector3(-17.0, 0.0, 14.0), "yaw": 25.0, "pitch": 30.0, "distance": 11.0},
 ]
@@ -102,18 +112,23 @@ var _capture_delay := 0
 
 func _ready() -> void:
 	grid.configure(CELL_SIZE, BOARD_CELLS)
+	water.configure(CELL_SIZE, BOARD_CELLS)
 	service.configure(grid)
+	water_service.configure(water, grid)
 	wear_service.configure(service)
 	terrain.configure(grid, camera)
-	# Binds the two grids and keeps the field current: every committed edit
-	# republishes exactly the columns it touched.
-	nav_publisher.configure(grid, nav_grid, service)
+	water_world.configure(water, grid, water_service, service)
+	# Binds the grids and keeps the field current: every committed edit — ground or
+	# water — republishes exactly the columns it touched.
+	nav_publisher.configure(grid, nav_grid, service, water, water_service)
 	brush.configure(grid, service, wear_service)
+	water_brush.configure(grid, water, water_service)
 	service.edit_committed.connect(_on_terrain_edited)
 	nav_overlay.configure(nav_grid, NAV_PROFILES[_nav_profile_index])
 	nav_overlay.visible = false
 	_generate_demo()
 	terrain.rebuild_pending_now()
+	water_world.rebuild_pending_now()
 	_update_camera()
 	if OS.get_cmdline_user_args().has("--capture"):
 		_capture_queue = CAPTURE_VIEWS.duplicate()
@@ -197,6 +212,20 @@ func _handle_key(event: InputEventKey) -> void:
 			brush.adjust_brush_size(-1)
 		KEY_BRACKETRIGHT:
 			brush.adjust_brush_size(1)
+		KEY_L:
+			water_brush.apply()
+		KEY_PERIOD:
+			water_brush.cycle_tool()
+		KEY_COMMA:
+			water_brush.pick_level_from_ground()
+		KEY_SLASH:
+			water_brush.toggle_body_ice()
+		KEY_PAGEUP:
+			water_brush.adjust_level(1)
+		KEY_PAGEDOWN:
+			water_brush.adjust_level(-1)
+		KEY_O:
+			_cycle_water_body()
 		KEY_M:
 			nav_overlay.visible = not nav_overlay.visible
 			nav_overlay.rebuild()
@@ -216,7 +245,9 @@ func _handle_key(event: InputEventKey) -> void:
 			brush.last_message = "demo terrain regenerated"
 		KEY_N:
 			grid.configure(CELL_SIZE, BOARD_CELLS)
+			water.configure(CELL_SIZE, BOARD_CELLS)
 			service.clear_history()
+			water_service.clear_history()
 			_republish_navigation()
 			brush.last_message = "cleared to flat"
 		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9, KEY_0:
@@ -300,6 +331,11 @@ func _update_hover() -> void:
 	hover_marker.visible = brush.update_hover(
 		camera, get_world_3d().direct_space_state, get_viewport().get_mouse_position(),
 	)
+	# The water tools pick the same column through the terrain's collider: the
+	# water surface has none, which is what lets an author paint the bottom of a
+	# lake they are looking through.
+	water_brush.hovered_cell = brush.hovered_cell
+	water_brush.has_hover = brush.has_hover
 	if not brush.has_hover:
 		return
 	var center := grid.cell_center(brush.hovered_cell)
@@ -348,6 +384,7 @@ func _update_hud() -> void:
 	lines.append("undo %d  redo %d  |  pending chunks: %d" % [
 		service.undo_depth(), service.redo_depth(), terrain.pending_chunk_count(),
 	])
+	lines.append(_water_line())
 	lines.append(_nav_line())
 	lines.append("> %s" % brush.last_message)
 	lines.append("")
@@ -355,6 +392,7 @@ func _update_hud() -> void:
 	lines.append("Tab mode (sculpt/terrace/level) · Z undo · Y redo · F level · P paint · 1-5 material")
 	lines.append("B variant · U wear · J snow · K walk brush · ; \' material page")
 	lines.append("H hole · R ramp · X unramp · C class · V dir · [ ] brush · G demo · N clear · Esc quit")
+	lines.append("L water tool · . cycle tool · , level from ground · PgUp/PgDn level · O body · / freeze body")
 	lines.append("M nav overlay · T traveller profile")
 	hud.text = "\n".join(lines)
 
@@ -441,9 +479,11 @@ func _setup_cascade_scene() -> void:
 ## carved hole, a stone tower and material patches.
 func _generate_demo() -> void:
 	grid.configure(CELL_SIZE, BOARD_CELLS)
+	water.configure(CELL_SIZE, BOARD_CELLS)
 	# The demo is scenery, not a player edit: it writes the grid directly and
 	# starts the history empty.
 	service.clear_history()
+	water_service.clear_history()
 
 	# Stepped plateau to the east: 0 → 1 → 2, all cliffs except where ramps go.
 	for z in range(-20, 20):
@@ -502,8 +542,10 @@ func _generate_demo() -> void:
 	for x in range(-14, -6):
 		grid.set_anchor(Vector2i(x, 6), true)
 
+	_generate_water_showcase()
+
 	_republish_navigation()
-	brush.last_message = "demo: terraces, ramps, tower, and the material catalog to the south-west"
+	brush.last_message = "demo: terraces, ramps, tower, water to the west, and the material catalog to the south-west"
 
 
 ## Every material of the catalog as a strip, each cell carrying a different
@@ -542,9 +584,84 @@ func _generate_material_showcase() -> void:
 				grid.set_snow_depth(cell, depth)
 
 
+## What the water layer makes of the hovered column. Depth is the number that
+## decides everything (§9.7) and it is invisible in the render: a lake and a ford
+## look identical from this camera until the overlay is on.
+func _water_line() -> String:
+	var body := water.body(water_brush.body_id)
+	var head := "water [%s] tool %s  level %d  body %s" % [
+		"on" if water.wet_cell_count() > 0 else "none", water_brush.tool, water_brush.level,
+		body.name if body != null else "—",
+	]
+	if not brush.has_hover or not water.is_wet(grid, brush.hovered_cell):
+		return "%s  |  cell dry" % head
+	var cell := brush.hovered_cell
+	return "%s  |  %s depth %d (%.1f m) %s%s" % [
+		head, water.body_at(cell).name, water.depth_steps_at(grid, cell),
+		water.depth_metres_at(grid, cell),
+		"FORD" if water.is_ford(grid, cell) else "deep",
+		"  ICE %d" % water.ice_thickness_at(cell) if water.is_frozen(cell) else "",
+	]
+
+
+## Steps through the bodies of the demo, so one key reaches every kind of liquid
+## the lab has without a palette.
+func _cycle_water_body() -> void:
+	var bodies := water.bodies()
+	if bodies.is_empty():
+		water_brush.create_body(WaterBody.Type.LAKE)
+		return
+	var position := 0
+	for index in bodies.size():
+		if bodies[index].id == water_brush.body_id:
+			position = (index + 1) % bodies.size()
+			break
+	water_brush.select_body(bodies[position].id)
+
+
+## The three cases §9 has to get right, side by side and reachable in one view:
+##
+##   * a LAKE in the sand basin, deep in the middle and a ford around the rim —
+##     the difference is invisible in the render and decisive in the overlay;
+##   * a RIVER with a current, which is fordable but never freezes (§9.6);
+##   * a LAVA pool, impassable at any depth and lighting its own banks (§9.4).
+##
+## Written straight into the layer, like the rest of the demo: it is scenery, not
+## an author's stroke, so it must not fill the undo stack.
+func _generate_water_showcase() -> void:
+	var lake := water.create_body(WaterBody.Type.LAKE, 0)
+	# Stops short of the material rows to the south: the catalog strip is a
+	# reference view of its own and must not be flooded.
+	for z in range(-14, 10):
+		for x in range(-20, -14):
+			water.set_cell(Vector2i(x, z), lake.id, 0)
+
+	var river := water.create_body(WaterBody.Type.RIVER, 0)
+	for z in range(-20, 5):
+		for x in range(-11, -9):
+			var cell := Vector2i(x, z)
+			grid.set_height(cell, -1)
+			grid.set_material(cell, TerrainMaterialCatalog.GRAVEL)
+			water.set_cell(cell, river.id, 0)
+			# Strength 2: a current strong enough to keep the reach open all winter
+			# and still shallow enough to wade (§9.6, §9.7).
+			river.set_flow(cell, SlopeCatalog.DIR_S, 2)
+
+	var lava := water.create_body(WaterBody.Type.LAVA, 2)
+	for z in range(6, 10):
+		for x in range(16, 20):
+			var cell := Vector2i(x, z)
+			grid.set_height(cell, 1)
+			grid.set_material(cell, TerrainMaterialCatalog.SCORCHED)
+			water.set_cell(cell, lava.id, 2)
+
+	water_brush.select_body(lake.id)
+
+
 ## The demo writes the grid directly rather than through the service, so nothing
 ## emitted `edit_committed` and the field is still describing the old board.
 func _republish_navigation() -> void:
 	nav_publisher.publish_all()
+	water_world.rebuild_pending_now()
 	if nav_overlay != null and nav_overlay.visible:
 		nav_overlay.rebuild()

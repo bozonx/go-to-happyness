@@ -31,6 +31,7 @@ func _run() -> void:
 	_test_mode_switching(editor)
 	await _test_terrain_editing_and_shared_undo(editor)
 	_test_surface_painting_moves_no_geometry(editor)
+	await _test_water_mode(editor)
 	_test_save_and_reopen(editor)
 
 	editor.queue_free()
@@ -48,11 +49,11 @@ func _test_scene_came_up(editor: Node) -> void:
 	print("  scene up: board %d, camera at %.1f" % [editor.document.board_cells(), editor.camera.distance])
 
 
-## The mode strip is data. Two modes work, the rest are visibly present and
+## The mode strip is data. Three modes work, the rest are visibly present and
 ## disabled, which is what tells the author the editor is unfinished rather than
 ## broken.
 func _test_mode_switching(editor: Node) -> void:
-	assert(editor._modes.size() == 2, "phase 1 ships relief and surface")
+	assert(editor._modes.size() == 3, "relief, surface and water")
 	assert(editor._active.id == &"terrain", "opens on relief")
 
 	editor._select_mode(&"surface")
@@ -61,7 +62,13 @@ func _test_mode_switching(editor: Node) -> void:
 	assert(editor._active.palette_entries().size() == TerrainMaterialCatalog.count(), "every catalog material, and only those")
 
 	editor._select_mode(&"water")
-	assert(editor._active.id == &"surface", "an unbuilt mode cannot be entered")
+	assert(editor._active.id == &"water", "switched to water")
+	# With no body authored yet the palette is exactly the five ways to make one:
+	# the type belongs to the body, so creating and choosing are one gesture.
+	assert(editor._active.palette_entries().size() == WaterBody.TYPE_IDS.size(), "palette is the five body types")
+
+	editor._select_mode(&"roads")
+	assert(editor._active.id == &"water", "an unbuilt mode cannot be entered")
 
 	editor._select_mode(&"terrain")
 	assert(editor._active.id == &"terrain", "switched back")
@@ -153,6 +160,56 @@ func _test_surface_painting_moves_no_geometry(editor: Node) -> void:
 	print("  surface paint ok, zero chunks queued")
 
 
+## Water mode end to end: make a body from the palette, dig a hollow, fill it,
+## and check that the layer, the undo stack and the navigation field all moved
+## together. The last of those is the one that matters — a lake the routing does
+## not know about is a lake citizens walk across.
+func _test_water_mode(editor: Node) -> void:
+	var terrain: TerrainGrid = editor.document.terrain
+	var water: WaterGrid = editor.document.water
+	var cell := Vector2i(-6, 6)
+
+	# A hollow two steps deep, cut with the relief tool the same way an author
+	# would, so the water has somewhere to stand.
+	editor._select_mode(&"terrain")
+	editor._brush.hovered_cell = cell
+	editor._brush.has_hover = true
+	editor._brush.adjust_brush_size(-1)
+	editor._brush.apply_height_brush(-1)
+	editor._brush.apply_height_brush(-1)
+	assert(terrain.height_of(cell) == -2, "dug a hollow, got %d" % terrain.height_of(cell))
+
+	editor._select_mode(&"water")
+	await process_frame
+	editor._active.select_palette_entry(&"new_lake")
+	assert(water.body_count() == 1, "the palette made a body")
+	var body_id: int = editor._water_brush.body_id
+	assert(body_id != WaterBody.NO_BODY, "and selected it")
+
+	var undo_before: int = editor.history.undo_depth()
+	var topology_before: int = editor._nav_grid.topology_revision()
+	editor._water_brush.hovered_cell = cell
+	editor._water_brush.has_hover = true
+	editor._water_brush.level = 0
+	editor._active.handle_input(_click(MOUSE_BUTTON_LEFT, true))
+	editor._active.handle_input(_click(MOUSE_BUTTON_LEFT, false))
+
+	assert(water.is_wet(terrain, cell), "the stroke filled the hollow")
+	assert(water.depth_steps_at(terrain, cell) == 2, "two steps deep")
+	assert(editor.history.undo_depth() == undo_before + 1, "the stroke is on the SHARED stack")
+	assert(editor._nav_grid.topology_revision() != topology_before, "routing heard about it")
+	assert(not editor._nav_grid.is_walkable(cell), "and refuses to walk through it")
+
+	# The neighbouring cells were dug by the same brush one step down, so the same
+	# level leaves them as a ford: crossable, three times the price.
+	editor._undo()
+	assert(not water.is_wet(terrain, cell), "undo drained it")
+	assert(editor._nav_grid.is_walkable(cell), "and gave routing the ground back")
+	editor._redo()
+	assert(water.is_wet(terrain, cell), "redo filled it again")
+	print("  water fill + shared undo + republished navigation ok")
+
+
 ## Everything the author built has to survive the round trip through the package,
 ## through the editor's own save path rather than a test-only one.
 func _test_save_and_reopen(editor: Node) -> void:
@@ -177,6 +234,10 @@ func _test_save_and_reopen(editor: Node) -> void:
 	assert(reopened.meta.name == "Сохранённая", "name survived")
 	assert(reopened.meta.board_cells == editor.document.meta.board_cells, "board survived")
 	assert(MapTerrainCodec.encode(reopened.terrain) == MapTerrainCodec.encode(editor.document.terrain), "ground survived byte for byte")
+	# ...and so did the water: the cells in `water.bin` and the registry in
+	# `map.json`, which are useless without each other.
+	assert(reopened.water.body_count() == editor.document.water.body_count(), "the registry survived")
+	assert(MapWaterCodec.encode(reopened.water) == MapWaterCodec.encode(editor.document.water), "water survived byte for byte")
 
 	MapDocumentService._remove_directory("user://test_maps")
 	print("  save + reopen ok")

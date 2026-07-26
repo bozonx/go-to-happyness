@@ -19,6 +19,9 @@ var sky_and_weather_controller: SkyAndWeatherController
 ## published here because it is the one place that answers "how high is the
 ## ground at X" for everything else.
 var terrain_grid: TerrainGrid
+## The board's water (§9), published beside the ground for the same reason: it is
+## what routing and the weather-driven waves both read.
+var water_grid: WaterGrid
 var trail_overlay: MeshInstance3D
 var trail_overlay_material: ShaderMaterial
 var selection_marker: MeshInstance3D
@@ -38,6 +41,9 @@ var _trail_field: RefCounted
 ## The launched map, when the session has one. Its `TerrainGrid` becomes the
 ## board's ground instead of a freshly flattened one (map_editor.md §14.1).
 var _map_document: MapDocument = null
+## The territory scene that owns the ground and the water. Kept because the
+## per-frame weather push has to reach the waves without walking the tree.
+var _territory: TerritoryBase = null
 
 
 func setup(p_camera: Camera3D, p_cell_size: float, p_board_cells: int, p_trail_field: RefCounted, p_map_document: MapDocument = null) -> void:
@@ -91,6 +97,11 @@ func update_daylight(
 			precipitation_type,
 			wind_displacement
 		)
+	# Waves and foam are amplitude × wind (§9.5), and the wind is this one. That is
+	# the whole of "the sea storms in a thunderstorm": no weather state of water's
+	# own, just the value every other weather-driven system already reads.
+	if _territory != null and _territory.water != null:
+		_territory.water.set_wind(wind, clampf(wind.length(), 0.0, 1.0))
 
 
 ## The board gets a real `TerrainGrid`, meshed and collided by `GridTerrainWorld`.
@@ -104,8 +115,11 @@ func _build_terrain(parent: Node) -> void:
 	var territory := parent.get_node_or_null("WorldTerritory") as TerritoryBase
 	if territory == null:
 		return
+	_territory = territory
 	var authored: TerrainGrid = _map_document.terrain if _map_document != null else null
 	terrain_grid = territory.configure_terrain(_cell_size, _board_cells, _camera, authored)
+	var authored_water: WaterGrid = _map_document.water if _map_document != null else null
+	water_grid = territory.configure_water(_board_cells, _cell_size, authored_water)
 
 
 func _build_boundary(parent: Node) -> void:

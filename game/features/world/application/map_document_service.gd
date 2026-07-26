@@ -28,10 +28,11 @@ const PLAYER_ROOT := "user://custom_maps"
 const PACKAGE_SUFFIX := ".gdmap"
 const MAP_JSON := "map.json"
 const TERRAIN_BIN := "terrain.bin"
+const WATER_BIN := "water.bin"
 const PREVIEW_PNG := "preview.png"
-## Reserved names of the layers phases 3 and 4b add. Listed so a save that does
-## not write them still knows not to treat them as strays when cleaning up.
-const KNOWN_FILES: Array[String] = [MAP_JSON, TERRAIN_BIN, "water.bin", "surface.bin", PREVIEW_PNG]
+## Reserved names of the layers phase 3 adds. Listed so a save that does not write
+## them still knows not to treat them as strays when cleaning up.
+const KNOWN_FILES: Array[String] = [MAP_JSON, TERRAIN_BIN, WATER_BIN, "surface.bin", PREVIEW_PNG]
 
 const USER_NAMESPACE := "user:"
 
@@ -157,6 +158,15 @@ func load_package(path: String) -> MapDocument:
 			push_warning("[map] terrain.bin не подходит к доске %d: %s" % [
 				document.meta.board_cells, terrain_path,
 			])
+	# Water is read after the registry came out of `map.json`: a cell reference to
+	# a body nobody registered is refused by the layer and would decode as dry.
+	var water_path := path.path_join(WATER_BIN)
+	if FileAccess.file_exists(water_path):
+		var water_buffer := FileAccess.get_file_as_bytes(water_path)
+		if not MapWaterCodec.decode_into(water_buffer, document.water):
+			push_warning("[map] water.bin не подходит к доске %d: %s" % [
+				document.meta.board_cells, water_path,
+			])
 	document.dirty = false
 	return document
 
@@ -207,6 +217,13 @@ func save_map_to(document: MapDocument, final_path: String, preview: Image = nul
 	var terrain_bytes := MapTerrainCodec.encode(document.terrain)
 	if not terrain_bytes.is_empty():
 		if not _write_bytes(staging_path.path_join(TERRAIN_BIN), terrain_bytes):
+			_remove_directory(staging_path)
+			return ""
+
+	# A map with no water carries no water layer, the same rule the ground follows.
+	var water_bytes := MapWaterCodec.encode(document.water)
+	if not water_bytes.is_empty():
+		if not _write_bytes(staging_path.path_join(WATER_BIN), water_bytes):
 			_remove_directory(staging_path)
 			return ""
 

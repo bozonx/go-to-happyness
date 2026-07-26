@@ -1,8 +1,9 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=12 format=3]
 
 [ext_resource type="Script" path="res://game/features/world/presentation/editor/map_editor.gd" id="1_editor"]
 [ext_resource type="Script" path="res://game/features/world/presentation/terrain/grid_terrain_world.gd" id="2_terrain"]
 [ext_resource type="Script" path="res://game/features/routing/presentation/nav_terrain_overlay.gd" id="3_nav_overlay"]
+[ext_resource type="Script" path="res://game/features/world/presentation/water/water_world.gd" id="11_water"]
 [ext_resource type="Script" path="res://game/features/world/presentation/editor/map_editor_camera.gd" id="4_camera"]
 [ext_resource type="Theme" path="res://game/features/ui/presentation/theme/ui_theme.tres" id="5_theme"]
 [ext_resource type="PackedScene" path="res://game/features/world/presentation/editor/ui/map_editor_top_bar.tscn" id="6_top_bar"]
@@ -31,6 +32,9 @@ shadow_enabled = true
 
 [node name="Terrain" type="Node3D" parent="."]
 script = ExtResource("2_terrain")
+
+[node name="Water" type="Node3D" parent="."]
+script = ExtResource("11_water")
 
 [node name="NavOverlay" type="MeshInstance3D" parent="."]
 script = ExtResource("3_nav_overlay")

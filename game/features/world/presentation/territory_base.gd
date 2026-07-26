@@ -12,8 +12,13 @@ extends Node3D
 @export var biome_definition: BiomeDefinition
 @onready var landscape_objects: Node3D = get_node_or_null("LandscapeObjects") as Node3D
 @onready var terrain: GridTerrainWorld = get_node_or_null("Terrain") as GridTerrainWorld
+@onready var water: WaterWorld = get_node_or_null("Water") as WaterWorld
 
 var terrain_grid: TerrainGrid = null
+## The board's water (grid_terrain_system.md §9). Adopted from the launched map
+## for the same reason the relief is: two copies of a lake would disagree the
+## moment anything edited one of them.
+var water_grid: WaterGrid = null
 
 
 ## Establishes the board's ground. Called once by `WorldSetup`, which owns the
@@ -34,6 +39,21 @@ func configure_terrain(cell_size: float, board_cells: int, camera: Camera3D = nu
 		terrain.configure(terrain_grid, camera)
 		terrain.rebuild_pending_now()
 	return terrain_grid
+
+
+## The water layer of the launched map, drawn over the same ground. Without a map
+## — or with one that has no water — this is an empty layer, and an empty layer
+## draws nothing and blocks nobody.
+func configure_water(board_cells: int, cell_size: float, authored: WaterGrid = null) -> WaterGrid:
+	if authored != null and authored.board_cells == board_cells:
+		water_grid = authored
+	else:
+		water_grid = WaterGrid.new()
+		water_grid.configure(cell_size, board_cells)
+	if water != null:
+		water.configure(water_grid, terrain_grid)
+		water.rebuild_pending_now()
+	return water_grid
 
 
 ## Owns visual nodes that are naturally part of this territory: trees, ponds,

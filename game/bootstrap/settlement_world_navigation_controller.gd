@@ -58,7 +58,12 @@ func publish_terrain_navigation() -> void:
 		return
 	# `configure` sizes the nav grid off the terrain, so the two cannot disagree
 	# about cell size or board extent — a mismatch neither side could detect.
-	terrain_navigation_publisher.configure(game.world_setup.terrain_grid, game.nav_grid)
+	# Water goes in with the ground: depth, fords, ice and lava are passability
+	# (§9.7), and publishing the two separately would leave a window in which a
+	# route could be planned across a lake.
+	terrain_navigation_publisher.configure(
+		game.world_setup.terrain_grid, game.nav_grid, null, game.world_setup.water_grid,
+	)
 
 
 func refresh_navigation_grid() -> void:

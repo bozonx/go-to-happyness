@@ -148,9 +148,20 @@ not in the settlement bootstrap scene. It runs the production `TerrainGrid`,
 - The brush is not in the lab. Raise, level, paint, wear, snow, hole and ramp live
   in `TerrainBrushController`
   (`game/features/world/presentation/editor/terrain_brush_controller.gd`), shared
-  by the lab, the map editor and the `Terrain Base` layer of the building editor.
+  by the lab, the map editor and the `Terrain Base` layer of the building editor;
+  the water brush is `WaterBrushController` beside it, shared by the lab and the
+  editor's water mode.
   A host binds keys, draws the hover marker and reads `last_message`; it does not
   reimplement a tool.
+- Water is a second layer over the same board (`WaterGrid` + the `WaterBody`
+  registry, `grid_terrain_system.md` §9). It is authored, never simulated: levels
+  are painted and a basin is filled once, at edit time. Depth is NOT stored — it is
+  water level minus ground — so raising a lake bed drains it without touching the
+  water layer. Water edits go through `WaterService` for the same reason ground
+  edits go through `TerrainService`: the commit is what republishes navigation, and
+  water IS passability (ford ×3, deeper is a wall, lava never, ice by thickness).
+  The lab captures `water_overview`, `water_nav_pedestrian` and `water_lava_closeup`
+  are the reference set.
 - Terrain edits must go through `TerrainService`, never straight into the grid:
   that signal is what keeps undo, the chunk mesher and the published navigation
   field in step. A tool that writes the grid directly has to republish by hand
