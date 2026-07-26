@@ -142,13 +142,13 @@ func handle_mouse_button(event: InputEventMouseButton) -> bool:
 				return true
 			return false
 		MOUSE_BUTTON_WHEEL_UP:
-			if event.shift_pressed:
+			if event.shift_pressed or event.ctrl_pressed:
 				return false
 			if event.pressed:
 				_zoom(-1.0)
 			return true
 		MOUSE_BUTTON_WHEEL_DOWN:
-			if event.shift_pressed:
+			if event.shift_pressed or event.ctrl_pressed:
 				return false
 			if event.pressed:
 				_zoom(1.0)

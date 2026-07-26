@@ -67,6 +67,14 @@ func handle_input(event: InputEvent) -> bool:
 
 
 func _handle_mouse(event: InputEventMouseButton) -> bool:
+	if event.ctrl_pressed and event.pressed:
+		match event.button_index:
+			MOUSE_BUTTON_WHEEL_UP:
+				context.brush.adjust_level_target(1)
+				return true
+			MOUSE_BUTTON_WHEEL_DOWN:
+				context.brush.adjust_level_target(-1)
+				return true
 	var direction := 0
 	match event.button_index:
 		MOUSE_BUTTON_LEFT:
@@ -216,6 +224,8 @@ func inspector_lines() -> Array[String]:
 	lines.append("Инструмент: %s" % _tool)
 	lines.append("Кисть: %d×%d" % [context.brush.brush_size * 2 - 1, context.brush.brush_size * 2 - 1])
 	lines.append("Режим высоты: %s" % TerrainEditOperation.mode_name(context.brush.edit_mode))
+	if context.brush.edit_mode == TerrainEditOperation.Mode.LEVEL:
+		lines.append("Цель Level: %d (Ctrl+колесо)" % context.brush.level_target_height())
 	lines.append("Пандус: %s → %s" % [
 		SlopeCatalog.id_of_class(context.brush.ramp_class),
 		TerrainBrushController.direction_name(context.brush.ramp_direction),
@@ -225,6 +235,7 @@ func inspector_lines() -> Array[String]:
 	lines.append("ЛКМ — применить, Shift+ПКМ — обратно")
 	lines.append("Tab — подынструмент, F — выровнять")
 	lines.append("[ ] — размер кисти, C/V — класс и направление пандуса")
+	lines.append("Ctrl+колесо — высота Level")
 	lines.append("M — оверлей навигации, T — профиль")
 	return lines
 
@@ -250,3 +261,11 @@ func _overlay_state() -> String:
 	if context.nav_overlay == null:
 		return "нет"
 	return "вкл" if context.nav_overlay.visible else "выкл"
+
+
+func list_title() -> String:
+	return "Объекты рельефа"
+
+
+func empty_list_hint() -> String:
+	return "В режиме «Рельеф» объектов в списке пока нет"

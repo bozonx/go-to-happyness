@@ -19,7 +19,7 @@ const BOARD_CELLS := 32
 static func run_all() -> void:
 	_test_brush_covers_a_square_and_clips_at_the_edge()
 	_test_height_brush_edits_through_the_service()
-	_test_level_mode_moves_a_plateau_from_the_hovered_column()
+	_test_level_mode_latches_a_plateau_height_for_the_stroke()
 	_test_no_hover_means_no_edit()
 	print("    [PASS] Terrain Brush Tests")
 	_test_material_pick_clamps_the_variant()
@@ -102,7 +102,7 @@ static func _test_height_brush_edits_through_the_service() -> void:
 	assert(not brush.is_painting())
 
 
-static func _test_level_mode_moves_a_plateau_from_the_hovered_column() -> void:
+static func _test_level_mode_latches_a_plateau_height_for_the_stroke() -> void:
 	var world := _make()
 	var brush: TerrainBrushController = world["brush"]
 	var grid: TerrainGrid = world["grid"]
@@ -113,13 +113,21 @@ static func _test_level_mode_moves_a_plateau_from_the_hovered_column() -> void:
 	var raised := grid.height_of(Vector2i(0, 0))
 	assert(raised == 2)
 
-	# `level` has no direction of its own: the wheel picks where the plateau lands
-	# relative to the hovered column, and every cell of the brush ends up there.
+	# Level captures its absolute target at the start of a stroke and preserves it
+	# as the cursor travels, rather than recalculating from every new column.
 	brush.edit_mode = TerrainEditOperation.Mode.LEVEL
-	brush.apply_height_brush(-1)
-	assert(grid.height_of(Vector2i(0, 0)) == raised - 1)
-	for cell: Vector2i in brush.brush_cells(Vector2i(0, 0)):
+	brush.set_paint_direction(1)
+	assert(brush.level_target_height() == raised)
+	_hover(brush, Vector2i(4, 0))
+	brush.apply_height_brush(1)
+	for cell: Vector2i in brush.brush_cells(Vector2i(4, 0)):
+		assert(grid.height_of(cell) == raised)
+	brush.adjust_level_target(-1)
+	_hover(brush, Vector2i(7, 0))
+	brush.apply_height_brush(1)
+	for cell: Vector2i in brush.brush_cells(Vector2i(7, 0)):
 		assert(grid.height_of(cell) == raised - 1)
+	brush.set_paint_direction(0)
 
 	# Flatten takes the hovered height as it stands and spreads it.
 	_hover(brush, Vector2i(8, 8))
@@ -149,6 +157,7 @@ static func _test_no_hover_means_no_edit() -> void:
 	brush.place_ramp()
 	brush.dissolve_ramp()
 	assert(service.undo_depth() == 0)
+	assert(brush.variant == 1, "variant selection is brush state even without hover")
 
 
 # --- Surface ------------------------------------------------------------------

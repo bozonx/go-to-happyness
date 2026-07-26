@@ -228,8 +228,7 @@ func _refresh_panels() -> void:
 	])
 	_side_panel.set_inspector("Инспектор — %s" % _active.title, _active.inspector_lines())
 	_side_panel.set_entries(
-		"Объекты", _active.list_entries(),
-		"Зоны, точки и маршруты появятся в фазе 4",
+		_active.list_title(), _active.list_entries(), _active.empty_list_hint(),
 	)
 	# A stack you cannot pop says so by being grey, the way the building editor's
 	# decor buttons do.

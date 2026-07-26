@@ -35,6 +35,10 @@ var _wear_service: SurfaceWearService
 ## Non-zero while a drag paints: +1 raises, -1 lowers, applied again whenever the
 ## cursor crosses into a new column.
 var _paint_direction := 0
+## The absolute plateau height captured when a Level stroke starts.  It must not
+## follow the hovered column: doing so turns Level into another sculpt brush.
+var _level_target_height := 0
+var _has_level_target := false
 var _wear_day := 0
 
 
@@ -76,9 +80,13 @@ func clear_hover() -> void:
 ## Starts or stops a painting drag. Non-zero also applies the brush at once, so a
 ## click that never moves still edits the column under it.
 func set_paint_direction(direction: int) -> void:
+	if direction != 0 and _paint_direction == 0 and edit_mode == TerrainEditOperation.Mode.LEVEL:
+		_capture_level_target()
 	_paint_direction = direction
 	if direction != 0:
 		apply_height_brush(direction)
+	else:
+		_has_level_target = false
 
 
 func is_painting() -> bool:
@@ -104,9 +112,9 @@ func apply_height_brush(delta: int) -> void:
 		return
 	var operation := TerrainEditOperation.offset(brush_cells(hovered_cell), delta, edit_mode)
 	if edit_mode == TerrainEditOperation.Mode.LEVEL:
-		# The level tool has no direction of its own: the wheel of the height
-		# brush chooses which way the plateau moves from the hovered column.
-		operation = TerrainEditOperation.level(brush_cells(hovered_cell), _grid.height_of(hovered_cell) + delta)
+		if not _has_level_target:
+			_capture_level_target()
+		operation = TerrainEditOperation.level(brush_cells(hovered_cell), _level_target_height)
 	if _service.apply_operation(operation):
 		last_message = "%s %+d — %d cells changed" % [
 			TerrainEditOperation.mode_name(edit_mode), delta, _service.last_delta_size(),
@@ -115,6 +123,28 @@ func apply_height_brush(delta: int) -> void:
 	last_message = "%s %+d REFUSED (%s)" % [
 		TerrainEditOperation.mode_name(edit_mode), delta, _service.last_rejection(),
 	]
+
+
+## Changes the captured plateau height without using the current column as a
+## new reference.  Ctrl+wheel invokes this during a Level stroke.
+func adjust_level_target(delta: int) -> void:
+	if not _has_level_target:
+		if not has_hover:
+			return
+		_capture_level_target()
+	_level_target_height += delta
+	last_message = "level target %d" % _level_target_height
+
+
+func level_target_height() -> int:
+	return _level_target_height
+
+
+func _capture_level_target() -> void:
+	if not has_hover:
+		return
+	_level_target_height = _grid.height_of(hovered_cell)
+	_has_level_target = true
 
 
 func apply_flatten() -> void:
@@ -160,14 +190,16 @@ func apply_material() -> void:
 	last_message = "paint %s changed nothing" % id
 
 
+func set_variant(next_variant: int) -> void:
+	variant = TerrainMaterialVariants.clamp_variant(material_index, next_variant)
+	last_message = "variant %s" % TerrainMaterialVariants.variant_name(material_index, variant)
+
+
+## Variant selection is brush state, not a paint operation.  The next ordinary
+## material stroke applies it, which also lets palette controls work after the
+## pointer has left the 3D viewport.
 func cycle_variant() -> void:
-	if not has_hover:
-		return
-	variant = (variant + 1) % TerrainMaterialVariants.variant_count(material_index)
-	if _service.paint_variant(brush_cells(hovered_cell), variant):
-		last_message = "variant %s" % TerrainMaterialVariants.variant_name(material_index, variant)
-		return
-	last_message = "variant %d unchanged" % variant
+	set_variant((variant + 1) % TerrainMaterialVariants.variant_count(material_index))
 
 
 ## Paints a wear level over the brush. Absolute and therefore idempotent, which

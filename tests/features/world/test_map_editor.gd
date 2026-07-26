@@ -131,10 +131,19 @@ func _test_surface_painting_moves_no_geometry(editor: Node) -> void:
 	var topology_before: int = editor._nav_grid.topology_revision()
 
 	editor._active.select_palette_entry(TerrainMaterialCatalog.MUD)
+	# Palette controls are clicked after the pointer leaves the 3D viewport.  A
+	# variant is therefore brush state, not an immediate repaint under hover.
+	editor._brush.clear_hover()
+	editor._active.activate_option(&"variant_1")
+	assert(editor._brush.variant == 1, "variant picker updates brush state without hover")
+	assert(terrain.variant_at(Vector2i(3, 3)) != 1, "picking a variant did not repaint")
+	editor._brush.hovered_cell = Vector2i(3, 3)
+	editor._brush.has_hover = true
 	editor._active.handle_input(_click(MOUSE_BUTTON_LEFT, true))
 	editor._active.handle_input(_click(MOUSE_BUTTON_LEFT, false))
 
 	assert(terrain.material_of(Vector2i(3, 3)) == TerrainMaterialCatalog.MUD, "painted through the palette")
+	assert(terrain.variant_at(Vector2i(3, 3)) == 1, "paint applied the selected variant")
 	assert(not terrain.has_dirty_chunks(), "painting queued no chunk rebuild")
 	assert(editor._nav_grid.topology_revision() == topology_before, "painting did not move topology")
 	assert(editor.history.undo_depth() == 1, "the paint is undoable on the same stack")

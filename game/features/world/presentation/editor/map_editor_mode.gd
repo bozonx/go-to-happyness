@@ -35,11 +35,16 @@ class ToolOption:
 	extends RefCounted
 	var id: StringName
 	var label: String
+	## Options with the same non-empty row id are rendered beside one another.
+	var row: StringName = &""
+	var selected := false
 
-	static func of(option_id: StringName, option_label: String) -> ToolOption:
+	static func of(option_id: StringName, option_label: String, option_row: StringName = &"", is_selected := false) -> ToolOption:
 		var option := ToolOption.new()
 		option.id = option_id
 		option.label = option_label
+		option.row = option_row
+		option.selected = is_selected
 		return option
 
 
@@ -105,6 +110,16 @@ func inspector_lines() -> Array[String]:
 ## points and routes.
 func list_entries() -> Array[String]:
 	return []
+
+
+## The mode owns the side-list wording.  Placeholder copy must not claim that
+## every mode is about zones and routes while the list is intentionally empty.
+func list_title() -> String:
+	return "Объекты"
+
+
+func empty_list_hint() -> String:
+	return "Объекты этого режима появятся в следующих фазах"
 
 
 ## The part of the status line this mode owns — what is under the cursor.

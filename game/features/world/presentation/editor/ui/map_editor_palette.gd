@@ -81,12 +81,23 @@ static func _readable(swatch: Color) -> Color:
 func set_options(options: Array) -> void:
 	for child in _options.get_children():
 		child.queue_free()
+	var rows: Dictionary = {}
 	for option in options:
+		var parent: Container = _options
+		if option.row != &"":
+			if not rows.has(option.row):
+				var row := HBoxContainer.new()
+				row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				_options.add_child(row)
+				rows[option.row] = row
+			parent = rows[option.row]
 		var button := Button.new()
 		button.text = option.label
+		button.toggle_mode = option.row != &""
+		button.button_pressed = option.selected
 		button.focus_mode = Control.FOCUS_NONE
 		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var option_id: StringName = option.id
 		button.pressed.connect(func() -> void: option_activated.emit(option_id))
-		_options.add_child(button)
+		parent.add_child(button)

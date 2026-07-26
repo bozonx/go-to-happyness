@@ -14,7 +14,7 @@ extends MapEditorMode
 ## is a variant, decor, a road surface or a state of the detail byte. The editor
 ## does not get to widen that rule by offering paints the catalog does not have.
 
-const OPTION_VARIANT := &"variant"
+const OPTION_VARIANT_PREFIX := "variant_"
 const OPTION_WEAR := &"wear"
 const OPTION_SNOW := &"snow"
 const OPTION_BRUSH_UP := &"brush_up"
@@ -133,9 +133,13 @@ func tool_options() -> Array:
 	var options: Array = []
 	options.append(ToolOption.of(OPTION_BRUSH_DOWN, "Кисть −"))
 	options.append(ToolOption.of(OPTION_BRUSH_UP, "Кисть +"))
-	options.append(ToolOption.of(OPTION_VARIANT, "Вариант: %s" % TerrainMaterialVariants.variant_name(
-		context.brush.material_index, context.brush.variant,
-	)))
+	var variant_count := TerrainMaterialVariants.variant_count(context.brush.material_index)
+	for variant_index in variant_count:
+		options.append(ToolOption.of(
+			_variant_option_id(variant_index),
+			String(TerrainMaterialVariants.variant_name(context.brush.material_index, variant_index)),
+			&"variants", variant_index == context.brush.variant,
+		))
 	# The level is part of the brush, so it is shown on the button that selects it.
 	options.append(ToolOption.of(OPTION_WEAR, "Износ: %d" % _wear_level))
 	options.append(ToolOption.of(OPTION_SNOW, "Снег: %d" % _snow_level))
@@ -143,14 +147,16 @@ func tool_options() -> Array:
 
 
 func activate_option(option_id: StringName) -> void:
+	if String(option_id).begins_with(OPTION_VARIANT_PREFIX):
+		context.set_edit_label("вариант")
+		context.brush.set_variant(String(option_id).trim_prefix(OPTION_VARIANT_PREFIX).to_int())
+		notify_ui_changed()
+		return
 	match option_id:
 		OPTION_BRUSH_UP:
 			context.brush.adjust_brush_size(1)
 		OPTION_BRUSH_DOWN:
 			context.brush.adjust_brush_size(-1)
-		OPTION_VARIANT:
-			context.set_edit_label("вариант")
-			context.brush.cycle_variant()
 		OPTION_WEAR:
 			# Pressing it again steps the level, so one button both picks the
 			# tool and sets what it paints.
@@ -162,6 +168,10 @@ func activate_option(option_id: StringName) -> void:
 				_snow_level = (_snow_level + 1) % (TerrainDetailCodec.MAX_SNOW_DEPTH + 1)
 			_tool = TOOL_SNOW
 	notify_ui_changed()
+
+
+func _variant_option_id(variant_index: int) -> StringName:
+	return StringName("%s%d" % [OPTION_VARIANT_PREFIX, variant_index])
 
 
 func inspector_lines() -> Array[String]:
@@ -198,6 +208,14 @@ func status_text() -> String:
 		context.terrain.surface_weight_at(cell),
 		context.terrain_world.pending_chunk_count() if context.terrain_world != null else 0,
 	]
+
+
+func list_title() -> String:
+	return "Объекты поверхности"
+
+
+func empty_list_hint() -> String:
+	return "В режиме «Поверхность» объектов в списке пока нет"
 
 
 ## Approximate colour of a material, for the palette swatch. Deliberately derived
