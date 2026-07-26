@@ -112,7 +112,7 @@ static func handle_civic_post_assignment(simulation: Node) -> void:
 	simulation.research_controller.handle_civic_post_assignment()
 
 static func set_selected_work_role(simulation: Node, role: String, daily_order := false) -> void:
-	simulation._set_selected_work_role(role, daily_order)
+	simulation.workplace_controller.assign_work_role(role, daily_order)
 
 static func refresh_build_menu(simulation: Node) -> void:
 	if simulation.building_menu_controller != null:
@@ -151,7 +151,7 @@ static func create_construction_site(simulation: Node, cell: Vector2i, building_
 	return simulation.construction_controller.create_construction_site(cell, building_type, position, rotation_quarters, blueprint, occupied_footprint)
 
 static func is_construction_site(simulation: Node, node: Node3D) -> bool:
-	return simulation.is_construction_site(node)
+	return simulation.construction_controller.is_construction_site(node)
 
 static func create_resource_pile(simulation: Node, position: Vector3, resources: Dictionary, is_backpack_pile := false) -> Node3D:
 	return simulation.resource_pile_service.create_resource_pile(position, resources, is_backpack_pile)
@@ -160,10 +160,10 @@ static func complete_building(simulation: Node, cell: Vector2i, building_type: S
 	simulation.construction_controller.complete_building(cell, building_type, position, building, blueprint)
 
 static func available_employer_capacity(simulation: Node, role: String) -> int:
-	return simulation.available_employer_capacity(role)
+	return simulation.workplace_controller.available_employer_capacity(role)
 
 static func employer_for_role(simulation: Node, role: String) -> Node3D:
-	return simulation.employer_for_role(role)
+	return simulation.workplace_controller.employer_for_role(role)
 
 static func required_staff_for_building(simulation: Node, building: Node3D) -> Dictionary:
 	return simulation.building_status_indicator_controller.required_staff_for_building(building) if simulation.building_status_indicator_controller != null else {}

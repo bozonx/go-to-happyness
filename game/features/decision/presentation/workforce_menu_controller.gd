@@ -73,19 +73,19 @@ func workforce_role_label(role: String) -> String:
 
 func workforce_role_limit(role: String) -> int:
 	match role:
-		"construction": return simulation.builder_job_capacity() if simulation.settlement.era >= SettlementStateScript.Era.STONE else -1
+		"construction": return simulation.workplace_controller.builder_job_capacity() if simulation.settlement.era >= SettlementStateScript.Era.STONE else -1
 		"forestry": return simulation.sawmill_positions.size()
 		"farming": return simulation.farm_positions.size()
-		"gather_branches": return simulation.available_employer_capacity("gather_branches")
-		"gather_food": return simulation.available_employer_capacity("gather_food")
+		"gather_branches": return simulation.workplace_controller.available_employer_capacity("gather_branches")
+		"gather_food": return simulation.workplace_controller.available_employer_capacity("gather_food")
 		"courier": return simulation.warehouse_positions.size()
 		"cook": return 1 if is_instance_valid(simulation.canteen) else 0
-		"official": return simulation.available_employer_capacity("official")
+		"official": return simulation.workplace_controller.available_employer_capacity("official")
 		"teacher": return simulation.school_positions.size()
 		"seller": return simulation.market_positions.size()
-		"factory_worker": return simulation.available_employer_capacity("factory_worker")
-		"engineer": return simulation.available_employer_capacity("engineer")
-		"craftsman": return simulation.available_employer_capacity("craftsman")
+		"factory_worker": return simulation.workplace_controller.available_employer_capacity("factory_worker")
+		"engineer": return simulation.workplace_controller.available_employer_capacity("engineer")
+		"craftsman": return simulation.workplace_controller.available_employer_capacity("craftsman")
 	return -1
 
 
@@ -282,7 +282,7 @@ func assign_unemployed_worker(role: String) -> void:
 		if role == "gather_branches":
 			simulation.research_controller.set_manual_specialist_employment(best, role)
 		else:
-			simulation._set_selected_work_role(role)
+			simulation.workplace_controller.assign_work_role(role)
 		refresh_workforce_menu()
 		refresh_campfire_occupancy_button()
 

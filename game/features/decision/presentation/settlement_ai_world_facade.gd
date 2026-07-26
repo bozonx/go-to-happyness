@@ -150,21 +150,21 @@ func _world_data() -> Dictionary:
 		"era": simulation.settlement.era,
 		"hour": current_hour,
 		"has_canteen": is_instance_valid(simulation.canteen),
-		"cooking_jobs": simulation.available_employer_capacity("cook"),
+		"cooking_jobs": simulation.workplace_controller.available_employer_capacity("cook"),
 		"schools": simulation.school_positions.size(),
 		"markets": simulation.market_positions.size(),
-		"builder_jobs": simulation.available_employer_capacity("construction"),
-		"forestry_jobs": simulation.available_employer_capacity("forestry"),
-		"farming_jobs": simulation.available_employer_capacity("farming"),
-		"forager_jobs": simulation.available_employer_capacity("gather_food"),
-		"materials_yard_jobs": simulation.available_employer_capacity("gather_branches"),
-		"teacher_jobs": simulation.available_employer_capacity("teacher"),
-		"seller_jobs": simulation.available_employer_capacity("seller"),
-		"official_jobs": simulation.available_employer_capacity("official"),
-		"factory_jobs": simulation.available_employer_capacity("factory_worker"),
-		"engineer_jobs": simulation.available_employer_capacity("engineer"),
-		"craftsman_jobs": simulation.available_employer_capacity("craftsman"),
-		"courier_jobs": simulation.available_employer_capacity("courier"),
+		"builder_jobs": simulation.workplace_controller.available_employer_capacity("construction"),
+		"forestry_jobs": simulation.workplace_controller.available_employer_capacity("forestry"),
+		"farming_jobs": simulation.workplace_controller.available_employer_capacity("farming"),
+		"forager_jobs": simulation.workplace_controller.available_employer_capacity("gather_food"),
+		"materials_yard_jobs": simulation.workplace_controller.available_employer_capacity("gather_branches"),
+		"teacher_jobs": simulation.workplace_controller.available_employer_capacity("teacher"),
+		"seller_jobs": simulation.workplace_controller.available_employer_capacity("seller"),
+		"official_jobs": simulation.workplace_controller.available_employer_capacity("official"),
+		"factory_jobs": simulation.workplace_controller.available_employer_capacity("factory_worker"),
+		"engineer_jobs": simulation.workplace_controller.available_employer_capacity("engineer"),
+		"craftsman_jobs": simulation.workplace_controller.available_employer_capacity("craftsman"),
+		"courier_jobs": simulation.workplace_controller.available_employer_capacity("courier"),
 		"construction_sites": simulation.construction_sites.size() + simulation.demolition_sites.size(),
 		"warehouses": simulation.warehouse_positions.size(),
 		"sawmills": simulation.sawmill_positions.size(),
@@ -288,7 +288,7 @@ func _role_employers() -> Dictionary:
 					"route_cost": _helpers.route_cost(employment_center, service_position),
 				})
 		if candidates.is_empty():
-			var fallback: Node3D = simulation.employer_for_role(role)
+			var fallback: Node3D = simulation.workplace_controller.employer_for_role(role)
 			if is_instance_valid(fallback):
 				candidates.append({
 					"position": fallback.global_position,
@@ -302,7 +302,7 @@ func _role_employers() -> Dictionary:
 			employers[role] = candidates
 	# Couriers are formally employed in the tent era but do not yet own a
 	# workplace node. The employment centre is only the registration destination.
-	var courier_slots: int = simulation.available_employer_capacity("courier") - int(_assigned_role_counts_internal().get("courier", 0))
+	var courier_slots: int = simulation.workplace_controller.available_employer_capacity("courier") - int(_assigned_role_counts_internal().get("courier", 0))
 	var centre_position: Vector3 = simulation.employment_center_position()
 	if courier_slots > 0 and centre_position != Vector3.INF:
 		employers["courier"] = [{

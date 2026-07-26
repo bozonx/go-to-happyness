@@ -101,7 +101,7 @@ func _refresh_role_buttons(selected_exists: bool, assignment_submenu_open: bool)
 		var submenu: String = button.get_meta("submenu", "job")
 		var is_daily_submenu: bool = submenu == "daily"
 		var daily_role_enabled: bool = not is_daily_submenu or role.is_empty() or role in simulation.workforce_menu_controller.daily_order_roles() if simulation.workforce_menu_controller != null else []
-		var min_era: int = simulation.min_era_for_role(role)
+		var min_era: int = simulation.workplace_controller.min_era_for_role(role)
 		var era_ok: bool = is_daily_submenu or min_era <= simulation.settlement.era
 		var role_available: bool = simulation.workplace_labor_service.is_daily_order_role_available(role) if is_daily_submenu else simulation.workplace_labor_service.is_role_available(role)
 		button.visible = selected_exists and ((is_daily_submenu and simulation.build_menu_is_daily_order_menu) or (not is_daily_submenu and simulation.build_menu_is_job_menu)) and daily_role_enabled and era_ok and (not hero_only or simulation.selected_builder.is_hero)
@@ -168,7 +168,7 @@ func show_building_menu() -> void:
 	simulation.build_menu_is_global = false
 	simulation.ui_manager.building_menu.visible = true
 
-	var is_construction: bool = simulation.is_construction_site(simulation.selected_building)
+	var is_construction: bool = simulation.construction_controller.is_construction_site(simulation.selected_building)
 
 	if is_construction:
 		var site_data: Variant = simulation.construction.site_for_node(simulation.selected_building)

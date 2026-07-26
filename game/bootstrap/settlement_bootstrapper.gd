@@ -133,8 +133,8 @@ func _setup_workplace_and_visuals() -> void:
 		game.dig_sites,
 		func(building): return game.fire_management_service.is_fire_lit(building),
 		game._update_interface,
-		game.available_employer_capacity,
-		game.builder_job_capacity,
+		game.workplace_controller.available_employer_capacity,
+		game.workplace_controller.builder_job_capacity,
 		func(site): return game.excavation_service.can_work_at_dig_site(site),
 		game._employment_centre_building
 	)
@@ -451,7 +451,7 @@ func _setup_building_lifecycle() -> void:
 		func(): game.building_management.select_best_canteen(),
 		func(position, resources, is_backpack_pile): return game.resource_pile_service.create_resource_pile(position, resources, is_backpack_pile),
 		func(): game.world_navigation_controller.refresh_navigation_grid(),
-		game.is_construction_site,
+		game.construction_controller.is_construction_site,
 		func(centre): game.research_controller.activate_employment_centre(centre),
 		game._convert_backpack_pile_to_regular,
 		func(building, group_name, footprint): game.building_visuals.add_building_selector(building, group_name, footprint),

@@ -73,6 +73,58 @@ func employer_capacity(role: String, building: Node3D) -> int:
 	return 1
 
 
+func assign_work_role(role: String, daily_order := false) -> void:
+	if game.selected_builder == null:
+		return
+	# A work assignment is an explicit hand-off to the settlement AI. Without
+	# this, a citizen previously moved in first-person mode keeps the direct
+	# control flag and is excluded from every work and courier order.
+	game.selected_builder.set_player_controlled(false)
+	game.selected_builder.idle()
+	if daily_order:
+		if role.is_empty():
+			game.selected_builder.clear_daily_order()
+		else:
+			if game.citizen_daily_order_service != null:
+				game.citizen_daily_order_service.assign_daily_order(game.selected_builder, role)
+		if game.selected_builder.employment_state == Citizen.EmploymentState.UNREGISTERED and game.employment_center_position() != Vector3.INF:
+			game.selected_builder.request_no_permanent_work_registration()
+	elif role == "excavation":
+		game.excavation_service.start_dig_assignment()
+		game.build_menu_is_job_menu = false
+		game.build_menu_is_daily_order_menu = false
+		return
+	elif role == "official":
+		if not game.research_controller.appoint_official(game.selected_builder, game._employment_centre_building(), false):
+			return
+	else:
+		if role != "official" and not game.workplace_labor_service.player_can_manage_permanent_professions():
+			if game.workplace_labor_service != null:
+				game.workplace_labor_service.show_labor_command_blocked()
+			return
+		if game.selected_builder.has_no_permanent_work() or game.selected_builder.is_unregistered():
+			if game.employment_center_position() == Vector3.INF:
+				game._update_interface("Build the main campfire before assigning permanent jobs.")
+				return
+			game.selected_builder.clear_daily_order()
+			game.selected_builder.begin_employment_processing(game.employment_center_position(), role, employer_for_role(role))
+	game.selected_builder.assigned_dig_site = null
+	if game.citizen_ai != null:
+		game.citizen_ai.request_decision_refresh()
+	game._update_workers()
+	game.build_menu_is_job_menu = false
+	game.build_menu_is_daily_order_menu = false
+	game._show_selected_citizen_menu()
+	if game.building_menu_controller != null:
+		game.building_menu_controller.refresh_build_menu()
+	game._update_interface("%s assigned to %s." % ["Hero" if game.selected_builder.is_hero else "Citizen", "automatic work" if role.is_empty() else role.replace("_", " ")])
+	if game.workforce_menu_controller != null:
+		game.workforce_menu_controller.refresh_campfire_occupancy_button()
+	if game.ui_manager.workforce_menu != null and game.ui_manager.workforce_menu.visible:
+		if game.workforce_menu_controller != null:
+			game.workforce_menu_controller.refresh_workforce_menu()
+
+
 func available_employer_capacity(role: String) -> int:
 	if role == "official":
 		var centre: Node3D = game.workplace_labor_service.employment_centre_building() if game.workplace_labor_service != null else null

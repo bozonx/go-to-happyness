@@ -200,5 +200,5 @@ func set_manual_specialist_employment(citizen: Citizen, role: String) -> bool:
 	if citizen.employment_state != Citizen.EmploymentState.NO_PERMANENT_WORK:
 		return false
 	citizen.idle()
-	citizen.begin_employment_processing(game.employment_center_position(), role, game.employer_for_role(role))
+	citizen.begin_employment_processing(game.employment_center_position(), role, game.workplace_controller.employer_for_role(role))
 	return true

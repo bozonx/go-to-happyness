@@ -86,7 +86,7 @@ func bind_events(target: Object) -> void:
 	_connect_event(events.job_submenu_requested, target, "_open_job_submenu")
 	_connect_event(events.category_opened, target.get("build_controller"), "open_build_category")
 	_connect_event(events.build_selected, target.get("build_controller"), "select_build_mode")
-	_connect_event(events.role_selected, target, "_set_selected_work_role")
+	_connect_event(events.role_selected, target.get("workplace_controller"), "assign_work_role")
 
 	_connect_event(events.send_resident_outside_requested, target.get("outside_work_controller"), "send_selected_resident_to_outside_work")
 	_connect_event(events.context_menus_close_requested, target.get("input_controller"), "close_context_menus")
