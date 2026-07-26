@@ -288,6 +288,16 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		if not _is_pointer_over_view():
 			return
+		if button.pressed and button.shift_pressed:
+			match button.button_index:
+				MOUSE_BUTTON_WHEEL_UP:
+					_brush.adjust_brush_size(1)
+					_refresh_panels()
+					return
+				MOUSE_BUTTON_WHEEL_DOWN:
+					_brush.adjust_brush_size(-1)
+					_refresh_panels()
+					return
 		if _active != null and _active.handle_input(event):
 			_refresh_panels()
 		return

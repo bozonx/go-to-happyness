@@ -3,8 +3,9 @@ extends Camera3D
 
 ## Free orbital camera of the territory editor (map_editor.md §3.4).
 ##
-## WASD across the plane, `Q`/`E` up and down the orbit, middle mouse to turn,
-## wheel to zoom, `F` to focus what is selected, `Home` to frame the whole board.
+## WASD across the plane, `Q`/`E` up and down the orbit, right mouse to turn,
+## middle mouse to pan, wheel to zoom, `F` to focus what is selected, `Home` to
+## frame the whole board. This matches the settlement view and building editor.
 ##
 ## The distance limits scale with the board: framing a 512 m map from the 90 m
 ## ceiling the laboratory uses would put the author inside a hillside. `Home` is
@@ -13,6 +14,7 @@ extends Camera3D
 const PAN_SPEED := 24.0
 const ORBIT_SPEED := 90.0
 const MOUSE_ORBIT := 0.35
+const MOUSE_PAN_FACTOR := 0.00075
 const ZOOM_STEP := 0.08
 const MIN_DISTANCE := 4.0
 const MIN_PITCH := 5.0
@@ -24,6 +26,7 @@ var pitch := 52.0
 var distance := 48.0
 
 var _orbiting := false
+var _panning := false
 var _max_distance := 400.0
 var _board_metres := 128.0
 ## Fraction of the window height the 3D view actually occupies, and how far the
@@ -124,17 +127,33 @@ func process_keys(delta: float) -> bool:
 func handle_mouse_button(event: InputEventMouseButton) -> bool:
 	match event.button_index:
 		MOUSE_BUTTON_MIDDLE:
-			_orbiting = event.pressed
+			_panning = event.pressed
 			return true
+		MOUSE_BUTTON_RIGHT:
+			# Shift+right belongs to an active tool's inverse operation.  On release
+			# it may already be up, so claim only a drag this camera actually began.
+			if event.pressed:
+				if event.shift_pressed:
+					return false
+				_orbiting = true
+				return true
+			if _orbiting:
+				_orbiting = false
+				return true
+			return false
 		MOUSE_BUTTON_WHEEL_UP:
+			if event.shift_pressed:
+				return false
 			if event.pressed:
 				_zoom(-1.0)
 			return true
 		MOUSE_BUTTON_WHEEL_DOWN:
+			if event.shift_pressed:
+				return false
 			if event.pressed:
 				_zoom(1.0)
 			return true
-	# `Alt`+left is the second way to orbit, for mice without a usable wheel click.
+	# `Alt`+left is the second way to orbit, for mice without a usable right button.
 	if event.button_index == MOUSE_BUTTON_LEFT and event.alt_pressed:
 		_orbiting = event.pressed
 		return true
@@ -143,7 +162,10 @@ func handle_mouse_button(event: InputEventMouseButton) -> bool:
 
 func handle_mouse_motion(event: InputEventMouseMotion) -> bool:
 	if not _orbiting:
-		return false
+		if not _panning:
+			return false
+		_pan(event.relative)
+		return true
 	yaw = fposmod(yaw - event.relative.x * MOUSE_ORBIT, 360.0)
 	pitch = clampf(pitch + event.relative.y * MOUSE_ORBIT, MIN_PITCH, MAX_PITCH)
 	apply()
@@ -152,6 +174,22 @@ func handle_mouse_motion(event: InputEventMouseMotion) -> bool:
 
 func is_orbiting() -> bool:
 	return _orbiting
+
+
+func _pan(mouse_delta: Vector2) -> void:
+	var right := global_transform.basis.x
+	right.y = 0.0
+	right = right.normalized()
+	var forward := -global_transform.basis.z
+	forward.y = 0.0
+	forward = forward.normalized()
+	var speed := distance * MOUSE_PAN_FACTOR
+	target -= right * mouse_delta.x * speed
+	target += forward * mouse_delta.y * speed
+	var reach := _board_metres * 0.75
+	target.x = clampf(target.x, -reach, reach)
+	target.z = clampf(target.z, -reach, reach)
+	apply()
 
 
 func apply() -> void:

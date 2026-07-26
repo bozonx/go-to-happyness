@@ -72,11 +72,23 @@ func _handle_mouse(event: InputEventMouseButton) -> bool:
 		MOUSE_BUTTON_LEFT:
 			direction = 1
 		MOUSE_BUTTON_RIGHT:
-			direction = -1
+			# A Shift-started sculpt stroke still has to stop if Shift is released
+			# before the mouse button.  An unmodified right button belongs to camera
+			# orbit and is claimed before the mode sees it.
+			if event.pressed:
+				if not event.shift_pressed:
+					return false
+				direction = -1
+			elif _tool == TOOL_SCULPT and context.brush.is_painting():
+				context.brush.set_paint_direction(0)
+				_redraw_overlay()
+				return true
+			else:
+				return false
 		_:
 			return false
-	# Every tool of this mode uses the same two buttons: left does the thing,
-	# right undoes it in place (§3.3). Only sculpting drags.
+	# Every tool uses left to apply and Shift+right for its inverse. Only sculpting
+	# drags; unmodified right is reserved for the shared camera orbit.
 	match _tool:
 		TOOL_SCULPT:
 			context.set_edit_label("рельеф")
@@ -210,7 +222,7 @@ func inspector_lines() -> Array[String]:
 	])
 	lines.append("Навигация: %s (%s)" % [_overlay_state(), NAV_PROFILES[_nav_profile_index]])
 	lines.append("")
-	lines.append("ЛКМ — применить, ПКМ — обратно")
+	lines.append("ЛКМ — применить, Shift+ПКМ — обратно")
 	lines.append("Tab — подынструмент, F — выровнять")
 	lines.append("[ ] — размер кисти, C/V — класс и направление пандуса")
 	lines.append("M — оверлей навигации, T — профиль")
