@@ -2,7 +2,7 @@ class_name MapTerrainCodec
 extends RefCounted
 
 ## `terrain.bin`: the whole grid as fixed-width cell records
-## (design_docs/core/map_editor.md §4, grid_terrain_system.md §12).
+## (design_docs/engine/map_editor.md §4, grid_terrain_system.md §12).
 ##
 ## Five bytes per cell, not the four the design estimated. The estimate assumed
 ## slope class, direction, index and flags fit in one byte together; they do not.

@@ -1,7 +1,7 @@
 class_name MapDocumentService
 extends RefCounted
 
-## Reads and writes `.gdmap` packages (design_docs/core/map_editor.md §4).
+## Reads and writes `.gdmap` packages (design_docs/engine/map_editor.md §4).
 ##
 ## A map is a folder, not a file: the terrain layer is 320 KB of binary at
 ## 256×256 and would become megabytes as text. The folder holds `map.json`, the

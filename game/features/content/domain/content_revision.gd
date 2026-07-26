@@ -2,7 +2,7 @@ class_name ContentRevision
 extends RefCounted
 
 ## Save stamp shared by every authored content file — blueprints, maps, prefabs
-## (design_docs/core/content_packaging.md §7).
+## (design_docs/engine/content_packaging.md §7).
 ##
 ## A revision answers one question: "is this the same file I loaded?". It is a
 ## stamp written on save, not a hash of the content: hashing a quarter-megabyte

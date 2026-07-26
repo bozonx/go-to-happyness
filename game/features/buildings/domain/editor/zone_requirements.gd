@@ -2,7 +2,7 @@ class_name ZoneRequirements
 extends RefCounted
 
 ## Static rules that define which fixture capabilities a zone kind requires
-## (design_docs/content/building_furnishing.md §4 — zone requirements).
+## (design_docs/engine/building_furnishing.md §4 — zone requirements).
 ##
 ## This is a pure domain lookup: given a zone kind (and optional subtype),
 ## it returns the list of capabilities that must be present in at least one

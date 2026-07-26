@@ -1,7 +1,7 @@
 extends SceneTree
 
 ## End-to-end test of the territory editor against the real scene
-## (design_docs/core/map_editor.md §15 "Тесты").
+## (design_docs/engine/map_editor.md §15 "Тесты").
 ##
 ## Modelled on `test_decor_mode_editor.gd` for a reason that is already paid for:
 ## the old catalog-only coverage of decor mode passed green while the entire mode

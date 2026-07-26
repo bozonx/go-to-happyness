@@ -1,7 +1,7 @@
 class_name TerrainService
 extends RefCounted
 
-## Transaction boundary for terrain editing (design_docs/core/grid_terrain_system.md §14).
+## Transaction boundary for terrain editing (design_docs/engine/grid_terrain_system.md §14).
 ##
 ## Tools describe what they want as a `TerrainEditOperation`; this service runs it
 ## through the solver, commits it in one piece, and keeps the undo history. Tools

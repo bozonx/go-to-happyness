@@ -1,7 +1,7 @@
 class_name TerrainMaterialCatalog
 extends RefCounted
 
-## Terrain surface materials (design_docs/core/terrain_materials.md §2).
+## Terrain surface materials (design_docs/engine/terrain_materials.md §2).
 ##
 ## A material is not decoration. The entry rule is hard and it is the reason this
 ## catalog stays small: something becomes a material only when it changes at least

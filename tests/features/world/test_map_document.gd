@@ -2,7 +2,7 @@ class_name TestMapDocument
 extends RefCounted
 
 ## The `.gdmap` package: write → read → byte-for-byte equal
-## (design_docs/core/map_editor.md §15 "Тесты").
+## (design_docs/engine/map_editor.md §15 "Тесты").
 ##
 ## The round-trip is the load-bearing test of the whole format. A map is the one
 ## artefact a player spends hours on and cannot reconstruct, so every claim the

@@ -63,7 +63,7 @@ create generic `utils`, `helpers`, `managers` or catch-all `services` directorie
 
 - `content`: authored content packaging — packs, content ids, style resolution and
   the save stamp shared by blueprints and maps. See
-  `design_docs/core/content_packaging.md`.
+  `design_docs/engine/content_packaging.md`.
 - `settlement`: economy, stored resources, eras, wellbeing and global progression.
 - `buildings`: definitions, placement, construction, demolition and building visuals.
 - `citizens`: citizen profiles, task state, actor movement and task execution.
@@ -77,7 +77,7 @@ create generic `utils`, `helpers`, `managers` or catch-all `services` directorie
 - `simulation`: the deterministic clock, day-cycle events and simulation-wide
   scheduling.
 - `events`: data-driven random events — definitions, conditions, outcomes,
-  delayed effects and the choice UI. See `design_docs/side_mechanics/event_system.md`.
+  delayed effects and the choice UI. See `design_docs/settlement/event_system.md`.
 - `save_load`: save file schema and the save/load service.
 - `world`: terrain, water, maps, the map editor and world-only presentation.
 - `routing`: navigation grid, route selection and route results. UI belongs in a

@@ -1,7 +1,7 @@
 class_name CascadeSolver
 extends RefCounted
 
-## Angle-of-repose cascade (design_docs/core/grid_terrain_system.md §4).
+## Angle-of-repose cascade (design_docs/engine/grid_terrain_system.md §4).
 ##
 ## Pure algorithm: reads a `TerrainGrid`, writes nothing, returns a `TerrainDelta`
 ## to commit or `null` to refuse. Everything happens on a `TerrainWorkingRegion`,

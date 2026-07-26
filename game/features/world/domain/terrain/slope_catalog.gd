@@ -1,7 +1,7 @@
 class_name SlopeCatalog
 extends RefCounted
 
-## One source of truth for terrain slopes (design_docs/core/grid_terrain_system.md §3).
+## One source of truth for terrain slopes (design_docs/engine/grid_terrain_system.md §3).
 ##
 ## A slope is never a height of its own: it is the authored transition between two
 ## integer columns. Every slope occupies a whole number of cells horizontally

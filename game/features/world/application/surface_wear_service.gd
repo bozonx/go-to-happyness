@@ -1,7 +1,7 @@
 class_name SurfaceWearService
 extends RefCounted
 
-## Ground wears where people walk (design_docs/core/terrain_materials.md §6.1).
+## Ground wears where people walk (design_docs/engine/terrain_materials.md §6.1).
 ##
 ## Citizens crossing a cell edge raise its `wear`; cells nobody visits for a while
 ## grow back. Wear changes the look everywhere and the traversal weight only where

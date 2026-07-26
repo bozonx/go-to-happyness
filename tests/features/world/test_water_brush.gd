@@ -1,7 +1,7 @@
 class_name TestWaterBrush
 extends RefCounted
 
-## The water brush (design_docs/core/map_editor.md §3.1, §5.3).
+## The water brush (design_docs/engine/map_editor.md §3.1, §5.3).
 ##
 ## Same arrangement as `TestTerrainBrush`: no camera, no viewport, no scene —
 ## just the controller over the real grids and the real `WaterService`.

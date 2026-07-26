@@ -1,7 +1,7 @@
 class_name MapDocument
 extends RefCounted
 
-## One map, whole, in memory (design_docs/core/map_editor.md §15).
+## One map, whole, in memory (design_docs/engine/map_editor.md §15).
 ##
 ## Pure data: no nodes, no files, no rendering. `MapDocumentService` reads and
 ## writes it, the editor mutates it, `GameLaunchManager` starts a session from it.

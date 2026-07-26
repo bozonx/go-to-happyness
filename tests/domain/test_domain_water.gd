@@ -1,7 +1,7 @@
 class_name TestDomainWater
 extends RefCounted
 
-## The water layer (design_docs/core/grid_terrain_system.md §9).
+## The water layer (design_docs/engine/grid_terrain_system.md §9).
 ##
 ## Three rules carry the whole design and every test below is a variation of one
 ## of them:

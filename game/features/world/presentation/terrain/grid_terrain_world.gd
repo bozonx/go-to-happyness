@@ -1,7 +1,7 @@
 class_name GridTerrainWorld
 extends Node3D
 
-## Scene-side owner of the terrain mesh (design_docs/core/grid_terrain_system.md §11, §14).
+## Scene-side owner of the terrain mesh (design_docs/engine/grid_terrain_system.md §11, §14).
 ##
 ## Holds one `StaticBody3D` per chunk with a mesh and a collision shape built from
 ## the same polygons, and rebuilds chunks the grid reported dirty under a per-frame

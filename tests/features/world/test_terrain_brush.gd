@@ -1,7 +1,7 @@
 class_name TestTerrainBrush
 extends RefCounted
 
-## The shared terrain brush (design_docs/core/map_editor.md §3.1, §3.6).
+## The shared terrain brush (design_docs/engine/map_editor.md §3.1, §3.6).
 ##
 ## The whole point of extracting it was that three hosts — the laboratory, the map
 ## editor and the `Terrain Base` layer of the building editor — drive one tool.

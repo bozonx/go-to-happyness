@@ -2,7 +2,7 @@ class_name TestDomainTerrain
 extends RefCounted
 
 ## Covers the invariant the whole terrain system rests on: only integers are
-## stored, everything fractional is derived (design_docs/core/grid_terrain_system.md §2.1).
+## stored, everything fractional is derived (design_docs/engine/grid_terrain_system.md §2.1).
 ##
 ## The edge cases are the point here. A cascade that is right in the middle of a
 ## plain and wrong at the board edge, at an anchor, at a hole or on a ramp it

@@ -1,7 +1,7 @@
 class_name WaterGrid
 extends RefCounted
 
-## The water layer of a board (design_docs/core/grid_terrain_system.md §9.3).
+## The water layer of a board (design_docs/engine/grid_terrain_system.md §9.3).
 ##
 ## Three flat arrays parallel to `TerrainGrid`, not sparse structures: a
 ## `Dictionary` over 65 536 cells costs a hash on every shader update and every

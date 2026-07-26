@@ -2,7 +2,7 @@ class_name ZoneAnchorRecord
 extends RefCounted
 
 ## A single authored anchor (a *point*) inside a building blueprint. Active zones
-## are organized by geometry (design_docs/content/modular_building_editor.md §3.4):
+## are organized by geometry (design_docs/engine/modular_building_editor.md §3.4):
 ## regions (PlaceZoneRecord), points (this), and — later — lines (routes). One
 ## anchor struct covers all point-shaped zones; the `role` field selects one of
 ## two role families:

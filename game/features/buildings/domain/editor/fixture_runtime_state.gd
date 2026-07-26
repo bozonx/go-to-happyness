@@ -2,7 +2,7 @@ class_name FixtureRuntimeState
 extends RefCounted
 
 ## Per-instance state of a fixture in a constructed building
-## (design_docs/content/building_furnishing.md §2.3, §11).
+## (design_docs/engine/building_furnishing.md §2.3, §11).
 ##
 ## Created from FixtureDefinition.runtime_defaults when a building is
 ## completed. Stored in the game save, not in the blueprint.

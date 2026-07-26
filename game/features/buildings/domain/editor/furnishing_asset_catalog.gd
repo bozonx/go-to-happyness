@@ -2,7 +2,7 @@ class_name FurnishingAssetCatalog
 extends RefCounted
 
 ## Catalog of furnishing asset definitions and their category taxonomy
-## (design_docs/content/building_furnishing.md §5).
+## (design_docs/engine/building_furnishing.md §5).
 ##
 ## Assets come from three sources, merged by id (later sources win):
 ##   1. the built-in definitions below;

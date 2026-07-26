@@ -2,7 +2,7 @@ class_name TerrainChunkMesher
 extends RefCounted
 
 ## Turns a region of `TerrainGrid` into one chunk mesh
-## (design_docs/core/grid_terrain_system.md §11).
+## (design_docs/engine/grid_terrain_system.md §11).
 ##
 ## Geometry only: no materials, no nodes. The result carries the triangle soup as
 ## well, so chunk collision is built from exactly the same polygons the player

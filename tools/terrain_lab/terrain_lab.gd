@@ -1,6 +1,6 @@
 extends Node3D
 
-## Isolated lab for the grid terrain system (design_docs/core/grid_terrain_system.md).
+## Isolated lab for the grid terrain system (design_docs/engine/grid_terrain_system.md).
 ##
 ## Runs the real domain grid, the real chunk mesher and the real chunk budget with
 ## nothing from the game around them, so terrain work can be developed and judged

@@ -2,7 +2,7 @@ class_name TerrainWorkingRegion
 extends RefCounted
 
 ## A scratch copy of the part of a `TerrainGrid` an operation touches
-## (design_docs/core/grid_terrain_system.md §4.4 "атомарность").
+## (design_docs/engine/grid_terrain_system.md §4.4 "атомарность").
 ##
 ## Reads fall through to the grid; writes land in override dictionaries. Nothing
 ## here mutates the grid, so an operation that is refused halfway leaves no trace,

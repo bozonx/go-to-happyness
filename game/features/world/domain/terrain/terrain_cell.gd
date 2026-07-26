@@ -1,7 +1,7 @@
 class_name TerrainCell
 extends RefCounted
 
-## Read/write view of a single terrain column (design_docs/core/grid_terrain_system.md §2.3).
+## Read/write view of a single terrain column (design_docs/engine/grid_terrain_system.md §2.3).
 ##
 ## The grid does NOT store these objects — it stores parallel packed arrays. This
 ## record exists so callers can pass a whole column around by name instead of by

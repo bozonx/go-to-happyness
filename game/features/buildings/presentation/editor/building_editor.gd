@@ -3,7 +3,7 @@ extends Node3D
 
 ## Modular building editor for frame construction and active work zones.
 ##
-## Runs in two modes (see design_docs/content/modular_building_editor.md §5):
+## Runs in two modes (see design_docs/engine/modular_building_editor.md §5):
 ##   * Dev mode  — launched by opening this scene directly in Godot; saves to
 ##     res://game/content/core/buildings and exposes the developer panel.
 ##   * Player mode — launched from the main menu; saves to user://custom_buildings.

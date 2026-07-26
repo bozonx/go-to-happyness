@@ -66,7 +66,7 @@ godot --headless --path . --script res://tests/features/simulation/test_startup.
 
 ## AI system
 
-Native runtime, **not GOAP**. See `design_docs/core/citizen_ai.md`.
+Native runtime, **not GOAP**. See `design_docs/citizens/citizen_ai.md`.
 
 - `AIWorldFacade` is the only read boundary (it produces a `WorldSnapshot`);
   `CitizenActuator` is the only write boundary.
@@ -97,7 +97,7 @@ the production `TerrainGrid`, `TerrainService`, chunk mesher and `NavGrid` in is
   editor's terrain layer. A host binds keys and draws the hover marker; it never
   reimplements a tool.
 - Water is a second layer over the same board (`WaterGrid` + `WaterBody` registry,
-  `grid_terrain_system.md` §9). It is authored, never simulated. Depth is **not** stored —
+  `engine/grid_terrain_system.md` §9). It is authored, never simulated. Depth is **not** stored —
   it is water level minus ground — so raising a lake bed drains it.
 - **All terrain and water edits go through `TerrainService` / `WaterService`.** The commit
   is what republishes navigation and keeps undo and the mesher in step. Writing the grid
@@ -105,14 +105,14 @@ the production `TerrainGrid`, `TerrainService`, chunk mesher and `NavGrid` in is
   waiting to happen. Water *is* passability: ford ×3, deeper is a wall, lava never, ice by
   thickness.
 - Re-run `tests/repro/diag_terrain_nav_publish_cost.gd` after touching the publisher or
-  `NavGrid` hot paths; budgets are in `grid_terrain_system.md` §10.5.
+  `NavGrid` hot paths; budgets are in `engine/grid_terrain_system.md` §10.5.
 
 ## Map editor and `.gdmap`
 
 A map is a folder package (`map.json` + `terrain.bin` + `preview.png`) under
 `res://game/content/core/maps/` or `user://custom_maps/`, opened by `MapDocumentService`.
 It owns the board size and starting conditions; `SettlementGame.BOARD_CELLS` is only the
-no-map fallback. See `design_docs/core/map_editor.md`.
+no-map fallback. See `design_docs/engine/map_editor.md`.
 
 - The editor is `game/features/world/presentation/editor/map_editor.tscn`. `map_editor.gd`
   loads the document, switches modes, routes input and owns the one undo stack —
@@ -159,6 +159,11 @@ calibration geometry.
   owner in the same commit.
 - Tests that preload `settlement_game.gd` parse the whole bootstrap controller: a missing
   function referenced there fails unrelated tests at load time.
-- Design docs live in `design_docs/` (what to build); `docs/ holds engineering docs (how
-  it is built). Sub-directories use underscores: `design_docs/npc_and_village/`,
-  `design_docs/side_mechanics/`, `design_docs/work_and_resources/`.
+- Design docs live in `design_docs/` (what to build), split by subsystem:
+  `engine/` (terrain, water, maps, building format, packs), `citizens/` (AI, needs,
+  orders, labour) and `settlement/` (eras, economy, content). `design_docs/README.md`
+  is the index; start there rather than guessing a path. `docs/` holds engineering
+  docs (how it is built): `architecture.md` and `gameplay.md`.
+- `design_docs/ideas.md` holds directions beyond the development horizon. It is not a
+  source of truth — do not implement from it, and do not leave far-future design in a
+  subsystem doc where it reads as a requirement.

@@ -1,7 +1,7 @@
 class_name TerrainEditOperation
 extends RefCounted
 
-## One request to change terrain heights (design_docs/core/grid_terrain_system.md §4.1).
+## One request to change terrain heights (design_docs/engine/grid_terrain_system.md §4.1).
 ##
 ## The tool decides the mode; the mode decides whether the surrounding ground
 ## slumps. A player has to be able to build both a natural hill and a sheer

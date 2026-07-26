@@ -1,7 +1,7 @@
 class_name TerrainDetailCodec
 extends RefCounted
 
-## The detail byte of a terrain column (design_docs/core/terrain_materials.md §5).
+## The detail byte of a terrain column (design_docs/engine/terrain_materials.md §5).
 ##
 ## ```
 ## bit 7 6 5 4 | 3 2 | 1 0

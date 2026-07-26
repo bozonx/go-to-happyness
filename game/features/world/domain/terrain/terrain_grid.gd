@@ -1,7 +1,7 @@
 class_name TerrainGrid
 extends RefCounted
 
-## The settlement's discrete elevation grid (design_docs/core/grid_terrain_system.md §2).
+## The settlement's discrete elevation grid (design_docs/engine/grid_terrain_system.md §2).
 ##
 ## Stores exactly four things per column: integer height in Δh steps, surface
 ## material, slope descriptor (catalog class + direction + index inside a

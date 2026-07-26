@@ -3,7 +3,7 @@ extends RefCounted
 
 ## Tier-1 active zone: the identity of a place inside a building — a whole house,
 ## a shop or warehouse room in a mall, a housing unit, a leisure spot. This is the
-## zone the player clicks to open the building menu (design_docs/content/
+## zone the player clicks to open the building menu (design_docs/engine/
 ## modular_building_editor.md §3.4).
 ##
 ## Employment capacity (profession + max_workers) lives here. Where workers

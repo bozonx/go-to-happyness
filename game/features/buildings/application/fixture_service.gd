@@ -2,7 +2,7 @@ class_name FixtureService
 extends RefCounted
 
 ## Application service that manages FixtureRuntimeState for constructed
-## building instances (design_docs/content/building_furnishing.md §11).
+## building instances (design_docs/engine/building_furnishing.md §11).
 ##
 ## Created on building completion from the blueprint's fixtures[]. Each fixture
 ## gets a stable address (building_instance_id, fixture_id). Feature services

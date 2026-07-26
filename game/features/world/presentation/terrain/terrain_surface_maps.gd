@@ -2,7 +2,7 @@ class_name TerrainSurfaceMaps
 extends RefCounted
 
 ## The two maps that carry the surface to the GPU
-## (design_docs/core/terrain_materials.md §7.3).
+## (design_docs/engine/terrain_materials.md §7.3).
 ##
 ## | Map | Format | Content |
 ## | :-- | :-- | :-- |

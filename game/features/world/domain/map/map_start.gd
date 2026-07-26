@@ -1,7 +1,7 @@
 class_name MapStart
 extends RefCounted
 
-## The conditions a session begins in (design_docs/core/map_editor.md §7).
+## The conditions a session begins in (design_docs/engine/map_editor.md §7).
 ##
 ## Every field here overrides a `GameLaunchConfig` default; anything the map does
 ## not state is left to the era config. `day_of_year` and `latitude` have no

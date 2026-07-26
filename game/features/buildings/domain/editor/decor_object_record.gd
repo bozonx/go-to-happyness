@@ -4,7 +4,7 @@ extends RefCounted
 const FurnishingAssetDefScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_def.gd")
 
 ## A single placed visual object inside a building blueprint — the `objects[]`
-## entries of `.gdbuilding.json` (design_docs/content/modular_building_editor.md
+## entries of `.gdbuilding.json` (design_docs/engine/modular_building_editor.md
 ## §3.3). Typed counterpart of BlueprintBlock / ZoneAnchorRecord: the editor and
 ## the runtime both work on records, and only (de)serialization touches raw
 ## dictionaries.
@@ -14,7 +14,7 @@ const FurnishingAssetDefScript = preload("res://game/features/buildings/domain/e
 ## hashed via `JSON.stringify` for `content_revision()`.
 ##
 ## `owner_zone_id` is an organizational label referencing a `place_zones` entry.
-## It has no runtime effect (design_docs/content/building_furnishing.md §3.2).
+## It has no runtime effect (design_docs/engine/building_furnishing.md §3.2).
 
 var id: String = ""
 var asset_id: StringName = &""
@@ -96,7 +96,7 @@ static func from_dict(data: Dictionary) -> DecorObjectRecord:
 		raw_appearance = data.get("properties", {})
 	record.appearance = (raw_appearance as Dictionary).duplicate() if raw_appearance is Dictionary else {}
 	# v2 migration: is_lit → visual_flame_visible to avoid semantic clash with
-	# future runtime fire.lit (design_docs/content/building_furnishing.md).
+	# future runtime fire.lit (design_docs/engine/building_furnishing.md).
 	if record.appearance.has("is_lit"):
 		record.appearance["visual_flame_visible"] = record.appearance["is_lit"]
 		record.appearance.erase("is_lit")

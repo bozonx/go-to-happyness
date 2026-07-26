@@ -2,7 +2,7 @@ class_name TestDomainTerrainNavigation
 extends RefCounted
 
 ## Phase 3 of the terrain system: routing over real ground
-## (design_docs/core/grid_terrain_system.md §10).
+## (design_docs/engine/grid_terrain_system.md §10).
 ##
 ## The thing worth testing here is the one rule that a cell-based grid cannot
 ## express — passability lives on the EDGE. Two free columns on either side of a

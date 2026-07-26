@@ -1,7 +1,7 @@
 class_name TerrainMaterialLibrary
 extends RefCounted
 
-## The one texture binding of the whole world (design_docs/core/terrain_materials.md §7.1).
+## The one texture binding of the whole world (design_docs/engine/terrain_materials.md §7.1).
 ##
 ## Every material × variant is a layer of a single `Texture2DArray`, at
 ## `layer = material_index * MAX_VARIANTS + variant`, and the auto-rock face kinds

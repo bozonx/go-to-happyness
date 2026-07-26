@@ -2,7 +2,7 @@ class_name TestDomainTerrainMaterials
 extends RefCounted
 
 ## The material catalog, its variants and the detail byte
-## (design_docs/core/terrain_materials.md §10).
+## (design_docs/engine/terrain_materials.md §10).
 ##
 ## These check PROPERTIES, not contents. The catalog will grow — that is what the
 ## design says it is for — so a test counting thirteen entries would fail on the

@@ -1,7 +1,7 @@
 class_name SlopeAssigner
 extends RefCounted
 
-## Automatic slope selection on a boundary (design_docs/core/grid_terrain_system.md
+## Automatic slope selection on a boundary (design_docs/engine/grid_terrain_system.md
 ## §3.2), which is also the auto-skirt that finishes a levelling operation (§4.5).
 ##
 ## The player's height tool never picks a slope class. After the cascade has

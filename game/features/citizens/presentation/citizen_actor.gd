@@ -1406,7 +1406,7 @@ func release_to_no_permanent_work() -> void:
 # Single point of truth for reading a citizen's employment situation. Callers
 # should prefer these over touching `employment_state`
 # directly, so that collapsing the stored EmploymentState later (see
-# design_docs/workforce_system.md) only has to change these bodies.
+# design_docs/citizens/workforce_system.md) only has to change these bodies.
 func is_employed() -> bool:
 	return _employment.is_employed()
 

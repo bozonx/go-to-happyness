@@ -4,7 +4,7 @@
 > **Статус:** спецификация; реализованы правило ревизии (§7) и переезд встроенного
 > пака в `res://game/content/core/` (§5.1)
 > **Связанные документы:**
-> [../content/modular_building_editor.md](../content/modular_building_editor.md) — формат `.gdbuilding.json`;
+> [../content/modular_building_editor.md](modular_building_editor.md) — формат `.gdbuilding.json`;
 > [map_editor.md](map_editor.md) — формат `.gdmap`;
 > [grid_terrain_system.md](grid_terrain_system.md) — Placement Merge.
 

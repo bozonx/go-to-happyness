@@ -2,7 +2,7 @@ class_name TestSurfaceState
 extends RefCounted
 
 ## Surface state end to end: painting, wear, snow and what they cost
-## (design_docs/core/terrain_materials.md §10).
+## (design_docs/engine/terrain_materials.md §10).
 ##
 ## The interesting claims are all negative ones — what a surface edit must NOT do.
 ## It must not rebuild a chunk, must not move `topology_revision`, must not

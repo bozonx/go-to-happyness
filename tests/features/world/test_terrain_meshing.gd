@@ -1,7 +1,7 @@
 class_name TestTerrainMeshing
 extends RefCounted
 
-## Chunk meshing and its collision (design_docs/core/grid_terrain_system.md §6, §11).
+## Chunk meshing and its collision (design_docs/engine/grid_terrain_system.md §6, §11).
 ##
 ## The mesh is what the player sees and the collision is what everybody walks on,
 ## and they are built from the same triangles on purpose — so these tests check

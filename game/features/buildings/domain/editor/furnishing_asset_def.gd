@@ -2,7 +2,7 @@ class_name FurnishingAssetDef
 extends Resource
 
 ## Definition of a furnishing asset available in the building editor catalog
-## (design_docs/content/building_furnishing.md §4).
+## (design_docs/engine/building_furnishing.md §4).
 ##
 ## `appearance_controls` are the authored visual knobs (design §3.3). Each entry is:
 ##   {

@@ -2,7 +2,7 @@ class_name FireSourceDefaults
 extends RefCounted
 
 ## Typed schema for `runtime_defaults` of a `fire_source` fixture
-## (design_docs/content/building_furnishing.md §3.2, §7.5).
+## (design_docs/engine/building_furnishing.md §3.2, §7.5).
 ##
 ## These values are authored in the blueprint and copied into
 ## FixtureRuntimeState when a building instance is constructed.

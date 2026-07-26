@@ -2,7 +2,7 @@ class_name WaterDelta
 extends RefCounted
 
 ## The result of one water operation: what every touched cell looked like before
-## and after (design_docs/core/grid_terrain_system.md §9, §4.4).
+## and after (design_docs/engine/grid_terrain_system.md §9, §4.4).
 ##
 ## The same shape as `TerrainDelta` and for the same reason: an operation is
 ## computed first and committed as one piece, so a refused stroke leaves nothing

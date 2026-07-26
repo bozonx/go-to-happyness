@@ -2,7 +2,7 @@ class_name BuildingBlueprint
 extends RefCounted
 
 ## Full data model of a modular building, matching the open `.gdbuilding.json`
-## format (see design_docs/content/modular_building_editor.md).
+## format (see design_docs/engine/modular_building_editor.md).
 ##
 ## Frame-construction level only populates `blocks` and `construction_cost`;
 ## the decor / active-zone sections are preserved verbatim on load/save so the
@@ -36,7 +36,7 @@ var era: StringName = &"tent"
 var style: StringName = &"generic"
 var kind: StringName = &"building"
 var name: String = "Новое здание"
-## Stamp rewritten on every save, exactly like a map package's (design_docs/core/
+## Stamp rewritten on every save, exactly like a map package's (design_docs/engine/
 ## content_packaging.md §7). A game save keeps it next to `blueprint_ref` so a
 ## session can tell the player the file was edited since — it never blocks loading.
 var revision: String = ""
@@ -73,7 +73,7 @@ var zone_anchors: Array[ZoneAnchorRecord] = []
 ## Placed decor and furnishing (authored in editor Mode 3, design §3.3).
 var objects: Array[DecorObjectRecord] = []
 
-## Functional fixtures (design_docs/content/building_furnishing.md §3.2).
+## Functional fixtures (design_docs/engine/building_furnishing.md §3.2).
 ## Each entry is a FixtureDefinition describing a game-interactable element.
 var fixtures: Array[FixtureDefinition] = []
 

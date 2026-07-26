@@ -1,7 +1,7 @@
 class_name WaterBody
 extends RefCounted
 
-## One authored body of water or lava (design_docs/core/grid_terrain_system.md §9.2).
+## One authored body of water or lava (design_docs/engine/grid_terrain_system.md §9.2).
 ##
 ## **The body owns the type, the bottom never does.** The first edition of the
 ## design derived the kind of water from the bottom material (`riverbed`,

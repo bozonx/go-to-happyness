@@ -1,6 +1,6 @@
 extends Node3D
 
-## The territory editor (design_docs/core/map_editor.md).
+## The territory editor (design_docs/engine/map_editor.md).
 ##
 ## This file does four things and no more: it loads and saves the document, it
 ## switches modes, it routes input to the active one, and it owns the shared undo

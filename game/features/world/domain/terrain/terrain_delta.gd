@@ -2,7 +2,7 @@ class_name TerrainDelta
 extends RefCounted
 
 ## The result of one terrain operation: what every touched column looked like
-## before and after (design_docs/core/grid_terrain_system.md §4.4).
+## before and after (design_docs/engine/grid_terrain_system.md §4.4).
 ##
 ## Operations are computed on a copy and committed as one delta, so a rejected
 ## operation leaves nothing behind and undo costs nothing extra — the delta IS the

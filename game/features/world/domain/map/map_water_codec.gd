@@ -2,7 +2,7 @@ class_name MapWaterCodec
 extends RefCounted
 
 ## `water.bin`: the water layer as fixed-width cell records
-## (design_docs/core/map_editor.md §4, grid_terrain_system.md §9.3).
+## (design_docs/engine/map_editor.md §4, grid_terrain_system.md §9.3).
 ##
 ## Three bytes per cell — level, body reference, flags — exactly the three arrays
 ## the layer keeps in memory, in the same row-major order `terrain.bin` uses, so

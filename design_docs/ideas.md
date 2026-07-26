@@ -17,11 +17,9 @@
 
 ## 1. Постиндустриальные эры
 
-> Перенесено из `content/eras_overview.md` §5 и `content/era_progression_gates.md` §4.
 > В коде `SettlementState.Era` содержит только `TENT, EARTH, CLAY, WOOD, STONE, BRICK`;
 > `Era.ECO` и `Era.INDUSTRIAL` не существуют. Реализованные эры и их gates описаны в
-> [eras_overview.md](content/eras_overview.md) и
-> [era_progression_gates.md](content/era_progression_gates.md).
+> [eras_overview.md](settlement/eras_overview.md).
 
 ### 1.1. Экологическая эра (`Era.ECO`)
 

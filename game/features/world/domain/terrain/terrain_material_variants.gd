@@ -2,7 +2,7 @@ class_name TerrainMaterialVariants
 extends RefCounted
 
 ## Visual variants of a material and the texture-array layout they imply
-## (design_docs/core/terrain_materials.md §4, §7.1).
+## (design_docs/engine/terrain_materials.md §4, §7.1).
 ##
 ## A variant NEVER changes gameplay: same repose, same weight, same soil, same
 ## cliff face. It is the answer to "this only looks different", which is why the

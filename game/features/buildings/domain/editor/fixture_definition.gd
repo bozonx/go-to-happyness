@@ -2,7 +2,7 @@ class_name FixtureDefinition
 extends RefCounted
 
 ## Stable description of a functional element inside a BuildingBlueprint
-## (design_docs/content/building_furnishing.md §3.2).
+## (design_docs/engine/building_furnishing.md §3.2).
 ##
 ## A fixture tells the game **what** is at a position and which systems can use
 ## it. It is not a visual object — it references one via `visual_object_id`.

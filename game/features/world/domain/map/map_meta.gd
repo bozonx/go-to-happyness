@@ -2,7 +2,7 @@ class_name MapMeta
 extends RefCounted
 
 ## Header of a map package: who it is, how big the board is, what is beyond it,
-## and the conditions a session starts in (design_docs/core/map_editor.md §4.1).
+## and the conditions a session starts in (design_docs/engine/map_editor.md §4.1).
 ##
 ## The board size is here and not in a code constant, which is the whole reason
 ## `SettlementGame.BOARD_CELLS` stops being one (§14.1). It is chosen once at
