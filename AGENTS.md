@@ -135,21 +135,28 @@ no-map fallback. See `design_docs/engine/map_editor.md`.
 ## Weather and lighting laboratory
 
 Weather, time of day, sky, stars, sun/moon, atmospherics and world lighting start in
-`res://tools/weather_lab/weather_lab.tscn`, using the production
-`SkyAndWeatherController`, cloud shader, rain and firefly effects with a fixed camera and
-calibration geometry.
+`res://tools/weather_lab/weather_lab.tscn`, not the settlement scene. It runs the
+production `SkyAndWeatherController`, cloud shader, rain and firefly effects with fixed
+cameras and calibration geometry. The rules themselves are in
+`design_docs/engine/weather.md`; read it before changing how weather looks or behaves.
 
-- Make and inspect the relevant preset before wiring a visual change into gameplay:
-  F1–F5 interactively, or `godot --path . res://tools/weather_lab/weather_lab.tscn -- --capture`
-  to write PNGs to `user://weather_lab/`. Open the captures after a visual change.
-- `CloudCamera` (`2`) for cloud work, `ContextCamera` (`1`) to confirm it still reads over
-  the settlement, `ZenithCamera` (`3`) for tiling/stars, `HorizonCamera` (`4`) for
-  atmospheric perspective. Batch presets capture as `cloud_noon`, `cloud_sunset`,
-  `cloud_storm`.
-- Keep deterministic time and forecast rules in `simulation/domain`; the lab and the game
+- Make and inspect the relevant scenario before wiring a visual change into gameplay:
+  F-keys interactively, or `godot --path . res://tools/weather_lab/weather_lab.tscn -- --capture`
+  to write PNGs to `user://weather_lab/`. Open the captures after a visual change — a
+  clean parse is not evidence.
+- Cameras: `CloudCamera` for cloud work, `ContextCamera` to confirm it still reads over
+  the settlement, `ZenithCamera` for tiling and stars, `HorizonCamera` for atmospheric
+  perspective, `TrackingCamera` to keep a sun/moon disc in frame at any hour, and
+  `GameplayCamera` for anything that depends on where the player actually looks.
+- **Cloud cover and storm murk are two independent axes** (`weather.md` §4). Grey and
+  haze come only from the storm front; cloudiness alone never seals the sky. Do not
+  collapse them because one preset would look better.
+- Wind is a general weather parameter, not a cloud-shader input: waves, flags and smoke
+  read the same `wind_*` accessors so everything drifts one way.
+- Keep deterministic forecast and time rules in `simulation/domain`; the lab and the game
   both feed visual values into `world/presentation`. A weather feature must not depend on
   `SettlementGame` to render.
-- Add or update a named preset whenever a change needs a repeatable visual case.
+- Add or update a named scenario whenever a change needs a repeatable visual case.
 
 ## Pitfalls
 

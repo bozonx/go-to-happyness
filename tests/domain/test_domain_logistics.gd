@@ -25,6 +25,14 @@ class FakeCanteenSimulation extends Node:
 	var pending_canteen_carrier: Citizen
 	var pending_canteen_delivery_amount := 0
 	var canteen_position := Vector3.ZERO
+	var logistics_controller: FakeCanteenLogisticsController
+	var fire_management_service: FakeFireManagementService
+	var simulation_tick_controller: FakeSimulationTickController
+
+	func _init() -> void:
+		logistics_controller = FakeCanteenLogisticsController.new(self)
+		fire_management_service = FakeFireManagementService.new(self)
+		simulation_tick_controller = FakeSimulationTickController.new(self)
 
 	func _is_fire_lit(_canteen: Node3D) -> bool:
 		return fire_lit
@@ -56,6 +64,42 @@ class FakeCanteenSimulation extends Node:
 		pass
 
 
+class FakeCanteenLogisticsController extends RefCounted:
+	var owner: FakeCanteenSimulation
+
+	func _init(p_owner: FakeCanteenSimulation) -> void:
+		owner = p_owner
+
+	func set_canteen_food(value: int) -> void:
+		owner._set_canteen_food(value)
+
+	func set_canteen_delivery_state(active: bool, carrier: Citizen, amount: int) -> void:
+		owner._set_canteen_delivery_state(active, carrier, amount)
+
+	func is_canteen_delivery_in_progress() -> bool:
+		return owner._is_canteen_delivery_in_progress()
+
+
+class FakeFireManagementService extends RefCounted:
+	var owner: FakeCanteenSimulation
+
+	func _init(p_owner: FakeCanteenSimulation) -> void:
+		owner = p_owner
+
+	func is_fire_lit(canteen: Node3D) -> bool:
+		return owner._is_fire_lit(canteen)
+
+
+class FakeSimulationTickController extends RefCounted:
+	var owner: FakeCanteenSimulation
+
+	func _init(p_owner: FakeCanteenSimulation) -> void:
+		owner = p_owner
+
+	func is_work_time() -> bool:
+		return owner._is_work_time()
+
+
 class FakeCourierDispatcher extends RefCounted:
 	var completed := 0
 
@@ -83,10 +127,14 @@ class FakeStorageSimulation extends Node:
 	var dispatch_requested := false
 	var leisure_worker: Citizen
 	var dropped_piles: Array[Dictionary] = []
+	var resource_pile_service: FakeResourcePileService
+	var simulation_tick_controller: FakeStorageSimulationTickController
 
 	func _init() -> void:
 		storage_routing_service.settlement = settlement
 		storage_routing_service.warehouse_positions = warehouse_positions
+		resource_pile_service = FakeResourcePileService.new(self)
+		simulation_tick_controller = FakeStorageSimulationTickController.new(self)
 
 	func update_interface(message: String) -> void:
 		last_interface_message = message
@@ -104,6 +152,26 @@ class FakeStorageSimulation extends Node:
 		pass
 
 
+class FakeResourcePileService extends RefCounted:
+	var owner: FakeStorageSimulation
+
+	func _init(p_owner: FakeStorageSimulation) -> void:
+		owner = p_owner
+
+	func drop_resource_pile(position: Vector3, resource_type: String, amount: int) -> void:
+		owner._drop_resource_pile(position, resource_type, amount)
+
+
+class FakeStorageSimulationTickController extends RefCounted:
+	var owner: FakeStorageSimulation
+
+	func _init(p_owner: FakeStorageSimulation) -> void:
+		owner = p_owner
+
+	func send_citizen_to_leisure(worker: Citizen) -> void:
+		owner._send_citizen_to_leisure(worker)
+
+
 class FakeTradeSimulation extends Node:
 	var settlement := SettlementState.new()
 	var citizens: Array = []
@@ -116,6 +184,18 @@ class FakeTradeSimulation extends Node:
 	var selected_market: Node3D
 	var entrance_stone: Node3D
 	var workers_updated := false
+	var logistics_controller: FakeTradeLogisticsController
+	var workplace_controller: FakeTradeWorkplaceController
+	var simulation_tick_controller: FakeTradeSimulationTickController
+	var citizen_factory: FakeTradeCitizenFactory
+	var resource_pile_service: FakeTradeResourcePileService
+
+	func _init() -> void:
+		logistics_controller = FakeTradeLogisticsController.new(self)
+		workplace_controller = FakeTradeWorkplaceController.new(self)
+		simulation_tick_controller = FakeTradeSimulationTickController.new(self)
+		citizen_factory = FakeTradeCitizenFactory.new(self)
+		resource_pile_service = FakeTradeResourcePileService.new(self)
 
 	func _total_game_minutes() -> float:
 		return total_minutes
@@ -143,6 +223,56 @@ class FakeTradeSimulation extends Node:
 
 	func _get_delivery_position() -> Vector3:
 		return Vector3.ZERO
+
+
+class FakeTradeLogisticsController extends RefCounted:
+	var owner: FakeTradeSimulation
+
+	func _init(p_owner: FakeTradeSimulation) -> void:
+		owner = p_owner
+
+	func get_delivery_position() -> Vector3:
+		return owner._get_delivery_position()
+
+
+class FakeTradeWorkplaceController extends RefCounted:
+	var owner: FakeTradeSimulation
+
+	func _init(p_owner: FakeTradeSimulation) -> void:
+		owner = p_owner
+
+	func refresh_market_menu() -> void:
+		owner._refresh_market_menu()
+
+
+class FakeTradeSimulationTickController extends RefCounted:
+	var owner: FakeTradeSimulation
+
+	func _init(p_owner: FakeTradeSimulation) -> void:
+		owner = p_owner
+
+	func total_game_minutes() -> float:
+		return owner._total_game_minutes()
+
+
+class FakeTradeCitizenFactory extends RefCounted:
+	var owner: FakeTradeSimulation
+
+	func _init(p_owner: FakeTradeSimulation) -> void:
+		owner = p_owner
+
+	func citizen_for_ai_id(ai_id: int) -> Citizen:
+		return owner._citizen_for_ai_id(ai_id)
+
+
+class FakeTradeResourcePileService extends RefCounted:
+	var owner: FakeTradeSimulation
+
+	func _init(p_owner: FakeTradeSimulation) -> void:
+		owner = p_owner
+
+	func create_resource_pile(position: Vector3, resources: Dictionary, _is_backpack_pile := false) -> void:
+		owner._create_resource_pile(position, resources)
 
 
 class FakeWaterCollectorSimulation extends Node:

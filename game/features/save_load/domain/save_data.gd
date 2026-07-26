@@ -72,7 +72,6 @@ func from_dict(data: Dictionary) -> bool:
 		return false
 	version = int(data.get("version", 1))
 	if version < 1 or version > VERSION:
-		push_error("SaveData: Unsupported save format version: " + str(version))
 		return false
 	timestamp = int(data.get("timestamp", 0))
 	game_version = str(data.get("game_version", _project_version()))

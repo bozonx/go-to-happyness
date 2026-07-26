@@ -16,6 +16,9 @@ var game: SettlementGame
 
 func run(p_game: SettlementGame) -> void:
 	game = p_game
+	# Event-driven services capture EventService during configuration. Create the
+	# registry before any such service so they never retain a stale null reference.
+	_setup_world_and_events()
 	_setup_hero_services()
 	_setup_construction_and_demolition()
 	_setup_workplace_and_visuals()
@@ -35,7 +38,6 @@ func run(p_game: SettlementGame) -> void:
 	_setup_courier_system()
 	_setup_actuator_and_events()
 	_setup_ui_controllers()
-	_setup_world_and_events()
 	_setup_controllers_and_world()
 	_setup_citizens_and_ai()
 	_finalize_launch(game.get_node_or_null("/root/GameLaunchManager"))

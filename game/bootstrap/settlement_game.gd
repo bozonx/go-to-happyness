@@ -291,7 +291,7 @@ var pending_canteen_delivery_amount := 0
 var nav_grid: NavGrid
 var road_network_service: RoadNetworkService
 var navigation_obstacle_publisher: NavigationObstaclePublisher
-var service_pockets: Array[Dictionary] = []
+var service_pockets: Array[ServicePocketRecord] = []
 var selected_school: Node3D
 var school_developed_professions: Dictionary:
 	get: return school_service.developed_professions
@@ -480,6 +480,12 @@ func _process(delta: float) -> void:
 		if camera_controller != null:
 			camera_controller.update(delta)
 	simulation_tick_controller.tick(delta)
+
+
+func _exit_tree() -> void:
+	# Time scaling is process-global. Never let a closed settlement scene affect
+	# menus, tests, or a subsequently loaded scene.
+	Engine.time_scale = 1.0
 
 
 func update_workers() -> void:

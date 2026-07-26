@@ -25,7 +25,11 @@ func publish(terrain_blocked: Dictionary, building_records: Array, service_pocke
 			for z in range(min_z, max_z + 1):
 				blocked[Vector2i(x, z)] = true
 	for pocket in service_pockets:
-		if is_instance_valid(pocket.node):
+		# Accept legacy dictionaries at this public routing boundary while all
+		# bootstrap-owned pockets use ServicePocketRecord.
+		if pocket is ServicePocketRecord and is_instance_valid(pocket.node):
+			blocked.erase(pocket.cell)
+		elif pocket is Dictionary and pocket.has("cell") and pocket.has("node") and is_instance_valid(pocket.node):
 			blocked.erase(pocket.cell)
 	if _grid != null:
 		_grid.set_blocked_cells(blocked)

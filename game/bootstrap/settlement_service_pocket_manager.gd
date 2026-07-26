@@ -21,7 +21,7 @@ func register_service_entrance(building: Node3D, blueprint: Dictionary, home_ent
 		building.set_meta("service_positions", service_positions)
 		building.set_meta("service_position", service_positions[0])
 		for position in service_positions:
-			game.service_pockets.append({"cell": game.cell_from_position(position), "node": building})
+			game.service_pockets.append(ServicePocketRecord.new(game.cell_from_position(position), building))
 		if show_marker:
 			var offsets := BuildingEntrancePositions.offsets(building_type)
 			if offsets.is_empty():
@@ -53,7 +53,7 @@ func register_service_pockets(node: Node3D) -> void:
 	var positions: Array = node.get_meta("service_positions")
 	for position in positions:
 		if position is Vector3:
-			game.service_pockets.append({"cell": game.cell_from_position(position), "node": node})
+			game.service_pockets.append(ServicePocketRecord.new(game.cell_from_position(position), node))
 
 
 func unregister_service_pockets(node: Node3D) -> void:
@@ -64,6 +64,6 @@ func unregister_service_pockets(node: Node3D) -> void:
 
 func unregister_navigation_footprint(center: Vector3, footprint: Vector2i) -> void:
 	for index in range(game.service_pockets.size() - 1, -1, -1):
-		var pocket: Dictionary = game.service_pockets[index]
+		var pocket: ServicePocketRecord = game.service_pockets[index]
 		if is_instance_valid(pocket.node) and pocket.node.global_position == center:
 			game.service_pockets.remove_at(index)

@@ -13,11 +13,26 @@ class FakeFireManagementService extends RefCounted:
 		return 1.0
 
 
+class FakeForagingService extends RefCounted:
+	var owner: FakeGatheringSimulation
+
+	func _init(p_owner: FakeGatheringSimulation) -> void:
+		owner = p_owner
+
+	func consume_grass_source(position: Vector3) -> int:
+		return owner._consume_grass_source(position)
+
+
 class FakeGatheringSimulation extends Node:
 	var settlement := FakeSettlement.new()
 	var grass_sources: Dictionary = {}
+	var citizens: Array[Citizen] = []
 	var consumed_count := 0
 	var fire_management_service := FakeFireManagementService.new()
+	var foraging_service: FakeForagingService
+
+	func _init() -> void:
+		foraging_service = FakeForagingService.new(self)
 
 	func cell_from_position(position: Vector3) -> Vector2i:
 		return Vector2i(floori(position.x), floori(position.z))
@@ -41,6 +56,7 @@ func _init() -> void:
 	var citizen := Citizen.new()
 	citizen.ai_id = 30
 	citizen.simulation = simulation
+	simulation.citizens.append(citizen)
 	root.add_child(citizen)
 	root.add_child(simulation)
 	await process_frame

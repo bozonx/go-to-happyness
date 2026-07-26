@@ -19,6 +19,10 @@ func _init() -> void:
 	assert(simulation.citizen_ai.goal_count() == 16)
 	assert(simulation.citizen_needs_service != null)
 	assert(simulation.citizen_ai.director.provider_count() == 10)
+	# Bootstrap dependencies that retain object references must be constructed in
+	# dependency order. In particular, fire management reads event flags.
+	assert(simulation.event_service != null)
+	assert(simulation.fire_management_service.event_service == simulation.event_service)
 
 	# Natural objects are owned by the terrain scene but retain their registered
 	# source records, so moving presentation ownership cannot make them inert.
