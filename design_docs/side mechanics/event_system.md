@@ -6,9 +6,9 @@
 
 Связанные документы:
 
-- [tent_era_survival.md](tent_era_survival.md) — стартовый сценарий, погода, выживание;
-- [food_water_progression.md](food_water_progression.md) — прогрессия еды и воды;
-- [era_progression_gates.md](era_progression_gates.md) — условия переходов между эрами.
+- [tent_era_survival.md](../content/tent_era_survival.md) — стартовый сценарий, погода, выживание;
+- [food_water_progression.md](../work%20and%20resources/food_water_progression.md) — прогрессия еды и воды;
+- [era_progression_gates.md](../content/era_progression_gates.md) — условия переходов между эрами.
 
 ## 1. Принципы
 

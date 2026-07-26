@@ -17,12 +17,12 @@ var game: SettlementGame
 func run(p_game: SettlementGame) -> void:
 	game = p_game
 	_setup_hero_services()
+	_setup_construction_and_demolition()
 	_setup_workplace_and_visuals()
 	_setup_territory()
 	_setup_ai_and_navigation()
 	_setup_citizen_lifecycle()
 	_setup_building_services()
-	_setup_construction_and_demolition()
 	_setup_canteen_and_resources()
 	_setup_foraging_and_fire()
 	_setup_building_maintenance()

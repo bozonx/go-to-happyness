@@ -21,8 +21,10 @@ game/features/buildings/
   application/         # состояние экземпляра и runtime зон
   presentation/        # файловый resolver и игровые визуальные адаптеры
   presentation/editor/ # сцена редактора, repository и визуальные инструменты
-  data/blueprints/     # встроенные файлы
 ```
+
+Встроенные `.gdbuilding.json` лежат вне фичи, в паке контента
+`res://game/content/core/buildings/` (см. [content_packaging.md](../core/content_packaging.md) §5.1).
 
 ## 2. Сетка и каркас
 
@@ -458,8 +460,8 @@ Dev mode позднее получит инструменты компиляци
 
 - **v1** — исходный формат каркаса и зон (§2–§4, §6);
 - **v2** — единый формат `objects[]`/`fixtures[]` для наполнения здания
-  (`properties` → `appearance`, `is_lit` → `visual_flame_visible`; см.
-  [план этапа 1](building_furnishing_phase_1_plan.md));
+  (`properties` → `appearance`, `is_lit` → `visual_flame_visible`;
+  см. [наполнение здания](building_furnishing.md));
 - **v3** — `objects[].pos` переведён из координат доски в координаты
   относительно пивота (см. выше). Отдельной миграции v2 → v3 нет: во всех
   файлах проекта на момент перехода декор стоял в начале координат, для

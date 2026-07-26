@@ -5,11 +5,11 @@
 организованному поселению, и взаимодействие с рабочими зданиями от первого лица.
 
 Связанные документы:
-- [eras_overview.md](eras_overview.md) — эры развития и смена масштаба управления;
-- [era_progression_gates.md](era_progression_gates.md) — условия переходов между эрами;
-- [building_progression.md](building_progression.md) — цепочки зданий;
-- [citizen_ai.md](citizen_ai.md) — архитектура AI жителей;
-- [tent_era_survival.md](tent_era_survival.md) — стартовый сценарий и выживание;
+- [eras_overview.md](../content/eras_overview.md) — эры развития и смена масштаба управления;
+- [era_progression_gates.md](../content/era_progression_gates.md) — условия переходов между эрами;
+- [building_progression.md](../npc%20and%20village/building_progression.md) — цепочки зданий;
+- [citizen_ai.md](../core/citizen_ai.md) — архитектура AI жителей;
+- [tent_era_survival.md](../content/tent_era_survival.md) — стартовый сценарий и выживание;
 - [food_water_progression.md](food_water_progression.md) — прогрессия еды и воды от рюкзака до столовых.
 
 ## 1. Концепция

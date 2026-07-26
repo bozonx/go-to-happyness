@@ -4,10 +4,10 @@
 Он намеренно устроен поперек эр: многие линии зданий проходят через несколько
 эр, поэтому их проще читать как единую прогрессию.
 
-Дизайн-описание эр находится в [eras_overview.md](eras_overview.md). Точные
+Дизайн-описание эр находится в [eras_overview.md](../content/eras_overview.md). Точные
 условия переходов между эрами находятся в
-[era_progression_gates.md](era_progression_gates.md). Прогрессия еды и воды
-описана в [food_water_progression.md](food_water_progression.md). Правила
+[era_progression_gates.md](../content/era_progression_gates.md). Прогрессия еды и воды
+описана в [food_water_progression.md](../work%20and%20resources/food_water_progression.md). Правила
 области деревни — где можно и нельзя строить — описаны в
 [village_territory.md](village_territory.md).
 
@@ -127,7 +127,7 @@ graph TD
 в стартовом рюкзаке. С тентом связана первая дилемма: потратить его на сборщик росы
 или натянуть над складом-кучей, превратив её в защищённую от дождя кучу (без
 увеличения вместимости). Подробнее — в
-[tent_era_survival.md](tent_era_survival.md) и
+[tent_era_survival.md](../content/tent_era_survival.md) и
 [storage_warehouses.md](storage_warehouses.md).
 
 Через **входную табличку** сразу можно:
@@ -141,7 +141,7 @@ graph TD
 До появления чиновника дневные приказы, земляные работы и управление рабочими
 местами доступны с самого начала. Чиновник открывает только постоянные
 профессии и исследования. Механика назначения чиновника через занятие рабочей
-позиции в FPP описана в [work_positions.md](work_positions.md).
+позиции в FPP описана в [work_positions.md](../work%20and%20resources/work_positions.md).
 
 ### 4.2. Ветки изучения
 
@@ -156,7 +156,7 @@ graph TD
   (2-й уровень). Для изучения этой технологии нужен исследователь у костра —
   любой юнит может занять позицию исследователя в FPP. После изучения юнит может
   занять костёр как чиновник и открыть регистрацию постоянных профессий
-  (см. [work_positions.md](work_positions.md)).
+  (см. [work_positions.md](../work%20and%20resources/work_positions.md)).
 * **Случайные заработки** — одноразовое исследование, после которого поденная
   работа через входную табличку приносит постоянный, более высокий доход вместо
   случайного.
@@ -235,10 +235,10 @@ graph TD
 Дороги игрок не строит: жители сами протаптывают тропинки. Игрок может дать
 приказ «ходить как по дорогам», тогда жители двигаются более собранно и тропы
 становятся ровнее и заметнее. Подробное описание этого механизма — в
-[navigation_and_roads.md](navigation_and_roads.md).
+[navigation_and_roads.md](../core/navigation_and_roads.md).
 
 Полный сценарий стартовой прогрессии, ночи, порча, входная табличка и
-выживание описаны в [tent_era_survival.md](tent_era_survival.md).
+выживание описаны в [tent_era_survival.md](../content/tent_era_survival.md).
 
 ## 5. Земляная эра
 

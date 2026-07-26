@@ -6,9 +6,9 @@
 Связанные документы:
 
 - [building_progression.md](building_progression.md) — цепочки зданий, уровни, апгрейды;
-- [tent_era_survival.md](tent_era_survival.md) — стартовый сценарий, Главный костёр, входная табличка;
+- [tent_era_survival.md](../content/tent_era_survival.md) — стартовый сценарий, Главный костёр, входная табличка;
 - [storage_warehouses.md](storage_warehouses.md) — склады под открытым небом;
-- [architecture.md](../docs/architecture.md) — фичи, слои, границы владения.
+- [architecture.md](../../docs/architecture.md) — фичи, слои, границы владения.
 
 ---
 

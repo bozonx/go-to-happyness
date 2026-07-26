@@ -120,15 +120,15 @@ var factories: Array[Node3D]:
 
 var sawmill_stocks: Dictionary = {}
 var grass_sources: Dictionary:
-	get: return foraging_service.grass_sources if foraging_service != null else {}
+	get: return foraging_service.grass_sources
 var forage_sources: Dictionary:
-	get: return foraging_service.forage_sources if foraging_service != null else {}
+	get: return foraging_service.forage_sources
 var forage_respawn_at: Dictionary:
-	get: return foraging_service.forage_respawn_at if foraging_service != null else {}
+	get: return foraging_service.forage_respawn_at
 var rabbit_sources: Dictionary:
-	get: return foraging_service.rabbit_sources if foraging_service != null else {}
+	get: return foraging_service.rabbit_sources
 var rabbit_respawn_at: Dictionary:
-	get: return foraging_service.rabbit_respawn_at if foraging_service != null else {}
+	get: return foraging_service.rabbit_respawn_at
 const RABBIT_MAX_COUNT := 8
 var outside_workers: Dictionary:
 	get: return world_state.outside_workers
@@ -151,29 +151,29 @@ var gather_progress_labels: Dictionary:
 	get: return world_state.gather_progress_labels
 var citizens: Array[Citizen] = []
 var camera: Camera3D:
-	get: return camera_controller.camera if camera_controller != null else null
+	get: return camera_controller.camera
 ## Declared in settlement_game.tscn, not built here: it is a fixed, single-instance
 ## part of the main scene, so the scene owns it (architecture rule 7).
 @onready var camera_controller: CameraController = $CameraController
 var world_setup: Node
 var selection_marker: MeshInstance3D:
-	get: return world_setup.selection_marker if world_setup != null else null
+	get: return world_setup.selection_marker
 var fireflies: Array[FirefliesEffect]:
-	get: return world_setup.fireflies if world_setup != null else []
+	get: return world_setup.fireflies
 var weather_state := WeatherState.new()
 var ambient_spawner: AmbientSpawner
 var camera_target: Vector3:
-	get: return camera_controller.camera_target if camera_controller != null else Vector3.ZERO
-	set(val): if camera_controller != null: camera_controller.camera_target = val
+	get: return camera_controller.camera_target
+	set(val): camera_controller.camera_target = val
 var camera_distance: float:
-	get: return camera_controller.camera_distance if camera_controller != null else 30.0
-	set(val): if camera_controller != null: camera_controller.camera_distance = val
+	get: return camera_controller.camera_distance
+	set(val): camera_controller.camera_distance = val
 var camera_yaw: float:
-	get: return camera_controller.camera_yaw if camera_controller != null else 42.0
-	set(val): if camera_controller != null: camera_controller.camera_yaw = val
+	get: return camera_controller.camera_yaw
+	set(val): camera_controller.camera_yaw = val
 var camera_pitch: float:
-	get: return camera_controller.camera_pitch if camera_controller != null else 52.0
-	set(val): if camera_controller != null: camera_controller.camera_pitch = val
+	get: return camera_controller.camera_pitch
+	set(val): camera_controller.camera_pitch = val
 var current_day: int:
 	get: return day_cycle.current_day
 var tent_weather: int = TentEraSurvivalRules.Weather.WARMING
@@ -194,9 +194,9 @@ var right_mouse_dragged: bool:
 	get: return camera_state.right_mouse_dragged
 	set(v): camera_state.right_mouse_dragged = v
 var construction_sites: Array[ConstructionSite]:
-	get: return construction.sites if construction != null else []
+	get: return construction.sites
 var demolition_sites: Array[DemolitionSite]:
-	get: return demolition.sites if demolition != null else []
+	get: return demolition.sites
 var completed_house_count := 0
 var player_controller: PlayerController
 var hero_state := SettlementHeroState.new()
@@ -205,52 +205,52 @@ var hero_citizen: Citizen:
 	set(v): hero_state.hero_citizen = v
 
 var is_first_person: bool:
-	get: return player_controller.is_first_person if player_controller != null else false
+	get: return player_controller.is_first_person
 	set(val):
-		if player_controller != null: player_controller.is_first_person = val
+		player_controller.is_first_person = val
 var player_citizen: Citizen:
-	get: return player_controller.player_citizen if player_controller != null else null
+	get: return player_controller.player_citizen
 	set(val):
-		if player_controller != null: player_controller.player_citizen = val
+		player_controller.player_citizen = val
 var player_yaw: float:
-	get: return player_controller.player_yaw if player_controller != null else 0.0
+	get: return player_controller.player_yaw
 	set(val):
-		if player_controller != null: player_controller.player_yaw = val
+		player_controller.player_yaw = val
 var player_pitch: float:
-	get: return player_controller.player_pitch if player_controller != null else 0.0
+	get: return player_controller.player_pitch
 	set(val):
-		if player_controller != null: player_controller.player_pitch = val
+		player_controller.player_pitch = val
 var interaction_action: String:
-	get: return player_controller.interaction_action if player_controller != null else ""
+	get: return player_controller.interaction_action
 	set(val):
-		if player_controller != null: player_controller.interaction_action = val
+		player_controller.interaction_action = val
 var interaction_resource: String:
-	get: return player_controller.interaction_resource if player_controller != null else ""
+	get: return player_controller.interaction_resource
 	set(val):
-		if player_controller != null: player_controller.interaction_resource = val
+		player_controller.interaction_resource = val
 var interaction_time: float:
-	get: return player_controller.interaction_time if player_controller != null else 0.0
+	get: return player_controller.interaction_time
 	set(val):
-		if player_controller != null: player_controller.interaction_time = val
+		player_controller.interaction_time = val
 var interaction_start_cell: Vector2i:
-	get: return player_controller.interaction_start_cell if player_controller != null else Vector2i(-9999, -9999)
+	get: return player_controller.interaction_start_cell
 	set(val):
-		if player_controller != null: player_controller.interaction_start_cell = val
+		player_controller.interaction_start_cell = val
 var interaction_repeat_all: bool:
-	get: return player_controller.interaction_repeat_all if player_controller != null else false
+	get: return player_controller.interaction_repeat_all
 	set(val):
-		if player_controller != null: player_controller.interaction_repeat_all = val
+		player_controller.interaction_repeat_all = val
 var player_work_target: Node3D:
-	get: return player_controller.player_work_target if player_controller != null else null
+	get: return player_controller.player_work_target
 	set(val):
-		if player_controller != null: player_controller.player_work_target = val
+		player_controller.player_work_target = val
 var player_toilet_notified: bool:
-	get: return player_controller.player_toilet_notified if player_controller != null else false
+	get: return player_controller.player_toilet_notified
 	set(val):
-		if player_controller != null: player_controller.player_toilet_notified = val
+		player_controller.player_toilet_notified = val
 var pocket: Dictionary:
-	get: return hero_pocket_service.pocket if hero_pocket_service != null else {}
-	set(val): if hero_pocket_service != null: hero_pocket_service.pocket = val
+	get: return hero_pocket_service.pocket
+	set(val): hero_pocket_service.pocket = val
 ## Declared in settlement_game.tscn, not built here: it is a fixed, single-instance
 ## part of the main scene, so the scene owns it (architecture rule 7).
 @onready var ui_manager: UIManager = $UIManager
@@ -294,7 +294,7 @@ var navigation_obstacle_publisher: NavigationObstaclePublisher
 var service_pockets: Array[Dictionary] = []
 var selected_school: Node3D
 var school_developed_professions: Dictionary:
-	get: return school_service.developed_professions if school_service != null else {}
+	get: return school_service.developed_professions
 var selected_materials_factory: Node3D
 var campfire_node: Node3D = null
 var selected_campfire: Node3D = null
@@ -318,9 +318,9 @@ var build_menu_is_global: bool:
 	get: return build_state.build_menu_is_global
 	set(v): build_state.build_menu_is_global = v
 var skip_night_button: Button:
-	get: return ui_manager.time_controls_panel.skip_night_button if ui_manager.time_controls_panel != null else null
+	get: return ui_manager.time_controls_panel.skip_night_button
 var start_workday_button: Button:
-	get: return ui_manager.time_controls_panel.start_workday_button if ui_manager.time_controls_panel != null else null
+	get: return ui_manager.time_controls_panel.start_workday_button
 var water_collectors: Array[WaterCollectorRecord] = []
 var pending_trades: Dictionary = {} # worker ai_id -> TradeOrder
 var queued_trades: Array = []

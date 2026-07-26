@@ -9,10 +9,10 @@
 
 Связанные документы:
 
-- [unit_needs.md](unit_needs.md) владеет накоплением усталости и восстановлением;
-- [order_system.md](order_system.md) определяет публикацию и срок приказов;
+- [unit_needs.md](../npc%20and%20village/unit_needs.md) владеет накоплением усталости и восстановлением;
+- [order_system.md](../core/order_system.md) определяет публикацию и срок приказов;
 - [workforce_system.md](workforce_system.md) определяет постоянные рабочие места;
-- [tent_era_survival.md](tent_era_survival.md) определяет меню костра и пропуск ночи.
+- [tent_era_survival.md](../content/tent_era_survival.md) определяет меню костра и пропуск ночи.
 
 ## Обычный рабочий день
 

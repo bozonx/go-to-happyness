@@ -11,18 +11,26 @@ game/
   bootstrap/
     settlement_game.tscn
     settlement_game.gd
+  content/
   features/
-    settlement/domain/
     buildings/{domain,application,presentation}/
     citizens/{domain,application,presentation}/
-    decision/{domain,application}/
-    logistics/{domain,application}/
+    content/{domain,application,presentation}/
+    decision/{domain,application,presentation}/
+    events/{domain,application,presentation}/
+    logistics/{domain,application,presentation}/
     needs/application/
-    production/{domain,application}/
+    production/{domain,application,presentation}/
+    routing/{domain,application,presentation}/
+    save_load/{domain,application}/
+    settlement/{domain,application,presentation}/
     simulation/{domain,application}/
-    world/{application,presentation}/
-    ui/presentation/
+    ui/{domain,application,presentation}/
+    world/{domain,application,presentation}/
 ```
+
+`game/content/` holds the authored content packs (`pack.json`, `*.gdbuilding.json`,
+`*.gdmap/`); `game/features/content/` holds the code that reads them.
 
 `game/bootstrap/settlement_game.tscn` is the configured main scene. Its
 `settlement_game.gd` controller is the composition root: it creates the runtime
@@ -68,7 +76,10 @@ create generic `utils`, `helpers`, `managers` or catch-all `services` directorie
 - `production`: production-specific rules and systems, currently the sawmill.
 - `simulation`: the deterministic clock, day-cycle events and simulation-wide
   scheduling.
-- `world`: terrain, obstacle publication and world-only presentation.
+- `events`: data-driven random events — definitions, conditions, outcomes,
+  delayed effects and the choice UI. See `design_docs/side mechanics/event_system.md`.
+- `save_load`: save file schema and the save/load service.
+- `world`: terrain, water, maps, the map editor and world-only presentation.
 - `routing`: navigation grid, route selection and route results. UI belongs in a
   future `ui/presentation` feature.
 - `ui`: reusable UI panels that read view models or query results and emit user

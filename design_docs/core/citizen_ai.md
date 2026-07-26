@@ -347,7 +347,7 @@ Headless-тесты домена должны оставаться детерм�
 
 Правила ночной работы и ее особые границы для `SleepGoal`, приказов и
 восстановления после истощения определены в
-[labour_time_and_overtime.md](labour_time_and_overtime.md).
+[labour_time_and_overtime.md](../work%20and%20resources/labour_time_and_overtime.md).
 
 - существуют снимки, факты, арбитр, blackboard, задачи, композиты, runner,
   приказы, директор, резервы и runtime-бюджет;
@@ -375,7 +375,7 @@ Headless-тесты домена должны оставаться детерм�
   повару, учителю, продавцу, чиновнику и ремесленнику; профильный сервис здания
   сохраняет владение выпуском и доступностью; механика рабочих позиций и
   переход игрока в рабочий режим через FPP описана в
-  [work_positions.md](work_positions.md);
+  [work_positions.md](../work%20and%20resources/work_positions.md);
 - `FactoryWorkOrderProvider` публикует место фабричному рабочему и инженеру, а
   при отсутствии строительных задач -- строителю для поддержки materials factory.
   Поддержка строителя передается тем же `factory_work` приказом с payload-ролью

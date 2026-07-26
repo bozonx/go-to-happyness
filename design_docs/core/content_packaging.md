@@ -1,7 +1,8 @@
 # Дизайн-документ: Упаковка контента (Content Packaging)
 
 > **Проект:** Go To Happyness (Godot 4.7 / Forward+)
-> **Статус:** спецификация; реализовано только единое правило ревизии (§7)
+> **Статус:** спецификация; реализованы правило ревизии (§7) и переезд встроенного
+> пака в `res://game/content/core/` (§5.1)
 > **Связанные документы:**
 > [../content/modular_building_editor.md](../content/modular_building_editor.md) — формат `.gdbuilding.json`;
 > [map_editor.md](map_editor.md) — формат `.gdmap`;
@@ -188,14 +189,14 @@ res://game/content/core/          # базовый пак: все эры, style=
 res://game/content/style_roman/
 ```
 
-Это переезд с текущего `res://game/features/buildings/data/blueprints/` и
-`res://game/features/world/data/maps/`. Причина: пак пересекает фичи — в нём и
+**Сделано.** Здания и карты уехали из `game/features/*/data/` в `game/content/core/`,
+рядом лежит `pack.json`. Причина: пак пересекает фичи — в нём и
 здания, и карты, и ассеты, — и держать его внутри одной фичи значит навсегда
 запретить пакам содержать карты. Feature-local остаются **код и справочники**
 (`building_material_catalog.gd`, `terrain_material_catalog.gd`), контент уезжает
 в `game/content/`.
 
-Переезд не срочен, но чем позже он делается, тем больше путей уже вписано в сейвы.
+Пак `style_roman` из примера выше пока не существует — стилевые паки не начаты.
 
 ---
 

@@ -6,10 +6,10 @@
 
 Связанные документы:
 
-- [tent_era_survival.md](tent_era_survival.md) — стартовый сценарий, порча, погода;
-- [storage_warehouses.md](storage_warehouses.md) — рюкзак, склады, кучи;
-- [building_progression.md](building_progression.md) — цепочки зданий кухни;
-- [unit_needs.md](unit_needs.md) — архитектура системы потребностей;
+- [tent_era_survival.md](../content/tent_era_survival.md) — стартовый сценарий, порча, погода;
+- [storage_warehouses.md](../npc%20and%20village/storage_warehouses.md) — рюкзак, склады, кучи;
+- [building_progression.md](../npc%20and%20village/building_progression.md) — цепочки зданий кухни;
+- [unit_needs.md](../npc%20and%20village/unit_needs.md) — архитектура системы потребностей;
 - [workforce_system.md](workforce_system.md) — профессии, курьеры, сервисные роли;
 - [work_positions.md](work_positions.md) — рабочие позиции, FPP-роли, чиновник.
 
@@ -44,7 +44,7 @@ graph LR
 **Еда:**
 
 - В рюкзаке лежат **консервы и сухпайки** — стартовая провизия (16 единиц
-  на 4 человека, хватает на 4 дня; см. [tent_era_survival.md](tent_era_survival.md)).
+  на 4 человека, хватает на 4 дня; см. [tent_era_survival.md](../content/tent_era_survival.md)).
 - Жители едят автоматически: берут 1 единицу из рюкзака (или склада, если
   построен) при наступлении голода.
 - **Сырая еда без готовки** даёт только **50% сытости** (вместо полного
@@ -54,7 +54,7 @@ graph LR
   создаёт стимул развить готовку.
 - После постройки склада еда переносится в склад и продолжает расходоваться
   напрямую. Порча еды на открытом складе действует по правилам
-  [storage_warehouses.md](storage_warehouses.md).
+  [storage_warehouses.md](../npc%20and%20village/storage_warehouses.md).
 
 **Вода:**
 
@@ -182,7 +182,7 @@ AI делает это за него. Появляется зависимост�
 **Еда:**
 
 - Цепочка зданий: `dugout_kitchen` → `clay_bakery` → `canteen` →
-  `stone_tavern` → `brick_restaurant` (см. [building_progression.md](building_progression.md),
+  `stone_tavern` → `brick_restaurant` (см. [building_progression.md](../npc%20and%20village/building_progression.md),
   раздел «Пища»).
 - Вместимость еды растёт: 6 → 8 → 12 → 16 → 20+ (`KITCHEN_FOOD_CAPACITIES`).
 - Повар работает через AI, доставка — через постоянных курьеров.
@@ -288,8 +288,8 @@ AI делает это за него. Появляется зависимост�
 
 ## 6. Порча еды
 
-Порча еды действует по правилам [storage_warehouses.md](storage_warehouses.md)
-и [tent_era_survival.md](tent_era_survival.md):
+Порча еды действует по правилам [storage_warehouses.md](../npc%20and%20village/storage_warehouses.md)
+и [tent_era_survival.md](../content/tent_era_survival.md):
 
 - Еда на открытом складе-куче портится: до 10% в сутки (до 5% в дождь).
 - Еда под навесом (солома, брезент) почти не портится.
