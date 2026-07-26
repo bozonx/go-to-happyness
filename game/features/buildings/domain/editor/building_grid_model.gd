@@ -41,6 +41,21 @@ func get_block_at(cell: Vector3i) -> BlueprintBlock:
 	return null
 
 
+## All elements whose anchor is exactly `cell`, in stable placement-key order. A frame
+## "block" can be assembled from several compatible sub-blocks in one voxel;
+## callers that copy the complete assembly must not use the broad-phase index
+## (which also includes pieces anchored in neighbouring cells).
+func blocks_anchored_at(cell: Vector3i) -> Array[BlueprintBlock]:
+	var result: Array[BlueprintBlock] = []
+	var keys: Array = _blocks.keys()
+	keys.sort()
+	for key in keys:
+		var block: BlueprintBlock = _blocks[key]
+		if block.pos == cell:
+			result.append(block)
+	return result
+
+
 func block_key_at(cell: Vector3i) -> String:
 	var block := get_block_at(cell)
 	return placement_key_for(block) if block != null else ""

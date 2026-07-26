@@ -64,6 +64,12 @@ var _painting: bool = false
 var _last_paint_cell: Vector3i = Vector3i.ZERO
 ## Fixed corner of the current rectangle brush drag (the cell first pressed).
 var _paint_anchor: Vector3i = Vector3i.ZERO
+## Shift + right mouse is a temporary erase stroke, separate from camera orbit.
+var _shift_erasing: bool = false
+## A picked frame assembly.  It retains every sub-block anchored in the source
+## voxel and is stamped as one brush on subsequent normal paint strokes.
+var _stamp_brush: Array[BlueprintBlock] = []
+var _shift_hover_block: BlueprintBlock = null
 
 ## Zones-mode state. `_armed_tool` is what a grid click does: paint place cells,
 ## or drop an anchor of the currently selected role.
@@ -84,6 +90,7 @@ var _block_nodes: Dictionary = {}  ## BuildingGridModel placement key -> MeshIns
 var _panning: bool = false
 var _orbiting: bool = false
 var _zone_material_cache: Dictionary = {}
+var _shift_hover_visual: MeshInstance3D = null
 
 ## Cached state to skip redundant ghost updates in _process.
 var _ghost_cell: Vector3i = Vector3i.ZERO
@@ -169,6 +176,10 @@ var _mode_buttons: Dictionary = {}
 var _palette_buttons: Dictionary = {}  ## StringName -> Button
 var _brush_inspector: Control = null  ## contextual variant strip + anchor pad
 var _tool_buttons: Dictionary = {}     ## StringName -> Button
+## Prevent value_changed callbacks from overwriting one footprint dimension
+## with the stale value of the other while a loaded blueprint updates both UI
+## fields.
+var _syncing_metadata_fields := false
 
 const ZONE_COLORS: Array[Color] = [
 	Color(0.35, 0.75, 1.0), Color(1.0, 0.7, 0.3), Color(0.6, 1.0, 0.5),
@@ -216,6 +227,10 @@ func _init_world() -> void:
 	_camera_controller.apply_position()
 
 	_refresh_building_grid_visuals()
+	_shift_hover_visual = MeshInstance3D.new()
+	_shift_hover_visual.name = "ShiftHoverBlock"
+	_shift_hover_visual.visible = false
+	_blocks_root.add_child(_shift_hover_visual)
 
 	decor_mode = DecorModeControllerScript.new()
 	add_child(decor_mode)
@@ -290,6 +305,7 @@ func _process(delta: float) -> void:
 	if _camera_controller != null:
 		_camera_controller.update(delta)
 	_update_cursor()
+	_refresh_shift_hover()
 	# Ghost refresh is cheap but redundant when nothing changed; skip via cache.
 	if cursor_valid and (cursor_cell != _ghost_cell or current_tool != _ghost_tool or current_rot != _ghost_rot or cursor_valid != _ghost_valid):
 		_refresh_ghost()
@@ -312,10 +328,15 @@ func _unhandled_input(event: InputEvent) -> void:
 					decor_mode.on_drag()
 				elif current_mode == EditMode.ZONES and _armed_tool == &"cell":
 					_paint_zone_line(_last_paint_cell, cursor_cell)
-				elif current_mode == EditMode.FRAME and (current_brush == Brush.RECT or event.shift_pressed or Input.is_key_pressed(KEY_SHIFT)):
+				elif current_mode == EditMode.FRAME and current_brush == Brush.RECT:
 					_paint_rect(_paint_anchor, cursor_cell)
 				else:
 					_paint_line(_last_paint_cell, cursor_cell)
+				_last_paint_cell = cursor_cell
+		elif _shift_erasing:
+			_update_cursor()
+			if cursor_valid:
+				_erase_line(_last_paint_cell, cursor_cell)
 				_last_paint_cell = cursor_cell
 	elif event is InputEventKey and event.pressed and not event.echo:
 		_handle_key(event)
@@ -326,8 +347,17 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 		return
 	match event.button_index:
 		MOUSE_BUTTON_RIGHT:
+			if _shift_erasing or (current_mode == EditMode.FRAME and event.shift_pressed):
+				_shift_erasing = event.pressed
+				if event.pressed:
+					_last_paint_cell = cursor_cell
+					_erase_hovered_block_or_cell()
+				return
 			_orbiting = event.pressed
 		MOUSE_BUTTON_MIDDLE:
+			if event.pressed and current_mode == EditMode.FRAME and event.shift_pressed:
+				_pick_stamp_brush()
+				return
 			_panning = event.pressed
 		MOUSE_BUTTON_WHEEL_UP:
 			if event.pressed:
@@ -337,6 +367,9 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 				_zoom(2.0)
 		MOUSE_BUTTON_LEFT:
 			if event.pressed:
+				if current_mode == EditMode.FRAME and event.shift_pressed:
+					_pick_single_block()
+					return
 				if current_mode == EditMode.ZONES:
 					_place_zone_marker_at_cursor()
 					_painting = _armed_tool == &"cell"
@@ -348,7 +381,7 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 					_painting = true
 					_last_paint_cell = cursor_cell
 					_paint_anchor = cursor_cell
-					if current_brush == Brush.RECT or event.shift_pressed or Input.is_key_pressed(KEY_SHIFT):
+					if current_brush == Brush.RECT:
 						_paint_rect(_paint_anchor, cursor_cell)
 					else:
 						_apply_tool_at_cursor()
@@ -435,7 +468,9 @@ func _apply_tool_at_cursor() -> void:
 func _apply_tool_at_cell(cell: Vector3i) -> void:
 	match current_tool:
 		Tool.PLACE:
-			if _is_block_in_bounds(cell, current_block_id, current_variant, current_rot) and grid_model.place(cell, current_block_id, current_rot, current_material_id, current_variant, current_anchor, current_rot_x, current_rot_z):
+			if not _stamp_brush.is_empty():
+				_apply_stamp_at_cell(cell)
+			elif _is_block_in_bounds(cell, current_block_id, current_variant, current_rot) and grid_model.place(cell, current_block_id, current_rot, current_material_id, current_variant, current_anchor, current_rot_x, current_rot_z):
 				_spawn_or_update_block_node(grid_model.get_block_at(cell))
 				_update_count()
 				_mark_dirty()
@@ -446,6 +481,72 @@ func _apply_tool_at_cell(cell: Vector3i) -> void:
 					_remove_block_node(target)
 				_update_count()
 				_mark_dirty()
+
+
+## Stamps the sub-block composition collected with Shift + middle click.  The
+## source voxel becomes the origin, so this also supports an assembly that
+## contains multi-cell pieces anchored around it.
+func _apply_stamp_at_cell(cell: Vector3i) -> void:
+	if _stamp_brush.is_empty():
+		return
+	var origin := _stamp_brush[0].pos
+	for block in _stamp_brush:
+		var target := cell + (block.pos - origin)
+		if not _is_block_in_bounds(target, block.block_id, block.variant, block.rot) or not grid_model.can_place(
+			target, block.block_id, block.rot, block.material_id, block.variant,
+			block.anchor, block.rot_x, block.rot_z):
+			return
+	for block in _stamp_brush:
+		var target := cell + (block.pos - origin)
+		if grid_model.place(target, block.block_id, block.rot, block.material_id, block.variant,
+			block.anchor, block.rot_x, block.rot_z):
+			_spawn_or_update_block_node(grid_model.get_block_at(target))
+	_update_count()
+	_mark_dirty()
+
+
+func _erase_hovered_block_or_cell() -> void:
+	if not cursor_valid:
+		return
+	var target := _block_under_mouse()
+	if target != null and grid_model.erase_block(target):
+		_set_layer(target.pos.y)
+		_remove_block_node(target)
+		_update_count()
+		_mark_dirty()
+		_refresh_ghost()
+		return
+	_apply_erase_at_cell(cursor_cell)
+
+
+func _apply_erase_at_cell(cell: Vector3i) -> void:
+	var target := grid_model.get_block_at(cell)
+	if target != null and grid_model.erase_block(target):
+		_remove_block_node(target)
+		_update_count()
+		_mark_dirty()
+
+
+func _erase_line(from_cell: Vector3i, to_cell: Vector3i) -> void:
+	var dx := absi(to_cell.x - from_cell.x)
+	var dz := absi(to_cell.z - from_cell.z)
+	var sx := 1 if to_cell.x > from_cell.x else -1
+	var sz := 1 if to_cell.z > from_cell.z else -1
+	var x := from_cell.x
+	var z := from_cell.z
+	var err := dx - dz
+	while true:
+		_apply_erase_at_cell(Vector3i(x, active_layer, z))
+		if x == to_cell.x and z == to_cell.z:
+			break
+		var e2 := 2 * err
+		if e2 > -dz:
+			err -= dz
+			x += sx
+		if e2 < dx:
+			err += dx
+			z += sz
+	_refresh_ghost()
 
 
 func _paint_line(from_cell: Vector3i, to_cell: Vector3i) -> void:
@@ -504,6 +605,116 @@ func _paint_zone_line(from_cell: Vector3i, to_cell: Vector3i) -> void:
 		_mark_dirty()
 		_refresh_zone_visuals()
 		_update_zone_info()
+
+
+## Shift is a direct manipulation modifier in frame mode.  Unlike the old
+## rectangle shortcut it never changes the paint brush: it exposes the exact
+## sub-block under the cursor and renders a translucent duplicate over it.
+func _refresh_shift_hover() -> void:
+	if _shift_hover_visual == null:
+		return
+	_shift_hover_block = null
+	if current_mode != EditMode.FRAME or not Input.is_key_pressed(KEY_SHIFT) or not cursor_valid:
+		_shift_hover_visual.visible = false
+		return
+	var block := _block_under_mouse()
+	if block == null:
+		_shift_hover_visual.visible = false
+		return
+	_shift_hover_block = block
+	_shift_hover_visual.mesh = mesh_library.mesh_for(block.block_id, block.variant)
+	_shift_hover_visual.position = Vector3(block.pos) + BlockMeshLibraryScript.local_offset(
+		block.block_id, block.variant, block.rot, block.anchor, 0.0, block.rot_x, block.rot_z)
+	_shift_hover_visual.rotation = block.rotation_euler()
+	_shift_hover_visual.material_override = mesh_library.ghost_material(true)
+	_shift_hover_visual.visible = true
+
+
+func _block_under_mouse() -> BlueprintBlock:
+	if _camera_controller == null or _camera_controller.camera == null:
+		return null
+	var camera := _camera_controller.camera
+	var mouse_pos := get_viewport().get_mouse_position()
+	var origin := camera.project_ray_origin(mouse_pos)
+	var direction := camera.project_ray_normal(mouse_pos)
+	var closest: BlueprintBlock = null
+	var closest_distance := INF
+	for block: BlueprintBlock in grid_model.all_blocks():
+		var aabb := BuildingBlockCatalogScript.occupied_aabb(block.pos, block.block_id,
+			block.variant, block.rot, block.anchor, block.rot_x, block.rot_z)
+		var distance := _ray_aabb_entry_distance(origin, direction, aabb)
+		if distance >= 0.0 and distance < closest_distance:
+			closest = block
+			closest_distance = distance
+	return closest
+
+
+## Slab intersection gives the nearest hit, whereas a broad-phase cell lookup
+## would always choose whichever compatible block happened to be placed last.
+func _ray_aabb_entry_distance(origin: Vector3, direction: Vector3, aabb: AABB) -> float:
+	var t_min := -INF
+	var t_max := INF
+	for axis in 3:
+		var start: float = origin[axis]
+		var ray: float = direction[axis]
+		var lower: float = aabb.position[axis]
+		var upper: float = aabb.end[axis]
+		if absf(ray) < 0.000001:
+			if start < lower or start > upper:
+				return -1.0
+			continue
+		var first := (lower - start) / ray
+		var last := (upper - start) / ray
+		if first > last:
+			var swap := first
+			first = last
+			last = swap
+		t_min = maxf(t_min, first)
+		t_max = minf(t_max, last)
+		if t_min > t_max:
+			return -1.0
+	if t_max < 0.0:
+		return -1.0
+	return maxf(0.0, t_min)
+
+
+func _pick_single_block(retain_stamp: bool = false) -> void:
+	var block := _block_under_mouse()
+	if block == null:
+		_update_status("Под Shift нет блока для выбора.")
+		return
+	_set_layer(block.pos.y)
+	_select_block(block.block_id, block.variant, retain_stamp)
+	current_material_id = block.material_id
+	current_anchor = block.anchor
+	current_rot = block.rot
+	current_rot_x = block.rot_x
+	current_rot_z = block.rot_z
+	_select_material_in_option(current_material_id)
+	_rebuild_brush_inspector()
+	_update_rotation_label()
+	_refresh_ghost()
+	_update_status("Выбран элемент %s." % block.block_id)
+
+
+func _pick_stamp_brush() -> void:
+	var block := _block_under_mouse()
+	if block == null:
+		_update_status("Под Shift нет блока для кисти.")
+		return
+	_stamp_brush.clear()
+	for source in grid_model.blocks_anchored_at(block.pos):
+		_stamp_brush.append(BlueprintBlock.new(source.pos, source.block_id, source.rot,
+			source.material_id, source.variant, source.anchor, source.rot_x, source.rot_z))
+	_pick_single_block(true)
+	_update_status("Кисть: узел из %d подблок(ов)." % _stamp_brush.size())
+
+
+func _select_material_in_option(material_id: StringName) -> void:
+	for index in _material_option.item_count:
+		if _material_option.get_item_metadata(index) == material_id:
+			_material_option.select(index)
+			return
 
 
 func _pointer_over_ui() -> bool:
@@ -728,7 +939,9 @@ func _set_brush(brush_id: int) -> void:
 ## keep the current one if it's the same block)"; a concrete id comes from the
 ## variant strip. The palette lists one button per block; size/profile and the
 ## in-cell anchor are chosen in the contextual brush inspector below it.
-func _select_block(block_id: StringName, variant: StringName = &"") -> void:
+func _select_block(block_id: StringName, variant: StringName = &"", retain_stamp: bool = false) -> void:
+	if not retain_stamp:
+		_stamp_brush.clear()
 	if variant == &"":
 		variant = current_variant if block_id == current_block_id else BuildingBlockCatalogScript.default_variant(block_id)
 	current_block_id = block_id
@@ -1655,6 +1868,7 @@ func _update_fallback_display() -> void:
 
 
 func _sync_metadata_fields() -> void:
+	_syncing_metadata_fields = true
 	if _name_edit != null:
 		_name_edit.text = blueprint.name
 	if _id_edit != null:
@@ -1676,6 +1890,10 @@ func _sync_metadata_fields() -> void:
 	_select_style_in_option(blueprint.construction_style)
 	_rebuild_material_options()
 	_refresh_underground_availability()
+	_syncing_metadata_fields = false
+	_refresh_building_grid_visuals()
+	_focus_footprint_center()
+	_refresh_ghost()
 
 
 func _update_rotation_label() -> void:
@@ -1898,7 +2116,7 @@ func _run_confirmation_dialog(dialog: ConfirmationDialog, size: Vector2i) -> boo
 
 
 func _on_footprint_changed(_value: float) -> void:
-	if blueprint == null:
+	if blueprint == null or _syncing_metadata_fields:
 		return
 	blueprint.footprint = Vector2i(int(_footprint_x_spin.value), int(_footprint_z_spin.value))
 	_refresh_building_grid_visuals()

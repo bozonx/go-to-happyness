@@ -168,7 +168,7 @@ unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
 text = "🔲 (M)"
-tooltip_text = "Прямоугольник (M / Shift)"
+tooltip_text = "Прямоугольник (M)"
 
 [node name="VSepBrush" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
 layout_mode = 2

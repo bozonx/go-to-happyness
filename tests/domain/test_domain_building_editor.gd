@@ -239,6 +239,9 @@ static func _test_grid_shared_cell() -> void:
 	assert(grid.place(Vector3i.ZERO, &"column_half", 1, &"branches", &"0.5"))
 	assert(grid.count() == 2)
 	assert(grid.has_block_at(Vector3i.ZERO))
+	# A composite brush copies the whole anchored assembly, not only the newest
+	# sub-block returned by get_block_at().
+	assert(grid.blocks_anchored_at(Vector3i.ZERO).size() == 2)
 	var blueprint := BuildingBlueprintScript.new()
 	blueprint.id = &"joined_columns"
 	grid.write_to_blueprint(blueprint)
