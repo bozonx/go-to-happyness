@@ -25,5 +25,16 @@ func _best(candidates: Array, requested_era: StringName, wanted_style: StringNam
 	for entry: ContentEntryScript in candidates:
 		var rank := BuildingMaterialCatalogScript.era_rank(entry.era)
 		if entry.style != wanted_style or rank > requested_rank or (exact_only and entry.era != requested_era): continue
-		if best == null or rank > BuildingMaterialCatalogScript.era_rank(best.era): best = entry
+		if best == null or rank > BuildingMaterialCatalogScript.era_rank(best.era) or (rank == BuildingMaterialCatalogScript.era_rank(best.era) and _priority(entry) > _priority(best)):
+			best = entry
 	return best
+
+
+static func _priority(entry: ContentEntryScript) -> int:
+	# Author-owned local files are the explicit override layer. Installed packs
+	# follow, then shipped content. Other pack ids are installed packs too.
+	if entry.source == &"local" or entry.source == &"player":
+		return 3
+	if entry.source == &"core" or entry.source == &"builtin":
+		return 1
+	return 2

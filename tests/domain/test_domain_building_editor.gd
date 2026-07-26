@@ -15,6 +15,7 @@ const BuildingZoneServiceScript = preload("res://game/features/buildings/applica
 const ContentIndexScript = preload("res://game/features/content/application/content_index.gd")
 const ContentEntryScript = preload("res://game/features/content/domain/content_entry.gd")
 const StyleResolverScript = preload("res://game/features/content/application/style_resolver.gd")
+const ContentPackIOScript = preload("res://game/features/content/presentation/content_pack_io.gd")
 
 
 const BlockMeshLibraryScript = preload("res://game/features/buildings/presentation/editor/block_mesh_library.gd")
@@ -39,6 +40,7 @@ static func run_all() -> void:
 	_test_invalid_blueprints_are_rejected()
 	_test_era_material_replacement()
 	_test_style_resolver_fallback_chain()
+	_test_content_packs_and_exchange()
 
 
 static func _test_catalog() -> void:
@@ -120,6 +122,24 @@ static func _test_style_resolver_fallback_chain() -> void:
 	index.entries.erase(&"bakery_clay_roman")
 	assert(resolver.resolve(&"bakery", &"brick", &"roman").era == &"tent")
 	assert(resolver.resolve(&"missing", &"brick", &"roman") == null)
+
+
+static func _test_content_packs_and_exchange() -> void:
+	var index := ContentIndexScript.new()
+	index.rebuild()
+	assert(index.get_entry(&"core:tent") != null, "core pack must namespace built-in blueprints")
+	assert(index.get_entry(&"core:green_valley") != null, "core pack must namespace built-in maps")
+	assert(index.content_packs().any(func(pack) -> bool: return pack.id == &"core"))
+
+	var io := ContentPackIOScript.new()
+	var archive := "user://content_pack_test.gdpack"
+	assert(io.export_pack("res://game/content/core", archive), io.last_error)
+	var installed_path := io.import_pack(archive)
+	assert(not installed_path.is_empty(), io.last_error)
+	assert(FileAccess.file_exists(installed_path.path_join("pack.json")))
+	assert(FileAccess.file_exists(installed_path.path_join("buildings/tent.gdbuilding.json")))
+	ContentPackIOScript._remove_directory(installed_path)
+	DirAccess.remove_absolute(archive)
 
 
 static func _test_mesh_library() -> void:

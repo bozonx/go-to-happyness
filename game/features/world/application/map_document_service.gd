@@ -19,11 +19,11 @@ const ContentRevisionScript = preload("res://game/features/content/domain/conten
 const ContentIndexScript = preload("res://game/features/content/application/content_index.gd")
 const ContentIdScript = preload("res://game/features/content/domain/content_id.gd")
 
-const SOURCE_BUILTIN := &"builtin"
-const SOURCE_PLAYER := &"player"
+const SOURCE_BUILTIN := &"core"
+const SOURCE_PLAYER := &"local"
 
-const BUILTIN_ROOT := "res://game/features/world/data/maps"
-const PLAYER_ROOT := "user://custom_maps"
+const BUILTIN_ROOT := "res://game/content/core/maps"
+const PLAYER_ROOT := "user://content/local/maps"
 
 const PACKAGE_SUFFIX := ".gdmap"
 const MAP_JSON := "map.json"
@@ -90,7 +90,9 @@ func _ensure_content_index() -> void:
 ## Header only — `map.json` without the binary layers. This is what a map list
 ## needs, and reading terrain for it would make the menu wait on every map.
 func read_header(source: StringName, id: StringName) -> Dictionary:
-	var path := package_path(source, id)
+	_ensure_content_index()
+	var entry := _content_index.get_entry(runtime_key(source, id))
+	var path := entry.path if entry != null else package_path(source, id)
 	var parsed := _read_json(path.path_join(MAP_JSON))
 	if parsed.is_empty():
 		return {}

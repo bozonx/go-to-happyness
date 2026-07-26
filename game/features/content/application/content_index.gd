@@ -3,25 +3,33 @@ extends RefCounted
 
 const ContentIdScript = preload("res://game/features/content/domain/content_id.gd")
 const ContentEntryScript = preload("res://game/features/content/domain/content_entry.gd")
+const ContentPackScript = preload("res://game/features/content/domain/content_pack.gd")
 const BuildingBlueprintScript = preload("res://game/features/buildings/domain/editor/building_blueprint.gd")
 
-const BUILTIN_BLUEPRINTS := "res://game/features/buildings/data/blueprints"
-const PLAYER_BLUEPRINTS := "user://custom_buildings"
-const BUILTIN_MAPS := "res://game/features/world/data/maps"
-const PLAYER_MAPS := "user://custom_maps"
+const BUILTIN_ROOT := "res://game/content"
+const LOCAL_ROOT := "user://content/local"
+const INSTALLED_ROOT := "user://content/installed"
+const LEGACY_BLUEPRINTS := "user://custom_buildings"
+const LEGACY_MAPS := "user://custom_maps"
 const BLUEPRINT_SUFFIX := ".gdbuilding.json"
 const MAP_SUFFIX := ".gdmap"
 
 var entries: Dictionary = {}
 var errors: Array[String] = []
+var packs: Array = []
 
 func rebuild() -> void:
 	entries.clear()
 	errors.clear()
-	_index_blueprints(BUILTIN_BLUEPRINTS, ContentIdScript.SOURCE_BUILTIN)
-	_index_blueprints(PLAYER_BLUEPRINTS, ContentIdScript.SOURCE_PLAYER)
-	_index_maps(BUILTIN_MAPS, ContentIdScript.SOURCE_BUILTIN)
-	_index_maps(PLAYER_MAPS, ContentIdScript.SOURCE_PLAYER)
+	packs.clear()
+	_migrate_legacy_player_content()
+	_index_pack_roots(BUILTIN_ROOT, ContentIdScript.SOURCE_CORE)
+	_index_local_pack()
+	_index_pack_roots(INSTALLED_ROOT, ContentIdScript.SOURCE_INSTALLED)
+
+
+func content_packs() -> Array:
+	return packs.duplicate()
 
 func get_entry(key: StringName) -> ContentEntryScript:
 	return entries.get(key) as ContentEntryScript
@@ -41,6 +49,52 @@ func _entries_of(content_type: StringName) -> Array[ContentEntryScript]:
 	result.sort_custom(func(a: ContentEntryScript, b: ContentEntryScript): return String(a.runtime_key) < String(b.runtime_key))
 	return result
 
+func _index_pack_roots(root: String, source_kind: StringName) -> void:
+	if not DirAccess.dir_exists_absolute(root):
+		return
+	for directory in DirAccess.get_directories_at(root):
+		var root_path := root.path_join(directory)
+		var source := StringName(directory) if source_kind == ContentIdScript.SOURCE_CORE else StringName("pack:" + directory)
+		_index_pack(root_path, source)
+
+
+func _index_local_pack() -> void:
+	if not DirAccess.dir_exists_absolute(LOCAL_ROOT):
+		return
+	var local := ContentPackScript.new()
+	local.id = &"local"
+	local.name = "Локальный контент"
+	local.root_path = LOCAL_ROOT
+	local.source = ContentIdScript.SOURCE_LOCAL
+	packs.append(local)
+	_index_blueprints(LOCAL_ROOT.path_join("buildings"), ContentIdScript.SOURCE_LOCAL)
+	_index_maps(LOCAL_ROOT.path_join("maps"), ContentIdScript.SOURCE_LOCAL)
+	_index_maps(LOCAL_ROOT.path_join("prefabs"), ContentIdScript.SOURCE_LOCAL)
+
+
+func _index_pack(root: String, source: StringName) -> void:
+	var metadata_path := root.path_join("pack.json")
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(metadata_path))
+	if not (parsed is Dictionary):
+		errors.append("Некорректный pack.json: %s" % metadata_path)
+		return
+	var pack := ContentPackScript.new()
+	if not pack.read_from_dict(parsed, root, source):
+		errors.append("Некорректные метаданные пака: %s" % metadata_path)
+		return
+	if source_kind_is_core(source) and pack.id != StringName(String(source)):
+		errors.append("id встроенного пака не совпадает с папкой: %s" % metadata_path)
+		return
+	packs.append(pack)
+	_index_blueprints(root.path_join("buildings"), source)
+	_index_maps(root.path_join("maps"), source)
+	_index_maps(root.path_join("prefabs"), source)
+
+
+static func source_kind_is_core(source: StringName) -> bool:
+	return not String(source).begins_with("pack:")
+
+
 func _index_blueprints(root: String, source: StringName) -> void:
 	for path in _files_recursively(root, BLUEPRINT_SUFFIX):
 		var blueprint := BuildingBlueprintScript.from_json(FileAccess.get_file_as_string(path))
@@ -54,6 +108,7 @@ func _index_blueprints(root: String, source: StringName) -> void:
 		entry.era = blueprint.era
 		entry.style = blueprint.style
 		entry.name = blueprint.name
+		entry.metadata = {"pack": _pack_id_for(source)}
 		_register(entry)
 
 func _index_maps(root: String, source: StringName) -> void:
@@ -76,11 +131,47 @@ func _index_maps(root: String, source: StringName) -> void:
 		entry.metadata = parsed.duplicate(true)
 		_register(entry)
 
+
+func _pack_id_for(source: StringName) -> StringName:
+	for pack in packs:
+		if pack.source == source:
+			return pack.id
+	return &""
+
 func _register(entry: ContentEntryScript) -> void:
 	if entries.has(entry.runtime_key):
 		errors.append("Дубликат content id %s: %s" % [entry.runtime_key, entry.path])
 		return
 	entries[entry.runtime_key] = entry
+
+
+## One-time, copy-then-remove migration.  It only touches the two old player
+## folders and leaves a failed move intact, so interrupted first launch remains
+## recoverable. Built-in files are intentionally never migrated here: the repo
+## owns their relocation and exported builds ship the new layout directly.
+func _migrate_legacy_player_content() -> void:
+	_migrate_legacy_directory(LEGACY_BLUEPRINTS, LOCAL_ROOT.path_join("buildings"))
+	_migrate_legacy_directory(LEGACY_MAPS, LOCAL_ROOT.path_join("maps"))
+
+
+static func _migrate_legacy_directory(old_root: String, new_root: String) -> void:
+	if not DirAccess.dir_exists_absolute(old_root):
+		return
+	if DirAccess.make_dir_recursive_absolute(new_root) != OK:
+		return
+	var old_dir := DirAccess.open(old_root)
+	if old_dir == null:
+		return
+	for file_name in old_dir.get_files():
+		var old_path := old_root.path_join(file_name)
+		var new_path := new_root.path_join(file_name)
+		if not FileAccess.file_exists(new_path) and DirAccess.rename_absolute(old_path, new_path) != OK:
+			push_warning("[content] не удалось перенести %s" % old_path)
+	for directory in old_dir.get_directories():
+		var old_path := old_root.path_join(directory)
+		var new_path := new_root.path_join(directory)
+		if not DirAccess.dir_exists_absolute(new_path) and DirAccess.rename_absolute(old_path, new_path) != OK:
+			push_warning("[content] не удалось перенести %s" % old_path)
 
 static func _files_recursively(root: String, suffix: String) -> Array[String]:
 	var result: Array[String] = []

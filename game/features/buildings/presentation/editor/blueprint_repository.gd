@@ -3,8 +3,8 @@ extends RefCounted
 
 ## Persists `BuildingBlueprint` records as `.gdbuilding.json` files.
 ##
-## Dev mode writes canonical blueprints under `res://game/features/buildings/data/blueprints/`;
-## player mode writes user creations under `user://custom_buildings/`. Save/load is the
+## Dev mode writes the core pack's blueprints; player mode writes the implicit
+## local pack. Save/load is the
 ## only place the editor touches the filesystem.
 
 const BuildingBlueprintScript = preload("res://game/features/buildings/domain/editor/building_blueprint.gd")
@@ -12,8 +12,8 @@ const ContentRevisionScript = preload("res://game/features/content/domain/conten
 
 ## Canonical, feature-local blueprint folder. The game's BuildingBlueprintLibrary
 ## also reads from here, so dev edits are exactly what ships in-game.
-const DEV_DIR := "res://game/features/buildings/data/blueprints"
-const PLAYER_DIR := "user://custom_buildings"
+const DEV_DIR := "res://game/content/core/buildings"
+const PLAYER_DIR := "user://content/local/buildings"
 
 var dev_mode: bool = false
 ## Read by the editor after listing, so duplicate ids are actionable instead of

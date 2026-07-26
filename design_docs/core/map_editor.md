@@ -257,7 +257,7 @@ my_map.gdmap/
 Источники, как и у чертежей:
 
 ```text
-builtin: res://game/features/world/data/maps/
+builtin: res://game/content/core/maps/
 player:  user://custom_maps/
 ```
 

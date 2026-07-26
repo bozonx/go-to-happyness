@@ -340,7 +340,7 @@ func _test_catalog_filtering() -> void:
 ## Every built-in .gdbuilding.json must be v2 — no v1 data should remain in
 ## the repository after the format migration.
 func _test_builtin_blueprints_are_v2() -> void:
-	var dir_path := "res://game/features/buildings/data/blueprints"
+	var dir_path := "res://game/content/core/buildings"
 	var dir := DirAccess.open(dir_path)
 	assert(dir != null, "Blueprints directory must exist")
 	var found_count := 0

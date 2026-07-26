@@ -15,13 +15,12 @@ const BuildingCatalogScript = preload("res://game/features/buildings/domain/buil
 const ContentIndexScript = preload("res://game/features/content/application/content_index.gd")
 const ContentIdScript = preload("res://game/features/content/domain/content_id.gd")
 
-const BUILTIN_DIR := "res://game/features/buildings/data/blueprints"
-const PLAYER_DIR := "user://custom_buildings"
-const SOURCE_BUILTIN := &"builtin"
-const SOURCE_PLAYER := &"player"
+const SOURCE_BUILTIN := &"core"
+const SOURCE_PLAYER := &"local"
 
 static var _index: Dictionary = {}          ## runtime key -> {path, source, id}
 static var _cache: Dictionary = {}          ## building_type(String) -> BuildingBlueprint
+static var _legacy_aliases: Dictionary = {} ## old bare ids -> canonical runtime key
 static var _index_built: bool = false
 static var _content_index: ContentIndex
 
@@ -29,6 +28,7 @@ static var _content_index: ContentIndex
 static func refresh() -> void:
 	_index.clear()
 	_cache.clear()
+	_legacy_aliases.clear()
 	_index_built = true
 	BuildingCatalogScript.clear_runtime_definitions()
 	_content_index = ContentIndexScript.new()
@@ -43,6 +43,10 @@ static func refresh() -> void:
 			continue
 		_index[key] = {"path": path, "source": indexed_entry.source, "id": blueprint.id}
 		_cache[key] = blueprint
+		# Simulation code still asks static catalog ids (such as `tent`). Keep that
+		# compatibility while all persisted references use core:tent.
+		if indexed_entry.source == SOURCE_BUILTIN and blueprint.style == &"generic" and not _legacy_aliases.has(blueprint.id):
+			_legacy_aliases[blueprint.id] = key
 		_register_definition(key, blueprint)
 
 
@@ -53,11 +57,12 @@ static func _ensure_index() -> void:
 
 static func has(building_type: String) -> bool:
 	_ensure_index()
-	return _index.has(building_type)
+	return _index.has(building_type) or _legacy_aliases.has(StringName(building_type))
 
 
 static func get_blueprint(building_type: String) -> BuildingBlueprintScript:
 	_ensure_index()
+	building_type = _canonical_key(building_type)
 	if _cache.has(building_type):
 		return _cache[building_type]
 	if not _index.has(building_type):
@@ -77,6 +82,7 @@ static func runtime_key(source: StringName, blueprint_id: StringName) -> String:
 
 static func blueprint_ref(building_type: String) -> Dictionary:
 	_ensure_index()
+	building_type = _canonical_key(building_type)
 	var entry: Dictionary = _index.get(building_type, {})
 	var blueprint := get_blueprint(building_type)
 	if entry.is_empty() or blueprint == null:
@@ -94,6 +100,8 @@ static func resolve_reference(reference: Dictionary) -> String:
 	var source := StringName(reference.get("source", "builtin"))
 	var blueprint_id := StringName(reference.get("id", ""))
 	var key := runtime_key(source, blueprint_id)
+	if not _index.has(key) and source == &"builtin":
+		key = runtime_key(SOURCE_BUILTIN, blueprint_id)
 	return key if _index.has(key) else ""
 
 
@@ -134,6 +142,10 @@ static func _register_definition(key: String, blueprint: BuildingBlueprintScript
 		"demolishable": true,
 		"custom_blueprint": key.begins_with("user:"),
 	})
+
+
+static func _canonical_key(building_type: String) -> String:
+	return String(_legacy_aliases.get(StringName(building_type), building_type))
 
 
 static func footprint(building_type: String) -> Vector2i:

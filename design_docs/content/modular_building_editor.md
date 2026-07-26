@@ -323,7 +323,7 @@ housing). В редакторе список подтипов появляетс
 Сегодня используются два источника:
 
 ```text
-builtin: res://game/features/buildings/data/blueprints/
+builtin: res://game/content/core/buildings/
 player:  user://custom_buildings/
 ```
 

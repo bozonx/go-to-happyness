@@ -294,7 +294,7 @@ static func _test_save_replaces_the_package_atomically() -> void:
 
 
 static func _test_runtime_keys_namespace_player_maps() -> void:
-	assert(MapDocumentService.runtime_key(MapDocumentService.SOURCE_BUILTIN, &"green_valley") == &"green_valley")
+	assert(MapDocumentService.runtime_key(MapDocumentService.SOURCE_BUILTIN, &"green_valley") == &"core:green_valley")
 	assert(MapDocumentService.runtime_key(MapDocumentService.SOURCE_PLAYER, &"green_valley") == &"user:green_valley")
 
 	# A player map can never be mistaken for the shipped map of the same name.
