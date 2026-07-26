@@ -95,6 +95,6 @@ The Tent Era implements the following systems:
 - Entrance sign trading: buy food, water, construction gloves, and buckets.
 - Bucket-based water gathering from ponds; the obsolete water `filter_1` tool has been removed.
 - Nightly campfire stories with three themes: optimistic wellbeing boost, teaching skill gain, and a focused work plan.
-- Data-driven random event system with 12 tent-era events: conditions, cooldowns, event chains (forest ranger -> wild boars), delayed consequences (smoky firewood), and random chance outcomes. See `design_docs/side mechanics/event_system.md` for architecture.
+- Data-driven random event system with 12 tent-era events: conditions, cooldowns, event chains (forest ranger -> wild boars), delayed consequences (smoky firewood), and random chance outcomes. See `design_docs/side_mechanics/event_system.md` for architecture.
 - Weather-driven rain decay on exposed resources, fire extinguishing, and smoke debuffs from wet firewood.
 - Temporary 4-person tent that auto-dismantles at dawn and a starting tarp dilemma (dew collector vs. warehouse cover).

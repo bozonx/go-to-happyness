@@ -159,6 +159,6 @@ calibration geometry.
   owner in the same commit.
 - Tests that preload `settlement_game.gd` parse the whole bootstrap controller: a missing
   function referenced there fails unrelated tests at load time.
-- Design docs live in `design_docs/` (what to build); `docs/` holds engineering docs (how
-  it is built). Note the directories with spaces: `design_docs/npc and village/`,
-  `side mechanics/`, `work and resources/`.
+- Design docs live in `design_docs/` (what to build); `docs/ holds engineering docs (how
+  it is built). Sub-directories use underscores: `design_docs/npc_and_village/`,
+  `design_docs/side_mechanics/`, `design_docs/work_and_resources/`.
