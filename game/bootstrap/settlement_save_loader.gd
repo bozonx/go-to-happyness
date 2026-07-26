@@ -139,7 +139,7 @@ func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
 		if not blueprint.is_empty():
 			var occupied_footprint = game.building_placement_controller.rotated_footprint(blueprint.footprint, rot_quarters) if game.building_placement_controller != null else blueprint.footprint
 			game.building_registry.reserve(cell, pos, occupied_footprint)
-			var site = game._create_construction_site(cell, b_type, pos, rot_quarters, blueprint, occupied_footprint)
+			var site = game.construction_controller.create_construction_site(cell, b_type, pos, rot_quarters, blueprint, occupied_footprint)
 			if site != null:
 				site.progress = progress
 				site.delivered_materials = delivered
@@ -161,7 +161,7 @@ func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
 		var pile_node := game._create_resource_pile(pos, resources, bool(p_dict.get("is_backpack", false)))
 		if pile_node != null and bool(p_dict.get("landscape_owned", false)):
 			pile_node.set_meta("landscape_owned", true)
-			game.add_landscape_object(pile_node)
+			game.world_navigation_controller.add_landscape_object(pile_node)
 		if bool(p_dict.get("is_backpack", false)):
 			game.backpack_node = pile_node
 
@@ -193,7 +193,7 @@ func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
 		game.add_child(citizen)
 		citizen.simulation = game
 		citizen.setup_specialization(str(cit_dict.get("specialization", "unassigned")))
-		game._wire_citizen(citizen)
+		game.citizen_factory.wire_citizen(citizen)
 
 		game.citizens.append(citizen)
 		citizen.ai_id = saved_id if saved_id > 0 else game._next_ai_citizen_id
@@ -317,4 +317,4 @@ func _restore_forest(tree_states: Array) -> void:
 			tree.set_meta("hand_branches", tree_state.hand_branches)
 			tree.set_meta("branch_exhausted", tree_state.branch_exhausted)
 		if tree_state != null and tree_state.felled:
-			game._apply_tree_felled_visual(cell, tree)
+			game.world_navigation_controller.apply_tree_felled_visual(cell, tree)

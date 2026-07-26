@@ -158,7 +158,7 @@ func _daily_gathering_targets_for(ctx: FacadeContext, actor: Citizen, role: Stri
 						})
 		"gather_water":
 			for pond_position: Vector3 in ctx.simulation.pond_positions:
-				var access: Vector3 = ctx.simulation._pond_access_position(actor.global_position, pond_position)
+				var access: Vector3 = ctx.simulation.world_navigation_controller.pond_access_position(actor.global_position, pond_position)
 				if access != Vector3.INF:
 					ctx.helpers.insert_nearby_gathering_candidate(nearby, {
 						&"id": ctx.helpers.target_key(&"water", access),

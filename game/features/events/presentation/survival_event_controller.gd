@@ -204,7 +204,7 @@ func skip_night() -> void:
 	for citizen in simulation.citizens.duplicate():
 		if is_instance_valid(citizen) and citizen.state == Citizen.State.LEAVING:
 			simulation._on_citizen_leaving_departed(citizen)
-	simulation._return_outside_workers()
+	simulation.outside_work_controller.return_outside_workers()
 	_apply_skip_night_incident()
 	simulation._update_workers()
 	for citizen in simulation.citizens:
@@ -215,7 +215,7 @@ func skip_night() -> void:
 	if simulation.citizen_ai != null:
 		simulation.citizen_ai.request_decision_refresh()
 	update_skip_night_button()
-	simulation._update_daylight()
+	simulation.simulation_tick_controller.update_daylight()
 	if simulation.building_lifecycle_service != null:
 		simulation.building_lifecycle_service.update_house_lights()
 	simulation._update_interface("Skipped the night. Morning begins at 06:00.")
@@ -231,7 +231,7 @@ func skip_to_workday_start() -> void:
 	if simulation.citizen_ai != null:
 		simulation.citizen_ai.request_decision_refresh()
 	update_skip_night_button()
-	simulation._update_daylight()
+	simulation.simulation_tick_controller.update_daylight()
 	if simulation.building_lifecycle_service != null:
 		simulation.building_lifecycle_service.update_house_lights()
 	simulation._update_interface("Workday starts at 08:00.")

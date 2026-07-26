@@ -160,8 +160,8 @@ func place_building(world_position: Vector3) -> void:
 
 	game.building_registry.reserve(cell, world_position, occupied_footprint)
 	game._refresh_navigation_grid()
-	var site := game._create_construction_site(cell, game.build_mode, world_position, game.build_rotation_quarters, blueprint, occupied_footprint)
-	game._deliver_pocket_to_site(site, true)
+	var site: ConstructionSite = game.construction_controller.create_construction_site(cell, game.build_mode, world_position, game.build_rotation_quarters, blueprint, occupied_footprint)
+	game.hero_interaction_controller.deliver_pocket_to_site(site, true)
 	game.building_registry.attach_node(cell, site.node, game.build_mode)
 	_reset_build_mode_visuals()
 	set_build_placement_ui_visible(true)
@@ -195,7 +195,7 @@ func _place_instant_building(cell: Vector2i, world_position: Vector3, blueprint:
 			child.queue_free()
 	game._complete_building(cell, game.build_mode, world_position, site_node, blueprint)
 	if BuildingCatalog.is_flag(game.build_mode):
-		game._bind_hero_squad_to_settlement(&"main_settlement")
+		game.citizen_factory.bind_hero_squad_to_settlement(&"main_settlement")
 	_reset_build_mode_visuals()
 	set_build_placement_ui_visible(true)
 	game._update_interface("%s placed!" % str(BuildingCatalog.definition_for(game.build_mode).get("name", "Building")))

@@ -30,7 +30,7 @@ func refresh_market_menu() -> void:
 	var market_type: String = simulation.building_registry.building_type_for_node(simulation.selected_market)
 	if market_type.is_empty():
 		market_type = "straw_trade_tent"
-	var available_money: int = simulation._available_trade_money()
+	var available_money: int = simulation.workplace_controller.available_trade_money()
 	var seller_ok: bool = simulation.trade_service.is_seller_present_at(simulation.selected_market) if simulation.trade_service != null else false
 
 	var title_text := "%s Menu\nCoins: %d  Available: %d\nCompleted sales: %d" % [market_type.capitalize().replace("_", " "), simulation.settlement.money, available_money, simulation.settlement.trade_sales]

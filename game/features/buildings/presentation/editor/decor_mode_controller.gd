@@ -14,10 +14,10 @@ extends Node3D
 const FurnishingAssetCatalogScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_catalog.gd")
 const FurnishingAssetDefScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_def.gd")
 const DecorObjectRecordScript = preload("res://game/features/buildings/domain/editor/decor_object_record.gd")
-const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
 const FixtureDefinitionScript = preload("res://game/features/buildings/domain/editor/fixture_definition.gd")
-const FireSourceDefaultsScript = preload("res://game/features/buildings/domain/editor/fire_source_defaults.gd")
-const ZoneRequirementsScript = preload("res://game/features/buildings/domain/editor/zone_requirements.gd")
+const FixtureEditorPanelScript = preload("res://game/features/buildings/presentation/editor/fixture_editor_panel.gd")
+const DecorPlacementValidatorScript = preload("res://game/features/buildings/presentation/editor/decor_placement_validator.gd")
+const DecorCollisionOverlayScript = preload("res://game/features/buildings/presentation/editor/decor_collision_overlay.gd")
 
 const ROTATION_STEP_DEG := 15.0
 const UNDO_LIMIT := 40
@@ -43,13 +43,8 @@ var current_pitch_deg: float = 0.0
 var current_roll_deg: float = 0.0
 var selected_object_id: String = ""
 
-## Cycle-selection state: when the cursor is over overlapping objects,
-## repeated clicks cycle through them instead of always picking the nearest.
-var _last_pick_pos: Vector3 = Vector3(INF, INF, INF)
-var _pick_cycle_index: int = 0
-var _last_picked_ids: Array[String] = []
-
 var _editor: Node = null
+var _validator: RefCounted = null
 var _nodes: Dictionary = {}  ## object id (String) -> Node3D
 var _ghost: Node3D = null
 var _ghost_asset_id: StringName = &""
@@ -102,25 +97,14 @@ var _toolbar_delete_btn: Button = null
 var _rot_label: Label = null
 var _layer_label: Label = null
 var _collision_overlay_btn: Button = null
-var _show_collision_overlay: bool = false
-var _collision_overlays: Dictionary = {}  ## object id (String) -> Array[MeshInstance3D]
+var _collision_overlay: Node3D = null
 var _zone_filter_option: OptionButton = null
 var _zone_out_of_bounds_label: Label = null
 var _asset_buttons: Dictionary = {}
 var _recent_buttons: Dictionary = {}
 
-# Fixture editor UI
-var _fixture_list: ItemList = null
-var _fixture_id_label: Label = null
-var _fixture_cap_option: OptionButton = null
-var _fixture_visual_option: OptionButton = null
-var _fixture_zone_option: OptionButton = null
-var _fixture_fire_defaults_lbl: Label = null
-var _fixture_fire_grid: GridContainer = null
-var _fixture_lit_check: CheckBox = null
-var _fixture_fuel_spin: SpinBox = null
-var _fixture_cap_fuel_spin: SpinBox = null
-var _selected_fixture_index: int = -1
+# Fixture editor — delegated to FixtureEditorPanel
+var _fixture_panel: RefCounted = null
 
 
 # ---------------------------------------------------------------------------
@@ -129,6 +113,7 @@ var _selected_fixture_index: int = -1
 
 func setup(editor: Node) -> void:
 	_editor = editor
+	_validator = DecorPlacementValidatorScript.new()
 	name = "DecorRoot"
 
 	_panel = editor.get_node("%DecorPanel")
@@ -167,29 +152,9 @@ func setup(editor: Node) -> void:
 	_rot_label = editor.get_node("%DecorRotLabel")
 	_layer_label = editor.get_node("%DecorLayerLabel")
 
-	# Fixture editor UI
-	_fixture_list = editor.get_node("%FixtureList")
-	_fixture_id_label = editor.get_node("%FixtureIdLbl")
-	_fixture_cap_option = editor.get_node("%FixtureCapabilityOption")
-	_fixture_visual_option = editor.get_node("%FixtureVisualOption")
-	_fixture_zone_option = editor.get_node("%FixtureZoneOption")
-	_fixture_fire_defaults_lbl = editor.get_node("%FixtureFireDefaultsLbl")
-	_fixture_fire_grid = editor.get_node("%FixtureFireGrid")
-	_fixture_lit_check = editor.get_node("%FixtureLitCheck")
-	_fixture_fuel_spin = editor.get_node("%FixtureFuelSpin")
-	_fixture_cap_fuel_spin = editor.get_node("%FixtureCapFuelSpin")
-
-	editor.get_node("%FixtureAddBtn").pressed.connect(_add_fixture)
-	editor.get_node("%FixtureDeleteBtn").pressed.connect(_delete_fixture)
-	_fixture_list.item_selected.connect(_on_fixture_list_selected)
-	_fixture_cap_option.item_selected.connect(_on_fixture_capability_selected)
-	_fixture_visual_option.item_selected.connect(_on_fixture_visual_selected)
-	_fixture_zone_option.item_selected.connect(_on_fixture_zone_selected)
-	_fixture_lit_check.toggled.connect(_on_fixture_fire_param_changed)
-	_fixture_fuel_spin.value_changed.connect(_on_fixture_fire_param_changed)
-	_fixture_cap_fuel_spin.value_changed.connect(_on_fixture_fire_param_changed)
-
-	_build_fixture_capability_options()
+	# Fixture editor — delegated to FixtureEditorPanel
+	_fixture_panel = FixtureEditorPanelScript.new()
+	_fixture_panel.setup(editor, Callable(self, "_push_undo"))
 
 	editor.get_node("%DecorRotLeftBtn").pressed.connect(rotate_selection.bind("y", -1))
 	editor.get_node("%DecorRotRightBtn").pressed.connect(rotate_selection.bind("y", 1))
@@ -197,6 +162,9 @@ func setup(editor: Node) -> void:
 	editor.get_node("%DecorLayerDownBtn").pressed.connect(func(): _editor.set_layer(_editor.active_layer - 1))
 	editor.get_node("%DecorLayerUpBtn").pressed.connect(func(): _editor.set_layer(_editor.active_layer + 1))
 	_collision_overlay_btn = editor.get_node("%DecorCollisionOverlayBtn")
+	_collision_overlay = DecorCollisionOverlayScript.new()
+	_collision_overlay.name = "CollisionOverlay"
+	add_child(_collision_overlay)
 	_collision_overlay_btn.toggled.connect(_on_collision_overlay_toggled)
 
 	_build_group_options()
@@ -266,7 +234,7 @@ func activate() -> void:
 	_refresh_zone_filter_options()
 	_refresh_object_list()
 	_refresh_inspector()
-	refresh_fixture_ui()
+	_fixture_panel.refresh_fixture_ui()
 	_update_layer_label()
 	_update_undo_redo_buttons()
 
@@ -278,7 +246,7 @@ func deactivate() -> void:
 	_dragging = false
 	_hide_ghost()
 	_update_selection_marker()
-	_clear_collision_overlays()
+	_collision_overlay.clear()
 
 
 func is_active() -> bool:
@@ -380,161 +348,39 @@ func handle_key(event: InputEventKey) -> bool:
 	return false
 
 # ---------------------------------------------------------------------------
-# Placement maths
+# Placement maths — delegated to DecorPlacementValidator
 # ---------------------------------------------------------------------------
 
-## Snap grid points are the *centres* of `step`-sized cells, so an object always
-## lands centred in its snap cell (1.0 → block centres, 0.5 → half-block centres).
-## Free placement (step 0) is only allowed when the asset's snap_steps includes 0.
 func snapped_position(raw_hit: Vector3) -> Vector3:
-	var y := float(_editor.active_layer)
-	var asset := FurnishingAssetCatalogScript.get_asset(current_asset_id)
-	var step := current_snap_step
-	# If the asset restricts snap steps, clamp to the closest allowed one.
-	if asset != null and not asset.snap_steps.is_empty():
-		var best_step := asset.snap_steps[0]
-		var best_diff := absf(step - best_step)
-		for allowed in asset.snap_steps:
-			var diff := absf(step - allowed)
-			if diff < best_diff:
-				best_step = allowed
-				best_diff = diff
-		step = best_step
-	if step <= 0.001:
-		return Vector3(raw_hit.x, y, raw_hit.z)
-	var half := step * 0.5
-	return Vector3(
-		snappedf(raw_hit.x - half, step) + half,
-		y,
-		snappedf(raw_hit.z - half, step) + half)
+	return _validator.snapped_position(raw_hit, _editor.active_layer, current_asset_id, current_snap_step)
 
 
-## Returns true when the position is inside the building footprint.
 func _is_in_bounds(pos: Vector3, asset_id: StringName = current_asset_id, scale: Vector3 = Vector3.ONE) -> bool:
-	if _editor == null or _editor.blueprint == null:
-		return true
-	var footprint: Vector2i = _editor.blueprint.footprint
-	var asset := FurnishingAssetCatalogScript.get_asset(asset_id)
-	var size := asset.footprint_m() if asset != null else Vector3.ONE
-	var half_x := size.x * scale.x * 0.5
-	var half_z := size.z * scale.z * 0.5
-	return pos.x - half_x >= 0.0 and pos.x + half_x <= float(footprint.x) and pos.z - half_z >= 0.0 and pos.z + half_z <= float(footprint.y)
+	return _validator.is_in_bounds(pos, _editor.blueprint, asset_id, scale)
 
 
-## Returns true when the position overlaps an existing decor object.
-func _decor_aabb(pos: Vector3, asset_id: StringName, scale: Vector3) -> AABB:
-	var asset := FurnishingAssetCatalogScript.get_asset(asset_id)
-	var size := (asset.footprint_m() if asset != null else Vector3.ONE) * scale
-	return AABB(pos - Vector3(size.x * 0.5, 0.0, size.z * 0.5), size)
-
-
-func _aabbs_intersect(a: AABB, b: AABB) -> bool:
-	const EPSILON := 0.0001
-	return a.position.x < b.end.x - EPSILON and b.position.x < a.end.x - EPSILON \
-		and a.position.y < b.end.y - EPSILON and b.position.y < a.end.y - EPSILON \
-		and a.position.z < b.end.z - EPSILON and b.position.z < a.end.z - EPSILON
-
-
-## Returns true only for conflicts that affect physical collision/navigation.
-## Decorative objects with `none` policy may intentionally overlap.
 func _is_collision_conflict(pos: Vector3, asset_id: StringName = current_asset_id, scale: Vector3 = Vector3.ONE, exclude_id: String = "") -> bool:
-	var asset := FurnishingAssetCatalogScript.get_asset(asset_id)
-	if asset == null:
-		return false
-	var candidate := _decor_aabb(pos, asset_id, scale)
-	var candidate_blocks := asset.collision_policy != FurnishingAssetDefScript.COLLISION_NONE or asset.blocking_navigation
-	# Frame volumes and circulation are authoring obstacles. This deliberately
-	# uses the same occupied volumes as the frame editor, not a second grid.
-	for block in _editor.blueprint.blocks:
-		var block_aabb := BuildingBlockCatalogScript.occupied_aabb(block.pos, block.block_id, block.variant, block.rot, block.anchor, block.rot_x, block.rot_z)
-		if _aabbs_intersect(candidate, block_aabb):
-			return true
-	if not candidate_blocks:
-		return false
-	for record: DecorObjectRecordScript in _editor.blueprint.objects:
-		if record.id == exclude_id:
-			continue
-		var other_asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
-		if other_asset == null:
-			continue
-		if other_asset.collision_policy == FurnishingAssetDefScript.COLLISION_NONE and not other_asset.blocking_navigation:
-			continue
-		if _aabbs_intersect(candidate, _decor_aabb(record.pos, record.asset_id, record.scale)):
-			return true
-	return false
+	return _validator.is_collision_conflict(pos, _editor.blueprint, asset_id, scale, exclude_id)
 
 
 func _is_valid_transform(pos: Vector3, rot: Vector3, scale: Vector3, asset_id: StringName, exclude_id: String = "") -> bool:
-	var asset := FurnishingAssetCatalogScript.get_asset(asset_id)
-	if asset != null:
-		if not asset.is_scale_allowed(scale.x) or not is_equal_approx(scale.x, scale.y) or not is_equal_approx(scale.x, scale.z):
-			return false
-		for axis in ["x", "y", "z"]:
-			var value := rot.x if axis == "x" else (rot.y if axis == "y" else rot.z)
-			if not is_zero_approx(value) and not asset.is_rotation_axis_allowed(axis):
-				return false
-	return _is_in_bounds(pos, asset_id, scale) and not _is_collision_conflict(pos, asset_id, scale, exclude_id)
+	return _validator.is_valid_transform(pos, rot, scale, asset_id, _editor.blueprint, exclude_id)
 
 
-## Computes the current ghost state for placement feedback.
 func _compute_ghost_state(pos: Vector3) -> int:
-	if not _is_in_bounds(pos):
-		return GhostState.OUT_OF_BOUNDS
-	if _is_collision_conflict(pos):
-		return GhostState.INTERSECTION
-	return GhostState.VALID
+	return _validator.compute_ghost_state(pos, _editor.blueprint, current_asset_id)
 
 
-## Objects whose footprint contains `world_pos`, sorted nearest first.
-## Returns all candidates so the caller can cycle through overlapping ones.
 func _pick_objects_at(world_pos: Vector3) -> Array[String]:
-	var candidates: Array[Dictionary] = []
-	for record: DecorObjectRecordScript in _editor.blueprint.objects:
-		var asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
-		var size := asset.footprint_m() if asset != null else Vector3.ONE
-		var radius := maxf(MIN_PICK_RADIUS, maxf(size.x, size.z) * 0.5 * maxf(record.scale.x, record.scale.z))
-		var distance := Vector2(record.pos.x - world_pos.x, record.pos.z - world_pos.z).length()
-		if distance <= radius:
-			candidates.append({"id": record.id, "dist": distance})
-	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		return float(a["dist"]) < float(b["dist"]))
-	var result: Array[String] = []
-	for c in candidates:
-		result.append(String(c["id"]))
-	return result
+	return _validator.pick_objects_at(world_pos, _editor.blueprint)
 
 
-## Picks one object at `world_pos`. On repeated clicks at the same position,
-## cycles through overlapping candidates instead of always returning the nearest.
 func pick_object_at(world_pos: Vector3) -> String:
-	var ids := _pick_objects_at(world_pos)
-	if ids.is_empty():
-		_last_pick_pos = Vector3(INF, INF, INF)
-		_pick_cycle_index = 0
-		_last_picked_ids = []
-		return ""
-	# If the cursor moved significantly, reset cycle state.
-	if world_pos.distance_to(_last_pick_pos) > MIN_PICK_RADIUS:
-		_last_pick_pos = world_pos
-		_pick_cycle_index = 0
-		_last_picked_ids = ids
-	elif ids != _last_picked_ids:
-		# Object list changed (e.g. after placement); reset.
-		_last_pick_pos = world_pos
-		_pick_cycle_index = 0
-		_last_picked_ids = ids
-	var idx := _pick_cycle_index % ids.size()
-	_pick_cycle_index += 1
-	return ids[idx]
+	return _validator.pick_object_at(world_pos, _editor.blueprint)
 
 
 func find_record(object_id: String) -> DecorObjectRecordScript:
-	if object_id.is_empty():
-		return null
-	for record: DecorObjectRecordScript in _editor.blueprint.objects:
-		if record.id == object_id:
-			return record
-	return null
+	return DecorPlacementValidatorScript.find_record_in(object_id, _editor.blueprint)
 
 
 # ---------------------------------------------------------------------------
@@ -594,9 +440,7 @@ func _place_at(position: Vector3) -> void:
 func _erase_object(object_id: String) -> void:
 	# A fixture without a visual is valid 2A data. Clear the explicit reference
 	# rather than leaving the blueprint unsaveable.
-	for fixture: FixtureDefinitionScript in _editor.blueprint.fixtures:
-		if fixture.visual_object_id == object_id:
-			fixture.visual_object_id = ""
+	_fixture_panel.clear_visual_references(object_id)
 	for i in range(_editor.blueprint.objects.size() - 1, -1, -1):
 		if _editor.blueprint.objects[i].id == object_id:
 			_editor.blueprint.objects.remove_at(i)
@@ -607,7 +451,7 @@ func _erase_object(object_id: String) -> void:
 	if selected_object_id == object_id:
 		select_object("")
 	if not _editor.blueprint.fixtures.is_empty():
-		refresh_fixture_ui()
+		_fixture_panel.refresh_fixture_ui()
 
 
 func delete_selection() -> void:
@@ -790,7 +634,7 @@ func _restore_snapshot(snapshot: Dictionary) -> void:
 	_editor.mark_dirty()
 	rebuild_nodes()
 	_refresh_object_list()
-	refresh_fixture_ui()
+	_fixture_panel.refresh_fixture_ui()
 	if find_record(selected_object_id) == null:
 		select_object("")
 	else:
@@ -808,8 +652,8 @@ func rebuild_nodes() -> void:
 	for record: DecorObjectRecordScript in _editor.blueprint.objects:
 		_spawn_node(record)
 	_update_selection_marker()
-	if _show_collision_overlay:
-		_rebuild_collision_overlays()
+	if _collision_overlay != null:
+		_collision_overlay.rebuild(_editor.blueprint)
 
 
 func _spawn_node(record: DecorObjectRecordScript) -> void:
@@ -985,79 +829,16 @@ func _update_selection_marker() -> void:
 
 
 # ---------------------------------------------------------------------------
-# Collision overlay (design §4.2 — authoring preview, not runtime)
+# Collision overlay — delegated to DecorCollisionOverlay node
 # ---------------------------------------------------------------------------
 
 ## Toggle collision overlay on/off. When on, wireframe boxes are drawn for
 ## each object whose collision_policy is not "none", and blocking-navigation
 ## objects get an additional coloured marker.
 func _on_collision_overlay_toggled(pressed: bool) -> void:
-	_show_collision_overlay = pressed
-	if not pressed:
-		_clear_collision_overlays()
-	else:
-		_rebuild_collision_overlays()
-
-
-func _clear_collision_overlays() -> void:
-	for overlays in _collision_overlays.values():
-		for mesh: MeshInstance3D in overlays:
-			mesh.queue_free()
-	_collision_overlays.clear()
-
-
-func _rebuild_collision_overlays() -> void:
-	_clear_collision_overlays()
-	if not _show_collision_overlay:
-		return
-	for record: DecorObjectRecordScript in _editor.blueprint.objects:
-		_build_collision_overlay_for(record)
-
-
-## Creates wireframe overlay meshes for a single decor object.
-func _build_collision_overlay_for(record: DecorObjectRecordScript) -> void:
-	var asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
-	if asset == null:
-		return
-	var policy := asset.collision_policy
-	if policy == FurnishingAssetDefScript.COLLISION_NONE and not asset.blocking_navigation:
-		return
-	var overlays: Array[MeshInstance3D] = []
-	var size := asset.footprint_m()
-	# Scale the collision box by the object's uniform scale.
-	var scaled_size := size * record.scale.x
-	# Collision box (box or footprint policy).
-	if policy == FurnishingAssetDefScript.COLLISION_BOX or policy == FurnishingAssetDefScript.COLLISION_FOOTPRINT:
-		var box := MeshInstance3D.new()
-		var mesh := BoxMesh.new()
-		mesh.size = scaled_size
-		box.mesh = mesh
-		var mat := StandardMaterial3D.new()
-		mat.albedo_color = Color(1.0, 0.4, 0.2, 0.3)
-		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-		box.material_override = mat
-		box.position = record.pos
-		box.rotation_degrees = record.rot
-		add_child(box)
-		overlays.append(box)
-	# Blocking-navigation marker: a small red sphere on top.
-	if asset.blocking_navigation:
-		var marker := MeshInstance3D.new()
-		var sphere := SphereMesh.new()
-		sphere.radius = 0.12
-		sphere.height = 0.24
-		marker.mesh = sphere
-		var mat2 := StandardMaterial3D.new()
-		mat2.albedo_color = Color(1.0, 0.1, 0.1, 0.8)
-		mat2.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		mat2.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		marker.material_override = mat2
-		marker.position = record.pos + Vector3(0.0, scaled_size.y * 0.5 + 0.15, 0.0)
-		add_child(marker)
-		overlays.append(marker)
-	_collision_overlays[record.id] = overlays
+	_collision_overlay.toggle(pressed)
+	if pressed:
+		_collision_overlay.rebuild(_editor.blueprint)
 
 
 # ---------------------------------------------------------------------------
@@ -1687,232 +1468,13 @@ func on_layer_changed() -> void:
 
 
 # ---------------------------------------------------------------------------
-# Fixtures (Phase 2A — fire_source vertical slice)
+# Fixtures — proxy methods for test compatibility. Logic lives in
+# FixtureEditorPanel.
 # ---------------------------------------------------------------------------
 
-func _build_fixture_capability_options() -> void:
-	_fixture_cap_option.clear()
-	for cap in FixtureDefinitionScript.KNOWN_CAPABILITIES:
-		_fixture_cap_option.add_item(String(cap))
-		_fixture_cap_option.set_item_metadata(_fixture_cap_option.item_count - 1, cap)
-
-
-func _refresh_fixture_list() -> void:
-	_syncing_ui = true
-	_fixture_list.clear()
-	var fixtures: Array = _editor.blueprint.fixtures
-	for i in fixtures.size():
-		var fixture: FixtureDefinitionScript = fixtures[i]
-		var cap_text := "—"
-		if not fixture.capabilities.is_empty():
-			cap_text = String(fixture.capabilities[0])
-		_fixture_list.add_item("%s (%s)" % [String(fixture.id), cap_text])
-	if _selected_fixture_index >= 0 and _selected_fixture_index < fixtures.size():
-		_fixture_list.select(_selected_fixture_index)
-	else:
-		_selected_fixture_index = -1
-	_syncing_ui = false
-	_refresh_fixture_inspector()
-
-
-func _refresh_fixture_inspector() -> void:
-	var fixtures: Array = _editor.blueprint.fixtures
-	var has_selection := _selected_fixture_index >= 0 and _selected_fixture_index < fixtures.size()
-	_fixture_id_label.visible = has_selection
-	_fixture_cap_option.disabled = not has_selection
-	_fixture_visual_option.disabled = not has_selection
-	_fixture_zone_option.disabled = not has_selection
-	_fixture_fire_defaults_lbl.visible = false
-	_fixture_fire_grid.visible = false
-	if not has_selection:
-		_fixture_id_label.text = "ID: —"
-		return
-	var fixture: FixtureDefinitionScript = fixtures[_selected_fixture_index]
-	_fixture_id_label.text = "ID: %s" % String(fixture.id)
-	# Capability dropdown — select first capability.
-	_syncing_ui = true
-	for i in _fixture_cap_option.item_count:
-		if _fixture_cap_option.get_item_metadata(i) == fixture.capabilities[0] if not fixture.capabilities.is_empty() else null:
-			_fixture_cap_option.select(i)
-			break
-	# Visual object dropdown — populate from blueprint objects.
-	_fixture_visual_option.clear()
-	_fixture_visual_option.add_item("— нет —")
-	_fixture_visual_option.set_item_metadata(0, "")
-	for obj in _editor.blueprint.objects:
-		_fixture_visual_option.add_item(obj.id)
-		_fixture_visual_option.set_item_metadata(_fixture_visual_option.item_count - 1, obj.id)
-	for i in _fixture_visual_option.item_count:
-		if String(_fixture_visual_option.get_item_metadata(i)) == fixture.visual_object_id:
-			_fixture_visual_option.select(i)
-			break
-	# Zone dropdown — populate from blueprint place_zones.
-	_fixture_zone_option.clear()
-	_fixture_zone_option.add_item("— здание —")
-	_fixture_zone_option.set_item_metadata(0, &"")
-	for zone in _editor.blueprint.place_zones:
-		_fixture_zone_option.add_item(zone.zone_name)
-		_fixture_zone_option.set_item_metadata(_fixture_zone_option.item_count - 1, zone.zone_id)
-	for i in _fixture_zone_option.item_count:
-		if _fixture_zone_option.get_item_metadata(i) == fixture.owner_zone_id:
-			_fixture_zone_option.select(i)
-			break
-	# Fire source defaults.
-	var is_fire := fixture.has_capability(FixtureDefinitionScript.CAP_FIRE_SOURCE)
-	_fixture_fire_defaults_lbl.visible = is_fire
-	_fixture_fire_grid.visible = is_fire
-	if is_fire:
-		var defaults := FireSourceDefaultsScript.from_dict(fixture.runtime_defaults)
-		_fixture_lit_check.button_pressed = defaults.lit
-		_fixture_fuel_spin.value = defaults.fuel
-		_fixture_cap_fuel_spin.value = defaults.fuel_capacity
-	_syncing_ui = false
-
-
 func _add_fixture() -> void:
-	_push_undo()
-	var fixture := FixtureDefinitionScript.new()
-	var next_index := 1
-	var existing_ids: Array = _editor.blueprint.fixtures.map(func(f): return String(f.id))
-	while "fixture_%d" % next_index in existing_ids:
-		next_index += 1
-	fixture.id = StringName("fixture_%d" % next_index)
-	fixture.capabilities = [FixtureDefinitionScript.CAP_FIRE_SOURCE]
-	fixture.runtime_defaults = {"lit": true, "fuel": 4, "fuel_capacity": 10}
-	_editor.blueprint.fixtures.append(fixture)
-	_selected_fixture_index = _editor.blueprint.fixtures.size() - 1
-	_editor.mark_dirty()
-	_refresh_fixture_list()
-	_editor.set_status("Fixture создан: %s" % String(fixture.id))
-
-
-func _delete_fixture() -> void:
-	if _selected_fixture_index < 0 or _selected_fixture_index >= _editor.blueprint.fixtures.size():
-		return
-	var fixture: FixtureDefinitionScript = _editor.blueprint.fixtures[_selected_fixture_index]
-	# Check if deleting this fixture would violate zone requirements.
-	var warning := _fixture_deletion_warning(fixture)
-	if not warning.is_empty():
-		_editor.set_status("ВНИМАНИЕ: %s" % warning)
-	_push_undo()
-	_editor.blueprint.fixtures.remove_at(_selected_fixture_index)
-	_selected_fixture_index = mini(_selected_fixture_index, _editor.blueprint.fixtures.size() - 1)
-	_editor.mark_dirty()
-	_refresh_fixture_list()
-	if warning.is_empty():
-		_editor.set_status("Fixture удалён.")
-	else:
-		_editor.set_status("Fixture удалён. ВНИМАНИЕ: %s" % warning)
-
-
-## Returns a warning message if removing the fixture would leave a zone
-## without a required capability. Empty string if no violation.
-func _fixture_deletion_warning(fixture: FixtureDefinitionScript) -> String:
-	if fixture.owner_zone_id == &"":
-		# Building-wide fixture: check all zones that have requirements.
-		for zone in _editor.blueprint.place_zones:
-			var required := ZoneRequirementsScript.required_capabilities_for_zone(zone)
-			for cap in required:
-				if not cap in fixture.capabilities:
-					continue
-				# Check if any other fixture still provides this cap for this zone.
-				if not _zone_has_capability(zone.zone_id, cap, fixture):
-					return "Зона «%s» останется без %s" % [zone.zone_name, ZoneRequirementsScript.capability_label(cap)]
-		return ""
-	# Zone-specific fixture: find the zone.
-	for zone in _editor.blueprint.place_zones:
-		if zone.zone_id != fixture.owner_zone_id:
-			continue
-		var required := ZoneRequirementsScript.required_capabilities_for_zone(zone)
-		for cap in required:
-			if not cap in fixture.capabilities:
-				continue
-			if not _zone_has_capability(zone.zone_id, cap, fixture):
-				return "Зона «%s» останется без %s" % [zone.zone_name, ZoneRequirementsScript.capability_label(cap)]
-		return ""
-	return ""
-
-
-## Returns true if any fixture (other than `exclude`) provides `cap` to the
-## given zone (either zone-specific or building-wide).
-func _zone_has_capability(zone_id: StringName, cap: StringName, exclude: FixtureDefinitionScript) -> bool:
-	for f in _editor.blueprint.fixtures:
-		if f == exclude:
-			continue
-		if f.owner_zone_id == zone_id or f.owner_zone_id == &"":
-			if cap in f.capabilities:
-				return true
-	return false
-
-
-func _on_fixture_list_selected(index: int) -> void:
-	if _syncing_ui:
-		return
-	_selected_fixture_index = index
-	_refresh_fixture_inspector()
-
-
-func _on_fixture_capability_selected(index: int) -> void:
-	if _syncing_ui or _selected_fixture_index < 0:
-		return
-	var fixture: FixtureDefinitionScript = _editor.blueprint.fixtures[_selected_fixture_index]
-	var cap: StringName = _fixture_cap_option.get_item_metadata(index)
-	# Replace capabilities with the single selected one (phase 2A: one cap per fixture).
-	if fixture.capabilities == [cap]:
-		return
-	_push_undo()
-	fixture.capabilities = [cap]
-	_editor.mark_dirty()
-	_refresh_fixture_inspector()
+	_fixture_panel.add_fixture()
 
 
 func _on_fixture_visual_selected(index: int) -> void:
-	if _syncing_ui or _selected_fixture_index < 0:
-		return
-	var fixture: FixtureDefinitionScript = _editor.blueprint.fixtures[_selected_fixture_index]
-	var visual_id := String(_fixture_visual_option.get_item_metadata(index))
-	if fixture.visual_object_id == visual_id:
-		return
-	# A visual has one primary fixture. Reject ambiguity before saving.
-	for other: FixtureDefinitionScript in _editor.blueprint.fixtures:
-		if other != fixture and other.visual_object_id == visual_id and not visual_id.is_empty():
-			_editor.set_status("Этот визуальный объект уже связан с fixture «%s»." % String(other.id))
-			_refresh_fixture_inspector()
-			return
-	_push_undo()
-	fixture.visual_object_id = visual_id
-	_editor.mark_dirty()
-
-
-func _on_fixture_zone_selected(index: int) -> void:
-	if _syncing_ui or _selected_fixture_index < 0:
-		return
-	var fixture: FixtureDefinitionScript = _editor.blueprint.fixtures[_selected_fixture_index]
-	var zone_id: StringName = _fixture_zone_option.get_item_metadata(index)
-	if fixture.owner_zone_id == zone_id:
-		return
-	_push_undo()
-	fixture.owner_zone_id = zone_id
-	_editor.mark_dirty()
-
-
-func _on_fixture_fire_param_changed(_value: Variant) -> void:
-	if _syncing_ui or _selected_fixture_index < 0:
-		return
-	var fixture: FixtureDefinitionScript = _editor.blueprint.fixtures[_selected_fixture_index]
-	if not fixture.has_capability(FixtureDefinitionScript.CAP_FIRE_SOURCE):
-		return
-	var defaults := {
-		"lit": _fixture_lit_check.button_pressed,
-		"fuel": int(_fixture_fuel_spin.value),
-		"fuel_capacity": int(_fixture_cap_fuel_spin.value),
-	}
-	if fixture.runtime_defaults == defaults:
-		return
-	_push_undo()
-	fixture.runtime_defaults = defaults
-	_editor.mark_dirty()
-
-
-func refresh_fixture_ui() -> void:
-	_refresh_fixture_list()
+	_fixture_panel._on_fixture_visual_selected(index)

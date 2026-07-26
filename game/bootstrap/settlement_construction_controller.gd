@@ -19,7 +19,7 @@ func _init(p_game: SettlementGame) -> void:
 
 func create_construction_site(cell: Vector2i, building_type: String, position_on_board: Vector3, rotation_quarters := 0, blueprint: Dictionary = {}, occupied_footprint := Vector2i.ZERO) -> ConstructionSite:
 	var site := game.construction.start_site(cell, building_type, position_on_board, rotation_quarters, blueprint, occupied_footprint)
-	game._register_service_pockets(site.node)
+	game.service_pocket_manager.register_service_pockets(site.node)
 	# The reservation refresh runs before the site exists. Publish its entrance
 	# pockets immediately so couriers and builders can route to the new site.
 	game._refresh_navigation_grid()
@@ -89,16 +89,16 @@ func complete_building(cell: Vector2i, building_type: String, position_on_board:
 			building.set_meta("fire_lit", first_fire.fire_state.lit)
 			building.set_meta("fire_embers_until", first_fire.fire_state.embers_until_minute)
 			building.set_meta("fire_phase", "burning")
-	if game._is_staffed_workplace(building):
+	if game.workplace_controller.is_staffed_workplace(building):
 		game.workplace_priority_counter += 1
 		building.set_meta("accepting_workers", true)
 		building.set_meta("workplace_priority", game.workplace_priority_counter)
 	if building_type not in ["warehouse", "straw_warehouse", "tarp_warehouse", "campfire", "campfire_lvl2", "campfire_lvl3", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant", "straw_trade_tent", "tarp_trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market", "school", "materials_factory", "tent", "straw_tent", "tarp_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house", "straw_craft_tent", "tarp_craft_tent", "straw_forager_tent", "tarp_forager_tent", "boundary_post", "entrance_sign"]:
 		game._add_building_selector(building, "building_selector", blueprint.footprint)
 	if building_type == "entrance_sign":
-		game._setup_entrance_sign_node(building)
+		game.building_management.setup_entrance_sign_node(building)
 	var is_home := BuildingTypes.is_housing(building_type)
-	game._register_service_entrance(building, blueprint, is_home, building_type not in ["farm", "park"])
+	game.service_pocket_manager.register_service_entrance(building, blueprint, is_home, building_type not in ["farm", "park"])
 	var service_position: Vector3 = building.get_meta("service_position")
 	game.building_lifecycle_service.register_completed_building_type_features(building_type, building, blueprint, service_position)
 
@@ -106,7 +106,7 @@ func complete_building(cell: Vector2i, building_type: String, position_on_board:
 	var occupied_footprint: Vector2i = building.get_meta("occupied_footprint", blueprint.footprint)
 	game.village_territory_service.on_building_added(cell, building_type)
 	game._refresh_boundary_markers()
-	game._add_building_status_indicator(building)
+	game.building_visuals.add_building_status_indicator(building)
 	game._refresh_navigation_grid()
 	game._update_workers()
 	if game.building_menu_controller != null:

@@ -41,7 +41,7 @@ func on_daily_settlement_update(_event: SimulationDayEvent) -> void:
 		game.building_lifecycle_service.remove_expired_temporary_tents()
 	if game.settlement_daily_rules_service != null:
 		game.settlement_daily_rules_service.apply_daily_settlement_rules()
-	game._return_outside_workers()
+	game.outside_work_controller.return_outside_workers()
 
 
 func end_ai_work_shift() -> void:

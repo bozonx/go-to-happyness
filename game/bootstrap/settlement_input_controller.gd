@@ -155,15 +155,15 @@ func _handle_first_person_input(event: InputEvent) -> void:
 			var viewport_center := game.get_viewport().get_visible_rect().size * 0.5
 			var build_point: Variant = game._terrain_point_at_screen_position(viewport_center)
 			if build_point != null:
-				game._place_building(build_point)
+				game.build_controller.place_building(build_point)
 		elif not is_first_person_menu_open():
-			game._first_person_select_at_crosshair()
+			game.hero_interaction_controller.first_person_select_at_crosshair()
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
 		if game.pocket_menu_open:
 			if game.pocket_take_menu_controller != null:
 				game.pocket_take_menu_controller.close_pocket_take_menu()
 		elif not game.build_mode.is_empty():
-			game._cancel_build_action()
+			game.build_controller.cancel_build_action()
 		else:
 			game.player_controller.leave_first_person_to_hero_overview()
 	game.get_viewport().set_input_as_handled()
@@ -185,7 +185,7 @@ func _handle_overview_input(event: InputEvent) -> void:
 		game.is_panning_camera = event.pressed
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
 		if event.pressed and (not game.build_mode.is_empty() or (game.selected_builder != null and game.dig_mode)):
-			game._cancel_build_action()
+			game.build_controller.cancel_build_action()
 			game.get_viewport().set_input_as_handled()
 			return
 		if event.pressed:
@@ -217,7 +217,7 @@ func _handle_overview_input(event: InputEvent) -> void:
 		elif not game.build_mode.is_empty():
 			var build_point: Variant = game._terrain_point_at_screen_position(event.position)
 			if build_point != null:
-				game._place_building(build_point)
+				game.build_controller.place_building(build_point)
 		else:
 			game._select_citizen_at(event.position)
 

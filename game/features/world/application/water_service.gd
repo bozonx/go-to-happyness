@@ -259,17 +259,9 @@ func set_flow(cells: Array[Vector2i], body_id: int, direction: int, strength: in
 
 
 func cells_of_body(body_id: int) -> Array[Vector2i]:
-	var cells: Array[Vector2i] = []
 	if grid == null:
-		return cells
-	var minimum := grid.min_cell()
-	var maximum := grid.max_cell()
-	for z in range(minimum.y, maximum.y + 1):
-		for x in range(minimum.x, maximum.x + 1):
-			var cell := Vector2i(x, z)
-			if grid.body_id_at(cell) == body_id:
-				cells.append(cell)
-	return cells
+		return []
+	return grid.cells_of_body(body_id)
 
 
 # --- History ------------------------------------------------------------------

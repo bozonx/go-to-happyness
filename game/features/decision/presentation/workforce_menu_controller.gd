@@ -280,7 +280,7 @@ func assign_unemployed_worker(role: String) -> void:
 	if best != null:
 		simulation.selected_builder = best
 		if role == "gather_branches":
-			simulation._set_manual_specialist_employment(best, role)
+			simulation.research_controller.set_manual_specialist_employment(best, role)
 		else:
 			simulation._set_selected_work_role(role)
 		refresh_workforce_menu()

@@ -71,7 +71,7 @@ func show_campfire_orders_menu() -> void:
 
 	var hour: int = simulation.clock.hour()
 	var can_cheer: bool = hour >= 6 and not simulation.settlement.cheer_up_used_today
-	var can_order_night_work: bool = simulation._has_night_work_candidates()
+	var can_order_night_work: bool = simulation.workplace_controller.has_night_work_candidates()
 	var settlement_night_active: bool = simulation._has_overtime_source("settlement")
 	var double_time_active: bool = simulation.settlement.double_time_order_day == simulation.day_cycle.current_day
 
@@ -117,7 +117,7 @@ func close_campfire_orders_menu() -> void:
 func refresh_campfire_menu() -> void:
 	if simulation == null or simulation.selected_campfire == null:
 		return
-	var era_str: String = simulation._era_name()
+	var era_str: String = simulation.workplace_controller.era_name()
 	var fire_state: Variant = simulation._fire_state_for(simulation.selected_campfire)
 	var fuel_current: int = fire_state.total_committed_fuel()
 	var title_text := S.CAMPFIRE_ERA_FORMAT % [era_str, fuel_current, simulation.FIRE_SUPPLY_TARGET]
@@ -149,7 +149,7 @@ func refresh_campfire_menu() -> void:
 		upgrade_state["tooltip"] = "" if not upgrade_state["disabled"] else "Research the next level and gather its resources."
 
 	var is_center: bool = is_instance_valid(simulation.selected_campfire) and simulation.building_registry.building_type_for_node(simulation.selected_campfire) in simulation.OFFICIAL_WORKPLACE_TYPES
-	var researcher: Variant = simulation._daily_researcher_at(simulation.selected_campfire)
+	var researcher: Variant = simulation.research_controller.daily_researcher_at(simulation.selected_campfire)
 	var research_post_disabled: bool = not simulation.settlement.is_research_completed("official") or researcher == null
 	var research_post_state := {
 		"visible": is_center and not simulation._officer_exists(),
@@ -157,7 +157,7 @@ func refresh_campfire_menu() -> void:
 		"disabled": research_post_disabled,
 		"tooltip": "Research the officer profession, then select a daily researcher working at this campfire." if research_post_disabled else "Promote this researcher to a permanent officer role.",
 	}
-	var controlled_unit_nearby: bool = simulation.is_first_person and is_instance_valid(simulation.player_citizen) and is_center and simulation.player_citizen.global_position.distance_to(simulation._nearest_service_position(simulation.selected_campfire, simulation.player_citizen.global_position)) <= simulation.OFFICER_POST_RADIUS
+	var controlled_unit_nearby: bool = simulation.is_first_person and is_instance_valid(simulation.player_citizen) and is_center and simulation.player_citizen.global_position.distance_to(simulation.hero_interaction_controller._nearest_service_position(simulation.selected_campfire, simulation.player_citizen.global_position)) <= simulation.OFFICER_POST_RADIUS
 	var can_be_official: bool = simulation.settlement.is_research_completed("official")
 	var player_role: String = simulation.player_citizen.permanent_role if is_instance_valid(simulation.player_citizen) else ""
 	var occupy_disabled: bool = can_be_official and simulation._officer_exists() and player_role != "official"
@@ -167,7 +167,7 @@ func refresh_campfire_menu() -> void:
 		"disabled": occupy_disabled,
 		"tooltip": S.CAMPFIRE_OFFICIAL_TAKEN if occupy_disabled else "",
 	}
-	var officer: Variant = simulation._workplace_worker(simulation.selected_campfire) if is_center else null
+	var officer: Variant = simulation.workplace_controller.workplace_worker(simulation.selected_campfire) if is_center else null
 	var campfire_night_order_used: bool = is_instance_valid(simulation.selected_campfire) and int(simulation.selected_campfire.get_meta("night_work_order_day", -1)) == simulation.day_cycle.current_day
 	var overtime_state := {
 		"visible": is_center and officer != null,

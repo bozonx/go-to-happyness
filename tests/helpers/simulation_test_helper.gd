@@ -65,10 +65,10 @@ static func find_path_around_houses(simulation: Node, from: Vector3, destination
 	return simulation._find_path_around_houses(from, destination, may_enter)
 
 static func pond_access_position(simulation: Node, from: Vector3, pond_center: Vector3) -> Vector3:
-	return simulation._pond_access_position(from, pond_center)
+	return simulation.world_navigation_controller.pond_access_position(from, pond_center)
 
 static func resource_access_position(simulation: Node, from: Vector3, resource_position: Vector3) -> Vector3:
-	return simulation._resource_access_position(from, resource_position)
+	return simulation.world_navigation_controller.resource_access_position(from, resource_position)
 
 static func employment_center_position(simulation: Node) -> Vector3:
 	return simulation._employment_center_position()
@@ -77,7 +77,7 @@ static func entrance_anchor_position(simulation: Node) -> Vector3:
 	return simulation._entrance_anchor_position()
 
 static func appoint_official(simulation: Node, citizen: Citizen, workplace: Node3D = null) -> bool:
-	return simulation._appoint_official(citizen, workplace)
+	return simulation.research_controller.appoint_official(citizen, workplace)
 
 static func registration_official(simulation: Node) -> Citizen:
 	return simulation._registration_official()
@@ -96,7 +96,7 @@ static func skip_night(simulation: Node) -> void:
 		simulation.survival_event_controller.skip_night()
 
 static func guard_citizen_positions(simulation: Node) -> void:
-	simulation._guard_citizen_positions()
+	simulation.simulation_tick_controller.guard_citizen_positions()
 
 static func start_park_rest(simulation: Node, cooks_only: bool) -> void:
 	simulation._start_park_rest(cooks_only)
@@ -141,14 +141,14 @@ static func take_control_of_selected_citizen(simulation: Node) -> void:
 		simulation.player_controller.take_control_of_selected_citizen()
 
 static func unhandled_input(simulation: Node, event: InputEvent) -> void:
-	simulation._unhandled_input(event)
+	simulation.input_controller.handle_unhandled_input(event)
 
 static func update_couriers(simulation: Node) -> void:
 	if simulation.courier_dispatcher != null:
 		simulation.courier_dispatcher.dispatch()
 
 static func create_construction_site(simulation: Node, cell: Vector2i, building_type: String, position: Vector3, rotation_quarters := 0, blueprint: Dictionary = {}, occupied_footprint := Vector2i.ZERO) -> ConstructionSite:
-	return simulation._create_construction_site(cell, building_type, position, rotation_quarters, blueprint, occupied_footprint)
+	return simulation.construction_controller.create_construction_site(cell, building_type, position, rotation_quarters, blueprint, occupied_footprint)
 
 static func is_construction_site(simulation: Node, node: Node3D) -> bool:
 	return simulation._is_construction_site(node)
@@ -169,7 +169,7 @@ static func required_staff_for_building(simulation: Node, building: Node3D) -> D
 	return simulation.building_status_indicator_controller.required_staff_for_building(building) if simulation.building_status_indicator_controller != null else {}
 
 static func is_staffed_workplace(simulation: Node, building: Node3D) -> bool:
-	return simulation._is_staffed_workplace(building)
+	return simulation.workplace_controller.is_staffed_workplace(building)
 
 static func assign_unemployed_worker(simulation: Node, role: String) -> void:
 	if simulation.workforce_menu_controller != null:
@@ -221,7 +221,7 @@ static func send_selected_resident_to_outside_work(simulation: Node) -> void:
 	simulation._send_selected_resident_to_outside_work()
 
 static func return_outside_workers(simulation: Node) -> void:
-	simulation._return_outside_workers()
+	simulation.outside_work_controller.return_outside_workers()
 
 # --- Overtime & workday ---
 
@@ -241,7 +241,7 @@ static func select_build_mode(simulation: Node, mode: String) -> void:
 	simulation._select_build_mode(mode)
 
 static func place_building(simulation: Node, world_position: Vector3) -> void:
-	simulation._place_building(world_position)
+	simulation.build_controller.place_building(world_position)
 
 # --- Navigation & citizens ---
 
@@ -257,4 +257,4 @@ static func placement_key(simulation: Node, world_position: Vector3) -> Vector2i
 # --- Construction priority ---
 
 static func preferred_construction_site(simulation: Node) -> ConstructionSite:
-	return simulation._preferred_construction_site()
+	return simulation.construction_controller.preferred_construction_site()

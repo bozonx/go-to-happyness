@@ -220,7 +220,7 @@ func show_building_menu() -> void:
 		simulation.ui_manager.building_seller_button.disabled = not can_manage_professions or simulation.selected_builder == null or simulation.selected_builder.is_player_controlled or not bool(simulation.selected_building.get_meta("accepting_workers", true))
 		simulation.ui_manager.building_seller_button.tooltip_text = profession_blocked_tooltip if not can_manage_professions else ""
 
-		var is_workplace: bool = simulation._is_staffed_workplace(simulation.selected_building)
+		var is_workplace: bool = simulation.workplace_controller.is_staffed_workplace(simulation.selected_building)
 		simulation.ui_manager.building_accept_workers_button.visible = is_workplace
 		simulation.ui_manager.building_dismiss_worker_button.visible = is_workplace
 		var next_upgrade: String = simulation.settlement.next_building_upgrade(building_type)
@@ -237,7 +237,7 @@ func show_building_menu() -> void:
 		simulation.ui_manager.building_demolish_button.visible = is_demolishable
 		simulation.ui_manager.building_relight_button.visible = simulation.fire_management_service != null and simulation.fire_management_service.is_managed_fire_source(simulation.selected_building) and not simulation._is_fire_lit(simulation.selected_building)
 
-		var officer: Variant = simulation._workplace_worker(simulation.selected_building)
+		var officer: Variant = simulation.workplace_controller.workplace_worker(simulation.selected_building)
 		simulation.ui_manager.building_overtime_button.visible = is_workplace and officer != null
 		var workplace_night_active: bool = simulation.citizen_daily_order_service.has_overtime_source("simulation.selected_building", simulation.selected_building) if simulation.citizen_daily_order_service != null else false
 		simulation.ui_manager.building_overtime_button.disabled = not can_command_labor
@@ -247,7 +247,7 @@ func show_building_menu() -> void:
 		if is_workplace:
 			var accepting: bool = bool(simulation.selected_building.get_meta("accepting_workers", true))
 			simulation.ui_manager.building_accept_workers_button.text = "Stop accepting workers" if accepting else "Start accepting workers"
-			simulation.ui_manager.building_accept_workers_button.tooltip_text = "This workplace is priority #%d among open workplaces of the same profession." % simulation._workplace_priority_position(simulation.selected_building) if accepting else "Reopen this workplace and move it to the front of the hiring queue."
+			simulation.ui_manager.building_accept_workers_button.tooltip_text = "This workplace is priority #%d among open workplaces of the same profession." % simulation.workplace_controller.workplace_priority_position(simulation.selected_building) if accepting else "Reopen this workplace and move it to the front of the hiring queue."
 			simulation.ui_manager.building_dismiss_worker_button.disabled = officer == null or not can_command_labor
 			simulation.ui_manager.building_dismiss_worker_button.tooltip_text = labor_blocked_tooltip if not can_command_labor else ""
 

@@ -233,17 +233,17 @@ func upgrade_selected_building() -> void:
 		game.selected_building.add_child(BuildingBlueprints.create_module(module))
 		game._unregister_navigation_footprint(game.selected_building.global_position, old_footprint)
 	var is_home := target_type in ["tent", "straw_tent", "tarp_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house"]
-	game._register_service_entrance(game.selected_building, blueprint, is_home, target_type not in ["farm", "park"])
+	game.service_pocket_manager.register_service_entrance(game.selected_building, blueprint, is_home, target_type not in ["farm", "park"])
 	if target_type in ["campfire", "campfire_lvl2", "campfire_lvl3", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall"]:
 		game.campfire_node = game.selected_building
 		game._activate_employment_centre(game.selected_building)
 		game._add_building_selector(game.selected_building, "campfire_selector", blueprint.footprint)
-		game._add_fire_light(game.selected_building)
+		game.building_visuals.add_fire_light(game.selected_building)
 	elif BuildingTypes.is_kitchen(target_type):
 		game._activate_kitchen_if_better(game.selected_building, service_position)
 		game._add_building_selector(game.selected_building, "cook_campfire_selector", blueprint.footprint)
-		game._add_fire_light(game.selected_building)
-	game._add_building_status_indicator(game.selected_building)
+		game.building_visuals.add_fire_light(game.selected_building)
+	game.building_visuals.add_building_status_indicator(game.selected_building)
 	if BuildingTypes.is_warehouse(target_type):
 		game._add_warehouse_fill_label(game.selected_building)
 	game.village_territory_service.recalculate()
@@ -273,7 +273,7 @@ func assign_cook_at_campfire() -> void:
 		if game.workplace_labor_service != null:
 			game.workplace_labor_service.show_labor_command_blocked()
 		return
-	if not game._set_manual_specialist_employment(game.selected_builder, "cook"):
+	if not game.research_controller.set_manual_specialist_employment(game.selected_builder, "cook"):
 		return
 	game.selected_builder.setup_specialization("cook")
 	game._update_interface("%s is registering as a cook." % game.selected_builder.role_label())
@@ -291,7 +291,7 @@ func assign_teacher_at_school() -> void:
 	if game.selected_builder.is_player_controlled:
 		game._update_interface("Pick a settler, not the character you are controlling.")
 		return
-	if not game._set_manual_specialist_employment(game.selected_builder, "teacher"):
+	if not game.research_controller.set_manual_specialist_employment(game.selected_builder, "teacher"):
 		return
 	game.selected_builder.setup_specialization("teacher")
 	game._update_interface("%s is registering as a teacher." % game.selected_builder.role_label())
@@ -309,7 +309,7 @@ func assign_seller_at_market() -> void:
 	if game.selected_builder.is_player_controlled:
 		game._update_interface("Pick a settler, not the character you are controlling.")
 		return
-	if not game._set_manual_specialist_employment(game.selected_builder, "seller"):
+	if not game.research_controller.set_manual_specialist_employment(game.selected_builder, "seller"):
 		return
 	game.selected_builder.setup_specialization("seller")
 	game._update_interface("%s is registering as a seller." % game.selected_builder.role_label())

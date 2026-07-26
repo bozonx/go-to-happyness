@@ -78,7 +78,7 @@ func collect(ctx: FacadeContext) -> Dictionary:
 func _construction_site_for(ctx: FacadeContext, actor: Citizen) -> ConstructionSite:
 	if not is_instance_valid(actor):
 		return null
-	var preferred: ConstructionSite = ctx.simulation._preferred_construction_site()
+	var preferred: ConstructionSite = ctx.simulation.construction_controller.preferred_construction_site()
 	if preferred != null and is_instance_valid(preferred.node) and actor._reachable_construction_approach(preferred.node) != Vector3.INF:
 		return preferred
 	var best: ConstructionSite = null

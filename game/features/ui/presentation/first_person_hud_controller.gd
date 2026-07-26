@@ -65,7 +65,7 @@ func first_person_action_hint() -> String:
 		"construction":
 			var site = simulation.construction.site_for_node(target.node)
 			if site != null and not site.is_supplied():
-				var missing: String = simulation._missing_site_materials_text(site)
+				var missing: String = simulation.hero_interaction_controller._missing_site_materials_text(site)
 				if not missing.is_empty():
 					return S.F_DELIVER_MATERIALS % missing
 			return S.F_WORK_ON_CONSTRUCTION
@@ -112,7 +112,7 @@ func first_person_action_hint() -> String:
 			var is_official_building: bool = building_type in simulation.OFFICIAL_WORKPLACE_TYPES
 			if is_official_building:
 				return S.OPEN_CAMPFIRE_MENU_FOR_OFFICIAL
-			var role: String = simulation._role_for_workplace(target.node)
+			var role: String = simulation.workplace_controller.role_for_workplace(target.node)
 			if role.is_empty():
 				return ""
 			match role:

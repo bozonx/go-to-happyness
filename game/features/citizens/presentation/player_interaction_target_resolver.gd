@@ -90,7 +90,7 @@ func _classify_building_hit(area_parent: Node3D, simulation: Node) -> Dictionary
 		return {"kind": "sawmill", "node": area_parent, "position": area_parent.global_position}
 	if building_type.begins_with("toilet_"):
 		return {"kind": "toilet", "node": area_parent, "position": area_parent.global_position}
-	if simulation._role_for_workplace(area_parent) != "":
+	if simulation.workplace_controller.role_for_workplace(area_parent) != "":
 		return {"kind": "workplace", "node": area_parent, "position": area_parent.global_position}
 	return {"kind": "building", "node": area_parent, "position": area_parent.global_position}
 

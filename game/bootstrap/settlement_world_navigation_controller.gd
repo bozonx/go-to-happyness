@@ -26,7 +26,7 @@ func create_world() -> void:
 	game.world_setup.setup(game.camera, game.CELL_SIZE, game.board_cells, game.trail_field, game.launch_config.map_document)
 	game.add_child(game.world_setup)
 	game.world_setup.build(game)
-	game._update_daylight()
+	game.simulation_tick_controller.update_daylight()
 	publish_terrain_navigation()
 	refresh_navigation_grid()
 	game._move_selection(Vector3.ZERO)

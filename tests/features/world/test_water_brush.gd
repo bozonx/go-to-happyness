@@ -165,9 +165,9 @@ static func _test_adjust_level_clamps() -> void:
 	var brush: WaterBrushController = world["brush"]
 
 	brush.level = 0
-	brush.adjust_level(-99)
+	brush.adjust_level(-999)
 	assert(brush.level == WaterGrid.MIN_HEIGHT)
-	brush.adjust_level(99)
+	brush.adjust_level(999)
 	assert(brush.level == WaterGrid.MAX_HEIGHT)
 
 

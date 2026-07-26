@@ -53,6 +53,10 @@ var _flags := PackedByteArray()
 ## written to disk or drawn in a list is deterministic.
 var _bodies: Dictionary = {}
 
+## body_id -> Dictionary[Vector2i, true]. Maintained alongside `_body_ids`
+## so `cells_of_body` and `remove_body` are O(cells_in_body), not O(board²).
+var _body_cells: Dictionary = {}
+
 var _revision := 0
 var _dirty_chunks: Dictionary = {}
 
@@ -69,6 +73,7 @@ func configure(next_cell_size: float, next_board_cells: int) -> void:
 	_flags = PackedByteArray()
 	_flags.resize(count)
 	_bodies.clear()
+	_body_cells.clear()
 	_revision += 1
 	mark_all_chunks_dirty()
 
@@ -129,12 +134,14 @@ func remove_body(body_id: int) -> bool:
 	if not _bodies.has(body_id):
 		return false
 	_bodies.erase(body_id)
-	for index in _body_ids.size():
-		if _body_ids[index] == body_id:
-			_body_ids[index] = WaterBody.NO_BODY
-			_heights[index] = 0
-			_flags[index] = 0
-			_touch_index(index)
+	var cells: Dictionary = _body_cells.get(body_id, {})
+	for cell: Vector2i in cells:
+		var index := _index_of(cell)
+		_body_ids[index] = WaterBody.NO_BODY
+		_heights[index] = 0
+		_flags[index] = 0
+		_touch_index(index)
+	_body_cells.erase(body_id)
 	_revision += 1
 	return true
 
@@ -171,6 +178,7 @@ func next_free_body_id() -> int:
 
 func clear_bodies() -> void:
 	_bodies.clear()
+	_body_cells.clear()
 	_revision += 1
 
 
@@ -285,6 +293,10 @@ func set_cell(cell: Vector2i, body_id: int, height: int, flags: int = 0) -> bool
 	var next_flags := (flags & 0xFF) if body_id != WaterBody.NO_BODY else 0
 	if _body_ids[index] == body_id and _heights[index] == next_height and _flags[index] == next_flags:
 		return true
+	var prev_body := int(_body_ids[index])
+	if prev_body != body_id:
+		_index_remove(prev_body, cell)
+		_index_add(body_id, cell)
 	_body_ids[index] = body_id
 	_heights[index] = next_height
 	_flags[index] = next_flags
@@ -411,17 +423,13 @@ func take_dirty_chunks() -> Array[Vector2i]:
 func is_empty() -> bool:
 	if _bodies.is_empty():
 		return true
-	for index in _body_ids.size():
-		if _body_ids[index] != WaterBody.NO_BODY:
-			return false
-	return true
+	return _body_cells.is_empty()
 
 
 func wet_cell_count() -> int:
 	var count := 0
-	for index in _body_ids.size():
-		if _body_ids[index] != WaterBody.NO_BODY:
-			count += 1
+	for body_id: int in _body_cells:
+		count += (_body_cells[body_id] as Dictionary).size()
 	return count
 
 
@@ -456,3 +464,33 @@ func _touch_index(index: int) -> void:
 		index % board_cells - board_half_cells,
 		index / board_cells - board_half_cells,
 	))
+
+
+# --- Body cell index ----------------------------------------------------------
+
+## The cells that belong to a body, in row-major order. O(cells_in_body) thanks
+## to the `_body_cells` index; the sort is deterministic (§4.4).
+func cells_of_body(body_id: int) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	if not _body_cells.has(body_id):
+		return result
+	for cell: Vector2i in _body_cells[body_id]:
+		result.append(cell)
+	result.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+		return a.y < b.y if a.y != b.y else a.x < b.x)
+	return result
+
+
+func _index_add(body_id: int, cell: Vector2i) -> void:
+	if body_id == WaterBody.NO_BODY:
+		return
+	if not _body_cells.has(body_id):
+		_body_cells[body_id] = {}
+	(_body_cells[body_id] as Dictionary)[cell] = true
+
+
+func _index_remove(body_id: int, cell: Vector2i) -> void:
+	if body_id == WaterBody.NO_BODY:
+		return
+	if _body_cells.has(body_id):
+		(_body_cells[body_id] as Dictionary).erase(cell)

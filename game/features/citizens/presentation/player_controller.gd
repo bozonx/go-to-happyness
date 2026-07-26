@@ -228,12 +228,12 @@ func update_interaction(delta: float) -> void:
 			ResourceIds.WOOD:
 				gathered = simulation.hero_pocket_service.add_to_pocket(ResourceIds.WOOD, 1) if simulation.hero_pocket_service != null else 0
 				if gathered > 0:
-					simulation._fell_nearest_tree()
+					simulation.hero_interaction_controller.fell_nearest_tree()
 			ResourceIds.BRANCHES:
 				var branch_batch := HERO_GATHER_YIELD
 				gathered = simulation.hero_pocket_service.add_to_pocket(ResourceIds.BRANCHES, branch_batch) if simulation.hero_pocket_service != null else 0
 				if gathered > 0:
-					simulation._consume_tree_near_player(gathered)
+					simulation.hero_interaction_controller.consume_tree_near_player(gathered)
 			ResourceIds.GRASS:
 				var grass_batch := HERO_GATHER_YIELD
 				gathered = simulation.hero_pocket_service.add_to_pocket(ResourceIds.GRASS, grass_batch) if simulation.hero_pocket_service != null else 0
@@ -278,16 +278,16 @@ func start_interaction(all: bool) -> void:
 			simulation.pocket_take_menu_controller.close_pocket_take_menu()
 		return
 	if player_citizen.work_position_locked:
-		simulation._exit_player_work_position()
+		simulation.hero_interaction_controller.exit_player_work_position()
 		return
 	if not interaction_action.is_empty():
 		return
 	var target := first_person_target()
 	if target.kind == "entrance":
-		simulation._meet_arrival_at_entrance()
+		simulation.hero_interaction_controller.meet_arrival_at_entrance()
 		return
 	if target.kind == "building" and simulation.fire_management_service.is_managed_fire_source(target.node):
-		simulation._refuel_fire_from_pocket(target.node, all)
+		simulation.hero_interaction_controller.refuel_fire_from_pocket(target.node, all)
 		return
 	if target.kind == "toilet":
 		simulation._player_use_toilet(target.node)
@@ -299,7 +299,7 @@ func start_interaction(all: bool) -> void:
 		"construction":
 			var site: ConstructionSite = simulation.construction.site_for_node(target.node)
 			if site != null and not site.is_supplied():
-				simulation._deliver_pocket_to_site(site, all)
+				simulation.hero_interaction_controller.deliver_pocket_to_site(site, all)
 			else:
 				player_work_target = target.node
 				interaction_action = "construction"
@@ -317,13 +317,13 @@ func start_interaction(all: bool) -> void:
 			simulation.ui_manager.interaction_hint_panel.hint_label.text = S.WORKING_DEMOLITION
 			return
 		"pile":
-			simulation._take_from_pile(target.pile, all)
+			simulation.hero_interaction_controller.take_from_pile(target.pile, all)
 			return
 		"sawmill":
-			simulation._handle_sawmill_interaction(all, target.position)
+			simulation.hero_interaction_controller.handle_sawmill_interaction(all, target.position)
 			return
 		"warehouse":
-			simulation._handle_warehouse_interaction(all, int(target.get("warehouse_index", -1)))
+			simulation.hero_interaction_controller.handle_warehouse_interaction(all, int(target.get("warehouse_index", -1)))
 			return
 		"forage", "rabbit":
 			simulation._update_interface(S.FORAGE_SPECIALIST_ONLY_SHORT)

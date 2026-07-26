@@ -38,7 +38,7 @@ func home_entrance_position(home: Node3D) -> Vector3:
 
 func resource_access_position(resource_position: Vector3, from: Vector3 = Vector3.INF) -> Vector3:
 	if from != Vector3.INF:
-		return simulation._resource_access_position(from, resource_position)
+		return simulation.world_navigation_controller.resource_access_position(from, resource_position)
 	var resource_cell: Vector2i = simulation._cell_from_position(resource_position)
 	for offset in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1)]:
 		var cell: Vector2i = resource_cell + offset

@@ -50,7 +50,7 @@ func refresh_interaction_hint() -> void:
 	if not game.is_first_person:
 		game.ui_manager.interaction_hint_panel.visible = false
 		return
-	if game._is_first_person_menu_open():
+	if game.input_controller.is_first_person_menu_open():
 		game.ui_manager.interaction_hint_panel.visible = false
 		return
 	game.ui_manager.interaction_hint_panel.visible = true
@@ -152,7 +152,7 @@ func occupy_workplace(workplace: Node3D) -> void:
 				game._update_interface(S.OFFICER_POSITION_TAKEN)
 				return
 			game.player_citizen.enter_work_position(service_position, "official", workplace, false)
-			game._appoint_official(game.player_citizen, workplace)
+			game.research_controller.appoint_official(game.player_citizen, workplace)
 			if game.player_citizen.permanent_role != "official":
 				game.player_citizen.exit_work_position()
 				return
@@ -163,7 +163,7 @@ func occupy_workplace(workplace: Node3D) -> void:
 				game.research_menu_controller.show_research_menu()
 			game._update_interface(S.HERO_TOOK_RESEARCHER)
 	else:
-		var role := game._role_for_workplace(workplace)
+		var role: String = game.workplace_controller.role_for_workplace(workplace)
 		if role.is_empty():
 			return
 		game.player_citizen.enter_work_position(service_position, role, workplace, true)
@@ -205,7 +205,7 @@ func relight_selected_fire() -> void:
 	fire_state.lit = true
 	game._apply_fire_state(game.selected_building, fire_state)
 	game._refresh_living_statuses()
-	game._reopen_workplace_menu()
+	game.workplace_controller.reopen_workplace_menu()
 	game._update_interface("The fire was relit with flint and steel.")
 
 

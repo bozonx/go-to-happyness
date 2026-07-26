@@ -57,6 +57,7 @@ func redo() -> bool:
 	var command: MapEditorCommand = _redo_stack.pop_back()
 	if not command.redo():
 		_redo_stack.append(command)
+		changed.emit()
 		return false
 	_undo_stack.append(command)
 	changed.emit()

@@ -18,7 +18,7 @@ func setup_entrance_sign_node(building: Node3D) -> void:
 	if not is_instance_valid(building):
 		return
 	game.entrance_stone = building
-	game._add_selector_to_node(building, "entrance_selector", Vector3(2.2, 2.4, 1.0), Vector3(0.0, 1.1, 0.0))
+	game.building_visuals.add_selector_to_node(building, "entrance_selector", Vector3(2.2, 2.4, 1.0), Vector3(0.0, 1.1, 0.0))
 	var label := Label3D.new()
 	label.position = Vector3(0.0, 1.26, 0.09)
 	label.text = "Settlement"

@@ -271,12 +271,12 @@ func _role_employers() -> Dictionary:
 		var candidates: Array[Dictionary] = []
 		for record in simulation.building_registry.records():
 			var workplace: Node3D = record.node
-			if not is_instance_valid(workplace) or not simulation._building_supports_role(workplace, role):
+			if not is_instance_valid(workplace) or not simulation.workplace_controller.building_supports_role(workplace, role):
 				continue
 			if not bool(workplace.get_meta("accepting_workers", true)):
 				continue
 			var occupied := int(occupancy.get("%s:%s" % [role, simulation._cell_from_position(workplace.global_position)], 0))
-			var available_slots: int = simulation._employer_capacity(role, workplace) - occupied
+			var available_slots: int = simulation.workplace_controller.employer_capacity(role, workplace) - occupied
 			if available_slots > 0:
 				var service_position: Vector3 = workplace.get_meta("service_position", workplace.global_position)
 				if employment_center == Vector3.INF or not simulation._is_route_reachable(employment_center, service_position):
