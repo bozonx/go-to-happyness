@@ -210,11 +210,10 @@ func _connect_back_navigation() -> void:
 # ---------------------------------------------------------------------------
 
 func _init_world() -> void:
-	_camera_controller.camera_target = Vector3(4.0, 0.0, 4.0)
+	_focus_footprint_center()
 	_camera_controller.camera_distance = 18.0
 	_camera_controller.apply_position()
 
-	var grid_lines := %GridLines as MeshInstance3D
 	_refresh_building_grid_visuals()
 
 	decor_mode = DecorModeControllerScript.new()
@@ -264,6 +263,15 @@ func _refresh_building_grid_visuals() -> void:
 	mesh.surface_set_material(0, mat)
 	%GridLines.mesh = mesh
 	_layer_plane.mesh = mesh
+
+
+## Grid coordinates stay stable (0…width, 0…depth) for saved blueprints;
+## only the view moves, so expanding a footprint grows around the screen centre.
+func _focus_footprint_center() -> void:
+	if _camera_controller == null or blueprint == null:
+		return
+	_camera_controller.camera_target = Vector3(blueprint.footprint.x * 0.5, 0.0, blueprint.footprint.y * 0.5)
+	_camera_controller.apply_position()
 
 
 # ---------------------------------------------------------------------------
@@ -1871,9 +1879,10 @@ func _confirm_discard_changes() -> bool:
 	var user_confirmed := false
 	dialog.confirmed.connect(func(): user_confirmed = true)
 	dialog.popup_centered(Vector2i(360, 120))
-	# `hidden` fires for both confirmation and cancellation, unlike the initial
-	# visibility change which could race the await and leave Load suspended.
-	await dialog.hidden
+	# `popup_centered` makes the dialog visible synchronously, so the loop
+	# body only runs while the user hasn't confirmed or cancelled yet.
+	while dialog.visible:
+		await get_tree().process_frame
 	dialog.queue_free()
 	return user_confirmed
 
@@ -1883,6 +1892,7 @@ func _on_footprint_changed(_value: float) -> void:
 		return
 	blueprint.footprint = Vector2i(int(_footprint_x_spin.value), int(_footprint_z_spin.value))
 	_refresh_building_grid_visuals()
+	_focus_footprint_center()
 	_refresh_ghost()
 	_mark_dirty()
 
