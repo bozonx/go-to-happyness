@@ -8,14 +8,16 @@ const WorldSetupScene = preload("res://game/features/world/presentation/world_se
 ## Extracted from SettlementGame to reduce its method count.
 
 var game: SettlementGame
+var navigation_runtime: WorldNavigationRuntimePort
 
 ## Kept alive for the session: it owns the published terrain field and, once the
 ## game gains terrain editing, the subscription that keeps it current.
 var terrain_navigation_publisher := TerrainNavigationPublisher.new()
 
 
-func _init(p_game: SettlementGame) -> void:
+func _init(p_game: SettlementGame, p_navigation_runtime: WorldNavigationRuntimePort) -> void:
 	game = p_game
+	navigation_runtime = p_navigation_runtime
 
 
 func create_world() -> void:
@@ -69,13 +71,14 @@ func publish_terrain_navigation() -> void:
 
 
 func refresh_navigation_grid() -> void:
-	if game.navigation_bridge != null:
-		game.navigation_blocked_cells = game.navigation_bridge.refresh_navigation_grid(
-			game.terrain_blocked_cells,
-			game.building_registry.records(),
-			game.service_pockets,
-			game.NAVIGATION_CLEARANCE_MARGIN
-		)
+	var navigation_bridge: NavigationBridge = navigation_runtime.navigation_bridge_getter.call()
+	if navigation_bridge != null:
+		navigation_runtime.navigation_blocked_cells_setter.call(navigation_bridge.refresh_navigation_grid(
+			navigation_runtime.terrain_blocked_cells_getter.call(),
+			navigation_runtime.building_records_getter.call(),
+			navigation_runtime.service_pockets_getter.call(),
+			navigation_runtime.clearance_margin
+		))
 
 
 func rebuild_navigation_obstacles() -> void:
@@ -92,7 +95,7 @@ func pond_access_position(from: Vector3, pond_center: Vector3) -> Vector3:
 	var best := Vector3.INF
 	var best_distance := INF
 	for candidate in candidates:
-		if game.navigation_blocked_cells.has(game.cell_from_position(candidate)):
+		if (navigation_runtime.navigation_blocked_cells_getter.call() as Dictionary).has(navigation_runtime.cell_from_position.call(candidate)):
 			continue
 		var distance := from.distance_squared_to(candidate)
 		if distance < best_distance:
@@ -100,22 +103,23 @@ func pond_access_position(from: Vector3, pond_center: Vector3) -> Vector3:
 			best_distance = distance
 	if best == Vector3.INF:
 		return Vector3.INF
-	var terrain_height := game.terrain_height_at(best.x, best.z, pond_center.y)
+	var terrain_height: float = navigation_runtime.terrain_height_at.call(best.x, best.z, pond_center.y)
 	if not is_nan(terrain_height):
 		best.y = terrain_height
 	return best
 
 
 func resource_access_position(from: Vector3, resource_position: Vector3) -> Vector3:
-	var resource_cell := game.cell_from_position(resource_position)
+	var resource_cell: Vector2i = navigation_runtime.cell_from_position.call(resource_position)
 	var best := Vector3.INF
 	var best_distance := INF
 	for offset in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1)]:
 		var cell: Vector2i = resource_cell + offset
-		if not game.is_board_cell(cell) or game.navigation_blocked_cells.has(cell):
+		if not navigation_runtime.is_board_cell.call(cell) or (navigation_runtime.navigation_blocked_cells_getter.call() as Dictionary).has(cell):
 			continue
-		var candidate: Vector3 = game.nav_grid.cell_center(cell) if game.nav_grid != null else Vector3((cell.x + 0.5) * game.CELL_SIZE, 0.0, (cell.y + 0.5) * game.CELL_SIZE)
-		if not game.is_route_reachable(from, candidate):
+		var nav_grid: NavGrid = navigation_runtime.nav_grid_getter.call()
+		var candidate: Vector3 = nav_grid.cell_center(cell) if nav_grid != null else Vector3((cell.x + 0.5) * navigation_runtime.cell_size, 0.0, (cell.y + 0.5) * navigation_runtime.cell_size)
+		if not navigation_runtime.is_route_reachable.call(from, candidate):
 			continue
 		var distance := from.distance_squared_to(candidate)
 		if distance < best_distance:
@@ -125,23 +129,23 @@ func resource_access_position(from: Vector3, resource_position: Vector3) -> Vect
 
 
 func fell_tree_at(position_on_board: Vector3) -> void:
-	var cell := game.cell_from_position(position_on_board)
-	var tree: Node3D = game.tree_nodes.get(cell)
+	var cell: Vector2i = navigation_runtime.cell_from_position.call(position_on_board)
+	var tree: Node3D = (navigation_runtime.tree_nodes_getter.call() as Dictionary).get(cell)
 	if not is_instance_valid(tree):
 		return
-	var tree_state: Variant = game.world_resource_state.tree_at(cell)
+	var tree_state: Variant = navigation_runtime.tree_at.call(cell)
 	if tree_state == null or tree_state.felled:
 		return
 	apply_tree_felled_visual(cell, tree)
 	refresh_navigation_grid()
-	game.settlement.add(ResourceIds.BRANCHES, 3)
-	game.update_interface("A tree was felled. Its log is ready for delivery; the living tree is no longer available for gathering.")
+	navigation_runtime.settlement_add.call(ResourceIds.BRANCHES, 3)
+	navigation_runtime.update_interface.call("A tree was felled. Its log is ready for delivery; the living tree is no longer available for gathering.")
 
 
 ## Lays a tree down and frees the cell it occupied. Shared by live felling and
 ## save restore so both paths produce identical geometry and navigation state.
 func apply_tree_felled_visual(cell: Vector2i, tree: Node3D) -> void:
-	var tree_state: Variant = game.world_resource_state.tree_at(cell)
+	var tree_state: Variant = navigation_runtime.tree_at.call(cell)
 	if tree_state != null:
 		tree_state.felled = true
 		tree.set_meta("felled", true) # Compatibility projection; state is authoritative.
@@ -149,7 +153,7 @@ func apply_tree_felled_visual(cell: Vector2i, tree: Node3D) -> void:
 	var collision_body := tree.get_node_or_null("TreeCollision") as CollisionObject3D
 	if collision_body != null:
 		collision_body.queue_free()
-	game.terrain_blocked_cells.erase(cell)
+	navigation_runtime.terrain_blocked_cell_erase.call(cell)
 
 
 func refresh_boundary_markers() -> void:

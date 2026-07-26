@@ -485,10 +485,33 @@ func _ready() -> void:
 	workplace_controller = SettlementWorkplaceController.new(self)
 	simulation_tick_controller = SettlementSimulationTickController.new(self)
 	logistics_controller = SettlementLogisticsController.new(self)
-	world_navigation_controller = SettlementWorldNavigationController.new(self)
+	world_navigation_controller = SettlementWorldNavigationController.new(self, _world_navigation_runtime_port())
 	ui_manager.setup(self)
 	ui_manager.bind_delegate_events(SettlementUICallbacks.new(self))
 	SettlementBootstrapper.new().run(self)
+
+
+func _world_navigation_runtime_port() -> WorldNavigationRuntimePort:
+	return WorldNavigationRuntimePort.new(
+		func() -> NavigationBridge: return navigation_bridge,
+		func() -> Dictionary: return terrain_blocked_cells,
+		func() -> Dictionary: return navigation_blocked_cells,
+		func(cells: Dictionary) -> void: navigation_blocked_cells = cells,
+		func() -> Array: return building_registry.records(),
+		func() -> Array[ServicePocketRecord]: return service_pockets,
+		cell_from_position,
+		is_board_cell,
+		func() -> NavGrid: return nav_grid,
+		is_route_reachable,
+		terrain_height_at,
+		func() -> Dictionary: return tree_nodes,
+		func(cell: Vector2i) -> Variant: return world_resource_state.tree_at(cell),
+		func(resource_type: String, amount: int) -> void: settlement.add(resource_type, amount),
+		update_interface,
+		func(cell: Vector2i) -> void: terrain_blocked_cells.erase(cell),
+		NAVIGATION_CLEARANCE_MARGIN,
+		CELL_SIZE
+	)
 
 
 func next_registration_ticket() -> int:
