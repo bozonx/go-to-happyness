@@ -125,9 +125,9 @@ const SettlementLogisticsControllerScript = preload("res://game/bootstrap/settle
 const SettlementWorldNavigationControllerScript = preload("res://game/bootstrap/settlement_world_navigation_controller.gd")
 
 
-# The playable routing and construction board must cover the terrain visible
-# beyond the starter forest. The former 48-cell board ended just behind the
-# trees, while the rendered ground continued much farther out.
+# Fallback board size for a session started without a map. Since maps arrived
+# (map_editor.md §14.1) the real size comes from `map.json`; this constant is
+# what a legacy launch, a save from before maps, and the tests still use.
 const BOARD_CELLS := 96
 const CELL_SIZE := BuildingBlueprints.BLOCK_SIZE
 const BUILDING_CLEARANCE_BLOCKS := 3.0
@@ -152,6 +152,9 @@ const SAWMILL_PROCESS_DURATION := 4.0
 var settlement := SettlementState.new()
 var world_resource_state := WorldResourceStateScript.new()
 var launch_config: GameLaunchConfigScript
+## Board size actually in play, from the launched map when there is one. Read it
+## rather than `BOARD_CELLS`: the constant is only the fallback.
+var board_cells := BOARD_CELLS
 var day_cycle := SimulationDayCycle.new()
 var clock: SimulationClock = day_cycle.clock
 var game_minutes: float:
@@ -546,6 +549,7 @@ func _ready() -> void:
 	if active_config == null:
 		active_config = GameLaunchConfigScript.for_tent_era()
 	launch_config = active_config
+	board_cells = launch_config.board_cells(BOARD_CELLS)
 
 	_research_controller = SettlementResearchControllerScript.new(self)
 	_citizen_factory = SettlementCitizenFactoryScript.new(self)
@@ -887,7 +891,7 @@ func _cell_from_position(position_on_board: Vector3) -> Vector2i:
 func _is_board_cell(cell: Vector2i) -> bool:
 	if nav_grid != null:
 		return nav_grid.is_board_cell(cell)
-	var half_cells := BOARD_CELLS / 2
+	var half_cells := board_cells / 2
 	return cell.x >= -half_cells and cell.x < half_cells and cell.y >= -half_cells and cell.y < half_cells
 
 func _find_path_around_houses(from: Vector3, destination: Vector3, may_enter_destination_house: bool) -> RouteResult:

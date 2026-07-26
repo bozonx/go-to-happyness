@@ -136,11 +136,17 @@ static func publish(source: TerrainGrid, target: NavGrid) -> NavTerrainField:
 	return built
 
 
+## Shared conversion buffer. The surface pass runs once per cell of the board, so
+## allocating four floats inside it costs one allocation per cell — 65 536 of them
+## on a standard map, for a value that is thrown away immediately.
+static var _metres_scratch := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
+
+
 static func _write_surface(target: NavTerrainField, source: TerrainGrid, cell: Vector2i, corners: PackedFloat32Array) -> void:
 	if not source.is_inside(cell):
 		return
 	source.corner_heights_into(cell, corners)
-	var metres := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
+	var metres := _metres_scratch
 	for corner in 4:
 		metres[corner] = corners[corner] * TerrainGrid.HEIGHT_STEP
 	target.set_cell(cell, not source.is_hole(cell), surface_class_of(corners), metres)
@@ -154,26 +160,44 @@ static func _write_surface(target: NavTerrainField, source: TerrainGrid, cell: V
 ## `TerrainGrid.corner_heights_into` — a pass over nine columns — would repeat the
 ## same work about twenty times per cell. The surface pass has already written
 ## exactly the numbers this needs, which is why the two passes are separate.
+## An edge belongs to both of the cells it joins and reads the same way from
+## either side: the corner gap is symmetric, the height difference is an absolute
+## value and the direction distance is the same both ways. So each edge is
+## computed once, from the cell on the north-west side of it, and written into
+## both — the four compass directions `N`, `NE`, `E`, `SE` cover every edge of the
+## board exactly once. Computing all eight per cell did the work twice.
+const HALF_DIRECTION_COUNT := 4
+
+
 static func _write_edges(target: NavTerrainField, source: TerrainGrid, cell: Vector2i, own: PackedFloat32Array, other: PackedFloat32Array) -> void:
 	if not source.is_inside(cell):
 		return
-	if source.is_hole(cell):
-		for direction in NavTerrainField.DIRECTION_COUNT:
-			target.set_edge_class(cell, direction, NavTerrainField.CLASS_CLIFF)
-		return
-	target.corner_heights_into(cell, own)
+	var is_hole := source.is_hole(cell)
+	if not is_hole:
+		target.corner_heights_into(cell, own)
 	var own_centre := target.centre_height(cell)
-	for direction in NavTerrainField.DIRECTION_COUNT:
+
+	for direction in HALF_DIRECTION_COUNT:
 		var neighbour: Vector2i = cell + NavTerrainField.DIRECTION_OFFSETS[direction]
-		if not source.is_inside(neighbour) or source.is_hole(neighbour):
+		var opposite := direction + HALF_DIRECTION_COUNT
+		if not source.is_inside(neighbour):
+			# Off the board is a cliff for this cell, and there is no other side.
 			target.set_edge_class(cell, direction, NavTerrainField.CLASS_CLIFF)
 			continue
-		target.corner_heights_into(neighbour, other)
 		var edge_class := NavTerrainField.CLASS_CLIFF
-		if corner_gap_metres(own, other, direction) < FACE_GAP_STEPS * TerrainGrid.HEIGHT_STEP:
-			var rise_steps := absf(target.centre_height(neighbour) - own_centre) / TerrainGrid.HEIGHT_STEP
-			edge_class = NavTerrainField.class_from_steps_per_cell(rise_steps / NavTerrainField.direction_distance(direction))
+		if not is_hole and not source.is_hole(neighbour):
+			target.corner_heights_into(neighbour, other)
+			if corner_gap_metres(own, other, direction) < FACE_GAP_STEPS * TerrainGrid.HEIGHT_STEP:
+				var rise_steps := absf(target.centre_height(neighbour) - own_centre) / TerrainGrid.HEIGHT_STEP
+				edge_class = NavTerrainField.class_from_steps_per_cell(rise_steps / NavTerrainField.direction_distance(direction))
 		target.set_edge_class(cell, direction, edge_class)
+		target.set_edge_class(neighbour, opposite, edge_class)
+
+	# The other four directions are written by the neighbour on that side — except
+	# where there is no neighbour, at the south and west rim of the board.
+	for direction in range(HALF_DIRECTION_COUNT, NavTerrainField.DIRECTION_COUNT):
+		if not source.is_inside(cell + NavTerrainField.DIRECTION_OFFSETS[direction]):
+			target.set_edge_class(cell, direction, NavTerrainField.CLASS_CLIFF)
 
 
 # --- Classification ----------------------------------------------------------

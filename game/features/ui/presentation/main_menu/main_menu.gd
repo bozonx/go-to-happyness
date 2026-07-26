@@ -15,7 +15,11 @@ const GameLaunchConfigScript = preload("res://game/features/settlement/domain/ga
 @onready var wood_era_btn: Button = $MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox/WoodEraButton
 @onready var stone_era_btn: Button = $MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox/StoneEraButton
 @onready var building_editor_btn: Button = $MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox/BuildingEditorButton
+@onready var map_editor_btn: Button = $MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox/MapEditorButton
 
+## Since maps arrived this picker chooses a map, not a biome (map_editor.md
+## §14.1). The biome entries remain below the maps because a biome still supplies
+## atmosphere and vegetation; what it no longer supplies is the ground.
 @onready var landscape_option: OptionButton = $MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox/LandscapeOption
 @onready var era_description_label: Label = $MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox/DescriptionLabel
 @onready var param_summary_label: Label = $MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox/ParamSummaryLabel
@@ -25,6 +29,11 @@ const GameLaunchConfigScript = preload("res://game/features/settlement/domain/ga
 
 var selected_era: StringName = &"tent"
 var selected_biome: StringName = &"summer_valley"
+## Runtime key of the chosen map, empty for a biome-only launch on the legacy
+## flat board.
+var selected_map: StringName = &""
+
+var _map_service := MapDocumentService.new()
 
 
 func _ready() -> void:
@@ -34,13 +43,30 @@ func _ready() -> void:
 	_select_era(&"tent")
 
 
+## Maps first, then the two procedural biomes. A map entry carries its runtime
+## key; a biome entry carries its biome id, and the two are told apart by which
+## field the metadata fills.
 func _setup_landscape_options() -> void:
 	landscape_option.clear()
-	landscape_option.add_item("Летняя долина (Summer Valley)", 0)
-	landscape_option.set_item_metadata(0, &"summer_valley")
-	landscape_option.add_item("Летняя равнина (Summer Plains)", 1)
-	landscape_option.set_item_metadata(1, &"summer_plains")
+	var slot := 0
+	for entry: Dictionary in _map_service.list_maps():
+		if entry["kind"] == MapMeta.KIND_PREFAB:
+			continue
+		var suffix := " · %d×%d" % [entry["board_cells"], entry["board_cells"]]
+		var origin := "" if entry["source"] == MapDocumentService.SOURCE_BUILTIN else " · своя"
+		landscape_option.add_item("🗺 %s%s%s" % [entry["name"], suffix, origin], slot)
+		landscape_option.set_item_metadata(slot, {"map": entry["key"]})
+		slot += 1
+	if slot > 0:
+		landscape_option.add_separator()
+		slot += 1
+	landscape_option.add_item("Летняя долина (без карты)", slot)
+	landscape_option.set_item_metadata(slot, {"biome": &"summer_valley"})
+	slot += 1
+	landscape_option.add_item("Летняя равнина (без карты)", slot)
+	landscape_option.set_item_metadata(slot, {"biome": &"summer_plains"})
 	landscape_option.select(0)
+	_on_landscape_selected(0)
 
 
 func _connect_signals() -> void:
@@ -50,6 +76,7 @@ func _connect_signals() -> void:
 	wood_era_btn.pressed.connect(func(): _select_era(&"wood"))
 	stone_era_btn.pressed.connect(func(): _select_era(&"stone"))
 	building_editor_btn.pressed.connect(_on_building_editor_pressed)
+	map_editor_btn.pressed.connect(_on_map_editor_pressed)
 
 	landscape_option.item_selected.connect(_on_landscape_selected)
 	start_game_btn.pressed.connect(_on_start_game_pressed)
@@ -57,7 +84,14 @@ func _connect_signals() -> void:
 
 
 func _on_landscape_selected(index: int) -> void:
-	selected_biome = landscape_option.get_item_metadata(index) as StringName
+	var metadata: Variant = landscape_option.get_item_metadata(index)
+	if metadata is not Dictionary:
+		return
+	var entry: Dictionary = metadata
+	selected_map = entry.get("map", &"")
+	# A map keeps its own biome for atmosphere; only a biome-only entry changes it.
+	if entry.has("biome"):
+		selected_biome = entry["biome"]
 	_update_config_summary()
 
 
@@ -74,22 +108,36 @@ func _update_era_buttons_state() -> void:
 	wood_era_btn.text = "🪵 Деревянная эра (Скоро)"
 	stone_era_btn.text = "🪨 Каменная эра (Скоро)"
 	building_editor_btn.text = "🏗️ Редактор зданий"
+	map_editor_btn.text = "🗺 Редактор территорий"
 
 	earth_era_btn.disabled = true
 	clay_era_btn.disabled = true
 	wood_era_btn.disabled = true
 	stone_era_btn.disabled = true
 	building_editor_btn.disabled = false
+	map_editor_btn.disabled = false
 
 
 func _update_config_summary() -> void:
 	match selected_era:
 		&"tent":
 			era_description_label.text = "Палаточная эра: Начало пути вашей кочевой группы. Выживание в дикой природе, сбор ресурсов, постройка первого костра и палаток."
-			param_summary_label.text = "• Ландшафт: %s\n• Стартовое население: 4 жителей\n• Монеты: 500\n• Запасы: Еда (16), Вода (8), Тент (1)\n• Снаряжение: Кремень и огниво, Рабочие перчатки" % [_biome_display_name(selected_biome)]
+			param_summary_label.text = "• %s\n• Стартовое население: 4 жителей\n• Монеты: 500\n• Запасы: Еда (16), Вода (8), Тент (1)\n• Снаряжение: Кремень и огниво, Рабочие перчатки" % [_landscape_summary()]
 		_:
 			era_description_label.text = "Эта эра будет доступна в следующих обновлениях."
 			param_summary_label.text = ""
+
+
+## What the chosen entry actually decides. A map states its own board and start
+## conditions, so saying "ландшафт" about it would be wrong.
+func _landscape_summary() -> String:
+	if String(selected_map).is_empty():
+		return "Ландшафт: %s (плоская доска)" % _biome_display_name(selected_biome)
+	var address := MapDocumentService.split_key(selected_map)
+	var header := _map_service.read_header(address["source"], address["id"])
+	if header.is_empty():
+		return "Карта: %s" % selected_map
+	return "Карта: %s (%d×%d м)" % [header["name"], header["board_cells"], header["board_cells"]]
 
 
 func _biome_display_name(biome: StringName) -> String:
@@ -105,6 +153,7 @@ func _biome_display_name(biome: StringName) -> String:
 func _on_start_game_pressed() -> void:
 	var config := GameLaunchConfigScript.for_tent_era()
 	config.biome_id = selected_biome
+	config.map_ref = selected_map
 	var launch_mgr: Node = get_node_or_null("/root/GameLaunchManager")
 	if launch_mgr != null and launch_mgr.has_method("launch_game"):
 		launch_mgr.call("launch_game", config)
@@ -118,6 +167,15 @@ func _on_building_editor_pressed() -> void:
 		launch_mgr.call("launch_building_editor", true)
 	else:
 		get_tree().change_scene_to_file("res://game/features/buildings/presentation/editor/building_editor.tscn")
+
+
+func _on_map_editor_pressed() -> void:
+	var launch_mgr: Node = get_node_or_null("/root/GameLaunchManager")
+	if launch_mgr != null and launch_mgr.has_method("launch_map_editor"):
+		# Editing opens the chosen map when one is chosen, and a new map otherwise.
+		launch_mgr.call("launch_map_editor", selected_map)
+		return
+	get_tree().change_scene_to_file("res://game/features/world/presentation/editor/map_editor.tscn")
 
 
 func _on_quit_pressed() -> void:

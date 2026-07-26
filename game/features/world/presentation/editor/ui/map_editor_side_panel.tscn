@@ -1,0 +1,29 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/features/world/presentation/editor/ui/map_editor_side_panel.gd" id="1_side_panel"]
+
+[node name="SidePanel" type="PanelContainer"]
+custom_minimum_size = Vector2(280, 0)
+script = ExtResource("1_side_panel")
+
+[node name="Rows" type="VBoxContainer" parent="."]
+theme_override_constants/separation = 6
+
+[node name="InspectorTitle" type="Label" parent="Rows"]
+text = "Инспектор"
+theme_override_font_sizes/font_size = 14
+
+[node name="Inspector" type="Label" parent="Rows"]
+size_flags_vertical = 3
+autowrap_mode = 2
+theme_override_font_sizes/font_size = 12
+
+[node name="Separator" type="HSeparator" parent="Rows"]
+
+[node name="ListTitle" type="Label" parent="Rows"]
+text = "Объекты"
+theme_override_font_sizes/font_size = 14
+
+[node name="List" type="ItemList" parent="Rows"]
+custom_minimum_size = Vector2(0, 190)
+size_flags_vertical = 3

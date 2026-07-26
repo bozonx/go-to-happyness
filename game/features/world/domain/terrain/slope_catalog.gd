@@ -125,8 +125,19 @@ static func run_of_class(slope_class: int) -> int:
 
 ## A ramp is a slope that actually occupies cells and gains height: everything
 ## between `shallow` and `pre_cliff`. `flat` and `cliff` are not ramps.
+##
+## Answered from a table rather than from `run > 0 and rise > 0`, because this is
+## the single most-called predicate in the engine: `corner_heights_into` asks it
+## about a cell and all eight of its neighbours, and both the mesher and the
+## navigation publisher walk every cell of the board through it. The derivation
+## cost four calls per question; the table costs one bounds test.
+const IS_RAMP_BY_CLASS: Array[bool] = [
+	false, true, true, true, true, true, true, false,
+]
+
+
 static func is_ramp_class(slope_class: int) -> bool:
-	return run_of_class(slope_class) > 0 and rise_of_class(slope_class) > 0
+	return slope_class >= 0 and slope_class < IS_RAMP_BY_CLASS.size() and IS_RAMP_BY_CLASS[slope_class]
 
 
 ## Height gained per cell as a fraction, i.e. rise/run. `cliff` has no run, so it

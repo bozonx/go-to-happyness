@@ -158,6 +158,35 @@ not in the settlement bootstrap scene. It runs the production `TerrainGrid`,
   it after touching the publisher or `NavGrid`'s hot paths; the budgets it guards
   are in `design_docs/core/grid_terrain_system.md` §10.5.
 
+## Map editor and the `.gdmap` format
+
+A map is a folder package (`map.json` + `terrain.bin` + `preview.png`) under
+`res://game/features/world/data/maps/` or `user://custom_maps/`, opened by
+`MapDocumentService`. It is the source of the board size and the starting
+conditions; `SettlementGame.BOARD_CELLS` is now only the no-map fallback.
+See `design_docs/core/map_editor.md`.
+
+- The editor is `res://game/features/world/presentation/editor/map_editor.tscn`.
+  `map_editor.gd` loads the document, switches modes, routes input and owns the
+  one undo stack — **nothing else**. Mode behaviour goes in a
+  `<mode>_mode_controller.gd` reached through `MapEditorContext`. An
+  `if mode == ...` inside the editor's input handling means logic leaked out of a
+  controller; that is what took `building_editor.gd` to 2159 lines.
+- Static editor UI is authored as `.tscn` under `editor/ui/`, one scene per
+  panel. Build nodes in code only for genuinely dynamic children (palette
+  entries, list rows).
+- One undo stack for every mode (`MapEditorHistory`), deliberately unlike the
+  building editor's per-mode decor stack. Terrain commands delegate to
+  `TerrainService`'s own delta stack rather than copying it.
+- `MapDocument` carries the sections this build does not interpret (rules,
+  markers, placements…) and writes them back untouched. Do not drop unknown keys
+  on save — a phase-1 editor must not eat the rules of a phase-5 map.
+- Never write a map package non-atomically. `MapDocumentService.save_map_to`
+  stages into `.tmp` and swaps; a crash must leave the previous map intact.
+- `tests/features/world/test_map_editor.gd` runs the real scene end to end. Unit
+  tests over the brush and the format prove the parts; only that one proves the
+  editor.
+
 ## Weather and lighting laboratory
 
 Changes to weather, time of day, sky, stars, sun/moon, atmospheric effects, or

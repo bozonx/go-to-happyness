@@ -20,7 +20,7 @@ func create_world() -> void:
 	game.camera_controller = game.CameraControllerScene.instantiate() as CameraController
 	game.add_child(game.camera_controller)
 	game.world_setup = game.WorldSetupScene.instantiate() as WorldSetup
-	game.world_setup.setup(game.camera, game.CELL_SIZE, game.BOARD_CELLS, game.trail_field)
+	game.world_setup.setup(game.camera, game.CELL_SIZE, game.board_cells, game.trail_field, game.launch_config.map_document)
 	game.add_child(game.world_setup)
 	game.world_setup.build(game)
 	game._update_daylight()

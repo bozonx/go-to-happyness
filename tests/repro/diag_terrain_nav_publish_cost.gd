@@ -23,14 +23,28 @@ const STROKE_BOARD := 96
 const STROKE_RADII: Array[int] = [1, 4, 16]
 
 
+## Two terrains, because the answer differs by a factor of three between them and
+## only one of the two is a map anybody authors:
+##
+## - `dense` puts a ramp every four cells over the whole board. Nothing is flat,
+##   so the corner-lift scan runs for every column. It is the worst case and the
+##   budget that must not be exceeded.
+## - `sparse` is a few hills on open ground — the shape of an actual map, where
+##   most columns are flat with flat neighbours and skip the scan entirely.
+const PROFILE_DENSE := &"dense"
+const PROFILE_SPARSE := &"sparse"
+
+
 func _init() -> void:
-	for cells: int in BOARDS:
-		_measure_board(cells)
+	for profile: StringName in [PROFILE_SPARSE, PROFILE_DENSE]:
+		print("--- %s terrain ---" % profile)
+		for cells: int in BOARDS:
+			_measure_board(cells, profile)
 	quit(0)
 
 
-func _measure_board(board_cells: int) -> void:
-	var terrain := _hilly_board(board_cells)
+func _measure_board(board_cells: int, profile: StringName = PROFILE_DENSE) -> void:
+	var terrain := _hilly_board(board_cells) if profile == PROFILE_DENSE else _sparse_board(board_cells)
 	var nav := NavGrid.new()
 	var publisher := TerrainNavigationPublisher.new()
 
@@ -46,7 +60,7 @@ func _measure_board(board_cells: int) -> void:
 	nav.refresh_connectivity()
 	print("    connectivity flood fill: %.2f ms" % ((Time.get_ticks_usec() - start) / 1000.0))
 
-	if board_cells != STROKE_BOARD:
+	if board_cells != STROKE_BOARD or profile != PROFILE_DENSE:
 		return
 	# A brush stroke: one cell edited, plus whatever the cascade dragged with it.
 	for radius: int in STROKE_RADII:
@@ -70,5 +84,20 @@ func _hilly_board(board_cells: int) -> TerrainGrid:
 	for z in range(-half, half, 4):
 		for x in range(-half, half, 4):
 			terrain.set_height(Vector2i(x, z), 2)
+			terrain.place_ramp(Vector2i(x - 1, z), SlopeCatalog.VERY_STEEP, SlopeCatalog.DIR_E)
+	return terrain
+
+
+## What an authored map looks like: open ground with a handful of hills, each
+## reached by a ramp. Roughly a twentieth of the columns are shaped.
+func _sparse_board(board_cells: int) -> TerrainGrid:
+	var terrain := TerrainGrid.new()
+	terrain.configure(1.0, board_cells)
+	var half := board_cells / 2 - 8
+	for z in range(-half, half, 24):
+		for x in range(-half, half, 24):
+			for hill_z in range(z, mini(z + 6, half)):
+				for hill_x in range(x, mini(x + 6, half)):
+					terrain.set_height(Vector2i(hill_x, hill_z), 2)
 			terrain.place_ramp(Vector2i(x - 1, z), SlopeCatalog.VERY_STEEP, SlopeCatalog.DIR_E)
 	return terrain

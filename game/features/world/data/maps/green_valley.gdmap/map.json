@@ -1,0 +1,38 @@
+{
+	"author": "Go To Happyness",
+	"board": {
+		"cell_size": 1.0,
+		"cells": 96
+	},
+	"border": {
+		"kind": "ocean",
+		"level": -1.5
+	},
+	"defeat": [],
+	"flags": [],
+	"format_version": 1,
+	"id": "green_valley",
+	"kind": "map",
+	"markers": [],
+	"name": "Зелёная долина",
+	"objects": [],
+	"placements": [],
+	"regions": [],
+	"required_content": [],
+	"revision": "6a654bd7615a",
+	"routes": [],
+	"rules": [],
+	"start": {
+		"day_of_year": 120,
+		"economy": {},
+		"era": "tent",
+		"latitude": 54.0,
+		"mode": {
+			"id": "settlement",
+			"systems": {}
+		},
+		"time_of_day": 480,
+		"weather_preset": "clear"
+	},
+	"victory": []
+}

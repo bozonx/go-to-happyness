@@ -1,0 +1,39 @@
+[gd_scene format=3]
+
+[node name="TopBar" type="PanelContainer"]
+custom_minimum_size = Vector2(0, 40)
+
+[node name="Margin" type="MarginContainer" parent="."]
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 4
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 4
+
+[node name="Row" type="HBoxContainer" parent="Margin"]
+theme_override_constants/separation = 6
+
+[node name="FileButton" type="MenuButton" parent="Margin/Row"]
+text = "Файл"
+flat = false
+
+[node name="EditButton" type="MenuButton" parent="Margin/Row"]
+text = "Правка"
+flat = false
+
+[node name="MapNameLabel" type="Label" parent="Margin/Row"]
+size_flags_horizontal = 3
+vertical_alignment = 1
+text = "Карта:"
+
+[node name="ValidateButton" type="Button" parent="Margin/Row"]
+text = "✔ Проверить"
+disabled = true
+tooltip_text = "Валидатор появляется в фазе 6"
+
+[node name="TestButton" type="Button" parent="Margin/Row"]
+text = "▶ Тест (F5)"
+disabled = true
+tooltip_text = "Тест-запуск появляется в фазе 6"
+
+[node name="ExitButton" type="Button" parent="Margin/Row"]
+text = "Выход"

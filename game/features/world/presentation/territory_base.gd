@@ -16,12 +16,20 @@ extends Node3D
 var terrain_grid: TerrainGrid = null
 
 
-## Builds the flat starting ground. Called once by `WorldSetup`, which owns the
+## Establishes the board's ground. Called once by `WorldSetup`, which owns the
 ## board dimensions. The mesh is built immediately rather than over the frame
 ## budget: nothing may run a frame without ground under it.
-func configure_terrain(cell_size: float, board_cells: int, camera: Camera3D = null) -> TerrainGrid:
-	terrain_grid = TerrainGrid.new()
-	terrain_grid.configure(cell_size, board_cells)
+##
+## `authored` is the grid a launched map brought with it (map_editor.md §14.1).
+## It is adopted, not copied: the map's relief and the session's ground have to be
+## the same object, or an edit made in play would be invisible to whatever still
+## held the other one. Without a map the board is flat, as it was before maps.
+func configure_terrain(cell_size: float, board_cells: int, camera: Camera3D = null, authored: TerrainGrid = null) -> TerrainGrid:
+	if authored != null and authored.board_cells == board_cells:
+		terrain_grid = authored
+	else:
+		terrain_grid = TerrainGrid.new()
+		terrain_grid.configure(cell_size, board_cells)
 	if terrain != null:
 		terrain.configure(terrain_grid, camera)
 		terrain.rebuild_pending_now()

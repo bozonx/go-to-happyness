@@ -1,0 +1,83 @@
+[gd_scene load_steps=12 format=3]
+
+[ext_resource type="Script" path="res://game/features/world/presentation/editor/map_editor.gd" id="1_editor"]
+[ext_resource type="Script" path="res://game/features/world/presentation/terrain/grid_terrain_world.gd" id="2_terrain"]
+[ext_resource type="Script" path="res://game/features/routing/presentation/nav_terrain_overlay.gd" id="3_nav_overlay"]
+[ext_resource type="Script" path="res://game/features/world/presentation/editor/map_editor_camera.gd" id="4_camera"]
+[ext_resource type="Theme" path="res://game/features/ui/presentation/theme/ui_theme.tres" id="5_theme"]
+[ext_resource type="PackedScene" path="res://game/features/world/presentation/editor/ui/map_editor_top_bar.tscn" id="6_top_bar"]
+[ext_resource type="PackedScene" path="res://game/features/world/presentation/editor/ui/map_editor_mode_bar.tscn" id="7_mode_bar"]
+[ext_resource type="PackedScene" path="res://game/features/world/presentation/editor/ui/map_editor_side_panel.tscn" id="8_side_panel"]
+[ext_resource type="PackedScene" path="res://game/features/world/presentation/editor/ui/map_editor_palette.tscn" id="9_palette"]
+[ext_resource type="PackedScene" path="res://game/features/world/presentation/editor/ui/map_editor_status_bar.tscn" id="10_status_bar"]
+
+[sub_resource type="Environment" id="env_map_editor"]
+background_mode = 1
+background_color = Color(0.42, 0.55, 0.66, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.62, 0.69, 0.78, 1)
+ambient_light_energy = 0.55
+tonemap_mode = 2
+
+[node name="MapEditor" type="Node3D"]
+script = ExtResource("1_editor")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("env_map_editor")
+
+[node name="SunLight" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.766, -0.443, 0.466, 0, 0.725, 0.689, -0.643, -0.528, 0.555, 0, 40, 0)
+light_energy = 1.15
+shadow_enabled = true
+
+[node name="Terrain" type="Node3D" parent="."]
+script = ExtResource("2_terrain")
+
+[node name="NavOverlay" type="MeshInstance3D" parent="."]
+script = ExtResource("3_nav_overlay")
+cast_shadow = 0
+visible = false
+
+[node name="HoverMarker" type="MeshInstance3D" parent="."]
+cast_shadow = 0
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 40, 40)
+far = 900.0
+script = ExtResource("4_camera")
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="Screen" type="VBoxContainer" parent="UI"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("5_theme")
+theme_override_constants/separation = 0
+mouse_filter = 2
+
+[node name="TopBar" parent="UI/Screen" instance=ExtResource("6_top_bar")]
+mouse_filter = 0
+
+[node name="Middle" type="HBoxContainer" parent="UI/Screen"]
+size_flags_vertical = 3
+theme_override_constants/separation = 0
+mouse_filter = 2
+
+[node name="ModeBar" parent="UI/Screen/Middle" instance=ExtResource("7_mode_bar")]
+mouse_filter = 0
+
+[node name="Viewport3D" type="Control" parent="UI/Screen/Middle"]
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="SidePanel" parent="UI/Screen/Middle" instance=ExtResource("8_side_panel")]
+mouse_filter = 0
+
+[node name="Palette" parent="UI/Screen" instance=ExtResource("9_palette")]
+mouse_filter = 0
+
+[node name="StatusBar" parent="UI/Screen" instance=ExtResource("10_status_bar")]
+mouse_filter = 0

@@ -35,13 +35,17 @@ var _camera: Camera3D
 var _cell_size: float
 var _board_cells: int
 var _trail_field: RefCounted
+## The launched map, when the session has one. Its `TerrainGrid` becomes the
+## board's ground instead of a freshly flattened one (map_editor.md §14.1).
+var _map_document: MapDocument = null
 
 
-func setup(p_camera: Camera3D, p_cell_size: float, p_board_cells: int, p_trail_field: RefCounted) -> void:
+func setup(p_camera: Camera3D, p_cell_size: float, p_board_cells: int, p_trail_field: RefCounted, p_map_document: MapDocument = null) -> void:
 	_camera = p_camera
 	_cell_size = p_cell_size
 	_board_cells = p_board_cells
 	_trail_field = p_trail_field
+	_map_document = p_map_document
 
 
 func build(parent: Node) -> void:
@@ -89,15 +93,19 @@ func update_daylight(
 		)
 
 
-## Phase 0 of the terrain migration: the board gets a real `TerrainGrid`, flat at
-## world zero, meshed and collided by `GridTerrainWorld`. It replaces the plane
-## the removed Terrain3D addon used to hide behind, so height has exactly one
-## owner from here on.
+## The board gets a real `TerrainGrid`, meshed and collided by `GridTerrainWorld`.
+## It replaces the plane the removed Terrain3D addon used to hide behind, so
+## height has exactly one owner from here on.
+##
+## With a map launched, that grid IS the map's — adopted rather than copied, so
+## the relief the author built is the relief the citizens walk on and there is no
+## second copy to fall out of step with the first.
 func _build_terrain(parent: Node) -> void:
 	var territory := parent.get_node_or_null("WorldTerritory") as TerritoryBase
 	if territory == null:
 		return
-	terrain_grid = territory.configure_terrain(_cell_size, _board_cells, _camera)
+	var authored: TerrainGrid = _map_document.terrain if _map_document != null else null
+	terrain_grid = territory.configure_terrain(_cell_size, _board_cells, _camera, authored)
 
 
 func _build_boundary(parent: Node) -> void:

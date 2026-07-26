@@ -1,0 +1,24 @@
+[gd_scene format=3]
+
+[node name="StatusBar" type="PanelContainer"]
+custom_minimum_size = Vector2(0, 30)
+
+[node name="Margin" type="MarginContainer" parent="."]
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 2
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 2
+
+[node name="Row" type="HBoxContainer" parent="Margin"]
+theme_override_constants/separation = 16
+
+[node name="CellLabel" type="Label" parent="Margin/Row"]
+size_flags_horizontal = 3
+vertical_alignment = 1
+theme_override_font_sizes/font_size = 12
+text = "клетка —"
+
+[node name="MessageLabel" type="Label" parent="Margin/Row"]
+vertical_alignment = 1
+theme_override_font_sizes/font_size = 12
+text = "готово"

@@ -83,6 +83,9 @@ var _slope_indices := PackedByteArray()
 var _flags := PackedByteArray()
 
 var _revision := 0
+## Scratch space for `corner_heights_into`, which runs once per cell of the board
+## on every publish and once per neighbour on every mesh.
+var _neighbour_corner_scratch := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
 var _dirty_chunks: Dictionary = {}
 ## Columns whose surface texels are out of date. Separate from the dirty chunks
 ## on purpose: a material or detail edit changes no geometry at all (§7.5), and
@@ -578,9 +581,19 @@ func corner_heights_into(cell: Vector2i, result: PackedFloat32Array) -> void:
 	# between four such cells needs it; the result is a `very_steep` corner, still
 	# straight out of the catalog. Gentler multi-cell ramps are authored roads and
 	# do not drag the ground beside them.
+	# The overwhelmingly common cell: flat ground with nothing sloped touching it.
+	# Its corners are its own height and the two neighbour passes below cannot
+	# change that, so the whole scan is skipped. This is what makes publishing a
+	# board proportional to how much of it is actually shaped rather than to how
+	# many cells it has.
+	if not SlopeCatalog.is_ramp_class(slope_class) and not _has_ramp_neighbour(cell):
+		return
+
 	var own_height := height_of(cell)
 	var lift_ceiling := float(own_height + MAX_CORNER_LIFT_STEPS)
-	var neighbour_corners := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
+	# Reused across calls rather than allocated per cell. Nothing below re-enters
+	# this function, so a single scratch buffer is safe.
+	var neighbour_corners := _neighbour_corner_scratch
 
 	for direction: int in SlopeCatalog.ORTHOGONAL_DIRECTIONS:
 		var neighbour := cell + SlopeCatalog.direction_offset(direction)
@@ -622,6 +635,25 @@ func corner_heights_into(cell: Vector2i, result: PackedFloat32Array) -> void:
 ## beside a terrace sheer (§4.1).
 func _lifts_corners(cell: Vector2i) -> bool:
 	return SlopeCatalog.is_ramp_class(slope_class_at(cell))
+
+
+## Whether any of the eight neighbours carries a slope — the question that decides
+## if a flat column needs the corner-lift scan at all.
+##
+## Indexes the slope array directly instead of going through `is_inside` and
+## `slope_class_at`, which would be three calls per neighbour and twenty-four per
+## cell. Everything it inlines is the arithmetic in `_index_of`.
+func _has_ramp_neighbour(cell: Vector2i) -> bool:
+	var low := -board_half_cells
+	var high := board_cells - board_half_cells - 1
+	for offset: Vector2i in SlopeCatalog.DIRECTION_OFFSETS:
+		var x := cell.x + offset.x
+		var z := cell.y + offset.y
+		if x < low or x > high or z < low or z > high:
+			continue
+		if SlopeCatalog.IS_RAMP_BY_CLASS[_slope_classes[(z + board_half_cells) * board_cells + (x + board_half_cells)]]:
+			return true
+	return false
 
 
 ## Takes a neighbour's corner whole or not at all — never clamped, because a

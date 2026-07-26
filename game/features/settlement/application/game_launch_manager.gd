@@ -4,11 +4,17 @@ extends Node
 
 const GameLaunchConfigScript = preload("res://game/features/settlement/domain/game_launch_config.gd")
 const BUILDING_EDITOR_SCENE := "res://game/features/buildings/presentation/editor/building_editor.tscn"
+const MAP_EDITOR_SCENE := "res://game/features/world/presentation/editor/map_editor.tscn"
 
 var active_launch_config: GameLaunchConfigScript = GameLaunchConfigScript.for_tent_era()
 var pending_save_path: String = ""
 ## Read by BuildingEditor to decide dev vs player mode. Set by launch_building_editor.
 var editor_player_mode: bool = false
+## Map the territory editor should open on entry, as a runtime key. Empty starts
+## the editor on a new unsaved map.
+var pending_editor_map: StringName = &""
+
+var _map_service := MapDocumentService.new()
 
 
 func launch_game(config: GameLaunchConfigScript) -> void:
@@ -17,7 +23,22 @@ func launch_game(config: GameLaunchConfigScript) -> void:
 		active_launch_config = config
 	else:
 		active_launch_config = GameLaunchConfigScript.for_tent_era()
+	_resolve_map(active_launch_config)
 	get_tree().change_scene_to_file("res://game/bootstrap/settlement_game.tscn")
+
+
+## Loads the package before the scene changes. A map that cannot be read is
+## reported and the session starts on the legacy flat board rather than on a
+## half-built world — the player gets a game, not a crash.
+func _resolve_map(config: GameLaunchConfigScript) -> void:
+	if config == null or config.map_document != null or String(config.map_ref).is_empty():
+		return
+	var document := _map_service.load_map(config.map_ref)
+	if document == null:
+		push_warning("[launch] карта %s не открылась: %s" % [config.map_ref, _map_service.last_error])
+		return
+	config.map_document = document
+	config.apply_map_start()
 
 
 func launch_from_save(save_path: String) -> void:
@@ -29,6 +50,12 @@ func launch_building_editor(player_mode: bool = true) -> void:
 	pending_save_path = ""
 	editor_player_mode = player_mode
 	get_tree().change_scene_to_file(BUILDING_EDITOR_SCENE)
+
+
+func launch_map_editor(map_key: StringName = &"") -> void:
+	pending_save_path = ""
+	pending_editor_map = map_key
+	get_tree().change_scene_to_file(MAP_EDITOR_SCENE)
 
 
 func return_to_main_menu() -> void:
