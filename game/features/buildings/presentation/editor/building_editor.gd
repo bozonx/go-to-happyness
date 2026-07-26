@@ -304,6 +304,11 @@ func _focus_footprint_center() -> void:
 func _process(delta: float) -> void:
 	if _camera_controller != null:
 		_camera_controller.update(delta)
+	# A Shift+RMB erase stroke owns the button until RMB itself is released.  In
+	# particular, releasing Shift first must not hand the still-held button back
+	# to the camera orbit controller.
+	if _shift_erasing:
+		_orbiting = false
 	_update_cursor()
 	_refresh_shift_hover()
 	# Ghost refresh is cheap but redundant when nothing changed; skip via cache.
@@ -347,8 +352,16 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 		return
 	match event.button_index:
 		MOUSE_BUTTON_RIGHT:
-			if _shift_erasing or (current_mode == EditMode.FRAME and event.shift_pressed):
-				_shift_erasing = event.pressed
+			if _shift_erasing:
+				# This is the release of a Shift-started stroke.  Do not inspect the
+				# modifier here: the user may release Shift before the mouse button.
+				if not event.pressed:
+					_shift_erasing = false
+				_orbiting = false
+				return
+			if current_mode == EditMode.FRAME and event.pressed and event.shift_pressed:
+				_shift_erasing = true
+				_orbiting = false
 				if event.pressed:
 					_last_paint_cell = cursor_cell
 					_erase_hovered_block_or_cell()
