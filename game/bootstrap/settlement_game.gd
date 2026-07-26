@@ -485,7 +485,10 @@ func _ready() -> void:
 	workplace_controller = SettlementWorkplaceController.new(self)
 	simulation_tick_controller = SettlementSimulationTickController.new(self)
 	logistics_controller = SettlementLogisticsController.new(self)
-	world_navigation_controller = SettlementWorldNavigationController.new(self, _world_navigation_runtime_port())
+	world_navigation_controller = SettlementWorldNavigationController.new(
+		_world_navigation_runtime_port(),
+		_world_navigation_presentation_port()
+	)
 	ui_manager.setup(self)
 	ui_manager.bind_delegate_events(SettlementUICallbacks.new(self))
 	SettlementBootstrapper.new().run(self)
@@ -511,6 +514,28 @@ func _world_navigation_runtime_port() -> WorldNavigationRuntimePort:
 		func(cell: Vector2i) -> void: terrain_blocked_cells.erase(cell),
 		NAVIGATION_CLEARANCE_MARGIN,
 		CELL_SIZE
+	)
+
+
+func _world_navigation_presentation_port() -> WorldNavigationPresentationPort:
+	return WorldNavigationPresentationPort.new(
+		func() -> Camera3D: return camera,
+		func() -> TrailFieldService: return trail_field,
+		func() -> MapDocument: return launch_config.map_document,
+		func() -> WorldSetup: return world_setup as WorldSetup,
+		func(next_world_setup: WorldSetup) -> void: world_setup = next_world_setup,
+		func(node: Node) -> void: add_child(node),
+		func(next_world_setup: WorldSetup) -> void: next_world_setup.build(self),
+		func() -> void: simulation_tick_controller.update_daylight(),
+		func(position: Vector3) -> void: build_controller.move_selection(position),
+		func() -> TerritoryBase: return get_node_or_null("WorldTerritory") as TerritoryBase,
+		func() -> TrailTextureRenderer: return trail_texture_renderer,
+		func() -> float: return runtime_seconds,
+		func() -> bool: return settlement.era == SettlementState.Era.TENT,
+		func() -> bool: return settlement.road_walking_order_enabled,
+		func() -> RefCounted: return village_territory_service.territory(),
+		CELL_SIZE,
+		board_cells
 	)
 
 

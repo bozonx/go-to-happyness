@@ -7,58 +7,71 @@ const WorldSetupScene = preload("res://game/features/world/presentation/world_se
 ## tree felling, trail overlay, and boundary markers.
 ## Extracted from SettlementGame to reduce its method count.
 
-var game: SettlementGame
 var navigation_runtime: WorldNavigationRuntimePort
+var presentation_runtime: WorldNavigationPresentationPort
 
 ## Kept alive for the session: it owns the published terrain field and, once the
 ## game gains terrain editing, the subscription that keeps it current.
 var terrain_navigation_publisher := TerrainNavigationPublisher.new()
 
 
-func _init(p_game: SettlementGame, p_navigation_runtime: WorldNavigationRuntimePort) -> void:
-	game = p_game
+func _init(p_navigation_runtime: WorldNavigationRuntimePort, p_presentation_runtime: WorldNavigationPresentationPort) -> void:
 	navigation_runtime = p_navigation_runtime
+	presentation_runtime = p_presentation_runtime
 
 
 func create_world() -> void:
 	# CameraController is a declared child of settlement_game.tscn; only the world
 	# itself is built here, because its construction needs the launched map.
-	game.world_setup = WorldSetupScene.instantiate() as WorldSetup
-	game.world_setup.setup(game.camera, game.CELL_SIZE, game.board_cells, game.trail_field, game.launch_config.map_document)
-	game.add_child(game.world_setup)
-	game.world_setup.build(game)
-	game.simulation_tick_controller.update_daylight()
+	var world_setup := WorldSetupScene.instantiate() as WorldSetup
+	world_setup.setup(
+		presentation_runtime.camera_getter.call(),
+		presentation_runtime.cell_size,
+		presentation_runtime.board_cells,
+		presentation_runtime.trail_field_getter.call(),
+		presentation_runtime.map_document_getter.call()
+	)
+	presentation_runtime.world_setup_setter.call(world_setup)
+	presentation_runtime.add_to_scene.call(world_setup)
+	presentation_runtime.build_world_setup.call(world_setup)
+	presentation_runtime.update_daylight.call()
 	publish_terrain_navigation()
 	refresh_navigation_grid()
-	game.build_controller.move_selection(Vector3.ZERO)
+	presentation_runtime.move_selection.call(Vector3.ZERO)
 
 
 func add_landscape_object(node: Node) -> void:
-	var territory := game.get_node_or_null("WorldTerritory") as TerritoryBase
+	var territory: TerritoryBase = presentation_runtime.territory_getter.call()
 	if territory != null:
 		territory.add_landscape_object(node)
 	else:
-		game.add_child(node)
+		presentation_runtime.add_to_scene.call(node)
 
 
 func update_trail_overlay() -> void:
-	if game.world_setup.trail_overlay_material == null or game.trail_field == null:
+	var world_setup: WorldSetup = presentation_runtime.world_setup_getter.call()
+	var trail_field: TrailFieldService = presentation_runtime.trail_field_getter.call()
+	if world_setup == null or world_setup.trail_overlay_material == null or trail_field == null:
 		return
-	if game.trail_texture_renderer != null:
-		game.world_setup.trail_overlay_material.set_shader_parameter("trail_map", game.trail_texture_renderer.flush(game.trail_field, game.runtime_seconds))
+	var trail_renderer: TrailTextureRenderer = presentation_runtime.trail_renderer_getter.call()
+	if trail_renderer != null:
+		world_setup.trail_overlay_material.set_shader_parameter("trail_map", trail_renderer.flush(trail_field, presentation_runtime.runtime_seconds_getter.call()))
 
 
 func record_trail_movement(citizen_id: int, position_on_board: Vector3) -> void:
-	if game.settlement.era != SettlementState.Era.TENT or game.trail_field == null:
+	var trail_field: TrailFieldService = presentation_runtime.trail_field_getter.call()
+	if not presentation_runtime.is_tent_era.call() or trail_field == null:
 		return
-	game.trail_field.record_walker_position(citizen_id, position_on_board, game.settlement.road_walking_order_enabled)
+	trail_field.record_walker_position(citizen_id, position_on_board, presentation_runtime.road_walking_enabled.call())
 
 
 ## Hands the shape of the ground to routing (grid_terrain_system.md §10). Must run
 ## before the first obstacle publication: the connectivity flood fill built there
 ## is only correct once the grid knows which edges are cliffs.
 func publish_terrain_navigation() -> void:
-	if game.nav_grid == null or game.world_setup == null:
+	var nav_grid: NavGrid = navigation_runtime.nav_grid_getter.call()
+	var world_setup: WorldSetup = presentation_runtime.world_setup_getter.call()
+	if nav_grid == null or world_setup == null:
 		return
 	# `configure` sizes the nav grid off the terrain, so the two cannot disagree
 	# about cell size or board extent — a mismatch neither side could detect.
@@ -66,7 +79,7 @@ func publish_terrain_navigation() -> void:
 	# (§9.7), and publishing the two separately would leave a window in which a
 	# route could be planned across a lake.
 	terrain_navigation_publisher.configure(
-		game.world_setup.terrain_grid, game.nav_grid, null, game.world_setup.water_grid,
+		world_setup.terrain_grid, nav_grid, null, world_setup.water_grid,
 	)
 
 
@@ -157,8 +170,11 @@ func apply_tree_felled_visual(cell: Vector2i, tree: Node3D) -> void:
 
 
 func refresh_boundary_markers() -> void:
-	var territory: RefCounted = game.village_territory_service.territory()
-	if game.world_setup.village_boundary_markers != null:
-		game.world_setup.village_boundary_markers.refresh(territory)
-	if game.world_setup.village_territory_overlay != null:
-		game.world_setup.village_territory_overlay.refresh(territory)
+	var world_setup: WorldSetup = presentation_runtime.world_setup_getter.call()
+	if world_setup == null:
+		return
+	var territory: RefCounted = presentation_runtime.village_territory_getter.call()
+	if world_setup.village_boundary_markers != null:
+		world_setup.village_boundary_markers.refresh(territory)
+	if world_setup.village_territory_overlay != null:
+		world_setup.village_territory_overlay.refresh(territory)
