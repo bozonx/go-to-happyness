@@ -14,11 +14,11 @@ func _init() -> void:
 	# --- Instance A: mutate and save ---
 	var sim_a := await SimHelper.setup_simulation(self)
 
-	var felled_cell: Vector2i = sim_a._cell_from_position(sim_a.tree_positions[0])
-	sim_a._fell_tree_at(sim_a.tree_positions[0])
+	var felled_cell: Vector2i = sim_a.cell_from_position(sim_a.tree_positions[0])
+	sim_a.fell_tree_at(sim_a.tree_positions[0])
 	assert(sim_a.world_resource_state.tree_at(felled_cell).felled, "tree should be felled in A")
 
-	var depleted_cell: Vector2i = sim_a._cell_from_position(sim_a.tree_positions[1])
+	var depleted_cell: Vector2i = sim_a.cell_from_position(sim_a.tree_positions[1])
 	var depleted_tree: Variant = sim_a.world_resource_state.tree_at(depleted_cell)
 	depleted_tree.initial_branches = 8
 	depleted_tree.remaining_branches = 3

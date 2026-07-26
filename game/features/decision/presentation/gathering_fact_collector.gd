@@ -125,7 +125,7 @@ func _daily_gathering_targets_for(ctx: FacadeContext, actor: Citizen, role: Stri
 	match role:
 		"gather_branches":
 			for tree_position: Vector3 in ctx.simulation.tree_positions:
-				var tree_cell: Vector2i = ctx.simulation._cell_from_position(tree_position)
+				var tree_cell: Vector2i = ctx.simulation.cell_from_position(tree_position)
 				var tree := ctx.simulation.tree_nodes.get(tree_cell) as Node3D
 				if not is_instance_valid(tree) or bool(tree.get_meta("felled", false)) or int(tree.get_meta("remaining_branches", 0)) <= 0:
 					continue
@@ -184,9 +184,9 @@ func _cleaning_targets(ctx: FacadeContext, actor: Citizen) -> Array[Dictionary]:
 		return targets
 	for pile: ResourcePileScript in ctx.simulation.resource_piles:
 		var pile_node := pile.node
-		if not is_instance_valid(pile_node) or not ctx.simulation._is_route_reachable(actor.global_position, pile_node.global_position):
+		if not is_instance_valid(pile_node) or not ctx.simulation.is_route_reachable(actor.global_position, pile_node.global_position):
 			continue
-		var pile_cell: Vector2i = ctx.simulation._cell_from_position(pile_node.global_position)
+		var pile_cell: Vector2i = ctx.simulation.cell_from_position(pile_node.global_position)
 		for resource_type in pile.resources:
 			var available := int(pile.resources[resource_type]) - int(pile.reserved.get(resource_type, 0))
 			if available <= 0 or not ctx.simulation.settlement.can_make_room_for(str(resource_type), 1, ctx.simulation.warehouse_positions.size()):
@@ -199,8 +199,8 @@ func _cleaning_targets(ctx: FacadeContext, actor: Citizen) -> Array[Dictionary]:
 				&"access": pile_node.global_position,
 			})
 	# The starter backpack is a non-decaying pile that couriers can empty into warehouses.
-	if ctx.simulation.backpack_position != Vector3.ZERO and ctx.simulation._is_route_reachable(actor.global_position, ctx.simulation.backpack_position):
-		var backpack_cell: Vector2i = ctx.simulation._cell_from_position(ctx.simulation.backpack_position)
+	if ctx.simulation.backpack_position != Vector3.ZERO and ctx.simulation.is_route_reachable(actor.global_position, ctx.simulation.backpack_position):
+		var backpack_cell: Vector2i = ctx.simulation.cell_from_position(ctx.simulation.backpack_position)
 		var backpack: Dictionary = ctx.backpack_resources()
 		for resource_type in backpack:
 			var available := int(backpack.get(resource_type, 0))

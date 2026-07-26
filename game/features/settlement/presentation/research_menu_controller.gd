@@ -66,25 +66,25 @@ func start_research(tech_id: String) -> void:
 		return
 	var tech: Dictionary = BuildingCatalog.RESEARCH_TECHS[tech_id]
 	if simulation.settlement.active_research_tech_id != "":
-		simulation._update_interface("Already researching another technology.")
+		simulation.update_interface("Already researching another technology.")
 		return
 	if not is_instance_valid(simulation.campfire_node) or not simulation.fire_management_service.is_fire_lit(simulation.campfire_node):
-		simulation._update_interface("Research requires an active Campfire.")
+		simulation.update_interface("Research requires an active Campfire.")
 		return
 
 	var researcher := get_available_researcher(tech.required_skill)
 	if researcher == null:
-		simulation._update_interface("Assign a researcher to the civic post or occupy it in first person.")
+		simulation.update_interface("Assign a researcher to the civic post or occupy it in first person.")
 		return
 
 	if simulation.building_research_service.start_block_reason(tech_id, true) != BuildingResearchServiceScript.REASON_OK:
-		simulation._update_interface("Research prerequisites or resources are missing.")
+		simulation.update_interface("Research prerequisites or resources are missing.")
 		return
 	if not simulation.building_research_service.start_research(tech_id, researcher.ai_id):
-		simulation._update_interface("Research prerequisites or resources are missing.")
+		simulation.update_interface("Research prerequisites or resources are missing.")
 		return
 
-	simulation._update_interface("Research started: %s. %s is studying at the Campfire." % [tech.name, researcher.role_label()])
+	simulation.update_interface("Research started: %s. %s is studying at the Campfire." % [tech.name, researcher.role_label()])
 	refresh_research_menu()
 	if simulation.campfire_menu_controller != null:
 		simulation.campfire_menu_controller.refresh_campfire_menu()

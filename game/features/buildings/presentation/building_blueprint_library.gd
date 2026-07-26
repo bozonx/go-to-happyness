@@ -1,3 +1,4 @@
+class_name BuildingBlueprintLibrary
 extends RefCounted
 
 ## Resolves an in-game gameplay role to the active visual block blueprint

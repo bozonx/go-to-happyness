@@ -78,13 +78,13 @@ func first_person_action_hint() -> String:
 				return ""
 			if not simulation.hero_pocket_service.pocket_has_room():
 				return S.POCKET_FULL
-			return S.F_TAKE_FROM_PILE % simulation._resource_display_name(available[0]).to_lower()
+			return S.F_TAKE_FROM_PILE % simulation.resource_display_name(available[0]).to_lower()
 		"warehouse":
 			var wh_index: int = int(target.get("warehouse_index", -1))
 			if wh_index < 0:
 				wh_index = simulation.storage_routing_service.warehouse_index_for_building(target.node)
 			if wh_index < 0:
-				wh_index = simulation._nearby_warehouse_index()
+				wh_index = simulation.nearby_warehouse_index()
 			if simulation.hero_pocket_service.pocket_total() > 0:
 				var primary_res: String = simulation.hero_pocket_service.primary_pocket_resource()
 				if wh_index >= 0 and not simulation.settlement.warehouse_accepts(wh_index, primary_res):
@@ -100,7 +100,7 @@ func first_person_action_hint() -> String:
 			return S.WAREHOUSE
 		"sawmill":
 			var sawmill_pos: Vector3 = target.position
-			var sawmill_stock = simulation._sawmill_stock(sawmill_pos)
+			var sawmill_stock = simulation.sawmill_stock(sawmill_pos)
 			if simulation.hero_pocket_service.pocket_amount(ResourceIds.WOOD) if simulation.hero_pocket_service != null else 0 > 0 or simulation._pocket_amount(ResourceIds.LOGS) > 0:
 				var wood_count: int = simulation.hero_pocket_service.pocket_amount(ResourceIds.WOOD) if simulation.hero_pocket_service != null else 0 + simulation._pocket_amount(ResourceIds.LOGS)
 				return S.F_DEPOSIT_WOOD_SAWMILL % wood_count
@@ -136,7 +136,7 @@ func first_person_action_hint() -> String:
 				return S.F_GATHER_BRANCHES % [rem, init]
 			return S.F_CHOP_TREE
 		"grass":
-			var grass_info: Dictionary = simulation._targeted_grass_info(target)
+			var grass_info: Dictionary = simulation.targeted_grass_info(target)
 			if grass_info.is_empty():
 				return S.F_GATHER_GRASS
 			return S.F_GATHER_GRASS_COUNT % [int(grass_info.remaining), int(grass_info.initial)]
@@ -161,5 +161,5 @@ func first_person_action_hint() -> String:
 				return ""
 			var status: Array[String] = citizen.status_effect_labels()
 			var status_text: String = ", ".join(status) if not status.is_empty() else "OK"
-			return "%s | %s | %s" % [citizen.role_label(), simulation._citizen_state_name(citizen.state), status_text]
+			return "%s | %s | %s" % [citizen.role_label(), simulation.citizen_state_name(citizen.state), status_text]
 	return ""

@@ -1,47 +1,9 @@
 class_name SettlementGame
 extends Node3D
 
-const UIManagerScene = preload("res://game/features/ui/presentation/ui_manager.tscn")
-const GameLaunchConfigScript = preload("res://game/features/settlement/domain/game_launch_config.gd")
-const TentEraSurvivalRulesScript = preload("res://game/features/settlement/domain/tent_era_survival_rules.gd")
-const WaterCollectorRecordScript = preload("res://game/features/logistics/domain/water_collector_record.gd")
-const GrassSourceRecordScript = preload("res://game/features/production/domain/grass_source_record.gd")
-const HouseLightRecordScript = preload("res://game/features/buildings/domain/house_light_record.gd")
-const ConstructionPriorityServiceScript = preload("res://game/features/buildings/application/construction_priority_service.gd")
 const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
-const SaveDataScript = preload("res://game/features/save_load/domain/save_data.gd")
-const SaveGameServiceScript = preload("res://game/features/save_load/application/save_game_service.gd")
 
-const WeatherStateScript = preload("res://game/features/simulation/domain/weather_state.gd")
-const ExcavationServiceScript = preload("res://game/features/production/application/excavation_service.gd")
-const FactoryServiceScript = preload("res://game/features/production/application/factory_service.gd")
-const ResourcePileScript = preload("res://game/features/logistics/domain/resource_pile.gd")
-const WorldResourceStateScript = preload("res://game/features/world/domain/world_resource_state.gd")
 const S = preload("res://game/features/ui/domain/game_strings.gd")
-const BuildingSpatialRegistryScript = preload("res://game/features/buildings/application/building_spatial_registry.gd")
-const SettlementUIAttacherScript = preload("res://game/features/ui/presentation/settlement_ui_attacher.gd")
-const SettlementBootstrapperScript = preload("res://game/bootstrap/settlement_bootstrapper.gd")
-const SettlementSaveLoaderScript = preload("res://game/bootstrap/settlement_save_loader.gd")
-const SettlementUICallbacksScript = preload("res://game/bootstrap/settlement_ui_callbacks.gd")
-const SettlementResearchControllerScript = preload("res://game/bootstrap/settlement_research_controller.gd")
-const SettlementCitizenFactoryScript = preload("res://game/bootstrap/settlement_citizen_factory.gd")
-const SettlementBuildingVisualsScript = preload("res://game/bootstrap/settlement_building_visuals.gd")
-const SettlementSimulationHandlersScript = preload("res://game/bootstrap/settlement_simulation_handlers.gd")
-const SettlementServicePocketManagerScript = preload("res://game/bootstrap/settlement_service_pocket_manager.gd")
-const SettlementOutsideWorkControllerScript = preload("res://game/bootstrap/settlement_outside_work_controller.gd")
-const SettlementBuildingManagementScript = preload("res://game/bootstrap/settlement_building_management.gd")
-const SettlementBuildStateScript = preload("res://game/bootstrap/settlement_build_state.gd")
-const SettlementHeroStateScript = preload("res://game/bootstrap/settlement_hero_state.gd")
-const SettlementCameraStateScript = preload("res://game/bootstrap/settlement_camera_state.gd")
-const SettlementWorldStateScript = preload("res://game/bootstrap/settlement_world_state.gd")
-const SettlementInputControllerScript = preload("res://game/bootstrap/settlement_input_controller.gd")
-const SettlementBuildControllerScript = preload("res://game/bootstrap/settlement_build_controller.gd")
-const SettlementHeroInteractionControllerScript = preload("res://game/bootstrap/settlement_hero_interaction_controller.gd")
-const SettlementConstructionControllerScript = preload("res://game/bootstrap/settlement_construction_controller.gd")
-const SettlementWorkplaceControllerScript = preload("res://game/bootstrap/settlement_workplace_controller.gd")
-const SettlementSimulationTickControllerScript = preload("res://game/bootstrap/settlement_simulation_tick_controller.gd")
-const SettlementLogisticsControllerScript = preload("res://game/bootstrap/settlement_logistics_controller.gd")
-const SettlementWorldNavigationControllerScript = preload("res://game/bootstrap/settlement_world_navigation_controller.gd")
 
 
 # Fallback board size for a session started without a map. Since maps arrived
@@ -68,8 +30,8 @@ const POCKET_CAPACITY := 8
 const SAWMILL_PROCESS_DURATION := 4.0
 
 var settlement := SettlementState.new()
-var world_resource_state := WorldResourceStateScript.new()
-var launch_config: GameLaunchConfigScript
+var world_resource_state := WorldResourceState.new()
+var launch_config: GameLaunchConfig
 ## Board size actually in play, from the launched map when there is one. Read it
 ## rather than `BOARD_CELLS`: the constant is only the fallback.
 var board_cells := BOARD_CELLS
@@ -93,12 +55,12 @@ const OFFICIAL_WORKPLACE_TYPES: Array[String] = BuildingTypes.CIVIC_TYPES
 const OFFICER_POST_RADIUS := 3.5
 # Maximum branches a fire source holds before couriers stop delivering.
 const FIRE_SUPPLY_TARGET := 4
-var _worker_poll_timer := 0.0
-var _registration_queue_counter := 0
-var _last_unstaffed_warning_time := -1000.0
+var worker_poll_timer := 0.0
+var registration_queue_counter := 0
+var last_unstaffed_warning_time := -1000.0
 var runtime_seconds := 0.0
 var random := RandomNumberGenerator.new()
-var build_state := SettlementBuildStateScript.new()
+var build_state := SettlementBuildState.new()
 var selected_cell: Vector2i:
 	get: return build_state.selected_cell
 	set(v): build_state.selected_cell = v
@@ -112,7 +74,7 @@ var build_rotation_quarters: int:
 	get: return build_state.build_rotation_quarters
 	set(v): build_state.build_rotation_quarters = v
 var building_registry := BuildingRegistry.new()
-var world_state := SettlementWorldStateScript.new()
+var world_state := SettlementWorldState.new()
 var tree_cells: Dictionary[Vector2i, bool]:
 	get: return world_state.tree_cells
 var terrain_blocked_cells: Dictionary[Vector2i, bool]:
@@ -121,11 +83,9 @@ var terrain_blocked_cells: Dictionary[Vector2i, bool]:
 var navigation_blocked_cells: Dictionary[Vector2i, bool]:
 	get: return world_state.navigation_blocked_cells
 	set(v): world_state.navigation_blocked_cells = v
-var building_spatial_registry := BuildingSpatialRegistryScript.new()
-# Keep this preload-backed dependency explicit.  Scene-test execution does not
-# populate Godot's editor-only global class cache before parsing this script.
-var simulation_event_dispatcher: RefCounted
-var ui_attacher := SettlementUIAttacherScript.new()
+var building_spatial_registry := BuildingSpatialRegistry.new()
+var simulation_event_dispatcher: SimulationEventDispatcher
+var ui_attacher := SettlementUIAttacher.new()
 
 var warehouse_positions: Array[Vector3]:
 	get: return building_spatial_registry.warehouse_positions
@@ -174,7 +134,7 @@ var outside_workers: Dictionary:
 	get: return world_state.outside_workers
 var last_citizen_positions: Dictionary:
 	get: return world_state.last_citizen_positions
-var resource_piles: Array[ResourcePileScript]:
+var resource_piles: Array[ResourcePile]:
 	get: return world_state.resource_piles
 var backpack_node: Node3D:
 	get: return world_state.backpack_node
@@ -192,13 +152,15 @@ var gather_progress_labels: Dictionary:
 var citizens: Array[Citizen] = []
 var camera: Camera3D:
 	get: return camera_controller.camera if camera_controller != null else null
-var camera_controller: CameraController
+## Declared in settlement_game.tscn, not built here: it is a fixed, single-instance
+## part of the main scene, so the scene owns it (architecture rule 7).
+@onready var camera_controller: CameraController = $CameraController
 var world_setup: Node
 var selection_marker: MeshInstance3D:
 	get: return world_setup.selection_marker if world_setup != null else null
 var fireflies: Array[FirefliesEffect]:
 	get: return world_setup.fireflies if world_setup != null else []
-var weather_state := WeatherStateScript.new()
+var weather_state := WeatherState.new()
 var ambient_spawner: AmbientSpawner
 var camera_target: Vector3:
 	get: return camera_controller.camera_target if camera_controller != null else Vector3.ZERO
@@ -214,14 +176,14 @@ var camera_pitch: float:
 	set(val): if camera_controller != null: camera_controller.camera_pitch = val
 var current_day: int:
 	get: return day_cycle.current_day
-var tent_weather: int = TentEraSurvivalRulesScript.Weather.WARMING
+var tent_weather: int = TentEraSurvivalRules.Weather.WARMING
 var selected_builder: Citizen:
 	get: return build_state.selected_builder
 	set(v): build_state.selected_builder = v
 var selected_building: Node3D:
 	get: return build_state.selected_building
 	set(v): build_state.selected_building = v
-var camera_state := SettlementCameraStateScript.new()
+var camera_state := SettlementCameraState.new()
 var is_panning_camera: bool:
 	get: return camera_state.is_panning_camera
 	set(v): camera_state.is_panning_camera = v
@@ -237,7 +199,7 @@ var demolition_sites: Array[DemolitionSite]:
 	get: return demolition.sites if demolition != null else []
 var completed_house_count := 0
 var player_controller: PlayerController
-var hero_state := SettlementHeroStateScript.new()
+var hero_state := SettlementHeroState.new()
 var hero_citizen: Citizen:
 	get: return hero_state.hero_citizen
 	set(v): hero_state.hero_citizen = v
@@ -282,14 +244,16 @@ var player_work_target: Node3D:
 	get: return player_controller.player_work_target if player_controller != null else null
 	set(val):
 		if player_controller != null: player_controller.player_work_target = val
-var _player_toilet_notified: bool:
+var player_toilet_notified: bool:
 	get: return player_controller.player_toilet_notified if player_controller != null else false
 	set(val):
 		if player_controller != null: player_controller.player_toilet_notified = val
 var pocket: Dictionary:
 	get: return hero_pocket_service.pocket if hero_pocket_service != null else {}
 	set(val): if hero_pocket_service != null: hero_pocket_service.pocket = val
-var ui_manager: UIManager
+## Declared in settlement_game.tscn, not built here: it is a fixed, single-instance
+## part of the main scene, so the scene owns it (architecture rule 7).
+@onready var ui_manager: UIManager = $UIManager
 
 var pocket_menu_open: bool:
 	get: return hero_state.pocket_menu_open
@@ -306,8 +270,8 @@ var exhausted_dig_cells: Dictionary:
 var dig_mode: bool:
 	get: return build_state.dig_mode
 	set(v): build_state.dig_mode = v
-var excavation_service: ExcavationServiceScript
-var factory_service: FactoryServiceScript
+var excavation_service: ExcavationService
+var factory_service: FactoryService
 var selected_house: Node3D
 var tent: Node3D
 var entrance_stone: Node3D
@@ -325,8 +289,8 @@ var pending_canteen_delivery := false
 var pending_canteen_carrier: Citizen
 var pending_canteen_delivery_amount := 0
 var nav_grid: NavGrid
-var road_network_service: RefCounted
-var navigation_obstacle_publisher: RefCounted
+var road_network_service: RoadNetworkService
+var navigation_obstacle_publisher: NavigationObstaclePublisher
 var service_pockets: Array[Dictionary] = []
 var selected_school: Node3D
 var school_developed_professions: Dictionary:
@@ -338,7 +302,7 @@ var selected_market: Node3D = null
 var selected_warehouse: Node3D = null
 var event_service: EventService
 var survival_busy_until: Dictionary = {}
-var house_lights: Array[HouseLightRecordScript] = []
+var house_lights: Array[HouseLightRecord] = []
 var house_light_update_minute := -1
 var entrance_lights: Array[OmniLight3D] = []
 var build_category: String:
@@ -357,7 +321,7 @@ var skip_night_button: Button:
 	get: return ui_manager.time_controls_panel.skip_night_button if ui_manager.time_controls_panel != null else null
 var start_workday_button: Button:
 	get: return ui_manager.time_controls_panel.start_workday_button if ui_manager.time_controls_panel != null else null
-var water_collectors: Array[WaterCollectorRecordScript] = []
+var water_collectors: Array[WaterCollectorRecord] = []
 var pending_trades: Dictionary = {} # worker ai_id -> TradeOrder
 var queued_trades: Array = []
 var building_status_indicators: Array[Label3D] = []
@@ -368,9 +332,9 @@ var citizen_needs_service: CitizenNeedsService
 var citizen_living_status_service: CitizenLivingStatusService
 ## Monotonic source of stable citizen AI identity. Persist it alongside the roster
 ## once save/load is introduced so reloaded games issue non-colliding ids.
-var _next_ai_citizen_id := 1
+var next_ai_citizen_id := 1
 var route_service: GridRouteService
-var navigation_facade: RefCounted
+var navigation_facade: NavigationFacade
 var navigation_bridge: NavigationBridge
 var building_queue_service: BuildingQueueService
 var citizen_lifecycle_service: CitizenLifecycleService
@@ -388,26 +352,26 @@ var storage_routing_service: StorageRoutingService
 var courier_dispatcher: CourierDispatcher
 var courier_task_publisher: CourierTaskPublisher
 var courier_task_service: CourierTaskService
-var campfire_menu_controller: RefCounted:
+var campfire_menu_controller: CampfireMenuController:
 	get: return ui_attacher.campfire_menu_controller
-var workforce_menu_controller: RefCounted:
+var workforce_menu_controller: WorkforceMenuController:
 	get: return ui_attacher.workforce_menu_controller
-var research_menu_controller: RefCounted:
+var research_menu_controller: ResearchMenuController:
 	get: return ui_attacher.research_menu_controller
-var school_menu_controller: RefCounted:
+var school_menu_controller: SchoolMenuController:
 	get: return ui_attacher.school_menu_controller
-var entrance_menu_controller: RefCounted:
+var entrance_menu_controller: EntranceMenuController:
 	get: return ui_attacher.entrance_menu_controller
-var house_menu_controller: RefCounted:
+var house_menu_controller: HouseMenuController:
 	get: return ui_attacher.house_menu_controller
-var pocket_take_menu_controller: RefCounted:
+var pocket_take_menu_controller: PocketTakeMenuController:
 	get: return ui_attacher.pocket_take_menu_controller
-var market_menu_controller: RefCounted:
+var market_menu_controller: MarketMenuController:
 	get: return ui_attacher.market_menu_controller
-var warehouse_menu_controller: RefCounted:
+var warehouse_menu_controller: WarehouseMenuController:
 	get: return ui_attacher.warehouse_menu_controller
 var warehouse_fill_label_controller: WarehouseFillLabelController
-var building_menu_controller: RefCounted:
+var building_menu_controller: BuildingMenuController:
 	get: return ui_attacher.building_menu_controller
 var building_placement_controller: BuildingPlacementController
 
@@ -422,8 +386,8 @@ var fire_management_service: FireManagementService
 var fixture_service: FixtureService
 var building_maintenance_service: BuildingMaintenanceService
 var building_lifecycle_service: BuildingLifecycleService
-var building_zone_service: RefCounted
-var construction_priority_service: ConstructionPriorityServiceScript
+var building_zone_service: BuildingZoneService
+var construction_priority_service: ConstructionPriorityService
 var settlement_survival_service: SettlementSurvivalService
 var settlement_daily_rules_service: SettlementDailyRulesService
 var territory_service: TerritoryService
@@ -435,58 +399,56 @@ var hero_pocket_service: HeroPocketService
 var hero_interaction_service: HeroInteractionService
 var workplace_labor_service: WorkplaceLaborService
 var building_visuals_service: BuildingVisualsService
-var actuator_bridge: RefCounted
+var actuator_bridge: SettlementActuatorBridge
 var survival_event_controller: SurvivalEventController
-var research_controller: RefCounted
-var citizen_factory: RefCounted
-var building_visuals: RefCounted
-var _simulation_handlers: RefCounted
-var service_pocket_manager: RefCounted
-var outside_work_controller: RefCounted
-var building_management: RefCounted
-var input_controller: RefCounted
-var build_controller: RefCounted
-var hero_interaction_controller: RefCounted
-var construction_controller: RefCounted
-var workplace_controller: RefCounted
-var simulation_tick_controller: RefCounted
-var logistics_controller: RefCounted
-var world_navigation_controller: RefCounted
+var research_controller: SettlementResearchController
+var citizen_factory: SettlementCitizenFactory
+var building_visuals: SettlementBuildingVisuals
+var simulation_handlers: SettlementSimulationHandlers
+var service_pocket_manager: SettlementServicePocketManager
+var outside_work_controller: SettlementOutsideWorkController
+var building_management: SettlementBuildingManagement
+var input_controller: SettlementInputController
+var build_controller: SettlementBuildController
+var hero_interaction_controller: SettlementHeroInteractionController
+var construction_controller: SettlementConstructionController
+var workplace_controller: SettlementWorkplaceController
+var simulation_tick_controller: SettlementSimulationTickController
+var logistics_controller: SettlementLogisticsController
+var world_navigation_controller: SettlementWorldNavigationController
 
 
 func _ready() -> void:
-	ui_manager = UIManagerScene.instantiate() as UIManager
-	add_child(ui_manager)
 	var launch_mgr: Node = get_node_or_null("/root/GameLaunchManager")
-	var active_config: GameLaunchConfigScript = null
+	var active_config: GameLaunchConfig = null
 	if launch_mgr != null:
-		active_config = launch_mgr.get("active_launch_config") as GameLaunchConfigScript
+		active_config = launch_mgr.get("active_launch_config") as GameLaunchConfig
 	if active_config == null:
-		active_config = GameLaunchConfigScript.for_tent_era()
+		active_config = GameLaunchConfig.for_tent_era()
 	launch_config = active_config
 	board_cells = launch_config.board_cells(BOARD_CELLS)
 
-	research_controller = SettlementResearchControllerScript.new(self)
-	citizen_factory = SettlementCitizenFactoryScript.new(self)
-	building_visuals = SettlementBuildingVisualsScript.new(self)
-	_simulation_handlers = SettlementSimulationHandlersScript.new(self)
-	service_pocket_manager = SettlementServicePocketManagerScript.new(self)
-	outside_work_controller = SettlementOutsideWorkControllerScript.new(self)
-	building_management = SettlementBuildingManagementScript.new(self)
-	input_controller = SettlementInputControllerScript.new(self)
-	build_controller = SettlementBuildControllerScript.new(self)
-	hero_interaction_controller = SettlementHeroInteractionControllerScript.new(self)
-	construction_controller = SettlementConstructionControllerScript.new(self)
-	workplace_controller = SettlementWorkplaceControllerScript.new(self)
-	simulation_tick_controller = SettlementSimulationTickControllerScript.new(self)
-	logistics_controller = SettlementLogisticsControllerScript.new(self)
-	world_navigation_controller = SettlementWorldNavigationControllerScript.new(self)
+	research_controller = SettlementResearchController.new(self)
+	citizen_factory = SettlementCitizenFactory.new(self)
+	building_visuals = SettlementBuildingVisuals.new(self)
+	simulation_handlers = SettlementSimulationHandlers.new(self)
+	service_pocket_manager = SettlementServicePocketManager.new(self)
+	outside_work_controller = SettlementOutsideWorkController.new(self)
+	building_management = SettlementBuildingManagement.new(self)
+	input_controller = SettlementInputController.new(self)
+	build_controller = SettlementBuildController.new(self)
+	hero_interaction_controller = SettlementHeroInteractionController.new(self)
+	construction_controller = SettlementConstructionController.new(self)
+	workplace_controller = SettlementWorkplaceController.new(self)
+	simulation_tick_controller = SettlementSimulationTickController.new(self)
+	logistics_controller = SettlementLogisticsController.new(self)
+	world_navigation_controller = SettlementWorldNavigationController.new(self)
 	ui_manager.setup(self)
-	ui_manager.bind_delegate_events(SettlementUICallbacksScript.new(self))
-	SettlementBootstrapperScript.new().run(self)
+	ui_manager.bind_delegate_events(SettlementUICallbacks.new(self))
+	SettlementBootstrapper.new().run(self)
 
 
-func _next_registration_ticket() -> int:
+func next_registration_ticket() -> int:
 	return citizen_registration_service.next_registration_ticket() if citizen_registration_service != null else 0
 
 
@@ -506,7 +468,7 @@ func _process(delta: float) -> void:
 			warehouse_fill_label_controller.update_warehouse_fill_labels()
 		if not build_mode.is_empty():
 			var viewport_center := get_viewport().get_visible_rect().size * 0.5
-			var terrain_point: Variant = _terrain_point_at_screen_position(viewport_center)
+			var terrain_point: Variant = terrain_point_at_screen_position(viewport_center)
 			if terrain_point != null:
 				build_controller.move_selection(terrain_point)
 				world_setup.selection_marker.visible = true
@@ -520,13 +482,13 @@ func _process(delta: float) -> void:
 	simulation_tick_controller.tick(delta)
 
 
-func _update_workers() -> void:
+func update_workers() -> void:
 	if building_zone_service != null:
 		building_zone_service.reconcile_assignments(citizens, building_registry.records())
 	simulation_tick_controller.check_unstaffed_employment_center()
 
 
-func _has_cook() -> bool:
+func has_cook() -> bool:
 	return workplace_labor_service.has_cook() if workplace_labor_service != null else false
 
 
@@ -534,19 +496,19 @@ func employment_center_position() -> Vector3:
 	return workplace_labor_service.employment_center_position() if workplace_labor_service != null else Vector3.INF
 
 
-func _employment_centre_building() -> Node3D:
+func employment_centre_building() -> Node3D:
 	return workplace_labor_service.employment_centre_building() if workplace_labor_service != null else null
 
 
-func _can_start_registration(citizen: Citizen) -> bool:
+func can_start_registration(citizen: Citizen) -> bool:
 	return citizen_registration_service.can_start_registration(citizen) if citizen_registration_service != null else false
 
 
-func _registration_duration() -> float:
+func registration_duration() -> float:
 	return citizen_registration_service.registration_duration() if citizen_registration_service != null else Citizen.EMPLOYMENT_PROCESS_DURATION
 
 
-func _on_employment_processing_finished(citizen: Citizen) -> void:
+func on_employment_processing_finished(citizen: Citizen) -> void:
 	if citizen_registration_service != null:
 		citizen_registration_service.on_employment_processing_finished(citizen)
 	else:
@@ -554,92 +516,92 @@ func _on_employment_processing_finished(citizen: Citizen) -> void:
 			citizen.state = Citizen.State.IDLE
 			return
 		citizen.finish_employment_processing()
-		_update_workers()
+		update_workers()
 
-func _publish_courier_tasks(dispatcher: RefCounted) -> void:
+func publish_courier_tasks(dispatcher: CourierDispatcher) -> void:
 	if courier_task_publisher != null:
 		courier_task_publisher.publish_courier_tasks(dispatcher)
 
 
-func _set_dig_mode(value: bool) -> void:
+func set_dig_mode(value: bool) -> void:
 	dig_mode = value
 
 
-func _set_build_mode(value: String) -> void:
+func set_build_mode(value: String) -> void:
 	build_mode = value
 
 
-func _sawmill_stock(position_on_board: Vector3) -> Dictionary:
+func sawmill_stock(position_on_board: Vector3) -> Dictionary:
 	return sawmills.stock_at(position_on_board, runtime_seconds)
 
-func _request_courier_dispatch() -> void:
-	if simulation_tick_controller.is_work_time() or _has_active_night_work_order():
+func request_courier_dispatch() -> void:
+	if simulation_tick_controller.is_work_time() or has_active_night_work_order():
 		if courier_dispatcher != null:
 			courier_dispatcher.dispatch()
 		if citizen_ai != null:
 			citizen_ai.request_decision_refresh()
 
 
-func _stored_resources() -> int:
+func stored_resources() -> int:
 	return storage_routing_service.stored_resources()
 
-func _warehouse_capacity() -> int:
+func warehouse_capacity() -> int:
 	return storage_routing_service.warehouse_capacity()
 
-func _cell_from_position(position_on_board: Vector3) -> Vector2i:
+func cell_from_position(position_on_board: Vector3) -> Vector2i:
 	return nav_grid.cell_from_position(position_on_board) if nav_grid != null else Vector2i(floori(position_on_board.x / CELL_SIZE), floori(position_on_board.z / CELL_SIZE))
 
-func _is_board_cell(cell: Vector2i) -> bool:
+func is_board_cell(cell: Vector2i) -> bool:
 	if nav_grid != null:
 		return nav_grid.is_board_cell(cell)
 	var half_cells := board_cells / 2
 	return cell.x >= -half_cells and cell.x < half_cells and cell.y >= -half_cells and cell.y < half_cells
 
-func _find_path_around_houses(from: Vector3, destination: Vector3, may_enter_destination_house: bool) -> RouteResult:
+func find_path_around_houses(from: Vector3, destination: Vector3, may_enter_destination_house: bool) -> RouteResult:
 	if navigation_bridge != null:
 		return navigation_bridge.find_path_around_houses(from, destination, may_enter_destination_house)
 	return RouteResult.unreachable(-1, -1, RouteResult.UnreachableReason.NO_GRID)
 
 
-func _find_recovery_path(from: Vector3, destination: Vector3, may_enter_destination_house: bool) -> RouteResult:
+func find_recovery_path(from: Vector3, destination: Vector3, may_enter_destination_house: bool) -> RouteResult:
 	return navigation_bridge.find_recovery_path(from, destination, may_enter_destination_house) if navigation_bridge != null else RouteResult.unreachable(-1, -1, RouteResult.UnreachableReason.NO_GRID)
 
 
-func _movement_speed_modifier_at(position_on_board: Vector3) -> float:
+func movement_speed_modifier_at(position_on_board: Vector3) -> float:
 	return navigation_facade.movement_speed_modifier_at(position_on_board) if navigation_facade != null else 1.0
 
 
-func _navigation_revision() -> int:
+func navigation_revision() -> int:
 	return navigation_facade.topology_revision() if navigation_facade != null else -1
 
 
-func _is_route_reachable(from: Vector3, destination: Vector3, may_enter_destination_house := false) -> bool:
+func is_route_reachable(from: Vector3, destination: Vector3, may_enter_destination_house := false) -> bool:
 	return navigation_bridge.is_route_reachable(from, destination, may_enter_destination_house) if navigation_bridge != null else false
 
 
-func _is_route_path_clear(from: Vector3, waypoints: Array[Vector3], may_enter_destination_house := false) -> bool:
+func is_route_path_clear(from: Vector3, waypoints: Array[Vector3], may_enter_destination_house := false) -> bool:
 	return nav_grid != null and nav_grid.is_waypoint_path_clear(from, waypoints, may_enter_destination_house)
 
-func _update_interface(message: String) -> void:
+func update_interface(message: String) -> void:
 	var lines: Array[String] = []
 	lines.append("Era: %s" % workplace_controller.era_name())
 	lines.append("Money: %d" % settlement.money)
 	var displayed_resources := settlement.era_resources()
 	for resource_type in displayed_resources:
-		lines.append("%s: %d" % [_resource_display_name(resource_type), settlement.amount(resource_type)])
+		lines.append("%s: %d" % [resource_display_name(resource_type), settlement.amount(resource_type)])
 	if settlement.uses_virtual_storage():
 		var backpack_units := 0.0
 		for resource_type in displayed_resources:
 			backpack_units += settlement.backpack_amount(resource_type) * settlement.storage_weight(resource_type)
 		lines.append("Backpack: %.1f u" % backpack_units)
 	else:
-		lines.append("Storage: %d/%d" % [_stored_resources(), _warehouse_capacity()])
+		lines.append("Storage: %d/%d" % [stored_resources(), warehouse_capacity()])
 	if not resource_piles.is_empty():
 		lines.append("Piles: %d" % resource_piles.size())
 	lines.append("Population: %d" % citizens.size())
 	lines.append("Wellbeing: %d" % settlement.wellbeing)
 	ui_manager.hud.update_resources("\n".join(lines))
-	_add_message(message)
+	add_message(message)
 	if is_first_person:
 		var build_hint := S.HUD_BUILD_HINT_FP if player_citizen == hero_citizen else ""
 		if not build_mode.is_empty():
@@ -650,7 +612,7 @@ func _update_interface(message: String) -> void:
 
 const ERA_CATEGORIES := ["tent", "earth", "clay", "wood", "stone", "brick"]
 
-func _resource_display_name(resource_type: String) -> String:
+func resource_display_name(resource_type: String) -> String:
 	match resource_type:
 		ResourceIds.WOOD: return "Timber"
 		_: return resource_type.capitalize()
@@ -658,7 +620,7 @@ func _resource_display_name(resource_type: String) -> String:
 
 # ---------- Message log system ------------------------------------------------
 
-func _add_message(text: String) -> void:
+func add_message(text: String) -> void:
 	if ui_manager.message_log_panel != null:
 		var timestamp := "[Day %d, %02d:%02d]" % [current_day, clock.hour(), clock.minute()]
 		ui_manager.message_log_panel.add_message(text, timestamp)
@@ -666,14 +628,14 @@ func _add_message(text: String) -> void:
 
 # ---------- End message log system --------------------------------------------
 
-func _create_world() -> void:
+func create_world() -> void:
 	world_navigation_controller.create_world()
 
 
 ## Presentation ownership boundary for naturally occurring world objects.
 ## Their mutable gameplay records remain registered with the relevant feature
 ## services; reparenting them here must not change routing or resource logic.
-func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void:
+func add_citizen(spawn_position: Vector3, primary_specialization := "") -> void:
 	citizen_factory.add_citizen(spawn_position, primary_specialization)
 
 
@@ -681,7 +643,7 @@ func _add_citizen(spawn_position: Vector3, primary_specialization := "") -> void
 ## citizen. The caller must already have added the node to the tree, set
 ## `simulation` and chosen the specialization. Shared by initial spawning and
 ## save restore so a new signal only needs to be registered in one place.
-func _player_use_toilet(toilet_node: Node3D) -> void:
+func player_use_toilet(toilet_node: Node3D) -> void:
 	if not is_first_person or player_citizen == null or not is_instance_valid(toilet_node):
 		return
 	if player_citizen.player_using_toilet:
@@ -691,32 +653,32 @@ func _player_use_toilet(toilet_node: Node3D) -> void:
 	interaction_time = 0.0
 	ui_manager.interaction_hint_panel.progress_bar.visible = true
 	ui_manager.interaction_hint_panel.hint_label.text = S.USING_TOILET
-	_update_interface(S.TOILET_IN_USE)
+	update_interface(S.TOILET_IN_USE)
 
 
-func _set_workday_hours(hours: int) -> void:
+func set_workday_hours(hours: int) -> void:
 	if hours not in [6, 8, 10, 12, 14]:
 		return
 	settlement.pending_workday_hours = hours
 	if survival_event_controller != null:
 		survival_event_controller.update_skip_night_button()
-	_update_interface("Workday set to %d hours for the next shift." % hours)
+	update_interface("Workday set to %d hours for the next shift." % hours)
 
 
-func _apply_pending_workday_hours() -> void:
+func apply_pending_workday_hours() -> void:
 	if settlement.pending_workday_hours <= 0:
 		return
 	settlement.workday_hours = settlement.pending_workday_hours
 	settlement.pending_workday_hours = 0
 
-func _has_active_night_work_order() -> bool:
+func has_active_night_work_order() -> bool:
 	for citizen in citizens:
 		if is_instance_valid(citizen) and citizen.has_active_overtime(day_cycle.current_day):
 			return true
 	return false
 
 
-func _release_unassigned_overtime_workers() -> void:
+func release_unassigned_overtime_workers() -> void:
 	if citizen_ai == null:
 		return
 	var changed := false
@@ -736,13 +698,13 @@ func _release_unassigned_overtime_workers() -> void:
 		if survival_event_controller != null:
 			survival_event_controller.update_skip_night_button()
 
-func _set_time_multiplier(multiplier: float) -> void:
+func set_time_multiplier(multiplier: float) -> void:
 	time_multiplier = multiplier
 	if is_first_person:
 		Engine.time_scale = 1.0
 	else:
 		Engine.time_scale = multiplier
-	_update_interface("Simulation speed set to x%d." % int(multiplier))
+	update_interface("Simulation speed set to x%d." % int(multiplier))
 
 
 func _show_materials_factory_menu() -> void:
@@ -751,17 +713,17 @@ func _show_materials_factory_menu() -> void:
 	ui_manager.materials_factory_menu.visible = true
 	ui_manager.materials_factory_menu_title.text = "Materials factory\nAssign workers to produce materials."
 
-func _show_house_menu() -> void:
+func show_house_menu() -> void:
 	if house_menu_controller != null:
 		house_menu_controller.show_house_menu()
 
-func _on_build_menu_gui_input(event: InputEvent) -> void:
+func on_build_menu_gui_input(event: InputEvent) -> void:
 	if not (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed):
 		return
 	if not build_category.is_empty():
 		build_controller.open_build_category("")
 	elif build_menu_is_job_menu or build_menu_is_daily_order_menu:
-		_close_assignment_submenu()
+		close_assignment_submenu()
 	else:
 		ui_manager.build_menu.visible = false
 		build_menu_is_global = false
@@ -769,31 +731,31 @@ func _on_build_menu_gui_input(event: InputEvent) -> void:
 			selected_builder = null
 	get_viewport().set_input_as_handled()
 
-func _open_job_submenu() -> void:
+func open_job_submenu() -> void:
 	build_menu_is_job_menu = true
 	build_menu_is_daily_order_menu = false
 	build_category = ""
 	if building_menu_controller != null:
 		building_menu_controller.refresh_build_menu()
 
-func _open_daily_order_submenu() -> void:
+func open_daily_order_submenu() -> void:
 	build_menu_is_daily_order_menu = true
 	build_menu_is_job_menu = false
 	build_category = ""
 	if building_menu_controller != null:
 		building_menu_controller.refresh_build_menu()
 
-func _close_assignment_submenu() -> void:
+func close_assignment_submenu() -> void:
 	build_menu_is_job_menu = false
 	build_menu_is_daily_order_menu = false
 	if building_menu_controller != null:
 		building_menu_controller.refresh_build_menu()
 
 
-func _select_citizen_at(screen_position: Vector2) -> void:
+func select_citizen_at(screen_position: Vector2) -> void:
 	var visible_citizen := _citizen_at_screen_position(screen_position)
 	if visible_citizen != null:
-		_select_citizen(visible_citizen)
+		select_citizen(visible_citizen)
 		return
 	var from := camera.project_ray_origin(screen_position)
 	var to := from + camera.project_ray_normal(screen_position) * 200.0
@@ -842,8 +804,8 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 		selected_building = parent
 		selected_builder = null
 		ui_manager.build_menu.visible = false
-		_show_house_menu()
-		_update_interface("House selected. Recruit a new resident when a bed is free.")
+		show_house_menu()
+		update_interface("House selected. Recruit a new resident when a bed is free.")
 		return
 	if hit.collider.is_in_group("school_selector"):
 		selected_school = parent
@@ -862,11 +824,11 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 		ui_manager.school_menu.visible = false
 		ui_manager.build_menu.visible = false
 		_show_materials_factory_menu()
-		_update_interface("Materials factory selected. Assign workers to produce materials.")
+		update_interface("Materials factory selected. Assign workers to produce materials.")
 		return
 	if not hit.collider.is_in_group("citizen_selector"):
 		return
-	_select_citizen(hit.collider.get_parent() as Citizen)
+	select_citizen(hit.collider.get_parent() as Citizen)
 
 
 func _open_dedicated_menu(building: Node3D, menu_controller: RefCounted, show_method: StringName) -> void:
@@ -908,7 +870,7 @@ func _hide_all_selection_menus() -> void:
 	selected_warehouse = null
 	selected_building = null
 
-func _finish_demolition(site: DemolitionSite) -> void:
+func finish_demolition(site: DemolitionSite) -> void:
 	var building_id := String(site.building.get_meta("building_instance_id", "")) if is_instance_valid(site.building) else ""
 	building_lifecycle_service.finish_demolition(site)
 	if fixture_service != null and not building_id.is_empty():
@@ -926,13 +888,13 @@ func _citizen_at_screen_position(screen_position: Vector2) -> Citizen:
 			closest_distance = distance
 	return closest
 
-func _select_citizen(clicked_citizen: Citizen) -> void:
+func select_citizen(clicked_citizen: Citizen) -> void:
 	if clicked_citizen == null:
 		return
 	if selected_builder != null and selected_builder.can_handle_entry_logistics() and clicked_citizen != selected_builder:
 		selected_builder.courier_worker = clicked_citizen
-		_request_courier_dispatch()
-		_update_interface("%s assigned to this worker. Click another worker to reassign." % ("Courier" if selected_builder.is_courier() else "Daily courier"))
+		request_courier_dispatch()
+		update_interface("%s assigned to this worker. Click another worker to reassign." % ("Courier" if selected_builder.is_courier() else "Daily courier"))
 		return
 	selected_builder = clicked_citizen
 	_hide_all_selection_menus()
@@ -944,10 +906,10 @@ func _select_citizen(clicked_citizen: Citizen) -> void:
 	ui_manager.build_menu.visible = true
 	if building_menu_controller != null:
 		building_menu_controller.refresh_build_menu()
-	_show_selected_citizen_menu()
-	_update_interface("Citizen selected. Choose a building in the lower-right menu.")
+	show_selected_citizen_menu()
+	update_interface("Citizen selected. Choose a building in the lower-right menu.")
 
-func _show_selected_citizen_menu() -> void:
+func show_selected_citizen_menu() -> void:
 	if selected_builder == null:
 		return
 	var assignment := "Unregistered"
@@ -970,7 +932,7 @@ func _show_selected_citizen_menu() -> void:
 		ui_manager.build_menu.citizen_skills_label.visible = true
 	ui_manager.build_menu.title_label.add_theme_color_override("font_color", selected_builder.specialization_color())
 
-func _gather_action_name(resource_type: String) -> String:
+func gather_action_name(resource_type: String) -> String:
 	match resource_type:
 		ResourceIds.WOOD: return S.GATHER_ACTION_WOOD
 		ResourceIds.BRANCHES: return S.GATHER_ACTION_BRANCHES
@@ -980,14 +942,14 @@ func _gather_action_name(resource_type: String) -> String:
 	return S.GATHER_ACTION_DEFAULT
 
 
-func _harvest_source_info(resource_type: String) -> String:
+func harvest_source_info(resource_type: String) -> String:
 	if player_citizen == null:
 		return ""
 	match resource_type:
 		ResourceIds.BRANCHES:
 			var tree := foraging_service.nearest_tree_node(player_citizen.global_position)
 			if is_instance_valid(tree):
-				var tree_state: Variant = world_resource_state.tree_at(_cell_from_position(tree.global_position))
+				var tree_state: Variant = world_resource_state.tree_at(cell_from_position(tree.global_position))
 				if tree_state != null:
 					return S.SOURCE_INFO_BRANCHES % [tree_state.remaining_branches, maxi(1, tree_state.initial_branches)]
 			return ""
@@ -995,7 +957,7 @@ func _harvest_source_info(resource_type: String) -> String:
 			var node := foraging_service.nearest_grass_node(player_citizen.global_position)
 			if is_instance_valid(node):
 				for cell in grass_sources:
-					var source: GrassSourceRecordScript = grass_sources[cell]
+					var source: GrassSourceRecord = grass_sources[cell]
 					if source.node == node:
 						var rem := source.remaining
 						var init := maxi(1, source.initial)
@@ -1010,11 +972,11 @@ func _harvest_source_info(resource_type: String) -> String:
 	return ""
 
 
-func _nearby_warehouse_index() -> int:
+func nearby_warehouse_index() -> int:
 	return storage_routing_service.nearby_warehouse_index()
 
 
-func _nearest_point_to_point_array(points: Array[Vector3], target: Vector3, max_distance: float) -> Vector3:
+func nearest_point_to_point_array(points: Array[Vector3], target: Vector3, max_distance: float) -> Vector3:
 	var best := Vector3.INF
 	var best_dist := max_distance
 	for point in points:
@@ -1025,12 +987,12 @@ func _nearest_point_to_point_array(points: Array[Vector3], target: Vector3, max_
 	return best
 
 
-func _nearest_grass_source_to_point(point: Vector3, max_distance: float) -> Vector3:
+func nearest_grass_source_to_point(point: Vector3, max_distance: float) -> Vector3:
 	var best := Vector3.INF
 	var best_dist := max_distance
 	var point_xz := Vector2(point.x, point.z)
 	for cell in grass_sources:
-		var source: GrassSourceRecordScript = grass_sources[cell]
+		var source: GrassSourceRecord = grass_sources[cell]
 		if source.remaining <= 0 or not is_instance_valid(source.node):
 			continue
 		var node_pos: Vector3 = source.node.global_position
@@ -1041,7 +1003,7 @@ func _nearest_grass_source_to_point(point: Vector3, max_distance: float) -> Vect
 	return best
 
 
-func _citizen_state_name(state: int) -> String:
+func citizen_state_name(state: int) -> String:
 	match state:
 		Citizen.State.TO_EMPLOYMENT_CENTER:
 			return S.STATE_GOING_TO_EMPLOYMENT
@@ -1061,17 +1023,17 @@ func _citizen_state_name(state: int) -> String:
 	return str(state_names[state]).capitalize().replace("_", " ")
 
 
-func _targeted_grass_info(target: Dictionary) -> Dictionary:
+func targeted_grass_info(target: Dictionary) -> Dictionary:
 	var target_node := target.get("node") as Node3D
 	if not is_instance_valid(target_node):
 		return {}
 	for cell in grass_sources:
-		var source: GrassSourceRecordScript = grass_sources[cell]
+		var source: GrassSourceRecord = grass_sources[cell]
 		if source.node == target_node:
 			return {"remaining": source.remaining, "initial": maxi(1, source.initial)}
 	return {}
 
-func _terrain_point_at_screen_position(screen_position: Vector2) -> Variant:
+func terrain_point_at_screen_position(screen_position: Vector2) -> Variant:
 	var from := camera.project_ray_origin(screen_position)
 	var to := from + camera.project_ray_normal(screen_position) * 200.0
 	var query := PhysicsRayQueryParameters3D.create(from, to)
@@ -1080,13 +1042,13 @@ func _terrain_point_at_screen_position(screen_position: Vector2) -> Variant:
 		return null
 	return hit.position as Vector3
 
-func _rotated_footprint(footprint: Vector2i, rotation_quarters := build_rotation_quarters) -> Vector2i:
+func rotated_footprint(footprint: Vector2i, rotation_quarters := build_rotation_quarters) -> Vector2i:
 	return building_placement_controller.rotated_footprint(footprint, rotation_quarters) if building_placement_controller != null else footprint
 
-func _can_hero_build() -> bool:
+func can_hero_build() -> bool:
 	return building_placement_controller.can_hero_build() if building_placement_controller != null else false
 
-func _terrain_height_at(x: float, z: float, near_y: float) -> float:
+func terrain_height_at(x: float, z: float, near_y: float) -> float:
 	# The grid terrain is the owner of height (grid_terrain_system.md §10.4), so
 	# ask it rather than the physics world: it answers identically headless, before
 	# a chunk has been meshed, and without a frame of collision lag after an edit.
@@ -1099,38 +1061,38 @@ func _terrain_height_at(x: float, z: float, near_y: float) -> float:
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	return NAN if hit.is_empty() else float(hit.position.y)
 
-func _is_clear_of_objects(world_position: Vector3, minimum_distance: float) -> bool:
+func is_clear_of_objects(world_position: Vector3, minimum_distance: float) -> bool:
 	return building_placement_controller.is_clear_of_objects(world_position, minimum_distance) if building_placement_controller != null else false
 
-func _placement_key(world_position: Vector3) -> Vector2i:
+func placement_key(world_position: Vector3) -> Vector2i:
 	return building_placement_controller.placement_key(world_position) if building_placement_controller != null else Vector2i.ZERO
 
-func _grant_debug_resources() -> void:
+func grant_debug_resources() -> void:
 	if not settlement.warehouse_ever_built:
-		_update_interface("Resources can only be added after the first warehouse is built.")
+		update_interface("Resources can only be added after the first warehouse is built.")
 		return
 	var result := settlement.fill_least_warehouse_cheat(90.0)
 	settlement.money += 30
 	if not result.filled:
-		_update_interface(S.NO_WAREHOUSE_BELOW_90)
+		update_interface(S.NO_WAREHOUSE_BELOW_90)
 	elif not result.overflow.is_empty() and not warehouse_positions.is_empty():
 		resource_pile_service.drop_overflow_as_piles(result.overflow, warehouse_positions[0])
-		_update_interface("Debug resources added. Some overflow dropped near the warehouse.")
+		update_interface("Debug resources added. Some overflow dropped near the warehouse.")
 	else:
-		_update_interface("Debug resources added to the least stocked warehouse.")
-	_update_workers()
-	_request_courier_dispatch()
+		update_interface("Debug resources added to the least stocked warehouse.")
+	update_workers()
+	request_courier_dispatch()
 
-func _on_tree_harvested(worker: Citizen, position_on_board: Vector3) -> void:
-	_fell_tree_at(position_on_board)
+func on_tree_harvested(worker: Citizen, position_on_board: Vector3) -> void:
+	fell_tree_at(position_on_board)
 
-func _fell_tree_at(position_on_board: Vector3) -> void:
+func fell_tree_at(position_on_board: Vector3) -> void:
 	world_navigation_controller.fell_tree_at(position_on_board)
 
 
 ## Lays a tree down and frees the cell it occupied. Shared by live felling and
 ## save restore so both paths produce identical geometry and navigation state.
-func _apply_building_wear_and_repairs() -> void:
+func apply_building_wear_and_repairs() -> void:
 	building_maintenance_service.apply_building_wear_and_repairs(_destroy_building_to_pile)
 
 
@@ -1141,10 +1103,10 @@ func _destroy_building_to_pile(building: Node3D, building_type: String) -> void:
 		fixture_service.remove_building(building_id)
 
 
-func _convert_backpack_pile_to_regular() -> void:
+func convert_backpack_pile_to_regular() -> void:
 	backpack_node = resource_pile_service.convert_backpack_pile_to_regular(backpack_node)
 
-func _warehouse_delivery_position(from: Vector3, resource_type: String, amount: int) -> Vector3:
+func warehouse_delivery_position(from: Vector3, resource_type: String, amount: int) -> Vector3:
 	return storage_routing_service.warehouse_delivery_position(from, resource_type, amount)
 
 
@@ -1158,5 +1120,5 @@ func get_toilets() -> Array[Node3D]:
 	return toilets
 
 
-func restore_from_save_data(save_data: SaveDataScript) -> bool:
-	return SettlementSaveLoaderScript.new().restore(self, save_data)
+func restore_from_save_data(save_data: SaveData) -> bool:
+	return SettlementSaveLoader.new().restore(self, save_data)

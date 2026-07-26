@@ -25,7 +25,7 @@ func handle_menu_right_click() -> bool:
 		if not game.build_category.is_empty():
 			game.build_controller.open_build_category("")
 		elif game.build_menu_is_job_menu or game.build_menu_is_daily_order_menu:
-			game._close_assignment_submenu()
+			game.close_assignment_submenu()
 		else:
 			ui.build_menu.visible = false
 			game.build_menu_is_global = false
@@ -79,25 +79,25 @@ func handle_menu_right_click() -> bool:
 
 func handle_unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.keycode == KEY_5 and event.pressed and not event.echo:
-		if SettlementGame.SaveGameServiceScript.save_quicksave(game):
-			game._update_interface("Игра сохранена (клавиша 5)")
+		if SaveGameService.save_quicksave(game):
+			game.update_interface("Игра сохранена (клавиша 5)")
 		else:
-			game._update_interface("Ошибка сохранения игры")
+			game.update_interface("Ошибка сохранения игры")
 		game.get_viewport().set_input_as_handled()
 		return
 	if event is InputEventKey and event.keycode == KEY_6 and event.pressed and not event.echo:
-		if SettlementGame.SaveGameServiceScript.has_quicksave():
-			if SettlementGame.SaveGameServiceScript.load_quicksave(game):
-				game._update_interface("Игра загружена (клавиша 6)")
+		if SaveGameService.has_quicksave():
+			if SaveGameService.load_quicksave(game):
+				game.update_interface("Игра загружена (клавиша 6)")
 			else:
-				game._update_interface("Ошибка загрузки игры")
+				game.update_interface("Ошибка загрузки игры")
 		else:
-			game._update_interface("Сохранение не найдено")
+			game.update_interface("Сохранение не найдено")
 		game.get_viewport().set_input_as_handled()
 		return
 	if event is InputEventKey and event.keycode == KEY_F and event.ctrl_pressed and event.pressed and not event.echo:
 		if OS.is_debug_build():
-			game._grant_debug_resources()
+			game.grant_debug_resources()
 			game.get_viewport().set_input_as_handled()
 			return
 	if event is InputEventKey and event.keycode == KEY_DELETE and event.pressed and not event.echo:
@@ -110,12 +110,12 @@ func handle_unhandled_input(event: InputEvent) -> void:
 		game.get_viewport().set_input_as_handled()
 		return
 	if event is InputEventKey and event.keycode == KEY_B and event.pressed and not event.echo:
-		if game._can_hero_build():
+		if game.can_hero_build():
 			game.build_controller.toggle_global_build_menu()
 			if game.is_first_person:
 				Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE if game.ui_manager.build_menu.visible else Input.MOUSE_MODE_CAPTURED)
 		else:
-			game._update_interface(SettlementGame.S.ONLY_HERO_CAN_APPROVE_BUILD)
+			game.update_interface(SettlementGame.S.ONLY_HERO_CAN_APPROVE_BUILD)
 		game.get_viewport().set_input_as_handled()
 		return
 	if not game.build_mode.is_empty() and event is InputEventKey and event.pressed and not event.echo and (event.keycode == KEY_Q or event.keycode == KEY_E):
@@ -153,7 +153,7 @@ func _handle_first_person_input(event: InputEvent) -> void:
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		if not game.build_mode.is_empty() and not is_first_person_menu_open():
 			var viewport_center := game.get_viewport().get_visible_rect().size * 0.5
-			var build_point: Variant = game._terrain_point_at_screen_position(viewport_center)
+			var build_point: Variant = game.terrain_point_at_screen_position(viewport_center)
 			if build_point != null:
 				game.build_controller.place_building(build_point)
 		elif not is_first_person_menu_open():
@@ -206,20 +206,20 @@ func _handle_overview_input(event: InputEvent) -> void:
 				game.camera_controller.pan(event.relative)
 		elif not game.build_mode.is_empty() or (game.selected_builder != null and game.dig_mode):
 			if game.get_viewport().gui_get_hovered_control() == null:
-				var terrain_point: Variant = game._terrain_point_at_screen_position(event.position)
+				var terrain_point: Variant = game.terrain_point_at_screen_position(event.position)
 				if terrain_point != null:
 					game.build_controller.move_selection(terrain_point)
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		if game.selected_builder != null and game.dig_mode:
-			var dig_point: Variant = game._terrain_point_at_screen_position(event.position)
+			var dig_point: Variant = game.terrain_point_at_screen_position(event.position)
 			if dig_point != null:
 				game.excavation_service.place_dig_site(dig_point)
 		elif not game.build_mode.is_empty():
-			var build_point: Variant = game._terrain_point_at_screen_position(event.position)
+			var build_point: Variant = game.terrain_point_at_screen_position(event.position)
 			if build_point != null:
 				game.build_controller.place_building(build_point)
 		else:
-			game._select_citizen_at(event.position)
+			game.select_citizen_at(event.position)
 
 
 func is_first_person_menu_open() -> bool:

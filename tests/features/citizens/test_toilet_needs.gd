@@ -20,7 +20,7 @@ class FakeToiletSimulation extends Node:
 				valid.append(toilet)
 		return valid
 
-	func _is_route_reachable(_origin: Vector3, _target: Vector3) -> bool:
+	func is_route_reachable(_origin: Vector3, _target: Vector3) -> bool:
 		return true
 
 	func _building_type_for_node(node: Node3D) -> String:
@@ -30,7 +30,7 @@ class FakeToiletSimulation extends Node:
 		service.configure(
 			nav_grid,
 			get_toilets,
-			_is_route_reachable,
+			is_route_reachable,
 			_building_type_for_node,
 			tree_positions,
 			grass_sources,

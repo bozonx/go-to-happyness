@@ -21,7 +21,7 @@ func register_service_entrance(building: Node3D, blueprint: Dictionary, home_ent
 		building.set_meta("service_positions", service_positions)
 		building.set_meta("service_position", service_positions[0])
 		for position in service_positions:
-			game.service_pockets.append({"cell": game._cell_from_position(position), "node": building})
+			game.service_pockets.append({"cell": game.cell_from_position(position), "node": building})
 		if show_marker:
 			var offsets := BuildingEntrancePositions.offsets(building_type)
 			if offsets.is_empty():
@@ -53,7 +53,7 @@ func register_service_pockets(node: Node3D) -> void:
 	var positions: Array = node.get_meta("service_positions")
 	for position in positions:
 		if position is Vector3:
-			game.service_pockets.append({"cell": game._cell_from_position(position), "node": node})
+			game.service_pockets.append({"cell": game.cell_from_position(position), "node": node})
 
 
 func unregister_service_pockets(node: Node3D) -> void:

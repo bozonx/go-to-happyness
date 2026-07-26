@@ -6,8 +6,6 @@ extends RefCounted
 ## and delivery position resolution.
 ## Extracted from SettlementGame to reduce its method count.
 
-const FireSourceStateScript = preload("res://game/features/settlement/domain/fire_source_state.gd")
-const BuildingRuntimeStateScript = preload("res://game/features/buildings/application/building_runtime_state.gd")
 
 var game: SettlementGame
 
@@ -16,12 +14,12 @@ func _init(p_game: SettlementGame) -> void:
 	game = p_game
 
 
-func firewood_task_priority(building: Node3D, fire_state: RefCounted) -> int:
+func firewood_task_priority(building: Node3D, fire_state: FireSourceState) -> int:
 	var phase: int = fire_state.phase_at(int(game.game_minutes))
 	var is_main := building == game.campfire_node
-	if phase == FireSourceStateScript.Phase.EMBERS or fire_state.fuel <= 1:
+	if phase == FireSourceState.Phase.EMBERS or fire_state.fuel <= 1:
 		return 120 if is_main else 115
-	if phase == FireSourceStateScript.Phase.DYING:
+	if phase == FireSourceState.Phase.DYING:
 		return 112 if is_main else 110
 	return 108 if is_main else 105
 
@@ -34,7 +32,7 @@ func reconcile_repair_reservations() -> void:
 		var building := record.node
 		if not is_instance_valid(building):
 			continue
-		var state: BuildingRuntimeStateScript = record.runtime_state()
+		var state: BuildingRuntimeState = record.runtime_state()
 		if not state.repair_reserved:
 			continue
 		var has_carrier := false
@@ -56,7 +54,7 @@ func construction_material_sources(resource_type: String, from_position: Vector3
 				var position := game.warehouse_positions[index]
 				# The position keeps task identity stable enough to invalidate a task when
 				# warehouses are demolished; the index makes pickup remove the same stock.
-				sources.append({"kind": "storage", "id": "storage_%s" % game._cell_from_position(position), "position": position, "warehouse_index": index})
+				sources.append({"kind": "storage", "id": "storage_%s" % game.cell_from_position(position), "position": position, "warehouse_index": index})
 			sources.sort_custom(func(left: Dictionary, right: Dictionary) -> bool:
 				return from_position.distance_squared_to(left.position) < from_position.distance_squared_to(right.position)
 			)
@@ -108,7 +106,7 @@ func get_nearest_delivery_position(from: Vector3) -> Vector3:
 	var warehouse_index := game.storage_routing_service.find_reachable_warehouse_index(from, "", 1, false)
 	if warehouse_index >= 0:
 		return game.warehouse_positions[warehouse_index]
-	if is_instance_valid(game.campfire_node) and game._is_route_reachable(from, game.campfire_node.global_position, false):
+	if is_instance_valid(game.campfire_node) and game.is_route_reachable(from, game.campfire_node.global_position, false):
 		return game.campfire_node.global_position
 	if is_instance_valid(game.entrance_stone):
 		return game.entrance_stone.global_position

@@ -57,7 +57,7 @@ func _create_pond_visual(center: Vector3) -> void:
 	# Ponds and excavated terrain are part of the same routing obstacle map.
 	for x in range(-2, 3):
 		for z in range(-2, 3):
-			simulation.terrain_blocked_cells[simulation._cell_from_position(center) + Vector2i(x, z)] = true
+			simulation.terrain_blocked_cells[simulation.cell_from_position(center) + Vector2i(x, z)] = true
 
 
 func _create_tree(position_on_board: Vector3, refresh_navigation := true) -> void:
@@ -66,7 +66,7 @@ func _create_tree(position_on_board: Vector3, refresh_navigation := true) -> voi
 	var initial_wood: int = simulation.random.randi_range(4, 7)
 	var initial_branches: int = simulation.random.randi_range(5, 9)
 	
-	var cell: Vector2i = simulation._cell_from_position(position_on_board)
+	var cell: Vector2i = simulation.cell_from_position(position_on_board)
 	var tree_state: Variant = simulation.world_resource_state.create_tree(cell, initial_wood, initial_branches)
 	_sync_tree_visual_state(tree, tree_state)
 	simulation.tree_nodes[cell] = tree
@@ -163,7 +163,7 @@ func spawn_trash_piles() -> void:
 		return
 	for loot: Resource in layout.get("starter_loot"):
 		var cell: Vector2i = loot.get("cell")
-		if not simulation._is_board_cell(cell) or simulation.terrain_blocked_cells.has(cell):
+		if not simulation.is_board_cell(cell) or simulation.terrain_blocked_cells.has(cell):
 			continue
 		var pile: Node3D = simulation.resource_pile_service.create_resource_pile(simulation.nav_grid.cell_center(cell) if simulation.nav_grid != null else Vector3((cell.x + 0.5) * simulation.CELL_SIZE, 0.0, (cell.y + 0.5) * simulation.CELL_SIZE), _loot_resources(loot)) as Node3D
 		# These are authored world loot, unlike piles dropped by citizens or
@@ -212,7 +212,7 @@ func update_wild_food(delta: float) -> void:
 			direction = Vector3(simulation.random.randf_range(-1.0, 1.0), 0.0, simulation.random.randf_range(-1.0, 1.0)).normalized()
 			rabbit.direction = direction
 		var next := rabbit.node.global_position + direction * delta * 0.7
-		if simulation.navigation_blocked_cells.has(simulation._cell_from_position(next)):
+		if simulation.navigation_blocked_cells.has(simulation.cell_from_position(next)):
 			rabbit.direction = -direction
 		else:
 			rabbit.node.global_position = next

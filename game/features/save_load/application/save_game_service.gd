@@ -186,7 +186,7 @@ static func save_game(game: Node, path: String = QUICKSAVE_PATH) -> bool:
 		if game.launch_config.map_document != null:
 			map_reference["revision"] = game.launch_config.map_document.meta.revision
 	save_data.world_state = {
-		"next_ai_citizen_id": game.get("_next_ai_citizen_id"),
+		"next_ai_citizen_id": game.get("next_ai_citizen_id"),
 		"biome_id": str(game.launch_config.biome_id) if "launch_config" in game and game.launch_config != null else "",
 		"map_ref": map_reference,
 		"natural_resources": game.ambient_spawner.export_resource_state() if "ambient_spawner" in game and game.ambient_spawner != null else {},

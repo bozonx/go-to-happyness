@@ -82,7 +82,7 @@ func _apply_event_outcome(outcome: EventOutcome) -> void:
 	match outcome.kind:
 		EventOutcome.Kind.MESSAGE:
 			if not outcome.text.is_empty():
-				simulation._add_message(outcome.text)
+				simulation.add_message(outcome.text)
 		EventOutcome.Kind.RESOURCE_CHANGE:
 			simulation.settlement.add(outcome.resource, outcome.amount)
 		EventOutcome.Kind.WELLBEING_CHANGE:
@@ -131,20 +131,20 @@ func update_survival_busy_workers() -> void:
 			worker.clear_status_effect(&"survival_assignment")
 			worker.idle()
 		simulation.survival_busy_until.erase(worker_id)
-		simulation._update_workers()
+		simulation.update_workers()
 
 
 # --- Skip night ---
 
 func can_skip_night() -> bool:
-	if simulation._has_active_night_work_order():
+	if simulation.has_active_night_work_order():
 		return false
 	var hour: int = simulation.clock.hour()
 	return hour >= 8 + simulation.settlement.workday_hours or hour < 6
 
 
 func can_skip_to_workday_start() -> bool:
-	if simulation._has_active_night_work_order():
+	if simulation.has_active_night_work_order():
 		return false
 	var hour: int = simulation.clock.hour()
 	return hour >= 6 and hour < 8
@@ -206,7 +206,7 @@ func skip_night() -> void:
 			simulation.citizen_lifecycle_service.on_citizen_leaving_departed(citizen)
 	simulation.outside_work_controller.return_outside_workers()
 	_apply_skip_night_incident()
-	simulation._update_workers()
+	simulation.update_workers()
 	for citizen in simulation.citizens:
 		if is_instance_valid(citizen) and positions.has(citizen.get_stable_id()):
 			citizen.global_position = positions[citizen.get_stable_id()]
@@ -218,7 +218,7 @@ func skip_night() -> void:
 	simulation.simulation_tick_controller.update_daylight()
 	if simulation.building_lifecycle_service != null:
 		simulation.building_lifecycle_service.update_house_lights()
-	simulation._update_interface("Skipped the night. Morning begins at 06:00.")
+	simulation.update_interface("Skipped the night. Morning begins at 06:00.")
 
 
 func skip_to_workday_start() -> void:
@@ -234,7 +234,7 @@ func skip_to_workday_start() -> void:
 	simulation.simulation_tick_controller.update_daylight()
 	if simulation.building_lifecycle_service != null:
 		simulation.building_lifecycle_service.update_house_lights()
-	simulation._update_interface("Workday starts at 08:00.")
+	simulation.update_interface("Workday starts at 08:00.")
 
 
 func _apply_skip_night_incident() -> void:
@@ -250,9 +250,9 @@ func _apply_skip_night_incident() -> void:
 		if int(gloves.get("sets", 0)) > 0:
 			gloves["active_durability"] = maxf(0.0, float(gloves.get("active_durability", 100.0)) - float(incident.max))
 			simulation.settlement.equipment[ResourceIds.CONSTRUCTION_GLOVES] = gloves
-			simulation._add_message(str(incident.message) % int(incident.max))
+			simulation.add_message(str(incident.message) % int(incident.max))
 		return
 	var amount := mini(simulation.settlement.amount(str(incident.resource)), simulation.random.randi_range(int(incident.min), int(incident.max)))
 	if amount > 0:
 		simulation.settlement.add(str(incident.resource), -amount)
-		simulation._add_message(str(incident.message) % amount)
+		simulation.add_message(str(incident.message) % amount)

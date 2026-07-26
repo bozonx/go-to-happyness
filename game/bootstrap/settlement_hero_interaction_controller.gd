@@ -16,15 +16,15 @@ func _init(p_game: SettlementGame) -> void:
 
 func check_player_toilet_request() -> void:
 	if not game.is_first_person or game.player_citizen == null:
-		game._player_toilet_notified = false
+		game.player_toilet_notified = false
 		return
 	var has_request := game.citizen_needs_service.has_toilet_request(game.player_citizen.ai_id)
-	if has_request and not game._player_toilet_notified:
-		game._player_toilet_notified = true
+	if has_request and not game.player_toilet_notified:
+		game.player_toilet_notified = true
 		var name := game.player_citizen.role_label() if game.player_citizen != game.hero_citizen else S.HERO_NAME
-		game._update_interface(S.TOILET_NEED_HINT % name)
+		game.update_interface(S.TOILET_NEED_HINT % name)
 	elif not has_request:
-		game._player_toilet_notified = false
+		game.player_toilet_notified = false
 
 
 func first_person_select_at_crosshair() -> void:
@@ -37,7 +37,7 @@ func first_person_select_at_crosshair() -> void:
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 		return
 	var viewport_center := game.get_viewport().get_visible_rect().size * 0.5
-	game._select_citizen_at(viewport_center)
+	game.select_citizen_at(viewport_center)
 
 
 func first_person_target() -> Dictionary:
@@ -130,9 +130,9 @@ func exit_player_work_position() -> void:
 	game.player_citizen.exit_work_position()
 	if was_official_appointment:
 		game.research_controller.dismiss_official(game.player_citizen)
-		game._update_interface(S.LEFT_OFFICER_POST_FORMAT % game.player_citizen.role_label())
+		game.update_interface(S.LEFT_OFFICER_POST_FORMAT % game.player_citizen.role_label())
 	else:
-		game._update_interface(S.LEFT_WORKPLACE_FORMAT % game.player_citizen.role_label())
+		game.update_interface(S.LEFT_WORKPLACE_FORMAT % game.player_citizen.role_label())
 	refresh_interaction_hint()
 
 
@@ -149,25 +149,25 @@ func occupy_workplace(workplace: Node3D) -> void:
 		if game.settlement.is_research_completed("official"):
 			var current_officer := game.workplace_labor_service.officer_holder()
 			if current_officer != null and current_officer != game.player_citizen:
-				game._update_interface(S.OFFICER_POSITION_TAKEN)
+				game.update_interface(S.OFFICER_POSITION_TAKEN)
 				return
 			game.player_citizen.enter_work_position(service_position, "official", workplace, false)
 			game.research_controller.appoint_official(game.player_citizen, workplace)
 			if game.player_citizen.permanent_role != "official":
 				game.player_citizen.exit_work_position()
 				return
-			game._update_interface(S.HERO_BECAME_OFFICER)
+			game.update_interface(S.HERO_BECAME_OFFICER)
 		else:
 			game.player_citizen.enter_work_position(service_position, "researcher", workplace, true)
 			if game.research_menu_controller != null:
 				game.research_menu_controller.show_research_menu()
-			game._update_interface(S.HERO_TOOK_RESEARCHER)
+			game.update_interface(S.HERO_TOOK_RESEARCHER)
 	else:
 		var role: String = game.workplace_controller.role_for_workplace(workplace)
 		if role.is_empty():
 			return
 		game.player_citizen.enter_work_position(service_position, role, workplace, true)
-		game._update_interface(S.TOOK_TEMP_ROLE_FORMAT % [game.player_citizen.role_label(), role.replace("_", " ")])
+		game.update_interface(S.TOOK_TEMP_ROLE_FORMAT % [game.player_citizen.role_label(), role.replace("_", " ")])
 	refresh_interaction_hint()
 
 
@@ -200,13 +200,13 @@ func relight_selected_fire() -> void:
 	if fire_state.lit:
 		return
 	if fire_state.fuel <= 0:
-		game._update_interface("A fire needs branches before it can be relit.")
+		game.update_interface("A fire needs branches before it can be relit.")
 		return
 	fire_state.lit = true
 	game.fire_management_service.apply_fire_state(game.selected_building, fire_state)
 	game.simulation_tick_controller.refresh_living_statuses()
 	game.workplace_controller.reopen_workplace_menu()
-	game._update_interface("The fire was relit with flint and steel.")
+	game.update_interface("The fire was relit with flint and steel.")
 
 
 func take_from_pile(pile: ResourcePile, all: bool) -> void:
@@ -236,9 +236,9 @@ func take_from_pile(pile: ResourcePile, all: bool) -> void:
 			break
 	if not taken_any:
 		if not game.hero_pocket_service.pocket_has_room():
-			game._update_interface(S.POCKET_FULL_SHORT)
+			game.update_interface(S.POCKET_FULL_SHORT)
 		else:
-			game._update_interface(S.PILE_EMPTY_NO_RESOURCES)
+			game.update_interface(S.PILE_EMPTY_NO_RESOURCES)
 		refresh_interaction_hint()
 		return
 	pile.resources = resources
@@ -250,7 +250,7 @@ func take_from_pile(pile: ResourcePile, all: bool) -> void:
 		pile_node.queue_free()
 	else:
 		game.resource_pile_service.refresh_resource_pile_label(pile)
-	game._update_interface(S.TOOK_FROM_PILE % game.hero_pocket_service.format_pocket_hint())
+	game.update_interface(S.TOOK_FROM_PILE % game.hero_pocket_service.format_pocket_hint())
 	refresh_interaction_hint()
 
 
@@ -259,8 +259,8 @@ func consume_tree_near_player(amount: int) -> void:
 		return
 	for position_on_board in game.tree_positions:
 		if game.player_citizen.global_position.distance_to(position_on_board) <= game.INTERACTION_RANGE:
-			var tree: Node3D = game.tree_nodes.get(game._cell_from_position(position_on_board))
-			var tree_state: Variant = game.world_resource_state.tree_at(game._cell_from_position(position_on_board))
+			var tree: Node3D = game.tree_nodes.get(game.cell_from_position(position_on_board))
+			var tree_state: Variant = game.world_resource_state.tree_at(game.cell_from_position(position_on_board))
 			if is_instance_valid(tree) and tree_state != null and not tree_state.felled:
 				var consumed := 0
 				while consumed < amount:
@@ -269,9 +269,9 @@ func consume_tree_near_player(amount: int) -> void:
 						break
 					consumed += result
 				if consumed > 0:
-					game._update_interface(S.BRANCHES_GATHERED_TREE_STANDING % consumed)
+					game.update_interface(S.BRANCHES_GATHERED_TREE_STANDING % consumed)
 				else:
-					game._update_interface(S.TREE_NO_BRANCHES_LEFT)
+					game.update_interface(S.TREE_NO_BRANCHES_LEFT)
 				return
 
 
@@ -280,17 +280,17 @@ func fell_nearest_tree() -> void:
 		return
 	for position_on_board in game.tree_positions:
 		if game.player_citizen.global_position.distance_to(position_on_board) <= game.INTERACTION_RANGE:
-			var tree: Node3D = game.tree_nodes.get(game._cell_from_position(position_on_board))
-			var tree_state: Variant = game.world_resource_state.tree_at(game._cell_from_position(position_on_board))
+			var tree: Node3D = game.tree_nodes.get(game.cell_from_position(position_on_board))
+			var tree_state: Variant = game.world_resource_state.tree_at(game.cell_from_position(position_on_board))
 			if is_instance_valid(tree) and tree_state != null and not tree_state.felled:
-				game._fell_tree_at(position_on_board)
+				game.fell_tree_at(position_on_board)
 				return
 
 
 func take_resource_into_pocket(resource_type: String, amount: int) -> void:
 	if amount <= 0:
 		return
-	var warehouse_index := game._nearby_warehouse_index()
+	var warehouse_index := game.nearby_warehouse_index()
 	if warehouse_index >= 0:
 		amount = mini(amount, game.settlement.warehouses[warehouse_index].amount(resource_type))
 	else:
@@ -301,7 +301,7 @@ func take_resource_into_pocket(resource_type: String, amount: int) -> void:
 			game.settlement.add_to_warehouse(resource_type, -amount, warehouse_index)
 		else:
 			game.settlement.add(resource_type, -amount)
-		game._update_interface(S.TOOK_FROM_WAREHOUSE % [amount, resource_type])
+		game.update_interface(S.TOOK_FROM_WAREHOUSE % [amount, resource_type])
 	if game.pocket_take_menu_controller != null:
 		game.pocket_take_menu_controller.refresh_pocket_take_menu()
 	refresh_interaction_hint()
@@ -320,13 +320,13 @@ func handle_sawmill_interaction(all: bool, sawmill_pos: Vector3) -> void:
 			if delivered == 0:
 				delivered = game.hero_pocket_service.remove_from_pocket(ResourceIds.LOGS, 1) if game.hero_pocket_service != null else 0
 		if delivered > 0:
-			var stock := game._sawmill_stock(sawmill_pos)
+			var stock := game.sawmill_stock(sawmill_pos)
 			stock.logs = int(stock.logs) + delivered
 			game.sawmills.store(sawmill_pos, stock)
-			game._update_interface(S.DELIVERED_WOOD_TO_SAWMILL % delivered)
+			game.update_interface(S.DELIVERED_WOOD_TO_SAWMILL % delivered)
 		refresh_interaction_hint()
 		return
-	var sawmill_stock := game._sawmill_stock(sawmill_pos)
+	var sawmill_stock := game.sawmill_stock(sawmill_pos)
 	var available_boards := int(sawmill_stock.boards)
 	if available_boards > 0 and game.hero_pocket_service.pocket_has_room():
 		var take_amount := mini(available_boards, game.hero_pocket_service.pocket_space_for(ResourceIds.BOARDS) if game.hero_pocket_service != null else 0) if all else 1
@@ -334,7 +334,7 @@ func handle_sawmill_interaction(all: bool, sawmill_pos: Vector3) -> void:
 		if take_amount > 0:
 			sawmill_stock.boards = int(sawmill_stock.boards) - take_amount
 			game.sawmills.store(sawmill_pos, sawmill_stock)
-			game._update_interface(S.TOOK_BOARDS_FROM_SAWMILL % take_amount)
+			game.update_interface(S.TOOK_BOARDS_FROM_SAWMILL % take_amount)
 	refresh_interaction_hint()
 
 
@@ -352,7 +352,7 @@ func handle_warehouse_interaction(all: bool, warehouse_index := -1) -> void:
 
 func _deliver_all_pocket_to_warehouse(warehouse_index := -1) -> void:
 	if warehouse_index < 0:
-		warehouse_index = game._nearby_warehouse_index()
+		warehouse_index = game.nearby_warehouse_index()
 	var delivered_total := 0
 	var summary: Array[String] = []
 	for resource_type in game.hero_pocket_service.pocket_resources():
@@ -360,7 +360,7 @@ func _deliver_all_pocket_to_warehouse(warehouse_index := -1) -> void:
 		if amount <= 0:
 			continue
 		if warehouse_index >= 0 and not game.settlement.uses_virtual_storage() and not game.settlement.warehouse_accepts(warehouse_index, resource_type):
-			game._update_interface(S.WAREHOUSE_REJECTS_FORMAT % resource_type)
+			game.update_interface(S.WAREHOUSE_REJECTS_FORMAT % resource_type)
 			continue
 		var to_deliver := amount
 		if not game.settlement.uses_virtual_storage():
@@ -378,16 +378,16 @@ func _deliver_all_pocket_to_warehouse(warehouse_index := -1) -> void:
 			delivered_total += actually_delivered
 			summary.append("%d %s" % [actually_delivered, resource_type])
 	if delivered_total > 0:
-		game._update_interface(S.DELIVERED_TO_WAREHOUSE_SUMMARY % ", ".join(summary))
+		game.update_interface(S.DELIVERED_TO_WAREHOUSE_SUMMARY % ", ".join(summary))
 	elif game.hero_pocket_service.pocket_resources().is_empty():
-		game._update_interface(S.POCKET_EMPTY)
+		game.update_interface(S.POCKET_EMPTY)
 	else:
-		game._update_interface(S.WAREHOUSE_NO_ROOM)
+		game.update_interface(S.WAREHOUSE_NO_ROOM)
 
 
 func _deliver_one_pocket_to_warehouse(warehouse_index := -1) -> void:
 	if warehouse_index < 0:
-		warehouse_index = game._nearby_warehouse_index()
+		warehouse_index = game.nearby_warehouse_index()
 	var resource_type := game.hero_pocket_service.primary_pocket_resource()
 	if resource_type.is_empty():
 		return
@@ -395,13 +395,13 @@ func _deliver_one_pocket_to_warehouse(warehouse_index := -1) -> void:
 	if amount <= 0:
 		return
 	if warehouse_index >= 0 and not game.settlement.uses_virtual_storage() and not game.settlement.warehouse_accepts(warehouse_index, resource_type):
-		game._update_interface(S.WAREHOUSE_REJECTS_FORMAT % resource_type)
+		game.update_interface(S.WAREHOUSE_REJECTS_FORMAT % resource_type)
 		return
 	var to_deliver := 1
 	if not game.settlement.uses_virtual_storage():
 		to_deliver = mini(1, game.settlement.storage_room_for(resource_type))
 	if to_deliver <= 0:
-		game._update_interface(S.WAREHOUSE_NO_ROOM_FOR_RESOURCE % resource_type)
+		game.update_interface(S.WAREHOUSE_NO_ROOM_FOR_RESOURCE % resource_type)
 		return
 	var overflow := 0
 	if warehouse_index >= 0 and not game.settlement.uses_virtual_storage():
@@ -410,10 +410,10 @@ func _deliver_one_pocket_to_warehouse(warehouse_index := -1) -> void:
 		game.settlement.add(resource_type, to_deliver)
 	var actually_delivered := to_deliver - overflow
 	if actually_delivered <= 0:
-		game._update_interface(S.WAREHOUSE_NO_ROOM_IN_THIS % resource_type)
+		game.update_interface(S.WAREHOUSE_NO_ROOM_IN_THIS % resource_type)
 		return
 	game.hero_pocket_service.remove_from_pocket(resource_type, actually_delivered) if game.hero_pocket_service != null else 0
-	game._update_interface(S.DELIVERED_ONE_TO_WAREHOUSE % [actually_delivered, resource_type, game.hero_pocket_service.format_pocket_hint()])
+	game.update_interface(S.DELIVERED_ONE_TO_WAREHOUSE % [actually_delivered, resource_type, game.hero_pocket_service.format_pocket_hint()])
 
 
 func deliver_pocket_to_site(site: ConstructionSite, all: bool) -> void:
@@ -437,14 +437,14 @@ func deliver_pocket_to_site(site: ConstructionSite, all: bool) -> void:
 		if not all:
 			break
 	if delivered_any:
-		game._update_interface(S.MATERIALS_DELIVERED_TO_SITE)
+		game.update_interface(S.MATERIALS_DELIVERED_TO_SITE)
 		refresh_interaction_hint()
 	else:
 		var missing := _missing_site_materials_text(site)
 		if missing.is_empty():
-			game._update_interface(S.SITE_FULLY_SUPPLIED)
+			game.update_interface(S.SITE_FULLY_SUPPLIED)
 		else:
-			game._update_interface(S.POCKET_MISSING_MATERIALS % missing)
+			game.update_interface(S.POCKET_MISSING_MATERIALS % missing)
 		refresh_interaction_hint()
 
 
@@ -453,7 +453,7 @@ func refuel_fire_from_pocket(building: Node3D, all: bool) -> void:
 		return
 	var available := game.hero_pocket_service.pocket_amount(ResourceIds.BRANCHES) if game.hero_pocket_service != null else 0
 	if available <= 0:
-		game._update_interface(S.NO_BRANCHES_FOR_FIRE)
+		game.update_interface(S.NO_BRANCHES_FOR_FIRE)
 		refresh_interaction_hint()
 		return
 	var fire_state := game.fire_management_service.fire_state_for(building)
@@ -465,7 +465,7 @@ func refuel_fire_from_pocket(building: Node3D, all: bool) -> void:
 	fire_state.add_delivered(delivered, int(game.game_minutes))
 	game.fire_management_service.apply_fire_state(building, fire_state)
 	game.simulation_tick_controller.refresh_living_statuses()
-	game._update_interface(S.BRANCHES_ADDED_TO_FIRE % delivered)
+	game.update_interface(S.BRANCHES_ADDED_TO_FIRE % delivered)
 	refresh_interaction_hint()
 
 
@@ -481,7 +481,7 @@ func meet_arrival_at_entrance() -> void:
 		game.citizen_lifecycle_service.on_arrival_greeter_ready(game.player_citizen)
 		refresh_interaction_hint()
 		return
-	game._update_interface(S.NO_ONE_TO_MEET)
+	game.update_interface(S.NO_ONE_TO_MEET)
 	refresh_interaction_hint()
 
 

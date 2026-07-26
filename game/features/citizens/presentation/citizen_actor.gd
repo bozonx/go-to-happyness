@@ -945,7 +945,7 @@ func _process_to_workplace(delta: float) -> void:
 			if has_perk("forestry") and (forestry_rng.randf() if forestry_rng != null else randf()) < 0.10:
 				count = 2
 				if simulation != null:
-					simulation._update_interface("Lumberjack Master: Forester delivered 2 logs!")
+					simulation.update_interface("Lumberjack Master: Forester delivered 2 logs!")
 			logs_delivered.emit(self, workplace_position, count)
 			return
 		state = State.SAWING
@@ -1490,7 +1490,7 @@ func _take_registration_ticket() -> void:
 	if registration_queue_order >= 0:
 		return
 	if simulation != null:
-		registration_queue_order = int(simulation.call("_next_registration_ticket"))
+		registration_queue_order = int(simulation.call("next_registration_ticket"))
 
 
 func has_active_delivery() -> bool:
@@ -2187,7 +2187,7 @@ func _process_gathering(delta: float) -> void:
 			if has_perk("forestry") and (gather_rng.randf() if gather_rng != null else randf()) < 0.10:
 				gathered_amount *= 2
 				if simulation != null:
-					simulation._update_interface("Lumberjack Master: Forester gathered 2 logs!")
+					simulation.update_interface("Lumberjack Master: Forester gathered 2 logs!")
 		var consumed_amount := 1
 		if simulation != null:
 			if resource_type == ResourceIds.GRASS:

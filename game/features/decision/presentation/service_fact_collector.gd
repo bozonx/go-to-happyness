@@ -47,7 +47,7 @@ func collect(ctx: FacadeContext) -> Dictionary:
 			service_position = ctx.simulation.employment_center_position()
 		else:
 			service_position = actor.employment_workplace.get_meta("service_position", actor.employment_workplace.global_position) if is_instance_valid(actor.employment_workplace) else Vector3.INF
-	var service_can_start: bool = not service_role.is_empty() and service_position != Vector3.INF and ctx.simulation._is_route_reachable(actor.global_position, service_position)
+	var service_can_start: bool = not service_role.is_empty() and service_position != Vector3.INF and ctx.simulation.is_route_reachable(actor.global_position, service_position)
 
 	return {
 		&"work.service.worker": not service_role.is_empty(),

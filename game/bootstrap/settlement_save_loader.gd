@@ -2,10 +2,7 @@ class_name SettlementSaveLoader
 extends RefCounted
 
 
-const BuildingBlueprintLibraryScript = preload("res://game/features/buildings/presentation/building_blueprint_library.gd")
-const BuildingEntrancePositionsScript = preload("res://game/features/buildings/domain/building_entrance_positions.gd")
 const CitizenActorScene = preload("res://game/features/citizens/presentation/citizen_actor.tscn")
-const SettlementCitizenActuatorScript = preload("res://game/features/decision/presentation/settlement_citizen_actuator.gd")
 
 ## Handles restoration of saved game state onto a running SettlementGame instance.
 
@@ -75,15 +72,15 @@ func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
 
 	# 3. Restore Settlement State
 	var s_dict: Dictionary = save_data.settlement_state
-	SettlementGame.SaveGameServiceScript.restore_settlement_state(game.settlement, s_dict)
-	SettlementGame.SaveGameServiceScript.restore_work_policy(game.settlement, s_dict.get("work_policy", {}))
-	SettlementGame.SaveGameServiceScript.restore_research(game.settlement, s_dict.get("research", {}))
+	SaveGameService.restore_settlement_state(game.settlement, s_dict)
+	SaveGameService.restore_work_policy(game.settlement, s_dict.get("work_policy", {}))
+	SaveGameService.restore_research(game.settlement, s_dict.get("research", {}))
 
 	# 4. Restore Simulation Clock
-	SettlementGame.SaveGameServiceScript.restore_clock(game.clock, game.day_cycle, save_data.clock_state)
+	SaveGameService.restore_clock(game.clock, game.day_cycle, save_data.clock_state)
 
 	# 5. Restore Camera State
-	var cam_state := SettlementGame.SaveGameServiceScript.restore_camera(save_data.camera_state)
+	var cam_state := SaveGameService.restore_camera(save_data.camera_state)
 	if not cam_state.is_empty():
 		if cam_state.has("target"):
 			game.camera_target = cam_state["target"]
@@ -93,9 +90,9 @@ func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
 
 	# 6. Restore Placed Buildings
 	for b_dict in save_data.buildings_state:
-		var cell = SettlementGame.SaveDataScript.dict_to_vector2i(b_dict.get("cell", {}))
+		var cell = SaveData.dict_to_vector2i(b_dict.get("cell", {}))
 		var b_type = str(b_dict.get("building_type", ""))
-		var pos = SettlementGame.SaveDataScript.dict_to_vector3(b_dict.get("position", {}))
+		var pos = SaveData.dict_to_vector3(b_dict.get("position", {}))
 		var rot_y = float(b_dict.get("rotation_y", 0.0))
 		var rot_quarters = posmod(roundi(rot_y / 90.0), 4)
 
@@ -111,7 +108,7 @@ func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
 			site_node.set_meta("building_type", b_type)
 			site_node.set_meta("footprint", blueprint.footprint)
 			site_node.set_meta("occupied_footprint", occupied_footprint)
-			site_node.set_meta("service_positions", BuildingEntrancePositionsScript.positions(site_node, blueprint.footprint, 1.0))
+			site_node.set_meta("service_positions", BuildingEntrancePositions.positions(site_node, blueprint.footprint, 1.0))
 			game.add_child(site_node)
 			for module in blueprint.modules:
 				site_node.add_child(BuildingBlueprints.create_module(module))
@@ -125,9 +122,9 @@ func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
 
 	# 7. Restore Construction Sites
 	for c_dict in save_data.construction_sites_state:
-		var cell = SettlementGame.SaveDataScript.dict_to_vector2i(c_dict.get("cell", {}))
+		var cell = SaveData.dict_to_vector2i(c_dict.get("cell", {}))
 		var b_type = str(c_dict.get("building_type", ""))
-		var pos = SettlementGame.SaveDataScript.dict_to_vector3(c_dict.get("position", {}))
+		var pos = SaveData.dict_to_vector3(c_dict.get("position", {}))
 		var rot_y = float(c_dict.get("rotation_y", 0.0))
 		var rot_quarters = posmod(roundi(rot_y / 90.0), 4)
 		var progress = float(c_dict.get("progress", 0.0))
@@ -148,7 +145,7 @@ func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
 		else:
 			push_warning("restore_from_save_data: skipping construction site with unknown type '" + b_type + "' at cell " + str(cell))
 
-	SettlementGame.SaveGameServiceScript.restore_warehouses(game.settlement, s_dict.get("warehouses", []), s_dict.get("warehouse_types", []), bool(s_dict.get("warehouse_ever_built", false)))
+	SaveGameService.restore_warehouses(game.settlement, s_dict.get("warehouses", []), s_dict.get("warehouse_types", []), bool(s_dict.get("warehouse_ever_built", false)))
 
 	# 8. Restore Resource Piles
 	for p_dict in save_data.resource_piles_state:
@@ -157,7 +154,7 @@ func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
 		var resources: Dictionary = p_dict.get("resources", {})
 		if resources.is_empty():
 			continue
-		var pos = SettlementGame.SaveDataScript.dict_to_vector3(p_dict.get("position", {}))
+		var pos = SaveData.dict_to_vector3(p_dict.get("position", {}))
 		var pile_node := game.resource_pile_service.create_resource_pile(pos, resources, bool(p_dict.get("is_backpack", false)))
 		if pile_node != null and bool(p_dict.get("landscape_owned", false)):
 			pile_node.set_meta("landscape_owned", true)
@@ -173,10 +170,10 @@ func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
 		game.road_network_service.restore_state(save_data.world_state.get("roads", []))
 
 	# 9. Restore Citizens
-	game._next_ai_citizen_id = int(save_data.world_state.get("next_ai_citizen_id", 1))
+	game.next_ai_citizen_id = int(save_data.world_state.get("next_ai_citizen_id", 1))
 	game.hero_citizen = null
 	for cit_dict in save_data.citizens_state:
-		var pos = SettlementGame.SaveDataScript.dict_to_vector3(cit_dict.get("position", {}))
+		var pos = SaveData.dict_to_vector3(cit_dict.get("position", {}))
 		var is_hero = bool(cit_dict.get("is_hero", false))
 		var saved_id = int(cit_dict.get("ai_id", 0))
 
@@ -196,11 +193,11 @@ func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
 		game.citizen_factory.wire_citizen(citizen)
 
 		game.citizens.append(citizen)
-		citizen.ai_id = saved_id if saved_id > 0 else game._next_ai_citizen_id
-		if citizen.ai_id >= game._next_ai_citizen_id:
-			game._next_ai_citizen_id = citizen.ai_id + 1
+		citizen.ai_id = saved_id if saved_id > 0 else game.next_ai_citizen_id
+		if citizen.ai_id >= game.next_ai_citizen_id:
+			game.next_ai_citizen_id = citizen.ai_id + 1
 
-		game.citizen_ai.register_citizen(citizen.ai_id, SettlementCitizenActuatorScript.new(citizen, game.citizen_factory.ai_target_for_key))
+		game.citizen_ai.register_citizen(citizen.ai_id, SettlementCitizenActuator.new(citizen, game.citizen_factory.ai_target_for_key))
 		citizen.tree_exiting.connect(game.citizen_factory.on_ai_citizen_exiting.bind(citizen.ai_id), CONNECT_ONE_SHOT)
 
 		var needs_dict: Dictionary = cit_dict.get("needs", {})
@@ -220,7 +217,7 @@ func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
 		citizen.permanent_role = str(cit_dict.get("permanent_role", ""))
 		citizen.daily_order_role = str(cit_dict.get("daily_order_role", ""))
 		if cit_dict.get("employment_building_cell", {}) is Dictionary:
-			var employment_cell := SettlementGame.SaveDataScript.dict_to_vector2i(cit_dict.get("employment_building_cell", {}))
+			var employment_cell := SaveData.dict_to_vector2i(cit_dict.get("employment_building_cell", {}))
 			var employment_record = game.building_registry.record_at_cell(employment_cell)
 			if employment_record != null and is_instance_valid(employment_record.node):
 				citizen.employment_workplace = employment_record.node
@@ -246,7 +243,7 @@ func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
 	# 10. Re-initialize AI and Interfaces
 	game.simulation_tick_controller.refresh_living_statuses()
 	game.world_navigation_controller.refresh_navigation_grid()
-	game._update_workers()
+	game.update_workers()
 	if game.building_menu_controller != null:
 		game.building_menu_controller.refresh_build_menu()
 
@@ -259,17 +256,17 @@ func _resolve_saved_building_blueprint(saved_type: String, data: Dictionary) -> 
 	var resolved_type := saved_type
 	var reference: Dictionary = data.get("blueprint_ref", {})
 	if not reference.is_empty():
-		var referenced_type := BuildingBlueprintLibraryScript.resolve_reference(reference)
+		var referenced_type := BuildingBlueprintLibrary.resolve_reference(reference)
 		if not referenced_type.is_empty():
 			resolved_type = referenced_type
-			var referenced_blueprint: Variant = BuildingBlueprintLibraryScript.get_blueprint(referenced_type)
+			var referenced_blueprint: Variant = BuildingBlueprintLibrary.get_blueprint(referenced_type)
 			var saved_revision: String = str(reference.get("revision", ""))
 			if referenced_blueprint != null and not saved_revision.is_empty() and referenced_blueprint.revision_id() != saved_revision:
 				push_warning("Blueprint '%s:%s' changed since this save; current file geometry will be used." % [
 					reference.get("source", "builtin"), reference.get("id", "")])
 		else:
 			var role := StringName(reference.get("role", ""))
-			var role_variant := BuildingBlueprintLibraryScript.resolve_role(role) if not String(role).is_empty() else ""
+			var role_variant := BuildingBlueprintLibrary.resolve_role(role) if not String(role).is_empty() else ""
 			if not role_variant.is_empty():
 				resolved_type = String(role)
 				push_warning("Missing blueprint '%s:%s'; restored using current variant for role '%s'." % [
@@ -302,7 +299,7 @@ func _restore_forest(tree_states: Array) -> void:
 	for entry in tree_states:
 		if not (entry is Dictionary):
 			continue
-		var cell := SettlementGame.SaveDataScript.dict_to_vector2i(entry.get("cell", {}))
+		var cell := SaveData.dict_to_vector2i(entry.get("cell", {}))
 		var tree: Node3D = game.tree_nodes.get(cell)
 		if not is_instance_valid(tree):
 			continue

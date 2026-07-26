@@ -56,7 +56,7 @@ func send_entrance_order() -> void:
 	if total <= 0:
 		return
 	if total > simulation.trade_service.available_trade_money():
-		simulation._update_interface("Not enough available coins for this order.")
+		simulation.update_interface("Not enough available coins for this order.")
 		return
 	if food > 0:
 		simulation.trade_service.buy_entrance_food(food, simulation.FOOD_PURCHASE_PRICE)
@@ -66,7 +66,7 @@ func send_entrance_order() -> void:
 		simulation.trade_service.buy_entrance_resource(ResourceIds.WATER, water, simulation.ENTRANCE_WATER_PRICE)
 	for _i in range(bucket):
 		simulation.trade_service.buy_entrance_tool("bucket", simulation.ENTRANCE_BUCKET_PRICE)
-	simulation._update_interface("Entrance order placed: %d food, %d water, %d gloves, %d buckets." % [food, water, gloves, bucket])
+	simulation.update_interface("Entrance order placed: %d food, %d water, %d gloves, %d buckets." % [food, water, gloves, bucket])
 	hide_entrance_order_modal()
 
 

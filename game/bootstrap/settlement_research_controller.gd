@@ -69,7 +69,7 @@ func update_building_research(delta: float) -> void:
 			else:
 				worker.idle()
 		var b_name := str(completion.get("display_name", tech_id))
-		game._update_interface("Research completed: %s unlocked! %s skill improved by 20%%." % [b_name, skill_to_upgrade.capitalize()])
+		game.update_interface("Research completed: %s unlocked! %s skill improved by 20%%." % [b_name, skill_to_upgrade.capitalize()])
 
 		if game.campfire_menu_controller != null:
 			game.campfire_menu_controller.refresh_campfire_menu()
@@ -93,18 +93,18 @@ func cancel_active_building_research(refund: bool, message: String) -> void:
 		else:
 			worker.idle()
 	game.building_research_service.cancel_active(refund)
-	game._update_interface(message)
+	game.update_interface(message)
 	if game.campfire_menu_controller != null:
 		game.campfire_menu_controller.refresh_campfire_menu()
 
 
 func handle_civic_post_assignment() -> void:
-	var centre := game.selected_campfire if is_instance_valid(game.selected_campfire) else game._employment_centre_building()
+	var centre := game.selected_campfire if is_instance_valid(game.selected_campfire) else game.employment_centre_building()
 	if not is_instance_valid(centre) or not game.settlement.is_research_completed("official"):
 		return
 	var researcher := daily_researcher_at(centre)
 	if researcher == null:
-		game._update_interface("Assign a daily researcher and wait until they reach the civic post.")
+		game.update_interface("Assign a daily researcher and wait until they reach the civic post.")
 		return
 	appoint_official(researcher, centre)
 
@@ -125,7 +125,7 @@ func appoint_official(citizen: Citizen, workplace: Node3D = null, require_at_pos
 	# it is unlocked by the research and sends the new officer to the post by AI.
 	if citizen == null or not game.settlement.is_research_completed("official"):
 		return false
-	var centre := workplace if is_instance_valid(workplace) else game._employment_centre_building()
+	var centre := workplace if is_instance_valid(workplace) else game.employment_centre_building()
 	if not is_instance_valid(centre) or (require_at_post and citizen.global_position.distance_to(game.employment_center_position()) > game.OFFICER_POST_RADIUS):
 		return false
 	for other in game.citizens:
@@ -163,8 +163,8 @@ func dismiss_official(citizen: Citizen) -> void:
 	citizen.employment_workplace = null
 	citizen.employment_state = Citizen.EmploymentState.NO_PERMANENT_WORK
 	citizen.active_role = ""
-	game._update_interface(S.CITIZEN_LEFT_OFFICER_POST % citizen.role_label())
-	game._update_workers()
+	game.update_interface(S.CITIZEN_LEFT_OFFICER_POST % citizen.role_label())
+	game.update_workers()
 	if game.building_menu_controller != null:
 		game.building_menu_controller.refresh_build_menu()
 
@@ -189,7 +189,7 @@ func activate_employment_centre(centre: Node3D) -> void:
 			citizen.assign_official_work(service_position)
 		else:
 			citizen.idle()
-	game._update_workers()
+	game.update_workers()
 
 
 func set_manual_specialist_employment(citizen: Citizen, role: String) -> bool:

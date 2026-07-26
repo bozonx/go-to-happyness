@@ -95,7 +95,7 @@ func assign_work_role(role: String, daily_order := false) -> void:
 		game.build_menu_is_daily_order_menu = false
 		return
 	elif role == "official":
-		if not game.research_controller.appoint_official(game.selected_builder, game._employment_centre_building(), false):
+		if not game.research_controller.appoint_official(game.selected_builder, game.employment_centre_building(), false):
 			return
 	else:
 		if role != "official" and not game.workplace_labor_service.player_can_manage_permanent_professions():
@@ -104,20 +104,20 @@ func assign_work_role(role: String, daily_order := false) -> void:
 			return
 		if game.selected_builder.has_no_permanent_work() or game.selected_builder.is_unregistered():
 			if game.employment_center_position() == Vector3.INF:
-				game._update_interface("Build the main campfire before assigning permanent jobs.")
+				game.update_interface("Build the main campfire before assigning permanent jobs.")
 				return
 			game.selected_builder.clear_daily_order()
 			game.selected_builder.begin_employment_processing(game.employment_center_position(), role, employer_for_role(role))
 	game.selected_builder.assigned_dig_site = null
 	if game.citizen_ai != null:
 		game.citizen_ai.request_decision_refresh()
-	game._update_workers()
+	game.update_workers()
 	game.build_menu_is_job_menu = false
 	game.build_menu_is_daily_order_menu = false
-	game._show_selected_citizen_menu()
+	game.show_selected_citizen_menu()
 	if game.building_menu_controller != null:
 		game.building_menu_controller.refresh_build_menu()
-	game._update_interface("%s assigned to %s." % ["Hero" if game.selected_builder.is_hero else "Citizen", "automatic work" if role.is_empty() else role.replace("_", " ")])
+	game.update_interface("%s assigned to %s." % ["Hero" if game.selected_builder.is_hero else "Citizen", "automatic work" if role.is_empty() else role.replace("_", " ")])
 	if game.workforce_menu_controller != null:
 		game.workforce_menu_controller.refresh_campfire_occupancy_button()
 	if game.ui_manager.workforce_menu != null and game.ui_manager.workforce_menu.visible:
@@ -255,13 +255,13 @@ func on_campfire_advance_pressed() -> void:
 
 	if game.settlement.advance_era(next_era, game.citizens.size(), housing_slots):
 		game.village_territory_service.set_era(int(game.settlement.era))
-		game._update_interface("Advanced to the %s Era! New buildings unlocked." % era_name())
+		game.update_interface("Advanced to the %s Era! New buildings unlocked." % era_name())
 		if game.campfire_menu_controller != null:
 			game.campfire_menu_controller.refresh_campfire_menu()
 		if game.building_menu_controller != null:
 			game.building_menu_controller.refresh_build_menu()
 	else:
-		game._update_interface("Failed to advance era. Double-check requirements.")
+		game.update_interface("Failed to advance era. Double-check requirements.")
 
 
 func refresh_market_menu() -> void:
@@ -284,13 +284,13 @@ func toggle_selected_workplace_acceptance() -> void:
 	var accepting := bool(game.selected_building.get_meta("accepting_workers", true))
 	if accepting:
 		game.selected_building.set_meta("accepting_workers", false)
-		game._update_interface("This workplace stopped accepting new workers.")
+		game.update_interface("This workplace stopped accepting new workers.")
 	else:
 		game.workplace_priority_counter += 1
 		game.selected_building.set_meta("accepting_workers", true)
 		game.selected_building.set_meta("workplace_priority", game.workplace_priority_counter)
-		game._update_interface("This workplace is accepting workers at the front of its queue.")
-	game._update_workers()
+		game.update_interface("This workplace is accepting workers at the front of its queue.")
+	game.update_workers()
 	reopen_workplace_menu()
 
 
@@ -303,7 +303,7 @@ func dismiss_selected_workplace_worker() -> void:
 		game.research_controller.dismiss_official(worker)
 	else:
 		game.citizen_lifecycle_service.send_to_unemployment_registration(worker)
-	game._update_workers()
+	game.update_workers()
 	reopen_workplace_menu()
 
 
@@ -328,10 +328,10 @@ func upgrade_selected_building() -> void:
 	var old_footprint: Vector2i = game.selected_building.get_meta("footprint", BuildingBlueprints.get_blueprint(old_type).footprint)
 	var blueprint := BuildingBlueprints.get_blueprint(target_type)
 	if blueprint.footprint != old_footprint:
-		game._update_interface("This upgrade needs rebuilding because its footprint changes.")
+		game.update_interface("This upgrade needs rebuilding because its footprint changes.")
 		return
 	if not game.settlement.can_upgrade_building(old_type):
-		game._update_interface("Upgrade needs research and resources.")
+		game.update_interface("Upgrade needs research and resources.")
 		return
 	var service_position: Vector3 = game.selected_building.get_meta("service_position", game.selected_building.global_position)
 	var warehouse_index := game.warehouse_positions.find(service_position)
@@ -367,8 +367,8 @@ func upgrade_selected_building() -> void:
 	game.village_territory_service.recalculate()
 	game.world_navigation_controller.refresh_boundary_markers()
 	game.world_navigation_controller.refresh_navigation_grid()
-	game._update_workers()
-	game._update_interface("%s upgraded to %s." % [str(BuildingCatalog.definition_for(old_type).get("name", old_type)), str(BuildingCatalog.definition_for(target_type).get("name", target_type))])
+	game.update_workers()
+	game.update_interface("%s upgraded to %s." % [str(BuildingCatalog.definition_for(old_type).get("name", old_type)), str(BuildingCatalog.definition_for(target_type).get("name", target_type))])
 	if game.ui_manager.campfire_menu.visible and game.selected_building == game.selected_campfire:
 		if game.campfire_menu_controller != null:
 			game.campfire_menu_controller.refresh_campfire_menu()
@@ -379,13 +379,13 @@ func upgrade_selected_building() -> void:
 
 func assign_cook_at_campfire() -> void:
 	if game.selected_builder == null:
-		game._update_interface("Select a resident first, then choose a cooking shift.")
+		game.update_interface("Select a resident first, then choose a cooking shift.")
 		return
 	if game.selected_builder.is_player_controlled:
-		game._update_interface("Pick a settler, not the character you are controlling.")
+		game.update_interface("Pick a settler, not the character you are controlling.")
 		return
 	if game.selected_building != game.canteen:
-		game._update_interface("Choose the active kitchen to assign a cook.")
+		game.update_interface("Choose the active kitchen to assign a cook.")
 		return
 	if not game.workplace_labor_service.player_can_manage_permanent_professions():
 		if game.workplace_labor_service != null:
@@ -394,8 +394,8 @@ func assign_cook_at_campfire() -> void:
 	if not game.research_controller.set_manual_specialist_employment(game.selected_builder, "cook"):
 		return
 	game.selected_builder.setup_specialization("cook")
-	game._update_interface("%s is registering as a cook." % game.selected_builder.role_label())
-	game._update_workers()
+	game.update_interface("%s is registering as a cook." % game.selected_builder.role_label())
+	game.update_workers()
 
 
 func assign_teacher_at_school() -> void:
@@ -404,16 +404,16 @@ func assign_teacher_at_school() -> void:
 			game.workplace_labor_service.show_labor_command_blocked()
 		return
 	if game.selected_builder == null:
-		game._update_interface("Select a resident first, then click the school to make them the teacher.")
+		game.update_interface("Select a resident first, then click the school to make them the teacher.")
 		return
 	if game.selected_builder.is_player_controlled:
-		game._update_interface("Pick a settler, not the character you are controlling.")
+		game.update_interface("Pick a settler, not the character you are controlling.")
 		return
 	if not game.research_controller.set_manual_specialist_employment(game.selected_builder, "teacher"):
 		return
 	game.selected_builder.setup_specialization("teacher")
-	game._update_interface("%s is registering as a teacher." % game.selected_builder.role_label())
-	game._update_workers()
+	game.update_interface("%s is registering as a teacher." % game.selected_builder.role_label())
+	game.update_workers()
 
 
 func assign_seller_at_market() -> void:
@@ -422,16 +422,16 @@ func assign_seller_at_market() -> void:
 			game.workplace_labor_service.show_labor_command_blocked()
 		return
 	if game.selected_builder == null:
-		game._update_interface("Select a resident first, then click the market to make them the seller.")
+		game.update_interface("Select a resident first, then click the market to make them the seller.")
 		return
 	if game.selected_builder.is_player_controlled:
-		game._update_interface("Pick a settler, not the character you are controlling.")
+		game.update_interface("Pick a settler, not the character you are controlling.")
 		return
 	if not game.research_controller.set_manual_specialist_employment(game.selected_builder, "seller"):
 		return
 	game.selected_builder.setup_specialization("seller")
-	game._update_interface("%s is registering as a seller." % game.selected_builder.role_label())
-	game._update_workers()
+	game.update_interface("%s is registering as a seller." % game.selected_builder.role_label())
+	game.update_workers()
 
 
 func cheer_up_settlement() -> void:
@@ -440,14 +440,14 @@ func cheer_up_settlement() -> void:
 	if game.settlement.apply_cheer_up():
 		if game.campfire_menu_controller != null:
 			game.campfire_menu_controller.show_campfire_orders_menu()
-		game._update_interface("You cheered up the settlement. Wellbeing rose by 5%%.")
+		game.update_interface("You cheered up the settlement. Wellbeing rose by 5%%.")
 
 
 func set_road_walking_order(enabled: bool) -> void:
 	if game.settlement.era != SettlementState.Era.TENT:
 		return
 	game.settlement.road_walking_order_enabled = enabled
-	game._update_interface(
+	game.update_interface(
 		"Trail-walking order %s. Residents prefer existing paths automatically and %s shared routes."
 		% [
 			"enabled" if enabled else "disabled",
@@ -481,7 +481,7 @@ func toggle_settlement_night_work(checked: bool) -> void:
 				game.campfire_menu_controller.show_campfire_orders_menu()
 			return
 		game.settlement.night_work_order_day = game.day_cycle.current_day
-		game._update_interface("Night-work order issued to %d residents. They will work through the night and next day." % affected)
+		game.update_interface("Night-work order issued to %d residents. They will work through the night and next day." % affected)
 		if game.survival_event_controller != null:
 			game.survival_event_controller.update_skip_night_button()
 		if game.citizen_ai != null:
@@ -494,7 +494,7 @@ func toggle_settlement_night_work(checked: bool) -> void:
 				citizen.deactivate_overtime("settlement")
 		if game.citizen_daily_order_service != null:
 			game.citizen_daily_order_service.sync_overtime_scope_indicators()
-		game._update_interface("Settlement night work cancelled. Workers will return home.")
+		game.update_interface("Settlement night work cancelled. Workers will return home.")
 		if game.survival_event_controller != null:
 			game.survival_event_controller.update_skip_night_button()
 		if game.citizen_ai != null:
@@ -510,10 +510,10 @@ func toggle_double_time_order(checked: bool) -> void:
 				game.campfire_menu_controller.show_campfire_orders_menu()
 			return
 		game.settlement.double_time_order_day = game.day_cycle.current_day
-		game._update_interface("Double time order issued. All residents walk twice as fast today, but fatigue accumulates faster.")
+		game.update_interface("Double time order issued. All residents walk twice as fast today, but fatigue accumulates faster.")
 	else:
 		game.settlement.double_time_order_day = -1
-		game._update_interface("Double time order cancelled. Residents resume normal pace.")
+		game.update_interface("Double time order cancelled. Residents resume normal pace.")
 	if game.campfire_menu_controller != null:
 		game.campfire_menu_controller.show_campfire_orders_menu()
 
@@ -533,14 +533,14 @@ func toggle_selected_citizen_night_work(checked: bool) -> void:
 		if not game.citizen_daily_order_service.activate_citizen_overtime(game.selected_builder, "personal") if game.citizen_daily_order_service != null else false:
 			game.ui_manager.build_menu.personal_night_work_button.set_pressed_no_signal(false)
 			return
-		game._update_interface("%s received a personal night-work order." % game.selected_builder.role_label())
+		game.update_interface("%s received a personal night-work order." % game.selected_builder.role_label())
 		if game.survival_event_controller != null:
 			game.survival_event_controller.update_skip_night_button()
 		if game.citizen_ai != null:
 			game.citizen_ai.request_decision_refresh()
 	else:
 		game.selected_builder.deactivate_overtime("personal")
-		game._update_interface("Night work cancelled for %s." % game.selected_builder.role_label())
+		game.update_interface("Night work cancelled for %s." % game.selected_builder.role_label())
 		if game.survival_event_controller != null:
 			game.survival_event_controller.update_skip_night_button()
 		if game.citizen_ai != null:
@@ -564,8 +564,8 @@ func toggle_worker_overtime(checked: bool) -> void:
 					workers_found = true
 		if workers_found:
 			game.selected_building.set_meta("night_work_order_day", game.day_cycle.current_day)
-			game._add_message("Night-work order issued for %s." % game.building_registry.building_type_for_node(game.selected_building).replace("_", " "))
-			game._update_workers()
+			game.add_message("Night-work order issued for %s." % game.building_registry.building_type_for_node(game.selected_building).replace("_", " "))
+			game.update_workers()
 			if game.survival_event_controller != null:
 				game.survival_event_controller.update_skip_night_button()
 			if game.citizen_ai != null:
@@ -578,8 +578,8 @@ func toggle_worker_overtime(checked: bool) -> void:
 				citizen.deactivate_overtime("workplace")
 		if game.citizen_daily_order_service != null:
 			game.citizen_daily_order_service.sync_overtime_scope_indicators()
-		game._add_message("Night work cancelled for %s." % game.building_registry.building_type_for_node(game.selected_building).replace("_", " "))
-		game._update_workers()
+		game.add_message("Night work cancelled for %s." % game.building_registry.building_type_for_node(game.selected_building).replace("_", " "))
+		game.update_workers()
 		if game.survival_event_controller != null:
 			game.survival_event_controller.update_skip_night_button()
 		if game.citizen_ai != null:

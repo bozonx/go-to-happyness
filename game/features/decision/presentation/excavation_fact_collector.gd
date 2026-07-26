@@ -15,7 +15,7 @@ func collect(ctx: FacadeContext) -> Dictionary:
 		for dig_site in ctx.simulation.dig_sites:
 			if not is_instance_valid(dig_site.node) or not ctx.simulation.excavation_service.can_work_at_dig_site(dig_site):
 				continue
-			if not ctx.simulation._is_route_reachable(actor.global_position, dig_site.node.global_position):
+			if not ctx.simulation.is_route_reachable(actor.global_position, dig_site.node.global_position):
 				continue
 			excavation_candidates.append({
 				&"id": ctx.helpers.target_key(&"dig", dig_site.node.global_position),

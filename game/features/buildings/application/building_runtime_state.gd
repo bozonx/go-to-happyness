@@ -1,3 +1,4 @@
+class_name BuildingRuntimeState
 extends RefCounted
 
 const ActiveWorkZoneStateScript = preload("res://game/features/buildings/domain/active_work_zone_state.gd")

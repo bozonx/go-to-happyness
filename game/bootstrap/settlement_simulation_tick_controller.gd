@@ -58,9 +58,9 @@ func update_clock(delta: float) -> void:
 	var events := game.day_cycle.advance(delta, game.GAME_MINUTES_PER_SECOND, game.settlement.workday_hours)
 	if game.weather_state.update(game.clock.minutes):
 		if game.weather_state.is_raining:
-			game._update_interface("Rain has started.")
+			game.update_interface("Rain has started.")
 		else:
-			game._update_interface("Rain has stopped.")
+			game.update_interface("Rain has stopped.")
 	if game.clock.hour() != previous_hour:
 		game.settlement_survival_service.apply_hourly_tent_survival(game.clock.hour())
 		game.settlement_survival_service.apply_hourly_bare_hands_penalty()
@@ -123,7 +123,7 @@ func start_park_rest(cooks_only: bool) -> void:
 		return
 	var sent := game.citizen_needs_service.request_scheduled_rest(cooks_only, game.citizens, game.park_positions)
 	if sent > 0:
-		game._update_interface("%02d:00 park break: %d residents are resting." % [int(game.game_minutes) / 60, sent])
+		game.update_interface("%02d:00 park break: %d residents are resting." % [int(game.game_minutes) / 60, sent])
 
 
 func check_unstaffed_employment_center() -> void:
@@ -141,9 +141,9 @@ func check_unstaffed_employment_center() -> void:
 
 	if has_waiting_citizen and not game.citizen_registration_service.is_registration_staffed():
 		var current_time := game.runtime_seconds
-		if current_time - game._last_unstaffed_warning_time > 60.0:
-			game._last_unstaffed_warning_time = current_time
-			game._add_message(S.WARNING_NO_OFFICER)
+		if current_time - game.last_unstaffed_warning_time > 60.0:
+			game.last_unstaffed_warning_time = current_time
+			game.add_message(S.WARNING_NO_OFFICER)
 
 
 ## Per-frame simulation orchestration. Called from SettlementGame._process after
@@ -154,7 +154,7 @@ func tick(delta: float) -> void:
 	game.demolition.tick(delta)
 	game.water_collector_service.tick(delta)
 	update_clock(delta)
-	game._release_unassigned_overtime_workers()
+	game.release_unassigned_overtime_workers()
 	if game.survival_event_controller != null:
 		game.survival_event_controller.update_survival_busy_workers()
 	game.outside_work_controller.return_outside_workers()
@@ -171,7 +171,7 @@ func tick(delta: float) -> void:
 	if game.trade_service != null:
 		game.trade_service.update()
 	# Queued trades are delivered as courier tasks; a dispatch pass picks them up.
-	game._request_courier_dispatch()
+	game.request_courier_dispatch()
 	game.sawmills.tick(delta, game.runtime_seconds)
 	game.research_controller.update_building_research(delta)
 	if game.building_status_indicator_controller != null:
@@ -180,13 +180,13 @@ func tick(delta: float) -> void:
 	if game.label_distance_fade_controller != null:
 		game.label_distance_fade_controller.update_label_distance_fading()
 	game.backpack_node = game.resource_pile_service.sync_backpack_pile(game.backpack_node)
-	if is_work_time() or game._has_active_night_work_order():
-		game._worker_poll_timer -= delta
-		if game._worker_poll_timer <= 0.0:
-			game._worker_poll_timer = game.WORKER_POLL_INTERVAL
-			game._update_workers()
+	if is_work_time() or game.has_active_night_work_order():
+		game.worker_poll_timer -= delta
+		if game.worker_poll_timer <= 0.0:
+			game.worker_poll_timer = game.WORKER_POLL_INTERVAL
+			game.update_workers()
 	if game.selected_builder != null and game.ui_manager.build_menu.visible:
-		game._show_selected_citizen_menu()
+		game.show_selected_citizen_menu()
 
 
 func send_citizen_to_leisure(citizen: Citizen, minimum_hours := 0) -> bool:

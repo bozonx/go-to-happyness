@@ -16,10 +16,10 @@ func collect(ctx: FacadeContext, canteen_service: CanteenService) -> Dictionary:
 	var needs_service: CitizenNeedsService = ctx.simulation.citizen_needs_service
 	var rest_request := needs_service.rest_request(citizen_id) if needs_service != null else {}
 	var home_position := ctx.helpers.home_entrance_position(actor.home)
-	var can_reach_home: bool = home_position != Vector3.INF and bool(ctx.simulation._is_route_reachable(actor.global_position, home_position))
-	var can_reach_canteen: bool = is_instance_valid(ctx.simulation.canteen) and bool(ctx.simulation._is_route_reachable(actor.global_position, ctx.simulation.canteen_position))
+	var can_reach_home: bool = home_position != Vector3.INF and bool(ctx.simulation.is_route_reachable(actor.global_position, home_position))
+	var can_reach_canteen: bool = is_instance_valid(ctx.simulation.canteen) and bool(ctx.simulation.is_route_reachable(actor.global_position, ctx.simulation.canteen_position))
 	var rest_position: Variant = rest_request.get(&"position", Vector3.INF)
-	var can_reach_rest: bool = rest_position is Vector3 and rest_position != Vector3.INF and bool(ctx.simulation._is_route_reachable(actor.global_position, rest_position))
+	var can_reach_rest: bool = rest_position is Vector3 and rest_position != Vector3.INF and bool(ctx.simulation.is_route_reachable(actor.global_position, rest_position))
 	var relief_candidates: Array[Dictionary] = []
 	if needs_service != null and needs_service.has_toilet_request(citizen_id):
 		relief_candidates = needs_service.relief_candidates_for(actor)

@@ -90,7 +90,7 @@ func enter_first_person(citizen: Citizen, message: String) -> void:
 	if simulation.ui_manager.crosshair != null:
 		simulation.ui_manager.crosshair.visible = true
 	Engine.time_scale = 1.0
-	simulation._update_interface(message)
+	simulation.update_interface(message)
 
 
 func leave_first_person_to_hero_overview() -> void:
@@ -124,9 +124,9 @@ func leave_first_person_to_hero_overview() -> void:
 	if simulation.camera_controller != null:
 		simulation.camera_controller.apply_position()
 	simulation.ui_manager.build_menu.visible = simulation.selected_builder != null
-	simulation._update_workers()
+	simulation.update_workers()
 	Engine.time_scale = simulation.time_multiplier
-	simulation._update_interface("Overview centered on the hero.")
+	simulation.update_interface("Overview centered on the hero.")
 
 
 func update_player_control(delta: float) -> void:
@@ -206,22 +206,22 @@ func update_interaction(delta: float) -> void:
 		simulation.ui_manager.interaction_hint_panel.progress_bar.value = clampi(toilet_pct, 0, 100)
 		simulation.ui_manager.interaction_hint_panel.hint_label.text = S.USING_TOILET_PERCENT % clampi(toilet_pct, 0, 100)
 		return
-	if simulation._cell_from_position(player_citizen.global_position) != interaction_start_cell:
+	if simulation.cell_from_position(player_citizen.global_position) != interaction_start_cell:
 		interaction_action = ""
 		simulation.ui_manager.interaction_hint_panel.progress_bar.visible = false
-		simulation._update_interface(S.ACTION_CANCELLED_AWAY)
+		simulation.update_interface(S.ACTION_CANCELLED_AWAY)
 		simulation.hero_interaction_controller.refresh_interaction_hint()
 		return
 	if (interaction_resource in [ResourceIds.WOOD, ResourceIds.BRANCHES] and not simulation.hero_interaction_service.nearby_tree()) or (interaction_resource == ResourceIds.FOOD and not simulation.hero_interaction_service.nearby_farm()) or (interaction_resource == ResourceIds.WATER and not simulation.hero_interaction_service.nearby_pond()) or (interaction_resource == ResourceIds.GRASS and not simulation.hero_interaction_service.nearby_grass_source()):
 		interaction_action = ""
 		simulation.ui_manager.interaction_hint_panel.progress_bar.visible = false
-		simulation._update_interface(S.HARVEST_CANCELLED_AWAY_SOURCE)
+		simulation.update_interface(S.HARVEST_CANCELLED_AWAY_SOURCE)
 		return
 	interaction_time += delta
 	var progress_pct := clampi(int(interaction_time / HARVEST_DURATION * 100.0), 0, 100)
 	simulation.ui_manager.interaction_hint_panel.progress_bar.value = progress_pct
-	var source_info: String = simulation._harvest_source_info(interaction_resource)
-	simulation.ui_manager.interaction_hint_panel.hint_label.text = "%s %d%% (%s)" % [simulation._gather_action_name(interaction_resource), progress_pct, source_info]
+	var source_info: String = simulation.harvest_source_info(interaction_resource)
+	simulation.ui_manager.interaction_hint_panel.hint_label.text = "%s %d%% (%s)" % [simulation.gather_action_name(interaction_resource), progress_pct, source_info]
 	if interaction_time >= HARVEST_DURATION:
 		var gathered := 0
 		match interaction_resource:
@@ -245,12 +245,12 @@ func update_interaction(delta: float) -> void:
 			ResourceIds.FOOD:
 				gathered = simulation.hero_pocket_service.add_to_pocket(ResourceIds.FOOD, 1) if simulation.hero_pocket_service != null else 0
 		if gathered > 0:
-			simulation._update_interface(S.GATHERED_FORMAT % [interaction_resource, simulation.hero_pocket_service.format_pocket_hint()])
+			simulation.update_interface(S.GATHERED_FORMAT % [interaction_resource, simulation.hero_pocket_service.format_pocket_hint()])
 			if interaction_repeat_all and simulation.hero_pocket_service.pocket_has_room() and _is_harvest_source_available(interaction_resource):
 				interaction_time = 0.0
 				return
 		else:
-			simulation._update_interface(S.POCKET_FULL_CANNOT_GATHER % interaction_resource)
+			simulation.update_interface(S.POCKET_FULL_CANNOT_GATHER % interaction_resource)
 		interaction_action = ""
 		interaction_repeat_all = false
 		simulation.ui_manager.interaction_hint_panel.progress_bar.visible = false
@@ -290,10 +290,10 @@ func start_interaction(all: bool) -> void:
 		simulation.hero_interaction_controller.refuel_fire_from_pocket(target.node, all)
 		return
 	if target.kind == "toilet":
-		simulation._player_use_toilet(target.node)
+		simulation.player_use_toilet(target.node)
 		return
 	if not player_citizen.is_hero:
-		simulation._update_interface(S.ONLY_HERO_CAN_ACT)
+		simulation.update_interface(S.ONLY_HERO_CAN_ACT)
 		return
 	match target.kind:
 		"construction":
@@ -304,7 +304,7 @@ func start_interaction(all: bool) -> void:
 				player_work_target = target.node
 				interaction_action = "construction"
 				interaction_time = 0.0
-				interaction_start_cell = simulation._cell_from_position(player_citizen.global_position)
+				interaction_start_cell = simulation.cell_from_position(player_citizen.global_position)
 				simulation.ui_manager.interaction_hint_panel.progress_bar.visible = true
 				simulation.ui_manager.interaction_hint_panel.hint_label.text = S.WORKING_CONSTRUCTION
 			return
@@ -312,7 +312,7 @@ func start_interaction(all: bool) -> void:
 			player_work_target = target.node
 			interaction_action = "demolition"
 			interaction_time = 0.0
-			interaction_start_cell = simulation._cell_from_position(player_citizen.global_position)
+			interaction_start_cell = simulation.cell_from_position(player_citizen.global_position)
 			simulation.ui_manager.interaction_hint_panel.progress_bar.visible = true
 			simulation.ui_manager.interaction_hint_panel.hint_label.text = S.WORKING_DEMOLITION
 			return
@@ -326,49 +326,49 @@ func start_interaction(all: bool) -> void:
 			simulation.hero_interaction_controller.handle_warehouse_interaction(all, int(target.get("warehouse_index", -1)))
 			return
 		"forage", "rabbit":
-			simulation._update_interface(S.FORAGE_SPECIALIST_ONLY_SHORT)
+			simulation.update_interface(S.FORAGE_SPECIALIST_ONLY_SHORT)
 			return
 		"citizen", "building":
 			return
 		"tree":
 			var gathering_branches: bool = int(simulation.settlement.era) < int(SettlementState.Era.WOOD)
 			if not simulation.hero_pocket_service.pocket_has_room():
-				simulation._update_interface(S.POCKET_FULL_TREE_HINT)
+				simulation.update_interface(S.POCKET_FULL_TREE_HINT)
 				return
 			interaction_action = "harvesting"
 			interaction_resource = ResourceIds.BRANCHES if gathering_branches else ResourceIds.WOOD
 			interaction_time = 0.0
-			interaction_start_cell = simulation._cell_from_position(player_citizen.global_position)
+			interaction_start_cell = simulation.cell_from_position(player_citizen.global_position)
 			interaction_repeat_all = all
 			return
 		"farm":
 			if not simulation.hero_pocket_service.pocket_has_room():
-				simulation._update_interface(S.POCKET_FULL_SHORT)
+				simulation.update_interface(S.POCKET_FULL_SHORT)
 				return
 			interaction_action = "harvesting"
 			interaction_resource = ResourceIds.FOOD
 			interaction_time = 0.0
-			interaction_start_cell = simulation._cell_from_position(player_citizen.global_position)
+			interaction_start_cell = simulation.cell_from_position(player_citizen.global_position)
 			interaction_repeat_all = all
 			return
 		"pond":
 			if not simulation.hero_pocket_service.pocket_has_room():
-				simulation._update_interface(S.POCKET_FULL_SHORT)
+				simulation.update_interface(S.POCKET_FULL_SHORT)
 				return
 			interaction_action = "harvesting"
 			interaction_resource = ResourceIds.WATER
 			interaction_time = 0.0
-			interaction_start_cell = simulation._cell_from_position(player_citizen.global_position)
+			interaction_start_cell = simulation.cell_from_position(player_citizen.global_position)
 			interaction_repeat_all = all
 			return
 		"grass":
 			if not simulation.hero_pocket_service.pocket_has_room():
-				simulation._update_interface(S.POCKET_FULL_SHORT)
+				simulation.update_interface(S.POCKET_FULL_SHORT)
 				return
 			interaction_action = "harvesting"
 			interaction_resource = ResourceIds.GRASS
 			interaction_time = 0.0
-			interaction_start_cell = simulation._cell_from_position(player_citizen.global_position)
+			interaction_start_cell = simulation.cell_from_position(player_citizen.global_position)
 			interaction_repeat_all = all
 			return
 

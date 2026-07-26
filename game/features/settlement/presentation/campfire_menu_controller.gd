@@ -28,13 +28,13 @@ func show_campfire_story_menu() -> void:
 	if simulation == null:
 		return
 	if simulation.settlement.era != SettlementStateScript.Era.TENT:
-		simulation._update_interface("Campfire stories are only part of the Tent Era.")
+		simulation.update_interface("Campfire stories are only part of the Tent Era.")
 		return
 	if simulation.clock.hour() < 20:
-		simulation._update_interface("Campfire stories can only be chosen after 20:00.")
+		simulation.update_interface("Campfire stories can only be chosen after 20:00.")
 		return
 	if not simulation.settlement.campfire_story_effect.is_empty():
-		simulation._update_interface("Tonight's story has already been chosen: %s." % simulation.settlement.campfire_story_effect.capitalize())
+		simulation.update_interface("Tonight's story has already been chosen: %s." % simulation.settlement.campfire_story_effect.capitalize())
 		return
 	simulation.ui_manager.campfire_menu.visible = false
 	simulation.ui_manager.campfire_story_menu.visible = true
@@ -61,7 +61,7 @@ func select_campfire_story(story_id: String) -> void:
 		"optimistic": message = "Optimistic stories chosen: wellbeing will recover faster tonight."
 		"teaching": message = "Teaching tales chosen: a resident may learn something overnight."
 		"plan": message = "Plan for tomorrow chosen: gathering work will be faster tomorrow."
-	simulation._update_interface(message)
+	simulation.update_interface(message)
 
 
 func show_campfire_orders_menu() -> void:

@@ -22,7 +22,7 @@ func show_school_menu() -> void:
 
 	simulation.ui_manager.school_menu.update_state(student_label, can_manage, block_tooltip, simulation.school_developed_professions)
 	simulation.ui_manager.school_menu.visible = true
-	simulation._update_interface("School selected: configure morning study and retraining here.")
+	simulation.update_interface("School selected: configure morning study and retraining here.")
 
 
 func toggle_school_development(role: String, pressed: bool) -> void:
@@ -32,9 +32,9 @@ func toggle_school_development(role: String, pressed: bool) -> void:
 		return
 	simulation.school_service.set_profession_developed(role, pressed)
 	if pressed:
-		simulation._update_interface("School developed: all %ss will train in mornings." % role.capitalize())
+		simulation.update_interface("School developed: all %ss will train in mornings." % role.capitalize())
 	else:
-		simulation._update_interface("Stopped school training for %ss." % role.capitalize())
+		simulation.update_interface("Stopped school training for %ss." % role.capitalize())
 
 
 func start_school_training(role: String) -> void:
@@ -46,4 +46,4 @@ func start_school_training(role: String) -> void:
 		return
 	simulation.selected_builder.start_training(role, simulation.selected_school.global_position)
 	simulation.ui_manager.school_menu.visible = false
-	simulation._update_interface("Training started: 10 mornings in school, then regular work.")
+	simulation.update_interface("Training started: 10 mornings in school, then regular work.")

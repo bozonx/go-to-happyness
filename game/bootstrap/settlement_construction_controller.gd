@@ -1,10 +1,6 @@
 class_name SettlementConstructionController
 extends RefCounted
 
-const FixtureDefinitionScript = preload("res://game/features/buildings/domain/editor/fixture_definition.gd")
-const FixtureRuntimeStateScript = preload("res://game/features/buildings/domain/editor/fixture_runtime_state.gd")
-const FireSourceDefaultsScript = preload("res://game/features/buildings/domain/editor/fire_source_defaults.gd")
-const BuildingBlueprintScript = preload("res://game/features/buildings/domain/editor/building_blueprint.gd")
 
 ## Manages construction lifecycle: site creation, ticking, supply labels,
 ## building completion, and cancellation.
@@ -23,7 +19,7 @@ func create_construction_site(cell: Vector2i, building_type: String, position_on
 	# The reservation refresh runs before the site exists. Publish its entrance
 	# pockets immediately so couriers and builders can route to the new site.
 	game.world_navigation_controller.refresh_navigation_grid()
-	game._request_courier_dispatch()
+	game.request_courier_dispatch()
 	return site
 
 
@@ -73,16 +69,16 @@ func complete_building(cell: Vector2i, building_type: String, position_on_board:
 	building.set_meta("building_instance_id", building_instance_id)
 	var raw_fixtures: Array = blueprint.get("fixtures", [])
 	if not raw_fixtures.is_empty() and game.fixture_service != null:
-		var bp_for_fixtures := BuildingBlueprintScript.new()
+		var bp_for_fixtures := BuildingBlueprint.new()
 		bp_for_fixtures.id = StringName(building_type)
 		for fd_data in raw_fixtures:
 			if fd_data is Dictionary:
-				bp_for_fixtures.fixtures.append(FixtureDefinitionScript.from_dict(fd_data))
+				bp_for_fixtures.fixtures.append(FixtureDefinition.from_dict(fd_data))
 		var current_minute := int(game.game_minutes) if "game_minutes" in game else 0
 		game.fixture_service.initialize_for_building(building_instance_id, bp_for_fixtures, current_minute)
 		# For fire_source fixtures, sync initial fire state to node meta so the
 		# existing visual system continues to work without changes.
-		var fire_states: Array = game.fixture_service.fixtures_with_capability(building_instance_id, FixtureDefinitionScript.CAP_FIRE_SOURCE)
+		var fire_states: Array = game.fixture_service.fixtures_with_capability(building_instance_id, FixtureDefinition.CAP_FIRE_SOURCE)
 		if not fire_states.is_empty():
 			var first_fire: Variant = fire_states[0]
 			building.set_meta("fire_fuel", first_fire.fire_state.fuel)
@@ -108,14 +104,14 @@ func complete_building(cell: Vector2i, building_type: String, position_on_board:
 	game.world_navigation_controller.refresh_boundary_markers()
 	game.building_visuals.add_building_status_indicator(building)
 	game.world_navigation_controller.refresh_navigation_grid()
-	game._update_workers()
+	game.update_workers()
 	if game.building_menu_controller != null:
 		game.building_menu_controller.refresh_build_menu()
 	var completion_message := "%s construction completed." % building_type.capitalize()
 	if building_type in ["recycling_factory", "metal_factory"]:
 		completion_message += " It requires 3 factory workers."
-	game._update_interface(completion_message)
-	game._request_courier_dispatch()
+	game.update_interface(completion_message)
+	game.request_courier_dispatch()
 
 
 func is_construction_site(node: Node3D) -> bool:
@@ -128,7 +124,7 @@ func cancel_selected_construction() -> void:
 	game.service_pocket_manager.unregister_service_pockets(game.selected_building)
 	game.construction.cancel_site(game.selected_building)
 	game.input_controller.close_context_menus()
-	game._update_interface("Construction cancelled. Refunded 50% of costs.")
+	game.update_interface("Construction cancelled. Refunded 50% of costs.")
 
 
 func reconcile_construction_reservations(site: ConstructionSite) -> void:

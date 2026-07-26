@@ -158,7 +158,7 @@ func _refresh_build_title_label() -> void:
 		elif simulation.build_menu_is_global:
 			simulation.ui_manager.build_menu.title_label.text = "%s Era Construction\nChoose a building to place." % simulation.workplace_controller.era_name()
 		else:
-			simulation._show_selected_citizen_menu()
+			simulation.show_selected_citizen_menu()
 
 
 func show_building_menu() -> void:

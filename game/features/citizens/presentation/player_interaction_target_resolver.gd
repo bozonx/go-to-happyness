@@ -96,21 +96,21 @@ func _classify_building_hit(area_parent: Node3D, simulation: Node) -> Dictionary
 
 
 func _classify_proximity(hit_position: Vector3, player_pos: Vector3, simulation: Node) -> Dictionary:
-	var grass_pos: Vector3 = simulation._nearest_grass_source_to_point(hit_position, 2.5)
+	var grass_pos: Vector3 = simulation.nearest_grass_source_to_point(hit_position, 2.5)
 
 	if grass_pos != Vector3.INF and player_pos.distance_to(grass_pos) <= INTERACTION_RANGE:
-		var grass_cell: Vector2i = simulation._cell_from_position(grass_pos)
+		var grass_cell: Vector2i = simulation.cell_from_position(grass_pos)
 		if simulation.grass_sources.has(grass_cell):
 			return {"kind": "grass", "position": grass_pos}
-	var farm_pos: Vector3 = simulation._nearest_point_to_point_array(simulation.farm_positions, hit_position, 5.0)
+	var farm_pos: Vector3 = simulation.nearest_point_to_point_array(simulation.farm_positions, hit_position, 5.0)
 	if farm_pos != Vector3.INF and player_pos.distance_to(farm_pos) <= INTERACTION_RANGE:
 		return {"kind": "farm", "position": farm_pos}
-	var pond_pos: Vector3 = simulation._nearest_point_to_point_array(simulation.pond_positions, hit_position, 2.5)
+	var pond_pos: Vector3 = simulation.nearest_point_to_point_array(simulation.pond_positions, hit_position, 2.5)
 	if pond_pos != Vector3.INF and player_pos.distance_to(pond_pos) <= INTERACTION_RANGE:
 		return {"kind": "pond", "position": pond_pos}
-	var tree_pos: Vector3 = simulation._nearest_point_to_point_array(simulation.tree_positions, hit_position, 1.5)
+	var tree_pos: Vector3 = simulation.nearest_point_to_point_array(simulation.tree_positions, hit_position, 1.5)
 	if tree_pos != Vector3.INF and player_pos.distance_to(tree_pos) <= INTERACTION_RANGE:
-		var tree_node: Node3D = simulation.tree_nodes.get(simulation._cell_from_position(tree_pos))
+		var tree_node: Node3D = simulation.tree_nodes.get(simulation.cell_from_position(tree_pos))
 		if is_instance_valid(tree_node) and not bool(tree_node.get_meta("felled", false)):
 			return {"kind": "tree", "node": tree_node, "position": tree_pos}
 	return {"kind": ""}

@@ -97,7 +97,7 @@ func dump_warehouse_resource(resource_type: String) -> void:
 	if dumped > 0:
 		var pile: Dictionary = {resource_type: dumped}
 		simulation.resource_pile_service.drop_overflow_as_piles(pile, selected_position)
-		simulation._update_interface("Dumped %d %s from the warehouse." % [dumped, resource_type])
+		simulation.update_interface("Dumped %d %s from the warehouse." % [dumped, resource_type])
 	refresh_warehouse_menu()
 
 
@@ -105,5 +105,5 @@ func cover_warehouse_with_tarp() -> void:
 	if simulation == null:
 		return
 	if simulation.settlement.cover_warehouse_with_tarp():
-		simulation._update_interface("The open heap is now covered with a tarp.")
+		simulation.update_interface("The open heap is now covered with a tarp.")
 	refresh_warehouse_menu()

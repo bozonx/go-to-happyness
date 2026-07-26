@@ -21,7 +21,7 @@ func _init(next_simulation: Node = null, next_route_cache: RouteCandidateCache =
 
 
 func target_key(kind: StringName, position: Vector3) -> StringName:
-	var cell: Vector2i = simulation._cell_from_position(position)
+	var cell: Vector2i = simulation.cell_from_position(position)
 	return StringName("%s:%d:%d" % [kind, cell.x, cell.y])
 
 
@@ -39,10 +39,10 @@ func home_entrance_position(home: Node3D) -> Vector3:
 func resource_access_position(resource_position: Vector3, from: Vector3 = Vector3.INF) -> Vector3:
 	if from != Vector3.INF:
 		return simulation.world_navigation_controller.resource_access_position(from, resource_position)
-	var resource_cell: Vector2i = simulation._cell_from_position(resource_position)
+	var resource_cell: Vector2i = simulation.cell_from_position(resource_position)
 	for offset in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1)]:
 		var cell: Vector2i = resource_cell + offset
-		if simulation._is_board_cell(cell) and not simulation.navigation_blocked_cells.has(cell):
+		if simulation.is_board_cell(cell) and not simulation.navigation_blocked_cells.has(cell):
 			return simulation.nav_grid.cell_center(cell) if simulation.nav_grid != null else Vector3((cell.x + 0.5) * simulation.CELL_SIZE, 0.0, (cell.y + 0.5) * simulation.CELL_SIZE)
 	return Vector3.INF
 
@@ -50,7 +50,7 @@ func resource_access_position(resource_position: Vector3, from: Vector3 = Vector
 func route_cost(from: Vector3, destination: Vector3) -> float:
 	if from == Vector3.INF or destination == Vector3.INF:
 		return INF
-	var route: RouteResult = simulation._find_path_around_houses(from, destination, false)
+	var route: RouteResult = simulation.find_path_around_houses(from, destination, false)
 	return simulation.navigation_facade.route_cost(from, route) if simulation.navigation_facade != null else INF
 
 
@@ -70,7 +70,7 @@ func storage_position_for(from: Vector3, resource_type: String) -> Vector3:
 
 func cached_route_candidates(key: StringName, origin: Vector3, producer: Callable) -> Array[Dictionary]:
 	var topology_revision: int = int(simulation.nav_grid.topology_revision()) if simulation.nav_grid != null else -1
-	var origin_cell: Vector2i = simulation._cell_from_position(origin)
+	var origin_cell: Vector2i = simulation.cell_from_position(origin)
 	var now := float(simulation.runtime_seconds)
 	return route_cache.get_or_produce(key, topology_revision, origin_cell, now, producer)
 

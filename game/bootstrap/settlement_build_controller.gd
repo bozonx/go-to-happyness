@@ -20,7 +20,7 @@ func open_build_category(category: String) -> void:
 	if game.building_menu_controller != null:
 		game.building_menu_controller.refresh_build_menu()
 	if game.build_category.is_empty() and not game.build_menu_is_global:
-		game._show_selected_citizen_menu()
+		game.show_selected_citizen_menu()
 
 
 func set_build_placement_ui_visible(is_visible: bool) -> void:
@@ -34,23 +34,23 @@ func set_build_placement_ui_visible(is_visible: bool) -> void:
 
 
 func select_build_mode(next_mode: String) -> void:
-	if not game._can_hero_build():
-		game._update_interface("Only the hero can approve construction decisions.")
+	if not game.can_hero_build():
+		game.update_interface("Only the hero can approve construction decisions.")
 		return
 	if next_mode == "tent" and game.clock.hour() >= 22:
-		game._update_interface("The temporary tent must be marked before 22:00.")
+		game.update_interface("The temporary tent must be marked before 22:00.")
 		return
 	var placement_state: Dictionary = game.building_availability_service.placement_state_with_inventory(next_mode, game.pocket)
 	if not bool(placement_state.allowed):
-		game._update_interface(str(placement_state.message))
+		game.update_interface(str(placement_state.message))
 		return
 	if not game.village_territory_service.has_flag():
 		if next_mode != "settlement_flag":
-			game._update_interface(game.village_territory_service.placement_message(game.village_territory_service.REASON_NO_FLAG))
+			game.update_interface(game.village_territory_service.placement_message(game.village_territory_service.REASON_NO_FLAG))
 			return
 	elif not game.village_territory_service.has_campfire():
 		if next_mode != "campfire" and next_mode != "warehouse":
-			game._update_interface(game.village_territory_service.placement_message(game.village_territory_service.REASON_NO_CAMPFIRE))
+			game.update_interface(game.village_territory_service.placement_message(game.village_territory_service.REASON_NO_CAMPFIRE))
 			return
 	game.build_mode = next_mode
 	game.build_rotation_quarters = 0
@@ -60,7 +60,7 @@ func select_build_mode(next_mode: String) -> void:
 	show_territory_overlay(true)
 	if game.is_first_person:
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-	game._update_interface("%s selected. Choose a clear point; Q/E rotates the building." % game.build_mode.capitalize())
+	game.update_interface("%s selected. Choose a clear point; Q/E rotates the building." % game.build_mode.capitalize())
 
 
 func cancel_build_action() -> void:
@@ -75,7 +75,7 @@ func cancel_build_action() -> void:
 	game.selected_builder = null
 	show_territory_overlay(false)
 	set_build_placement_ui_visible(true)
-	game._update_interface("Construction mode cancelled.")
+	game.update_interface("Construction mode cancelled.")
 
 
 func toggle_global_build_menu() -> void:
@@ -101,11 +101,11 @@ func show_territory_overlay(show: bool) -> void:
 func move_selection(world_position: Vector3) -> void:
 	var bpc := game.building_placement_controller
 	game.selected_world_position = bpc.snapped_build_position(world_position) if bpc != null else world_position
-	game.selected_cell = game._placement_key(game.selected_world_position)
+	game.selected_cell = game.placement_key(game.selected_world_position)
 	game.world_setup.selection_marker.position = game.selected_world_position + Vector3(0.0, 0.04, 0.0)
 	if not game.build_mode.is_empty():
 		var local_footprint: Vector2i = BuildingBlueprints.get_blueprint(game.build_mode).footprint
-		var footprint := game._rotated_footprint(local_footprint)
+		var footprint := game.rotated_footprint(local_footprint)
 		(game.world_setup.selection_marker.mesh as BoxMesh).size = Vector3(footprint.x, 0.04, footprint.y)
 		var forward := Vector3(0.0, 0.0, -1.0).rotated(Vector3.UP, game.build_rotation_quarters * PI * 0.5)
 		game.world_setup.preview_entrance_marker.position = game.selected_world_position + forward * (local_footprint.y * 0.5 + 0.35) + Vector3.UP * 0.08
@@ -126,32 +126,32 @@ func move_selection(world_position: Vector3) -> void:
 
 
 func place_building(world_position: Vector3) -> void:
-	if not game._can_hero_build():
-		game._update_interface("Only the hero can approve construction decisions.")
+	if not game.can_hero_build():
+		game.update_interface("Only the hero can approve construction decisions.")
 		return
 	var bpc := game.building_placement_controller
 	world_position = bpc.snapped_build_position(world_position) if bpc != null else world_position
 	var max_hero_radius := BuildingCatalog.max_hero_radius(game.build_mode)
 	if max_hero_radius > 0.0 and is_instance_valid(game.hero_citizen):
 		if game.hero_citizen.global_position.distance_to(world_position) > max_hero_radius:
-			game._update_interface("Too far from Hero (max %.0f tiles)." % max_hero_radius)
+			game.update_interface("Too far from Hero (max %.0f tiles)." % max_hero_radius)
 			return
 	if game.build_mode in ["straw_trade_tent", "tarp_trade_tent"] and is_instance_valid(game.entrance_stone) and world_position.distance_to(game.entrance_stone.global_position) > 8.0:
-		game._update_interface("The tent market must be built beside the entrance sign.")
+		game.update_interface("The tent market must be built beside the entrance sign.")
 		return
-	var cell := game._placement_key(world_position)
+	var cell := game.placement_key(world_position)
 	var blueprint := BuildingBlueprints.get_blueprint(game.build_mode)
-	var occupied_footprint := game._rotated_footprint(blueprint.footprint)
+	var occupied_footprint := game.rotated_footprint(blueprint.footprint)
 	var territory_reason: StringName = game.village_territory_service.placement_reason(game.build_mode, cell, occupied_footprint)
 	if territory_reason != game.village_territory_service.REASON_OK:
-		game._update_interface(game.village_territory_service.placement_message(territory_reason))
+		game.update_interface(game.village_territory_service.placement_message(territory_reason))
 		return
 	if not (bpc.can_place(world_position) if bpc != null else false):
-		game._update_interface("Construction is not allowed at this point.")
+		game.update_interface("Construction is not allowed at this point.")
 		return
 	if not (bpc.can_pay_building_cost(game.build_mode) if bpc != null else false):
 		var placement_state: Dictionary = game.building_availability_service.placement_state_with_inventory(game.build_mode, game.pocket)
-		game._update_interface(str(placement_state.message))
+		game.update_interface(str(placement_state.message))
 		return
 
 	if BuildingCatalog.is_instant_build(game.build_mode):
@@ -165,14 +165,14 @@ func place_building(world_position: Vector3) -> void:
 	game.building_registry.attach_node(cell, site.node, game.build_mode)
 	_reset_build_mode_visuals()
 	set_build_placement_ui_visible(true)
-	game._update_interface("Construction marked. Couriers must deliver the required materials before builders can start.")
+	game.update_interface("Construction marked. Couriers must deliver the required materials before builders can start.")
 
 
 func place_building_at_crosshair() -> void:
 	var viewport_center := game.get_viewport().get_visible_rect().size * 0.5
-	var terrain_point: Variant = game._terrain_point_at_screen_position(viewport_center)
+	var terrain_point: Variant = game.terrain_point_at_screen_position(viewport_center)
 	if terrain_point == null:
-		game._update_interface("Aim at clear terrain to place the building.")
+		game.update_interface("Aim at clear terrain to place the building.")
 		return
 	place_building(terrain_point)
 
@@ -198,7 +198,7 @@ func _place_instant_building(cell: Vector2i, world_position: Vector3, blueprint:
 		game.citizen_factory.bind_hero_squad_to_settlement(&"main_settlement")
 	_reset_build_mode_visuals()
 	set_build_placement_ui_visible(true)
-	game._update_interface("%s placed!" % str(BuildingCatalog.definition_for(game.build_mode).get("name", "Building")))
+	game.update_interface("%s placed!" % str(BuildingCatalog.definition_for(game.build_mode).get("name", "Building")))
 
 
 func _reset_build_mode_visuals() -> void:

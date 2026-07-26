@@ -1,7 +1,6 @@
 class_name SettlementWorldNavigationController
 extends RefCounted
 
-const CameraControllerScene = preload("res://game/features/world/presentation/camera_controller.tscn")
 const WorldSetupScene = preload("res://game/features/world/presentation/world_setup.tscn")
 
 ## Manages world setup, navigation grid refresh, terrain access positions,
@@ -20,8 +19,8 @@ func _init(p_game: SettlementGame) -> void:
 
 
 func create_world() -> void:
-	game.camera_controller = CameraControllerScene.instantiate() as CameraController
-	game.add_child(game.camera_controller)
+	# CameraController is a declared child of settlement_game.tscn; only the world
+	# itself is built here, because its construction needs the launched map.
 	game.world_setup = WorldSetupScene.instantiate() as WorldSetup
 	game.world_setup.setup(game.camera, game.CELL_SIZE, game.board_cells, game.trail_field, game.launch_config.map_document)
 	game.add_child(game.world_setup)
@@ -93,7 +92,7 @@ func pond_access_position(from: Vector3, pond_center: Vector3) -> Vector3:
 	var best := Vector3.INF
 	var best_distance := INF
 	for candidate in candidates:
-		if game.navigation_blocked_cells.has(game._cell_from_position(candidate)):
+		if game.navigation_blocked_cells.has(game.cell_from_position(candidate)):
 			continue
 		var distance := from.distance_squared_to(candidate)
 		if distance < best_distance:
@@ -101,22 +100,22 @@ func pond_access_position(from: Vector3, pond_center: Vector3) -> Vector3:
 			best_distance = distance
 	if best == Vector3.INF:
 		return Vector3.INF
-	var terrain_height := game._terrain_height_at(best.x, best.z, pond_center.y)
+	var terrain_height := game.terrain_height_at(best.x, best.z, pond_center.y)
 	if not is_nan(terrain_height):
 		best.y = terrain_height
 	return best
 
 
 func resource_access_position(from: Vector3, resource_position: Vector3) -> Vector3:
-	var resource_cell := game._cell_from_position(resource_position)
+	var resource_cell := game.cell_from_position(resource_position)
 	var best := Vector3.INF
 	var best_distance := INF
 	for offset in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1)]:
 		var cell: Vector2i = resource_cell + offset
-		if not game._is_board_cell(cell) or game.navigation_blocked_cells.has(cell):
+		if not game.is_board_cell(cell) or game.navigation_blocked_cells.has(cell):
 			continue
 		var candidate: Vector3 = game.nav_grid.cell_center(cell) if game.nav_grid != null else Vector3((cell.x + 0.5) * game.CELL_SIZE, 0.0, (cell.y + 0.5) * game.CELL_SIZE)
-		if not game._is_route_reachable(from, candidate):
+		if not game.is_route_reachable(from, candidate):
 			continue
 		var distance := from.distance_squared_to(candidate)
 		if distance < best_distance:
@@ -126,7 +125,7 @@ func resource_access_position(from: Vector3, resource_position: Vector3) -> Vect
 
 
 func fell_tree_at(position_on_board: Vector3) -> void:
-	var cell := game._cell_from_position(position_on_board)
+	var cell := game.cell_from_position(position_on_board)
 	var tree: Node3D = game.tree_nodes.get(cell)
 	if not is_instance_valid(tree):
 		return
@@ -136,7 +135,7 @@ func fell_tree_at(position_on_board: Vector3) -> void:
 	apply_tree_felled_visual(cell, tree)
 	refresh_navigation_grid()
 	game.settlement.add(ResourceIds.BRANCHES, 3)
-	game._update_interface("A tree was felled. Its log is ready for delivery; the living tree is no longer available for gathering.")
+	game.update_interface("A tree was felled. Its log is ready for delivery; the living tree is no longer available for gathering.")
 
 
 ## Lays a tree down and frees the cell it occupied. Shared by live felling and

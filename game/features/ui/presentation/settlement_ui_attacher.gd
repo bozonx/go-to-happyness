@@ -1,39 +1,29 @@
 class_name SettlementUIAttacher
 extends RefCounted
 
-const CampfireMenuControllerScript = preload("res://game/features/settlement/presentation/campfire_menu_controller.gd")
-const WorkforceMenuControllerScript = preload("res://game/features/decision/presentation/workforce_menu_controller.gd")
-const ResearchMenuControllerScript = preload("res://game/features/settlement/presentation/research_menu_controller.gd")
-const SchoolMenuControllerScript = preload("res://game/features/buildings/presentation/school_menu_controller.gd")
-const EntranceMenuControllerScript = preload("res://game/features/buildings/presentation/entrance_menu_controller.gd")
-const HouseMenuControllerScript = preload("res://game/features/buildings/presentation/house_menu_controller.gd")
-const PocketTakeMenuControllerScript = preload("res://game/features/citizens/presentation/pocket_take_menu_controller.gd")
-const MarketMenuControllerScript = preload("res://game/features/logistics/presentation/market_menu_controller.gd")
-const WarehouseMenuControllerScript = preload("res://game/features/logistics/presentation/warehouse_menu_controller.gd")
-const BuildingMenuControllerScript = preload("res://game/features/buildings/presentation/building_menu_controller.gd")
 
-var campfire_menu_controller: RefCounted
-var workforce_menu_controller: RefCounted
-var research_menu_controller: RefCounted
-var school_menu_controller: RefCounted
-var entrance_menu_controller: RefCounted
-var house_menu_controller: RefCounted
-var pocket_take_menu_controller: RefCounted
-var market_menu_controller: RefCounted
-var warehouse_menu_controller: RefCounted
-var building_menu_controller: RefCounted
+var campfire_menu_controller: CampfireMenuController
+var workforce_menu_controller: WorkforceMenuController
+var research_menu_controller: ResearchMenuController
+var school_menu_controller: SchoolMenuController
+var entrance_menu_controller: EntranceMenuController
+var house_menu_controller: HouseMenuController
+var pocket_take_menu_controller: PocketTakeMenuController
+var market_menu_controller: MarketMenuController
+var warehouse_menu_controller: WarehouseMenuController
+var building_menu_controller: BuildingMenuController
 
 func create_all_controllers() -> void:
-	campfire_menu_controller = CampfireMenuControllerScript.new()
-	workforce_menu_controller = WorkforceMenuControllerScript.new()
-	research_menu_controller = ResearchMenuControllerScript.new()
-	school_menu_controller = SchoolMenuControllerScript.new()
-	entrance_menu_controller = EntranceMenuControllerScript.new()
-	house_menu_controller = HouseMenuControllerScript.new()
-	pocket_take_menu_controller = PocketTakeMenuControllerScript.new()
-	market_menu_controller = MarketMenuControllerScript.new()
-	warehouse_menu_controller = WarehouseMenuControllerScript.new()
-	building_menu_controller = BuildingMenuControllerScript.new()
+	campfire_menu_controller = CampfireMenuController.new()
+	workforce_menu_controller = WorkforceMenuController.new()
+	research_menu_controller = ResearchMenuController.new()
+	school_menu_controller = SchoolMenuController.new()
+	entrance_menu_controller = EntranceMenuController.new()
+	house_menu_controller = HouseMenuController.new()
+	pocket_take_menu_controller = PocketTakeMenuController.new()
+	market_menu_controller = MarketMenuController.new()
+	warehouse_menu_controller = WarehouseMenuController.new()
+	building_menu_controller = BuildingMenuController.new()
 
 func configure_all(game: Node3D) -> void:
 	if campfire_menu_controller != null: campfire_menu_controller.configure(game)

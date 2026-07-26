@@ -53,16 +53,16 @@ static func cell_center(simulation: Node, cell: Vector2i) -> Vector3:
 	return simulation.nav_grid.cell_center(cell) if simulation.nav_grid != null else Vector3((cell.x + 0.5) * simulation.CELL_SIZE, 0.0, (cell.y + 0.5) * simulation.CELL_SIZE)
 
 static func cell_from_position(simulation: Node, position: Vector3) -> Vector2i:
-	return simulation._cell_from_position(position)
+	return simulation.cell_from_position(position)
 
 static func is_board_cell(simulation: Node, cell: Vector2i) -> bool:
-	return simulation._is_board_cell(cell)
+	return simulation.is_board_cell(cell)
 
 static func is_navigation_cell_blocked(simulation: Node, cell: Vector2i) -> bool:
 	return simulation.navigation_blocked_cells.has(cell)
 
 static func find_path_around_houses(simulation: Node, from: Vector3, destination: Vector3, may_enter: bool) -> RouteResult:
-	return simulation._find_path_around_houses(from, destination, may_enter)
+	return simulation.find_path_around_houses(from, destination, may_enter)
 
 static func pond_access_position(simulation: Node, from: Vector3, pond_center: Vector3) -> Vector3:
 	return simulation.world_navigation_controller.pond_access_position(from, pond_center)
@@ -86,7 +86,7 @@ static func activate_employment_centre(simulation: Node, centre: Node3D) -> void
 	simulation.research_controller.activate_employment_centre(centre)
 
 static func can_start_registration(simulation: Node, citizen: Citizen) -> bool:
-	return simulation._can_start_registration(citizen)
+	return simulation.can_start_registration(citizen)
 
 static func toggle_worker_overtime(simulation: Node, checked: bool) -> void:
 	simulation.workplace_controller.toggle_worker_overtime(checked)
@@ -119,13 +119,13 @@ static func refresh_build_menu(simulation: Node) -> void:
 		simulation.building_menu_controller.refresh_build_menu()
 
 static func open_job_submenu(simulation: Node) -> void:
-	simulation._open_job_submenu()
+	simulation.open_job_submenu()
 
 static func open_daily_order_submenu(simulation: Node) -> void:
-	simulation._open_daily_order_submenu()
+	simulation.open_daily_order_submenu()
 
 static func close_assignment_submenu(simulation: Node) -> void:
-	simulation._close_assignment_submenu()
+	simulation.close_assignment_submenu()
 
 static func player_can_command_labor(simulation: Node) -> bool:
 	return simulation.workplace_labor_service.player_can_command_labor()
@@ -134,7 +134,7 @@ static func toggle_hero_view(simulation: Node) -> void:
 	simulation.player_controller.toggle_hero_view()
 
 static func select_citizen(simulation: Node, citizen: Citizen) -> void:
-	simulation._select_citizen(citizen)
+	simulation.select_citizen(citizen)
 
 static func take_control_of_selected_citizen(simulation: Node) -> void:
 	if simulation.player_controller != null:
@@ -202,7 +202,7 @@ static func house_initial_residents(simulation: Node, tent: Node3D) -> void:
 	simulation.citizen_lifecycle_service.house_initial_residents(tent)
 
 static func show_house_menu(simulation: Node) -> void:
-	simulation._show_house_menu()
+	simulation.show_house_menu()
 
 static func spawn_house_citizen(simulation: Node) -> void:
 	simulation.citizen_lifecycle_service.spawn_house_citizen()
@@ -233,7 +233,7 @@ static func handle_day_cycle_event(simulation: Node, event: SimulationDayEvent) 
 		simulation.simulation_event_dispatcher.dispatch_event(event, simulation.day_cycle.current_day)
 
 static func set_workday_hours(simulation: Node, hours: int) -> void:
-	simulation._set_workday_hours(hours)
+	simulation.set_workday_hours(hours)
 
 # --- Build mode ---
 
@@ -249,10 +249,10 @@ static func refresh_navigation_grid(simulation: Node) -> void:
 	simulation.world_navigation_controller.refresh_navigation_grid()
 
 static func add_citizen(simulation: Node, position: Vector3, role := "") -> void:
-	simulation._add_citizen(position, role)
+	simulation.add_citizen(position, role)
 
 static func placement_key(simulation: Node, world_position: Vector3) -> Vector2i:
-	return simulation._placement_key(world_position)
+	return simulation.placement_key(world_position)
 
 # --- Construction priority ---
 

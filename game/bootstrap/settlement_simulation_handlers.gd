@@ -5,8 +5,6 @@ extends RefCounted
 ## daily order clearing, overtime management, and daily settlement updates.
 ## Extracted from SettlementGame to reduce monolithic file size.
 
-const TentEraSurvivalRulesScript = preload("res://game/features/settlement/domain/tent_era_survival_rules.gd")
-const EventContextScript = preload("res://game/features/events/domain/event_context.gd")
 
 var game: SettlementGame
 
@@ -22,13 +20,13 @@ func on_school_day_ended() -> void:
 
 
 func on_daily_settlement_update(_event: SimulationDayEvent) -> void:
-	game.tent_weather = TentEraSurvivalRulesScript.weather_for_day(game.day_cycle.current_day)
+	game.tent_weather = TentEraSurvivalRules.weather_for_day(game.day_cycle.current_day)
 	game.weather_state.new_day(game.tent_weather, game.random, int(game.clock.minutes))
-	game._update_interface("Forecast: %s." % TentEraSurvivalRulesScript.WEATHER_NAMES[game.tent_weather])
+	game.update_interface("Forecast: %s." % TentEraSurvivalRules.WEATHER_NAMES[game.tent_weather])
 	if game.event_service != null:
 		game.event_service.log.clear_flag(&"smoky_firewood")
 		game.event_service.log.clear_flag(&"firewood_protected_today")
-		var delayed_outcomes: Array[EventOutcome] = game.event_service.advance_day(game.day_cycle.current_day, game.survival_event_controller.build_event_context() if game.survival_event_controller != null else EventContextScript.create(0, 1, 0, {}, 0, 0, {}), game.random)
+		var delayed_outcomes: Array[EventOutcome] = game.event_service.advance_day(game.day_cycle.current_day, game.survival_event_controller.build_event_context() if game.survival_event_controller != null else EventContext.create(0, 1, 0, {}, 0, 0, {}), game.random)
 		for outcome in delayed_outcomes:
 			if game.survival_event_controller != null:
 				game.survival_event_controller.apply_event_outcome(outcome)

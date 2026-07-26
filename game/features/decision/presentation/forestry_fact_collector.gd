@@ -41,7 +41,7 @@ func _cached_forestry_targets(ctx: FacadeContext, actor: Citizen, sawmill_positi
 func _forestry_targets(ctx: FacadeContext, from: Vector3, sawmill_position: Vector3, warehouse_position: Vector3) -> Array[Dictionary]:
 	var nearby: Array[Dictionary] = []
 	for tree_position: Vector3 in ctx.simulation.tree_positions:
-		var cell: Vector2i = ctx.simulation._cell_from_position(tree_position)
+		var cell: Vector2i = ctx.simulation.cell_from_position(tree_position)
 		var tree: Node3D = ctx.simulation.tree_nodes.get(cell) as Node3D
 		if not is_instance_valid(tree) or bool(tree.get_meta("felled", false)):
 			continue
@@ -57,9 +57,9 @@ func _forestry_targets(ctx: FacadeContext, from: Vector3, sawmill_position: Vect
 	var targets: Array[Dictionary] = []
 	for candidate in nearby:
 		var access: Vector3 = candidate[&"access"]
-		if sawmill_position != Vector3.INF and not ctx.simulation._is_route_reachable(access, sawmill_position):
+		if sawmill_position != Vector3.INF and not ctx.simulation.is_route_reachable(access, sawmill_position):
 			continue
-		if warehouse_position != Vector3.INF and not ctx.simulation._is_route_reachable(sawmill_position, warehouse_position):
+		if warehouse_position != Vector3.INF and not ctx.simulation.is_route_reachable(sawmill_position, warehouse_position):
 			continue
 		var cost := ctx.helpers.route_cost(from, access)
 		if cost >= INF:

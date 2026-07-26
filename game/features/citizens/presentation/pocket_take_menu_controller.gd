@@ -36,7 +36,7 @@ func refresh_pocket_take_menu() -> void:
 	if simulation == null or simulation.ui_manager.pocket_take_menu == null:
 		return
 	simulation.ui_manager.pocket_take_menu.clear_items()
-	var warehouse_index: int = simulation.pocket_take_warehouse_index if simulation.pocket_take_warehouse_index >= 0 else simulation._nearby_warehouse_index()
+	var warehouse_index: int = simulation.pocket_take_warehouse_index if simulation.pocket_take_warehouse_index >= 0 else simulation.nearby_warehouse_index()
 	var warehouse_amount := func(resource_type: String) -> int:
 		if warehouse_index >= 0:
 			return simulation.settlement.warehouses[warehouse_index].amount(resource_type)

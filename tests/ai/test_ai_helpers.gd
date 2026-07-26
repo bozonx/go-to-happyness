@@ -206,7 +206,7 @@ class FakeRouteCacheSimulation extends Node:
 	func _init() -> void:
 		nav_grid.configure(1.0, 10)
 
-	func _cell_from_position(position: Vector3) -> Vector2i:
+	func cell_from_position(position: Vector3) -> Vector2i:
 		return nav_grid.cell_from_position(position)
 
 
@@ -231,11 +231,11 @@ class FakeGatheringSimulation extends Node:
 	var consumed_count := 0
 	var fire_management_service := FakeFireManagementService.new()
 
-	func _cell_from_position(position: Vector3) -> Vector2i:
+	func cell_from_position(position: Vector3) -> Vector2i:
 		return Vector2i(floori(position.x), floori(position.z))
 
 	func _consume_grass_source(position: Vector3) -> int:
-		var cell := _cell_from_position(position)
+		var cell := cell_from_position(position)
 		if not grass_sources.has(cell):
 			return 0
 		var source: GrassSourceRecord = grass_sources[cell]
@@ -261,7 +261,7 @@ class FakeCourierSimulation extends Node:
 	func _is_work_time() -> bool:
 		return work_time
 
-	func _publish_courier_tasks(dispatcher: RefCounted) -> void:
+	func publish_courier_tasks(dispatcher: RefCounted) -> void:
 		publish_count += 1
 
 	func _is_courier_task_valid(_task: RefCounted) -> bool:
@@ -287,7 +287,7 @@ class FakeCourierSimulation extends Node:
 			warehouse_positions,
 			routing,
 			func() -> float: return runtime_seconds,
-			func(d): _publish_courier_tasks(d),
+			func(d): publish_courier_tasks(d),
 			func(t) -> bool: return _is_courier_task_valid(t),
 			func(c, t) -> bool: return _start_courier_task(c, t),
 			func(c, t): _cancel_courier_task(c, t),

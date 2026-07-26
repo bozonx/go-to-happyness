@@ -12,6 +12,19 @@ echo "=================================================="
 echo "          GO TO HAPPYNESS TEST SUITE              "
 echo "=================================================="
 
+# Warm the global class-name cache before anything parses a script.
+# `--script` runs resolve `class_name` globals through
+# `.godot/global_script_class_cache.cfg`, which only an import pass writes. On a
+# cold checkout (CI) or right after a `class_name` is added, skipping this makes
+# every affected script fail with "Could not find type X in the current scope"
+# — a parse error that looks nothing like its cause.
+echo ""
+echo "[0/2] Importing project (warms the global class cache)..."
+if ! env XDG_DATA_HOME="$TEST_USER_DATA" godot --headless --log-file "$ENGINE_LOG" --path . --import > /dev/null 2>&1; then
+  echo "[FAIL] Project import failed."
+  exit 1
+fi
+
 echo ""
 echo "[1/2] Running Domain & AI Unit Tests..."
 unit_log="$(mktemp)"

@@ -77,13 +77,13 @@ func bind_events(target: Object) -> void:
 	_connect_event(events.global_build_menu_toggled, target.get("build_controller"), "toggle_global_build_menu")
 	_connect_event(events.skip_night_requested, target, "_skip_night")
 	_connect_event(events.skip_to_workday_start_requested, target, "_skip_to_workday_start")
-	_connect_event(events.time_multiplier_changed, target, "_set_time_multiplier")
+	_connect_event(events.time_multiplier_changed, target, "set_time_multiplier")
 
-	_connect_event(events.build_menu_gui_input, target, "_on_build_menu_gui_input")
+	_connect_event(events.build_menu_gui_input, target, "on_build_menu_gui_input")
 	_connect_event(events.manage_citizen_requested, target, "_take_control_of_selected_citizen")
-	_connect_event(events.daily_order_submenu_requested, target, "_open_daily_order_submenu")
+	_connect_event(events.daily_order_submenu_requested, target, "open_daily_order_submenu")
 	_connect_event(events.personal_night_work_toggled, target.get("workplace_controller"), "toggle_selected_citizen_night_work")
-	_connect_event(events.job_submenu_requested, target, "_open_job_submenu")
+	_connect_event(events.job_submenu_requested, target, "open_job_submenu")
 	_connect_event(events.category_opened, target.get("build_controller"), "open_build_category")
 	_connect_event(events.build_selected, target.get("build_controller"), "select_build_mode")
 	_connect_event(events.role_selected, target.get("workplace_controller"), "assign_work_role")
@@ -96,7 +96,7 @@ func bind_events(target: Object) -> void:
 
 	_connect_event(events.school_demolish_requested, target, "_demolish_selected_school")
 
-	_connect_event(events.workday_hours_changed, target, "_set_workday_hours")
+	_connect_event(events.workday_hours_changed, target, "set_workday_hours")
 	_connect_event(events.campfire_advance_pressed, target.get("workplace_controller"), "on_campfire_advance_pressed")
 	_connect_event(events.campfire_orders_menu_show_requested, target, "_show_campfire_orders_menu")
 	_connect_event(events.campfire_primary_action_requested, target.get("hero_interaction_controller"), "handle_campfire_primary_action")

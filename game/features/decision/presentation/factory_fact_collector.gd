@@ -36,7 +36,7 @@ func collect(ctx: FacadeContext) -> Dictionary:
 		var factory_position_value: Variant = factory_node.get_meta("service_position", factory_node.global_position)
 		if factory_position_value is Vector3:
 			factory_position = factory_position_value
-	factory_can_start = factory_can_start and factory_position != Vector3.INF and ctx.simulation._is_route_reachable(actor.global_position, factory_position)
+	factory_can_start = factory_can_start and factory_position != Vector3.INF and ctx.simulation.is_route_reachable(actor.global_position, factory_position)
 
 	return {
 		&"work.factory.worker": factory_worker or factory_role == &"construction",

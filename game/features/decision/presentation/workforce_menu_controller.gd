@@ -15,7 +15,7 @@ func show_workforce_menu() -> void:
 		return
 	simulation.ui_manager.campfire_menu.visible = false
 	if not simulation.workplace_labor_service.officer_exists():
-		simulation._update_interface(simulation.workplace_labor_service.permanent_profession_block_message())
+		simulation.update_interface(simulation.workplace_labor_service.permanent_profession_block_message())
 		return
 	simulation.ui_manager.workforce_menu.visible = true
 	refresh_workforce_menu()
@@ -253,7 +253,7 @@ func remove_worker_from_role(role: String) -> void:
 			citizen.assigned_dig_site = null
 		else:
 			continue
-		simulation._update_workers()
+		simulation.update_workers()
 		refresh_workforce_menu()
 		refresh_campfire_occupancy_button()
 		return
@@ -294,6 +294,6 @@ func enable_auto_for_citizen(citizen: Citizen) -> void:
 	if not is_instance_valid(citizen) or citizen.is_player_controlled:
 		return
 	citizen.request_no_permanent_work_registration()
-	simulation._update_workers()
+	simulation.update_workers()
 	refresh_workforce_menu()
 	refresh_campfire_occupancy_button()

@@ -19,11 +19,11 @@ class FakeGatheringSimulation extends Node:
 	var consumed_count := 0
 	var fire_management_service := FakeFireManagementService.new()
 
-	func _cell_from_position(position: Vector3) -> Vector2i:
+	func cell_from_position(position: Vector3) -> Vector2i:
 		return Vector2i(floori(position.x), floori(position.z))
 
 	func _consume_grass_source(position: Vector3) -> int:
-		var cell := _cell_from_position(position)
+		var cell := cell_from_position(position)
 		if not grass_sources.has(cell):
 			return 0
 		var source: GrassSourceRecord = grass_sources[cell]
@@ -46,7 +46,7 @@ func _init() -> void:
 	await process_frame
 
 	var source_pos := Vector3(2.0, 0.0, 0.0)
-	simulation.grass_sources[simulation._cell_from_position(source_pos)] = GrassSourceRecord.new(null, 1, 1)
+	simulation.grass_sources[simulation.cell_from_position(source_pos)] = GrassSourceRecord.new(null, 1, 1)
 	citizen.gather_resource_type = "grass"
 	citizen.gather_source_position = source_pos
 	citizen.active_role = "gather_grass"
