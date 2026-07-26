@@ -22,7 +22,7 @@ func create_construction_site(cell: Vector2i, building_type: String, position_on
 	game.service_pocket_manager.register_service_pockets(site.node)
 	# The reservation refresh runs before the site exists. Publish its entrance
 	# pockets immediately so couriers and builders can route to the new site.
-	game._refresh_navigation_grid()
+	game.world_navigation_controller.refresh_navigation_grid()
 	game._request_courier_dispatch()
 	return site
 
@@ -66,7 +66,7 @@ func complete_building(cell: Vector2i, building_type: String, position_on_board:
 		game.building_zone_service.configure_building(building, blueprint.get("work_zones", []), blueprint.get("saved_zone_state", []))
 	if blueprint.has("routing_anchors"):
 		building.set_meta("routing_anchors", blueprint["routing_anchors"])
-	game._unregister_service_pockets(building)
+	game.service_pocket_manager.unregister_service_pockets(building)
 	# Initialize fixtures from the blueprint. The building_instance_id is the
 	# cell key, stored on the node so FireManagementService can look it up.
 	var building_instance_id := "%d,%d" % [cell.x, cell.y]
@@ -94,7 +94,7 @@ func complete_building(cell: Vector2i, building_type: String, position_on_board:
 		building.set_meta("accepting_workers", true)
 		building.set_meta("workplace_priority", game.workplace_priority_counter)
 	if building_type not in ["warehouse", "straw_warehouse", "tarp_warehouse", "campfire", "campfire_lvl2", "campfire_lvl3", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant", "straw_trade_tent", "tarp_trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market", "school", "materials_factory", "tent", "straw_tent", "tarp_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house", "straw_craft_tent", "tarp_craft_tent", "straw_forager_tent", "tarp_forager_tent", "boundary_post", "entrance_sign"]:
-		game._add_building_selector(building, "building_selector", blueprint.footprint)
+		game.building_visuals.add_building_selector(building, "building_selector", blueprint.footprint)
 	if building_type == "entrance_sign":
 		game.building_management.setup_entrance_sign_node(building)
 	var is_home := BuildingTypes.is_housing(building_type)
@@ -105,9 +105,9 @@ func complete_building(cell: Vector2i, building_type: String, position_on_board:
 	game.building_registry.attach_node(cell, building, building_type)
 	var occupied_footprint: Vector2i = building.get_meta("occupied_footprint", blueprint.footprint)
 	game.village_territory_service.on_building_added(cell, building_type)
-	game._refresh_boundary_markers()
+	game.world_navigation_controller.refresh_boundary_markers()
 	game.building_visuals.add_building_status_indicator(building)
-	game._refresh_navigation_grid()
+	game.world_navigation_controller.refresh_navigation_grid()
 	game._update_workers()
 	if game.building_menu_controller != null:
 		game.building_menu_controller.refresh_build_menu()
@@ -125,7 +125,7 @@ func is_construction_site(node: Node3D) -> bool:
 func cancel_selected_construction() -> void:
 	if not is_instance_valid(game.selected_building) or not is_construction_site(game.selected_building):
 		return
-	game._unregister_service_pockets(game.selected_building)
+	game.service_pocket_manager.unregister_service_pockets(game.selected_building)
 	game.construction.cancel_site(game.selected_building)
 	game._close_context_menus()
 	game._update_interface("Construction cancelled. Refunded 50% of costs.")

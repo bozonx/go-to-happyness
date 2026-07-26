@@ -182,7 +182,7 @@ func dismiss_selected_workplace_worker() -> void:
 		return
 	game.selected_building.set_meta("accepting_workers", false)
 	if worker.permanent_role == "official":
-		game._dismiss_official(worker)
+		game.research_controller.dismiss_official(worker)
 	else:
 		game.citizen_lifecycle_service.send_to_unemployment_registration(worker)
 	game._update_workers()
@@ -231,24 +231,24 @@ func upgrade_selected_building() -> void:
 	game.selected_building.set_meta("occupied_footprint", blueprint.footprint)
 	for module in blueprint.modules:
 		game.selected_building.add_child(BuildingBlueprints.create_module(module))
-		game._unregister_navigation_footprint(game.selected_building.global_position, old_footprint)
+		game.service_pocket_manager.unregister_navigation_footprint(game.selected_building.global_position, old_footprint)
 	var is_home := target_type in ["tent", "straw_tent", "tarp_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house"]
 	game.service_pocket_manager.register_service_entrance(game.selected_building, blueprint, is_home, target_type not in ["farm", "park"])
 	if target_type in ["campfire", "campfire_lvl2", "campfire_lvl3", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall"]:
 		game.campfire_node = game.selected_building
-		game._activate_employment_centre(game.selected_building)
-		game._add_building_selector(game.selected_building, "campfire_selector", blueprint.footprint)
+		game.research_controller.activate_employment_centre(game.selected_building)
+		game.building_visuals.add_building_selector(game.selected_building, "campfire_selector", blueprint.footprint)
 		game.building_visuals.add_fire_light(game.selected_building)
 	elif BuildingTypes.is_kitchen(target_type):
-		game._activate_kitchen_if_better(game.selected_building, service_position)
-		game._add_building_selector(game.selected_building, "cook_campfire_selector", blueprint.footprint)
+		game.building_management.activate_kitchen_if_better(game.selected_building, service_position)
+		game.building_visuals.add_building_selector(game.selected_building, "cook_campfire_selector", blueprint.footprint)
 		game.building_visuals.add_fire_light(game.selected_building)
 	game.building_visuals.add_building_status_indicator(game.selected_building)
 	if BuildingTypes.is_warehouse(target_type):
-		game._add_warehouse_fill_label(game.selected_building)
+		game.building_visuals.add_warehouse_fill_label(game.selected_building)
 	game.village_territory_service.recalculate()
-	game._refresh_boundary_markers()
-	game._refresh_navigation_grid()
+	game.world_navigation_controller.refresh_boundary_markers()
+	game.world_navigation_controller.refresh_navigation_grid()
 	game._update_workers()
 	game._update_interface("%s upgraded to %s." % [str(BuildingCatalog.definition_for(old_type).get("name", old_type)), str(BuildingCatalog.definition_for(target_type).get("name", target_type))])
 	if game.ui_manager.campfire_menu.visible and game.selected_building == game.selected_campfire:

@@ -29,7 +29,7 @@ func create_world() -> void:
 	game.simulation_tick_controller.update_daylight()
 	publish_terrain_navigation()
 	refresh_navigation_grid()
-	game._move_selection(Vector3.ZERO)
+	game.build_controller.move_selection(Vector3.ZERO)
 
 
 func add_landscape_object(node: Node) -> void:

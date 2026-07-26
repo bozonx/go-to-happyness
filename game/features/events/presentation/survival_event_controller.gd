@@ -118,14 +118,14 @@ func _assign_survival_busy_worker(hours: float, status_label: String) -> void:
 	worker.cancel_current_action()
 	worker.set_player_controlled(true)
 	worker.set_status_effect(&"survival_assignment", status_label, 1.0, hours)
-	simulation.survival_busy_until[worker.ai_id] = simulation._total_game_minutes() + hours * 60.0
+	simulation.survival_busy_until[worker.ai_id] = simulation.simulation_tick_controller.total_game_minutes() + hours * 60.0
 
 
 func update_survival_busy_workers() -> void:
 	for worker_id in simulation.survival_busy_until.keys().duplicate():
-		if simulation._total_game_minutes() < float(simulation.survival_busy_until[worker_id]):
+		if simulation.simulation_tick_controller.total_game_minutes() < float(simulation.survival_busy_until[worker_id]):
 			continue
-		var worker = simulation._citizen_for_ai_id(int(worker_id))
+		var worker = simulation.citizen_factory.citizen_for_ai_id(int(worker_id))
 		if is_instance_valid(worker):
 			worker.set_player_controlled(false)
 			worker.clear_status_effect(&"survival_assignment")
@@ -196,7 +196,7 @@ func skip_night() -> void:
 	# Living through the night crosses 06:00, when the daily water/food sink runs and
 	# frees storage. Skipping must apply the same rules, otherwise stores stay full,
 	# no production is assignable, and workers have nothing to wake up for.
-	simulation._refresh_living_statuses()
+	simulation.simulation_tick_controller.refresh_living_statuses()
 	if simulation.settlement_daily_rules_service != null:
 		simulation.settlement_daily_rules_service.apply_daily_settlement_rules()
 	# A skipped night has no intervening movement frames for a departing resident.

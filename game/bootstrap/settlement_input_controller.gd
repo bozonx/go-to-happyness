@@ -120,7 +120,7 @@ func handle_unhandled_input(event: InputEvent) -> void:
 		return
 	if not game.build_mode.is_empty() and event is InputEventKey and event.pressed and not event.echo and (event.keycode == KEY_Q or event.keycode == KEY_E):
 		game.build_rotation_quarters = posmod(game.build_rotation_quarters + (-1 if event.keycode == KEY_Q else 1), 4)
-		game._move_selection(game.selected_world_position)
+		game.build_controller.move_selection(game.selected_world_position)
 		game.get_viewport().set_input_as_handled()
 		return
 	if event is InputEventKey and event.keycode == KEY_ESCAPE and event.pressed and not event.echo:
@@ -208,7 +208,7 @@ func _handle_overview_input(event: InputEvent) -> void:
 			if game.get_viewport().gui_get_hovered_control() == null:
 				var terrain_point: Variant = game._terrain_point_at_screen_position(event.position)
 				if terrain_point != null:
-					game._move_selection(terrain_point)
+					game.build_controller.move_selection(terrain_point)
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		if game.selected_builder != null and game.dig_mode:
 			var dig_point: Variant = game._terrain_point_at_screen_position(event.position)
@@ -266,7 +266,7 @@ func close_context_menus() -> void:
 	game.build_mode = ""
 	game.dig_mode = false
 	game.world_setup.selection_marker.visible = false
-	game._show_territory_overlay(false)
+	game.build_controller.show_territory_overlay(false)
 	game.is_rotating_camera = false
 	ui.entrance_menu.visible = false
 	if ui.entrance_order_modal != null:

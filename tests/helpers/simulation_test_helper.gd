@@ -74,7 +74,7 @@ static func employment_center_position(simulation: Node) -> Vector3:
 	return simulation._employment_center_position()
 
 static func entrance_anchor_position(simulation: Node) -> Vector3:
-	return simulation._entrance_anchor_position()
+	return simulation.building_management.entrance_anchor_position()
 
 static func appoint_official(simulation: Node, citizen: Citizen, workplace: Node3D = null) -> bool:
 	return simulation.research_controller.appoint_official(citizen, workplace)
@@ -83,7 +83,7 @@ static func registration_official(simulation: Node) -> Citizen:
 	return simulation._registration_official()
 
 static func activate_employment_centre(simulation: Node, centre: Node3D) -> void:
-	simulation._activate_employment_centre(centre)
+	simulation.research_controller.activate_employment_centre(centre)
 
 static func can_start_registration(simulation: Node, citizen: Citizen) -> bool:
 	return simulation._can_start_registration(citizen)
@@ -99,7 +99,7 @@ static func guard_citizen_positions(simulation: Node) -> void:
 	simulation.simulation_tick_controller.guard_citizen_positions()
 
 static func start_park_rest(simulation: Node, cooks_only: bool) -> void:
-	simulation._start_park_rest(cooks_only)
+	simulation.simulation_tick_controller.start_park_rest(cooks_only)
 
 static func assign_daily_order(simulation: Node, citizen: Citizen, role: String) -> void:
 	if simulation.citizen_daily_order_service != null:
@@ -157,7 +157,7 @@ static func create_resource_pile(simulation: Node, position: Vector3, resources:
 	return simulation.resource_pile_service.create_resource_pile(position, resources, is_backpack_pile)
 
 static func complete_building(simulation: Node, cell: Vector2i, building_type: String, position: Vector3, building: Node3D, blueprint: Dictionary) -> void:
-	simulation._complete_building(cell, building_type, position, building, blueprint)
+	simulation.construction_controller.complete_building(cell, building_type, position, building, blueprint)
 
 static func available_employer_capacity(simulation: Node, role: String) -> int:
 	return simulation._available_employer_capacity(role)
@@ -182,7 +182,7 @@ static func reserve_player_gather_storage(simulation: Node, resource_type: Strin
 	return simulation._reserve_player_gather_storage(resource_type, requested)
 
 static func reconcile_construction_reservations(simulation: Node, site: ConstructionSite) -> void:
-	simulation._reconcile_construction_reservations(site)
+	simulation.construction_controller.reconcile_construction_reservations(site)
 
 # --- Housing ---
 
@@ -246,7 +246,7 @@ static func place_building(simulation: Node, world_position: Vector3) -> void:
 # --- Navigation & citizens ---
 
 static func refresh_navigation_grid(simulation: Node) -> void:
-	simulation._refresh_navigation_grid()
+	simulation.world_navigation_controller.refresh_navigation_grid()
 
 static func add_citizen(simulation: Node, position: Vector3, role := "") -> void:
 	simulation._add_citizen(position, role)

@@ -93,7 +93,7 @@ func start_research(tech_id: String) -> void:
 func cancel_research() -> void:
 	if simulation.settlement.active_research_tech_id == "":
 		return
-	simulation._cancel_active_building_research(true, "Research cancelled. Resources refunded.")
+	simulation.research_controller.cancel_active_building_research(true, "Research cancelled. Resources refunded.")
 	refresh_research_menu()
 	if simulation.campfire_menu_controller != null:
 		simulation.campfire_menu_controller.refresh_campfire_menu()

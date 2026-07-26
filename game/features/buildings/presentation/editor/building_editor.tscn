@@ -143,8 +143,8 @@ theme_override_constants/separation = 6
 unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
-text = "🔨 (B)"
-tooltip_text = "Строить (B)"
+text = "🔨"
+tooltip_text = "Строить"
 
 [node name="ToolEraseBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar"]
 unique_name_in_owner = true
@@ -218,36 +218,54 @@ theme_override_constants/separation = 6
 unique_name_in_owner = true
 layout_mode = 2
 disabled = true
-text = "Удалить"
+text = "🗑"
 tooltip_text = "Удалить выбранный объект (Delete)"
 
 [node name="VSepDecorActions" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
 layout_mode = 2
 
-[node name="DecorRotLeftBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
+[node name="DecorRotXBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "↺"
-tooltip_text = "Повернуть против часовой (Shift+C)"
+text = "🔄X (X)"
+tooltip_text = "Поворот вокруг оси X (X)"
 
-[node name="DecorRotLabel" type="Label" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
+[node name="DecorRotYBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(52, 0)
 layout_mode = 2
-horizontal_alignment = 1
-text = "0°"
+text = "🔄Y (C)"
+tooltip_text = "Поворот вокруг оси Y (C)"
 
-[node name="DecorRotRightBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
+[node name="DecorRotZBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "↻"
-tooltip_text = "Повернуть по часовой (C)"
+text = "🔄Z (Z)"
+tooltip_text = "Поворот вокруг оси Z (Z)"
 
-[node name="DecorRotResetBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
+[node name="DecorSnapButtons" type="HBoxContainer" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="DecorSnap1Btn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar/DecorSnapButtons"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "⟲0"
-tooltip_text = "Сбросить поворот"
+toggle_mode = true
+text = "1"
+tooltip_text = "Привязка к сетке: 1 м"
+
+[node name="DecorSnapHalfBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar/DecorSnapButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+toggle_mode = true
+text = "0.5"
+tooltip_text = "Привязка к сетке: 0.5 м"
+
+[node name="DecorSnapQuarterBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar/DecorSnapButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+toggle_mode = true
+text = "0.25"
+tooltip_text = "Привязка к сетке: 0.25 м"
 
 [node name="VSepDecorUndo" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
 layout_mode = 2
@@ -344,15 +362,14 @@ theme_override_constants/separation = 4
 [node name="HSep2" type="HSeparator" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox"]
 layout_mode = 2
 
-[node name="CostHeaderBtn" type="Button" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox"]
+[node name="CostHeaderBtn" type="Label" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "► Стоимость здания"
-alignment = 0
+theme_override_font_sizes/font_size = 16
+text = "Стоимость здания"
 
 [node name="CostContainer" type="VBoxContainer" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox"]
 unique_name_in_owner = true
-visible = false
 layout_mode = 2
 theme_override_constants/separation = 6
 
@@ -640,32 +657,6 @@ layout_mode = 2
 text = "Каталог декора"
 horizontal_alignment = 1
 
-[node name="DecorSearchEdit" type="LineEdit" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(190, 0)
-layout_mode = 2
-placeholder_text = "Поиск ассета во всех категориях..."
-
-[node name="GroupLbl" type="Label" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
-layout_mode = 2
-text = "Группа:"
-
-[node name="DecorGroupOption" type="OptionButton" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
-unique_name_in_owner = true
-layout_mode = 2
-clip_text = true
-fit_to_longest_item = false
-
-[node name="CategoryLbl" type="Label" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
-layout_mode = 2
-text = "Категория:"
-
-[node name="DecorCategoryOption" type="OptionButton" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
-unique_name_in_owner = true
-layout_mode = 2
-clip_text = true
-fit_to_longest_item = false
-
 [node name="DecorRecentLbl" type="Label" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -679,46 +670,16 @@ layout_mode = 2
 theme_override_constants/h_separation = 3
 theme_override_constants/v_separation = 3
 
+[node name="DecorSearchEdit" type="LineEdit" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(190, 0)
+layout_mode = 2
+placeholder_text = "Поиск ассета во всех категориях..."
+
 [node name="DecorAssetContainer" type="VBoxContainer" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 3
-
-[node name="DecorAssetHint" type="Label" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
-theme_override_font_sizes/font_size = 12
-autowrap_mode = 2
-
-[node name="HSepSnap" type="HSeparator" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
-layout_mode = 2
-
-[node name="SnapLbl" type="Label" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
-layout_mode = 2
-text = "Привязка к сетке:"
-
-[node name="DecorSnapButtons" type="HBoxContainer" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
-layout_mode = 2
-alignment = 1
-
-[node name="DecorSnap1Btn" type="Button" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox/DecorSnapButtons"]
-unique_name_in_owner = true
-layout_mode = 2
-toggle_mode = true
-text = "1"
-
-[node name="DecorSnapHalfBtn" type="Button" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox/DecorSnapButtons"]
-unique_name_in_owner = true
-layout_mode = 2
-toggle_mode = true
-text = "0.5"
-
-[node name="DecorSnapQuarterBtn" type="Button" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox/DecorSnapButtons"]
-unique_name_in_owner = true
-layout_mode = 2
-toggle_mode = true
-text = "0.25"
 
 [node name="DecorInspectorPanel" type="PanelContainer" parent="EditorUI/Root"]
 unique_name_in_owner = true
@@ -1246,6 +1207,5 @@ size_flags_vertical = 3
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/RotZBtn" to="." method="_cycle_rotation_z"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/LayerDownBtn" to="." method="_on_layer_down_pressed"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/LayerUpBtn" to="." method="_on_layer_up_pressed"]
-[connection signal="pressed" from="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/CostHeaderBtn" to="." method="_on_cost_header_pressed"]
 [connection signal="item_selected" from="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/CostContainer/CostModeRow/CostModeOption" to="." method="_on_cost_mode_selected"]
 [connection signal="pressed" from="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/CostContainer/AddExtraCostBtn" to="." method="_on_add_extra_cost_pressed"]

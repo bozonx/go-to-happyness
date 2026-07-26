@@ -129,7 +129,7 @@ func exit_player_work_position() -> void:
 	var was_official_appointment := game.player_citizen.work_position_role == "official" and not game.player_citizen.work_position_temporary
 	game.player_citizen.exit_work_position()
 	if was_official_appointment:
-		game._dismiss_official(game.player_citizen)
+		game.research_controller.dismiss_official(game.player_citizen)
 		game._update_interface(S.LEFT_OFFICER_POST_FORMAT % game.player_citizen.role_label())
 	else:
 		game._update_interface(S.LEFT_WORKPLACE_FORMAT % game.player_citizen.role_label())
@@ -204,7 +204,7 @@ func relight_selected_fire() -> void:
 		return
 	fire_state.lit = true
 	game.fire_management_service.apply_fire_state(game.selected_building, fire_state)
-	game._refresh_living_statuses()
+	game.simulation_tick_controller.refresh_living_statuses()
 	game.workplace_controller.reopen_workplace_menu()
 	game._update_interface("The fire was relit with flint and steel.")
 
@@ -464,7 +464,7 @@ func refuel_fire_from_pocket(building: Node3D, all: bool) -> void:
 		return
 	fire_state.add_delivered(delivered, int(game.game_minutes))
 	game.fire_management_service.apply_fire_state(building, fire_state)
-	game._refresh_living_statuses()
+	game.simulation_tick_controller.refresh_living_statuses()
 	game._update_interface(S.BRANCHES_ADDED_TO_FIRE % delivered)
 	refresh_interaction_hint()
 

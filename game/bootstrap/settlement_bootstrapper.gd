@@ -112,7 +112,7 @@ func run(p_game: SettlementGame) -> void:
 
 func _setup_hero_services() -> void:
 	game.hero_pocket_service = HeroPocketServiceScript.new()
-	game.hero_pocket_service.configure(func() -> Citizen: return game.player_citizen, func(position, resources, is_backpack_pile): return game.resource_pile_service.create_resource_pile(position, resources, is_backpack_pile), game._update_interface, game._refresh_interaction_hint)
+	game.hero_pocket_service.configure(func() -> Citizen: return game.player_citizen, func(position, resources, is_backpack_pile): return game.resource_pile_service.create_resource_pile(position, resources, is_backpack_pile), game._update_interface, func(): game.hero_interaction_controller.refresh_interaction_hint())
 	game.hero_interaction_service = HeroInteractionServiceScript.new()
 
 
@@ -180,7 +180,7 @@ func _setup_ai_and_navigation() -> void:
 	game.navigation_bridge.configure(game.nav_grid, game.navigation_facade, game.route_service, game.navigation_obstacle_publisher)
 	game.building_queue_service = BuildingQueueServiceScript.new()
 	game.building_queue_service.configure(game.building_registry, game.nav_grid)
-	game.building_queue_service.set_citizen_alive_checker(game._is_ai_citizen_id_alive)
+	game.building_queue_service.set_citizen_alive_checker(func(citizen_id): return game.citizen_factory.is_ai_citizen_id_alive(citizen_id))
 
 
 func _setup_citizen_lifecycle() -> void:
@@ -192,15 +192,15 @@ func _setup_citizen_lifecycle() -> void:
 		game.arrival_waiting_greeters,
 		game.arrival_escort_ids,
 		func() -> Node3D: return game.entrance_stone,
-		game._entrance_anchor_position,
+		func(): return game.building_management.entrance_anchor_position(),
 		game._employment_center_position,
-		game._is_work_time,
+		func(): return game.simulation_tick_controller.is_work_time(),
 		game._update_interface,
 		game._show_house_menu,
 		game._add_citizen,
-		game._refresh_living_status,
+		func(citizen): game.simulation_tick_controller.refresh_living_status(citizen),
 		game._request_courier_dispatch,
-		game._citizen_for_ai_id,
+		func(citizen_id): return game.citizen_factory.citizen_for_ai_id(citizen_id),
 		game._terrain_height_at,
 		func(ai_id: int) -> void: if game.citizen_ai != null: game.citizen_ai.unregister_citizen(ai_id),
 		func(ai_id: int) -> void: if game.citizen_ai != null: game.citizen_ai.cancel_citizen_work(ai_id),
@@ -231,20 +231,20 @@ func _setup_construction_and_demolition() -> void:
 	construction_runtime.building_registry = game.building_registry
 	construction_runtime.citizens = game.citizens
 	construction_runtime.duration = SettlementGame.CONSTRUCTION_DURATION
-	construction_runtime.builder_power = game._building_power
-	construction_runtime.builder_count = game._builder_count
-	construction_runtime.set_status = game._set_construction_status
-	construction_runtime.building_completed = game._complete_building
+	construction_runtime.builder_power = func(site_node): return game.construction_controller.building_power(site_node)
+	construction_runtime.builder_count = func(site_node): return game.construction_controller.builder_count(site_node)
+	construction_runtime.set_status = func(text): game.construction_controller.set_construction_status(text)
+	construction_runtime.building_completed = func(cell, building_type, position_on_board, building, blueprint): game.construction_controller.complete_building(cell, building_type, position_on_board, building, blueprint)
 	construction_runtime.workers_changed = game._update_workers
-	construction_runtime.navigation_changed = game._refresh_navigation_grid
-	construction_runtime.update_supply_label = game._update_construction_supply_label
+	construction_runtime.navigation_changed = func(): game.world_navigation_controller.refresh_navigation_grid()
+	construction_runtime.update_supply_label = func(site): game.construction_controller.update_construction_supply_label(site)
 	game.construction = ConstructionService.new()
 	game.construction.site_scene = ConstructionSiteScene
 	game.construction.entrance_post_scene = ConstructionEntrancePostScene
 	game.construction.configure(construction_runtime)
 	var demolition_runtime := DemolitionRuntime.new()
 	demolition_runtime.duration = SettlementGame.DEMOLITION_DURATION
-	demolition_runtime.building_power = game._building_power
+	demolition_runtime.building_power = func(site_node): return game.construction_controller.building_power(site_node)
 	demolition_runtime.is_ready = func(site): return game.building_lifecycle_service.demolition_ready(site)
 	demolition_runtime.completed = game._finish_demolition
 	game.demolition = DemolitionService.new()
@@ -271,7 +271,7 @@ func _setup_canteen_and_resources() -> void:
 		game._has_cook,
 		game._update_interface,
 		game._request_courier_dispatch,
-		game._is_work_time,
+		func(): return game.simulation_tick_controller.is_work_time(),
 		game._update_workers
 	)
 	game.resource_pile_service = ResourcePileService.new(game, game.resource_piles, game.settlement, game.weather_state)
@@ -296,7 +296,7 @@ func _setup_foraging_and_fire() -> void:
 		game.gather_progress_labels,
 		game._terrain_height_at,
 		game._cell_from_position,
-		game._first_person_target
+		func(): return game.hero_interaction_controller.first_person_target()
 	)
 	# Natural-resource dictionaries are owned by ForagingService. Configure hero
 	# proximity queries only after that service exists, otherwise the bootstrap
@@ -324,7 +324,7 @@ func _setup_foraging_and_fire() -> void:
 		func() -> int: return int(game.game_minutes),
 		func() -> Node3D: return game.campfire_node,
 		game._add_message,
-		game._refresh_living_statuses,
+		func(): game.simulation_tick_controller.refresh_living_statuses(),
 		func() -> void: game.settlement.wellbeing = maxi(0, game.settlement.wellbeing - 1)
 	)
 	game.fixture_service = FixtureService.new()
@@ -339,16 +339,16 @@ func _setup_building_maintenance() -> void:
 		game.village_territory_service,
 		game.resource_pile_service,
 		{
-			"unregister_pockets": game._unregister_service_pockets,
+			"unregister_pockets": func(node): game.service_pocket_manager.unregister_service_pockets(node),
 			"move_stored_resources": func(resources, warehouse_index): game.building_lifecycle_service.move_stored_resources_to_pile(resources, warehouse_index),
 			"return_supplies": func(building): game.logistics_controller.return_in_transit_building_supplies(building),
 			"remove_services": func(building, building_type): game.building_lifecycle_service.remove_building_services(building, building_type),
-			"unregister_nav_footprint": game._unregister_navigation_footprint,
-			"refresh_boundary": game._refresh_boundary_markers,
+			"unregister_nav_footprint": func(center, footprint): game.service_pocket_manager.unregister_navigation_footprint(center, footprint),
+			"refresh_boundary": func(): game.world_navigation_controller.refresh_boundary_markers(),
 			"select_best_campfire": func(): game.building_lifecycle_service.select_best_campfire(),
-			"refresh_nav_grid": game._refresh_navigation_grid,
+			"refresh_nav_grid": func(): game.world_navigation_controller.refresh_navigation_grid(),
 			"update_workers": game._update_workers,
-			"refresh_living_status": game._refresh_living_status
+			"refresh_living_status": func(citizen): game.simulation_tick_controller.refresh_living_status(citizen)
 		}
 	)
 
@@ -367,10 +367,10 @@ func _setup_settlement_survival_and_daily_rules() -> void:
 		func() -> int: return game.tent_weather,
 		func() -> Node3D: return game.entrance_stone,
 		func() -> Variant: return game.event_service,
-		game._has_lit_communal_fire,
+		func(): return game.simulation_tick_controller.has_lit_communal_fire(),
 		game._add_message,
-		game._is_citizen_work_time,
-		game._is_work_time
+		func(citizen): return game.simulation_tick_controller.is_citizen_work_time(citizen),
+		func(): return game.simulation_tick_controller.is_work_time()
 	)
 	game.settlement_daily_rules_service = SettlementDailyRulesServiceScript.new()
 	game.settlement_daily_rules_service.configure(
@@ -441,28 +441,28 @@ func _setup_building_lifecycle() -> void:
 		game._update_interface,
 		game._update_workers,
 		func(house): game.citizen_lifecycle_service.cancel_arrivals_for_house(house),
-		game._add_demolition_marker,
-		game._refresh_living_status,
-		game._unregister_service_pockets,
+		func(building): game.building_visuals.add_demolition_marker(building),
+		func(citizen): game.simulation_tick_controller.refresh_living_status(citizen),
+		func(node): game.service_pocket_manager.unregister_service_pockets(node),
 		func(building): game.logistics_controller.return_in_transit_building_supplies(building),
 		func(): game.canteen_service.cancel_canteen_delivery(),
-		game._unregister_navigation_footprint,
-		game._refresh_boundary_markers,
-		game._select_best_canteen,
+		func(center, footprint): game.service_pocket_manager.unregister_navigation_footprint(center, footprint),
+		func(): game.world_navigation_controller.refresh_boundary_markers(),
+		func(): game.building_management.select_best_canteen(),
 		func(position, resources, is_backpack_pile): return game.resource_pile_service.create_resource_pile(position, resources, is_backpack_pile),
-		game._refresh_navigation_grid,
+		func(): game.world_navigation_controller.refresh_navigation_grid(),
 		game._is_construction_site,
-		game._activate_employment_centre,
+		func(centre): game.research_controller.activate_employment_centre(centre),
 		game._convert_backpack_pile_to_regular,
-		game._add_building_selector,
-		game._add_warehouse_fill_label,
+		func(building, group_name, footprint): game.building_visuals.add_building_selector(building, group_name, footprint),
+		func(building): game.building_visuals.add_warehouse_fill_label(building),
 		game._sawmill_stock,
-		game._create_gathering_place_visual,
-		game._activate_kitchen_if_better,
-		game._add_house_light,
+		func(building): game.building_visuals.create_gathering_place_visual(building),
+		func(building, service_position): game.building_management.activate_kitchen_if_better(building, service_position),
+		func(house): game.building_visuals.add_house_light(house),
 		func(house): game.citizen_lifecycle_service.house_initial_residents(house),
-		game._cancel_active_building_research,
-		game._dismiss_official,
+		func(refund, message): game.research_controller.cancel_active_building_research(refund, message),
+		func(citizen): game.research_controller.dismiss_official(citizen),
 		func(citizen): game.citizen_lifecycle_service.send_to_unemployment_registration(citizen)
 	)
 	game.construction_priority_service = SettlementGame.ConstructionPriorityServiceScript.new()
@@ -494,8 +494,8 @@ func _setup_excavation_and_factory() -> void:
 		game._placement_key,
 		game._is_clear_of_objects,
 		game._employment_center_position,
-		game._show_territory_overlay,
-		game._move_selection,
+		func(show): game.build_controller.show_territory_overlay(show),
+		func(world_position): game.build_controller.move_selection(world_position),
 		game._show_selected_citizen_menu,
 		func() -> Citizen: return game.selected_builder,
 		func() -> Vector3: return game.selected_world_position,
@@ -516,7 +516,7 @@ func _setup_citizen_registration_and_school() -> void:
 		SettlementGame.OFFICER_POST_RADIUS,
 		game._employment_centre_building,
 		game._employment_center_position,
-		game._is_work_time,
+		func(): return game.simulation_tick_controller.is_work_time(),
 		game._update_workers,
 		func() -> int:
 			game._registration_queue_counter += 1
@@ -544,9 +544,9 @@ func _setup_citizen_needs_and_orders() -> void:
 		game.clock,
 		game.building_registry,
 		func() -> float: return game.runtime_seconds,
-		game._is_work_time,
-		game._is_citizen_work_time,
-		game._absolute_game_minutes,
+		func(): return game.simulation_tick_controller.is_work_time(),
+		func(citizen): return game.simulation_tick_controller.is_citizen_work_time(citizen),
+		func(): return game.outside_work_controller.absolute_game_minutes(),
 		SettlementGame.GAME_MINUTES_PER_SECOND,
 		func() -> void: if game.citizen_ai != null: game.citizen_ai.request_decision_refresh()
 	)
@@ -576,10 +576,10 @@ func _setup_trade_and_logistics() -> void:
 		func() -> Node3D: return game.entrance_stone,
 		func(): return game.logistics_controller.get_delivery_position(),
 		game._update_interface,
-		game._refresh_market_menu,
+		func(): game.workplace_controller.refresh_market_menu(),
 		game._request_courier_dispatch,
-		game._total_game_minutes,
-		game._citizen_for_ai_id,
+		func(): return game.simulation_tick_controller.total_game_minutes(),
+		func(citizen_id): return game.citizen_factory.citizen_for_ai_id(citizen_id),
 		func(position, resources, is_backpack_pile): return game.resource_pile_service.create_resource_pile(position, resources, is_backpack_pile),
 		game._update_workers
 	)
@@ -623,7 +623,7 @@ func _setup_courier_system() -> void:
 		func(position, resource_type, amount): game.resource_pile_service.drop_resource_pile(position, resource_type, amount),
 		game._update_interface,
 		game._request_courier_dispatch,
-		game._send_citizen_to_leisure
+		func(citizen, minimum_hours): return game.simulation_tick_controller.send_citizen_to_leisure(citizen, minimum_hours)
 	)
 	game.courier_task_publisher = CourierTaskPublisherScript.new()
 	game.courier_task_publisher.configure(
@@ -644,12 +644,12 @@ func _setup_courier_system() -> void:
 		func() -> Vector3: return game.canteen_position,
 		func() -> bool: return game.pending_canteen_delivery,
 		func() -> float: return game.runtime_seconds,
-		game._reconcile_construction_reservations,
+		func(site): game.construction_controller.reconcile_construction_reservations(site),
 		func(): game.logistics_controller.reconcile_repair_reservations(),
 		game._cell_from_position,
 		func(from): return game.logistics_controller.get_nearest_delivery_position(from),
 		game._warehouse_delivery_position,
-		game._construction_development_priority,
+		func(site): return game.construction_controller.construction_development_priority(site),
 		func(resource_type, from_position): return game.logistics_controller.construction_material_sources(resource_type, from_position),
 		func(resource_type, source): return game.logistics_controller.construction_source_available(resource_type, source),
 		func(building): return game.fire_management_service.fire_state_for(building),
@@ -682,7 +682,7 @@ func _setup_courier_system() -> void:
 		func(building, fire_state): game.fire_management_service.apply_fire_state(building, fire_state),
 		game._is_route_reachable,
 		func(resource_type, source): return game.logistics_controller.construction_source_available(resource_type, source),
-		game._citizen_for_ai_id
+		func(citizen_id): return game.citizen_factory.citizen_for_ai_id(citizen_id)
 	)
 
 
@@ -707,7 +707,7 @@ func _setup_actuator_and_events() -> void:
 		game._update_interface,
 		game._request_courier_dispatch,
 		func() -> void: if game.citizen_ai != null: game.citizen_ai.request_decision_refresh(),
-		game._refresh_living_statuses,
+		func(): game.simulation_tick_controller.refresh_living_statuses(),
 		func(position, resource_type, amount): game.resource_pile_service.drop_resource_pile(position, resource_type, amount),
 		func(building): return game.fire_management_service.fire_state_for(building),
 		func(building, fire_state): game.fire_management_service.apply_fire_state(building, fire_state)
@@ -715,10 +715,10 @@ func _setup_actuator_and_events() -> void:
 	game.simulation_event_dispatcher = SimulationEventDispatcherScript.new()
 	game.simulation_event_dispatcher.configure({
 		"start_meal": func(hour): game.canteen_service.start_meal(hour),
-		"start_park_rest": game._start_park_rest,
+		"start_park_rest": func(cooks_only): game.simulation_tick_controller.start_park_rest(cooks_only),
 		"end_ai_work_shift": func(): game.simulation_handlers.end_ai_work_shift(),
 		"clear_finished_daily_orders": func(workday_id): game.simulation_handlers.clear_finished_daily_orders(workday_id),
-		"refresh_living_statuses": game._refresh_living_statuses,
+		"refresh_living_statuses": func(): game.simulation_tick_controller.refresh_living_statuses(),
 		"update_workers": game._update_workers,
 		"apply_pending_workday_hours": game._apply_pending_workday_hours,
 		"clear_expired_overtime_orders": func(): game.simulation_handlers.clear_expired_overtime_orders(),
@@ -779,7 +779,7 @@ func _setup_controllers_and_world() -> void:
 func _setup_citizens_and_ai() -> void:
 	game.citizen_factory.create_citizens()
 	game.citizen_factory.create_starter_backpack()
-	game._refresh_living_statuses()
+	game.simulation_tick_controller.refresh_living_statuses()
 	if not game.citizen_ai.configure(
 		SettlementAIWorldFacade.new(game),
 		[SleepGoalScript.new(), MealGoalScript.new(), ToiletGoalScript.new(), RestGoalScript.new(), ReturnHomeWhenIdleGoalScript.new(), FollowLeaderGoalScript.new(), RegisterGoalScript.new(), ForestryGoalScript.new(), FarmingGoalScript.new(), ConstructionGoalScript.new(), GatheringGoalScript.new(), CleaningGoalScript.new(), ExcavationGoalScript.new(), ServiceWorkGoalScript.new(), FactoryWorkGoalScript.new(), CourierDeliveryGoalScript.new()],

@@ -13,93 +13,44 @@ const FurnishingAssetCatalogScript = preload("res://game/features/buildings/doma
 const RECENT_ASSET_LIMIT := 6
 
 var _controller: Node = null
-var _group_option: OptionButton = null
-var _category_option: OptionButton = null
 var _search_edit: LineEdit = null
 var _recent_label: Label = null
 var _recent_container: HFlowContainer = null
 var _asset_container: VBoxContainer = null
-var _asset_hint: Label = null
 var _snap_buttons: Dictionary = {}
 var _asset_buttons: Dictionary = {}
 var _recent_buttons: Dictionary = {}
 var _recent_assets: Array[StringName] = []
 var _expanded_categories: Dictionary = {}
+var _expanded_group: StringName = &""
 
 
 func setup(controller: Node, editor: Node) -> void:
 	_controller = controller
-	_group_option = editor.get_node("%DecorGroupOption")
-	_category_option = editor.get_node("%DecorCategoryOption")
 	_search_edit = editor.get_node("%DecorSearchEdit")
 	_recent_label = editor.get_node("%DecorRecentLbl")
 	_recent_container = editor.get_node("%DecorRecentContainer")
 	_asset_container = editor.get_node("%DecorAssetContainer")
-	_asset_hint = editor.get_node("%DecorAssetHint")
 
-	_category_option.item_selected.connect(_on_category_selected)
-	_group_option.item_selected.connect(_on_group_selected)
 	_search_edit.text_changed.connect(_on_search_changed)
 
-	_build_group_options()
 	_build_snap_options(editor)
 
 
 func activate() -> void:
-	_rebuild_category_options()
+	if _expanded_group.is_empty():
+		for group_id in FurnishingAssetCatalogScript.GROUPS.keys():
+			if _controller.current_category in FurnishingAssetCatalogScript.categories_in_group(group_id):
+				_expanded_group = group_id
+				break
 	_rebuild_asset_buttons()
 	_rebuild_recent_assets()
-
-
-func _build_group_options() -> void:
-	_group_option.clear()
-	_group_option.add_item("Все группы")
-	_group_option.set_item_metadata(0, &"")
-	for group_id in FurnishingAssetCatalogScript.GROUPS.keys():
-		_group_option.add_item(String(FurnishingAssetCatalogScript.GROUPS[group_id]))
-		_group_option.set_item_metadata(_group_option.item_count - 1, group_id)
-	_group_option.select(0)
 
 
 func _build_snap_options(editor: Node) -> void:
 	_snap_buttons = {1.0: editor.get_node("%DecorSnap1Btn"), 0.5: editor.get_node("%DecorSnapHalfBtn"), 0.25: editor.get_node("%DecorSnapQuarterBtn")}
 	for step in _snap_buttons.keys():
 		(_snap_buttons[step] as Button).pressed.connect(_select_snap_step.bind(float(step)))
-
-
-func _on_group_selected(index: int) -> void:
-	_controller.current_group = _group_option.get_item_metadata(index)
-	_rebuild_category_options()
-	_rebuild_asset_buttons()
-
-
-func _rebuild_category_options() -> void:
-	var counts := FurnishingAssetCatalogScript.category_counts()
-	_category_option.clear()
-	var selected_index := -1
-	for category_id in FurnishingAssetCatalogScript.categories_in_group(_controller.current_group):
-		var count := int(counts.get(category_id, 0))
-		_category_option.add_item("%s (%d)" % [FurnishingAssetCatalogScript.category_display_name(category_id), count])
-		var item_index := _category_option.item_count - 1
-		_category_option.set_item_metadata(item_index, category_id)
-		# Empty categories stay listed (they document what is planned) but cannot
-		# be selected into a blank asset list.
-		_category_option.set_item_disabled(item_index, count == 0)
-		if category_id == _controller.current_category:
-			selected_index = item_index
-	if selected_index < 0:
-		_controller.current_category = FurnishingAssetCatalogScript.first_populated_category(_controller.current_category)
-		for i in _category_option.item_count:
-			if _category_option.get_item_metadata(i) == _controller.current_category:
-				selected_index = i
-				break
-	if selected_index >= 0:
-		_category_option.select(selected_index)
-
-
-func _on_category_selected(index: int) -> void:
-	_controller.current_category = _category_option.get_item_metadata(index)
-	_rebuild_asset_buttons()
 
 
 ## One toggle button per asset, mirroring the frame palette, instead of a second
@@ -129,22 +80,28 @@ func _rebuild_asset_buttons() -> void:
 		_asset_container.add_child(empty_label)
 		if search_text.is_empty():
 			_controller.current_asset_id = &""
-			_asset_hint.text = ""
 		_controller.refresh_ghost()
 		return
 
-	var keep_selection := false
-	for asset in all_assets:
-		if asset.id == _controller.current_asset_id:
-			keep_selection = true
-	if not keep_selection:
-		_controller.current_asset_id = all_assets[0].id
 	for group_id in FurnishingAssetCatalogScript.GROUPS.keys():
 		var group_box := VBoxContainer.new()
-		var group_title := Label.new()
-		group_title.text = String(FurnishingAssetCatalogScript.GROUPS[group_id])
-		group_title.add_theme_font_size_override("font_size", 15)
-		group_box.add_child(group_title)
+		var group_assets: Array = []
+		for category_id in FurnishingAssetCatalogScript.categories_in_group(group_id):
+			for asset in FurnishingAssetCatalogScript.get_assets_by_category(category_id):
+				if asset in all_assets:
+					group_assets.append(asset)
+		if group_assets.is_empty():
+			continue
+		var group_header := Button.new()
+		group_header.flat = true
+		group_header.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		var group_expanded: bool = group_id == _expanded_group
+		group_header.text = ("▾ " if group_expanded else "▸ ") + String(FurnishingAssetCatalogScript.GROUPS[group_id])
+		group_header.pressed.connect(_toggle_catalog_group.bind(group_id))
+		group_box.add_child(group_header)
+		if not group_expanded:
+			_asset_container.add_child(group_box)
+			continue
 		for category_id in FurnishingAssetCatalogScript.categories_in_group(group_id):
 			var assets := FurnishingAssetCatalogScript.get_assets_by_category(category_id)
 			if not search_text.is_empty():
@@ -170,8 +127,14 @@ func _rebuild_asset_buttons() -> void:
 					group_box.add_child(button)
 					_asset_buttons[asset.id] = button
 		_asset_container.add_child(group_box)
-	_update_asset_hint()
 	_controller.refresh_ghost()
+
+
+func _toggle_catalog_group(group_id: StringName) -> void:
+	# The inline catalog is a true accordion: exactly one group stays open.
+	_expanded_group = group_id
+	_controller.current_group = group_id
+	_rebuild_asset_buttons()
 
 
 func _toggle_catalog_category(category_id: StringName) -> void:
@@ -188,7 +151,6 @@ func _select_asset(asset_id: StringName) -> void:
 	if asset != null:
 		_select_snap_step(asset.default_snap_step)
 	_add_recent_asset(asset_id)
-	_update_asset_hint()
 	_controller.refresh_ghost()
 
 
@@ -228,15 +190,6 @@ func _rebuild_recent_assets() -> void:
 		button.pressed.connect(_select_asset.bind(asset_id))
 		_recent_container.add_child(button)
 		_recent_buttons[asset_id] = button
-
-
-func _update_asset_hint() -> void:
-	var asset := FurnishingAssetCatalogScript.get_asset(_controller.current_asset_id)
-	if asset == null:
-		_asset_hint.text = ""
-		return
-	var size := asset.footprint_m()
-	_asset_hint.text = "%s\nРазмер: %.2f×%.2f×%.2f м" % [asset.description, size.x, size.y, size.z]
 
 
 func _select_snap_step(step: float) -> void:

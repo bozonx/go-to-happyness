@@ -20,7 +20,7 @@ func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
 	# 1. Despawn current citizens
 	for citizen in game.citizens.duplicate():
 		if is_instance_valid(citizen):
-			game._on_ai_citizen_exiting(citizen.ai_id)
+			game.citizen_factory.on_ai_citizen_exiting(citizen.ai_id)
 			citizen.queue_free()
 	game.citizens.clear()
 
@@ -119,7 +119,7 @@ func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
 				var child := site_node.get_node_or_null(child_name)
 				if child != null:
 					child.queue_free()
-			game._complete_building(cell, b_type, pos, site_node, blueprint)
+			game.construction_controller.complete_building(cell, b_type, pos, site_node, blueprint)
 		else:
 			push_warning("restore_from_save_data: skipping building with unknown type '" + b_type + "' at cell " + str(cell))
 
@@ -144,7 +144,7 @@ func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
 				site.progress = progress
 				site.delivered_materials = delivered
 				game.building_registry.attach_node(cell, site.node, b_type)
-				game._update_construction_supply_label(site)
+				game.construction_controller.update_construction_supply_label(site)
 		else:
 			push_warning("restore_from_save_data: skipping construction site with unknown type '" + b_type + "' at cell " + str(cell))
 
@@ -200,8 +200,8 @@ func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
 		if citizen.ai_id >= game._next_ai_citizen_id:
 			game._next_ai_citizen_id = citizen.ai_id + 1
 
-		game.citizen_ai.register_citizen(citizen.ai_id, SettlementCitizenActuatorScript.new(citizen, game._ai_target_for_key))
-		citizen.tree_exiting.connect(game._on_ai_citizen_exiting.bind(citizen.ai_id), CONNECT_ONE_SHOT)
+		game.citizen_ai.register_citizen(citizen.ai_id, SettlementCitizenActuatorScript.new(citizen, game.citizen_factory.ai_target_for_key))
+		citizen.tree_exiting.connect(game.citizen_factory.on_ai_citizen_exiting.bind(citizen.ai_id), CONNECT_ONE_SHOT)
 
 		var needs_dict: Dictionary = cit_dict.get("needs", {})
 		citizen.hunger = float(needs_dict.get("hunger", 100.0))
@@ -244,8 +244,8 @@ func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
 			citizen.employment_state = Citizen.EmploymentState.NO_PERMANENT_WORK
 
 	# 10. Re-initialize AI and Interfaces
-	game._refresh_living_statuses()
-	game._refresh_navigation_grid()
+	game.simulation_tick_controller.refresh_living_statuses()
+	game.world_navigation_controller.refresh_navigation_grid()
 	game._update_workers()
 	if game.building_menu_controller != null:
 		game.building_menu_controller.refresh_build_menu()

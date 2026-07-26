@@ -85,7 +85,6 @@ var _scale_spin: SpinBox = null
 var _duplicate_btn: Button = null
 var _delete_btn: Button = null
 var _toolbar_delete_btn: Button = null
-var _rot_label: Label = null
 var _layer_label: Label = null
 var _collision_overlay_btn: Button = null
 var _collision_overlay: Node3D = null
@@ -132,7 +131,6 @@ func setup(editor: Node) -> void:
 	_toolbar_delete_btn = editor.get_node("%DecorDeleteSelectionBtn")
 	_undo_btn = editor.get_node("%DecorUndoBtn")
 	_redo_btn = editor.get_node("%DecorRedoBtn")
-	_rot_label = editor.get_node("%DecorRotLabel")
 	_layer_label = editor.get_node("%DecorLayerLabel")
 
 	# Fixture editor — delegated to FixtureEditorPanel
@@ -143,9 +141,9 @@ func setup(editor: Node) -> void:
 	_catalog_panel = DecorCatalogPanelScript.new()
 	_catalog_panel.setup(self, editor)
 
-	editor.get_node("%DecorRotLeftBtn").pressed.connect(rotate_selection.bind("y", -1))
-	editor.get_node("%DecorRotRightBtn").pressed.connect(rotate_selection.bind("y", 1))
-	editor.get_node("%DecorRotResetBtn").pressed.connect(_reset_rotation)
+	editor.get_node("%DecorRotXBtn").pressed.connect(rotate_selection.bind("x", 1))
+	editor.get_node("%DecorRotYBtn").pressed.connect(rotate_selection.bind("y", 1))
+	editor.get_node("%DecorRotZBtn").pressed.connect(rotate_selection.bind("z", 1))
 	editor.get_node("%DecorLayerDownBtn").pressed.connect(func(): _editor.set_layer(_editor.active_layer - 1))
 	editor.get_node("%DecorLayerUpBtn").pressed.connect(func(): _editor.set_layer(_editor.active_layer + 1))
 	_collision_overlay_btn = editor.get_node("%DecorCollisionOverlayBtn")
@@ -1226,8 +1224,7 @@ func _on_transform_spin_changed(_value: float) -> void:
 # ---------------------------------------------------------------------------
 
 func _update_rotation_label() -> void:
-	if _rot_label != null:
-		_rot_label.text = "%d°" % int(round(current_yaw_deg))
+	pass
 
 
 func _update_layer_label() -> void:

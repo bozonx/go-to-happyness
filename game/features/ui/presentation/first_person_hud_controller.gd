@@ -50,7 +50,7 @@ func first_person_action_hint() -> String:
 		return S.F_LEAVE_WORK_POSITION
 	if simulation.player_citizen != null and simulation.player_citizen.player_using_toilet:
 		return S.USING_TOILET
-	var target: Dictionary = simulation._first_person_target()
+	var target: Dictionary = simulation.hero_interaction_controller.first_person_target()
 	match target.get("kind", ""):
 		"entrance":
 			for order: Dictionary in simulation.pending_arrivals:

@@ -48,9 +48,9 @@ func refresh_pocket_take_menu() -> void:
 			continue
 		var row: PocketTakeItemRow = PocketTakeItemRowScene.instantiate()
 		row.setup(resource_type, stored)
-		row.take_one_requested.connect(simulation._take_resource_into_pocket.bind(resource_type, 1))
+		row.take_one_requested.connect(simulation.hero_interaction_controller.take_resource_into_pocket.bind(resource_type, 1))
 		row.take_all_requested.connect(func():
-			simulation._take_resource_into_pocket(resource_type, simulation.hero_pocket_service.pocket_space_for(resource_type) if simulation.hero_pocket_service != null else 0)
+			simulation.hero_interaction_controller.take_resource_into_pocket(resource_type, simulation.hero_pocket_service.pocket_space_for(resource_type) if simulation.hero_pocket_service != null else 0)
 		)
 		simulation.ui_manager.pocket_take_menu.item_list.add_child(row)
 	simulation.ui_manager.pocket_take_menu_title.text = S.TAKE_FROM_WAREHOUSE_FORMAT % [simulation.hero_pocket_service.pocket_total(), simulation.POCKET_CAPACITY]

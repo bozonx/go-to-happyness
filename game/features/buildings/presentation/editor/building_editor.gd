@@ -42,8 +42,8 @@ var blueprint: BuildingBlueprintScript
 var repository: BlueprintRepositoryScript
 var mesh_library: BlockMeshLibraryScript
 
-var current_block_id: StringName = BuildingBlockCatalogScript.default_block_id()
-var current_variant: StringName = BuildingBlockCatalogScript.default_variant(BuildingBlockCatalogScript.default_block_id())
+var current_block_id: StringName = &""
+var current_variant: StringName = &""
 var current_anchor: int = BuildingBlockCatalogScript.ANCHOR_CENTER
 var current_material_id: StringName = BuildingMaterialCatalogScript.DEFAULT_ID
 var current_rot: int = 0
@@ -127,7 +127,7 @@ var _ghost_valid: bool = false
 @onready var _load_popup: PopupPanel = %LoadPopup
 @onready var _load_list: ItemList = %LoadList
 
-@onready var _cost_header_btn: Button = %CostHeaderBtn
+@onready var _cost_header_btn: Label = %CostHeaderBtn
 @onready var _cost_container: VBoxContainer = %CostContainer
 @onready var _cost_mode_option: OptionButton = %CostModeOption
 @onready var _cost_block_summary_label: Label = %CostBlockSummaryLabel
@@ -463,7 +463,7 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 
 
 func _handle_key(event: InputEventKey) -> void:
-	# Decor owns its shortcuts. Do not let frame-only bindings (B/E, etc.) change
+	# Decor owns its shortcuts. Do not let frame-only bindings (E, etc.) change
 	# hidden frame state while the contextual decor mode is active.
 	if current_mode == EditMode.DECOR:
 		decor_mode.handle_key(event)
@@ -477,8 +477,6 @@ func _handle_key(event: InputEventKey) -> void:
 			_cycle_rotation(-1 if event.shift_pressed else 1)
 		KEY_E:
 			_set_tool(Tool.ERASE)
-		KEY_B:
-			_set_tool(Tool.PLACE)
 		KEY_L:
 			_on_brush_line_pressed()
 		KEY_M:
@@ -488,7 +486,7 @@ func _handle_key(event: InputEventKey) -> void:
 		KEY_PAGEDOWN:
 			_set_layer(active_layer - 1)
 		KEY_ESCAPE:
-			_confirm_back_to_menu()
+			_clear_block_selection()
 
 
 func _zoom(amount: float) -> void:
@@ -539,6 +537,8 @@ func _apply_tool_at_cursor() -> void:
 func _apply_tool_at_cell(cell: Vector3i) -> void:
 	match current_tool:
 		Tool.PLACE:
+			if current_block_id.is_empty() and _stamp_brush.is_empty():
+				return
 			if not _stamp_brush.is_empty():
 				_apply_stamp_at_cell(cell)
 			elif _is_block_in_bounds(cell, current_block_id, current_variant, current_rot) and grid_model.place(cell, current_block_id, current_rot, current_material_id, current_variant, current_anchor, current_rot_x, current_rot_z):
@@ -838,6 +838,9 @@ func _refresh_ghost() -> void:
 	if current_mode == EditMode.ZONES or not cursor_valid:
 		_ghost.visible = false
 		return
+	if current_tool == Tool.PLACE and current_block_id.is_empty() and _stamp_brush.is_empty():
+		_ghost.visible = false
+		return
 
 	_ghost.visible = true
 	if current_tool == Tool.ERASE:
@@ -1030,6 +1033,18 @@ func _select_block(block_id: StringName, variant: StringName = &"", retain_stamp
 	_refresh_ghost()
 
 
+func _clear_block_selection() -> void:
+	_stamp_brush.clear()
+	current_block_id = &""
+	current_variant = &""
+	for key in _palette_buttons.keys():
+		(_palette_buttons[key] as Button).button_pressed = false
+	if _brush_inspector != null:
+		_brush_inspector.visible = false
+	_refresh_ghost()
+	_update_status("Элемент для строительства не выбран.")
+
+
 func _cycle_rotation(direction: int = 1) -> void:
 	var def := BuildingBlockCatalogScript.get_block(current_block_id)
 	if def.is_empty() or not def.get("rotatable", true):
@@ -1102,7 +1117,7 @@ func _select_mode(mode: int) -> void:
 
 	if mode == EditMode.DECOR:
 		decor_mode.activate()
-		_update_status("Режим декора: B — поставить, V — выбрать, E — удалить.")
+		_update_status("Режим декора: щелчок — поставить или выбрать, Delete — удалить, Esc — снять выделение.")
 	else:
 		decor_mode.deactivate()
 		if mode == EditMode.ZONES:
@@ -1360,11 +1375,11 @@ func _setup_ui() -> void:
 	_cost_mode_option.add_item("Ручной ввод сметы")
 	_cost_mode_option.set_item_metadata(1, &"manual")
 
-	_cost_container.visible = false
-	_cost_header_btn.text = "► Стоимость здания"
+	_cost_container.visible = true
+	_cost_header_btn.text = "Стоимость здания"
 
 	_sync_metadata_fields()
-	_select_block(current_block_id, current_variant)
+	_clear_block_selection()
 	_set_tool(Tool.PLACE)
 	_set_brush(Brush.LINE)
 	_set_layer(0)
@@ -1394,7 +1409,7 @@ func _build_palette_blocks() -> void:
 		else:
 			var s: Vector3 = def["size"]
 			btn.tooltip_text = "Размер: %.2f×%.2f×%.2f м" % [s.x, s.y, s.z]
-		btn.pressed.connect(func(): _select_block(block_id))
+		btn.pressed.connect(_select_block.bind(block_id))
 		_palette_buttons[block_id] = btn
 		_palette_container.add_child(btn)
 
@@ -1434,6 +1449,7 @@ func _move_brush_inspector_under_selection() -> void:
 
 func _rebuild_brush_inspector() -> void:
 	var host := _ensure_brush_inspector()
+	host.visible = true
 	for child in host.get_children():
 		child.queue_free()
 	_move_brush_inspector_under_selection()
@@ -1462,7 +1478,7 @@ func _rebuild_brush_inspector() -> void:
 			vbtn.button_pressed = v_id == current_variant
 			var v_size: Vector3 = v.get("size", Vector3.ONE)
 			vbtn.tooltip_text = "Размер: %.2f×%.2f×%.2f м" % [v_size.x, v_size.y, v_size.z]
-			vbtn.pressed.connect(func(): _select_block(current_block_id, v_id))
+			vbtn.pressed.connect(_select_block.bind(current_block_id, v_id))
 			toolbar.add_child(vbtn)
 
 	# Spacer pushing anchor buttons to the right
@@ -1477,7 +1493,7 @@ func _rebuild_brush_inspector() -> void:
 			abtn.toggle_mode = true
 			abtn.text = _anchor_label(kind)
 			abtn.button_pressed = kind == current_anchor
-			abtn.pressed.connect(func(): _select_anchor(kind))
+			abtn.pressed.connect(_select_anchor.bind(kind))
 			toolbar.add_child(abtn)
 
 
@@ -1991,11 +2007,8 @@ func _update_count() -> void:
 
 
 func _on_cost_header_pressed() -> void:
-	_cost_container.visible = not _cost_container.visible
-	var arrow := "▼" if _cost_container.visible else "►"
-	_cost_header_btn.text = "%s Стоимость здания" % arrow
-	if _cost_container.visible:
-		_refresh_cost_ui()
+	# Compatibility target for the former accordion header.
+	_refresh_cost_ui()
 
 
 func _on_cost_mode_selected(index: int) -> void:
@@ -2016,7 +2029,7 @@ func _on_add_extra_cost_pressed() -> void:
 
 
 func _refresh_cost_ui() -> void:
-	if _cost_container == null or not _cost_container.visible:
+	if _cost_container == null:
 		return
 
 	_cost_block_summary_label.text = "Всего блоков: %d" % blueprint.block_count()

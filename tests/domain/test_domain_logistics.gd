@@ -254,7 +254,7 @@ static func _test_canteen_meal_requests() -> void:
 		simulation._has_cook,
 		simulation._update_interface,
 		simulation._request_courier_dispatch,
-		simulation._is_work_time,
+		simulation.simulation_tick_controller.is_work_time,
 		simulation._update_workers
 	)
 
@@ -301,7 +301,7 @@ static func _test_canteen_raw_rations() -> void:
 		simulation._has_cook,
 		simulation._update_interface,
 		simulation._request_courier_dispatch,
-		simulation._is_work_time,
+		simulation.simulation_tick_controller.is_work_time,
 		simulation._update_workers
 	)
 
@@ -340,7 +340,7 @@ static func _test_no_canteen_raw_rations() -> void:
 		simulation._has_cook,
 		simulation._update_interface,
 		simulation._request_courier_dispatch,
-		simulation._is_work_time,
+		simulation.simulation_tick_controller.is_work_time,
 		simulation._update_workers
 	)
 
@@ -442,10 +442,10 @@ static func _test_trade_service_entrance_expedition_walks_to_sign_before_departu
 		func() -> Node3D: return simulation.entrance_stone,
 		simulation.logistics_controller.get_delivery_position,
 		simulation._update_interface,
-		simulation._refresh_market_menu,
+		simulation.workplace_controller.refresh_market_menu,
 		simulation._request_courier_dispatch,
-		simulation._total_game_minutes,
-		simulation._citizen_for_ai_id,
+		simulation.simulation_tick_controller.total_game_minutes,
+		simulation.citizen_factory.citizen_for_ai_id,
 		simulation.resource_pile_service.create_resource_pile,
 		simulation._update_workers
 	)
@@ -530,7 +530,7 @@ static func _test_storage_delivery_service() -> void:
 		simulation.resource_pile_service.drop_resource_pile,
 		simulation._update_interface,
 		simulation._request_courier_dispatch,
-		simulation._send_citizen_to_leisure
+		simulation.simulation_tick_controller.send_citizen_to_leisure
 	)
 	var worker := Citizen.new()
 	service.on_resource_delivered(worker, "grass", 1)

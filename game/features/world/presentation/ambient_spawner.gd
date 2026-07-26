@@ -34,7 +34,7 @@ func create_forest() -> void:
 		_create_tree(tree_position, false)
 		_create_grass_sources_near_tree(cell)
 		_create_forage_sources_near_tree(cell)
-	simulation._refresh_navigation_grid()
+	simulation.world_navigation_controller.refresh_navigation_grid()
 	_create_firefly_clusters()
 
 
@@ -46,7 +46,7 @@ func create_ponds() -> void:
 		var center: Vector3 = simulation.nav_grid.cell_center(cell) if simulation.nav_grid != null else Vector3((cell.x + 0.5) * simulation.CELL_SIZE, 0.0, (cell.y + 0.5) * simulation.CELL_SIZE)
 		simulation.pond_positions.append(center)
 		_create_pond_visual(center)
-	simulation._refresh_navigation_grid()
+	simulation.world_navigation_controller.refresh_navigation_grid()
 
 
 func _create_pond_visual(center: Vector3) -> void:
@@ -87,7 +87,7 @@ func _create_tree(position_on_board: Vector3, refresh_navigation := true) -> voi
 	
 	simulation.terrain_blocked_cells[cell] = true
 	if refresh_navigation:
-		simulation._refresh_navigation_grid()
+		simulation.world_navigation_controller.refresh_navigation_grid()
 
 
 func _create_grass_sources_near_tree(tree_cell: Vector2i) -> void:

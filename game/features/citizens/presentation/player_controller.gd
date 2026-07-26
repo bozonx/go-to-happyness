@@ -68,7 +68,7 @@ func enter_first_person(citizen: Citizen, message: String) -> void:
 	is_first_person = true
 	simulation.build_mode = ""
 	simulation.selection_marker.visible = false
-	simulation._show_territory_overlay(false)
+	simulation.build_controller.show_territory_overlay(false)
 	simulation.ui_manager.build_menu.visible = false
 	simulation.build_menu_is_global = false
 	simulation.build_menu_is_job_menu = false
@@ -136,12 +136,12 @@ func update_player_control(delta: float) -> void:
 	if player_citizen.work_position_locked:
 		simulation.camera.global_position = player_citizen.global_position + Vector3(0.0, PLAYER_EYE_HEIGHT, 0.0)
 		simulation.camera.rotation = Vector3(player_pitch, player_yaw, 0.0)
-		simulation._refresh_interaction_hint()
+		simulation.hero_interaction_controller.refresh_interaction_hint()
 		return
 	if player_citizen.player_using_toilet:
 		simulation.camera.global_position = player_citizen.global_position + Vector3(0.0, PLAYER_EYE_HEIGHT, 0.0)
 		simulation.camera.rotation = Vector3(player_pitch, player_yaw, 0.0)
-		simulation._refresh_interaction_hint()
+		simulation.hero_interaction_controller.refresh_interaction_hint()
 		return
 	var move_direction := Vector3.ZERO
 	var forward := Vector3(-sin(player_yaw), 0.0, -cos(player_yaw))
@@ -154,7 +154,7 @@ func update_player_control(delta: float) -> void:
 		if move_direction.is_zero_approx():
 			simulation.camera.global_position = player_citizen.global_position + Vector3(0.0, PLAYER_EYE_HEIGHT, 0.0)
 			simulation.camera.rotation = Vector3(player_pitch, player_yaw, 0.0)
-			simulation._refresh_interaction_hint()
+			simulation.hero_interaction_controller.refresh_interaction_hint()
 			return
 		if simulation.citizen_ai != null:
 			simulation.citizen_ai.cancel_citizen_work(player_citizen.ai_id)
@@ -178,7 +178,7 @@ func update_player_control(delta: float) -> void:
 	player_citizen.drive_player_animation(Input.is_key_pressed(KEY_SHIFT))
 	simulation.camera.global_position = player_citizen.global_position + Vector3(0.0, PLAYER_EYE_HEIGHT, 0.0)
 	simulation.camera.rotation = Vector3(player_pitch, player_yaw, 0.0)
-	simulation._refresh_interaction_hint()
+	simulation.hero_interaction_controller.refresh_interaction_hint()
 
 
 func update_interaction(delta: float) -> void:
@@ -191,7 +191,7 @@ func update_interaction(delta: float) -> void:
 			interaction_action = ""
 			player_work_target = null
 			simulation.ui_manager.interaction_hint_panel.progress_bar.visible = false
-			simulation._refresh_interaction_hint()
+			simulation.hero_interaction_controller.refresh_interaction_hint()
 			return
 		simulation.ui_manager.interaction_hint_panel.progress_bar.value = 100.0
 		simulation.ui_manager.interaction_hint_panel.hint_label.text = S.WORKING_FORMAT % interaction_action
@@ -200,7 +200,7 @@ func update_interaction(delta: float) -> void:
 		if player_citizen == null or not player_citizen.player_using_toilet:
 			interaction_action = ""
 			simulation.ui_manager.interaction_hint_panel.progress_bar.visible = false
-			simulation._refresh_interaction_hint()
+			simulation.hero_interaction_controller.refresh_interaction_hint()
 			return
 		var toilet_pct := int((1.0 - player_citizen.toilet_timer.remaining / Citizen.TOILET_USE_DURATION) * 100.0)
 		simulation.ui_manager.interaction_hint_panel.progress_bar.value = clampi(toilet_pct, 0, 100)
@@ -210,7 +210,7 @@ func update_interaction(delta: float) -> void:
 		interaction_action = ""
 		simulation.ui_manager.interaction_hint_panel.progress_bar.visible = false
 		simulation._update_interface(S.ACTION_CANCELLED_AWAY)
-		simulation._refresh_interaction_hint()
+		simulation.hero_interaction_controller.refresh_interaction_hint()
 		return
 	if (interaction_resource in [ResourceIds.WOOD, ResourceIds.BRANCHES] and not simulation.hero_interaction_service.nearby_tree()) or (interaction_resource == ResourceIds.FOOD and not simulation.hero_interaction_service.nearby_farm()) or (interaction_resource == ResourceIds.WATER and not simulation.hero_interaction_service.nearby_pond()) or (interaction_resource == ResourceIds.GRASS and not simulation.hero_interaction_service.nearby_grass_source()):
 		interaction_action = ""

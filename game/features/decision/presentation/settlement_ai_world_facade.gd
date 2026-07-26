@@ -41,7 +41,7 @@ func capture(sequence: int) -> WorldSnapshot:
 		if not is_instance_valid(actor) or actor.ai_id == 0 or simulation.outside_workers.has(actor.get_stable_id()):
 			continue
 		var citizen_id := actor.ai_id
-		var actor_work_time: bool = simulation._is_citizen_work_time(actor)
+		var actor_work_time: bool = simulation.simulation_tick_controller.is_citizen_work_time(actor)
 		var daily_order_active := actor.has_active_daily_order() and not actor.is_player_controlled
 		var daily_order_role := actor.daily_order_role if daily_order_active else ""
 		var ctx := FacadeContext.new(simulation, _helpers, actor, citizen_id, actor_work_time, daily_order_active, daily_order_role)

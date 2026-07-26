@@ -20,7 +20,6 @@ extends RefCounted
 enum Category {
 	STRUCTURE,   ## cube and slab (size is selected separately)
 	FOUNDATION,  ## foundation blocks that auto-extend down to the ground
-	COLUMNS,     ## square / round / half columns (size selected separately)
 	ROOF,        ## roof pitches and corners at 45° and 22.5°
 	CIRCULATION, ## stairs, half stairs, quarter stairs, corner stairs
 	RAILING,     ## fences and railings
@@ -80,9 +79,10 @@ const BLOCKS: Array = [
 		"id": &"arch",
 		"name": "Арка",
 		"category": Category.STRUCTURE,
-		"size": Vector3(1.0, 1.0, 0.5),
+		"size": Vector3(1.0, 0.5, 1.0),
 		"mesh_shape": SHAPE_ARCH,
 		"rotatable": true,
+		"variants": [{"id": &"lower", "name": "Нижний", "size": Vector3(1.0, 0.5, 1.0)}, {"id": &"upper", "name": "Верхний", "size": Vector3(1.0, 0.5, 1.0), "vertical_offset": 0.5}],
 	},
 	{"id": &"half_arch", "name": "Полуарка", "category": Category.STRUCTURE, "size": Vector3(1.0, 1.0, 1.0), "mesh_shape": SHAPE_HALF_ARCH, "rotatable": true},
 	# --- Фундамент ---------------------------------------------------------
@@ -99,7 +99,7 @@ const BLOCKS: Array = [
 	{
 		"id": &"column_square",
 		"name": "Квадратная колонна",
-		"category": Category.COLUMNS,
+		"category": Category.STRUCTURE,
 		"size": Vector3(0.5, 1.0, 0.5),
 		"mesh_shape": SHAPE_BOX,
 		"rotatable": true,
@@ -112,7 +112,7 @@ const BLOCKS: Array = [
 	{
 		"id": &"column_round",
 		"name": "Круглая колонна",
-		"category": Category.COLUMNS,
+		"category": Category.STRUCTURE,
 		"size": Vector3(0.5, 1.0, 0.5),
 		"mesh_shape": SHAPE_CYLINDER,
 		"rotatable": true,
@@ -126,7 +126,7 @@ const BLOCKS: Array = [
 	{
 		"id": &"column_half",
 		"name": "Полуколонна",
-		"category": Category.COLUMNS,
+		"category": Category.STRUCTURE,
 		"size": Vector3(0.5, 1.0, 0.25),
 		"mesh_shape": SHAPE_HALF_CYLINDER,
 		"rotatable": true,
@@ -246,7 +246,7 @@ const BLOCKS: Array = [
 		"size": Vector3(1.0, 1.0, 0.12),
 		"mesh_shape": SHAPE_RAILING,
 		"rotatable": true,
-		"variants": [{"id": &"full", "name": "В полный блок", "size": Vector3(1.0, 1.0, 0.12)}, {"id": &"half", "name": "В полблока", "size": Vector3(1.0, 0.5, 0.12)}],
+		"variants": [{"id": &"full", "name": "1", "size": Vector3(1.0, 1.0, 0.12)}, {"id": &"half", "name": "0.5", "size": Vector3(1.0, 0.5, 0.12)}],
 	},
 	{
 		"id": &"fence",
@@ -255,6 +255,7 @@ const BLOCKS: Array = [
 		"size": Vector3(1.0, 0.5, 0.12),
 		"mesh_shape": SHAPE_FENCE,
 		"rotatable": true,
+		"variants": [{"id": &"full", "name": "1", "size": Vector3(1.0, 1.0, 0.12)}, {"id": &"half", "name": "0.5", "size": Vector3(1.0, 0.5, 0.12)}],
 	},
 ]
 
@@ -493,7 +494,6 @@ static func category_name(category: int) -> String:
 	match category:
 		Category.STRUCTURE: return "Конструкция"
 		Category.FOUNDATION: return "Фундамент"
-		Category.COLUMNS: return "Колонны"
 		Category.ROOF: return "Скат"
 		Category.CIRCULATION: return "Проходы"
 		Category.RAILING: return "Ограждения"

@@ -156,7 +156,7 @@ func _refresh_build_title_label() -> void:
 		elif not simulation.build_category.is_empty():
 			simulation.ui_manager.build_menu.title_label.text = "%s buildings\nChoose a building to place." % simulation.build_category.capitalize()
 		elif simulation.build_menu_is_global:
-			simulation.ui_manager.build_menu.title_label.text = "%s Era Construction\nChoose a building to place." % simulation.era_name()
+			simulation.ui_manager.build_menu.title_label.text = "%s Era Construction\nChoose a building to place." % simulation.workplace_controller.era_name()
 		else:
 			simulation._show_selected_citizen_menu()
 
@@ -174,7 +174,7 @@ func show_building_menu() -> void:
 		var site_data: Variant = simulation.construction.site_for_node(simulation.selected_building)
 		var type: String = site_data.building_type
 		var progress: float = site_data.progress
-		var builders: int = simulation._builder_count(simulation.selected_building)
+		var builders: int = simulation.construction_controller.builder_count(simulation.selected_building)
 		var supplied_parts: Array[String] = []
 		for resource_type in site_data.required_materials:
 			supplied_parts.append("%s %d/%d" % [resource_type, int(site_data.delivered_materials.get(resource_type, 0)), int(site_data.required_materials[resource_type])])

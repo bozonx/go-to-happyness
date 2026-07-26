@@ -34,7 +34,7 @@ func on_daily_settlement_update(_event: SimulationDayEvent) -> void:
 				game.survival_event_controller.apply_event_outcome(outcome)
 	if game.survival_event_controller != null:
 		game.survival_event_controller.maybe_present_survival_decision()
-	game._refresh_living_statuses()
+	game.simulation_tick_controller.refresh_living_statuses()
 	game.settlement.cheer_up_used_today = false
 	game.settlement.double_time_order_day = -1
 	if game.building_lifecycle_service != null:

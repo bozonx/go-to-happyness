@@ -19,13 +19,13 @@ func _init() -> void:
 
 	toggle.button_pressed = true
 	assert(simulation.settlement.road_walking_order_enabled)
-	simulation._record_trail_movement(9001, Vector3(20.1, 0.0, 20.1))
-	simulation._record_trail_movement(9001, Vector3(21.1, 0.0, 20.1))
+	simulation.world_navigation_controller.record_trail_movement(9001, Vector3(20.1, 0.0, 20.1))
+	simulation.world_navigation_controller.record_trail_movement(9001, Vector3(21.1, 0.0, 20.1))
 
 	toggle.button_pressed = false
 	assert(not simulation.settlement.road_walking_order_enabled)
-	simulation._record_trail_movement(9002, Vector3(20.1, 0.0, 22.1))
-	simulation._record_trail_movement(9002, Vector3(21.1, 0.0, 22.1))
+	simulation.world_navigation_controller.record_trail_movement(9002, Vector3(20.1, 0.0, 22.1))
+	simulation.world_navigation_controller.record_trail_movement(9002, Vector3(21.1, 0.0, 22.1))
 
 	var ordered_gain: float = simulation.trail_field.cell_strength(ordered_cell) - ordered_before
 	var normal_gain: float = simulation.trail_field.cell_strength(normal_cell) - normal_before

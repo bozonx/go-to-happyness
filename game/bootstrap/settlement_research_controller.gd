@@ -185,7 +185,7 @@ func activate_employment_centre(centre: Node3D) -> void:
 			continue
 		# Start the post in the same hand-off so another scheduler tick cannot
 		# replace the job before the route starts.
-		if game._is_work_time():
+		if game.simulation_tick_controller.is_work_time():
 			citizen.assign_official_work(service_position)
 		else:
 			citizen.idle()

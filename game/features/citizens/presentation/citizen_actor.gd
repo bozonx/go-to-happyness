@@ -1460,7 +1460,7 @@ func clear_expired_overtime(current_workday_id: int) -> void:
 
 func deactivate_overtime(source := "") -> void:
 	_employment.clear_overtime_source(source)
-	if not overtime_mode and simulation != null and not simulation._is_work_time():
+	if not overtime_mode and simulation != null and not simulation.simulation_tick_controller.is_work_time():
 		end_work_shift()
 
 

@@ -27,7 +27,7 @@ func send_selected_resident_to_outside_work() -> void:
 	if not is_instance_valid(game.selected_builder) or game.selected_builder.is_player_controlled:
 		game._update_interface("Select an AI-controlled Courier before sending them to outside work.")
 		return
-	if not game.selected_builder.can_handle_entry_logistics() or not game._is_work_time():
+	if not game.selected_builder.can_handle_entry_logistics() or not game.simulation_tick_controller.is_work_time():
 		game._update_interface("Outside work requires a Courier.")
 		return
 	var worker_id := game.selected_builder.get_stable_id()

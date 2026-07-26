@@ -301,14 +301,12 @@ func _build_door_wall(size: Vector3) -> ArrayMesh:
 	return st.commit()
 
 
-## Full-thickness slab with a half-column carved out of it: the panel keeps its
-## whole footprint and a semicircle of radius `size.x * 0.5`, springing from the
-## bottom edge, is removed. Two spandrels stay in the upper corners, so a row of
-## arches over columns reads as an arcade.
+## A horizontal half-slab with a semicircle cut out from its lower face. The
+## curve springs from the slab's bottom edge, leaving material above the opening.
 func _build_arch(size: Vector3, segments: int = 16) -> ArrayMesh:
 	var hx := size.x * 0.5
 	var hy := size.y * 0.5
-	var radius := minf(hx, size.y)
+	var radius := minf(hx, hy)
 	var profile := PackedVector2Array()
 	# Cut-out first: the semicircle is traced left → right along the bottom edge,
 	# which keeps the whole outline counter-clockwise.

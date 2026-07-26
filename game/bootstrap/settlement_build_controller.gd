@@ -55,7 +55,7 @@ func select_build_mode(next_mode: String) -> void:
 	game.build_mode = next_mode
 	game.build_rotation_quarters = 0
 	game.world_setup.selection_marker.visible = true
-	game._move_selection(game.selected_world_position)
+	game.build_controller.move_selection(game.selected_world_position)
 	set_build_placement_ui_visible(false)
 	show_territory_overlay(true)
 	if game.is_first_person:
@@ -159,7 +159,7 @@ func place_building(world_position: Vector3) -> void:
 		return
 
 	game.building_registry.reserve(cell, world_position, occupied_footprint)
-	game._refresh_navigation_grid()
+	game.world_navigation_controller.refresh_navigation_grid()
 	var site: ConstructionSite = game.construction_controller.create_construction_site(cell, game.build_mode, world_position, game.build_rotation_quarters, blueprint, occupied_footprint)
 	game.hero_interaction_controller.deliver_pocket_to_site(site, true)
 	game.building_registry.attach_node(cell, site.node, game.build_mode)
@@ -193,7 +193,7 @@ func _place_instant_building(cell: Vector2i, world_position: Vector3, blueprint:
 		var child := site_node.get_node_or_null(child_name)
 		if child != null:
 			child.queue_free()
-	game._complete_building(cell, game.build_mode, world_position, site_node, blueprint)
+	game.construction_controller.complete_building(cell, game.build_mode, world_position, site_node, blueprint)
 	if BuildingCatalog.is_flag(game.build_mode):
 		game.citizen_factory.bind_hero_squad_to_settlement(&"main_settlement")
 	_reset_build_mode_visuals()
