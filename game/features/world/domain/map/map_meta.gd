@@ -17,6 +17,7 @@ const KIND_MAP := &"map"
 const KIND_PREFAB := &"prefab"
 
 const BORDER_OCEAN := &"ocean"
+const BORDER_NOTHING := &"nothing"
 
 const FORMAT_VERSION := 1
 
@@ -45,7 +46,8 @@ var board_cells := DEFAULT_BOARD_CELLS
 var cell_size := DEFAULT_CELL_SIZE
 
 var border_kind: StringName = BORDER_OCEAN
-var border_level := -1.5
+## Ocean-connected lowland is filled at the terrain's zero level by default.
+var border_level := 0.0
 
 var start: MapStart = MapStart.new()
 
@@ -72,6 +74,8 @@ static func from_dict(source: Dictionary) -> MapMeta:
 
 	var border: Dictionary = source.get("border", {})
 	meta.border_kind = StringName(border.get("kind", meta.border_kind))
+	if meta.border_kind != BORDER_OCEAN and meta.border_kind != BORDER_NOTHING:
+		meta.border_kind = BORDER_OCEAN
 	meta.border_level = float(border.get("level", meta.border_level))
 
 	meta.start = MapStart.from_dict(source.get("start", {}))

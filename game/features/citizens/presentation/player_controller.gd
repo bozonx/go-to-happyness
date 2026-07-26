@@ -55,7 +55,7 @@ func take_control_of_selected_citizen() -> void:
 func enter_first_person(citizen: Citizen, message: String) -> void:
 	if citizen == null:
 		return
-	simulation._close_context_menus()
+	simulation.input_controller.close_context_menus()
 	if is_first_person and player_citizen != null and player_citizen != citizen:
 		player_citizen.set_player_controlled(false)
 		player_citizen.set_head_visible(true)

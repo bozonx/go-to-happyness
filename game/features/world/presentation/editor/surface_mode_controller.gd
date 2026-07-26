@@ -147,8 +147,9 @@ func select_palette_entry(entry_id: StringName) -> void:
 
 func tool_options() -> Array:
 	var options: Array = []
-	options.append(ToolOption.of(OPTION_BRUSH_DOWN, "Кисть −"))
-	options.append(ToolOption.of(OPTION_BRUSH_UP, "Кисть +"))
+	options.append(ToolOption.of(&"brush_size", "Кисть: %d" % (context.brush.brush_size - 1), &"brush", false, true))
+	options.append(ToolOption.of(OPTION_BRUSH_DOWN, "−", &"brush"))
+	options.append(ToolOption.of(OPTION_BRUSH_UP, "+", &"brush"))
 	var variant_count := TerrainMaterialVariants.variant_count(context.brush.material_index)
 	for variant_index in variant_count:
 		options.append(ToolOption.of(

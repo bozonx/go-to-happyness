@@ -89,7 +89,7 @@ static func can_start_registration(simulation: Node, citizen: Citizen) -> bool:
 	return simulation._can_start_registration(citizen)
 
 static func toggle_worker_overtime(simulation: Node, checked: bool) -> void:
-	simulation._toggle_worker_overtime(checked)
+	simulation.workplace_controller.toggle_worker_overtime(checked)
 
 static func skip_night(simulation: Node) -> void:
 	if simulation.survival_event_controller != null:
@@ -109,7 +109,7 @@ static func get_available_researcher(simulation: Node, required_skill: String) -
 	return simulation.research_menu_controller.get_available_researcher(required_skill) if simulation.research_menu_controller != null else null
 
 static func handle_civic_post_assignment(simulation: Node) -> void:
-	simulation._handle_civic_post_assignment()
+	simulation.research_controller.handle_civic_post_assignment()
 
 static func set_selected_work_role(simulation: Node, role: String, daily_order := false) -> void:
 	simulation._set_selected_work_role(role, daily_order)
@@ -218,7 +218,7 @@ static func skip_to_workday_start(simulation: Node) -> void:
 		simulation.survival_event_controller.skip_to_workday_start()
 
 static func send_selected_resident_to_outside_work(simulation: Node) -> void:
-	simulation._send_selected_resident_to_outside_work()
+	simulation.outside_work_controller.send_selected_resident_to_outside_work()
 
 static func return_outside_workers(simulation: Node) -> void:
 	simulation.outside_work_controller.return_outside_workers()
@@ -238,7 +238,7 @@ static func set_workday_hours(simulation: Node, hours: int) -> void:
 # --- Build mode ---
 
 static func select_build_mode(simulation: Node, mode: String) -> void:
-	simulation._select_build_mode(mode)
+	simulation.build_controller.select_build_mode(mode)
 
 static func place_building(simulation: Node, world_position: Vector3) -> void:
 	simulation.build_controller.place_building(world_position)

@@ -32,6 +32,7 @@ func _run() -> void:
 	await _test_terrain_editing_and_shared_undo(editor)
 	_test_surface_painting_moves_no_geometry(editor)
 	await _test_water_mode(editor)
+	_test_ocean_boundary_floods_only_from_the_edge(editor)
 	_test_save_and_reopen(editor)
 
 	editor.queue_free()
@@ -216,6 +217,25 @@ func _test_water_mode(editor: Node) -> void:
 	editor._undo()
 	assert(water.has_body(body_id) and water.is_wet(terrain, cell), "undo restored the flooded body")
 	print("  water fill + shared undo + republished navigation ok")
+
+
+func _test_ocean_boundary_floods_only_from_the_edge(editor: Node) -> void:
+	var terrain: TerrainGrid = editor.document.terrain
+	var water: WaterGrid = editor.document.water
+	var edge := terrain.min_cell()
+	var inland := Vector2i(20, 20)
+	# Nothing outside leaves even an exposed low edge dry.
+	editor._on_map_menu_item_pressed(editor.MENU_BORDER_NOTHING)
+	editor._terrain_service.apply_operation(TerrainEditOperation.offset([edge, inland], -1))
+	assert(not water.is_wet(terrain, edge), "an empty border does not flood")
+	assert(not water.is_wet(terrain, inland), "an inland hollow stays dry")
+	# Switching to ocean fills the edge-connected lowland, but never the separate
+	# depression: an author remains responsible for filling that one in Water.
+	editor._on_map_menu_item_pressed(editor.MENU_BORDER_OCEAN)
+	assert(water.is_wet(terrain, edge), "ocean reached the exposed edge")
+	assert(not water.is_wet(terrain, inland), "ocean did not fill a closed inland hollow")
+	assert(editor.document.meta.border_kind == MapMeta.BORDER_OCEAN)
+	print("  ocean border fill ok")
 
 
 ## Everything the author built has to survive the round trip through the package,

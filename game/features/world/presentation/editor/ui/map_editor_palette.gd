@@ -95,6 +95,7 @@ func set_options(options: Array) -> void:
 		button.text = option.label
 		button.toggle_mode = option.row != &""
 		button.button_pressed = option.selected
+		button.disabled = option.disabled
 		button.focus_mode = Control.FOCUS_NONE
 		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL

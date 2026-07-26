@@ -45,7 +45,7 @@ static func run_all() -> void:
 
 
 static func _test_catalog() -> void:
-	assert(BuildingBlockCatalogScript.all().size() == 21)
+	assert(BuildingBlockCatalogScript.all().size() == 22)
 	assert(BuildingBlockCatalogScript.has_block(&"cube"))
 	assert(BuildingBlockCatalogScript.has_block(&"stairs_corner_45"))
 	assert(BuildingBlockCatalogScript.has_block(&"stairs_corner_half"))
@@ -75,6 +75,9 @@ static func _test_catalog() -> void:
 	assert(BuildingBlockCatalogScript.normalize_variant(&"column_square", &"bogus") == &"0.5")
 	assert(BuildingBlockCatalogScript.size_of(&"column_round", &"0.5") == Vector3(0.5, 1.0, 0.5))
 	assert(BuildingBlockCatalogScript.mesh_shape_of(&"column_round", &"0.5") == BuildingBlockCatalogScript.SHAPE_CYLINDER)
+	assert(BuildingBlockCatalogScript.size_of(&"arch", &"lower") == Vector3(1.0, 0.5, 1.0))
+	assert(is_equal_approx(BuildingBlockCatalogScript.vertical_offset_of(&"arch", &"upper"), 0.5))
+	assert(BuildingBlockCatalogScript.get_block(&"column_square")["category"] == BuildingBlockCatalogScript.Category.STRUCTURE)
 	# Single-cell blocks report a unit footprint.
 	assert(BuildingBlockCatalogScript.footprint_of(&"arch") == Vector3i(1, 1, 1))
 	assert(not BuildingBlockCatalogScript.is_multicell(&"arch"))

@@ -45,6 +45,10 @@ const PLANNED_MODES: Array = [
 @onready var _save_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/SaveButton
 @onready var _undo_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/UndoButton
 @onready var _redo_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/RedoButton
+@onready var _map_menu: MenuButton = $UI/Screen/TopBar/Margin/Scroll/Row/MapMenu
+
+const MENU_BORDER_OCEAN := 1
+const MENU_BORDER_NOTHING := 2
 
 var document: MapDocument
 var history := MapEditorHistory.new()
@@ -166,6 +170,7 @@ func _new_map() -> void:
 	for mode: MapEditorMode in _modes:
 		mode.configure(_context)
 	_message = "новая карта"
+	_refresh_map_menu()
 	_refresh_panels()
 
 
@@ -221,6 +226,30 @@ func _connect_ui() -> void:
 	_save_button.pressed.connect(_save)
 	_undo_button.pressed.connect(_undo)
 	_redo_button.pressed.connect(_redo)
+	_map_menu.get_popup().id_pressed.connect(_on_map_menu_item_pressed)
+	_refresh_map_menu()
+
+
+func _refresh_map_menu() -> void:
+	var popup := _map_menu.get_popup()
+	popup.clear()
+	popup.add_radio_check_item("За пределами карты: Океан", MENU_BORDER_OCEAN)
+	popup.add_radio_check_item("За пределами карты: Ничего", MENU_BORDER_NOTHING)
+	popup.set_item_checked(0, document.meta.border_kind == MapMeta.BORDER_OCEAN)
+	popup.set_item_checked(1, document.meta.border_kind == MapMeta.BORDER_NOTHING)
+
+
+func _on_map_menu_item_pressed(menu_id: int) -> void:
+	var kind := MapMeta.BORDER_OCEAN if menu_id == MENU_BORDER_OCEAN else MapMeta.BORDER_NOTHING
+	if document.meta.border_kind == kind:
+		return
+	document.meta.border_kind = kind
+	document.mark_dirty()
+	_message = "за пределами карты: %s" % ("океан" if kind == MapMeta.BORDER_OCEAN else "ничего")
+	if kind == MapMeta.BORDER_OCEAN:
+		_flood_ocean_from_border()
+	_refresh_map_menu()
+	_refresh_panels()
 
 
 func _rebuild_palette() -> void:
@@ -354,6 +383,41 @@ func _on_terrain_committed(_delta: TerrainDelta) -> void:
 		return
 	history.push(TerrainServiceCommand.of(_terrain_service, _context.pending_edit_label))
 	document.mark_dirty()
+	_flood_ocean_from_border()
+
+
+## Ocean water enters only through the map boundary and only below the zero
+## terrain level. Closed inland depressions are intentionally untouched.
+func _flood_ocean_from_border() -> void:
+	if document.meta.border_kind != MapMeta.BORDER_OCEAN:
+		return
+	var ocean_id := WaterBody.NO_BODY
+	for body: WaterBody in document.water.bodies():
+		if body.type == WaterBody.Type.SEA:
+			ocean_id = body.id
+			break
+	if ocean_id == WaterBody.NO_BODY:
+		# Avoid creating an empty registry entry on a map whose edge is still dry.
+		var has_open_edge := false
+		var minimum := document.terrain.min_cell()
+		var maximum := document.terrain.max_cell()
+		for x in range(minimum.x, maximum.x + 1):
+			has_open_edge = document.terrain.height_of(Vector2i(x, minimum.y)) < 0 or document.terrain.height_of(Vector2i(x, maximum.y)) < 0
+			if has_open_edge:
+				break
+		if not has_open_edge:
+			for z in range(minimum.y + 1, maximum.y):
+				has_open_edge = document.terrain.height_of(Vector2i(minimum.x, z)) < 0 or document.terrain.height_of(Vector2i(maximum.x, z)) < 0
+				if has_open_edge:
+					break
+		if not has_open_edge:
+			return
+		var ocean := _water_service.create_body(WaterBody.Type.SEA, 0)
+		if ocean == null:
+			return
+		ocean_id = ocean.id
+	_context.set_edit_label("океан")
+	_water_service.flood_from_edges(ocean_id, 0)
 
 
 ## The same arrangement for the water layer, and for the same reason: one command

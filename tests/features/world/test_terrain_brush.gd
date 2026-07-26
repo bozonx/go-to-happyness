@@ -27,6 +27,7 @@ static func run_all() -> void:
 	_test_detail_brushes_are_idempotent_under_a_drag()
 	print("    [PASS] Terrain Brush Surface Tests")
 	_test_ramp_cycles_stay_inside_the_catalog()
+	_test_material_picker_copies_material_and_variant()
 	_test_undo_reports_through_the_message()
 	print("    [PASS] Terrain Brush Tool Tests")
 
@@ -248,6 +249,19 @@ static func _test_detail_brushes_are_idempotent_under_a_drag() -> void:
 
 
 # --- Ramps and history --------------------------------------------------------
+
+static func _test_material_picker_copies_material_and_variant() -> void:
+	var world := _make()
+	var terrain: TerrainGrid = world["grid"]
+	var brush: TerrainBrushController = world["brush"]
+	var cell := Vector2i(3, 2)
+	terrain.set_material_index(cell, TerrainMaterialCatalog.index_of(TerrainMaterialCatalog.MUD))
+	terrain.set_variant(cell, 1)
+	_hover(brush, cell)
+	brush.pick_material()
+	assert(brush.material_id() == TerrainMaterialCatalog.MUD)
+	assert(brush.variant == 1)
+
 
 static func _test_ramp_cycles_stay_inside_the_catalog() -> void:
 	var world := _make()

@@ -210,8 +210,9 @@ func tool_options() -> Array:
 	options.append(ToolOption.of(OPTION_LEVEL_DOWN, "Уровень −"))
 	options.append(ToolOption.of(OPTION_LEVEL_UP, "Уровень +"))
 	if brush.tool == WaterBrushController.TOOL_FREEZE:
-		options.append(ToolOption.of(OPTION_BRUSH_DOWN, "Кисть −"))
-		options.append(ToolOption.of(OPTION_BRUSH_UP, "Кисть +"))
+		options.append(ToolOption.of(&"brush_size", "Кисть: %d" % (brush.brush_size - 1), &"brush", false, true))
+		options.append(ToolOption.of(OPTION_BRUSH_DOWN, "−", &"brush"))
+		options.append(ToolOption.of(OPTION_BRUSH_UP, "+", &"brush"))
 		options.append(ToolOption.of(OPTION_ICE, "Толщина льда: %d" % brush.ice_thickness))
 	options.append(ToolOption.of(OPTION_BODY_ICE, "Заморозить водоём"))
 	if _selected_body_is_river():

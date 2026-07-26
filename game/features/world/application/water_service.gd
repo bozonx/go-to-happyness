@@ -141,6 +141,50 @@ func flood(seed: Vector2i, body_id: int, level: int) -> bool:
 	return paint(cells, body_id, level)
 
 
+## Floods every low area connected to the board edge.  This is the authored
+## ocean boundary: unlike `flood`, it deliberately has no inland seed, so a
+## closed depression remains dry until its author chooses to fill it.
+func flood_from_edges(body_id: int, level: int) -> bool:
+	if grid == null or terrain == null:
+		return _reject(REASON_NO_GRID)
+	if not grid.has_body(body_id):
+		return _reject(REASON_NO_BODY)
+	if level < WaterGrid.MIN_HEIGHT or level > WaterGrid.MAX_HEIGHT:
+		return _reject(REASON_NOTHING_TO_DO)
+	var delta := WaterDelta.new()
+	var seen: Dictionary = {}
+	var queue: Array[Vector2i] = []
+	var minimum := grid.min_cell()
+	var maximum := grid.max_cell()
+	for x in range(minimum.x, maximum.x + 1):
+		_queue_ocean_cell(Vector2i(x, minimum.y), level, body_id, seen, queue)
+		_queue_ocean_cell(Vector2i(x, maximum.y), level, body_id, seen, queue)
+	for z in range(minimum.y + 1, maximum.y):
+		_queue_ocean_cell(Vector2i(minimum.x, z), level, body_id, seen, queue)
+		_queue_ocean_cell(Vector2i(maximum.x, z), level, body_id, seen, queue)
+	while not queue.is_empty():
+		var cell: Vector2i = queue.pop_front()
+		var old_state := WaterDelta.state_of(grid, cell)
+		var new_state := WaterDelta.make_state(body_id, level, _kept_flags(old_state, body_id, level))
+		if old_state != new_state:
+			delta.record(cell, old_state, new_state)
+		for offset: Vector2i in WaterGrid.ORTHOGONAL_OFFSETS:
+			_queue_ocean_cell(cell + offset, level, body_id, seen, queue)
+	return _commit_or_reject(delta)
+
+
+func _queue_ocean_cell(cell: Vector2i, level: int, body_id: int, seen: Dictionary, queue: Array[Vector2i]) -> void:
+	if seen.has(cell) or not grid.is_inside(cell):
+		return
+	seen[cell] = true
+	if terrain.is_hole(cell) or terrain.height_of(cell) >= level:
+		return
+	var occupant := grid.body_id_at(cell)
+	if occupant != WaterBody.NO_BODY and occupant != body_id:
+		return
+	queue.append(cell)
+
+
 func erase(cells: Array[Vector2i]) -> bool:
 	if grid == null:
 		return _reject(REASON_NO_GRID)

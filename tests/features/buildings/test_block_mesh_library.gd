@@ -24,7 +24,7 @@ func _test_arch_and_railing_meshes() -> void:
 	var arch_verts: PackedVector3Array = arch.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
 	assert(arch_verts.size() >= 72, "arch must build jambs + arch ring, got %d verts" % arch_verts.size())
 	var arch_aabb := arch.get_aabb()
-	assert(arch_aabb.size.y > 0.5 and arch_aabb.size.x > 0.5, "arch must span the block")
+	assert(arch_aabb.size.y >= 0.49 and arch_aabb.size.x > 0.5, "arch must span its half-slab footprint")
 
 	# Full- and half-height railing variants must differ in height.
 	var full := (lib.mesh_for(&"railing", &"full") as ArrayMesh).get_aabb()

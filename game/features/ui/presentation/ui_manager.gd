@@ -74,7 +74,7 @@ func setup(p_simulation: Node) -> void:
 
 
 func bind_events(target: Object) -> void:
-	_connect_event(events.global_build_menu_toggled, target, "_toggle_global_build_menu")
+	_connect_event(events.global_build_menu_toggled, target.get("build_controller"), "toggle_global_build_menu")
 	_connect_event(events.skip_night_requested, target, "_skip_night")
 	_connect_event(events.skip_to_workday_start_requested, target, "_skip_to_workday_start")
 	_connect_event(events.time_multiplier_changed, target, "_set_time_multiplier")
@@ -82,14 +82,14 @@ func bind_events(target: Object) -> void:
 	_connect_event(events.build_menu_gui_input, target, "_on_build_menu_gui_input")
 	_connect_event(events.manage_citizen_requested, target, "_take_control_of_selected_citizen")
 	_connect_event(events.daily_order_submenu_requested, target, "_open_daily_order_submenu")
-	_connect_event(events.personal_night_work_toggled, target, "_toggle_selected_citizen_night_work")
+	_connect_event(events.personal_night_work_toggled, target.get("workplace_controller"), "toggle_selected_citizen_night_work")
 	_connect_event(events.job_submenu_requested, target, "_open_job_submenu")
-	_connect_event(events.category_opened, target, "_open_build_category")
-	_connect_event(events.build_selected, target, "_select_build_mode")
+	_connect_event(events.category_opened, target.get("build_controller"), "open_build_category")
+	_connect_event(events.build_selected, target.get("build_controller"), "select_build_mode")
 	_connect_event(events.role_selected, target, "_set_selected_work_role")
 
-	_connect_event(events.send_resident_outside_requested, target, "_send_selected_resident_to_outside_work")
-	_connect_event(events.context_menus_close_requested, target, "_close_context_menus")
+	_connect_event(events.send_resident_outside_requested, target.get("outside_work_controller"), "send_selected_resident_to_outside_work")
+	_connect_event(events.context_menus_close_requested, target.get("input_controller"), "close_context_menus")
 
 	_connect_event(events.spawn_house_citizen_requested, target, "_spawn_house_citizen")
 	_connect_event(events.house_demolish_requested, target, "_demolish_selected_house")
@@ -97,37 +97,37 @@ func bind_events(target: Object) -> void:
 	_connect_event(events.school_demolish_requested, target, "_demolish_selected_school")
 
 	_connect_event(events.workday_hours_changed, target, "_set_workday_hours")
-	_connect_event(events.campfire_advance_pressed, target, "_on_campfire_advance_pressed")
+	_connect_event(events.campfire_advance_pressed, target.get("workplace_controller"), "on_campfire_advance_pressed")
 	_connect_event(events.campfire_orders_menu_show_requested, target, "_show_campfire_orders_menu")
-	_connect_event(events.campfire_primary_action_requested, target, "_handle_campfire_primary_action")
+	_connect_event(events.campfire_primary_action_requested, target.get("hero_interaction_controller"), "handle_campfire_primary_action")
 	_connect_event(events.research_menu_show_requested, target, "_show_research_menu")
-	_connect_event(events.civic_post_assignment_requested, target, "_handle_civic_post_assignment")
-	_connect_event(events.occupy_campfire_position_requested, target, "_occupy_selected_campfire_position")
-	_connect_event(events.campfire_acceptance_toggled, target, "_toggle_campfire_acceptance")
-	_connect_event(events.dismiss_campfire_worker_requested, target, "_dismiss_campfire_worker")
-	_connect_event(events.campfire_worker_overtime_toggled, target, "_toggle_campfire_worker_overtime")
+	_connect_event(events.civic_post_assignment_requested, target.get("research_controller"), "handle_civic_post_assignment")
+	_connect_event(events.occupy_campfire_position_requested, target.get("hero_interaction_controller"), "occupy_selected_campfire_position")
+	_connect_event(events.campfire_acceptance_toggled, target.get("workplace_controller"), "toggle_campfire_acceptance")
+	_connect_event(events.dismiss_campfire_worker_requested, target.get("workplace_controller"), "dismiss_campfire_worker")
+	_connect_event(events.campfire_worker_overtime_toggled, target.get("workplace_controller"), "toggle_campfire_worker_overtime")
 
 	_connect_event(events.warehouse_demolish_requested, target, "_demolish_selected_warehouse")
 
 	_connect_event(events.pocket_take_menu_close_requested, target, "_close_pocket_take_menu")
 
-	_connect_event(events.cook_assigned, target, "_assign_cook_at_campfire")
-	_connect_event(events.teacher_assigned, target, "_assign_teacher_at_school")
-	_connect_event(events.seller_assigned, target, "_assign_seller_at_market")
-	_connect_event(events.workplace_acceptance_toggled, target, "_toggle_selected_workplace_acceptance")
-	_connect_event(events.workplace_worker_dismissed, target, "_dismiss_selected_workplace_worker")
-	_connect_event(events.worker_overtime_toggled, target, "_toggle_worker_overtime")
-	_connect_event(events.relight_fire_requested, target, "_relight_selected_fire")
-	_connect_event(events.upgrade_building_requested, target, "_upgrade_selected_building")
-	_connect_event(events.demolish_building_requested, target, "_demolish_selected_building")
-	_connect_event(events.cancel_construction_requested, target, "_cancel_selected_construction")
+	_connect_event(events.cook_assigned, target.get("workplace_controller"), "assign_cook_at_campfire")
+	_connect_event(events.teacher_assigned, target.get("workplace_controller"), "assign_teacher_at_school")
+	_connect_event(events.seller_assigned, target.get("workplace_controller"), "assign_seller_at_market")
+	_connect_event(events.workplace_acceptance_toggled, target.get("workplace_controller"), "toggle_selected_workplace_acceptance")
+	_connect_event(events.workplace_worker_dismissed, target.get("workplace_controller"), "dismiss_selected_workplace_worker")
+	_connect_event(events.worker_overtime_toggled, target.get("workplace_controller"), "toggle_worker_overtime")
+	_connect_event(events.relight_fire_requested, target.get("hero_interaction_controller"), "relight_selected_fire")
+	_connect_event(events.upgrade_building_requested, target.get("workplace_controller"), "upgrade_selected_building")
+	_connect_event(events.demolish_building_requested, target.get("workplace_controller"), "demolish_selected_building")
+	_connect_event(events.cancel_construction_requested, target.get("construction_controller"), "cancel_selected_construction")
 
 	_connect_event(events.assign_unemployed_worker_requested, target, "_assign_unemployed_worker")
 
-	_connect_event(events.road_walking_order_set, target, "_set_road_walking_order")
-	_connect_event(events.settlement_night_work_toggled, target, "_toggle_settlement_night_work")
-	_connect_event(events.double_time_order_toggled, target, "_toggle_double_time_order")
-	_connect_event(events.cheer_up_settlement_requested, target, "_cheer_up_settlement")
+	_connect_event(events.road_walking_order_set, target.get("workplace_controller"), "set_road_walking_order")
+	_connect_event(events.settlement_night_work_toggled, target.get("workplace_controller"), "toggle_settlement_night_work")
+	_connect_event(events.double_time_order_toggled, target.get("workplace_controller"), "toggle_double_time_order")
+	_connect_event(events.cheer_up_settlement_requested, target.get("workplace_controller"), "cheer_up_settlement")
 
 
 func bind_delegate_events(callbacks: Object) -> void:

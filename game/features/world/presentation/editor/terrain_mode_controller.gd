@@ -8,18 +8,18 @@ extends MapEditorMode
 ## the same tool the laboratory and the building editor's `Terrain Base` layer
 ## drive. This controller binds it to the editor's input, palette and undo stack.
 ##
-## The navigation overlay is not optional decoration in this mode. A green board
-## proves nothing about whether anyone can walk on it — two terraces and a slope
-## are identical from this camera, and the difference is a wall the author cannot
-## see. `M` toggles it, and it is on by default here for exactly that reason.
+## Navigation is available here, but starts hidden so terrain sculpting opens on
+## the ground itself. The explicit profile buttons make the overlay's meaning
+## clear when the author needs to inspect it.
 
 const OPTION_MODE := &"edit_mode"
 const OPTION_BRUSH_UP := &"brush_up"
 const OPTION_BRUSH_DOWN := &"brush_down"
 const OPTION_RAMP_CLASS := &"ramp_class"
 const OPTION_RAMP_DIR := &"ramp_dir"
-const OPTION_NAV := &"nav_overlay"
-const OPTION_PROFILE := &"nav_profile"
+const OPTION_NAV_NONE := &"nav_none"
+const OPTION_NAV_PEDESTRIAN := &"nav_pedestrian"
+const OPTION_NAV_CART := &"nav_cart"
 
 ## What a map has to be checked against: what a citizen can climb, and what a
 ## loaded cart can. A ramp only a walker can use is a supply route that silently
@@ -44,8 +44,7 @@ func _init() -> void:
 func activate() -> void:
 	if context.nav_overlay != null:
 		context.nav_overlay.configure(context.nav_grid, NAV_PROFILES[_nav_profile_index])
-		context.nav_overlay.visible = true
-		context.nav_overlay.rebuild()
+		context.nav_overlay.visible = false
 
 
 func deactivate() -> void:
@@ -84,6 +83,10 @@ func handle_input(event: InputEvent) -> bool:
 
 func _handle_mouse(event: InputEventMouseButton) -> bool:
 	if _handle_common_mouse(event):
+		return true
+	if event.button_index == MOUSE_BUTTON_LEFT and event.shift_pressed and event.pressed:
+		context.brush.pick_material()
+		notify_ui_changed()
 		return true
 	if event.ctrl_pressed and event.pressed:
 		match event.button_index:
@@ -207,14 +210,17 @@ func select_palette_entry(entry_id: StringName) -> void:
 
 func tool_options() -> Array:
 	var options: Array = []
-	options.append(ToolOption.of(OPTION_MODE, "Режим: %s" % TerrainEditOperation.mode_name(context.brush.edit_mode)))
-	options.append(ToolOption.of(OPTION_BRUSH_DOWN, "Кисть −"))
-	options.append(ToolOption.of(OPTION_BRUSH_UP, "Кисть +"))
+	options.append(ToolOption.of(OPTION_NAV_NONE, "Нет", &"navigation", context.nav_overlay == null or not context.nav_overlay.visible))
+	options.append(ToolOption.of(OPTION_NAV_PEDESTRIAN, "Pedestrian", &"navigation", _overlay_profile_is(&"pedestrian")))
+	options.append(ToolOption.of(OPTION_NAV_CART, "Cart", &"navigation", _overlay_profile_is(&"cart")))
+	if _tool != TOOL_RAMP:
+		options.append(ToolOption.of(OPTION_MODE, "Режим: %s" % TerrainEditOperation.mode_name(context.brush.edit_mode)))
+	options.append(ToolOption.of(&"brush_size", "Кисть: %d" % (context.brush.brush_size - 1), &"brush", false, true))
+	options.append(ToolOption.of(OPTION_BRUSH_DOWN, "−", &"brush"))
+	options.append(ToolOption.of(OPTION_BRUSH_UP, "+", &"brush"))
 	if _tool == TOOL_RAMP:
 		options.append(ToolOption.of(OPTION_RAMP_CLASS, "Класс: %s" % SlopeCatalog.id_of_class(context.brush.ramp_class)))
 		options.append(ToolOption.of(OPTION_RAMP_DIR, "Направление: %s" % TerrainBrushController.direction_name(context.brush.ramp_direction)))
-	options.append(ToolOption.of(OPTION_NAV, "Навигация: %s" % _overlay_state()))
-	options.append(ToolOption.of(OPTION_PROFILE, "Профиль: %s" % NAV_PROFILES[_nav_profile_index]))
 	return options
 
 
@@ -230,17 +236,19 @@ func activate_option(option_id: StringName) -> void:
 			context.brush.cycle_ramp_class()
 		OPTION_RAMP_DIR:
 			context.brush.cycle_ramp_direction()
-		OPTION_NAV:
-			_toggle_overlay()
-		OPTION_PROFILE:
-			_cycle_profile()
+		OPTION_NAV_NONE:
+			_set_overlay_profile(&"")
+		OPTION_NAV_PEDESTRIAN:
+			_set_overlay_profile(&"pedestrian")
+		OPTION_NAV_CART:
+			_set_overlay_profile(&"cart")
 	notify_ui_changed()
 
 
 func inspector_lines() -> Array[String]:
 	var lines: Array[String] = []
 	lines.append("Инструмент: %s" % _tool)
-	lines.append("Кисть: %d×%d" % [context.brush.brush_size * 2 - 1, context.brush.brush_size * 2 - 1])
+	lines.append("Кисть: %d" % (context.brush.brush_size - 1))
 	lines.append("Режим высоты: %s" % TerrainEditOperation.mode_name(context.brush.edit_mode))
 	if context.brush.edit_mode == TerrainEditOperation.Mode.LEVEL:
 		lines.append("Цель Level: %d (Ctrl+колесо)" % context.brush.level_target_height())
@@ -250,7 +258,7 @@ func inspector_lines() -> Array[String]:
 	])
 	lines.append("Навигация: %s (%s)" % [_overlay_state(), NAV_PROFILES[_nav_profile_index]])
 	lines.append("")
-	lines.append("ЛКМ — применить, Shift+ПКМ — обратно")
+	lines.append("ЛКМ — применить, Shift+ЛКМ — пипетка, Shift+ПКМ — обратно")
 	lines.append("Tab — подынструмент, F — выровнять")
 	lines.append("[ ] — размер кисти, C/V — класс и направление пандуса")
 	lines.append("Ctrl+колесо — высота Level")
@@ -279,6 +287,22 @@ func _overlay_state() -> String:
 	if context.nav_overlay == null:
 		return "нет"
 	return "вкл" if context.nav_overlay.visible else "выкл"
+
+
+func _overlay_profile_is(profile: StringName) -> bool:
+	return context.nav_overlay != null and context.nav_overlay.visible and NAV_PROFILES[_nav_profile_index] == profile
+
+
+func _set_overlay_profile(profile: StringName) -> void:
+	if context.nav_overlay == null:
+		return
+	if profile == &"":
+		context.nav_overlay.visible = false
+		return
+	_nav_profile_index = NAV_PROFILES.find(profile)
+	context.nav_overlay.configure(context.nav_grid, profile)
+	context.nav_overlay.visible = true
+	context.nav_overlay.rebuild()
 
 
 func list_title() -> String:

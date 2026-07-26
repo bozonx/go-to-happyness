@@ -137,6 +137,16 @@ func material_id() -> StringName:
 	return TerrainMaterialCatalog.ids()[material_index]
 
 
+## Picks the complete paint state, so the next surface stroke has the clicked
+## material and its authored variant rather than only the base material.
+func pick_material() -> void:
+	if not has_hover or _grid == null:
+		return
+	material_index = _grid.material_index_at(hovered_cell)
+	variant = _grid.variant_at(hovered_cell)
+	last_message = "picked %s/%s" % [material_id(), TerrainMaterialVariants.variant_name(material_index, variant)]
+
+
 func apply_material() -> void:
 	if not has_hover:
 		return

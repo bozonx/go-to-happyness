@@ -460,7 +460,6 @@ var world_navigation_controller: RefCounted
 func _ready() -> void:
 	ui_manager = UIManagerScene.instantiate() as UIManager
 	add_child(ui_manager)
-	ui_manager.setup(self)
 	var launch_mgr: Node = get_node_or_null("/root/GameLaunchManager")
 	var active_config: GameLaunchConfigScript = null
 	if launch_mgr != null:
@@ -485,6 +484,7 @@ func _ready() -> void:
 	simulation_tick_controller = SettlementSimulationTickControllerScript.new(self)
 	logistics_controller = SettlementLogisticsControllerScript.new(self)
 	world_navigation_controller = SettlementWorldNavigationControllerScript.new(self)
+	ui_manager.setup(self)
 	ui_manager.bind_delegate_events(SettlementUICallbacksScript.new(self))
 	SettlementBootstrapperScript.new().run(self)
 
@@ -787,33 +787,21 @@ func _set_time_multiplier(multiplier: float) -> void:
 	_update_interface("Simulation speed set to x%d." % int(multiplier))
 
 
-func _send_selected_resident_to_outside_work() -> void:
-	outside_work_controller.send_selected_resident_to_outside_work()
-
-
 func _show_materials_factory_menu() -> void:
 	if selected_materials_factory == null:
 		return
 	ui_manager.materials_factory_menu.visible = true
 	ui_manager.materials_factory_menu_title.text = "Materials factory\nAssign workers to produce materials."
 
-func _handle_civic_post_assignment() -> void:
-	research_controller.handle_civic_post_assignment()
-
-
 func _show_house_menu() -> void:
 	if house_menu_controller != null:
 		house_menu_controller.show_house_menu()
-
-func _open_build_category(category: String) -> void:
-	build_controller.open_build_category(category)
-
 
 func _on_build_menu_gui_input(event: InputEvent) -> void:
 	if not (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed):
 		return
 	if not build_category.is_empty():
-		_open_build_category("")
+		build_controller.open_build_category("")
 	elif build_menu_is_job_menu or build_menu_is_daily_order_menu:
 		_close_assignment_submenu()
 	else:
@@ -980,13 +968,6 @@ func _available_employer_capacity(role: String) -> int:
 	return capacity
 
 
-func _select_build_mode(next_mode: String) -> void:
-	build_controller.select_build_mode(next_mode)
-
-func _close_context_menus() -> void:
-	input_controller.close_context_menus()
-
-
 func _select_citizen_at(screen_position: Vector2) -> void:
 	var visible_citizen := _citizen_at_screen_position(screen_position)
 	if visible_citizen != null:
@@ -1000,7 +981,7 @@ func _select_citizen_at(screen_position: Vector2) -> void:
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	if hit.is_empty():
 		# Clicking empty ground clears the current selection and its menu.
-		_close_context_menus()
+		input_controller.close_context_menus()
 		return
 	# Switching to a different building always dismisses the previously open
 	# menu first, so only one context menu is ever visible at a time.
@@ -1335,82 +1316,6 @@ func _fell_tree_at(position_on_board: Vector3) -> void:
 
 ## Lays a tree down and frees the cell it occupied. Shared by live felling and
 ## save restore so both paths produce identical geometry and navigation state.
-func _toggle_global_build_menu() -> void:
-	build_controller.toggle_global_build_menu()
-
-
-func _set_road_walking_order(enabled: bool) -> void:
-	workplace_controller.set_road_walking_order(enabled)
-
-
-func _cheer_up_settlement() -> void:
-	workplace_controller.cheer_up_settlement()
-
-
-func _toggle_settlement_night_work(checked: bool) -> void:
-	workplace_controller.toggle_settlement_night_work(checked)
-
-
-func _toggle_double_time_order(checked: bool) -> void:
-	workplace_controller.toggle_double_time_order(checked)
-
-
-func _toggle_selected_citizen_night_work(checked: bool) -> void:
-	workplace_controller.toggle_selected_citizen_night_work(checked)
-
-
-func _occupy_selected_campfire_position() -> void:
-	hero_interaction_controller.occupy_selected_campfire_position()
-
-
-func _handle_campfire_primary_action() -> void:
-	hero_interaction_controller.handle_campfire_primary_action()
-
-
-func _toggle_campfire_acceptance() -> void:
-	workplace_controller.toggle_campfire_acceptance()
-
-
-func _dismiss_campfire_worker() -> void:
-	workplace_controller.dismiss_campfire_worker()
-
-
-func _on_campfire_advance_pressed() -> void:
-	workplace_controller.on_campfire_advance_pressed()
-
-
-func _demolish_selected_building() -> void:
-	workplace_controller.demolish_selected_building()
-
-
-func _relight_selected_fire() -> void:
-	hero_interaction_controller.relight_selected_fire()
-
-
-func _toggle_selected_workplace_acceptance() -> void:
-	workplace_controller.toggle_selected_workplace_acceptance()
-
-
-func _dismiss_selected_workplace_worker() -> void:
-	workplace_controller.dismiss_selected_workplace_worker()
-
-
-func _upgrade_selected_building() -> void:
-	workplace_controller.upgrade_selected_building()
-
-
-func _assign_cook_at_campfire() -> void:
-	workplace_controller.assign_cook_at_campfire()
-
-
-func _assign_teacher_at_school() -> void:
-	workplace_controller.assign_teacher_at_school()
-
-
-func _assign_seller_at_market() -> void:
-	workplace_controller.assign_seller_at_market()
-
-
 func _apply_building_wear_and_repairs() -> void:
 	building_maintenance_service.apply_building_wear_and_repairs(_destroy_building_to_pile)
 
@@ -1432,10 +1337,6 @@ func _warehouse_delivery_position(from: Vector3, resource_type: String, amount: 
 func _is_construction_site(node: Node3D) -> bool:
 	return construction_controller.is_construction_site(node)
 
-func _cancel_selected_construction() -> void:
-	construction_controller.cancel_selected_construction()
-
-
 func get_toilets() -> Array[Node3D]:
 	var toilets: Array[Node3D] = []
 	for record in building_registry.records():
@@ -1444,14 +1345,6 @@ func get_toilets() -> Array[Node3D]:
 			if b_type.begins_with("toilet_"):
 				toilets.append(record.node)
 	return toilets
-
-
-func _toggle_worker_overtime(checked: bool) -> void:
-	workplace_controller.toggle_worker_overtime(checked)
-
-
-func _toggle_campfire_worker_overtime(checked: bool) -> void:
-	workplace_controller.toggle_campfire_worker_overtime(checked)
 
 
 func restore_from_save_data(save_data: SaveDataScript) -> bool:

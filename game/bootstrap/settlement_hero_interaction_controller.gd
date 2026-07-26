@@ -190,7 +190,7 @@ func handle_campfire_primary_action() -> void:
 		if game.campfire_menu_controller != null:
 			game.campfire_menu_controller.refresh_campfire_menu()
 		return
-	game._upgrade_selected_building()
+	game.workplace_controller.upgrade_selected_building()
 
 
 func relight_selected_fire() -> void:

@@ -127,7 +127,7 @@ func cancel_selected_construction() -> void:
 		return
 	game.service_pocket_manager.unregister_service_pockets(game.selected_building)
 	game.construction.cancel_site(game.selected_building)
-	game._close_context_menus()
+	game.input_controller.close_context_menus()
 	game._update_interface("Construction cancelled. Refunded 50% of costs.")
 
 

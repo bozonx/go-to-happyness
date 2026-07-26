@@ -39,6 +39,7 @@ static func _test_meta_round_trips_through_json() -> void:
 	document.meta.biomes = [&"forest", &"mountain"]
 	document.meta.tags = [&"survival"]
 	document.meta.border_level = -2.5
+	document.meta.border_kind = MapMeta.BORDER_NOTHING
 	document.meta.start.era = &"tent"
 	document.meta.start.style = &"roman"
 	document.meta.start.day_of_year = 200
@@ -57,6 +58,7 @@ static func _test_meta_round_trips_through_json() -> void:
 	assert(restored.meta.tags == [&"survival"])
 	assert(restored.meta.board_cells == BOARD_CELLS)
 	assert(is_equal_approx(restored.meta.border_level, -2.5))
+	assert(restored.meta.border_kind == MapMeta.BORDER_NOTHING)
 	assert(restored.meta.start.day_of_year == 200)
 	assert(restored.meta.start.style == &"roman")
 	assert(is_equal_approx(restored.meta.start.latitude, 60.0))

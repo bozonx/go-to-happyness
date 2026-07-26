@@ -80,7 +80,7 @@ func cancel_build_action() -> void:
 
 func toggle_global_build_menu() -> void:
 	var was_visible := game.ui_manager.build_menu.visible and game.build_menu_is_global
-	game._close_context_menus()
+	game.input_controller.close_context_menus()
 	game.build_menu_is_global = not was_visible
 	game.ui_manager.build_menu.visible = game.build_menu_is_global
 	if game.ui_manager.build_menu.visible:

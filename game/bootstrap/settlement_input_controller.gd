@@ -23,7 +23,7 @@ func handle_menu_right_click() -> bool:
 	var ui := game.ui_manager
 	if ui.build_menu.visible:
 		if not game.build_category.is_empty():
-			game._open_build_category("")
+			game.build_controller.open_build_category("")
 		elif game.build_menu_is_job_menu or game.build_menu_is_daily_order_menu:
 			game._close_assignment_submenu()
 		else:
@@ -111,7 +111,7 @@ func handle_unhandled_input(event: InputEvent) -> void:
 		return
 	if event is InputEventKey and event.keycode == KEY_B and event.pressed and not event.echo:
 		if game._can_hero_build():
-			game._toggle_global_build_menu()
+			game.build_controller.toggle_global_build_menu()
 			if game.is_first_person:
 				Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE if game.ui_manager.build_menu.visible else Input.MOUSE_MODE_CAPTURED)
 		else:
