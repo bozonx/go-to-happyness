@@ -5,7 +5,6 @@ const UIManagerScene = preload("res://game/features/ui/presentation/ui_manager.t
 const GameLaunchConfigScript = preload("res://game/features/settlement/domain/game_launch_config.gd")
 const TentEraSurvivalRulesScript = preload("res://game/features/settlement/domain/tent_era_survival_rules.gd")
 const WaterCollectorRecordScript = preload("res://game/features/logistics/domain/water_collector_record.gd")
-const DigSiteRecordScript = preload("res://game/features/production/domain/dig_site_record.gd")
 const GrassSourceRecordScript = preload("res://game/features/production/domain/grass_source_record.gd")
 const HouseLightRecordScript = preload("res://game/features/buildings/domain/house_light_record.gd")
 const ConstructionPriorityServiceScript = preload("res://game/features/buildings/application/construction_priority_service.gd")
@@ -337,8 +336,6 @@ var campfire_node: Node3D = null
 var selected_campfire: Node3D = null
 var selected_market: Node3D = null
 var selected_warehouse: Node3D = null
-var campfire_story_buttons: Array[Button] = []
-var _decision_buttons: Array[Button] = []
 var event_service: EventService
 var survival_busy_until: Dictionary = {}
 var house_lights: Array[HouseLightRecordScript] = []
