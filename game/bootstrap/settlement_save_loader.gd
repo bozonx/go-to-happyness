@@ -262,15 +262,22 @@ func _resolve_saved_building_blueprint(saved_type: String, data: Dictionary) -> 
 				push_warning("Blueprint '%s:%s' changed since this save; current file geometry will be used." % [
 					reference.get("source", "builtin"), reference.get("id", "")])
 		else:
-			var fallback := str(reference.get("fallback_building_id", "house"))
-			if BuildingCatalog.has_definition(fallback):
-				resolved_type = fallback
-				push_warning("Missing blueprint '%s:%s'; restored as fallback '%s'." % [
-					reference.get("source", "builtin"), reference.get("id", ""), fallback])
+			var role := StringName(reference.get("role", ""))
+			var role_variant := SettlementGame.BuildingBlueprintLibraryScript.resolve_role(role) if not String(role).is_empty() else ""
+			if not role_variant.is_empty():
+				resolved_type = String(role)
+				push_warning("Missing blueprint '%s:%s'; restored using current variant for role '%s'." % [
+					reference.get("source", "builtin"), reference.get("id", ""), role])
 			else:
-				push_warning("Missing blueprint and invalid fallback for '%s:%s'." % [
-					reference.get("source", "builtin"), reference.get("id", "")])
-				return {"type": saved_type, "blueprint": {}}
+				var fallback := str(reference.get("fallback_building_id", "house"))
+				if BuildingCatalog.has_definition(fallback):
+					resolved_type = fallback
+					push_warning("Missing blueprint '%s:%s'; restored as fallback '%s'." % [
+						reference.get("source", "builtin"), reference.get("id", ""), fallback])
+				else:
+					push_warning("Missing blueprint and invalid fallback for '%s:%s'." % [
+						reference.get("source", "builtin"), reference.get("id", "")])
+					return {"type": saved_type, "blueprint": {}}
 	var blueprint: Dictionary = BuildingBlueprints.get_blueprint(resolved_type)
 	var saved_zones: Variant = data.get("zone_state", [])
 	if saved_zones is Array and not saved_zones.is_empty() and not blueprint.is_empty():

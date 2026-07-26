@@ -14,6 +14,7 @@ const ZoneAnchorRecordScript = preload("res://game/features/buildings/domain/edi
 const BuildingZoneServiceScript = preload("res://game/features/buildings/application/building_zone_service.gd")
 const ContentIndexScript = preload("res://game/features/content/application/content_index.gd")
 const ContentEntryScript = preload("res://game/features/content/domain/content_entry.gd")
+const ContentIdScript = preload("res://game/features/content/domain/content_id.gd")
 const StyleResolverScript = preload("res://game/features/content/application/style_resolver.gd")
 const ContentPackIOScript = preload("res://game/features/content/presentation/content_pack_io.gd")
 
@@ -122,6 +123,7 @@ static func _test_style_resolver_fallback_chain() -> void:
 	index.entries.erase(&"bakery_clay_roman")
 	assert(resolver.resolve(&"bakery", &"brick", &"roman").era == &"tent")
 	assert(resolver.resolve(&"missing", &"brick", &"roman") == null)
+	assert(ContentIdScript.runtime_key(ContentIdScript.split_runtime_key(&"pack:ivan.roman/bakery")["source"], ContentIdScript.split_runtime_key(&"pack:ivan.roman/bakery")["id"]) == &"pack:ivan.roman/bakery")
 
 
 static func _test_content_packs_and_exchange() -> void:

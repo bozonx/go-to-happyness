@@ -3,6 +3,8 @@ extends Node
 ## Application service for managing active game launch configuration and scene transitions.
 
 const GameLaunchConfigScript = preload("res://game/features/settlement/domain/game_launch_config.gd")
+const SaveDataScript = preload("res://game/features/save_load/domain/save_data.gd")
+const ContentIdScript = preload("res://game/features/content/domain/content_id.gd")
 const BUILDING_EDITOR_SCENE := "res://game/features/buildings/presentation/editor/building_editor.tscn"
 const MAP_EDITOR_SCENE := "res://game/features/world/presentation/editor/map_editor.tscn"
 
@@ -42,6 +44,27 @@ func _resolve_map(config: GameLaunchConfigScript) -> void:
 
 
 func launch_from_save(save_path: String) -> void:
+	var save_data := SaveDataScript.new()
+	if not save_data.load_from_file(save_path):
+		push_warning("[launch] сохранение не читается: %s" % save_path)
+		return
+	var map_reference: Variant = save_data.world_state.get("map_ref", {})
+	if map_reference is Dictionary and not (map_reference as Dictionary).is_empty():
+		var reference := map_reference as Dictionary
+		var source := StringName(reference.get("source", "core"))
+		var id := StringName(reference.get("id", ""))
+		if String(id).is_empty():
+			push_warning("[launch] в сохранении некорректная ссылка на карту")
+			return
+		active_launch_config = GameLaunchConfigScript.for_tent_era()
+		active_launch_config.map_ref = ContentIdScript.runtime_key(source, id)
+		_resolve_map(active_launch_config)
+		if active_launch_config.map_document == null:
+			push_warning("[launch] сохранение не открыто: карта %s не найдена" % active_launch_config.map_ref)
+			return
+		var saved_revision := String(reference.get("revision", ""))
+		if not saved_revision.is_empty() and active_launch_config.map_document.meta.revision != saved_revision:
+			push_warning("[launch] карта %s изменилась после сохранения; будет использована текущая версия." % active_launch_config.map_ref)
 	pending_save_path = save_path
 	get_tree().change_scene_to_file("res://game/bootstrap/settlement_game.tscn")
 

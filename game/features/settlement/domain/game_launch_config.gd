@@ -11,6 +11,10 @@ var era_type: int = 0 # Matches SettlementState.Era.TENT
 ## Atmosphere and vegetation defaults. Since maps arrived the biome no longer
 ## owns the ground: relief comes from `map_document` (map_editor.md §14.1).
 var biome_id: StringName = &"summer_valley"
+## Chosen by the map, not a per-player cosmetic preference. Building content
+## resolves visual variants against this value while gameplay remains keyed by
+## role.
+var world_style: StringName = &"generic"
 
 ## The map this session runs on, as a runtime key (`green_valley` or
 ## `user:green_valley`). Empty means the legacy flat board — the one seam through
@@ -64,6 +68,7 @@ func apply_map_start() -> void:
 		return
 	var start := map_document.meta.start
 	era_id = start.era
+	world_style = start.style
 	var economy := start.economy
 	if economy.has("money"):
 		starting_money = int(economy["money"])

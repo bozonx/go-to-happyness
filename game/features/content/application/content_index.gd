@@ -40,6 +40,9 @@ func blueprint_entries() -> Array[ContentEntryScript]:
 func map_entries() -> Array[ContentEntryScript]:
 	return _entries_of(&"map")
 
+func prefab_entries() -> Array[ContentEntryScript]:
+	return _entries_of(&"prefab")
+
 func _entries_of(content_type: StringName) -> Array[ContentEntryScript]:
 	var result: Array[ContentEntryScript] = []
 	for key in entries:
@@ -124,9 +127,13 @@ func _index_maps(root: String, source: StringName) -> void:
 		if String(id).is_empty():
 			errors.append("У карты нет id: %s" % package_path)
 			continue
-		var entry := ContentEntryScript.new(source, id, &"map", package_path)
+		var kind := StringName(parsed.get("kind", "map"))
+		if kind not in [&"map", &"prefab"]:
+			errors.append("Неизвестный kind карты: %s" % package_path)
+			continue
+		var entry := ContentEntryScript.new(source, id, kind, package_path)
 		entry.runtime_key = ContentIdScript.runtime_key(source, id)
-		entry.kind = StringName(parsed.get("kind", "map"))
+		entry.kind = kind
 		entry.name = String(parsed.get("name", id))
 		entry.metadata = parsed.duplicate(true)
 		_register(entry)

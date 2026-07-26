@@ -19,6 +19,7 @@ func resolve(role: StringName, era: StringName, style: StringName) -> ContentEnt
 		if older != null: return older
 	return null
 
+
 func _best(candidates: Array, requested_era: StringName, wanted_style: StringName, exact_only: bool) -> ContentEntryScript:
 	var requested_rank := BuildingMaterialCatalogScript.era_rank(requested_era)
 	var best: ContentEntryScript = null

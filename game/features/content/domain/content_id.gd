@@ -34,7 +34,10 @@ static func split_runtime_key(key: StringName) -> Dictionary:
 		var body := text.trim_prefix(PACK_PREFIX)
 		var separator := body.find("/")
 		if separator > 0:
-			return {"source": StringName(body.left(separator)), "id": StringName(body.substr(separator + 1))}
+			# Keep the source in the same canonical form `runtime_key()` accepts.
+			# Without the prefix this was not a round trip: splitting and joining an
+			# installed reference changed `pack:author.id/foo` to `author.id:foo`.
+			return {"source": StringName(PACK_PREFIX + body.left(separator)), "id": StringName(body.substr(separator + 1))}
 	var colon := text.find(":")
 	if colon > 0:
 		return {"source": StringName(text.left(colon)), "id": StringName(text.substr(colon + 1))}

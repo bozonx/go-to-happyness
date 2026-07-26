@@ -16,6 +16,10 @@ func configure(next_simulation: Node) -> void:
 func refresh_build_menu() -> void:
 	if simulation == null or simulation.ui_manager.build_menu == null:
 		return
+	var world_style := &"generic"
+	if "launch_config" in simulation and simulation.launch_config != null:
+		world_style = simulation.launch_config.world_style
+	BuildingBlueprintLibraryScript.set_world_style(world_style)
 	BuildingBlueprintLibraryScript.refresh()
 	simulation.ui_manager.build_menu.sync_custom_build_buttons(BuildingBlueprintLibraryScript.player_entries())
 	var selected_exists: bool = is_instance_valid(simulation.selected_builder)

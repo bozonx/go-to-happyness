@@ -7,6 +7,7 @@ const QUICKSAVE_PATH := "user://saves/quicksave.json"
 const SaveDataScript = preload("res://game/features/save_load/domain/save_data.gd")
 const WarehouseStateScript = preload("res://game/features/settlement/domain/warehouse_state.gd")
 const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
+const ContentIdScript = preload("res://game/features/content/domain/content_id.gd")
 
 
 static func has_quicksave() -> bool:
@@ -178,9 +179,16 @@ static func save_game(game: Node, path: String = QUICKSAVE_PATH) -> bool:
 					citizen_data["age"] = citizen.get("age")
 				citizens_list.append(citizen_data)
 	save_data.citizens_state = citizens_list
+	var map_reference: Dictionary = {}
+	if "launch_config" in game and game.launch_config != null and not String(game.launch_config.map_ref).is_empty():
+		var address := ContentIdScript.split_runtime_key(game.launch_config.map_ref)
+		map_reference = {"source": String(address["source"]), "id": String(address["id"])}
+		if game.launch_config.map_document != null:
+			map_reference["revision"] = game.launch_config.map_document.meta.revision
 	save_data.world_state = {
 		"next_ai_citizen_id": game.get("_next_ai_citizen_id"),
 		"biome_id": str(game.launch_config.biome_id) if "launch_config" in game and game.launch_config != null else "",
+		"map_ref": map_reference,
 		"natural_resources": game.ambient_spawner.export_resource_state() if "ambient_spawner" in game and game.ambient_spawner != null else {},
 		"roads": game.road_network_service.export_state() if "road_network_service" in game and game.road_network_service != null else [],
 	}

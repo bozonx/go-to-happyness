@@ -1,19 +1,19 @@
 extends RefCounted
 
-## Resolves an in-game `building_type` to its canonical block blueprint
+## Resolves an in-game gameplay role to the active visual block blueprint
 ## (`.gdbuilding.json`) and exposes the data the construction pipeline needs.
 ##
 ## This is the bridge that lets the game render buildings from the modular
-## editor format. A `building_type` maps to the blueprint file whose `id`
-## matches. While a type has no file, `has()` returns false and callers fall
-## back to the legacy procedural generator — so the game keeps working during
-## the gradual conversion.
+## editor format. A role resolves through the world's era/style; a namespaced
+## runtime key still addresses one immutable file for saves and map placements.
+## While no authored variant exists callers fall back to procedural generation.
 
 const BuildingBlueprintScript = preload("res://game/features/buildings/domain/editor/building_blueprint.gd")
 const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
 const BuildingCatalogScript = preload("res://game/features/buildings/domain/building_catalog.gd")
 const ContentIndexScript = preload("res://game/features/content/application/content_index.gd")
 const ContentIdScript = preload("res://game/features/content/domain/content_id.gd")
+const StyleResolverScript = preload("res://game/features/content/application/style_resolver.gd")
 
 const SOURCE_BUILTIN := &"core"
 const SOURCE_PLAYER := &"local"
@@ -23,6 +23,7 @@ static var _cache: Dictionary = {}          ## building_type(String) -> Building
 static var _legacy_aliases: Dictionary = {} ## old bare ids -> canonical runtime key
 static var _index_built: bool = false
 static var _content_index: ContentIndex
+static var _world_style: StringName = &"generic"
 
 
 static func refresh() -> void:
@@ -43,11 +44,20 @@ static func refresh() -> void:
 			continue
 		_index[key] = {"path": path, "source": indexed_entry.source, "id": blueprint.id}
 		_cache[key] = blueprint
-		# Simulation code still asks static catalog ids (such as `tent`). Keep that
-		# compatibility while all persisted references use core:tent.
-		if indexed_entry.source == SOURCE_BUILTIN and blueprint.style == &"generic" and not _legacy_aliases.has(blueprint.id):
-			_legacy_aliases[blueprint.id] = key
-		_register_definition(key, blueprint)
+		# Simulation asks gameplay roles (such as `tent`), never a visual file id.
+		# Keep the old bare-id seam for v1/v2 content whose role defaults to id.
+		if indexed_entry.source == SOURCE_BUILTIN and blueprint.style == &"generic" and not _legacy_aliases.has(blueprint.role):
+			_legacy_aliases[blueprint.role] = key
+		if blueprint.kind == &"building":
+			_register_definition(blueprint.role, blueprint)
+
+
+static func set_world_style(style: StringName) -> void:
+	_world_style = style if not String(style).is_empty() else &"generic"
+
+
+static func world_style() -> StringName:
+	return _world_style
 
 
 static func _ensure_index() -> void:
@@ -57,12 +67,14 @@ static func _ensure_index() -> void:
 
 static func has(building_type: String) -> bool:
 	_ensure_index()
-	return _index.has(building_type) or _legacy_aliases.has(StringName(building_type))
+	return not _resolved_key(building_type).is_empty()
 
 
 static func get_blueprint(building_type: String) -> BuildingBlueprintScript:
 	_ensure_index()
-	building_type = _canonical_key(building_type)
+	building_type = _resolved_key(building_type)
+	if building_type.is_empty():
+		return null
 	if _cache.has(building_type):
 		return _cache[building_type]
 	if not _index.has(building_type):
@@ -82,7 +94,7 @@ static func runtime_key(source: StringName, blueprint_id: StringName) -> String:
 
 static func blueprint_ref(building_type: String) -> Dictionary:
 	_ensure_index()
-	building_type = _canonical_key(building_type)
+	building_type = _resolved_key(building_type)
 	var entry: Dictionary = _index.get(building_type, {})
 	var blueprint := get_blueprint(building_type)
 	if entry.is_empty() or blueprint == null:
@@ -90,6 +102,7 @@ static func blueprint_ref(building_type: String) -> Dictionary:
 	return {
 		"source": String(entry["source"]),
 		"id": String(entry["id"]),
+		"role": String(blueprint.role),
 		"revision": blueprint.revision_id(),
 		"fallback_building_id": String(blueprint.fallback_building_id),
 	}
@@ -105,17 +118,28 @@ static func resolve_reference(reference: Dictionary) -> String:
 	return key if _index.has(key) else ""
 
 
+static func resolve_role(role: StringName) -> String:
+	_ensure_index()
+	return _resolved_key(String(role))
+
+
 static func player_entries() -> Array[Dictionary]:
 	_ensure_index()
 	var result: Array[Dictionary] = []
+	var seen_roles: Dictionary = {}
 	for key in _index:
 		var entry: Dictionary = _index[key]
 		if entry["source"] != SOURCE_PLAYER:
 			continue
 		var blueprint := get_blueprint(key)
-		if blueprint != null:
+		if blueprint != null and blueprint.kind == &"building" and not seen_roles.has(blueprint.role):
+			# Only show the active variant for a role. A local file may exist but be
+			# shadowed by another explicit local variant of the same role.
+			if _resolved_key(String(blueprint.role)) != key:
+				continue
+			seen_roles[blueprint.role] = true
 			result.append({
-				"building_type": key,
+				"building_type": String(blueprint.role),
 				"id": blueprint.id,
 				"name": blueprint.name,
 				"category": "custom",
@@ -125,27 +149,40 @@ static func player_entries() -> Array[Dictionary]:
 	return result
 
 
-static func _register_definition(key: String, blueprint: BuildingBlueprintScript) -> void:
+static func _register_definition(role: StringName, blueprint: BuildingBlueprintScript) -> void:
 	# A builtin blueprint that matches an existing catalog building_type only
 	# supplies visuals + zones: the static definition stays authoritative so its
 	# costs, housing/civic flags and upgrade chains are never silently lost
 	# (functionality is keyed by building_type, not by the blueprint — see the
 	# design doc §1). Only genuinely new types (player customs) get a runtime def.
-	if BuildingCatalogScript.DEFINITIONS.has(key):
+	if BuildingCatalogScript.has_definition(String(role)):
 		return
-	BuildingCatalogScript.register_runtime_definition(key, {
+	BuildingCatalogScript.register_runtime_definition(String(role), {
 		"name": blueprint.name,
 		"category": String(blueprint.category),
 		"costs": blueprint.construction_cost.duplicate(true),
 		"requires_village_area": true,
 		"expands_village_area": false,
 		"demolishable": true,
-		"custom_blueprint": key.begins_with("user:"),
+		"custom_blueprint": true,
 	})
 
 
-static func _canonical_key(building_type: String) -> String:
-	return String(_legacy_aliases.get(StringName(building_type), building_type))
+static func _resolved_key(building_type: String) -> String:
+	# Runtime keys are immutable file references (not style requests), so use
+	# them verbatim for save restore and map placement.
+	if _index.has(building_type):
+		return building_type
+	if ":" in building_type:
+		return ""
+	var resolver := StyleResolverScript.new(_content_index)
+	var requested_era := &"brick"
+	if BuildingCatalogScript.has_definition(building_type):
+		requested_era = StringName(BuildingCatalogScript.definition_for(building_type).get("category", requested_era))
+	var entry := resolver.resolve(StringName(building_type), requested_era, _world_style)
+	if entry != null:
+		return String(entry.runtime_key)
+	return String(_legacy_aliases.get(StringName(building_type), ""))
 
 
 static func footprint(building_type: String) -> Vector2i:

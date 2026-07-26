@@ -55,12 +55,13 @@ func _init() -> void:
 	var loaded = LibraryScript.get_blueprint(runtime_key)
 	assert(loaded != null)
 	assert(loaded.construction_cost == {"soil": 1, "branches": 1})
-	assert(BuildingCatalogScript.definition_for(runtime_key).get("category") == "earth")
+	assert(BuildingCatalogScript.definition_for(String(TEST_ID)).get("category") == "earth")
 
 	var game_blueprint: Dictionary = BuildingBlueprintsScript.get_blueprint(runtime_key)
 	assert(game_blueprint.get("modules", []).size() == 2)
 	assert(game_blueprint.get("work_zones", []).size() == 1)
-	assert(game_blueprint.get("blueprint_ref", {}).get("source") == "player")
+	assert(game_blueprint.get("blueprint_ref", {}).get("source") == "local")
+	assert(game_blueprint.get("blueprint_ref", {}).get("role") == String(TEST_ID))
 	assert(game_blueprint.get("blueprint_ref", {}).get("fallback_building_id") == "smithy")
 
 	var remove_error := DirAccess.remove_absolute(repository.file_path_for(TEST_ID))
