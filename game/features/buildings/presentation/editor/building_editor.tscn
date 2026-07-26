@@ -214,12 +214,6 @@ visible = false
 layout_mode = 2
 theme_override_constants/separation = 6
 
-[node name="DecorSearchEdit" type="LineEdit" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(190, 0)
-layout_mode = 2
-placeholder_text = "Поиск ассета во всех категориях..."
-
 [node name="DecorToolPlaceBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -659,6 +653,12 @@ theme_override_constants/separation = 6
 layout_mode = 2
 text = "Каталог декора"
 horizontal_alignment = 1
+
+[node name="DecorSearchEdit" type="LineEdit" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(190, 0)
+layout_mode = 2
+placeholder_text = "Поиск ассета во всех категориях..."
 
 [node name="GroupLbl" type="Label" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
 layout_mode = 2

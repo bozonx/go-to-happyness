@@ -1043,7 +1043,7 @@ func _rebuild_asset_buttons() -> void:
 	var assets := FurnishingAssetCatalogScript.get_assets_by_category(current_category)
 	var search_text := _search_edit.text.strip_edges().to_lower() if _search_edit != null else ""
 	if not search_text.is_empty():
-		# The top-bar search deliberately crosses category boundaries.
+		# The search field deliberately crosses category boundaries.
 		assets = FurnishingAssetCatalogScript.get_all_assets()
 		var filtered: Array = []
 		for asset in assets:
