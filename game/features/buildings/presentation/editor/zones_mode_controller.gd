@@ -196,6 +196,10 @@ func handle_key(_event: InputEventKey) -> bool:
 	return false
 
 
+func is_painting() -> bool:
+	return _painting
+
+
 func process(_delta: float) -> void:
 	pass
 
@@ -217,6 +221,12 @@ func on_blueprint_loaded() -> void:
 	_selected_place_index = 0 if not _editor.blueprint.place_zones.is_empty() else -1
 	_rebuild_place_option()
 	_refresh_zone_visuals()
+
+
+func on_blueprint_changed() -> void:
+	_selected_place_index = -1
+	_rebuild_place_option()
+	_clear_zone_visuals()
 
 
 func on_blueprint_created() -> void:

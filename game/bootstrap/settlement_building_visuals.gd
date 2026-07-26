@@ -10,11 +10,11 @@ const FireLightScene = preload("res://game/features/buildings/presentation/fire_
 const BillboardLabelScene = preload("res://game/features/ui/presentation/billboard_label.tscn")
 const GatheringPlaceVisualScene = preload("res://game/features/buildings/presentation/gathering_place_visual.tscn")
 
-var game: SettlementGame
+var runtime: BuildingVisualsPort
 
 
-func _init(p_game: SettlementGame) -> void:
-	game = p_game
+func _init(p_runtime: BuildingVisualsPort) -> void:
+	runtime = p_runtime
 
 
 func add_building_selector(building: Node3D, group_name: String, footprint: Vector2i) -> void:
@@ -54,12 +54,12 @@ func add_building_status_indicator(building: Node3D) -> void:
 	indicator.visible = false
 	building.add_child(indicator)
 	building.set_meta("status_indicator", indicator)
-	game.building_status_indicators.append(indicator)
+	runtime.status_indicators.append(indicator)
 
 
 func add_warehouse_fill_label(building: Node3D) -> void:
-	if game.warehouse_fill_label_controller != null:
-		game.warehouse_fill_label_controller.add_warehouse_fill_label(building)
+	if runtime.add_warehouse_fill_label.is_valid():
+		runtime.add_warehouse_fill_label.call(building)
 
 
 func create_gathering_place_visual(building: Node3D) -> void:
@@ -68,8 +68,8 @@ func create_gathering_place_visual(building: Node3D) -> void:
 
 
 func add_house_light(house: Node3D) -> void:
-	if game.building_visuals_service != null:
-		game.building_visuals_service.add_house_light(house)
+	if runtime.add_house_light.is_valid():
+		runtime.add_house_light.call(house)
 
 
 func add_demolition_marker(building: Node3D) -> void:

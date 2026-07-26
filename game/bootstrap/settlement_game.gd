@@ -425,7 +425,19 @@ func _ready() -> void:
 
 	research_controller = SettlementResearchController.new(self)
 	citizen_factory = SettlementCitizenFactory.new(self)
-	building_visuals = SettlementBuildingVisuals.new(self)
+	var add_warehouse_fill_label := func(building: Node3D) -> void:
+		if warehouse_fill_label_controller != null:
+			warehouse_fill_label_controller.add_warehouse_fill_label(building)
+	var add_house_light := func(house: Node3D) -> void:
+		if building_visuals_service != null:
+			building_visuals_service.add_house_light(house)
+	building_visuals = SettlementBuildingVisuals.new(
+		BuildingVisualsPort.new(
+			building_status_indicators,
+			add_warehouse_fill_label,
+			add_house_light
+		)
+	)
 	simulation_handlers = SettlementSimulationHandlers.new(self)
 	var add_service_marker := func(building: Node3D, local: Vector3) -> void:
 		if building_visuals_service != null:
@@ -442,7 +454,30 @@ func _ready() -> void:
 		)
 	)
 	outside_work_controller = SettlementOutsideWorkController.new(self)
-	building_management = SettlementBuildingManagement.new(self)
+	var nav_grid_getter := func() -> NavGrid: return nav_grid
+	var entrance_getter := func() -> Node3D: return entrance_stone
+	var entrance_setter := func(building: Node3D) -> void: entrance_stone = building
+	var canteen_getter := func() -> Node3D: return canteen
+	var canteen_setter := func(building: Node3D) -> void: canteen = building
+	var canteen_position_setter := func(position: Vector3) -> void: canteen_position = position
+	var add_entrance_selector := func(node: Node3D, group_name: String, shape_size: Vector3, offset: Vector3) -> void:
+		building_visuals.add_selector_to_node(node, group_name, shape_size, offset)
+	var configure_entrance_ambient := func(building: Node3D) -> void:
+		if ambient_spawner != null:
+			ambient_spawner.setup_entrance_sign_node(building)
+	building_management = SettlementBuildingManagement.new(
+		BuildingManagementPort.new(
+			building_registry,
+			nav_grid_getter,
+			entrance_getter,
+			entrance_setter,
+			canteen_getter,
+			canteen_setter,
+			canteen_position_setter,
+			add_entrance_selector,
+			configure_entrance_ambient
+		)
+	)
 	input_controller = SettlementInputController.new(self)
 	build_controller = SettlementBuildController.new(self)
 	hero_interaction_controller = SettlementHeroInteractionController.new(self)

@@ -15,8 +15,6 @@ const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain
 const BuildingMaterialCatalogScript = preload("res://game/features/buildings/domain/editor/building_material_catalog.gd")
 const BuildingBlueprintScript = preload("res://game/features/buildings/domain/editor/building_blueprint.gd")
 const BuildingGridModelScript = preload("res://game/features/buildings/domain/editor/building_grid_model.gd")
-const PlaceZoneRecordScript = preload("res://game/features/buildings/domain/editor/place_zone_record.gd")
-const ZoneAnchorRecordScript = preload("res://game/features/buildings/domain/editor/zone_anchor_record.gd")
 const BlueprintRepositoryScript = preload("res://game/features/buildings/presentation/editor/blueprint_repository.gd")
 const BlockMeshLibraryScript = preload("res://game/features/buildings/presentation/editor/block_mesh_library.gd")
 const DecorModeControllerScript = preload("res://game/features/buildings/presentation/editor/decor_mode_controller.gd")
@@ -83,7 +81,6 @@ var _block_nodes: Dictionary = {}  ## BuildingGridModel placement key -> MeshIns
 @onready var _ground: MeshInstance3D = get_node("Ground") as MeshInstance3D
 @onready var _ghost: MeshInstance3D = %Ghost
 @onready var _layer_plane: MeshInstance3D = %LayerPlane
-@onready var _zones_visual_root: Node3D = %ZonesVisual
 @onready var _export_mesh_btn: Button = %ExportMeshBtn
 @onready var _navmesh_preview_btn: Button = %NavMeshPreviewBtn
 var _panning: bool = false
@@ -1013,6 +1010,22 @@ func mark_dirty() -> void:
 
 func set_status(message: String) -> void:
 	_update_status(message)
+
+
+func is_pointer_over_ui() -> bool:
+	return _pointer_over_ui()
+
+
+func update_cursor() -> void:
+	_update_cursor()
+
+
+func is_cell_in_bounds(cell: Vector3i) -> bool:
+	return _is_cell_in_bounds(cell)
+
+
+func update_fallback_display() -> void:
+	_update_fallback_display()
 
 
 func _select_mode(mode: int) -> void:
