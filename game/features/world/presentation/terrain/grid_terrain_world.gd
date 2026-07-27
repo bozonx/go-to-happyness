@@ -37,6 +37,7 @@ signal rebuild_finished()
 @export var lod_distance := 64.0
 @export var full_smoothing := false
 @export_range(0.0, 1.0, 0.01) var edge_rounding := 0.0
+@export var edge_bevel := false
 
 var grid: TerrainGrid = null
 ## Optional: without it every chunk is built at full detail.
@@ -126,14 +127,21 @@ func set_edge_rounding(amount: float) -> void:
 	_sync_smoothing_parameters()
 
 
+func set_edge_bevel(enabled: bool) -> void:
+	edge_bevel = enabled
+	_sync_smoothing_parameters()
+
+
 func _sync_smoothing_parameters() -> void:
 	var full_amount := 1.0 if full_smoothing else 0.0
 	if _ground_material != null:
 		_ground_material.set_shader_parameter(&"full_smoothing", full_amount)
 		_ground_material.set_shader_parameter(&"edge_rounding", edge_rounding)
+		_ground_material.set_shader_parameter(&"edge_bevel", 1.0 if edge_bevel else 0.0)
 	if _cliff_material != null:
 		_cliff_material.set_shader_parameter(&"full_smoothing", full_amount)
 		_cliff_material.set_shader_parameter(&"edge_rounding", edge_rounding)
+		_cliff_material.set_shader_parameter(&"edge_bevel", 1.0 if edge_bevel else 0.0)
 
 
 func lod_of_chunk(chunk: Vector2i) -> int:
@@ -251,6 +259,7 @@ func _ground_shader_material() -> ShaderMaterial:
 	_ground_material.set_shader_parameter(&"max_variants", float(TerrainMaterialVariants.MAX_VARIANTS))
 	_ground_material.set_shader_parameter(&"full_smoothing", 1.0 if full_smoothing else 0.0)
 	_ground_material.set_shader_parameter(&"edge_rounding", edge_rounding)
+	_ground_material.set_shader_parameter(&"edge_bevel", 1.0 if edge_bevel else 0.0)
 	return _ground_material
 
 
@@ -262,4 +271,5 @@ func _cliff_shader_material() -> ShaderMaterial:
 	_cliff_material.set_shader_parameter(&"surface_textures", _library.texture_array())
 	_cliff_material.set_shader_parameter(&"full_smoothing", 1.0 if full_smoothing else 0.0)
 	_cliff_material.set_shader_parameter(&"edge_rounding", edge_rounding)
+	_cliff_material.set_shader_parameter(&"edge_bevel", 1.0 if edge_bevel else 0.0)
 	return _cliff_material

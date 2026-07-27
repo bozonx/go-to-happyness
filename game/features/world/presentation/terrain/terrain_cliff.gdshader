@@ -20,6 +20,7 @@ uniform float tile_size = 2.0;
 uniform float face_shade = 0.86;
 uniform float full_smoothing : hint_range(0.0, 1.0) = 0.0;
 uniform float edge_rounding : hint_range(0.0, 1.0) = 0.0;
+uniform float edge_bevel : hint_range(0.0, 1.0) = 0.0;
 
 varying vec3 world_position;
 varying vec3 world_normal;
@@ -45,12 +46,20 @@ void fragment() {
 	);
 	vec4 edge_distances = vec4(UV.y * dimensions.y, (1.0 - UV.x) * dimensions.x, (1.0 - UV.y) * dimensions.y, UV.x * dimensions.x);
 	float eligible_edge_distance = min(min(edge_distances.x + (1.0 - edge_enabled.x) * 10000.0, edge_distances.y + (1.0 - edge_enabled.y) * 10000.0), min(edge_distances.z + (1.0 - edge_enabled.z) * 10000.0, edge_distances.w + (1.0 - edge_enabled.w) * 10000.0));
-	float rounding_radius = max(edge_rounding * tile_size * 0.25, 0.0001);
-	float edge_band = (1.0 - smoothstep(0.0, rounding_radius, eligible_edge_distance)) * step(0.001, edge_rounding);
+	// Cliff polygons are taller and visually coarser than top cells. Give their
+	// bevel twice the reach of the ground band, otherwise the same UI value is
+	// almost invisible on rock while already reading clearly on grass.
+	float rounding_radius = max(edge_rounding * tile_size * 0.5, 0.0001);
+	float rounded_band = 1.0 - smoothstep(0.0, rounding_radius, eligible_edge_distance);
+	float bevel_band = 1.0 - step(rounding_radius, eligible_edge_distance);
+	float edge_band = mix(rounded_band, bevel_band, edge_bevel) * step(0.001, edge_rounding);
 	float normal_blend = max(edge_band, full_smoothing);
 	NORMAL = normalize(mix(NORMAL, smooth_view_normal, normal_blend));
 	vec3 blend = abs(normalize(mix(world_normal, smooth_world_normal, normal_blend)));
-	blend = pow(blend, vec3(4.0));
+	// A hard triplanar exponent redraws a polygonal seam in the texture after the
+	// lighting normal has been rounded. Relax it only inside the rounded band.
+	float triplanar_sharpness = mix(4.0, 1.35, normal_blend);
+	blend = pow(blend, vec3(triplanar_sharpness));
 	blend /= max(blend.x + blend.y + blend.z, 0.0001);
 
 	vec3 uv = world_position / tile_size;

@@ -57,6 +57,8 @@ static func _test_every_housing_blueprint() -> void:
 		var anchor: Dictionary = anchors[0]
 		assert(String(anchor.get("id", "")) == "front_door", "%s: anchor id must be 'front_door'" % file_id)
 		assert(String(anchor.get("role", "")) == "door", "%s: front_door must be a door" % file_id)
+		var allow: Array = anchor.get("allow", [])
+		assert("builder" in allow, "%s: front_door must allow builder" % file_id)
 
 		# No fixtures
 		assert(raw.get("fixtures", []).size() == 0, "%s: must have no fixtures" % file_id)

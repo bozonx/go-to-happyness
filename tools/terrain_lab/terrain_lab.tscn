@@ -68,7 +68,7 @@ text = "terrain lab"
 offset_left = 24.0
 offset_top = 500.0
 offset_right = 520.0
-offset_bottom = 608.0
+offset_bottom = 642.0
 
 [node name="Margin" type="MarginContainer" parent="UI/SmoothingPanel"]
 theme_override_constants/margin_left = 10
@@ -83,6 +83,9 @@ text = "Edge rounding radius: 0%"
 
 [node name="FullSmoothing" type="CheckButton" parent="UI/SmoothingPanel/Margin/Rows"]
 text = "Full surface smoothing"
+
+[node name="EdgeBevel" type="CheckButton" parent="UI/SmoothingPanel/Margin/Rows"]
+text = "Flat bevel instead of rounding"
 
 [node name="Controls" type="HBoxContainer" parent="UI/SmoothingPanel/Margin/Rows"]
 

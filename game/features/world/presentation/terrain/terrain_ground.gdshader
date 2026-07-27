@@ -32,6 +32,8 @@ uniform float blend_sharpness = 0.18;
 // edge rounding keeps planes flat and changes only a configurable border band.
 uniform float full_smoothing : hint_range(0.0, 1.0) = 0.0;
 uniform float edge_rounding : hint_range(0.0, 1.0) = 0.0;
+// 0 makes a curved normal transition; 1 makes a constant-width flat bevel.
+uniform float edge_bevel : hint_range(0.0, 1.0) = 0.0;
 
 uniform vec3 snow_colour : source_color = vec3(0.88, 0.91, 0.96);
 uniform vec3 wear_tint : source_color = vec3(0.52, 0.44, 0.33);
@@ -60,7 +62,9 @@ void fragment() {
 	vec4 edge_distances = vec4(UV.y * dimensions.y, (1.0 - UV.x) * dimensions.x, (1.0 - UV.y) * dimensions.y, UV.x * dimensions.x);
 	float eligible_edge_distance = min(min(edge_distances.x + (1.0 - edge_enabled.x) * 10000.0, edge_distances.y + (1.0 - edge_enabled.y) * 10000.0), min(edge_distances.z + (1.0 - edge_enabled.z) * 10000.0, edge_distances.w + (1.0 - edge_enabled.w) * 10000.0));
 	float rounding_radius = max(edge_rounding * cell_size * 0.5, 0.0001);
-	float edge_band = (1.0 - smoothstep(0.0, rounding_radius, eligible_edge_distance)) * step(0.001, edge_rounding);
+	float rounded_band = 1.0 - smoothstep(0.0, rounding_radius, eligible_edge_distance);
+	float bevel_band = 1.0 - step(rounding_radius, eligible_edge_distance);
+	float edge_band = mix(rounded_band, bevel_band, edge_bevel) * step(0.001, edge_rounding);
 	float normal_blend = max(edge_band, full_smoothing);
 	NORMAL = normalize(mix(NORMAL, smooth_view_normal, normal_blend));
 	vec2 tile_uv = world_position.xz / tile_size;

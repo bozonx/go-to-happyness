@@ -56,6 +56,7 @@ const CAMERA_MOUSE_ORBIT := 0.35
 @onready var water_world: WaterWorld = $Water
 @onready var smoothing_title: Label = $UI/SmoothingPanel/Margin/Rows/Title
 @onready var full_smoothing_toggle: CheckButton = $UI/SmoothingPanel/Margin/Rows/FullSmoothing
+@onready var edge_bevel_toggle: CheckButton = $UI/SmoothingPanel/Margin/Rows/EdgeBevel
 @onready var smoothing_slider: HSlider = $UI/SmoothingPanel/Margin/Rows/Controls/Slider
 @onready var smoothing_flat_button: Button = $UI/SmoothingPanel/Margin/Rows/Controls/FlatButton
 @onready var smoothing_decrease_button: Button = $UI/SmoothingPanel/Margin/Rows/Controls/DecreaseButton
@@ -101,6 +102,8 @@ const CAPTURE_VIEWS: Array = [
 	{"name": "smoothing_flat", "rounding": 0.0, "full_smoothing": false, "target": Vector3(0.0, 0.5, 0.0), "yaw": 250.0, "pitch": 22.0, "distance": 18.0},
 	{"name": "rounding_half", "rounding": 0.5, "full_smoothing": false, "target": Vector3(0.0, 0.5, 0.0), "yaw": 250.0, "pitch": 22.0, "distance": 18.0},
 	{"name": "rounding_full", "rounding": 1.0, "full_smoothing": false, "target": Vector3(0.0, 0.5, 0.0), "yaw": 250.0, "pitch": 22.0, "distance": 18.0},
+	{"name": "bevel_half", "rounding": 0.5, "bevel": true, "full_smoothing": false, "target": Vector3(0.0, 0.5, 0.0), "yaw": 250.0, "pitch": 22.0, "distance": 18.0},
+	{"name": "bevel_full", "rounding": 1.0, "bevel": true, "full_smoothing": false, "target": Vector3(0.0, 0.5, 0.0), "yaw": 250.0, "pitch": 22.0, "distance": 18.0},
 	{"name": "smoothing_full", "rounding": 0.0, "full_smoothing": true, "target": Vector3(0.0, 0.5, 0.0), "yaw": 250.0, "pitch": 22.0, "distance": 18.0},
 	{"name": "tower_and_hole", "target": Vector3(12.0, 2.0, 4.0), "yaw": 300.0, "pitch": 28.0, "distance": 26.0},
 	{"name": "cascade_repose", "setup": &"cascade", "target": Vector3(0.0, 1.0, 0.0), "yaw": 20.0, "pitch": 30.0, "distance": 40.0},
@@ -162,6 +165,7 @@ func _ready() -> void:
 func _connect_smoothing_controls() -> void:
 	smoothing_slider.value_changed.connect(_on_smoothing_changed)
 	full_smoothing_toggle.toggled.connect(terrain.set_full_smoothing)
+	edge_bevel_toggle.toggled.connect(_on_edge_bevel_toggled)
 	smoothing_flat_button.pressed.connect(func() -> void: smoothing_slider.value = 0.0)
 	smoothing_decrease_button.pressed.connect(func() -> void: smoothing_slider.value -= smoothing_slider.step)
 	smoothing_increase_button.pressed.connect(func() -> void: smoothing_slider.value += smoothing_slider.step)
@@ -171,7 +175,17 @@ func _connect_smoothing_controls() -> void:
 
 func _on_smoothing_changed(percent: float) -> void:
 	terrain.set_edge_rounding(percent / 100.0)
-	smoothing_title.text = "Edge rounding radius: %d%%" % roundi(percent)
+	_update_edge_title()
+
+
+func _on_edge_bevel_toggled(enabled: bool) -> void:
+	terrain.set_edge_bevel(enabled)
+	_update_edge_title()
+
+
+func _update_edge_title() -> void:
+	var treatment := "bevel width" if edge_bevel_toggle.button_pressed else "rounding radius"
+	smoothing_title.text = "Edge %s: %d%%" % [treatment, roundi(smoothing_slider.value)]
 
 
 func _process(delta: float) -> void:
@@ -491,6 +505,10 @@ func _process_capture() -> void:
 			smoothing_slider.value = float(view["rounding"]) * 100.0
 		if view.has("full_smoothing"):
 			full_smoothing_toggle.button_pressed = bool(view["full_smoothing"])
+		if view.has("bevel"):
+			edge_bevel_toggle.button_pressed = bool(view["bevel"])
+		else:
+			edge_bevel_toggle.button_pressed = false
 		match view.get("setup", &""):
 			&"cascade":
 				_setup_cascade_scene()
