@@ -149,7 +149,6 @@ func select_asset(asset_id: StringName) -> void:
 	if asset != null:
 		_select_snap_step(asset.default_snap_step)
 		add_recent_asset(asset_id)
-	_controller.set_tool(_controller.Tool.PLACE)
 	_controller.refresh_ghost()
 
 

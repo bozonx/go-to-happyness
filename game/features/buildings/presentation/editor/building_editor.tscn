@@ -214,24 +214,6 @@ visible = false
 layout_mode = 2
 theme_override_constants/separation = 6
 
-[node name="DecorToolPlaceBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
-unique_name_in_owner = true
-layout_mode = 2
-toggle_mode = true
-text = "✚ Ставить (B)"
-tooltip_text = "Ставить выбранный декор. Выбор ассета в каталоге включает этот режим."
-
-[node name="DecorToolSelectBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
-unique_name_in_owner = true
-layout_mode = 2
-toggle_mode = true
-button_pressed = true
-text = "⌖ Выбрать (V)"
-tooltip_text = "Выбрать и переместить предмет; клик по пустому месту снимает выделение."
-
-[node name="VSepDecorTools" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
-layout_mode = 2
-
 [node name="DecorDeleteSelectionBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
