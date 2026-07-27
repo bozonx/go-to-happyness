@@ -350,9 +350,9 @@ func upgrade_selected_building() -> void:
 	for module in blueprint.modules:
 		game.selected_building.add_child(BuildingBlueprints.create_module(module))
 		game.service_pocket_manager.unregister_navigation_footprint(game.selected_building.global_position, old_footprint)
-	var is_home := target_type in ["tent", "straw_tent", "tarp_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house"]
+	var is_home := BuildingTypes.is_housing(target_type)
 	game.service_pocket_manager.register_service_entrance(game.selected_building, blueprint, is_home, target_type not in ["farm", "park"])
-	if target_type in ["campfire", "campfire_lvl2", "campfire_lvl3", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall"]:
+	if BuildingTypes.is_civic(target_type):
 		game.campfire_node = game.selected_building
 		game.research_controller.activate_employment_centre(game.selected_building)
 		game.building_visuals.add_building_selector(game.selected_building, "campfire_selector", blueprint.footprint)
@@ -482,23 +482,15 @@ func toggle_settlement_night_work(checked: bool) -> void:
 			return
 		game.settlement.night_work_order_day = game.day_cycle.current_day
 		game.update_interface("Night-work order issued to %d residents. They will work through the night and next day." % affected)
-		if game.survival_event_controller != null:
-			game.survival_event_controller.update_skip_night_button()
-		if game.citizen_ai != null:
-			game.citizen_ai.request_decision_refresh()
+		_post_overtime_change()
 	else:
 		for citizen in game.citizens:
 			if not is_instance_valid(citizen) or citizen.is_player_controlled:
 				continue
 			if citizen.has_overtime_source("settlement", game.day_cycle.current_day):
 				citizen.deactivate_overtime("settlement")
-		if game.citizen_daily_order_service != null:
-			game.citizen_daily_order_service.sync_overtime_scope_indicators()
 		game.update_interface("Settlement night work cancelled. Workers will return home.")
-		if game.survival_event_controller != null:
-			game.survival_event_controller.update_skip_night_button()
-		if game.citizen_ai != null:
-			game.citizen_ai.request_decision_refresh()
+		_post_overtime_change(true)
 	if game.campfire_menu_controller != null:
 		game.campfire_menu_controller.show_campfire_orders_menu()
 
@@ -534,17 +526,11 @@ func toggle_selected_citizen_night_work(checked: bool) -> void:
 			game.ui_manager.build_menu.personal_night_work_button.set_pressed_no_signal(false)
 			return
 		game.update_interface("%s received a personal night-work order." % game.selected_builder.role_label())
-		if game.survival_event_controller != null:
-			game.survival_event_controller.update_skip_night_button()
-		if game.citizen_ai != null:
-			game.citizen_ai.request_decision_refresh()
+		_post_overtime_change()
 	else:
 		game.selected_builder.deactivate_overtime("personal")
 		game.update_interface("Night work cancelled for %s." % game.selected_builder.role_label())
-		if game.survival_event_controller != null:
-			game.survival_event_controller.update_skip_night_button()
-		if game.citizen_ai != null:
-			game.citizen_ai.request_decision_refresh()
+		_post_overtime_change()
 	if game.building_menu_controller != null:
 		game.building_menu_controller.refresh_build_menu()
 
@@ -566,24 +552,28 @@ func toggle_worker_overtime(checked: bool) -> void:
 			game.selected_building.set_meta("night_work_order_day", game.day_cycle.current_day)
 			game.add_message("Night-work order issued for %s." % game.building_registry.building_type_for_node(game.selected_building).replace("_", " "))
 			game.update_workers()
-			if game.survival_event_controller != null:
-				game.survival_event_controller.update_skip_night_button()
-			if game.citizen_ai != null:
-				game.citizen_ai.request_decision_refresh()
+			_post_overtime_change()
 		else:
 			game.ui_manager.building_overtime_button.set_pressed_no_signal(false)
 	else:
 		for citizen in game.citizens:
 			if is_instance_valid(citizen) and citizen.employment_workplace == game.selected_building:
 				citizen.deactivate_overtime("workplace")
-		if game.citizen_daily_order_service != null:
-			game.citizen_daily_order_service.sync_overtime_scope_indicators()
 		game.add_message("Night work cancelled for %s." % game.building_registry.building_type_for_node(game.selected_building).replace("_", " "))
 		game.update_workers()
-		if game.survival_event_controller != null:
-			game.survival_event_controller.update_skip_night_button()
-		if game.citizen_ai != null:
-			game.citizen_ai.request_decision_refresh()
+		_post_overtime_change(true)
+
+
+## Common post-change cleanup after any overtime toggle: syncs scope
+## indicators (optional), refreshes the skip-night button and requests an
+## AI decision refresh so workers react immediately.
+func _post_overtime_change(sync_indicators := false) -> void:
+	if sync_indicators and game.citizen_daily_order_service != null:
+		game.citizen_daily_order_service.sync_overtime_scope_indicators()
+	if game.survival_event_controller != null:
+		game.survival_event_controller.update_skip_night_button()
+	if game.citizen_ai != null:
+		game.citizen_ai.request_decision_refresh()
 
 
 func toggle_campfire_worker_overtime(checked: bool) -> void:

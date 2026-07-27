@@ -37,64 +37,35 @@ var _firewood_task_priority: Callable
 var _is_managed_fire_source: Callable
 
 
-func configure(
-	p_settlement: SettlementState,
-	p_citizens: Array,
-	p_construction_sites: Array,
-	p_warehouse_positions: Array[Vector3],
-	p_pending_arrivals: Array,
-	p_queued_trades: Array,
-	p_sawmill_positions: Array[Vector3],
-	p_water_collectors: Array,
-	p_building_registry: Variant,
-	p_sawmills: Variant,
-	p_courier_dispatcher: CourierDispatcher,
-	p_entrance_stone_getter: Callable,
-	p_canteen_getter: Callable,
-	p_canteen_food_getter: Callable,
-	p_canteen_position_getter: Callable,
-	p_pending_canteen_delivery_getter: Callable,
-	p_runtime_seconds_getter: Callable,
-	p_reconcile_construction_reservations: Callable,
-	p_reconcile_repair_reservations: Callable,
-	p_cell_from_position: Callable,
-	p_get_nearest_delivery_position: Callable,
-	p_warehouse_delivery_position: Callable,
-	p_construction_priority: Callable,
-	p_construction_material_sources: Callable,
-	p_construction_source_available: Callable,
-	p_fire_state_for: Callable,
-	p_firewood_task_priority: Callable,
-	p_is_managed_fire_source: Callable
-) -> void:
-	_settlement = p_settlement
-	_citizens = p_citizens
-	_construction_sites = p_construction_sites
-	_warehouse_positions = p_warehouse_positions
-	_pending_arrivals = p_pending_arrivals
-	_queued_trades = p_queued_trades
-	_sawmill_positions = p_sawmill_positions
-	_water_collectors = p_water_collectors
-	_building_registry = p_building_registry
-	_sawmills = p_sawmills
-	_courier_dispatcher = p_courier_dispatcher
-	_entrance_stone_getter = p_entrance_stone_getter
-	_canteen_getter = p_canteen_getter
-	_canteen_food_getter = p_canteen_food_getter
-	_canteen_position_getter = p_canteen_position_getter
-	_pending_canteen_delivery_getter = p_pending_canteen_delivery_getter
-	_runtime_seconds_getter = p_runtime_seconds_getter
-	_reconcile_construction_reservations = p_reconcile_construction_reservations
-	_reconcile_repair_reservations = p_reconcile_repair_reservations
-	_cell_from_position = p_cell_from_position
-	_get_nearest_delivery_position = p_get_nearest_delivery_position
-	_warehouse_delivery_position = p_warehouse_delivery_position
-	_construction_priority = p_construction_priority
-	_construction_material_sources = p_construction_material_sources
-	_construction_source_available = p_construction_source_available
-	_fire_state_for = p_fire_state_for
-	_firewood_task_priority = p_firewood_task_priority
-	_is_managed_fire_source = p_is_managed_fire_source
+func configure(port: CourierTaskPublisherRuntimePort) -> void:
+	_settlement = port.settlement
+	_citizens = port.citizens
+	_construction_sites = port.construction_sites
+	_warehouse_positions = port.warehouse_positions
+	_pending_arrivals = port.pending_arrivals
+	_queued_trades = port.queued_trades
+	_sawmill_positions = port.sawmill_positions
+	_water_collectors = port.water_collectors
+	_building_registry = port.building_registry
+	_sawmills = port.sawmills
+	_courier_dispatcher = port.courier_dispatcher
+	_entrance_stone_getter = port.entrance_stone_getter
+	_canteen_getter = port.canteen_getter
+	_canteen_food_getter = port.canteen_food_getter
+	_canteen_position_getter = port.canteen_position_getter
+	_pending_canteen_delivery_getter = port.pending_canteen_delivery_getter
+	_runtime_seconds_getter = port.runtime_seconds_getter
+	_reconcile_construction_reservations = port.reconcile_construction_reservations
+	_reconcile_repair_reservations = port.reconcile_repair_reservations
+	_cell_from_position = port.cell_from_position
+	_get_nearest_delivery_position = port.get_nearest_delivery_position
+	_warehouse_delivery_position = port.warehouse_delivery_position
+	_construction_priority = port.construction_priority
+	_construction_material_sources = port.construction_material_sources
+	_construction_source_available = port.construction_source_available
+	_fire_state_for = port.fire_state_for
+	_firewood_task_priority = port.firewood_task_priority
+	_is_managed_fire_source = port.is_managed_fire_source
 
 
 func publish_courier_tasks(dispatcher: RefCounted) -> void:

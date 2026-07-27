@@ -1,0 +1,74 @@
+class_name BuildingLifecycleRuntimePort
+extends RefCounted
+
+## Explicit integration boundary between building lifecycle rules and the
+## settlement runtime. The bootstrap composition root supplies these values.
+
+var settlement: SettlementState
+var citizens: Array
+var building_registry: BuildingRegistry
+var demolition: DemolitionService
+var village_territory_service: VillageTerritoryService
+var warehouse_positions: Array[Vector3]
+var sawmill_positions: Array[Vector3]
+var farm_positions: Array[Vector3]
+var builders_guild_positions: Array[Vector3]
+var construction_company_positions: Array[Vector3]
+var forager_positions: Array[Vector3]
+var materials_yard_positions: Array[Vector3]
+var school_positions: Array[Vector3]
+var park_positions: Array[Vector3]
+var gathering_place_positions: Array[Vector3]
+var leisure_positions: Array[Vector3]
+var craft_tent_positions: Array[Vector3]
+var market_positions: Array[Vector3]
+var water_collectors: Array
+var factories: Array
+var house_lights: Array
+var entrance_lights: Array
+var house_capacity: int
+var fire_light_scene: PackedScene
+var entrance_stone_getter: Callable
+var campfire_node_getter: Callable
+var campfire_node_setter: Callable
+var canteen_getter: Callable
+var canteen_setter: Callable
+var canteen_food_getter: Callable
+var canteen_food_setter: Callable
+var pending_canteen_delivery_getter: Callable
+var employment_office_getter: Callable
+var employment_office_setter: Callable
+var employment_office_position_getter: Callable
+var employment_office_position_setter: Callable
+var completed_house_count_getter: Callable
+var completed_house_count_setter: Callable
+var house_light_update_minute_getter: Callable
+var house_light_update_minute_setter: Callable
+var game_minutes_getter: Callable
+var can_hero_build: Callable
+var update_interface: Callable
+var update_workers: Callable
+var cancel_arrivals_for_house: Callable
+var add_demolition_marker: Callable
+var refresh_living_status: Callable
+var unregister_service_pockets: Callable
+var return_in_transit_building_supplies: Callable
+var cancel_canteen_delivery: Callable
+var unregister_navigation_footprint: Callable
+var refresh_boundary_markers: Callable
+var select_best_canteen: Callable
+var create_resource_pile: Callable
+var refresh_navigation_grid: Callable
+var is_construction_site: Callable
+var activate_employment_centre: Callable
+var convert_backpack_pile_to_regular: Callable
+var add_building_selector: Callable
+var add_warehouse_fill_label: Callable
+var sawmill_stock: Callable
+var create_gathering_place_visual: Callable
+var activate_kitchen_if_better: Callable
+var add_house_light: Callable
+var house_initial_residents: Callable
+var cancel_active_building_research: Callable
+var dismiss_official: Callable
+var send_to_unemployment_registration: Callable

@@ -89,7 +89,7 @@ func complete_building(cell: Vector2i, building_type: String, position_on_board:
 		game.workplace_priority_counter += 1
 		building.set_meta("accepting_workers", true)
 		building.set_meta("workplace_priority", game.workplace_priority_counter)
-	if building_type not in ["warehouse", "straw_warehouse", "tarp_warehouse", "campfire", "campfire_lvl2", "campfire_lvl3", "earth_assembly", "clay_lodge", "wood_town_hall", "stone_prefecture", "brick_city_hall", "cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3", "dugout_kitchen", "clay_bakery", "canteen", "stone_tavern", "brick_restaurant", "straw_trade_tent", "tarp_trade_tent", "earth_market", "clay_market", "wood_market", "stone_market", "brick_market", "school", "materials_factory", "tent", "straw_tent", "tarp_tent", "dugout", "earth_house", "clay_house", "stone_house", "house", "house_lvl2", "house_lvl3", "brick_house", "straw_craft_tent", "tarp_craft_tent", "straw_forager_tent", "tarp_forager_tent", "boundary_post", "entrance_sign"]:
+	if BuildingTypes.needs_generic_selector(building_type):
 		game.building_visuals.add_building_selector(building, "building_selector", blueprint.footprint)
 	if building_type == "entrance_sign":
 		game.building_management.setup_entrance_sign_node(building)

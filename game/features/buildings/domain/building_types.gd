@@ -58,6 +58,14 @@ const CRAFT_TENT_TYPES: Array[String] = [
 	"craft_tent", "straw_craft_tent", "tarp_craft_tent",
 ]
 
+# Types that have a dedicated selector or none at all — not the generic one.
+const EXTRA_SELECTOR_EXEMPT_TYPES: Array[String] = [
+	"school", "materials_factory",
+	"straw_craft_tent", "tarp_craft_tent",
+	"straw_forager_tent", "tarp_forager_tent",
+	"boundary_post", "entrance_sign",
+]
+
 
 static func is_fire_source(building_type: String) -> bool:
 	return building_type in FIRE_SOURCE_TYPES
@@ -101,3 +109,22 @@ static func is_materials_yard(building_type: String) -> bool:
 
 static func is_craft_tent(building_type: String) -> bool:
 	return building_type in CRAFT_TENT_TYPES
+
+
+## Returns true if the building needs the generic building_selector.
+## Types with dedicated selectors (campfire, cook_campfire, house, etc.)
+## or no selector at all (warehouse, boundary_post, etc.) are exempt.
+static func needs_generic_selector(building_type: String) -> bool:
+	if building_type in WAREHOUSE_TYPES:
+		return false
+	if building_type in CIVIC_TYPES:
+		return false
+	if building_type in KITCHEN_TYPES:
+		return false
+	if building_type in MARKET_TYPES:
+		return false
+	if building_type in HOUSING_TYPES:
+		return false
+	if building_type in EXTRA_SELECTOR_EXEMPT_TYPES:
+		return false
+	return true

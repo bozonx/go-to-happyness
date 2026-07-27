@@ -81,144 +81,75 @@ var _dismiss_official: Callable
 var _send_to_unemployment_registration: Callable
 
 
-func configure(
-	p_settlement: SettlementState,
-	p_citizens: Array,
-	p_building_registry: Variant,
-	p_demolition: Variant,
-	p_village_territory_service: Variant,
-	p_warehouse_positions: Array[Vector3],
-	p_sawmill_positions: Array[Vector3],
-	p_farm_positions: Array[Vector3],
-	p_builders_guild_positions: Array[Vector3],
-	p_construction_company_positions: Array[Vector3],
-	p_forager_positions: Array[Vector3],
-	p_materials_yard_positions: Array[Vector3],
-	p_school_positions: Array[Vector3],
-	p_park_positions: Array[Vector3],
-	p_gathering_place_positions: Array[Vector3],
-	p_leisure_positions: Array[Vector3],
-	p_craft_tent_positions: Array[Vector3],
-	p_market_positions: Array[Vector3],
-	p_water_collectors: Array,
-	p_factories: Array,
-	p_house_lights: Array,
-	p_entrance_lights: Array,
-	p_house_capacity: int,
-	p_fire_light_scene: PackedScene,
-	p_entrance_stone_getter: Callable,
-	p_campfire_node_getter: Callable,
-	p_campfire_node_setter: Callable,
-	p_canteen_getter: Callable,
-	p_canteen_setter: Callable,
-	p_canteen_food_getter: Callable,
-	p_canteen_food_setter: Callable,
-	p_pending_canteen_delivery_getter: Callable,
-	p_employment_office_getter: Callable,
-	p_employment_office_setter: Callable,
-	p_employment_office_position_getter: Callable,
-	p_employment_office_position_setter: Callable,
-	p_completed_house_count_getter: Callable,
-	p_completed_house_count_setter: Callable,
-	p_house_light_update_minute_getter: Callable,
-	p_house_light_update_minute_setter: Callable,
-	p_game_minutes_getter: Callable,
-	p_can_hero_build: Callable,
-	p_update_interface: Callable,
-	p_update_workers: Callable,
-	p_cancel_arrivals_for_house: Callable,
-	p_add_demolition_marker: Callable,
-	p_refresh_living_status: Callable,
-	p_unregister_service_pockets: Callable,
-	p_return_in_transit_building_supplies: Callable,
-	p_cancel_canteen_delivery: Callable,
-	p_unregister_navigation_footprint: Callable,
-	p_refresh_boundary_markers: Callable,
-	p_select_best_canteen: Callable,
-	p_create_resource_pile: Callable,
-	p_refresh_navigation_grid: Callable,
-	p_is_construction_site: Callable,
-	p_activate_employment_centre: Callable,
-	p_convert_backpack_pile_to_regular: Callable,
-	p_add_building_selector: Callable,
-	p_add_warehouse_fill_label: Callable,
-	p_sawmill_stock: Callable,
-	p_create_gathering_place_visual: Callable,
-	p_activate_kitchen_if_better: Callable,
-	p_add_house_light: Callable,
-	p_house_initial_residents: Callable,
-	p_cancel_active_building_research: Callable,
-	p_dismiss_official: Callable,
-	p_send_to_unemployment_registration: Callable
-) -> void:
-	_settlement = p_settlement
-	_citizens = p_citizens
-	_building_registry = p_building_registry
-	_demolition = p_demolition
-	_village_territory_service = p_village_territory_service
-	_warehouse_positions = p_warehouse_positions
-	_sawmill_positions = p_sawmill_positions
-	_farm_positions = p_farm_positions
-	_builders_guild_positions = p_builders_guild_positions
-	_construction_company_positions = p_construction_company_positions
-	_forager_positions = p_forager_positions
-	_materials_yard_positions = p_materials_yard_positions
-	_school_positions = p_school_positions
-	_park_positions = p_park_positions
-	_gathering_place_positions = p_gathering_place_positions
-	_leisure_positions = p_leisure_positions
-	_craft_tent_positions = p_craft_tent_positions
-	_market_positions = p_market_positions
-	_water_collectors = p_water_collectors
-	_factories = p_factories
-	_house_lights = p_house_lights
-	_entrance_lights = p_entrance_lights
-	_house_capacity = p_house_capacity
-	_fire_light_scene = p_fire_light_scene
-	_entrance_stone_getter = p_entrance_stone_getter
-	_campfire_node_getter = p_campfire_node_getter
-	_campfire_node_setter = p_campfire_node_setter
-	_canteen_getter = p_canteen_getter
-	_canteen_setter = p_canteen_setter
-	_canteen_food_getter = p_canteen_food_getter
-	_canteen_food_setter = p_canteen_food_setter
-	_pending_canteen_delivery_getter = p_pending_canteen_delivery_getter
-	_employment_office_getter = p_employment_office_getter
-	_employment_office_setter = p_employment_office_setter
-	_employment_office_position_getter = p_employment_office_position_getter
-	_employment_office_position_setter = p_employment_office_position_setter
-	_completed_house_count_getter = p_completed_house_count_getter
-	_completed_house_count_setter = p_completed_house_count_setter
-	_house_light_update_minute_getter = p_house_light_update_minute_getter
-	_house_light_update_minute_setter = p_house_light_update_minute_setter
-	_game_minutes_getter = p_game_minutes_getter
-	_can_hero_build = p_can_hero_build
-	_update_interface = p_update_interface
-	_update_workers = p_update_workers
-	_cancel_arrivals_for_house = p_cancel_arrivals_for_house
-	_add_demolition_marker = p_add_demolition_marker
-	_refresh_living_status = p_refresh_living_status
-	_unregister_service_pockets = p_unregister_service_pockets
-	_return_in_transit_building_supplies = p_return_in_transit_building_supplies
-	_cancel_canteen_delivery = p_cancel_canteen_delivery
-	_unregister_navigation_footprint = p_unregister_navigation_footprint
-	_refresh_boundary_markers = p_refresh_boundary_markers
-	_select_best_canteen = p_select_best_canteen
-	_create_resource_pile = p_create_resource_pile
-	_refresh_navigation_grid = p_refresh_navigation_grid
-	_is_construction_site = p_is_construction_site
-	_activate_employment_centre = p_activate_employment_centre
-	_convert_backpack_pile_to_regular = p_convert_backpack_pile_to_regular
-	_add_building_selector = p_add_building_selector
-	_add_warehouse_fill_label = p_add_warehouse_fill_label
-	_sawmill_stock = p_sawmill_stock
-	_create_gathering_place_visual = p_create_gathering_place_visual
-	_activate_kitchen_if_better = p_activate_kitchen_if_better
-	_add_house_light = p_add_house_light
-	_house_initial_residents = p_house_initial_residents
-	_cancel_active_building_research = p_cancel_active_building_research
-	_dismiss_official = p_dismiss_official
-	_send_to_unemployment_registration = p_send_to_unemployment_registration
+func configure(port: BuildingLifecycleRuntimePort) -> void:
+	_settlement = port.settlement
+	_citizens = port.citizens
+	_building_registry = port.building_registry
+	_demolition = port.demolition
+	_village_territory_service = port.village_territory_service
+	_warehouse_positions = port.warehouse_positions
+	_sawmill_positions = port.sawmill_positions
+	_farm_positions = port.farm_positions
+	_builders_guild_positions = port.builders_guild_positions
+	_construction_company_positions = port.construction_company_positions
+	_forager_positions = port.forager_positions
+	_materials_yard_positions = port.materials_yard_positions
+	_school_positions = port.school_positions
+	_park_positions = port.park_positions
+	_gathering_place_positions = port.gathering_place_positions
+	_leisure_positions = port.leisure_positions
+	_craft_tent_positions = port.craft_tent_positions
+	_market_positions = port.market_positions
+	_water_collectors = port.water_collectors
+	_factories = port.factories
+	_house_lights = port.house_lights
+	_entrance_lights = port.entrance_lights
+	_house_capacity = port.house_capacity
+	_fire_light_scene = port.fire_light_scene
+	_entrance_stone_getter = port.entrance_stone_getter
+	_campfire_node_getter = port.campfire_node_getter
+	_campfire_node_setter = port.campfire_node_setter
+	_canteen_getter = port.canteen_getter
+	_canteen_setter = port.canteen_setter
+	_canteen_food_getter = port.canteen_food_getter
+	_canteen_food_setter = port.canteen_food_setter
+	_pending_canteen_delivery_getter = port.pending_canteen_delivery_getter
+	_employment_office_getter = port.employment_office_getter
+	_employment_office_setter = port.employment_office_setter
+	_employment_office_position_getter = port.employment_office_position_getter
+	_employment_office_position_setter = port.employment_office_position_setter
+	_completed_house_count_getter = port.completed_house_count_getter
+	_completed_house_count_setter = port.completed_house_count_setter
+	_house_light_update_minute_getter = port.house_light_update_minute_getter
+	_house_light_update_minute_setter = port.house_light_update_minute_setter
+	_game_minutes_getter = port.game_minutes_getter
+	_can_hero_build = port.can_hero_build
+	_update_interface = port.update_interface
+	_update_workers = port.update_workers
+	_cancel_arrivals_for_house = port.cancel_arrivals_for_house
+	_add_demolition_marker = port.add_demolition_marker
+	_refresh_living_status = port.refresh_living_status
+	_unregister_service_pockets = port.unregister_service_pockets
+	_return_in_transit_building_supplies = port.return_in_transit_building_supplies
+	_cancel_canteen_delivery = port.cancel_canteen_delivery
+	_unregister_navigation_footprint = port.unregister_navigation_footprint
+	_refresh_boundary_markers = port.refresh_boundary_markers
+	_select_best_canteen = port.select_best_canteen
+	_create_resource_pile = port.create_resource_pile
+	_refresh_navigation_grid = port.refresh_navigation_grid
+	_is_construction_site = port.is_construction_site
+	_activate_employment_centre = port.activate_employment_centre
+	_convert_backpack_pile_to_regular = port.convert_backpack_pile_to_regular
+	_add_building_selector = port.add_building_selector
+	_add_warehouse_fill_label = port.add_warehouse_fill_label
+	_sawmill_stock = port.sawmill_stock
+	_create_gathering_place_visual = port.create_gathering_place_visual
+	_activate_kitchen_if_better = port.activate_kitchen_if_better
+	_add_house_light = port.add_house_light
+	_house_initial_residents = port.house_initial_residents
+	_cancel_active_building_research = port.cancel_active_building_research
+	_dismiss_official = port.dismiss_official
+	_send_to_unemployment_registration = port.send_to_unemployment_registration
 
 
 func mark_building_for_demolition(building: Node3D) -> void:

@@ -6,6 +6,8 @@ extends RefCounted
 ## Lifecycle hooks (_input, _unhandled_input) remain on the Node
 ## and delegate here.
 
+const S = preload("res://game/features/ui/domain/game_strings.gd")
+
 var game: SettlementGame
 
 
@@ -80,19 +82,19 @@ func handle_menu_right_click() -> bool:
 func handle_unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.keycode == KEY_5 and event.pressed and not event.echo:
 		if SaveGameService.save_quicksave(game):
-			game.update_interface("Игра сохранена (клавиша 5)")
+			game.update_interface(S.QUICKSAVE_SUCCESS)
 		else:
-			game.update_interface("Ошибка сохранения игры")
+			game.update_interface(S.QUICKSAVE_ERROR)
 		game.get_viewport().set_input_as_handled()
 		return
 	if event is InputEventKey and event.keycode == KEY_6 and event.pressed and not event.echo:
 		if SaveGameService.has_quicksave():
 			if SaveGameService.load_quicksave(game):
-				game.update_interface("Игра загружена (клавиша 6)")
+				game.update_interface(S.QUICKLOAD_SUCCESS)
 			else:
-				game.update_interface("Ошибка загрузки игры")
+				game.update_interface(S.QUICKLOAD_ERROR)
 		else:
-			game.update_interface("Сохранение не найдено")
+			game.update_interface(S.QUICKLOAD_NOT_FOUND)
 		game.get_viewport().set_input_as_handled()
 		return
 	if event is InputEventKey and event.keycode == KEY_F and event.ctrl_pressed and event.pressed and not event.echo:

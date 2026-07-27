@@ -7,7 +7,7 @@
 > [grid_terrain_system.md](grid_terrain_system.md) — сетка, высоты, уклоны, каскад, вода;
 > [terrain_materials.md](terrain_materials.md) — материалы поверхности и детальный байт;
 > [navigation_and_roads.md](navigation_and_roads.md) — веса, дороги, `RoutePlan`;
-> [../content/modular_building_editor.md](modular_building_editor.md) — формат
+> [modular_building_editor.md](modular_building_editor.md) — формат
 > `.gdbuilding.json`, зоны, декор;
 > [content_packaging.md](content_packaging.md) — паки, стили, пользовательский контент,
 > ключи рантайма и правило ревизии.

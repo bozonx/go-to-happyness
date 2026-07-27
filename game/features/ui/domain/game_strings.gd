@@ -222,3 +222,10 @@ const BRANCHES_ADDED_TO_FIRE := "В костер добавлено веток: 
 
 # --- Settlement game: arrival ---
 const NO_ONE_TO_MEET := "Никого не нужно встречать у входа."
+
+# --- Settlement game: save / load ---
+const QUICKSAVE_SUCCESS := "Игра сохранена (клавиша 5)"
+const QUICKSAVE_ERROR := "Ошибка сохранения игры"
+const QUICKLOAD_SUCCESS := "Игра загружена (клавиша 6)"
+const QUICKLOAD_ERROR := "Ошибка загрузки игры"
+const QUICKLOAD_NOT_FOUND := "Сохранение не найдено"

@@ -328,76 +328,76 @@ func _setup_settlement_survival_and_daily_rules() -> void:
 
 func _setup_building_lifecycle() -> void:
 	game.building_lifecycle_service = BuildingLifecycleService.new()
-	game.building_lifecycle_service.configure(
-		game.settlement,
-		game.citizens,
-		game.building_registry,
-		game.demolition,
-		game.village_territory_service,
-		game.warehouse_positions,
-		game.sawmill_positions,
-		game.farm_positions,
-		game.builders_guild_positions,
-		game.construction_company_positions,
-		game.forager_positions,
-		game.materials_yard_positions,
-		game.school_positions,
-		game.park_positions,
-		game.gathering_place_positions,
-		game.leisure_positions,
-		game.craft_tent_positions,
-		game.market_positions,
-		game.water_collectors,
-		game.factories,
-		game.house_lights,
-		game.entrance_lights,
-		SettlementGame.HOUSE_CAPACITY,
-		FireLightScene,
-		func() -> Node3D: return game.entrance_stone,
-		func() -> Node3D: return game.campfire_node,
-		func(v: Node3D) -> void: game.campfire_node = v,
-		func() -> Node3D: return game.canteen,
-		func(v: Node3D) -> void: game.canteen = v,
-		func() -> int: return game.canteen_food,
-		func(v: int) -> void: game.canteen_food = v,
-		func() -> bool: return game.pending_canteen_delivery,
-		func() -> Node3D: return game.employment_office,
-		func(v: Node3D) -> void: game.employment_office = v,
-		func() -> Vector3: return game.employment_office_position,
-		func(v: Vector3) -> void: game.employment_office_position = v,
-		func() -> int: return game.completed_house_count,
-		func(v: int) -> void: game.completed_house_count = v,
-		func() -> int: return game.house_light_update_minute,
-		func(v: int) -> void: game.house_light_update_minute = v,
-		func() -> float: return game.game_minutes,
-		game.can_hero_build,
-		game.update_interface,
-		game.update_workers,
-		func(house): game.citizen_lifecycle_service.cancel_arrivals_for_house(house),
-		func(building): game.building_visuals.add_demolition_marker(building),
-		func(citizen): game.simulation_tick_controller.refresh_living_status(citizen),
-		func(node): game.service_pocket_manager.unregister_service_pockets(node),
-		func(building): game.logistics_controller.return_in_transit_building_supplies(building),
-		func(): game.canteen_service.cancel_canteen_delivery(),
-		func(center, footprint): game.service_pocket_manager.unregister_navigation_footprint(center, footprint),
-		func(): game.world_navigation_controller.refresh_boundary_markers(),
-		func(): game.building_management.select_best_canteen(),
-		func(position, resources, is_backpack_pile): return game.resource_pile_service.create_resource_pile(position, resources, is_backpack_pile),
-		func(): game.world_navigation_controller.refresh_navigation_grid(),
-		game.construction_controller.is_construction_site,
-		func(centre): game.research_controller.activate_employment_centre(centre),
-		game.convert_backpack_pile_to_regular,
-		func(building, group_name, footprint): game.building_visuals.add_building_selector(building, group_name, footprint),
-		func(building): game.building_visuals.add_warehouse_fill_label(building),
-		game.sawmill_stock,
-		func(building): game.building_visuals.create_gathering_place_visual(building),
-		func(building, service_position): game.building_management.activate_kitchen_if_better(building, service_position),
-		func(house): game.building_visuals.add_house_light(house),
-		func(house): game.citizen_lifecycle_service.house_initial_residents(house),
-		func(refund, message): game.research_controller.cancel_active_building_research(refund, message),
-		func(citizen): game.research_controller.dismiss_official(citizen),
-		func(citizen): game.citizen_lifecycle_service.send_to_unemployment_registration(citizen)
-	)
+	var port := BuildingLifecycleRuntimePort.new()
+	port.settlement = game.settlement
+	port.citizens = game.citizens
+	port.building_registry = game.building_registry
+	port.demolition = game.demolition
+	port.village_territory_service = game.village_territory_service
+	port.warehouse_positions = game.warehouse_positions
+	port.sawmill_positions = game.sawmill_positions
+	port.farm_positions = game.farm_positions
+	port.builders_guild_positions = game.builders_guild_positions
+	port.construction_company_positions = game.construction_company_positions
+	port.forager_positions = game.forager_positions
+	port.materials_yard_positions = game.materials_yard_positions
+	port.school_positions = game.school_positions
+	port.park_positions = game.park_positions
+	port.gathering_place_positions = game.gathering_place_positions
+	port.leisure_positions = game.leisure_positions
+	port.craft_tent_positions = game.craft_tent_positions
+	port.market_positions = game.market_positions
+	port.water_collectors = game.water_collectors
+	port.factories = game.factories
+	port.house_lights = game.house_lights
+	port.entrance_lights = game.entrance_lights
+	port.house_capacity = SettlementGame.HOUSE_CAPACITY
+	port.fire_light_scene = FireLightScene
+	port.entrance_stone_getter = func() -> Node3D: return game.entrance_stone
+	port.campfire_node_getter = func() -> Node3D: return game.campfire_node
+	port.campfire_node_setter = func(v: Node3D) -> void: game.campfire_node = v
+	port.canteen_getter = func() -> Node3D: return game.canteen
+	port.canteen_setter = func(v: Node3D) -> void: game.canteen = v
+	port.canteen_food_getter = func() -> int: return game.canteen_food
+	port.canteen_food_setter = func(v: int) -> void: game.canteen_food = v
+	port.pending_canteen_delivery_getter = func() -> bool: return game.pending_canteen_delivery
+	port.employment_office_getter = func() -> Node3D: return game.employment_office
+	port.employment_office_setter = func(v: Node3D) -> void: game.employment_office = v
+	port.employment_office_position_getter = func() -> Vector3: return game.employment_office_position
+	port.employment_office_position_setter = func(v: Vector3) -> void: game.employment_office_position = v
+	port.completed_house_count_getter = func() -> int: return game.completed_house_count
+	port.completed_house_count_setter = func(v: int) -> void: game.completed_house_count = v
+	port.house_light_update_minute_getter = func() -> int: return game.house_light_update_minute
+	port.house_light_update_minute_setter = func(v: int) -> void: game.house_light_update_minute = v
+	port.game_minutes_getter = func() -> float: return game.game_minutes
+	port.can_hero_build = game.can_hero_build
+	port.update_interface = game.update_interface
+	port.update_workers = game.update_workers
+	port.cancel_arrivals_for_house = func(house): game.citizen_lifecycle_service.cancel_arrivals_for_house(house)
+	port.add_demolition_marker = func(building): game.building_visuals.add_demolition_marker(building)
+	port.refresh_living_status = func(citizen): game.simulation_tick_controller.refresh_living_status(citizen)
+	port.unregister_service_pockets = func(node): game.service_pocket_manager.unregister_service_pockets(node)
+	port.return_in_transit_building_supplies = func(building): game.logistics_controller.return_in_transit_building_supplies(building)
+	port.cancel_canteen_delivery = func(): game.canteen_service.cancel_canteen_delivery()
+	port.unregister_navigation_footprint = func(center, footprint): game.service_pocket_manager.unregister_navigation_footprint(center, footprint)
+	port.refresh_boundary_markers = func(): game.world_navigation_controller.refresh_boundary_markers()
+	port.select_best_canteen = func(): game.building_management.select_best_canteen()
+	port.create_resource_pile = func(position, resources, is_backpack_pile): return game.resource_pile_service.create_resource_pile(position, resources, is_backpack_pile)
+	port.refresh_navigation_grid = func(): game.world_navigation_controller.refresh_navigation_grid()
+	port.is_construction_site = game.construction_controller.is_construction_site
+	port.activate_employment_centre = func(centre): game.research_controller.activate_employment_centre(centre)
+	port.convert_backpack_pile_to_regular = game.convert_backpack_pile_to_regular
+	port.add_building_selector = func(building, group_name, footprint): game.building_visuals.add_building_selector(building, group_name, footprint)
+	port.add_warehouse_fill_label = func(building): game.building_visuals.add_warehouse_fill_label(building)
+	port.sawmill_stock = game.sawmill_stock
+	port.create_gathering_place_visual = func(building): game.building_visuals.create_gathering_place_visual(building)
+	port.activate_kitchen_if_better = func(building, service_position): game.building_management.activate_kitchen_if_better(building, service_position)
+	port.add_house_light = func(house): game.building_visuals.add_house_light(house)
+	port.house_initial_residents = func(house): game.citizen_lifecycle_service.house_initial_residents(house)
+	port.cancel_active_building_research = func(refund, message): game.research_controller.cancel_active_building_research(refund, message)
+	port.dismiss_official = func(citizen): game.research_controller.dismiss_official(citizen)
+	port.send_to_unemployment_registration = func(citizen): game.citizen_lifecycle_service.send_to_unemployment_registration(citizen)
+	game.building_lifecycle_service.configure(port)
 	game.construction_priority_service = ConstructionPriorityService.new()
 	game.construction_priority_service.configure(
 		game.construction_sites,
@@ -559,36 +559,36 @@ func _setup_courier_system() -> void:
 		func(citizen, minimum_hours): return game.simulation_tick_controller.send_citizen_to_leisure(citizen, minimum_hours)
 	)
 	game.courier_task_publisher = CourierTaskPublisher.new()
-	game.courier_task_publisher.configure(
-		game.settlement,
-		game.citizens,
-		game.construction_sites,
-		game.warehouse_positions,
-		game.logistics_runtime.pending_arrivals,
-		game.logistics_runtime.queued_trades,
-		game.sawmill_positions,
-		game.water_collectors,
-		game.building_registry,
-		game.sawmills,
-		game.courier_dispatcher,
-		func() -> Node3D: return game.entrance_stone,
-		func() -> Node3D: return game.canteen,
-		func() -> int: return game.canteen_food,
-		func() -> Vector3: return game.canteen_position,
-		func() -> bool: return game.pending_canteen_delivery,
-		func() -> float: return game.runtime_seconds,
-		func(site): game.construction_controller.reconcile_construction_reservations(site),
-		func(): game.logistics_controller.reconcile_repair_reservations(),
-		game.cell_from_position,
-		func(from): return game.logistics_controller.get_nearest_delivery_position(from),
-		game.warehouse_delivery_position,
-		func(site): return game.construction_controller.construction_development_priority(site),
-		func(resource_type, from_position): return game.logistics_controller.construction_material_sources(resource_type, from_position),
-		func(resource_type, source): return game.logistics_controller.construction_source_available(resource_type, source),
-		func(building): return game.fire_management_service.fire_state_for(building),
-		func(building, fire_state): return game.logistics_controller.firewood_task_priority(building, fire_state),
-		func(building: Node3D) -> bool: return game.fire_management_service.is_managed_fire_source(building)
-	)
+	var publisher_port := CourierTaskPublisherRuntimePort.new()
+	publisher_port.settlement = game.settlement
+	publisher_port.citizens = game.citizens
+	publisher_port.construction_sites = game.construction_sites
+	publisher_port.warehouse_positions = game.warehouse_positions
+	publisher_port.pending_arrivals = game.logistics_runtime.pending_arrivals
+	publisher_port.queued_trades = game.logistics_runtime.queued_trades
+	publisher_port.sawmill_positions = game.sawmill_positions
+	publisher_port.water_collectors = game.water_collectors
+	publisher_port.building_registry = game.building_registry
+	publisher_port.sawmills = game.sawmills
+	publisher_port.courier_dispatcher = game.courier_dispatcher
+	publisher_port.entrance_stone_getter = func() -> Node3D: return game.entrance_stone
+	publisher_port.canteen_getter = func() -> Node3D: return game.canteen
+	publisher_port.canteen_food_getter = func() -> int: return game.canteen_food
+	publisher_port.canteen_position_getter = func() -> Vector3: return game.canteen_position
+	publisher_port.pending_canteen_delivery_getter = func() -> bool: return game.pending_canteen_delivery
+	publisher_port.runtime_seconds_getter = func() -> float: return game.runtime_seconds
+	publisher_port.reconcile_construction_reservations = func(site): game.construction_controller.reconcile_construction_reservations(site)
+	publisher_port.reconcile_repair_reservations = func(): game.logistics_controller.reconcile_repair_reservations()
+	publisher_port.cell_from_position = game.cell_from_position
+	publisher_port.get_nearest_delivery_position = func(from): return game.logistics_controller.get_nearest_delivery_position(from)
+	publisher_port.warehouse_delivery_position = game.warehouse_delivery_position
+	publisher_port.construction_priority = func(site): return game.construction_controller.construction_development_priority(site)
+	publisher_port.construction_material_sources = func(resource_type, from_position): return game.logistics_controller.construction_material_sources(resource_type, from_position)
+	publisher_port.construction_source_available = func(resource_type, source): return game.logistics_controller.construction_source_available(resource_type, source)
+	publisher_port.fire_state_for = func(building): return game.fire_management_service.fire_state_for(building)
+	publisher_port.firewood_task_priority = func(building, fire_state): return game.logistics_controller.firewood_task_priority(building, fire_state)
+	publisher_port.is_managed_fire_source = func(building: Node3D) -> bool: return game.fire_management_service.is_managed_fire_source(building)
+	game.courier_task_publisher.configure(publisher_port)
 	game.courier_task_service = CourierTaskService.new()
 	game.courier_task_service.configure(
 		game.settlement,
