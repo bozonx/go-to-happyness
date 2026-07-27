@@ -83,4 +83,4 @@ mouse_filter = 0
 [node name="StatusBar" parent="UI/Screen" instance=ExtResource("10_status_bar")]
 
 [node name="Dialogs" parent="UI" instance=ExtResource("12_dialogs")]
-mouse_filter = 0
+mouse_filter = 2
