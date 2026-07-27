@@ -32,7 +32,8 @@ static func removal(grid: WaterGrid, body: WaterBody) -> WaterBodyEdit:
 
 
 ## Retypes a body in place: the id and cells stay, the metadata changes. The old
-## snapshot is what revert restores; the new body is what apply writes.
+## snapshot is what revert restores; the new body is what apply writes. The cells
+## are recorded so the presentation knows which chunks to rebuild.
 static func retype(grid: WaterGrid, body: WaterBody, new_type: WaterBody.Type) -> WaterBodyEdit:
 	var edit := WaterBodyEdit.new()
 	edit.kind = Kind.RETYPE
@@ -41,6 +42,9 @@ static func retype(grid: WaterGrid, body: WaterBody, new_type: WaterBody.Type) -
 	replacement.surface_height = body.surface_height
 	replacement.name = body.name
 	edit._new_body = replacement
+	if grid != null:
+		for cell: Vector2i in grid.cells_of_body(body.id):
+			edit.cells.append(cell)
 	return edit
 
 

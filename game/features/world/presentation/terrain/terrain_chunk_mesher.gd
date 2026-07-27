@@ -71,6 +71,9 @@ const EDGE_RUNS: Dictionary = {
 
 var _top_vertices := PackedVector3Array()
 var _top_normals := PackedVector3Array()
+## RGB carries an encoded smooth normal. The shaders blend it with the geometric
+## normal; geometry, collision and navigation never see that visual choice.
+var _top_colors := PackedColorArray()
 var _top_indices := PackedInt32Array()
 var _wall_vertices := PackedVector3Array()
 var _wall_normals := PackedVector3Array()
@@ -105,6 +108,7 @@ func _build(grid: TerrainGrid, chunk: Vector2i, lod: int) -> Dictionary:
 	_origin = grid.chunk_origin_cell(chunk)
 	_top_vertices = PackedVector3Array()
 	_top_normals = PackedVector3Array()
+	_top_colors = PackedColorArray()
 	_top_indices = PackedInt32Array()
 	_wall_vertices = PackedVector3Array()
 	_wall_normals = PackedVector3Array()
@@ -115,6 +119,7 @@ func _build(grid: TerrainGrid, chunk: Vector2i, lod: int) -> Dictionary:
 	_add_tops()
 	if lod == Lod.FULL:
 		_add_walls()
+	_encode_smooth_normals()
 
 	if _top_indices.is_empty() and _wall_indices.is_empty():
 		return {"mesh": null, "faces": PackedVector3Array(), SURFACE_TOP: -1, SURFACE_CLIFF: -1}
@@ -127,6 +132,7 @@ func _build(grid: TerrainGrid, chunk: Vector2i, lod: int) -> Dictionary:
 		top_arrays.resize(Mesh.ARRAY_MAX)
 		top_arrays[Mesh.ARRAY_VERTEX] = _top_vertices
 		top_arrays[Mesh.ARRAY_NORMAL] = _top_normals
+		top_arrays[Mesh.ARRAY_COLOR] = _top_colors
 		top_arrays[Mesh.ARRAY_INDEX] = _top_indices
 		top_surface = mesh.get_surface_count()
 		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, top_arrays)
@@ -387,6 +393,7 @@ func _add_top_quad(a: Vector3, b: Vector3, c: Vector3, d: Vector3, normal: Vecto
 	_top_vertices.append(d)
 	for _index in 4:
 		_top_normals.append(normal)
+		_top_colors.append(Color.WHITE)
 	_append_quad_indices(_top_indices, base)
 
 
@@ -400,6 +407,33 @@ func _add_wall_quad(a: Vector3, b: Vector3, c: Vector3, d: Vector3, normal: Vect
 		_wall_normals.append(normal)
 		_wall_colors.append(color)
 	_append_quad_indices(_wall_indices, base)
+
+
+## Builds one averaged normal for every coincident visual vertex, across both
+## terrain surfaces. Vertices stay split (the two shaders and flat normals still
+## need that), but their encoded target normal is shared, so a top can visually
+## roll into a cliff without changing a single polygon.
+func _encode_smooth_normals() -> void:
+	var sums: Dictionary = {}
+	_accumulate_normals(_top_vertices, _top_normals, sums)
+	_accumulate_normals(_wall_vertices, _wall_normals, sums)
+	for index in _top_vertices.size():
+		var encoded := _encode_normal((sums[_top_vertices[index]] as Vector3).normalized())
+		_top_colors[index] = Color(encoded.x, encoded.y, encoded.z, 1.0)
+	for index in _wall_vertices.size():
+		var encoded := _encode_normal((sums[_wall_vertices[index]] as Vector3).normalized())
+		var layer := _wall_colors[index].r
+		_wall_colors[index] = Color(layer, encoded.x, encoded.y, encoded.z)
+
+
+static func _accumulate_normals(vertices: PackedVector3Array, normals: PackedVector3Array, sums: Dictionary) -> void:
+	for index in vertices.size():
+		var position := vertices[index]
+		sums[position] = (sums.get(position, Vector3.ZERO) as Vector3) + normals[index]
+
+
+static func _encode_normal(normal: Vector3) -> Vector3:
+	return normal * 0.5 + Vector3.ONE * 0.5
 
 
 static func _append_quad_indices(indices: PackedInt32Array, base: int) -> void:

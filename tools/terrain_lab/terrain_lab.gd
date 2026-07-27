@@ -54,6 +54,12 @@ const CAMERA_MOUSE_ORBIT := 0.35
 @onready var hud: Label = $UI/Hud
 @onready var nav_overlay: NavTerrainOverlay = $NavOverlay
 @onready var water_world: WaterWorld = $Water
+@onready var smoothing_title: Label = $UI/SmoothingPanel/Margin/Rows/Title
+@onready var smoothing_slider: HSlider = $UI/SmoothingPanel/Margin/Rows/Controls/Slider
+@onready var smoothing_flat_button: Button = $UI/SmoothingPanel/Margin/Rows/Controls/FlatButton
+@onready var smoothing_decrease_button: Button = $UI/SmoothingPanel/Margin/Rows/Controls/DecreaseButton
+@onready var smoothing_increase_button: Button = $UI/SmoothingPanel/Margin/Rows/Controls/IncreaseButton
+@onready var smoothing_smooth_button: Button = $UI/SmoothingPanel/Margin/Rows/Controls/SmoothButton
 
 var grid := TerrainGrid.new()
 var water := WaterGrid.new()
@@ -128,6 +134,7 @@ func _ready() -> void:
 	water_service.configure(water, grid)
 	wear_service.configure(service)
 	terrain.configure(grid, camera)
+	_connect_smoothing_controls()
 	water_world.configure(water, grid, water_service, service)
 	# Binds the grids and keeps the field current: every committed edit — ground or
 	# water — republishes exactly the columns it touched.
@@ -145,6 +152,20 @@ func _ready() -> void:
 	if OS.get_cmdline_user_args().has("--capture"):
 		_capture_queue = CAPTURE_VIEWS.duplicate()
 		_capture_delay = CAPTURE_SETTLE_FRAMES
+
+
+func _connect_smoothing_controls() -> void:
+	smoothing_slider.value_changed.connect(_on_smoothing_changed)
+	smoothing_flat_button.pressed.connect(func() -> void: smoothing_slider.value = 0.0)
+	smoothing_decrease_button.pressed.connect(func() -> void: smoothing_slider.value -= smoothing_slider.step)
+	smoothing_increase_button.pressed.connect(func() -> void: smoothing_slider.value += smoothing_slider.step)
+	smoothing_smooth_button.pressed.connect(func() -> void: smoothing_slider.value = 100.0)
+	_on_smoothing_changed(smoothing_slider.value)
+
+
+func _on_smoothing_changed(percent: float) -> void:
+	terrain.set_visual_smoothing(percent / 100.0)
+	smoothing_title.text = "Visual terrain smoothing: %d%%" % roundi(percent)
 
 
 func _process(delta: float) -> void:

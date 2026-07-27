@@ -41,16 +41,14 @@ const ANCHOR_STYLE: Dictionary = {
 var _editor: Node = null
 var _zones_visual_root: Node3D = null
 
-# Left palette
-var _palette_panel: PanelContainer = null
+# Top toolbar
+var _toolbar: HBoxContainer = null
 var _tool_area_btn: Button = null
 var _tool_point_btn: Button = null
 var _tool_route_btn: Button = null
 var _tool_select_btn: Button = null
 var _role_option: OptionButton = null
-var _role_hint_label: Label = null
 var _function_option: OptionButton = null
-var _function_pack_label: Label = null
 var _layer_label: Label = null
 var _layer_down_btn: Button = null
 var _layer_up_btn: Button = null
@@ -96,6 +94,10 @@ var _dragging: bool = false
 var _drag_start: Vector2i = Vector2i.ZERO
 var _moving_anchor: bool = false
 
+# Ghost preview of the active tool under the cursor.
+var _ghost: MeshInstance3D = null
+var _ghost_material: StandardMaterial3D = null
+
 
 # ---------------------------------------------------------------------------
 # Setup
@@ -105,15 +107,13 @@ func setup(editor: Node) -> void:
 	_editor = editor
 	name = "ZonesModeController"
 
-	_palette_panel = editor.get_node("%ZonesPalettePanel")
+	_toolbar = editor.get_node("%ZonesToolbar")
 	_tool_area_btn = editor.get_node("%ToolAreaBtn")
 	_tool_point_btn = editor.get_node("%ToolPointBtn")
 	_tool_route_btn = editor.get_node("%ToolRouteBtn")
 	_tool_select_btn = editor.get_node("%ToolSelectBtn")
 	_role_option = editor.get_node("%ZoneRoleOption")
-	_role_hint_label = editor.get_node("%RoleHintLbl")
 	_function_option = editor.get_node("%ZoneFunctionOption")
-	_function_pack_label = editor.get_node("%ZoneFunctionPackLbl")
 	_layer_label = editor.get_node("%ZoneLayerLabel")
 	_layer_down_btn = editor.get_node("%ZoneLayerDownBtn")
 	_layer_up_btn = editor.get_node("%ZoneLayerUpBtn")
@@ -173,7 +173,7 @@ func setup(editor: Node) -> void:
 # ---------------------------------------------------------------------------
 
 func activate() -> void:
-	_palette_panel.visible = true
+	_toolbar.visible = true
 	_inspector_panel.visible = true
 	_rebuild_function_options()
 	_refresh_all()
@@ -181,14 +181,15 @@ func activate() -> void:
 
 
 func deactivate() -> void:
-	_palette_panel.visible = false
+	_toolbar.visible = false
 	_inspector_panel.visible = false
 	_dragging = false
+	_hide_ghost()
 	_clear_visuals()
 
 
 func is_active() -> bool:
-	return _palette_panel != null and _palette_panel.visible
+	return _toolbar != null and _toolbar.visible
 
 
 # ---------------------------------------------------------------------------
@@ -266,7 +267,55 @@ func process(_delta: float) -> void:
 
 
 func refresh_ghost() -> void:
-	pass
+	if not is_active() or not _editor.cursor_valid or _tool == TOOL_SELECT:
+		_hide_ghost()
+		return
+	if _editor.is_pointer_over_ui():
+		_hide_ghost()
+		return
+	_ensure_ghost()
+	var cell: Vector3i = _editor.cursor_cell
+	var pos := Vector3(cell.x + 0.5, float(cell.y), cell.z + 0.5)
+	match _tool:
+		TOOL_AREA:
+			_ghost.mesh = BoxMesh.new()
+			(_ghost.mesh as BoxMesh).size = Vector3(0.94, 0.04, 0.94)
+			_ghost.position = pos + Vector3(0.0, 0.02, 0.0)
+			_ghost.rotation = Vector3.ZERO
+		TOOL_POINT:
+			var style: Dictionary = ANCHOR_STYLE.get(_anchor_role, ANCHOR_STYLE[&"poi"])
+			_ghost.mesh = BoxMesh.new()
+			(_ghost.mesh as BoxMesh).size = style["size"]
+			_ghost.position = pos + Vector3(0.0, style["size"].y * 0.5, 0.0)
+			_ghost.rotation = Vector3.ZERO
+		TOOL_ROUTE:
+			_ghost.mesh = SphereMesh.new()
+			(_ghost.mesh as SphereMesh).radius = 0.2
+			(_ghost.mesh as SphereMesh).height = 0.4
+			_ghost.position = pos + Vector3(0.0, 0.2, 0.0)
+			_ghost.rotation = Vector3.ZERO
+	_ghost.visible = true
+
+
+func _hide_ghost() -> void:
+	if _ghost != null:
+		_ghost.visible = false
+
+
+func _ensure_ghost() -> void:
+	if _ghost == null:
+		_ghost = MeshInstance3D.new()
+		_ghost.material_override = _get_ghost_material()
+		_zones_visual_root.add_child(_ghost)
+
+
+func _get_ghost_material() -> StandardMaterial3D:
+	if _ghost_material == null:
+		_ghost_material = StandardMaterial3D.new()
+		_ghost_material.albedo_color = Color(0.45, 0.85, 1.0, 0.4)
+		_ghost_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_ghost_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	return _ghost_material
 
 
 func on_layer_changed() -> void:
@@ -346,16 +395,7 @@ func _on_palette_role_selected(index: int) -> void:
 
 
 func _update_role_hint() -> void:
-	if _role_hint_label == null:
-		return
-	if _tool == TOOL_AREA:
-		_role_hint_label.text = ZoneAreaRecord.role_hint(_area_role)
-	elif _tool == TOOL_POINT:
-		_role_hint_label.text = ZoneAnchorRecord.role_hint(_anchor_role)
-	elif _tool == TOOL_ROUTE:
-		_role_hint_label.text = "Щёлкайте по дверям, слотам и путевым точкам в порядке обхода."
-	else:
-		_role_hint_label.text = "Выберите область или точку на доске."
+	pass
 
 
 func _cycle_role() -> void:
@@ -387,7 +427,6 @@ func _rebuild_function_options() -> void:
 		_function_option.select(0)
 	_function_option.disabled = _tool in [TOOL_ROUTE, TOOL_SELECT]
 	_suppress_ui_events = false
-	_update_pack_label(_function_pack_label, _armed_function, entries.is_empty())
 
 
 func _armed_function_entries() -> Array[Dictionary]:
@@ -402,7 +441,6 @@ func _on_palette_function_selected(index: int) -> void:
 	if _suppress_ui_events:
 		return
 	_armed_function = _function_option.get_item_metadata(index)
-	_update_pack_label(_function_pack_label, _armed_function, false)
 
 
 ## Naming the pack is deliberate: the author must see that "Пекарня" is content,

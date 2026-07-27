@@ -287,6 +287,9 @@ func inspector_lines() -> Array[String]:
 		TravelerProfile.MIN_ICE_THICKNESS_PEDESTRIAN,
 		TravelerProfile.MIN_ICE_THICKNESS_CART,
 	])
+	lines.append("")
+	lines.append("ЛКМ по водоёму с другим типом — сменить тип всего водоёма")
+	lines.append("ПКМ — осушить весь водоём (краевой нельзя — только поднятием земли)")
 	return lines
 
 

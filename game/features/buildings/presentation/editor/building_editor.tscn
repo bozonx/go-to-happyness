@@ -319,6 +319,88 @@ toggle_mode = true
 text = "🔲 Коллизии"
 tooltip_text = "Показать коллизии и blocking navigation"
 
+[node name="ZonesToolbar" type="HBoxContainer" parent="EditorUI/Root/TopBar/Margin/HBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="ToolAreaBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/ZonesToolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "▣ Q"
+toggle_mode = true
+tooltip_text = "Область (Q)"
+
+[node name="ToolPointBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/ZonesToolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "◆ W"
+toggle_mode = true
+tooltip_text = "Точка (W)"
+
+[node name="ToolRouteBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/ZonesToolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "／ E"
+toggle_mode = true
+tooltip_text = "Линия (E)"
+
+[node name="ToolSelectBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/ZonesToolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "↖ R"
+toggle_mode = true
+tooltip_text = "Выделить (R)"
+
+[node name="VSepZonesRole" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/ZonesToolbar"]
+layout_mode = 2
+
+[node name="ZoneRoleOption" type="OptionButton" parent="EditorUI/Root/TopBar/Margin/HBox/ZonesToolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(120, 0)
+tooltip_text = "Роль"
+
+[node name="ZoneFunctionOption" type="OptionButton" parent="EditorUI/Root/TopBar/Margin/HBox/ZonesToolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(140, 0)
+tooltip_text = "Функция"
+
+[node name="VSepZonesLayer" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/ZonesToolbar"]
+layout_mode = 2
+
+[node name="ZoneLayerLabel" type="Label" parent="EditorUI/Root/TopBar/Margin/HBox/ZonesToolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Слой Y: 0"
+
+[node name="ZoneLayerDownBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/ZonesToolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "−"
+tooltip_text = "Слой ниже"
+
+[node name="ZoneLayerUpBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/ZonesToolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "+"
+tooltip_text = "Слой выше"
+
+[node name="VSepZonesOverlay" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/ZonesToolbar"]
+layout_mode = 2
+
+[node name="ShowOverlayCheck" type="CheckBox" parent="EditorUI/Root/TopBar/Margin/HBox/ZonesToolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Оверлеи"
+
+[node name="OverlayAudienceOption" type="OptionButton" parent="EditorUI/Root/TopBar/Margin/HBox/ZonesToolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(100, 0)
+
 [node name="Spacer" type="Control" parent="EditorUI/Root/TopBar/Margin/HBox"]
 layout_mode = 2
 size_flags_horizontal = 3
@@ -421,147 +503,17 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 14
 text = "Итоговая смета: -"
 
-[node name="ZonesPalettePanel" type="PanelContainer" parent="EditorUI/Root"]
-unique_name_in_owner = true
-visible = false
-custom_minimum_size = Vector2(240, 0)
-layout_mode = 1
-anchors_preset = 9
-anchor_bottom = 1.0
-offset_left = 8.0
-offset_top = 60.0
-offset_right = 248.0
-offset_bottom = -48.0
-grow_vertical = 2
-
-[node name="Scroll" type="ScrollContainer" parent="EditorUI/Root/ZonesPalettePanel"]
-layout_mode = 2
-horizontal_scroll_mode = 0
-
-[node name="PaletteVBox" type="VBoxContainer" parent="EditorUI/Root/ZonesPalettePanel/Scroll"]
-layout_mode = 2
-size_flags_horizontal = 3
-theme_override_constants/separation = 6
-
-[node name="Title" type="Label" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
-layout_mode = 2
-text = "ИНСТРУМЕНТ"
-theme_override_font_sizes/font_size = 14
-theme_override_colors/font_color = Color(0.8, 0.75, 0.5, 1)
-
-[node name="ToolAreaBtn" type="Button" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "▣ Область   Q"
-toggle_mode = true
-
-[node name="ToolPointBtn" type="Button" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "◆ Точка     W"
-toggle_mode = true
-
-[node name="ToolRouteBtn" type="Button" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "／ Линия     E"
-toggle_mode = true
-
-[node name="ToolSelectBtn" type="Button" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "↖ Выделить  R"
-toggle_mode = true
-
-[node name="HSepRole" type="HSeparator" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
-layout_mode = 2
-
-[node name="RoleLbl" type="Label" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
-layout_mode = 2
-text = "РОЛЬ"
-theme_override_font_sizes/font_size = 14
-theme_override_colors/font_color = Color(0.8, 0.75, 0.5, 1)
-
-[node name="ZoneRoleOption" type="OptionButton" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
-unique_name_in_owner = true
-layout_mode = 2
-
-[node name="RoleHintLbl" type="Label" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Роль задаёт, что движок делает с зоной."
-theme_override_font_sizes/font_size = 11
-theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
-autowrap_mode = 2
-
-[node name="HSepFunction" type="HSeparator" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
-layout_mode = 2
-
-[node name="FunctionLbl" type="Label" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
-layout_mode = 2
-text = "ФУНКЦИЯ"
-theme_override_font_sizes/font_size = 14
-theme_override_colors/font_color = Color(0.8, 0.75, 0.5, 1)
-
-[node name="ZoneFunctionOption" type="OptionButton" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
-unique_name_in_owner = true
-layout_mode = 2
-
-[node name="ZoneFunctionPackLbl" type="Label" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_font_sizes/font_size = 11
-theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
-autowrap_mode = 2
-text = "Смысл зоны приходит из пака контента."
-
-[node name="HSepLayer" type="HSeparator" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
-layout_mode = 2
-
-[node name="ZoneLayerRow" type="HBoxContainer" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
-layout_mode = 2
-
-[node name="ZoneLayerLabel" type="Label" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox/ZoneLayerRow"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-text = "Слой Y: 0"
-
-[node name="ZoneLayerDownBtn" type="Button" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox/ZoneLayerRow"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "−"
-
-[node name="ZoneLayerUpBtn" type="Button" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox/ZoneLayerRow"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "+"
-
-[node name="HSepView" type="HSeparator" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
-layout_mode = 2
-
-[node name="ShowOverlayCheck" type="CheckBox" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Показать оверлеи"
-
-[node name="OverlayAudienceOption" type="OptionButton" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
-unique_name_in_owner = true
-layout_mode = 2
-
 [node name="ZonesInspectorPanel" type="PanelContainer" parent="EditorUI/Root"]
 unique_name_in_owner = true
 visible = false
 custom_minimum_size = Vector2(300, 0)
 layout_mode = 1
-anchors_preset = 1
-anchor_left = 1.0
-anchor_right = 1.0
-offset_left = -308.0
+anchors_preset = 9
+anchor_bottom = 1.0
+offset_left = 8.0
 offset_top = 60.0
-offset_right = -8.0
+offset_right = 308.0
 offset_bottom = -48.0
-grow_horizontal = 0
 grow_vertical = 2
 
 [node name="Scroll" type="ScrollContainer" parent="EditorUI/Root/ZonesInspectorPanel"]

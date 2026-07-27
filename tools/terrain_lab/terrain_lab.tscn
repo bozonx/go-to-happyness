@@ -63,3 +63,39 @@ theme_override_colors/font_color = Color(0.94, 0.96, 1, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.75)
 theme_override_constants/outline_size = 4
 text = "terrain lab"
+
+[node name="SmoothingPanel" type="PanelContainer" parent="UI"]
+offset_left = 24.0
+offset_top = 500.0
+offset_right = 520.0
+offset_bottom = 574.0
+
+[node name="Margin" type="MarginContainer" parent="UI/SmoothingPanel"]
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 8
+
+[node name="Rows" type="VBoxContainer" parent="UI/SmoothingPanel/Margin"]
+
+[node name="Title" type="Label" parent="UI/SmoothingPanel/Margin/Rows"]
+text = "Visual terrain smoothing: 0%"
+
+[node name="Controls" type="HBoxContainer" parent="UI/SmoothingPanel/Margin/Rows"]
+
+[node name="FlatButton" type="Button" parent="UI/SmoothingPanel/Margin/Rows/Controls"]
+text = "0%"
+
+[node name="DecreaseButton" type="Button" parent="UI/SmoothingPanel/Margin/Rows/Controls"]
+text = "−"
+
+[node name="Slider" type="HSlider" parent="UI/SmoothingPanel/Margin/Rows/Controls"]
+custom_minimum_size = Vector2(280, 0)
+max_value = 100.0
+step = 5.0
+
+[node name="IncreaseButton" type="Button" parent="UI/SmoothingPanel/Margin/Rows/Controls"]
+text = "+"
+
+[node name="SmoothButton" type="Button" parent="UI/SmoothingPanel/Margin/Rows/Controls"]
+text = "100%"

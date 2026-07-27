@@ -38,6 +38,7 @@ static func run_all() -> void:
 	_test_creating_a_body_publishes_nothing()
 	_test_border_ocean_floods_only_what_touches_the_rim()
 	_test_border_nothing_never_floods()
+	_test_border_lava_floods_edge_with_lava()
 	_test_access_service_finds_banks_not_water()
 	_test_starter_water_digs_a_real_basin()
 	print("    [PASS] Water Layer Tests")
@@ -514,7 +515,7 @@ static func _test_border_ocean_floods_only_what_touches_the_rim() -> void:
 	for x in range(rim, 1):
 		assert(terrain.set_height(Vector2i(x, 0), -1))
 	assert(border.apply())
-	assert(border.ocean_body_id() != WaterBody.NO_BODY)
+	assert(border.border_body_id() != WaterBody.NO_BODY)
 	assert(water.is_wet(terrain, Vector2i(rim, 0)))
 	assert(water.is_wet(terrain, Vector2i(0, 0)), "the pit is connected now, so it fills")
 	assert(not water.is_wet(terrain, Vector2i(0, 5)), "and untouched ground does not")
@@ -530,6 +531,25 @@ static func _test_border_nothing_never_floods() -> void:
 		assert(terrain.set_height(Vector2i(x, 0), -2))
 	assert(not border.apply())
 	assert(not water.has_water(Vector2i(rim, 0)), "the board simply ends; digging at it digs a pit")
+
+
+## A lava border follows the same edge-fill rule as ocean, but the body it creates
+## is lava, not sea. The type is what makes it impassable at any depth (§9.4).
+static func _test_border_lava_floods_edge_with_lava() -> void:
+	var world := _bordered(MapMeta.BORDER_LAVA, 0)
+	var terrain: TerrainGrid = world["terrain"]
+	var water: WaterGrid = world["water"]
+	var border: BorderOceanService = world["border"]
+	var rim := terrain.min_cell().x
+	for x in range(rim, 1):
+		assert(terrain.set_height(Vector2i(x, 0), -1))
+	assert(border.apply())
+	assert(border.border_body_id() != WaterBody.NO_BODY, "a lava border creates a body")
+	var body := water.body(border.border_body_id())
+	assert(body != null and body.is_lava(), "the border body is lava")
+	assert(water.is_wet(terrain, Vector2i(rim, 0)), "lava reached the exposed edge")
+	assert(border.is_border_body(body.id), "is_border_body recognises it")
+	print("  border lava fill ok")
 
 
 # --- Drinking water comes from the water layer and nowhere else -----------------

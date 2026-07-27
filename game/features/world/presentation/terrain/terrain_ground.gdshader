@@ -28,6 +28,9 @@ uniform float tile_size = 2.0;
 // How sharply the height map wins over the bilinear weight. Low values fade,
 // high values interlock; 0.18 keeps the boundary readable at this camera height.
 uniform float blend_sharpness = 0.18;
+// 0 keeps authored facets; 1 interpolates the averaged vertex normals. Only
+// lighting changes: VERTEX and therefore the rendered silhouette stay intact.
+uniform float visual_smoothing : hint_range(0.0, 1.0) = 0.0;
 
 uniform vec3 snow_colour : source_color = vec3(0.88, 0.91, 0.96);
 uniform vec3 wear_tint : source_color = vec3(0.52, 0.44, 0.33);
@@ -35,6 +38,8 @@ uniform vec3 wear_tint : source_color = vec3(0.52, 0.44, 0.33);
 varying vec3 world_position;
 
 void vertex() {
+	vec3 smooth_normal = normalize(COLOR.rgb * 2.0 - 1.0);
+	NORMAL = normalize(mix(NORMAL, smooth_normal, visual_smoothing));
 	world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 }
 

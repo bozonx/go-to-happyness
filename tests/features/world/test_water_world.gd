@@ -45,6 +45,8 @@ func _init() -> void:
 	assert(_border_node(world) == null, "no border was configured yet")
 	world.configure_border(MapMeta.BORDER_OCEAN, -2)
 	assert(_border_node(world) != null, "an ocean border draws a horizon")
+	world.configure_border(MapMeta.BORDER_LAVA, -2)
+	assert(_border_node(world) != null, "a lava border draws a horizon too")
 	world.configure_border(MapMeta.BORDER_NOTHING, 0)
 	assert(_border_node(world) == null, "and 'nothing' draws nothing at all")
 
@@ -63,6 +65,6 @@ func _ice_body_count(world: WaterWorld) -> int:
 
 func _border_node(world: WaterWorld) -> Node:
 	for child: Node in world.get_children():
-		if child.name == "BorderOcean":
+		if child.name == "BorderPlane":
 			return child
 	return null

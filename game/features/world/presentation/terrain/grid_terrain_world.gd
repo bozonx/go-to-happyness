@@ -35,6 +35,7 @@ signal chunk_rebuilt(chunk: Vector2i)
 signal rebuild_finished()
 
 @export var lod_distance := 64.0
+@export_range(0.0, 1.0, 0.01) var visual_smoothing := 0.0
 
 var grid: TerrainGrid = null
 ## Optional: without it every chunk is built at full detail.
@@ -111,6 +112,15 @@ func rebuild_pending_now() -> void:
 
 func pending_chunk_count() -> int:
 	return _pending_chunks.size()
+
+
+## Changes shading only. It neither rebuilds chunks nor changes collision.
+func set_visual_smoothing(amount: float) -> void:
+	visual_smoothing = clampf(amount, 0.0, 1.0)
+	if _ground_material != null:
+		_ground_material.set_shader_parameter(&"visual_smoothing", visual_smoothing)
+	if _cliff_material != null:
+		_cliff_material.set_shader_parameter(&"visual_smoothing", visual_smoothing)
 
 
 func lod_of_chunk(chunk: Vector2i) -> int:
@@ -226,6 +236,7 @@ func _ground_shader_material() -> ShaderMaterial:
 	_ground_material.set_shader_parameter(&"board_cells", float(grid.board_cells))
 	_ground_material.set_shader_parameter(&"cell_size", grid.cell_size)
 	_ground_material.set_shader_parameter(&"max_variants", float(TerrainMaterialVariants.MAX_VARIANTS))
+	_ground_material.set_shader_parameter(&"visual_smoothing", visual_smoothing)
 	return _ground_material
 
 
@@ -235,4 +246,5 @@ func _cliff_shader_material() -> ShaderMaterial:
 	_cliff_material = ShaderMaterial.new()
 	_cliff_material.shader = load(CLIFF_SHADER_PATH)
 	_cliff_material.set_shader_parameter(&"surface_textures", _library.texture_array())
+	_cliff_material.set_shader_parameter(&"visual_smoothing", visual_smoothing)
 	return _cliff_material

@@ -18,12 +18,15 @@ uniform float tile_size = 2.0;
 // Faces are the same textures seen edge-on; a touch darker reads as shadowed rock
 // without a second texture set.
 uniform float face_shade = 0.86;
+uniform float visual_smoothing : hint_range(0.0, 1.0) = 0.0;
 
 varying vec3 world_position;
 varying vec3 world_normal;
 varying float layer_index;
 
 void vertex() {
+	vec3 smooth_normal = normalize(COLOR.gba * 2.0 - 1.0);
+	NORMAL = normalize(mix(NORMAL, smooth_normal, visual_smoothing));
 	world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	world_normal = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
 	layer_index = floor(COLOR.r * 255.0 + 0.5);

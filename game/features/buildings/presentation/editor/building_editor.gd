@@ -173,6 +173,7 @@ func _process(delta: float) -> void:
 		decor_mode.refresh_ghost()
 		return
 	if current_mode == EditMode.ZONES:
+		zones_mode.refresh_ghost()
 		return
 	frame_mode.process(delta)
 
@@ -356,7 +357,10 @@ func _refresh_ghost() -> void:
 	if current_mode == EditMode.DECOR:
 		decor_mode.refresh_ghost()
 		return
-	if current_mode == EditMode.ZONES or not cursor_valid:
+	if current_mode == EditMode.ZONES:
+		zones_mode.refresh_ghost()
+		return
+	if not cursor_valid:
 		return
 	frame_mode.refresh_ghost()
 
