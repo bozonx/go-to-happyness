@@ -74,12 +74,16 @@ var _top_normals := PackedVector3Array()
 ## RGB carries an encoded smooth normal. The shaders blend it with the geometric
 ## normal; geometry, collision and navigation never see that visual choice.
 var _top_colors := PackedColorArray()
+var _top_uv := PackedVector2Array()
+var _top_uv2 := PackedVector2Array()
 var _top_indices := PackedInt32Array()
 var _wall_vertices := PackedVector3Array()
 var _wall_normals := PackedVector3Array()
 ## COLOR.r of a wall vertex is its auto-rock texture layer / 255 (§3). Faces are
 ## the only place a material reaches the vertex data at all.
 var _wall_colors := PackedColorArray()
+var _wall_uv := PackedVector2Array()
+var _wall_uv2 := PackedVector2Array()
 var _wall_indices := PackedInt32Array()
 
 var _grid: TerrainGrid = null
@@ -109,10 +113,14 @@ func _build(grid: TerrainGrid, chunk: Vector2i, lod: int) -> Dictionary:
 	_top_vertices = PackedVector3Array()
 	_top_normals = PackedVector3Array()
 	_top_colors = PackedColorArray()
+	_top_uv = PackedVector2Array()
+	_top_uv2 = PackedVector2Array()
 	_top_indices = PackedInt32Array()
 	_wall_vertices = PackedVector3Array()
 	_wall_normals = PackedVector3Array()
 	_wall_colors = PackedColorArray()
+	_wall_uv = PackedVector2Array()
+	_wall_uv2 = PackedVector2Array()
 	_wall_indices = PackedInt32Array()
 	_cache_region()
 
@@ -133,6 +141,8 @@ func _build(grid: TerrainGrid, chunk: Vector2i, lod: int) -> Dictionary:
 		top_arrays[Mesh.ARRAY_VERTEX] = _top_vertices
 		top_arrays[Mesh.ARRAY_NORMAL] = _top_normals
 		top_arrays[Mesh.ARRAY_COLOR] = _top_colors
+		top_arrays[Mesh.ARRAY_TEX_UV] = _top_uv
+		top_arrays[Mesh.ARRAY_TEX_UV2] = _top_uv2
 		top_arrays[Mesh.ARRAY_INDEX] = _top_indices
 		top_surface = mesh.get_surface_count()
 		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, top_arrays)
@@ -142,6 +152,8 @@ func _build(grid: TerrainGrid, chunk: Vector2i, lod: int) -> Dictionary:
 		wall_arrays[Mesh.ARRAY_VERTEX] = _wall_vertices
 		wall_arrays[Mesh.ARRAY_NORMAL] = _wall_normals
 		wall_arrays[Mesh.ARRAY_COLOR] = _wall_colors
+		wall_arrays[Mesh.ARRAY_TEX_UV] = _wall_uv
+		wall_arrays[Mesh.ARRAY_TEX_UV2] = _wall_uv2
 		wall_arrays[Mesh.ARRAY_INDEX] = _wall_indices
 		cliff_surface = mesh.get_surface_count()
 		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, wall_arrays)
@@ -394,6 +406,7 @@ func _add_top_quad(a: Vector3, b: Vector3, c: Vector3, d: Vector3, normal: Vecto
 	for _index in 4:
 		_top_normals.append(normal)
 		_top_colors.append(Color.WHITE)
+	_append_edge_coordinates(_top_uv, _top_uv2, a, b, c)
 	_append_quad_indices(_top_indices, base)
 
 
@@ -406,6 +419,7 @@ func _add_wall_quad(a: Vector3, b: Vector3, c: Vector3, d: Vector3, normal: Vect
 	for _index in 4:
 		_wall_normals.append(normal)
 		_wall_colors.append(color)
+	_append_edge_coordinates(_wall_uv, _wall_uv2, a, b, c)
 	_append_quad_indices(_wall_indices, base)
 
 
@@ -434,6 +448,20 @@ static func _accumulate_normals(vertices: PackedVector3Array, normals: PackedVec
 
 static func _encode_normal(normal: Vector3) -> Vector3:
 	return normal * 0.5 + Vector3.ONE * 0.5
+
+
+## UV is the position across this quad and UV2 repeats its size in metres. The
+## shaders use them to keep partial smoothing in a narrow band at the edges,
+## instead of bending the lighting across the centre of a greedily merged plain.
+static func _append_edge_coordinates(coordinates: PackedVector2Array, dimensions: PackedVector2Array, a: Vector3, b: Vector3, c: Vector3) -> void:
+	var width := a.distance_to(b)
+	var depth := b.distance_to(c)
+	coordinates.append(Vector2.ZERO)
+	coordinates.append(Vector2(1.0, 0.0))
+	coordinates.append(Vector2.ONE)
+	coordinates.append(Vector2(0.0, 1.0))
+	for _index in 4:
+		dimensions.append(Vector2(width, depth))
 
 
 static func _append_quad_indices(indices: PackedInt32Array, base: int) -> void:

@@ -97,6 +97,9 @@ var _material_page := 0
 const CAPTURE_VIEWS: Array = [
 	{"name": "overview", "target": Vector3(0.0, 0.0, 0.0), "yaw": 42.0, "pitch": 52.0, "distance": 48.0},
 	{"name": "ramps", "target": Vector3(0.0, 0.5, 0.0), "yaw": 250.0, "pitch": 22.0, "distance": 18.0},
+	{"name": "smoothing_flat", "smoothing": 0.0, "target": Vector3(0.0, 0.5, 0.0), "yaw": 250.0, "pitch": 22.0, "distance": 18.0},
+	{"name": "smoothing_partial", "smoothing": 0.5, "target": Vector3(0.0, 0.5, 0.0), "yaw": 250.0, "pitch": 22.0, "distance": 18.0},
+	{"name": "smoothing_full", "smoothing": 1.0, "target": Vector3(0.0, 0.5, 0.0), "yaw": 250.0, "pitch": 22.0, "distance": 18.0},
 	{"name": "tower_and_hole", "target": Vector3(12.0, 2.0, 4.0), "yaw": 300.0, "pitch": 28.0, "distance": 26.0},
 	{"name": "cascade_repose", "setup": &"cascade", "target": Vector3(0.0, 1.0, 0.0), "yaw": 20.0, "pitch": 30.0, "distance": 40.0},
 	{"name": "cascade_closeup", "target": Vector3(-4.0, 1.0, 0.0), "yaw": 35.0, "pitch": 18.0, "distance": 16.0},
@@ -481,6 +484,8 @@ func _palette_line() -> String:
 func _process_capture() -> void:
 	var view: Dictionary = _capture_queue[0]
 	if _capture_delay == CAPTURE_SETTLE_FRAMES:
+		if view.has("smoothing"):
+			smoothing_slider.value = float(view["smoothing"]) * 100.0
 		match view.get("setup", &""):
 			&"cascade":
 				_setup_cascade_scene()

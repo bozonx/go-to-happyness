@@ -22,18 +22,26 @@ uniform float visual_smoothing : hint_range(0.0, 1.0) = 0.0;
 
 varying vec3 world_position;
 varying vec3 world_normal;
+varying vec3 smooth_world_normal;
+varying vec3 smooth_view_normal;
 varying float layer_index;
 
 void vertex() {
 	vec3 smooth_normal = normalize(COLOR.gba * 2.0 - 1.0);
-	NORMAL = normalize(mix(NORMAL, smooth_normal, visual_smoothing));
 	world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	world_normal = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
+	smooth_world_normal = normalize((MODEL_MATRIX * vec4(smooth_normal, 0.0)).xyz);
+	smooth_view_normal = normalize(MODELVIEW_NORMAL_MATRIX * smooth_normal);
 	layer_index = floor(COLOR.r * 255.0 + 0.5);
 }
 
 void fragment() {
-	vec3 blend = abs(normalize(world_normal));
+	vec2 edge_metres = min(UV, vec2(1.0) - UV) * UV2;
+	float edge_band = 1.0 - smoothstep(0.0, tile_size * 0.25, min(edge_metres.x, edge_metres.y));
+	float full_surface = smoothstep(0.9, 1.0, visual_smoothing);
+	float normal_blend = mix(visual_smoothing * edge_band, visual_smoothing, full_surface);
+	NORMAL = normalize(mix(NORMAL, smooth_view_normal, normal_blend));
+	vec3 blend = abs(normalize(mix(world_normal, smooth_world_normal, normal_blend)));
 	blend = pow(blend, vec3(4.0));
 	blend /= max(blend.x + blend.y + blend.z, 0.0001);
 

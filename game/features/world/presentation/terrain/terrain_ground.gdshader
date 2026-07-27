@@ -36,10 +36,11 @@ uniform vec3 snow_colour : source_color = vec3(0.88, 0.91, 0.96);
 uniform vec3 wear_tint : source_color = vec3(0.52, 0.44, 0.33);
 
 varying vec3 world_position;
+varying vec3 smooth_view_normal;
 
 void vertex() {
 	vec3 smooth_normal = normalize(COLOR.rgb * 2.0 - 1.0);
-	NORMAL = normalize(mix(NORMAL, smooth_normal, visual_smoothing));
+	smooth_view_normal = normalize(MODELVIEW_NORMAL_MATRIX * smooth_normal);
 	world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 }
 
@@ -49,6 +50,13 @@ vec2 map_uv_of_cell(vec2 cell) {
 }
 
 void fragment() {
+	vec2 edge_metres = min(UV, vec2(1.0) - UV) * UV2;
+	// Before the final 10%, only a half-cell band around polygon borders rolls.
+	// The last 10% deliberately opens into fully smooth shading.
+	float edge_band = 1.0 - smoothstep(0.0, cell_size * 0.5, min(edge_metres.x, edge_metres.y));
+	float full_surface = smoothstep(0.9, 1.0, visual_smoothing);
+	float normal_blend = mix(visual_smoothing * edge_band, visual_smoothing, full_surface);
+	NORMAL = normalize(mix(NORMAL, smooth_view_normal, normal_blend));
 	vec2 tile_uv = world_position.xz / tile_size;
 
 	// Sample positions are cell CENTRES, so the four taps around a fragment are
