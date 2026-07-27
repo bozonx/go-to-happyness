@@ -1,0 +1,239 @@
+{
+	"version": 6,
+	"id": "tent_shelter",
+	"role": "tent_shelter",
+	"name": "Временное жилище",
+	"construction_style": "surface",
+	"category": "tent",
+	"fallback_building_id": "tent_shelter",
+	"grid_bounds": {
+		"x": 4,
+		"y": 1,
+		"z": 4
+	},
+	"footprint": [
+		4,
+		4
+	],
+	"blocks": [
+		{
+			"pos": [
+				0,
+				0,
+				0
+			],
+			"block_id": "slab",
+			"material_id": "thatch",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				0,
+				0,
+				1
+			],
+			"block_id": "slab",
+			"material_id": "thatch",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				0,
+				0,
+				2
+			],
+			"block_id": "slab",
+			"material_id": "thatch",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				0,
+				0,
+				3
+			],
+			"block_id": "slab",
+			"material_id": "thatch",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				1,
+				0,
+				0
+			],
+			"block_id": "slab",
+			"material_id": "thatch",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				1,
+				0,
+				1
+			],
+			"block_id": "slab",
+			"material_id": "thatch",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				1,
+				0,
+				2
+			],
+			"block_id": "slab",
+			"material_id": "thatch",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				1,
+				0,
+				3
+			],
+			"block_id": "slab",
+			"material_id": "thatch",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				2,
+				0,
+				0
+			],
+			"block_id": "slab",
+			"material_id": "thatch",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				2,
+				0,
+				1
+			],
+			"block_id": "slab",
+			"material_id": "thatch",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				2,
+				0,
+				2
+			],
+			"block_id": "slab",
+			"material_id": "thatch",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				2,
+				0,
+				3
+			],
+			"block_id": "slab",
+			"material_id": "thatch",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				3,
+				0,
+				0
+			],
+			"block_id": "slab",
+			"material_id": "thatch",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				3,
+				0,
+				1
+			],
+			"block_id": "slab",
+			"material_id": "thatch",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				3,
+				0,
+				2
+			],
+			"block_id": "slab",
+			"material_id": "thatch",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				3,
+				0,
+				3
+			],
+			"block_id": "slab",
+			"material_id": "thatch",
+			"rot": 0,
+			"variant": "0.25"
+		}
+	],
+	"objects": [],
+	"fixtures": [],
+	"areas": [
+		{
+			"id": "home",
+			"name": "Жилое помещение",
+			"role": "room",
+			"function": "core:housing",
+			"properties": {
+				"residents": 4
+			},
+			"rects": [
+				[
+					0,
+					0,
+					4,
+					4
+				]
+			],
+			"y": [
+				0,
+				2
+			]
+		}
+	],
+	"anchors": [
+		{
+			"id": "front_door",
+			"role": "door",
+			"pos": [
+				2.0,
+				0,
+				0
+			],
+			"facing": 180,
+			"allow": [
+				"visitor",
+				"staff",
+				"owner"
+			]
+		}
+	],
+	"routes": []
+}

@@ -96,8 +96,7 @@ var manual_costs: Dictionary = {}
 ## integer grid cells (`blocks[].pos`) are array indices and stay non-negative
 ## `0…N-1`, while continuous placements are signed offsets from the footprint
 ## centre — which is the pivot the game rotates and positions a building around
-## (see `BuildingEntrancePositions`, and `entrance`, which was always stored that
-## way). `objects[]` is serialized in that centre space and converted back to
+## (see `BuildingAccessPoints`). `objects[]` is serialized in that centre space and converted back to
 ## corner space on load, so every editor tool keeps working in board-local
 ## coordinates and only the file format is centre-relative.
 ##

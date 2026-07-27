@@ -150,6 +150,22 @@ static func player_entries() -> Array[Dictionary]:
 	return result
 
 
+## Read-only catalogue view for migration audits and content tooling.
+static func authored_entries() -> Array[Dictionary]:
+	_ensure_index()
+	var result: Array[Dictionary] = []
+	for key in _index:
+		var entry: Dictionary = _index[key]
+		result.append({
+			"runtime_key": key,
+			"source": entry["source"],
+			"id": entry["id"],
+			"path": entry["path"],
+		})
+	result.sort_custom(func(a: Dictionary, b: Dictionary): return str(a["runtime_key"]) < str(b["runtime_key"]))
+	return result
+
+
 static func _register_definition(role: StringName, blueprint: BuildingBlueprintScript) -> void:
 	# A builtin blueprint that matches an existing catalog building_type only
 	# supplies visuals + zones: the static definition stays authoritative so its

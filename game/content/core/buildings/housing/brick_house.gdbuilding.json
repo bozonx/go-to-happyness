@@ -1,0 +1,602 @@
+{
+	"version": 6,
+	"id": "brick_house",
+	"role": "brick_house",
+	"name": "Кирпичный дом",
+	"construction_style": "surface",
+	"category": "brick",
+	"fallback_building_id": "brick_house",
+	"grid_bounds": {
+		"x": 7,
+		"y": 1,
+		"z": 7
+	},
+	"footprint": [
+		7,
+		7
+	],
+	"blocks": [
+		{
+			"pos": [
+				0,
+				0,
+				0
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				0,
+				0,
+				1
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				0,
+				0,
+				2
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				0,
+				0,
+				3
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				0,
+				0,
+				4
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				0,
+				0,
+				5
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				0,
+				0,
+				6
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				1,
+				0,
+				0
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				1,
+				0,
+				1
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				1,
+				0,
+				2
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				1,
+				0,
+				3
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				1,
+				0,
+				4
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				1,
+				0,
+				5
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				1,
+				0,
+				6
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				2,
+				0,
+				0
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				2,
+				0,
+				1
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				2,
+				0,
+				2
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				2,
+				0,
+				3
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				2,
+				0,
+				4
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				2,
+				0,
+				5
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				2,
+				0,
+				6
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				3,
+				0,
+				0
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				3,
+				0,
+				1
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				3,
+				0,
+				2
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				3,
+				0,
+				3
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				3,
+				0,
+				4
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				3,
+				0,
+				5
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				3,
+				0,
+				6
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				4,
+				0,
+				0
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				4,
+				0,
+				1
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				4,
+				0,
+				2
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				4,
+				0,
+				3
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				4,
+				0,
+				4
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				4,
+				0,
+				5
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				4,
+				0,
+				6
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				5,
+				0,
+				0
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				5,
+				0,
+				1
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				5,
+				0,
+				2
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				5,
+				0,
+				3
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				5,
+				0,
+				4
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				5,
+				0,
+				5
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				5,
+				0,
+				6
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				6,
+				0,
+				0
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				6,
+				0,
+				1
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				6,
+				0,
+				2
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				6,
+				0,
+				3
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				6,
+				0,
+				4
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				6,
+				0,
+				5
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				6,
+				0,
+				6
+			],
+			"block_id": "slab",
+			"material_id": "brick",
+			"rot": 0,
+			"variant": "0.25"
+		}
+	],
+	"objects": [],
+	"fixtures": [],
+	"areas": [
+		{
+			"id": "home",
+			"name": "Жилое помещение",
+			"role": "room",
+			"function": "core:housing",
+			"properties": {
+				"residents": 12
+			},
+			"rects": [
+				[
+					0,
+					0,
+					7,
+					7
+				]
+			],
+			"y": [
+				0,
+				2
+			]
+		}
+	],
+	"anchors": [
+		{
+			"id": "front_door",
+			"role": "door",
+			"pos": [
+				3.5,
+				0,
+				0
+			],
+			"facing": 180,
+			"allow": [
+				"visitor",
+				"staff",
+				"owner"
+			]
+		}
+	],
+	"routes": []
+}

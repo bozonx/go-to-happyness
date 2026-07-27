@@ -36,6 +36,7 @@ static func run_all() -> void:
 	_test_blueprint_round_trip()
 	_test_grid_blueprint_sync()
 	_test_zones_and_metadata_round_trip()
+	_test_authored_building_access_points()
 	_test_runtime_zone_assignment()
 	_test_runtime_zone_function_survives()
 	_test_zone_session_state_round_trip()
@@ -553,6 +554,48 @@ static func _test_runtime_zone_assignment() -> void:
 	assert(state.zones[0].slot_holder(&"oven") == 10, "work position reserves the slot")
 	assert(not state.zones[0].assign(11), "a second citizen cannot share one slot")
 	building.free()
+
+
+## Authored doors are authoritative. The legacy type table is only used by
+## procedural blueprints, and must never hide a missing door in new content.
+static func _test_authored_building_access_points() -> void:
+	var authored := {
+		"type": "sawmill",
+		"footprint": Vector2i(8, 6),
+		"blueprint_ref": {"source": "core", "id": "authored_sawmill"},
+		"routing_anchors": [
+			{"id": "front_door", "role": "door", "pos": [0.0, 0.0, -3.0]},
+			{"id": "staff_door", "role": "door", "pos": [4.0, 0.0, 0.0], "deny": ["visitor"]},
+			{"id": "visitor_only", "role": "door", "pos": [-4.0, 0.0, 0.0], "deny": ["staff", "builder"]},
+		]
+	}
+	assert(BuildingAccessPoints.source_for(authored) == BuildingAccessPoints.SOURCE_AUTHORED)
+	assert(BuildingAccessPoints.authored_door_count(authored) == 3)
+	assert(BuildingAccessPoints.visitor_local_positions(authored) == [
+		Vector3(0.0, 0.0, -3.0), Vector3(-4.0, 0.0, 0.0)])
+	assert(BuildingAccessPoints.worker_local_positions(authored) == [
+		Vector3(0.0, 0.0, -3.0), Vector3(4.0, 0.0, 0.0)])
+	assert(BuildingAccessPoints.construction_local_positions(authored) == [
+		Vector3(0.0, 0.0, -3.0), Vector3(4.0, 0.0, 0.0)])
+	assert(BuildingAccessPoints.transition_errors(authored).is_empty())
+
+	var building := Node3D.new()
+	building.position = Vector3(10.0, 2.0, 20.0)
+	building.rotation.y = PI * 0.5
+	assert(BuildingAccessPoints.visitor_positions(building, authored)[0].is_equal_approx(
+		Vector3(7.0, 2.0, 20.0)))
+	building.free()
+
+	var missing_door := authored.duplicate(true)
+	missing_door["routing_anchors"] = []
+	assert(BuildingAccessPoints.worker_local_positions(missing_door).is_empty(),
+		"authored content without a door must not fall back to the hard-coded sawmill entrances")
+	assert(BuildingAccessPoints.transition_errors(missing_door).size() == 1)
+
+	var legacy := {"type": "sawmill", "footprint": Vector2i(8, 6)}
+	assert(BuildingAccessPoints.source_for(legacy) == BuildingAccessPoints.SOURCE_LEGACY)
+	assert(BuildingAccessPoints.worker_local_positions(legacy).size() == 2)
+	assert(BuildingAccessPoints.transition_errors(legacy).size() == 1)
 
 
 ## Pack-defined meaning must survive definition -> runtime state -> meta ->

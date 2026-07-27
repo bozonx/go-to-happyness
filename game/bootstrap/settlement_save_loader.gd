@@ -107,7 +107,8 @@ func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
 			site_node.set_meta("building_type", b_type)
 			site_node.set_meta("footprint", blueprint.footprint)
 			site_node.set_meta("occupied_footprint", occupied_footprint)
-			site_node.set_meta("service_positions", BuildingEntrancePositions.positions(site_node, blueprint.footprint, 1.0))
+			site_node.set_meta("service_positions", BuildingAccessPoints.construction_positions(site_node, blueprint, 1.0))
+			site_node.set_meta("access_points_source", BuildingAccessPoints.source_for(blueprint))
 			game.add_child(site_node)
 			for module in blueprint.modules:
 				site_node.add_child(BuildingBlueprints.create_module(module))

@@ -3,7 +3,6 @@ extends RefCounted
 
 
 const BuildingModuleScene = preload("res://game/features/buildings/presentation/building_module.tscn")
-const BuildingEntrancePositionsScript = preload("res://game/features/buildings/domain/building_entrance_positions.gd")
 const BuildingBlueprintLibraryScript = preload("res://game/features/buildings/presentation/building_blueprint_library.gd")
 const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
 const BlockMeshLibraryScript = preload("res://game/features/buildings/presentation/editor/block_mesh_library.gd")
@@ -618,11 +617,11 @@ static func _fire_source_fixture_dict() -> Dictionary:
 
 
 static func worker_entrance_offsets(building_type: String) -> Array[Vector2i]:
-	return BuildingEntrancePositionsScript.offsets(building_type)
+	return _access_offsets(BuildingAccessPoints.worker_local_positions(get_blueprint(building_type)))
 
 
 static func visitor_entrance_offsets(building_type: String) -> Array[Vector2i]:
-	return BuildingEntrancePositionsScript.visitor_offsets(building_type)
+	return _access_offsets(BuildingAccessPoints.visitor_local_positions(get_blueprint(building_type)))
 
 
 static func has_worker_entrance(building_type: String) -> bool:
@@ -630,7 +629,14 @@ static func has_worker_entrance(building_type: String) -> bool:
 
 
 static func has_visitor_entrance(building_type: String) -> bool:
-	return building_type in VISITOR_ENTRANCE_BUILDINGS or building_type in VISITOR_ONLY_BUILDINGS
+	return not visitor_entrance_offsets(building_type).is_empty()
+
+
+static func _access_offsets(local_positions: Array[Vector3]) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	for position in local_positions:
+		result.append(Vector2i(roundi(position.x), roundi(position.z)))
+	return result
 
 
 static func _module(position: Vector3, size: Vector3, kind: String, color: Color, rotation := Vector3.ZERO) -> Dictionary:
@@ -653,4 +659,3 @@ static func _boundary_post_blueprint() -> Dictionary:
 		"modules": modules,
 		"entrance": Vector2i(0, 0),
 	}
-

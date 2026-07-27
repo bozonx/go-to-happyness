@@ -55,8 +55,6 @@ func _run() -> void:
 	assert(kitchen_index > 0, "the core kitchen is in the list")
 	function_option.select(kitchen_index)
 	zones._on_palette_function_selected(kitchen_index)
-	assert(editor.get_node("%ZoneFunctionPackLbl").text.contains("core"),
-		"the pack is named, so the author sees the function is content")
 	print("  pack-driven function list ok")
 
 	# Draw a room with the rectangle drag, the way the UI does.

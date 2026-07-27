@@ -7,7 +7,6 @@ var runtime: ConstructionRuntime
 var sites: Array[ConstructionSite] = []
 
 
-const BuildingEntrancePositionsScript = preload("res://game/features/buildings/domain/building_entrance_positions.gd")
 const SERVICE_PAD_OFFSET := 1.0
 
 
@@ -49,15 +48,16 @@ func start_site(cell: Vector2i, building_type: String, position: Vector3, rotati
 		site_node.set_meta("zone_overlays", blueprint["overlays"])
 	site_node.set_meta("footprint", blueprint.footprint)
 	site_node.set_meta("occupied_footprint", occupied_footprint if occupied_footprint != Vector2i.ZERO else blueprint.footprint)
-	site_node.set_meta("service_positions", BuildingEntrancePositionsScript.positions(site_node, blueprint.footprint, SERVICE_PAD_OFFSET))
+	site_node.set_meta("service_positions", BuildingAccessPoints.construction_positions(site_node, blueprint, SERVICE_PAD_OFFSET))
+	site_node.set_meta("access_points_source", BuildingAccessPoints.source_for(blueprint))
 
 	var display_footprint: Vector2i = blueprint.footprint
 
 	# Entrance posts and flags are positioned dynamically based on the building footprint.
 	var entrance_parent := site_node.get_node("ConstructionEntrance") as Node3D
-	for service_position: Vector3 in site_node.get_meta("service_positions"):
+	for local_position in BuildingAccessPoints.construction_local_positions(blueprint, SERVICE_PAD_OFFSET):
 		var post := _get_entrance_post_scene().instantiate() as Node3D
-		post.position = (service_position - site_node.position).rotated(Vector3.UP, -site_node.rotation.y)
+		post.position = local_position
 		post.position.y = 0.0
 		entrance_parent.add_child(post)
 

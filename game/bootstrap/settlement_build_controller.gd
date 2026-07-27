@@ -107,11 +107,19 @@ func move_selection(world_position: Vector3) -> void:
 		var local_footprint: Vector2i = BuildingBlueprints.get_blueprint(game.build_mode).footprint
 		var footprint := game.rotated_footprint(local_footprint)
 		(game.world_setup.selection_marker.mesh as BoxMesh).size = Vector3(footprint.x, 0.04, footprint.y)
-		var forward := Vector3(0.0, 0.0, -1.0).rotated(Vector3.UP, game.build_rotation_quarters * PI * 0.5)
-		game.world_setup.preview_entrance_marker.position = game.selected_world_position + forward * (local_footprint.y * 0.5 + 0.35) + Vector3.UP * 0.08
-		game.world_setup.preview_back_entrance_marker.position = game.selected_world_position - forward * (local_footprint.y * 0.5 + 0.35) + Vector3.UP * 0.08
-		game.world_setup.preview_entrance_marker.visible = true
-		game.world_setup.preview_back_entrance_marker.visible = true
+		var blueprint: Dictionary = BuildingBlueprints.get_blueprint(game.build_mode)
+		var preview_access := BuildingAccessPoints.visitor_local_positions(blueprint)
+		if preview_access.is_empty():
+			preview_access = BuildingAccessPoints.worker_local_positions(blueprint)
+		if preview_access.is_empty():
+			preview_access = BuildingAccessPoints.construction_local_positions(blueprint)
+		var rotation := game.build_rotation_quarters * PI * 0.5
+		game.world_setup.preview_entrance_marker.visible = not preview_access.is_empty()
+		game.world_setup.preview_back_entrance_marker.visible = preview_access.size() > 1
+		if not preview_access.is_empty():
+			game.world_setup.preview_entrance_marker.position = game.selected_world_position + preview_access[0].rotated(Vector3.UP, rotation) + Vector3.UP * 0.08
+		if preview_access.size() > 1:
+			game.world_setup.preview_back_entrance_marker.position = game.selected_world_position + preview_access[1].rotated(Vector3.UP, rotation) + Vector3.UP * 0.08
 	if not game.build_mode.is_empty():
 		var can_place := bpc.can_place(game.selected_world_position) if bpc != null else false
 		game.world_setup.selection_material.albedo_color = Color(0.25, 0.85, 0.37, 0.55) if can_place else Color(0.9, 0.2, 0.18, 0.6)
@@ -185,7 +193,8 @@ func _place_instant_building(cell: Vector2i, world_position: Vector3, blueprint:
 	site_node.set_meta("building_type", game.build_mode)
 	site_node.set_meta("footprint", blueprint.footprint)
 	site_node.set_meta("occupied_footprint", occupied_footprint)
-	site_node.set_meta("service_positions", BuildingEntrancePositions.positions(site_node, blueprint.footprint, 1.0))
+	site_node.set_meta("service_positions", BuildingAccessPoints.construction_positions(site_node, blueprint, 1.0))
+	site_node.set_meta("access_points_source", BuildingAccessPoints.source_for(blueprint))
 	game.add_child(site_node)
 	for module in blueprint.modules:
 		site_node.add_child(BuildingBlueprints.create_module(module))
