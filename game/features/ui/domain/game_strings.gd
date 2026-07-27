@@ -58,7 +58,7 @@ const F_GATHER_GRASS_COUNT := "F: собрать траву (%d/%d) | Shift+F: �
 # --- First Person HUD: farm ---
 const F_HARVEST_FARM := "F: собрать еду | Shift+F: собирать до полноты"
 
-# --- First Person HUD: pond ---
+# --- First Person HUD: water ---
 const F_COLLECT_WATER := "F: набрать воды | Shift+F: набирать до полноты"
 const NEED_BUCKET_FOR_WATER := "Нужно ведро, чтобы черпать воду. Купите его на рынке."
 

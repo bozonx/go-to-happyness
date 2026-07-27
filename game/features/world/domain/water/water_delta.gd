@@ -48,19 +48,6 @@ func size() -> int:
 	return cells.size()
 
 
-## True when the change can move anyone's route: water appearing, disappearing,
-## deepening, shallowing or freezing. A recolour of the same surface at the same
-## level cannot, but there is no such edit in this layer — every field here is
-## navigational, so this is honest rather than merely conservative.
-func changes_passability() -> bool:
-	for index in cells.size():
-		var offset := index * STATE_SIZE
-		for field in STATE_SIZE:
-			if _old_states[offset + field] != _new_states[offset + field]:
-				return true
-	return false
-
-
 func record(cell: Vector2i, old_state: PackedInt32Array, new_state: PackedInt32Array) -> void:
 	cells.append(cell)
 	_old_states.append_array(old_state)

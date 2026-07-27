@@ -177,7 +177,7 @@ func _world_data() -> Dictionary:
 		"food": simulation.settlement.amount(ResourceIds.FOOD),
 		"water": simulation.settlement.amount(ResourceIds.WATER),
 		"wood": simulation.settlement.amount(ResourceIds.WOOD),
-		"ponds": simulation.pond_positions.size(),
+		"water_sources": simulation.water_source_positions.size(),
 		"has_bucket": bool(simulation.settlement.tools.get("bucket", false)),
 		"population": simulation.citizens.size(),
 		"assigned_roles": _assigned_role_counts_internal(),

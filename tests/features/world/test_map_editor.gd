@@ -235,6 +235,18 @@ func _test_ocean_boundary_floods_only_from_the_edge(editor: Node) -> void:
 	assert(water.is_wet(terrain, edge), "ocean reached the exposed edge")
 	assert(not water.is_wet(terrain, inland), "ocean did not fill a closed inland hollow")
 	assert(editor.document.meta.border_kind == MapMeta.BORDER_OCEAN)
+
+	# From here on the rule holds per stroke, and the fill it causes is part of that
+	# stroke: one Ctrl+Z gives back both the trench and the dry ground in it.
+	var trench := Vector2i(edge.x, edge.y + 2)
+	var depth_before: int = editor.history.undo_depth()
+	editor._terrain_service.apply_operation(TerrainEditOperation.offset([trench], -1))
+	assert(water.is_wet(terrain, trench), "digging at the rim let the sea in")
+	assert(editor.history.undo_depth() == depth_before + 1, "one action, one undo entry")
+	assert(editor._undo_button.disabled == false)
+	editor._undo()
+	assert(not water.is_wet(terrain, trench), "undo took the water back out")
+	assert(terrain.height_of(trench) == 0, "...and the ground with it")
 	print("  ocean border fill ok")
 
 

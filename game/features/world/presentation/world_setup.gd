@@ -22,6 +22,9 @@ var terrain_grid: TerrainGrid
 ## The board's water (§9), published beside the ground for the same reason: it is
 ## what routing and the weather-driven waves both read.
 var water_grid: WaterGrid
+## Where a citizen can stand to draw water. Owned here because it is derived from
+## the two grids this node publishes and from nothing else (§9.2).
+var water_access := WaterAccessService.new()
 var trail_overlay: MeshInstance3D
 var trail_overlay_material: ShaderMaterial
 var selection_marker: MeshInstance3D
@@ -44,14 +47,25 @@ var _map_document: MapDocument = null
 ## The territory scene that owns the ground and the water. Kept because the
 ## per-frame weather push has to reach the waves without walking the tree.
 var _territory: TerritoryBase = null
+## Pond seeds of the active biome, used only when the session has no map of its
+## own (see `_build_terrain`).
+var _starter_water_cells: Array[Vector2i] = []
 
 
-func setup(p_camera: Camera3D, p_cell_size: float, p_board_cells: int, p_trail_field: RefCounted, p_map_document: MapDocument = null) -> void:
+func setup(
+	p_camera: Camera3D,
+	p_cell_size: float,
+	p_board_cells: int,
+	p_trail_field: RefCounted,
+	p_map_document: MapDocument = null,
+	p_starter_water_cells: Array[Vector2i] = [],
+) -> void:
 	_camera = p_camera
 	_cell_size = p_cell_size
 	_board_cells = p_board_cells
 	_trail_field = p_trail_field
 	_map_document = p_map_document
+	_starter_water_cells = p_starter_water_cells
 
 
 func build(parent: Node) -> void:
@@ -119,7 +133,17 @@ func _build_terrain(parent: Node) -> void:
 	var authored: TerrainGrid = _map_document.terrain if _map_document != null else null
 	terrain_grid = territory.configure_terrain(_cell_size, _board_cells, _camera, authored)
 	var authored_water: WaterGrid = _map_document.water if _map_document != null else null
-	water_grid = territory.configure_water(_board_cells, _cell_size, authored_water)
+	# A map owns its own water; the biome's ponds are the fallback for a session
+	# that has no map, and adding them to an authored board would put lakes on it
+	# that its author never drew.
+	var seeds: Array[Vector2i] = [] if _map_document != null else _starter_water_cells
+	water_grid = territory.configure_water(_board_cells, _cell_size, authored_water, seeds)
+	var meta: MapMeta = _map_document.meta if _map_document != null else null
+	territory.configure_water_border(
+		meta.border_kind if meta != null else MapMeta.BORDER_NOTHING,
+		meta.border_level if meta != null else 0,
+	)
+	water_access.configure(water_grid, terrain_grid)
 
 
 func _build_boundary(parent: Node) -> void:

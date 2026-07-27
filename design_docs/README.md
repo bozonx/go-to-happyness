@@ -17,7 +17,8 @@
 | [navigation_and_roads.md](engine/navigation_and_roads.md) | `NavGrid`, веса, дороги как покрытие, `RoutePlan`. |
 | [weather.md](engine/weather.md) | Прогноз, две оси облачности, ветер, небо и светила, лаборатория погоды. |
 | [map_editor.md](engine/map_editor.md) | Формат `.gdmap`, редактор территорий, режимы и undo. |
-| [modular_building_editor.md](engine/modular_building_editor.md) | Формат `.gdbuilding.json`, каркас, отделка, активные зоны и их runtime. |
+| [modular_building_editor.md](engine/modular_building_editor.md) | Формат `.gdbuilding.json`, каркас, отделка, режимы редактора. |
+| [active_zones.md](engine/active_zones.md) | Модель активных зон обоих редакторов: области, точки, маршруты, права доступа, валидация, runtime. |
 | [building_furnishing.md](engine/building_furnishing.md) | Наполнение здания: предметы, fixtures, capabilities. |
 | [content_packaging.md](engine/content_packaging.md) | Паки, стили, идентификаторы, пользовательский контент, правило ревизии. |
 

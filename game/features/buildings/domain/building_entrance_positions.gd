@@ -28,8 +28,6 @@ static func offsets(building_type: String) -> Array[Vector2i]:
 		return [Vector2i(0, -3), Vector2i(0, 3)]
 	if building_type == "gathering_place":
 		return [Vector2i(0, -5)]
-	if building_type == "pond":
-		return [Vector2i(0, -2)]
 	if building_type in TWO_WORKER_ENTRANCE_BUILDINGS:
 		return [Vector2i(0, -2), Vector2i(0, 2)]
 	return [Vector2i(0, -1)]
@@ -40,8 +38,6 @@ static func visitor_offsets(building_type: String) -> Array[Vector2i]:
 		return []
 	if building_type == "gathering_place":
 		return [Vector2i(0, -5)]
-	if building_type == "pond":
-		return [Vector2i(0, -2)]
 	return [Vector2i(0, -1)]
 
 

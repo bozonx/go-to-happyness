@@ -61,6 +61,7 @@ var _nav_publisher := TerrainNavigationPublisher.new()
 var _brush := TerrainBrushController.new()
 var _water_service := WaterService.new()
 var _water_brush := WaterBrushController.new()
+var _border_ocean := BorderOceanService.new()
 
 var _context := MapEditorContext.new()
 var _modes: Array[MapEditorMode] = []
@@ -69,6 +70,10 @@ var _message := "готово"
 ## True while the history is replaying a command, so the commits that replay emits
 ## are not recorded as new commands.
 var _replaying := false
+## True while `BorderOceanService` is filling as part of a terrain stroke, so the
+## water commits it produces are folded into that stroke's command instead of
+## becoming commands of their own.
+var _recording_border_fill := false
 
 
 func _ready() -> void:
@@ -103,8 +108,10 @@ func _build_services() -> void:
 	_terrain_service.configure(document.terrain)
 	_wear_service.configure(_terrain_service)
 	_water_service.configure(document.water, document.terrain)
+	_border_ocean.configure(_water_service, document.terrain, document.water, document.meta)
 	terrain_world.configure(document.terrain, camera)
 	water_world.configure(document.water, document.terrain, _water_service, _terrain_service)
+	water_world.configure_border(document.meta.border_kind, document.meta.border_level)
 	# Binds navigation to the ground and the water, and keeps it current: every
 	# committed edit republishes exactly the columns it touched.
 	_nav_publisher.configure(document.terrain, _nav_grid, _terrain_service, document.water, _water_service)
@@ -246,8 +253,13 @@ func _on_map_menu_item_pressed(menu_id: int) -> void:
 	document.meta.border_kind = kind
 	document.mark_dirty()
 	_message = "за пределами карты: %s" % ("океан" if kind == MapMeta.BORDER_OCEAN else "ничего")
+	# Switching the border is a header edit, so it re-reads the header everywhere it
+	# is consumed: the rule that floods the rim, and the horizon that draws it.
+	_border_ocean.configure(_water_service, document.terrain, document.water, document.meta)
+	water_world.configure_border(document.meta.border_kind, document.meta.border_level)
 	if kind == MapMeta.BORDER_OCEAN:
-		_flood_ocean_from_border()
+		_context.set_edit_label("океан")
+		_border_ocean.apply()
 	_refresh_map_menu()
 	_refresh_panels()
 
@@ -381,43 +393,21 @@ func _on_terrain_committed(_delta: TerrainDelta) -> void:
 	# new command for every undo and the stack would never empty.
 	if _replaying:
 		return
-	history.push(TerrainServiceCommand.of(_terrain_service, _context.pending_edit_label))
+	var label := _context.pending_edit_label
+	var parts: Array[MapEditorCommand] = [TerrainServiceCommand.of(_terrain_service, label)]
+	# The sea comes in as part of the stroke that opened the way for it (§6.1), so
+	# it joins the same command. Two entries here would mean two Ctrl+Z for one
+	# thing the author did.
+	_recording_border_fill = true
+	var flooded := _border_ocean.apply()
+	_recording_border_fill = false
+	if flooded:
+		parts.append(WaterServiceCommand.of(_water_service, label))
+	history.push(
+		parts[0] if parts.size() == 1
+		else MapEditorCompositeCommand.of(parts, "%s + океан" % label)
+	)
 	document.mark_dirty()
-	_flood_ocean_from_border()
-
-
-## Ocean water enters only through the map boundary and only below the zero
-## terrain level. Closed inland depressions are intentionally untouched.
-func _flood_ocean_from_border() -> void:
-	if document.meta.border_kind != MapMeta.BORDER_OCEAN:
-		return
-	var ocean_id := WaterBody.NO_BODY
-	for body: WaterBody in document.water.bodies():
-		if body.type == WaterBody.Type.SEA:
-			ocean_id = body.id
-			break
-	if ocean_id == WaterBody.NO_BODY:
-		# Avoid creating an empty registry entry on a map whose edge is still dry.
-		var has_open_edge := false
-		var minimum := document.terrain.min_cell()
-		var maximum := document.terrain.max_cell()
-		for x in range(minimum.x, maximum.x + 1):
-			has_open_edge = document.terrain.height_of(Vector2i(x, minimum.y)) < 0 or document.terrain.height_of(Vector2i(x, maximum.y)) < 0
-			if has_open_edge:
-				break
-		if not has_open_edge:
-			for z in range(minimum.y + 1, maximum.y):
-				has_open_edge = document.terrain.height_of(Vector2i(minimum.x, z)) < 0 or document.terrain.height_of(Vector2i(maximum.x, z)) < 0
-				if has_open_edge:
-					break
-		if not has_open_edge:
-			return
-		var ocean := _water_service.create_body(WaterBody.Type.SEA, 0)
-		if ocean == null:
-			return
-		ocean_id = ocean.id
-	_context.set_edit_label("океан")
-	_water_service.flood_from_edges(ocean_id, 0)
 
 
 ## The same arrangement for the water layer, and for the same reason: one command
@@ -426,7 +416,9 @@ func _flood_ocean_from_border() -> void:
 ## through an author's actual sequence of strokes instead of through one layer at
 ## a time.
 func _on_water_committed(_delta: WaterDelta) -> void:
-	if _replaying:
+	# A border fill is part of the terrain command that triggered it, so it must not
+	# also push one of its own.
+	if _replaying or _recording_border_fill:
 		return
 	history.push(WaterServiceCommand.of(_water_service, _context.pending_edit_label))
 	document.mark_dirty()

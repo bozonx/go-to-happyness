@@ -11,14 +11,23 @@ extends BaseBrushController
 ## `WaterGrid`: every edit goes through `WaterService`, which is what keeps undo
 ## and the published navigation field in step.
 ##
-## The hovered column comes from the TERRAIN's collision, not the water's: the
-## water surface has no collider (§9), and picking through it is what lets an
-## author paint the bottom of a lake they can see through.
+## The hovered column comes from the TERRAIN's collision, not the water's: open
+## water has no collider (§9), and picking through it is what lets an author paint
+## the bottom of a lake they can see through. Ice does have one — it is a floor
+## walkers stand on — and the ray would stop on it, which is correct: an author
+## clicking a frozen lake means the cell they can see.
 
-## What the left button does.
+## What the left button does. Three tools, the three `map_editor.md` §5.3 names:
+## fill a basin, move the surface of water that is already there, take it away.
+##
+## Ice is NOT one of them. §9.6 makes freezing a seasonal operation over a whole
+## body — "one operation per body per season" — so a per-cell ice brush authors a
+## state the first seasonal pass overwrites wholesale. Freezing stays a button on
+## the body (`toggle_body_ice`), which is the granularity the mechanic has.
 const TOOL_FLOOD := &"flood"
-const TOOL_FREEZE := &"freeze"
-const TOOLS: Array[StringName] = [TOOL_FLOOD, TOOL_FREEZE]
+const TOOL_LEVEL := &"level"
+const TOOL_ERASE := &"erase"
+const TOOLS: Array[StringName] = [TOOL_FLOOD, TOOL_LEVEL, TOOL_ERASE]
 
 var tool: StringName = TOOL_FLOOD
 ## The body strokes go into. Zero until the author makes one — a stroke with no
@@ -28,6 +37,11 @@ var body_id := WaterBody.NO_BODY
 ## overlaps its own path, and a brush defined as "one step deeper than what is
 ## here" digs a staircase instead of filling a basin.
 var level := 0
+## Load the ice of this body carries when it freezes (§9.6). Two thresholds are
+## distinguishable — `MIN_ICE_THICKNESS_PEDESTRIAN` and `..._CART` — so the useful
+## authored answers are "walkers only" and "carts too"; the fourth value of the
+## two-bit field is spare, kept because the format has the bits and a third
+## traveller class would need them.
 var ice_thickness := WaterGrid.MAX_ICE_THICKNESS
 
 var _terrain: TerrainGrid
@@ -95,8 +109,10 @@ func apply() -> void:
 	match tool:
 		TOOL_FLOOD:
 			_flood()
-		TOOL_FREEZE:
-			_freeze(true)
+		TOOL_LEVEL:
+			_set_level()
+		TOOL_ERASE:
+			_erase()
 
 
 func _flood() -> void:
@@ -109,20 +125,32 @@ func _flood() -> void:
 	last_message = "basin did not flood (%s)" % _service.last_rejection()
 
 
-func _freeze(frozen: bool) -> void:
-	if _service.set_frozen(brush_cells(hovered_cell), frozen, ice_thickness):
-		last_message = "%s: %d cells" % ["ice" if frozen else "thaw", _service.last_delta_size()]
+## Moves the surface of the water already under the brush, without changing which
+## body it belongs to. This is the one operation Flood cannot express: re-flooding
+## at a lower level reaches fewer cells and leaves the rest standing at the old
+## one, so a lake could be raised and never lowered.
+func _set_level() -> void:
+	if _service.set_level(brush_cells(hovered_cell), level):
+		last_message = "level %d: %d cells" % [level, _service.last_delta_size()]
 		return
-	last_message = "ice did not set (%s)" % _service.last_rejection()
+	last_message = "level unchanged (%s)" % _service.last_rejection()
 
 
-## Right button is the inverse operation: thaw ice, or drain the entire body
-## under the cursor. There is deliberately no per-cell erase for authored water.
+func _erase() -> void:
+	if _service.erase(brush_cells(hovered_cell)):
+		last_message = "erased: %d cells" % _service.last_delta_size()
+		return
+	last_message = "nothing to erase (%s)" % _service.last_rejection()
+
+
+## Right button is the inverse or the complement of the left one: drain the whole
+## body under the cursor, except under the level tool, where the useful opposite of
+## "stamp this level" is "take the level from here".
 func apply_secondary() -> void:
 	if not has_hover or _service == null:
 		return
-	if tool == TOOL_FREEZE:
-		_freeze(false)
+	if tool == TOOL_LEVEL:
+		pick_level_from_ground()
 		return
 	_drain_body_at_hover()
 

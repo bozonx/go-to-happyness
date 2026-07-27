@@ -9,23 +9,18 @@ extends Node
 ## preview, the stamp brush, the 3D block nodes — so the editor script only
 ## routes input and mode switching here.
 
-const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
-const BuildingMaterialCatalogScript = preload("res://game/features/buildings/domain/editor/building_material_catalog.gd")
-const BuildingGridModelScript = preload("res://game/features/buildings/domain/editor/building_grid_model.gd")
-const BlockMeshLibraryScript = preload("res://game/features/buildings/presentation/editor/block_mesh_library.gd")
-
 const CENTRE_LINE_COLOR := Color(1.0, 0.82, 0.18, 1.0)
 const CENTRE_BAND_COLOR := Color(1.0, 0.82, 0.18, 0.12)
 
 enum Tool { PLACE, ERASE }
 enum Brush { LINE, RECT }
 
-var _editor: Node = null
+var _editor: BuildingEditor = null
 
-var _painting: bool = false
-var _last_paint_cell: Vector3i = Vector3i.ZERO
-var _paint_anchor: Vector3i = Vector3i.ZERO
-var _shift_erasing: bool = false
+var painting: bool = false
+var last_paint_cell: Vector3i = Vector3i.ZERO
+var paint_anchor: Vector3i = Vector3i.ZERO
+var shift_erasing: bool = false
 var _stamp_brush: Array[BlueprintBlock] = []
 var _shift_hover_block: BlueprintBlock = null
 
@@ -42,7 +37,7 @@ var _ghost: MeshInstance3D = null
 var _layer_plane: MeshInstance3D = null
 var _blocks_root: Node3D = null
 var _ground: MeshInstance3D = null
-var _camera_controller: Node = null
+var _camera_controller: CameraController = null
 var _material_option: OptionButton = null
 var _brush_line_btn: Button = null
 var _brush_rect_btn: Button = null
@@ -124,7 +119,7 @@ func setup(editor: Node) -> void:
 	_build_palette_blocks()
 
 	_category_option.clear()
-	for category_id in BuildingMaterialCatalogScript.ERA_ORDER:
+	for category_id in BuildingMaterialCatalog.ERA_ORDER:
 		_category_option.add_item(category_id.capitalize())
 		_category_option.set_item_metadata(_category_option.item_count - 1, category_id)
 	_category_option.item_selected.connect(_on_era_changed)
@@ -154,6 +149,9 @@ func setup(editor: Node) -> void:
 	_cost_container.visible = true
 	_cost_header_btn.text = "Стоимость здания"
 
+	_cost_mode_option.item_selected.connect(_on_cost_mode_selected)
+	_add_extra_cost_btn.pressed.connect(_on_add_extra_cost_pressed)
+
 	_shift_hover_visual = MeshInstance3D.new()
 	_shift_hover_visual.name = "ShiftHoverBlock"
 	_shift_hover_visual.visible = false
@@ -172,8 +170,12 @@ func activate() -> void:
 
 
 func deactivate() -> void:
-	_painting = false
-	_shift_erasing = false
+	painting = false
+	shift_erasing = false
+	if _palette_panel != null:
+		_palette_panel.visible = false
+	if _frame_toolbar != null:
+		_frame_toolbar.visible = false
 
 
 func is_active() -> bool:
@@ -181,11 +183,11 @@ func is_active() -> bool:
 
 
 func is_painting() -> bool:
-	return _painting
+	return painting
 
 
 func is_shift_erasing() -> bool:
-	return _shift_erasing
+	return shift_erasing
 
 
 # ---------------------------------------------------------------------------
@@ -193,7 +195,7 @@ func is_shift_erasing() -> bool:
 # ---------------------------------------------------------------------------
 
 func process(_delta: float) -> void:
-	if _shift_erasing:
+	if shift_erasing:
 		_editor._orbiting = false
 	refresh_shift_hover()
 	if _editor.cursor_valid and (_editor.cursor_cell != _ghost_cell or _editor.current_tool != _ghost_tool or _editor.current_rot != _ghost_rot or _editor.cursor_valid != _ghost_valid):
@@ -217,17 +219,17 @@ func refresh_ghost() -> void:
 		if target == null:
 			_ghost.mesh = _editor.mesh_library.mesh_for(_editor.current_block_id, _editor.current_variant)
 			_ghost.rotation = _current_ghost_euler()
-			_ghost.position = Vector3(_editor.cursor_cell) + BlockMeshLibraryScript.local_offset(_editor.current_block_id, _editor.current_variant, _editor.current_rot, _editor.current_anchor, 0.0, _editor.current_rot_x, _editor.current_rot_z)
+			_ghost.position = Vector3(_editor.cursor_cell) + BlockMeshLibrary.local_offset(_editor.current_block_id, _editor.current_variant, _editor.current_rot, _editor.current_anchor, 0.0, _editor.current_rot_x, _editor.current_rot_z)
 			_ghost.material_override = _editor.mesh_library.ghost_material(false)
 		else:
 			_ghost.mesh = _editor.mesh_library.mesh_for(target.block_id, target.variant)
 			_ghost.rotation = target.rotation_euler()
-			_ghost.position = Vector3(target.pos) + BlockMeshLibraryScript.local_offset(target.block_id, target.variant, target.rot, target.anchor, 0.0, target.rot_x, target.rot_z)
+			_ghost.position = Vector3(target.pos) + BlockMeshLibrary.local_offset(target.block_id, target.variant, target.rot, target.anchor, 0.0, target.rot_x, target.rot_z)
 			_ghost.material_override = _editor.mesh_library.ghost_material(false)
 	else:
 		_ghost.mesh = _editor.mesh_library.mesh_for(_editor.current_block_id, _editor.current_variant)
 		_ghost.rotation = _current_ghost_euler()
-		_ghost.position = Vector3(_editor.cursor_cell) + BlockMeshLibraryScript.local_offset(_editor.current_block_id, _editor.current_variant, _editor.current_rot, _editor.current_anchor, 0.0, _editor.current_rot_x, _editor.current_rot_z)
+		_ghost.position = Vector3(_editor.cursor_cell) + BlockMeshLibrary.local_offset(_editor.current_block_id, _editor.current_variant, _editor.current_rot, _editor.current_anchor, 0.0, _editor.current_rot_x, _editor.current_rot_z)
 		_ghost.material_override = _editor.mesh_library.ghost_material(is_block_in_bounds(_editor.cursor_cell, _editor.current_block_id, _editor.current_variant, _editor.current_rot) and _editor.grid_model.can_place(
 			_editor.cursor_cell, _editor.current_block_id, _editor.current_rot, _editor.current_material_id, _editor.current_variant,
 			_editor.current_anchor, _editor.current_rot_x, _editor.current_rot_z))
@@ -376,7 +378,7 @@ func refresh_shift_hover() -> void:
 		return
 	_shift_hover_block = block
 	_shift_hover_visual.mesh = _editor.mesh_library.mesh_for(block.block_id, block.variant)
-	_shift_hover_visual.position = Vector3(block.pos) + BlockMeshLibraryScript.local_offset(
+	_shift_hover_visual.position = Vector3(block.pos) + BlockMeshLibrary.local_offset(
 		block.block_id, block.variant, block.rot, block.anchor, 0.0, block.rot_x, block.rot_z)
 	_shift_hover_visual.rotation = block.rotation_euler()
 	_shift_hover_visual.material_override = _editor.mesh_library.ghost_material(true)
@@ -393,7 +395,7 @@ func _block_under_mouse() -> BlueprintBlock:
 	var closest: BlueprintBlock = null
 	var closest_distance := INF
 	for block: BlueprintBlock in _editor.grid_model.all_blocks():
-		var aabb := BuildingBlockCatalogScript.occupied_aabb(block.pos, block.block_id,
+		var aabb := BuildingBlockCatalog.occupied_aabb(block.pos, block.block_id,
 			block.variant, block.rot, block.anchor, block.rot_x, block.rot_z)
 		var distance := _ray_aabb_entry_distance(origin, direction, aabb)
 		if distance >= 0.0 and distance < closest_distance:
@@ -485,7 +487,7 @@ func _spawn_or_update_block_node(block: BlueprintBlock) -> void:
 		_block_nodes[key] = node
 	node.mesh = _editor.mesh_library.mesh_for(block.block_id, block.variant)
 	node.material_override = _editor.mesh_library.material_for(block.material_id)
-	node.position = Vector3(block.pos) + BlockMeshLibraryScript.local_offset(block.block_id, block.variant, block.rot, block.anchor, 0.0, block.rot_x, block.rot_z)
+	node.position = Vector3(block.pos) + BlockMeshLibrary.local_offset(block.block_id, block.variant, block.rot, block.anchor, 0.0, block.rot_x, block.rot_z)
 	node.rotation = block.rotation_euler()
 
 
@@ -515,7 +517,7 @@ func rebuild_all_block_nodes() -> void:
 # ---------------------------------------------------------------------------
 
 func is_block_in_bounds(cell: Vector3i, block_id: StringName, variant: StringName, rot: int) -> bool:
-	for covered: Vector3i in BuildingGridModelScript.occupied_cells(cell, block_id, variant, rot):
+	for covered: Vector3i in BuildingGridModel.occupied_cells(cell, block_id, variant, rot):
 		if not _editor.is_cell_in_bounds(covered):
 			return false
 	return true
@@ -546,10 +548,10 @@ func select_block(block_id: StringName, variant: StringName = &"", retain_stamp:
 	if not retain_stamp:
 		_stamp_brush.clear()
 	if variant == &"":
-		variant = _editor.current_variant if block_id == _editor.current_block_id else BuildingBlockCatalogScript.default_variant(block_id)
+		variant = _editor.current_variant if block_id == _editor.current_block_id else BuildingBlockCatalog.default_variant(block_id)
 	_editor.current_block_id = block_id
-	_editor.current_variant = BuildingBlockCatalogScript.normalize_variant(block_id, variant)
-	var def := BuildingBlockCatalogScript.get_block(block_id)
+	_editor.current_variant = BuildingBlockCatalog.normalize_variant(block_id, variant)
+	var def := BuildingBlockCatalog.get_block(block_id)
 	if def.is_empty() or not def.get("rotatable", true):
 		_editor.current_rot = 0
 		_editor.current_rot_x = 0
@@ -575,7 +577,7 @@ func clear_block_selection() -> void:
 
 
 func cycle_rotation(direction: int = 1) -> void:
-	var def := BuildingBlockCatalogScript.get_block(_editor.current_block_id)
+	var def := BuildingBlockCatalog.get_block(_editor.current_block_id)
 	if def.is_empty() or not def.get("rotatable", true):
 		return
 	_editor.current_rot = (_editor.current_rot + direction + 4) % 4
@@ -585,7 +587,7 @@ func cycle_rotation(direction: int = 1) -> void:
 
 
 func cycle_rotation_x(direction: int = 1) -> void:
-	var def := BuildingBlockCatalogScript.get_block(_editor.current_block_id)
+	var def := BuildingBlockCatalog.get_block(_editor.current_block_id)
 	if def.is_empty() or not def.get("rotatable", true):
 		return
 	_editor.current_rot_x = (_editor.current_rot_x + direction + 4) % 4
@@ -594,7 +596,7 @@ func cycle_rotation_x(direction: int = 1) -> void:
 
 
 func cycle_rotation_z(direction: int = 1) -> void:
-	var def := BuildingBlockCatalogScript.get_block(_editor.current_block_id)
+	var def := BuildingBlockCatalog.get_block(_editor.current_block_id)
 	if def.is_empty() or not def.get("rotatable", true):
 		return
 	_editor.current_rot_z = (_editor.current_rot_z + direction + 4) % 4
@@ -608,6 +610,12 @@ func select_anchor(anchor: int) -> void:
 	refresh_ghost()
 
 
+func update_fallback_display() -> void:
+	_editor.update_fallback_display()
+	if _fallback_edit != null:
+		_fallback_edit.text = String(_editor.blueprint.fallback_building_id)
+
+
 # ---------------------------------------------------------------------------
 # Material / era
 # ---------------------------------------------------------------------------
@@ -617,13 +625,13 @@ func rebuild_material_options() -> void:
 		return
 	_material_option.clear()
 	var current_ok := false
-	for material in BuildingMaterialCatalogScript.materials_for_era(_editor.blueprint.category):
+	for material in BuildingMaterialCatalog.materials_for_era(_editor.blueprint.category):
 		_material_option.add_item(material["name"])
 		_material_option.set_item_metadata(_material_option.item_count - 1, material["id"])
 		if material["id"] == _editor.current_material_id:
 			current_ok = true
 	if not current_ok:
-		_editor.current_material_id = BuildingMaterialCatalogScript.default_material_for_era(_editor.blueprint.category)
+		_editor.current_material_id = BuildingMaterialCatalog.default_material_for_era(_editor.blueprint.category)
 	for i in _material_option.item_count:
 		if _material_option.get_item_metadata(i) == _editor.current_material_id:
 			_material_option.select(i)
@@ -638,8 +646,8 @@ func _on_era_changed(index: int) -> void:
 
 	var offenders := _get_offending_blocks(target_era)
 	if not offenders.is_empty():
-		var default_mat := BuildingMaterialCatalogScript.default_material_for_era(target_era)
-		var mat_info := BuildingMaterialCatalogScript.get_material(default_mat)
+		var default_mat := BuildingMaterialCatalog.default_material_for_era(target_era)
+		var mat_info := BuildingMaterialCatalog.get_material(default_mat)
 		var default_mat_name: String = String(mat_info.get("name", str(default_mat)))
 
 		var user_confirmed := await _confirm_era_material_replacement(target_era, offenders.size(), default_mat_name)
@@ -655,7 +663,7 @@ func _on_era_changed(index: int) -> void:
 		_editor.blueprint.recalculate_construction_cost()
 
 	_editor.blueprint.category = target_era
-	_editor.update_fallback_display()
+	update_fallback_display()
 	_editor.mark_dirty()
 	rebuild_material_options()
 	refresh_underground_availability()
@@ -668,7 +676,7 @@ func _on_era_changed(index: int) -> void:
 func _get_offending_blocks(target_era: StringName) -> Array[BlueprintBlock]:
 	var offenders: Array[BlueprintBlock] = []
 	for block in _editor.grid_model.all_blocks():
-		if not BuildingMaterialCatalogScript.is_available_in_era(block.material_id, target_era):
+		if not BuildingMaterialCatalog.is_available_in_era(block.material_id, target_era):
 			offenders.append(block)
 	return offenders
 
@@ -693,8 +701,8 @@ func select_category_in_option(category: StringName) -> void:
 func refresh_underground_availability() -> void:
 	if _style_option == null:
 		return
-	var earth_rank := BuildingMaterialCatalogScript.era_rank(&"earth")
-	var allowed := BuildingMaterialCatalogScript.era_rank(_editor.blueprint.category) >= earth_rank
+	var earth_rank := BuildingMaterialCatalog.era_rank(&"earth")
+	var allowed := BuildingMaterialCatalog.era_rank(_editor.blueprint.category) >= earth_rank
 	for i in _style_option.item_count:
 		if _style_option.get_item_metadata(i) == &"underground":
 			_style_option.set_item_disabled(i, not allowed)
@@ -723,7 +731,7 @@ func _build_palette_blocks() -> void:
 
 	var blocks_by_category: Dictionary = {}
 	var category_order: Array[int] = []
-	for def in BuildingBlockCatalogScript.all():
+	for def in BuildingBlockCatalog.all():
 		var category: int = def["category"]
 		if not blocks_by_category.has(category):
 			blocks_by_category[category] = []
@@ -732,7 +740,7 @@ func _build_palette_blocks() -> void:
 
 	for category in category_order:
 		var cat_label := Label.new()
-		cat_label.text = BuildingBlockCatalogScript.category_name(category)
+		cat_label.text = BuildingBlockCatalog.category_name(category)
 		cat_label.add_theme_color_override("font_color", Color(0.65, 0.72, 0.8))
 		_palette_container.add_child(cat_label)
 		for def in blocks_by_category[category]:
@@ -740,7 +748,7 @@ func _build_palette_blocks() -> void:
 			var btn := Button.new()
 			btn.toggle_mode = true
 			btn.text = def["name"]
-			if BuildingBlockCatalogScript.has_variants(block_id):
+			if BuildingBlockCatalog.has_variants(block_id):
 				btn.tooltip_text = "Размер/профиль выбирается ниже"
 			else:
 				var s: Vector3 = def["size"]
@@ -778,12 +786,12 @@ func _rebuild_brush_inspector() -> void:
 		child.queue_free()
 	_move_brush_inspector_under_selection()
 
-	var variants: Array = BuildingBlockCatalogScript.variants(_editor.current_block_id)
-	var kinds: Array = BuildingBlockCatalogScript.available_anchors(_editor.current_block_id, _editor.current_variant)
+	var variants: Array = BuildingBlockCatalog.variants(_editor.current_block_id)
+	var kinds: Array = BuildingBlockCatalog.available_anchors(_editor.current_block_id, _editor.current_variant)
 	if kinds.size() <= 1:
-		_editor.current_anchor = BuildingBlockCatalogScript.ANCHOR_CENTER
+		_editor.current_anchor = BuildingBlockCatalog.ANCHOR_CENTER
 	else:
-		_editor.current_anchor = BuildingBlockCatalogScript.normalize_anchor(_editor.current_block_id, _editor.current_variant, _editor.current_anchor)
+		_editor.current_anchor = BuildingBlockCatalog.normalize_anchor(_editor.current_block_id, _editor.current_variant, _editor.current_anchor)
 
 	if variants.is_empty() and kinds.size() <= 1:
 		return
@@ -820,8 +828,8 @@ func _rebuild_brush_inspector() -> void:
 
 func _anchor_label(kind: int) -> String:
 	match kind:
-		BuildingBlockCatalogScript.ANCHOR_EDGE: return "К грани"
-		BuildingBlockCatalogScript.ANCHOR_CORNER: return "В угол"
+		BuildingBlockCatalog.ANCHOR_EDGE: return "К грани"
+		BuildingBlockCatalog.ANCHOR_CORNER: return "В угол"
 		_: return "Центр"
 
 
@@ -871,9 +879,9 @@ func _refresh_cost_ui() -> void:
 
 		for mat_id in mat_counts.keys():
 			var count: int = mat_counts[mat_id]
-			var mat_def := BuildingMaterialCatalogScript.get_material(mat_id)
+			var mat_def := BuildingMaterialCatalog.get_material(mat_id)
 			var mat_name: String = mat_def.get("name", str(mat_id))
-			var comp: Dictionary = BuildingMaterialCatalogScript.resource_composition(mat_id)
+			var comp: Dictionary = BuildingMaterialCatalog.resource_composition(mat_id)
 			if _editor.blueprint.custom_material_costs.has(mat_id) and _editor.blueprint.custom_material_costs[mat_id] is Dictionary:
 				comp = _editor.blueprint.custom_material_costs[mat_id]
 
@@ -913,6 +921,23 @@ func _refresh_cost_ui() -> void:
 		_total_cost_label.text = "Итоговая смета: Бесплатно"
 	else:
 		_total_cost_label.text = "Итоговая смета: %s" % ", ".join(costs_array)
+
+
+func _on_cost_mode_selected(index: int) -> void:
+	var mode: StringName = _cost_mode_option.get_item_metadata(index)
+	_editor.blueprint.cost_mode = mode
+	_editor.blueprint.recalculate_construction_cost()
+	_editor.mark_dirty()
+	_refresh_cost_ui()
+
+
+func _on_add_extra_cost_pressed() -> void:
+	var default_res := "coins"
+	var current_qty := int(_editor.blueprint.extra_costs.get(default_res, 0))
+	_editor.blueprint.extra_costs[default_res] = current_qty + 1
+	_editor.blueprint.recalculate_construction_cost()
+	_editor.mark_dirty()
+	_refresh_cost_ui()
 
 
 func _build_cost_row(costs: Dictionary, key: String, value: int) -> HBoxContainer:
@@ -1035,10 +1060,12 @@ func focus_footprint_center() -> void:
 func refresh_layer_plane() -> void:
 	if _layer_plane != null:
 		_layer_plane.position = Vector3(0.0, float(_editor.active_layer), 0.0)
+	if _layer_label != null:
+		_layer_label.text = "Слой %d" % _editor.active_layer
 
 
 func _on_footprint_changed(_value: float) -> void:
-	if _editor.blueprint == null:
+	if _editor.blueprint == null or _editor._syncing_metadata_fields:
 		return
 	_editor.blueprint.footprint = Vector2i(int(_footprint_x_spin.value), int(_footprint_z_spin.value))
 	var removed := 0
@@ -1066,7 +1093,7 @@ func sync_metadata_fields() -> void:
 		_editor._name_edit.text = _editor.blueprint.name
 	if _editor._id_edit != null:
 		_editor._id_edit.text = String(_editor.blueprint.id)
-	_editor.update_fallback_display()
+	update_fallback_display()
 	if _footprint_x_spin != null:
 		_footprint_x_spin.value = _editor.blueprint.footprint.x
 	if _footprint_z_spin != null:
@@ -1084,6 +1111,7 @@ func sync_metadata_fields() -> void:
 	rebuild_material_options()
 	refresh_underground_availability()
 	_editor._syncing_metadata_fields = false
+	_update_count()
 	refresh_building_grid_visuals()
 	focus_footprint_center()
 	refresh_ghost()
@@ -1103,7 +1131,7 @@ func on_save_pressed() -> void:
 			_editor.blueprint.id = StringName(raw_id)
 	if _category_option != null:
 		_editor.blueprint.category = StringName(_category_option.get_item_metadata(_category_option.selected))
-	_editor.update_fallback_display()
+	update_fallback_display()
 	if _footprint_x_spin != null and _footprint_z_spin != null:
 		_editor.blueprint.footprint = Vector2i(int(_footprint_x_spin.value), int(_footprint_z_spin.value))
 	if _editor._entrance_x_spin != null and _editor._entrance_z_spin != null:

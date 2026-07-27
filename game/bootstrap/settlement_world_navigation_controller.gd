@@ -29,9 +29,11 @@ func create_world() -> void:
 		presentation_runtime.cell_size,
 		presentation_runtime.board_cells,
 		presentation_runtime.trail_field_getter.call(),
-		presentation_runtime.map_document_getter.call()
+		presentation_runtime.map_document_getter.call(),
+		presentation_runtime.starter_water_cells_getter.call()
 	)
 	presentation_runtime.world_setup_setter.call(world_setup)
+	presentation_runtime.water_access_setter.call(world_setup.water_access)
 	presentation_runtime.add_to_scene.call(world_setup)
 	presentation_runtime.build_world_setup.call(world_setup)
 	presentation_runtime.update_daylight.call()
@@ -81,6 +83,10 @@ func publish_terrain_navigation() -> void:
 	terrain_navigation_publisher.configure(
 		world_setup.terrain_grid, nav_grid, null, world_setup.water_grid,
 	)
+	# The bank positions gameplay reads come off the same two grids; handing it the
+	# nav grid as well is what puts them on the surface a citizen stands on rather
+	# than at the stored column height.
+	world_setup.water_access.configure(world_setup.water_grid, world_setup.terrain_grid, nav_grid)
 
 
 func refresh_navigation_grid() -> void:
@@ -96,30 +102,6 @@ func refresh_navigation_grid() -> void:
 
 func rebuild_navigation_obstacles() -> void:
 	refresh_navigation_grid()
-
-
-func pond_access_position(from: Vector3, pond_center: Vector3) -> Vector3:
-	var candidates := [
-		pond_center + Vector3(3.0, 0.0, 0.0),
-		pond_center + Vector3(-3.0, 0.0, 0.0),
-		pond_center + Vector3(0.0, 0.0, 3.0),
-		pond_center + Vector3(0.0, 0.0, -3.0)
-	]
-	var best := Vector3.INF
-	var best_distance := INF
-	for candidate in candidates:
-		if (navigation_runtime.navigation_blocked_cells_getter.call() as Dictionary).has(navigation_runtime.cell_from_position.call(candidate)):
-			continue
-		var distance := from.distance_squared_to(candidate)
-		if distance < best_distance:
-			best = candidate
-			best_distance = distance
-	if best == Vector3.INF:
-		return Vector3.INF
-	var terrain_height: float = navigation_runtime.terrain_height_at.call(best.x, best.z, pond_center.y)
-	if not is_nan(terrain_height):
-		best.y = terrain_height
-	return best
 
 
 func resource_access_position(from: Vector3, resource_position: Vector3) -> Vector3:

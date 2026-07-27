@@ -1,7 +1,7 @@
 class_name HeroInteractionService
 extends RefCounted
 
-## Handles hero proximity queries for nearby trees, sawmills, farms, ponds,
+## Handles hero proximity queries for nearby trees, sawmills, farms, water,
 ## grass patches, forage sources, rabbits, and interaction percentages.
 
 const GrassSourceRecord = preload("res://game/features/production/domain/grass_source_record.gd")
@@ -13,7 +13,10 @@ var _tree_positions: Array[Vector3] = []
 var _tree_nodes: Dictionary = {}
 var _sawmill_positions: Array[Vector3] = []
 var _farm_positions: Array[Vector3] = []
-var _pond_positions: Array[Vector3] = []
+## Asked, not held. The bank positions are derived from the water layer on demand
+## (`WaterAccessService`), so a captured array would be the empty snapshot taken
+## before the world was built.
+var _water_source_positions_getter: Callable
 var _grass_sources: Dictionary = {}
 var _forage_sources: Dictionary = {}
 var _rabbit_sources: Dictionary = {}
@@ -28,7 +31,7 @@ func configure(
 	p_tree_nodes: Dictionary,
 	p_sawmill_positions: Array[Vector3],
 	p_farm_positions: Array[Vector3],
-	p_pond_positions: Array[Vector3],
+	p_water_source_positions_getter: Callable,
 	p_grass_sources: Dictionary,
 	p_forage_sources: Dictionary,
 	p_rabbit_sources: Dictionary,
@@ -41,7 +44,7 @@ func configure(
 	_tree_nodes = p_tree_nodes
 	_sawmill_positions = p_sawmill_positions
 	_farm_positions = p_farm_positions
-	_pond_positions = p_pond_positions
+	_water_source_positions_getter = p_water_source_positions_getter
 	_grass_sources = p_grass_sources
 	_forage_sources = p_forage_sources
 	_rabbit_sources = p_rabbit_sources
@@ -106,14 +109,14 @@ func nearby_farm() -> bool:
 	return false
 
 
-func nearby_pond() -> bool:
+func nearby_water_source() -> bool:
 	var player: Citizen = _player_citizen_getter.call()
 	if player == null:
 		return false
 	var player_xz := Vector2(player.global_position.x, player.global_position.z)
 	var max_dist := _interaction_range + 1.5
-	for pond_position in _pond_positions:
-		if player_xz.distance_to(Vector2(pond_position.x, pond_position.z)) <= max_dist:
+	for source_position: Vector3 in (_water_source_positions_getter.call() as Array):
+		if player_xz.distance_to(Vector2(source_position.x, source_position.z)) <= max_dist:
 			return true
 	return false
 

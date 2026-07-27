@@ -202,13 +202,14 @@ func send_citizen_to_leisure(citizen: Citizen, minimum_hours := 0) -> bool:
 			recreation.append(position)
 	if not recreation.is_empty():
 		return game.citizen_needs_service != null and game.citizen_needs_service.request_leisure(citizen.ai_id, recreation, minimum_hours)
-	# No parks yet (early eras): gather at the main campfire or a natural pond.
+	# No parks yet (early eras): gather at the main campfire or at the water.
 	var gathering_spots: Array[Vector3] = []
 	if is_instance_valid(game.campfire_node) and game.fire_management_service.is_fire_lit(game.campfire_node):
 		gathering_spots.append(game.campfire_node.global_position)
-	for pond in game.pond_positions:
-		# Do not stand in water: choose a stable point at its rim.
-		gathering_spots.append(pond + Vector3(2.8, 0.0, 0.0))
+	# An access point is already a bank cell, so it needs no nudge out of the water:
+	# `WaterAccessService` never returns a wet column.
+	for bank: Vector3 in game.water_source_positions:
+		gathering_spots.append(bank)
 	if not gathering_spots.is_empty():
 		return game.citizen_needs_service != null and game.citizen_needs_service.request_leisure(citizen.ai_id, gathering_spots, minimum_hours)
 	# Nothing communal exists at all. During the working day we must NOT send them

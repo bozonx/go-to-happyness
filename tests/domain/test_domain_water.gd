@@ -33,6 +33,13 @@ static func run_all() -> void:
 	_test_committed_water_edits_republish_themselves()
 	_test_registry_removal_republishes_and_is_undoable()
 	_test_flow_requires_a_river()
+	_test_level_brush_can_lower_a_lake()
+	_test_erase_takes_water_away_and_undo_brings_it_back()
+	_test_creating_a_body_publishes_nothing()
+	_test_border_ocean_floods_only_what_touches_the_rim()
+	_test_border_nothing_never_floods()
+	_test_access_service_finds_banks_not_water()
+	_test_starter_water_digs_a_real_basin()
 	print("    [PASS] Water Layer Tests")
 
 
@@ -74,7 +81,7 @@ static func _test_body_defaults_and_flow() -> void:
 	var sea := WaterBody.of_type(1, WaterBody.Type.SEA)
 	assert(sea.salinity == WaterBody.Salinity.SALT)
 	assert(not sea.is_drinkable())
-	assert(sea.wave_amplitude > WaterBody.of_type(2, WaterBody.Type.POND).wave_amplitude)
+	assert(sea.wave_amplitude > WaterBody.of_type(2, WaterBody.Type.LAKE).wave_amplitude)
 
 	var lava := WaterBody.of_type(3, WaterBody.Type.LAVA)
 	assert(lava.is_lava())
@@ -89,12 +96,16 @@ static func _test_body_defaults_and_flow() -> void:
 	assert(river.can_freeze_at(Vector2i(0, 0)))
 	assert(not river.can_freeze_at(Vector2i(1, 1)))
 
-	# The registry survives a trip through JSON, flow and fish included.
-	river.fish_stock = {"trout": 40}
+	# The registry survives a trip through JSON, flow included.
+	river.name = "Тихая"
 	var copy := WaterBody.from_dict(river.to_dict())
 	assert(copy.type == WaterBody.Type.RIVER)
+	assert(copy.name == "Тихая")
 	assert(copy.flow_strength_at(Vector2i(1, 1)) == 2)
-	assert(int(copy.fish_stock["trout"]) == 40)
+	# A type earns the enum by changing a mechanic, so there are four and the ids
+	# are the ones maps are written with.
+	assert(WaterBody.TYPE_IDS.size() == 4)
+	assert(not WaterBody.TYPE_IDS.has(&"pond"))
 
 
 static func _test_cells_reference_registered_bodies_only() -> void:
@@ -120,7 +131,7 @@ static func _test_cells_reference_registered_bodies_only() -> void:
 static func _test_depth_is_derived_from_the_ground() -> void:
 	var terrain := _terrain()
 	var water := _water_over(terrain)
-	var pond := water.create_body(WaterBody.Type.POND, 0)
+	var pond := water.create_body(WaterBody.Type.LAKE, 0)
 	assert(terrain.set_height(Vector2i(0, 0), -2))
 	assert(water.set_cell(Vector2i(0, 0), pond.id, 0))
 	assert(water.depth_steps_at(terrain, Vector2i(0, 0)) == 2)
@@ -376,3 +387,203 @@ static func _test_flow_requires_a_river() -> void:
 	assert(service.flood(Vector2i.ZERO, lake.id, 0))
 	assert(not service.set_flow([Vector2i.ZERO], lake.id, SlopeCatalog.DIR_E, 1))
 	assert(service.last_rejection() == WaterService.REASON_FLOW_REQUIRES_RIVER)
+
+
+# --- Level and erase: the two operations Flood cannot express -------------------
+
+## Re-flooding at a lower level reaches fewer cells and leaves the rest standing at
+## the old one, so without an absolute level brush a lake could be raised and never
+## lowered (`map_editor.md` §5.3).
+static func _test_level_brush_can_lower_a_lake() -> void:
+	var terrain := _terrain()
+	_dig_basin(terrain)
+	var water := _water_over(terrain)
+	var service := WaterService.new()
+	service.configure(water, terrain)
+	var lake := service.create_body(WaterBody.Type.LAKE, 0)
+	assert(service.flood(Vector2i.ZERO, lake.id, 0))
+	assert(water.height_of(Vector2i.ZERO) == 0)
+	assert(water.is_wet(terrain, Vector2i(3, 0)), "the shelf is under water at level 0")
+
+	var cells := water.cells_of_body(lake.id)
+	assert(service.set_level(cells, -1))
+	assert(water.height_of(Vector2i.ZERO) == -1)
+	# The middle is still water — one step of it — and the shelf, which sat exactly at
+	# -1, is dry ground again without anyone erasing it.
+	assert(water.is_wet(terrain, Vector2i.ZERO))
+	assert(not water.is_wet(terrain, Vector2i(3, 0)))
+
+	assert(service.undo())
+	assert(water.height_of(Vector2i.ZERO) == 0)
+	assert(water.is_wet(terrain, Vector2i(3, 0)))
+
+
+static func _test_erase_takes_water_away_and_undo_brings_it_back() -> void:
+	var terrain := _terrain()
+	_dig_basin(terrain)
+	var water := _water_over(terrain)
+	var service := WaterService.new()
+	service.configure(water, terrain)
+	var lake := service.create_body(WaterBody.Type.LAKE, 0)
+	assert(service.flood(Vector2i.ZERO, lake.id, 0))
+	var before := water.snapshot()
+
+	assert(service.erase([Vector2i.ZERO, Vector2i(1, 0)]))
+	assert(not water.has_water(Vector2i.ZERO))
+	# Erasing the cells does not erase the body: the author still has it selected.
+	assert(water.has_body(lake.id))
+
+	assert(service.undo())
+	var after := water.snapshot()
+	for key: String in before:
+		assert(before[key] == after[key], "erase and its undo must be byte-exact in %s" % key)
+
+
+# --- Registry edits publish only what they reach -------------------------------
+
+## Creating a body touches no cell, so it must not republish the board. It used to,
+## and on the standard 256×256 preset that was 2.5 s per click on the palette
+## (§10.5).
+static func _test_creating_a_body_publishes_nothing() -> void:
+	var terrain := _terrain()
+	_dig_basin(terrain)
+	var water := _water_over(terrain)
+	var service := WaterService.new()
+	service.configure(water, terrain)
+	var nav := NavGrid.new()
+	var publisher := TerrainNavigationPublisher.new()
+	publisher.configure(terrain, nav, null, water, service)
+
+	# Appended to, never reassigned: a GDScript lambda captures locals by value, so
+	# `seen = cells` inside it would write to a copy and this test would pass blind.
+	var seen: Array = []
+	service.registry_changed.connect(func(cells: Array[Vector2i]) -> void: seen.append(cells))
+	var topology_before := nav.topology_revision()
+	var lake := service.create_body(WaterBody.Type.LAKE, 0)
+	assert(lake != null)
+	assert(seen.size() == 1, "creating a body is still a registry event")
+	assert((seen[0] as Array).is_empty(), "but an empty body reaches no cell")
+	assert(nav.topology_revision() == topology_before, "and therefore moves no topology")
+
+	# Removing one, on the other hand, drains its cells and must say exactly which.
+	assert(service.flood(Vector2i.ZERO, lake.id, 0))
+	var wet := water.wet_cell_count()
+	assert(wet > 0)
+	assert(service.remove_body(lake.id))
+	assert(seen.size() == 2)
+	assert((seen[1] as Array).size() == wet)
+	assert(nav.topology_revision() != topology_before, "draining a lake IS a topology change")
+
+
+# --- The border is a property of the map file ----------------------------------
+
+static func _bordered(kind: StringName, level: int) -> Dictionary:
+	var terrain := _terrain()
+	var water := _water_over(terrain)
+	var service := WaterService.new()
+	service.configure(water, terrain)
+	var meta := MapMeta.new()
+	meta.border_kind = kind
+	meta.border_level = level
+	var border := BorderOceanService.new()
+	border.configure(service, terrain, water, meta)
+	return {"terrain": terrain, "water": water, "service": service, "border": border}
+
+
+## Digging a channel from the rim lets the sea in; digging a pit in the middle of
+## the board does not, however deep it is. That asymmetry is the whole rule
+## (`map_editor.md` §6.1).
+static func _test_border_ocean_floods_only_what_touches_the_rim() -> void:
+	var world := _bordered(MapMeta.BORDER_OCEAN, 0)
+	var terrain: TerrainGrid = world["terrain"]
+	var water: WaterGrid = world["water"]
+	var border: BorderOceanService = world["border"]
+
+	# A flat board at zero has no lowland at all, so there is no sea and no empty
+	# registry entry invented for one.
+	assert(not border.apply())
+	assert(border.ocean_body_id() == WaterBody.NO_BODY)
+
+	# A closed pit in the middle stays dry: it is not connected to the sea.
+	assert(terrain.set_height(Vector2i(0, 0), -3))
+	assert(not border.apply())
+	assert(not water.is_wet(terrain, Vector2i(0, 0)))
+
+	# A trench from the rim inward floods, and only along itself.
+	var rim := terrain.min_cell().x
+	for x in range(rim, 1):
+		assert(terrain.set_height(Vector2i(x, 0), -1))
+	assert(border.apply())
+	assert(border.ocean_body_id() != WaterBody.NO_BODY)
+	assert(water.is_wet(terrain, Vector2i(rim, 0)))
+	assert(water.is_wet(terrain, Vector2i(0, 0)), "the pit is connected now, so it fills")
+	assert(not water.is_wet(terrain, Vector2i(0, 5)), "and untouched ground does not")
+
+
+static func _test_border_nothing_never_floods() -> void:
+	var world := _bordered(MapMeta.BORDER_NOTHING, 0)
+	var terrain: TerrainGrid = world["terrain"]
+	var water: WaterGrid = world["water"]
+	var border: BorderOceanService = world["border"]
+	var rim := terrain.min_cell().x
+	for x in range(rim, 1):
+		assert(terrain.set_height(Vector2i(x, 0), -2))
+	assert(not border.apply())
+	assert(not water.has_water(Vector2i(rim, 0)), "the board simply ends; digging at it digs a pit")
+
+
+# --- Drinking water comes from the water layer and nowhere else -----------------
+
+static func _test_access_service_finds_banks_not_water() -> void:
+	var terrain := _terrain()
+	_dig_basin(terrain)
+	var water := _water_over(terrain)
+	var service := WaterService.new()
+	service.configure(water, terrain)
+	var lake := service.create_body(WaterBody.Type.LAKE, 0)
+	assert(service.flood(Vector2i.ZERO, lake.id, 0))
+
+	var access := WaterAccessService.new()
+	access.configure(water, terrain)
+	var positions := access.source_positions()
+	assert(not positions.is_empty())
+	for position: Vector3 in positions:
+		var cell := terrain.cell_from_position(position)
+		assert(not water.is_wet(terrain, cell), "an access point is the bank, never the water")
+
+	# Salt water is not drinkable, so a sea leaves no access points at all (§9.2).
+	var sea_terrain := _terrain()
+	_dig_basin(sea_terrain)
+	var sea_water := _water_over(sea_terrain)
+	var sea_service := WaterService.new()
+	sea_service.configure(sea_water, sea_terrain)
+	var sea := sea_service.create_body(WaterBody.Type.SEA, 0)
+	assert(sea_service.flood(Vector2i.ZERO, sea.id, 0))
+	var sea_access := WaterAccessService.new()
+	sea_access.configure(sea_water, sea_terrain)
+	assert(not sea_access.has_source())
+
+
+## A session with no map still needs water, and it gets a dug basin in the real
+## grids rather than the prop-plus-blocked-cells arrangement it used to get.
+static func _test_starter_water_digs_a_real_basin() -> void:
+	var terrain := _terrain()
+	var water := _water_over(terrain)
+	var body_id := StarterWater.carve(terrain, water, [Vector2i(0, 0)])
+	assert(body_id != WaterBody.NO_BODY)
+
+	# The middle is deep enough to be water and the rim is a ford.
+	assert(water.is_wet(terrain, Vector2i(0, 0)))
+	assert(not water.is_ford(terrain, Vector2i(0, 0)))
+	assert(water.is_ford(terrain, Vector2i(2, 0)))
+	# ...and the ground outside is untouched, which is what makes it a bank.
+	assert(terrain.height_of(Vector2i(3, 0)) == 0)
+	assert(not water.has_water(Vector2i(3, 0)))
+
+	var nav := _nav_over(terrain, water)
+	assert(not nav.is_walkable(Vector2i(0, 0)), "nobody wades the middle of a pond")
+	assert(nav.is_walkable(Vector2i(3, 0)), "and everybody can stand on its bank")
+
+	var access := WaterAccessService.new()
+	access.configure(water, terrain)
+	assert(access.has_source())

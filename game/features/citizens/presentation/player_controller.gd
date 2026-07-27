@@ -212,7 +212,7 @@ func update_interaction(delta: float) -> void:
 		simulation.update_interface(S.ACTION_CANCELLED_AWAY)
 		simulation.hero_interaction_controller.refresh_interaction_hint()
 		return
-	if (interaction_resource in [ResourceIds.WOOD, ResourceIds.BRANCHES] and not simulation.hero_interaction_service.nearby_tree()) or (interaction_resource == ResourceIds.FOOD and not simulation.hero_interaction_service.nearby_farm()) or (interaction_resource == ResourceIds.WATER and not simulation.hero_interaction_service.nearby_pond()) or (interaction_resource == ResourceIds.GRASS and not simulation.hero_interaction_service.nearby_grass_source()):
+	if (interaction_resource in [ResourceIds.WOOD, ResourceIds.BRANCHES] and not simulation.hero_interaction_service.nearby_tree()) or (interaction_resource == ResourceIds.FOOD and not simulation.hero_interaction_service.nearby_farm()) or (interaction_resource == ResourceIds.WATER and not simulation.hero_interaction_service.nearby_water_source()) or (interaction_resource == ResourceIds.GRASS and not simulation.hero_interaction_service.nearby_grass_source()):
 		interaction_action = ""
 		simulation.ui_manager.interaction_hint_panel.progress_bar.visible = false
 		simulation.update_interface(S.HARVEST_CANCELLED_AWAY_SOURCE)
@@ -263,7 +263,7 @@ func _is_harvest_source_available(resource: String) -> bool:
 		ResourceIds.FOOD:
 			return simulation.hero_interaction_service.nearby_farm()
 		ResourceIds.WATER:
-			return simulation.hero_interaction_service.nearby_pond()
+			return simulation.hero_interaction_service.nearby_water_source()
 		ResourceIds.GRASS:
 			return simulation.hero_interaction_service.nearby_grass_source()
 		_:
@@ -351,7 +351,7 @@ func start_interaction(all: bool) -> void:
 			interaction_start_cell = simulation.cell_from_position(player_citizen.global_position)
 			interaction_repeat_all = all
 			return
-		"pond":
+		"water":
 			if not simulation.hero_pocket_service.pocket_has_room():
 				simulation.update_interface(S.POCKET_FULL_SHORT)
 				return

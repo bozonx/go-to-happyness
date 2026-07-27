@@ -20,6 +20,8 @@ static func run_all() -> void:
 	_test_undo_failure_emits_changed_and_keeps_command()
 	_test_redo_failure_emits_changed_and_keeps_command()
 	_test_push_null_is_ignored()
+	_test_composite_runs_parts_in_order_and_reverses_them()
+	_test_composite_rolls_back_a_failed_part()
 	print("    [PASS] Map Editor History Tests")
 
 
@@ -181,3 +183,65 @@ static func _test_push_null_is_ignored() -> void:
 	var history := MapEditorHistory.new()
 	assert(not history.push(null))
 	assert(history.undo_depth() == 0)
+
+
+# --- Composite ------------------------------------------------------------------
+
+## One author action that produced edits in two layers — digging to the coast on a
+## map with an ocean border (`map_editor.md` §6.1) — is one entry on the stack.
+## Redo replays the parts in order and undo reverses them, because the later part
+## was computed against the state the earlier one produced.
+static func _test_composite_runs_parts_in_order_and_reverses_them() -> void:
+	var order: Array[String] = []
+	var first := _RecordingCommand.new("terrain", order)
+	var second := _RecordingCommand.new("water", order)
+	var parts: Array[MapEditorCommand] = [first, second]
+	var composite := MapEditorCompositeCommand.of(parts, "рельеф + океан")
+	assert(composite.part_count() == 2)
+	assert(not composite.apply_on_push(), "the services already committed both parts")
+
+	var history := MapEditorHistory.new()
+	assert(history.push(composite))
+	assert(history.undo_label() == "рельеф + океан")
+
+	assert(history.undo())
+	assert(order == ["undo:water", "undo:terrain"])
+	order.clear()
+	assert(history.redo())
+	assert(order == ["redo:terrain", "redo:water"])
+
+
+## A half-undone composite is a state no author asked for, so a refusing part puts
+## the ones already reversed back.
+static func _test_composite_rolls_back_a_failed_part() -> void:
+	var order: Array[String] = []
+	var first := _RecordingCommand.new("terrain", order)
+	first.fail_undo = true
+	var second := _RecordingCommand.new("water", order)
+	var parts: Array[MapEditorCommand] = [first, second]
+	var composite := MapEditorCompositeCommand.of(parts, "рельеф + океан")
+
+	assert(not composite.undo(), "the composite reports the refusal")
+	assert(order == ["undo:water", "undo:terrain", "redo:water"], "the part that did undo is re-applied")
+
+
+class _RecordingCommand extends MapEditorCommand:
+	var fail_undo := false
+	var _name := ""
+	var _order: Array[String]
+
+	func _init(command_name: String, order: Array[String]) -> void:
+		_name = command_name
+		_order = order
+		label = command_name
+
+	func apply_on_push() -> bool:
+		return false
+
+	func redo() -> bool:
+		_order.append("redo:%s" % _name)
+		return true
+
+	func undo() -> bool:
+		_order.append("undo:%s" % _name)
+		return not fail_undo

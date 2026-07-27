@@ -97,8 +97,11 @@ var builders_guild_positions: Array[Vector3]:
 	get: return building_spatial_registry.builders_guild_positions
 var construction_company_positions: Array[Vector3]:
 	get: return building_spatial_registry.construction_company_positions
-var pond_positions: Array[Vector3]:
-	get: return building_spatial_registry.pond_positions
+## Bank positions where a citizen can draw water (grid_terrain_system.md §9.2).
+## Derived from the water layer, not from spawned scenery: there is one owner of
+## "is there water here" and it is `WaterGrid`.
+var water_source_positions: Array[Vector3]:
+	get: return (world_setup as WorldSetup).water_access.source_positions() if world_setup != null else []
 var forager_positions: Array[Vector3]:
 	get: return building_spatial_registry.forager_positions
 var materials_yard_positions: Array[Vector3]:
@@ -319,6 +322,7 @@ var skip_night_button: Button:
 var start_workday_button: Button:
 	get: return ui_manager.time_controls_panel.start_workday_button
 var water_collectors: Array[WaterCollectorRecord] = []
+var water_access_service: WaterAccessService
 var building_status_indicators: Array[Label3D] = []
 var building_status_update_time := 0.0
 var workplace_priority_counter := 0
@@ -453,7 +457,7 @@ func _ready() -> void:
 			add_visitor_marker
 		)
 	)
-	outside_work_controller = SettlementOutsideWorkController.new(self)
+	outside_work_controller = SettlementOutsideWorkController.new(_outside_work_runtime_port())
 	var nav_grid_getter := func() -> NavGrid: return nav_grid
 	var entrance_getter := func() -> Node3D: return entrance_stone
 	var entrance_setter := func(building: Node3D) -> void: entrance_stone = building
@@ -517,13 +521,31 @@ func _world_navigation_runtime_port() -> WorldNavigationRuntimePort:
 	)
 
 
+## Pond seeds of the active biome (grid_terrain_system.md §9). A session launched
+## with a map ignores them — that map's author owns its water — but a plain new
+## game still needs somewhere to fill a bucket, and it gets a dug basin in the
+## real grids instead of the decorative prop this used to be.
+func _starter_water_cells() -> Array[Vector2i]:
+	var biome: BiomeDefinition = territory_service.get_active_biome()
+	var layout: Resource = biome.natural_layout if biome != null else null
+	if layout == null:
+		return []
+	var cells: Array[Vector2i] = []
+	for cell: Variant in layout.get("water_cells"):
+		if cell is Vector2i:
+			cells.append(cell as Vector2i)
+	return cells
+
+
 func _world_navigation_presentation_port() -> WorldNavigationPresentationPort:
 	return WorldNavigationPresentationPort.new(
 		func() -> Camera3D: return camera,
 		func() -> TrailFieldService: return trail_field,
 		func() -> MapDocument: return launch_config.map_document,
+		_starter_water_cells,
 		func() -> WorldSetup: return world_setup as WorldSetup,
 		func(next_world_setup: WorldSetup) -> void: world_setup = next_world_setup,
+		func(next_water_access_service: WaterAccessService) -> void: water_access_service = next_water_access_service,
 		func(node: Node) -> void: add_child(node),
 		func(next_world_setup: WorldSetup) -> void: next_world_setup.build(self),
 		func() -> void: simulation_tick_controller.update_daylight(),
@@ -536,6 +558,26 @@ func _world_navigation_presentation_port() -> WorldNavigationPresentationPort:
 		func() -> RefCounted: return village_territory_service.territory(),
 		CELL_SIZE,
 		board_cells
+	)
+
+
+func _outside_work_runtime_port() -> OutsideWorkRuntimePort:
+	return OutsideWorkRuntimePort.new(
+		settlement,
+		random,
+		outside_workers,
+		last_citizen_positions,
+		func() -> Citizen: return selected_builder,
+		func() -> bool: return simulation_tick_controller.is_work_time(),
+		update_interface,
+		func() -> CourierDispatcher: return courier_dispatcher,
+		func() -> Node3D: return entrance_stone,
+		request_courier_dispatch,
+		func() -> int: return (day_cycle.current_day - 1) * SimulationClock.MINUTES_PER_DAY + floori(clock.minutes),
+		func() -> int: return day_cycle.current_day,
+		func() -> void:
+			if citizen_ai != null:
+				citizen_ai.request_decision_refresh()
 	)
 
 

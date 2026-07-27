@@ -6,7 +6,7 @@ const ResourcePileScript = preload("res://game/features/logistics/domain/resourc
 ## Resolves the interactable target in front of the first-person camera.
 ## Performs a raycast from the camera and classifies the hit collider
 ## (building, tree, warehouse, construction site, etc.), then falls back
-## to proximity checks for grass, farms, ponds, and trees.
+## to proximity checks for grass, farms, water banks, and trees.
 
 const INTERACTION_RANGE := 4.5
 
@@ -105,9 +105,9 @@ func _classify_proximity(hit_position: Vector3, player_pos: Vector3, simulation:
 	var farm_pos: Vector3 = simulation.nearest_point_to_point_array(simulation.farm_positions, hit_position, 5.0)
 	if farm_pos != Vector3.INF and player_pos.distance_to(farm_pos) <= INTERACTION_RANGE:
 		return {"kind": "farm", "position": farm_pos}
-	var pond_pos: Vector3 = simulation.nearest_point_to_point_array(simulation.pond_positions, hit_position, 2.5)
-	if pond_pos != Vector3.INF and player_pos.distance_to(pond_pos) <= INTERACTION_RANGE:
-		return {"kind": "pond", "position": pond_pos}
+	var water_pos: Vector3 = simulation.nearest_point_to_point_array(simulation.water_source_positions, hit_position, 2.5)
+	if water_pos != Vector3.INF and player_pos.distance_to(water_pos) <= INTERACTION_RANGE:
+		return {"kind": "water", "position": water_pos}
 	var tree_pos: Vector3 = simulation.nearest_point_to_point_array(simulation.tree_positions, hit_position, 1.5)
 	if tree_pos != Vector3.INF and player_pos.distance_to(tree_pos) <= INTERACTION_RANGE:
 		var tree_node: Node3D = simulation.tree_nodes.get(simulation.cell_from_position(tree_pos))

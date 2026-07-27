@@ -45,12 +45,6 @@ func revert(grid: WaterGrid) -> void:
 		_write_flow(body, cells[index], _old_flows, index)
 
 
-## Flow always changes passability: a current that stops a ford is a
-## passability change (§9.7), and removing one opens it again.
-func changes_passability() -> bool:
-	return not cells.is_empty()
-
-
 static func _write_flow(body: WaterBody, cell: Vector2i, flows: PackedInt32Array, index: int) -> void:
 	var value := flows[index]
 	if value == 0:

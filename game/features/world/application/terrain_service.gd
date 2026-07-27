@@ -228,6 +228,34 @@ func set_hole(cells: Array[Vector2i], enabled: bool) -> bool:
 	return true
 
 
+## Pins cells against the cascade (§4.4). An anchored column is one the cascade
+## may not move: reaching one rejects the whole operation rather than letting the
+## ground subside under what is standing on it.
+##
+## The flag is the domain half of an invariant whose other half is Placement Merge
+## (§5.3, phase 5) — nothing in the game writes anchors yet, because nothing in the
+## game moves a column yet. This entry point exists so that when something does, it
+## writes them through the one owner of terrain writes and not into the grid behind
+## its back; an anchor set outside a transaction is an anchor undo silently drops.
+func set_anchor(cells: Array[Vector2i], enabled: bool) -> bool:
+	if _grid == null:
+		return _reject(CascadeSolver.REASON_NOTHING_TO_DO)
+	var delta := TerrainDelta.new()
+	for cell: Vector2i in CellUtils.sorted_unique(cells):
+		if not _grid.is_inside(cell) or _grid.is_anchor(cell) == enabled:
+			continue
+		var old_state := TerrainDelta.state_of(_grid, cell)
+		var new_state := old_state.duplicate()
+		new_state[TerrainDelta.STATE_FLAGS] = _with_flag(
+			new_state[TerrainDelta.STATE_FLAGS], TerrainCell.FLAG_ANCHOR, enabled,
+		)
+		delta.record(cell, old_state, new_state)
+	if delta.is_empty():
+		return _reject(CascadeSolver.REASON_NOTHING_TO_DO)
+	_commit(delta)
+	return true
+
+
 func can_undo() -> bool:
 	return not _undo_stack.is_empty()
 

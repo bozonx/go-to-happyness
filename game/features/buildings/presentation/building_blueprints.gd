@@ -74,7 +74,6 @@ const COLORS := {
 	"advanced_dew_collector": Color("4fa2c0"),
 	"house_lvl2": Color("859eaf"),
 	"house_lvl3": Color("7992a3"),
-	"pond": Color("3f7fa0"),
 	"dugout": Color("8a6549"),
 	"earth_house": Color("9b7655"),
 	"smithy": Color("65686d"),
@@ -198,7 +197,6 @@ static func get_blueprint(building_type: String) -> Dictionary:
 		"cook_campfire_lvl2", "cook_campfire_lvl3": return _cook_campfire_blueprint(building_type)
 		"dew_collector": return _water_collector_blueprint("dew_collector", Vector2i(2, 2))
 		"advanced_dew_collector": return _water_collector_blueprint("advanced_dew_collector", Vector2i(3, 3))
-		"pond": return _pond_blueprint()
 		"tent", "straw_tent", "tarp_tent", "forager_tent", "straw_forager_tent", "tarp_forager_tent", "materials_yard", "straw_materials_yard", "tarp_materials_yard", "craft_tent", "straw_craft_tent", "tarp_craft_tent", "straw_trade_tent", "tarp_trade_tent": return _enclosed_blueprint(building_type, Vector2i(4, 4), 2, "gable")
 		"house": return _enclosed_blueprint("house", Vector2i(4, 4), 3, "gable")
 		"house_lvl2": return _enclosed_blueprint("house_lvl2", Vector2i(5, 5), 3, "gable")
@@ -513,21 +511,6 @@ static func _water_collector_blueprint(building_type: String, footprint: Vector2
 	# A little collecting funnel above the tray.
 	modules.append(_module(Vector3(0.0, 1.7, 0.0), Vector3(0.9, 0.7, 0.9), "funnel", frame_color, Vector3(0.0, 45.0, 0.0)))
 	return {"type": building_type, "footprint": footprint, "entrance": Vector2i(0, -1), "modules": modules}
-
-
-static func _pond_blueprint() -> Dictionary:
-	var footprint := Vector2i(5, 5)
-	var modules: Array[Dictionary] = []
-	# A stone rim around a recessed water surface.
-	var half_x := (footprint.x - 1) * 0.5
-	var half_z := (footprint.y - 1) * 0.5
-	for x in range(footprint.x):
-		for z in range(footprint.y):
-			var on_edge := x == 0 or z == 0 or x == footprint.x - 1 or z == footprint.y - 1
-			if on_edge:
-				modules.append(_module(Vector3(_axis_coordinate(x, footprint.x), 0.18, _axis_coordinate(z, footprint.y)), Vector3(1.0, 0.36, 1.0), "rim", Color("6f747a")))
-	modules.append(_module(Vector3(0.0, 0.1, 0.0), Vector3(footprint.x - 1.4, 0.2, footprint.y - 1.4), "water", COLORS.pond))
-	return {"type": "pond", "footprint": footprint, "entrance": Vector2i(0, -2), "modules": modules}
 
 
 static func _campfire_blueprint_for(building_type: String) -> Dictionary:

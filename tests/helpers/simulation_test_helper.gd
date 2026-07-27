@@ -64,9 +64,6 @@ static func is_navigation_cell_blocked(simulation: Node, cell: Vector2i) -> bool
 static func find_path_around_houses(simulation: Node, from: Vector3, destination: Vector3, may_enter: bool) -> RouteResult:
 	return simulation.find_path_around_houses(from, destination, may_enter)
 
-static func pond_access_position(simulation: Node, from: Vector3, pond_center: Vector3) -> Vector3:
-	return simulation.world_navigation_controller.pond_access_position(from, pond_center)
-
 static func resource_access_position(simulation: Node, from: Vector3, resource_position: Vector3) -> Vector3:
 	return simulation.world_navigation_controller.resource_access_position(from, resource_position)
 

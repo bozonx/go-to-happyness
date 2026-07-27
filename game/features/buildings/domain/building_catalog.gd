@@ -24,7 +24,6 @@ const DEFINITIONS := {
 	"tarp_craft_tent": {"name": "Брезентовая ремесленная палатка", "category": "tent", "costs": {"branches": 8, "grass": 4, "tarp": 1}},
 	"dew_collector": {"name": "Сборщик росы", "category": "tent", "costs": {"branches": 1, "tarp": 1}},
 	"advanced_dew_collector": {"name": "Улучшенный сборщик росы", "category": "tent", "costs": {"branches": 12, "grass": 8}},
-	"pond": {"name": "Pond", "category": "tent", "costs": {"branches": 8, "grass": 6}},
 	"warehouse": {"name": "Склад под открытым небом", "category": "tent", "costs": {}, "requires_village_area": false, "expands_village_area": false},
 	"straw_warehouse": {"name": "Склад с соломенным навесом", "category": "tent", "costs": {"branches": 15, "grass": 12}},
 	"tarp_warehouse": {"name": "Склад с брезентовым навесом", "category": "tent", "costs": {"branches": 12, "grass": 8, "tarp": 2}},

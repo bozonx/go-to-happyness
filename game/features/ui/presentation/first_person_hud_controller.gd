@@ -142,7 +142,7 @@ func first_person_action_hint() -> String:
 			return S.F_GATHER_GRASS_COUNT % [int(grass_info.remaining), int(grass_info.initial)]
 		"farm":
 			return S.F_HARVEST_FARM
-		"pond":
+		"water":
 			if bool(simulation.settlement.tools.get("bucket", false)):
 				return S.F_COLLECT_WATER
 			return S.NEED_BUCKET_FOR_WATER

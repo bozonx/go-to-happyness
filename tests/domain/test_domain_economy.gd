@@ -317,7 +317,7 @@ static func _test_weather_state() -> void:
 
 
 static func _test_workforce_policy() -> void:
-	var world := {"hour": 9, "warehouses": 1, "sawmills": 1, "trees": 1, "farms": 0, "dig_sites": 0, "schools": 0, "construction_sites": 0, "has_canteen": false, "has_factory_job": false, "has_engineer_job": false, "has_bucket": false, "ponds": 2, "water": 0, "population": 3}
+	var world := {"hour": 9, "warehouses": 1, "sawmills": 1, "trees": 1, "farms": 0, "dig_sites": 0, "schools": 0, "construction_sites": 0, "has_canteen": false, "has_factory_job": false, "has_engineer_job": false, "has_bucket": false, "water_sources": 2, "water": 0, "population": 3}
 	var forester := {"specialization": "forestry", "permanent_role": "forestry", "player_controlled": false, "blocked_by_storage": false, "training_role": "", "training_days_completed": 0}
 	assert(WorkforcePolicy.role_for(forester, world) == "forestry")
 	assert(WorkforcePolicy.can_assign(forester, world))

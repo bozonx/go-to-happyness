@@ -23,10 +23,15 @@ const REASON_FLOW_REQUIRES_RIVER: StringName = &"flow_requires_river"
 
 signal edit_committed(delta: WaterDelta)
 signal edit_rejected(reason: StringName)
-## The registry changed shape: a body was added, removed or retyped. Presentation
-## caches its per-body materials, so it has to hear about this separately from a
-## cell edit.
-signal registry_changed()
+## The registry changed shape: a body was added, removed or retyped.
+##
+## It carries the cells the change actually reaches, and that argument is the
+## whole point of the signal being separate from `edit_committed`. Adding an empty
+## body reaches nothing: republishing the board for it cost 2.5 s on a 256×256
+## map, to add one entry to a dictionary. Removing one reaches exactly its own
+## cells. Presentation still drops its cached per-body material either way,
+## because that cache is keyed by id and not by cell.
+signal registry_changed(affected_cells: Array[Vector2i])
 
 var grid: WaterGrid = null
 ## Read-only here. Water needs the ground for depth, for flood fill and for
@@ -92,10 +97,6 @@ func remove_body(body_id: int) -> bool:
 	if body == null:
 		return _reject(REASON_NO_BODY)
 	return _commit_registry_edit(WaterBodyEdit.removal(grid, body))
-
-
-func notify_body_edited() -> void:
-	registry_changed.emit()
 
 
 # --- Strokes ------------------------------------------------------------------
@@ -326,7 +327,7 @@ func undo() -> bool:
 	_redo_stack.push_back(delta)
 	_last_delta = delta
 	if delta is WaterBodyEdit:
-		registry_changed.emit()
+		registry_changed.emit(delta.cells)
 	edit_committed.emit(delta)
 	return true
 
@@ -339,7 +340,7 @@ func redo() -> bool:
 	_undo_stack.push_back(delta)
 	_last_delta = delta
 	if delta is WaterBodyEdit:
-		registry_changed.emit()
+		registry_changed.emit(delta.cells)
 	edit_committed.emit(delta)
 	return true
 
@@ -370,7 +371,7 @@ func _commit_registry_edit(edit: WaterBodyEdit) -> bool:
 		_undo_stack.pop_front()
 	_redo_stack.clear()
 	_last_rejection = REASON_NONE
-	registry_changed.emit()
+	registry_changed.emit(edit.cells)
 	edit_committed.emit(edit)
 	return true
 

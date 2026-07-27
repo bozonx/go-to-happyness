@@ -10,16 +10,6 @@ extends Node3D
 
 signal back_requested
 
-const CameraControllerScript = preload("res://game/features/world/presentation/camera_controller.gd")
-const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
-const BuildingMaterialCatalogScript = preload("res://game/features/buildings/domain/editor/building_material_catalog.gd")
-const BuildingBlueprintScript = preload("res://game/features/buildings/domain/editor/building_blueprint.gd")
-const BuildingGridModelScript = preload("res://game/features/buildings/domain/editor/building_grid_model.gd")
-const BlueprintRepositoryScript = preload("res://game/features/buildings/presentation/editor/blueprint_repository.gd")
-const BlockMeshLibraryScript = preload("res://game/features/buildings/presentation/editor/block_mesh_library.gd")
-const DecorModeControllerScript = preload("res://game/features/buildings/presentation/editor/decor_mode_controller.gd")
-const ZonesModeControllerScript = preload("res://game/features/buildings/presentation/editor/zones_mode_controller.gd")
-const FrameModeControllerScript = preload("res://game/features/buildings/presentation/editor/frame_mode_controller.gd")
 
 ## Footprint centre marks. The band is faint on purpose: it must not compete
 ## with block colours, only hint where the building's origin will sit in game.
@@ -35,15 +25,15 @@ enum EditMode { FRAME, FINISHES, DECOR, ZONES }
 ## clears this via GameLaunchManager before switching in player mode.
 @export var dev_mode: bool = true
 
-var grid_model: BuildingGridModelScript
-var blueprint: BuildingBlueprintScript
-var repository: BlueprintRepositoryScript
-var mesh_library: BlockMeshLibraryScript
+var grid_model: BuildingGridModel
+var blueprint: BuildingBlueprint
+var repository: BlueprintRepository
+var mesh_library: BlockMeshLibrary
 
 var current_block_id: StringName = &""
 var current_variant: StringName = &""
-var current_anchor: int = BuildingBlockCatalogScript.ANCHOR_CENTER
-var current_material_id: StringName = BuildingMaterialCatalogScript.DEFAULT_ID
+var current_anchor: int = BuildingBlockCatalog.ANCHOR_CENTER
+var current_material_id: StringName = BuildingMaterialCatalog.DEFAULT_ID
 var current_rot: int = 0
 var current_rot_x: int = 0
 var current_rot_z: int = 0
@@ -57,11 +47,11 @@ var cursor_hit_pos: Vector3 = Vector3.ZERO
 var current_mode: int = EditMode.FRAME
 
 ## Frame mode lives in its own controller; see frame_mode_controller.gd.
-var frame_mode: FrameModeControllerScript = null
+var frame_mode: FrameModeController = null
 ## Decor mode (design §3.3) lives in its own controller; see decor_mode_controller.gd.
-var decor_mode: DecorModeControllerScript = null
+var decor_mode: DecorModeController = null
 ## Zones mode lives in its own controller; see zones_mode_controller.gd.
-var zones_mode: ZonesModeControllerScript = null
+var zones_mode: ZonesModeController = null
 
 ## True when there are unsaved changes. Checked before scene transitions.
 var _dirty: bool = false
@@ -99,10 +89,10 @@ var _syncing_metadata_fields := false
 
 func _ready() -> void:
 	_resolve_launch_mode()
-	grid_model = BuildingGridModelScript.new()
-	blueprint = BuildingBlueprintScript.new()
-	repository = BlueprintRepositoryScript.new(dev_mode)
-	mesh_library = BlockMeshLibraryScript.new()
+	grid_model = BuildingGridModel.new()
+	blueprint = BuildingBlueprint.new()
+	repository = BlueprintRepository.new(dev_mode)
+	mesh_library = BlockMeshLibrary.new()
 
 	_init_world()
 	_setup_ui()
@@ -137,11 +127,11 @@ func _init_world() -> void:
 	_camera_controller.camera_distance = 18.0
 	_camera_controller.apply_position()
 
-	frame_mode = FrameModeControllerScript.new()
+	frame_mode = FrameModeController.new()
 	add_child(frame_mode)
-	decor_mode = DecorModeControllerScript.new()
+	decor_mode = DecorModeController.new()
 	add_child(decor_mode)
-	zones_mode = ZonesModeControllerScript.new()
+	zones_mode = ZonesModeController.new()
 	add_child(zones_mode)
 
 
@@ -179,15 +169,15 @@ func _unhandled_input(event: InputEvent) -> void:
 				elif current_mode == EditMode.ZONES:
 					zones_mode.on_mouse_motion(event)
 				elif current_mode == EditMode.FRAME and current_brush == Brush.RECT:
-					frame_mode.paint_rect(frame_mode._paint_anchor, cursor_cell)
+					frame_mode.paint_rect(frame_mode.paint_anchor, cursor_cell)
 				else:
-					frame_mode.paint_line(frame_mode._last_paint_cell, cursor_cell)
-				frame_mode._last_paint_cell = cursor_cell
+					frame_mode.paint_line(frame_mode.last_paint_cell, cursor_cell)
+				frame_mode.last_paint_cell = cursor_cell
 		elif frame_mode.is_shift_erasing():
 			_update_cursor()
 			if cursor_valid:
-				frame_mode.erase_line(frame_mode._last_paint_cell, cursor_cell)
-				frame_mode._last_paint_cell = cursor_cell
+				frame_mode.erase_line(frame_mode.last_paint_cell, cursor_cell)
+				frame_mode.last_paint_cell = cursor_cell
 	elif event is InputEventKey and event.pressed and not event.echo:
 		_handle_key(event)
 
@@ -199,13 +189,13 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 		MOUSE_BUTTON_RIGHT:
 			if frame_mode.is_shift_erasing():
 				if not event.pressed:
-					frame_mode._shift_erasing = false
+					frame_mode.shift_erasing = false
 				_orbiting = false
 				return
 			if current_mode == EditMode.FRAME and event.pressed and event.shift_pressed:
-				frame_mode._shift_erasing = true
+				frame_mode.shift_erasing = true
 				_orbiting = false
-				frame_mode._last_paint_cell = cursor_cell
+				frame_mode.last_paint_cell = cursor_cell
 				frame_mode.erase_hovered_block_or_cell()
 				return
 			if current_mode == EditMode.DECOR and event.pressed and event.shift_pressed:
@@ -231,22 +221,22 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 					return
 				if current_mode == EditMode.ZONES:
 					if zones_mode.handle_mouse_button(event):
-						frame_mode._painting = zones_mode.is_painting()
-						frame_mode._last_paint_cell = cursor_cell
+						frame_mode.painting = zones_mode.is_painting()
+						frame_mode.last_paint_cell = cursor_cell
 					return
 				elif current_mode == EditMode.DECOR:
 					decor_mode.on_left_pressed()
-					frame_mode._painting = true
+					frame_mode.painting = true
 				else:
-					frame_mode._painting = true
-					frame_mode._last_paint_cell = cursor_cell
-					frame_mode._paint_anchor = cursor_cell
+					frame_mode.painting = true
+					frame_mode.last_paint_cell = cursor_cell
+					frame_mode.paint_anchor = cursor_cell
 					if current_brush == Brush.RECT:
-						frame_mode.paint_rect(frame_mode._paint_anchor, cursor_cell)
+						frame_mode.paint_rect(frame_mode.paint_anchor, cursor_cell)
 					else:
 						frame_mode.apply_tool_at_cursor()
 			else:
-				frame_mode._painting = false
+				frame_mode.painting = false
 				if current_mode == EditMode.DECOR:
 					decor_mode.on_left_released()
 				elif current_mode == EditMode.ZONES:
@@ -396,6 +386,7 @@ func _select_mode(mode: int) -> void:
 	else:
 		decor_mode.deactivate()
 		if mode == EditMode.ZONES:
+			frame_mode.deactivate()
 			frame_mode.set_tool(Tool.PLACE)
 			zones_mode.activate()
 		else:
@@ -417,7 +408,7 @@ func _on_new_pressed() -> void:
 	if not await _confirm_discard_changes():
 		return
 	grid_model.clear()
-	blueprint = BuildingBlueprintScript.new()
+	blueprint = BuildingBlueprint.new()
 	frame_mode.rebuild_all_block_nodes()
 	zones_mode.on_blueprint_changed()
 	_reset_decor_for_new_blueprint()

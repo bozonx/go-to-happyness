@@ -572,15 +572,20 @@ func corner_heights_into(cell: Vector2i, result: PackedFloat32Array) -> void:
 	if is_hole(cell) or not is_inside(cell):
 		return
 	var rise_steps := SlopeCatalog.rise_of_class(slope_class)
-	# Lifts come only from one-cell 45° slopes — the class hillsides are made of —
-	# and only by a whole number of steps, at most two. Whole steps keep the rule
-	# single-valued: every column sharing the corner tests the same integer, so
-	# the ones that accept it land on exactly the same height and the surface
+	# Lifts come from ANY slope (`_lifts_corners`) and never from a flat column:
+	# a slope is ground that has already been shaped, so the corner it raises is
+	# raised for everyone standing on that point, while a terrace beside a terrace
+	# has to stay sheer (§4.1). Restricting the source to one-cell 45° slopes was
+	# tried and grows triangular fins along the sides of sand terraces and authored
+	# ramps, where the neighbour rose and the flat ground beside it did not.
+	#
+	# The lift is a whole number of steps and at most two. Whole steps keep the
+	# rule single-valued: every column sharing the corner tests the same integer,
+	# so the ones that accept it land on exactly the same height and the surface
 	# closes instead of tearing somewhere else. Two steps is what a diagonal of a
 	# 45° hillside actually drops (one step each way), which is why the corner
 	# between four such cells needs it; the result is a `very_steep` corner, still
-	# straight out of the catalog. Gentler multi-cell ramps are authored roads and
-	# do not drag the ground beside them.
+	# straight out of the catalog.
 	# The overwhelmingly common cell: flat ground with nothing sloped touching it.
 	# Its corners are its own height and the two neighbour passes below cannot
 	# change that, so the whole scan is skipped. This is what makes publishing a

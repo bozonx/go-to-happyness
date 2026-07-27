@@ -15,7 +15,8 @@ var _warehouse_positions: Array[Vector3] = []
 var _construction_sites: Array = []
 var _demolition_sites: Array = []
 var _tree_positions: Array[Vector3] = []
-var _pond_positions: Array[Vector3] = []
+## Asked, not held: derived from the water layer per call (`WaterAccessService`).
+var _water_source_positions_getter: Callable
 var _craft_tent_positions: Array[Vector3] = []
 var _dig_sites: Array = []
 var _is_fire_lit: Callable
@@ -36,7 +37,7 @@ func configure(
 	p_construction_sites: Array,
 	p_demolition_sites: Array,
 	p_tree_positions: Array[Vector3],
-	p_pond_positions: Array[Vector3],
+	p_water_source_positions_getter: Callable,
 	p_craft_tent_positions: Array[Vector3],
 	p_dig_sites: Array,
 	p_is_fire_lit: Callable,
@@ -55,7 +56,7 @@ func configure(
 	_construction_sites = p_construction_sites
 	_demolition_sites = p_demolition_sites
 	_tree_positions = p_tree_positions
-	_pond_positions = p_pond_positions
+	_water_source_positions_getter = p_water_source_positions_getter
 	_craft_tent_positions = p_craft_tent_positions
 	_dig_sites = p_dig_sites
 	_is_fire_lit = p_is_fire_lit
@@ -166,7 +167,7 @@ func is_role_available(role: String) -> bool:
 		"gather_branches": return not _tree_positions.is_empty()
 		"gather_grass": return _settlement.era == SettlementState.Era.TENT
 		"gather_food": return _available_employer_capacity.call("gather_food") > 0
-		"gather_water": return bool(_settlement.tools.get("bucket", false)) and not _pond_positions.is_empty() and not _warehouse_positions.is_empty()
+		"gather_water": return bool(_settlement.tools.get("bucket", false)) and not (_water_source_positions_getter.call() as Array).is_empty() and not _warehouse_positions.is_empty()
 		"cook": return _available_employer_capacity.call("cook") > 0
 		"teacher": return _available_employer_capacity.call("teacher") > 0
 		"seller": return _available_employer_capacity.call("seller") > 0
@@ -181,6 +182,6 @@ func is_daily_order_role_available(role: String) -> bool:
 	match role:
 		"cook": return _available_employer_capacity.call("cook") > 0
 		"researcher": return not _settlement.is_research_completed("official") and is_instance_valid(_employment_centre_building_getter.call()) and _is_fire_lit.call(_employment_centre_building_getter.call())
-		"gather_water": return bool(_settlement.tools.get("bucket", false)) and not _pond_positions.is_empty() and not _warehouse_positions.is_empty()
+		"gather_water": return bool(_settlement.tools.get("bucket", false)) and not (_water_source_positions_getter.call() as Array).is_empty() and not _warehouse_positions.is_empty()
 	return true
 

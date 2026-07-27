@@ -37,6 +37,14 @@ const FACE_GAP_STEPS := 0.5
 const SURFACE_RING := 1
 const EDGE_RING := 2
 
+## Above this share of the board, republishing a patch costs more than
+## republishing everything. Measured on an empty board: flooding all 9216 columns
+## of a 96×96 map took 660 ms through `refresh_cells` against 349 ms through
+## `publish_all`, and 4.76 s against 2.65 s at 256×256. The incremental path pays
+## for a dictionary of dilated cells and a sort of it; the full path pays for
+## neither, so past a threshold it simply wins.
+const FULL_PUBLISH_SHARE := 0.25
+
 var terrain: TerrainGrid = null
 var nav_grid: NavGrid = null
 var field: NavTerrainField = null
@@ -89,6 +97,9 @@ func publish_all() -> NavTerrainField:
 func refresh_cells(cells: Array[Vector2i]) -> void:
 	if terrain == null or field == null or cells.is_empty():
 		return
+	if _is_cheaper_to_publish_all(cells.size()):
+		publish_all()
+		return
 	var corners := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
 	var neighbour_corners := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
 	for cell: Vector2i in _dilate(cells, SURFACE_RING):
@@ -129,10 +140,25 @@ func _on_water_committed(delta: WaterDelta) -> void:
 	refresh_cells(delta.cells)
 
 
-## Retyping a body changes lava/passability without necessarily changing a cell.
-## A registry operation therefore rebuilds the authoritative field as well.
-func _on_water_registry_changed() -> void:
-	publish_all()
+## A registry operation republishes the cells it reaches and nothing else. Adding
+## an empty body reaches none — and that is the common case, because the editor
+## creates a body the moment an author picks "+ lake" from the palette, before a
+## single cell of it exists. Rebuilding the whole field there cost 362 ms on a
+## 96×96 board and 2.5 s on a 256×256 one, per click.
+func _on_water_registry_changed(affected_cells: Array[Vector2i]) -> void:
+	if affected_cells.is_empty():
+		return
+	refresh_cells(affected_cells)
+
+
+## Whether a patch has grown large enough that the whole-board pass is the cheaper
+## way to publish it. A patch republishes `(2 * EDGE_RING + 1)²` columns per cell
+## before deduplication, so the crossover is well under the size of the board.
+func _is_cheaper_to_publish_all(patch_size: int) -> bool:
+	if terrain == null or terrain.board_cells <= 0:
+		return false
+	var board_columns := terrain.board_cells * terrain.board_cells
+	return float(patch_size) >= float(board_columns) * FULL_PUBLISH_SHARE
 
 
 # --- Construction ------------------------------------------------------------
@@ -166,7 +192,7 @@ static func publish(source: TerrainGrid, target: NavGrid, water_source: WaterGri
 
 ## Shared conversion buffer. The surface pass runs once per cell of the board, so
 ## allocating four floats inside it costs one allocation per cell — 65 536 of them
-## on a standard map, for a value that is thrown away immediately.
+## on the standard 256×256 board — for a value that is thrown away immediately.
 static var _metres_scratch := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
 
 

@@ -157,8 +157,9 @@ func _daily_gathering_targets_for(ctx: FacadeContext, actor: Citizen, role: Stri
 							&"direct_distance": actor.global_position.distance_squared_to(access),
 						})
 		"gather_water":
-			for pond_position: Vector3 in ctx.simulation.pond_positions:
-				var access: Vector3 = ctx.simulation.world_navigation_controller.pond_access_position(actor.global_position, pond_position)
+			# The water layer hands back bank columns, so the position IS the access
+			# point — there is no centre of a lake to walk around any more.
+			for access: Vector3 in ctx.simulation.water_source_positions:
 				if access != Vector3.INF:
 					ctx.helpers.insert_nearby_gathering_candidate(nearby, {
 						&"id": ctx.helpers.target_key(&"water", access),

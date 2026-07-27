@@ -44,19 +44,42 @@ func configure_terrain(cell_size: float, board_cells: int, camera: Camera3D = nu
 ## The water layer of the launched map, drawn over the same ground. Without a map
 ## — or with one that has no water — this is an empty layer, and an empty layer
 ## draws nothing and blocks nobody.
-func configure_water(board_cells: int, cell_size: float, authored: WaterGrid = null) -> WaterGrid:
+##
+## `starter_cells` are the biome's pond seeds for a session with no map at all
+## (`StarterWater`). They are dug here, before the ground is meshed, because the
+## basin they cut is terrain: doing it afterwards would need a second remesh and
+## a second navigation publish for water that was always going to be there.
+func configure_water(
+	board_cells: int,
+	cell_size: float,
+	authored: WaterGrid = null,
+	starter_cells: Array[Vector2i] = [],
+) -> WaterGrid:
 	if authored != null and authored.board_cells == board_cells:
 		water_grid = authored
 	else:
 		water_grid = WaterGrid.new()
 		water_grid.configure(cell_size, board_cells)
+	if not starter_cells.is_empty():
+		StarterWater.carve(terrain_grid, water_grid, starter_cells)
+		if terrain != null:
+			terrain.rebuild_pending_now()
 	if water != null:
 		water.configure(water_grid, terrain_grid)
 		water.rebuild_pending_now()
 	return water_grid
 
 
-## Owns visual nodes that are naturally part of this territory: trees, ponds,
+## What the map says lies past the rim (`map_editor.md` §6.1). Visual only in a
+## session: the horizon ocean has no collider and no navigation, and the rule that
+## floods the rim belongs to the editor, where columns can still move.
+func configure_water_border(kind: StringName, level: int) -> void:
+	if water != null:
+		water.configure_border(kind, level)
+		water.rebuild_pending_now()
+
+
+## Owns visual nodes that are naturally part of this territory: trees,
 ## wild plants, animals and their ambience. Gameplay services keep the matching
 ## runtime records; this method only establishes scene ownership.
 func add_landscape_object(node: Node) -> void:

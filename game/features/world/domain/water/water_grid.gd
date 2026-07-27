@@ -4,14 +4,19 @@ extends RefCounted
 ## The water layer of a board (design_docs/engine/grid_terrain_system.md §9.3).
 ##
 ## Three flat arrays parallel to `TerrainGrid`, not sparse structures: a
-## `Dictionary` over 65 536 cells costs a hash on every shader update and every
-## navigation publish to save a few tens of kilobytes.
+## `Dictionary` over a whole board — 65 536 cells at the standard 256×256 preset —
+## costs a hash on every shader update and every navigation publish to save a few
+## hundred kilobytes.
 ##
-## | array          | format  | meaning                                    |
-## | -------------- | ------- | ------------------------------------------ |
-## | `water_height` | `int8`  | surface level in Δh steps, biased like the terrain |
-## | `body_id`      | `uint8` | which `WaterBody`; 0 is dry                |
-## | `water_flags`  | `uint8` | FROZEN, ice thickness (2 bits), reserve    |
+## | array          | in memory | on disk | meaning                            |
+## | -------------- | --------- | ------- | ---------------------------------- |
+## | `water_height` | `int32`   | `int8`  | surface level in Δh steps          |
+## | `body_id`      | `uint8`   | `uint8` | which `WaterBody`; 0 is dry        |
+## | `water_flags`  | `uint8`   | `uint8` | FROZEN, ice thickness (2 bits)     |
+##
+## Levels are `int32` in memory and one biased byte on disk, exactly as
+## `TerrainGrid` keeps heights: the bias belongs to the format, and paying for it
+## on every read of a signed number would buy nothing but arithmetic.
 ##
 ## **Water is authored, not simulated** (§9.1). Nothing here flows between frames:
 ## the level is painted, low ground is filled once at edit time, and no game
@@ -138,7 +143,7 @@ func remove_body(body_id: int) -> bool:
 		_body_ids[index] = WaterBody.NO_BODY
 		_heights[index] = 0
 		_flags[index] = 0
-		_touch_index(index)
+		_touch()
 	_body_cells.erase(body_id)
 	_revision += 1
 	return true
@@ -298,7 +303,7 @@ func set_cell(cell: Vector2i, body_id: int, height: int, flags: int = 0) -> bool
 	_body_ids[index] = body_id
 	_heights[index] = next_height
 	_flags[index] = next_flags
-	_touch(cell)
+	_touch()
 	return true
 
 
@@ -347,7 +352,9 @@ static func pack_flags(frozen: bool, ice_thickness: int) -> int:
 ## asks for it.
 func flood_cells(terrain: TerrainGrid, seed: Vector2i, level: int, keep_body_id := WaterBody.NO_BODY) -> Array[Vector2i]:
 	var found: Array[Vector2i] = []
-	if terrain == null or not is_inside(seed) or terrain.height_of(seed) >= level:
+	if terrain == null or not is_inside(seed) or terrain.is_hole(seed):
+		return found
+	if terrain.height_of(seed) >= level:
 		return found
 	var seen: Dictionary = {seed: true}
 	var queue: Array[Vector2i] = [seed]
@@ -383,9 +390,10 @@ const ORTHOGONAL_OFFSETS: Array[Vector2i] = [
 ## True when nothing has been authored. The package skips `water.bin` entirely for
 ## such a layer, exactly as it skips an untouched `terrain.bin`.
 func is_empty() -> bool:
-	if _bodies.is_empty():
-		return true
-	return _body_cells.is_empty()
+	for body_id: int in _body_cells:
+		if not (_body_cells[body_id] as Dictionary).is_empty():
+			return false
+	return true
 
 
 func wet_cell_count() -> int:
@@ -412,18 +420,12 @@ func _index_of(cell: Vector2i) -> int:
 
 
 ## Unlike the terrain, a water cell's geometry is its own: the surface is a flat
-## quad at one level, so a change never moves a neighbour's vertex.
-func _touch(cell: Vector2i) -> void:
+## quad at one level, so a change never moves a neighbour's vertex and there is no
+## per-cell dirty set to keep. One counter is the whole invalidation signal, and
+## the consumers that need to know *which* cells moved read them off the
+## `WaterDelta` instead of asking the grid.
+func _touch() -> void:
 	_revision += 1
-
-
-func _touch_index(index: int) -> void:
-	if board_cells <= 0:
-		return
-	_touch(Vector2i(
-		index % board_cells - board_half_cells,
-		index / board_cells - board_half_cells,
-	))
 
 
 # --- Body cell index ----------------------------------------------------------

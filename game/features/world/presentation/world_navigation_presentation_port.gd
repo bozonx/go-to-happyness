@@ -8,8 +8,12 @@ extends RefCounted
 var camera_getter: Callable
 var trail_field_getter: Callable
 var map_document_getter: Callable
+## Pond seeds of the active biome. Used only for a session with no map, where
+## `StarterWater` digs them into the real grids (grid_terrain_system.md §9).
+var starter_water_cells_getter: Callable
 var world_setup_getter: Callable
 var world_setup_setter: Callable
+var water_access_setter: Callable
 var add_to_scene: Callable
 var build_world_setup: Callable
 var update_daylight: Callable
@@ -28,8 +32,10 @@ func _init(
 	p_camera_getter: Callable,
 	p_trail_field_getter: Callable,
 	p_map_document_getter: Callable,
+	p_starter_water_cells_getter: Callable,
 	p_world_setup_getter: Callable,
 	p_world_setup_setter: Callable,
+	p_water_access_setter: Callable,
 	p_add_to_scene: Callable,
 	p_build_world_setup: Callable,
 	p_update_daylight: Callable,
@@ -46,8 +52,10 @@ func _init(
 	camera_getter = p_camera_getter
 	trail_field_getter = p_trail_field_getter
 	map_document_getter = p_map_document_getter
+	starter_water_cells_getter = p_starter_water_cells_getter
 	world_setup_getter = p_world_setup_getter
 	world_setup_setter = p_world_setup_setter
+	water_access_setter = p_water_access_setter
 	add_to_scene = p_add_to_scene
 	build_world_setup = p_build_world_setup
 	update_daylight = p_update_daylight

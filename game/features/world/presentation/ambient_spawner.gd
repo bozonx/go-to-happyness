@@ -2,7 +2,6 @@ class_name AmbientSpawner
 extends Node3D
 
 const FirefliesEffectScene = preload("res://game/features/world/presentation/fireflies_effect.tscn")
-const PondScene = preload("res://game/features/world/presentation/pond.tscn")
 const TreeScene = preload("res://game/features/world/presentation/tree.tscn")
 const GrassSourceScene = preload("res://game/features/world/presentation/grass_source.tscn")
 const ForageSourceScene = preload("res://game/features/world/presentation/forage_source.tscn")
@@ -36,28 +35,6 @@ func create_forest() -> void:
 		_create_forage_sources_near_tree(cell)
 	simulation.world_navigation_controller.refresh_navigation_grid()
 	_create_firefly_clusters()
-
-
-func create_ponds() -> void:
-	# Natural ponds are part of the terrain, not a building.
-	if layout == null:
-		return
-	for cell: Vector2i in layout.get("pond_cells"):
-		var center: Vector3 = simulation.nav_grid.cell_center(cell) if simulation.nav_grid != null else Vector3((cell.x + 0.5) * simulation.CELL_SIZE, 0.0, (cell.y + 0.5) * simulation.CELL_SIZE)
-		simulation.pond_positions.append(center)
-		_create_pond_visual(center)
-	simulation.world_navigation_controller.refresh_navigation_grid()
-
-
-func _create_pond_visual(center: Vector3) -> void:
-	var pond: Node3D = PondScene.instantiate()
-	pond.position = center
-	simulation.world_navigation_controller.add_landscape_object(pond)
-	
-	# Ponds and excavated terrain are part of the same routing obstacle map.
-	for x in range(-2, 3):
-		for z in range(-2, 3):
-			simulation.terrain_blocked_cells[simulation.cell_from_position(center) + Vector2i(x, z)] = true
 
 
 func _create_tree(position_on_board: Vector3, refresh_navigation := true) -> void:

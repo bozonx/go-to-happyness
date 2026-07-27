@@ -7,12 +7,17 @@ extends RefCounted
 ## design derived the kind of water from the bottom material (`riverbed`,
 ## `lakebed`, `seabed`) and that breaks on the ordinary cases: one river runs over
 ## gravel, sand and silt without changing colour; a drained channel keeps its type
-## and loses its water; a fish stock needs an owner that can be depleted and
-## refill, which a tile cannot be; and a current is a property of a whole channel,
-## not of single cells.
+## and loses its water; and a current is a property of a whole channel, not of
+## single cells.
 ##
 ## So a cell stores nothing but a reference (`body_id`), a surface level and a
 ## state byte, and everything that makes water *this* water lives here.
+##
+## **A type earns its place in the enum only by changing a mechanic** — salinity,
+## current or damage. Anything that differs by wave height, colour and foam alone
+## is three authored numbers on a `LAKE`, not a fourth entry. This is the entry
+## rule `terrain_materials.md` §1 puts on the material catalog, applied here for
+## the same reason: every type costs a row in five tables forever.
 ##
 ## Ice is NOT here: freezing is a state of the cells (`WaterGrid`), because a lake
 ## can be frozen at its edges and open in the middle, and because the thaw must
@@ -25,11 +30,12 @@ const NO_BODY := 0
 const MIN_ID := 1
 const MAX_ID := 255
 
-enum Type { SEA, RIVER, LAKE, POND, LAVA }
+enum Type { SEA, RIVER, LAKE, LAVA }
 
-const TYPE_IDS: Array[StringName] = [&"sea", &"river", &"lake", &"pond", &"lava"]
+const TYPE_IDS: Array[StringName] = [&"sea", &"river", &"lake", &"lava"]
 
-## FRESH water is drinkable and carries the freshwater fish table; SALT is neither.
+## FRESH water is drinkable; SALT is not. That is the only mechanic salinity has,
+## and it is why SEA is a type of its own rather than a blue LAKE.
 enum Salinity { FRESH, SALT }
 
 ## Flow is packed per cell as `dir | strength << 3`: eight compass slots and a
@@ -65,10 +71,6 @@ var freezes := true
 ## percentages of a board, and a per-cell array of vectors for them is 9216
 ## entries to store a few hundred.
 var flow: Dictionary = {}
-## species -> amount, and the daily refill. Fishing gets a real economy — a quota,
-## overfishing and recovery — on the same pattern as the other resource states.
-var fish_stock: Dictionary = {}
-var fish_regen_per_day: Dictionary = {}
 
 
 ## A body with the defaults of its type. Everything below can be overridden by the
@@ -95,10 +97,6 @@ static func of_type(body_id: int, body_type: Type) -> WaterBody:
 			body.wave_amplitude = 0.04
 			body.colour = Color(0.13, 0.32, 0.45, 1.0)
 			body.foam_strength = 0.35
-		Type.POND:
-			body.wave_amplitude = 0.015
-			body.colour = Color(0.17, 0.30, 0.31, 1.0)
-			body.foam_strength = 0.15
 		Type.LAVA:
 			body.wave_amplitude = 0.03
 			body.colour = Color(0.85, 0.26, 0.06, 1.0)
@@ -184,8 +182,6 @@ func to_dict() -> Dictionary:
 		"salinity": "salt" if salinity == Salinity.SALT else "fresh",
 		"freezes": freezes,
 		"flow": flow_entries,
-		"fish_stock": fish_stock.duplicate(true),
-		"fish_regen_per_day": fish_regen_per_day.duplicate(true),
 	}
 
 
@@ -206,8 +202,6 @@ static func from_dict(source: Dictionary) -> WaterBody:
 				Vector2i(int(record.get("x", 0)), int(record.get("z", 0))),
 				int(record.get("dir", 0)), int(record.get("strength", 0)),
 			)
-	body.fish_stock = (source.get("fish_stock", {}) as Dictionary).duplicate(true)
-	body.fish_regen_per_day = (source.get("fish_regen_per_day", {}) as Dictionary).duplicate(true)
 	return body
 
 

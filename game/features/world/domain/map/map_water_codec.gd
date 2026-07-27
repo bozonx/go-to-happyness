@@ -23,6 +23,8 @@ const BYTES_PER_CELL := 3
 
 ## Levels run over the same range as terrain heights, so they take the same bias.
 const HEIGHT_BIAS := 64
+const MIN_ENCODABLE := WaterGrid.MIN_HEIGHT
+const MAX_ENCODABLE := WaterGrid.MAX_HEIGHT
 
 
 static func encode(grid: WaterGrid, skip_if_empty := true) -> PackedByteArray:
@@ -42,7 +44,16 @@ static func encode(grid: WaterGrid, skip_if_empty := true) -> PackedByteArray:
 	for z in range(minimum.y, maximum.y + 1):
 		for x in range(minimum.x, maximum.x + 1):
 			var cell := Vector2i(x, z)
-			buffer[offset] = clampi(grid.height_of(cell) + HEIGHT_BIAS, 0, 255)
+			var level := grid.height_of(cell)
+			# Out of range is refused, never clamped (§2.2). A clamp here would put
+			# a lake back one step lower than the author left it and nothing would
+			# ever report that the file no longer matches the map.
+			if level < MIN_ENCODABLE or level > MAX_ENCODABLE:
+				push_error("[map] уровень воды %d в клетке %s вне диапазона %d..%d" % [
+					level, cell, MIN_ENCODABLE, MAX_ENCODABLE,
+				])
+				return PackedByteArray()
+			buffer[offset] = level + HEIGHT_BIAS
 			buffer[offset + 1] = grid.body_id_at(cell)
 			buffer[offset + 2] = grid.flags_of(cell)
 			offset += BYTES_PER_CELL

@@ -99,6 +99,18 @@ the production `TerrainGrid`, `TerrainService`, chunk mesher and `NavGrid` in is
 - Water is a second layer over the same board (`WaterGrid` + `WaterBody` registry,
   `engine/grid_terrain_system.md` §9). It is authored, never simulated. Depth is **not** stored —
   it is water level minus ground — so raising a lake bed drains it.
+- **There is exactly one water system.** The old pond props plus hand-written
+  `terrain_blocked_cells` are gone; a session with no map digs the biome's ponds into the
+  real grids (`StarterWater`), and everything gameplay asks about water goes through
+  `WaterAccessService`. Do not reintroduce a second list of "where the water is".
+- `border.kind` in the map header is a global option: `ocean` draws the horizon plane and
+  makes `BorderOceanService` flood any rim-connected lowland below `border.level` after
+  every terrain stroke; `nothing` draws nothing and floods nothing (`engine/map_editor.md`
+  §6.1). The fill joins the stroke's undo entry — one author action, one Ctrl+Z.
+- Frozen water has a collider and open water does not. Routing walks ice at the water
+  level, so without that floor `move_and_slide` drops the walker to the lake bed.
+- A registry change publishes only the cells it reaches. Creating an empty body must stay
+  free: republishing the board for it cost 2.5 s per palette click at 256×256.
 - **All terrain and water edits go through `TerrainService` / `WaterService`.** The commit
   is what republishes navigation and keeps undo and the mesher in step. Writing the grid
   directly means republishing by hand (`TerrainNavigationPublisher.publish_all`) — a bug

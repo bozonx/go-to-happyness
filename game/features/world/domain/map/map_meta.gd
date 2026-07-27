@@ -16,10 +16,21 @@ const KIND_MAP := &"map"
 ## (§2). Phase 1 reads and writes the field but only authors `map`.
 const KIND_PREFAB := &"prefab"
 
+## What lies past the last column of the board (`map_editor.md` §6.1). This is a
+## property of the map file, not of a tool or a session: it decides both what the
+## horizon looks like and whether lowering a column at the rim floods.
+##
+## `BORDER_OCEAN` — the world continues as sea at `border_level`. Any lowland
+## connected to the rim and lying below that level is water, and the editor keeps
+## it that way after every terrain stroke.
+## `BORDER_NOTHING` — the board ends. Nothing is drawn beyond it and digging at
+## the rim digs a dry pit.
 const BORDER_OCEAN := &"ocean"
 const BORDER_NOTHING := &"nothing"
 
-const FORMAT_VERSION := 1
+## 2 — `border.level` became whole Δh steps, and `water` registry entries lost
+## their fish fields. Both were authored data that no map has yet.
+const FORMAT_VERSION := 2
 
 ## Board presets (§6.2). All are multiples of `TerrainGrid.CHUNK_CELLS` so the
 ## board is whole chunks. The default is the largest one that still loads
@@ -46,8 +57,11 @@ var board_cells := DEFAULT_BOARD_CELLS
 var cell_size := DEFAULT_CELL_SIZE
 
 var border_kind: StringName = BORDER_OCEAN
-## Ocean-connected lowland is filled at the terrain's zero level by default.
-var border_level := 0.0
+## Sea level in whole Δh steps, like every other height in the system — a border
+## that could sit between two terraces would flood by a fraction of a column and
+## no part of the grid can express that. Ocean-connected lowland below it is
+## water; the default is the terrain's zero.
+var border_level := 0
 
 var start: MapStart = MapStart.new()
 
@@ -76,7 +90,7 @@ static func from_dict(source: Dictionary) -> MapMeta:
 	meta.border_kind = StringName(border.get("kind", meta.border_kind))
 	if meta.border_kind != BORDER_OCEAN and meta.border_kind != BORDER_NOTHING:
 		meta.border_kind = BORDER_OCEAN
-	meta.border_level = float(border.get("level", meta.border_level))
+	meta.border_level = int(border.get("level", meta.border_level))
 
 	meta.start = MapStart.from_dict(source.get("start", {}))
 	for entry: Variant in source.get("required_content", []):
@@ -103,6 +117,12 @@ func to_dict() -> Dictionary:
 		result["border"] = {"kind": String(border_kind), "level": border_level}
 		result["start"] = start.to_dict()
 	return result
+
+
+## Whether the map continues as sea past its rim. The one question every consumer
+## of the border actually asks.
+func has_border_ocean() -> bool:
+	return border_kind == BORDER_OCEAN
 
 
 func board_metres() -> float:

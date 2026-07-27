@@ -55,7 +55,7 @@ The Tent Era ships with these systems:
 - New `tarp` resource with a straw/tarp building branch (tents, forager tents, materials yards, craft tents, trade tents, warehouses, toilets).
 - Research tree: `straw_tents` -> `tarp_tents` -> `trade` -> `tarp_trade_tent`, with `earth_buildings` and campfire upgrades alongside.
 - Entrance sign trading: buy food, water, construction gloves, and buckets.
-- Bucket-based water gathering from ponds.
+- Bucket-based water gathering from the bank of any fresh water on the map.
 - Nightly campfire stories with three themes: optimistic wellbeing boost, teaching skill gain, and a focused work plan.
 - Data-driven random event system with 12 tent-era events: conditions, cooldowns, event chains (forest ranger -> wild boars), delayed consequences (smoky firewood), and random chance outcomes.
 - Weather-driven rain decay on exposed resources, fire extinguishing, and smoke debuffs from wet firewood.

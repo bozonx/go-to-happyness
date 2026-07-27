@@ -61,7 +61,7 @@ func _setup_workplace_and_visuals() -> void:
 		game.construction_sites,
 		game.demolition_sites,
 		game.tree_positions,
-		game.pond_positions,
+		func() -> Array[Vector3]: return game.water_source_positions,
 		game.craft_tent_positions,
 		game.dig_sites,
 		func(building): return game.fire_management_service.is_fire_lit(building),
@@ -241,7 +241,7 @@ func _setup_foraging_and_fire() -> void:
 		game.tree_nodes,
 		game.sawmill_positions,
 		game.farm_positions,
-		game.pond_positions,
+		func() -> Array[Vector3]: return game.water_source_positions,
 		game.grass_sources,
 		game.forage_sources,
 		game.rabbit_sources,
@@ -706,7 +706,6 @@ func _setup_controllers_and_world() -> void:
 	game.ambient_spawner.create_forest()
 	game.ambient_spawner.spawn_trash_piles()
 	game.ambient_spawner.spawn_initial_rabbits()
-	game.ambient_spawner.create_ponds()
 
 
 func _setup_citizens_and_ai() -> void:

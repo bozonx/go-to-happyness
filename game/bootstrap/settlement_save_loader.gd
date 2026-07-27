@@ -51,7 +51,6 @@ func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
 	game.farm_positions.clear()
 	game.builders_guild_positions.clear()
 	game.construction_company_positions.clear()
-	game.pond_positions.clear()
 	game.forager_positions.clear()
 	game.materials_yard_positions.clear()
 	game.school_positions.clear()

@@ -31,5 +31,5 @@ gloves = 1
 [resource]
 script = ExtResource("1_layout")
 tree_cells = [Vector2i(-16, -15), Vector2i(-15, -18), Vector2i(-18, -12), Vector2i(-12, -19), Vector2i(16, -15), Vector2i(15, -18), Vector2i(18, -12), Vector2i(12, -19), Vector2i(-16, 15), Vector2i(-15, 18), Vector2i(-18, 12), Vector2i(-12, 19), Vector2i(16, 15), Vector2i(15, 18), Vector2i(18, 12), Vector2i(12, 19), Vector2i(-20, -5), Vector2i(-20, 5), Vector2i(20, -5), Vector2i(20, 5), Vector2i(-5, -20), Vector2i(5, -20), Vector2i(-5, 20), Vector2i(5, 20)]
-pond_cells = [Vector2i(-9, 8), Vector2i(10, -7)]
+water_cells = [Vector2i(-9, 8), Vector2i(10, -7)]
 starter_loot = [SubResource("StarterLoot1"), SubResource("StarterLoot2"), SubResource("StarterLoot3"), SubResource("StarterLoot4")]

@@ -16,12 +16,14 @@ static func run_all() -> void:
 	_test_reverse_flood_drains_whole_body()
 	_test_no_hover_means_no_edit()
 	_test_no_body_means_refusal()
-	_test_cycle_tool_rotates_flood_and_ice()
+	_test_cycle_tool_rotates_the_three_tools()
 	_test_adjust_level_clamps()
 	_test_pick_level_from_ground()
 	_test_create_body_is_undoable()
 	_test_undo_and_redo()
 	_test_freeze_and_thaw()
+	_test_level_tool_stamps_an_absolute_level()
+	_test_erase_tool_clears_the_cells_under_the_brush()
 	print("    [PASS] Water Brush Tests")
 
 
@@ -143,13 +145,15 @@ static func _test_no_body_means_refusal() -> void:
 
 # --- Tool cycling -------------------------------------------------------------
 
-static func _test_cycle_tool_rotates_flood_and_ice() -> void:
+static func _test_cycle_tool_rotates_the_three_tools() -> void:
 	var world := _make()
 	var brush: WaterBrushController = world["brush"]
 
 	assert(brush.tool == WaterBrushController.TOOL_FLOOD)
 	brush.cycle_tool()
-	assert(brush.tool == WaterBrushController.TOOL_FREEZE)
+	assert(brush.tool == WaterBrushController.TOOL_LEVEL)
+	brush.cycle_tool()
+	assert(brush.tool == WaterBrushController.TOOL_ERASE)
 	brush.cycle_tool()
 	assert(brush.tool == WaterBrushController.TOOL_FLOOD)
 
@@ -235,10 +239,67 @@ static func _test_freeze_and_thaw() -> void:
 	brush.apply()
 	assert(water.has_water(centre))
 
-	brush.tool = WaterBrushController.TOOL_FREEZE
-	brush.apply()
+	# Ice is a whole-body seasonal operation (§9.6), not a per-cell brush.
+	brush.toggle_body_ice()
 	assert(water.is_frozen(centre))
-
-	# Right button while freezing = thaw.
-	brush.apply_secondary()
+	brush.toggle_body_ice()
 	assert(not water.is_frozen(centre))
+
+
+# --- Level and erase ------------------------------------------------------------
+
+## The level tool is what makes a lake reversible. Flood only reaches cells below
+## the level it is given, so lowering one by re-flooding leaves every deeper cell
+## where it was; `level` stamps an absolute surface onto what is already wet.
+static func _test_level_tool_stamps_an_absolute_level() -> void:
+	var world := _make()
+	var terrain: TerrainGrid = world["terrain"]
+	var water: WaterGrid = world["water"]
+	var brush: WaterBrushController = world["brush"]
+	for z in range(-2, 3):
+		for x in range(-2, 3):
+			assert(terrain.set_height(Vector2i(x, z), -3))
+	_make_body(world)
+	brush.level = 0
+	_hover(brush, Vector2i.ZERO)
+	brush.apply()
+	assert(water.height_of(Vector2i.ZERO) == 0)
+
+	brush.tool = WaterBrushController.TOOL_LEVEL
+	brush.adjust_brush_size(2)
+	brush.level = -1
+	brush.apply()
+	assert(water.height_of(Vector2i.ZERO) == -1, "the surface came down")
+	assert(water.is_wet(terrain, Vector2i.ZERO), "and there is still water in the hole")
+
+	# Right button under this tool takes the level from the ground instead of
+	# stamping one: the natural way to say "fill this to just over that rock".
+	brush.apply_secondary()
+	assert(brush.level == terrain.height_of(Vector2i.ZERO) + 1)
+
+
+static func _test_erase_tool_clears_the_cells_under_the_brush() -> void:
+	var world := _make()
+	var terrain: TerrainGrid = world["terrain"]
+	var water: WaterGrid = world["water"]
+	var service: WaterService = world["service"]
+	var brush: WaterBrushController = world["brush"]
+	for z in range(-2, 3):
+		for x in range(-2, 3):
+			assert(terrain.set_height(Vector2i(x, z), -2))
+	var body := _make_body(world)
+	brush.level = 0
+	_hover(brush, Vector2i.ZERO)
+	brush.apply()
+	var wet_before := water.wet_cell_count()
+	assert(wet_before > 1)
+
+	brush.tool = WaterBrushController.TOOL_ERASE
+	brush.apply()
+	assert(not water.has_water(Vector2i.ZERO))
+	assert(water.wet_cell_count() < wet_before)
+	# Erasing cells is not draining the body: the author keeps the lake selected.
+	assert(water.has_body(body.id))
+
+	assert(service.undo())
+	assert(water.wet_cell_count() == wet_before)

@@ -6,7 +6,6 @@ var sawmill_positions: Array[Vector3] = []
 var farm_positions: Array[Vector3] = []
 var builders_guild_positions: Array[Vector3] = []
 var construction_company_positions: Array[Vector3] = []
-var pond_positions: Array[Vector3] = []
 var forager_positions: Array[Vector3] = []
 var materials_yard_positions: Array[Vector3] = []
 var school_positions: Array[Vector3] = []
@@ -23,7 +22,6 @@ func clear_all() -> void:
 	farm_positions.clear()
 	builders_guild_positions.clear()
 	construction_company_positions.clear()
-	pond_positions.clear()
 	forager_positions.clear()
 	materials_yard_positions.clear()
 	school_positions.clear()

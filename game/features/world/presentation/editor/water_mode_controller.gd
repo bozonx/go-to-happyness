@@ -58,9 +58,15 @@ func hover_brush() -> BaseBrushController:
 	return context.water_brush if context != null else null
 
 
+## Flood takes its extent from the basin, not from the brush, so the size control
+## belongs to the two tools that stamp a square.
 func adjust_brush_size(delta: int) -> void:
-	if context != null and context.water_brush != null and context.water_brush.tool == WaterBrushController.TOOL_FREEZE:
+	if context != null and context.water_brush != null and _brush_has_size():
 		context.water_brush.adjust_brush_size(delta)
+
+
+func _brush_has_size() -> bool:
+	return context != null and context.water_brush != null and context.water_brush.tool != WaterBrushController.TOOL_FLOOD
 
 
 func process(_delta: float) -> void:
@@ -101,10 +107,10 @@ func _handle_key(event: InputEventKey) -> bool:
 		KEY_TAB:
 			brush.cycle_tool()
 		KEY_BRACKETLEFT:
-			if brush.tool == WaterBrushController.TOOL_FREEZE:
+			if _brush_has_size():
 				brush.adjust_brush_size(-1)
 		KEY_BRACKETRIGHT:
-			if brush.tool == WaterBrushController.TOOL_FREEZE:
+			if _brush_has_size():
 				brush.adjust_brush_size(1)
 		KEY_EQUAL, KEY_KP_ADD:
 			brush.adjust_level(1)
@@ -134,7 +140,7 @@ func _stroke() -> void:
 	context.set_edit_label(_edit_label())
 	var brush := context.water_brush
 	brush.apply()
-	if brush.tool == WaterBrushController.TOOL_FLOOD and _flow_strength > 0 and _selected_body_is_river():
+	if brush.tool != WaterBrushController.TOOL_ERASE and _flow_strength > 0 and _selected_body_is_river():
 		context.water_service.set_flow(
 			brush.brush_cells(brush.hovered_cell),
 			brush.body_id,
@@ -146,7 +152,8 @@ func _stroke() -> void:
 func _edit_label() -> String:
 	match context.water_brush.tool:
 		WaterBrushController.TOOL_FLOOD: return "залив низины"
-		WaterBrushController.TOOL_FREEZE: return "лёд"
+		WaterBrushController.TOOL_LEVEL: return "уровень воды"
+		WaterBrushController.TOOL_ERASE: return "осушение"
 	return "вода"
 
 
@@ -209,11 +216,11 @@ func tool_options() -> Array:
 		))
 	options.append(ToolOption.of(OPTION_LEVEL_DOWN, "Уровень −"))
 	options.append(ToolOption.of(OPTION_LEVEL_UP, "Уровень +"))
-	if brush.tool == WaterBrushController.TOOL_FREEZE:
+	if _brush_has_size():
 		options.append(ToolOption.of(&"brush_size", "Кисть: %d" % (brush.brush_size - 1), &"brush", false, true))
 		options.append(ToolOption.of(OPTION_BRUSH_DOWN, "−", &"brush"))
 		options.append(ToolOption.of(OPTION_BRUSH_UP, "+", &"brush"))
-		options.append(ToolOption.of(OPTION_ICE, "Толщина льда: %d" % brush.ice_thickness))
+	options.append(ToolOption.of(OPTION_ICE, "Толщина льда: %d" % brush.ice_thickness))
 	options.append(ToolOption.of(OPTION_BODY_ICE, "Заморозить водоём"))
 	if _selected_body_is_river():
 		options.append(ToolOption.of(OPTION_FLOW_DIR, "Течение: %s" % TerrainBrushController.direction_name(_flow_direction)))
@@ -259,7 +266,7 @@ func inspector_lines() -> Array[String]:
 	var body := context.water.body(brush.body_id)
 	var lines: Array[String] = []
 	lines.append("Инструмент: %s" % brush.tool)
-	if brush.tool == WaterBrushController.TOOL_FREEZE:
+	if _brush_has_size():
 		lines.append("Кисть: %d×%d" % [brush.brush_size * 2 - 1, brush.brush_size * 2 - 1])
 	lines.append("Уровень: %d (%.1f м)" % [brush.level, float(brush.level) * TerrainGrid.HEIGHT_STEP])
 	lines.append("")
@@ -280,10 +287,10 @@ func inspector_lines() -> Array[String]:
 		TravelerProfile.MIN_ICE_THICKNESS_CART,
 	])
 	lines.append("")
-	lines.append("ЛКМ Flood — заполнить низину; ПКМ Flood — осушить весь водоём под курсором")
-	lines.append("ЛКМ/ПКМ лёд — заморозить/растопить; [ ] — размер кисти льда")
-	lines.append("+ / − уровень, G — взять уровень с рельефа")
-	lines.append("F — заморозить/растопить водоём, I — толщина льда")
+	lines.append("ЛКМ: flood — залить низину, level — задать уровень, erase — осушить клетки")
+	lines.append("ПКМ — осушить весь водоём под курсором; под level — взять уровень с рельефа")
+	lines.append("[ ] — размер кисти, + / − уровень, G — взять уровень с рельефа")
+	lines.append("F — заморозить/растопить водоём целиком, I — толщина льда")
 	lines.append("V — направление течения, C — сила течения")
 	return lines
 
