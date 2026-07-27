@@ -15,7 +15,7 @@ layout_mode = 0
 offset_right = 32.0
 offset_bottom = 26.0
 tooltip_text = "Горячие клавиши"
-text = "[?]"
+text = "?"
 
 [node name="Popup" type="PanelContainer" parent="."]
 visible = false

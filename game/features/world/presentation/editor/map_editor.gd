@@ -72,6 +72,7 @@ var _context := MapEditorContext.new()
 var _modes: Array[MapEditorMode] = []
 var _active: MapEditorMode = null
 var _message := "готово"
+var dev_mode := false
 ## True while the history is replaying a command, so the commits that replay emits
 ## are not recorded as new commands.
 var _replaying := false
@@ -104,6 +105,7 @@ func _resolve_launch_mode() -> void:
 	if launch_manager != null and "editor_mode_forced" in launch_manager \
 			and bool(launch_manager.get("editor_mode_forced")):
 		dev = bool(launch_manager.get("editor_dev_mode"))
+	dev_mode = dev
 	_service = MapDocumentService.new(dev)
 
 
@@ -319,6 +321,7 @@ func _connect_ui() -> void:
 		_active.select_palette_entry(entry_id))
 	_palette.option_activated.connect(func(option_id: StringName) -> void:
 		_active.activate_option(option_id))
+	_back_button.visible = not dev_mode
 	_back_button.pressed.connect(_return_to_menu)
 	_new_button.pressed.connect(_on_new_pressed)
 	_load_button.pressed.connect(_on_load_pressed)

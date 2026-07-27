@@ -50,8 +50,6 @@ var _asset_label: Label = null
 var _badges_label: Label = null
 var _zone_option: OptionButton = null
 var _replace_btn: Button = null
-var _undo_btn: Button = null
-var _redo_btn: Button = null
 var _dragging: bool = false
 ## Grab offset so dragging moves the object relative to where it was picked up.
 var _drag_offset: Vector3 = Vector3.ZERO
@@ -119,8 +117,6 @@ func setup(editor: Node) -> void:
 	_duplicate_btn = editor.get_node("%DecorDuplicateBtn")
 	_delete_btn = editor.get_node("%DecorDeleteBtn")
 	_toolbar_delete_btn = editor.get_node("%DecorDeleteSelectionBtn")
-	_undo_btn = editor.get_node("%DecorUndoBtn")
-	_redo_btn = editor.get_node("%DecorRedoBtn")
 	_layer_label = editor.get_node("%DecorLayerLabel")
 
 	# Fixture editor — delegated to FixtureEditorPanel
@@ -150,8 +146,6 @@ func setup(editor: Node) -> void:
 	_delete_btn.pressed.connect(delete_selection)
 	_toolbar_delete_btn.pressed.connect(delete_selection)
 	_replace_btn.pressed.connect(_replace_selected_object)
-	_undo_btn.pressed.connect(undo)
-	_redo_btn.pressed.connect(redo)
 	_pos_x_spin.value_changed.connect(_on_transform_spin_changed)
 	_pos_y_spin.value_changed.connect(_on_transform_spin_changed)
 	_pos_z_spin.value_changed.connect(_on_transform_spin_changed)
@@ -181,7 +175,6 @@ func activate() -> void:
 	_refresh_inspector()
 	_fixture_panel.refresh_fixture_ui()
 	_update_layer_label()
-	_update_undo_redo_buttons()
 
 
 func deactivate() -> void:
@@ -557,19 +550,12 @@ func redo() -> bool:
 	return _editor != null and _editor.redo()
 
 
-func _update_undo_redo_buttons() -> void:
-	if _undo_btn != null:
-		_undo_btn.disabled = _editor == null or not _editor.can_undo()
-	if _redo_btn != null:
-		_redo_btn.disabled = _editor == null or not _editor.can_redo()
-
-
 func refresh_history_buttons() -> void:
-	_update_undo_redo_buttons()
+	pass
 
 
 func clear_undo_history() -> void:
-	_update_undo_redo_buttons()
+	pass
 
 
 # ---------------------------------------------------------------------------

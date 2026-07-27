@@ -112,6 +112,20 @@ tooltip_text = "Сохранить как новый чертёж"
 [node name="VSep1" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox"]
 layout_mode = 2
 
+[node name="UndoBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(38, 0)
+text = "↩"
+tooltip_text = "Отменить (Ctrl+Z)"
+
+[node name="RedoBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(38, 0)
+text = "↪"
+tooltip_text = "Повторить (Ctrl+Shift+Z)"
+
 [node name="ModeFrameBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -273,21 +287,6 @@ layout_mode = 2
 toggle_mode = true
 text = "0.25"
 tooltip_text = "Привязка к сетке: 0.25 м"
-
-[node name="VSepDecorUndo" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
-layout_mode = 2
-
-[node name="DecorUndoBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "↶"
-tooltip_text = "Ctrl+Z"
-
-[node name="DecorRedoBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "↷"
-tooltip_text = "Ctrl+Y"
 
 [node name="VSepDecorLayer" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/DecorToolbar"]
 layout_mode = 2
@@ -1304,6 +1303,8 @@ placeholder_text = "my_building_id"
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/LoadBtn" to="." method="_on_load_pressed"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/SaveBtn" to="." method="_on_save_pressed"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/SaveAsBtn" to="." method="_on_save_as_pressed"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/UndoBtn" to="." method="_on_undo_pressed"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/RedoBtn" to="." method="_on_redo_pressed"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/ToolPlaceBtn" to="." method="_on_tool_place_pressed"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/ToolEraseBtn" to="." method="_on_tool_erase_pressed"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/BrushLineBtn" to="." method="_on_brush_line_pressed"]

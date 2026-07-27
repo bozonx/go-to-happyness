@@ -90,6 +90,8 @@ var _orbiting: bool = false
 @onready var _mode_zones_btn: Button = %ModeZonesBtn
 
 @onready var _back_btn: Button = %BackBtn
+@onready var _undo_btn: Button = %UndoBtn
+@onready var _redo_btn: Button = %RedoBtn
 
 var _mode_buttons: Dictionary = {}
 ## Prevent value_changed callbacks from overwriting one footprint dimension
@@ -397,6 +399,7 @@ func undo() -> bool:
 	_redo_stack.append(_history_baseline.duplicate(true))
 	_restore_history_snapshot(_undo_stack.pop_back())
 	_update_status("Отменено. Шагов в истории: %d" % _undo_stack.size())
+	_refresh_undo_redo_buttons()
 	return true
 
 
@@ -415,7 +418,23 @@ func redo() -> bool:
 	_undo_stack.append(_history_baseline.duplicate(true))
 	_restore_history_snapshot(_redo_stack.pop_back())
 	_update_status("Повторено. Шагов в истории: %d" % _redo_stack.size())
+	_refresh_undo_redo_buttons()
 	return true
+
+
+func _on_undo_pressed() -> void:
+	undo()
+
+
+func _on_redo_pressed() -> void:
+	redo()
+
+
+func _refresh_undo_redo_buttons() -> void:
+	if _undo_btn != null:
+		_undo_btn.disabled = _undo_stack.is_empty()
+	if _redo_btn != null:
+		_redo_btn.disabled = _redo_stack.is_empty()
 
 
 func set_status(message: String) -> void:
@@ -670,6 +689,7 @@ func _record_history_change() -> void:
 		_undo_stack.pop_front()
 	_redo_stack.clear()
 	_history_baseline = current
+	_refresh_undo_redo_buttons()
 	if decor_mode != null:
 		decor_mode.refresh_history_buttons()
 
@@ -679,6 +699,7 @@ func reset_history() -> void:
 	_redo_stack.clear()
 	_history_baseline = blueprint.to_dict() if blueprint != null else {}
 	_saved_snapshot = _history_baseline.duplicate(true)
+	_refresh_undo_redo_buttons()
 
 
 func _restore_history_snapshot(snapshot: Dictionary) -> void:
