@@ -807,7 +807,7 @@ func _rebuild_brush_inspector() -> void:
 	var variants: Array = BuildingBlockCatalog.variants(_editor.current_block_id)
 	var kinds: Array = BuildingBlockCatalog.available_anchors(_editor.current_block_id, _editor.current_variant)
 	if kinds.size() <= 1:
-		_editor.current_anchor = BuildingBlockCatalog.ANCHOR_CENTER
+		_editor.current_anchor = kinds[0]
 	else:
 		_editor.current_anchor = BuildingBlockCatalog.normalize_anchor(_editor.current_block_id, _editor.current_variant, _editor.current_anchor)
 
@@ -818,7 +818,10 @@ func _rebuild_brush_inspector() -> void:
 	toolbar.name = "BrushToolbar"
 	host.add_child(toolbar)
 
-	if not variants.is_empty():
+	var grouped_options: bool = not variants.is_empty() and variants[0].has("section")
+	if grouped_options:
+		_build_column_option_buttons(toolbar, variants, &"section", &"section_name")
+	elif not variants.is_empty():
 		for v in variants:
 			var v_id: StringName = v["id"]
 			var vbtn := Button.new()
@@ -842,6 +845,38 @@ func _rebuild_brush_inspector() -> void:
 			abtn.button_pressed = kind == _editor.current_anchor
 			abtn.pressed.connect(select_anchor.bind(kind))
 			toolbar.add_child(abtn)
+
+	if grouped_options:
+		var length_toolbar := HBoxContainer.new()
+		length_toolbar.name = "LengthToolbar"
+		host.add_child(length_toolbar)
+		_build_column_option_buttons(length_toolbar, variants, &"length", &"length_name")
+
+
+func _build_column_option_buttons(toolbar: HBoxContainer, variants: Array, option: StringName, label_key: StringName) -> void:
+	var current := BuildingBlockCatalog.variant_option(_editor.current_block_id, _editor.current_variant, option)
+	var seen: Dictionary = {}
+	for variant in variants:
+		var value: StringName = variant.get(option, &"")
+		if seen.has(value):
+			continue
+		seen[value] = true
+		var button := Button.new()
+		button.toggle_mode = true
+		button.text = variant.get(label_key, str(value))
+		button.button_pressed = value == current
+		button.pressed.connect(_select_column_option.bind(option, value))
+		toolbar.add_child(button)
+
+
+func _select_column_option(option: StringName, value: StringName) -> void:
+	var section := BuildingBlockCatalog.variant_option(_editor.current_block_id, _editor.current_variant, &"section")
+	var length := BuildingBlockCatalog.variant_option(_editor.current_block_id, _editor.current_variant, &"length")
+	if option == &"section":
+		section = value
+	else:
+		length = value
+	select_block(_editor.current_block_id, BuildingBlockCatalog.variant_for_options(_editor.current_block_id, section, length))
 
 
 func _anchor_label(kind: int) -> String:

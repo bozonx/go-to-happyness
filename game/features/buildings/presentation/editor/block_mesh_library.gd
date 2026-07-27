@@ -305,12 +305,13 @@ func _build_door_wall(size: Vector3) -> ArrayMesh:
 	return st.commit()
 
 
-## A horizontal half-slab with a semicircle cut out from its lower face. The
-## curve springs from the slab's bottom edge, leaving material above the opening.
+## A 0.5 m slab with the profile of a 1 m half-column removed from it. In the
+## default orientation its flat diameter spans the lower edge and its rounded
+## side cuts upward through the slab.
 func _build_arch(size: Vector3, segments: int = 16) -> ArrayMesh:
 	var hx := size.x * 0.5
 	var hy := size.y * 0.5
-	var radius := minf(hx, hy)
+	var radius := hx
 	var profile := PackedVector2Array()
 	# Cut-out first: the semicircle is traced left → right along the bottom edge,
 	# which keeps the whole outline counter-clockwise.

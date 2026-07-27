@@ -76,9 +76,12 @@ static func _test_catalog() -> void:
 	assert(BuildingBlockCatalogScript.default_variant(&"column_square") == &"0.5")
 	assert(BuildingBlockCatalogScript.normalize_variant(&"column_square", &"bogus") == &"0.5")
 	assert(BuildingBlockCatalogScript.size_of(&"column_round", &"0.5") == Vector3(0.5, 1.0, 0.5))
+	assert(BuildingBlockCatalogScript.size_of(&"column_square", &"0.5_half") == Vector3(0.5, 0.5, 0.5))
+	assert(BuildingBlockCatalogScript.size_of(&"column_round", &"0.5_quarter") == Vector3(0.5, 0.25, 0.5))
+	assert(BuildingBlockCatalogScript.size_of(&"column_half", &"0.5_quarter") == Vector3(0.5, 0.25, 0.25))
+	assert(BuildingBlockCatalogScript.variant_for_options(&"column_round", &"0.5", &"quarter") == &"0.5_quarter")
 	assert(BuildingBlockCatalogScript.mesh_shape_of(&"column_round", &"0.5") == BuildingBlockCatalogScript.SHAPE_CYLINDER)
-	assert(BuildingBlockCatalogScript.size_of(&"arch", &"lower") == Vector3(1.0, 0.25, 1.0))
-	assert(is_equal_approx(BuildingBlockCatalogScript.vertical_offset_of(&"arch", &"upper"), 0.75))
+	assert(BuildingBlockCatalogScript.size_of(&"arch") == Vector3(1.0, 0.5, 1.0))
 	assert(BuildingBlockCatalogScript.get_block(&"column_square")["category"] == BuildingBlockCatalogScript.Category.STRUCTURE)
 	# Single-cell blocks report a unit footprint.
 	assert(BuildingBlockCatalogScript.footprint_of(&"arch") == Vector3i(1, 1, 1))
@@ -95,6 +98,9 @@ static func _test_anchoring() -> void:
 	assert(C.available_anchors(&"cube", &"1") == [C.ANCHOR_CENTER])
 	assert(C.available_anchors(&"railing", &"full") == [C.ANCHOR_CENTER, C.ANCHOR_EDGE])
 	assert(C.available_anchors(&"slab", &"0.5") == [C.ANCHOR_CENTER])
+	assert(C.available_anchors(&"column_half", &"1") == [C.ANCHOR_EDGE])
+	assert(C.available_anchors(&"column_half", &"0.5") == [C.ANCHOR_EDGE, C.ANCHOR_CORNER])
+	assert(C.normalize_anchor(&"column_half", &"1", C.ANCHOR_CENTER) == C.ANCHOR_EDGE)
 	# Centre stays centred; corner snaps the 0.5m block flush to a corner and
 	# rotation pivots it around the cell centre to the opposite corner.
 	assert(C.cell_offset(&"column_square", &"0.5", C.ANCHOR_CENTER, 0) == Vector2(0.5, 0.5))

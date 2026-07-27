@@ -79,12 +79,10 @@ const BLOCKS: Array = [
 		"id": &"arch",
 		"name": "Арка",
 		"category": Category.STRUCTURE,
-		# An arch is a semicircular cut-out in a quarter-height horizontal slab.
-		# Its upper variant occupies the other quarter of the cell.
-		"size": Vector3(1.0, 0.25, 1.0),
+		# A 1 m half-column laid on the floor is cut out of a 0.5 m slab.
+		"size": Vector3(1.0, 0.5, 1.0),
 		"mesh_shape": SHAPE_ARCH,
 		"rotatable": true,
-		"variants": [{"id": &"lower", "name": "Нижний", "size": Vector3(1.0, 0.25, 1.0)}, {"id": &"upper", "name": "Верхний", "size": Vector3(1.0, 0.25, 1.0), "vertical_offset": 0.75}],
 	},
 	{"id": &"half_arch", "name": "Полуарка", "category": Category.STRUCTURE, "size": Vector3(1.0, 1.0, 1.0), "mesh_shape": SHAPE_HALF_ARCH, "rotatable": true},
 	# --- Фундамент ---------------------------------------------------------
@@ -107,8 +105,10 @@ const BLOCKS: Array = [
 		"rotatable": true,
 		"overlap_policy": &"structural_joint",
 		"variants": [
-			{"id": &"0.5", "name": "0.5 м", "size": Vector3(0.5, 1.0, 0.5)},
-			{"id": &"0.25", "name": "0.25 м", "size": Vector3(0.25, 1.0, 0.25)},
+			{"id": &"0.5", "name": "0.5 м · Полная", "section": &"0.5", "section_name": "0.5 м", "length": &"full", "length_name": "Полная", "size": Vector3(0.5, 1.0, 0.5)},
+			{"id": &"0.25", "name": "0.25 м · Полная", "section": &"0.25", "section_name": "0.25 м", "length": &"full", "length_name": "Полная", "size": Vector3(0.25, 1.0, 0.25)},
+			{"id": &"0.5_half", "name": "0.5 м · 1/2", "section": &"0.5", "section_name": "0.5 м", "length": &"half", "length_name": "1/2", "size": Vector3(0.5, 0.5, 0.5)},
+			{"id": &"0.25_half", "name": "0.25 м · 1/2", "section": &"0.25", "section_name": "0.25 м", "length": &"half", "length_name": "1/2", "size": Vector3(0.25, 0.5, 0.25)},
 		],
 	},
 	{
@@ -120,9 +120,15 @@ const BLOCKS: Array = [
 		"rotatable": true,
 		"overlap_policy": &"structural_joint",
 		"variants": [
-			{"id": &"1", "name": "1 м", "size": Vector3(1.0, 1.0, 1.0)},
-			{"id": &"0.5", "name": "0.5 м", "size": Vector3(0.5, 1.0, 0.5)},
-			{"id": &"0.25", "name": "0.25 м", "size": Vector3(0.25, 1.0, 0.25)},
+			{"id": &"1", "name": "1 м · Полная", "section": &"1", "section_name": "1 м", "length": &"full", "length_name": "Полная", "size": Vector3(1.0, 1.0, 1.0)},
+			{"id": &"0.5", "name": "0.5 м · Полная", "section": &"0.5", "section_name": "0.5 м", "length": &"full", "length_name": "Полная", "size": Vector3(0.5, 1.0, 0.5)},
+			{"id": &"0.25", "name": "0.25 м · Полная", "section": &"0.25", "section_name": "0.25 м", "length": &"full", "length_name": "Полная", "size": Vector3(0.25, 1.0, 0.25)},
+			{"id": &"1_half", "name": "1 м · 1/2", "section": &"1", "section_name": "1 м", "length": &"half", "length_name": "1/2", "size": Vector3(1.0, 0.5, 1.0)},
+			{"id": &"0.5_half", "name": "0.5 м · 1/2", "section": &"0.5", "section_name": "0.5 м", "length": &"half", "length_name": "1/2", "size": Vector3(0.5, 0.5, 0.5)},
+			{"id": &"0.25_half", "name": "0.25 м · 1/2", "section": &"0.25", "section_name": "0.25 м", "length": &"half", "length_name": "1/2", "size": Vector3(0.25, 0.5, 0.25)},
+			{"id": &"1_quarter", "name": "1 м · 1/4", "section": &"1", "section_name": "1 м", "length": &"quarter", "length_name": "1/4", "size": Vector3(1.0, 0.25, 1.0)},
+			{"id": &"0.5_quarter", "name": "0.5 м · 1/4", "section": &"0.5", "section_name": "0.5 м", "length": &"quarter", "length_name": "1/4", "size": Vector3(0.5, 0.25, 0.5)},
+			{"id": &"0.25_quarter", "name": "0.25 м · 1/4", "section": &"0.25", "section_name": "0.25 м", "length": &"quarter", "length_name": "1/4", "size": Vector3(0.25, 0.25, 0.25)},
 		],
 	},
 	{
@@ -134,9 +140,15 @@ const BLOCKS: Array = [
 		"rotatable": true,
 		"overlap_policy": &"structural_joint",
 		"variants": [
-			{"id": &"1", "name": "1 м", "size": Vector3(1.0, 1.0, 0.5)},
-			{"id": &"0.5", "name": "0.5 м", "size": Vector3(0.5, 1.0, 0.25)},
-			{"id": &"0.25", "name": "0.25 м", "size": Vector3(0.25, 1.0, 0.125)},
+			{"id": &"1", "name": "1 м · Полная", "section": &"1", "section_name": "1 м", "length": &"full", "length_name": "Полная", "size": Vector3(1.0, 1.0, 0.5)},
+			{"id": &"0.5", "name": "0.5 м · Полная", "section": &"0.5", "section_name": "0.5 м", "length": &"full", "length_name": "Полная", "size": Vector3(0.5, 1.0, 0.25)},
+			{"id": &"0.25", "name": "0.25 м · Полная", "section": &"0.25", "section_name": "0.25 м", "length": &"full", "length_name": "Полная", "size": Vector3(0.25, 1.0, 0.125)},
+			{"id": &"1_half", "name": "1 м · 1/2", "section": &"1", "section_name": "1 м", "length": &"half", "length_name": "1/2", "size": Vector3(1.0, 0.5, 0.5)},
+			{"id": &"0.5_half", "name": "0.5 м · 1/2", "section": &"0.5", "section_name": "0.5 м", "length": &"half", "length_name": "1/2", "size": Vector3(0.5, 0.5, 0.25)},
+			{"id": &"0.25_half", "name": "0.25 м · 1/2", "section": &"0.25", "section_name": "0.25 м", "length": &"half", "length_name": "1/2", "size": Vector3(0.25, 0.5, 0.125)},
+			{"id": &"1_quarter", "name": "1 м · 1/4", "section": &"1", "section_name": "1 м", "length": &"quarter", "length_name": "1/4", "size": Vector3(1.0, 0.25, 0.5)},
+			{"id": &"0.5_quarter", "name": "0.5 м · 1/4", "section": &"0.5", "section_name": "0.5 м", "length": &"quarter", "length_name": "1/4", "size": Vector3(0.5, 0.25, 0.25)},
+			{"id": &"0.25_quarter", "name": "0.25 м · 1/4", "section": &"0.25", "section_name": "0.25 м", "length": &"quarter", "length_name": "1/4", "size": Vector3(0.25, 0.25, 0.125)},
 		],
 	},
 	# --- Крыша -------------------------------------------------------------
@@ -344,6 +356,19 @@ static func normalize_variant(block_id: StringName, variant_id: StringName) -> S
 	return vs[0]["id"]
 
 
+static func variant_option(block_id: StringName, variant_id: StringName, option: StringName) -> StringName:
+	var def := get_block(block_id)
+	var variant := _resolve_variant(def, block_id, variant_id)
+	return variant.get(option, &"")
+
+
+static func variant_for_options(block_id: StringName, section: StringName, length: StringName) -> StringName:
+	for variant in variants(block_id):
+		if variant.get("section", &"") == section and variant.get("length", &"") == length:
+			return variant["id"]
+	return default_variant(block_id)
+
+
 ## Effective mesh footprint of a block for the given variant.
 static func size_of(block_id: StringName, variant_id: StringName = &"") -> Vector3:
 	var def := get_block(block_id)
@@ -440,6 +465,9 @@ static func _free_extents(block_id: StringName, variant_id: StringName) -> Vecto
 static func available_anchors(block_id: StringName, variant_id: StringName) -> Array:
 	if is_multicell(block_id, variant_id):
 		return [ANCHOR_CENTER]
+	if block_id == &"column_half":
+		var half_free := _free_extents(block_id, variant_id)
+		return [ANCHOR_EDGE, ANCHOR_CORNER] if half_free.x > 0.001 else [ANCHOR_EDGE]
 	var f := _free_extents(block_id, variant_id)
 	var out: Array = [ANCHOR_CENTER]
 	if f.x > 0.001 or f.y > 0.001:
@@ -450,7 +478,8 @@ static func available_anchors(block_id: StringName, variant_id: StringName) -> A
 
 
 static func normalize_anchor(block_id: StringName, variant_id: StringName, anchor_kind: int) -> int:
-	return anchor_kind if anchor_kind in available_anchors(block_id, variant_id) else ANCHOR_CENTER
+	var anchors := available_anchors(block_id, variant_id)
+	return anchor_kind if anchor_kind in anchors else anchors[0]
 
 
 ## Public accessor for the rot=0 in-cell anchor offset (see `_anchor_base_offset`),
