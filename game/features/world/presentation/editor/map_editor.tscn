@@ -1,15 +1,15 @@
-[gd_scene load_steps=13 format=3]
+[gd_scene format=3 uid="uid://d1fmxuybjqbih"]
 
-[ext_resource type="Script" path="res://game/features/world/presentation/editor/map_editor.gd" id="1_editor"]
-[ext_resource type="Script" path="res://game/features/world/presentation/terrain/grid_terrain_world.gd" id="2_terrain"]
-[ext_resource type="Script" path="res://game/features/routing/presentation/nav_terrain_overlay.gd" id="3_nav_overlay"]
-[ext_resource type="Script" path="res://game/features/world/presentation/water/water_world.gd" id="11_water"]
-[ext_resource type="Script" path="res://game/features/world/presentation/editor/map_editor_camera.gd" id="4_camera"]
+[ext_resource type="Script" uid="uid://bbq6r1o2fhfjs" path="res://game/features/world/presentation/editor/map_editor.gd" id="1_editor"]
+[ext_resource type="Script" uid="uid://cs0y6i5eh2tic" path="res://game/features/world/presentation/terrain/grid_terrain_world.gd" id="2_terrain"]
+[ext_resource type="Script" uid="uid://c80qmlapc4ehj" path="res://game/features/routing/presentation/nav_terrain_overlay.gd" id="3_nav_overlay"]
+[ext_resource type="Script" uid="uid://bxko5vni8obv7" path="res://game/features/world/presentation/editor/map_editor_camera.gd" id="4_camera"]
 [ext_resource type="Theme" path="res://game/features/ui/presentation/theme/ui_theme.tres" id="5_theme"]
 [ext_resource type="PackedScene" path="res://game/features/world/presentation/editor/ui/map_editor_top_bar.tscn" id="6_top_bar"]
 [ext_resource type="PackedScene" path="res://game/features/world/presentation/editor/ui/map_editor_side_panel.tscn" id="8_side_panel"]
 [ext_resource type="PackedScene" path="res://game/features/world/presentation/editor/ui/map_editor_palette.tscn" id="9_palette"]
 [ext_resource type="PackedScene" path="res://game/features/world/presentation/editor/ui/map_editor_status_bar.tscn" id="10_status_bar"]
+[ext_resource type="Script" uid="uid://dvuwd0lsd080y" path="res://game/features/world/presentation/water/water_world.gd" id="11_water"]
 [ext_resource type="PackedScene" path="res://game/features/world/presentation/editor/ui/map_editor_dialogs.tscn" id="12_dialogs"]
 
 [sub_resource type="Environment" id="env_map_editor"]
@@ -20,67 +20,67 @@ ambient_light_color = Color(0.62, 0.69, 0.78, 1)
 ambient_light_energy = 0.55
 tonemap_mode = 2
 
-[node name="MapEditor" type="Node3D"]
+[node name="MapEditor" type="Node3D" unique_id=2074017236]
 script = ExtResource("1_editor")
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=910126507]
 environment = SubResource("env_map_editor")
 
-[node name="SunLight" type="DirectionalLight3D" parent="."]
+[node name="SunLight" type="DirectionalLight3D" parent="." unique_id=703765422]
 transform = Transform3D(0.766, -0.443, 0.466, 0, 0.725, 0.689, -0.643, -0.528, 0.555, 0, 40, 0)
 light_energy = 1.15
 shadow_enabled = true
 
-[node name="Terrain" type="Node3D" parent="."]
+[node name="Terrain" type="Node3D" parent="." unique_id=1695614586]
 script = ExtResource("2_terrain")
 
-[node name="Water" type="Node3D" parent="."]
+[node name="Water" type="Node3D" parent="." unique_id=2017373680]
 script = ExtResource("11_water")
 
-[node name="NavOverlay" type="MeshInstance3D" parent="."]
-script = ExtResource("3_nav_overlay")
-cast_shadow = 0
+[node name="NavOverlay" type="MeshInstance3D" parent="." unique_id=74331365]
 visible = false
+cast_shadow = 0
+script = ExtResource("3_nav_overlay")
 
-[node name="HoverMarker" type="MeshInstance3D" parent="."]
+[node name="HoverMarker" type="MeshInstance3D" parent="." unique_id=1075526191]
 cast_shadow = 0
 
-[node name="Camera3D" type="Camera3D" parent="."]
+[node name="Camera3D" type="Camera3D" parent="." unique_id=1817952013]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 40, 40)
 far = 900.0
 script = ExtResource("4_camera")
 
-[node name="UI" type="CanvasLayer" parent="."]
+[node name="UI" type="CanvasLayer" parent="." unique_id=950004142]
 
-[node name="Screen" type="VBoxContainer" parent="UI"]
+[node name="Screen" type="VBoxContainer" parent="UI" unique_id=1465171972]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-grow_horizontal = 1
-grow_vertical = 1
+mouse_filter = 2
 theme = ExtResource("5_theme")
 theme_override_constants/separation = 0
-mouse_filter = 2
 
-[node name="TopBar" parent="UI/Screen" instance=ExtResource("6_top_bar")]
-mouse_filter = 0
+[node name="TopBar" parent="UI/Screen" unique_id=475464171 instance=ExtResource("6_top_bar")]
+layout_mode = 2
 
-[node name="Middle" type="HBoxContainer" parent="UI/Screen"]
+[node name="Middle" type="HBoxContainer" parent="UI/Screen" unique_id=1778716793]
+layout_mode = 2
 size_flags_vertical = 3
-theme_override_constants/separation = 0
 mouse_filter = 2
+theme_override_constants/separation = 0
 
-[node name="Palette" parent="UI/Screen/Middle" instance=ExtResource("9_palette")]
-mouse_filter = 0
+[node name="Palette" parent="UI/Screen/Middle" unique_id=1506814597 instance=ExtResource("9_palette")]
+layout_mode = 2
 
-[node name="Viewport3D" type="Control" parent="UI/Screen/Middle"]
+[node name="Viewport3D" type="Control" parent="UI/Screen/Middle" unique_id=975798821]
+layout_mode = 2
 size_flags_horizontal = 3
 mouse_filter = 2
 
-[node name="SidePanel" parent="UI/Screen/Middle" instance=ExtResource("8_side_panel")]
-mouse_filter = 0
+[node name="SidePanel" parent="UI/Screen/Middle" unique_id=2074173077 instance=ExtResource("8_side_panel")]
+layout_mode = 2
 
-[node name="StatusBar" parent="UI/Screen" instance=ExtResource("10_status_bar")]
+[node name="StatusBar" parent="UI/Screen" unique_id=341088665 instance=ExtResource("10_status_bar")]
+layout_mode = 2
 
-[node name="Dialogs" parent="UI" instance=ExtResource("12_dialogs")]
-mouse_filter = 2
+[node name="Dialogs" parent="UI" unique_id=653009314 instance=ExtResource("12_dialogs")]
