@@ -59,10 +59,6 @@ tooltip_text = "Повторить (Ctrl+Shift+Z)"
 
 [node name="VSep2" type="VSeparator" parent="Margin/Scroll/Row"]
 
-[node name="MapMenu" type="MenuButton" parent="Margin/Scroll/Row"]
-text = "Карта"
-tooltip_text = "Параметры карты"
-
 [node name="ModeBar" parent="Margin/Scroll/Row" instance=ExtResource("1_mode_bar")]
 
 [node name="Spacer" type="Control" parent="Margin/Scroll/Row"]

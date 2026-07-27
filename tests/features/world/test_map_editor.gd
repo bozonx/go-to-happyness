@@ -228,13 +228,15 @@ func _test_ocean_boundary_floods_only_from_the_edge(editor: Node) -> void:
 	var edge := terrain.min_cell()
 	var inland := Vector2i(20, 20)
 	# Nothing outside leaves even an exposed low edge dry.
-	editor._on_map_menu_item_pressed(editor.MENU_BORDER_NOTHING)
+	editor.document.meta.border_kind = MapMeta.BORDER_NOTHING
+	editor._apply_header_change("nothing")
 	editor._terrain_service.apply_operation(TerrainEditOperation.offset([edge, inland], -1))
 	assert(not water.is_wet(terrain, edge), "an empty border does not flood")
 	assert(not water.is_wet(terrain, inland), "an inland hollow stays dry")
 	# Switching to ocean fills the edge-connected lowland, but never the separate
 	# depression: an author remains responsible for filling that one in Water.
-	editor._on_map_menu_item_pressed(editor.MENU_BORDER_OCEAN)
+	editor.document.meta.border_kind = MapMeta.BORDER_OCEAN
+	editor._apply_header_change("ocean")
 	assert(water.is_wet(terrain, edge), "ocean reached the exposed edge")
 	assert(not water.is_wet(terrain, inland), "ocean did not fill a closed inland hollow")
 	assert(editor.document.meta.border_kind == MapMeta.BORDER_OCEAN)

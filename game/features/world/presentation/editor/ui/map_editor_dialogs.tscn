@@ -261,7 +261,7 @@ size_flags_horizontal = 3
 
 [node name="BorderLevelLbl" type="Label" parent="PropertiesDialog/Body/Scroll/Grid"]
 layout_mode = 2
-text = "Уровень моря:"
+text = "Уровень границы:"
 
 [node name="PropBorderLevelSpin" type="SpinBox" parent="PropertiesDialog/Body/Scroll/Grid"]
 unique_name_in_owner = true
@@ -269,10 +269,17 @@ layout_mode = 2
 min_value = -64.0
 max_value = 64.0
 
+[node name="StartSep" type="HSeparator" parent="PropertiesDialog/Body/Scroll/Grid"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="StartSpacer2" type="Control" parent="PropertiesDialog/Body/Scroll/Grid"]
+layout_mode = 2
+
 [node name="StartLbl" type="Label" parent="PropertiesDialog/Body/Scroll/Grid"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 15
-text = "Старт"
+text = "Старт игры"
 
 [node name="StartSpacer" type="Control" parent="PropertiesDialog/Body/Scroll/Grid"]
 layout_mode = 2

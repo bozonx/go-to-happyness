@@ -47,12 +47,7 @@ const PLANNED_MODES: Array = [
 @onready var _save_as_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/SaveAsButton
 @onready var _undo_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/UndoButton
 @onready var _redo_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/RedoButton
-@onready var _map_menu: MenuButton = $UI/Screen/TopBar/Margin/Scroll/Row/MapMenu
 @onready var _dialogs: MapEditorDialogs = $UI/Dialogs
-
-const MENU_BORDER_OCEAN := 1
-const MENU_BORDER_NOTHING := 2
-const MENU_PROPERTIES := 3
 
 var document: MapDocument
 var history := MapEditorHistory.new()
@@ -158,7 +153,7 @@ func _build_services() -> void:
 	if not _water_service.edit_committed.is_connected(_on_water_committed):
 		_water_service.edit_committed.connect(_on_water_committed)
 	_brush.configure(document.terrain, _terrain_service, _wear_service)
-	_water_brush.configure(document.terrain, document.water, _water_service)
+	_water_brush.configure(document.terrain, document.water, _water_service, _border_ocean)
 	nav_overlay.configure(_nav_grid)
 	nav_overlay.visible = false
 	terrain_world.rebuild_pending_now()
@@ -229,7 +224,6 @@ func _on_save_as_requested(id: StringName) -> void:
 	else:
 		current_path = path
 		_message = "сохранено в %s" % path
-	_refresh_map_menu()
 	_refresh_panels()
 
 
@@ -275,7 +269,6 @@ func _replace_document(next: MapDocument, path: String) -> void:
 	_build_services()
 	for mode: MapEditorMode in _modes:
 		mode.configure(_context)
-	_refresh_map_menu()
 	_refresh_panels()
 
 
@@ -333,36 +326,15 @@ func _connect_ui() -> void:
 	_save_as_button.pressed.connect(_open_save_as)
 	_undo_button.pressed.connect(_undo)
 	_redo_button.pressed.connect(_redo)
-	_map_menu.get_popup().id_pressed.connect(_on_map_menu_item_pressed)
+	_side_panel.settings_requested.connect(_open_settings)
 	_dialogs.create_requested.connect(_on_create_requested)
 	_dialogs.open_requested.connect(_on_open_requested)
 	_dialogs.save_as_requested.connect(_on_save_as_requested)
 	_dialogs.properties_applied.connect(_on_properties_applied)
-	_refresh_map_menu()
 
 
-func _refresh_map_menu() -> void:
-	var popup := _map_menu.get_popup()
-	popup.clear()
-	popup.add_item("Свойства карты…", MENU_PROPERTIES)
-	popup.add_separator()
-	popup.add_radio_check_item("За пределами карты: Океан", MENU_BORDER_OCEAN)
-	popup.add_radio_check_item("За пределами карты: Ничего", MENU_BORDER_NOTHING)
-	popup.set_item_checked(popup.get_item_index(MENU_BORDER_OCEAN),
-		document.meta.border_kind == MapMeta.BORDER_OCEAN)
-	popup.set_item_checked(popup.get_item_index(MENU_BORDER_NOTHING),
-		document.meta.border_kind == MapMeta.BORDER_NOTHING)
-
-
-func _on_map_menu_item_pressed(menu_id: int) -> void:
-	if menu_id == MENU_PROPERTIES:
-		_dialogs.open_properties_dialog(document.meta)
-		return
-	var kind := MapMeta.BORDER_OCEAN if menu_id == MENU_BORDER_OCEAN else MapMeta.BORDER_NOTHING
-	if document.meta.border_kind == kind:
-		return
-	document.meta.border_kind = kind
-	_apply_header_change("за пределами карты: %s" % ("океан" if kind == MapMeta.BORDER_OCEAN else "ничего"))
+func _open_settings() -> void:
+	_dialogs.open_properties_dialog(document.meta)
 
 
 ## The properties dialog has already written into `document.meta`; everything that
@@ -380,10 +352,9 @@ func _apply_header_change(message: String) -> void:
 	_message = message
 	_border_ocean.configure(_water_service, document.terrain, document.water, document.meta)
 	water_world.configure_border(document.meta.border_kind, document.meta.border_level)
-	if document.meta.border_kind == MapMeta.BORDER_OCEAN:
-		_context.set_edit_label("океан")
+	if MapMeta.has_border_fill_static(document.meta.border_kind):
+		_context.set_edit_label("граница")
 		_border_ocean.apply()
-	_refresh_map_menu()
 	_refresh_panels()
 
 
@@ -471,9 +442,12 @@ func _refresh_camera_framing() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var button := event as InputEventMouseButton
-		if camera.handle_mouse_button(button):
-			return
+		# Wheel over a panel should scroll that panel, not zoom the camera.
+		# Only forward mouse buttons to the camera when the cursor is over the
+		# 3D viewport.
 		if not _is_pointer_over_view():
+			return
+		if camera.handle_mouse_button(button):
 			return
 		if _active != null and _active.handle_input(event):
 			_refresh_panels()

@@ -259,7 +259,7 @@ static func _register_builtin_assets() -> void:
 		&"lighting_heating",
 		SCENE_DIR.path_join("campfire.tscn"),
 		Vector3i(1, 1, 1),
-		0.5,
+		1.0,
 		[
 			{
 				"name": "visual_flame_visible", "label": "Горит", "type": "bool", "default": true,
@@ -307,7 +307,7 @@ static func _register_builtin_assets() -> void:
 		&"lighting_heating",
 		SCENE_DIR.path_join("cooking_campfire.tscn"),
 		Vector3i(2, 2, 2),
-		0.5,
+		1.0,
 		[
 			{
 				"name": "visual_flame_visible", "label": "Горит", "type": "bool", "default": true,
@@ -349,7 +349,7 @@ static func _register_builtin_assets() -> void:
 		&"outdoor",
 		SCENE_DIR.path_join("entrance_sign.tscn"),
 		Vector3i(2, 2, 1),
-		0.5,
+		1.0,
 		[
 			{
 				"name": "sign_text", "label": "Текст на знаке", "type": "string",
@@ -389,7 +389,7 @@ static func _register_builtin_assets() -> void:
 		&"outdoor",
 		SCENE_DIR.path_join("flag.tscn"),
 		Vector3i(1, 3, 1),
-		0.5,
+		1.0,
 		[
 			{
 				"name": "banner_color", "label": "Цвет полотнища", "type": "color",

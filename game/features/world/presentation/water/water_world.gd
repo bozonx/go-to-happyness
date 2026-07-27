@@ -62,9 +62,9 @@ var _wind_direction := Vector2(1.0, 0.0)
 var _wind_strength := 0.4
 
 ## What lies past the last column (`map_editor.md` §6.1). `BORDER_NOTHING` draws
-## nothing at all and makes the rim of the board a bank; `BORDER_OCEAN` draws the
-## plane and makes the rim open water, so the shore band does not paint a beach
-## along a coastline that continues.
+## nothing at all and makes the rim of the board a bank; `BORDER_OCEAN` and
+## `BORDER_LAVA` draw the plane and make the rim open water (or lava), so the
+## shore band does not paint a beach along a coastline that continues.
 var _border_kind: StringName = MapMeta.BORDER_NOTHING
 var _border_level := 0
 var _border_node: MeshInstance3D = null
@@ -444,7 +444,7 @@ func _rebuild_border() -> void:
 		remove_child(_border_node)
 		_border_node.queue_free()
 		_border_node = null
-	if water == null or _border_kind != MapMeta.BORDER_OCEAN or water.board_cells <= 0:
+	if water == null or not MapMeta.has_border_fill_static(_border_kind) or water.board_cells <= 0:
 		return
 	var half := float(water.board_half_cells) * water.cell_size
 	var far := half + BORDER_OCEAN_REACH
@@ -465,7 +465,7 @@ func _rebuild_border() -> void:
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 
 	_border_node = MeshInstance3D.new()
-	_border_node.name = "BorderOcean"
+	_border_node.name = "BorderPlane"
 	_border_node.mesh = mesh
 	_border_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_border_node.set_surface_override_material(0, _material_from_body(_border_body(), false))
@@ -483,15 +483,16 @@ static func _add_border_band(builder: Dictionary, west: float, east: float, nort
 	)
 
 
-## The map's own sea if it has one, so the horizon and the coast are the same
-## water; a default sea otherwise, which is what an ocean border means on a map
-## whose author has not painted a drop yet.
+## The map's own border body if it has one, so the horizon and the coast are the
+## same water (or lava); a default body otherwise, which is what a border means
+## on a map whose author has not painted a drop yet.
 func _border_body() -> WaterBody:
+	var body_type := WaterBody.Type.SEA if _border_kind == MapMeta.BORDER_OCEAN else WaterBody.Type.LAVA
 	if water != null:
 		for body: WaterBody in water.bodies():
-			if body.type == WaterBody.Type.SEA:
+			if body.type == body_type:
 				return body
-	return WaterBody.of_type(WaterBody.MIN_ID, WaterBody.Type.SEA)
+	return WaterBody.of_type(WaterBody.MIN_ID, body_type)
 
 
 # --- Shore distance -----------------------------------------------------------
@@ -541,7 +542,7 @@ func _shore_distance_of_chunk(chunk: Vector2i) -> PackedByteArray:
 ## rim is open water, without one the board simply ends.
 func _is_bank(cell: Vector2i) -> bool:
 	if not water.is_inside(cell):
-		return _border_kind != MapMeta.BORDER_OCEAN
+		return not MapMeta.has_border_fill_static(_border_kind)
 	return not water.is_wet(terrain, cell)
 
 

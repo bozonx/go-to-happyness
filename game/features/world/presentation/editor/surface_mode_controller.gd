@@ -206,10 +206,6 @@ func inspector_lines() -> Array[String]:
 	lines.append("Вес прохода: ×%.2f" % TerrainMaterialCatalog.nav_weight_of_index(index))
 	lines.append("")
 	lines.append("Кисть износа: %d, кисть снега: %d" % [_wear_level, _snow_level])
-	lines.append("")
-	lines.append("ЛКМ — красить, Tab — материал / износ / снег")
-	lines.append("B — вариант, U — уровень износа, J — уровень снега")
-	lines.append("[ ] — размер кисти")
 	return lines
 
 

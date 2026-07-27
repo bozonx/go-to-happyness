@@ -214,8 +214,9 @@ func tool_options() -> Array:
 		options.append(ToolOption.of(
 			StringName("%s%s" % [OPTION_TOOL_PREFIX, tool]), String(tool), &"tools", brush.tool == tool,
 		))
-	options.append(ToolOption.of(OPTION_LEVEL_DOWN, "Уровень −"))
-	options.append(ToolOption.of(OPTION_LEVEL_UP, "Уровень +"))
+	options.append(ToolOption.of(&"water_level", "Уровень %d" % brush.level, &"level", false, true))
+	options.append(ToolOption.of(OPTION_LEVEL_DOWN, "−", &"level"))
+	options.append(ToolOption.of(OPTION_LEVEL_UP, "+", &"level"))
 	if _brush_has_size():
 		options.append(ToolOption.of(&"brush_size", "Кисть: %d" % (brush.brush_size - 1), &"brush", false, true))
 		options.append(ToolOption.of(OPTION_BRUSH_DOWN, "−", &"brush"))
@@ -286,12 +287,6 @@ func inspector_lines() -> Array[String]:
 		TravelerProfile.MIN_ICE_THICKNESS_PEDESTRIAN,
 		TravelerProfile.MIN_ICE_THICKNESS_CART,
 	])
-	lines.append("")
-	lines.append("ЛКМ: flood — залить низину, level — задать уровень, erase — осушить клетки")
-	lines.append("ПКМ — осушить весь водоём под курсором; под level — взять уровень с рельефа")
-	lines.append("[ ] — размер кисти, + / − уровень, G — взять уровень с рельефа")
-	lines.append("F — заморозить/растопить водоём целиком, I — толщина льда")
-	lines.append("V — направление течения, C — сила течения")
 	return lines
 
 

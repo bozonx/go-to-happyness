@@ -1,7 +1,10 @@
-[gd_scene format=3]
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="PackedScene" path="res://game/features/ui/presentation/editor_shortcut_tooltip.tscn" id="1_shortcuts"]
 
 [node name="StatusBar" type="PanelContainer"]
 custom_minimum_size = Vector2(0, 30)
+z_index = 10
 
 [node name="Margin" type="MarginContainer" parent="."]
 theme_override_constants/margin_left = 10
@@ -26,12 +29,6 @@ vertical_alignment = 1
 theme_override_font_sizes/font_size = 12
 text = "готово"
 
-[node name="HelpLabel" type="Label" parent="Margin/Row"]
-size_flags_horizontal = 3
-clip_text = true
-text_overrun_behavior = 3
-horizontal_alignment = 2
-vertical_alignment = 1
-theme_override_font_sizes/font_size = 12
-theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
-text = "ЛКМ — применить · ПКМ — обратно · СКМ — камера · Колесо — зум · [ ] — кисть · Tab — подынструмент"
+[node name="ShortcutTooltip" parent="Margin/Row" instance=ExtResource("1_shortcuts")]
+layout_mode = 2
+shortcuts_text = "Общее\nЛКМ — применить · Shift+ПКМ — обратное действие\nПКМ — камера · СКМ — панорама · Колесо — зум\nWASD/QE — движение камеры · Home — показать всю карту\nCtrl+S — сохранить · Ctrl+Z / Ctrl+Shift+Z — отменить / повторить\n1–3 — режим редактора · Esc — в меню\n\nИнструменты\nShift+колесо или [ ] — размер кисти · Tab — следующий подынструмент\nРельеф: Shift+ЛКМ — пипетка · F — выровнять · M — навигация · T — профиль · C/V — пандус\nПоверхность: B — вариант · U/J — износ / снег\nВода: +/− — уровень · G — взять уровень грунта · F — лёд · I — толщина льда · V/C — течение"

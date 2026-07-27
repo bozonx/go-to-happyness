@@ -1,0 +1,41 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/features/ui/presentation/editor_shortcut_tooltip.gd" id="1_tooltip"]
+
+[node name="EditorShortcutTooltip" type="Control"]
+custom_minimum_size = Vector2(32, 26)
+layout_mode = 3
+anchors_preset = 0
+mouse_filter = 2
+script = ExtResource("1_tooltip")
+
+[node name="HelpButton" type="Button" parent="."]
+custom_minimum_size = Vector2(32, 26)
+layout_mode = 0
+offset_right = 32.0
+offset_bottom = 26.0
+tooltip_text = "Горячие клавиши"
+text = "[?]"
+
+[node name="Popup" type="PanelContainer" parent="."]
+visible = false
+custom_minimum_size = Vector2(390, 0)
+layout_mode = 0
+offset_left = -358.0
+offset_top = -188.0
+offset_right = 32.0
+offset_bottom = -6.0
+mouse_filter = 0
+z_index = 1
+
+[node name="Margin" type="MarginContainer" parent="Popup"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 8
+
+[node name="Label" type="Label" parent="Popup/Margin"]
+layout_mode = 2
+autowrap_mode = 2
+theme_override_font_sizes/font_size = 12

@@ -21,7 +21,11 @@ extends PanelContainer
 ## able to make the editor taller than the window it is running in.
 
 signal entry_activated(index: int)
+signal settings_requested
 
+@onready var _map_title_row: HBoxContainer = $Margin/Scroll/Rows/MapTitleRow
+@onready var _map_title: Label = $Margin/Scroll/Rows/MapTitleRow/MapTitle
+@onready var _settings_button: Button = $Margin/Scroll/Rows/MapTitleRow/SettingsButton
 @onready var _map_info: Label = $Margin/Scroll/Rows/MapInfo
 @onready var _inspector_title: Label = $Margin/Scroll/Rows/InspectorTitle
 @onready var _inspector: Label = $Margin/Scroll/Rows/Inspector
@@ -31,10 +35,12 @@ signal entry_activated(index: int)
 
 func _ready() -> void:
 	_list.item_activated.connect(func(index: int) -> void: entry_activated.emit(index))
+	_settings_button.pressed.connect(func() -> void: settings_requested.emit())
 
 
 func set_map_info(lines: Array[String]) -> void:
-	_map_info.text = "\n".join(lines)
+	_map_title.text = lines[0] if not lines.is_empty() else ""
+	_map_info.text = "\n".join(lines.slice(1))
 
 
 func set_inspector(title: String, lines: Array[String]) -> void:

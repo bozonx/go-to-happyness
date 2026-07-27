@@ -153,6 +153,18 @@ func has_body(body_id: int) -> bool:
 	return _bodies.has(body_id)
 
 
+## Swaps a body's metadata in place. The id and all cell references stay; only the
+## body object changes. Used by retype operations to change a body's type, colour,
+## wave and other properties without touching any cells.
+func replace_body(body_id: int, new_body: WaterBody) -> bool:
+	if not _bodies.has(body_id):
+		return false
+	new_body.id = body_id
+	_bodies[body_id] = new_body
+	_revision += 1
+	return true
+
+
 func body(body_id: int) -> WaterBody:
 	return _bodies.get(body_id, null)
 

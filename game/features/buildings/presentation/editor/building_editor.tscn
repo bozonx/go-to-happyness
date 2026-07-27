@@ -1,9 +1,10 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://game/features/buildings/presentation/editor/building_editor.gd" id="1_editor"]
 [ext_resource type="Theme" path="res://game/features/ui/presentation/theme/ui_theme.tres" id="2_theme"]
 [ext_resource type="StandardMaterial3D" path="res://game/features/buildings/presentation/editor/materials/ground_material.tres" id="1_ground_mat"]
 [ext_resource type="PackedScene" path="res://game/features/world/presentation/camera_controller.tscn" id="3_camera"]
+[ext_resource type="PackedScene" path="res://game/features/ui/presentation/editor_shortcut_tooltip.tscn" id="4_shortcuts"]
 [sub_resource type="PlaneMesh" id="mesh_ground"]
 size = Vector2(64, 64)
 
@@ -547,14 +548,6 @@ text = "Показать оверлеи"
 [node name="OverlayAudienceOption" type="OptionButton" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
 unique_name_in_owner = true
 layout_mode = 2
-
-[node name="ZonesHintLbl" type="Label" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_font_sizes/font_size = 11
-theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
-autowrap_mode = 2
-text = "ЛКМ — применить, Shift+ПКМ — стереть, F — поворот, Del — удалить. Q/W/E/R — инструмент."
 
 [node name="ZonesInspectorPanel" type="PanelContainer" parent="EditorUI/Root"]
 unique_name_in_owner = true
@@ -1150,6 +1143,7 @@ value = 10.0
 
 [node name="StatusBar" type="PanelContainer" parent="EditorUI/Root"]
 custom_minimum_size = Vector2(0, 40)
+z_index = 10
 layout_mode = 1
 anchors_preset = 12
 anchor_top = 1.0
@@ -1172,10 +1166,9 @@ size_flags_horizontal = 3
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="HelpLabel" type="Label" parent="EditorUI/Root/StatusBar/HBox"]
+[node name="ShortcutTooltip" parent="EditorUI/Root/StatusBar/HBox" instance=ExtResource("4_shortcuts")]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
-text = "ЛКМ (зажать) — линия/прямоугольник · ПКМ — камера · СКМ — панорама · Колесо — зум · WASD — движение"
+shortcuts_text = "Общее\nЛКМ — строить / выбрать · Shift+ЛКМ — пипетка\nShift+ПКМ — стереть · ПКМ — камера · СКМ — панорама · Колесо — зум\nWASD/QE — движение камеры · Ctrl+Z / Ctrl+Y — отменить / повторить\n\nКаркас\nE — ластик · L — линия · M — прямоугольник · Z/X/C — поворот\nPageUp/PageDown — слой выше / ниже · Shift+СКМ — взять кисть\n\nДекор\nC/R, X, Z — поворот по осям · Ctrl+D — дублировать · Delete — удалить\n\nЗоны\nQ/W/E/R — область / точка / маршрут / выбор · Tab — следующая роль · F — поворот · Delete — удалить"
 
 [node name="MetadataPanel" type="PanelContainer" parent="EditorUI/Root"]
 unique_name_in_owner = true

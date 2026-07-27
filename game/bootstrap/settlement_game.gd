@@ -436,6 +436,14 @@ func next_registration_ticket() -> int:
 	return citizen_registration_service.next_registration_ticket() if citizen_registration_service != null else 0
 
 
+func _input(event: InputEvent) -> void:
+	input_controller.handle_input(event)
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	input_controller.handle_unhandled_input(event)
+
+
 func _process(delta: float) -> void:
 	runtime_seconds += delta
 	if foraging_service != null:

@@ -215,6 +215,7 @@ func _fill_static_options() -> void:
 	])
 	_add_options(_prop_border_option, [
 		[MapMeta.BORDER_OCEAN, "Океан"],
+		[MapMeta.BORDER_LAVA, "Лава"],
 		[MapMeta.BORDER_NOTHING, "Ничего"],
 	])
 	_add_options(_prop_mode_option, [

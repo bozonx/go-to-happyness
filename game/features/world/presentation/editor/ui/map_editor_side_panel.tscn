@@ -19,9 +19,18 @@ horizontal_scroll_mode = 0
 size_flags_horizontal = 3
 theme_override_constants/separation = 6
 
-[node name="MapTitle" type="Label" parent="Margin/Scroll/Rows"]
+[node name="MapTitleRow" type="HBoxContainer" parent="Margin/Scroll/Rows"]
+theme_override_constants/separation = 4
+
+[node name="MapTitle" type="Label" parent="Margin/Scroll/Rows/MapTitleRow"]
+size_flags_horizontal = 3
 text = "Карта"
 theme_override_font_sizes/font_size = 14
+
+[node name="SettingsButton" type="Button" parent="Margin/Scroll/Rows/MapTitleRow"]
+custom_minimum_size = Vector2(28, 0)
+text = "⚙"
+tooltip_text = "Настройки карты"
 
 [node name="MapInfo" type="Label" parent="Margin/Scroll/Rows"]
 autowrap_mode = 2

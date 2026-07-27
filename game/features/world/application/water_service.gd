@@ -105,6 +105,20 @@ func remove_body(body_id: int) -> bool:
 	return _commit_registry_edit(WaterBodyEdit.removal(grid, body))
 
 
+## Changes a body's type in place: the id and cells stay, the metadata changes.
+## One undoable operation that emits registry_changed so the presentation drops
+## its cached per-body material.
+func retype_body(body_id: int, new_type: WaterBody.Type) -> bool:
+	if grid == null:
+		return _reject(REASON_NO_GRID)
+	var body := grid.body(body_id)
+	if body == null:
+		return _reject(REASON_NO_BODY)
+	if body.type == new_type:
+		return _reject(REASON_NOTHING_TO_DO)
+	return _commit_registry_edit(WaterBodyEdit.retype(grid, body, new_type))
+
+
 # --- Strokes ------------------------------------------------------------------
 
 ## Paints cells into a body at a level.

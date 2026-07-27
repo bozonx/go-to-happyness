@@ -136,7 +136,9 @@ func _build_terrain(parent: Node) -> void:
 	# A map owns its own water; the biome's ponds are the fallback for a session
 	# that has no map, and adding them to an authored board would put lakes on it
 	# that its author never drew.
-	var seeds: Array[Vector2i] = [] if _map_document != null else _starter_water_cells
+	var seeds: Array[Vector2i] = []
+	if _map_document == null:
+		seeds = _starter_water_cells
 	water_grid = territory.configure_water(_board_cells, _cell_size, authored_water, seeds)
 	var meta: MapMeta = _map_document.meta if _map_document != null else null
 	territory.configure_water_border(

@@ -47,13 +47,15 @@ var ice_thickness := WaterGrid.MAX_ICE_THICKNESS
 var _terrain: TerrainGrid
 var _water: WaterGrid
 var _service: WaterService
+var _border: BorderOceanService = null
 
 
-func configure(terrain: TerrainGrid, water: WaterGrid, service: WaterService) -> void:
+func configure(terrain: TerrainGrid, water: WaterGrid, service: WaterService, border: BorderOceanService = null) -> void:
 	_terrain = terrain
 	_water = water
 	_pick_grid = terrain
 	_service = service
+	_border = border
 
 
 func cycle_tool() -> void:
@@ -102,10 +104,13 @@ func create_body(body_type: WaterBody.Type) -> WaterBody:
 # --- Strokes ------------------------------------------------------------------
 
 ## What the left button does, dispatched by tool. Called on press and again on
-## every new column a drag crosses.
+## every new column a drag crosses. When the hovered cell belongs to a body whose
+## type differs from the selected body's type, the body is retyped first — one
+## click converts an entire body, except border bodies which are protected.
 func apply() -> void:
 	if not has_hover or _service == null:
 		return
+	_maybe_retype_hovered_body()
 	match tool:
 		TOOL_FLOOD:
 			_flood()
@@ -160,11 +165,36 @@ func _drain_body_at_hover() -> void:
 	if target_body == WaterBody.NO_BODY:
 		last_message = "no water body here"
 		return
+	if _border != null and _border.is_border_body(target_body):
+		last_message = "border body cannot be drained — raise the ground above the level"
+		return
 	if _service.remove_body(target_body):
 		body_id = WaterBody.NO_BODY if body_id == target_body else body_id
 		last_message = "drained whole body"
 		return
 	last_message = "could not drain (%s)" % _service.last_rejection()
+
+
+## When the hovered cell belongs to a body whose type differs from the selected
+## body's type, retypes the hovered body to match. Border bodies are protected:
+## they cannot be retyped, only drained by raising the ground.
+func _maybe_retype_hovered_body() -> void:
+	if _water == null or body_id == WaterBody.NO_BODY:
+		return
+	var selected := _water.body(body_id)
+	if selected == null:
+		return
+	var hovered_id := _water.body_id_at(hovered_cell)
+	if hovered_id == WaterBody.NO_BODY or hovered_id == body_id:
+		return
+	var hovered_body := _water.body(hovered_id)
+	if hovered_body == null or hovered_body.type == selected.type:
+		return
+	if _border != null and _border.is_border_body(hovered_id):
+		last_message = "border body cannot be retyped"
+		return
+	if _service.retype_body(hovered_id, selected.type):
+		last_message = "retyped %s to %s" % [hovered_body.name, selected.type_id()]
 
 
 ## Freezes or thaws the whole selected body in one transaction — the seasonal

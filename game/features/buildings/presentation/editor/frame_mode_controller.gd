@@ -847,10 +847,16 @@ func _rebuild_brush_inspector() -> void:
 			toolbar.add_child(abtn)
 
 	if grouped_options:
-		var length_toolbar := HBoxContainer.new()
-		length_toolbar.name = "LengthToolbar"
-		host.add_child(length_toolbar)
-		_build_column_option_buttons(length_toolbar, variants, &"length", &"length_name")
+		var current_section := BuildingBlockCatalog.variant_option(_editor.current_block_id, _editor.current_variant, &"section")
+		var length_variants: Array = variants.filter(func(v): return v.get("section", &"") == current_section)
+		var seen_lengths: Dictionary = {}
+		for v in length_variants:
+			seen_lengths[v.get("length", &"")] = true
+		if seen_lengths.size() > 1:
+			var length_toolbar := HBoxContainer.new()
+			length_toolbar.name = "LengthToolbar"
+			host.add_child(length_toolbar)
+			_build_column_option_buttons(length_toolbar, length_variants, &"length", &"length_name")
 
 
 func _build_column_option_buttons(toolbar: HBoxContainer, variants: Array, option: StringName, label_key: StringName) -> void:

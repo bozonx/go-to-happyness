@@ -502,7 +502,7 @@ static func _test_border_ocean_floods_only_what_touches_the_rim() -> void:
 	# A flat board at zero has no lowland at all, so there is no sea and no empty
 	# registry entry invented for one.
 	assert(not border.apply())
-	assert(border.ocean_body_id() == WaterBody.NO_BODY)
+	assert(border.border_body_id() == WaterBody.NO_BODY)
 
 	# A closed pit in the middle stays dry: it is not connected to the sea.
 	assert(terrain.set_height(Vector2i(0, 0), -3))

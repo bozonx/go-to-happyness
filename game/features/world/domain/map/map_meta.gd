@@ -23,10 +23,16 @@ const KIND_PREFAB := &"prefab"
 ## `BORDER_OCEAN` — the world continues as sea at `border_level`. Any lowland
 ## connected to the rim and lying below that level is water, and the editor keeps
 ## it that way after every terrain stroke.
+## `BORDER_LAVA` — the world continues as lava at `border_level`. Any lowland
+## connected to the rim and lying below that level is lava, and the editor keeps
+## it that way after every terrain stroke. A lava border body cannot be deleted
+## or retyped by the author — only raising the ground above the level drains it.
 ## `BORDER_NOTHING` — the board ends. Nothing is drawn beyond it and digging at
 ## the rim digs a dry pit.
 const BORDER_OCEAN := &"ocean"
+const BORDER_LAVA := &"lava"
 const BORDER_NOTHING := &"nothing"
+const BORDER_KINDS: Array[StringName] = [BORDER_OCEAN, BORDER_LAVA, BORDER_NOTHING]
 
 ## 2 — `border.level` became whole Δh steps, and `water` registry entries lost
 ## their fish fields. Both were authored data that no map has yet.
@@ -105,7 +111,7 @@ static func from_dict(source: Dictionary) -> MapMeta:
 
 	var border: Dictionary = source.get("border", {})
 	meta.border_kind = StringName(border.get("kind", meta.border_kind))
-	if meta.border_kind != BORDER_OCEAN and meta.border_kind != BORDER_NOTHING:
+	if meta.border_kind not in BORDER_KINDS:
 		meta.border_kind = BORDER_OCEAN
 	meta.border_level = int(border.get("level", meta.border_level))
 
@@ -142,6 +148,23 @@ func to_dict() -> Dictionary:
 ## of the border actually asks.
 func has_border_ocean() -> bool:
 	return border_kind == BORDER_OCEAN
+
+
+## Whether the map continues as lava past its rim. Same rule as ocean, but the
+## border body is lava and the horizon draws a lava plane instead of a sea.
+func has_border_lava() -> bool:
+	return border_kind == BORDER_LAVA
+
+
+## Whether anything past the rim floods the board. Both ocean and lava fill
+## edge-connected lowland; "nothing" does not.
+func has_border_fill() -> bool:
+	return border_kind == BORDER_OCEAN or border_kind == BORDER_LAVA
+
+
+## Static version for callers that hold a kind string rather than a full meta.
+static func has_border_fill_static(kind: StringName) -> bool:
+	return kind == BORDER_OCEAN or kind == BORDER_LAVA
 
 
 func board_metres() -> float:

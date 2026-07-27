@@ -42,6 +42,7 @@ const SHAPE_STAIRS_CORNER_QUARTER := &"stairs_corner_quarter"
 const SHAPE_WINDOW_WALL := &"window_wall"
 const SHAPE_DOOR_WALL := &"door_wall"
 const SHAPE_ARCH := &"arch"
+const SHAPE_ARCH_TOP := &"arch_top"
 const SHAPE_HALF_ARCH := &"half_arch"
 const SHAPE_RAILING := &"railing"
 const SHAPE_FENCE := &"fence"
@@ -83,6 +84,10 @@ const BLOCKS: Array = [
 		"size": Vector3(1.0, 0.5, 1.0),
 		"mesh_shape": SHAPE_ARCH,
 		"rotatable": true,
+		"variants": [
+			{"id": &"bottom", "name": "Нижний", "mesh_shape": SHAPE_ARCH},
+			{"id": &"top", "name": "Верхний", "mesh_shape": SHAPE_ARCH_TOP},
+		],
 	},
 	{"id": &"half_arch", "name": "Полуарка", "category": Category.STRUCTURE, "size": Vector3(1.0, 1.0, 1.0), "mesh_shape": SHAPE_HALF_ARCH, "rotatable": true},
 	# --- Фундамент ---------------------------------------------------------
@@ -107,7 +112,6 @@ const BLOCKS: Array = [
 		"variants": [
 			{"id": &"0.5", "name": "0.5 м · Полная", "section": &"0.5", "section_name": "0.5 м", "length": &"full", "length_name": "Полная", "size": Vector3(0.5, 1.0, 0.5)},
 			{"id": &"0.25", "name": "0.25 м · Полная", "section": &"0.25", "section_name": "0.25 м", "length": &"full", "length_name": "Полная", "size": Vector3(0.25, 1.0, 0.25)},
-			{"id": &"0.5_half", "name": "0.5 м · 1/2", "section": &"0.5", "section_name": "0.5 м", "length": &"half", "length_name": "1/2", "size": Vector3(0.5, 0.5, 0.5)},
 			{"id": &"0.25_half", "name": "0.25 м · 1/2", "section": &"0.25", "section_name": "0.25 м", "length": &"half", "length_name": "1/2", "size": Vector3(0.25, 0.5, 0.25)},
 		],
 	},

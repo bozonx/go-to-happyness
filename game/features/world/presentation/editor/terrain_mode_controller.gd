@@ -253,18 +253,12 @@ func inspector_lines() -> Array[String]:
 	lines.append("Кисть: %d" % (context.brush.brush_size - 1))
 	lines.append("Режим высоты: %s" % TerrainEditOperation.mode_name(context.brush.edit_mode))
 	if context.brush.edit_mode == TerrainEditOperation.Mode.LEVEL:
-		lines.append("Цель Level: %d (Ctrl+колесо)" % context.brush.level_target_height())
+		lines.append("Цель Level: %d" % context.brush.level_target_height())
 	lines.append("Пандус: %s → %s" % [
 		SlopeCatalog.id_of_class(context.brush.ramp_class),
 		TerrainBrushController.direction_name(context.brush.ramp_direction),
 	])
 	lines.append("Навигация: %s (%s)" % [_overlay_state(), NAV_PROFILES[_nav_profile_index]])
-	lines.append("")
-	lines.append("ЛКМ — применить, Shift+ЛКМ — пипетка, Shift+ПКМ — обратно")
-	lines.append("Tab — подынструмент, F — выровнять")
-	lines.append("[ ] — размер кисти, C/V — класс и направление пандуса")
-	lines.append("Ctrl+колесо — высота Level")
-	lines.append("M — оверлей навигации, T — профиль")
 	return lines
 
 
