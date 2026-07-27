@@ -53,6 +53,12 @@ func last_delta_size() -> int:
 	return 0 if _last_delta == null else _last_delta.size()
 
 
+## The delta most recently committed or replayed.  Editor commands retain this
+## identity so they can only undo the transaction they represent.
+func last_delta() -> TerrainDelta:
+	return _last_delta
+
+
 func undo_depth() -> int:
 	return _undo_stack.size()
 
@@ -265,9 +271,19 @@ func can_redo() -> bool:
 
 
 func undo() -> bool:
+	return undo_delta()
+
+
+## Revert the exact delta recorded by an editor command.  The identity check
+## turns accidental history desynchronisation into a safe refusal rather than
+## undoing whichever terrain edit happens to be on top.
+func undo_delta(expected: TerrainDelta = null) -> bool:
 	if _grid == null or _undo_stack.is_empty():
 		return false
 	var delta: TerrainDelta = _undo_stack.pop_back()
+	if expected != null and delta != expected:
+		_undo_stack.push_back(delta)
+		return false
 	delta.revert(_grid)
 	_redo_stack.push_back(delta)
 	_last_delta = delta
@@ -276,9 +292,17 @@ func undo() -> bool:
 
 
 func redo() -> bool:
+	return redo_delta()
+
+
+## Replay the exact delta recorded by an editor command. See `undo_delta`.
+func redo_delta(expected: TerrainDelta = null) -> bool:
 	if _grid == null or _redo_stack.is_empty():
 		return false
 	var delta: TerrainDelta = _redo_stack.pop_back()
+	if expected != null and delta != expected:
+		_redo_stack.push_back(delta)
+		return false
 	delta.apply(_grid)
 	_undo_stack.push_back(delta)
 	_last_delta = delta

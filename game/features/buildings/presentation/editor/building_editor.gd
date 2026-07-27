@@ -86,6 +86,18 @@ var _mode_buttons: Dictionary = {}
 ## fields.
 var _syncing_metadata_fields := false
 
+## One chronological history for the entire blueprint.  The older decor-only
+## snapshots made Ctrl+Z depend on the active mode and left frame/zones edits
+## irreversible.  A blueprint is still small enough for bounded whole-document
+## snapshots; this gives every existing mode undo coverage without making each
+## controller own a competing stack.
+const HISTORY_LIMIT := 128
+var _undo_stack: Array[Dictionary] = []
+var _redo_stack: Array[Dictionary] = []
+var _history_baseline: Dictionary = {}
+var _saved_snapshot: Dictionary = {}
+var _history_replaying := false
+
 
 func _ready() -> void:
 	_resolve_launch_mode()
@@ -99,6 +111,7 @@ func _ready() -> void:
 	frame_mode.refresh_layer_plane()
 	_refresh_ghost()
 	_connect_back_navigation()
+	reset_history()
 	_update_status("Готово. Режим: %s" % ("Разработчик" if dev_mode else "Игрок"))
 
 
@@ -244,6 +257,14 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 
 
 func _handle_key(event: InputEventKey) -> void:
+	if event.ctrl_pressed:
+		match event.keycode:
+			KEY_Z:
+				redo() if event.shift_pressed else undo()
+				return
+			KEY_Y:
+				redo()
+				return
 	if current_mode == EditMode.DECOR:
 		decor_mode.handle_key(event)
 		return
@@ -344,7 +365,36 @@ func set_layer(layer: int) -> void:
 
 
 func mark_dirty() -> void:
+	_record_history_change()
 	_mark_dirty()
+
+
+func undo() -> bool:
+	if _undo_stack.is_empty():
+		_update_status("Отменять нечего.")
+		return false
+	_redo_stack.append(_history_baseline.duplicate(true))
+	_restore_history_snapshot(_undo_stack.pop_back())
+	_update_status("Отменено. Шагов в истории: %d" % _undo_stack.size())
+	return true
+
+
+func can_undo() -> bool:
+	return not _undo_stack.is_empty()
+
+
+func can_redo() -> bool:
+	return not _redo_stack.is_empty()
+
+
+func redo() -> bool:
+	if _redo_stack.is_empty():
+		_update_status("Повторять нечего.")
+		return false
+	_undo_stack.append(_history_baseline.duplicate(true))
+	_restore_history_snapshot(_redo_stack.pop_back())
+	_update_status("Повторено. Шагов в истории: %d" % _redo_stack.size())
+	return true
 
 
 func set_status(message: String) -> void:
@@ -414,6 +464,7 @@ func _on_new_pressed() -> void:
 	_reset_decor_for_new_blueprint()
 	frame_mode.sync_metadata_fields()
 	_dirty = false
+	reset_history()
 	_set_layer(0)
 	_update_status("Новый чертёж.")
 
@@ -456,6 +507,7 @@ func _on_load_item_activated(index: int) -> void:
 	_reset_decor_for_new_blueprint()
 	frame_mode.sync_metadata_fields()
 	_dirty = false
+	reset_history()
 	_load_popup.hide()
 	_update_status("Загружено: %s (%d блоков, %d зон, %d объектов)" % [
 		blueprint.name, blueprint.block_count(), blueprint.place_zones.size(), blueprint.objects.size()])
@@ -558,6 +610,41 @@ func _update_status(message: String) -> void:
 
 func _mark_dirty() -> void:
 	_dirty = true
+
+
+func _record_history_change() -> void:
+	if _history_replaying or blueprint == null:
+		return
+	var current := blueprint.to_dict()
+	if current == _history_baseline:
+		return
+	_undo_stack.append(_history_baseline.duplicate(true))
+	if _undo_stack.size() > HISTORY_LIMIT:
+		_undo_stack.pop_front()
+	_redo_stack.clear()
+	_history_baseline = current
+	if decor_mode != null:
+		decor_mode.refresh_history_buttons()
+
+
+func reset_history() -> void:
+	_undo_stack.clear()
+	_redo_stack.clear()
+	_history_baseline = blueprint.to_dict() if blueprint != null else {}
+	_saved_snapshot = _history_baseline.duplicate(true)
+
+
+func _restore_history_snapshot(snapshot: Dictionary) -> void:
+	_history_replaying = true
+	blueprint = BuildingBlueprint.from_dict(snapshot)
+	grid_model.load_from_blueprint(blueprint)
+	frame_mode.rebuild_all_block_nodes()
+	zones_mode.on_blueprint_loaded()
+	_reset_decor_for_new_blueprint()
+	frame_mode.sync_metadata_fields()
+	_history_baseline = snapshot.duplicate(true)
+	_dirty = _history_baseline != _saved_snapshot
+	_history_replaying = false
 
 
 func _confirm_discard_changes() -> bool:

@@ -274,16 +274,17 @@ func _delete_place() -> void:
 			kept.append(anchor)
 	_editor.blueprint.zone_anchors = kept
 	_editor.blueprint.place_zones.remove_at(_selected_place_index)
+	# Clear decor links before recording the mutation, so deleting a zone is one
+	# undo step rather than a zone deletion followed by a separate link cleanup.
+	var decor = _editor.decor_mode
+	if decor != null:
+		decor.on_zone_deleted(deleted_zone_id)
 	_selected_place_index = mini(_selected_place_index, _editor.blueprint.place_zones.size() - 1)
 	_editor.mark_dirty()
 	_editor.update_fallback_display()
 	_rebuild_place_option()
 	_refresh_place_panel_fields()
 	_refresh_zone_visuals()
-	# Notify decor mode so it can clear owner_zone_id references.
-	var decor = _editor.decor_mode
-	if decor != null and decor.is_active():
-		decor.on_zone_deleted(deleted_zone_id)
 
 
 func _rebuild_place_option() -> void:

@@ -7,7 +7,7 @@ extends RefCounted
 ## apply/revert calls is enough to prove the stack orders, discards redo
 ## branches, caps depth, and emits `changed` at the right times.
 
-const MAX_DEPTH := 256
+const MAX_DEPTH := MapEditorHistory.MAX_DEPTH
 
 
 static func run_all() -> void:
@@ -20,6 +20,7 @@ static func run_all() -> void:
 	_test_undo_failure_emits_changed_and_keeps_command()
 	_test_redo_failure_emits_changed_and_keeps_command()
 	_test_push_null_is_ignored()
+	_test_service_command_replays_its_exact_delta()
 	_test_composite_runs_parts_in_order_and_reverses_them()
 	_test_composite_rolls_back_a_failed_part()
 	print("    [PASS] Map Editor History Tests")
@@ -183,6 +184,32 @@ static func _test_push_null_is_ignored() -> void:
 	var history := MapEditorHistory.new()
 	assert(not history.push(null))
 	assert(history.undo_depth() == 0)
+
+
+## Map commands must name a concrete service delta.  Delegating to bare
+## `service.undo()` makes a stale global-history entry undo an unrelated edit.
+static func _test_service_command_replays_its_exact_delta() -> void:
+	var grid := TerrainGrid.new()
+	grid.configure(1.0, 8)
+	var service := TerrainService.new()
+	service.configure(grid)
+	var first_cell := Vector2i(0, 0)
+	var second_cell := Vector2i(1, 0)
+	assert(service.apply_operation(TerrainEditOperation.offset([first_cell] as Array[Vector2i], 1)))
+	var first := service.last_delta()
+	assert(service.apply_operation(TerrainEditOperation.offset([second_cell] as Array[Vector2i], 1)))
+	var second := service.last_delta()
+
+	var history := MapEditorHistory.new()
+	assert(history.push(TerrainServiceCommand.of(service, first, "first")))
+	assert(history.push(TerrainServiceCommand.of(service, second, "second")))
+	assert(history.undo())
+	assert(grid.height_of(second_cell) == 0)
+	assert(grid.height_of(first_cell) == 1)
+	assert(history.undo())
+	assert(grid.height_of(first_cell) == 0)
+	assert(history.redo())
+	assert(grid.height_of(first_cell) == 1)
 
 
 # --- Composite ------------------------------------------------------------------

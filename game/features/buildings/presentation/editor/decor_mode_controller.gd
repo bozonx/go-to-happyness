@@ -5,8 +5,9 @@ extends Node3D
 ## configures the `objects[]` of a blueprint.
 ##
 ## Lives as a child of BuildingEditor and owns everything decor-specific — the
-## spawned instances, the placement ghost, the selection marker and its own undo
-## stack — so the editor script only routes input and mode switching here.
+## spawned instances, the placement ghost and the selection marker — so the
+## editor script only routes input and mode switching here.  History belongs to
+## BuildingEditor, where it remains chronological across every mode.
 ##
 ## One contextual tool shares the left mouse button: it drops the catalog
 ## selection on empty ground, or selects and drags an existing object.
@@ -14,15 +15,12 @@ extends Node3D
 const FurnishingAssetCatalogScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_catalog.gd")
 const FurnishingAssetDefScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_def.gd")
 const DecorObjectRecordScript = preload("res://game/features/buildings/domain/editor/decor_object_record.gd")
-const FixtureDefinitionScript = preload("res://game/features/buildings/domain/editor/fixture_definition.gd")
 const FixtureEditorPanelScript = preload("res://game/features/buildings/presentation/editor/fixture_editor_panel.gd")
 const DecorPlacementValidatorScript = preload("res://game/features/buildings/presentation/editor/decor_placement_validator.gd")
 const DecorCollisionOverlayScript = preload("res://game/features/buildings/presentation/editor/decor_collision_overlay.gd")
 const DecorCatalogPanelScript = preload("res://game/features/buildings/presentation/editor/decor_catalog_panel.gd")
 
 const ROTATION_STEP_DEG := 15.0
-const UNDO_LIMIT := 40
-const REDO_LIMIT := 40
 ## Ghost feedback colours (design §6.2).
 const GHOST_COLOR_VALID := Color(0.45, 0.85, 1.0, 0.4)
 const GHOST_COLOR_INTERSECTION := Color(1.0, 0.3, 0.2, 0.5)
@@ -46,8 +44,6 @@ var _ghost_material: StandardMaterial3D = null
 var _selection_marker: MeshInstance3D = null
 var _hover_marker: MeshInstance3D = null
 var _hovered_object_id: String = ""
-var _undo_stack: Array = []
-var _redo_stack: Array = []
 var _object_search_edit: LineEdit = null
 var _id_label: Label = null
 var _asset_label: Label = null
@@ -510,82 +506,36 @@ func _next_object_suffix() -> int:
 
 
 # ---------------------------------------------------------------------------
-# Undo / Redo (decor-scoped snapshots)
+# Undo / Redo (delegated to the editor-wide history)
 # ---------------------------------------------------------------------------
 
 func _push_undo() -> void:
-	_undo_stack.append(_snapshot_state())
-	if _undo_stack.size() > UNDO_LIMIT:
-		_undo_stack.pop_front()
-	# Clear redo stack on new action.
-	_redo_stack.clear()
-	_update_undo_redo_buttons()
+	# Compatibility hook for fixture/decor callers.  The authoritative snapshot
+	# is recorded by BuildingEditor.mark_dirty after the mutation.
+	pass
 
 
 func undo() -> bool:
-	if _undo_stack.is_empty():
-		_editor.set_status("Отменять нечего.")
-		return true
-	_redo_stack.append(_snapshot_state())
-	if _redo_stack.size() > REDO_LIMIT:
-		_redo_stack.pop_front()
-	_restore_snapshot(_undo_stack.pop_back())
-	_editor.set_status("Отменено. Шагов в истории: %d" % _undo_stack.size())
-	_update_undo_redo_buttons()
-	return true
+	return _editor != null and _editor.undo()
 
 
 func redo() -> bool:
-	if _redo_stack.is_empty():
-		_editor.set_status("Повторять нечего.")
-		return true
-	_undo_stack.append(_snapshot_state())
-	if _undo_stack.size() > UNDO_LIMIT:
-		_undo_stack.pop_front()
-	_restore_snapshot(_redo_stack.pop_back())
-	_editor.set_status("Повторено. Шагов в истории: %d" % _redo_stack.size())
-	_update_undo_redo_buttons()
-	return true
+	return _editor != null and _editor.redo()
 
 
 func _update_undo_redo_buttons() -> void:
 	if _undo_btn != null:
-		_undo_btn.disabled = _undo_stack.is_empty()
+		_undo_btn.disabled = _editor == null or not _editor.can_undo()
 	if _redo_btn != null:
-		_redo_btn.disabled = _redo_stack.is_empty()
+		_redo_btn.disabled = _editor == null or not _editor.can_redo()
 
 
-func clear_undo_history() -> void:
-	_undo_stack.clear()
-	_redo_stack.clear()
+func refresh_history_buttons() -> void:
 	_update_undo_redo_buttons()
 
 
-func _snapshot_state() -> Dictionary:
-	var objects: Array = []
-	for record: DecorObjectRecordScript in _editor.blueprint.objects:
-		objects.append(record.to_dict())
-	var fixtures: Array = []
-	for fixture: FixtureDefinitionScript in _editor.blueprint.fixtures:
-		fixtures.append(fixture.to_dict())
-	return {"objects": objects, "fixtures": fixtures}
-
-
-func _restore_snapshot(snapshot: Dictionary) -> void:
-	_editor.blueprint.objects.clear()
-	for data in snapshot.get("objects", []):
-		_editor.blueprint.objects.append(DecorObjectRecordScript.from_dict(data))
-	_editor.blueprint.fixtures.clear()
-	for data in snapshot.get("fixtures", []):
-		_editor.blueprint.fixtures.append(FixtureDefinitionScript.from_dict(data))
-	_editor.mark_dirty()
-	rebuild_nodes()
-	_refresh_object_list()
-	_fixture_panel.refresh_fixture_ui()
-	if find_record(selected_object_id) == null:
-		select_object("")
-	else:
-		select_object(selected_object_id)
+func clear_undo_history() -> void:
+	_update_undo_redo_buttons()
 
 
 # ---------------------------------------------------------------------------
@@ -926,7 +876,6 @@ func on_zone_deleted(zone_id: StringName) -> void:
 			record.owner_zone_id = &""
 			affected += 1
 	if affected > 0:
-		_editor.mark_dirty()
 		_editor.set_status("Зона «%s» удалена. Связь снята с %d предметов." % [String(zone_id), affected])
 	_refresh_zone_filter_options()
 	_refresh_object_list()

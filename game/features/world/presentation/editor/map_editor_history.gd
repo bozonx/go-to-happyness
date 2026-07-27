@@ -7,7 +7,10 @@ extends RefCounted
 ## redo branch, which is the behaviour every editor has and the only one that
 ## does not surprise an author.
 
-const MAX_DEPTH := 256
+## Service-backed commands retain 128 deltas.  This cap must never exceed that
+## retention window: otherwise the editor can advertise an older command whose
+## service has already forgotten the delta needed to replay it.
+const MAX_DEPTH := 128
 
 signal changed()
 

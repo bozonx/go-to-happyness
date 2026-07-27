@@ -32,7 +32,8 @@ extends Node3D
 ##        X dissolve ramp, C cycle ramp class,
 ##        V cycle ramp direction, [ / ] brush size, Tab cycle cascade mode,
 ##        M toggle the navigation overlay, T cycle the traveller profile,
-##        Z undo, Y redo, G regenerate demo, N clear to flat, WASD pan, Q/E orbit.
+##        Z undo, Y redo (terrain and water in chronological order), G regenerate
+##        demo, N clear to flat, WASD pan, Q/E orbit.
 ##        The legend is on screen as well.
 ##
 ## Batch: `godot --path . tools/terrain_lab/terrain_lab.tscn -- --capture` writes
@@ -63,6 +64,10 @@ var nav_grid := NavGrid.new()
 var nav_publisher := TerrainNavigationPublisher.new()
 var brush := TerrainBrushController.new()
 var water_brush := WaterBrushController.new()
+## The laboratory edits two layers, so its shortcuts must use one chronological
+## history rather than whichever brush happened to receive the last key.
+var history := MapEditorHistory.new()
+var _replaying_history := false
 
 ## Profiles worth checking a map against: what a citizen can climb, and what a
 ## loaded cart can. A ramp that only a walker can use is a supply route that
@@ -130,6 +135,7 @@ func _ready() -> void:
 	brush.configure(grid, service, wear_service)
 	water_brush.configure(grid, water, water_service)
 	service.edit_committed.connect(_on_terrain_edited)
+	water_service.edit_committed.connect(_on_water_edited)
 	nav_overlay.configure(nav_grid, NAV_PROFILES[_nav_profile_index])
 	nav_overlay.visible = false
 	_generate_demo()
@@ -243,9 +249,9 @@ func _handle_key(event: InputEventKey) -> void:
 		KEY_TAB:
 			brush.cycle_edit_mode()
 		KEY_Z:
-			brush.undo()
+			_undo()
 		KEY_Y:
-			brush.redo()
+			_redo()
 		KEY_G:
 			_generate_demo()
 			brush.last_message = "demo terrain regenerated"
@@ -254,6 +260,7 @@ func _handle_key(event: InputEventKey) -> void:
 			water.configure(CELL_SIZE, BOARD_CELLS)
 			service.clear_history()
 			water_service.clear_history()
+			history.clear()
 			_republish_navigation()
 			brush.last_message = "cleared to flat"
 		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9, KEY_0:
@@ -287,9 +294,38 @@ func _nav_line() -> String:
 
 ## The publisher already refreshed the field; the overlay is presentation and
 ## rebuilds only when it is actually being looked at.
-func _on_terrain_edited(_delta: TerrainDelta) -> void:
+func _on_terrain_edited(delta: TerrainDelta) -> void:
+	if not _replaying_history:
+		history.push(TerrainServiceCommand.of(service, delta, "terrain"))
 	if nav_overlay.visible:
 		nav_overlay.rebuild()
+
+
+func _on_water_edited(delta: WaterDelta) -> void:
+	if not _replaying_history:
+		history.push(WaterServiceCommand.of(water_service, delta, "water"))
+	if nav_overlay.visible:
+		nav_overlay.rebuild()
+
+
+func _undo() -> void:
+	if not history.can_undo():
+		brush.last_message = "nothing to undo"
+		return
+	_replaying_history = true
+	var ok := history.undo()
+	_replaying_history = false
+	brush.last_message = "undo" if ok else "undo failed"
+
+
+func _redo() -> void:
+	if not history.can_redo():
+		brush.last_message = "nothing to redo"
+		return
+	_replaying_history = true
+	var ok := history.redo()
+	_replaying_history = false
+	brush.last_message = "redo" if ok else "redo failed"
 
 
 func _process_camera_keys(delta: float) -> void:
@@ -465,6 +501,7 @@ func _process_capture() -> void:
 func _setup_cascade_scene() -> void:
 	grid.configure(CELL_SIZE, BOARD_CELLS)
 	service.clear_history()
+	history.clear()
 	for z in range(-8, 9):
 		for x in range(-4, 5):
 			grid.set_material(Vector2i(x, z), TerrainMaterialCatalog.SAND)
@@ -490,6 +527,7 @@ func _generate_demo() -> void:
 	# starts the history empty.
 	service.clear_history()
 	water_service.clear_history()
+	history.clear()
 
 	# Stepped plateau to the east: 0 → 1 → 2, all cliffs except where ramps go.
 	for z in range(-20, 20):

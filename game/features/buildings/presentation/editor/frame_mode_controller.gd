@@ -1140,6 +1140,7 @@ func on_save_pressed() -> void:
 	var result := _editor.repository.save(_editor.blueprint)
 	if result["ok"]:
 		_editor._dirty = false
+		_editor.reset_history()
 		_editor.set_status("Сохранено: %s (%d блоков)" % [result["path"], _editor.blueprint.block_count()])
 	else:
 		_editor.set_status("Ошибка сохранения: %s" % result["error"])

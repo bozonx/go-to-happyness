@@ -14,11 +14,13 @@ extends MapEditorCommand
 ## two layers.
 
 var _service: WaterService
+var _delta: WaterDelta
 
 
-static func of(service: WaterService, label: String) -> WaterServiceCommand:
+static func of(service: WaterService, delta: WaterDelta, label: String) -> WaterServiceCommand:
 	var command := WaterServiceCommand.new()
 	command._service = service
+	command._delta = delta
 	command.label = label
 	return command
 
@@ -30,8 +32,8 @@ func apply_on_push() -> bool:
 
 
 func redo() -> bool:
-	return _service != null and _service.redo()
+	return _service != null and _delta != null and _service.redo_delta(_delta)
 
 
 func undo() -> bool:
-	return _service != null and _service.undo()
+	return _service != null and _delta != null and _service.undo_delta(_delta)

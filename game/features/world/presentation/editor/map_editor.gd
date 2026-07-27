@@ -388,13 +388,13 @@ func _handle_key(event: InputEventKey) -> void:
 ## over: a drag across twenty columns commits twenty deltas, and a click that the
 ## cascade refuses commits none. The service is the one thing that knows which of
 ## those happened, so it is the one thing that gets to say a command exists.
-func _on_terrain_committed(_delta: TerrainDelta) -> void:
+func _on_terrain_committed(delta: TerrainDelta) -> void:
 	# Undo and redo replay through the same signal. Recording those would push a
 	# new command for every undo and the stack would never empty.
 	if _replaying:
 		return
 	var label := _context.pending_edit_label
-	var parts: Array[MapEditorCommand] = [TerrainServiceCommand.of(_terrain_service, label)]
+	var parts: Array[MapEditorCommand] = [TerrainServiceCommand.of(_terrain_service, delta, label)]
 	# The sea comes in as part of the stroke that opened the way for it (§6.1), so
 	# it joins the same command. Two entries here would mean two Ctrl+Z for one
 	# thing the author did.
@@ -402,7 +402,7 @@ func _on_terrain_committed(_delta: TerrainDelta) -> void:
 	var flooded := _border_ocean.apply()
 	_recording_border_fill = false
 	if flooded:
-		parts.append(WaterServiceCommand.of(_water_service, label))
+		parts.append(WaterServiceCommand.of(_water_service, _water_service.last_delta(), label))
 	history.push(
 		parts[0] if parts.size() == 1
 		else MapEditorCompositeCommand.of(parts, "%s + океан" % label)
@@ -415,12 +415,12 @@ func _on_terrain_committed(_delta: TerrainDelta) -> void:
 ## two services push onto the SAME stack, which is what makes Ctrl+Z walk back
 ## through an author's actual sequence of strokes instead of through one layer at
 ## a time.
-func _on_water_committed(_delta: WaterDelta) -> void:
+func _on_water_committed(delta: WaterDelta) -> void:
 	# A border fill is part of the terrain command that triggered it, so it must not
 	# also push one of its own.
 	if _replaying or _recording_border_fill:
 		return
-	history.push(WaterServiceCommand.of(_water_service, _context.pending_edit_label))
+	history.push(WaterServiceCommand.of(_water_service, delta, _context.pending_edit_label))
 	document.mark_dirty()
 
 

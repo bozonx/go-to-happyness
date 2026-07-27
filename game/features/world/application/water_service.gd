@@ -65,6 +65,12 @@ func last_delta_size() -> int:
 	return 0 if _last_delta == null else _last_delta.size()
 
 
+## The delta most recently committed or replayed.  Composite editor commands
+## use it to bind a border-ocean fill to this exact water transaction.
+func last_delta() -> WaterDelta:
+	return _last_delta
+
+
 func undo_depth() -> int:
 	return _undo_stack.size()
 
@@ -320,9 +326,18 @@ func can_redo() -> bool:
 
 
 func undo() -> bool:
+	return undo_delta()
+
+
+## Revert the exact delta recorded by an editor command.  This prevents a
+## stale command from operating on a different water edit after histories move.
+func undo_delta(expected: WaterDelta = null) -> bool:
 	if grid == null or _undo_stack.is_empty():
 		return false
 	var delta: WaterDelta = _undo_stack.pop_back()
+	if expected != null and delta != expected:
+		_undo_stack.push_back(delta)
+		return false
 	delta.revert(grid)
 	_redo_stack.push_back(delta)
 	_last_delta = delta
@@ -333,9 +348,17 @@ func undo() -> bool:
 
 
 func redo() -> bool:
+	return redo_delta()
+
+
+## Replay the exact delta recorded by an editor command. See `undo_delta`.
+func redo_delta(expected: WaterDelta = null) -> bool:
 	if grid == null or _redo_stack.is_empty():
 		return false
 	var delta: WaterDelta = _redo_stack.pop_back()
+	if expected != null and delta != expected:
+		_redo_stack.push_back(delta)
+		return false
 	delta.apply(grid)
 	_undo_stack.push_back(delta)
 	_last_delta = delta
