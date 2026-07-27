@@ -134,13 +134,31 @@ func _toggle_catalog_category(category_id: StringName) -> void:
 
 
 func _select_asset(asset_id: StringName) -> void:
+	select_asset(asset_id)
+
+
+## Chooses an asset as a placement brush.  This is also used by the scene
+## eyedropper, so catalog and shortcut selection always leave identical UI.
+func select_asset(asset_id: StringName) -> void:
 	_controller.current_asset_id = asset_id
 	for id in _asset_buttons.keys():
 		(_asset_buttons[id] as Button).button_pressed = id == asset_id
+	for id in _recent_buttons.keys():
+		(_recent_buttons[id] as Button).button_pressed = id == asset_id
 	var asset := FurnishingAssetCatalogScript.get_asset(asset_id)
 	if asset != null:
 		_select_snap_step(asset.default_snap_step)
 		add_recent_asset(asset_id)
+	_controller.set_tool(_controller.Tool.PLACE)
+	_controller.refresh_ghost()
+
+
+func clear_asset_selection() -> void:
+	_controller.current_asset_id = &""
+	for button in _asset_buttons.values():
+		(button as Button).button_pressed = false
+	for button in _recent_buttons.values():
+		(button as Button).button_pressed = false
 	_controller.refresh_ghost()
 
 

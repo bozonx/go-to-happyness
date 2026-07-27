@@ -229,9 +229,13 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 				_zoom(2.0)
 		MOUSE_BUTTON_LEFT:
 			if event.pressed:
-				if current_mode == EditMode.FRAME and event.shift_pressed:
-					frame_mode.pick_single_block()
-					return
+				if event.shift_pressed:
+					if current_mode == EditMode.FRAME:
+						frame_mode.pick_single_block()
+						return
+					if current_mode == EditMode.DECOR:
+						decor_mode.pick_asset_at_cursor()
+						return
 				if current_mode == EditMode.ZONES:
 					if zones_mode.handle_mouse_button(event):
 						frame_mode.painting = zones_mode.is_painting()

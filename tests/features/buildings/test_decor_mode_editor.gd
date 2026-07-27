@@ -48,6 +48,7 @@ func _run() -> void:
 	# Place two objects through the real click path.
 	editor.cursor_valid = true
 	decor.current_asset_id = &"campfire"
+	decor.set_tool(decor.Tool.PLACE)
 	editor.cursor_hit_pos = Vector3(2.2, 0.0, 2.2)
 	decor.on_left_pressed()
 	editor.cursor_hit_pos = Vector3(5.4, 0.0, 5.4)
@@ -58,21 +59,21 @@ func _run() -> void:
 	assert(decor._nodes.size() == 2, "two instances spawned")
 	print("  placement ok, ids=", editor.blueprint.objects.map(func(r): return r.id))
 
-	# PLACE is context-sensitive: clicking existing decor selects it instead of
-	# inserting another object at the same spot. Small decor may still share a
-	# grid cell when their footprints do not intersect.
+	# Placement never stacks on an existing object. It selects it and moves to
+	# explicit selection mode, making the next click predictable.
 	editor.cursor_hit_pos = Vector3(2.2, 0.0, 2.2)
 	decor.on_left_pressed()
 	assert(editor.blueprint.objects.size() == 2, "placement mode must not stack decor under the cursor")
 	assert(decor.selected_object_id == editor.blueprint.objects[0].id,
 		"placement mode selects the object under the cursor")
+	assert(decor.current_tool == decor.Tool.SELECT, "occupied placement switches to selection")
 	decor.refresh_ghost()
 	assert(decor._ghost == null or not decor._ghost.visible, "ghost hides while the cursor is over decor")
 	assert(decor._hover_marker.visible, "hover marker identifies the object a click will select")
 	assert(not editor.get_node("%DecorDeleteSelectionBtn").disabled, "toolbar delete enables for selection")
 	print("  occupied placement selects instead of stacking")
 
-	# Selection and dragging use the same contextual left-click gesture.
+	# Selection mode handles dragging, while an empty click clears selection.
 	editor.cursor_hit_pos = Vector3(2.3, 0.0, 2.3)
 	decor.on_left_pressed()
 	assert(decor.selected_object_id == editor.blueprint.objects[0].id, "picked the campfire")
@@ -161,8 +162,24 @@ func _run() -> void:
 		"light_energy must be carried over during replace")
 	print("  replace preserves appearance ok")
 
-	# All rotation axes are authorable and Esc cancels selection without leaving a
-	# pending drag/placement operation behind.
+	# The eyedropper copies the placed asset and rotations into the placement
+	# brush, then Esc first clears scene selection and then clears that brush.
+	editor.cursor_hit_pos = editor.blueprint.objects[0].pos
+	decor.pick_asset_at_cursor()
+	assert(decor.current_asset_id == editor.blueprint.objects[0].asset_id, "decor eyedropper copies asset")
+	assert(decor.current_tool == decor.Tool.PLACE, "eyedropper enters placement mode")
+	decor.select_object(editor.blueprint.objects[0].id)
+	decor.cancel_current_action()
+	assert(decor.selected_object_id.is_empty(), "first Esc clears decor selection")
+	assert(not decor.current_asset_id.is_empty(), "first Esc keeps the placement brush")
+	decor.cancel_current_action()
+	assert(decor.current_asset_id.is_empty(), "second Esc clears the placement brush")
+	assert(decor.current_tool == decor.Tool.SELECT, "second Esc returns to neutral select mode")
+
+	# All rotation axes are authorable and Esc does not leave a pending drag.
+	decor.current_asset_id = &"campfire"
+	decor.set_tool(decor.Tool.PLACE)
+	decor.select_object(editor.blueprint.objects[0].id)
 	decor.rotate_selection("x", 1)
 	decor.rotate_selection("z", 1)
 	assert(not is_zero_approx(editor.blueprint.objects[0].rot.x), "X rotation applied")

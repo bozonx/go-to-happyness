@@ -9,8 +9,9 @@ extends Node3D
 ## editor script only routes input and mode switching here.  History belongs to
 ## BuildingEditor, where it remains chronological across every mode.
 ##
-## One contextual tool shares the left mouse button: it drops the catalog
-## selection on empty ground, or selects and drags an existing object.
+## Placement and selection deliberately stay separate.  Decor has per-instance
+## properties (transform, appearance, zone and fixture links), unlike frame
+## blocks, so a neutral selection tool prevents accidental duplicates.
 
 const FurnishingAssetCatalogScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_catalog.gd")
 const FurnishingAssetDefScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_def.gd")
@@ -26,6 +27,8 @@ const GHOST_COLOR_VALID := Color(0.45, 0.85, 1.0, 0.4)
 const GHOST_COLOR_INTERSECTION := Color(1.0, 0.3, 0.2, 0.5)
 const GHOST_COLOR_OUT_OF_BOUNDS := Color(1.0, 0.85, 0.2, 0.5)
 
+enum Tool { PLACE, SELECT }
+
 var current_group: StringName = &""  ## empty = all groups
 var current_category: StringName = &"camping"
 var current_asset_id: StringName = &""
@@ -34,6 +37,7 @@ var current_yaw_deg: float = 0.0
 var current_pitch_deg: float = 0.0
 var current_roll_deg: float = 0.0
 var selected_object_id: String = ""
+var current_tool: int = Tool.SELECT
 
 var _editor: Node = null
 var _validator: RefCounted = null
@@ -75,6 +79,8 @@ var _scale_spin: SpinBox = null
 var _duplicate_btn: Button = null
 var _delete_btn: Button = null
 var _toolbar_delete_btn: Button = null
+var _tool_place_btn: Button = null
+var _tool_select_btn: Button = null
 var _layer_label: Label = null
 var _collision_overlay_btn: Button = null
 var _collision_overlay: Node3D = null
@@ -119,6 +125,8 @@ func setup(editor: Node) -> void:
 	_duplicate_btn = editor.get_node("%DecorDuplicateBtn")
 	_delete_btn = editor.get_node("%DecorDeleteBtn")
 	_toolbar_delete_btn = editor.get_node("%DecorDeleteSelectionBtn")
+	_tool_place_btn = editor.get_node("%DecorToolPlaceBtn")
+	_tool_select_btn = editor.get_node("%DecorToolSelectBtn")
 	_undo_btn = editor.get_node("%DecorUndoBtn")
 	_redo_btn = editor.get_node("%DecorRedoBtn")
 	_layer_label = editor.get_node("%DecorLayerLabel")
@@ -149,6 +157,8 @@ func setup(editor: Node) -> void:
 	_duplicate_btn.pressed.connect(duplicate_selection)
 	_delete_btn.pressed.connect(delete_selection)
 	_toolbar_delete_btn.pressed.connect(delete_selection)
+	_tool_place_btn.pressed.connect(set_tool.bind(Tool.PLACE))
+	_tool_select_btn.pressed.connect(set_tool.bind(Tool.SELECT))
 	_replace_btn.pressed.connect(_replace_selected_object)
 	_undo_btn.pressed.connect(undo)
 	_redo_btn.pressed.connect(redo)
@@ -182,6 +192,7 @@ func activate() -> void:
 	_fixture_panel.refresh_fixture_ui()
 	_update_layer_label()
 	_update_undo_redo_buttons()
+	_sync_tool_buttons()
 
 
 func deactivate() -> void:
@@ -207,12 +218,18 @@ func on_left_pressed() -> void:
 		return
 	var hit: Vector3 = _editor.cursor_hit_pos
 	var picked := pick_object_at(hit)
+	if current_tool == Tool.SELECT:
+		if picked.is_empty():
+			select_object("")
+			_editor.set_status("Выделение снято.")
+			return
+		_select_for_drag(picked, hit)
+		return
 	if not picked.is_empty():
-		select_object(picked)
-		var record := find_record(picked)
-		_drag_offset = record.pos - Vector3(hit.x, record.pos.y, hit.z)
-		_dragging = true
-		_drag_started = false
+		# Existing objects are edited, never overwritten or duplicated by a
+		# placement click. Switch to selection so the next click is predictable.
+		set_tool(Tool.SELECT)
+		_select_for_drag(picked, hit)
 		return
 	_place_or_select_at(hit)
 
@@ -234,6 +251,35 @@ func erase_at_cursor() -> void:
 	_erase_object(target)
 	_editor.set_status("Объект удалён.")
 	refresh_hover()
+
+
+## Shift+LMB: use the object below the cursor as the next placement brush.
+func pick_asset_at_cursor() -> void:
+	if not _editor.cursor_valid:
+		return
+	var object_id := pick_object_at(_editor.cursor_hit_pos)
+	var record := find_record(object_id)
+	if record == null:
+		_editor.set_status("Под курсором нет объекта для пипетки.")
+		return
+	_catalog_panel.select_asset(record.asset_id)
+	current_pitch_deg = record.rot.x
+	current_yaw_deg = record.rot.y
+	current_roll_deg = record.rot.z
+	select_object("")
+	set_tool(Tool.PLACE)
+	_editor.set_status("Пипетка: выбран «%s»." % FurnishingAssetCatalogScript.get_asset(record.asset_id).name)
+	refresh_ghost()
+
+
+func _select_for_drag(object_id: String, hit: Vector3) -> void:
+	select_object(object_id)
+	var record := find_record(object_id)
+	if record == null:
+		return
+	_drag_offset = record.pos - Vector3(hit.x, record.pos.y, hit.z)
+	_dragging = true
+	_drag_started = false
 
 
 func on_drag() -> void:
@@ -275,6 +321,12 @@ func handle_key(event: InputEventKey) -> bool:
 				return true
 		return false
 	match event.keycode:
+		KEY_B:
+			set_tool(Tool.PLACE)
+			return true
+		KEY_V:
+			set_tool(Tool.SELECT)
+			return true
 		KEY_C, KEY_R:
 			rotate_selection("y", -1 if event.shift_pressed else 1)
 			return true
@@ -490,6 +542,13 @@ func cancel_current_action() -> void:
 	if not selected_object_id.is_empty():
 		select_object("")
 		_editor.set_status("Выделение снято.")
+		return
+	if not current_asset_id.is_empty():
+		_catalog_panel.clear_asset_selection()
+		set_tool(Tool.SELECT)
+		_editor.set_status("Кисть декора сброшена.")
+		return
+	_editor.set_status("Ничего не выбрано.")
 
 
 ## Monotonic-enough suffix for generated ids. `Time.get_ticks_msec()` alone
@@ -593,7 +652,7 @@ func _remove_node(object_id: String) -> void:
 
 func refresh_ghost() -> void:
 	refresh_hover()
-	if not is_active() or not _editor.cursor_valid or not _hovered_object_id.is_empty():
+	if not is_active() or current_tool != Tool.PLACE or not _editor.cursor_valid or not _hovered_object_id.is_empty():
 		_hide_ghost()
 		return
 	var asset := FurnishingAssetCatalogScript.get_asset(current_asset_id)
@@ -748,6 +807,20 @@ func select_object(object_id: String) -> void:
 	_toolbar_delete_btn.disabled = selected_object_id.is_empty()
 	_sync_object_list_selection()
 	_refresh_inspector()
+	_update_selection_marker()
+
+
+func set_tool(tool: int) -> void:
+	current_tool = tool
+	_sync_tool_buttons()
+	refresh_ghost()
+
+
+func _sync_tool_buttons() -> void:
+	if _tool_place_btn != null:
+		_tool_place_btn.button_pressed = current_tool == Tool.PLACE
+	if _tool_select_btn != null:
+		_tool_select_btn.button_pressed = current_tool == Tool.SELECT
 	_update_selection_marker()
 
 
