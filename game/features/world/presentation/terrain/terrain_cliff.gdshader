@@ -37,9 +37,16 @@ void vertex() {
 }
 
 void fragment() {
-	vec2 edge_metres = min(UV, vec2(1.0) - UV) * UV2;
+	float edge_mask = floor(UV2.x + 0.0001);
+	vec2 dimensions = vec2(fract(UV2.x) * 100.0, UV2.y);
+	vec4 edge_enabled = vec4(
+		mod(edge_mask, 2.0), mod(floor(edge_mask / 2.0), 2.0),
+		mod(floor(edge_mask / 4.0), 2.0), mod(floor(edge_mask / 8.0), 2.0)
+	);
+	vec4 edge_distances = vec4(UV.y * dimensions.y, (1.0 - UV.x) * dimensions.x, (1.0 - UV.y) * dimensions.y, UV.x * dimensions.x);
+	float eligible_edge_distance = min(min(edge_distances.x + (1.0 - edge_enabled.x) * 10000.0, edge_distances.y + (1.0 - edge_enabled.y) * 10000.0), min(edge_distances.z + (1.0 - edge_enabled.z) * 10000.0, edge_distances.w + (1.0 - edge_enabled.w) * 10000.0));
 	float rounding_radius = max(edge_rounding * tile_size * 0.25, 0.0001);
-	float edge_band = (1.0 - smoothstep(0.0, rounding_radius, min(edge_metres.x, edge_metres.y))) * step(0.001, edge_rounding);
+	float edge_band = (1.0 - smoothstep(0.0, rounding_radius, eligible_edge_distance)) * step(0.001, edge_rounding);
 	float normal_blend = max(edge_band, full_smoothing);
 	NORMAL = normalize(mix(NORMAL, smooth_view_normal, normal_blend));
 	vec3 blend = abs(normalize(mix(world_normal, smooth_world_normal, normal_blend)));

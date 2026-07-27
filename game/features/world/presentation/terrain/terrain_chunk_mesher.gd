@@ -127,6 +127,7 @@ func _build(grid: TerrainGrid, chunk: Vector2i, lod: int) -> Dictionary:
 	_add_tops()
 	if lod == Lod.FULL:
 		_add_walls()
+	_encode_roundable_edges()
 	_encode_smooth_normals()
 
 	if _top_indices.is_empty() and _wall_indices.is_empty():
@@ -450,9 +451,78 @@ static func _encode_normal(normal: Vector3) -> Vector3:
 	return normal * 0.5 + Vector3.ONE * 0.5
 
 
-## UV is the position across this quad and UV2 repeats its size in metres. The
-## shaders use them to keep partial smoothing in a narrow band at the edges,
-## instead of bending the lighting across the centre of a greedily merged plain.
+## Marks only edges shared by two non-coplanar rendered faces. This rejects
+## triangulation/chunk seams and silhouette edges (board skirts and holes), while
+## still matching one long greedy top edge against several shorter wall edges.
+func _encode_roundable_edges() -> void:
+	var top_quads := _top_vertices.size() / 4
+	var wall_quads := _wall_vertices.size() / 4
+	var masks := PackedInt32Array()
+	masks.resize(top_quads + wall_quads)
+	var buckets: Dictionary = {}
+	_collect_quad_edges(_top_vertices, _top_normals, 0, buckets)
+	_collect_quad_edges(_wall_vertices, _wall_normals, top_quads, buckets)
+	for bucket: Array in buckets.values():
+		for left_index in bucket.size():
+			var left: Dictionary = bucket[left_index]
+			for right_index in range(left_index + 1, bucket.size()):
+				var right: Dictionary = bucket[right_index]
+				if int(left["quad"]) == int(right["quad"]):
+					continue
+				if (left["normal"] as Vector3).dot(right["normal"] as Vector3) > 0.999:
+					continue
+				if minf(float(left["max"]), float(right["max"])) - maxf(float(left["min"]), float(right["min"])) <= 0.0001:
+					continue
+				masks[int(left["quad"])] |= 1 << int(left["edge"])
+				masks[int(right["quad"])] |= 1 << int(right["edge"])
+	for quad in top_quads:
+		_pack_edge_mask(_top_uv2, quad, masks[quad])
+	for quad in wall_quads:
+		_pack_edge_mask(_wall_uv2, quad, masks[top_quads + quad])
+
+
+static func _collect_quad_edges(vertices: PackedVector3Array, normals: PackedVector3Array, quad_offset: int, buckets: Dictionary) -> void:
+	for quad in vertices.size() / 4:
+		var base := quad * 4
+		for edge in 4:
+			var a := vertices[base + edge]
+			var b := vertices[base + ((edge + 1) % 4)]
+			var direction := (b - a).normalized()
+			if direction.x < -0.0001 or (absf(direction.x) <= 0.0001 and direction.y < -0.0001) or (absf(direction.x) <= 0.0001 and absf(direction.y) <= 0.0001 and direction.z < 0.0):
+				direction = -direction
+			var anchor := a - direction * a.dot(direction)
+			var key := _edge_line_key(direction, anchor)
+			if not buckets.has(key):
+				buckets[key] = []
+			var a_distance := a.dot(direction)
+			var b_distance := b.dot(direction)
+			(buckets[key] as Array).append({
+				"quad": quad_offset + quad, "edge": edge,
+				"min": minf(a_distance, b_distance), "max": maxf(a_distance, b_distance),
+				"normal": normals[base],
+			})
+
+
+static func _edge_line_key(direction: Vector3, anchor: Vector3) -> String:
+	const PRECISION := 10000.0
+	return "%d:%d:%d|%d:%d:%d" % [
+		roundi(direction.x * PRECISION), roundi(direction.y * PRECISION), roundi(direction.z * PRECISION),
+		roundi(anchor.x * PRECISION), roundi(anchor.y * PRECISION), roundi(anchor.z * PRECISION),
+	]
+
+
+static func _pack_edge_mask(uv2: PackedVector2Array, quad: int, mask: int) -> void:
+	var base := quad * 4
+	var dimensions := uv2[base]
+	# Chunks are at most 16 cells wide, so width/100 safely occupies the
+	# fractional part and the four mask bits fit in the integer part.
+	var packed_width := float(mask) + dimensions.x / 100.0
+	for corner in 4:
+		uv2[base + corner] = Vector2(packed_width, dimensions.y)
+
+
+## UV is the position across this quad. UV2 initially repeats its size in metres;
+## `_encode_roundable_edges` later packs the four-bit adjacency mask into X.
 static func _append_edge_coordinates(coordinates: PackedVector2Array, dimensions: PackedVector2Array, a: Vector3, b: Vector3, c: Vector3) -> void:
 	var width := a.distance_to(b)
 	var depth := b.distance_to(c)
