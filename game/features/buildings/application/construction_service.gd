@@ -43,8 +43,10 @@ func start_site(cell: Vector2i, building_type: String, position: Vector3, rotati
 		site_node.set_meta("active_zones", blueprint["zones"])
 	if blueprint.has("routing_anchors"):
 		site_node.set_meta("routing_anchors", blueprint["routing_anchors"])
-	if blueprint.has("access_overlays"):
-		site_node.set_meta("access_overlays", blueprint["access_overlays"])
+	if blueprint.has("routes"):
+		site_node.set_meta("zone_routes", blueprint["routes"])
+	if blueprint.has("overlays"):
+		site_node.set_meta("zone_overlays", blueprint["overlays"])
 	site_node.set_meta("footprint", blueprint.footprint)
 	site_node.set_meta("occupied_footprint", occupied_footprint if occupied_footprint != Vector2i.ZERO else blueprint.footprint)
 	site_node.set_meta("service_positions", BuildingEntrancePositionsScript.positions(site_node, blueprint.footprint, SERVICE_PAD_OFFSET))

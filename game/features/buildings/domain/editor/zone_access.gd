@@ -38,6 +38,22 @@ static func permits(allow: Array[StringName], deny: Array[StringName], audience:
 	return audience in allow
 
 
+## Resolves a mask against all tags carried by one agent. Any denial is a veto;
+## one matching allowance is enough to pass a whitelist.
+static func permits_tags(allow: Array[StringName], deny: Array[StringName], tags: Array[StringName]) -> bool:
+	if AUDIENCE_ANY in deny:
+		return false
+	for tag in tags:
+		if tag in deny:
+			return false
+	if allow.is_empty() or AUDIENCE_ANY in allow:
+		return true
+	for tag in tags:
+		if tag in allow:
+			return true
+	return false
+
+
 ## Combines masks of several overlapping areas: any denial forbids entry.
 static func permits_all(masks: Array, audience: StringName) -> bool:
 	for mask in masks:

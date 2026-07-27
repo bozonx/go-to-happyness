@@ -16,8 +16,10 @@ extends RefCounted
 ## `owner` links a point to its area; empty means a top-level point (a bus stop
 ## on a street, a spawn on a map).
 
-## Portal in or out. The only authority on entrances — the board-level
-## `entrance` fields the game consumes are derived from these.
+## Portal in or out of a building, and between maps. The only authority on
+## entrances — the board-level `entrance` fields the game consumes are derived
+## from these. Where a transition leads is a pack `function`; the engine only
+## knows "this is where one enters".
 const ROLE_DOOR := &"door"
 ## A point a unit occupies to act. Capacity is always one; reservation required.
 const ROLE_SLOT := &"slot"
@@ -64,6 +66,11 @@ var pos: Vector3 = Vector3.ZERO
 ## Yaw in degrees. Points are placed on a grid, so one axis is enough — a slot
 ## facing up or rolled sideways is not a thing the engine can act on.
 var facing: float = 0.0
+## Spread of the sector the point looks along, in degrees around `facing`.
+## 0 means "all around". "Where does it look and what does it cover" is one
+## question for a firing position, a guard post, a viewpoint and a start camera,
+## and a field answers it far cheaper than four roles (§5.2).
+var arc: float = 0.0
 
 ## `slot` — body pose and the pack-defined activity performed there.
 var pose: StringName = POSE_STAND
@@ -103,6 +110,20 @@ func is_queue() -> bool:
 	return role == ROLE_QUEUE
 
 
+func is_spawn() -> bool:
+	return role == ROLE_SPAWN
+
+
+func is_poi() -> bool:
+	return role == ROLE_POI
+
+
+## Roles for which "where does it look" is a real question. A door has a side,
+## not a sector; a queue place inherits the sector of its slot.
+func supports_arc() -> bool:
+	return role == ROLE_SLOT or role == ROLE_POI or role == ROLE_SPAWN
+
+
 func permits(audience: StringName) -> bool:
 	return ZoneAccess.permits(allow, deny, audience)
 
@@ -122,6 +143,8 @@ func to_dict() -> Dictionary:
 		data["owner"] = String(owner_id)
 	if not is_zero_approx(facing):
 		data["facing"] = facing
+	if not is_zero_approx(arc):
+		data["arc"] = arc
 	match role:
 		ROLE_SLOT:
 			if pose != POSE_STAND:
@@ -156,6 +179,7 @@ static func from_dict(data: Dictionary) -> ZoneAnchorRecord:
 	if raw_pos is Array and raw_pos.size() >= 3:
 		anchor.pos = Vector3(float(raw_pos[0]), float(raw_pos[1]), float(raw_pos[2]))
 	anchor.facing = float(data.get("facing", 0.0))
+	anchor.arc = clampf(float(data.get("arc", 0.0)), 0.0, 360.0)
 	anchor.pose = StringName(data.get("pose", POSE_STAND))
 	anchor.activity = StringName(data.get("activity", ""))
 	anchor.fixture_id = StringName(data.get("fixture", ""))
@@ -183,6 +207,18 @@ static func role_display_name(anchor_role: StringName) -> String:
 		ROLE_WAYPOINT: return "Путевая точка"
 		ROLE_POI: return "Точка интереса"
 		_: return String(anchor_role)
+
+
+static func role_hint(anchor_role: StringName) -> String:
+	match anchor_role:
+		ROLE_DOOR: return "Портал внутрь и наружу. Единственный источник истины о входах."
+		ROLE_SLOT: return "Точка, которую занимают для действия. Вместимость — один."
+		ROLE_QUEUE: return "Место в очереди к выбранному месту."
+		ROLE_STORAGE: return "Поддон приёмки или выдачи. К нему подходят, его не занимают."
+		ROLE_SPAWN: return "Где что-то появляется. Что именно — решает правило пака."
+		ROLE_WAYPOINT: return "Точка маршрута. Сама по себе ничего не делает."
+		ROLE_POI: return "Всё остальное точечное: сцена, обзор, камера, метка для правил."
+		_: return ""
 
 
 static func pose_display_name(anchor_pose: StringName) -> String:

@@ -204,7 +204,7 @@ func _test_v3_migrates_to_content_axes() -> void:
 		"category": "clay", "construction_style": "surface",
 		"grid_bounds": {"x": 1, "y": 1, "z": 1}, "footprint": [1, 1],
 	})
-	assert(legacy.version == 5)
+	assert(legacy.version == BlueprintScript.FORMAT_VERSION)
 	assert(legacy.role == &"legacy_bakery")
 	assert(legacy.era == &"clay")
 	assert(legacy.style == &"generic")

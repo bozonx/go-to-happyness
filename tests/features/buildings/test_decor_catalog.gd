@@ -362,8 +362,9 @@ func _test_builtin_blueprints_are_current() -> void:
 			var json := JSON.new()
 			assert(json.parse(text) == OK, "Blueprint %s must be valid JSON" % file_name)
 			var data: Dictionary = json.data
-			assert(int(data.get("version", 0)) == 5,
-				"Built-in blueprint %s must be v5, got version %d" % [file_name, int(data.get("version", 0))])
+			assert(int(data.get("version", 0)) == BuildingBlueprintScript.FORMAT_VERSION,
+				"Built-in blueprint %s must be current v%d, got version %d" % [
+					file_name, BuildingBlueprintScript.FORMAT_VERSION, int(data.get("version", 0))])
 			# Entrances are `door` anchors now; the standalone fields are gone.
 			assert(not data.has("entrance") and not data.has("worker_entrances"),
 				"Built-in blueprint %s must not carry legacy entrance fields" % file_name)

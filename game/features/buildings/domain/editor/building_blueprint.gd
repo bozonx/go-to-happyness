@@ -23,7 +23,10 @@ const ContentIdScript = preload("res://game/features/content/domain/content_id.g
 ## `place_zones`/`zone_anchors`/`work_zones` and the standalone `entrance`/
 ## `worker_entrances` fields are gone; there is no migration branch, because no
 ## shipped or authored file used the old zone arrays.
-const FORMAT_VERSION := 5
+## v6: the `access` area role became `overlay` and gained an `effects` section;
+## points gained `arc`. Again no migration branch: not one authored file carried
+## an area, so there is nothing to convert — only the version stamp moves.
+const FORMAT_VERSION := 6
 const MIN_LOAD_VERSION := 1
 const FILE_EXTENSION := "gdbuilding.json"
 
@@ -65,10 +68,10 @@ var blocks: Array[BlueprintBlock] = []
 
 ## Active zones, organized by geometry (design_docs/engine/active_zones.md §3):
 ## `areas` are regions, `anchors` are points, `routes` are ordered lines over
-## routing points. Routes stay opaque until the line tool exists.
+## routing points.
 var areas: Array[ZoneAreaRecord] = []
 var anchors: Array[ZoneAnchorRecord] = []
-var routes: Array = []
+var routes: Array[ZoneRouteRecord] = []
 
 ## Placed decor and furnishing (authored in editor Mode 3, design §3.3).
 var objects: Array[DecorObjectRecord] = []
@@ -157,6 +160,34 @@ func area_by_id(area_id: StringName) -> ZoneAreaRecord:
 	return null
 
 
+## Whether a zone id is already taken. Areas and points share **one** namespace
+## (active_zones.md §7.1): rules, routes, saves and selectors address them by the
+## same name, so an area `till` and a point `till` in one file is an ambiguity,
+## not two independent ids.
+func zone_id_taken(zone_id: StringName, except: Variant = null) -> bool:
+	for area in areas:
+		if area.id == zone_id and area != except:
+			return true
+	for anchor in anchors:
+		if anchor.id == zone_id and anchor != except:
+			return true
+	return false
+
+
+func anchor_by_id(anchor_id: StringName) -> ZoneAnchorRecord:
+	for anchor in anchors:
+		if anchor.id == anchor_id:
+			return anchor
+	return null
+
+
+func route_by_id(route_id: StringName) -> ZoneRouteRecord:
+	for route in routes:
+		if route.id == route_id:
+			return route
+	return null
+
+
 func anchors_of(area_id: StringName) -> Array[ZoneAnchorRecord]:
 	var result: Array[ZoneAnchorRecord] = []
 	for anchor in anchors:
@@ -233,7 +264,7 @@ func to_dict() -> Dictionary:
 		"decor_trims": decor_trims,
 		"areas": area_dicts,
 		"anchors": anchor_dicts,
-		"routes": routes,
+		"routes": routes.map(func(route: ZoneRouteRecord) -> Dictionary: return route.to_dict()),
 		"objects": object_dicts,
 		"fixtures": fixtures.map(func(f: FixtureDefinition) -> Dictionary: return f.to_dict()),
 		"cost_mode": String(cost_mode),
@@ -286,7 +317,10 @@ static func from_dict(data: Dictionary) -> BuildingBlueprint:
 				bp.anchors.append(ZoneAnchorRecord.from_dict(raw_anchor))
 
 	var raw_routes: Variant = data.get("routes", [])
-	bp.routes = (raw_routes as Array).duplicate(true) if raw_routes is Array else []
+	if raw_routes is Array:
+		for raw_route in raw_routes:
+			if raw_route is Dictionary:
+				bp.routes.append(ZoneRouteRecord.from_dict(raw_route))
 
 	var raw_objects: Variant = data.get("objects", [])
 	if raw_objects is Array:
@@ -434,59 +468,104 @@ func validation_errors() -> Array[String]:
 
 
 ## Zone-layer validation (design_docs/engine/active_zones.md §8.1). Reachability
-## over NavGrid is checked by the editor, which has the navigation data; what can
-## be decided from the file alone is decided here.
+## over NavGrid is not decided here — the file alone cannot answer it; everything
+## that *can* be decided from the file is decided here and nowhere else.
+func zone_validation_errors() -> Array[String]:
+	return _zone_errors()
+
+
 func _zone_errors() -> Array[String]:
 	var errors: Array[String] = []
+	# One namespace for areas and points (§7.1).
+	var zone_ids: Dictionary = {}
 	var area_ids: Dictionary = {}
 	var rooms_seen: Array[ZoneAreaRecord] = []
 	for area in areas:
 		if not _valid_id(String(area.id)):
-			errors.append("Invalid area id: %s" % area.id)
-		if area_ids.has(area.id):
-			errors.append("Duplicate area id: %s" % area.id)
+			errors.append("Недопустимый идентификатор области: %s" % area.id)
+		if zone_ids.has(area.id):
+			errors.append("Идентификатор занят дважды: %s" % area.id)
+		zone_ids[area.id] = true
 		area_ids[area.id] = true
 		if area.role not in ZoneAreaRecord.ROLES:
-			errors.append("Unknown area role: %s" % area.role)
+			errors.append("Неизвестная роль области %s: %s" % [area.id, area.role])
 		if area.function != &"" and not ZoneFunctionCatalog.has_function(area.function):
-			errors.append("Area %s references unknown function: %s" % [area.id, area.function])
+			errors.append("Область %s ссылается на неизвестную функцию: %s" % [area.id, area.function])
+		if area.function != &"" and area.is_overlay():
+			errors.append("Оверлей %s не может нести функцию: он ничего не адресует" % area.id)
 		if area.y_max < area.y_min:
-			errors.append("Area %s has an inverted height range" % area.id)
+			errors.append("У области %s перевёрнут диапазон высот" % area.id)
 		for audience in area.allow + area.deny:
-			if not ZoneAccess.is_known_audience(audience):
-				errors.append("Area %s references unknown audience: %s" % [area.id, audience])
+			if not ZoneAccess.is_known_audience(audience) and not _valid_id(String(audience).replace(":", "_")):
+				errors.append("Область %s ссылается на недопустимую аудиторию: %s" % [area.id, audience])
+		for key in ZoneEffects.unknown_keys(area.effects):
+			errors.append("У области %s неизвестный эффект: %s" % [area.id, key])
+		if not area.is_overlay() and not (area.allow.is_empty() and area.deny.is_empty()):
+			errors.append("Права есть только у оверлея, а %s — %s" % [
+				area.id, ZoneAreaRecord.role_display_name(area.role)])
+		if not area.is_overlay() and not area.effects.is_empty():
+			errors.append("Эффекты есть только у оверлея, а %s — %s" % [
+				area.id, ZoneAreaRecord.role_display_name(area.role)])
 		# Rooms partition the building; only overlays may overlap (§7.3).
 		if area.is_room():
 			for other in rooms_seen:
 				if area.overlaps(other):
-					errors.append("Rooms %s and %s overlap" % [area.id, other.id])
+					errors.append("Комнаты %s и %s пересекаются" % [area.id, other.id])
 			rooms_seen.append(area)
 
-	var anchor_ids: Dictionary = {}
 	var doors_by_room: Dictionary = {}
 	var slot_ids: Dictionary = {}
 	for anchor in anchors:
-		if anchor_ids.has(anchor.id):
-			errors.append("Duplicate anchor id: %s" % anchor.id)
-		anchor_ids[anchor.id] = true
+		if not _valid_id(String(anchor.id)):
+			errors.append("Недопустимый идентификатор точки: %s" % anchor.id)
+		if zone_ids.has(anchor.id):
+			errors.append("Идентификатор занят дважды: %s" % anchor.id)
+		zone_ids[anchor.id] = true
 		if anchor.role not in ZoneAnchorRecord.ROLES:
-			errors.append("Unknown anchor role: %s" % anchor.role)
+			errors.append("Неизвестная роль точки %s: %s" % [anchor.id, anchor.role])
 		if anchor.owner_id != &"" and not area_ids.has(anchor.owner_id):
-			errors.append("Anchor %s references unknown area: %s" % [anchor.id, anchor.owner_id])
+			errors.append("Точка %s принадлежит несуществующей области: %s" % [anchor.id, anchor.owner_id])
+		if anchor.owner_id != &"" and area_ids.has(anchor.owner_id):
+			var owner_area := area_by_id(anchor.owner_id)
+			if owner_area != null and not owner_area.owns_content():
+				errors.append("Точка %s принадлежит области %s, которая ничем не владеет" % [
+					anchor.id, anchor.owner_id])
 		if anchor.is_slot():
 			slot_ids[anchor.id] = true
 		if anchor.is_door() and anchor.owner_id != &"":
 			doors_by_room[anchor.owner_id] = true
 		if anchor.is_storage() and anchor.direction not in ZoneAnchorRecord.DIRECTIONS:
-			errors.append("Storage anchor %s has unknown direction: %s" % [anchor.id, anchor.direction])
+			errors.append("У поддона %s неизвестное направление: %s" % [anchor.id, anchor.direction])
 		if anchor.fixture_id != &"" and not _has_fixture(anchor.fixture_id):
-			errors.append("Anchor %s references unknown fixture: %s" % [anchor.id, anchor.fixture_id])
+			errors.append("Точка %s ссылается на несуществующий предмет: %s" % [anchor.id, anchor.fixture_id])
+		if not _cell_in_bounds(anchor.cell()):
+			errors.append("Точка %s стоит за пределами доски" % anchor.id)
 		# A slot standing where its own audience is denied can never be worked.
 		if anchor.is_slot() and not _cell_permits(anchor.cell(), ZoneAccess.AUDIENCE_STAFF):
-			errors.append("Slot %s stands where staff are denied entry" % anchor.id)
+			errors.append("Место %s стоит там, куда персоналу вход запрещён" % anchor.id)
 	for anchor in anchors:
 		if anchor.is_queue() and not slot_ids.has(anchor.target_id):
-			errors.append("Queue anchor %s references unknown slot: %s" % [anchor.id, anchor.target_id])
+			errors.append("Очередь %s ссылается на несуществующее место: %s" % [anchor.id, anchor.target_id])
+
+	var route_ids: Dictionary = {}
+	for route in routes:
+		if not _valid_id(String(route.id)):
+			errors.append("Недопустимый идентификатор маршрута: %s" % route.id)
+		if route_ids.has(route.id):
+			errors.append("Идентификатор маршрута занят дважды: %s" % route.id)
+		route_ids[route.id] = true
+		if route.cycle not in ZoneRouteRecord.CYCLES:
+			errors.append("У маршрута %s неизвестный режим обхода: %s" % [route.id, route.cycle])
+		if route.stops.size() < 2:
+			errors.append("В маршруте %s должно быть хотя бы две точки" % route.id)
+		for stop_id in route.stops:
+			var stop := anchor_by_id(stop_id)
+			if stop == null:
+				errors.append("Маршрут %s ссылается на несуществующую точку: %s" % [route.id, stop_id])
+			elif stop.role not in [ZoneAnchorRecord.ROLE_WAYPOINT,
+					ZoneAnchorRecord.ROLE_SLOT, ZoneAnchorRecord.ROLE_DOOR]:
+				errors.append("Маршрут %s не может проходить через %s (%s)" % [
+					route.id, stop.id, ZoneAnchorRecord.role_display_name(stop.role)])
 
 	# A room nobody can enter is not a room. A building-wide door counts.
 	var has_building_door := false
@@ -496,14 +575,20 @@ func _zone_errors() -> Array[String]:
 	if not has_building_door:
 		for area in rooms_seen:
 			if not doors_by_room.has(area.id):
-				errors.append("Room %s has no door" % area.id)
+				errors.append("В комнату %s нет двери" % area.id)
 
 	# Requirements declared by the pack that owns the function (§8.3).
 	for area in areas:
 		for cap in ZoneFunctionCatalog.required_capabilities(area.function):
 			if not _capabilities_of(area.id).has(cap):
-				errors.append("Area %s requires capability %s but no fixture provides it" % [area.id, cap])
+				errors.append("Области %s нужен предмет со свойством «%s»" % [area.id, cap])
 	return errors
+
+
+func _cell_in_bounds(cell: Vector2i) -> bool:
+	# A door is allowed to sit on the rim or one cell outside: that is the cell
+	# one enters from (modular_building_editor.md §7.1).
+	return cell.x >= -1 and cell.y >= -1 and cell.x <= footprint.x and cell.y <= footprint.y
 
 
 ## Non-fatal remarks shown next to the zone list (§8.2). The file still runs.
@@ -531,14 +616,32 @@ func validation_warnings() -> Array[String]:
 		if (has_intake or has_dispatch) and not (has_intake and has_dispatch):
 			warnings.append("Склад «%s»: нет %s" % [area.display_name(),
 				"выдачи" if has_intake else "приёмки"])
+		# More workers than places means the extra ones have nowhere to stand
+		# (§13): capacity is bounded by the slots, not by the pack's wish.
+		var slot_count := 0
+		for anchor in owned:
+			if anchor.is_slot():
+				slot_count += 1
+		var declared := int(area.properties.get("max_workers", 0))
+		if slot_count > 0 and declared > slot_count:
+			warnings.append("Комната «%s»: работников %d, а мест %d" % [
+				area.display_name(), declared, slot_count])
 	for anchor in anchors:
 		# An anchor sitting inside exactly one room but owned by nobody reads as a
 		# forgotten `owner`, which is the most common authoring slip.
 		if anchor.owner_id == &"":
 			var containing := _rooms_containing(anchor.cell())
 			if containing.size() == 1 and not anchor.is_door():
-				warnings.append("Якорь «%s» стоит в комнате «%s», но ничьей не является" % [
+				warnings.append("Точка «%s» стоит в комнате «%s», но ничьей не является" % [
 					anchor.id, containing[0].display_name()])
+		# A work place closed to visitors is normal; closed to everyone is a slip.
+		if (anchor.is_spawn() or anchor.is_slot()) \
+				and not _cell_permits(anchor.cell(), ZoneAccess.AUDIENCE_VISITOR) \
+				and not _cell_permits(anchor.cell(), ZoneAccess.AUDIENCE_STAFF):
+			warnings.append("Точка «%s» закрыта оверлеем для всех аудиторий" % anchor.id)
+	for area in areas:
+		if area.is_overlay() and not area.is_active_overlay():
+			warnings.append("Оверлей «%s» ничего не запрещает и ничего не меняет" % area.display_name())
 	return warnings
 
 
@@ -561,7 +664,7 @@ func _capabilities_of(area_id: StringName) -> Dictionary:
 
 func _cell_permits(cell: Vector2i, audience: StringName) -> bool:
 	for area in areas:
-		if area.is_access() and area.contains_cell(cell) and not area.permits(audience):
+		if area.is_overlay() and area.contains_cell(cell) and not area.permits(audience):
 			return false
 	return true
 
@@ -608,6 +711,13 @@ func zone_requirements_checklist() -> Array[Dictionary]:
 ## Denormalizes areas + anchors into one runtime dict per owning area — the shape
 ## ZoneRuntimeState consumes unchanged (active_zones.md §9). Doors and top-level
 ## points are excluded; navigation takes them from `routing_anchor_definitions`.
+##
+## **This is the coordinate boundary.** Zones are authored and stored in board
+## cells `[0…footprint]`, while a built building's node origin is the footprint
+## centre. Everything leaving for the runtime is converted here, once, exactly
+## like `entrance_offset()` does for doors — a slot converted differently from
+## the door of its own building means citizens working half a footprint away, and
+## no test that feeds the runtime hand-written dictionaries can see it.
 func runtime_zone_definitions() -> Array:
 	var buckets: Dictionary = {}
 	for anchor in anchors:
@@ -619,7 +729,7 @@ func runtime_zone_definitions() -> Array:
 			buckets[anchor.owner_id] = bucket
 		if anchor.is_storage() or anchor.is_slot() or anchor.is_queue():
 			var key := "storage" if anchor.is_storage() else ("queue" if anchor.is_queue() else "slots")
-			bucket[key].append(anchor.to_dict())
+			bucket[key].append(_anchor_runtime_dict(anchor))
 	var defs: Array = []
 	for area in areas:
 		if not area.owns_content():
@@ -629,29 +739,52 @@ func runtime_zone_definitions() -> Array:
 		d["slots"] = bucket.get("slots", [])
 		d["queue"] = bucket.get("queue", [])
 		d["storage"] = bucket.get("storage", [])
-		d["fallback_pos"] = _vec3_to_array(area.centroid())
+		d["fallback_pos"] = _vec3_to_array(_to_pivot_space(area.centroid()))
 		defs.append(d)
 	return defs
 
 
 ## Points navigation consumes rather than occupancy: doors and every top-level
-## point (a stop on a street, a spawn) regardless of role.
+## point (a stop on a street, a spawn) regardless of role. Pivot-relative, as
+## above.
 func routing_anchor_definitions() -> Array:
 	var defs: Array = []
 	for anchor in anchors:
 		if anchor.is_door() or anchor.owner_id == &"":
-			defs.append(anchor.to_dict())
+			defs.append(_anchor_runtime_dict(anchor))
 	return defs
 
 
-## Access overlays as flat dicts, so navigation can apply them without loading
-## the whole blueprint (active_zones.md §4).
-func access_overlay_definitions() -> Array:
+func route_definitions() -> Array:
+	return routes.map(func(route: ZoneRouteRecord) -> Dictionary: return route.to_dict())
+
+
+## Overlays as flat dicts, so navigation can apply permissions and effects
+## without loading the whole blueprint (active_zones.md §4). Rectangles stay in
+## **board cells**: they address cells of the frame, and a cell index has no
+## meaning in pivot space — the consumer converts a world position to a board
+## cell, not the other way round.
+func overlay_definitions() -> Array:
 	var defs: Array = []
 	for area in areas:
-		if area.is_access():
+		if area.is_overlay():
 			defs.append(area.to_dict())
 	return defs
+
+
+func _anchor_runtime_dict(anchor: ZoneAnchorRecord) -> Dictionary:
+	var data := anchor.to_dict()
+	data["pos"] = _vec3_to_array(_to_pivot_space(anchor.pos))
+	return data
+
+
+## Board space `[0…footprint]` → building-local space around the pivot. Y is a
+## layer height and is never shifted.
+func _to_pivot_space(board_position: Vector3) -> Vector3:
+	if board_position == Vector3.INF:
+		return board_position
+	var pivot := pivot_offset()
+	return Vector3(board_position.x - pivot.x, board_position.y, board_position.z - pivot.z)
 
 
 static func _vec3_to_array(v: Vector3) -> Array:

@@ -1,5 +1,5 @@
 {
-	"version": 5,
+	"version": 6,
 	"id": "warehouse",
 	"name": "Склад под открытым небом",
 	"construction_style": "surface",

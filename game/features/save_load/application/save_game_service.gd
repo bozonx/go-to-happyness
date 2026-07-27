@@ -94,7 +94,7 @@ static func save_game(game: Node, path: String = QUICKSAVE_PATH) -> bool:
 				var rot_y = record.node.rotation_degrees.y
 				var b_type = record.building_type
 				var blueprint_ref: Dictionary = record.node.get_meta("blueprint_ref", {})
-				var zone_state: Array = game.building_zone_service.zone_snapshot(record.node) if "building_zone_service" in game and game.building_zone_service != null else []
+				var zone_state: Array = game.building_zone_service.zone_state_snapshot(record.node) if "building_zone_service" in game and game.building_zone_service != null else []
 				if "construction_controller" in game and game.construction_controller != null and game.construction_controller.is_construction_site(record.node):
 					var site = game.call("_get_construction_site_data", record.node)
 					if site != null:

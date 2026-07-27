@@ -31,8 +31,11 @@ var housing_capacity: int = 0
 var zones: Array[ZoneRuntimeState] = []
 ## Doors and top-level points, for navigation; occupancy never reads them.
 var routing_anchors: Array = []
-## Access overlays that apply inside this building.
-var access_overlays: Array = []
+## Ordered references over routing anchors (§16).
+var routes: Array = []
+## Overlays that apply inside this building: permissions and effects (§4).
+## Their rectangles are in board cells, unlike positions, which are pivot-local.
+var overlays: Array = []
 
 
 static func from_node(node: Node3D) -> RefCounted:
@@ -53,8 +56,10 @@ static func from_node(node: Node3D) -> RefCounted:
 				state.zones.append(ZoneRuntimeState.from_definition(raw_zone))
 	var raw_routing: Variant = node.get_meta("routing_anchors", [])
 	state.routing_anchors = (raw_routing as Array).duplicate(true) if raw_routing is Array else []
-	var raw_access: Variant = node.get_meta("access_overlays", [])
-	state.access_overlays = (raw_access as Array).duplicate(true) if raw_access is Array else []
+	var raw_routes: Variant = node.get_meta("zone_routes", [])
+	state.routes = (raw_routes as Array).duplicate(true) if raw_routes is Array else []
+	var raw_overlays: Variant = node.get_meta("zone_overlays", [])
+	state.overlays = (raw_overlays as Array).duplicate(true) if raw_overlays is Array else []
 	return state
 
 
@@ -70,7 +75,8 @@ func apply_to_node(node: Node3D) -> void:
 	node.set_meta("housing_capacity", housing_capacity)
 	node.set_meta("active_zones", zones_to_dict())
 	node.set_meta("routing_anchors", routing_anchors)
-	node.set_meta("access_overlays", access_overlays)
+	node.set_meta("zone_routes", routes)
+	node.set_meta("zone_overlays", overlays)
 
 
 func zones_to_dict() -> Array:
@@ -84,7 +90,7 @@ func role_capacity(role: StringName) -> int:
 	var capacity := 0
 	for zone in zones:
 		if zone.supports_role(role):
-			capacity += zone.max_workers()
+			capacity += zone.capacity()
 	return capacity
 
 
@@ -102,13 +108,41 @@ func zone_by_id(zone_id: StringName) -> ZoneRuntimeState:
 	return null
 
 
-## Whether an agent of this audience may stand on a building-local cell, after
-## every access overlay of the building has been applied (active_zones.md §4).
-func permits(cell: Vector2i, audience: StringName) -> bool:
-	for raw_overlay in access_overlays:
-		if not (raw_overlay is Dictionary):
-			continue
-		var overlay: ZoneAreaRecord = ZoneAreaRecord.from_dict(raw_overlay)
-		if overlay.contains_cell(cell) and not overlay.permits(audience):
+## Whether an agent may stand on a board cell of this building, after every
+## overlay has been applied (active_zones.md §4.1). `agent_tags` are the tags the
+## agent carries (§12); the `owner` audience is relational and resolves against
+## the owner of the zone being asked about, so it is passed in already resolved.
+func permits(cell: Vector2i, agent_tags: Array, owner_tag: StringName = &"") -> bool:
+	for overlay in _overlays_at(cell):
+		var resolved_tags: Array[StringName] = []
+		for raw_tag in agent_tags:
+			var tag := StringName(raw_tag)
+			if tag not in resolved_tags:
+				resolved_tags.append(tag)
+		if owner_tag != &"" and owner_tag in resolved_tags:
+			resolved_tags.append(ZoneAccess.AUDIENCE_OWNER)
+		if not ZoneAccess.permits_tags(overlay.allow, overlay.deny, resolved_tags):
 			return false
 	return true
+
+
+## Combined effects of the overlays covering a board cell (§4.2): movement cost,
+## vision and concealment. Everything else an author may want to happen in a zone
+## is a rule over `area_entered`, not a value here.
+func effects_at(cell: Vector2i) -> Dictionary:
+	var stack: Array = []
+	for overlay in _overlays_at(cell):
+		if not overlay.effects.is_empty():
+			stack.append(overlay.effects)
+	return ZoneEffects.combine(stack)
+
+
+func _overlays_at(cell: Vector2i) -> Array[ZoneAreaRecord]:
+	var result: Array[ZoneAreaRecord] = []
+	for raw_overlay in overlays:
+		if not (raw_overlay is Dictionary):
+			continue
+		var overlay := ZoneAreaRecord.from_dict(raw_overlay)
+		if overlay.contains_cell(cell):
+			result.append(overlay)
+	return result

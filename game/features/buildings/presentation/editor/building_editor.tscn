@@ -460,6 +460,12 @@ layout_mode = 2
 text = "◆ Точка     W"
 toggle_mode = true
 
+[node name="ToolRouteBtn" type="Button" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "／ Линия     E"
+toggle_mode = true
+
 [node name="ToolSelectBtn" type="Button" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -480,6 +486,7 @@ unique_name_in_owner = true
 layout_mode = 2
 
 [node name="RoleHintLbl" type="Label" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
+unique_name_in_owner = true
 layout_mode = 2
 text = "Роль задаёт, что движок делает с зоной."
 theme_override_font_sizes/font_size = 11
@@ -532,12 +539,12 @@ text = "+"
 [node name="HSepView" type="HSeparator" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
 layout_mode = 2
 
-[node name="ShowAccessCheck" type="CheckBox" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
+[node name="ShowOverlayCheck" type="CheckBox" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Показать права"
+text = "Показать оверлеи"
 
-[node name="AccessAudienceOption" type="OptionButton" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
+[node name="OverlayAudienceOption" type="OptionButton" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 
@@ -547,7 +554,7 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 11
 theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
 autowrap_mode = 2
-text = "ЛКМ — применить, Shift+ЛКМ — к выделению, Shift+ПКМ — стереть, F — поворот, Del — удалить."
+text = "ЛКМ — применить, Shift+ПКМ — стереть, F — поворот, Del — удалить. Q/W/E/R — инструмент."
 
 [node name="ZonesInspectorPanel" type="PanelContainer" parent="EditorUI/Root"]
 unique_name_in_owner = true
@@ -643,21 +650,32 @@ unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 2
 
-[node name="ZoneAccessRow" type="VBoxContainer" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox/ZoneInspectorBody"]
+[node name="ZoneOverlayRow" type="VBoxContainer" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox/ZoneInspectorBody"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 2
 
-[node name="AccessLbl" type="Label" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox/ZoneInspectorBody/ZoneAccessRow"]
+[node name="OverlayPermissionsLbl" type="Label" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox/ZoneInspectorBody/ZoneOverlayRow"]
 layout_mode = 2
 text = "Кому запрещено"
 theme_override_font_sizes/font_size = 11
 theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
 
-[node name="ZoneAccessContainer" type="HFlowContainer" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox/ZoneInspectorBody/ZoneAccessRow"]
+[node name="ZoneOverlayPermissionsContainer" type="HFlowContainer" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox/ZoneInspectorBody/ZoneOverlayRow"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/h_separation = 4
+
+[node name="OverlayEffectsLbl" type="Label" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox/ZoneInspectorBody/ZoneOverlayRow"]
+layout_mode = 2
+text = "Эффекты"
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
+
+[node name="ZoneOverlayEffectsContainer" type="VBoxContainer" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox/ZoneInspectorBody/ZoneOverlayRow"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 2
 
 [node name="ZoneAnchorProps" type="VBoxContainer" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox/ZoneInspectorBody"]
 unique_name_in_owner = true

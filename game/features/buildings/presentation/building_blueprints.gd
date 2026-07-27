@@ -365,7 +365,8 @@ static func _blueprint_from_library(building_type: String) -> Dictionary:
 		"blueprint_ref": BuildingBlueprintLibraryScript.blueprint_ref(building_type),
 		"zones": bp.runtime_zone_definitions() if bp != null else [],
 		"routing_anchors": bp.routing_anchor_definitions() if bp != null else [],
-		"access_overlays": bp.access_overlay_definitions() if bp != null else [],
+		"routes": bp.route_definitions() if bp != null else [],
+		"overlays": bp.overlay_definitions() if bp != null else [],
 		"construction_cost": bp.construction_cost.duplicate(true) if bp != null else {},
 		"fixtures": bp.fixtures.map(func(f: FixtureDefinitionScript) -> Dictionary: return f.to_dict()) if bp != null else [],
 	}
@@ -652,6 +653,4 @@ static func _boundary_post_blueprint() -> Dictionary:
 		"modules": modules,
 		"entrance": Vector2i(0, 0),
 	}
-
-
 

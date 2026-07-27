@@ -33,12 +33,15 @@ func _run() -> void:
 	# Tool, then role, then function — the order the model itself is in.
 	assert(editor.get_node("%ToolAreaBtn").button_pressed, "area tool armed by default")
 	var role_option: OptionButton = editor.get_node("%ZoneRoleOption")
-	assert(role_option.item_count == 2, "area tool offers room + access, got %d" % role_option.item_count)
+	assert(role_option.item_count == 2, "area tool offers room + overlay, got %d" % role_option.item_count)
 	assert(role_option.get_item_metadata(0) == ZoneAreaRecord.ROLE_ROOM)
 	zones.handle_key(_key(KEY_W))
 	assert(editor.get_node("%ToolPointBtn").button_pressed, "W arms the point tool")
 	assert(role_option.item_count == ZoneAnchorRecord.BUILDING_ROLES.size(),
 		"point tool offers point roles, got %d" % role_option.item_count)
+	zones.handle_key(_key(KEY_Q))
+	zones.handle_key(_key(KEY_E))
+	assert(editor.get_node("%ToolRouteBtn").button_pressed, "E arms the route tool")
 	zones.handle_key(_key(KEY_Q))
 	print("  contextual role list ok")
 
@@ -85,6 +88,17 @@ func _run() -> void:
 	assert(slot.is_slot())
 	assert(slot.owner_id == room.id, "the slot adopted the room it stands in")
 	assert(editor.blueprint.anchors[0].owner_id == &"", "a door stays building-wide")
+	slot.arc = 120.0
+	zones._selected_anchor_id = slot.id
+	zones._selected_area_id = &""
+	zones._refresh_inspector()
+	assert(editor.get_node("%ZoneAnchorProps").get_child_count() >= 3,
+		"slot inspector exposes facing, arc and ownership")
+	editor.cursor_cell = Vector3i(3, 0, 1)
+	zones._move_selected_anchor_to_cursor()
+	assert(slot.cell() == Vector2i(3, 1), "selected point moves to the cursor")
+	editor.cursor_cell = Vector3i(2, 0, 1)
+	zones._move_selected_anchor_to_cursor()
 	print("  anchor placement + ownership ok")
 
 	# A queue point wires itself to the nearest slot.
@@ -95,6 +109,18 @@ func _run() -> void:
 	var queue: ZoneAnchorRecord = editor.blueprint.anchors[2]
 	assert(queue.is_queue() and queue.target_id == slot.id, "queue points at the slot")
 	print("  queue wiring ok")
+
+	# A line connects existing routing points and adds no geometry of its own.
+	zones.handle_key(_key(KEY_E))
+	editor.cursor_cell = Vector3i(2, 0, 0)
+	zones.handle_mouse_button(_click(true))
+	editor.cursor_cell = Vector3i(2, 0, 1)
+	zones.handle_mouse_button(_click(true))
+	await process_frame
+	assert(editor.blueprint.routes.size() == 1)
+	assert(editor.blueprint.routes[0].stops == [&"door_1", slot.id])
+	assert(zones._selected_route_id == editor.blueprint.routes[0].id)
+	print("  route line ok")
 
 	# Entrances derive from the door; the format carries no entrance fields.
 	assert(editor.blueprint.entrance_offset() == Vector2i(-2, -4),
@@ -115,6 +141,7 @@ func _run() -> void:
 	await process_frame
 	assert(editor.blueprint.anchors.size() == 1, "slot and its queue are gone, %d left" % editor.blueprint.anchors.size())
 	assert(editor.blueprint.anchors[0].is_door())
+	assert(editor.blueprint.routes.is_empty(), "route with fewer than two stops is removed")
 	print("  cascade delete ok")
 
 	# Deleting the room releases what it owned instead of orphaning it.
@@ -124,24 +151,29 @@ func _run() -> void:
 	assert(editor.blueprint.areas.is_empty(), "room deleted")
 	assert(editor.blueprint.anchors.size() == 1, "the building-wide door survived")
 
-	# An access overlay denies an audience without touching walkability.
+	# An overlay denies an audience and corrects an engine calculation.
 	zones._arm_tool(zones.TOOL_AREA)
-	zones._area_role = ZoneAreaRecord.ROLE_ACCESS
+	zones._area_role = ZoneAreaRecord.ROLE_OVERLAY
 	editor.cursor_cell = Vector3i(1, 0, 1)
 	zones.handle_mouse_button(_click(true))
 	editor.cursor_cell = Vector3i(1, 0, 1)
 	zones.handle_mouse_button(_click(false))
 	await process_frame
 	var overlay: ZoneAreaRecord = editor.blueprint.areas[0]
-	assert(overlay.is_access())
+	assert(overlay.is_overlay())
 	assert(not overlay.permits(ZoneAccess.AUDIENCE_VISITOR), "the overlay starts by denying visitors")
 	assert(overlay.permits(ZoneAccess.AUDIENCE_STAFF), "staff still pass")
-	print("  access overlay ok")
+	overlay.effects = {ZoneEffects.KEY_COST: 2.5, ZoneEffects.KEY_CONCEAL: 0.7}
+	zones._selected_area_id = overlay.id
+	zones._refresh_inspector()
+	assert(editor.get_node("%ZoneOverlayEffectsContainer").get_child_count() == ZoneEffects.KEYS.size())
+	print("  overlay permissions + effects ok")
 
 	# The whole thing survives a round trip through the file format.
 	var reloaded = BuildingBlueprint.from_json(editor.blueprint.to_json())
 	assert(reloaded != null, "blueprint serializes: %s" % [editor.blueprint.validation_errors()])
-	assert(reloaded.areas.size() == 1 and reloaded.areas[0].is_access())
+	assert(reloaded.areas.size() == 1 and reloaded.areas[0].is_overlay())
+	assert(reloaded.areas[0].effects[ZoneEffects.KEY_COST] == 2.5)
 	assert(reloaded.anchors.size() == 1 and reloaded.anchors[0].is_door())
 	print("  save/load ok")
 

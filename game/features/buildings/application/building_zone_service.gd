@@ -8,15 +8,27 @@ extends RefCounted
 const BuildingRuntimeStateScript = preload("res://game/features/buildings/application/building_runtime_state.gd")
 
 
+## Instantiates the authored definitions and **lays saved session state over
+## them** (active_zones.md §9). The definition always comes from the file: a save
+## that replaced it wholesale would freeze the building's markup at the moment it
+## was saved, so a content patch would never reach anyone already playing.
 func configure_building(building: Node3D, zone_definitions: Array, saved_zones: Array = []) -> void:
 	if not is_instance_valid(building):
 		return
-	var source := saved_zones if not saved_zones.is_empty() else zone_definitions
+	var saved_by_id: Dictionary = {}
+	for raw_saved in saved_zones:
+		if raw_saved is Dictionary:
+			saved_by_id[StringName((raw_saved as Dictionary).get("id", ""))] = raw_saved
 	var state := BuildingRuntimeStateScript.from_node(building)
 	state.zones.clear()
-	for raw_zone in source:
-		if raw_zone is Dictionary:
-			state.zones.append(ZoneRuntimeState.from_definition(raw_zone))
+	for raw_zone in zone_definitions:
+		if not (raw_zone is Dictionary):
+			continue
+		var zone := ZoneRuntimeState.from_definition(raw_zone)
+		var saved: Variant = saved_by_id.get(zone.zone_id)
+		if saved is Dictionary:
+			zone.apply_session_state(saved)
+		state.zones.append(zone)
 	state.apply_to_node(building)
 	var first_slot := _first_slot(state)
 	if first_slot != Vector3.INF:
@@ -100,18 +112,76 @@ func work_position(building: Node3D, role: StringName, citizen_id: int) -> Vecto
 	var zone: ZoneRuntimeState = state.zone_for_citizen(citizen_id, role)
 	if zone == null:
 		for candidate in state.zones:
-			if candidate.supports_role(role):
+			if candidate.supports_role(role) and candidate.assign(citizen_id):
 				zone = candidate
 				break
 	if zone == null:
 		return Vector3.INF
 	# The slot, or the zone centre when the author placed no slots (§5.2).
 	var local := zone.position_for(citizen_id)
+	state.apply_to_node(building)
 	return _to_world(building, local) if local != Vector3.INF else building.global_position
 
 
-func zone_snapshot(building: Node3D) -> Array:
-	return BuildingRuntimeStateScript.from_node(building).zones_to_dict() if is_instance_valid(building) else []
+## What a save stores: session state only (§13). Definitions are re-read from the
+## blueprint on load, so re-marked buildings reach old saves.
+func zone_state_snapshot(building: Node3D) -> Array:
+	if not is_instance_valid(building):
+		return []
+	var snapshot: Array = []
+	for zone in BuildingRuntimeStateScript.from_node(building).zones:
+		snapshot.append(zone.session_state_to_dict())
+	return snapshot
+
+
+## Owner of a zone (§13). Changing it is a rule's business, not the engine's —
+## the service only stores the change and reports whether anything moved.
+func set_zone_owner(building: Node3D, zone_id: StringName, owner_tag: StringName) -> bool:
+	if not is_instance_valid(building):
+		return false
+	var state := BuildingRuntimeStateScript.from_node(building)
+	var zone: ZoneRuntimeState = state.zone_by_id(zone_id)
+	if zone == null or not zone.set_owner(owner_tag):
+		return false
+	state.apply_to_node(building)
+	return true
+
+
+func zone_owner(building: Node3D, zone_id: StringName) -> StringName:
+	if not is_instance_valid(building):
+		return &""
+	var zone: ZoneRuntimeState = BuildingRuntimeStateScript.from_node(building).zone_by_id(zone_id)
+	return zone.owner_tag if zone != null else &""
+
+
+func set_zone_flag(building: Node3D, zone_id: StringName, key: StringName, value: Variant) -> bool:
+	if not is_instance_valid(building):
+		return false
+	var state := BuildingRuntimeStateScript.from_node(building)
+	var zone: ZoneRuntimeState = state.zone_by_id(zone_id)
+	if zone == null or not zone.set_flag(key, value):
+		return false
+	state.apply_to_node(building)
+	return true
+
+
+func zone_flag(building: Node3D, zone_id: StringName, key: StringName, fallback: Variant = null) -> Variant:
+	if not is_instance_valid(building):
+		return fallback
+	var zone: ZoneRuntimeState = BuildingRuntimeStateScript.from_node(building).zone_by_id(zone_id)
+	return zone.flag(key, fallback) if zone != null else fallback
+
+
+## Frees the place a citizen held, whatever building it was in. Called when a
+## task is interrupted: a reservation that outlives its task takes a slot out of
+## circulation for good (§13).
+func release_slot(building: Node3D, citizen_id: int) -> void:
+	if not is_instance_valid(building):
+		return
+	var state := BuildingRuntimeStateScript.from_node(building)
+	for zone in state.zones:
+		zone.release_slot(citizen_id)
+	state.apply_to_node(building)
 
 
 func zone_id_for(building: Node3D, role: StringName, citizen_id: int) -> StringName:

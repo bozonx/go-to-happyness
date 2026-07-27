@@ -9,11 +9,15 @@ extends RefCounted
 ## reads them (§2). That is what lets the same editor author a settlement
 ## bakery, an RPG inn and a shooter spawn room without touching the format.
 ##
-##   room   — an addressable part of a building. Owns its anchors, fixtures and
-##            objects; the player clicks it to open the menu.
-##   region — a named area on a map that rules and routes reference by id.
-##            Owns nothing.
-##   access — a permission overlay (ZoneAccess). Owns nothing, addresses nothing.
+##   room    — an addressable part of a building. Owns its anchors, fixtures and
+##             objects; the player clicks it to open the menu.
+##   region  — a named area on a map that rules and routes reference by id.
+##             Owns nothing.
+##   overlay — permissions (ZoneAccess) and effects (ZoneEffects). Owns nothing,
+##             addresses nothing, overlaps anything including itself.
+##
+## The difference between `room` and `region` is ownership, not size: a room owns
+## content and answers a click, a region only names a place.
 ##
 ## Geometry is a set of rectangles over the board plus a height range: a
 ## rectangle is free on a grid, several of them make an L-shaped room without
@@ -21,9 +25,9 @@ extends RefCounted
 
 const ROLE_ROOM := &"room"
 const ROLE_REGION := &"region"
-const ROLE_ACCESS := &"access"
+const ROLE_OVERLAY := &"overlay"
 
-const ROLES: Array[StringName] = [ROLE_ROOM, ROLE_REGION, ROLE_ACCESS]
+const ROLES: Array[StringName] = [ROLE_ROOM, ROLE_REGION, ROLE_OVERLAY]
 
 ## Roles that own anchors, fixtures and objects, and that a game menu addresses.
 const OWNING_ROLES: Array[StringName] = [ROLE_ROOM]
@@ -40,8 +44,11 @@ var rects: Array[Rect2i] = []
 ## Inclusive height range in grid levels.
 var y_min: int = 0
 var y_max: int = 0
+## `overlay` — permission mask over audiences (§4.1).
 var allow: Array[StringName] = []
 var deny: Array[StringName] = []
+## `overlay` — corrections to what the engine already computes (§4.2).
+var effects: Dictionary = {}
 
 
 ## Name for lists and messages. Access overlays are usually left unnamed, so the
@@ -54,8 +61,14 @@ func is_room() -> bool:
 	return role == ROLE_ROOM
 
 
-func is_access() -> bool:
-	return role == ROLE_ACCESS
+func is_overlay() -> bool:
+	return role == ROLE_OVERLAY
+
+
+## True when the overlay actually changes something. An overlay that forbids
+## nobody and corrects nothing is a no-op, and the validator says so.
+func is_active_overlay() -> bool:
+	return is_overlay() and not (allow.is_empty() and deny.is_empty() and effects.is_empty())
 
 
 ## True when the area owns content (anchors, fixtures, objects reference it).
@@ -164,6 +177,9 @@ func to_dict() -> Dictionary:
 		data["allow"] = ZoneAccess.audiences_to_json(allow)
 	if not deny.is_empty():
 		data["deny"] = ZoneAccess.audiences_to_json(deny)
+	var effect_json := ZoneEffects.to_json(effects)
+	if not effect_json.is_empty():
+		data["effects"] = effect_json
 	return data
 
 
@@ -184,6 +200,7 @@ static func from_dict(data: Dictionary) -> ZoneAreaRecord:
 		area.y_max = int(raw_y[1])
 	area.allow = ZoneAccess.parse_audiences(data.get("allow", []))
 	area.deny = ZoneAccess.parse_audiences(data.get("deny", []))
+	area.effects = ZoneEffects.parse(data.get("effects", {}))
 	return area
 
 
@@ -191,5 +208,13 @@ static func role_display_name(area_role: StringName) -> String:
 	match area_role:
 		ROLE_ROOM: return "Комната"
 		ROLE_REGION: return "Область карты"
-		ROLE_ACCESS: return "Доступ"
+		ROLE_OVERLAY: return "Оверлей"
 		_: return String(area_role)
+
+
+static func role_hint(area_role: StringName) -> String:
+	match area_role:
+		ROLE_ROOM: return "Владеет точками, предметами и меню. Комнаты не пересекаются."
+		ROLE_REGION: return "Только имя места для правил. Ничем не владеет."
+		ROLE_OVERLAY: return "Права и эффекты поверх любых зон. Ничем не владеет."
+		_: return ""

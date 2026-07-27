@@ -1,5 +1,5 @@
 {
-	"version": 5,
+	"version": 6,
 	"id": "settlement_flag",
 	"name": "Флаг поселения",
 	"construction_style": "surface",

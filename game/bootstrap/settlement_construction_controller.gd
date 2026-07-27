@@ -62,8 +62,10 @@ func complete_building(cell: Vector2i, building_type: String, position_on_board:
 		game.building_zone_service.configure_building(building, blueprint.get("zones", []), blueprint.get("saved_zone_state", []))
 	if blueprint.has("routing_anchors"):
 		building.set_meta("routing_anchors", blueprint["routing_anchors"])
-	if blueprint.has("access_overlays"):
-		building.set_meta("access_overlays", blueprint["access_overlays"])
+	if blueprint.has("routes"):
+		building.set_meta("zone_routes", blueprint["routes"])
+	if blueprint.has("overlays"):
+		building.set_meta("zone_overlays", blueprint["overlays"])
 	game.service_pocket_manager.unregister_service_pockets(building)
 	# Initialize fixtures from the blueprint. The building_instance_id is the
 	# cell key, stored on the node so FireManagementService can look it up.

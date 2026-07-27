@@ -38,6 +38,7 @@ static func run_all() -> void:
 	_test_zones_and_metadata_round_trip()
 	_test_runtime_zone_assignment()
 	_test_runtime_zone_function_survives()
+	_test_zone_session_state_round_trip()
 	_test_runtime_zone_falls_back_to_centre()
 	_test_invalid_blueprints_are_rejected()
 	_test_era_material_replacement()
@@ -362,6 +363,8 @@ static func _test_zones_and_metadata_round_trip() -> void:
 	counter.owner_id = &"z_trade"
 	counter.role = ZoneAnchorRecord.ROLE_SLOT
 	counter.activity = &"core:serve"
+	counter.facing = 90.0
+	counter.arc = 120.0
 	counter.pos = Vector3(1.5, 0.0, 1.5)
 	bp.anchors.append(counter)
 	var line := ZoneAnchorRecord.new()
@@ -394,11 +397,20 @@ static func _test_zones_and_metadata_round_trip() -> void:
 	back.deny = [ZoneAccess.AUDIENCE_VISITOR]
 	back.pos = Vector3(2.0, 0.0, 4.0)
 	bp.anchors.append(back)
+	var route := ZoneRouteRecord.new()
+	route.id = &"service_route"
+	route.stops = [&"front", &"counter", &"back"]
+	route.cycle = ZoneRouteRecord.CYCLE_PINGPONG
+	route.wait_minutes = 2.5
+	bp.routes.append(route)
 
 	var restored := BuildingBlueprintScript.from_dict(bp.to_dict())
 	assert(restored.footprint == Vector2i(4, 4))
 	assert(restored.areas.size() == 1)
 	assert(restored.anchors.size() == 5)
+	assert(restored.routes.size() == 1)
+	assert(restored.routes[0].stops == [&"front", &"counter", &"back"])
+	assert(restored.routes[0].cycle == ZoneRouteRecord.CYCLE_PINGPONG)
 	var room_back: ZoneAreaRecord = restored.areas[0]
 	assert(room_back.id == &"z_trade")
 	assert(room_back.function == &"core:trade")
@@ -417,6 +429,7 @@ static func _test_zones_and_metadata_round_trip() -> void:
 	var def: Dictionary = runtime_defs[0]
 	assert(def["slots"].size() == 1)
 	assert(def["slots"][0]["activity"] == "core:serve")
+	assert(def["slots"][0]["arc"] == 120.0)
 	assert(def["queue"].size() == 1)
 	assert(def["storage"].size() == 1 and def["storage"][0]["capacity"] == 80)
 	assert(restored.routing_anchor_definitions().size() == 2)
@@ -425,8 +438,10 @@ static func _test_zones_and_metadata_round_trip() -> void:
 	var state := ZoneRuntimeState.from_definition(def)
 	assert(state.supports_role(&"seller"))
 	assert(state.max_workers() == 2)
+	assert(state.capacity() == 1, "one authored slot means one occupant")
 	assert(state.assign(7))
-	assert(state.position_for(7) == Vector3(1.5, 0.0, 1.5))
+	assert(state.position_for(7) == Vector3(-0.5, 0.0, -0.5),
+		"board coordinates must cross into pivot-local space once")
 
 
 ## Rooms partition a building; overlays may overlap anything (§7.3, §7.4).
@@ -448,33 +463,45 @@ static func _test_zone_invariants() -> void:
 	door.pos = Vector3(0.5, 0.0, 0.0)
 	bp.anchors.append(door)
 	var errors := bp.validation_errors()
-	assert(_has_error(errors, "overlap"), str(errors))
+	assert(_has_error(errors, "пересекаются"), str(errors))
 
 	second.rects.clear()
 	second.add_rect(Rect2i(2, 2, 2, 2))
-	assert(not _has_error(bp.validation_errors(), "overlap"))
+	assert(not _has_error(bp.validation_errors(), "пересекаются"))
 
 	# An overlay on top of a room is fine, and a slot behind a staff denial is not.
 	var overlay := ZoneAreaRecord.new()
 	overlay.id = &"private"
-	overlay.role = ZoneAreaRecord.ROLE_ACCESS
+	overlay.role = ZoneAreaRecord.ROLE_OVERLAY
 	overlay.deny = [ZoneAccess.AUDIENCE_STAFF]
+	overlay.effects = {ZoneEffects.KEY_COST: 2.0, ZoneEffects.KEY_CONCEAL: 0.6}
 	overlay.add_rect(Rect2i(0, 0, 2, 2))
 	bp.areas.append(overlay)
-	assert(not _has_error(bp.validation_errors(), "overlap"))
+	assert(not _has_error(bp.validation_errors(), "пересекаются"))
+	var overlay_back := ZoneAreaRecord.from_dict(overlay.to_dict())
+	assert(overlay_back.is_overlay())
+	assert(overlay_back.effects[ZoneEffects.KEY_COST] == 2.0)
 	var slot := ZoneAnchorRecord.new()
 	slot.id = &"s"
 	slot.owner_id = &"room_a"
 	slot.role = ZoneAnchorRecord.ROLE_SLOT
 	slot.pos = Vector3(0.5, 0.0, 0.5)
 	bp.anchors.append(slot)
-	assert(_has_error(bp.validation_errors(), "staff are denied"), str(bp.validation_errors()))
+	assert(_has_error(bp.validation_errors(), "персоналу вход запрещён"), str(bp.validation_errors()))
+
+	# Areas and points share one namespace.
+	var duplicate := ZoneAnchorRecord.new()
+	duplicate.id = first.id
+	duplicate.role = ZoneAnchorRecord.ROLE_POI
+	bp.anchors.append(duplicate)
+	assert(_has_error(bp.validation_errors(), "занят дважды"), str(bp.validation_errors()))
+	bp.anchors.erase(duplicate)
 
 	# A room nobody can enter is an error; a building-wide door covers every room.
 	bp.anchors.erase(slot)
-	assert(not _has_error(bp.validation_errors(), "no door"))
+	assert(not _has_error(bp.validation_errors(), "нет двери"))
 	door.owner_id = &"room_a"
-	assert(_has_error(bp.validation_errors(), "Room room_b has no door"), str(bp.validation_errors()))
+	assert(_has_error(bp.validation_errors(), "room_b нет двери"), str(bp.validation_errors()))
 
 
 static func _has_error(errors: Array[String], fragment: String) -> bool:
@@ -510,8 +537,11 @@ static func _test_runtime_zone_assignment() -> void:
 		"fallback_pos": [0.5, 0.0, 0.5],
 	}])
 	assert(zone_service.supports_role(building, &"cook"))
-	assert(zone_service.role_capacity(building, &"cook") == 2)
+	assert(zone_service.role_capacity(building, &"cook") == 1)
 	assert(zone_service.work_position(building, &"cook", 10) == Vector3(1.0, 0.0, 2.0))
+	var state := BuildingRuntimeState.from_node(building)
+	assert(state.zones[0].slot_holder(&"oven") == 10, "work position reserves the slot")
+	assert(not state.zones[0].assign(11), "a second citizen cannot share one slot")
 	building.free()
 
 
@@ -528,10 +558,48 @@ static func _test_runtime_zone_function_survives() -> void:
 		"properties": {"flavour": "cinema", "visitors": 20},
 		"fallback_pos": [0.5, 0.0, 0.5],
 	}])
-	var snapshot := zone_service.zone_snapshot(building)
+	var snapshot: Array = BuildingRuntimeState.from_node(building).zones_to_dict()
 	assert(snapshot.size() == 1)
 	assert(snapshot[0].get("function", "") == "core:leisure", "function must survive")
 	assert(snapshot[0]["properties"]["flavour"] == "cinema", "pack properties must survive")
+	building.free()
+
+
+static func _test_zone_session_state_round_trip() -> void:
+	var building := Node3D.new()
+	var zone_service := BuildingZoneServiceScript.new()
+	var definitions := [{
+		"id": "house",
+		"role": "room",
+		"function": "core:civic",
+		"properties": {"profession": "official", "max_workers": 1},
+		"slots": [{"id": "desk", "role": "slot", "pos": [0.0, 0.0, 0.0]}],
+		"fallback_pos": [0.0, 0.0, 0.0],
+	}]
+	zone_service.configure_building(building, definitions)
+	assert(zone_service.assign_to_zone(building, &"house", &"official", 17))
+	assert(zone_service.work_position(building, &"official", 17) == Vector3.ZERO)
+	assert(zone_service.set_zone_owner(building, &"house", &"faction:red"))
+	assert(zone_service.set_zone_flag(building, &"house", &"cleared", true))
+	var saved := zone_service.zone_state_snapshot(building)
+	assert(saved[0].has("owner") and not saved[0].has("function"),
+		"save stores session state, not authored definition")
+	zone_service.configure_building(building, definitions, saved)
+	assert(zone_service.zone_owner(building, &"house") == &"faction:red")
+	assert(zone_service.zone_flag(building, &"house", &"cleared") == true)
+	assert(BuildingRuntimeState.from_node(building).zones[0].slot_holder(&"desk") == 17)
+	var private_overlay := ZoneAreaRecord.new()
+	private_overlay.id = &"private"
+	private_overlay.role = ZoneAreaRecord.ROLE_OVERLAY
+	private_overlay.deny = [ZoneAccess.AUDIENCE_OWNER]
+	private_overlay.effects = {ZoneEffects.KEY_COST: 2.0, ZoneEffects.KEY_VISION: 0.4}
+	private_overlay.add_rect(Rect2i(0, 0, 1, 1))
+	building.set_meta("zone_overlays", [private_overlay.to_dict()])
+	var runtime := BuildingRuntimeState.from_node(building)
+	assert(not runtime.permits(Vector2i.ZERO, [&"faction:red"], &"faction:red"),
+		"owner audience resolves against the current owner tag")
+	assert(runtime.permits(Vector2i.ZERO, [&"faction:blue"], &"faction:red"))
+	assert(runtime.effects_at(Vector2i.ZERO)[ZoneEffects.KEY_COST] == 2.0)
 	building.free()
 
 
