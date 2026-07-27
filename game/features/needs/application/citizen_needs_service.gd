@@ -31,20 +31,13 @@ func set_random(rng: RandomNumberGenerator) -> void:
 	_random = rng
 
 
-func configure(
-	nav_grid: Variant,
-	toilets_getter: Callable,
-	is_route_reachable: Callable,
-	building_type_for_node: Callable,
-	tree_positions: Array[Vector3],
-	grass_sources: Dictionary,
-) -> void:
-	_nav_grid = nav_grid
-	_toilets_getter = toilets_getter
-	_is_route_reachable = is_route_reachable
-	_building_type_for_node = building_type_for_node
-	_tree_positions = tree_positions
-	_grass_sources = grass_sources
+func configure(port: CitizenNeedsRuntimePort) -> void:
+	_nav_grid = port.nav_grid
+	_toilets_getter = port.toilets_getter
+	_is_route_reachable = port.is_route_reachable
+	_building_type_for_node = port.building_type_for_node
+	_tree_positions = port.tree_positions
+	_grass_sources = port.grass_sources
 
 
 func schedule_toilet(citizen_id: int) -> void:

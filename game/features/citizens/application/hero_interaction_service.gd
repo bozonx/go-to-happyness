@@ -13,9 +13,6 @@ var _tree_positions: Array[Vector3] = []
 var _tree_nodes: Dictionary = {}
 var _sawmill_positions: Array[Vector3] = []
 var _farm_positions: Array[Vector3] = []
-## Asked, not held. The bank positions are derived from the water layer on demand
-## (`WaterAccessService`), so a captured array would be the empty snapshot taken
-## before the world was built.
 var _water_source_positions_getter: Callable
 var _grass_sources: Dictionary = {}
 var _forage_sources: Dictionary = {}
@@ -24,32 +21,19 @@ var _cell_from_position: Callable
 var _consume_grass_source: Callable
 
 
-func configure(
-	p_player_citizen_getter: Callable,
-	p_interaction_range: float,
-	p_tree_positions: Array[Vector3],
-	p_tree_nodes: Dictionary,
-	p_sawmill_positions: Array[Vector3],
-	p_farm_positions: Array[Vector3],
-	p_water_source_positions_getter: Callable,
-	p_grass_sources: Dictionary,
-	p_forage_sources: Dictionary,
-	p_rabbit_sources: Dictionary,
-	p_cell_from_position: Callable,
-	p_consume_grass_source: Callable
-) -> void:
-	_player_citizen_getter = p_player_citizen_getter
-	_interaction_range = p_interaction_range
-	_tree_positions = p_tree_positions
-	_tree_nodes = p_tree_nodes
-	_sawmill_positions = p_sawmill_positions
-	_farm_positions = p_farm_positions
-	_water_source_positions_getter = p_water_source_positions_getter
-	_grass_sources = p_grass_sources
-	_forage_sources = p_forage_sources
-	_rabbit_sources = p_rabbit_sources
-	_cell_from_position = p_cell_from_position
-	_consume_grass_source = p_consume_grass_source
+func configure(port: HeroInteractionRuntimePort) -> void:
+	_player_citizen_getter = port.player_citizen_getter
+	_interaction_range = port.interaction_range
+	_tree_positions = port.tree_positions
+	_tree_nodes = port.tree_nodes
+	_sawmill_positions = port.sawmill_positions
+	_farm_positions = port.farm_positions
+	_water_source_positions_getter = port.water_source_positions_getter
+	_grass_sources = port.grass_sources
+	_forage_sources = port.forage_sources
+	_rabbit_sources = port.rabbit_sources
+	_cell_from_position = port.cell_from_position
+	_consume_grass_source = port.consume_grass_source
 
 
 func nearby_tree() -> bool:

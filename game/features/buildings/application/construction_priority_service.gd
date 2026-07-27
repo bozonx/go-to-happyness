@@ -32,24 +32,15 @@ var _housing_slots_provider: Callable
 var _food_amount_provider: Callable
 
 
-func configure(
-	construction_sites: Array[ConstructionSite],
-	warehouse_positions: Array[Vector3],
-	sawmill_positions: Array[Vector3],
-	campfire_node: Node3D,
-	canteen: Node3D,
-	population_provider: Callable,
-	housing_slots_provider: Callable,
-	food_amount_provider: Callable
-) -> void:
-	_construction_sites = construction_sites
-	_warehouse_positions = warehouse_positions
-	_sawmill_positions = sawmill_positions
-	_campfire_node = campfire_node
-	_canteen = canteen
-	_population_provider = population_provider
-	_housing_slots_provider = housing_slots_provider
-	_food_amount_provider = food_amount_provider
+func configure(port: ConstructionPriorityRuntimePort) -> void:
+	_construction_sites = port.construction_sites
+	_warehouse_positions = port.warehouse_positions
+	_sawmill_positions = port.sawmill_positions
+	_campfire_node = port.campfire_node
+	_canteen = port.canteen
+	_population_provider = port.population_provider
+	_housing_slots_provider = port.housing_slots_provider
+	_food_amount_provider = port.food_amount_provider
 
 
 func preferred_construction_site() -> ConstructionSite:

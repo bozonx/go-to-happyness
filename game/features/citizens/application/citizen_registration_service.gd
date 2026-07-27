@@ -13,22 +13,14 @@ var _update_workers: Callable
 var _registration_queue_counter_setter: Callable
 
 
-func configure(
-	p_citizens: Array,
-	p_officer_post_radius: float,
-	p_employment_centre_building_getter: Callable,
-	p_employment_center_position_getter: Callable,
-	p_is_work_time: Callable,
-	p_update_workers: Callable,
-	p_registration_queue_counter_setter: Callable
-) -> void:
-	_citizens = p_citizens
-	_officer_post_radius = p_officer_post_radius
-	_employment_centre_building_getter = p_employment_centre_building_getter
-	_employment_center_position_getter = p_employment_center_position_getter
-	_is_work_time = p_is_work_time
-	_update_workers = p_update_workers
-	_registration_queue_counter_setter = p_registration_queue_counter_setter
+func configure(port: CitizenRegistrationRuntimePort) -> void:
+	_citizens = port.citizens
+	_officer_post_radius = port.officer_post_radius
+	_employment_centre_building_getter = port.employment_centre_building_getter
+	_employment_center_position_getter = port.employment_center_position_getter
+	_is_work_time = port.is_work_time
+	_update_workers = port.update_workers
+	_registration_queue_counter_setter = port.registration_queue_counter_setter
 
 
 func registration_official() -> Citizen:

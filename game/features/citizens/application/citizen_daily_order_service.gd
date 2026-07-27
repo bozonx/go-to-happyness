@@ -17,30 +17,18 @@ var _game_minutes_per_second: float
 var _citizen_ai_request_decision_refresh: Callable
 
 
-func configure(
-	p_settlement: SettlementState,
-	p_citizens: Array,
-	p_day_cycle: SimulationDayCycle,
-	p_clock: SimulationClock,
-	p_building_registry: Variant,
-	p_runtime_seconds_getter: Callable,
-	p_is_work_time: Callable,
-	p_is_citizen_work_time: Callable,
-	p_absolute_game_minutes: Callable,
-	p_game_minutes_per_second: float,
-	p_citizen_ai_request_decision_refresh: Callable
-) -> void:
-	_settlement = p_settlement
-	_citizens = p_citizens
-	_day_cycle = p_day_cycle
-	_clock = p_clock
-	_building_registry = p_building_registry
-	_runtime_seconds_getter = p_runtime_seconds_getter
-	_is_work_time = p_is_work_time
-	_is_citizen_work_time = p_is_citizen_work_time
-	_absolute_game_minutes = p_absolute_game_minutes
-	_game_minutes_per_second = p_game_minutes_per_second
-	_citizen_ai_request_decision_refresh = p_citizen_ai_request_decision_refresh
+func configure(port: CitizenDailyOrderRuntimePort) -> void:
+	_settlement = port.settlement
+	_citizens = port.citizens
+	_day_cycle = port.day_cycle
+	_clock = port.clock
+	_building_registry = port.building_registry
+	_runtime_seconds_getter = port.runtime_seconds_getter
+	_is_work_time = port.is_work_time
+	_is_citizen_work_time = port.is_citizen_work_time
+	_absolute_game_minutes = port.absolute_game_minutes
+	_game_minutes_per_second = port.game_minutes_per_second
+	_citizen_ai_request_decision_refresh = port.citizen_ai_request_decision_refresh
 
 
 func daily_order_workday_for_new_order() -> int:

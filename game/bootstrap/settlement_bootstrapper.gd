@@ -16,12 +16,14 @@ var game: SettlementGame
 
 func run(p_game: SettlementGame) -> void:
 	game = p_game
+	# Phase 1 — controllers and world state.
 	# Controllers and UI wiring must happen before any service setup,
 	# because service lambdas capture controller references.
 	_setup_controllers()
 	# Event-driven services capture EventService during configuration. Create the
 	# registry before any such service so they never retain a stale null reference.
 	_setup_world_and_events()
+	# Phase 2 — buildings.
 	_setup_hero_services()
 	_setup_construction_and_demolition()
 	_setup_workplace_and_visuals()
@@ -29,17 +31,21 @@ func run(p_game: SettlementGame) -> void:
 	_setup_ai_and_navigation()
 	_setup_citizen_lifecycle()
 	_setup_building_services()
+	# Phase 3 — logistics and resources.
 	_setup_canteen_and_resources()
 	_setup_foraging_and_fire()
 	_setup_building_maintenance()
 	_setup_settlement_survival_and_daily_rules()
 	_setup_building_lifecycle()
 	_setup_excavation_and_factory()
+	# Phase 4 — citizens.
 	_setup_citizen_registration_and_school()
 	_setup_citizen_needs_and_orders()
+	# Phase 5 — logistics and AI/events.
 	_setup_trade_and_logistics()
 	_setup_courier_system()
 	_setup_actuator_and_events()
+	# Phase 6 — presentation and launch.
 	_setup_ui_controllers()
 	_setup_controllers_and_world()
 	_setup_citizens_and_ai()
@@ -311,20 +317,20 @@ func _setup_foraging_and_fire() -> void:
 	# Natural-resource dictionaries are owned by ForagingService. Configure hero
 	# proximity queries only after that service exists, otherwise the bootstrap
 	# getters return temporary empty dictionaries that never receive grass data.
-	game.hero_interaction_service.configure(
-		func() -> Citizen: return game.player_citizen,
-		SettlementGame.INTERACTION_RANGE,
-		game.tree_positions,
-		game.tree_nodes,
-		game.sawmill_positions,
-		game.farm_positions,
-		func() -> Array[Vector3]: return game.water_source_positions,
-		game.grass_sources,
-		game.forage_sources,
-		game.rabbit_sources,
-		game.cell_from_position,
-		func(position): return game.foraging_service.consume_grass_source(position)
-	)
+	var hero_port := HeroInteractionRuntimePort.new()
+	hero_port.player_citizen_getter = func() -> Citizen: return game.player_citizen
+	hero_port.interaction_range = SettlementGame.INTERACTION_RANGE
+	hero_port.tree_positions = game.tree_positions
+	hero_port.tree_nodes = game.tree_nodes
+	hero_port.sawmill_positions = game.sawmill_positions
+	hero_port.farm_positions = game.farm_positions
+	hero_port.water_source_positions_getter = func() -> Array[Vector3]: return game.water_source_positions
+	hero_port.grass_sources = game.grass_sources
+	hero_port.forage_sources = game.forage_sources
+	hero_port.rabbit_sources = game.rabbit_sources
+	hero_port.cell_from_position = game.cell_from_position
+	hero_port.consume_grass_source = func(position): return game.foraging_service.consume_grass_source(position)
+	game.hero_interaction_service.configure(hero_port)
 	game.fire_management_service = FireManagementService.new()
 	game.fire_management_service.setup(
 		game.building_registry,
@@ -476,16 +482,16 @@ func _setup_building_lifecycle() -> void:
 	port.send_to_unemployment_registration = func(citizen): game.citizen_lifecycle_service.send_to_unemployment_registration(citizen)
 	game.building_lifecycle_service.configure(port)
 	game.construction_priority_service = ConstructionPriorityService.new()
-	game.construction_priority_service.configure(
-		game.construction_sites,
-		game.warehouse_positions,
-		game.sawmill_positions,
-		game.campfire_node,
-		game.canteen,
-		func() -> int: return game.citizens.size(),
-		func(): return game.building_registry.housing_capacity(),
-		func() -> int: return game.settlement.amount(SettlementGame.ResourceIds.FOOD)
-	)
+	var priority_port := ConstructionPriorityRuntimePort.new()
+	priority_port.construction_sites = game.construction_sites
+	priority_port.warehouse_positions = game.warehouse_positions
+	priority_port.sawmill_positions = game.sawmill_positions
+	priority_port.campfire_node = game.campfire_node
+	priority_port.canteen = game.canteen
+	priority_port.population_provider = func() -> int: return game.citizens.size()
+	priority_port.housing_slots_provider = func(): return game.building_registry.housing_capacity()
+	priority_port.food_amount_provider = func() -> int: return game.settlement.amount(SettlementGame.ResourceIds.FOOD)
+	game.construction_priority_service.configure(priority_port)
 
 
 func _setup_excavation_and_factory() -> void:
@@ -521,55 +527,55 @@ func _setup_excavation_and_factory() -> void:
 
 func _setup_citizen_registration_and_school() -> void:
 	game.citizen_registration_service = CitizenRegistrationService.new()
-	game.citizen_registration_service.configure(
-		game.citizens,
-		SettlementGame.OFFICER_POST_RADIUS,
-		game.employment_centre_building,
-		game.employment_center_position,
-		func(): return game.simulation_tick_controller.is_work_time(),
-		game.update_workers,
-		func() -> int:
-			game.registration_queue_counter += 1
-			return game.registration_queue_counter
-	)
+	var registration_port := CitizenRegistrationRuntimePort.new()
+	registration_port.citizens = game.citizens
+	registration_port.officer_post_radius = SettlementGame.OFFICER_POST_RADIUS
+	registration_port.employment_centre_building_getter = game.employment_centre_building
+	registration_port.employment_center_position_getter = game.employment_center_position
+	registration_port.is_work_time = func(): return game.simulation_tick_controller.is_work_time()
+	registration_port.update_workers = game.update_workers
+	registration_port.registration_queue_counter_setter = func() -> int:
+		game.registration_queue_counter += 1
+		return game.registration_queue_counter
+	game.citizen_registration_service.configure(registration_port)
 	game.school_service = SchoolService.new()
 	game.school_service.configure(game.school_positions, game.citizens)
 	game.building_placement_service = BuildingPlacementService.new()
-	game.building_placement_service.configure(
-		game.dig_sites,
-		game.terrain_blocked_cells,
-		game.building_registry,
-		game.tree_positions,
-		game.terrain_height_at,
-		SettlementGame.MAX_BUILD_SLOPE
-	)
+	var placement_port := BuildingPlacementRuntimePort.new()
+	placement_port.dig_sites = game.dig_sites
+	placement_port.terrain_blocked_cells = game.terrain_blocked_cells
+	placement_port.building_registry = game.building_registry
+	placement_port.tree_positions = game.tree_positions
+	placement_port.terrain_height_at = game.terrain_height_at
+	placement_port.max_build_slope = SettlementGame.MAX_BUILD_SLOPE
+	game.building_placement_service.configure(placement_port)
 
 
 func _setup_citizen_needs_and_orders() -> void:
 	game.citizen_daily_order_service = CitizenDailyOrderService.new()
-	game.citizen_daily_order_service.configure(
-		game.settlement,
-		game.citizens,
-		game.day_cycle,
-		game.clock,
-		game.building_registry,
-		func() -> float: return game.runtime_seconds,
-		func(): return game.simulation_tick_controller.is_work_time(),
-		func(citizen): return game.simulation_tick_controller.is_citizen_work_time(citizen),
-		func(): return game.outside_work_controller.absolute_game_minutes(),
-		SettlementGame.GAME_MINUTES_PER_SECOND,
-		func() -> void: if game.citizen_ai != null: game.citizen_ai.request_decision_refresh()
-	)
+	var daily_order_port := CitizenDailyOrderRuntimePort.new()
+	daily_order_port.settlement = game.settlement
+	daily_order_port.citizens = game.citizens
+	daily_order_port.day_cycle = game.day_cycle
+	daily_order_port.clock = game.clock
+	daily_order_port.building_registry = game.building_registry
+	daily_order_port.runtime_seconds_getter = func() -> float: return game.runtime_seconds
+	daily_order_port.is_work_time = func(): return game.simulation_tick_controller.is_work_time()
+	daily_order_port.is_citizen_work_time = func(citizen): return game.simulation_tick_controller.is_citizen_work_time(citizen)
+	daily_order_port.absolute_game_minutes = func(): return game.outside_work_controller.absolute_game_minutes()
+	daily_order_port.game_minutes_per_second = SettlementGame.GAME_MINUTES_PER_SECOND
+	daily_order_port.citizen_ai_request_decision_refresh = func() -> void: if game.citizen_ai != null: game.citizen_ai.request_decision_refresh()
+	game.citizen_daily_order_service.configure(daily_order_port)
 	game.citizen_needs_service = CitizenNeedsService.new()
 	game.citizen_needs_service.set_random(game.random)
-	game.citizen_needs_service.configure(
-		game.nav_grid,
-		game.get_toilets,
-		game.is_route_reachable,
-		game.building_registry.building_type_for_node,
-		game.tree_positions,
-		game.grass_sources,
-	)
+	var needs_port := CitizenNeedsRuntimePort.new()
+	needs_port.nav_grid = game.nav_grid
+	needs_port.toilets_getter = game.get_toilets
+	needs_port.is_route_reachable = game.is_route_reachable
+	needs_port.building_type_for_node = game.building_registry.building_type_for_node
+	needs_port.tree_positions = game.tree_positions
+	needs_port.grass_sources = game.grass_sources
+	game.citizen_needs_service.configure(needs_port)
 	game.citizen_living_status_service = CitizenLivingStatusService.new()
 
 
@@ -791,8 +797,8 @@ func _setup_citizens_and_ai() -> void:
 	game.simulation_tick_controller.refresh_living_statuses()
 	if not game.citizen_ai.configure(
 		SettlementAIWorldFacade.new(game),
-		[SleepGoal.new(), MealGoal.new(), ToiletGoal.new(), RestGoal.new(), ReturnHomeWhenIdleGoal.new(), FollowLeaderGoal.new(), RegisterGoal.new(), ForestryGoal.new(), FarmingGoal.new(), ConstructionGoal.new(), GatheringGoal.new(), CleaningGoal.new(), ExcavationGoal.new(), ServiceWorkGoal.new(), FactoryWorkGoal.new(), CourierDeliveryGoal.new()],
-		[WorkforceOrderProvider.new(), DailyPlayerOrderProvider.new(), ForestryOrderProvider.new(), FarmingOrderProvider.new(), ConstructionOrderProvider.new(), GatheringOrderProvider.new(), ExcavationOrderProvider.new(), ServiceWorkOrderProvider.new(), FactoryWorkOrderProvider.new(), CourierDeliveryOrderProvider.new()]
+		CitizenAIRegistry.default_goals(),
+		CitizenAIRegistry.default_order_providers()
 	):
 		push_error("Native citizen AI failed to capture its initial world snapshot")
 	game.update_workers()

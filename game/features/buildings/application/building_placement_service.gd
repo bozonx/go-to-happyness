@@ -12,20 +12,13 @@ var _terrain_height_at: Callable
 var _max_build_slope: float
 
 
-func configure(
-	p_dig_sites: Array,
-	p_terrain_blocked_cells: Dictionary,
-	p_building_registry: Variant,
-	p_tree_positions: Array[Vector3],
-	p_terrain_height_at: Callable,
-	p_max_build_slope: float
-) -> void:
-	_dig_sites = p_dig_sites
-	_terrain_blocked_cells = p_terrain_blocked_cells
-	_building_registry = p_building_registry
-	_tree_positions = p_tree_positions
-	_terrain_height_at = p_terrain_height_at
-	_max_build_slope = p_max_build_slope
+func configure(port: BuildingPlacementRuntimePort) -> void:
+	_dig_sites = port.dig_sites
+	_terrain_blocked_cells = port.terrain_blocked_cells
+	_building_registry = port.building_registry
+	_tree_positions = port.tree_positions
+	_terrain_height_at = port.terrain_height_at
+	_max_build_slope = port.max_build_slope
 
 
 func is_clear_of_dig_sites(world_position: Vector3, footprint: Vector2i) -> bool:

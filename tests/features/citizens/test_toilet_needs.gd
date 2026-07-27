@@ -27,14 +27,14 @@ class FakeToiletSimulation extends Node:
 		return str(node.get_meta("building_type", ""))
 
 	func configure_needs_service(service: CitizenNeedsService) -> void:
-		service.configure(
-			nav_grid,
-			get_toilets,
-			is_route_reachable,
-			_building_type_for_node,
-			tree_positions,
-			grass_sources,
-		)
+		var port := CitizenNeedsRuntimePort.new()
+		port.nav_grid = nav_grid
+		port.toilets_getter = get_toilets
+		port.is_route_reachable = is_route_reachable
+		port.building_type_for_node = _building_type_for_node
+		port.tree_positions = tree_positions
+		port.grass_sources = grass_sources
+		service.configure(port)
 
 
 func _test_toilet_candidates_prefer_toilets() -> void:
