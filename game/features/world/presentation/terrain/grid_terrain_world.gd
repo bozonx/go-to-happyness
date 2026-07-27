@@ -35,7 +35,8 @@ signal chunk_rebuilt(chunk: Vector2i)
 signal rebuild_finished()
 
 @export var lod_distance := 64.0
-@export_range(0.0, 1.0, 0.01) var visual_smoothing := 0.0
+@export var full_smoothing := false
+@export_range(0.0, 1.0, 0.01) var edge_rounding := 0.0
 
 var grid: TerrainGrid = null
 ## Optional: without it every chunk is built at full detail.
@@ -114,13 +115,25 @@ func pending_chunk_count() -> int:
 	return _pending_chunks.size()
 
 
-## Changes shading only. It neither rebuilds chunks nor changes collision.
-func set_visual_smoothing(amount: float) -> void:
-	visual_smoothing = clampf(amount, 0.0, 1.0)
+## Independent shading controls. Neither rebuilds chunks nor changes collision.
+func set_full_smoothing(enabled: bool) -> void:
+	full_smoothing = enabled
+	_sync_smoothing_parameters()
+
+
+func set_edge_rounding(amount: float) -> void:
+	edge_rounding = clampf(amount, 0.0, 1.0)
+	_sync_smoothing_parameters()
+
+
+func _sync_smoothing_parameters() -> void:
+	var full_amount := 1.0 if full_smoothing else 0.0
 	if _ground_material != null:
-		_ground_material.set_shader_parameter(&"visual_smoothing", visual_smoothing)
+		_ground_material.set_shader_parameter(&"full_smoothing", full_amount)
+		_ground_material.set_shader_parameter(&"edge_rounding", edge_rounding)
 	if _cliff_material != null:
-		_cliff_material.set_shader_parameter(&"visual_smoothing", visual_smoothing)
+		_cliff_material.set_shader_parameter(&"full_smoothing", full_amount)
+		_cliff_material.set_shader_parameter(&"edge_rounding", edge_rounding)
 
 
 func lod_of_chunk(chunk: Vector2i) -> int:
@@ -236,7 +249,8 @@ func _ground_shader_material() -> ShaderMaterial:
 	_ground_material.set_shader_parameter(&"board_cells", float(grid.board_cells))
 	_ground_material.set_shader_parameter(&"cell_size", grid.cell_size)
 	_ground_material.set_shader_parameter(&"max_variants", float(TerrainMaterialVariants.MAX_VARIANTS))
-	_ground_material.set_shader_parameter(&"visual_smoothing", visual_smoothing)
+	_ground_material.set_shader_parameter(&"full_smoothing", 1.0 if full_smoothing else 0.0)
+	_ground_material.set_shader_parameter(&"edge_rounding", edge_rounding)
 	return _ground_material
 
 
@@ -246,5 +260,6 @@ func _cliff_shader_material() -> ShaderMaterial:
 	_cliff_material = ShaderMaterial.new()
 	_cliff_material.shader = load(CLIFF_SHADER_PATH)
 	_cliff_material.set_shader_parameter(&"surface_textures", _library.texture_array())
-	_cliff_material.set_shader_parameter(&"visual_smoothing", visual_smoothing)
+	_cliff_material.set_shader_parameter(&"full_smoothing", 1.0 if full_smoothing else 0.0)
+	_cliff_material.set_shader_parameter(&"edge_rounding", edge_rounding)
 	return _cliff_material

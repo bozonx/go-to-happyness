@@ -18,7 +18,8 @@ uniform float tile_size = 2.0;
 // Faces are the same textures seen edge-on; a touch darker reads as shadowed rock
 // without a second texture set.
 uniform float face_shade = 0.86;
-uniform float visual_smoothing : hint_range(0.0, 1.0) = 0.0;
+uniform float full_smoothing : hint_range(0.0, 1.0) = 0.0;
+uniform float edge_rounding : hint_range(0.0, 1.0) = 0.0;
 
 varying vec3 world_position;
 varying vec3 world_normal;
@@ -37,9 +38,9 @@ void vertex() {
 
 void fragment() {
 	vec2 edge_metres = min(UV, vec2(1.0) - UV) * UV2;
-	float edge_band = 1.0 - smoothstep(0.0, tile_size * 0.25, min(edge_metres.x, edge_metres.y));
-	float full_surface = smoothstep(0.9, 1.0, visual_smoothing);
-	float normal_blend = mix(visual_smoothing * edge_band, visual_smoothing, full_surface);
+	float rounding_radius = max(edge_rounding * tile_size * 0.25, 0.0001);
+	float edge_band = (1.0 - smoothstep(0.0, rounding_radius, min(edge_metres.x, edge_metres.y))) * step(0.001, edge_rounding);
+	float normal_blend = max(edge_band, full_smoothing);
 	NORMAL = normalize(mix(NORMAL, smooth_view_normal, normal_blend));
 	vec3 blend = abs(normalize(mix(world_normal, smooth_world_normal, normal_blend)));
 	blend = pow(blend, vec3(4.0));

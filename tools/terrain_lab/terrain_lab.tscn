@@ -68,7 +68,7 @@ text = "terrain lab"
 offset_left = 24.0
 offset_top = 500.0
 offset_right = 520.0
-offset_bottom = 574.0
+offset_bottom = 608.0
 
 [node name="Margin" type="MarginContainer" parent="UI/SmoothingPanel"]
 theme_override_constants/margin_left = 10
@@ -79,7 +79,10 @@ theme_override_constants/margin_bottom = 8
 [node name="Rows" type="VBoxContainer" parent="UI/SmoothingPanel/Margin"]
 
 [node name="Title" type="Label" parent="UI/SmoothingPanel/Margin/Rows"]
-text = "Visual terrain smoothing: 0%"
+text = "Edge rounding radius: 0%"
+
+[node name="FullSmoothing" type="CheckButton" parent="UI/SmoothingPanel/Margin/Rows"]
+text = "Full surface smoothing"
 
 [node name="Controls" type="HBoxContainer" parent="UI/SmoothingPanel/Margin/Rows"]
 
