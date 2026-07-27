@@ -72,6 +72,11 @@ var facing: float = 0.0
 ## and a field answers it far cheaper than four roles (§5.2).
 var arc: float = 0.0
 
+## Pack-defined meaning for point roles that have no specialised field (`spawn`,
+## `poi`, map door transitions). The engine stores it but never interprets it.
+var function: StringName = &""
+var properties: Dictionary = {}
+
 ## `slot` — body pose and the pack-defined activity performed there.
 var pose: StringName = POSE_STAND
 var activity: StringName = &""
@@ -145,6 +150,10 @@ func to_dict() -> Dictionary:
 		data["facing"] = facing
 	if not is_zero_approx(arc):
 		data["arc"] = arc
+	if function != &"":
+		data["function"] = String(function)
+	if not properties.is_empty():
+		data["properties"] = properties.duplicate(true)
 	match role:
 		ROLE_SLOT:
 			if pose != POSE_STAND:
@@ -180,6 +189,9 @@ static func from_dict(data: Dictionary) -> ZoneAnchorRecord:
 		anchor.pos = Vector3(float(raw_pos[0]), float(raw_pos[1]), float(raw_pos[2]))
 	anchor.facing = float(data.get("facing", 0.0))
 	anchor.arc = clampf(float(data.get("arc", 0.0)), 0.0, 360.0)
+	anchor.function = StringName(data.get("function", ""))
+	var raw_properties: Variant = data.get("properties", {})
+	anchor.properties = (raw_properties as Dictionary).duplicate(true) if raw_properties is Dictionary else {}
 	anchor.pose = StringName(data.get("pose", POSE_STAND))
 	anchor.activity = StringName(data.get("activity", ""))
 	anchor.fixture_id = StringName(data.get("fixture", ""))

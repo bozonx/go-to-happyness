@@ -23,7 +23,6 @@ const MapEditorModeBarScript = preload("res://game/features/world/presentation/e
 const PLANNED_MODES: Array = [
 	{"id": &"roads", "title": "Покрытия", "reason": "Слой покрытий — фаза 3"},
 	{"id": &"fill", "title": "Наполнение", "reason": "Здания, декор и природа — фаза 2"},
-	{"id": &"entities", "title": "Зоны и точки", "reason": "Зоны, точки и маршруты — фаза 4"},
 	{"id": &"rules", "title": "Правила и старт", "reason": "Правила и режимы игры — фаза 5"},
 ]
 
@@ -277,7 +276,7 @@ func _replace_document(next: MapDocument, path: String) -> void:
 # --- Modes --------------------------------------------------------------------
 
 func _build_modes() -> void:
-	_modes = [TerrainModeController.new(), SurfaceModeController.new(), WaterModeController.new()]
+	_modes = [TerrainModeController.new(), SurfaceModeController.new(), WaterModeController.new(), EntitiesModeController.new()]
 	for mode: MapEditorMode in _modes:
 		mode.configure(_context)
 		mode.ui_changed.connect(_refresh_panels)

@@ -34,9 +34,9 @@ const BORDER_LAVA := &"lava"
 const BORDER_NOTHING := &"nothing"
 const BORDER_KINDS: Array[StringName] = [BORDER_OCEAN, BORDER_LAVA, BORDER_NOTHING]
 
-## 2 — `border.level` became whole Δh steps, and `water` registry entries lost
-## their fish fields. Both were authored data that no map has yet.
-const FORMAT_VERSION := 2
+## 3 — active zones became typed `areas` / `anchors` / `routes`, replacing the
+## temporary opaque `regions` / `markers` sections.
+const FORMAT_VERSION := 3
 
 ## Board presets (§6.2). All are multiples of `TerrainGrid.CHUNK_CELLS` so the
 ## board is whole chunks. The default is the largest one that still loads

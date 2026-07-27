@@ -27,6 +27,7 @@ static func run_all() -> void:
 	_test_foreign_or_truncated_layer_is_refused()
 	print("    [PASS] Map Terrain Codec Tests")
 	_test_package_round_trip_on_disk()
+	_test_zone_layer_round_trips()
 	_test_unknown_sections_survive_a_save()
 	_test_save_replaces_the_package_atomically()
 	_test_runtime_keys_namespace_player_maps()
@@ -282,6 +283,33 @@ static func _test_package_round_trip_on_disk() -> void:
 
 	assert(service.load_package(TEST_ROOT.path_join("no_such.gdmap")) == null)
 	assert(not service.last_error.is_empty())
+
+
+## `areas`, `anchors` and `routes` are authored data, not opaque future sections:
+## their IDs and references must survive the exact same package round trip.
+static func _test_zone_layer_round_trips() -> void:
+	var document := MapDocument.create(&"zones", "Зоны", BOARD_CELLS)
+	var region := ZoneAreaRecord.new()
+	region.id = &"gate_yard"
+	region.role = ZoneAreaRecord.ROLE_REGION
+	region.add_rect(Rect2i(2, 3, 4, 2))
+	document.zones.areas.append(region)
+	var spawn := ZoneAnchorRecord.new()
+	spawn.id = &"hero_start"
+	spawn.role = ZoneAnchorRecord.ROLE_SPAWN
+	spawn.pos = Vector3(2.5, 0.0, 3.5)
+	spawn.function = &"core:hero_start"
+	document.zones.anchors.append(spawn)
+	var route := ZoneRouteRecord.new()
+	route.id = &"patrol"
+	route.stops = [&"hero_start"]
+	document.zones.routes.append(route)
+
+	var restored := MapDocument.from_json(document.to_json())
+	assert(restored.zones.area_by_id(&"gate_yard") != null)
+	assert(restored.zones.anchor_by_id(&"hero_start").function == &"core:hero_start")
+	assert(restored.zones.route_by_id(&"patrol").stops == [&"hero_start"])
+	assert(restored.zones.validate(BOARD_CELLS).is_empty())
 
 
 ## The reason `MapDocument` carries sections it cannot interpret: a phase-1 editor

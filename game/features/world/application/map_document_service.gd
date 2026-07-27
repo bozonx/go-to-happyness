@@ -220,7 +220,35 @@ static func _migrate(parsed: Dictionary, from_version: int) -> Dictionary:
 			migrated["level"] = roundi(float(migrated["level"]))
 			parsed = parsed.duplicate()
 			parsed["border"] = migrated
+	if from_version < 3:
+		parsed = _promote_legacy_zone_sections(parsed)
 	return parsed
+
+
+## v2 → v3 adopts only records that already have the shared zone shape. Old
+## experimental records whose meaning cannot be known are deliberately retained
+## as opaque data: guessing a role would silently change a player's scenario.
+static func _promote_legacy_zone_sections(parsed: Dictionary) -> Dictionary:
+	var migrated := parsed.duplicate(true)
+	if not migrated.has("areas") and _records_have_fields(migrated.get("regions", []), ["id", "role", "rects"]):
+		migrated["areas"] = migrated["regions"]
+		migrated.erase("regions")
+	if not migrated.has("anchors") and _records_have_fields(migrated.get("markers", []), ["id", "role", "pos"]):
+		migrated["anchors"] = migrated["markers"]
+		migrated.erase("markers")
+	return migrated
+
+
+static func _records_have_fields(value: Variant, fields: Array[String]) -> bool:
+	if not (value is Array):
+		return false
+	for entry: Variant in value as Array:
+		if not (entry is Dictionary):
+			return false
+		for field in fields:
+			if not (entry as Dictionary).has(field):
+				return false
+	return true
 
 
 # --- Saving -------------------------------------------------------------------
@@ -255,6 +283,10 @@ func save_map_to(document: MapDocument, final_path: String, preview: Image = nul
 	last_error = ""
 	if document == null:
 		last_error = "нечего сохранять"
+		return ""
+	var zone_errors := document.zones.validate(document.board_cells())
+	if not zone_errors.is_empty():
+		last_error = "карта содержит ошибки зон: %s" % "; ".join(zone_errors)
 		return ""
 
 	var staging_path := final_path + ".tmp"

@@ -53,11 +53,11 @@ func _test_scene_came_up(editor: Node) -> void:
 	print("  scene up: board %d, camera at %.1f" % [editor.document.board_cells(), editor.camera.distance])
 
 
-## The mode strip is data. Three modes work, the rest are visibly present and
+## The mode strip is data. Four modes work, the rest are visibly present and
 ## disabled, which is what tells the author the editor is unfinished rather than
 ## broken.
 func _test_mode_switching(editor: Node) -> void:
-	assert(editor._modes.size() == 3, "relief, surface and water")
+	assert(editor._modes.size() == 4, "relief, surface, water and zones")
 	assert(editor._active.id == &"terrain", "opens on relief")
 
 	editor._select_mode(&"surface")
@@ -71,8 +71,13 @@ func _test_mode_switching(editor: Node) -> void:
 	# the type belongs to the body, so creating and choosing are one gesture.
 	assert(editor._active.palette_entries().size() == WaterBody.TYPE_IDS.size(), "palette is the five body types")
 
+	editor._select_mode(&"entities")
+	assert(editor._active.id == &"entities", "switched to zones")
+	assert(editor._active.palette_entries().size() == 3, "area, point and route tools")
+
 	editor._select_mode(&"roads")
-	assert(editor._active.id == &"water", "an unbuilt mode cannot be entered")
+	assert(editor._active.id == &"entities", "an unbuilt mode cannot be entered")
+	editor._select_mode(&"terrain")
 
 	editor._select_mode(&"terrain")
 	assert(editor._active.id == &"terrain", "switched back")
