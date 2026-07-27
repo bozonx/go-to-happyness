@@ -323,11 +323,11 @@ player: user://content/local/maps/        → ключ user:<id>
 проставляется при записи общим `ContentRevision.new_stamp()` — то же правило, что
 у чертежей (`content_packaging.md` §7).
 
-### 4.1. `map.json`, версия 1
+### 4.1. `map.json`, целевой формат после введения зон (v3)
 
 ```json
 {
-  "format_version": 2,
+  "format_version": 3,
   "kind": "map",
   "id": "green_valley",
   "name": "Зелёная долина",
@@ -365,8 +365,8 @@ player: user://content/local/maps/        → ключ user:<id>
 
   "placements": [],
   "objects": [],
-  "regions": [],
-  "markers": [],
+  "areas": [],
+  "anchors": [],
   "routes": [],
   "flags": {},
   "rules": [],
@@ -400,11 +400,17 @@ player: user://content/local/maps/        → ключ user:<id>
 `biomes[]`, `tags[]` и `start.*` уже в модели, но задать их нечем: инспектора карты в
 редакторе нет. Это и есть содержание фазы 1a.
 
-**Версии.** Актуальная — 2: `border.level` стал целыми шагами Δh, а записи реестра
+**Версии.** Актуальная реализованная версия — 2: `border.level` стал целыми шагами Δh, а записи реестра
 `water` потеряли рыбные поля. Единственная существующая карта `green_valley` записана в
 версии 1 с `border.level: -1.5`, а ветка миграции v1 → v2 не написана — при чтении
 дробное значение усекается до `-1`, и пересохранение молча закрепит сдвиг. Ветку надо
 дописать, пока карта одна и цена нулевая.
+
+Ввод типизированных зон — следующая версия формата после v2. Она заменяет
+временные passthrough-секции `regions` и `markers` на общие `areas` и `anchors`
+по правилам [active_zones.md](active_zones.md) §18.1. Версия поднимается потому,
+что меняется смысл и владелец существующих данных, а не потому, что добавилось
+пустое поле.
 
 ---
 
@@ -718,6 +724,12 @@ revision сетки одной транзакцией. А `terrain_materials.md`
 список клеток нельзя, и это ровно та причина, по которой примитив области определён
 набором прямоугольников, а не множеством клеток.
 
+**Владение форматом.** `MapZoneLayer` — типизированная часть `MapDocument` и
+единственный владелец `areas[]`, `anchors[]`, `routes[]`. До соответствующей
+версии формата `regions[]` и `markers[]` только round-trip через passthrough;
+редактор не смешивает два набора и не создаёт новые записи в старых ключах.
+Миграция и её отказ описаны в `active_zones.md` §18.1.
+
 **Маршрут** (линия) на карте востребован сразу: патрули и транспортные линии. Это
 `RoutePlan` из [navigation_and_roads.md](navigation_and_roads.md) — стабильный ID,
 упорядоченный список точек-остановок, режим цикла, время ожидания, профиль мобильности.
@@ -743,7 +755,7 @@ revision сетки одной транзакцией. А `terrain_materials.md`
 ```json
 {
   "id": "gate_ambush",
-  "when": { "trigger": "region_entered", "region": "gate_yard", "actor": "hero" },
+  "when": { "trigger": "area_entered", "zone": "gate_yard", "actor": "hero" },
   "if":   [ { "flag": "has_key", "eq": false } ],
   "then": [ { "spawn": "guard_squad", "at": "post_a" },
             { "set_flag": "alarm", "value": true },
