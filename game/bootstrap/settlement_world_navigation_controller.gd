@@ -29,8 +29,7 @@ func create_world() -> void:
 		presentation_runtime.cell_size,
 		presentation_runtime.board_cells,
 		presentation_runtime.trail_field_getter.call(),
-		presentation_runtime.map_document_getter.call(),
-		presentation_runtime.starter_water_cells_getter.call()
+		presentation_runtime.map_document_getter.call()
 	)
 	presentation_runtime.world_setup_setter.call(world_setup)
 	presentation_runtime.water_access_setter.call(world_setup.water_access)

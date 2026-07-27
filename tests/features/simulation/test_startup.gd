@@ -8,6 +8,13 @@ const SimHelper = preload("res://tests/helpers/simulation_test_helper.gd")
 func _init() -> void:
 	var simulation := await SimHelper.setup_simulation(self)
 
+	# A session is always backed by the chosen authored map: the runtime adopts
+	# the exact grids, rather than constructing a fallback board.
+	assert(simulation.launch_config.map_document != null)
+	assert(simulation.board_cells == simulation.launch_config.map_document.board_cells())
+	assert(simulation.world_setup.terrain_grid == simulation.launch_config.map_document.terrain)
+	assert(simulation.world_setup.water_grid == simulation.launch_config.map_document.water)
+
 	# Core settlement state
 	assert(simulation.citizens.size() == simulation.POPULATION)
 	assert(simulation.settlement.money == SettlementState.TENT_STARTING_MONEY)

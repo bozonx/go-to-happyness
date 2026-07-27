@@ -4,6 +4,7 @@ extends RefCounted
 ## Unit tests for GameLaunchConfig and launch configuration state application.
 
 const GameLaunchConfigScript = preload("res://game/features/settlement/domain/game_launch_config.gd")
+const GameLaunchManagerScript = preload("res://game/features/settlement/application/game_launch_manager.gd")
 const SettlementStateScript = preload("res://game/features/settlement/domain/settlement_state.gd")
 const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.gd")
 
@@ -11,6 +12,7 @@ const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.
 static func run_all() -> void:
 	test_default_tent_config()
 	test_custom_launch_config()
+	test_map_launch_is_resolved_before_bootstrap()
 	test_apply_launch_config_to_settlement()
 	test_apply_launch_config_null_defaults_to_tent()
 	test_apply_launch_config_reset_progress_false()
@@ -55,6 +57,20 @@ static func test_custom_launch_config() -> void:
 	assert(config.starting_population == 6)
 	assert(int(config.starting_resources.get(ResourceIds.WOOD, 0)) == 50)
 	assert(bool(config.custom_parameters.get("building_editor_mode", false)) == true)
+
+
+## The launcher, rather than the gameplay scene, owns package I/O. This guards
+## the menu path: selecting a map must hand the bootstrap a populated document,
+## otherwise `WorldSetup` correctly falls back to a flat board.
+static func test_map_launch_is_resolved_before_bootstrap() -> void:
+	var manager := GameLaunchManagerScript.new()
+	var config := GameLaunchConfigScript.for_tent_era()
+	config.map_ref = &"core:green_valley"
+	var prepared := manager.prepare_game_launch(config)
+	assert(prepared == config)
+	assert(prepared.map_document != null, "the selected built-in map must load before scene startup")
+	assert(prepared.board_cells() == 96)
+	assert(prepared.map_document.meta.id == &"green_valley")
 
 
 static func test_apply_launch_config_to_settlement() -> void:

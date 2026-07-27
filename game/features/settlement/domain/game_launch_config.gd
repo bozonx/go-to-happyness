@@ -16,13 +16,11 @@ var biome_id: StringName = &"summer_valley"
 ## role.
 var world_style: StringName = &"generic"
 
-## The map this session runs on, as a runtime key (`green_valley` or
-## `user:green_valley`). Empty means the legacy flat board — the one seam through
-## which maps enter the game (map_editor.md §14.1).
-var map_ref: StringName = &""
+## The map this session runs on, as a runtime key (`core:green_valley` or
+## `user:green_valley`). A playable session always has a map.
+var map_ref: StringName = &"core:green_valley"
 ## The loaded package. `GameLaunchManager` fills it from `map_ref` before the
-## scene changes, so the bootstrap never waits on disk mid-startup. Null is a
-## valid state and means "flat board of the default size".
+## scene changes, so the bootstrap never waits on disk mid-startup.
 var map_document: MapDocument = null
 var starting_money: int = 500
 var starting_wellbeing: int = 75
@@ -37,6 +35,7 @@ static func for_tent_era() -> GameLaunchConfig:
 	config.era_id = &"tent"
 	config.era_type = 0 # Era.TENT
 	config.biome_id = &"summer_valley"
+	config.map_ref = &"core:green_valley"
 	config.starting_money = 500
 	config.starting_wellbeing = 75
 	config.starting_population = 4
@@ -52,13 +51,9 @@ static func for_tent_era() -> GameLaunchConfig:
 	return config
 
 
-## Board size of this session. From the map when there is one, otherwise the
-## caller's legacy constant — which is the whole reason `BOARD_CELLS` stops being
-## the source of truth (map_editor.md §14.1).
-func board_cells(fallback: int) -> int:
-	if map_document != null and map_document.board_cells() > 0:
-		return map_document.board_cells()
-	return fallback
+## Board size of this session. It is authored by the selected map.
+func board_cells() -> int:
+	return map_document.board_cells() if map_document != null else 0
 
 
 ## Applies whatever the map states over the era defaults. Fields the map omits are

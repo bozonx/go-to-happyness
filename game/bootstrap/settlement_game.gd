@@ -6,10 +6,6 @@ const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.
 const S = preload("res://game/features/ui/domain/game_strings.gd")
 
 
-# Fallback board size for a session started without a map. Since maps arrived
-# (map_editor.md §14.1) the real size comes from `map.json`; this constant is
-# what a legacy launch, a save from before maps, and the tests still use.
-const BOARD_CELLS := 96
 const CELL_SIZE := BuildingBlueprints.BLOCK_SIZE
 const BUILDING_CLEARANCE_BLOCKS := 3.0
 const NAVIGATION_CLEARANCE_MARGIN := 1.0
@@ -32,9 +28,8 @@ const SAWMILL_PROCESS_DURATION := 4.0
 var settlement := SettlementState.new()
 var world_resource_state := WorldResourceState.new()
 var launch_config: GameLaunchConfig
-## Board size actually in play, from the launched map when there is one. Read it
-## rather than `BOARD_CELLS`: the constant is only the fallback.
-var board_cells := BOARD_CELLS
+## Board size actually in play, always from the launched map.
+var board_cells := 0
 var day_cycle := SimulationDayCycle.new()
 var clock: SimulationClock = day_cycle.clock
 var game_minutes: float:
@@ -422,13 +417,18 @@ var world_navigation_controller: SettlementWorldNavigationController
 
 func _ready() -> void:
 	var launch_mgr: Node = get_node_or_null("/root/GameLaunchManager")
-	var active_config: GameLaunchConfig = null
+	var active_config: GameLaunchConfig = launch_config
 	if launch_mgr != null:
-		active_config = launch_mgr.get("active_launch_config") as GameLaunchConfig
+		var manager_config := launch_mgr.get("active_launch_config") as GameLaunchConfig
+		if manager_config != null and manager_config.map_document != null:
+			active_config = manager_config
 	if active_config == null:
 		active_config = GameLaunchConfig.for_tent_era()
 	launch_config = active_config
-	board_cells = launch_config.board_cells(BOARD_CELLS)
+	if launch_config.map_document == null:
+		push_error("[launch] SettlementGame requires a resolved map document")
+		return
+	board_cells = launch_config.board_cells()
 	SettlementBootstrapper.new().run(self)
 
 

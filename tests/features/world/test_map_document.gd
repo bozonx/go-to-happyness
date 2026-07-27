@@ -361,10 +361,11 @@ static func _test_runtime_keys_namespace_player_maps() -> void:
 	assert(MapDocumentService.runtime_key(MapDocumentService.SOURCE_PLAYER, &"green_valley") == &"user:green_valley")
 
 	# A player map can never be mistaken for the shipped map of the same name.
-	var builtin := MapDocumentService.split_key(&"green_valley")
+	var builtin := MapDocumentService.split_key(&"core:green_valley")
 	assert(builtin["source"] == MapDocumentService.SOURCE_BUILTIN and builtin["id"] == &"green_valley")
 	var player := MapDocumentService.split_key(&"user:green_valley")
 	assert(player["source"] == MapDocumentService.SOURCE_PLAYER and player["id"] == &"green_valley")
+	assert(MapDocumentService.split_key(&"green_valley")["id"] == &"", "map references require an explicit source")
 	assert(MapDocumentService.package_path(MapDocumentService.SOURCE_PLAYER, &"green_valley").begins_with(MapDocumentService.PLAYER_ROOT))
 
 

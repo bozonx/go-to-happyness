@@ -35,28 +35,11 @@ func world_navigation_runtime_port() -> WorldNavigationRuntimePort:
 	)
 
 
-## Pond seeds of the active biome (grid_terrain_system.md §9). A session launched
-## with a map ignores them — that map's author owns its water — but a plain new
-## game still needs somewhere to fill a bucket, and it gets a dug basin in the
-## real grids instead of the decorative prop this used to be.
-func starter_water_cells() -> Array[Vector2i]:
-	var biome: BiomeDefinition = game.territory_service.get_active_biome()
-	var layout: Resource = biome.natural_layout if biome != null else null
-	if layout == null:
-		return []
-	var cells: Array[Vector2i] = []
-	for cell: Variant in layout.get("water_cells"):
-		if cell is Vector2i:
-			cells.append(cell as Vector2i)
-	return cells
-
-
 func world_navigation_presentation_port() -> WorldNavigationPresentationPort:
 	return WorldNavigationPresentationPort.new(
 		func() -> Camera3D: return game.camera,
 		func() -> TrailFieldService: return game.trail_field,
 		func() -> MapDocument: return game.launch_config.map_document,
-		starter_water_cells,
 		func() -> WorldSetup: return game.world_setup as WorldSetup,
 		func(next_world_setup: WorldSetup) -> void: game.world_setup = next_world_setup,
 		func(next_water_access_service: WaterAccessService) -> void: game.water_access_service = next_water_access_service,

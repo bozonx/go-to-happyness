@@ -21,8 +21,6 @@ uniform float face_shade = 0.86;
 uniform float full_smoothing : hint_range(0.0, 1.0) = 0.0;
 uniform float edge_rounding : hint_range(0.0, 1.0) = 0.0;
 uniform float edge_bevel : hint_range(0.0, 1.0) = 0.0;
-// Match the ground shader: terrace corners should not turn into a bright box.
-uniform float bevel_corner_strength : hint_range(0.0, 1.0) = 0.62;
 
 varying vec3 world_position;
 varying vec3 world_normal;
@@ -68,7 +66,8 @@ void fragment() {
 		min(max(eligible_distances.x, eligible_distances.w), min(max(eligible_distances.y, eligible_distances.z), min(max(eligible_distances.y, eligible_distances.w), max(eligible_distances.z, eligible_distances.w))))
 	);
 	float corner_amount = 1.0 - smoothstep(0.0, rounding_radius, second_edge_distance);
-	float corner_fade = mix(1.0, bevel_corner_strength, corner_amount);
+	// No fake rounded joint where two eligible edges meet (inside or 90° corner).
+	float corner_fade = 1.0 - corner_amount;
 	float edge_band = mix(rounded_band, bevel_band, edge_bevel) * corner_fade * step(0.001, edge_rounding);
 	float normal_blend = max(edge_band, full_smoothing);
 	vec4 bevel_normal = bevel_view_0;

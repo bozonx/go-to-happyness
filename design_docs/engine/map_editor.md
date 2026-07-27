@@ -849,11 +849,10 @@ revision сетки одной транзакцией. А `terrain_materials.md`
 * `main_menu.gd` заменяет дропдаун «ландшафт» на выбор карты (встроенные + пользовательские
   с миниатюрами) и получает кнопку «🗺 Редактор территорий» рядом с «🏗 Редактор зданий».
 * `BOARD_CELLS := 96` в `settlement_game.gd` перестаёт быть константой и приходит из карты.
-* `WorldSetup._build_terrain` перестаёт строить плоскую доску и заливает в `TerrainGrid`
-  содержимое `terrain.bin`.
-* `TerritoryBase` теряет плоскую подложку 1000 м (она уже помечена к удалению) и получает
-  океан за границей §6.1 — уже сделано: `configure_water_border` передаёт заголовок карты
-  в `WaterWorld`, и сессия рисует ту же плоскость, что и редактор.
+* `WorldSetup._build_terrain` принимает `TerrainGrid` из выбранной карты; игровой мир не
+  имеет пути запуска без пакета `.gdmap`.
+* `TerritoryBase` не содержит плоской подложки: границу мира рисует только океан из
+  заголовка карты через `configure_water_border` → `WaterWorld`.
 * `BiomeDefinition` перестаёт быть источником рельефа и остаётся источником атмосферы и
   дефолтов для генерации новой карты.
 
@@ -888,7 +887,6 @@ game/features/world/
                                                 #   (модель — active_zones.md)
                        map_rule_record.gd       # when / if / then
   domain/water/        water_body.gd            # §9 родительского документа
-                       starter_water.gd         # пруды биома для сессии без карты
   application/         border_ocean_service.gd  # §6.1, залив края по заголовку
                        water_access_service.gd  # берега, с которых набирают воду
   domain/roads/        road_type_catalog.gd

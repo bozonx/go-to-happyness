@@ -56,8 +56,8 @@ func _init(p_dev_mode: bool = false) -> void:
 
 # --- Addressing ---------------------------------------------------------------
 
-## The key a save file and a launch config store. Built-in maps keep their bare
-## id so shipped content is addressed the same way it always was.
+## The key a save file and a launch config store. ContentId keeps the source
+## explicit (`core:` for shipped maps, `user:` for local maps).
 static func runtime_key(source: StringName, id: StringName) -> StringName:
 	return ContentIdScript.runtime_key(source, id)
 

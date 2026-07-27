@@ -40,7 +40,6 @@ static func run_all() -> void:
 	_test_border_nothing_never_floods()
 	_test_border_lava_floods_edge_with_lava()
 	_test_access_service_finds_banks_not_water()
-	_test_starter_water_digs_a_real_basin()
 	print("    [PASS] Water Layer Tests")
 
 
@@ -586,24 +585,3 @@ static func _test_access_service_finds_banks_not_water() -> void:
 
 ## A session with no map still needs water, and it gets a dug basin in the real
 ## grids rather than the prop-plus-blocked-cells arrangement it used to get.
-static func _test_starter_water_digs_a_real_basin() -> void:
-	var terrain := _terrain()
-	var water := _water_over(terrain)
-	var body_id := StarterWater.carve(terrain, water, [Vector2i(0, 0)])
-	assert(body_id != WaterBody.NO_BODY)
-
-	# The middle is deep enough to be water and the rim is a ford.
-	assert(water.is_wet(terrain, Vector2i(0, 0)))
-	assert(not water.is_ford(terrain, Vector2i(0, 0)))
-	assert(water.is_ford(terrain, Vector2i(2, 0)))
-	# ...and the ground outside is untouched, which is what makes it a bank.
-	assert(terrain.height_of(Vector2i(3, 0)) == 0)
-	assert(not water.has_water(Vector2i(3, 0)))
-
-	var nav := _nav_over(terrain, water)
-	assert(not nav.is_walkable(Vector2i(0, 0)), "nobody wades the middle of a pond")
-	assert(nav.is_walkable(Vector2i(3, 0)), "and everybody can stand on its bank")
-
-	var access := WaterAccessService.new()
-	access.configure(water, terrain)
-	assert(access.has_source())

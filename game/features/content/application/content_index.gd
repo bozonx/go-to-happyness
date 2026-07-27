@@ -10,7 +10,6 @@ const BUILTIN_ROOT := "res://game/content"
 const LOCAL_ROOT := "user://content/local"
 const INSTALLED_ROOT := "user://content/installed"
 const LEGACY_BLUEPRINTS := "user://custom_buildings"
-const LEGACY_MAPS := "user://custom_maps"
 const BLUEPRINT_SUFFIX := ".gdbuilding.json"
 const MAP_SUFFIX := ".gdmap"
 
@@ -158,7 +157,6 @@ func _register(entry: ContentEntryScript) -> void:
 ## owns their relocation and exported builds ship the new layout directly.
 func _migrate_legacy_player_content() -> void:
 	_migrate_legacy_directory(LEGACY_BLUEPRINTS, LOCAL_ROOT.path_join("buildings"))
-	_migrate_legacy_directory(LEGACY_MAPS, LOCAL_ROOT.path_join("maps"))
 
 
 static func _migrate_legacy_directory(old_root: String, new_root: String) -> void:

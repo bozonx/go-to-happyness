@@ -17,9 +17,7 @@ const GameLaunchConfigScript = preload("res://game/features/settlement/domain/ga
 @onready var building_editor_btn: Button = $MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox/BuildingEditorButton
 @onready var map_editor_btn: Button = $MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox/MapEditorButton
 
-## Since maps arrived this picker chooses a map, not a biome (map_editor.md
-## §14.1). The biome entries remain below the maps because a biome still supplies
-## atmosphere and vegetation; what it no longer supplies is the ground.
+## This picker chooses the authored world for the session.
 @onready var landscape_option: OptionButton = $MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox/LandscapeOption
 @onready var era_description_label: Label = $MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox/DescriptionLabel
 @onready var param_summary_label: Label = $MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox/ParamSummaryLabel
@@ -29,9 +27,8 @@ const GameLaunchConfigScript = preload("res://game/features/settlement/domain/ga
 
 var selected_era: StringName = &"tent"
 var selected_biome: StringName = &"summer_valley"
-## Runtime key of the chosen map, empty for a biome-only launch on the legacy
-## flat board.
-var selected_map: StringName = &""
+## Runtime key of the chosen playable map.
+var selected_map: StringName = &"core:green_valley"
 
 var _map_service := MapDocumentService.new()
 
@@ -43,9 +40,8 @@ func _ready() -> void:
 	_select_era(&"tent")
 
 
-## Maps first, then the two procedural biomes. A map entry carries its runtime
-## key; a biome entry carries its biome id, and the two are told apart by which
-## field the metadata fills.
+## Every game session starts from an authored map. Player maps saved by the
+## territory editor are indexed alongside the shipped maps on the next visit.
 func _setup_landscape_options() -> void:
 	landscape_option.clear()
 	var slot := 0
@@ -57,14 +53,14 @@ func _setup_landscape_options() -> void:
 		landscape_option.add_item("🗺 %s%s%s" % [entry["name"], suffix, origin], slot)
 		landscape_option.set_item_metadata(slot, {"map": entry["key"]})
 		slot += 1
-	if slot > 0:
-		landscape_option.add_separator()
-		slot += 1
-	landscape_option.add_item("Летняя долина (без карты)", slot)
-	landscape_option.set_item_metadata(slot, {"biome": &"summer_valley"})
-	slot += 1
-	landscape_option.add_item("Летняя равнина (без карты)", slot)
-	landscape_option.set_item_metadata(slot, {"biome": &"summer_plains"})
+	if slot == 0:
+		landscape_option.add_item("Нет доступных карт")
+		landscape_option.disabled = true
+		start_game_btn.disabled = true
+		param_summary_label.text = "Сохраните карту в редакторе территорий, чтобы начать игру."
+		return
+	landscape_option.disabled = false
+	start_game_btn.disabled = false
 	landscape_option.select(0)
 	_on_landscape_selected(0)
 
@@ -89,9 +85,6 @@ func _on_landscape_selected(index: int) -> void:
 		return
 	var entry: Dictionary = metadata
 	selected_map = entry.get("map", &"")
-	# A map keeps its own biome for atmosphere; only a biome-only entry changes it.
-	if entry.has("biome"):
-		selected_biome = entry["biome"]
 	_update_config_summary()
 
 
@@ -131,23 +124,11 @@ func _update_config_summary() -> void:
 ## What the chosen entry actually decides. A map states its own board and start
 ## conditions, so saying "ландшафт" about it would be wrong.
 func _landscape_summary() -> String:
-	if String(selected_map).is_empty():
-		return "Ландшафт: %s (плоская доска)" % _biome_display_name(selected_biome)
 	var address := MapDocumentService.split_key(selected_map)
 	var header := _map_service.read_header(address["source"], address["id"])
 	if header.is_empty():
 		return "Карта: %s" % selected_map
 	return "Карта: %s (%d×%d м)" % [header["name"], header["board_cells"], header["board_cells"]]
-
-
-func _biome_display_name(biome: StringName) -> String:
-	match biome:
-		&"summer_valley":
-			return "Летняя долина (Summer Valley)"
-		&"summer_plains":
-			return "Летняя равнина (Summer Plains)"
-		_:
-			return str(biome)
 
 
 func _on_start_game_pressed() -> void:
@@ -192,4 +173,3 @@ func _unhandled_input(event: InputEvent) -> void:
 			if launch_mgr != null and launch_mgr.has_method("launch_from_save"):
 				launch_mgr.call("launch_from_save", save_service.QUICKSAVE_PATH)
 				get_viewport().set_input_as_handled()
-

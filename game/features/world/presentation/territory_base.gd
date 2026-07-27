@@ -3,11 +3,8 @@ extends Node3D
 
 ## The ground of one territory plus everything that visually belongs to it.
 ##
-## Since the Terrain3D addon was removed (grid_terrain_system.md §13), the ground
-## is a `GridTerrainWorld` over a real `TerrainGrid` — flat at world zero for now
-## (Phase 0's stub), but already the single source of truth for height and
-## collision. The 1000 m plane below it is a backdrop with no collider: it fills
-## the horizon beyond the board and must never answer a height query.
+## The ground is a `GridTerrainWorld` over the launched map's real `TerrainGrid`.
+## It is the single source of truth for height and collision.
 
 @export var biome_definition: BiomeDefinition
 @onready var landscape_objects: Node3D = get_node_or_null("LandscapeObjects") as Node3D
@@ -28,7 +25,7 @@ var water_grid: WaterGrid = null
 ## `authored` is the grid a launched map brought with it (map_editor.md §14.1).
 ## It is adopted, not copied: the map's relief and the session's ground have to be
 ## the same object, or an edit made in play would be invisible to whatever still
-## held the other one. Without a map the board is flat, as it was before maps.
+## held the other one.
 func configure_terrain(cell_size: float, board_cells: int, camera: Camera3D = null, authored: TerrainGrid = null) -> TerrainGrid:
 	if authored != null and authored.board_cells == board_cells:
 		terrain_grid = authored
@@ -41,29 +38,18 @@ func configure_terrain(cell_size: float, board_cells: int, camera: Camera3D = nu
 	return terrain_grid
 
 
-## The water layer of the launched map, drawn over the same ground. Without a map
-## — or with one that has no water — this is an empty layer, and an empty layer
-## draws nothing and blocks nobody.
-##
-## `starter_cells` are the biome's pond seeds for a session with no map at all
-## (`StarterWater`). They are dug here, before the ground is meshed, because the
-## basin they cut is terrain: doing it afterwards would need a second remesh and
-## a second navigation publish for water that was always going to be there.
+## The water layer of the launched map, drawn over the same ground. An empty map
+## water layer simply draws nothing and blocks nobody.
 func configure_water(
 	board_cells: int,
 	cell_size: float,
 	authored: WaterGrid = null,
-	starter_cells: Array[Vector2i] = [],
 ) -> WaterGrid:
 	if authored != null and authored.board_cells == board_cells:
 		water_grid = authored
 	else:
 		water_grid = WaterGrid.new()
 		water_grid.configure(cell_size, board_cells)
-	if not starter_cells.is_empty():
-		StarterWater.carve(terrain_grid, water_grid, starter_cells)
-		if terrain != null:
-			terrain.rebuild_pending_now()
 	if water != null:
 		water.configure(water_grid, terrain_grid)
 		water.rebuild_pending_now()

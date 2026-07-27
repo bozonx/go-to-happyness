@@ -1,7 +1,7 @@
 class_name ContentId
 extends RefCounted
 
-## Stable runtime addressing.  `builtin` and `player` are accepted only when
+## Stable runtime addressing. `builtin` and `player` are accepted only when
 ## reading pre-pack saves and resolve to their pack-era equivalents.
 const SOURCE_CORE := &"core"
 const SOURCE_LOCAL := &"local"
@@ -108,5 +108,4 @@ static func split_runtime_key(key: StringName) -> Dictionary:
 	var colon := text.find(":")
 	if colon > 0:
 		return {"source": StringName(text.left(colon)), "id": StringName(text.substr(colon + 1))}
-	# Bare built-in ids were written by phase 1 saves.
-	return {"source": SOURCE_CORE, "id": key}
+	return {"source": StringName(), "id": StringName()}

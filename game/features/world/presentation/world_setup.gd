@@ -41,15 +41,11 @@ var _camera: Camera3D
 var _cell_size: float
 var _board_cells: int
 var _trail_field: RefCounted
-## The launched map, when the session has one. Its `TerrainGrid` becomes the
-## board's ground instead of a freshly flattened one (map_editor.md §14.1).
+## The launched map. Its terrain and water grids are the session's world.
 var _map_document: MapDocument = null
 ## The territory scene that owns the ground and the water. Kept because the
 ## per-frame weather push has to reach the waves without walking the tree.
 var _territory: TerritoryBase = null
-## Pond seeds of the active biome, used only when the session has no map of its
-## own (see `_build_terrain`).
-var _starter_water_cells: Array[Vector2i] = []
 
 
 func setup(
@@ -57,15 +53,13 @@ func setup(
 	p_cell_size: float,
 	p_board_cells: int,
 	p_trail_field: RefCounted,
-	p_map_document: MapDocument = null,
-	p_starter_water_cells: Array[Vector2i] = [],
+	p_map_document: MapDocument,
 ) -> void:
 	_camera = p_camera
 	_cell_size = p_cell_size
 	_board_cells = p_board_cells
 	_trail_field = p_trail_field
 	_map_document = p_map_document
-	_starter_water_cells = p_starter_water_cells
 
 
 func build(parent: Node) -> void:
@@ -130,21 +124,12 @@ func _build_terrain(parent: Node) -> void:
 	if territory == null:
 		return
 	_territory = territory
-	var authored: TerrainGrid = _map_document.terrain if _map_document != null else null
-	terrain_grid = territory.configure_terrain(_cell_size, _board_cells, _camera, authored)
-	var authored_water: WaterGrid = _map_document.water if _map_document != null else null
-	# A map owns its own water; the biome's ponds are the fallback for a session
-	# that has no map, and adding them to an authored board would put lakes on it
-	# that its author never drew.
-	var seeds: Array[Vector2i] = []
 	if _map_document == null:
-		seeds = _starter_water_cells
-	water_grid = territory.configure_water(_board_cells, _cell_size, authored_water, seeds)
-	var meta: MapMeta = _map_document.meta if _map_document != null else null
-	territory.configure_water_border(
-		meta.border_kind if meta != null else MapMeta.BORDER_NOTHING,
-		meta.border_level if meta != null else 0,
-	)
+		push_error("[world] WorldSetup requires a map document")
+		return
+	terrain_grid = territory.configure_terrain(_cell_size, _board_cells, _camera, _map_document.terrain)
+	water_grid = territory.configure_water(_board_cells, _cell_size, _map_document.water)
+	territory.configure_water_border(_map_document.meta.border_kind, _map_document.meta.border_level)
 	water_access.configure(water_grid, terrain_grid)
 
 

@@ -26,21 +26,37 @@ var pending_editor_map: StringName = &""
 var _map_service := MapDocumentService.new()
 
 
+func _ready() -> void:
+	prepare_game_launch(active_launch_config)
+
+
 func launch_game(config: GameLaunchConfigScript) -> void:
 	pending_save_path = ""
-	if config != null:
-		active_launch_config = config
-	else:
-		active_launch_config = GameLaunchConfigScript.for_tent_era()
-	_resolve_map(active_launch_config)
+	if prepare_game_launch(config).map_document == null:
+		push_warning("[launch] игровая сессия отменена: нужна доступная карта")
+		return
 	get_tree().change_scene_to_file("res://game/bootstrap/settlement_game.tscn")
 
 
-## Loads the package before the scene changes. A map that cannot be read is
-## reported and the session starts on the legacy flat board rather than on a
-## half-built world — the player gets a game, not a crash.
+## Makes a launch configuration ready for the bootstrap scene. Keeping the disk
+## read here means `SettlementGame` receives one fully resolved world.
+##
+## This is public deliberately: launch surfaces other than the main menu (for
+## example a future editor test-run) need the same preparation without owning a
+## second map-loading path.
+func prepare_game_launch(config: GameLaunchConfigScript) -> GameLaunchConfigScript:
+	active_launch_config = config if config != null else GameLaunchConfigScript.for_tent_era()
+	_resolve_map(active_launch_config)
+	return active_launch_config
+
+
+## Loads the package before the scene changes. A map that cannot be read rejects
+## the launch rather than constructing a different world under the same session.
 func _resolve_map(config: GameLaunchConfigScript) -> void:
-	if config == null or config.map_document != null or String(config.map_ref).is_empty():
+	if config == null or config.map_document != null:
+		return
+	if String(config.map_ref).is_empty():
+		push_warning("[launch] игровая сессия требует карту")
 		return
 	var document := _map_service.load_map(config.map_ref)
 	if document == null:
@@ -72,6 +88,9 @@ func launch_from_save(save_path: String) -> void:
 		var saved_revision := String(reference.get("revision", ""))
 		if not saved_revision.is_empty() and active_launch_config.map_document.meta.revision != saved_revision:
 			push_warning("[launch] карта %s изменилась после сохранения; будет использована текущая версия." % active_launch_config.map_ref)
+	else:
+		push_warning("[launch] сохранение не открыто: в нём нет ссылки на карту")
+		return
 	pending_save_path = save_path
 	get_tree().change_scene_to_file("res://game/bootstrap/settlement_game.tscn")
 
@@ -101,3 +120,4 @@ func return_to_main_menu() -> void:
 func reset_to_default() -> void:
 	pending_save_path = ""
 	active_launch_config = GameLaunchConfigScript.for_tent_era()
+	prepare_game_launch(active_launch_config)

@@ -12,11 +12,14 @@ const SettlementGameScene := preload("res://game/bootstrap/settlement_game.tscn"
 
 
 static func create_simulation() -> Node:
-	return SettlementGameScene.instantiate()
+	var simulation := SettlementGameScene.instantiate()
+	simulation.launch_config = _default_launch_config()
+	return simulation
 
 
 static func setup_simulation(tree: SceneTree) -> Node:
 	var simulation := SettlementGameScene.instantiate()
+	simulation.launch_config = _default_launch_config()
 	tree.root.add_child(simulation)
 	await tree.process_frame
 	await tree.physics_frame
@@ -28,6 +31,13 @@ static func setup_simulation(tree: SceneTree) -> Node:
 		simulation.add_child(entrance)
 		simulation.entrance_stone = entrance
 	return simulation
+
+
+static func _default_launch_config() -> GameLaunchConfig:
+	var config := GameLaunchConfig.for_tent_era()
+	config.map_document = MapDocumentService.new().load_map(config.map_ref)
+	config.apply_map_start()
+	return config
 
 
 static func cleanup_simulation(tree: SceneTree, simulation: Node) -> void:
