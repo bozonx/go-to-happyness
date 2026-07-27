@@ -1,0 +1,123 @@
+{
+	"format_version": 1,
+	"functions": [
+		{
+			"id": "workplace",
+			"label": "Рабочее место (общее)",
+			"scope": "area",
+			"roles": ["room"],
+			"properties": [
+				{"key": "profession", "label": "Профессия", "type": "enum", "default": "craftsman",
+					"options": ["cook", "teacher", "seller", "official", "researcher", "craftsman", "forager", "trader"]},
+				{"key": "max_workers", "label": "Работников", "type": "int", "default": 1, "min": 0, "max": 16}
+			]
+		},
+		{
+			"id": "kitchen",
+			"label": "Кухня",
+			"scope": "area",
+			"roles": ["room"],
+			"requires": ["fire_source"],
+			"fallback": {"clay": "clay_bakery", "earth": "dugout_kitchen", "wood": "canteen", "default": "cook_campfire"},
+			"properties": [
+				{"key": "profession", "label": "Профессия", "type": "enum", "default": "cook", "options": ["cook"]},
+				{"key": "max_workers", "label": "Работников", "type": "int", "default": 1, "min": 0, "max": 8}
+			]
+		},
+		{
+			"id": "workshop",
+			"label": "Мастерская",
+			"scope": "area",
+			"roles": ["room"],
+			"fallback": {"stone": "masonry_workshop", "clay": "clay_workshop", "earth": "smithy", "wood": "sawmill", "default": "straw_craft_tent"},
+			"properties": [
+				{"key": "profession", "label": "Профессия", "type": "enum", "default": "craftsman", "options": ["craftsman"]},
+				{"key": "max_workers", "label": "Работников", "type": "int", "default": 1, "min": 0, "max": 8}
+			]
+		},
+		{
+			"id": "forager_camp",
+			"label": "Стоянка собирателей",
+			"scope": "area",
+			"roles": ["room"],
+			"fallback": {"default": "straw_forager_tent"},
+			"properties": [
+				{"key": "profession", "label": "Профессия", "type": "enum", "default": "forager", "options": ["forager"]},
+				{"key": "max_workers", "label": "Работников", "type": "int", "default": 2, "min": 0, "max": 8}
+			]
+		},
+		{
+			"id": "school",
+			"label": "Школа",
+			"scope": "area",
+			"roles": ["room"],
+			"fallback": {"default": "school"},
+			"properties": [
+				{"key": "profession", "label": "Профессия", "type": "enum", "default": "teacher", "options": ["teacher"]},
+				{"key": "max_workers", "label": "Работников", "type": "int", "default": 1, "min": 0, "max": 8}
+			]
+		},
+		{
+			"id": "civic",
+			"label": "Гражданское место",
+			"scope": "area",
+			"roles": ["room"],
+			"fallback": {"tent": "campfire", "earth": "earth_assembly", "clay": "clay_lodge", "stone": "stone_prefecture", "default": "wood_town_hall"},
+			"properties": [
+				{"key": "profession", "label": "Профессия", "type": "enum", "default": "official",
+					"options": ["official", "researcher"]},
+				{"key": "max_workers", "label": "Работников", "type": "int", "default": 1, "min": 0, "max": 8}
+			]
+		},
+		{
+			"id": "market",
+			"label": "Торговля",
+			"scope": "area",
+			"roles": ["room"],
+			"fallback": {"tent": "straw_trade_tent", "earth": "earth_market", "clay": "clay_market", "stone": "stone_market", "default": "straw_trade_tent"},
+			"properties": [
+				{"key": "profession", "label": "Профессия", "type": "enum", "default": "seller",
+					"options": ["seller", "trader"]},
+				{"key": "max_workers", "label": "Работников", "type": "int", "default": 1, "min": 0, "max": 8}
+			]
+		},
+		{
+			"id": "storage",
+			"label": "Склад",
+			"scope": "area",
+			"roles": ["room"],
+			"fallback": {"tent": "straw_warehouse", "default": "warehouse"},
+			"properties": [
+				{"key": "capacity", "label": "Вместимость", "type": "int", "default": 100, "min": 0, "max": 10000}
+			]
+		},
+		{
+			"id": "housing",
+			"label": "Жильё",
+			"scope": "area",
+			"roles": ["room"],
+			"fallback": {"tent": "tent", "earth": "earth_house", "clay": "clay_house", "stone": "stone_house", "default": "house"},
+			"properties": [
+				{"key": "residents", "label": "Жильцов", "type": "int", "default": 1, "min": 0, "max": 16}
+			]
+		},
+		{
+			"id": "leisure",
+			"label": "Отдых",
+			"scope": "area",
+			"roles": ["room", "region"],
+			"fallback": {"stone": "stone_tavern", "default": "gathering_place"},
+			"properties": [
+				{"key": "flavour", "label": "Вид отдыха", "type": "enum", "default": "plaza",
+					"options": ["park", "plaza", "playground", "sports_field", "gym", "cinema", "theater"]},
+				{"key": "visitors", "label": "Посетителей", "type": "int", "default": 4, "min": 0, "max": 64}
+			]
+		},
+		{"id": "cook", "label": "Готовка", "scope": "activity"},
+		{"id": "serve", "label": "Обслуживание", "scope": "activity"},
+		{"id": "craft", "label": "Ремесло", "scope": "activity"},
+		{"id": "study", "label": "Учёба", "scope": "activity"},
+		{"id": "sleep", "label": "Сон", "scope": "activity"},
+		{"id": "rest", "label": "Отдых", "scope": "activity"}
+	]
+}

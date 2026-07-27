@@ -87,7 +87,7 @@ func open_new_dialog() -> void:
 
 
 func _on_new_confirmed() -> void:
-	var id := ContentIdScript.sanitize_id(_new_id_edit.text)
+	var id := ContentIdScript.normalize_id(_new_id_edit.text)
 	if id.is_empty():
 		# Reopening beats a silent placeholder: the author has to see that the id
 		# they typed produced nothing usable.
@@ -134,7 +134,7 @@ func open_save_as_dialog(default_id: StringName, target_dir: String) -> void:
 
 
 func _on_save_as_confirmed() -> void:
-	var id := ContentIdScript.sanitize_id(_save_as_id_edit.text)
+	var id := ContentIdScript.normalize_id(_save_as_id_edit.text)
 	if id.is_empty():
 		_save_as_dialog.popup_centered()
 		_save_as_id_edit.grab_focus()
@@ -175,7 +175,7 @@ func _on_properties_confirmed() -> void:
 	var meta := _editing_meta
 	_editing_meta = null
 	# An emptied id would make the map unsaveable, so the previous one stands.
-	var id := ContentIdScript.sanitize_id(_prop_id_edit.text)
+	var id := ContentIdScript.normalize_id(_prop_id_edit.text)
 	if not id.is_empty():
 		meta.id = StringName(id)
 	meta.name = _prop_name_edit.text.strip_edges()
@@ -187,7 +187,7 @@ func _on_properties_confirmed() -> void:
 	meta.border_kind = StringName(_prop_border_option.get_item_metadata(_prop_border_option.selected))
 	meta.border_level = int(_prop_border_level_spin.value)
 	meta.start.era = StringName(_prop_era_option.get_item_metadata(_prop_era_option.selected))
-	var style := ContentIdScript.sanitize_id(_prop_style_edit.text)
+	var style := ContentIdScript.normalize_id(_prop_style_edit.text)
 	meta.start.style = StringName(style) if not style.is_empty() else &"generic"
 	meta.start.mode_id = StringName(_prop_mode_option.get_item_metadata(_prop_mode_option.selected))
 	meta.start.time_of_day = int(_prop_time_spin.value)
@@ -264,7 +264,7 @@ static func _join_names(values: Array[StringName]) -> String:
 static func _split_names(text: String) -> Array[StringName]:
 	var result: Array[StringName] = []
 	for part: String in text.split(",", false):
-		var cleaned := ContentIdScript.sanitize_id(part)
+		var cleaned := ContentIdScript.normalize_id(part)
 		if not cleaned.is_empty():
 			result.append(StringName(cleaned))
 	return result

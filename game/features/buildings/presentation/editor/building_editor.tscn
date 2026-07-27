@@ -420,221 +420,299 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 14
 text = "Итоговая смета: -"
 
-[node name="ZonesPanel" type="PanelContainer" parent="EditorUI/Root"]
+[node name="ZonesPalettePanel" type="PanelContainer" parent="EditorUI/Root"]
 unique_name_in_owner = true
 visible = false
-custom_minimum_size = Vector2(270, 0)
+custom_minimum_size = Vector2(240, 0)
 layout_mode = 1
 anchors_preset = 9
 anchor_bottom = 1.0
 offset_left = 8.0
 offset_top = 60.0
-offset_right = 278.0
+offset_right = 248.0
 offset_bottom = -48.0
 grow_vertical = 2
 
-[node name="Scroll" type="ScrollContainer" parent="EditorUI/Root/ZonesPanel"]
+[node name="Scroll" type="ScrollContainer" parent="EditorUI/Root/ZonesPalettePanel"]
 layout_mode = 2
 horizontal_scroll_mode = 0
 
-[node name="ZonesVBox" type="VBoxContainer" parent="EditorUI/Root/ZonesPanel/Scroll"]
+[node name="PaletteVBox" type="VBoxContainer" parent="EditorUI/Root/ZonesPalettePanel/Scroll"]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 6
 
-[node name="Title" type="Label" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+[node name="Title" type="Label" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 16
-text = "Активные зоны"
+text = "ИНСТРУМЕНТ"
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.8, 0.75, 0.5, 1)
 
-[node name="PlaceHint" type="Label" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
-layout_mode = 2
-theme_override_colors/font_color = Color(0.65, 0.72, 0.8, 1)
-text = "Зона места (что это за место)"
-
-[node name="ZoneRow" type="HBoxContainer" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
-layout_mode = 2
-
-[node name="ZoneOption" type="OptionButton" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox/ZoneRow"]
+[node name="ToolAreaBtn" type="Button" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
 unique_name_in_owner = true
 layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="AddPlaceBtn" type="Button" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox/ZoneRow"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "＋"
-
-[node name="DelPlaceBtn" type="Button" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox/ZoneRow"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "🗑"
-
-[node name="ZoneIdLbl" type="Label" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
-layout_mode = 2
-text = "ID зоны:"
-
-[node name="ZoneIdEdit" type="LineEdit" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
-unique_name_in_owner = true
-layout_mode = 2
-
-[node name="ZoneNameLbl" type="Label" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
-layout_mode = 2
-text = "Название зоны:"
-
-[node name="ZoneNameEdit" type="LineEdit" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
-unique_name_in_owner = true
-layout_mode = 2
-
-[node name="ZoneKindLbl" type="Label" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
-layout_mode = 2
-text = "Назначение:"
-
-[node name="ZoneKindOption" type="OptionButton" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
-unique_name_in_owner = true
-layout_mode = 2
-
-[node name="ZoneSubtypeRow" type="VBoxContainer" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
-unique_name_in_owner = true
-layout_mode = 2
-
-[node name="SubtypeLbl" type="Label" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox/ZoneSubtypeRow"]
-layout_mode = 2
-text = "Тип:"
-
-[node name="ZoneSubtypeOption" type="OptionButton" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox/ZoneSubtypeRow"]
-unique_name_in_owner = true
-layout_mode = 2
-
-[node name="ZoneProfLbl" type="Label" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
-layout_mode = 2
-text = "Профессия:"
-
-[node name="ZoneProfessionOption" type="OptionButton" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
-unique_name_in_owner = true
-layout_mode = 2
-
-[node name="WorkersRow" type="HBoxContainer" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
-layout_mode = 2
-
-[node name="WorkersLbl" type="Label" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox/WorkersRow"]
-layout_mode = 2
-text = "Макс. рабочих:"
-
-[node name="ZoneWorkersSpin" type="SpinBox" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox/WorkersRow"]
-unique_name_in_owner = true
-layout_mode = 2
-max_value = 12.0
-value = 1.0
-
-[node name="HSep1" type="HSeparator" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
-layout_mode = 2
-
-[node name="AnchorHint" type="Label" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
-layout_mode = 2
-theme_override_colors/font_color = Color(0.65, 0.72, 0.8, 1)
-text = "Точки (якоря): занятие и маршрутизация"
-
-[node name="AnchorFamilyLbl" type="Label" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
-layout_mode = 2
-text = "Семейство роли:"
-
-[node name="AnchorFamilyOption" type="OptionButton" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
-unique_name_in_owner = true
-layout_mode = 2
-
-[node name="AnchorRoleLbl" type="Label" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
-layout_mode = 2
-text = "Роль якоря:"
-
-[node name="AnchorRoleOption" type="OptionButton" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
-unique_name_in_owner = true
-layout_mode = 2
-
-[node name="AnchorWorldCheck" type="CheckBox" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Мировой якорь (без здания)"
-
-[node name="MarkerSettings" type="HBoxContainer" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
-layout_mode = 2
-
-[node name="YawLbl" type="Label" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox/MarkerSettings"]
-layout_mode = 2
-text = "Поворот:"
-
-[node name="ZoneMarkerYawSpin" type="SpinBox" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox/MarkerSettings"]
-unique_name_in_owner = true
-layout_mode = 2
-max_value = 270.0
-step = 90.0
-
-[node name="CapLbl" type="Label" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox/MarkerSettings"]
-layout_mode = 2
-text = "Ёмкость:"
-
-[node name="ZoneCapacitySpin" type="SpinBox" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox/MarkerSettings"]
-unique_name_in_owner = true
-layout_mode = 2
-min_value = 1.0
-max_value = 10000.0
-value = 1.0
-
-[node name="PlaceToolLbl" type="Label" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
-layout_mode = 2
-theme_override_colors/font_color = Color(0.65, 0.72, 0.8, 1)
-text = "Что ставить (ЛКМ по сетке):"
-
-[node name="ToolCellBtn" type="Button" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
-unique_name_in_owner = true
-layout_mode = 2
+text = "▣ Область   Q"
 toggle_mode = true
-text = "▦ Ячейка места"
 
-[node name="ToolAnchorBtn" type="Button" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+[node name="ToolPointBtn" type="Button" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
 unique_name_in_owner = true
 layout_mode = 2
+text = "◆ Точка     W"
 toggle_mode = true
-text = "📍 Якорь (по роли)"
 
-[node name="ClearCellsBtn" type="Button" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+[node name="ToolSelectBtn" type="Button" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Очистить ячейки места"
+text = "↖ Выделить  R"
+toggle_mode = true
 
-[node name="ClearAnchorsBtn" type="Button" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+[node name="HSepRole" type="HSeparator" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
+layout_mode = 2
+
+[node name="RoleLbl" type="Label" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
+layout_mode = 2
+text = "РОЛЬ"
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.8, 0.75, 0.5, 1)
+
+[node name="ZoneRoleOption" type="OptionButton" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Очистить якоря места"
 
-[node name="HSep2" type="HSeparator" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+[node name="RoleHintLbl" type="Label" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
 layout_mode = 2
-
-[node name="ZoneInfoLabel" type="Label" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
-unique_name_in_owner = true
-layout_mode = 2
+text = "Роль задаёт, что движок делает с зоной."
+theme_override_font_sizes/font_size = 11
 theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
 autowrap_mode = 2
 
-[node name="ZoneReqSep" type="HSeparator" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+[node name="HSepFunction" type="HSeparator" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
 layout_mode = 2
 
-[node name="ZoneReqTitle" type="Label" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+[node name="FunctionLbl" type="Label" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
 layout_mode = 2
-text = "Требования зон"
+text = "ФУНКЦИЯ"
+theme_override_font_sizes/font_size = 14
 theme_override_colors/font_color = Color(0.8, 0.75, 0.5, 1)
 
-[node name="ZoneReqChecklist" type="VBoxContainer" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox"]
+[node name="ZoneFunctionOption" type="OptionButton" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="ZoneFunctionPackLbl" type="Label" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
+autowrap_mode = 2
+text = "Смысл зоны приходит из пака контента."
+
+[node name="HSepLayer" type="HSeparator" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
+layout_mode = 2
+
+[node name="ZoneLayerRow" type="HBoxContainer" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
+layout_mode = 2
+
+[node name="ZoneLayerLabel" type="Label" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox/ZoneLayerRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Слой Y: 0"
+
+[node name="ZoneLayerDownBtn" type="Button" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox/ZoneLayerRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "−"
+
+[node name="ZoneLayerUpBtn" type="Button" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox/ZoneLayerRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "+"
+
+[node name="HSepView" type="HSeparator" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
+layout_mode = 2
+
+[node name="ShowAccessCheck" type="CheckBox" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Показать права"
+
+[node name="AccessAudienceOption" type="OptionButton" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="ZonesHintLbl" type="Label" parent="EditorUI/Root/ZonesPalettePanel/Scroll/PaletteVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
+autowrap_mode = 2
+text = "ЛКМ — применить, Shift+ЛКМ — к выделению, Shift+ПКМ — стереть, F — поворот, Del — удалить."
+
+[node name="ZonesInspectorPanel" type="PanelContainer" parent="EditorUI/Root"]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -308.0
+offset_top = 60.0
+offset_right = -8.0
+offset_bottom = -48.0
+grow_horizontal = 0
+grow_vertical = 2
+
+[node name="Scroll" type="ScrollContainer" parent="EditorUI/Root/ZonesInspectorPanel"]
+layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="InspectorVBox" type="VBoxContainer" parent="EditorUI/Root/ZonesInspectorPanel/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="ZoneInspectorTitle" type="Label" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Ничего не выбрано"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 15
+
+[node name="ZoneInspectorBody" type="VBoxContainer" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="IdLbl" type="Label" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox/ZoneInspectorBody"]
+layout_mode = 2
+text = "Идентификатор"
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
+
+[node name="ZoneIdEdit" type="LineEdit" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox/ZoneInspectorBody"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="NameLbl" type="Label" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox/ZoneInspectorBody"]
+layout_mode = 2
+text = "Имя"
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
+
+[node name="ZoneNameEdit" type="LineEdit" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox/ZoneInspectorBody"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="InspRoleLbl" type="Label" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox/ZoneInspectorBody"]
+layout_mode = 2
+text = "Роль"
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
+
+[node name="ZoneInspectorRoleOption" type="OptionButton" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox/ZoneInspectorBody"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="ZoneFunctionRow" type="VBoxContainer" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox/ZoneInspectorBody"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 2
 
-[node name="ZoneReqEmptyLabel" type="Label" parent="EditorUI/Root/ZonesPanel/Scroll/ZonesVBox/ZoneReqChecklist"]
+[node name="InspFunctionLbl" type="Label" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox/ZoneInspectorBody/ZoneFunctionRow"]
+layout_mode = 2
+text = "Функция"
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
+
+[node name="ZoneInspectorFunctionOption" type="OptionButton" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox/ZoneInspectorBody/ZoneFunctionRow"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="ZoneInspectorPackLbl" type="Label" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox/ZoneInspectorBody/ZoneFunctionRow"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.55, 0.7, 0.55, 1)
+autowrap_mode = 2
+text = ""
+
+[node name="ZonePropsContainer" type="VBoxContainer" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox/ZoneInspectorBody"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="ZoneAccessRow" type="VBoxContainer" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox/ZoneInspectorBody"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="AccessLbl" type="Label" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox/ZoneInspectorBody/ZoneAccessRow"]
+layout_mode = 2
+text = "Кому запрещено"
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
+
+[node name="ZoneAccessContainer" type="HFlowContainer" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox/ZoneInspectorBody/ZoneAccessRow"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/h_separation = 4
+
+[node name="ZoneAnchorProps" type="VBoxContainer" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox/ZoneInspectorBody"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="DeleteZoneBtn" type="Button" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox/ZoneInspectorBody"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Удалить выделенное (Del)"
+
+[node name="HSepReq" type="HSeparator" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox"]
+layout_mode = 2
+
+[node name="ZoneReqTitle" type="Label" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox"]
+layout_mode = 2
+text = "Требования пака"
+theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.8, 0.75, 0.5, 1)
+
+[node name="ZoneReqChecklist" type="VBoxContainer" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="ZoneReqEmptyLabel" type="Label" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox/ZoneReqChecklist"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
 theme_override_font_sizes/font_size = 12
-text = "Нет требований для текущих зон."
+text = "Нет требований."
+
+[node name="HSepList" type="HSeparator" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox"]
+layout_mode = 2
+
+[node name="ZoneListTitle" type="Label" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox"]
+layout_mode = 2
+text = "ЗОНЫ ЗДАНИЯ"
+theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.8, 0.75, 0.5, 1)
+
+[node name="ZoneTree" type="Tree" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 220)
+allow_rmb_select = true
+hide_root = true
+
+[node name="ZoneWarningsLabel" type="Label" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.85, 0.75, 0.4, 1)
+theme_override_font_sizes/font_size = 11
+autowrap_mode = 2
+text = ""
 
 [node name="DecorPanel" type="PanelContainer" parent="EditorUI/Root"]
 unique_name_in_owner = true
@@ -1193,22 +1271,14 @@ value = 8.0
 
 [node name="EntranceLbl" type="Label" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
 layout_mode = 2
-text = "Вход (смещение X × Z от центра):"
+text = "Вход:"
 
-[node name="EntranceRow" type="HBoxContainer" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
-layout_mode = 2
-
-[node name="EntranceXSpin" type="SpinBox" parent="EditorUI/Root/MetadataPanel/MetadataVBox/EntranceRow"]
+[node name="EntranceDerivedLabel" type="Label" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
 unique_name_in_owner = true
 layout_mode = 2
-min_value = -32.0
-max_value = 32.0
-
-[node name="EntranceZSpin" type="SpinBox" parent="EditorUI/Root/MetadataPanel/MetadataVBox/EntranceRow"]
-unique_name_in_owner = true
-layout_mode = 2
-min_value = -32.0
-max_value = 32.0
+theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
+autowrap_mode = 2
+text = "Задаётся дверью в режиме зон."
 
 [node name="PathHintLabel" type="Label" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
 unique_name_in_owner = true

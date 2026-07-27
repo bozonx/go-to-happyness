@@ -105,6 +105,7 @@ func _setup_controllers() -> void:
 	)
 	game.input_controller = SettlementInputController.new(game)
 	game.selection_controller = SettlementSelectionController.new(game)
+	game.query_helper = SettlementQueryHelper.new(game)
 	game.build_controller = SettlementBuildController.new(game)
 	game.hero_interaction_controller = SettlementHeroInteractionController.new(game)
 	game.construction_controller = SettlementConstructionController.new(game)
@@ -127,26 +128,26 @@ func _setup_hero_services() -> void:
 
 func _setup_workplace_and_visuals() -> void:
 	game.workplace_labor_service = WorkplaceLaborService.new()
-	game.workplace_labor_service.configure(
-		game.settlement,
-		game.citizens,
-		func() -> Node3D: return game.campfire_node,
-		func() -> Node3D: return game.canteen,
-		func() -> Vector3: return game.canteen_position,
-		game.warehouse_positions,
-		game.construction_sites,
-		game.demolition_sites,
-		game.tree_positions,
-		func() -> Array[Vector3]: return game.water_source_positions,
-		game.craft_tent_positions,
-		game.dig_sites,
-		func(building): return game.fire_management_service.is_fire_lit(building),
-		game.update_interface,
-		game.workplace_controller.available_employer_capacity,
-		game.workplace_controller.builder_job_capacity,
-		func(site): return game.excavation_service.can_work_at_dig_site(site),
-		game.employment_centre_building
-	)
+	var port := WorkplaceLaborRuntimePort.new()
+	port.settlement = game.settlement
+	port.citizens = game.citizens
+	port.campfire_node_getter = func() -> Node3D: return game.campfire_node
+	port.canteen_getter = func() -> Node3D: return game.canteen
+	port.canteen_position_getter = func() -> Vector3: return game.canteen_position
+	port.warehouse_positions = game.warehouse_positions
+	port.construction_sites = game.construction_sites
+	port.demolition_sites = game.demolition_sites
+	port.tree_positions = game.tree_positions
+	port.water_source_positions_getter = func() -> Array[Vector3]: return game.water_source_positions
+	port.craft_tent_positions = game.craft_tent_positions
+	port.dig_sites = game.dig_sites
+	port.is_fire_lit = func(building): return game.fire_management_service.is_fire_lit(building)
+	port.update_interface = game.update_interface
+	port.available_employer_capacity = game.workplace_controller.available_employer_capacity
+	port.builder_job_capacity = game.workplace_controller.builder_job_capacity
+	port.can_work_at_dig_site = func(site): return game.excavation_service.can_work_at_dig_site(site)
+	port.employment_centre_building_getter = game.employment_centre_building
+	game.workplace_labor_service.configure(port)
 	game.building_visuals_service = BuildingVisualsService.new()
 	game.building_visuals_service.configure(
 		game.entrance_lights,
@@ -364,42 +365,42 @@ func _setup_building_maintenance() -> void:
 
 func _setup_settlement_survival_and_daily_rules() -> void:
 	game.settlement_survival_service = SettlementSurvivalService.new()
-	game.settlement_survival_service.configure(
-		game.settlement,
-		game.day_cycle,
-		game.clock,
-		game.citizens,
-		game.random,
-		game.weather_state,
-		game.building_registry,
-		game.fire_management_service,
-		func() -> int: return game.tent_weather,
-		func() -> Node3D: return game.entrance_stone,
-		func() -> Variant: return game.event_service,
-		func(): return game.simulation_tick_controller.has_lit_communal_fire(),
-		game.add_message,
-		func(citizen): return game.simulation_tick_controller.is_citizen_work_time(citizen),
-		func(): return game.simulation_tick_controller.is_work_time()
-	)
+	var survival_port := SettlementSurvivalRuntimePort.new()
+	survival_port.settlement = game.settlement
+	survival_port.day_cycle = game.day_cycle
+	survival_port.clock = game.clock
+	survival_port.citizens = game.citizens
+	survival_port.random = game.random
+	survival_port.weather_state = game.weather_state
+	survival_port.building_registry = game.building_registry
+	survival_port.fire_management_service = game.fire_management_service
+	survival_port.tent_weather_getter = func() -> int: return game.tent_weather
+	survival_port.entrance_stone_getter = func() -> Node3D: return game.entrance_stone
+	survival_port.event_service_getter = func() -> Variant: return game.event_service
+	survival_port.has_lit_communal_fire = func(): return game.simulation_tick_controller.has_lit_communal_fire()
+	survival_port.add_message = game.add_message
+	survival_port.is_citizen_work_time = func(citizen): return game.simulation_tick_controller.is_citizen_work_time(citizen)
+	survival_port.is_work_time = func(): return game.simulation_tick_controller.is_work_time()
+	game.settlement_survival_service.configure(survival_port)
 	game.settlement_daily_rules_service = SettlementDailyRulesService.new()
-	game.settlement_daily_rules_service.configure(
-		game.settlement,
-		game.day_cycle,
-		game.citizens,
-		game.trail_field,
-		func() -> Variant: return game.event_service,
-		game.citizen_needs_service,
-		func() -> Node3D: return game.canteen,
-		func() -> int: return game.tent_weather,
-		game.add_message,
-		game.update_interface,
-		game.apply_building_wear_and_repairs,
-		func(): game.resource_pile_service.decay_resource_piles(),
-		func(): return game.building_registry.housing_capacity(),
-		func(): game.settlement_survival_service.check_daily_departures(),
-		game.stored_resources,
-		game.warehouse_capacity
-	)
+	var daily_port := SettlementDailyRulesRuntimePort.new()
+	daily_port.settlement = game.settlement
+	daily_port.day_cycle = game.day_cycle
+	daily_port.citizens = game.citizens
+	daily_port.trail_field = game.trail_field
+	daily_port.event_service_getter = func() -> Variant: return game.event_service
+	daily_port.citizen_needs_service = game.citizen_needs_service
+	daily_port.canteen_getter = func() -> Node3D: return game.canteen
+	daily_port.tent_weather_getter = func() -> int: return game.tent_weather
+	daily_port.add_message = game.add_message
+	daily_port.update_interface = game.update_interface
+	daily_port.apply_building_wear_and_repairs = game.apply_building_wear_and_repairs
+	daily_port.decay_resource_piles = func(): game.resource_pile_service.decay_resource_piles()
+	daily_port.total_housing_slots = func(): return game.building_registry.housing_capacity()
+	daily_port.check_daily_departures = func(): game.settlement_survival_service.check_daily_departures()
+	daily_port.stored_resources = game.stored_resources
+	daily_port.warehouse_capacity = game.warehouse_capacity
+	game.settlement_daily_rules_service.configure(daily_port)
 
 
 func _setup_building_lifecycle() -> void:
@@ -490,30 +491,30 @@ func _setup_building_lifecycle() -> void:
 func _setup_excavation_and_factory() -> void:
 	game.excavation_service = ExcavationService.new()
 	game.excavation_service.dig_site_scene = DigSiteScene
-	game.excavation_service.configure(
-		game.settlement,
-		game.citizens,
-		game.dig_sites,
-		game.dig_cells,
-		game.exhausted_dig_cells,
-		game.random,
-		game.update_interface,
-		game.update_workers,
-		game.request_courier_dispatch,
-		game.placement_key,
-		game.is_clear_of_objects,
-		game.employment_center_position,
-		func(show): game.build_controller.show_territory_overlay(show),
-		func(world_position): game.build_controller.move_selection(world_position),
-		game.selection_controller.show_selected_citizen_menu,
-		func() -> Citizen: return game.selected_builder,
-		func() -> Vector3: return game.selected_world_position,
-		func() -> Node3D: return game.world_setup.selection_marker,
-		func() -> StandardMaterial3D: return game.world_setup.selection_material,
-		game.set_dig_mode,
-		game.set_build_mode,
-		func(node: Node) -> void: game.add_child(node)
-	)
+	var excavation_port := ExcavationRuntimePort.new()
+	excavation_port.settlement = game.settlement
+	excavation_port.citizens = game.citizens
+	excavation_port.dig_sites = game.dig_sites
+	excavation_port.dig_cells = game.dig_cells
+	excavation_port.exhausted_dig_cells = game.exhausted_dig_cells
+	excavation_port.random = game.random
+	excavation_port.update_interface = game.update_interface
+	excavation_port.update_workers = game.update_workers
+	excavation_port.request_courier_dispatch = game.request_courier_dispatch
+	excavation_port.placement_key = game.placement_key
+	excavation_port.is_clear_of_objects = game.is_clear_of_objects
+	excavation_port.employment_center_position = game.employment_center_position
+	excavation_port.show_territory_overlay = func(show): game.build_controller.show_territory_overlay(show)
+	excavation_port.move_selection = func(world_position): game.build_controller.move_selection(world_position)
+	excavation_port.show_selected_citizen_menu = game.selection_controller.show_selected_citizen_menu
+	excavation_port.selected_builder_getter = func() -> Citizen: return game.selected_builder
+	excavation_port.selected_world_position_getter = func() -> Vector3: return game.selected_world_position
+	excavation_port.selection_marker_getter = func() -> Node3D: return game.world_setup.selection_marker
+	excavation_port.selection_material_getter = func() -> StandardMaterial3D: return game.world_setup.selection_material
+	excavation_port.set_dig_mode = game.set_dig_mode
+	excavation_port.set_build_mode = game.set_build_mode
+	excavation_port.add_child = func(node: Node) -> void: game.add_child(node)
+	game.excavation_service.configure(excavation_port)
 	game.factory_service = FactoryService.new()
 	game.factory_service.configure(game.settlement, game.building_registry, game.add_message, game.random)
 
@@ -574,66 +575,66 @@ func _setup_citizen_needs_and_orders() -> void:
 
 func _setup_trade_and_logistics() -> void:
 	game.trade_service = TradeService.new()
-	game.trade_service.configure(
-		game.settlement,
-		game.citizens,
-		game.logistics_runtime.queued_trades,
-		game.logistics_runtime.pending_trades,
-		game.warehouse_positions,
-		game.ui_manager.market_menu,
-		func() -> Node3D: return game.selected_market,
-		func() -> Node3D: return game.entrance_stone,
-		func(): return game.logistics_controller.get_delivery_position(),
-		game.update_interface,
-		func(): game.workplace_controller.refresh_market_menu(),
-		game.request_courier_dispatch,
-		func(): return game.simulation_tick_controller.total_game_minutes(),
-		func(citizen_id): return game.citizen_factory.citizen_for_ai_id(citizen_id),
-		func(position, resources, is_backpack_pile): return game.resource_pile_service.create_resource_pile(position, resources, is_backpack_pile),
-		game.update_workers
-	)
+	var trade_port := TradeRuntimePort.new()
+	trade_port.settlement = game.settlement
+	trade_port.citizens = game.citizens
+	trade_port.queued_trades = game.logistics_runtime.queued_trades
+	trade_port.pending_trades = game.logistics_runtime.pending_trades
+	trade_port.warehouse_positions = game.warehouse_positions
+	trade_port.market_menu = game.ui_manager.market_menu
+	trade_port.selected_market_getter = func() -> Node3D: return game.selected_market
+	trade_port.entrance_stone_getter = func() -> Node3D: return game.entrance_stone
+	trade_port.get_delivery_position = func(): return game.logistics_controller.get_delivery_position()
+	trade_port.update_interface = game.update_interface
+	trade_port.refresh_market_menu = func(): game.workplace_controller.refresh_market_menu()
+	trade_port.request_courier_dispatch = game.request_courier_dispatch
+	trade_port.total_game_minutes = func(): return game.simulation_tick_controller.total_game_minutes()
+	trade_port.citizen_for_ai_id = func(citizen_id): return game.citizen_factory.citizen_for_ai_id(citizen_id)
+	trade_port.create_resource_pile = func(position, resources, is_backpack_pile): return game.resource_pile_service.create_resource_pile(position, resources, is_backpack_pile)
+	trade_port.update_workers = game.update_workers
+	game.trade_service.configure(trade_port)
 	game.storage_routing_service = StorageRoutingService.new()
-	game.storage_routing_service.configure(
-		game.settlement,
-		game.warehouse_positions,
-		game.resource_piles,
-		func() -> Citizen: return game.player_citizen,
-		SettlementGame.INTERACTION_RANGE,
-		game.is_route_reachable,
-		game.find_path_around_houses,
-		game.nav_grid,
-		game.dig_sites,
-		func(site): return game.excavation_service.can_work_at_dig_site(site),
-		func(site, depth): return game.excavation_service.resource_for_depth(site, depth),
-		game.update_interface
-	)
+	var routing_port := StorageRoutingRuntimePort.new()
+	routing_port.settlement = game.settlement
+	routing_port.warehouse_positions = game.warehouse_positions
+	routing_port.resource_piles = game.resource_piles
+	routing_port.player_citizen_getter = func() -> Citizen: return game.player_citizen
+	routing_port.interaction_range = SettlementGame.INTERACTION_RANGE
+	routing_port.is_route_reachable = game.is_route_reachable
+	routing_port.find_path_around_houses = game.find_path_around_houses
+	routing_port.nav_grid = game.nav_grid
+	routing_port.dig_sites = game.dig_sites
+	routing_port.can_work_at_dig_site = func(site): return game.excavation_service.can_work_at_dig_site(site)
+	routing_port.resource_for_depth = func(site, depth): return game.excavation_service.resource_for_depth(site, depth)
+	routing_port.update_interface = game.update_interface
+	game.storage_routing_service.configure(routing_port)
 
 
 func _setup_courier_system() -> void:
 	game.courier_dispatcher = CourierDispatcher.new()
-	game.courier_dispatcher.configure(
-		game.citizens,
-		game.warehouse_positions,
-		game.storage_routing_service,
-		func() -> float: return game.runtime_seconds,
-		game.publish_courier_tasks,
-		func(task): return game.courier_task_service.is_courier_task_valid(task),
-		func(courier, task): return game.courier_task_service.start_courier_task(courier, task),
-		func(courier, task): game.courier_task_service.cancel_courier_task(courier, task),
-		func(task): game.courier_task_service.release_task_warehouse_reservation(task)
-	)
+	var dispatch_port := CourierDispatchRuntimePort.new()
+	dispatch_port.citizens = game.citizens
+	dispatch_port.warehouse_positions = game.warehouse_positions
+	dispatch_port.storage_routing = game.storage_routing_service
+	dispatch_port.runtime_seconds_getter = func() -> float: return game.runtime_seconds
+	dispatch_port.publish_tasks = game.publish_courier_tasks
+	dispatch_port.is_task_valid = func(task): return game.courier_task_service.is_courier_task_valid(task)
+	dispatch_port.start_task = func(courier, task): return game.courier_task_service.start_courier_task(courier, task)
+	dispatch_port.cancel_task = func(courier, task): game.courier_task_service.cancel_courier_task(courier, task)
+	dispatch_port.release_reservation = func(task): game.courier_task_service.release_task_warehouse_reservation(task)
+	game.courier_dispatcher.configure(dispatch_port)
 	game.storage_delivery_service = StorageDeliveryService.new()
-	game.storage_delivery_service.configure(
-		game.settlement,
-		game.warehouse_positions,
-		game.courier_dispatcher,
-		game.storage_routing_service,
-		func(task): game.courier_task_service.release_task_warehouse_reservation(task),
-		func(position, resource_type, amount): game.resource_pile_service.drop_resource_pile(position, resource_type, amount),
-		game.update_interface,
-		game.request_courier_dispatch,
-		func(citizen, minimum_hours): return game.simulation_tick_controller.send_citizen_to_leisure(citizen, minimum_hours)
-	)
+	var delivery_port := StorageDeliveryRuntimePort.new()
+	delivery_port.settlement = game.settlement
+	delivery_port.warehouse_positions = game.warehouse_positions
+	delivery_port.courier_dispatcher = game.courier_dispatcher
+	delivery_port.storage_routing = game.storage_routing_service
+	delivery_port.release_reservation = func(task): game.courier_task_service.release_task_warehouse_reservation(task)
+	delivery_port.drop_resource_pile = func(position, resource_type, amount): game.resource_pile_service.drop_resource_pile(position, resource_type, amount)
+	delivery_port.update_interface = game.update_interface
+	delivery_port.request_courier_dispatch = game.request_courier_dispatch
+	delivery_port.send_citizen_to_leisure = func(citizen, minimum_hours): return game.simulation_tick_controller.send_citizen_to_leisure(citizen, minimum_hours)
+	game.storage_delivery_service.configure(delivery_port)
 	game.courier_task_publisher = CourierTaskPublisher.new()
 	var publisher_port := CourierTaskPublisherRuntimePort.new()
 	publisher_port.settlement = game.settlement
@@ -697,30 +698,30 @@ func _setup_courier_system() -> void:
 
 func _setup_actuator_and_events() -> void:
 	game.actuator_bridge = SettlementActuatorBridge.new()
-	game.actuator_bridge.configure(
-		game.canteen_service,
-		game.courier_dispatcher,
-		game.construction,
-		game.settlement,
-		game.building_registry,
-		game.storage_delivery_service,
-		game.factory_service,
-		game.sawmills,
-		game.water_collector_service,
-		game.excavation_service,
-		game.citizen_needs_service,
-		game.trade_service,
-		game.resource_piles,
-		func() -> float: return game.game_minutes,
-		func() -> float: return game.runtime_seconds,
-		game.update_interface,
-		game.request_courier_dispatch,
-		func() -> void: if game.citizen_ai != null: game.citizen_ai.request_decision_refresh(),
-		func(): game.simulation_tick_controller.refresh_living_statuses(),
-		func(position, resource_type, amount): game.resource_pile_service.drop_resource_pile(position, resource_type, amount),
-		func(building): return game.fire_management_service.fire_state_for(building),
-		func(building, fire_state): game.fire_management_service.apply_fire_state(building, fire_state)
-	)
+	var actuator_port := SettlementActuatorRuntimePort.new()
+	actuator_port.canteen_service = game.canteen_service
+	actuator_port.courier_dispatcher = game.courier_dispatcher
+	actuator_port.construction = game.construction
+	actuator_port.settlement = game.settlement
+	actuator_port.building_registry = game.building_registry
+	actuator_port.storage_delivery_service = game.storage_delivery_service
+	actuator_port.factory_service = game.factory_service
+	actuator_port.sawmills = game.sawmills
+	actuator_port.water_collector_service = game.water_collector_service
+	actuator_port.excavation_service = game.excavation_service
+	actuator_port.citizen_needs_service = game.citizen_needs_service
+	actuator_port.trade_service = game.trade_service
+	actuator_port.resource_piles = game.resource_piles
+	actuator_port.game_minutes_query = func() -> float: return game.game_minutes
+	actuator_port.runtime_seconds_query = func() -> float: return game.runtime_seconds
+	actuator_port.update_interface = game.update_interface
+	actuator_port.request_courier_dispatch = game.request_courier_dispatch
+	actuator_port.request_decision_refresh = func() -> void: if game.citizen_ai != null: game.citizen_ai.request_decision_refresh()
+	actuator_port.refresh_living_statuses = func(): game.simulation_tick_controller.refresh_living_statuses()
+	actuator_port.drop_resource_pile = func(position, resource_type, amount): game.resource_pile_service.drop_resource_pile(position, resource_type, amount)
+	actuator_port.fire_state_query = func(building): return game.fire_management_service.fire_state_for(building)
+	actuator_port.apply_fire_state = func(building, fire_state): game.fire_management_service.apply_fire_state(building, fire_state)
+	game.actuator_bridge.configure(actuator_port)
 	game.simulation_event_dispatcher = SimulationEventDispatcher.new()
 	game.simulation_event_dispatcher.configure({
 		"start_meal": func(hour): game.canteen_service.start_meal(hour),

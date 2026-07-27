@@ -9,7 +9,6 @@ extends SceneTree
 ## single object while every catalog assertion still passed.
 
 const EditorScene = preload("res://game/features/buildings/presentation/editor/building_editor.tscn")
-const PlaceZoneRecordScript = preload("res://game/features/buildings/domain/editor/place_zone_record.gd")
 const DecorObjectRecordScript = preload("res://game/features/buildings/domain/editor/decor_object_record.gd")
 const BlueprintBlockScript = preload("res://game/features/buildings/domain/editor/blueprint_block.gd")
 
@@ -121,11 +120,11 @@ func _run() -> void:
 	# Re-select first object since undo/redo may have cleared the selection.
 	decor.select_object(editor.blueprint.objects[0].id)
 	assert(decor.find_record(decor.selected_object_id) != null, "object re-selected before zone test")
-	var zone := PlaceZoneRecordScript.new()
-	zone.zone_id = &"test_zone_1"
-	zone.zone_name = "Тестовая зона"
-	zone.cells = [Vector3i(2, 0, 2)]
-	editor.blueprint.place_zones.append(zone)
+	var zone := ZoneAreaRecord.new()
+	zone.id = &"test_zone_1"
+	zone.area_name = "Тестовая зона"
+	zone.add_rect(Rect2i(2, 2, 1, 1))
+	editor.blueprint.areas.append(zone)
 	decor._refresh_zone_filter_options()
 	# Assign selected object to the zone.
 	decor.find_record(decor.selected_object_id).owner_zone_id = &"test_zone_1"
@@ -224,11 +223,11 @@ func _run() -> void:
 
 	# Zone bounds: an object at cell centre (x=1.5) must map to cell 1 via floor,
 	# not cell 2 via round. Create a zone at cell (1,0,1) and assign the object.
-	var zone2 := PlaceZoneRecordScript.new()
-	zone2.zone_id = &"test_zone_bounds"
-	zone2.zone_name = "Зона проверки границ"
-	zone2.cells = [Vector3i(1, 0, 1)]
-	editor.blueprint.place_zones.append(zone2)
+	var zone2 := ZoneAreaRecord.new()
+	zone2.id = &"test_zone_bounds"
+	zone2.area_name = "Зона проверки границ"
+	zone2.add_rect(Rect2i(1, 1, 1, 1))
+	editor.blueprint.areas.append(zone2)
 	var bounds_obj: DecorObjectRecordScript = editor.blueprint.objects[0]
 	bounds_obj.pos = Vector3(1.5, 0.0, 1.5)
 	bounds_obj.owner_zone_id = &"test_zone_bounds"
@@ -242,7 +241,15 @@ func _run() -> void:
 
 	# Clean up: remove the zone and revert the object.
 	decor.on_zone_deleted(&"test_zone_bounds")
-	editor.blueprint.place_zones.erase(zone2)
+	editor.blueprint.areas.erase(zone2)
+
+	# A room must be reachable, so the blueprint needs a door before it validates
+	# (active_zones.md §8.1) — the decor test authors rooms, not just labels.
+	var door := ZoneAnchorRecord.new()
+	door.id = &"door"
+	door.role = ZoneAnchorRecord.ROLE_DOOR
+	door.pos = Vector3(0.5, 0.0, 0.0)
+	editor.blueprint.anchors.append(door)
 
 	# The whole thing must serialize.
 	var json: String = editor.blueprint.to_json()

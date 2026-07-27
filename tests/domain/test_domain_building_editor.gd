@@ -9,7 +9,6 @@ const BuildingMaterialCatalogScript = preload("res://game/features/buildings/dom
 const BlueprintBlockScript = preload("res://game/features/buildings/domain/editor/blueprint_block.gd")
 const BuildingBlueprintScript = preload("res://game/features/buildings/domain/editor/building_blueprint.gd")
 const BuildingGridModelScript = preload("res://game/features/buildings/domain/editor/building_grid_model.gd")
-const PlaceZoneRecordScript = preload("res://game/features/buildings/domain/editor/place_zone_record.gd")
 const ZoneAnchorRecordScript = preload("res://game/features/buildings/domain/editor/zone_anchor_record.gd")
 const BuildingZoneServiceScript = preload("res://game/features/buildings/application/building_zone_service.gd")
 const ContentIndexScript = preload("res://game/features/content/application/content_index.gd")
@@ -28,7 +27,8 @@ static func run_all() -> void:
 	_test_material_catalog_and_costs()
 	_test_material_era_filtering()
 	_test_underground_requires_earth_era()
-	_test_zone_subtype_round_trip()
+	_test_zone_function_round_trip()
+	_test_zone_invariants()
 	_test_grid_place_erase()
 	_test_grid_shared_cell()
 	_test_grid_rotation_rules()
@@ -37,7 +37,8 @@ static func run_all() -> void:
 	_test_grid_blueprint_sync()
 	_test_zones_and_metadata_round_trip()
 	_test_runtime_zone_assignment()
-	_test_runtime_zone_subtype_survives()
+	_test_runtime_zone_function_survives()
+	_test_runtime_zone_falls_back_to_centre()
 	_test_invalid_blueprints_are_rejected()
 	_test_era_material_replacement()
 	_test_style_resolver_fallback_chain()
@@ -230,27 +231,25 @@ static func _test_underground_requires_earth_era() -> void:
 	assert(tent_underground.validation_errors().is_empty())
 
 
-static func _test_zone_subtype_round_trip() -> void:
+## Meaning comes from a pack, so a "cinema" is a function id plus properties on
+## an ordinary room — not a zone kind the engine has to know about.
+static func _test_zone_function_round_trip() -> void:
 	var bp := BuildingBlueprintScript.new()
 	bp.id = &"town_park"
-	var leisure := PlaceZoneRecordScript.new()
-	leisure.zone_id = &"z_park"
-	leisure.kind = PlaceZoneRecordScript.KIND_LEISURE
-	leisure.subtype = &"cinema"
-	bp.place_zones.append(leisure)
-	var gate := PlaceZoneRecordScript.new()
-	gate.zone_id = &"z_gate"
-	gate.kind = PlaceZoneRecordScript.KIND_SPECIAL
-	gate.subtype = &"entrance_sign"
-	bp.place_zones.append(gate)
-	var restored := BuildingBlueprintScript.from_json(bp.to_json())
-	assert(restored != null)
-	assert(restored.place_zones[0].kind == PlaceZoneRecordScript.KIND_LEISURE)
-	assert(restored.place_zones[0].subtype == &"cinema")
-	assert(restored.place_zones[1].kind == PlaceZoneRecordScript.KIND_SPECIAL)
-	assert(restored.place_zones[1].subtype == &"entrance_sign")
-	assert(&"cinema" in PlaceZoneRecordScript.subtypes_for_kind(PlaceZoneRecordScript.KIND_LEISURE))
-	assert(&"entrance_sign" in PlaceZoneRecordScript.subtypes_for_kind(PlaceZoneRecordScript.KIND_SPECIAL))
+	var leisure := ZoneAreaRecord.new()
+	leisure.id = &"z_park"
+	leisure.function = &"core:leisure"
+	leisure.properties = {"flavour": "cinema", "visitors": 12}
+	leisure.add_rect(Rect2i(0, 0, 2, 2))
+	bp.areas.append(leisure)
+	var restored := BuildingBlueprintScript.from_dict(bp.to_dict())
+	assert(restored.areas.size() == 1)
+	assert(restored.areas[0].function == &"core:leisure")
+	assert(restored.areas[0].properties["flavour"] == "cinema")
+	assert(restored.areas[0].properties["visitors"] == 12)
+	# The pack really is the source of the vocabulary.
+	assert(ZoneFunctionCatalog.has_function(&"core:leisure"))
+	assert(ZoneFunctionCatalog.pack_of(&"core:leisure") == &"core")
 
 
 static func _test_grid_place_erase() -> void:
@@ -349,78 +348,140 @@ static func _test_zones_and_metadata_round_trip() -> void:
 	var bp := BuildingBlueprintScript.new()
 	bp.id = &"trade_post"
 	bp.footprint = Vector2i(4, 4)
-	bp.entrance = Vector2i(0, -2)
-	bp.worker_entrances = [Vector2i(0, -2), Vector2i(0, 2)]
 
-	var place := PlaceZoneRecordScript.new()
-	place.zone_id = &"z_trade"
-	place.zone_name = "Торговый пост"
-	place.kind = PlaceZoneRecordScript.KIND_TRADE
-	place.profession = &"seller"
-	place.max_workers = 2
-	place.cells = [Vector3i(1, 0, 1), Vector3i(2, 0, 1)]
-	bp.place_zones.append(place)
-	# Tier-2 slot (counter) and tier-2 tray, plus a tier-3 routing door.
-	var counter := ZoneAnchorRecordScript.new()
-	counter.anchor_id = &"counter"
-	counter.owner_zone_id = &"z_trade"
-	counter.role = ZoneAnchorRecordScript.ROLE_COUNTER
+	var room := ZoneAreaRecord.new()
+	room.id = &"z_trade"
+	room.area_name = "Торговый пост"
+	room.function = &"core:trade"
+	room.properties = {"profession": "seller", "max_workers": 2}
+	room.add_rect(Rect2i(1, 1, 2, 1))
+	bp.areas.append(room)
+
+	var counter := ZoneAnchorRecord.new()
+	counter.id = &"counter"
+	counter.owner_id = &"z_trade"
+	counter.role = ZoneAnchorRecord.ROLE_SLOT
+	counter.activity = &"core:serve"
 	counter.pos = Vector3(1.5, 0.0, 1.5)
-	bp.zone_anchors.append(counter)
-	var tray := ZoneAnchorRecordScript.new()
-	tray.anchor_id = &"out"
-	tray.owner_zone_id = &"z_trade"
-	tray.role = ZoneAnchorRecordScript.ROLE_OUTPUT_TRAY
-	tray.pos = Vector3(3.5, 0.0, 1.5)
+	bp.anchors.append(counter)
+	var line := ZoneAnchorRecord.new()
+	line.id = &"q1"
+	line.owner_id = &"z_trade"
+	line.role = ZoneAnchorRecord.ROLE_QUEUE
+	line.target_id = &"counter"
+	line.pos = Vector3(1.5, 0.0, 0.5)
+	bp.anchors.append(line)
+	var tray := ZoneAnchorRecord.new()
+	tray.id = &"out"
+	tray.owner_id = &"z_trade"
+	tray.role = ZoneAnchorRecord.ROLE_STORAGE
+	tray.direction = ZoneAnchorRecord.DIRECTION_OUT
+	tray.pos = Vector3(2.5, 0.0, 1.5)
 	tray.capacity = 80
-	bp.zone_anchors.append(tray)
-	var door := ZoneAnchorRecordScript.new()
-	door.anchor_id = &"vdoor"
-	door.owner_zone_id = &"z_trade"
-	door.role = ZoneAnchorRecordScript.ROLE_VISITOR_DOOR
-	door.pos = Vector3(1.5, 0.0, 0.0)
-	bp.zone_anchors.append(door)
+	bp.anchors.append(tray)
+	# Two doors: one public, one staff-only. Entrance offsets are derived from
+	# them — the format has no separate entrance fields any more.
+	var front := ZoneAnchorRecord.new()
+	front.id = &"front"
+	front.owner_id = &"z_trade"
+	front.role = ZoneAnchorRecord.ROLE_DOOR
+	front.pos = Vector3(2.0, 0.0, 0.0)
+	bp.anchors.append(front)
+	var back := ZoneAnchorRecord.new()
+	back.id = &"back"
+	back.owner_id = &"z_trade"
+	back.role = ZoneAnchorRecord.ROLE_DOOR
+	back.deny = [ZoneAccess.AUDIENCE_VISITOR]
+	back.pos = Vector3(2.0, 0.0, 4.0)
+	bp.anchors.append(back)
 
-	var restored := BuildingBlueprintScript.from_json(bp.to_json())
+	var restored := BuildingBlueprintScript.from_dict(bp.to_dict())
 	assert(restored.footprint == Vector2i(4, 4))
-	assert(restored.entrance == Vector2i(0, -2))
-	assert(restored.worker_entrances.size() == 2 and restored.worker_entrances[1] == Vector2i(0, 2))
-	assert(restored.place_zones.size() == 1)
-	assert(restored.zone_anchors.size() == 3)
-	var rp: PlaceZoneRecord = restored.place_zones[0]
-	assert(rp.zone_id == &"z_trade")
-	assert(rp.kind == PlaceZoneRecordScript.KIND_TRADE)
-	assert(rp.profession == &"seller")
-	assert(rp.max_workers == 2)
-	assert(rp.cells == [Vector3i(1, 0, 1), Vector3i(2, 0, 1)])
+	assert(restored.areas.size() == 1)
+	assert(restored.anchors.size() == 5)
+	var room_back: ZoneAreaRecord = restored.areas[0]
+	assert(room_back.id == &"z_trade")
+	assert(room_back.function == &"core:trade")
+	assert(room_back.properties["profession"] == "seller")
+	assert(room_back.contains_cell(Vector2i(2, 1)))
 
-	# Denormalization groups the anchors back under the place; the routing door
-	# is excluded from work zones and surfaces via routing_anchor_definitions.
+	# Entrances derive from doors: the visitor one is the main entrance, and the
+	# staff list covers both, because a public door also admits staff.
+	assert(restored.entrance_offset() == Vector2i(0, -2))
+	var staff := restored.worker_entrance_offsets()
+	assert(staff.size() == 2 and Vector2i(0, 2) in staff, str(staff))
+
+	# Denormalization groups points under their owner; doors go to routing.
 	var runtime_defs := restored.runtime_zone_definitions()
 	assert(runtime_defs.size() == 1)
 	var def: Dictionary = runtime_defs[0]
-	assert(def["work_anchors"].size() == 1)
-	assert(def["work_anchors"][0]["action"] == "counter")
-	assert(def["storage_trays"].has("output"))
-	assert(def["storage_trays"]["output"]["capacity"] == 80)
-	assert(restored.routing_anchor_definitions().size() == 1)
-	assert(restored.routing_anchor_definitions()[0]["role"] == "visitor_door")
+	assert(def["slots"].size() == 1)
+	assert(def["slots"][0]["activity"] == "core:serve")
+	assert(def["queue"].size() == 1)
+	assert(def["storage"].size() == 1 and def["storage"][0]["capacity"] == 80)
+	assert(restored.routing_anchor_definitions().size() == 2)
 
-	# Legacy `work_zones[]` files still load via built-in migration.
-	var legacy := {
-		"version": 1, "id": "legacy_post", "name": "Legacy", "category": "tent",
-		"footprint": [4, 4], "blocks": [],
-		"work_zones": [{
-			"id": "z_old", "kind": "workplace", "profession_type": "cook", "max_workers": 1,
-			"cells": [[0, 0, 0]],
-			"work_anchors": [{"id": "oven", "pos": [0.5, 0.0, 0.5], "rot": [0, 0, 0], "action": "work"}],
-			"storage_trays": {"input": {"pos": [1.5, 0.0, 0.5], "capacity": 40}},
-		}],
-	}
-	var migrated := BuildingBlueprintScript.from_dict(legacy)
-	assert(migrated.place_zones.size() == 1 and migrated.place_zones[0].zone_id == &"z_old")
-	assert(migrated.zone_anchors.size() == 2)
-	assert(migrated.runtime_zone_definitions()[0]["storage_trays"]["input"]["capacity"] == 40)
+	# The runtime reads employment out of pack properties, not engine fields.
+	var state := ZoneRuntimeState.from_definition(def)
+	assert(state.supports_role(&"seller"))
+	assert(state.max_workers() == 2)
+	assert(state.assign(7))
+	assert(state.position_for(7) == Vector3(1.5, 0.0, 1.5))
+
+
+## Rooms partition a building; overlays may overlap anything (§7.3, §7.4).
+static func _test_zone_invariants() -> void:
+	var bp := BuildingBlueprintScript.new()
+	bp.id = &"overlap_house"
+	bp.footprint = Vector2i(4, 4)
+	var first := ZoneAreaRecord.new()
+	first.id = &"room_a"
+	first.add_rect(Rect2i(0, 0, 2, 2))
+	bp.areas.append(first)
+	var second := ZoneAreaRecord.new()
+	second.id = &"room_b"
+	second.add_rect(Rect2i(1, 1, 2, 2))
+	bp.areas.append(second)
+	var door := ZoneAnchorRecord.new()
+	door.id = &"d"
+	door.role = ZoneAnchorRecord.ROLE_DOOR
+	door.pos = Vector3(0.5, 0.0, 0.0)
+	bp.anchors.append(door)
+	var errors := bp.validation_errors()
+	assert(_has_error(errors, "overlap"), str(errors))
+
+	second.rects.clear()
+	second.add_rect(Rect2i(2, 2, 2, 2))
+	assert(not _has_error(bp.validation_errors(), "overlap"))
+
+	# An overlay on top of a room is fine, and a slot behind a staff denial is not.
+	var overlay := ZoneAreaRecord.new()
+	overlay.id = &"private"
+	overlay.role = ZoneAreaRecord.ROLE_ACCESS
+	overlay.deny = [ZoneAccess.AUDIENCE_STAFF]
+	overlay.add_rect(Rect2i(0, 0, 2, 2))
+	bp.areas.append(overlay)
+	assert(not _has_error(bp.validation_errors(), "overlap"))
+	var slot := ZoneAnchorRecord.new()
+	slot.id = &"s"
+	slot.owner_id = &"room_a"
+	slot.role = ZoneAnchorRecord.ROLE_SLOT
+	slot.pos = Vector3(0.5, 0.0, 0.5)
+	bp.anchors.append(slot)
+	assert(_has_error(bp.validation_errors(), "staff are denied"), str(bp.validation_errors()))
+
+	# A room nobody can enter is an error; a building-wide door covers every room.
+	bp.anchors.erase(slot)
+	assert(not _has_error(bp.validation_errors(), "no door"))
+	door.owner_id = &"room_a"
+	assert(_has_error(bp.validation_errors(), "Room room_b has no door"), str(bp.validation_errors()))
+
+
+static func _has_error(errors: Array[String], fragment: String) -> bool:
+	for error in errors:
+		if error.contains(fragment):
+			return true
+	return false
 
 
 static func _test_grid_blueprint_sync() -> void:
@@ -442,12 +503,11 @@ static func _test_runtime_zone_assignment() -> void:
 	zone_service.configure_building(building, [{
 		"id": "cook_1",
 		"name": "Kitchen",
-		"kind": "workplace",
-		"profession_type": "cook",
-		"max_workers": 2,
-		"cells": [[0, 0, 0]],
-		"work_anchors": [{"id": "oven", "pos": [1.0, 0.0, 2.0], "rot": [0, 0, 0], "action": "work"}],
-		"storage_trays": {},
+		"role": "room",
+		"function": "core:kitchen",
+		"properties": {"profession": "cook", "max_workers": 2},
+		"slots": [{"id": "oven", "role": "slot", "pos": [1.0, 0.0, 2.0]}],
+		"fallback_pos": [0.5, 0.0, 0.5],
 	}])
 	assert(zone_service.supports_role(building, &"cook"))
 	assert(zone_service.role_capacity(building, &"cook") == 2)
@@ -455,22 +515,39 @@ static func _test_runtime_zone_assignment() -> void:
 	building.free()
 
 
-## A leisure zone's subtype must survive the definition -> runtime-state ->
-## meta -> definition round trip so the game knows which need it satisfies.
-static func _test_runtime_zone_subtype_survives() -> void:
+## Pack-defined meaning must survive definition -> runtime state -> meta ->
+## definition, or the game loses what the zone actually is.
+static func _test_runtime_zone_function_survives() -> void:
 	var building := Node3D.new()
 	var zone_service := BuildingZoneServiceScript.new()
 	zone_service.configure_building(building, [{
 		"id": "cinema_1",
 		"name": "Cinema",
-		"kind": "leisure",
-		"subtype": "cinema",
-		"max_workers": 0,
-		"cells": [[0, 0, 0]],
+		"role": "room",
+		"function": "core:leisure",
+		"properties": {"flavour": "cinema", "visitors": 20},
+		"fallback_pos": [0.5, 0.0, 0.5],
 	}])
 	var snapshot := zone_service.zone_snapshot(building)
 	assert(snapshot.size() == 1)
-	assert(snapshot[0].get("subtype", "") == "cinema", "subtype must be preserved at runtime")
+	assert(snapshot[0].get("function", "") == "core:leisure", "function must survive")
+	assert(snapshot[0]["properties"]["flavour"] == "cinema", "pack properties must survive")
+	building.free()
+
+
+## A room with no authored slots still gives citizens somewhere to stand (§5.2).
+static func _test_runtime_zone_falls_back_to_centre() -> void:
+	var building := Node3D.new()
+	var zone_service := BuildingZoneServiceScript.new()
+	zone_service.configure_building(building, [{
+		"id": "hall",
+		"role": "room",
+		"function": "core:civic",
+		"properties": {"profession": "official", "max_workers": 1},
+		"fallback_pos": [2.5, 0.0, 3.5],
+	}])
+	assert(zone_service.assign_to_zone(building, &"hall", &"official", 4))
+	assert(zone_service.work_position(building, &"official", 4) == Vector3(2.5, 0.0, 3.5))
 	building.free()
 
 

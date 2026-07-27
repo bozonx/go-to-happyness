@@ -9,7 +9,6 @@ extends RefCounted
 
 const FixtureDefinitionScript = preload("res://game/features/buildings/domain/editor/fixture_definition.gd")
 const FireSourceDefaultsScript = preload("res://game/features/buildings/domain/editor/fire_source_defaults.gd")
-const ZoneRequirementsScript = preload("res://game/features/buildings/domain/editor/zone_requirements.gd")
 
 var _editor: Node = null
 var _push_undo_cb: Callable = Callable()
@@ -115,13 +114,15 @@ func _refresh_fixture_inspector() -> void:
 		if String(_fixture_visual_option.get_item_metadata(i)) == fixture.visual_object_id:
 			_fixture_visual_option.select(i)
 			break
-	# Zone dropdown — populate from blueprint place_zones.
+	# Zone dropdown — populate from the blueprint's owning areas.
 	_fixture_zone_option.clear()
 	_fixture_zone_option.add_item("— здание —")
 	_fixture_zone_option.set_item_metadata(0, &"")
-	for zone in _editor.blueprint.place_zones:
-		_fixture_zone_option.add_item(zone.zone_name)
-		_fixture_zone_option.set_item_metadata(_fixture_zone_option.item_count - 1, zone.zone_id)
+	for area in _editor.blueprint.areas:
+		if not area.owns_content():
+			continue
+		_fixture_zone_option.add_item(area.display_name())
+		_fixture_zone_option.set_item_metadata(_fixture_zone_option.item_count - 1, area.id)
 	for i in _fixture_zone_option.item_count:
 		if _fixture_zone_option.get_item_metadata(i) == fixture.owner_zone_id:
 			_fixture_zone_option.select(i)
@@ -179,17 +180,16 @@ func delete_fixture() -> void:
 func _fixture_deletion_warning(fixture: FixtureDefinitionScript) -> String:
 	# Check only zones the fixture is relevant to: building-wide fixtures
 	# affect all zones, zone-specific ones only their own.
-	var zones_to_check: Array = _editor.blueprint.place_zones
-	if fixture.owner_zone_id != &"":
-		zones_to_check = zones_to_check.filter(
-			func(z): return z.zone_id == fixture.owner_zone_id)
-	for zone in zones_to_check:
-		var required := ZoneRequirementsScript.required_capabilities_for_zone(zone)
-		for cap in required:
+	var areas_to_check: Array[ZoneAreaRecord] = []
+	for area in _editor.blueprint.areas:
+		if fixture.owner_zone_id == &"" or area.id == fixture.owner_zone_id:
+			areas_to_check.append(area)
+	for area in areas_to_check:
+		for cap in ZoneFunctionCatalog.required_capabilities(area.function):
 			if not cap in fixture.capabilities:
 				continue
-			if not _zone_has_capability(zone.zone_id, cap, fixture):
-				return "Зона «%s» останется без %s" % [zone.zone_name, ZoneRequirementsScript.capability_label(cap)]
+			if not _zone_has_capability(area.id, cap, fixture):
+				return "Зона «%s» останется без «%s»" % [area.display_name(), cap]
 	return ""
 
 

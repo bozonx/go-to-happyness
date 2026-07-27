@@ -1,56 +1,312 @@
 {
-  "version": 2,
-  "id": "warehouse",
-  "name": "Склад под открытым небом",
-  "construction_style": "surface",
-  "category": "tent",
-  "fallback_building_id": "warehouse",
-  "grid_bounds": {
-    "x": 5,
-    "y": 1,
-    "z": 5
-  },
-  "footprint": [
-    5,
-    5
-  ],
-  "entrance": [
-    0,
-    -2
-  ],
-  "worker_entrances": [],
-  "blocks": [
-    {"pos": [0, 0, 0], "block_id": "slab", "material_id": "branches", "rot": 0, "variant": "0.25"},
-    {"pos": [1, 0, 0], "block_id": "slab", "material_id": "branches", "rot": 0, "variant": "0.25"},
-    {"pos": [2, 0, 0], "block_id": "slab", "material_id": "branches", "rot": 0, "variant": "0.25"},
-    {"pos": [3, 0, 0], "block_id": "slab", "material_id": "branches", "rot": 0, "variant": "0.25"},
-    {"pos": [4, 0, 0], "block_id": "slab", "material_id": "branches", "rot": 0, "variant": "0.25"},
-    {"pos": [0, 0, 1], "block_id": "slab", "material_id": "branches", "rot": 0, "variant": "0.25"},
-    {"pos": [1, 0, 1], "block_id": "slab", "material_id": "branches", "rot": 0, "variant": "0.25"},
-    {"pos": [2, 0, 1], "block_id": "slab", "material_id": "branches", "rot": 0, "variant": "0.25"},
-    {"pos": [3, 0, 1], "block_id": "slab", "material_id": "branches", "rot": 0, "variant": "0.25"},
-    {"pos": [4, 0, 1], "block_id": "slab", "material_id": "branches", "rot": 0, "variant": "0.25"},
-    {"pos": [0, 0, 2], "block_id": "slab", "material_id": "branches", "rot": 0, "variant": "0.25"},
-    {"pos": [1, 0, 2], "block_id": "slab", "material_id": "branches", "rot": 0, "variant": "0.25"},
-    {"pos": [2, 0, 2], "block_id": "slab", "material_id": "branches", "rot": 0, "variant": "0.25"},
-    {"pos": [3, 0, 2], "block_id": "slab", "material_id": "branches", "rot": 0, "variant": "0.25"},
-    {"pos": [4, 0, 2], "block_id": "slab", "material_id": "branches", "rot": 0, "variant": "0.25"},
-    {"pos": [0, 0, 3], "block_id": "slab", "material_id": "branches", "rot": 0, "variant": "0.25"},
-    {"pos": [1, 0, 3], "block_id": "slab", "material_id": "branches", "rot": 0, "variant": "0.25"},
-    {"pos": [2, 0, 3], "block_id": "slab", "material_id": "branches", "rot": 0, "variant": "0.25"},
-    {"pos": [3, 0, 3], "block_id": "slab", "material_id": "branches", "rot": 0, "variant": "0.25"},
-    {"pos": [4, 0, 3], "block_id": "slab", "material_id": "branches", "rot": 0, "variant": "0.25"},
-    {"pos": [0, 0, 4], "block_id": "slab", "material_id": "branches", "rot": 0, "variant": "0.25"},
-    {"pos": [1, 0, 4], "block_id": "slab", "material_id": "branches", "rot": 0, "variant": "0.25"},
-    {"pos": [2, 0, 4], "block_id": "slab", "material_id": "branches", "rot": 0, "variant": "0.25"},
-    {"pos": [3, 0, 4], "block_id": "slab", "material_id": "branches", "rot": 0, "variant": "0.25"},
-    {"pos": [4, 0, 4], "block_id": "slab", "material_id": "branches", "rot": 0, "variant": "0.25"}
-  ],
-  "surface_finishes": [],
-  "decor_trims": [],
-  "place_zones": [],
-  "zone_anchors": [],
-  "objects": [],
-  "fixtures": [],
-  "construction_cost": {}
+	"version": 5,
+	"id": "warehouse",
+	"name": "Склад под открытым небом",
+	"construction_style": "surface",
+	"category": "tent",
+	"fallback_building_id": "warehouse",
+	"grid_bounds": {
+		"x": 5,
+		"y": 1,
+		"z": 5
+	},
+	"footprint": [
+		5,
+		5
+	],
+	"blocks": [
+		{
+			"pos": [
+				0,
+				0,
+				0
+			],
+			"block_id": "slab",
+			"material_id": "branches",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				1,
+				0,
+				0
+			],
+			"block_id": "slab",
+			"material_id": "branches",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				2,
+				0,
+				0
+			],
+			"block_id": "slab",
+			"material_id": "branches",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				3,
+				0,
+				0
+			],
+			"block_id": "slab",
+			"material_id": "branches",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				4,
+				0,
+				0
+			],
+			"block_id": "slab",
+			"material_id": "branches",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				0,
+				0,
+				1
+			],
+			"block_id": "slab",
+			"material_id": "branches",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				1,
+				0,
+				1
+			],
+			"block_id": "slab",
+			"material_id": "branches",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				2,
+				0,
+				1
+			],
+			"block_id": "slab",
+			"material_id": "branches",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				3,
+				0,
+				1
+			],
+			"block_id": "slab",
+			"material_id": "branches",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				4,
+				0,
+				1
+			],
+			"block_id": "slab",
+			"material_id": "branches",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				0,
+				0,
+				2
+			],
+			"block_id": "slab",
+			"material_id": "branches",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				1,
+				0,
+				2
+			],
+			"block_id": "slab",
+			"material_id": "branches",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				2,
+				0,
+				2
+			],
+			"block_id": "slab",
+			"material_id": "branches",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				3,
+				0,
+				2
+			],
+			"block_id": "slab",
+			"material_id": "branches",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				4,
+				0,
+				2
+			],
+			"block_id": "slab",
+			"material_id": "branches",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				0,
+				0,
+				3
+			],
+			"block_id": "slab",
+			"material_id": "branches",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				1,
+				0,
+				3
+			],
+			"block_id": "slab",
+			"material_id": "branches",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				2,
+				0,
+				3
+			],
+			"block_id": "slab",
+			"material_id": "branches",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				3,
+				0,
+				3
+			],
+			"block_id": "slab",
+			"material_id": "branches",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				4,
+				0,
+				3
+			],
+			"block_id": "slab",
+			"material_id": "branches",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				0,
+				0,
+				4
+			],
+			"block_id": "slab",
+			"material_id": "branches",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				1,
+				0,
+				4
+			],
+			"block_id": "slab",
+			"material_id": "branches",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				2,
+				0,
+				4
+			],
+			"block_id": "slab",
+			"material_id": "branches",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				3,
+				0,
+				4
+			],
+			"block_id": "slab",
+			"material_id": "branches",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				4,
+				0,
+				4
+			],
+			"block_id": "slab",
+			"material_id": "branches",
+			"rot": 0,
+			"variant": "0.25"
+		}
+	],
+	"surface_finishes": [],
+	"decor_trims": [],
+	"areas": [],
+	"anchors": [
+		{
+			"id": "door",
+			"role": "door",
+			"pos": [
+				2.5,
+				0.0,
+				0.5
+			]
+		}
+	],
+	"routes": [],
+	"objects": [],
+	"fixtures": [],
+	"construction_cost": {}
 }

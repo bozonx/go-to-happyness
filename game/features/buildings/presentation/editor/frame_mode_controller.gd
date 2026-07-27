@@ -1121,10 +1121,14 @@ func sync_metadata_fields() -> void:
 		_footprint_x_spin.value = _editor.blueprint.footprint.x
 	if _footprint_z_spin != null:
 		_footprint_z_spin.value = _editor.blueprint.footprint.y
-	if _editor._entrance_x_spin != null:
-		_editor._entrance_x_spin.value = _editor.blueprint.entrance.x
-	if _editor._entrance_z_spin != null:
-		_editor._entrance_z_spin.value = _editor.blueprint.entrance.y
+	if _editor._entrance_label != null:
+		var doors := _editor.blueprint.doors()
+		if doors.is_empty():
+			_editor._entrance_label.text = "Двери нет — вход берётся у ближней грани. Поставьте дверь в режиме зон."
+		else:
+			var offset := _editor.blueprint.entrance_offset()
+			_editor._entrance_label.text = "Из двери «%s», смещение %d × %d от центра." % [
+				doors[0].id, offset.x, offset.y]
 	if _category_option != null:
 		for i in _category_option.item_count:
 			if _category_option.get_item_metadata(i) == _editor.blueprint.category:
@@ -1177,24 +1181,22 @@ func collect_metadata_from_ui() -> void:
 	if _editor.blueprint.name.is_empty():
 		_editor.blueprint.name = "Новое здание"
 	if _editor._id_edit != null:
-		var raw_id := ContentId.sanitize_id(_editor._id_edit.text)
+		var raw_id := ContentId.normalize_id(_editor._id_edit.text)
 		if not raw_id.is_empty():
 			_editor.blueprint.id = StringName(raw_id)
 	# `role` defaults to the id and only diverges when the author says so — that
 	# divergence is the entire style mechanism (content_packaging.md §3.1).
 	if _role_edit != null:
-		var raw_role := ContentId.sanitize_id(_role_edit.text)
+		var raw_role := ContentId.normalize_id(_role_edit.text)
 		_editor.blueprint.role = StringName(raw_role) if not raw_role.is_empty() else _editor.blueprint.id
 	if _visual_style_edit != null:
-		var raw_style := ContentId.sanitize_id(_visual_style_edit.text)
+		var raw_style := ContentId.normalize_id(_visual_style_edit.text)
 		_editor.blueprint.style = StringName(raw_style) if not raw_style.is_empty() else &"generic"
 	if _category_option != null:
 		_editor.blueprint.category = StringName(_category_option.get_item_metadata(_category_option.selected))
 	update_fallback_display()
 	if _footprint_x_spin != null and _footprint_z_spin != null:
 		_editor.blueprint.footprint = Vector2i(int(_footprint_x_spin.value), int(_footprint_z_spin.value))
-	if _editor._entrance_x_spin != null and _editor._entrance_z_spin != null:
-		_editor.blueprint.entrance = Vector2i(int(_editor._entrance_x_spin.value), int(_editor._entrance_z_spin.value))
 	_editor.grid_model.write_to_blueprint(_editor.blueprint)
 
 

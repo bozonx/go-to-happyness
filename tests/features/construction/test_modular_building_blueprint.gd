@@ -5,8 +5,6 @@ extends SceneTree
 
 const BlueprintScript = preload("res://game/features/buildings/domain/editor/building_blueprint.gd")
 const BlueprintBlockScript = preload("res://game/features/buildings/domain/editor/blueprint_block.gd")
-const PlaceZoneScript = preload("res://game/features/buildings/domain/editor/place_zone_record.gd")
-const ZoneAnchorScript = preload("res://game/features/buildings/domain/editor/zone_anchor_record.gd")
 const RepositoryScript = preload("res://game/features/buildings/presentation/editor/blueprint_repository.gd")
 const LibraryScript = preload("res://game/features/buildings/presentation/building_blueprint_library.gd")
 const BuildingBlueprintsScript = preload("res://game/features/buildings/presentation/building_blueprints.gd")
@@ -29,19 +27,25 @@ func _init() -> void:
 		BlueprintBlockScript.new(Vector3i(0, 0, 0), &"cube", 0, &"earth"),
 		BlueprintBlockScript.new(Vector3i(1, 0, 0), &"slab", 1, &"branches", &"0.5"),
 	]
-	var place := PlaceZoneScript.new()
-	place.zone_id = &"craft_1"
-	place.zone_name = "Craft bench"
-	place.profession = &"craftsman"
-	place.max_workers = 1
-	place.cells = [Vector3i.ZERO]
-	blueprint.place_zones.append(place)
-	var anchor := ZoneAnchorScript.new()
-	anchor.anchor_id = &"bench"
-	anchor.owner_zone_id = &"craft_1"
-	anchor.role = ZoneAnchorScript.ROLE_WORK
-	anchor.pos = Vector3(0.5, 0.0, 0.5)
-	blueprint.zone_anchors.append(anchor)
+	var room := ZoneAreaRecord.new()
+	room.id = &"craft_1"
+	room.area_name = "Craft bench"
+	room.function = &"core:workshop"
+	room.properties = {"profession": "craftsman", "max_workers": 1}
+	room.add_rect(Rect2i(0, 0, 1, 1))
+	blueprint.areas.append(room)
+	var slot := ZoneAnchorRecord.new()
+	slot.id = &"bench"
+	slot.owner_id = &"craft_1"
+	slot.role = ZoneAnchorRecord.ROLE_SLOT
+	slot.pos = Vector3(0.5, 0.0, 0.5)
+	blueprint.anchors.append(slot)
+	var door := ZoneAnchorRecord.new()
+	door.id = &"door"
+	door.owner_id = &"craft_1"
+	door.role = ZoneAnchorRecord.ROLE_DOOR
+	door.pos = Vector3(0.5, 0.0, 0.0)
+	blueprint.anchors.append(door)
 
 	var repository := RepositoryScript.new(false)
 	var save_result: Dictionary = repository.save(blueprint)
@@ -60,7 +64,7 @@ func _init() -> void:
 
 	var game_blueprint: Dictionary = BuildingBlueprintsScript.get_blueprint(runtime_key)
 	assert(game_blueprint.get("modules", []).size() == 2)
-	assert(game_blueprint.get("work_zones", []).size() == 1)
+	assert(game_blueprint.get("zones", []).size() == 1)
 	assert(game_blueprint.get("blueprint_ref", {}).get("source") == "local")
 	assert(game_blueprint.get("blueprint_ref", {}).get("role") == String(TEST_ID))
 	assert(game_blueprint.get("blueprint_ref", {}).get("fallback_building_id") == "smithy")
@@ -94,10 +98,15 @@ func _test_id_alphabet_is_refused_not_mangled() -> void:
 		"and must not fall back to a shared placeholder file")
 
 	# The same rule as a pure function, which is what the editor's live field uses.
-	# Two words of Cyrillic leave only their separators and the digit — which is
-	# exactly why nothing is auto-filled from `name`: the result is not a slug.
-	assert(ContentId.sanitize_id("Моя Пекарня 2") == "__2", "non-ASCII is dropped, spaces become _")
-	assert(ContentId.sanitize_id("My Bakery") == "my_bakery")
+	# Two words of Cyrillic leave only the digit — which is exactly why nothing is
+	# auto-filled from `name`: the result is not a slug.
+	assert(ContentId.normalize_id("Моя Пекарня 2") == "2", "non-ASCII is dropped, stray separators trimmed")
+	assert(ContentId.normalize_id("Проба-Map 7") == "map_7", "a leading dash is an artefact, not a name")
+	assert(ContentId.normalize_id("My Bakery") == "my_bakery")
+	# The live form keeps separators where they fall, or the field could not be
+	# typed in: `my_` is what `my_bakery` looks like half-way through.
+	assert(ContentId.sanitize_id("my_") == "my_", "typing an underscore must survive")
+	assert(ContentId.normalize_id("my_") == "my", "committing one drops it")
 	assert(not ContentId.is_valid_id(""), "empty is not a name")
 
 
@@ -195,7 +204,7 @@ func _test_v3_migrates_to_content_axes() -> void:
 		"category": "clay", "construction_style": "surface",
 		"grid_bounds": {"x": 1, "y": 1, "z": 1}, "footprint": [1, 1],
 	})
-	assert(legacy.version == 4)
+	assert(legacy.version == 5)
 	assert(legacy.role == &"legacy_bakery")
 	assert(legacy.era == &"clay")
 	assert(legacy.style == &"generic")

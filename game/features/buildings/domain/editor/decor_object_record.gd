@@ -13,7 +13,7 @@ const FurnishingAssetDefScript = preload("res://game/features/buildings/domain/e
 ## JSON-safe (Color is stored as an html string), because the whole blueprint is
 ## hashed via `JSON.stringify` for `content_revision()`.
 ##
-## `owner_zone_id` is an organizational label referencing a `place_zones` entry.
+## `owner_zone_id` is an organizational label referencing an `areas[]` entry.
 ## It has no runtime effect (design_docs/engine/building_furnishing.md §3.2).
 
 var id: String = ""

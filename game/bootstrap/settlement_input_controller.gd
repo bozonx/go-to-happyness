@@ -155,7 +155,7 @@ func _handle_first_person_input(event: InputEvent) -> void:
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		if not game.build_mode.is_empty() and not is_first_person_menu_open():
 			var viewport_center := game.get_viewport().get_visible_rect().size * 0.5
-			var build_point: Variant = game.terrain_point_at_screen_position(viewport_center)
+			var build_point: Variant = game.query_helper.terrain_point_at_screen_position(viewport_center)
 			if build_point != null:
 				game.build_controller.place_building(build_point)
 		elif not is_first_person_menu_open():
@@ -208,16 +208,16 @@ func _handle_overview_input(event: InputEvent) -> void:
 				game.camera_controller.pan(event.relative)
 		elif not game.build_mode.is_empty() or (game.selected_builder != null and game.dig_mode):
 			if game.get_viewport().gui_get_hovered_control() == null:
-				var terrain_point: Variant = game.terrain_point_at_screen_position(event.position)
+				var terrain_point: Variant = game.query_helper.terrain_point_at_screen_position(event.position)
 				if terrain_point != null:
 					game.build_controller.move_selection(terrain_point)
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		if game.selected_builder != null and game.dig_mode:
-			var dig_point: Variant = game.terrain_point_at_screen_position(event.position)
+			var dig_point: Variant = game.query_helper.terrain_point_at_screen_position(event.position)
 			if dig_point != null:
 				game.excavation_service.place_dig_site(dig_point)
 		elif not game.build_mode.is_empty():
-			var build_point: Variant = game.terrain_point_at_screen_position(event.position)
+			var build_point: Variant = game.query_helper.terrain_point_at_screen_position(event.position)
 			if build_point != null:
 				game.build_controller.place_building(build_point)
 		else:

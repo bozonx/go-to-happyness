@@ -34,38 +34,22 @@ var is_skipping_night := false
 var skip_zero_wellbeing_departure_applied := false
 
 
-func configure(
-	p_settlement: SettlementState,
-	p_day_cycle: SimulationDayCycle,
-	p_clock: SimulationClock,
-	p_citizens: Array,
-	p_random: RandomNumberGenerator,
-	p_weather_state: Variant,
-	p_building_registry: Variant,
-	p_fire_management_service: Variant,
-	p_tent_weather_getter: Callable,
-	p_entrance_stone_getter: Callable,
-	p_event_service_getter: Callable,
-	p_has_lit_communal_fire: Callable,
-	p_add_message: Callable,
-	p_is_citizen_work_time: Callable,
-	p_is_work_time: Callable
-) -> void:
-	_settlement = p_settlement
-	_day_cycle = p_day_cycle
-	_clock = p_clock
-	_citizens = p_citizens
-	_random = p_random
-	_weather_state = p_weather_state
-	_building_registry = p_building_registry
-	_fire_management_service = p_fire_management_service
-	_tent_weather_getter = p_tent_weather_getter
-	_entrance_stone_getter = p_entrance_stone_getter
-	_event_service_getter = p_event_service_getter
-	_has_lit_communal_fire = p_has_lit_communal_fire
-	_add_message = p_add_message
-	_is_citizen_work_time = p_is_citizen_work_time
-	_is_work_time = p_is_work_time
+func configure(port: SettlementSurvivalRuntimePort) -> void:
+	_settlement = port.settlement
+	_day_cycle = port.day_cycle
+	_clock = port.clock
+	_citizens = port.citizens
+	_random = port.random
+	_weather_state = port.weather_state
+	_building_registry = port.building_registry
+	_fire_management_service = port.fire_management_service
+	_tent_weather_getter = port.tent_weather_getter
+	_entrance_stone_getter = port.entrance_stone_getter
+	_event_service_getter = port.event_service_getter
+	_has_lit_communal_fire = port.has_lit_communal_fire
+	_add_message = port.add_message
+	_is_citizen_work_time = port.is_citizen_work_time
+	_is_work_time = port.is_work_time
 
 
 func apply_hourly_tent_survival(hour: int, survival_day := 0) -> void:

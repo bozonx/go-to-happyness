@@ -21,26 +21,16 @@ var tasks: Dictionary = {}
 var _tasks_by_courier_id: Dictionary = {}
 
 
-func configure(
-	citizens: Array,
-	warehouse_positions: Array[Vector3],
-	storage_routing: StorageRoutingService,
-	runtime_seconds_getter: Callable,
-	publish_tasks: Callable,
-	is_task_valid: Callable,
-	start_task: Callable,
-	cancel_task: Callable,
-	release_reservation: Callable
-) -> void:
-	_citizens = citizens
-	_warehouse_positions = warehouse_positions
-	_storage_routing = storage_routing
-	_runtime_seconds_getter = runtime_seconds_getter
-	_publish_tasks = publish_tasks
-	_is_task_valid = is_task_valid
-	_start_task = start_task
-	_cancel_task = cancel_task
-	_release_reservation = release_reservation
+func configure(port: CourierDispatchRuntimePort) -> void:
+	_citizens = port.citizens
+	_warehouse_positions = port.warehouse_positions
+	_storage_routing = port.storage_routing
+	_runtime_seconds_getter = port.runtime_seconds_getter
+	_publish_tasks = port.publish_tasks
+	_is_task_valid = port.is_task_valid
+	_start_task = port.start_task
+	_cancel_task = port.cancel_task
+	_release_reservation = port.release_reservation
 
 
 func dispatch() -> void:

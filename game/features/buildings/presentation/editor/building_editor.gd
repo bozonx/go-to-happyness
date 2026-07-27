@@ -73,8 +73,9 @@ var _orbiting: bool = false
 # UI bindings (linked to scene unique nodes in building_editor.tscn).
 @onready var _name_edit: LineEdit = %NameEdit
 @onready var _id_edit: LineEdit = %IdEdit
-@onready var _entrance_x_spin: SpinBox = %EntranceXSpin
-@onready var _entrance_z_spin: SpinBox = %EntranceZSpin
+## Entrances are authored as `door` anchors in zones mode; the metadata panel
+## only reports where they landed (active_zones.md §5.2).
+@onready var _entrance_label: Label = %EntranceDerivedLabel
 @onready var _status_label: Label = %StatusLabel
 @onready var _metadata_panel: PanelContainer = %MetadataPanel
 @onready var _load_popup: PopupPanel = %LoadPopup
@@ -482,7 +483,7 @@ func _on_save_as_pressed() -> void:
 
 
 func _on_save_as_confirmed() -> void:
-	var requested := ContentId.sanitize_id(_save_as_id_edit.text)
+	var requested := ContentId.normalize_id(_save_as_id_edit.text)
 	if requested.is_empty():
 		_update_status("ID не может быть пустым: допустимы латинские строчные буквы, цифры, «_» и «-».")
 		return
@@ -559,7 +560,7 @@ func _on_load_item_activated(index: int) -> void:
 	_load_popup.hide()
 	var detached := " · только чтение, сохранится в %s" % repository.base_dir() if current_path.is_empty() else ""
 	_update_status("Загружено: %s (%d блоков, %d зон, %d объектов)%s" % [
-		blueprint.name, blueprint.block_count(), blueprint.place_zones.size(),
+		blueprint.name, blueprint.block_count(), blueprint.areas.size(),
 		blueprint.objects.size(), detached])
 
 

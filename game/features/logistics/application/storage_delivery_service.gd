@@ -14,26 +14,16 @@ var _request_courier_dispatch: Callable
 var _send_citizen_to_leisure: Callable
 
 
-func configure(
-	p_settlement: SettlementState,
-	p_warehouse_positions: Array[Vector3],
-	p_courier_dispatcher: Variant,
-	p_storage_routing: Variant,
-	p_release_reservation: Callable,
-	p_drop_resource_pile: Callable,
-	p_update_interface: Callable,
-	p_request_courier_dispatch: Callable,
-	p_send_citizen_to_leisure: Callable
-) -> void:
-	_settlement = p_settlement
-	_warehouse_positions = p_warehouse_positions
-	_courier_dispatcher = p_courier_dispatcher
-	_storage_routing = p_storage_routing
-	_release_reservation = p_release_reservation
-	_drop_resource_pile = p_drop_resource_pile
-	_update_interface = p_update_interface
-	_request_courier_dispatch = p_request_courier_dispatch
-	_send_citizen_to_leisure = p_send_citizen_to_leisure
+func configure(port: StorageDeliveryRuntimePort) -> void:
+	_settlement = port.settlement
+	_warehouse_positions = port.warehouse_positions
+	_courier_dispatcher = port.courier_dispatcher
+	_storage_routing = port.storage_routing
+	_release_reservation = port.release_reservation
+	_drop_resource_pile = port.drop_resource_pile
+	_update_interface = port.update_interface
+	_request_courier_dispatch = port.request_courier_dispatch
+	_send_citizen_to_leisure = port.send_citizen_to_leisure
 
 
 func on_resource_delivered(worker: Citizen, resource_type: String, amount: int) -> void:

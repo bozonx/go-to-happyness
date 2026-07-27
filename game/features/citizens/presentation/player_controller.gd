@@ -220,8 +220,8 @@ func update_interaction(delta: float) -> void:
 	interaction_time += delta
 	var progress_pct := clampi(int(interaction_time / HARVEST_DURATION * 100.0), 0, 100)
 	simulation.ui_manager.interaction_hint_panel.progress_bar.value = progress_pct
-	var source_info: String = simulation.harvest_source_info(interaction_resource)
-	simulation.ui_manager.interaction_hint_panel.hint_label.text = "%s %d%% (%s)" % [simulation.gather_action_name(interaction_resource), progress_pct, source_info]
+	var source_info: String = simulation.query_helper.harvest_source_info(interaction_resource)
+	simulation.ui_manager.interaction_hint_panel.hint_label.text = "%s %d%% (%s)" % [simulation.query_helper.gather_action_name(interaction_resource), progress_pct, source_info]
 	if interaction_time >= HARVEST_DURATION:
 		var gathered := 0
 		match interaction_resource:

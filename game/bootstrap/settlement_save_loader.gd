@@ -285,7 +285,7 @@ func _resolve_saved_building_blueprint(saved_type: String, data: Dictionary) -> 
 	if saved_zones is Array and not saved_zones.is_empty() and not blueprint.is_empty():
 		blueprint = blueprint.duplicate(true)
 		blueprint["saved_zone_state"] = saved_zones.duplicate(true)
-		blueprint["work_zones"] = saved_zones.duplicate(true)
+		blueprint["zones"] = saved_zones.duplicate(true)
 		blueprint["blueprint_ref"] = reference.duplicate(true)
 	return {"type": resolved_type, "blueprint": blueprint}
 

@@ -21,7 +21,7 @@ func _init() -> void:
 	_test_non_empty_fixtures_rejected()
 	_test_owner_zone_validation()
 	_test_catalog_filtering()
-	_test_builtin_blueprints_are_v2()
+	_test_builtin_blueprints_are_current()
 	_test_asset_validation_with_known_asset()
 	_test_is_lit_migration_to_visual_flame_visible()
 	_test_era_cumulative_progression()
@@ -346,7 +346,7 @@ func _test_catalog_filtering() -> void:
 
 ## Every built-in .gdbuilding.json must be v2 — no v1 data should remain in
 ## the repository after the format migration.
-func _test_builtin_blueprints_are_v2() -> void:
+func _test_builtin_blueprints_are_current() -> void:
 	var dir_path := "res://game/content/core/buildings"
 	var dir := DirAccess.open(dir_path)
 	assert(dir != null, "Blueprints directory must exist")
@@ -362,22 +362,27 @@ func _test_builtin_blueprints_are_v2() -> void:
 			var json := JSON.new()
 			assert(json.parse(text) == OK, "Blueprint %s must be valid JSON" % file_name)
 			var data: Dictionary = json.data
-			assert(int(data.get("version", 0)) == 2,
-				"Built-in blueprint %s must be v2, got version %d" % [file_name, int(data.get("version", 0))])
-			# v2 objects must use appearance, not properties.
+			assert(int(data.get("version", 0)) == 5,
+				"Built-in blueprint %s must be v5, got version %d" % [file_name, int(data.get("version", 0))])
+			# Entrances are `door` anchors now; the standalone fields are gone.
+			assert(not data.has("entrance") and not data.has("worker_entrances"),
+				"Built-in blueprint %s must not carry legacy entrance fields" % file_name)
+			assert(not data.has("place_zones") and not data.has("zone_anchors"),
+				"Built-in blueprint %s must not carry legacy zone arrays" % file_name)
+			# Objects must use appearance, not properties.
 			var objects: Array = data.get("objects", [])
 			for obj in objects:
 				assert(not obj.has("properties"),
-					"v2 blueprint %s object %s must not have legacy 'properties' key" % [file_name, obj.get("id", "")])
+					"Blueprint %s object %s must not have legacy 'properties' key" % [file_name, obj.get("id", "")])
 				assert(not obj.has("anchor"),
-					"v2 blueprint %s object %s must not have legacy 'anchor' key" % [file_name, obj.get("id", "")])
+					"Blueprint %s object %s must not have legacy 'anchor' key" % [file_name, obj.get("id", "")])
 				assert(obj.has("appearance"),
-					"v2 blueprint %s object %s must have 'appearance' key" % [file_name, obj.get("id", "")])
+					"Blueprint %s object %s must have 'appearance' key" % [file_name, obj.get("id", "")])
 			assert(data.has("fixtures"), "v2 blueprint %s must have 'fixtures' key" % file_name)
 		file_name = dir.get_next()
 	dir.list_dir_end()
 	assert(found_count >= 6, "Expected at least 6 built-in blueprints, found %d" % found_count)
-	print("  builtin blueprints v2 ok (%d files)" % found_count)
+	print("  builtin blueprints format ok (%d files)" % found_count)
 
 
 ## A decor object with a known asset must be validated against the asset's

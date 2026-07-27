@@ -27,44 +27,25 @@ var _can_work_at_dig_site: Callable
 var _employment_centre_building_getter: Callable
 
 
-func configure(
-	p_settlement: SettlementState,
-	p_citizens: Array,
-	p_campfire_node_getter: Callable,
-	p_canteen_getter: Callable,
-	p_canteen_position_getter: Callable,
-	p_warehouse_positions: Array[Vector3],
-	p_construction_sites: Array,
-	p_demolition_sites: Array,
-	p_tree_positions: Array[Vector3],
-	p_water_source_positions_getter: Callable,
-	p_craft_tent_positions: Array[Vector3],
-	p_dig_sites: Array,
-	p_is_fire_lit: Callable,
-	p_update_interface: Callable,
-	p_available_employer_capacity: Callable,
-	p_builder_job_capacity: Callable,
-	p_can_work_at_dig_site: Callable,
-	p_employment_centre_building_getter: Callable
-) -> void:
-	_settlement = p_settlement
-	_citizens = p_citizens
-	_campfire_node_getter = p_campfire_node_getter
-	_canteen_getter = p_canteen_getter
-	_canteen_position_getter = p_canteen_position_getter
-	_warehouse_positions = p_warehouse_positions
-	_construction_sites = p_construction_sites
-	_demolition_sites = p_demolition_sites
-	_tree_positions = p_tree_positions
-	_water_source_positions_getter = p_water_source_positions_getter
-	_craft_tent_positions = p_craft_tent_positions
-	_dig_sites = p_dig_sites
-	_is_fire_lit = p_is_fire_lit
-	_update_interface = p_update_interface
-	_available_employer_capacity = p_available_employer_capacity
-	_builder_job_capacity = p_builder_job_capacity
-	_can_work_at_dig_site = p_can_work_at_dig_site
-	_employment_centre_building_getter = p_employment_centre_building_getter
+func configure(port: WorkplaceLaborRuntimePort) -> void:
+	_settlement = port.settlement
+	_citizens = port.citizens
+	_campfire_node_getter = port.campfire_node_getter
+	_canteen_getter = port.canteen_getter
+	_canteen_position_getter = port.canteen_position_getter
+	_warehouse_positions = port.warehouse_positions
+	_construction_sites = port.construction_sites
+	_demolition_sites = port.demolition_sites
+	_tree_positions = port.tree_positions
+	_water_source_positions_getter = port.water_source_positions_getter
+	_craft_tent_positions = port.craft_tent_positions
+	_dig_sites = port.dig_sites
+	_is_fire_lit = port.is_fire_lit
+	_update_interface = port.update_interface
+	_available_employer_capacity = port.available_employer_capacity
+	_builder_job_capacity = port.builder_job_capacity
+	_can_work_at_dig_site = port.can_work_at_dig_site
+	_employment_centre_building_getter = port.employment_centre_building_getter
 
 
 func employment_center_position() -> Vector3:
@@ -184,4 +165,3 @@ func is_daily_order_role_available(role: String) -> bool:
 		"researcher": return not _settlement.is_research_completed("official") and is_instance_valid(_employment_centre_building_getter.call()) and _is_fire_lit.call(_employment_centre_building_getter.call())
 		"gather_water": return bool(_settlement.tools.get("bucket", false)) and not (_water_source_positions_getter.call() as Array).is_empty() and not _warehouse_positions.is_empty()
 	return true
-

@@ -44,7 +44,7 @@ func target_source() -> StringName:
 
 
 func file_path_for(blueprint_id: StringName) -> String:
-	return "%s/%s.%s" % [base_dir(), ContentIdScript.sanitize_id(String(blueprint_id)),
+	return "%s/%s.%s" % [base_dir(), ContentIdScript.normalize_id(String(blueprint_id)),
 		BuildingBlueprintScript.FILE_EXTENSION]
 
 

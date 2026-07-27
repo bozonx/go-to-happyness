@@ -29,40 +29,23 @@ var _stored_resources: Callable
 var _warehouse_capacity: Callable
 
 
-func configure(
-	p_settlement: SettlementState,
-	p_day_cycle: SimulationDayCycle,
-	p_citizens: Array,
-	p_trail_field: Variant,
-	p_event_service_getter: Callable,
-	p_citizen_needs_service: Variant,
-	p_canteen_getter: Callable,
-	p_tent_weather_getter: Callable,
-	p_add_message: Callable,
-	p_update_interface: Callable,
-	p_apply_building_wear_and_repairs: Callable,
-	p_decay_resource_piles: Callable,
-	p_total_housing_slots: Callable,
-	p_check_daily_departures: Callable,
-	p_stored_resources: Callable,
-	p_warehouse_capacity: Callable
-) -> void:
-	_settlement = p_settlement
-	_day_cycle = p_day_cycle
-	_citizens = p_citizens
-	_trail_field = p_trail_field
-	_event_service_getter = p_event_service_getter
-	_citizen_needs_service = p_citizen_needs_service
-	_canteen_getter = p_canteen_getter
-	_tent_weather_getter = p_tent_weather_getter
-	_add_message = p_add_message
-	_update_interface = p_update_interface
-	_apply_building_wear_and_repairs = p_apply_building_wear_and_repairs
-	_decay_resource_piles = p_decay_resource_piles
-	_total_housing_slots = p_total_housing_slots
-	_check_daily_departures = p_check_daily_departures
-	_stored_resources = p_stored_resources
-	_warehouse_capacity = p_warehouse_capacity
+func configure(port: SettlementDailyRulesRuntimePort) -> void:
+	_settlement = port.settlement
+	_day_cycle = port.day_cycle
+	_citizens = port.citizens
+	_trail_field = port.trail_field
+	_event_service_getter = port.event_service_getter
+	_citizen_needs_service = port.citizen_needs_service
+	_canteen_getter = port.canteen_getter
+	_tent_weather_getter = port.tent_weather_getter
+	_add_message = port.add_message
+	_update_interface = port.update_interface
+	_apply_building_wear_and_repairs = port.apply_building_wear_and_repairs
+	_decay_resource_piles = port.decay_resource_piles
+	_total_housing_slots = port.total_housing_slots
+	_check_daily_departures = port.check_daily_departures
+	_stored_resources = port.stored_resources
+	_warehouse_capacity = port.warehouse_capacity
 
 
 func apply_daily_settlement_rules() -> void:

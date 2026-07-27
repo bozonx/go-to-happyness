@@ -23,40 +23,23 @@ var _update_workers: Callable
 var entrance_expeditions: Dictionary = {} # citizen ai_id -> TradeOrder
 
 
-func configure(
-	p_settlement: SettlementState,
-	p_citizens: Array,
-	p_queued_trades: Array,
-	p_pending_trades: Dictionary,
-	p_warehouse_positions: Array[Vector3],
-	p_market_menu: Variant,
-	p_selected_market_getter: Callable,
-	p_entrance_stone_getter: Callable,
-	p_get_delivery_position: Callable,
-	p_update_interface: Callable,
-	p_refresh_market_menu: Callable,
-	p_request_courier_dispatch: Callable,
-	p_total_game_minutes: Callable,
-	p_citizen_for_ai_id: Callable,
-	p_create_resource_pile: Callable,
-	p_update_workers: Callable
-) -> void:
-	_settlement = p_settlement
-	_citizens = p_citizens
-	_queued_trades = p_queued_trades
-	_pending_trades = p_pending_trades
-	_warehouse_positions = p_warehouse_positions
-	_market_menu = p_market_menu
-	_selected_market_getter = p_selected_market_getter
-	_entrance_stone_getter = p_entrance_stone_getter
-	_get_delivery_position = p_get_delivery_position
-	_update_interface = p_update_interface
-	_refresh_market_menu = p_refresh_market_menu
-	_request_courier_dispatch = p_request_courier_dispatch
-	_total_game_minutes = p_total_game_minutes
-	_citizen_for_ai_id = p_citizen_for_ai_id
-	_create_resource_pile = p_create_resource_pile
-	_update_workers = p_update_workers
+func configure(port: TradeRuntimePort) -> void:
+	_settlement = port.settlement
+	_citizens = port.citizens
+	_queued_trades = port.queued_trades
+	_pending_trades = port.pending_trades
+	_warehouse_positions = port.warehouse_positions
+	_market_menu = port.market_menu
+	_selected_market_getter = port.selected_market_getter
+	_entrance_stone_getter = port.entrance_stone_getter
+	_get_delivery_position = port.get_delivery_position
+	_update_interface = port.update_interface
+	_refresh_market_menu = port.refresh_market_menu
+	_request_courier_dispatch = port.request_courier_dispatch
+	_total_game_minutes = port.total_game_minutes
+	_citizen_for_ai_id = port.citizen_for_ai_id
+	_create_resource_pile = port.create_resource_pile
+	_update_workers = port.update_workers
 
 
 func buy_food(quantity: int, unit_price: int) -> void:

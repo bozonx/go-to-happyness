@@ -354,20 +354,25 @@ static func _create_block_module(module: Dictionary) -> StaticBody3D:
 static func _blueprint_from_library(building_type: String) -> Dictionary:
 	var fp := BuildingBlueprintLibraryScript.footprint(building_type)
 	var bp := BuildingBlueprintLibraryScript.get_blueprint(building_type)
-	var entrance: Vector2i = bp.entrance if bp != null and bp.entrance != Vector2i.ZERO else Vector2i(0, -fp.y / 2)
+	# Entrances come from the blueprint's `door` anchors — the format has one
+	# authority on them (active_zones.md §5.2).
+	var entrance: Vector2i = bp.entrance_offset() if bp != null else Vector2i(0, -fp.y / 2)
 	var result := {
 		"type": building_type,
 		"footprint": fp,
 		"entrance": entrance,
 		"modules": BuildingBlueprintLibraryScript.ordered_modules(building_type),
 		"blueprint_ref": BuildingBlueprintLibraryScript.blueprint_ref(building_type),
-		"work_zones": bp.runtime_zone_definitions() if bp != null else [],
+		"zones": bp.runtime_zone_definitions() if bp != null else [],
 		"routing_anchors": bp.routing_anchor_definitions() if bp != null else [],
+		"access_overlays": bp.access_overlay_definitions() if bp != null else [],
 		"construction_cost": bp.construction_cost.duplicate(true) if bp != null else {},
 		"fixtures": bp.fixtures.map(func(f: FixtureDefinitionScript) -> Dictionary: return f.to_dict()) if bp != null else [],
 	}
-	if bp != null and not bp.worker_entrances.is_empty():
-		result["worker_entrances"] = bp.worker_entrances
+	if bp != null:
+		var staff_doors := bp.worker_entrance_offsets()
+		if not staff_doors.is_empty():
+			result["worker_entrances"] = staff_doors
 	return result
 
 

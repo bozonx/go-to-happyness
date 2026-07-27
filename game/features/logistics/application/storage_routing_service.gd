@@ -22,32 +22,19 @@ var _resource_for_depth: Callable
 var _update_interface: Callable
 
 
-func configure(
-	p_settlement: SettlementState,
-	p_warehouse_positions: Array[Vector3],
-	p_resource_piles: Array[ResourcePileScript],
-	p_player_citizen_getter: Callable,
-	p_interaction_range: float,
-	p_is_route_reachable: Callable,
-	p_find_path_around_houses: Callable,
-	p_nav_grid: Variant,
-	p_dig_sites: Array,
-	p_can_work_at_dig_site: Callable,
-	p_resource_for_depth: Callable,
-	p_update_interface: Callable
-) -> void:
-	_settlement = p_settlement
-	_warehouse_positions = p_warehouse_positions
-	_resource_piles = p_resource_piles
-	_player_citizen_getter = p_player_citizen_getter
-	_interaction_range = p_interaction_range
-	_is_route_reachable = p_is_route_reachable
-	_find_path_around_houses = p_find_path_around_houses
-	_nav_grid = p_nav_grid
-	_dig_sites = p_dig_sites
-	_can_work_at_dig_site = p_can_work_at_dig_site
-	_resource_for_depth = p_resource_for_depth
-	_update_interface = p_update_interface
+func configure(port: StorageRoutingRuntimePort) -> void:
+	_settlement = port.settlement
+	_warehouse_positions = port.warehouse_positions
+	_resource_piles = port.resource_piles
+	_player_citizen_getter = port.player_citizen_getter
+	_interaction_range = port.interaction_range
+	_is_route_reachable = port.is_route_reachable
+	_find_path_around_houses = port.find_path_around_houses
+	_nav_grid = port.nav_grid
+	_dig_sites = port.dig_sites
+	_can_work_at_dig_site = port.can_work_at_dig_site
+	_resource_for_depth = port.resource_for_depth
+	_update_interface = port.update_interface
 
 
 func resource_pile_for_node(pile_node: Node3D) -> ResourcePileScript:

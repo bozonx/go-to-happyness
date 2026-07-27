@@ -136,7 +136,7 @@ func first_person_action_hint() -> String:
 				return S.F_GATHER_BRANCHES % [rem, init]
 			return S.F_CHOP_TREE
 		"grass":
-			var grass_info: Dictionary = simulation.targeted_grass_info(target)
+			var grass_info: Dictionary = simulation.query_helper.targeted_grass_info(target)
 			if grass_info.is_empty():
 				return S.F_GATHER_GRASS
 			return S.F_GATHER_GRASS_COUNT % [int(grass_info.remaining), int(grass_info.initial)]
@@ -161,5 +161,5 @@ func first_person_action_hint() -> String:
 				return ""
 			var status: Array[String] = citizen.status_effect_labels()
 			var status_text: String = ", ".join(status) if not status.is_empty() else "OK"
-			return "%s | %s | %s" % [citizen.role_label(), simulation.citizen_state_name(citizen.state), status_text]
+			return "%s | %s | %s" % [citizen.role_label(), simulation.query_helper.citizen_state_name(citizen.state), status_text]
 	return ""

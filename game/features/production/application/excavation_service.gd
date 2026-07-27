@@ -31,52 +31,29 @@ var _set_build_mode: Callable
 var _add_child: Callable
 
 
-func configure(
-	p_settlement: SettlementState,
-	p_citizens: Array,
-	p_dig_sites: Array,
-	p_dig_cells: Dictionary,
-	p_exhausted_dig_cells: Dictionary,
-	p_random: RandomNumberGenerator,
-	p_update_interface: Callable,
-	p_update_workers: Callable,
-	p_request_courier_dispatch: Callable,
-	p_placement_key: Callable,
-	p_is_clear_of_objects: Callable,
-	p_employment_center_position: Callable,
-	p_show_territory_overlay: Callable,
-	p_move_selection: Callable,
-	p_show_selected_citizen_menu: Callable,
-	p_selected_builder_getter: Callable,
-	p_selected_world_position_getter: Callable,
-	p_selection_marker_getter: Callable,
-	p_selection_material_getter: Callable,
-	p_set_dig_mode: Callable,
-	p_set_build_mode: Callable,
-	p_add_child: Callable
-) -> void:
-	_settlement = p_settlement
-	_citizens = p_citizens
-	_dig_sites = p_dig_sites
-	_dig_cells = p_dig_cells
-	_exhausted_dig_cells = p_exhausted_dig_cells
-	_random = p_random
-	_update_interface = p_update_interface
-	_update_workers = p_update_workers
-	_request_courier_dispatch = p_request_courier_dispatch
-	_placement_key = p_placement_key
-	_is_clear_of_objects = p_is_clear_of_objects
-	_employment_center_position = p_employment_center_position
-	_show_territory_overlay = p_show_territory_overlay
-	_move_selection = p_move_selection
-	_show_selected_citizen_menu = p_show_selected_citizen_menu
-	_selected_builder_getter = p_selected_builder_getter
-	_selected_world_position_getter = p_selected_world_position_getter
-	_selection_marker_getter = p_selection_marker_getter
-	_selection_material_getter = p_selection_material_getter
-	_set_dig_mode = p_set_dig_mode
-	_set_build_mode = p_set_build_mode
-	_add_child = p_add_child
+func configure(port: ExcavationRuntimePort) -> void:
+	_settlement = port.settlement
+	_citizens = port.citizens
+	_dig_sites = port.dig_sites
+	_dig_cells = port.dig_cells
+	_exhausted_dig_cells = port.exhausted_dig_cells
+	_random = port.random
+	_update_interface = port.update_interface
+	_update_workers = port.update_workers
+	_request_courier_dispatch = port.request_courier_dispatch
+	_placement_key = port.placement_key
+	_is_clear_of_objects = port.is_clear_of_objects
+	_employment_center_position = port.employment_center_position
+	_show_territory_overlay = port.show_territory_overlay
+	_move_selection = port.move_selection
+	_show_selected_citizen_menu = port.show_selected_citizen_menu
+	_selected_builder_getter = port.selected_builder_getter
+	_selected_world_position_getter = port.selected_world_position_getter
+	_selection_marker_getter = port.selection_marker_getter
+	_selection_material_getter = port.selection_material_getter
+	_set_dig_mode = port.set_dig_mode
+	_set_build_mode = port.set_build_mode
+	_add_child = port.add_child
 
 
 var dig_site_scene: PackedScene = null

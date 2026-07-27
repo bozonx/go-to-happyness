@@ -170,7 +170,7 @@ func place_building(world_position: Vector3) -> void:
 
 func place_building_at_crosshair() -> void:
 	var viewport_center := game.get_viewport().get_visible_rect().size * 0.5
-	var terrain_point: Variant = game.terrain_point_at_screen_position(viewport_center)
+	var terrain_point: Variant = game.query_helper.terrain_point_at_screen_position(viewport_center)
 	if terrain_point == null:
 		game.update_interface("Aim at clear terrain to place the building.")
 		return

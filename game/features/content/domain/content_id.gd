@@ -32,10 +32,16 @@ static func is_valid_id(value: String) -> bool:
 	return true
 
 
-## Best-effort reduction of free input to the alphabet, for live cleanup of a text
-## field. Spaces become `_`, case is folded, everything else is dropped. The result
-## may be empty — that is a valid answer meaning "nothing usable was typed", and
-## callers must report it rather than substitute a placeholder name.
+## Character-level reduction of free input to the alphabet: spaces become `_`, case
+## is folded, everything else is dropped.
+##
+## This is the **live** form, for cleaning a field as the author types, and it
+## deliberately keeps separators wherever they land. Trimming them here would make
+## the field impossible to type in: half-way through `my_bakery` the text is
+## `my_`, and eating that underscore would swallow every one the author tries.
+##
+## The result may be empty — that is a valid answer meaning "nothing usable was
+## typed", and callers must report it rather than substitute a placeholder name.
 static func sanitize_id(value: String) -> String:
 	var lowered := value.strip_edges().to_lower()
 	var safe := ""
@@ -46,6 +52,26 @@ static func sanitize_id(value: String) -> String:
 		elif character == " ":
 			safe += "_"
 	return safe
+
+
+## The **committed** form: what an id becomes when it is finally used as a file or
+## folder name. Separators are trimmed from both ends because there they are
+## artefacts of what was stripped rather than anything the author meant —
+## `Проба-Map 7` sanitizes to `-map_7`, and a folder starting with `-` reads as a
+## command-line flag to every tool that later touches it.
+static func normalize_id(value: String) -> String:
+	var safe := sanitize_id(value)
+	var start := 0
+	var end := safe.length()
+	while start < end and _is_separator(safe[start]):
+		start += 1
+	while end > start and _is_separator(safe[end - 1]):
+		end -= 1
+	return safe.substr(start, end - start)
+
+
+static func _is_separator(character: String) -> bool:
+	return character == "_" or character == "-"
 
 
 static func _is_id_char(character: String) -> bool:

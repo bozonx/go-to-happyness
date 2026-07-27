@@ -834,7 +834,7 @@ func _get_zone_filter_selection() -> StringName:
 	return _zone_filter_option.get_item_metadata(idx)
 
 
-## Rebuild the zone filter dropdown from the blueprint's place_zones.
+## Rebuild the zone filter dropdown from the blueprint's owning areas.
 func _refresh_zone_filter_options() -> void:
 	if _zone_filter_option == null:
 		return
@@ -845,11 +845,12 @@ func _refresh_zone_filter_options() -> void:
 	_zone_filter_option.set_item_metadata(0, &"")
 	var selected_idx := 0
 	if _editor != null and _editor.blueprint != null:
-		for i in _editor.blueprint.place_zones.size():
-			var zone = _editor.blueprint.place_zones[i]
-			_zone_filter_option.add_item(String(zone.zone_name))
-			_zone_filter_option.set_item_metadata(_zone_filter_option.item_count - 1, zone.zone_id)
-			if zone.zone_id == prev_selection:
+		for area in _editor.blueprint.areas:
+			if not area.owns_content():
+				continue
+			_zone_filter_option.add_item(area.display_name())
+			_zone_filter_option.set_item_metadata(_zone_filter_option.item_count - 1, area.id)
+			if area.id == prev_selection:
 				selected_idx = _zone_filter_option.item_count - 1
 	_zone_filter_option.select(selected_idx)
 	_syncing_ui = false
@@ -870,23 +871,13 @@ func _update_zone_highlight() -> void:
 		return
 	if _editor == null or _editor.blueprint == null:
 		return
-	# Find the zone's cells to check bounds.
-	var zone_cells: Array[Vector3i] = []
-	for zone in _editor.blueprint.place_zones:
-		if zone.zone_id == record.owner_zone_id:
-			zone_cells = zone.cells
-			break
-	if zone_cells.is_empty():
+	var area: ZoneAreaRecord = _editor.blueprint.area_by_id(record.owner_zone_id)
+	if area == null or area.is_empty():
 		return
-	# Check if the object position is within the zone's cell bounds.
 	# floor maps cell-centre positions (e.g. 1.5) to the correct cell (1),
 	# while round would snap 1.5 to 2 — a false out-of-zone warning.
-	var obj_cell := Vector3i(int(floor(record.pos.x)), int(floor(record.pos.y)), int(floor(record.pos.z)))
-	var in_zone := false
-	for cell in zone_cells:
-		if cell == obj_cell:
-			in_zone = true
-			break
+	var obj_cell := Vector2i(int(floor(record.pos.x)), int(floor(record.pos.z)))
+	var in_zone := area.contains_cell(obj_cell)
 	if not in_zone and _zone_out_of_bounds_label != null:
 		_zone_out_of_bounds_label.text = "⚠ Предмет вне зоны «%s»" % _zone_name_for_id(record.owner_zone_id)
 		_zone_out_of_bounds_label.visible = true
@@ -895,10 +886,8 @@ func _update_zone_highlight() -> void:
 func _zone_name_for_id(zone_id: StringName) -> String:
 	if _editor == null or _editor.blueprint == null:
 		return String(zone_id)
-	for zone in _editor.blueprint.place_zones:
-		if zone.zone_id == zone_id:
-			return String(zone.zone_name)
-	return String(zone_id)
+	var area: ZoneAreaRecord = _editor.blueprint.area_by_id(zone_id)
+	return area.display_name() if area != null else String(zone_id)
 
 
 ## Called by BuildingEditor when a place zone is deleted.
@@ -1014,7 +1003,7 @@ func _set_transform_fields_enabled(enabled: bool) -> void:
 	_replace_btn.disabled = not enabled
 
 
-## Refresh the owner-zone dropdown from the blueprint's place_zones.
+## Refresh the owner-zone dropdown from the blueprint's owning areas.
 func _refresh_zone_options(current_zone: StringName, _record: DecorObjectRecordScript) -> void:
 	_syncing_ui = true
 	_zone_option.clear()
@@ -1022,11 +1011,12 @@ func _refresh_zone_options(current_zone: StringName, _record: DecorObjectRecordS
 	_zone_option.set_item_metadata(0, &"")
 	var selected_idx := 0
 	if _editor != null and _editor.blueprint != null:
-		for i in _editor.blueprint.place_zones.size():
-			var zone = _editor.blueprint.place_zones[i]
-			_zone_option.add_item(String(zone.zone_name))
-			_zone_option.set_item_metadata(_zone_option.item_count - 1, zone.zone_id)
-			if zone.zone_id == current_zone:
+		for area in _editor.blueprint.areas:
+			if not area.owns_content():
+				continue
+			_zone_option.add_item(area.display_name())
+			_zone_option.set_item_metadata(_zone_option.item_count - 1, area.id)
+			if area.id == current_zone:
 				selected_idx = _zone_option.item_count - 1
 	_zone_option.select(selected_idx)
 	_syncing_ui = false

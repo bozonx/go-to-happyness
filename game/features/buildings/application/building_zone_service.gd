@@ -6,9 +6,6 @@ extends RefCounted
 ## the selected anchor through the world facade.
 
 const BuildingRuntimeStateScript = preload("res://game/features/buildings/application/building_runtime_state.gd")
-const ActiveWorkZoneStateScript = preload("res://game/features/buildings/domain/active_work_zone_state.gd")
-const PlaceZoneRecordScript = preload("res://game/features/buildings/domain/editor/place_zone_record.gd")
-const SUPPORTED_AI_ROLES: Array[StringName] = PlaceZoneRecordScript.PROFESSIONS
 
 
 func configure_building(building: Node3D, zone_definitions: Array, saved_zones: Array = []) -> void:
@@ -16,14 +13,14 @@ func configure_building(building: Node3D, zone_definitions: Array, saved_zones: 
 		return
 	var source := saved_zones if not saved_zones.is_empty() else zone_definitions
 	var state := BuildingRuntimeStateScript.from_node(building)
-	state.work_zones.clear()
+	state.zones.clear()
 	for raw_zone in source:
 		if raw_zone is Dictionary:
-			state.work_zones.append(ActiveWorkZoneStateScript.from_definition(raw_zone))
+			state.zones.append(ZoneRuntimeState.from_definition(raw_zone))
 	state.apply_to_node(building)
-	var first_anchor := _first_anchor(state)
-	if first_anchor != Vector3.INF:
-		building.set_meta("service_position", _to_world(building, first_anchor))
+	var first_slot := _first_slot(state)
+	if first_slot != Vector3.INF:
+		building.set_meta("service_position", _to_world(building, first_slot))
 
 
 func reconcile_assignments(citizens: Array, building_records: Array = []) -> void:
@@ -39,9 +36,9 @@ func reconcile_assignments(citizens: Array, building_records: Array = []) -> voi
 		if not is_instance_valid(record.node):
 			continue
 		var existing_state: RefCounted = BuildingRuntimeStateScript.from_node(record.node)
-		if existing_state.work_zones.is_empty():
+		if existing_state.zones.is_empty():
 			continue
-		for zone in existing_state.work_zones:
+		for zone in existing_state.zones:
 			for citizen_id in zone.assigned_citizen_ids.duplicate():
 				var assignment: Dictionary = valid_assignments.get(citizen_id, {})
 				if assignment.is_empty() or assignment.get("building") != record.node or not zone.supports_role(StringName(assignment.get("role", &""))):
@@ -56,9 +53,9 @@ func reconcile_assignments(citizens: Array, building_records: Array = []) -> voi
 		var role := StringName(citizen.permanent_role)
 		var citizen_id := int(citizen.ai_id)
 		var state: RefCounted = touched.get(workplace, BuildingRuntimeStateScript.from_node(workplace))
-		if state.work_zones.is_empty():
+		if state.zones.is_empty():
 			continue
-		for zone in state.work_zones:
+		for zone in state.zones:
 			if citizen_id in zone.assigned_citizen_ids and not zone.supports_role(role):
 				zone.unassign(citizen_id)
 			if zone.supports_role(role) and state.zone_for_citizen(citizen_id, role) == null:
@@ -69,20 +66,23 @@ func reconcile_assignments(citizens: Array, building_records: Array = []) -> voi
 		state.apply_to_node(building)
 
 
+## Whether the building has a zone staffing this role. There is no engine-side
+## list of valid roles any more: a role is valid exactly when some zone function
+## declares it (active_zones.md §2), so the question is answered by the data.
 func supports_role(building: Node3D, role: StringName) -> bool:
-	return role in SUPPORTED_AI_ROLES and is_instance_valid(building) and BuildingRuntimeStateScript.from_node(building).role_capacity(role) > 0
+	return role != &"" and is_instance_valid(building) and BuildingRuntimeStateScript.from_node(building).role_capacity(role) > 0
 
 
 func role_capacity(building: Node3D, role: StringName) -> int:
-	return BuildingRuntimeStateScript.from_node(building).role_capacity(role) if role in SUPPORTED_AI_ROLES and is_instance_valid(building) else 0
+	return BuildingRuntimeStateScript.from_node(building).role_capacity(role) if role != &"" and is_instance_valid(building) else 0
 
 
 func assign_to_zone(building: Node3D, zone_id: StringName, role: StringName, citizen_id: int) -> bool:
 	if not is_instance_valid(building) or zone_id == &"" or citizen_id <= 0:
 		return false
 	var state := BuildingRuntimeStateScript.from_node(building)
-	var target: Variant = null
-	for zone in state.work_zones:
+	var target: ZoneRuntimeState = null
+	for zone in state.zones:
 		zone.unassign(citizen_id)
 		if zone.zone_id == zone_id:
 			target = zone
@@ -97,23 +97,17 @@ func work_position(building: Node3D, role: StringName, citizen_id: int) -> Vecto
 	if not is_instance_valid(building):
 		return Vector3.INF
 	var state := BuildingRuntimeStateScript.from_node(building)
-	var zone: Variant = state.zone_for_citizen(citizen_id, role)
+	var zone: ZoneRuntimeState = state.zone_for_citizen(citizen_id, role)
 	if zone == null:
-		for candidate in state.work_zones:
+		for candidate in state.zones:
 			if candidate.supports_role(role):
 				zone = candidate
 				break
 	if zone == null:
 		return Vector3.INF
-	var anchor: Dictionary = zone.anchor_for(citizen_id)
-	var raw_pos: Variant = anchor.get("pos", [])
-	if raw_pos is Array and raw_pos.size() >= 3:
-		return _to_world(building, Vector3(float(raw_pos[0]), float(raw_pos[1]), float(raw_pos[2])))
-	# No authored slot — fall back to the centre of the zone's cells.
-	var fallback: Vector3 = zone.fallback_position()
-	if fallback != Vector3.INF:
-		return _to_world(building, fallback)
-	return building.global_position
+	# The slot, or the zone centre when the author placed no slots (§5.2).
+	var local := zone.position_for(citizen_id)
+	return _to_world(building, local) if local != Vector3.INF else building.global_position
 
 
 func zone_snapshot(building: Node3D) -> Array:
@@ -123,15 +117,15 @@ func zone_snapshot(building: Node3D) -> Array:
 func zone_id_for(building: Node3D, role: StringName, citizen_id: int) -> StringName:
 	if not is_instance_valid(building):
 		return &""
-	var zone: Variant = BuildingRuntimeStateScript.from_node(building).zone_for_citizen(citizen_id, role)
+	var zone: ZoneRuntimeState = BuildingRuntimeStateScript.from_node(building).zone_for_citizen(citizen_id, role)
 	return zone.zone_id if zone != null else &""
 
 
-func _first_anchor(state: RefCounted) -> Vector3:
-	for zone in state.work_zones:
-		if zone.work_anchors.is_empty():
+func _first_slot(state: RefCounted) -> Vector3:
+	for zone in state.zones:
+		if zone.slots.is_empty():
 			continue
-		var raw_pos: Variant = zone.work_anchors[0].get("pos", [])
+		var raw_pos: Variant = zone.slots[0].get("pos", [])
 		if raw_pos is Array and raw_pos.size() >= 3:
 			return Vector3(float(raw_pos[0]), float(raw_pos[1]), float(raw_pos[2]))
 	return Vector3.INF

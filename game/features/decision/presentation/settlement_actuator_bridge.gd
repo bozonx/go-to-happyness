@@ -30,52 +30,29 @@ var fire_state_query := Callable()
 var apply_fire_state_fn := Callable()
 
 
-func configure(
-	canteen_svc: RefCounted,
-	dispatcher: RefCounted,
-	construction_svc: RefCounted,
-	settlement_ref: RefCounted,
-	registry: RefCounted,
-	storage_svc: RefCounted,
-	factory_svc: RefCounted,
-	sawmills_svc: RefCounted,
-	water_svc: RefCounted,
-	excavation_svc: RefCounted,
-	needs_svc: RefCounted,
-	trade_svc: RefCounted,
-	piles: Array,
-	minutes_fn: Callable,
-	runtime_fn: Callable,
-	ui_fn: Callable,
-	dispatch_fn: Callable,
-	refresh_ai_fn: Callable,
-	refresh_living_fn: Callable,
-	drop_pile_fn: Callable,
-	fire_query_fn: Callable,
-	apply_fire_fn: Callable
-) -> void:
-	canteen_service = canteen_svc
-	courier_dispatcher = dispatcher
-	construction = construction_svc
-	settlement = settlement_ref
-	building_registry = registry
-	storage_delivery_service = storage_svc
-	factory_service = factory_svc
-	sawmills = sawmills_svc
-	water_collector_service = water_svc
-	excavation_service = excavation_svc
-	citizen_needs_service = needs_svc
-	trade_service = trade_svc
-	resource_piles = piles
-	game_minutes_query = minutes_fn
-	runtime_seconds_query = runtime_fn
-	update_interface_fn = ui_fn
-	request_courier_dispatch_fn = dispatch_fn
-	request_decision_refresh_fn = refresh_ai_fn
-	refresh_living_statuses_fn = refresh_living_fn
-	drop_resource_pile_fn = drop_pile_fn
-	fire_state_query = fire_query_fn
-	apply_fire_state_fn = apply_fire_fn
+func configure(port: SettlementActuatorRuntimePort) -> void:
+	canteen_service = port.canteen_service
+	courier_dispatcher = port.courier_dispatcher
+	construction = port.construction
+	settlement = port.settlement
+	building_registry = port.building_registry
+	storage_delivery_service = port.storage_delivery_service
+	factory_service = port.factory_service
+	sawmills = port.sawmills
+	water_collector_service = port.water_collector_service
+	excavation_service = port.excavation_service
+	citizen_needs_service = port.citizen_needs_service
+	trade_service = port.trade_service
+	resource_piles = port.resource_piles
+	game_minutes_query = port.game_minutes_query
+	runtime_seconds_query = port.runtime_seconds_query
+	update_interface_fn = port.update_interface
+	request_courier_dispatch_fn = port.request_courier_dispatch
+	request_decision_refresh_fn = port.request_decision_refresh
+	refresh_living_statuses_fn = port.refresh_living_statuses
+	drop_resource_pile_fn = port.drop_resource_pile
+	fire_state_query = port.fire_state_query
+	apply_fire_state_fn = port.apply_fire_state
 
 
 func wire_citizen(citizen: Node3D) -> void:
