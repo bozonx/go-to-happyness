@@ -42,16 +42,26 @@ const PLANNED_MODES: Array = [
 @onready var _status_message: Label = $UI/Screen/StatusBar/Margin/Row/MessageLabel
 @onready var _back_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/BackButton
 @onready var _new_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/NewButton
+@onready var _load_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/LoadButton
 @onready var _save_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/SaveButton
+@onready var _save_as_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/SaveAsButton
 @onready var _undo_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/UndoButton
 @onready var _redo_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/RedoButton
 @onready var _map_menu: MenuButton = $UI/Screen/TopBar/Margin/Scroll/Row/MapMenu
+@onready var _dialogs: MapEditorDialogs = $UI/Dialogs
 
 const MENU_BORDER_OCEAN := 1
 const MENU_BORDER_NOTHING := 2
+const MENU_PROPERTIES := 3
 
 var document: MapDocument
 var history := MapEditorHistory.new()
+
+## Path this document was opened from, or "" when it has none — a new map, or one
+## detached because this mode cannot write where it came from
+## (content_packaging.md §6.4). It is what makes Ctrl+S go back to the same
+## package instead of minting `new_map.gdmap` over and over.
+var current_path: String = ""
 
 var _service := MapDocumentService.new()
 var _terrain_service := TerrainService.new()
@@ -77,6 +87,7 @@ var _recording_border_fill := false
 
 
 func _ready() -> void:
+	_resolve_launch_mode()
 	_open_requested_map()
 	_build_services()
 	_build_modes()
@@ -89,8 +100,25 @@ func _ready() -> void:
 
 # --- Document -----------------------------------------------------------------
 
-## Opens whatever the launcher asked for, or starts a new map. A map that will not
-## open is reported and replaced by a new one rather than left as a half-editor.
+## Dev mode authors the shipped pack, exactly as the building editor does
+## (content_packaging.md §9). Running this scene straight from Godot is the
+## developer's entry point; a launch through the menu always forces player mode.
+func _resolve_launch_mode() -> void:
+	var launch_manager: Node = get_node_or_null("/root/GameLaunchManager")
+	var dev := OS.has_feature("editor")
+	if launch_manager != null and "editor_mode_forced" in launch_manager \
+			and bool(launch_manager.get("editor_mode_forced")):
+		dev = bool(launch_manager.get("editor_dev_mode"))
+	_service = MapDocumentService.new(dev)
+
+
+## Opens whatever the launcher asked for, or starts a blank map. A map that will
+## not open is reported and replaced by a blank one rather than left as a
+## half-editor.
+##
+## A blank map deliberately has **no id**: it has not been named yet, and naming
+## it `new_map` by default is what made every unnamed map overwrite the previous
+## one. Saving it goes through Save As, which is where a name is asked for.
 func _open_requested_map() -> void:
 	var launch_manager: Node = get_node_or_null("/root/GameLaunchManager")
 	var requested: StringName = &""
@@ -100,8 +128,18 @@ func _open_requested_map() -> void:
 		document = _service.load_map(requested)
 		if document == null:
 			_message = "не удалось открыть %s: %s" % [requested, _service.last_error]
+		else:
+			_adopt_path(_service.map_path(requested))
 	if document == null:
-		document = MapDocument.create(&"new_map", "Новая карта", MapMeta.DEFAULT_BOARD_CELLS)
+		document = MapDocument.create(&"", "Новая карта", MapMeta.DEFAULT_BOARD_CELLS)
+		current_path = ""
+
+
+## Binds the document to the file it came from, or detaches it when this mode may
+## not write there. Detaching early — at open, not at save — is what lets the
+## editor say so in the panel while the author still has a choice.
+func _adopt_path(path: String) -> void:
+	current_path = path if _service.can_write(path) else ""
 
 
 func _build_services() -> void:
@@ -159,24 +197,84 @@ func _build_hover_marker() -> void:
 	hover_marker.mesh = mesh
 
 
+## Ctrl+S. A document with a file of its own goes back into it, subfolder and all;
+## anything else — a new map, or one opened from a source this mode cannot write —
+## routes through Save As, which is where the author names it.
 func _save() -> void:
-	var path := _service.save_map(document, MapDocumentService.SOURCE_PLAYER)
+	if current_path.is_empty() or not _service.can_write(current_path):
+		_open_save_as()
+		return
+	# The `preview` argument is the reserved hook for map thumbnails
+	# (map_editor.md §3.2.1). Nothing renders one yet, and passing null keeps the
+	# call shape final so adding the snapshot later touches only this line.
+	var path := _service.save_map_to(document, current_path, null)
 	if path.is_empty():
 		_message = "не сохранено: %s" % _service.last_error
 	else:
+		current_path = path
 		_message = "сохранено в %s" % path
 	_refresh_panels()
 
 
-func _new_map() -> void:
-	document = MapDocument.create(&"new_map", "Новая карта", MapMeta.DEFAULT_BOARD_CELLS)
+func _open_save_as() -> void:
+	var proposed := document.meta.id if not String(document.meta.id).is_empty() else &"my_map"
+	_dialogs.open_save_as_dialog(proposed, _service.base_dir())
+
+
+func _on_save_as_requested(id: StringName) -> void:
+	document.meta.id = id
+	var path := _service.save_map(document, &"", null)
+	if path.is_empty():
+		_message = "не сохранено: %s" % _service.last_error
+	else:
+		current_path = path
+		_message = "сохранено в %s" % path
+	_refresh_map_menu()
+	_refresh_panels()
+
+
+func _on_new_pressed() -> void:
+	if not await _confirm_discard_changes():
+		return
+	_dialogs.open_new_dialog()
+
+
+func _on_create_requested(id: StringName, display_name: String, board_cells: int) -> void:
+	_replace_document(MapDocument.create(id, display_name, board_cells), "")
+	_message = "новая карта: %s (%d×%d)" % [id, board_cells, board_cells]
+
+
+func _on_load_pressed() -> void:
+	if not await _confirm_discard_changes():
+		return
+	var entries := _service.list_maps()
+	_dialogs.open_load_dialog(entries, _service.last_errors)
+
+
+func _on_open_requested(path: String) -> void:
+	var opened := _service.load_package(path)
+	if opened == null:
+		_message = "не удалось открыть: %s" % _service.last_error
+		_refresh_panels()
+		return
+	_replace_document(opened, path)
+	_message = "открыто: %s" % path
+	if current_path.is_empty():
+		_message += " · только чтение, сохранится в %s" % _service.base_dir()
+
+
+## Swaps in a different document and rebuilds everything bound to the old one. The
+## undo stacks go with it: a command recorded against the previous board would
+## replay onto cells that no longer mean the same thing.
+func _replace_document(next: MapDocument, path: String) -> void:
+	document = next
+	_adopt_path(path)
 	history.clear()
 	_terrain_service.clear_history()
 	_water_service.clear_history()
 	_build_services()
 	for mode: MapEditorMode in _modes:
 		mode.configure(_context)
-	_message = "новая карта"
 	_refresh_map_menu()
 	_refresh_panels()
 
@@ -229,35 +327,60 @@ func _connect_ui() -> void:
 	_palette.option_activated.connect(func(option_id: StringName) -> void:
 		_active.activate_option(option_id))
 	_back_button.pressed.connect(_return_to_menu)
-	_new_button.pressed.connect(_new_map)
+	_new_button.pressed.connect(_on_new_pressed)
+	_load_button.pressed.connect(_on_load_pressed)
 	_save_button.pressed.connect(_save)
+	_save_as_button.pressed.connect(_open_save_as)
 	_undo_button.pressed.connect(_undo)
 	_redo_button.pressed.connect(_redo)
 	_map_menu.get_popup().id_pressed.connect(_on_map_menu_item_pressed)
+	_dialogs.create_requested.connect(_on_create_requested)
+	_dialogs.open_requested.connect(_on_open_requested)
+	_dialogs.save_as_requested.connect(_on_save_as_requested)
+	_dialogs.properties_applied.connect(_on_properties_applied)
 	_refresh_map_menu()
 
 
 func _refresh_map_menu() -> void:
 	var popup := _map_menu.get_popup()
 	popup.clear()
+	popup.add_item("Свойства карты…", MENU_PROPERTIES)
+	popup.add_separator()
 	popup.add_radio_check_item("За пределами карты: Океан", MENU_BORDER_OCEAN)
 	popup.add_radio_check_item("За пределами карты: Ничего", MENU_BORDER_NOTHING)
-	popup.set_item_checked(0, document.meta.border_kind == MapMeta.BORDER_OCEAN)
-	popup.set_item_checked(1, document.meta.border_kind == MapMeta.BORDER_NOTHING)
+	popup.set_item_checked(popup.get_item_index(MENU_BORDER_OCEAN),
+		document.meta.border_kind == MapMeta.BORDER_OCEAN)
+	popup.set_item_checked(popup.get_item_index(MENU_BORDER_NOTHING),
+		document.meta.border_kind == MapMeta.BORDER_NOTHING)
 
 
 func _on_map_menu_item_pressed(menu_id: int) -> void:
+	if menu_id == MENU_PROPERTIES:
+		_dialogs.open_properties_dialog(document.meta)
+		return
 	var kind := MapMeta.BORDER_OCEAN if menu_id == MENU_BORDER_OCEAN else MapMeta.BORDER_NOTHING
 	if document.meta.border_kind == kind:
 		return
 	document.meta.border_kind = kind
+	_apply_header_change("за пределами карты: %s" % ("океан" if kind == MapMeta.BORDER_OCEAN else "ничего"))
+
+
+## The properties dialog has already written into `document.meta`; everything that
+## caches a header value has to be told, which is the same work switching the
+## border does.
+func _on_properties_applied() -> void:
+	_apply_header_change("свойства карты обновлены")
+
+
+## Re-reads the header everywhere it is consumed: the rule that floods the rim, and
+## the horizon that draws it. Both take the sea level as well as the border kind,
+## so editing the level in the properties dialog lands here too.
+func _apply_header_change(message: String) -> void:
 	document.mark_dirty()
-	_message = "за пределами карты: %s" % ("океан" if kind == MapMeta.BORDER_OCEAN else "ничего")
-	# Switching the border is a header edit, so it re-reads the header everywhere it
-	# is consumed: the rule that floods the rim, and the horizon that draws it.
+	_message = message
 	_border_ocean.configure(_water_service, document.terrain, document.water, document.meta)
 	water_world.configure_border(document.meta.border_kind, document.meta.border_level)
-	if kind == MapMeta.BORDER_OCEAN:
+	if document.meta.border_kind == MapMeta.BORDER_OCEAN:
 		_context.set_edit_label("океан")
 		_border_ocean.apply()
 	_refresh_map_menu()
@@ -269,6 +392,15 @@ func _rebuild_palette() -> void:
 	_palette.set_entries(_active.palette_entries(), _active.selected_palette_entry())
 
 
+## Where a save would land, and whether this document owns a file. Silent write
+## redirection is the failure this line exists to prevent
+## (content_packaging.md §6.4).
+func _binding_line() -> String:
+	if current_path.is_empty():
+		return "новый файл → %s" % _service.base_dir()
+	return "файл: %s" % current_path
+
+
 func _refresh_panels() -> void:
 	if _active == null:
 		return
@@ -276,8 +408,9 @@ func _refresh_panels() -> void:
 	_palette.set_options(_active.tool_options())
 	_side_panel.set_map_info([
 		"%s%s" % [document.meta.name, "*" if document.dirty else ""],
-		"id: %s" % document.meta.id,
+		"id: %s" % (document.meta.id if not String(document.meta.id).is_empty() else "— не задан"),
 		"доска %d×%d" % [document.meta.board_cells, document.meta.board_cells],
+		_binding_line(),
 		"отмен в стеке: %d" % history.undo_depth(),
 	])
 	_side_panel.set_inspector("Инспектор — %s" % _active.title, _active.inspector_lines())
@@ -459,8 +592,34 @@ func _after_history_change() -> void:
 
 
 func _return_to_menu() -> void:
+	if not await _confirm_discard_changes():
+		return
 	var launch_manager: Node = get_node_or_null("/root/GameLaunchManager")
 	if launch_manager != null and launch_manager.has_method("return_to_main_menu"):
 		launch_manager.call("return_to_main_menu")
 		return
 	get_tree().change_scene_to_file("res://game/features/ui/presentation/main_menu/main_menu.tscn")
+
+
+## Guards every path that throws the document away: New, Open, Back and Esc.
+## `MapDocument.dirty` promised this prompt from the day the flag was added; until
+## it existed, Esc during a session silently discarded the whole map.
+func _confirm_discard_changes() -> bool:
+	if document == null or not document.dirty:
+		return true
+	var dialog := ConfirmationDialog.new()
+	dialog.title = "Несохранённые изменения"
+	dialog.dialog_text = "Карта изменена и не сохранена. Продолжить и потерять правки?"
+	dialog.ok_button_text = "Продолжить"
+	dialog.cancel_button_text = "Отмена"
+	# The flag lives in an Array because GDScript lambdas capture locals by value:
+	# writing to a plain `var` from the handler would leave the outer one untouched
+	# and every dialog would read as cancelled.
+	var confirmed := [false]
+	dialog.confirmed.connect(func() -> void: confirmed[0] = true)
+	add_child(dialog)
+	dialog.popup_centered(Vector2i(420, 140))
+	while dialog.visible:
+		await get_tree().process_frame
+	dialog.queue_free()
+	return confirmed[0]

@@ -499,17 +499,17 @@ game/features/content/
 
 | # | Шаг | Файлы | Готово, когда |
 | --- | --- | --- | --- |
-| 9 | Dev-режим для редактора карт, симметрично чертежам (§9): `MapDocumentService` получает флаг и целевой корень, `GameLaunchManager` — `editor_dev_mode` | `map_document_service.gd`, `game_launch_manager.gd`, `map_editor.gd` | встроенная `green_valley` открывается, правится и сохраняется на месте; `tools/make_builtin_maps.gd` перестаёт быть единственным способом |
-| 10 | Сохранение по исходному пути + «Сохранить как» в обоих редакторах (§6.4) | `blueprint_repository.gd`, `map_document_service.gd`, оба редактора | чертёж из подпапки сохраняется в неё же; второе «Сохранить как» не затирает первый файл |
-| 11 | Открытие из всех источников с пометкой источника и отвязкой read-only (§6.4) | `blueprint_repository.gd`, `map_document_service.gd`, оба редактора | игрок открывает `core:tent`, правит и получает `user:tent`, файл игры не тронут |
-| 12 | Инспектор карты: `id`, `name`, `author`, `biomes[]`, `tags[]`, `map_kind`, `players`, `start.era`, `start.style`; размер доски — только в диалоге создания (§6.2 `map_editor.md`) | `map_meta.gd`, `map_editor` UI | новая карта сохраняется без ручной правки JSON и не зовётся `new_map` |
-| 13 | Оси идентичности в инспекторе здания: `role`, `style` рядом с `era` | `frame_mode_controller.gd`, `building_editor.tscn` | два файла с `role: bakery` и разными `style` резолвятся цепочкой §4.2 на живом контенте |
-| 14 | Алфавит `id`: живая чистка поля ввода и внятная ошибка вместо `untitled_building` (§3.3) | `blueprint_repository.gd`, оба редактора | кириллический ввод сразу виден как отброшенный, пустой `id` не создаёт файл |
-| 15 | Защита от потери работы в редакторе карт: `dirty` на «Новая», «Назад», Esc | `map_editor.gd` | Esc с несохранённой картой спрашивает, а не выходит |
-| 16 | `ContentIndex.errors` доходят до UI обоих редакторов и до списка карт | `content_index.gd`, оба редактора, `main_menu.gd` | два файла с одним `id` дают видимое сообщение |
-| 17 | Основание для превью: параметр `preview` доходит до записи, `preview.png` и `has_preview` зарезервированы, снимок пока не делается | `map_document_service.gd`, `map_editor.gd` | место под миниатюру есть, кода рендера нет |
-| 18 | Миграция `map.json` v1 → v2: `border.level` в целые шаги Δh | `map_document_service.gd` | `green_valley` переоткрывается и пересохраняется без сдвига уровня моря |
-| 19 | `export_presets.cfg` с include-фильтрами на `game/content/**` (§9) | `export_presets.cfg` | экспортированная сборка находит `core:tent` и `core:green_valley` |
+| 9 | Dev-режим для редактора карт, симметрично чертежам (§9) | `map_document_service.gd`, `game_launch_manager.gd`, `map_editor.gd` | ✅ `MapDocumentService.new(dev)`, флаг `editor_dev_mode` + `editor_mode_forced` в лаунчере |
+| 10 | Сохранение по исходному пути + «Сохранить как» в обоих редакторах (§6.4) | оба репозитория, оба редактора | ✅ `current_path` в обоих редакторах, `save(bp, path)` и `save_map_to` |
+| 11 | Открытие из всех источников с пометкой и отвязкой read-only (§6.4) | `blueprint_repository.gd`, `map_document_service.gd`, оба редактора | ✅ список через `ContentIndex`, `can_write()` решает привязку |
+| 12 | Инспектор карты + `map_kind`, `players`; размер доски — только в диалоге создания | `map_meta.gd`, `map_editor_dialogs.tscn/.gd` | ✅ диалоги вынесены отдельной сценой |
+| 13 | Оси идентичности в инспекторе здания: `role`, `style` рядом с `era` | `frame_mode_controller.gd`, `building_editor.tscn` | ✅ поля `RoleEdit`, `VisualStyleEdit` |
+| 14 | Алфавит `id`: живая чистка поля и внятная ошибка (§3.3) | `content_id.gd`, оба редактора | ✅ правило переехало в `ContentId.sanitize_id/is_valid_id` |
+| 15 | Защита от потери работы в редакторе карт: `dirty` на «Новая», «Открыть», «Назад», Esc | `map_editor.gd` | ✅ `_confirm_discard_changes()` |
+| 16 | `ContentIndex.errors` доходят до UI обоих редакторов | `content_index.gd`, оба редактора | ◐ доходят до редакторов; в списке карт главного меню — нет |
+| 17 | Основание для превью: параметр `preview` доходит до записи, снимок не делается | `map_document_service.gd`, `map_editor.gd` | ✅ хук на месте, рендера нет |
+| 18 | Миграция `map.json` v1 → v2: `border.level` в целые шаги Δh | `map_document_service.gd` | ✅ округление к ближайшему шагу, покрыто тестом |
+| 19 | `export_presets.cfg` с include-фильтрами на `game/content/**` (§9) | `export_presets.cfg` | ◐ пресеты Linux/Windows заведены; на реальной сборке не проверено |
 
 Результат этапа: обоими редакторами можно наполнять игру, ничего не правя в JSON руками,
 и игрок не может испортить встроенный контент, даже начав с него.

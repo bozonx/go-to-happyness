@@ -1,4 +1,4 @@
-[gd_scene load_steps=12 format=3]
+[gd_scene load_steps=13 format=3]
 
 [ext_resource type="Script" path="res://game/features/world/presentation/editor/map_editor.gd" id="1_editor"]
 [ext_resource type="Script" path="res://game/features/world/presentation/terrain/grid_terrain_world.gd" id="2_terrain"]
@@ -10,6 +10,7 @@
 [ext_resource type="PackedScene" path="res://game/features/world/presentation/editor/ui/map_editor_side_panel.tscn" id="8_side_panel"]
 [ext_resource type="PackedScene" path="res://game/features/world/presentation/editor/ui/map_editor_palette.tscn" id="9_palette"]
 [ext_resource type="PackedScene" path="res://game/features/world/presentation/editor/ui/map_editor_status_bar.tscn" id="10_status_bar"]
+[ext_resource type="PackedScene" path="res://game/features/world/presentation/editor/ui/map_editor_dialogs.tscn" id="12_dialogs"]
 
 [sub_resource type="Environment" id="env_map_editor"]
 background_mode = 1
@@ -80,4 +81,6 @@ mouse_filter = 2
 mouse_filter = 0
 
 [node name="StatusBar" parent="UI/Screen" instance=ExtResource("10_status_bar")]
+
+[node name="Dialogs" parent="UI" instance=ExtResource("12_dialogs")]
 mouse_filter = 0

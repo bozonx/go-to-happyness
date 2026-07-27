@@ -37,7 +37,7 @@ func first_person_select_at_crosshair() -> void:
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 		return
 	var viewport_center := game.get_viewport().get_visible_rect().size * 0.5
-	game.select_citizen_at(viewport_center)
+	game.selection_controller.select_citizen_at(viewport_center)
 
 
 func first_person_target() -> Dictionary:

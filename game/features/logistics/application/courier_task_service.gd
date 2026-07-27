@@ -38,58 +38,32 @@ var _construction_source_available: Callable
 var _citizen_for_ai_id: Callable
 
 
-func configure(
-	p_settlement: SettlementState,
-	p_citizens: Array,
-	p_queued_trades: Array,
-	p_pending_trades: Dictionary,
-	p_warehouse_positions: Array[Vector3],
-	p_pending_arrivals: Array,
-	p_arrival_greeters: Dictionary,
-	p_outside_workers: Dictionary,
-	p_building_registry: Variant,
-	p_sawmills: Variant,
-	p_water_collector_service: Variant,
-	p_trade_service: TradeService,
-	p_canteen_service: Variant,
-	p_canteen_getter: Callable,
-	p_canteen_food_getter: Callable,
-	p_canteen_position_getter: Callable,
-	p_pending_canteen_delivery_getter: Callable,
-	p_set_canteen_delivery_state: Callable,
-	p_entrance_stone_getter: Callable,
-	p_runtime_seconds_getter: Callable,
-	p_fire_state_for: Callable,
-	p_apply_fire_state: Callable,
-	p_is_route_reachable: Callable,
-	p_construction_source_available: Callable,
-	p_citizen_for_ai_id: Callable
-) -> void:
-	_settlement = p_settlement
-	_citizens = p_citizens
-	_queued_trades = p_queued_trades
-	_pending_trades = p_pending_trades
-	_warehouse_positions = p_warehouse_positions
-	_pending_arrivals = p_pending_arrivals
-	_arrival_greeters = p_arrival_greeters
-	_outside_workers = p_outside_workers
-	_building_registry = p_building_registry
-	_sawmills = p_sawmills
-	_water_collector_service = p_water_collector_service
-	_trade_service = p_trade_service
-	_canteen_service = p_canteen_service
-	_canteen_getter = p_canteen_getter
-	_canteen_food_getter = p_canteen_food_getter
-	_canteen_position_getter = p_canteen_position_getter
-	_pending_canteen_delivery_getter = p_pending_canteen_delivery_getter
-	_set_canteen_delivery_state = p_set_canteen_delivery_state
-	_entrance_stone_getter = p_entrance_stone_getter
-	_runtime_seconds_getter = p_runtime_seconds_getter
-	_fire_state_for = p_fire_state_for
-	_apply_fire_state = p_apply_fire_state
-	_is_route_reachable = p_is_route_reachable
-	_construction_source_available = p_construction_source_available
-	_citizen_for_ai_id = p_citizen_for_ai_id
+func configure(port: CourierTaskRuntimePort) -> void:
+	_settlement = port.settlement
+	_citizens = port.citizens
+	_queued_trades = port.queued_trades
+	_pending_trades = port.pending_trades
+	_warehouse_positions = port.warehouse_positions
+	_pending_arrivals = port.pending_arrivals
+	_arrival_greeters = port.arrival_greeters
+	_outside_workers = port.outside_workers
+	_building_registry = port.building_registry
+	_sawmills = port.sawmills
+	_water_collector_service = port.water_collector_service
+	_trade_service = port.trade_service
+	_canteen_service = port.canteen_service
+	_canteen_getter = port.canteen_getter
+	_canteen_food_getter = port.canteen_food_getter
+	_canteen_position_getter = port.canteen_position_getter
+	_pending_canteen_delivery_getter = port.pending_canteen_delivery_getter
+	_set_canteen_delivery_state = port.set_canteen_delivery_state
+	_entrance_stone_getter = port.entrance_stone_getter
+	_runtime_seconds_getter = port.runtime_seconds_getter
+	_fire_state_for = port.fire_state_for
+	_apply_fire_state = port.apply_fire_state
+	_is_route_reachable = port.is_route_reachable
+	_construction_source_available = port.construction_source_available
+	_citizen_for_ai_id = port.citizen_for_ai_id
 
 
 func start_courier_canteen_or_trade(courier: Citizen, task: RefCounted) -> bool:

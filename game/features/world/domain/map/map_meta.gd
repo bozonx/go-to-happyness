@@ -43,10 +43,23 @@ const BOARD_PRESETS: Array[int] = [PRESET_ARENA, PRESET_SMALL, PRESET_STANDARD, 
 const DEFAULT_BOARD_CELLS := PRESET_SMALL
 const DEFAULT_CELL_SIZE := 1.0
 
+## What the map is for (§4.1). Purely a filter in the map list: unlike `kind`,
+## which decides how the file is read, nothing in the game branches on this.
+const MAP_KIND_MAP := &"map"
+const MAP_KIND_SCENARIO := &"scenario"
+const MAP_KIND_ARENA := &"arena"
+const MAP_KINDS: Array[StringName] = [MAP_KIND_MAP, MAP_KIND_SCENARIO, MAP_KIND_ARENA]
+
 var kind: StringName = KIND_MAP
 var id: StringName = &""
 var name := ""
 var author := ""
+## What the map is *for*, as opposed to `kind`, which is what the file *is*
+## (`map_editor.md` §4.1). A filter in the map list, never a rule the game enforces.
+var map_kind: StringName = MAP_KIND_MAP
+## How many players the author designed for. One is not a special case, it is the
+## default; the field exists so a co-op map can say so before co-op exists.
+var players := 1
 var biomes: Array[StringName] = []
 var tags: Array[StringName] = []
 ## Changes on every save. A game save stores it alongside `map_ref` so a session
@@ -76,6 +89,10 @@ static func from_dict(source: Dictionary) -> MapMeta:
 	meta.id = StringName(source.get("id", meta.id))
 	meta.name = String(source.get("name", meta.name))
 	meta.author = String(source.get("author", meta.author))
+	meta.map_kind = StringName(source.get("map_kind", meta.map_kind))
+	if meta.map_kind not in MAP_KINDS:
+		meta.map_kind = MAP_KIND_MAP
+	meta.players = maxi(int(source.get("players", meta.players)), 1)
 	for biome: Variant in source.get("biomes", []):
 		meta.biomes.append(StringName(biome))
 	for tag: Variant in source.get("tags", []):
@@ -105,6 +122,8 @@ func to_dict() -> Dictionary:
 		"id": String(id),
 		"name": name,
 		"author": author,
+		"map_kind": String(map_kind),
+		"players": players,
 		"biomes": biomes.map(func(value: StringName) -> String: return String(value)),
 		"tags": tags.map(func(value: StringName) -> String: return String(value)),
 		"revision": revision,

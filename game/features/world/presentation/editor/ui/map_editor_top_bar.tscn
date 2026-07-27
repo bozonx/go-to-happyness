@@ -32,14 +32,18 @@ tooltip_text = "Создать новую карту"
 
 [node name="LoadButton" type="Button" parent="Margin/Scroll/Row"]
 custom_minimum_size = Vector2(38, 0)
-disabled = true
 text = "📂"
-tooltip_text = "Выбор карты появляется в фазе 6"
+tooltip_text = "Открыть карту"
 
 [node name="SaveButton" type="Button" parent="Margin/Scroll/Row"]
 custom_minimum_size = Vector2(38, 0)
 text = "💾"
 tooltip_text = "Сохранить карту (Ctrl+S)"
+
+[node name="SaveAsButton" type="Button" parent="Margin/Scroll/Row"]
+custom_minimum_size = Vector2(38, 0)
+text = "💾+"
+tooltip_text = "Сохранить как новую карту"
 
 [node name="VSep1" type="VSeparator" parent="Margin/Scroll/Row"]
 

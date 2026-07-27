@@ -37,7 +37,21 @@ const KNOWN_FILES: Array[String] = [MAP_JSON, TERRAIN_BIN, WATER_BIN, "surface.b
 const USER_NAMESPACE := "user:"
 
 var last_error := ""
+## Populated by every listing: duplicate ids and unreadable packages, so the editor
+## can show them instead of letting one of two files quietly disappear.
+var last_errors: Array[String] = []
+## Dev mode authors the shipped pack, exactly as the building editor does
+## (content_packaging.md §9). Without it the built-in maps are reachable only from
+## `tools/make_builtin_maps.gd`, which means the game's own terrain, water and
+## surface are unavailable to the editor that exists to author them.
+var dev_mode := false
 var _content_index: ContentIndex
+
+
+func _init(p_dev_mode: bool = false) -> void:
+	# Gated in the service, not in the UI: `res://` is a read-only `.pck` once
+	# exported, and a save that silently does nothing is the worst outcome here.
+	dev_mode = p_dev_mode and OS.has_feature("editor")
 
 
 # --- Addressing ---------------------------------------------------------------
@@ -61,6 +75,24 @@ static func package_path(source: StringName, id: StringName) -> String:
 	return "%s/%s%s" % [root_of(source), id, PACKAGE_SUFFIX]
 
 
+## The source this mode writes under, and the folder it writes into.
+func target_source() -> StringName:
+	return SOURCE_BUILTIN if dev_mode else SOURCE_PLAYER
+
+
+func base_dir() -> String:
+	return root_of(target_source())
+
+
+## Whether this mode may write `path`. A player who opened a shipped map gets
+## `false`, which detaches the document (content_packaging.md §6.4) instead of
+## failing the save after the author has already done the work.
+func can_write(path: String) -> bool:
+	if path.is_empty():
+		return false
+	return path.begins_with(base_dir() + "/")
+
+
 # --- Listing ------------------------------------------------------------------
 
 ## Every map the player can pick, built-in first. Each entry carries enough to
@@ -69,13 +101,16 @@ static func package_path(source: StringName, id: StringName) -> String:
 func list_maps() -> Array[Dictionary]:
 	var found: Array[Dictionary] = []
 	_ensure_content_index()
+	last_errors = _content_index.errors.duplicate()
 	for indexed_entry in _content_index.map_entries():
 		var parsed: Dictionary = indexed_entry.metadata
 		var meta := MapMeta.from_dict(parsed)
 		found.append({"source": indexed_entry.source, "id": indexed_entry.id,
 			"key": indexed_entry.runtime_key, "name": meta.name if not meta.name.is_empty() else String(indexed_entry.id),
-			"kind": meta.kind, "board_cells": meta.board_cells, "revision": meta.revision,
+			"kind": meta.kind, "map_kind": meta.map_kind, "players": meta.players,
+			"board_cells": meta.board_cells, "revision": meta.revision,
 			"author": meta.author, "path": indexed_entry.path,
+			"writable": can_write(indexed_entry.path),
 			"has_preview": FileAccess.file_exists(indexed_entry.path.path_join(PREVIEW_PNG))})
 	return found
 
@@ -111,19 +146,15 @@ func read_header(source: StringName, id: StringName) -> Dictionary:
 	}
 
 
-func _ids_in(root: String) -> Array[StringName]:
-	var ids: Array[StringName] = []
-	var directory := DirAccess.open(root)
-	if directory == null:
-		return ids
-	for entry: String in directory.get_directories():
-		if entry.ends_with(PACKAGE_SUFFIX):
-			ids.append(StringName(entry.trim_suffix(PACKAGE_SUFFIX)))
-	ids.sort()
-	return ids
-
-
 # --- Loading ------------------------------------------------------------------
+
+## Package folder a runtime key resolves to, or "" when nothing claims it. The
+## editor needs this to remember where an opened map came from.
+func map_path(key: StringName) -> String:
+	_ensure_content_index()
+	var entry = _content_index.get_entry(key)
+	return entry.path if entry != null else ""
+
 
 func load_map(key: StringName) -> MapDocument:
 	_ensure_content_index()
@@ -174,26 +205,52 @@ func load_package(path: String) -> MapDocument:
 
 
 ## Files of past versions are brought forward here; writing always emits the
-## current version. Nothing to do yet — version 1 is the first.
-static func _migrate(parsed: Dictionary, _from_version: int) -> Dictionary:
+## current version.
+##
+## v1 → v2: `border.level` became whole Δh steps (`map_editor.md` §6.1). A v1 file
+## could hold a fraction, and reading it as an int would truncate silently — the
+## sea would drop by part of a terrace on the first resave, which is exactly the
+## kind of change nobody notices until a coastline is wrong. Rounding is explicit
+## and to the nearest step, because the author picked a level, not a floor.
+static func _migrate(parsed: Dictionary, from_version: int) -> Dictionary:
+	if from_version < 2:
+		var border: Variant = parsed.get("border", {})
+		if border is Dictionary and (border as Dictionary).has("level"):
+			var migrated := (border as Dictionary).duplicate()
+			migrated["level"] = roundi(float(migrated["level"]))
+			parsed = parsed.duplicate()
+			parsed["border"] = migrated
 	return parsed
 
 
 # --- Saving -------------------------------------------------------------------
 
-## Writes to the package folder this source and id address. Built-in maps are only
-## writable from a development build; `res://` is read-only once exported.
-func save_map(document: MapDocument, source: StringName = SOURCE_PLAYER, preview: Image = null) -> String:
+## Writes to the package folder this source and id address. An empty `source` means
+## "whatever this mode writes" — the normal case for the editor, and the reason a
+## player-mode save never lands in the shipped pack.
+##
+## `preview` is the reserved hook for map thumbnails (`map_editor.md` §3.2.1): the
+## parameter is plumbed through to the package, but nothing renders one yet.
+func save_map(document: MapDocument, source: StringName = &"", preview: Image = null) -> String:
 	last_error = ""
 	if document == null or String(document.meta.id).is_empty():
 		last_error = "у карты нет id"
 		return ""
-	return save_map_to(document, package_path(source, document.meta.id), preview)
+	if not ContentIdScript.is_valid_id(String(document.meta.id)):
+		last_error = "ID карты может содержать только латинские строчные буквы, цифры, «_» и «-»"
+		return ""
+	var effective := source if not String(source).is_empty() else target_source()
+	return save_map_to(document, package_path(effective, document.meta.id), preview)
 
 
 ## Writes the package atomically and returns the path, or "" on failure. The
 ## document's revision is refreshed first, so what lands on disk and what the
 ## editor holds agree about which revision they are.
+##
+## This is the raw writer: it honours `final_path` without asking whether the mode
+## owns it, because `tools/make_builtin_maps.gd` and tests write shipped packages
+## directly. Interactive callers ask `can_write()` first and detach the document
+## when the answer is no (content_packaging.md §6.4).
 func save_map_to(document: MapDocument, final_path: String, preview: Image = null) -> String:
 	last_error = ""
 	if document == null:

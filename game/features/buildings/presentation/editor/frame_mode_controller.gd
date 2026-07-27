@@ -55,7 +55,10 @@ var _fallback_edit: LineEdit = null
 var _footprint_x_spin: SpinBox = null
 var _footprint_z_spin: SpinBox = null
 var _category_option: OptionButton = null
+## `construction_style` (surface / underground), not the visual style below.
 var _style_option: OptionButton = null
+var _role_edit: LineEdit = null
+var _visual_style_edit: LineEdit = null
 var _path_hint_label: Label = null
 var _cost_header_btn: Label = null
 var _cost_container: VBoxContainer = null
@@ -101,6 +104,8 @@ func setup(editor: Node) -> void:
 	_footprint_z_spin = editor.get_node("%FootprintZSpin")
 	_category_option = editor.get_node("%CategoryOption")
 	_style_option = editor.get_node("%StyleOption")
+	_role_edit = editor.get_node("%RoleEdit")
+	_visual_style_edit = editor.get_node("%VisualStyleEdit")
 	_path_hint_label = editor.get_node("%PathHintLabel")
 	_cost_header_btn = editor.get_node("%CostHeaderBtn")
 	_cost_container = editor.get_node("%CostContainer")
@@ -138,7 +143,14 @@ func setup(editor: Node) -> void:
 		_editor.mark_dirty()
 	)
 
-	_path_hint_label.text = "Сохранение → %s" % _editor.repository.base_dir()
+	# The alphabet is enforced as the author types rather than at save time
+	# (content_packaging.md §3.3): a field that silently drops what you typed is
+	# still better than a file named `untitled_building` discovered later.
+	for field: LineEdit in [_editor._id_edit, _role_edit, _visual_style_edit]:
+		if field != null:
+			field.text_changed.connect(_on_id_like_field_changed.bind(field))
+
+	refresh_path_hint()
 
 	_cost_mode_option.clear()
 	_cost_mode_option.add_item("Авто-расчёт (по блокам)")
@@ -1099,6 +1111,11 @@ func sync_metadata_fields() -> void:
 		_editor._name_edit.text = _editor.blueprint.name
 	if _editor._id_edit != null:
 		_editor._id_edit.text = String(_editor.blueprint.id)
+	if _role_edit != null:
+		_role_edit.text = String(_editor.blueprint.role)
+	if _visual_style_edit != null:
+		_visual_style_edit.text = String(_editor.blueprint.style)
+	refresh_path_hint()
 	update_fallback_display()
 	if _footprint_x_spin != null:
 		_footprint_x_spin.value = _editor.blueprint.footprint.x
@@ -1127,14 +1144,50 @@ func sync_metadata_fields() -> void:
 # Save
 # ---------------------------------------------------------------------------
 
-func on_save_pressed() -> void:
+## Rewrites an id-like field to the allowed alphabet, keeping the caret where the
+## author expects it. Assigning `text` resets the caret to 0, which would make the
+## field type backwards.
+func _on_id_like_field_changed(new_text: String, field: LineEdit) -> void:
+	var cleaned := ContentId.sanitize_id(new_text)
+	if cleaned == new_text:
+		return
+	var caret := field.caret_column - (new_text.length() - cleaned.length())
+	field.text = cleaned
+	field.caret_column = clampi(caret, 0, cleaned.length())
+	_editor.mark_dirty()
+
+
+## Where a save would land right now, and whether the document is attached to a
+## file of its own. Silent write redirection is the failure this line exists to
+## prevent (content_packaging.md §6.4).
+func refresh_path_hint() -> void:
+	if _path_hint_label == null:
+		return
+	if _editor.current_path.is_empty():
+		_path_hint_label.text = "Новый файл → %s" % _editor.repository.base_dir()
+	else:
+		_path_hint_label.text = "Сохранение → %s" % _editor.current_path
+
+
+## Pulls every inspector field into the blueprint. Split out of `on_save_pressed`
+## because Save As needs the same values before it can propose an id, and two
+## copies of this would drift the first time a field is added.
+func collect_metadata_from_ui() -> void:
 	_editor.blueprint.name = _editor._name_edit.text.strip_edges()
 	if _editor.blueprint.name.is_empty():
 		_editor.blueprint.name = "Новое здание"
 	if _editor._id_edit != null:
-		var raw_id := _editor._id_edit.text.strip_edges()
+		var raw_id := ContentId.sanitize_id(_editor._id_edit.text)
 		if not raw_id.is_empty():
 			_editor.blueprint.id = StringName(raw_id)
+	# `role` defaults to the id and only diverges when the author says so — that
+	# divergence is the entire style mechanism (content_packaging.md §3.1).
+	if _role_edit != null:
+		var raw_role := ContentId.sanitize_id(_role_edit.text)
+		_editor.blueprint.role = StringName(raw_role) if not raw_role.is_empty() else _editor.blueprint.id
+	if _visual_style_edit != null:
+		var raw_style := ContentId.sanitize_id(_visual_style_edit.text)
+		_editor.blueprint.style = StringName(raw_style) if not raw_style.is_empty() else &"generic"
 	if _category_option != null:
 		_editor.blueprint.category = StringName(_category_option.get_item_metadata(_category_option.selected))
 	update_fallback_display()
@@ -1143,10 +1196,20 @@ func on_save_pressed() -> void:
 	if _editor._entrance_x_spin != null and _editor._entrance_z_spin != null:
 		_editor.blueprint.entrance = Vector2i(int(_editor._entrance_x_spin.value), int(_editor._entrance_z_spin.value))
 	_editor.grid_model.write_to_blueprint(_editor.blueprint)
-	var result := _editor.repository.save(_editor.blueprint)
+
+
+func on_save_pressed() -> void:
+	collect_metadata_from_ui()
+	# An empty `current_path` means "no file of our own yet": either a new blueprint
+	# or one detached from a read-only source. Both save under the current id into
+	# the mode's own folder.
+	var result := _editor.repository.save(_editor.blueprint, _editor.current_path)
 	if result["ok"]:
+		_editor.current_path = result["path"]
 		_editor._dirty = false
 		_editor.reset_history()
-		_editor.set_status("Сохранено: %s (%d блоков)" % [result["path"], _editor.blueprint.block_count()])
+		_editor.set_status("Сохранено: %s (%d блоков, %d объектов)" % [
+			result["path"], _editor.blueprint.block_count(), _editor.blueprint.objects.size()])
 	else:
 		_editor.set_status("Ошибка сохранения: %s" % result["error"])
+	refresh_path_hint()

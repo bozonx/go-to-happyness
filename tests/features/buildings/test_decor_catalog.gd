@@ -85,6 +85,13 @@ func _test_catalog_taxonomy() -> void:
 	assert(equip_cats.has(&"utility_sanitary"), "Equipment must include utility_sanitary")
 	assert(equip_cats.has(&"tools"), "Equipment must include tools")
 
+	var tags := FurnishingAssetCatalogScript.all_tags()
+	assert(tags.has(&"fire"), "Catalog tag index must include fire")
+	assert(tags.has(&"town"), "Catalog tag index must include town")
+	for index in range(1, tags.size()):
+		assert(String(tags[index - 1]).naturalnocasecmp_to(String(tags[index])) <= 0,
+			"Catalog tags must have a stable display order")
+
 
 func _test_asset_scenes_exist() -> void:
 	for asset in FurnishingAssetCatalogScript.get_all_assets():

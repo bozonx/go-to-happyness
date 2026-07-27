@@ -1,0 +1,336 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/features/world/presentation/editor/ui/map_editor_dialogs.gd" id="1_dialogs"]
+
+[node name="MapEditorDialogs" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1_dialogs")
+
+[node name="NewDialog" type="ConfirmationDialog" parent="."]
+title = "Новая карта"
+size = Vector2i(420, 260)
+ok_button_text = "Создать"
+cancel_button_text = "Отмена"
+
+[node name="Body" type="MarginContainer" parent="NewDialog"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = -46.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBox" type="VBoxContainer" parent="NewDialog/Body"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="IdLbl" type="Label" parent="NewDialog/Body/VBox"]
+layout_mode = 2
+text = "ID карты (латиница, цифры, «_», «-»):"
+
+[node name="NewIdEdit" type="LineEdit" parent="NewDialog/Body/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "my_map"
+
+[node name="NameLbl" type="Label" parent="NewDialog/Body/VBox"]
+layout_mode = 2
+text = "Название:"
+
+[node name="NewNameEdit" type="LineEdit" parent="NewDialog/Body/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "Новая карта"
+
+[node name="BoardLbl" type="Label" parent="NewDialog/Body/VBox"]
+layout_mode = 2
+text = "Размер доски (потом не меняется):"
+
+[node name="NewBoardOption" type="OptionButton" parent="NewDialog/Body/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="LoadDialog" type="ConfirmationDialog" parent="."]
+title = "Открыть карту"
+size = Vector2i(520, 420)
+ok_button_text = "Открыть"
+cancel_button_text = "Отмена"
+
+[node name="Body" type="MarginContainer" parent="LoadDialog"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = -46.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBox" type="VBoxContainer" parent="LoadDialog/Body"]
+layout_mode = 2
+
+[node name="LoadErrorLabel" type="Label" parent="LoadDialog/Body/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+visible = false
+autowrap_mode = 2
+theme_override_colors/font_color = Color(0.95, 0.55, 0.45, 1)
+
+[node name="LoadList" type="ItemList" parent="LoadDialog/Body/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="SaveAsDialog" type="ConfirmationDialog" parent="."]
+title = "Сохранить как"
+size = Vector2i(420, 160)
+ok_button_text = "Сохранить"
+cancel_button_text = "Отмена"
+
+[node name="Body" type="MarginContainer" parent="SaveAsDialog"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = -46.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBox" type="VBoxContainer" parent="SaveAsDialog/Body"]
+layout_mode = 2
+
+[node name="SaveAsHint" type="Label" parent="SaveAsDialog/Body/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2
+text = "ID новой карты:"
+
+[node name="SaveAsIdEdit" type="LineEdit" parent="SaveAsDialog/Body/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "my_map"
+
+[node name="PropertiesDialog" type="ConfirmationDialog" parent="."]
+title = "Свойства карты"
+size = Vector2i(520, 560)
+ok_button_text = "Применить"
+cancel_button_text = "Отмена"
+
+[node name="Body" type="MarginContainer" parent="PropertiesDialog"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = -46.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Scroll" type="ScrollContainer" parent="PropertiesDialog/Body"]
+layout_mode = 2
+
+[node name="Grid" type="GridContainer" parent="PropertiesDialog/Body/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+columns = 2
+theme_override_constants/h_separation = 10
+theme_override_constants/v_separation = 6
+
+[node name="IdentityLbl" type="Label" parent="PropertiesDialog/Body/Scroll/Grid"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 15
+text = "Идентичность"
+
+[node name="IdentitySpacer" type="Control" parent="PropertiesDialog/Body/Scroll/Grid"]
+layout_mode = 2
+
+[node name="IdLbl" type="Label" parent="PropertiesDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "ID:"
+
+[node name="PropIdEdit" type="LineEdit" parent="PropertiesDialog/Body/Scroll/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="NameLbl" type="Label" parent="PropertiesDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "Название:"
+
+[node name="PropNameEdit" type="LineEdit" parent="PropertiesDialog/Body/Scroll/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="AuthorLbl" type="Label" parent="PropertiesDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "Автор:"
+
+[node name="PropAuthorEdit" type="LineEdit" parent="PropertiesDialog/Body/Scroll/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ClassLbl" type="Label" parent="PropertiesDialog/Body/Scroll/Grid"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 15
+text = "Классификация"
+
+[node name="ClassSpacer" type="Control" parent="PropertiesDialog/Body/Scroll/Grid"]
+layout_mode = 2
+
+[node name="MapKindLbl" type="Label" parent="PropertiesDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "Назначение:"
+
+[node name="PropMapKindOption" type="OptionButton" parent="PropertiesDialog/Body/Scroll/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="PlayersLbl" type="Label" parent="PropertiesDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "Игроков:"
+
+[node name="PropPlayersSpin" type="SpinBox" parent="PropertiesDialog/Body/Scroll/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 1.0
+max_value = 16.0
+value = 1.0
+
+[node name="BiomesLbl" type="Label" parent="PropertiesDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "Биомы:"
+
+[node name="PropBiomesEdit" type="LineEdit" parent="PropertiesDialog/Body/Scroll/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "forest, mountain"
+
+[node name="TagsLbl" type="Label" parent="PropertiesDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "Метки:"
+
+[node name="PropTagsEdit" type="LineEdit" parent="PropertiesDialog/Body/Scroll/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "survival"
+
+[node name="WorldLbl" type="Label" parent="PropertiesDialog/Body/Scroll/Grid"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 15
+text = "Мир"
+
+[node name="WorldSpacer" type="Control" parent="PropertiesDialog/Body/Scroll/Grid"]
+layout_mode = 2
+
+[node name="BoardLbl" type="Label" parent="PropertiesDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "Доска:"
+
+[node name="PropBoardLabel" type="Label" parent="PropertiesDialog/Body/Scroll/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
+tooltip_text = "Размер выбирается при создании карты и не меняется"
+
+[node name="BorderLbl" type="Label" parent="PropertiesDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "За границей:"
+
+[node name="PropBorderOption" type="OptionButton" parent="PropertiesDialog/Body/Scroll/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="BorderLevelLbl" type="Label" parent="PropertiesDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "Уровень моря:"
+
+[node name="PropBorderLevelSpin" type="SpinBox" parent="PropertiesDialog/Body/Scroll/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = -64.0
+max_value = 64.0
+
+[node name="StartLbl" type="Label" parent="PropertiesDialog/Body/Scroll/Grid"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 15
+text = "Старт"
+
+[node name="StartSpacer" type="Control" parent="PropertiesDialog/Body/Scroll/Grid"]
+layout_mode = 2
+
+[node name="EraLbl" type="Label" parent="PropertiesDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "Эра:"
+
+[node name="PropEraOption" type="OptionButton" parent="PropertiesDialog/Body/Scroll/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="StyleLbl" type="Label" parent="PropertiesDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "Стиль построек:"
+
+[node name="PropStyleEdit" type="LineEdit" parent="PropertiesDialog/Body/Scroll/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "generic"
+
+[node name="ModeLbl" type="Label" parent="PropertiesDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "Режим игры:"
+
+[node name="PropModeOption" type="OptionButton" parent="PropertiesDialog/Body/Scroll/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="TimeLbl" type="Label" parent="PropertiesDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "Время суток (мин):"
+
+[node name="PropTimeSpin" type="SpinBox" parent="PropertiesDialog/Body/Scroll/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+max_value = 1439.0
+
+[node name="DayLbl" type="Label" parent="PropertiesDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "День года:"
+
+[node name="PropDaySpin" type="SpinBox" parent="PropertiesDialog/Body/Scroll/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 1.0
+max_value = 365.0
+value = 120.0
+
+[node name="WeatherLbl" type="Label" parent="PropertiesDialog/Body/Scroll/Grid"]
+layout_mode = 2
+text = "Погода:"
+
+[node name="PropWeatherEdit" type="LineEdit" parent="PropertiesDialog/Body/Scroll/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "clear"

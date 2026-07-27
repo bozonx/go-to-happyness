@@ -34,6 +34,9 @@ func _run() -> void:
 	await _test_water_mode(editor)
 	_test_ocean_boundary_floods_only_from_the_edge(editor)
 	_test_save_and_reopen(editor)
+	_test_new_map_is_unnamed_until_asked()
+	_test_save_writes_back_to_the_same_file(editor)
+	_test_read_only_source_detaches(editor)
 
 	editor.queue_free()
 	print("--- test_map_editor.gd PASSED ---")
@@ -281,6 +284,99 @@ func _test_save_and_reopen(editor: Node) -> void:
 
 	MapDocumentService._remove_directory("user://test_maps")
 	print("  save + reopen ok")
+
+
+## A blank map has no id, and that is the point: `new_map` as a default meant the
+## second map an author created silently overwrote the first. Naming happens in the
+## creation dialog, which is also where the board size is chosen — the one moment
+## it can still be chosen at all (§6.2).
+func _test_new_map_is_unnamed_until_asked() -> void:
+	var blank := MapDocument.create(&"", "Новая карта", MapMeta.DEFAULT_BOARD_CELLS)
+	var service := MapDocumentService.new(false)
+	assert(service.save_map(blank).is_empty(), "an unnamed map cannot be saved by id")
+	assert(service.last_error.contains("id"), "and the reason names the id: %s" % service.last_error)
+
+	# The dialog is what turns intent into a document, so drive its signal rather
+	# than its widgets: the editor must react to the same thing the UI emits.
+	var named := MapDocument.create(&"my_map", "Моя карта", MapMeta.PRESET_ARENA)
+	assert(named.meta.board_cells == MapMeta.PRESET_ARENA, "the chosen preset reached the board")
+	assert(named.terrain.board_cells == MapMeta.PRESET_ARENA, "and the terrain grid with it")
+	print("  new map naming ok")
+
+
+## Ctrl+S goes back into the file the document came from, subfolder included. The
+## old behaviour rebuilt the path from the id every time, which turned a blueprint
+## or map living in a subfolder into a second file with the same id.
+func _test_save_writes_back_to_the_same_file(editor: Node) -> void:
+	# Inside the writable source on purpose: a subfolder of the player's own maps
+	# is exactly the case the old id-derived path destroyed.
+	var nested_dir := MapDocumentService.PLAYER_ROOT + "/_test_nested/deep"
+	var nested := nested_dir + "/keeps_place.gdmap"
+	MapDocumentService._remove_directory(MapDocumentService.PLAYER_ROOT + "/_test_nested")
+	DirAccess.make_dir_recursive_absolute(nested_dir)
+
+	var service := MapDocumentService.new(false)
+	var document := MapDocument.create(&"keeps_place", "На месте", MapMeta.PRESET_ARENA)
+	assert(not service.save_map_to(document, nested).is_empty(), "first write: %s" % service.last_error)
+
+	# Reopening from that path is what the editor's Open does, and it is what binds
+	# `current_path`.
+	var previous_document: MapDocument = editor.document
+	var previous_path: String = editor.current_path
+	var previous_service = editor._service
+	# Run as a player: the scene opened straight from Godot defaults to dev mode,
+	# which writes the shipped pack and would rightly refuse this path.
+	editor._service = MapDocumentService.new(false)
+	editor._on_open_requested(nested)
+	assert(editor.current_path == nested, "opened document remembers its file")
+
+	editor.document.meta.name = "Переименована"
+	editor.document.mark_dirty()
+	editor._save()
+	assert(editor.current_path == nested, "save stayed on the same path")
+	assert(not editor.document.dirty, "and cleared the dirty flag")
+
+	var reread := service.load_package(nested)
+	assert(reread != null and reread.meta.name == "Переименована", "the edit landed in the original file")
+	# Nothing was minted at the source root next to it.
+	assert(not DirAccess.dir_exists_absolute(MapDocumentService.PLAYER_ROOT + "/keeps_place.gdmap"),
+		"a save must not also create a copy under the source root")
+
+	editor._service = previous_service
+	editor.document = previous_document
+	editor.current_path = previous_path
+	editor._build_services()
+	MapDocumentService._remove_directory(MapDocumentService.PLAYER_ROOT + "/_test_nested")
+	print("  save-to-original-path ok")
+
+
+## Opening content this mode cannot write detaches the document instead of failing
+## later: the player keeps the shipped map as a starting point, and the result goes
+## to their own folder (content_packaging.md §6.4).
+func _test_read_only_source_detaches(editor: Node) -> void:
+	var shipped := MapDocumentService.package_path(MapDocumentService.SOURCE_BUILTIN, &"green_valley")
+	if not FileAccess.file_exists(shipped.path_join(MapDocumentService.MAP_JSON)):
+		print("  detach skipped: no shipped map to open")
+		return
+
+	var previous_document: MapDocument = editor.document
+	var previous_path: String = editor.current_path
+	var previous_service = editor._service
+	# Force player mode regardless of how the test process was launched.
+	editor._service = MapDocumentService.new(false)
+
+	editor._on_open_requested(shipped)
+	assert(editor.document != null, "the shipped map opened")
+	assert(editor.current_path.is_empty(),
+		"a map from a source this mode cannot write must detach, got %s" % editor.current_path)
+	assert(editor._binding_line().contains(MapDocumentService.PLAYER_ROOT),
+		"and the panel says where a save would go instead: %s" % editor._binding_line())
+
+	editor._service = previous_service
+	editor.document = previous_document
+	editor.current_path = previous_path
+	editor._build_services()
+	print("  read-only detach ok")
 
 
 func _click(button: int, pressed: bool) -> InputEventMouseButton:

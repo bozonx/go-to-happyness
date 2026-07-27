@@ -17,6 +17,7 @@ const DecorObjectRecordScript = preload("res://game/features/buildings/domain/ed
 const FurnishingAssetCatalogScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_catalog.gd")
 const FixtureDefinitionScript = preload("res://game/features/buildings/domain/editor/fixture_definition.gd")
 const ZoneRequirementsScript = preload("res://game/features/buildings/domain/editor/zone_requirements.gd")
+const ContentIdScript = preload("res://game/features/content/domain/content_id.gd")
 
 ## v3: `objects[].pos` is relative to the footprint centre (see `pivot_offset`).
 ## No migration branch for v2: every v2 file in the project places decor at the
@@ -605,14 +606,10 @@ func routing_anchor_definitions() -> Array:
 	return defs
 
 
+## The alphabet is owned by `ContentId` (content_packaging.md §3.3): maps answer the
+## same question, and two copies of one rule drift.
 static func _valid_id(value: String) -> bool:
-	if value.is_empty():
-		return false
-	for i in value.length():
-		var c := value[i]
-		if not ((c >= "a" and c <= "z") or (c >= "0" and c <= "9") or c == "_" or c == "-"):
-			return false
-	return true
+	return ContentIdScript.is_valid_id(value)
 
 
 static func _vec3i_from(data: Variant, fallback: Vector3i) -> Vector3i:

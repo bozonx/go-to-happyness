@@ -102,6 +102,12 @@ layout_mode = 2
 text = "💾"
 tooltip_text = "Сохранить текущий чертёж"
 
+[node name="SaveAsBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "💾+"
+tooltip_text = "Сохранить как новый чертёж"
+
 [node name="VSep1" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox"]
 layout_mode = 2
 
@@ -654,7 +660,7 @@ theme_override_constants/separation = 6
 
 [node name="Title" type="Label" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
 layout_mode = 2
-text = "Каталог декора"
+text = "Каталог наполнения"
 horizontal_alignment = 1
 
 [node name="DecorRecentLbl" type="Label" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
@@ -675,6 +681,38 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(190, 0)
 layout_mode = 2
 placeholder_text = "Поиск ассета во всех категориях..."
+
+[node name="DecorCatalogNav" type="HBoxContainer" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="DecorCatalogBackBtn" type="Button" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox/DecorCatalogNav"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+flat = true
+text = "‹ Назад"
+
+[node name="DecorCatalogLocation" type="Label" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox/DecorCatalogNav"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Все группы"
+vertical_alignment = 1
+
+[node name="DecorTagFilterToggle" type="Button" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox/DecorCatalogNav"]
+unique_name_in_owner = true
+layout_mode = 2
+flat = true
+text = "Теги ▾"
+
+[node name="DecorTagFilters" type="HFlowContainer" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/h_separation = 3
+theme_override_constants/v_separation = 3
 
 [node name="DecorAssetContainer" type="VBoxContainer" parent="EditorUI/Root/DecorPanel/Scroll/DecorVBox"]
 unique_name_in_owner = true
@@ -1083,6 +1121,26 @@ unique_name_in_owner = true
 layout_mode = 2
 placeholder_text = "my_building_id"
 
+[node name="RoleLbl" type="Label" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
+layout_mode = 2
+text = "Игровая роль:"
+
+[node name="RoleEdit" type="LineEdit" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "bakery"
+tooltip_text = "Что это за здание для геймплея. Два стиля одного здания имеют одну роль и разные ID."
+
+[node name="VisualStyleLbl" type="Label" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
+layout_mode = 2
+text = "Визуальный стиль:"
+
+[node name="VisualStyleEdit" type="LineEdit" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "generic"
+tooltip_text = "Набор, к которому относится постройка. generic — базовый стиль и запасной вариант для всех остальных."
+
 [node name="HSepNameId" type="HSeparator" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
 layout_mode = 2
 
@@ -1190,6 +1248,30 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 
+[node name="SaveAsDialog" type="ConfirmationDialog" parent="EditorUI/Root"]
+unique_name_in_owner = true
+title = "Сохранить как"
+size = Vector2i(420, 150)
+ok_button_text = "Сохранить"
+cancel_button_text = "Отмена"
+
+[node name="SaveAsVBox" type="VBoxContainer" parent="EditorUI/Root/SaveAsDialog"]
+offset_left = 8.0
+offset_top = 8.0
+offset_right = 412.0
+offset_bottom = 100.0
+
+[node name="SaveAsHint" type="Label" parent="EditorUI/Root/SaveAsDialog/SaveAsVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2
+text = "ID нового чертежа:"
+
+[node name="SaveAsIdEdit" type="LineEdit" parent="EditorUI/Root/SaveAsDialog/SaveAsVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "my_building_id"
+
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/BackBtn" to="." method="_confirm_back_to_menu"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/ModeFrameBtn" to="." method="_on_mode_frame_pressed"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/ModeFinishesBtn" to="." method="_on_mode_finishes_pressed"]
@@ -1198,6 +1280,7 @@ size_flags_vertical = 3
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/NewBtn" to="." method="_on_new_pressed"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/LoadBtn" to="." method="_on_load_pressed"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/SaveBtn" to="." method="_on_save_pressed"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/SaveAsBtn" to="." method="_on_save_as_pressed"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/ToolPlaceBtn" to="." method="_on_tool_place_pressed"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/ToolEraseBtn" to="." method="_on_tool_erase_pressed"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/BrushLineBtn" to="." method="_on_brush_line_pressed"]

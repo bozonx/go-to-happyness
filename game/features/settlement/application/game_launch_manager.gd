@@ -10,8 +10,15 @@ const MAP_EDITOR_SCENE := "res://game/features/world/presentation/editor/map_edi
 
 var active_launch_config: GameLaunchConfigScript = GameLaunchConfigScript.for_tent_era()
 var pending_save_path: String = ""
-## Read by BuildingEditor to decide dev vs player mode. Set by launch_building_editor.
-var editor_player_mode: bool = false
+## Read by both editors to decide dev vs player mode (content_packaging.md §9).
+## One flag for both, because the rule is one: dev authors the shipped pack and
+## exists only inside Godot; everything launched from the menu is player mode.
+var editor_dev_mode: bool = false
+## Whether `editor_dev_mode` was actually chosen by a launch. This autoload also
+## exists when an editor scene is run straight from Godot (F6), and there the
+## scene's own `dev_mode` export is the answer — without this flag that case would
+## silently read the default and drop the developer into player mode.
+var editor_mode_forced: bool = false
 ## Map the territory editor should open on entry, as a runtime key. Empty starts
 ## the editor on a new unsaved map.
 var pending_editor_map: StringName = &""
@@ -69,16 +76,22 @@ func launch_from_save(save_path: String) -> void:
 	get_tree().change_scene_to_file("res://game/bootstrap/settlement_game.tscn")
 
 
-func launch_building_editor(player_mode: bool = true) -> void:
+func launch_building_editor(dev_mode: bool = false) -> void:
 	pending_save_path = ""
-	editor_player_mode = player_mode or not OS.has_feature("editor")
+	_set_editor_mode(dev_mode)
 	get_tree().change_scene_to_file(BUILDING_EDITOR_SCENE)
 
 
-func launch_map_editor(map_key: StringName = &"") -> void:
+func launch_map_editor(map_key: StringName = &"", dev_mode: bool = false) -> void:
 	pending_save_path = ""
 	pending_editor_map = map_key
+	_set_editor_mode(dev_mode)
 	get_tree().change_scene_to_file(MAP_EDITOR_SCENE)
+
+
+func _set_editor_mode(dev_mode: bool) -> void:
+	editor_dev_mode = dev_mode and OS.has_feature("editor")
+	editor_mode_forced = true
 
 
 func return_to_main_menu() -> void:

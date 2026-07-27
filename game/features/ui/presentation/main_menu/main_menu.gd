@@ -164,7 +164,9 @@ func _on_start_game_pressed() -> void:
 func _on_building_editor_pressed() -> void:
 	var launch_mgr: Node = get_node_or_null("/root/GameLaunchManager")
 	if launch_mgr != null and launch_mgr.has_method("launch_building_editor"):
-		launch_mgr.call("launch_building_editor", true)
+		# Player mode: the menu is the player's entry point. Dev mode is reached by
+		# opening the editor scene inside Godot (content_packaging.md §9).
+		launch_mgr.call("launch_building_editor", false)
 	else:
 		get_tree().change_scene_to_file("res://game/features/buildings/presentation/editor/building_editor.tscn")
 

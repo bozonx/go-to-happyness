@@ -79,10 +79,12 @@ const BLOCKS: Array = [
 		"id": &"arch",
 		"name": "Арка",
 		"category": Category.STRUCTURE,
-		"size": Vector3(1.0, 0.5, 1.0),
+		# An arch is a semicircular cut-out in a quarter-height horizontal slab.
+		# Its upper variant occupies the other quarter of the cell.
+		"size": Vector3(1.0, 0.25, 1.0),
 		"mesh_shape": SHAPE_ARCH,
 		"rotatable": true,
-		"variants": [{"id": &"lower", "name": "Нижний", "size": Vector3(1.0, 0.5, 1.0)}, {"id": &"upper", "name": "Верхний", "size": Vector3(1.0, 0.5, 1.0), "vertical_offset": 0.5}],
+		"variants": [{"id": &"lower", "name": "Нижний", "size": Vector3(1.0, 0.25, 1.0)}, {"id": &"upper", "name": "Верхний", "size": Vector3(1.0, 0.25, 1.0), "vertical_offset": 0.75}],
 	},
 	{"id": &"half_arch", "name": "Полуарка", "category": Category.STRUCTURE, "size": Vector3(1.0, 1.0, 1.0), "mesh_shape": SHAPE_HALF_ARCH, "rotatable": true},
 	# --- Фундамент ---------------------------------------------------------

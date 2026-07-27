@@ -201,32 +201,36 @@ func _build_cylinder(size: Vector3, segments: int = 16) -> ArrayMesh:
 	return st.commit()
 
 
-## Vertical half-cylinder: flat back on the cell-local `z = 0` plane, the round
-## side bulging toward +Z. The sweep reuses the full cylinder's parametrisation
+## Vertical half-cylinder, centred on its actual AABB: its flat back is at local
+## `z = -size.z / 2` and the rounded apex at `z = +size.z / 2`. Keeping the
+## procedural mesh centred is essential: the common cell-anchor transform can
+## then place either surface exactly on a cell face after quarter-turn rotation.
+## The round side bulges toward +Z. The sweep reuses the full cylinder's parametrisation
 ## (`x = cos`, `z = sin`) so the side quads and the caps keep the same outward
 ## winding; mirroring it into `x = sin` turned every face inside out and the
 ## round side rendered see-through.
 func _build_half_cylinder(size: Vector3, segments: int = 12) -> ArrayMesh:
 	var rx := size.x * 0.5
-	var rz := size.z
+	var rz := size.z * 0.5
 	var hy := size.y * 0.5
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var bbl := Vector3(-rx, -hy, 0.0)
-	var bbr := Vector3(rx, -hy, 0.0)
-	var btl := Vector3(-rx, hy, 0.0)
-	var btr := Vector3(rx, hy, 0.0)
+	var flat_z := -rz
+	var bbl := Vector3(-rx, -hy, flat_z)
+	var bbr := Vector3(rx, -hy, flat_z)
+	var btl := Vector3(-rx, hy, flat_z)
+	var btr := Vector3(rx, hy, flat_z)
 	_add_quad(st, bbr, bbl, btl, btr) # Flat back (-Z)
 	for i in segments:
 		var a1 := float(i) / float(segments) * PI
 		var a2 := float(i + 1) / float(segments) * PI
-		var p1_b := Vector3(cos(a1) * rx, -hy, sin(a1) * rz)
-		var p2_b := Vector3(cos(a2) * rx, -hy, sin(a2) * rz)
-		var p1_t := Vector3(cos(a1) * rx, hy, sin(a1) * rz)
-		var p2_t := Vector3(cos(a2) * rx, hy, sin(a2) * rz)
+		var p1_b := Vector3(cos(a1) * rx, -hy, flat_z + sin(a1) * size.z)
+		var p2_b := Vector3(cos(a2) * rx, -hy, flat_z + sin(a2) * size.z)
+		var p1_t := Vector3(cos(a1) * rx, hy, flat_z + sin(a1) * size.z)
+		var p2_t := Vector3(cos(a2) * rx, hy, flat_z + sin(a2) * size.z)
 		_add_quad(st, p1_b, p1_t, p2_t, p2_b) # Curved side
-		_add_tri(st, Vector3(0, hy, 0), p2_t, p1_t) # Top cap
-		_add_tri(st, Vector3(0, -hy, 0), p1_b, p2_b) # Bottom cap
+		_add_tri(st, Vector3(0, hy, flat_z), p2_t, p1_t) # Top cap
+		_add_tri(st, Vector3(0, -hy, flat_z), p1_b, p2_b) # Bottom cap
 	return st.commit()
 
 

@@ -116,13 +116,13 @@ static func refresh_build_menu(simulation: Node) -> void:
 		simulation.building_menu_controller.refresh_build_menu()
 
 static func open_job_submenu(simulation: Node) -> void:
-	simulation.open_job_submenu()
+	simulation.selection_controller.open_job_submenu()
 
 static func open_daily_order_submenu(simulation: Node) -> void:
-	simulation.open_daily_order_submenu()
+	simulation.selection_controller.open_daily_order_submenu()
 
 static func close_assignment_submenu(simulation: Node) -> void:
-	simulation.close_assignment_submenu()
+	simulation.selection_controller.close_assignment_submenu()
 
 static func player_can_command_labor(simulation: Node) -> bool:
 	return simulation.workplace_labor_service.player_can_command_labor()
@@ -131,7 +131,7 @@ static func toggle_hero_view(simulation: Node) -> void:
 	simulation.player_controller.toggle_hero_view()
 
 static func select_citizen(simulation: Node, citizen: Citizen) -> void:
-	simulation.select_citizen(citizen)
+	simulation.selection_controller.select_citizen(citizen)
 
 static func take_control_of_selected_citizen(simulation: Node) -> void:
 	if simulation.player_controller != null:
@@ -199,7 +199,7 @@ static func house_initial_residents(simulation: Node, tent: Node3D) -> void:
 	simulation.citizen_lifecycle_service.house_initial_residents(tent)
 
 static func show_house_menu(simulation: Node) -> void:
-	simulation.show_house_menu()
+	simulation.selection_controller.show_house_menu()
 
 static func spawn_house_citizen(simulation: Node) -> void:
 	simulation.citizen_lifecycle_service.spawn_house_citizen()

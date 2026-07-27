@@ -150,6 +150,24 @@ static func get_assets_by_tag(tag: StringName) -> Array[FurnishingAssetDefScript
 	return list
 
 
+## All tags currently represented in the catalog, in a stable display order.
+## Tags are a secondary way to narrow a search; they deliberately do not form
+## another level of the catalog tree.
+static func all_tags() -> Array[StringName]:
+
+	_ensure_catalog()
+	var unique: Dictionary = {}
+	for asset: FurnishingAssetDefScript in _assets.values():
+		for tag in asset.tags:
+			unique[tag] = true
+	var tags: Array[StringName] = []
+	for tag in unique.keys():
+		tags.append(tag)
+	tags.sort_custom(func(a: StringName, b: StringName) -> bool:
+		return String(a).naturalnocasecmp_to(String(b)) < 0)
+	return tags
+
+
 ## Filter assets by era (design §5.2). Returns all assets if era is empty.
 ## An asset is available when its `available_from_era` rank is at or below the
 ## selected era's rank — cumulative progression, not exact equality.

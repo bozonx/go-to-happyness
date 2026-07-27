@@ -186,7 +186,7 @@ func tick(delta: float) -> void:
 			game.worker_poll_timer = game.WORKER_POLL_INTERVAL
 			game.update_workers()
 	if game.selected_builder != null and game.ui_manager.build_menu.visible:
-		game.show_selected_citizen_menu()
+		game.selection_controller.show_selected_citizen_menu()
 
 
 func send_citizen_to_leisure(citizen: Citizen, minimum_hours := 0) -> bool:

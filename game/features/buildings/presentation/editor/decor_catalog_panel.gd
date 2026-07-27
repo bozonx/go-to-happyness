@@ -1,9 +1,10 @@
 class_name DecorCatalogPanel
 extends RefCounted
 
-## Catalog sub-panel of decor mode: groups, categories, asset buttons, search,
-## recent assets, and snap-step selection. Extracted from DecorModeController
-## to isolate catalog UI building from placement and inspector logic.
+## Catalog sub-panel of decor mode: one-level-at-a-time browse navigation,
+## search, tag filters, recent assets, and snap-step selection. Extracted from
+## DecorModeController to isolate catalog UI building from placement and
+## inspector logic.
 ##
 ## State (current_asset_id, current_category, etc.) stays on the controller
 ## so tests and external code can still read/write it directly.
@@ -17,12 +18,18 @@ var _search_edit: LineEdit = null
 var _recent_label: Label = null
 var _recent_container: HFlowContainer = null
 var _asset_container: VBoxContainer = null
+var _back_button: Button = null
+var _location_label: Label = null
+var _tag_filter_toggle: Button = null
+var _tag_filters: HFlowContainer = null
 var _snap_buttons: Dictionary = {}
 var _asset_buttons: Dictionary = {}
 var _recent_buttons: Dictionary = {}
 var _recent_assets: Array[StringName] = []
-var _expanded_categories: Dictionary = {}
-var _expanded_group: StringName = &""
+var _opened_group: StringName = &""
+var _opened_category: StringName = &""
+var _active_tag: StringName = &""
+var _tag_filters_visible := false
 
 
 func setup(controller: Node, editor: Node) -> void:
@@ -31,18 +38,20 @@ func setup(controller: Node, editor: Node) -> void:
 	_recent_label = editor.get_node("%DecorRecentLbl")
 	_recent_container = editor.get_node("%DecorRecentContainer")
 	_asset_container = editor.get_node("%DecorAssetContainer")
+	_back_button = editor.get_node("%DecorCatalogBackBtn")
+	_location_label = editor.get_node("%DecorCatalogLocation")
+	_tag_filter_toggle = editor.get_node("%DecorTagFilterToggle")
+	_tag_filters = editor.get_node("%DecorTagFilters")
 
 	_search_edit.text_changed.connect(_on_search_changed)
+	_back_button.pressed.connect(_go_back)
+	_tag_filter_toggle.pressed.connect(_toggle_tag_filters)
 
 	_build_snap_options(editor)
 
 
 func activate() -> void:
-	if _expanded_group.is_empty():
-		for group_id in FurnishingAssetCatalogScript.GROUPS.keys():
-			if _controller.current_category in FurnishingAssetCatalogScript.categories_in_group(group_id):
-				_expanded_group = group_id
-				break
+	_rebuild_tag_filters()
 	_rebuild_asset_buttons()
 	_rebuild_recent_assets()
 
@@ -53,84 +62,167 @@ func _build_snap_options(editor: Node) -> void:
 		(_snap_buttons[step] as Button).pressed.connect(_select_snap_step.bind(float(step)))
 
 
-## One toggle button per asset, mirroring the frame palette, instead of a second
-## dropdown: the author sees every option at once.
-## When the search field is non-empty, assets are filtered by name/description.
+## Browse one catalog level at a time. Search and tag filtering intentionally
+## replace the hierarchy with a flat result list: neither is a third accordion.
 func _rebuild_asset_buttons() -> void:
 	for child in _asset_container.get_children():
 		child.queue_free()
 	_asset_buttons.clear()
 
 	var search_text := _search_edit.text.strip_edges().to_lower() if _search_edit != null else ""
-	var all_assets := FurnishingAssetCatalogScript.get_all_assets()
-	if not search_text.is_empty():
-		var filtered: Array = []
-		for asset in all_assets:
-			if String(asset.name).to_lower().contains(search_text) or String(asset.description).to_lower().contains(search_text):
-				filtered.append(asset)
-		all_assets = filtered
-	for group_id in FurnishingAssetCatalogScript.GROUPS.keys():
-		var group_box := VBoxContainer.new()
-		var group_header := Button.new()
-		group_header.flat = true
-		group_header.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		var group_expanded: bool = group_id == _expanded_group
-		group_header.text = ("▾ " if group_expanded else "▸ ") + String(FurnishingAssetCatalogScript.GROUPS[group_id])
-		group_header.pressed.connect(_toggle_catalog_group.bind(group_id))
-		group_box.add_child(group_header)
-		if not group_expanded:
-			_asset_container.add_child(group_box)
-			continue
-		for category_id in FurnishingAssetCatalogScript.categories_in_group(group_id):
-			var assets := FurnishingAssetCatalogScript.get_assets_by_category(category_id)
-			if not search_text.is_empty():
-				var all_set: Dictionary = {}
-				for a in all_assets:
-					all_set[a] = true
-				assets = assets.filter(func(asset): return all_set.has(asset))
-			var header := Button.new()
-			header.flat = true
-			header.alignment = HORIZONTAL_ALIGNMENT_LEFT
-			var expanded := bool(_expanded_categories.get(category_id, category_id == _controller.current_category))
-			header.text = ("▾ " if expanded else "▸ ") + "%s (%d)" % [FurnishingAssetCatalogScript.category_display_name(category_id), assets.size()]
-			header.disabled = assets.is_empty()
-			header.pressed.connect(_toggle_catalog_category.bind(category_id))
-			group_box.add_child(header)
-			if expanded:
-				for asset in assets:
-					var button := Button.new()
-					button.toggle_mode = true
-					button.text = "    " + asset.name
-					button.tooltip_text = asset.description
-					button.clip_text = true
-					button.alignment = HORIZONTAL_ALIGNMENT_LEFT
-					button.button_pressed = asset.id == _controller.current_asset_id
-					button.pressed.connect(_select_asset.bind(asset.id))
-					group_box.add_child(button)
-					_asset_buttons[asset.id] = button
-		_asset_container.add_child(group_box)
-	if all_assets.is_empty():
+	var filtering := not search_text.is_empty() or not _active_tag.is_empty()
+	if filtering:
+		_location_label.text = "Результаты поиска"
+		_back_button.visible = false
+		_add_asset_buttons(_filtered_assets(search_text), true)
+	elif _opened_category != &"":
+		_location_label.text = FurnishingAssetCatalogScript.category_display_name(_opened_category)
+		_back_button.visible = true
+		_add_asset_buttons(FurnishingAssetCatalogScript.get_assets_by_category(_opened_category))
+	elif _opened_group != &"":
+		_location_label.text = String(FurnishingAssetCatalogScript.GROUPS[_opened_group])
+		_back_button.visible = true
+		_add_category_buttons(_opened_group)
+	else:
+		_location_label.text = "Все группы"
+		_back_button.visible = false
+		_add_group_buttons()
+	if _asset_buttons.is_empty() and filtering:
 		var empty_label := Label.new()
-		empty_label.text = "Ничего не найдено." if not search_text.is_empty() else "В каталоге пока нет ассетов."
+		empty_label.text = "Ничего не найдено."
 		empty_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		empty_label.add_theme_color_override("font_color", Color(0.75, 0.6, 0.4))
 		_asset_container.add_child(empty_label)
-		if search_text.is_empty():
-			_controller.current_asset_id = &""
 	_controller.refresh_ghost()
 
 
-func _toggle_catalog_group(group_id: StringName) -> void:
-	# The inline catalog is a true accordion: exactly one group stays open.
-	_expanded_group = group_id
+func _add_group_buttons() -> void:
+	var counts := FurnishingAssetCatalogScript.category_counts()
+	for group_id in FurnishingAssetCatalogScript.GROUPS.keys():
+		var count := 0
+		for category_id in FurnishingAssetCatalogScript.categories_in_group(group_id):
+			count += int(counts.get(category_id, 0))
+		var button := _make_browse_button("%s (%d)" % [FurnishingAssetCatalogScript.GROUPS[group_id], count])
+		button.pressed.connect(_open_group.bind(group_id))
+		_asset_container.add_child(button)
+
+
+func _add_category_buttons(group_id: StringName) -> void:
+	var counts := FurnishingAssetCatalogScript.category_counts()
+	for category_id in FurnishingAssetCatalogScript.categories_in_group(group_id):
+		var count := int(counts.get(category_id, 0))
+		var button := _make_browse_button("%s (%d)" % [FurnishingAssetCatalogScript.category_display_name(category_id), count])
+		button.disabled = count == 0
+		button.tooltip_text = "Скоро появится" if count == 0 else ""
+		button.pressed.connect(_open_category.bind(category_id))
+		_asset_container.add_child(button)
+
+
+func _add_asset_buttons(assets: Array, show_category: bool = false) -> void:
+	for asset in assets:
+		var button := Button.new()
+		button.toggle_mode = true
+		button.text = asset.name
+		if show_category:
+			button.text += "  ·  " + FurnishingAssetCatalogScript.category_display_name(asset.category)
+		button.tooltip_text = _asset_tooltip(asset)
+		button.clip_text = true
+		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		button.button_pressed = asset.id == _controller.current_asset_id
+		button.pressed.connect(_select_asset.bind(asset.id))
+		_asset_container.add_child(button)
+		_asset_buttons[asset.id] = button
+
+
+func _make_browse_button(text: String) -> Button:
+	var button := Button.new()
+	button.text = text
+	button.flat = true
+	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	button.clip_text = true
+	return button
+
+
+func _open_group(group_id: StringName) -> void:
+	_opened_group = group_id
+	_opened_category = &""
 	_controller.current_group = group_id
 	_rebuild_asset_buttons()
 
 
-func _toggle_catalog_category(category_id: StringName) -> void:
-	_expanded_categories[category_id] = not bool(_expanded_categories.get(category_id, category_id == _controller.current_category))
+func _open_category(category_id: StringName) -> void:
+	_opened_category = category_id
 	_controller.current_category = category_id
 	_rebuild_asset_buttons()
+
+
+func _go_back() -> void:
+	if _opened_category != &"":
+		_opened_category = &""
+	elif _opened_group != &"":
+		_opened_group = &""
+	_rebuild_asset_buttons()
+
+
+func _filtered_assets(search_text: String) -> Array:
+	var matches: Array = []
+	for asset in FurnishingAssetCatalogScript.get_all_assets():
+		if not _active_tag.is_empty() and not asset.tags.has(_active_tag):
+			continue
+		if not search_text.is_empty() and not _asset_matches_search(asset, search_text):
+			continue
+		matches.append(asset)
+	matches.sort_custom(func(a, b) -> bool:
+		return a.name.naturalnocasecmp_to(b.name) < 0)
+	return matches
+
+
+func _asset_matches_search(asset, search_text: String) -> bool:
+	if String(asset.name).to_lower().contains(search_text) or String(asset.description).to_lower().contains(search_text):
+		return true
+	for tag in asset.tags:
+		if String(tag).to_lower().contains(search_text):
+			return true
+	return false
+
+
+func _asset_tooltip(asset) -> String:
+	var tags: Array[String] = []
+	for tag in asset.tags:
+		tags.append(String(tag))
+	var tag_text := ", ".join(tags)
+	return asset.description + ("\nТеги: " + tag_text if not tag_text.is_empty() else "")
+
+
+func _rebuild_tag_filters() -> void:
+	for child in _tag_filters.get_children():
+		child.queue_free()
+	var all_button := Button.new()
+	all_button.text = "Все теги"
+	all_button.toggle_mode = true
+	all_button.button_pressed = _active_tag.is_empty()
+	all_button.pressed.connect(_select_tag.bind(StringName("")))
+	_tag_filters.add_child(all_button)
+	for tag in FurnishingAssetCatalogScript.all_tags():
+		var button := Button.new()
+		button.text = String(tag)
+		button.toggle_mode = true
+		button.button_pressed = tag == _active_tag
+		button.pressed.connect(_select_tag.bind(tag))
+		_tag_filters.add_child(button)
+	_tag_filters.visible = _tag_filters_visible
+	_tag_filter_toggle.text = "Теги: %s ▾" % _active_tag if not _active_tag.is_empty() else "Теги ▾"
+
+
+func _select_tag(tag: StringName) -> void:
+	_active_tag = tag
+	_rebuild_tag_filters()
+	_rebuild_asset_buttons()
+
+
+func _toggle_tag_filters() -> void:
+	_tag_filters_visible = not _tag_filters_visible
+	_tag_filters.visible = _tag_filters_visible
 
 
 func _select_asset(asset_id: StringName) -> void:

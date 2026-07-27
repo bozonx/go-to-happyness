@@ -24,7 +24,13 @@ func _test_arch_and_railing_meshes() -> void:
 	var arch_verts: PackedVector3Array = arch.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
 	assert(arch_verts.size() >= 72, "arch must build jambs + arch ring, got %d verts" % arch_verts.size())
 	var arch_aabb := arch.get_aabb()
-	assert(arch_aabb.size.y >= 0.49 and arch_aabb.size.x > 0.5, "arch must span its half-slab footprint")
+	assert(arch_aabb.size.y >= 0.24 and arch_aabb.size.y <= 0.251 and arch_aabb.size.x > 0.5, "arch must be cut from a 0.25m slab")
+
+	var half_column := lib.mesh_for(&"column_half", &"0.5") as ArrayMesh
+	assert(half_column != null, "half-column mesh must exist")
+	var half_column_aabb := half_column.get_aabb()
+	assert(is_equal_approx(half_column_aabb.position.z, -half_column_aabb.size.z * 0.5), "half-column flat face must be centred relative to its AABB")
+	assert(is_equal_approx(half_column_aabb.end.z, half_column_aabb.size.z * 0.5), "half-column rounded apex must be centred relative to its AABB")
 
 	# Full- and half-height railing variants must differ in height.
 	var full := (lib.mesh_for(&"railing", &"full") as ArrayMesh).get_aabb()

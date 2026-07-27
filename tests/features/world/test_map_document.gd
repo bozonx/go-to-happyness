@@ -18,7 +18,10 @@ const BOARD_CELLS := 32
 static func run_all() -> void:
 	_test_meta_round_trips_through_json()
 	_test_start_defaults_and_system_flags()
+	_test_border_level_migrates_from_version_one()
 	print("    [PASS] Map Meta Tests")
+	_test_write_target_follows_the_mode()
+	print("    [PASS] Map Write Target Tests")
 	_test_terrain_layer_round_trips_byte_for_byte()
 	_test_default_board_writes_no_layer()
 	_test_foreign_or_truncated_layer_is_refused()
@@ -36,6 +39,8 @@ static func run_all() -> void:
 static func _test_meta_round_trips_through_json() -> void:
 	var document := MapDocument.create(&"green_valley", "Зелёная долина", BOARD_CELLS)
 	document.meta.author = "ivan"
+	document.meta.map_kind = MapMeta.MAP_KIND_SCENARIO
+	document.meta.players = 4
 	document.meta.biomes = [&"forest", &"mountain"]
 	document.meta.tags = [&"survival"]
 	document.meta.border_level = -2
@@ -54,6 +59,8 @@ static func _test_meta_round_trips_through_json() -> void:
 	assert(restored.meta.id == &"green_valley")
 	assert(restored.meta.name == "Зелёная долина")
 	assert(restored.meta.author == "ivan")
+	assert(restored.meta.map_kind == MapMeta.MAP_KIND_SCENARIO)
+	assert(restored.meta.players == 4)
 	assert(restored.meta.biomes == [&"forest", &"mountain"])
 	assert(restored.meta.tags == [&"survival"])
 	assert(restored.meta.board_cells == BOARD_CELLS)
@@ -68,6 +75,60 @@ static func _test_meta_round_trips_through_json() -> void:
 	assert(restored.meta.required_content.size() == 1)
 	assert(restored.meta.start.economy["money"] == 900)
 	assert(restored.to_json()["format_version"] == MapMeta.FORMAT_VERSION)
+
+
+## v1 wrote `border.level` as a float; v2 made it whole Δh steps. Reading a v1 file
+## as an int would truncate — a sea half a terrace lower than the author left it,
+## silently frozen in place by the next save.
+static func _test_border_level_migrates_from_version_one() -> void:
+	var service := _service()
+	var package := _package_path("legacy_border")
+	DirAccess.make_dir_recursive_absolute(package)
+	var legacy := {
+		"format_version": 1, "kind": "map", "id": "legacy_border", "name": "Старая",
+		"board": {"cells": BOARD_CELLS, "cell_size": 1.0},
+		"border": {"kind": "ocean", "level": -1.5},
+	}
+	var file := FileAccess.open(package.path_join(MapDocumentService.MAP_JSON), FileAccess.WRITE)
+	file.store_string(JSON.stringify(legacy))
+	file.close()
+
+	var loaded := service.load_package(package)
+	assert(loaded != null, "a v1 package still opens")
+	assert(loaded.meta.border_level == -2, "-1.5 rounds to the nearer step, not toward zero: %d" % loaded.meta.border_level)
+
+	# ...and the rounded value is what a resave writes, so the migration happens
+	# once instead of drifting on every open.
+	assert(loaded.to_json()["border"]["level"] == -2)
+	assert(loaded.to_json()["format_version"] == MapMeta.FORMAT_VERSION)
+	_cleanup()
+
+
+## Which folder a save lands in is decided by the mode, never by the document
+## (content_packaging.md §6.4). Player mode must not be able to name a path inside
+## the shipped pack as its own.
+static func _test_write_target_follows_the_mode() -> void:
+	var player := MapDocumentService.new(false)
+	assert(player.target_source() == MapDocumentService.SOURCE_PLAYER)
+	assert(player.base_dir() == MapDocumentService.PLAYER_ROOT)
+	assert(player.can_write(MapDocumentService.PLAYER_ROOT + "/mine.gdmap"))
+	assert(not player.can_write(MapDocumentService.BUILTIN_ROOT + "/green_valley.gdmap"),
+		"a player may open the shipped map but never write it")
+
+	# Dev mode is the mirror image, and only exists inside Godot: in an exported
+	# build `res://` is a read-only `.pck`, so the flag is refused outright.
+	var dev := MapDocumentService.new(true)
+	if OS.has_feature("editor"):
+		assert(dev.target_source() == MapDocumentService.SOURCE_BUILTIN)
+		assert(dev.can_write(MapDocumentService.BUILTIN_ROOT + "/green_valley.gdmap"))
+		assert(not dev.can_write(MapDocumentService.PLAYER_ROOT + "/mine.gdmap"))
+	else:
+		assert(not dev.dev_mode, "dev mode cannot survive outside the Godot editor")
+
+	# An id outside the alphabet never reaches the filesystem.
+	var document := MapDocument.create(&"Карта", "Кириллица", BOARD_CELLS)
+	assert(player.save_map(document).is_empty(), "a non-ASCII id is refused")
+	assert(not player.last_error.is_empty(), "and says why")
 
 
 ## A system a map never mentions must keep running. Otherwise adding a flag to the

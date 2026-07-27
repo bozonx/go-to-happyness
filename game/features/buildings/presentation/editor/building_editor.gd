@@ -56,6 +56,13 @@ var zones_mode: ZonesModeController = null
 ## True when there are unsaved changes. Checked before scene transitions.
 var _dirty: bool = false
 
+## Path this document was opened from, or "" when it has none — a new blueprint, or
+## one detached because this mode cannot write where it came from
+## (content_packaging.md §6.4). A save with a path goes back to that exact file,
+## subfolder included; a save without one goes to the mode's source under the
+## current id.
+var current_path: String = ""
+
 var _panning: bool = false
 var _orbiting: bool = false
 
@@ -72,6 +79,9 @@ var _orbiting: bool = false
 @onready var _metadata_panel: PanelContainer = %MetadataPanel
 @onready var _load_popup: PopupPanel = %LoadPopup
 @onready var _load_list: ItemList = %LoadList
+@onready var _save_as_dialog: ConfirmationDialog = %SaveAsDialog
+@onready var _save_as_id_edit: LineEdit = %SaveAsIdEdit
+@onready var _save_as_hint: Label = %SaveAsHint
 
 @onready var _mode_frame_btn: Button = %ModeFrameBtn
 @onready var _mode_finishes_btn: Button = %ModeFinishesBtn
@@ -115,13 +125,15 @@ func _ready() -> void:
 	_update_status("Готово. Режим: %s" % ("Разработчик" if dev_mode else "Игрок"))
 
 
+## The scene's `dev_mode` export is what "opened directly in Godot" means. A launch
+## through `GameLaunchManager` always overrides it, so the menu cannot land in dev
+## mode and a dev launch cannot be downgraded by a stale export.
 func _resolve_launch_mode() -> void:
-	if not OS.has_feature("editor"):
-		dev_mode = false
 	var launch_mgr := get_node_or_null("/root/GameLaunchManager")
-	if launch_mgr != null and "editor_player_mode" in launch_mgr:
-		if bool(launch_mgr.get("editor_player_mode")):
-			dev_mode = false
+	if launch_mgr != null and "editor_mode_forced" in launch_mgr \
+			and bool(launch_mgr.get("editor_mode_forced")):
+		dev_mode = bool(launch_mgr.get("editor_dev_mode"))
+	dev_mode = dev_mode and OS.has_feature("editor")
 
 
 func _connect_back_navigation() -> void:
@@ -458,11 +470,35 @@ func _on_save_pressed() -> void:
 	frame_mode.on_save_pressed()
 
 
+## Save As always asks for an id, because that is the only thing that distinguishes
+## the copy from the original. It is also the way out of a detached document: a
+## player who opened a shipped blueprint lands here with the same id proposed in
+## their own source.
+func _on_save_as_pressed() -> void:
+	frame_mode.collect_metadata_from_ui()
+	_save_as_id_edit.text = String(blueprint.id)
+	_save_as_hint.text = "ID нового чертежа (сохранится в %s):" % repository.base_dir()
+	_save_as_dialog.popup_centered()
+
+
+func _on_save_as_confirmed() -> void:
+	var requested := ContentId.sanitize_id(_save_as_id_edit.text)
+	if requested.is_empty():
+		_update_status("ID не может быть пустым: допустимы латинские строчные буквы, цифры, «_» и «-».")
+		return
+	blueprint.id = StringName(requested)
+	# A Save As deliberately forgets where the document came from: writing to the
+	# proposed id in this mode's source is the whole point of the command.
+	current_path = ""
+	frame_mode.on_save_pressed()
+
+
 func _on_new_pressed() -> void:
 	if not await _confirm_discard_changes():
 		return
 	grid_model.clear()
 	blueprint = BuildingBlueprint.new()
+	current_path = ""
 	frame_mode.rebuild_all_block_nodes()
 	zones_mode.on_blueprint_changed()
 	_reset_decor_for_new_blueprint()
@@ -481,18 +517,22 @@ func _on_navmesh_preview_pressed() -> void:
 	_update_status("Предпросмотр навмеша: функция в разработке.")
 
 
+## Lists every source, not just the writable one (content_packaging.md §6.4).
+## Taking a shipped building as a starting point is the most common first step an
+## author takes, and a list that hides it makes that step impossible.
 func _on_load_pressed() -> void:
 	_load_list.clear()
 	var entries := repository.list_blueprints()
 	if not repository.last_errors.is_empty():
 		_update_status("Ошибка контента: " + "\n".join(repository.last_errors))
 	if entries.is_empty():
-		_update_status("Нет сохранённых чертежей в %s" % repository.base_dir())
+		_update_status("Нет чертежей ни в одном источнике.")
 		return
 	for entry in entries:
-		var idx := _load_list.add_item("%s  (%s)" % [entry["name"], entry["id"]])
+		var suffix := "" if entry["writable"] else "  · только чтение"
+		var idx := _load_list.add_item("%s  (%s)%s" % [entry["name"], entry["key"], suffix])
 		_load_list.set_item_metadata(idx, entry["path"])
-	_load_popup.popup_centered(Vector2i(420, 360))
+	_load_popup.popup_centered(Vector2i(460, 380))
 
 
 func _on_load_item_activated(index: int) -> void:
@@ -505,6 +545,10 @@ func _on_load_item_activated(index: int) -> void:
 		_update_status("Не удалось загрузить: %s" % path)
 		return
 	blueprint = loaded
+	# Remembering the path is what makes a save go back where the file came from,
+	# including into a subfolder. A file this mode cannot write detaches instead:
+	# `current_path` stays empty and the next save behaves as Save As.
+	current_path = path if repository.can_write(path) else ""
 	grid_model.load_from_blueprint(blueprint)
 	frame_mode.rebuild_all_block_nodes()
 	zones_mode.on_blueprint_loaded()
@@ -513,8 +557,10 @@ func _on_load_item_activated(index: int) -> void:
 	_dirty = false
 	reset_history()
 	_load_popup.hide()
-	_update_status("Загружено: %s (%d блоков, %d зон, %d объектов)" % [
-		blueprint.name, blueprint.block_count(), blueprint.place_zones.size(), blueprint.objects.size()])
+	var detached := " · только чтение, сохранится в %s" % repository.base_dir() if current_path.is_empty() else ""
+	_update_status("Загружено: %s (%d блоков, %d зон, %d объектов)%s" % [
+		blueprint.name, blueprint.block_count(), blueprint.place_zones.size(),
+		blueprint.objects.size(), detached])
 
 
 func _confirm_back_to_menu() -> void:
@@ -589,6 +635,7 @@ func _setup_ui() -> void:
 		_navmesh_preview_btn.pressed.connect(_on_navmesh_preview_pressed)
 
 	_load_list.item_activated.connect(_on_load_item_activated)
+	_save_as_dialog.confirmed.connect(_on_save_as_confirmed)
 
 	frame_mode.sync_metadata_fields()
 	frame_mode.clear_block_selection()

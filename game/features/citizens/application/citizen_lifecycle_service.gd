@@ -31,54 +31,30 @@ var _selected_house_getter: Callable
 var _day_cycle_current_day_getter: Callable
 
 
-func configure(
-	p_citizens: Array,
-	p_pending_arrivals: Array,
-	p_arrival_greeters: Dictionary,
-	p_arrival_waiting_greeters: Dictionary,
-	p_arrival_escort_ids: Dictionary,
-	p_entrance_stone_getter: Callable,
-	p_entrance_anchor_position: Callable,
-	p_employment_center_position: Callable,
-	p_is_work_time: Callable,
-	p_update_interface: Callable,
-	p_show_house_menu: Callable,
-	p_add_citizen: Callable,
-	p_refresh_living_status: Callable,
-	p_request_courier_dispatch: Callable,
-	p_citizen_for_ai_id: Callable,
-	p_terrain_height_at: Callable,
-	p_citizen_ai_unregister: Callable,
-	p_citizen_ai_cancel_work: Callable,
-	p_canteen_service_remove_citizen: Callable,
-	p_citizen_needs_service_remove_citizen: Callable,
-	p_courier_dispatcher_complete_for: Callable,
-	p_selected_house_getter: Callable,
-	p_day_cycle_current_day_getter: Callable
-) -> void:
-	_citizens = p_citizens
-	_pending_arrivals = p_pending_arrivals
-	_arrival_greeters = p_arrival_greeters
-	_arrival_waiting_greeters = p_arrival_waiting_greeters
-	_arrival_escort_ids = p_arrival_escort_ids
-	_entrance_stone_getter = p_entrance_stone_getter
-	_entrance_anchor_position = p_entrance_anchor_position
-	_employment_center_position = p_employment_center_position
-	_is_work_time = p_is_work_time
-	_update_interface = p_update_interface
-	_show_house_menu = p_show_house_menu
-	_add_citizen = p_add_citizen
-	_refresh_living_status = p_refresh_living_status
-	_request_courier_dispatch = p_request_courier_dispatch
-	_citizen_for_ai_id = p_citizen_for_ai_id
-	_terrain_height_at = p_terrain_height_at
-	_citizen_ai_unregister = p_citizen_ai_unregister
-	_citizen_ai_cancel_work = p_citizen_ai_cancel_work
-	_canteen_service_remove_citizen = p_canteen_service_remove_citizen
-	_citizen_needs_service_remove_citizen = p_citizen_needs_service_remove_citizen
-	_courier_dispatcher_complete_for = p_courier_dispatcher_complete_for
-	_selected_house_getter = p_selected_house_getter
-	_day_cycle_current_day_getter = p_day_cycle_current_day_getter
+func configure(port: CitizenLifecycleRuntimePort) -> void:
+	_citizens = port.citizens
+	_pending_arrivals = port.pending_arrivals
+	_arrival_greeters = port.arrival_greeters
+	_arrival_waiting_greeters = port.arrival_waiting_greeters
+	_arrival_escort_ids = port.arrival_escort_ids
+	_entrance_stone_getter = port.entrance_stone_getter
+	_entrance_anchor_position = port.entrance_anchor_position
+	_employment_center_position = port.employment_center_position
+	_is_work_time = port.is_work_time
+	_update_interface = port.update_interface
+	_show_house_menu = port.show_house_menu
+	_add_citizen = port.add_citizen
+	_refresh_living_status = port.refresh_living_status
+	_request_courier_dispatch = port.request_courier_dispatch
+	_citizen_for_ai_id = port.citizen_for_ai_id
+	_terrain_height_at = port.terrain_height_at
+	_citizen_ai_unregister = port.citizen_ai_unregister
+	_citizen_ai_cancel_work = port.citizen_ai_cancel_work
+	_canteen_service_remove_citizen = port.canteen_service_remove_citizen
+	_citizen_needs_service_remove_citizen = port.citizen_needs_service_remove_citizen
+	_courier_dispatcher_complete_for = port.courier_dispatcher_complete_for
+	_selected_house_getter = port.selected_house_getter
+	_day_cycle_current_day_getter = port.day_cycle_current_day_getter
 
 
 func on_citizen_leaving_departed(citizen: Citizen) -> void:

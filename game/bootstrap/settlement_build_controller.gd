@@ -20,7 +20,7 @@ func open_build_category(category: String) -> void:
 	if game.building_menu_controller != null:
 		game.building_menu_controller.refresh_build_menu()
 	if game.build_category.is_empty() and not game.build_menu_is_global:
-		game.show_selected_citizen_menu()
+		game.selection_controller.show_selected_citizen_menu()
 
 
 func set_build_placement_ui_visible(is_visible: bool) -> void:

@@ -27,42 +27,24 @@ var _meal_requests: Dictionary = {}
 var _current_meal_cooked: bool = false
 
 
-func configure(
-	p_settlement: SettlementState,
-	p_citizens: Array,
-	p_canteen_getter: Callable,
-	p_canteen_food_getter: Callable,
-	p_set_canteen_food: Callable,
-	p_canteen_position_getter: Callable,
-	p_pending_canteen_delivery_getter: Callable,
-	p_pending_canteen_carrier_getter: Callable,
-	p_pending_canteen_delivery_amount_getter: Callable,
-	p_set_canteen_delivery_state: Callable,
-	p_is_canteen_delivery_in_progress: Callable,
-	p_is_fire_lit: Callable,
-	p_has_cook: Callable,
-	p_update_interface: Callable,
-	p_request_courier_dispatch: Callable,
-	p_is_work_time: Callable,
-	p_update_workers: Callable
-) -> void:
-	_settlement = p_settlement
-	_citizens = p_citizens
-	_canteen_getter = p_canteen_getter
-	_canteen_food_getter = p_canteen_food_getter
-	_set_canteen_food = p_set_canteen_food
-	_canteen_position_getter = p_canteen_position_getter
-	_pending_canteen_delivery_getter = p_pending_canteen_delivery_getter
-	_pending_canteen_carrier_getter = p_pending_canteen_carrier_getter
-	_pending_canteen_delivery_amount_getter = p_pending_canteen_delivery_amount_getter
-	_set_canteen_delivery_state = p_set_canteen_delivery_state
-	_is_canteen_delivery_in_progress = p_is_canteen_delivery_in_progress
-	_is_fire_lit = p_is_fire_lit
-	_has_cook = p_has_cook
-	_update_interface = p_update_interface
-	_request_courier_dispatch = p_request_courier_dispatch
-	_is_work_time = p_is_work_time
-	_update_workers = p_update_workers
+func configure(port: CanteenRuntimePort) -> void:
+	_settlement = port.settlement
+	_citizens = port.citizens
+	_canteen_getter = port.canteen_getter
+	_canteen_food_getter = port.canteen_food_getter
+	_set_canteen_food = port.set_canteen_food
+	_canteen_position_getter = port.canteen_position_getter
+	_pending_canteen_delivery_getter = port.pending_canteen_delivery_getter
+	_pending_canteen_carrier_getter = port.pending_canteen_carrier_getter
+	_pending_canteen_delivery_amount_getter = port.pending_canteen_delivery_amount_getter
+	_set_canteen_delivery_state = port.set_canteen_delivery_state
+	_is_canteen_delivery_in_progress = port.is_canteen_delivery_in_progress
+	_is_fire_lit = port.is_fire_lit
+	_has_cook = port.has_cook
+	_update_interface = port.update_interface
+	_request_courier_dispatch = port.request_courier_dispatch
+	_is_work_time = port.is_work_time
+	_update_workers = port.update_workers
 
 
 func start_meal(hour: int) -> void:

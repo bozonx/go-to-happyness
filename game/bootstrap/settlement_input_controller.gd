@@ -27,7 +27,7 @@ func handle_menu_right_click() -> bool:
 		if not game.build_category.is_empty():
 			game.build_controller.open_build_category("")
 		elif game.build_menu_is_job_menu or game.build_menu_is_daily_order_menu:
-			game.close_assignment_submenu()
+			game.selection_controller.close_assignment_submenu()
 		else:
 			ui.build_menu.visible = false
 			game.build_menu_is_global = false
@@ -221,7 +221,7 @@ func _handle_overview_input(event: InputEvent) -> void:
 			if build_point != null:
 				game.build_controller.place_building(build_point)
 		else:
-			game.select_citizen_at(event.position)
+			game.selection_controller.select_citizen_at(event.position)
 
 
 func is_first_person_menu_open() -> bool:

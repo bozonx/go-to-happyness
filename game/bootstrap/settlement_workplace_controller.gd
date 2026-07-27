@@ -114,7 +114,7 @@ func assign_work_role(role: String, daily_order := false) -> void:
 	game.update_workers()
 	game.build_menu_is_job_menu = false
 	game.build_menu_is_daily_order_menu = false
-	game.show_selected_citizen_menu()
+	game.selection_controller.show_selected_citizen_menu()
 	if game.building_menu_controller != null:
 		game.building_menu_controller.refresh_build_menu()
 	game.update_interface("%s assigned to %s." % ["Hero" if game.selected_builder.is_hero else "Citizen", "automatic work" if role.is_empty() else role.replace("_", " ")])
