@@ -451,7 +451,8 @@
 			"allow": [
 				"visitor",
 				"staff",
-				"owner"
+				"owner",
+				"builder"
 			]
 		}
 	],
