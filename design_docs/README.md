@@ -17,6 +17,7 @@
 | [navigation_and_roads.md](engine/navigation_and_roads.md) | `NavGrid`, веса, дороги как покрытие, `RoutePlan`. |
 | [weather.md](engine/weather.md) | Прогноз, две оси облачности, ветер, небо и светила, лаборатория погоды. |
 | [map_editor.md](engine/map_editor.md) | Формат `.gdmap`, редактор территорий, режимы и undo. |
+| [map_fill_mode.md](engine/map_fill_mode.md) | Режим наполнения карты: общая библиотека ассетов, архетипы сущностей, состояния, NPC и спавнеры, генерируемый инспектор свойств. |
 | [modular_building_editor.md](engine/modular_building_editor.md) | Формат `.gdbuilding.json`, каркас, отделка, режимы редактора. |
 | [active_zones.md](engine/active_zones.md) | Модель активных зон обоих редакторов: области, точки, маршруты, права и эффекты, состояние и владелец зоны, события, валидация, runtime. |
 | [building_furnishing.md](engine/building_furnishing.md) | Наполнение здания: предметы, fixtures, capabilities. |
