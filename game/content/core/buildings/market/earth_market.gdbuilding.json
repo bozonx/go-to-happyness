@@ -1,0 +1,241 @@
+{
+	"version": 6,
+	"id": "earth_market",
+	"role": "earth_market",
+	"name": "Земляной рынок",
+	"construction_style": "surface",
+	"category": "earth",
+	"fallback_building_id": "earth_market",
+	"grid_bounds": {
+		"x": 4,
+		"y": 1,
+		"z": 4
+	},
+	"footprint": [
+		4,
+		4
+	],
+	"blocks": [
+		{
+			"pos": [
+				0,
+				0,
+				0
+			],
+			"block_id": "slab",
+			"material_id": "earth",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				0,
+				0,
+				1
+			],
+			"block_id": "slab",
+			"material_id": "earth",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				0,
+				0,
+				2
+			],
+			"block_id": "slab",
+			"material_id": "earth",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				0,
+				0,
+				3
+			],
+			"block_id": "slab",
+			"material_id": "earth",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				1,
+				0,
+				0
+			],
+			"block_id": "slab",
+			"material_id": "earth",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				1,
+				0,
+				1
+			],
+			"block_id": "slab",
+			"material_id": "earth",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				1,
+				0,
+				2
+			],
+			"block_id": "slab",
+			"material_id": "earth",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				1,
+				0,
+				3
+			],
+			"block_id": "slab",
+			"material_id": "earth",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				2,
+				0,
+				0
+			],
+			"block_id": "slab",
+			"material_id": "earth",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				2,
+				0,
+				1
+			],
+			"block_id": "slab",
+			"material_id": "earth",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				2,
+				0,
+				2
+			],
+			"block_id": "slab",
+			"material_id": "earth",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				2,
+				0,
+				3
+			],
+			"block_id": "slab",
+			"material_id": "earth",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				3,
+				0,
+				0
+			],
+			"block_id": "slab",
+			"material_id": "earth",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				3,
+				0,
+				1
+			],
+			"block_id": "slab",
+			"material_id": "earth",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				3,
+				0,
+				2
+			],
+			"block_id": "slab",
+			"material_id": "earth",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				3,
+				0,
+				3
+			],
+			"block_id": "slab",
+			"material_id": "earth",
+			"rot": 0,
+			"variant": "0.25"
+		}
+	],
+	"objects": [],
+	"fixtures": [],
+	"areas": [
+		{
+			"id": "main",
+			"name": "Помещение",
+			"role": "room",
+			"function": "core:market",
+			"properties": {
+				"profession": "seller",
+				"max_workers": 3
+			},
+			"rects": [
+				[
+					0,
+					0,
+					4,
+					4
+				]
+			],
+			"y": [
+				0,
+				2
+			]
+		}
+	],
+	"anchors": [
+		{
+			"id": "front_door",
+			"role": "door",
+			"pos": [
+				2.0,
+				0,
+				0
+			],
+			"facing": 180,
+			"allow": [
+				"visitor",
+				"staff",
+				"owner",
+				"builder"
+			]
+		}
+	],
+	"routes": []
+}

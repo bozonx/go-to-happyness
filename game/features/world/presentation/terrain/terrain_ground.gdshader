@@ -40,10 +40,18 @@ uniform vec3 wear_tint : source_color = vec3(0.52, 0.44, 0.33);
 
 varying vec3 world_position;
 varying vec3 smooth_view_normal;
+varying vec4 bevel_view_0;
+varying vec4 bevel_view_1;
+varying vec4 bevel_view_2;
+varying vec4 bevel_view_3;
 
 void vertex() {
 	vec3 smooth_normal = normalize(COLOR.rgb * 2.0 - 1.0);
 	smooth_view_normal = normalize(MODELVIEW_NORMAL_MATRIX * smooth_normal);
+	bevel_view_0 = vec4(normalize(MODELVIEW_NORMAL_MATRIX * mix(NORMAL, CUSTOM0.xyz, CUSTOM0.w)), CUSTOM0.w);
+	bevel_view_1 = vec4(normalize(MODELVIEW_NORMAL_MATRIX * mix(NORMAL, CUSTOM1.xyz, CUSTOM1.w)), CUSTOM1.w);
+	bevel_view_2 = vec4(normalize(MODELVIEW_NORMAL_MATRIX * mix(NORMAL, CUSTOM2.xyz, CUSTOM2.w)), CUSTOM2.w);
+	bevel_view_3 = vec4(normalize(MODELVIEW_NORMAL_MATRIX * mix(NORMAL, CUSTOM3.xyz, CUSTOM3.w)), CUSTOM3.w);
 	world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 }
 
@@ -66,7 +74,13 @@ void fragment() {
 	float bevel_band = 1.0 - step(rounding_radius, eligible_edge_distance);
 	float edge_band = mix(rounded_band, bevel_band, edge_bevel) * step(0.001, edge_rounding);
 	float normal_blend = max(edge_band, full_smoothing);
-	NORMAL = normalize(mix(NORMAL, smooth_view_normal, normal_blend));
+	vec4 bevel_normal = bevel_view_0;
+	float bevel_distance = edge_distances.x + (1.0 - edge_enabled.x) * 10000.0;
+	if (edge_distances.y + (1.0 - edge_enabled.y) * 10000.0 < bevel_distance) { bevel_normal = bevel_view_1; bevel_distance = edge_distances.y + (1.0 - edge_enabled.y) * 10000.0; }
+	if (edge_distances.z + (1.0 - edge_enabled.z) * 10000.0 < bevel_distance) { bevel_normal = bevel_view_2; bevel_distance = edge_distances.z + (1.0 - edge_enabled.z) * 10000.0; }
+	if (edge_distances.w + (1.0 - edge_enabled.w) * 10000.0 < bevel_distance) { bevel_normal = bevel_view_3; }
+	vec3 edge_target = mix(smooth_view_normal, bevel_normal.xyz, edge_bevel * bevel_normal.w);
+	NORMAL = normalize(mix(NORMAL, edge_target, normal_blend));
 	vec2 tile_uv = world_position.xz / tile_size;
 
 	// Sample positions are cell CENTRES, so the four taps around a fragment are

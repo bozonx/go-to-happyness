@@ -1,0 +1,164 @@
+{
+	"version": 6,
+	"id": "campfire_lvl2",
+	"role": "campfire_lvl2",
+	"name": "Главный костёр ур. 2",
+	"construction_style": "surface",
+	"category": "tent",
+	"fallback_building_id": "campfire_lvl2",
+	"grid_bounds": {
+		"x": 3,
+		"y": 1,
+		"z": 3
+	},
+	"footprint": [
+		3,
+		3
+	],
+	"blocks": [
+		{
+			"pos": [
+				0,
+				0,
+				0
+			],
+			"block_id": "slab",
+			"material_id": "thatch",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				0,
+				0,
+				1
+			],
+			"block_id": "slab",
+			"material_id": "thatch",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				0,
+				0,
+				2
+			],
+			"block_id": "slab",
+			"material_id": "thatch",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				1,
+				0,
+				0
+			],
+			"block_id": "slab",
+			"material_id": "thatch",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				1,
+				0,
+				1
+			],
+			"block_id": "slab",
+			"material_id": "thatch",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				1,
+				0,
+				2
+			],
+			"block_id": "slab",
+			"material_id": "thatch",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				2,
+				0,
+				0
+			],
+			"block_id": "slab",
+			"material_id": "thatch",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				2,
+				0,
+				1
+			],
+			"block_id": "slab",
+			"material_id": "thatch",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				2,
+				0,
+				2
+			],
+			"block_id": "slab",
+			"material_id": "thatch",
+			"rot": 0,
+			"variant": "0.25"
+		}
+	],
+	"objects": [],
+	"fixtures": [],
+	"areas": [
+		{
+			"id": "main",
+			"name": "Помещение",
+			"role": "room",
+			"function": "core:civic",
+			"properties": {
+				"profession": "official",
+				"max_workers": 2
+			},
+			"rects": [
+				[
+					0,
+					0,
+					3,
+					3
+				]
+			],
+			"y": [
+				0,
+				2
+			]
+		}
+	],
+	"anchors": [
+		{
+			"id": "front_door",
+			"role": "door",
+			"pos": [
+				1.5,
+				0,
+				0
+			],
+			"facing": 180,
+			"allow": [
+				"visitor",
+				"staff",
+				"owner",
+				"builder"
+			]
+		}
+	],
+	"routes": []
+}

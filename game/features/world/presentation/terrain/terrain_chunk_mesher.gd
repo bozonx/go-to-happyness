@@ -26,6 +26,10 @@ extends RefCounted
 
 ## Depth of the wall drawn where the ground ends: board border and hole edges.
 const SKIRT_STEPS := 4.0
+## Neighbouring ramp cells often differ by a tiny normal angle while still
+## reading as one continuous plane. Treat bends below ten degrees as coplanar so
+## the bevel shader does not reveal the cell grid across an otherwise flat hill.
+const ROUNDABLE_EDGE_MAX_DOT := 0.98480775 # cos(10 degrees)
 
 ## Detail levels (§11). Distant chunks drop their side faces: the camera is
 ## isometric and the faces are not visible from there anyway.
@@ -76,6 +80,7 @@ var _top_normals := PackedVector3Array()
 var _top_colors := PackedColorArray()
 var _top_uv := PackedVector2Array()
 var _top_uv2 := PackedVector2Array()
+var _top_edge_normals: Array = []
 var _top_indices := PackedInt32Array()
 var _wall_vertices := PackedVector3Array()
 var _wall_normals := PackedVector3Array()
@@ -84,6 +89,7 @@ var _wall_normals := PackedVector3Array()
 var _wall_colors := PackedColorArray()
 var _wall_uv := PackedVector2Array()
 var _wall_uv2 := PackedVector2Array()
+var _wall_edge_normals: Array = []
 var _wall_indices := PackedInt32Array()
 
 var _grid: TerrainGrid = null
@@ -115,12 +121,14 @@ func _build(grid: TerrainGrid, chunk: Vector2i, lod: int) -> Dictionary:
 	_top_colors = PackedColorArray()
 	_top_uv = PackedVector2Array()
 	_top_uv2 = PackedVector2Array()
+	_top_edge_normals = [PackedFloat32Array(), PackedFloat32Array(), PackedFloat32Array(), PackedFloat32Array()]
 	_top_indices = PackedInt32Array()
 	_wall_vertices = PackedVector3Array()
 	_wall_normals = PackedVector3Array()
 	_wall_colors = PackedColorArray()
 	_wall_uv = PackedVector2Array()
 	_wall_uv2 = PackedVector2Array()
+	_wall_edge_normals = [PackedFloat32Array(), PackedFloat32Array(), PackedFloat32Array(), PackedFloat32Array()]
 	_wall_indices = PackedInt32Array()
 	_cache_region()
 
@@ -144,9 +152,11 @@ func _build(grid: TerrainGrid, chunk: Vector2i, lod: int) -> Dictionary:
 		top_arrays[Mesh.ARRAY_COLOR] = _top_colors
 		top_arrays[Mesh.ARRAY_TEX_UV] = _top_uv
 		top_arrays[Mesh.ARRAY_TEX_UV2] = _top_uv2
+		for custom in 4:
+			top_arrays[Mesh.ARRAY_CUSTOM0 + custom] = _top_edge_normals[custom]
 		top_arrays[Mesh.ARRAY_INDEX] = _top_indices
 		top_surface = mesh.get_surface_count()
-		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, top_arrays)
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, top_arrays, [], {}, _custom_float_flags())
 	if not _wall_indices.is_empty():
 		var wall_arrays: Array = []
 		wall_arrays.resize(Mesh.ARRAY_MAX)
@@ -155,9 +165,11 @@ func _build(grid: TerrainGrid, chunk: Vector2i, lod: int) -> Dictionary:
 		wall_arrays[Mesh.ARRAY_COLOR] = _wall_colors
 		wall_arrays[Mesh.ARRAY_TEX_UV] = _wall_uv
 		wall_arrays[Mesh.ARRAY_TEX_UV2] = _wall_uv2
+		for custom in 4:
+			wall_arrays[Mesh.ARRAY_CUSTOM0 + custom] = _wall_edge_normals[custom]
 		wall_arrays[Mesh.ARRAY_INDEX] = _wall_indices
 		cliff_surface = mesh.get_surface_count()
-		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, wall_arrays)
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, wall_arrays, [], {}, _custom_float_flags())
 	return {
 		"mesh": mesh, "faces": _collision_faces(),
 		SURFACE_TOP: top_surface, SURFACE_CLIFF: cliff_surface,
@@ -408,6 +420,7 @@ func _add_top_quad(a: Vector3, b: Vector3, c: Vector3, d: Vector3, normal: Vecto
 		_top_normals.append(normal)
 		_top_colors.append(Color.WHITE)
 	_append_edge_coordinates(_top_uv, _top_uv2, a, b, c)
+	_append_empty_edge_normals(_top_edge_normals)
 	_append_quad_indices(_top_indices, base)
 
 
@@ -421,6 +434,7 @@ func _add_wall_quad(a: Vector3, b: Vector3, c: Vector3, d: Vector3, normal: Vect
 		_wall_normals.append(normal)
 		_wall_colors.append(color)
 	_append_edge_coordinates(_wall_uv, _wall_uv2, a, b, c)
+	_append_empty_edge_normals(_wall_edge_normals)
 	_append_quad_indices(_wall_indices, base)
 
 
@@ -459,6 +473,10 @@ func _encode_roundable_edges() -> void:
 	var wall_quads := _wall_vertices.size() / 4
 	var masks := PackedInt32Array()
 	masks.resize(top_quads + wall_quads)
+	var edge_normal_sums: Array[Vector3] = []
+	var edge_normal_counts := PackedInt32Array()
+	edge_normal_sums.resize((top_quads + wall_quads) * 4)
+	edge_normal_counts.resize((top_quads + wall_quads) * 4)
 	var buckets: Dictionary = {}
 	_collect_quad_edges(_top_vertices, _top_normals, 0, buckets)
 	_collect_quad_edges(_wall_vertices, _wall_normals, top_quads, buckets)
@@ -469,16 +487,24 @@ func _encode_roundable_edges() -> void:
 				var right: Dictionary = bucket[right_index]
 				if int(left["quad"]) == int(right["quad"]):
 					continue
-				if (left["normal"] as Vector3).dot(right["normal"] as Vector3) > 0.999:
+				if (left["normal"] as Vector3).dot(right["normal"] as Vector3) > ROUNDABLE_EDGE_MAX_DOT:
 					continue
 				if minf(float(left["max"]), float(right["max"])) - maxf(float(left["min"]), float(right["min"])) <= 0.0001:
 					continue
-				masks[int(left["quad"])] |= 1 << int(left["edge"])
-				masks[int(right["quad"])] |= 1 << int(right["edge"])
+				var left_quad := int(left["quad"])
+				var right_quad := int(right["quad"])
+				var left_edge := int(left["edge"])
+				var right_edge := int(right["edge"])
+				masks[left_quad] |= 1 << left_edge
+				masks[right_quad] |= 1 << right_edge
+				_accumulate_edge_bisector(edge_normal_sums, edge_normal_counts, left_quad * 4 + left_edge, left["normal"], right["normal"])
+				_accumulate_edge_bisector(edge_normal_sums, edge_normal_counts, right_quad * 4 + right_edge, right["normal"], left["normal"])
 	for quad in top_quads:
 		_pack_edge_mask(_top_uv2, quad, masks[quad])
+		_pack_edge_normals(_top_edge_normals, quad, edge_normal_sums, edge_normal_counts, quad)
 	for quad in wall_quads:
 		_pack_edge_mask(_wall_uv2, quad, masks[top_quads + quad])
+		_pack_edge_normals(_wall_edge_normals, quad, edge_normal_sums, edge_normal_counts, top_quads + quad)
 
 
 static func _collect_quad_edges(vertices: PackedVector3Array, normals: PackedVector3Array, quad_offset: int, buckets: Dictionary) -> void:
@@ -511,6 +537,28 @@ static func _edge_line_key(direction: Vector3, anchor: Vector3) -> String:
 	]
 
 
+static func _accumulate_edge_bisector(sums: Array[Vector3], counts: PackedInt32Array, index: int, own_normal: Vector3, adjacent_normal: Vector3) -> void:
+	var bisector := (own_normal + adjacent_normal).normalized()
+	if bisector.is_zero_approx():
+		return
+	sums[index] += bisector
+	counts[index] += 1
+
+
+static func _pack_edge_normals(channels: Array, local_quad: int, sums: Array[Vector3], counts: PackedInt32Array, global_quad: int) -> void:
+	for edge in 4:
+		var source := global_quad * 4 + edge
+		var normal := sums[source].normalized() if counts[source] > 0 else Vector3.ZERO
+		var channel: PackedFloat32Array = channels[edge]
+		var base := local_quad * 16
+		for corner in 4:
+			var offset := base + corner * 4
+			channel[offset] = normal.x
+			channel[offset + 1] = normal.y
+			channel[offset + 2] = normal.z
+			channel[offset + 3] = 1.0 if counts[source] > 0 else 0.0
+
+
 static func _pack_edge_mask(uv2: PackedVector2Array, quad: int, mask: int) -> void:
 	var base := quad * 4
 	var dimensions := uv2[base]
@@ -532,6 +580,21 @@ static func _append_edge_coordinates(coordinates: PackedVector2Array, dimensions
 	coordinates.append(Vector2(0.0, 1.0))
 	for _index in 4:
 		dimensions.append(Vector2(width, depth))
+
+
+static func _append_empty_edge_normals(channels: Array) -> void:
+	for channel: PackedFloat32Array in channels:
+		for _value in 16:
+			channel.append(0.0)
+
+
+static func _custom_float_flags() -> int:
+	return (
+		(Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT)
+		| (Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM1_SHIFT)
+		| (Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM2_SHIFT)
+		| (Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM3_SHIFT)
+	)
 
 
 static func _append_quad_indices(indices: PackedInt32Array, base: int) -> void:

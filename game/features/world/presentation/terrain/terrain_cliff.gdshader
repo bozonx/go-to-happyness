@@ -27,6 +27,10 @@ varying vec3 world_normal;
 varying vec3 smooth_world_normal;
 varying vec3 smooth_view_normal;
 varying float layer_index;
+varying vec4 bevel_view_0;
+varying vec4 bevel_view_1;
+varying vec4 bevel_view_2;
+varying vec4 bevel_view_3;
 
 void vertex() {
 	vec3 smooth_normal = normalize(COLOR.gba * 2.0 - 1.0);
@@ -34,6 +38,10 @@ void vertex() {
 	world_normal = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
 	smooth_world_normal = normalize((MODEL_MATRIX * vec4(smooth_normal, 0.0)).xyz);
 	smooth_view_normal = normalize(MODELVIEW_NORMAL_MATRIX * smooth_normal);
+	bevel_view_0 = vec4(normalize(MODELVIEW_NORMAL_MATRIX * mix(NORMAL, CUSTOM0.xyz, CUSTOM0.w)), CUSTOM0.w);
+	bevel_view_1 = vec4(normalize(MODELVIEW_NORMAL_MATRIX * mix(NORMAL, CUSTOM1.xyz, CUSTOM1.w)), CUSTOM1.w);
+	bevel_view_2 = vec4(normalize(MODELVIEW_NORMAL_MATRIX * mix(NORMAL, CUSTOM2.xyz, CUSTOM2.w)), CUSTOM2.w);
+	bevel_view_3 = vec4(normalize(MODELVIEW_NORMAL_MATRIX * mix(NORMAL, CUSTOM3.xyz, CUSTOM3.w)), CUSTOM3.w);
 	layer_index = floor(COLOR.r * 255.0 + 0.5);
 }
 
@@ -54,8 +62,16 @@ void fragment() {
 	float bevel_band = 1.0 - step(rounding_radius, eligible_edge_distance);
 	float edge_band = mix(rounded_band, bevel_band, edge_bevel) * step(0.001, edge_rounding);
 	float normal_blend = max(edge_band, full_smoothing);
-	NORMAL = normalize(mix(NORMAL, smooth_view_normal, normal_blend));
-	vec3 blend = abs(normalize(mix(world_normal, smooth_world_normal, normal_blend)));
+	vec4 bevel_normal = bevel_view_0;
+	float bevel_distance = edge_distances.x + (1.0 - edge_enabled.x) * 10000.0;
+	if (edge_distances.y + (1.0 - edge_enabled.y) * 10000.0 < bevel_distance) { bevel_normal = bevel_view_1; bevel_distance = edge_distances.y + (1.0 - edge_enabled.y) * 10000.0; }
+	if (edge_distances.z + (1.0 - edge_enabled.z) * 10000.0 < bevel_distance) { bevel_normal = bevel_view_2; bevel_distance = edge_distances.z + (1.0 - edge_enabled.z) * 10000.0; }
+	if (edge_distances.w + (1.0 - edge_enabled.w) * 10000.0 < bevel_distance) { bevel_normal = bevel_view_3; }
+	vec3 edge_target_view = mix(smooth_view_normal, bevel_normal.xyz, edge_bevel * bevel_normal.w);
+	NORMAL = normalize(mix(NORMAL, edge_target_view, normal_blend));
+	vec3 bevel_world_normal = normalize((INV_VIEW_MATRIX * vec4(bevel_normal.xyz, 0.0)).xyz);
+	vec3 edge_target_world = mix(smooth_world_normal, bevel_world_normal, edge_bevel * bevel_normal.w);
+	vec3 blend = abs(normalize(mix(world_normal, edge_target_world, normal_blend)));
 	// A hard triplanar exponent redraws a polygonal seam in the texture after the
 	// lighting normal has been rounded. Relax it only inside the rounded band.
 	float triplanar_sharpness = mix(4.0, 1.35, normal_blend);

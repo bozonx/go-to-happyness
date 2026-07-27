@@ -1,0 +1,76 @@
+{
+	"version": 6,
+	"id": "boundary_post",
+	"role": "boundary_post",
+	"name": "Столб границы",
+	"construction_style": "surface",
+	"category": "tent",
+	"fallback_building_id": "boundary_post",
+	"grid_bounds": {
+		"x": 1,
+		"y": 1,
+		"z": 1
+	},
+	"footprint": [
+		1,
+		1
+	],
+	"blocks": [
+		{
+			"pos": [
+				0,
+				0,
+				0
+			],
+			"block_id": "slab",
+			"material_id": "thatch",
+			"rot": 0,
+			"variant": "0.25"
+		}
+	],
+	"objects": [],
+	"fixtures": [],
+	"areas": [
+		{
+			"id": "main",
+			"name": "Помещение",
+			"role": "room",
+			"function": "core:workplace",
+			"properties": {
+				"profession": "craftsman",
+				"max_workers": 1
+			},
+			"rects": [
+				[
+					0,
+					0,
+					1,
+					1
+				]
+			],
+			"y": [
+				0,
+				2
+			]
+		}
+	],
+	"anchors": [
+		{
+			"id": "front_door",
+			"role": "door",
+			"pos": [
+				0.5,
+				0,
+				0
+			],
+			"facing": 180,
+			"allow": [
+				"visitor",
+				"staff",
+				"owner",
+				"builder"
+			]
+		}
+	],
+	"routes": []
+}

@@ -1,0 +1,109 @@
+{
+	"version": 6,
+	"id": "toilet_stone",
+	"role": "toilet_stone",
+	"name": "Каменный туалет ур. 1",
+	"construction_style": "surface",
+	"category": "stone",
+	"fallback_building_id": "toilet_stone",
+	"grid_bounds": {
+		"x": 2,
+		"y": 1,
+		"z": 2
+	},
+	"footprint": [
+		2,
+		2
+	],
+	"blocks": [
+		{
+			"pos": [
+				0,
+				0,
+				0
+			],
+			"block_id": "slab",
+			"material_id": "stone",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				0,
+				0,
+				1
+			],
+			"block_id": "slab",
+			"material_id": "stone",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				1,
+				0,
+				0
+			],
+			"block_id": "slab",
+			"material_id": "stone",
+			"rot": 0,
+			"variant": "0.25"
+		},
+		{
+			"pos": [
+				1,
+				0,
+				1
+			],
+			"block_id": "slab",
+			"material_id": "stone",
+			"rot": 0,
+			"variant": "0.25"
+		}
+	],
+	"objects": [],
+	"fixtures": [],
+	"areas": [
+		{
+			"id": "main",
+			"name": "Помещение",
+			"role": "room",
+			"function": "core:workplace",
+			"properties": {
+				"profession": "craftsman",
+				"max_workers": 1
+			},
+			"rects": [
+				[
+					0,
+					0,
+					2,
+					2
+				]
+			],
+			"y": [
+				0,
+				2
+			]
+		}
+	],
+	"anchors": [
+		{
+			"id": "front_door",
+			"role": "door",
+			"pos": [
+				1.0,
+				0,
+				0
+			],
+			"facing": 180,
+			"allow": [
+				"visitor",
+				"staff",
+				"owner",
+				"builder"
+			]
+		}
+	],
+	"routes": []
+}
