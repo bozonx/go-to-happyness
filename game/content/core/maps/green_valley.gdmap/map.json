@@ -22,7 +22,7 @@
 	"players": 1,
 	"regions": [],
 	"required_content": [],
-	"revision": "6a67c18f8a69",
+	"revision": "6a67ca6acc57",
 	"routes": [],
 	"rules": [],
 	"start": {
@@ -40,5 +40,18 @@
 	},
 	"tags": [],
 	"victory": [],
-	"water": []
+	"water": [
+		{
+			"colour": "174261",
+			"flow": [],
+			"foam_strength": 1.0,
+			"freezes": false,
+			"id": 1,
+			"name": "sea 1",
+			"salinity": "salt",
+			"surface_height": 0,
+			"type": "sea",
+			"wave_amplitude": 0.22
+		}
+	]
 }
