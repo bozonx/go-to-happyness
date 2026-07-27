@@ -45,7 +45,6 @@ static func run_all() -> void:
 			"source": "player",
 			"id": "test_house",
 			"revision": "abcd1234",
-			"fallback_building_id": "house",
 		},
 		"zone_state": [{
 			"id": "zone_1",

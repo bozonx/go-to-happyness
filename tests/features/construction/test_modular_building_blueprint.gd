@@ -1,7 +1,6 @@
 extends SceneTree
 
-## End-to-end content test for a player-authored modular building:
-## repository -> player resolver -> runtime key -> legacy-compatible view model.
+## End-to-end content test for a player-authored modular building.
 
 const BlueprintScript = preload("res://game/features/buildings/domain/editor/building_blueprint.gd")
 const BlueprintBlockScript = preload("res://game/features/buildings/domain/editor/blueprint_block.gd")
@@ -15,12 +14,10 @@ const TEST_ID := &"_test_modular_pipeline"
 
 
 func _init() -> void:
-	_test_v3_migrates_to_content_axes()
 	var blueprint := BlueprintScript.new()
 	blueprint.id = TEST_ID
 	blueprint.name = "Test modular workshop"
 	blueprint.category = "earth"
-	blueprint.fallback_building_id = &"earth_house"
 	blueprint.footprint = Vector2i(2, 1)
 	blueprint.grid_bounds = Vector3i(2, 1, 1)
 	blueprint.blocks = [
@@ -67,7 +64,6 @@ func _init() -> void:
 	assert(game_blueprint.get("zones", []).size() == 1)
 	assert(game_blueprint.get("blueprint_ref", {}).get("source") == "local")
 	assert(game_blueprint.get("blueprint_ref", {}).get("role") == String(TEST_ID))
-	assert(game_blueprint.get("blueprint_ref", {}).get("fallback_building_id") == "smithy")
 
 	var remove_error := DirAccess.remove_absolute(repository.file_path_for(TEST_ID))
 	assert(remove_error == OK)
@@ -75,6 +71,7 @@ func _init() -> void:
 	assert(not LibraryScript.has(runtime_key))
 
 	_test_builtin_tent()
+	_test_decor_only_blueprint_uses_footprint_pivot()
 	_test_id_alphabet_is_refused_not_mangled()
 	_test_save_writes_back_to_the_same_file()
 	_test_read_only_source_is_not_writable()
@@ -198,21 +195,6 @@ func _test_decor_survives_a_round_trip() -> void:
 	DirAccess.remove_absolute(saved["path"])
 
 
-func _test_v3_migrates_to_content_axes() -> void:
-	var legacy := BlueprintScript.from_dict({
-		"version": 3, "id": "legacy_bakery", "name": "Legacy bakery",
-		"category": "clay", "construction_style": "surface",
-		"grid_bounds": {"x": 1, "y": 1, "z": 1}, "footprint": [1, 1],
-	})
-	assert(legacy.version == BlueprintScript.FORMAT_VERSION)
-	assert(legacy.role == &"legacy_bakery")
-	assert(legacy.era == &"clay")
-	assert(legacy.style == &"generic")
-	assert(legacy.kind == &"building")
-	var serialized := legacy.to_dict()
-	assert(serialized.has("era") and not serialized.has("category"))
-
-
 ## The shipped tent blueprint must render from blocks yet keep the tent's static
 ## gameplay definition (costs, housing) — a builtin blueprint supplies visuals,
 ## never overrides functionality keyed by building_type.
@@ -229,3 +211,14 @@ func _test_builtin_tent() -> void:
 	# the 16 thatch blocks, and the tent stays a housing type.
 	var costs: Dictionary = BuildingCatalogScript.definition_for("tent").get("costs", {})
 	assert(costs == {"branches": 4, "grass": 4}, "tent cost must stay the static one, got %s" % costs)
+
+
+## A building with only authored decor still uses the footprint pivot. Otherwise
+## its objects are offset by half the footprint when placed in the world.
+func _test_decor_only_blueprint_uses_footprint_pivot() -> void:
+	var campfire: Dictionary = BuildingBlueprintsScript.get_blueprint("campfire")
+	var modules: Array = campfire.get("modules", [])
+	assert(modules.size() == 1, "campfire must contain its authored decor module")
+	var local_position: Vector3 = modules[0].get("position", Vector3.INF)
+	assert(local_position.is_zero_approx(),
+		"decor-only campfire must be centred on its placement cell")

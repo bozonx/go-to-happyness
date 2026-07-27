@@ -16,18 +16,8 @@ const FurnishingAssetCatalogScript = preload("res://game/features/buildings/doma
 const FixtureDefinitionScript = preload("res://game/features/buildings/domain/editor/fixture_definition.gd")
 const ContentIdScript = preload("res://game/features/content/domain/content_id.gd")
 
-## v3: `objects[].pos` is relative to the footprint centre (see `pivot_offset`).
-## No migration branch for v2: every v2 file in the project places decor at the
-## origin, which the centre reading interprets correctly.
-## v5: active zones rebuilt on the shared model (design_docs/engine/active_zones.md).
-## `place_zones`/`zone_anchors`/`work_zones` and the standalone `entrance`/
-## `worker_entrances` fields are gone; there is no migration branch, because no
-## shipped or authored file used the old zone arrays.
-## v6: the `access` area role became `overlay` and gained an `effects` section;
-## points gained `arc`. Again no migration branch: not one authored file carried
-## an area, so there is nothing to convert — only the version stamp moves.
 const FORMAT_VERSION := 6
-const MIN_LOAD_VERSION := 1
+const MIN_LOAD_VERSION := FORMAT_VERSION
 const FILE_EXTENSION := "gdbuilding.json"
 
 var version: int = FORMAT_VERSION
@@ -56,8 +46,6 @@ var building_type: String:
 var category: StringName:
 	get: return era
 	set(value): era = value
-## Standard building used when a referenced player file is unavailable.
-var fallback_building_id: StringName = &"house"
 var grid_bounds: Vector3i = Vector3i(8, 4, 8)
 
 ## Footprint on the settlement board. Entrances are **not** stored: they are the
@@ -127,18 +115,6 @@ func entrance_offset() -> Vector2i:
 	return Vector2i(0, -footprint.y / 2)
 
 
-## Board offsets of the doors staff and couriers use. A door open to staff counts,
-## which means a single public door serves both without being authored twice.
-func worker_entrance_offsets() -> Array[Vector2i]:
-	var offsets: Array[Vector2i] = []
-	for anchor in anchors:
-		if anchor.is_door() and anchor.permits(ZoneAccess.AUDIENCE_STAFF):
-			var offset := _anchor_board_offset(anchor)
-			if offset not in offsets:
-				offsets.append(offset)
-	return offsets
-
-
 func _anchor_board_offset(anchor: ZoneAnchorRecord) -> Vector2i:
 	var pivot := pivot_offset()
 	return Vector2i(roundi(anchor.pos.x - pivot.x), roundi(anchor.pos.z - pivot.z))
@@ -203,33 +179,7 @@ func rooms() -> Array[ZoneAreaRecord]:
 	return result
 
 
-## Standard building substituted when a referenced player file is unavailable.
-## The mapping from a zone function to a shipped building lives in the pack that
-## declared the function (`fallback` in zone_functions.json), not here: the engine
-## must not know that "kitchen" means a campfire in the tent era.
-func infer_fallback_building_id() -> StringName:
-	var era_key := String(era)
-	for area in rooms():
-		if area.function == &"":
-			continue
-		var fallbacks: Variant = ZoneFunctionCatalog.get_function(area.function).get("fallback", {})
-		if not (fallbacks is Dictionary):
-			continue
-		var by_era: Dictionary = fallbacks
-		if by_era.has(era_key):
-			return StringName(by_era[era_key])
-		if by_era.has("default"):
-			return StringName(by_era["default"])
-	match era_key:
-		"tent": return &"tent"
-		"earth": return &"earth_house"
-		"clay": return &"clay_house"
-		"stone": return &"stone_house"
-		_: return &"house"
-
-
 func to_dict() -> Dictionary:
-	fallback_building_id = infer_fallback_building_id()
 	var block_dicts: Array = []
 	for block in blocks:
 		block_dicts.append(block.to_dict())
@@ -255,7 +205,6 @@ func to_dict() -> Dictionary:
 		"name": name,
 		"revision": revision,
 		"construction_style": String(construction_style),
-		"fallback_building_id": String(fallback_building_id),
 		"grid_bounds": {"x": grid_bounds.x, "y": grid_bounds.y, "z": grid_bounds.z},
 		"footprint": [footprint.x, footprint.y],
 		"blocks": block_dicts,
@@ -282,18 +231,13 @@ static func from_dict(data: Dictionary) -> BuildingBlueprint:
 	var bp := BuildingBlueprint.new()
 	bp.version = int(data.get("version", FORMAT_VERSION))
 	bp.id = StringName(data.get("id", "new_building"))
-	# v3 -> v4: category became era and the missing axes receive their safe
-	# defaults. Keep `category` populated for existing gameplay consumers.
 	bp.role = StringName(data.get("role", bp.id))
-	bp.era = StringName(data.get("era", data.get("category", "tent")))
+	bp.era = StringName(data.get("era", "tent"))
 	bp.style = StringName(data.get("style", "generic"))
 	bp.kind = StringName(data.get("kind", "building"))
 	bp.name = String(data.get("name", "Новое здание"))
 	bp.revision = String(data.get("revision", ""))
-	# `building_type` was used by the initial prototype for surface/underground.
-	# It remains a read alias inside v1, but new files use the unambiguous name.
-	bp.construction_style = StringName(data.get("construction_style", data.get("building_type", "surface")))
-	bp.fallback_building_id = StringName(data.get("fallback_building_id", "house"))
+	bp.construction_style = StringName(data.get("construction_style", "surface"))
 	bp.grid_bounds = _vec3i_from(data.get("grid_bounds", {}), Vector3i(8, 4, 8))
 	bp.footprint = _vec2i_from(data.get("footprint", []), Vector2i.ZERO)
 
@@ -343,10 +287,6 @@ static func from_dict(data: Dictionary) -> BuildingBlueprint:
 		for fd_data in raw_fixtures:
 			if fd_data is Dictionary:
 				bp.fixtures.append(FixtureDefinitionScript.from_dict(fd_data))
-	# Upgrade in-memory version so a save writes v2, even if the file was v1.
-	# Out-of-range versions are left as-is so validation_errors can reject them.
-	if bp.version >= MIN_LOAD_VERSION and bp.version <= FORMAT_VERSION:
-		bp.version = FORMAT_VERSION
 	bp.recalculate_construction_cost()
 	return bp
 
@@ -393,8 +333,7 @@ func recalculate_construction_cost() -> void:
 
 
 ## Identity of this exact file version. Maps answer the same question with a
-## stored save stamp, so blueprints do too; the content hash stays only as the
-## answer for files written before `revision` existed (v2 and earlier).
+## stored save stamp, so blueprints do too.
 func revision_id() -> String:
 	return revision if not revision.is_empty() else content_revision()
 

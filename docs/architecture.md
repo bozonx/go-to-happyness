@@ -90,8 +90,7 @@ create generic `utils`, `helpers`, `managers` or catch-all `services` directorie
 
 Keep the three building concepts separate:
 
-- `BuildingDefinition`: immutable content data, eventually an editor-authored
-  `Resource` in `game/data/buildings/`.
+- `BuildingBlueprint`: immutable authored content in a `.gdbuilding.json` pack file.
 - `BuildingInstance`: typed runtime gameplay state, addressed by an ID.
 - `BuildingView`: the `Node3D` and its collision/mesh representation.
 
@@ -105,7 +104,7 @@ queues. Their scene, economy, worker and completion dependencies are explicit ru
 callbacks, not a bootstrap-controller reference. Building placement and completion
 effects remain the next building subsystems to move behind the same narrow boundary.
 
-`building_blueprints.gd` is presentation code. It may build geometry and collision,
+`building_blueprints.gd` is presentation code. It builds authored geometry and collision,
 but it must not decide costs, unlocks, production or staffing. Do not use `Node3D`
 metadata or arbitrary dictionaries as a new source of building state; introduce a
 typed runtime record and registry as the building feature grows.

@@ -51,7 +51,6 @@ var _rot_btn: Button = null
 var _rot_z_btn: Button = null
 var _layer_label: Label = null
 var _count_label: Label = null
-var _fallback_edit: LineEdit = null
 var _footprint_x_spin: SpinBox = null
 var _footprint_z_spin: SpinBox = null
 var _category_option: OptionButton = null
@@ -99,7 +98,6 @@ func setup(editor: Node) -> void:
 	_rot_z_btn = editor.get_node("%RotZBtn")
 	_layer_label = editor.get_node("%LayerLabel")
 	_count_label = editor.get_node("%CountLabel")
-	_fallback_edit = editor.get_node("%FallbackEdit")
 	_footprint_x_spin = editor.get_node("%FootprintXSpin")
 	_footprint_z_spin = editor.get_node("%FootprintZSpin")
 	_category_option = editor.get_node("%CategoryOption")
@@ -628,12 +626,6 @@ func select_anchor(anchor: int) -> void:
 	refresh_ghost()
 
 
-func update_fallback_display() -> void:
-	_editor.update_fallback_display()
-	if _fallback_edit != null:
-		_fallback_edit.text = String(_editor.blueprint.fallback_building_id)
-
-
 # ---------------------------------------------------------------------------
 # Material / era
 # ---------------------------------------------------------------------------
@@ -681,7 +673,6 @@ func _on_era_changed(index: int) -> void:
 		_editor.blueprint.recalculate_construction_cost()
 
 	_editor.blueprint.category = target_era
-	update_fallback_display()
 	_editor.mark_dirty()
 	rebuild_material_options()
 	refresh_underground_availability()
@@ -1157,7 +1148,6 @@ func sync_metadata_fields() -> void:
 	if _visual_style_edit != null:
 		_visual_style_edit.text = String(_editor.blueprint.style)
 	refresh_path_hint()
-	update_fallback_display()
 	if _footprint_x_spin != null:
 		_footprint_x_spin.value = _editor.blueprint.footprint.x
 	if _footprint_z_spin != null:
@@ -1235,7 +1225,6 @@ func collect_metadata_from_ui() -> void:
 		_editor.blueprint.style = StringName(raw_style) if not raw_style.is_empty() else &"generic"
 	if _category_option != null:
 		_editor.blueprint.category = StringName(_category_option.get_item_metadata(_category_option.selected))
-	update_fallback_display()
 	if _footprint_x_spin != null and _footprint_z_spin != null:
 		_editor.blueprint.footprint = Vector2i(int(_footprint_x_spin.value), int(_footprint_z_spin.value))
 	_editor.grid_model.write_to_blueprint(_editor.blueprint)

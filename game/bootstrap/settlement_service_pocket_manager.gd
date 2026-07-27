@@ -22,7 +22,6 @@ func register_service_entrance(building: Node3D, blueprint: Dictionary, home_ent
 			building.remove_meta(key)
 	var service_positions := BuildingAccessPoints.worker_positions(building, blueprint, SERVICE_PAD_OFFSET)
 	var service_local_positions := BuildingAccessPoints.worker_local_positions(blueprint, SERVICE_PAD_OFFSET)
-	building.set_meta("access_points_source", BuildingAccessPoints.source_for(blueprint))
 	if not service_positions.is_empty():
 		building.set_meta("service_positions", service_positions)
 		building.set_meta("service_position", service_positions[0])

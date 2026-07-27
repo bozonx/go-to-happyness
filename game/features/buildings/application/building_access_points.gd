@@ -3,17 +3,8 @@ extends RefCounted
 
 ## Resolves authored building access anchors into local/world positions.
 ##
-## Modular blueprints use `routing_anchors` as their only authority. Legacy
-## procedural blueprints have no `blueprint_ref`, so they temporarily fall back
-## to BuildingEntrancePositions until their authored content lands.
-
-const SOURCE_AUTHORED := &"authored"
-const SOURCE_LEGACY := &"legacy"
+## Authored `routing_anchors` are the sole authority for building access.
 const DEFAULT_PAD := 1.0
-
-
-static func source_for(blueprint: Dictionary) -> StringName:
-	return SOURCE_AUTHORED if blueprint.has("blueprint_ref") else SOURCE_LEGACY
 
 
 static func worker_local_positions(blueprint: Dictionary, pad := DEFAULT_PAD) -> Array[Vector3]:
@@ -29,15 +20,7 @@ static func construction_local_positions(blueprint: Dictionary, pad := DEFAULT_P
 
 
 static func local_positions_for_audience(blueprint: Dictionary, audience: StringName, pad := DEFAULT_PAD) -> Array[Vector3]:
-	if source_for(blueprint) == SOURCE_AUTHORED:
-		return _authored_door_positions(blueprint, audience)
-	var building_type := str(blueprint.get("type", ""))
-	var offsets: Array[Vector2i]
-	if audience == ZoneAccess.AUDIENCE_VISITOR:
-		offsets = BuildingEntrancePositions.visitor_offsets(building_type)
-	else:
-		offsets = BuildingEntrancePositions.offsets(building_type)
-	return BuildingEntrancePositions.local_positions(blueprint.get("footprint", Vector2i.ZERO), offsets, pad)
+	return _authored_door_positions(blueprint, audience)
 
 
 static func worker_positions(building: Node3D, blueprint: Dictionary, pad := DEFAULT_PAD) -> Array[Vector3]:
@@ -53,8 +36,6 @@ static func construction_positions(building: Node3D, blueprint: Dictionary, pad 
 
 
 static func authored_door_count(blueprint: Dictionary) -> int:
-	if source_for(blueprint) != SOURCE_AUTHORED:
-		return 0
 	var count := 0
 	for raw_anchor in blueprint.get("routing_anchors", []):
 		if raw_anchor is Dictionary and StringName(raw_anchor.get("role", "")) == ZoneAnchorRecord.ROLE_DOOR:
@@ -62,15 +43,9 @@ static func authored_door_count(blueprint: Dictionary) -> int:
 	return count
 
 
-## Minimum cutover contract shared by diagnostics and future CI gates. Audience-
-## specific gameplay requirements (visitor door, staff door, storage point) stay
-## with the feature that needs them; every constructible authored building must
-## at least declare a door that builders may approach.
-static func transition_errors(blueprint: Dictionary) -> Array[String]:
+## Every constructible building must declare a door that builders may approach.
+static func access_errors(blueprint: Dictionary) -> Array[String]:
 	var errors: Array[String] = []
-	if source_for(blueprint) != SOURCE_AUTHORED:
-		errors.append("blueprint still uses legacy access fallback")
-		return errors
 	if authored_door_count(blueprint) == 0:
 		errors.append("authored blueprint has no door anchor")
 	elif construction_local_positions(blueprint).is_empty():

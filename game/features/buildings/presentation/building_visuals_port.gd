@@ -1,7 +1,7 @@
 class_name BuildingVisualsPort
 extends RefCounted
 
-## Presentation-only dependencies needed by procedural building visuals.
+## Presentation-only dependencies needed by building visuals.
 ## This avoids making a visual helper reach into the settlement composition root.
 
 var status_indicators: Array[Label3D]

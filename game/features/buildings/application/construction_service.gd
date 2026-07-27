@@ -49,7 +49,6 @@ func start_site(cell: Vector2i, building_type: String, position: Vector3, rotati
 	site_node.set_meta("footprint", blueprint.footprint)
 	site_node.set_meta("occupied_footprint", occupied_footprint if occupied_footprint != Vector2i.ZERO else blueprint.footprint)
 	site_node.set_meta("service_positions", BuildingAccessPoints.construction_positions(site_node, blueprint, SERVICE_PAD_OFFSET))
-	site_node.set_meta("access_points_source", BuildingAccessPoints.source_for(blueprint))
 
 	var display_footprint: Vector2i = blueprint.footprint
 

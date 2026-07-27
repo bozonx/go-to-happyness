@@ -8,12 +8,12 @@ extends RefCounted
 
 const BuildingBlueprintScript = preload("res://game/features/buildings/domain/editor/building_blueprint.gd")
 const LibraryScript = preload("res://game/features/buildings/presentation/building_blueprint_library.gd")
+const BuildingCatalogScript = preload("res://game/features/buildings/domain/building_catalog.gd")
 
 const BUILDINGS_ROOT := "res://game/content/core/buildings"
 
-# Buildings that predate the authored-blueprint migration. They use
-# "door" as the anchor id (not "front_door") and may have no areas.
-const LEGACY_IDS: Array[String] = [
+# Interactive landmarks keep their intentional fixture and decor layouts.
+const FEATURED_IDS: Array[String] = [
 	"campfire", "cook_campfire", "entrance_sign", "settlement_flag",
 	"tent", "warehouse",
 ]
@@ -60,8 +60,8 @@ static func _test_every_building_blueprint() -> void:
 		var anchor: Dictionary = anchors[0]
 		assert(String(anchor.get("role", "")) == "door",
 			"%s: anchor must be a door" % file_id)
-		var is_legacy := file_id in LEGACY_IDS
-		if not is_legacy:
+		var is_featured := file_id in FEATURED_IDS
+		if not is_featured:
 			assert(String(anchor.get("id", "")) == "front_door",
 				"%s: anchor id must be 'front_door'" % file_id)
 		# builder access: either allow list is empty (permits all) or includes builder
@@ -70,8 +70,7 @@ static func _test_every_building_blueprint() -> void:
 			assert("builder" in allow,
 				"%s: door must allow builder" % file_id)
 
-		# No fixtures (new buildings only; legacy may have authored fixtures)
-		if not is_legacy:
+		if not is_featured:
 			assert(raw.get("fixtures", []).size() == 0,
 				"%s: must have no fixtures" % file_id)
 
@@ -81,8 +80,7 @@ static func _test_every_building_blueprint() -> void:
 			assert(role not in ["slot", "storage", "queue"],
 				"%s: anchor %s has forbidden role %s" % [file_id, a.get("id", ""), role])
 
-		# No routes (new buildings only)
-		if not is_legacy:
+		if not is_featured:
 			assert(raw.get("routes", []).size() == 0,
 				"%s: must have no routes" % file_id)
 
@@ -94,8 +92,7 @@ static func _test_every_building_blueprint() -> void:
 		assert(fp_w > 0 and fp_h > 0,
 			"%s: footprint must be positive" % file_id)
 
-		# Block coverage (new buildings only; legacy may have no blocks)
-		if not is_legacy:
+		if not is_featured:
 			assert(fp_w == fp_h, "%s: footprint must be square" % file_id)
 			var blocks: Array = raw.get("blocks", [])
 			assert(blocks.size() == fp_w * fp_h,
@@ -115,6 +112,7 @@ static func _test_every_building_blueprint() -> void:
 		# Full validation passes (from_json returns null on validation error)
 		var bp := BuildingBlueprintScript.from_json(text)
 		assert(bp != null, "%s: validation failed" % file_id)
+		assert(not raw.has("fallback_building_id"), "%s: fallback field is forbidden" % file_id)
 
 		# runtime_zone_definitions: 0 or 1 zone
 		var zones: Array = bp.runtime_zone_definitions()
@@ -139,6 +137,8 @@ static func _test_library_indexes_all() -> void:
 	LibraryScript.refresh()
 	var entries: Array = LibraryScript.authored_entries()
 	assert(entries.size() > 0, "Library indexed no authored blueprints")
+	for building_type in BuildingCatalogScript.DEFINITIONS:
+		assert(LibraryScript.has(building_type), "Missing authored blueprint for catalog building '%s'" % building_type)
 	print("Library indexed %d authored blueprints" % entries.size())
 
 

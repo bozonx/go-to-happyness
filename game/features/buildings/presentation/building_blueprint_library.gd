@@ -7,7 +7,6 @@ extends RefCounted
 ## This is the bridge that lets the game render buildings from the modular
 ## editor format. A role resolves through the world's era/style; a namespaced
 ## runtime key still addresses one immutable file for saves and map placements.
-## While no authored variant exists callers fall back to procedural generation.
 
 const BuildingBlueprintScript = preload("res://game/features/buildings/domain/editor/building_blueprint.gd")
 const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
@@ -21,7 +20,6 @@ const SOURCE_PLAYER := &"local"
 
 static var _index: Dictionary = {}          ## runtime key -> {path, source, id}
 static var _cache: Dictionary = {}          ## building_type(String) -> BuildingBlueprint
-static var _legacy_aliases: Dictionary = {} ## old bare ids -> canonical runtime key
 static var _index_built: bool = false
 static var _content_index: ContentIndex
 static var _world_style: StringName = &"generic"
@@ -30,7 +28,6 @@ static var _world_style: StringName = &"generic"
 static func refresh() -> void:
 	_index.clear()
 	_cache.clear()
-	_legacy_aliases.clear()
 	_index_built = true
 	BuildingCatalogScript.clear_runtime_definitions()
 	_content_index = ContentIndexScript.new()
@@ -45,10 +42,6 @@ static func refresh() -> void:
 			continue
 		_index[key] = {"path": path, "source": indexed_entry.source, "id": blueprint.id}
 		_cache[key] = blueprint
-		# Simulation asks gameplay roles (such as `tent`), never a visual file id.
-		# Keep the old bare-id seam for v1/v2 content whose role defaults to id.
-		if indexed_entry.source == SOURCE_BUILTIN and blueprint.style == &"generic" and not _legacy_aliases.has(blueprint.role):
-			_legacy_aliases[blueprint.role] = key
 		if blueprint.kind == &"building":
 			_register_definition(blueprint.role, blueprint)
 
@@ -105,7 +98,6 @@ static func blueprint_ref(building_type: String) -> Dictionary:
 		"id": String(entry["id"]),
 		"role": String(blueprint.role),
 		"revision": blueprint.revision_id(),
-		"fallback_building_id": String(blueprint.fallback_building_id),
 	}
 
 
@@ -199,7 +191,7 @@ static func _resolved_key(building_type: String) -> String:
 	var entry := resolver.resolve(StringName(building_type), requested_era, _world_style)
 	if entry != null:
 		return String(entry.runtime_key)
-	return String(_legacy_aliases.get(StringName(building_type), ""))
+	return ""
 
 
 static func footprint(building_type: String) -> Vector2i:
@@ -220,7 +212,7 @@ static func ordered_modules(building_type: String) -> Array:
 	var bp := get_blueprint(building_type)
 	if bp == null:
 		return []
-	var center := _footprint_center(bp)
+	var center := bp.pivot_offset()
 	var entries: Array = []
 	for block in bp.blocks:
 		var local := Vector3(block.pos) + _block_offset(block.block_id, block.variant, block.rot, block.anchor) - center
@@ -252,24 +244,6 @@ static func _block_offset(block_id: StringName, variant: StringName = &"", rot: 
 	var size := BuildingBlockCatalogScript.size_of(block_id, variant)
 	var xz := BuildingBlockCatalogScript.cell_offset(block_id, variant, anchor, rot)
 	return Vector3(xz.x, size.y * 0.5, xz.y)
-
-
-static func _footprint_center(bp: BuildingBlueprintScript) -> Vector3:
-	# Midpoint of the placed extent in X/Z, floor in Y.
-	if bp.blocks.is_empty():
-		return Vector3.ZERO
-	var min_c := Vector3i(2147483647, 2147483647, 2147483647)
-	var max_c := Vector3i(-2147483648, -2147483648, -2147483648)
-	for block in bp.blocks:
-		min_c.x = mini(min_c.x, block.pos.x)
-		min_c.y = mini(min_c.y, block.pos.y)
-		min_c.z = mini(min_c.z, block.pos.z)
-		max_c.x = maxi(max_c.x, block.pos.x)
-		max_c.z = maxi(max_c.z, block.pos.z)
-	return Vector3(
-		float(min_c.x) + float(max_c.x - min_c.x + 1) * 0.5,
-		float(min_c.y),
-		float(min_c.z) + float(max_c.z - min_c.z + 1) * 0.5)
 
 
 static func _compare_module_height(a: Dictionary, b: Dictionary) -> bool:

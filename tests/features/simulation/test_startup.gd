@@ -23,6 +23,10 @@ func _init() -> void:
 	# dependency order. In particular, fire management reads event flags.
 	assert(simulation.event_service != null)
 	assert(simulation.fire_management_service.event_service == simulation.event_service)
+	# Opening the campfire menu must use the workplace service's public officer
+	# query; the composition root deliberately has no private compatibility API.
+	simulation.selected_campfire = simulation.campfire_node
+	simulation.campfire_menu_controller.refresh_campfire_menu()
 
 	# Natural objects are owned by the terrain scene but retain their registered
 	# source records, so moving presentation ownership cannot make them inert.

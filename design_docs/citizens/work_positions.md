@@ -52,9 +52,8 @@
 ### 3.1. Определение
 
 **Рабочая позиция** — это точка у здания, где юнит переходит в рабочий режим.
-Каждое рабочее здание имеет одну или несколько рабочих позиций, вычисляемых
-через `BuildingEntrancePositions.positions()` и хранящихся в meta-данных
-здания как `service_positions`.
+Каждое рабочее здание имеет одну или несколько рабочих позиций, вычисляемых из
+authoring-якорей `door` и хранящихся в meta-данных здания как `service_positions`.
 
 Рабочая позиция — это не радиус, а конкретная точка. Юнит должен встать на неё
 и перейти в рабочий режим.
@@ -428,8 +427,7 @@ FPP-взаимодействие определяется через `_first_per
 ### 9.4. Что не меняется
 
 - `SettlementDirector`, `OrderBoard`, `CitizenBrain` — без изменений.
-- `BuildingEntrancePositions` — без изменений, уже вычисляет `service_positions`.
-- `BuildingBlueprints.worker_entrance_offsets()` — без изменений.
+- `BuildingAccessPoints` вычисляет `service_positions` из authored `door`-якорей.
 - Era progression gates — без изменений.
 
 ## 10. Инварианты

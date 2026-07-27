@@ -108,7 +108,6 @@ func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
 			site_node.set_meta("footprint", blueprint.footprint)
 			site_node.set_meta("occupied_footprint", occupied_footprint)
 			site_node.set_meta("service_positions", BuildingAccessPoints.construction_positions(site_node, blueprint, 1.0))
-			site_node.set_meta("access_points_source", BuildingAccessPoints.source_for(blueprint))
 			game.add_child(site_node)
 			for module in blueprint.modules:
 				site_node.add_child(BuildingBlueprints.create_module(module))
@@ -268,19 +267,13 @@ func _resolve_saved_building_blueprint(saved_type: String, data: Dictionary) -> 
 			var role := StringName(reference.get("role", ""))
 			var role_variant := BuildingBlueprintLibrary.resolve_role(role) if not String(role).is_empty() else ""
 			if not role_variant.is_empty():
-				resolved_type = String(role)
+				resolved_type = role_variant
 				push_warning("Missing blueprint '%s:%s'; restored using current variant for role '%s'." % [
 					reference.get("source", "builtin"), reference.get("id", ""), role])
 			else:
-				var fallback := str(reference.get("fallback_building_id", "house"))
-				if BuildingCatalog.has_definition(fallback):
-					resolved_type = fallback
-					push_warning("Missing blueprint '%s:%s'; restored as fallback '%s'." % [
-						reference.get("source", "builtin"), reference.get("id", ""), fallback])
-				else:
-					push_warning("Missing blueprint and invalid fallback for '%s:%s'." % [
-						reference.get("source", "builtin"), reference.get("id", "")])
-					return {"type": saved_type, "blueprint": {}}
+				push_warning("Missing authored blueprint '%s:%s' and no current variant for role '%s'." % [
+					reference.get("source", "core"), reference.get("id", ""), role])
+				return {"type": saved_type, "blueprint": {}}
 	var blueprint: Dictionary = BuildingBlueprints.get_blueprint(resolved_type)
 	var saved_zones: Variant = data.get("zone_state", [])
 	if saved_zones is Array and not saved_zones.is_empty() and not blueprint.is_empty():

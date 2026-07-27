@@ -130,7 +130,7 @@ func refresh_campfire_menu() -> void:
 	var unhoused: int = simulation.citizen_lifecycle_service.unhoused_citizen_count()
 	if unhoused > 0:
 		req_text += "\nProblems:\n- Unhoused residents: %d. Settle them in a home before inviting anyone new.\n" % unhoused
-	if not simulation._officer_exists():
+	if not simulation.workplace_labor_service.officer_exists():
 		req_text += S.CAMPFIRE_NO_OFFICER_HINT
 
 	var upgrade_state := {"visible": false, "text": "", "disabled": false, "tooltip": ""}
@@ -152,7 +152,7 @@ func refresh_campfire_menu() -> void:
 	var researcher: Variant = simulation.research_controller.daily_researcher_at(simulation.selected_campfire)
 	var research_post_disabled: bool = not simulation.settlement.is_research_completed("official") or researcher == null
 	var research_post_state := {
-		"visible": is_center and not simulation._officer_exists(),
+		"visible": is_center and not simulation.workplace_labor_service.officer_exists(),
 		"text": "Promote daily researcher to officer",
 		"disabled": research_post_disabled,
 		"tooltip": "Research the officer profession, then select a daily researcher working at this campfire." if research_post_disabled else "Promote this researcher to a permanent officer role.",
@@ -160,7 +160,7 @@ func refresh_campfire_menu() -> void:
 	var controlled_unit_nearby: bool = simulation.is_first_person and is_instance_valid(simulation.player_citizen) and is_center and simulation.player_citizen.global_position.distance_to(simulation.hero_interaction_controller._nearest_service_position(simulation.selected_campfire, simulation.player_citizen.global_position)) <= simulation.OFFICER_POST_RADIUS
 	var can_be_official: bool = simulation.settlement.is_research_completed("official")
 	var player_role: String = simulation.player_citizen.permanent_role if is_instance_valid(simulation.player_citizen) else ""
-	var occupy_disabled: bool = can_be_official and simulation._officer_exists() and player_role != "official"
+	var occupy_disabled: bool = can_be_official and simulation.workplace_labor_service.officer_exists() and player_role != "official"
 	var occupy_state := {
 		"visible": controlled_unit_nearby,
 		"text": S.CAMPFIRE_OCCUPY_OFFICIAL if can_be_official else S.CAMPFIRE_OCCUPY_RESEARCHER,

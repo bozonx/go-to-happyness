@@ -428,11 +428,8 @@ static func _test_zones_and_metadata_round_trip() -> void:
 	assert(room_back.properties["profession"] == "seller")
 	assert(room_back.contains_cell(Vector2i(2, 1)))
 
-	# Entrances derive from doors: the visitor one is the main entrance, and the
-	# staff list covers both, because a public door also admits staff.
+	# Entrances derive from authored doors.
 	assert(restored.entrance_offset() == Vector2i(0, -2))
-	var staff := restored.worker_entrance_offsets()
-	assert(staff.size() == 2 and Vector2i(0, 2) in staff, str(staff))
 
 	# Denormalization groups points under their owner; doors go to routing.
 	var runtime_defs := restored.runtime_zone_definitions()
@@ -556,8 +553,7 @@ static func _test_runtime_zone_assignment() -> void:
 	building.free()
 
 
-## Authored doors are authoritative. The legacy type table is only used by
-## procedural blueprints, and must never hide a missing door in new content.
+## Authored doors are authoritative for every building.
 static func _test_authored_building_access_points() -> void:
 	var authored := {
 		"type": "sawmill",
@@ -569,7 +565,6 @@ static func _test_authored_building_access_points() -> void:
 			{"id": "visitor_only", "role": "door", "pos": [-4.0, 0.0, 0.0], "deny": ["staff", "builder"]},
 		]
 	}
-	assert(BuildingAccessPoints.source_for(authored) == BuildingAccessPoints.SOURCE_AUTHORED)
 	assert(BuildingAccessPoints.authored_door_count(authored) == 3)
 	assert(BuildingAccessPoints.visitor_local_positions(authored) == [
 		Vector3(0.0, 0.0, -3.0), Vector3(-4.0, 0.0, 0.0)])
@@ -577,7 +572,7 @@ static func _test_authored_building_access_points() -> void:
 		Vector3(0.0, 0.0, -3.0), Vector3(4.0, 0.0, 0.0)])
 	assert(BuildingAccessPoints.construction_local_positions(authored) == [
 		Vector3(0.0, 0.0, -3.0), Vector3(4.0, 0.0, 0.0)])
-	assert(BuildingAccessPoints.transition_errors(authored).is_empty())
+	assert(BuildingAccessPoints.access_errors(authored).is_empty())
 
 	var building := Node3D.new()
 	building.position = Vector3(10.0, 2.0, 20.0)
@@ -590,12 +585,7 @@ static func _test_authored_building_access_points() -> void:
 	missing_door["routing_anchors"] = []
 	assert(BuildingAccessPoints.worker_local_positions(missing_door).is_empty(),
 		"authored content without a door must not fall back to the hard-coded sawmill entrances")
-	assert(BuildingAccessPoints.transition_errors(missing_door).size() == 1)
-
-	var legacy := {"type": "sawmill", "footprint": Vector2i(8, 6)}
-	assert(BuildingAccessPoints.source_for(legacy) == BuildingAccessPoints.SOURCE_LEGACY)
-	assert(BuildingAccessPoints.worker_local_positions(legacy).size() == 2)
-	assert(BuildingAccessPoints.transition_errors(legacy).size() == 1)
+	assert(BuildingAccessPoints.access_errors(missing_door).size() == 1)
 
 
 ## Pack-defined meaning must survive definition -> runtime state -> meta ->

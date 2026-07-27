@@ -434,10 +434,6 @@ func is_cell_in_bounds(cell: Vector3i) -> bool:
 	return _is_cell_in_bounds(cell)
 
 
-func update_fallback_display() -> void:
-	_update_fallback_display()
-
-
 func _select_mode(mode: int) -> void:
 	if mode == EditMode.FINISHES:
 		_update_status("Этот режим подготовлен в формате и будет реализован следующим срезом.")
@@ -653,11 +649,6 @@ func _setup_ui() -> void:
 # ---------------------------------------------------------------------------
 # UI sync helpers
 # ---------------------------------------------------------------------------
-
-func _update_fallback_display() -> void:
-	if blueprint != null:
-		blueprint.fallback_building_id = blueprint.infer_fallback_building_id()
-
 
 func _update_status(message: String) -> void:
 	if _status_label != null:

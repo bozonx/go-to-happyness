@@ -194,7 +194,6 @@ func _place_instant_building(cell: Vector2i, world_position: Vector3, blueprint:
 	site_node.set_meta("footprint", blueprint.footprint)
 	site_node.set_meta("occupied_footprint", occupied_footprint)
 	site_node.set_meta("service_positions", BuildingAccessPoints.construction_positions(site_node, blueprint, 1.0))
-	site_node.set_meta("access_points_source", BuildingAccessPoints.source_for(blueprint))
 	game.add_child(site_node)
 	for module in blueprint.modules:
 		site_node.add_child(BuildingBlueprints.create_module(module))

@@ -1,7 +1,7 @@
 class_name SettlementBuildingVisuals
 extends RefCounted
 
-## Handles procedural visual node creation for buildings: selectors, fire lights,
+## Handles visual node creation for buildings: selectors, fire lights,
 ## status indicators, warehouse fill labels, gathering place visuals, house
 ## lights, and demolition markers. Extracted from SettlementGame.
 
