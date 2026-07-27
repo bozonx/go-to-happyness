@@ -4,8 +4,7 @@
 	"role": "hide_worker",
 	"name": "Кожевенная мастерская",
 	"construction_style": "surface",
-	"category": "earth",
-	"fallback_building_id": "hide_worker",
+	"era": "earth",
 	"grid_bounds": {
 		"x": 4,
 		"y": 1,

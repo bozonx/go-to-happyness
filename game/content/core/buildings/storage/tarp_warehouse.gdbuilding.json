@@ -4,8 +4,7 @@
 	"role": "tarp_warehouse",
 	"name": "Склад с брезентовым навесом",
 	"construction_style": "surface",
-	"category": "tent",
-	"fallback_building_id": "tarp_warehouse",
+	"era": "tent",
 	"grid_bounds": {
 		"x": 5,
 		"y": 1,

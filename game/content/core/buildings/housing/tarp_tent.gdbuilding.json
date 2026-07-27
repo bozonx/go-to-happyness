@@ -4,8 +4,7 @@
 	"role": "tarp_tent",
 	"name": "Брезентовая палатка",
 	"construction_style": "surface",
-	"category": "tent",
-	"fallback_building_id": "tarp_tent",
+	"era": "tent",
 	"grid_bounds": {
 		"x": 4,
 		"y": 1,

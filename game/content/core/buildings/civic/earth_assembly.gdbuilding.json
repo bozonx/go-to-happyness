@@ -4,8 +4,7 @@
 	"role": "earth_assembly",
 	"name": "Земляное собрание",
 	"construction_style": "surface",
-	"category": "earth",
-	"fallback_building_id": "earth_assembly",
+	"era": "earth",
 	"grid_bounds": {
 		"x": 5,
 		"y": 1,

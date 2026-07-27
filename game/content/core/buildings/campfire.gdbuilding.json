@@ -3,8 +3,7 @@
 	"id": "campfire",
 	"name": "Главный костер ур. 1",
 	"construction_style": "surface",
-	"category": "tent",
-	"fallback_building_id": "campfire",
+	"era": "tent",
 	"grid_bounds": {
 		"x": 5,
 		"y": 2,

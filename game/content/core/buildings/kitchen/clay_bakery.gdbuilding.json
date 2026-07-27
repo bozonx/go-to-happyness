@@ -4,8 +4,7 @@
 	"role": "clay_bakery",
 	"name": "Глиняная пекарня",
 	"construction_style": "surface",
-	"category": "clay",
-	"fallback_building_id": "clay_bakery",
+	"era": "clay",
 	"grid_bounds": {
 		"x": 4,
 		"y": 1,

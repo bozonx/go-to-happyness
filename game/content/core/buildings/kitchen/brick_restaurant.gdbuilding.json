@@ -4,8 +4,7 @@
 	"role": "brick_restaurant",
 	"name": "Кирпичный ресторан",
 	"construction_style": "surface",
-	"category": "brick",
-	"fallback_building_id": "brick_restaurant",
+	"era": "brick",
 	"grid_bounds": {
 		"x": 5,
 		"y": 1,

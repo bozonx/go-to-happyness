@@ -4,8 +4,7 @@
 	"role": "clay_lodge",
 	"name": "Глиняная управа",
 	"construction_style": "surface",
-	"category": "clay",
-	"fallback_building_id": "clay_lodge",
+	"era": "clay",
 	"grid_bounds": {
 		"x": 5,
 		"y": 1,

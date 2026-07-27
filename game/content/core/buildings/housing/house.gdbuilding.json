@@ -4,8 +4,7 @@
 	"role": "house",
 	"name": "Деревянный дом",
 	"construction_style": "surface",
-	"category": "wood",
-	"fallback_building_id": "house",
+	"era": "wood",
 	"grid_bounds": {
 		"x": 6,
 		"y": 1,

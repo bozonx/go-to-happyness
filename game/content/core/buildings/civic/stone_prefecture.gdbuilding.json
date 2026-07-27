@@ -4,8 +4,7 @@
 	"role": "stone_prefecture",
 	"name": "Каменная префектура",
 	"construction_style": "surface",
-	"category": "stone",
-	"fallback_building_id": "stone_prefecture",
+	"era": "stone",
 	"grid_bounds": {
 		"x": 6,
 		"y": 1,

@@ -4,8 +4,7 @@
 	"role": "straw_materials_yard",
 	"name": "Соломенный двор материалов",
 	"construction_style": "surface",
-	"category": "tent",
-	"fallback_building_id": "straw_materials_yard",
+	"era": "tent",
 	"grid_bounds": {
 		"x": 4,
 		"y": 1,

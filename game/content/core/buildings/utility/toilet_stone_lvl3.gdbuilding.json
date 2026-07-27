@@ -4,8 +4,7 @@
 	"role": "toilet_stone_lvl3",
 	"name": "Каменный туалет ур. 3",
 	"construction_style": "surface",
-	"category": "stone",
-	"fallback_building_id": "toilet_stone_lvl3",
+	"era": "stone",
 	"grid_bounds": {
 		"x": 3,
 		"y": 1,

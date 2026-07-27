@@ -3,8 +3,7 @@
 	"id": "settlement_flag",
 	"name": "Флаг поселения",
 	"construction_style": "surface",
-	"category": "tent",
-	"fallback_building_id": "settlement_flag",
+	"era": "tent",
 	"grid_bounds": {
 		"x": 1,
 		"y": 3,

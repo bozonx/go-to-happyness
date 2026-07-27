@@ -4,8 +4,7 @@
 	"role": "brick_market",
 	"name": "Кирпичный рынок",
 	"construction_style": "surface",
-	"category": "brick",
-	"fallback_building_id": "brick_market",
+	"era": "brick",
 	"grid_bounds": {
 		"x": 5,
 		"y": 1,

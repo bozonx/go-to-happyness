@@ -4,8 +4,7 @@
 	"role": "dew_collector",
 	"name": "Сборщик росы",
 	"construction_style": "surface",
-	"category": "tent",
-	"fallback_building_id": "dew_collector",
+	"era": "tent",
 	"grid_bounds": {
 		"x": 2,
 		"y": 1,

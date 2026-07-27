@@ -4,8 +4,7 @@
 	"role": "toilet_wood_lvl3",
 	"name": "Деревянный туалет ур. 3",
 	"construction_style": "surface",
-	"category": "wood",
-	"fallback_building_id": "toilet_wood_lvl3",
+	"era": "wood",
 	"grid_bounds": {
 		"x": 3,
 		"y": 1,

@@ -4,8 +4,7 @@
 	"role": "earth_market",
 	"name": "Земляной рынок",
 	"construction_style": "surface",
-	"category": "earth",
-	"fallback_building_id": "earth_market",
+	"era": "earth",
 	"grid_bounds": {
 		"x": 4,
 		"y": 1,

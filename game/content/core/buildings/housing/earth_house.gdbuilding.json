@@ -4,8 +4,7 @@
 	"role": "earth_house",
 	"name": "Земляной дом",
 	"construction_style": "surface",
-	"category": "earth",
-	"fallback_building_id": "earth_house",
+	"era": "earth",
 	"grid_bounds": {
 		"x": 5,
 		"y": 1,

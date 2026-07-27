@@ -4,8 +4,7 @@
 	"role": "construction_company",
 	"name": "Строительная фирма",
 	"construction_style": "surface",
-	"category": "brick",
-	"fallback_building_id": "construction_company",
+	"era": "brick",
 	"grid_bounds": {
 		"x": 5,
 		"y": 1,

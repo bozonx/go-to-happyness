@@ -4,8 +4,7 @@
 	"role": "straw_warehouse",
 	"name": "Склад с соломенным навесом",
 	"construction_style": "surface",
-	"category": "tent",
-	"fallback_building_id": "straw_warehouse",
+	"era": "tent",
 	"grid_bounds": {
 		"x": 5,
 		"y": 1,

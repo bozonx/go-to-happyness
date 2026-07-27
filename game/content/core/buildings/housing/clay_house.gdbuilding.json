@@ -4,8 +4,7 @@
 	"role": "clay_house",
 	"name": "Глиняный дом",
 	"construction_style": "surface",
-	"category": "clay",
-	"fallback_building_id": "clay_house",
+	"era": "clay",
 	"grid_bounds": {
 		"x": 5,
 		"y": 1,

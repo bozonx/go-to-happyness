@@ -4,8 +4,7 @@
 	"role": "brick_city_hall",
 	"name": "Кирпичная ратуша",
 	"construction_style": "surface",
-	"category": "brick",
-	"fallback_building_id": "brick_city_hall",
+	"era": "brick",
 	"grid_bounds": {
 		"x": 7,
 		"y": 1,

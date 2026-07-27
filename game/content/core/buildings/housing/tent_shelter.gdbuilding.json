@@ -4,8 +4,7 @@
 	"role": "tent_shelter",
 	"name": "Временное жилище",
 	"construction_style": "surface",
-	"category": "tent",
-	"fallback_building_id": "tent_shelter",
+	"era": "tent",
 	"grid_bounds": {
 		"x": 4,
 		"y": 1,

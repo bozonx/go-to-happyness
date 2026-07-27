@@ -4,8 +4,7 @@
 	"role": "tarp_forager_tent",
 	"name": "Брезентовая палатка собирателя",
 	"construction_style": "surface",
-	"category": "tent",
-	"fallback_building_id": "tarp_forager_tent",
+	"era": "tent",
 	"grid_bounds": {
 		"x": 3,
 		"y": 1,

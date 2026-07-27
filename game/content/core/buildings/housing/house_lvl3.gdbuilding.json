@@ -4,8 +4,7 @@
 	"role": "house_lvl3",
 	"name": "Деревянный дом ур. 3",
 	"construction_style": "surface",
-	"category": "wood",
-	"fallback_building_id": "house_lvl3",
+	"era": "wood",
 	"grid_bounds": {
 		"x": 6,
 		"y": 1,

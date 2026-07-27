@@ -4,8 +4,7 @@
 	"role": "brick_house",
 	"name": "Кирпичный дом",
 	"construction_style": "surface",
-	"category": "brick",
-	"fallback_building_id": "brick_house",
+	"era": "brick",
 	"grid_bounds": {
 		"x": 7,
 		"y": 1,

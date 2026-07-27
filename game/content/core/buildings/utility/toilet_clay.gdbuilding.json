@@ -4,8 +4,7 @@
 	"role": "toilet_clay",
 	"name": "Глиняный туалет ур. 1",
 	"construction_style": "surface",
-	"category": "clay",
-	"fallback_building_id": "toilet_clay",
+	"era": "clay",
 	"grid_bounds": {
 		"x": 2,
 		"y": 1,

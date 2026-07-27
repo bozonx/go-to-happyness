@@ -3,8 +3,7 @@
 	"id": "warehouse",
 	"name": "Склад под открытым небом",
 	"construction_style": "surface",
-	"category": "tent",
-	"fallback_building_id": "warehouse",
+	"era": "tent",
 	"grid_bounds": {
 		"x": 5,
 		"y": 1,

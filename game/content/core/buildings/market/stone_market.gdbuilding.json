@@ -4,8 +4,7 @@
 	"role": "stone_market",
 	"name": "Каменный рынок",
 	"construction_style": "surface",
-	"category": "stone",
-	"fallback_building_id": "stone_market",
+	"era": "stone",
 	"grid_bounds": {
 		"x": 5,
 		"y": 1,

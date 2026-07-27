@@ -4,8 +4,7 @@
 	"role": "advanced_dew_collector",
 	"name": "Улучшенный сборщик росы",
 	"construction_style": "surface",
-	"category": "tent",
-	"fallback_building_id": "advanced_dew_collector",
+	"era": "tent",
 	"grid_bounds": {
 		"x": 2,
 		"y": 1,

@@ -4,8 +4,7 @@
 	"role": "dugout_kitchen",
 	"name": "Земляная кухня",
 	"construction_style": "surface",
-	"category": "earth",
-	"fallback_building_id": "dugout_kitchen",
+	"era": "earth",
 	"grid_bounds": {
 		"x": 4,
 		"y": 1,

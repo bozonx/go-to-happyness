@@ -4,8 +4,7 @@
 	"role": "toilet_earth_lvl3",
 	"name": "Земляной туалет ур. 3",
 	"construction_style": "surface",
-	"category": "earth",
-	"fallback_building_id": "toilet_earth_lvl3",
+	"era": "earth",
 	"grid_bounds": {
 		"x": 3,
 		"y": 1,

@@ -4,8 +4,7 @@
 	"role": "dugout",
 	"name": "Землянка",
 	"construction_style": "underground",
-	"category": "earth",
-	"fallback_building_id": "dugout",
+	"era": "earth",
 	"grid_bounds": {
 		"x": 4,
 		"y": 1,

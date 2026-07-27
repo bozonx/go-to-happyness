@@ -4,8 +4,7 @@
 	"role": "wood_market",
 	"name": "Деревянный рынок",
 	"construction_style": "surface",
-	"category": "wood",
-	"fallback_building_id": "wood_market",
+	"era": "wood",
 	"grid_bounds": {
 		"x": 5,
 		"y": 1,

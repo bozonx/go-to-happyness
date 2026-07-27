@@ -4,8 +4,7 @@
 	"role": "farm",
 	"name": "Ферма",
 	"construction_style": "surface",
-	"category": "wood",
-	"fallback_building_id": "farm",
+	"era": "wood",
 	"grid_bounds": {
 		"x": 5,
 		"y": 1,

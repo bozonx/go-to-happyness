@@ -4,8 +4,7 @@
 	"role": "clay_workshop",
 	"name": "Глиняная мастерская",
 	"construction_style": "surface",
-	"category": "clay",
-	"fallback_building_id": "clay_workshop",
+	"era": "clay",
 	"grid_bounds": {
 		"x": 4,
 		"y": 1,

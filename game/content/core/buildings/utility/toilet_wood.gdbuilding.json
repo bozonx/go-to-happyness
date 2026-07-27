@@ -4,8 +4,7 @@
 	"role": "toilet_wood",
 	"name": "Деревянный туалет ур. 1",
 	"construction_style": "surface",
-	"category": "wood",
-	"fallback_building_id": "toilet_wood",
+	"era": "wood",
 	"grid_bounds": {
 		"x": 2,
 		"y": 1,

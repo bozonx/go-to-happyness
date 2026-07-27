@@ -4,8 +4,7 @@
 	"role": "school",
 	"name": "Школа",
 	"construction_style": "surface",
-	"category": "clay",
-	"fallback_building_id": "school",
+	"era": "clay",
 	"grid_bounds": {
 		"x": 4,
 		"y": 1,

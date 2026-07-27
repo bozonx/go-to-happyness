@@ -4,8 +4,7 @@
 	"role": "gathering_place",
 	"name": "Бадминтонная площадка",
 	"construction_style": "surface",
-	"category": "tent",
-	"fallback_building_id": "gathering_place",
+	"era": "tent",
 	"grid_bounds": {
 		"x": 4,
 		"y": 1,

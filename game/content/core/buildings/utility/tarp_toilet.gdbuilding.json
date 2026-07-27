@@ -4,8 +4,7 @@
 	"role": "tarp_toilet",
 	"name": "Брезентовый общественный туалет",
 	"construction_style": "surface",
-	"category": "tent",
-	"fallback_building_id": "tarp_toilet",
+	"era": "tent",
 	"grid_bounds": {
 		"x": 2,
 		"y": 1,

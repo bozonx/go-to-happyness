@@ -4,8 +4,7 @@
 	"role": "materials_factory",
 	"name": "Фабрика материалов",
 	"construction_style": "surface",
-	"category": "brick",
-	"fallback_building_id": "materials_factory",
+	"era": "brick",
 	"grid_bounds": {
 		"x": 5,
 		"y": 1,

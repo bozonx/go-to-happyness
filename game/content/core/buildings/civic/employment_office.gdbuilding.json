@@ -4,8 +4,7 @@
 	"role": "employment_office",
 	"name": "Служба занятости",
 	"construction_style": "surface",
-	"category": "brick",
-	"fallback_building_id": "employment_office",
+	"era": "brick",
 	"grid_bounds": {
 		"x": 5,
 		"y": 1,

@@ -4,8 +4,7 @@
 	"role": "masonry_workshop",
 	"name": "Каменотёсная мастерская",
 	"construction_style": "surface",
-	"category": "stone",
-	"fallback_building_id": "masonry_workshop",
+	"era": "stone",
 	"grid_bounds": {
 		"x": 5,
 		"y": 1,

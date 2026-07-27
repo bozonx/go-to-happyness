@@ -4,8 +4,7 @@
 	"role": "canteen",
 	"name": "Столовая",
 	"construction_style": "surface",
-	"category": "wood",
-	"fallback_building_id": "canteen",
+	"era": "wood",
 	"grid_bounds": {
 		"x": 5,
 		"y": 1,

@@ -4,8 +4,7 @@
 	"role": "tarp_trade_tent",
 	"name": "Брезентовый торговый шатёр",
 	"construction_style": "surface",
-	"category": "tent",
-	"fallback_building_id": "tarp_trade_tent",
+	"era": "tent",
 	"grid_bounds": {
 		"x": 3,
 		"y": 1,

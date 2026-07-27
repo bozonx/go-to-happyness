@@ -4,8 +4,7 @@
 	"role": "park",
 	"name": "Парк",
 	"construction_style": "surface",
-	"category": "wood",
-	"fallback_building_id": "park",
+	"era": "wood",
 	"grid_bounds": {
 		"x": 5,
 		"y": 1,

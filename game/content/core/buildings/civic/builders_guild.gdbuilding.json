@@ -4,8 +4,7 @@
 	"role": "builders_guild",
 	"name": "Гильдия строителей",
 	"construction_style": "surface",
-	"category": "stone",
-	"fallback_building_id": "builders_guild",
+	"era": "stone",
 	"grid_bounds": {
 		"x": 5,
 		"y": 1,

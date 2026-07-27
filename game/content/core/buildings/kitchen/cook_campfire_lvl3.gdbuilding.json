@@ -4,8 +4,7 @@
 	"role": "cook_campfire_lvl3",
 	"name": "Костёр для готовки ур. 3",
 	"construction_style": "surface",
-	"category": "tent",
-	"fallback_building_id": "cook_campfire_lvl3",
+	"era": "tent",
 	"grid_bounds": {
 		"x": 3,
 		"y": 1,

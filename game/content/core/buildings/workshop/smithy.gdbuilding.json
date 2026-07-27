@@ -4,8 +4,7 @@
 	"role": "smithy",
 	"name": "Кузница",
 	"construction_style": "surface",
-	"category": "earth",
-	"fallback_building_id": "smithy",
+	"era": "earth",
 	"grid_bounds": {
 		"x": 4,
 		"y": 1,
