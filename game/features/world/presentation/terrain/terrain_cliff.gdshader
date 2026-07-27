@@ -21,6 +21,8 @@ uniform float face_shade = 0.86;
 uniform float full_smoothing : hint_range(0.0, 1.0) = 0.0;
 uniform float edge_rounding : hint_range(0.0, 1.0) = 0.0;
 uniform float edge_bevel : hint_range(0.0, 1.0) = 0.0;
+// Match the ground shader: terrace corners should not turn into a bright box.
+uniform float bevel_corner_strength : hint_range(0.0, 1.0) = 0.62;
 
 varying vec3 world_position;
 varying vec3 world_normal;
@@ -53,14 +55,21 @@ void fragment() {
 		mod(floor(edge_mask / 4.0), 2.0), mod(floor(edge_mask / 8.0), 2.0)
 	);
 	vec4 edge_distances = vec4(UV.y * dimensions.y, (1.0 - UV.x) * dimensions.x, (1.0 - UV.y) * dimensions.y, UV.x * dimensions.x);
-	float eligible_edge_distance = min(min(edge_distances.x + (1.0 - edge_enabled.x) * 10000.0, edge_distances.y + (1.0 - edge_enabled.y) * 10000.0), min(edge_distances.z + (1.0 - edge_enabled.z) * 10000.0, edge_distances.w + (1.0 - edge_enabled.w) * 10000.0));
+	vec4 eligible_distances = edge_distances + (vec4(1.0) - edge_enabled) * 10000.0;
+	float eligible_edge_distance = min(min(eligible_distances.x, eligible_distances.y), min(eligible_distances.z, eligible_distances.w));
 	// Cliff polygons are taller and visually coarser than top cells. Give their
 	// bevel twice the reach of the ground band, otherwise the same UI value is
 	// almost invisible on rock while already reading clearly on grass.
 	float rounding_radius = max(edge_rounding * tile_size * 0.5, 0.0001);
 	float rounded_band = 1.0 - smoothstep(0.0, rounding_radius, eligible_edge_distance);
 	float bevel_band = 1.0 - step(rounding_radius, eligible_edge_distance);
-	float edge_band = mix(rounded_band, bevel_band, edge_bevel) * step(0.001, edge_rounding);
+	float second_edge_distance = min(
+		min(max(eligible_distances.x, eligible_distances.y), max(eligible_distances.x, eligible_distances.z)),
+		min(max(eligible_distances.x, eligible_distances.w), min(max(eligible_distances.y, eligible_distances.z), min(max(eligible_distances.y, eligible_distances.w), max(eligible_distances.z, eligible_distances.w))))
+	);
+	float corner_amount = 1.0 - smoothstep(0.0, rounding_radius, second_edge_distance);
+	float corner_fade = mix(1.0, bevel_corner_strength, corner_amount);
+	float edge_band = mix(rounded_band, bevel_band, edge_bevel) * corner_fade * step(0.001, edge_rounding);
 	float normal_blend = max(edge_band, full_smoothing);
 	vec4 bevel_normal = bevel_view_0;
 	float bevel_distance = edge_distances.x + (1.0 - edge_enabled.x) * 10000.0;

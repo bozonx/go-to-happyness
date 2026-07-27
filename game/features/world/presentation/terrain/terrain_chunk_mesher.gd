@@ -26,10 +26,10 @@ extends RefCounted
 
 ## Depth of the wall drawn where the ground ends: board border and hole edges.
 const SKIRT_STEPS := 4.0
-## Neighbouring ramp cells often differ by a tiny normal angle while still
-## reading as one continuous plane. Treat bends below ten degrees as coplanar so
-## the bevel shader does not reveal the cell grid across an otherwise flat hill.
-const ROUNDABLE_EDGE_MAX_DOT := 0.98480775 # cos(10 degrees)
+## A shallow change between neighbouring ramp cells is terrain shape, not a
+## decorative seam. Only a clearly legible break gets handed to the bevel
+## shader; otherwise its highlight would reveal the cell grid across a hill.
+const ROUNDABLE_EDGE_MAX_DOT := 0.90630779 # cos(25 degrees)
 
 ## Detail levels (§11). Distant chunks drop their side faces: the camera is
 ## isometric and the faces are not visible from there anyway.

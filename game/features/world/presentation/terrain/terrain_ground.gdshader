@@ -34,6 +34,9 @@ uniform float full_smoothing : hint_range(0.0, 1.0) = 0.0;
 uniform float edge_rounding : hint_range(0.0, 1.0) = 0.0;
 // 0 makes a curved normal transition; 1 makes a constant-width flat bevel.
 uniform float edge_bevel : hint_range(0.0, 1.0) = 0.0;
+// A full-strength bevel from two perpendicular edges creates an unnaturally
+// bright square at a terrace corner. Keep the corner readable, but soften it.
+uniform float bevel_corner_strength : hint_range(0.0, 1.0) = 0.62;
 
 uniform vec3 snow_colour : source_color = vec3(0.88, 0.91, 0.96);
 uniform vec3 wear_tint : source_color = vec3(0.52, 0.44, 0.33);
@@ -68,11 +71,20 @@ void fragment() {
 		mod(floor(edge_mask / 4.0), 2.0), mod(floor(edge_mask / 8.0), 2.0)
 	);
 	vec4 edge_distances = vec4(UV.y * dimensions.y, (1.0 - UV.x) * dimensions.x, (1.0 - UV.y) * dimensions.y, UV.x * dimensions.x);
-	float eligible_edge_distance = min(min(edge_distances.x + (1.0 - edge_enabled.x) * 10000.0, edge_distances.y + (1.0 - edge_enabled.y) * 10000.0), min(edge_distances.z + (1.0 - edge_enabled.z) * 10000.0, edge_distances.w + (1.0 - edge_enabled.w) * 10000.0));
+	vec4 eligible_distances = edge_distances + (vec4(1.0) - edge_enabled) * 10000.0;
+	float eligible_edge_distance = min(min(eligible_distances.x, eligible_distances.y), min(eligible_distances.z, eligible_distances.w));
 	float rounding_radius = max(edge_rounding * cell_size * 0.5, 0.0001);
 	float rounded_band = 1.0 - smoothstep(0.0, rounding_radius, eligible_edge_distance);
 	float bevel_band = 1.0 - step(rounding_radius, eligible_edge_distance);
-	float edge_band = mix(rounded_band, bevel_band, edge_bevel) * step(0.001, edge_rounding);
+	// The second closest eligible edge is within the band only at a real corner.
+	// Attenuating there avoids the square highlight without affecting long edges.
+	float second_edge_distance = min(
+		min(max(eligible_distances.x, eligible_distances.y), max(eligible_distances.x, eligible_distances.z)),
+		min(max(eligible_distances.x, eligible_distances.w), min(max(eligible_distances.y, eligible_distances.z), min(max(eligible_distances.y, eligible_distances.w), max(eligible_distances.z, eligible_distances.w))))
+	);
+	float corner_amount = 1.0 - smoothstep(0.0, rounding_radius, second_edge_distance);
+	float corner_fade = mix(1.0, bevel_corner_strength, corner_amount);
+	float edge_band = mix(rounded_band, bevel_band, edge_bevel) * corner_fade * step(0.001, edge_rounding);
 	float normal_blend = max(edge_band, full_smoothing);
 	vec4 bevel_normal = bevel_view_0;
 	float bevel_distance = edge_distances.x + (1.0 - edge_enabled.x) * 10000.0;
