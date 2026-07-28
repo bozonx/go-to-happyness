@@ -322,6 +322,11 @@ static func _register_builtin_assets() -> void:
 	campfire.collision_policy = WorldAssetDef.COLLISION_FOOTPRINT
 	campfire.blocking_navigation = true
 	campfire.supported_capabilities = [&"fire_source", &"cooking_station", &"light_source"]
+	campfire.state_variants = {
+		"flame_full": {"visual_flame_visible": true, "light_energy": 1.8, "flame_height": 1.0},
+		"flame_low": {"visual_flame_visible": true, "light_energy": 0.6, "flame_height": 0.55},
+		"flame_none": {"visual_flame_visible": false, "light_energy": 0.0},
+	}
 	campfire.placement = AssetPlacementPolicy.of_surfaces(
 		[AssetPlacementPolicy.SURFACE_GROUND], SlopeCatalog.CLASS_GENTLE
 	)

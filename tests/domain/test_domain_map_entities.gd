@@ -6,6 +6,7 @@ extends RefCounted
 
 static func run_all() -> void:
 	_test_runtime_resolves_authored_differences()
+	_test_presenter_applies_state_variant()
 	_test_validator_rejects_structural_entity_errors()
 	print("    [PASS] Map Entity Runtime Tests")
 
@@ -44,3 +45,19 @@ static func _test_validator_rejects_structural_entity_errors() -> void:
 	document.entities.entities[0].initial_state = &"not_a_state"
 	errors = MapValidator.validate(document, document.terrain, document.water, null)
 	assert(errors.any(func(message: String) -> bool: return message.contains("неизвестное состояние")))
+
+
+static func _test_presenter_applies_state_variant() -> void:
+	var runtime := MapEntityRuntime.new()
+	runtime.load_map(_document())
+	var territory := TerritoryBase.new()
+	var presenter := MapEntityPresenter.new()
+	presenter.present(runtime, territory)
+	var view := presenter.view_for(&"camp_1")
+	assert(view != null and view.get_meta("map_entity_state") == &"embers")
+	var fire := view.get_node_or_null("Fire") as Node3D
+	assert(fire != null and fire.visible, "embers keeps a reduced but visible flame variant")
+	var light := view.get_node_or_null("Light") as OmniLight3D
+	assert(light != null and is_equal_approx(light.light_energy, 0.6))
+	presenter.clear()
+	territory.queue_free()

@@ -42,7 +42,24 @@ func _make_view(entity: MapEntityRuntime.RuntimeEntity) -> Node3D:
 	view.scale = Vector3.ONE * entity.scale
 	view.set_meta("map_entity_id", entity.id)
 	view.set_meta("map_entity_state", entity.state)
+	_apply_state_appearance(view, entity, asset)
 	return view
+
+
+func _apply_state_appearance(view: Node3D, entity: MapEntityRuntime.RuntimeEntity, asset: WorldAssetDef) -> void:
+	if asset == null or not view.has_method("apply_decor_properties"):
+		return
+	var appearance := asset.default_appearance()
+	var state := entity.archetype.states.get_state(entity.state)
+	if state != null and state.visual_kind == EntityStateDef.VISUAL_VARIANT:
+		appearance.merge(asset.state_appearance(state.visual_value), true)
+	# Gameplay props intentionally do not overwrite visual state: a cold campfire
+	# must remain cold even if an old author override set the flame control.
+	view.call("apply_decor_properties", appearance)
+	# A freshly-instanced DecorObjectController applies its defaults in `_ready`.
+	# Repeat state one turn later so authored initial state wins regardless of
+	# whether the presenter ran before or after the child entered the scene tree.
+	view.call_deferred("apply_decor_properties", appearance)
 
 
 func _placeholder(entity_id: StringName) -> Node3D:

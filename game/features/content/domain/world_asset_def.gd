@@ -58,6 +58,9 @@ const SCOPES: Array[StringName] = [SCOPE_BUILDING, SCOPE_MAP, SCOPE_BOTH]
 @export var snap_steps: Array[float] = []
 ## Authoring appearance knobs (renamed from `controls`).
 @export var appearance_controls: Array[Dictionary] = []
+## Named visual state variants declared by the asset. Archetypes refer to one of
+## these through `EntityStateDef.visual_value`; the presenter stays generic.
+@export var state_variants: Dictionary = {}
 @export var icon_path: String = ""
 ## Short authoring hint shown under the catalog.
 @export var description: String = ""
@@ -147,6 +150,11 @@ func get_control(control_name: String) -> Dictionary:
 		if String(control.get("name", "")) == control_name:
 			return control
 	return {}
+
+
+func state_appearance(variant_id: String) -> Dictionary:
+	var raw: Variant = state_variants.get(variant_id, {})
+	return (raw as Dictionary).duplicate(true) if raw is Dictionary else {}
 
 
 ## Whether the given scale value is allowed by this asset's scale policy.
