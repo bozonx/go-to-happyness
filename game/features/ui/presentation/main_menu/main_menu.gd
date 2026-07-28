@@ -139,7 +139,7 @@ func _on_start_game_pressed() -> void:
 	if launch_mgr != null and launch_mgr.has_method("launch_game"):
 		launch_mgr.call("launch_game", config)
 	else:
-		get_tree().change_scene_to_file("res://game/bootstrap/settlement_game.tscn")
+		get_tree().change_scene_to_file("res://game/bootstrap/game_runtime.tscn")
 
 
 func _on_building_editor_pressed() -> void:

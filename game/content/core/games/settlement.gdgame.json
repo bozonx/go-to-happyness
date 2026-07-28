@@ -1,0 +1,12 @@
+{
+  "format_version": 1,
+  "id": "settlement",
+  "name": "Go To Happyness: Settlement",
+  "pack": "core",
+  "modules": ["gth.settlement"],
+  "default_map": "core:green_valley",
+  "clock": "realtime_pauseable",
+  "input_profile": "rts",
+  "ui_layout": "settlement_hud",
+  "start": {}
+}

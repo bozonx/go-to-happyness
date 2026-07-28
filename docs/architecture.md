@@ -22,6 +22,7 @@ game/
     logistics/{domain,application,presentation}/
     needs/application/
     production/{domain,application,presentation}/
+    runtime/{domain,application,presentation}/
     routing/{domain,application,presentation}/
     save_load/{domain,application}/
     settlement/{domain,application,presentation}/
@@ -81,6 +82,11 @@ create generic `utils`, `helpers`, `managers` or catch-all `services` directorie
 - `needs`: simulation of personal needs that feed AI facts. The AI decides when to
   satisfy them; the needs service owns the values and effects.
 - `production`: production-specific rules and systems, currently the sawmill.
+- `runtime`: game definitions, session configuration, the registry of built-in
+  game modules and their composition order. It owns no settlement rule, actor
+  type or UI panel. `GameRuntime` is the generic session root; a temporary
+  `SettlementGameModule` starts the existing settlement bootstrap through this
+  boundary while its services are extracted incrementally.
 - `simulation`: the deterministic clock, day-cycle events and simulation-wide
   scheduling.
 - `events`: data-driven random events — definitions, conditions, outcomes,
@@ -174,6 +180,26 @@ dispatcher and AI order path.
    cross-system identity.
 
 ## Migration boundary
+
+### Game runtime migration
+
+The player launch path is now `game definition -> GameSessionConfig ->
+GameRuntime -> registered modules`. The shipped `core:settlement` definition
+selects `gth.settlement`; it is indexed from the content pack like other authored
+content rather than hard-coded as the application's only game. `SettlementGame`
+and its scene remain a compatibility entry for existing scene tests and direct
+editor runs, but they are not the menu's launch target.
+
+Keep game-specific fields inside a module's start parameters. `GameSessionConfig`
+may hold a map, seed and definition, but never era, wellbeing, population or
+settlement resources. The current `legacy_settlement_launch` field is a short
+adapter while the settlement start state moves behind its module. Do not add new
+uses of it.
+
+The next runtime extraction is save ownership: replace monolithic `SaveData`
+with module sections before adding a second playable definition. UI host and
+input-profile extraction follow that same rule. Do not introduce a second
+gameplay module until the settlement module owns its save section.
 
 The native AI migration is the primary execution path. Continue extracting
 bootstrap implementation into feature modules incrementally without a behavior

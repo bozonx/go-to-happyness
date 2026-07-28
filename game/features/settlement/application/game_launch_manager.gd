@@ -7,8 +7,12 @@ const SaveDataScript = preload("res://game/features/save_load/domain/save_data.g
 const ContentIdScript = preload("res://game/features/content/domain/content_id.gd")
 const BUILDING_EDITOR_SCENE := "res://game/features/buildings/presentation/editor/building_editor.tscn"
 const MAP_EDITOR_SCENE := "res://game/features/world/presentation/editor/map_editor.tscn"
+const GAME_RUNTIME_SCENE := "res://game/bootstrap/game_runtime.tscn"
 
 var active_launch_config: GameLaunchConfigScript = GameLaunchConfigScript.for_tent_era()
+## Generic session selected by the menu or save loader. The old config remains
+## only for settlement compatibility and editor entry points during migration.
+var active_session: GameSessionConfig = null
 var pending_save_path: String = ""
 ## Read by both editors to decide dev vs player mode (content_packaging.md §9).
 ## One flag for both, because the rule is one: dev authors the shipped pack and
@@ -32,10 +36,16 @@ func _ready() -> void:
 
 func launch_game(config: GameLaunchConfigScript) -> void:
 	pending_save_path = ""
-	if prepare_game_launch(config).map_document == null:
+	var prepared := prepare_game_launch(config)
+	if prepared.map_document == null:
 		push_warning("[launch] игровая сессия отменена: нужна доступная карта")
 		return
-	get_tree().change_scene_to_file("res://game/bootstrap/settlement_game.tscn")
+	var definition := GameModuleRegistry.resolve_definition(&"core:settlement")
+	if definition == null:
+		push_error("[launch] settlement game definition is unavailable")
+		return
+	active_session = GameSessionConfig.from_settlement_launch(prepared, definition)
+	get_tree().change_scene_to_file(GAME_RUNTIME_SCENE)
 
 
 ## Makes a launch configuration ready for the bootstrap scene. Keeping the disk
@@ -92,7 +102,12 @@ func launch_from_save(save_path: String) -> void:
 		push_warning("[launch] сохранение не открыто: в нём нет ссылки на карту")
 		return
 	pending_save_path = save_path
-	get_tree().change_scene_to_file("res://game/bootstrap/settlement_game.tscn")
+	var definition := GameModuleRegistry.resolve_definition(&"core:settlement")
+	if definition == null:
+		push_error("[launch] settlement game definition is unavailable")
+		return
+	active_session = GameSessionConfig.from_settlement_launch(active_launch_config, definition)
+	get_tree().change_scene_to_file(GAME_RUNTIME_SCENE)
 
 
 func launch_building_editor(dev_mode: bool = false) -> void:
@@ -119,5 +134,6 @@ func return_to_main_menu() -> void:
 
 func reset_to_default() -> void:
 	pending_save_path = ""
+	active_session = null
 	active_launch_config = GameLaunchConfigScript.for_tent_era()
 	prepare_game_launch(active_launch_config)

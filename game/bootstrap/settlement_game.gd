@@ -432,12 +432,12 @@ var world_navigation_controller: SettlementWorldNavigationController
 
 
 func _ready() -> void:
-	var launch_mgr: Node = get_node_or_null("/root/GameLaunchManager")
-	var active_config: GameLaunchConfig = launch_config
-	if launch_mgr != null:
-		var manager_config := launch_mgr.get("active_launch_config") as GameLaunchConfig
-		if manager_config != null and manager_config.map_document != null:
-			active_config = manager_config
+	start_settlement_session(_active_legacy_launch_config())
+
+
+## Transitional public module boundary. The generic GameRuntime invokes this
+## through SettlementGameModule; direct scene tests still use _ready above.
+func start_settlement_session(active_config: GameLaunchConfig) -> void:
 	if active_config == null:
 		active_config = GameLaunchConfig.for_tent_era()
 	launch_config = active_config
@@ -456,6 +456,16 @@ func _ready() -> void:
 		return
 	board_cells = launch_config.board_cells()
 	SettlementBootstrapper.new().run(self)
+
+
+func _active_legacy_launch_config() -> GameLaunchConfig:
+	var launch_mgr: Node = get_node_or_null("/root/GameLaunchManager")
+	var active_config: GameLaunchConfig = launch_config
+	if launch_mgr != null:
+		var manager_config := launch_mgr.get("active_launch_config") as GameLaunchConfig
+		if manager_config != null and manager_config.map_document != null:
+			active_config = manager_config
+	return active_config
 
 
 func next_registration_ticket() -> int:

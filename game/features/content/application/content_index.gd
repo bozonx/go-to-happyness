@@ -12,6 +12,7 @@ const INSTALLED_ROOT := "user://content/installed"
 const LEGACY_BLUEPRINTS := "user://custom_buildings"
 const BLUEPRINT_SUFFIX := ".gdbuilding.json"
 const MAP_SUFFIX := ".gdmap"
+const GAME_SUFFIX := ".gdgame.json"
 
 var entries: Dictionary = {}
 var errors: Array[String] = []
@@ -41,6 +42,9 @@ func map_entries() -> Array[ContentEntryScript]:
 
 func prefab_entries() -> Array[ContentEntryScript]:
 	return _entries_of(&"prefab")
+
+func game_entries() -> Array[ContentEntryScript]:
+	return _entries_of(&"game")
 
 func _entries_of(content_type: StringName) -> Array[ContentEntryScript]:
 	var result: Array[ContentEntryScript] = []
@@ -72,6 +76,7 @@ func _index_local_pack() -> void:
 	_index_blueprints(LOCAL_ROOT.path_join("buildings"), ContentIdScript.SOURCE_LOCAL)
 	_index_maps(LOCAL_ROOT.path_join("maps"), ContentIdScript.SOURCE_LOCAL)
 	_index_maps(LOCAL_ROOT.path_join("prefabs"), ContentIdScript.SOURCE_LOCAL)
+	_index_games(LOCAL_ROOT.path_join("games"), ContentIdScript.SOURCE_LOCAL)
 
 
 func _index_pack(root: String, source: StringName) -> void:
@@ -91,6 +96,7 @@ func _index_pack(root: String, source: StringName) -> void:
 	_index_blueprints(root.path_join("buildings"), source)
 	_index_maps(root.path_join("maps"), source)
 	_index_maps(root.path_join("prefabs"), source)
+	_index_games(root.path_join("games"), source)
 
 
 static func source_kind_is_core(source: StringName) -> bool:
@@ -135,6 +141,23 @@ func _index_maps(root: String, source: StringName) -> void:
 		entry.kind = kind
 		entry.name = String(parsed.get("name", id))
 		entry.metadata = parsed.duplicate(true)
+		_register(entry)
+
+
+func _index_games(root: String, source: StringName) -> void:
+	for path in _files_recursively(root, GAME_SUFFIX):
+		var definition := GameDefinition.load_from_file(path)
+		if definition == null:
+			errors.append("Некорректное описание игры: %s" % path)
+			continue
+		var entry := ContentEntryScript.new(source, definition.id, &"game", path)
+		entry.runtime_key = ContentIdScript.runtime_key(source, definition.id)
+		entry.name = definition.name
+		entry.metadata = {
+			"pack": _pack_id_for(source),
+			"modules": definition.module_ids.map(func(module_id: StringName) -> String: return String(module_id)),
+			"default_map": String(definition.default_map),
+		}
 		_register(entry)
 
 
