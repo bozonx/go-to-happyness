@@ -249,6 +249,21 @@ func walk_the_brush() -> void:
 	last_message = "walked %d cells — %d wore down" % [cells.size(), raised.size()]
 
 
+## Cuts or fills a hole. direction > 0 cuts, direction < 0 fills. The author
+## chooses the action explicitly, matching the left/Shift+right pattern of the
+## sculpt and ramp tools, instead of relying on what is under the cursor.
+func apply_hole(direction: int) -> void:
+	if not has_hover:
+		return
+	var enabled := direction > 0
+	if _service.set_hole(brush_cells(hovered_cell), enabled):
+		last_message = "hole %s" % ("cut" if enabled else "filled")
+		return
+	last_message = "hole unchanged"
+
+
+## Toggles the hole state of the hovered cell. Kept for the terrain lab, where
+## a single key (H) cycling the state is the convenient affordance.
 func toggle_hole() -> void:
 	if not has_hover:
 		return

@@ -16,7 +16,7 @@ extends Node
 
 const TOOL_AREA := &"area"
 const TOOL_POINT := &"point"
-const TOOL_SELECT := &"select"
+const TOOL_NONE := &"none"
 
 const AREA_COLORS: Array[Color] = [
 	Color(0.35, 0.75, 1.0), Color(1.0, 0.7, 0.3), Color(0.6, 1.0, 0.5),
@@ -113,6 +113,11 @@ func setup(editor: Node) -> void:
 	_tool_area_btn = editor.get_node("%ToolAreaBtn")
 	_tool_point_btn = editor.get_node("%ToolPointBtn")
 	_tool_select_btn = editor.get_node("%ToolSelectBtn")
+	# The select tool is gone — selection is now hybrid in the area and point
+	# tools, and TOOL_NONE is the idle mode reached by Esc. Hide the legacy
+	# button if the scene still carries it.
+	if _tool_select_btn != null:
+		_tool_select_btn.visible = false
 	# The route tool is gone — routes are built by linking anchors from the
 	# inspector (§11). Hide the legacy button if the scene still carries it.
 	if editor.has_node("%ToolRouteBtn"):
@@ -145,7 +150,6 @@ func setup(editor: Node) -> void:
 
 	_tool_area_btn.pressed.connect(func() -> void: _arm_tool(TOOL_AREA))
 	_tool_point_btn.pressed.connect(func() -> void: _arm_tool(TOOL_POINT))
-	_tool_select_btn.pressed.connect(func() -> void: _arm_tool(TOOL_SELECT))
 	_role_option.item_selected.connect(_on_palette_role_selected)
 	_layer_down_btn.pressed.connect(func() -> void: _editor.set_layer(_editor.active_layer - 1))
 	_layer_up_btn.pressed.connect(func() -> void: _editor.set_layer(_editor.active_layer + 1))
@@ -169,7 +173,7 @@ func activate() -> void:
 	_toolbar.visible = true
 	_inspector_panel.visible = true
 	_refresh_all()
-	_editor.set_status("Режим зон: Q — область, W — точка, R — выделение. Маршруты — из инспектора точки.")
+	_editor.set_status("Режим зон: Q — область, W — точка, Esc — снять выделение / холостой режим.")
 
 
 func deactivate() -> void:
@@ -212,13 +216,33 @@ func handle_mouse_button(event: InputEventMouseButton) -> bool:
 			return true
 		match _tool:
 			TOOL_AREA:
-				if not _cursor_in_bounds():
-					return false
-				_dragging = true
-				_drag_start = _cursor_cell_2d()
+				# Hybrid: over an existing area → select it (not anchors);
+				# over empty space → start drawing a rectangle.
+				var area := _area_at_cursor()
+				if area != null:
+					_selected_area_id = area.id
+					_selected_anchor_id = &""
+					_selected_route_id = &""
+					_refresh_all()
+				else:
+					if not _cursor_in_bounds():
+						return false
+					_dragging = true
+					_drag_start = _cursor_cell_2d()
 			TOOL_POINT:
-				_place_anchor_at_cursor()
-			TOOL_SELECT:
+				# Hybrid: over an existing anchor → select it (not areas);
+				# over empty space → place a new anchor.
+				var anchor := _anchor_at_cursor()
+				if anchor != null:
+					_selected_anchor_id = anchor.id
+					_selected_area_id = &""
+					_selected_route_id = &""
+					_refresh_all()
+					_moving_anchor = true
+				else:
+					_place_anchor_at_cursor()
+			TOOL_NONE:
+				# Idle mode: select whatever is under the cursor.
 				_select_at_cursor()
 				_moving_anchor = _selected_anchor() != null
 		return true
@@ -247,8 +271,6 @@ func handle_key(event: InputEventKey) -> bool:
 			_arm_tool(TOOL_AREA)
 		KEY_W:
 			_arm_tool(TOOL_POINT)
-		KEY_R:
-			_arm_tool(TOOL_SELECT)
 		KEY_TAB:
 			_cycle_role()
 		KEY_F:
@@ -256,6 +278,15 @@ func handle_key(event: InputEventKey) -> bool:
 		KEY_ESCAPE:
 			if _linking:
 				_stop_linking()
+				return true
+			# First Esc clears the selection; second Esc disarms the tool
+			# into the idle mode where the cursor selects without creating.
+			if _selected_area() != null or _selected_anchor() != null or _selected_route() != null:
+				_clear_selection()
+				_refresh_all()
+				return true
+			if _tool != TOOL_NONE:
+				_arm_tool(TOOL_NONE)
 				return true
 			return false
 		KEY_DELETE:
@@ -289,12 +320,20 @@ func refresh_ghost() -> void:
 		_ghost.rotation = Vector3.ZERO
 		_ghost.visible = true
 		return
-	if _tool == TOOL_SELECT:
+	if _tool == TOOL_NONE:
 		_hide_ghost()
 		return
 	if _dragging:
 		_hide_ghost()
 		_update_drag_preview()
+		return
+	# Hybrid tools hide the creation ghost when the cursor is over something
+	# the click would select instead of create.
+	if _tool == TOOL_AREA and _area_at_cursor() != null:
+		_hide_ghost()
+		return
+	if _tool == TOOL_POINT and _anchor_at_cursor() != null:
+		_hide_ghost()
 		return
 	_ensure_ghost()
 	var cell: Vector3i = _editor.cursor_cell
@@ -424,7 +463,6 @@ func _arm_tool(tool_id: StringName) -> void:
 	_tool = tool_id
 	_tool_area_btn.button_pressed = tool_id == TOOL_AREA
 	_tool_point_btn.button_pressed = tool_id == TOOL_POINT
-	_tool_select_btn.button_pressed = tool_id == TOOL_SELECT
 	if _linking:
 		_stop_linking()
 	_rebuild_role_options()
@@ -435,7 +473,7 @@ func _arm_tool(tool_id: StringName) -> void:
 func _rebuild_role_options() -> void:
 	_suppress_ui_events = true
 	_role_option.clear()
-	_role_option.disabled = _tool == TOOL_SELECT
+	_role_option.disabled = _tool == TOOL_NONE
 	if _tool == TOOL_AREA:
 		# `region` belongs to maps; a building authors rooms and overlays.
 		for role in [ZoneAreaRecord.ROLE_ROOM, ZoneAreaRecord.ROLE_OVERLAY]:
@@ -576,20 +614,19 @@ func _place_anchor_at_cursor() -> void:
 	_refresh_all()
 
 
-func _append_route_stop_at_cursor() -> void:
-	if not _editor.cursor_valid:
+## Begins linking mode from the selected anchor: subsequent clicks on
+## door/slot/waypoint anchors in 3D append them to the route being built.
+## Esc or right-click finishes.
+func _start_linking() -> void:
+	var anchor := _selected_anchor()
+	if anchor == null:
 		return
-	var stop: ZoneAnchorRecord = null
-	for anchor in _editor.blueprint.anchors:
-		if anchor.cell() == _cursor_cell_2d() and anchor.role in [
-				ZoneAnchorRecord.ROLE_DOOR, ZoneAnchorRecord.ROLE_SLOT,
-				ZoneAnchorRecord.ROLE_WAYPOINT]:
-			stop = anchor
-			break
-	if stop == null:
-		_editor.set_status("Маршрут можно провести только через дверь, слот или путевую точку.")
+	if not _anchor_can_route(anchor):
+		_editor.set_status("Эту точку нельзя добавить в маршрут.")
 		return
-	var route := _selected_route()
+	var route: ZoneRouteRecord = null
+	if _link_route_id != &"":
+		route = _editor.blueprint.route_by_id(_link_route_id)
 	if route == null:
 		route = ZoneRouteRecord.new()
 		route.id = _unique_id("route", func(candidate: StringName) -> bool:
@@ -598,10 +635,57 @@ func _append_route_stop_at_cursor() -> void:
 		_selected_route_id = route.id
 		_selected_area_id = &""
 		_selected_anchor_id = &""
+	if route.stops.is_empty() or route.stops[-1] != anchor.id:
+		route.stops.append(anchor.id)
+	_link_route_id = route.id
+	_linking = true
+	_editor.set_status("Маршрут «%s»: кликайте по точкам, чтобы добавить. Esc — готово." % route.id)
+	_editor.mark_dirty()
+	_refresh_all()
+
+
+func _stop_linking() -> void:
+	_linking = false
+	var route_id := _link_route_id
+	_link_route_id = &""
+	if route_id != &"":
+		_selected_route_id = route_id
+		var route := _selected_route()
+		if route != null and route.stops.size() < 2:
+			_editor.blueprint.routes.erase(route)
+			_clear_selection()
+			_editor.set_status("Маршрут отменён: нужно минимум две точки.")
+		else:
+			_editor.set_status("Маршрут «%s» готов: %d точек." % [route_id,
+				route.stops.size() if route != null else 0])
+	_editor.mark_dirty()
+	_refresh_all()
+
+
+func _link_click_at_cursor() -> void:
+	if not _editor.cursor_valid:
+		return
+	var stop: ZoneAnchorRecord = null
+	for anchor in _editor.blueprint.anchors:
+		if anchor.cell() == _cursor_cell_2d() and _anchor_can_route(anchor):
+			stop = anchor
+			break
+	if stop == null:
+		_editor.set_status("Кликайте по двери, слоту или путевой точке.")
+		return
+	var route: ZoneRouteRecord = _editor.blueprint.route_by_id(_link_route_id)
+	if route == null:
+		_stop_linking()
+		return
 	if route.stops.is_empty() or route.stops[-1] != stop.id:
 		route.stops.append(stop.id)
 		_editor.mark_dirty()
-	_refresh_all()
+		_refresh_all()
+
+
+static func _anchor_can_route(anchor: ZoneAnchorRecord) -> bool:
+	return anchor.role in [ZoneAnchorRecord.ROLE_DOOR, ZoneAnchorRecord.ROLE_SLOT,
+		ZoneAnchorRecord.ROLE_WAYPOINT]
 
 
 func _nearest_slot(pos: Vector3) -> ZoneAnchorRecord:
@@ -643,6 +727,26 @@ func _erase_at_cursor() -> void:
 				_editor.mark_dirty()
 				_refresh_all()
 			return
+
+
+func _area_at_cursor() -> ZoneAreaRecord:
+	if not _editor.cursor_valid:
+		return null
+	var cell := _cursor_cell_2d()
+	for area in _editor.blueprint.areas:
+		if area.contains_cell(cell):
+			return area
+	return null
+
+
+func _anchor_at_cursor() -> ZoneAnchorRecord:
+	if not _editor.cursor_valid:
+		return null
+	var cell := _cursor_cell_2d()
+	for anchor in _editor.blueprint.anchors:
+		if anchor.cell() == cell:
+			return anchor
+	return null
 
 
 func _select_at_cursor() -> void:
@@ -1032,6 +1136,13 @@ func _build_anchor_rows(anchor: ZoneAnchorRecord) -> void:
 		_refresh_tree()
 		_refresh_warnings())
 	_add_anchor_row("Принадлежит", owner_option)
+	# Eligible anchors (door/slot/waypoint) can start a route by linking.
+	if _anchor_can_route(anchor):
+		var link_btn := Button.new()
+		link_btn.text = "В маршрут" if not _linking else "Добавить в маршрут «%s»" % _link_route_id
+		link_btn.tooltip_text = "Связать эту точку с другими в маршрут"
+		link_btn.pressed.connect(_start_linking)
+		_anchor_props.add_child(link_btn)
 
 
 func _build_route_rows(route: ZoneRouteRecord) -> void:
@@ -1062,6 +1173,16 @@ func _build_route_rows(route: ZoneRouteRecord) -> void:
 	stops_label.text = " → ".join(route.stops.map(func(stop: StringName) -> String: return String(stop)))
 	stops_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_anchor_props.add_child(stops_label)
+	# Extend an existing route by clicking more anchors in 3D.
+	var add_stop_btn := Button.new()
+	add_stop_btn.text = "Добавить точку"
+	add_stop_btn.tooltip_text = "Кликайте по точкам в 3D, чтобы добавить их в маршрут"
+	add_stop_btn.pressed.connect(func() -> void:
+		_link_route_id = route.id
+		_selected_route_id = route.id
+		_linking = true
+		_editor.set_status("Маршрут «%s»: кликайте по точкам, чтобы добавить. Esc — готово." % route.id))
+	_anchor_props.add_child(add_stop_btn)
 
 
 func _make_spin(min_value: float, max_value: float, value: float, step: float,

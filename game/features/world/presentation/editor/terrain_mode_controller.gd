@@ -133,8 +133,8 @@ func _handle_mouse(event: InputEventMouseButton) -> bool:
 					context.brush.dissolve_ramp()
 		TOOL_HOLE:
 			if event.pressed:
-				context.set_edit_label("вырез")
-				context.brush.toggle_hole()
+				context.set_edit_label("вырез" if direction > 0 else "засыпка")
+				context.brush.apply_hole(direction)
 	_redraw_overlay()
 	notify_ui_changed()
 	return true
@@ -196,7 +196,7 @@ func palette_entries() -> Array:
 	var entries: Array = []
 	entries.append(PaletteEntry.of(TOOL_SCULPT, "Подъём / спуск"))
 	entries.append(PaletteEntry.of(TOOL_RAMP, "Пандус"))
-	entries.append(PaletteEntry.of(TOOL_HOLE, "Вырез"))
+	entries.append(PaletteEntry.of(TOOL_HOLE, "Вырез / засыпка"))
 	return entries
 
 
@@ -215,7 +215,7 @@ func tool_options() -> Array:
 	options.append(ToolOption.of(OPTION_NAV_NONE, "Нет", &"navigation", context.nav_overlay == null or not context.nav_overlay.visible))
 	options.append(ToolOption.of(OPTION_NAV_PEDESTRIAN, "Pedestrian", &"navigation", _overlay_profile_is(&"pedestrian")))
 	options.append(ToolOption.of(OPTION_NAV_CART, "Cart", &"navigation", _overlay_profile_is(&"cart")))
-	if _tool != TOOL_RAMP:
+	if _tool == TOOL_SCULPT:
 		options.append(ToolOption.of(OPTION_MODE, "Режим: %s" % TerrainEditOperation.mode_name(context.brush.edit_mode)))
 	options.append(ToolOption.of(&"brush_size", "Кисть: %d" % (context.brush.brush_size - 1), &"brush", false, true))
 	options.append(ToolOption.of(OPTION_BRUSH_DOWN, "−", &"brush"))
@@ -251,9 +251,10 @@ func inspector_lines() -> Array[String]:
 	var lines: Array[String] = []
 	lines.append("Инструмент: %s" % _tool)
 	lines.append("Кисть: %d" % (context.brush.brush_size - 1))
-	lines.append("Режим высоты: %s" % TerrainEditOperation.mode_name(context.brush.edit_mode))
-	if context.brush.edit_mode == TerrainEditOperation.Mode.LEVEL:
-		lines.append("Цель Level: %d" % context.brush.level_target_height())
+	if _tool == TOOL_SCULPT:
+		lines.append("Режим высоты: %s" % TerrainEditOperation.mode_name(context.brush.edit_mode))
+		if context.brush.edit_mode == TerrainEditOperation.Mode.LEVEL:
+			lines.append("Цель Level: %d" % context.brush.level_target_height())
 	lines.append("Пандус: %s → %s" % [
 		SlopeCatalog.id_of_class(context.brush.ramp_class),
 		TerrainBrushController.direction_name(context.brush.ramp_direction),

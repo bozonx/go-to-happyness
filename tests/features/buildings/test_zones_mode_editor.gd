@@ -40,9 +40,6 @@ func _run() -> void:
 	assert(role_option.item_count == ZoneAnchorRecord.BUILDING_ROLES.size(),
 		"point tool offers point roles, got %d" % role_option.item_count)
 	zones.handle_key(_key(KEY_Q))
-	zones.handle_key(_key(KEY_E))
-	assert(editor.get_node("%ToolRouteBtn").button_pressed, "E arms the route tool")
-	zones.handle_key(_key(KEY_Q))
 	print("  contextual role list ok")
 
 	# Draw a room with the rectangle drag, the way the UI does.
@@ -111,18 +108,6 @@ func _run() -> void:
 	assert(queue.is_queue() and queue.target_id == slot.id, "queue points at the slot")
 	print("  queue wiring ok")
 
-	# A line connects existing routing points and adds no geometry of its own.
-	zones.handle_key(_key(KEY_E))
-	editor.cursor_cell = Vector3i(2, 0, 0)
-	zones.handle_mouse_button(_click(true))
-	editor.cursor_cell = Vector3i(2, 0, 1)
-	zones.handle_mouse_button(_click(true))
-	await process_frame
-	assert(editor.blueprint.routes.size() == 1)
-	assert(editor.blueprint.routes[0].stops == [&"door_1", slot.id])
-	assert(zones._selected_route_id == editor.blueprint.routes[0].id)
-	print("  route line ok")
-
 	# Entrances derive from the door; the format carries no entrance fields.
 	assert(editor.blueprint.entrance_offset() == Vector2i(-2, -4),
 		"entrance derives from the door: %s" % editor.blueprint.entrance_offset())
@@ -142,7 +127,7 @@ func _run() -> void:
 	await process_frame
 	assert(editor.blueprint.anchors.size() == 1, "slot and its queue are gone, %d left" % editor.blueprint.anchors.size())
 	assert(editor.blueprint.anchors[0].is_door())
-	assert(editor.blueprint.routes.is_empty(), "route with fewer than two stops is removed")
+	assert(editor.blueprint.routes.is_empty(), "no routes left after cascade delete")
 	print("  cascade delete ok")
 
 	# Deleting the room releases what it owned instead of orphaning it.

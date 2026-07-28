@@ -124,7 +124,10 @@ func guard_citizen_positions() -> void:
 			var current_cell: Vector2i = game.cell_from_position(citizen.global_position)
 			var previous_cell: Variant = game.last_citizen_cells.get(citizen_id, null)
 			if previous_cell == null or (previous_cell is Vector2i and previous_cell != current_cell):
-				game.zone_presence_tracker.on_citizen_cell_changed(citizen_id, current_cell)
+				# The tag set the access model checks against (§12): visitor always,
+				# plus staff/builder derived from employment. The `owner` audience is
+				# relational and appended at query time, never part of this set.
+				game.zone_presence_tracker.on_citizen_cell_changed(citizen_id, current_cell, ActorTags.of(citizen))
 				game.last_citizen_cells[citizen_id] = current_cell
 
 

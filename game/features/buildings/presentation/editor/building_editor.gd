@@ -288,6 +288,10 @@ func _handle_key(event: InputEventKey) -> void:
 	if current_mode == EditMode.DECOR:
 		decor_mode.handle_key(event)
 		return
+	if current_mode == EditMode.ZONES:
+		if zones_mode.handle_key(event):
+			return
+		return
 	match event.keycode:
 		KEY_Z:
 			frame_mode.cycle_rotation_z(-1 if event.shift_pressed else 1)
