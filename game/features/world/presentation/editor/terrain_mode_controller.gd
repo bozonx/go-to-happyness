@@ -20,6 +20,7 @@ const OPTION_RAMP_DIR := &"ramp_dir"
 const OPTION_NAV_NONE := &"nav_none"
 const OPTION_NAV_PEDESTRIAN := &"nav_pedestrian"
 const OPTION_NAV_CART := &"nav_cart"
+const OPTION_HOLE_MODE := &"hole_mode"
 
 ## What a map has to be checked against: what a citizen can climb, and what a
 ## loaded cart can. A ramp only a walker can use is a supply route that silently
@@ -36,6 +37,9 @@ const TOOLS: Array[StringName] = [TOOL_SCULPT, TOOL_RAMP, TOOL_HOLE]
 
 var _tool: StringName = TOOL_SCULPT
 var _nav_profile_index := 0
+## Hole tool: true = cut, false = fill. Left-click applies the selected mode,
+## Shift+right applies the inverse — same pattern as sculpt's raise/lower.
+var _hole_cutting := true
 
 
 func _init() -> void:
@@ -133,8 +137,9 @@ func _handle_mouse(event: InputEventMouseButton) -> bool:
 					context.brush.dissolve_ramp()
 		TOOL_HOLE:
 			if event.pressed:
-				context.set_edit_label("вырез" if direction > 0 else "засыпка")
-				context.brush.apply_hole(direction)
+				var cutting := _hole_cutting if direction > 0 else not _hole_cutting
+				context.set_edit_label("вырез" if cutting else "засыпка")
+				context.brush.apply_hole(1 if cutting else -1)
 	_redraw_overlay()
 	notify_ui_changed()
 	return true
@@ -220,6 +225,8 @@ func tool_options() -> Array:
 	options.append(ToolOption.of(&"brush_size", "Кисть: %d" % (context.brush.brush_size - 1), &"brush", false, true))
 	options.append(ToolOption.of(OPTION_BRUSH_DOWN, "−", &"brush"))
 	options.append(ToolOption.of(OPTION_BRUSH_UP, "+", &"brush"))
+	if _tool == TOOL_HOLE:
+		options.append(ToolOption.of(OPTION_HOLE_MODE, "Режим: %s" % ("вырез" if _hole_cutting else "засыпка")))
 	if _tool == TOOL_RAMP:
 		options.append(ToolOption.of(OPTION_RAMP_CLASS, "Класс: %s" % SlopeCatalog.id_of_class(context.brush.ramp_class)))
 		options.append(ToolOption.of(OPTION_RAMP_DIR, "Направление: %s" % TerrainBrushController.direction_name(context.brush.ramp_direction)))
@@ -244,6 +251,8 @@ func activate_option(option_id: StringName) -> void:
 			_set_overlay_profile(&"pedestrian")
 		OPTION_NAV_CART:
 			_set_overlay_profile(&"cart")
+		OPTION_HOLE_MODE:
+			_hole_cutting = not _hole_cutting
 	notify_ui_changed()
 
 
@@ -255,6 +264,8 @@ func inspector_lines() -> Array[String]:
 		lines.append("Режим высоты: %s" % TerrainEditOperation.mode_name(context.brush.edit_mode))
 		if context.brush.edit_mode == TerrainEditOperation.Mode.LEVEL:
 			lines.append("Цель Level: %d" % context.brush.level_target_height())
+	if _tool == TOOL_HOLE:
+		lines.append("Режим кисти: %s" % ("вырез" if _hole_cutting else "засыпка"))
 	lines.append("Пандус: %s → %s" % [
 		SlopeCatalog.id_of_class(context.brush.ramp_class),
 		TerrainBrushController.direction_name(context.brush.ramp_direction),

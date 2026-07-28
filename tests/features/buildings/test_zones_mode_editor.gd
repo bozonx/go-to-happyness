@@ -108,6 +108,22 @@ func _run() -> void:
 	assert(queue.is_queue() and queue.target_id == slot.id, "queue points at the slot")
 	print("  queue wiring ok")
 
+	# A route links existing routing points from the inspector, not a separate tool.
+	# Select the door, start linking, then click the slot in 3D to add it.
+	zones._selected_anchor_id = editor.blueprint.anchors[0].id
+	zones._selected_area_id = &""
+	zones._refresh_inspector()
+	zones._start_linking()
+	assert(zones._linking, "linking mode is active")
+	editor.cursor_cell = Vector3i(2, 0, 1)
+	zones.handle_mouse_button(_click(true))
+	await process_frame
+	assert(editor.blueprint.routes.size() == 1)
+	assert(editor.blueprint.routes[0].stops == [&"door_1", slot.id])
+	assert(zones._selected_route_id == editor.blueprint.routes[0].id)
+	zones._stop_linking()
+	print("  route linking ok")
+
 	# Entrances derive from the door; the format carries no entrance fields.
 	assert(editor.blueprint.entrance_offset() == Vector2i(-2, -4),
 		"entrance derives from the door: %s" % editor.blueprint.entrance_offset())
