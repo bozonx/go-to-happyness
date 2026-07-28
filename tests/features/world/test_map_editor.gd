@@ -158,6 +158,20 @@ func _test_fill_placement_and_shared_undo(editor: Node) -> void:
 	assert(editor.document.entities.entities.is_empty(), "undo removed the placed entity")
 	editor._redo()
 	assert(editor.document.entities.entities.size() == 1, "redo restored it")
+	# Select, duplicate, rotate and delete use the same record layer and history;
+	# these shortcuts keep common authoring work out of a bespoke inspector.
+	editor._active.select_palette_entry(&"select")
+	editor._active.handle_input(_click(MOUSE_BUTTON_LEFT, true))
+	editor._active.handle_input(_key(KEY_D, true))
+	assert(editor.document.entities.entities.size() == 2, "Ctrl+D duplicated the selected entity")
+	editor._active.handle_input(_key(KEY_R))
+	assert(is_equal_approx(editor.document.entities.entities[1].yaw_degrees, 15.0), "R rotated the duplicate")
+	editor._active.handle_input(_key(KEY_DELETE))
+	assert(editor.document.entities.entities.size() == 1, "Delete removed the selection")
+	editor._undo()
+	editor._undo()
+	editor._undo()
+	assert(editor.document.entities.entities.size() == 1, "shortcut edits undo back to the original")
 	# Raising its cell is one terrain action and the record follows the surface in
 	# that very same shared-history entry.
 	editor._select_mode(&"terrain")
@@ -428,4 +442,12 @@ func _click(button: int, pressed: bool) -> InputEventMouseButton:
 	var event := InputEventMouseButton.new()
 	event.button_index = button
 	event.pressed = pressed
+	return event
+
+
+func _key(keycode: Key, ctrl := false) -> InputEventKey:
+	var event := InputEventKey.new()
+	event.keycode = keycode
+	event.ctrl_pressed = ctrl
+	event.pressed = true
 	return event

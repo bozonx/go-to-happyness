@@ -12,9 +12,12 @@ const TOOLS: Array[StringName] = [TOOL_SELECT, TOOL_PLACE]
 var _tool: StringName = TOOL_SELECT
 var _archetype_id: StringName = &""
 var _selected_id: StringName = &""
+var _additional_selected: Array[StringName] = []
 var _root: Node3D = null
 var _views: Dictionary = {}
 var _last_warnings: Array[String] = []
+var _ghost: Node3D = null
+var _ghost_archetype_id: StringName = &""
 
 
 func _init() -> void:
@@ -38,6 +41,8 @@ func activate() -> void:
 
 func deactivate() -> void:
 	_selected_id = &""
+	_additional_selected.clear()
+	_hide_ghost()
 
 
 func document_changed() -> void:
@@ -55,18 +60,24 @@ func hover_brush() -> BaseBrushController:
 
 func process(_delta: float) -> void:
 	context.brush.update_hover(context.camera, context.space_state(), context.mouse_position())
+	_refresh_ghost()
 
 
 func handle_input(event: InputEvent) -> bool:
 	if event is InputEventMouseButton:
 		return _handle_mouse(event as InputEventMouseButton)
 	if event is InputEventKey and event.is_pressed() and not event.is_echo():
+		var key := event as InputEventKey
+		if key.ctrl_pressed and key.keycode == KEY_D:
+			return _duplicate_selection()
 		match (event as InputEventKey).keycode:
 			KEY_TAB:
 				_tool = TOOLS[(TOOLS.find(_tool) + 1) % TOOLS.size()]
 				return true
 			KEY_DELETE:
 				return _delete_selected()
+			KEY_R:
+				return _rotate_selection(-1 if key.shift_pressed else 1)
 	return false
 
 
@@ -79,7 +90,7 @@ func _handle_mouse(event: InputEventMouseButton) -> bool:
 	if event.button_index != MOUSE_BUTTON_LEFT or not event.pressed:
 		return false
 	if _tool == TOOL_SELECT:
-		_selected_id = _entity_at(context.brush.hovered_cell)
+		_select_at(context.brush.hovered_cell, event.shift_pressed)
 		rebuild_views()
 		notify_ui_changed()
 		return true
@@ -87,6 +98,34 @@ func _handle_mouse(event: InputEventMouseButton) -> bool:
 		return false
 	_place(context.brush.hovered_cell)
 	return true
+
+
+func _select_at(cell: Vector2i, additive: bool) -> void:
+	var found := _entity_at(cell)
+	if not additive:
+		_selected_id = found
+		_additional_selected.clear()
+		return
+	if found == &"":
+		return
+	if _selected_id == &"":
+		_selected_id = found
+	elif found == _selected_id:
+		_selected_id = _additional_selected.pop_front() if not _additional_selected.is_empty() else &""
+	elif found in _additional_selected:
+		_additional_selected.erase(found)
+	else:
+		_additional_selected.append(found)
+
+
+func _selected_ids() -> Array[StringName]:
+	var ids: Array[StringName] = []
+	if _selected_id != &"":
+		ids.append(_selected_id)
+	for entity_id: StringName in _additional_selected:
+		if entity_id not in ids:
+			ids.append(entity_id)
+	return ids
 
 
 func _place(cell: Vector2i) -> void:
@@ -163,16 +202,61 @@ func _entity_at(cell: Vector2i) -> StringName:
 
 
 func _delete_selected() -> bool:
-	if _selected_id == &"":
+	var selected := _selected_ids()
+	if selected.is_empty():
 		return false
 	var before := context.document.entities.to_json()
 	for index in range(context.document.entities.entities.size() - 1, -1, -1):
-		if context.document.entities.entities[index].id == _selected_id:
+		if context.document.entities.entities[index].id in selected:
 			context.document.entities.entities.remove_at(index)
-			_selected_id = &""
-			_commit(before, "удаление сущности")
-			return true
-	return false
+	_selected_id = &""
+	_additional_selected.clear()
+	_commit(before, "удаление сущности")
+	return true
+
+
+func _duplicate_selection() -> bool:
+	var selected := _selected_ids()
+	if selected.is_empty():
+		return false
+	var before := context.document.entities.to_json()
+	var copies: Array[MapEntityRecord] = []
+	for entity_id: StringName in selected:
+		var original := context.document.entities.by_id(entity_id)
+		if original == null:
+			continue
+		var copy := MapEntityRecord.from_dict(original.to_dict())
+		copy.id = _next_id("entity")
+		copy.position.x += context.terrain.cell_size
+		var cell := copy.cell(context.terrain)
+		if not context.terrain.is_inside(cell) or context.terrain.is_hole(cell):
+			continue
+		var archetype := EntityArchetypeCatalog.get_archetype(copy.archetype_id)
+		if archetype != null:
+			copy.position = _surface_position(cell, archetype)
+		copies.append(copy)
+	if copies.is_empty():
+		return false
+	context.document.entities.entities.append_array(copies)
+	_selected_id = copies[0].id
+	_additional_selected.clear()
+	for copy: MapEntityRecord in copies.slice(1):
+		_additional_selected.append(copy.id)
+	_commit(before, "дублирование сущности")
+	return true
+
+
+func _rotate_selection(direction: int) -> bool:
+	var selected := _selected_ids()
+	if selected.is_empty():
+		return false
+	var before := context.document.entities.to_json()
+	for entity_id: StringName in selected:
+		var record := context.document.entities.by_id(entity_id)
+		if record != null:
+			record.yaw_degrees = fposmod(record.yaw_degrees + 15.0 * direction, 360.0)
+	_commit(before, "поворот сущности")
+	return true
 
 
 func _next_id(prefix: String) -> StringName:
@@ -199,21 +283,106 @@ func rebuild_views() -> void:
 		child.queue_free()
 	_views.clear()
 	for record: MapEntityRecord in context.document.entities.entities:
-		var marker := MeshInstance3D.new()
-		var mesh := CylinderMesh.new()
-		mesh.top_radius = 0.28
-		mesh.bottom_radius = 0.38
-		mesh.height = 0.65
-		var material := StandardMaterial3D.new()
-		material.albedo_color = Color(1.0, 0.72, 0.22) if record.id == _selected_id else Color(0.28, 0.78, 0.46)
-		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		mesh.material = material
-		marker.mesh = mesh
-		marker.position = record.position + Vector3.UP * 0.325
-		marker.rotation_degrees.y = record.yaw_degrees
-		marker.scale = Vector3.ONE * record.scale
-		_root.add_child(marker)
-		_views[record.id] = marker
+		var view := _make_view(record.archetype_id)
+		_root.add_child(view)
+		_apply_transform(view, record)
+		if record.id in _selected_ids():
+			_add_selection_ring(view)
+		_views[record.id] = view
+
+
+func _make_view(archetype_id: StringName) -> Node3D:
+	var asset := EntityArchetypeCatalog.asset_of(archetype_id)
+	if asset != null and ResourceLoader.exists(asset.scene_path):
+		var scene := load(asset.scene_path) as PackedScene
+		if scene != null:
+			var instance := scene.instantiate() as Node3D
+			if instance != null:
+				return instance
+	# A missing pack must remain editable. This marker is deliberately a
+	# placeholder, not a second asset system.
+	var placeholder := MeshInstance3D.new()
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = 0.28
+	mesh.bottom_radius = 0.38
+	mesh.height = 0.65
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(0.9, 0.15, 0.85)
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mesh.material = material
+	placeholder.mesh = mesh
+	placeholder.position.y = 0.325
+	return placeholder
+
+
+func _apply_transform(view: Node3D, record: MapEntityRecord) -> void:
+	view.position = record.position
+	view.rotation_degrees.y = record.yaw_degrees
+	view.scale = Vector3.ONE * record.scale
+
+
+func _add_selection_ring(view: Node3D) -> void:
+	var ring := MeshInstance3D.new()
+	var mesh := TorusMesh.new()
+	mesh.inner_radius = 0.34
+	mesh.outer_radius = 0.39
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(1.0, 0.72, 0.22)
+	material.emission_enabled = true
+	material.emission = material.albedo_color
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mesh.material = material
+	ring.mesh = mesh
+	ring.position.y = 0.04
+	view.add_child(ring)
+
+
+func _refresh_ghost() -> void:
+	if _tool != TOOL_PLACE or _archetype_id == &"" or context.brush == null or not context.brush.has_hover:
+		_hide_ghost()
+		return
+	var archetype := EntityArchetypeCatalog.get_archetype(_archetype_id)
+	if archetype == null:
+		_hide_ghost()
+		return
+	if _ghost == null or _ghost_archetype_id != archetype.id:
+		if _ghost != null:
+			_ghost.queue_free()
+		_ghost = _make_view(archetype.id)
+		_ghost_archetype_id = archetype.id
+		_root.add_child(_ghost)
+		_apply_preview_look(_ghost)
+	var cell := context.brush.hovered_cell
+	_ghost.visible = true
+	_ghost.position = _surface_position(cell, archetype)
+	_set_preview_colour(_ghost, Color(1.0, 0.78, 0.22, 0.72) if not _placement_warnings(cell, archetype).is_empty() else Color(0.35, 0.9, 1.0, 0.58))
+
+
+func _hide_ghost() -> void:
+	if _ghost != null:
+		_ghost.visible = false
+
+
+func _apply_preview_look(root: Node3D) -> void:
+	for node: Node in [root] + root.find_children("*", "MeshInstance3D"):
+		if node is MeshInstance3D:
+			var mesh_node := node as MeshInstance3D
+			for surface in mesh_node.get_surface_override_material_count():
+				var material := mesh_node.get_active_material(surface)
+				if material is StandardMaterial3D:
+					mesh_node.set_surface_override_material(surface, (material as StandardMaterial3D).duplicate())
+
+
+func _set_preview_colour(root: Node3D, colour: Color) -> void:
+	for node: Node in [root] + root.find_children("*", "MeshInstance3D"):
+		if node is MeshInstance3D:
+			var mesh_node := node as MeshInstance3D
+			for surface in mesh_node.get_surface_override_material_count():
+				var material := mesh_node.get_active_material(surface)
+				if material is StandardMaterial3D:
+					var preview := material as StandardMaterial3D
+					preview.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+					preview.albedo_color = colour
 
 
 func palette_entries() -> Array:
@@ -244,7 +413,7 @@ func select_palette_entry(entry_id: StringName) -> void:
 func inspector_lines() -> Array[String]:
 	var lines: Array[String] = [
 		"Инструмент: %s" % ("поставить" if _tool == TOOL_PLACE else "выбрать"),
-		"Сущностей: %d" % context.document.entities.entities.size(),
+		"Сущностей: %d · выделено: %d" % [context.document.entities.entities.size(), _selected_ids().size()],
 	]
 	var selected := context.document.entities.by_id(_selected_id)
 	if selected != null:
