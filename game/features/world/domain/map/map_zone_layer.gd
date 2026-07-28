@@ -83,8 +83,16 @@ func validate(board_cells: int) -> Array[String]:
 		var cell := anchor.cell()
 		if cell.x < 0 or cell.y < 0 or cell.x >= board_cells or cell.y >= board_cells:
 			errors.append("точка %s выходит за доску" % anchor.id)
-		if anchor.owner_id != &"" and area_by_id(anchor.owner_id) == null:
-			errors.append("точка %s ссылается на отсутствующую область %s" % [anchor.id, anchor.owner_id])
+		if anchor.owner_id != &"":
+			var owner := area_by_id(anchor.owner_id)
+			if owner == null:
+				errors.append("точка %s ссылается на отсутствующую область %s" % [anchor.id, anchor.owner_id])
+			# §8.1: a point sits outside the y-range of its owner area — a launch error.
+			# The owner's rectangles cover the footprint; the point's height must lie in
+			# the area's inclusive y-band. Checked only when the footprint is valid, so a
+			# dangling owner reference reports once, not twice.
+			elif owner.contains_cell(cell) and (anchor.pos.y < float(owner.y_min) or anchor.pos.y > float(owner.y_max)):
+				errors.append("точка %s вне уровня y области %s" % [anchor.id, anchor.owner_id])
 	for route in routes:
 		_validate_id(route.id, ids, errors)
 		for stop in route.stops:
@@ -96,6 +104,12 @@ func validate(board_cells: int) -> Array[String]:
 func _validate_id(id: StringName, ids: Dictionary, errors: Array[String]) -> void:
 	if id == &"":
 		errors.append("у зоны нет id")
+		return
+	# §8.1: an id outside the `ContentId` alphabet — same rule for a point as for
+	# an area. The alphabet is the one an id becomes a filename and a save
+	# reference by, so a zone with `Вход` in it cannot survive the round trip.
+	if not ContentId.is_valid_id(String(id)):
+		errors.append("id зоны вне алфавита: %s" % id)
 		return
 	if ids.has(id):
 		errors.append("дублирующийся id зоны: %s" % id)

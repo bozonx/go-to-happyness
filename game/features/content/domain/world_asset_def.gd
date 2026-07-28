@@ -1,8 +1,9 @@
-class_name FurnishingAssetDef
+class_name WorldAssetDef
 extends Resource
 
-## Definition of a furnishing asset available in the building editor catalog
-## (design_docs/engine/building_furnishing.md §4).
+## Definition of a world asset available in both the building editor and the
+## map fill mode catalog (design_docs/engine/map_fill_mode.md §3,
+## design_docs/engine/building_furnishing.md §4).
 ##
 ## `appearance_controls` are the authored visual knobs (design §3.3). Each entry is:
 ##   {

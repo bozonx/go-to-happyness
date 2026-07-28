@@ -230,19 +230,29 @@ static func _migrate(parsed: Dictionary, from_version: int) -> Dictionary:
 ## as opaque data: guessing a role would silently change a player's scenario.
 static func _promote_legacy_zone_sections(parsed: Dictionary) -> Dictionary:
 	var migrated := parsed.duplicate(true)
-	if not migrated.has("areas") and _records_have_fields(migrated.get("regions", []), ["id", "role", "rects"]):
+	if not migrated.has("areas") and _legacy_zone_records_promote(migrated, "regions", ["id", "role", "rects"]):
 		migrated["areas"] = migrated["regions"]
 		migrated.erase("regions")
-	if not migrated.has("anchors") and _records_have_fields(migrated.get("markers", []), ["id", "role", "pos"]):
+	if not migrated.has("anchors") and _legacy_zone_records_promote(migrated, "markers", ["id", "role", "pos"]):
 		migrated["anchors"] = migrated["markers"]
 		migrated.erase("markers")
 	return migrated
 
 
-static func _records_have_fields(value: Variant, fields: Array[String]) -> bool:
+## True only when `parsed[key]` is present and every record in it already has the
+## shared zone shape. An absent key or an empty list means nothing to promote and
+## must return `false` — otherwise the caller dereferences a missing key, and a
+## map with no legacy sections would crash on every load.
+static func _legacy_zone_records_promote(parsed: Dictionary, key: String, fields: Array[String]) -> bool:
+	if not parsed.has(key):
+		return false
+	var value: Variant = parsed[key]
 	if not (value is Array):
 		return false
-	for entry: Variant in value as Array:
+	var records := value as Array
+	if records.is_empty():
+		return false
+	for entry: Variant in records:
 		if not (entry is Dictionary):
 			return false
 		for field in fields:

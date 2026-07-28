@@ -1,15 +1,14 @@
-class_name FurnishingAssetCatalog
+class_name WorldAssetCatalog
 extends RefCounted
 
-## Catalog of furnishing asset definitions and their category taxonomy
-## (design_docs/engine/building_furnishing.md §5).
+## Catalog of world asset definitions and their category taxonomy
+## (design_docs/engine/map_fill_mode.md §3, design_docs/engine/building_furnishing.md §5).
 ##
 ## Assets come from three sources, merged by id (later sources win):
 ##   1. the built-in definitions below;
-##   2. `FurnishingAssetDef` resources under `res://game/features/buildings/data/decor`;
+##   2. `WorldAssetDef` resources under `res://game/features/buildings/data/decor`;
 ##   3. player-authored resources under `user://custom_decor`.
 
-const FurnishingAssetDefScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_def.gd")
 const BuildingMaterialCatalogScript = preload("res://game/features/buildings/domain/editor/building_material_catalog.gd")
 
 const BUILTIN_ASSET_DIR := "res://game/features/buildings/data/decor"
@@ -62,26 +61,26 @@ const MIGRATED_CATEGORIES: Dictionary = {
 static var _assets: Dictionary = {}
 
 
-static func get_all_assets() -> Array[FurnishingAssetDefScript]:
+static func get_all_assets() -> Array[WorldAssetDef]:
 	_ensure_catalog()
-	var list: Array[FurnishingAssetDefScript] = []
-	for asset: FurnishingAssetDefScript in _assets.values():
+	var list: Array[WorldAssetDef] = []
+	for asset: WorldAssetDef in _assets.values():
 		list.append(asset)
 	return list
 
 
-static func get_assets_by_category(category: StringName) -> Array[FurnishingAssetDefScript]:
+static func get_assets_by_category(category: StringName) -> Array[WorldAssetDef]:
 	_ensure_catalog()
-	var list: Array[FurnishingAssetDefScript] = []
-	for asset: FurnishingAssetDefScript in _assets.values():
+	var list: Array[WorldAssetDef] = []
+	for asset: WorldAssetDef in _assets.values():
 		if asset.category == category:
 			list.append(asset)
-	list.sort_custom(func(a: FurnishingAssetDefScript, b: FurnishingAssetDefScript) -> bool:
+	list.sort_custom(func(a: WorldAssetDef, b: WorldAssetDef) -> bool:
 		return a.name.naturalnocasecmp_to(b.name) < 0)
 	return list
 
 
-static func get_asset(id: StringName) -> FurnishingAssetDefScript:
+static func get_asset(id: StringName) -> WorldAssetDef:
 	_ensure_catalog()
 	return _assets.get(id, null)
 
@@ -104,7 +103,7 @@ static func category_counts() -> Dictionary:
 	var counts: Dictionary = {}
 	for category_id in CATEGORIES.keys():
 		counts[category_id] = 0
-	for asset: FurnishingAssetDefScript in _assets.values():
+	for asset: WorldAssetDef in _assets.values():
 		counts[asset.category] = int(counts.get(asset.category, 0)) + 1
 	return counts
 
@@ -139,12 +138,12 @@ static func first_populated_category(preferred: StringName = &"camping") -> Stri
 
 
 ## Filter assets by tag (design §5.2). Returns all assets if tag is empty.
-static func get_assets_by_tag(tag: StringName) -> Array[FurnishingAssetDefScript]:
+static func get_assets_by_tag(tag: StringName) -> Array[WorldAssetDef]:
 	_ensure_catalog()
 	if tag == &"":
 		return get_all_assets()
-	var list: Array[FurnishingAssetDefScript] = []
-	for asset: FurnishingAssetDefScript in _assets.values():
+	var list: Array[WorldAssetDef] = []
+	for asset: WorldAssetDef in _assets.values():
 		if tag in asset.tags:
 			list.append(asset)
 	return list
@@ -157,7 +156,7 @@ static func all_tags() -> Array[StringName]:
 
 	_ensure_catalog()
 	var unique: Dictionary = {}
-	for asset: FurnishingAssetDefScript in _assets.values():
+	for asset: WorldAssetDef in _assets.values():
 		for tag in asset.tags:
 			unique[tag] = true
 	var tags: Array[StringName] = []
@@ -171,13 +170,13 @@ static func all_tags() -> Array[StringName]:
 ## Filter assets by era (design §5.2). Returns all assets if era is empty.
 ## An asset is available when its `available_from_era` rank is at or below the
 ## selected era's rank — cumulative progression, not exact equality.
-static func get_assets_by_era(era: StringName) -> Array[FurnishingAssetDefScript]:
+static func get_assets_by_era(era: StringName) -> Array[WorldAssetDef]:
 	_ensure_catalog()
 	if era == &"":
 		return get_all_assets()
 	var era_rank := BuildingMaterialCatalogScript.era_rank(era)
-	var list: Array[FurnishingAssetDefScript] = []
-	for asset: FurnishingAssetDefScript in _assets.values():
+	var list: Array[WorldAssetDef] = []
+	for asset: WorldAssetDef in _assets.values():
 		if asset.available_from_era == &"":
 			list.append(asset)
 		elif BuildingMaterialCatalogScript.era_rank(asset.available_from_era) <= era_rank:
@@ -191,10 +190,10 @@ static func filter_assets(
 	p_category: StringName = &"",
 	p_tag: StringName = &"",
 	p_era: StringName = &""
-) -> Array[FurnishingAssetDefScript]:
+) -> Array[WorldAssetDef]:
 	_ensure_catalog()
-	var list: Array[FurnishingAssetDefScript] = []
-	for asset: FurnishingAssetDefScript in _assets.values():
+	var list: Array[WorldAssetDef] = []
+	for asset: WorldAssetDef in _assets.values():
 		if p_category != &"" and asset.category != p_category:
 			continue
 		if p_tag != &"" and not (p_tag in asset.tags):
@@ -203,7 +202,7 @@ static func filter_assets(
 			if BuildingMaterialCatalogScript.era_rank(asset.available_from_era) > BuildingMaterialCatalogScript.era_rank(p_era):
 				continue
 		list.append(asset)
-	list.sort_custom(func(a: FurnishingAssetDefScript, b: FurnishingAssetDefScript) -> bool:
+	list.sort_custom(func(a: WorldAssetDef, b: WorldAssetDef) -> bool:
 		return a.name.naturalnocasecmp_to(b.name) < 0)
 	return list
 
@@ -234,25 +233,25 @@ static func _scan_directory(dir_path: String) -> void:
 		var clean_name := file_name.trim_suffix(".remap")
 		if not (clean_name.ends_with(".tres") or clean_name.ends_with(".res")):
 			continue
-		var asset := load(dir_path.path_join(clean_name)) as FurnishingAssetDefScript
+		var asset := load(dir_path.path_join(clean_name)) as WorldAssetDef
 		if asset == null or asset.id == &"":
-			push_warning("FurnishingAssetCatalog: skipped invalid asset %s" % clean_name)
+			push_warning("WorldAssetCatalog: skipped invalid asset %s" % clean_name)
 			continue
 		# Migrate legacy category names so old custom assets still load.
 		if MIGRATED_CATEGORIES.has(asset.category):
 			asset.category = MIGRATED_CATEGORIES[asset.category]
 		if not CATEGORIES.has(asset.category):
-			push_warning("FurnishingAssetCatalog: asset %s has unknown category %s" % [asset.id, asset.category])
+			push_warning("WorldAssetCatalog: asset %s has unknown category %s" % [asset.id, asset.category])
 			continue
 		if not ResourceLoader.exists(asset.scene_path):
-			push_warning("FurnishingAssetCatalog: asset %s points at a missing scene %s" % [asset.id, asset.scene_path])
+			push_warning("WorldAssetCatalog: asset %s points at a missing scene %s" % [asset.id, asset.scene_path])
 			continue
 		asset.group = group_of_category(asset.category)
 		_assets[asset.id] = asset
 
 
 static func _register_builtin_assets() -> void:
-	_register(FurnishingAssetDefScript.new(
+	_register(WorldAssetDef.new(
 		&"campfire",
 		"Костёр",
 		&"fires_stoves",
@@ -279,28 +278,28 @@ static func _register_builtin_assets() -> void:
 				"default": Color("ffaa44"),
 				"bind": [
 					{"node": "Light", "prop": "light_color"},
-					{"node": "Fire/FlameCore", "prop": FurnishingAssetDefScript.PROP_ALBEDO},
+					{"node": "Fire/FlameCore", "prop": WorldAssetDef.PROP_ALBEDO},
 				],
 			},
 			{
 				"name": "flame_height", "label": "Высота пламени", "type": "float",
 				"min": 0.4, "max": 2.0, "step": 0.1, "default": 1.0,
-				"bind": [{"node": "Fire", "prop": FurnishingAssetDefScript.PROP_SCALE_Y}],
+				"bind": [{"node": "Fire", "prop": WorldAssetDef.PROP_SCALE_Y}],
 			},
 		],
 		Vector3(1.3, 0.9, 1.3),
 		"Кольцо камней, сложенные брёвна, живое пламя с искрами."
 	))
 	# Additional metadata for campfire
-	var campfire := _assets[&"campfire"] as FurnishingAssetDefScript
+	var campfire := _assets[&"campfire"] as WorldAssetDef
 	campfire.tags = [&"fire", &"light", &"cooking", &"outdoor"]
 	campfire.available_from_era = &"tent"
-	campfire.scale_mode = FurnishingAssetDefScript.SCALE_LOCKED
-	campfire.collision_policy = FurnishingAssetDefScript.COLLISION_FOOTPRINT
+	campfire.scale_mode = WorldAssetDef.SCALE_LOCKED
+	campfire.collision_policy = WorldAssetDef.COLLISION_FOOTPRINT
 	campfire.blocking_navigation = true
 	campfire.supported_capabilities = [&"fire_source", &"cooking_station", &"light_source"]
 
-	_register(FurnishingAssetDefScript.new(
+	_register(WorldAssetDef.new(
 		&"cooking_campfire",
 		"Костёр для готовки",
 		&"fires_stoves",
@@ -334,15 +333,15 @@ static func _register_builtin_assets() -> void:
 		Vector3(1.9, 1.6, 1.9),
 		"Кольцо камней, тренога с котлом, опциональный навес."
 	))
-	var cooking := _assets[&"cooking_campfire"] as FurnishingAssetDefScript
+	var cooking := _assets[&"cooking_campfire"] as WorldAssetDef
 	cooking.tags = [&"fire", &"light", &"cooking", &"outdoor"]
 	cooking.available_from_era = &"tent"
-	cooking.scale_mode = FurnishingAssetDefScript.SCALE_LOCKED
-	cooking.collision_policy = FurnishingAssetDefScript.COLLISION_FOOTPRINT
+	cooking.scale_mode = WorldAssetDef.SCALE_LOCKED
+	cooking.collision_policy = WorldAssetDef.COLLISION_FOOTPRINT
 	cooking.blocking_navigation = true
 	cooking.supported_capabilities = [&"fire_source", &"cooking_station", &"light_source"]
 
-	_register(FurnishingAssetDefScript.new(
+	_register(WorldAssetDef.new(
 		&"entrance_sign",
 		"Въездной знак",
 		&"town",
@@ -359,7 +358,7 @@ static func _register_builtin_assets() -> void:
 			{
 				"name": "board_color", "label": "Цвет щита", "type": "color",
 				"default": Color("8a6549"),
-				"bind": [{"node": "Board/BoardMesh", "prop": FurnishingAssetDefScript.PROP_ALBEDO}],
+				"bind": [{"node": "Board/BoardMesh", "prop": WorldAssetDef.PROP_ALBEDO}],
 			},
 			{
 				"name": "has_lantern", "label": "Фонарь", "type": "bool", "default": true,
@@ -374,15 +373,15 @@ static func _register_builtin_assets() -> void:
 		Vector3(2.0, 2.4, 0.35),
 		"Два столба, щит с надписью и подвесной фонарь."
 	))
-	var sign := _assets[&"entrance_sign"] as FurnishingAssetDefScript
+	var sign := _assets[&"entrance_sign"] as WorldAssetDef
 	sign.tags = [&"sign", &"town", &"light"]
 	sign.available_from_era = &"tent"
-	sign.scale_mode = FurnishingAssetDefScript.SCALE_LOCKED
-	sign.collision_policy = FurnishingAssetDefScript.COLLISION_BOX
+	sign.scale_mode = WorldAssetDef.SCALE_LOCKED
+	sign.collision_policy = WorldAssetDef.COLLISION_BOX
 	sign.blocking_navigation = true
 	sign.supported_capabilities = [&"light_source"]
 
-	_register(FurnishingAssetDefScript.new(
+	_register(WorldAssetDef.new(
 		&"flag",
 		"Флаг",
 		&"town",
@@ -395,14 +394,14 @@ static func _register_builtin_assets() -> void:
 				"name": "banner_color", "label": "Цвет полотнища", "type": "color",
 				"default": Color("d45448"),
 				"bind": [
-					{"node": "Mast/Banner/BannerMesh", "prop": FurnishingAssetDefScript.PROP_ALBEDO},
-					{"node": "Mast/Banner/BannerTail", "prop": FurnishingAssetDefScript.PROP_ALBEDO},
+					{"node": "Mast/Banner/BannerMesh", "prop": WorldAssetDef.PROP_ALBEDO},
+					{"node": "Mast/Banner/BannerTail", "prop": WorldAssetDef.PROP_ALBEDO},
 				],
 			},
 			{
 				"name": "pole_height", "label": "Высота древка", "type": "float",
 				"min": 0.6, "max": 2.0, "step": 0.05, "default": 1.0,
-				"bind": [{"node": "Mast", "prop": FurnishingAssetDefScript.PROP_SCALE_Y}],
+				"bind": [{"node": "Mast", "prop": WorldAssetDef.PROP_SCALE_Y}],
 			},
 			{
 				"name": "has_banner", "label": "Полотнище", "type": "bool", "default": true,
@@ -420,15 +419,15 @@ static func _register_builtin_assets() -> void:
 		Vector3(0.9, 2.6, 0.2),
 		"Древко с навершием и полотнищем; цвет и надпись настраиваются."
 	))
-	var flag := _assets[&"flag"] as FurnishingAssetDefScript
+	var flag := _assets[&"flag"] as WorldAssetDef
 	flag.tags = [&"town", &"sign"]
 	flag.available_from_era = &"tent"
-	flag.scale_mode = FurnishingAssetDefScript.SCALE_UNIFORM_STEPS
+	flag.scale_mode = WorldAssetDef.SCALE_UNIFORM_STEPS
 	flag.allowed_scales = [0.5, 1.0, 2.0]
-	flag.collision_policy = FurnishingAssetDefScript.COLLISION_BOX
+	flag.collision_policy = WorldAssetDef.COLLISION_BOX
 	flag.blocking_navigation = true
 
 
-static func _register(asset: FurnishingAssetDefScript) -> void:
+static func _register(asset: WorldAssetDef) -> void:
 	asset.group = group_of_category(asset.category)
 	_assets[asset.id] = asset

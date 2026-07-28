@@ -8,8 +8,6 @@ extends Node3D
 ##
 ## Extracted from DecorModeController to isolate the visual overlay lifecycle.
 
-const FurnishingAssetCatalogScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_catalog.gd")
-const FurnishingAssetDefScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_def.gd")
 const DecorObjectRecordScript = preload("res://game/features/buildings/domain/editor/decor_object_record.gd")
 
 var _overlays: Dictionary = {}  ## object id (String) -> Array[MeshInstance3D]
@@ -42,18 +40,18 @@ func rebuild(blueprint: RefCounted = null) -> void:
 
 
 func _build_for(record: DecorObjectRecordScript) -> void:
-	var asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
+	var asset := WorldAssetCatalog.get_asset(record.asset_id)
 	if asset == null:
 		return
 	var policy := asset.collision_policy
-	if policy == FurnishingAssetDefScript.COLLISION_NONE and not asset.blocking_navigation:
+	if policy == WorldAssetDef.COLLISION_NONE and not asset.blocking_navigation:
 		return
 	var meshes: Array[MeshInstance3D] = []
 	var size := asset.footprint_m()
 	# Scale the collision box by the object's uniform scale.
 	var scaled_size := size * record.scale.x
 	# Collision box (box or footprint policy).
-	if policy == FurnishingAssetDefScript.COLLISION_BOX or policy == FurnishingAssetDefScript.COLLISION_FOOTPRINT:
+	if policy == WorldAssetDef.COLLISION_BOX or policy == WorldAssetDef.COLLISION_FOOTPRINT:
 		var box := MeshInstance3D.new()
 		var mesh := BoxMesh.new()
 		mesh.size = scaled_size

@@ -19,6 +19,7 @@ static func run_all() -> void:
 	_test_meta_round_trips_through_json()
 	_test_start_defaults_and_system_flags()
 	_test_border_level_migrates_from_version_one()
+	_test_legacy_zone_sections_migrate_to_v3()
 	print("    [PASS] Map Meta Tests")
 	_test_write_target_follows_the_mode()
 	print("    [PASS] Map Write Target Tests")
@@ -28,6 +29,7 @@ static func run_all() -> void:
 	print("    [PASS] Map Terrain Codec Tests")
 	_test_package_round_trip_on_disk()
 	_test_zone_layer_round_trips()
+	_test_zone_layer_reports_structural_errors()
 	_test_unknown_sections_survive_a_save()
 	_test_save_replaces_the_package_atomically()
 	_test_runtime_keys_namespace_player_maps()
@@ -102,6 +104,47 @@ static func _test_border_level_migrates_from_version_one() -> void:
 	# once instead of drifting on every open.
 	assert(loaded.to_json()["border"]["level"] == -2)
 	assert(loaded.to_json()["format_version"] == MapMeta.FORMAT_VERSION)
+	_cleanup()
+
+
+## v2 stored `regions`/`markers` as opaque passthrough; v3 promotes records that
+## already have the shared zone shape into the typed `areas`/`anchors`. A record
+## the migration cannot understand stays opaque (§18.1) rather than guessed at —
+## guessing a role would silently change a player's scenario.
+static func _test_legacy_zone_sections_migrate_to_v3() -> void:
+	var service := _service()
+	var package := _package_path("legacy_zones")
+	DirAccess.make_dir_recursive_absolute(package)
+	var legacy := {
+		"format_version": 2, "kind": "map", "id": "legacy_zones", "name": "Старые зоны",
+		"board": {"cells": BOARD_CELLS, "cell_size": 1.0},
+		# A region already shaped like a v3 area: id + role + rects.
+		"regions": [{"id": "gate_yard", "role": "region", "rects": [[2, 3, 4, 2]]}],
+		# A marker already shaped like a v3 anchor: id + role + pos.
+		"markers": [{"id": "hero_start", "role": "spawn", "pos": [2.5, 0.0, 3.5]}],
+		# A marker the migration cannot understand (no `pos`): must survive opaque,
+		# because guessing its meaning would change the player's map silently.
+		"markers_unknown": [{"id": "old_trigger", "kind": "ambience"}],
+	}
+	var file := FileAccess.open(package.path_join(MapDocumentService.MAP_JSON), FileAccess.WRITE)
+	file.store_string(JSON.stringify(legacy))
+	file.close()
+
+	var loaded := service.load_package(package)
+	assert(loaded != null, "a v2 package with legacy zones still opens")
+	# The well-formed records were promoted into the typed layer...
+	assert(loaded.zones.area_by_id(&"gate_yard") != null, "region promoted to area")
+	assert(loaded.zones.anchor_by_id(&"hero_start") != null, "marker promoted to anchor")
+	assert(loaded.zones.validate(BOARD_CELLS).is_empty())
+	# ...and the legacy keys no longer appear in a resave.
+	var resaved := loaded.to_json()
+	assert(not resaved.has("regions"), "regions consumed by migration, not duplicated")
+	assert(not resaved.has("markers"), "markers consumed by migration, not duplicated")
+	assert(resaved.has("areas") and resaved["areas"].size() == 1)
+	assert(resaved.has("anchors") and resaved["anchors"].size() == 1)
+	assert(resaved["format_version"] == MapMeta.FORMAT_VERSION)
+	# The un-understood marker survived as an opaque section.
+	assert(loaded.section("markers_unknown").size() == 1)
 	_cleanup()
 
 
@@ -310,6 +353,39 @@ static func _test_zone_layer_round_trips() -> void:
 	assert(restored.zones.anchor_by_id(&"hero_start").function == &"core:hero_start")
 	assert(restored.zones.route_by_id(&"patrol").stops == [&"hero_start"])
 	assert(restored.zones.validate(BOARD_CELLS).is_empty())
+
+
+## §8.1: structural errors that must block save — id outside the `ContentId`
+## alphabet (§8.1), and a point whose height is outside its owner area's y-range.
+## Both are file-will-not-launch errors, so they surface from `validate()`.
+static func _test_zone_layer_reports_structural_errors() -> void:
+	var document := MapDocument.create(&"zones", "Зоны", BOARD_CELLS)
+	# An area with a narrow y-band, then an owned point above that band.
+	var region := ZoneAreaRecord.new()
+	region.id = &"yard"
+	region.role = ZoneAreaRecord.ROLE_REGION
+	region.y_min = 0
+	region.y_max = 0
+	region.add_rect(Rect2i(2, 3, 4, 2))
+	document.zones.areas.append(region)
+	var floating := ZoneAnchorRecord.new()
+	floating.id = &"post"
+	floating.role = ZoneAnchorRecord.ROLE_WAYPOINT
+	floating.owner_id = &"yard"
+	floating.pos = Vector3(3.5, 5.0, 4.5) # y=5, but the yard spans y=[0,0]
+	document.zones.anchors.append(floating)
+	# A point with a non-ASCII id — outside the `ContentId` alphabet.
+	var bad_id := ZoneAnchorRecord.new()
+	bad_id.id = &"Вход"
+	bad_id.role = ZoneAnchorRecord.ROLE_SPAWN
+	bad_id.pos = Vector3(2.5, 0.0, 3.5)
+	document.zones.anchors.append(bad_id)
+
+	var errors := document.zones.validate(BOARD_CELLS)
+	assert(errors.any(func(message: String) -> bool: return message.find("y") > 0),
+		"point above owner y-range is a launch error: %s" % "; ".join(errors))
+	assert(errors.any(func(message: String) -> bool: return message.find("алфавит") > 0),
+		"non-ASCII id is a launch error: %s" % "; ".join(errors))
 
 
 ## The reason `MapDocument` carries sections it cannot interpret: a phase-1 editor

@@ -1,7 +1,6 @@
 class_name DecorObjectRecord
 extends RefCounted
 
-const FurnishingAssetDefScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_def.gd")
 
 ## A single placed visual object inside a building blueprint — the `objects[]`
 ## entries of `.gdbuilding.json` (design_docs/engine/modular_building_editor.md
@@ -139,10 +138,10 @@ func validation_errors_with_asset(asset: Variant) -> Array[String]:
 		errors.append("Decor object %s rotates on Z axis but asset %s does not allow it" % [id, asset.id])
 	# Collision policy: must be a known value.
 	var valid_policies := [
-		FurnishingAssetDefScript.COLLISION_NONE,
-		FurnishingAssetDefScript.COLLISION_BOX,
-		FurnishingAssetDefScript.COLLISION_SCENE,
-		FurnishingAssetDefScript.COLLISION_FOOTPRINT,
+		WorldAssetDef.COLLISION_NONE,
+		WorldAssetDef.COLLISION_BOX,
+		WorldAssetDef.COLLISION_SCENE,
+		WorldAssetDef.COLLISION_FOOTPRINT,
 	]
 	if not (asset.collision_policy in valid_policies):
 		errors.append("Decor object %s: asset %s has unknown collision policy %s" % [id, asset.id, asset.collision_policy])

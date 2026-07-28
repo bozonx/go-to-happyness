@@ -12,8 +12,6 @@ extends Node3D
 ## One contextual gesture owns the left mouse button: it drops the selected
 ## catalog asset on empty ground, or selects and drags an existing object.
 
-const FurnishingAssetCatalogScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_catalog.gd")
-const FurnishingAssetDefScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_def.gd")
 const DecorObjectRecordScript = preload("res://game/features/buildings/domain/editor/decor_object_record.gd")
 const FixtureEditorPanelScript = preload("res://game/features/buildings/presentation/editor/fixture_editor_panel.gd")
 const DecorPlacementValidatorScript = preload("res://game/features/buildings/presentation/editor/decor_placement_validator.gd")
@@ -154,7 +152,7 @@ func setup(editor: Node) -> void:
 	_roll_spin.value_changed.connect(_on_transform_spin_changed)
 	_scale_spin.value_changed.connect(_on_transform_spin_changed)
 
-	current_category = FurnishingAssetCatalogScript.first_populated_category(current_category)
+	current_category = WorldAssetCatalog.first_populated_category(current_category)
 	_catalog_panel.activate()
 
 
@@ -164,8 +162,8 @@ func setup(editor: Node) -> void:
 
 func activate() -> void:
 	# Picks up `.tres` assets authored since the editor opened.
-	FurnishingAssetCatalogScript.refresh()
-	current_category = FurnishingAssetCatalogScript.first_populated_category(current_category)
+	WorldAssetCatalog.refresh()
+	current_category = WorldAssetCatalog.first_populated_category(current_category)
 	_catalog_panel.activate()
 	_panel.visible = true
 	_toolbar.visible = true
@@ -243,7 +241,7 @@ func pick_asset_at_cursor() -> void:
 	current_yaw_deg = record.rot.y
 	current_roll_deg = record.rot.z
 	select_object("")
-	_editor.set_status("Пипетка: выбран «%s»." % FurnishingAssetCatalogScript.get_asset(record.asset_id).name)
+	_editor.set_status("Пипетка: выбран «%s»." % WorldAssetCatalog.get_asset(record.asset_id).name)
 	refresh_ghost()
 
 
@@ -362,7 +360,7 @@ func _place_or_select_at(hit: Vector3) -> void:
 		_editor.set_status("Выбран объект под курсором.")
 		return
 	var position := snapped_position(hit)
-	var asset := FurnishingAssetCatalogScript.get_asset(current_asset_id)
+	var asset := WorldAssetCatalog.get_asset(current_asset_id)
 	if asset == null:
 		_editor.set_status("Выберите ассет в каталоге декора.")
 		return
@@ -381,7 +379,7 @@ func _place_or_select_at(hit: Vector3) -> void:
 
 
 func _place_at(position: Vector3) -> void:
-	var asset := FurnishingAssetCatalogScript.get_asset(current_asset_id)
+	var asset := WorldAssetCatalog.get_asset(current_asset_id)
 	if asset == null:
 		_editor.set_status("Выберите ассет в каталоге декора.")
 		return
@@ -463,7 +461,7 @@ func duplicate_selection() -> void:
 
 func rotate_selection(axis: String, direction: int) -> void:
 	var record := find_record(selected_object_id)
-	var asset := FurnishingAssetCatalogScript.get_asset(record.asset_id if record != null else current_asset_id)
+	var asset := WorldAssetCatalog.get_asset(record.asset_id if record != null else current_asset_id)
 	if asset != null and not asset.is_rotation_axis_allowed(axis):
 		_editor.set_status("Этот ассет нельзя вращать вокруг оси %s." % axis.to_upper())
 		return
@@ -574,7 +572,7 @@ func rebuild_nodes() -> void:
 
 
 func _spawn_node(record: DecorObjectRecordScript) -> void:
-	var asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
+	var asset := WorldAssetCatalog.get_asset(record.asset_id)
 	if asset == null:
 		push_warning("DecorModeController: unknown asset %s, object %s not shown" % [record.asset_id, record.id])
 		return
@@ -616,7 +614,7 @@ func refresh_ghost() -> void:
 	if not is_active() or not _editor.cursor_valid or not _hovered_object_id.is_empty():
 		_hide_ghost()
 		return
-	var asset := FurnishingAssetCatalogScript.get_asset(current_asset_id)
+	var asset := WorldAssetCatalog.get_asset(current_asset_id)
 	if asset == null:
 		_hide_ghost()
 		return
@@ -661,7 +659,7 @@ func _update_hover_marker() -> void:
 		return
 	if _hover_marker == null:
 		_hover_marker = _create_torus_marker(Color(1.0, 0.8, 0.2, 0.9))
-	var asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
+	var asset := WorldAssetCatalog.get_asset(record.asset_id)
 	var size := asset.footprint_m() if asset != null else Vector3.ONE
 	var radius := maxf(DecorPlacementValidatorScript.MIN_PICK_RADIUS, maxf(size.x, size.z) * 0.5 * maxf(record.scale.x, record.scale.z))
 	_hover_marker.visible = true
@@ -737,7 +735,7 @@ func _update_selection_marker() -> void:
 		return
 	if _selection_marker == null:
 		_selection_marker = _create_torus_marker(Color(0.35, 0.95, 1.0, 0.85))
-	var asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
+	var asset := WorldAssetCatalog.get_asset(record.asset_id)
 	var size := asset.footprint_m() if asset != null else Vector3.ONE
 	var radius := maxf(DecorPlacementValidatorScript.MIN_PICK_RADIUS, maxf(size.x, size.z) * 0.5 * maxf(record.scale.x, record.scale.z))
 	_selection_marker.visible = true
@@ -783,7 +781,7 @@ func _refresh_object_list() -> void:
 	var search_text := _object_search_edit.text.strip_edges().to_lower() if _object_search_edit != null else ""
 	var zone_filter := _get_zone_filter_selection()
 	for record: DecorObjectRecordScript in _editor.blueprint.objects:
-		var asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
+		var asset := WorldAssetCatalog.get_asset(record.asset_id)
 		var label := asset.name if asset != null else "%s (нет ассета)" % record.asset_id
 		if not search_text.is_empty():
 			if not String(label).to_lower().contains(search_text) and not record.id.to_lower().contains(search_text):
@@ -906,7 +904,7 @@ func _refresh_inspector() -> void:
 		_update_zone_highlight()
 		return
 
-	var asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
+	var asset := WorldAssetCatalog.get_asset(record.asset_id)
 	_inspector_title.text = "Свойства: %s" % (asset.name if asset != null else String(record.asset_id))
 	_id_label.text = "ID: %s" % record.id
 	_asset_label.text = "Ассет: %s" % (asset.name if asset != null else String(record.asset_id))
@@ -935,13 +933,13 @@ func _build_control_row(record: DecorObjectRecordScript, control: Dictionary) ->
 	row.add_child(label)
 
 	var stored: Variant = record.appearance.get(property_name, control.get("default", null))
-	match String(control.get("type", FurnishingAssetDefScript.TYPE_STRING)):
-		FurnishingAssetDefScript.TYPE_BOOL:
+	match String(control.get("type", WorldAssetDef.TYPE_STRING)):
+		WorldAssetDef.TYPE_BOOL:
 			var check := CheckBox.new()
 			check.button_pressed = bool(stored)
 			check.toggled.connect(func(pressed: bool): _set_property(property_name, pressed))
 			row.add_child(check)
-		FurnishingAssetDefScript.TYPE_FLOAT:
+		WorldAssetDef.TYPE_FLOAT:
 			var spin := SpinBox.new()
 			spin.min_value = float(control.get("min", 0.0))
 			spin.max_value = float(control.get("max", 10.0))
@@ -950,7 +948,7 @@ func _build_control_row(record: DecorObjectRecordScript, control: Dictionary) ->
 			spin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			spin.value_changed.connect(func(value: float): _set_property(property_name, value))
 			row.add_child(spin)
-		FurnishingAssetDefScript.TYPE_COLOR:
+		WorldAssetDef.TYPE_COLOR:
 			var picker := ColorPickerButton.new()
 			picker.color = DecorObjectController._to_color(stored)
 			picker.custom_minimum_size = Vector2(48, 24)
@@ -1022,7 +1020,7 @@ func _on_zone_selected(index: int) -> void:
 ## Show diagnostic badges for the selected object.
 func _update_badges(record: DecorObjectRecordScript, asset: Variant) -> void:
 	var badges: Array[String] = []
-	if asset != null and asset.scale_mode != FurnishingAssetDefScript.SCALE_LOCKED:
+	if asset != null and asset.scale_mode != WorldAssetDef.SCALE_LOCKED:
 		badges.append("Масштаб: %s" % String(asset.scale_mode))
 	if asset != null and asset.blocking_navigation:
 		badges.append("Блокирует навигацию")
@@ -1044,8 +1042,8 @@ func _replace_selected_object() -> void:
 	if current_asset_id == record.asset_id:
 		_editor.set_status("Объект уже использует этот ассет.")
 		return
-	var old_asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
-	var new_asset := FurnishingAssetCatalogScript.get_asset(current_asset_id)
+	var old_asset := WorldAssetCatalog.get_asset(record.asset_id)
+	var new_asset := WorldAssetCatalog.get_asset(current_asset_id)
 	if new_asset == null:
 		return
 	# Count how many appearance properties will be lost.
@@ -1079,11 +1077,11 @@ func _replace_selected_object() -> void:
 			# Type compatibility check: bool, float, string, color (stored as html string).
 			var compatible := false
 			match new_type:
-				FurnishingAssetDefScript.TYPE_BOOL:
+				WorldAssetDef.TYPE_BOOL:
 					compatible = old_value is bool
-				FurnishingAssetDefScript.TYPE_FLOAT:
+				WorldAssetDef.TYPE_FLOAT:
 					compatible = old_value is float or old_value is int
-				FurnishingAssetDefScript.TYPE_COLOR:
+				WorldAssetDef.TYPE_COLOR:
 					compatible = old_value is String or old_value is Color
 				_:
 					compatible = old_value is String
@@ -1129,15 +1127,15 @@ func _on_transform_spin_changed(_value: float) -> void:
 	var candidate_pos := Vector3(_pos_x_spin.value, _pos_y_spin.value, _pos_z_spin.value)
 	var candidate_rot := Vector3(_pitch_spin.value, _yaw_spin.value, _roll_spin.value)
 	# Clamp scale by asset policy.
-	var asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
+	var asset := WorldAssetCatalog.get_asset(record.asset_id)
 	var scale_val := _scale_spin.value
 	if asset != null:
 		if not asset.is_scale_allowed(scale_val):
 			# Snap to the closest allowed value.
 			match asset.scale_mode:
-				FurnishingAssetDefScript.SCALE_LOCKED:
+				WorldAssetDef.SCALE_LOCKED:
 					scale_val = 1.0
-				FurnishingAssetDefScript.SCALE_UNIFORM_STEPS:
+				WorldAssetDef.SCALE_UNIFORM_STEPS:
 					var best := asset.allowed_scales[0] if not asset.allowed_scales.is_empty() else 1.0
 					var best_diff := absf(scale_val - best)
 					for allowed in asset.allowed_scales:
@@ -1146,7 +1144,7 @@ func _on_transform_spin_changed(_value: float) -> void:
 							best = allowed
 							best_diff = diff
 					scale_val = best
-				FurnishingAssetDefScript.SCALE_FREE_UNIFORM:
+				WorldAssetDef.SCALE_FREE_UNIFORM:
 					if asset.allowed_scales.size() >= 2:
 						scale_val = clampf(scale_val, asset.allowed_scales[0], asset.allowed_scales[-1])
 					else:

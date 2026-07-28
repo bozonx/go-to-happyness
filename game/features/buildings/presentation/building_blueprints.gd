@@ -8,7 +8,6 @@ const BuildingModuleScene = preload("res://game/features/buildings/presentation/
 const BuildingBlueprintLibraryScript = preload("res://game/features/buildings/presentation/building_blueprint_library.gd")
 const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
 const BlockMeshLibraryScript = preload("res://game/features/buildings/presentation/editor/block_mesh_library.gd")
-const FurnishingAssetCatalogScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_catalog.gd")
 const FixtureDefinitionScript = preload("res://game/features/buildings/domain/editor/fixture_definition.gd")
 
 const BLOCK_SIZE := 1.0
@@ -38,7 +37,7 @@ static func create_module(module: Dictionary) -> StaticBody3D:
 
 static func _create_decor_module(module: Dictionary) -> StaticBody3D:
 	var asset_id: StringName = StringName(module.get("asset_id", ""))
-	var asset := FurnishingAssetCatalogScript.get_asset(asset_id)
+	var asset := WorldAssetCatalog.get_asset(asset_id)
 	if asset == null:
 		push_error("Unknown authored decor asset '%s'." % asset_id)
 		return null

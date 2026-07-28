@@ -4,14 +4,12 @@ extends Node3D
 ## Applies authored furnishing appearance values to a decor scene.
 ##
 ## The controller is deliberately generic: it owns no per-asset `@export`s and
-## does no `find_child` guessing. Each asset declares, in its `FurnishingAssetDef`,
+## does no `find_child` guessing. Each asset declares, in its `WorldAssetDef`,
 ## which node property every control drives (`"bind"`, see
-## furnishing_asset_def.gd), and this script just walks those bindings. Adding an
+## world_asset_def.gd), and this script just walks those bindings. Adding an
 ## asset therefore means adding a scene plus a catalog entry — never editing this
 ## file.
 
-const FurnishingAssetCatalogScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_catalog.gd")
-const FurnishingAssetDefScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_def.gd")
 
 ## Catalog id of the asset this scene implements. Set per scene; it is how the
 ## controller finds its own control/binding declarations.
@@ -54,8 +52,8 @@ func get_decor_properties() -> Dictionary:
 	return _appearance.duplicate(true)
 
 
-func _asset() -> FurnishingAssetDefScript:
-	return FurnishingAssetCatalogScript.get_asset(asset_id) if asset_id != &"" else null
+func _asset() -> WorldAssetDef:
+	return WorldAssetCatalog.get_asset(asset_id) if asset_id != &"" else null
 
 
 func _apply_bindings(binds: Variant, value: Variant) -> void:
@@ -77,9 +75,9 @@ func _apply_bindings(binds: Variant, value: Variant) -> void:
 
 func _apply_to_node(node: Node, property_name: String, value: Variant) -> void:
 	match property_name:
-		FurnishingAssetDefScript.PROP_ALBEDO:
+		WorldAssetDef.PROP_ALBEDO:
 			_set_albedo(node, _to_color(value))
-		FurnishingAssetDefScript.PROP_SCALE_Y:
+		WorldAssetDef.PROP_SCALE_Y:
 			if node is Node3D:
 				(node as Node3D).scale.y = maxf(0.001, float(value))
 		"light_color":

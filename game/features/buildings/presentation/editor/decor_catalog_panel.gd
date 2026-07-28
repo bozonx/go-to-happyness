@@ -9,7 +9,6 @@ extends RefCounted
 ## State (current_asset_id, current_category, etc.) stays on the controller
 ## so tests and external code can still read/write it directly.
 
-const FurnishingAssetCatalogScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_catalog.gd")
 
 const RECENT_ASSET_LIMIT := 6
 
@@ -76,11 +75,11 @@ func _rebuild_asset_buttons() -> void:
 		_back_button.visible = false
 		_add_asset_buttons(_filtered_assets(search_text), true)
 	elif _opened_category != &"":
-		_location_label.text = FurnishingAssetCatalogScript.category_display_name(_opened_category)
+		_location_label.text = WorldAssetCatalog.category_display_name(_opened_category)
 		_back_button.visible = true
-		_add_asset_buttons(FurnishingAssetCatalogScript.get_assets_by_category(_opened_category))
+		_add_asset_buttons(WorldAssetCatalog.get_assets_by_category(_opened_category))
 	elif _opened_group != &"":
-		_location_label.text = String(FurnishingAssetCatalogScript.GROUPS[_opened_group])
+		_location_label.text = String(WorldAssetCatalog.GROUPS[_opened_group])
 		_back_button.visible = true
 		_add_category_buttons(_opened_group)
 	else:
@@ -97,21 +96,21 @@ func _rebuild_asset_buttons() -> void:
 
 
 func _add_group_buttons() -> void:
-	var counts := FurnishingAssetCatalogScript.category_counts()
-	for group_id in FurnishingAssetCatalogScript.GROUPS.keys():
+	var counts := WorldAssetCatalog.category_counts()
+	for group_id in WorldAssetCatalog.GROUPS.keys():
 		var count := 0
-		for category_id in FurnishingAssetCatalogScript.categories_in_group(group_id):
+		for category_id in WorldAssetCatalog.categories_in_group(group_id):
 			count += int(counts.get(category_id, 0))
-		var button := _make_browse_button("%s (%d)" % [FurnishingAssetCatalogScript.GROUPS[group_id], count])
+		var button := _make_browse_button("%s (%d)" % [WorldAssetCatalog.GROUPS[group_id], count])
 		button.pressed.connect(_open_group.bind(group_id))
 		_asset_container.add_child(button)
 
 
 func _add_category_buttons(group_id: StringName) -> void:
-	var counts := FurnishingAssetCatalogScript.category_counts()
-	for category_id in FurnishingAssetCatalogScript.categories_in_group(group_id):
+	var counts := WorldAssetCatalog.category_counts()
+	for category_id in WorldAssetCatalog.categories_in_group(group_id):
 		var count := int(counts.get(category_id, 0))
-		var button := _make_browse_button("%s (%d)" % [FurnishingAssetCatalogScript.category_display_name(category_id), count])
+		var button := _make_browse_button("%s (%d)" % [WorldAssetCatalog.category_display_name(category_id), count])
 		button.disabled = count == 0
 		button.tooltip_text = "Скоро появится" if count == 0 else ""
 		button.pressed.connect(_open_category.bind(category_id))
@@ -124,7 +123,7 @@ func _add_asset_buttons(assets: Array, show_category: bool = false) -> void:
 		button.toggle_mode = true
 		button.text = asset.name
 		if show_category:
-			button.text += "  ·  " + FurnishingAssetCatalogScript.category_display_name(asset.category)
+			button.text += "  ·  " + WorldAssetCatalog.category_display_name(asset.category)
 		button.tooltip_text = _asset_tooltip(asset)
 		button.clip_text = true
 		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -166,7 +165,7 @@ func _go_back() -> void:
 
 func _filtered_assets(search_text: String) -> Array:
 	var matches: Array = []
-	for asset in FurnishingAssetCatalogScript.get_all_assets():
+	for asset in WorldAssetCatalog.get_all_assets():
 		if not _active_tag.is_empty() and not asset.tags.has(_active_tag):
 			continue
 		if not search_text.is_empty() and not _asset_matches_search(asset, search_text):
@@ -203,7 +202,7 @@ func _rebuild_tag_filters() -> void:
 	all_button.button_pressed = _active_tag.is_empty()
 	all_button.pressed.connect(_select_tag.bind(StringName("")))
 	_tag_filters.add_child(all_button)
-	for tag in FurnishingAssetCatalogScript.all_tags():
+	for tag in WorldAssetCatalog.all_tags():
 		var button := Button.new()
 		button.text = String(tag)
 		button.toggle_mode = true
@@ -237,7 +236,7 @@ func select_asset(asset_id: StringName) -> void:
 		(_asset_buttons[id] as Button).button_pressed = id == asset_id
 	for id in _recent_buttons.keys():
 		(_recent_buttons[id] as Button).button_pressed = id == asset_id
-	var asset := FurnishingAssetCatalogScript.get_asset(asset_id)
+	var asset := WorldAssetCatalog.get_asset(asset_id)
 	if asset != null:
 		_select_snap_step(asset.default_snap_step)
 		add_recent_asset(asset_id)
@@ -276,7 +275,7 @@ func _rebuild_recent_assets() -> void:
 		return
 	_recent_label.visible = true
 	for asset_id in _recent_assets:
-		var asset := FurnishingAssetCatalogScript.get_asset(asset_id)
+		var asset := WorldAssetCatalog.get_asset(asset_id)
 		if asset == null:
 			continue
 		var button := Button.new()

@@ -5,8 +5,6 @@ extends RefCounted
 ## checks, AABB intersection, collision conflicts, picking, and record lookup.
 ## No nodes, no UI — only deterministic math over blueprint state.
 
-const FurnishingAssetCatalogScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_catalog.gd")
-const FurnishingAssetDefScript = preload("res://game/features/buildings/domain/editor/furnishing_asset_def.gd")
 const DecorObjectRecordScript = preload("res://game/features/buildings/domain/editor/decor_object_record.gd")
 const BuildingBlockCatalogScript = preload("res://game/features/buildings/domain/editor/building_block_catalog.gd")
 
@@ -27,7 +25,7 @@ var _last_picked_ids: Array[String] = []
 ## Free placement (step 0) is only allowed when the asset's snap_steps includes 0.
 func snapped_position(raw_hit: Vector3, active_layer: int, asset_id: StringName, snap_step: float) -> Vector3:
 	var y := float(active_layer)
-	var asset := FurnishingAssetCatalogScript.get_asset(asset_id)
+	var asset := WorldAssetCatalog.get_asset(asset_id)
 	var step := snap_step
 	# If the asset restricts snap steps, clamp to the closest allowed one.
 	if asset != null and not asset.snap_steps.is_empty():
@@ -53,7 +51,7 @@ func is_in_bounds(pos: Vector3, blueprint: RefCounted, asset_id: StringName, sca
 	if blueprint == null:
 		return true
 	var footprint: Vector2i = blueprint.footprint
-	var asset := FurnishingAssetCatalogScript.get_asset(asset_id)
+	var asset := WorldAssetCatalog.get_asset(asset_id)
 	var size := asset.footprint_m() if asset != null else Vector3.ONE
 	var half_x := size.x * scale.x * 0.5
 	var half_z := size.z * scale.z * 0.5
@@ -61,7 +59,7 @@ func is_in_bounds(pos: Vector3, blueprint: RefCounted, asset_id: StringName, sca
 
 
 func decor_aabb(pos: Vector3, asset_id: StringName, scale: Vector3) -> AABB:
-	var asset := FurnishingAssetCatalogScript.get_asset(asset_id)
+	var asset := WorldAssetCatalog.get_asset(asset_id)
 	var size := (asset.footprint_m() if asset != null else Vector3.ONE) * scale
 	return AABB(pos - Vector3(size.x * 0.5, 0.0, size.z * 0.5), size)
 
@@ -76,11 +74,11 @@ func aabbs_intersect(a: AABB, b: AABB) -> bool:
 ## Returns true only for conflicts that affect physical collision/navigation.
 ## Decorative objects with `none` policy may intentionally overlap.
 func is_collision_conflict(pos: Vector3, blueprint: RefCounted, asset_id: StringName, scale: Vector3, exclude_id: String = "") -> bool:
-	var asset := FurnishingAssetCatalogScript.get_asset(asset_id)
+	var asset := WorldAssetCatalog.get_asset(asset_id)
 	if asset == null:
 		return false
 	var candidate := decor_aabb(pos, asset_id, scale)
-	var candidate_blocks := asset.collision_policy != FurnishingAssetDefScript.COLLISION_NONE or asset.blocking_navigation
+	var candidate_blocks := asset.collision_policy != WorldAssetDef.COLLISION_NONE or asset.blocking_navigation
 	# Frame volumes and circulation are authoring obstacles. This deliberately
 	# uses the same occupied volumes as the frame editor, not a second grid.
 	for block in blueprint.blocks:
@@ -92,10 +90,10 @@ func is_collision_conflict(pos: Vector3, blueprint: RefCounted, asset_id: String
 	for record: DecorObjectRecordScript in blueprint.objects:
 		if record.id == exclude_id:
 			continue
-		var other_asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
+		var other_asset := WorldAssetCatalog.get_asset(record.asset_id)
 		if other_asset == null:
 			continue
-		if other_asset.collision_policy == FurnishingAssetDefScript.COLLISION_NONE and not other_asset.blocking_navigation:
+		if other_asset.collision_policy == WorldAssetDef.COLLISION_NONE and not other_asset.blocking_navigation:
 			continue
 		if aabbs_intersect(candidate, decor_aabb(record.pos, record.asset_id, record.scale)):
 			return true
@@ -103,7 +101,7 @@ func is_collision_conflict(pos: Vector3, blueprint: RefCounted, asset_id: String
 
 
 func is_valid_transform(pos: Vector3, rot: Vector3, scale: Vector3, asset_id: StringName, blueprint: RefCounted, exclude_id: String = "") -> bool:
-	var asset := FurnishingAssetCatalogScript.get_asset(asset_id)
+	var asset := WorldAssetCatalog.get_asset(asset_id)
 	if asset != null:
 		if not asset.is_scale_allowed(scale.x) or not is_equal_approx(scale.x, scale.y) or not is_equal_approx(scale.x, scale.z):
 			return false
@@ -128,7 +126,7 @@ func compute_ghost_state(pos: Vector3, blueprint: RefCounted, asset_id: StringNa
 func pick_objects_at(world_pos: Vector3, blueprint: RefCounted) -> Array[String]:
 	var candidates: Array[Dictionary] = []
 	for record: DecorObjectRecordScript in blueprint.objects:
-		var asset := FurnishingAssetCatalogScript.get_asset(record.asset_id)
+		var asset := WorldAssetCatalog.get_asset(record.asset_id)
 		var size := asset.footprint_m() if asset != null else Vector3.ONE
 		var radius := maxf(MIN_PICK_RADIUS, maxf(size.x, size.z) * 0.5 * maxf(record.scale.x, record.scale.z))
 		var distance := Vector2(record.pos.x - world_pos.x, record.pos.z - world_pos.z).length()
