@@ -401,6 +401,15 @@ static func _read_json(path: String) -> Dictionary:
 static func _populate_required_content(document: MapDocument) -> void:
 	var found: Dictionary = {}
 	_collect_content_references(document.sections, found)
+	for entity: MapEntityRecord in document.entities.entities:
+		if entity.archetype_id == &"":
+			continue
+		var archetype_ref := {"kind": "archetype", "id": String(entity.archetype_id)}
+		found[JSON.stringify(archetype_ref)] = archetype_ref
+		var asset := EntityArchetypeCatalog.asset_of(entity.archetype_id)
+		if asset != null:
+			var asset_ref := {"kind": "asset", "id": String(asset.id)}
+			found[JSON.stringify(asset_ref)] = asset_ref
 	var refs: Array[Dictionary] = []
 	for key in found:
 		refs.append(found[key])

@@ -27,8 +27,32 @@ static func validate(document: MapDocument, terrain: TerrainGrid, water: WaterGr
 	var board_cells := document.board_cells()
 	for anchor in document.zones.anchors:
 		_validate_anchor_place(anchor, terrain, water, board_cells, errors)
+	_validate_entities(document, terrain, errors)
 	_validate_hero_start(document, errors)
 	return errors
+
+
+static func _validate_entities(document: MapDocument, terrain: TerrainGrid, errors: Array[String]) -> void:
+	var ids: Dictionary = {}
+	for entity: MapEntityRecord in document.entities.entities:
+		if entity.id == &"" or ids.has(entity.id):
+			errors.append("дубликат или пустой id сущности: %s" % entity.id)
+			continue
+		ids[entity.id] = true
+		if terrain == null:
+			continue
+		var cell := entity.cell(terrain)
+		if not terrain.is_inside(cell):
+			errors.append("сущность %s стоит вне доски" % entity.id)
+			continue
+		if terrain.is_hole(cell):
+			errors.append("сущность %s стоит в вырезе террейна" % entity.id)
+			continue
+		# Missing packs are deliberately allowed; when an archetype is present its
+		# declared states are authoritative and a typo must not reach runtime.
+		var archetype := EntityArchetypeCatalog.get_archetype(entity.archetype_id)
+		if archetype != null and not archetype.states.allows_initial_state(entity.initial_state):
+			errors.append("сущность %s задаёт неизвестное состояние %s" % [entity.id, entity.initial_state])
 
 
 ## An anchor must stand on real, dry, passable ground — a spawn in a hole, under

@@ -36,6 +36,10 @@ var village_boundary_markers: VillageBoundaryMarkers
 var village_territory_overlay: VillageTerritoryOverlay
 var sun_glare_material: ShaderMaterial
 var fireflies: Array[FirefliesEffect] = []
+## Named map entities are loaded once with the map and projected into the
+## territory. The runtime record is data; this node owns only its presentation.
+var map_entity_runtime := MapEntityRuntime.new()
+var map_entity_presenter: MapEntityPresenter = null
 
 var _camera: Camera3D
 var _cell_size: float
@@ -73,6 +77,7 @@ func build(parent: Node) -> void:
 			sun_glare_material = glare_rect.material as ShaderMaterial
 	_build_sky()
 	_build_terrain(parent)
+	_build_map_entities()
 	_build_boundary(parent)
 	_build_rain_effect(parent)
 	_build_sky_and_weather_controller(parent)
@@ -131,6 +136,17 @@ func _build_terrain(parent: Node) -> void:
 	water_grid = territory.configure_water(_board_cells, _cell_size, _map_document.water)
 	territory.configure_water_border(_map_document.meta.border_kind, _map_document.meta.border_level)
 	water_access.configure(water_grid, terrain_grid)
+
+
+func _build_map_entities() -> void:
+	if _territory == null:
+		return
+	map_entity_runtime.load_map(_map_document)
+	if map_entity_presenter == null:
+		map_entity_presenter = MapEntityPresenter.new()
+		map_entity_presenter.name = "MapEntities"
+	_territory.add_landscape_object(map_entity_presenter)
+	map_entity_presenter.present(map_entity_runtime, _territory)
 
 
 func _build_boundary(parent: Node) -> void:
