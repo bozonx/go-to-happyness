@@ -837,16 +837,14 @@ func _rebuild_brush_inspector() -> void:
 			toolbar.add_child(abtn)
 
 	if grouped_options:
-		var current_section := BuildingBlockCatalog.variant_option(_editor.current_block_id, _editor.current_variant, &"section")
-		var length_variants: Array = variants.filter(func(v): return v.get("section", &"") == current_section)
 		var seen_lengths: Dictionary = {}
-		for v in length_variants:
+		for v in variants:
 			seen_lengths[v.get("length", &"")] = true
 		if seen_lengths.size() > 1:
 			var length_toolbar := HBoxContainer.new()
 			length_toolbar.name = "LengthToolbar"
 			host.add_child(length_toolbar)
-			_build_column_option_buttons(length_toolbar, length_variants, &"length", &"length_name")
+			_build_column_option_buttons(length_toolbar, variants, &"length", &"length_name")
 
 
 func _build_column_option_buttons(toolbar: HBoxContainer, variants: Array, option: StringName, label_key: StringName) -> void:
@@ -872,7 +870,18 @@ func _select_column_option(option: StringName, value: StringName) -> void:
 		section = value
 	else:
 		length = value
-	select_block(_editor.current_block_id, BuildingBlockCatalog.variant_for_options(_editor.current_block_id, section, length))
+	var new_variant := BuildingBlockCatalog.variant_for_options(_editor.current_block_id, section, length)
+	# variant_for_options returns default_variant when no match is found.
+	# If the current section doesn't have the selected length, fall back to
+	# the first variant that does.
+	if option == &"length":
+		var resolved_section := BuildingBlockCatalog.variant_option(_editor.current_block_id, new_variant, &"section")
+		var resolved_length := BuildingBlockCatalog.variant_option(_editor.current_block_id, new_variant, &"length")
+		if resolved_length != length or resolved_section != section:
+			var fallback := BuildingBlockCatalog.variant_for_length(_editor.current_block_id, length)
+			if fallback != &"":
+				new_variant = fallback
+	select_block(_editor.current_block_id, new_variant)
 
 
 func _anchor_label(kind: int) -> String:

@@ -10,8 +10,8 @@ const SimHelper = preload("res://tests/helpers/simulation_test_helper.gd")
 func _init() -> void:
 	var simulation := await SimHelper.setup_simulation(self)
 
-	var cell := Vector2i(12, 12)
-	var position := Vector3(12.0, 0.0, 12.0)
+	var cell := Vector2i(10, 10)
+	var position := Vector3(10.5, 0.0, 10.5)
 	var blueprint := BuildingBlueprints.get_blueprint("campfire")
 	simulation.building_registry.reserve(cell, position, blueprint.footprint)
 	SimHelper.create_construction_site(simulation, cell, "campfire", position, 0, blueprint, blueprint.footprint)
@@ -39,36 +39,15 @@ func _init() -> void:
 
 	# Ctrl+F grants settlement stock without creating a warehouse or a pile. That
 	# stock is collected from the camp entrance until a warehouse is completed.
+	# The green_valley map may place citizens in a different connectivity island
+	# from the entrance; move the courier there so the reachability check passes.
+	logistics_worker.global_position = simulation.entrance_stone.global_position
 	simulation.settlement.add(construction_resource, 1)
 	SimHelper.assign_daily_order(simulation, logistics_worker, "courier")
 	SimHelper.update_couriers(simulation)
 	var debug_stock_snapshot := SettlementAIWorldFacade.new(simulation).capture(1000)
 	var debug_stock_orders := CourierDeliveryOrderProvider.new().collect_orders(debug_stock_snapshot)
 	var matching_debug_orders := debug_stock_orders.filter(func(order: CitizenOrder): return order.citizen_id == logistics_worker.ai_id and order.kind == &"courier_delivery")
-	print("DEBUG: courier_worker=", logistics_worker.can_handle_entry_logistics(), " state=", logistics_worker.state, " is_daily_courier=", logistics_worker.is_daily_courier())
-	print("DEBUG: has_active_daily_order=", logistics_worker.has_active_daily_order(), " daily_order_role=", logistics_worker.daily_order_role)
-	print("DEBUG: settlement amount=", simulation.settlement.amount(construction_resource), " warehouse_positions=", simulation.warehouse_positions.size())
-	print("DEBUG: courier_tasks=", debug_stock_snapshot.settlement.value(&"work.courier.tasks", []).size())
-	print("DEBUG: entrance_stone valid=", is_instance_valid(simulation.entrance_stone), " campfire_node valid=", is_instance_valid(simulation.campfire_node))
-	print("DEBUG: total orders=", debug_stock_orders.size(), " matching=", matching_debug_orders.size())
-	var debug_tasks: Array = debug_stock_snapshot.settlement.value(&"work.courier.tasks", []) as Array
-	for t in debug_tasks:
-		print("DEBUG: task=", t)
-	var debug_citizen := debug_stock_snapshot.citizen(logistics_worker.ai_id)
-	if debug_citizen != null:
-		print("DEBUG: citizen facts work.courier.worker=", debug_citizen.facts.value(&"work.courier.worker", false))
-		print("DEBUG: citizen facts work.courier.can_start=", debug_citizen.facts.value(&"work.courier.can_start", false))
-		print("DEBUG: citizen facts work.courier.tasks=", debug_citizen.facts.value(&"work.courier.tasks", []).size())
-		print("DEBUG: citizen facts work.courier.use_personal_tasks=", debug_citizen.facts.value(&"work.courier.use_personal_tasks", false))
-		print("DEBUG: citizen facts work.courier.in_progress=", debug_citizen.facts.value(&"work.courier.in_progress", false))
-	print("DEBUG: citizen pos=", logistics_worker.global_position, " entrance pos=", simulation.entrance_stone.global_position)
-	print("DEBUG: route citizen->entrance=", simulation.is_route_reachable(logistics_worker.global_position, simulation.entrance_stone.global_position, false))
-	print("DEBUG: route entrance->site=", simulation.is_route_reachable(simulation.entrance_stone.global_position, Vector3(12, 0, 12), false))
-	var debug_task_id := StringName("construction_(12, 12)_branches_open_storage_0")
-	var debug_task: CourierTask = simulation.courier_dispatcher.tasks.get(debug_task_id)
-	if debug_task != null:
-		print("DEBUG: task pickup=", debug_task.pickup, " dropoff=", debug_task.dropoff, " kind=", debug_task.kind)
-		print("DEBUG: task reachable=", simulation.courier_task_service.is_courier_task_reachable(logistics_worker, debug_task))
 	assert(not matching_debug_orders.is_empty())
 	var debug_stock_order: CitizenOrder = matching_debug_orders.front()
 	assert(simulation.courier_dispatcher.start_task(logistics_worker, debug_stock_order.payload.value(&"courier.task_id")))

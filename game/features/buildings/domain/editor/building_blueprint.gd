@@ -228,7 +228,10 @@ func to_json() -> String:
 
 static func from_dict(data: Dictionary) -> BuildingBlueprint:
 	var bp := BuildingBlueprint.new()
-	bp.version = int(data.get("version", FORMAT_VERSION))
+	# Old versions (<= FORMAT_VERSION) are migrated up; versions above the
+	# current format are preserved so validation_errors() can reject them.
+	var authored_version := int(data.get("version", FORMAT_VERSION))
+	bp.version = FORMAT_VERSION if authored_version <= FORMAT_VERSION else authored_version
 	bp.id = StringName(data.get("id", "new_building"))
 	bp.role = StringName(data.get("role", bp.id))
 	bp.era = StringName(data.get("era", "tent"))

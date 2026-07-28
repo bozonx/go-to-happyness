@@ -186,7 +186,19 @@ static func demolition_ready(simulation: Node, site: DemolitionSite) -> bool:
 	return simulation.building_lifecycle_service.demolition_ready(site)
 
 static func reserve_player_gather_storage(simulation: Node, resource_type: String, requested: int) -> int:
-	return simulation._reserve_player_gather_storage(resource_type, requested)
+	if simulation.settlement.uses_virtual_storage():
+		return requested
+	if simulation.warehouse_positions.is_empty():
+		return 0
+	var origin: Vector3 = simulation.warehouse_positions[0]
+	var index: int = simulation.settlement.find_warehouse_index(origin, resource_type, requested, simulation.warehouse_positions)
+	if index >= 0 and simulation.settlement.reserve_warehouse_room(index, resource_type, requested):
+		return requested
+	for amount in range(requested - 1, 0, -1):
+		index = simulation.settlement.find_warehouse_index(origin, resource_type, amount, simulation.warehouse_positions)
+		if index >= 0 and simulation.settlement.reserve_warehouse_room(index, resource_type, amount):
+			return amount
+	return 0
 
 static func reconcile_construction_reservations(simulation: Node, site: ConstructionSite) -> void:
 	simulation.construction_controller.reconcile_construction_reservations(site)

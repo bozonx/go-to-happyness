@@ -373,6 +373,14 @@ static func variant_for_options(block_id: StringName, section: StringName, lengt
 	return default_variant(block_id)
 
 
+## First variant id matching a given length, ignoring section.
+static func variant_for_length(block_id: StringName, length: StringName) -> StringName:
+	for variant in variants(block_id):
+		if variant.get("length", &"") == length:
+			return variant["id"]
+	return default_variant(block_id)
+
+
 ## Effective mesh footprint of a block for the given variant.
 static func size_of(block_id: StringName, variant_id: StringName = &"") -> Vector3:
 	var def := get_block(block_id)
