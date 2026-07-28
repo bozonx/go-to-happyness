@@ -14,8 +14,9 @@ const BUILDINGS_ROOT := "res://game/content/core/buildings"
 
 # Interactive landmarks keep their intentional fixture and decor layouts.
 const FEATURED_IDS: Array[String] = [
-	"campfire", "cook_campfire", "entrance_sign", "settlement_flag",
-	"tent", "warehouse",
+	"campfire", "campfire_lvl2", "campfire_lvl3",
+	"cook_campfire", "cook_campfire_lvl2", "cook_campfire_lvl3",
+	"entrance_sign", "settlement_flag", "tent", "warehouse",
 ]
 
 

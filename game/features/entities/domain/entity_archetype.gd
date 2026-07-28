@@ -212,9 +212,10 @@ static func from_dict(source: Dictionary) -> EntityArchetype:
 
 
 static func from_json(text: String) -> EntityArchetype:
-	var parsed: Variant = JSON.parse_string(text)
-	if not (parsed is Dictionary):
+	var json := JSON.new()
+	if json.parse(text) != OK or not (json.data is Dictionary):
 		return null
+	var parsed: Dictionary = json.data
 	var archetype := from_dict(parsed as Dictionary)
 	return archetype if archetype.id != &"" else null
 

@@ -286,7 +286,8 @@ static func from_dict(data: Dictionary) -> BuildingBlueprint:
 		for fd_data in raw_fixtures:
 			if fd_data is Dictionary:
 				bp.fixtures.append(FixtureDefinitionScript.from_dict(fd_data))
-	bp.version = FORMAT_VERSION
+	# Preserve the authored version so validation_errors() can reject
+	# unsupported ones; from_json() gates on validation_errors().is_empty().
 	bp.recalculate_construction_cost()
 	return bp
 
