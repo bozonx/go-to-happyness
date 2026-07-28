@@ -1,0 +1,19 @@
+{
+	"version": 1,
+	"id": "flag",
+	"name": "Флаг",
+	"asset": "flag",
+	"content_class": "decor",
+	"category": "world_props",
+	"activity": "distance",
+	"tags": ["town", "sign"],
+	"components": {
+		"banner": {"wind_driven": true}
+	},
+	"properties": [
+		{
+			"name": "owner_faction", "label": "Фракция владельца", "type": "enum",
+			"options_dictionary": "factions", "section": "links"
+		}
+	]
+}

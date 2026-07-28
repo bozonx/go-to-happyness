@@ -1,0 +1,32 @@
+{
+	"version": 1,
+	"id": "cooking_campfire",
+	"name": "Костёр для готовки",
+	"asset": "cooking_campfire",
+	"content_class": "object",
+	"category": "world_props",
+	"activity": "distance",
+	"tags": ["fire", "cooking", "camping"],
+	"components": {
+		"fuel": {"capacity": 8, "burn_minutes_per_unit": 40},
+		"light_source": {"range_m": 6.0},
+		"workstation": {"capability": "cooking_station", "workers": 1}
+	},
+	"properties": [
+		{
+			"name": "fuel_units", "label": "Топлива", "type": "int",
+			"min": 0, "max": 8, "default": 4, "section": "gameplay", "unit": "ед."
+		}
+	],
+	"states": {
+		"default": "lit",
+		"list": [
+			{"id": "lit", "name": "Горит", "visual": {"variant": "flame_full"}},
+			{"id": "embers", "name": "Тлеет", "visual": {"variant": "flame_low"}},
+			{
+				"id": "cold", "name": "Погас", "visual": {"variant": "flame_none"},
+				"flags": ["harvested"]
+			}
+		]
+	}
+}

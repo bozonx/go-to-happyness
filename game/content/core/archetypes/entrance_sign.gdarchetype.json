@@ -1,0 +1,34 @@
+{
+	"version": 1,
+	"id": "entrance_sign",
+	"name": "Въездной знак",
+	"asset": "entrance_sign",
+	"content_class": "object",
+	"category": "world_props",
+	"activity": "on_trigger",
+	"tags": ["sign", "town"],
+	"components": {
+		"readable": {"lines": 1},
+		"light_source": {"range_m": 4.0}
+	},
+	"properties": [
+		{
+			"name": "inscription", "label": "Надпись", "type": "string",
+			"default": "Happyness", "section": "gameplay"
+		},
+		{
+			"name": "owner_faction", "label": "Фракция владельца", "type": "enum",
+			"options_dictionary": "factions", "section": "links"
+		}
+	],
+	"states": {
+		"default": "intact",
+		"list": [
+			{"id": "intact", "name": "Целый", "visual": {"variant": "board_intact"}},
+			{
+				"id": "ruined", "name": "Разрушенный",
+				"visual": {"variant": "board_broken"}, "flags": ["no_collision"]
+			}
+		]
+	}
+}

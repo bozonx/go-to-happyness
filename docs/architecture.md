@@ -17,6 +17,7 @@ game/
     citizens/{domain,application,presentation}/
     content/{domain,application,presentation}/
     decision/{domain,application,presentation}/
+    entities/{domain,application}/
     events/{domain,application,presentation}/
     logistics/{domain,application,presentation}/
     needs/application/
@@ -30,7 +31,13 @@ game/
 ```
 
 `game/content/` holds the authored content packs (`pack.json`, `*.gdbuilding.json`,
-`*.gdmap/`); `game/features/content/` holds the code that reads them.
+`*.gdarchetype.json`, `*.gdmap/`); `game/features/content/` holds the code that reads
+them.
+
+`features/entities/` owns what a placed thing *is* — archetypes, their property
+schema and their states, all of it pack data
+(`design_docs/engine/map_fill_mode.md` §4). It deliberately knows no component by
+name: the module that executes a component introduces and validates it.
 
 `game/bootstrap/settlement_game.tscn` is the configured main scene. Its
 `settlement_game.gd` controller is the composition root: it creates the runtime

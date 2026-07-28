@@ -35,6 +35,16 @@ const COLLISION_BOX := "box"
 const COLLISION_SCENE := "scene"
 const COLLISION_FOOTPRINT := "footprint"
 
+## Where the asset is meaningful (design §3.2). The field filters the palette and
+## nothing else: a mountain cliff should not clutter the list of kitchenware.
+## Prohibitions live in `placement`, where they can be explained to the author,
+## not in a filter that merely hides.
+const SCOPE_BUILDING := &"building"
+const SCOPE_MAP := &"map"
+const SCOPE_BOTH := &"both"
+
+const SCOPES: Array[StringName] = [SCOPE_BUILDING, SCOPE_MAP, SCOPE_BOTH]
+
 @export var id: StringName = &""
 @export var name: String = ""
 @export var category: StringName = &"camping"
@@ -69,6 +79,11 @@ const COLLISION_FOOTPRINT := "footprint"
 @export var blocking_navigation: bool = false
 ## Supported capabilities stub (design §4). Not used by editor in phase 1.
 @export var supported_capabilities: Array[StringName] = []
+## Which editor's palette this asset appears in (design §3.2).
+@export var scope: StringName = SCOPE_BOTH
+## Where it may stand and how it sits on the ground (design §3.3). Only the map
+## fill mode reads it: inside a blueprint the building grid decides.
+@export var placement: AssetPlacementPolicy = null
 
 
 func _init(
@@ -157,3 +172,18 @@ func is_rotation_axis_allowed(axis: String) -> bool:
 	if rotation_axes.is_empty():
 		return axis in ["x", "y", "z"]
 	return axis in rotation_axes
+
+
+func is_in_scope(requested: StringName) -> bool:
+	if requested == &"" or scope == SCOPE_BOTH:
+		return true
+	return scope == requested
+
+
+## The policy this asset is placed by. An asset that declares none still has to be
+## placeable, so it gets the permissive default rather than a null check spread
+## across every caller.
+func placement_policy() -> AssetPlacementPolicy:
+	if placement == null:
+		placement = AssetPlacementPolicy.new()
+	return placement

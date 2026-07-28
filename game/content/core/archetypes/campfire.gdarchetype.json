@@ -1,0 +1,41 @@
+{
+	"version": 1,
+	"id": "campfire",
+	"name": "Костёр",
+	"asset": "campfire",
+	"content_class": "object",
+	"category": "world_props",
+	"activity": "distance",
+	"tags": ["fire", "light", "camping"],
+	"components": {
+		"fuel": {"capacity": 6, "burn_minutes_per_unit": 40},
+		"light_source": {"range_m": 6.0},
+		"interactable": {"verbs": ["stoke", "extinguish"]}
+	},
+	"properties": [
+		{
+			"name": "fuel_units", "label": "Топлива", "type": "int",
+			"min": 0, "max": 6, "default": 3, "section": "gameplay", "unit": "ед."
+		},
+		{
+			"name": "relights", "label": "Разжигается заново", "type": "bool",
+			"default": true, "section": "gameplay"
+		},
+		{
+			"name": "relight_minutes", "label": "Разжигается за", "type": "int",
+			"min": 1, "max": 600, "default": 30, "section": "gameplay", "unit": "мин",
+			"visible_if": {"prop": "relights", "eq": true}
+		}
+	],
+	"states": {
+		"default": "lit",
+		"list": [
+			{"id": "lit", "name": "Горит", "visual": {"variant": "flame_full"}},
+			{"id": "embers", "name": "Тлеет", "visual": {"variant": "flame_low"}},
+			{
+				"id": "cold", "name": "Погас", "visual": {"variant": "flame_none"},
+				"flags": ["harvested"]
+			}
+		]
+	}
+}

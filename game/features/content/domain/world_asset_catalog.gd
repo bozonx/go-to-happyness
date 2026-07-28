@@ -16,6 +16,7 @@ const CUSTOM_ASSET_DIR := "user://custom_decor"
 const SCENE_DIR := "res://game/features/buildings/presentation/decor/scenes"
 
 const GROUPS: Dictionary = {
+	&"world": "Мир и природа",
 	&"outdoor": "Экстерьер",
 	&"furniture_living": "Мебель и быт",
 	&"lighting_heating": "Освещение и отопление",
@@ -29,6 +30,11 @@ const CATEGORIES: Dictionary = {
 	&"town": {"name": "Город и знаки", "group": &"outdoor"},
 	&"nature": {"name": "Сад и озеленение", "group": &"outdoor"},
 	&"street_furniture": {"name": "Уличная мебель", "group": &"outdoor"},
+	# World and nature (Мир и природа) — map fill mode categories (map_fill_mode.md §3.2).
+	&"vegetation": {"name": "Растительность", "group": &"world"},
+	&"rocks_minerals": {"name": "Камни и минералы", "group": &"world"},
+	&"creatures": {"name": "Существа", "group": &"world"},
+	&"world_props": {"name": "Мировой реквизит", "group": &"world"},
 	# Furniture and living (Мебель и быт)
 	&"tables_seating": {"name": "Столы и сиденья", "group": &"furniture_living"},
 	&"beds_storage": {"name": "Кровати и хранение вещей", "group": &"furniture_living"},
@@ -61,19 +67,25 @@ const MIGRATED_CATEGORIES: Dictionary = {
 static var _assets: Dictionary = {}
 
 
-static func get_all_assets() -> Array[WorldAssetDef]:
+static func get_all_assets(scope: StringName = &"") -> Array[WorldAssetDef]:
 	_ensure_catalog()
 	var list: Array[WorldAssetDef] = []
 	for asset: WorldAssetDef in _assets.values():
-		list.append(asset)
+		if asset.is_in_scope(scope):
+			list.append(asset)
 	return list
 
 
-static func get_assets_by_category(category: StringName) -> Array[WorldAssetDef]:
+## `scope` is `WorldAssetDef.SCOPE_BUILDING`, `SCOPE_MAP`, or empty for both
+## palettes at once (design §3.2).
+static func get_assets_by_category(
+	category: StringName,
+	scope: StringName = &""
+) -> Array[WorldAssetDef]:
 	_ensure_catalog()
 	var list: Array[WorldAssetDef] = []
 	for asset: WorldAssetDef in _assets.values():
-		if asset.category == category:
+		if asset.category == category and asset.is_in_scope(scope):
 			list.append(asset)
 	list.sort_custom(func(a: WorldAssetDef, b: WorldAssetDef) -> bool:
 		return a.name.naturalnocasecmp_to(b.name) < 0)
@@ -98,16 +110,19 @@ static func migrate_category(category_id: StringName) -> StringName:
 
 ## How many assets each category holds — the editor greys out empty categories
 ## instead of dropping the author into a blank list.
-static func category_counts() -> Dictionary:
+static func category_counts(scope: StringName = &"") -> Dictionary:
 	_ensure_catalog()
 	var counts: Dictionary = {}
 	for category_id in CATEGORIES.keys():
 		counts[category_id] = 0
 	for asset: WorldAssetDef in _assets.values():
+		if not asset.is_in_scope(scope):
+			continue
 		counts[asset.category] = int(counts.get(asset.category, 0)) + 1
 	return counts
 
 
+## Categories of a group, or of every group when `group_id` is empty.
 static func categories_in_group(group_id: StringName) -> Array[StringName]:
 	var list: Array[StringName] = []
 	for category_id in CATEGORIES.keys():
@@ -127,8 +142,11 @@ static func group_of_category(category_id: StringName) -> StringName:
 
 
 ## First category that actually holds assets, so the catalog never opens empty.
-static func first_populated_category(preferred: StringName = &"camping") -> StringName:
-	var counts := category_counts()
+static func first_populated_category(
+	preferred: StringName = &"camping",
+	scope: StringName = &""
+) -> StringName:
+	var counts := category_counts(scope)
 	if int(counts.get(preferred, 0)) > 0:
 		return preferred
 	for category_id in CATEGORIES.keys():
@@ -138,13 +156,13 @@ static func first_populated_category(preferred: StringName = &"camping") -> Stri
 
 
 ## Filter assets by tag (design §5.2). Returns all assets if tag is empty.
-static func get_assets_by_tag(tag: StringName) -> Array[WorldAssetDef]:
+static func get_assets_by_tag(tag: StringName, scope: StringName = &"") -> Array[WorldAssetDef]:
 	_ensure_catalog()
 	if tag == &"":
-		return get_all_assets()
+		return get_all_assets(scope)
 	var list: Array[WorldAssetDef] = []
 	for asset: WorldAssetDef in _assets.values():
-		if tag in asset.tags:
+		if tag in asset.tags and asset.is_in_scope(scope):
 			list.append(asset)
 	return list
 
@@ -152,11 +170,12 @@ static func get_assets_by_tag(tag: StringName) -> Array[WorldAssetDef]:
 ## All tags currently represented in the catalog, in a stable display order.
 ## Tags are a secondary way to narrow a search; they deliberately do not form
 ## another level of the catalog tree.
-static func all_tags() -> Array[StringName]:
-
+static func all_tags(scope: StringName = &"") -> Array[StringName]:
 	_ensure_catalog()
 	var unique: Dictionary = {}
 	for asset: WorldAssetDef in _assets.values():
+		if not asset.is_in_scope(scope):
+			continue
 		for tag in asset.tags:
 			unique[tag] = true
 	var tags: Array[StringName] = []
@@ -170,13 +189,15 @@ static func all_tags() -> Array[StringName]:
 ## Filter assets by era (design §5.2). Returns all assets if era is empty.
 ## An asset is available when its `available_from_era` rank is at or below the
 ## selected era's rank — cumulative progression, not exact equality.
-static func get_assets_by_era(era: StringName) -> Array[WorldAssetDef]:
+static func get_assets_by_era(era: StringName, scope: StringName = &"") -> Array[WorldAssetDef]:
 	_ensure_catalog()
 	if era == &"":
-		return get_all_assets()
+		return get_all_assets(scope)
 	var era_rank := BuildingMaterialCatalogScript.era_rank(era)
 	var list: Array[WorldAssetDef] = []
 	for asset: WorldAssetDef in _assets.values():
+		if not asset.is_in_scope(scope):
+			continue
 		if asset.available_from_era == &"":
 			list.append(asset)
 		elif BuildingMaterialCatalogScript.era_rank(asset.available_from_era) <= era_rank:
@@ -189,11 +210,14 @@ static func get_assets_by_era(era: StringName) -> Array[WorldAssetDef]:
 static func filter_assets(
 	p_category: StringName = &"",
 	p_tag: StringName = &"",
-	p_era: StringName = &""
+	p_era: StringName = &"",
+	p_scope: StringName = &""
 ) -> Array[WorldAssetDef]:
 	_ensure_catalog()
 	var list: Array[WorldAssetDef] = []
 	for asset: WorldAssetDef in _assets.values():
+		if not asset.is_in_scope(p_scope):
+			continue
 		if p_category != &"" and asset.category != p_category:
 			continue
 		if p_tag != &"" and not (p_tag in asset.tags):
@@ -298,6 +322,9 @@ static func _register_builtin_assets() -> void:
 	campfire.collision_policy = WorldAssetDef.COLLISION_FOOTPRINT
 	campfire.blocking_navigation = true
 	campfire.supported_capabilities = [&"fire_source", &"cooking_station", &"light_source"]
+	campfire.placement = AssetPlacementPolicy.of_surfaces(
+		[AssetPlacementPolicy.SURFACE_GROUND], SlopeCatalog.CLASS_GENTLE
+	)
 
 	_register(WorldAssetDef.new(
 		&"cooking_campfire",
@@ -340,6 +367,10 @@ static func _register_builtin_assets() -> void:
 	cooking.collision_policy = WorldAssetDef.COLLISION_FOOTPRINT
 	cooking.blocking_navigation = true
 	cooking.supported_capabilities = [&"fire_source", &"cooking_station", &"light_source"]
+	cooking.placement = AssetPlacementPolicy.of_surfaces(
+		[AssetPlacementPolicy.SURFACE_GROUND], SlopeCatalog.CLASS_GENTLE
+	)
+	cooking.placement.footprint_cells = Vector2i(2, 2)
 
 	_register(WorldAssetDef.new(
 		&"entrance_sign",
@@ -380,6 +411,10 @@ static func _register_builtin_assets() -> void:
 	sign.collision_policy = WorldAssetDef.COLLISION_BOX
 	sign.blocking_navigation = true
 	sign.supported_capabilities = [&"light_source"]
+	sign.placement = AssetPlacementPolicy.of_surfaces(
+		[AssetPlacementPolicy.SURFACE_GROUND], SlopeCatalog.CLASS_MODERATE
+	)
+	sign.placement.footprint_cells = Vector2i(2, 1)
 
 	_register(WorldAssetDef.new(
 		&"flag",
@@ -426,6 +461,10 @@ static func _register_builtin_assets() -> void:
 	flag.allowed_scales = [0.5, 1.0, 2.0]
 	flag.collision_policy = WorldAssetDef.COLLISION_BOX
 	flag.blocking_navigation = true
+	flag.placement = AssetPlacementPolicy.of_surfaces(
+		[AssetPlacementPolicy.SURFACE_GROUND, AssetPlacementPolicy.SURFACE_ICE],
+		SlopeCatalog.CLASS_MODERATE
+	)
 
 
 static func _register(asset: WorldAssetDef) -> void:
