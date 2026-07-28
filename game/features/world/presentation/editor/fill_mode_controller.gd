@@ -317,6 +317,11 @@ func _make_view(archetype_id: StringName) -> Node3D:
 
 func _apply_transform(view: Node3D, record: MapEntityRecord) -> void:
 	view.position = record.position
+	# Stored Y is the authored offset above ground. The editor must draw the same
+	# terrain-attached transform the launched map uses, otherwise objects vanish
+	# into raised terrain or float over excavations.
+	if context != null and context.terrain != null:
+		view.position.y = context.terrain.height_at(record.position) + record.position.y
 	view.rotation_degrees.y = record.yaw_degrees
 	view.scale = Vector3.ONE * record.scale
 

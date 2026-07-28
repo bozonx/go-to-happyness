@@ -52,10 +52,6 @@ func create_forest() -> void:
 		simulation.tree_cells[cell] = true
 		simulation.tree_positions.append(tree_position)
 		_create_tree(tree_position, false, int(entry.props.get(&"wood", 6)), int(entry.props.get(&"branches", 7)))
-		# Transitional authored grove recipe: its children are still regular
-		# gameplay records, but their positions derive from the map-placed tree.
-		_create_grass_sources_near_tree(cell)
-		_create_forage_sources_near_tree(cell)
 	for entry in _entities_of_kind(&"grass_source"):
 		_create_grass_source_at(entry.position, int(entry.props.get(&"amount", 3)))
 	for entry in _entities_of_kind(&"forage_source"):

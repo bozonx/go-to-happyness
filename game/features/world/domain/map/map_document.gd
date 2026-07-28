@@ -91,13 +91,46 @@ static func from_json(source: Dictionary) -> MapDocument:
 	document.meta = MapMeta.from_dict(source)
 	document.configure_terrain()
 	for key: String in source:
-		if _is_meta_key(key) or key == WATER_SECTION or key in ["areas", "anchors", "routes", "entities"]:
+		if _is_meta_key(key) or key == WATER_SECTION or key in ["areas", "anchors", "routes", "entities", "natural_scatter"]:
 			continue
 		document.sections[key] = _duplicated(source[key])
 	document.zones.from_json(source)
 	document.entities.from_json(source.get("entities", []))
+	document._expand_natural_scatter(source.get("natural_scatter", {}))
 	document._read_water_registry(source.get(WATER_SECTION, []))
 	return document
+
+
+## Compact authored grove data migrates on load to ordinary entity records. The
+## editor and runtime then have one representation: every grass and forage
+## source has its own stable map id and can be moved, deleted or duplicated.
+func _expand_natural_scatter(raw: Variant) -> void:
+	if not raw is Dictionary:
+		return
+	var scatter := raw as Dictionary
+	for tree_cell_value: Variant in scatter.get("tree_cells", []):
+		if not tree_cell_value is Array or tree_cell_value.size() < 2:
+			continue
+		var cell := Vector2i(int(tree_cell_value[0]), int(tree_cell_value[1]))
+		for index in 3:
+			var offsets := [Vector2i(2, 0), Vector2i(-2, 1), Vector2i(1, -2)]
+			_add_natural_entity(&"grass_source", cell + offsets[index], &"grass")
+		for index in 2:
+			var offsets := [Vector2i(3, 1), Vector2i(-3, -1)]
+			_add_natural_entity(&"forage_source", cell + offsets[index], &"forage")
+
+
+func _add_natural_entity(kind: StringName, cell: Vector2i, prefix: StringName) -> void:
+	if not terrain.is_inside(cell):
+		return
+	var id := StringName("%s_%d_%d" % [prefix, cell.x, cell.y])
+	if entities.has_id(id):
+		return
+	var record := MapEntityRecord.new()
+	record.id = id
+	record.archetype_id = StringName("core:%s" % kind)
+	record.position = terrain.cell_center(cell)
+	entities.entities.append(record)
 
 
 func to_json() -> Dictionary:
