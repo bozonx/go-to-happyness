@@ -16,6 +16,10 @@ static func run_all() -> void:
 	_test_session_state_shape()
 	_test_session_state_round_trips_through_save()
 	_test_stale_zone_state_is_dropped_on_restore()
+	_test_owner_change_publishes_on_bus()
+	_test_flag_change_publishes_on_bus()
+	_test_noop_mutation_publishes_nothing()
+	_test_restore_does_not_publish()
 	print("    [PASS] Map Zone Registry Tests")
 
 
@@ -155,3 +159,77 @@ static func _test_stale_zone_state_is_dropped_on_restore() -> void:
 	assert(after.state(&"forest") == null)
 	assert(after.state(&"new_region") != null)
 	assert(after.owner_of(&"new_region") == &"") # untouched by the stale snapshot
+
+
+## A bus that records dispatched events as readable strings, so a test can assert
+## on the exact sequence without holding typed events.
+static func _recording_bus() -> ZoneEventBus:
+	var bus := ZoneEventBus.new()
+	var seen: Array = []
+	bus.configure({
+		"owner_changed": func(event: ZoneEvent): seen.append("owner:%s:%s" % [event.subject_id, event.new_owner]),
+		"zone_flag_changed": func(event: ZoneEvent): seen.append("flag:%s:%s=%s" % [event.subject_id, event.flag_key, str(event.flag_value)]),
+	})
+	bus.set_meta("seen", seen)
+	return bus
+
+
+## set_owner publishes `owner_changed` carrying the new owner tag.
+static func _test_owner_change_publishes_on_bus() -> void:
+	var registry := MapZoneRegistry.new()
+	registry.build_from(_layer_with_two_areas())
+	var bus := _recording_bus()
+	registry.configure(bus)
+	registry.set_owner(&"gate_yard", &"faction:red")
+	var seen: Array = bus.get_meta("seen")
+	assert(seen == ["owner:gate_yard:faction:red"], "owner change publishes: %s" % str(seen))
+
+
+## set_flag publishes `zone_flag_changed` carrying the key and value.
+static func _test_flag_change_publishes_on_bus() -> void:
+	var registry := MapZoneRegistry.new()
+	registry.build_from(_layer_with_two_areas())
+	var bus := _recording_bus()
+	registry.configure(bus)
+	registry.set_flag(&"forest", &"cleared", true)
+	var seen: Array = bus.get_meta("seen")
+	assert(seen == ["flag:forest:cleared=true"], "flag change publishes: %s" % str(seen))
+
+
+## A no-op mutation (same owner, same flag value) publishes nothing — the
+## short-circuit keeps a re-applied capture from firing a second event.
+static func _test_noop_mutation_publishes_nothing() -> void:
+	var registry := MapZoneRegistry.new()
+	registry.build_from(_layer_with_two_areas())
+	var bus := _recording_bus()
+	registry.configure(bus)
+	registry.set_owner(&"gate_yard", &"faction:red")
+	registry.set_owner(&"gate_yard", &"faction:red") # no-op
+	registry.set_flag(&"forest", &"cleared", true)
+	registry.set_flag(&"forest", &"cleared", true) # no-op
+	var seen: Array = bus.get_meta("seen")
+	assert(seen == ["owner:gate_yard:faction:red", "flag:forest:cleared=true"],
+		"no-op mutations publish nothing: %s" % str(seen))
+
+
+## Restoring saved state must NOT publish: replaying owner/flags from a save is
+## not a player capturing zones. The bus is null during restore precisely so
+## `set_owner`/`set_flag` stay silent — `apply_session_state` bypasses them.
+static func _test_restore_does_not_publish() -> void:
+	var before := MapZoneRegistry.new()
+	before.build_from(_layer_with_two_areas())
+	before.set_owner(&"forest", &"player")
+	before.set_flag(&"gate_yard", &"cleared", true)
+	var snapshot := before.session_state_to_dict()
+
+	var after := MapZoneRegistry.new()
+	after.build_from(_layer_with_two_areas())
+	var bus := _recording_bus()
+	after.configure(bus)
+	after.apply_session_state(snapshot)
+	# State did come back...
+	assert(after.owner_of(&"forest") == &"player")
+	assert(after.flag_of(&"gate_yard", &"cleared") == true)
+	# ...but no events fired: restore is silent.
+	var seen: Array = bus.get_meta("seen")
+	assert(seen == [], "restore publishes nothing: %s" % str(seen))
