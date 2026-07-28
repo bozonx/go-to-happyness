@@ -425,6 +425,48 @@ func inspector_lines() -> Array[String]:
 	return lines
 
 
+func inspector_properties() -> Array[EntityPropertyDef]:
+	var selected := context.document.entities.by_id(_selected_id)
+	if selected == null:
+		return []
+	var archetype := EntityArchetypeCatalog.get_archetype(selected.archetype_id)
+	return archetype.property_schema if archetype != null else []
+
+
+func inspector_values() -> Dictionary:
+	var selected := context.document.entities.by_id(_selected_id)
+	if selected == null:
+		return {}
+	var archetype := EntityArchetypeCatalog.get_archetype(selected.archetype_id)
+	return archetype.resolved_properties(selected.props) if archetype != null else {}
+
+
+func apply_inspector_value(property_name: StringName, value: Variant) -> bool:
+	var primary := context.document.entities.by_id(_selected_id)
+	if primary == null:
+		return false
+	var archetype := EntityArchetypeCatalog.get_archetype(primary.archetype_id)
+	var definition := archetype.get_property(property_name) if archetype != null else null
+	if definition == null:
+		return false
+	var next: Variant = definition.clamp_value(value)
+	var before := context.document.entities.to_json()
+	var changed := false
+	for entity_id: StringName in _selected_ids():
+		var record := context.document.entities.by_id(entity_id)
+		if record == null or record.archetype_id != archetype.id:
+			continue
+		var values := archetype.resolved_properties(record.props)
+		if values.get(property_name, null) == next:
+			continue
+		values[property_name] = next
+		record.props = archetype.authored_differences(values)
+		changed = true
+	if changed:
+		_commit(before, "свойство %s" % definition.label)
+	return changed
+
+
 func list_title() -> String:
 	return "Сущности карты"
 

@@ -162,6 +162,11 @@ func _test_fill_placement_and_shared_undo(editor: Node) -> void:
 	# these shortcuts keep common authoring work out of a bespoke inspector.
 	editor._active.select_palette_entry(&"select")
 	editor._active.handle_input(_click(MOUSE_BUTTON_LEFT, true))
+	assert(editor._side_panel.get_node("Margin/Scroll/Rows/InspectorFields").get_child_count() > 0, "schema generated inspector controls")
+	assert(editor._active.apply_inspector_value(&"fuel_units", 5), "inspector applied authored property")
+	assert(editor.document.entities.entities[0].props == {&"fuel_units": 5}, "only authored difference is stored")
+	editor._undo()
+	assert(editor.document.entities.entities[0].props.is_empty(), "property undo restored defaults")
 	editor._active.handle_input(_key(KEY_D, true))
 	assert(editor.document.entities.entities.size() == 2, "Ctrl+D duplicated the selected entity")
 	editor._active.handle_input(_key(KEY_R))

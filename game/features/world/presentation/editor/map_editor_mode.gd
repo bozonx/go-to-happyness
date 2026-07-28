@@ -150,6 +150,18 @@ func inspector_lines() -> Array[String]:
 	return []
 
 
+func inspector_properties() -> Array[EntityPropertyDef]:
+	return []
+
+
+func inspector_values() -> Dictionary:
+	return {}
+
+
+func apply_inspector_value(_property_name: StringName, _value: Variant) -> bool:
+	return false
+
+
 ## Entities of this mode for the side list. Empty until phase 4 brings zones,
 ## points and routes.
 func list_entries() -> Array[String]:

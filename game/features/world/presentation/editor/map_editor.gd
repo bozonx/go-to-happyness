@@ -333,6 +333,7 @@ func _connect_ui() -> void:
 	_dialogs.open_requested.connect(_on_open_requested)
 	_dialogs.save_as_requested.connect(_on_save_as_requested)
 	_dialogs.properties_applied.connect(_on_properties_applied)
+	_side_panel.property_committed.connect(_on_inspector_property_committed)
 
 
 func _open_settings() -> void:
@@ -387,6 +388,7 @@ func _refresh_panels() -> void:
 		"отмен в стеке: %d" % history.undo_depth(),
 	])
 	_side_panel.set_inspector("Инспектор — %s" % _active.title, _active.inspector_lines())
+	_side_panel.set_property_fields(_active.inspector_properties(), _active.inspector_values())
 	_side_panel.set_entries(
 		_active.list_title(), _active.list_entries(), _active.empty_list_hint(),
 	)
@@ -395,6 +397,11 @@ func _refresh_panels() -> void:
 	_undo_button.disabled = not history.can_undo()
 	_redo_button.disabled = not history.can_redo()
 	_status_message.text = _message
+
+
+func _on_inspector_property_committed(property_name: StringName, value: Variant) -> void:
+	if _active != null and _active.apply_inspector_value(property_name, value):
+		_refresh_panels()
 
 
 # --- Frame and input ----------------------------------------------------------

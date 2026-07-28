@@ -21,11 +21,13 @@ extends PanelContainer
 ## able to make the editor taller than the window it is running in.
 
 signal entry_activated(index: int)
+signal property_committed(property_name: StringName, value: Variant)
 
 @onready var _map_title: Label = $Margin/Scroll/Rows/MapTitleRow/MapTitle
 @onready var _map_info: Label = $Margin/Scroll/Rows/MapInfo
 @onready var _inspector_title: Label = $Margin/Scroll/Rows/InspectorTitle
 @onready var _inspector: Label = $Margin/Scroll/Rows/Inspector
+@onready var _inspector_fields: VBoxContainer = $Margin/Scroll/Rows/InspectorFields
 @onready var _list_title: Label = $Margin/Scroll/Rows/ListTitle
 @onready var _list: ItemList = $Margin/Scroll/Rows/List
 
@@ -42,6 +44,89 @@ func set_map_info(lines: Array[String]) -> void:
 func set_inspector(title: String, lines: Array[String]) -> void:
 	_inspector_title.text = title
 	_inspector.text = "\n".join(lines)
+
+
+## Generic schema-driven inspector for map entities. The panel knows control
+## types, never archetype ids; gameplay modules only provide `EntityPropertyDef`.
+func set_property_fields(properties: Array[EntityPropertyDef], values: Dictionary) -> void:
+	for child in _inspector_fields.get_children():
+		child.queue_free()
+	if properties.is_empty():
+		return
+	var sections: Dictionary = {}
+	for property: EntityPropertyDef in properties:
+		if property.is_visible_for(values):
+			if not sections.has(property.section):
+				sections[property.section] = []
+			sections[property.section].append(property)
+	for section: StringName in EntityPropertyDef.SECTIONS:
+		if not sections.has(section):
+			continue
+		var heading := Label.new()
+		heading.text = _section_name(section)
+		heading.add_theme_font_size_override("font_size", 12)
+		_inspector_fields.add_child(heading)
+		for property: EntityPropertyDef in sections[section]:
+			_add_property_control(property, values.get(property.name, property.default))
+
+
+func _add_property_control(property: EntityPropertyDef, value: Variant) -> void:
+	var row := VBoxContainer.new()
+	var label := Label.new()
+	label.text = property.label + (" · " + property.unit if not property.unit.is_empty() else "")
+	row.add_child(label)
+	var control: Control = null
+	match property.type:
+		EntityPropertyDef.TYPE_BOOL:
+			var check := CheckBox.new()
+			check.button_pressed = bool(value)
+			check.toggled.connect(func(next: bool) -> void: property_committed.emit(property.name, next))
+			control = check
+		EntityPropertyDef.TYPE_INT, EntityPropertyDef.TYPE_FLOAT:
+			var spin := SpinBox.new()
+			spin.allow_greater = property.maximum == null
+			spin.allow_lesser = property.minimum == null
+			spin.min_value = float(property.minimum) if property.minimum != null else -1000000.0
+			spin.max_value = float(property.maximum) if property.maximum != null else 1000000.0
+			spin.step = float(property.step) if property.step != null else (1.0 if property.type == EntityPropertyDef.TYPE_INT else 0.1)
+			spin.value = float(value) if value != null else 0.0
+			var line := spin.get_line_edit()
+			line.text_submitted.connect(func(_text: String) -> void: property_committed.emit(property.name, int(spin.value) if property.type == EntityPropertyDef.TYPE_INT else spin.value))
+			line.focus_exited.connect(func() -> void: property_committed.emit(property.name, int(spin.value) if property.type == EntityPropertyDef.TYPE_INT else spin.value))
+			control = spin
+		EntityPropertyDef.TYPE_ENUM:
+			var option := OptionButton.new()
+			for entry: Variant in property.options:
+				option.add_item(String(entry))
+				if String(entry) == String(value):
+					option.select(option.item_count - 1)
+			option.disabled = option.item_count == 0
+			option.item_selected.connect(func(index: int) -> void: property_committed.emit(property.name, option.get_item_text(index)))
+			control = option
+		EntityPropertyDef.TYPE_STRING, EntityPropertyDef.TYPE_TEXT:
+			var edit: Control = TextEdit.new() if property.type == EntityPropertyDef.TYPE_TEXT else LineEdit.new()
+			if edit is TextEdit:
+				(edit as TextEdit).text = String(value)
+				(edit as TextEdit).focus_exited.connect(func() -> void: property_committed.emit(property.name, (edit as TextEdit).text))
+			else:
+				(edit as LineEdit).text = String(value)
+				(edit as LineEdit).text_submitted.connect(func(text: String) -> void: property_committed.emit(property.name, text))
+				(edit as LineEdit).focus_exited.connect(func() -> void: property_committed.emit(property.name, (edit as LineEdit).text))
+			control = edit
+		_:
+			var unsupported := Label.new()
+			unsupported.text = "Тип «%s» будет доступен в следующем подшаге" % property.type
+			unsupported.modulate = Color(0.75, 0.65, 0.35)
+			control = unsupported
+	row.add_child(control)
+	_inspector_fields.add_child(row)
+
+
+static func _section_name(section: StringName) -> String:
+	return {
+		&"main": "Основное", &"transform": "Трансформ", &"appearance": "Внешний вид",
+		&"state": "Состояние", &"gameplay": "Игровые свойства", &"behavior": "Поведение", &"links": "Связи",
+	}.get(section, String(section))
 
 
 func set_entries(title: String, entries: Array[String], empty_hint := "") -> void:

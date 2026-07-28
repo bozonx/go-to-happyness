@@ -41,6 +41,9 @@ theme_override_font_sizes/font_size = 14
 autowrap_mode = 2
 theme_override_font_sizes/font_size = 12
 
+[node name="InspectorFields" type="VBoxContainer" parent="Margin/Scroll/Rows"]
+theme_override_constants/separation = 4
+
 [node name="Separator" type="HSeparator" parent="Margin/Scroll/Rows"]
 
 [node name="ListTitle" type="Label" parent="Margin/Scroll/Rows"]
