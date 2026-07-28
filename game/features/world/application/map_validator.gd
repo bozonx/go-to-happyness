@@ -12,10 +12,12 @@ extends RefCounted
 ## cannot run at authoring time without the published grids, and folding them
 ## into the layer would couple pure data to the world.
 ##
-## What is deliberately not here yet: slot/door reachability (§8.1 "слот
-## недостижим от двери") needs the building registry to resolve a door's cell,
-## and map slots are rare; route-edge passability needs a per-segment walk. Both
-## land when the building-side runtime is unified with the map one.
+## Two grades, mirroring §11: `validate` returns launch-blocking errors (a map
+## with them will not start); `warnings` returns things a map will launch with
+## but the author very likely did not mean. Reachability lives in `warnings`
+## because it needs a published `NavGrid`, which the save path does not have —
+## the editor's "Проверить" button supplies one, save calls `validate` with
+## `nav_grid = null` and reachability is silently skipped.
 
 ## Runs every cross-cutting check and returns the launch-blocking errors.
 ## `nav_grid` may be null — reachability checks are skipped then, which is how
@@ -67,3 +69,51 @@ static func _validate_hero_start(document: MapDocument, errors: Array[String]) -
 		if anchor.role == ZoneAnchorRecord.ROLE_SPAWN:
 			return
 	errors.append("hero-режим карты требует хотя бы одну spawn-точку (hero_start)")
+
+
+## Reachability-grade findings: a map launches with them, but the author very
+## likely did not mean them (map_editor.md §11 warnings). Returns nothing when
+## `nav_grid` is null — these checks are the editor's "Проверить" button's job,
+## not the save path's, and save never has a published navigation field.
+static func warnings(document: MapDocument, nav_grid: NavGrid) -> Array[String]:
+	var warnings: Array[String] = []
+	if nav_grid == null:
+		return warnings
+	var board_cells := document.board_cells()
+	# An anchor standing on an impassable cell is reachable only by teleport.
+	# A spawn there is already an error in `validate` (hole/water); this catches
+	# the navigation-blocked case — a waypoint on a cliff, a slot behind a wall.
+	for anchor in document.zones.anchors:
+		_warn_if_anchor_unreachable(anchor, nav_grid, board_cells, warnings)
+	# A route whose consecutive stops are not connected by NavGrid cannot be
+	# walked. The route record already verified each stop exists; this checks the
+	# ground between them. `once`/`loop`/`pingpong` differ in traversal, not in
+	# whether each edge is walkable, so a single forward pass covers them.
+	for route in document.zones.routes:
+		_warn_if_route_breaks(route, document, nav_grid, warnings)
+	return warnings
+
+
+static func _warn_if_anchor_unreachable(anchor: ZoneAnchorRecord, nav_grid: NavGrid, board_cells: int, warnings: Array[String]) -> void:
+	var cell := anchor.cell()
+	if cell.x < 0 or cell.y < 0 or cell.x >= board_cells or cell.y >= board_cells:
+		return
+	# `is_walkable` folds in water/lava/cliff passability for the pedestrian
+	# profile; a cell that fails it is one no agent can stand on.
+	if not nav_grid.is_walkable(cell):
+		warnings.append("точка %s стоит на непроходимой клетке" % anchor.id)
+
+
+static func _warn_if_route_breaks(route: ZoneRouteRecord, document: MapDocument, nav_grid: NavGrid, warnings: Array[String]) -> void:
+	if route.stops.size() < 2:
+		return
+	var previous: Vector2i = Vector2i.MIN
+	for index in route.stops.size():
+		var anchor := document.zones.anchor_by_id(route.stops[index])
+		if anchor == null:
+			return # `MapZoneLayer.validate` already flagged the dangling stop.
+		var cell := anchor.cell()
+		if index > 0 and not nav_grid.are_cells_connected(previous, cell):
+			warnings.append("маршрут %s: остановки %s и %s не связаны проходимым путём" % [route.id, route.stops[index - 1], route.stops[index]])
+			return # one broken edge per route is enough; the author fixes forward
+		previous = cell

@@ -18,6 +18,10 @@ static func run_all() -> void:
 	_test_frozen_water_is_walkable()
 	_test_hero_mode_without_spawn_is_an_error()
 	_test_settlement_mode_needs_no_spawn()
+	_test_warnings_skip_when_nav_grid_is_null()
+	_test_anchor_on_blocked_cell_warns()
+	_test_route_across_a_wall_warns()
+	_test_connected_route_has_no_warnings()
 	print("    [PASS] Map Validator Tests")
 
 
@@ -111,3 +115,78 @@ static func _document_with_spawn_at(cell: Vector2i) -> MapDocument:
 	spawn.pos = Vector3(float(cell.x) + 0.5, 0.0, float(cell.y) + 0.5)
 	document.zones.anchors.append(spawn)
 	return document
+
+
+# --- Reachability warnings (§11) ---------------------------------------------
+
+
+## `warnings` is the editor's "Проверить" job, not the save path's: with no
+## navigation field there is nothing to check, so it returns nothing rather than
+## guessing. This is the property that lets save call `validate` with nav=null.
+static func _test_warnings_skip_when_nav_grid_is_null() -> void:
+	var document := _document_with_spawn_at(Vector2i(2, 2))
+	assert(MapValidator.warnings(document, null).is_empty())
+
+
+## A waypoint anchored on a navigation-blocked cell is reachable only by
+## teleport — a warning the author wants before shipping.
+static func _test_anchor_on_blocked_cell_warns() -> void:
+	var nav := NavGrid.new()
+	nav.configure(1.0, BOARD_CELLS)
+	nav.set_blocked_cells({Vector2i(3, 3): true})
+	var document := MapDocument.create(&"w", "W", BOARD_CELLS)
+	var waypoint := ZoneAnchorRecord.new()
+	waypoint.id = &"post"
+	waypoint.role = ZoneAnchorRecord.ROLE_WAYPOINT
+	waypoint.pos = Vector3(3.5, 0.0, 3.5)
+	document.zones.anchors.append(waypoint)
+	var warnings := MapValidator.warnings(document, nav)
+	assert(warnings.any(func(m: String) -> bool: return m.find("непроходим") > 0),
+		"anchor on blocked cell: %s" % "; ".join(warnings))
+
+
+## A route whose consecutive stops sit in disconnected NavGrid components cannot
+## be walked — the wall between them has no path through it.
+static func _test_route_across_a_wall_warns() -> void:
+	var nav := NavGrid.new()
+	nav.configure(1.0, BOARD_CELLS)
+	# Block a full column to split the board into left/right components.
+	var wall: Dictionary = {}
+	for y in BOARD_CELLS:
+		wall[Vector2i(8, y)] = true
+	nav.set_blocked_cells(wall)
+	var document := MapDocument.create(&"r", "R", BOARD_CELLS)
+	_add_waypoint(document, &"a", Vector2i(2, 2))
+	_add_waypoint(document, &"b", Vector2i(12, 2)) # across the wall
+	var route := ZoneRouteRecord.new()
+	route.id = &"patrol"
+	route.stops = [&"a", &"b"]
+	document.zones.routes.append(route)
+	var warnings := MapValidator.warnings(document, nav)
+	assert(warnings.any(func(m: String) -> bool: return m.find("не связаны") > 0),
+		"route across a wall: %s" % "; ".join(warnings))
+
+
+## Two stops in the same connected component produce no route warning.
+static func _test_connected_route_has_no_warnings() -> void:
+	var nav := NavGrid.new()
+	nav.configure(1.0, BOARD_CELLS)
+	var document := MapDocument.create(&"rc", "RC", BOARD_CELLS)
+	_add_waypoint(document, &"a", Vector2i(2, 2))
+	_add_waypoint(document, &"b", Vector2i(3, 2)) # adjacent, same component
+	var route := ZoneRouteRecord.new()
+	route.id = &"patrol"
+	route.stops = [&"a", &"b"]
+	document.zones.routes.append(route)
+	var warnings := MapValidator.warnings(document, nav)
+	# The two waypoints are walkable and connected; no anchor warning either.
+	for w in warnings:
+		assert(false, "connected route should have no warnings: %s" % w)
+
+
+static func _add_waypoint(document: MapDocument, id: StringName, cell: Vector2i) -> void:
+	var waypoint := ZoneAnchorRecord.new()
+	waypoint.id = id
+	waypoint.role = ZoneAnchorRecord.ROLE_WAYPOINT
+	waypoint.pos = Vector3(float(cell.x) + 0.5, 0.0, float(cell.y) + 0.5)
+	document.zones.anchors.append(waypoint)
