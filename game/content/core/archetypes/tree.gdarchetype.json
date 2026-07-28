@@ -1,0 +1,1 @@
+{"version":1,"id":"tree","name":"Дерево","asset":"tree","content_class":"object","category":"vegetation","components":{"settlement_natural":{"kind":"tree"}},"properties":[{"name":"wood","label":"Древесина","type":"int","min":1,"max":99,"default":6},{"name":"branches","label":"Ветки","type":"int","min":0,"max":99,"default":7}]}

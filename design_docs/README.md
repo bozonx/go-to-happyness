@@ -22,6 +22,7 @@
 | [active_zones.md](engine/active_zones.md) | Модель активных зон обоих редакторов: области, точки, маршруты, права и эффекты, состояние и владелец зоны, события, валидация, runtime. |
 | [building_furnishing.md](engine/building_furnishing.md) | Наполнение здания: предметы, fixtures, capabilities. |
 | [content_packaging.md](engine/content_packaging.md) | Паки, стили, идентификаторы, пользовательский контент, правило ревизии. |
+| [multi_purpose_engine.md](engine/multi_purpose_engine.md) | Переход к платформе: общий runtime, модули и ближайший срез «две игры, один runtime». |
 
 ## citizens — житель, решения, труд
 

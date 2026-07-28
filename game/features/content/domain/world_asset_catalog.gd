@@ -470,6 +470,23 @@ static func _register_builtin_assets() -> void:
 		[AssetPlacementPolicy.SURFACE_GROUND, AssetPlacementPolicy.SURFACE_ICE],
 		SlopeCatalog.CLASS_MODERATE
 	)
+	_register_natural_assets()
+
+
+static func _register_natural_assets() -> void:
+	for data in [
+		[&"tree", "Дерево", &"vegetation", "res://game/features/world/presentation/tree.tscn", Vector3(2.0, 5.0, 2.0), true],
+		[&"grass_source", "Трава", &"vegetation", "res://game/features/world/presentation/grass_source.tscn", Vector3(1.2, 0.6, 1.2), false],
+		[&"forage_source", "Дикая пища", &"vegetation", "res://game/features/world/presentation/forage_source.tscn", Vector3(0.5, 0.5, 0.5), false],
+		[&"rabbit", "Кролик", &"creatures", "res://game/features/world/presentation/rabbit.tscn", Vector3(0.5, 0.4, 0.5), false],
+	]:
+		var asset := WorldAssetDef.new(data[0], data[1], data[2], &"world", data[3], Vector3i.ONE, 1.0, [], data[4])
+		asset.scope = WorldAssetDef.SCOPE_MAP
+		asset.rotation_axes = ["y"]
+		asset.collision_policy = WorldAssetDef.COLLISION_SCENE
+		asset.blocking_navigation = bool(data[5])
+		asset.placement = AssetPlacementPolicy.of_surfaces([AssetPlacementPolicy.SURFACE_GROUND, AssetPlacementPolicy.SURFACE_ICE], SlopeCatalog.CLASS_MODERATE)
+		_register(asset)
 
 
 static func _register(asset: WorldAssetDef) -> void:

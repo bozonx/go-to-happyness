@@ -1,0 +1,1 @@
+{"version":1,"id":"forage_source","name":"Дикая пища","asset":"forage_source","content_class":"object","category":"vegetation","components":{"settlement_natural":{"kind":"forage_source"}}}

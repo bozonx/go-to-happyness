@@ -14,34 +14,61 @@ const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.
 const WorldResourceStateScript = preload("res://game/features/world/domain/world_resource_state.gd")
 
 var simulation: Node
-var natural_resources: Dictionary = {}
+var map_document: MapDocument = null
+
+class NaturalEntry:
+	extends RefCounted
+	var position := Vector3.ZERO
+	var props: Dictionary = {}
 
 
 func setup(p_simulation: Node, map_document: MapDocument = null) -> void:
 	simulation = p_simulation
-	natural_resources = map_document.sections.get("natural_resources", {}) as Dictionary if map_document != null else {}
+	self.map_document = map_document
+
+
+func _entities_of_kind(kind: StringName) -> Array[NaturalEntry]:
+	var result: Array[NaturalEntry] = []
+	if map_document == null:
+		return result
+	for placed: MapEntityRecord in map_document.entities.entities:
+		var archetype := EntityArchetypeCatalog.get_archetype(placed.archetype_id)
+		if archetype == null or not archetype.has_component(&"settlement_natural"):
+			continue
+		if StringName(archetype.component_data(&"settlement_natural").get("kind", "")) != kind:
+			continue
+		var entry := NaturalEntry.new()
+		entry.position = placed.position
+		entry.position.y = simulation.terrain_height_at(entry.position.x, entry.position.z, entry.position.y) + placed.position.y
+		entry.props = archetype.resolved_properties(placed.props)
+		result.append(entry)
+	return result
 
 
 func create_forest() -> void:
-	for raw_cell: Variant in natural_resources.get("trees", []):
-		var cell := _cell_from_map_value(raw_cell)
-		if not simulation.is_board_cell(cell):
-			continue
-		var tree_position: Vector3 = simulation.nav_grid.cell_center(cell) if simulation.nav_grid != null else Vector3((cell.x + 0.5) * simulation.CELL_SIZE, 0.0, (cell.y + 0.5) * simulation.CELL_SIZE)
+	for entry in _entities_of_kind(&"tree"):
+		var tree_position: Vector3 = entry.position
+		var cell: Vector2i = simulation.cell_from_position(tree_position)
 		simulation.tree_cells[cell] = true
 		simulation.tree_positions.append(tree_position)
-		_create_tree(tree_position, false)
+		_create_tree(tree_position, false, int(entry.props.get(&"wood", 6)), int(entry.props.get(&"branches", 7)))
+		# Transitional authored grove recipe: its children are still regular
+		# gameplay records, but their positions derive from the map-placed tree.
 		_create_grass_sources_near_tree(cell)
 		_create_forage_sources_near_tree(cell)
+	for entry in _entities_of_kind(&"grass_source"):
+		_create_grass_source_at(entry.position, int(entry.props.get(&"amount", 3)))
+	for entry in _entities_of_kind(&"forage_source"):
+		_create_forage_source_at(entry.position)
 	simulation.world_navigation_controller.refresh_navigation_grid()
 	_create_firefly_clusters()
 
 
-func _create_tree(position_on_board: Vector3, refresh_navigation := true) -> void:
+func _create_tree(position_on_board: Vector3, refresh_navigation := true, initial_wood := -1, initial_branches := -1) -> void:
 	var tree: Node3D = TreeScene.instantiate()
 	tree.position = position_on_board
-	var initial_wood: int = simulation.random.randi_range(4, 7)
-	var initial_branches: int = simulation.random.randi_range(5, 9)
+	initial_wood = simulation.random.randi_range(4, 7) if initial_wood < 0 else initial_wood
+	initial_branches = simulation.random.randi_range(5, 9) if initial_branches < 0 else initial_branches
 	
 	var cell: Vector2i = simulation.cell_from_position(position_on_board)
 	var tree_state: Variant = simulation.world_resource_state.create_tree(cell, initial_wood, initial_branches)
@@ -81,6 +108,17 @@ func _create_grass_sources_near_tree(tree_cell: Vector2i) -> void:
 		simulation.grass_sources[cell] = GrassSourceRecord.new(node, initial_remaining, initial_remaining)
 
 
+func _create_grass_source_at(position: Vector3, amount: int) -> void:
+	var cell: Vector2i = simulation.cell_from_position(position)
+	if not simulation.is_board_cell(cell) or simulation.grass_sources.has(cell) or simulation.tree_cells.has(cell):
+		return
+	var node: MeshInstance3D = GrassSourceScene.instantiate()
+	node.position = position + Vector3.UP * 0.05
+	simulation.building_visuals.add_selector_to_node(node, "grass_selector", Vector3(1.2, 0.6, 1.2), Vector3.UP * 0.3)
+	simulation.world_navigation_controller.add_landscape_object(node)
+	simulation.grass_sources[cell] = GrassSourceRecord.new(node, amount, amount)
+
+
 func _create_forage_sources_near_tree(tree_cell: Vector2i) -> void:
 	for offset in [Vector2i(3, 1), Vector2i(-3, -1)]:
 		var cell: Vector2i = tree_cell + offset
@@ -91,6 +129,17 @@ func _create_forage_sources_near_tree(tree_cell: Vector2i) -> void:
 		simulation.building_visuals.add_selector_to_node(node, "forage_selector", Vector3(0.5, 0.5, 0.5), Vector3.UP * 0.25)
 		simulation.world_navigation_controller.add_landscape_object(node)
 		simulation.forage_sources[cell] = ForageSourceRecord.new(node)
+
+
+func _create_forage_source_at(position: Vector3) -> void:
+	var cell: Vector2i = simulation.cell_from_position(position)
+	if not simulation.is_board_cell(cell) or simulation.forage_sources.has(cell) or simulation.tree_cells.has(cell):
+		return
+	var node: Node3D = ForageSourceScene.instantiate()
+	node.position = position + Vector3.UP * 0.05
+	simulation.building_visuals.add_selector_to_node(node, "forage_selector", Vector3(0.5, 0.5, 0.5), Vector3.UP * 0.25)
+	simulation.world_navigation_controller.add_landscape_object(node)
+	simulation.forage_sources[cell] = ForageSourceRecord.new(node)
 
 
 func _create_firefly_clusters() -> void:
@@ -136,14 +185,11 @@ func setup_entrance_sign_node(entrance_stone: Node3D) -> void:
 
 
 func spawn_trash_piles() -> void:
-	for raw_loot: Variant in natural_resources.get("starter_loot", []):
-		if not raw_loot is Dictionary:
-			continue
-		var loot := raw_loot as Dictionary
-		var cell := _cell_from_map_value(loot.get("cell", []))
+	for entry in _entities_of_kind(&"starter_loot"):
+		var cell: Vector2i = simulation.cell_from_position(entry.position)
 		if not simulation.is_board_cell(cell) or simulation.terrain_blocked_cells.has(cell):
 			continue
-		var pile: Node3D = simulation.resource_pile_service.create_resource_pile(simulation.nav_grid.cell_center(cell) if simulation.nav_grid != null else Vector3((cell.x + 0.5) * simulation.CELL_SIZE, 0.0, (cell.y + 0.5) * simulation.CELL_SIZE), _loot_resources(loot)) as Node3D
+		var pile: Node3D = simulation.resource_pile_service.create_resource_pile(entry.position, _loot_resources(entry.props)) as Node3D
 		# These are authored world loot, unlike piles dropped by citizens or
 		# logistics. Keep their visuals under the territory while the logistics
 		# service continues to own their resource record.
@@ -161,19 +207,11 @@ func _loot_resources(loot: Dictionary) -> Dictionary:
 	return resources
 
 
-func _cell_from_map_value(value: Variant) -> Vector2i:
-	if value is Array and value.size() >= 2:
-		return Vector2i(int(value[0]), int(value[1]))
-	if value is Vector2i:
-		return value
-	return Vector2i.ZERO
-
-
 func spawn_initial_rabbits() -> void:
-	for tree_cell in simulation.tree_cells.keys():
+	for entry in _entities_of_kind(&"rabbit"):
 		if simulation.rabbit_sources.size() >= simulation.RABBIT_MAX_COUNT:
 			break
-		_spawn_rabbit_near_tree(tree_cell as Vector2i)
+		_create_rabbit_source(simulation.cell_from_position(entry.position), entry.position + Vector3.UP * 0.16, Vector3(simulation.random.randf_range(-1.0, 1.0), 0.0, simulation.random.randf_range(-1.0, 1.0)).normalized())
 
 
 func _spawn_rabbit_near_tree(tree_cell: Vector2i) -> void:
