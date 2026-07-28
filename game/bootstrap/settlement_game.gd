@@ -135,12 +135,8 @@ var grass_sources: Dictionary:
 	get: return foraging_service.grass_sources
 var forage_sources: Dictionary:
 	get: return foraging_service.forage_sources
-var forage_respawn_at: Dictionary:
-	get: return foraging_service.forage_respawn_at
 var rabbit_sources: Dictionary:
 	get: return foraging_service.rabbit_sources
-var rabbit_respawn_at: Dictionary:
-	get: return foraging_service.rabbit_respawn_at
 const RABBIT_MAX_COUNT := 8
 var outside_workers: Dictionary:
 	get: return world_state.outside_workers
@@ -429,10 +425,14 @@ var workplace_controller: SettlementWorkplaceController
 var simulation_tick_controller: SettlementSimulationTickController
 var logistics_controller: SettlementLogisticsController
 var world_navigation_controller: SettlementWorldNavigationController
+## Direct editor/scene runs retain the historic automatic start. GameRuntime
+## turns this off before adding the scene and lets SettlementGameModule start it.
+var start_on_ready := true
 
 
 func _ready() -> void:
-	start_settlement_session(_active_legacy_launch_config())
+	if start_on_ready:
+		start_settlement_session(_active_legacy_launch_config())
 
 
 ## Transitional public module boundary. The generic GameRuntime invokes this

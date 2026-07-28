@@ -331,6 +331,24 @@ func _test_save_and_reopen(editor: Node) -> void:
 	editor._active.handle_input(_click(MOUSE_BUTTON_LEFT, false))
 	editor.document.meta.name = "Сохранённая"
 
+	# Natural fill is authored like any other entity: place a grass source and a
+	# firefly cluster in fill mode, then prove both survive the package round trip
+	# as typed records (the contract the procedural-startup removal depends on).
+	editor._select_mode(&"fill")
+	editor._active.select_palette_entry(&"core:grass_source")
+	editor._brush.hovered_cell = Vector2i(3, 4)
+	editor._brush.has_hover = true
+	editor._active.handle_input(_click(MOUSE_BUTTON_LEFT, true))
+	editor._active.select_palette_entry(&"core:fireflies")
+	editor._brush.hovered_cell = Vector2i(9, -2)
+	editor._active.handle_input(_click(MOUSE_BUTTON_LEFT, true))
+	var placed_kinds: Array = []
+	for record: MapEntityRecord in editor.document.entities.entities:
+		placed_kinds.append(String(record.archetype_id))
+	assert(placed_kinds.count("core:grass_source") == 1, "fill authored a grass source")
+	assert(placed_kinds.count("core:fireflies") == 1, "fill authored a firefly cluster")
+	var placed_count: int = editor.document.entities.entities.size()
+
 	var service := MapDocumentService.new()
 	var path := service.save_map_to(editor.document, TEST_PACKAGE)
 	assert(not path.is_empty(), "saved: %s" % service.last_error)
@@ -340,6 +358,12 @@ func _test_save_and_reopen(editor: Node) -> void:
 	assert(reopened != null, "reopened")
 	assert(reopened.meta.name == "Сохранённая", "name survived")
 	assert(reopened.meta.board_cells == editor.document.meta.board_cells, "board survived")
+	assert(reopened.entities.entities.size() == placed_count, "every authored natural entity survived the round trip")
+	var reopened_kinds: Array = []
+	for record: MapEntityRecord in reopened.entities.entities:
+		reopened_kinds.append(String(record.archetype_id))
+	assert(reopened_kinds.count("core:grass_source") == 1, "grass source round-tripped")
+	assert(reopened_kinds.count("core:fireflies") == 1, "firefly cluster round-tripped")
 	assert(MapTerrainCodec.encode(reopened.terrain) == MapTerrainCodec.encode(editor.document.terrain), "ground survived byte for byte")
 	# ...and so did the water: the cells in `water.bin` and the registry in
 	# `map.json`, which are useless without each other.

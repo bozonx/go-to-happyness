@@ -1,9 +1,45 @@
 {
 	"anchors": [
-		{"id": "hero_start", "role": "spawn", "pos": [-22.5, 0.0, 3.5], "function": "core:hero_start"},
-		{"id": "companion_1", "role": "spawn", "pos": [-21.0, 0.0, 3.5], "function": "core:companion_start"},
-		{"id": "companion_2", "role": "spawn", "pos": [-22.5, 0.0, 5.0], "function": "core:companion_start"},
-		{"id": "companion_3", "role": "spawn", "pos": [-21.0, 0.0, 5.0], "function": "core:companion_start"}
+		{
+			"function": "core:hero_start",
+			"id": "hero_start",
+			"pos": [
+				-22.5,
+				0.0,
+				3.5
+			],
+			"role": "spawn"
+		},
+		{
+			"function": "core:companion_start",
+			"id": "companion_1",
+			"pos": [
+				-21.0,
+				0.0,
+				3.5
+			],
+			"role": "spawn"
+		},
+		{
+			"function": "core:companion_start",
+			"id": "companion_2",
+			"pos": [
+				-22.5,
+				0.0,
+				5.0
+			],
+			"role": "spawn"
+		},
+		{
+			"function": "core:companion_start",
+			"id": "companion_3",
+			"pos": [
+				-21.0,
+				0.0,
+				5.0
+			],
+			"role": "spawn"
+		}
 	],
 	"areas": [],
 	"author": "Go To Happyness",
@@ -18,27 +54,2156 @@
 	},
 	"defeat": [],
 	"entities": [
-		{"id":"tree_01","archetype":"core:tree","transform":{"position":[-15.5,0,-14.5]}}, {"id":"tree_02","archetype":"core:tree","transform":{"position":[-14.5,0,-17.5]}},
-		{"id":"tree_03","archetype":"core:tree","transform":{"position":[-17.5,0,-11.5]}}, {"id":"tree_04","archetype":"core:tree","transform":{"position":[-11.5,0,-18.5]}},
-		{"id":"tree_05","archetype":"core:tree","transform":{"position":[16.5,0,-14.5]}}, {"id":"tree_06","archetype":"core:tree","transform":{"position":[15.5,0,-17.5]}},
-		{"id":"tree_07","archetype":"core:tree","transform":{"position":[18.5,0,-11.5]}}, {"id":"tree_08","archetype":"core:tree","transform":{"position":[12.5,0,-18.5]}},
-		{"id":"tree_09","archetype":"core:tree","transform":{"position":[-15.5,0,15.5]}}, {"id":"tree_10","archetype":"core:tree","transform":{"position":[-14.5,0,18.5]}},
-		{"id":"tree_11","archetype":"core:tree","transform":{"position":[-17.5,0,12.5]}}, {"id":"tree_12","archetype":"core:tree","transform":{"position":[-11.5,0,19.5]}},
-		{"id":"tree_13","archetype":"core:tree","transform":{"position":[16.5,0,15.5]}}, {"id":"tree_14","archetype":"core:tree","transform":{"position":[15.5,0,18.5]}},
-		{"id":"tree_15","archetype":"core:tree","transform":{"position":[18.5,0,12.5]}}, {"id":"tree_16","archetype":"core:tree","transform":{"position":[12.5,0,19.5]}},
-		{"id":"tree_17","archetype":"core:tree","transform":{"position":[-19.5,0,-4.5]}}, {"id":"tree_18","archetype":"core:tree","transform":{"position":[-19.5,0,5.5]}},
-		{"id":"tree_19","archetype":"core:tree","transform":{"position":[20.5,0,-4.5]}}, {"id":"tree_20","archetype":"core:tree","transform":{"position":[20.5,0,5.5]}},
-		{"id":"tree_21","archetype":"core:tree","transform":{"position":[-4.5,0,-19.5]}}, {"id":"tree_22","archetype":"core:tree","transform":{"position":[5.5,0,-19.5]}},
-		{"id":"tree_23","archetype":"core:tree","transform":{"position":[-4.5,0,20.5]}}, {"id":"tree_24","archetype":"core:tree","transform":{"position":[5.5,0,20.5]}},
-		{"id":"starter_backpack","archetype":"core:starter_backpack","transform":{"position":[-24.0,0,4.2]}},
-		{"id":"rabbit_01","archetype":"core:rabbit","transform":{"position":[-11.5,0,-14.5]}}, {"id":"rabbit_02","archetype":"core:rabbit","transform":{"position":[-10.5,0,-17.5]}},
-		{"id":"rabbit_03","archetype":"core:rabbit","transform":{"position":[-13.5,0,-11.5]}}, {"id":"rabbit_04","archetype":"core:rabbit","transform":{"position":[-7.5,0,-18.5]}},
-		{"id":"rabbit_05","archetype":"core:rabbit","transform":{"position":[20.5,0,-14.5]}}, {"id":"rabbit_06","archetype":"core:rabbit","transform":{"position":[19.5,0,-17.5]}},
-		{"id":"rabbit_07","archetype":"core:rabbit","transform":{"position":[22.5,0,-11.5]}}, {"id":"rabbit_08","archetype":"core:rabbit","transform":{"position":[16.5,0,-18.5]}},
-		{"id":"loot_01","archetype":"core:starter_loot","transform":{"position":[-9.5,0,-2.5]},"props":{"grass":11,"branches":6}},
-		{"id":"loot_02","archetype":"core:starter_loot","transform":{"position":[7.5,0,12.5]},"props":{"grass":9,"branches":5}},
-		{"id":"loot_03","archetype":"core:starter_loot","transform":{"position":[-13.5,0,6.5]},"props":{"grass":13,"branches":7}},
-		{"id":"loot_04","archetype":"core:starter_loot","transform":{"position":[5.5,0,-11.5]},"props":{"grass":6,"branches":4,"gloves":1}}
+		{
+			"archetype": "core:tree",
+			"id": "tree_01",
+			"transform": {
+				"position": [
+					-15.5,
+					0.0,
+					-14.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:tree",
+			"id": "tree_02",
+			"transform": {
+				"position": [
+					-14.5,
+					0.0,
+					-17.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:tree",
+			"id": "tree_03",
+			"transform": {
+				"position": [
+					-17.5,
+					0.0,
+					-11.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:tree",
+			"id": "tree_04",
+			"transform": {
+				"position": [
+					-11.5,
+					0.0,
+					-18.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:tree",
+			"id": "tree_05",
+			"transform": {
+				"position": [
+					16.5,
+					0.0,
+					-14.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:tree",
+			"id": "tree_06",
+			"transform": {
+				"position": [
+					15.5,
+					0.0,
+					-17.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:tree",
+			"id": "tree_07",
+			"transform": {
+				"position": [
+					18.5,
+					0.0,
+					-11.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:tree",
+			"id": "tree_08",
+			"transform": {
+				"position": [
+					12.5,
+					0.0,
+					-18.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:tree",
+			"id": "tree_09",
+			"transform": {
+				"position": [
+					-15.5,
+					0.0,
+					15.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:tree",
+			"id": "tree_10",
+			"transform": {
+				"position": [
+					-14.5,
+					0.0,
+					18.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:tree",
+			"id": "tree_11",
+			"transform": {
+				"position": [
+					-17.5,
+					0.0,
+					12.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:tree",
+			"id": "tree_12",
+			"transform": {
+				"position": [
+					-11.5,
+					0.0,
+					19.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:tree",
+			"id": "tree_13",
+			"transform": {
+				"position": [
+					16.5,
+					0.0,
+					15.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:tree",
+			"id": "tree_14",
+			"transform": {
+				"position": [
+					15.5,
+					0.0,
+					18.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:tree",
+			"id": "tree_15",
+			"transform": {
+				"position": [
+					18.5,
+					0.0,
+					12.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:tree",
+			"id": "tree_16",
+			"transform": {
+				"position": [
+					12.5,
+					0.0,
+					19.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:tree",
+			"id": "tree_17",
+			"transform": {
+				"position": [
+					-19.5,
+					0.0,
+					-4.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:tree",
+			"id": "tree_18",
+			"transform": {
+				"position": [
+					-19.5,
+					0.0,
+					5.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:tree",
+			"id": "tree_19",
+			"transform": {
+				"position": [
+					20.5,
+					0.0,
+					-4.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:tree",
+			"id": "tree_20",
+			"transform": {
+				"position": [
+					20.5,
+					0.0,
+					5.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:tree",
+			"id": "tree_21",
+			"transform": {
+				"position": [
+					-4.5,
+					0.0,
+					-19.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:tree",
+			"id": "tree_22",
+			"transform": {
+				"position": [
+					5.5,
+					0.0,
+					-19.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:tree",
+			"id": "tree_23",
+			"transform": {
+				"position": [
+					-4.5,
+					0.0,
+					20.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:tree",
+			"id": "tree_24",
+			"transform": {
+				"position": [
+					5.5,
+					0.0,
+					20.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:starter_backpack",
+			"id": "starter_backpack",
+			"transform": {
+				"position": [
+					-24.0,
+					0.0,
+					4.19999980926514
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:rabbit",
+			"id": "rabbit_01",
+			"transform": {
+				"position": [
+					-11.5,
+					0.0,
+					-14.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:rabbit",
+			"id": "rabbit_02",
+			"transform": {
+				"position": [
+					-10.5,
+					0.0,
+					-17.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:rabbit",
+			"id": "rabbit_03",
+			"transform": {
+				"position": [
+					-13.5,
+					0.0,
+					-11.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:rabbit",
+			"id": "rabbit_04",
+			"transform": {
+				"position": [
+					-7.5,
+					0.0,
+					-18.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:rabbit",
+			"id": "rabbit_05",
+			"transform": {
+				"position": [
+					20.5,
+					0.0,
+					-14.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:rabbit",
+			"id": "rabbit_06",
+			"transform": {
+				"position": [
+					19.5,
+					0.0,
+					-17.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:rabbit",
+			"id": "rabbit_07",
+			"transform": {
+				"position": [
+					22.5,
+					0.0,
+					-11.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:rabbit",
+			"id": "rabbit_08",
+			"transform": {
+				"position": [
+					16.5,
+					0.0,
+					-18.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:starter_loot",
+			"id": "loot_01",
+			"props": {
+				"branches": 6.0,
+				"grass": 11.0
+			},
+			"transform": {
+				"position": [
+					-9.5,
+					0.0,
+					-2.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:starter_loot",
+			"id": "loot_02",
+			"props": {
+				"branches": 5.0,
+				"grass": 9.0
+			},
+			"transform": {
+				"position": [
+					7.5,
+					0.0,
+					12.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:starter_loot",
+			"id": "loot_03",
+			"props": {
+				"branches": 7.0,
+				"grass": 13.0
+			},
+			"transform": {
+				"position": [
+					-13.5,
+					0.0,
+					6.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:starter_loot",
+			"id": "loot_04",
+			"props": {
+				"branches": 4.0,
+				"gloves": 1.0,
+				"grass": 6.0
+			},
+			"transform": {
+				"position": [
+					5.5,
+					0.0,
+					-11.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-14_-15",
+			"transform": {
+				"position": [
+					-13.5,
+					0.0,
+					-14.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-18_-14",
+			"transform": {
+				"position": [
+					-17.5,
+					0.0,
+					-13.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-15_-17",
+			"transform": {
+				"position": [
+					-14.5,
+					0.0,
+					-16.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_-13_-14",
+			"transform": {
+				"position": [
+					-12.5,
+					0.0,
+					-13.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_-19_-16",
+			"transform": {
+				"position": [
+					-18.5,
+					0.0,
+					-15.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-13_-18",
+			"transform": {
+				"position": [
+					-12.5,
+					0.0,
+					-17.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-17_-17",
+			"transform": {
+				"position": [
+					-16.5,
+					0.0,
+					-16.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-14_-20",
+			"transform": {
+				"position": [
+					-13.5,
+					0.0,
+					-19.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_-12_-17",
+			"transform": {
+				"position": [
+					-11.5,
+					0.0,
+					-16.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_-18_-19",
+			"transform": {
+				"position": [
+					-17.5,
+					0.0,
+					-18.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-16_-12",
+			"transform": {
+				"position": [
+					-15.5,
+					0.0,
+					-11.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-20_-11",
+			"transform": {
+				"position": [
+					-19.5,
+					0.0,
+					-10.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-17_-14",
+			"transform": {
+				"position": [
+					-16.5,
+					0.0,
+					-13.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_-15_-11",
+			"transform": {
+				"position": [
+					-14.5,
+					0.0,
+					-10.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_-21_-13",
+			"transform": {
+				"position": [
+					-20.5,
+					0.0,
+					-12.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-10_-19",
+			"transform": {
+				"position": [
+					-9.5,
+					0.0,
+					-18.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-14_-18",
+			"transform": {
+				"position": [
+					-13.5,
+					0.0,
+					-17.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-11_-21",
+			"transform": {
+				"position": [
+					-10.5,
+					0.0,
+					-20.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_-9_-18",
+			"transform": {
+				"position": [
+					-8.5,
+					0.0,
+					-17.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_-15_-20",
+			"transform": {
+				"position": [
+					-14.5,
+					0.0,
+					-19.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_18_-15",
+			"transform": {
+				"position": [
+					18.5,
+					0.0,
+					-14.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_14_-14",
+			"transform": {
+				"position": [
+					14.5,
+					0.0,
+					-13.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_17_-17",
+			"transform": {
+				"position": [
+					17.5,
+					0.0,
+					-16.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_19_-14",
+			"transform": {
+				"position": [
+					19.5,
+					0.0,
+					-13.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_13_-16",
+			"transform": {
+				"position": [
+					13.5,
+					0.0,
+					-15.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_17_-18",
+			"transform": {
+				"position": [
+					17.5,
+					0.0,
+					-17.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_13_-17",
+			"transform": {
+				"position": [
+					13.5,
+					0.0,
+					-16.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_16_-20",
+			"transform": {
+				"position": [
+					16.5,
+					0.0,
+					-19.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_18_-17",
+			"transform": {
+				"position": [
+					18.5,
+					0.0,
+					-16.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_20_-12",
+			"transform": {
+				"position": [
+					20.5,
+					0.0,
+					-11.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_16_-11",
+			"transform": {
+				"position": [
+					16.5,
+					0.0,
+					-10.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_19_-14",
+			"transform": {
+				"position": [
+					19.5,
+					0.0,
+					-13.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_21_-11",
+			"transform": {
+				"position": [
+					21.5,
+					0.0,
+					-10.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_15_-13",
+			"transform": {
+				"position": [
+					15.5,
+					0.0,
+					-12.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_14_-19",
+			"transform": {
+				"position": [
+					14.5,
+					0.0,
+					-18.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_10_-18",
+			"transform": {
+				"position": [
+					10.5,
+					0.0,
+					-17.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_13_-21",
+			"transform": {
+				"position": [
+					13.5,
+					0.0,
+					-20.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_9_-20",
+			"transform": {
+				"position": [
+					9.5,
+					0.0,
+					-19.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-14_15",
+			"transform": {
+				"position": [
+					-13.5,
+					0.0,
+					15.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-18_16",
+			"transform": {
+				"position": [
+					-17.5,
+					0.0,
+					16.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-15_13",
+			"transform": {
+				"position": [
+					-14.5,
+					0.0,
+					13.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_-13_16",
+			"transform": {
+				"position": [
+					-12.5,
+					0.0,
+					16.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_-19_14",
+			"transform": {
+				"position": [
+					-18.5,
+					0.0,
+					14.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-13_18",
+			"transform": {
+				"position": [
+					-12.5,
+					0.0,
+					18.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-17_19",
+			"transform": {
+				"position": [
+					-16.5,
+					0.0,
+					19.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-14_16",
+			"transform": {
+				"position": [
+					-13.5,
+					0.0,
+					16.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_-18_17",
+			"transform": {
+				"position": [
+					-17.5,
+					0.0,
+					17.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-16_12",
+			"transform": {
+				"position": [
+					-15.5,
+					0.0,
+					12.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-20_13",
+			"transform": {
+				"position": [
+					-19.5,
+					0.0,
+					13.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-17_10",
+			"transform": {
+				"position": [
+					-16.5,
+					0.0,
+					10.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_-15_13",
+			"transform": {
+				"position": [
+					-14.5,
+					0.0,
+					13.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_-21_11",
+			"transform": {
+				"position": [
+					-20.5,
+					0.0,
+					11.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-10_19",
+			"transform": {
+				"position": [
+					-9.5,
+					0.0,
+					19.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-14_20",
+			"transform": {
+				"position": [
+					-13.5,
+					0.0,
+					20.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-11_17",
+			"transform": {
+				"position": [
+					-10.5,
+					0.0,
+					17.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_-9_20",
+			"transform": {
+				"position": [
+					-8.5,
+					0.0,
+					20.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_18_15",
+			"transform": {
+				"position": [
+					18.5,
+					0.0,
+					15.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_14_16",
+			"transform": {
+				"position": [
+					14.5,
+					0.0,
+					16.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_17_13",
+			"transform": {
+				"position": [
+					17.5,
+					0.0,
+					13.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_19_16",
+			"transform": {
+				"position": [
+					19.5,
+					0.0,
+					16.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_13_14",
+			"transform": {
+				"position": [
+					13.5,
+					0.0,
+					14.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_17_18",
+			"transform": {
+				"position": [
+					17.5,
+					0.0,
+					18.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_13_19",
+			"transform": {
+				"position": [
+					13.5,
+					0.0,
+					19.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_16_16",
+			"transform": {
+				"position": [
+					16.5,
+					0.0,
+					16.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_18_19",
+			"transform": {
+				"position": [
+					18.5,
+					0.0,
+					19.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_12_17",
+			"transform": {
+				"position": [
+					12.5,
+					0.0,
+					17.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_20_12",
+			"transform": {
+				"position": [
+					20.5,
+					0.0,
+					12.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_16_13",
+			"transform": {
+				"position": [
+					16.5,
+					0.0,
+					13.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_19_10",
+			"transform": {
+				"position": [
+					19.5,
+					0.0,
+					10.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_21_13",
+			"transform": {
+				"position": [
+					21.5,
+					0.0,
+					13.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_15_11",
+			"transform": {
+				"position": [
+					15.5,
+					0.0,
+					11.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_14_19",
+			"transform": {
+				"position": [
+					14.5,
+					0.0,
+					19.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_10_20",
+			"transform": {
+				"position": [
+					10.5,
+					0.0,
+					20.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_13_17",
+			"transform": {
+				"position": [
+					13.5,
+					0.0,
+					17.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_15_20",
+			"transform": {
+				"position": [
+					15.5,
+					0.0,
+					20.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_9_18",
+			"transform": {
+				"position": [
+					9.5,
+					0.0,
+					18.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-18_-5",
+			"transform": {
+				"position": [
+					-17.5,
+					0.0,
+					-4.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-22_-4",
+			"transform": {
+				"position": [
+					-21.5,
+					0.0,
+					-3.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-19_-7",
+			"transform": {
+				"position": [
+					-18.5,
+					0.0,
+					-6.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_-17_-4",
+			"transform": {
+				"position": [
+					-16.5,
+					0.0,
+					-3.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_-23_-6",
+			"transform": {
+				"position": [
+					-22.5,
+					0.0,
+					-5.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-18_5",
+			"transform": {
+				"position": [
+					-17.5,
+					0.0,
+					5.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-22_6",
+			"transform": {
+				"position": [
+					-21.5,
+					0.0,
+					6.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-19_3",
+			"transform": {
+				"position": [
+					-18.5,
+					0.0,
+					3.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_-17_6",
+			"transform": {
+				"position": [
+					-16.5,
+					0.0,
+					6.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_-23_4",
+			"transform": {
+				"position": [
+					-22.5,
+					0.0,
+					4.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_22_-5",
+			"transform": {
+				"position": [
+					22.5,
+					0.0,
+					-4.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_18_-4",
+			"transform": {
+				"position": [
+					18.5,
+					0.0,
+					-3.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_21_-7",
+			"transform": {
+				"position": [
+					21.5,
+					0.0,
+					-6.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_23_-4",
+			"transform": {
+				"position": [
+					23.5,
+					0.0,
+					-3.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_17_-6",
+			"transform": {
+				"position": [
+					17.5,
+					0.0,
+					-5.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_22_5",
+			"transform": {
+				"position": [
+					22.5,
+					0.0,
+					5.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_18_6",
+			"transform": {
+				"position": [
+					18.5,
+					0.0,
+					6.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_21_3",
+			"transform": {
+				"position": [
+					21.5,
+					0.0,
+					3.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_23_6",
+			"transform": {
+				"position": [
+					23.5,
+					0.0,
+					6.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_17_4",
+			"transform": {
+				"position": [
+					17.5,
+					0.0,
+					4.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-3_-20",
+			"transform": {
+				"position": [
+					-2.5,
+					0.0,
+					-19.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-7_-19",
+			"transform": {
+				"position": [
+					-6.5,
+					0.0,
+					-18.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-4_-22",
+			"transform": {
+				"position": [
+					-3.5,
+					0.0,
+					-21.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_-2_-19",
+			"transform": {
+				"position": [
+					-1.5,
+					0.0,
+					-18.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_-8_-21",
+			"transform": {
+				"position": [
+					-7.5,
+					0.0,
+					-20.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_7_-20",
+			"transform": {
+				"position": [
+					7.5,
+					0.0,
+					-19.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_3_-19",
+			"transform": {
+				"position": [
+					3.5,
+					0.0,
+					-18.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_6_-22",
+			"transform": {
+				"position": [
+					6.5,
+					0.0,
+					-21.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_8_-19",
+			"transform": {
+				"position": [
+					8.5,
+					0.0,
+					-18.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_2_-21",
+			"transform": {
+				"position": [
+					2.5,
+					0.0,
+					-20.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-3_20",
+			"transform": {
+				"position": [
+					-2.5,
+					0.0,
+					20.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-7_21",
+			"transform": {
+				"position": [
+					-6.5,
+					0.0,
+					21.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_-4_18",
+			"transform": {
+				"position": [
+					-3.5,
+					0.0,
+					18.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_-2_21",
+			"transform": {
+				"position": [
+					-1.5,
+					0.0,
+					21.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_-8_19",
+			"transform": {
+				"position": [
+					-7.5,
+					0.0,
+					19.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_7_20",
+			"transform": {
+				"position": [
+					7.5,
+					0.0,
+					20.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_3_21",
+			"transform": {
+				"position": [
+					3.5,
+					0.0,
+					21.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:grass_source",
+			"id": "grass_6_18",
+			"transform": {
+				"position": [
+					6.5,
+					0.0,
+					18.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_8_21",
+			"transform": {
+				"position": [
+					8.5,
+					0.0,
+					21.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:forage_source",
+			"id": "forage_2_19",
+			"transform": {
+				"position": [
+					2.5,
+					0.0,
+					19.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:fireflies",
+			"id": "fireflies_north_west",
+			"props": {
+				"amount": 38.0,
+				"height": 3.5,
+				"radius": 4.4
+			},
+			"transform": {
+				"position": [
+					-14.75,
+					1.0,
+					-15.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:fireflies",
+			"id": "fireflies_north_east",
+			"props": {
+				"amount": 38.0,
+				"height": 3.5,
+				"radius": 4.4
+			},
+			"transform": {
+				"position": [
+					15.75,
+					1.0,
+					-15.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:fireflies",
+			"id": "fireflies_south_west",
+			"props": {
+				"amount": 38.0,
+				"height": 3.5,
+				"radius": 4.4
+			},
+			"transform": {
+				"position": [
+					-14.75,
+					1.0,
+					16.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:fireflies",
+			"id": "fireflies_south_east",
+			"props": {
+				"amount": 38.0,
+				"height": 3.5,
+				"radius": 4.4
+			},
+			"transform": {
+				"position": [
+					15.75,
+					1.0,
+					16.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:fireflies",
+			"id": "fireflies_west_grove",
+			"props": {
+				"amount": 24.0,
+				"height": 2.8,
+				"radius": 3.6
+			},
+			"transform": {
+				"position": [
+					-19.5,
+					1.0,
+					0.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:fireflies",
+			"id": "fireflies_east_grove",
+			"props": {
+				"amount": 24.0,
+				"height": 2.8,
+				"radius": 3.6
+			},
+			"transform": {
+				"position": [
+					20.5,
+					1.0,
+					0.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:fireflies",
+			"id": "fireflies_north_grove",
+			"props": {
+				"amount": 24.0,
+				"height": 2.8,
+				"radius": 3.6
+			},
+			"transform": {
+				"position": [
+					0.5,
+					1.0,
+					-19.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		},
+		{
+			"archetype": "core:fireflies",
+			"id": "fireflies_south_grove",
+			"props": {
+				"amount": 24.0,
+				"height": 2.8,
+				"radius": 3.6
+			},
+			"transform": {
+				"position": [
+					0.5,
+					1.0,
+					20.5
+				],
+				"scale": 1.0,
+				"yaw": 0.0
+			}
+		}
 	],
 	"flags": {},
 	"format_version": 4,
@@ -46,11 +2211,59 @@
 	"kind": "map",
 	"map_kind": "map",
 	"name": "Зелёная долина",
-	"natural_scatter": {"tree_cells": [[-16,-15],[-15,-18],[-18,-12],[-12,-19],[16,-15],[15,-18],[18,-12],[12,-19],[-16,15],[-15,18],[-18,12],[-12,19],[16,15],[15,18],[18,12],[12,19],[-20,-5],[-20,5],[20,-5],[20,5],[-5,-20],[5,-20],[-5,20],[5,20]]},
 	"placements": [],
 	"players": 1,
-	"required_content": [],
-	"revision": "6a69014c575a",
+	"required_content": [
+		{
+			"id": "core:fireflies",
+			"kind": "archetype"
+		},
+		{
+			"id": "core:forage_source",
+			"kind": "archetype"
+		},
+		{
+			"id": "core:grass_source",
+			"kind": "archetype"
+		},
+		{
+			"id": "core:rabbit",
+			"kind": "archetype"
+		},
+		{
+			"id": "core:starter_backpack",
+			"kind": "archetype"
+		},
+		{
+			"id": "core:starter_loot",
+			"kind": "archetype"
+		},
+		{
+			"id": "core:tree",
+			"kind": "archetype"
+		},
+		{
+			"id": "fireflies",
+			"kind": "asset"
+		},
+		{
+			"id": "forage_source",
+			"kind": "asset"
+		},
+		{
+			"id": "grass_source",
+			"kind": "asset"
+		},
+		{
+			"id": "rabbit",
+			"kind": "asset"
+		},
+		{
+			"id": "tree",
+			"kind": "asset"
+		}
+	],
+	"revision": "6a69356b11c5",
 	"routes": [],
 	"rules": [],
 	"start": {

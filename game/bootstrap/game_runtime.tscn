@@ -1,15 +1,6 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://game/features/runtime/presentation/game_runtime.gd" id="1_runtime"]
-[ext_resource type="PackedScene" path="res://game/features/world/presentation/biomes/summer/summer_valley/summer_valley_territory.tscn" id="2_terrain"]
-[ext_resource type="PackedScene" path="res://game/features/world/presentation/camera_controller.tscn" id="3_camera"]
-[ext_resource type="PackedScene" path="res://game/features/ui/presentation/ui_manager.tscn" id="4_ui"]
 
 [node name="GameRuntime" type="Node3D"]
 script = ExtResource("1_runtime")
-
-[node name="WorldTerritory" parent="." instance=ExtResource("2_terrain")]
-
-[node name="CameraController" parent="." instance=ExtResource("3_camera")]
-
-[node name="UIManager" parent="." instance=ExtResource("4_ui")]

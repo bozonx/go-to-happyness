@@ -31,7 +31,10 @@ func _init() -> void:
 	var rabbit_before: RabbitSourceRecord = sim_a.rabbit_sources[rabbit_cell]
 	rabbit_before.direction = Vector3(0.4, 0.0, -0.8)
 	var rabbit_position := rabbit_before.node.global_position
-	sim_a.forage_respawn_at[Vector2i(31, 31)] = 123.0
+	# Wild food no longer respawns, so harvesting a forage source in A must leave
+	# it permanently gone — the save carries that absence, not a respawn timer.
+	sim_a.forage_sources[forage_cell].node.queue_free()
+	sim_a.forage_sources.erase(forage_cell)
 
 	sim_a.settlement.money = 4321
 	var citizen_count: int = sim_a.citizens.size()
@@ -59,11 +62,11 @@ func _init() -> void:
 	assert(restored_tree.hand_branches == 2, "hand branches not restored")
 	assert(sim_b.grass_sources.has(grass_cell), "grass source missing after restore")
 	assert(sim_b.grass_sources[grass_cell].remaining == grass_before.remaining, "grass depletion not restored")
-	assert(sim_b.forage_sources.has(forage_cell), "forage source missing after restore")
+	# The harvested forage source stays gone after save/load: wild food does not
+	# respawn, so the absence harvested in A is the state restored in B.
+	assert(not sim_b.forage_sources.has(forage_cell), "harvested forage must not come back")
 	assert(sim_b.rabbit_sources.has(rabbit_cell), "rabbit source missing after restore")
 	assert(sim_b.rabbit_sources[rabbit_cell].node.global_position.distance_to(rabbit_position) < 0.01, "rabbit position not restored")
-	assert(sim_b.rabbit_respawn_at.is_empty(), "unexpected rabbit respawn state")
-	assert(float(sim_b.forage_respawn_at.get(Vector2i(31, 31), -1.0)) == 123.0, "forage respawn timer not restored")
 	var landscape_objects := sim_b.get_node("WorldTerritory/LandscapeObjects")
 	assert(sim_b.resource_piles.any(func(pile): return bool(pile.node.get_meta("landscape_owned", false)) and pile.node.get_parent() == landscape_objects), "starter world loot must return to the terrain hierarchy")
 

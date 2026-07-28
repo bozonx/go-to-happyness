@@ -43,14 +43,24 @@ static func _test_scope_filters_the_palette_only() -> void:
 static func _test_catalog_queries_respect_scope() -> void:
 	var all_assets := WorldAssetCatalog.get_all_assets()
 	assert(not all_assets.is_empty())
-	# Every built-in is `both` today, so no query may lose one.
-	assert(WorldAssetCatalog.get_all_assets(WorldAssetDef.SCOPE_BUILDING).size() == all_assets.size())
-	assert(WorldAssetCatalog.get_all_assets(WorldAssetDef.SCOPE_MAP).size() == all_assets.size())
+	# Map-only assets exist and are legitimate: the natural and ambient fill
+	# (trees, grass, forage, rabbits, fireflies) belongs on the map, never inside
+	# a building blueprint. So every building-scope asset also appears in the
+	# map scope, but the map scope may carry more — the building query is a
+	# subset, not the whole catalogue.
+	var building_assets := WorldAssetCatalog.get_all_assets(WorldAssetDef.SCOPE_BUILDING)
+	var map_assets := WorldAssetCatalog.get_all_assets(WorldAssetDef.SCOPE_MAP)
+	assert(map_assets.size() == all_assets.size(), "every asset is at least map-scope")
+	assert(building_assets.size() <= map_assets.size(), "building scope is a subset of map scope")
+	for asset: WorldAssetDef in building_assets:
+		assert(asset.is_in_scope(WorldAssetDef.SCOPE_MAP), "a building asset must also be map-placeable")
 
 	var building_counts := WorldAssetCatalog.category_counts(WorldAssetDef.SCOPE_BUILDING)
 	var unfiltered_counts := WorldAssetCatalog.category_counts()
 	for category_id: StringName in unfiltered_counts.keys():
-		assert(int(building_counts[category_id]) == int(unfiltered_counts[category_id]))
+		# A category may have more map-only assets than building ones (vegetation,
+		# creatures, ambient), but never the other way around.
+		assert(int(building_counts[category_id]) <= int(unfiltered_counts[category_id]))
 
 	var scoped := WorldAssetCatalog.filter_assets(&"", &"", &"", WorldAssetDef.SCOPE_MAP)
 	assert(scoped.size() == all_assets.size())

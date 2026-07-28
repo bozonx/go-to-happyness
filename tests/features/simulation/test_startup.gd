@@ -37,16 +37,27 @@ func _init() -> void:
 
 	# Natural objects are owned by the terrain scene but retain their registered
 	# source records, so moving presentation ownership cannot make them inert.
+	# Every one of them now comes from authored `entities[]`: startup never
+	# invents grass, forage, rabbits or fireflies the map did not place.
 	var landscape_objects := simulation.get_node("WorldTerritory/LandscapeObjects") as Node3D
 	assert(not simulation.tree_nodes.is_empty())
 	assert(not simulation.grass_sources.is_empty())
 	assert(not simulation.forage_sources.is_empty())
 	assert(not simulation.rabbit_sources.is_empty())
+	assert(not simulation.fireflies.is_empty())
 	assert(simulation.tree_nodes.values()[0].get_parent() == landscape_objects)
 	assert((simulation.grass_sources.values()[0] as GrassSourceRecord).node.get_parent() == landscape_objects)
 	assert((simulation.forage_sources.values()[0] as ForageSourceRecord).node.get_parent() == landscape_objects)
 	assert((simulation.rabbit_sources.values()[0] as RabbitSourceRecord).node.get_parent() == landscape_objects)
+	# Authored firefly placements are rendered by MapEntityPresenter and forwarded
+	# into the weather controller's list, so they are live FirefliesEffect nodes.
+	assert(simulation.fireflies[0] is FirefliesEffect)
+	assert(is_instance_valid(simulation.fireflies[0]))
 	assert(simulation.resource_piles.any(func(pile): return pile.node.get_parent() == landscape_objects))
+
+	# The runtime count of every natural kind matches the map's authored records
+	# exactly — no startup fabrication, nothing dropped.
+	_count_natural_entities(simulation)
 
 	# Hero citizen
 	assert(is_instance_valid(simulation.hero_citizen))
@@ -167,3 +178,32 @@ func _init() -> void:
 
 	SimHelper.cleanup_simulation(self, simulation)
 	quit(0)
+
+
+## Every natural object at runtime must trace back to an authored `entities[]`
+## record. This is the end-to-end guard against reintroducing a procedural
+## startup generator: if a count drifts, startup invented or dropped something.
+func _count_natural_entities(simulation: Node) -> void:
+	var document: MapDocument = simulation.launch_config.map_document
+	assert(document != null)
+	var expected := {
+		&"tree": 0, &"grass_source": 0, &"forage_source": 0,
+		&"rabbit": 0, &"fireflies": 0, &"starter_loot": 0, &"starter_backpack": 0,
+	}
+	for placed: MapEntityRecord in document.entities.entities:
+		var archetype := EntityArchetypeCatalog.get_archetype(placed.archetype_id)
+		if archetype == null or not archetype.has_component(&"settlement_natural"):
+			# Fireflies carry no settlement_natural component (the presenter owns
+			# them), so match them by archetype id instead.
+			if String(placed.archetype_id) == "core:fireflies":
+				expected[&"fireflies"] += 1
+			continue
+		var kind := StringName(archetype.component_data(&"settlement_natural").get("kind", ""))
+		if expected.has(kind):
+			expected[kind] += 1
+	# starter_loot becomes resource piles; starter_backpack is a single pile.
+	assert(simulation.tree_nodes.size() == expected[&"tree"])
+	assert(simulation.grass_sources.size() == expected[&"grass_source"])
+	assert(simulation.forage_sources.size() == expected[&"forage_source"])
+	assert(simulation.rabbit_sources.size() == expected[&"rabbit"])
+	assert(simulation.fireflies.size() == expected[&"fireflies"])

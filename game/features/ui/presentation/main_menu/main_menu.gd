@@ -4,8 +4,6 @@ extends Control
 ## Main menu controller supporting era selection, landscape selection, and game launch.
 
 const UI_THEME = preload("res://game/features/ui/presentation/theme/ui_theme.tres")
-const GameLaunchConfigScript = preload("res://game/features/settlement/domain/game_launch_config.gd")
-
 @onready var title_label: Label = $MarginContainer/VBoxContainer/Header/TitleLabel
 @onready var subtitle_label: Label = $MarginContainer/VBoxContainer/Header/SubtitleLabel
 
@@ -18,6 +16,7 @@ const GameLaunchConfigScript = preload("res://game/features/settlement/domain/ga
 @onready var map_editor_btn: Button = $MarginContainer/VBoxContainer/ContentSplit/EraPanel/VBox/MapEditorButton
 
 ## This picker chooses the authored world for the session.
+@onready var game_option: OptionButton = $MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox/GameOption
 @onready var landscape_option: OptionButton = $MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox/LandscapeOption
 @onready var era_description_label: Label = $MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox/DescriptionLabel
 @onready var param_summary_label: Label = $MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox/ParamSummaryLabel
@@ -27,6 +26,7 @@ const GameLaunchConfigScript = preload("res://game/features/settlement/domain/ga
 
 var selected_era: StringName = &"tent"
 var selected_biome: StringName = &"summer_valley"
+var selected_game: StringName = &"core:settlement"
 ## Runtime key of the chosen playable map.
 var selected_map: StringName = &"core:green_valley"
 
@@ -35,9 +35,35 @@ var _map_service := MapDocumentService.new()
 
 func _ready() -> void:
 	theme = UI_THEME
+	_setup_game_options()
 	_setup_landscape_options()
 	_connect_signals()
 	_select_era(&"tent")
+	_select_game_option()
+
+
+## The host library indexes every installed game definition. The first UI is a
+## picker rather than a store: installation and remote publishing come later,
+## but an installed pack already becomes launchable here without a menu rewrite.
+func _setup_game_options() -> void:
+	game_option.clear()
+	var index := ContentIndex.new()
+	index.rebuild()
+	var slot := 0
+	var settlement_slot := -1
+	for entry in index.game_entries():
+		game_option.add_item("🎮 %s" % entry.name, slot)
+		game_option.set_item_metadata(slot, {"game": entry.runtime_key})
+		if entry.runtime_key == &"core:settlement":
+			settlement_slot = slot
+		slot += 1
+	if slot == 0:
+		game_option.add_item("Нет доступных игр")
+		game_option.disabled = true
+		start_game_btn.disabled = true
+		return
+	game_option.disabled = false
+	game_option.select(settlement_slot if settlement_slot >= 0 else 0)
 
 
 ## Every game session starts from an authored map. Player maps saved by the
@@ -74,6 +100,7 @@ func _connect_signals() -> void:
 	building_editor_btn.pressed.connect(_on_building_editor_pressed)
 	map_editor_btn.pressed.connect(_on_map_editor_pressed)
 
+	game_option.item_selected.connect(_on_game_selected)
 	landscape_option.item_selected.connect(_on_landscape_selected)
 	start_game_btn.pressed.connect(_on_start_game_pressed)
 	quit_btn.pressed.connect(_on_quit_pressed)
@@ -86,6 +113,33 @@ func _on_landscape_selected(index: int) -> void:
 	var entry: Dictionary = metadata
 	selected_map = entry.get("map", &"")
 	_update_config_summary()
+
+
+func _on_game_selected(index: int) -> void:
+	var metadata: Variant = game_option.get_item_metadata(index)
+	if metadata is Dictionary:
+		selected_game = (metadata as Dictionary).get("game", &"")
+	_select_game_option()
+
+
+func _select_game_option() -> void:
+	var definition := GameModuleRegistry.resolve_definition(selected_game)
+	var is_settlement := definition != null and definition.module_ids.has(&"gth.settlement")
+	tent_era_btn.get_parent().get_parent().visible = is_settlement
+	if definition != null and not definition.default_map.is_empty():
+		_select_default_map(definition.default_map)
+	start_game_btn.text = "▶ Начать Settlement" if is_settlement else "▶ Запустить игру"
+	subtitle_label.text = "Главное меню — библиотека установленных игр"
+	_update_config_summary()
+
+
+func _select_default_map(map_key: StringName) -> void:
+	for index in range(landscape_option.item_count):
+		var metadata: Variant = landscape_option.get_item_metadata(index)
+		if metadata is Dictionary and (metadata as Dictionary).get("map", &"") == map_key:
+			landscape_option.select(index)
+			selected_map = map_key
+			return
 
 
 func _select_era(era_id: StringName) -> void:
@@ -112,6 +166,11 @@ func _update_era_buttons_state() -> void:
 
 
 func _update_config_summary() -> void:
+	if selected_game != &"core:settlement":
+		var definition := GameModuleRegistry.resolve_definition(selected_game)
+		era_description_label.text = definition.name if definition != null else "Неизвестная игра"
+		param_summary_label.text = "• %s\n• Запускается внутри Go To Happyness" % [_landscape_summary()]
+		return
 	match selected_era:
 		&"tent":
 			era_description_label.text = "Палаточная эра: Начало пути вашей кочевой группы. Выживание в дикой природе, сбор ресурсов, постройка первого костра и палаток."
@@ -134,9 +193,10 @@ func _landscape_summary() -> String:
 func _on_start_game_pressed() -> void:
 	var launch_mgr: Node = get_node_or_null("/root/GameLaunchManager")
 	if launch_mgr != null and launch_mgr.has_method("launch_game_definition"):
-		launch_mgr.call("launch_game_definition", &"core:settlement", selected_map, {
+		var parameters := {
 			&"gth.settlement": {"era": String(selected_era), "biome": String(selected_biome)},
-		})
+		} if selected_game == &"core:settlement" else {}
+		launch_mgr.call("launch_game_definition", selected_game, selected_map, parameters)
 	else:
 		get_tree().change_scene_to_file("res://game/bootstrap/game_runtime.tscn")
 

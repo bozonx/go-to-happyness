@@ -1,7 +1,6 @@
 class_name AmbientSpawner
 extends Node3D
 
-const FirefliesEffectScene = preload("res://game/features/world/presentation/fireflies_effect.tscn")
 const TreeScene = preload("res://game/features/world/presentation/tree.tscn")
 const GrassSourceScene = preload("res://game/features/world/presentation/grass_source.tscn")
 const ForageSourceScene = preload("res://game/features/world/presentation/forage_source.tscn")
@@ -57,7 +56,9 @@ func create_forest() -> void:
 	for entry in _entities_of_kind(&"forage_source"):
 		_create_forage_source_at(entry.position)
 	simulation.world_navigation_controller.refresh_navigation_grid()
-	_create_firefly_clusters()
+	# Fireflies are no longer spawned here: they are authored as `core:fireflies`
+	# map entities and rendered by MapEntityPresenter, which publishes each
+	# instance into WorldSetup.fireflies for the weather controller.
 
 
 func _create_tree(position_on_board: Vector3, refresh_navigation := true, initial_wood := -1, initial_branches := -1) -> void:
@@ -90,20 +91,6 @@ func _create_tree(position_on_board: Vector3, refresh_navigation := true, initia
 		simulation.world_navigation_controller.refresh_navigation_grid()
 
 
-func _create_grass_sources_near_tree(tree_cell: Vector2i) -> void:
-	for offset in [Vector2i(2, 0), Vector2i(-2, 1), Vector2i(1, -2)]:
-		var cell: Vector2i = tree_cell + offset
-		if simulation.grass_sources.has(cell) or simulation.tree_cells.has(cell) or simulation.navigation_blocked_cells.has(cell):
-			continue
-		var position: Vector3 = simulation.nav_grid.cell_center(cell) if simulation.nav_grid != null else Vector3((cell.x + 0.5) * simulation.CELL_SIZE, 0.0, (cell.y + 0.5) * simulation.CELL_SIZE)
-		var node: MeshInstance3D = GrassSourceScene.instantiate()
-		node.position = position + Vector3.UP * 0.05
-		simulation.building_visuals.add_selector_to_node(node, "grass_selector", Vector3(1.2, 0.6, 1.2), Vector3.UP * 0.3)
-		simulation.world_navigation_controller.add_landscape_object(node)
-		var initial_remaining: int = simulation.random.randi_range(2, 5)
-		simulation.grass_sources[cell] = GrassSourceRecord.new(node, initial_remaining, initial_remaining)
-
-
 func _create_grass_source_at(position: Vector3, amount: int) -> void:
 	var cell: Vector2i = simulation.cell_from_position(position)
 	if not simulation.is_board_cell(cell) or simulation.grass_sources.has(cell) or simulation.tree_cells.has(cell):
@@ -115,18 +102,6 @@ func _create_grass_source_at(position: Vector3, amount: int) -> void:
 	simulation.grass_sources[cell] = GrassSourceRecord.new(node, amount, amount)
 
 
-func _create_forage_sources_near_tree(tree_cell: Vector2i) -> void:
-	for offset in [Vector2i(3, 1), Vector2i(-3, -1)]:
-		var cell: Vector2i = tree_cell + offset
-		if simulation.forage_sources.has(cell) or simulation.tree_cells.has(cell) or simulation.navigation_blocked_cells.has(cell):
-			continue
-		var node: Node3D = ForageSourceScene.instantiate()
-		node.position = simulation.nav_grid.cell_center(cell) if simulation.nav_grid != null else Vector3((cell.x + 0.5) * simulation.CELL_SIZE, 0.0, (cell.y + 0.5) * simulation.CELL_SIZE) + Vector3.UP * 0.05
-		simulation.building_visuals.add_selector_to_node(node, "forage_selector", Vector3(0.5, 0.5, 0.5), Vector3.UP * 0.25)
-		simulation.world_navigation_controller.add_landscape_object(node)
-		simulation.forage_sources[cell] = ForageSourceRecord.new(node)
-
-
 func _create_forage_source_at(position: Vector3) -> void:
 	var cell: Vector2i = simulation.cell_from_position(position)
 	if not simulation.is_board_cell(cell) or simulation.forage_sources.has(cell) or simulation.tree_cells.has(cell):
@@ -136,40 +111,6 @@ func _create_forage_source_at(position: Vector3) -> void:
 	simulation.building_visuals.add_selector_to_node(node, "forage_selector", Vector3(0.5, 0.5, 0.5), Vector3.UP * 0.25)
 	simulation.world_navigation_controller.add_landscape_object(node)
 	simulation.forage_sources[cell] = ForageSourceRecord.new(node)
-
-
-func _create_firefly_clusters() -> void:
-	if DisplayServer.get_name() == "headless":
-		return
-	_create_firefly_cluster("FirefliesNorthWest", [Vector2i(-16, -15), Vector2i(-15, -18), Vector2i(-18, -12), Vector2i(-12, -19)], 38, 4.4, 3.5)
-	_create_firefly_cluster("FirefliesNorthEast", [Vector2i(16, -15), Vector2i(15, -18), Vector2i(18, -12), Vector2i(12, -19)], 38, 4.4, 3.5)
-	_create_firefly_cluster("FirefliesSouthWest", [Vector2i(-16, 15), Vector2i(-15, 18), Vector2i(-18, 12), Vector2i(-12, 19)], 38, 4.4, 3.5)
-	_create_firefly_cluster("FirefliesSouthEast", [Vector2i(16, 15), Vector2i(15, 18), Vector2i(18, 12), Vector2i(12, 19)], 38, 4.4, 3.5)
-	_create_firefly_cluster("FirefliesWestGrove", [Vector2i(-20, -5), Vector2i(-20, 5)], 24, 3.6, 2.8)
-	_create_firefly_cluster("FirefliesEastGrove", [Vector2i(20, -5), Vector2i(20, 5)], 24, 3.6, 2.8)
-	_create_firefly_cluster("FirefliesNorthGrove", [Vector2i(-5, -20), Vector2i(5, -20)], 24, 3.6, 2.8)
-	_create_firefly_cluster("FirefliesSouthGrove", [Vector2i(-5, 20), Vector2i(5, 20)], 24, 3.6, 2.8)
-
-
-func _create_firefly_cluster(cluster_name: String, cells: Array, amount_count: int, radius: float, height: float) -> void:
-	if DisplayServer.get_name() == "headless":
-		return
-	var fireflies_node := FirefliesEffectScene.instantiate() as FirefliesEffect
-	fireflies_node.name = cluster_name
-	fireflies_node.position = _firefly_cluster_center(cells)
-	fireflies_node.amount = amount_count
-	fireflies_node.swarm_radius = radius
-	fireflies_node.swarm_height = height
-	fireflies_node.minimum_height = 0.45
-	simulation.world_navigation_controller.add_landscape_object(fireflies_node)
-	simulation.fireflies.append(fireflies_node)
-
-
-func _firefly_cluster_center(cells: Array) -> Vector3:
-	var center := Vector3.ZERO
-	for cell: Vector2i in cells:
-		center += simulation.nav_grid.cell_center(cell) if simulation.nav_grid != null else Vector3((cell.x + 0.5) * simulation.CELL_SIZE, 0.0, (cell.y + 0.5) * simulation.CELL_SIZE)
-	return center / float(cells.size()) + Vector3(0.0, 1.0, 0.0)
 
 
 func setup_entrance_sign_node(entrance_stone: Node3D) -> void:
@@ -210,19 +151,10 @@ func spawn_initial_rabbits() -> void:
 		_create_rabbit_source(simulation.cell_from_position(entry.position), entry.position + Vector3.UP * 0.16, Vector3(simulation.random.randf_range(-1.0, 1.0), 0.0, simulation.random.randf_range(-1.0, 1.0)).normalized())
 
 
-func _spawn_rabbit_near_tree(tree_cell: Vector2i) -> void:
-	for offset in [Vector2i(4, 0), Vector2i(-4, 2), Vector2i(2, -4)]:
-		var cell: Vector2i = tree_cell + offset
-		if simulation.rabbit_sources.has(cell) or simulation.tree_cells.has(cell) or simulation.navigation_blocked_cells.has(cell):
-			continue
-		var node: MeshInstance3D = RabbitScene.instantiate()
-		node.position = simulation.nav_grid.cell_center(cell) if simulation.nav_grid != null else Vector3((cell.x + 0.5) * simulation.CELL_SIZE, 0.0, (cell.y + 0.5) * simulation.CELL_SIZE) + Vector3.UP * 0.16
-		simulation.building_visuals.add_selector_to_node(node, "rabbit_selector", Vector3(0.5, 0.4, 0.5), Vector3.UP * 0.2)
-		simulation.world_navigation_controller.add_landscape_object(node)
-		simulation.rabbit_sources[cell] = RabbitSourceRecord.new(node, Vector3(simulation.random.randf_range(-1.0, 1.0), 0.0, simulation.random.randf_range(-1.0, 1.0)).normalized())
-
-
 func update_wild_food(delta: float) -> void:
+	# Wild food no longer respawns: a harvested bush or a caught rabbit is gone
+	# for the rest of the session, which keeps the map finite and avoids
+	# fabricating new positions. Only rabbit roaming animation runs here.
 	for source in simulation.rabbit_sources.values():
 		var rabbit: RabbitSourceRecord = source
 		if not is_instance_valid(rabbit.node):
@@ -236,14 +168,6 @@ func update_wild_food(delta: float) -> void:
 			rabbit.direction = -direction
 		else:
 			rabbit.node.global_position = next
-	for cell in simulation.forage_respawn_at.keys().duplicate():
-		if simulation.runtime_seconds >= float(simulation.forage_respawn_at[cell]):
-			_create_forage_sources_near_tree((cell as Vector2i) - Vector2i(3, 1))
-			simulation.forage_respawn_at.erase(cell)
-	for cell in simulation.rabbit_respawn_at.keys().duplicate():
-		if simulation.runtime_seconds >= float(simulation.rabbit_respawn_at[cell]) and simulation.rabbit_sources.size() < simulation.RABBIT_MAX_COUNT:
-			_spawn_rabbit_near_tree(cell as Vector2i)
-			simulation.rabbit_respawn_at.erase(cell)
 
 
 func export_resource_state() -> Dictionary:
@@ -251,9 +175,7 @@ func export_resource_state() -> Dictionary:
 	state.capture(
 		simulation.grass_sources,
 		simulation.forage_sources,
-		simulation.forage_respawn_at,
-		simulation.rabbit_sources,
-		simulation.rabbit_respawn_at
+		simulation.rabbit_sources
 	)
 	return state.to_save_dict()
 
@@ -269,13 +191,9 @@ func restore_resource_state(data: Dictionary) -> void:
 		_create_grass_source(cell, int(entry.get("remaining", 0)), int(entry.get("initial", 0)))
 	for cell in state.forage_cells:
 		_create_forage_source(cell)
-	for entry: Dictionary in state.forage_respawns:
-		simulation.forage_respawn_at[WorldResourceStateScript._dict_to_cell(entry.get("cell", {}))] = float(entry.get("at", 0.0))
 	for entry: Dictionary in state.rabbits:
 		var cell := WorldResourceStateScript._dict_to_cell(entry.get("cell", {}))
 		_create_rabbit_source(cell, WorldResourceStateScript._dict_to_vector(entry.get("position", {})), WorldResourceStateScript._dict_to_vector(entry.get("direction", {})))
-	for entry: Dictionary in state.rabbit_respawns:
-		simulation.rabbit_respawn_at[WorldResourceStateScript._dict_to_cell(entry.get("cell", {}))] = float(entry.get("at", 0.0))
 
 
 func _clear_natural_source_nodes() -> void:
@@ -287,9 +205,7 @@ func _clear_natural_source_nodes() -> void:
 		if is_instance_valid(source.node): source.node.queue_free()
 	simulation.grass_sources.clear()
 	simulation.forage_sources.clear()
-	simulation.forage_respawn_at.clear()
 	simulation.rabbit_sources.clear()
-	simulation.rabbit_respawn_at.clear()
 
 
 func _create_grass_source(cell: Vector2i, remaining: int, initial: int) -> void:

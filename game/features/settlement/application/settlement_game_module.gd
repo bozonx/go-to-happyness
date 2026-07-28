@@ -1,6 +1,8 @@
 class_name SettlementGameModule
 extends GameModule
 
+const SettlementScene = preload("res://game/bootstrap/settlement_game.tscn")
+
 ## Transitional settlement module. It owns selection of the existing settlement
 ## bootstrap while that bootstrap is incrementally extracted from SettlementGame.
 
@@ -14,8 +16,14 @@ func start(runtime: GameRuntime, session: GameSessionConfig) -> bool:
 		push_error("[launch] settlement module requires settlement start parameters")
 		return false
 	var launch := _launch_config(session, parameters as Dictionary)
-	runtime.start_settlement_session(launch)
-	return runtime.world_setup != null
+	var settlement := SettlementScene.instantiate() as SettlementGame
+	if settlement == null:
+		push_error("[launch] failed to instantiate settlement session")
+		return false
+	settlement.start_on_ready = false
+	runtime.attach_session_content(settlement)
+	settlement.start_settlement_session(launch)
+	return settlement.world_setup != null
 
 
 func _launch_config(session: GameSessionConfig, parameters: Dictionary) -> GameLaunchConfig:

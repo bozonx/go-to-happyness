@@ -2,8 +2,6 @@ class_name ForagingService
 extends RefCounted
 
 const INTERACTION_RANGE := 2.8
-const WILD_FOOD_RESPAWN_SECONDS := 90.0
-const RABBIT_RESPAWN_SECONDS := 120.0
 const HARVEST_DURATION := 3.5
 const CitizenTaskStateScript = preload("res://game/features/citizens/domain/citizen_task_state.gd")
 const GrassSourceRecord = preload("res://game/features/production/domain/grass_source_record.gd")
@@ -22,9 +20,7 @@ func set_random(rng: RandomNumberGenerator) -> void:
 
 var forager_positions: Array[Vector3] = []
 var forage_sources: Dictionary = {}
-var forage_respawn_at: Dictionary = {}
 var rabbit_sources: Dictionary = {}
-var rabbit_respawn_at: Dictionary = {}
 var grass_sources: Dictionary = {}
 var tree_nodes: Dictionary = {}
 var tree_positions: Array[Vector3] = []
@@ -46,9 +42,7 @@ func setup(
 	world_state_ref: RefCounted,
 	forager_pos_ref: Array[Vector3],
 	forage_src_ref: Dictionary,
-	forage_resp_ref: Dictionary,
 	rabbit_src_ref: Dictionary,
-	rabbit_resp_ref: Dictionary,
 	grass_src_ref: Dictionary,
 	tree_nodes_ref: Dictionary,
 	tree_pos_ref: Array[Vector3],
@@ -61,9 +55,7 @@ func setup(
 	world_resource_state = world_state_ref
 	forager_positions = forager_pos_ref
 	forage_sources = forage_src_ref
-	forage_respawn_at = forage_resp_ref
 	rabbit_sources = rabbit_src_ref
-	rabbit_respawn_at = rabbit_resp_ref
 	grass_sources = grass_src_ref
 	tree_nodes = tree_nodes_ref
 	tree_positions = tree_pos_ref
@@ -93,13 +85,14 @@ func find_forage_position(citizen: Node3D) -> Vector3:
 	return spot
 
 func harvest_wild_food(position: Vector3, worker: Node3D) -> String:
+	# Wild food does not respawn (see AmbientSpawner.update_wild_food): once a
+	# bush is picked or a rabbit caught, it is gone for the rest of the session.
 	var plant_cell: Vector2i = cell_query.call(position) if cell_query.is_valid() else Vector2i.ZERO
 	if forage_sources.has(plant_cell):
 		var plant: ForageSourceRecord = forage_sources[plant_cell]
 		if is_instance_valid(plant.node):
 			plant.node.queue_free()
 		forage_sources.erase(plant_cell)
-		forage_respawn_at[plant_cell] = runtime_seconds + WILD_FOOD_RESPAWN_SECONDS
 		return ResourceIds.FOOD
 	for cell in rabbit_sources:
 		var source: RabbitSourceRecord = rabbit_sources[cell]
@@ -108,7 +101,6 @@ func harvest_wild_food(position: Vector3, worker: Node3D) -> String:
 				worker.play_hunting_shot()
 			source.node.queue_free()
 			rabbit_sources.erase(cell)
-			rabbit_respawn_at[cell] = runtime_seconds + RABBIT_RESPAWN_SECONDS
 			var rng2 := _rng()
 			var hide_roll := rng2.randf() if rng2 != null else randf()
 			return ResourceIds.HIDES if hide_roll < 0.35 else ResourceIds.FOOD

@@ -147,6 +147,10 @@ func _build_map_entities() -> void:
 		map_entity_presenter.name = "MapEntities"
 	_territory.add_landscape_object(map_entity_presenter)
 	map_entity_presenter.present(map_entity_runtime, _territory)
+	# Authored firefly placements become live `FirefliesEffect` nodes in the
+	# presenter; forward them so the weather controller's night fade still has a
+	# list to drive. AmbientSpawner no longer owns this.
+	fireflies = map_entity_presenter.firefly_views()
 
 
 func _build_boundary(parent: Node) -> void:

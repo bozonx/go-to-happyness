@@ -208,13 +208,20 @@ static func _test_core_pack_archetypes_load() -> void:
 	assert(campfire.states.has_state(&"embers"))
 	assert(campfire.get_property(&"relight_minutes") != null)
 	assert(not campfire.get_property(&"relight_minutes").is_visible_for({&"relights": false}))
-	# Every core archetype resolves to a real asset in the shared library.
+	# Every core archetype that declares an asset resolves it in the shared
+	# library. Some archetypes carry no visual asset on purpose — starter loot
+	# and the starter backpack are rendered by the resource-pile service, not the
+	# map entity presenter — so an empty asset id is allowed and skipped here.
 	for archetype: EntityArchetype in EntityArchetypeCatalog.all():
-		assert(EntityArchetypeCatalog.asset_of(archetype.id) != null)
+		if String(archetype.asset_id).is_empty():
+			continue
+		assert(EntityArchetypeCatalog.asset_of(archetype.id) != null, "archetype %s declares an asset it cannot resolve" % archetype.id)
 
 	assert(not EntityArchetypeCatalog.of_class(EntityArchetype.CLASS_OBJECT).is_empty())
 	assert(not EntityArchetypeCatalog.of_class(EntityArchetype.CLASS_DECOR).is_empty())
-	assert(EntityArchetypeCatalog.of_class(EntityArchetype.CLASS_ACTOR).is_empty())
+	# The rabbit is an actor (live creature the citizen hunts), so the actor class
+	# is populated rather than empty.
+	assert(not EntityArchetypeCatalog.of_class(EntityArchetype.CLASS_ACTOR).is_empty())
 	assert(not EntityArchetypeCatalog.of_tag(&"fire").is_empty())
 	# An unknown archetype is not an error, it is simply absent (§11).
 	assert(EntityArchetypeCatalog.get_archetype(&"core:nothing") == null)

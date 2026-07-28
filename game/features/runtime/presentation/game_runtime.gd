@@ -1,11 +1,11 @@
 class_name GameRuntime
-extends SettlementGame
+extends Node3D
 
-## Generic session root. It temporarily inherits the settlement scene behaviour
-## so the migration does not alter gameplay; the selected module is nevertheless
-## the sole caller that starts settlement logic.
+## Generic session root. Modules attach their own session presentation below this
+## node; it deliberately owns no settlement scene, UI or gameplay state.
 
 var active_session: GameSessionConfig = null
+var session_content: Node = null
 
 
 func _ready() -> void:
@@ -15,3 +15,13 @@ func _ready() -> void:
 		push_error("[launch] GameRuntime requires an active game session")
 		return
 	SessionBootstrapper.new().run(self, session)
+
+
+func attach_session_content(node: Node) -> void:
+	if node == null:
+		return
+	if session_content != null:
+		push_error("[launch] session content is already attached")
+		return
+	session_content = node
+	add_child(node)

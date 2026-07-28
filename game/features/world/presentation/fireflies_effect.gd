@@ -14,6 +14,19 @@ const FIREFLY_SOFT_GREEN := Color(0.62, 1.0, 0.54)
 @export var visibility_distance_begin := 32.0
 @export var visibility_distance_end := 58.0
 
+
+## Authoring hook used by `MapEntityPresenter`: the `core:fireflies` archetype
+## carries `amount`/`radius`/`height` props, and the presenter applies them right
+## after instantiation, before `_ready` spawns the swarm. The archetype's own
+## `@export` defaults stand when a placement omits a prop.
+func apply_entity_props(props: Dictionary) -> void:
+	if props.has("amount"):
+		amount = int(props["amount"])
+	if props.has("radius"):
+		swarm_radius = float(props["radius"])
+	if props.has("height"):
+		swarm_height = float(props["height"])
+
 var _rng := RandomNumberGenerator.new()
 var _records: Array[FireflyRecord] = []
 var _multimesh: MultiMesh

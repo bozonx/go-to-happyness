@@ -146,6 +146,14 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 20
 text = "Параметры запуска"
 
+[node name="GameLabel" type="Label" parent="MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox"]
+layout_mode = 2
+text = "Выберите игру:"
+
+[node name="GameOption" type="OptionButton" parent="MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox"]
+custom_minimum_size = Vector2(0, 36)
+layout_mode = 2
+
 [node name="LandscapeLabel" type="Label" parent="MarginContainer/VBoxContainer/ContentSplit/ConfigPanel/VBox"]
 layout_mode = 2
 text = "Выберите ландшафт / карту:"

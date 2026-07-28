@@ -99,12 +99,21 @@ func _test_asset_scenes_exist() -> void:
 
 ## Every declared binding must point at a node that actually exists, otherwise
 ## the control silently does nothing in the editor.
+##
+## The `asset_id` meta and binding resolution are a decor-object contract: they
+## matter for assets the `DecorObjectController` drives through
+## `appearance_controls`. Natural and ambient fill (trees, grass, forage,
+## rabbits, fireflies) is rendered by other presenters and carries no bindings,
+## so it is skipped here — its scenes only need to exist, which
+## `_test_asset_scenes_exist` already asserts.
 func _test_bindings_resolve_in_scenes() -> void:
 	for asset in WorldAssetCatalog.get_all_assets():
+		var bindings := asset.bindings()
+		if bindings.is_empty():
+			continue
 		var instance := (load(asset.scene_path) as PackedScene).instantiate()
 		assert(instance.get("asset_id") == asset.id,
 			"Scene %s must declare asset_id %s" % [asset.scene_path, asset.id])
-		var bindings := asset.bindings()
 		for property_name in bindings.keys():
 			for bind in bindings[property_name]:
 				var node_path := String(bind["node"])

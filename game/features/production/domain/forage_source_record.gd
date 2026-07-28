@@ -1,8 +1,8 @@
 class_name ForageSourceRecord
 extends RefCounted
 
-## Runtime state for one wild edible forage plant. One harvest each,
-## respawns via forage_respawn_at schedule.
+## Runtime state for one wild edible forage plant. One harvest each, then gone
+## for the rest of the session — wild food does not respawn.
 
 var node: Node3D = null
 

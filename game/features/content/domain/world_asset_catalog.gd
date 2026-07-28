@@ -35,6 +35,7 @@ const CATEGORIES: Dictionary = {
 	&"rocks_minerals": {"name": "Камни и минералы", "group": &"world"},
 	&"creatures": {"name": "Существа", "group": &"world"},
 	&"world_props": {"name": "Мировой реквизит", "group": &"world"},
+	&"ambient": {"name": "Атмосфера", "group": &"world"},
 	# Furniture and living (Мебель и быт)
 	&"tables_seating": {"name": "Столы и сиденья", "group": &"furniture_living"},
 	&"beds_storage": {"name": "Кровати и хранение вещей", "group": &"furniture_living"},
@@ -479,11 +480,15 @@ static func _register_natural_assets() -> void:
 		[&"grass_source", "Трава", &"vegetation", "res://game/features/world/presentation/grass_source.tscn", Vector3(1.2, 0.6, 1.2), false],
 		[&"forage_source", "Дикая пища", &"vegetation", "res://game/features/world/presentation/forage_source.tscn", Vector3(0.5, 0.5, 0.5), false],
 		[&"rabbit", "Кролик", &"creatures", "res://game/features/world/presentation/rabbit.tscn", Vector3(0.5, 0.4, 0.5), false],
+		# Fireflies are a non-physical ambient effect (a MultiMesh of glowing
+		# points), so neither a collider nor navigation blocking applies; the
+		# weather controller reaches each instance through `WorldSetup.fireflies`.
+		[&"fireflies", "Светлячки", &"ambient", "res://game/features/world/presentation/fireflies_effect.tscn", Vector3(4.0, 3.0, 4.0), false],
 	]:
 		var asset := WorldAssetDef.new(data[0], data[1], data[2], &"world", data[3], Vector3i.ONE, 1.0, [], data[4])
 		asset.scope = WorldAssetDef.SCOPE_MAP
 		asset.rotation_axes = ["y"]
-		asset.collision_policy = WorldAssetDef.COLLISION_SCENE
+		asset.collision_policy = WorldAssetDef.COLLISION_SCENE if data[0] != &"fireflies" else WorldAssetDef.COLLISION_NONE
 		asset.blocking_navigation = bool(data[5])
 		asset.placement = AssetPlacementPolicy.of_surfaces([AssetPlacementPolicy.SURFACE_GROUND, AssetPlacementPolicy.SURFACE_ICE], SlopeCatalog.CLASS_MODERATE)
 		_register(asset)

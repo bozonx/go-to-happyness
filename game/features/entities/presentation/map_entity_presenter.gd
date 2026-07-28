@@ -5,6 +5,9 @@ extends Node3D
 ## placeholder so a shared map remains launchable and resaveable.
 
 var _views: Dictionary = {}
+## Firefly placements published to the weather controller. Keyed by entity id so
+## `clear()` can drop them in lockstep with the views they come from.
+var _firefly_views: Dictionary = {}
 
 
 func present(runtime: MapEntityRuntime, territory: TerritoryBase) -> void:
@@ -20,10 +23,25 @@ func present(runtime: MapEntityRuntime, territory: TerritoryBase) -> void:
 			continue
 		territory.add_landscape_object(view)
 		_views[entity.id] = view
+		# Fireflies are an ambient effect, not a settlement_natural object, so
+		# they reach the weather controller here rather than through AmbientSpawner.
+		if view is FirefliesEffect:
+			_firefly_views[entity.id] = view
 
 
 func view_for(entity_id: StringName) -> Node3D:
 	return _views.get(entity_id, null)
+
+
+## Every live firefly instance created by the last `present`. `WorldSetup`
+## forwards this list to `SkyAndWeatherController` so the night fade keeps
+## working without AmbientSpawner owning the visual.
+func firefly_views() -> Array[FirefliesEffect]:
+	var result: Array[FirefliesEffect] = []
+	for view: FirefliesEffect in _firefly_views.values():
+		if is_instance_valid(view):
+			result.append(view)
+	return result
 
 
 func clear() -> void:
@@ -31,6 +49,7 @@ func clear() -> void:
 		if is_instance_valid(view):
 			view.queue_free()
 	_views.clear()
+	_firefly_views.clear()
 
 
 func _make_view(entity: MapEntityRuntime.RuntimeEntity) -> Node3D:
@@ -41,6 +60,10 @@ func _make_view(entity: MapEntityRuntime.RuntimeEntity) -> Node3D:
 		view = scene.instantiate() as Node3D if scene != null else null
 	if view == null:
 		view = _placeholder(entity.id)
+	# Authoring props (e.g. a firefly cluster's amount/radius/height) land on the
+	# view before it enters the tree, so its `_ready` spawns with the right shape.
+	if view.has_method("apply_entity_props"):
+		view.call("apply_entity_props", entity.props)
 	view.name = "MapEntity_%s" % entity.id
 	view.position = entity.position
 	view.rotation_degrees.y = entity.yaw_degrees

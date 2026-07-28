@@ -12,7 +12,11 @@ static func resolve_definition(definition_key: StringName) -> GameDefinition:
 
 
 static func create_module(module_id: StringName) -> GameModule:
+	if module_id == &"core.world":
+		return CoreWorldModule.new()
 	if module_id == &"gth.settlement":
 		return SettlementGameModule.new()
+	if module_id == &"gth.world_showcase":
+		return WorldShowcaseModule.new()
 	push_error("GameModuleRegistry: unknown module: %s" % module_id)
 	return null

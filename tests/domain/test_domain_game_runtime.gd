@@ -18,7 +18,7 @@ static func test_core_settlement_definition_is_indexed() -> void:
 	assert(definition != null)
 	assert(definition.pack_id == &"core")
 	assert(definition.default_map == &"core:green_valley")
-	assert(definition.module_ids == [&"gth.settlement"])
+	assert(definition.module_ids == [&"core.world", &"gth.settlement"])
 
 
 static func test_session_keeps_settlement_values_module_scoped() -> void:

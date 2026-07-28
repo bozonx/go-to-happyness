@@ -1,12 +1,12 @@
 {
   "format_version": 1,
-  "id": "settlement",
-  "name": "Go To Happyness: Settlement",
+  "id": "world_showcase",
+  "name": "World Showcase",
   "pack": "core",
-  "modules": ["core.world", "gth.settlement"],
+  "modules": ["core.world", "gth.world_showcase"],
   "default_map": "core:green_valley",
   "clock": "realtime_pauseable",
   "input_profile": "rts",
-  "ui_layout": "settlement_hud",
+  "ui_layout": "",
   "start": {}
 }
