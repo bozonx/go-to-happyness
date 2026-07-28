@@ -508,6 +508,10 @@ func can_start_registration(citizen: Citizen) -> bool:
 	return citizen_registration_service.can_start_registration(citizen) if citizen_registration_service != null else false
 
 
+func _registration_official() -> Citizen:
+	return citizen_registration_service.registration_official() if citizen_registration_service != null else null
+
+
 func registration_duration() -> float:
 	return citizen_registration_service.registration_duration() if citizen_registration_service != null else Citizen.EMPLOYMENT_PROCESS_DURATION
 

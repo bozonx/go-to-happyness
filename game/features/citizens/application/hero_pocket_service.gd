@@ -91,7 +91,7 @@ func drop_pocket_on_ground() -> void:
 	var player_citizen: Citizen = _player_citizen_getter.call()
 	if player_citizen == null or pocket.is_empty():
 		return
-	_create_resource_pile.call(player_citizen.global_position, pocket.duplicate())
+	_create_resource_pile.call(player_citizen.global_position, pocket.duplicate(), false)
 	pocket.clear()
 	_update_interface.call(S.POCKET_DROPPED)
 	_refresh_interaction_hint.call()

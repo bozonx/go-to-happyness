@@ -1,4 +1,6 @@
 {
+	"anchors": [],
+	"areas": [],
 	"author": "Go To Happyness",
 	"biomes": [],
 	"board": {
@@ -11,18 +13,16 @@
 	},
 	"defeat": [],
 	"flags": {},
-	"format_version": 2,
+	"format_version": 3,
 	"id": "green_valley",
 	"kind": "map",
 	"map_kind": "map",
-	"markers": [],
 	"name": "Зелёная долина",
 	"objects": [],
 	"placements": [],
 	"players": 1,
-	"regions": [],
 	"required_content": [],
-	"revision": "6a67ca6acc57",
+	"revision": "6a68208b5623",
 	"routes": [],
 	"rules": [],
 	"start": {
@@ -42,16 +42,16 @@
 	"victory": [],
 	"water": [
 		{
-			"colour": "174261",
+			"colour": "215273",
 			"flow": [],
-			"foam_strength": 1.0,
-			"freezes": false,
+			"foam_strength": 0.35,
+			"freezes": true,
 			"id": 1,
-			"name": "sea 1",
-			"salinity": "salt",
+			"name": "lake 1",
+			"salinity": "fresh",
 			"surface_height": 0,
-			"type": "sea",
-			"wave_amplitude": 0.22
+			"type": "lake",
+			"wave_amplitude": 0.04
 		}
 	]
 }

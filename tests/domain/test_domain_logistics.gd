@@ -100,17 +100,17 @@ class FakeSimulationTickController extends RefCounted:
 		return owner._is_work_time()
 
 
-class FakeCourierDispatcher extends RefCounted:
+class FakeCourierDispatcher extends CourierDispatcher:
 	var completed := 0
 
 	func complete_for(_worker: Citizen) -> void:
 		completed += 1
 
-	func task_for(_worker: Citizen) -> RefCounted:
+	func task_for(_worker: Citizen) -> CourierTask:
 		return null
 
 
-class FakeStorageRoutingService extends RefCounted:
+class FakeStorageRoutingService extends StorageRoutingService:
 	var settlement: SettlementState
 	var warehouse_positions: Array[Vector3] = []
 
@@ -361,6 +361,28 @@ static func _test_citizen_work_position_lock() -> void:
 	building.free()
 
 
+static func _make_canteen_port(simulation: FakeCanteenSimulation) -> CanteenRuntimePort:
+	var port := CanteenRuntimePort.new()
+	port.settlement = SettlementState.new()
+	port.citizens = simulation.citizens
+	port.canteen_getter = func() -> Node3D: return simulation.canteen
+	port.canteen_food_getter = func() -> int: return simulation.canteen_food
+	port.set_canteen_food = simulation.logistics_controller.set_canteen_food
+	port.canteen_position_getter = func() -> Vector3: return simulation.canteen_position
+	port.pending_canteen_delivery_getter = func() -> bool: return simulation.pending_canteen_delivery
+	port.pending_canteen_carrier_getter = func() -> Citizen: return simulation.pending_canteen_carrier
+	port.pending_canteen_delivery_amount_getter = func() -> int: return simulation.pending_canteen_delivery_amount
+	port.set_canteen_delivery_state = simulation.logistics_controller.set_canteen_delivery_state
+	port.is_canteen_delivery_in_progress = simulation.logistics_controller.is_canteen_delivery_in_progress
+	port.is_fire_lit = simulation.fire_management_service.is_fire_lit
+	port.has_cook = simulation.has_cook
+	port.update_interface = simulation.update_interface
+	port.request_courier_dispatch = simulation.request_courier_dispatch
+	port.is_work_time = simulation.simulation_tick_controller.is_work_time
+	port.update_workers = simulation.update_workers
+	return port
+
+
 static func _test_canteen_meal_requests() -> void:
 	var simulation := FakeCanteenSimulation.new()
 	simulation.canteen = Node3D.new()
@@ -368,25 +390,7 @@ static func _test_canteen_meal_requests() -> void:
 	citizen.ai_id = 42
 	simulation.citizens.append(citizen)
 	var service := CanteenServiceScript.new()
-	service.configure(
-		SettlementState.new(),
-		simulation.citizens,
-		func() -> Node3D: return simulation.canteen,
-		func() -> int: return simulation.canteen_food,
-		simulation.logistics_controller.set_canteen_food,
-		func() -> Vector3: return simulation.canteen_position,
-		func() -> bool: return simulation.pending_canteen_delivery,
-		func() -> Citizen: return simulation.pending_canteen_carrier,
-		func() -> int: return simulation.pending_canteen_delivery_amount,
-		simulation.logistics_controller.set_canteen_delivery_state,
-		simulation.logistics_controller.is_canteen_delivery_in_progress,
-		simulation.fire_management_service.is_fire_lit,
-		simulation.has_cook,
-		simulation.update_interface,
-		simulation.request_courier_dispatch,
-		simulation.simulation_tick_controller.is_work_time,
-		simulation.update_workers
-	)
+	service.configure(_make_canteen_port(simulation))
 
 	service.start_meal(13)
 	assert(service.is_meal_requested(citizen.ai_id))
@@ -415,25 +419,7 @@ static func _test_canteen_raw_rations() -> void:
 	citizen.hunger = 50.0
 	simulation.citizens.append(citizen)
 	var service := CanteenServiceScript.new()
-	service.configure(
-		SettlementState.new(),
-		simulation.citizens,
-		func() -> Node3D: return simulation.canteen,
-		func() -> int: return simulation.canteen_food,
-		simulation.logistics_controller.set_canteen_food,
-		func() -> Vector3: return simulation.canteen_position,
-		func() -> bool: return simulation.pending_canteen_delivery,
-		func() -> Citizen: return simulation.pending_canteen_carrier,
-		func() -> int: return simulation.pending_canteen_delivery_amount,
-		simulation.logistics_controller.set_canteen_delivery_state,
-		simulation.logistics_controller.is_canteen_delivery_in_progress,
-		simulation.fire_management_service.is_fire_lit,
-		simulation.has_cook,
-		simulation.update_interface,
-		simulation.request_courier_dispatch,
-		simulation.simulation_tick_controller.is_work_time,
-		simulation.update_workers
-	)
+	service.configure(_make_canteen_port(simulation))
 
 	service.start_meal(13)
 	assert(service.is_meal_requested(citizen.ai_id))
@@ -454,25 +440,7 @@ static func _test_no_canteen_raw_rations() -> void:
 	citizen.hunger = 50.0
 	simulation.citizens.append(citizen)
 	var service := CanteenServiceScript.new()
-	service.configure(
-		SettlementState.new(),
-		simulation.citizens,
-		func() -> Node3D: return simulation.canteen,
-		func() -> int: return simulation.canteen_food,
-		simulation.logistics_controller.set_canteen_food,
-		func() -> Vector3: return simulation.canteen_position,
-		func() -> bool: return simulation.pending_canteen_delivery,
-		func() -> Citizen: return simulation.pending_canteen_carrier,
-		func() -> int: return simulation.pending_canteen_delivery_amount,
-		simulation.logistics_controller.set_canteen_delivery_state,
-		simulation.logistics_controller.is_canteen_delivery_in_progress,
-		simulation.fire_management_service.is_fire_lit,
-		simulation.has_cook,
-		simulation.update_interface,
-		simulation.request_courier_dispatch,
-		simulation.simulation_tick_controller.is_work_time,
-		simulation.update_workers
-	)
+	service.configure(_make_canteen_port(simulation))
 
 	service.start_meal(13)
 	assert(not service.is_meal_requested(citizen.ai_id))
@@ -561,24 +529,24 @@ static func _test_trade_order_model() -> void:
 static func _test_trade_service_entrance_expedition_walks_to_sign_before_departure() -> void:
 	var simulation := FakeTradeSimulation.new()
 	var service := TradeServiceScript.new()
-	service.configure(
-		simulation.settlement,
-		simulation.citizens,
-		simulation.queued_trades,
-		simulation.pending_trades,
-		simulation.warehouse_positions,
-		simulation.market_menu,
-		func() -> Node3D: return simulation.selected_market,
-		func() -> Node3D: return simulation.entrance_stone,
-		simulation.logistics_controller.get_delivery_position,
-		simulation.update_interface,
-		simulation.workplace_controller.refresh_market_menu,
-		simulation.request_courier_dispatch,
-		simulation.simulation_tick_controller.total_game_minutes,
-		simulation.citizen_factory.citizen_for_ai_id,
-		simulation.resource_pile_service.create_resource_pile,
-		simulation.update_workers
-	)
+	var trade_port := TradeRuntimePort.new()
+	trade_port.settlement = simulation.settlement
+	trade_port.citizens = simulation.citizens
+	trade_port.queued_trades = simulation.queued_trades
+	trade_port.pending_trades = simulation.pending_trades
+	trade_port.warehouse_positions = simulation.warehouse_positions
+	trade_port.market_menu = simulation.market_menu
+	trade_port.selected_market_getter = func() -> Node3D: return simulation.selected_market
+	trade_port.entrance_stone_getter = func() -> Node3D: return simulation.entrance_stone
+	trade_port.get_delivery_position = simulation.logistics_controller.get_delivery_position
+	trade_port.update_interface = simulation.update_interface
+	trade_port.refresh_market_menu = simulation.workplace_controller.refresh_market_menu
+	trade_port.request_courier_dispatch = simulation.request_courier_dispatch
+	trade_port.total_game_minutes = simulation.simulation_tick_controller.total_game_minutes
+	trade_port.citizen_for_ai_id = simulation.citizen_factory.citizen_for_ai_id
+	trade_port.create_resource_pile = simulation.resource_pile_service.create_resource_pile
+	trade_port.update_workers = simulation.update_workers
+	service.configure(trade_port)
 	var worker := Citizen.new()
 	worker.position = Vector3(12.0, 0.0, 0.0)
 	var entrance := Vector3(-22.5, 0.0, 1.5)
@@ -651,17 +619,17 @@ static func _test_storage_delivery_service() -> void:
 	simulation.warehouse_positions.append(Vector3.ZERO)
 	simulation.storage_routing_service.warehouse_positions = simulation.warehouse_positions
 	var service := StorageDeliveryServiceScript.new()
-	service.configure(
-		simulation.settlement,
-		simulation.warehouse_positions,
-		simulation.courier_dispatcher,
-		simulation.storage_routing_service,
-		simulation._release_reservation,
-		simulation.resource_pile_service.drop_resource_pile,
-		simulation.update_interface,
-		simulation.request_courier_dispatch,
-		simulation.simulation_tick_controller.send_citizen_to_leisure
-	)
+	var storage_port := StorageDeliveryRuntimePort.new()
+	storage_port.settlement = simulation.settlement
+	storage_port.warehouse_positions = simulation.warehouse_positions
+	storage_port.courier_dispatcher = simulation.courier_dispatcher
+	storage_port.storage_routing = simulation.storage_routing_service
+	storage_port.release_reservation = simulation._release_reservation
+	storage_port.drop_resource_pile = simulation.resource_pile_service.drop_resource_pile
+	storage_port.update_interface = simulation.update_interface
+	storage_port.request_courier_dispatch = simulation.request_courier_dispatch
+	storage_port.send_citizen_to_leisure = simulation.simulation_tick_controller.send_citizen_to_leisure
+	service.configure(storage_port)
 	var worker := Citizen.new()
 	service.on_resource_delivered(worker, "grass", 1)
 	assert(simulation.settlement.grass == 1)
@@ -676,17 +644,17 @@ static func _test_storage_delivery_service() -> void:
 	full_storage_simulation.warehouse_positions.append(Vector3.ZERO)
 	full_storage_simulation.storage_routing_service.warehouse_positions = full_storage_simulation.warehouse_positions
 	var full_storage_service := StorageDeliveryServiceScript.new()
-	full_storage_service.configure(
-		full_storage_simulation.settlement,
-		full_storage_simulation.warehouse_positions,
-		full_storage_simulation.courier_dispatcher,
-		full_storage_simulation.storage_routing_service,
-		full_storage_simulation._release_reservation,
-		full_storage_simulation._drop_resource_pile,
-		full_storage_simulation.update_interface,
-		full_storage_simulation.request_courier_dispatch,
-		full_storage_simulation._send_citizen_to_leisure
-	)
+	var full_storage_port := StorageDeliveryRuntimePort.new()
+	full_storage_port.settlement = full_storage_simulation.settlement
+	full_storage_port.warehouse_positions = full_storage_simulation.warehouse_positions
+	full_storage_port.courier_dispatcher = full_storage_simulation.courier_dispatcher
+	full_storage_port.storage_routing = full_storage_simulation.storage_routing_service
+	full_storage_port.release_reservation = full_storage_simulation._release_reservation
+	full_storage_port.drop_resource_pile = full_storage_simulation._drop_resource_pile
+	full_storage_port.update_interface = full_storage_simulation.update_interface
+	full_storage_port.request_courier_dispatch = full_storage_simulation.request_courier_dispatch
+	full_storage_port.send_citizen_to_leisure = full_storage_simulation._send_citizen_to_leisure
+	full_storage_service.configure(full_storage_port)
 	full_storage_simulation.settlement.warehouses[0].set_amount("grass", 24)
 	var full_storage_worker := Citizen.new()
 	full_storage_worker.carried_amount = 1
@@ -698,17 +666,17 @@ static func _test_storage_delivery_service() -> void:
 
 	var no_storage_simulation := FakeStorageSimulation.new()
 	var no_storage_service := StorageDeliveryServiceScript.new()
-	no_storage_service.configure(
-		no_storage_simulation.settlement,
-		no_storage_simulation.warehouse_positions,
-		no_storage_simulation.courier_dispatcher,
-		no_storage_simulation.storage_routing_service,
-		no_storage_simulation._release_reservation,
-		no_storage_simulation._drop_resource_pile,
-		no_storage_simulation.update_interface,
-		no_storage_simulation.request_courier_dispatch,
-		no_storage_simulation._send_citizen_to_leisure
-	)
+	var no_storage_port := StorageDeliveryRuntimePort.new()
+	no_storage_port.settlement = no_storage_simulation.settlement
+	no_storage_port.warehouse_positions = no_storage_simulation.warehouse_positions
+	no_storage_port.courier_dispatcher = no_storage_simulation.courier_dispatcher
+	no_storage_port.storage_routing = no_storage_simulation.storage_routing_service
+	no_storage_port.release_reservation = no_storage_simulation._release_reservation
+	no_storage_port.drop_resource_pile = no_storage_simulation._drop_resource_pile
+	no_storage_port.update_interface = no_storage_simulation.update_interface
+	no_storage_port.request_courier_dispatch = no_storage_simulation.request_courier_dispatch
+	no_storage_port.send_citizen_to_leisure = no_storage_simulation._send_citizen_to_leisure
+	no_storage_service.configure(no_storage_port)
 	var blocked_worker := Citizen.new()
 	blocked_worker.carried_amount = 1
 	no_storage_service.on_resource_delivered(blocked_worker, "grass", 1)

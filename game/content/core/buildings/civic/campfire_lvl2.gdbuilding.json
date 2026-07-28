@@ -115,8 +115,44 @@
 			"variant": "0.25"
 		}
 	],
-	"objects": [],
-	"fixtures": [],
+	"objects": [
+		{
+			"id": "decor_campfire_1",
+			"asset_id": "campfire",
+			"owner_zone": "",
+			"pos": [
+				0,
+				0,
+				0
+			],
+			"rot": [
+				0,
+				0,
+				0
+			],
+			"scale": [
+				1,
+				1,
+				1
+			],
+			"appearance": {}
+		}
+	],
+	"fixtures": [
+		{
+			"id": "fire_source_1",
+			"capabilities": [
+				"fire_source"
+			],
+			"owner_zone": "",
+			"visual_object": "decor_campfire_1",
+			"runtime_defaults": {
+				"lit": true,
+				"fuel": 4,
+				"fuel_capacity": 10
+			}
+		}
+	],
 	"areas": [
 		{
 			"id": "main",

@@ -282,17 +282,17 @@ class FakeCourierSimulation extends Node:
 
 	func configure_dispatcher(dispatcher: CourierDispatcher) -> void:
 		var routing := StorageRoutingService.new()
-		dispatcher.configure(
-			citizens,
-			warehouse_positions,
-			routing,
-			func() -> float: return runtime_seconds,
-			func(d): publish_courier_tasks(d),
-			func(t) -> bool: return _is_courier_task_valid(t),
-			func(c, t) -> bool: return _start_courier_task(c, t),
-			func(c, t): _cancel_courier_task(c, t),
-			func(t): _release_task_warehouse_reservation(t)
-		)
+		var port := CourierDispatchRuntimePort.new()
+		port.citizens = citizens
+		port.warehouse_positions = warehouse_positions
+		port.storage_routing = routing
+		port.runtime_seconds_getter = func() -> float: return runtime_seconds
+		port.publish_tasks = func(d): publish_courier_tasks(d)
+		port.is_task_valid = func(t) -> bool: return _is_courier_task_valid(t)
+		port.start_task = func(c, t) -> bool: return _start_courier_task(c, t)
+		port.cancel_task = func(c, t): _cancel_courier_task(c, t)
+		port.release_reservation = func(t): _release_task_warehouse_reservation(t)
+		dispatcher.configure(port)
 
 
 

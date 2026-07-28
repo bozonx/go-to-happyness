@@ -286,6 +286,7 @@ static func from_dict(data: Dictionary) -> BuildingBlueprint:
 		for fd_data in raw_fixtures:
 			if fd_data is Dictionary:
 				bp.fixtures.append(FixtureDefinitionScript.from_dict(fd_data))
+	bp.version = FORMAT_VERSION
 	bp.recalculate_construction_cost()
 	return bp
 
@@ -401,6 +402,8 @@ func validation_errors() -> Array[String]:
 			if _interiors_intersect(left_aabb, right_aabb) and not _allows_structural_joint(left, right):
 				errors.append("Overlapping block volumes: %s and %s" % [left.pos, right.pos])
 	errors.append_array(_zone_errors())
+	errors.append_array(_decor_errors())
+	errors.append_array(_fixture_errors())
 	return errors
 
 
@@ -519,6 +522,45 @@ func _zone_errors() -> Array[String]:
 		for cap in ZoneFunctionCatalog.required_capabilities(area.function):
 			if not _capabilities_of(area.id).has(cap):
 				errors.append("Области %s нужен предмет со свойством «%s»" % [area.id, cap])
+	return errors
+
+
+func _decor_errors() -> Array[String]:
+	var errors: Array[String] = []
+	var seen_ids: Dictionary = {}
+	var zone_ids: Dictionary = {}
+	for area in areas:
+		zone_ids[area.id] = true
+	for obj in objects:
+		var obj_errors := obj.validation_errors()
+		for e in obj_errors:
+			errors.append(e)
+		if seen_ids.has(obj.id):
+			errors.append("Duplicate decor object id: %s" % obj.id)
+		seen_ids[obj.id] = true
+		if obj.owner_zone_id != &"" and not zone_ids.has(obj.owner_zone_id):
+			errors.append("Decor object %s references unknown place zone: %s" % [obj.id, obj.owner_zone_id])
+	return errors
+
+
+func _fixture_errors() -> Array[String]:
+	var errors: Array[String] = []
+	var object_ids: Dictionary = {}
+	for obj in objects:
+		object_ids[obj.id] = true
+	var zone_ids: Dictionary = {}
+	for area in areas:
+		zone_ids[area.id] = true
+	var visual_refs: Dictionary = {}
+	for fixture in fixtures:
+		var fe := fixture.validation_errors(object_ids, zone_ids)
+		for e in fe:
+			errors.append(e)
+		if fixture.visual_object_id != "":
+			if visual_refs.has(fixture.visual_object_id):
+				errors.append("Fixture %s and %s reference the same visual object: %s" % [
+					fixture.id, visual_refs[fixture.visual_object_id], fixture.visual_object_id])
+			visual_refs[fixture.visual_object_id] = fixture.id
 	return errors
 
 
