@@ -29,6 +29,7 @@ func run(p_game: SettlementGame) -> void:
 	_setup_workplace_and_visuals()
 	_setup_territory()
 	_setup_ai_and_navigation()
+	_setup_zone_runtime()
 	_setup_citizen_lifecycle()
 	_setup_building_services()
 	# Phase 3 — logistics and resources.
@@ -197,6 +198,20 @@ func _setup_ai_and_navigation() -> void:
 	game.building_queue_service = BuildingQueueService.new()
 	game.building_queue_service.configure(game.building_registry, game.nav_grid)
 	game.building_queue_service.set_citizen_alive_checker(func(citizen_id): return game.citizen_factory.is_ai_citizen_id_alive(citizen_id))
+
+
+## Builds the map-zone session state (active_zones.md §13). Runs after the
+## navigation stack because the overlay publisher (previous round) has already
+## read `map_document.zones` for cost; this reads the same layer for owner and
+## flags. A session without a map document gets an empty registry, so the
+## no-map fallback board still has a service to call.
+func _setup_zone_runtime() -> void:
+	game.map_zone_registry = MapZoneRegistry.new()
+	var map_document: MapDocument = game.launch_config.map_document if game.launch_config != null else null
+	if map_document != null:
+		game.map_zone_registry.build_from(map_document.zones)
+	game.map_zone_service = MapZoneService.new()
+	game.map_zone_service.configure(game.map_zone_registry)
 
 
 func _setup_citizen_lifecycle() -> void:

@@ -80,6 +80,12 @@ var navigation_blocked_cells: Dictionary[Vector2i, bool]:
 	set(v): world_state.navigation_blocked_cells = v
 var building_spatial_registry := BuildingSpatialRegistry.new()
 var simulation_event_dispatcher: SimulationEventDispatcher
+## Session-state of every authored map zone (active_zones.md §13): owner and
+## flags per region/overlay. In-memory for now; a future block adds the
+## `map_zones` save slot. Built by `SettlementBootstrapper._setup_zone_runtime`.
+var map_zone_registry: MapZoneRegistry
+## Stateless facade over `map_zone_registry`, the surface rules will call.
+var map_zone_service: MapZoneService
 var ui_attacher := SettlementUIAttacher.new()
 
 var warehouse_positions: Array[Vector3]:
