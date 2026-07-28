@@ -15,6 +15,15 @@ extends RefCounted
 ## facade rules will eventually call through; nothing else mutates this directly.
 
 var _states: Dictionary = {} # zone_id (StringName) -> MapZoneRuntimeState
+## The bus state mutations publish on (active_zones.md §14). Set by `configure`;
+## null means mutations are silent, which is exactly what a save restore wants —
+## replaying saved owner/flags onto a fresh build must not fire a stream of
+## `owner_changed` events as if a player had just captured every zone.
+var _bus: ZoneEventBus = null
+
+
+func configure(bus: ZoneEventBus) -> void:
+	_bus = bus
 
 
 func clear() -> void:
@@ -62,20 +71,30 @@ func flag_of(zone_id: StringName, key: StringName, fallback: Variant = null) -> 
 
 
 ## Sets the owner of a zone, returning whether anything changed. A no-op (same
-## owner, or a zone that does not exist) returns false so the service can skip
-## publishing a spurious `owner_changed` once the event bus exists.
+## owner, or a zone that does not exist) returns false and publishes nothing,
+## so a re-applied capture does not fire a second `owner_changed`. A genuine
+## change publishes on the bus — unless `_bus` is null, which is the restore
+## path replaying saved state without claiming the player just captured it.
 func set_owner(zone_id: StringName, owner_tag: StringName) -> bool:
 	var s := state(zone_id)
 	if s == null:
 		return false
-	return s.set_owner(owner_tag)
+	if not s.set_owner(owner_tag):
+		return false
+	if _bus != null:
+		_bus.dispatch(ZoneEvent.owner_changed(zone_id, owner_tag))
+	return true
 
 
 func set_flag(zone_id: StringName, key: StringName, value: Variant) -> bool:
 	var s := state(zone_id)
 	if s == null:
 		return false
-	return s.set_flag(key, value)
+	if not s.set_flag(key, value):
+		return false
+	if _bus != null:
+		_bus.dispatch(ZoneEvent.zone_flag_changed(zone_id, key, value))
+	return true
 
 
 func is_owned_by(zone_id: StringName, agent_tags: Array) -> bool:
