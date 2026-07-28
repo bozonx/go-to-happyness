@@ -102,9 +102,10 @@ func launch_from_save(save_path: String) -> void:
 		push_warning("[launch] сохранение не открыто: в нём нет ссылки на карту")
 		return
 	pending_save_path = save_path
-	var definition := GameModuleRegistry.resolve_definition(&"core:settlement")
+	var definition_key := _save_definition_key(save_data)
+	var definition := GameModuleRegistry.resolve_definition(definition_key)
 	if definition == null:
-		push_error("[launch] settlement game definition is unavailable")
+		push_error("[launch] game definition is unavailable: %s" % definition_key)
 		return
 	active_session = GameSessionConfig.from_settlement_launch(active_launch_config, definition)
 	get_tree().change_scene_to_file(GAME_RUNTIME_SCENE)
@@ -126,6 +127,15 @@ func launch_map_editor(map_key: StringName = &"", dev_mode: bool = false) -> voi
 func _set_editor_mode(dev_mode: bool) -> void:
 	editor_dev_mode = dev_mode and OS.has_feature("editor")
 	editor_mode_forced = true
+
+
+func _save_definition_key(save_data: SaveData) -> StringName:
+	if save_data != null and not save_data.game_header.is_empty():
+		var pack_id := StringName(save_data.game_header.get("pack", ""))
+		var game_id := StringName(save_data.game_header.get("id", ""))
+		if not pack_id.is_empty() and not game_id.is_empty():
+			return ContentIdScript.runtime_key(pack_id, game_id)
+	return &"core:settlement"
 
 
 func return_to_main_menu() -> void:

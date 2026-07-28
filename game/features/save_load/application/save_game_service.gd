@@ -197,6 +197,16 @@ static func save_game(game: Node, path: String = QUICKSAVE_PATH) -> bool:
 		# with the registry left at its freshly-built default.
 		"map_zones": game.map_zone_registry.session_state_to_dict() if "map_zone_registry" in game and game.map_zone_registry != null else [],
 	}
+	# The session root, rather than settlement state, identifies which game owns
+	# this save. Legacy direct SettlementGame tests have no session and retain the
+	# compatible core:settlement fallback in SaveData.
+	if "active_session" in game and game.active_session != null and game.active_session.definition != null:
+		var definition: GameDefinition = game.active_session.definition
+		save_data.game_header = {
+			"pack": String(definition.pack_id),
+			"id": String(definition.id),
+			"revision": "",
+		}
 
 	var success := save_data.save_to_file(path)
 	if success:

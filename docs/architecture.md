@@ -196,10 +196,12 @@ settlement resources. The current `legacy_settlement_launch` field is a short
 adapter while the settlement start state moves behind its module. Do not add new
 uses of it.
 
-The next runtime extraction is save ownership: replace monolithic `SaveData`
-with module sections before adding a second playable definition. UI host and
-input-profile extraction follow that same rule. Do not introduce a second
-gameplay module until the settlement module owns its save section.
+`SaveData` v4 now persists the generic `game`, `map` and `engine` headers plus
+`modules.gth.settlement`. It still exposes a legacy settlement projection to
+`SettlementSaveLoader`, so old v1–v3 saves remain loadable while the loader moves
+behind the module boundary. UI host and input-profile extraction follow that same
+rule. Do not introduce a second gameplay module until the settlement module owns
+its save port rather than this projection.
 
 The native AI migration is the primary execution path. Continue extracting
 bootstrap implementation into feature modules incrementally without a behavior

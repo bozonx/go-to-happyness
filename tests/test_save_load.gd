@@ -55,6 +55,13 @@ static func run_all() -> void:
 
 	var test_path := "user://saves/test_quicksave.json"
 	assert(save_data.save_to_file(test_path) == true, "Failed to save test_quicksave.json")
+	var raw: Variant = JSON.parse_string(FileAccess.get_file_as_string(test_path))
+	assert(raw is Dictionary)
+	assert(int((raw as Dictionary).get("format_version", 0)) == SaveDataScript.VERSION)
+	assert((raw as Dictionary).get("game", {}) is Dictionary)
+	assert((raw as Dictionary).get("engine", {}) is Dictionary)
+	assert((raw as Dictionary).get("modules", {}) is Dictionary)
+	assert(((raw as Dictionary).get("modules", {}) as Dictionary).has("gth.settlement"))
 
 	var read_data := SaveDataScript.new()
 	assert(read_data.load_from_file(test_path) == true, "Failed to load test_quicksave.json")

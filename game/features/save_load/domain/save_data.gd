@@ -6,7 +6,9 @@ extends RefCounted
 ## Bump this only alongside an explicit migration in `from_dict`.
 ##   v2 -> v3: added `forest` (per-tree wood/branch/felled state). Absent in
 ##             older saves, which load with a pristine (regenerated) forest.
-const VERSION := 3
+##   v3 -> v4: root became game/map/engine/module sections. The old fields below
+##             remain a compatibility projection for SettlementSaveLoader.
+const VERSION := 4
 
 ## Read once from the project so a single edit in project.godot propagates here.
 static func _project_version() -> String:
@@ -25,6 +27,13 @@ var citizens_state: Array = []
 var resource_piles_state: Array = []
 var forest_state: Array = []
 var camera_state: Dictionary = {}
+## Metadata and raw sections of the v4 envelope. A module owns its section; the
+## temporary settlement projection above is removed only after its loader has
+## moved behind a proper module save port.
+var game_header: Dictionary = {}
+var map_header: Dictionary = {}
+var engine_state: Dictionary = {}
+var module_states: Dictionary = {}
 
 
 static func vector3_to_dict(v: Vector3) -> Dictionary:
@@ -51,30 +60,40 @@ static func dict_to_vector2i(d: Dictionary) -> Vector2i:
 
 
 func to_dict() -> Dictionary:
+	var map_reference: Dictionary = world_state.get("map_ref", {}) if world_state.get("map_ref", {}) is Dictionary else {}
+	var game := game_header.duplicate(true)
+	if game.is_empty():
+		game = {"pack": "core", "id": "settlement", "revision": ""}
+	var map := map_header.duplicate(true)
+	if map.is_empty():
+		map = map_reference.duplicate(true)
+	var engine := engine_state.duplicate(true)
+	if engine.is_empty():
+		engine = {"clock": clock_state.duplicate(true), "camera": camera_state.duplicate(true)}
+	var modules := module_states.duplicate(true)
+	if modules.is_empty():
+		modules = {"gth.settlement": _settlement_module_section()}
 	return {
-		"version": version,
+		"format_version": VERSION,
 		"timestamp": timestamp,
 		"game_version": game_version,
-		"settlement": settlement_state.duplicate(true),
-		"clock": clock_state.duplicate(true),
-		"world": world_state.duplicate(true),
-		"buildings": buildings_state.duplicate(true),
-		"construction_sites": construction_sites_state.duplicate(true),
-		"citizens": citizens_state.duplicate(true),
-		"resource_piles": resource_piles_state.duplicate(true),
-		"forest": forest_state.duplicate(true),
-		"camera": camera_state.duplicate(true)
+		"game": game,
+		"map": map,
+		"engine": engine,
+		"modules": modules,
 	}
 
 
 func from_dict(data: Dictionary) -> bool:
-	if data.is_empty() or not data.has("version"):
+	if data.is_empty() or (not data.has("version") and not data.has("format_version")):
 		return false
-	version = int(data.get("version", 1))
+	version = int(data.get("format_version", data.get("version", 1)))
 	if version < 1 or version > VERSION:
 		return false
 	timestamp = int(data.get("timestamp", 0))
 	game_version = str(data.get("game_version", _project_version()))
+	if version == VERSION:
+		return _read_sectioned_v4(data)
 	
 	if not _is_dictionary_field(data, "settlement") or not _is_dictionary_field(data, "clock") or not _is_dictionary_field(data, "world"):
 		push_error("SaveData: Invalid save root schema")
@@ -95,6 +114,57 @@ func from_dict(data: Dictionary) -> bool:
 	camera_state = (data.get("camera", {}) as Dictionary).duplicate(true) if data.get("camera", {}) is Dictionary else {}
 	if version == 1:
 		_migrate_v1_to_v2()
+	version = VERSION
+	return true
+
+
+func _settlement_module_section() -> Dictionary:
+	return {
+		"settlement": settlement_state.duplicate(true),
+		"world": world_state.duplicate(true),
+		"buildings": buildings_state.duplicate(true),
+		"construction_sites": construction_sites_state.duplicate(true),
+		"citizens": citizens_state.duplicate(true),
+		"resource_piles": resource_piles_state.duplicate(true),
+		"forest": forest_state.duplicate(true),
+	}
+
+
+func _read_sectioned_v4(data: Dictionary) -> bool:
+	if not (data.get("game", {}) is Dictionary) or not (data.get("map", {}) is Dictionary):
+		push_error("SaveData: Invalid v4 game/map headers")
+		return false
+	if not (data.get("engine", {}) is Dictionary) or not (data.get("modules", {}) is Dictionary):
+		push_error("SaveData: Invalid v4 engine/modules sections")
+		return false
+	game_header = (data["game"] as Dictionary).duplicate(true)
+	map_header = (data["map"] as Dictionary).duplicate(true)
+	engine_state = (data["engine"] as Dictionary).duplicate(true)
+	module_states = (data["modules"] as Dictionary).duplicate(true)
+	var settlement_section: Variant = module_states.get("gth.settlement", {})
+	if not (settlement_section is Dictionary):
+		push_error("SaveData: Missing gth.settlement save section")
+		return false
+	var section := settlement_section as Dictionary
+	if not _is_dictionary_field(section, "settlement") or not _is_dictionary_field(section, "world"):
+		push_error("SaveData: Invalid gth.settlement save section")
+		return false
+	if not _is_array_field(section, "buildings") or not _is_array_field(section, "construction_sites") or not _is_array_field(section, "citizens") or not _is_array_field(section, "resource_piles"):
+		push_error("SaveData: Invalid gth.settlement collections")
+		return false
+	settlement_state = (section["settlement"] as Dictionary).duplicate(true)
+	world_state = (section["world"] as Dictionary).duplicate(true)
+	# Map ownership is generic in v4. Keep the legacy projection needed by the
+	# current launch manager and settlement loader.
+	if not map_header.is_empty():
+		world_state["map_ref"] = map_header.duplicate(true)
+	clock_state = (engine_state.get("clock", {}) as Dictionary).duplicate(true) if engine_state.get("clock", {}) is Dictionary else {}
+	camera_state = (engine_state.get("camera", {}) as Dictionary).duplicate(true) if engine_state.get("camera", {}) is Dictionary else {}
+	buildings_state = (section["buildings"] as Array).duplicate(true)
+	construction_sites_state = (section["construction_sites"] as Array).duplicate(true)
+	citizens_state = (section["citizens"] as Array).duplicate(true)
+	resource_piles_state = (section["resource_piles"] as Array).duplicate(true)
+	forest_state = (section.get("forest", []) as Array).duplicate(true) if section.get("forest", []) is Array else []
 	version = VERSION
 	return true
 
