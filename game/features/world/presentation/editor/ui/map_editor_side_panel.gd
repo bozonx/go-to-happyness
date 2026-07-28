@@ -113,6 +113,22 @@ func _add_property_control(property: EntityPropertyDef, value: Variant) -> void:
 				(edit as LineEdit).text_submitted.connect(func(text: String) -> void: property_committed.emit(property.name, text))
 				(edit as LineEdit).focus_exited.connect(func() -> void: property_committed.emit(property.name, (edit as LineEdit).text))
 			control = edit
+		EntityPropertyDef.TYPE_COLOR:
+			var picker := ColorPickerButton.new()
+			picker.color = value if value is Color else Color.html(String(value))
+			picker.color_changed.connect(func(next: Color) -> void: property_committed.emit(property.name, next))
+			control = picker
+		EntityPropertyDef.TYPE_VECTOR2, EntityPropertyDef.TYPE_VECTOR3:
+			control = _vector_control(property, value)
+		EntityPropertyDef.TYPE_FLAGS:
+			control = _flags_control(property, value)
+		EntityPropertyDef.TYPE_ASSET_REF, EntityPropertyDef.TYPE_ARCHETYPE_REF, EntityPropertyDef.TYPE_ENTITY_REF, EntityPropertyDef.TYPE_ZONE_REF, EntityPropertyDef.TYPE_POINT_REF, EntityPropertyDef.TYPE_ROUTE_REF, EntityPropertyDef.TYPE_ITEM_REF, EntityPropertyDef.TYPE_DIALOG_REF, EntityPropertyDef.TYPE_QUEST_REF, EntityPropertyDef.TYPE_FLAG_REF:
+			var reference := LineEdit.new()
+			reference.placeholder_text = "идентификатор"
+			reference.text = String(value)
+			reference.text_submitted.connect(func(text: String) -> void: property_committed.emit(property.name, text))
+			reference.focus_exited.connect(func() -> void: property_committed.emit(property.name, reference.text))
+			control = reference
 		_:
 			var unsupported := Label.new()
 			unsupported.text = "Тип «%s» будет доступен в следующем подшаге" % property.type
@@ -120,6 +136,46 @@ func _add_property_control(property: EntityPropertyDef, value: Variant) -> void:
 			control = unsupported
 	row.add_child(control)
 	_inspector_fields.add_child(row)
+
+
+func _vector_control(property: EntityPropertyDef, value: Variant) -> Control:
+	var row := HBoxContainer.new()
+	var count := 2 if property.type == EntityPropertyDef.TYPE_VECTOR2 else 3
+	var values: Array = value as Array if value is Array else ([value.x, value.y] if value is Vector2 else ([value.x, value.y, value.z] if value is Vector3 else []))
+	while values.size() < count:
+		values.append(0.0)
+	var spins: Array[SpinBox] = []
+	for index in count:
+		var spin := SpinBox.new()
+		spin.step = float(property.step) if property.step != null else 0.1
+		spin.value = float(values[index])
+		spin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(spin)
+		spins.append(spin)
+		spin.get_line_edit().focus_exited.connect(func() -> void:
+			var result: Array = spins.map(func(item: SpinBox) -> float: return item.value)
+			property_committed.emit(property.name, result))
+	return row
+
+
+func _flags_control(property: EntityPropertyDef, value: Variant) -> Control:
+	var row := VBoxContainer.new()
+	var selected: Dictionary = {}
+	if value is Array:
+		for entry: Variant in value as Array:
+			selected[String(entry)] = true
+	for entry: Variant in property.options:
+		var check := CheckBox.new()
+		check.text = String(entry)
+		check.button_pressed = selected.has(String(entry))
+		check.toggled.connect(func(_pressed: bool) -> void:
+			var values: Array = []
+			for child: Node in row.get_children():
+				if child is CheckBox and (child as CheckBox).button_pressed:
+					values.append((child as CheckBox).text)
+			property_committed.emit(property.name, values))
+		row.add_child(check)
+	return row
 
 
 static func _section_name(section: StringName) -> String:

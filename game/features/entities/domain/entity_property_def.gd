@@ -140,6 +140,10 @@ func coerce_value(value: Variant) -> Variant:
 			return float(value)
 		TYPE_STRING, TYPE_TEXT:
 			return String(value)
+		TYPE_COLOR:
+			if value is Color:
+				return value
+			return Color.html(String(value))
 		TYPE_VECTOR2:
 			return _as_vector(value, 2)
 		TYPE_VECTOR3:

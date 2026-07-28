@@ -36,7 +36,7 @@ func to_dict() -> Dictionary:
 	if initial_state != EntityStateSet.FOLLOW_SEASON:
 		result["state"] = String(initial_state)
 	if not props.is_empty():
-		result["props"] = props.duplicate(true)
+		result["props"] = _json_safe(props)
 	if not tags.is_empty():
 		result["tags"] = tags.map(func(tag: StringName) -> String: return String(tag))
 	if activity != &"":
@@ -69,3 +69,28 @@ static func from_dict(source: Dictionary) -> MapEntityRecord:
 
 func is_valid() -> bool:
 	return id != &"" and archetype_id != &""
+
+
+## Entity props are deliberately open data. Convert Godot value types here at the
+## persistence boundary so the generic inspector can safely author vectors and
+## colours without every component inventing its own JSON codec.
+static func _json_safe(value: Variant) -> Variant:
+	if value is Color:
+		return (value as Color).to_html(true)
+	if value is Vector2:
+		var vector2 := value as Vector2
+		return [vector2.x, vector2.y]
+	if value is Vector3:
+		var vector3 := value as Vector3
+		return [vector3.x, vector3.y, vector3.z]
+	if value is Array:
+		var array: Array = []
+		for item: Variant in value as Array:
+			array.append(_json_safe(item))
+		return array
+	if value is Dictionary:
+		var dictionary: Dictionary = {}
+		for key: Variant in (value as Dictionary).keys():
+			dictionary[key] = _json_safe((value as Dictionary)[key])
+		return dictionary
+	return value
