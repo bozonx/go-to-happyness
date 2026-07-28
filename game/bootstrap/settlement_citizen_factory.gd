@@ -101,12 +101,17 @@ func wire_citizen(citizen: Citizen) -> void:
 func create_starter_backpack() -> void:
 	if game.settlement.warehouse_ever_built:
 		return
-	if game.hero_citizen == null:
+	if game.launch_config == null or game.launch_config.map_document == null:
 		return
-	# The starter inventory is part of the starting party, not an invisible
-	# entrance-sign fallback.  Keep it beside the authored hero spawn and snap it
-	# to the same terrain field as every other launch object.
-	game.backpack_position = game.hero_citizen.global_position + Vector3(-1.5, 0.0, 0.7)
+	var spawn: MapEntityRecord = null
+	for entity: MapEntityRecord in game.launch_config.map_document.entities.entities:
+		if entity.archetype_id == &"core:starter_backpack":
+			spawn = entity
+			break
+	if spawn == null:
+		push_error("[launch] Map requires one core:starter_backpack entity")
+		return
+	game.backpack_position = spawn.position
 	var terrain_height := game.terrain_height_at(game.backpack_position.x, game.backpack_position.z, 0.0)
 	if not is_nan(terrain_height):
 		game.backpack_position.y = terrain_height + 0.08

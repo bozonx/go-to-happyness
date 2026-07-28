@@ -30,6 +30,7 @@
 		{"id":"tree_19","archetype":"core:tree","transform":{"position":[20.5,0,-4.5]}}, {"id":"tree_20","archetype":"core:tree","transform":{"position":[20.5,0,5.5]}},
 		{"id":"tree_21","archetype":"core:tree","transform":{"position":[-4.5,0,-19.5]}}, {"id":"tree_22","archetype":"core:tree","transform":{"position":[5.5,0,-19.5]}},
 		{"id":"tree_23","archetype":"core:tree","transform":{"position":[-4.5,0,20.5]}}, {"id":"tree_24","archetype":"core:tree","transform":{"position":[5.5,0,20.5]}},
+		{"id":"starter_backpack","archetype":"core:starter_backpack","transform":{"position":[-24.0,0,4.2]}},
 		{"id":"rabbit_01","archetype":"core:rabbit","transform":{"position":[-11.5,0,-14.5]}}, {"id":"rabbit_02","archetype":"core:rabbit","transform":{"position":[-10.5,0,-17.5]}},
 		{"id":"rabbit_03","archetype":"core:rabbit","transform":{"position":[-13.5,0,-11.5]}}, {"id":"rabbit_04","archetype":"core:rabbit","transform":{"position":[-7.5,0,-18.5]}},
 		{"id":"rabbit_05","archetype":"core:rabbit","transform":{"position":[20.5,0,-14.5]}}, {"id":"rabbit_06","archetype":"core:rabbit","transform":{"position":[19.5,0,-17.5]}},
