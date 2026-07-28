@@ -873,10 +873,14 @@ routes[]   → routes[]    # нормализуются ссылки на anchor
     глубокой воде и отсутствие `spawn` в hero-режиме — ошибки, блокируют
     сохранение; `warnings(nav_grid)` — anchor на непроходимой клетке и маршрут
     через непроходимое ребро (кнопка «Проверить», где есть NavGrid).
+22. **Вертикальный пример** (`test_zone_vertical_example.gd`, §17): карта с
+    region/overlay/spawn/route в реальной settlement-сессии доказывает, что все
+    слои compose — registry adopting, overlay-cost в NavGrid, spawn размещает
+    горожанина, presence публикует `area_entered`, маршрут проходим.
 
 Осталось:
 
-22. **Pack-теги (§12):** фракции, виды животных — аддитив к `ActorTags`;
+23. **Pack-теги (§12):** фракции, виды животных — аддитив к `ActorTags`;
     audience-scoped `cost`; tag-фильтрация спавна.
 23. **Slot-события (§14):** `slot_reserved`/`slot_released` — требуют
     slot-резерваций на карте (сейчас только в зданиях); `activity_*`/`queue_*`/

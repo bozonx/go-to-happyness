@@ -53,7 +53,7 @@ func _init() -> void:
 		"slot_reserved": func(_event: ZoneEvent): pass,
 		"slot_released": func(_event: ZoneEvent): pass,
 	})
-	var first_citizen := simulation.citizens[0]
+	var first_citizen: Citizen = simulation.citizens[0]
 	simulation.zone_presence_tracker.on_citizen_cell_changed(first_citizen.ai_id, Vector2i(12, 12), ActorTags.of(first_citizen))
 	assert(entered[0], "entering the gate_yard region published area_entered")
 
