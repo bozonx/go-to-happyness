@@ -116,6 +116,16 @@ func guard_citizen_positions() -> void:
 			citizen.global_position = previous
 			citizen.velocity = Vector3.ZERO
 		game.last_citizen_positions[citizen_id] = citizen.global_position
+		# Zone presence: diff the citizen's current cell against the last one and
+		# let the tracker publish area_entered/area_exited (active_zones.md §14).
+		# Reuses the iteration this guard already pays for, rather than walking
+		# every citizen a second time; the tracker itself owns no loop.
+		if game.zone_presence_tracker != null:
+			var current_cell: Vector2i = game.cell_from_position(citizen.global_position)
+			var previous_cell: Variant = game.last_citizen_cells.get(citizen_id, null)
+			if previous_cell == null or (previous_cell is Vector2i and previous_cell != current_cell):
+				game.zone_presence_tracker.on_citizen_cell_changed(citizen_id, current_cell)
+				game.last_citizen_cells[citizen_id] = current_cell
 
 
 func start_park_rest(cooks_only: bool) -> void:

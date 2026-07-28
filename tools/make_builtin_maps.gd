@@ -59,7 +59,7 @@ func _author_green_valley_water(terrain: TerrainGrid, water: WaterGrid) -> void:
 	# A small fresh-water pond near the settlement centre so citizens have
 	# somewhere to draw water. Dig a shallow basin with a deeper middle:
 	# the rim is one step deep (a ford), the centre is two steps deep (not a ford).
-	var pond_centre := Vector2i(-9, 8)
+	var pond_centre := Vector2i(10, -7)
 	var pond_radius := 3
 	for z in range(pond_centre.y - pond_radius, pond_centre.y + pond_radius + 1):
 		for x in range(pond_centre.x - pond_radius, pond_centre.x + pond_radius + 1):

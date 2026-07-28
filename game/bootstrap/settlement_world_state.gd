@@ -22,4 +22,9 @@ var backpack_position: Vector3
 
 var outside_workers: Dictionary = {}
 var last_citizen_positions: Dictionary = {}
+## The previous board cell of each citizen, so the presence tracker can diff.
+## Kept alongside `last_citizen_positions` because both are maintained in the
+## same `guard_citizen_positions` pass; a separate tracker would re-walk every
+## citizen to recompute what that pass already touches.
+var last_citizen_cells: Dictionary = {}
 var resource_piles: Array[ResourcePile] = []

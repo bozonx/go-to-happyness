@@ -86,6 +86,14 @@ var simulation_event_dispatcher: SimulationEventDispatcher
 var map_zone_registry: MapZoneRegistry
 ## Stateless facade over `map_zone_registry`, the surface rules will call.
 var map_zone_service: MapZoneService
+## The presence index (cell → addressable areas) and the tracker that diffs
+## citizen cells against it, publishing `area_entered`/`area_exited` on the bus.
+## Fed by `guard_citizen_positions` every tick.
+var zone_presence_index: ZonePresenceIndex
+var zone_presence_tracker: ZonePresenceTracker
+## One bus for every zone event (active_zones.md §14). Driven from outside by
+## the tracker and the registry; holds no knowledge of who listens.
+var zone_event_bus: ZoneEventBus
 var ui_attacher := SettlementUIAttacher.new()
 
 var warehouse_positions: Array[Vector3]:
@@ -138,6 +146,8 @@ var outside_workers: Dictionary:
 	get: return world_state.outside_workers
 var last_citizen_positions: Dictionary:
 	get: return world_state.last_citizen_positions
+var last_citizen_cells: Dictionary:
+	get: return world_state.last_citizen_cells
 var resource_piles: Array[ResourcePile]:
 	get: return world_state.resource_piles
 var backpack_node: Node3D:

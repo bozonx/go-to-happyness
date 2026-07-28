@@ -10,9 +10,12 @@
 > (`OverlayNavigationPublisher`, §4.2), `deny visitor` отмечает клетку для
 > планировщика; спавн-операция читает `spawn`-якори карты (`MapSpawnService`,
 > §15). Runtime-состояние зон карты (§13): `MapZoneRegistry` + `MapZoneService`
-> держат владельца и флаги в памяти сессии. Шина событий (§14), теги действующего
-> (§12), `vision`/`conceal`, persistence состояния зон (save/load),
-> audience-scoped `cost` и presence-события ещё не подключены.
+> держат владельца и флаги в памяти сессии. Шина событий (§14): `ZoneEventBus`
+> публикует presence-события (`area_entered`/`area_exited`) — `ZonePresenceTracker`
+> детектит переход клеток граждан в `guard_citizen_positions`. Потребители-правила
+> пока не подписаны; теги действующего (§12), `vision`/`conceal`, persistence
+> состояния зон (save/load), audience-scoped `cost` и остальные типы событий ещё
+> не подключены.
 > Предыдущая модель и имя роли `access` удалены, совместимого легаси-слоя нет.
 
 Активная зона — это авторская разметка пространства, которую читают навигация,
@@ -836,22 +839,26 @@ routes[]   → routes[]    # нормализуются ссылки на anchor
     камень. Tag-фильтрация спавна — ниже, после тегов.
 16. **Runtime-состояние зон карты** (§13): `MapZoneRegistry` + `MapZoneService`
     — адресуемый реестр владельца и флагов в памяти сессии, строится из
-    `MapZoneLayer` в `_setup_zone_runtime`. Теги действующего (§12), persistence
-    (save/load), presence-события и резервации — ниже.
+    `MapZoneLayer` в `_setup_zone_runtime`.
+17. **Шина событий** (§14): `ZoneEventBus` (mirror `SimulationEventDispatcher`),
+    `ZonePresenceIndex` (cell→addressable areas, overlay исключён),
+    `ZonePresenceTracker` (diff клеток граждан в `guard_citizen_positions` →
+    `area_entered`/`area_exited`). Потребители-правила пока не подписаны.
 
 Осталось:
 
-17. **Шина событий** (§14) и подписка правил на неё: `ZoneEventBus` (mirror
-    `SimulationEventDispatcher`) + `ZonePresenceTracker` (cell-diff в
-    `guard_citizen_positions`) для `area_entered`/`area_exited`.
 18. **Persistence состояния зон:** слот `map_zones` в `SaveData.world_state`;
     `export`/restore session_state (только owner/flags, не геометрию).
 19. **Теги действующего (§12):** единый issuer для граждан (аудитории + теги
-    фракций); owner-resolve, audience-scoped `cost`, tag-фильтрация спавна.
-20. **Навигация и видимость (остальное):** `vision`/`conceal` — нет FOV-системы
+    фракций); owner-resolve, audience-scoped `cost`, tag-фильтрация спавна;
+    теги в presence-событиях (пока пустой массив).
+20. **Остальные типы событий (§14):** `slot_reserved`/`slot_released`,
+    `owner_changed`, `zone_flag_changed` — emit из registry/service.
+21. **Навигация и видимость (остальное):** `vision`/`conceal` — нет FOV-системы
     вообще; audience-scoped `cost`; очередь в планировании.
-21. **Превью.** Болванки в редакторе (§11) — валидация разметки и тот самый
-    момент «дом ожил». Ставится после §17: превью гоняет ту же шину событий.
-22. **Валидатор карты** (`map_validator.gd`, фаза 6): достижимость по `NavGrid`,
+22. **Превью.** Болванки в редакторе (§11) — валидация разметки и тот самый
+    момент «дом ожил». Ставится после потребителей правил: превью гоняет ту же
+    шину событий.
+23. **Валидатор карты** (`map_validator.gd`, фаза 6): достижимость по `NavGrid`,
     вода/дыры/обрывы, цели дверей, требования пака — поверх in-layer проверок
     `MapZoneLayer`.

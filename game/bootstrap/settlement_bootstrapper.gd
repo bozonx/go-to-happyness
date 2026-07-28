@@ -200,18 +200,31 @@ func _setup_ai_and_navigation() -> void:
 	game.building_queue_service.set_citizen_alive_checker(func(citizen_id): return game.citizen_factory.is_ai_citizen_id_alive(citizen_id))
 
 
-## Builds the map-zone session state (active_zones.md §13). Runs after the
-## navigation stack because the overlay publisher (previous round) has already
-## read `map_document.zones` for cost; this reads the same layer for owner and
-## flags. A session without a map document gets an empty registry, so the
-## no-map fallback board still has a service to call.
+## Builds the map-zone runtime: session state (§13), the presence index and
+## tracker (§14), and the event bus they publish on. Runs after the navigation
+## stack because the overlay publisher (a prior round) has already read
+## `map_document.zones` for cost; this reads the same layer for owner, flags and
+## presence. A session without a map document gets empty structures, so the
+## no-map fallback board still has services to call without null-checks upstream.
 func _setup_zone_runtime() -> void:
-	game.map_zone_registry = MapZoneRegistry.new()
 	var map_document: MapDocument = game.launch_config.map_document if game.launch_config != null else null
+	var board_cells := game.board_cells
+	# Session state (§13): owner and flags per zone.
+	game.map_zone_registry = MapZoneRegistry.new()
 	if map_document != null:
 		game.map_zone_registry.build_from(map_document.zones)
 	game.map_zone_service = MapZoneService.new()
 	game.map_zone_service.configure(game.map_zone_registry)
+	# Presence (§14): a cell→areas index, a tracker that diffs citizen cells
+	# against it, and the bus both publish to. No consumers are wired yet — a
+	# future rules phase subscribes by adding callables to the bus configure.
+	game.zone_presence_index = ZonePresenceIndex.new()
+	if map_document != null:
+		game.zone_presence_index.rebuild(map_document.zones, board_cells)
+	game.zone_event_bus = ZoneEventBus.new()
+	game.zone_event_bus.configure({})
+	game.zone_presence_tracker = ZonePresenceTracker.new()
+	game.zone_presence_tracker.configure(game.zone_presence_index, game.zone_event_bus)
 
 
 func _setup_citizen_lifecycle() -> void:

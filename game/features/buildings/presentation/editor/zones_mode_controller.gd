@@ -48,12 +48,10 @@ var _tool_point_btn: Button = null
 var _tool_route_btn: Button = null
 var _tool_select_btn: Button = null
 var _role_option: OptionButton = null
-var _function_option: OptionButton = null
 var _layer_label: Label = null
 var _layer_down_btn: Button = null
 var _layer_up_btn: Button = null
-var _show_overlay_check: CheckBox = null
-var _overlay_audience_option: OptionButton = null
+var _delete_selection_btn: Button = null
 
 # Right inspector
 var _inspector_panel: PanelContainer = null
@@ -70,7 +68,6 @@ var _overlay_row: VBoxContainer = null
 var _overlay_permissions_container: HFlowContainer = null
 var _overlay_effects_container: VBoxContainer = null
 var _anchor_props: VBoxContainer = null
-var _delete_btn: Button = null
 var _req_checklist: VBoxContainer = null
 var _req_empty_label: Label = null
 var _zone_tree: Tree = null
@@ -81,7 +78,6 @@ var _tool: StringName = TOOL_AREA
 ## Role armed for the next created zone; contextual to the tool.
 var _area_role: StringName = ZoneAreaRecord.ROLE_ROOM
 var _anchor_role: StringName = ZoneAnchorRecord.ROLE_SLOT
-var _armed_function: StringName = &""
 ## Selection is either an area or an anchor; ids are unique per collection.
 var _selected_area_id: StringName = &""
 var _selected_anchor_id: StringName = &""
@@ -97,6 +93,9 @@ var _moving_anchor: bool = false
 # Ghost preview of the active tool under the cursor.
 var _ghost: MeshInstance3D = null
 var _ghost_material: StandardMaterial3D = null
+# Drag rectangle preview for the area tool.
+var _drag_preview: MeshInstance3D = null
+var _drag_preview_material: StandardMaterial3D = null
 
 
 # ---------------------------------------------------------------------------
@@ -113,12 +112,10 @@ func setup(editor: Node) -> void:
 	_tool_route_btn = editor.get_node("%ToolRouteBtn")
 	_tool_select_btn = editor.get_node("%ToolSelectBtn")
 	_role_option = editor.get_node("%ZoneRoleOption")
-	_function_option = editor.get_node("%ZoneFunctionOption")
 	_layer_label = editor.get_node("%ZoneLayerLabel")
 	_layer_down_btn = editor.get_node("%ZoneLayerDownBtn")
 	_layer_up_btn = editor.get_node("%ZoneLayerUpBtn")
-	_show_overlay_check = editor.get_node("%ShowOverlayCheck")
-	_overlay_audience_option = editor.get_node("%OverlayAudienceOption")
+	_delete_selection_btn = editor.get_node("%ZoneDeleteSelectionBtn")
 
 	_inspector_panel = editor.get_node("%ZonesInspectorPanel")
 	_inspector_title = editor.get_node("%ZoneInspectorTitle")
@@ -134,7 +131,6 @@ func setup(editor: Node) -> void:
 	_overlay_permissions_container = editor.get_node("%ZoneOverlayPermissionsContainer")
 	_overlay_effects_container = editor.get_node("%ZoneOverlayEffectsContainer")
 	_anchor_props = editor.get_node("%ZoneAnchorProps")
-	_delete_btn = editor.get_node("%DeleteZoneBtn")
 	_req_checklist = editor.get_node("%ZoneReqChecklist")
 	_req_empty_label = editor.get_node("%ZoneReqEmptyLabel")
 	_zone_tree = editor.get_node("%ZoneTree")
@@ -146,24 +142,16 @@ func setup(editor: Node) -> void:
 	_tool_route_btn.pressed.connect(func() -> void: _arm_tool(TOOL_ROUTE))
 	_tool_select_btn.pressed.connect(func() -> void: _arm_tool(TOOL_SELECT))
 	_role_option.item_selected.connect(_on_palette_role_selected)
-	_function_option.item_selected.connect(_on_palette_function_selected)
 	_layer_down_btn.pressed.connect(func() -> void: _editor.set_layer(_editor.active_layer - 1))
 	_layer_up_btn.pressed.connect(func() -> void: _editor.set_layer(_editor.active_layer + 1))
-	_show_overlay_check.toggled.connect(func(_pressed: bool) -> void: _refresh_visuals())
-	_overlay_audience_option.item_selected.connect(func(_index: int) -> void: _refresh_visuals())
+	_delete_selection_btn.pressed.connect(_delete_selection)
 
 	_id_edit.text_submitted.connect(_on_id_submitted)
 	_id_edit.focus_exited.connect(func() -> void: _on_id_submitted(_id_edit.text))
 	_name_edit.text_changed.connect(_on_name_changed)
 	_inspector_role_option.item_selected.connect(_on_inspector_role_selected)
 	_inspector_function_option.item_selected.connect(_on_inspector_function_selected)
-	_delete_btn.pressed.connect(_delete_selection)
 	_zone_tree.item_selected.connect(_on_tree_item_selected)
-
-	for audience in ZoneAccess.AUDIENCES:
-		_overlay_audience_option.add_item(ZoneAccess.audience_display_name(audience))
-		_overlay_audience_option.set_item_metadata(_overlay_audience_option.item_count - 1, audience)
-	_overlay_audience_option.select(0)
 
 	_arm_tool(TOOL_AREA)
 
@@ -175,7 +163,6 @@ func setup(editor: Node) -> void:
 func activate() -> void:
 	_toolbar.visible = true
 	_inspector_panel.visible = true
-	_rebuild_function_options()
 	_refresh_all()
 	_editor.set_status("Режим зон: Q — область, W — точка, E — линия, R — выделение.")
 
@@ -185,7 +172,9 @@ func deactivate() -> void:
 	_inspector_panel.visible = false
 	_dragging = false
 	_hide_ghost()
+	_hide_drag_preview()
 	_clear_visuals()
+	_clear_selection()
 
 
 func is_active() -> bool:
@@ -209,6 +198,8 @@ func handle_mouse_button(event: InputEventMouseButton) -> bool:
 			return false
 		match _tool:
 			TOOL_AREA:
+				if not _cursor_in_bounds():
+					return false
 				_dragging = true
 				_drag_start = _cursor_cell_2d()
 			TOOL_POINT:
@@ -221,6 +212,7 @@ func handle_mouse_button(event: InputEventMouseButton) -> bool:
 		return true
 	if _dragging:
 		_dragging = false
+		_hide_drag_preview()
 		_commit_area_rect(_drag_start, _cursor_cell_2d())
 	elif _moving_anchor:
 		_moving_anchor = false
@@ -273,11 +265,18 @@ func refresh_ghost() -> void:
 	if _editor.is_pointer_over_ui():
 		_hide_ghost()
 		return
+	if _dragging:
+		_hide_ghost()
+		_update_drag_preview()
+		return
 	_ensure_ghost()
 	var cell: Vector3i = _editor.cursor_cell
 	var pos := Vector3(cell.x + 0.5, float(cell.y), cell.z + 0.5)
 	match _tool:
 		TOOL_AREA:
+			if not _cursor_in_bounds():
+				_hide_ghost()
+				return
 			_ghost.mesh = BoxMesh.new()
 			(_ghost.mesh as BoxMesh).size = Vector3(0.94, 0.04, 0.94)
 			_ghost.position = pos + Vector3(0.0, 0.02, 0.0)
@@ -300,6 +299,56 @@ func refresh_ghost() -> void:
 func _hide_ghost() -> void:
 	if _ghost != null:
 		_ghost.visible = false
+
+
+func _hide_drag_preview() -> void:
+	if _drag_preview != null:
+		_drag_preview.visible = false
+
+
+func _ensure_drag_preview() -> void:
+	if _drag_preview == null:
+		_drag_preview = MeshInstance3D.new()
+		_drag_preview.material_override = _get_drag_preview_material()
+		_zones_visual_root.add_child(_drag_preview)
+
+
+func _get_drag_preview_material() -> StandardMaterial3D:
+	if _drag_preview_material == null:
+		_drag_preview_material = StandardMaterial3D.new()
+		_drag_preview_material.albedo_color = Color(0.3, 0.9, 0.4, 0.35)
+		_drag_preview_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_drag_preview_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	return _drag_preview_material
+
+
+func _update_drag_preview() -> void:
+	if not _dragging:
+		return
+	if not _editor.cursor_valid:
+		_hide_drag_preview()
+		return
+	_ensure_drag_preview()
+	var from_cell := _drag_start
+	var to_cell := _cursor_cell_2d()
+	# Clamp to building footprint so the preview stays inside the bounds.
+	var fp: Vector2i = _editor.blueprint.footprint
+	from_cell.x = clampi(from_cell.x, 0, fp.x - 1)
+	from_cell.y = clampi(from_cell.y, 0, fp.y - 1)
+	to_cell.x = clampi(to_cell.x, 0, fp.x - 1)
+	to_cell.y = clampi(to_cell.y, 0, fp.y - 1)
+	var rect := Rect2i(from_cell, Vector2i.ONE).merge(Rect2i(to_cell, Vector2i.ONE))
+	var w := float(rect.size.x)
+	var d := float(rect.size.y)
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3(w, 0.06, d)
+	_drag_preview.mesh = mesh
+	_drag_preview.position = Vector3(
+		float(rect.position.x) + w * 0.5,
+		float(_editor.active_layer) + 0.03,
+		float(rect.position.y) + d * 0.5)
+	_drag_preview.rotation = Vector3.ZERO
+	_drag_preview.visible = true
 
 
 func _ensure_ghost() -> void:
@@ -356,7 +405,6 @@ func _arm_tool(tool_id: StringName) -> void:
 	_tool_route_btn.button_pressed = tool_id == TOOL_ROUTE
 	_tool_select_btn.button_pressed = tool_id == TOOL_SELECT
 	_rebuild_role_options()
-	_rebuild_function_options()
 
 
 ## The role list is contextual: an area tool offers area roles, a point tool
@@ -391,7 +439,6 @@ func _on_palette_role_selected(index: int) -> void:
 	else:
 		_anchor_role = role
 	_update_role_hint()
-	_rebuild_function_options()
 
 
 func _update_role_hint() -> void:
@@ -404,43 +451,6 @@ func _cycle_role() -> void:
 	var next := (_role_option.selected + 1) % _role_option.item_count
 	_role_option.select(next)
 	_on_palette_role_selected(next)
-
-
-## Functions offered for what is currently armed. An empty list is not a bug: it
-## means no installed pack gives this role a meaning, and the zone stays inert.
-func _rebuild_function_options() -> void:
-	_suppress_ui_events = true
-	_function_option.clear()
-	_function_option.add_item("— без функции —")
-	_function_option.set_item_metadata(0, &"")
-	var entries := _armed_function_entries()
-	for entry in entries:
-		_function_option.add_item(String(entry.get("label", "")))
-		_function_option.set_item_metadata(_function_option.item_count - 1, entry.get("id", &""))
-	var matched := false
-	for i in _function_option.item_count:
-		if _function_option.get_item_metadata(i) == _armed_function:
-			_function_option.select(i)
-			matched = true
-	if not matched:
-		_armed_function = &""
-		_function_option.select(0)
-	_function_option.disabled = _tool in [TOOL_ROUTE, TOOL_SELECT]
-	_suppress_ui_events = false
-
-
-func _armed_function_entries() -> Array[Dictionary]:
-	if _tool == TOOL_AREA:
-		return ZoneFunctionCatalog.for_area_role(_area_role)
-	if _tool == TOOL_POINT and _anchor_role == ZoneAnchorRecord.ROLE_SLOT:
-		return ZoneFunctionCatalog.activities()
-	return [] as Array[Dictionary]
-
-
-func _on_palette_function_selected(index: int) -> void:
-	if _suppress_ui_events:
-		return
-	_armed_function = _function_option.get_item_metadata(index)
 
 
 ## Naming the pack is deliberate: the author must see that "Пекарня" is content,
@@ -465,9 +475,22 @@ func _cursor_cell_2d() -> Vector2i:
 	return Vector2i(_editor.cursor_cell.x, _editor.cursor_cell.z)
 
 
+func _cursor_in_bounds() -> bool:
+	if not _editor.cursor_valid:
+		return false
+	var fp: Vector2i = _editor.blueprint.footprint
+	var cell := _cursor_cell_2d()
+	return cell.x >= 0 and cell.y >= 0 and cell.x < fp.x and cell.y < fp.y
+
+
 func _commit_area_rect(from_cell: Vector2i, to_cell: Vector2i) -> void:
 	if not _editor.cursor_valid:
 		return
+	var fp: Vector2i = _editor.blueprint.footprint
+	from_cell.x = clampi(from_cell.x, 0, fp.x - 1)
+	from_cell.y = clampi(from_cell.y, 0, fp.y - 1)
+	to_cell.x = clampi(to_cell.x, 0, fp.x - 1)
+	to_cell.y = clampi(to_cell.y, 0, fp.y - 1)
 	var rect := Rect2i(from_cell, Vector2i.ONE).merge(Rect2i(to_cell, Vector2i.ONE))
 	var area := _selected_area()
 	if area == null or area.role != _area_role:
@@ -495,9 +518,6 @@ func _create_area() -> ZoneAreaRecord:
 		# An overlay that forbids nobody is a no-op; start from the case the
 		# author almost always wants and let them widen it.
 		area.deny = [ZoneAccess.AUDIENCE_VISITOR]
-	elif _armed_function != &"":
-		area.function = _armed_function
-		area.properties = ZoneFunctionCatalog.default_properties(_armed_function)
 	_editor.blueprint.areas.append(area)
 	return area
 
@@ -518,9 +538,7 @@ func _place_anchor_at_cursor() -> void:
 			if area.contains_cell(_cursor_cell_2d()):
 				anchor.owner_id = area.id
 				break
-	if anchor.is_slot() and _armed_function != &"":
-		anchor.activity = _armed_function
-	if anchor.is_storage():
+	if anchor.is_slot():
 		anchor.capacity = 50
 	if anchor.is_queue():
 		var target := _nearest_slot(anchor.pos)
@@ -753,6 +771,12 @@ func _anchor_by_id(anchor_id: StringName) -> ZoneAnchorRecord:
 # Inspector
 # ---------------------------------------------------------------------------
 
+func _refresh_delete_button() -> void:
+	if _delete_selection_btn == null:
+		return
+	_delete_selection_btn.disabled = _selected_area() == null and _selected_anchor() == null and _selected_route() == null
+
+
 func _refresh_all() -> void:
 	on_layer_changed()
 	_refresh_inspector()
@@ -760,6 +784,7 @@ func _refresh_all() -> void:
 	_refresh_requirements()
 	_refresh_warnings()
 	_refresh_visuals()
+	_refresh_delete_button()
 
 
 ## Shows the fields of the selected role and nothing else. The old panel showed
@@ -1348,16 +1373,6 @@ func _refresh_cursor_status() -> void:
 			rooms.append(area)
 	if not rooms.is_empty():
 		parts.append("комната «%s»" % rooms[0].display_name())
-	var audience: StringName = ZoneAccess.AUDIENCE_VISITOR
-	if _overlay_audience_option.selected >= 0:
-		audience = _overlay_audience_option.get_item_metadata(_overlay_audience_option.selected)
-	var denied: Array[String] = []
-	for area in _editor.blueprint.areas:
-		if area.is_overlay() and area.contains_cell_3d(Vector3i(cell.x, _editor.active_layer, cell.y)) \
-				and not area.permits(audience):
-			denied.append(area.display_name())
-	if not denied.is_empty():
-		parts.append("нельзя: %s" % ZoneAccess.audience_display_name(audience))
 	parts.append("ошибок: %d" % _editor.blueprint.zone_validation_errors().size())
 	_editor.set_status(" · ".join(parts))
 
@@ -1380,10 +1395,6 @@ func _refresh_visuals() -> void:
 	_clear_visuals()
 	if not is_active():
 		return
-	var show_overlays: bool = _show_overlay_check != null and _show_overlay_check.button_pressed
-	var audience: StringName = &""
-	if show_overlays and _overlay_audience_option.selected >= 0:
-		audience = _overlay_audience_option.get_item_metadata(_overlay_audience_option.selected)
 	var color_index := 0
 	for area in _editor.blueprint.areas:
 		var color := OVERLAY_COLOR
@@ -1391,12 +1402,12 @@ func _refresh_visuals() -> void:
 		if not area.is_overlay():
 			color = AREA_COLORS[color_index % AREA_COLORS.size()]
 			color_index += 1
-		elif show_overlays:
-			# With the overlay on, only what actually blocks the chosen audience
-			# is painted — otherwise every overlay looks equally forbidding.
-			if area.permits(audience):
+		else:
+			# Overlays that block visitors are highlighted; the rest are dimmed.
+			if not area.permits(ZoneAccess.AUDIENCE_VISITOR):
+				height = 0.12
+			else:
 				continue
-			height = 0.12
 		if area.id == _selected_area_id:
 			color = color.lerp(SELECTION_COLOR, 0.5)
 		for cell in area.footprint_cells():

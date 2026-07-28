@@ -361,12 +361,6 @@ layout_mode = 2
 custom_minimum_size = Vector2(120, 0)
 tooltip_text = "Роль"
 
-[node name="ZoneFunctionOption" type="OptionButton" parent="EditorUI/Root/TopBar/Margin/HBox/ZonesToolbar"]
-unique_name_in_owner = true
-layout_mode = 2
-custom_minimum_size = Vector2(140, 0)
-tooltip_text = "Функция"
-
 [node name="VSepZonesLayer" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/ZonesToolbar"]
 layout_mode = 2
 
@@ -387,18 +381,15 @@ layout_mode = 2
 text = "+"
 tooltip_text = "Слой выше"
 
-[node name="VSepZonesOverlay" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/ZonesToolbar"]
+[node name="VSepZonesDelete" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox/ZonesToolbar"]
 layout_mode = 2
 
-[node name="ShowOverlayCheck" type="CheckBox" parent="EditorUI/Root/TopBar/Margin/HBox/ZonesToolbar"]
+[node name="ZoneDeleteSelectionBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox/ZonesToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Оверлеи"
-
-[node name="OverlayAudienceOption" type="OptionButton" parent="EditorUI/Root/TopBar/Margin/HBox/ZonesToolbar"]
-unique_name_in_owner = true
-layout_mode = 2
-custom_minimum_size = Vector2(100, 0)
+disabled = true
+text = "🗑"
+tooltip_text = "Удалить выделенную зону (Delete)"
 
 [node name="Spacer" type="Control" parent="EditorUI/Root/TopBar/Margin/HBox"]
 layout_mode = 2
@@ -625,11 +616,6 @@ theme_override_constants/separation = 2
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 2
-
-[node name="DeleteZoneBtn" type="Button" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox/ZoneInspectorBody"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Удалить выделенное (Del)"
 
 [node name="HSepReq" type="HSeparator" parent="EditorUI/Root/ZonesInspectorPanel/Scroll/InspectorVBox"]
 layout_mode = 2

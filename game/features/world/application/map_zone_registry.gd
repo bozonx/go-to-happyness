@@ -69,10 +69,12 @@ func is_owned_by(zone_id: StringName, agent_tags: Array) -> bool:
 
 ## Session slice of every zone, in id order, for a future save. Geometry never
 ## leaves the file, so this is only `{id, owner, flags}` per zone. Stable order
-## keeps a map saved twice without an edit byte-identical.
+## keeps a map saved twice without an edit byte-identical. Sort compares the ids
+## as strings: `Array.sort()` on `StringName` is not lexicographic, so a plain
+## sort would put `gate_yard` before `forest` and break the byte-identical claim.
 func session_state_to_dict() -> Array:
 	var ids: Array = _states.keys()
-	ids.sort()
+	ids.sort_custom(func(a, b) -> bool: return String(a) < String(b))
 	var result: Array = []
 	for id in ids:
 		result.append((_states[id] as MapZoneRuntimeState).session_state_to_dict())

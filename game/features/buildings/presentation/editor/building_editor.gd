@@ -467,6 +467,7 @@ func _select_mode(mode: int) -> void:
 
 	if mode == EditMode.DECOR:
 		frame_mode.deactivate()
+		zones_mode.deactivate()
 		decor_mode.activate()
 		_update_status("Режим декора: щелчок — поставить или выбрать, Delete — удалить, Esc — снять выделение.")
 	else:

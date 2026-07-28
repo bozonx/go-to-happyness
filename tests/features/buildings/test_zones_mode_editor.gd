@@ -45,18 +45,6 @@ func _run() -> void:
 	zones.handle_key(_key(KEY_Q))
 	print("  contextual role list ok")
 
-	# The function list comes from a pack, not from the editor.
-	var function_option: OptionButton = editor.get_node("%ZoneFunctionOption")
-	assert(function_option.item_count > 1, "core pack functions are offered")
-	var kitchen_index := -1
-	for i in function_option.item_count:
-		if function_option.get_item_metadata(i) == &"core:kitchen":
-			kitchen_index = i
-	assert(kitchen_index > 0, "the core kitchen is in the list")
-	function_option.select(kitchen_index)
-	zones._on_palette_function_selected(kitchen_index)
-	print("  pack-driven function list ok")
-
 	# Draw a room with the rectangle drag, the way the UI does.
 	editor.cursor_valid = true
 	editor.cursor_cell = Vector3i(1, 0, 1)
@@ -67,10 +55,25 @@ func _run() -> void:
 	assert(editor.blueprint.areas.size() == 1, "one area created")
 	var room: ZoneAreaRecord = editor.blueprint.areas[0]
 	assert(room.is_room())
-	assert(room.function == &"core:kitchen", "the armed function was applied")
-	assert(room.properties.get("profession") == "cook", "pack defaults filled in")
+	assert(room.function == &"", "new areas start without a function")
 	assert(room.cell_count() == 6, "3x2 cells, got %d" % room.cell_count())
 	print("  rectangle drag ok, cells=", room.cell_count())
+
+	# The function list comes from a pack and is set in the inspector, not the toolbar.
+	zones._selected_area_id = room.id
+	zones._refresh_inspector()
+	var function_option: OptionButton = editor.get_node("%ZoneInspectorFunctionOption")
+	assert(function_option.item_count > 1, "core pack functions are offered")
+	var kitchen_index := -1
+	for i in function_option.item_count:
+		if function_option.get_item_metadata(i) == &"core:kitchen":
+			kitchen_index = i
+	assert(kitchen_index > 0, "the core kitchen is in the list")
+	function_option.select(kitchen_index)
+	zones._on_inspector_function_selected(kitchen_index)
+	assert(room.function == &"core:kitchen", "the function was applied to the selected area")
+	assert(room.properties.get("profession") == "cook", "pack defaults filled in")
+	print("  inspector function selection ok")
 
 	# A door and a slot. The slot must adopt the room under it automatically.
 	zones.handle_key(_key(KEY_W))
