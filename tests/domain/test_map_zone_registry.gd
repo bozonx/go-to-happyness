@@ -14,6 +14,8 @@ static func run_all() -> void:
 	_test_is_owned_by_matches_current_owner()
 	_test_unknown_zone_is_inert()
 	_test_session_state_shape()
+	_test_session_state_round_trips_through_save()
+	_test_stale_zone_state_is_dropped_on_restore()
 	print("    [PASS] Map Zone Registry Tests")
 
 
@@ -104,3 +106,52 @@ static func _layer_with_two_areas() -> MapZoneLayer:
 	overlay.add_rect(Rect2i(8, 8, 3, 3))
 	zones.areas.append(overlay)
 	return zones
+
+
+## A save round-trip: export the session state, rebuild a fresh registry from
+## the same definition, lay the snapshot back over it, and the owner/flags come
+## back identical. This is the contract a player's captured regions rely on.
+static func _test_session_state_round_trips_through_save() -> void:
+	var before := MapZoneRegistry.new()
+	before.build_from(_layer_with_two_areas())
+	before.set_owner(&"forest", &"player")
+	before.set_flag(&"gate_yard", &"cleared", true)
+	before.set_flag(&"gate_yard", &"waves_left", 3)
+	var snapshot := before.session_state_to_dict()
+
+	# The loader rebuilds definitions from the map document, then applies the save.
+	var after := MapZoneRegistry.new()
+	after.build_from(_layer_with_two_areas())
+	after.apply_session_state(snapshot)
+	assert(after.owner_of(&"forest") == &"player")
+	assert(after.flag_of(&"gate_yard", &"cleared") == true)
+	assert(after.flag_of(&"gate_yard", &"waves_left") == 3)
+	# A snapshot re-exported is byte-identical — a save made twice with no edit
+	# produces the same bytes.
+	assert(after.session_state_to_dict() == snapshot)
+
+
+## State for a zone the author removed between save and load is dropped, not
+## resurrected: a re-authored map owns its geometry, and a dangling state record
+## must not bring back a deleted region (§13).
+static func _test_stale_zone_state_is_dropped_on_restore() -> void:
+	var before := MapZoneRegistry.new()
+	before.build_from(_layer_with_two_areas())
+	before.set_owner(&"gate_yard", &"faction:red")
+	var snapshot := before.session_state_to_dict()
+
+	# The next build dropped `gate_yard` and added `new_region`.
+	var reauthored := MapZoneLayer.new()
+	var region := ZoneAreaRecord.new()
+	region.id = &"new_region"
+	region.role = ZoneAreaRecord.ROLE_REGION
+	region.add_rect(Rect2i(0, 0, 2, 2))
+	reauthored.areas.append(region)
+	var after := MapZoneRegistry.new()
+	after.build_from(reauthored)
+	after.apply_session_state(snapshot) # carries owner for `gate_yard` and `forest`
+	# Stale ids silently ignored: no crash, no resurrected zone.
+	assert(after.state(&"gate_yard") == null)
+	assert(after.state(&"forest") == null)
+	assert(after.state(&"new_region") != null)
+	assert(after.owner_of(&"new_region") == &"") # untouched by the stale snapshot

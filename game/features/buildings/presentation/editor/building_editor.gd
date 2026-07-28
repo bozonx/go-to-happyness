@@ -77,7 +77,7 @@ var _orbiting: bool = false
 ## only reports where they landed (active_zones.md §5.2).
 @onready var _entrance_label: Label = %EntranceDerivedLabel
 @onready var _status_label: Label = %StatusLabel
-@onready var _metadata_panel: PanelContainer = %MetadataPanel
+@onready var _metadata_panel: ConfirmationDialog = %MetadataPanel
 @onready var _load_popup: PopupPanel = %LoadPopup
 @onready var _load_list: ItemList = %LoadList
 @onready var _save_as_dialog: ConfirmationDialog = %SaveAsDialog
@@ -380,6 +380,8 @@ func _set_layer(layer: int) -> void:
 	frame_mode.refresh_layer_plane()
 	if decor_mode != null:
 		decor_mode.on_layer_changed()
+	if zones_mode != null:
+		zones_mode.on_layer_changed()
 
 
 ## Public entry points used by the mode controllers.
@@ -462,9 +464,6 @@ func _select_mode(mode: int) -> void:
 	current_mode = mode
 	for m in _mode_buttons.keys():
 		(_mode_buttons[m] as Button).button_pressed = m == mode
-	if _metadata_panel != null:
-		_metadata_panel.visible = mode != EditMode.DECOR
-
 	if mode == EditMode.DECOR:
 		frame_mode.deactivate()
 		zones_mode.deactivate()
@@ -512,6 +511,20 @@ func _on_save_as_confirmed() -> void:
 	# proposed id in this mode's source is the whole point of the command.
 	current_path = ""
 	frame_mode.on_save_pressed()
+
+
+## Opens the building settings dialog. The fields are already synced to the
+## blueprint by `sync_metadata_fields`; the dialog collects edits on confirm.
+func _on_settings_pressed() -> void:
+	frame_mode.sync_metadata_fields()
+	_metadata_panel.popup_centered()
+
+
+func _on_settings_confirmed() -> void:
+	frame_mode.collect_metadata_from_ui()
+	mark_dirty()
+	frame_mode.sync_metadata_fields()
+	_update_status("Параметры здания применены.")
 
 
 func _on_new_pressed() -> void:
@@ -657,6 +670,7 @@ func _setup_ui() -> void:
 
 	_load_list.item_activated.connect(_on_load_item_activated)
 	_save_as_dialog.confirmed.connect(_on_save_as_confirmed)
+	_metadata_panel.confirmed.connect(_on_settings_confirmed)
 
 	frame_mode.sync_metadata_fields()
 	frame_mode.clear_block_selection()

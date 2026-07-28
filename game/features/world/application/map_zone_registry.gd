@@ -31,6 +31,22 @@ func build_from(zones: MapZoneLayer) -> void:
 		_states[area.id] = MapZoneRuntimeState.from_definition(area)
 
 
+## Lays saved session state over the freshly-built definitions. Called by the
+## save loader after `build_from`, so a re-authored map still owns the geometry
+## while a player's captured regions and flags come back. Entries whose id no
+## longer matches a zone are dropped: a definition that removed an address
+## discards its state rather than resurrecting a zone the author deleted (§13).
+func apply_session_state(snapshot: Array) -> void:
+	for raw in snapshot:
+		if not (raw is Dictionary):
+			continue
+		var zone_id := StringName(raw.get("id", &""))
+		var s := state(zone_id)
+		if s == null:
+			continue
+		s.apply_session_state(raw)
+
+
 func state(zone_id: StringName) -> MapZoneRuntimeState:
 	return _states.get(zone_id, null)
 

@@ -10,12 +10,14 @@
 > (`OverlayNavigationPublisher`, §4.2), `deny visitor` отмечает клетку для
 > планировщика; спавн-операция читает `spawn`-якори карты (`MapSpawnService`,
 > §15). Runtime-состояние зон карты (§13): `MapZoneRegistry` + `MapZoneService`
-> держат владельца и флаги в памяти сессии. Шина событий (§14): `ZoneEventBus`
-> публикует presence-события (`area_entered`/`area_exited`) — `ZonePresenceTracker`
-> детектит переход клеток граждан в `guard_citizen_positions`. Потребители-правила
-> пока не подписаны; теги действующего (§12), `vision`/`conceal`, persistence
-> состояния зон (save/load), audience-scoped `cost` и остальные типы событий ещё
-> не подключены.
+> держат владельца и флаги в памяти сессии и переживают сохранение: слот
+> `map_zones` в `world_state`, export из registry, restore через
+> `apply_session_state` поверх свежей геометрии. Шина событий (§14):
+> `ZoneEventBus` публикует presence-события (`area_entered`/`area_exited`) —
+> `ZonePresenceTracker` детектит переход клеток граждан в
+> `guard_citizen_positions`. Потребители-правила пока не подписаны; теги
+> действующего (§12), `vision`/`conceal`, audience-scoped `cost` и остальные типы
+> событий ещё не подключены.
 > Предыдущая модель и имя роли `access` удалены, совместимого легаси-слоя нет.
 
 Активная зона — это авторская разметка пространства, которую читают навигация,
@@ -844,11 +846,12 @@ routes[]   → routes[]    # нормализуются ссылки на anchor
     `ZonePresenceIndex` (cell→addressable areas, overlay исключён),
     `ZonePresenceTracker` (diff клеток граждан в `guard_citizen_positions` →
     `area_entered`/`area_exited`). Потребители-правила пока не подписаны.
+18. **Persistence состояния зон** (§13): слот `map_zones` в `world_state`,
+    `session_state_to_dict` → save, `apply_session_state` → restore поверх свежей
+    геометрии. Stale-записи (зона удалена автором) молча отбрасываются.
 
 Осталось:
 
-18. **Persistence состояния зон:** слот `map_zones` в `SaveData.world_state`;
-    `export`/restore session_state (только owner/flags, не геометрию).
 19. **Теги действующего (§12):** единый issuer для граждан (аудитории + теги
     фракций); owner-resolve, audience-scoped `cost`, tag-фильтрация спавна;
     теги в presence-событиях (пока пустой массив).

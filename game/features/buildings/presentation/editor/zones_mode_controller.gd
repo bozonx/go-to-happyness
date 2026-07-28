@@ -16,7 +16,6 @@ extends Node
 
 const TOOL_AREA := &"area"
 const TOOL_POINT := &"point"
-const TOOL_ROUTE := &"route"
 const TOOL_SELECT := &"select"
 
 const AREA_COLORS: Array[Color] = [
@@ -45,7 +44,6 @@ var _zones_visual_root: Node3D = null
 var _toolbar: HBoxContainer = null
 var _tool_area_btn: Button = null
 var _tool_point_btn: Button = null
-var _tool_route_btn: Button = null
 var _tool_select_btn: Button = null
 var _role_option: OptionButton = null
 var _layer_label: Label = null
@@ -85,6 +83,11 @@ var _selected_route_id: StringName = &""
 var _material_cache: Dictionary = {}
 var _suppress_ui_events: bool = false
 
+# Linking mode: after pressing «В маршрут» on a selected anchor, subsequent
+# clicks on eligible anchors append them to the route being built.
+var _linking: bool = false
+var _link_route_id: StringName = &""
+
 # Rectangle drag for the area tool.
 var _dragging: bool = false
 var _drag_start: Vector2i = Vector2i.ZERO
@@ -109,8 +112,11 @@ func setup(editor: Node) -> void:
 	_toolbar = editor.get_node("%ZonesToolbar")
 	_tool_area_btn = editor.get_node("%ToolAreaBtn")
 	_tool_point_btn = editor.get_node("%ToolPointBtn")
-	_tool_route_btn = editor.get_node("%ToolRouteBtn")
 	_tool_select_btn = editor.get_node("%ToolSelectBtn")
+	# The route tool is gone — routes are built by linking anchors from the
+	# inspector (§11). Hide the legacy button if the scene still carries it.
+	if editor.has_node("%ToolRouteBtn"):
+		editor.get_node("%ToolRouteBtn").visible = false
 	_role_option = editor.get_node("%ZoneRoleOption")
 	_layer_label = editor.get_node("%ZoneLayerLabel")
 	_layer_down_btn = editor.get_node("%ZoneLayerDownBtn")
@@ -139,7 +145,6 @@ func setup(editor: Node) -> void:
 
 	_tool_area_btn.pressed.connect(func() -> void: _arm_tool(TOOL_AREA))
 	_tool_point_btn.pressed.connect(func() -> void: _arm_tool(TOOL_POINT))
-	_tool_route_btn.pressed.connect(func() -> void: _arm_tool(TOOL_ROUTE))
 	_tool_select_btn.pressed.connect(func() -> void: _arm_tool(TOOL_SELECT))
 	_role_option.item_selected.connect(_on_palette_role_selected)
 	_layer_down_btn.pressed.connect(func() -> void: _editor.set_layer(_editor.active_layer - 1))
@@ -164,13 +169,15 @@ func activate() -> void:
 	_toolbar.visible = true
 	_inspector_panel.visible = true
 	_refresh_all()
-	_editor.set_status("Режим зон: Q — область, W — точка, E — линия, R — выделение.")
+	_editor.set_status("Режим зон: Q — область, W — точка, R — выделение. Маршруты — из инспектора точки.")
 
 
 func deactivate() -> void:
 	_toolbar.visible = false
 	_inspector_panel.visible = false
 	_dragging = false
+	_linking = false
+	_link_route_id = &""
 	_hide_ghost()
 	_hide_drag_preview()
 	_clear_visuals()
@@ -191,11 +198,18 @@ func handle_mouse_button(event: InputEventMouseButton) -> bool:
 		if event.pressed and not _editor.is_pointer_over_ui():
 			_erase_at_cursor()
 		return true
+	if event.button_index == MOUSE_BUTTON_RIGHT:
+		if _linking and event.pressed:
+			_stop_linking()
+		return true
 	if event.button_index != MOUSE_BUTTON_LEFT:
 		return false
 	if event.pressed:
 		if _editor.is_pointer_over_ui():
 			return false
+		if _linking:
+			_link_click_at_cursor()
+			return true
 		match _tool:
 			TOOL_AREA:
 				if not _cursor_in_bounds():
@@ -204,8 +218,6 @@ func handle_mouse_button(event: InputEventMouseButton) -> bool:
 				_drag_start = _cursor_cell_2d()
 			TOOL_POINT:
 				_place_anchor_at_cursor()
-			TOOL_ROUTE:
-				_append_route_stop_at_cursor()
 			TOOL_SELECT:
 				_select_at_cursor()
 				_moving_anchor = _selected_anchor() != null
@@ -235,14 +247,17 @@ func handle_key(event: InputEventKey) -> bool:
 			_arm_tool(TOOL_AREA)
 		KEY_W:
 			_arm_tool(TOOL_POINT)
-		KEY_E:
-			_arm_tool(TOOL_ROUTE)
 		KEY_R:
 			_arm_tool(TOOL_SELECT)
 		KEY_TAB:
 			_cycle_role()
 		KEY_F:
 			_rotate_selected_anchor()
+		KEY_ESCAPE:
+			if _linking:
+				_stop_linking()
+				return true
+			return false
 		KEY_DELETE:
 			_delete_selection()
 		_:
@@ -259,10 +274,22 @@ func process(_delta: float) -> void:
 
 
 func refresh_ghost() -> void:
-	if not is_active() or not _editor.cursor_valid or _tool == TOOL_SELECT:
+	if not is_active() or not _editor.cursor_valid:
 		_hide_ghost()
 		return
 	if _editor.is_pointer_over_ui():
+		_hide_ghost()
+		return
+	if _linking:
+		_ensure_ghost()
+		_ghost.mesh = SphereMesh.new()
+		(_ghost.mesh as SphereMesh).radius = 0.25
+		(_ghost.mesh as SphereMesh).height = 0.5
+		_ghost.position = Vector3(_editor.cursor_cell) + Vector3(0.5, 0.25, 0.5)
+		_ghost.rotation = Vector3.ZERO
+		_ghost.visible = true
+		return
+	if _tool == TOOL_SELECT:
 		_hide_ghost()
 		return
 	if _dragging:
@@ -286,12 +313,6 @@ func refresh_ghost() -> void:
 			_ghost.mesh = BoxMesh.new()
 			(_ghost.mesh as BoxMesh).size = style["size"]
 			_ghost.position = pos + Vector3(0.0, style["size"].y * 0.5, 0.0)
-			_ghost.rotation = Vector3.ZERO
-		TOOL_ROUTE:
-			_ghost.mesh = SphereMesh.new()
-			(_ghost.mesh as SphereMesh).radius = 0.2
-			(_ghost.mesh as SphereMesh).height = 0.4
-			_ghost.position = pos + Vector3(0.0, 0.2, 0.0)
 			_ghost.rotation = Vector3.ZERO
 	_ghost.visible = true
 
@@ -370,6 +391,7 @@ func _get_ghost_material() -> StandardMaterial3D:
 func on_layer_changed() -> void:
 	if _layer_label != null and _editor != null:
 		_layer_label.text = "Слой Y: %d" % _editor.active_layer
+	_refresh_visuals()
 
 
 # ---------------------------------------------------------------------------
@@ -402,8 +424,9 @@ func _arm_tool(tool_id: StringName) -> void:
 	_tool = tool_id
 	_tool_area_btn.button_pressed = tool_id == TOOL_AREA
 	_tool_point_btn.button_pressed = tool_id == TOOL_POINT
-	_tool_route_btn.button_pressed = tool_id == TOOL_ROUTE
 	_tool_select_btn.button_pressed = tool_id == TOOL_SELECT
+	if _linking:
+		_stop_linking()
 	_rebuild_role_options()
 
 
@@ -412,7 +435,7 @@ func _arm_tool(tool_id: StringName) -> void:
 func _rebuild_role_options() -> void:
 	_suppress_ui_events = true
 	_role_option.clear()
-	_role_option.disabled = _tool in [TOOL_ROUTE, TOOL_SELECT]
+	_role_option.disabled = _tool == TOOL_SELECT
 	if _tool == TOOL_AREA:
 		# `region` belongs to maps; a building authors rooms and overlays.
 		for role in [ZoneAreaRecord.ROLE_ROOM, ZoneAreaRecord.ROLE_OVERLAY]:
@@ -1410,10 +1433,23 @@ func _refresh_visuals() -> void:
 				continue
 		if area.id == _selected_area_id:
 			color = color.lerp(SELECTION_COLOR, 0.5)
+		# Areas are flat markers; draw them on the current layer when it falls inside
+		# the area's height range, so a room that spans floors is visible on each.
+		if _editor.active_layer < area.y_min or _editor.active_layer > area.y_max:
+			continue
+		var marker_y := float(_editor.active_layer)
 		for cell in area.footprint_cells():
-			_add_marker(Vector3(cell.x + 0.5, float(area.y_min), cell.y + 0.5), color,
+			_add_marker(Vector3(cell.x + 0.5, marker_y, cell.y + 0.5), color,
 				Vector3(0.94, height, 0.94), true)
+	var fp: Vector2i = _editor.blueprint.footprint
 	for anchor in _editor.blueprint.anchors:
+		# Anchors belong on the floor they were placed on; hide ones outside the
+		# current layer or the building footprint so a upper floor stays clean.
+		if int(floor(anchor.pos.y)) != _editor.active_layer:
+			continue
+		var ac: Vector2i = anchor.cell()
+		if ac.x < 0 or ac.y < 0 or ac.x >= fp.x or ac.y >= fp.y:
+			continue
 		var style: Dictionary = ANCHOR_STYLE.get(anchor.role, ANCHOR_STYLE[&"poi"])
 		var color: Color = style["color"]
 		if anchor.id == _selected_anchor_id:

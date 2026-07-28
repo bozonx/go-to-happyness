@@ -109,6 +109,13 @@ layout_mode = 2
 text = "💾+"
 tooltip_text = "Сохранить как новый чертёж"
 
+[node name="SettingsBtn" type="Button" parent="EditorUI/Root/TopBar/Margin/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(38, 0)
+text = "⚙"
+tooltip_text = "Параметры здания"
+
 [node name="VSep1" type="VSeparator" parent="EditorUI/Root/TopBar/Margin/HBox"]
 layout_mode = 2
 
@@ -1107,131 +1114,136 @@ layout_mode = 2
 layout_mode = 2
 shortcuts_text = "Общее\nЛКМ — строить / выбрать · Shift+ЛКМ — пипетка\nShift+ПКМ — стереть · ПКМ — камера · СКМ — панорама · Колесо — зум\nWASD/QE — движение камеры · Ctrl+Z / Ctrl+Y — отменить / повторить\n\nКаркас\nE — ластик · L — линия · M — прямоугольник · Z/X/C — поворот\nPageUp/PageDown — слой выше / ниже · Shift+СКМ — взять кисть\n\nДекор\nC/R, X, Z — поворот по осям · Ctrl+D — дублировать · Delete — удалить\n\nЗоны\nQ/W/E/R — область / точка / маршрут / выбор · Tab — следующая роль · F — поворот · Delete — удалить"
 
-[node name="MetadataPanel" type="PanelContainer" parent="EditorUI/Root"]
+[node name="MetadataPanel" type="ConfirmationDialog" parent="EditorUI/Root"]
 unique_name_in_owner = true
-layout_mode = 1
-anchors_preset = 1
-anchor_left = 1.0
-anchor_right = 1.0
-offset_left = -280.0
-offset_top = 60.0
-offset_right = -8.0
-offset_bottom = 480.0
-grow_horizontal = 0
+title = "Параметры здания"
+size = Vector2i(420, 560)
+ok_button_text = "Применить"
+cancel_button_text = "Отмена"
 
-[node name="MetadataVBox" type="VBoxContainer" parent="EditorUI/Root/MetadataPanel"]
+[node name="Body" type="MarginContainer" parent="EditorUI/Root/MetadataPanel"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = -46.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Scroll" type="ScrollContainer" parent="EditorUI/Root/MetadataPanel/Body"]
+layout_mode = 2
+
+[node name="MetadataVBox" type="VBoxContainer" parent="EditorUI/Root/MetadataPanel/Body/Scroll"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
 theme_override_constants/separation = 6
 
-[node name="Title" type="Label" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 16
-text = "Параметры здания"
-
-[node name="NameLbl" type="Label" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
+[node name="NameLbl" type="Label" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox"]
 layout_mode = 2
 text = "Название здания:"
 
-[node name="NameEdit" type="LineEdit" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
+[node name="NameEdit" type="LineEdit" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 placeholder_text = "Название здания"
 
-[node name="IdLbl" type="Label" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
+[node name="IdLbl" type="Label" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox"]
 layout_mode = 2
 text = "ID здания:"
 
-[node name="IdEdit" type="LineEdit" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
+[node name="IdEdit" type="LineEdit" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 placeholder_text = "my_building_id"
 
-[node name="RoleLbl" type="Label" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
+[node name="RoleLbl" type="Label" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox"]
 layout_mode = 2
 text = "Игровая роль:"
 
-[node name="RoleEdit" type="LineEdit" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
+[node name="RoleEdit" type="LineEdit" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 placeholder_text = "bakery"
 tooltip_text = "Что это за здание для геймплея. Два стиля одного здания имеют одну роль и разные ID."
 
-[node name="VisualStyleLbl" type="Label" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
+[node name="VisualStyleLbl" type="Label" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox"]
 layout_mode = 2
 text = "Визуальный стиль:"
 
-[node name="VisualStyleEdit" type="LineEdit" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
+[node name="VisualStyleEdit" type="LineEdit" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 placeholder_text = "generic"
 tooltip_text = "Набор, к которому относится постройка. generic — базовый стиль и запасной вариант для всех остальных."
 
-[node name="HSepNameId" type="HSeparator" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
+[node name="HSepNameId" type="HSeparator" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox"]
 layout_mode = 2
 
-[node name="EraLbl" type="Label" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
+[node name="EraLbl" type="Label" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox"]
 layout_mode = 2
 text = "Эра (задаёт материалы):"
 
-[node name="CategoryOption" type="OptionButton" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
+[node name="CategoryOption" type="OptionButton" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="StyleLbl" type="Label" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
+[node name="StyleLbl" type="Label" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox"]
 layout_mode = 2
 text = "Стиль постройки:"
 
-[node name="StyleOption" type="OptionButton" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
+[node name="StyleOption" type="OptionButton" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="FootprintLbl" type="Label" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
+[node name="FootprintLbl" type="Label" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox"]
 layout_mode = 2
 text = "Пятно размещения X × Z:"
 
-[node name="FootprintRow" type="HBoxContainer" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
+[node name="FootprintRow" type="HBoxContainer" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox"]
 layout_mode = 2
 
-[node name="FootprintXSpin" type="SpinBox" parent="EditorUI/Root/MetadataPanel/MetadataVBox/FootprintRow"]
+[node name="FootprintXSpin" type="SpinBox" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox/FootprintRow"]
 unique_name_in_owner = true
 layout_mode = 2
 min_value = 1.0
 max_value = 64.0
 value = 8.0
 
-[node name="FootprintZSpin" type="SpinBox" parent="EditorUI/Root/MetadataPanel/MetadataVBox/FootprintRow"]
+[node name="FootprintZSpin" type="SpinBox" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox/FootprintRow"]
 unique_name_in_owner = true
 layout_mode = 2
 min_value = 1.0
 max_value = 64.0
 value = 8.0
 
-[node name="EntranceLbl" type="Label" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
+[node name="EntranceLbl" type="Label" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox"]
 layout_mode = 2
 text = "Вход:"
 
-[node name="EntranceDerivedLabel" type="Label" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
+[node name="EntranceDerivedLabel" type="Label" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
 autowrap_mode = 2
 text = "Задаётся дверью в режиме зон."
 
-[node name="PathHintLabel" type="Label" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
+[node name="PathHintLabel" type="Label" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
 autowrap_mode = 2
 
-[node name="ExportMeshBtn" type="Button" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
+[node name="ExportMeshBtn" type="Button" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox"]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 disabled = true
 text = "Экспорт меша .tres/.gltf (скоро)"
 
-[node name="NavMeshPreviewBtn" type="Button" parent="EditorUI/Root/MetadataPanel/MetadataVBox"]
+[node name="NavMeshPreviewBtn" type="Button" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox"]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
@@ -1289,6 +1301,7 @@ placeholder_text = "my_building_id"
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/LoadBtn" to="." method="_on_load_pressed"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/SaveBtn" to="." method="_on_save_pressed"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/SaveAsBtn" to="." method="_on_save_as_pressed"]
+[connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/SettingsBtn" to="." method="_on_settings_pressed"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/UndoBtn" to="." method="_on_undo_pressed"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/RedoBtn" to="." method="_on_redo_pressed"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/ToolPlaceBtn" to="." method="_on_tool_place_pressed"]

@@ -27,11 +27,6 @@ size_flags_horizontal = 3
 text = "Карта"
 theme_override_font_sizes/font_size = 14
 
-[node name="SettingsButton" type="Button" parent="Margin/Scroll/Rows/MapTitleRow"]
-custom_minimum_size = Vector2(28, 0)
-text = "⚙"
-tooltip_text = "Настройки карты"
-
 [node name="MapInfo" type="Label" parent="Margin/Scroll/Rows"]
 autowrap_mode = 2
 theme_override_font_sizes/font_size = 12

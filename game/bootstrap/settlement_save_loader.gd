@@ -167,6 +167,12 @@ func restore(p_game: SettlementGame, save_data: SaveData) -> bool:
 		game.ambient_spawner.restore_resource_state(save_data.world_state.get("natural_resources", {}))
 	if game.road_network_service != null and save_data.world_state.get("roads", []) is Array:
 		game.road_network_service.restore_state(save_data.world_state.get("roads", []))
+	# Map-zone session state (§13) is laid over the freshly-built registry: the
+	# geometry and roles came back from the map document in `_setup_zone_runtime`,
+	# and only what a session mutated (owner, flags) is restored from the save.
+	# An absent key is the default for saves predating this slot.
+	if game.map_zone_registry != null and save_data.world_state.get("map_zones", []) is Array:
+		game.map_zone_registry.apply_session_state(save_data.world_state.get("map_zones", []))
 
 	# 9. Restore Citizens
 	game.next_ai_citizen_id = int(save_data.world_state.get("next_ai_citizen_id", 1))

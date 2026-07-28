@@ -31,7 +31,7 @@ func _run() -> void:
 	editor.get_node("%Ghost").visible = true
 	editor._select_mode(editor.EditMode.DECOR)
 	assert(decor.is_active(), "decor panel visible")
-	assert(not editor._metadata_panel.visible, "metadata panel yields to the inspector")
+	assert(not editor._metadata_panel.visible, "settings dialog is not open")
 	assert(editor.get_node("%DecorToolbar").visible, "decor toolbar visible")
 	assert(not editor.get_node("%FrameToolbar").visible, "frame toolbar hidden")
 	assert(not editor.get_node("%Ghost").visible, "frame ghost hidden outside frame mode")
@@ -265,6 +265,6 @@ func _run() -> void:
 	# Leaving decor mode cleans up.
 	editor._select_mode(editor.EditMode.FRAME)
 	assert(not decor.is_active(), "decor deactivated")
-	assert(editor._metadata_panel.visible, "metadata panel back")
+	assert(not editor._metadata_panel.visible, "settings dialog stays closed outside decor mode too")
 	print("--- test_decor_mode_editor.gd PASSED ---")
 	quit(0)

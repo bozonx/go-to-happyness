@@ -191,6 +191,11 @@ static func save_game(game: Node, path: String = QUICKSAVE_PATH) -> bool:
 		"map_ref": map_reference,
 		"natural_resources": game.ambient_spawner.export_resource_state() if "ambient_spawner" in game and game.ambient_spawner != null else {},
 		"roads": game.road_network_service.export_state() if "road_network_service" in game and game.road_network_service != null else [],
+		# Session state of map zones (active_zones.md §13): owner and flags only —
+		# geometry comes back from the map document on every launch. A save without
+		# zones (older build, or a no-map session) writes an empty list and loads
+		# with the registry left at its freshly-built default.
+		"map_zones": game.map_zone_registry.session_state_to_dict() if "map_zone_registry" in game and game.map_zone_registry != null else [],
 	}
 
 	var success := save_data.save_to_file(path)

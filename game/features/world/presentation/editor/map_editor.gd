@@ -44,6 +44,7 @@ const PLANNED_MODES: Array = [
 @onready var _load_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/LoadButton
 @onready var _save_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/SaveButton
 @onready var _save_as_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/SaveAsButton
+@onready var _settings_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/SettingsButton
 @onready var _undo_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/UndoButton
 @onready var _redo_button: Button = $UI/Screen/TopBar/Margin/Scroll/Row/RedoButton
 @onready var _dialogs: MapEditorDialogs = $UI/Dialogs
@@ -326,9 +327,9 @@ func _connect_ui() -> void:
 	_load_button.pressed.connect(_on_load_pressed)
 	_save_button.pressed.connect(_save)
 	_save_as_button.pressed.connect(_open_save_as)
+	_settings_button.pressed.connect(_open_settings)
 	_undo_button.pressed.connect(_undo)
 	_redo_button.pressed.connect(_redo)
-	_side_panel.settings_requested.connect(_open_settings)
 	_dialogs.create_requested.connect(_on_create_requested)
 	_dialogs.open_requested.connect(_on_open_requested)
 	_dialogs.save_as_requested.connect(_on_save_as_requested)
