@@ -67,6 +67,9 @@ func from_json(source: Dictionary) -> void:
 func validate(board_cells: int) -> Array[String]:
 	var errors: Array[String] = []
 	var ids: Dictionary = {}
+	var half_cells := board_cells / 2
+	var min_cell := -half_cells
+	var max_edge := board_cells - half_cells
 	for area in areas:
 		_validate_id(area.id, ids, errors)
 		if area.role not in [ZoneAreaRecord.ROLE_REGION, ZoneAreaRecord.ROLE_OVERLAY]:
@@ -74,14 +77,14 @@ func validate(board_cells: int) -> Array[String]:
 		if area.rects.is_empty():
 			errors.append("область %s не содержит прямоугольников" % area.id)
 		for rect in area.rects:
-			if rect.position.x < 0 or rect.position.y < 0 or rect.end.x > board_cells or rect.end.y > board_cells:
+			if rect.position.x < min_cell or rect.position.y < min_cell or rect.end.x > max_edge or rect.end.y > max_edge:
 				errors.append("область %s выходит за доску" % area.id)
 	for anchor in anchors:
 		_validate_id(anchor.id, ids, errors)
 		if anchor.role not in ZoneAnchorRecord.ROLES:
 			errors.append("точка %s: неизвестная роль %s" % [anchor.id, anchor.role])
 		var cell := anchor.cell()
-		if cell.x < 0 or cell.y < 0 or cell.x >= board_cells or cell.y >= board_cells:
+		if cell.x < min_cell or cell.y < min_cell or cell.x >= max_edge or cell.y >= max_edge:
 			errors.append("точка %s выходит за доску" % anchor.id)
 		if anchor.owner_id != &"":
 			var owner := area_by_id(anchor.owner_id)

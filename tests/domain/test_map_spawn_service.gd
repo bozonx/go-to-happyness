@@ -1,15 +1,13 @@
 class_name TestMapSpawnService
 extends RefCounted
 
-## Domain tests for the spawn operation (active_zones.md §15): that authored
-## `spawn` anchors become positions in a stable order, and that a layer with no
-## spawns falls back to whatever the caller drew with — the citizen factory's
-## hardcoded entrance anchor today.
+## Domain tests for the spawn operation (active_zones.md §15): launch roles are
+## explicit, so a generic spawn can never silently become a hero fallback.
 
 
 static func run_all() -> void:
 	_test_spawn_anchors_become_positions()
-	_test_empty_layer_returns_fallback()
+	_test_launch_roles_are_explicit()
 	_test_non_spawn_anchors_are_ignored()
 	print("    [PASS] Map Spawn Service Tests")
 
@@ -22,11 +20,13 @@ static func _test_spawn_anchors_become_positions() -> void:
 	first.id = &"hero_start"
 	first.role = ZoneAnchorRecord.ROLE_SPAWN
 	first.pos = Vector3(2.5, 0.0, 3.5)
+	first.function = MapSpawnService.HERO_START
 	zones.anchors.append(first)
 	var second := ZoneAnchorRecord.new()
 	second.id = &"reinforcements"
 	second.role = ZoneAnchorRecord.ROLE_SPAWN
 	second.pos = Vector3(10.5, 0.0, 8.5)
+	second.function = MapSpawnService.COMPANION_START
 	zones.anchors.append(second)
 
 	var service := MapSpawnService.new()
@@ -34,17 +34,17 @@ static func _test_spawn_anchors_become_positions() -> void:
 	assert(positions.size() == 2)
 	assert(positions[0] == Vector3(2.5, 0.0, 3.5))
 	assert(positions[1] == Vector3(10.5, 0.0, 8.5))
-	assert(service.first_spawn_position(zones, Vector3.ZERO) == Vector3(2.5, 0.0, 3.5))
+	assert(service.hero_spawn_position(zones) == Vector3(2.5, 0.0, 3.5))
+	assert(service.companion_spawn_positions(zones) == [Vector3(10.5, 0.0, 8.5)])
 
 
-## A layer with no `spawn` anchor falls back to the caller's default, so a map
-## that authors none behaves like the no-map board always did.
-static func _test_empty_layer_returns_fallback() -> void:
+## Missing roles have no hidden fallback at launch.
+static func _test_launch_roles_are_explicit() -> void:
 	var zones := MapZoneLayer.new()
 	var service := MapSpawnService.new()
 	assert(service.spawn_positions(zones).is_empty())
-	var fallback := Vector3(-21.5, 0.0, 1.5)
-	assert(service.first_spawn_position(zones, fallback) == fallback)
+	assert(service.hero_spawn_position(zones) == Vector3.INF)
+	assert(service.companion_spawn_positions(zones).is_empty())
 
 
 ## A `waypoint` or a `poi` is not a spawn point and must not surface here — the

@@ -14,19 +14,19 @@ const ResourceIds = preload("res://game/features/settlement/domain/resource_ids.
 const WorldResourceStateScript = preload("res://game/features/world/domain/world_resource_state.gd")
 
 var simulation: Node
-var layout: Resource
+var natural_resources: Dictionary = {}
 
 
-func setup(p_simulation: Node, p_layout: Resource = null) -> void:
+func setup(p_simulation: Node, map_document: MapDocument = null) -> void:
 	simulation = p_simulation
-	layout = p_layout
+	natural_resources = map_document.sections.get("natural_resources", {}) as Dictionary if map_document != null else {}
 
 
 func create_forest() -> void:
-	if layout == null:
-		push_error("AmbientSpawner requires a BiomeLayout")
-		return
-	for cell: Vector2i in layout.get("tree_cells"):
+	for raw_cell: Variant in natural_resources.get("trees", []):
+		var cell := _cell_from_map_value(raw_cell)
+		if not simulation.is_board_cell(cell):
+			continue
 		var tree_position: Vector3 = simulation.nav_grid.cell_center(cell) if simulation.nav_grid != null else Vector3((cell.x + 0.5) * simulation.CELL_SIZE, 0.0, (cell.y + 0.5) * simulation.CELL_SIZE)
 		simulation.tree_cells[cell] = true
 		simulation.tree_positions.append(tree_position)
@@ -136,10 +136,11 @@ func setup_entrance_sign_node(entrance_stone: Node3D) -> void:
 
 
 func spawn_trash_piles() -> void:
-	if layout == null:
-		return
-	for loot: Resource in layout.get("starter_loot"):
-		var cell: Vector2i = loot.get("cell")
+	for raw_loot: Variant in natural_resources.get("starter_loot", []):
+		if not raw_loot is Dictionary:
+			continue
+		var loot := raw_loot as Dictionary
+		var cell := _cell_from_map_value(loot.get("cell", []))
 		if not simulation.is_board_cell(cell) or simulation.terrain_blocked_cells.has(cell):
 			continue
 		var pile: Node3D = simulation.resource_pile_service.create_resource_pile(simulation.nav_grid.cell_center(cell) if simulation.nav_grid != null else Vector3((cell.x + 0.5) * simulation.CELL_SIZE, 0.0, (cell.y + 0.5) * simulation.CELL_SIZE), _loot_resources(loot)) as Node3D
@@ -151,13 +152,21 @@ func spawn_trash_piles() -> void:
 			simulation.world_navigation_controller.add_landscape_object(pile)
 
 
-func _loot_resources(loot: Resource) -> Dictionary:
+func _loot_resources(loot: Dictionary) -> Dictionary:
 	var resources: Dictionary = {}
 	for field in [{"name": &"grass", "resource": ResourceIds.GRASS}, {"name": &"branches", "resource": ResourceIds.BRANCHES}, {"name": &"gloves", "resource": &"gloves"}]:
-		var amount := int(loot.get(field.name))
+		var amount := int(loot.get(field.name, 0))
 		if amount > 0:
 			resources[field.resource] = amount
 	return resources
+
+
+func _cell_from_map_value(value: Variant) -> Vector2i:
+	if value is Array and value.size() >= 2:
+		return Vector2i(int(value[0]), int(value[1]))
+	if value is Vector2i:
+		return value
+	return Vector2i.ZERO
 
 
 func spawn_initial_rabbits() -> void:

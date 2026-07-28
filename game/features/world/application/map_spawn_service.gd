@@ -10,16 +10,17 @@ extends RefCounted
 ## them in a stable order, so the citizen factory can stop hardcoding a cell and
 ## a settlement editor demo can place a hero where the author drew them.
 ##
-## The engine never reads `function` or `tag` here (§2): a spawn anchor with
-## `function: "core:hero_start"` and one with no function are the same to this
-## service. Tag-based selection ("only the `red_team` spawn") waits for a tag
-## issuer (§12); until then every spawn anchor is a candidate.
+## Functions are the stable launch contract.  A generic `spawn` is deliberately
+## not silently reused for the hero or a companion: maps must say which member of
+## the starting party belongs there.  Tags remain a future selection dimension.
+
+const HERO_START := &"core:hero_start"
+const COMPANION_START := &"core:companion_start"
 
 
 ## Positions of every `spawn` anchor on the layer, in authoring order. The
-## caller applies terrain-height clamping itself, the same way it does for the
-## hardcoded entrance anchor today — keeping that responsibility here would
-## couple this pure-data service to the terrain grid.
+## caller applies terrain-height clamping itself, keeping this pure-data service
+## independent from the terrain grid.
 func spawn_positions(zones: MapZoneLayer) -> Array[Vector3]:
 	var positions: Array[Vector3] = []
 	for anchor in zones.anchors:
@@ -28,12 +29,19 @@ func spawn_positions(zones: MapZoneLayer) -> Array[Vector3]:
 	return positions
 
 
-## The first spawn anchor, or `fallback` when the layer has none. A map with no
-## authored spawns must behave like the no-map board did, so the citizen factory
-## hands its current anchor here and gets it back unchanged when the layer is
-## empty — one call site, one fallback rule.
-func first_spawn_position(zones: MapZoneLayer, fallback: Vector3) -> Vector3:
+## The authored hero position, or `Vector3.INF` when the map is incomplete.
+func hero_spawn_position(zones: MapZoneLayer) -> Vector3:
 	for anchor in zones.anchors:
-		if anchor.is_spawn():
+		if anchor.is_spawn() and anchor.function == HERO_START:
 			return anchor.pos
-	return fallback
+	return Vector3.INF
+
+
+## Companion starts in authoring order.  Their identity is their index; that is
+## sufficient until party definitions become authored content of their own.
+func companion_spawn_positions(zones: MapZoneLayer) -> Array[Vector3]:
+	var positions: Array[Vector3] = []
+	for anchor in zones.anchors:
+		if anchor.is_spawn() and anchor.function == COMPANION_START:
+			positions.append(anchor.pos)
+	return positions

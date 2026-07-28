@@ -444,6 +444,16 @@ func _ready() -> void:
 	if launch_config.map_document == null:
 		push_error("[launch] SettlementGame requires a resolved map document")
 		return
+	var map_errors := MapValidator.validate(
+		launch_config.map_document,
+		launch_config.map_document.terrain,
+		launch_config.map_document.water,
+		null
+	)
+	map_errors.append_array(MapValidator.validate_party_spawns(launch_config.map_document, POPULATION))
+	if not map_errors.is_empty():
+		push_error("[launch] Invalid map: %s" % "; ".join(map_errors))
+		return
 	board_cells = launch_config.board_cells()
 	SettlementBootstrapper.new().run(self)
 

@@ -1,5 +1,10 @@
 {
-	"anchors": [],
+	"anchors": [
+		{"id": "hero_start", "role": "spawn", "pos": [-22.5, 0.0, 3.5], "function": "core:hero_start"},
+		{"id": "companion_1", "role": "spawn", "pos": [-21.0, 0.0, 3.5], "function": "core:companion_start"},
+		{"id": "companion_2", "role": "spawn", "pos": [-22.5, 0.0, 5.0], "function": "core:companion_start"},
+		{"id": "companion_3", "role": "spawn", "pos": [-21.0, 0.0, 5.0], "function": "core:companion_start"}
+	],
 	"areas": [],
 	"author": "Go To Happyness",
 	"biomes": [],
@@ -19,6 +24,15 @@
 	"kind": "map",
 	"map_kind": "map",
 	"name": "Зелёная долина",
+	"natural_resources": {
+		"trees": [[-16, -15], [-15, -18], [-18, -12], [-12, -19], [16, -15], [15, -18], [18, -12], [12, -19], [-16, 15], [-15, 18], [-18, 12], [-12, 19], [16, 15], [15, 18], [18, 12], [12, 19], [-20, -5], [-20, 5], [20, -5], [20, 5], [-5, -20], [5, -20], [-5, 20], [5, 20]],
+		"starter_loot": [
+			{"cell": [-10, -3], "grass": 11, "branches": 6},
+			{"cell": [7, 12], "grass": 9, "branches": 5},
+			{"cell": [-14, 6], "grass": 13, "branches": 7},
+			{"cell": [5, -12], "grass": 6, "branches": 4, "gloves": 1}
+		]
+	},
 	"placements": [],
 	"players": 1,
 	"required_content": [],

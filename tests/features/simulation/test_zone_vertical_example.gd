@@ -30,7 +30,7 @@ func _init() -> void:
 	var grass_weight: float = simulation.nav_grid.get_cell_weight(Vector2i(10, 10))
 	assert(forest_weight > grass_weight, "forest overlay priced in NavGrid: %f vs %f" % [forest_weight, grass_weight])
 
-	# 3. The spawn anchor placed a citizen there (not the entrance fallback):
+	# 3. The authored hero spawn placed a citizen in its column:
 	#    at least one citizen stands in the spawn cell's column.
 	var spawn_cell := Vector2i(6, 6)
 	var any_at_spawn := false
@@ -104,7 +104,15 @@ func _zone_map() -> MapDocument:
 	spawn.id = &"hero_start"
 	spawn.role = ZoneAnchorRecord.ROLE_SPAWN
 	spawn.pos = Vector3(6.5, 0.0, 6.5)
+	spawn.function = MapSpawnService.HERO_START
 	document.zones.anchors.append(spawn)
+	for index in 3:
+		var companion := ZoneAnchorRecord.new()
+		companion.id = StringName("companion_%d" % index)
+		companion.role = ZoneAnchorRecord.ROLE_SPAWN
+		companion.function = MapSpawnService.COMPANION_START
+		companion.pos = Vector3(7.5 + float(index), 0.0, 6.5)
+		document.zones.anchors.append(companion)
 
 	# Two waypoints inside the gate_yard region, adjacent and walkable.
 	var post_a := ZoneAnchorRecord.new()

@@ -141,7 +141,7 @@ func _build_terrain(parent: Node) -> void:
 func _build_map_entities() -> void:
 	if _territory == null:
 		return
-	map_entity_runtime.load_map(_map_document)
+	map_entity_runtime.load_map(_map_document, terrain_grid)
 	if map_entity_presenter == null:
 		map_entity_presenter = MapEntityPresenter.new()
 		map_entity_presenter.name = "MapEntities"

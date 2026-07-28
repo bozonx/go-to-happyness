@@ -6,6 +6,7 @@ extends RefCounted
 
 static func run_all() -> void:
 	_test_runtime_resolves_authored_differences()
+	_test_runtime_offsets_entity_from_terrain()
 	_test_presenter_applies_state_variant()
 	_test_validator_rejects_structural_entity_errors()
 	print("    [PASS] Map Entity Runtime Tests")
@@ -32,6 +33,18 @@ static func _test_runtime_resolves_authored_differences() -> void:
 	assert(entity.state == &"embers")
 	assert(entity.props[&"fuel_units"] == 5)
 	assert(entity.props[&"relights"] == true, "runtime overlays authored differences on archetype defaults")
+
+
+static func _test_runtime_offsets_entity_from_terrain() -> void:
+	EntityArchetypeCatalog.reload()
+	var document := _document()
+	document.terrain.set_height(Vector2i(1, 1), 4)
+	document.entities.entities[0].position.y = 0.25
+	var runtime := MapEntityRuntime.new()
+	runtime.load_map(document, document.terrain)
+	var entity := runtime.by_id(&"camp_1")
+	assert(entity != null)
+	assert(is_equal_approx(entity.position.y, 2.25), "entity Y is terrain height plus authored offset")
 
 
 static func _test_validator_rejects_structural_entity_errors() -> void:

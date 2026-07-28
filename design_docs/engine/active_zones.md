@@ -831,9 +831,11 @@ routes[]   → routes[]    # нормализуются ссылки на anchor
     `NavGrid` как весовой слой (`OverlayNavigationPublisher` поверх
     `ZoneOverlayIndex`), `deny visitor` отмечает клетку для планировщика.
     Теги действующего (§12), audience-scoped `cost`, `vision`/`conceal` — ниже.
-15. **Спавн-операция** (§15): `MapSpawnService` читает `spawn`-якори карты;
-    `SettlementCitizenFactory` стартует горожан оттуда, с fallback на входной
-    камень. Tag-фильтрация спавна — ниже, после тегов.
+15. **Спавн-операция** (§15): `MapSpawnService` читает `spawn`-якори карты.
+    Запуск требует один `function: "core:hero_start"` и по одному
+    `function: "core:companion_start"` для каждого компаньона; fallback на
+    входной камень удалён. `SettlementCitizenFactory` нормализует высоту каждой
+    точки по terrain до создания актёра. Tag-фильтрация спавна — ниже, после тегов.
 16. **Runtime-состояние зон карты** (§13): `MapZoneRegistry` + `MapZoneService`
     — адресуемый реестр владельца и флагов в памяти сессии, строится из
     `MapZoneLayer` в `_setup_zone_runtime`.

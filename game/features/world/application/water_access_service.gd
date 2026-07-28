@@ -3,7 +3,7 @@ extends RefCounted
 
 ## Where a citizen can reach drinkable water (grid_terrain_system.md §9.2).
 ##
-## This replaces the pond props the settlement used to spawn from `BiomeLayout`.
+## This replaces the old separate pond props; water is authored on the map.
 ## Those were a second water system: a decorative mesh, a hard-coded 5×5 blot
 ## written straight into `terrain_blocked_cells`, and a list of world positions
 ## that gameplay read — none of it known to `WaterGrid`, none of it known to the

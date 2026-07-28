@@ -18,7 +18,7 @@ class RuntimeEntity:
 var _entities: Dictionary = {}
 
 
-func load_map(document: MapDocument) -> void:
+func load_map(document: MapDocument, terrain: TerrainGrid = null) -> void:
 	_entities.clear()
 	if document == null:
 		return
@@ -30,6 +30,11 @@ func load_map(document: MapDocument) -> void:
 		entity.id = placed.id
 		entity.archetype = archetype
 		entity.position = placed.position
+		# Map transforms store a local vertical offset above the terrain, not an
+		# absolute world Y. This keeps authored objects attached when the terrain
+		# under them is edited and makes launch independent of mesh/physics timing.
+		if terrain != null:
+			entity.position.y = terrain.height_at(placed.position) + placed.position.y
 		entity.yaw_degrees = placed.yaw_degrees
 		entity.scale = placed.scale
 		entity.state = placed.initial_state

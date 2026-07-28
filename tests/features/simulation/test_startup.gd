@@ -56,6 +56,21 @@ func _init() -> void:
 	assert(simulation.is_first_person)
 	assert(simulation.player_citizen == simulation.hero_citizen)
 	assert(SimHelper.player_can_command_labor(simulation))
+	# Every member of the starting party comes from its own authored map anchor
+	# and is snapped to the live terrain field — no entrance-sign or y=0 fallback.
+	var spawn_service := MapSpawnService.new()
+	var expected_starts: Array[Vector3] = [spawn_service.hero_spawn_position(simulation.launch_config.map_document.zones)]
+	expected_starts.append_array(spawn_service.companion_spawn_positions(simulation.launch_config.map_document.zones).slice(0, simulation.POPULATION - 1))
+	assert(expected_starts.size() == simulation.POPULATION)
+	for index in simulation.POPULATION:
+		var expected := expected_starts[index]
+		var citizen: Citizen = simulation.citizens[index]
+		assert(is_equal_approx(citizen.global_position.x, expected.x))
+		assert(is_equal_approx(citizen.global_position.z, expected.z))
+		# Physics settles a CharacterBody from the 8 cm launch clearance onto the
+		# collider during the helper's first frames, so assert terrain attachment
+		# rather than the transient clearance exactly.
+		assert(absf(citizen.global_position.y - simulation.terrain_height_at(expected.x, expected.z, expected.y)) <= 0.12)
 	# Hero proximity checks must share the live natural-resource registries.
 	# A stale empty registry makes first-person grass gathering cancel at once.
 	var hero_start_position: Vector3 = simulation.hero_citizen.global_position

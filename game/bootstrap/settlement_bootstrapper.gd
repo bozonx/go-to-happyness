@@ -805,8 +805,7 @@ func _setup_world_and_events() -> void:
 func _setup_controllers_and_world() -> void:
 	game.ambient_spawner = AmbientSpawner.new()
 	game.add_child(game.ambient_spawner)
-	var active_biome: BiomeDefinition = game.territory_service.get_active_biome()
-	game.ambient_spawner.setup(game, active_biome.natural_layout if active_biome != null else null)
+	game.ambient_spawner.setup(game, game.launch_config.map_document)
 	game.player_controller = PlayerController.new()
 	game.add_child(game.player_controller)
 	game.player_controller.setup(game)

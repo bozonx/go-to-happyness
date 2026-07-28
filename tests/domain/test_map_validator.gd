@@ -18,6 +18,7 @@ static func run_all() -> void:
 	_test_frozen_water_is_walkable()
 	_test_hero_mode_without_spawn_is_an_error()
 	_test_settlement_mode_needs_no_spawn()
+	_test_party_spawns_are_required_at_launch()
 	_test_warnings_skip_when_nav_grid_is_null()
 	_test_anchor_on_blocked_cell_warns()
 	_test_route_across_a_wall_warns()
@@ -99,6 +100,27 @@ static func _test_settlement_mode_needs_no_spawn() -> void:
 	# Default mode is settlement; no spawn anchor authored.
 	var errors := MapValidator.validate(document, _flat_terrain(), WaterGrid.new(), null)
 	assert(errors.is_empty(), "settlement mode needs no spawn: %s" % "; ".join(errors))
+
+
+static func _test_party_spawns_are_required_at_launch() -> void:
+	var document := MapDocument.create(&"party", "Party", BOARD_CELLS)
+	var errors := MapValidator.validate_party_spawns(document, 4)
+	assert(errors.size() == 2, "launch rejects missing hero and companions: %s" % "; ".join(errors))
+	var hero := ZoneAnchorRecord.new()
+	hero.id = &"hero_start"
+	hero.role = ZoneAnchorRecord.ROLE_SPAWN
+	hero.function = MapSpawnService.HERO_START
+	hero.pos = Vector3(0.5, 0.0, 0.5)
+	document.zones.anchors.append(hero)
+	for index in 3:
+		var companion := ZoneAnchorRecord.new()
+		companion.id = StringName("companion_%d" % index)
+		companion.role = ZoneAnchorRecord.ROLE_SPAWN
+		companion.function = MapSpawnService.COMPANION_START
+		companion.pos = Vector3(1.5 + index, 0.0, 0.5)
+		document.zones.anchors.append(companion)
+	errors = MapValidator.validate_party_spawns(document, 4)
+	assert(errors.is_empty(), "complete authored party starts launch: %s" % "; ".join(errors))
 
 
 static func _flat_terrain() -> TerrainGrid:

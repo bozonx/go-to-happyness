@@ -16,18 +16,18 @@ func _init(p_game: SettlementGame) -> void:
 
 
 func create_citizens() -> void:
-	# A map that authors `spawn` anchors places citizens there (active_zones.md
-	# §15); a map with none falls back to the entrance anchor the no-map board
-	# always used, so removing every spawn point restores the old behaviour
-	# rather than leaving citizens at the origin.
 	var map_document: MapDocument = game.launch_config.map_document if game.launch_config != null else null
-	var fallback := game.building_management.entrance_anchor_position() + Vector3(0.0, 0.0, 2.0)
-	var spawn_anchor := MapSpawnService.new().first_spawn_position(map_document.zones, fallback) if map_document != null else fallback
-	var columns := 3
+	if map_document == null:
+		push_error("[spawn] SettlementGame requires map-authored party spawn points")
+		return
+	var spawns := MapSpawnService.new()
+	var hero_spawn := spawns.hero_spawn_position(map_document.zones)
+	var companion_spawns := spawns.companion_spawn_positions(map_document.zones)
+	if hero_spawn == Vector3.INF or companion_spawns.size() < game.POPULATION - 1:
+		push_error("[spawn] Map needs one core:hero_start and %d core:companion_start anchors" % (game.POPULATION - 1))
+		return
 	for index in range(game.POPULATION):
-		var col := index % columns
-		var row := index / columns
-		var spawn_position := spawn_anchor + Vector3((col - 1) * 1.5, 0.0, row * 1.4)
+		var spawn_position: Vector3 = hero_spawn if index == 0 else companion_spawns[index - 1]
 		var terrain_height := game.terrain_height_at(spawn_position.x, spawn_position.z, 0.0)
 		if not is_nan(terrain_height):
 			spawn_position.y = terrain_height + 0.08
@@ -101,8 +101,12 @@ func wire_citizen(citizen: Citizen) -> void:
 func create_starter_backpack() -> void:
 	if game.settlement.warehouse_ever_built:
 		return
-	var anchor: Vector3 = game.building_management.entrance_anchor_position() + Vector3(0.0, 0.0, 2.0)
-	game.backpack_position = anchor + Vector3(-1.5, 0.0, 0.7)
+	if game.hero_citizen == null:
+		return
+	# The starter inventory is part of the starting party, not an invisible
+	# entrance-sign fallback.  Keep it beside the authored hero spawn and snap it
+	# to the same terrain field as every other launch object.
+	game.backpack_position = game.hero_citizen.global_position + Vector3(-1.5, 0.0, 0.7)
 	var terrain_height := game.terrain_height_at(game.backpack_position.x, game.backpack_position.z, 0.0)
 	if not is_nan(terrain_height):
 		game.backpack_position.y = terrain_height + 0.08
