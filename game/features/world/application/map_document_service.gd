@@ -298,6 +298,14 @@ func save_map_to(document: MapDocument, final_path: String, preview: Image = nul
 	if not zone_errors.is_empty():
 		last_error = "карта содержит ошибки зон: %s" % "; ".join(zone_errors)
 		return ""
+	# Cross-cutting checks that need the published grids: a spawn in a hole or
+	# under impassable water, a hero-mode map without a hero_start (§8.1, §11).
+	# The editor may save before a navigation field exists, so null nav_grid is
+	# allowed — those checks skip, the rest still run off terrain and water.
+	var map_errors := MapValidator.validate(document, document.terrain, document.water, null)
+	if not map_errors.is_empty():
+		last_error = "карта содержит ошибки: %s" % "; ".join(map_errors)
+		return ""
 
 	var staging_path := final_path + ".tmp"
 	_populate_required_content(document)
