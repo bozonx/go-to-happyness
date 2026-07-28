@@ -101,6 +101,38 @@ func validate(board_cells: int) -> Array[String]:
 	return errors
 
 
+## §8.2: things a map will launch with but the author very likely did not mean.
+## Kept separate from `validate()` on purpose — errors block save, warnings do
+## not, and folding them together would make every "you forgot to reference this
+## region" notice refuse the file.
+func warnings(board_cells: int) -> Array[String]:
+	var warnings: Array[String] = []
+	var referenced: Dictionary = {}
+	for anchor in anchors:
+		if anchor.owner_id != &"":
+			referenced[anchor.owner_id] = true
+	for route in routes:
+		for stop in route.stops:
+			var anchor := anchor_by_id(stop)
+			if anchor != null and anchor.owner_id != &"":
+				referenced[anchor.owner_id] = true
+	# A region that no anchor owns and no route touches is almost certainly a
+	# leftover. An overlay is exempt: it changes a calculation, it is not pointed
+	# at by anything, and that is exactly what makes it an overlay.
+	for area in areas:
+		if area.role == ZoneAreaRecord.ROLE_REGION and not referenced.has(area.id):
+			warnings.append("область %s ни на что не ссылается" % area.id)
+	# A spawn or slot sealed off by its own audience's denial is a warning, not an
+	# error (§8.2): the cell is passable, the agent simply may not plan there.
+	for anchor in anchors:
+		if anchor.role in [ZoneAnchorRecord.ROLE_SPAWN, ZoneAnchorRecord.ROLE_SLOT]:
+			var cell := anchor.cell()
+			for area in areas:
+				if area.is_overlay() and area.contains_cell(cell) and ZoneAccess.permits(area.allow, area.deny, ZoneAccess.AUDIENCE_VISITOR) == false:
+					warnings.append("точка %s в клетке, закрытой оверлеем для посетителя" % anchor.id)
+	return warnings
+
+
 func _validate_id(id: StringName, ids: Dictionary, errors: Array[String]) -> void:
 	if id == &"":
 		errors.append("у зоны нет id")

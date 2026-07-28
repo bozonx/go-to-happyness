@@ -30,6 +30,13 @@ var _cell_weights: Dictionary = {}
 var _road_cell_weights: Dictionary = {}
 var _road_cells: Dictionary = {}
 var _profile_cell_weights: Dictionary = {}
+## Overlay-effect cost multipliers (active_zones.md §4.2): a forest or a mud
+## patch that is *not* terrain passability but still makes a cell slower. A
+## profile-blind layer, so it applies the same multiplier to every traveller —
+## audience-scoped cost is a later refinement. Owned by
+## `OverlayNavigationPublisher`, the same way terrain weights are owned by the
+## terrain publisher; nothing else writes this dictionary.
+var _overlay_cell_weights: Dictionary = {}
 var _minimum_cell_weight := DEFAULT_CELL_WEIGHT
 # Set when an incremental erase may have removed the cell that held the current
 # minimum. The recompute is deferred to the next minimum_cell_weight() query so a
@@ -190,6 +197,30 @@ func set_profile_cell_weights(profile: StringName, next_weights: Dictionary) -> 
 	_weights_revision += 1
 
 
+## Replaces the overlay-effect cost layer wholesale (active_zones.md §4.2). Like
+## the profile layer this is a cost correction, not passability, so only the
+## weight revisions bump: a route over a cell that got muddier is merely no
+## longer optimal, while one over ground that vanished is invalid, and the two
+## must not invalidate live routes together.
+func set_overlay_cell_weights(next_weights: Dictionary) -> void:
+	var sanitized := _sanitize_weights(next_weights)
+	if _overlay_cell_weights == sanitized:
+		return
+	_overlay_cell_weights = sanitized
+	_recompute_minimum_cell_weight()
+	_revision += 1
+	_weights_revision += 1
+
+
+func clear_overlay_cell_weights() -> void:
+	if _overlay_cell_weights.is_empty():
+		return
+	_overlay_cell_weights.clear()
+	_recompute_minimum_cell_weight()
+	_revision += 1
+	_weights_revision += 1
+
+
 ## Incremental single-cell update of a profile weight. The trail field pushes one
 ## cell at a time as walkers reinforce or decay it; this avoids re-sanitizing and
 ## comparing the entire (ever-growing) overrides dictionary on every change.
@@ -229,9 +260,11 @@ func erase_profile_cell_weight(profile: StringName, cell: Vector2i) -> void:
 
 ## Cost of one cell of travel. Surface coverage decides the base — a road wins
 ## over a trail, a trail over bare terrain — and the slope of the ground then
-## multiplies it (§10.2): a road laid up a hillside is still a hillside.
+## multiplies it (§10.2): a road laid up a hillside is still a hillside. An
+## active-zone overlay multiplies on top (§4.2): a road through a smoky square
+## is still a road, but a slower one to pick.
 func get_cell_weight(cell: Vector2i, profile: StringName = PEDESTRIAN_PROFILE, profile_override: TravelerProfile = null) -> float:
-	return _surface_weight(cell, profile) * _slope_cost_factor(cell, profile, profile_override)
+	return _surface_weight(cell, profile) * _slope_cost_factor(cell, profile, profile_override) * _overlay_factor(cell)
 
 
 ## The terrain material multiplier applies to bare ground only. A built road and
@@ -249,6 +282,16 @@ func _surface_weight(cell: Vector2i, profile: StringName) -> float:
 	if _terrain != null:
 		base *= _terrain.surface_weight_at(cell)
 	return clampf(base, MIN_CELL_WEIGHT, MAX_CELL_WEIGHT)
+
+
+## Overlay-effect cost multiplier for a cell (active_zones.md §4.2). 1.0 = no
+## overlay covers it; a value below 1.0 would be a speed-up, which effects never
+## express (cost is a *penalty* over the engine's own surface weight), but the
+## clamp keeps a malformed layer finite rather than asserting at route time.
+func _overlay_factor(cell: Vector2i) -> float:
+	if not _overlay_cell_weights.has(cell):
+		return 1.0
+	return clampf(float(_overlay_cell_weights[cell]), MIN_CELL_WEIGHT, MAX_CELL_WEIGHT)
 
 
 ## Always >= 1.0, so it can never drag a cell below `minimum_cell_weight()` and

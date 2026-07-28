@@ -16,7 +16,13 @@ func _init(p_game: SettlementGame) -> void:
 
 
 func create_citizens() -> void:
-	var spawn_anchor: Vector3 = game.building_management.entrance_anchor_position() + Vector3(0.0, 0.0, 2.0)
+	# A map that authors `spawn` anchors places citizens there (active_zones.md
+	# §15); a map with none falls back to the entrance anchor the no-map board
+	# always used, so removing every spawn point restores the old behaviour
+	# rather than leaving citizens at the origin.
+	var map_document: MapDocument = game.launch_config.map_document if game.launch_config != null else null
+	var fallback := game.building_management.entrance_anchor_position() + Vector3(0.0, 0.0, 2.0)
+	var spawn_anchor := MapSpawnService.new().first_spawn_position(map_document.zones, fallback) if map_document != null else fallback
 	var columns := 3
 	for index in range(game.POPULATION):
 		var col := index % columns

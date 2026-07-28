@@ -30,6 +30,7 @@ static func run_all() -> void:
 	_test_package_round_trip_on_disk()
 	_test_zone_layer_round_trips()
 	_test_zone_layer_reports_structural_errors()
+	_test_zone_layer_reports_warnings()
 	_test_unknown_sections_survive_a_save()
 	_test_save_replaces_the_package_atomically()
 	_test_runtime_keys_namespace_player_maps()
@@ -386,6 +387,49 @@ static func _test_zone_layer_reports_structural_errors() -> void:
 		"point above owner y-range is a launch error: %s" % "; ".join(errors))
 	assert(errors.any(func(message: String) -> bool: return message.find("алфавит") > 0),
 		"non-ASCII id is a launch error: %s" % "; ".join(errors))
+
+
+## §8.2: warnings — a map launches with these but the author very likely did not
+## mean them. They must NOT surface from `validate()` (which blocks save), only
+## from `warnings()`. A region nothing references warns; an overlay does not,
+## because an overlay changes a calculation rather than being pointed at.
+static func _test_zone_layer_reports_warnings() -> void:
+	var document := MapDocument.create(&"zones_warn", "Зоны", BOARD_CELLS)
+	# A region no anchor owns and no route touches — an orphan.
+	var orphan := ZoneAreaRecord.new()
+	orphan.id = &"lonely_region"
+	orphan.role = ZoneAreaRecord.ROLE_REGION
+	orphan.add_rect(Rect2i(2, 2, 2, 2))
+	document.zones.areas.append(orphan)
+	# A region that IS referenced (by an owned anchor) — no warning.
+	var used := ZoneAreaRecord.new()
+	used.id = &"yard"
+	used.role = ZoneAreaRecord.ROLE_REGION
+	used.add_rect(Rect2i(8, 8, 2, 2))
+	document.zones.areas.append(used)
+	var post := ZoneAnchorRecord.new()
+	post.id = &"post"
+	post.role = ZoneAnchorRecord.ROLE_WAYPOINT
+	post.owner_id = &"yard"
+	post.pos = Vector3(8.5, 0.0, 8.5)
+	document.zones.anchors.append(post)
+	# An overlay — never warns for being unreferenced, that is its nature.
+	var overlay := ZoneAreaRecord.new()
+	overlay.id = &"forest"
+	overlay.role = ZoneAreaRecord.ROLE_OVERLAY
+	overlay.effects = {ZoneEffects.KEY_COST: 2.0}
+	overlay.add_rect(Rect2i(0, 0, 2, 2))
+	document.zones.areas.append(overlay)
+
+	var warnings := document.zones.warnings(BOARD_CELLS)
+	assert(warnings.any(func(message: String) -> bool: return message.find("lonely_region") > 0),
+		"orphan region warns: %s" % "; ".join(warnings))
+	assert(not warnings.any(func(message: String) -> bool: return message.find("yard") > 0),
+		"referenced region does not warn")
+	assert(not warnings.any(func(message: String) -> bool: return message.find("forest") > 0),
+		"overlay never warns for being unreferenced")
+	# And the same layer has zero launch errors — warnings are not errors.
+	assert(document.zones.validate(BOARD_CELLS).is_empty())
 
 
 ## The reason `MapDocument` carries sections it cannot interpret: a phase-1 editor

@@ -13,6 +13,10 @@ var presentation_runtime: WorldNavigationPresentationPort
 ## Kept alive for the session: it owns the published terrain field and, once the
 ## game gains terrain editing, the subscription that keeps it current.
 var terrain_navigation_publisher := TerrainNavigationPublisher.new()
+## The overlay-effect cost layer over the same grid (active_zones.md §4.2). Built
+## once at session start from the map's zone layer; republishing on zone edits is
+## the map editor's job, the same way terrain republishing is.
+var overlay_navigation_publisher := OverlayNavigationPublisher.new()
 
 
 func _init(p_navigation_runtime: WorldNavigationRuntimePort, p_presentation_runtime: WorldNavigationPresentationPort) -> void:
@@ -86,6 +90,22 @@ func publish_terrain_navigation() -> void:
 	# nav grid as well is what puts them on the surface a citizen stands on rather
 	# than at the stored column height.
 	world_setup.water_access.configure(world_setup.water_grid, world_setup.terrain_grid, nav_grid)
+	_publish_overlay_navigation(nav_grid)
+
+
+## Active-zone overlay effects land on the same grid as the ground, one layer up
+## (active_zones.md §4.2): a forest or a mud patch is not terrain passability but
+## still multiplies a cell's cost. Runs after the terrain publisher so the
+## overlay has a surface to multiply. A map with no overlay areas publishes an
+## empty layer, which `set_overlay_cell_weights` turns into a no-op.
+func _publish_overlay_navigation(nav_grid: NavGrid) -> void:
+	var map_document: MapDocument = presentation_runtime.map_document_getter.call()
+	if map_document == null:
+		return
+	var overlay_index := ZoneOverlayIndex.new()
+	overlay_index.rebuild(map_document.zones, map_document.board_cells())
+	overlay_navigation_publisher.configure(overlay_index, nav_grid)
+	overlay_navigation_publisher.publish_all()
 
 
 func refresh_navigation_grid() -> void:
