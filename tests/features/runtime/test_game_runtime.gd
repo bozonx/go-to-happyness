@@ -16,17 +16,21 @@ func _run() -> void:
 	var config := GameLaunchConfig.for_tent_era()
 	config.map_document = MapDocumentService.new().load_map(config.map_ref)
 	config.apply_map_start()
-	launch_manager.set("active_launch_config", config)
 	var definition := GameModuleRegistry.resolve_definition(&"core:settlement")
 	assert(definition != null)
 	assert(definition.module_ids == [&"gth.settlement"])
-	launch_manager.set("active_session", GameSessionConfig.from_settlement_launch(config, definition))
+	launch_manager.set("active_session", GameSessionConfig.create(definition, config.map_ref, config.map_document, {
+		&"gth.settlement": GameSessionConfig.settlement_parameters_from(config),
+	}))
 	var runtime := GameRuntimeScene.instantiate() as GameRuntime
 	root.add_child(runtime)
 	for _frame in range(4):
 		await physics_frame
 	assert(runtime.active_session != null)
-	assert(runtime.launch_config == config)
+	assert(runtime.launch_config != null)
+	assert(runtime.launch_config != config, "runtime must receive module parameters, not the legacy launch object")
+	assert(runtime.launch_config.map_document == config.map_document)
+	assert(runtime.launch_config.starting_population == config.starting_population)
 	assert(runtime.world_setup != null, "settlement module must initialize the existing game")
 	runtime.queue_free()
 	print("--- test_game_runtime.gd PASSED ---")

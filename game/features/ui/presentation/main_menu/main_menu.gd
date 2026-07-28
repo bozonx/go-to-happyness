@@ -132,12 +132,11 @@ func _landscape_summary() -> String:
 
 
 func _on_start_game_pressed() -> void:
-	var config := GameLaunchConfigScript.for_tent_era()
-	config.biome_id = selected_biome
-	config.map_ref = selected_map
 	var launch_mgr: Node = get_node_or_null("/root/GameLaunchManager")
-	if launch_mgr != null and launch_mgr.has_method("launch_game"):
-		launch_mgr.call("launch_game", config)
+	if launch_mgr != null and launch_mgr.has_method("launch_game_definition"):
+		launch_mgr.call("launch_game_definition", &"core:settlement", selected_map, {
+			&"gth.settlement": {"era": String(selected_era), "biome": String(selected_biome)},
+		})
 	else:
 		get_tree().change_scene_to_file("res://game/bootstrap/game_runtime.tscn")
 

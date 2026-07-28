@@ -40,11 +40,30 @@ func launch_game(config: GameLaunchConfigScript) -> void:
 	if prepared.map_document == null:
 		push_warning("[launch] игровая сессия отменена: нужна доступная карта")
 		return
-	var definition := GameModuleRegistry.resolve_definition(&"core:settlement")
+	launch_game_definition(&"core:settlement", prepared.map_ref, {
+		&"gth.settlement": GameSessionConfig.settlement_parameters_from(prepared),
+	}, prepared.map_document)
+
+
+## Generic host entry point. Menu, library, editor test-run and installed packs
+## all resolve the same definition -> map -> session -> runtime path.
+func launch_game_definition(
+	definition_key: StringName,
+	map_ref: StringName = &"",
+	module_parameters: Dictionary = {},
+	resolved_map: MapDocument = null,
+) -> void:
+	pending_save_path = ""
+	var definition := GameModuleRegistry.resolve_definition(definition_key)
 	if definition == null:
-		push_error("[launch] settlement game definition is unavailable")
+		push_error("[launch] game definition is unavailable: %s" % definition_key)
 		return
-	active_session = GameSessionConfig.from_settlement_launch(prepared, definition)
+	var selected_map := map_ref if not map_ref.is_empty() else definition.default_map
+	var document := resolved_map if resolved_map != null else _map_service.load_map(selected_map)
+	if document == null:
+		push_warning("[launch] игровая сессия отменена: карта %s не открылась: %s" % [selected_map, _map_service.last_error])
+		return
+	active_session = GameSessionConfig.create(definition, selected_map, document, module_parameters)
 	get_tree().change_scene_to_file(GAME_RUNTIME_SCENE)
 
 
@@ -107,7 +126,9 @@ func launch_from_save(save_path: String) -> void:
 	if definition == null:
 		push_error("[launch] game definition is unavailable: %s" % definition_key)
 		return
-	active_session = GameSessionConfig.from_settlement_launch(active_launch_config, definition)
+	active_session = GameSessionConfig.create(definition, active_launch_config.map_ref, active_launch_config.map_document, {
+		&"gth.settlement": GameSessionConfig.settlement_parameters_from(active_launch_config),
+	})
 	get_tree().change_scene_to_file(GAME_RUNTIME_SCENE)
 
 

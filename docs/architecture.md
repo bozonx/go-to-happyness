@@ -192,9 +192,9 @@ editor runs, but they are not the menu's launch target.
 
 Keep game-specific fields inside a module's start parameters. `GameSessionConfig`
 may hold a map, seed and definition, but never era, wellbeing, population or
-settlement resources. The current `legacy_settlement_launch` field is a short
-adapter while the settlement start state moves behind its module. Do not add new
-uses of it.
+settlement resources. `SettlementGameModule` temporarily adapts its module
+parameters to the existing settlement bootstrap start record; the generic session
+does not carry that record. Do not add new launch paths that do.
 
 `SaveData` v4 now persists the generic `game`, `map` and `engine` headers plus
 `modules.gth.settlement`. It still exposes a legacy settlement projection to
