@@ -156,7 +156,6 @@ func setup(editor: Node) -> void:
 	_cost_mode_option.add_item("Ручной ввод сметы")
 	_cost_mode_option.set_item_metadata(1, &"manual")
 
-	_cost_container.visible = true
 	_cost_header_btn.text = "Стоимость здания"
 
 	_cost_mode_option.item_selected.connect(_on_cost_mode_selected)
@@ -1136,6 +1135,12 @@ func _on_footprint_changed(_value: float) -> void:
 # ---------------------------------------------------------------------------
 # Metadata sync
 # ---------------------------------------------------------------------------
+
+## Public wrapper so the editor can refresh the cost block when the settings
+## modal opens — the cost nodes now live inside the metadata dialog.
+func refresh_cost_ui() -> void:
+	_refresh_cost_ui()
+
 
 func sync_metadata_fields() -> void:
 	_editor._syncing_metadata_fields = true

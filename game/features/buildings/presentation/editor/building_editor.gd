@@ -521,6 +521,7 @@ func _on_save_as_confirmed() -> void:
 ## blueprint by `sync_metadata_fields`; the dialog collects edits on confirm.
 func _on_settings_pressed() -> void:
 	frame_mode.sync_metadata_fields()
+	frame_mode.refresh_cost_ui()
 	_metadata_panel.popup_centered()
 
 

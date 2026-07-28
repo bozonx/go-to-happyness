@@ -445,61 +445,6 @@ layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 4
 
-[node name="HSep2" type="HSeparator" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox"]
-layout_mode = 2
-
-[node name="CostHeaderBtn" type="Label" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_font_sizes/font_size = 16
-text = "Стоимость здания"
-
-[node name="CostContainer" type="VBoxContainer" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_constants/separation = 6
-
-[node name="CostModeRow" type="HBoxContainer" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/CostContainer"]
-layout_mode = 2
-
-[node name="CostModeLabel" type="Label" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/CostContainer/CostModeRow"]
-layout_mode = 2
-text = "Режим:"
-
-[node name="CostModeOption" type="OptionButton" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/CostContainer/CostModeRow"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="CostBlockSummaryLabel" type="Label" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/CostContainer"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Всего блоков: 0"
-
-[node name="CostBreakdownVBox" type="VBoxContainer" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/CostContainer"]
-unique_name_in_owner = true
-layout_mode = 2
-
-[node name="ExtraCostsLabel" type="Label" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/CostContainer"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 14
-text = "Доп. ресурсы:"
-
-[node name="ExtraCostsVBox" type="VBoxContainer" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/CostContainer"]
-unique_name_in_owner = true
-layout_mode = 2
-
-[node name="AddExtraCostBtn" type="Button" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/CostContainer"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "+ Добавить ресурс"
-
-[node name="TotalCostLabel" type="Label" parent="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/CostContainer"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_font_sizes/font_size = 14
-text = "Итоговая смета: -"
-
 [node name="ZonesInspectorPanel" type="PanelContainer" parent="EditorUI/Root"]
 unique_name_in_owner = true
 visible = false
@@ -1117,7 +1062,7 @@ shortcuts_text = "Общее\nЛКМ — строить / выбрать · Shif
 [node name="MetadataPanel" type="ConfirmationDialog" parent="EditorUI/Root"]
 unique_name_in_owner = true
 title = "Параметры здания"
-size = Vector2i(420, 560)
+size = Vector2i(440, 720)
 ok_button_text = "Применить"
 cancel_button_text = "Отмена"
 
@@ -1236,6 +1181,61 @@ layout_mode = 2
 theme_override_colors/font_color = Color(0.6, 0.66, 0.72, 1)
 autowrap_mode = 2
 
+[node name="HSepCost" type="HSeparator" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox"]
+layout_mode = 2
+
+[node name="CostHeaderBtn" type="Label" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "Стоимость здания"
+
+[node name="CostContainer" type="VBoxContainer" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="CostModeRow" type="HBoxContainer" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox/CostContainer"]
+layout_mode = 2
+
+[node name="CostModeLabel" type="Label" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox/CostContainer/CostModeRow"]
+layout_mode = 2
+text = "Режим:"
+
+[node name="CostModeOption" type="OptionButton" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox/CostContainer/CostModeRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="CostBlockSummaryLabel" type="Label" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox/CostContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Всего блоков: 0"
+
+[node name="CostBreakdownVBox" type="VBoxContainer" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox/CostContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="ExtraCostsLabel" type="Label" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox/CostContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Доп. ресурсы:"
+
+[node name="ExtraCostsVBox" type="VBoxContainer" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox/CostContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="AddExtraCostBtn" type="Button" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox/CostContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "+ Добавить ресурс"
+
+[node name="TotalCostLabel" type="Label" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox/CostContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Итоговая смета: -"
+
 [node name="ExportMeshBtn" type="Button" parent="EditorUI/Root/MetadataPanel/Body/Scroll/MetadataVBox"]
 unique_name_in_owner = true
 visible = false
@@ -1313,5 +1313,3 @@ placeholder_text = "my_building_id"
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/RotZBtn" to="." method="_cycle_rotation_z"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/LayerDownBtn" to="." method="_on_layer_down_pressed"]
 [connection signal="pressed" from="EditorUI/Root/TopBar/Margin/HBox/FrameToolbar/LayerUpBtn" to="." method="_on_layer_up_pressed"]
-[connection signal="item_selected" from="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/CostContainer/CostModeRow/CostModeOption" to="." method="_on_cost_mode_selected"]
-[connection signal="pressed" from="EditorUI/Root/PalettePanel/Scroll/PaletteVBox/CostContainer/AddExtraCostBtn" to="." method="_on_add_extra_cost_pressed"]

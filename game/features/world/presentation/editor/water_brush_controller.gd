@@ -127,6 +127,17 @@ func _flood() -> void:
 	if _service.flood(hovered_cell, body_id, level):
 		last_message = "flooded basin: %d cells" % _service.last_delta_size()
 		return
+	# If the ground is at or above the level, the basin has no depth to fill.
+	# Pick the level from the ground (one step above it) and try again, so
+	# flood works on flat terrain without forcing the author to raise the
+	# level manually first.
+	if _terrain != null and _service.last_rejection() == WaterService.REASON_NOTHING_TO_DO:
+		var ground := _terrain.height_of(hovered_cell)
+		if level <= ground:
+			level = ground + 1
+			if _service.flood(hovered_cell, body_id, level):
+				last_message = "flooded basin (level %d): %d cells" % [level, _service.last_delta_size()]
+				return
 	last_message = "basin did not flood (%s)" % _service.last_rejection()
 
 
@@ -141,11 +152,12 @@ func _set_level() -> void:
 	last_message = "level unchanged (%s)" % _service.last_rejection()
 
 
+## Erase removes the whole body under the cursor, not a patch of cells. Water is
+## authored per body — a lake is one entity with one level — so erasing a cell at a
+## time would leave a half-drained body with no surface, which is not a state the
+## author can meaningfully inspect or continue editing.
 func _erase() -> void:
-	if _service.erase(brush_cells(hovered_cell)):
-		last_message = "erased: %d cells" % _service.last_delta_size()
-		return
-	last_message = "nothing to erase (%s)" % _service.last_rejection()
+	_drain_body_at_hover()
 
 
 ## Right button is the inverse or the complement of the left one: drain the whole

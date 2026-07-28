@@ -13,6 +13,7 @@ const BOARD_CELLS := 32
 static func run_all() -> void:
 	_test_brush_covers_a_square_and_clips_at_the_edge()
 	_test_flood_writes_through_the_service()
+	_test_flood_auto_picks_level_on_flat_ground()
 	_test_reverse_flood_drains_whole_body()
 	_test_no_hover_means_no_edit()
 	_test_no_body_means_refusal()
@@ -95,6 +96,30 @@ static func _test_flood_writes_through_the_service() -> void:
 	assert(water.has_water(centre))
 	assert(water.body_id_at(centre) == brush.body_id)
 	assert(water.height_of(centre) == 0)
+
+
+## On flat ground (height 0) with the default level 0, flood would have nowhere
+## to put water. The brush auto-picks the level from the ground (one step above
+## it) and retries, so flood works without forcing the author to raise the level
+## manually first.
+static func _test_flood_auto_picks_level_on_flat_ground() -> void:
+	var world := _make()
+	var terrain: TerrainGrid = world["terrain"]
+	var water: WaterGrid = world["water"]
+	var brush: WaterBrushController = world["brush"]
+
+	# Flat ground at height 0 — no basin dug.
+	var centre := Vector2i(0, 0)
+	assert(terrain.height_of(centre) == 0)
+	_make_body(world)
+	brush.level = 0
+	_hover(brush, centre)
+	brush.apply()
+
+	# Flood auto-adjusted the level to 1 (ground + 1) and succeeded.
+	assert(water.has_water(centre))
+	assert(water.height_of(centre) == 1)
+	assert(brush.level == 1)
 
 
 static func _test_reverse_flood_drains_whole_body() -> void:
@@ -278,6 +303,9 @@ static func _test_level_tool_stamps_an_absolute_level() -> void:
 	assert(brush.level == terrain.height_of(Vector2i.ZERO) + 1)
 
 
+## Erase drains the whole body under the cursor, not just the cells under the
+## brush. Water is authored per body, so a partial erase would leave a body with
+## no surface — a state the author cannot inspect or continue editing.
 static func _test_erase_tool_clears_the_cells_under_the_brush() -> void:
 	var world := _make()
 	var terrain: TerrainGrid = world["terrain"]
@@ -297,9 +325,10 @@ static func _test_erase_tool_clears_the_cells_under_the_brush() -> void:
 	brush.tool = WaterBrushController.TOOL_ERASE
 	brush.apply()
 	assert(not water.has_water(Vector2i.ZERO))
-	assert(water.wet_cell_count() < wet_before)
-	# Erasing cells is not draining the body: the author keeps the lake selected.
-	assert(water.has_body(body.id))
+	assert(water.wet_cell_count() == 0)
+	# Erasing drains the body entirely: the body is gone from the registry.
+	assert(not water.has_body(body.id))
 
 	assert(service.undo())
 	assert(water.wet_cell_count() == wet_before)
+	assert(water.has_body(body.id))
