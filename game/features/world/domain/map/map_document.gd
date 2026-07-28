@@ -17,7 +17,7 @@ extends RefCounted
 ## Sections the format defines but this phase does not interpret. They round-trip
 ## byte-for-byte through the editor.
 const PASSTHROUGH_SECTIONS: Array[String] = [
-	"placements", "objects",
+	"placements",
 	"flags", "rules", "victory", "defeat",
 ]
 
@@ -44,6 +44,9 @@ var water: WaterGrid = WaterGrid.new()
 ## The authored active-zone primitives. Unlike scenario rules they are understood
 ## by the editor and have one typed owner, `MapZoneLayer`.
 var zones: MapZoneLayer = MapZoneLayer.new()
+
+## Named authored entities; anonymous scatter remains a later binary layer.
+var entities: MapEntityLayer = MapEntityLayer.new()
 
 ## Raw contents of the sections listed above, plus any key a future version adds
 ## that this build has never heard of.
@@ -88,10 +91,11 @@ static func from_json(source: Dictionary) -> MapDocument:
 	document.meta = MapMeta.from_dict(source)
 	document.configure_terrain()
 	for key: String in source:
-		if _is_meta_key(key) or key == WATER_SECTION or key in ["areas", "anchors", "routes"]:
+		if _is_meta_key(key) or key == WATER_SECTION or key in ["areas", "anchors", "routes", "entities"]:
 			continue
 		document.sections[key] = _duplicated(source[key])
 	document.zones.from_json(source)
+	document.entities.from_json(source.get("entities", []))
 	document._read_water_registry(source.get(WATER_SECTION, []))
 	return document
 
@@ -102,6 +106,7 @@ func to_json() -> Dictionary:
 	result[WATER_SECTION] = _water_registry_json()
 	for key: String in zones.to_json():
 		result[key] = zones.to_json()[key]
+	result["entities"] = entities.to_json()
 	# Declared sections are always written, even when empty, so a map file reads
 	# the same whether or not its author ever opened those modes.
 	for key: String in PASSTHROUGH_SECTIONS:

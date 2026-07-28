@@ -30,6 +30,7 @@ func _run() -> void:
 	_test_scene_came_up(editor)
 	_test_mode_switching(editor)
 	await _test_terrain_editing_and_shared_undo(editor)
+	_test_fill_placement_and_shared_undo(editor)
 	_test_surface_painting_moves_no_geometry(editor)
 	await _test_water_mode(editor)
 	_test_ocean_boundary_floods_only_from_the_edge(editor)
@@ -53,11 +54,11 @@ func _test_scene_came_up(editor: Node) -> void:
 	print("  scene up: board %d, camera at %.1f" % [editor.document.board_cells(), editor.camera.distance])
 
 
-## The mode strip is data. Four modes work, the rest are visibly present and
+## The mode strip is data. Five modes work, the rest are visibly present and
 ## disabled, which is what tells the author the editor is unfinished rather than
 ## broken.
 func _test_mode_switching(editor: Node) -> void:
-	assert(editor._modes.size() == 4, "relief, surface, water and zones")
+	assert(editor._modes.size() == 5, "relief, surface, water, zones and fill")
 	assert(editor._active.id == &"terrain", "opens on relief")
 
 	editor._select_mode(&"surface")
@@ -75,8 +76,12 @@ func _test_mode_switching(editor: Node) -> void:
 	assert(editor._active.id == &"entities", "switched to zones")
 	assert(editor._active.palette_entries().size() == 3, "area, point and route tools")
 
+	editor._select_mode(&"fill")
+	assert(editor._active.id == &"fill", "switched to fill")
+	assert(editor._active.palette_entries().size() > 2, "fill has tools and archetypes")
+
 	editor._select_mode(&"roads")
-	assert(editor._active.id == &"entities", "an unbuilt mode cannot be entered")
+	assert(editor._active.id == &"fill", "an unbuilt mode cannot be entered")
 	editor._select_mode(&"terrain")
 
 	editor._select_mode(&"terrain")
@@ -133,6 +138,39 @@ func _test_terrain_editing_and_shared_undo(editor: Node) -> void:
 	for x in range(0, 5):
 		assert(terrain.height_of(Vector2i(x, 0)) == 0, "column %d back to flat" % x)
 	print("  terrain edit + cross-mode undo + per-column drag ok")
+
+
+## The first Fill Mode slice must use the same real input, document and history
+## path as every other editor mode. A green marker is not enough: the entity has
+## to serialize through the typed layer and disappear on the shared Ctrl+Z.
+func _test_fill_placement_and_shared_undo(editor: Node) -> void:
+	editor._select_mode(&"fill")
+	editor._active.select_palette_entry(&"core:campfire")
+	editor._brush.hovered_cell = Vector2i(7, 7)
+	editor._brush.has_hover = true
+	editor._active.handle_input(_click(MOUSE_BUTTON_LEFT, true))
+	assert(editor.document.entities.entities.size() == 1, "fill placed one typed entity")
+	var entity: MapEntityRecord = editor.document.entities.entities[0]
+	assert(entity.archetype_id == &"core:campfire")
+	assert(entity.cell(editor.document.terrain) == Vector2i(7, 7), "entity attached to hovered cell")
+	assert(editor.history.undo_depth() == 1, "fill uses the shared undo stack")
+	editor._undo()
+	assert(editor.document.entities.entities.is_empty(), "undo removed the placed entity")
+	editor._redo()
+	assert(editor.document.entities.entities.size() == 1, "redo restored it")
+	# Raising its cell is one terrain action and the record follows the surface in
+	# that very same shared-history entry.
+	editor._select_mode(&"terrain")
+	editor._brush.hovered_cell = Vector2i(7, 7)
+	editor._brush.has_hover = true
+	editor._active.handle_input(_click(MOUSE_BUTTON_LEFT, true))
+	editor._active.handle_input(_click(MOUSE_BUTTON_LEFT, false))
+	assert(is_equal_approx(editor.document.entities.entities[0].position.y, 0.5), "terrain lift moved the entity with its surface")
+	editor._undo()
+	assert(is_equal_approx(editor.document.entities.entities[0].position.y, 0.0), "undo restored the entity height with terrain")
+	editor._undo()
+	assert(editor.history.undo_depth() == 0, "fill left the next mode a clean stack")
+	print("  fill placement + shared undo ok")
 
 
 ## The claim that makes surface a separate mode rather than a terrain brush: a

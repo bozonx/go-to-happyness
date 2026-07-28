@@ -20,6 +20,7 @@ static func run_all() -> void:
 	_test_start_defaults_and_system_flags()
 	_test_border_level_migrates_from_version_one()
 	_test_legacy_zone_sections_migrate_to_v3()
+	_test_legacy_objects_migrate_to_entities_v4()
 	print("    [PASS] Map Meta Tests")
 	_test_write_target_follows_the_mode()
 	print("    [PASS] Map Write Target Tests")
@@ -146,6 +147,33 @@ static func _test_legacy_zone_sections_migrate_to_v3() -> void:
 	assert(resaved["format_version"] == MapMeta.FORMAT_VERSION)
 	# The un-understood marker survived as an opaque section.
 	assert(loaded.section("markers_unknown").size() == 1)
+	_cleanup()
+
+
+static func _test_legacy_objects_migrate_to_entities_v4() -> void:
+	var service := _service()
+	var package := _package_path("legacy_objects")
+	DirAccess.make_dir_recursive_absolute(package)
+	var legacy := {
+		"format_version": 3, "kind": "map", "id": "legacy_objects", "name": "Старые объекты",
+		"board": {"cells": BOARD_CELLS, "cell_size": 1.0},
+		"objects": [{
+			"id": "camp_1", "archetype": "core:campfire",
+			"transform": {"position": [1.5, 0.0, 2.5], "yaw": 45.0, "scale": 1.0},
+		}],
+	}
+	var file := FileAccess.open(package.path_join(MapDocumentService.MAP_JSON), FileAccess.WRITE)
+	file.store_string(JSON.stringify(legacy))
+	file.close()
+
+	var loaded := service.load_package(package)
+	assert(loaded != null)
+	assert(loaded.entities.entities.size() == 1)
+	var entity := loaded.entities.entities[0]
+	assert(entity.id == &"camp_1" and entity.archetype_id == &"core:campfire")
+	assert(is_equal_approx(entity.position.x, 1.5) and is_equal_approx(entity.yaw_degrees, 45.0))
+	var resaved := loaded.to_json()
+	assert(resaved.has("entities") and not resaved.has("objects"))
 	_cleanup()
 
 

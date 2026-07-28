@@ -34,9 +34,8 @@ const BORDER_LAVA := &"lava"
 const BORDER_NOTHING := &"nothing"
 const BORDER_KINDS: Array[StringName] = [BORDER_OCEAN, BORDER_LAVA, BORDER_NOTHING]
 
-## 3 — active zones became typed `areas` / `anchors` / `routes`, replacing the
-## temporary opaque `regions` / `markers` sections.
-const FORMAT_VERSION := 3
+## 4 — map fill mode promoted opaque `objects[]` into typed `entities[]`.
+const FORMAT_VERSION := 4
 
 ## Board presets (§6.2). All are multiples of `TerrainGrid.CHUNK_CELLS` so the
 ## board is whole chunks. The default is the largest one that still loads

@@ -71,6 +71,13 @@ func deactivate() -> void:
 	pass
 
 
+## The document changed through another mode or shared-history replay. Modes with
+## presentation caches rebuild them here without making `map_editor.gd` know
+## their data shape.
+func document_changed() -> void:
+	pass
+
+
 func process(_delta: float) -> void:
 	pass
 

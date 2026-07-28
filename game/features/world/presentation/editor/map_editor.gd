@@ -22,7 +22,6 @@ const MapEditorModeBarScript = preload("res://game/features/world/presentation/e
 ## what the editor is going to be, and disabled so they cannot pretend to work.
 const PLANNED_MODES: Array = [
 	{"id": &"roads", "title": "Покрытия", "reason": "Слой покрытий — фаза 3"},
-	{"id": &"fill", "title": "Наполнение", "reason": "Здания, декор и природа — фаза 2"},
 	{"id": &"rules", "title": "Правила и старт", "reason": "Правила и режимы игры — фаза 5"},
 ]
 
@@ -277,7 +276,7 @@ func _replace_document(next: MapDocument, path: String) -> void:
 # --- Modes --------------------------------------------------------------------
 
 func _build_modes() -> void:
-	_modes = [TerrainModeController.new(), SurfaceModeController.new(), WaterModeController.new(), EntitiesModeController.new()]
+	_modes = [TerrainModeController.new(), SurfaceModeController.new(), WaterModeController.new(), EntitiesModeController.new(), FillModeController.new()]
 	for mode: MapEditorMode in _modes:
 		mode.configure(_context)
 		mode.ui_changed.connect(_refresh_panels)
@@ -505,6 +504,21 @@ func _on_terrain_committed(delta: TerrainDelta) -> void:
 		return
 	var label := _context.pending_edit_label
 	var parts: Array[MapEditorCommand] = [TerrainServiceCommand.of(_terrain_service, delta, label)]
+	# A placed entity owns no absolute ground height: it follows its surface.
+	# Folding its position change into the terrain command preserves one author
+	# action and one Ctrl+Z, just like the ocean fill below.
+	if delta.changes_geometry():
+		var entities_before := document.entities.to_json()
+		var moved := false
+		for record: MapEntityRecord in document.entities.entities:
+			if record.cell(document.terrain) in delta.cells:
+				var centre := document.terrain.cell_center(record.cell(document.terrain))
+				var archetype := EntityArchetypeCatalog.get_archetype(record.archetype_id)
+				var asset := EntityArchetypeCatalog.asset_of(archetype.id) if archetype != null else null
+				record.position.y = centre.y + (asset.placement_policy().vertical_offset if asset != null else 0.0)
+				moved = true
+		if moved:
+			parts.append(MapEntityCommand.of(document, entities_before, document.entities.to_json(), label).mark_applied())
 	# The sea comes in as part of the stroke that opened the way for it (§6.1), so
 	# it joins the same command. Two entries here would mean two Ctrl+Z for one
 	# thing the author did.
@@ -518,6 +532,7 @@ func _on_terrain_committed(delta: TerrainDelta) -> void:
 		else MapEditorCompositeCommand.of(parts, "%s + океан" % label)
 	)
 	document.mark_dirty()
+	_notify_document_changed()
 
 
 ## The same arrangement for the water layer, and for the same reason: one command
@@ -563,9 +578,15 @@ func _redo() -> void:
 ## navigation field on its own. The overlay is presentation and redraws only when
 ## it is actually being looked at.
 func _after_history_change() -> void:
+	_notify_document_changed()
 	if nav_overlay.visible:
 		nav_overlay.rebuild()
 	_refresh_panels()
+
+
+func _notify_document_changed() -> void:
+	for mode: MapEditorMode in _modes:
+		mode.document_changed()
 
 
 func _return_to_menu() -> void:

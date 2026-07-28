@@ -222,6 +222,8 @@ static func _migrate(parsed: Dictionary, from_version: int) -> Dictionary:
 			parsed["border"] = migrated
 	if from_version < 3:
 		parsed = _promote_legacy_zone_sections(parsed)
+	if from_version < 4:
+		parsed = _promote_legacy_objects(parsed)
 	return parsed
 
 
@@ -236,6 +238,30 @@ static func _promote_legacy_zone_sections(parsed: Dictionary) -> Dictionary:
 	if not migrated.has("anchors") and _legacy_zone_records_promote(migrated, "markers", ["id", "role", "pos"]):
 		migrated["anchors"] = migrated["markers"]
 		migrated.erase("markers")
+	return migrated
+
+
+## v3 → v4 gives the former opaque object section one typed owner.  Legacy
+## experimental entries without an archetype cannot be interpreted safely, so
+## they are retained as a future-compatible empty entity list rather than guessed
+## into a different gameplay object.
+static func _promote_legacy_objects(parsed: Dictionary) -> Dictionary:
+	var migrated := parsed.duplicate(true)
+	if migrated.has("entities"):
+		migrated.erase("objects")
+		return migrated
+	var promoted: Array = []
+	var legacy: Variant = migrated.get("objects", [])
+	if legacy is Array:
+		for raw: Variant in legacy as Array:
+			if not (raw is Dictionary):
+				continue
+			var entry := raw as Dictionary
+			if String(entry.get("id", "")).is_empty() or String(entry.get("archetype", "")).is_empty():
+				continue
+			promoted.append(entry.duplicate(true))
+	migrated["entities"] = promoted
+	migrated.erase("objects")
 	return migrated
 
 
