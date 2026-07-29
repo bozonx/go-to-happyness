@@ -526,9 +526,8 @@ func _validate_map() -> Dictionary:
 	return result
 
 
-## F5 deliberately runs World Showcase: it is the generic `core.world`
-## consumer and therefore proves this map without silently adding Settlement
-## rules, citizens, economy or authored start requirements to a new map.
+## F5 runs the definition selected in the map header. New and legacy maps default
+## to World Showcase, so authoring terrain never silently creates Settlement.
 func _test_run() -> void:
 	var result := _validate_map()
 	if not (result["errors"] as Array).is_empty():
@@ -538,8 +537,13 @@ func _test_run() -> void:
 		_message = "тест-запуск недоступен: нет host launcher"
 		_refresh_panels()
 		return
+	var definition_key := document.meta.start.game_definition
+	if GameModuleRegistry.resolve_definition(definition_key) == null:
+		_message = "тест-запуск недоступен: игра %s не установлена" % definition_key
+		_refresh_panels()
+		return
 	if launch_manager.has_method("launch_editor_test"):
-		launch_manager.call("launch_editor_test", document)
+		launch_manager.call("launch_editor_test", definition_key, document)
 
 
 ## Every committed ground edit becomes exactly one command, recorded here rather

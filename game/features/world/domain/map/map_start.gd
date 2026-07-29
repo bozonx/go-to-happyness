@@ -32,6 +32,10 @@ var day_of_year := 120
 var latitude := 54.0
 var time_of_day := DEFAULT_TIME_OF_DAY
 var weather_preset: StringName = &"clear"
+## The authored game that interprets this map. It replaces map-owned mode and
+## system switches as the session-composition boundary; old maps without it
+## retain the generic showcase so they remain testable without settlement data.
+var game_definition: StringName = &"core:world_showcase"
 
 var mode_id: StringName = MODE_SETTLEMENT
 ## Per-system switches. Only the keys a map states are stored; a system whose flag
@@ -51,6 +55,7 @@ static func from_dict(source: Dictionary) -> MapStart:
 	start.latitude = clampf(float(source.get("latitude", start.latitude)), -90.0, 90.0)
 	start.time_of_day = clampi(int(source.get("time_of_day", start.time_of_day)), 0, 1439)
 	start.weather_preset = StringName(source.get("weather_preset", start.weather_preset))
+	start.game_definition = StringName(source.get("game_definition", start.game_definition))
 	var mode: Dictionary = source.get("mode", {})
 	start.mode_id = StringName(mode.get("id", start.mode_id))
 	start.systems = (mode.get("systems", {}) as Dictionary).duplicate(true)
@@ -66,6 +71,7 @@ func to_dict() -> Dictionary:
 		"latitude": latitude,
 		"time_of_day": time_of_day,
 		"weather_preset": String(weather_preset),
+		"game_definition": String(game_definition),
 		"mode": {"id": String(mode_id), "systems": systems.duplicate(true)},
 		"economy": economy.duplicate(true),
 	}

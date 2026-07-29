@@ -40,13 +40,13 @@ func launch_game_definition(
 	get_tree().change_scene_to_file(GAME_RUNTIME_SCENE)
 
 
-func launch_editor_test(document: MapDocument) -> void:
+func launch_editor_test(definition_key: StringName, document: MapDocument) -> void:
 	if document == null:
 		push_warning("[launch] тест-запуск отменён: карта отсутствует")
 		return
-	var definition := GameModuleRegistry.resolve_definition(&"core:world_showcase")
+	var definition := GameModuleRegistry.resolve_definition(definition_key)
 	if definition == null:
-		push_error("[launch] тест-запуску нужен core:world_showcase")
+		push_error("[launch] тест-запуску недоступна игра: %s" % definition_key)
 		return
 	pending_save_path = ""
 	pending_editor_document = document

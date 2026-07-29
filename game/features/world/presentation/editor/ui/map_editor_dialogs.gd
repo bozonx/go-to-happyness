@@ -45,6 +45,7 @@ const BuildingMaterialCatalogScript = preload("res://game/features/buildings/dom
 @onready var _prop_board_label: Label = %PropBoardLabel
 @onready var _prop_border_option: OptionButton = %PropBorderOption
 @onready var _prop_border_level_spin: SpinBox = %PropBorderLevelSpin
+@onready var _prop_game_option: OptionButton = %PropGameOption
 @onready var _prop_era_option: OptionButton = %PropEraOption
 @onready var _prop_style_edit: LineEdit = %PropStyleEdit
 @onready var _prop_mode_option: OptionButton = %PropModeOption
@@ -160,6 +161,7 @@ func open_properties_dialog(meta: MapMeta) -> void:
 		meta.board_cells, meta.board_cells, MapMeta.preset_name(meta.board_cells)]
 	_select_metadata(_prop_border_option, meta.border_kind)
 	_prop_border_level_spin.value = meta.border_level
+	_fill_game_options(meta.start.game_definition)
 	_select_metadata(_prop_era_option, meta.start.era)
 	_prop_style_edit.text = String(meta.start.style)
 	_select_metadata(_prop_mode_option, meta.start.mode_id)
@@ -186,6 +188,7 @@ func _on_properties_confirmed() -> void:
 	meta.tags = _split_names(_prop_tags_edit.text)
 	meta.border_kind = StringName(_prop_border_option.get_item_metadata(_prop_border_option.selected))
 	meta.border_level = int(_prop_border_level_spin.value)
+	meta.start.game_definition = StringName(_prop_game_option.get_item_metadata(_prop_game_option.selected))
 	meta.start.era = StringName(_prop_era_option.get_item_metadata(_prop_era_option.selected))
 	var style := ContentIdScript.normalize_id(_prop_style_edit.text)
 	meta.start.style = StringName(style) if not style.is_empty() else &"generic"
@@ -228,6 +231,16 @@ func _fill_static_options() -> void:
 	for era: StringName in BuildingMaterialCatalogScript.ERA_ORDER:
 		eras.append([era, String(era).capitalize()])
 	_add_options(_prop_era_option, eras)
+
+
+func _fill_game_options(selected_game: StringName) -> void:
+	_prop_game_option.clear()
+	var index := ContentIndex.new()
+	index.rebuild()
+	for entry in index.game_entries():
+		_prop_game_option.add_item(entry.name)
+		_prop_game_option.set_item_metadata(_prop_game_option.item_count - 1, entry.runtime_key)
+	_select_metadata(_prop_game_option, selected_game)
 
 
 static func _add_options(option: OptionButton, pairs: Array) -> void:

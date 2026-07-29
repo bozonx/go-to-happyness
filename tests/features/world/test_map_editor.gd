@@ -58,6 +58,7 @@ func _test_scene_came_up(editor: Node) -> void:
 func _test_validation(editor: Node) -> void:
 	var result: Dictionary = editor._validate_map()
 	assert((result["errors"] as Array).is_empty(), "a blank sandbox map is valid for the generic test run")
+	assert(editor.document.meta.start.game_definition == &"core:world_showcase", "new maps choose the generic game definition")
 	assert(not editor._validate_button.disabled and not editor._test_button.disabled, "validation and test-run are available")
 	print("  validation ok")
 
