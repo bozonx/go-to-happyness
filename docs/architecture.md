@@ -184,7 +184,7 @@ dispatcher and AI order path.
 ### Game runtime migration
 
 The player launch path is now `game definition -> GameSessionConfig ->
-GameRuntime -> registered modules`. The shipped `core:settlement` definition
+RuntimeLaunchManager -> GameRuntime -> registered modules`. The shipped `core:settlement` definition
 selects `gth.settlement`; it is indexed from the content pack like other authored
 content rather than hard-coded as the application's only game. `SettlementGame`
 and its scene remain a compatibility entry for existing scene tests and direct

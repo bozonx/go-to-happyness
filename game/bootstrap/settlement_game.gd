@@ -459,13 +459,7 @@ func start_settlement_session(active_config: GameLaunchConfig) -> void:
 
 
 func _active_legacy_launch_config() -> GameLaunchConfig:
-	var launch_mgr: Node = get_node_or_null("/root/GameLaunchManager")
-	var active_config: GameLaunchConfig = launch_config
-	if launch_mgr != null:
-		var manager_config := launch_mgr.get("active_launch_config") as GameLaunchConfig
-		if manager_config != null and manager_config.map_document != null:
-			active_config = manager_config
-	return active_config
+	return launch_config if launch_config != null else GameLaunchConfig.for_tent_era()
 
 
 func next_registration_ticket() -> int:

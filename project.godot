@@ -18,7 +18,7 @@ config/icon="res://icon.svg"
 
 [autoload]
 
-GameLaunchManager="*res://game/features/settlement/application/game_launch_manager.gd"
+GameLaunchManager="*res://game/features/runtime/application/runtime_launch_manager.gd"
 _mcp_game_helper="*res://addons/godot_ai/runtime/game_helper.gd"
 
 [display]

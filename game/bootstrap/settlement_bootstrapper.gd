@@ -837,6 +837,11 @@ func _setup_citizens_and_ai() -> void:
 
 
 func _finalize_launch(launch_mgr: Node) -> void:
+	# Runtime sessions restore through SessionSaveCoordinator after the module has
+	# finished starting. Keep this legacy loader only for direct SettlementGame
+	# scene runs and old scene tests.
+	if game.get_parent() is GameRuntime:
+		return
 	var pending_save: String = ""
 	if launch_mgr != null and "pending_save_path" in launch_mgr:
 		pending_save = str(launch_mgr.get("pending_save_path"))
