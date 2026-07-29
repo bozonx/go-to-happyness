@@ -5,6 +5,7 @@ extends RefCounted
 static func run_all() -> void:
 	test_core_settlement_definition_is_indexed()
 	test_session_keeps_settlement_values_module_scoped()
+	test_host_input_profiles_are_allowlisted()
 	print("    [PASS] Game Runtime Domain Tests")
 
 
@@ -30,3 +31,9 @@ static func test_session_keeps_settlement_values_module_scoped() -> void:
 	var settlement_parameters: Dictionary = session.module_parameters[&"gth.settlement"]
 	assert(settlement_parameters["era"] == "tent")
 	assert(settlement_parameters["starting_population"] == 4)
+
+
+static func test_host_input_profiles_are_allowlisted() -> void:
+	assert(HostInputProfile.is_supported(&"rts"))
+	assert(not HostInputProfile.is_supported(&"first_person"))
+	assert(not HostInputProfile.is_supported(&"author_supplied_shortcuts"))

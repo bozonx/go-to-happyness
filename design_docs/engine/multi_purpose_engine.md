@@ -224,14 +224,20 @@ Settlement не особенный, без преждевременного ст
 
 ### Реализовано в первом инкременте
 
-Уже существуют authored `GameDefinition` (`core:settlement`),
-`GameSessionConfig`, `GameRuntime`, статический registry built-in модулей и
-`SettlementGameModule`. Главное меню запускает Settlement через этот путь; game
-definitions индексируются из папки `games/` content pack. Существующий
+Уже существуют authored `GameDefinition` (`core:settlement` и
+`core:world_showcase`), `GameSessionConfig`, `GameRuntime`, статический registry
+built-in модулей и `SettlementGameModule`. Главное меню запускает обе игры через
+один путь; definitions индексируются из папки `games/` content pack.
+`core.world` создаёт единый `WorldSession` с картой, `WorldSetup` и
+terrain/water navigation, который используют модули игры. Существующий
 `SettlementGame` пока остаётся внутренним адаптером модуля, а старые scene tests
-могут создавать его напрямую. Это намеренно не завершает срез: секционные
-сохранения пока имеют compatibility projection для старого loader-а, а UI host и
-вторая Showcase-игра ещё не реализованы.
+могут создавать его напрямую.
+
+Секционные сохранения уже пишет `SessionSaveCoordinator`: заголовки game/map
+принадлежат host, а Settlement и Showcase добавляют только свои module sections.
+Первый UI/input host тоже есть: definition выбирает allowlisted `rts` profile,
+`F5` сохраняет, `Esc` возвращает в библиотеку. Settlement HUD пока остаётся
+временной панелью модуля.
 
 ### Пользовательский результат
 

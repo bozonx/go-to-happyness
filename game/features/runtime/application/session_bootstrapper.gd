@@ -12,6 +12,9 @@ func run(runtime: GameRuntime, session: GameSessionConfig) -> bool:
 	if session.map_document == null:
 		push_error("[launch] game session requires a resolved map document")
 		return false
+	if not HostInputProfile.is_supported(session.definition.input_profile):
+		push_error("[launch] unsupported host input profile: %s" % session.definition.input_profile)
+		return false
 	runtime.active_session = session
 	for module_id: StringName in session.definition.module_ids:
 		var module := GameModuleRegistry.create_module(module_id)

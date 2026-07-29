@@ -207,9 +207,11 @@ does not carry that record. Do not add new launch paths that do.
 the `game`, `map` and `engine` headers plus a section per participating module.
 It still exposes a legacy settlement projection to `SettlementSaveLoader`, so old
 v1–v3 saves remain loadable while the loader moves behind the module boundary.
-Host UI and input-profile extraction follow that same rule. Do not introduce a
-second gameplay module until the settlement module owns its save port rather than
-this projection.
+`HostInputController` handles registered profile shortcuts before module scenes;
+the first supported profile is `rts` (`F5` quicksave, `Esc` library). Host UI and
+further input-profile extraction follow that same rule. Do not introduce a second
+gameplay module until the settlement module owns its save port rather than this
+projection.
 
 The native AI migration is the primary execution path. Continue extracting
 bootstrap implementation into feature modules incrementally without a behavior

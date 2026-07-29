@@ -9,6 +9,7 @@ var session_content: Node = null
 ## Created by core.world before any gameplay module starts. It owns the map
 ## session and the single WorldSetup projection for the active scene host.
 var world_session: WorldSession = null
+var host_input := HostInputController.new()
 
 
 func _ready() -> void:
@@ -19,6 +20,7 @@ func _ready() -> void:
 		return
 	if not SessionBootstrapper.new().run(self, session):
 		return
+	host_input.configure(session.definition.input_profile)
 	_restore_pending_save()
 
 
@@ -44,13 +46,5 @@ func _restore_pending_save() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.keycode == KEY_F5 and event.pressed and not event.echo:
-		if SessionSaveCoordinator.save_quicksave(self):
-			print("[save] quicksave written")
-			get_viewport().set_input_as_handled()
-		return
-	if event is InputEventKey and event.keycode == KEY_ESCAPE and event.pressed and not event.echo:
-		var launch_manager := get_node_or_null("/root/GameLaunchManager")
-		if launch_manager != null and launch_manager.has_method("return_to_main_menu"):
-			launch_manager.call("return_to_main_menu")
-			get_viewport().set_input_as_handled()
+	if host_input.handle_unhandled_input(event, self):
+		get_viewport().set_input_as_handled()
