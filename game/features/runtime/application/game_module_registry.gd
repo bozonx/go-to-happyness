@@ -8,7 +8,10 @@ static func resolve_definition(definition_key: StringName) -> GameDefinition:
 	if entry == null or entry.content_type != &"game":
 		push_error("GameModuleRegistry: unknown game definition: %s" % definition_key)
 		return null
-	return GameDefinition.load_from_file(entry.path)
+	var definition := GameDefinition.load_from_file(entry.path)
+	if definition != null:
+		definition.runtime_key = entry.runtime_key
+	return definition
 
 
 static func create_module(module_id: StringName) -> GameModule:

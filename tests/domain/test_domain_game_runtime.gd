@@ -17,6 +17,7 @@ static func test_core_settlement_definition_is_indexed() -> void:
 	var definition := GameModuleRegistry.resolve_definition(&"core:settlement")
 	assert(definition != null)
 	assert(definition.pack_id == &"core")
+	assert(definition.runtime_key == &"core:settlement")
 	assert(definition.default_map == &"core:green_valley")
 	assert(definition.module_ids == [&"core.world", &"gth.settlement"])
 

@@ -18,8 +18,9 @@ static func save_quicksave(runtime: GameRuntime) -> bool:
 		push_error("[save] session has no game definition")
 		return false
 	var save_data := SaveData.new()
+	var game_address := ContentId.split_runtime_key(_definition_key(definition))
 	save_data.game_header = {
-		"pack": String(definition.pack_id),
+		"pack": String(game_address["source"]),
 		"id": String(definition.id),
 		"revision": "",
 	}
@@ -58,6 +59,12 @@ static func _map_header(session: GameSessionConfig) -> Dictionary:
 	if session.map_document != null:
 		header["revision"] = session.map_document.meta.revision
 	return header
+
+
+static func _definition_key(definition: GameDefinition) -> StringName:
+	if definition != null and not definition.runtime_key.is_empty():
+		return definition.runtime_key
+	return ContentId.runtime_key(definition.pack_id, definition.id) if definition != null else &""
 
 
 static func _matches_active_definition(save_data: SaveData, session: GameSessionConfig) -> bool:

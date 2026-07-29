@@ -8,6 +8,10 @@ const FORMAT_VERSION := 1
 
 var id: StringName = &""
 var name := ""
+## Runtime address from ContentIndex (`core:settlement`, `user:...` or
+## `pack:author.pack/game`). It is assigned by the registry, not authored in
+## `.gdgame.json`, because an installed pack's source is chosen on install.
+var runtime_key: StringName = &""
 var pack_id: StringName = &""
 var default_map: StringName = &""
 var module_ids: Array[StringName] = []
